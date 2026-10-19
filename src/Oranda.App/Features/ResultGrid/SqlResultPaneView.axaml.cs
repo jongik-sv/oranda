@@ -50,12 +50,28 @@ public partial class SqlResultPaneView : UserControl
         DataContextChanged += (_, _) => Bind();
 
         GridControl.EditRequested += (_, cell) => BeginEdit(cell);
-        CellEditor.KeyDown += (_, e) =>
+
+        // 칸을 고른 채 글자를 치면 바로 그 글자로 편집을 시작한다(SQL Developer·Excel 처럼).
+        GridControl.TextInput += (_, e) =>
         {
-            if (e.Key is Key.Enter or Key.Tab)
+            if (!string.IsNullOrEmpty(e.Text) && !char.IsControl(e.Text[0]) && GridControl.Model is { HasSelection: true } m
+                && BeginEdit(m.Active, e.Text))
             {
                 e.Handled = true;
-                CommitEdit(moveDown: e.Key == Key.Enter);
+            }
+        };
+        CellEditor.KeyDown += (_, e) =>
+        {
+            if (e.Key == Key.Enter)
+            {
+                e.Handled = true;
+                CommitEdit(moveDown: true);
+            }
+            else if (e.Key == Key.Tab)
+            {
+                // Tab·Shift+Tab: 반영하고 옆 칸(줄 끝이면 다음·앞 줄)으로 옮겨 이어서 편집한다.
+                e.Handled = true;
+                CommitAndEditNext(e.KeyModifiers.HasFlag(KeyModifiers.Shift) ? -1 : 1);
             }
             else if (e.Key == Key.Escape)
             {
@@ -75,24 +91,24 @@ public partial class SqlResultPaneView : UserControl
     private GridCell? _editing;
 
     /// <summary>편집 모드 그리드에서 셀 편집기를 연다. 키 열이 아니어도 편집할 수 없는 열(대상 테이블 밖)은 열지 않는다.</summary>
-    private void BeginEdit(GridCell cell)
+    private bool BeginEdit(GridCell cell, string? typed = null)
     {
         if (GridControl.Model is not { } m || Oranda.App.Features.GridEdit.GridEditBinding.Of(m) is not { CanEdit: true } es)
         {
-            return;
+            return false;
         }
 
         var ord = m.VisibleColumns[cell.Col];
         var row = Oranda.App.Features.GridEdit.GridEditBinding.ToEditRow(m, es, cell.Row);
         if (!es.IsEditableColumn(ord) || es.GetRowState(row) == Oranda.App.Features.GridEdit.GridEditRowState.Deleted)
         {
-            return;
+            return false;
         }
 
         GridControl.EnsureVisible(cell);
         if (GridControl.CellBounds(cell) is not { } r)
         {
-            return;
+            return false;
         }
 
         _editing = cell;
@@ -102,7 +118,39 @@ public partial class SqlResultPaneView : UserControl
         CellEditor.Text = m.TryGetValue(cell.Row, ord, out var v) && v is not null ? m.GetCellText(cell.Row, ord) : string.Empty;
         CellEditor.IsVisible = true;
         CellEditor.Focus();
-        CellEditor.SelectAll();
+        if (typed is null)
+        {
+            CellEditor.SelectAll();
+        }
+        else
+        {
+            CellEditor.Text = typed; // 친 글자로 값을 바꿔 쓴다
+            CellEditor.CaretIndex = typed.Length;
+        }
+
+        return true;
+    }
+
+    private void CommitAndEditNext(int step)
+    {
+        if (_editing is not { } cell || GridControl.Model is not { } m)
+        {
+            CommitEdit(moveDown: false);
+            return;
+        }
+
+        CommitEdit(moveDown: false);
+        var cols = m.VisibleColumns.Count;
+        var index = (cell.Row * cols) + cell.Col + step;
+        if (cols == 0 || index < 0 || index >= m.RowCount * cols)
+        {
+            return;
+        }
+
+        var next = new GridCell(index / cols, (int)(index % cols));
+        m.SelectCell(next);
+        GridControl.EnsureVisible(next);
+        BeginEdit(next);
     }
 
     private void CommitEdit(bool moveDown)

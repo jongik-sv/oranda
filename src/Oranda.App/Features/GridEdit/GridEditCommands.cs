@@ -92,9 +92,10 @@ public sealed class GridEditCommandHandler : ICommandHandler
                 s.ResetAll();
                 break;
             case "oranda.grid.edit.previewDml":
-                if (GridEditCommands.ConfirmPreview is { } show)
+                // 미리보기 창의 「반영」은 커밋 없이 반영한다(취소면 아무것도 하지 않는다).
+                if (GridEditCommands.ConfirmPreview is { } show && await show(s.BuildPreview(), cancellationToken).ConfigureAwait(true))
                 {
-                    await show(s.BuildPreview(), cancellationToken).ConfigureAwait(true);
+                    await ApplyConfirmedAsync(s, commit: false, cancellationToken).ConfigureAwait(true);
                 }
 
                 break;
@@ -133,6 +134,13 @@ public sealed class GridEditCommandHandler : ICommandHandler
             return false;
         }
 
+        await ApplyConfirmedAsync(s, commit, ct).ConfigureAwait(true);
+        return true;
+    }
+
+    /// <summary>확인을 받은 변경을 반영한다.</summary>
+    private static async Task ApplyConfirmedAsync(GridEditSession s, bool commit, CancellationToken ct)
+    {
         await s.ApplyAsync(commit, ct).ConfigureAwait(true);
 
         // 모두 반영됐으면 같은 질의를 편집 모드로 다시 읽어 그리드가 반영된 값을 보인다(실패 행이 남으면 그대로 둔다).
@@ -140,7 +148,5 @@ public sealed class GridEditCommandHandler : ICommandHandler
         {
             await rerun(s.Query, ct).ConfigureAwait(true);
         }
-
-        return true;
     }
 }
