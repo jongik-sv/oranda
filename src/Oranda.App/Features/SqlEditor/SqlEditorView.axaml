@@ -1,8 +1,49 @@
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:ae="using:AvaloniaEdit"
              xmlns:vm="using:Oranda.App.Features.SqlEditor"
              x:Class="Oranda.App.Features.SqlEditor.SqlEditorView"
              x:DataType="vm:SqlEditorViewModel">
-  <!-- TSK-04-02 빈 틀 -->
-  <TextBlock Text="oranda.panel.sqlEditor" />
+  <UserControl.Styles>
+    <StyleInclude Source="avares://AvaloniaEdit/Themes/Fluent/AvaloniaEdit.xaml" />
+  </UserControl.Styles>
+
+  <!-- 위: 찾기 패널 / 가운데: 편집기 / 아래: 결과 영역(TSK-06-03 이 ResultPane 에 꽂는다) -->
+  <Grid RowDefinitions="Auto,*,Auto,Auto">
+    <Border Grid.Row="0" Name="FindPanel" Padding="6" IsVisible="{Binding IsFindPanelOpen}"
+            BorderThickness="0,0,0,1" BorderBrush="{DynamicResource SystemControlForegroundBaseLowBrush}">
+      <StackPanel Spacing="4">
+        <StackPanel Orientation="Horizontal" Spacing="6">
+          <TextBox Name="FindBox" Width="260" PlaceholderText="찾기"
+                   Text="{Binding FindText, Mode=TwoWay}" AutomationProperties.Name="찾을 글" />
+          <Button Name="PrevButton" Content="이전" />
+          <Button Name="NextButton" Content="다음" />
+          <ToggleButton Content="Aa" ToolTip.Tip="대소문자 구분" IsChecked="{Binding MatchCase, Mode=TwoWay}" />
+          <ToggleButton Content="단어" ToolTip.Tip="단어 단위" IsChecked="{Binding WholeWord, Mode=TwoWay}" />
+          <ToggleButton Content=".*" ToolTip.Tip="정규식" IsChecked="{Binding UseRegex, Mode=TwoWay}" />
+          <TextBlock Text="{Binding FindStatus}" VerticalAlignment="Center" Opacity="0.7" />
+          <Button Name="CloseFindButton" Content="닫기" />
+        </StackPanel>
+        <StackPanel Orientation="Horizontal" Spacing="6" IsVisible="{Binding IsReplaceMode}">
+          <TextBox Name="ReplaceBox" Width="260" PlaceholderText="바꿀 글"
+                   Text="{Binding ReplaceText, Mode=TwoWay}" AutomationProperties.Name="바꿀 글" />
+          <Button Name="ReplaceButton" Content="바꾸기" />
+          <Button Name="ReplaceAllButton" Content="모두 바꾸기" />
+        </StackPanel>
+      </StackPanel>
+    </Border>
+
+    <ae:TextEditor Grid.Row="1" Name="Editor"
+                   ShowLineNumbers="True"
+                   FontFamily="Cascadia Mono,Consolas,Menlo,monospace"
+                   FontSize="13"
+                   HorizontalScrollBarVisibility="Auto"
+                   VerticalScrollBarVisibility="Auto"
+                   AutomationProperties.Name="SQL 편집기" />
+
+    <GridSplitter Grid.Row="2" Height="4" HorizontalAlignment="Stretch"
+                  IsVisible="{Binding ResultPane, Converter={x:Static ObjectConverters.IsNotNull}}" />
+    <ContentControl Grid.Row="3" Name="ResultHost" Content="{Binding ResultPane}" MinHeight="0" MaxHeight="2000"
+                    IsVisible="{Binding ResultPane, Converter={x:Static ObjectConverters.IsNotNull}}" />
+  </Grid>
 </UserControl>

@@ -3,6 +3,16 @@
              xmlns:vm="using:Oranda.App.Features.SqlEditor"
              x:Class="Oranda.App.Features.SqlEditor.OutlineView"
              x:DataType="vm:OutlineViewModel">
-  <!-- TSK-04-02 빈 틀 -->
-  <TextBlock Text="oranda.panel.outline" />
+  <ListBox ItemsSource="{Binding Items}"
+           SelectedItem="{Binding Selected, Mode=TwoWay}"
+           AutomationProperties.Name="문서 개요">
+    <ListBox.ItemTemplate>
+      <DataTemplate x:DataType="vm:OutlineItem">
+        <StackPanel Orientation="Horizontal" Spacing="8">
+          <TextBlock Text="{Binding Line}" Opacity="0.6" MinWidth="32" TextAlignment="Right" />
+          <TextBlock Text="{Binding Title}" TextTrimming="CharacterEllipsis" />
+        </StackPanel>
+      </DataTemplate>
+    </ListBox.ItemTemplate>
+  </ListBox>
 </UserControl>

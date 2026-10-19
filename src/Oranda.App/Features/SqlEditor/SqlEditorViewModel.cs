@@ -1,10 +1,528 @@
+using AvaloniaEdit.Document;
+using CommunityToolkit.Mvvm.ComponentModel;
 using Oranda.App.Shell;
+using Oranda.Core.Execution;
+using Oranda.Core.Language;
 using Oranda.Core.Shell;
+using Oranda.Core.Text;
+using Oranda.Core.Workspaces;
+using Oranda.Language.Lexing;
 
 namespace Oranda.App.Features.SqlEditor;
 
-/// <summary><c>oranda.panel.sqlEditor</c> — TSK-04-02 빈 틀. 실행 로직 없음.</summary>
-[OrandaToolPanel("oranda.panel.sqlEditor", ToolPanelKind.Document, DockLocation.Document, AllowMultiple = true)]
-public sealed class SqlEditorViewModel : ToolPanelViewModelBase
+/// <summary>접기 동작(commands.md <c>oranda.edit.fold</c> 등).</summary>
+public enum FoldAction
 {
+    Fold,
+    Unfold,
+    FoldAll,
+    UnfoldAll,
+}
+
+/// <summary>
+/// 편집기 View 가 구현해 ViewModel 에 꽂는 면. View 가 없는 시험에서는 비어 있어도 ViewModel 이 동작한다.
+/// 글자 바꾸기·찾기·북마크 같은 논리는 ViewModel 이 하고, 클립보드·접기·화면 이동처럼 컨트롤이 필요한 것만 여기로 온다.
+/// </summary>
+public interface IEditorSurface
+{
+    int CursorCount { get; }
+
+    /// <summary>맨 위에 보이는 줄(1부터).</summary>
+    int FirstVisibleLine { get; }
+
+    void Cut();
+
+    void Copy();
+
+    void Paste();
+
+    void SelectAll();
+
+    void SelectRange(int start, int length);
+
+    void ScrollToLine(int line);
+
+    void Fold(FoldAction action);
+
+    /// <summary>위(-1)·아래(+1) 줄에 커서를 더한다.</summary>
+    void AddCursor(int direction);
+
+    void ShowFind(bool replace);
+
+    void FocusEditor();
+}
+
+/// <summary>
+/// <c>oranda.panel.sqlEditor</c> — 탭 하나의 SQL 문서. 글자(<see cref="Document"/>)·파일 연결·커서·찾기·북마크를 가진다.
+/// 실행 쪽 상태(접속·결과)는 다른 Task 가 붙인다. <see cref="ConnectionProfileId"/> 만 작업 공간 저장을 위해 둔다.
+/// </summary>
+[OrandaToolPanel("oranda.panel.sqlEditor", ToolPanelKind.Document, DockLocation.Document, AllowMultiple = true)]
+public sealed partial class SqlEditorViewModel : ToolPanelViewModelBase
+{
+    private readonly List<TextAnchor> _bookmarks = [];
+    private int _suppressDirty;
+
+    public SqlEditorViewModel()
+        : this(Guid.NewGuid(), string.Empty)
+    {
+    }
+
+    public SqlEditorViewModel(Guid tabId, string text)
+    {
+        TabId = tabId;
+        Document = new TextDocument(text ?? string.Empty);
+        Document.UndoStack.ClearAll();
+        Document.TextChanged += (_, _) =>
+        {
+            Version++;
+            if (_suppressDirty == 0)
+            {
+                IsDirty = true;
+            }
+
+            OnPropertyChanged(nameof(CanUndo));
+            OnPropertyChanged(nameof(CanRedo));
+            TextChanged?.Invoke(this, EventArgs.Empty);
+        };
+    }
+
+    public Guid TabId { get; }
+
+    public TextDocument Document { get; }
+
+    /// <summary>글자가 바뀔 때마다 오르는 번호(자동 저장이 변경 여부를 본다).</summary>
+    public long Version { get; private set; }
+
+    [ObservableProperty]
+    public partial string Title { get; set; } = "SQL";
+
+    [ObservableProperty]
+    public partial string? FilePath { get; set; }
+
+    [ObservableProperty]
+    public partial bool IsDirty { get; set; }
+
+    [ObservableProperty]
+    public partial string Encoding { get; set; } = "utf-8";
+
+    [ObservableProperty]
+    public partial Guid? ConnectionProfileId { get; set; }
+
+    [ObservableProperty]
+    public partial bool IsReadOnly { get; set; }
+
+    [ObservableProperty]
+    public partial int CaretOffset { get; set; }
+
+    [ObservableProperty]
+    public partial int SelectionStart { get; set; }
+
+    [ObservableProperty]
+    public partial int SelectionLength { get; set; }
+
+    [ObservableProperty]
+    public partial int ScrollLine { get; set; } = 1;
+
+    /// <summary>결과 영역(TSK-06-03 의 <c>SqlResultPaneViewModel</c> 등)을 편집기 아래에 붙이는 자리.</summary>
+    [ObservableProperty]
+    public partial object? ResultPane { get; set; }
+
+    public IEditorSurface? Surface { get; set; }
+
+    public event EventHandler? TextChanged;
+
+    public string Text => Document.Text;
+
+    public bool HasSelection => SelectionLength > 0;
+
+    public bool CanUndo => Document.UndoStack.CanUndo;
+
+    public bool CanRedo => Document.UndoStack.CanRedo;
+
+    public int CursorCount => Surface?.CursorCount ?? 1;
+
+    public string DisplayTitle => (IsDirty ? "* " : string.Empty) + Title;
+
+    partial void OnIsDirtyChanged(bool value) => OnPropertyChanged(nameof(DisplayTitle));
+
+    partial void OnTitleChanged(string value) => OnPropertyChanged(nameof(DisplayTitle));
+
+    partial void OnSelectionLengthChanged(int value) => OnPropertyChanged(nameof(HasSelection));
+
+    partial void OnCaretOffsetChanged(int value)
+    {
+        OnPropertyChanged(nameof(CaretPosition));
+        OnPropertyChanged(nameof(PositionText));
+    }
+
+    // ---- 글자 읽기·바꾸기 -----------------------------------------------------------------
+
+    /// <summary>파일에서 읽은 내용 등으로 글자를 통째로 바꾼다. 실행 취소 기록과 변경 표시를 지운다.</summary>
+    public void LoadText(string text, bool dirty = false)
+    {
+        _suppressDirty++;
+        try
+        {
+            Document.Text = text;
+        }
+        finally
+        {
+            _suppressDirty--;
+        }
+
+        Document.UndoStack.ClearAll();
+        IsDirty = dirty;
+        _bookmarks.Clear();
+        OnPropertyChanged(nameof(CanUndo));
+        OnPropertyChanged(nameof(CanRedo));
+    }
+
+    public void MarkSaved() => IsDirty = false;
+
+    /// <summary>글자 연산 결과를 문서에 적용(실행 취소 1단계)하고 선택을 옮긴다.</summary>
+    public bool Apply(TextOpResult? result)
+    {
+        if (result is null || IsReadOnly)
+        {
+            return false;
+        }
+
+        Document.Replace(result.Start, result.Length, result.NewText);
+        Select(result.SelectionStart, result.SelectionLength);
+        return true;
+    }
+
+    /// <summary>현재 선택에 글자 연산을 적용한다.</summary>
+    public bool Apply(Func<string, int, int, TextOpResult?> op)
+    {
+        ArgumentNullException.ThrowIfNull(op);
+        return Apply(op(Text, SelectionStart, SelectionLength));
+    }
+
+    public void Select(int start, int length)
+    {
+        start = Math.Clamp(start, 0, Document.TextLength);
+        length = Math.Clamp(length, 0, Document.TextLength - start);
+        SelectionStart = start;
+        SelectionLength = length;
+        CaretOffset = start + length;
+        Surface?.SelectRange(start, length);
+    }
+
+    public void UpdateCaret(int caretOffset, int selectionStart, int selectionLength)
+    {
+        CaretOffset = caretOffset;
+        SelectionStart = selectionStart;
+        SelectionLength = selectionLength;
+    }
+
+    // ---- 줄·열 ------------------------------------------------------------------------
+
+    public TextPosition PositionOf(int offset)
+    {
+        var loc = Document.GetLocation(Math.Clamp(offset, 0, Document.TextLength));
+        return new TextPosition(loc.Line, loc.Column);
+    }
+
+    public int OffsetOf(TextPosition position)
+    {
+        int line = Math.Clamp(position.Line, 1, Document.LineCount);
+        var dl = Document.GetLineByNumber(line);
+        return dl.Offset + Math.Clamp(position.Column - 1, 0, dl.Length);
+    }
+
+    public TextPosition CaretPosition => PositionOf(CaretOffset);
+
+    public string PositionText
+    {
+        get
+        {
+            var p = CaretPosition;
+            return $"줄 {p.Line}, 열 {p.Column}";
+        }
+    }
+
+    public bool GoToLine(int line)
+    {
+        if (line < 1 || line > Document.LineCount)
+        {
+            return false;
+        }
+
+        var dl = Document.GetLineByNumber(line);
+        Select(dl.Offset, 0);
+        Surface?.ScrollToLine(line);
+        return true;
+    }
+
+    // ---- 문장·짝 ------------------------------------------------------------------------
+
+    public SqlStatement? GetStatementAtCaret() => StatementSplitter.GetStatementAt(Text, CaretOffset, SplitOptions.Default);
+
+    /// <summary>커서 옆 괄호·BEGIN/END 의 짝으로 커서를 옮긴다(<c>oranda.edit.goToMatchingBracket</c>).</summary>
+    public bool GoToMatchingBracket()
+    {
+        var match = SqlStructure.FindMatch(SqlStructure.FindPairs(Text), CaretOffset);
+        if (match is not { } m)
+        {
+            return false;
+        }
+
+        // 닫는 쪽에서 열림으로, 열림에서 닫는 쪽 끝으로 간다.
+        int target = m.Other.Start < m.Here.Start ? m.Other.Start : m.Other.End;
+        Select(target, 0);
+        return true;
+    }
+
+    // ---- 북마크 -------------------------------------------------------------------------
+
+    public bool HasBookmark => _bookmarks.Exists(a => !a.IsDeleted);
+
+    /// <summary>북마크가 걸린 줄 번호(오름차순, 1부터).</summary>
+    public IReadOnlyList<int> BookmarkLines
+        => [.. _bookmarks.Where(a => !a.IsDeleted).Select(a => a.Line).Distinct().Order()];
+
+    public bool ToggleBookmark()
+    {
+        int line = CaretPosition.Line;
+        var existing = _bookmarks.Where(a => !a.IsDeleted && a.Line == line).ToList();
+        if (existing.Count > 0)
+        {
+            _bookmarks.RemoveAll(a => existing.Contains(a));
+            OnPropertyChanged(nameof(HasBookmark));
+            BookmarksChanged?.Invoke(this, EventArgs.Empty);
+            return false;
+        }
+
+        var anchor = Document.CreateAnchor(Document.GetLineByNumber(line).Offset);
+        anchor.MovementType = AnchorMovementType.BeforeInsertion;
+        _bookmarks.Add(anchor);
+        OnPropertyChanged(nameof(HasBookmark));
+        BookmarksChanged?.Invoke(this, EventArgs.Empty);
+        return true;
+    }
+
+    public event EventHandler? BookmarksChanged;
+
+    /// <summary>다음(+1)·이전(-1) 북마크 줄로 간다. 끝에서 반대쪽 끝으로 돈다.</summary>
+    public bool GoToBookmark(int direction)
+    {
+        var lines = BookmarkLines;
+        if (lines.Count == 0)
+        {
+            return false;
+        }
+
+        int cur = CaretPosition.Line;
+        int target = direction >= 0
+            ? lines.FirstOrDefault(l => l > cur, lines[0])
+            : lines.LastOrDefault(l => l < cur, lines[^1]);
+        return GoToLine(target);
+    }
+
+    // ---- 찾기·바꾸기 ---------------------------------------------------------------------
+
+    [ObservableProperty]
+    public partial string FindText { get; set; } = string.Empty;
+
+    [ObservableProperty]
+    public partial string ReplaceText { get; set; } = string.Empty;
+
+    [ObservableProperty]
+    public partial bool UseRegex { get; set; }
+
+    [ObservableProperty]
+    public partial bool MatchCase { get; set; }
+
+    [ObservableProperty]
+    public partial bool WholeWord { get; set; }
+
+    [ObservableProperty]
+    public partial bool IsFindPanelOpen { get; set; }
+
+    [ObservableProperty]
+    public partial bool IsReplaceMode { get; set; }
+
+    [ObservableProperty]
+    public partial string FindStatus { get; set; } = string.Empty;
+
+    public bool HasFindText => FindText.Length > 0;
+
+    partial void OnFindTextChanged(string value)
+    {
+        OnPropertyChanged(nameof(HasFindText));
+        UpdateFindStatus();
+    }
+
+    partial void OnUseRegexChanged(bool value) => UpdateFindStatus();
+
+    partial void OnMatchCaseChanged(bool value) => UpdateFindStatus();
+
+    partial void OnWholeWordChanged(bool value) => UpdateFindStatus();
+
+    public void OpenFind(bool replace)
+    {
+        IsFindPanelOpen = true;
+        IsReplaceMode = replace && !IsReadOnly;
+        if (SelectionLength > 0 && SelectionLength < 200)
+        {
+            var sel = Document.GetText(SelectionStart, SelectionLength);
+            if (!sel.Contains('\n', StringComparison.Ordinal))
+            {
+                FindText = sel;
+            }
+        }
+
+        Surface?.ShowFind(IsReplaceMode);
+    }
+
+    public void CloseFind()
+    {
+        IsFindPanelOpen = false;
+        Surface?.FocusEditor();
+    }
+
+    private TextFinder CreateFinder() => new(new FindOptions
+    {
+        Pattern = FindText,
+        UseRegex = UseRegex,
+        MatchCase = MatchCase,
+        WholeWord = WholeWord,
+    });
+
+    private void UpdateFindStatus()
+    {
+        if (FindText.Length == 0)
+        {
+            FindStatus = string.Empty;
+            return;
+        }
+
+        var f = CreateFinder();
+        FindStatus = f.Error is not null ? "정규식 오류" : $"{f.Count(Text)}건";
+    }
+
+    /// <summary>선택 끝(또는 커서) 뒤의 다음 일치를 고르고 true.</summary>
+    public bool FindNext()
+    {
+        var f = CreateFinder();
+        var m = f.FindNext(Text, SelectionStart + SelectionLength);
+        if (m is not { } hit)
+        {
+            FindStatus = f.Error is not null ? "정규식 오류" : "없음";
+            return false;
+        }
+
+        Select(hit.Start, hit.Length);
+        Surface?.ScrollToLine(PositionOf(hit.Start).Line);
+        UpdateFindStatus();
+        return true;
+    }
+
+    public bool FindPrevious()
+    {
+        var f = CreateFinder();
+        var m = f.FindPrevious(Text, SelectionStart);
+        if (m is not { } hit)
+        {
+            FindStatus = f.Error is not null ? "정규식 오류" : "없음";
+            return false;
+        }
+
+        Select(hit.Start, hit.Length);
+        Surface?.ScrollToLine(PositionOf(hit.Start).Line);
+        return true;
+    }
+
+    /// <summary>선택이 일치면 바꾸고 다음으로, 아니면 다음 일치만 고른다.</summary>
+    public bool ReplaceCurrent()
+    {
+        if (IsReadOnly)
+        {
+            return false;
+        }
+
+        var f = CreateFinder();
+        var rep = SelectionLength > 0 ? f.ReplacementFor(Text, SelectionStart, SelectionLength, ReplaceText) : null;
+        if (rep is not null)
+        {
+            Document.Replace(SelectionStart, SelectionLength, rep);
+            Select(SelectionStart + rep.Length, 0);
+        }
+
+        return FindNext();
+    }
+
+    /// <summary>모두 바꾼다(실행 취소 1단계). 바꾼 횟수를 돌려준다.</summary>
+    public int ReplaceAll()
+    {
+        if (IsReadOnly)
+        {
+            return 0;
+        }
+
+        var f = CreateFinder();
+        var (text, count) = f.ReplaceAll(Text, ReplaceText);
+        if (count > 0)
+        {
+            Document.Replace(0, Document.TextLength, text);
+        }
+
+        FindStatus = $"{count}건 바꿈";
+        return count;
+    }
+
+    // ---- 작업 공간 ----------------------------------------------------------------------
+
+    /// <summary>
+    /// 작업 공간 탭으로 만든다. 글자는 저장 안 된 문서(파일 없음 또는 변경됨)만 담는다(data-model 2.6).
+    /// </summary>
+    public WorkspaceTab ToWorkspaceTab()
+    {
+        bool keepContent = FilePath is null || IsDirty;
+        return new WorkspaceTab
+        {
+            Id = TabId,
+            Title = Title,
+            FilePath = FilePath,
+            Content = keepContent ? Text : null,
+            IsDirty = IsDirty,
+            Encoding = Encoding,
+            Caret = CaretPosition,
+            SelectionStart = SelectionLength > 0 ? PositionOf(SelectionStart) : null,
+            ScrollLine = Surface?.FirstVisibleLine ?? ScrollLine,
+            ConnectionProfileId = ConnectionProfileId,
+        };
+    }
+
+    /// <summary>작업 공간 탭을 복원한다. <paramref name="fileText"/> 는 파일에서 다시 읽은 내용(없으면 null).</summary>
+    public static SqlEditorViewModel FromWorkspaceTab(WorkspaceTab tab, string? fileText)
+    {
+        ArgumentNullException.ThrowIfNull(tab);
+        var vm = new SqlEditorViewModel(tab.Id == Guid.Empty ? Guid.NewGuid() : tab.Id, string.Empty)
+        {
+            Title = tab.Title,
+            FilePath = tab.FilePath,
+            Encoding = tab.Encoding,
+            ConnectionProfileId = tab.ConnectionProfileId,
+            ScrollLine = tab.ScrollLine,
+        };
+        var text = tab.Content ?? fileText ?? string.Empty;
+        // 파일이 있어야 하는데 못 읽었고 저장된 내용도 없으면 빈 문서 + 변경됨으로 두어 닫을 때 알린다.
+        bool dirty = tab.IsDirty || (tab.Content is null && fileText is null && tab.FilePath is not null);
+        vm.LoadText(text, dirty);
+        var caret = vm.OffsetOf(tab.Caret);
+        if (tab.SelectionStart is { } selFrom)
+        {
+            var a = vm.OffsetOf(selFrom);
+            vm.Select(Math.Min(a, caret), Math.Abs(caret - a));
+            vm.CaretOffset = caret;
+        }
+        else
+        {
+            vm.Select(caret, 0);
+        }
+
+        return vm;
+    }
 }

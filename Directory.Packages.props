@@ -11,6 +11,8 @@
     <PackageVersion Include="Avalonia.Fonts.Inter" Version="12.1.4" />
     <PackageVersion Include="AvaloniaUI.DiagnosticsSupport" Version="2.2.3" />
     <PackageVersion Include="CommunityToolkit.Mvvm" Version="8.4.2" />
+    <!-- TSK-04-02: 지정 11.4.1 은 Avalonia 12 에서 TypeLoadException(spikes/TSK-01-05/RESULT.md 1절). 12.0.0 사용. -->
+    <PackageVersion Include="Avalonia.AvaloniaEdit" Version="12.0.0" />
     <PackageVersion Include="Dock.Avalonia" Version="12.1.0.12" />
     <PackageVersion Include="Dock.Avalonia.Themes.Fluent" Version="12.1.0.12" />
     <PackageVersion Include="Dock.Model.Mvvm" Version="12.1.0.12" />
