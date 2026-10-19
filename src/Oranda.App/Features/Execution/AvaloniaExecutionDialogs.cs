@@ -229,7 +229,7 @@ public sealed class AvaloniaExecutionDialogs : IExecutionDialogs
             Spacing = 8,
             Children =
             {
-                new TextBlock { Text = (error.Number > 0 ? $"ORA-{error.Number:00000}: " : string.Empty) + error.Message, TextWrapping = TextWrapping.Wrap, MaxWidth = 560 },
+                new TextBlock { Text = DbErrorText.Format(error), TextWrapping = TextWrapping.Wrap, MaxWidth = 560 },
                 new TextBox { Text = stmt.Text, IsReadOnly = true, AcceptsReturn = true, FontFamily = Mono, MaxHeight = 140, MinWidth = 420 },
             },
         };

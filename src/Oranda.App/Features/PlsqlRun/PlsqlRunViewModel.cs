@@ -360,7 +360,7 @@ public sealed partial class PlsqlRunViewModel : ObservableObject
                 return true;
 
             case ExecutionStatus.Failed:
-                var text = (r.Error is { Number: > 0 } e ? $"ORA-{e.Number:00000}: " : string.Empty) + (r.Error?.Message ?? "실패");
+                var text = Execution.DbErrorText.Format(r.Error);
                 SetStatus(text, error: true);
                 _deps.State?.SetError(block.Statement, r.Error, null);
                 _deps.Log?.AddMessage(MessageKind.Error, $"{title} — {text}");

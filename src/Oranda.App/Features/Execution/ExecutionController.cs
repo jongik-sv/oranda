@@ -633,6 +633,15 @@ public sealed class ExecutionController : IDisposable
         {
             case ExecutionStatus.Succeeded:
                 Log.AddMessage(MessageKind.Info, $"{Brief(stmt)} — {text}");
+
+                // SQL*Plus 명령이 낸 글(PROMPT, DEFINE 목록, SPOOL 상태 등)은 메시지 창에 그대로 보인다.
+                if (stmt.Kind == StatementKind.SqlPlus)
+                {
+                    foreach (var line in r.DbmsOutput)
+                    {
+                        Log.AddMessage(MessageKind.Info, line);
+                    }
+                }
                 if (r.ResultSet is { } rs)
                 {
                     results.AddQuery(rs, title, stmt);
@@ -702,7 +711,7 @@ public sealed class ExecutionController : IDisposable
             ExecutionStatus.Succeeded when r.RowsAffected is { } n => $"{n.ToString("N0", CultureInfo.InvariantCulture)}행 처리됨 ({time})",
             ExecutionStatus.Succeeded when r.ResultSet is not null => $"조회 완료 ({time})",
             ExecutionStatus.Succeeded => $"완료 ({time})",
-            ExecutionStatus.Failed => (r.Error is { Number: > 0 } e ? $"ORA-{e.Number:00000}: " : string.Empty) + (r.Error?.Message ?? "실패"),
+            ExecutionStatus.Failed => DbErrorText.Format(r.Error),
             ExecutionStatus.Denied => "거부됨",
             _ => "취소됨",
         };
@@ -717,7 +726,7 @@ public sealed class ExecutionController : IDisposable
         }
 
         var sb = new StringBuilder();
-        sb.Append(e.Number > 0 ? $"ORA-{e.Number:00000}: " : string.Empty).AppendLine(e.Message);
+        sb.AppendLine(DbErrorText.Format(e));
         if (e.Line is { } l && e.Column is { } c)
         {
             sb.Append(CultureInfo.InvariantCulture, $"위치: 문장 안 줄 {l}, 열 {c}").AppendLine();

@@ -216,6 +216,7 @@
                     <SolidColorBrush x:Key="OrandaEnvProductionForegroundBrush" Color="#FFFFFF" />
                     <SolidColorBrush x:Key="OrandaEnvTestBrush" Color="#B65A00" />
                     <SolidColorBrush x:Key="OrandaEnvDevelopmentBrush" Color="#107C10" />
+                    <SolidColorBrush x:Key="OrandaEnvChipForegroundBrush" Color="#FFFFFF" />
                     <SolidColorBrush x:Key="OrandaUncommittedBrush" Color="#B65A00" />
                     <SolidColorBrush x:Key="OrandaSeparatorBrush" Color="#D0D0D0" />
                     <SolidColorBrush x:Key="OrandaToolbarBackgroundBrush" Color="#F3F3F3" />
@@ -239,6 +240,7 @@
                     <SolidColorBrush x:Key="OrandaEnvProductionForegroundBrush" Color="#000000" />
                     <SolidColorBrush x:Key="OrandaEnvTestBrush" Color="#F0A04B" />
                     <SolidColorBrush x:Key="OrandaEnvDevelopmentBrush" Color="#6CCB5F" />
+                    <SolidColorBrush x:Key="OrandaEnvChipForegroundBrush" Color="#000000" />
                     <SolidColorBrush x:Key="OrandaUncommittedBrush" Color="#F0A04B" />
                     <SolidColorBrush x:Key="OrandaSeparatorBrush" Color="#404040" />
                     <SolidColorBrush x:Key="OrandaToolbarBackgroundBrush" Color="#2B2B2B" />

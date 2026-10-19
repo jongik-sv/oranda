@@ -106,6 +106,26 @@ public sealed class SqlPlusCommandLogicTests : IDisposable
     }
 
     [Fact]
+    public async Task Prompt_replaces_defined_substitution_variables()
+    {
+        await RunAsync("DEFINE d = 20");
+        var prompt = await RunAsync("PROMPT dept is &d and &unknown");
+
+        Assert.Equal(["dept is 20 and &unknown"], prompt.DbmsOutput);
+        Assert.Empty(_engine.Sent);
+    }
+
+    [Fact]
+    public async Task Desc_reports_a_clear_error_without_metadata_service()
+    {
+        var desc = await RunAsync("DESC emp");
+
+        Assert.Equal(ExecutionStatus.Failed, desc.Status);
+        Assert.Contains("DESC", desc.Error!.Message, StringComparison.Ordinal);
+        Assert.Empty(_engine.Sent);
+    }
+
+    [Fact]
     public async Task Exec_wraps_the_call_in_a_plsql_block()
     {
         await RunAsync("EXEC dbms_stats.gather_schema_stats('SCOTT');");

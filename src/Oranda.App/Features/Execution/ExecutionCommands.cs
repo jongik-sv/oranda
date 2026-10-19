@@ -142,6 +142,12 @@ public static class ExecutionCommands
 
         GridEditCommands.Rerun ??= (stmt, ct) => Resolve(container).RerunForEditAsync(stmt, ct);
         GridEditCommands.ConfirmPreview ??= (text, ct) => Resolve(container).ConfirmPreviewAsync(text, ct);
+
+        // 이력 「다시 실행」·내보내기/가져오기의 완료 알림은 메시지 창으로 보낸다(받는 곳이 없으면 조용히 사라졌다).
+        var log = ExecutionLog.For(container.GetService<IEventBus>());
+        void Notify(string text) => Avalonia.Threading.Dispatcher.UIThread.Post(() => log.AddMessage(MessageKind.Info, text));
+        HistoryScripts.HistoryScriptsCommands.Notify ??= Notify;
+        DataTransfer.DataTransferCommands.Notify ??= Notify;
         var state = ExecutionState.For(container.GetService<IEventBus>());
         state.PropertyChanged += (_, e) =>
         {

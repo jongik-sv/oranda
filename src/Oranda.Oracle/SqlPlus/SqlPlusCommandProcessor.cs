@@ -30,7 +30,7 @@ internal sealed class SqlPlusCommandProcessor : ISqlPlusCommandProcessor
 
     private static readonly HashSet<string> UnsupportedVerbs = new(StringComparer.OrdinalIgnoreCase)
     {
-        "ACCEPT", "ACC", "VARIABLE", "VAR", "PRINT", "DESC", "DESCRIBE", "SHOW", "CONNECT", "CONN", "DISCONNECT", "HOST",
+        "ACCEPT", "ACC", "VARIABLE", "VAR", "PRINT", "SHOW", "CONNECT", "CONN", "DISCONNECT", "HOST",
     };
 
     private readonly Func<IExecutionService> _execution;
@@ -44,7 +44,11 @@ internal sealed class SqlPlusCommandProcessor : ISqlPlusCommandProcessor
             () => (ILanguageService)services.GetService(typeof(ILanguageService))!,
             () => services.GetService(typeof(IEventBus)) as IEventBus)
     {
+        _metadata = () => services.GetService(typeof(Oranda.Core.Metadata.IMetadataProvider)) as Oranda.Core.Metadata.IMetadataProvider;
     }
+
+    /// <summary>DESC 가 쓰는 메타데이터(처음 쓸 때 꺼낸다). 시험 생성자에서는 없다.</summary>
+    private readonly Func<Oranda.Core.Metadata.IMetadataProvider?> _metadata = () => null;
 
     internal SqlPlusCommandProcessor(Func<IExecutionService> execution, Func<ILanguageService> language, Func<IEventBus?>? events = null)
     {
@@ -63,9 +67,19 @@ internal sealed class SqlPlusCommandProcessor : ISqlPlusCommandProcessor
         return result.Elapsed == TimeSpan.Zero ? result with { Elapsed = System.Diagnostics.Stopwatch.GetElapsedTime(started) } : result;
     }
 
-    /// <summary>시험·진단용: 세션의 DEFINE 값(없으면 null).</summary>
+    /// <summary>세션의 DEFINE 값(없으면 null). 실행 엔진의 치환 변수도 이 값을 본다(DEFINE 뒤 &amp;이름 을 다시 묻지 않게).</summary>
     internal string? GetDefine(ISession s, string name)
         => _states.TryGetValue(s, out var st) && st.Defines.TryGetValue(name, out var v) ? v : null;
+
+    /// <summary>실행 엔진이 받은 &amp;&amp;이름 값을 같은 DEFINE 저장소에 기억한다.</summary>
+    internal void SetDefine(ISession s, string name, string value) => _states.GetValue(s, _ => new SessionState()).Defines[name] = value;
+
+    /// <summary>편집기 스크립트가 WHENEVER SQLERROR EXIT 를 따르게: 오류 뒤 멈춰야 하는지.</summary>
+    internal bool ExitOnError(ISession s) => _states.TryGetValue(s, out var st) && st.ExitOnError;
+
+    /// <summary>WHENEVER SQLERROR EXIT COMMIT|ROLLBACK 의 트랜잭션 처리를 한다(편집기 스크립트가 멈출 때).</summary>
+    internal Task ApplyOnErrorTransactionAsync(ISession s, CancellationToken ct)
+        => _states.TryGetValue(s, out var st) ? ApplyTransactionActionAsync(s, st.OnErrorTransaction, ct) : Task.CompletedTask;
 
     private async Task<ExecutionResult> DispatchAsync(ISession s, SessionState state, SqlStatement stmt, CancellationToken ct)
     {
@@ -112,9 +126,13 @@ internal sealed class SqlPlusCommandProcessor : ISqlPlusCommandProcessor
                     }
 
                     return Ok(stmt);
+                case "DESC":
+                case "DESCRIBE":
+                    return await DescribeAsync(s, stmt, rest, ct).ConfigureAwait(false);
                 case "PROMPT":
                 case "PRO":
-                    return Ok(stmt, rest);
+                    // SQL*Plus 처럼 PROMPT 글의 &이름 도 DEFINE 값으로 바꾼다(모르는 이름은 그대로 둔다).
+                    return Ok(stmt, SubstitutionText.Apply(rest, n => state.Defines.TryGetValue(n, out var v) ? v : null));
                 case "SPOOL":
                 case "SPO":
                     return Spool(s, state, stmt, rest);
@@ -143,6 +161,62 @@ internal sealed class SqlPlusCommandProcessor : ISqlPlusCommandProcessor
             UnsupportedVerbs.Contains(verb)
                 ? $"SQL*Plus 명령 '{verb}' 는 지원하지 않습니다."
                 : $"알 수 없는 명령 '{verb}' — 나머지 줄은 무시됩니다.");
+    }
+
+    // ---- DESC ----
+
+    /// <summary>
+    /// <c>DESC [소유자.]이름</c>: SQL*Plus 처럼 「이름 / NULL? / 형식」 표를 글로 낸다(메시지 창에 보인다).
+    /// 소유자를 안 쓰면 접속 사용자의 객체로 본다.
+    /// </summary>
+    private async Task<ExecutionResult> DescribeAsync(ISession s, SqlStatement stmt, string rest, CancellationToken ct)
+    {
+        var target = rest.Trim().TrimEnd(';').Trim();
+        if (target.Length == 0)
+        {
+            return Fail(stmt, "SP2-0565", "DESC 다음에 객체 이름을 쓰세요.");
+        }
+
+        if (_metadata() is not { } meta)
+        {
+            return Fail(stmt, "ORANDA-SQLPLUS", "메타데이터 서비스가 없어 DESC 를 할 수 없습니다.");
+        }
+
+        static string Name(string part) => part.Length >= 2 && part[0] == '"' && part[^1] == '"' ? part[1..^1] : part.ToUpperInvariant();
+        var dot = target.IndexOf('.', StringComparison.Ordinal);
+        var owner = dot > 0 ? Name(target[..dot]) : (s.Server.SessionUser ?? s.Profile.User).ToUpperInvariant();
+        var name = Name(dot > 0 ? target[(dot + 1)..] : target);
+        Oranda.Core.Metadata.TableInfo info;
+        try
+        {
+            info = await meta.GetTableAsync(s, new Oranda.Core.Metadata.DbObjectRef(owner, name, "TABLE"), ct).ConfigureAwait(false);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            return Fail(stmt, "ORA-04043", $"객체 {owner}.{name} 을(를) 찾을 수 없습니다: {ex.Message}");
+        }
+
+        if (info.Columns.Count == 0)
+        {
+            return Fail(stmt, "ORA-04043", $"객체 {owner}.{name} 이(가) 없습니다.");
+        }
+
+        static string TypeText(Oranda.Core.Metadata.ColumnInfo c) => c.DataType switch
+        {
+            "NUMBER" when c.Precision is { } p => c.Scale is > 0 ? $"NUMBER({p},{c.Scale})" : $"NUMBER({p})",
+            "VARCHAR2" or "NVARCHAR2" or "CHAR" or "NCHAR" or "RAW" when c.Length is { } l => $"{c.DataType}({l})",
+            _ => c.DataType,
+        };
+        var cols = info.Columns.OrderBy(c => c.Position).ToList();
+        var w = Math.Max(4, cols.Max(c => c.Name.Length));
+        var lines = new List<string>
+        {
+            string.Create(CultureInfo.InvariantCulture, $"{owner}.{name}"),
+            $"{"이름".PadRight(w)}  {"NULL?",-8}  형식",
+            $"{new string('-', w)}  {new string('-', 8)}  {new string('-', 20)}",
+        };
+        lines.AddRange(cols.Select(c => $"{c.Name.PadRight(w)}  {(c.IsNullable ? string.Empty : "NOT NULL"),-8}  {TypeText(c)}"));
+        return Ok(stmt, [.. lines]);
     }
 
     // ---- SET / DEFINE / WHENEVER / EXEC ----

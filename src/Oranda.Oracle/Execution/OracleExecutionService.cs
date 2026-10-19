@@ -88,6 +88,13 @@ internal sealed partial class OracleExecutionService : IExecutionService
 
             if (result.Status is ExecutionStatus.Failed or ExecutionStatus.Denied)
             {
+                // 스크립트 안의 WHENEVER SQLERROR EXIT 는 설정(묻기·계속)보다 앞선다(SQL*Plus 와 같다).
+                if (_sqlPlus is SqlPlus.SqlPlusCommandProcessor processor && processor.ExitOnError(s))
+                {
+                    await processor.ApplyOnErrorTransactionAsync(s, ct);
+                    yield break;
+                }
+
                 if (mode == ScriptErrorMode.Stop)
                 {
                     yield break;
@@ -124,7 +131,7 @@ internal sealed partial class OracleExecutionService : IExecutionService
         // 1. 치환 변수
         if (stmt.SubstitutionNames.Count > 0)
         {
-            var substituted = await SubstituteAsync(stmt, runtime, ct);
+            var substituted = await SubstituteAsync(s, stmt, runtime, ct);
             if (substituted is null)
             {
                 return new ExecutionResult(stmt, ExecutionStatus.Cancelled);
@@ -423,10 +430,15 @@ internal sealed partial class OracleExecutionService : IExecutionService
         }
     }
 
-    private async Task<SqlStatement?> SubstituteAsync(SqlStatement stmt, SessionRuntime? runtime, CancellationToken ct)
+    private async Task<SqlStatement?> SubstituteAsync(ISession s, SqlStatement stmt, SessionRuntime? runtime, CancellationToken ct)
     {
         var defines = runtime?.Defines;
-        var missing = stmt.SubstitutionNames.Where(n => defines is null || !defines.ContainsKey(n)).ToList();
+
+        // DEFINE 은 SQL*Plus 처리기가 기억한다. 같은 저장소를 봐야 「define d = 20」 뒤 &d 를 다시 묻지 않는다.
+        var processor = _sqlPlus as SqlPlus.SqlPlusCommandProcessor;
+        string? Known(string name) => processor?.GetDefine(s, name)
+            ?? (defines is not null && defines.TryGetValue(name, out var d) ? d : null);
+        var missing = stmt.SubstitutionNames.Where(n => Known(n) is null).ToList();
         var values = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         if (missing.Count > 0)
         {
@@ -443,15 +455,15 @@ internal sealed partial class OracleExecutionService : IExecutionService
         }
 
         var text = SubstitutionText.Apply(stmt.Text, name =>
-            values.TryGetValue(name, out var v) ? v
-            : defines is not null && defines.TryGetValue(name, out var d) ? d
-            : null,
+            values.TryGetValue(name, out var v) ? v : Known(name),
             (name, value) =>
             {
                 if (defines is not null)
                 {
                     defines[name] = value; // && 는 세션 동안 기억한다.
                 }
+
+                processor?.SetDefine(s, name, value);
             });
         return stmt with { Text = text };
     }
