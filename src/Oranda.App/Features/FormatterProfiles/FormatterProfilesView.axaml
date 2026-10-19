@@ -3,6 +3,53 @@
              xmlns:vm="using:Oranda.App.Features.FormatterProfiles"
              x:Class="Oranda.App.Features.FormatterProfiles.FormatterProfilesView"
              x:DataType="vm:FormatterProfilesViewModel">
-  <!-- TSK-05-03 빈 틀 -->
-  <TextBlock Text="oranda.panel.formatterProfiles" />
+  <DockPanel>
+    <TextBlock DockPanel.Dock="Bottom" Margin="6,2" Text="{Binding StatusText}" TextTrimming="CharacterEllipsis" Opacity="0.7" />
+    <StackPanel DockPanel.Dock="Left" Width="230" Margin="4" Spacing="4">
+      <ListBox x:Name="ProfileList" ItemsSource="{Binding Profiles}" SelectedItem="{Binding Selected, Mode=TwoWay}" MinHeight="140">
+        <ListBox.ItemTemplate>
+          <DataTemplate x:DataType="vm:ProfileEntry">
+            <TextBlock Text="{Binding Display}" />
+          </DataTemplate>
+        </ListBox.ItemTemplate>
+      </ListBox>
+      <WrapPanel>
+        <Button x:Name="CopyButton" Margin="0,0,4,4" Content="복사" />
+        <Button x:Name="DeleteButton" Margin="0,0,4,4" Content="삭제" />
+        <Button x:Name="DefaultButton" Margin="0,0,4,4" Content="기본으로 지정" />
+        <Button x:Name="ImportButton" Margin="0,0,4,4" Content="가져오기…" />
+        <Button x:Name="ExportButton" Margin="0,0,4,4" Content="내보내기…" />
+      </WrapPanel>
+    </StackPanel>
+    <Grid ColumnDefinitions="*,6,*" Margin="4">
+      <DockPanel Grid.Column="0">
+        <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Spacing="6" Margin="0,0,0,4">
+          <TextBox x:Name="NameBox" Width="220" PlaceholderText="프로필 이름" Text="{Binding ProfileName, Mode=TwoWay}" IsEnabled="{Binding IsEditable}" />
+          <Button x:Name="SaveButton" Content="저장" IsEnabled="{Binding IsEditable}" />
+        </StackPanel>
+        <ScrollViewer VerticalScrollBarVisibility="Auto">
+          <ItemsControl x:Name="OptionList" ItemsSource="{Binding Rows}">
+            <ItemsControl.ItemTemplate>
+              <DataTemplate x:DataType="vm:OptionRow">
+                <Grid ColumnDefinitions="220,*" Margin="0,2">
+                  <TextBlock Grid.Column="0" Text="{Binding Label}" VerticalAlignment="Center" />
+                  <CheckBox Grid.Column="1" IsVisible="{Binding IsBool}" IsEnabled="{Binding IsEditable}" IsChecked="{Binding BoolValue, Mode=TwoWay}" />
+                  <NumericUpDown Grid.Column="1" IsVisible="{Binding IsInt}" IsEnabled="{Binding IsEditable}" Width="130" HorizontalAlignment="Left"
+                                 Minimum="{Binding Minimum}" Maximum="{Binding Maximum}" FormatString="0" Value="{Binding NumberValue, Mode=TwoWay}" />
+                  <ComboBox Grid.Column="1" IsVisible="{Binding IsChoice}" IsEnabled="{Binding IsEditable}" Width="130"
+                            ItemsSource="{Binding Choices}" SelectedItem="{Binding ChoiceValue, Mode=TwoWay}" />
+                </Grid>
+              </DataTemplate>
+            </ItemsControl.ItemTemplate>
+          </ItemsControl>
+        </ScrollViewer>
+      </DockPanel>
+      <DockPanel Grid.Column="2">
+        <TextBlock DockPanel.Dock="Top" Text="예제 SQL (고쳐 써도 된다)" FontWeight="SemiBold" />
+        <TextBox DockPanel.Dock="Top" Height="130" AcceptsReturn="True" FontFamily="Consolas,Menlo,monospace" Text="{Binding SampleSql, Mode=TwoWay}" />
+        <TextBlock DockPanel.Dock="Top" Text="미리보기" FontWeight="SemiBold" Margin="0,6,0,0" />
+        <TextBox x:Name="PreviewBox" IsReadOnly="True" AcceptsReturn="True" FontFamily="Consolas,Menlo,monospace" Text="{Binding PreviewText}" />
+      </DockPanel>
+    </Grid>
+  </DockPanel>
 </UserControl>
