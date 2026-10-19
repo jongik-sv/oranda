@@ -1,0 +1,11 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- grammars-v4 PL/SQL 문법에서 생성한 ANTLR 파서. Generated/ 는 gen-antlr.sh(Java 필요)로 만든다. -->
+  <PropertyGroup>
+    <OutputType>Library</OutputType>
+    <Nullable>disable</Nullable>
+    <NoWarn>$(NoWarn);CS3021;CS0108;CS8602</NoWarn>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Antlr4.Runtime.Standard" Version="4.13.1" />
+  </ItemGroup>
+</Project>

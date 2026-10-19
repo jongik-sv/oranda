@@ -1,0 +1,9 @@
+<Project>
+  <!-- TSK-01-05 스파이크 전용. 루트 Directory.Build.props 를 끌어오지 않도록 여기서 멈춘다. -->
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <LangVersion>latest</LangVersion>
+  </PropertyGroup>
+</Project>

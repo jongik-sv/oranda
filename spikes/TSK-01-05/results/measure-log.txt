@@ -1,0 +1,22 @@
+17:23:07 cpu before = 74%
+17:23:43 cpu before = 81%
+17:24:19 cpu before = 98%
+17:24:56 cpu before = 100%
+17:25:32 cpu before = 74%
+17:26:07 cpu before = 78%
+17:26:43 cpu before = 77%
+17:27:19 cpu before = 79%
+17:27:55 cpu before = 95%
+17:28:31 cpu before = 50%
+17:29:07 cpu before = 32%
+17:29:13 start typing-window cpu=56%
+17:31:24 end typing-window exit=0 cpu=57%
+17:31:30 start typing-headless cpu=72%
+17:32:45 end typing-headless exit=0 cpu=13%
+17:32:51 start bench-lexer cpu=22%
+17:34:51 end bench-lexer exit=0 cpu=19%
+17:34:57 start antlr-cold cpu=20%
+17:35:37 end antlr-cold exit=0 cpu=13%
+17:35:43 start bench-antlr cpu=23%
+17:36:00 end bench-antlr exit=0 cpu=15%
+17:36:00 lock released

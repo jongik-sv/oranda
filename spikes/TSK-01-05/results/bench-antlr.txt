@@ -1,0 +1,186 @@
+// Validating benchmarks:
+// ***** BenchmarkRunner: Start   *****
+// ***** Found 2 benchmark(s) in total *****
+// ***** Building 1 exe(s) in Parallel: Start   *****
+// ***** Done, took 00:00:00 (0.05 sec)   *****
+// Found 2 benchmarks:
+//   AntlrBenchmarks.'ANTLR 웜: 프로시저 1개(~50줄)': Job-NRTYLR(Toolchain=InProcessEmitToolchain, IterationCount=10, LaunchCount=1, RunStrategy=Monitoring, WarmupCount=3)
+//   AntlrBenchmarks.'ANTLR 웜: 1만 줄 패키지': Job-NRTYLR(Toolchain=InProcessEmitToolchain, IterationCount=10, LaunchCount=1, RunStrategy=Monitoring, WarmupCount=3)
+
+Setup power plan (GUID: 8c5e7fda-e8bf-4a96-9a85-a6e23a8c635c FriendlyName: 고성능)
+// **************************
+// Benchmark: AntlrBenchmarks.'ANTLR 웜: 프로시저 1개(~50줄)': Job-NRTYLR(Toolchain=InProcessEmitToolchain, IterationCount=10, LaunchCount=1, RunStrategy=Monitoring, WarmupCount=3)
+// *** Execute ***
+// Launch: 1 / 1
+
+// Benchmark Process Environment Information:
+// BenchmarkDotNet v0.15.8
+// Runtime=.NET 10.0.13 (10.0.13, 10.0.1326.50504), X64 RyuJIT x86-64-v4
+// GC=Concurrent Workstation
+// HardwareIntrinsics=AVX512 BITALG+VBMI2+VNNI+VPOPCNTDQ,AVX512 IFMA+VBMI,AVX512 F+BW+CD+DQ+VL,AVX2+BMI1+BMI2+F16C+FMA+LZCNT+MOVBE,AVX,SSE3+SSSE3+SSE4.1+SSE4.2+POPCNT,X86Base+SSE+SSE2,AES+PCLMUL VectorSize=256
+// Job: Job-NRTYLR(Toolchain=InProcessEmitToolchain, IterationCount=10, LaunchCount=1, RunStrategy=Monitoring, WarmupCount=3)
+
+WorkloadWarmup   1: 1 op, 3231100.00 ns, 3.2311 ms/op
+WorkloadWarmup   2: 1 op, 1022100.00 ns, 1.0221 ms/op
+WorkloadWarmup   3: 1 op, 1029200.00 ns, 1.0292 ms/op
+
+WorkloadActual   1: 1 op, 1018900.00 ns, 1.0189 ms/op
+WorkloadActual   2: 1 op, 974100.00 ns, 974.1000 us/op
+WorkloadActual   3: 1 op, 1239200.00 ns, 1.2392 ms/op
+WorkloadActual   4: 1 op, 1004200.00 ns, 1.0042 ms/op
+WorkloadActual   5: 1 op, 999900.00 ns, 999.9000 us/op
+WorkloadActual   6: 1 op, 1794800.00 ns, 1.7948 ms/op
+WorkloadActual   7: 1 op, 1183500.00 ns, 1.1835 ms/op
+WorkloadActual   8: 1 op, 1759300.00 ns, 1.7593 ms/op
+WorkloadActual   9: 1 op, 1131200.00 ns, 1.1312 ms/op
+WorkloadActual  10: 1 op, 1059700.00 ns, 1.0597 ms/op
+
+WorkloadResult   1: 1 op, 1018900.00 ns, 1.0189 ms/op
+WorkloadResult   2: 1 op, 974100.00 ns, 974.1000 us/op
+WorkloadResult   3: 1 op, 1239200.00 ns, 1.2392 ms/op
+WorkloadResult   4: 1 op, 1004200.00 ns, 1.0042 ms/op
+WorkloadResult   5: 1 op, 999900.00 ns, 999.9000 us/op
+WorkloadResult   6: 1 op, 1794800.00 ns, 1.7948 ms/op
+WorkloadResult   7: 1 op, 1183500.00 ns, 1.1835 ms/op
+WorkloadResult   8: 1 op, 1759300.00 ns, 1.7593 ms/op
+WorkloadResult   9: 1 op, 1131200.00 ns, 1.1312 ms/op
+WorkloadResult  10: 1 op, 1059700.00 ns, 1.0597 ms/op
+// GC:  0 0 0 293824 1
+// Threading:  0 0 1
+
+
+Mean = 1.216 ms, StdErr = 0.097 ms (8.00%), N = 10, StdDev = 0.308 ms
+Min = 0.974 ms, Q1 = 1.008 ms, Median = 1.095 ms, Q3 = 1.225 ms, Max = 1.795 ms
+IQR = 0.217 ms, LowerFence = 0.682 ms, UpperFence = 1.551 ms
+ConfidenceInterval = [0.751 ms; 1.682 ms] (CI 99.9%), Margin = 0.465 ms (38.25% of Mean)
+Skewness = 1.05, Kurtosis = 2.33, MValue = 2
+
+// ** Remained 1 (50.0%) benchmark(s) to run. Estimated finish 2026-10-19 17:35 (0h 0m from now) **
+Setup power plan (GUID: 8c5e7fda-e8bf-4a96-9a85-a6e23a8c635c FriendlyName: 고성능)
+// **************************
+// Benchmark: AntlrBenchmarks.'ANTLR 웜: 1만 줄 패키지': Job-NRTYLR(Toolchain=InProcessEmitToolchain, IterationCount=10, LaunchCount=1, RunStrategy=Monitoring, WarmupCount=3)
+// *** Execute ***
+// Launch: 1 / 1
+
+// Benchmark Process Environment Information:
+// BenchmarkDotNet v0.15.8
+// Runtime=.NET 10.0.13 (10.0.13, 10.0.1326.50504), X64 RyuJIT x86-64-v4
+// GC=Concurrent Workstation
+// HardwareIntrinsics=AVX512 BITALG+VBMI2+VNNI+VPOPCNTDQ,AVX512 IFMA+VBMI,AVX512 F+BW+CD+DQ+VL,AVX2+BMI1+BMI2+F16C+FMA+LZCNT+MOVBE,AVX,SSE3+SSSE3+SSE4.1+SSE4.2+POPCNT,X86Base+SSE+SSE2,AES+PCLMUL VectorSize=256
+// Job: Job-NRTYLR(Toolchain=InProcessEmitToolchain, IterationCount=10, LaunchCount=1, RunStrategy=Monitoring, WarmupCount=3)
+
+WorkloadWarmup   1: 1 op, 327272600.00 ns, 327.2726 ms/op
+WorkloadWarmup   2: 1 op, 216472700.00 ns, 216.4727 ms/op
+WorkloadWarmup   3: 1 op, 283678400.00 ns, 283.6784 ms/op
+
+WorkloadActual   1: 1 op, 292576400.00 ns, 292.5764 ms/op
+WorkloadActual   2: 1 op, 153557000.00 ns, 153.5570 ms/op
+WorkloadActual   3: 1 op, 148550400.00 ns, 148.5504 ms/op
+WorkloadActual   4: 1 op, 149108000.00 ns, 149.1080 ms/op
+WorkloadActual   5: 1 op, 145245100.00 ns, 145.2451 ms/op
+WorkloadActual   6: 1 op, 145075700.00 ns, 145.0757 ms/op
+WorkloadActual   7: 1 op, 127248100.00 ns, 127.2481 ms/op
+WorkloadActual   8: 1 op, 146971600.00 ns, 146.9716 ms/op
+WorkloadActual   9: 1 op, 128509100.00 ns, 128.5091 ms/op
+WorkloadActual  10: 1 op, 150977900.00 ns, 150.9779 ms/op
+
+WorkloadResult   1: 1 op, 292576400.00 ns, 292.5764 ms/op
+WorkloadResult   2: 1 op, 153557000.00 ns, 153.5570 ms/op
+WorkloadResult   3: 1 op, 148550400.00 ns, 148.5504 ms/op
+WorkloadResult   4: 1 op, 149108000.00 ns, 149.1080 ms/op
+WorkloadResult   5: 1 op, 145245100.00 ns, 145.2451 ms/op
+WorkloadResult   6: 1 op, 145075700.00 ns, 145.0757 ms/op
+WorkloadResult   7: 1 op, 127248100.00 ns, 127.2481 ms/op
+WorkloadResult   8: 1 op, 146971600.00 ns, 146.9716 ms/op
+WorkloadResult   9: 1 op, 128509100.00 ns, 128.5091 ms/op
+WorkloadResult  10: 1 op, 150977900.00 ns, 150.9779 ms/op
+// GC:  10 5 1 65510256 1
+// Threading:  0 0 1
+
+
+Mean = 158.782 ms, StdErr = 15.132 ms (9.53%), N = 10, StdDev = 47.853 ms
+Min = 127.248 ms, Q1 = 145.118 ms, Median = 147.761 ms, Q3 = 150.510 ms, Max = 292.576 ms
+IQR = 5.392 ms, LowerFence = 137.029 ms, UpperFence = 158.599 ms
+ConfidenceInterval = [86.436 ms; 231.128 ms] (CI 99.9%), Margin = 72.346 ms (45.56% of Mean)
+Skewness = 2.12, Kurtosis = 6.15, MValue = 2
+
+// ** Remained 0 (0.0%) benchmark(s) to run. Estimated finish 2026-10-19 17:35 (0h 0m from now) **
+Successfully reverted power plan (GUID: 381b4222-f694-41f0-9685-ff5bb260df2e FriendlyName: 균형 조정)
+// ***** BenchmarkRunner: Finish  *****
+
+// * Export *
+  BenchmarkDotNet.Artifacts\results\EditorSpike.Bench.AntlrBenchmarks-report.csv
+  BenchmarkDotNet.Artifacts\results\EditorSpike.Bench.AntlrBenchmarks-report-github.md
+  BenchmarkDotNet.Artifacts\results\EditorSpike.Bench.AntlrBenchmarks-report.html
+
+// * Detailed results *
+AntlrBenchmarks.'ANTLR 웜: 프로시저 1개(~50줄)': Job-NRTYLR(Toolchain=InProcessEmitToolchain, IterationCount=10, LaunchCount=1, RunStrategy=Monitoring, WarmupCount=3)
+Runtime = ; GC = 
+Mean = 1.216 ms, StdErr = 0.097 ms (8.00%), N = 10, StdDev = 0.308 ms
+Min = 0.974 ms, Q1 = 1.008 ms, Median = 1.095 ms, Q3 = 1.225 ms, Max = 1.795 ms
+IQR = 0.217 ms, LowerFence = 0.682 ms, UpperFence = 1.551 ms
+ConfidenceInterval = [0.751 ms; 1.682 ms] (CI 99.9%), Margin = 0.465 ms (38.25% of Mean)
+Skewness = 1.05, Kurtosis = 2.33, MValue = 2
+-------------------- Histogram --------------------
+[0.919 ms ; 1.294 ms) | @@@@@@@@
+[1.294 ms ; 1.590 ms) | 
+[1.590 ms ; 1.982 ms) | @@
+---------------------------------------------------
+
+AntlrBenchmarks.'ANTLR 웜: 1만 줄 패키지': Job-NRTYLR(Toolchain=InProcessEmitToolchain, IterationCount=10, LaunchCount=1, RunStrategy=Monitoring, WarmupCount=3)
+Runtime = ; GC = 
+Mean = 158.782 ms, StdErr = 15.132 ms (9.53%), N = 10, StdDev = 47.853 ms
+Min = 127.248 ms, Q1 = 145.118 ms, Median = 147.761 ms, Q3 = 150.510 ms, Max = 292.576 ms
+IQR = 5.392 ms, LowerFence = 137.029 ms, UpperFence = 158.599 ms
+ConfidenceInterval = [86.436 ms; 231.128 ms] (CI 99.9%), Margin = 72.346 ms (45.56% of Mean)
+Skewness = 2.12, Kurtosis = 6.15, MValue = 2
+-------------------- Histogram --------------------
+[111.250 ms ; 169.555 ms) | @@@@@@@@@
+[169.555 ms ; 227.859 ms) | 
+[227.859 ms ; 263.424 ms) | 
+[263.424 ms ; 321.729 ms) | @
+---------------------------------------------------
+
+// * Summary *
+
+BenchmarkDotNet v0.15.8, Windows 11 (10.0.26300.9711)
+11th Gen Intel Core i5-1135G7 2.40GHz (Max: 2.42GHz), 1 CPU, 8 logical and 4 physical cores
+  [Host] : .NET 10.0.13 (10.0.13, 10.0.1326.50504), X64 RyuJIT x86-64-v4
+
+Toolchain=InProcessEmitToolchain  IterationCount=10  LaunchCount=1  
+RunStrategy=Monitoring  WarmupCount=3  
+
+| Method                   | Mean       | Error      | StdDev     | P95        | Gen0       | Gen1      | Gen2      | Allocated   |
+|------------------------- |-----------:|-----------:|-----------:|-----------:|-----------:|----------:|----------:|------------:|
+| 'ANTLR 웜: 프로시저 1개(~50줄)' |   1.216 ms |  0.4653 ms |  0.3077 ms |   1.779 ms |          - |         - |         - |   286.94 KB |
+| 'ANTLR 웜: 1만 줄 패키지'      | 158.782 ms | 72.3463 ms | 47.8526 ms | 230.018 ms | 10000.0000 | 5000.0000 | 1000.0000 | 63974.86 KB |
+
+// * Warnings *
+MinIterationTime
+  AntlrBenchmarks.'ANTLR 웜: 프로시저 1개(~50줄)': Toolchain=InProcessEmitToolchain, IterationCount=10, LaunchCount=1, RunStrategy=Monitoring, WarmupCount=3 -> The minimum observed iteration time is 974.1us which is very small. It's recommended to increase it to at least 100ms using more operations.
+
+// * Hints *
+Outliers
+  AntlrBenchmarks.'ANTLR 웜: 프로시저 1개(~50줄)': Toolchain=InProcessEmitToolchain, IterationCount=10, LaunchCount=1, RunStrategy=Monitoring, WarmupCount=3 -> 2 outliers were detected (1.76 ms, 1.79 ms)
+  AntlrBenchmarks.'ANTLR 웜: 1만 줄 패키지': Toolchain=InProcessEmitToolchain, IterationCount=10, LaunchCount=1, RunStrategy=Monitoring, WarmupCount=3      -> 3 outliers were detected (127.25 ms, 128.51 ms, 292.58 ms)
+
+// * Legends *
+  Mean      : Arithmetic mean of all measurements
+  Error     : Half of 99.9% confidence interval
+  StdDev    : Standard deviation of all measurements
+  P95       : Percentile 95
+  Gen0      : GC Generation 0 collects per 1000 operations
+  Gen1      : GC Generation 1 collects per 1000 operations
+  Gen2      : GC Generation 2 collects per 1000 operations
+  Allocated : Allocated memory per single operation (managed only, inclusive, 1KB = 1024B)
+  1 ms      : 1 Millisecond (0.001 sec)
+
+// * Diagnostic Output - MemoryDiagnoser *
+
+
+// ***** BenchmarkRunner: End *****
+Run time: 00:00:09 (9.05 sec), executed benchmarks: 2
+
+Global total time: 00:00:10 (10.22 sec), executed benchmarks: 2
+// * Artifacts cleanup *
+Artifacts cleanup is finished

@@ -1,0 +1,32 @@
+# antlr cold proc x5  (* = SLL 실패 후 LL 재파싱, e=LL 구문 오류 수, t=토큰 수, ms)
+  RESULT proc 2116.6 1.8 1.5 1.5 1.6 1.6 1.6 1.6 1.6 1.6
+  WS 106 MB
+  process wall 2280 ms
+  RESULT proc 2630.2 2.3 2.2 2.1 2.2 2.3 2.3 2.2 2.2 2.2
+  WS 106 MB
+  process wall 2768 ms
+  RESULT proc 2076.3 2.0 1.9 1.7 1.8 1.8 1.8 2.4 2.0 1.8
+  WS 106 MB
+  process wall 2204 ms
+  RESULT proc 1922.3 2.6 3.8 2.5 2.4 2.5 3.0 2.5 2.4 2.6
+  WS 106 MB
+  process wall 2060 ms
+  RESULT proc 2068.5 2.9 2.3 2.2 2.1 2.0 2.1 2.0 2.1 2.0
+  WS 106 MB
+  process wall 2204 ms
+# antlr cold package x5  (* = SLL 실패 후 LL 재파싱, e=LL 구문 오류 수, t=토큰 수, ms)
+  RESULT package 2653.1(e0,t122060) 579.1(e0,t122060) 471.3(e0,t122060) 733.3(e0,t122060) 264.1(e0,t122060) | proc: 3.91 0.85 0.70 0.73 0.71 0.71 0.68 0.68 0.64 0.64
+  WS 207 MB
+  process wall 4852 ms
+  RESULT package 2481.3(e0,t122060) 387.2(e0,t122060) 415.8(e0,t122060) 603.4(e0,t122060) 297.6(e0,t122060) | proc: 3.57 0.57 0.44 0.45 0.43 0.47 0.46 0.40 0.38 0.41
+  WS 214 MB
+  process wall 4341 ms
+  RESULT package 2449.2(e0,t122060) 343.6(e0,t122060) 323.7(e0,t122060) 637.1(e0,t122060) 401.8(e0,t122060) | proc: 46.89 0.78 0.52 0.50 0.55 0.51 0.65 0.54 0.51 0.50
+  WS 196 MB
+  process wall 4347 ms
+  RESULT package 2263.0(e0,t122060) 406.6(e0,t122060) 245.9(e0,t122060) 681.3(e0,t122060) 315.6(e0,t122060) | proc: 3.46 0.68 0.59 0.55 0.56 0.53 32.79 0.56 0.38 0.35
+  WS 191 MB
+  process wall 4079 ms
+  RESULT package 2635.4(e0,t122060) 624.3(e0,t122060) 547.8(e0,t122060) 656.8(e0,t122060) 243.7(e0,t122060) | proc: 4.05 0.92 0.79 0.74 0.70 0.71 0.66 0.67 0.71 0.66
+  WS 208 MB
+  process wall 4849 ms
