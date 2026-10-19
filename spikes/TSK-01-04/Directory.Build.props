@@ -1,0 +1,9 @@
+<Project>
+  <!-- 스파이크 전용: 루트 Directory.Build.props 를 가린다(경고=오류 끔 — 트리밍·AOT 경고를 세어야 하므로). -->
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <AvaloniaUseCompiledBindingsByDefault>true</AvaloniaUseCompiledBindingsByDefault>
+  </PropertyGroup>
+</Project>

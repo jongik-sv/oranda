@@ -1,0 +1,34 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!--
+    TSK-01-04 측정 전용 진입점. src/Oranda.App(2eaf738)의 복제본에 시작 단계 표식만 더했다.
+    실제 App 과 같은 프로젝트를 참조해 게시 폴더 구성(ODP.NET 포함)을 맞춘다.
+    게시 변형(ReadyToRun·트리밍·AOT)은 publish.ps1 이 -p: 속성으로 바꾼다.
+  -->
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <RootNamespace>Oranda.App</RootNamespace>
+    <AssemblyName>Oranda.App</AssemblyName>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <RuntimeIdentifier>win-x64</RuntimeIdentifier>
+    <SelfContained>true</SelfContained>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <AvaloniaResource Include="Assets\**" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Avalonia" Version="12.1.4" />
+    <PackageReference Include="Avalonia.Desktop" Version="12.1.4" />
+    <PackageReference Include="Avalonia.Themes.Fluent" Version="12.1.4" />
+    <PackageReference Include="Avalonia.Fonts.Inter" Version="12.1.4" />
+    <PackageReference Include="CommunityToolkit.Mvvm" Version="8.4.2" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\..\src\Oranda.Core\Oranda.Core.csproj" />
+    <ProjectReference Include="..\..\..\src\Oranda.Language\Oranda.Language.csproj" />
+    <ProjectReference Include="..\..\..\src\Oranda.Oracle\Oranda.Oracle.csproj" />
+    <ProjectReference Include="..\..\..\src\Oranda.Platform\Oranda.Platform.csproj" />
+  </ItemGroup>
+</Project>
