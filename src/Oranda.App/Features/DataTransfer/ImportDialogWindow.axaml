@@ -50,7 +50,8 @@
             <DataTemplate x:DataType="dt:ImportMappingRow">
               <Grid ColumnDefinitions="180,200,*" ColumnSpacing="8">
                 <TextBlock Text="{Binding Source}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
-                <ComboBox x:Name="TargetBox" Grid.Column="1" HorizontalAlignment="Stretch" AutomationProperties.Name="대상 열" />
+                <ComboBox x:Name="TargetBox" Grid.Column="1" HorizontalAlignment="Stretch" AutomationProperties.Name="대상 열"
+                          Loaded="OnRowLoaded" />
                 <TextBlock Grid.Column="2" Text="{Binding Preview}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis"
                            Classes.error="{Binding PreviewIsError}" />
               </Grid>

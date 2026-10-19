@@ -78,6 +78,8 @@ public sealed class ShellText : IShellText
         ["Menu.help"] = "도움말",
         ["Menu.view.panels"] = "도구 창",
         ["Menu.view.theme"] = "테마",
+        ["Menu.sql.errorMode"] = "스크립트 오류 처리",
+        ["Menu.tools.keymapPreset"] = "단축키 프리셋",
         ["Shell.palette.watermark"] = "명령 이름을 입력하세요",
         ["Shell.palette.none"] = "일치하는 명령이 없다",
         ["Shell.palette.disabled"] = "지금은 실행할 수 없다",

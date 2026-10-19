@@ -72,8 +72,9 @@ public sealed class PlsqlRunWindow : Window
             header.Children.Add(h);
         }
 
-        Grid.SetRow(header, 1);
-        root.Children.Add(header);
+        var headerBand = new Border { Classes = { "grid-header" }, Child = header, Padding = new Thickness(4, 4) };
+        Grid.SetRow(headerBand, 1);
+        root.Children.Add(headerBand);
 
         var rows = new ItemsControl { ItemTemplate = new FuncDataTemplate<PlsqlArgumentRow>((row, _) => RowView(row)) };
         rows.Bind(ItemsControl.ItemsSourceProperty, new Binding(nameof(PlsqlRunViewModel.Rows)));
@@ -103,7 +104,7 @@ public sealed class PlsqlRunWindow : Window
         var output = new TextBox { IsReadOnly = true, AcceptsReturn = true, FontFamily = Mono };
         output.Bind(TextBox.TextProperty, new Binding(nameof(PlsqlRunViewModel.DbmsOutputText)));
         Avalonia.Automation.AutomationProperties.SetName(output, "DBMS_OUTPUT");
-        tabs.Items.Add(new TabItem { Header = "DBMS_OUTPUT", Content = output });
+        tabs.Items.Add(new TabItem { Header = "DBMS__OUTPUT", Content = output }); // 「__」 = 밑줄 글자(접근 키 아님)
         Grid.SetRow(tabs, 3);
         root.Children.Add(tabs);
 
@@ -123,7 +124,7 @@ public sealed class PlsqlRunWindow : Window
         root.Children.Add(status);
 
         // 단추
-        var run = new Button { Content = "실행", MinWidth = 90 };
+        var run = new Button { Content = "실행", MinWidth = 90, Classes = { "accent" } };
         run.Bind(IsEnabledProperty, new Binding(nameof(PlsqlRunViewModel.CanRun)));
         run.Click += async (_, _) => await _vm.RunAsync().ConfigureAwait(true);
         var cancel = new Button { Content = "실행 취소", MinWidth = 90 };

@@ -15,17 +15,17 @@ namespace Oranda.App.Features.DbTools;
 /// 실행 엔진(정책 관문)으로 보낸다. 서비스는 실행할 때 꺼낸다(시작 경로에서 Oracle 어셈블리를 올리지 않기 위해).
 /// </summary>
 [OrandaCommand("oranda.schema.compileInvalid", CommandCategory.Database, Enablement = "hasSession && !readOnlySession",
-    Placements = ["menu:tools/compileInvalid@120", "context:schema/compileInvalid@50"])]
+    Placements = ["menu:database/compileInvalid@1020", "context:schema/compileInvalid@50"])]
 [OrandaCommand("oranda.schema.recyclebinPurge", CommandCategory.Database, When = "schemaFocus", Enablement = "recyclebinNodeSelected && !readOnlySession",
     Placements = ["context:schema/recyclebin@60"])]
 [OrandaCommand("oranda.schema.recyclebinFlashback", CommandCategory.Database, When = "schemaFocus", Enablement = "recyclebinNodeSelected && !readOnlySession",
     Placements = ["context:schema/recyclebin@61"])]
 [OrandaCommand("oranda.schema.objectSearch", CommandCategory.Database, Enablement = "hasSession",
-    Placements = ["menu:tools/objectSearch@100"])]
+    Placements = ["menu:database/objectSearch@1000"])]
 [OrandaCommand("oranda.db.info", CommandCategory.Database, Enablement = "hasSession",
-    Icon = "database", Placements = ["menu:tools/dbInfo@110", "toolbar:main/dbInfo@530"])]
+    Icon = "database", Placements = ["menu:database/dbInfo@1010", "toolbar:main/dbInfo@530"])]
 [OrandaCommand("oranda.db.ddlExtract", CommandCategory.Database, Enablement = "hasSession",
-    Placements = ["menu:tools/ddlExtract@130"])]
+    Placements = ["menu:database/ddlExtract@1030"])]
 public sealed class DbToolsCommandHandler : ICommandHandler
 {
     public const string DbInfoPanelId = "oranda.panel.dbInfo";

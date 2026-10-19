@@ -118,7 +118,8 @@ public sealed class MenuControls(ICommandRegistry registry, IContextKeys keys, F
             default:
                 {
                     var command = track ? Track(n.CommandId!) : new RegistryCommand(n.CommandId!, registry, keys);
-                    var item = new MenuItem { Header = n.Title, Command = command, InputGesture = gesture(n.CommandId!), Icon = ShellIcons.Create(n.Icon) };
+                    // 밑줄은 접근 키 표시로 읽히므로(「DBMS_OUTPUT」→「DBMSOUTPUT」) 두 번 써서 글자로 남긴다.
+                    var item = new MenuItem { Header = n.Title.Replace("_", "__", StringComparison.Ordinal), Command = command, InputGesture = gesture(n.CommandId!), Icon = ShellIcons.Create(n.Icon) };
                     AutomationProperties.SetName(item, n.Title);
                     return item;
                 }

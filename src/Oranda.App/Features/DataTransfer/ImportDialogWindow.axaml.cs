@@ -14,13 +14,13 @@ public partial class ImportDialogWindow : Window
         BrowseButton.Click += OnBrowse;
         CloseButton.Click += (_, _) => Close();
         Closed += (_, _) => (DataContext as System.IDisposable)?.Dispose();
-        AddHandler(Control.LoadedEvent, OnRowLoaded, RoutingStrategies.Bubble);
     }
 
     /// <summary>매핑 줄이 만들어질 때 그 줄의 대상 열 선택 상자를 현재 대상 열 목록과 양방향으로 잇는다.</summary>
     private void OnRowLoaded(object? sender, RoutedEventArgs e)
     {
-        if (e.Source is ComboBox { Name: "TargetBox", DataContext: ImportMappingRow row } box && DataContext is ImportDialogViewModel vm && box.ItemsSource is null)
+        // Loaded 는 위로 전파되지 않으므로(Direct) 창에서 받지 않고 콤보 상자 자신에 단다(XAML Loaded="OnRowLoaded").
+        if (sender is ComboBox { DataContext: ImportMappingRow row } box && DataContext is ImportDialogViewModel vm && box.ItemsSource is null)
         {
             var items = new List<string?> { null };
             items.AddRange(vm.TargetColumns);

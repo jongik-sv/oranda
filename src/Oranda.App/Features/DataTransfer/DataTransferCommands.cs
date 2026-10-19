@@ -122,8 +122,12 @@ public sealed class DataTransferCommandHandler : ICommandHandler
 
     private static ExportSource? FromEditor(IServiceProvider services)
     {
+        // 결과를 내보낼 때는 지금 보고 있는 결과 탭의 문장을 쓴다(커서가 문장 밖에 있어도 된다). 없으면 커서 위치 문장.
+        var shown = Oranda.App.Features.SqlEditor.SqlEditorHost.Current.Active?.ResultPane is Oranda.App.Features.Execution.ResultTabsViewModel { Selected.Statement: { } st }
+            ? st
+            : null;
         var editor = services.GetService(typeof(IEditorContext)) as IEditorContext;
-        var statement = editor?.GetCurrentStatement();
+        var statement = shown ?? editor?.GetCurrentStatement();
         var session = DataTransferCommands.ResolveSession(services);
         if (statement is null || session is null)
         {

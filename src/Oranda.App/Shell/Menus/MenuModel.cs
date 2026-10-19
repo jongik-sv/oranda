@@ -88,6 +88,12 @@ public static class MenuModelBuilder
 
     public const string PanelsSubmenuId = "view.panels";
 
+    /// <summary>편집 메뉴 안에서 탐색 명령 묶음이 시작하는 순서(편집 명령은 이보다 작다).</summary>
+    private const int NavigateOffset = 10000;
+
+    /// <summary>오른쪽 클릭 표면 → 그 명령을 함께 보일 최상위 메뉴.</summary>
+    private static readonly (string Surface, string Top)[] ContextMenuMirrors = [("grid", "result"), ("schema", "database")];
+
     public static IReadOnlyList<MenuNode> BuildMenuBar(
         IEnumerable<CommandDefinition> commands,
         IShellText text,
@@ -95,11 +101,23 @@ public static class MenuModelBuilder
         IEnumerable<ToolPanelDefinition> panels)
     {
         var roots = TopMenus.ToDictionary(id => id, id => new List<(Placement P, MenuNode N)>(), StringComparer.Ordinal);
-        foreach (var c in commands)
+        var commandList = commands as IReadOnlyList<CommandDefinition> ?? [.. commands];
+        foreach (var c in commandList)
         {
             foreach (var raw in c.Placements)
             {
-                if (!Placement.TryParse(raw, out var p) || p.Surface != "menu" || !roots.TryGetValue(p.Path[0], out var list))
+                if (!Placement.TryParse(raw, out var p) || p.Surface != "menu")
+                {
+                    continue;
+                }
+
+                // 「탐색」 범주는 따로 최상위 메뉴가 없다(ui-shell 1.1: 편집 메뉴에 탐색 포함). 편집 메뉴 아래쪽 묶음으로 보낸다.
+                if (p.Path[0] == "navigate")
+                {
+                    p = p with { Path = ["edit", .. p.Path.Skip(1)], Order = NavigateOffset + p.Order % NavigateOffset };
+                }
+
+                if (!roots.TryGetValue(p.Path[0], out var list))
                 {
                     continue;
                 }
@@ -110,6 +128,26 @@ public static class MenuModelBuilder
                     Shortcut = shortcut(c.Id),
                     Icon = c.Icon,
                 }));
+            }
+        }
+
+        // 오른쪽 클릭에만 놓인 명령도 메뉴 막대에서 찾을 수 있게 한다(ui-shell 1.1 의 결과·데이터베이스 메뉴).
+        foreach (var (surface, top) in ContextMenuMirrors)
+        {
+            var context = BuildContext(commandList.Where(c => !c.Placements.Any(r => r.StartsWith("menu:", StringComparison.Ordinal))), text, shortcut, surface);
+            var group = 0;
+            var order = 0;
+            foreach (var node in context)
+            {
+                if (node.Kind == MenuNodeKind.Separator)
+                {
+                    group++;
+                    order = 0;
+                    continue;
+                }
+
+                var p = new Placement("menu", [top, node.CommandId ?? "item"], (group * Placement.GroupSize) + (++order));
+                roots[top].Add((p, node with { Order = p.Order }));
             }
         }
 
