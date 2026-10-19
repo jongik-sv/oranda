@@ -1,18 +1,54 @@
 namespace Oranda.Core.Connection;
 
-/// <summary>Oracle 에서 SYSDBA/SYSOPER 로 붙는지. ODP.NET Managed 가 지원하는 값만 둔다.</summary>
+/// <summary>
+/// 접속 권한 모드(CONN-02). ODP.NET <c>DBA Privilege</c> 연결 속성 값과 1:1.
+/// <see cref="SysBackup"/>·<see cref="SysDg"/>·<see cref="SysKm"/> 의 Managed 드라이버 지원 여부는 접속 Task 가 실측한다.
+/// </summary>
 public enum AuthMode
 {
     Default,
     SysDba,
     SysOper,
+    SysBackup,
+    SysDg,
+    SysKm,
+}
+
+/// <summary>환경 라벨(CONN-06, SAFE-01). <see cref="Production"/> 은 확인 대화상자·빨간 테두리 대상.</summary>
+public enum ConnectionEnvironment
+{
+    Development,
+    Test,
+    Production,
+}
+
+/// <summary>관리 팩 보유 선언(SAFE-07). Tuning 은 Diagnostics 를 전제하므로 3값이며 값 순서가 포함 관계다.</summary>
+public enum LicensePack
+{
+    None,
+    Diagnostics,
+    DiagnosticsAndTuning,
+}
+
+/// <summary>접속 직후 적용할 NLS 설정(CONN-08). null = 서버 기본값.</summary>
+public sealed record NlsSettings
+{
+    public string? DateFormat { get; init; }
+
+    public string? TimestampFormat { get; init; }
+
+    public string? Language { get; init; }
+
+    public string? Territory { get; init; }
+
+    public string? Sort { get; init; }
 }
 
 /// <summary>
-/// 접속 정보. <see cref="DataSource"/> 는 Easy Connect Plus 문자열
-/// (예: <c>tcps://host:1522/svc?retry_count=3</c>, <c>host:1521/svc</c>) 또는 tnsnames.ora 별칭.
-/// 비밀번호는 보관하지 않는다 — 연결을 만들 때 따로 넘긴다.
-/// 연결 문자열 조립과 ODP.NET 프로세스 설정은 Oranda.Oracle 의 <c>ConnectionProfileExtensions</c> 가 맡는다.
+/// 접속 정보(<c>connections.json</c> 의 <c>profiles[]</c>, docs/design/data-model.md 2.2).
+/// <see cref="DataSource"/> 는 Easy Connect Plus 문자열 또는 tnsnames.ora 별칭.
+/// 비밀번호는 보관하지 않는다 — <see cref="CredentialRef"/> 로 <c>ICredentialStore</c> 에서 꺼낸다.
+/// D-004: 위치 매개변수 record 를 유지하고 새 매개변수는 끝에 기본값과 함께 덧붙인다.
 /// </summary>
 public sealed record ConnectionProfile(
     string Name,
@@ -21,4 +57,23 @@ public sealed record ConnectionProfile(
     AuthMode Auth = AuthMode.Default,
     string? TnsAdmin = null,
     string? WalletLocation = null,
-    int ConnectTimeoutSeconds = 15);
+    int ConnectTimeoutSeconds = 15,
+    Guid Id = default,
+    ConnectionEnvironment Environment = ConnectionEnvironment.Development,
+    bool ReadOnly = false,
+    LicensePack LicensePack = LicensePack.None,
+    int KeepAliveSeconds = 0,
+    NlsSettings? Nls = null,
+    string? CredentialRef = null,
+    string? ProxyUser = null,
+    string? Color = null,
+    string? Group = null,
+    DateTimeOffset? LastConnectedAt = null);
+
+/// <summary><c>connections.json</c> 루트.</summary>
+public sealed record ConnectionsDocument
+{
+    public int SchemaVersion { get; init; } = Settings.SchemaVersions.Connections;
+
+    public IReadOnlyList<ConnectionProfile> Profiles { get; init; } = [];
+}

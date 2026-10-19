@@ -1,0 +1,12 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    공용 시험 헬퍼(가짜 세션·결과·실행 엔진·이벤트 버스 등). 시험 프로젝트가 참조하는 일반 라이브러리다.
+    Core 만 참조한다 — Oracle 드라이버·Avalonia 없이 기능 로직을 시험하기 위해서다.
+  -->
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Oranda.Core\Oranda.Core.csproj" />
+  </ItemGroup>
+
+</Project>

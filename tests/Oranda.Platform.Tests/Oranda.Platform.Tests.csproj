@@ -1,0 +1,25 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- Oranda.Platform 단위 시험(저장소·자격 증명·가져오기). 실제 사용자 폴더 대신 ORANDA_DATA_DIR 임시 폴더를 쓴다. -->
+
+  <PropertyGroup>
+    <IsTestProject>true</IsTestProject>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="coverlet.collector" />
+    <PackageReference Include="Microsoft.NET.Test.Sdk" />
+    <PackageReference Include="xunit" />
+    <PackageReference Include="xunit.runner.visualstudio" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Using Include="Xunit" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Oranda.Platform\Oranda.Platform.csproj" />
+    <ProjectReference Include="..\Oranda.Testing\Oranda.Testing.csproj" />
+  </ItemGroup>
+
+</Project>

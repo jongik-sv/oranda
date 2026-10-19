@@ -18,6 +18,8 @@
   <ItemGroup>
     <ProjectReference Include="..\..\src\Oranda.Core\Oranda.Core.csproj" />
     <ProjectReference Include="..\..\src\Oranda.Language\Oranda.Language.csproj" />
+    <ProjectReference Include="..\..\src\Oranda.Oracle\Oranda.Oracle.csproj" />
+    <ProjectReference Include="..\..\src\Oranda.Platform\Oranda.Platform.csproj" />
   </ItemGroup>
 
 </Project>

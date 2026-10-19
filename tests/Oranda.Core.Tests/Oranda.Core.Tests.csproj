@@ -17,6 +17,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\Oranda.Core\Oranda.Core.csproj" />
+    <ProjectReference Include="..\Oranda.Testing\Oranda.Testing.csproj" />
   </ItemGroup>
 
 </Project>
