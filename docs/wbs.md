@@ -362,7 +362,7 @@ dotnet, testhost, Oranda.App
 - acceptance:
   - 화면 구조 문서와 명령 ID 목록이 docs/design 에 있다
 - constraints:
-  - HiDPI 100~250% 에서 잘리지 않는 레이아웃 기준을 둔다
+  - HiDPI 100-250% 에서 잘리지 않는 레이아웃 기준을 둔다
 - test-criteria: -
 
 #### 기술 스펙 (TRD)
@@ -481,7 +481,7 @@ dotnet, testhost, Oranda.App
 - acceptance:
   - 실행 로직 없음 (contract-only)
   - 공유 시험은 틀의 존재·탑재 순서만 단정한다. 빈 라우터·스텁 목록(`STUBS` 등)을 단정하지 않는다
-  - 기능 Task 마다 자기 시험 파일과 소유 파일을 ui-contract.md `## 기능 Task 편집 지점` 에 적고(design.md 에서 링크), 두 Task 가 한 파일을 나눠 갖지 않는다
+  - 기능 Task 마다 자기 시험 파일과 소유 파일을 design.md `## 기능 Task 편집 지점` 에 적고, 두 Task 가 한 파일을 나눠 갖지 않는다
   - 등록(라우트·핸들러 목록)은 자동 수집이며 기능 Task 가 공유 진입점에 줄을 더하지 않아도 된다
   - 계약 문서가 지정한 파일(공용 시험 헬퍼 포함)이 모두 있다
 - constraints:
@@ -521,7 +521,7 @@ dotnet, testhost, Oranda.App
 - requirements:
   - 도킹 레이아웃 표시·저장·복원
   - 밝은·어두운 테마와 OS 설정 따르기, 에디터 글꼴 설정
-  - HiDPI 100~250% 표시
+  - HiDPI 100-250% 표시
   - 명령 팔레트(명령 이름 검색·실행)
   - 설정 파일 읽기·쓰기(TSK-02-01 스키마)
   - 계약 Task design.md 「기능 Task 편집 지점」 의 자기 소유 파일만 고친다
@@ -646,13 +646,13 @@ dotnet, testhost, Oranda.App
   - EZConnect Plus, TNS 별칭(TNS 디렉터리), 호스트·포트·서비스 입력
   - 인증 모드(SYSDBA 등), 프록시 사용자
   - ADB 지갑 zip 끌어 놓기로 프로필 생성, 지갑 없는 TLS
-  - 비밀번호 만료 시 변경 대화상자
+  - 비밀번호가 만료되면 변경 대화상자 표시
   - 환경 라벨·색, 읽기 전용, 팩 보유 선언, NLS 설정
   - 계약 Task design.md 「기능 Task 편집 지점」 의 자기 소유 파일만 고친다
 - acceptance:
   - 세 접속 방식으로 26ai 컨테이너에 접속된다
   - 지갑 zip 을 끌어 놓으면 프로필이 만들어지고 접속된다
-  - 미지원 버전 접속 시 버전·이유가 표시된다
+  - 미지원 버전에 접속하면 버전·이유가 표시된다
 - constraints:
   - 비밀번호는 ICredentialStore 에만 저장한다
 - test-criteria:
@@ -773,7 +773,7 @@ dotnet, testhost, Oranda.App
   - 탭 묶음 저장·복원, 10 s 간격 자동 저장과 비정상 종료 복구
   - 계약 Task design.md 「기능 Task 편집 지점」 의 자기 소유 파일만 고친다
 - acceptance:
-  - 앱을 강제 종료 후 다시 열면 미저장 탭 내용이 복구된다
+  - 앱을 강제 종료한 후 다시 열면 미저장 탭 내용이 복구된다
   - 1만 줄 파일에서 키 입력 반영 16 ms 이하(p95)
 - constraints:
   - IEditorContext 를 이 편집기에 붙여 확장 지점으로 노출한다(APP-09)
@@ -782,7 +782,7 @@ dotnet, testhost, Oranda.App
 
 #### 기술 스펙 (TRD)
 - tech-spec:
-  - Avalonia.AvaloniaEdit 12.0.0
+  - Avalonia.AvaloniaEdit 11.4.1
 - api-spec:
   - ILanguageService, IEditorContext
 - data-model:
@@ -807,8 +807,8 @@ dotnet, testhost, Oranda.App
 #### PRD 요구사항
 - prd-ref: PRD EDIT-01, EDIT-03, TRD 4.5
 - requirements:
-  - grammars-v4 PL/SQL 문법을 저장소에 포함해 빌드 시 생성
-  - SLL 우선·실패 시 LL 재파싱, 앱 유휴 시간 워밍업
+  - grammars-v4 PL/SQL 문법을 저장소에 포함해 빌드할 때 생성
+  - SLL 우선·실패하면 LL 재파싱, 앱 유휴 시간 워밍업
   - 입력 300 ms 멈춘 뒤 바뀐 문장만 백그라운드 재파싱
   - 오류 위치 밑줄·메시지 표시, 서버 컴파일 오류(user_errors) 표시 경로 제공
   - 23ai/26ai 구문 보강
@@ -855,7 +855,7 @@ dotnet, testhost, Oranda.App
   - 계약 Task design.md 「기능 Task 편집 지점」 의 자기 소유 파일만 고친다
 - acceptance:
   - DBA 아닌 계정에서 all_ 뷰로 동작한다
-  - 캐시가 있으면 재접속 후 객체 목록을 서버 조회 없이 보여 준다
+  - 캐시가 있으면 재접속한 후 객체 목록을 서버 조회 없이 보여 준다
 - constraints:
   - 23 전용 객체(Domain, Duality View)는 min-version: 23 카탈로그로만
 - test-criteria:
@@ -894,8 +894,8 @@ dotnet, testhost, Oranda.App
   - 150 ms 안에 응답 못 하면 캐시 결과 먼저 표시
   - 계약 Task design.md 「기능 Task 편집 지점」 의 자기 소유 파일만 고친다
 - acceptance:
-  - `SELECT e. FROM emp e` 에서 `e.` 입력 시 EMP 열이 150 ms 안에 뜬다
-  - 패키지명 뒤 `.` 입력 시 멤버 목록이 뜬다
+  - `SELECT e. FROM emp e` 에서 `e.` 를 입력하면 EMP 열이 150 ms 안에 뜬다
+  - 패키지명 뒤에 `.` 를 입력하면 멤버 목록이 뜬다
 - constraints:
   - IMetadataProvider 만 사용한다(확장 지점 사용 사례)
 - test-criteria:
@@ -932,8 +932,8 @@ dotnet, testhost, Oranda.App
   - 현재 파일 안 참조 찾기
   - 계약 Task design.md 「기능 Task 편집 지점」 의 자기 소유 파일만 고친다
 - acceptance:
-  - 테이블 이름 Ctrl+클릭 시 DDL 이 열린다
-  - 패키지 프로시저 호출 Ctrl+클릭 시 해당 소스 위치로 간다
+  - 테이블 이름을 Ctrl+클릭하면 DDL 이 열린다
+  - 패키지 프로시저 호출을 Ctrl+클릭하면 해당 소스 위치로 간다
 - constraints: -
 - test-criteria:
   - Headless UI 시험
@@ -1009,7 +1009,7 @@ dotnet, testhost, Oranda.App
   - 토큰 열 + 부분 구문 트리 기반 포매터, 전체·선택·현재 문장 단위
   - 대소문자(키워드·함수·식별자), 들여쓰기(공백·탭, 폭, 하위 쿼리·CASE·블록)
   - 주석 보존·빈 줄 최대 수·문장 끝 처리
-  - 토큰 동일성·멱등성 검사, 위반 시 적용 안 함
+  - 토큰 동일성·멱등성 검사, 위반하면 적용 안 함
   - 회귀 예제 1,000개 이상 구성
   - 계약 Task design.md 「기능 Task 편집 지점」 의 자기 소유 파일만 고친다
 - acceptance:
@@ -1086,7 +1086,7 @@ dotnet, testhost, Oranda.App
 - requirements:
   - 프로필 여러 개 저장·기본 지정·JSON 내보내기/가져오기
   - 기본 제공 프로필 3종
-  - 옵션 변경 시 예제 SQL 즉시 미리보기
+  - 옵션을 바꾸면 예제 SQL 즉시 미리보기
   - 편집기 포맷 명령 연결
   - 계약 Task design.md 「기능 Task 편집 지점」 의 자기 소유 파일만 고친다
 - acceptance:
@@ -1175,8 +1175,8 @@ dotnet, testhost, Oranda.App
   - 운영 라벨 표시(빨간 테두리·탭·상태바), DML/DDL 확인, 위험 명령 이름 재입력
   - 계약 Task design.md 「기능 Task 편집 지점」 의 자기 소유 파일만 고친다
 - acceptance:
-  - 운영 라벨 접속에서 UPDATE 실행 시 확인 대화상자가 뜬다
-  - 10분짜리 쿼리 취소 시 1 s 안에 실행 상태가 풀린다
+  - 운영 라벨 접속에서 UPDATE 를 실행하면 확인 대화상자가 뜬다
+  - 10분짜리 쿼리를 취소하면 1 s 안에 실행 상태가 풀린다
   - 미커밋 상태로 창을 닫으면 커밋/롤백/취소를 묻는다
 - constraints:
   - UI 스레드에서 DB 호출을 하지 않는다
@@ -1339,7 +1339,7 @@ dotnet, testhost, Oranda.App
   - 실행한 SQL 이 이력에 남고 검색·다시 실행된다
   - @파일 스크립트가 순서대로 실행된다
 - constraints:
-  - 바인드 값 저장은 사용자 설정 시만
+  - 바인드 값은 사용자가 설정한 경우에만 저장한다
 - test-criteria:
   - 단위 시험 + Headless UI 시험
 
@@ -1371,7 +1371,7 @@ dotnet, testhost, Oranda.App
 - prd-ref: PRD EXP-01, EXP-02
 - requirements:
   - 결과·테이블을 CSV, TSV, xlsx, JSON, INSERT문으로 서버에서 다시 스트리밍해 저장
-  - xlsx 1,048,576행 초과 시 시트 분할
+  - xlsx 가 1,048,576행을 넘으면 시트를 나눈다
   - CSV·xlsx 가져오기(열 매핑, 타입 변환 미리보기, 배치 크기)
   - 계약 Task design.md 「기능 Task 편집 지점」 의 자기 소유 파일만 고친다
 - acceptance:
@@ -1421,7 +1421,7 @@ dotnet, testhost, Oranda.App
   - SELECT·UPDATE 의 예상 계획이 트리로 보인다
   - 실행 후 실제 계획에서 A-Rows 가 보인다
 - constraints:
-  - DISPLAY_AWR 등 라이선스 대상은 쓰지 않는다
+  - DISPLAY_AWR 같은 라이선스 대상은 쓰지 않는다
 - test-criteria:
   - 통합 시험
 
@@ -1493,7 +1493,7 @@ dotnet, testhost, Oranda.App
   - DBMS_DEVELOPER.GET_METADATA 사용 여부 측정
   - 계약 Task design.md 「기능 Task 편집 지점」 의 자기 소유 파일만 고친다
 - acceptance:
-  - 테이블 선택 시 상세 탭이 채워지고 DDL 이 표시된다
+  - 테이블을 선택하면 상세 탭이 채워지고 DDL 이 표시된다
   - BOOLEAN·VECTOR 열이 있는 26ai 테이블 DDL 이 맞다
 - constraints: -
 - test-criteria:
@@ -1570,11 +1570,11 @@ dotnet, testhost, Oranda.App
 - requirements:
   - 객체 소스 열기·편집·저장(컴파일), 명세/본문 전환
   - 컴파일 오류·경고 목록과 위치 이동
-  - 편집 시작 후 서버 소스 변경(last_ddl_time) 시 차이 표시
+  - 편집을 시작한 후 서버 소스가 바뀌면(last_ddl_time) 차이 표시
   - 다른 세션이 쓰는 객체 컴파일 경고
   - 계약 Task design.md 「기능 Task 편집 지점」 의 자기 소유 파일만 고친다
 - acceptance:
-  - 패키지 본문을 고쳐 저장하면 컴파일되고 오류 클릭 시 해당 줄로 간다
+  - 패키지 본문을 고쳐 저장하면 컴파일되고 오류를 누르면 그 오류의 줄로 간다
   - 다른 세션이 먼저 바꾼 경우 저장 전에 차이를 보여 준다
 - constraints:
   - 서버에 잠금 테이블을 만들지 않는다(C-05)
@@ -1612,7 +1612,7 @@ dotnet, testhost, Oranda.App
   - DBMS_OUTPUT 함께 표시
   - 계약 Task design.md 「기능 Task 편집 지점」 의 자기 소유 파일만 고친다
 - acceptance:
-  - IN/OUT 인자와 REF CURSOR 를 가진 프로시저를 실행해 결과가 표시된다
+  - IN/OUT 인자와 REF CURSOR 를 가진 프로시저를 실행하면 결과가 표시된다
 - constraints: -
 - test-criteria:
   - 통합 시험
@@ -1646,7 +1646,7 @@ dotnet, testhost, Oranda.App
 #### PRD 요구사항
 - prd-ref: PRD SESS-01, SESS-02, SESS-03, SESS-04, SESS-05, SESS-06
 - requirements:
-  - IMonitorService 세션 부분(전용 세션, 주기 조회 2~60 s, 델타)
+  - IMonitorService 세션 부분(전용 세션, 주기 조회 2-60 s, 델타)
   - 세션 목록·필터·자동 새로고침, RAC gv$
   - 블로킹 트리(blocking_session, final_blocking_session)
   - 세션 상세(현재·직전 SQL, 실제 계획, 트랜잭션, 잠금 객체, 통계)
@@ -1845,7 +1845,7 @@ dotnet, testhost, Oranda.App
 - note: -
 
 #### PRD 요구사항
-- prd-ref: PRD 9.2~9.4
+- prd-ref: PRD 9.2-9.4
 - requirements:
   - 접속 가져오기 → 편집기 자동완성 → 포맷 → 실행 → 그리드 편집 → 이력 다시 실행
   - PL/SQL 편집·컴파일·실행 흐름
@@ -1877,7 +1877,7 @@ dotnet, testhost, Oranda.App
 - note: -
 
 #### PRD 요구사항
-- prd-ref: PRD 9.2~9.4
+- prd-ref: PRD 9.2-9.4
 - requirements:
   - 잠금 경합 → 블로킹 트리 → Kill → Top SQL → 실제 계획
   - 팩 "없음" 접속에서 전체 화면 1시간 순회 중 서버 SQL 트레이스 수집
@@ -1909,7 +1909,7 @@ dotnet, testhost, Oranda.App
 - note: -
 
 #### PRD 요구사항
-- prd-ref: PRD 9.2~9.4
+- prd-ref: PRD 9.2-9.4
 - requirements:
   - PRD 7.2 성능 예산 전 항목을 두 OS 게시본으로 측정
 - acceptance:
@@ -1939,7 +1939,7 @@ dotnet, testhost, Oranda.App
 - note: -
 
 #### PRD 요구사항
-- prd-ref: PRD 9.2~9.4
+- prd-ref: PRD 9.2-9.4
 - requirements:
   - 운영·읽기 전용·팩 선언 조합별 실행 경로(편집기, 그리드, 스키마 명령, Kill, 확장 패널) 교차 검사
   - 설정·로그·SQLite 평문 비밀번호 검색
@@ -2089,7 +2089,7 @@ graph LR
 
 - 최장 경로: TSK-01-01 → TSK-01-02 → TSK-01-03 → TSK-02-01 → TSK-02-03 → TSK-03-02 → TSK-03-04 → TSK-03-05 → TSK-11-01
 - 기능 구간 내부 깊이는 3 이하다(예: TSK-02-03 계약 → TSK-03-02 → TSK-03-04 → TSK-03-05).
-- 공정 앞쪽 깊이 5 는 예외로 둔다. 근거: 런타임 결정(TSK-01-01)이 솔루션 구성(TSK-01-02)을 정하고, 기술 검증(TSK-01-03·05·06) 결과가 설계(TSK-02-01·02)와 계약(TSK-02-03~05)에 들어가야 한다. 검증 없이 계약을 동결하면 컴포넌트 교체 시 계약을 다시 연다.
+- 공정 앞쪽 깊이 5 는 예외로 둔다. 근거: 런타임 결정(TSK-01-01)이 솔루션 구성(TSK-01-02)을 정하고, 기술 검증(TSK-01-03·05·06) 결과가 설계(TSK-02-01·02)와 계약(TSK-02-03·04·05)에 들어가야 한다. 검증 없이 계약을 동결하면 컴포넌트 교체 시 계약을 다시 연다.
 - 일정은 depends 만으로 계산했다(인원 제약 없음). 실제 종료일은 투입 인원에 따라 늘어난다.
 
 **Fan-in Top 5**
