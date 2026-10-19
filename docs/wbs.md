@@ -1033,7 +1033,7 @@ dotnet, testhost, Oranda.App
 - category: dev
 - domain: backend
 - model: sonnet
-- status: [ ]
+- status: [xx]
 - priority: medium
 - assignee: -
 - schedule: 2026-11-24 ~ 2026-11-30
