@@ -1,0 +1,43 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    L2 분석용 PL/SQL 파서(TSK-04-03). 소유: TSK-04-03.
+    문법: antlr/grammars-v4 sql/plsql @ 3036ab7a91d7b2ca2282ab6c3c9b945c0a92f8b0 (Apache-2.0, 머리말의 저작권 표시 유지).
+    빌드할 때 Antlr4BuildTasks 가 *.g4 에서 C# 를 obj/ 에 생성한다(Java 필요 — PATH·JAVA_HOME 에 없으면 도구가 내려받는다).
+    생성물은 약 9 MB 라 컴파일이 오래 걸려 Oranda.Language 와 다른 어셈블리로 둔다: 문법이 바뀌지 않으면 다시 컴파일하지 않는다.
+    시작 경로에서 로드하지 않는다(D-006). Oranda.Language 만 참조한다.
+  -->
+
+  <PropertyGroup>
+    <AssemblyName>Oranda.Language.PlSqlGrammar</AssemblyName>
+    <RootNamespace>Oranda.Language.Parsing.Grammar</RootNamespace>
+    <!-- 생성 코드에 한해 경고를 끈다(문법 저장소 원본을 손대지 않기 위함). -->
+    <Nullable>disable</Nullable>
+    <TreatWarningsAsErrors>false</TreatWarningsAsErrors>
+    <AnalysisLevel>none</AnalysisLevel>
+    <EnableNETAnalyzers>false</EnableNETAnalyzers>
+    <NoWarn>$(NoWarn);CS3021;CS0108;CS0162;CS0219;CS8602;CS1591;CA1822</NoWarn>
+    <GenerateDocumentationFile>false</GenerateDocumentationFile>
+    <!-- ANT01 = ANTLR 도구의 문법 경고(원본 문법의 빈 선택지 경고 154). -warnaserror 에서도 메시지로 남긴다. -->
+    <MSBuildWarningsAsMessages>$(MSBuildWarningsAsMessages);ANT01</MSBuildWarningsAsMessages>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Antlr4.Runtime.Standard" />
+    <PackageReference Include="Antlr4BuildTasks" PrivateAssets="all" IncludeAssets="build" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Antlr4 Include="PlSqlLexer.g4">
+      <Package>Oranda.Language.Parsing.Grammar</Package>
+      <Listener>false</Listener>
+      <Visitor>false</Visitor>
+    </Antlr4>
+    <Antlr4 Include="PlSqlParser.g4">
+      <Package>Oranda.Language.Parsing.Grammar</Package>
+      <Listener>false</Listener>
+      <Visitor>false</Visitor>
+    </Antlr4>
+  </ItemGroup>
+
+</Project>

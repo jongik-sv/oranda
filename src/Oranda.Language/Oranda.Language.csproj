@@ -4,6 +4,16 @@
 
   <ItemGroup>
     <ProjectReference Include="..\Oranda.Core\Oranda.Core.csproj" />
+    <!-- L2 ANTLR 파서(TSK-04-03). 생성 코드가 커서 별도 어셈블리로 둔다. 폴더가 이 프로젝트 안이라 아래에서 항목을 뺀다. -->
+    <ProjectReference Include="Parsing\Grammar\Oranda.Language.PlSqlGrammar.csproj" />
+    <PackageReference Include="Antlr4.Runtime.Standard" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Compile Remove="Parsing\Grammar\**" />
+    <None Remove="Parsing\Grammar\**" />
+    <EmbeddedResource Remove="Parsing\Grammar\**" />
+    <Content Remove="Parsing\Grammar\**" />
   </ItemGroup>
 
 </Project>

@@ -16,6 +16,8 @@
     <PackageVersion Include="Dock.Avalonia" Version="12.1.0.12" />
     <PackageVersion Include="Dock.Avalonia.Themes.Fluent" Version="12.1.0.12" />
     <PackageVersion Include="Dock.Model.Mvvm" Version="12.1.0.12" />
+    <PackageVersion Include="Antlr4.Runtime.Standard" Version="4.13.1" />
+    <PackageVersion Include="Antlr4BuildTasks" Version="12.14.0" />
   </ItemGroup>
 
   <ItemGroup Label="Oracle">
