@@ -1,21 +1,27 @@
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:vm="using:Oranda.App.Features.LobRowView"
+             xmlns:icons="using:Oranda.App.Shell.Icons"
              x:Class="Oranda.App.Features.LobRowView.LobEditorView"
              x:DataType="vm:LobEditorViewModel">
   <DockPanel>
-    <StackPanel DockPanel.Dock="Top" Margin="6" Spacing="4">
+    <!-- 툴바: 정보 | 파일로 저장·인코딩·파일에서 불러오기 | DB 에 저장·저장 후 커밋 | 다시 읽기 -->
+    <Border DockPanel.Dock="Top" Classes="panel-toolbar">
       <WrapPanel>
-        <TextBlock Margin="0,0,12,4" VerticalAlignment="Center" FontWeight="SemiBold" Text="{Binding InfoText}" />
-        <Button x:Name="SaveFileButton" Margin="0,0,6,4" Content="파일로 저장" IsEnabled="{Binding !IsBusy}" />
-        <ComboBox x:Name="EncodingBox" Margin="0,0,6,4" Width="120" IsVisible="{Binding IsText}" />
-        <Button x:Name="LoadFileButton" Margin="0,0,6,4" Content="파일에서 불러오기" IsVisible="False" />
-        <Button x:Name="SaveDbButton" Margin="0,0,6,4" Content="DB 에 저장" IsEnabled="{Binding CanSaveToDatabase}" />
-        <Button x:Name="SaveCommitButton" Margin="0,0,6,4" Content="저장 후 커밋" IsEnabled="{Binding CanSaveToDatabase}" />
-        <Button x:Name="ReloadButton" Margin="0,0,6,4" Content="다시 읽기" IsEnabled="{Binding !IsBusy}" />
+        <TextBlock Margin="4,0,12,0" VerticalAlignment="Center" FontWeight="SemiBold" Text="{Binding InfoText}" />
+        <Button x:Name="SaveFileButton" Classes="tool" Content="파일로 저장" IsEnabled="{Binding !IsBusy}" icons:ButtonIcon.Key="download" />
+        <ComboBox x:Name="EncodingBox" Classes="compact" Margin="2,0,6,0" Width="120" IsVisible="{Binding IsText}" AutomationProperties.Name="인코딩" />
+        <Button x:Name="LoadFileButton" Classes="tool" Content="파일에서 불러오기" IsVisible="False" icons:ButtonIcon.Key="open" />
+        <Separator Classes="toolbar" />
+        <Button x:Name="SaveDbButton" Classes="tool" Content="DB 에 저장" IsEnabled="{Binding CanSaveToDatabase}" icons:ButtonIcon.Key="save" />
+        <Button x:Name="SaveCommitButton" Classes="tool" Content="저장 후 커밋" IsEnabled="{Binding CanSaveToDatabase}" icons:ButtonIcon.Key="commit" />
+        <Separator Classes="toolbar" />
+        <Button x:Name="ReloadButton" Classes="tool" Content="다시 읽기" IsEnabled="{Binding !IsBusy}" icons:ButtonIcon.Key="refresh" />
       </WrapPanel>
-    </StackPanel>
-    <TextBlock DockPanel.Dock="Bottom" Margin="6,2" Text="{Binding StatusText}" TextWrapping="Wrap" Opacity="0.8" />
+    </Border>
+    <Border DockPanel.Dock="Bottom" Classes="panel-status">
+      <TextBlock Text="{Binding StatusText}" TextWrapping="Wrap" />
+    </Border>
     <Grid>
       <TextBox x:Name="TextBox" AcceptsReturn="True" AcceptsTab="True" TextWrapping="NoWrap"
                FontFamily="Consolas,Menlo,monospace" IsVisible="{Binding IsText}"

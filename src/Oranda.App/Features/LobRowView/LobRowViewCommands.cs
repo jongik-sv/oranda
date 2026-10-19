@@ -106,11 +106,11 @@ public sealed class LobRowViewCommandHandler : ICommandHandler
         {
             case "oranda.view.rowView":
                 Show(LobRowViewCommands.RowViewPanelId);
-                RowViewerViewModel.Current?.Attach(ResultGridCommands.Active);
+                RowViewerViewModel.AttachActive(ResultGridCommands.Active);
                 break;
             case "oranda.grid.rowView" when ResultGridCommands.Active is { } grid:
                 Show(LobRowViewCommands.RowViewPanelId);
-                RowViewerViewModel.Current?.Attach(grid);
+                RowViewerViewModel.AttachActive(grid);
                 break;
             case "oranda.grid.viewValue" when ResultGridCommands.Active is { HasSelection: true } g:
                 await ViewValueAsync(g, cancellationToken).ConfigureAwait(true);

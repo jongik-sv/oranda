@@ -1,25 +1,25 @@
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:vm="using:Oranda.App.Features.LobRowView"
+             xmlns:icons="using:Oranda.App.Shell.Icons"
              x:Class="Oranda.App.Features.LobRowView.RowViewerView"
              x:DataType="vm:RowViewerViewModel">
   <DockPanel>
-    <StackPanel DockPanel.Dock="Top" Margin="6" Spacing="4">
-      <TextBlock Text="{Binding HeaderText}" FontWeight="SemiBold" />
-      <StackPanel Orientation="Horizontal" Spacing="4">
-        <Button x:Name="PrevButton" Content="이전 행" />
-        <Button x:Name="NextButton" Content="다음 행" />
-      </StackPanel>
-      <TextBox PlaceholderText="열 이름·값 찾기" Text="{Binding FilterText, Mode=TwoWay}" />
-    </StackPanel>
-    <ListBox x:Name="FieldList" ItemsSource="{Binding Fields}" SelectedItem="{Binding SelectedField, Mode=TwoWay}">
+    <!-- 툴바: 이전·다음 행 · 위치 / 거르기 -->
+    <Border DockPanel.Dock="Top" Classes="panel-toolbar">
+      <DockPanel>
+        <Button x:Name="PrevButton" DockPanel.Dock="Left" Classes="toolbar" Content="이전 행" icons:ButtonIcon.Key="up" icons:ButtonIcon.IconOnly="True" />
+        <Button x:Name="NextButton" DockPanel.Dock="Left" Classes="toolbar" Content="다음 행" icons:ButtonIcon.Key="down" icons:ButtonIcon.IconOnly="True" />
+        <TextBlock Text="{Binding HeaderText}" FontWeight="SemiBold" VerticalAlignment="Center" Margin="6,0" TextTrimming="CharacterEllipsis" />
+      </DockPanel>
+    </Border>
+    <TextBox DockPanel.Dock="Top" Classes="compact search" Margin="4" PlaceholderText="열 이름·값 찾기" Text="{Binding FilterText, Mode=TwoWay}"
+             AutomationProperties.Name="열 이름·값 찾기" />
+    <ListBox x:Name="FieldList" Classes="log" ItemsSource="{Binding Fields}" SelectedItem="{Binding SelectedField, Mode=TwoWay}">
       <ListBox.ItemTemplate>
         <DataTemplate x:DataType="vm:RowField">
-          <Grid ColumnDefinitions="140,*" Margin="0,2">
-            <StackPanel>
-              <TextBlock Text="{Binding Name}" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" />
-              <TextBlock Text="{Binding TypeName}" Opacity="0.6" FontSize="11" />
-            </StackPanel>
+          <Grid ColumnDefinitions="130,*" Margin="0,1" ToolTip.Tip="{Binding TypeName}">
+            <TextBlock Text="{Binding Name}" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" VerticalAlignment="Top" />
             <SelectableTextBlock Grid.Column="1" Text="{Binding Text}" TextWrapping="Wrap" FontFamily="Consolas,Menlo,monospace" />
           </Grid>
         </DataTemplate>

@@ -23,10 +23,25 @@ public sealed partial class RowViewerViewModel : ToolPanelViewModelBase, IDispos
     public RowViewerViewModel()
     {
         Current = this;
+
+        // 창은 처음 보일 때 만들어진다. 그 전에 명령이 고른 그리드가 있으면 여기서 붙인다.
+        if (s_pending is not null)
+        {
+            Attach(s_pending);
+        }
     }
+
+    private static ResultGridModel? s_pending;
 
     /// <summary>가장 최근에 만든 행 보기 창(명령 처리기가 그리드를 붙이는 곳).</summary>
     public static RowViewerViewModel? Current { get; private set; }
+
+    /// <summary>행 보기 창에 그리드를 붙인다. 창이 아직 없으면 만들어질 때 붙는다.</summary>
+    public static void AttachActive(ResultGridModel? model)
+    {
+        s_pending = model;
+        Current?.Attach(model);
+    }
 
     /// <summary>필드 목록(거름 적용).</summary>
     public ObservableCollection<RowField> Fields { get; } = [];
