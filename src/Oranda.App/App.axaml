@@ -28,6 +28,137 @@
             <Setter Property="Background" Value="{DynamicResource OrandaEnvProductionBrush}" />
             <Setter Property="TextElement.Foreground" Value="{DynamicResource OrandaEnvProductionForegroundBrush}" />
         </Style>
+
+        <!-- 툴바: 평평한 아이콘 단추(Orange·SQL Developer). 마우스를 올리면 옅은 바탕, 쓸 수 없으면 흐리게. -->
+        <Style Selector="Button.toolbar">
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="CornerRadius" Value="3" />
+            <Setter Property="MinWidth" Value="0" />
+            <Setter Property="MinHeight" Value="0" />
+            <Setter Property="Padding" Value="5" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+        </Style>
+        <Style Selector="Button.toolbar-text">
+            <Setter Property="Padding" Value="8,4" />
+            <Setter Property="FontSize" Value="{DynamicResource OrandaFontSizeSmall}" />
+        </Style>
+        <Style Selector="Button.toolbar:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+            <Setter Property="Background" Value="{DynamicResource OrandaToolbarHoverBrush}" />
+        </Style>
+        <Style Selector="Button.toolbar:pressed /template/ ContentPresenter#PART_ContentPresenter">
+            <Setter Property="Background" Value="{DynamicResource OrandaToolbarPressedBrush}" />
+        </Style>
+        <Style Selector="Button.toolbar:disabled /template/ ContentPresenter#PART_ContentPresenter">
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="Opacity" Value="0.35" />
+        </Style>
+        <Style Selector="Separator.toolbar">
+            <Setter Property="Width" Value="1" />
+            <Setter Property="Height" Value="18" />
+            <Setter Property="Margin" Value="5,0" />
+            <Setter Property="Background" Value="{DynamicResource OrandaSeparatorBrush}" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+        </Style>
+        <Style Selector="Button.palette-box">
+            <Setter Property="Background" Value="{DynamicResource OrandaSearchBoxBrush}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource OrandaSeparatorBrush}" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="CornerRadius" Value="4" />
+            <Setter Property="Padding" Value="8,3" />
+            <Setter Property="MinHeight" Value="0" />
+            <Setter Property="HorizontalContentAlignment" Value="Left" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+            <Setter Property="FontSize" Value="{DynamicResource OrandaFontSizeSmall}" />
+        </Style>
+        <Style Selector="ToggleButton.toolbar">
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="CornerRadius" Value="3" />
+            <Setter Property="MinWidth" Value="0" />
+            <Setter Property="MinHeight" Value="0" />
+            <Setter Property="Padding" Value="5" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+        </Style>
+        <Style Selector="ToggleButton.toolbar:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+            <Setter Property="Background" Value="{DynamicResource OrandaToolbarHoverBrush}" />
+        </Style>
+        <Style Selector="ToggleButton.toolbar:checked /template/ ContentPresenter#PART_ContentPresenter">
+            <Setter Property="Background" Value="{DynamicResource OrandaToolbarPressedBrush}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource OrandaIconBlueBrush}" />
+            <Setter Property="BorderThickness" Value="1" />
+        </Style>
+
+        <!-- 아이콘 + 짧은 글자 단추(도구 창·문서 안 Sub Toolbar). ButtonIcon.Key 로 아이콘을 붙인다. -->
+        <Style Selector="Button.tool, ToggleButton.tool">
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="CornerRadius" Value="3" />
+            <Setter Property="MinHeight" Value="0" />
+            <Setter Property="Padding" Value="6,4" />
+            <Setter Property="FontSize" Value="{DynamicResource OrandaFontSizeSmall}" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+        </Style>
+        <Style Selector="Button.tool:pointerover /template/ ContentPresenter#PART_ContentPresenter, ToggleButton.tool:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+            <Setter Property="Background" Value="{DynamicResource OrandaToolbarHoverBrush}" />
+        </Style>
+        <Style Selector="Button.tool:pressed /template/ ContentPresenter#PART_ContentPresenter, ToggleButton.tool:checked /template/ ContentPresenter#PART_ContentPresenter">
+            <Setter Property="Background" Value="{DynamicResource OrandaToolbarPressedBrush}" />
+        </Style>
+        <Style Selector="Button.tool:disabled /template/ ContentPresenter#PART_ContentPresenter, ToggleButton.tool:disabled /template/ ContentPresenter#PART_ContentPresenter">
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="Opacity" Value="0.4" />
+        </Style>
+        <Style Selector="TextBlock.panel-caption">
+            <Setter Property="FontSize" Value="{DynamicResource OrandaFontSizeSmall}" />
+            <Setter Property="Opacity" Value="0.75" />
+        </Style>
+        <Style Selector="ListBox.log ListBoxItem">
+            <Setter Property="Padding" Value="8,2" />
+            <Setter Property="MinHeight" Value="0" />
+        </Style>
+
+        <!-- 도구 창 안의 작은 툴바 띠와 아래 상태 줄(Orange 의 Sub Toolbar·Tool Statusbar). -->
+        <Style Selector="Border.panel-toolbar">
+            <Setter Property="Background" Value="{DynamicResource OrandaToolbarBackgroundBrush}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource OrandaSeparatorBrush}" />
+            <Setter Property="BorderThickness" Value="0,0,0,1" />
+            <Setter Property="Padding" Value="4,2" />
+        </Style>
+        <Style Selector="Border.panel-status">
+            <Setter Property="BorderBrush" Value="{DynamicResource OrandaSeparatorBrush}" />
+            <Setter Property="BorderThickness" Value="0,1,0,0" />
+            <Setter Property="Padding" Value="6,2" />
+        </Style>
+        <Style Selector="Border.panel-status TextBlock">
+            <Setter Property="FontSize" Value="{DynamicResource OrandaFontSizeSmall}" />
+            <Setter Property="Opacity" Value="0.75" />
+        </Style>
+
+        <!-- 촘촘한 입력 칸·목록(Fluent 기본 32 DIP 줄 높이 → 24~26). -->
+        <Style Selector="TextBox.compact">
+            <Setter Property="MinHeight" Value="26" />
+            <Setter Property="Padding" Value="6,3" />
+            <Setter Property="FontSize" Value="{DynamicResource OrandaFontSizeBase}" />
+        </Style>
+        <Style Selector="TextBox.search /template/ ContentPresenter#PART_InnerLeftContent">
+            <Setter Property="Margin" Value="6,0,0,0" />
+        </Style>
+        <Style Selector="ComboBox.compact">
+            <Setter Property="MinHeight" Value="26" />
+            <Setter Property="Padding" Value="8,2,0,2" />
+        </Style>
+        <Style Selector="TreeView.compact TreeViewItem">
+            <Setter Property="MinHeight" Value="24" />
+            <Setter Property="Padding" Value="0" />
+        </Style>
+        <Style Selector="TextBlock.invalid">
+            <Setter Property="Foreground" Value="{DynamicResource OrandaIconRedBrush}" />
+        </Style>
+
+        <Style Selector="MenuItem:disabled Viewbox.shell-icon">
+            <Setter Property="Opacity" Value="0.4" />
+        </Style>
     </Application.Styles>
 
     <Application.Resources>
@@ -41,6 +172,21 @@
                     <SolidColorBrush x:Key="OrandaEnvDevelopmentBrush" Color="#107C10" />
                     <SolidColorBrush x:Key="OrandaUncommittedBrush" Color="#B65A00" />
                     <SolidColorBrush x:Key="OrandaSeparatorBrush" Color="#D0D0D0" />
+                    <SolidColorBrush x:Key="OrandaToolbarBackgroundBrush" Color="#F3F3F3" />
+                    <SolidColorBrush x:Key="OrandaToolbarHoverBrush" Color="#DCE6F4" />
+                    <SolidColorBrush x:Key="OrandaToolbarPressedBrush" Color="#C3D5EE" />
+                    <SolidColorBrush x:Key="OrandaPanelHeaderBrush" Color="#EAEAEA" />
+                    <SolidColorBrush x:Key="OrandaSearchBoxBrush" Color="#FFFFFF" />
+                    <SolidColorBrush x:Key="OrandaSplitterBrush" Color="#D6D6D6" />
+                    <!-- 아이콘 색(ShellIcons 의 Tone). Orange·SQL Developer 처럼 동작 종류마다 색을 나눈다. -->
+                    <SolidColorBrush x:Key="OrandaIconGreenBrush" Color="#1E8E3E" />
+                    <SolidColorBrush x:Key="OrandaIconRedBrush" Color="#D13438" />
+                    <SolidColorBrush x:Key="OrandaIconBlueBrush" Color="#1F6FD0" />
+                    <SolidColorBrush x:Key="OrandaIconAmberBrush" Color="#D99A16" />
+                    <SolidColorBrush x:Key="OrandaIconOrangeBrush" Color="#E8710A" />
+                    <SolidColorBrush x:Key="OrandaIconPurpleBrush" Color="#8250DF" />
+                    <SolidColorBrush x:Key="OrandaIconTealBrush" Color="#0F7B8A" />
+                    <SolidColorBrush x:Key="OrandaIconNeutralBrush" Color="#5F6368" />
                 </ResourceDictionary>
                 <ResourceDictionary x:Key="Dark">
                     <SolidColorBrush x:Key="OrandaEnvProductionBrush" Color="#FF6B5E" />
@@ -49,6 +195,20 @@
                     <SolidColorBrush x:Key="OrandaEnvDevelopmentBrush" Color="#6CCB5F" />
                     <SolidColorBrush x:Key="OrandaUncommittedBrush" Color="#F0A04B" />
                     <SolidColorBrush x:Key="OrandaSeparatorBrush" Color="#404040" />
+                    <SolidColorBrush x:Key="OrandaToolbarBackgroundBrush" Color="#2B2B2B" />
+                    <SolidColorBrush x:Key="OrandaToolbarHoverBrush" Color="#3A4556" />
+                    <SolidColorBrush x:Key="OrandaToolbarPressedBrush" Color="#46566E" />
+                    <SolidColorBrush x:Key="OrandaPanelHeaderBrush" Color="#333333" />
+                    <SolidColorBrush x:Key="OrandaSearchBoxBrush" Color="#1E1E1E" />
+                    <SolidColorBrush x:Key="OrandaSplitterBrush" Color="#3C3C3C" />
+                    <SolidColorBrush x:Key="OrandaIconGreenBrush" Color="#5CC27A" />
+                    <SolidColorBrush x:Key="OrandaIconRedBrush" Color="#FF6B6B" />
+                    <SolidColorBrush x:Key="OrandaIconBlueBrush" Color="#6CB4FF" />
+                    <SolidColorBrush x:Key="OrandaIconAmberBrush" Color="#F2C14E" />
+                    <SolidColorBrush x:Key="OrandaIconOrangeBrush" Color="#FFA25C" />
+                    <SolidColorBrush x:Key="OrandaIconPurpleBrush" Color="#B794F6" />
+                    <SolidColorBrush x:Key="OrandaIconTealBrush" Color="#4FC3C9" />
+                    <SolidColorBrush x:Key="OrandaIconNeutralBrush" Color="#B0B5BA" />
                 </ResourceDictionary>
             </ResourceDictionary.ThemeDictionaries>
 
@@ -57,6 +217,14 @@
             <x:Double x:Key="OrandaFontSizeSmall">11</x:Double>
             <x:Double x:Key="OrandaEditorFontSize">13</x:Double>
             <FontFamily x:Key="OrandaEditorFontFamily">Cascadia Mono, Consolas, Malgun Gothic</FontFamily>
+
+            <!-- Fluent 기본 탭 머리글(24 DIP 글자, 48 DIP 높이)은 도구용으로 너무 크다. Orange·SQL Developer 처럼 작게 쓴다. -->
+            <x:Double x:Key="TabItemHeaderFontSize">12.5</x:Double>
+            <x:Double x:Key="TabItemMinHeight">28</x:Double>
+            <x:Double x:Key="TabItemHeaderMinHeight">28</x:Double>
+            <x:Double x:Key="TabItemVerticalPipeHeight">16</x:Double>
+            <Thickness x:Key="TabItemHeaderMargin">10,0,10,0</Thickness>
+            <FontWeight x:Key="TabItemHeaderThemeFontWeight">Normal</FontWeight>
         </ResourceDictionary>
     </Application.Resources>
 </Application>

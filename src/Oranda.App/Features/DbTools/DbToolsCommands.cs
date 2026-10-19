@@ -23,7 +23,7 @@ namespace Oranda.App.Features.DbTools;
 [OrandaCommand("oranda.schema.objectSearch", CommandCategory.Database, Enablement = "hasSession",
     Placements = ["menu:tools/objectSearch@100"])]
 [OrandaCommand("oranda.db.info", CommandCategory.Database, Enablement = "hasSession",
-    Placements = ["menu:tools/dbInfo@110"])]
+    Icon = "database", Placements = ["menu:tools/dbInfo@110", "toolbar:main/dbInfo@530"])]
 [OrandaCommand("oranda.db.ddlExtract", CommandCategory.Database, Enablement = "hasSession",
     Placements = ["menu:tools/ddlExtract@130"])]
 public sealed class DbToolsCommandHandler : ICommandHandler

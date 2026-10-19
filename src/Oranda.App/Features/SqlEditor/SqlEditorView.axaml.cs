@@ -28,6 +28,7 @@ public partial class SqlEditorView : UserControl, IEditorSurface
     private IReadOnlyList<StructurePair> _pairs = [];
     private long _pairsVersion = -1;
     private long _lastChangeTimestamp;
+    private GridLength _resultRowHeight = new(2, GridUnitType.Star);
 
     public SqlEditorView()
     {
@@ -111,6 +112,7 @@ public partial class SqlEditorView : UserControl, IEditorSurface
         }
 
         RefreshStructureNow();
+        UpdateResultRow();
         int scrollLine = vm.ScrollLine;
         Dispatcher.UIThread.Post(() =>
         {
@@ -163,6 +165,31 @@ public partial class SqlEditorView : UserControl, IEditorSurface
         if (e.PropertyName == nameof(SqlEditorViewModel.IsReadOnly) && _vm is not null)
         {
             Editor.IsReadOnly = _vm.IsReadOnly;
+        }
+        else if (e.PropertyName == nameof(SqlEditorViewModel.ResultPane))
+        {
+            UpdateResultRow();
+        }
+    }
+
+    /// <summary>
+    /// 결과 영역 행: 결과가 없으면 0(별 행은 내용이 숨어도 몫을 차지하므로 직접 접는다), 생기면 지난번 높이(처음엔 편집기의 2/3)로 편다.
+    /// </summary>
+    private void UpdateResultRow()
+    {
+        var row = RootGrid.RowDefinitions[3];
+        if (_vm?.ResultPane is null)
+        {
+            if (row.Height.Value > 0)
+            {
+                _resultRowHeight = row.Height;
+            }
+
+            row.Height = new GridLength(0);
+        }
+        else if (row.Height.Value == 0)
+        {
+            row.Height = _resultRowHeight;
         }
     }
 

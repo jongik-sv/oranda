@@ -155,11 +155,11 @@ public static class ExecutionCommands
 
 /// <summary>실행·취소·커밋·롤백 등 TSK-06-02 소유 명령의 처리기. 한 클래스가 명령 ID 로 나눠 처리한다.</summary>
 [OrandaCommand("oranda.exec.runStatement", CommandCategory.Sql, When = "sqlDocFocus", Enablement = "hasSession && !sessionBusy",
-    Placements = ["menu:sql/runStatement@10", "toolbar:main/run@20"])]
+    Icon = "run", Placements = ["menu:sql/runStatement@10", "toolbar:main/run@210"])]
 [OrandaCommand("oranda.exec.runSelection", CommandCategory.Sql, When = "sqlDocFocus", Enablement = "hasSession && !sessionBusy && hasSelection",
     Placements = ["menu:sql/runSelection@12"])]
 [OrandaCommand("oranda.exec.runScript", CommandCategory.Sql, When = "sqlDocFocus", Enablement = "hasSession && !sessionBusy",
-    Placements = ["menu:sql/runScript@14", "toolbar:main/runScript@25"])]
+    Icon = "runScript", Placements = ["menu:sql/runScript@14", "toolbar:main/runScript@220"])]
 [OrandaCommand("oranda.exec.runFromCursor", CommandCategory.Sql, When = "sqlDocFocus", Enablement = "hasSession && !sessionBusy",
     Placements = ["menu:sql/runFromCursor@16"])]
 [OrandaCommand("oranda.exec.runStep", CommandCategory.Sql, When = "sqlDocFocus", Enablement = "hasSession && !sessionBusy",
@@ -169,7 +169,7 @@ public static class ExecutionCommands
 [OrandaCommand("oranda.exec.runAllTabs", CommandCategory.Sql, Enablement = "hasSession && !sessionBusy",
     Placements = ["menu:sql/runAllTabs@22"])]
 [OrandaCommand("oranda.exec.cancel", CommandCategory.Sql, When = "sqlDocFocus", Enablement = "sessionBusy",
-    Placements = ["menu:sql/cancel@50", "toolbar:main/cancel@30"])]
+    Icon = "cancel", Placements = ["menu:sql/cancel@50", "toolbar:main/cancel@240"])]
 [OrandaCommand("oranda.exec.bindVariables", CommandCategory.Sql, When = "sqlDocFocus", Enablement = "sqlDocActive",
     Placements = ["menu:sql/bindVariables@60"])]
 [OrandaCommand("oranda.exec.toggleDbmsOutput", CommandCategory.Sql, Enablement = "sqlDocActive",
@@ -185,9 +185,9 @@ public static class ExecutionCommands
 [OrandaCommand("oranda.exec.toggleBlankLineDelimiter", CommandCategory.Sql, Enablement = "sqlDocActive",
     Placements = ["menu:sql/toggleBlankLineDelimiter@95"])]
 [OrandaCommand("oranda.txn.commit", CommandCategory.Sql, Enablement = "hasSession && txnPending && !sessionBusy",
-    Placements = ["menu:sql/commit@100", "toolbar:main/commit@40"])]
+    Icon = "commit", Placements = ["menu:sql/commit@100", "toolbar:main/commit@310"])]
 [OrandaCommand("oranda.txn.rollback", CommandCategory.Sql, Enablement = "hasSession && txnPending && !sessionBusy",
-    Placements = ["menu:sql/rollback@110", "toolbar:main/rollback@50"])]
+    Icon = "rollback", Placements = ["menu:sql/rollback@110", "toolbar:main/rollback@320"])]
 [OrandaCommand("oranda.txn.toggleAutoCommit", CommandCategory.Sql, Enablement = "hasSession && !readOnlySession",
     Placements = ["menu:sql/toggleAutoCommit@120"])]
 [OrandaCommand("oranda.view.output", CommandCategory.View, Placements = ["menu:view/output@20"])]

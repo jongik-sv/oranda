@@ -141,7 +141,7 @@ public static class SessionMonitorCommands
 
 /// <summary>모니터 메뉴·명령 팔레트의 세션 모니터 명령(SESS-01~05).</summary>
 [OrandaCommand("oranda.monitor.sessions", CommandCategory.Monitor, Enablement = "hasSession && !noMonitorPrivilege",
-    Placements = ["menu:monitor/sessions@10"])]
+    Icon = "sessions", Placements = ["menu:monitor/sessions@10", "toolbar:main/sessions@510"])]
 [OrandaCommand("oranda.monitor.refresh", CommandCategory.Monitor, When = "monitorFocus", Enablement = "monitorSessionOpen",
     Placements = ["menu:monitor/refresh@100", "context:monitor/refresh@10"])]
 [OrandaCommand("oranda.monitor.toggleAutoRefresh", CommandCategory.Monitor, When = "monitorFocus", Enablement = "monitorSessionOpen",

@@ -5,6 +5,7 @@ using Avalonia.Automation;
 using Avalonia.Controls;
 using Avalonia.Input;
 using Oranda.App.Shell.Docking;
+using Oranda.App.Shell.Icons;
 using Oranda.Core.Shell;
 
 namespace Oranda.App.Shell.Menus;
@@ -51,17 +52,20 @@ public sealed class MenuControls(ICommandRegistry registry, IContextKeys keys, F
         {
             if (n.Kind == MenuNodeKind.Separator)
             {
-                items.Add(new Separator { Width = 1, Margin = new Avalonia.Thickness(4, 2) });
+                items.Add(new Separator { Classes = { "toolbar" } });
                 continue;
             }
 
             var command = Track(n.CommandId!);
+
+            // 아이콘이 있으면 아이콘만 그리고 이름은 툴팁으로 보인다(Orange·SQL Developer 툴바). 없으면 글자 단추.
+            var icon = ShellIcons.Create(n.Icon);
             var button = new Button
             {
-                Content = n.Title,
+                Content = icon ?? (object)n.Title,
                 Command = command,
-                MinWidth = 32,
-                Padding = new Avalonia.Thickness(8, 3),
+                Classes = { "toolbar", icon is null ? "toolbar-text" : "toolbar-icon" },
+                Tag = n.Icon, // 「…」 메뉴로 접힐 때 같은 아이콘을 다시 만든다(컨트롤은 한 부모만 갖는다).
             };
             AutomationProperties.SetName(button, n.Title);
             ToolTip.SetTip(button, n.Shortcut is null ? n.Title : $"{n.Title} ({n.Shortcut})");
@@ -71,6 +75,12 @@ public sealed class MenuControls(ICommandRegistry registry, IContextKeys keys, F
         return items;
     }
 
+    /// <summary>
+    /// 오른쪽 클릭 메뉴 항목. 메뉴를 열 때마다 새로 만들므로 명령은 추적 목록에 넣지 않는다(활성 상태는 만들 때 계산된다).
+    /// </summary>
+    public IReadOnlyList<object> BuildContextItems(IReadOnlyList<MenuNode> nodes)
+        => [.. nodes.Select(n => n.Kind == MenuNodeKind.Separator ? (object)new Separator() : MenuItemFor(n, track: false))];
+
     public RegistryCommand Track(string commandId)
     {
         var c = new RegistryCommand(commandId, registry, keys);
@@ -78,7 +88,7 @@ public sealed class MenuControls(ICommandRegistry registry, IContextKeys keys, F
         return c;
     }
 
-    private MenuItem MenuItemFor(MenuNode n, bool topLevel = false)
+    private MenuItem MenuItemFor(MenuNode n, bool topLevel = false, bool track = true)
     {
         switch (n.Kind)
         {
@@ -87,7 +97,7 @@ public sealed class MenuControls(ICommandRegistry registry, IContextKeys keys, F
                     var header = topLevel && AccessKeys.TryGetValue(n.Title, out var withKey) ? withKey : n.Title;
                     var item = new MenuItem { Header = header };
                     AutomationProperties.SetName(item, n.Title);
-                    item.ItemsSource = n.Children.Select(c => c.Kind == MenuNodeKind.Separator ? (object)new Separator() : MenuItemFor(c)).ToList();
+                    item.ItemsSource = n.Children.Select(c => c.Kind == MenuNodeKind.Separator ? (object)new Separator() : MenuItemFor(c, track: track)).ToList();
                     return item;
                 }
 
@@ -107,8 +117,8 @@ public sealed class MenuControls(ICommandRegistry registry, IContextKeys keys, F
 
             default:
                 {
-                    var command = Track(n.CommandId!);
-                    var item = new MenuItem { Header = n.Title, Command = command, InputGesture = gesture(n.CommandId!) };
+                    var command = track ? Track(n.CommandId!) : new RegistryCommand(n.CommandId!, registry, keys);
+                    var item = new MenuItem { Header = n.Title, Command = command, InputGesture = gesture(n.CommandId!), Icon = ShellIcons.Create(n.Icon) };
                     AutomationProperties.SetName(item, n.Title);
                     return item;
                 }

@@ -9,7 +9,8 @@
   </UserControl.Styles>
 
   <!-- 위: 찾기 패널 / 가운데: 편집기 / 아래: 결과 영역(TSK-06-03 이 ResultPane 에 꽂는다) -->
-  <Grid RowDefinitions="Auto,*,Auto,Auto">
+  <!-- 결과 행 높이는 code-behind 가 정한다(결과가 없으면 0, 있으면 편집기와 3:2 로 나눈다). -->
+  <Grid x:Name="RootGrid" RowDefinitions="Auto,3*,Auto,0">
     <Border Grid.Row="0" Name="FindPanel" Padding="6" IsVisible="{Binding IsFindPanelOpen}"
             BorderThickness="0,0,0,1" BorderBrush="{DynamicResource SystemControlForegroundBaseLowBrush}">
       <StackPanel Spacing="4">
@@ -41,7 +42,8 @@
                    VerticalScrollBarVisibility="Auto"
                    AutomationProperties.Name="SQL 편집기" />
 
-    <GridSplitter Grid.Row="2" Height="4" HorizontalAlignment="Stretch"
+    <GridSplitter Grid.Row="2" Height="5" HorizontalAlignment="Stretch" ResizeDirection="Rows"
+                  Background="{DynamicResource OrandaSplitterBrush}" AutomationProperties.Name="편집기와 결과 나누기"
                   IsVisible="{Binding ResultPane, Converter={x:Static ObjectConverters.IsNotNull}}" />
     <ContentControl Grid.Row="3" Name="ResultHost" Content="{Binding ResultPane}" MinHeight="0" MaxHeight="2000"
                     IsVisible="{Binding ResultPane, Converter={x:Static ObjectConverters.IsNotNull}}" />

@@ -110,7 +110,7 @@ public sealed class ViewShellCommandHandler(IShellUi ui) : ICommandHandler
 }
 
 /// <summary>도구 메뉴: 설정.</summary>
-[OrandaCommand("oranda.tools.settings", CommandCategory.Tools, Placements = ["menu:tools/settings@10"])]
+[OrandaCommand("oranda.tools.settings", CommandCategory.Tools, Icon = "settings", Placements = ["menu:tools/settings@10", "toolbar:main/settings@610"])]
 public sealed class SettingsShellCommandHandler(IShellUi ui) : ICommandHandler
 {
     public Task ExecuteAsync(CommandContext context, CancellationToken cancellationToken)

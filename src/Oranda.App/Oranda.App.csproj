@@ -17,6 +17,11 @@
     <AvaloniaResource Include="Assets\**" />
   </ItemGroup>
 
+  <!-- 명령 제목 한국어 기본값(docs/design/commands.md 7장 제목 열). 다국어 리소스(TSK-10-02)가 붙기 전까지 ShellText 가 읽는다. -->
+  <ItemGroup>
+    <EmbeddedResource Include="Shell\Resources\CommandTitles.json" LogicalName="Oranda.App.Resources.CommandTitles.json" />
+  </ItemGroup>
+
   <!-- 키맵 프리셋 4종(TSK-02-05): 정본 docs/design/keymaps/*.json 을 복사하지 않고 링크해 임베디드 리소스로 넣는다. -->
   <ItemGroup>
     <EmbeddedResource Include="..\..\docs\design\keymaps\*.json"

@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Text.Json;
 using Oranda.Core.Shell;
 
 namespace Oranda.App.Shell;
@@ -115,6 +116,9 @@ public sealed class ShellText : IShellText
         [CommandCategory.Help] = "도움말",
     };
 
+    /// <summary>명령 제목 기본값(<c>Cmd.&lt;ID&gt;</c> → 한국어). commands.md 7장 표를 옮긴 내장 리소스에서 한 번 읽는다.</summary>
+    private static readonly Lazy<Dictionary<string, string>> CommandTitles = new(LoadCommandTitles);
+
     private readonly Func<string, string?>? _resources;
 
     /// <param name="resources">나중에 붙는 다국어 리소스 조회(TSK-10-02). 없거나 null 을 돌려주면 내장 표를 쓴다.</param>
@@ -125,7 +129,9 @@ public sealed class ShellText : IShellText
         ArgumentNullException.ThrowIfNull(key);
         return _resources?.Invoke(key) is { } found ? found
             : Table.TryGetValue(key, out var text) ? text
-            : Fallback(key);
+            : CommandTitles.Value.TryGetValue(key, out var title) ? title
+            : IsResourceKey(key) ? Fallback(key)
+            : key; // 특성에 화면 글자를 바로 적은 제목(예: 「새 PL/SQL 편집기」)은 그대로 쓴다.
     }
 
     public string Title(CommandDefinition command)
@@ -142,6 +148,18 @@ public sealed class ShellText : IShellText
 
     public string CategoryName(CommandCategory category) =>
         Categories.TryGetValue(category, out var name) ? name : category.ToString();
+
+    private static Dictionary<string, string> LoadCommandTitles()
+    {
+        using var stream = typeof(ShellText).Assembly.GetManifestResourceStream("Oranda.App.Resources.CommandTitles.json");
+        return stream is null
+            ? new Dictionary<string, string>(StringComparer.Ordinal)
+            : JsonSerializer.Deserialize(stream, ShellJsonContext.Default.DictionaryStringString) ?? new Dictionary<string, string>(StringComparer.Ordinal);
+    }
+
+    private static bool IsResourceKey(string key) =>
+        key.StartsWith("Cmd.", StringComparison.Ordinal) || key.StartsWith("Panel.", StringComparison.Ordinal)
+        || key.StartsWith("Menu.", StringComparison.Ordinal) || key.StartsWith("oranda.", StringComparison.Ordinal);
 
     /// <summary><c>Cmd.oranda.exec.runStatement</c> → <c>exec run Statement</c> 처럼 읽을 수 있는 이름.</summary>
     internal static string Fallback(string key)

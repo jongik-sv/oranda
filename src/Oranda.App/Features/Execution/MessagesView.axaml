@@ -1,14 +1,17 @@
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:icons="using:Oranda.App.Shell.Icons"
              xmlns:vm="using:Oranda.App.Features.Execution"
              x:Class="Oranda.App.Features.Execution.MessagesView"
              x:DataType="vm:MessagesViewModel">
   <DockPanel>
-    <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Spacing="8" Margin="4">
-      <TextBlock Text="메시지" VerticalAlignment="Center" />
-      <Button Content="지우기" Command="{Binding ClearCommand}" />
-    </StackPanel>
-    <ListBox x:Name="MessageList" ItemsSource="{Binding Messages}" AutomationProperties.Name="실행 메시지">
+    <Border DockPanel.Dock="Top" Classes="panel-toolbar">
+      <StackPanel Orientation="Horizontal" Spacing="1">
+        <Button Classes="toolbar" Content="메시지 지우기" Command="{Binding ClearCommand}"
+                icons:ButtonIcon.Key="eraser" icons:ButtonIcon.IconOnly="True" />
+      </StackPanel>
+    </Border>
+    <ListBox x:Name="MessageList" Classes="log" ItemsSource="{Binding Messages}" AutomationProperties.Name="실행 메시지">
       <ListBox.ItemTemplate>
         <DataTemplate x:DataType="vm:MessageEntry">
           <SelectableTextBlock Text="{Binding Line}" FontFamily="Cascadia Mono,Consolas,Menlo,monospace" TextWrapping="Wrap" />

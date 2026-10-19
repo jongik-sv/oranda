@@ -1,19 +1,30 @@
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:vm="using:Oranda.App.Features.SchemaBrowser"
+             xmlns:icons="using:Oranda.App.Shell.Icons"
              x:Class="Oranda.App.Features.SchemaBrowser.SchemaBrowserView"
              x:DataType="vm:SchemaBrowserViewModel">
   <DockPanel>
-    <StackPanel DockPanel.Dock="Top" Margin="4" Spacing="4">
-      <TextBox x:Name="FilterBox" PlaceholderText="이름 필터 (* 와일드카드)" Text="{Binding FilterText, Mode=TwoWay}" />
-      <WrapPanel>
-        <ComboBox x:Name="TypeBox" PlaceholderText="모든 유형" MinWidth="120" SelectedItem="{Binding TypeFilter, Mode=TwoWay}" Margin="0,0,6,0" />
-        <ToggleButton Content="INVALID" IsChecked="{Binding InvalidOnly, Mode=TwoWay}" Margin="0,0,6,0" />
-        <ToggleButton Content="즐겨찾기" IsChecked="{Binding FavoritesOnly, Mode=TwoWay}" />
-      </WrapPanel>
-    </StackPanel>
-    <TextBlock DockPanel.Dock="Bottom" Margin="6,2" Text="{Binding StatusText}" TextTrimming="CharacterEllipsis" Opacity="0.7" />
-    <TreeView x:Name="Tree" ItemsSource="{Binding Roots}" SelectedItem="{Binding SelectedNode, Mode=TwoWay}">
+    <!-- 패널 툴바(Orange Schema Browser 처럼 아이콘 단추 한 줄): 유형 고르기 · INVALID 만 · 즐겨찾기만 · 새로 고침 -->
+    <Border DockPanel.Dock="Top" Classes="panel-toolbar">
+      <DockPanel>
+        <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" Spacing="1">
+          <ToggleButton x:Name="InvalidToggle" Classes="toolbar" IsChecked="{Binding InvalidOnly, Mode=TwoWay}"
+                        ToolTip.Tip="INVALID 객체만" AutomationProperties.Name="INVALID 객체만" />
+          <ToggleButton x:Name="FavoritesToggle" Classes="toolbar" IsChecked="{Binding FavoritesOnly, Mode=TwoWay}"
+                        ToolTip.Tip="즐겨찾기만" AutomationProperties.Name="즐겨찾기만" />
+          <Button x:Name="RefreshButton" Classes="toolbar" ToolTip.Tip="새로 고침 (F5)" AutomationProperties.Name="새로 고침" />
+        </StackPanel>
+        <ComboBox x:Name="TypeBox" Classes="compact" PlaceholderText="모든 유형" HorizontalAlignment="Stretch"
+                  SelectedItem="{Binding TypeFilter, Mode=TwoWay}" Margin="0,0,4,0" AutomationProperties.Name="객체 유형" />
+      </DockPanel>
+    </Border>
+    <TextBox x:Name="FilterBox" DockPanel.Dock="Top" Classes="compact search" Margin="4,4,4,2"
+             PlaceholderText="이름 필터 (* 와일드카드)" Text="{Binding FilterText, Mode=TwoWay}" AutomationProperties.Name="이름 필터" />
+    <Border DockPanel.Dock="Bottom" Classes="panel-status">
+      <TextBlock Text="{Binding StatusText}" TextTrimming="CharacterEllipsis" />
+    </Border>
+    <TreeView x:Name="Tree" Classes="compact" ItemsSource="{Binding Roots}" SelectedItem="{Binding SelectedNode, Mode=TwoWay}">
       <TreeView.Styles>
         <Style Selector="TreeViewItem" x:DataType="vm:SchemaNode">
           <Setter Property="IsExpanded" Value="{Binding IsExpanded, Mode=TwoWay}" />
@@ -21,10 +32,12 @@
       </TreeView.Styles>
       <TreeView.ItemTemplate>
         <TreeDataTemplate x:DataType="vm:SchemaNode" ItemsSource="{Binding Children}">
-          <StackPanel Orientation="Horizontal" Spacing="4">
-            <TextBlock Text="★" IsVisible="{Binding IsFavorite}" />
-            <TextBlock Text="{Binding Title}" />
-            <TextBlock Text="{Binding Detail}" Opacity="0.55" />
+          <StackPanel Orientation="Horizontal" Spacing="5">
+            <ContentControl Content="{Binding IconKey, Converter={x:Static icons:IconKeyConverter.Instance}}" VerticalAlignment="Center" />
+            <TextBlock Text="{Binding Title}" Classes.invalid="{Binding IsInvalid}" VerticalAlignment="Center" />
+            <ContentControl Content="{Binding Source='star', Converter={x:Static icons:IconKeyConverter.Instance}, ConverterParameter=11}"
+                            IsVisible="{Binding IsFavorite}" VerticalAlignment="Center" />
+            <TextBlock Text="{Binding Detail}" Opacity="0.55" VerticalAlignment="Center" />
           </StackPanel>
         </TreeDataTemplate>
       </TreeView.ItemTemplate>

@@ -1,17 +1,24 @@
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:vm="using:Oranda.App.Features.HistoryScripts"
+             xmlns:icons="using:Oranda.App.Shell.Icons"
              x:Class="Oranda.App.Features.HistoryScripts.ScriptsView"
              x:DataType="vm:ScriptsViewModel">
   <DockPanel>
-    <WrapPanel DockPanel.Dock="Top" Margin="4">
-      <Button x:Name="AddButton" Content="폴더 연결" Margin="0,0,4,0" />
-      <Button x:Name="RemoveButton" Content="연결 끊기" Margin="0,0,4,0" />
-      <Button x:Name="RefreshButton" Content="새로 고침" Margin="0,0,4,0" />
-      <Button x:Name="RunButton" Content="실행(@)" />
-    </WrapPanel>
-    <TextBlock DockPanel.Dock="Bottom" Margin="6,2" Text="{Binding StatusMessage}" TextTrimming="CharacterEllipsis" Opacity="0.7" />
-    <TreeView x:Name="Tree" ItemsSource="{Binding Roots}" SelectedItem="{Binding SelectedNode, Mode=TwoWay}">
+    <!-- 패널 툴바: 폴더 연결 · 연결 끊기 · 새로 고침 | 실행(@파일). 이름은 툴팁으로 보인다. -->
+    <Border DockPanel.Dock="Top" Classes="panel-toolbar">
+      <StackPanel Orientation="Horizontal" Spacing="1">
+        <Button x:Name="AddButton" Classes="toolbar" ToolTip.Tip="스크립트 폴더 연결" AutomationProperties.Name="폴더 연결" />
+        <Button x:Name="RemoveButton" Classes="toolbar" ToolTip.Tip="선택한 폴더 연결 끊기" AutomationProperties.Name="연결 끊기" />
+        <Button x:Name="RefreshButton" Classes="toolbar" ToolTip.Tip="새로 고침" AutomationProperties.Name="새로 고침" />
+        <Separator Classes="toolbar" />
+        <Button x:Name="RunButton" Classes="toolbar" ToolTip.Tip="선택한 파일 실행 (@파일)" AutomationProperties.Name="실행(@)" />
+      </StackPanel>
+    </Border>
+    <Border DockPanel.Dock="Bottom" Classes="panel-status">
+      <TextBlock Text="{Binding StatusMessage}" TextTrimming="CharacterEllipsis" />
+    </Border>
+    <TreeView x:Name="Tree" Classes="compact" ItemsSource="{Binding Roots}" SelectedItem="{Binding SelectedNode, Mode=TwoWay}">
       <TreeView.Styles>
         <Style Selector="TreeViewItem" x:DataType="vm:ScriptNode">
           <Setter Property="IsExpanded" Value="{Binding IsExpanded, Mode=TwoWay}" />
@@ -19,7 +26,10 @@
       </TreeView.Styles>
       <TreeView.ItemTemplate>
         <TreeDataTemplate x:DataType="vm:ScriptNode" ItemsSource="{Binding Children}">
-          <TextBlock Text="{Binding Name}" ToolTip.Tip="{Binding FullPath}" />
+          <StackPanel Orientation="Horizontal" Spacing="5" ToolTip.Tip="{Binding FullPath}">
+            <ContentControl Content="{Binding IconKey, Converter={x:Static icons:IconKeyConverter.Instance}}" VerticalAlignment="Center" />
+            <TextBlock Text="{Binding Name}" VerticalAlignment="Center" />
+          </StackPanel>
         </TreeDataTemplate>
       </TreeView.ItemTemplate>
     </TreeView>

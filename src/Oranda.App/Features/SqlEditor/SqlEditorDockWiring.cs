@@ -1,4 +1,5 @@
 using Avalonia.Threading;
+using Oranda.App.Shell;
 using Oranda.App.Shell.Docking;
 using Oranda.Core.Composition;
 
@@ -9,7 +10,7 @@ namespace Oranda.App.Features.SqlEditor;
 /// 탭이 열리면 문서로 열고 문서 활성이 바뀌면 호스트의 활성 탭을 맞춘다.
 /// </summary>
 [OrandaService(typeof(IStartupTask))]
-public sealed class SqlEditorDockWiring(DockWorkspace docking) : IStartupTask
+public sealed class SqlEditorDockWiring(DockWorkspace docking, ContextKeyService keys) : IStartupTask
 {
     private const string PanelId = "oranda.panel.sqlEditor";
 
@@ -25,7 +26,19 @@ public sealed class SqlEditorDockWiring(DockWorkspace docking) : IStartupTask
                 Open(tab);
             }
 
-            host.TabOpened += (_, tab) => Open(tab);
+            host.TabOpened += (_, tab) =>
+            {
+                Open(tab);
+                tab.PropertyChanged += (_, _) => PushKeys(host);
+            };
+            foreach (var tab in host.Tabs)
+            {
+                tab.PropertyChanged += (_, _) => PushKeys(host);
+            }
+
+            host.TabClosed += (_, _) => PushKeys(host);
+            host.ActiveChanged += (_, _) => PushKeys(host);
+            PushKeys(host);
             docking.ActiveDocumentChanged += (_, _) =>
             {
                 if (docking.ActiveDocument?.Panel is SqlEditorViewModel vm && host.Tabs.Contains(vm))
@@ -35,6 +48,18 @@ public sealed class SqlEditorDockWiring(DockWorkspace docking) : IStartupTask
             };
         });
         return Task.CompletedTask;
+    }
+
+    /// <summary>편집기 상태 키(sqlDocOpen·hasSelection·canUndo 등)를 셸 문맥 키로 옮긴다. 값이 같으면 Set 이 알림을 내지 않는다.</summary>
+    private void PushKeys(SqlEditorHost host)
+    {
+        foreach (var (key, value) in host.GetContextKeys())
+        {
+            if (key != "hasDocument") // 문서 수는 도킹(ShellController)이 PL/SQL·객체 상세 문서까지 세어 따로 정한다.
+            {
+                keys.Set(key, value);
+            }
+        }
     }
 
     private void Open(SqlEditorViewModel tab)

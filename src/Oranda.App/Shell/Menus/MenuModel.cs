@@ -150,6 +150,32 @@ public static class MenuModelBuilder
         return WithSeparators(items);
     }
 
+    /// <summary>
+    /// 오른쪽 클릭 메뉴(<c>context:&lt;surface&gt;/…</c> 배치). 표면은 <c>editor</c>·<c>grid</c>·<c>schema</c>·<c>monitor</c> 등.
+    /// 하위 메뉴·구분선 규칙은 메뉴 막대와 같다.
+    /// </summary>
+    public static IReadOnlyList<MenuNode> BuildContext(IEnumerable<CommandDefinition> commands, IShellText text, Func<string, string?> shortcut, string surface)
+    {
+        var items = new List<(Placement P, MenuNode N)>();
+        foreach (var c in commands)
+        {
+            foreach (var raw in c.Placements)
+            {
+                if (Placement.TryParse(raw, out var p) && p.Surface == "context" && p.Path[0] == surface)
+                {
+                    items.Add((p, new MenuNode(MenuNodeKind.Command, text.Title(c), p.Order)
+                    {
+                        CommandId = c.Id,
+                        Shortcut = shortcut(c.Id),
+                        Icon = c.Icon,
+                    }));
+                }
+            }
+        }
+
+        return BuildLevel(items, depth: 1, text, $"Menu.context.{surface}");
+    }
+
     private static IReadOnlyList<MenuNode> PanelToggles(IEnumerable<ToolPanelDefinition> panels, IShellText text)
     {
         var nodes = panels

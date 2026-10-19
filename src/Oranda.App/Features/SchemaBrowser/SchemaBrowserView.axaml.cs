@@ -3,6 +3,8 @@ using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Threading;
+using Oranda.App.Shell.Icons;
+using Oranda.App.Shell.Menus;
 
 namespace Oranda.App.Features.SchemaBrowser;
 
@@ -17,6 +19,18 @@ public partial class SchemaBrowserView : UserControl
     {
         InitializeComponent();
         TypeBox.ItemsSource = SchemaBrowserViewModel.KnownTypes;
+        InvalidToggle.Content = ShellIcons.Create("invalid");
+        FavoritesToggle.Content = ShellIcons.Create("star");
+        RefreshButton.Content = ShellIcons.Create("refresh");
+        RefreshButton.Click += async (_, _) =>
+        {
+            if (DataContext is SchemaBrowserViewModel vm)
+            {
+                await vm.LoadAsync();
+            }
+        };
+        FilterBox.InnerLeftContent = ShellIcons.Create("find", 14);
+        ShellContextMenus.Attach(Tree, "schema");
         Tree.AddHandler(PointerPressedEvent, OnTreePressed, handledEventsToo: true);
         Tree.AddHandler(PointerMovedEvent, OnTreeMoved, handledEventsToo: true);
         Tree.DoubleTapped += OnTreeDoubleTapped;
@@ -43,6 +57,12 @@ public partial class SchemaBrowserView : UserControl
         _pressPoint = e.GetPosition(Tree);
         _pressNode = (e.Source as Control)?.DataContext as SchemaNode;
         _dragging = false;
+
+        // 오른쪽 단추는 누른 노드를 먼저 고른다(오른쪽 클릭 메뉴가 그 노드에 대해 열린다).
+        if (_pressNode is { } node && e.GetCurrentPoint(Tree).Properties.IsRightButtonPressed && DataContext is SchemaBrowserViewModel vm)
+        {
+            vm.SelectedNode = node;
+        }
     }
 
     private async void OnTreeMoved(object? sender, PointerEventArgs e)

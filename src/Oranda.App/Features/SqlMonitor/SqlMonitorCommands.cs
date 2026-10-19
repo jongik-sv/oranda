@@ -27,7 +27,7 @@ public static class SqlMonitorCommands
 
 /// <summary>모니터 메뉴의 SQL 모니터 명령(SQLM-01·02).</summary>
 [OrandaCommand("oranda.monitor.sql", CommandCategory.Monitor, Enablement = "hasSession && !noMonitorPrivilege",
-    Placements = ["menu:monitor/sql@20"])]
+    Icon = "sqlMonitor", Placements = ["menu:monitor/sql@20", "toolbar:main/sqlMonitor@520"])]
 [OrandaCommand("oranda.monitor.sqlSearch", CommandCategory.Monitor, When = "monitorFocus", Enablement = "monitorSqlOpen",
     Placements = ["menu:monitor/sqlSearch@300"])]
 [OrandaCommand("oranda.monitor.sqlShowPlan", CommandCategory.Monitor, When = "monitorFocus", Enablement = "monitorSqlSelected",

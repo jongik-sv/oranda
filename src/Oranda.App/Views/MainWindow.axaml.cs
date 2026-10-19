@@ -4,12 +4,14 @@ using System.ComponentModel;
 using System.Diagnostics;
 using System.Linq;
 using Avalonia;
+using Avalonia.Automation;
 using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Interactivity;
 using Avalonia.Threading;
 using Oranda.App.Shell;
 using Oranda.App.Shell.Composition;
+using Oranda.App.Shell.Icons;
 using Oranda.App.Shell.Keymaps;
 using Oranda.App.Shell.Layout;
 using Oranda.App.Shell.Menus;
@@ -76,6 +78,7 @@ public partial class MainWindow : Window
         _dispatcher = new KeyDispatcher(() => _keymap.Table, _registry, _keys);
         AddHandler(KeyDownEvent, OnKeyDownTunnel, RoutingStrategies.Tunnel);
 
+        PaletteIcon.Content = ShellIcons.Create("find", 14);
         PaletteButton.Click += (_, _) => _shell.ShowCommandPalette();
         ToolbarHost.SizeChanged += (_, _) => UpdateToolbarOverflow();
         SizeChanged += (_, _) => UpdateStatusBarCollapse();
@@ -97,6 +100,10 @@ public partial class MainWindow : Window
         });
 
         RebuildMenus();
+        ShellContextMenus.Factory = surface =>
+            _controls is null || _registry is null || _keymap is null || _shell is null
+                ? []
+                : _controls.BuildContextItems(MenuModelBuilder.BuildContext(_registry.Commands, _shell.Text, _keymap.ShortcutText, surface));
         ApplyEnvironment();
         ApplyPlacement(_shell.SavedWindow);
     }
@@ -156,7 +163,12 @@ public partial class MainWindow : Window
         var flyout = new MenuFlyout();
         foreach (var button in hidden.OfType<Button>())
         {
-            flyout.Items.Add(new MenuItem { Header = button.Content, Command = button.Command });
+            flyout.Items.Add(new MenuItem
+            {
+                Header = AutomationProperties.GetName(button),
+                Command = button.Command,
+                Icon = ShellIcons.Create(button.Tag as string),
+            });
         }
 
         OverflowButton.Flyout = flyout;

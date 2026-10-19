@@ -77,6 +77,39 @@ public sealed partial class SchemaNode : ObservableObject
 
     public bool IsInvalid => Status is not null && !string.Equals(Status, "VALID", StringComparison.Ordinal);
 
+    /// <summary>범주 노드가 묶은 객체 유형(<c>TABLE</c> 등). 다른 노드는 null.</summary>
+    public string? CategoryType { get; internal init; }
+
+    /// <summary>트리 앞 아이콘 키(<see cref="Oranda.App.Shell.Icons.ShellIcons"/>). Orange 처럼 객체 유형마다 다르게 보인다.</summary>
+    public string? IconKey => Kind switch
+    {
+        SchemaNodeKind.Favorites => "star",
+        SchemaNodeKind.Schema => "schemaUser",
+        SchemaNodeKind.Category => IconForType(CategoryType),
+        SchemaNodeKind.Item => IconForType(Ref?.ObjectType),
+        SchemaNodeKind.Column => "column",
+        _ => null,
+    };
+
+    internal static string IconForType(string? type) => type switch
+    {
+        "TABLE" => "table",
+        "VIEW" => "objView",
+        "MATERIALIZED VIEW" => "objMview",
+        "INDEX" => "objIndex",
+        "PACKAGE" or "PACKAGE BODY" => "objPackage",
+        "PROCEDURE" => "objProcedure",
+        "FUNCTION" => "objFunction",
+        "TYPE" or "TYPE BODY" => "objType",
+        "SEQUENCE" => "objSequence",
+        "TRIGGER" => "objTrigger",
+        "SYNONYM" => "objSynonym",
+        "DATABASE LINK" => "objDbLink",
+        "JOB" or "SCHEDULER JOB" => "objJob",
+        "JAVA CLASS" or "JAVA SOURCE" => "objJava",
+        _ => "objOther",
+    };
+
     public bool HasChildrenToLoad => Kind is SchemaNodeKind.Favorites or SchemaNodeKind.Schema or SchemaNodeKind.Category
         || (Kind == SchemaNodeKind.Item && Ref is { } r && IsTableLike(r.ObjectType));
 

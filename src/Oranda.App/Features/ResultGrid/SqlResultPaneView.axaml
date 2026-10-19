@@ -1,5 +1,6 @@
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:icons="using:Oranda.App.Shell.Icons"
              xmlns:vm="using:Oranda.App.Features.ResultGrid"
              x:Class="Oranda.App.Features.ResultGrid.SqlResultPaneView"
              x:DataType="vm:SqlResultPaneViewModel">
@@ -7,9 +8,9 @@
     <!-- 찾기 줄(oranda.grid.find) -->
     <StackPanel Grid.Row="0" Orientation="Horizontal" Spacing="6" Margin="4"
                 IsVisible="{Binding IsFindVisible}">
-      <TextBox x:Name="FindBox" Width="220" Text="{Binding FindText}" PlaceholderText="결과에서 찾기" />
-      <Button x:Name="FindNextButton" Content="다음" />
-      <Button x:Name="FindCloseButton" Content="닫기" />
+      <TextBox x:Name="FindBox" Classes="compact" Width="220" Text="{Binding FindText}" PlaceholderText="결과에서 찾기" />
+      <Button x:Name="FindNextButton" Classes="tool" Content="다음" icons:ButtonIcon.Key="down" />
+      <Button x:Name="FindCloseButton" Classes="toolbar" Content="닫기" icons:ButtonIcon.Key="clear" icons:ButtonIcon.IconOnly="True" />
       <TextBlock Text="{Binding FindMessage}" VerticalAlignment="Center" />
     </StackPanel>
     <Grid Grid.Row="1" ColumnDefinitions="*,Auto" RowDefinitions="*,Auto">
@@ -17,6 +18,8 @@
       <ScrollBar x:Name="VBar" Grid.Row="0" Grid.Column="1" Orientation="Vertical" AllowAutoHide="False" />
       <ScrollBar x:Name="HBar" Grid.Row="1" Grid.Column="0" Orientation="Horizontal" AllowAutoHide="False" />
     </Grid>
-    <TextBlock Grid.Row="2" Margin="6,2" Text="{Binding StatusText}" />
+    <Border Grid.Row="2" Classes="panel-status">
+      <TextBlock Text="{Binding StatusText}" />
+    </Border>
   </Grid>
 </UserControl>

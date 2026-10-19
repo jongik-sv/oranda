@@ -1,6 +1,7 @@
 using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Platform.Storage;
+using Oranda.App.Shell.Icons;
 
 namespace Oranda.App.Features.HistoryScripts;
 
@@ -9,6 +10,10 @@ public partial class ScriptsView : UserControl
     public ScriptsView()
     {
         InitializeComponent();
+        AddButton.Content = ShellIcons.Create("folderAdd");
+        RemoveButton.Content = ShellIcons.Create("folderRemove");
+        RefreshButton.Content = ShellIcons.Create("refresh");
+        RunButton.Content = ShellIcons.Create("run");
         AddButton.Click += async (_, _) => await AddFolderAsync();
         RemoveButton.Click += (_, _) =>
         {

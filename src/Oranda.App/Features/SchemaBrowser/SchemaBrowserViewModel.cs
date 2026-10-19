@@ -207,7 +207,18 @@ public sealed partial class SchemaBrowserViewModel : ToolPanelViewModelBase, IDi
     public void RequestFilterFocus() => FilterFocusRequested?.Invoke(this, EventArgs.Empty);
 
 
-    partial void OnSelectedNodeChanged(SchemaNode? value) => OnPropertyChanged(nameof(IsNodeSelected));
+    partial void OnSelectedNodeChanged(SchemaNode? value)
+    {
+        OnPropertyChanged(nameof(IsNodeSelected));
+
+        // 오른쪽 클릭 메뉴·단축키의 활성 조건(commands.md 2.2): 객체 노드면 schemaNodeSelected, 소스가 있는 객체면 plsqlNodeSelected.
+        if (_services?.GetService(typeof(Oranda.App.Shell.ContextKeyService)) is Oranda.App.Shell.ContextKeyService keys)
+        {
+            keys.Set("schemaNodeSelected", value is { Ref: not null });
+            keys.Set("plsqlNodeSelected", value?.Ref?.ObjectType is "PROCEDURE" or "FUNCTION" or "PACKAGE" or "PACKAGE BODY"
+                or "TRIGGER" or "TYPE" or "TYPE BODY");
+        }
+    }
 
     partial void OnFilterTextChanged(string value) => ScheduleFilter();
 
@@ -435,6 +446,7 @@ public sealed partial class SchemaBrowserViewModel : ToolPanelViewModelBase, IDi
             var cat = new SchemaNode(this, SchemaNodeKind.Category, $"{title} ({items.Count})")
             {
                 Owner = node.Owner,
+                CategoryType = type,
                 Parent = node,
                 Items = items,
             };

@@ -8,9 +8,9 @@ namespace Oranda.App.Features.SqlEditor;
 /// TSK-04-02 이 소유한 명령 46개의 처리기(commands.md 7장). 한 클래스가 <see cref="CommandContext.CommandId"/> 로 나눠 처리한다.
 /// 활성 탭은 <see cref="SqlEditorHost.Active"/>. 탭이 없을 때 편집 명령은 아무것도 하지 않는다(활성 조건은 셸이 막는다).
 /// </summary>
-[OrandaCommand("oranda.file.newSqlEditor", CommandCategory.File, Placements = ["menu:file/newSqlEditor@10"])]
-[OrandaCommand("oranda.file.open", CommandCategory.File, Placements = ["menu:file/open@20"])]
-[OrandaCommand("oranda.file.save", CommandCategory.File, Enablement = "hasDocument", Placements = ["menu:file/save@30"])]
+[OrandaCommand("oranda.file.newSqlEditor", CommandCategory.File, Icon = "newSql", Placements = ["menu:file/newSqlEditor@10", "toolbar:main/newSql@10"])]
+[OrandaCommand("oranda.file.open", CommandCategory.File, Icon = "open", Placements = ["menu:file/open@20", "toolbar:main/open@20"])]
+[OrandaCommand("oranda.file.save", CommandCategory.File, Enablement = "hasDocument", Icon = "save", Placements = ["menu:file/save@30", "toolbar:main/save@30"])]
 [OrandaCommand("oranda.file.saveAs", CommandCategory.File, Enablement = "hasDocument", Placements = ["menu:file/saveAs@40"])]
 [OrandaCommand("oranda.file.saveAll", CommandCategory.File, Enablement = "hasDocument", Placements = ["menu:file/saveAll@50"])]
 [OrandaCommand("oranda.file.reopenClosed", CommandCategory.File, Placements = ["menu:file/reopenClosed@60"])]
@@ -23,7 +23,7 @@ namespace Oranda.App.Features.SqlEditor;
 [OrandaCommand("oranda.edit.copy", CommandCategory.Edit, When = "editorFocus", Enablement = "hasSelection", Placements = ["menu:edit/copy@40", "context:editor/copy@40"])]
 [OrandaCommand("oranda.edit.paste", CommandCategory.Edit, When = "editorFocus", Placements = ["menu:edit/paste@50", "context:editor/paste@50"])]
 [OrandaCommand("oranda.edit.selectAll", CommandCategory.Edit, When = "editorFocus", Placements = ["menu:edit/selectAll@60", "context:editor/selectAll@60"])]
-[OrandaCommand("oranda.edit.find", CommandCategory.Edit, When = "editorFocus", Placements = ["menu:edit/find@70", "context:editor/find@70"])]
+[OrandaCommand("oranda.edit.find", CommandCategory.Edit, When = "editorFocus", Icon = "find", Placements = ["menu:edit/find@70", "context:editor/find@70"])]
 [OrandaCommand("oranda.edit.replace", CommandCategory.Edit, When = "editorFocus", Enablement = "!readOnlyDoc", Placements = ["menu:edit/replace@80", "context:editor/replace@80"])]
 [OrandaCommand("oranda.edit.findNext", CommandCategory.Edit, When = "editorFocus", Enablement = "hasFindText", Placements = ["menu:edit/findNext@90"])]
 [OrandaCommand("oranda.edit.findPrevious", CommandCategory.Edit, When = "editorFocus", Enablement = "hasFindText", Placements = ["menu:edit/findPrevious@100"])]

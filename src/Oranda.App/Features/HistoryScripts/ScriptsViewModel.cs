@@ -40,6 +40,9 @@ public sealed partial class ScriptNode : ObservableObject
 
     public bool IsDirectory { get; }
 
+    /// <summary>트리 앞 아이콘 키: 폴더·SQL 파일. 자리 표시(「…」)는 아이콘이 없다.</summary>
+    public string? IconKey => IsDirectory ? "folder" : FullPath.Length == 0 ? null : "fileSql";
+
     public bool IsRoot { get; }
 
     public ObservableCollection<ScriptNode> Children { get; } = [];

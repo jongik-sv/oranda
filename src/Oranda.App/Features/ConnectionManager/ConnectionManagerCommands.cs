@@ -65,9 +65,9 @@ public static class ConnectionManagerCommands
 }
 
 /// <summary>접속 메뉴·명령 팔레트의 접속 명령(CONN-01~04).</summary>
-[OrandaCommand("oranda.conn.manage", CommandCategory.Connection, Placements = ["menu:file/connManage@400", "toolbar:main/connManage@10"])]
+[OrandaCommand("oranda.conn.manage", CommandCategory.Connection, Icon = "connect", Placements = ["menu:file/connManage@400", "toolbar:main/connManage@110"])]
 [OrandaCommand("oranda.conn.switchSession", CommandCategory.Connection, Enablement = "sqlDocActive || plsqlDocActive", Placements = ["menu:file/connSwitch@410"])]
-[OrandaCommand("oranda.conn.disconnect", CommandCategory.Connection, Enablement = "hasSession", Placements = ["menu:file/connDisconnect@420"])]
+[OrandaCommand("oranda.conn.disconnect", CommandCategory.Connection, Enablement = "hasSession", Icon = "disconnect", Placements = ["menu:file/connDisconnect@420", "toolbar:main/connDisconnect@120"])]
 [OrandaCommand("oranda.conn.reconnect", CommandCategory.Connection, Enablement = "sessionBroken", Placements = ["menu:file/connReconnect@430"])]
 [OrandaCommand("oranda.conn.changePassword", CommandCategory.Connection, Enablement = "hasSession", Placements = ["menu:file/connChangePassword@440"])]
 public sealed class ConnectionCommandHandler(ServiceContainer container) : ICommandHandler

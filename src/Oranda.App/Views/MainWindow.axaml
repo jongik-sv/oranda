@@ -22,13 +22,20 @@
         </Menu.ItemsPanel>
       </Menu>
 
-      <Border DockPanel.Dock="Top" BorderThickness="0,0,0,1" BorderBrush="{DynamicResource OrandaSeparatorBrush}">
+      <Border DockPanel.Dock="Top" BorderThickness="0,0,0,1" BorderBrush="{DynamicResource OrandaSeparatorBrush}"
+              Background="{DynamicResource OrandaToolbarBackgroundBrush}">
         <DockPanel x:Name="ToolbarHost" Margin="4,2">
-          <Button x:Name="PaletteButton" DockPanel.Dock="Right" MinWidth="120" Padding="10,3"
-                  Content="명령 검색…" AutomationProperties.Name="명령 검색" />
-          <Button x:Name="OverflowButton" DockPanel.Dock="Right" MinWidth="32" Content="…" IsVisible="False"
+          <!-- 오른쪽 위 검색 칸 모양의 명령 팔레트 단추(SQL Developer 의 검색 칸 자리). -->
+          <Button x:Name="PaletteButton" DockPanel.Dock="Right" Classes="palette-box" MinWidth="200"
+                  AutomationProperties.Name="명령 검색" ToolTip.Tip="명령 검색 (⇧⌘P)">
+            <DockPanel>
+              <ContentControl x:Name="PaletteIcon" DockPanel.Dock="Left" Margin="0,0,6,0" VerticalAlignment="Center" />
+              <TextBlock Text="명령 검색" Opacity="0.6" VerticalAlignment="Center" />
+            </DockPanel>
+          </Button>
+          <Button x:Name="OverflowButton" DockPanel.Dock="Right" Classes="toolbar toolbar-text" Content="…" IsVisible="False"
                   AutomationProperties.Name="더 보기" />
-          <StackPanel x:Name="ToolbarPanel" Orientation="Horizontal" Spacing="2" />
+          <StackPanel x:Name="ToolbarPanel" Orientation="Horizontal" Spacing="1" />
         </DockPanel>
       </Border>
 
