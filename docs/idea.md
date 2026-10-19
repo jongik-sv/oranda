@@ -1,0 +1,43 @@
+# 아이디어·나중에 할 일
+
+## 성능 시험 — 나중에 한다 (2026-10-20 결정)
+
+지금 회차에서는 성능 시험을 하지 않는다. 기능 개발과 통합을 먼저 끝내고, 성능 시험은 조용한 장비에서 따로 한 회차로 한다.
+
+이유:
+- 레인 여러 개가 한 PC 에서 동시에 빌드·시험해서 측정값이 흔들린다. `StatementSplitterTests` 의 1만 줄 성능 시험이 부하 때문에 자주 실패했다.
+- PRD 7.2 의 기준은 Release·ReadyToRun 게시본과 실제 창으로 재야 맞다. 헤드리스·Debug 값으로는 판정할 수 없다.
+
+### 할 일
+
+1. 성능을 단정하는 시험을 `Category=Perf` 로 옮겨 기본 시험(`dotnet test`)에서 뺀다. 성능 시험은 따로 돌린다.
+2. 조용한 PC(다른 빌드 없음, RDP 아님, 60 Hz 이상 모니터)에서 Release·ReadyToRun 게시본으로 아래 표를 모두 잰다. Windows 와 macOS(M1 이상) 둘 다 잰다.
+3. 결과를 PRD 7.2 「현재 기준선」 칸에 적고, 못 미치는 항목은 개선 Task 를 만든다.
+4. CI 에서 매 빌드 성능을 기록하는 일(PRD 7.2, TSK-01-07 의 `tests/Oranda.Perf`)을 켠다.
+5. TSK-11-03 「성능 예산 전 항목」 은 이 회차에서 한다.
+
+### 재야 할 항목 (PRD 7.2)
+
+| 항목 | 목표 | 지금까지 한 것 | 관련 Task |
+|---|---|---|---|
+| 앱 시작 → 입력 가능 (두 번째 실행) | 1.5 s 이하 | 빈 창 약 1.8~1.9 s. 셸 완성 뒤에는 부하 때문에 값이 흔들려 판정 못 함. 구간 표시 `PerfMarks` 있음 | TSK-01-04, TSK-03-01 |
+| 최초 실행 (디스크 캐시 없음) | 4 s 이하 | 10~15 s 추정 | TSK-01-04 |
+| 유휴 메모리 (접속 1, 탭 1) | 150 MB 이하 | 빈 창 142~153 MB | TSK-01-04 |
+| 접속 3 + 10만 행 결과 3 | 400 MB 이하 | 미측정 | TSK-06-03 |
+| 키 입력 → 화면 반영 (1만 줄) | 16 ms 이하 (p95) | 헤드리스 Release 처리 시간 p95 2.3 ms. 실제 창 렌더 포함 값은 미측정 | TSK-04-01, TSK-04-02 |
+| 자동완성 목록 표시 (캐시 후) | 150 ms 이하 | 단위 시험만. 실제 Oracle 에서 `e.` 계측 안 함 | TSK-04-05 |
+| 문법 검사 반영 (1만 줄, 입력 멈춘 뒤) | 300 ms 이하 | 미측정 | TSK-04-03 |
+| 포맷 (2,000줄) | 500 ms 이하 | Release 시험 통과 (Debug 한도 1,500 ms) | TSK-05-01, TSK-05-02 |
+| 첫 행 표시 (첫 묶음 수신 뒤) | 100 ms 이하 | 모델 쪽만 확인. 실제 창 미측정 | TSK-06-03 |
+| 100만 행 그리드 스크롤 | 60 fps, 행당 200 bytes 이하 | 스파이크(RDP)에서 60 fps 확인 못 함. 로컬 콘솔 재측정 필요 | TSK-01-06, TSK-06-03 |
+| 실행 취소 반응 | 1 s 이하 | 통합 시험 통과 (수십 ms) — 기능 시험으로 유지 | TSK-06-01, TSK-06-02 |
+| 설치 파일 크기 | 80 MB 이하 | 게시 폴더 235 MB(비압축). 실제 패키지 미측정. 검사 스크립트 `scripts/release/check-installer-size.ps1` 있음 | TSK-10-01 |
+
+### 지금 코드에 있는 성능 단정 시험 (Category=Perf 로 옮길 대상)
+
+- `tests/Oranda.Language.Tests/Lexing/StatementSplitterTests.cs` — `Split_of_10k_lines_is_fast_enough`, `Incremental_lex_of_10k_lines_meets_budget`
+- `tests/Oranda.Language.Tests/Formatting/` — 2,000줄 포맷 시험 (05-01, 05-02)
+- `tests/Oranda.Language.Tests/Completion/` — 완성 응답·L1 문맥 시간 시험 (04-05)
+- `tests/Oranda.App.Tests/Features/SqlEditor/` — 1만 줄 키 입력 p95 시험 (04-02)
+- `tests/Oranda.App.Tests` 의 자동완성 헤드리스 시간 시험 (04-05)
+- 그 밖에 이름에 `fast`, `budget`, `ms` 가 들어간 시험을 찾아 함께 옮긴다.
