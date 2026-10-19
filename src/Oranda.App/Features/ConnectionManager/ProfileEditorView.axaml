@@ -3,8 +3,19 @@
              xmlns:cm="using:Oranda.App.Features.ConnectionManager"
              x:Class="Oranda.App.Features.ConnectionManager.ProfileEditorView"
              x:DataType="cm:ProfileEditorViewModel">
-  <StackPanel Spacing="8">
-      <Grid ColumnDefinitions="Auto,*" RowDefinitions="Auto,Auto,Auto,Auto,Auto" ColumnSpacing="12" RowSpacing="8">
+  <UserControl.Styles>
+    <!-- 라벨 열은 모든 묶음이 같은 폭(SharedSizeGroup)이고 오른쪽에 붙인다(Orange 로그온 창처럼 칸 시작이 한 줄로 맞는다). -->
+    <Style Selector="Grid > TextBlock">
+      <Setter Property="MinWidth" Value="96" />
+      <Setter Property="TextAlignment" Value="Right" />
+    </Style>
+  </UserControl.Styles>
+  <StackPanel Spacing="8" Grid.IsSharedSizeScope="True">
+      <Grid  RowDefinitions="Auto,Auto,Auto,Auto,Auto" ColumnSpacing="12" RowSpacing="8">
+        <Grid.ColumnDefinitions>
+          <ColumnDefinition Width="Auto" SharedSizeGroup="Label" />
+          <ColumnDefinition Width="*" />
+        </Grid.ColumnDefinitions>
         <TextBlock Grid.Row="0" Text="이름" VerticalAlignment="Center" />
         <TextBox x:Name="NameBox" Grid.Row="0" Grid.Column="1" Text="{Binding Name}" AutomationProperties.Name="이름" />
         <TextBlock Grid.Row="1" Text="그룹" VerticalAlignment="Center" />
@@ -22,7 +33,13 @@
                   SelectedValue="{Binding Mode}" AutomationProperties.Name="접속 방식" />
       </Grid>
   
-      <Grid IsVisible="{Binding IsHostPortMode}" ColumnDefinitions="Auto,*,Auto,Auto" RowDefinitions="Auto,Auto" ColumnSpacing="12" RowSpacing="8">
+      <Grid IsVisible="{Binding IsHostPortMode}"  RowDefinitions="Auto,Auto" ColumnSpacing="12" RowSpacing="8">
+        <Grid.ColumnDefinitions>
+          <ColumnDefinition Width="Auto" SharedSizeGroup="Label" />
+          <ColumnDefinition Width="*" />
+          <ColumnDefinition Width="Auto" />
+          <ColumnDefinition Width="Auto" />
+        </Grid.ColumnDefinitions>
         <TextBlock Grid.Row="0" Text="호스트" VerticalAlignment="Center" />
         <TextBox x:Name="HostBox" Grid.Row="0" Grid.Column="1" Text="{Binding Host}" AutomationProperties.Name="호스트" />
         <TextBlock Grid.Row="0" Grid.Column="2" Text="포트" VerticalAlignment="Center" />
@@ -32,18 +49,30 @@
         <CheckBox x:Name="TlsBox" Grid.Row="1" Grid.Column="2" Grid.ColumnSpan="2" Content="TLS(tcps)" IsChecked="{Binding UseTls}" />
       </Grid>
   
-      <Grid IsVisible="{Binding IsEasyConnectMode}" ColumnDefinitions="Auto,*" ColumnSpacing="12">
+      <Grid IsVisible="{Binding IsEasyConnectMode}"  ColumnSpacing="12">
+        <Grid.ColumnDefinitions>
+          <ColumnDefinition Width="Auto" SharedSizeGroup="Label" />
+          <ColumnDefinition Width="*" />
+        </Grid.ColumnDefinitions>
         <TextBlock Text="접속 문자열" VerticalAlignment="Center" />
         <TextBox x:Name="EasyConnectBox" Grid.Column="1" Text="{Binding EasyConnect}"
                  PlaceholderText="host:1521/service?connect_timeout=5 또는 tcps://…" AutomationProperties.Name="접속 문자열" />
       </Grid>
   
-      <Grid IsVisible="{Binding IsTnsMode}" ColumnDefinitions="Auto,*" ColumnSpacing="12">
+      <Grid IsVisible="{Binding IsTnsMode}"  ColumnSpacing="12">
+        <Grid.ColumnDefinitions>
+          <ColumnDefinition Width="Auto" SharedSizeGroup="Label" />
+          <ColumnDefinition Width="*" />
+        </Grid.ColumnDefinitions>
         <TextBlock Text="TNS 별칭" VerticalAlignment="Center" />
         <TextBox x:Name="TnsAliasBox" Grid.Column="1" Text="{Binding TnsAlias}" AutomationProperties.Name="TNS 별칭" />
       </Grid>
   
-      <Grid ColumnDefinitions="Auto,*" RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto" ColumnSpacing="12" RowSpacing="8">
+      <Grid  RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto" ColumnSpacing="12" RowSpacing="8">
+        <Grid.ColumnDefinitions>
+          <ColumnDefinition Width="Auto" SharedSizeGroup="Label" />
+          <ColumnDefinition Width="*" />
+        </Grid.ColumnDefinitions>
         <TextBlock Grid.Row="0" Text="TNS 디렉터리" VerticalAlignment="Center" />
         <TextBox x:Name="TnsAdminBox" Grid.Row="0" Grid.Column="1" Text="{Binding TnsAdmin}" PlaceholderText="tnsnames.ora 가 있는 폴더(선택)" AutomationProperties.Name="TNS 디렉터리" />
         <TextBlock Grid.Row="1" Text="지갑 폴더" VerticalAlignment="Center" />
@@ -61,8 +90,12 @@
                   SelectedValue="{Binding Auth}" AutomationProperties.Name="인증 모드" />
       </Grid>
   
-      <Expander Header="고급" IsExpanded="False">
-        <Grid ColumnDefinitions="Auto,*" RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto" ColumnSpacing="12" RowSpacing="8" Margin="0,8,0,0">
+      <Expander Header="고급 설정(프록시·읽기 전용·NLS·시간 제한)" IsExpanded="False" HorizontalAlignment="Stretch">
+        <Grid  RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto" ColumnSpacing="12" RowSpacing="8" Margin="0,8,0,0">
+        <Grid.ColumnDefinitions>
+          <ColumnDefinition Width="Auto" SharedSizeGroup="Label" />
+          <ColumnDefinition Width="*" />
+        </Grid.ColumnDefinitions>
           <TextBlock Grid.Row="0" Text="프록시 사용자" VerticalAlignment="Center" />
           <TextBox x:Name="ProxyBox" Grid.Row="0" Grid.Column="1" Text="{Binding ProxyUser}" PlaceholderText="비워 두면 프록시를 쓰지 않습니다" AutomationProperties.Name="프록시 사용자" />
           <CheckBox x:Name="ReadOnlyBox" Grid.Row="1" Grid.Column="1" Content="읽기 전용 접속(쓰기 문장 차단)" IsChecked="{Binding ReadOnly}" />
