@@ -180,6 +180,7 @@ public sealed class ExecutionController : IDisposable
         item.EditSession = es;
         item.Title += " (편집)";
         GridEditCommands.Active = es;
+        GridEditBinding.Attach(model, es); // 바꾼 값·새 행을 그리드에 그리고 셀 편집기가 세션을 찾는다
         if (!es.CanEdit)
         {
             Log.AddMessage(MessageKind.Warning, "결과를 편집할 수 없습니다: " + (es.Capability.Message ?? es.Capability.Reason.ToString()));

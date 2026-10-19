@@ -324,6 +324,33 @@ public sealed class LobRowViewTests : IDisposable
     }
 
     [Fact]
+    public async Task Edit_binding_shows_pending_values_new_rows_and_maps_rows()
+    {
+        var grid = await LoadGridAsync(DocColumns(), [[5m, "a"], [6m, "b"]]);
+        var edit = await OpenEditAsync(grid, "SELECT id, doc FROM scott.emp", readOnly: false);
+        GridEditBinding.Attach(grid, edit);
+        var editable = edit.Capability.EditableColumnOrdinals[0];
+
+        Assert.Same(edit, GridEditBinding.Of(grid));
+        Assert.True(edit.SetCell(0, editable, 50m));
+        Assert.True(grid.IsEdited(0, editable));
+        Assert.Equal(GridRowMark.Modified, grid.RowMarkOf(0));
+        Assert.True(grid.TryGetValue(0, editable, out var shown));
+        Assert.Equal(50m, shown);
+
+        // 새 행은 질의 결과 뒤에 붙고, 화면 행이 음수 편집 행 번호로 바뀐다.
+        var inserted = edit.AddRow();
+        Assert.Equal(3, grid.RowCount);
+        Assert.Equal(2, grid.BaseRowCount);
+        Assert.Equal(inserted, GridEditBinding.ToEditRow(grid, edit, 2));
+        Assert.Equal(GridRowMark.Inserted, grid.RowMarkOf(2));
+        Assert.Equal(1L, GridEditBinding.ToEditRow(grid, edit, 1));
+
+        Assert.Equal(12m, GridEditBinding.Parse(grid, 0, "12"));
+        Assert.Null(GridEditBinding.Parse(grid, 0, string.Empty));
+    }
+
+    [Fact]
     public async Task Target_missing_without_edit_mode_or_when_result_not_editable()
     {
         var lob = new LobValue(LobKind.Clob, 2) { TextPreview = "hi" };

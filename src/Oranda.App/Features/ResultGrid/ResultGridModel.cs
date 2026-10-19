@@ -80,7 +80,22 @@ public sealed class ResultGridModel : IAsyncDisposable
     public long? TotalRowCount => _knownRows ?? Source.KnownRowCount;
 
     /// <summary>스크롤 범위로 쓰는 행 수.</summary>
-    public long RowCount => TotalRowCount ?? _loadedRows;
+    public long RowCount => BaseRowCount + (EditOverlay?.ExtraRows ?? 0);
+
+    /// <summary>질의가 돌려준 행 수(편집 모드에서 새로 더한 행은 뺀다).</summary>
+    public long BaseRowCount => TotalRowCount ?? _loadedRows;
+
+    /// <summary>편집 모드에서 그릴 대기 값·행 상태·새 행(그리드 편집이 채운다). 없으면 읽기 전용 그리드.</summary>
+    public IGridEditOverlay? EditOverlay { get; set; }
+
+    /// <summary>편집 중인 셀이면 true(바뀐 칸 색칠용).</summary>
+    public bool IsEdited(long viewRow, int ordinal) => EditOverlay?.IsEdited(viewRow, ordinal) ?? false;
+
+    /// <summary>행 표시(바뀜·새 행·지울 행).</summary>
+    public GridRowMark RowMarkOf(long viewRow) => EditOverlay?.RowMark(viewRow) ?? GridRowMark.None;
+
+    /// <summary>편집 상태가 바뀌었으니 다시 그린다.</summary>
+    public void NotifyEditChanged() => RaiseChanged();
 
     public bool HasMoreRows => TotalRowCount is null;
 
@@ -139,8 +154,8 @@ public sealed class ResultGridModel : IAsyncDisposable
             return;
         }
 
-        var first = (int)(SourceRow(Math.Max(0, firstViewRow)) / PageSize);
-        var lastSrc = SourceRow(Math.Max(0, Math.Min(lastViewRow, Math.Max(0, RowCount - 1))));
+        var first = (int)(SourceRow(Math.Max(0, Math.Min(firstViewRow, Math.Max(0, BaseRowCount - 1)))) / PageSize);
+        var lastSrc = SourceRow(Math.Max(0, Math.Min(lastViewRow, Math.Max(0, BaseRowCount - 1))));
         var last = (int)(lastSrc / PageSize);
         for (var p = first; p <= last; p++)
         {
@@ -241,6 +256,21 @@ public sealed class ResultGridModel : IAsyncDisposable
     /// <summary>원시 값. 페이지가 아직 없으면 <c>false</c>(백그라운드 요청은 <see cref="Prefetch"/> 몫).</summary>
     public bool TryGetValue(long viewRow, int ordinal, out object? value)
     {
+        // 편집 모드: 바꾼 값이 원본보다 앞서고, 질의 결과 뒤의 행은 새로 더한 행이다(페이지가 없다).
+        if (EditOverlay is { } edit)
+        {
+            if (edit.TryGetValue(viewRow, ordinal, out value))
+            {
+                return true;
+            }
+
+            if (viewRow >= BaseRowCount)
+            {
+                value = null;
+                return true;
+            }
+        }
+
         var src = SourceRow(viewRow);
         if (_cache.TryGetResident((int)(src / PageSize), out var page))
         {
@@ -701,4 +731,27 @@ public sealed class ResultGridModel : IAsyncDisposable
         await Source.DisposeAsync().ConfigureAwait(false);
         _cts.Dispose();
     }
+}
+
+/// <summary>편집 행 표시.</summary>
+public enum GridRowMark
+{
+    None,
+    Modified,
+    Inserted,
+    Deleted,
+    Failed,
+}
+
+/// <summary>그리드가 편집 모드에서 읽는 덮어쓰기(대기 값·행 상태·새 행). 그리드 편집(TSK-06-04)이 구현한다.</summary>
+public interface IGridEditOverlay
+{
+    /// <summary>질의 결과 뒤에 붙여 보일 새 행 수.</summary>
+    int ExtraRows { get; }
+
+    bool TryGetValue(long viewRow, int ordinal, out object? value);
+
+    bool IsEdited(long viewRow, int ordinal);
+
+    GridRowMark RowMark(long viewRow);
 }

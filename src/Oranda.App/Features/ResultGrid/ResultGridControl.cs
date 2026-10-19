@@ -257,6 +257,34 @@ public sealed class ResultGridControl : Control
         return w;
     }
 
+    /// <summary>
+    /// 셀의 화면 사각형(이 컨트롤 좌표). 셀 편집기가 그 위에 입력 칸을 띄운다. 화면 밖이면 null.
+    /// </summary>
+    public Rect? CellBounds(GridCell cell)
+    {
+        if (_model is null || _model.IsTextMode || cell.Col < 0 || cell.Col >= _model.VisibleColumns.Count)
+        {
+            return null;
+        }
+
+        var left = ColumnLeft(cell.Col) - (cell.Col < _model.FrozenCount ? 0 : _offsetX);
+        var top = HeaderHeight + (cell.Row * RowHeight) - _offsetY;
+        var w = _model.GetColumnWidth(_model.VisibleColumns[cell.Col]);
+        return top < HeaderHeight || top > Bounds.Height ? null : new Rect(left, top, w, RowHeight);
+    }
+
+    /// <summary>셀 편집을 열어 달라는 요청(두 번 누르기·F2). 편집 모드인지는 받는 쪽이 판단한다.</summary>
+    public event EventHandler<GridCell>? EditRequested;
+
+    protected override void OnDoubleTapped(Avalonia.Input.TappedEventArgs e)
+    {
+        base.OnDoubleTapped(e);
+        if (_model is { HasSelection: true } m && !m.IsTextMode && e.GetPosition(this).Y >= HeaderHeight)
+        {
+            EditRequested?.Invoke(this, m.Active);
+        }
+    }
+
     /// <summary>보이는 열 <paramref name="col"/> 의 왼쪽 x(스크롤 전 절대 좌표).</summary>
     private double ColumnLeft(int col)
     {
@@ -465,6 +493,20 @@ public sealed class ResultGridControl : Control
             {
                 var y = yStart + (r - first) * rh;
                 var selected = m.IsSelected(r, visCol);
+
+                // 편집 모드: 새 행은 초록, 지울 행은 빨강, 바꾼 칸은 노랑으로 깐다(선택 색이 위에 온다).
+                var mark = m.EditOverlay is null ? GridRowMark.None : m.RowMarkOf(r);
+                var editBrush = mark switch
+                {
+                    GridRowMark.Inserted => pal.InsertedRow,
+                    GridRowMark.Deleted or GridRowMark.Failed => pal.DeletedRow,
+                    _ => m.EditOverlay is not null && m.IsEdited(r, ord) ? pal.EditedCell : null,
+                };
+                if (editBrush is not null)
+                {
+                    ctx.FillRectangle(editBrush, new Rect(x, y, w, rh));
+                }
+
                 if (selected)
                 {
                     ctx.FillRectangle(pal.Selection, new Rect(x, y, w, rh));
@@ -482,6 +524,11 @@ public sealed class ResultGridControl : Control
                 var t = _cells.Get(key, text, s => f.Create(s, brush));
                 var tx = m.IsRightAligned(ord) ? x + w - CellPadX - t.Width : x + CellPadX;
                 t.Draw(ctx, new Point(tx, y + (rh - t.Height) / 2));
+                if (mark == GridRowMark.Deleted)
+                {
+                    var mid = Snap(y + rh / 2, scale);
+                    ctx.DrawLine(pal.Strike, new Point(tx, mid), new Point(tx + t.Width, mid)); // 지울 행은 취소선
+                }
             }
         }
 
@@ -719,6 +766,11 @@ public sealed class ResultGridControl : Control
             _model.SelectAll();
             e.Handled = true;
         }
+        else if (e.Key == Key.F2 && _model.HasSelection && !_model.IsTextMode)
+        {
+            EditRequested?.Invoke(this, _model.Active);
+            e.Handled = true;
+        }
     }
 
     private async Task SortAsync(int ordinal)
@@ -743,6 +795,14 @@ public sealed class ResultGridControl : Control
         public required IBrush Header { get; init; }
 
         public required IBrush Selection { get; init; }
+
+        public required IBrush EditedCell { get; init; }
+
+        public required IBrush InsertedRow { get; init; }
+
+        public required IBrush DeletedRow { get; init; }
+
+        public required IPen Strike { get; init; }
 
         public required IBrush Text { get; init; }
 
@@ -770,6 +830,10 @@ public sealed class ResultGridControl : Control
                 AltRow = Brush("OrandaGridAltRowBrush", 0xFFF6F8FA, 0xFF24272C),
                 Header = Brush("OrandaGridHeaderBrush", 0xFFE8EAEE, 0xFF2D3138),
                 Selection = Brush("OrandaGridSelectionBrush", 0xFFCFE0FB, 0xFF2B4A7A),
+                EditedCell = Brush("OrandaGridEditedBrush", 0xFFFFF4CE, 0xFF4A3F12),
+                InsertedRow = Brush("OrandaGridInsertedBrush", 0xFFE6F4EA, 0xFF1E3A27),
+                DeletedRow = Brush("OrandaGridDeletedBrush", 0xFFFDE7E9, 0xFF4A1F24),
+                Strike = new Pen(Brush("OrandaGridStrikeBrush", 0xFFC42B1C, 0xFFFF6B5E), 1),
                 Text = Brush("OrandaGridTextBrush", 0xFF202020, 0xFFDCDDDE),
                 NullText = Brush("OrandaGridNullBrush", 0xFF9AA0A6, 0xFF7C828A),
                 Line = new Pen(line, 1),

@@ -67,12 +67,20 @@ public sealed class GridEditCommandHandler : ICommandHandler
             return;
         }
 
-        // 행 대상: Parameter 가 행 번호(long)면 그 행.
-        var row = context.Parameter is long r ? r : (long?)null;
+        // 행 대상: Parameter 가 행 번호(long)면 그 행, 없으면 지금 그리드에서 고른 행(메뉴·오른쪽 클릭에서 부를 때).
+        var row = context.Parameter is long r ? r
+            : ResultGrid.ResultGridCommands.Active is { HasSelection: true } grid && GridEditBinding.Of(grid) == s
+                ? GridEditBinding.ToEditRow(grid, s, grid.Active.Row)
+                : (long?)null;
         switch (context.CommandId)
         {
             case "oranda.grid.edit.addRow":
                 s.AddRow();
+                if (ResultGrid.ResultGridCommands.Active is { } shown && GridEditBinding.Of(shown) == s)
+                {
+                    shown.SelectCell(new ResultGrid.GridCell(shown.RowCount - 1, 0)); // 새 행으로 가서 바로 입력
+                }
+
                 break;
             case "oranda.grid.edit.deleteRow" when row is { } d:
                 s.DeleteRow(d);
@@ -126,6 +134,13 @@ public sealed class GridEditCommandHandler : ICommandHandler
         }
 
         await s.ApplyAsync(commit, ct).ConfigureAwait(true);
+
+        // 모두 반영됐으면 같은 질의를 편집 모드로 다시 읽어 그리드가 반영된 값을 보인다(실패 행이 남으면 그대로 둔다).
+        if (!s.IsDirty && GridEditCommands.Rerun is { } rerun)
+        {
+            await rerun(s.Query, ct).ConfigureAwait(true);
+        }
+
         return true;
     }
 }

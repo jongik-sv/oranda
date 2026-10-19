@@ -48,6 +48,87 @@ public partial class SqlResultPaneView : UserControl
             }
         };
         DataContextChanged += (_, _) => Bind();
+
+        GridControl.EditRequested += (_, cell) => BeginEdit(cell);
+        CellEditor.KeyDown += (_, e) =>
+        {
+            if (e.Key is Key.Enter or Key.Tab)
+            {
+                e.Handled = true;
+                CommitEdit(moveDown: e.Key == Key.Enter);
+            }
+            else if (e.Key == Key.Escape)
+            {
+                e.Handled = true;
+                CancelEdit();
+            }
+        };
+        CellEditor.LostFocus += (_, _) =>
+        {
+            if (CellEditor.IsVisible)
+            {
+                CommitEdit(moveDown: false);
+            }
+        };
+    }
+
+    private GridCell? _editing;
+
+    /// <summary>편집 모드 그리드에서 셀 편집기를 연다. 키 열이 아니어도 편집할 수 없는 열(대상 테이블 밖)은 열지 않는다.</summary>
+    private void BeginEdit(GridCell cell)
+    {
+        if (GridControl.Model is not { } m || Oranda.App.Features.GridEdit.GridEditBinding.Of(m) is not { CanEdit: true } es)
+        {
+            return;
+        }
+
+        var ord = m.VisibleColumns[cell.Col];
+        var row = Oranda.App.Features.GridEdit.GridEditBinding.ToEditRow(m, es, cell.Row);
+        if (!es.IsEditableColumn(ord) || es.GetRowState(row) == Oranda.App.Features.GridEdit.GridEditRowState.Deleted)
+        {
+            return;
+        }
+
+        GridControl.EnsureVisible(cell);
+        if (GridControl.CellBounds(cell) is not { } r)
+        {
+            return;
+        }
+
+        _editing = cell;
+        CellEditor.Margin = new Avalonia.Thickness(r.X, r.Y, 0, 0);
+        CellEditor.Width = Math.Max(60, r.Width);
+        CellEditor.Height = r.Height;
+        CellEditor.Text = m.TryGetValue(cell.Row, ord, out var v) && v is not null ? m.GetCellText(cell.Row, ord) : string.Empty;
+        CellEditor.IsVisible = true;
+        CellEditor.Focus();
+        CellEditor.SelectAll();
+    }
+
+    private void CommitEdit(bool moveDown)
+    {
+        if (_editing is not { } cell || GridControl.Model is not { } m || Oranda.App.Features.GridEdit.GridEditBinding.Of(m) is not { } es)
+        {
+            CancelEdit();
+            return;
+        }
+
+        var ord = m.VisibleColumns[cell.Col];
+        var row = Oranda.App.Features.GridEdit.GridEditBinding.ToEditRow(m, es, cell.Row);
+        es.SetCell(row, ord, Oranda.App.Features.GridEdit.GridEditBinding.Parse(m, ord, CellEditor.Text));
+        CancelEdit();
+        if (moveDown && cell.Row + 1 < m.RowCount)
+        {
+            m.SelectCell(cell with { Row = cell.Row + 1 });
+            GridControl.EnsureVisible(m.Active);
+        }
+    }
+
+    private void CancelEdit()
+    {
+        _editing = null;
+        CellEditor.IsVisible = false;
+        GridControl.Focus();
     }
 
     private SqlResultPaneViewModel? Vm => DataContext as SqlResultPaneViewModel;
@@ -123,6 +204,18 @@ public partial class SqlResultPaneView : UserControl
 
         keys.Set("gridHasResult", m.HasResult);
         keys.Set("gridHasSelection", m.HasSelection);
+
+        // 편집 모드 키(commands.md: 행 추가·반영 등의 활성 조건). 이 그리드의 세션을 편집 명령의 대상으로 둔다.
+        var es = Oranda.App.Features.GridEdit.GridEditBinding.Of(m);
+        if (es is not null)
+        {
+            Oranda.App.Features.GridEdit.GridEditCommands.Active = es;
+        }
+
+        keys.Set("gridEditing", es is { CanEdit: true });
+        keys.Set("gridDirty", es is { IsDirty: true });
+        keys.Set("gridNotEditable", es is { CanEdit: false });
+        keys.Set("singleTable", es?.Capability.CanAddRowId ?? false);
     }
 
     private async Task FindNextAsync()
