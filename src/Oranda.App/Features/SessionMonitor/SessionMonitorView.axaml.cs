@@ -1,4 +1,5 @@
 using Avalonia.Controls;
+using Oranda.App.Shell.Menus;
 
 namespace Oranda.App.Features.SessionMonitor;
 
@@ -8,6 +9,7 @@ public partial class SessionMonitorView : UserControl
     public SessionMonitorView()
     {
         InitializeComponent();
+        ShellContextMenus.Attach(SessionList, "monitor");
         RefreshButton.Click += (_, _) => Run(vm => vm.RefreshAsync());
         KillButton.Click += (_, _) => Run(vm => vm.KillAsync(immediate: true));
         DisconnectButton.Click += (_, _) => Run(vm => vm.DisconnectAsync(immediate: true));

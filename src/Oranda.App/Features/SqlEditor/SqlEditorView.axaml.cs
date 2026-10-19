@@ -6,6 +6,7 @@ using Avalonia.Input;
 using Avalonia.Threading;
 using AvaloniaEdit.Folding;
 using AvaloniaEdit.Rendering;
+using Oranda.App.Shell.Menus;
 
 namespace Oranda.App.Features.SqlEditor;
 
@@ -33,6 +34,7 @@ public partial class SqlEditorView : UserControl, IEditorSurface
     public SqlEditorView()
     {
         InitializeComponent();
+        ShellContextMenus.Attach(Editor, "editor");
         _structureTimer = new DispatcherTimer { Interval = StructureDelay / 4 };
         _structureTimer.Tick += (_, _) =>
         {

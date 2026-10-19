@@ -1,6 +1,8 @@
 using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Input.Platform;
+using Oranda.App.Shell.Menus;
+using Oranda.App.Shell;
 
 namespace Oranda.App.Features.ResultGrid;
 
@@ -12,6 +14,8 @@ public partial class SqlResultPaneView : UserControl
     public SqlResultPaneView()
     {
         InitializeComponent();
+        GotFocus += (_, _) => PushGridKeys();
+        ShellContextMenus.Attach(GridControl, "grid");
         GridControl.ScrollChanged += (_, _) => SyncBars();
         GridControl.SizeChanged += (_, _) => SyncBars();
         VBar.Scroll += (_, e) =>
@@ -86,9 +90,15 @@ public partial class SqlResultPaneView : UserControl
 
     private void AttachModel(SqlResultPaneViewModel vm)
     {
+        if (GridControl.Model is { } old)
+        {
+            old.Changed -= OnModelChanged;
+        }
+
         GridControl.Model = vm.Model;
         if (vm.Model is { } m)
         {
+            m.Changed += OnModelChanged;
             m.ClipboardWriter = async text =>
             {
                 if (TopLevel.GetTopLevel(this)?.Clipboard is { } cb)
@@ -99,6 +109,20 @@ public partial class SqlResultPaneView : UserControl
         }
 
         SyncBars();
+    }
+
+    private void OnModelChanged(object? sender, EventArgs e) => PushGridKeys();
+
+    /// <summary>그리드 명령(복사·열 고정 등)의 활성 조건 키를 맞춘다. 포커스가 이 그리드에 있을 때만 의미가 있다.</summary>
+    private void PushGridKeys()
+    {
+        if (ContextKeyService.Shared is not { } keys || GridControl.Model is not { } m || !(GridControl.IsFocused || IsKeyboardFocusWithin))
+        {
+            return;
+        }
+
+        keys.Set("gridHasResult", m.HasResult);
+        keys.Set("gridHasSelection", m.HasSelection);
     }
 
     private async Task FindNextAsync()

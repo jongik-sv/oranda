@@ -24,6 +24,18 @@
         <Style Selector="Border.env-frame.env-development">
             <Setter Property="BorderBrush" Value="{DynamicResource OrandaEnvDevelopmentBrush}" />
         </Style>
+        <Style Selector="Border.statusbar">
+            <Setter Property="Background" Value="{DynamicResource OrandaToolbarBackgroundBrush}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource OrandaSeparatorBrush}" />
+            <Setter Property="BorderThickness" Value="0,1,0,0" />
+            <Setter Property="TextElement.FontSize" Value="{DynamicResource OrandaFontSizeSmall}" />
+        </Style>
+        <Style Selector="Border.status-cell">
+            <Setter Property="BorderBrush" Value="{DynamicResource OrandaSeparatorBrush}" />
+            <Setter Property="BorderThickness" Value="0,0,1,0" />
+            <Setter Property="Padding" Value="8,0" />
+            <Setter Property="Margin" Value="0,1" />
+        </Style>
         <Style Selector="Border.statusbar.env-production">
             <Setter Property="Background" Value="{DynamicResource OrandaEnvProductionBrush}" />
             <Setter Property="TextElement.Foreground" Value="{DynamicResource OrandaEnvProductionForegroundBrush}" />
@@ -108,6 +120,10 @@
         <Style Selector="Button.tool:disabled /template/ ContentPresenter#PART_ContentPresenter, ToggleButton.tool:disabled /template/ ContentPresenter#PART_ContentPresenter">
             <Setter Property="Background" Value="Transparent" />
             <Setter Property="Opacity" Value="0.4" />
+        </Style>
+        <Style Selector="Button.start-item">
+            <Setter Property="Padding" Value="10,7" />
+            <Setter Property="FontSize" Value="{DynamicResource OrandaFontSizeBase}" />
         </Style>
         <Style Selector="TextBlock.panel-caption">
             <Setter Property="FontSize" Value="{DynamicResource OrandaFontSizeSmall}" />

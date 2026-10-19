@@ -155,11 +155,11 @@ public static class ExecutionCommands
 
 /// <summary>실행·취소·커밋·롤백 등 TSK-06-02 소유 명령의 처리기. 한 클래스가 명령 ID 로 나눠 처리한다.</summary>
 [OrandaCommand("oranda.exec.runStatement", CommandCategory.Sql, When = "sqlDocFocus", Enablement = "hasSession && !sessionBusy",
-    Icon = "run", Placements = ["menu:sql/runStatement@10", "toolbar:main/run@210"])]
+    Icon = "run", Placements = ["menu:sql/runStatement@10", "toolbar:main/run@210", "context:editor/runStatement@1000"])]
 [OrandaCommand("oranda.exec.runSelection", CommandCategory.Sql, When = "sqlDocFocus", Enablement = "hasSession && !sessionBusy && hasSelection",
     Placements = ["menu:sql/runSelection@12"])]
 [OrandaCommand("oranda.exec.runScript", CommandCategory.Sql, When = "sqlDocFocus", Enablement = "hasSession && !sessionBusy",
-    Icon = "runScript", Placements = ["menu:sql/runScript@14", "toolbar:main/runScript@220"])]
+    Icon = "runScript", Placements = ["menu:sql/runScript@14", "toolbar:main/runScript@220", "context:editor/runScript@1010"])]
 [OrandaCommand("oranda.exec.runFromCursor", CommandCategory.Sql, When = "sqlDocFocus", Enablement = "hasSession && !sessionBusy",
     Placements = ["menu:sql/runFromCursor@16"])]
 [OrandaCommand("oranda.exec.runStep", CommandCategory.Sql, When = "sqlDocFocus", Enablement = "hasSession && !sessionBusy",

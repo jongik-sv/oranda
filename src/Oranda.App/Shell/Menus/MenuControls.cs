@@ -68,7 +68,7 @@ public sealed class MenuControls(ICommandRegistry registry, IContextKeys keys, F
                 Tag = n.Icon, // 「…」 메뉴로 접힐 때 같은 아이콘을 다시 만든다(컨트롤은 한 부모만 갖는다).
             };
             AutomationProperties.SetName(button, n.Title);
-            ToolTip.SetTip(button, n.Shortcut is null ? n.Title : $"{n.Title} ({n.Shortcut})");
+            ToolTip.SetTip(button, n.Shortcut is null ? n.Title : $"{n.Title} ({Keymaps.KeyBindingTable.ForScreen(n.Shortcut)})");
             items.Add(button);
         }
 

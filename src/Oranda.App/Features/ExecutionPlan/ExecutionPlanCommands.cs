@@ -32,7 +32,7 @@ public static class ExecutionPlanCommands
 /// 편집기 현재 문장은 <see cref="IEditorContext"/> 로 얻고(소비만), 마지막 실행의 sql_id 는 <c>StatementExecuted</c> 이벤트의 커서를 기억한다.
 /// </summary>
 [OrandaCommand("oranda.plan.explain", CommandCategory.Sql, When = "sqlDocFocus", Enablement = "hasSession && !sessionBusy",
-    Icon = "explainPlan", Placements = ["menu:sql/explain@50", "toolbar:main/explain@230"])]
+    Icon = "explainPlan", Placements = ["menu:sql/explain@50", "toolbar:main/explain@230", "context:editor/explain@1020"])]
 [OrandaCommand("oranda.plan.actual", CommandCategory.Sql, When = "sqlDocFocus", Enablement = "hasSession",
     Placements = ["menu:sql/actualPlan@60"])]
 [OrandaCommand("oranda.plan.displayCursorOptions", CommandCategory.Sql, Enablement = "hasSession",

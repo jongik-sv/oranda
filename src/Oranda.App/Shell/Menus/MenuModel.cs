@@ -173,7 +173,39 @@ public static class MenuModelBuilder
             }
         }
 
-        return BuildLevel(items, depth: 1, text, $"Menu.context.{surface}");
+        return ContextSections(items);
+    }
+
+    /// <summary>오른쪽 클릭 메뉴에서 묶음 이름의 순서가 같을 때(그리드처럼 묶음마다 10 부터 센다) 쓰는 차례.</summary>
+    private static readonly string[] ContextSectionOrder = ["run", "refresh", "copy", "view", "columns", "edit", "insert", "favorite", "detail", "export"];
+
+    /// <summary>
+    /// 오른쪽 클릭 배치는 두 관례가 섞여 있다. <c>context:grid/copy@10</c> 처럼 둘째 마디를 여러 명령이 같이 쓰면 그것이 묶음 이름이고,
+    /// 편집기처럼 명령마다 다르면 순서 번호로 묶는다(100 단위, 순서가 모두 100 미만이면 10 단위).
+    /// </summary>
+    private static List<MenuNode> ContextSections(List<(Placement P, MenuNode N)> items)
+    {
+        var keyOf = items.Select(i => i.P.Path.Count >= 2 ? i.P.Path[1] : string.Empty).ToList();
+        var named = keyOf.GroupBy(k => k, StringComparer.Ordinal).Any(g => g.Count() > 1);
+        var step = items.All(i => i.P.Order < Placement.GroupSize) ? 10 : Placement.GroupSize;
+        var sections = items
+            .Select((item, i) => (Item: item, Section: named ? keyOf[i] : (item.P.Order / step).ToString("D6", System.Globalization.CultureInfo.InvariantCulture)))
+            .GroupBy(x => x.Section, StringComparer.Ordinal)
+            .OrderBy(g => g.Min(x => x.Item.P.Order))
+            .ThenBy(g => Array.IndexOf(ContextSectionOrder, g.Key) is var r && r >= 0 ? r : int.MaxValue)
+            .ThenBy(g => g.Key, StringComparer.Ordinal);
+        var result = new List<MenuNode>();
+        foreach (var section in sections)
+        {
+            if (result.Count > 0)
+            {
+                result.Add(MenuNode.Separator(0));
+            }
+
+            result.AddRange(section.OrderBy(x => x.Item.P.Order).ThenBy(x => x.Item.N.Title, StringComparer.Ordinal).Select(x => x.Item.N));
+        }
+
+        return result;
     }
 
     private static IReadOnlyList<MenuNode> PanelToggles(IEnumerable<ToolPanelDefinition> panels, IShellText text)

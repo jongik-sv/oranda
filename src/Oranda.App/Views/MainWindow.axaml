@@ -39,17 +39,20 @@
         </DockPanel>
       </Border>
 
-      <Border x:Name="StatusBarBorder" DockPanel.Dock="Bottom" Padding="8,3" MinHeight="24"
+      <!-- 상태 표시줄: Orange 의 Main Statusbar 처럼 구간을 세로선으로 나눈 한 줄. -->
+      <Border x:Name="StatusBarBorder" DockPanel.Dock="Bottom" Padding="4,2" MinHeight="24"
               Classes="statusbar">
         <ItemsControl x:Name="StatusBar" ItemsSource="{Binding StatusItems}">
           <ItemsControl.ItemsPanel>
             <ItemsPanelTemplate>
-              <StackPanel Orientation="Horizontal" Spacing="16" />
+              <StackPanel Orientation="Horizontal" />
             </ItemsPanelTemplate>
           </ItemsControl.ItemsPanel>
           <ItemsControl.ItemTemplate>
             <DataTemplate x:DataType="vm:StatusBarEntry">
-              <ContentControl Content="{Binding Item}" IsVisible="{Binding IsShown}" />
+              <Border Classes="status-cell" IsVisible="{Binding IsShown}">
+                <ContentControl Content="{Binding Item}" />
+              </Border>
             </DataTemplate>
           </ItemsControl.ItemTemplate>
         </ItemsControl>

@@ -13,6 +13,11 @@ namespace Oranda.App.Shell;
 /// </summary>
 public sealed class ContextKeyService : IContextKeys
 {
+    /// <summary>
+    /// 주 창에 붙은 셸의 문맥 키. DI 없이 ViewLocator 가 만드는 화면(결과 그리드 등)이 상태 키를 알릴 때 쓴다. 주 창이 설정한다.
+    /// </summary>
+    public static ContextKeyService? Shared { get; set; }
+
     private readonly object _gate = new();
     private readonly HashSet<string> _keys = new(StringComparer.Ordinal);
     private string? _focusSlot;

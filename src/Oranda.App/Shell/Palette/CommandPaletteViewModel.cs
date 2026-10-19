@@ -26,6 +26,9 @@ public sealed class PaletteItem(CommandDefinition definition, string title, stri
 
     public string? Shortcut { get; } = shortcut;
 
+    /// <summary>화면용 단축키 글(macOS 는 ⌘ 기호).</summary>
+    public string? ShortcutDisplay => Keymaps.KeyBindingTable.ForScreen(Shortcut);
+
     /// <summary>false 면 회색이고 실행할 수 없다(활성 조건이 거짓).</summary>
     public bool IsEnabled { get; } = isEnabled;
 }

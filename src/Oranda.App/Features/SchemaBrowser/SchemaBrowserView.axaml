@@ -1,8 +1,10 @@
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:keymaps="using:Oranda.App.Shell.Keymaps"
              xmlns:vm="using:Oranda.App.Features.SchemaBrowser"
              xmlns:icons="using:Oranda.App.Shell.Icons"
              x:Class="Oranda.App.Features.SchemaBrowser.SchemaBrowserView"
+             keymaps:FocusSlot.Name="schema"
              x:DataType="vm:SchemaBrowserViewModel">
   <DockPanel>
     <!-- 패널 툴바(Orange Schema Browser 처럼 아이콘 단추 한 줄): 유형 고르기 · INVALID 만 · 즐겨찾기만 · 새로 고침 -->

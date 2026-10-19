@@ -2,6 +2,7 @@ using System.Collections.Generic;
 using System.Linq;
 using Avalonia.Controls;
 using Oranda.Core.Monitoring;
+using Oranda.App.Shell.Menus;
 
 namespace Oranda.App.Features.SqlMonitor;
 
@@ -11,6 +12,7 @@ public partial class SqlMonitorView : UserControl
     public SqlMonitorView()
     {
         InitializeComponent();
+        ShellContextMenus.Attach(ResultList, "monitor");
         OrderBox.SelectionChanged += (_, _) =>
         {
             if (DataContext is SqlMonitorViewModel vm && OrderBox.SelectedItem is KeyValuePair<string, TopSqlOrder> pick)

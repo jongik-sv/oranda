@@ -68,6 +68,35 @@ public sealed class DockWorkspace
 
     public event EventHandler? ActiveDocumentChanged;
 
+    /// <summary>
+    /// 문서가 하나도 없을 때 문서 영역에 보일 내용(시작 화면). 배치를 다시 지어도 새 문서 영역마다 다시 만든다.
+    /// 없으면 Dock 기본 글(「No documents open」).
+    /// </summary>
+    public Func<object?>? EmptyDocumentContent
+    {
+        get => _emptyDocumentContent;
+        set
+        {
+            _emptyDocumentContent = value;
+            ApplyEmptyContent();
+        }
+    }
+
+    private Func<object?>? _emptyDocumentContent;
+
+    private void ApplyEmptyContent()
+    {
+        if (_emptyDocumentContent is null || Layout is null)
+        {
+            return;
+        }
+
+        foreach (var dock in DocumentDocks().OfType<Dock.Model.Mvvm.Controls.DocumentDock>())
+        {
+            dock.EmptyContent = _emptyDocumentContent();
+        }
+    }
+
     /// <summary>문서 탭이 닫혔다(탭의 × 단추·탭 닫기 명령 모두). 문서를 가진 기능이 자기 목록을 맞춘다.</summary>
     public event EventHandler<PanelDocument>? DocumentClosed;
 
@@ -117,6 +146,7 @@ public sealed class DockWorkspace
         }
 
         Factory.InitLayout(dockRoot);
+        ApplyEmptyContent();
         LayoutRebuilt?.Invoke(this, EventArgs.Empty);
     }
 

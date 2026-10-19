@@ -93,6 +93,29 @@ public sealed class KeyBindingTable
         return e?.Chord[0];
     }
 
+    /// <summary>
+    /// 화면에 보일 단축키 글. macOS 는 메뉴(Avalonia InputGesture)와 같은 기호(⌃ ⌥ ⇧ ⌘)로 바꾼다.
+    /// <see cref="Display"/> 결과(키맵 파일·시험이 쓰는 글)는 그대로 둔다.
+    /// </summary>
+    public static string? ForScreen(string? text)
+    {
+        if (text is null || !OperatingSystem.IsMacOS())
+        {
+            return text;
+        }
+
+        var parts = text.Split('+');
+        var mods = parts[..^1].Select(m => m switch
+        {
+            "Ctrl" => "⌃",
+            "Alt" => "⌥",
+            "Shift" => "⇧",
+            "Cmd" => "⌘",
+            _ => m,
+        }).OrderBy(m => "⌃⌥⇧⌘".IndexOf(m, StringComparison.Ordinal));
+        return string.Join('+', mods.Append(parts[^1]));
+    }
+
     /// <summary>제스처를 사람이 읽는 글자로(<c>Ctrl+OemComma</c> → <c>Ctrl+,</c>, <c>D0</c> → <c>0</c>).</summary>
     public static string Display(KeyGesture gesture)
     {

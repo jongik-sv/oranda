@@ -1,7 +1,9 @@
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:keymaps="using:Oranda.App.Shell.Keymaps"
              xmlns:vm="using:Oranda.App.Features.SessionMonitor"
              x:Class="Oranda.App.Features.SessionMonitor.SessionMonitorView"
+             keymaps:FocusSlot.Name="monitor"
              x:DataType="vm:SessionMonitorViewModel">
   <DockPanel>
     <WrapPanel DockPanel.Dock="Top" Margin="4">

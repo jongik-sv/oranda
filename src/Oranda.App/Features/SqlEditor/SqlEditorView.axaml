@@ -1,8 +1,10 @@
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:keymaps="using:Oranda.App.Shell.Keymaps"
              xmlns:ae="using:AvaloniaEdit"
              xmlns:vm="using:Oranda.App.Features.SqlEditor"
              x:Class="Oranda.App.Features.SqlEditor.SqlEditorView"
+             keymaps:FocusSlot.Name="sqlText"
              x:DataType="vm:SqlEditorViewModel">
   <UserControl.Styles>
     <StyleInclude Source="avares://AvaloniaEdit/Themes/Fluent/AvaloniaEdit.xaml" />
@@ -45,7 +47,7 @@
     <GridSplitter Grid.Row="2" Height="5" HorizontalAlignment="Stretch" ResizeDirection="Rows"
                   Background="{DynamicResource OrandaSplitterBrush}" AutomationProperties.Name="편집기와 결과 나누기"
                   IsVisible="{Binding ResultPane, Converter={x:Static ObjectConverters.IsNotNull}}" />
-    <ContentControl Grid.Row="3" Name="ResultHost" Content="{Binding ResultPane}" MinHeight="0" MaxHeight="2000"
+    <ContentControl Grid.Row="3" Name="ResultHost" keymaps:FocusSlot.Name="sqlGrid" Content="{Binding ResultPane}" MinHeight="0" MaxHeight="2000"
                     IsVisible="{Binding ResultPane, Converter={x:Static ObjectConverters.IsNotNull}}" />
   </Grid>
 </UserControl>

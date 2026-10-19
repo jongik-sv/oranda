@@ -78,6 +78,16 @@ public partial class MainWindow : Window
         _dispatcher = new KeyDispatcher(() => _keymap.Table, _registry, _keys);
         AddHandler(KeyDownEvent, OnKeyDownTunnel, RoutingStrategies.Tunnel);
 
+        // 포커스가 옮겨지면 그 화면의 포커스 자리를 문맥 키로(commands.md 2.2). 자리가 없는 곳(툴바·메뉴)은 직전 자리를 둔다.
+        ContextKeyService.Shared = _keys;
+        AddHandler(GotFocusEvent, (_, e) =>
+        {
+            if (FocusSlot.Find(e.Source as Visual) is { } slot)
+            {
+                _keys?.SetFocusSlot(slot);
+            }
+        }, RoutingStrategies.Bubble, handledEventsToo: true);
+
         PaletteIcon.Content = ShellIcons.Create("find", 14);
         PaletteButton.Click += (_, _) => _shell.ShowCommandPalette();
         ToolbarHost.SizeChanged += (_, _) => UpdateToolbarOverflow();
@@ -100,6 +110,7 @@ public partial class MainWindow : Window
         });
 
         RebuildMenus();
+        _shell.Docking.EmptyDocumentContent = () => new StartPage(_registry, _keys, _shell.Text, _keymap.ShortcutText);
         ShellContextMenus.Factory = surface =>
             _controls is null || _registry is null || _keymap is null || _shell is null
                 ? []
