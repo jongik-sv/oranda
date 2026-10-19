@@ -24,6 +24,9 @@ public class ConnectionProfileTests
     [Theory]
     [InlineData(AuthMode.SysDba, "SYSDBA")]
     [InlineData(AuthMode.SysOper, "SYSOPER")]
+    [InlineData(AuthMode.SysBackup, "SYSBACKUP")]
+    [InlineData(AuthMode.SysDg, "SYSDG")]
+    [InlineData(AuthMode.SysKm, "SYSKM")]
     public void Sets_dba_privilege_only_for_sys_modes(AuthMode mode, string expected)
     {
         var profile = new ConnectionProfile("sys", "sys", "host:1521/svc", mode);

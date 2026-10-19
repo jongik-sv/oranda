@@ -74,3 +74,51 @@
 - **Rationale**: WinExe 는 stdout 이 막힐 수 있다. 비밀값 없이도 CI 가 통과해야 한다
 - **Reversible**: yes
 - **Source**: 커밋 71ce5ee, spikes/TSK-01-07/RESULT.md. 보류: Apple 비밀값 8개 등록, Windows Authenticode 인증서, macOS 주 1회 측정 스케줄
+
+## D-010 (2026-10-19T12:00:00Z)
+- **Phase**: TSK-02-01 로컬 데이터 모델
+- **Decision needed**: 라이선스 팩 표현, 포매터·레이아웃 저장 형식, 이력 검색·비밀 처리
+- **Decision made**: 접속의 라이선스는 열거형 `LicensePack { None, Diagnostics, DiagnosticsAndTuning }`. 포매터 프로필은 `id`·`name` + `options`(= FormatterOptions). 레이아웃은 Dock 형식이 아닌 App DTO `LayoutDocument`. 이력 검색은 FTS5 trigram. 이력 SQL 은 `ISecretRedactor` 로 비밀을 가린 뒤 저장하고 바인드 값은 기본 저장 안 함. 비밀은 `credentialRef = oranda:conn:{id}` 키로 DPAPI/키체인에만. `settings.json` 추가, 마이그레이션 전 `backup/`
+- **Rationale**: Tuning 은 Diagnostics 를 전제. 비밀번호가 어떤 파일에도 남지 않음을 자동 검사로 확인 가능
+- **Reversible**: yes
+- **Source**: 커밋 733bd02, docs/design/data-model.md
+
+## D-011 (2026-10-19T12:00:00Z)
+- **Phase**: TSK-02-02 화면 구조·명령 체계
+- **Decision needed**: 도킹 라이브러리, 결과 그리드 위치, 키맵 형식, 환경 라벨
+- **Decision made**: Dock.Avalonia 12.1.x(Avalonia 12.1.4 지원), `Dock.*` 형식은 `Shell/Docking` 안에서만. 결과 그리드는 도구 창이 아닌 SQL 편집기 문서의 아래쪽 분할. 명령 ID `oranda.<영역>.<동작>`, 기본 단축키는 키맵 파일에만. 키맵 프리셋 4종(default·orange5·plsqldev·sqldev), `Primary` = Win Ctrl / mac Cmd, `mac` 별도 목록. 운영 라벨은 빨강 고정(사용자 색 무시), 확인 대화상자 여부는 색이 아닌 환경 값으로 결정
+- **Rationale**: Dock.Avalonia 12.1.0.12 가 Avalonia 12.1.4 에 의존(nuget 확인). 키맵 4종 Windows·macOS 충돌 0
+- **Reversible**: yes
+- **Source**: 커밋 21bece1, docs/design/ui-shell.md·commands.md·keymaps/. 보류: PL/SQL Developer·SQL Developer 키 실물 대조(TSK-04-07)
+
+## D-012 (2026-10-19T12:00:00Z)
+- **Phase**: TSK-02-03 Core 계약
+- **Decision needed**: 서비스 등록 방식, TRD 6장 시그니처 변경, 여러 Task 가 한 인터페이스를 구현할 때
+- **Decision made**: 서비스 등록은 `[OrandaService]` 특성 + `[assembly: OrandaServiceAssembly]` 스캔(Core 자체 구현 EventBus·ExecutionPolicy 는 앱 조립 코드가 직접 등록). `ExecuteAsync`·`ExecuteScriptAsync` 에 `ExecutionOptions?` 추가, `ISession` 에 Purpose·DbKey 추가, IMetadataProvider·IMonitorService 메서드 추가(TRD 6장 반영). 한 인터페이스를 여러 Task 가 구현하면 partial 파일로 나눈다. 공용 가짜 객체는 `tests/Oranda.Testing`
+- **Rationale**: 기능 Task 가 공유 진입점에 줄을 더하지 않고, 두 Task 가 한 파일을 나눠 갖지 않게
+- **Reversible**: yes
+- **Source**: 커밋 d988875, docs/design/design.md
+
+## D-013 (2026-10-19T12:00:00Z)
+- **Phase**: TSK-02-04 SQL 카탈로그
+- **Decision needed**: 머리 주석 형식, 선택 규칙, 시험 위치
+- **Decision made**: 필수 `id`·`min-version`·`license`, 선택 `requires`·`rac`. 같은 id 중 서버 주 버전 이하 최대 min-version 선택(하한 19). `license` 는 카탈로그 전용 `CatalogLicense { None, Diagnostics, Tuning }`(필요한 팩), 접속 `LicensePack`(보유 조합)과 대조는 정책 관문. 파서·검사는 Core, 임베디드 수집은 Oracle. 시험은 새 `tests/Oranda.Oracle.Tests`(Category=Catalog, 기본 실행 포함)
+- **Rationale**: Core.Tests 가 Oracle 을 참조하면 드라이버를 끌고 옴. 기능 Task 는 .sql 파일만 더하면 됨
+- **Reversible**: yes
+- **Source**: 커밋 7bd662e, docs/design/catalog.md
+
+## D-014 (2026-10-19T12:00:00Z)
+- **Phase**: TSK-02-05 UI 셸 계약
+- **Decision needed**: 셸 기여 등록, 키맵 프리셋 정본 위치, Dock 패키지 도입 시점, 환경 라벨 값
+- **Decision made**: `[OrandaCommand]`·`[OrandaToolPanel]`·`[OrandaStatusBarItem]` + App 스캔. 기능 Task 는 `src/Oranda.App/Features/<폴더>/` 하나를 통째로 소유. 키맵 프리셋 정본은 `docs/design/keymaps/*.json` 하나, App 은 링크해 임베디드 리소스로. Dock.Avalonia 패키지·레지스트리 배선은 TSK-03-01 에서 시작 시간 측정과 함께. 환경 라벨은 Development·Test·Production 만, 모르는 값은 Production 으로 취급
+- **Rationale**: 셸 파일 수정 없이 도구 창이 잡힘. 시작 경로(D-006)를 이번 Task 에서 건드리지 않음. 모르는 값은 안전 쪽으로
+- **Reversible**: yes
+- **Source**: 커밋 86f6f72, docs/design/ui-contract.md
+
+## D-015 (2026-10-19T12:00:00Z)
+- **Phase**: WP-02 마감(조정자)
+- **Decision needed**: AuthMode 에 더한 SysBackup·SysDg·SysKm 이 연결 문자열에서 SYSOPER 로 바뀌던 문제
+- **Decision made**: `BuildConnectionString` 이 모드마다 DBA Privilege 를 그대로 넣게 고침(SYSBACKUP·SYSDG·SYSKM). ODP.NET Managed 23.26 연결 문자열 빌더가 세 값을 받는 것을 시험으로 확인. 실제 서버 접속 확인은 TSK-03-03
+- **Rationale**: 잘못된 권한으로 조용히 접속하는 것을 막음
+- **Reversible**: yes
+- **Source**: WP-02 마감 커밋

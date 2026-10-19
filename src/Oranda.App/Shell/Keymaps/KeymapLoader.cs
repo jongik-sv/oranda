@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Text.Json;
+using Oranda.Core.Settings;
 using Oranda.Core.Shell;
 
 namespace Oranda.App.Shell.Keymaps;
@@ -12,8 +13,8 @@ namespace Oranda.App.Shell.Keymaps;
 /// </summary>
 public static class KeymapLoader
 {
-    /// <summary>현재 키맵 파일 버전. TODO(연결): Core <c>SchemaVersions.Keymap</c>.</summary>
-    public const int CurrentSchemaVersion = 1;
+    /// <summary>현재 키맵 파일 버전.</summary>
+    public const int CurrentSchemaVersion = SchemaVersions.Keymap;
 
     private const string ResourcePrefix = "Oranda.App.Keymaps.";
 

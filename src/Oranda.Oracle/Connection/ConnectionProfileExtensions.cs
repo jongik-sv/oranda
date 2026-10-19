@@ -23,7 +23,15 @@ public static class ConnectionProfileExtensions
 
         if (profile.Auth != AuthMode.Default)
         {
-            builder.DBAPrivilege = profile.Auth == AuthMode.SysDba ? "SYSDBA" : "SYSOPER";
+            builder.DBAPrivilege = profile.Auth switch
+            {
+                AuthMode.SysDba => "SYSDBA",
+                AuthMode.SysOper => "SYSOPER",
+                AuthMode.SysBackup => "SYSBACKUP",
+                AuthMode.SysDg => "SYSDG",
+                AuthMode.SysKm => "SYSKM",
+                _ => throw new ArgumentOutOfRangeException(nameof(profile), profile.Auth, "알 수 없는 인증 모드"),
+            };
         }
 
         return builder.ConnectionString;

@@ -223,7 +223,8 @@ SELECT s.inst_id, s.sid, s.serial#, s.username, ...
 ### 4.12 로컬 저장·자격 증명
 | 데이터 | 위치 | 형식 |
 |---|---|---|
-| 설정, 접속 프로필, 포매터 프로필, 키맵, 레이아웃 | Windows `%APPDATA%\Oranda`, macOS `~/Library/Application Support/Oranda` | JSON (스키마 버전 필드) |
+| 설정(`settings.json`), 접속 프로필, 포매터 프로필, 키맵, 레이아웃 | Windows `%APPDATA%\Oranda`, macOS `~/Library/Application Support/Oranda` | JSON (스키마 버전 필드) |
+| 마이그레이션 전 백업 | 같은 폴더 `backup/` | 원본 사본 |
 | 실행 이력, 메타데이터 캐시 | 같은 폴더 `oranda.db` | SQLite |
 | 작업 공간·자동 저장(복구용) | 같은 폴더 `workspaces/`, `autosave/` | 파일(10 s 간격) |
 | 로그 | 같은 폴더 `logs/` (7일 보관) | Serilog 파일 |
@@ -234,6 +235,7 @@ SELECT s.inst_id, s.sid, s.serial#, s.username, ...
 ---
 
 ## 5. 데이터 모델 (로컬)
+> 필드 표·마이그레이션 규칙·C# 매핑의 정본은 `docs/design/data-model.md`(TSK-02-01)와 `docs/design/examples/` 다. 이 장은 요약이다.
 
 ### 5.1 접속 프로필 (`connections.json`)
 ```json
@@ -242,20 +244,24 @@ SELECT s.inst_id, s.sid, s.serial#, s.username, ...
   "profiles": [{
     "id": "b1f6…", "name": "운영-주문DB", "user": "app_ro",
     "dataSource": "tcps://db01.corp:1522/ORDERS_PDB",
-    "auth": "Default", "tnsAdmin": null, "walletLocation": null,
-    "environment": "Production", "readOnly": true,
-    "licensePacks": [], "keepAliveSeconds": 300,
-    "nls": { "dateFormat": "YYYY-MM-DD HH24:MI:SS", "language": null },
-    "credentialRef": "oranda:b1f6…"
+    "auth": "Default", "tnsAdmin": null, "walletLocation": null, "proxyUser": null,
+    "connectTimeoutSeconds": 15, "environment": "Production", "color": null, "group": "주문",
+    "readOnly": true, "licensePack": "None", "keepAliveSeconds": 300,
+    "nls": { "dateFormat": "YYYY-MM-DD HH24:MI:SS", "timestampFormat": null,
+             "language": null, "territory": null, "sort": null },
+    "credentialRef": "oranda:conn:b1f6…", "lastConnectedAt": "2026-10-19T08:00:00Z"
   }]
 }
 ```
-- `environment`: Development | Test | Production. `licensePacks`: [] | ["Diagnostics"] | ["Diagnostics","Tuning"].
-- `credentialRef`는 `ICredentialStore` 키. 비밀번호 자체는 이 파일에 없다(자동 검사로 확인, PRD 9.2).
+- `environment`: Development | Test | Production. 운영은 `color` 를 무시하고 항상 빨강.
+- `licensePack`: None | Diagnostics | DiagnosticsAndTuning (Tuning 은 Diagnostics 를 전제).
+- `auth`: Default | SysDba | SysOper | SysBackup | SysDg | SysKm (뒤 3개는 ODP.NET Managed 지원 여부를 CONN-02 에서 확인).
+- `credentialRef`(`oranda:conn:{id}`)는 `ICredentialStore` 키. 비밀번호 자체는 이 파일에 없다(자동 검사로 확인, PRD 9.2).
 
 ### 5.2 포매터 프로필 (`formatter/*.json`)
+옵션은 `options` 객체 아래에 두고 `FormatterOptions` 로 바로 역직렬화한다.
 ```json
-{ "schemaVersion": 1, "name": "팀 기본",
+{ "schemaVersion": 1, "id": "team-default", "name": "팀 기본", "options": {
   "case": { "keyword": "Upper", "function": "Upper", "identifier": "AsIs" },
   "indent": { "useTabs": false, "size": 4, "subquery": 1, "case": 1, "plsqlBlock": 1 },
   "commaPosition": "Trailing", "operatorSpacing": true, "parenInnerSpace": false,
@@ -263,25 +269,22 @@ SELECT s.inst_id, s.sid, s.serial#, s.username, ...
                   "inListThreshold": 5, "maxLineWidth": 120 },
   "align": { "alias": true, "assignment": true, "columnDefinition": true, "equals": false },
   "comments": { "preserve": true, "maxBlankLines": 1 },
-  "statementTerminator": "Keep" }
+  "statementTerminator": "Keep" } }
 ```
 
 ### 5.3 SQLite 스키마 (`oranda.db`)
-```sql
-CREATE TABLE history (
-  id INTEGER PRIMARY KEY, profile_id TEXT NOT NULL, executed_at TEXT NOT NULL,
-  sql_text TEXT NOT NULL, statement_kind TEXT NOT NULL, elapsed_ms INTEGER,
-  rows_affected INTEGER, error_code TEXT, binds_json TEXT /* 사용자 설정 시만 */ );
-CREATE INDEX ix_history_profile_time ON history(profile_id, executed_at DESC);
-CREATE TABLE meta_object (
-  db_key TEXT NOT NULL, owner TEXT NOT NULL, name TEXT NOT NULL, type TEXT NOT NULL,
-  last_ddl_time TEXT, payload_json TEXT, PRIMARY KEY (db_key, owner, name, type) );
-CREATE TABLE schema_version (version INTEGER NOT NULL);
-```
-`db_key` = DB 고유 이름 + PDB 이름 + 접속 사용자.
+전체 DDL = `docs/design/examples/oranda-db-v1.sql`. 요약:
+| 테이블 | 내용 |
+|---|---|
+| `schema_version` | `version` PK, `applied_at`, `description` — 순번 스크립트마다 1행 |
+| `history` | 접속·DB 키·실행 시각·SQL(비밀 가림, 256 KiB 에서 자름)·종류·출처·상태·시간·행 수·오류, `binds_json`(사용자 설정 시만) |
+| `history_fts` | FTS5 trigram 색인(이력 SQL 부분 문자열 검색), 트리거로 동기화 |
+| `meta_source` | `db_key` 별 서버 버전·갱신 시각·마지막 사용(30일 미사용 시 캐시 삭제) |
+| `meta_object` | `(db_key, owner, name, type)` PK, 상태·`last_ddl_time`·`payload_json` |
+- `db_key` = DB 고유 이름 + PDB 이름 + 접속 사용자. 이력 보존 = 50,000건 또는 180일.
 
 ### 5.4 작업 공간 (`workspaces/*.json`)
-탭 목록(파일 경로 또는 내용, 커서 위치, 연결 프로필 ID), 활성 탭, 레이아웃 참조.
+탭 목록(파일 경로 또는 내용, 커서 위치, 연결 프로필 ID), 활성 탭, 레이아웃 참조. 복구용 `autosave/` 도 같은 스키마.
 
 ---
 
@@ -296,15 +299,17 @@ public interface ISessionManager {
 }
 public interface ISession : IAsyncDisposable {
     Guid Id { get; }  ConnectionProfile Profile { get; }  ServerInfo Server { get; }
+    SessionPurpose Purpose { get; }  string DbKey { get; }
     SessionState State { get; }            // Idle | Busy | Broken | Closed
     bool HasPendingTransaction { get; }
     Task CommitAsync(CancellationToken ct);  Task RollbackAsync(CancellationToken ct);
 }
 public interface IExecutionService {
     Task<ExecutionResult> ExecuteAsync(ISession s, SqlStatement stmt,
-                                       IReadOnlyDictionary<string, BindValue> binds, CancellationToken ct);
+                                       IReadOnlyDictionary<string, BindValue> binds,
+                                       ExecutionOptions? options, CancellationToken ct);   // 출처·필요 라이선스
     IAsyncEnumerable<ExecutionResult> ExecuteScriptAsync(ISession s, IReadOnlyList<SqlStatement> stmts,
-                                       ScriptErrorMode mode, CancellationToken ct);
+                                       ScriptErrorMode mode, ExecutionOptions? options, CancellationToken ct);
 }
 public interface IExecutionPolicy {
     ValueTask<PolicyDecision> EvaluateAsync(PolicyContext ctx, SqlStatement stmt, CancellationToken ct);
@@ -315,7 +320,7 @@ public interface IResultSet : IAsyncDisposable {
     bool IsComplete { get; }  long? KnownRowCount { get; }
 }
 public interface IRowEditor {          // GRID-04
-    EditCapability Analyze(SqlStatement select, IReadOnlyList<ResultColumn> cols, TableKeyInfo keys);
+    EditCapability Analyze(SqlStatement query, IReadOnlyList<ResultColumn> cols, TableKeyInfo keys);
     IReadOnlyList<SqlStatement> BuildDml(IReadOnlyList<RowChange> changes);   // 미리보기용
     Task<ApplyResult> ApplyAsync(ISession s, IReadOnlyList<RowChange> changes, bool commit, CancellationToken ct);
 }
@@ -323,12 +328,14 @@ public interface IMetadataProvider {
     Task<IReadOnlyList<DbObjectRef>> ListObjectsAsync(ISession s, ObjectQuery q, CancellationToken ct);
     Task<TableInfo> GetTableAsync(ISession s, DbObjectRef table, CancellationToken ct);
     Task<string> GetDdlAsync(ISession s, DbObjectRef obj, DdlOptions o, CancellationToken ct);
+    // + ListSchemas, GetProcedures, GetObjectDetail, GetSource, GetCompileErrors (design.md 1.1)
 }
 public interface IMonitorService {
     Task<IReadOnlyList<SessionRow>> GetSessionsAsync(ISession monitor, SessionFilter f, CancellationToken ct);
     Task<BlockingTree> GetBlockingTreeAsync(ISession monitor, CancellationToken ct);
     Task<IReadOnlyList<TopSqlRow>> GetTopSqlAsync(ISession monitor, TopSqlCriteria c, CancellationToken ct);
     Task KillAsync(ISession monitor, SessionKey target, bool immediate, CancellationToken ct);
+    // + GetSessionDetail, SetTrace, GetSqlDetail (design.md 1.1)
 }
 public interface ILanguageService {
     IReadOnlyList<SqlStatement> Split(string text, SplitOptions o);
@@ -346,6 +353,8 @@ public interface ICredentialStore {
 }
 ```
 확장 지점 인터페이스(`IEditorContext`, `IToolPanelRegistry`, `IOutboundConsent`, `ICommandRegistry`)는 4.10·4.11 설명대로 Core에 둔다.
+- C# 정의의 정본은 `src/Oranda.Core` 이고, 이 장에 없는 기능별·저장소 인터페이스 목록과 이 장과 다른 점은 `docs/design/design.md` 1.1(TSK-02-03)에 있다. 카탈로그는 `docs/design/catalog.md`, 셸 계약(명령·도구 창·상태 표시줄·키맵)은 `docs/design/ui-contract.md`.
+- 서비스 등록: 구현 클래스의 `[OrandaService]` 특성 + `[assembly: OrandaServiceAssembly]` 어셈블리 스캔. 셸 기여는 `[OrandaCommand]`·`[OrandaToolPanel]`·`[OrandaStatusBarItem]`. 기능 Task 는 공유 진입점에 줄을 더하지 않는다.
 
 ---
 
@@ -497,7 +506,7 @@ macOS 서명 시 필요한 권한(entitlement)은 CoreCLR 기준 `com.apple.secu
 |--------|-------------|-----------|----------|------------|---------|
 | backend | Core·Language·Oracle·Platform (UI 없는 계층) | `dotnet test tests/Oranda.Core.Tests && dotnet test tests/Oranda.Language.Tests` | `dotnet test tests/Oranda.Oracle.IntegrationTests --filter Category=Integration` | - | - |
 | frontend | Avalonia UI (Oranda.App) | `dotnet test tests/Oranda.App.Tests` | - | - | - |
-| database | Oracle SQL 카탈로그 | `dotnet test tests/Oranda.Core.Tests --filter Category=Catalog` | - | - | - |
+| database | Oracle SQL 카탈로그 | `dotnet test tests/Oranda.Oracle.Tests --filter Category=Catalog` | - | - | - |
 | fullstack | 화면 + 서비스 + 카탈로그 수직 슬라이스 | - | - | - | - |
 
 ### Design Guidance

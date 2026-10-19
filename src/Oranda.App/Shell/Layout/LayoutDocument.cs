@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using Oranda.Core.Settings;
 
 namespace Oranda.App.Shell.Layout;
 
@@ -8,8 +9,8 @@ namespace Oranda.App.Shell.Layout;
 /// </summary>
 public sealed record LayoutDocument
 {
-    /// <summary>현재 1. TODO(연결): Core <c>SchemaVersions.Layout</c> 로 바꾼다.</summary>
-    public int SchemaVersion { get; init; } = 1;
+    /// <summary>현재 <see cref="SchemaVersions.Layout"/>.</summary>
+    public int SchemaVersion { get; init; } = SchemaVersions.Layout;
 
     /// <summary>null = 화면 가운데 기본 크기.</summary>
     public WindowPlacement? Window { get; init; }

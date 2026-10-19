@@ -14,7 +14,7 @@
 |--------|-------------|-----------|----------|------------|---------|
 | backend | Core·Language·Oracle·Platform (UI 없는 계층) | `dotnet test tests/Oranda.Core.Tests && dotnet test tests/Oranda.Language.Tests` | `dotnet test tests/Oranda.Oracle.IntegrationTests --filter Category=Integration` | - | - |
 | frontend | Avalonia UI 셸·도구 창 틀 (Oranda.App) | `dotnet test tests/Oranda.App.Tests` | - | - | - |
-| database | 로컬 데이터 모델·Oracle SQL 카탈로그 | `dotnet test tests/Oranda.Core.Tests --filter Category=Catalog` | - | - | - |
+| database | 로컬 데이터 모델·Oracle SQL 카탈로그 | `dotnet test tests/Oranda.Oracle.Tests --filter Category=Catalog` | - | - | - |
 | fullstack | 화면 + 서비스 + 카탈로그 수직 슬라이스 | - | - | - | - |
 | infra | 솔루션·CI·패키징·기술 검증 | `dotnet build Oranda.sln -warnaserror` | - | - | - |
 | test | 통합테스트 | - | `dotnet test Oranda.sln --filter Category=Integration` | - | - |
@@ -481,7 +481,7 @@ dotnet, testhost, Oranda.App
 - acceptance:
   - 실행 로직 없음 (contract-only)
   - 공유 시험은 틀의 존재·탑재 순서만 단정한다. 빈 라우터·스텁 목록(`STUBS` 등)을 단정하지 않는다
-  - 기능 Task 마다 자기 시험 파일과 소유 파일을 design.md `## 기능 Task 편집 지점` 에 적고, 두 Task 가 한 파일을 나눠 갖지 않는다
+  - 기능 Task 마다 자기 시험 파일과 소유 파일을 ui-contract.md `## 기능 Task 편집 지점` 에 적고(design.md 에서 링크), 두 Task 가 한 파일을 나눠 갖지 않는다
   - 등록(라우트·핸들러 목록)은 자동 수집이며 기능 Task 가 공유 진입점에 줄을 더하지 않아도 된다
   - 계약 문서가 지정한 파일(공용 시험 헬퍼 포함)이 모두 있다
 - constraints:
@@ -634,7 +634,7 @@ dotnet, testhost, Oranda.App
 - assignee: -
 - schedule: 2026-11-17 ~ 2026-11-23
 - tags: m1, connection
-- depends: TSK-02-05, TSK-03-02, TSK-03-03
+- depends: TSK-02-05, TSK-03-01, TSK-03-02, TSK-03-03
 - blocked-by: -
 - entry-point: 메뉴 > 파일 > 접속 (Ctrl+Shift+O)
 - note: -
@@ -1322,7 +1322,7 @@ dotnet, testhost, Oranda.App
 - assignee: -
 - schedule: 2026-11-24 ~ 2026-11-30
 - tags: m1, execution
-- depends: TSK-06-01
+- depends: TSK-06-01, TSK-04-04
 - blocked-by: -
 - entry-point: 도구 창 > 실행 이력 (F8), 도구 창 > 스크립트 (Ctrl+R)
 - note: -

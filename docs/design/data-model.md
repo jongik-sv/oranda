@@ -189,7 +189,8 @@
 | `bindings` | `KeyBinding[]` | ○ | `[]` | |
 | `bindings[].command` | string | ● | | 명령 ID(`ICommandRegistry`, TSK-02-02 형식) |
 | `bindings[].keys` | string[] | ● | | 키 조합 목록. **`[]` = 이 명령의 바탕 키를 지움** |
-| `bindings[].when` | string | ○ | null | 적용 문맥(예: `editor`, `grid`). 값 목록은 TSK-02-02 |
+| `bindings[].when` | string | ○ | null | 적용 문맥(예: `editorFocus`, `gridFocus`). 값 목록 = commands.md 2.2 |
+| `bindings[].mac` | string[] | ○ | null | macOS 에서 `keys` 대신 쓰는 목록. 이 안의 `Ctrl` 은 실제 Control 키(commands.md macOS 규칙) |
 
 키 조합 문자열 규칙:
 
@@ -477,7 +478,7 @@ connections.json ◀────── credentialRef 문자열만 저장 ("orand
 | (공통) | `SchemaVersions`(static), `ISettingsMigration` | `Oranda.Core.Settings` |
 | `connections.json` | `ConnectionsDocument`, `ConnectionProfile`(기존), `NlsSettings`, enum `AuthMode`(기존+3값), `ConnectionEnvironment`, `LicensePack` | `Oranda.Core.Connection` |
 | `formatter/*.json` | `FormatterProfile`, `FormatterOptions`, `CaseOptions`, `IndentOptions`, `LineBreakOptions`, `AlignOptions`, `CommentOptions`, enum `LetterCase`, `CommaPosition`, `SelectListLayout`, `AndOrBreak`, `StatementTerminator` | `Oranda.Core.Formatting` |
-| `keymaps/*.json` | `Keymap`, `KeyBinding` | `Oranda.Core.Commands` |
+| `keymaps/*.json` | `Keymap`, `KeyBinding`(+`Mac`) | `Oranda.Core.Shell` (TSK-02-05) |
 | `layout.json` | `LayoutDocument`, `WindowPlacement`, `DockNode`, enum `WindowStateKind`, `DockNodeKind`, `DockOrientation` | **`Oranda.App.Shell.Layout`** (App DTO) |
 | `workspaces/*.json` | `Workspace`, `WorkspaceTab`, `TextPosition` | `Oranda.Core.Workspaces` |
 | `history` | `HistoryEntry`, enum `HistorySource`, `HistoryStatus` | `Oranda.Core.History` |
@@ -556,7 +557,7 @@ public sealed record ConnectionsDocument
 | `AlignOptions` | `Alias`(true), `Assignment`(true), `ColumnDefinition`(true), `Equals`(false) — C# 에서 `Equals` 는 `object.Equals` 와 겹치므로 속성 이름 **`EqualsSign`** + `[JsonPropertyName("equals")]` |
 | `CommentOptions` | `Preserve`(true), `MaxBlankLines`(1) |
 | `Keymap` | `SchemaVersion`(1), `Id`(required), `Name`(required), `BasedOn`(string?), `Bindings`(IReadOnlyList<KeyBinding>=[]) |
-| `KeyBinding` | `Command`(string, required), `Keys`(IReadOnlyList<string>=[]), `When`(string?) |
+| `KeyBinding` | `Command`(string, required), `Keys`(IReadOnlyList<string>=[]), `When`(string?), `Mac`(IReadOnlyList<string>?) |
 | `LayoutDocument` | `SchemaVersion`(1), `Window`(WindowPlacement?), `Root`(DockNode?), `HiddenTools`(IReadOnlyList<string>=[]) |
 | `WindowPlacement` | `X`, `Y`, `Width`, `Height`(int), `State`(WindowStateKind=Normal), `Screen`(string?) |
 | `DockNode` | `Kind`(DockNodeKind), `Orientation`(DockOrientation=Horizontal), `Proportion`(double?), `Children`(IReadOnlyList<DockNode>=[]), `Tools`(IReadOnlyList<string>=[]), `ActiveTool`(string?) |
