@@ -218,7 +218,7 @@ dotnet, testhost, Oranda.App
 
 #### 기술 스펙 (TRD)
 - tech-spec:
-  - Avalonia.AvaloniaEdit 11.4.1
+  - Avalonia.AvaloniaEdit 12.0.0
   - Antlr4.Runtime.Standard 4.13.1
 - api-spec: -
 - data-model: -
@@ -254,7 +254,7 @@ dotnet, testhost, Oranda.App
 
 #### 기술 스펙 (TRD)
 - tech-spec:
-  - Avalonia Control.Render, FormattedText 캐시
+  - Avalonia Control.Render, GlyphRun·TextLayout 캐시 (D-008)
 - api-spec: -
 - data-model: -
 - ui-spec: -
@@ -782,7 +782,7 @@ dotnet, testhost, Oranda.App
 
 #### 기술 스펙 (TRD)
 - tech-spec:
-  - Avalonia.AvaloniaEdit 11.4.1
+  - Avalonia.AvaloniaEdit 12.0.0
 - api-spec:
   - ILanguageService, IEditorContext
 - data-model:

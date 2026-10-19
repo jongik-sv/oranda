@@ -151,7 +151,7 @@ SELECT s.inst_id, s.sid, s.serial#, s.username, ...
 ### 4.4 결과 그리드 (GRID)
 - **데이터 구조**: `IResultSet` → 페이지 캐시(기본 500행/페이지). 열 지향 버퍼에 원시 값 저장(문자열 변환은 그릴 때). 페이지는 LRU로 메모리 상한(설정, 기본 200 MB) 안에서 유지하고, 밀려난 페이지는 다시 가져오지 않고 **임시 파일 캐시**로 내린다(커서는 앞으로만 가므로 재조회 불가).
 - **가져오기**: `FetchSize = reader.RowSize × 500`. 화면 끝에 가까워지면 다음 페이지 요청. "모두 가져오기"는 백그라운드 스트리밍.
-- **그리기**: 보이는 셀만 `Render`에서 직접 그린다(행·열 가상화, 셀 컨트롤 0개). 텍스트는 셀 단위 `FormattedText` 캐시. 편집 시에만 오버레이 편집기 1개.
+- **그리기**: 보이는 셀만 `Render`에서 직접 그린다(행·열 가상화, 셀 컨트롤 0개). 텍스트는 셀 단위 `GlyphRun`(ASCII)·`TextLayout`(그 밖) 캐시(D-008, Avalonia 12 `FormattedText` 는 캐시 효과 없음). 편집 시에만 오버레이 편집기 1개.
 - **타입 표시**: NUMBER는 `OracleDecimal`로 정밀도 보존, DATE/TIMESTAMP는 세션 NLS 형식, LOB은 앞부분(`InitialLOBFetchSize` 설정값, 기본 4,000자)만 미리 가져오고 나머지는 열 때 스트림으로, BOOLEAN 체크 표시, VECTOR는 "VECTOR(768, FLOAT32)" 요약 후 펼침.
 - **복사·내보내기**: 선택 범위 → TSV/CSV/INSERT/IN 목록. 파일 내보내기는 그리드가 아니라 **새 DataReader로 서버에서 다시 스트리밍**(EXP-01).
 - **편집(GRID-04, PRD 6.5.1)**:
@@ -453,8 +453,8 @@ macOS 서명 시 필요한 권한(entitlement)은 CoreCLR 기준 `com.apple.secu
 | ID | 질문 | 제안 | 상태 |
 |---|---|---|---|
 | T-D01 | 런타임: .NET 8 지원 종료(2026-11-10) 대응 | **A안 — .NET 10 + Avalonia 12.** 2026-10-19 전환 완료(빌드 경고 0, 테스트 통과) | 결정 |
-| T-D02 | 결과 그리드 | 직접 그리기 가상 그리드. M0 시험에서 60 fps 미달이면 TreeDataGrid.Avalonia(MIT 포크) 비교 | 제안 |
-| T-D03 | 다중 커서 | M0에서 AvaloniaEdit 확장 시험. 어려우면 열 선택으로 대체, P1로 조정 | 제안 |
+| T-D02 | 결과 그리드 | 직접 그리기 가상 그리드 확정, TreeDataGrid 포크 제외(D-008). 60 fps 는 로컬 콘솔 재측정 필요 | 결정 |
+| T-D03 | 다중 커서 | 포크 없는 AvaloniaEdit 확장(앵커+배경 렌더러+터널 입력). 1.0 범위는 D-007 | 결정 |
 | T-D04 | 파서 | L1 자체 렉서·경량 파서 + L2 ANTLR(grammars-v4 PL/SQL) | 제안 |
 | T-D05 | macOS 자격 증명 | 키체인 P/Invoke 직접 구현(150줄 안팎) | 제안 |
 | T-D06 | 업데이트 | Velopack + 사내 정적 파일 서버 | 제안 |
