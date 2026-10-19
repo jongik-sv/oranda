@@ -993,7 +993,7 @@ dotnet, testhost, Oranda.App
 - category: dev
 - domain: backend
 - model: opus
-- status: [ ]
+- status: [xx]
 - priority: high
 - assignee: -
 - schedule: 2026-11-17 ~ 2026-11-23
