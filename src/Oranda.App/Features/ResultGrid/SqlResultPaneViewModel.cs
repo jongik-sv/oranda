@@ -125,5 +125,9 @@ public sealed class SqlResultPaneViewModel : ToolPanelViewModelBase
 
         var loaded = _model.LoadedRowCount.ToString("N0", System.Globalization.CultureInfo.CurrentCulture);
         StatusText = _model.HasMoreRows ? $"{loaded} 행 (더 있음)" : $"{loaded} 행";
+        if (_model.EditOverlay?.ExtraRows is > 0 and var added)
+        {
+            StatusText += $" · 새 행 {added}"; // 편집 모드에서 아직 반영하지 않은 새 행
+        }
     }
 }
