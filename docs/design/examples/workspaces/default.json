@@ -1,0 +1,29 @@
+{
+  "schemaVersion": 1,
+  "id": "default",
+  "name": "기본 작업 공간",
+  "savedAt": "2026-10-19T09:30:12Z",
+  "activeTabId": "0f5c3a2b-1d4e-4f6a-8b7c-9d0e1f2a3b4c",
+  "tabs": [
+    {
+      "id": "0f5c3a2b-1d4e-4f6a-8b7c-9d0e1f2a3b4c",
+      "title": "orders_report.sql",
+      "filePath": "C:\\Users\\dev\\sql\\orders_report.sql",
+      "isDirty": false,
+      "encoding": "utf-8",
+      "caret": { "line": 42, "column": 7 },
+      "scrollLine": 20,
+      "connectionProfileId": "b1f6c2d4-7a3e-4c1b-9f2a-1d0e5c8b7a61"
+    },
+    {
+      "id": "7a8b9c0d-1e2f-4a3b-8c4d-5e6f7a8b9c0d",
+      "title": "새 쿼리 1",
+      "content": "SELECT owner, object_name\n  FROM all_objects\n WHERE object_type = 'TABLE'\n   AND owner = :owner;\n",
+      "isDirty": true,
+      "caret": { "line": 4, "column": 22 },
+      "selectionStart": { "line": 1, "column": 1 },
+      "connectionProfileId": "4e0a9b13-2c55-4d7e-8a19-63f0b2c4d5e7"
+    }
+  ],
+  "layout": "layout.json"
+}

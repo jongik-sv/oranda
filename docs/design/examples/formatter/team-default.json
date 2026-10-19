@@ -1,0 +1,41 @@
+{
+  "schemaVersion": 1,
+  "id": "team-default",
+  "name": "팀 기본",
+  "options": {
+    "case": {
+      "keyword": "Upper",
+      "function": "Upper",
+      "identifier": "Lower"
+    },
+    "indent": {
+      "useTabs": false,
+      "size": 4,
+      "subquery": 1,
+      "case": 1,
+      "plsqlBlock": 1
+    },
+    "commaPosition": "Leading",
+    "operatorSpacing": true,
+    "parenInnerSpace": false,
+    "lineBreaks": {
+      "selectList": "OnePerLine",
+      "joinClause": true,
+      "andOr": "Before",
+      "inListThreshold": 5,
+      "maxLineWidth": 120
+    },
+    "align": {
+      "alias": true,
+      "assignment": true,
+      "columnDefinition": true,
+      "equals": false
+    },
+    "comments": {
+      "preserve": true,
+      "maxBlankLines": 1
+    },
+    "statementTerminator": "Keep",
+    "honorFormatterOff": true
+  }
+}

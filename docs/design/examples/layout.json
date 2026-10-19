@@ -1,0 +1,38 @@
+{
+  "schemaVersion": 1,
+  "window": {
+    "x": 120,
+    "y": 80,
+    "width": 1600,
+    "height": 960,
+    "state": "Maximized",
+    "screen": "\\\\.\\DISPLAY1"
+  },
+  "root": {
+    "kind": "Split",
+    "orientation": "Horizontal",
+    "children": [
+      {
+        "kind": "ToolGroup",
+        "proportion": 0.2,
+        "tools": ["tool.schemaBrowser", "tool.namedScripts"],
+        "activeTool": "tool.schemaBrowser"
+      },
+      {
+        "kind": "Split",
+        "orientation": "Vertical",
+        "proportion": 0.8,
+        "children": [
+          { "kind": "Documents", "proportion": 0.7 },
+          {
+            "kind": "ToolGroup",
+            "proportion": 0.3,
+            "tools": ["tool.output", "tool.history"],
+            "activeTool": "tool.output"
+          }
+        ]
+      }
+    ]
+  },
+  "hiddenTools": ["tool.sessionMonitor"]
+}

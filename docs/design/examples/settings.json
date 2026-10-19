@@ -1,0 +1,42 @@
+{
+  "schemaVersion": 1,
+  "ui": {
+    "theme": "System",
+    "language": "ko"
+  },
+  "editor": {
+    "fontFamily": "D2Coding",
+    "fontSize": 13,
+    "tabSize": 4
+  },
+  "keymapId": "my-keys",
+  "formatterProfileId": "team-default",
+  "execution": {
+    "autoCommit": false,
+    "dbmsOutput": true,
+    "scriptErrorMode": "Ask",
+    "splitOnBlankLine": false
+  },
+  "grid": {
+    "pageSize": 500,
+    "memoryLimitMb": 200,
+    "initialLobFetchSize": 4000
+  },
+  "history": {
+    "enabled": true,
+    "saveBindValues": false,
+    "maxEntries": 50000,
+    "maxAgeDays": 180
+  },
+  "metadataCache": {
+    "retentionDays": 30
+  },
+  "monitor": {
+    "refreshSeconds": 5
+  },
+  "workspace": {
+    "autosaveSeconds": 10,
+    "restoreOnStartup": true,
+    "lastWorkspaceId": "default"
+  }
+}

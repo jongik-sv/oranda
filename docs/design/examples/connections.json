@@ -1,0 +1,45 @@
+{
+  "schemaVersion": 1,
+  "profiles": [
+    {
+      "id": "b1f6c2d4-7a3e-4c1b-9f2a-1d0e5c8b7a61",
+      "name": "운영-주문DB",
+      "user": "app_ro",
+      "dataSource": "tcps://db01.corp.example:1522/ORDERS_PDB?retry_count=3",
+      "auth": "Default",
+      "walletLocation": "C:\\Oracle\\wallets\\orders",
+      "connectTimeoutSeconds": 15,
+      "environment": "Production",
+      "group": "주문",
+      "readOnly": true,
+      "licensePack": "None",
+      "keepAliveSeconds": 300,
+      "nls": {
+        "dateFormat": "YYYY-MM-DD HH24:MI:SS",
+        "timestampFormat": "YYYY-MM-DD HH24:MI:SS.FF3"
+      },
+      "credentialRef": "oranda:conn:b1f6c2d4-7a3e-4c1b-9f2a-1d0e5c8b7a61",
+      "lastConnectedAt": "2026-10-19T08:00:00Z"
+    },
+    {
+      "id": "4e0a9b13-2c55-4d7e-8a19-63f0b2c4d5e7",
+      "name": "개발-로컬 FREE",
+      "user": "scott",
+      "dataSource": "localhost:1521/FREEPDB1",
+      "proxyUser": "app",
+      "environment": "Development",
+      "color": "#2E7D32",
+      "licensePack": "DiagnosticsAndTuning",
+      "credentialRef": "oranda:conn:4e0a9b13-2c55-4d7e-8a19-63f0b2c4d5e7"
+    },
+    {
+      "id": "9c7d1e2f-0b3a-4f5c-8d6e-7a8b9c0d1e2f",
+      "name": "검증-TNS 별칭",
+      "user": "system",
+      "dataSource": "QA19C",
+      "auth": "SysDba",
+      "tnsAdmin": "C:\\Oracle\\network\\admin",
+      "environment": "Test"
+    }
+  ]
+}

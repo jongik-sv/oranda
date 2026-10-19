@@ -1,0 +1,14 @@
+{
+  "schemaVersion": 1,
+  "id": "my-keys",
+  "name": "내 키맵 (Orange 5 바탕)",
+  "basedOn": "orange5",
+  "bindings": [
+    { "command": "editor.executeStatement", "keys": ["Primary+Enter", "F9"], "when": "editor" },
+    { "command": "editor.executeScript", "keys": ["F5"], "when": "editor" },
+    { "command": "editor.formatDocument", "keys": ["Primary+Shift+F"], "when": "editor" },
+    { "command": "editor.toggleComment", "keys": ["Primary+K Primary+C"], "when": "editor" },
+    { "command": "app.commandPalette", "keys": ["Primary+Shift+P"] },
+    { "command": "grid.copyAsInsert", "keys": [] }
+  ]
+}
