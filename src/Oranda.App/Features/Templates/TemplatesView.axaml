@@ -1,8 +1,35 @@
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:vm="using:Oranda.App.Features.Templates"
+             xmlns:ls="using:Oranda.Language.Snippets"
              x:Class="Oranda.App.Features.Templates.TemplatesView"
              x:DataType="vm:TemplatesViewModel">
-  <!-- TSK-04-07 빈 틀 -->
-  <TextBlock Text="oranda.panel.templates" />
+  <Grid RowDefinitions="Auto,*,Auto,Auto,Auto" Margin="6">
+    <Grid Grid.Row="0" ColumnDefinitions="*,Auto" Margin="0,0,0,6">
+      <TextBox Grid.Column="0" PlaceholderText="조각·힌트·함수 찾기" Text="{Binding Query}" />
+      <ComboBox Grid.Column="1" ItemsSource="{Binding Kinds}" SelectedItem="{Binding KindFilter}" Margin="6,0,0,0" MinWidth="110" />
+    </Grid>
+    <ListBox Grid.Row="1" ItemsSource="{Binding Items}" SelectedItem="{Binding Selected}" DoubleTapped="OnInsert">
+      <ListBox.ItemTemplate>
+        <DataTemplate x:DataType="ls:Snippet">
+          <StackPanel Orientation="Horizontal" Spacing="8">
+            <TextBlock Text="{Binding Prefix}" FontWeight="SemiBold" MinWidth="70" />
+            <TextBlock Text="{Binding Name}" />
+          </StackPanel>
+        </DataTemplate>
+      </ListBox.ItemTemplate>
+    </ListBox>
+    <TextBox Grid.Row="2" Text="{Binding Detail}" IsReadOnly="True" AcceptsReturn="True" TextWrapping="Wrap" MinHeight="90" MaxHeight="160" Margin="0,6,0,0" FontFamily="Consolas,monospace" />
+    <StackPanel Grid.Row="3" Margin="0,6,0,0" Spacing="4">
+      <StackPanel Orientation="Horizontal" Spacing="6">
+        <Button Content="삽입" Click="OnInsert" />
+        <Button Content="사용자 조각 지우기" Click="OnDelete" />
+      </StackPanel>
+      <TextBox PlaceholderText="줄임말" Text="{Binding EditPrefix}" />
+      <TextBox PlaceholderText="이름" Text="{Binding EditName}" />
+      <TextBox PlaceholderText="본문 ($1, ${1:기본값}, $0)" Text="{Binding EditBody}" AcceptsReturn="True" MinHeight="60" />
+      <Button Content="사용자 조각 저장" Click="OnAdd" />
+    </StackPanel>
+    <TextBlock Grid.Row="4" Text="{Binding Status}" TextWrapping="Wrap" />
+  </Grid>
 </UserControl>
