@@ -1,0 +1,15 @@
+# GridSpike mode=window render=software text=glyph rows=1,000,000 cols=50 pageSize=500 maxPages=400
+# Microsoft Windows NT 10.0.26300.0 cores=8 .NET 10.0.13 gc=workstation
+window client=1600, 900 scaling=1 start managed=2.6MB workingSet=86.0MB private=40.7MB gen0/1/2=1/1/1
+[V-smooth 3행/프레임] frame interval ms: n=323 mean=30.78 p50=28.93 p95=47.71 p99=59.88 max=128.99 => 실측 fps=32.3 (>=17.5ms 프레임 99.7%)
+[V-smooth 3행/프레임] Render(record, UI 스레드) ms: n=324 mean=1.28 p50=0.76 p95=3.15 p99=6.53 max=54.58 | 프레임당 page=0.17 text=0.09
+[V-smooth 3행/프레임] cells/frame=492 newText/frame=37.4 pageFetch=3 cachedPages=4 managed=5.2MB workingSet=90.6MB private=41.3MB gen0/1/2=11/3/2
+[V-fast 60행/프레임] frame interval ms: n=309 mean=32.36 p50=30.53 p95=50.22 p99=70.52 max=98.88 => 실측 fps=30.8 (>=17.5ms 프레임 100.0%)
+[V-fast 60행/프레임] Render(record, UI 스레드) ms: n=310 mean=3.79 p50=2.60 p95=10.59 p99=17.39 max=72.34 | 프레임당 page=0.40 text=0.54
+[V-fast 60행/프레임] cells/frame=492 newText/frame=492.0 pageFetch=38 cachedPages=42 managed=29.7MB workingSet=113.7MB private=64.8MB gen0/1/2=52/13/4
+[H-scroll 40px/프레임] frame interval ms: n=423 mean=23.58 p50=22.66 p95=32.67 p99=47.41 max=69.71 => 실측 fps=42.3 (>=17.5ms 프레임 96.2%)
+[H-scroll 40px/프레임] Render(record, UI 스레드) ms: n=424 mean=0.63 p50=0.49 p95=1.01 p99=5.32 max=9.69 | 프레임당 page=0.00 text=0.01
+[H-scroll 40px/프레임] cells/frame=574 newText/frame=13.5 pageFetch=1 cachedPages=43 managed=27.6MB workingSet=113.7MB private=65.2MB gen0/1/2=61/14/4
+[Jump 무작위 행] frame interval ms: n=371 mean=27.00 p50=24.98 p95=40.22 p99=47.20 max=152.24 => 실측 fps=37.0 (>=17.5ms 프레임 97.8%)
+[Jump 무작위 행] Render(record, UI 스레드) ms: n=372 mean=5.92 p50=4.10 p95=16.90 p99=22.30 max=26.28 | 프레임당 page=1.76 text=0.94
+[Jump 무작위 행] cells/frame=533 newText/frame=537.8 pageFetch=347 cachedPages=390 managed=197.0MB workingSet=278.8MB private=231.5MB gen0/1/2=139/48/7

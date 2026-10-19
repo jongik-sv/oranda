@@ -1,0 +1,7 @@
+<Project>
+  <!-- TSK-01-06 스파이크 전용: 루트 Directory.Build.props 를 가져오지 않는다(독립 프로젝트, sln 미포함). -->
+  <PropertyGroup>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+</Project>

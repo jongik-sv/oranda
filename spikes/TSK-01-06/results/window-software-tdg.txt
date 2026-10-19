@@ -1,0 +1,7 @@
+# GridSpike mode=window grid=tdg render=software text=layout rows=1,000,000 cols=50 pageSize=500 maxPages=400
+# Microsoft Windows NT 10.0.26300.0 cores=8 .NET 10.0.13 gc=workstation
+tdg scroll=ScrollViewer extent=6917, 25000000 viewport=1600, 874 start managed=35.4MB workingSet=141.3MB private=85.0MB gen0/1/2=10/5/2
+[TDG V-smooth 3행/프레임] frame interval ms: n=108 mean=85.39 p50=46.68 p95=287.74 p99=501.08 max=557.51 => 실측 fps=10.8 (>=17.5ms 프레임 92.6%) cachedPages=2 managed=79.3MB workingSet=197.1MB private=136.5MB gen0/1/2=43/18/3
+[TDG V-fast 60행/프레임] frame interval ms: n=28 mean=350.54 p50=346.66 p95=476.29 p99=486.68 max=486.68 => 실측 fps=2.7 (>=17.5ms 프레임 100.0%) cachedPages=6 managed=95.7MB workingSet=205.4MB private=145.5MB gen0/1/2=130/51/7
+[TDG H-scroll 40px/프레임] frame interval ms: n=162 mean=60.06 p50=36.22 p95=157.61 p99=292.50 max=307.78 => 실측 fps=16.1 (>=17.5ms 프레임 97.5%) cachedPages=7 managed=66.0MB workingSet=188.3MB private=127.0MB gen0/1/2=209/100/9
+[TDG Jump 무작위 행] frame interval ms: n=26 mean=379.14 p50=374.08 p95=437.14 p99=449.95 max=449.95 => 실측 fps=2.6 (>=17.5ms 프레임 100.0%) cachedPages=37 managed=91.7MB workingSet=216.7MB private=155.4MB gen0/1/2=298/136/13
