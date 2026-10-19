@@ -7,6 +7,9 @@ using Avalonia.Automation;
 using Avalonia.Controls;
 using Avalonia.Controls.Primitives;
 using Avalonia.Interactivity;
+using Avalonia.Layout;
+using Avalonia.Threading;
+using Avalonia.VisualTree;
 using Oranda.App.Shell;
 
 namespace Oranda.App.Features.Localization;
@@ -25,6 +28,7 @@ public static class LiteralTranslator
     private static readonly List<WeakReference<TopLevel>> Windows = [];
     private static readonly List<WeakReference<Control>> Tracked = [];
     private static readonly System.Runtime.CompilerServices.ConditionalWeakTable<Control, Dictionary<AvaloniaProperty, Entry>> Applied = new();
+    private static readonly List<WeakReference<Control>> Relayout = [];
     private static IShellText? _text;
     private static EventHandler? _handler;
     private static int _registered;
@@ -202,6 +206,7 @@ public static class LiteralTranslator
                 map ??= Applied.GetOrCreateValue(c);
                 map[property] = new Entry(current, en);
                 c.SetValue(property, en);
+                ScheduleRelayout(c);
                 lock (Gate)
                 {
                     if (!Tracked.Exists(w => w.TryGetTarget(out var t) && ReferenceEquals(t, c)))
@@ -220,9 +225,54 @@ public static class LiteralTranslator
             if (current == entry.Translated)
             {
                 c.SetValue(property, entry.Original);
+                ScheduleRelayout(c);
             }
 
             map.Remove(property);
+        }
+    }
+
+    /// <summary>
+    /// 글자를 바꾼 컨트롤과 그 조상을 다음 차례에 다시 재게 한다. 창이 처음 뜰 때(Loaded) 바꾼 글은 그 자리의 측정 무효화가
+    /// 실제 창에서 사라질 때가 있어(대화상자 툴바 단추가 한국어 폭으로 남아 「New co」로 잘림) 배치가 끝난 뒤 한 번 더 건다.
+    /// </summary>
+    private static void ScheduleRelayout(Control c)
+    {
+        bool first;
+        lock (Gate)
+        {
+            first = Relayout.Count == 0;
+            Relayout.Add(new WeakReference<Control>(c));
+        }
+
+        if (first)
+        {
+            Dispatcher.UIThread.Post(FlushRelayout, DispatcherPriority.Background);
+        }
+    }
+
+    private static void FlushRelayout()
+    {
+        List<Control> controls = [];
+        lock (Gate)
+        {
+            foreach (var w in Relayout)
+            {
+                if (w.TryGetTarget(out var c))
+                {
+                    controls.Add(c);
+                }
+            }
+
+            Relayout.Clear();
+        }
+
+        foreach (var c in controls)
+        {
+            for (Visual? v = c; v is not null; v = v.GetVisualParent())
+            {
+                (v as Layoutable)?.InvalidateMeasure();
+            }
         }
     }
 
