@@ -18,6 +18,37 @@ public sealed class KeyDispatcher(Func<KeyBindingTable> table, ICommandRegistry 
     private readonly List<(Key Key, KeyModifiers Modifiers)> _pending = [];
     private DateTime _pendingAt;
 
+    /// <summary>
+    /// 입력 칸(TextBox)이 직접 처리해야 하는 글자 편집 키인지. 수식키 없는 키(글자·방향·지우기), Shift 만 누른 키,
+    /// 플랫폼 기본 편집 단축키(모두 선택·복사·붙여 넣기·잘라내기·실행 취소·다시 실행, 단어 단위 이동·지우기)다.
+    /// F 키와 Primary+Enter 같은 실행 단축키는 아니다(입력 칸에서도 명령으로 간다).
+    /// </summary>
+    public static bool IsTextEditingKey(Key key, KeyModifiers modifiers, bool macOS)
+    {
+        if (key is >= Key.F1 and <= Key.F24)
+        {
+            return false;
+        }
+
+        if (modifiers is KeyModifiers.None or KeyModifiers.Shift)
+        {
+            return key is not (Key.Escape or Key.Enter or Key.Tab);
+        }
+
+        var primary = macOS ? KeyModifiers.Meta : KeyModifiers.Control;
+        var word = macOS ? KeyModifiers.Alt : KeyModifiers.Control;
+        if (modifiers == primary || modifiers == (primary | KeyModifiers.Shift))
+        {
+            if (key is Key.A or Key.C or Key.V or Key.X or Key.Z or Key.Y or Key.Left or Key.Right or Key.Up or Key.Down or Key.Back or Key.Delete or Key.Home or Key.End)
+            {
+                return true;
+            }
+        }
+
+        return (modifiers == word || modifiers == (word | KeyModifiers.Shift))
+            && key is Key.Left or Key.Right or Key.Back or Key.Delete;
+    }
+
     /// <summary>키를 처리했으면 true(이벤트를 삼킨다). 수식키만 눌린 입력은 무시한다.</summary>
     public bool Handle(Key key, KeyModifiers modifiers)
     {

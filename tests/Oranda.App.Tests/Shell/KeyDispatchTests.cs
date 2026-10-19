@@ -184,4 +184,18 @@ public class KeyDispatchTests
         Assert.True(dispatcher.Handle(Key.F9, KeyModifiers.None));
         await dispatcher.LastRun!; // 예외 없이 끝난다
     }
+
+    [Theory]
+    [InlineData(Key.A, KeyModifiers.Meta, true, true)]          // ⌘A: 입력 칸의 모두 선택
+    [InlineData(Key.V, KeyModifiers.Control, false, true)]      // Ctrl+V
+    [InlineData(Key.Z, KeyModifiers.Meta | KeyModifiers.Shift, true, true)]
+    [InlineData(Key.Left, KeyModifiers.Alt, true, true)]        // macOS 단어 이동
+    [InlineData(Key.D5, KeyModifiers.None, true, true)]         // 글자
+    [InlineData(Key.Back, KeyModifiers.None, false, true)]
+    [InlineData(Key.Enter, KeyModifiers.Meta, true, false)]     // ⌘↵ 는 실행 명령으로
+    [InlineData(Key.F9, KeyModifiers.None, false, false)]       // F 키는 명령으로
+    [InlineData(Key.Escape, KeyModifiers.None, true, false)]
+    [InlineData(Key.A, KeyModifiers.Control, true, false)]      // macOS 의 Ctrl+A 는 편집 키가 아니다
+    public void Text_boxes_keep_their_editing_keys(Key key, KeyModifiers modifiers, bool macOS, bool editing)
+        => Assert.Equal(editing, KeyDispatcher.IsTextEditingKey(key, modifiers, macOS));
 }

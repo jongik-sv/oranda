@@ -247,6 +247,13 @@ public partial class MainWindow : Window
 
     private void OnKeyDownTunnel(object? sender, KeyEventArgs e)
     {
+        // 입력 칸(도구 창의 찾기·바인드 값 등)에서는 글자 편집 키를 칸에 맡긴다. 포커스 자리가 없는 칸은 직전 자리(편집기)를
+        // 그대로 두므로, 가로채면 ⌘A 가 편집기의 「모두 선택」으로 간다. 실행 키(F 키·Primary+Enter)는 그대로 명령으로 보낸다.
+        if (e.Source is TextBox && KeyDispatcher.IsTextEditingKey(e.Key, e.KeyModifiers, OperatingSystem.IsMacOS()))
+        {
+            return;
+        }
+
         if (_dispatcher is not null && !e.Handled && _dispatcher.Handle(e.Key, e.KeyModifiers))
         {
             e.Handled = true;

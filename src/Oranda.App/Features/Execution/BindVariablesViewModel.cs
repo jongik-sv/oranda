@@ -12,7 +12,7 @@ namespace Oranda.App.Features.Execution;
 /// 값·형식·방향을 둔다. 실행은 묻지 않고 이 값을 쓴다. 처음 보는 변수는 실행할 때 여기에 줄이 생긴다. 직접 더할 수도 있다.
 /// 값은 세션 메모리에만 있다(디스크에 쓰지 않는다).
 /// </summary>
-[OrandaToolPanel("oranda.panel.binds", ToolPanelKind.Tool, DockLocation.Right, Order = 20)]
+[OrandaToolPanel("oranda.panel.binds", ToolPanelKind.Tool, DockLocation.Right, Order = 20, DefaultSize = 380)]
 public sealed partial class BindVariablesViewModel : ToolPanelViewModelBase
 {
     // 이벤트 버스만 받는다(등록된 서비스라 지연 어셈블리를 깨우지 않는다). 생성자는 이것 하나만 둔다.

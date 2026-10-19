@@ -5,13 +5,41 @@
              x:Class="Oranda.App.Features.Execution.BindVariablesView"
              x:DataType="vm:BindVariablesViewModel">
   <UserControl.Styles>
+    <!-- 표 칸: 입력 칸·콤보는 테두리 없이 칸을 채우고, 칸 사이는 가는 선으로 나눈다(오렌지 Bind Variable List 처럼). -->
     <Style Selector="ListBox#RowList ListBoxItem">
       <Setter Property="Padding" Value="0" />
       <Setter Property="MinHeight" Value="0" />
     </Style>
-    <Style Selector="ListBox#RowList TextBox, ListBox#RowList ComboBox">
-      <Setter Property="Margin" Value="1" />
+    <Style Selector="Border.cell">
+      <Setter Property="BorderBrush" Value="{DynamicResource OrandaSeparatorBrush}" />
+      <Setter Property="BorderThickness" Value="0,0,1,1" />
       <Setter Property="MinHeight" Value="26" />
+    </Style>
+    <Style Selector="TextBox.cell">
+      <Setter Property="MinWidth" Value="0" />
+      <Setter Property="MinHeight" Value="0" />
+      <Setter Property="Padding" Value="6,3" />
+      <Setter Property="BorderThickness" Value="0" />
+      <Setter Property="Background" Value="Transparent" />
+      <Setter Property="VerticalContentAlignment" Value="Center" />
+      <Setter Property="FontFamily" Value="Cascadia Mono,Consolas,Menlo,monospace" />
+    </Style>
+    <Style Selector="TextBox.cell:focus /template/ Border#PART_BorderElement">
+      <Setter Property="BorderThickness" Value="0,0,0,2" />
+    </Style>
+    <Style Selector="ComboBox.cell">
+      <Setter Property="MinWidth" Value="0" />
+      <Setter Property="MinHeight" Value="0" />
+      <Setter Property="Padding" Value="6,0,0,0" />
+      <Setter Property="BorderThickness" Value="0" />
+      <Setter Property="Background" Value="Transparent" />
+      <Setter Property="HorizontalAlignment" Value="Stretch" />
+      <Setter Property="VerticalAlignment" Value="Stretch" />
+    </Style>
+    <Style Selector="TextBlock.head">
+      <Setter Property="Margin" Value="6,0" />
+      <Setter Property="VerticalAlignment" Value="Center" />
+      <Setter Property="TextTrimming" Value="CharacterEllipsis" />
     </Style>
   </UserControl.Styles>
   <!-- 오렌지 Bind Variable List: 번호 | 변수 | 값 | 형식, 오렌지 8.0 의 방향(IN/OUT). 실행은 묻지 않고 이 값을 쓴다. -->
@@ -29,40 +57,64 @@
       <TextBlock Text="실행하면 문장의 :변수가 여기에 채워집니다. 빈 값은 NULL." TextTrimming="CharacterEllipsis" />
     </Border>
     <Border DockPanel.Dock="Top" Classes="grid-header">
-      <Grid ColumnDefinitions="26,96,*,104,60" Margin="0,3">
-        <TextBlock Grid.Column="0" Text="#" HorizontalAlignment="Center" />
-        <TextBlock Grid.Column="1" Text="변수" Margin="6,0" />
-        <TextBlock Grid.Column="2" Text="값" Margin="6,0" />
-        <TextBlock Grid.Column="3" Text="자료형" Margin="6,0" />
-        <TextBlock Grid.Column="4" Text="방향" Margin="6,0" />
+      <Grid Height="26">
+        <Grid.ColumnDefinitions>
+          <ColumnDefinition Width="24" />
+          <ColumnDefinition Width="2*" MinWidth="56" />
+          <ColumnDefinition Width="3*" MinWidth="64" />
+          <ColumnDefinition Width="2.4*" MinWidth="84" />
+          <ColumnDefinition Width="58" />
+        </Grid.ColumnDefinitions>
+        <TextBlock Grid.Column="0" Classes="head" Text="#" HorizontalAlignment="Center" Margin="0" />
+        <TextBlock Grid.Column="1" Classes="head" Text="변수" />
+        <TextBlock Grid.Column="2" Classes="head" Text="값" />
+        <TextBlock Grid.Column="3" Classes="head" Text="자료형" />
+        <TextBlock Grid.Column="4" Classes="head" Text="방향" />
       </Grid>
     </Border>
     <ListBox x:Name="RowList" ItemsSource="{Binding Rows}" SelectedItem="{Binding Selected, Mode=TwoWay}"
              AutomationProperties.Name="바인드 변수 목록">
       <ListBox.ItemTemplate>
         <DataTemplate x:DataType="vm:BindVariableRow">
-          <Grid ColumnDefinitions="26,96,*,104,60">
-            <TextBlock Grid.Column="0" Text="{Binding Number}" HorizontalAlignment="Center" VerticalAlignment="Center" Opacity="0.6" />
-            <TextBox Grid.Column="1" x:Name="NameBox" Classes="compact" Text="{Binding Name, Mode=TwoWay}" PlaceholderText="이름"
-                     FontFamily="Cascadia Mono,Consolas,Menlo,monospace" AutomationProperties.Name="바인드 변수 이름" />
-            <TextBox Grid.Column="2" x:Name="ValueBox" Classes="compact" Text="{Binding Text, Mode=TwoWay}" PlaceholderText="NULL"
-                     FontFamily="Cascadia Mono,Consolas,Menlo,monospace" AutomationProperties.Name="바인드 변수 값" />
-            <ComboBox Grid.Column="3" Classes="compact" HorizontalAlignment="Stretch" ItemsSource="{x:Static vm:BindTypeChoice.All}"
-                      SelectedItem="{Binding TypeChoice, Mode=TwoWay}" AutomationProperties.Name="바인드 변수 형식">
-              <ComboBox.ItemTemplate>
-                <DataTemplate x:DataType="vm:BindTypeChoice">
-                  <TextBlock Text="{Binding Label}" />
-                </DataTemplate>
-              </ComboBox.ItemTemplate>
-            </ComboBox>
-            <ComboBox Grid.Column="4" Classes="compact" HorizontalAlignment="Stretch" ItemsSource="{x:Static vm:BindDirectionChoice.All}"
-                      SelectedItem="{Binding DirectionChoice, Mode=TwoWay}" AutomationProperties.Name="바인드 변수 방향">
-              <ComboBox.ItemTemplate>
-                <DataTemplate x:DataType="vm:BindDirectionChoice">
-                  <TextBlock Text="{Binding Label}" />
-                </DataTemplate>
-              </ComboBox.ItemTemplate>
-            </ComboBox>
+          <Grid>
+            <Grid.ColumnDefinitions>
+              <ColumnDefinition Width="24" />
+              <ColumnDefinition Width="2*" MinWidth="56" />
+              <ColumnDefinition Width="3*" MinWidth="64" />
+              <ColumnDefinition Width="2.4*" MinWidth="84" />
+              <ColumnDefinition Width="58" />
+            </Grid.ColumnDefinitions>
+            <Border Grid.Column="0" Classes="cell">
+              <TextBlock Text="{Binding Number}" HorizontalAlignment="Center" VerticalAlignment="Center" Opacity="0.6" />
+            </Border>
+            <Border Grid.Column="1" Classes="cell">
+              <TextBox x:Name="NameBox" Classes="cell" Text="{Binding Name, Mode=TwoWay}" PlaceholderText="이름"
+                       AutomationProperties.Name="바인드 변수 이름" />
+            </Border>
+            <Border Grid.Column="2" Classes="cell">
+              <TextBox x:Name="ValueBox" Classes="cell" Text="{Binding Text, Mode=TwoWay}" PlaceholderText="NULL"
+                       AutomationProperties.Name="바인드 변수 값" />
+            </Border>
+            <Border Grid.Column="3" Classes="cell">
+              <ComboBox Classes="cell" ItemsSource="{x:Static vm:BindTypeChoice.All}"
+                        SelectedItem="{Binding TypeChoice, Mode=TwoWay}" AutomationProperties.Name="바인드 변수 형식">
+                <ComboBox.ItemTemplate>
+                  <DataTemplate x:DataType="vm:BindTypeChoice">
+                    <TextBlock Text="{Binding Label}" TextTrimming="CharacterEllipsis" />
+                  </DataTemplate>
+                </ComboBox.ItemTemplate>
+              </ComboBox>
+            </Border>
+            <Border Grid.Column="4" Classes="cell">
+              <ComboBox Classes="cell" ItemsSource="{x:Static vm:BindDirectionChoice.All}"
+                        SelectedItem="{Binding DirectionChoice, Mode=TwoWay}" AutomationProperties.Name="바인드 변수 방향">
+                <ComboBox.ItemTemplate>
+                  <DataTemplate x:DataType="vm:BindDirectionChoice">
+                    <TextBlock Text="{Binding Label}" />
+                  </DataTemplate>
+                </ComboBox.ItemTemplate>
+              </ComboBox>
+            </Border>
           </Grid>
         </DataTemplate>
       </ListBox.ItemTemplate>
