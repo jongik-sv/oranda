@@ -1,0 +1,31 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:Oranda.App.Features.Execution"
+             x:Class="Oranda.App.Features.Execution.ResultTabsView"
+             x:DataType="vm:ResultTabsViewModel">
+  <DockPanel>
+    <!-- 접속 라벨 띠(운영 = 빨강, ui-shell.md 4.2). 개발 접속이고 읽기 전용이 아니면 숨긴다. -->
+    <Border x:Name="BannerBorder" DockPanel.Dock="Top" Padding="8,2" BorderThickness="0,3,0,0"
+            IsVisible="{Binding HasBanner}">
+      <TextBlock Text="{Binding Banner}" FontWeight="SemiBold" TextTrimming="CharacterEllipsis"
+                 AutomationProperties.Name="접속 라벨" />
+    </Border>
+    <TabControl x:Name="Tabs" ItemsSource="{Binding Tabs}" SelectedItem="{Binding Selected, Mode=TwoWay}">
+      <TabControl.ItemTemplate>
+        <DataTemplate x:DataType="vm:ResultTabItem">
+          <TextBlock Text="{Binding Title}" />
+        </DataTemplate>
+      </TabControl.ItemTemplate>
+      <TabControl.ContentTemplate>
+        <DataTemplate x:DataType="vm:ResultTabItem">
+          <Grid>
+            <ContentControl Content="{Binding Pane}" IsVisible="{Binding HasPane}" />
+            <TextBox Text="{Binding Message, Mode=OneWay}" IsReadOnly="True" AcceptsReturn="True"
+                     TextWrapping="Wrap" IsVisible="{Binding HasMessage}"
+                     FontFamily="Cascadia Mono,Consolas,Menlo,monospace" />
+          </Grid>
+        </DataTemplate>
+      </TabControl.ContentTemplate>
+    </TabControl>
+  </DockPanel>
+</UserControl>

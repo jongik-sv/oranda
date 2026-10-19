@@ -3,6 +3,17 @@
              xmlns:vm="using:Oranda.App.Features.Execution"
              x:Class="Oranda.App.Features.Execution.MessagesView"
              x:DataType="vm:MessagesViewModel">
-  <!-- TSK-06-02 빈 틀 -->
-  <TextBlock Text="oranda.panel.messages" />
+  <DockPanel>
+    <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Spacing="8" Margin="4">
+      <TextBlock Text="메시지" VerticalAlignment="Center" />
+      <Button Content="지우기" Command="{Binding ClearCommand}" />
+    </StackPanel>
+    <ListBox x:Name="MessageList" ItemsSource="{Binding Messages}" AutomationProperties.Name="실행 메시지">
+      <ListBox.ItemTemplate>
+        <DataTemplate x:DataType="vm:MessageEntry">
+          <SelectableTextBlock Text="{Binding Line}" FontFamily="Cascadia Mono,Consolas,Menlo,monospace" TextWrapping="Wrap" />
+        </DataTemplate>
+      </ListBox.ItemTemplate>
+    </ListBox>
+  </DockPanel>
 </UserControl>
