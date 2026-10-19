@@ -14,8 +14,9 @@
                   SelectedItem="{Binding SelectedPreset, Mode=TwoWay}" AutomationProperties.Name="프리셋" />
         <ComboBox x:Name="OrderBox" Classes="compact" Width="140" Margin="0,0,6,0" ItemsSource="{x:Static vm:SqlMonitorViewModel.Orders}"
                   AutomationProperties.Name="정렬" />
-        <NumericUpDown Width="110" Margin="0,0,6,0" Minimum="1" Maximum="1000" Increment="10" Value="{Binding Top, Mode=TwoWay}"
-                       FormatString="'Top '0" VerticalAlignment="Center" AutomationProperties.Name="상위 개수" />
+        <TextBlock Text="상위" VerticalAlignment="Center" Margin="2,0,4,0" />
+        <NumericUpDown Width="120" Margin="0,0,6,0" Minimum="1" Maximum="1000" Increment="10" Value="{Binding Top, Mode=TwoWay}"
+                       FormatString="0" VerticalAlignment="Center" AutomationProperties.Name="상위 개수" />
         <Button x:Name="SearchButton" Classes="tool" Content="검색" IsEnabled="{Binding IsOpen}" icons:ButtonIcon.Key="find" />
         <Separator Classes="toolbar" />
         <Button x:Name="PlanButton" Classes="tool" Content="실제 계획" IsEnabled="{Binding IsOpen}" icons:ButtonIcon.Key="plan" />
@@ -41,11 +42,11 @@
         <Grid Margin="6,0" ColumnDefinitions="120,40,70,70,90,90,80,100,*">
           <TextBlock Grid.Column="0" Text="SQL ID" />
           <TextBlock Grid.Column="1" Text="자식" />
-          <TextBlock Grid.Column="2" Text="소요(s)" />
-          <TextBlock Grid.Column="3" Text="CPU(s)" />
-          <TextBlock Grid.Column="4" Text="실행" />
-          <TextBlock Grid.Column="5" Text="읽은 블록" />
-          <TextBlock Grid.Column="6" Text="디스크" />
+          <TextBlock Grid.Column="2" Text="소요(s)" TextAlignment="Right" Margin="0,0,12,0" />
+          <TextBlock Grid.Column="3" Text="CPU(s)" TextAlignment="Right" Margin="0,0,12,0" />
+          <TextBlock Grid.Column="4" Text="실행" TextAlignment="Right" Margin="0,0,12,0" />
+          <TextBlock Grid.Column="5" Text="읽은 블록" TextAlignment="Right" Margin="0,0,12,0" />
+          <TextBlock Grid.Column="6" Text="디스크" TextAlignment="Right" Margin="0,0,12,0" />
           <TextBlock Grid.Column="7" Text="스키마" />
           <TextBlock Grid.Column="8" Text="SQL" />
         </Grid>
@@ -57,11 +58,11 @@
               <Grid ColumnDefinitions="120,40,70,70,90,90,80,100,*">
                 <TextBlock Grid.Column="0" Text="{Binding SqlId}" FontFamily="Consolas,Menlo,monospace" />
                 <TextBlock Grid.Column="1" Text="{Binding ChildText}" />
-                <TextBlock Grid.Column="2" Text="{Binding ElapsedText}" />
-                <TextBlock Grid.Column="3" Text="{Binding CpuText}" />
-                <TextBlock Grid.Column="4" Text="{Binding ExecutionsText}" />
-                <TextBlock Grid.Column="5" Text="{Binding BlocksText}" />
-                <TextBlock Grid.Column="6" Text="{Binding DiskText}" />
+                <TextBlock Grid.Column="2" Text="{Binding ElapsedText}" TextAlignment="Right" Margin="0,0,12,0" />
+                <TextBlock Grid.Column="3" Text="{Binding CpuText}" TextAlignment="Right" Margin="0,0,12,0" />
+                <TextBlock Grid.Column="4" Text="{Binding ExecutionsText}" TextAlignment="Right" Margin="0,0,12,0" />
+                <TextBlock Grid.Column="5" Text="{Binding BlocksText}" TextAlignment="Right" Margin="0,0,12,0" />
+                <TextBlock Grid.Column="6" Text="{Binding DiskText}" TextAlignment="Right" Margin="0,0,12,0" />
                 <TextBlock Grid.Column="7" Text="{Binding Schema}" TextTrimming="CharacterEllipsis" />
                 <TextBlock Grid.Column="8" Text="{Binding Preview}" TextTrimming="CharacterEllipsis" />
               </Grid>
@@ -71,7 +72,7 @@
       </DockPanel>
       </ScrollViewer>
       <GridSplitter Grid.Row="1" ResizeDirection="Rows" Background="{DynamicResource OrandaSplitterBrush}" />
-      <TabControl Grid.Row="2">
+      <TabControl x:Name="DetailTabs" Grid.Row="2">
         <TabItem Header="전문·바인드">
           <TextBox Text="{Binding DetailText}" IsReadOnly="True" AcceptsReturn="True" TextWrapping="NoWrap"
                    FontFamily="Consolas,Menlo,monospace" ScrollViewer.HorizontalScrollBarVisibility="Auto" />

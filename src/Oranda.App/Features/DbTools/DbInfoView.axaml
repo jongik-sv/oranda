@@ -2,40 +2,50 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:vm="using:Oranda.App.Features.DbTools"
              xmlns:md="using:Oranda.Core.Metadata"
+             xmlns:icons="using:Oranda.App.Shell.Icons"
+             xmlns:ctl="using:Oranda.App.Shell.Controls"
              x:Class="Oranda.App.Features.DbTools.DbInfoView"
              x:DataType="vm:DbInfoViewModel">
   <DockPanel>
-    <TextBlock DockPanel.Dock="Bottom" Margin="6,2" Text="{Binding StatusText}" TextTrimming="CharacterEllipsis" Opacity="0.7" />
-    <Border DockPanel.Dock="Bottom" Padding="6" BorderThickness="0,1,0,0" BorderBrush="Gray">
+    <!-- 툴바: 새로 고침 · 이 구역에서 찾기 -->
+    <Border DockPanel.Dock="Top" Classes="panel-toolbar">
+      <DockPanel>
+        <Button x:Name="RefreshButton" DockPanel.Dock="Left" Classes="toolbar" Content="새로 고침" IsEnabled="{Binding !IsBusy}"
+                icons:ButtonIcon.Key="refresh" icons:ButtonIcon.IconOnly="True" />
+        <TextBox Classes="compact search" Margin="6,0,0,0" MaxWidth="360" HorizontalAlignment="Left" MinWidth="240"
+                 PlaceholderText="이 구역에서 찾기" Text="{Binding FilterText, Mode=TwoWay}" AutomationProperties.Name="이 구역에서 찾기" />
+      </DockPanel>
+    </Border>
+    <Border DockPanel.Dock="Bottom" Classes="panel-status">
+      <TextBlock Text="{Binding StatusText}" TextTrimming="CharacterEllipsis" />
+    </Border>
+    <!-- 파라미터 변경 DDL 미리보기: 파라미터 구역의 행을 누르면 이름·현재 값이 채워진다. 실행하지 않고 복사만 한다. -->
+    <Border DockPanel.Dock="Bottom" Padding="8,6" BorderThickness="0,1,0,0" BorderBrush="{DynamicResource OrandaSeparatorBrush}">
       <StackPanel Spacing="4">
-        <TextBlock Text="파라미터 변경 DDL 미리보기 (실행하지 않는다)" FontWeight="SemiBold" />
+        <TextBlock Text="파라미터 변경 DDL 미리보기 (실행하지 않습니다)" FontWeight="SemiBold" />
         <WrapPanel>
-          <TextBox x:Name="ParameterNameBox" Width="200" Margin="0,0,6,4" PlaceholderText="파라미터 이름" Text="{Binding ParameterName, Mode=TwoWay}" />
-          <TextBox Width="200" Margin="0,0,6,4" PlaceholderText="새 값" Text="{Binding ParameterValue, Mode=TwoWay}" />
-          <ComboBox x:Name="ScopeBox" Width="110" Margin="0,0,6,4" />
-          <Button x:Name="CopyDdlButton" Margin="0,0,6,4" Content="DDL 복사" />
+          <TextBox x:Name="ParameterNameBox" Classes="compact" Width="200" Margin="0,0,6,4" PlaceholderText="파라미터 이름" Text="{Binding ParameterName, Mode=TwoWay}" />
+          <TextBox Classes="compact" Width="200" Margin="0,0,6,4" PlaceholderText="새 값" Text="{Binding ParameterValue, Mode=TwoWay}" />
+          <ComboBox x:Name="ScopeBox" Classes="compact" Width="110" Margin="0,0,6,4" AutomationProperties.Name="적용 범위" />
+          <Button x:Name="CopyDdlButton" Classes="tool" Margin="0,0,6,4" Content="DDL 복사" icons:ButtonIcon.Key="copy" />
         </WrapPanel>
-        <TextBox Text="{Binding PreviewDdl}" IsReadOnly="True" FontFamily="Consolas,Menlo,monospace" />
-        <TextBlock Text="{Binding PreviewError}" Foreground="OrangeRed" />
+        <TextBox Classes="compact" Text="{Binding PreviewDdl}" IsReadOnly="True" FontFamily="Consolas,Menlo,monospace" />
+        <TextBlock Text="{Binding PreviewError}" Foreground="{DynamicResource OrandaIconRedBrush}"
+                   IsVisible="{Binding PreviewError, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
       </StackPanel>
     </Border>
-    <DockPanel>
-      <StackPanel DockPanel.Dock="Left" MinWidth="120" Margin="4" Spacing="4">
-        <Button x:Name="RefreshButton" Content="새로 고침" IsEnabled="{Binding !IsBusy}" />
-        <ListBox x:Name="SectionList" ItemsSource="{Binding Sections}" SelectedItem="{Binding SelectedSection, Mode=TwoWay}">
-          <ListBox.ItemTemplate>
-            <DataTemplate x:DataType="md:DetailSection">
-              <TextBlock Text="{Binding Title}" />
-            </DataTemplate>
-          </ListBox.ItemTemplate>
-        </ListBox>
-      </StackPanel>
-      <DockPanel>
-        <TextBox DockPanel.Dock="Top" Margin="4" PlaceholderText="이 구역에서 찾기" Text="{Binding FilterText, Mode=TwoWay}" />
-        <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto">
-          <SelectableTextBlock Margin="8,4" Text="{Binding SectionText}" FontFamily="Consolas,Menlo,monospace" />
-        </ScrollViewer>
-      </DockPanel>
-    </DockPanel>
+    <Grid ColumnDefinitions="Auto,*">
+      <ListBox x:Name="SectionList" Grid.Column="0" Classes="log" MinWidth="130" ItemsSource="{Binding Sections}"
+               SelectedItem="{Binding SelectedSection, Mode=TwoWay}" AutomationProperties.Name="구역">
+        <ListBox.ItemTemplate>
+          <DataTemplate x:DataType="md:DetailSection">
+            <TextBlock Text="{Binding Title}" Margin="4,3" />
+          </DataTemplate>
+        </ListBox.ItemTemplate>
+      </ListBox>
+      <Border Grid.Column="1" BorderThickness="1,0,0,0" BorderBrush="{DynamicResource OrandaSeparatorBrush}">
+        <ctl:DetailTable x:Name="Table" Columns="{Binding SelectedSection.Columns}" Rows="{Binding VisibleRows}" />
+      </Border>
+    </Grid>
   </DockPanel>
 </UserControl>

@@ -192,6 +192,12 @@
             <Setter Property="FontWeight" Value="SemiBold" />
             <Setter Property="FontSize" Value="{DynamicResource OrandaFontSizeSmall}" />
         </Style>
+        <Style Selector="Border.detail-row">
+            <Setter Property="Background" Value="Transparent" />
+        </Style>
+        <Style Selector="Border.detail-row-alt">
+            <Setter Property="Background" Value="{DynamicResource OrandaToolbarBackgroundBrush}" />
+        </Style>
         <Style Selector="TextBlock.invalid">
             <Setter Property="Foreground" Value="{DynamicResource OrandaIconRedBrush}" />
         </Style>

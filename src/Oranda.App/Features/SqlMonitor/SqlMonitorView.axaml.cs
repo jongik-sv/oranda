@@ -35,9 +35,10 @@ public partial class SqlMonitorView : UserControl
             }
         };
         SearchButton.Click += (_, _) => Run(vm => vm.SearchAsync());
-        PlanButton.Click += (_, _) => Run(vm => vm.ShowPlanAsync());
-        BindsButton.Click += (_, _) => Run(vm => vm.ShowBindsAsync());
-        ResultList.DoubleTapped += (_, _) => Run(vm => vm.ShowPlanAsync());
+        // 계획·바인드를 읽으면 아래 탭도 그 내용으로 넘긴다(결과가 숨은 탭에 들어가 안 보이지 않게).
+        PlanButton.Click += (_, _) => Run(vm => vm.ShowPlanAsync(), tab: 1);
+        BindsButton.Click += (_, _) => Run(vm => vm.ShowBindsAsync(), tab: 0);
+        ResultList.DoubleTapped += (_, _) => Run(vm => vm.ShowPlanAsync(), tab: 1);
         OrderBox.DisplayMemberBinding = new Avalonia.Data.Binding("Key");
         OrderBox.SelectedIndex = 0;
     }
@@ -50,10 +51,15 @@ public partial class SqlMonitorView : UserControl
         }
     }
 
-    private void Run(System.Func<SqlMonitorViewModel, System.Threading.Tasks.Task> action)
+    private void Run(System.Func<SqlMonitorViewModel, System.Threading.Tasks.Task> action, int? tab = null)
     {
         if (DataContext is SqlMonitorViewModel vm)
         {
+            if (tab is { } index)
+            {
+                DetailTabs.SelectedIndex = index;
+            }
+
             _ = action(vm);
         }
     }

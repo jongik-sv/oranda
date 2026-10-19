@@ -64,6 +64,10 @@ public sealed partial class DbInfoViewModel : ToolPanelViewModelBase
     [ObservableProperty]
     private string _sectionText = string.Empty;
 
+    /// <summary>선택한 구역에서 거름을 통과한 행(표 컨트롤이 그린다).</summary>
+    [ObservableProperty]
+    private IReadOnlyList<IReadOnlyList<object?>> _visibleRows = [];
+
     [ObservableProperty]
     private string _statusText = string.Empty;
 
@@ -157,6 +161,7 @@ public sealed partial class DbInfoViewModel : ToolPanelViewModelBase
         if (SelectedSection is not { } section)
         {
             SectionText = string.Empty;
+            VisibleRows = [];
             return;
         }
 
@@ -165,6 +170,7 @@ public sealed partial class DbInfoViewModel : ToolPanelViewModelBase
             ? section.Rows
             : [.. section.Rows.Where(r => r.Any(c => ObjectDetailSection.Cell(c).Contains(filter, StringComparison.OrdinalIgnoreCase)))];
         SectionText = new ObjectDetailSection(section with { Rows = rows }).Text;
+        VisibleRows = rows;
     }
 
     private void RefreshPreview()

@@ -1,35 +1,42 @@
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:vm="using:Oranda.App.Features.ObjectDetail"
+             xmlns:icons="using:Oranda.App.Shell.Icons"
+             xmlns:ctl="using:Oranda.App.Shell.Controls"
              x:Class="Oranda.App.Features.ObjectDetail.ObjectDetailView"
              x:DataType="vm:ObjectDetailViewModel">
   <DockPanel>
-    <TextBlock DockPanel.Dock="Bottom" Margin="6,2" Text="{Binding StatusText}" TextTrimming="CharacterEllipsis" Opacity="0.7" />
+    <Border DockPanel.Dock="Bottom" Classes="panel-status">
+      <TextBlock Text="{Binding StatusText}" TextTrimming="CharacterEllipsis" />
+    </Border>
     <TabControl x:Name="Tabs">
       <TabItem Header="상세">
         <DockPanel>
-          <ListBox x:Name="SectionList" DockPanel.Dock="Left" MinWidth="110" ItemsSource="{Binding Sections}" SelectedItem="{Binding SelectedSection, Mode=TwoWay}">
+          <!-- Orange Schema Browser 의 객체 정보처럼 왼쪽은 구역(열·인덱스·제약·권한…), 오른쪽은 표. -->
+          <ListBox x:Name="SectionList" DockPanel.Dock="Left" Classes="log" MinWidth="120" ItemsSource="{Binding Sections}" SelectedItem="{Binding SelectedSection, Mode=TwoWay}">
             <ListBox.ItemTemplate>
               <DataTemplate x:DataType="vm:ObjectDetailSection">
-                <TextBlock Text="{Binding Title}" />
+                <TextBlock Text="{Binding Title}" Margin="4,3" />
               </DataTemplate>
             </ListBox.ItemTemplate>
           </ListBox>
-          <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto">
-            <SelectableTextBlock x:Name="SectionText" Margin="8,4" FontFamily="Consolas,Menlo,monospace" />
-          </ScrollViewer>
+          <Border BorderThickness="1,0,0,0" BorderBrush="{DynamicResource OrandaSeparatorBrush}">
+            <ctl:DetailTable x:Name="SectionTable" Columns="{Binding SelectedSection.Columns}" Rows="{Binding SelectedSection.Rows}" />
+          </Border>
         </DockPanel>
       </TabItem>
       <TabItem Header="DDL" x:Name="DdlTab">
         <DockPanel>
-          <WrapPanel DockPanel.Dock="Top" Margin="4">
-            <CheckBox Content="저장 속성(STORAGE)" IsChecked="{Binding IncludeStorage, Mode=TwoWay}" Margin="0,0,10,0" />
-            <CheckBox Content="세그먼트 속성" IsChecked="{Binding IncludeSegmentAttributes, Mode=TwoWay}" Margin="0,0,10,0" />
-            <CheckBox Content="테이블스페이스" IsChecked="{Binding IncludeTablespace, Mode=TwoWay}" Margin="0,0,10,0" />
-            <CheckBox Content="종결자(;)" IsChecked="{Binding SqlTerminator, Mode=TwoWay}" Margin="0,0,10,0" />
-            <CheckBox Content="종속 객체(인덱스·제약·권한 등)" IsChecked="{Binding IncludeDependentObjects, Mode=TwoWay}" Margin="0,0,10,0" />
-            <Button x:Name="CopyButton" Content="복사" />
-          </WrapPanel>
+          <Border DockPanel.Dock="Top" Classes="panel-toolbar">
+            <WrapPanel>
+              <Button x:Name="CopyButton" Classes="tool" Content="DDL 복사" icons:ButtonIcon.Key="copy" Margin="0,0,10,0" />
+              <CheckBox Content="저장 속성(STORAGE)" IsChecked="{Binding IncludeStorage, Mode=TwoWay}" Margin="0,0,10,0" />
+              <CheckBox Content="세그먼트 속성" IsChecked="{Binding IncludeSegmentAttributes, Mode=TwoWay}" Margin="0,0,10,0" />
+              <CheckBox Content="테이블스페이스" IsChecked="{Binding IncludeTablespace, Mode=TwoWay}" Margin="0,0,10,0" />
+              <CheckBox Content="종결자(;)" IsChecked="{Binding SqlTerminator, Mode=TwoWay}" Margin="0,0,10,0" />
+              <CheckBox Content="종속 객체(인덱스·제약·권한 등)" IsChecked="{Binding IncludeDependentObjects, Mode=TwoWay}" />
+            </WrapPanel>
+          </Border>
           <TextBox Text="{Binding DdlText}" IsReadOnly="True" AcceptsReturn="True" TextWrapping="NoWrap"
                    FontFamily="Consolas,Menlo,monospace" />
         </DockPanel>

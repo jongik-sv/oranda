@@ -50,7 +50,6 @@ public partial class ObjectDetailView : UserControl
             return;
         }
 
-        SectionText.Text = _vm.SelectedSection?.Text ?? string.Empty;
         var wanted = _vm.IsDdlSelected ? DdlTab : (TabItem)Tabs.Items[0]!;
         if (Tabs.SelectedItem != wanted)
         {
