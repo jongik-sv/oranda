@@ -1513,7 +1513,7 @@ dotnet, testhost, Oranda.App
 - category: dev
 - domain: fullstack
 - model: sonnet
-- status: [ ]
+- status: [xx]
 - priority: medium
 - assignee: -
 - schedule: 2026-11-23 ~ 2026-11-27
