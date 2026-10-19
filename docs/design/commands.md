@@ -1,0 +1,521 @@
+# 명령 체계 설계 — TSK-02-02
+
+> 근거: PRD 6.12(APP-04·08), EDIT-10, 7.5 / TRD 4.11. 짝 문서: [ui-shell.md](ui-shell.md), [keymaps/](keymaps/).
+> 이 문서를 계약으로 쓰는 Task: TSK-02-05(레지스트리·키맵 로더 틀), TSK-03-01(메뉴·툴바·팔레트), TSK-04-07(프리셋 전환·사용자 정의), 명령을 가진 기능 Task 전부.
+
+## 1. 명령 ID 규칙
+
+| 규칙 | 내용 | 예 |
+|---|---|---|
+| 형식 | `oranda.<영역>.<동작>` — 소문자 영역, 동작은 lowerCamelCase. 하위 묶음이 필요하면 점을 하나 더(`<영역>.<묶음>.<동작>`) | `oranda.exec.runStatement`, `oranda.grid.edit.apply` |
+| 영역 | `file` `conn` `edit` `nav` `format` `exec` `txn` `plan` `sqlplus` `grid` `view` `schema` `db` `plsql` `monitor` `tools` `window` `help` | |
+| 동작 | 동사로 시작(`run`, `toggle`, `open`, `show`, `copy`…). 켜기/끄기 상태 명령은 `toggle…` 하나로 | `oranda.txn.toggleAutoCommit` |
+| 도구 창 | 도구 창 ID `oranda.panel.<이름>`, 그것을 여는 명령 `oranda.view.<이름>` | `oranda.panel.history` ↔ `oranda.view.history` |
+| 안정성 | ID 는 키맵·사용자 설정 파일에 저장되므로 **한 번 내보낸 ID 는 바꾸지 않는다**. 바꿔야 하면 옛 ID 를 별칭으로 남긴다(레지스트리 `Aliases`) | |
+| 확장 | 1.0 이후 확장(AI 패널 등)은 `oranda.ext.<확장 이름>.<동작>` | `oranda.ext.aiChat.explainPlan` |
+| 표시 이름 | 제목은 리소스 키(`Cmd.<ID>`)로 두고 한/영 번역(TSK-10-02). 팔레트에서는 「범주: 제목」으로 보인다 | `SQL: 현재 문장 실행` |
+
+## 2. 명령 정의 항목
+
+| 항목 | 뜻 | 누가 정하나 |
+|---|---|---|
+| `Id` | 위 규칙의 ID | 기능 Task |
+| `Title` | 리소스 키 | 기능 Task |
+| `Category` | 아래 3장 범주(= 메뉴 묶음, 팔레트 접두어) | 기능 Task |
+| `Icon` | 벡터 아이콘 키(없으면 메뉴에 아이콘 없음) | 기능 Task |
+| `Enablement` | 활성 조건식(아래 2.2 문맥 키). 거짓이면 메뉴·툴바 흐리게, 팔레트에서 회색, 단축키 무시 | 기능 Task |
+| `Placements` | 메뉴·툴바·오른쪽 클릭 메뉴 위치 목록(`menu:sql/run@10`, `toolbar:main/run@10`, `context:grid/copy@30`) | 기능 Task |
+| `ShowInPalette` | 팔레트 노출(기본 true) | 기능 Task |
+| 기본 단축키 | **명령 정의에 넣지 않는다.** 키는 키맵 파일(keymaps/*.json)에만 있다 | TSK-02-02(이 문서) → TSK-04-07 |
+
+### 2.1 연결 방식 (한 ID 를 네 곳이 같이 쓴다)
+
+```
+① 명령 레지스트리 (ICommandRegistry)
+   기능 Task 가 [OrandaCommand("oranda.exec.runStatement", ...)] 특성으로 처리기 등록
+   → 시작 때 어셈블리 스캔으로 자동 수집 (셸 파일 수정 없음, TSK-02-05)
+        │  Id·Title·Category·Icon·Enablement·Placements
+        ▼
+② 메뉴·툴바·오른쪽 클릭 메뉴
+   셸이 Placements 를 모아 위치·순서(@n)대로 메뉴 트리를 만든다.
+   같은 묶음 안 순서 = @n, 묶음 사이 구분선 자동.
+        │
+        ▼
+③ 키맵 (IKeymapService)
+   프리셋 JSON(keymaps/<id>.json) 위에 사용자 키맵({data}/keymaps/{id}.json, basedOn + 차이)을 겹친다.
+   키 → (when 이 맞는 바인딩) → 명령 ID → 레지스트리에서 실행.
+   메뉴 항목 오른쪽 키 표시(InputGesture)는 키맵에서 거꾸로 찾아 넣는다.
+        │
+        ▼
+④ 명령 팔레트 (Ctrl+Shift+P)
+   레지스트리 전체(ShowInPalette)를 「범주: 제목」+ ID 로 검색, 현재 키 표시,
+   Enablement 거짓이면 회색(실행 불가). 최근 실행 순 우선.
+```
+
+- 실행 경로는 하나: 메뉴 클릭·툴바·단축키·팔레트 모두 `ICommandRegistry.ExecuteAsync(id, 문맥)` 를 부른다. 그래서 「단축키로는 되는데 메뉴로는 안 됨」 같은 차이가 생기지 않는다.
+- 키맵에 없는 명령도 메뉴·팔레트로 항상 실행할 수 있다(7.5 키보드 접근 = 메뉴 접근 키 + 팔레트).
+- 키맵에 있는 ID 가 레지스트리에 없으면 그 바인딩은 무시하고 로그에 경고 1줄(확장을 지운 경우 등).
+
+### 2.2 문맥 키
+
+`when`(키맵)과 `Enablement`(명령)에서 쓰는 이름. 식 문법: 이름, `!`, `&&`, `||`, 괄호. 셸이 포커스·선택이 바뀔 때 다시 계산한다.
+
+**포커스 키** — 한 순간에 하나의 「포커스 자리」만 참이다. 키맵 `when` 에는 이것만 쓴다.
+
+| 키 | 참일 때 | 포커스 자리 |
+|---|---|---|
+| (없음 = 전역) | 언제나(대화상자가 열려 있을 때 제외) | 전부 |
+| `sqlEditorFocus` | SQL 편집기 글자 영역 | sqlText |
+| `gridFocus` | SQL 편집기 문서의 결과 그리드 | sqlGrid |
+| `sqlDocFocus` | 위 둘 중 하나 | sqlText, sqlGrid |
+| `plsqlEditorFocus` | PL/SQL 편집기 글자 영역 | plsql |
+| `editorFocus` | SQL 또는 PL/SQL 편집기 글자 영역 | sqlText, plsql |
+| `schemaFocus` | 스키마 브라우저 | schema |
+| `monitorFocus` | 세션·SQL 모니터 문서 | monitor |
+
+**상태 키** — `Enablement` 에 쓴다.
+
+| 키 | 뜻 |
+|---|---|
+| `hasDocument`, `sqlDocActive`, `plsqlDocActive`, `sqlDocOpen` | 문서 있음 / 활성 문서 종류 / SQL 편집기가 하나 이상 열림 |
+| `hasSession`, `sessionBusy`, `sessionBroken`, `readOnlySession` | 활성 문서 접속 상태(연결됨·실행 중·끊김·읽기 전용 프로필) |
+| `txnPending` | 미커밋 트랜잭션 있음 |
+| `hasSelection`, `canUndo`, `canRedo`, `hasFindText`, `hasBookmark`, `readOnlyDoc`, `canNavigateBack`, `canNavigateForward` | 편집기 상태 |
+| `hasExecError`, `hasLastSqlId` | 마지막 실행 결과 |
+| `gridHasResult`, `gridHasSelection`, `gridHasMoreRows`, `gridEditing`, `gridDirty`, `gridNotEditable`, `singleTable`, `joinResult` | 그리드 상태 |
+| `schemaNodeSelected`, `plsqlNodeSelected`, `recyclebinNodeSelected` | 스키마 트리 선택 |
+| `isPackageDoc`, `serverSourceChanged`, `plsqlRunnable` | PL/SQL 편집기 |
+| `monitorSessionOpen`, `monitorSessionSelected`, `monitorSqlOpen`, `monitorSqlSelected` | 모니터 |
+| `canKillSession`, `canTraceSessions` | 서버 점검 결과(`ServerCapabilities`) |
+| `devBuild` | 개발 빌드 |
+
+### 2.3 단축키 충돌 규칙
+
+1. 한 프리셋 안에서 **같은 키 두 바인딩의 포커스 자리가 겹치면 충돌**이다(전역은 모든 자리와 겹친다). 예: `F5` 는 `sqlDocFocus`(스크립트 실행)·`schemaFocus`(새로 고침)·`plsqlEditorFocus`(컴파일)·`monitorFocus`(새로 고침)로 나눠 쓴다 — 겹치지 않으므로 허용.
+2. 같은 검사를 macOS 로 바꾼 키(5장)에도 한다.
+3. 사용자 키맵에서 충돌이 생기면 단축키 설정 화면(TSK-04-07)이 경고하고, 저장된 파일에서는 **뒤에 적힌 바인딩**이 이긴다.
+4. 프리셋 4종은 이 규칙으로 검사했다(충돌 0). TSK-02-05 키맵 로더 시험에 같은 검사를 넣는다.
+5. 편집기 기본 키(방향키·Home/End·Tab·Shift+Tab·Backspace·Delete·Alt+드래그 열 선택·Alt+클릭 커서 추가)는 AvaloniaEdit·다중 커서 확장(D-007) 몫이며 키맵에 넣지 않는다. 그리드 기본 키(방향키·PageUp/Down·F2 셀 편집·Esc)도 같다.
+6. 시스템이 쓰는 키는 바인딩하지 않는다: Windows `Alt+F4`, `Alt+Space`, `Ctrl+Esc`, `Win+…`, 메뉴 접근 `Alt+문자`(Orange 5 `Alt+C` 만 예외), macOS 5.2 목록.
+
+## 3. 범주 = 메뉴 묶음
+
+| 범주 | 메뉴 | 오른쪽 클릭 메뉴 |
+|---|---|---|
+| 파일, 접속 | 파일 | 문서 탭 머리 |
+| 편집, 탐색, 포맷 | 편집 | 편집기 |
+| SQL | SQL | 편집기(실행 묶음) |
+| 결과 | 결과 | 그리드 |
+| 보기 | 보기 | — |
+| 데이터베이스 | 데이터베이스 | 스키마 트리, PL/SQL 편집기 |
+| 모니터 | 모니터 | 모니터 목록 |
+| 도구 | 도구 | — |
+| 창 | 창 | 문서 탭 머리 |
+| 도움말 | 도움말 | — |
+
+툴바(기본, ui-shell.md 1장): `conn.manage` · `file.newSqlEditor` `file.open` `file.save` · `exec.runStatement` `exec.runScript` `exec.cancel` · `txn.commit` `txn.rollback` · `plan.explain` · `format.document` · `view.commandPalette`. 접속 콤보는 셸 고유 컨트롤(선택 시 `conn.switchSession`).
+
+## 4. 키맵 파일 형식
+
+파일 형식의 정본은 [data-model.md 2.4](data-model.md)(TSK-02-01)다. 이 문서는 그 형식으로 키 표 내용과 `when` 값을 정하고, 아래 `mac` 필드 하나를 더 쓴다.
+
+```json
+{
+  "schemaVersion": 1,
+  "id": "orange5",
+  "name": "Orange 5",
+  "basedOn": null,
+  "bindings": [
+    { "command": "oranda.exec.runStatement", "keys": ["Primary+Enter", "Primary+K"], "when": "sqlDocFocus" },
+    { "command": "oranda.exec.runFromCursor", "keys": ["Primary+M"], "when": "sqlDocFocus", "mac": ["Primary+Shift+M"] }
+  ]
+}
+```
+
+| 필드 | 필수 | 뜻 |
+|---|---|---|
+| `schemaVersion` | 예 | 1 |
+| `id` | 예 | 프리셋 `default`, `orange5`, `plsqldev`, `sqldev` (= 파일 이름) |
+| `name` | 예 | 표시 이름 |
+| `basedOn` | 아니요 | 프리셋은 `null`. 사용자 키맵은 바탕 프리셋 id + 차이만 |
+| `bindings[].command` | 예 | 명령 ID |
+| `bindings[].keys` | 예 | 키 조합 목록(data-model 2.4 규칙: 수식키 `Primary+Ctrl+Alt+Shift+Meta+키`, 키는 Avalonia `Key` 이름). `[]` = 바탕 키 지움 |
+| `bindings[].when` | 아니요 | 포커스 키(2.2). 없으면 전역 |
+| `bindings[].mac` | 아니요 | **이 문서가 더하는 필드.** macOS 에서 `keys` 대신 쓰는 키 목록(같은 표기, `Primary`=Cmd, `Ctrl`=실제 Control, `Alt`=Option). 없으면 `keys` 를 그대로 쓴다 |
+
+- 한 바인딩 줄 = (명령, `when`) 하나. 같은 명령이 다른 `when` 에서 키를 가지면 줄이 둘이다.
+- 프리셋 파일에서 `Ctrl` 은 쓰지 않는다(Windows 의 Ctrl 은 모두 `Primary`). `Ctrl` 은 `mac` 안에서 실제 Control 키를 뜻할 때만 쓴다.
+- 이 문서의 표(5.3, 6.1, 7장)는 읽기 쉽게 Windows 표기(`Ctrl+Enter`, `Ctrl+-`)로 적는다. 파일 표기와의 대응: `Ctrl`→`Primary`, `-`→`OemMinus`, `=`→`OemPlus`, `/`→`Oem2`, `[`→`OemOpenBrackets`, `]`→`OemCloseBrackets`, `,`→`OemComma`, `.`→`OemPeriod`, `'`→`OemQuotes`, `0`~`9`→`D0`~`D9`, `Esc`→`Escape`, `Backspace`→`Back`, `Break`→`Cancel`(Ctrl+Break 가 만드는 키).
+- 겹치기: 앱에 든 프리셋(임베디드 리소스, 읽기 전용) → 사용자 키맵(`{data}/keymaps/{id}.json`, `basedOn` + 차이). 프리셋을 바꿔도 사용자 차이는 남는다.
+- 프리셋 4종은 연속 키(chord)를 쓰지 않는다(형식은 허용).
+
+## 5. macOS 키 규칙
+
+### 5.1 기본 대응 (`mac` 이 없을 때)
+
+| 파일 표기 | Windows | macOS |
+|---|---|---|
+| `Primary` | Ctrl | Cmd |
+| `Alt` | Alt | Option |
+| `Shift` | Shift | Shift |
+| 기능 키·글자·기호 | 그대로 | 그대로(기능 키는 맥 키보드에서 `fn` 과 함께 누를 수 있음 — 사용자 문서에 적는다) |
+
+다음 경우는 프리셋 파일에 `mac` 을 반드시 적는다(키맵 로더 시험이 검사):
+- `Cancel`(Ctrl+Break) — 맥에 없음 → 관례대로 `Cmd+.`
+- `Alt+글자/숫자/기호` — 맥에서 `Option+문자` 는 특수 문자 입력이라 쓸 수 없음 → 실제 Control 등으로 지정
+- 맥에서 그대로 쓰면 5.2 예약 키가 되는 경우
+
+### 5.2 macOS 예약 키 (바인딩 금지)
+
+`Cmd+Q` `Cmd+H` `Cmd+Option+H` `Cmd+M` `Cmd+Option+M` `Cmd+Tab` `Cmd+Space` `Ctrl+Space`(입력 소스 전환 — 한글 사용자 필수) ``Cmd+` `` `Cmd+Option+Esc` `Cmd+Shift+3/4/5` `Ctrl+방향키`(Mission Control) `F11`(데스크톱 보기) `Cmd+Ctrl+F` `Cmd+Ctrl+Q` `Cmd+Ctrl+Space`. `Cmd+,`(설정)·`Cmd+Q`(끝내기)·`Cmd+H`(가리기)는 앱 메뉴가 OS 관례대로 맡는다.
+
+### 5.3 `mac` 을 따로 적은 바인딩 (프리셋 전체)
+
+| 명령 ID | Windows 키 | macOS 키 |
+|---|---|---|
+| `oranda.edit.redo` | `Ctrl+Y` | `Cmd+Shift+Z` |
+| `oranda.edit.replace` | `Ctrl+H` | `Cmd+Option+F` |
+| `oranda.edit.findNext` | `F3` | `Cmd+G` |
+| `oranda.edit.findPrevious` | `Shift+F3` | `Cmd+Shift+G` |
+| `oranda.edit.goToLine` | `Ctrl+G` | `Cmd+L` |
+| `oranda.edit.triggerCompletion` | `Ctrl+Space` | `Option+Esc` |
+| `oranda.nav.back` | `Alt+Left` | `Cmd+Ctrl+Left` |
+| `oranda.nav.forward` | `Alt+Right` | `Cmd+Ctrl+Right` |
+| `oranda.exec.runToNewResultTab` | `F11` | `Cmd+Option+Enter` |
+| `oranda.exec.cancel` | `Ctrl+Break` | `Cmd+.` |
+| `oranda.grid.rowView` | `Alt+Enter` | `Cmd+Option+R` |
+| `oranda.grid.edit.addRow` | `Alt+Insert` | `Cmd+Option+N` |
+| `oranda.grid.edit.deleteRow` | `Alt+Delete` | `Cmd+Option+Backspace` |
+| `oranda.view.schemaBrowser` | `Alt+1` | `Ctrl+1` |
+| `oranda.view.output` | `Alt+2` | `Ctrl+2` |
+| `oranda.view.messages` | `Alt+3` | `Ctrl+3` |
+| `oranda.view.plan` | `Alt+4` | `Ctrl+4` |
+| `oranda.view.history` | `Alt+5` | `Ctrl+5` |
+| `oranda.window.nextDocument` | `Ctrl+Tab` | `Ctrl+Tab` |
+| `oranda.window.previousDocument` | `Ctrl+Shift+Tab` | `Ctrl+Shift+Tab` |
+| `oranda.edit.goToLine` | `Ctrl+G` | `Cmd+Option+L` |
+| `oranda.nav.describeObject` | `Alt+C` | `Ctrl+Option+C` |
+| `oranda.exec.runFromCursor` | `Ctrl+M` | `Cmd+Shift+M` |
+| `oranda.txn.commit` | `F11` | `Cmd+F11` |
+
+`edit.triggerCompletion` 을 `Option+Esc` 로 둔 이유: 맥 기본 `Ctrl+Space` 는 한/영 입력 소스 전환이다. 사용자 키맵으로 바꿀 수 있다.
+
+## 6. 키맵 프리셋 4종
+
+| 파일 | 프리셋 | 키 수 | 기준 |
+|---|---|---|---|
+| [keymaps/default.json](keymaps/default.json) | 기본 | 80 | Orange 5 사용자에게 익숙한 실행 키(F5·Ctrl+Enter·F9·F8·Ctrl+E·F11) + 일반 편집기 관례(Ctrl+F/H/G, Ctrl+/) |
+| [keymaps/orange5.json](keymaps/orange5.json) | Orange 5 | 86 | `docs/orange5-features.md` 29장 통합 단축키 표 |
+| [keymaps/plsqldev.json](keymaps/plsqldev.json) | PL/SQL Developer | 83 | PL/SQL Developer 기본 키(F8 실행, F5 계획, Shift+Esc 중단, F10/Shift+F10 커밋/롤백, Ctrl+E 이전 문장 불러오기) |
+| [keymaps/sqldev.json](keymaps/sqldev.json) | SQL Developer | 82 | SQL Developer 기본 키(Ctrl+Enter/F9 문장, F5 스크립트, F10 계획, F6 Autotrace, F11/F12 커밋/롤백, Ctrl+F7 포맷, F8 이력, Shift+F4 설명, Ctrl+' 대소문자) |
+
+- 각 파일은 **완전한 표**다(다른 프리셋을 상속하지 않음). 로더가 겹치기 계산을 하지 않아도 되고, 파일 하나만 보고 충돌을 검사할 수 있다.
+- 커밋·롤백은 기본·Orange 5 프리셋에서 단축키를 주지 않았다(실수 방지, 툴바·메뉴·팔레트로 실행). PL/SQL Developer·SQL Developer 프리셋은 원래 도구의 키를 따른다.
+- PL/SQL Developer 프리셋의 `F10`(커밋)은 Windows 의 「F10 = 메뉴 막대로」 동작을 덮는다. 원래 도구와 같은 동작이므로 그대로 둔다(메뉴는 `Alt` 로 연다).
+- PL/SQL Developer·SQL Developer 키는 공개 문서·일반 기본값 기준이다. TSK-04-07 이 실제 제품과 한 번 더 대조해 고친다(아래 「확인 필요」).
+
+### 6.1 프리셋 사이에 다른 키
+
+같은 명령의 키가 프리셋마다 다른 것만 모았다. 나머지 명령은 4종 모두 기본 프리셋과 같다.
+
+| 명령 ID | 기본 | Orange 5 | PL/SQL Developer | SQL Developer |
+|---|---|---|---|---|
+| `oranda.file.newSqlEditor` | `Ctrl+N` | `Ctrl+N`, `Ctrl+T` | `Ctrl+N` | `Alt+F10`, `Ctrl+N` |
+| `oranda.file.saveAll` | `Ctrl+Shift+S` | - | `Ctrl+Shift+S` | `Ctrl+Shift+S` |
+| `oranda.file.reopenClosed` | `Ctrl+Shift+T` | - | `Ctrl+Shift+T` | `Ctrl+Shift+T` |
+| `oranda.file.duplicateTab` | - | `Ctrl+Shift+T` | - | - |
+| `oranda.conn.switchSession` | - | `F7` | - | - |
+| `oranda.edit.commentLines` | - | `Ctrl+-` | - | - |
+| `oranda.edit.uncommentLines` | - | `Ctrl+Shift+-` | - | - |
+| `oranda.edit.cycleCase` | - | - | - | `Ctrl+'` |
+| `oranda.edit.duplicateLine` | `Ctrl+D` | `Ctrl+D` | `Ctrl+D` | - |
+| `oranda.nav.goToDefinition` | `F12` | `F12` | `F12` | - |
+| `oranda.nav.describeObject` | `F4` | `Alt+C`, `F4` | `F4` | `F4`, `Shift+F4` |
+| `oranda.format.document` | `Ctrl+Shift+F` | `Ctrl+Shift+F` | `Ctrl+Shift+F` | `Ctrl+F7` |
+| `oranda.exec.runStatement` | `Ctrl+Enter` | `Ctrl+Enter`, `Ctrl+K` | `Ctrl+Enter` | `Ctrl+Enter`, `F9` |
+| `oranda.exec.runSelection` | - | `Ctrl+L` | - | - |
+| `oranda.exec.runScript` | `F5` | `F5` | `F8` | `F5` |
+| `oranda.exec.runFromCursor` | `Alt+F5` | `Ctrl+M` | `Alt+F5` | `Alt+F5` |
+| `oranda.exec.runStep` | `Ctrl+Shift+Enter` | `Ctrl+J` | `Ctrl+Shift+Enter` | `Ctrl+Shift+Enter` |
+| `oranda.exec.runToNewResultTab` | `F11` | `F11` | `F11` | - |
+| `oranda.exec.runForEdit` | `F9` | `F9` | `F9` | - |
+| `oranda.exec.cancel` | `Ctrl+Break` | `Ctrl+Break` | `Ctrl+Break`, `Shift+Esc` | `Ctrl+Break` |
+| `oranda.exec.toggleStatistics` | - | `Ctrl+Shift+S` | - | - |
+| `oranda.txn.commit` | - | - | `F10` | `F11` |
+| `oranda.txn.rollback` | - | - | `Shift+F10` | `F12` |
+| `oranda.plan.explain` | `Ctrl+E` | `Ctrl+E` | `F5` | `F10` |
+| `oranda.plan.actual` | `Ctrl+Shift+E` | `Ctrl+Shift+E` | `Ctrl+Shift+E` | `F6` |
+| `oranda.view.history` | `Alt+5`, `F8` | `Alt+5`, `F8` | `Alt+5`, `Ctrl+E` | `Alt+5`, `F8` |
+| `oranda.view.zoomOut` | `Ctrl+-` | - | `Ctrl+-` | `Ctrl+-` |
+| `oranda.plsql.compile` | `F5` | `F5` | `F8` | `Ctrl+Shift+F9` |
+
+### 6.2 확인 필요 (TSK-04-07)
+
+| 프리셋 | 항목 |
+|---|---|
+| Orange 5 | 도움말 문서 불일치: Named Script 가 `F9`(결과 수정 모드와 충돌)로도 적혀 있음 → `Ctrl+R` 만 채택. 탭 닫기·전체 탭 실행 키는 문서에 없어 기본값 유지 |
+| PL/SQL Developer | 편집기 「현재 문장 실행」 키, 대소문자 변환·주석 키, 찾기/바꾸기 키(`Ctrl+R` 여부) |
+| SQL Developer | 실행 취소 키, PL/SQL 실행 키, `Ctrl+D`(편집기 지우기) — 지금은 줄 복제 바인딩만 빼 두었다 |
+
+## 7. 1.0 명령 목록
+
+- 아래 표가 1.0 의 **명령 ID 전체**다(191개). 기본 키는 `default.json` 기준, 다른 프리셋은 6.1.
+- 「키 범위(when)」는 키맵 `when`, 「활성 조건」은 명령 `Enablement` 다.
+- 소유 Task 가 처리기·제목·아이콘·Placements 를 만든다. 셸(TSK-03-01)은 이 표를 하드코딩하지 않는다 — 레지스트리 자동 수집만 한다.
+- 새 명령이 필요하면 기능 Task 가 규칙(1장)대로 ID 를 만들고 이 표에 행을 더하는 요청을 낸다. 키를 주려면 4개 프리셋 모두 충돌 검사를 통과해야 한다.
+
+### 파일
+
+| ID | 제목 | 기본 키 | 키 범위(when) | 활성 조건 | 소유 Task |
+|---|---|---|---|---|---|
+| `oranda.file.newSqlEditor` | 새 SQL 편집기 | `Ctrl+N` | 전역 | 항상 | TSK-04-02 |
+| `oranda.file.newPlsqlEditor` | 새 PL/SQL 편집기 | `Ctrl+Shift+N` | 전역 | 항상 | TSK-08-01 |
+| `oranda.file.open` | 파일 열기 | `Ctrl+O` | 전역 | 항상 | TSK-04-02 |
+| `oranda.file.save` | 저장 | `Ctrl+S` | 전역 | `hasDocument` | TSK-04-02 |
+| `oranda.file.saveAs` | 다른 이름으로 저장 | - | 전역 | `hasDocument` | TSK-04-02 |
+| `oranda.file.saveAll` | 모두 저장 | `Ctrl+Shift+S` | 전역 | `hasDocument` | TSK-04-02 |
+| `oranda.file.close` | 탭 닫기 | `Ctrl+W` | 전역 | `hasDocument` | TSK-03-01 |
+| `oranda.file.closeAll` | 모든 탭 닫기 | - | 전역 | `hasDocument` | TSK-03-01 |
+| `oranda.file.reopenClosed` | 닫은 탭 다시 열기 | `Ctrl+Shift+T` | 전역 | 항상 | TSK-04-02 |
+| `oranda.file.duplicateTab` | 탭 복사(새 탭에) | - | 전역 | `sqlDocActive` | TSK-04-02 |
+| `oranda.file.saveWorkspace` | 작업 공간 저장 | - | 전역 | `hasDocument` | TSK-04-02 |
+| `oranda.file.openWorkspace` | 작업 공간 열기 | - | 전역 | 항상 | TSK-04-02 |
+| `oranda.file.exit` | 끝내기 | - | 전역 | 항상 | TSK-03-01 |
+
+### 접속
+
+| ID | 제목 | 기본 키 | 키 범위(when) | 활성 조건 | 소유 Task |
+|---|---|---|---|---|---|
+| `oranda.conn.manage` | 접속 관리자 | `Ctrl+Shift+O` | 전역 | 항상 | TSK-03-04 |
+| `oranda.conn.switchSession` | 편집기 접속 바꾸기 | - | 전역 | `sqlDocActive \|\| plsqlDocActive` | TSK-03-04 |
+| `oranda.conn.disconnect` | 접속 끊기 | - | 전역 | `hasSession` | TSK-03-04 |
+| `oranda.conn.reconnect` | 다시 접속 | - | 전역 | `sessionBroken` | TSK-03-04 |
+| `oranda.conn.changePassword` | 비밀번호 변경 | - | 전역 | `hasSession` | TSK-03-04 |
+| `oranda.conn.import` | 접속 가져오기 | - | 전역 | 항상 | TSK-03-05 |
+
+### 편집
+
+| ID | 제목 | 기본 키 | 키 범위(when) | 활성 조건 | 소유 Task |
+|---|---|---|---|---|---|
+| `oranda.edit.undo` | 실행 취소 | `Ctrl+Z` | `editorFocus` | `canUndo` | TSK-04-02 |
+| `oranda.edit.redo` | 다시 실행 | `Ctrl+Y` | `editorFocus` | `canRedo` | TSK-04-02 |
+| `oranda.edit.cut` | 잘라내기 | `Ctrl+X` | `editorFocus` | `hasSelection` | TSK-04-02 |
+| `oranda.edit.copy` | 복사 | `Ctrl+C` | `editorFocus` | `hasSelection` | TSK-04-02 |
+| `oranda.edit.paste` | 붙여넣기 | `Ctrl+V` | `editorFocus` | 항상 | TSK-04-02 |
+| `oranda.edit.selectAll` | 모두 선택 | `Ctrl+A` | `editorFocus` | 항상 | TSK-04-02 |
+| `oranda.edit.find` | 찾기 | `Ctrl+F` | `editorFocus` | 항상 | TSK-04-02 |
+| `oranda.edit.replace` | 바꾸기 | `Ctrl+H` | `editorFocus` | `!readOnlyDoc` | TSK-04-02 |
+| `oranda.edit.findNext` | 다음 찾기 | `F3` | `editorFocus` | `hasFindText` | TSK-04-02 |
+| `oranda.edit.findPrevious` | 이전 찾기 | `Shift+F3` | `editorFocus` | `hasFindText` | TSK-04-02 |
+| `oranda.edit.goToLine` | 줄로 이동 | `Ctrl+G` | `editorFocus` | 항상 | TSK-04-02 |
+| `oranda.edit.toggleLineComment` | 줄 주석 토글 | `Ctrl+/` | `editorFocus` | `!readOnlyDoc` | TSK-04-02 |
+| `oranda.edit.toggleBlockComment` | 블록 주석 토글 | `Ctrl+Shift+/` | `editorFocus` | `!readOnlyDoc` | TSK-04-02 |
+| `oranda.edit.commentLines` | 줄 주석 달기 | - | `editorFocus` | `!readOnlyDoc` | TSK-04-02 |
+| `oranda.edit.uncommentLines` | 줄 주석 풀기 | - | `editorFocus` | `!readOnlyDoc` | TSK-04-02 |
+| `oranda.edit.indent` | 들여쓰기 | - | `editorFocus` | `!readOnlyDoc` | TSK-04-02 |
+| `oranda.edit.outdent` | 내어쓰기 | - | `editorFocus` | `!readOnlyDoc` | TSK-04-02 |
+| `oranda.edit.upperCase` | 대문자로 | `Ctrl+Shift+U` | `editorFocus` | `!readOnlyDoc` | TSK-04-02 |
+| `oranda.edit.lowerCase` | 소문자로 | `Ctrl+U` | `editorFocus` | `!readOnlyDoc` | TSK-04-02 |
+| `oranda.edit.titleCase` | 단어 첫 글자 대문자 | - | `editorFocus` | `!readOnlyDoc` | TSK-04-02 |
+| `oranda.edit.sentenceCase` | 문장 첫 글자 대문자 | - | `editorFocus` | `!readOnlyDoc` | TSK-04-02 |
+| `oranda.edit.invertCase` | 대소문자 반전 | - | `editorFocus` | `!readOnlyDoc` | TSK-04-02 |
+| `oranda.edit.cycleCase` | 대소문자 순환 | - | `editorFocus` | `!readOnlyDoc` | TSK-04-02 |
+| `oranda.edit.duplicateLine` | 줄 복제 | `Ctrl+D` | `editorFocus` | `!readOnlyDoc` | TSK-04-02 |
+| `oranda.edit.deleteLine` | 줄 삭제 | `Ctrl+Shift+K` | `editorFocus` | `!readOnlyDoc` | TSK-04-02 |
+| `oranda.edit.toggleBookmark` | 북마크 토글 | `Ctrl+F2` | `editorFocus` | 항상 | TSK-04-02 |
+| `oranda.edit.nextBookmark` | 다음 북마크 | `F2` | `editorFocus` | `hasBookmark` | TSK-04-02 |
+| `oranda.edit.previousBookmark` | 이전 북마크 | `Shift+F2` | `editorFocus` | `hasBookmark` | TSK-04-02 |
+| `oranda.edit.fold` | 접기 | `Ctrl+Shift+[` | `editorFocus` | 항상 | TSK-04-02 |
+| `oranda.edit.unfold` | 펼치기 | `Ctrl+Shift+]` | `editorFocus` | 항상 | TSK-04-02 |
+| `oranda.edit.foldAll` | 모두 접기 | - | `editorFocus` | 항상 | TSK-04-02 |
+| `oranda.edit.unfoldAll` | 모두 펼치기 | - | `editorFocus` | 항상 | TSK-04-02 |
+| `oranda.edit.goToMatchingBracket` | 짝 괄호·BEGIN/END 로 이동 | `Ctrl+]` | `editorFocus` | 항상 | TSK-04-02 |
+| `oranda.edit.addCursorAbove` | 위에 커서 추가 | `Ctrl+Alt+Up` | `editorFocus` | 항상 | TSK-04-02 |
+| `oranda.edit.addCursorBelow` | 아래에 커서 추가 | `Ctrl+Alt+Down` | `editorFocus` | 항상 | TSK-04-02 |
+| `oranda.edit.triggerCompletion` | 자동완성 열기 | `Ctrl+Space` | `editorFocus` | 항상 | TSK-04-05 |
+| `oranda.edit.parameterHints` | 인자 도움말 | `Ctrl+Shift+Space` | `editorFocus` | `hasSession` | TSK-04-05 |
+| `oranda.edit.insertSnippet` | 코드 조각 삽입 | `Ctrl+Shift+J` | `editorFocus` | `!readOnlyDoc` | TSK-04-07 |
+
+### 탐색
+
+| ID | 제목 | 기본 키 | 키 범위(when) | 활성 조건 | 소유 Task |
+|---|---|---|---|---|---|
+| `oranda.nav.goToDefinition` | 정의로 이동 | `F12` | `editorFocus` | `hasSession` | TSK-04-06 |
+| `oranda.nav.describeObject` | 객체 정보 보기 | `F4` | `editorFocus` | `hasSession` | TSK-04-06 |
+| `oranda.nav.findReferences` | 참조 찾기(현재 파일) | `Shift+F12` | `editorFocus` | 항상 | TSK-04-06 |
+| `oranda.nav.back` | 뒤로 이동 | `Alt+Left` | `editorFocus` | `canNavigateBack` | TSK-04-06 |
+| `oranda.nav.forward` | 앞으로 이동 | `Alt+Right` | `editorFocus` | `canNavigateForward` | TSK-04-06 |
+| `oranda.nav.documentOutline` | 문서 개요로 이동 | - | `editorFocus` | 항상 | TSK-04-02 |
+
+### 포맷
+
+| ID | 제목 | 기본 키 | 키 범위(when) | 활성 조건 | 소유 Task |
+|---|---|---|---|---|---|
+| `oranda.format.document` | 포맷(선택 영역 또는 문서) | `Ctrl+Shift+F` | `editorFocus` | `!readOnlyDoc` | TSK-05-03 |
+| `oranda.format.statement` | 현재 문장 포맷 | - | `editorFocus` | `!readOnlyDoc` | TSK-05-03 |
+| `oranda.format.profiles` | 포매터 프로필 | - | 전역 | 항상 | TSK-05-03 |
+
+### SQL
+
+| ID | 제목 | 기본 키 | 키 범위(when) | 활성 조건 | 소유 Task |
+|---|---|---|---|---|---|
+| `oranda.exec.runStatement` | 현재 문장 실행(선택 시 선택 영역) | `Ctrl+Enter` | `sqlDocFocus` | `hasSession && !sessionBusy` | TSK-06-02 |
+| `oranda.exec.runSelection` | 선택 영역 실행 | - | `sqlDocFocus` | `hasSession && !sessionBusy && hasSelection` | TSK-06-02 |
+| `oranda.exec.runScript` | 스크립트 전체 실행 | `F5` | `sqlDocFocus` | `hasSession && !sessionBusy` | TSK-06-02 |
+| `oranda.exec.runFromCursor` | 커서 문장부터 끝까지 실행 | `Alt+F5` | `sqlDocFocus` | `hasSession && !sessionBusy` | TSK-06-02 |
+| `oranda.exec.runStep` | 순차 실행(실행 후 다음 문장으로) | `Ctrl+Shift+Enter` | `sqlDocFocus` | `hasSession && !sessionBusy` | TSK-06-02 |
+| `oranda.exec.runToNewResultTab` | 새 결과 탭으로 실행 | `F11` | `sqlDocFocus` | `hasSession && !sessionBusy` | TSK-06-02 |
+| `oranda.exec.runAllTabs` | 모든 탭 실행 | - | 전역 | `hasSession && !sessionBusy` | TSK-06-02 |
+| `oranda.exec.runForEdit` | 결과 편집 모드로 실행 | `F9` | `sqlDocFocus` | `hasSession && !sessionBusy && !readOnlySession` | TSK-06-04 |
+| `oranda.exec.cancel` | 실행 취소(서버 중단) | `Ctrl+Break` | `sqlDocFocus` | `sessionBusy` | TSK-06-02 |
+| `oranda.exec.bindVariables` | 바인드 변수 창 | - | `sqlDocFocus` | `sqlDocActive` | TSK-06-02 |
+| `oranda.exec.toggleDbmsOutput` | DBMS_OUTPUT 수집 켜기/끄기 | - | 전역 | `sqlDocActive` | TSK-06-02 |
+| `oranda.exec.errorModeAsk` | 스크립트 오류 시: 묻기 | - | 전역 | `sqlDocActive` | TSK-06-02 |
+| `oranda.exec.errorModeStop` | 스크립트 오류 시: 중지 | - | 전역 | `sqlDocActive` | TSK-06-02 |
+| `oranda.exec.errorModeContinue` | 스크립트 오류 시: 계속 | - | 전역 | `sqlDocActive` | TSK-06-02 |
+| `oranda.exec.goToError` | 오류 문장으로 이동 | - | `sqlDocFocus` | `hasExecError` | TSK-06-02 |
+| `oranda.exec.toggleBlankLineDelimiter` | 빈 줄로 문장 나누기 켜기/끄기 | - | 전역 | `sqlDocActive` | TSK-06-02 |
+| `oranda.exec.toggleStatistics` | 실행 통계 수집 켜기/끄기 | - | 전역 | `sqlDocActive` | TSK-06-06 |
+| `oranda.txn.commit` | 커밋 | - | 전역 | `hasSession && txnPending && !sessionBusy` | TSK-06-02 |
+| `oranda.txn.rollback` | 롤백 | - | 전역 | `hasSession && txnPending && !sessionBusy` | TSK-06-02 |
+| `oranda.txn.toggleAutoCommit` | 자동 커밋 켜기/끄기 | - | 전역 | `hasSession && !readOnlySession` | TSK-06-02 |
+| `oranda.plan.explain` | 예상 실행 계획 | `Ctrl+E` | `sqlDocFocus` | `hasSession && !sessionBusy` | TSK-07-01 |
+| `oranda.plan.actual` | 실제 실행 계획(마지막 실행) | `Ctrl+Shift+E` | `sqlDocFocus` | `hasSession && hasLastSqlId` | TSK-07-01 |
+| `oranda.plan.displayCursorOptions` | DISPLAY_CURSOR 형식 옵션 | - | 전역 | `hasSession` | TSK-07-01 |
+| `oranda.sqlplus.runFile` | @파일 실행 | - | `sqlDocFocus` | `hasSession && !sessionBusy` | TSK-06-06 |
+
+### 결과
+
+| ID | 제목 | 기본 키 | 키 범위(when) | 활성 조건 | 소유 Task |
+|---|---|---|---|---|---|
+| `oranda.grid.copy` | 복사(TSV) | `Ctrl+C` | `gridFocus` | `gridHasSelection` | TSK-06-03 |
+| `oranda.grid.copyWithHeaders` | 머리글 포함 복사 | `Ctrl+Shift+C` | `gridFocus` | `gridHasSelection` | TSK-06-03 |
+| `oranda.grid.copyAsCsv` | CSV 로 복사 | - | `gridFocus` | `gridHasSelection` | TSK-06-03 |
+| `oranda.grid.copyAsInsert` | INSERT 문으로 복사 | - | `gridFocus` | `gridHasSelection` | TSK-06-03 |
+| `oranda.grid.copyAsInList` | IN 목록으로 복사 | - | `gridFocus` | `gridHasSelection` | TSK-06-03 |
+| `oranda.grid.find` | 결과에서 찾기 | `Ctrl+F` | `gridFocus` | `gridHasResult` | TSK-06-03 |
+| `oranda.grid.fetchAll` | 모두 가져오기 | `Alt+End` | `gridFocus` | `gridHasMoreRows` | TSK-06-03 |
+| `oranda.grid.toggleTextMode` | 텍스트 결과 모드 | - | `gridFocus` | `gridHasResult` | TSK-06-03 |
+| `oranda.grid.freezeColumns` | 열 고정 | - | `gridFocus` | `gridHasResult` | TSK-06-03 |
+| `oranda.grid.hideColumn` | 열 숨기기 | - | `gridFocus` | `gridHasResult` | TSK-06-03 |
+| `oranda.grid.showAllColumns` | 숨긴 열 모두 보이기 | - | `gridFocus` | `gridHasResult` | TSK-06-03 |
+| `oranda.grid.toggleRepeatHide` | 같은 값 숨김 | - | `gridFocus` | `gridHasResult` | TSK-06-03 |
+| `oranda.grid.closeResultTab` | 결과 탭 닫기 | - | `gridFocus` | `gridHasResult` | TSK-06-03 |
+| `oranda.grid.rowView` | 행 보기 | `Alt+Enter` | `gridFocus` | `gridHasSelection` | TSK-06-05 |
+| `oranda.grid.viewValue` | 값 보기(LOB 편집기) | - | `gridFocus` | `gridHasSelection` | TSK-06-05 |
+| `oranda.grid.export` | 내보내기 | - | `gridFocus` | `gridHasResult` | TSK-06-07 |
+| `oranda.grid.edit.addRow` | 행 추가 | `Alt+Insert` | `gridFocus` | `gridEditing` | TSK-06-04 |
+| `oranda.grid.edit.deleteRow` | 행 삭제 | `Alt+Delete` | `gridFocus` | `gridEditing` | TSK-06-04 |
+| `oranda.grid.edit.previewDml` | 반영할 DML 미리보기 | - | `gridFocus` | `gridDirty` | TSK-06-04 |
+| `oranda.grid.edit.applyAndCommit` | 반영 후 커밋 | - | `gridFocus` | `gridDirty && !sessionBusy` | TSK-06-04 |
+| `oranda.grid.edit.apply` | 반영(커밋 안 함) | - | `gridFocus` | `gridDirty && !sessionBusy` | TSK-06-04 |
+| `oranda.grid.edit.resetRow` | 행 되돌리기 | - | `gridFocus` | `gridDirty` | TSK-06-04 |
+| `oranda.grid.edit.resetAll` | 모두 되돌리기 | - | `gridFocus` | `gridDirty` | TSK-06-04 |
+| `oranda.grid.edit.addRowidAndRerun` | ROWID 추가 후 다시 실행 | - | `gridFocus` | `gridNotEditable && singleTable` | TSK-06-04 |
+| `oranda.grid.edit.chooseTargetTable` | 편집 대상 테이블 고르기 | - | `gridFocus` | `gridEditing && joinResult` | TSK-06-04 |
+| `oranda.grid.edit.toggleOptimisticLock` | 낙관적 잠금 켜기/끄기 | - | `gridFocus` | `gridEditing` | TSK-06-04 |
+
+### 보기
+
+| ID | 제목 | 기본 키 | 키 범위(when) | 활성 조건 | 소유 Task |
+|---|---|---|---|---|---|
+| `oranda.view.commandPalette` | 명령 팔레트 | `Ctrl+Shift+P` | 전역 | 항상 | TSK-03-01 |
+| `oranda.view.schemaBrowser` | 스키마 브라우저 | `Alt+1` | 전역 | 항상 | TSK-07-02 |
+| `oranda.view.output` | DBMS 출력 | `Alt+2` | 전역 | 항상 | TSK-06-02 |
+| `oranda.view.messages` | 메시지 | `Alt+3` | 전역 | 항상 | TSK-06-02 |
+| `oranda.view.plan` | 실행 계획 | `Alt+4` | 전역 | 항상 | TSK-07-01 |
+| `oranda.view.history` | 실행 이력 | `F8`, `Alt+5` | 전역 | 항상 | TSK-06-06 |
+| `oranda.view.scripts` | 이름 붙인 스크립트 | `Ctrl+R` | 전역 | 항상 | TSK-06-06 |
+| `oranda.view.outline` | 문서 개요 | - | 전역 | 항상 | TSK-04-02 |
+| `oranda.view.compileErrors` | 컴파일 오류 | - | 전역 | 항상 | TSK-08-01 |
+| `oranda.view.templates` | 템플릿 | - | 전역 | 항상 | TSK-04-07 |
+| `oranda.view.rowView` | 행 보기 창 | - | 전역 | 항상 | TSK-06-05 |
+| `oranda.view.extensionTest` | 확장 시험 패널 | - | 전역 | `devBuild` | TSK-10-03 |
+| `oranda.view.resetLayout` | 레이아웃 초기화 | - | 전역 | 항상 | TSK-03-01 |
+| `oranda.view.themeLight` | 밝은 테마 | - | 전역 | 항상 | TSK-03-01 |
+| `oranda.view.themeDark` | 어두운 테마 | - | 전역 | 항상 | TSK-03-01 |
+| `oranda.view.themeSystem` | OS 테마 따르기 | - | 전역 | 항상 | TSK-03-01 |
+| `oranda.view.zoomIn` | 글자 크게 | `Ctrl+=` | 전역 | 항상 | TSK-03-01 |
+| `oranda.view.zoomOut` | 글자 작게 | `Ctrl+-` | 전역 | 항상 | TSK-03-01 |
+| `oranda.view.zoomReset` | 글자 크기 원래대로 | `Ctrl+0` | 전역 | 항상 | TSK-03-01 |
+
+### 데이터베이스
+
+| ID | 제목 | 기본 키 | 키 범위(when) | 활성 조건 | 소유 Task |
+|---|---|---|---|---|---|
+| `oranda.schema.refresh` | 새로 고침 | `F5` | `schemaFocus` | `hasSession` | TSK-07-02 |
+| `oranda.schema.filter` | 객체 필터 | `Ctrl+F` | `schemaFocus` | `hasSession` | TSK-07-02 |
+| `oranda.schema.toggleFavorite` | 즐겨찾기 추가/빼기 | - | `schemaFocus` | `schemaNodeSelected` | TSK-07-02 |
+| `oranda.schema.insertName` | 편집기에 이름 넣기 | - | `schemaFocus` | `schemaNodeSelected && sqlDocOpen` | TSK-07-02 |
+| `oranda.schema.insertSelect` | 편집기에 SELECT 문 넣기 | - | `schemaFocus` | `schemaNodeSelected && sqlDocOpen` | TSK-07-02 |
+| `oranda.schema.insertColumns` | 편집기에 열 목록 넣기 | - | `schemaFocus` | `schemaNodeSelected && sqlDocOpen` | TSK-07-02 |
+| `oranda.schema.openDetail` | 객체 상세 열기 | - | `schemaFocus` | `schemaNodeSelected` | TSK-07-03 |
+| `oranda.schema.showDdl` | DDL 보기 | - | `schemaFocus` | `schemaNodeSelected` | TSK-07-03 |
+| `oranda.schema.compileInvalid` | INVALID 객체 일괄 컴파일 | - | 전역 | `hasSession && !readOnlySession` | TSK-07-04 |
+| `oranda.schema.recyclebinPurge` | 휴지통 비우기(Purge) | - | `schemaFocus` | `recyclebinNodeSelected && !readOnlySession` | TSK-07-04 |
+| `oranda.schema.recyclebinFlashback` | 휴지통에서 되살리기 | - | `schemaFocus` | `recyclebinNodeSelected && !readOnlySession` | TSK-07-04 |
+| `oranda.schema.objectSearch` | 객체 검색 | - | 전역 | `hasSession` | TSK-07-04 |
+| `oranda.db.info` | DB 정보 | - | 전역 | `hasSession` | TSK-07-04 |
+| `oranda.db.ddlExtract` | DDL 일괄 추출 | - | 전역 | `hasSession` | TSK-07-04 |
+| `oranda.plsql.openSource` | PL/SQL 소스 열기 | - | `schemaFocus` | `plsqlNodeSelected` | TSK-08-01 |
+| `oranda.plsql.compile` | 컴파일(저장) | `F5` | `plsqlEditorFocus` | `hasSession && !sessionBusy && !readOnlySession` | TSK-08-01 |
+| `oranda.plsql.toggleSpecBody` | 명세/본문 전환 | `Ctrl+Shift+B` | `plsqlEditorFocus` | `isPackageDoc` | TSK-08-01 |
+| `oranda.plsql.showServerDiff` | 서버 소스와 차이 보기 | - | `plsqlEditorFocus` | `serverSourceChanged` | TSK-08-01 |
+| `oranda.plsql.run` | PL/SQL 실행 대화상자 | `Ctrl+Enter` | `plsqlEditorFocus` | `hasSession && !sessionBusy && plsqlRunnable` | TSK-08-02 |
+| `oranda.plsql.runFromBrowser` | 프로시저·함수 실행 | - | `schemaFocus` | `plsqlNodeSelected && hasSession` | TSK-08-02 |
+
+### 모니터
+
+| ID | 제목 | 기본 키 | 키 범위(when) | 활성 조건 | 소유 Task |
+|---|---|---|---|---|---|
+| `oranda.monitor.sessions` | 세션 모니터 | - | 전역 | `hasSession` | TSK-09-01 |
+| `oranda.monitor.refresh` | 모니터 새로 고침 | `F5` | `monitorFocus` | `monitorSessionOpen` | TSK-09-01 |
+| `oranda.monitor.toggleAutoRefresh` | 자동 새로 고침 켜기/끄기 | - | `monitorFocus` | `monitorSessionOpen` | TSK-09-01 |
+| `oranda.monitor.toggleDelta` | 델타 모드 | - | `monitorFocus` | `monitorSessionOpen` | TSK-09-01 |
+| `oranda.monitor.blockingTree` | 블로킹 트리 | - | `monitorFocus` | `monitorSessionOpen` | TSK-09-01 |
+| `oranda.monitor.sessionDetail` | 세션 상세 | - | `monitorFocus` | `monitorSessionSelected` | TSK-09-01 |
+| `oranda.monitor.killSession` | 세션 Kill | - | `monitorFocus` | `monitorSessionSelected && canKillSession` | TSK-09-01 |
+| `oranda.monitor.disconnectSession` | 세션 Disconnect | - | `monitorFocus` | `monitorSessionSelected && canKillSession` | TSK-09-01 |
+| `oranda.monitor.traceOn` | SQL 트레이스 켜기 | - | `monitorFocus` | `monitorSessionSelected && canTraceSessions` | TSK-09-01 |
+| `oranda.monitor.traceOff` | SQL 트레이스 끄기 | - | `monitorFocus` | `monitorSessionSelected && canTraceSessions` | TSK-09-01 |
+| `oranda.monitor.sql` | SQL 모니터(Top SQL) | - | 전역 | `hasSession` | TSK-09-02 |
+| `oranda.monitor.sqlSearch` | Top SQL 검색 | - | `monitorFocus` | `monitorSqlOpen` | TSK-09-02 |
+| `oranda.monitor.sqlShowPlan` | 선택 SQL 실제 계획 | - | `monitorFocus` | `monitorSqlSelected` | TSK-09-02 |
+| `oranda.monitor.sqlShowBinds` | 선택 SQL 바인드 캡처 | - | `monitorFocus` | `monitorSqlSelected` | TSK-09-02 |
+
+### 도구
+
+| ID | 제목 | 기본 키 | 키 범위(when) | 활성 조건 | 소유 Task |
+|---|---|---|---|---|---|
+| `oranda.tools.settings` | 설정 | `Ctrl+,` | 전역 | 항상 | TSK-03-01 |
+| `oranda.tools.keymap` | 단축키 설정 | - | 전역 | 항상 | TSK-04-07 |
+| `oranda.tools.keymapPreset.default` | 단축키 프리셋: 기본 | - | 전역 | 항상 | TSK-04-07 |
+| `oranda.tools.keymapPreset.orange5` | 단축키 프리셋: Orange 5 | - | 전역 | 항상 | TSK-04-07 |
+| `oranda.tools.keymapPreset.plsqldev` | 단축키 프리셋: PL/SQL Developer | - | 전역 | 항상 | TSK-04-07 |
+| `oranda.tools.keymapPreset.sqldev` | 단축키 프리셋: SQL Developer | - | 전역 | 항상 | TSK-04-07 |
+| `oranda.tools.exportSettings` | 설정 내보내기 | - | 전역 | 항상 | TSK-04-07 |
+| `oranda.tools.importSettings` | 설정 가져오기 | - | 전역 | 항상 | TSK-04-07 |
+| `oranda.tools.import` | 데이터 가져오기(CSV·xlsx) | - | 전역 | `hasSession && !readOnlySession` | TSK-06-07 |
+| `oranda.tools.language` | UI 언어 | - | 전역 | 항상 | TSK-10-02 |
+
+### 창
+
+| ID | 제목 | 기본 키 | 키 범위(when) | 활성 조건 | 소유 Task |
+|---|---|---|---|---|---|
+| `oranda.window.nextDocument` | 다음 탭 | `Ctrl+Tab` | 전역 | `hasDocument` | TSK-03-01 |
+| `oranda.window.previousDocument` | 이전 탭 | `Ctrl+Shift+Tab` | 전역 | `hasDocument` | TSK-03-01 |
+| `oranda.window.splitRight` | 오른쪽으로 분할 | - | 전역 | `hasDocument` | TSK-03-01 |
+| `oranda.window.splitDown` | 아래로 분할 | - | 전역 | `hasDocument` | TSK-03-01 |
+| `oranda.window.focusDocument` | 문서로 포커스 | - | 전역 | `hasDocument` | TSK-03-01 |
+| `oranda.window.toggleResultPane` | 결과 영역 보이기/숨기기 | `Ctrl+Shift+R` | `sqlDocFocus` | `sqlDocActive` | TSK-06-02 |
+
+### 도움말
+
+| ID | 제목 | 기본 키 | 키 범위(when) | 활성 조건 | 소유 Task |
+|---|---|---|---|---|---|
+| `oranda.help.docs` | 사용자 문서 | `F1` | 전역 | 항상 | TSK-10-01 |
+| `oranda.help.shortcuts` | 단축키 목록 | - | 전역 | 항상 | TSK-10-01 |
+| `oranda.help.checkUpdate` | 업데이트 확인 | - | 전역 | 항상 | TSK-10-01 |
+| `oranda.help.crashReport` | 오류 보고서 | - | 전역 | 항상 | TSK-10-01 |
+| `oranda.help.openLogs` | 로그 폴더 열기 | - | 전역 | 항상 | TSK-10-01 |
+| `oranda.help.about` | Oranda 정보 | - | 전역 | 항상 | TSK-03-01 |
