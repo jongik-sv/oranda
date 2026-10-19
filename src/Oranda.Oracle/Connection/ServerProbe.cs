@@ -29,6 +29,18 @@ public static class ServerProbe
             "SELECT COUNT(*) FROM all_tab_privs WHERE table_name = 'DBMS_MONITOR' AND privilege = 'EXECUTE'", ct);
         var canExecuteDbmsMonitor = CanExecuteDbmsMonitor(hasMonitorGrant, privileges);
 
+        // 확장 점검(CONN-12). 못 읽으면 null/false 로 두고 예외로 만들지 않는다.
+        var ident = await QueryRowAsync(connection,
+            "SELECT SYS_CONTEXT('USERENV','DB_UNIQUE_NAME'), SYS_CONTEXT('USERENV','SESSION_USER') FROM dual", ct);
+        var cloudService = await QueryRowAsync(connection,
+            "SELECT SYS_CONTEXT('USERENV','CLOUD_SERVICE') FROM dual", ct);
+        var banner = (await QueryRowAsync(connection, "SELECT banner FROM v$version WHERE ROWNUM = 1", ct))?[0]
+            ?? (await QueryRowAsync(connection, "SELECT product FROM product_component_version WHERE ROWNUM = 1", ct))?[0];
+        var packAccess = (await QueryRowAsync(connection,
+            "SELECT value FROM v$parameter WHERE name = 'control_management_pack_access'", ct))?[0];
+        var clusterDb = (await QueryRowAsync(connection,
+            "SELECT value FROM v$parameter WHERE name = 'cluster_database'", ct))?[0];
+
         var conName = multitenant?[0];
         var cdbName = multitenant?[1];
 
@@ -41,7 +53,35 @@ public static class ServerProbe
             ContainerName: conName,
             IsMultitenant: !string.IsNullOrEmpty(cdbName),
             SessionId: long.TryParse(basic[4], out var sid) ? sid : 0,
-            Capabilities: ServerCapabilities.From(privileges, roles, canReadVSession, canExecuteDbmsMonitor));
+            Capabilities: ServerCapabilities.From(privileges, roles, canReadVSession, canExecuteDbmsMonitor),
+            DbUniqueName: ident?[0],
+            SessionUser: ident?[1],
+            IsAutonomous: IsAutonomousService(cloudService?[0]),
+            Edition: ParseEdition(banner),
+            ManagementPackAccess: packAccess,
+            IsRac: string.Equals(clusterDb, "TRUE", StringComparison.OrdinalIgnoreCase));
+    }
+
+    /// <summary>CLOUD_SERVICE 컨텍스트는 ADB 에서만 값이 있다(OLTP, DWCS, JDCS, ...).</summary>
+    public static bool IsAutonomousService(string? cloudService) => !string.IsNullOrWhiteSpace(cloudService);
+
+    /// <summary>v$version 배너에서 에디션을 뽑는다(Enterprise, Standard, Free, Express). 모르면 null.</summary>
+    public static string? ParseEdition(string? banner)
+    {
+        if (string.IsNullOrWhiteSpace(banner))
+        {
+            return null;
+        }
+
+        foreach (var name in new[] { "Enterprise", "Standard", "Free", "Express", "Personal" })
+        {
+            if (banner.Contains(name, StringComparison.OrdinalIgnoreCase))
+            {
+                return name;
+            }
+        }
+
+        return null;
     }
 
     /// <summary>
