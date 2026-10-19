@@ -236,10 +236,10 @@ public class FormatterBasicTests
     {
         const string sql = "select Nvl(Col1, 0), Count(*), My_Func(x), sysdate from Emp where rownum < 2";
         var upperKw = new FormatterOptions { Case = new CaseOptions { Keyword = LetterCase.Upper, Function = LetterCase.Lower, Identifier = LetterCase.AsIs } };
-        Assert.Equal("SELECT nvl(Col1, 0), count(*), My_Func(x), sysdate\nFROM Emp\nWHERE ROWNUM < 2", Fmt(sql, upperKw));
+        Assert.Equal("SELECT nvl(Col1, 0),\n    count(*),\n    My_Func(x),\n    sysdate\nFROM Emp\nWHERE ROWNUM < 2", Fmt(sql, upperKw));
 
         var lowerKw = new FormatterOptions { Case = new CaseOptions { Keyword = LetterCase.Lower, Function = LetterCase.Upper, Identifier = LetterCase.Upper } };
-        Assert.Equal("select NVL(COL1, 0), COUNT(*), MY_FUNC(X), SYSDATE\nfrom EMP\nwhere rownum < 2", Fmt(sql, lowerKw));
+        Assert.Equal("select NVL(COL1, 0),\n    COUNT(*),\n    MY_FUNC(X),\n    SYSDATE\nfrom EMP\nwhere rownum < 2", Fmt(sql, lowerKw));
     }
 
     [Fact]
@@ -247,7 +247,7 @@ public class FormatterBasicTests
     {
         const string sql = "select \"MixedCase\", 'Text', t.Type, t.Comment from t";
         var o = new FormatterOptions { Case = new CaseOptions { Keyword = LetterCase.Upper, Identifier = LetterCase.Lower } };
-        Assert.Equal("SELECT \"MixedCase\", 'Text', t.type, t.comment\nFROM t", Fmt(sql, o));
+        Assert.Equal("SELECT \"MixedCase\",\n    'Text',\n    t.type,\n    t.comment\nFROM t", Fmt(sql, o));
     }
 
     [Fact]
@@ -416,8 +416,8 @@ public class FormatterBasicTests
     [Fact]
     public void Never_joins_tokens_that_would_lex_differently()
     {
-        Assert.Equal("SELECT 3 - -4, - -1\nFROM dual", Fmt("select 3 - -4, - -1 from dual"));
-        Assert.Equal("SELECT &a&b, &x.y\nFROM t", Fmt("select &a&b, &x.y from t"));
+        Assert.Equal("SELECT 3 - -4,\n    - -1\nFROM dual", Fmt("select 3 - -4, - -1 from dual"));
+        Assert.Equal("SELECT &a&b,\n    &x.y\nFROM t", Fmt("select &a&b, &x.y from t"));
         Assert.Equal("SELECT n 'x'\nFROM dual", Fmt("select n 'x' from dual"));
     }
 
@@ -448,7 +448,7 @@ public class FormatterBasicTests
         var st = StatementSplitter.GetStatementAt(sql, at, Core.Language.SplitOptions.Default)!;
         var r = Formatter().Format(sql, Default, st.Range);
         Assert.True(r.Succeeded);
-        Assert.Equal("select 1 from dual;\n  SELECT a, b\n  FROM t\n  WHERE c = 1;\nselect 3 from dual;", r.Text);
+        Assert.Equal("select 1 from dual;\n  SELECT a,\n      b\n  FROM t\n  WHERE c = 1;\nselect 3 from dual;", r.Text);
         Assert.Equal(new TextRange(20, sql.IndexOf("\nselect 3", StringComparison.Ordinal) - 20), r.Range);
     }
 
