@@ -3,6 +3,55 @@
              xmlns:vm="using:Oranda.App.Features.ExecutionPlan"
              x:Class="Oranda.App.Features.ExecutionPlan.PlanView"
              x:DataType="vm:PlanViewModel">
-  <!-- TSK-07-01 빈 틀 -->
-  <TextBlock Text="oranda.panel.plan" />
+  <DockPanel>
+    <WrapPanel DockPanel.Dock="Top" Margin="4">
+      <ComboBox Width="110" Margin="0,0,6,4" ItemsSource="{x:Static vm:PlanViewModel.BaseFormats}" SelectedItem="{Binding BaseFormat, Mode=TwoWay}" />
+      <CheckBox Margin="0,0,6,4" Content="LAST" IsChecked="{Binding LastOnly, Mode=TwoWay}" />
+      <CheckBox Margin="0,0,6,4" Content="바인드 엿보기" IsChecked="{Binding PeekedBinds, Mode=TwoWay}" />
+      <CheckBox Margin="0,0,6,4" Content="별칭" IsChecked="{Binding Alias, Mode=TwoWay}" />
+      <CheckBox Margin="0,0,10,4" Content="아웃라인" IsChecked="{Binding Outline, Mode=TwoWay}" />
+      <TextBox Width="150" Margin="0,0,6,4" PlaceholderText="sql_id" Text="{Binding SqlIdText, Mode=TwoWay}" />
+    </WrapPanel>
+    <TextBlock DockPanel.Dock="Bottom" Margin="6,2" Text="{Binding StatusText}" TextTrimming="CharacterEllipsis" Opacity="0.75" />
+    <TabControl>
+      <TabItem Header="트리">
+        <DockPanel>
+          <Grid DockPanel.Dock="Top" Margin="6,2" ColumnDefinitions="40,300,160,80,90,90,70,70,110,*" Opacity="0.7">
+            <TextBlock Grid.Column="0" Text="Id" />
+            <TextBlock Grid.Column="1" Text="연산" />
+            <TextBlock Grid.Column="2" Text="객체" />
+            <TextBlock Grid.Column="3" Text="비용" />
+            <TextBlock Grid.Column="4" Text="E-Rows" />
+            <TextBlock Grid.Column="5" Text="A-Rows" />
+            <TextBlock Grid.Column="6" Text="Starts" />
+            <TextBlock Grid.Column="7" Text="시간(s)" />
+            <TextBlock Grid.Column="8" Text="위험" />
+            <TextBlock Grid.Column="9" Text="조건절" />
+          </Grid>
+          <ListBox ItemsSource="{Binding Rows}">
+            <ListBox.ItemTemplate>
+              <DataTemplate x:DataType="vm:PlanRowItem">
+                <Grid ColumnDefinitions="40,300,160,80,90,90,70,70,110,*">
+                  <TextBlock Grid.Column="0" Text="{Binding Id}" />
+                  <TextBlock Grid.Column="1" Text="{Binding Operation}" FontFamily="Consolas,Menlo,monospace" />
+                  <TextBlock Grid.Column="2" Text="{Binding ObjectText}" TextTrimming="CharacterEllipsis" />
+                  <TextBlock Grid.Column="3" Text="{Binding CostText}" />
+                  <TextBlock Grid.Column="4" Text="{Binding EstimatedText}" />
+                  <TextBlock Grid.Column="5" Text="{Binding ActualText}" />
+                  <TextBlock Grid.Column="6" Text="{Binding StartsText}" />
+                  <TextBlock Grid.Column="7" Text="{Binding TimeText}" />
+                  <TextBlock Grid.Column="8" Text="{Binding RiskText}" Foreground="OrangeRed" FontWeight="SemiBold" />
+                  <TextBlock Grid.Column="9" Text="{Binding Predicates}" TextTrimming="CharacterEllipsis" />
+                </Grid>
+              </DataTemplate>
+            </ListBox.ItemTemplate>
+          </ListBox>
+        </DockPanel>
+      </TabItem>
+      <TabItem Header="텍스트">
+        <TextBox Text="{Binding PlanText}" IsReadOnly="True" AcceptsReturn="True" TextWrapping="NoWrap"
+                 FontFamily="Consolas,Menlo,monospace" ScrollViewer.HorizontalScrollBarVisibility="Auto" />
+      </TabItem>
+    </TabControl>
+  </DockPanel>
 </UserControl>
