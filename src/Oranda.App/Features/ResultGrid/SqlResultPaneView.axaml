@@ -3,6 +3,20 @@
              xmlns:vm="using:Oranda.App.Features.ResultGrid"
              x:Class="Oranda.App.Features.ResultGrid.SqlResultPaneView"
              x:DataType="vm:SqlResultPaneViewModel">
-  <!-- TSK-06-03 빈 틀 -->
-  <TextBlock Text="SqlResultPane" />
+  <Grid RowDefinitions="Auto,*,Auto">
+    <!-- 찾기 줄(oranda.grid.find) -->
+    <StackPanel Grid.Row="0" Orientation="Horizontal" Spacing="6" Margin="4"
+                IsVisible="{Binding IsFindVisible}">
+      <TextBox x:Name="FindBox" Width="220" Text="{Binding FindText}" PlaceholderText="결과에서 찾기" />
+      <Button x:Name="FindNextButton" Content="다음" />
+      <Button x:Name="FindCloseButton" Content="닫기" />
+      <TextBlock Text="{Binding FindMessage}" VerticalAlignment="Center" />
+    </StackPanel>
+    <Grid Grid.Row="1" ColumnDefinitions="*,Auto" RowDefinitions="*,Auto">
+      <vm:ResultGridControl x:Name="GridControl" Grid.Row="0" Grid.Column="0" />
+      <ScrollBar x:Name="VBar" Grid.Row="0" Grid.Column="1" Orientation="Vertical" AllowAutoHide="False" />
+      <ScrollBar x:Name="HBar" Grid.Row="1" Grid.Column="0" Orientation="Horizontal" AllowAutoHide="False" />
+    </Grid>
+    <TextBlock Grid.Row="2" Margin="6,2" Text="{Binding StatusText}" />
+  </Grid>
 </UserControl>
