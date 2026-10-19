@@ -1,0 +1,38 @@
+{
+  "connections": [
+    {
+      "name": "DEV_HR",
+      "type": "jdbc",
+      "info": {
+        "role": "",
+        "SavePassword": "true",
+        "OracleConnectionType": "BASIC",
+        "RaptorConnectionType": "Oracle",
+        "hostname": "db-dev.example.com",
+        "port": "1521",
+        "serviceName": "FREEPDB1",
+        "user": "hr",
+        "password": "!encrypted-blob-should-not-be-kept"
+      }
+    },
+    {
+      "name": "PROD_SYS",
+      "type": "jdbc",
+      "info": {
+        "role": "SYSDBA",
+        "OracleConnectionType": "TNS",
+        "networkAlias": "PRODDB",
+        "TNSDirectory": "C:\\oracle\\network\\admin",
+        "user": "sys"
+      }
+    },
+    {
+      "name": "OLD_SID",
+      "type": "jdbc",
+      "info": {
+        "customUrl": "jdbc:oracle:thin:@legacy-host:1521:ORCL",
+        "user": "scott"
+      }
+    }
+  ]
+}

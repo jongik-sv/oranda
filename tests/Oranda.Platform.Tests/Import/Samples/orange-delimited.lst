@@ -1,0 +1,3 @@
+# Orange 접속 목록
+테스트 SCOTT;scott;TESTDB;;tiger
+운영 읽기;rpt;PRODDB;SYSOPER

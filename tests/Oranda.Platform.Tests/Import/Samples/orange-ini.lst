@@ -1,0 +1,9 @@
+[개발 HR]
+User=hr
+Password=abc123
+Alias=ORCL
+
+[운영 SYS]
+User=sys
+Alias=PRODDB
+Role=SYSDBA
