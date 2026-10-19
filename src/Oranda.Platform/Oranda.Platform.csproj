@@ -3,7 +3,14 @@
   <!-- OS 연동: 자격 증명 저장소(DPAPI/키체인), 앱 데이터 경로, OS 테마 감지. -->
 
   <ItemGroup>
+    <PackageReference Include="Microsoft.Data.Sqlite" />
+    <PackageReference Include="SQLitePCLRaw.lib.e_sqlite3" />
     <PackageReference Include="System.Security.Cryptography.ProtectedData" />
+  </ItemGroup>
+
+  <!-- oranda.db 마이그레이션 스크립트(data-model 4.2): 리소스 이름 Migrations/OrandaDb/NNNN_설명.sql -->
+  <ItemGroup>
+    <EmbeddedResource Include="Migrations\OrandaDb\*.sql" LogicalName="Migrations/OrandaDb/%(Filename)%(Extension)" />
   </ItemGroup>
 
   <ItemGroup>

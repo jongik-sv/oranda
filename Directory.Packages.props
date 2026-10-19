@@ -20,6 +20,12 @@
     <PackageVersion Include="System.Security.Cryptography.ProtectedData" Version="10.0.13" />
   </ItemGroup>
 
+  <ItemGroup Label="Storage">
+    <PackageVersion Include="Microsoft.Data.Sqlite" Version="10.0.0" />
+    <!-- Microsoft.Data.Sqlite 가 끌어오는 2.1.11 에 알려진 취약점(GHSA-2m69-gcr7-jv3q)이 있어 직접 올린다. -->
+    <PackageVersion Include="SQLitePCLRaw.lib.e_sqlite3" Version="2.1.14" />
+  </ItemGroup>
+
   <ItemGroup Label="Test">
     <PackageVersion Include="coverlet.collector" Version="6.0.0" />
     <PackageVersion Include="Microsoft.NET.Test.Sdk" Version="17.8.0" />
