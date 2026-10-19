@@ -3,6 +3,81 @@
              xmlns:vm="using:Oranda.App.Features.SessionMonitor"
              x:Class="Oranda.App.Features.SessionMonitor.SessionMonitorView"
              x:DataType="vm:SessionMonitorViewModel">
-  <!-- TSK-09-01 빈 틀 -->
-  <TextBlock Text="oranda.panel.sessionMonitor" />
+  <DockPanel>
+    <WrapPanel DockPanel.Dock="Top" Margin="4">
+      <TextBox Width="120" Margin="0,0,6,4" PlaceholderText="사용자" Text="{Binding UsernameFilter, Mode=TwoWay}" />
+      <TextBox Width="180" Margin="0,0,6,4" PlaceholderText="머신·프로그램·모듈·SQL ID" Text="{Binding TextFilter, Mode=TwoWay}" />
+      <CheckBox Margin="0,0,6,4" Content="활성만" IsChecked="{Binding ActiveOnly, Mode=TwoWay}" />
+      <CheckBox Margin="0,0,10,4" Content="백그라운드" IsChecked="{Binding IncludeBackground, Mode=TwoWay}" />
+      <Button x:Name="RefreshButton" Margin="0,0,6,4" Content="새로 고침" IsEnabled="{Binding IsOpen}" />
+      <ToggleButton Margin="0,0,4,4" Content="자동" IsEnabled="{Binding IsOpen}" IsChecked="{Binding AutoRefresh, Mode=TwoWay}" />
+      <NumericUpDown Width="110" Margin="0,0,10,4" Minimum="2" Maximum="60" Increment="1" FormatString="0' s'"
+                     Value="{Binding RefreshSeconds, Mode=TwoWay}" />
+      <ToggleButton Margin="0,0,10,4" Content="델타" IsChecked="{Binding DeltaMode, Mode=TwoWay}" />
+      <Button x:Name="KillButton" Margin="0,0,4,4" Content="Kill" IsEnabled="{Binding CanKill}" />
+      <Button x:Name="DisconnectButton" Margin="0,0,10,4" Content="Disconnect" IsEnabled="{Binding CanKill}" />
+      <Button x:Name="TraceOnButton" Margin="0,0,4,4" Content="트레이스 켜기" IsEnabled="{Binding CanTrace}" />
+      <Button x:Name="TraceOffButton" Margin="0,0,4,4" Content="끄기" IsEnabled="{Binding CanTrace}" />
+      <CheckBox Margin="0,0,4,4" Content="waits" IsChecked="{Binding TraceWaits, Mode=TwoWay}" />
+      <CheckBox Margin="0,0,4,4" Content="binds" IsChecked="{Binding TraceBinds, Mode=TwoWay}" />
+    </WrapPanel>
+    <TextBlock DockPanel.Dock="Bottom" Margin="6,2" Text="{Binding StatusText}" TextTrimming="CharacterEllipsis" Opacity="0.75" />
+    <Grid ColumnDefinitions="3*,4,2*">
+      <DockPanel Grid.Column="0">
+        <Grid DockPanel.Dock="Top" Margin="6,2" ColumnDefinitions="110,110,70,60,60,200,110,*" Opacity="0.7">
+          <TextBlock Grid.Column="0" Text="SID,SERIAL#" />
+          <TextBlock Grid.Column="1" Text="사용자" />
+          <TextBlock Grid.Column="2" Text="상태" />
+          <TextBlock Grid.Column="3" Text="경과" />
+          <TextBlock Grid.Column="4" Text="블로커" />
+          <TextBlock Grid.Column="5" Text="대기 이벤트" />
+          <TextBlock Grid.Column="6" Text="SQL ID" />
+          <TextBlock Grid.Column="7" Text="프로그램 · 델타" />
+        </Grid>
+        <ListBox x:Name="SessionList" ItemsSource="{Binding Sessions}" SelectedItem="{Binding SelectedSession, Mode=TwoWay}">
+          <ListBox.ItemTemplate>
+            <DataTemplate x:DataType="vm:SessionItem">
+              <Grid ColumnDefinitions="110,110,70,60,60,200,110,*">
+                <TextBlock Grid.Column="0" Text="{Binding KeyText}" FontFamily="Consolas,Menlo,monospace" />
+                <TextBlock Grid.Column="1" Text="{Binding Username}" TextTrimming="CharacterEllipsis" />
+                <TextBlock Grid.Column="2" Text="{Binding Status}" />
+                <TextBlock Grid.Column="3" Text="{Binding Elapsed}" />
+                <TextBlock Grid.Column="4" Text="{Binding BlockedBy}" Foreground="OrangeRed" />
+                <TextBlock Grid.Column="5" Text="{Binding Event}" TextTrimming="CharacterEllipsis" />
+                <TextBlock Grid.Column="6" Text="{Binding SqlId}" FontFamily="Consolas,Menlo,monospace" />
+                <StackPanel Grid.Column="7" Orientation="Horizontal" Spacing="8">
+                  <TextBlock Text="{Binding Program}" TextTrimming="CharacterEllipsis" />
+                  <TextBlock Text="{Binding DeltaText}" Opacity="0.7" />
+                </StackPanel>
+              </Grid>
+            </DataTemplate>
+          </ListBox.ItemTemplate>
+        </ListBox>
+      </DockPanel>
+      <GridSplitter Grid.Column="1" ResizeDirection="Columns" />
+      <TabControl Grid.Column="2">
+        <TabItem Header="블로킹 트리">
+          <TreeView ItemsSource="{Binding BlockingRoots}">
+            <TreeView.Styles>
+              <Style Selector="TreeViewItem">
+                <Setter Property="IsExpanded" Value="True" />
+              </Style>
+            </TreeView.Styles>
+            <TreeView.ItemTemplate>
+              <TreeDataTemplate x:DataType="vm:BlockingItem" ItemsSource="{Binding Children}">
+                <TextBlock Text="{Binding Title}" FontFamily="Consolas,Menlo,monospace" />
+              </TreeDataTemplate>
+            </TreeView.ItemTemplate>
+          </TreeView>
+        </TabItem>
+        <TabItem Header="상세">
+          <DockPanel>
+            <Button x:Name="DetailButton" DockPanel.Dock="Top" Margin="4" Content="상세 읽기" IsEnabled="{Binding IsOpen}" />
+            <TextBox Text="{Binding DetailText}" IsReadOnly="True" AcceptsReturn="True" TextWrapping="NoWrap"
+                     FontFamily="Consolas,Menlo,monospace" ScrollViewer.HorizontalScrollBarVisibility="Auto" />
+          </DockPanel>
+        </TabItem>
+      </TabControl>
+    </Grid>
+  </DockPanel>
 </UserControl>
