@@ -49,7 +49,7 @@ public sealed class SqlEditorTests : IDisposable
             .Where(l => l.StartsWith("| `oranda.", StringComparison.Ordinal) && l.Contains("TSK-04-02", StringComparison.Ordinal))
             .Select(l => l.Trim('|').Split('|').Select(c => c.Trim()).ToArray())
             .ToList();
-        Assert.Equal(46, rows.Count);
+        Assert.Equal(49, rows.Count);
 
         var registered = ShellTestHelpers.AppContributions.Commands.ToDictionary(c => c.Definition.Id);
         foreach (var r in rows)

@@ -61,6 +61,7 @@ public sealed class ShellController : IShellUi
     private readonly KeymapService _keymap;
     private readonly ThemeService _theme;
     private readonly List<string> _recent = [];
+    private readonly List<Func<CancellationToken, Task>> _shutdownHooks = [];
     private CommandPaletteWindow? _palette;
     private ConnectionEnvironment? _activeEnvironment;
 
@@ -159,6 +160,29 @@ public sealed class ShellController : IShellUi
     /// <summary>현재 배치와 창 위치를 layout.json 에 저장한다(종료 때, 배치가 바뀐 뒤 잠시 쉬었을 때).</summary>
     public Task SaveLayoutAsync(WindowPlacement? window, CancellationToken ct = default) =>
         _layoutStore.SaveAsync(Docking.Capture(window), ct);
+
+    /// <summary>창을 닫기 직전에 할 일(작업 공간 저장 등)을 등록한다. 기능이 시작 작업에서 부른다.</summary>
+    public void RegisterShutdown(Func<CancellationToken, Task> hook)
+    {
+        ArgumentNullException.ThrowIfNull(hook);
+        _shutdownHooks.Add(hook);
+    }
+
+    /// <summary>등록된 종료 작업을 차례로 부른다. 하나가 실패해도 나머지는 계속한다.</summary>
+    public async Task RunShutdownHooksAsync(CancellationToken ct = default)
+    {
+        foreach (var hook in _shutdownHooks.ToList())
+        {
+            try
+            {
+                await hook(ct).ConfigureAwait(true);
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Trace.TraceError("종료 작업 실패: {0}", ex);
+            }
+        }
+    }
 
     public void ShowCommandPalette()
     {

@@ -39,7 +39,15 @@ public sealed class DockWorkspace
             HideDocumentsOnClose = false,
         };
         Factory.ActiveDockableChanged += (_, _) => ActiveDocumentChanged?.Invoke(this, EventArgs.Empty);
-        Factory.DockableClosed += (_, _) => LayoutChanged?.Invoke(this, EventArgs.Empty);
+        Factory.DockableClosed += (_, e) =>
+        {
+            if (e.Dockable is PanelDocument closed)
+            {
+                DocumentClosed?.Invoke(this, closed);
+            }
+
+            LayoutChanged?.Invoke(this, EventArgs.Empty);
+        };
         Factory.DockableMoved += (_, _) => LayoutChanged?.Invoke(this, EventArgs.Empty);
         Factory.DockableDocked += (_, _) => LayoutChanged?.Invoke(this, EventArgs.Empty);
         Factory.DockableUndocked += (_, _) => LayoutChanged?.Invoke(this, EventArgs.Empty);
@@ -59,6 +67,9 @@ public sealed class DockWorkspace
     public event EventHandler? LayoutChanged;
 
     public event EventHandler? ActiveDocumentChanged;
+
+    /// <summary>문서 탭이 닫혔다(탭의 × 단추·탭 닫기 명령 모두). 문서를 가진 기능이 자기 목록을 맞춘다.</summary>
+    public event EventHandler<PanelDocument>? DocumentClosed;
 
     /// <summary>지금 열린 문서 탭(여러 문서 영역이 있으면 모두).</summary>
     public IReadOnlyList<PanelDocument> Documents =>

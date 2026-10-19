@@ -18,7 +18,7 @@ public sealed class SqlEditorHost : ObservableObject, IDisposable
 
     private static SqlEditorHost? s_current;
 
-    private readonly IWorkspaceStore? _store;
+    private IWorkspaceStore? _store;
     private readonly Stack<WorkspaceTab> _closed = new();
     private List<(Guid Id, long Version, bool Dirty)>? _lastAutosaveStamp;
     private CancellationTokenSource? _autosaveCts;
@@ -39,6 +39,13 @@ public sealed class SqlEditorHost : ObservableObject, IDisposable
     }
 
     public IEditorDialogs Dialogs { get; set; }
+
+    /// <summary>작업 공간 저장소. 셸이 시작 작업에서 넣는다(<see cref="Current"/> 는 DI 전에 만들어지므로).</summary>
+    public IWorkspaceStore? Store
+    {
+        get => _store;
+        set => _store = value;
+    }
 
     public ObservableCollection<SqlEditorViewModel> Tabs { get; } = [];
 
@@ -361,6 +368,94 @@ public sealed class SqlEditorHost : ObservableObject, IDisposable
         }
 
         Restore(doc.Value);
+        return true;
+    }
+
+    // ---- 작업 공간 파일(Orange SQL Tool 의 Workspace 파일) ------------------------------------
+
+    /// <summary>파일에서 열었거나 파일로 저장한 작업 공간의 .md 경로. 그 뒤 「작업 공간 파일로 저장」은 이 파일에 덮어쓴다.</summary>
+    public string? WorkspaceFilePath { get; private set; }
+
+    /// <summary>열린 탭 전체를 Markdown 작업 공간 파일 하나로 저장한다. 처음이거나 <paramref name="askPath"/> 면 경로를 묻는다.</summary>
+    public async Task<bool> SaveWorkspaceFileAsync(bool askPath, CancellationToken ct)
+    {
+        var path = askPath || WorkspaceFilePath is null
+            ? await Dialogs.PickWorkspaceFileAsync(save: true, WorkspaceName + ".md", ct).ConfigureAwait(true)
+            : WorkspaceFilePath;
+        if (string.IsNullOrWhiteSpace(path))
+        {
+            return false;
+        }
+
+        if (!path.EndsWith(".md", StringComparison.OrdinalIgnoreCase) && !path.EndsWith(".markdown", StringComparison.OrdinalIgnoreCase))
+        {
+            path += ".md";
+        }
+
+        var name = Path.GetFileNameWithoutExtension(path);
+        var tabs = Tabs.Select(t => new WorkspaceFileTab(t.Title, t.Text, t.ConnectionProfileId?.ToString()));
+        await File.WriteAllTextAsync(path, WorkspaceFiles.WriteMarkdown(name, tabs), new System.Text.UTF8Encoding(false), ct).ConfigureAwait(true);
+        WorkspaceFilePath = path;
+        WorkspaceName = name;
+        foreach (var t in Tabs.Where(t => t.FilePath is null))
+        {
+            t.IsDirty = false; // 파일 없는 탭은 작업 공간 파일에 들어갔다.
+        }
+
+        return true;
+    }
+
+    /// <summary>
+    /// 작업 공간 파일(.md)이나 MyBatis 매퍼(.xml)를 열어 탭마다 새 편집기로 연다. 지금 열린 탭은 그대로 둔다.
+    /// 읽은 결과(알림 포함)를 돌려주고, 취소하면 null.
+    /// </summary>
+    public async Task<WorkspaceFile?> OpenWorkspaceFileAsync(string? path, CancellationToken ct)
+    {
+        path ??= await Dialogs.PickWorkspaceFileAsync(save: false, string.Empty, ct).ConfigureAwait(true);
+        if (string.IsNullOrWhiteSpace(path))
+        {
+            return null;
+        }
+
+        var file = WorkspaceFiles.Load(path);
+        SqlEditorViewModel? first = null;
+        foreach (var t in file.Tabs)
+        {
+            var vm = NewDocument(t.Text);
+            vm.Title = t.Title;
+            if (Guid.TryParse(t.Connection, out var profile))
+            {
+                vm.ConnectionProfileId = profile;
+            }
+
+            first ??= vm;
+        }
+
+        if (first is not null)
+        {
+            Active = first;
+        }
+
+        if (!WorkspaceFiles.IsMyBatis(path))
+        {
+            WorkspaceFilePath = path;
+            WorkspaceName = file.Name;
+        }
+
+        return file;
+    }
+
+    /// <summary>탭 이름 바꾸기(Orange 의 Change Tab Name). 파일 탭은 화면 이름만 바뀐다.</summary>
+    public async Task<bool> RenameTabAsync(SqlEditorViewModel tab, CancellationToken ct)
+    {
+        ArgumentNullException.ThrowIfNull(tab);
+        var name = await Dialogs.PromptAsync("탭 이름 바꾸기", tab.Title, ct).ConfigureAwait(true);
+        if (string.IsNullOrWhiteSpace(name))
+        {
+            return false;
+        }
+
+        tab.Title = name.Trim();
         return true;
     }
 

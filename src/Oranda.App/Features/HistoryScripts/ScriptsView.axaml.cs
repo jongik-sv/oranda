@@ -7,6 +7,8 @@ namespace Oranda.App.Features.HistoryScripts;
 
 public partial class ScriptsView : UserControl
 {
+    private ScriptsViewModel? _wired;
+
     public ScriptsView()
     {
         InitializeComponent();
@@ -49,6 +51,15 @@ public partial class ScriptsView : UserControl
             {
                 await vm.OpenAsync(node);
                 e.Handled = true;
+            }
+        };
+        // 파일을 열면 새 편집기 탭으로 연다(Orange SQL Tool 의 File Mode). 활성 편집기에 끼워 넣기는 쓰지 않는다.
+        DataContextChanged += (_, _) =>
+        {
+            if (DataContext is ScriptsViewModel vm && !ReferenceEquals(_wired, vm))
+            {
+                _wired = vm;
+                vm.OpenRequested += async (_, path) => await SqlEditor.SqlEditorHost.Current.OpenFileAsync(path, default);
             }
         };
         AttachedToVisualTree += (_, _) =>

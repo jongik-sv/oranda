@@ -259,7 +259,7 @@
 
 ## 7. 1.0 명령 목록
 
-- 아래 표가 1.0 의 **명령 ID 전체**다(191개). 기본 키는 `default.json` 기준, 다른 프리셋은 6.1.
+- 아래 표가 1.0 의 **명령 ID 전체**다(194개). 기본 키는 `default.json` 기준, 다른 프리셋은 6.1.
 - 「키 범위(when)」는 키맵 `when`, 「활성 조건」은 명령 `Enablement` 다.
 - 소유 Task 가 처리기·제목·아이콘·Placements 를 만든다. 셸(TSK-03-01)은 이 표를 하드코딩하지 않는다 — 레지스트리 자동 수집만 한다.
 - 새 명령이 필요하면 기능 Task 가 규칙(1장)대로 ID 를 만들고 이 표에 행을 더하는 요청을 낸다. 키를 주려면 4개 프리셋 모두 충돌 검사를 통과해야 한다.
@@ -280,6 +280,9 @@
 | `oranda.file.duplicateTab` | 탭 복사(새 탭에) | - | 전역 | `sqlDocActive` | TSK-04-02 |
 | `oranda.file.saveWorkspace` | 작업 공간 저장 | - | 전역 | `hasDocument` | TSK-04-02 |
 | `oranda.file.openWorkspace` | 작업 공간 열기 | - | 전역 | 항상 | TSK-04-02 |
+| `oranda.file.renameTab` | 탭 이름 바꾸기 | - | 전역 | `sqlDocActive` | TSK-04-02 |
+| `oranda.file.saveWorkspaceFile` | 작업 공간 파일로 저장 | - | 전역 | `hasDocument` | TSK-04-02 |
+| `oranda.file.openWorkspaceFile` | 작업 공간 파일 열기(Markdown·MyBatis) | - | 전역 | 항상 | TSK-04-02 |
 | `oranda.file.exit` | 끝내기 | - | 전역 | 항상 | TSK-03-01 |
 
 ### 접속

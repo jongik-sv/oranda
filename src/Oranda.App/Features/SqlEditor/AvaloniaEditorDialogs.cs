@@ -14,6 +14,8 @@ namespace Oranda.App.Features.SqlEditor;
 public sealed class AvaloniaEditorDialogs : IEditorDialogs
 {
     private static readonly FilePickerFileType SqlFiles = new("SQL 파일") { Patterns = ["*.sql", "*.pls", "*.pks", "*.pkb", "*.txt"] };
+    private static readonly FilePickerFileType WorkspaceFiles = new("작업 공간(Markdown)") { Patterns = ["*.md", "*.markdown"] };
+    private static readonly FilePickerFileType MyBatisFiles = new("MyBatis 매퍼") { Patterns = ["*.xml"] };
 
     private static Window? Owner
         => (Application.Current?.ApplicationLifetime as IClassicDesktopStyleApplicationLifetime)?.MainWindow;
@@ -51,6 +53,37 @@ public sealed class AvaloniaEditorDialogs : IEditorDialogs
         return file?.TryGetLocalPath();
     }
 
+    public async Task<string?> PickWorkspaceFileAsync(bool save, string suggestedName, CancellationToken ct)
+    {
+        if (Owner?.StorageProvider is not { } sp)
+        {
+            return null;
+        }
+
+        if (save)
+        {
+            var file = await sp.SaveFilePickerAsync(new FilePickerSaveOptions
+            {
+                Title = "작업 공간 파일로 저장",
+                SuggestedFileName = suggestedName,
+                DefaultExtension = "md",
+                FileTypeChoices = [WorkspaceFiles],
+            }).ConfigureAwait(true);
+            return file?.TryGetLocalPath();
+        }
+
+        var files = await sp.OpenFilePickerAsync(new FilePickerOpenOptions
+        {
+            Title = "작업 공간 파일 열기",
+            AllowMultiple = false,
+            FileTypeFilter = [new FilePickerFileType("작업 공간·MyBatis 매퍼") { Patterns = ["*.md", "*.markdown", "*.xml"] }, WorkspaceFiles, MyBatisFiles],
+        }).ConfigureAwait(true);
+        return files.Count == 0 ? null : files[0].TryGetLocalPath();
+    }
+
+    public Task ShowMessageAsync(string title, string message, CancellationToken ct)
+        => ShowAsync(title, new TextBlock { Text = message, TextWrapping = TextWrapping.Wrap, MaxWidth = 460 }, false, ok => ok, "확인", null);
+
     public Task<string?> PromptAsync(string title, string initial, CancellationToken ct)
     {
         var box = new TextBox { Text = initial, MinWidth = 280 };
@@ -64,7 +97,7 @@ public sealed class AvaloniaEditorDialogs : IEditorDialogs
     }
 
     public Task<bool> ConfirmAsync(string message, CancellationToken ct)
-        => ShowAsync(message, new TextBlock { Text = message, TextWrapping = TextWrapping.Wrap, MaxWidth = 420 }, false, ok => ok);
+        => ShowAsync("Oranda", new TextBlock { Text = message, TextWrapping = TextWrapping.Wrap, MaxWidth = 420 }, false, ok => ok);
 
     public Task<bool> PreviewEditAsync(string title, string before, string after, CancellationToken ct)
     {
@@ -84,7 +117,7 @@ public sealed class AvaloniaEditorDialogs : IEditorDialogs
         return ShowAsync(title, panel, false, ok => ok, "적용", "거절");
     }
 
-    private static async Task<T> ShowAsync<T>(string title, Control content, T cancelled, Func<bool, T> result, string okText = "확인", string cancelText = "취소")
+    private static async Task<T> ShowAsync<T>(string title, Control content, T cancelled, Func<bool, T> result, string okText = "확인", string? cancelText = "취소")
     {
         var owner = Owner;
         if (owner is null)
@@ -100,8 +133,8 @@ public sealed class AvaloniaEditorDialogs : IEditorDialogs
             WindowStartupLocation = WindowStartupLocation.CenterOwner,
             CanResize = true,
         };
-        var ok = new Button { Content = okText, IsDefault = true, MinWidth = 80 };
-        var cancel = new Button { Content = cancelText, IsCancel = true, MinWidth = 80 };
+        var ok = new Button { Content = okText, IsDefault = true, MinWidth = 80, Classes = { "accent" } };
+        var cancel = new Button { Content = cancelText, IsCancel = true, MinWidth = 80, IsVisible = cancelText is not null };
         ok.Click += (_, _) =>
         {
             accepted = true;
@@ -117,6 +150,23 @@ public sealed class AvaloniaEditorDialogs : IEditorDialogs
                 content,
                 new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8, HorizontalAlignment = HorizontalAlignment.Right, Children = { ok, cancel } },
             },
+        };
+        dialog.Opened += (_, _) =>
+        {
+            // 입력 칸이 있으면 바로 칠 수 있게 포커스를 주고 기존 글을 고른다(없으면 확인 단추).
+            if (content is TextBox box)
+            {
+                box.Focus();
+                box.SelectAll();
+            }
+            else if (content is ListBox list)
+            {
+                list.Focus();
+            }
+            else
+            {
+                ok.Focus();
+            }
         };
         await dialog.ShowDialog(owner).ConfigureAwait(true);
         return result(accepted);

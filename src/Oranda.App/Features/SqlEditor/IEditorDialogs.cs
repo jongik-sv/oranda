@@ -25,6 +25,13 @@ public interface IEditorDialogs
     /// 사용자가 받아들이면 true.
     /// </summary>
     Task<bool> PreviewEditAsync(string title, string before, string after, CancellationToken ct);
+
+    /// <summary>작업 공간 파일(.md, 열 때는 MyBatis .xml 도) 고르기. 기본은 일반 파일 고르기와 같다.</summary>
+    Task<string?> PickWorkspaceFileAsync(bool save, string suggestedName, CancellationToken ct)
+        => save ? PickSaveFileAsync(suggestedName, ct) : PickOpenFileAsync(ct);
+
+    /// <summary>알림 한 개(확인 단추만). 기본은 아무것도 하지 않는다.</summary>
+    Task ShowMessageAsync(string title, string message, CancellationToken ct) => Task.CompletedTask;
 }
 
 /// <summary>대화상자가 없는 환경(시험·헤드리스)의 기본값: 모두 취소·거절로 답한다. 제안 편집은 절대 자동 적용하지 않는다.</summary>

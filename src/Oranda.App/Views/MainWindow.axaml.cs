@@ -196,6 +196,8 @@ public partial class MainWindow : Window
                 Trace.TraceError("layout.json 저장 실패: {0}", ex);
             }
 
+            await _shell.RunShutdownHooksAsync();
+
             _closeConfirmed = true;
             Close();
             return;

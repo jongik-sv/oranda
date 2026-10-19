@@ -5,7 +5,7 @@ using static Oranda.App.Features.SqlEditor.EditorTextOps;
 namespace Oranda.App.Features.SqlEditor;
 
 /// <summary>
-/// TSK-04-02 이 소유한 명령 46개의 처리기(commands.md 7장). 한 클래스가 <see cref="CommandContext.CommandId"/> 로 나눠 처리한다.
+/// TSK-04-02 이 소유한 명령 49개의 처리기(commands.md 7장). 한 클래스가 <see cref="CommandContext.CommandId"/> 로 나눠 처리한다.
 /// 활성 탭은 <see cref="SqlEditorHost.Active"/>. 탭이 없을 때 편집 명령은 아무것도 하지 않는다(활성 조건은 셸이 막는다).
 /// </summary>
 [OrandaCommand("oranda.file.newSqlEditor", CommandCategory.File, Icon = "newSql", Placements = ["menu:file/newSqlEditor@10", "toolbar:main/newSql@10"])]
@@ -17,6 +17,9 @@ namespace Oranda.App.Features.SqlEditor;
 [OrandaCommand("oranda.file.duplicateTab", CommandCategory.File, Enablement = "sqlDocActive", Placements = ["menu:file/duplicateTab@70"])]
 [OrandaCommand("oranda.file.saveWorkspace", CommandCategory.File, Enablement = "hasDocument", Placements = ["menu:file/saveWorkspace@80"])]
 [OrandaCommand("oranda.file.openWorkspace", CommandCategory.File, Placements = ["menu:file/openWorkspace@90"])]
+[OrandaCommand("oranda.file.saveWorkspaceFile", CommandCategory.File, Enablement = "hasDocument", Icon = "workspaceSave", Placements = ["menu:file/saveWorkspaceFile@92"])]
+[OrandaCommand("oranda.file.openWorkspaceFile", CommandCategory.File, Icon = "workspaceOpen", Placements = ["menu:file/openWorkspaceFile@94"])]
+[OrandaCommand("oranda.file.renameTab", CommandCategory.File, Enablement = "sqlDocActive", Icon = "rename", Placements = ["menu:file/renameTab@75", "context:editor/renameTab@900"])]
 [OrandaCommand("oranda.edit.undo", CommandCategory.Edit, When = "editorFocus", Enablement = "canUndo", Placements = ["menu:edit/undo@10", "context:editor/undo@10"])]
 [OrandaCommand("oranda.edit.redo", CommandCategory.Edit, When = "editorFocus", Enablement = "canRedo", Placements = ["menu:edit/redo@20", "context:editor/redo@20"])]
 [OrandaCommand("oranda.edit.cut", CommandCategory.Edit, When = "editorFocus", Enablement = "hasSelection", Placements = ["menu:edit/cut@30", "context:editor/cut@30"])]
@@ -102,6 +105,15 @@ public sealed class SqlEditorCommandHandler : ICommandHandler
                 return;
             case "oranda.file.openWorkspace":
                 await host.OpenWorkspaceAsync(cancellationToken).ConfigureAwait(true);
+                return;
+            case "oranda.file.saveWorkspaceFile":
+                await host.SaveWorkspaceFileAsync(askPath: context.Parameter is true, cancellationToken).ConfigureAwait(true);
+                return;
+            case "oranda.file.openWorkspaceFile":
+                await OpenWorkspaceFileAsync(host, context.Parameter as string, cancellationToken).ConfigureAwait(true);
+                return;
+            case "oranda.file.renameTab" when tab is not null:
+                await host.RenameTabAsync(tab, cancellationToken).ConfigureAwait(true);
                 return;
 
             // ---- 보기·이동 ----
@@ -254,6 +266,22 @@ public sealed class SqlEditorCommandHandler : ICommandHandler
         if (int.TryParse(text, NumberStyles.Integer, CultureInfo.InvariantCulture, out var line))
         {
             tab.GoToLine(line);
+        }
+    }
+
+    private static async Task OpenWorkspaceFileAsync(SqlEditorHost host, string? path, CancellationToken ct)
+    {
+        try
+        {
+            var file = await host.OpenWorkspaceFileAsync(path, ct).ConfigureAwait(true);
+            if (file is { Notes.Count: > 0 })
+            {
+                await host.Dialogs.ShowMessageAsync("작업 공간 열기", string.Join(Environment.NewLine, file.Notes), ct).ConfigureAwait(true);
+            }
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or FormatException or System.Xml.XmlException)
+        {
+            await host.Dialogs.ShowMessageAsync("작업 공간 열기", "파일을 열지 못했다: " + ex.Message, ct).ConfigureAwait(true);
         }
     }
 }
