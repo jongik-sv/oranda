@@ -1,8 +1,36 @@
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:vm="using:Oranda.App.Features.PlsqlEditor"
+             xmlns:se="using:Oranda.App.Features.SqlEditor"
              x:Class="Oranda.App.Features.PlsqlEditor.PlsqlEditorView"
              x:DataType="vm:PlsqlEditorViewModel">
-  <!-- TSK-08-01 빈 틀 -->
-  <TextBlock Text="oranda.panel.plsqlEditor" />
+  <!-- 위: 저장 도구줄·충돌 알림 / 가운데: 차이 보기(열렸을 때) / 아래 본문: SQL 편집기 / 맨 아래: 상태 -->
+  <DockPanel>
+    <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Spacing="6" Margin="6,4">
+      <Button x:Name="CompileButton" Content="컴파일(저장)" IsEnabled="{Binding !IsBusy}" />
+      <Button x:Name="DiffButton" Content="서버와 차이" />
+      <Button x:Name="SiblingButton" Content="명세/본문" IsVisible="{Binding IsPackageDoc}" />
+    </StackPanel>
+    <Border DockPanel.Dock="Top" Padding="6,4" IsVisible="{Binding HasConflictBanner}"
+            Background="{DynamicResource SystemControlBackgroundBaseLowBrush}">
+      <StackPanel Spacing="4">
+        <TextBlock x:Name="BannerText" TextWrapping="Wrap" />
+        <StackPanel Orientation="Horizontal" Spacing="6">
+          <Button x:Name="ForceButton" Content="무시하고 덮어쓰기" />
+          <Button x:Name="ReloadButton" Content="서버 소스 다시 읽기" />
+        </StackPanel>
+      </StackPanel>
+    </Border>
+    <TextBlock DockPanel.Dock="Bottom" Margin="6,2" Text="{Binding StatusText}" TextTrimming="CharacterEllipsis" Opacity="0.7" />
+    <Border DockPanel.Dock="Bottom" MaxHeight="220" IsVisible="{Binding DiffText, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"
+            BorderThickness="0,1,0,0" BorderBrush="{DynamicResource SystemControlForegroundBaseLowBrush}">
+      <DockPanel>
+        <Button x:Name="CloseDiffButton" DockPanel.Dock="Top" Content="차이 닫기" HorizontalAlignment="Left" Margin="4" />
+        <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto">
+          <SelectableTextBlock Text="{Binding DiffText}" Margin="8,2" FontFamily="Consolas,Menlo,monospace" />
+        </ScrollViewer>
+      </DockPanel>
+    </Border>
+    <se:SqlEditorView x:Name="EditorView" />
+  </DockPanel>
 </UserControl>

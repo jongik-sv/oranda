@@ -3,6 +3,19 @@
              xmlns:vm="using:Oranda.App.Features.PlsqlEditor"
              x:Class="Oranda.App.Features.PlsqlEditor.CompileErrorsView"
              x:DataType="vm:CompileErrorsViewModel">
-  <!-- TSK-08-01 빈 틀 -->
-  <TextBlock Text="oranda.panel.compileErrors" />
+  <DockPanel>
+    <TextBlock DockPanel.Dock="Top" Margin="6,3" Text="{Binding Header}" Opacity="0.8" />
+    <ListBox ItemsSource="{Binding Items}" SelectedItem="{Binding SelectedItem, Mode=TwoWay}"
+             AutomationProperties.Name="컴파일 오류 목록">
+      <ListBox.ItemTemplate>
+        <DataTemplate x:DataType="vm:CompileErrorItem">
+          <StackPanel Orientation="Horizontal" Spacing="10">
+            <TextBlock Text="{Binding Kind}" MinWidth="32" />
+            <TextBlock Text="{Binding Position}" MinWidth="56" FontFamily="Consolas,Menlo,monospace" />
+            <TextBlock Text="{Binding Message}" />
+          </StackPanel>
+        </DataTemplate>
+      </ListBox.ItemTemplate>
+    </ListBox>
+  </DockPanel>
 </UserControl>
