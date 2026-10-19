@@ -26,7 +26,9 @@
     <Border DockPanel.Dock="Bottom" Classes="panel-status">
       <TextBlock Text="{Binding StatusText}" TextTrimming="CharacterEllipsis" />
     </Border>
-    <TreeView x:Name="Tree" Classes="compact" ItemsSource="{Binding Roots}" SelectedItem="{Binding SelectedNode, Mode=TwoWay}">
+    <!-- 위: 객체 트리 / 아래: 고른 객체의 속성(오렌지 Property 창). 나누기 막대로 높이를 바꾼다. -->
+    <Grid RowDefinitions="*,Auto,240">
+    <TreeView x:Name="Tree" Grid.Row="0" Classes="compact" ItemsSource="{Binding Roots}" SelectedItem="{Binding SelectedNode, Mode=TwoWay}">
       <TreeView.Styles>
         <Style Selector="TreeViewItem" x:DataType="vm:SchemaNode">
           <Setter Property="IsExpanded" Value="{Binding IsExpanded, Mode=TwoWay}" />
@@ -44,5 +46,9 @@
         </TreeDataTemplate>
       </TreeView.ItemTemplate>
     </TreeView>
+    <GridSplitter Grid.Row="1" Height="5" HorizontalAlignment="Stretch" ResizeDirection="Rows"
+                  Background="{DynamicResource OrandaSplitterBrush}" AutomationProperties.Name="트리와 속성 나누기" />
+    <vm:SchemaPropertiesView Grid.Row="2" MinHeight="0" DataContext="{Binding Properties}" />
+    </Grid>
   </DockPanel>
 </UserControl>

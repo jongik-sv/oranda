@@ -46,6 +46,40 @@ public class ObjectDetailTests
     }
 
     [Fact]
+    public async Task Schema_properties_order_tabs_like_orange_load_definition_on_demand_and_keep_the_tab()
+    {
+        var meta = new FakeMeta();
+        var session = new FakeSession();
+        using var props = new SchemaPropertiesViewModel(() => meta, () => session) { Delay = TimeSpan.Zero };
+
+        await props.ShowAsync(Emp);
+        Assert.Equal(["열", "권한", "정의"], props.Tabs.Select(t => t.Title));
+        Assert.Equal("열", props.SelectedTab!.Title);
+        Assert.Null(meta.LastOptions); // 정의는 그 탭을 고를 때만 읽는다
+
+        props.SelectedTab = props.Tabs[^1];
+        Assert.Equal("CREATE TABLE EMP;", props.SelectedTab.DdlText);
+
+        // 다른 객체로 옮겨도 보던 탭(정의)을 유지하고 그 객체의 정의를 읽는다.
+        await props.ShowAsync(new DbObjectRef("SCOTT", "DEPT", "TABLE"));
+        Assert.Equal("정의", props.SelectedTab!.Title);
+        Assert.Equal("CREATE TABLE DEPT;", props.SelectedTab.DdlText);
+        Assert.Contains("SCOTT.DEPT", props.Header, StringComparison.Ordinal);
+
+        await props.ShowAsync(null);
+        Assert.Empty(props.Tabs);
+    }
+
+    [Fact]
+    public async Task Schema_properties_report_a_failed_read_in_the_header()
+    {
+        using var props = new SchemaPropertiesViewModel(() => new FakeMeta { DetailFails = true }, () => new FakeSession()) { Delay = TimeSpan.Zero };
+        await props.ShowAsync(Emp);
+        Assert.Empty(props.Tabs);
+        Assert.Contains("boom", props.Header, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task Open_fills_sections_and_ddl()
     {
         var meta = new FakeMeta();

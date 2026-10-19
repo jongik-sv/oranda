@@ -1,0 +1,43 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:Oranda.App.Features.SchemaBrowser"
+             xmlns:ctl="using:Oranda.App.Shell.Controls"
+             xmlns:se="using:Oranda.App.Features.SqlEditor"
+             x:Class="Oranda.App.Features.SchemaBrowser.SchemaPropertiesView"
+             x:DataType="vm:SchemaPropertiesViewModel">
+  <UserControl.Styles>
+    <!-- 오렌지 Property 창처럼 작은 탭이 여러 줄로 꺾인다. -->
+    <Style Selector="TabControl#PropertyTabs TabItem">
+      <Setter Property="FontSize" Value="{DynamicResource OrandaFontSizeSmall}" />
+      <Setter Property="MinHeight" Value="22" />
+      <Setter Property="Padding" Value="8,2" />
+    </Style>
+    <Style Selector="TabControl#PropertyTabs /template/ ItemsPresenter#PART_ItemsPresenter">
+      <Setter Property="ItemsPanel">
+        <ItemsPanelTemplate>
+          <WrapPanel />
+        </ItemsPanelTemplate>
+      </Setter>
+    </Style>
+  </UserControl.Styles>
+  <DockPanel>
+    <Border DockPanel.Dock="Top" Classes="panel-toolbar">
+      <TextBlock Text="{Binding Header}" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" Margin="4,2" />
+    </Border>
+    <TabControl x:Name="PropertyTabs" ItemsSource="{Binding Tabs}" SelectedItem="{Binding SelectedTab, Mode=TwoWay}" Padding="0">
+      <TabControl.ItemTemplate>
+        <DataTemplate x:DataType="vm:PropertyTab">
+          <TextBlock Text="{Binding Title}" />
+        </DataTemplate>
+      </TabControl.ItemTemplate>
+      <TabControl.ContentTemplate>
+        <DataTemplate x:DataType="vm:PropertyTab">
+          <Panel>
+            <ctl:DetailTable Columns="{Binding Columns}" Rows="{Binding Rows}" IsVisible="{Binding IsTable}" />
+            <se:SqlCodeView Text="{Binding DdlText}" IsVisible="{Binding IsDefinition}" />
+          </Panel>
+        </DataTemplate>
+      </TabControl.ContentTemplate>
+    </TabControl>
+  </DockPanel>
+</UserControl>

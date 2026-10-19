@@ -162,6 +162,7 @@ public sealed partial class SchemaBrowserViewModel : ToolPanelViewModelBase, IDi
 
     public void Dispose()
     {
+        _properties?.Dispose();
         _debounce?.Cancel();
         _debounce?.Dispose();
         foreach (var d in _subscriptions)
@@ -208,9 +209,20 @@ public sealed partial class SchemaBrowserViewModel : ToolPanelViewModelBase, IDi
     public void RequestFilterFocus() => FilterFocusRequested?.Invoke(this, EventArgs.Empty);
 
 
+    /// <summary>트리 아래 속성 창(오렌지 Property 창). 고른 객체의 상세를 탭으로 보인다.</summary>
+    public SchemaPropertiesViewModel Properties => _properties ??= new SchemaPropertiesViewModel(() => _meta, () => CurrentSession);
+
+    private SchemaPropertiesViewModel? _properties;
+
     partial void OnSelectedNodeChanged(SchemaNode? value)
     {
         OnPropertyChanged(nameof(IsNodeSelected));
+
+        // 객체를 고르면 아래 속성 창에 보인다. 열 노드는 그 테이블을 그대로 두고, 스키마·범주는 비운다.
+        if (value?.Kind != SchemaNodeKind.Column)
+        {
+            _ = Properties.ShowAsync(value?.Ref);
+        }
 
         // 오른쪽 클릭 메뉴·단축키의 활성 조건(commands.md 2.2): 객체 노드면 schemaNodeSelected, 소스가 있는 객체면 plsqlNodeSelected.
         if (_services?.GetService(typeof(Oranda.App.Shell.ContextKeyService)) is Oranda.App.Shell.ContextKeyService keys)
