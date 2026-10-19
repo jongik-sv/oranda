@@ -1792,7 +1792,7 @@ dotnet, testhost, Oranda.App
 - category: dev
 - domain: fullstack
 - model: opus
-- status: [ ]
+- status: [xx]
 - priority: low
 - assignee: -
 - schedule: 2026-11-24 ~ 2026-11-26
