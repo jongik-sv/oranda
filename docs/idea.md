@@ -33,6 +33,20 @@
 | 실행 취소 반응                 | 1 s 이하                  | 통합 시험 통과 (수십 ms) — 기능 시험으로 유지                                                          | TSK-06-01, TSK-06-02 |
 | 설치 파일 크기                 | 80 MB 이하                | 게시 폴더 235 MB(비압축). 실제 패키지 미측정. 검사 스크립트 `scripts/release/check-installer-size.ps1` 있음 | TSK-10-01            |
 
+### macOS 참고값 (2026-10-20, dev 9dea471, 맥북에서 측정)
+
+판정용 값이 아니다. 조용한 장비·게시본 측정의 출발점으로만 쓴다.
+
+| 항목 | 값 | 비고 |
+|---|---|---|
+| 시작 → 입력 가능 | 391 ms | 목표 1.5 s |
+| 유휴 메모리 | 131.6 MB | 접속·탭 없음. 목표 150 MB 까지 18 MB 여유. 「접속 1, 탭 1」 조건으로 다시 재야 함 |
+| 포맷 2,000줄 | 16 ms | 목표 500 ms |
+| 그리드 스크롤 (스파이크) | 59.9 fps | 목표 60 fps. 제품 그리드(TSK-06-03)로 다시 재야 함 |
+| 편집기 키 입력 p95 (스파이크) | 9~13 ms | 목표 16 ms. 제품 편집기(TSK-04-02)로 다시 재야 함 |
+
+CI(run 39276301319) 의 Windows 러너에서 `Incremental_lex_of_10k_lines_meets_budget` 가 21 ms(한도 16 ms)로 실패했다. 성능 단정 시험을 기본 시험에서 빼야 하는 근거다.
+
 ### 지금 코드에 있는 성능 단정 시험 (Category=Perf 로 옮길 대상)
 
 - `tests/Oranda.Language.Tests/Lexing/StatementSplitterTests.cs` — `Split_of_10k_lines_is_fast_enough`, `Incremental_lex_of_10k_lines_meets_budget`
