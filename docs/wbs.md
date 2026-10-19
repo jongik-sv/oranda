@@ -707,6 +707,39 @@ dotnet, testhost, Oranda.App
 - ui-spec:
   - 가져오기 마법사
 
+### TSK-03-06: 접속 보안 결함: 프록시 비밀번호 입력·client_identifier OS 사용자
+- category: defect
+- domain: fullstack
+- model: sonnet
+- status: [ ]
+- priority: low
+- assignee: -
+- schedule: 2026-12-08 ~ 2026-12-10
+- tags: defect, security
+- depends: TSK-11-04
+- blocked-by: -
+- entry-point: 메뉴 > 파일 > 접속 (Ctrl+Shift+O)
+- note: 출처 docs/itest/TSK-11-04.md DEF-07, DEF-09
+
+#### PRD 요구사항
+- prd-ref: PRD SAFE-05, SAFE-06
+- requirements:
+  - 프록시 사용자 칸에 「이름/비밀번호」 형태를 넣으면 저장을 막는다 (DEF-07, TSK-03-04)
+  - client_identifier 에 도구 이름과 OS 사용자를 함께 넣는다 (DEF-09, TSK-03-03)
+- acceptance:
+  - 프록시 칸에 비밀번호를 적으면 오류 안내가 나오고 저장되지 않는다
+  - v$session.client_identifier 에 OS 사용자 이름이 보인다
+- constraints:
+  - 결함을 재현하는 통합 시험이 먼저 실패하고, 고친 뒤 통과해야 한다
+- test-criteria:
+  - TSK-11-04 SafetyCross 시험의 Observed_ 단정을 기대 동작으로 바꿔 통과
+
+#### 기술 스펙 (TRD)
+- tech-spec: -
+- api-spec: -
+- data-model: -
+- ui-spec: -
+
 ## WP-04: SQL 편집기·언어 서비스
 - schedule: 2026-11-10 ~ 2026-11-30
 
@@ -985,6 +1018,37 @@ dotnet, testhost, Oranda.App
   - keymaps/*.json, snippets/*.json
 - ui-spec:
   - 템플릿 창, 단축키 설정
+
+### TSK-04-08: 자동완성: 새로 만든 표의 열 후보가 늦게 뜸
+- category: defect
+- domain: fullstack
+- model: sonnet
+- status: [ ]
+- priority: low
+- assignee: -
+- schedule: 2026-12-08 ~ 2026-12-10
+- tags: defect, completion
+- depends: TSK-11-01
+- blocked-by: -
+- entry-point: SQL 편집기 (Ctrl+Space)
+- note: 출처 docs/itest/TSK-11-01.md 관찰 O-1
+
+#### PRD 요구사항
+- prd-ref: PRD EDIT 자동완성
+- requirements:
+  - 방금 만든 표의 열 자동완성이 첫 호출부터 후보를 보이게 한다. DDL 뒤 메타데이터 무효화와 자동완성 캐시를 맞춘다 (TSK-04-05)
+- acceptance:
+  - CREATE TABLE 직후 「별칭.」 입력에서 첫 호출에 열 후보가 뜬다
+- constraints:
+  - 결함을 재현하는 통합 시험이 먼저 실패하고, 고친 뒤 통과해야 한다
+- test-criteria:
+  - DeveloperFlowTests 의 자동완성 단계에서 재시도 없이 단정
+
+#### 기술 스펙 (TRD)
+- tech-spec: -
+- api-spec: -
+- data-model: -
+- ui-spec: -
 
 ## WP-05: 포매터
 - schedule: 2026-11-17 ~ 2026-11-30
@@ -1391,6 +1455,106 @@ dotnet, testhost, Oranda.App
 - ui-spec:
   - 내보내기 대화상자, 가져오기 마법사
 
+### TSK-06-08: 그리드 편집: DUAL·공용 동의어·SYS 뷰에서 처리되지 않은 예외
+- category: defect
+- domain: fullstack
+- model: sonnet
+- status: [ ]
+- priority: medium
+- assignee: -
+- schedule: 2026-12-08 ~ 2026-12-10
+- tags: defect, grid-edit
+- depends: TSK-11-01
+- blocked-by: -
+- entry-point: SQL 편집기 > 편집 모드 실행 (F9)
+- note: 출처 docs/itest/TSK-11-01.md D-02
+
+#### PRD 요구사항
+- prd-ref: PRD 6.5.1
+- requirements:
+  - GridEditSession.PlanAsync 가 소유자를 현재 사용자로 가정하지 않고 동의어를 따라간다 (TSK-06-04)
+  - 대상 표를 찾지 못하면 예외 대신 「편집 불가」 와 이유를 보인다
+- acceptance:
+  - select dummy from dual, select … from all_tables 를 F9 로 실행하면 앱이 오류 없이 「편집 불가」 를 보인다
+- constraints:
+  - 결함을 재현하는 통합 시험이 먼저 실패하고, 고친 뒤 통과해야 한다
+- test-criteria:
+  - DeveloperFlowTests.S3_4 통과
+
+#### 기술 스펙 (TRD)
+- tech-spec: -
+- api-spec: -
+- data-model: -
+- ui-spec: -
+
+### TSK-06-09: 트랜잭션 표시: SAVEPOINT 만으로 미커밋, 읽기 전용 ORA-01466
+- category: defect
+- domain: backend
+- model: sonnet
+- status: [ ]
+- priority: medium
+- assignee: -
+- schedule: 2026-12-08 ~ 2026-12-10
+- tags: defect, transaction
+- depends: TSK-11-04
+- blocked-by: -
+- entry-point: -
+- note: 출처 docs/itest/TSK-11-04.md DEF-04, DEF-08
+
+#### PRD 요구사항
+- prd-ref: PRD SAFE-01, SAFE-03
+- requirements:
+  - SAVEPOINT 만 실행했거나 운영 확인을 거절한 저장 뒤에는 미커밋 표시와 종료 질문을 켜지 않는다 (DEF-04, TSK-06-01)
+  - 읽기 전용 프로필에서 방금 만들거나 바뀐 표를 읽을 때 ORA-01466 이 나지 않게 한다 (DEF-08, TSK-06-01)
+- acceptance:
+  - SAVEPOINT 뒤 상태줄에 미커밋이 표시되지 않는다
+  - 읽기 전용 접속이 방금 만든 표를 첫 시도에 읽는다
+- constraints:
+  - 결함을 재현하는 통합 시험이 먼저 실패하고, 고친 뒤 통과해야 한다
+- test-criteria:
+  - SafetyCrossDbTests 의 Observed_ 단정을 기대 동작으로 바꿔 통과
+
+#### 기술 스펙 (TRD)
+- tech-spec: -
+- api-spec: -
+- data-model: -
+- ui-spec: -
+
+### TSK-06-10: 이력: 비밀 가림 누락·가져오기 기록 누락·시험 파일 서식
+- category: defect
+- domain: backend
+- model: sonnet
+- status: [ ]
+- priority: low
+- assignee: -
+- schedule: 2026-12-08 ~ 2026-12-10
+- tags: defect, history
+- depends: TSK-11-04
+- blocked-by: -
+- entry-point: -
+- note: 출처 docs/itest/TSK-11-04.md DEF-02, DEF-06, TSK-11-01 D-04
+
+#### PRD 요구사항
+- prd-ref: PRD SAFE-06
+- requirements:
+  - 이력 비밀 가림이 문자열 리터럴 안 비밀, DEFINE pw = '…', 줄 중간 CONNECT 를 가린다 (DEF-02, TSK-06-06)
+  - 가져오기 INSERT 를 이력에 남긴다 (DEF-06, TSK-06-07)
+  - tests/Oranda.Oracle.IntegrationTests/Transfer/DataTransferTests.cs 455행 공백을 고쳐 dotnet format 이 통과한다 (D-04)
+- acceptance:
+  - 데이터 폴더 평문 검색에서 oranda.db 에 비밀번호가 0건이다
+  - 가져오기 뒤 이력 창에 INSERT 가 보인다
+  - 솔루션 서식 검사(dotnet format)에서 바뀌는 파일이 0개다
+- constraints:
+  - 결함을 재현하는 통합 시험이 먼저 실패하고, 고친 뒤 통과해야 한다
+- test-criteria:
+  - SafetyCrossTests 평문 검색 시험과 이력 시험 통과
+
+#### 기술 스펙 (TRD)
+- tech-spec: -
+- api-spec: -
+- data-model: -
+- ui-spec: -
+
 ## WP-07: 실행 계획·스키마 브라우저
 - schedule: 2026-11-16 ~ 2026-11-30
 
@@ -1710,6 +1874,39 @@ dotnet, testhost, Oranda.App
 - ui-spec:
   - 검색 조건 패널, 결과 목록
 
+### TSK-09-03: 세션 모니터: 읽기 전용 Kill 메뉴·없는 세션 안내
+- category: defect
+- domain: fullstack
+- model: sonnet
+- status: [ ]
+- priority: low
+- assignee: -
+- schedule: 2026-12-08 ~ 2026-12-10
+- tags: defect, monitor
+- depends: TSK-11-04
+- blocked-by: -
+- entry-point: 메뉴 > 도구 > 세션 모니터
+- note: 출처 docs/itest/TSK-11-04.md(코드 확인), TSK-11-02.md 개선 제안
+
+#### PRD 요구사항
+- prd-ref: PRD MON
+- requirements:
+  - 읽기 전용 프로필에서는 Kill·Disconnect 메뉴를 끈다 (TSK-09-01)
+  - 없는 세션을 Kill 하면 ORA-00026 대신 「이미 끝난 세션일 수 있습니다」 를 보인다
+- acceptance:
+  - 읽기 전용 접속에서 Kill 메뉴가 비활성이다
+  - 없는 세션 Kill 에 안내 문구가 나온다
+- constraints:
+  - 결함을 재현하는 통합 시험이 먼저 실패하고, 고친 뒤 통과해야 한다
+- test-criteria:
+  - DbaFlowTests S4 와 세션 모니터 App 시험
+
+#### 기술 스펙 (TRD)
+- tech-spec: -
+- api-spec: -
+- data-model: -
+- ui-spec: -
+
 ## WP-10: 배포·품질 마감 (M3)
 - schedule: 2026-11-09 ~ 2026-11-26
 
@@ -1825,6 +2022,74 @@ dotnet, testhost, Oranda.App
 - data-model: -
 - ui-spec:
   - 시험 패널
+
+### TSK-10-04: 외부 전송·비밀 가림: 동의 대화상자·충돌 보고 연결·가림 통일
+- category: defect
+- domain: fullstack
+- model: sonnet
+- status: [ ]
+- priority: medium
+- assignee: -
+- schedule: 2026-12-08 ~ 2026-12-10
+- tags: defect, security
+- depends: TSK-11-04
+- blocked-by: -
+- entry-point: 메뉴 > 도움말 > 오류 보고
+- note: 출처 docs/itest/TSK-11-04.md DEF-01, DEF-03, DEF-05
+
+#### PRD 요구사항
+- prd-ref: PRD SAFE-06, 배포 충돌 보고
+- requirements:
+  - App 에 IOutboundConsent 대화상자를 두고, 처리되지 않은 예외 훅에서 충돌 보고를 쓰고 동의 뒤에만 전송한다 (DEF-05, TSK-10-01)
+  - 충돌 보고 가림이 따옴표로 감싼 값(Password="a;b")을 가린다 (DEF-01)
+  - 확장 패널 전송 본문에도 비밀 가림을 건다 (DEF-03, TSK-10-03)
+  - 이력·충돌 보고·전송 본문이 같은 ISecretRedactor 를 쓴다
+- acceptance:
+  - 동의하지 않으면 아무것도 전송되지 않고, 동의하면 미리보기와 같은 본문이 간다
+  - 세 출력 모두 평문 비밀번호 0건이다
+- constraints:
+  - 결함을 재현하는 통합 시험이 먼저 실패하고, 고친 뒤 통과해야 한다
+- test-criteria:
+  - SafetyCrossNoDbTests 의 Observed_ 단정을 기대 동작으로 바꿔 통과
+
+#### 기술 스펙 (TRD)
+- tech-spec: -
+- api-spec: -
+- data-model: -
+- ui-spec: -
+
+### TSK-10-05: 다국어·접근성 남은 항목: 기능 화면 메시지·낭독기 이름
+- category: defect
+- domain: frontend
+- model: sonnet
+- status: [ ]
+- priority: low
+- assignee: -
+- schedule: 2026-12-08 ~ 2026-12-10
+- tags: defect, i18n
+- depends: TSK-10-02
+- blocked-by: -
+- entry-point: 메뉴 > 도구 > UI 언어
+- note: 출처 TSK-10-02 레인 보고 결함
+
+#### PRD 요구사항
+- prd-ref: PRD 다국어·접근성
+- requirements:
+  - 각 기능 ViewModel 이 만드는 한국어 상태·오류·대화상자 문자열을 UiText 리소스로 옮긴다
+  - 도구 창 안쪽 컨트롤(예: SchemaBrowserView TreeView)과 Dock 탭 단추에 낭독기 이름을 단다
+- acceptance:
+  - 영어로 바꾸면 기능 화면 메시지에 한국어가 남지 않는다
+  - 모든 대화형 컨트롤에 두 언어 낭독기 이름이 있다
+- constraints:
+  - 결함을 재현하는 통합 시험이 먼저 실패하고, 고친 뒤 통과해야 한다
+- test-criteria:
+  - Localization Headless 시험을 기능 화면까지 넓혀 통과
+
+#### 기술 스펙 (TRD)
+- tech-spec: -
+- api-spec: -
+- data-model: -
+- ui-spec: -
 
 ## WP-11: 통합테스트
 - schedule: 2026-12-01 ~ 2026-12-07
@@ -2061,6 +2326,15 @@ graph LR
   TSK-03-02 --> TSK-11-04
   TSK-10-01 --> TSK-11-04
   TSK-10-03 --> TSK-11-04
+  %% 통합테스트 결함 (2026-10-20 등록)
+  TSK-11-04 --> TSK-03-06
+  TSK-11-01 --> TSK-04-08
+  TSK-11-01 --> TSK-06-08
+  TSK-11-04 --> TSK-06-09
+  TSK-11-04 --> TSK-06-10
+  TSK-11-04 --> TSK-09-03
+  TSK-11-04 --> TSK-10-04
+  TSK-10-02 --> TSK-10-05
   style TSK-01-02 fill:#fff3e0,stroke:#e65100
   style TSK-01-07 fill:#fff3e0,stroke:#e65100
   style TSK-01-02 stroke:#c62828,stroke-width:2px
