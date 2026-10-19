@@ -46,6 +46,7 @@ public static class AppComposition
         // 1) 이벤트 버스(Core 구현은 스캔 대상이 아니라 직접 등록)와 구현 어셈블리.
         container.AddInstance<IEventBus>(new EventBus());
         container.AddAssembly(typeof(PlatformAssembly).Assembly);
+        container.AddAssembly(typeof(AppComposition).Assembly); // 앱 어셈블리의 [OrandaService](편집기 문맥·시작 작업 등)
         foreach (var name in DeferredAssemblies)
         {
             container.AddDeferredAssembly(name);

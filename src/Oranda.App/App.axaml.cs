@@ -1,11 +1,16 @@
 using System;
+using System.Collections.Generic;
+using System.Diagnostics;
+using System.Threading;
 using System.Threading.Tasks;
 using Avalonia;
 using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Markup.Xaml;
+using Avalonia.Threading;
 using Oranda.App.Shell;
 using Oranda.App.Shell.Composition;
 using Oranda.App.Views;
+using Oranda.Core.Composition;
 
 namespace Oranda.App;
 
@@ -33,6 +38,7 @@ public partial class App : Application
             var window = new MainWindow();
             Start(services, window, preload);
             desktop.MainWindow = window;
+            ScheduleStartupTasks(services);
             desktop.Exit += (_, _) => Services?.Dispose();
         }
 
@@ -52,5 +58,47 @@ public partial class App : Application
         shell.Initialize(loaded);
         window.Attach(services);
         PerfMarks.Mark("shell-attached");
+    }
+
+    /// <summary>첫 프레임 뒤 유휴로 보고 지연 어셈블리를 훑기까지 기다리는 시간.</summary>
+    private static readonly TimeSpan StartupIdleDelay = TimeSpan.FromSeconds(2);
+
+    /// <summary>
+    /// 시작 작업(<see cref="IStartupTask"/>)을 예약한다(D-006, 시작 경로에서는 돌지 않는다).
+    /// 첫 프레임 직후 <see cref="StartupPhase.AfterFirstFrame"/> 작업을 부르고, 잠시 뒤 유휴 때 지연 어셈블리(Oracle·Language)를 훑어
+    /// 아직 돌지 않은 작업(<see cref="StartupPhase.Idle"/> 과 지연 어셈블리의 작업)을 부른다.
+    /// </summary>
+    private static void ScheduleStartupTasks(ServiceContainer services)
+    {
+        var ran = new HashSet<IStartupTask>(ReferenceEqualityComparer.Instance);
+        Dispatcher.UIThread.Post(() => _ = RunStartupTasksAsync(services, ran, StartupPhase.AfterFirstFrame), DispatcherPriority.Background);
+        DispatcherTimer.RunOnce(
+            () =>
+            {
+                services.ScanDeferred();
+                _ = RunStartupTasksAsync(services, ran, null);
+            },
+            StartupIdleDelay);
+    }
+
+    /// <summary>등록된 시작 작업 중 아직 돌지 않은 것을 부른다. 작업 하나가 실패해도 나머지는 계속한다.</summary>
+    private static async Task RunStartupTasksAsync(ServiceContainer services, HashSet<IStartupTask> ran, StartupPhase? only)
+    {
+        foreach (var task in services.GetService<IEnumerable<IStartupTask>>() ?? [])
+        {
+            if ((only is { } phase && task.Phase != phase) || !ran.Add(task))
+            {
+                continue;
+            }
+
+            try
+            {
+                await task.RunAsync(CancellationToken.None);
+            }
+            catch (Exception ex)
+            {
+                Trace.TraceError("시작 작업 '{0}' 실행 중 예외: {1}", task.GetType().FullName, ex);
+            }
+        }
     }
 }

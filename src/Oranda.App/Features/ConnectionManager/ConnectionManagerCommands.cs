@@ -2,6 +2,7 @@ using System;
 using System.Threading;
 using System.Threading.Tasks;
 using Avalonia.Controls;
+using Avalonia.Threading;
 using Oranda.App.Shell;
 using Oranda.App.Shell.Composition;
 using Oranda.Core.Events;
@@ -53,7 +54,8 @@ public static class ConnectionManagerCommands
                 keys: container.GetService<ContextKeyService>());
             if (container.GetService<ShellController>() is { } shell)
             {
-                service.ActiveSessionChanged += (_, _) => shell.ActiveEnvironment = service.ActiveSession?.Profile.Environment;
+                // 접속은 스레드 풀에서 끝나므로 창(환경 테두리)을 바꾸는 일은 UI 스레드로 넘긴다.
+                service.ActiveSessionChanged += (_, _) => Dispatcher.UIThread.Post(() => shell.ActiveEnvironment = service.ActiveSession?.Profile.Environment);
             }
 
             container.AddInstance<IConnectionService>(service);
