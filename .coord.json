@@ -1,0 +1,4 @@
+{
+  "integration_branch": "main",
+  "heavy": {"script": ".claude/skills/dflow-dev/scripts/heavy.mjs"}
+}

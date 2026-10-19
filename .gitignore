@@ -1,0 +1,29 @@
+# D'Flow / 조정자 개인 설정 — 토큰이 들어 있으므로 커밋 금지
+/.dflow.local
+.coord.local.json
+**/.claude/worktrees/
+.claude/skills/dflow-*/**/__pycache__/
+.claude/skills/dflow-*/**/.pytest_cache/
+
+# .NET
+bin/
+obj/
+*.user
+.vs/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Claude Code 개인 설정
+.claude/settings.local.json
+
+# dmes-standard 스킬 링크(정션) — 원본은 dmes-standard 저장소가 관리하므로 커밋하지 않는다
+.claude/skills/coordinator
+.claude/skills/dflow-*
+.claude/skills/_shared
+
+# Orange 역분석·도움말 요약 — 공개 저장소에 올리지 않는다 (로컬 보관)
+/docs/orange-analysis.md
+/docs/orange5-features.md
+/.dflow

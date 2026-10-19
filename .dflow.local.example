@@ -1,0 +1,37 @@
+# .dflow.local.example — dmes-standard 용 D'Flow 개인 설정 샘플.
+# 사용법: cp .dflow.local.example .dflow.local 한 뒤 pats= 에 내 토큰을 넣는다.
+# .dflow.local 은 git 에 올리지 않는다(.gitignore). 토큰 값은 어디에도 출력·붙여넣지 않는다.
+# 항목 설명 정본: .claude/skills/dflow-work/dflow.local.example · 확인: .claude/skills/dflow-work/scripts/dflow.sh doctor
+
+# 개인 액세스 토큰 — D'Flow 웹 /account "내 토큰" 에서 발급. 쉼표로 여러 개(첫 토큰이 기본). 하나면 pat= 도 된다.
+pats=
+
+# 토큰이 둘 이상일 때 이 리포가 쓸 키의 prefix(토큰의 셋째 '_' 칸). 비우면 첫 토큰. 목록은 dflow.sh profiles.
+# /dflow-team 은 비어 있으면 시작할 때 정해서 파일 끝에 적는다.
+as=
+
+# 내 개발 브랜치(필수). 에이전트 머지·스택 기점·반영 확인의 기준이다. 동료와 같은 이름을 쓰면 그 브랜치를 공유한다.
+# 이 리포는 dev1 에서 개발하고 main 으로 승격한다. 원격에 먼저 push 돼 있어야 한다.
+dev_branch=dev1
+
+# 1 이면 팀장이 완료 보고된 작업을 승인 전에 개발 브랜치로 머지한다. 기본 0.
+automerge=0
+
+# 내가 맡은 서브시스템의 DOCS_DIR=프로젝트 UUID(쉼표 구분). 이 리포의 MDM 은 docs/mdm 이 MDM PoC 프로젝트다.
+project_map=docs/mdm=1bf6ce9e-128b-435f-b33e-22b03239590f
+
+# 1 이면 이 PC 에서 docker 태그 Task 의 워커와 수동 /dflow-dev 도 도커를 쓰지 않는다. 워커는 이 값과 무관하게 기본이 금지다.
+# no_docker=1
+
+# /dflow-team 팀원의 첫 턴 컨텍스트 줄이기(선택). 적지 않으면 종전과 같다. dflow-* 와 이 리포의 프로젝트 스킬은 늘 남는다.
+# worker_keep_skills=auto
+# worker_keep_plugins=auto
+# worker_output_style=default
+# worker_skills_off=update-config,keybindings-help,code-review,simplify,fewer-permission-prompts,loop,schedule,claude-api,run,init,security-review,dataviz
+
+# Build 모델 시험(기본 꺼짐). opus 로 배정될 Build 중 일부를 sonnet(+advisor)으로 돌려 비교한다.
+# build_model_trial=sonnet
+# build_model_trial_rate=30
+
+
+
