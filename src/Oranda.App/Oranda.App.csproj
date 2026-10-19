@@ -4,6 +4,14 @@
     <ApplicationManifest>app.manifest</ApplicationManifest>
   </PropertyGroup>
 
+  <!-- 게시본 시작 단축 (TSK-01-04): Windows self-contained 게시는 ReadyToRun composite.
+       일반 R2R 대비 입력 가능까지 −0.5~0.6 s, 게시 폴더 +30 MB. composite 는 self-contained 에서만 동작한다.
+       macOS 는 측정 전이라 일반 R2R(CI 의 -p:PublishReadyToRun=true) 그대로 둔다. 트리밍은 시간 효과가 없어 쓰지 않는다. -->
+  <PropertyGroup Condition="'$(Configuration)' == 'Release' And $(RuntimeIdentifier.StartsWith('win-')) And '$(SelfContained)' == 'true'">
+    <PublishReadyToRun>true</PublishReadyToRun>
+    <PublishReadyToRunComposite>true</PublishReadyToRunComposite>
+  </PropertyGroup>
+
   <ItemGroup>
     <Folder Include="Models\" />
     <AvaloniaResource Include="Assets\**" />

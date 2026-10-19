@@ -5,7 +5,8 @@ using System.Text.Json;
 
 // 사용: Oranda.Perf --exe <게시본 실행파일> [--runs 5] [--out <디렉터리>] [--budget-ms 1000] [--enforce] [--timeout-s 30]
 // App 계측 훅 규약: 환경 변수 ORANDA_PERF=1 이면 App 이 stdout 에 한 줄씩
-//   ORANDA_PERF stage=<appbuilder|window-created|first-render> ms=<프로세스 시작 후 경과 ms>
+//   ORANDA_PERF stage=<appbuilder|window-created|first-render|input-ready> ms=<프로세스 시작 후 경과 ms>
+// first-render = 실제 첫 프레임이 그려진 뒤(두 번째 rAF), input-ready = 그 뒤 디스패처가 비어 입력을 받는 시점 (TSK-01-04).
 // 를 stdout 또는 ORANDA_PERF_FILE(도구가 항상 지정)에 쓴다. 훅이 없으면 wall-clock(Process.Start→표식 없음)이라 first-render 는 null 로 기록된다.
 var opt = Options.Parse(args);
 if (opt.Exe is null || !File.Exists(opt.Exe))
@@ -19,7 +20,7 @@ for (var i = 1; i <= opt.Runs; i++)
 {
     var r = RunOnce(opt, i);
     runs.Add(r);
-    Console.WriteLine($"run {i}: appbuilder={Fmt(r.AppBuilderMs)} window={Fmt(r.WindowCreatedMs)} firstRender={Fmt(r.FirstRenderMs)} privateMB={r.PrivateMemoryMb:F1} ok={r.Ok}");
+    Console.WriteLine($"run {i}: appbuilder={Fmt(r.AppBuilderMs)} window={Fmt(r.WindowCreatedMs)} firstRender={Fmt(r.FirstRenderMs)} inputReady={Fmt(r.InputReadyMs)} privateMB={r.PrivateMemoryMb:F1} ok={r.Ok}");
 }
 
 var ok = runs.Where(r => r.FirstRenderMs is not null).Select(r => r.FirstRenderMs!.Value).OrderBy(x => x).ToList();
@@ -28,13 +29,14 @@ var summary = new Summary(
     Median(runs.Select(r => r.AppBuilderMs)), Median(runs.Select(r => r.WindowCreatedMs)),
     ok.Count > 0 ? Median(ok.Select(x => (double?)x)) : null,
     ok.Count > 0 ? ok[^1] : null,
+    Median(runs.Select(r => r.InputReadyMs)),
     Median(runs.Select(r => (double?)r.PrivateMemoryMb)), opt.BudgetMs, runs);
 
 Directory.CreateDirectory(opt.Out);
 File.WriteAllText(Path.Combine(opt.Out, "perf-startup.json"),
     JsonSerializer.Serialize(summary, new JsonSerializerOptions { WriteIndented = true }));
 File.WriteAllText(Path.Combine(opt.Out, "perf-startup.md"), ToMarkdown(summary));
-Console.WriteLine($"median firstRender={Fmt(summary.MedianFirstRenderMs)} ms, private={Fmt(summary.MedianPrivateMemoryMb)} MB -> {opt.Out}");
+Console.WriteLine($"median firstRender={Fmt(summary.MedianFirstRenderMs)} ms, inputReady={Fmt(summary.MedianInputReadyMs)} ms, private={Fmt(summary.MedianPrivateMemoryMb)} MB -> {opt.Out}");
 
 var failed = runs.Any(r => !r.Ok);
 var overBudget = summary.MedianFirstRenderMs is { } m && m > opt.BudgetMs;
@@ -56,6 +58,7 @@ static RunResult RunOnce(Options opt, int index)
     psi.Environment["ORANDA_PERF_FILE"] = markFile;
     var marks = new Dictionary<string, double>();
     var firstRender = new ManualResetEventSlim();
+    var inputReady = new ManualResetEventSlim();
     using var p = new Process { StartInfo = psi };
     void Parse(string? line)
     {
@@ -71,13 +74,17 @@ static RunResult RunOnce(Options opt, int index)
         if (stage is null || ms is null) return;
         lock (marks) marks[stage] = ms.Value;
         if (stage == "first-render") firstRender.Set();
+        if (stage == "input-ready") inputReady.Set();
     }
     p.OutputDataReceived += (_, e) => Parse(e.Data);
     p.Start();
     p.BeginOutputReadLine();
     var deadline = DateTime.UtcNow.AddSeconds(opt.TimeoutS);
-    while (!firstRender.IsSet && DateTime.UtcNow < deadline && !p.HasExited)
+    // input-ready 까지 기다린다. 이 표식이 없는 옛 App 이면 first-render 뒤 1 초만 더 기다린다.
+    DateTime? graceUntil = null;
+    while (!inputReady.IsSet && DateTime.UtcNow < deadline && !p.HasExited && (graceUntil is null || DateTime.UtcNow < graceUntil))
     {
+        if (firstRender.IsSet) graceUntil ??= DateTime.UtcNow.AddSeconds(1);
         try { foreach (var l in File.ReadAllLines(markFile)) Parse(l); } catch (IOException) { } catch (UnauthorizedAccessException) { }
         Thread.Sleep(50);
     }
@@ -93,7 +100,7 @@ static RunResult RunOnce(Options opt, int index)
     lock (marks)
     {
         double? Get(string k) => marks.TryGetValue(k, out var v) ? v : null;
-        return new RunResult(index, Get("appbuilder"), Get("window-created"), Get("first-render"), mem, got);
+        return new RunResult(index, Get("appbuilder"), Get("window-created"), Get("first-render"), Get("input-ready"), mem, got);
     }
 }
 
@@ -121,18 +128,19 @@ static string ToMarkdown(Summary s)
     sb.AppendLine(CultureInfo.InvariantCulture, $"| 창 생성(중앙값 ms) | {Fmt(s.MedianWindowCreatedMs)} |");
     sb.AppendLine(CultureInfo.InvariantCulture, $"| 첫 렌더(중앙값 ms) | {Fmt(s.MedianFirstRenderMs)} |");
     sb.AppendLine(CultureInfo.InvariantCulture, $"| 첫 렌더(최대 ms) | {Fmt(s.MaxFirstRenderMs)} |");
+    sb.AppendLine(CultureInfo.InvariantCulture, $"| 입력 가능(중앙값 ms) | {Fmt(s.MedianInputReadyMs)} |");
     sb.AppendLine(CultureInfo.InvariantCulture, $"| 전용 메모리(중앙값 MB) | {Fmt(s.MedianPrivateMemoryMb)} |");
     sb.AppendLine();
-    sb.AppendLine("| # | AppBuilder | 창 생성 | 첫 렌더 | 전용 MB | 성공 |");
-    sb.AppendLine("|---|---|---|---|---|---|");
+    sb.AppendLine("| # | AppBuilder | 창 생성 | 첫 렌더 | 입력 가능 | 전용 MB | 성공 |");
+    sb.AppendLine("|---|---|---|---|---|---|---|");
     foreach (var r in s.Details)
-        sb.AppendLine(CultureInfo.InvariantCulture, $"| {r.Index} | {Fmt(r.AppBuilderMs)} | {Fmt(r.WindowCreatedMs)} | {Fmt(r.FirstRenderMs)} | {r.PrivateMemoryMb:F1} | {r.Ok} |");
+        sb.AppendLine(CultureInfo.InvariantCulture, $"| {r.Index} | {Fmt(r.AppBuilderMs)} | {Fmt(r.WindowCreatedMs)} | {Fmt(r.FirstRenderMs)} | {Fmt(r.InputReadyMs)} | {r.PrivateMemoryMb:F1} | {r.Ok} |");
     return sb.ToString();
 }
 
-sealed record RunResult(int Index, double? AppBuilderMs, double? WindowCreatedMs, double? FirstRenderMs, double PrivateMemoryMb, bool Ok);
+sealed record RunResult(int Index, double? AppBuilderMs, double? WindowCreatedMs, double? FirstRenderMs, double? InputReadyMs, double PrivateMemoryMb, bool Ok);
 sealed record Summary(DateTime TimestampUtc, string Environment, string Runtime, int Runs,
-    double? MedianAppBuilderMs, double? MedianWindowCreatedMs, double? MedianFirstRenderMs, double? MaxFirstRenderMs,
+    double? MedianAppBuilderMs, double? MedianWindowCreatedMs, double? MedianFirstRenderMs, double? MaxFirstRenderMs, double? MedianInputReadyMs,
     double? MedianPrivateMemoryMb, double BudgetMs, List<RunResult> Details);
 
 sealed record Options(string? Exe, int Runs, string Out, double BudgetMs, bool Enforce, int TimeoutS)
