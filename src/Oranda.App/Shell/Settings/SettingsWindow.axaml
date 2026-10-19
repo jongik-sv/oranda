@@ -1,0 +1,52 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:settings="using:Oranda.App.Shell.Settings"
+        x:Class="Oranda.App.Shell.Settings.SettingsWindow"
+        x:DataType="settings:SettingsViewModel"
+        Title="{Binding TitleText}"
+        MinWidth="420" MinHeight="260"
+        SizeToContent="WidthAndHeight"
+        WindowStartupLocation="CenterOwner"
+        ShowInTaskbar="False"
+        FontSize="{DynamicResource OrandaFontSizeBase}">
+  <!-- 고정 폭·높이를 쓰지 않는다(배율 250% 에서 글자가 잘리지 않게). 단추 줄은 항상 아래에 고정. -->
+  <DockPanel Margin="16">
+    <StackPanel DockPanel.Dock="Bottom" Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8" Margin="0,16,0,0">
+      <Button MinWidth="80" Content="{Binding SaveLabel}" Command="{Binding SaveCommand}"
+              IsEnabled="{Binding !IsReadOnly}" IsDefault="True" />
+      <Button MinWidth="80" Content="{Binding CloseLabel}" Command="{Binding CloseCommand}" IsCancel="True" />
+    </StackPanel>
+    <TextBlock DockPanel.Dock="Bottom" Text="{Binding Notice}" IsVisible="{Binding HasNotice}"
+               TextWrapping="Wrap" MaxWidth="480" Margin="0,12,0,0" />
+    <ScrollViewer HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
+      <Grid ColumnDefinitions="Auto,*" RowDefinitions="Auto,Auto,Auto,Auto" ColumnSpacing="12" RowSpacing="10">
+        <TextBlock Grid.Row="0" VerticalAlignment="Center" Text="{Binding ThemeLabel}" />
+        <ComboBox Grid.Row="0" Grid.Column="1" MinWidth="220" HorizontalAlignment="Stretch" x:Name="ThemeBox"
+                  ItemsSource="{Binding Themes}" SelectedItem="{Binding SelectedTheme}"
+                  AutomationProperties.Name="{Binding ThemeLabel}">
+          <ComboBox.ItemTemplate>
+            <DataTemplate x:DataType="settings:ThemeChoice">
+              <TextBlock Text="{Binding Label}" />
+            </DataTemplate>
+          </ComboBox.ItemTemplate>
+        </ComboBox>
+
+        <TextBlock Grid.Row="1" VerticalAlignment="Center" Text="{Binding FontLabel}" />
+        <!-- 편집 가능한 콤보: 설치되지 않은 글꼴 이름도 그대로 둔다(목록에 없다고 지우지 않는다). -->
+        <ComboBox Grid.Row="1" Grid.Column="1" MinWidth="220" HorizontalAlignment="Stretch" x:Name="FontBox"
+                  IsEditable="True" ItemsSource="{Binding FontChoices}" Text="{Binding FontFamily, Mode=TwoWay}"
+                  AutomationProperties.Name="{Binding FontLabel}" />
+
+        <TextBlock Grid.Row="2" VerticalAlignment="Center" Text="{Binding FontSizeLabel}" />
+        <NumericUpDown Grid.Row="2" Grid.Column="1" MinWidth="120" HorizontalAlignment="Left" x:Name="FontSizeBox"
+                       Minimum="8" Maximum="32" Increment="1" FormatString="0.#"
+                       Value="{Binding FontSize}" AutomationProperties.Name="{Binding FontSizeLabel}" />
+
+        <TextBlock Grid.Row="3" VerticalAlignment="Center" Text="{Binding TabSizeLabel}" />
+        <NumericUpDown Grid.Row="3" Grid.Column="1" MinWidth="120" HorizontalAlignment="Left" x:Name="TabSizeBox"
+                       Minimum="1" Maximum="16" Increment="1" FormatString="0"
+                       Value="{Binding TabSize}" AutomationProperties.Name="{Binding TabSizeLabel}" />
+      </Grid>
+    </ScrollViewer>
+  </DockPanel>
+</Window>

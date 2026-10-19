@@ -11,6 +11,9 @@
     <PackageVersion Include="Avalonia.Fonts.Inter" Version="12.1.4" />
     <PackageVersion Include="AvaloniaUI.DiagnosticsSupport" Version="2.2.3" />
     <PackageVersion Include="CommunityToolkit.Mvvm" Version="8.4.2" />
+    <PackageVersion Include="Dock.Avalonia" Version="12.1.0.12" />
+    <PackageVersion Include="Dock.Avalonia.Themes.Fluent" Version="12.1.0.12" />
+    <PackageVersion Include="Dock.Model.Mvvm" Version="12.1.0.12" />
   </ItemGroup>
 
   <ItemGroup Label="Oracle">
@@ -27,6 +30,7 @@
   </ItemGroup>
 
   <ItemGroup Label="Test">
+    <PackageVersion Include="Avalonia.Headless" Version="12.1.4" />
     <PackageVersion Include="coverlet.collector" Version="6.0.0" />
     <PackageVersion Include="Microsoft.NET.Test.Sdk" Version="17.8.0" />
     <PackageVersion Include="xunit" Version="2.5.3" />

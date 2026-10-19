@@ -1,22 +1,54 @@
 <Window xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:vm="using:Oranda.App.ViewModels"
-        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
-        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
-        mc:Ignorable="d" d:DesignWidth="800" d:DesignHeight="450"
+        xmlns:docking="using:Oranda.App.Shell.Docking"
         x:Class="Oranda.App.Views.MainWindow"
         x:DataType="vm:MainViewModel"
         Icon="/Assets/avalonia-logo.ico"
-        Title="Oranda.App">
+        Title="{Binding Title}"
+        MinWidth="960" MinHeight="600"
+        FontFamily="Inter, Malgun Gothic, Apple SD Gothic Neo"
+        FontSize="{DynamicResource OrandaFontSizeBase}">
 
-    <Design.DataContext>
-        <!-- This only sets the DataContext for the previewer in an IDE,
-             to set the actual DataContext for runtime, set the DataContext property in code (look at App.axaml.cs) -->
-        <vm:MainViewModel />
-    </Design.DataContext>
+  <!-- 환경 테두리는 창 장식이 아니라 창 내용 안쪽에 그린다(최대화·전체 화면에서도 보임, ui-shell.md 4.2). -->
+  <Border x:Name="EnvironmentBorder" BorderThickness="3" Classes="env-frame">
+    <DockPanel>
+      <!-- 창이 아주 좁으면(배율 250 %) 메뉴 머리글이 잘리지 않고 다음 줄로 넘어간다. -->
+      <Menu x:Name="MenuBar" DockPanel.Dock="Top">
+        <Menu.ItemsPanel>
+          <ItemsPanelTemplate>
+            <WrapPanel />
+          </ItemsPanelTemplate>
+        </Menu.ItemsPanel>
+      </Menu>
 
-    <TextBox Text="{Binding Greeting}"
-             HorizontalAlignment="Center"
-             VerticalAlignment="Center" />
+      <Border DockPanel.Dock="Top" BorderThickness="0,0,0,1" BorderBrush="{DynamicResource OrandaSeparatorBrush}">
+        <DockPanel x:Name="ToolbarHost" Margin="4,2">
+          <Button x:Name="PaletteButton" DockPanel.Dock="Right" MinWidth="120" Padding="10,3"
+                  Content="명령 검색…" AutomationProperties.Name="명령 검색" />
+          <Button x:Name="OverflowButton" DockPanel.Dock="Right" MinWidth="32" Content="…" IsVisible="False"
+                  AutomationProperties.Name="더 보기" />
+          <StackPanel x:Name="ToolbarPanel" Orientation="Horizontal" Spacing="2" />
+        </DockPanel>
+      </Border>
 
+      <Border x:Name="StatusBarBorder" DockPanel.Dock="Bottom" Padding="8,3" MinHeight="24"
+              Classes="statusbar">
+        <ItemsControl x:Name="StatusBar" ItemsSource="{Binding StatusItems}">
+          <ItemsControl.ItemsPanel>
+            <ItemsPanelTemplate>
+              <StackPanel Orientation="Horizontal" Spacing="16" />
+            </ItemsPanelTemplate>
+          </ItemsControl.ItemsPanel>
+          <ItemsControl.ItemTemplate>
+            <DataTemplate x:DataType="vm:StatusBarEntry">
+              <ContentControl Content="{Binding Item}" IsVisible="{Binding IsShown}" />
+            </DataTemplate>
+          </ItemsControl.ItemTemplate>
+        </ItemsControl>
+      </Border>
+
+      <docking:DockHostView x:Name="DockHost" DataContext="{Binding Docking}" />
+    </DockPanel>
+  </Border>
 </Window>

@@ -1,9 +1,10 @@
 <Application xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:dock="using:Dock.Avalonia.Themes.Fluent"
              x:Class="Oranda.App.App"
              xmlns:local="using:Oranda.App"
              RequestedThemeVariant="Default">
-             <!-- "Default" ThemeVariant follows system theme variant. "Dark" or "Light" are other available options. -->
+    <!-- "Default" ThemeVariant 는 OS 테마를 따른다(설정 창·보기 메뉴에서 밝게/어둡게로 바꾸면 ThemeService 가 바꾼다). -->
 
     <Application.DataTemplates>
         <local:ViewLocator />
@@ -11,5 +12,51 @@
 
     <Application.Styles>
         <FluentTheme />
+        <dock:DockFluentTheme />
+
+        <!-- 환경 라벨 틀(ui-shell.md 4.2): 운영 = 빨강 테두리 + 상태 표시줄 바탕 빨강. 색은 아래 테마 리소스에서만 받는다. -->
+        <Style Selector="Border.env-frame.env-production">
+            <Setter Property="BorderBrush" Value="{DynamicResource OrandaEnvProductionBrush}" />
+        </Style>
+        <Style Selector="Border.env-frame.env-test">
+            <Setter Property="BorderBrush" Value="{DynamicResource OrandaEnvTestBrush}" />
+        </Style>
+        <Style Selector="Border.env-frame.env-development">
+            <Setter Property="BorderBrush" Value="{DynamicResource OrandaEnvDevelopmentBrush}" />
+        </Style>
+        <Style Selector="Border.statusbar.env-production">
+            <Setter Property="Background" Value="{DynamicResource OrandaEnvProductionBrush}" />
+            <Setter Property="TextElement.Foreground" Value="{DynamicResource OrandaEnvProductionForegroundBrush}" />
+        </Style>
     </Application.Styles>
+
+    <Application.Resources>
+        <!-- 앱 색은 Light·Dark 두 벌에 리소스 키로만 둔다(코드에 색 값 직접 쓰기 금지, ui-shell.md 6장). -->
+        <ResourceDictionary>
+            <ResourceDictionary.ThemeDictionaries>
+                <ResourceDictionary x:Key="Light">
+                    <SolidColorBrush x:Key="OrandaEnvProductionBrush" Color="#C42B1C" />
+                    <SolidColorBrush x:Key="OrandaEnvProductionForegroundBrush" Color="#FFFFFF" />
+                    <SolidColorBrush x:Key="OrandaEnvTestBrush" Color="#B65A00" />
+                    <SolidColorBrush x:Key="OrandaEnvDevelopmentBrush" Color="#107C10" />
+                    <SolidColorBrush x:Key="OrandaUncommittedBrush" Color="#B65A00" />
+                    <SolidColorBrush x:Key="OrandaSeparatorBrush" Color="#D0D0D0" />
+                </ResourceDictionary>
+                <ResourceDictionary x:Key="Dark">
+                    <SolidColorBrush x:Key="OrandaEnvProductionBrush" Color="#FF6B5E" />
+                    <SolidColorBrush x:Key="OrandaEnvProductionForegroundBrush" Color="#000000" />
+                    <SolidColorBrush x:Key="OrandaEnvTestBrush" Color="#F0A04B" />
+                    <SolidColorBrush x:Key="OrandaEnvDevelopmentBrush" Color="#6CCB5F" />
+                    <SolidColorBrush x:Key="OrandaUncommittedBrush" Color="#F0A04B" />
+                    <SolidColorBrush x:Key="OrandaSeparatorBrush" Color="#404040" />
+                </ResourceDictionary>
+            </ResourceDictionary.ThemeDictionaries>
+
+            <!-- UI 글자 크기(DIP). 고정 Width/Height 대신 이 값과 자동 크기를 쓴다(ui-shell.md 5장). -->
+            <x:Double x:Key="OrandaFontSizeBase">13</x:Double>
+            <x:Double x:Key="OrandaFontSizeSmall">11</x:Double>
+            <x:Double x:Key="OrandaEditorFontSize">13</x:Double>
+            <FontFamily x:Key="OrandaEditorFontFamily">Cascadia Mono, Consolas, Malgun Gothic</FontFamily>
+        </ResourceDictionary>
+    </Application.Resources>
 </Application>
