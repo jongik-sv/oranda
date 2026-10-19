@@ -3,6 +3,37 @@
              xmlns:vm="using:Oranda.App.Features.ObjectDetail"
              x:Class="Oranda.App.Features.ObjectDetail.ObjectDetailView"
              x:DataType="vm:ObjectDetailViewModel">
-  <!-- TSK-07-03 빈 틀 -->
-  <TextBlock Text="oranda.panel.objectDetail" />
+  <DockPanel>
+    <TextBlock DockPanel.Dock="Bottom" Margin="6,2" Text="{Binding StatusText}" TextTrimming="CharacterEllipsis" Opacity="0.7" />
+    <TabControl x:Name="Tabs">
+      <TabItem Header="상세">
+        <DockPanel>
+          <ListBox x:Name="SectionList" DockPanel.Dock="Left" MinWidth="110" ItemsSource="{Binding Sections}" SelectedItem="{Binding SelectedSection, Mode=TwoWay}">
+            <ListBox.ItemTemplate>
+              <DataTemplate x:DataType="vm:ObjectDetailSection">
+                <TextBlock Text="{Binding Title}" />
+              </DataTemplate>
+            </ListBox.ItemTemplate>
+          </ListBox>
+          <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto">
+            <SelectableTextBlock x:Name="SectionText" Margin="8,4" FontFamily="Consolas,Menlo,monospace" />
+          </ScrollViewer>
+        </DockPanel>
+      </TabItem>
+      <TabItem Header="DDL" x:Name="DdlTab">
+        <DockPanel>
+          <WrapPanel DockPanel.Dock="Top" Margin="4">
+            <CheckBox Content="저장 속성(STORAGE)" IsChecked="{Binding IncludeStorage, Mode=TwoWay}" Margin="0,0,10,0" />
+            <CheckBox Content="세그먼트 속성" IsChecked="{Binding IncludeSegmentAttributes, Mode=TwoWay}" Margin="0,0,10,0" />
+            <CheckBox Content="테이블스페이스" IsChecked="{Binding IncludeTablespace, Mode=TwoWay}" Margin="0,0,10,0" />
+            <CheckBox Content="종결자(;)" IsChecked="{Binding SqlTerminator, Mode=TwoWay}" Margin="0,0,10,0" />
+            <CheckBox Content="종속 객체(인덱스·제약·권한 등)" IsChecked="{Binding IncludeDependentObjects, Mode=TwoWay}" Margin="0,0,10,0" />
+            <Button x:Name="CopyButton" Content="복사" />
+          </WrapPanel>
+          <TextBox Text="{Binding DdlText}" IsReadOnly="True" AcceptsReturn="True" TextWrapping="NoWrap"
+                   FontFamily="Consolas,Menlo,monospace" />
+        </DockPanel>
+      </TabItem>
+    </TabControl>
+  </DockPanel>
 </UserControl>
