@@ -1,0 +1,128 @@
+name: ci
+
+on:
+  push:
+    branches: [main, 'dev-*']
+  pull_request:
+    branches: [main, 'dev-*']
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  DOTNET_NOLOGO: 1
+  DOTNET_CLI_TELEMETRY_OPTOUT: 1
+  VPK_VERSION: 1.2.161
+
+jobs:
+  windows:
+    name: windows-x64 (build, unit, ui, perf)
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+      - run: dotnet build Oranda.sln -c Release
+      - name: Unit and UI tests
+        run: dotnet test Oranda.sln -c Release --no-build --filter "Category!=Integration"
+      - name: Publish app
+        run: dotnet publish src/Oranda.App -c Release -r win-x64 --self-contained -p:PublishReadyToRun=true -o artifacts/publish/win-x64
+      - name: Startup perf (5 runs)
+        # 예산 초과 시 실패시키려면 --enforce 를 붙인다(예산 확정 전까지 보고만).
+        run: dotnet run --project tests/Oranda.Perf -c Release -- --exe artifacts/publish/win-x64/Oranda.App.exe --runs 5 --out artifacts/perf
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: perf-windows-x64
+          path: artifacts/perf/
+          if-no-files-found: warn
+
+  macos:
+    name: macos-arm64 (build, unit, ui, package)
+    runs-on: macos-14
+    env:
+      HAS_APPLE_SECRETS: ${{ secrets.APPLE_CERTIFICATE_P12_BASE64 != '' }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+      - run: dotnet build Oranda.sln -c Release
+      - name: Unit and UI tests
+        run: dotnet test Oranda.sln -c Release --no-build --filter "Category!=Integration"
+      - name: Publish app
+        run: dotnet publish src/Oranda.App -c Release -r osx-arm64 --self-contained -p:PublishReadyToRun=true -o artifacts/publish/osx-arm64
+      - name: Install vpk
+        run: dotnet tool install -g vpk --version "$VPK_VERSION"
+      - name: Import signing certificate
+        if: env.HAS_APPLE_SECRETS == 'true'
+        env:
+          APPLE_CERTIFICATE_P12_BASE64: ${{ secrets.APPLE_CERTIFICATE_P12_BASE64 }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          KEYCHAIN_PASSWORD: ${{ secrets.APPLE_KEYCHAIN_PASSWORD }}
+        run: |
+          KC="$RUNNER_TEMP/oranda.keychain-db"
+          echo "$APPLE_CERTIFICATE_P12_BASE64" | base64 --decode > "$RUNNER_TEMP/cert.p12"
+          security create-keychain -p "$KEYCHAIN_PASSWORD" "$KC"
+          security set-keychain-settings -lut 21600 "$KC"
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KC"
+          security import "$RUNNER_TEMP/cert.p12" -P "$APPLE_CERTIFICATE_PASSWORD" -A -t cert -f pkcs12 -k "$KC"
+          security set-key-partition-list -S apple-tool:,apple: -s -k "$KEYCHAIN_PASSWORD" "$KC"
+          security list-keychains -d user -s "$KC" login.keychain
+      - name: Store notarytool profile
+        if: env.HAS_APPLE_SECRETS == 'true'
+        env:
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          APPLE_APP_PASSWORD: ${{ secrets.APPLE_APP_PASSWORD }}
+        run: xcrun notarytool store-credentials oranda-notary --apple-id "$APPLE_ID" --team-id "$APPLE_TEAM_ID" --password "$APPLE_APP_PASSWORD"
+      - name: Package (signed and notarized)
+        if: env.HAS_APPLE_SECRETS == 'true'
+        env:
+          APPLE_SIGN_APP_IDENTITY: ${{ secrets.APPLE_SIGN_APP_IDENTITY }}
+          APPLE_SIGN_INSTALL_IDENTITY: ${{ secrets.APPLE_SIGN_INSTALL_IDENTITY }}
+        run: >
+          vpk pack --packId Oranda --packVersion "0.0.${{ github.run_number }}"
+          --packDir artifacts/publish/osx-arm64 --mainExe Oranda.App
+          --signAppIdentity "$APPLE_SIGN_APP_IDENTITY" --signInstallIdentity "$APPLE_SIGN_INSTALL_IDENTITY"
+          --notaryProfile oranda-notary --outputDir artifacts/release
+      - name: Package (unsigned, no secrets)
+        if: env.HAS_APPLE_SECRETS != 'true'
+        run: >
+          vpk pack --packId Oranda --packVersion "0.0.${{ github.run_number }}"
+          --packDir artifacts/publish/osx-arm64 --mainExe Oranda.App --outputDir artifacts/release
+      - name: Verify signature and Gatekeeper
+        if: env.HAS_APPLE_SECRETS == 'true'
+        run: |
+          APP=$(find artifacts/release -name '*.app' -maxdepth 2 | head -n1)
+          if [ -n "$APP" ]; then
+            codesign --verify --deep --strict --verbose=2 "$APP"
+            spctl --assess --type execute --verbose "$APP"
+          fi
+      - name: Installer size check (80 MB)
+        run: |
+          for f in artifacts/release/*Setup* artifacts/release/*.pkg; do
+            [ -e "$f" ] || continue
+            s=$(stat -f%z "$f"); echo "$f $s"
+            [ "$s" -le 83886080 ] || { echo "too large"; exit 1; }
+          done
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-macos-arm64
+          path: artifacts/release/
+          if-no-files-found: warn
+
+  integration:
+    name: integration (ubuntu, Testcontainers)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+      # gvenzl/oracle-free:23-slim 은 Testcontainers 가 직접 pull·기동한다. 러너의 Docker 사용.
+      - run: dotnet build Oranda.sln -c Release
+      - name: Integration tests
+        run: dotnet test Oranda.sln -c Release --no-build --filter "Category=Integration"
