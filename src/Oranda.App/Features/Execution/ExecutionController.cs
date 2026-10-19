@@ -61,6 +61,9 @@ public sealed class ExecutionDeps
 
     /// <summary>도구 창 보이기/숨기기(패널 ID).</summary>
     public Action<string> TogglePanel { get; init; } = _ => { };
+
+    /// <summary>바인드 변수 목록(「바인드 변수」 창과 같은 것). 기본값은 버스 없는 공용 목록.</summary>
+    public BindVariableStore Binds { get; init; } = BindVariableStore.For(null);
 }
 
 /// <summary>
@@ -71,13 +74,15 @@ public sealed class ExecutionDeps
 public sealed class ExecutionController : IDisposable
 {
     private readonly ExecutionDeps _d;
-    private readonly Dictionary<string, BindInput> _lastBinds = new(StringComparer.OrdinalIgnoreCase);
     private CancellationTokenSource? _cts;
     private Window? _window;
     private bool _exitApproved;
     private bool _lastCancelled;
     /// <summary>결과·오류를 보이는 아래 도구 창(<see cref="ResultsPanelViewModel"/>).</summary>
     public const string ResultsPanelId = "oranda.panel.results";
+
+    /// <summary>바인드 변수 창(<see cref="BindVariablesViewModel"/>).</summary>
+    public const string BindsPanelId = "oranda.panel.binds";
 
     public ExecutionController(ExecutionDeps deps)
     {
@@ -299,66 +304,115 @@ public sealed class ExecutionController : IDisposable
 
     // ---- 바인드 ----------------------------------------------------------------------------
 
-    /// <summary>바인드 변수 창(<c>oranda.exec.bindVariables</c>): 현재 문장의 바인드 값을 미리 정해 둔다. 실행은 하지 않는다.</summary>
-    public async Task<bool> EditBindsAsync(SqlEditorViewModel? tab = null, CancellationToken ct = default)
+    /// <summary>
+    /// 바인드 변수 창(<c>oranda.exec.bindVariables</c>): 창을 보이고, 커서 문장의 바인드 이름을 목록에 채워 첫 값 칸으로 간다.
+    /// 실행은 하지 않는다(오렌지 Bind Variable List).
+    /// </summary>
+    public Task<bool> EditBindsAsync(SqlEditorViewModel? tab = null, CancellationToken ct = default)
     {
         tab ??= Host.Active;
+        _d.ActivatePanel(BindsPanelId);
         if (tab?.GetStatementAtCaret() is not { BindNames.Count: > 0 } stmt)
         {
-            Log.AddMessage(MessageKind.Info, "현재 문장에 바인드 변수가 없습니다.");
-            return false;
+            Log.AddMessage(MessageKind.Info, "현재 문장에 바인드 변수가 없습니다. 「바인드 변수」 창에서 직접 더할 수 있습니다.");
+            return Task.FromResult(false);
         }
 
-        return await AskBindsAsync(stmt, ct).ConfigureAwait(true) is not null;
+        _d.Binds.Ensure(stmt.BindNames);
+        _d.Binds.RequestFocus(stmt.BindNames[0]);
+        return Task.FromResult(true);
     }
 
-    private async Task<Dictionary<string, BindValue>?> AskBindsAsync(SqlStatement stmt, CancellationToken ct)
+    /// <summary>
+    /// 실행할 바인드 값을 「바인드 변수」 목록에서 만든다(묻는 창 없음). 처음 보는 이름은 목록에 더하고 실행하지 않는다:
+    /// 값 없이 실행하면 INSERT·UPDATE 가 NULL 로 돌 수 있어서다. 형식에 맞지 않는 값도 실행하지 않는다.
+    /// </summary>
+    private Dictionary<string, BindValue>? ResolveBinds(IEnumerable<string> names, ResultTabsViewModel? results)
     {
-        var result = new Dictionary<string, BindValue>(StringComparer.OrdinalIgnoreCase);
-        if (stmt.BindNames.Count == 0)
+        var list = names.Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+        if (list.Count == 0)
         {
-            return result;
+            return new Dictionary<string, BindValue>(StringComparer.OrdinalIgnoreCase);
         }
 
-        var rows = stmt.BindNames
-            .Select(n => _lastBinds.TryGetValue(n, out var last) ? Clone(last) : new BindInput(n))
-            .ToList();
-        while (true)
+        string? problem = null;
+        var added = _d.Binds.Ensure(list);
+        if (added.Count > 0)
         {
-            var answer = await _d.Dialogs.AskBindsAsync(rows, ct).ConfigureAwait(true);
-            if (answer is null)
-            {
-                return null;
-            }
-
-            result.Clear();
-            string? error = null;
-            foreach (var row in answer)
-            {
-                var value = row.ToBindValue(out error);
-                if (value is null)
-                {
-                    break;
-                }
-
-                result[row.Name] = value;
-            }
-
-            if (error is null)
-            {
-                foreach (var row in answer)
-                {
-                    _lastBinds[row.Name] = Clone(row); // 마지막 값은 세션 메모리에만(EXEC-03).
-                }
-
-                return result;
-            }
-
-            Log.AddMessage(MessageKind.Error, error);
+            problem = $"바인드 변수 {string.Join(", ", added.Select(n => ":" + n))} 의 값을 「바인드 변수」 창에 넣은 뒤 다시 실행하세요. (빈 값은 NULL)";
+            _d.Binds.RequestFocus(added[0]);
         }
+        else if (!_d.Binds.TryBuild(list, out var values, out var error))
+        {
+            problem = error ?? "바인드 값을 읽을 수 없습니다.";
+        }
+        else
+        {
+            return values;
+        }
+
+        _d.ActivatePanel(BindsPanelId);
+        Log.AddMessage(added.Count > 0 ? MessageKind.Warning : MessageKind.Error, problem);
+        if (results is not null)
+        {
+            results.Clear();
+            results.AddMessage("바인드 변수", problem, isError: added.Count == 0);
+        }
+
+        return null;
     }
 
-    private static BindInput Clone(BindInput b) => new(b.Name) { Type = b.Type, Direction = b.Direction, Text = b.Text, IsNull = b.IsNull };
+    /// <summary>
+    /// 편집기의 바인드 변수를 목록의 값으로 바꿔 넣는다(오렌지 「Paste Bind Variables Into Editor」, <c>oranda.exec.pasteBindValues</c>).
+    /// 렉서의 바인드 토큰만 바꾼다(문자열·주석 안은 그대로). 목록에 없거나 값을 읽을 수 없는 변수는 남긴다. 한 번에 실행 취소된다.
+    /// </summary>
+    public int PasteBindValues(SqlEditorViewModel? tab = null)
+    {
+        tab ??= Host.Active;
+        if (tab is null || tab.IsReadOnly)
+        {
+            return 0;
+        }
+
+        var text = tab.Text;
+        var edits = new List<(int Start, int Length, string Literal)>();
+        foreach (var t in Oranda.Language.Lexing.SqlLexer.Tokenize(text))
+        {
+            if (t.Kind != Oranda.Language.Lexing.TokenKind.Bind || t.Length < 2)
+            {
+                continue;
+            }
+
+            var name = text.Substring(t.Start + 1, t.Length - 1);
+            if (_d.Binds.Find(name) is { } row && BindVariableStore.ToLiteral(row) is { } literal)
+            {
+                edits.Add((t.Start, t.Length, literal));
+            }
+        }
+
+        if (edits.Count == 0)
+        {
+            Log.AddMessage(MessageKind.Info, "바꿀 바인드 변수가 없습니다(목록에 값이 있는 변수만 바꿉니다).");
+            return 0;
+        }
+
+        var doc = tab.Document;
+        doc.BeginUpdate();
+        try
+        {
+            for (int i = edits.Count - 1; i >= 0; i--)
+            {
+                doc.Replace(edits[i].Start, edits[i].Length, edits[i].Literal);
+            }
+        }
+        finally
+        {
+            doc.EndUpdate();
+        }
+
+        Log.AddMessage(MessageKind.Info, $"바인드 변수 {edits.Count.ToString(CultureInfo.InvariantCulture)}곳을 값으로 바꿨습니다.");
+        return edits.Count;
+    }
 
     // ---- 문장 고르기 -------------------------------------------------------------------------
 
@@ -436,7 +490,7 @@ public sealed class ExecutionController : IDisposable
             return false;
         }
 
-        var binds = await AskBindsAsync(stmt, ct).ConfigureAwait(true);
+        var binds = ResolveBinds(stmt.BindNames, results);
         if (binds is null)
         {
             return false;
@@ -475,6 +529,12 @@ public sealed class ExecutionController : IDisposable
             return false;
         }
 
+        var binds = ResolveBinds(stmts.SelectMany(st => st.BindNames), results);
+        if (binds is null)
+        {
+            return false;
+        }
+
         if (!newResultTab)
         {
             results.Clear();
@@ -486,7 +546,7 @@ public sealed class ExecutionController : IDisposable
         await GuardedAsync(session, async token =>
         {
             var exec = _d.Execution();
-            var options = new ExecutionOptions { Source = HistorySource.Script };
+            var options = new ExecutionOptions { Source = HistorySource.Script, Binds = binds };
             var en = exec.ExecuteScriptAsync(session, stmts, State.ErrorMode, options, token).GetAsyncEnumerator(token);
             try
             {

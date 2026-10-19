@@ -28,9 +28,6 @@ public interface IExecutionDialogs
     Task<IReadOnlyDictionary<string, string>?> AskSubstitutionsAsync(
         IReadOnlyList<string> names, IReadOnlyDictionary<string, string> last, CancellationToken ct);
 
-    /// <summary>바인드 입력. 같은 행 객체에 사용자가 고친 값이 담겨 돌아온다. null = 취소.</summary>
-    Task<IReadOnlyList<BindInput>?> AskBindsAsync(IReadOnlyList<BindInput> rows, CancellationToken ct);
-
     Task<ScriptErrorAction> AskScriptErrorAsync(SqlStatement stmt, DbError failure, CancellationToken ct);
 
     Task<UncommittedChoice> AskUncommittedAsync(CancellationToken ct);
@@ -39,7 +36,7 @@ public interface IExecutionDialogs
     Task<bool> PreviewDmlAsync(string text, CancellationToken ct);
 }
 
-/// <summary>바인드 대화상자의 한 줄: 이름·형식·방향·값(EXEC-03).</summary>
+/// <summary>바인드 값 한 개의 입력: 이름·형식·방향·글자(EXEC-03). 「바인드 변수」 목록 줄이 실행 값으로 바꿀 때 쓴다.</summary>
 public sealed class BindInput
 {
     public BindInput(string name)

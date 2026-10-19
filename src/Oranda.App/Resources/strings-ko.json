@@ -36,6 +36,7 @@
   "Menu.view.theme": "테마",
   "Menu.window": "창",
   "Menu.window.access": "창(_W)",
+  "Panel.oranda.panel.binds": "바인드 변수",
   "Panel.oranda.panel.compileErrors": "컴파일 오류",
   "Panel.oranda.panel.dbInfo": "DB 정보",
   "Panel.oranda.panel.ddlExtract": "DDL 일괄 추출",

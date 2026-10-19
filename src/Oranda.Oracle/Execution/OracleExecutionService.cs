@@ -78,7 +78,9 @@ internal sealed partial class OracleExecutionService : IExecutionService
 
         foreach (var stmt in stmts)
         {
-            var result = await ExecuteAsync(s, stmt, empty, options, ct);
+            // 바인드 이름이 없는 문장에 값을 넘기면 BindBuilder 가 받은 값을 모두 붙인다(ORA-01036). 그 문장에는 빈 사전.
+            var binds = options.Binds is { } all && stmt.BindNames.Count > 0 ? all : empty;
+            var result = await ExecuteAsync(s, stmt, binds, options, ct);
             yield return result;
 
             if (result.Status == ExecutionStatus.Cancelled)

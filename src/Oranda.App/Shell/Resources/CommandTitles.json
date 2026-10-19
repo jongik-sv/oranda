@@ -78,6 +78,7 @@
   "Cmd.oranda.exec.runForEdit": "결과 편집 모드로 실행",
   "Cmd.oranda.exec.cancel": "실행 취소(서버 중단)",
   "Cmd.oranda.exec.bindVariables": "바인드 변수 창",
+  "Cmd.oranda.exec.pasteBindValues": "바인드 값을 편집기에 붙여 넣기",
   "Cmd.oranda.exec.toggleDbmsOutput": "DBMS_OUTPUT 수집 켜기/끄기",
   "Cmd.oranda.exec.errorModeAsk": "스크립트 오류 시: 묻기",
   "Cmd.oranda.exec.errorModeStop": "스크립트 오류 시: 중지",

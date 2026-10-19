@@ -74,6 +74,8 @@ internal sealed class FakeExecution : IExecutionService
 
     public ScriptErrorMode? LastMode { get; private set; }
 
+    public ExecutionOptions? LastOptions { get; private set; }
+
     public Task<ExecutionResult> ExecuteAsync(ISession s, SqlStatement stmt, IReadOnlyDictionary<string, BindValue> binds, ExecutionOptions? options, CancellationToken ct)
     {
         Statements.Add(stmt);
@@ -85,6 +87,7 @@ internal sealed class FakeExecution : IExecutionService
         ExecutionOptions? options, [EnumeratorCancellation] CancellationToken ct)
     {
         LastMode = mode;
+        LastOptions = options;
         foreach (var stmt in stmts)
         {
             var r = await ExecuteAsync(s, stmt, new Dictionary<string, BindValue>(), options, ct);
@@ -107,11 +110,6 @@ internal sealed class FakeDialogs : IExecutionDialogs
 
     public List<IReadOnlyDictionary<string, string>> SubstitutionLasts { get; } = [];
 
-    /// <summary>바인드 대화상자 답: 줄마다 한 번 꺼낸다. null 항목 = 취소. 비면 받은 그대로 확인.</summary>
-    public Queue<Action<IReadOnlyList<BindInput>>?> BindScript { get; } = new();
-
-    public List<string> BindTextsShown { get; } = [];
-
     public ScriptErrorAction ScriptErrorAnswer { get; set; } = ScriptErrorAction.Stop;
 
     public UncommittedChoice UncommittedAnswer { get; set; } = UncommittedChoice.Cancel;
@@ -132,24 +130,6 @@ internal sealed class FakeDialogs : IExecutionDialogs
     {
         SubstitutionLasts.Add(new Dictionary<string, string>(last));
         return Task.FromResult(SubstitutionAnswer);
-    }
-
-    public Task<IReadOnlyList<BindInput>?> AskBindsAsync(IReadOnlyList<BindInput> rows, CancellationToken ct)
-    {
-        BindTextsShown.Add(string.Join("|", rows.Select(r => r.Text)));
-        if (BindScript.Count == 0)
-        {
-            return Task.FromResult<IReadOnlyList<BindInput>?>(rows);
-        }
-
-        var step = BindScript.Dequeue();
-        if (step is null)
-        {
-            return Task.FromResult<IReadOnlyList<BindInput>?>(null);
-        }
-
-        step(rows);
-        return Task.FromResult<IReadOnlyList<BindInput>?>(rows);
     }
 
     public Task<ScriptErrorAction> AskScriptErrorAsync(SqlStatement stmt, DbError failure, CancellationToken ct) => Task.FromResult(ScriptErrorAnswer);
@@ -214,6 +194,7 @@ internal sealed class Rig : IDisposable
             Execution = () => Exec,
             Language = () => lang,
             Host = () => Host,
+            Binds = BindVariableStore.For(Bus),
             ActivatePanel = id => Panels.Add("show " + id),
             TogglePanel = id => Panels.Add("toggle " + id),
         });
@@ -224,6 +205,9 @@ internal sealed class Rig : IDisposable
 
     /// <summary>컨트롤러가 요청한 도구 창 동작(<c>show id</c>·<c>toggle id</c>).</summary>
     public List<string> Panels { get; } = [];
+
+    /// <summary>이 리그의 바인드 변수 목록(버스마다 하나).</summary>
+    public BindVariableStore Binds => BindVariableStore.For(Bus);
 
     public ConnectionProfile Profile { get; }
 
@@ -272,7 +256,7 @@ public sealed class ExecutionTests
             Assert.NotNull(registry.Find(id));
         }
 
-        Assert.Equal(21, ExecutionCommands.Ids.Length);
+        Assert.Equal(22, ExecutionCommands.Ids.Length);
         Assert.Equal("hasSession && !sessionBusy", registry.Find("oranda.exec.runStatement")!.Enablement);
         Assert.Equal("hasSession && !sessionBusy && hasSelection", registry.Find("oranda.exec.runSelection")!.Enablement);
         Assert.Equal("sessionBusy", registry.Find("oranda.exec.cancel")!.Enablement);
@@ -893,72 +877,163 @@ public sealed class ExecutionTests
     // ---------- 컨트롤러: 바인드 ----------
 
     [Fact]
-    public Task Bind_dialog_values_reach_the_engine_and_are_remembered_for_the_next_run() => Ui.Run(async () =>
+    public Task New_bind_names_fill_the_list_and_stop_then_list_values_reach_the_engine() => Ui.Run(async () =>
     {
         using var rig = new Rig();
-        rig.Host.NewDocument("select :a, :b from dual");
-        rig.Dialogs.BindScript.Enqueue(rows =>
-        {
-            rows[0].Type = BindDataType.Number;
-            rows[0].Text = "42";
-            rows[1].Text = "hi";
-        });
+        var tab = rig.Host.NewDocument("select :a, :b from dual");
 
-        await rig.Controller.RunAsync(RunMode.Statement);
+        // 처음 보는 이름: 목록에 줄을 더하고 실행하지 않는다(값 없이 NULL 로 돌지 않게). 바인드 변수 창을 보인다.
+        Assert.False(await rig.Controller.RunAsync(RunMode.Statement));
+        Assert.Empty(rig.Exec.Statements);
+        Assert.Equal(["a", "b"], rig.Binds.Rows.Select(r => r.Name));
+        Assert.Contains("show " + ExecutionController.BindsPanelId, rig.Panels);
+        Assert.Equal("a", rig.Binds.PendingFocus);
+        Assert.Contains(rig.Log.Messages, m => m.Kind == MessageKind.Warning && m.Text.Contains(":a, :b", StringComparison.Ordinal));
+        var message = Assert.IsType<ResultTabsViewModel>(tab.ResultPane).Tabs.Single();
+        Assert.Equal("바인드 변수", message.Title);
 
+        rig.Binds.Find("a")!.Type = BindDataType.Number;
+        rig.Binds.Find("a")!.Text = "42";
+        rig.Binds.Find("b")!.Text = "hi";
+        Assert.True(await rig.Controller.RunAsync(RunMode.Statement));
         Assert.Equal(42m, rig.Exec.LastBinds!["a"].Value);
         Assert.Equal("hi", rig.Exec.LastBinds["b"].Value);
-        Assert.Equal("|", rig.Dialogs.BindTextsShown[0]);
 
-        await rig.Controller.RunAsync(RunMode.Statement);
-        Assert.Equal("42|hi", rig.Dialogs.BindTextsShown[1]);
+        // 다음 실행도 묻지 않고 같은 값. 빈 값은 NULL.
+        rig.Binds.Find("b")!.Text = string.Empty;
+        Assert.True(await rig.Controller.RunAsync(RunMode.Statement));
         Assert.Equal(BindDataType.Number, rig.Exec.LastBinds["a"].Type);
+        Assert.Null(rig.Exec.LastBinds["b"].Value);
     });
 
     [Fact]
-    public Task Cancelled_bind_dialog_does_not_execute() => Ui.Run(async () =>
+    public Task Invalid_bind_value_stops_with_a_message_and_shows_the_list() => Ui.Run(async () =>
     {
         using var rig = new Rig();
-        rig.Host.NewDocument("select :a from dual");
-        rig.Dialogs.BindScript.Enqueue(null);
+        rig.Host.NewDocument("select :n from dual");
+        var row = rig.Binds.Add("n");
+        row.Type = BindDataType.Number;
+        row.Text = "abc";
 
         Assert.False(await rig.Controller.RunAsync(RunMode.Statement));
 
         Assert.Empty(rig.Exec.Statements);
         Assert.False(rig.State.Busy);
-    });
-
-    [Fact]
-    public Task Invalid_bind_text_asks_again_with_a_message() => Ui.Run(async () =>
-    {
-        using var rig = new Rig();
-        rig.Host.NewDocument("select :n from dual");
-        rig.Dialogs.BindScript.Enqueue(rows =>
-        {
-            rows[0].Type = BindDataType.Number;
-            rows[0].Text = "abc";
-        });
-        rig.Dialogs.BindScript.Enqueue(rows => rows[0].Text = "7");
-
-        await rig.Controller.RunAsync(RunMode.Statement);
-
-        Assert.Equal(7m, rig.Exec.LastBinds!["n"].Value);
-        Assert.Equal(2, rig.Dialogs.BindTextsShown.Count);
         Assert.Contains(rig.Log.Messages, m => m.Kind == MessageKind.Error && m.Text.Contains(":n", StringComparison.Ordinal));
+        Assert.Equal("show " + ExecutionController.BindsPanelId, rig.Panels[^1]);
     });
 
     [Fact]
-    public Task Bind_variables_command_stores_values_without_running() => Ui.Run(async () =>
+    public Task Bind_variables_command_fills_the_list_without_running() => Ui.Run(async () =>
     {
         using var rig = new Rig();
-        rig.Host.NewDocument("select :a from dual");
-        rig.Dialogs.BindScript.Enqueue(rows => rows[0].Text = "preset");
+        rig.Host.NewDocument("select :a from dual where x = :A");
 
         Assert.True(await rig.Controller.EditBindsAsync());
 
         Assert.Empty(rig.Exec.Statements);
-        await rig.Controller.RunAsync(RunMode.Statement);
-        Assert.Equal("preset", rig.Dialogs.BindTextsShown[1]);
+        Assert.Equal("a", Assert.Single(rig.Binds.Rows).Name);
+        Assert.Contains("show " + ExecutionController.BindsPanelId, rig.Panels);
+    });
+
+    [Fact]
+    public Task Script_run_takes_bind_values_from_the_list() => Ui.Run(async () =>
+    {
+        using var rig = new Rig();
+        rig.Host.NewDocument("select :a from dual;\nselect 1 from dual;");
+        rig.Binds.Add("a").Text = "x";
+
+        Assert.True(await rig.Controller.RunAsync(RunMode.Script));
+
+        Assert.Equal("x", rig.Exec.LastOptions!.Binds!["a"].Value);
+    });
+
+    [Fact]
+    public Task Paste_bind_values_replaces_bind_tokens_only_and_undoes_in_one_step() => Ui.Run(() =>
+    {
+        using var rig = new Rig();
+        var tab = rig.Host.NewDocument("select ':a' s, :a, :b, :c, :d from t -- :a\nwhere x = :a");
+        rig.Binds.Add("a").Text = "O'Hara";
+        var b = rig.Binds.Add("b");
+        b.Type = BindDataType.Number;
+        b.Text = "12.5";
+        var c = rig.Binds.Add("c");
+        c.Type = BindDataType.Date;
+        c.Text = "2026-10-20";
+        rig.Binds.Add("d"); // 빈 값 = NULL
+
+        Assert.Equal(5, rig.Controller.PasteBindValues(tab));
+
+        Assert.Equal(
+            "select ':a' s, 'O''Hara', 12.5, TO_DATE('2026-10-20 00:00:00', 'YYYY-MM-DD HH24:MI:SS'), NULL from t -- :a\nwhere x = 'O''Hara'",
+            tab.Text);
+        tab.Document.UndoStack.Undo();
+        Assert.Equal("select ':a' s, :a, :b, :c, :d from t -- :a\nwhere x = :a", tab.Text);
+        return Task.CompletedTask;
+    });
+
+    [Fact]
+    public void Bind_store_adds_only_new_names_and_builds_values_case_insensitively()
+    {
+        var store = BindVariableStore.For(new EventBus());
+        Assert.Equal(["ID", "name"], store.Ensure(["ID", "name", "id"]));
+        Assert.Empty(store.Ensure(["Id", "NAME"]));
+        Assert.Equal([1, 2], store.Rows.Select(r => r.Number));
+
+        store.Find("id")!.Type = BindDataType.Number;
+        store.Find("id")!.Text = "7";
+        Assert.True(store.TryBuild(["ID", "name"], out var values, out _));
+        Assert.Equal(7m, values["id"].Value);
+        Assert.Null(values["NAME"].Value); // 빈 값 = NULL
+
+        Assert.False(store.TryBuild(["missing"], out _, out var error));
+        Assert.Contains(":missing", error, StringComparison.Ordinal);
+        store.Find("id")!.Text = "x";
+        Assert.False(store.TryBuild(["id"], out _, out error));
+        Assert.Contains(":ID", error, StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData(BindDataType.NVarchar2, "가'나", "N'가''나'")]
+    [InlineData(BindDataType.FixedChar, "Y", "'Y'")]
+    [InlineData(BindDataType.BinaryDouble, "1.5", "1.5")]
+    [InlineData(BindDataType.Timestamp, "2026-10-20 10:11:12", "TO_TIMESTAMP('2026-10-20 10:11:12.0000000', 'YYYY-MM-DD HH24:MI:SS.FF')")]
+    [InlineData(BindDataType.Raw, "0a ff", "HEXTORAW('0AFF')")]
+    [InlineData(BindDataType.Boolean, "y", "TRUE")]
+    [InlineData(BindDataType.Number, "", "NULL")]
+    [InlineData(BindDataType.Number, "abc", null)]
+    public void Bind_literals_follow_the_type(BindDataType type, string text, string? expected)
+    {
+        var row = new BindVariableRow("v") { Type = type, Text = text };
+        Assert.Equal(expected, BindVariableStore.ToLiteral(row));
+    }
+
+    [Fact]
+    public Task Bind_panel_focuses_the_value_of_a_requested_variable_and_the_name_of_a_new_row() => Ui.Run(() =>
+    {
+        var bus = new EventBus();
+        var vm = new BindVariablesViewModel(bus);
+        vm.Store.Ensure(["A", "ID"]);
+        var view = new BindVariablesView { DataContext = vm };
+        var window = new Avalonia.Controls.Window { Width = 500, Height = 300, Content = view };
+        window.Show();
+        Avalonia.Threading.Dispatcher.UIThread.RunJobs();
+
+        vm.Store.RequestFocus("id");
+        Avalonia.Threading.Dispatcher.UIThread.RunJobs();
+        var focused = Assert.IsType<Avalonia.Controls.TextBox>(window.FocusManager!.GetFocusedElement());
+        Assert.Equal("ValueBox", focused.Name);
+        Assert.Same(vm.Store.Find("ID"), vm.Selected);
+
+        vm.AddCommand.Execute(null);
+        Avalonia.Threading.Dispatcher.UIThread.RunJobs();
+        Assert.Equal(3, vm.Rows.Count);
+        Assert.Equal("NameBox", Assert.IsType<Avalonia.Controls.TextBox>(window.FocusManager!.GetFocusedElement()).Name);
+
+        vm.DeleteCommand.Execute(null);
+        Assert.Equal(2, vm.Rows.Count);
+        window.Close();
+        return Task.CompletedTask;
     });
 
     // ---------- 트랜잭션 ----------
@@ -1379,11 +1454,9 @@ public sealed class ExecutionIntegrationTests
         var sub = await rig.RunSqlAsync("select &x as v from dual");
         Assert.Equal("abc", await CellAsync(Assert.Single(sub.Tabs)));
 
-        rig.Dialogs.BindScript.Enqueue(rows =>
-        {
-            rows[0].Type = BindDataType.Number;
-            rows[0].Text = "42";
-        });
+        var a = BindVariableStore.For(rig.Container.GetService<IEventBus>()).Add("a");
+        a.Type = BindDataType.Number;
+        a.Text = "42";
         var bind = await rig.RunSqlAsync("select :a as v from dual");
         Assert.Equal("42", await CellAsync(Assert.Single(bind.Tabs)));
     });

@@ -34,9 +34,6 @@ public sealed class AvaloniaExecutionDialogs : IExecutionDialogs
         IReadOnlyList<string> names, IReadOnlyDictionary<string, string> last, CancellationToken ct)
         => OnUi(() => SubstitutionsCoreAsync(names, last));
 
-    public Task<IReadOnlyList<BindInput>?> AskBindsAsync(IReadOnlyList<BindInput> rows, CancellationToken ct)
-        => OnUi(() => BindsCoreAsync(rows));
-
     public Task<ScriptErrorAction> AskScriptErrorAsync(SqlStatement stmt, DbError failure, CancellationToken ct)
         => OnUi(() => ScriptErrorCoreAsync(stmt, failure));
 
@@ -152,70 +149,6 @@ public sealed class AvaloniaExecutionDialogs : IExecutionDialogs
         dialog.Content = Framed(grid, Buttons(ok, cancel));
         await ShowAsync(dialog).ConfigureAwait(true);
         return accepted ? boxes.ToDictionary(p => p.Key, p => p.Value.Text ?? string.Empty, StringComparer.OrdinalIgnoreCase) : null;
-    }
-
-    // ---- 바인드 ----------------------------------------------------------------------------
-
-    private async Task<IReadOnlyList<BindInput>?> BindsCoreAsync(IReadOnlyList<BindInput> rows)
-    {
-        var dialog = NewWindow("바인드 변수");
-        var types = Enum.GetValues<BindDataType>();
-        var dirs = Enum.GetValues<BindDirection>();
-        var grid = new Grid { ColumnDefinitions = new ColumnDefinitions("Auto,Auto,Auto,*,Auto"), RowSpacing = 6, ColumnSpacing = 8 };
-        var typeBoxes = new List<ComboBox>();
-        var dirBoxes = new List<ComboBox>();
-        var valueBoxes = new List<TextBox>();
-        var nullBoxes = new List<CheckBox>();
-        for (int i = 0; i < rows.Count; i++)
-        {
-            grid.RowDefinitions.Add(new RowDefinition(GridLength.Auto));
-            var r = rows[i];
-            var label = new TextBlock { Text = ":" + r.Name, VerticalAlignment = VerticalAlignment.Center };
-            var type = new ComboBox { ItemsSource = types, SelectedItem = r.Type, MinWidth = 120 };
-            var dir = new ComboBox { ItemsSource = dirs, SelectedItem = r.Direction, MinWidth = 100 };
-            var value = new TextBox { Text = r.Text, MinWidth = 200 };
-            var isNull = new CheckBox { Content = "NULL", IsChecked = r.IsNull };
-            AutomationName(type, $":{r.Name} 형식");
-            AutomationName(dir, $":{r.Name} 방향");
-            AutomationName(value, $":{r.Name} 값");
-            typeBoxes.Add(type);
-            dirBoxes.Add(dir);
-            valueBoxes.Add(value);
-            nullBoxes.Add(isNull);
-            int col = 0;
-            foreach (Control c in new Control[] { label, type, dir, value, isNull })
-            {
-                Grid.SetRow(c, i);
-                Grid.SetColumn(c, col++);
-                grid.Children.Add(c);
-            }
-        }
-
-        bool accepted = false;
-        var ok = new Button { Content = "확인", MinWidth = 80, IsDefault = true };
-        var cancel = new Button { Content = "취소", MinWidth = 80, IsCancel = true };
-        ok.Click += (_, _) =>
-        {
-            accepted = true;
-            dialog.Close();
-        };
-        cancel.Click += (_, _) => dialog.Close();
-        dialog.Content = Framed(new ScrollViewer { Content = grid, MaxHeight = 420, HorizontalScrollBarVisibility = Avalonia.Controls.Primitives.ScrollBarVisibility.Auto }, Buttons(ok, cancel));
-        await ShowAsync(dialog).ConfigureAwait(true);
-        if (!accepted)
-        {
-            return null;
-        }
-
-        for (int i = 0; i < rows.Count; i++)
-        {
-            rows[i].Type = (BindDataType)(typeBoxes[i].SelectedItem ?? rows[i].Type);
-            rows[i].Direction = (BindDirection)(dirBoxes[i].SelectedItem ?? rows[i].Direction);
-            rows[i].Text = valueBoxes[i].Text ?? string.Empty;
-            rows[i].IsNull = nullBoxes[i].IsChecked == true;
-        }
-
-        return rows;
     }
 
     // ---- 스크립트 오류 ------------------------------------------------------------------------

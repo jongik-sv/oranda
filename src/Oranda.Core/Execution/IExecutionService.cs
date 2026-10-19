@@ -38,6 +38,12 @@ public sealed record ExecutionOptions
 
     /// <summary>true 면 이력에 남기지 않는다(앱 내부 점검 쿼리 등).</summary>
     public bool SkipHistory { get; init; }
+
+    /// <summary>
+    /// 스크립트 실행(<see cref="IExecutionService.ExecuteScriptAsync"/>)의 바인드 값(이름 → 값, 대소문자 무시).
+    /// 문장마다 그 문장의 바인드 이름에 해당하는 값만 쓴다. null 이면 바인드 없이 실행한다.
+    /// </summary>
+    public IReadOnlyDictionary<string, BindValue>? Binds { get; init; }
 }
 
 /// <summary>스크립트 오류 처리(EXEC-10). 설정 <c>execution.scriptErrorMode</c> 와 같은 형식.</summary>

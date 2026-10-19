@@ -37,6 +37,7 @@ public static class ExecutionCommands
         "oranda.exec.runAllTabs",
         "oranda.exec.cancel",
         "oranda.exec.bindVariables",
+        "oranda.exec.pasteBindValues",
         "oranda.exec.toggleDbmsOutput",
         "oranda.exec.errorModeAsk",
         "oranda.exec.errorModeStop",
@@ -85,6 +86,7 @@ public static class ExecutionCommands
                 Language = () => container.GetRequiredService<ILanguageService>(),
                 RowEditor = () => container.GetService<IRowEditor>(),
                 Metadata = () => container.GetService<IMetadataProvider>(),
+                Binds = BindVariableStore.For(bus),
                 ActivatePanel = id => container.GetService<IShellUi>()?.Docking.ActivateTool(id),
                 TogglePanel = id => container.GetService<IShellUi>()?.Docking.ToggleTool(id),
             });
@@ -179,7 +181,9 @@ public static class ExecutionCommands
 [OrandaCommand("oranda.exec.cancel", CommandCategory.Sql, When = "sqlDocFocus", Enablement = "sessionBusy",
     Icon = "cancel", Placements = ["menu:sql/cancel@50", "toolbar:main/cancel@240"])]
 [OrandaCommand("oranda.exec.bindVariables", CommandCategory.Sql, When = "sqlDocFocus", Enablement = "sqlDocActive",
-    Placements = ["menu:sql/bindVariables@60"])]
+    Icon = "binds", Placements = ["menu:sql/bindVariables@60"])]
+[OrandaCommand("oranda.exec.pasteBindValues", CommandCategory.Sql, When = "sqlDocFocus", Enablement = "sqlDocActive",
+    Placements = ["menu:sql/pasteBindValues@62"])]
 [OrandaCommand("oranda.exec.toggleDbmsOutput", CommandCategory.Sql, Enablement = "sqlDocActive",
     Placements = ["menu:sql/toggleDbmsOutput@70"])]
 [OrandaCommand("oranda.exec.errorModeAsk", CommandCategory.Sql, Enablement = "sqlDocActive",
@@ -239,6 +243,9 @@ public sealed class ExecutionCommandHandler(ServiceContainer container) : IComma
                 break;
             case "oranda.exec.bindVariables":
                 await c.EditBindsAsync(ct: cancellationToken).ConfigureAwait(true);
+                break;
+            case "oranda.exec.pasteBindValues":
+                c.PasteBindValues();
                 break;
             case "oranda.exec.toggleDbmsOutput":
                 state.DbmsOutputEnabled = !state.DbmsOutputEnabled;

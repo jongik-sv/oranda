@@ -55,6 +55,7 @@
     { "command": "oranda.exec.runStep", "keys": ["Primary+J"], "when": "sqlDocFocus" },
     { "command": "oranda.exec.runToNewResultTab", "keys": ["F11"], "when": "sqlDocFocus", "mac": ["Primary+Alt+Enter"] },
     { "command": "oranda.exec.runForEdit", "keys": ["F9"], "when": "sqlDocFocus" },
+    { "command": "oranda.exec.bindVariables", "keys": ["Alt+B"], "when": "sqlDocFocus", "mac": ["Ctrl+Alt+B"] },
     { "command": "oranda.exec.cancel", "keys": ["Primary+Cancel"], "when": "sqlDocFocus", "mac": ["Primary+OemPeriod"] },
     { "command": "oranda.exec.toggleStatistics", "keys": ["Primary+Shift+S"], "when": "sqlDocFocus" },
     { "command": "oranda.plan.explain", "keys": ["Primary+E"], "when": "sqlDocFocus" },

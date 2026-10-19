@@ -370,9 +370,6 @@ public class ExtensionTestTests
             IReadOnlyList<string> names, IReadOnlyDictionary<string, string> last, CancellationToken ct) =>
             Task.FromResult<IReadOnlyDictionary<string, string>?>(null);
 
-        public Task<IReadOnlyList<BindInput>?> AskBindsAsync(IReadOnlyList<BindInput> rows, CancellationToken ct) =>
-            Task.FromResult<IReadOnlyList<BindInput>?>(null);
-
         public Task<ScriptErrorAction> AskScriptErrorAsync(SqlStatement stmt, DbError failure, CancellationToken ct) =>
             Task.FromResult(ScriptErrorAction.Stop);
 

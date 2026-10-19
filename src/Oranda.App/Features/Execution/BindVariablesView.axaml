@@ -1,0 +1,71 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:icons="using:Oranda.App.Shell.Icons"
+             xmlns:vm="using:Oranda.App.Features.Execution"
+             x:Class="Oranda.App.Features.Execution.BindVariablesView"
+             x:DataType="vm:BindVariablesViewModel">
+  <UserControl.Styles>
+    <Style Selector="ListBox#RowList ListBoxItem">
+      <Setter Property="Padding" Value="0" />
+      <Setter Property="MinHeight" Value="0" />
+    </Style>
+    <Style Selector="ListBox#RowList TextBox, ListBox#RowList ComboBox">
+      <Setter Property="Margin" Value="1" />
+      <Setter Property="MinHeight" Value="26" />
+    </Style>
+  </UserControl.Styles>
+  <!-- 오렌지 Bind Variable List: 번호 | 변수 | 값 | 형식, 오렌지 8.0 의 방향(IN/OUT). 실행은 묻지 않고 이 값을 쓴다. -->
+  <DockPanel>
+    <Border DockPanel.Dock="Top" Classes="panel-toolbar">
+      <StackPanel Orientation="Horizontal" Spacing="1">
+        <Button Classes="toolbar" Content="바인드 변수 더하기" Command="{Binding AddCommand}" icons:ButtonIcon.Key="add" icons:ButtonIcon.IconOnly="True" />
+        <Button Classes="toolbar" Content="고른 변수 지우기" Command="{Binding DeleteCommand}" icons:ButtonIcon.Key="remove" icons:ButtonIcon.IconOnly="True" />
+        <Button Classes="toolbar" Content="목록 비우기" Command="{Binding ClearCommand}" icons:ButtonIcon.Key="eraser" icons:ButtonIcon.IconOnly="True" />
+        <Separator Classes="toolbar" />
+        <Button Classes="toolbar" Content="편집기에 값 붙여 넣기" Command="{Binding PasteIntoEditorCommand}" icons:ButtonIcon.Key="docEdit" icons:ButtonIcon.IconOnly="True" />
+      </StackPanel>
+    </Border>
+    <Border DockPanel.Dock="Bottom" Classes="panel-status">
+      <TextBlock Text="실행하면 문장의 :변수가 여기에 채워집니다. 빈 값은 NULL." TextTrimming="CharacterEllipsis" />
+    </Border>
+    <Border DockPanel.Dock="Top" Classes="grid-header">
+      <Grid ColumnDefinitions="26,96,*,104,60" Margin="0,3">
+        <TextBlock Grid.Column="0" Text="#" HorizontalAlignment="Center" />
+        <TextBlock Grid.Column="1" Text="변수" Margin="6,0" />
+        <TextBlock Grid.Column="2" Text="값" Margin="6,0" />
+        <TextBlock Grid.Column="3" Text="자료형" Margin="6,0" />
+        <TextBlock Grid.Column="4" Text="방향" Margin="6,0" />
+      </Grid>
+    </Border>
+    <ListBox x:Name="RowList" ItemsSource="{Binding Rows}" SelectedItem="{Binding Selected, Mode=TwoWay}"
+             AutomationProperties.Name="바인드 변수 목록">
+      <ListBox.ItemTemplate>
+        <DataTemplate x:DataType="vm:BindVariableRow">
+          <Grid ColumnDefinitions="26,96,*,104,60">
+            <TextBlock Grid.Column="0" Text="{Binding Number}" HorizontalAlignment="Center" VerticalAlignment="Center" Opacity="0.6" />
+            <TextBox Grid.Column="1" x:Name="NameBox" Classes="compact" Text="{Binding Name, Mode=TwoWay}" PlaceholderText="이름"
+                     FontFamily="Cascadia Mono,Consolas,Menlo,monospace" AutomationProperties.Name="바인드 변수 이름" />
+            <TextBox Grid.Column="2" x:Name="ValueBox" Classes="compact" Text="{Binding Text, Mode=TwoWay}" PlaceholderText="NULL"
+                     FontFamily="Cascadia Mono,Consolas,Menlo,monospace" AutomationProperties.Name="바인드 변수 값" />
+            <ComboBox Grid.Column="3" Classes="compact" HorizontalAlignment="Stretch" ItemsSource="{x:Static vm:BindTypeChoice.All}"
+                      SelectedItem="{Binding TypeChoice, Mode=TwoWay}" AutomationProperties.Name="바인드 변수 형식">
+              <ComboBox.ItemTemplate>
+                <DataTemplate x:DataType="vm:BindTypeChoice">
+                  <TextBlock Text="{Binding Label}" />
+                </DataTemplate>
+              </ComboBox.ItemTemplate>
+            </ComboBox>
+            <ComboBox Grid.Column="4" Classes="compact" HorizontalAlignment="Stretch" ItemsSource="{x:Static vm:BindDirectionChoice.All}"
+                      SelectedItem="{Binding DirectionChoice, Mode=TwoWay}" AutomationProperties.Name="바인드 변수 방향">
+              <ComboBox.ItemTemplate>
+                <DataTemplate x:DataType="vm:BindDirectionChoice">
+                  <TextBlock Text="{Binding Label}" />
+                </DataTemplate>
+              </ComboBox.ItemTemplate>
+            </ComboBox>
+          </Grid>
+        </DataTemplate>
+      </ListBox.ItemTemplate>
+    </ListBox>
+  </DockPanel>
+</UserControl>

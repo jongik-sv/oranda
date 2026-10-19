@@ -51,6 +51,7 @@
   "Cmd.oranda.exec.errorModeContinue": "On Script Error: Continue",
   "Cmd.oranda.exec.errorModeStop": "On Script Error: Stop",
   "Cmd.oranda.exec.goToError": "Go to Error Statement",
+  "Cmd.oranda.exec.pasteBindValues": "Paste Bind Values into Editor",
   "Cmd.oranda.exec.runAllTabs": "Run All Tabs",
   "Cmd.oranda.exec.runForEdit": "Run in Result Edit Mode",
   "Cmd.oranda.exec.runFromCursor": "Run from Cursor to End",

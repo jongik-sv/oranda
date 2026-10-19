@@ -96,7 +96,7 @@
 3. 사용자 키맵에서 충돌이 생기면 단축키 설정 화면(TSK-04-07)이 경고하고, 저장된 파일에서는 **뒤에 적힌 바인딩**이 이긴다.
 4. 프리셋 4종은 이 규칙으로 검사했다(충돌 0). TSK-02-05 키맵 로더 시험에 같은 검사를 넣는다.
 5. 편집기 기본 키(방향키·Home/End·Tab·Shift+Tab·Backspace·Delete·Alt+드래그 열 선택·Alt+클릭 커서 추가)는 AvaloniaEdit·다중 커서 확장(D-007) 몫이며 키맵에 넣지 않는다. 그리드 기본 키(방향키·PageUp/Down·F2 셀 편집·Esc)도 같다.
-6. 시스템이 쓰는 키는 바인딩하지 않는다: Windows `Alt+F4`, `Alt+Space`, `Ctrl+Esc`, `Win+…`, 메뉴 접근 `Alt+문자`(Orange 5 `Alt+C` 만 예외), macOS 5.2 목록.
+6. 시스템이 쓰는 키는 바인딩하지 않는다: Windows `Alt+F4`, `Alt+Space`, `Ctrl+Esc`, `Win+…`, 메뉴 접근 `Alt+문자`(Orange 5 `Alt+C`·`Alt+B` 만 예외 — 메뉴 접근 키 C·B 없음), macOS 5.2 목록.
 
 ## 3. 범주 = 메뉴 묶음
 
@@ -195,6 +195,7 @@
 | `oranda.window.previousDocument` | `Ctrl+Shift+Tab` | `Ctrl+Shift+Tab` |
 | `oranda.edit.goToLine` | `Ctrl+G` | `Cmd+Option+L` |
 | `oranda.nav.describeObject` | `Alt+C` | `Ctrl+Option+C` |
+| `oranda.exec.bindVariables` | `Alt+B` | `Ctrl+Option+B` |
 | `oranda.exec.runFromCursor` | `Ctrl+M` | `Cmd+Shift+M` |
 | `oranda.txn.commit` | `F11` | `Cmd+F11` |
 
@@ -231,6 +232,7 @@
 | `oranda.edit.duplicateLine` | `Ctrl+D` | `Ctrl+D` | `Ctrl+D` | - |
 | `oranda.nav.goToDefinition` | `F12` | `F12` | `F12` | - |
 | `oranda.nav.describeObject` | `F4` | `Alt+C`, `F4` | `F4` | `F4`, `Shift+F4` |
+| `oranda.exec.bindVariables` | - | `Alt+B` | - | - |
 | `oranda.format.document` | `Ctrl+Shift+F` | `Ctrl+Shift+F` | `Ctrl+Shift+F` | `Ctrl+F7` |
 | `oranda.exec.runStatement` | `Ctrl+Enter` | `Ctrl+Enter`, `Ctrl+K` | `Ctrl+Enter` | `Ctrl+Enter`, `F9` |
 | `oranda.exec.runSelection` | - | `Ctrl+L` | - | - |
@@ -259,7 +261,7 @@
 
 ## 7. 1.0 명령 목록
 
-- 아래 표가 1.0 의 **명령 ID 전체**다(194개). 기본 키는 `default.json` 기준, 다른 프리셋은 6.1.
+- 아래 표가 1.0 의 **명령 ID 전체**다(195개). 기본 키는 `default.json` 기준, 다른 프리셋은 6.1.
 - 「키 범위(when)」는 키맵 `when`, 「활성 조건」은 명령 `Enablement` 다.
 - 소유 Task 가 처리기·제목·아이콘·Placements 를 만든다. 셸(TSK-03-01)은 이 표를 하드코딩하지 않는다 — 레지스트리 자동 수집만 한다.
 - 새 명령이 필요하면 기능 Task 가 규칙(1장)대로 ID 를 만들고 이 표에 행을 더하는 요청을 낸다. 키를 주려면 4개 프리셋 모두 충돌 검사를 통과해야 한다.
@@ -372,6 +374,7 @@
 | `oranda.exec.runForEdit` | 결과 편집 모드로 실행 | `F9` | `sqlDocFocus` | `hasSession && !sessionBusy && !readOnlySession` | TSK-06-04 |
 | `oranda.exec.cancel` | 실행 취소(서버 중단) | `Ctrl+Break` | `sqlDocFocus` | `sessionBusy` | TSK-06-02 |
 | `oranda.exec.bindVariables` | 바인드 변수 창 | - | `sqlDocFocus` | `sqlDocActive` | TSK-06-02 |
+| `oranda.exec.pasteBindValues` | 바인드 값을 편집기에 붙여 넣기 | - | `sqlDocFocus` | `sqlDocActive` | TSK-06-02 |
 | `oranda.exec.toggleDbmsOutput` | DBMS_OUTPUT 수집 켜기/끄기 | - | 전역 | `sqlDocActive` | TSK-06-02 |
 | `oranda.exec.errorModeAsk` | 스크립트 오류 시: 묻기 | - | 전역 | `sqlDocActive` | TSK-06-02 |
 | `oranda.exec.errorModeStop` | 스크립트 오류 시: 중지 | - | 전역 | `sqlDocActive` | TSK-06-02 |

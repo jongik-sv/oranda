@@ -36,6 +36,7 @@
   "Menu.view.theme": "Theme",
   "Menu.window": "Window",
   "Menu.window.access": "_Window",
+  "Panel.oranda.panel.binds": "Bind Variables",
   "Panel.oranda.panel.compileErrors": "Errors",
   "Panel.oranda.panel.dbInfo": "Database Info",
   "Panel.oranda.panel.ddlExtract": "Bulk DDL Extract",
