@@ -3,6 +3,53 @@
              xmlns:vm="using:Oranda.App.Features.DbTools"
              x:Class="Oranda.App.Features.DbTools.DdlExtractView"
              x:DataType="vm:DdlExtractViewModel">
-  <!-- TSK-07-04 빈 틀 -->
-  <TextBlock Text="oranda.panel.ddlExtract" />
+  <DockPanel>
+    <TextBlock DockPanel.Dock="Bottom" Margin="6,2" Text="{Binding StatusText}" TextTrimming="CharacterEllipsis" Opacity="0.7" />
+    <ProgressBar DockPanel.Dock="Bottom" Margin="6,2" Minimum="0" Maximum="100" Value="{Binding Progress}" />
+    <Grid ColumnDefinitions="360,4,*">
+      <ScrollViewer Grid.Column="0">
+        <StackPanel Margin="8" Spacing="6">
+          <TextBlock Text="1. 대상" FontWeight="SemiBold" />
+          <TextBox PlaceholderText="스키마" Text="{Binding Owner, Mode=TwoWay}" />
+          <TextBox PlaceholderText="이름 필터 (* 와일드카드)" Text="{Binding NameText, Mode=TwoWay}" />
+          <CheckBox Content="INVALID 객체만" IsChecked="{Binding InvalidOnly, Mode=TwoWay}" />
+          <ItemsControl ItemsSource="{Binding TypeChoices}">
+            <ItemsControl.ItemsPanel>
+              <ItemsPanelTemplate>
+                <WrapPanel />
+              </ItemsPanelTemplate>
+            </ItemsControl.ItemsPanel>
+            <ItemsControl.ItemTemplate>
+              <DataTemplate x:DataType="vm:DdlTypeChoice">
+                <CheckBox Margin="0,0,10,0" Content="{Binding Name}" IsChecked="{Binding IsSelected, Mode=TwoWay}" />
+              </DataTemplate>
+            </ItemsControl.ItemTemplate>
+          </ItemsControl>
+          <TextBlock Text="2. 저장 속성" FontWeight="SemiBold" />
+          <CheckBox Content="저장 속성(STORAGE)" IsChecked="{Binding IncludeStorage, Mode=TwoWay}" />
+          <CheckBox Content="세그먼트 속성" IsChecked="{Binding IncludeSegmentAttributes, Mode=TwoWay}" />
+          <CheckBox Content="테이블스페이스" IsChecked="{Binding IncludeTablespace, Mode=TwoWay}" />
+          <CheckBox Content="종결자(;)" IsChecked="{Binding SqlTerminator, Mode=TwoWay}" />
+          <CheckBox Content="종속 객체(인덱스·제약·권한 등)" IsChecked="{Binding IncludeDependentObjects, Mode=TwoWay}" />
+          <TextBlock Text="3. 이름 바꾸기 (한 줄에 이전=새)" FontWeight="SemiBold" />
+          <TextBox AcceptsReturn="True" Height="70" FontFamily="Consolas,Menlo,monospace" Text="{Binding RenameText, Mode=TwoWay}" />
+          <TextBlock Text="4. 출력" FontWeight="SemiBold" />
+          <DockPanel>
+            <Button x:Name="BrowseButton" DockPanel.Dock="Right" Margin="4,0,0,0" Content="찾아보기" />
+            <TextBox PlaceholderText="출력 폴더" Text="{Binding OutputDirectory, Mode=TwoWay}" />
+          </DockPanel>
+          <CheckBox Content="객체마다 파일 하나(유형/이름.sql)" IsChecked="{Binding FilePerObject, Mode=TwoWay}" />
+          <Button x:Name="RunButton" Content="추출" HorizontalAlignment="Left" IsEnabled="{Binding CanRun}" />
+        </StackPanel>
+      </ScrollViewer>
+      <GridSplitter Grid.Column="1" ResizeDirection="Columns" />
+      <ListBox Grid.Column="2" ItemsSource="{Binding Results}">
+        <ListBox.ItemTemplate>
+          <DataTemplate x:DataType="vm:DdlExtractRow">
+            <TextBlock Text="{Binding Line}" FontFamily="Consolas,Menlo,monospace" TextTrimming="CharacterEllipsis" />
+          </DataTemplate>
+        </ListBox.ItemTemplate>
+      </ListBox>
+    </Grid>
+  </DockPanel>
 </UserControl>
