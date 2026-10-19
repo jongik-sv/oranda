@@ -4,7 +4,7 @@
              xmlns:vm="using:Oranda.App.Features.ResultGrid"
              x:Class="Oranda.App.Features.ResultGrid.SqlResultPaneView"
              x:DataType="vm:SqlResultPaneViewModel">
-  <Grid RowDefinitions="Auto,*,Auto">
+  <Grid RowDefinitions="Auto,Auto,Auto,*,Auto">
     <!-- 찾기 줄(oranda.grid.find) -->
     <StackPanel Grid.Row="0" Orientation="Horizontal" Spacing="6" Margin="4"
                 IsVisible="{Binding IsFindVisible}">
@@ -13,7 +13,44 @@
       <Button x:Name="FindCloseButton" Classes="toolbar" Content="닫기" icons:ButtonIcon.Key="clear" icons:ButtonIcon.IconOnly="True" />
       <TextBlock Text="{Binding FindMessage}" VerticalAlignment="Center" />
     </StackPanel>
-    <Grid Grid.Row="1" ColumnDefinitions="*,Auto" RowDefinitions="*,Auto">
+    <!-- 편집할 수 없는 결과를 고치려 할 때의 안내(읽기 전용이면 편집 모드로 다시 실행, 키가 없으면 그 이유). -->
+    <Border Grid.Row="1" IsVisible="{Binding HasEditHint}" Background="{DynamicResource OrandaPanelHeaderBrush}"
+            BorderBrush="{DynamicResource OrandaIconAmberBrush}" BorderThickness="3,0,0,0" Padding="6,3">
+      <DockPanel>
+        <Button x:Name="EditHintClose" DockPanel.Dock="Right" Classes="toolbar" Content="안내 닫기" Focusable="False"
+                icons:ButtonIcon.Key="clear" icons:ButtonIcon.IconOnly="True" />
+        <!-- 단추는 안내 글 바로 뒤에 둔다(넓은 창에서 오른쪽 끝으로 떨어지지 않게). -->
+        <WrapPanel Orientation="Horizontal">
+          <TextBlock Text="{Binding EditHint}" VerticalAlignment="Center" TextWrapping="Wrap" Margin="0,0,10,0" />
+          <Button x:Name="EditHintRerun" Padding="8,2" MinHeight="0" Focusable="False" Content="편집 모드로 다시 실행"
+                  IsVisible="{Binding OffersRerunForEdit}" icons:ButtonIcon.Key="tableEdit" />
+          <Button x:Name="EditHintRowId" Padding="8,2" MinHeight="0" Focusable="False" Content="ROWID 추가 후 다시 실행"
+                  IsVisible="{Binding OffersRowIdRerun}" icons:ButtonIcon.Key="tableEdit" />
+        </WrapPanel>
+      </DockPanel>
+    </Border>
+    <!-- 편집 모드(F9) 툴바: 오렌지 결과 그리드처럼 행 추가·삭제·반영·되돌리기를 아이콘으로 바로 쓴다(오른쪽 클릭 메뉴와 같은 명령). -->
+    <Border Grid.Row="2" Classes="panel-toolbar" IsVisible="{Binding IsEditMode}">
+      <StackPanel Orientation="Horizontal" Spacing="1">
+        <Button Classes="toolbar" Focusable="False" Tag="oranda.grid.edit.addRow" Content="행 추가"
+                icons:ButtonIcon.Key="rowAdd" icons:ButtonIcon.IconOnly="True" />
+        <Button Classes="toolbar" Focusable="False" Tag="oranda.grid.edit.deleteRow" Content="행 삭제"
+                icons:ButtonIcon.Key="rowDelete" icons:ButtonIcon.IconOnly="True" />
+        <Separator Classes="toolbar" />
+        <Button Classes="toolbar" Focusable="False" Tag="oranda.grid.edit.previewDml" Content="반영할 DML 미리보기"
+                IsEnabled="{Binding IsEditDirty}" icons:ButtonIcon.Key="objView" icons:ButtonIcon.IconOnly="True" />
+        <Button Classes="toolbar" Focusable="False" Tag="oranda.grid.edit.apply" Content="반영(커밋 안 함)"
+                IsEnabled="{Binding IsEditDirty}" icons:ButtonIcon.Key="save" icons:ButtonIcon.IconOnly="True" />
+        <Button Classes="toolbar" Focusable="False" Tag="oranda.grid.edit.applyAndCommit" Content="반영 후 커밋"
+                IsEnabled="{Binding IsEditDirty}" icons:ButtonIcon.Key="commit" icons:ButtonIcon.IconOnly="True" />
+        <Separator Classes="toolbar" />
+        <Button Classes="toolbar" Focusable="False" Tag="oranda.grid.edit.resetRow" Content="행 되돌리기"
+                IsEnabled="{Binding IsEditDirty}" icons:ButtonIcon.Key="reset" icons:ButtonIcon.IconOnly="True" />
+        <Button Classes="toolbar" Focusable="False" Tag="oranda.grid.edit.resetAll" Content="모두 되돌리기"
+                IsEnabled="{Binding IsEditDirty}" icons:ButtonIcon.Key="eraser" icons:ButtonIcon.IconOnly="True" />
+      </StackPanel>
+    </Border>
+    <Grid Grid.Row="3" ColumnDefinitions="*,Auto" RowDefinitions="*,Auto">
       <vm:ResultGridControl x:Name="GridControl" Grid.Row="0" Grid.Column="0" />
       <!-- 셀 편집기(편집 모드에서 두 번 누르기·F2): 셀 위에 겹쳐 띄운다. Enter 반영·Esc 취소. -->
       <TextBox x:Name="CellEditor" Grid.Row="0" Grid.Column="0" IsVisible="False" MinHeight="0" Padding="4,0"
@@ -22,7 +59,7 @@
       <ScrollBar x:Name="VBar" Grid.Row="0" Grid.Column="1" Orientation="Vertical" AllowAutoHide="False" />
       <ScrollBar x:Name="HBar" Grid.Row="1" Grid.Column="0" Orientation="Horizontal" AllowAutoHide="False" />
     </Grid>
-    <Border Grid.Row="2" Classes="panel-status">
+    <Border Grid.Row="4" Classes="panel-status">
       <TextBlock Text="{Binding StatusText}" />
     </Border>
   </Grid>

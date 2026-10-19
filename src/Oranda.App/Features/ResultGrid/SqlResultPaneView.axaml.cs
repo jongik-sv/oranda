@@ -50,6 +50,20 @@ public partial class SqlResultPaneView : UserControl
         DataContextChanged += (_, _) => Bind();
 
         GridControl.EditRequested += (_, cell) => BeginEdit(cell);
+        EditHintClose.Click += (_, _) => Vm?.HideEditHint();
+        EditHintRerun.Click += async (_, _) => await RunEditHintActionAsync();
+        EditHintRowId.Click += async (_, _) => await RunEditHintActionAsync();
+
+        // 편집 툴바 단추: Tag 의 명령을 실행한다(오른쪽 클릭 메뉴와 같은 명령, 포커스는 그리드에 둔다).
+        AddHandler(Button.ClickEvent, async (_, e) =>
+        {
+            if (e.Source is Button { Tag: string id } && id.StartsWith("oranda.grid.edit.", StringComparison.Ordinal))
+            {
+                e.Handled = true;
+                PushGridKeys();
+                await ShellCommandRunner.RunAsync(id);
+            }
+        });
 
         // 칸을 고른 채 글자를 치면 바로 그 글자로 편집을 시작한다(SQL Developer·Excel 처럼).
         GridControl.TextInput += (_, e) =>
@@ -93,8 +107,14 @@ public partial class SqlResultPaneView : UserControl
     /// <summary>편집 모드 그리드에서 셀 편집기를 연다. 키 열이 아니어도 편집할 수 없는 열(대상 테이블 밖)은 열지 않는다.</summary>
     private bool BeginEdit(GridCell cell, string? typed = null)
     {
-        if (GridControl.Model is not { } m || Oranda.App.Features.GridEdit.GridEditBinding.Of(m) is not { CanEdit: true } es)
+        if (GridControl.Model is not { HasResult: true } m)
         {
+            return false;
+        }
+
+        if (Oranda.App.Features.GridEdit.GridEditBinding.Of(m) is not { CanEdit: true } es)
+        {
+            Vm?.ShowEditHint(); // 읽기 전용(또는 고칠 수 없는) 결과: 조용히 무시하지 않고 편집 모드로 다시 실행하라고 알린다
             return false;
         }
 
@@ -180,6 +200,8 @@ public partial class SqlResultPaneView : UserControl
     }
 
     private SqlResultPaneViewModel? Vm => DataContext as SqlResultPaneViewModel;
+
+    private Task RunEditHintActionAsync() => Vm?.RunEditHintActionAsync() ?? Task.CompletedTask;
 
     private void Bind()
     {

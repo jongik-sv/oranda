@@ -71,6 +71,66 @@ public sealed class GridEditTests : IDisposable
     }
 
     [Fact]
+    public async Task Read_only_result_pane_hints_and_reruns_the_same_statement_in_edit_mode()
+    {
+        var stmt = new SqlStatement("SELECT empno, ename, sal FROM emp", default, StatementKind.Query) { Verb = "SELECT" };
+        var pane = new Oranda.App.Features.ResultGrid.SqlResultPaneViewModel { Statement = stmt };
+        SqlStatement? rerun = null;
+        GridEditCommands.Rerun = (q, _) => { rerun = q; return Task.CompletedTask; };
+
+        pane.ShowEditHint(); // 일반 실행 결과에서 셀을 고치려 했다
+
+        Assert.True(pane.HasEditHint);
+        Assert.Contains("F9", pane.EditHint, StringComparison.Ordinal);
+        Assert.Equal("편집 모드로 다시 실행", pane.EditHintAction);
+        Assert.True(pane.OffersRerunForEdit);
+        Assert.False(pane.OffersRowIdRerun);
+        Assert.False(pane.IsEditMode);
+
+        await pane.RunEditHintActionAsync();
+
+        Assert.Same(stmt, rerun);
+        Assert.False(pane.HasEditHint);
+    }
+
+    [Fact]
+    public async Task Edit_mode_pane_shows_toolbar_state_and_no_hint()
+    {
+        var s = await OpenAsync("SELECT empno, ename, sal FROM emp");
+        var pane = new Oranda.App.Features.ResultGrid.SqlResultPaneViewModel();
+        var changed = new List<string?>();
+        pane.PropertyChanged += (_, e) => changed.Add(e.PropertyName);
+
+        pane.SetEditSession(s);
+
+        Assert.True(pane.IsEditMode);
+        Assert.False(pane.IsEditDirty);
+        Assert.False(pane.HasEditHint);
+        Assert.True(s.SetCell(0, 1, "SCOTT"));
+        Assert.True(pane.IsEditDirty);
+        Assert.Contains(nameof(pane.IsEditDirty), changed);
+        pane.ShowEditHint(); // 고칠 수 있는 결과에서는 안내하지 않는다
+        Assert.False(pane.HasEditHint);
+    }
+
+    [Fact]
+    public async Task Keyless_edit_session_explains_why_and_offers_rowid_rerun()
+    {
+        var s = await OpenAsync("SELECT ename, sal FROM emp",
+            Columns(("ENAME", ColumnDataKind.Text), ("SAL", ColumnDataKind.Number)), [["SMITH", 800m]]);
+        var pane = new Oranda.App.Features.ResultGrid.SqlResultPaneViewModel();
+
+        pane.SetEditSession(s);
+
+        Assert.False(pane.IsEditMode);
+        Assert.True(pane.HasEditHint);
+        Assert.Contains("ROWID", pane.EditHint, StringComparison.Ordinal);
+        Assert.Equal("ROWID 추가 후 다시 실행", pane.EditHintAction);
+        Assert.True(pane.OffersRowIdRerun);
+        Assert.False(pane.OffersRerunForEdit);
+    }
+
+    [Fact]
     public async Task Read_only_profile_is_not_editable()
     {
         var s = await OpenAsync("SELECT empno, ename, sal FROM emp", readOnly: true);

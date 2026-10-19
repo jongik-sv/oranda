@@ -111,7 +111,7 @@ public sealed partial class ResultTabsViewModel : ViewModelBase
     public ResultTabItem AddQuery(IResultSet result, string title, SqlStatement? statement, GridDisplayOptions? display = null)
     {
         ArgumentNullException.ThrowIfNull(result);
-        var pane = new SqlResultPaneViewModel();
+        var pane = new SqlResultPaneViewModel { Statement = statement };
         pane.SetResult(result, display);
         var tab = new ResultTabItem { Title = title, Pane = pane, Statement = statement };
         pane.CloseRequested += (_, _) => Close(tab);
