@@ -7,6 +7,11 @@
     <PackageReference Include="System.Security.Cryptography.Pkcs" />
   </ItemGroup>
 
+  <!-- SQL 카탈로그 자동 수집(TSK-02-04, docs/design/catalog.md). 기능 Task 는 Catalog/<폴더>/ 에 .sql 만 더한다. -->
+  <ItemGroup>
+    <EmbeddedResource Include="Catalog\**\*.sql" LogicalName="Catalog/%(RecursiveDir)%(Filename)%(Extension)" />
+  </ItemGroup>
+
   <ItemGroup>
     <ProjectReference Include="..\Oranda.Core\Oranda.Core.csproj" />
   </ItemGroup>

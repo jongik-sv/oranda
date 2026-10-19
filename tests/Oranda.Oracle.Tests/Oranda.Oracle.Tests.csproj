@@ -1,0 +1,32 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Oranda.Oracle 의 DB 없는 단위 시험. 카탈로그 검사는 [Trait("Category", "Catalog")] 이며 기본 dotnet test 에 포함된다.
+    DB 가 필요한 시험은 여기 두지 않고 Oranda.Oracle.IntegrationTests 에 둔다.
+  -->
+
+  <PropertyGroup>
+    <IsTestProject>true</IsTestProject>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="coverlet.collector" />
+    <PackageReference Include="Microsoft.NET.Test.Sdk" />
+    <PackageReference Include="xunit" />
+    <PackageReference Include="xunit.runner.visualstudio" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Using Include="Xunit" />
+  </ItemGroup>
+
+  <!-- 수집 장치 시험용 고정 카탈로그. 제품과 같은 LogicalName 규칙으로 싣는다. -->
+  <ItemGroup>
+    <EmbeddedResource Include="Catalog\Fixtures\**\*.sql" LogicalName="Catalog/%(RecursiveDir)%(Filename)%(Extension)" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Oranda.Oracle\Oranda.Oracle.csproj" />
+  </ItemGroup>
+
+</Project>
