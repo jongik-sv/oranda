@@ -7,6 +7,8 @@
 
   <PropertyGroup>
     <IsTestProject>true</IsTestProject>
+    <!-- 기본 실행에서는 컨테이너가 필요한 시험을 뺀다. 돌릴 때는 dotnet test 의 filter 옵션에 Category=Integration (명령줄 필터가 이 값을 덮어쓴다). -->
+    <VSTestTestCaseFilter>Category!=Integration</VSTestTestCaseFilter>
   </PropertyGroup>
 
   <ItemGroup>
