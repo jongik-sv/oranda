@@ -31,6 +31,10 @@ public partial class App : Application
             PerfMarks.Mark("app-init");
             var services = AppComposition.Create();
             PerfMarks.Mark("composed");
+            if (services.GetService<Oranda.Core.Storage.IAppDataPaths>() is { } paths)
+            {
+                TraceLog.Start(paths.LogsDirectory);
+            }
 
             // 설정·레이아웃 파일 읽기는 스레드 풀에서 하고, 그동안 UI 스레드는 창 XAML 을 읽는다(둘이 겹친다).
             var shell = services.GetRequiredService<ShellController>();

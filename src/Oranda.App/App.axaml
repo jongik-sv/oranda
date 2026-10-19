@@ -181,6 +181,17 @@
             <Setter Property="MinHeight" Value="24" />
             <Setter Property="Padding" Value="0" />
         </Style>
+        <!-- 목록 머리글 띠(결과 그리드 머리글과 같은 색). -->
+        <Style Selector="Border.grid-header">
+            <Setter Property="Background" Value="{DynamicResource OrandaPanelHeaderBrush}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource OrandaSeparatorBrush}" />
+            <Setter Property="BorderThickness" Value="0,0,0,1" />
+            <Setter Property="Padding" Value="0,4" />
+        </Style>
+        <Style Selector="Border.grid-header TextBlock">
+            <Setter Property="FontWeight" Value="SemiBold" />
+            <Setter Property="FontSize" Value="{DynamicResource OrandaFontSizeSmall}" />
+        </Style>
         <Style Selector="TextBlock.invalid">
             <Setter Property="Foreground" Value="{DynamicResource OrandaIconRedBrush}" />
         </Style>

@@ -1,32 +1,55 @@
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:keymaps="using:Oranda.App.Shell.Keymaps"
+             xmlns:icons="using:Oranda.App.Shell.Icons"
              xmlns:vm="using:Oranda.App.Features.SessionMonitor"
              x:Class="Oranda.App.Features.SessionMonitor.SessionMonitorView"
              keymaps:FocusSlot.Name="monitor"
              x:DataType="vm:SessionMonitorViewModel">
   <DockPanel>
-    <WrapPanel DockPanel.Dock="Top" Margin="4">
-      <TextBox Width="120" Margin="0,0,6,4" PlaceholderText="사용자" Text="{Binding UsernameFilter, Mode=TwoWay}" />
-      <TextBox Width="180" Margin="0,0,6,4" PlaceholderText="머신·프로그램·모듈·SQL ID" Text="{Binding TextFilter, Mode=TwoWay}" />
-      <CheckBox Margin="0,0,6,4" Content="활성만" IsChecked="{Binding ActiveOnly, Mode=TwoWay}" />
-      <CheckBox Margin="0,0,10,4" Content="백그라운드" IsChecked="{Binding IncludeBackground, Mode=TwoWay}" />
-      <Button x:Name="RefreshButton" Margin="0,0,6,4" Content="새로 고침" IsEnabled="{Binding IsOpen}" />
-      <ToggleButton Margin="0,0,4,4" Content="자동" IsEnabled="{Binding IsOpen}" IsChecked="{Binding AutoRefresh, Mode=TwoWay}" />
-      <NumericUpDown Width="110" Margin="0,0,10,4" Minimum="2" Maximum="60" Increment="1" FormatString="0' s'"
-                     Value="{Binding RefreshSeconds, Mode=TwoWay}" />
-      <ToggleButton Margin="0,0,10,4" Content="델타" IsChecked="{Binding DeltaMode, Mode=TwoWay}" />
-      <Button x:Name="KillButton" Margin="0,0,4,4" Content="Kill" IsEnabled="{Binding CanKill}" />
-      <Button x:Name="DisconnectButton" Margin="0,0,10,4" Content="Disconnect" IsEnabled="{Binding CanKill}" />
-      <Button x:Name="TraceOnButton" Margin="0,0,4,4" Content="트레이스 켜기" IsEnabled="{Binding CanTrace}" />
-      <Button x:Name="TraceOffButton" Margin="0,0,4,4" Content="끄기" IsEnabled="{Binding CanTrace}" />
-      <CheckBox Margin="0,0,4,4" Content="waits" IsChecked="{Binding TraceWaits, Mode=TwoWay}" />
-      <CheckBox Margin="0,0,4,4" Content="binds" IsChecked="{Binding TraceBinds, Mode=TwoWay}" />
+    <!-- 툴바(Orange Session Monitor 의 Sub Toolbar): 새로 고침·자동·간격·델타 | 상세·KILL·DISCONNECT | 트레이스 -->
+    <Border DockPanel.Dock="Top" Classes="panel-toolbar">
+      <WrapPanel>
+        <Button x:Name="RefreshButton" Classes="toolbar" Content="새로 고침 (F5)" IsEnabled="{Binding IsOpen}"
+                icons:ButtonIcon.Key="refresh" icons:ButtonIcon.IconOnly="True" />
+        <ToggleButton Classes="tool" Content="자동" IsEnabled="{Binding IsOpen}" IsChecked="{Binding AutoRefresh, Mode=TwoWay}"
+                      icons:ButtonIcon.Key="timer" ToolTip.Tip="자동 새로 고침" />
+        <NumericUpDown Width="96" Minimum="2" Maximum="60" Increment="1" FormatString="0' 초'" VerticalAlignment="Center"
+                       Value="{Binding RefreshSeconds, Mode=TwoWay}" AutomationProperties.Name="새로 고침 간격" />
+        <ToggleButton Classes="tool" Content="델타" IsChecked="{Binding DeltaMode, Mode=TwoWay}"
+                      icons:ButtonIcon.Key="sort" ToolTip.Tip="직전 새로 고침과의 차이(델타)로 보기" />
+        <Separator Classes="toolbar" />
+        <Button x:Name="DetailButton" Classes="tool" Content="상세" IsEnabled="{Binding IsOpen}" icons:ButtonIcon.Key="sessionInfo"
+                ToolTip.Tip="선택한 세션의 현재 SQL·계획·잠금·통계" />
+        <Button x:Name="KillButton" Classes="tool" Content="세션 종료" IsEnabled="{Binding CanKill}" icons:ButtonIcon.Key="kill"
+                ToolTip.Tip="ALTER SYSTEM KILL SESSION … IMMEDIATE" />
+        <Button x:Name="DisconnectButton" Classes="tool" Content="연결 끊기" IsEnabled="{Binding CanKill}" icons:ButtonIcon.Key="disconnect"
+                ToolTip.Tip="ALTER SYSTEM DISCONNECT SESSION … IMMEDIATE" />
+        <Separator Classes="toolbar" />
+        <Button x:Name="TraceOnButton" Classes="tool" Content="트레이스 켜기" IsEnabled="{Binding CanTrace}" icons:ButtonIcon.Key="bug" />
+        <Button x:Name="TraceOffButton" Classes="tool" Content="끄기" IsEnabled="{Binding CanTrace}" icons:ButtonIcon.Key="clear" />
+        <CheckBox Margin="4,0" Content="waits" IsChecked="{Binding TraceWaits, Mode=TwoWay}" VerticalAlignment="Center" />
+        <CheckBox Content="binds" IsChecked="{Binding TraceBinds, Mode=TwoWay}" VerticalAlignment="Center" />
+      </WrapPanel>
+    </Border>
+    <!-- 거르기 줄 -->
+    <WrapPanel DockPanel.Dock="Top" Margin="4,4,4,2">
+      <TextBox Classes="compact search" Width="140" Margin="0,0,6,0" PlaceholderText="사용자" Text="{Binding UsernameFilter, Mode=TwoWay}"
+               AutomationProperties.Name="사용자 거르기" />
+      <TextBox Classes="compact search" Width="220" Margin="0,0,10,0" PlaceholderText="머신·프로그램·모듈·SQL ID" Text="{Binding TextFilter, Mode=TwoWay}"
+               AutomationProperties.Name="글 거르기" />
+      <CheckBox Margin="0,0,10,0" Content="활성만" IsChecked="{Binding ActiveOnly, Mode=TwoWay}" />
+      <CheckBox Content="백그라운드" IsChecked="{Binding IncludeBackground, Mode=TwoWay}" />
     </WrapPanel>
-    <TextBlock DockPanel.Dock="Bottom" Margin="6,2" Text="{Binding StatusText}" TextTrimming="CharacterEllipsis" Opacity="0.75" />
+    <Border DockPanel.Dock="Bottom" Classes="panel-status">
+      <TextBlock Text="{Binding StatusText}" TextTrimming="CharacterEllipsis" />
+    </Border>
     <Grid ColumnDefinitions="3*,4,2*">
-      <DockPanel Grid.Column="0">
-        <Grid DockPanel.Dock="Top" Margin="6,2" ColumnDefinitions="110,110,70,60,60,200,110,*" Opacity="0.7">
+      <!-- 머리글과 목록을 같은 가로 스크롤에 넣는다(열이 넓어도 오른쪽 창 머리글과 겹치지 않는다). -->
+      <ScrollViewer Grid.Column="0" HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled">
+      <DockPanel MinWidth="760">
+        <Border DockPanel.Dock="Top" Classes="grid-header">
+        <Grid Margin="6,0" ColumnDefinitions="110,110,70,60,60,200,110,*">
           <TextBlock Grid.Column="0" Text="SID,SERIAL#" />
           <TextBlock Grid.Column="1" Text="사용자" />
           <TextBlock Grid.Column="2" Text="상태" />
@@ -36,7 +59,9 @@
           <TextBlock Grid.Column="6" Text="SQL ID" />
           <TextBlock Grid.Column="7" Text="프로그램 · 델타" />
         </Grid>
-        <ListBox x:Name="SessionList" ItemsSource="{Binding Sessions}" SelectedItem="{Binding SelectedSession, Mode=TwoWay}">
+        </Border>
+        <ListBox x:Name="SessionList" Classes="log" ItemsSource="{Binding Sessions}" SelectedItem="{Binding SelectedSession, Mode=TwoWay}"
+                 ScrollViewer.HorizontalScrollBarVisibility="Disabled">
           <ListBox.ItemTemplate>
             <DataTemplate x:DataType="vm:SessionItem">
               <Grid ColumnDefinitions="110,110,70,60,60,200,110,*">
@@ -56,7 +81,8 @@
           </ListBox.ItemTemplate>
         </ListBox>
       </DockPanel>
-      <GridSplitter Grid.Column="1" ResizeDirection="Columns" />
+      </ScrollViewer>
+      <GridSplitter Grid.Column="1" ResizeDirection="Columns" Background="{DynamicResource OrandaSplitterBrush}" />
       <TabControl Grid.Column="2">
         <TabItem Header="블로킹 트리">
           <TreeView ItemsSource="{Binding BlockingRoots}">
@@ -74,7 +100,6 @@
         </TabItem>
         <TabItem Header="상세">
           <DockPanel>
-            <Button x:Name="DetailButton" DockPanel.Dock="Top" Margin="4" Content="상세 읽기" IsEnabled="{Binding IsOpen}" />
             <TextBox Text="{Binding DetailText}" IsReadOnly="True" AcceptsReturn="True" TextWrapping="NoWrap"
                      FontFamily="Consolas,Menlo,monospace" ScrollViewer.HorizontalScrollBarVisibility="Auto" />
           </DockPanel>
