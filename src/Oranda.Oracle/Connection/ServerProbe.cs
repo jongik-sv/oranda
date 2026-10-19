@@ -25,8 +25,9 @@ public static class ServerProbe
         var privileges = await QuerySetAsync(connection, "SELECT privilege FROM session_privs", ct);
         var roles = await QuerySetAsync(connection, "SELECT role FROM session_roles", ct);
         var canReadVSession = await CanRunAsync(connection, "SELECT 1 FROM v$session WHERE ROWNUM <= 1", ct);
-        var canExecuteDbmsMonitor = await CanRunAsync(connection,
-            "SELECT 1 FROM all_tab_privs WHERE table_name = 'DBMS_MONITOR' AND privilege = 'EXECUTE' AND ROWNUM <= 1", ct);
+        var hasMonitorGrant = await CountAtLeastOneAsync(connection,
+            "SELECT COUNT(*) FROM all_tab_privs WHERE table_name = 'DBMS_MONITOR' AND privilege = 'EXECUTE'", ct);
+        var canExecuteDbmsMonitor = CanExecuteDbmsMonitor(hasMonitorGrant, privileges);
 
         var conName = multitenant?[0];
         var cdbName = multitenant?[1];
@@ -41,6 +42,31 @@ public static class ServerProbe
             IsMultitenant: !string.IsNullOrEmpty(cdbName),
             SessionId: long.TryParse(basic[4], out var sid) ? sid : 0,
             Capabilities: ServerCapabilities.From(privileges, roles, canReadVSession, canExecuteDbmsMonitor));
+    }
+
+    /// <summary>
+    /// all_tab_privs 는 본인·PUBLIC·활성 역할 경유의 객체 권한 행을 보여 주므로 행이 있으면 실행 가능이다.
+    /// 한계: EXECUTE ANY PROCEDURE 시스템 권한은 이 뷰에 안 나오므로 session_privs 로 따로 인정하고, 그 외 경로는 보지 못한다.
+    /// </summary>
+    public static bool CanExecuteDbmsMonitor(bool hasExecuteGrantRow, IReadOnlySet<string> privileges)
+    {
+        ArgumentNullException.ThrowIfNull(privileges);
+        return hasExecuteGrantRow || privileges.Contains("EXECUTE ANY PROCEDURE");
+    }
+
+    private static async Task<bool> CountAtLeastOneAsync(OracleConnection connection, string sql, CancellationToken ct)
+    {
+        try
+        {
+            await using var command = connection.CreateCommand();
+            command.CommandText = sql;
+            var value = await command.ExecuteScalarAsync(ct);
+            return Convert.ToInt64(value, CultureInfo.InvariantCulture) > 0;
+        }
+        catch (OracleException)
+        {
+            return false;
+        }
     }
 
     private static async Task<string?[]?> QueryRowAsync(OracleConnection connection, string sql, CancellationToken ct)

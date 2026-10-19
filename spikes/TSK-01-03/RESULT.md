@@ -20,7 +20,7 @@
 - 환경 변수: `DOCKER_HOST=npipe://./pipe/docker_engine`, `TESTCONTAINERS_RYUK_DISABLED=true` (Ryuk 이 문제가 되는지는 따로 확인하지 않고 껐다).
 - 비밀번호는 실행마다 만든 임시 GUID 기반 값이며 어디에도 쓰지 않는다.
 
-## src 수정 요청 (src 는 수정하지 않았다)
+## src 수정 요청 (후속 l0103-db-2 에서 1번 반영됨: 행 존재 COUNT 기준 + EXECUTE ANY PROCEDURE 인정, 시험으로 확인)
 1. `src/Oranda.Oracle/Connection/ServerProbe.cs` 의 `canExecuteDbmsMonitor`: `CanRunAsync` 는 쿼리가 오류 없이 실행되면 true 를 돌려주므로, `all_tab_privs` 에 DBMS_MONITOR EXECUTE 행이 없어도 true 가 된다. 26ai 일반 계정(해당 권한 행 0건)에서 `CanTraceSessions == true` 로 관측됨. 행 존재 여부(`SELECT COUNT(*)`)나 실제 호출 가능 여부로 판정해야 한다. 고치면 `Plain_account_probe_reports_no_privileges` 에 `Assert.False(CanTraceSessions)` 를 추가한다.
 2. (참고) `ServerProbe` 의 `OracleException` 삼킴은 의도된 설계이나, 진단용으로 실패 사유를 남길 수단이 없다.
 

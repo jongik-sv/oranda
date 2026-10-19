@@ -113,6 +113,24 @@ public sealed class OracleFreeProbeTests : IClassFixture<OracleFreeFixture>
         Assert.True(info.Capabilities.IsDba);
         Assert.True(info.Capabilities.CanQueryDictionary);
         Assert.True(info.Capabilities.CanQueryPerformanceViews);
+        Assert.True(await CanCallDbmsMonitorAsync(conn));
+        Assert.Equal(await CanCallDbmsMonitorAsync(conn), info.Capabilities.CanTraceSessions);
+    }
+
+    // 실제로 호출해 본다(자기 세션의 추적을 끄는 호출이라 부작용이 없다).
+    private static async Task<bool> CanCallDbmsMonitorAsync(OracleConnection conn)
+    {
+        try
+        {
+            await using var cmd = conn.CreateCommand();
+            cmd.CommandText = "BEGIN DBMS_MONITOR.SESSION_TRACE_DISABLE(NULL, NULL); END;";
+            await cmd.ExecuteNonQueryAsync();
+            return true;
+        }
+        catch (OracleException)
+        {
+            return false;
+        }
     }
 
     [Fact]
@@ -131,12 +149,8 @@ public sealed class OracleFreeProbeTests : IClassFixture<OracleFreeFixture>
         Assert.False(info.Capabilities.CanQueryPerformanceViews);
         Assert.False(info.Capabilities.CanKillSession);
 
-        // 알려진 src 결함: ServerProbe 의 DBMS_MONITOR 점검은 쿼리가 "실행되는지"만 보고 행이 있는지는 보지 않아,
-        // EXECUTE 권한이 없어도 CanTraceSessions 가 true 가 된다. 고쳐질 때까지 이 값은 단정하지 않고 사실만 확인한다.
-        // (spikes/TSK-01-03/RESULT.md 「src 수정 요청」)
-        var grants = await ScalarAsync(conn,
-            "SELECT COUNT(*) FROM all_tab_privs WHERE table_name = 'DBMS_MONITOR' AND privilege = 'EXECUTE'");
-        Assert.Equal("0", grants);
+        Assert.False(info.Capabilities.CanTraceSessions);
+        Assert.False(await CanCallDbmsMonitorAsync(conn));
 
         // 실제로 막혀 있는지 직접 확인한다(ORA-00942).
         var ex = await Assert.ThrowsAsync<OracleException>(() => ScalarAsync(conn, "SELECT COUNT(*) FROM v$session"));
