@@ -192,6 +192,25 @@ public sealed class DockWorkspace
 
     public bool ToggleTool(string toolId) => IsToolVisible(toolId) ? !HideTool(toolId) : ShowTool(toolId);
 
+    /// <summary>
+    /// 도구 창 탭을 앞으로 가져온다. 이미 보이면 배치를 다시 짓지 않고 그 묶음의 활성 탭만 바꾼다(키보드 포커스는 그대로 —
+    /// 실행 뒤 결과 창을 보여도 편집기에서 이어서 칠 수 있게). 숨겨져 있으면 <see cref="ShowTool"/>.
+    /// </summary>
+    public bool ActivateTool(string toolId)
+    {
+        if (_tools.TryGetValue(toolId, out var tool) && tool.Owner is IDock owner && IsToolVisible(toolId))
+        {
+            if (!ReferenceEquals(owner.ActiveDockable, tool))
+            {
+                owner.ActiveDockable = tool;
+            }
+
+            return true;
+        }
+
+        return ShowTool(toolId);
+    }
+
     /// <summary>기본 배치로 되돌린다(<c>oranda.view.resetLayout</c>).</summary>
     public void Reset() => Apply(LayoutPlanner.CreateDefault(_registry.Panels));
 

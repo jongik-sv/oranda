@@ -1,6 +1,7 @@
 <Application xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:dock="using:Dock.Avalonia.Themes.Fluent"
+             xmlns:dockctl="using:Dock.Avalonia.Controls"
              x:Class="Oranda.App.App"
              xmlns:local="using:Oranda.App"
              RequestedThemeVariant="Default">
@@ -213,6 +214,18 @@
 
         <Style Selector="MenuItem:disabled Viewbox.shell-icon">
             <Setter Property="Opacity" Value="0.4" />
+        </Style>
+        <!-- 아래 도구 창 묶음은 탭이 많다(조회 결과·DBMS 출력·메시지·실행 계획·이력·컴파일 오류). 창이 좁으면 탭 줄을 두 줄로 꺾어
+             마지막 탭이 창 밖으로 밀려나지 않게 한다(배율 250 %·영어에서도). -->
+        <Style Selector="dockctl|ToolTabStrip">
+            <Setter Property="ItemsPanel">
+                <ItemsPanelTemplate>
+                    <WrapPanel Orientation="Horizontal" />
+                </ItemsPanelTemplate>
+            </Setter>
+        </Style>
+        <Style Selector="dockctl|ToolTabStrip /template/ ScrollViewer#PART_ScrollViewer">
+            <Setter Property="HorizontalScrollBarVisibility" Value="Disabled" />
         </Style>
     </Application.Styles>
 

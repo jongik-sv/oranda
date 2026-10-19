@@ -214,11 +214,16 @@ internal sealed class Rig : IDisposable
             Execution = () => Exec,
             Language = () => lang,
             Host = () => Host,
+            ActivatePanel = id => Panels.Add("show " + id),
+            TogglePanel = id => Panels.Add("toggle " + id),
         });
         Bus.Publish(new SessionOpened(Session.Id, Profile, Session.Server, SessionPurpose.Work));
     }
 
     public EventBus Bus { get; } = new();
+
+    /// <summary>컨트롤러가 요청한 도구 창 동작(<c>show id</c>·<c>toggle id</c>).</summary>
+    public List<string> Panels { get; } = [];
 
     public ConnectionProfile Profile { get; }
 
@@ -1065,7 +1070,7 @@ public sealed class ExecutionTests
     // ---------- 결과 영역 숨기기 ----------
 
     [Fact]
-    public Task Toggle_result_pane_hides_without_losing_results_and_a_run_brings_it_back() => Ui.Run(async () =>
+    public Task Run_shows_the_results_panel_and_toggle_keeps_the_tab_results() => Ui.Run(async () =>
     {
         using var rig = new Rig();
         var tab = rig.Host.NewDocument("select 1 from dual");
@@ -1073,15 +1078,64 @@ public sealed class ExecutionTests
         await rig.Controller.RunAsync(RunMode.Statement);
         var results = tab.ResultPane;
         Assert.NotNull(results);
+        Assert.Contains("show " + ExecutionController.ResultsPanelId, rig.Panels);
 
+        // 결과 창을 숨겨도 탭의 결과는 그대로다. 다시 실행하면 같은 결과 영역을 쓴다.
         rig.Controller.ToggleResultPane();
-        Assert.Null(tab.ResultPane);
-        rig.Controller.ToggleResultPane();
+        Assert.Equal("toggle " + ExecutionController.ResultsPanelId, rig.Panels[^1]);
         Assert.Same(results, tab.ResultPane);
-
-        rig.Controller.ToggleResultPane();
         await rig.Controller.RunAsync(RunMode.Statement);
         Assert.Same(results, tab.ResultPane);
+        Assert.Equal("show " + ExecutionController.ResultsPanelId, rig.Panels[^1]);
+    });
+
+    [Fact]
+    public Task Results_panel_follows_the_active_tab_and_its_result_pane() => Ui.Run(() =>
+    {
+        using var rig = new Rig();
+        var a = rig.Host.NewDocument("select 1 from dual");
+        using var panel = ResultsPanelViewModel.ForHost(rig.Host);
+        Assert.False(panel.HasPane);
+
+        var paneA = new object();
+        a.ResultPane = paneA;
+        Assert.Same(paneA, panel.Pane);
+
+        var b = rig.Host.NewDocument("select 2 from dual");
+        Assert.Null(panel.Pane);
+        var paneB = new object();
+        b.ResultPane = paneB;
+        Assert.Same(paneB, panel.Pane);
+
+        rig.Host.Active = a;
+        Assert.Same(paneA, panel.Pane);
+        return Task.CompletedTask;
+    });
+
+    [Fact]
+    public Task Results_panel_view_reuses_each_tab_view_when_switching() => Ui.Run(() =>
+    {
+        using var rig = new Rig();
+        var a = rig.Host.NewDocument("select 1 from dual");
+        a.ResultPane = new ResultTabsViewModel(null);
+        using var vm = ResultsPanelViewModel.ForHost(rig.Host);
+        var view = new ResultsPanelView { DataContext = vm };
+        var window = new Avalonia.Controls.Window { Width = 800, Height = 300, Content = view };
+        window.Show();
+        Avalonia.Threading.Dispatcher.UIThread.RunJobs();
+
+        var host = view.FindControl<Avalonia.Controls.ContentControl>("PaneHost")!;
+        var first = Assert.IsType<ResultTabsView>(host.Content);
+        Assert.Same(a.ResultPane, first.DataContext);
+
+        var b = rig.Host.NewDocument("select 2 from dual");
+        b.ResultPane = new ResultTabsViewModel(null);
+        Assert.NotSame(first, host.Content);
+
+        rig.Host.Active = a;
+        Assert.Same(first, host.Content); // 다시 만들지 않는다(스크롤·열 폭을 지킨다)
+        window.Close();
+        return Task.CompletedTask;
     });
 
     // ---------- 명령 처리기 ----------

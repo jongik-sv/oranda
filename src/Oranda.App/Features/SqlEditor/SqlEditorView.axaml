@@ -11,9 +11,9 @@
     <StyleInclude Source="avares://AvaloniaEdit/Themes/Fluent/AvaloniaEdit.xaml" />
   </UserControl.Styles>
 
-  <!-- 위: 찾기 패널 / 가운데: 편집기 / 아래: 결과 영역(TSK-06-03 이 ResultPane 에 꽂는다) -->
+  <!-- 위: 찾기 패널 / 아래: 편집기. 결과 영역은 아래 도구 창 「조회 결과」가 활성 탭의 ResultPane 을 보인다. -->
   <!-- 결과 행 높이는 code-behind 가 정한다(결과가 없으면 0, 있으면 편집기와 3:2 로 나눈다). -->
-  <Grid x:Name="RootGrid" RowDefinitions="Auto,3*,Auto,0">
+  <Grid x:Name="RootGrid" RowDefinitions="Auto,*">
     <Border Grid.Row="0" Name="FindPanel" Classes="panel-toolbar" IsVisible="{Binding IsFindPanelOpen}">
       <StackPanel Spacing="4">
         <StackPanel Orientation="Horizontal" Spacing="6">
@@ -44,10 +44,5 @@
                    VerticalScrollBarVisibility="Auto"
                    AutomationProperties.Name="SQL 편집기" />
 
-    <GridSplitter Grid.Row="2" Height="5" HorizontalAlignment="Stretch" ResizeDirection="Rows"
-                  Background="{DynamicResource OrandaSplitterBrush}" AutomationProperties.Name="편집기와 결과 나누기"
-                  IsVisible="{Binding ResultPane, Converter={x:Static ObjectConverters.IsNotNull}}" />
-    <ContentControl Grid.Row="3" Name="ResultHost" keymaps:FocusSlot.Name="sqlGrid" Content="{Binding ResultPane}" MinHeight="0" MaxHeight="2000"
-                    IsVisible="{Binding ResultPane, Converter={x:Static ObjectConverters.IsNotNull}}" />
   </Grid>
 </UserControl>

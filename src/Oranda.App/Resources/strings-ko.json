@@ -50,6 +50,7 @@
   "Panel.oranda.panel.output": "DBMS 출력",
   "Panel.oranda.panel.plan": "실행 계획",
   "Panel.oranda.panel.plsqlEditor": "PL/SQL 편집기",
+  "Panel.oranda.panel.results": "조회 결과",
   "Panel.oranda.panel.rowView": "행 보기",
   "Panel.oranda.panel.schemaBrowser": "스키마 브라우저",
   "Panel.oranda.panel.scripts": "스크립트",

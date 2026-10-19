@@ -20,6 +20,7 @@
   "NLS 지역": "NLS territory",
   "NLS 타임스탬프": "NLS timestamp",
   "SQL 검색 (3자 이상 부분 일치)": "Search SQL (substring, 3+ characters)",
+  "SQL 을 실행하면 결과가 여기에 보입니다.": "Run SQL to see the results here.",
   "SQL 텍스트·SQL ID": "SQL text or SQL ID",
   "SQL 편집기": "SQL Editor",
   "TNS 디렉터리": "TNS directory",

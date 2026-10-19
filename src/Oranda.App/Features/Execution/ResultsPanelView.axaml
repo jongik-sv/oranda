@@ -1,0 +1,13 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:Oranda.App.Features.Execution"
+             xmlns:keymaps="using:Oranda.App.Shell.Keymaps"
+             x:Class="Oranda.App.Features.Execution.ResultsPanelView"
+             x:DataType="vm:ResultsPanelViewModel">
+  <Panel>
+    <!-- 결과 영역 View 는 탭마다 만들어 두고 바꿔 끼운다(스크롤·열 폭·찾기 상태를 지킨다). 그리드 포커스 자리는 sqlGrid. -->
+    <ContentControl x:Name="PaneHost" keymaps:FocusSlot.Name="sqlGrid" IsVisible="{Binding HasPane}" />
+    <TextBlock Classes="panel-caption" IsVisible="{Binding !HasPane}" HorizontalAlignment="Center" VerticalAlignment="Center"
+               Text="SQL 을 실행하면 결과가 여기에 보입니다." />
+  </Panel>
+</UserControl>

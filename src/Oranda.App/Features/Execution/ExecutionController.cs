@@ -55,6 +55,12 @@ public sealed class ExecutionDeps
     public Func<IRowEditor?> RowEditor { get; init; } = () => null;
 
     public Func<IMetadataProvider?> Metadata { get; init; } = () => null;
+
+    /// <summary>도구 창 탭을 앞으로 가져온다(패널 ID). 실행하면 「조회 결과」 창을 보인다.</summary>
+    public Action<string> ActivatePanel { get; init; } = _ => { };
+
+    /// <summary>도구 창 보이기/숨기기(패널 ID).</summary>
+    public Action<string> TogglePanel { get; init; } = _ => { };
 }
 
 /// <summary>
@@ -70,7 +76,8 @@ public sealed class ExecutionController : IDisposable
     private Window? _window;
     private bool _exitApproved;
     private bool _lastCancelled;
-    private readonly Dictionary<Guid, ResultTabsViewModel> _hiddenPanes = [];
+    /// <summary>결과·오류를 보이는 아래 도구 창(<see cref="ResultsPanelViewModel"/>).</summary>
+    public const string ResultsPanelId = "oranda.panel.results";
 
     public ExecutionController(ExecutionDeps deps)
     {
@@ -284,25 +291,8 @@ public sealed class ExecutionController : IDisposable
         }
     }
 
-    /// <summary>결과 영역 보이기/숨기기(<c>oranda.window.toggleResultPane</c>). 숨겨도 결과는 남는다.</summary>
-    public void ToggleResultPane(SqlEditorViewModel? tab = null)
-    {
-        tab ??= Host.Active;
-        if (tab is null)
-        {
-            return;
-        }
-
-        if (tab.ResultPane is ResultTabsViewModel visible)
-        {
-            _hiddenPanes[tab.TabId] = visible;
-            tab.ResultPane = null;
-        }
-        else if (_hiddenPanes.Remove(tab.TabId, out var hidden))
-        {
-            tab.ResultPane = hidden;
-        }
-    }
+    /// <summary>조회 결과 창 보이기/숨기기(<c>oranda.window.toggleResultPane</c>). 숨겨도 탭의 결과는 남는다.</summary>
+    public void ToggleResultPane() => _d.TogglePanel(ResultsPanelId);
 
     /// <summary>그리드 편집 반영 전 DML 미리보기. 사용자가 확인하면 true.</summary>
     public Task<bool> ConfirmPreviewAsync(string text, CancellationToken ct) => _d.Dialogs.PreviewDmlAsync(text, ct);
@@ -546,6 +536,7 @@ public sealed class ExecutionController : IDisposable
     {
         session = _d.Session();
         var results = EnsureResults(tab, session);
+        _d.ActivatePanel(ResultsPanelId); // 결과·오류는 아래 「조회 결과」 탭에(포커스는 편집기에 남는다)
         if (session is null)
         {
             const string none = "접속이 없습니다. 접속한 뒤 실행하세요.";
@@ -565,18 +556,10 @@ public sealed class ExecutionController : IDisposable
         return results;
     }
 
-    private ResultTabsViewModel EnsureResults(SqlEditorViewModel tab, ISession? session)
+    private static ResultTabsViewModel EnsureResults(SqlEditorViewModel tab, ISession? session)
     {
         if (tab.ResultPane is not ResultTabsViewModel results)
         {
-            // 숨겨 둔 결과 영역이 있으면 다시 보이고 그대로 쓴다(숨기기는 결과를 버리지 않는다).
-            if (_hiddenPanes.Remove(tab.TabId, out var hidden))
-            {
-                tab.ResultPane = hidden;
-                hidden.SetProfile(session?.Profile);
-                return hidden;
-            }
-
             results = new ResultTabsViewModel(session?.Profile);
             tab.ResultPane = results;
         }

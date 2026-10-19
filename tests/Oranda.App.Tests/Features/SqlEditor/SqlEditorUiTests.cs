@@ -241,18 +241,6 @@ public sealed class SqlEditorUiTests(ITestOutputHelper output)
         window.Close();
     });
 
-    [Fact]
-    public Task Result_pane_slot_stays_hidden_until_set() => Ui.Run(() =>
-    {
-        var (window, view, vm) = Show("select 1");
-        var host = view.FindControl<ContentControl>("ResultHost")!;
-        Assert.False(host.IsVisible);
-        vm.ResultPane = new object();
-        Dispatcher.UIThread.RunJobs();
-        Assert.True(host.IsVisible);
-        window.Close();
-    });
-
     // ---- 성능: 1만 줄 문서에서 키 입력 반영(p95 ≤ 16 ms, D-007: 렌더 틱 대기를 뺀 처리 시간) --------------
 
     private static string BuildDocument(int lines)

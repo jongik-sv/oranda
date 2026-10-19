@@ -50,6 +50,7 @@
   "Panel.oranda.panel.output": "DBMS Output",
   "Panel.oranda.panel.plan": "Execution Plan",
   "Panel.oranda.panel.plsqlEditor": "PL/SQL Editor",
+  "Panel.oranda.panel.results": "Results",
   "Panel.oranda.panel.rowView": "Row View",
   "Panel.oranda.panel.schemaBrowser": "Schema Browser",
   "Panel.oranda.panel.scripts": "Scripts",

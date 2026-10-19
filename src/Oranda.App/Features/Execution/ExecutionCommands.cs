@@ -85,6 +85,8 @@ public static class ExecutionCommands
                 Language = () => container.GetRequiredService<ILanguageService>(),
                 RowEditor = () => container.GetService<IRowEditor>(),
                 Metadata = () => container.GetService<IMetadataProvider>(),
+                ActivatePanel = id => container.GetService<IShellUi>()?.Docking.ActivateTool(id),
+                TogglePanel = id => container.GetService<IShellUi>()?.Docking.ToggleTool(id),
             });
             Controllers.Add(container, controller);
             return controller;
