@@ -302,7 +302,7 @@ internal sealed class CompletionProvider : ICompletionProvider, IDisposable
             };
             if (kind is { } k)
             {
-                items.Add(new CompletionItem(o.Name, k, o.Name) { Detail = o.ObjectType.ToLowerInvariant() + " · " + o.Owner });
+                items.Add(new CompletionItem(o.Name, k, o.Name) { Detail = o.ObjectType + " · " + o.Owner });
             }
         }
     }

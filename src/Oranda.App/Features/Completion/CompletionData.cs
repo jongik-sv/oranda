@@ -1,9 +1,13 @@
 using System.ComponentModel;
 using System.Globalization;
+using Avalonia;
+using Avalonia.Controls;
+using Avalonia.Layout;
 using Avalonia.Media;
 using AvaloniaEdit.CodeCompletion;
 using AvaloniaEdit.Document;
 using AvaloniaEdit.Editing;
+using Oranda.App.Shell.Icons;
 using Oranda.Core.Language;
 using Oranda.Core.Metadata;
 
@@ -14,14 +18,23 @@ public sealed class CompletionData(CompletionItem item) : ICompletionData
 {
     public CompletionItem Item { get; } = item;
 
+    private Control? _content;
+
     public IImage? Image => null;
 
     public string Text => Item.Label;
 
-    /// <summary>목록에 보이는 글: 이름 + 종류.</summary>
-    public object Content => Item.Label + "  · " + KindText(Item.Kind);
+    /// <summary>
+    /// 목록 한 줄: 종류 아이콘 + 이름 + 흐린 글씨의 상세(열 형식·객체 종류). SQL Developer·Orange 의 완성 목록처럼
+    /// 이름 열 폭을 맞춰 상세가 한 줄로 늘어서게 한다. 줄마다 한 번만 만든다.
+    /// </summary>
+    public object Content => _content ??= BuildContent();
 
-    public object Description => Item.Detail is { Length: > 0 } d ? KindText(Item.Kind) + "\n" + d : KindText(Item.Kind);
+    /// <summary>옆 설명 창. 상세는 줄에 이미 보이므로 줄에서 잘릴 만큼 길 때만 띄운다.</summary>
+    public object? Description => Item.Detail is { Length: > DetailFitsChars } d ? KindText(Item.Kind) + "\n" + d : null;
+
+    /// <summary>목록 폭(360)에서 상세 칸에 잘리지 않고 들어가는 글자 수(대략).</summary>
+    private const int DetailFitsChars = 22;
 
     /// <summary>DB 객체가 키워드보다 앞(같은 접두어일 때 먼저 고른다).</summary>
     public double Priority => Item.Kind switch
@@ -38,6 +51,40 @@ public sealed class CompletionData(CompletionItem item) : ICompletionData
         ArgumentNullException.ThrowIfNull(textArea);
         ArgumentNullException.ThrowIfNull(completionSegment);
         textArea.Document.Replace(completionSegment, Item.InsertText);
+    }
+
+    /// <summary>종류별 아이콘 키(스키마 브라우저와 같은 그림). 키워드는 아이콘 없이 자리만 둔다.</summary>
+    public static string? IconKey(CompletionItemKind kind) => kind switch
+    {
+        CompletionItemKind.Schema => "schemaUser",
+        CompletionItemKind.Table => "table",
+        CompletionItemKind.View => "objView",
+        CompletionItemKind.Synonym => "objSynonym",
+        CompletionItemKind.Column => "column",
+        CompletionItemKind.Package => "objPackage",
+        CompletionItemKind.Procedure => "objProcedure",
+        CompletionItemKind.Function => "objFunction",
+        CompletionItemKind.Hint => "info",
+        CompletionItemKind.Snippet => "fileSql",
+        _ => null,
+    };
+
+    private DockPanel BuildContent()
+    {
+        const double iconSize = 14;
+        var icon = (Control?)ShellIcons.Create(IconKey(Item.Kind), iconSize) ?? new Border { Width = iconSize, Height = iconSize };
+        var name = new TextBlock { Text = Item.Label, MinWidth = 150, Margin = new Thickness(6, 0, 12, 0), VerticalAlignment = VerticalAlignment.Center };
+        var detail = new TextBlock
+        {
+            Text = Item.Detail is { Length: > 0 } d && Item.Kind != CompletionItemKind.Schema ? d : KindText(Item.Kind),
+            Opacity = 0.6,
+            VerticalAlignment = VerticalAlignment.Center,
+            TextTrimming = TextTrimming.CharacterEllipsis,
+        };
+        var row = new DockPanel { Children = { icon, name, detail } };
+        DockPanel.SetDock(icon, Avalonia.Controls.Dock.Left);
+        DockPanel.SetDock(name, Avalonia.Controls.Dock.Left);
+        return row;
     }
 
     public static string KindText(CompletionItemKind kind) => kind switch

@@ -95,7 +95,8 @@ public sealed class CompletionController
 
         CloseCompletion();
         EnsureEditorTheme(area);
-        var window = new CompletionWindow(area) { StartOffset = start, EndOffset = now };
+        // 기본 폭(175)은 이름만 겨우 들어간다. 아이콘·이름·상세(열 형식) 세 칸이 보이게 넓힌다.
+        var window = new CompletionWindow(area) { StartOffset = start, EndOffset = now, Width = 360 };
         var list = window.CompletionList.CompletionData;
         foreach (var item in result.Items)
         {
@@ -116,6 +117,10 @@ public sealed class CompletionController
         if (typed.Length > 0 && window.CompletionList.ListBox is not null)
         {
             window.CompletionList.SelectItem(typed);
+        }
+        else if (list.Count > 0)
+        {
+            window.CompletionList.SelectedItem = list[0]; // SQL Developer 처럼 첫 후보를 골라 두어 Enter·Tab 으로 바로 넣는다
         }
 
         return true;
