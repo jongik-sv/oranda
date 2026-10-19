@@ -1,0 +1,8 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:Oranda.App.Features.HistoryScripts"
+             x:Class="Oranda.App.Features.HistoryScripts.ScriptsView"
+             x:DataType="vm:ScriptsViewModel">
+  <!-- TSK-06-06 빈 틀 -->
+  <TextBlock Text="oranda.panel.scripts" />
+</UserControl>

@@ -1,0 +1,8 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:Oranda.App.Features.ExtensionTest"
+             x:Class="Oranda.App.Features.ExtensionTest.ExtensionTestView"
+             x:DataType="vm:ExtensionTestViewModel">
+  <!-- TSK-10-03 빈 틀 -->
+  <TextBlock Text="oranda.panel.extensionTest" />
+</UserControl>

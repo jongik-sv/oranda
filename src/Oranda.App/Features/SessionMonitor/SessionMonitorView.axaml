@@ -1,0 +1,8 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:Oranda.App.Features.SessionMonitor"
+             x:Class="Oranda.App.Features.SessionMonitor.SessionMonitorView"
+             x:DataType="vm:SessionMonitorViewModel">
+  <!-- TSK-09-01 빈 틀 -->
+  <TextBlock Text="oranda.panel.sessionMonitor" />
+</UserControl>

@@ -1,0 +1,8 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:Oranda.App.Features.DbTools"
+             x:Class="Oranda.App.Features.DbTools.DdlExtractView"
+             x:DataType="vm:DdlExtractViewModel">
+  <!-- TSK-07-04 빈 틀 -->
+  <TextBlock Text="oranda.panel.ddlExtract" />
+</UserControl>

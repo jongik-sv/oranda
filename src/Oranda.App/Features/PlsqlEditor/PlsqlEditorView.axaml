@@ -1,0 +1,8 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:Oranda.App.Features.PlsqlEditor"
+             x:Class="Oranda.App.Features.PlsqlEditor.PlsqlEditorView"
+             x:DataType="vm:PlsqlEditorViewModel">
+  <!-- TSK-08-01 빈 틀 -->
+  <TextBlock Text="oranda.panel.plsqlEditor" />
+</UserControl>

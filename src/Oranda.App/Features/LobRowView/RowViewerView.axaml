@@ -1,0 +1,8 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:Oranda.App.Features.LobRowView"
+             x:Class="Oranda.App.Features.LobRowView.RowViewerView"
+             x:DataType="vm:RowViewerViewModel">
+  <!-- TSK-06-05 빈 틀 -->
+  <TextBlock Text="oranda.panel.rowView" />
+</UserControl>

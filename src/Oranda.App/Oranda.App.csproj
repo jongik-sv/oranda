@@ -17,6 +17,13 @@
     <AvaloniaResource Include="Assets\**" />
   </ItemGroup>
 
+  <!-- 키맵 프리셋 4종(TSK-02-05): 정본 docs/design/keymaps/*.json 을 복사하지 않고 링크해 임베디드 리소스로 넣는다. -->
+  <ItemGroup>
+    <EmbeddedResource Include="..\..\docs\design\keymaps\*.json"
+                      Link="Shell\Keymaps\Presets\%(Filename)%(Extension)"
+                      LogicalName="Oranda.App.Keymaps.%(Filename)%(Extension)" />
+  </ItemGroup>
+
   <ItemGroup>
     <PackageReference Include="Avalonia" />
     <PackageReference Include="Avalonia.Desktop" />
