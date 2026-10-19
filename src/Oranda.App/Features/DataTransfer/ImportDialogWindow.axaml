@@ -1,0 +1,66 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:dt="using:Oranda.App.Features.DataTransfer"
+        x:Class="Oranda.App.Features.DataTransfer.ImportDialogWindow"
+        x:DataType="dt:ImportDialogViewModel"
+        Title="데이터 가져오기"
+        Width="860" Height="680" MinWidth="640" MinHeight="480"
+        WindowStartupLocation="CenterOwner"
+        ShowInTaskbar="False"
+        FontSize="{DynamicResource OrandaFontSizeBase}">
+  <DockPanel Margin="16">
+    <StackPanel DockPanel.Dock="Bottom" Spacing="8" Margin="0,10,0,0">
+      <ProgressBar IsIndeterminate="{Binding IsRunning}" IsVisible="{Binding IsRunning}" />
+      <TextBlock Text="{Binding Status}" TextWrapping="Wrap" Classes.error="{Binding StatusIsError}" AutomationProperties.Name="상태" />
+      <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8">
+        <Button MinWidth="88" Content="가져오기" Command="{Binding StartCommand}" IsDefault="True" />
+        <Button MinWidth="88" Content="중단" Command="{Binding CancelCommand}" />
+        <Button x:Name="CloseButton" MinWidth="88" Content="닫기" IsCancel="True" />
+      </StackPanel>
+    </StackPanel>
+
+    <Grid RowDefinitions="Auto,Auto,Auto,*" RowSpacing="8">
+      <Grid Grid.Row="0" ColumnDefinitions="Auto,*,Auto" ColumnSpacing="8">
+        <TextBlock Text="파일(CSV·TSV·xlsx)" VerticalAlignment="Center" />
+        <TextBox Grid.Column="1" Text="{Binding FilePath}" AutomationProperties.Name="가져올 파일 경로" />
+        <Button x:Name="BrowseButton" Grid.Column="2" Content="찾아보기…" />
+      </Grid>
+
+      <Grid Grid.Row="1" ColumnDefinitions="Auto,160,Auto,*,Auto" ColumnSpacing="8">
+        <TextBlock Text="대상 스키마" VerticalAlignment="Center" />
+        <TextBox Grid.Column="1" Text="{Binding TargetOwner}" AutomationProperties.Name="대상 스키마" />
+        <TextBlock Grid.Column="2" Text="표" VerticalAlignment="Center" />
+        <TextBox Grid.Column="3" Text="{Binding TargetTable}" AutomationProperties.Name="대상 표 이름" />
+        <Button Grid.Column="4" Content="열 읽기" Command="{Binding LoadCommand}" />
+      </Grid>
+
+      <StackPanel Grid.Row="2" Orientation="Horizontal" Spacing="16">
+        <CheckBox Content="첫 줄은 열 이름" IsChecked="{Binding HasHeader}" />
+        <StackPanel Orientation="Horizontal" Spacing="6">
+          <TextBlock Text="배치 크기" VerticalAlignment="Center" />
+          <NumericUpDown Minimum="1" Maximum="5000" Increment="100" FormatString="0" Value="{Binding BatchSize}" Width="120" AutomationProperties.Name="배치 크기" />
+        </StackPanel>
+        <CheckBox Content="끝에서 한 번에 커밋(끄면 배치마다 커밋)" IsChecked="{Binding CommitAtEnd}" />
+      </StackPanel>
+
+      <Grid Grid.Row="3" RowDefinitions="Auto,*,Auto,Auto,*" RowSpacing="4">
+        <TextBlock Text="열 매핑·타입 변환 미리보기(원본 첫 데이터 행 기준)" FontWeight="SemiBold" />
+        <ListBox Grid.Row="1" ItemsSource="{Binding Mappings}" AutomationProperties.Name="열 매핑">
+          <ListBox.ItemTemplate>
+            <DataTemplate x:DataType="dt:ImportMappingRow">
+              <Grid ColumnDefinitions="180,200,*" ColumnSpacing="8">
+                <TextBlock Text="{Binding Source}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
+                <ComboBox x:Name="TargetBox" Grid.Column="1" HorizontalAlignment="Stretch" AutomationProperties.Name="대상 열" />
+                <TextBlock Grid.Column="2" Text="{Binding Preview}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis"
+                           Classes.error="{Binding PreviewIsError}" />
+              </Grid>
+            </DataTemplate>
+          </ListBox.ItemTemplate>
+        </ListBox>
+        <TextBlock Grid.Row="2" Text="원본 앞부분" FontWeight="SemiBold" Margin="0,8,0,0" />
+        <ListBox Grid.Row="3" ItemsSource="{Binding PreviewLines}" MaxHeight="110" AutomationProperties.Name="원본 앞부분" />
+        <ListBox Grid.Row="4" ItemsSource="{Binding ErrorRows}" IsVisible="{Binding HasErrors}" AutomationProperties.Name="오류 행" />
+      </Grid>
+    </Grid>
+  </DockPanel>
+</Window>

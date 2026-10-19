@@ -1,0 +1,42 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:dt="using:Oranda.App.Features.DataTransfer"
+        x:Class="Oranda.App.Features.DataTransfer.ExportDialogWindow"
+        x:DataType="dt:ExportDialogViewModel"
+        Title="내보내기"
+        Width="560" SizeToContent="Height" MinWidth="460"
+        WindowStartupLocation="CenterOwner"
+        ShowInTaskbar="False"
+        FontSize="{DynamicResource OrandaFontSizeBase}">
+  <StackPanel Margin="16" Spacing="10">
+    <Grid ColumnDefinitions="Auto,*" RowDefinitions="Auto,Auto,Auto,Auto,Auto" RowSpacing="8" ColumnSpacing="12">
+      <TextBlock Grid.Row="0" Text="형식" VerticalAlignment="Center" />
+      <ComboBox x:Name="FormatBox" Grid.Row="0" Grid.Column="1" HorizontalAlignment="Stretch" AutomationProperties.Name="내보내기 형식" />
+
+      <TextBlock Grid.Row="1" Text="저장 위치" VerticalAlignment="Center" />
+      <Grid Grid.Row="1" Grid.Column="1" ColumnDefinitions="*,Auto" ColumnSpacing="8">
+        <TextBox x:Name="PathBox" Text="{Binding FilePath}" AutomationProperties.Name="저장 파일 경로" />
+        <Button x:Name="BrowseButton" Grid.Column="1" Content="찾아보기…" />
+      </Grid>
+
+      <CheckBox Grid.Row="2" Grid.Column="1" Content="첫 줄에 열 이름 넣기" IsChecked="{Binding IncludeHeader}" IsVisible="{Binding HasHeaderOption}" />
+
+      <TextBlock Grid.Row="3" Text="표 이름" VerticalAlignment="Center" IsVisible="{Binding IsInsert}" />
+      <TextBox Grid.Row="3" Grid.Column="1" Text="{Binding InsertTableName}" IsVisible="{Binding IsInsert}" AutomationProperties.Name="INSERT 대상 표 이름" />
+
+      <TextBlock Grid.Row="4" Text="시트당 최대 행" VerticalAlignment="Center" IsVisible="{Binding IsXlsx}" />
+      <NumericUpDown Grid.Row="4" Grid.Column="1" Minimum="1" Maximum="1048575" Increment="10000" FormatString="0"
+                     Value="{Binding MaxRowsPerSheet}" IsVisible="{Binding IsXlsx}" AutomationProperties.Name="시트당 최대 행" />
+    </Grid>
+
+    <TextBlock Text="질의를 서버에서 다시 실행해 처음부터 끝까지 흘려 저장한다(그리드에 불러온 행만이 아니다)." TextWrapping="Wrap" Opacity="0.7" />
+    <ProgressBar IsIndeterminate="{Binding IsRunning}" IsVisible="{Binding IsRunning}" />
+    <TextBlock Text="{Binding Status}" TextWrapping="Wrap" Classes.error="{Binding StatusIsError}" AutomationProperties.Name="상태" />
+
+    <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8">
+      <Button x:Name="StartButton" MinWidth="88" Content="내보내기" Command="{Binding StartCommand}" IsDefault="True" />
+      <Button x:Name="CancelButton" MinWidth="88" Content="중단" Command="{Binding CancelCommand}" />
+      <Button x:Name="CloseButton" MinWidth="88" Content="닫기" IsCancel="True" />
+    </StackPanel>
+  </StackPanel>
+</Window>
