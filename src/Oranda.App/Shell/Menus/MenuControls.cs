@@ -13,20 +13,6 @@ namespace Oranda.App.Shell.Menus;
 /// <summary><see cref="MenuNode"/> 모델을 Avalonia 메뉴·툴바 컨트롤로 만든다.</summary>
 public sealed class MenuControls(ICommandRegistry registry, IContextKeys keys, Func<string, KeyGesture?> gesture, DockWorkspace workspace)
 {
-    private static readonly Dictionary<string, string> AccessKeys = new(StringComparer.Ordinal)
-    {
-        ["파일"] = "파일(_F)",
-        ["편집"] = "편집(_E)",
-        ["보기"] = "보기(_V)",
-        ["SQL"] = "_SQL",
-        ["결과"] = "결과(_R)",
-        ["데이터베이스"] = "데이터베이스(_D)",
-        ["모니터"] = "모니터(_M)",
-        ["도구"] = "도구(_T)",
-        ["창"] = "창(_W)",
-        ["도움말"] = "도움말(_H)",
-    };
-
     private readonly List<RegistryCommand> _commands = [];
 
     /// <summary>문맥 키가 바뀌면 모든 메뉴·단추의 활성 상태를 다시 계산한다.</summary>
@@ -94,7 +80,7 @@ public sealed class MenuControls(ICommandRegistry registry, IContextKeys keys, F
         {
             case MenuNodeKind.Submenu:
                 {
-                    var header = topLevel && AccessKeys.TryGetValue(n.Title, out var withKey) ? withKey : n.Title;
+                    var header = topLevel ? n.AccessHeader ?? n.Title : n.Title;
                     var item = new MenuItem { Header = header };
                     AutomationProperties.SetName(item, n.Title);
                     item.ItemsSource = n.Children.Select(c => c.Kind == MenuNodeKind.Separator ? (object)new Separator() : MenuItemFor(c, track: track)).ToList();

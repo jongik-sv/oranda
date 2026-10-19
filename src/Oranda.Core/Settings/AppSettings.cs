@@ -41,6 +41,12 @@ public sealed record UiSettings
 
     /// <summary><c>system</c> | <c>ko</c> | <c>en</c>.</summary>
     public string Language { get; init; } = "system";
+
+    /// <summary>화면 글자 배율(0.8~2.5, 기본 1.0). 메뉴·대화상자·패널 글자가 함께 커진다(TSK-10-02).</summary>
+    public double UiScale { get; init; } = 1.0;
+
+    /// <summary>고대비 색 사용(OS 고대비 설정이 켜져 있으면 이 값과 상관없이 고대비로 그린다, TSK-10-02).</summary>
+    public bool HighContrast { get; init; }
 }
 
 public sealed record EditorSettings

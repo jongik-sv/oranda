@@ -33,6 +33,7 @@ public sealed class DockWorkspace
         _registry = registry;
         _createViewModel = createViewModel;
         _text = text;
+        _text.LanguageChanged += (_, _) => Retitle();
         Factory = new Factory
         {
             HideToolsOnClose = true,
@@ -375,6 +376,28 @@ public sealed class DockWorkspace
                     docs.VisibleDockables = Factory.CreateList<IDockable>();
                     return docs;
                 }
+        }
+    }
+
+    /// <summary>
+    /// 언어가 바뀌었을 때 도구 창과 문서 탭의 제목을 새 언어로 다시 단다.
+    /// 문서는 이름 그대로(옛 언어의 기본 제목과 같은) 탭만 바꾼다 — 사용자가 붙인 이름·파일 이름은 건드리지 않는다.
+    /// </summary>
+    private void Retitle()
+    {
+        foreach (var tool in _tools.Values)
+        {
+            tool.Title = _text.Title(tool.Definition);
+        }
+
+        var other = _text.Language == "ko" ? "en" : "ko";
+        foreach (var doc in Documents)
+        {
+            var old = _text.LookupIn(other, "Panel." + doc.Definition.Id);
+            if (string.Equals(doc.Title, old, StringComparison.Ordinal))
+            {
+                doc.Title = _text.Title(doc.Definition);
+            }
         }
     }
 

@@ -14,7 +14,7 @@
   <Border x:Name="EnvironmentBorder" BorderThickness="3" Classes="env-frame">
     <DockPanel>
       <!-- 창이 아주 좁으면(배율 250 %) 메뉴 머리글이 잘리지 않고 다음 줄로 넘어간다. -->
-      <Menu x:Name="MenuBar" DockPanel.Dock="Top">
+      <Menu x:Name="MenuBar" DockPanel.Dock="Top" KeyboardNavigation.TabNavigation="Once">
         <Menu.ItemsPanel>
           <ItemsPanelTemplate>
             <WrapPanel />
@@ -30,7 +30,7 @@
                   AutomationProperties.Name="명령 검색" ToolTip.Tip="명령 검색 (⇧⌘P)">
             <DockPanel>
               <ContentControl x:Name="PaletteIcon" DockPanel.Dock="Left" Margin="0,0,6,0" VerticalAlignment="Center" />
-              <TextBlock Text="명령 검색" Opacity="0.6" VerticalAlignment="Center" />
+              <TextBlock x:Name="PaletteText" Text="명령 검색" Opacity="0.6" VerticalAlignment="Center" />
             </DockPanel>
           </Button>
           <Button x:Name="OverflowButton" DockPanel.Dock="Right" Classes="toolbar toolbar-text" Content="…" IsVisible="False"

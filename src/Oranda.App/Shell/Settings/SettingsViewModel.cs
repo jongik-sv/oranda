@@ -4,6 +4,8 @@ using System.Linq;
 using System.Threading.Tasks;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using Oranda.App.Features.Localization;
+using Oranda.App.Shell.Appearance;
 using Oranda.App.ViewModels;
 using Oranda.Core.Execution;
 using Oranda.Core.Settings;
@@ -12,6 +14,15 @@ namespace Oranda.App.Shell.Settings;
 
 /// <summary>테마 선택 한 줄.</summary>
 public sealed record ThemeChoice(Theme Theme, string Label);
+
+/// <summary>언어 선택 한 줄. <see cref="Code"/> 는 <c>system</c> | <c>ko</c> | <c>en</c>.</summary>
+public sealed record LanguageChoice(string Code, string Label);
+
+/// <summary>설정 창 글자 조회(<c>{Binding Strings[키]}</c>): 키 <c>x</c> → 리소스 <c>Shell.settings.x</c>. 창을 열 때의 언어로 고정된다.</summary>
+public sealed class SettingsStrings(IShellText text)
+{
+    public string this[string key] => text.Lookup("Shell.settings." + key);
+}
 
 /// <summary>스크립트 오류 처리 선택 한 줄.</summary>
 public sealed record ErrorModeChoice(ScriptErrorMode Mode, string Label);
@@ -27,6 +38,16 @@ public sealed partial class SettingsViewModel : ViewModelBase
 
     [ObservableProperty]
     private ThemeChoice _selectedTheme;
+
+    [ObservableProperty]
+    private LanguageChoice _selectedLanguage;
+
+    /// <summary>화면 글자 배율(%, 80~250).</summary>
+    [ObservableProperty]
+    private decimal _uiScalePercent;
+
+    [ObservableProperty]
+    private bool _highContrast;
 
     [ObservableProperty]
     private string? _fontFamily;
@@ -94,19 +115,30 @@ public sealed partial class SettingsViewModel : ViewModelBase
             new ThemeChoice(Theme.Light, text.Lookup("Shell.settings.theme.light")),
             new ThemeChoice(Theme.Dark, text.Lookup("Shell.settings.theme.dark")),
         ];
+        Strings = new SettingsStrings(text);
+        Languages =
+        [
+            new LanguageChoice(UiLanguage.System, text.Lookup("Shell.settings.language.system")),
+            new LanguageChoice("ko", text.Lookup("Shell.settings.language.ko")),
+            new LanguageChoice("en", text.Lookup("Shell.settings.language.en")),
+        ];
         FontChoices = [text.Lookup("Shell.settings.editorFontDefault"), .. (installedFonts ?? []).Distinct(StringComparer.CurrentCulture).Order(StringComparer.CurrentCulture)];
 
         var s = settings.Current;
         _selectedTheme = Themes.First(t => t.Theme == s.Ui.Theme);
+        var code = UiLanguage.Normalize(s.Ui.Language);
+        _selectedLanguage = Languages.First(l => l.Code == code);
+        _uiScalePercent = Math.Round((decimal)ThemeService.ClampScale(s.Ui.UiScale) * 100);
+        _highContrast = s.Ui.HighContrast;
         _fontFamily = string.IsNullOrWhiteSpace(s.Editor.FontFamily) ? FontChoices[0] : s.Editor.FontFamily;
         _fontSize = (decimal)s.Editor.FontSize;
         _tabSize = s.Editor.TabSize;
 
         ErrorModes =
         [
-            new ErrorModeChoice(ScriptErrorMode.Ask, "물어보기"),
-            new ErrorModeChoice(ScriptErrorMode.Stop, "멈추기"),
-            new ErrorModeChoice(ScriptErrorMode.Continue, "계속하기"),
+            new ErrorModeChoice(ScriptErrorMode.Ask, text.Lookup("Shell.settings.mode.ask")),
+            new ErrorModeChoice(ScriptErrorMode.Stop, text.Lookup("Shell.settings.mode.stop")),
+            new ErrorModeChoice(ScriptErrorMode.Continue, text.Lookup("Shell.settings.mode.continue")),
         ];
         _autoCommit = s.Execution.AutoCommit;
         _dbmsOutput = s.Execution.DbmsOutput;
@@ -129,6 +161,10 @@ public sealed partial class SettingsViewModel : ViewModelBase
 
     public IReadOnlyList<ThemeChoice> Themes { get; }
 
+    public IReadOnlyList<LanguageChoice> Languages { get; }
+
+    public SettingsStrings Strings { get; }
+
     /// <summary>첫 항목은 「기본 고정폭 글꼴」(= <c>null</c> 로 저장).</summary>
     public IReadOnlyList<string> FontChoices { get; }
 
@@ -141,6 +177,12 @@ public sealed partial class SettingsViewModel : ViewModelBase
     public string TitleText => _text.Lookup("Shell.settings.title");
 
     public string ThemeLabel => _text.Lookup("Shell.settings.theme");
+
+    public string LanguageLabel => _text.Lookup("Shell.settings.language");
+
+    public string UiScaleLabel => _text.Lookup("Shell.settings.uiScale");
+
+    public string HighContrastLabel => _text.Lookup("Shell.settings.highContrast");
 
     public string FontLabel => _text.Lookup("Shell.settings.editorFont");
 
@@ -162,7 +204,13 @@ public sealed partial class SettingsViewModel : ViewModelBase
         var family = string.IsNullOrWhiteSpace(FontFamily) || FontFamily == FontChoices[0] ? null : FontFamily.Trim();
         await _settings.UpdateAsync(s => s with
         {
-            Ui = s.Ui with { Theme = SelectedTheme.Theme },
+            Ui = s.Ui with
+            {
+                Theme = SelectedTheme.Theme,
+                Language = SelectedLanguage.Code,
+                UiScale = ThemeService.ClampScale((double)UiScalePercent / 100),
+                HighContrast = HighContrast,
+            },
             Editor = s.Editor with
             {
                 FontFamily = family,

@@ -3,7 +3,7 @@
         xmlns:palette="using:Oranda.App.Shell.Palette"
         x:Class="Oranda.App.Shell.Palette.CommandPaletteWindow"
         x:DataType="palette:CommandPaletteViewModel"
-        Title="명령 팔레트"
+        Title="{Binding TitleText}"
         Width="640" MinWidth="360"
         SizeToContent="Height"
         CanResize="False"
@@ -15,12 +15,12 @@
     <TextBox x:Name="QueryBox" DockPanel.Dock="Top"
              Text="{Binding Query, Mode=TwoWay}"
              PlaceholderText="{Binding WatermarkText}"
-             AutomationProperties.Name="명령 팔레트" />
+             AutomationProperties.Name="{Binding TitleText}" />
     <TextBlock DockPanel.Dock="Bottom" Margin="4,6" IsVisible="{Binding !HasResults}"
                Text="{Binding EmptyText}" Opacity="0.7" />
     <ListBox x:Name="ResultList" Margin="0,6,0,0" MaxHeight="360"
              ItemsSource="{Binding Results}" SelectedItem="{Binding Selected, Mode=TwoWay}"
-             IsVisible="{Binding HasResults}">
+             IsVisible="{Binding HasResults}" AutomationProperties.Name="{Binding ResultsLabel}">
       <ListBox.ItemTemplate>
         <DataTemplate x:DataType="palette:PaletteItem">
           <Grid ColumnDefinitions="*,Auto" Opacity="{Binding IsEnabled, Converter={x:Static palette:PaletteConverters.EnabledOpacity}}">

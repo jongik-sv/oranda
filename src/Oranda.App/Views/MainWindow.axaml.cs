@@ -110,6 +110,13 @@ public partial class MainWindow : Window
             }
         });
 
+        _shell.Text.LanguageChanged += (_, _) => Dispatcher.UIThread.Post(() =>
+        {
+            ApplyStaticText();
+            RebuildMenus();
+        });
+
+        ApplyStaticText();
         RebuildMenus();
         ShellCommandRunner.Runner = id => _registry is null || _keys is null ? Task.CompletedTask : _registry.ExecuteAsync(id, _keys);
         _shell.Docking.EmptyDocumentContent = () => new StartPage(_registry, _keys, _shell.Text, _keymap.ShortcutText);
@@ -119,6 +126,25 @@ public partial class MainWindow : Window
                 : _controls.BuildContextItems(MenuModelBuilder.BuildContext(_registry.Commands, _shell.Text, _keymap.ShortcutText, surface));
         ApplyEnvironment();
         ApplyPlacement(_shell.SavedWindow);
+    }
+
+    /// <summary>메뉴가 아닌 고정 글자와 화면 낭독기 이름을 지금 언어로 다시 단다(7.5 접근성, TSK-10-02).</summary>
+    internal void ApplyStaticText()
+    {
+        if (_shell is null)
+        {
+            return;
+        }
+
+        var text = _shell.Text;
+        PaletteText.Text = text.Lookup("Shell.main.paletteButton");
+        ToolTip.SetTip(PaletteButton, text.Lookup("Shell.main.paletteTip"));
+        AutomationProperties.SetName(PaletteButton, text.Lookup("Shell.main.paletteButtonName"));
+        AutomationProperties.SetName(OverflowButton, text.Lookup("Shell.main.overflowName"));
+        AutomationProperties.SetName(MenuBar, text.Lookup("Shell.main.menuBar"));
+        AutomationProperties.SetName(ToolbarPanel, text.Lookup("Shell.main.toolbar"));
+        AutomationProperties.SetName(StatusBar, text.Lookup("Shell.main.statusBar"));
+        AutomationProperties.SetName(DockHost, text.Lookup("Shell.main.documents"));
     }
 
     /// <summary>레지스트리·키맵으로 메뉴 막대와 툴바를 다시 만든다.</summary>

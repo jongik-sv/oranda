@@ -74,6 +74,10 @@ public sealed partial class CommandPaletteViewModel : ViewModelBase
     /// <summary>실행 뒤 또는 취소 때 창을 닫아 달라는 요청.</summary>
     public event EventHandler? CloseRequested;
 
+    public string TitleText => _text.Lookup("Shell.palette.automation");
+
+    public string ResultsLabel => _text.Lookup("Shell.palette.results");
+
     public string WatermarkText => _text.Lookup("Shell.palette.watermark");
 
     public string EmptyText => _text.Lookup("Shell.palette.none");

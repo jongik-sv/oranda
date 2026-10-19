@@ -74,6 +74,9 @@ public sealed record MenuNode(MenuNodeKind Kind, string Title, int Order)
 
     public string? Icon { get; init; }
 
+    /// <summary>접근 키(<c>_</c> 앞 글자, Alt+글자)를 넣은 머리글(최상위 메뉴만). 없으면 <see cref="Title"/> 을 그대로 쓴다.</summary>
+    public string? AccessHeader { get; init; }
+
     public IReadOnlyList<MenuNode> Children { get; init; } = [];
 
     public static MenuNode Separator(int order) => new(MenuNodeKind.Separator, string.Empty, order);
@@ -160,7 +163,11 @@ public static class MenuModelBuilder
                 children = [.. children, .. PanelToggles(panels, text)];
             }
 
-            bar.Add(new MenuNode(MenuNodeKind.Submenu, text.Lookup($"Menu.{id}"), 0) { Children = children });
+            bar.Add(new MenuNode(MenuNodeKind.Submenu, text.Lookup($"Menu.{id}"), 0)
+            {
+                Children = children,
+                AccessHeader = text.TryLookup($"Menu.{id}.access"),
+            });
         }
 
         return bar;

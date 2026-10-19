@@ -27,6 +27,15 @@
             <Setter Property="MinHeight" Value="28" />
         </Style>
 
+        <!-- 키보드 포커스 표시(7.5 접근성): 어떤 컨트롤이든 Tab 으로 포커스가 오면 2 DIP 테두리가 보인다. 색은 OrandaFocusBrush. -->
+        <Style Selector=":is(Control)">
+            <Setter Property="FocusAdorner">
+                <FocusAdornerTemplate>
+                    <Border BorderThickness="2" CornerRadius="2" BorderBrush="{DynamicResource OrandaFocusBrush}" />
+                </FocusAdornerTemplate>
+            </Setter>
+        </Style>
+
         <!-- 환경 라벨 틀(ui-shell.md 4.2): 운영 = 빨강 테두리 + 상태 표시줄 바탕 빨강. 색은 아래 테마 리소스에서만 받는다. -->
         <Style Selector="Border.env-frame.env-production">
             <Setter Property="BorderBrush" Value="{DynamicResource OrandaEnvProductionBrush}" />
@@ -234,6 +243,7 @@
                     <SolidColorBrush x:Key="OrandaIconPurpleBrush" Color="#8250DF" />
                     <SolidColorBrush x:Key="OrandaIconTealBrush" Color="#0F7B8A" />
                     <SolidColorBrush x:Key="OrandaIconNeutralBrush" Color="#5F6368" />
+                    <SolidColorBrush x:Key="OrandaFocusBrush" Color="#005FB8" />
                 </ResourceDictionary>
                 <ResourceDictionary x:Key="Dark">
                     <SolidColorBrush x:Key="OrandaEnvProductionBrush" Color="#FF6B5E" />
@@ -257,6 +267,7 @@
                     <SolidColorBrush x:Key="OrandaIconPurpleBrush" Color="#B794F6" />
                     <SolidColorBrush x:Key="OrandaIconTealBrush" Color="#4FC3C9" />
                     <SolidColorBrush x:Key="OrandaIconNeutralBrush" Color="#B0B5BA" />
+                    <SolidColorBrush x:Key="OrandaFocusBrush" Color="#60CDFF" />
                 </ResourceDictionary>
             </ResourceDictionary.ThemeDictionaries>
 

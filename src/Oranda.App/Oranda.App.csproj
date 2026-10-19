@@ -17,9 +17,10 @@
     <AvaloniaResource Include="Assets\**" />
   </ItemGroup>
 
-  <!-- 명령 제목 한국어 기본값(docs/design/commands.md 7장 제목 열). 다국어 리소스(TSK-10-02)가 붙기 전까지 ShellText 가 읽는다. -->
+  <!-- 명령 제목 한국어 기본값(docs/design/commands.md 7장 제목 열). 한국어 표. 영어 짝은 CommandTitles-en.json(TSK-10-02). StringCatalog 가 읽는다. -->
   <ItemGroup>
     <EmbeddedResource Include="Shell\Resources\CommandTitles.json" LogicalName="Oranda.App.Resources.CommandTitles.json" />
+    <EmbeddedResource Include="Shell\Resources\CommandTitles-en.json" LogicalName="Oranda.App.Resources.CommandTitles-en.json" />
   </ItemGroup>
 
   <!-- 키맵 프리셋 4종(TSK-02-05): 정본 docs/design/keymaps/*.json 을 복사하지 않고 링크해 임베디드 리소스로 넣는다. -->
@@ -27,6 +28,13 @@
     <EmbeddedResource Include="..\..\docs\design\keymaps\*.json"
                       Link="Shell\Keymaps\Presets\%(Filename)%(Extension)"
                       LogicalName="Oranda.App.Keymaps.%(Filename)%(Extension)" />
+  </ItemGroup>
+
+  <!-- 화면 글자 한/영 리소스(TSK-10-02). 키 집합이 같아야 한다(LocalizationTests). 파일 이름에 점+언어(Strings.ko.json)를 쓰면 SDK 가 위성 어셈블리로 만들어 버려서 strings-ko.json 으로 둔다. -->
+  <ItemGroup>
+    <EmbeddedResource Include="Resources\strings-*.json" LogicalName="Oranda.App.%(Filename)%(Extension)" />
+    <!-- XAML 에 한국어로 적힌 글자의 영어 짝(LiteralTranslator). -->
+    <EmbeddedResource Include="Resources\literals-en.json" LogicalName="Oranda.App.literals-en.json" />
   </ItemGroup>
 
   <ItemGroup>

@@ -1,6 +1,8 @@
 using System;
 using Avalonia;
+using Avalonia.Controls;
 using Avalonia.Media;
+using Avalonia.Platform;
 using Avalonia.Styling;
 using Avalonia.Threading;
 using Oranda.App.Shell.Settings;
@@ -20,6 +22,21 @@ public sealed class ThemeService : IDisposable
 
     public const string EditorFontSizeKey = "OrandaEditorFontSize";
 
+    public const string UiFontSizeBaseKey = "OrandaFontSizeBase";
+
+    public const string UiFontSizeSmallKey = "OrandaFontSizeSmall";
+
+    public const double BaseUiFontSize = 13;
+
+    public const double SmallUiFontSize = 11;
+
+    public const double MinUiScale = 0.8;
+
+    public const double MaxUiScale = 2.5;
+
+    /// <summary>고대비 변형: 어두운 테마를 바탕으로 앱 색을 흰색·원색 위주로 바꾼다(7.5 접근성).</summary>
+    public static readonly ThemeVariant HighContrastVariant = new("HighContrast", ThemeVariant.Dark);
+
     /// <summary>한글 대체 글꼴을 뒤에 단 UI 글꼴 목록.</summary>
     public const string UiFontFallback = "Inter, Malgun Gothic, Apple SD Gothic Neo";
 
@@ -35,6 +52,14 @@ public sealed class ThemeService : IDisposable
     /// <summary>플랫폼 기본 고정폭 글꼴 목록(한글 대체 포함).</summary>
     public static string DefaultEditorFontFamily =>
         OperatingSystem.IsMacOS() ? "SF Mono, Menlo, Apple SD Gothic Neo" : "Cascadia Mono, Consolas, Malgun Gothic";
+
+    /// <summary>글자 배율을 허용 범위(0.8~2.5)로 맞춘다. 숫자가 아니면 1.0.</summary>
+    public static double ClampScale(double scale) =>
+        double.IsNaN(scale) || double.IsInfinity(scale) ? 1.0 : Math.Clamp(scale, MinUiScale, MaxUiScale);
+
+    /// <summary>OS 고대비 설정이 켜져 있는가.</summary>
+    public static bool SystemPrefersHighContrast(Application app) =>
+        app.PlatformSettings?.GetColorValues().ContrastPreference == ColorContrastPreference.High;
 
     public static ThemeVariant ToVariant(CoreTheme theme) => theme switch
     {
@@ -52,12 +77,36 @@ public sealed class ThemeService : IDisposable
         }
 
         var s = _settings.Current;
-        app.RequestedThemeVariant = ToVariant(s.Ui.Theme);
+        var highContrast = s.Ui.HighContrast || SystemPrefersHighContrast(app);
+        if (highContrast && !app.Resources.ThemeDictionaries.ContainsKey(HighContrastVariant))
+        {
+            app.Resources.ThemeDictionaries[HighContrastVariant] = BuildHighContrastDictionary();
+        }
+
+        app.RequestedThemeVariant = highContrast ? HighContrastVariant : ToVariant(s.Ui.Theme);
+        var scale = ClampScale(s.Ui.UiScale);
+        app.Resources[UiFontSizeBaseKey] = BaseUiFontSize * scale;
+        app.Resources[UiFontSizeSmallKey] = SmallUiFontSize * scale;
         var family = string.IsNullOrWhiteSpace(s.Editor.FontFamily)
             ? DefaultEditorFontFamily
             : s.Editor.FontFamily + ", " + DefaultEditorFontFamily;
         app.Resources[EditorFontFamilyKey] = new FontFamily(family);
         app.Resources[EditorFontSizeKey] = s.Editor.FontSize;
+    }
+
+    private static ResourceDictionary BuildHighContrastDictionary()
+    {
+        static SolidColorBrush Brush(uint argb) => new(Color.FromUInt32(argb));
+        return new ResourceDictionary
+        {
+            ["OrandaEnvProductionBrush"] = Brush(0xFFFF4040),
+            ["OrandaEnvProductionForegroundBrush"] = Brush(0xFF000000),
+            ["OrandaEnvTestBrush"] = Brush(0xFFFFD400),
+            ["OrandaEnvDevelopmentBrush"] = Brush(0xFF00FF00),
+            ["OrandaUncommittedBrush"] = Brush(0xFFFFD400),
+            ["OrandaSeparatorBrush"] = Brush(0xFFFFFFFF),
+            ["OrandaFocusBrush"] = Brush(0xFFFFFF00),
+        };
     }
 
     public void Dispose() => _subscription.Dispose();

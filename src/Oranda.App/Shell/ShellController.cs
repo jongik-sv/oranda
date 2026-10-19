@@ -6,6 +6,8 @@ using System.Threading.Tasks;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Media;
+using Avalonia.Threading;
+using Oranda.App.Features.Localization;
 using Oranda.App.Shell.Appearance;
 using Oranda.App.Shell.Docking;
 using Oranda.App.Shell.Keymaps;
@@ -13,6 +15,7 @@ using Oranda.App.Shell.Layout;
 using Oranda.App.Shell.Palette;
 using Oranda.App.Shell.Settings;
 using Oranda.Core.Connection;
+using Oranda.Core.Events;
 using Oranda.Core.Shell;
 
 namespace Oranda.App.Shell;
@@ -73,11 +76,14 @@ public sealed class ShellController : IShellUi
         ILayoutStore layoutStore,
         DockWorkspace docking,
         KeymapService keymap,
-        ThemeService theme)
+        ThemeService theme,
+        IEventBus events)
     {
         _registry = registry;
         _keys = keys;
         _text = text;
+        UiText.Current = text;
+        LiteralTranslator.Install(text);
         Settings = settings;
         _layoutStore = layoutStore;
         Docking = docking;
@@ -85,7 +91,24 @@ public sealed class ShellController : IShellUi
         _theme = theme;
         docking.ActiveDocumentChanged += (_, _) => UpdateDocumentKeys();
         docking.LayoutRebuilt += (_, _) => UpdateDocumentKeys();
+        events.Subscribe<SettingsChanged>(this, e =>
+        {
+            if (e.Section == "ui")
+            {
+                if (Dispatcher.UIThread.CheckAccess())
+                {
+                    ApplyLanguage();
+                }
+                else
+                {
+                    Dispatcher.UIThread.Post(ApplyLanguage);
+                }
+            }
+        });
     }
+
+    /// <summary>설정의 언어(<c>system</c> | <c>ko</c> | <c>en</c>)를 화면 글자에 반영한다. 바뀌면 <see cref="IShellText.LanguageChanged"/> 가 난다.</summary>
+    public void ApplyLanguage() => _text.SetLanguage(UiLanguage.Resolve(Settings.Current.Ui.Language));
 
     public DockWorkspace Docking { get; }
 
@@ -143,6 +166,7 @@ public sealed class ShellController : IShellUi
     public void Initialize(ShellLoadResult loaded)
     {
         _keymap.Reload();
+        ApplyLanguage();
         _theme.Apply();
         LayoutNotice = loaded.Notice;
         SavedWindow = loaded.Layout.Window;
@@ -219,7 +243,7 @@ public sealed class ShellController : IShellUi
     public void ShowAbout()
     {
         var version = typeof(ShellController).Assembly.GetName().Version?.ToString(3) ?? "0.1.0";
-        var ok = new Button { Content = "OK", MinWidth = 80, HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Right, IsDefault = true, IsCancel = true };
+        var ok = new Button { Content = _text.Lookup("Shell.about.ok"), MinWidth = 80, HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Right, IsDefault = true, IsCancel = true };
         var window = new Window
         {
             Title = _text.Lookup("Shell.about.title"),

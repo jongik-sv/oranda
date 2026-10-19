@@ -4,6 +4,7 @@ using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Layout;
 using Avalonia.Media;
 using Avalonia.Platform.Storage;
+using Oranda.App.Features.Localization;
 
 namespace Oranda.App.Features.SqlEditor;
 
@@ -13,9 +14,12 @@ namespace Oranda.App.Features.SqlEditor;
 /// </summary>
 public sealed class AvaloniaEditorDialogs : IEditorDialogs
 {
-    private static readonly FilePickerFileType SqlFiles = new("SQL 파일") { Patterns = ["*.sql", "*.pls", "*.pks", "*.pkb", "*.txt"] };
-    private static readonly FilePickerFileType WorkspaceFiles = new("작업 공간(Markdown)") { Patterns = ["*.md", "*.markdown"] };
-    private static readonly FilePickerFileType MyBatisFiles = new("MyBatis 매퍼") { Patterns = ["*.xml"] };
+    // 이름이 언어를 따라가야 하므로 부를 때마다 만든다(글자는 Shell 리소스 Shell.dialog.*).
+    private static FilePickerFileType SqlFiles => new(UiText.Get("Shell.dialog.filter.sql", "SQL 파일")) { Patterns = ["*.sql", "*.pls", "*.pks", "*.pkb", "*.txt"] };
+
+    private static FilePickerFileType WorkspaceFiles => new(UiText.Get("Shell.dialog.filter.workspace", "작업 공간(Markdown)")) { Patterns = ["*.md", "*.markdown"] };
+
+    private static FilePickerFileType MyBatisFiles => new(UiText.Get("Shell.dialog.filter.mybatis", "MyBatis 매퍼")) { Patterns = ["*.xml"] };
 
     private static Window? Owner
         => (Application.Current?.ApplicationLifetime as IClassicDesktopStyleApplicationLifetime)?.MainWindow;
@@ -29,7 +33,7 @@ public sealed class AvaloniaEditorDialogs : IEditorDialogs
 
         var files = await sp.OpenFilePickerAsync(new FilePickerOpenOptions
         {
-            Title = "파일 열기",
+            Title = UiText.Get("Shell.dialog.openFile", "파일 열기"),
             AllowMultiple = false,
             FileTypeFilter = [SqlFiles, FilePickerFileTypes.All],
         }).ConfigureAwait(true);
@@ -45,7 +49,7 @@ public sealed class AvaloniaEditorDialogs : IEditorDialogs
 
         var file = await sp.SaveFilePickerAsync(new FilePickerSaveOptions
         {
-            Title = "저장",
+            Title = UiText.Get("Shell.dialog.save", "저장"),
             SuggestedFileName = suggestedName,
             DefaultExtension = "sql",
             FileTypeChoices = [SqlFiles, FilePickerFileTypes.All],
@@ -64,7 +68,7 @@ public sealed class AvaloniaEditorDialogs : IEditorDialogs
         {
             var file = await sp.SaveFilePickerAsync(new FilePickerSaveOptions
             {
-                Title = "작업 공간 파일로 저장",
+                Title = UiText.Get("Shell.dialog.saveWorkspaceFile", "작업 공간 파일로 저장"),
                 SuggestedFileName = suggestedName,
                 DefaultExtension = "md",
                 FileTypeChoices = [WorkspaceFiles],
@@ -74,15 +78,15 @@ public sealed class AvaloniaEditorDialogs : IEditorDialogs
 
         var files = await sp.OpenFilePickerAsync(new FilePickerOpenOptions
         {
-            Title = "작업 공간 파일 열기",
+            Title = UiText.Get("Shell.dialog.openWorkspaceFile", "작업 공간 파일 열기"),
             AllowMultiple = false,
-            FileTypeFilter = [new FilePickerFileType("작업 공간·MyBatis 매퍼") { Patterns = ["*.md", "*.markdown", "*.xml"] }, WorkspaceFiles, MyBatisFiles],
+            FileTypeFilter = [new FilePickerFileType(UiText.Get("Shell.dialog.filter.workspaceOrMapper", "작업 공간·MyBatis 매퍼")) { Patterns = ["*.md", "*.markdown", "*.xml"] }, WorkspaceFiles, MyBatisFiles],
         }).ConfigureAwait(true);
         return files.Count == 0 ? null : files[0].TryGetLocalPath();
     }
 
     public Task ShowMessageAsync(string title, string message, CancellationToken ct)
-        => ShowAsync(title, new TextBlock { Text = message, TextWrapping = TextWrapping.Wrap, MaxWidth = 460 }, false, ok => ok, "확인", null);
+        => ShowAsync(title, new TextBlock { Text = message, TextWrapping = TextWrapping.Wrap, MaxWidth = 460 }, false, ok => ok, UiText.Get("Shell.dialog.ok", "확인"), null);
 
     public Task<string?> PromptAsync(string title, string initial, CancellationToken ct)
     {
@@ -102,8 +106,8 @@ public sealed class AvaloniaEditorDialogs : IEditorDialogs
     public Task<bool> PreviewEditAsync(string title, string before, string after, CancellationToken ct)
     {
         var panel = new Grid { ColumnDefinitions = new ColumnDefinitions("*,*"), RowDefinitions = new RowDefinitions("Auto,*"), MinWidth = 640, MinHeight = 240 };
-        panel.Children.Add(new TextBlock { Text = "현재", FontWeight = FontWeight.SemiBold });
-        var right = new TextBlock { Text = "제안", FontWeight = FontWeight.SemiBold };
+        panel.Children.Add(new TextBlock { Text = UiText.Get("Shell.dialog.current", "현재"), FontWeight = FontWeight.SemiBold });
+        var right = new TextBlock { Text = UiText.Get("Shell.dialog.proposed", "제안"), FontWeight = FontWeight.SemiBold };
         Grid.SetColumn(right, 1);
         panel.Children.Add(right);
         var mono = new FontFamily("Cascadia Mono,Consolas,Menlo,monospace");
@@ -114,10 +118,10 @@ public sealed class AvaloniaEditorDialogs : IEditorDialogs
         Grid.SetColumn(proposed, 1);
         panel.Children.Add(left);
         panel.Children.Add(proposed);
-        return ShowAsync(title, panel, false, ok => ok, "적용", "거절");
+        return ShowAsync(title, panel, false, ok => ok, UiText.Get("Shell.dialog.apply", "적용"), UiText.Get("Shell.dialog.reject", "거절"));
     }
 
-    private static async Task<T> ShowAsync<T>(string title, Control content, T cancelled, Func<bool, T> result, string okText = "확인", string? cancelText = "취소")
+    private static async Task<T> ShowAsync<T>(string title, Control content, T cancelled, Func<bool, T> result, string? okText = null, string? cancelText = "")
     {
         var owner = Owner;
         if (owner is null)
@@ -133,6 +137,8 @@ public sealed class AvaloniaEditorDialogs : IEditorDialogs
             WindowStartupLocation = WindowStartupLocation.CenterOwner,
             CanResize = true,
         };
+        okText ??= UiText.Get("Shell.dialog.ok", "확인");
+        cancelText = cancelText == "" ? UiText.Get("Shell.dialog.cancel", "취소") : cancelText;
         var ok = new Button { Content = okText, IsDefault = true, MinWidth = 80, Classes = { "accent" } };
         var cancel = new Button { Content = cancelText, IsCancel = true, MinWidth = 80, IsVisible = cancelText is not null };
         ok.Click += (_, _) =>

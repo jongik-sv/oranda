@@ -33,20 +33,13 @@
     </Style>
   </Window.Styles>
 
-  <!-- 고정 폭·높이를 쓰지 않는다(배율 250% 에서 글자가 잘리지 않게). 단추 줄은 항상 아래에 고정. -->
-  <DockPanel Margin="12">
-    <StackPanel DockPanel.Dock="Bottom" Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8" Margin="0,12,0,0">
-      <Button MinWidth="80" Content="{Binding SaveLabel}" Command="{Binding SaveCommand}" Classes="accent"
-              IsEnabled="{Binding !IsReadOnly}" IsDefault="True" />
-      <Button MinWidth="80" Content="{Binding CloseLabel}" Command="{Binding CloseCommand}" IsCancel="True" />
-    </StackPanel>
-    <TextBlock DockPanel.Dock="Bottom" Text="{Binding Notice}" IsVisible="{Binding HasNotice}"
-               TextWrapping="Wrap" MaxWidth="480" Margin="0,12,0,0" />
-
-    <TabControl Classes="categories" TabStripPlacement="Left" Padding="16,0,0,0">
-      <TabItem Header="일반">
+  <!-- 고정 폭·높이를 쓰지 않는다(배율 250% 에서 글자가 잘리지 않게). 단추 줄은 항상 아래에 고정.
+       탭 순서 = 적은 순서(범주 → 입력 칸 → 저장 → 닫기)라서 단추 줄을 맨 뒤에 둔다. -->
+  <Grid Margin="12" RowDefinitions="*,Auto,Auto">
+    <TabControl Grid.Row="0" Classes="categories" TabStripPlacement="Left" Padding="16,0,0,0">
+      <TabItem Header="{Binding Strings[tab.general]}">
         <ScrollViewer HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
-          <Grid Classes="form" ColumnDefinitions="Auto,*" RowDefinitions="Auto,Auto,Auto" ColumnSpacing="12" RowSpacing="10">
+          <Grid Classes="form" ColumnDefinitions="Auto,*" RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto" ColumnSpacing="12" RowSpacing="10">
             <TextBlock Grid.Row="0" Text="{Binding ThemeLabel}" />
             <ComboBox Grid.Row="0" Grid.Column="1" MinWidth="220" HorizontalAlignment="Stretch" x:Name="ThemeBox"
                       ItemsSource="{Binding Themes}" SelectedItem="{Binding SelectedTheme}"
@@ -57,16 +50,34 @@
                 </DataTemplate>
               </ComboBox.ItemTemplate>
             </ComboBox>
-            <TextBlock Grid.Row="1" Text="작업 공간" />
-            <CheckBox Grid.Row="1" Grid.Column="1" Content="시작할 때 마지막 작업 공간 열기" IsChecked="{Binding RestoreOnStartup}" />
-            <TextBlock Grid.Row="2" Text="자동 저장(초)" />
-            <NumericUpDown Grid.Row="2" Grid.Column="1" Minimum="1" Maximum="10" Increment="1" FormatString="0"
-                           Value="{Binding AutosaveSeconds}" AutomationProperties.Name="자동 저장 간격" />
+            <TextBlock Grid.Row="1" Text="{Binding LanguageLabel}" />
+            <ComboBox Grid.Row="1" Grid.Column="1" MinWidth="220" HorizontalAlignment="Stretch" x:Name="LanguageBox"
+                      ItemsSource="{Binding Languages}" SelectedItem="{Binding SelectedLanguage}"
+                      AutomationProperties.Name="{Binding LanguageLabel}">
+              <ComboBox.ItemTemplate>
+                <DataTemplate x:DataType="settings:LanguageChoice">
+                  <TextBlock Text="{Binding Label}" />
+                </DataTemplate>
+              </ComboBox.ItemTemplate>
+            </ComboBox>
+            <TextBlock Grid.Row="2" Text="{Binding UiScaleLabel}" />
+            <NumericUpDown Grid.Row="2" Grid.Column="1" x:Name="UiScaleBox"
+                           Minimum="80" Maximum="250" Increment="10" FormatString="0'%'"
+                           Value="{Binding UiScalePercent}" AutomationProperties.Name="{Binding UiScaleLabel}" />
+            <TextBlock Grid.Row="3" Text="{Binding Strings[accessibility]}" />
+            <CheckBox Grid.Row="3" Grid.Column="1" x:Name="HighContrastBox"
+                      Content="{Binding HighContrastLabel}" IsChecked="{Binding HighContrast}"
+                      AutomationProperties.Name="{Binding HighContrastLabel}" />
+            <TextBlock Grid.Row="4" Text="{Binding Strings[workspace]}" />
+            <CheckBox Grid.Row="4" Grid.Column="1" Content="{Binding Strings[restore]}" IsChecked="{Binding RestoreOnStartup}" />
+            <TextBlock Grid.Row="5" Text="{Binding Strings[autosave]}" />
+            <NumericUpDown Grid.Row="5" Grid.Column="1" Minimum="1" Maximum="10" Increment="1" FormatString="0"
+                           Value="{Binding AutosaveSeconds}" AutomationProperties.Name="{Binding Strings[autosaveName]}" />
           </Grid>
         </ScrollViewer>
       </TabItem>
 
-      <TabItem Header="편집기">
+      <TabItem Header="{Binding Strings[tab.editor]}">
         <ScrollViewer HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
           <Grid Classes="form" ColumnDefinitions="Auto,*" RowDefinitions="Auto,Auto,Auto" ColumnSpacing="12" RowSpacing="10">
             <TextBlock Grid.Row="0" Text="{Binding FontLabel}" />
@@ -86,73 +97,80 @@
         </ScrollViewer>
       </TabItem>
 
-      <TabItem Header="실행">
+      <TabItem Header="{Binding Strings[tab.execution]}">
         <ScrollViewer HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
           <Grid Classes="form" ColumnDefinitions="Auto,*" RowDefinitions="Auto,Auto,Auto,Auto" ColumnSpacing="12" RowSpacing="10">
-            <TextBlock Grid.Row="0" Text="트랜잭션" />
-            <CheckBox Grid.Row="0" Grid.Column="1" Content="자동 커밋(새 세션 기본값)" IsChecked="{Binding AutoCommit}" />
-            <TextBlock Grid.Row="1" Text="DBMS_OUTPUT" />
-            <CheckBox Grid.Row="1" Grid.Column="1" Content="실행할 때 함께 받기" IsChecked="{Binding DbmsOutput}" />
-            <TextBlock Grid.Row="2" Text="스크립트 오류" />
+            <TextBlock Grid.Row="0" Text="{Binding Strings[tx]}" />
+            <CheckBox Grid.Row="0" Grid.Column="1" Content="{Binding Strings[autoCommit]}" IsChecked="{Binding AutoCommit}" />
+            <TextBlock Grid.Row="1" Text="{Binding Strings[dbmsOutput]}" />
+            <CheckBox Grid.Row="1" Grid.Column="1" Content="{Binding Strings[dbmsOutputCollect]}" IsChecked="{Binding DbmsOutput}" />
+            <TextBlock Grid.Row="2" Text="{Binding Strings[errorLabel]}" />
             <ComboBox Grid.Row="2" Grid.Column="1" MinWidth="160" ItemsSource="{Binding ErrorModes}"
-                      SelectedItem="{Binding SelectedErrorMode}" AutomationProperties.Name="스크립트 오류 처리">
+                      SelectedItem="{Binding SelectedErrorMode}" AutomationProperties.Name="{Binding Strings[errorName]}">
               <ComboBox.ItemTemplate>
                 <DataTemplate x:DataType="settings:ErrorModeChoice">
                   <TextBlock Text="{Binding Label}" />
                 </DataTemplate>
               </ComboBox.ItemTemplate>
             </ComboBox>
-            <TextBlock Grid.Row="3" Text="문장 나누기" />
-            <CheckBox Grid.Row="3" Grid.Column="1" Content="빈 줄을 문장 끝으로 보기" IsChecked="{Binding SplitOnBlankLine}" />
+            <TextBlock Grid.Row="3" Text="{Binding Strings[splitLabel]}" />
+            <CheckBox Grid.Row="3" Grid.Column="1" Content="{Binding Strings[split]}" IsChecked="{Binding SplitOnBlankLine}" />
           </Grid>
         </ScrollViewer>
       </TabItem>
 
-      <TabItem Header="결과 그리드">
+      <TabItem Header="{Binding Strings[tab.grid]}">
         <ScrollViewer HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
           <Grid Classes="form" ColumnDefinitions="Auto,*" RowDefinitions="Auto,Auto,Auto" ColumnSpacing="12" RowSpacing="10">
-            <TextBlock Grid.Row="0" Text="한 번에 가져올 행" />
+            <TextBlock Grid.Row="0" Text="{Binding Strings[page]}" />
             <NumericUpDown Grid.Row="0" Grid.Column="1" Minimum="50" Maximum="100000" Increment="100" FormatString="0"
-                           Value="{Binding PageSize}" AutomationProperties.Name="한 번에 가져올 행 수" />
-            <TextBlock Grid.Row="1" Text="메모리 한도(MB)" />
+                           Value="{Binding PageSize}" AutomationProperties.Name="{Binding Strings[pageName]}" />
+            <TextBlock Grid.Row="1" Text="{Binding Strings[memory]}" />
             <NumericUpDown Grid.Row="1" Grid.Column="1" Minimum="16" Maximum="4096" Increment="16" FormatString="0"
-                           Value="{Binding MemoryLimitMb}" AutomationProperties.Name="결과 메모리 한도" />
-            <TextBlock Grid.Row="2" Text="LOB 미리 읽기(바이트)" />
+                           Value="{Binding MemoryLimitMb}" AutomationProperties.Name="{Binding Strings[memoryName]}" />
+            <TextBlock Grid.Row="2" Text="{Binding Strings[lob]}" />
             <NumericUpDown Grid.Row="2" Grid.Column="1" Minimum="0" Maximum="1048576" Increment="1000" FormatString="0"
-                           Value="{Binding LobFetchSize}" AutomationProperties.Name="LOB 미리 읽기 크기" />
+                           Value="{Binding LobFetchSize}" AutomationProperties.Name="{Binding Strings[lobName]}" />
           </Grid>
         </ScrollViewer>
       </TabItem>
 
-      <TabItem Header="이력·캐시">
+      <TabItem Header="{Binding Strings[tab.history]}">
         <ScrollViewer HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
           <Grid Classes="form" ColumnDefinitions="Auto,*" RowDefinitions="Auto,Auto,Auto,Auto,Auto" ColumnSpacing="12" RowSpacing="10">
-            <TextBlock Grid.Row="0" Text="실행 이력" />
-            <CheckBox Grid.Row="0" Grid.Column="1" Content="실행한 SQL 을 기록" IsChecked="{Binding HistoryEnabled}" />
-            <TextBlock Grid.Row="1" Text="바인드 값" />
-            <CheckBox Grid.Row="1" Grid.Column="1" Content="바인드 값도 함께 기록" IsChecked="{Binding SaveBindValues}" />
-            <TextBlock Grid.Row="2" Text="최대 개수" />
+            <TextBlock Grid.Row="0" Text="{Binding Strings[history]}" />
+            <CheckBox Grid.Row="0" Grid.Column="1" Content="{Binding Strings[historyOn]}" IsChecked="{Binding HistoryEnabled}" />
+            <TextBlock Grid.Row="1" Text="{Binding Strings[binds]}" />
+            <CheckBox Grid.Row="1" Grid.Column="1" Content="{Binding Strings[bindsOn]}" IsChecked="{Binding SaveBindValues}" />
+            <TextBlock Grid.Row="2" Text="{Binding Strings[maxEntries]}" />
             <NumericUpDown Grid.Row="2" Grid.Column="1" Minimum="100" Maximum="1000000" Increment="1000" FormatString="0"
-                           Value="{Binding HistoryMaxEntries}" AutomationProperties.Name="이력 최대 개수" />
-            <TextBlock Grid.Row="3" Text="보관 일수" />
+                           Value="{Binding HistoryMaxEntries}" AutomationProperties.Name="{Binding Strings[maxEntriesName]}" />
+            <TextBlock Grid.Row="3" Text="{Binding Strings[maxAge]}" />
             <NumericUpDown Grid.Row="3" Grid.Column="1" Minimum="1" Maximum="3650" Increment="30" FormatString="0"
-                           Value="{Binding HistoryMaxAgeDays}" AutomationProperties.Name="이력 보관 일수" />
-            <TextBlock Grid.Row="4" Text="메타데이터 캐시(일)" />
+                           Value="{Binding HistoryMaxAgeDays}" AutomationProperties.Name="{Binding Strings[maxAgeName]}" />
+            <TextBlock Grid.Row="4" Text="{Binding Strings[cache]}" />
             <NumericUpDown Grid.Row="4" Grid.Column="1" Minimum="1" Maximum="365" Increment="1" FormatString="0"
-                           Value="{Binding CacheRetentionDays}" AutomationProperties.Name="메타데이터 캐시 보관 일수" />
+                           Value="{Binding CacheRetentionDays}" AutomationProperties.Name="{Binding Strings[cacheName]}" />
           </Grid>
         </ScrollViewer>
       </TabItem>
 
-      <TabItem Header="모니터">
+      <TabItem Header="{Binding Strings[tab.monitor]}">
         <ScrollViewer HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
           <Grid Classes="form" ColumnDefinitions="Auto,*" RowDefinitions="Auto" ColumnSpacing="12" RowSpacing="10">
-            <TextBlock Grid.Row="0" Text="새로 고침(초)" />
+            <TextBlock Grid.Row="0" Text="{Binding Strings[refresh]}" />
             <NumericUpDown Grid.Row="0" Grid.Column="1" Minimum="2" Maximum="60" Increment="1" FormatString="0"
-                           Value="{Binding MonitorRefreshSeconds}" AutomationProperties.Name="모니터 새로 고침 간격" />
+                           Value="{Binding MonitorRefreshSeconds}" AutomationProperties.Name="{Binding Strings[refreshName]}" />
           </Grid>
         </ScrollViewer>
       </TabItem>
     </TabControl>
-  </DockPanel>
+    <TextBlock Grid.Row="1" Text="{Binding Notice}" IsVisible="{Binding HasNotice}"
+               TextWrapping="Wrap" MaxWidth="480" Margin="0,12,0,0" />
+    <StackPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8" Margin="0,12,0,0">
+      <Button MinWidth="80" Content="{Binding SaveLabel}" Command="{Binding SaveCommand}" Classes="accent"
+              IsEnabled="{Binding !IsReadOnly}" IsDefault="True" />
+      <Button MinWidth="80" Content="{Binding CloseLabel}" Command="{Binding CloseCommand}" IsCancel="True" />
+    </StackPanel>
+  </Grid>
 </Window>
