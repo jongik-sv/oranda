@@ -3,6 +3,46 @@
              xmlns:vm="using:Oranda.App.Features.HistoryScripts"
              x:Class="Oranda.App.Features.HistoryScripts.HistoryView"
              x:DataType="vm:HistoryViewModel">
-  <!-- TSK-06-06 빈 틀 -->
-  <TextBlock Text="oranda.panel.history" />
+  <DockPanel>
+    <WrapPanel DockPanel.Dock="Top" Margin="4">
+      <TextBox x:Name="SearchBox" Width="240" Margin="0,0,6,0" PlaceholderText="SQL 검색 (3자 이상 부분 일치)"
+               Text="{Binding SearchText, Mode=TwoWay}" />
+      <ComboBox x:Name="StatusBox" MinWidth="90" Margin="0,0,6,0" ItemsSource="{Binding StatusFilters}"
+                SelectedItem="{Binding StatusFilter, Mode=TwoWay}">
+        <ComboBox.ItemTemplate>
+          <DataTemplate x:DataType="vm:HistoryStatusFilter">
+            <TextBlock Text="{Binding Title}" />
+          </DataTemplate>
+        </ComboBox.ItemTemplate>
+      </ComboBox>
+      <CheckBox Content="이 접속만" Margin="0,0,6,0" IsChecked="{Binding CurrentConnectionOnly, Mode=TwoWay}" />
+      <Button x:Name="RerunButton" Content="다시 실행" Margin="0,0,4,0" />
+      <Button x:Name="ToEditorButton" Content="편집기로" Margin="0,0,4,0" />
+      <Button x:Name="DeleteButton" Content="지우기" Margin="0,0,4,0" />
+      <Button x:Name="ClearButton" Content="모두 비우기" />
+    </WrapPanel>
+    <StackPanel DockPanel.Dock="Bottom" Orientation="Horizontal" Margin="6,2" Spacing="8">
+      <TextBlock Text="{Binding StatusMessage}" Opacity="0.7" />
+      <Button x:Name="MoreButton" Content="더 보기" IsVisible="{Binding CanLoadMore}" />
+    </StackPanel>
+    <Border DockPanel.Dock="Bottom" Padding="6,2" IsVisible="{Binding Selected, Converter={x:Static ObjectConverters.IsNotNull}}">
+      <TextBox x:Name="DetailBox" IsReadOnly="True" AcceptsReturn="True" MaxHeight="120" FontFamily="Consolas, Menlo, monospace"
+               Text="{Binding Selected.FullSql, Mode=OneWay}" />
+    </Border>
+    <ListBox x:Name="List" ItemsSource="{Binding Items}" SelectedItem="{Binding Selected, Mode=TwoWay}" SelectionMode="Multiple">
+      <ListBox.ItemTemplate>
+        <DataTemplate x:DataType="vm:HistoryItem">
+          <Grid ColumnDefinitions="110,110,44,64,64,*,Auto" ToolTip.Tip="{Binding FullSql}">
+            <TextBlock Grid.Column="0" Text="{Binding TimeText}" />
+            <TextBlock Grid.Column="1" Text="{Binding ProfileName}" TextTrimming="CharacterEllipsis" />
+            <TextBlock Grid.Column="2" Text="{Binding StatusText}" />
+            <TextBlock Grid.Column="3" Text="{Binding ElapsedText}" HorizontalAlignment="Right" Margin="0,0,8,0" />
+            <TextBlock Grid.Column="4" Text="{Binding RowsText}" HorizontalAlignment="Right" Margin="0,0,8,0" />
+            <TextBlock Grid.Column="5" Text="{Binding SqlPreview}" TextTrimming="CharacterEllipsis" FontFamily="Consolas, Menlo, monospace" />
+            <TextBlock Grid.Column="6" Text="{Binding ErrorText}" Opacity="0.7" Margin="8,0,0,0" MaxWidth="260" TextTrimming="CharacterEllipsis" />
+          </Grid>
+        </DataTemplate>
+      </ListBox.ItemTemplate>
+    </ListBox>
+  </DockPanel>
 </UserControl>
