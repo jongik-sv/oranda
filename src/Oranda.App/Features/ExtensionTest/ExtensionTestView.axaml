@@ -3,6 +3,32 @@
              xmlns:vm="using:Oranda.App.Features.ExtensionTest"
              x:Class="Oranda.App.Features.ExtensionTest.ExtensionTestView"
              x:DataType="vm:ExtensionTestViewModel">
-  <!-- TSK-10-03 빈 틀 -->
-  <TextBlock Text="oranda.panel.extensionTest" />
+  <!-- TSK-10-03 확장 시험 패널(개발 빌드만): IEditorContext·IExecutionService·IMetadataProvider·IOutboundConsent 만 쓴다. -->
+  <DockPanel Margin="6">
+    <TextBlock DockPanel.Dock="Top" Margin="0,0,0,6" TextWrapping="Wrap" Opacity="0.75"
+               Text="확장 지점 시험: 선택 SQL 을 읽어 바꾼 뒤 미리보기·승인을 거쳐 다시 넣고, 정책 관문을 지나 실행합니다." />
+    <WrapPanel DockPanel.Dock="Top">
+      <Button x:Name="ReadButton" Margin="0,0,4,4" Content="읽기" Command="{Binding ReadCommand}" />
+      <ComboBox x:Name="TransformBox" Margin="0,0,4,4" MinWidth="110"
+                ItemsSource="{Binding Transforms}" SelectedItem="{Binding Transform, Mode=TwoWay}" />
+      <Button x:Name="ProposeButton" Margin="0,0,4,4" Content="제안 넣기" Command="{Binding ProposeCommand}" />
+      <Button x:Name="RunButton" Margin="0,0,4,4" Content="현재 문장 실행" Command="{Binding RunCommand}" />
+      <Button x:Name="TablesButton" Margin="0,0,4,4" Content="테이블 목록" Command="{Binding LoadTablesCommand}" />
+      <Button x:Name="SendButton" Margin="0,0,4,4" Content="외부 전송 시험" Command="{Binding SendCommand}" />
+    </WrapPanel>
+    <TextBlock DockPanel.Dock="Bottom" Margin="0,4,0,0" Text="{Binding StatusText}" TextWrapping="Wrap" />
+    <Grid RowDefinitions="Auto,*,Auto,*,Auto,*">
+      <TextBlock Grid.Row="0" Text="읽은 SQL" Opacity="0.7" />
+      <TextBox Grid.Row="1" x:Name="SourceBox" IsReadOnly="True" AcceptsReturn="True" TextWrapping="Wrap"
+               FontFamily="Consolas,Menlo,monospace" Text="{Binding SourceText}" />
+      <TextBlock Grid.Row="2" Margin="0,4,0,0" Text="제안(고칠 수 있음)" Opacity="0.7" />
+      <TextBox Grid.Row="3" x:Name="ProposedBox" AcceptsReturn="True" TextWrapping="Wrap"
+               FontFamily="Consolas,Menlo,monospace" Text="{Binding ProposedText, Mode=TwoWay}" />
+      <TextBlock Grid.Row="4" Margin="0,4,0,0" Text="기록 · 테이블" Opacity="0.7" />
+      <Grid Grid.Row="5" ColumnDefinitions="*,*">
+        <ListBox Grid.Column="0" x:Name="LogList" ItemsSource="{Binding Log}" />
+        <ListBox Grid.Column="1" x:Name="ObjectList" ItemsSource="{Binding Objects}" />
+      </Grid>
+    </Grid>
+  </DockPanel>
 </UserControl>
