@@ -43,7 +43,7 @@ dotnet, testhost, Oranda.App
 - category: research
 - domain: infra
 - model: opus
-- status: [ ]
+- status: [xx]
 - priority: critical
 - assignee: -
 - schedule: 2026-10-20 ~ 2026-10-21
@@ -78,7 +78,7 @@ dotnet, testhost, Oranda.App
 - category: infra
 - domain: infra
 - model: sonnet
-- status: [ ]
+- status: [xx]
 - priority: critical
 - assignee: -
 - schedule: 2026-10-22 ~ 2026-10-26
@@ -116,7 +116,7 @@ dotnet, testhost, Oranda.App
 - category: research
 - domain: infra
 - model: sonnet
-- status: [ ]
+- status: [xx]
 - priority: critical
 - assignee: -
 - schedule: 2026-10-27 ~ 2026-10-29
@@ -154,7 +154,7 @@ dotnet, testhost, Oranda.App
 - category: research
 - domain: infra
 - model: sonnet
-- status: [ ]
+- status: [xx]
 - priority: critical
 - assignee: -
 - schedule: 2026-10-27 ~ 2026-10-29
@@ -191,7 +191,7 @@ dotnet, testhost, Oranda.App
 - category: research
 - domain: infra
 - model: opus
-- status: [ ]
+- status: [xx]
 - priority: critical
 - assignee: -
 - schedule: 2026-10-27 ~ 2026-10-29
@@ -228,7 +228,7 @@ dotnet, testhost, Oranda.App
 - category: research
 - domain: infra
 - model: opus
-- status: [ ]
+- status: [xx]
 - priority: critical
 - assignee: -
 - schedule: 2026-10-27 ~ 2026-10-29
@@ -263,7 +263,7 @@ dotnet, testhost, Oranda.App
 - category: infra
 - domain: infra
 - model: sonnet
-- status: [ ]
+- status: [xx]
 - priority: critical
 - assignee: -
 - schedule: 2026-10-27 ~ 2026-11-02
@@ -306,7 +306,7 @@ dotnet, testhost, Oranda.App
 - category: design
 - domain: database
 - model: opus
-- status: [ ]
+- status: [xx]
 - priority: critical
 - assignee: -
 - schedule: 2026-10-30 ~ 2026-11-03
@@ -342,7 +342,7 @@ dotnet, testhost, Oranda.App
 - category: design
 - domain: infra
 - model: sonnet
-- status: [ ]
+- status: [xx]
 - priority: critical
 - assignee: -
 - schedule: 2026-10-30 ~ 2026-11-03
@@ -379,7 +379,7 @@ dotnet, testhost, Oranda.App
 - category: infra
 - domain: backend
 - model: opus
-- status: [ ]
+- status: [xx]
 - priority: critical
 - assignee: -
 - schedule: 2026-11-04 ~ 2026-11-09
@@ -421,7 +421,7 @@ dotnet, testhost, Oranda.App
 - category: infra
 - domain: database
 - model: sonnet
-- status: [ ]
+- status: [xx]
 - priority: critical
 - assignee: -
 - schedule: 2026-11-04 ~ 2026-11-06
@@ -462,7 +462,7 @@ dotnet, testhost, Oranda.App
 - category: infra
 - domain: frontend
 - model: sonnet
-- status: [ ]
+- status: [xx]
 - priority: critical
 - assignee: -
 - schedule: 2026-11-04 ~ 2026-11-06
@@ -506,7 +506,7 @@ dotnet, testhost, Oranda.App
 - category: dev
 - domain: fullstack
 - model: sonnet
-- status: [ ]
+- status: [xx]
 - priority: high
 - assignee: -
 - schedule: 2026-11-09 ~ 2026-11-13
@@ -549,7 +549,7 @@ dotnet, testhost, Oranda.App
 - category: dev
 - domain: backend
 - model: opus
-- status: [ ]
+- status: [xx]
 - priority: high
 - assignee: -
 - schedule: 2026-11-10 ~ 2026-11-12
@@ -588,7 +588,7 @@ dotnet, testhost, Oranda.App
 - category: dev
 - domain: backend
 - model: opus
-- status: [ ]
+- status: [xx]
 - priority: high
 - assignee: -
 - schedule: 2026-11-10 ~ 2026-11-16
@@ -714,7 +714,7 @@ dotnet, testhost, Oranda.App
 - category: dev
 - domain: backend
 - model: opus
-- status: [ ]
+- status: [xx]
 - priority: high
 - assignee: -
 - schedule: 2026-11-10 ~ 2026-11-16
@@ -835,7 +835,7 @@ dotnet, testhost, Oranda.App
 - category: dev
 - domain: backend
 - model: sonnet
-- status: [ ]
+- status: [xx]
 - priority: high
 - assignee: -
 - schedule: 2026-11-10 ~ 2026-11-13
@@ -1196,7 +1196,7 @@ dotnet, testhost, Oranda.App
 - category: dev
 - domain: fullstack
 - model: opus
-- status: [ ]
+- status: [xx]
 - priority: high
 - assignee: -
 - schedule: 2026-11-10 ~ 2026-11-16
@@ -1438,7 +1438,7 @@ dotnet, testhost, Oranda.App
 - category: dev
 - domain: fullstack
 - model: sonnet
-- status: [ ]
+- status: [xx]
 - priority: high
 - assignee: -
 - schedule: 2026-11-16 ~ 2026-11-20
@@ -1717,7 +1717,7 @@ dotnet, testhost, Oranda.App
 - category: dev
 - domain: fullstack
 - model: sonnet
-- status: [ ]
+- status: [xx]
 - priority: low
 - assignee: -
 - schedule: 2026-11-09 ~ 2026-11-13
