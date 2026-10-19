@@ -125,6 +125,16 @@ public sealed partial class SchemaNode : ObservableObject
         }
     }
 
+    /// <summary>펼침 표시만 바꾼다(자식은 이미 읽은 상태일 때, 다시 읽지 않게).</summary>
+    internal bool IsExpandedSilently
+    {
+        set
+        {
+            _isExpanded = value;
+            OnPropertyChanged(nameof(IsExpanded));
+        }
+    }
+
     internal static bool IsTableLike(string type) => type is "TABLE" or "VIEW" or "MATERIALIZED VIEW";
 
     internal void ResetChildren()

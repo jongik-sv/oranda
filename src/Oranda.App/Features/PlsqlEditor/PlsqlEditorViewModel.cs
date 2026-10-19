@@ -430,7 +430,7 @@ public sealed partial class PlsqlEditorViewModel : ToolPanelViewModelBase
             Errors.Add(e);
         }
 
-        CompileErrorsViewModel.Current?.Show(this);
+        CompileErrorsViewModel.Publish(this);
         return errors;
     }
 

@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.ComponentModel;
 using System.Diagnostics;
 using System.Linq;
+using System.Threading.Tasks;
 using Avalonia;
 using Avalonia.Automation;
 using Avalonia.Controls;
@@ -110,6 +111,7 @@ public partial class MainWindow : Window
         });
 
         RebuildMenus();
+        ShellCommandRunner.Runner = id => _registry is null || _keys is null ? Task.CompletedTask : _registry.ExecuteAsync(id, _keys);
         _shell.Docking.EmptyDocumentContent = () => new StartPage(_registry, _keys, _shell.Text, _keymap.ShortcutText);
         ShellContextMenus.Factory = surface =>
             _controls is null || _registry is null || _keymap is null || _shell is null

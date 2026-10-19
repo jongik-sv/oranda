@@ -60,6 +60,7 @@ public sealed partial class SchemaBrowserViewModel : ToolPanelViewModelBase, IDi
     private IReadOnlySet<string> _favorites = new HashSet<string>(StringComparer.Ordinal);
     private SchemaNode? _favoritesNode;
     private SchemaFilter _filter = new();
+    private readonly Dictionary<string, HashSet<string>> _invalidByOwner = new(StringComparer.Ordinal);
     private int _generation;
     private CancellationTokenSource? _debounce;
 
@@ -285,7 +286,9 @@ public sealed partial class SchemaBrowserViewModel : ToolPanelViewModelBase, IDi
             _favoritesNode = new SchemaNode(this, SchemaNodeKind.Favorites, "즐겨찾기");
             _favoritesNode.ResetChildren();
             Roots.Add(_favoritesNode);
-            foreach (var name in schemas)
+            // 내 스키마(접속 사용자)를 맨 위에 둔다(SQL Developer·Orange 처럼 자기 객체부터 보인다). 나머지는 이름 순서 그대로.
+            var ordered = schemas.OrderBy(n => string.Equals(n, session.Profile.User, StringComparison.OrdinalIgnoreCase) ? 0 : 1).ToList();
+            foreach (var name in ordered)
             {
                 var n = new SchemaNode(this, SchemaNodeKind.Schema, name) { Owner = name };
                 n.ResetChildren();
@@ -298,6 +301,7 @@ public sealed partial class SchemaBrowserViewModel : ToolPanelViewModelBase, IDi
             if (own is not null)
             {
                 await ExpandAsync(own, ct);
+                own.IsExpandedSilently = true; // 화면에서도 펼친 채로 보인다(이미 읽었으니 다시 읽지 않는다).
             }
         }
         catch (OperationCanceledException)
@@ -324,11 +328,19 @@ public sealed partial class SchemaBrowserViewModel : ToolPanelViewModelBase, IDi
         _filter = BuildFilter();
         var gen = Interlocked.Increment(ref _generation);
         var reload = new List<SchemaNode>();
+
+        // 다시 읽어도 펼쳐 둔 범주와 고른 객체는 그대로 둔다(컴파일·DDL 뒤 트리가 접히지 않게).
+        var openCategories = new Dictionary<SchemaNode, HashSet<string>>();
+        var selectedKey = SelectedNode?.Ref is { } picked ? SchemaSql.FavoriteKey(picked) : null;
         foreach (var root in Roots.Where(r => r.Kind == SchemaNodeKind.Schema))
         {
             if (root.Loaded || root.IsExpanded)
             {
                 reload.Add(root);
+                openCategories[root] = root.Children
+                    .Where(c => c.Kind == SchemaNodeKind.Category && c.IsExpanded && c.CategoryType is not null)
+                    .Select(c => c.CategoryType!)
+                    .ToHashSet(StringComparer.Ordinal);
             }
 
             root.ResetChildren();
@@ -342,6 +354,16 @@ public sealed partial class SchemaBrowserViewModel : ToolPanelViewModelBase, IDi
             }
 
             await ExpandAsync(n, ct);
+            foreach (var cat in n.Children.Where(c => c.Kind == SchemaNodeKind.Category && c.CategoryType is { } t && openCategories[n].Contains(t)).ToList())
+            {
+                await ExpandAsync(cat, ct);
+                cat.IsExpandedSilently = true;
+                if (selectedKey is not null
+                    && cat.Children.FirstOrDefault(c => c.Ref is { } r && SchemaSql.FavoriteKey(r) == selectedKey) is { } again)
+                {
+                    SelectedNode = again;
+                }
+            }
         }
     }
 
@@ -412,6 +434,17 @@ public sealed partial class SchemaBrowserViewModel : ToolPanelViewModelBase, IDi
             InvalidOnly = f.InvalidOnly,
         };
         var gen = _generation;
+
+        // 목록 조회 결과에는 상태가 없으므로 INVALID 객체만 먼저 따로 읽어 트리에서 빨갛게 보인다(Orange 처럼 깨진 객체가 바로 보이게).
+        var invalid = f.InvalidOnly
+            ? null
+            : (await _meta!.ListObjectsAsync(session, query with { InvalidOnly = true, ObjectTypes = [], NamePattern = null }, ct))
+                .Select(SchemaSql.FavoriteKey).ToHashSet(StringComparer.Ordinal);
+        if (node.Owner is { } owner && invalid is not null)
+        {
+            _invalidByOwner[owner] = invalid;
+        }
+
         var objects = await _meta!.ListObjectsAsync(session, query, ct);
         var favorites = _favorites;
         var groups = await Task.Run(
@@ -464,10 +497,11 @@ public sealed partial class SchemaBrowserViewModel : ToolPanelViewModelBase, IDi
 
     private void AddPage(SchemaNode category)
     {
-        var status = _filter.InvalidOnly ? "INVALID" : null;
+        var invalid = category.Owner is { } owner && _invalidByOwner.TryGetValue(owner, out var set) ? set : null;
         var next = category.Items.Skip(category.Shown).Take(PageSize).ToList();
         foreach (var r in next)
         {
+            var status = _filter.InvalidOnly || (invalid?.Contains(SchemaSql.FavoriteKey(r)) ?? false) ? "INVALID" : null;
             category.Children.Add(MakeObject(r, category, status));
         }
 

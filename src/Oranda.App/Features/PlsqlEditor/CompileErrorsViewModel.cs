@@ -13,6 +13,9 @@ public sealed record CompileErrorItem(CompileError Error)
 {
     public string Kind => Error.IsWarning ? "경고" : "오류";
 
+    /// <summary>앞 아이콘 키(오류 = 빨간 원, 경고 = 노란 삼각형).</summary>
+    public string IconKey => Error.IsWarning ? "warn" : "error";
+
     public string Position => $"{Error.Line}:{Error.Column}";
 
     public string Message => Error.Message;
@@ -27,10 +30,27 @@ public sealed partial class CompileErrorsViewModel : ToolPanelViewModelBase
     public CompileErrorsViewModel()
     {
         Current = this;
+
+        // 창을 열기 전에 컴파일한 탭이 있으면 그 결과부터 보여 준다(창은 처음 열 때 만들어진다).
+        if (LastSource is { } pending)
+        {
+            Show(pending);
+        }
     }
 
     /// <summary>화면에 만들어진 목록 창(편집 탭이 결과를 올려 보낸다). 아직 없으면 null.</summary>
     public static CompileErrorsViewModel? Current { get; private set; }
+
+    /// <summary>마지막으로 오류 목록을 올린 탭. 창이 아직 없을 때도 기억해 두었다가 창이 생기면 보여 준다.</summary>
+    public static PlsqlEditorViewModel? LastSource { get; private set; }
+
+    /// <summary>편집 탭이 컴파일 결과를 올린다. 창이 있으면 바로 보이고, 없으면 창이 만들어질 때 보인다.</summary>
+    public static void Publish(PlsqlEditorViewModel source)
+    {
+        ArgumentNullException.ThrowIfNull(source);
+        LastSource = source;
+        Current?.Show(source);
+    }
 
     public PlsqlEditorViewModel? Source { get; private set; }
 

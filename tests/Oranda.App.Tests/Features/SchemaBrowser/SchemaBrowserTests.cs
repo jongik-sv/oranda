@@ -63,15 +63,16 @@ public class SchemaBrowserTests
         var h = new Harness();
         await h.Vm.SetSessionAsync(h.Session);
 
-        Assert.Equal(["즐겨찾기", "HR", "SCOTT"], h.Vm.Roots.Select(r => r.Title));
-        Assert.Equal(1, h.Meta.ListObjectsCalls); // 내 스키마(SCOTT)만 자동 펼침
-        var scott = h.Vm.Roots[2];
+        Assert.Equal(["즐겨찾기", "SCOTT", "HR"], h.Vm.Roots.Select(r => r.Title)); // 내 스키마가 맨 위
+        Assert.Equal(2, h.Meta.ListObjectsCalls); // 내 스키마(SCOTT)만 자동 펼침(INVALID 목록 + 전체 목록)
+        Assert.True(h.Vm.Roots[1].IsExpanded);
+        var scott = h.Vm.Roots[1];
         Assert.Equal(["테이블 (2)", "뷰 (1)", "프로시저 (1)"], scott.Children.Select(c => c.Title));
 
-        var hr = h.Vm.Roots[1];
+        var hr = h.Vm.Roots[2];
         Assert.Equal(SchemaNodeKind.Placeholder, hr.Children.Single().Kind);
         await h.Vm.ExpandAsync(hr);
-        Assert.Equal(2, h.Meta.ListObjectsCalls);
+        Assert.Equal(4, h.Meta.ListObjectsCalls);
         Assert.Single(hr.Children);
         Assert.Equal("테이블 (1)", hr.Children[0].Title);
     }
@@ -81,7 +82,7 @@ public class SchemaBrowserTests
     {
         var h = new Harness();
         await h.Vm.SetSessionAsync(h.Session);
-        var tables = h.Vm.Roots[2].Children[0];
+        var tables = h.Vm.Roots[1].Children[0];
         await h.Vm.ExpandAsync(tables);
         var emp = tables.Children.First(c => c.Title == "EMP");
         await h.Vm.ExpandAsync(emp);
@@ -151,7 +152,7 @@ public class SchemaBrowserTests
     {
         var h = new Harness();
         await h.Vm.SetSessionAsync(h.Session);
-        var tables = h.Vm.Roots[2].Children[0];
+        var tables = h.Vm.Roots[1].Children[0];
         await h.Vm.ExpandAsync(tables);
         var emp = tables.Children.First(c => c.Title == "EMP");
 
@@ -187,7 +188,7 @@ public class SchemaBrowserTests
     {
         var h = new Harness();
         await h.Vm.SetSessionAsync(h.Session);
-        var node = h.Vm.Roots[2].Children[0];
+        var node = h.Vm.Roots[1].Children[0];
         await h.Vm.ExpandAsync(node);
         var emp = node.Children.First(c => c.Title == "EMP");
 
@@ -211,7 +212,7 @@ public class SchemaBrowserTests
         var h = new Harness();
         h.Editor.Doc = new EditorSnapshot(Guid.NewGuid(), "abcdef", new TextRange(2, 3), 5);
         await h.Vm.SetSessionAsync(h.Session);
-        var node = h.Vm.Roots[2].Children[0];
+        var node = h.Vm.Roots[1].Children[0];
         await h.Vm.ExpandAsync(node);
         var emp = node.Children.First(c => c.Title == "EMP");
 
@@ -230,7 +231,7 @@ public class SchemaBrowserTests
     {
         var h = new Harness();
         await h.Vm.SetSessionAsync(h.Session);
-        Assert.False(await h.Vm.InsertAsync(h.Vm.Roots[2], SchemaInsertMode.Name));
+        Assert.False(await h.Vm.InsertAsync(h.Vm.Roots[1], SchemaInsertMode.Name));
         Assert.Empty(h.Editor.Edits);
     }
 
@@ -240,7 +241,7 @@ public class SchemaBrowserTests
         var h = new Harness();
         h.Editor.Doc = new EditorSnapshot(Guid.NewGuid(), "", new TextRange(0, 0), 0);
         await h.Vm.SetSessionAsync(h.Session);
-        var tables = h.Vm.Roots[2].Children[0];
+        var tables = h.Vm.Roots[1].Children[0];
         await h.Vm.ExpandAsync(tables);
         var emp = tables.Children.First(c => c.Title == "EMP");
 
@@ -262,7 +263,7 @@ public class SchemaBrowserTests
         h.Bus.Publish(new SessionOpened(h.Session.Id, h.Session.Profile, Server(), SessionPurpose.Work));
         await WaitForAsync(() => h.Vm.Roots.Count > 0);
         Assert.True(h.Vm.HasSession);
-        Assert.Equal("SCOTT", h.Vm.Roots[^1].Title);
+        Assert.Equal("SCOTT", h.Vm.Roots[1].Title);
 
         h.Manager.Sessions.Clear();
         h.Bus.Publish(new SessionClosed(h.Session.Id));

@@ -12,7 +12,18 @@ public partial class PlsqlEditorView : UserControl
     public PlsqlEditorView()
     {
         InitializeComponent();
-        CompileButton.Click += async (_, _) => await Run(async () => { if (_vm is not null) { await _vm.CompileAsync(); } });
+        // 단추도 명령(oranda.plsql.compile)과 같은 길: 오류가 있으면 컴파일 오류 창을 연다.
+        CompileButton.Click += async (_, _) => await Run(async () =>
+        {
+            if (_vm is not null)
+            {
+                await _vm.CompileAsync();
+                if (_vm.Errors.Count > 0)
+                {
+                    await Oranda.App.Shell.ShellCommandRunner.RunAsync("oranda.view.compileErrors");
+                }
+            }
+        });
         ForceButton.Click += async (_, _) => await Run(async () => { if (_vm is not null) { await _vm.CompileAsync(force: true); } });
         DiffButton.Click += async (_, _) => await Run(async () => { if (_vm is not null) { await _vm.ShowServerDiffAsync(); } });
         CloseDiffButton.Click += (_, _) => _vm?.CloseDiff();

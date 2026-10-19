@@ -186,7 +186,20 @@ public sealed class PlsqlEditorCommandHandler : ICommandHandler
             return open(vm, vm.Title);
         }
 
-        return (services?.GetService(typeof(IShellUi)) as IShellUi)?.Docking.OpenDocument(PlsqlEditorCommands.PanelId, vm, vm.Title) is not null;
+        if ((services?.GetService(typeof(IShellUi)) as IShellUi)?.Docking.OpenDocument(PlsqlEditorCommands.PanelId, vm, vm.Title) is not { } doc)
+        {
+            return false;
+        }
+
+        // 소스를 읽은 뒤 정해지는 제목(「FT.EMP_PKG」)도 탭 머리글에 따라간다(처음엔 「PL/SQL」로 열린다).
+        vm.PropertyChanged += (_, e) =>
+        {
+            if (e.PropertyName == nameof(PlsqlEditorViewModel.Title))
+            {
+                doc.Title = vm.Title;
+            }
+        };
+        return true;
     }
 }
 
