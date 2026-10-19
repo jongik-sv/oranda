@@ -89,7 +89,9 @@ public class ShellHeadlessTests
         var view = TopMenu(h, "보기");
         var palette = view.Items.OfType<MenuItem>().Single(m => (string?)m.Header == "명령 팔레트");
 
-        Assert.Equal(new KeyGesture(Key.P, KeyModifiers.Control | KeyModifiers.Shift), palette.InputGesture);
+        // 키맵의 Primary 는 macOS 에서 ⌘(Meta), 그 밖에서 Ctrl 이다(commands.md 5.1).
+        var primary = OperatingSystem.IsMacOS() ? KeyModifiers.Meta : KeyModifiers.Control;
+        Assert.Equal(new KeyGesture(Key.P, primary | KeyModifiers.Shift), palette.InputGesture);
         Assert.NotNull(palette.Command);
         Assert.Contains(view.Items.OfType<MenuItem>(), m => (string?)m.Header == "테마");
         // 보기 > 도구 창: 등록된 도구 창이 자동으로 나열된다.
@@ -469,7 +471,8 @@ public class ShellHeadlessTests
         var shell = h.Get<ShellController>();
         h.Window.Activate();
 
-        h.Window.KeyPress(Key.P, RawInputModifiers.Control | RawInputModifiers.Shift, PhysicalKey.P, "P");
+        var primary = OperatingSystem.IsMacOS() ? RawInputModifiers.Meta : RawInputModifiers.Control;
+        h.Window.KeyPress(Key.P, primary | RawInputModifiers.Shift, PhysicalKey.P, "P");
         await HeadlessHost.WaitUntil(() => shell.IsPaletteOpen);
 
         var window = shell.Palette!;
