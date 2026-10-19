@@ -45,16 +45,16 @@ public class LayoutPlannerTests
     {
         var layout = LayoutPlanner.CreateDefault(Standard);
 
-        // 세로: [가로: [왼쪽 묶음, 문서], 아래 묶음]
+        // 가로: [왼쪽 묶음(창 전체 높이), 세로: [문서, 아래 묶음]]
         var root = layout.Root!;
         Assert.Equal(DockNodeKind.Split, root.Kind);
-        Assert.Equal(DockOrientation.Vertical, root.Orientation);
-        var middle = root.Children[0];
-        var bottom = root.Children[1];
-        Assert.Equal(DockOrientation.Horizontal, middle.Orientation);
-        Assert.Equal([Id("schemaBrowser"), Id("scripts")], middle.Children[0].Tools);
-        Assert.Equal(DockNodeKind.Documents, middle.Children[1].Kind);
-        Assert.Equal([Id("output"), Id("messages")], bottom.Tools);
+        Assert.Equal(DockOrientation.Horizontal, root.Orientation);
+        var left = root.Children[0];
+        var column = root.Children[1];
+        Assert.Equal([Id("schemaBrowser"), Id("scripts")], left.Tools);
+        Assert.Equal(DockOrientation.Vertical, column.Orientation);
+        Assert.Equal(DockNodeKind.Documents, column.Children[0].Kind);
+        Assert.Equal([Id("output"), Id("messages")], column.Children[1].Tools);
 
         // 오른쪽 도구 창은 기본 숨김(트리에 없고 hiddenTools 에 있다). 문서 종류는 트리에 넣지 않는다.
         Assert.Equal([Id("outline"), Id("templates")], layout.HiddenTools);
@@ -92,8 +92,9 @@ public class LayoutPlannerTests
 
         var ids = LayoutPlanner.ToolIds(r.Root);
         Assert.Equal([Id("schemaBrowser")], ids);
-        // 아래 묶음이 사라지면 가장 바깥 세로 분할도 없어진다.
+        // 아래 묶음이 사라지면 문서 쪽 세로 분할도 없어진다: 가로 [왼쪽, 문서].
         Assert.Equal(DockOrientation.Horizontal, r.Root!.Orientation);
+        Assert.Equal(DockNodeKind.Documents, r.Root.Children[1].Kind);
         Assert.Equal(1, CountDocuments(r.Root));
     }
 
@@ -109,6 +110,19 @@ public class LayoutPlannerTests
         Assert.Equal([Id("output"), Id("messages"), Id("history")], bottom.Tools);
         var left = FindGroup(r.Root!, Id("schemaBrowser"));
         Assert.Contains(Id("rowView"), left.Tools);
+    }
+
+    [Fact]
+    public void Reconcile_puts_a_newly_registered_tool_at_its_order_within_the_group()
+    {
+        var saved = LayoutPlanner.CreateDefault(Standard);
+        var withNew = Standard.Append(Tool("results", DockLocation.Bottom, 5)).Append(Tool("plan", DockLocation.Bottom, 15)).ToArray();
+
+        var r = LayoutPlanner.Reconcile(saved, withNew);
+
+        var bottom = FindGroup(r.Root!, Id("output"));
+        Assert.Equal([Id("results"), Id("output"), Id("plan"), Id("messages")], bottom.Tools);
+        Assert.Equal(saved.Root!.Children[1].Children[1].ActiveTool, bottom.ActiveTool);
     }
 
     [Fact]
@@ -190,14 +204,7 @@ public class LayoutPlannerTests
         {
             Root = layout.Root! with
             {
-                Children =
-                [
-                    layout.Root.Children[0] with
-                    {
-                        Children = [left with { Tools = [Id("schemaBrowser"), Id("schemaBrowser"), Id("scripts")] }, layout.Root.Children[0].Children[1]],
-                    },
-                    layout.Root.Children[1],
-                ],
+                Children = [left with { Tools = [Id("schemaBrowser"), Id("schemaBrowser"), Id("scripts")] }, layout.Root.Children[1]],
             },
         };
 
@@ -246,12 +253,94 @@ public class LayoutPlannerTests
         var json = System.Text.Json.JsonSerializer.Serialize(layout, ShellJsonContext.Default.LayoutDocument);
         var back = System.Text.Json.JsonSerializer.Deserialize(json, ShellJsonContext.Default.LayoutDocument)!;
 
-        Assert.Contains("\"schemaVersion\": 1", json);
+        Assert.Contains("\"schemaVersion\": 2", json);
         Assert.Contains("\"kind\": \"ToolGroup\"", json);
         Assert.DoesNotContain("Dock.", json);
         Assert.Equal(layout.Window, back.Window);
         Assert.True(LayoutPlanner.SameShape(layout.Root, back.Root));
         Assert.Equal(layout.HiddenTools, back.HiddenTools);
+    }
+
+    // layout.json 1 → 2: 예전 기본 모양(왼쪽 묶음이 아래 묶음 위에서 끝남)을 왼쪽 전체 높이 모양으로 옮긴다.
+    private const string OldDefaultRoot = """
+        {
+          "kind": "Split", "orientation": "Vertical", "tools": [],
+          "children": [
+            { "kind": "Split", "orientation": "Horizontal", "proportion": 0.7, "tools": [],
+              "children": [
+                { "kind": "ToolGroup", "proportion": 0.25, "tools": ["oranda.panel.schemaBrowser", "oranda.panel.scripts"], "activeTool": "oranda.panel.scripts" },
+                { "kind": "Documents", "proportion": 0.75, "tools": [] }
+              ] },
+            { "kind": "ToolGroup", "proportion": 0.3, "tools": ["oranda.panel.output", "oranda.panel.messages"] }
+          ]
+        }
+        """;
+
+    private static LayoutDocument Migrate(string root)
+    {
+        var doc = System.Text.Json.Nodes.JsonNode.Parse("{\"schemaVersion\": 1, \"hiddenTools\": [\"oranda.panel.outline\"], \"root\": " + root + "}")!;
+        var migrated = new LayoutLeftFullHeightMigration().Apply(doc);
+        return System.Text.Json.JsonSerializer.Deserialize(migrated, ShellJsonContext.Default.LayoutDocument)!;
+    }
+
+    [Fact]
+    public void Migration_moves_old_default_layout_to_full_height_left_column()
+    {
+        var r = Migrate(OldDefaultRoot);
+
+        var root = r.Root!;
+        Assert.Equal(DockOrientation.Horizontal, root.Orientation);
+        var left = root.Children[0];
+        Assert.Equal([Id("schemaBrowser"), Id("scripts")], left.Tools);
+        Assert.Equal(Id("scripts"), left.ActiveTool);
+        Assert.Equal(0.25, left.Proportion);
+        var column = root.Children[1];
+        Assert.Equal(DockOrientation.Vertical, column.Orientation);
+        Assert.Equal(0.75, column.Proportion);
+        Assert.Equal(DockNodeKind.Documents, column.Children[0].Kind);
+        Assert.Equal(0.7, column.Children[0].Proportion!.Value, 6);
+        Assert.Equal([Id("output"), Id("messages")], column.Children[1].Tools);
+        Assert.Equal(0.3, column.Children[1].Proportion);
+        Assert.Equal([Id("outline")], r.HiddenTools);
+        Assert.Equal(DockLocation.Left, LayoutPlanner.LocationOf(root, left));
+        Assert.Equal(DockLocation.Bottom, LayoutPlanner.LocationOf(root, column.Children[1]));
+    }
+
+    [Fact]
+    public void Migration_keeps_a_right_group_beside_the_documents()
+    {
+        var old = OldDefaultRoot.Replace(
+            """{ "kind": "Documents", "proportion": 0.75, "tools": [] }""",
+            """{ "kind": "Documents", "proportion": 0.55, "tools": [] }, { "kind": "ToolGroup", "proportion": 0.2, "tools": ["oranda.panel.outline"] }""",
+            StringComparison.Ordinal);
+
+        var root = Migrate(old).Root!;
+
+        var top = root.Children[1].Children[0];
+        Assert.Equal(DockOrientation.Horizontal, top.Orientation);
+        Assert.Equal(DockNodeKind.Documents, top.Children[0].Kind);
+        Assert.Equal(0.55 / 0.75, top.Children[0].Proportion!.Value, 3);
+        Assert.Equal(0.2 / 0.75, top.Children[1].Proportion!.Value, 3);
+        Assert.Equal(DockLocation.Right, LayoutPlanner.LocationOf(root, top.Children[1]));
+        Assert.Equal(1, CountDocuments(root));
+    }
+
+    [Fact]
+    public void Migration_leaves_other_shapes_alone()
+    {
+        const string custom = """
+            { "kind": "Split", "orientation": "Horizontal", "tools": [],
+              "children": [
+                { "kind": "Documents", "proportion": 0.7, "tools": [] },
+                { "kind": "ToolGroup", "proportion": 0.3, "tools": ["oranda.panel.schemaBrowser"] }
+              ] }
+            """;
+
+        var root = Migrate(custom).Root!;
+
+        Assert.Equal(DockOrientation.Horizontal, root.Orientation);
+        Assert.Equal(DockNodeKind.Documents, root.Children[0].Kind);
+        Assert.Equal([Id("schemaBrowser")], root.Children[1].Tools);
     }
 
     private static int CountDocuments(DockNode n) =>

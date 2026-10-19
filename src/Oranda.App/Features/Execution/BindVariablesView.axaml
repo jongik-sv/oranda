@@ -56,6 +56,9 @@
     <Border DockPanel.Dock="Bottom" Classes="panel-status">
       <TextBlock Text="실행하면 문장의 :변수가 여기에 채워집니다. 빈 값은 NULL." TextTrimming="CharacterEllipsis" />
     </Border>
+    <!-- 창이 표의 최소 폭보다 좁으면 방향 열을 자르지 않고 가로로 스크롤한다. -->
+    <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled">
+    <DockPanel MinWidth="290">
     <Border DockPanel.Dock="Top" Classes="grid-header">
       <Grid Height="26">
         <Grid.ColumnDefinitions>
@@ -119,5 +122,7 @@
         </DataTemplate>
       </ListBox.ItemTemplate>
     </ListBox>
+    </DockPanel>
+    </ScrollViewer>
   </DockPanel>
 </UserControl>

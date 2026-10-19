@@ -76,13 +76,16 @@
 
 | 위치 | 기본 폭/높이 | 들어가는 도구 창(탭 순서) |
 |---|---|---|
-| 왼쪽 | 280 DIP | 스키마 브라우저, 이름 붙인 스크립트 |
-| 오른쪽 | 300 DIP, 기본 숨김(자동 숨김 막대) | 문서 개요, 템플릿, 행 보기, 확장 시험 패널(개발 빌드) |
-| 아래 | 220 DIP | DBMS 출력, 메시지, 실행 계획, 실행 이력, 컴파일 오류 |
+| 왼쪽 | 280 DIP, 창 전체 높이 | 스키마 브라우저(아래에 속성 창), 이름 붙인 스크립트 |
+| 오른쪽 | 300 DIP, 문서 영역 옆(아래 묶음 위). 바인드 변수 말고는 기본 숨김(자동 숨김 막대) | 문서 개요, 템플릿, 바인드 변수, 행 보기, 확장 시험 패널(개발 빌드) |
+| 아래 | 220 DIP, 문서 영역 밑(왼쪽 묶음 오른쪽 열 안) | 조회 결과, DBMS 출력, 메시지, 실행 계획, 실행 이력, 컴파일 오류 |
 | 문서 영역 | 나머지 | 문서 탭(편집기, 객체 상세, 모니터, DB 정보 등) |
 
+- 트리 모양: `가로[왼쪽 묶음, 세로[문서(+오른쪽 묶음), 아래 묶음]]`. 왼쪽 묶음(스키마 브라우저)은 창 위에서 아래까지 다 쓰고, 아래 묶음은 편집기 밑에만 놓인다(오렌지·SQL Developer 와 같다).
+- `layout.json` 버전 1 의 예전 기본 모양 `세로[가로[왼쪽 묶음, 문서, …], 아래 묶음]` 은 읽을 때 한 번 새 모양으로 옮긴다(`LayoutLeftFullHeightMigration`, 왼쪽 폭·아래 높이 비율 유지). 사용자가 다른 모양으로 바꾼 배치는 그대로 둔다.
+
 - 첫 실행 = 위 배치. 사용자가 바꾼 배치는 종료 때 `layout.json`(앱 DTO, 스키마 버전 필드, TSK-02-01 data-model)에 저장하고 시작 때 복원한다. Dock 의 직렬화 형식을 그대로 저장하지 않는다(라이브러리 버전이 바뀌어도 파일이 깨지지 않게).
-- 복원할 때 등록되지 않은 도구 창 ID(플러그인 제거 등)는 건너뛰고, 새로 등록된 도구 창은 자기 기본 위치에 추가한다.
+- 복원할 때 등록되지 않은 도구 창 ID(플러그인 제거 등)는 건너뛰고, 새로 등록된 도구 창은 자기 기본 위치에 추가한다. 그 위치에 묶음이 있으면 묶음 안에서 자기 순서(`Order`) 자리에 넣는다(맨 뒤가 아니라 기본 배치와 같은 자리).
 - `view.resetLayout` = 기본 배치로 되돌림.
 - 시작 시간(D-006): 첫 프레임에는 문서 영역·스키마 브라우저 틀만 그린다. 숨겨진 도구 창의 View 는 처음 보일 때 만든다(지연 생성).
 
@@ -104,6 +107,7 @@
 | `oranda.panel.formatterProfiles` | 포매터 프로필 | document | 문서 | 아니요 | `oranda.format.profiles` | TSK-05-03 |
 | `oranda.panel.schemaBrowser` | 스키마 브라우저 | tool | 왼쪽 | 아니요 | `oranda.view.schemaBrowser` | TSK-07-02 |
 | `oranda.panel.scripts` | 이름 붙인 스크립트 | tool | 왼쪽 | 아니요 | `oranda.view.scripts` | TSK-06-06 |
+| `oranda.panel.results` | 조회 결과(활성 편집기 탭의 결과·오류·스크립트 요약) | tool | 아래 | 아니요 | `oranda.window.toggleResultPane`, 실행하면 앞으로 | TSK-06-03 |
 | `oranda.panel.output` | DBMS 출력 | tool | 아래 | 아니요 | `oranda.view.output` | TSK-06-02 |
 | `oranda.panel.messages` | 메시지(실행 로그·스크립트 오류) | tool | 아래 | 아니요 | `oranda.view.messages` | TSK-06-02 |
 | `oranda.panel.plan` | 실행 계획 | tool | 아래 | 아니요 | `oranda.view.plan` | TSK-07-01 |
@@ -111,10 +115,11 @@
 | `oranda.panel.compileErrors` | 컴파일 오류 | tool | 아래 | 아니요 | `oranda.view.compileErrors` | TSK-08-01 |
 | `oranda.panel.outline` | 문서 개요 | tool | 오른쪽 | 아니요 | `oranda.view.outline` | TSK-04-02 |
 | `oranda.panel.templates` | 템플릿(코드 조각·힌트·함수 설명) | tool | 오른쪽 | 아니요 | `oranda.view.templates` | TSK-04-07 |
+| `oranda.panel.binds` | 바인드 변수(오렌지 Bind Variable List) | tool | 오른쪽 | 아니요 | `oranda.exec.bindVariables` | TSK-06-02 (EXEC-03) |
 | `oranda.panel.rowView` | 행 보기 | tool | 오른쪽 | 아니요 | `oranda.view.rowView`, `oranda.grid.rowView` | TSK-06-05 |
 | `oranda.panel.extensionTest` | 확장 시험 패널 | tool | 오른쪽 | 아니요 | `oranda.view.extensionTest` | TSK-10-03 (개발 빌드만) |
 
-대화상자(도킹 안 함): 접속 관리자·비밀번호 변경(TSK-03-04), 접속 가져오기(TSK-03-05), 바인드 변수·치환 변수 입력·운영 실행 확인·위험 명령 이름 재입력·미커밋 종료 확인(TSK-06-02), DML 미리보기(TSK-06-04), 내보내기·가져오기(TSK-06-07), PL/SQL 실행(TSK-08-02), 세션 Kill 확인(TSK-09-01), 설정·단축키 설정(TSK-03-01·TSK-04-07), 명령 팔레트(TSK-03-01).
+대화상자(도킹 안 함): 접속 관리자·비밀번호 변경(TSK-03-04), 접속 가져오기(TSK-03-05), 치환 변수 입력·운영 실행 확인·위험 명령 이름 재입력·미커밋 종료 확인(TSK-06-02), DML 미리보기(TSK-06-04), 내보내기·가져오기(TSK-06-07), PL/SQL 실행(TSK-08-02), 세션 Kill 확인(TSK-09-01), 설정·단축키 설정(TSK-03-01·TSK-04-07), 명령 팔레트(TSK-03-01).
 
 규칙:
 - 도구 창 ID = `oranda.panel.<camelCase>`. 그 도구 창을 보이는 명령 = `oranda.view.<같은 이름>`(문서 종류는 위 표의 명령).

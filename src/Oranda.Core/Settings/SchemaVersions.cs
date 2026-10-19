@@ -9,7 +9,7 @@ public static class SchemaVersions
     public const int Connections = 1;
     public const int Formatter = 1;
     public const int Keymap = 1;
-    public const int Layout = 1;
+    public const int Layout = 2;
     public const int Workspace = 1;
 }
 

@@ -34,29 +34,27 @@ public static class LayoutPlanner
         var hidden = IdsAt(tools, DockLocation.Right);
         var documents = new DockNode { Kind = DockNodeKind.Documents };
 
-        DockNode middle = documents;
-        if (left.Count > 0)
+        // 가로: [왼쪽 묶음(창 전체 높이), 세로: [문서, 아래 묶음]] — 오렌지처럼 스키마 브라우저가 왼쪽을 위아래로 다 쓰고,
+        // 아래 묶음(조회 결과·DBMS 출력 …)은 문서 영역 밑에만 둔다.
+        DockNode column = documents;
+        if (bottom.Count > 0)
         {
-            middle = new DockNode
+            column = new DockNode
             {
                 Kind = DockNodeKind.Split,
-                Orientation = DockOrientation.Horizontal,
-                Children =
-                [
-                    Group(left, LeftProportion),
-                    documents with { Proportion = 1 - LeftProportion },
-                ],
+                Orientation = DockOrientation.Vertical,
+                Children = [documents with { Proportion = 1 - BottomProportion }, Group(bottom, BottomProportion)],
             };
         }
 
-        DockNode root = middle;
-        if (bottom.Count > 0)
+        DockNode root = column;
+        if (left.Count > 0)
         {
             root = new DockNode
             {
                 Kind = DockNodeKind.Split,
-                Orientation = DockOrientation.Vertical,
-                Children = [middle with { Proportion = 1 - BottomProportion }, Group(bottom, BottomProportion)],
+                Orientation = DockOrientation.Horizontal,
+                Children = [Group(left, LeftProportion), column with { Proportion = 1 - LeftProportion }],
             };
         }
 
@@ -91,11 +89,14 @@ public static class LayoutPlanner
             .ToList();
         var hiddenSet = hidden.ToHashSet(StringComparer.Ordinal);
 
+        var order = all.Where(p => p.Kind == ToolPanelKind.Tool)
+            .GroupBy(p => p.Id, StringComparer.Ordinal)
+            .ToDictionary(g => g.Key, g => g.First().Order, StringComparer.Ordinal);
         foreach (var def in all.Where(p => p.Kind == ToolPanelKind.Tool).OrderBy(p => p.Order))
         {
             if (!seen.Contains(def.Id) && !hiddenSet.Contains(def.Id))
             {
-                root = AddTool(root, def.Id, def.DefaultLocation);
+                root = AddTool(root, def.Id, def.DefaultLocation, order);
                 seen.Add(def.Id);
             }
         }
@@ -282,12 +283,25 @@ public static class LayoutPlanner
         }
     }
 
-    private static DockNode AddTool(DockNode root, string id, DockLocation location)
+    /// <summary>
+    /// 도구 창을 기본 위치 묶음에 더한다(없으면 새 묶음). <paramref name="order"/> 가 있으면 묶음 안에서 자기 순서 자리에
+    /// 넣는다(새로 등록된 창이 저장된 배치의 맨 뒤가 아니라 기본 배치와 같은 자리에 오게). 없으면 맨 뒤에 붙인다.
+    /// </summary>
+    private static DockNode AddTool(DockNode root, string id, DockLocation location, Dictionary<string, int>? order = null)
     {
         var existing = FindGroups(root).FirstOrDefault(g => LocationOf(root, g) == location);
         if (existing is not null)
         {
-            return Replace(root, existing, existing with { Tools = [.. existing.Tools ?? [], id] });
+            var tools = (existing.Tools ?? []).ToList();
+            var at = tools.Count;
+            if (order is not null && order.TryGetValue(id, out var rank))
+            {
+                var later = tools.FindIndex(t => order.TryGetValue(t, out var r) && r > rank);
+                at = later < 0 ? tools.Count : later;
+            }
+
+            tools.Insert(at, id);
+            return Replace(root, existing, existing with { Tools = tools });
         }
 
         var group = Group([id], location switch
@@ -299,11 +313,37 @@ public static class LayoutPlanner
 
         if (location == DockLocation.Bottom)
         {
+            // 왼쪽 묶음이 창 전체 높이를 쓰는 배치면 그 오른쪽 열 밑에, 아니면 전체 밑에 둔다.
+            if (root is { Kind: DockNodeKind.Split, Orientation: DockOrientation.Horizontal, Children.Count: 2 }
+                && root.Children[0].Kind == DockNodeKind.ToolGroup && FindDocuments(root.Children[1]) is not null)
+            {
+                var rest = root.Children[1];
+                var column = new DockNode
+                {
+                    Kind = DockNodeKind.Split,
+                    Orientation = DockOrientation.Vertical,
+                    Proportion = rest.Proportion,
+                    Children = [rest with { Proportion = 1 - BottomProportion }, group],
+                };
+                return root with { Children = [root.Children[0], column] };
+            }
+
             return new DockNode
             {
                 Kind = DockNodeKind.Split,
                 Orientation = DockOrientation.Vertical,
                 Children = [root with { Proportion = 1 - BottomProportion }, group],
+            };
+        }
+
+        if (location == DockLocation.Left)
+        {
+            // 왼쪽 묶음은 창 전체 높이(맨 바깥 가로 분할의 첫 칸).
+            return new DockNode
+            {
+                Kind = DockNodeKind.Split,
+                Orientation = DockOrientation.Horizontal,
+                Children = [group, root with { Proportion = 1 - group.Proportion!.Value }],
             };
         }
 

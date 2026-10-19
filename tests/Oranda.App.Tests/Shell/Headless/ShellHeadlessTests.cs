@@ -45,29 +45,6 @@ public class ShellHeadlessTests
         return found ?? throw new Xunit.Sdk.XunitException($"도구 창 {toolId} 의 묶음이 도킹 모델에 없다.");
     }
 
-    private static IDocumentDock FindDocumentDock(IRootDock root)
-    {
-        IDocumentDock? found = null;
-        void Walk(IDockable d)
-        {
-            if (d is IDocumentDock dd)
-            {
-                found = dd;
-            }
-
-            if (d is IDock dock)
-            {
-                foreach (var c in dock.VisibleDockables ?? [])
-                {
-                    Walk(c);
-                }
-            }
-        }
-
-        Walk(root);
-        return found!;
-    }
-
     private static MenuItem TopMenu(ShellHarness h, string header) =>
         h.Window.Menus.Items.OfType<MenuItem>().Single(m => m.Header is string s && s.StartsWith(header, StringComparison.Ordinal));
 
@@ -148,9 +125,10 @@ public class ShellHeadlessTests
                 ws.ShowTool("oranda.panel.outline");
                 ws.HideTool("oranda.panel.scripts");
                 ws.ShowTool("oranda.panel.history");
-                // 구분선을 끌면 이웃 둘의 비율이 함께 바뀐다(합 1).
-                FindToolDock(ws.Layout!, "oranda.panel.schemaBrowser").Proportion = 0.30;
-                FindDocumentDock(ws.Layout!).Proportion = 0.47;
+                // 구분선을 끌면 이웃 둘의 비율이 함께 바뀐다(합 1). 왼쪽 묶음의 이웃은 문서·아래 묶음을 담은 오른쪽 열이다.
+                var left = FindToolDock(ws.Layout!, "oranda.panel.schemaBrowser");
+                left.Proportion = 0.30;
+                ((IDock)left.Owner!).VisibleDockables!.OfType<IDock>().Single(d => !ReferenceEquals(d, left)).Proportion = 0.70;
                 before = ws.Capture();
                 await h.Get<ShellController>().SaveLayoutAsync(h.Window.CapturePlacement());
             }

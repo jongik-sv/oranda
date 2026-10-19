@@ -207,7 +207,7 @@ TRD 4.11 대로 앱 DTO 다(Core 가 아니라 `Oranda.App`). Dock.Avalonia 의 
 
 | 필드 | 형식 | 필수 | 기본값 | 설명 |
 |---|---|---|---|---|
-| `schemaVersion` | int | ● | 1 | |
+| `schemaVersion` | int | ● | 2 | 1 → 2: 예전 기본 모양을 왼쪽 묶음 전체 높이 모양으로 옮긴다(ui-shell 2.1) |
 | `window` | `WindowPlacement` | ○ | null(화면 가운데 기본 크기) | |
 | `window.x`, `window.y` | int | ● | | 논리 좌표(DIP) |
 | `window.width`, `window.height` | int | ● | | DIP. 최소 800×500 |
