@@ -28,7 +28,12 @@ internal sealed class MemoryCredentials : ICredentialStore
         return Task.CompletedTask;
     }
 
-    public Task<byte[]?> LoadAsync(string key) => Task.FromResult(Items.TryGetValue(key, out var v) ? (byte[]?)v.ToArray() : null);
+    /// <summary>설정하면 읽기가 이 예외로 실패한다(키체인 접근 거부 등).</summary>
+    public Exception? LoadFailure { get; set; }
+
+    public Task<byte[]?> LoadAsync(string key) => LoadFailure is { } fail
+        ? Task.FromException<byte[]?>(fail)
+        : Task.FromResult(Items.TryGetValue(key, out var v) ? (byte[]?)v.ToArray() : null);
 
     public Task DeleteAsync(string key)
     {
@@ -418,6 +423,22 @@ public sealed class ConnectionManagerTests
         Assert.False(fx.Keys.Get("sessionBroken"));
         var stored = (await fx.Service.LoadAsync(CancellationToken.None)).Value.Profiles.Single();
         Assert.NotNull(stored.LastConnectedAt);
+    }
+
+    [Fact]
+    public async Task Unreadable_stored_password_asks_for_one_instead_of_failing()
+    {
+        // macOS 에서 키체인 접근 허용 창을 「거부」하면 읽기가 OSStatus -128 로 실패한다. 앱이 죽지 않고 비밀번호를 물어야 한다.
+        using var fx = new ServiceFixture();
+        var saved = await fx.Service.SaveProfileAsync(Profile(), "tiger", true, CancellationToken.None);
+        fx.Credentials.LoadFailure = new InvalidOperationException("키체인 읽기 실패(OSStatus -128).");
+
+        var outcome = await fx.Service.ConnectAsync(saved, null, CancellationToken.None);
+
+        Assert.Equal(ConnectStatus.PasswordRequired, outcome.Status);
+        Assert.Contains("저장된 비밀번호를 읽지 못했습니다", outcome.Message, StringComparison.Ordinal);
+        Assert.Contains("-128", outcome.Message, StringComparison.Ordinal);
+        Assert.Equal(ConnectStatus.Connected, (await fx.Service.ConnectAsync(saved, "tiger", CancellationToken.None)).Status);
     }
 
     [Fact]

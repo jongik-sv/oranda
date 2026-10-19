@@ -264,10 +264,17 @@ public sealed class ConnectionService : IConnectionService, IDisposable
     {
         ArgumentNullException.ThrowIfNull(profile);
 
-        var secret = string.IsNullOrEmpty(password) ? await LoadStoredAsync(profile).ConfigureAwait(false) : password;
+        var secret = password;
+        string? storeProblem = null;
         if (string.IsNullOrEmpty(secret))
         {
-            return new ConnectOutcome(ConnectStatus.PasswordRequired, $"'{profile.Name}' 의 비밀번호를 입력하세요.");
+            (secret, storeProblem) = await TryLoadStoredAsync(profile).ConfigureAwait(false);
+        }
+
+        if (string.IsNullOrEmpty(secret))
+        {
+            var ask = $"'{profile.Name}' 의 비밀번호를 입력하세요.";
+            return new ConnectOutcome(ConnectStatus.PasswordRequired, storeProblem is null ? ask : storeProblem + " " + ask);
         }
 
         using var credential = new SecureCredential(secret);
@@ -455,22 +462,38 @@ public sealed class ConnectionService : IConnectionService, IDisposable
 
     internal string WalletFolder(Guid id) => Path.Combine(_paths.DataDirectory, "wallets", id.ToString("D").ToLowerInvariant());
 
-    private async Task<string?> LoadStoredAsync(ConnectionProfile profile)
+    private async Task<string?> LoadStoredAsync(ConnectionProfile profile) =>
+        (await TryLoadStoredAsync(profile).ConfigureAwait(false)).Secret;
+
+    /// <summary>
+    /// 저장된 비밀번호. 없으면 null. 저장소를 읽지 못하면(키체인 접근을 거부함 등) null 과 그 이유를 돌려준다:
+    /// 예외를 그대로 올리면 접속 명령이 처리되지 않은 예외로 앱을 끝내므로, 비밀번호를 묻는 쪽으로 넘긴다.
+    /// </summary>
+    private async Task<(string? Secret, string? Problem)> TryLoadStoredAsync(ConnectionProfile profile)
     {
         if (profile.CredentialRef is null)
         {
-            return null;
+            return (null, null);
         }
 
-        var bytes = await _credentials.LoadAsync(profile.CredentialRef).ConfigureAwait(false);
+        byte[]? bytes;
+        try
+        {
+            bytes = await _credentials.LoadAsync(profile.CredentialRef).ConfigureAwait(false);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            return (null, "저장된 비밀번호를 읽지 못했습니다(" + ex.Message + ").");
+        }
+
         if (bytes is null)
         {
-            return null;
+            return (null, null);
         }
 
         var text = Encoding.UTF8.GetString(bytes);
         Array.Clear(bytes);
-        return text;
+        return (text, null);
     }
 
     private void DeleteOwnWalletFolder(ConnectionProfile removed)
