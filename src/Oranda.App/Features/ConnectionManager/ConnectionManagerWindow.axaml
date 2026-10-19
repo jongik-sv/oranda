@@ -1,0 +1,56 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:cm="using:Oranda.App.Features.ConnectionManager"
+        x:Class="Oranda.App.Features.ConnectionManager.ConnectionManagerWindow"
+        x:DataType="cm:ConnectionManagerViewModel"
+        Title="접속 관리자"
+        Width="900" Height="640" MinWidth="640" MinHeight="420"
+        WindowStartupLocation="CenterOwner"
+        ShowInTaskbar="False"
+        DragDrop.AllowDrop="True"
+        FontSize="{DynamicResource OrandaFontSizeBase}">
+  <!-- 고정 크기 칸을 쓰지 않는다: 왼쪽 목록은 비율, 오른쪽 폼은 스크롤. 단추 줄은 항상 아래에 고정. -->
+  <DockPanel Margin="12">
+    <Grid DockPanel.Dock="Bottom" ColumnDefinitions="*,Auto" Margin="0,12,0,0">
+      <TextBlock x:Name="StatusText" Grid.Column="0" Text="{Binding Status}" TextWrapping="Wrap" VerticalAlignment="Center"
+                 Classes.error="{Binding StatusIsError}" AutomationProperties.Name="상태" />
+      <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8" Margin="12,0,0,0">
+        <Button x:Name="SaveButton" MinWidth="80" Content="저장" Command="{Binding SaveCommand}" />
+        <Button x:Name="ConnectButton" MinWidth="80" Content="접속" Command="{Binding ConnectCommand}" IsDefault="True" />
+        <Button x:Name="CloseButton" MinWidth="80" Content="닫기" Command="{Binding CloseCommand}" IsCancel="True" />
+      </StackPanel>
+    </Grid>
+    <TextBlock DockPanel.Dock="Bottom" Text="{Binding FileNotice}" IsVisible="{Binding FileNotice, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"
+               TextWrapping="Wrap" Margin="0,8,0,0" />
+
+    <Grid ColumnDefinitions="2*,3*" ColumnSpacing="12">
+      <DockPanel Grid.Column="0">
+        <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Spacing="8" Margin="0,0,0,8">
+          <Button x:Name="AddButton" Content="추가" Command="{Binding AddNewCommand}" />
+          <Button x:Name="DeleteButton" Content="삭제" Command="{Binding DeleteCommand}" />
+        </StackPanel>
+        <TextBlock DockPanel.Dock="Bottom" Margin="0,8,0,0" TextWrapping="Wrap" Opacity="0.7"
+                   Text="ADB 지갑(Wallet_*.zip)을 이 창에 끌어 놓으면 접속이 만들어집니다." />
+        <TreeView x:Name="ConnectionTree" ItemsSource="{Binding Tree}" SelectedItem="{Binding Selected}"
+                  AutomationProperties.Name="접속 목록">
+          <TreeView.ItemTemplate>
+            <TreeDataTemplate DataType="cm:ConnectionTreeNode" ItemsSource="{Binding Children}">
+              <StackPanel Orientation="Horizontal" Spacing="8" AutomationProperties.Name="{Binding AccessibleName}">
+                <Border IsVisible="{Binding HasChip}" Background="{Binding EnvironmentColor}" CornerRadius="3" Padding="6,1" VerticalAlignment="Center">
+                  <TextBlock Text="{Binding EnvironmentLabel}" Foreground="White" FontSize="12" />
+                </Border>
+                <TextBlock Text="{Binding Title}" VerticalAlignment="Center" />
+                <TextBlock Text="{Binding Subtitle}" VerticalAlignment="Center" Opacity="0.6" FontSize="12" />
+              </StackPanel>
+            </TreeDataTemplate>
+          </TreeView.ItemTemplate>
+        </TreeView>
+      </DockPanel>
+
+      <ScrollViewer Grid.Column="1" HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto"
+                    IsVisible="{Binding Editor, Converter={x:Static ObjectConverters.IsNotNull}}">
+        <cm:ProfileEditorView x:Name="EditorView" DataContext="{Binding Editor}" Margin="0,0,12,0" />
+      </ScrollViewer>
+    </Grid>
+  </DockPanel>
+</Window>
