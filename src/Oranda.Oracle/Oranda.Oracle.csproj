@@ -1,0 +1,14 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- ODP.NET 기반 구현: 접속·점검·실행·메타데이터·모니터링, SQL 카탈로그 리소스. -->
+
+  <ItemGroup>
+    <PackageReference Include="Oracle.ManagedDataAccess.Core" />
+    <PackageReference Include="System.Security.Cryptography.Pkcs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Oranda.Core\Oranda.Core.csproj" />
+  </ItemGroup>
+
+</Project>

@@ -1,0 +1,15 @@
+<Project>
+  <!-- 모든 src/·tests/ 프로젝트 공통 빌드 설정 (TRD 10). 스파이크(spikes/)는 자체 Directory.Build.props 로 이 파일을 가린다. -->
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <AnalysisLevel>latest-recommended</AnalysisLevel>
+    <AvaloniaUseCompiledBindingsByDefault>true</AvaloniaUseCompiledBindingsByDefault>
+
+    <!-- 버전 일괄 관리: MAJOR.MINOR.PATCH (+ CI 빌드 번호는 -p:Version 으로 덮어쓴다) -->
+    <VersionPrefix>0.1.0</VersionPrefix>
+    <Product>Oranda</Product>
+  </PropertyGroup>
+</Project>

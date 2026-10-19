@@ -1,6 +1,8 @@
+using System.Globalization;
 using Oracle.ManagedDataAccess.Client;
+using Oranda.Core.Connection;
 
-namespace Oranda.Core.Connection;
+namespace Oranda.Oracle.Connection;
 
 /// <summary>
 /// 접속 직후 한 번 서버 버전·세션·권한을 읽는다. 권한이 모자라서 실패하는 쿼리는 예외로 두지 않고
@@ -56,7 +58,7 @@ public static class ServerProbe
             var row = new string?[reader.FieldCount];
             for (var i = 0; i < row.Length; i++)
             {
-                row[i] = reader.IsDBNull(i) ? null : Convert.ToString(reader.GetValue(i));
+                row[i] = reader.IsDBNull(i) ? null : Convert.ToString(reader.GetValue(i), CultureInfo.InvariantCulture);
             }
 
             return row;

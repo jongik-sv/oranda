@@ -1,0 +1,28 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    실제 DB 시험(컨테이너 26ai, 사내 19c, ADB)은 [Trait("Category", "Integration")] 를 붙인다.
+    컨테이너 없이 돌릴 때: dotnet test Oranda.sln -filter "Category!=Integration"
+  -->
+
+  <PropertyGroup>
+    <IsTestProject>true</IsTestProject>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="coverlet.collector" />
+    <PackageReference Include="Microsoft.NET.Test.Sdk" />
+    <PackageReference Include="xunit" />
+    <PackageReference Include="xunit.runner.visualstudio" />
+    <PackageReference Include="Testcontainers.Oracle" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Using Include="Xunit" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Oranda.Oracle\Oranda.Oracle.csproj" />
+  </ItemGroup>
+
+</Project>

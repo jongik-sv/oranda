@@ -1,0 +1,29 @@
+<Project>
+  <!-- 패키지 버전 중앙 관리. csproj 의 PackageReference 에는 Version 을 쓰지 않는다. -->
+  <PropertyGroup>
+    <ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>
+  </PropertyGroup>
+
+  <ItemGroup Label="UI">
+    <PackageVersion Include="Avalonia" Version="12.1.4" />
+    <PackageVersion Include="Avalonia.Desktop" Version="12.1.4" />
+    <PackageVersion Include="Avalonia.Themes.Fluent" Version="12.1.4" />
+    <PackageVersion Include="Avalonia.Fonts.Inter" Version="12.1.4" />
+    <PackageVersion Include="AvaloniaUI.DiagnosticsSupport" Version="2.2.3" />
+    <PackageVersion Include="CommunityToolkit.Mvvm" Version="8.4.2" />
+  </ItemGroup>
+
+  <ItemGroup Label="Oracle">
+    <PackageVersion Include="Oracle.ManagedDataAccess.Core" Version="23.26.301" />
+    <!-- ODP.NET 이 끌어오는 8.0.1 에 알려진 취약점(GHSA-2fmv-rv2c-59x7, GHSA-846f-f764-76mx)이 있어 직접 올린다. -->
+    <PackageVersion Include="System.Security.Cryptography.Pkcs" Version="10.0.13" />
+  </ItemGroup>
+
+  <ItemGroup Label="Test">
+    <PackageVersion Include="coverlet.collector" Version="6.0.0" />
+    <PackageVersion Include="Microsoft.NET.Test.Sdk" Version="17.8.0" />
+    <PackageVersion Include="xunit" Version="2.5.3" />
+    <PackageVersion Include="xunit.runner.visualstudio" Version="2.5.3" />
+    <PackageVersion Include="Testcontainers.Oracle" Version="4.16.0" />
+  </ItemGroup>
+</Project>

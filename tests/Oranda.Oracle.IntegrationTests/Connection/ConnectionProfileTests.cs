@@ -1,7 +1,10 @@
 using Oracle.ManagedDataAccess.Client;
 using Oranda.Core.Connection;
+using Oranda.Oracle.Connection;
 
-namespace Oranda.Core.Tests.Connection;
+namespace Oranda.Oracle.IntegrationTests.Connection;
+
+// DB 없이 도는 단위 시험이다(Category 표시 없음). 실제 DB 시험은 [Trait("Category", "Integration")] 를 붙인다.
 
 public class ConnectionProfileTests
 {

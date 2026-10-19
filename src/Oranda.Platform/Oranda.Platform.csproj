@@ -1,0 +1,9 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- OS 연동: 자격 증명 저장소(DPAPI/키체인), 앱 데이터 경로, OS 테마 감지. -->
+
+  <ItemGroup>
+    <ProjectReference Include="..\Oranda.Core\Oranda.Core.csproj" />
+  </ItemGroup>
+
+</Project>

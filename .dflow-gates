@@ -1,6 +1,6 @@
 # .dflow-gates — 게이트 범위 대응표 (oranda 용). 한 줄 = <경로 접두 또는 glob><TAB><명령>. 칸 구분은 반드시 TAB.
 # 정본 형식: .claude/skills/dflow-dev/references/dflow-gates.example
-# 아직 소스가 없다. .NET 솔루션을 만든 뒤 경로와 명령을 맞춘다.
+# full = 루트의 유일한 솔루션 Oranda.sln 전체 시험. 루트에 sln/csproj 를 하나만 두어야 `dotnet test` 가 동작한다.
 
 full	dotnet test
 

@@ -1,0 +1,9 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- 렉서·파서·포매터·자동완성. DB 를 모른다: Oracle 드라이버·Avalonia 참조 금지(Oranda.Architecture.Tests 가 검사). -->
+
+  <ItemGroup>
+    <ProjectReference Include="..\Oranda.Core\Oranda.Core.csproj" />
+  </ItemGroup>
+
+</Project>
