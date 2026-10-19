@@ -1,5 +1,6 @@
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:icons="using:Oranda.App.Shell.Icons"
              xmlns:vm="using:Oranda.App.Features.ExtensionTest"
              x:Class="Oranda.App.Features.ExtensionTest.ExtensionTestView"
              x:DataType="vm:ExtensionTestViewModel">
@@ -8,13 +9,13 @@
     <TextBlock DockPanel.Dock="Top" Margin="0,0,0,6" TextWrapping="Wrap" Opacity="0.75"
                Text="확장 지점 시험: 선택 SQL 을 읽어 바꾼 뒤 미리보기·승인을 거쳐 다시 넣고, 정책 관문을 지나 실행합니다." />
     <WrapPanel DockPanel.Dock="Top">
-      <Button x:Name="ReadButton" Margin="0,0,4,4" Content="읽기" Command="{Binding ReadCommand}" />
+      <Button Classes="tool" icons:ButtonIcon.Key="docEdit" x:Name="ReadButton" Margin="0,0,4,4" Content="읽기" Command="{Binding ReadCommand}" />
       <ComboBox x:Name="TransformBox" Margin="0,0,4,4" MinWidth="110"
                 ItemsSource="{Binding Transforms}" SelectedItem="{Binding Transform, Mode=TwoWay}" />
-      <Button x:Name="ProposeButton" Margin="0,0,4,4" Content="제안 넣기" Command="{Binding ProposeCommand}" />
-      <Button x:Name="RunButton" Margin="0,0,4,4" Content="현재 문장 실행" Command="{Binding RunCommand}" />
-      <Button x:Name="TablesButton" Margin="0,0,4,4" Content="테이블 목록" Command="{Binding LoadTablesCommand}" />
-      <Button x:Name="SendButton" Margin="0,0,4,4" Content="외부 전송 시험" Command="{Binding SendCommand}" />
+      <Button Classes="tool" icons:ButtonIcon.Key="add" x:Name="ProposeButton" Margin="0,0,4,4" Content="제안 넣기" Command="{Binding ProposeCommand}" />
+      <Button Classes="tool" icons:ButtonIcon.Key="run" x:Name="RunButton" Margin="0,0,4,4" Content="현재 문장 실행" Command="{Binding RunCommand}" />
+      <Button Classes="tool" icons:ButtonIcon.Key="table" x:Name="TablesButton" Margin="0,0,4,4" Content="테이블 목록" Command="{Binding LoadTablesCommand}" />
+      <Button Classes="tool" icons:ButtonIcon.Key="exportFile" x:Name="SendButton" Margin="0,0,4,4" Content="외부 전송 시험" Command="{Binding SendCommand}" />
     </WrapPanel>
     <TextBlock DockPanel.Dock="Bottom" Margin="0,4,0,0" Text="{Binding StatusText}" TextWrapping="Wrap" />
     <Grid RowDefinitions="Auto,*,Auto,*,Auto,*">

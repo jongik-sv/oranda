@@ -1,5 +1,6 @@
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:icons="using:Oranda.App.Shell.Icons"
              xmlns:vm="using:Oranda.App.Features.Templates"
              xmlns:ls="using:Oranda.Language.Snippets"
              x:Class="Oranda.App.Features.Templates.TemplatesView"
@@ -22,13 +23,13 @@
     <TextBox Grid.Row="2" Text="{Binding Detail}" IsReadOnly="True" AcceptsReturn="True" TextWrapping="Wrap" MinHeight="90" MaxHeight="160" Margin="0,6,0,0" FontFamily="Consolas,monospace" />
     <StackPanel Grid.Row="3" Margin="0,6,0,0" Spacing="4">
       <StackPanel Orientation="Horizontal" Spacing="6">
-        <Button Content="삽입" Click="OnInsert" />
-        <Button Content="사용자 조각 지우기" Click="OnDelete" />
+        <Button Classes="tool" icons:ButtonIcon.Key="add" Content="삽입" Click="OnInsert" />
+        <Button Classes="tool" icons:ButtonIcon.Key="delete" Content="사용자 조각 지우기" Click="OnDelete" />
       </StackPanel>
       <TextBox PlaceholderText="줄임말" Text="{Binding EditPrefix}" />
       <TextBox PlaceholderText="이름" Text="{Binding EditName}" />
       <TextBox PlaceholderText="본문 ($1, ${1:기본값}, $0)" Text="{Binding EditBody}" AcceptsReturn="True" MinHeight="60" />
-      <Button Content="사용자 조각 저장" Click="OnAdd" />
+      <Button Classes="tool" icons:ButtonIcon.Key="save" Content="사용자 조각 저장" Click="OnAdd" />
     </StackPanel>
     <TextBlock Grid.Row="4" Text="{Binding Status}" TextWrapping="Wrap" />
   </Grid>

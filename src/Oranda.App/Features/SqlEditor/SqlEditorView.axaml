@@ -1,5 +1,6 @@
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:icons="using:Oranda.App.Shell.Icons"
              xmlns:keymaps="using:Oranda.App.Shell.Keymaps"
              xmlns:ae="using:AvaloniaEdit"
              xmlns:vm="using:Oranda.App.Features.SqlEditor"
@@ -13,25 +14,24 @@
   <!-- 위: 찾기 패널 / 가운데: 편집기 / 아래: 결과 영역(TSK-06-03 이 ResultPane 에 꽂는다) -->
   <!-- 결과 행 높이는 code-behind 가 정한다(결과가 없으면 0, 있으면 편집기와 3:2 로 나눈다). -->
   <Grid x:Name="RootGrid" RowDefinitions="Auto,3*,Auto,0">
-    <Border Grid.Row="0" Name="FindPanel" Padding="6" IsVisible="{Binding IsFindPanelOpen}"
-            BorderThickness="0,0,0,1" BorderBrush="{DynamicResource SystemControlForegroundBaseLowBrush}">
+    <Border Grid.Row="0" Name="FindPanel" Classes="panel-toolbar" IsVisible="{Binding IsFindPanelOpen}">
       <StackPanel Spacing="4">
         <StackPanel Orientation="Horizontal" Spacing="6">
-          <TextBox Name="FindBox" Width="260" PlaceholderText="찾기"
+          <TextBox Name="FindBox" Classes="compact search" Width="260" PlaceholderText="찾기"
                    Text="{Binding FindText, Mode=TwoWay}" AutomationProperties.Name="찾을 글" />
-          <Button Name="PrevButton" Content="이전" />
-          <Button Name="NextButton" Content="다음" />
-          <ToggleButton Content="Aa" ToolTip.Tip="대소문자 구분" IsChecked="{Binding MatchCase, Mode=TwoWay}" />
-          <ToggleButton Content="단어" ToolTip.Tip="단어 단위" IsChecked="{Binding WholeWord, Mode=TwoWay}" />
-          <ToggleButton Content=".*" ToolTip.Tip="정규식" IsChecked="{Binding UseRegex, Mode=TwoWay}" />
+          <Button Classes="tool" icons:ButtonIcon.Key="up" Name="PrevButton" Content="이전" />
+          <Button Classes="tool" icons:ButtonIcon.Key="down" Name="NextButton" Content="다음" />
+          <ToggleButton Classes="toolbar" Content="Aa" ToolTip.Tip="대소문자 구분" IsChecked="{Binding MatchCase, Mode=TwoWay}" />
+          <ToggleButton Classes="toolbar" Content="단어" ToolTip.Tip="단어 단위" IsChecked="{Binding WholeWord, Mode=TwoWay}" />
+          <ToggleButton Classes="toolbar" Content=".*" ToolTip.Tip="정규식" IsChecked="{Binding UseRegex, Mode=TwoWay}" />
           <TextBlock Text="{Binding FindStatus}" VerticalAlignment="Center" Opacity="0.7" />
-          <Button Name="CloseFindButton" Content="닫기" />
+          <Button Name="CloseFindButton" Classes="toolbar" Content="찾기 닫기" icons:ButtonIcon.Key="clear" icons:ButtonIcon.IconOnly="True" />
         </StackPanel>
         <StackPanel Orientation="Horizontal" Spacing="6" IsVisible="{Binding IsReplaceMode}">
-          <TextBox Name="ReplaceBox" Width="260" PlaceholderText="바꿀 글"
+          <TextBox Name="ReplaceBox" Classes="compact" Width="260" PlaceholderText="바꿀 글"
                    Text="{Binding ReplaceText, Mode=TwoWay}" AutomationProperties.Name="바꿀 글" />
-          <Button Name="ReplaceButton" Content="바꾸기" />
-          <Button Name="ReplaceAllButton" Content="모두 바꾸기" />
+          <Button Classes="tool" icons:ButtonIcon.Key="swap" Name="ReplaceButton" Content="바꾸기" />
+          <Button Classes="tool" icons:ButtonIcon.Key="swap" Name="ReplaceAllButton" Content="모두 바꾸기" />
         </StackPanel>
       </StackPanel>
     </Border>

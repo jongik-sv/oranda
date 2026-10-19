@@ -1,10 +1,13 @@
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:icons="using:Oranda.App.Shell.Icons"
              xmlns:vm="using:Oranda.App.Features.DbTools"
              x:Class="Oranda.App.Features.DbTools.DdlExtractView"
              x:DataType="vm:DdlExtractViewModel">
   <DockPanel>
-    <TextBlock DockPanel.Dock="Bottom" Margin="6,2" Text="{Binding StatusText}" TextTrimming="CharacterEllipsis" Opacity="0.7" />
+    <Border DockPanel.Dock="Bottom" Classes="panel-status">
+      <TextBlock Text="{Binding StatusText}" TextTrimming="CharacterEllipsis" />
+    </Border>
     <ProgressBar DockPanel.Dock="Bottom" Margin="6,2" Minimum="0" Maximum="100" Value="{Binding Progress}" />
     <Grid ColumnDefinitions="360,4,*">
       <ScrollViewer Grid.Column="0">
@@ -35,11 +38,11 @@
           <TextBox AcceptsReturn="True" Height="70" FontFamily="Consolas,Menlo,monospace" Text="{Binding RenameText, Mode=TwoWay}" />
           <TextBlock Text="4. 출력" FontWeight="SemiBold" />
           <DockPanel>
-            <Button x:Name="BrowseButton" DockPanel.Dock="Right" Margin="4,0,0,0" Content="찾아보기" />
+            <Button Classes="tool" icons:ButtonIcon.Key="open" x:Name="BrowseButton" DockPanel.Dock="Right" Margin="4,0,0,0" Content="찾아보기" />
             <TextBox PlaceholderText="출력 폴더" Text="{Binding OutputDirectory, Mode=TwoWay}" />
           </DockPanel>
           <CheckBox Content="객체마다 파일 하나(유형/이름.sql)" IsChecked="{Binding FilePerObject, Mode=TwoWay}" />
-          <Button x:Name="RunButton" Content="추출" HorizontalAlignment="Left" IsEnabled="{Binding CanRun}" />
+          <Button Classes="tool" icons:ButtonIcon.Key="exportFile" x:Name="RunButton" Content="추출" HorizontalAlignment="Left" IsEnabled="{Binding CanRun}" />
         </StackPanel>
       </ScrollViewer>
       <GridSplitter Grid.Column="1" ResizeDirection="Columns" />

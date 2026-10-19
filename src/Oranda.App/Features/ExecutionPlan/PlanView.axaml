@@ -1,10 +1,12 @@
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:icons="using:Oranda.App.Shell.Icons"
              xmlns:vm="using:Oranda.App.Features.ExecutionPlan"
              x:Class="Oranda.App.Features.ExecutionPlan.PlanView"
              x:DataType="vm:PlanViewModel">
   <DockPanel>
-    <WrapPanel DockPanel.Dock="Top" Margin="4">
+    <Border DockPanel.Dock="Top" Classes="panel-toolbar">
+      <WrapPanel>
       <ComboBox Width="110" Margin="0,0,6,4" ItemsSource="{x:Static vm:PlanViewModel.BaseFormats}" SelectedItem="{Binding BaseFormat, Mode=TwoWay}" />
       <CheckBox Margin="0,0,6,4" Content="LAST" IsChecked="{Binding LastOnly, Mode=TwoWay}" />
       <CheckBox Margin="0,0,6,4" Content="바인드 엿보기" IsChecked="{Binding PeekedBinds, Mode=TwoWay}" />
@@ -12,7 +14,10 @@
       <CheckBox Margin="0,0,10,4" Content="아웃라인" IsChecked="{Binding Outline, Mode=TwoWay}" />
       <TextBox Width="150" Margin="0,0,6,4" PlaceholderText="sql_id" Text="{Binding SqlIdText, Mode=TwoWay}" />
     </WrapPanel>
-    <TextBlock DockPanel.Dock="Bottom" Margin="6,2" Text="{Binding StatusText}" TextTrimming="CharacterEllipsis" Opacity="0.75" />
+    </Border>
+    <Border DockPanel.Dock="Bottom" Classes="panel-status">
+      <TextBlock Text="{Binding StatusText}" TextTrimming="CharacterEllipsis" />
+    </Border>
     <TabControl>
       <TabItem Header="트리">
         <DockPanel>

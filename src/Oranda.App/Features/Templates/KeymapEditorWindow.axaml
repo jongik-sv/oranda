@@ -1,5 +1,6 @@
 <Window xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:icons="using:Oranda.App.Shell.Icons"
         xmlns:vm="using:Oranda.App.Features.Templates"
         x:Class="Oranda.App.Features.Templates.KeymapEditorWindow"
         x:DataType="vm:KeymapEditorViewModel"
@@ -10,7 +11,7 @@
     <StackPanel Grid.Row="0" Orientation="Horizontal" Spacing="8">
       <TextBlock Text="프리셋" VerticalAlignment="Center" />
       <ComboBox ItemsSource="{Binding Presets}" SelectedItem="{Binding SelectedPresetId}" MinWidth="160" />
-      <Button Content="모두 되돌리기" Click="OnResetAll" />
+      <Button Classes="tool" icons:ButtonIcon.Key="reset" Content="모두 되돌리기" Click="OnResetAll" />
     </StackPanel>
     <TextBox Grid.Row="1" Margin="0,8,0,8" PlaceholderText="명령·키 찾기" Text="{Binding Filter}" />
     <ListBox Grid.Row="2" ItemsSource="{Binding Rows}" SelectedItem="{Binding SelectedRow}">
@@ -26,14 +27,14 @@
     </ListBox>
     <Grid Grid.Row="3" ColumnDefinitions="*,Auto,Auto,Auto" Margin="0,8,0,0">
       <TextBox Grid.Column="0" PlaceholderText="새 키 (예: Primary+Shift+F, 연속 키는 공백, 여럿은 쉼표)" Text="{Binding NewKeys}" />
-      <Button Grid.Column="1" Content="바꾸기" Margin="8,0,0,0" Click="OnAssign" />
-      <Button Grid.Column="2" Content="지우기" Margin="8,0,0,0" Click="OnClear" />
-      <Button Grid.Column="3" Content="프리셋 키로" Margin="8,0,0,0" Click="OnResetRow" />
+      <Button Classes="tool" icons:ButtonIcon.Key="swap" Grid.Column="1" Content="바꾸기" Margin="8,0,0,0" Click="OnAssign" />
+      <Button Classes="tool" icons:ButtonIcon.Key="clear" Grid.Column="2" Content="지우기" Margin="8,0,0,0" Click="OnClear" />
+      <Button Classes="tool" icons:ButtonIcon.Key="reset" Grid.Column="3" Content="프리셋 키로" Margin="8,0,0,0" Click="OnResetRow" />
     </Grid>
     <TextBlock Grid.Row="4" Text="{Binding Warning}" IsVisible="{Binding HasWarning}" Foreground="OrangeRed" TextWrapping="Wrap" Margin="0,8,0,0" />
     <DockPanel Grid.Row="5" Margin="0,8,0,0">
       <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" Spacing="8">
-        <Button Content="저장" Click="OnSave" IsDefault="True" />
+        <Button Content="저장" Click="OnSave" IsDefault="True" Classes="accent" />
         <Button Content="닫기" Click="OnClose" IsCancel="True" />
       </StackPanel>
       <TextBlock Text="{Binding Status}" VerticalAlignment="Center" />

@@ -1,14 +1,18 @@
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:icons="using:Oranda.App.Shell.Icons"
              xmlns:vm="using:Oranda.App.Features.DbTools"
              x:Class="Oranda.App.Features.DbTools.ObjectSearchView"
              x:DataType="vm:ObjectSearchViewModel">
   <DockPanel>
-    <TextBlock DockPanel.Dock="Bottom" Margin="6,2" Text="{Binding StatusText}" TextTrimming="CharacterEllipsis" Opacity="0.7" />
+    <Border DockPanel.Dock="Bottom" Classes="panel-status">
+      <TextBlock Text="{Binding StatusText}" TextTrimming="CharacterEllipsis" />
+    </Border>
     <TabControl x:Name="Tabs">
       <TabItem Header="검색">
         <DockPanel>
-          <WrapPanel DockPanel.Dock="Top" Margin="4">
+          <Border DockPanel.Dock="Top" Classes="panel-toolbar">
+            <WrapPanel>
             <TextBox Width="110" Margin="0,0,6,4" PlaceholderText="스키마" Text="{Binding Owner, Mode=TwoWay}" />
             <TextBox x:Name="NameBox" Width="170" Margin="0,0,6,4" PlaceholderText="이름 (* 와일드카드)" Text="{Binding NameText, Mode=TwoWay}" />
             <ComboBox x:Name="TypeBox" Width="150" Margin="0,0,6,4" PlaceholderText="모든 유형" SelectedItem="{Binding TypeFilter, Mode=TwoWay}" />
@@ -17,8 +21,9 @@
             <CalendarDatePicker Margin="0,0,6,4" PlaceholderText="변경일 이후" SelectedDate="{Binding ModifiedAfter, Mode=TwoWay}" />
             <NumericUpDown Width="130" Margin="0,0,6,4" Minimum="0" Increment="64" PlaceholderText="최소 KB" FormatString="0" Value="{Binding MinSizeKb, Mode=TwoWay}" />
             <NumericUpDown Width="130" Margin="0,0,6,4" Minimum="0" Increment="64" PlaceholderText="최대 KB" FormatString="0" Value="{Binding MaxSizeKb, Mode=TwoWay}" />
-            <Button x:Name="SearchButton" Margin="0,0,6,4" Content="검색" IsEnabled="{Binding !IsBusy}" />
+            <Button Classes="tool" icons:ButtonIcon.Key="find" x:Name="SearchButton" Margin="0,0,6,4" Content="검색" IsEnabled="{Binding !IsBusy}" />
           </WrapPanel>
+          </Border>
           <Grid ColumnDefinitions="3*,4,2*">
             <DockPanel Grid.Column="0">
               <Grid DockPanel.Dock="Top" Margin="6,2" ColumnDefinitions="*,110,70,130,130,80" Opacity="0.7">
@@ -53,10 +58,12 @@
       </TabItem>
       <TabItem Header="INVALID 컴파일">
         <DockPanel>
-          <WrapPanel DockPanel.Dock="Top" Margin="4">
+          <Border DockPanel.Dock="Top" Classes="panel-toolbar">
+            <WrapPanel>
             <TextBox Width="110" Margin="0,0,6,4" PlaceholderText="스키마" Text="{Binding Owner, Mode=TwoWay}" />
-            <Button x:Name="CompileButton" Margin="0,0,6,4" Content="INVALID 객체 일괄 컴파일" IsEnabled="{Binding CanChange}" />
+            <Button Classes="tool" icons:ButtonIcon.Key="compileInvalid" x:Name="CompileButton" Margin="0,0,6,4" Content="INVALID 객체 일괄 컴파일" IsEnabled="{Binding CanChange}" />
           </WrapPanel>
+          </Border>
           <ListBox ItemsSource="{Binding CompileResults}">
             <ListBox.ItemTemplate>
               <DataTemplate x:DataType="vm:CompileResultItem">
@@ -68,13 +75,15 @@
       </TabItem>
       <TabItem Header="휴지통">
         <DockPanel>
-          <WrapPanel DockPanel.Dock="Top" Margin="4">
-            <Button x:Name="RecycleRefreshButton" Margin="0,0,6,4" Content="새로 고침" />
+          <Border DockPanel.Dock="Top" Classes="panel-toolbar">
+            <WrapPanel>
+            <Button Classes="tool" icons:ButtonIcon.Key="refresh" x:Name="RecycleRefreshButton" Margin="0,0,6,4" Content="새로 고침" />
             <TextBox Width="150" Margin="0,0,6,4" PlaceholderText="되살릴 때 새 이름(선택)" Text="{Binding FlashbackName, Mode=TwoWay}" />
-            <Button x:Name="FlashbackButton" Margin="0,0,6,4" Content="되살리기" IsEnabled="{Binding CanChange}" />
-            <Button x:Name="PurgeButton" Margin="0,0,6,4" Content="비우기(Purge)" IsEnabled="{Binding CanChange}" />
-            <Button x:Name="PurgeAllButton" Margin="0,0,6,4" Content="전체 비우기" IsEnabled="{Binding CanChange}" />
+            <Button Classes="tool" icons:ButtonIcon.Key="reset" x:Name="FlashbackButton" Margin="0,0,6,4" Content="되살리기" IsEnabled="{Binding CanChange}" />
+            <Button Classes="tool" icons:ButtonIcon.Key="recycle" x:Name="PurgeButton" Margin="0,0,6,4" Content="비우기(Purge)" IsEnabled="{Binding CanChange}" />
+            <Button Classes="tool" icons:ButtonIcon.Key="delete" x:Name="PurgeAllButton" Margin="0,0,6,4" Content="전체 비우기" IsEnabled="{Binding CanChange}" />
           </WrapPanel>
+          </Border>
           <ListBox ItemsSource="{Binding RecycleBin}" SelectedItem="{Binding SelectedRecycle, Mode=TwoWay}">
             <ListBox.ItemTemplate>
               <DataTemplate x:DataType="vm:RecycleBinRow">

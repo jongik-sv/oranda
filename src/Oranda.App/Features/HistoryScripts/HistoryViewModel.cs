@@ -49,7 +49,11 @@ public sealed record HistoryItem(HistoryEntry Entry)
 
     public string FullSql => Entry.SqlText;
 
-    public string? ErrorText => Entry.ErrorCode is null ? null : Entry.ErrorCode + (Entry.ErrorMessage is null ? string.Empty : ": " + Entry.ErrorMessage);
+    /// <summary>「코드: 메시지」. Oracle 메시지가 이미 코드로 시작하면 코드를 다시 붙이지 않는다.</summary>
+    public string? ErrorText => Entry.ErrorCode is null ? null
+        : Entry.ErrorMessage is null ? Entry.ErrorCode
+        : Entry.ErrorMessage.StartsWith(Entry.ErrorCode, StringComparison.Ordinal) ? Entry.ErrorMessage
+        : Entry.ErrorCode + ": " + Entry.ErrorMessage;
 }
 
 /// <summary>상태 필터 목록 항목.</summary>
