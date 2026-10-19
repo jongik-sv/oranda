@@ -3,6 +3,7 @@
              xmlns:vm="using:Oranda.App.Features.ObjectDetail"
              xmlns:icons="using:Oranda.App.Shell.Icons"
              xmlns:ctl="using:Oranda.App.Shell.Controls"
+             xmlns:se="using:Oranda.App.Features.SqlEditor"
              x:Class="Oranda.App.Features.ObjectDetail.ObjectDetailView"
              x:DataType="vm:ObjectDetailViewModel">
   <DockPanel>
@@ -37,8 +38,8 @@
               <CheckBox Content="종속 객체(인덱스·제약·권한 등)" IsChecked="{Binding IncludeDependentObjects, Mode=TwoWay}" />
             </WrapPanel>
           </Border>
-          <TextBox Text="{Binding DdlText}" IsReadOnly="True" AcceptsReturn="True" TextWrapping="NoWrap"
-                   FontFamily="Consolas,Menlo,monospace" />
+          <!-- 편집기와 같은 강조·줄 번호(읽기 전용). 패키지·프로시저 소스도 여기서 본다. -->
+          <se:SqlCodeView x:Name="DdlView" Text="{Binding DdlText}" />
         </DockPanel>
       </TabItem>
     </TabControl>

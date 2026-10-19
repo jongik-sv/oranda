@@ -128,6 +128,34 @@ public class PlsqlEditorTests
         Assert.False(vm.ServerSourceChanged);
     }
 
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public Task Opened_package_source_is_highlighted_in_the_editor_view(bool openFirst) => Oranda.App.Tests.Shell.Headless.HeadlessHost.Run(async () =>
+    {
+        var vm = new PlsqlEditorViewModel(new FakeMeta { Source = BodySource }, new FakeExec());
+        if (openFirst)
+        {
+            Assert.True(await vm.OpenAsync(new FakeSession(), Body));
+        }
+
+        var view = new PlsqlEditorView { DataContext = vm };
+        var window = new Avalonia.Controls.Window { Width = 900, Height = 600, Content = view };
+        window.Show();
+        Avalonia.Threading.Dispatcher.UIThread.RunJobs();
+        if (!openFirst)
+        {
+            Assert.True(await vm.OpenAsync(new FakeSession(), Body));
+            Avalonia.Threading.Dispatcher.UIThread.RunJobs();
+        }
+
+        var editor = Avalonia.VisualTree.VisualExtensions.GetVisualDescendants(view).OfType<Oranda.App.Features.SqlEditor.SqlEditorView>().First();
+        Assert.NotNull(editor.Colorizer);
+        Assert.Contains(editor.Colorizer!.Lexer.TokensOf(0), t => t.Kind == Oranda.Language.Lexing.TokenKind.Keyword);
+        Assert.Contains(editor.TextEditorControl.TextArea.TextView.LineTransformers, t => ReferenceEquals(t, editor.Colorizer));
+        window.Close();
+    });
+
     [Fact]
     public async Task Open_failure_reports_in_status_without_throwing()
     {

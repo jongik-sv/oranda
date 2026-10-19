@@ -40,6 +40,24 @@ public sealed class SqlEditorUiTests(ITestOutputHelper output)
     });
 
     [Fact]
+    public Task Code_view_highlights_read_only_source_and_follows_text_changes() => Ui.Run(() =>
+    {
+        var code = new SqlCodeView { Text = "CREATE OR REPLACE PROCEDURE p IS BEGIN NULL; END;" };
+        var window = new Window { Width = 600, Height = 300, Content = code };
+        window.Show();
+        Dispatcher.UIThread.RunJobs();
+
+        Assert.True(code.TextEditorControl.IsReadOnly);
+        Assert.Contains(code.Colorizer!.Lexer.TokensOf(0), t => t.Kind == TokenKind.Keyword);
+
+        code.Text = "-- only a comment";
+        Assert.All(code.Colorizer.Lexer.TokensOf(0), t => Assert.Equal(TokenKind.Comment, t.Kind));
+
+        window.Close();
+        Assert.Null(code.Colorizer);
+    });
+
+    [Fact]
     public Task Highlight_tokens_cover_keyword_string_comment_bind_and_follow_edits() => Ui.Run(() =>
     {
         var (window, view, vm) = Show("select 'a', :b, 12 from dual -- tail\nwhere x = 1");

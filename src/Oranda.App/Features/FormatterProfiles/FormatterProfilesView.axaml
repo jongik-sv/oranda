@@ -1,5 +1,6 @@
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:se="using:Oranda.App.Features.SqlEditor"
              xmlns:icons="using:Oranda.App.Shell.Icons"
              xmlns:vm="using:Oranda.App.Features.FormatterProfiles"
              x:Class="Oranda.App.Features.FormatterProfiles.FormatterProfilesView"
@@ -52,7 +53,7 @@
         <TextBlock DockPanel.Dock="Top" Text="예제 SQL (고쳐 써도 된다)" FontWeight="SemiBold" />
         <TextBox DockPanel.Dock="Top" Height="130" AcceptsReturn="True" FontFamily="Consolas,Menlo,monospace" Text="{Binding SampleSql, Mode=TwoWay}" />
         <TextBlock DockPanel.Dock="Top" Text="미리보기" FontWeight="SemiBold" Margin="0,6,0,0" />
-        <TextBox x:Name="PreviewBox" IsReadOnly="True" AcceptsReturn="True" FontFamily="Consolas,Menlo,monospace" Text="{Binding PreviewText}" />
+        <se:SqlCodeView x:Name="PreviewBox" Text="{Binding PreviewText}" />
       </DockPanel>
     </Grid>
   </DockPanel>

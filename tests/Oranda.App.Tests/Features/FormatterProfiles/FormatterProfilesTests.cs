@@ -320,11 +320,11 @@ public class FormatterProfilesTests
 
         var list = view.FindControl<ItemsControl>("OptionList")!;
         Assert.Equal(24, list.ItemsSource!.Cast<object>().Count());
-        Assert.Contains("SELECT", view.FindControl<TextBox>("PreviewBox")!.Text);
+        Assert.Contains("SELECT", view.FindControl<Oranda.App.Features.SqlEditor.SqlCodeView>("PreviewBox")!.Text);
 
         vm.Rows.Single(r => r.Path == "case.keyword").ChoiceValue = nameof(LetterCase.Lower);
         Dispatcher.UIThread.RunJobs();
-        Assert.Contains("select", view.FindControl<TextBox>("PreviewBox")!.Text);
+        Assert.Contains("select", view.FindControl<Oranda.App.Features.SqlEditor.SqlCodeView>("PreviewBox")!.Text);
         window.Close();
     });
 
