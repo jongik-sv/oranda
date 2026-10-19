@@ -3,6 +3,29 @@
              xmlns:vm="using:Oranda.App.Features.LobRowView"
              x:Class="Oranda.App.Features.LobRowView.LobEditorView"
              x:DataType="vm:LobEditorViewModel">
-  <!-- TSK-06-05 빈 틀 -->
-  <TextBlock Text="oranda.panel.lobEditor" />
+  <DockPanel>
+    <StackPanel DockPanel.Dock="Top" Margin="6" Spacing="4">
+      <WrapPanel>
+        <TextBlock Margin="0,0,12,4" VerticalAlignment="Center" FontWeight="SemiBold" Text="{Binding InfoText}" />
+        <Button x:Name="SaveFileButton" Margin="0,0,6,4" Content="파일로 저장" IsEnabled="{Binding !IsBusy}" />
+        <ComboBox x:Name="EncodingBox" Margin="0,0,6,4" Width="120" IsVisible="{Binding IsText}" />
+        <Button x:Name="LoadFileButton" Margin="0,0,6,4" Content="파일에서 불러오기" IsVisible="False" />
+        <Button x:Name="SaveDbButton" Margin="0,0,6,4" Content="DB 에 저장" IsEnabled="{Binding CanSaveToDatabase}" />
+        <Button x:Name="SaveCommitButton" Margin="0,0,6,4" Content="저장 후 커밋" IsEnabled="{Binding CanSaveToDatabase}" />
+        <Button x:Name="ReloadButton" Margin="0,0,6,4" Content="다시 읽기" IsEnabled="{Binding !IsBusy}" />
+      </WrapPanel>
+    </StackPanel>
+    <TextBlock DockPanel.Dock="Bottom" Margin="6,2" Text="{Binding StatusText}" TextWrapping="Wrap" Opacity="0.8" />
+    <Grid>
+      <TextBox x:Name="TextBox" AcceptsReturn="True" AcceptsTab="True" TextWrapping="NoWrap"
+               FontFamily="Consolas,Menlo,monospace" IsVisible="{Binding IsText}"
+               IsReadOnly="{Binding !CanEditText}" Text="{Binding Text, Mode=TwoWay}" />
+      <Grid IsVisible="{Binding IsBinary}" RowDefinitions="Auto,*">
+        <Image x:Name="Preview" MaxHeight="260" Margin="6" Stretch="Uniform" HorizontalAlignment="Left" />
+        <ScrollViewer Grid.Row="1" HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto">
+          <SelectableTextBlock Margin="8,4" FontFamily="Consolas,Menlo,monospace" Text="{Binding HexText}" />
+        </ScrollViewer>
+      </Grid>
+    </Grid>
+  </DockPanel>
 </UserControl>
