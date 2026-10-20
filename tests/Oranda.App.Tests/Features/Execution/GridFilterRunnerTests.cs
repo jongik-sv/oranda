@@ -74,18 +74,13 @@ public sealed class GridFilterRunnerTests
         {
             var profile = new ConnectionProfile("dev", "scott", "localhost:1521/FREEPDB1");
             Session = connected ? new FakeSession(profile) : null;
-            State = new ExecutionState(Bus);
-            if (Session is not null)
-            {
-                Bus.Publish(new SessionOpened(Session.Id, profile, Session.Server, SessionPurpose.Work));
-            }
-
+            // 이벤트 버스를 쓰지 않는다: 같은 프로세스의 다른 시험이 Avalonia 앱을 띄워 두면 SessionOpened 가 UI 스레드로 늦게 올라가
+            // 실행 중에 OnOpened 가 상태를 Idle 로 되돌려 Busy 확인이 가끔 어긋났다. 러너는 세션 공급자로 세션을 받으므로 버스 이벤트가 필요 없다.
+            State = new ExecutionState();
             Binds.Add("d").Text = "10";
             Binds.Add("minsal").Text = "1000";
             Runner = new GridFilterRunner(State, Binds, () => Session, () => Engine);
         }
-
-        public EventBus Bus { get; } = new();
 
         public FakeSession? Session { get; }
 
