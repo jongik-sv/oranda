@@ -56,6 +56,15 @@
 - 메뉴 접근 키(Windows): 파일(F) 편집(E) 보기(V) SQL(S) 결과(R) 데이터베이스(D) 모니터(M) 도구(T) 창(W) 도움말(H). 그래서 키맵에는 `Alt+문자` 바인딩을 두지 않는다(Orange 5 프리셋 `Alt+C`·`Alt+B` 만 예외 — 메뉴 접근 키 C·B 없음).
 - 오른쪽 클릭 메뉴(편집기·그리드·스키마 트리·모니터 목록)도 같은 명령 ID 로 만든다(commands.md 3장).
 
+#### macOS 시스템 메뉴 막대
+
+- macOS 에서는 창 안 `Menu` 를 숨기고(`IsVisible=false`, 키보드 이동에서도 제외) 같은 `MenuNode` 모델에서 만든 `NativeMenu` 를 창에 붙인다(`MenuControls.BuildNativeMenu`). Windows·Linux 는 창 안 메뉴 그대로다. 메뉴 원본은 명령 레지스트리 하나이며 새 명령은 두 쪽에 모두 나온다.
+- 이름: 앱 이름 `Application.Name = "Oranda"`(`App.axaml`). 최상위 메뉴는 접근 키 표기 없이 「파일」「편집」…「도움말」. 항목 글자는 창 안 메뉴와 같은 문자열 표를 쓴다.
+- 앱 메뉴(Oranda): 「Oranda 정보」(`oranda.help.about`), 「설정…」(`oranda.tools.settings`, ⌘,), 그 뒤에 Avalonia 가 서비스·숨기기·모두 보기·종료를 붙인다(`MacAppMenu`). 도구 > 설정 항목은 그대로 둔다.
+- 단축키: `NativeMenuItem.Gesture` 가 표시와 실행을 함께 맡는다. AppKit 이 ⌘ 키를 창보다 먼저 메뉴에서 찾고, 활성 항목에 맞으면 이벤트를 소비하므로 키맵 `KeyDispatcher` 로는 가지 않는다(한 번만 실행). 항목이 비활성이면 키는 창으로 내려가 키맵이 처리한다. 입력 칸(TextBox)에 포커스가 있을 때의 글자 편집 키(⌘C·X·V·A·Z·⇧⌘Z)는 `NativeMenuCommand` 가 그 입력 칸에 직접 전달한다.
+- 활성·체크 갱신: 메뉴를 열거나 단축키를 찾을 때(`NativeMenu.NeedsUpdate`) 그리고 문맥 키가 바뀔 때 `RegistryCommand.CanExecute` 로 다시 계산한다. 보기 > 도구 창은 `ToggleType=CheckBox` 로 보임 상태를 체크한다.
+- 아이콘은 시스템 메뉴에 그리지 않는다(글자만).
+
 ### 1.2 상태 표시줄 구간
 
 | 순서 | 구간 | 내용 | 소유 Task |

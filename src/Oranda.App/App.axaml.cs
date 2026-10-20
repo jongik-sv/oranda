@@ -4,11 +4,13 @@ using System.Diagnostics;
 using System.Threading;
 using System.Threading.Tasks;
 using Avalonia;
+using Avalonia.Controls;
 using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Markup.Xaml;
 using Avalonia.Threading;
 using Oranda.App.Shell;
 using Oranda.App.Shell.Composition;
+using Oranda.App.Shell.Menus;
 using Oranda.App.Views;
 using Oranda.Core.Composition;
 
@@ -19,9 +21,19 @@ public partial class App : Application
     /// <summary>앱 조립 결과. 시험이 <see cref="Start"/> 로 직접 조립한 값을 넣을 수도 있다.</summary>
     public ServiceContainer? Services { get; private set; }
 
+    /// <summary>macOS 앱 메뉴(Oranda)의 앞쪽 항목. macOS 가 아니면 null.</summary>
+    public MacAppMenu? AppMenu { get; private set; }
+
     public override void Initialize()
     {
         AvaloniaXamlLoader.Load(this);
+
+        // Avalonia 는 플랫폼 초기화 직후(Initialize 다음) 응용 프로그램 메뉴를 읽으므로 여기서 붙여야 기본 항목(숨기기·종료)이 이어 붙는다.
+        if (OperatingSystem.IsMacOS())
+        {
+            AppMenu = new MacAppMenu();
+            NativeMenu.SetMenu(this, AppMenu.Menu);
+        }
     }
 
     public override void OnFrameworkInitializationCompleted()
@@ -39,7 +51,7 @@ public partial class App : Application
             // 설정·레이아웃 파일 읽기는 스레드 풀에서 하고, 그동안 UI 스레드는 창 XAML 을 읽는다(둘이 겹친다).
             var shell = services.GetRequiredService<ShellController>();
             var preload = Task.Run(() => shell.LoadAsync());
-            var window = new MainWindow();
+            var window = new MainWindow { UseNativeMenu = OperatingSystem.IsMacOS() };
             Start(services, window, preload);
             desktop.MainWindow = window;
             ScheduleStartupTasks(services);
@@ -60,6 +72,7 @@ public partial class App : Application
         var loaded = (preload ?? Task.Run(() => shell.LoadAsync())).GetAwaiter().GetResult();
         PerfMarks.Mark("settings-loaded");
         shell.Initialize(loaded);
+        AppMenu?.Bind(shell.Text);
         window.Attach(services);
         PerfMarks.Mark("shell-attached");
     }

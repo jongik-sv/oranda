@@ -49,6 +49,9 @@ public sealed class KeyDispatcher(Func<KeyBindingTable> table, ICommandRegistry 
             && key is Key.Left or Key.Right or Key.Back or Key.Delete;
     }
 
+    /// <summary>연속 키의 첫 단을 받고 다음 단을 기다리는 중인가(<see cref="ChordTimeout"/> 안).</summary>
+    public bool HasPending => _pending.Count > 0 && DateTime.UtcNow - _pendingAt <= ChordTimeout;
+
     /// <summary>키를 처리했으면 true(이벤트를 삼킨다). 수식키만 눌린 입력은 무시한다.</summary>
     public bool Handle(Key key, KeyModifiers modifiers)
     {

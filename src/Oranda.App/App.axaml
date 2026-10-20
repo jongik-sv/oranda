@@ -5,6 +5,7 @@
              xmlns:aedit="using:AvaloniaEdit.Editing"
              x:Class="Oranda.App.App"
              xmlns:local="using:Oranda.App"
+             Name="Oranda"
              RequestedThemeVariant="Default">
     <!-- "Default" ThemeVariant 는 OS 테마를 따른다(설정 창·보기 메뉴에서 밝게/어둡게로 바꾸면 ThemeService 가 바꾼다). -->
 

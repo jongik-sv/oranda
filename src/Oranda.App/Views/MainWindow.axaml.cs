@@ -55,6 +55,15 @@ public partial class MainWindow : Window
     /// <summary>메뉴·툴바를 가장 최근에 만든 결과(시험이 항목을 살필 때 쓴다).</summary>
     internal Menu Menus => MenuBar;
 
+    /// <summary>
+    /// true 면 메뉴를 창 안 <see cref="Menu"/> 대신 시스템 메뉴 막대(<see cref="NativeMenu"/>)로 보인다(macOS). 창을 셸에 묶기 전에 정한다.
+    /// 시험은 macOS 가 아니어도 켤 수 있다.
+    /// </summary>
+    internal bool UseNativeMenu { get; set; }
+
+    /// <summary>창에 붙은 시스템 메뉴(<see cref="UseNativeMenu"/> 일 때만 값이 있다).</summary>
+    internal NativeMenu? NativeMenuBar => NativeMenu.GetMenu(this);
+
     internal StackPanel Toolbar => ToolbarPanel;
 
     internal Shell.Docking.DockHostView Dock => DockHost;
@@ -78,8 +87,19 @@ public partial class MainWindow : Window
         DataContext = _viewModel;
         _shell.MainWindow = this;
 
-        _controls = new MenuControls(_registry, _keys, id => _keymap.Table.SingleGesture(id), _shell.Docking);
         _dispatcher = new KeyDispatcher(() => _keymap.Table, _registry, _keys);
+        _controls = new MenuControls(
+            _registry,
+            _keys,
+            id => _keymap.Table.SingleGesture(id),
+            _shell.Docking,
+            () => FocusManager?.GetFocusedElement(),
+            g =>
+            {
+                var match = _keymap.Table.Find([(g.Key, g.KeyModifiers)], _keys);
+                return match.Kind == KeyMatchKind.Match ? match.CommandId : null;
+            },
+            _dispatcher);
         AddHandler(KeyDownEvent, OnKeyDownTunnel, RoutingStrategies.Tunnel);
 
         // 포커스가 옮겨지면 그 화면의 포커스 자리를 문맥 키로(commands.md 2.2). 자리가 없는 곳(툴바·메뉴)은 직전 자리를 둔다.
@@ -101,7 +121,18 @@ public partial class MainWindow : Window
 
         _registry.CommandsChanged += (_, _) => Dispatcher.UIThread.Post(RebuildMenus);
         _panels.PanelsChanged += (_, _) => Dispatcher.UIThread.Post(RebuildMenus);
-        _shell.Docking.LayoutRebuilt += (_, _) => RebuildMenus();
+        // 시스템 메뉴의 클릭 콜백 안에서 도구 창 토글이 메뉴를 갈아 끼우지 않도록 시스템 메뉴는 한 박자 미룬다.
+        _shell.Docking.LayoutRebuilt += (_, _) =>
+        {
+            if (UseNativeMenu)
+            {
+                Dispatcher.UIThread.Post(RebuildMenus);
+            }
+            else
+            {
+                RebuildMenus();
+            }
+        };
         _shell.Docking.LayoutChanged += (_, _) => ScheduleLayoutSave();
         _keys.Changed += (_, _) => Dispatcher.UIThread.Post(() => _controls?.RefreshEnablement());
         _viewModel.PropertyChanged += OnViewModelPropertyChanged;
@@ -160,7 +191,24 @@ public partial class MainWindow : Window
 
         var text = _shell.Text;
         var bar = MenuModelBuilder.BuildMenuBar(_registry.Commands, text, _keymap.ShortcutText, _panels.Panels);
-        MenuBar.ItemsSource = _controls.BuildMenuBar(bar);
+        if (UseNativeMenu)
+        {
+            // 시스템 메뉴 막대가 메뉴를 맡는다. 창 안 메뉴는 숨기고 키보드 이동(Tab·Alt)에서도 뺀다.
+            MenuBar.ItemsSource = null;
+            MenuBar.IsVisible = false;
+            MenuBar.Focusable = false;
+            if (NativeMenu.GetMenu(this) is not { } root)
+            {
+                root = _controls.CreateNativeRoot();
+                NativeMenu.SetMenu(this, root);
+            }
+
+            _controls.FillNativeMenu(root, bar);
+        }
+        else
+        {
+            MenuBar.ItemsSource = _controls.BuildMenuBar(bar);
+        }
 
         _toolbarModel = MenuModelBuilder.BuildToolbar(_registry.Commands, text, _keymap.ShortcutText);
         ToolbarPanel.Children.Clear();

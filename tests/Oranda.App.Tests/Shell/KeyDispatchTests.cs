@@ -185,6 +185,32 @@ public class KeyDispatchTests
         await dispatcher.LastRun!; // 예외 없이 끝난다
     }
 
+    [Fact]
+    public void Native_menu_key_during_a_chord_goes_to_the_dispatcher_not_the_menu_command()
+    {
+        var registry = new Recorder();
+        var keys = new ContextKeyService();
+        var table = KeyBindingTable.Build(Map(B("oranda.x.chord", ["Primary+K Primary+C"]), B("oranda.x.copy", ["Primary+C"])), macOS: false);
+        var dispatcher = new KeyDispatcher(() => table, registry, keys);
+        var command = new Oranda.App.Shell.Menus.NativeMenuCommand(
+            new Oranda.App.Shell.Menus.RegistryCommand("oranda.x.copy", registry, keys),
+            new KeyGesture(Key.C, KeyModifiers.Control),
+            () => null,
+            dispatcher);
+
+        // 연속 키 대기가 없으면 메뉴 명령이 그대로 실행된다.
+        Assert.False(dispatcher.HasPending);
+        command.Execute(null);
+        Assert.Equal(["oranda.x.copy"], registry.Executed);
+
+        // ⌘K 뒤 메뉴가 둘째 단(⌘C)을 먼저 가져가도 연속 키 명령이 실행된다.
+        Assert.True(dispatcher.Handle(Key.K, KeyModifiers.Control));
+        Assert.True(dispatcher.HasPending);
+        command.Execute(null);
+        Assert.Equal(["oranda.x.copy", "oranda.x.chord"], registry.Executed);
+        Assert.False(dispatcher.HasPending);
+    }
+
     [Theory]
     [InlineData(Key.A, KeyModifiers.Meta, true, true)]          // ⌘A: 입력 칸의 모두 선택
     [InlineData(Key.V, KeyModifiers.Control, false, true)]      // Ctrl+V

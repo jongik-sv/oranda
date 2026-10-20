@@ -55,7 +55,7 @@ public sealed class ShellHarness : IDisposable
 
     private readonly Oranda.App.Features.SqlEditor.SqlEditorHost _previousHost;
 
-    public ShellHarness(string? dataDirectory = null, bool show = true)
+    public ShellHarness(string? dataDirectory = null, bool show = true, bool nativeMenu = false)
     {
         _ownsDirectory = dataDirectory is null;
         DataDirectory = dataDirectory ?? Path.Combine(Path.GetTempPath(), "oranda-shell-" + Guid.NewGuid().ToString("N"));
@@ -65,7 +65,7 @@ public sealed class ShellHarness : IDisposable
         // 편집기 호스트는 프로세스 정적이다. 앞 시험이 남긴 탭·결과가 새 셸(조회 결과 창)에 보이지 않게 셸마다 새로 둔다.
         _previousHost = Oranda.App.Features.SqlEditor.SqlEditorHost.Current;
         Oranda.App.Features.SqlEditor.SqlEditorHost.Current = new Oranda.App.Features.SqlEditor.SqlEditorHost();
-        Window = new MainWindow();
+        Window = new MainWindow { UseNativeMenu = nativeMenu };
         ((Oranda.App.App)Application.Current!).Start(Services, Window);
         if (show)
         {
