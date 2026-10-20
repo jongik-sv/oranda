@@ -37,12 +37,12 @@ public sealed partial class SqlEditorTests
     {
         var store = NewStore();
         var host = new SqlEditorHost(store);
-        host.NewDocument("select * from emp where empno = :empno and hired > :since and note = :note and dept = :dept");
-        SetBind(host.Binds, "EMPNO", "1002", BindDataType.Number);
-        SetBind(host.Binds, "SINCE", string.Empty, BindDataType.Date); // NULL 날짜
-        SetBind(host.Binds, "NOTE", "a\nb */ 'c' & \"d\"");
-        host.Binds.Ensure(["DEPT"]); // 실행이 만들어 둔 빈 줄(빈 값·문자열·IN)은 남기지 않는다
-        SetBind(host.Binds, "UNUSED", "x"); // 탭이 참조하지 않는 이름도 남기지 않는다
+        var tab = host.NewDocument("select * from emp where empno = :empno and hired > :since and note = :note and dept = :dept");
+        SetBind(tab.Binds, "EMPNO", "1002", BindDataType.Number);
+        SetBind(tab.Binds, "SINCE", string.Empty, BindDataType.Date); // NULL 날짜
+        SetBind(tab.Binds, "NOTE", "a\nb */ 'c' & \"d\"");
+        tab.Binds.Ensure(["DEPT"]); // 실행이 만들어 둔 빈 줄(빈 값·문자열·IN)은 남기지 않는다
+        SetBind(tab.Binds, "UNUSED", "x"); // 탭이 참조하지 않는 이름도 남기지 않는다
         await host.ShutdownAsync(default);
 
         var json = await File.ReadAllTextAsync(Path.Combine(_root, "workspaces", "default.json"));
@@ -50,9 +50,7 @@ public sealed partial class SqlEditorTests
         Assert.DoesNotContain("\"name\": \"DEPT\"", json, StringComparison.Ordinal);
         Assert.DoesNotContain("UNUSED", json, StringComparison.Ordinal);
 
-        // 목록을 비우고(다른 값이 있어도) 복원하면 저장한 값·형식·NULL 로 돌아온다.
-        host.Binds.Clear();
-        SetBind(host.Binds, "EMPNO", "9999");
+        // 복원하면 저장한 값·형식·NULL 이 그 탭의 목록으로 돌아온다.
         host.Restore((await store.LoadAsync("default", default))!.Value);
 
         Assert.Equal(
@@ -61,7 +59,7 @@ public sealed partial class SqlEditorTests
                 ("SINCE", string.Empty, BindDataType.Date, BindDirection.In),
                 ("NOTE", "a\nb */ 'c' & \"d\"", BindDataType.Varchar2, BindDirection.In),
             ],
-            RowsOf(host.Binds));
+            RowsOf(Assert.Single(host.Tabs).Binds));
     });
 
     [Fact]
@@ -82,15 +80,15 @@ public sealed partial class SqlEditorTests
         Assert.False(await host.InitializeAsync(default));
 
         Assert.Equal("select :x from dual", Assert.Single(host.Tabs).Text);
-        Assert.Empty(host.Binds.Rows);
+        Assert.Empty(host.Tabs[0].Binds.Rows);
     });
 
     [Fact]
     public Task Changing_only_a_bind_value_is_autosaved_and_recovery_brings_it_back() => Ui.Run(async () =>
     {
         var host = new SqlEditorHost(NewStore());
-        host.NewDocument("select :x from dual");
-        var x = SetBind(host.Binds, "X", "1");
+        var tab = host.NewDocument("select :x from dual");
+        var x = SetBind(tab.Binds, "X", "1");
         Assert.True(await host.AutosaveAsync(default));
         Assert.False(await host.AutosaveAsync(default));
 
@@ -101,13 +99,13 @@ public sealed partial class SqlEditorTests
         Assert.True(await host.AutosaveAsync(default));
         x.Direction = BindDirection.InOut;
         Assert.True(await host.AutosaveAsync(default));
-        SetBind(host.Binds, "UNRELATED", "z"); // 탭이 참조하지 않는 이름은 표지에 들지 않는다
+        SetBind(tab.Binds, "UNRELATED", "z"); // 탭이 참조하지 않는 이름은 표지에 들지 않는다
         Assert.False(await host.AutosaveAsync(default));
 
         // 비정상 종료(Shutdown 없음) 뒤 복구: 마지막 자동 저장의 값이 돌아온다.
         var run2 = new SqlEditorHost(NewStore(), new FakeDialogs { Confirm = true });
         Assert.True(await run2.InitializeAsync(default));
-        Assert.Equal([("X", "2", BindDataType.Number, BindDirection.InOut)], RowsOf(run2.Binds));
+        Assert.Equal([("X", "2", BindDataType.Number, BindDirection.InOut)], RowsOf(Assert.Single(run2.Tabs).Binds));
     });
 
     // ---- .sql 파일 ---------------------------------------------------------------------------
@@ -123,7 +121,7 @@ public sealed partial class SqlEditorTests
 
         var host = new SqlEditorHost();
         var tab = (await host.OpenFileAsync(path, default))!;
-        SetBind(host.Binds, "EMPNO", "1002", BindDataType.Number);
+        SetBind(tab.Binds, "EMPNO", "1002", BindDataType.Number);
         Assert.True(await host.SaveAsync(tab, default));
         Assert.False(tab.IsDirty);
         Assert.Equal(body, tab.Text);
@@ -140,7 +138,7 @@ public sealed partial class SqlEditorTests
         var reopened = (await other.OpenFileAsync(path, default))!;
         Assert.Equal(body, reopened.Text);
         Assert.False(reopened.IsDirty);
-        Assert.Equal([("EMPNO", "1002", BindDataType.Number, BindDirection.In)], RowsOf(other.Binds));
+        Assert.Equal([("EMPNO", "1002", BindDataType.Number, BindDirection.In)], RowsOf(reopened.Binds));
 
         Assert.True(await other.SaveAsync(reopened, default)); // 연 그대로 저장해도 같은 바이트
         Assert.Equal(saved, await File.ReadAllBytesAsync(path));
@@ -157,11 +155,13 @@ public sealed partial class SqlEditorTests
         await File.WriteAllBytesAsync(noRefs, plainBytes);
         await File.WriteAllBytesAsync(noValues, noValueBytes);
         var host = new SqlEditorHost();
-        SetBind(host.Binds, "OTHER", "1"); // 파일이 참조하지 않는 값
-        host.Binds.Ensure(["ID"]); // 참조하지만 값이 없는 빈 줄
+        var noRefsTab = (await host.OpenFileAsync(noRefs, default))!;
+        var noValuesTab = (await host.OpenFileAsync(noValues, default))!;
+        SetBind(noRefsTab.Binds, "OTHER", "1"); // 파일이 참조하지 않는 값
+        noValuesTab.Binds.Ensure(["ID"]); // 참조하지만 값이 없는 빈 줄
 
-        Assert.True(await host.SaveAsync((await host.OpenFileAsync(noRefs, default))!, default));
-        Assert.True(await host.SaveAsync((await host.OpenFileAsync(noValues, default))!, default));
+        Assert.True(await host.SaveAsync(noRefsTab, default));
+        Assert.True(await host.SaveAsync(noValuesTab, default));
 
         Assert.Equal(plainBytes, await File.ReadAllBytesAsync(noRefs));
         Assert.Equal(noValueBytes, await File.ReadAllBytesAsync(noValues));
@@ -174,12 +174,12 @@ public sealed partial class SqlEditorTests
         var path = Path.Combine(_root, "tricky.sql");
         var host = new SqlEditorHost(dialogs: new FakeDialogs { SavePath = path });
         var tab = host.NewDocument("select :a, :b, :c, :d, :e, :f from dual");
-        SetBind(host.Binds, "A", "line1\nline2\r\nline3");
-        SetBind(host.Binds, "B", "*/ select 1 from dual; /*");
-        SetBind(host.Binds, "C", "it's \"quoted\" \\ back");
-        SetBind(host.Binds, "D", "R&D &1 &&2");
-        SetBind(host.Binds, "E", "한글 값", BindDataType.NVarchar2);
-        SetBind(host.Binds, "F", string.Empty, BindDataType.RefCursor, BindDirection.Out);
+        SetBind(tab.Binds, "A", "line1\nline2\r\nline3");
+        SetBind(tab.Binds, "B", "*/ select 1 from dual; /*");
+        SetBind(tab.Binds, "C", "it's \"quoted\" \\ back");
+        SetBind(tab.Binds, "D", "R&D &1 &&2");
+        SetBind(tab.Binds, "E", "한글 값", BindDataType.NVarchar2);
+        SetBind(tab.Binds, "F", string.Empty, BindDataType.RefCursor, BindDirection.Out);
         Assert.True(await host.SaveAsync(tab, default));
 
         var text = await File.ReadAllTextAsync(path);
@@ -190,7 +190,7 @@ public sealed partial class SqlEditorTests
         var other = new SqlEditorHost();
         var reopened = (await other.OpenFileAsync(path, default))!;
         Assert.Equal("select :a, :b, :c, :d, :e, :f from dual", reopened.Text);
-        Assert.Equal(RowsOf(host.Binds), RowsOf(other.Binds));
+        Assert.Equal(RowsOf(tab.Binds), RowsOf(reopened.Binds));
     });
 
     [Fact]
@@ -200,7 +200,7 @@ public sealed partial class SqlEditorTests
         var path = Path.Combine(_root, "notes.txt");
         var host = new SqlEditorHost(dialogs: new FakeDialogs { SavePath = path });
         var tab = host.NewDocument("select :a from dual");
-        SetBind(host.Binds, "A", "1");
+        SetBind(tab.Binds, "A", "1");
 
         Assert.True(await host.SaveAsync(tab, default));
 
@@ -215,10 +215,10 @@ public sealed partial class SqlEditorTests
         await File.WriteAllTextAsync(path, "select :a, :b from dual;\n");
         var host = new SqlEditorHost(NewStore());
         var tab = (await host.OpenFileAsync(path, default))!;
-        SetBind(host.Binds, "A", "from file");
-        SetBind(host.Binds, "B", "file only");
+        SetBind(tab.Binds, "A", "from file");
+        SetBind(tab.Binds, "B", "file only");
         Assert.True(await host.SaveAsync(tab, default));
-        SetBind(host.Binds, "A", "later"); // 파일은 저장하지 않고 작업 공간에만 남는 값
+        SetBind(tab.Binds, "A", "later"); // 파일은 저장하지 않고 작업 공간에만 남는 값
         await host.ShutdownAsync(default);
 
         var run2 = new SqlEditorHost(NewStore());
@@ -227,8 +227,8 @@ public sealed partial class SqlEditorTests
         var back = Assert.Single(run2.Tabs);
         Assert.Equal("select :a, :b from dual;\n", back.Text);
         Assert.False(back.IsDirty);
-        Assert.Equal("later", run2.Binds.Find("A")!.Text);
-        Assert.Equal("file only", run2.Binds.Find("B")!.Text);
+        Assert.Equal("later", back.Binds.Find("A")!.Text);
+        Assert.Equal("file only", back.Binds.Find("B")!.Text);
     });
 
     [Fact]
@@ -238,10 +238,10 @@ public sealed partial class SqlEditorTests
         var path = Path.Combine(_root, "login.sql");
         var host = new SqlEditorHost(NewStore(), new FakeDialogs { SavePath = path });
         var tab = host.NewDocument("select * from users where name = :user_name and hash = :p_password and t = :api_token and s = :my_secret");
-        SetBind(host.Binds, "USER_NAME", "scott");
-        SetBind(host.Binds, "P_PASSWORD", "tiger-value-1");
-        SetBind(host.Binds, "API_TOKEN", "token-value-2");
-        SetBind(host.Binds, "MY_SECRET", "secret-value-3");
+        SetBind(tab.Binds, "USER_NAME", "scott");
+        SetBind(tab.Binds, "P_PASSWORD", "tiger-value-1");
+        SetBind(tab.Binds, "API_TOKEN", "token-value-2");
+        SetBind(tab.Binds, "MY_SECRET", "secret-value-3");
         Assert.True(await host.SaveAsync(tab, default));
         tab.Document.Insert(0, " "); // 작업 공간에 글도 담기게
         await host.ShutdownAsync(default);

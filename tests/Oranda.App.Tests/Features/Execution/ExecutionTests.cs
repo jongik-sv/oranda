@@ -228,8 +228,8 @@ internal sealed class Rig : IDisposable
     /// <summary>컨트롤러가 요청한 도구 창 동작(<c>show id</c>·<c>toggle id</c>).</summary>
     public List<string> Panels { get; } = [];
 
-    /// <summary>이 리그의 바인드 변수 목록(버스마다 하나).</summary>
-    public BindVariableStore Binds => BindVariableStore.For(Bus);
+    /// <summary>이 리그의 활성 SQL 탭의 바인드 변수 목록(탭마다 하나). 열린 탭이 없으면 도구 창용 기본 목록.</summary>
+    public BindVariableStore Binds => BindVariableStore.ForTab(Host.Active, Bus);
 
     public ConnectionProfile Profile { get; }
 
@@ -832,6 +832,23 @@ public sealed class ExecutionTests
         Assert.Equal("a", rig.Exec.LastBinds!["x"].Value);
         Assert.Equal(1m, rig.Exec.LastBinds["y"].Value);
         Assert.False(rig.Exec.LastBinds.ContainsKey("z"));
+    });
+
+    [Fact]
+    public Task Two_tabs_with_the_same_bind_name_each_run_with_their_own_value() => Ui.Run(async () =>
+    {
+        using var rig = new Rig();
+        const string Text = "select * from emp where id = :ID";
+        var a = rig.Host.NewDocument(Text);
+        var b = rig.Host.NewDocument(Text);
+        a.Binds.Add("ID").Text = "1";
+        b.Binds.Add("ID").Text = "2";
+
+        Assert.True(await rig.Controller.RunAsync(RunMode.Statement, tab: a));
+        Assert.Equal("1", rig.Exec.LastBinds!["ID"].Value);
+        Assert.True(await rig.Controller.RunAsync(RunMode.Statement, tab: b));
+        Assert.Equal("2", rig.Exec.LastBinds["ID"].Value);
+        Assert.Equal("1", a.Binds.Find("ID")!.Text);
     });
 
     [Fact]

@@ -167,7 +167,7 @@ public sealed partial class SqlWorkspaceViewModel : ToolPanelViewModelBase, IInn
         Name = Name,
         SavedAt = DateTimeOffset.UtcNow,
         ActiveTabId = ActiveTab?.TabId,
-        Tabs = [.. Tabs.Select(t => t.ToWorkspaceTab(Host.Binds))],
+        Tabs = [.. Tabs.Select(t => t.ToWorkspaceTab())],
         SourcePath = SourcePath,
     };
 
@@ -182,7 +182,7 @@ public sealed partial class SqlWorkspaceViewModel : ToolPanelViewModelBase, IInn
         foreach (var t in Tabs)
         {
             sb.Append('\u0002').Append(t.TabId).Append(':').Append(t.Version).Append(':').Append(t.IsDirty).Append(':').Append(t.Title)
-                .Append('\u0001').Append(Host.Binds.Fingerprint(t.ReferencedBindNames));
+                .Append('\u0001').Append(t.Binds.Fingerprint(t.ReferencedBindNames));
         }
 
         stamp = sb.ToString();

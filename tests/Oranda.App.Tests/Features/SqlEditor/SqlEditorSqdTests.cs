@@ -35,10 +35,14 @@ public sealed partial class SqlEditorTests
         Assert.Same(ws.Tabs[0], host.Active);
         Assert.Empty(file!.Notes);
 
-        var rows = host.Binds.Rows.ToDictionary(r => r.Name.Trim(), r => r.Text, StringComparer.OrdinalIgnoreCase);
-        Assert.Equal("7369", rows["EMPNO"]);
-        Assert.Equal(string.Empty, rows["ENAME"]);
-        Assert.Equal("10,20", rows["D"]);
+        // VAR 줄은 그 탭의 목록으로만 들어간다(다른 탭 목록에 섞이지 않는다).
+        var first = ws.Tabs[0].Binds.Rows.ToDictionary(r => r.Name.Trim(), r => r.Text, StringComparer.OrdinalIgnoreCase);
+        Assert.Equal(2, first.Count);
+        Assert.Equal("7369", first["EMPNO"]);
+        Assert.Equal(string.Empty, first["ENAME"]);
+        var second = ws.Tabs[1].Binds.Rows.ToDictionary(r => r.Name.Trim(), r => r.Text, StringComparer.OrdinalIgnoreCase);
+        Assert.Equal("10,20", Assert.Single(second).Value);
+        Assert.Equal("D", second.Keys.Single());
     });
 
     [Fact]
@@ -129,7 +133,7 @@ public sealed partial class SqlEditorTests
         Assert.Equal(19, host.ActiveWorkspace!.Tabs.Count);
         Assert.Equal("라인길이 계산 공정.sql", host.ActiveWorkspace.Tabs[0].Title);
         Assert.Empty(file!.Notes);
-        Assert.Contains(host.Binds.Rows, r => r.Name.Trim() == "WORD_DH" && r.Text == "2022-07-12");
+        Assert.Contains(host.ActiveWorkspace.Tabs.SelectMany(t => t.Binds.Rows), r => r.Name.Trim() == "WORD_DH" && r.Text == "2022-07-12");
     });
 
     [Fact]

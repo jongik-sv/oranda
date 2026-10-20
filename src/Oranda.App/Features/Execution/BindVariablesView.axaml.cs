@@ -17,19 +17,47 @@ public partial class BindVariablesView : UserControl
         {
             if (_vm is not null)
             {
-                _vm.Store.FocusRequested -= OnFocusRequested;
-            }
-
-            _vm = DataContext as BindVariablesViewModel;
-            if (_vm is not null)
-            {
-                _vm.Store.FocusRequested += OnFocusRequested;
-                if (_vm.Store.PendingFocus is { } pending)
+                _vm.PropertyChanged -= OnVmPropertyChanged;
+                if (_watched is not null)
                 {
-                    Dispatcher.UIThread.Post(() => FocusRow(pending), DispatcherPriority.Background);
+                    _watched.FocusRequested -= OnFocusRequested;
+                    _watched = null;
                 }
             }
+
+            _vm =DataContext as BindVariablesViewModel;
+            if (_vm is not null)
+            {
+                _vm.PropertyChanged += OnVmPropertyChanged;
+                Watch(_vm.Store);
+            }
         };
+    }
+
+    private BindVariableStore? _watched;
+
+    // 활성 탭이 바뀌면 목록도 바뀐다: 새 목록의 포커스 요청을 듣는다.
+    private void OnVmPropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName == nameof(BindVariablesViewModel.Store) && _vm is not null)
+        {
+            Watch(_vm.Store);
+        }
+    }
+
+    private void Watch(BindVariableStore store)
+    {
+        if (_watched is not null)
+        {
+            _watched.FocusRequested -= OnFocusRequested;
+        }
+
+        _watched = store;
+        store.FocusRequested += OnFocusRequested;
+        if (store.PendingFocus is { } pending)
+        {
+            Dispatcher.UIThread.Post(() => FocusRow(pending), DispatcherPriority.Background);
+        }
     }
 
     private void OnFocusRequested(object? sender, string name) =>

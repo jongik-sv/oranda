@@ -91,6 +91,9 @@ public sealed partial class SqlEditorViewModel : ToolPanelViewModelBase
 
     public Guid TabId { get; }
 
+    /// <summary>이 탭의 바인드 변수 목록(TSK-04-11). 바인드 변수 창은 활성 탭의 것을 보이고, 작업 공간·.sql·.sqd 도 탭마다 이 목록을 넣고 뺀다.</summary>
+    public BindVariableStore Binds { get; } = new();
+
     public TextDocument Document { get; }
 
     /// <summary>글자가 바뀔 때마다 오르는 번호(자동 저장이 변경 여부를 본다).</summary>
@@ -551,12 +554,12 @@ public sealed partial class SqlEditorViewModel : ToolPanelViewModelBase
 
     /// <summary>
     /// 작업 공간 탭으로 만든다. 글자는 저장 안 된 문서(파일 없음 또는 변경됨)만 담는다(data-model 2.6).
-    /// <paramref name="binds"/> 를 주면 이 탭이 참조하는 바인드의 값도 담는다.
+    /// 이 탭의 바인드 목록(<see cref="Binds"/>, 다른 목록을 주면 그것)에서 탭이 참조하는 바인드의 값도 담는다.
     /// </summary>
     public WorkspaceTab ToWorkspaceTab(BindVariableStore? binds = null)
     {
         bool keepContent = FilePath is null || IsDirty;
-        var values = binds?.Snapshot(ReferencedBindNames);
+        var values = (binds ?? Binds).Snapshot(ReferencedBindNames);
         return new WorkspaceTab
         {
             Id = TabId,
@@ -588,10 +591,18 @@ public sealed partial class SqlEditorViewModel : ToolPanelViewModelBase
             ConnectionProfileId = tab.ConnectionProfileId,
             ScrollLine = tab.ScrollLine,
         };
+        // 바인드 값은 이 탭의 목록에 넣는다: 파일 끝 블록 먼저, 작업 공간에 남긴 값이 그 위에(작업 공간·자동 저장 쪽이 더 나중 값이다).
         if (fileText is not null && SqlEditorHost.CarriesBinds(tab.FilePath))
         {
-            fileText = SqlFileBinds.Split(fileText).Body;
+            var (body, fileBinds) = SqlFileBinds.Split(fileText);
+            fileText = body;
+            if (tab.Content is null)
+            {
+                vm.Binds.Restore(fileBinds);
+            }
         }
+
+        vm.Binds.Restore(tab.Binds);
 
         var text = tab.Content ?? fileText ?? string.Empty;
         // 파일이 있어야 하는데 못 읽었고 저장된 내용도 없으면 빈 문서 + 변경됨으로 두어 닫을 때 알린다.

@@ -142,7 +142,7 @@ public static class ExecutionCommands
 
     /// <summary>
     /// 결과 그리드 「전체 행 수 세기」의 실행 쪽. 세션·실행 엔진은 부를 때 해석한다(시작 때 Oracle 어셈블리를 깨우지 않게).
-    /// 상태·바인드 목록은 컨트롤러와 같은 것(버스마다 하나)을 쓴다.
+    /// 상태는 컨트롤러와 같은 것(버스마다 하나), 바인드 목록은 활성 SQL 탭의 것(TSK-04-11)을 쓴다.
     /// </summary>
     private static GridRowCounter RowCounter(ServiceContainer container)
     {
@@ -150,7 +150,7 @@ public static class ExecutionCommands
         var state = ExecutionState.For(bus);
         return new GridRowCounter(
             state,
-            BindVariableStore.For(bus),
+            BindVariableStore.ForTab(SqlEditorHost.Current.Active, bus),
             () => ActiveTabSession(container),
             () =>
             {
@@ -160,7 +160,7 @@ public static class ExecutionCommands
     }
 
     /// <summary>
-    /// 결과 거르기 줄(GRID-10)의 실행 쪽. 행 수 세기와 같이 세션·실행 엔진은 부를 때 해석하고, 상태·바인드 목록은 버스마다 하나인 것을 쓴다.
+    /// 결과 거르기 줄(GRID-10)의 실행 쪽. 행 수 세기와 같이 세션·실행 엔진은 부를 때 해석하고, 상태는 버스마다 하나, 바인드 목록은 활성 SQL 탭의 것을 쓴다.
     /// </summary>
     private static GridFilterRunner FilterRunner(ServiceContainer container)
     {
@@ -168,7 +168,7 @@ public static class ExecutionCommands
         var state = ExecutionState.For(bus);
         return new GridFilterRunner(
             state,
-            BindVariableStore.For(bus),
+            BindVariableStore.ForTab(SqlEditorHost.Current.Active, bus),
             () => ActiveTabSession(container),
             () =>
             {
@@ -179,7 +179,7 @@ public static class ExecutionCommands
 
     /// <summary>
     /// 객체 상세 「데이터」 탭(SCH-03)의 실행 쪽. 세션은 활성 세션이 아니라 그 상세 문서의 세션이고, 실행 엔진은 부를 때 해석한다.
-    /// 상태·바인드 목록은 버스마다 하나인 것을 쓴다(데이터를 읽는 동안 편집기 실행과 겹치지 않게).
+    /// 상태는 버스마다 하나, 바인드 목록은 탭이 없으니 기본 목록을 쓴다(데이터를 읽는 동안 편집기 실행과 겹치지 않게).
     /// </summary>
     private static ObjectDetail.ObjectDataRunner DataRunner(ServiceContainer container, Oranda.Core.Sessions.ISession session)
     {

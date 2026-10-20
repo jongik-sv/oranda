@@ -490,6 +490,9 @@ public sealed class ExecutionController : IDisposable
 
     // ---- 바인드 ----------------------------------------------------------------------------
 
+    /// <summary>탭의 바인드 목록(탭마다 하나, TSK-04-11). 탭이 없으면 도구 창용 기본 목록.</summary>
+    private BindVariableStore BindsOf(SqlEditorViewModel? tab) => tab?.Binds ?? _d.Binds;
+
     /// <summary>
     /// 바인드 변수 창(<c>oranda.exec.bindVariables</c>): 창을 보이고, 커서 문장의 바인드 이름을 목록에 채워 첫 값 칸으로 간다.
     /// 실행은 하지 않는다(오렌지 Bind Variable List).
@@ -504,8 +507,9 @@ public sealed class ExecutionController : IDisposable
             return Task.FromResult(false);
         }
 
-        _d.Binds.Ensure(stmt.BindNames);
-        _d.Binds.RequestFocus(stmt.BindNames[0]);
+        var binds = BindsOf(tab);
+        binds.Ensure(stmt.BindNames);
+        binds.RequestFocus(stmt.BindNames[0]);
         return Task.FromResult(true);
     }
 
@@ -513,8 +517,9 @@ public sealed class ExecutionController : IDisposable
     /// 실행할 바인드 값을 「바인드 변수」 목록에서 만든다(묻는 창 없음). 처음 보는 이름은 목록에 더하고 실행하지 않는다:
     /// 값 없이 실행하면 INSERT·UPDATE 가 NULL 로 돌 수 있어서다. 형식에 맞지 않는 값도 실행하지 않는다.
     /// </summary>
-    private Dictionary<string, BindValue>? ResolveBinds(IEnumerable<string> names, ResultTabsViewModel? results)
+    private Dictionary<string, BindValue>? ResolveBinds(SqlEditorViewModel tab, IEnumerable<string> names, ResultTabsViewModel? results)
     {
+        var store = BindsOf(tab);
         var list = names.Distinct(StringComparer.OrdinalIgnoreCase).ToList();
         if (list.Count == 0)
         {
@@ -522,13 +527,13 @@ public sealed class ExecutionController : IDisposable
         }
 
         string? problem = null;
-        var added = _d.Binds.Ensure(list);
+        var added = store.Ensure(list);
         if (added.Count > 0)
         {
             problem = $"바인드 변수 {string.Join(", ", added.Select(n => ":" + n))} 의 값을 「바인드 변수」 창에 넣은 뒤 다시 실행하세요. (빈 값은 NULL)";
-            _d.Binds.RequestFocus(added[0]);
+            store.RequestFocus(added[0]);
         }
-        else if (!_d.Binds.TryBuild(list, out var values, out var error))
+        else if (!store.TryBuild(list, out var values, out var error))
         {
             problem = error ?? "바인드 값을 읽을 수 없습니다.";
         }
@@ -561,6 +566,7 @@ public sealed class ExecutionController : IDisposable
         }
 
         var text = tab.Text;
+        var binds = BindsOf(tab);
         var edits = new List<(int Start, int Length, string Literal)>();
         foreach (var t in Oranda.Language.Lexing.SqlLexer.Tokenize(text))
         {
@@ -570,7 +576,7 @@ public sealed class ExecutionController : IDisposable
             }
 
             var name = text.Substring(t.Start + 1, t.Length - 1);
-            if (_d.Binds.Find(name) is { } row && BindVariableStore.ToLiteral(row) is { } literal)
+            if (binds.Find(name) is { } row && BindVariableStore.ToLiteral(row) is { } literal)
             {
                 edits.Add((t.Start, t.Length, literal));
             }
@@ -711,7 +717,7 @@ public sealed class ExecutionController : IDisposable
             return false;
         }
 
-        var binds = ResolveBinds(stmt.BindNames, results);
+        var binds = ResolveBinds(tab, stmt.BindNames, results);
         if (binds is null)
         {
             return false;
@@ -752,7 +758,7 @@ public sealed class ExecutionController : IDisposable
             return false;
         }
 
-        var binds = ResolveBinds(stmts.SelectMany(st => st.BindNames), results);
+        var binds = ResolveBinds(tab, stmts.SelectMany(st => st.BindNames), results);
         if (binds is null)
         {
             return false;

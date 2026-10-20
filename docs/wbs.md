@@ -1313,7 +1313,7 @@ dotnet, testhost, Oranda.App
 - category: defect
 - domain: fullstack
 - model: sonnet
-- status: [ ]
+- status: [xx]
 - priority: high
 - assignee: -
 - schedule: 2027-01-11 ~ 2027-01-13
@@ -1321,7 +1321,7 @@ dotnet, testhost, Oranda.App
 - depends: TSK-04-02, TSK-03-08
 - blocked-by: -
 - entry-point: 바인드 변수 창(oranda.panel.binds), SQL 탭 전환·실행
-- note: 담당 PC: win144(Windows 개발 PC) — 맥북 세션은 이 Task 를 하지 않는다. 2026-10-20 사용자 지적: 바인드 변수 설정은 SQL 탭별로 있어야 한다. 현황: BindVariableStore 가 이벤트 버스(앱)마다 하나(BindVariableStore.For(bus))라 모든 SQL 탭이 같은 목록·같은 값을 쓴다. 저장(작업 공간 tabs[].binds·.sql 끝 바인드 블록)만 탭이 참조하는 이름으로 나눠 저장하고, 다시 열면 공용 목록에 섞여 들어간다(SqlEditorHost.Binds.Restore). 같은 이름 :ID 를 두 탭이 다른 값으로 쓸 수 없다. TSK-03-08(탭마다 접속) 다음에 같은 레인이 한다(SqlEditorHost·Execution 이 겹침)
+- note: 담당 PC: win144(Windows 개발 PC) — 맥북 세션은 이 Task 를 하지 않는다. 2026-10-20 사용자 지적: 바인드 변수 설정은 SQL 탭별로 있어야 한다. 현황: BindVariableStore 가 이벤트 버스(앱)마다 하나(BindVariableStore.For(bus))라 모든 SQL 탭이 같은 목록·같은 값을 쓴다. 저장(작업 공간 tabs[].binds·.sql 끝 바인드 블록)만 탭이 참조하는 이름으로 나눠 저장하고, 다시 열면 공용 목록에 섞여 들어간다(SqlEditorHost.Binds.Restore). 같은 이름 :ID 를 두 탭이 다른 값으로 쓸 수 없다. TSK-03-08(탭마다 접속) 다음에 같은 레인이 한다(SqlEditorHost·Execution 이 겹침) / 2026-10-20 완료(win144): SqlEditorViewModel.Binds(탭마다 BindVariableStore)·BindVariableStore.ForTab(tab, bus). 바인드 창은 활성 탭 목록을 따르고, 실행·하위 쿼리·바인드 창 열기·편집기에 값 붙여 넣기·행 수·그리드 필터·MyBatis 붙여 넣기·작업 공간·.sql 블록·.sqd VAR 이 그 탭의 목록을 쓴다. 객체 상세 데이터 탭·탭 없는 도구 창은 For(bus) 기본 목록 유지. Excel 내보내기(편집기 원본은 바인드 없음)·플래시백·LOB 쓰기·PL/SQL 실행은 BindVariableStore 를 읽지 않아 그대로(각자 문장 바인드)
 
 #### PRD 요구사항
 - prd-ref: PRD EXEC-03

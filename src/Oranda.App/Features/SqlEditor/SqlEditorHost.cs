@@ -54,12 +54,6 @@ public sealed class SqlEditorHost : ObservableObject, IDisposable
 
     public IEditorDialogs Dialogs { get; set; }
 
-    /// <summary>
-    /// 탭과 함께 저장·복원할 바인드 변수 목록(바인드 변수 창과 같은 것). 셸이 시작 작업에서 이벤트 버스의 목록으로 바꿔 넣는다.
-    /// 기본은 이 호스트만의 빈 목록이다(시험끼리 값을 나눠 쓰지 않게).
-    /// </summary>
-    public BindVariableStore Binds { get; set; } = new();
-
     /// <summary>작업 공간 저장소. 셸이 시작 작업에서 넣는다(<see cref="Current"/> 는 DI 전에 만들어지므로).</summary>
     public IWorkspaceStore? Store
     {
@@ -689,12 +683,11 @@ public sealed class SqlEditorHost : ObservableObject, IDisposable
 
         var bytes = await File.ReadAllBytesAsync(full, ct).ConfigureAwait(true);
         var (text, enc) = FileEncoding.Decode(bytes);
+        IReadOnlyList<WorkspaceBind>? fileBinds = null;
         if (CarriesBinds(full))
         {
-            // 끝의 바인드 블록은 편집기에 보이지 않고 그 값만 바인드 변수 창에 들어간다.
-            var (body, binds) = SqlFileBinds.Split(text);
-            text = body;
-            Binds.Restore(binds);
+            // 끝의 바인드 블록은 편집기에 보이지 않고 그 값만 이 탭의 바인드 목록에 들어간다.
+            (text, fileBinds) = SqlFileBinds.Split(text);
         }
 
         var vm = new SqlEditorViewModel(Guid.NewGuid(), text)
@@ -703,6 +696,7 @@ public sealed class SqlEditorHost : ObservableObject, IDisposable
             FilePath = full,
             Encoding = enc,
         };
+        vm.Binds.Restore(fileBinds);
         vm.IsDirty = false;
         AddTab(EnsureWorkspace(), vm);
         return vm;
@@ -756,11 +750,11 @@ public sealed class SqlEditorHost : ObservableObject, IDisposable
     internal static bool CarriesBinds(string? path) =>
         path is not null && string.Equals(Path.GetExtension(path), ".sql", StringComparison.OrdinalIgnoreCase);
 
-    private async Task WriteFileAsync(SqlEditorViewModel tab, string path, CancellationToken ct)
+    private static async Task WriteFileAsync(SqlEditorViewModel tab, string path, CancellationToken ct)
     {
         // .sql 이면 이 탭이 참조하는 바인드의 지금 값을 끝에 블록으로 붙인다(값이 없으면 본문만 — 예전과 같은 바이트).
         // 편집기 글은 블록 없는 본문이라 몇 번을 저장해도 블록은 하나다.
-        var text = CarriesBinds(path) ? SqlFileBinds.Append(tab.Text, Binds.Snapshot(tab.ReferencedBindNames)) : tab.Text;
+        var text = CarriesBinds(path) ? SqlFileBinds.Append(tab.Text, tab.Binds.Snapshot(tab.ReferencedBindNames)) : tab.Text;
         var bytes = FileEncoding.Encode(text, tab.Encoding);
         var dir = Path.GetDirectoryName(path);
         if (!string.IsNullOrEmpty(dir))
@@ -840,7 +834,6 @@ public sealed class SqlEditorHost : ObservableObject, IDisposable
             }
 
             var vm = SqlEditorViewModel.FromWorkspaceTab(t, fileText);
-            RestoreBinds(t, fileText);
             ws.Tabs.Add(vm);
             InsertIntoAllTabs(ws, vm);
             TabOpened?.Invoke(this, vm);
@@ -858,20 +851,6 @@ public sealed class SqlEditorHost : ObservableObject, IDisposable
         }
 
         return ws;
-    }
-
-    /// <summary>
-    /// 복원한 탭의 바인드 값을 바인드 변수 목록에 넣는다. 파일에서 다시 읽은 .sql 의 끝 블록 먼저, 작업 공간에 남긴 값이 그 위에
-    /// (작업 공간·자동 저장 쪽이 더 나중 값이다).
-    /// </summary>
-    private void RestoreBinds(WorkspaceTab tab, string? fileText)
-    {
-        if (tab.Content is null && fileText is not null && CarriesBinds(tab.FilePath))
-        {
-            Binds.Restore(SqlFileBinds.Split(fileText).Binds);
-        }
-
-        Binds.Restore(tab.Binds);
     }
 
     /// <summary>「작업 공간 저장」: 이름을 물어 보고 있는 작업 공간을 <c>workspaces/{id}.json</c> 에 저장한다.</summary>
@@ -1015,7 +994,7 @@ public sealed class SqlEditorHost : ObservableObject, IDisposable
                 vm.ConnectionProfileId = profile;
             }
 
-            Binds.Restore(t.Binds);
+            vm.Binds.Restore(t.Binds);
             first ??= vm;
         }
 

@@ -18,7 +18,7 @@ namespace Oranda.App.Features.SqlEditor;
 [OrandaService(typeof(IStartupTask))]
 public sealed partial class SqlEditorDockWiring(
     DockWorkspace docking, ContextKeyService keys, IWorkspaceStore store, SettingsService settings, ShellController shell,
-    IAppDataPaths paths, IEventBus events) : IStartupTask
+    IAppDataPaths paths) : IStartupTask
 {
     private const string PanelId = "oranda.panel.sqlEditor";
 
@@ -36,7 +36,6 @@ public sealed partial class SqlEditorDockWiring(
             // 호스트는 DI 전에 만들어지므로 대화상자·작업 공간 저장소를 여기서 넣는다(없으면 파일 열기·작업 공간이 조용히 실패한다).
             host.Dialogs = new AvaloniaEditorDialogs();
             host.Store = store;
-            host.Binds = BindVariableStore.For(events); // 바인드 변수 창·실행과 같은 목록(탭·.sql 과 함께 저장·복원된다)
             host.ListWorkspaceIds = ListSavedWorkspaceIds;
             var workspace = settings.Current.Workspace;
             host.RestoreOnStartup = workspace.RestoreOnStartup;

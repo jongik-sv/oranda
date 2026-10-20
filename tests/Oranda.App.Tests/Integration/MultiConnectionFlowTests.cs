@@ -36,6 +36,30 @@ public sealed class MultiConnectionFlowTests(ItDb db, ITestOutputHelper output) 
     }
 
     [Fact]
+    public Task Two_tabs_with_the_same_bind_name_run_with_their_own_values_on_a_live_server() => Ui.Run(async () =>
+    {
+        if (!db.Enabled)
+        {
+            return;
+        }
+
+        using var rig = new FlowRig(db);
+        await rig.ConnectAsync();
+
+        // 같은 :ID 를 쓰는 두 탭: 각자 목록의 값으로 실행한다(TSK-04-11).
+        var a = rig.Host.NewDocument("select :ID from dual");
+        var b = rig.Host.NewDocument("select :ID from dual");
+        a.Binds.Add("ID").Text = "11";
+        b.Binds.Add("ID").Text = "22";
+        a.Binds.Find("ID")!.Type = Oranda.Core.Execution.BindDataType.Number;
+        b.Binds.Find("ID")!.Type = Oranda.Core.Execution.BindDataType.Number;
+
+        Assert.Equal("11", await RunAsync(rig, a, "select :ID from dual"));
+        Assert.Equal("22", await RunAsync(rig, b, "select :ID from dual"));
+        Assert.Equal("11", a.Binds.Find("ID")!.Text);
+    });
+
+    [Fact]
     public Task Two_connections_run_side_by_side_and_keep_their_own_transactions() => Ui.Run(async () =>
     {
         if (!db.Enabled)

@@ -1,6 +1,7 @@
 using System.Collections.ObjectModel;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using Oranda.App.Features.SqlEditor;
 using Oranda.App.Shell;
 using Oranda.Core.Events;
 using Oranda.Core.Shell;
@@ -17,15 +18,40 @@ namespace Oranda.App.Features.Execution;
 [OrandaToolPanel("oranda.panel.binds", ToolPanelKind.Tool, DockLocation.Right, Order = 20, DefaultSize = 380)]
 public sealed partial class BindVariablesViewModel : ToolPanelViewModelBase
 {
+    private readonly IEventBus? _events;
+    private readonly SqlEditorHost _host;
+
     // 이벤트 버스만 받는다(등록된 서비스라 지연 어셈블리를 깨우지 않는다). 생성자는 이것 하나만 둔다.
     public BindVariablesViewModel(IEventBus? events = null)
+        : this(events, SqlEditorHost.Current)
     {
-        Store = BindVariableStore.For(events);
     }
 
-    public BindVariableStore Store { get; }
+    /// <summary>활성 SQL 탭을 주는 호스트를 직접 받는다(시험용).</summary>
+    internal BindVariablesViewModel(IEventBus? events, SqlEditorHost host)
+    {
+        _events = events;
+        _host = host;
+        _store = BindVariableStore.ForTab(_host.Active, _events);
+        _host.ActiveChanged += (_, _) => FollowActiveTab();
+    }
+
+    /// <summary>지금 보이는 목록: 활성 SQL 탭의 것(TSK-04-11). 탭이 없으면 도구 창용 기본 목록.</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(Rows))]
+    private BindVariableStore _store;
 
     public ObservableCollection<BindVariableRow> Rows => Store.Rows;
+
+    private void FollowActiveTab()
+    {
+        var next = BindVariableStore.ForTab(_host.Active, _events);
+        if (!ReferenceEquals(next, Store))
+        {
+            Selected = null;
+            Store = next;
+        }
+    }
 
     [ObservableProperty]
     [NotifyCanExecuteChangedFor(nameof(DeleteCommand))]

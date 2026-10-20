@@ -3,6 +3,7 @@ using System.Globalization;
 using System.Runtime.CompilerServices;
 using System.Text;
 using CommunityToolkit.Mvvm.ComponentModel;
+using Oranda.App.Features.SqlEditor;
 using Oranda.Core.Events;
 using Oranda.Core.Execution;
 using Oranda.Core.Security;
@@ -95,7 +96,7 @@ public sealed partial class BindVariableRow : ObservableObject
 /// <summary>
 /// 바인드 변수 목록(EXEC-03, 오렌지 Bind Variable List 방식). 「바인드 변수」 창이 보이고 고치는 목록이며, 실행은 묻지 않고 이 값을 쓴다.
 /// 문장에 처음 보는 이름이 있으면 목록에 줄을 더하고 실행하지 않는다(값 없이 INSERT 등이 NULL 로 실행되지 않게).
-/// 이벤트 버스(앱)마다 하나. 목록 자체는 메모리에 있고, 탭이 참조하는 이름의 값만 작업 공간(<c>tabs[].binds</c>)과
+/// SQL 탭마다 하나(<see cref="ForTab"/>, 탭이 없는 도구 창용 기본 목록은 이벤트 버스(앱)마다 하나인 <see cref="For"/>). 목록 자체는 메모리에 있고, 탭이 참조하는 이름의 값만 작업 공간(<c>tabs[].binds</c>)과
 /// .sql 파일 끝 바인드 블록에 함께 저장된다(<see cref="Snapshot"/>·<see cref="Restore"/>, data-model 2.6).
 /// </summary>
 public sealed class BindVariableStore
@@ -116,6 +117,12 @@ public sealed class BindVariableStore
             return PerBus.GetValue(bus, _ => new BindVariableStore());
         }
     }
+
+    /// <summary>
+    /// 탭의 바인드 목록(TSK-04-11): SQL 탭마다 자기 목록을 가진다. 탭이 없으면(도구 창 등) <paramref name="bus"/> 의 기본 목록
+    /// (<see cref="For"/>)을 돌려준다.
+    /// </summary>
+    public static BindVariableStore ForTab(SqlEditorViewModel? tab, IEventBus? bus) => tab?.Binds ?? For(bus);
 
     public ObservableCollection<BindVariableRow> Rows { get; } = [];
 

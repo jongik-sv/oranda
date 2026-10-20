@@ -43,7 +43,7 @@ public sealed class MyBatisLogCommandHandler(ServiceContainer container) : IComm
             return;
         }
 
-        var result = MyBatisLogPaste.Apply(tab, BindVariableStore.For(bus), text);
+        var result = MyBatisLogPaste.Apply(tab, tab.Binds, text);
         if (result is null)
         {
             log.AddMessage(MessageKind.Warning, "클립보드에서 MyBatis 로그(Preparing/Parameters)를 찾지 못했거나 편집기가 읽기 전용입니다.");
