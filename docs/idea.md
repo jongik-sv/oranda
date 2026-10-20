@@ -10,11 +10,15 @@
 
 ### 할 일
 
-1. 성능을 단정하는 시험을 `Category=Perf` 로 옮겨 기본 시험(`dotnet test`)에서 뺀다. 성능 시험은 따로 돌린다.
-2. 조용한 PC(다른 빌드 없음, RDP 아님, 60 Hz 이상 모니터)에서 Release·ReadyToRun 게시본으로 아래 표를 모두 잰다. Windows 와 macOS(M1 이상) 둘 다 잰다.
-3. 결과를 PRD 7.2 「현재 기준선」 칸에 적고, 못 미치는 항목은 개선 Task 를 만든다.
-4. CI 에서 매 빌드 성능을 기록하는 일(PRD 7.2, TSK-01-07 의 `tests/Oranda.Perf`)을 켠다.
-5. TSK-11-03 「성능 예산 전 항목」 은 이 회차에서 한다.
+TSK-11-03 회차(2026-10-20)에서 한 것과 남은 일. 결과 `docs/itest/TSK-11-03.md`, 절차 `docs/perf/README.md`.
+
+1. 성능을 단정하는 시험을 `Category=Perf` 로 옮겨 기본 시험에서 뺀다. **TSK-11-03 회차에서 함.** 기본 필터 `Category!=Perf`(tests/Directory.Build.props, CI). 따로 돌리기: `dotnet test Oranda.sln -c Release --filter "Category=Perf"`.
+2. Release·ReadyToRun 게시본으로 아래 표를 모두 잰다. **Windows 는 TSK-11-03 회차에서 함**(도구 `tests/Oranda.Perf`, `tests/Oranda.Perf.Ui`, `scripts/perf/`). 단 화면이 측정 도중 잠겨 창 항목(키 입력·자동완성·첫 행·그리드·접속 메모리)은 최종 커밋으로 재지 못했다 → **남은 일: 잠금을 푼 PC 에서 `scripts/perf/run-windows.ps1` 다시.** macOS 는 **남은 일: 맥북에서 `scripts/perf/run-macos.sh`.**
+3. 결과를 PRD 7.2 「현재 기준선」 칸에 적고 못 미치는 항목은 개선 Task 를 만든다. **Windows 값 기록과 결함 Task 등록은 함**(TSK-01-08~10, TSK-04-09, TSK-06-11~12, TSK-10-06). macOS 값은 맥 재측정 뒤 적는다.
+4. CI 에서 매 빌드 성능을 기록하는 일(PRD 7.2, TSK-01-07 의 `tests/Oranda.Perf`)을 켠다. **남은 일**: CI 는 이미 시작 측정을 돌리지만 `--enforce` 는 끄고 있다. 결함 수정으로 예산에 들어온 뒤에 켠다.
+5. TSK-11-03 「성능 예산 전 항목」 은 이 회차에서 한다. **함**(위 결과서).
+
+남은 일 요약: ① 창 항목 최종 커밋 재측정(Windows, 잠금 해제) ② macOS 전 항목 ③ 결함 7건 수정 ④ PRD 정의 확정(전용 메모리, 입력 멈춘 뒤, 행당 200 bytes) ⑤ `--enforce` 켜기.
 
 ### 재야 할 항목 (PRD 7.2)
 

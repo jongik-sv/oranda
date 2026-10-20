@@ -241,6 +241,7 @@ public class PlSqlAnalyzerTests(ITestOutputHelper output)
         Assert.NotNull(typeof(PlSqlWarmUpTask).GetCustomAttributes(typeof(OrandaServiceAttribute), false).SingleOrDefault());
     }
 
+    [Trait("Category", "Perf")]
     [Fact]
     public async Task Measure_parse_times_without_asserting()
     {

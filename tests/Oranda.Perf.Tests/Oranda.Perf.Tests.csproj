@@ -1,0 +1,24 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <IsTestProject>true</IsTestProject>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="coverlet.collector" />
+    <PackageReference Include="Microsoft.NET.Test.Sdk" />
+    <PackageReference Include="xunit" />
+    <PackageReference Include="xunit.runner.visualstudio" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Using Include="Xunit" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Oranda.Perf.Common\Oranda.Perf.Common.csproj" />
+    <!-- 가짜 앱은 실행 파일만 필요하다(빌드 순서 보장). -->
+    <ProjectReference Include="..\Oranda.Perf.FakeApp\Oranda.Perf.FakeApp.csproj" ReferenceOutputAssembly="false" />
+  </ItemGroup>
+
+</Project>

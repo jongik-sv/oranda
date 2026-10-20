@@ -65,6 +65,7 @@ public sealed class CompletionTests
     private static bool Optimized =>
         typeof(CompletionController).Assembly.GetCustomAttribute<DebuggableAttribute>()?.IsJITOptimizerDisabled != true;
 
+    [Trait("Category", "Perf")]
     [Fact]
     public Task Alias_dot_opens_emp_columns_within_150ms() => HeadlessHost.Run(async () =>
     {

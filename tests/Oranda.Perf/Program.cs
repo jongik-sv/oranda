@@ -1,165 +1,71 @@
-using System.Diagnostics;
 using System.Globalization;
-using System.Text;
+using System.Runtime.InteropServices;
 using System.Text.Json;
+using Oranda.Perf.Common;
 
-// 사용: Oranda.Perf --exe <게시본 실행파일> [--runs 5] [--out <디렉터리>] [--budget-ms 1000] [--enforce] [--timeout-s 30]
-// App 계측 훅 규약: 환경 변수 ORANDA_PERF=1 이면 App 이 stdout 에 한 줄씩
-//   ORANDA_PERF stage=<appbuilder|window-created|first-render|input-ready> ms=<프로세스 시작 후 경과 ms>
-// first-render = 실제 첫 프레임이 그려진 뒤(두 번째 rAF), input-ready = 그 뒤 디스패처가 비어 입력을 받는 시점 (TSK-01-04).
-// 를 stdout 또는 ORANDA_PERF_FILE(도구가 항상 지정)에 쓴다. 훅이 없으면 wall-clock(Process.Start→표식 없음)이라 first-render 는 null 로 기록된다.
-var opt = Options.Parse(args);
+// 사용: Oranda.Perf --exe <게시본 실행파일> [--runs 5] [--discard 0] [--out <디렉터리>] [--budget-ms 1000] [--enforce] [--timeout-s 30]
+//                  [--cold-copy] [--data-dir <폴더>] [--idle-s 2]
+// 시작 표식 규약은 StartupRunner 주석 참고(App 의 PerfMarks).
+// 기본: 실행마다 빈 임시 데이터 폴더(ORANDA_DATA_DIR). --data-dir 이면 같은 폴더를 계속 쓴다(레이아웃 복원이 있는 「두 번째 실행」).
+// --cold-copy: 실행마다 게시 폴더를 새 임시 폴더에 복사해 띄운다(「최초 실행」 근사. macOS 는 대신 실행 직전 sudo purge).
+// --idle-s: 입력 가능 뒤 메모리를 읽기까지 기다리는 시간(유휴 메모리는 10 이상으로).
+StartupOptions opt;
+try
+{
+    opt = StartupOptions.Parse(args);
+}
+catch (ArgumentException ex)
+{
+    Console.Error.WriteLine(ex.Message);
+    return 2;
+}
+
 if (opt.Exe is null || !File.Exists(opt.Exe))
 {
     Console.Error.WriteLine("--exe <게시본 실행파일> 필요");
     return 2;
 }
 
-var runs = new List<RunResult>();
-for (var i = 1; i <= opt.Runs; i++)
+var all = new List<StartupRun>();
+for (var i = 1; i <= opt.Discard + opt.Runs; i++)
 {
-    var r = RunOnce(opt, i);
-    runs.Add(r);
-    Console.WriteLine($"run {i}: appbuilder={Fmt(r.AppBuilderMs)} window={Fmt(r.WindowCreatedMs)} firstRender={Fmt(r.FirstRenderMs)} inputReady={Fmt(r.InputReadyMs)} privateMB={r.PrivateMemoryMb:F1} ok={r.Ok}");
+    var r = StartupRunner.RunOnce(opt, i);
+    all.Add(r);
+    var tag = i <= opt.Discard ? " (버림)" : string.Empty;
+    Console.WriteLine($"run {i}{tag}: appbuilder={Fmt(r.AppBuilderMs)} window={Fmt(r.WindowCreatedMs)} firstRender={Fmt(r.FirstRenderMs)} inputReady={Fmt(r.InputReadyMs)} privateMB={Fmt(r.PrivateMb)} commitMB={Fmt(r.CommitMb)} ok={r.Ok}");
 }
 
-var ok = runs.Where(r => r.FirstRenderMs is not null).Select(r => r.FirstRenderMs!.Value).OrderBy(x => x).ToList();
-var summary = new Summary(
-    DateTime.UtcNow, Environment.OSVersion.ToString(), RuntimeInformation(), opt.Runs,
-    Median(runs.Select(r => r.AppBuilderMs)), Median(runs.Select(r => r.WindowCreatedMs)),
-    ok.Count > 0 ? Median(ok.Select(x => (double?)x)) : null,
-    ok.Count > 0 ? ok[^1] : null,
-    Median(runs.Select(r => r.InputReadyMs)),
-    Median(runs.Select(r => (double?)r.PrivateMemoryMb)), opt.BudgetMs, runs);
-
-Directory.CreateDirectory(opt.Out);
-File.WriteAllText(Path.Combine(opt.Out, "perf-startup.json"),
-    JsonSerializer.Serialize(summary, new JsonSerializerOptions { WriteIndented = true }));
-File.WriteAllText(Path.Combine(opt.Out, "perf-startup.md"), ToMarkdown(summary));
-Console.WriteLine($"median firstRender={Fmt(summary.MedianFirstRenderMs)} ms, inputReady={Fmt(summary.MedianInputReadyMs)} ms, private={Fmt(summary.MedianPrivateMemoryMb)} MB -> {opt.Out}");
+var runs = all.Skip(opt.Discard).ToList();
+var report = new Report("Oranda 시작·유휴 메모리 측정", $"{RuntimeInformation.OSDescription} / {RuntimeInformation.OSArchitecture} / {Environment.ProcessorCount} 논리 코어 / 실행 {opt.Runs}회(앞 {opt.Discard}회 버림), cold-copy={opt.ColdCopy}, 데이터 폴더={(opt.DataDir is null ? "실행마다 빈 폴더" : "고정")}");
+report.Rows.Add(RowOf("앱 시작 → 입력 가능", "ms", 1500, runs.Select(r => r.InputReadyMs), "median", "목표 1.5 s(두 번째 실행 이후). 중앙값 기준"));
+report.Rows.Add(RowOf("첫 렌더", "ms", null, runs.Select(r => r.FirstRenderMs), "median", "참고"));
+report.Rows.Add(RowOf("창 생성", "ms", null, runs.Select(r => r.WindowCreatedMs), "median", "참고"));
+report.Rows.Add(RowOf("AppBuilder 설정 완료", "ms", null, runs.Select(r => r.AppBuilderMs), "median", "참고(런타임 시작 + 어셈블리 로드)"));
+report.Rows.Add(RowOf($"전용 메모리(입력 가능 뒤 {opt.IdleSeconds}s)", "MB", 150, runs.Select(r => r.PrivateMb), "median", "Windows 전용 작업 집합, macOS phys_footprint. 접속·탭 없음"));
+report.Rows.Add(RowOf("커밋 메모리(Windows 전용 바이트)", "MB", null, runs.Select(r => r.CommitMb), "median", "참고"));
+report.WriteTo(opt.Out, "perf-startup");
+File.WriteAllText(Path.Combine(opt.Out, "perf-startup-runs.json"), JsonSerializer.Serialize(runs, new JsonSerializerOptions { WriteIndented = true }));
+Console.WriteLine(report.ToMarkdown());
 
 var failed = runs.Any(r => !r.Ok);
-var overBudget = summary.MedianFirstRenderMs is { } m && m > opt.BudgetMs;
-if (failed) { Console.Error.WriteLine("일부 실행이 표식 없이 종료/시간 초과"); }
-if (overBudget) { Console.Error.WriteLine($"예산 초과: {summary.MedianFirstRenderMs:F0} > {opt.BudgetMs} ms"); }
+var firstRenders = runs.Where(r => r.FirstRenderMs is not null).Select(r => r.FirstRenderMs!.Value).ToList();
+var overBudget = firstRenders.Count > 0 && Stats.Median(firstRenders) > opt.BudgetMs;
+if (failed)
+{
+    Console.Error.WriteLine("일부 실행이 표식 없이 종료/시간 초과");
+}
+
+if (overBudget)
+{
+    Console.Error.WriteLine($"예산 초과: 첫 렌더 중앙값 {Stats.Median(firstRenders):F0} > {opt.BudgetMs} ms");
+}
+
 return opt.Enforce && (failed || overBudget) ? 1 : 0;
 
-static RunResult RunOnce(Options opt, int index)
-{
-    var psi = new ProcessStartInfo(opt.Exe!)
-    {
-        RedirectStandardOutput = true,
-        UseShellExecute = false,
-        WorkingDirectory = Path.GetDirectoryName(Path.GetFullPath(opt.Exe!))!,
-    };
-    var markFile = Path.Combine(Path.GetTempPath(), $"oranda-perf-{Environment.ProcessId}-{index}.txt");
-    File.Delete(markFile);
-    psi.Environment["ORANDA_PERF"] = "1";
-    psi.Environment["ORANDA_PERF_FILE"] = markFile;
-    var marks = new Dictionary<string, double>();
-    var firstRender = new ManualResetEventSlim();
-    var inputReady = new ManualResetEventSlim();
-    using var p = new Process { StartInfo = psi };
-    void Parse(string? line)
-    {
-        if (line is null || !line.StartsWith("ORANDA_PERF ", StringComparison.Ordinal)) return;
-        string? stage = null; double? ms = null;
-        foreach (var kv in line.Split(' ', StringSplitOptions.RemoveEmptyEntries).Skip(1))
-        {
-            var parts = kv.Split('=', 2);
-            if (parts.Length != 2) continue;
-            if (parts[0] == "stage") stage = parts[1];
-            else if (parts[0] == "ms" && double.TryParse(parts[1], NumberStyles.Float, CultureInfo.InvariantCulture, out var v)) ms = v;
-        }
-        if (stage is null || ms is null) return;
-        lock (marks) marks[stage] = ms.Value;
-        if (stage == "first-render") firstRender.Set();
-        if (stage == "input-ready") inputReady.Set();
-    }
-    p.OutputDataReceived += (_, e) => Parse(e.Data);
-    p.Start();
-    p.BeginOutputReadLine();
-    var deadline = DateTime.UtcNow.AddSeconds(opt.TimeoutS);
-    // input-ready 까지 기다린다. 이 표식이 없는 옛 App 이면 first-render 뒤 1 초만 더 기다린다.
-    DateTime? graceUntil = null;
-    while (!inputReady.IsSet && DateTime.UtcNow < deadline && !p.HasExited && (graceUntil is null || DateTime.UtcNow < graceUntil))
-    {
-        if (firstRender.IsSet) graceUntil ??= DateTime.UtcNow.AddSeconds(1);
-        try { foreach (var l in File.ReadAllLines(markFile)) Parse(l); } catch (IOException) { } catch (UnauthorizedAccessException) { }
-        Thread.Sleep(50);
-    }
-    try { foreach (var l in File.ReadAllLines(markFile)) Parse(l); } catch (IOException) { }
-    var got = firstRender.IsSet;
-    double mem = 0;
-    if (got)
-    {
-        Thread.Sleep(2000); // 첫 렌더 직후 안정화
-        try { p.Refresh(); mem = p.PrivateMemorySize64 / 1024.0 / 1024.0; } catch { }
-    }
-    try { if (!p.HasExited) { p.Kill(true); p.WaitForExit(5000); } } catch { }
-    lock (marks)
-    {
-        double? Get(string k) => marks.TryGetValue(k, out var v) ? v : null;
-        return new RunResult(index, Get("appbuilder"), Get("window-created"), Get("first-render"), Get("input-ready"), mem, got);
-    }
-}
-
-static double? Median(IEnumerable<double?> xs)
-{
-    var l = xs.Where(x => x is not null).Select(x => x!.Value).OrderBy(x => x).ToList();
-    if (l.Count == 0) return null;
-    return l.Count % 2 == 1 ? l[l.Count / 2] : (l[l.Count / 2 - 1] + l[l.Count / 2]) / 2;
-}
 static string Fmt(double? v) => v is null ? "n/a" : v.Value.ToString("F0", CultureInfo.InvariantCulture);
-static string RuntimeInformation() => System.Runtime.InteropServices.RuntimeInformation.OSDescription + " / " + System.Runtime.InteropServices.RuntimeInformation.OSArchitecture;
 
-static string ToMarkdown(Summary s)
+static ReportRow RowOf(string item, string unit, double? limit, IEnumerable<double?> values, string judged, string note)
 {
-    var sb = new StringBuilder();
-    sb.AppendLine("# Oranda 시작 측정");
-    sb.AppendLine();
-    sb.AppendLine(CultureInfo.InvariantCulture, $"- 시각(UTC): {s.TimestampUtc:O}");
-    sb.AppendLine(CultureInfo.InvariantCulture, $"- 환경: {s.Environment}");
-    sb.AppendLine(CultureInfo.InvariantCulture, $"- 실행 횟수: {s.Runs}, 예산(첫 렌더 중앙값): {s.BudgetMs} ms");
-    sb.AppendLine();
-    sb.AppendLine("| 지표 | 값 |");
-    sb.AppendLine("|---|---|");
-    sb.AppendLine(CultureInfo.InvariantCulture, $"| AppBuilder 설정 완료(중앙값 ms) | {Fmt(s.MedianAppBuilderMs)} |");
-    sb.AppendLine(CultureInfo.InvariantCulture, $"| 창 생성(중앙값 ms) | {Fmt(s.MedianWindowCreatedMs)} |");
-    sb.AppendLine(CultureInfo.InvariantCulture, $"| 첫 렌더(중앙값 ms) | {Fmt(s.MedianFirstRenderMs)} |");
-    sb.AppendLine(CultureInfo.InvariantCulture, $"| 첫 렌더(최대 ms) | {Fmt(s.MaxFirstRenderMs)} |");
-    sb.AppendLine(CultureInfo.InvariantCulture, $"| 입력 가능(중앙값 ms) | {Fmt(s.MedianInputReadyMs)} |");
-    sb.AppendLine(CultureInfo.InvariantCulture, $"| 전용 메모리(중앙값 MB) | {Fmt(s.MedianPrivateMemoryMb)} |");
-    sb.AppendLine();
-    sb.AppendLine("| # | AppBuilder | 창 생성 | 첫 렌더 | 입력 가능 | 전용 MB | 성공 |");
-    sb.AppendLine("|---|---|---|---|---|---|---|");
-    foreach (var r in s.Details)
-        sb.AppendLine(CultureInfo.InvariantCulture, $"| {r.Index} | {Fmt(r.AppBuilderMs)} | {Fmt(r.WindowCreatedMs)} | {Fmt(r.FirstRenderMs)} | {Fmt(r.InputReadyMs)} | {r.PrivateMemoryMb:F1} | {r.Ok} |");
-    return sb.ToString();
-}
-
-sealed record RunResult(int Index, double? AppBuilderMs, double? WindowCreatedMs, double? FirstRenderMs, double? InputReadyMs, double PrivateMemoryMb, bool Ok);
-sealed record Summary(DateTime TimestampUtc, string Environment, string Runtime, int Runs,
-    double? MedianAppBuilderMs, double? MedianWindowCreatedMs, double? MedianFirstRenderMs, double? MaxFirstRenderMs, double? MedianInputReadyMs,
-    double? MedianPrivateMemoryMb, double BudgetMs, List<RunResult> Details);
-
-sealed record Options(string? Exe, int Runs, string Out, double BudgetMs, bool Enforce, int TimeoutS)
-{
-    public static Options Parse(string[] a)
-    {
-        string? exe = null, outDir = "perf-results"; int runs = 5, timeout = 30; double budget = 1000; bool enforce = false;
-        for (var i = 0; i < a.Length; i++)
-        {
-            switch (a[i])
-            {
-                case "--exe": exe = a[++i]; break;
-                case "--runs": runs = int.Parse(a[++i], CultureInfo.InvariantCulture); break;
-                case "--out": outDir = a[++i]; break;
-                case "--budget-ms": budget = double.Parse(a[++i], CultureInfo.InvariantCulture); break;
-                case "--timeout-s": timeout = int.Parse(a[++i], CultureInfo.InvariantCulture); break;
-                case "--enforce": enforce = true; break;
-            }
-        }
-        return new Options(exe, runs, outDir, budget, enforce, timeout);
-    }
+    var list = values.Where(v => v is not null).Select(v => v!.Value).ToList();
+    return ReportRow.Create(item, unit, limit, list, judged, note);
 }

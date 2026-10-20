@@ -1,0 +1,7 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+  <!-- Oranda.Perf.Tests 가 시작 측정 도구를 시험할 때 게시본 대신 띄우는 가짜 앱. 외부 패키지 없음. -->
+</Project>

@@ -1,0 +1,7 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <IsPackable>false</IsPackable>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+  </PropertyGroup>
+  <!-- 성능 측정 도구(Oranda.Perf, Oranda.Perf.Ui)가 함께 쓰는 통계·메모리·결과 기록. 외부 패키지 없음(BCL 만). -->
+</Project>

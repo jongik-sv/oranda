@@ -5,5 +5,7 @@
     <IsPackable>false</IsPackable>
     <!-- 시험 메서드 이름은 Given_when_then 식 밑줄을 쓴다. -->
     <NoWarn>$(NoWarn);CA1707</NoWarn>
+    <!-- 성능 단정 시험(Category=Perf)은 기본 실행·CI 에서 뺀다(docs/idea.md, 2026-10-20 결정). 돌릴 때는 dotnet test 의 filter 옵션에 Category=Perf. -->
+    <VSTestTestCaseFilter Condition="'$(VSTestTestCaseFilter)' == ''">Category!=Perf</VSTestTestCaseFilter>
   </PropertyGroup>
 </Project>

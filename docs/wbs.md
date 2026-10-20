@@ -299,6 +299,105 @@ dotnet, testhost, Oranda.App
 - data-model: -
 - ui-spec: -
 
+### TSK-01-08: 시작 시간: 입력 가능까지 2.6 s (목표 1.5 s) · 최초 실행 11 s (목표 4 s)
+- category: defect
+- domain: fullstack
+- model: sonnet
+- status: [ ]
+- priority: high
+- assignee: -
+- schedule: 2026-12-08 ~ 2026-12-10
+- tags: defect, perf, startup
+- depends: TSK-11-03
+- blocked-by: -
+- entry-point: -
+- note: 출처 docs/itest/TSK-11-03.md DEF-01. 원인 분석은 결과서 4장
+
+#### PRD 요구사항
+- prd-ref: PRD 7.2 시작
+- requirements:
+  - 게시본(Release·ReadyToRun composite) 시작 → 입력 가능 중앙값이 Windows 개발 PC 에서 2.6 s (p95 3.1 s) 다. 구간: Main 전 약 0.6 s, Avalonia Win32 플랫폼 초기화 약 1.0 s(첫 창/STA 1회성 약 0.4 s 포함), 셸 조립·창 생성 약 0.2 s, 첫 프레임 약 0.45 s, 시작 작업 약 0.2 s
+  - 시간을 줄일 후보를 시도해 효과를 측정한다: ① 첫 프레임 레이아웃 줄이기(Dock 도구 창을 처음 보일 때까지 미루기) ② 시작 때 JIT 되는 약 3,400 메서드(제네릭 값 형식 인스턴스·람다·컴파일된 XAML) 줄이기 또는 R2R 로 미리 만들기 ③ 플랫폼 초기화(렌더러 후보 ANGLE/소프트웨어 선택, 글꼴 열거)와 첫 창 비용 비교 ④ 설치 파일에서 PDB 제외로 디스크 읽기 줄이기
+  - 최초 실행(새로 풀린 파일, 백신 검사)이 중앙값 11 s (7~33 s) 다. 설치 파일 크기를 줄이고(TSK-10-06) 실행 파일 수·크기를 줄이는 방안을 본다. 사내 백신 예외 등록 안내는 사용자 문서에 적는다
+  - 목표(1.5 s)가 이 PC 환경에서 도달 가능한지 판단한다: 같은 PC 의 빈 Avalonia 창(spikes/TSK-01-04 HelloFloor)이 1.8 s 였다. 도달 불가이면 PRD 7.2 의 기준 장비·목표를 사람이 다시 정한다
+- acceptance:
+  - Oranda.Perf --discard 2 --runs 12 (고정 데이터 폴더) 입력 가능 중앙값 1.5 s 이하, 또는 도달 불가 근거와 새 목표가 PRD 7.2 에 반영됨
+  - 적용 전후 구간별 표(AppBuilder, app-init, window-created, first-render, input-ready)가 결과서에 남음
+- constraints:
+  - 측정은 docs/perf/README.md 의 방법으로 같은 PC·같은 조건에서 전후 비교한다
+- test-criteria:
+  - scripts/perf/run-windows.ps1 의 startup-warm 결과
+
+#### 기술 스펙 (TRD)
+- tech-spec: -
+- api-spec: -
+- data-model: -
+- ui-spec: -
+
+### TSK-01-09: 유휴 메모리: 접속·탭 없이 159~173 MB, 접속 1·탭 1 에서 194 MB (목표 150 MB)
+- category: defect
+- domain: fullstack
+- model: sonnet
+- status: [ ]
+- priority: medium
+- assignee: -
+- schedule: 2026-12-08 ~ 2026-12-10
+- tags: defect, perf, memory
+- depends: TSK-11-03
+- blocked-by: -
+- entry-point: -
+- note: 출처 docs/itest/TSK-11-03.md DEF-02. macOS 는 접속·탭 없이 131.6 MB (docs/perf/macos-2026-10-20.md)
+
+#### PRD 요구사항
+- prd-ref: PRD 7.2 유휴 메모리
+- requirements:
+  - Windows 전용 작업 집합이 기동 직후(접속 0, 탭 0) 159~173 MB, 접속 1·탭 1 에서 194 MB 로 목표 150 MB 를 넘는다(커밋 메모리는 204~236 MB). 관리 힙은 42 MB(접속 0)~57 MB(접속 1)이라 대부분은 네이티브(Skia/ANGLE, 런타임, R2R 이미지 114 MB 매핑)이다
+  - 원인 조사: 렌더러 선택(ANGLE vs 소프트웨어), 글리프/텍스트 캐시, composite R2R 이미지의 전용 페이지, Oracle 드라이버 적재(접속 때 +20 MB), 시작 작업이 만드는 객체. 줄일 수 있는 것부터 고친다
+  - 목표의 「전용 메모리」 정의(Windows 전용 작업 집합 vs 커밋)를 PRD 7.2 에 못 박는다
+- acceptance:
+  - tests/Oranda.Perf.Ui memory 시나리오의 「접속 1, 탭 1」 전용 메모리 중앙값 150 MB 이하(Windows), macOS 도 맥에서 재측정해 150 MB 이하
+- constraints:
+  - 고친 뒤 시작 시간(TSK-01-08)이 나빠지지 않아야 한다
+- test-criteria:
+  - scripts/perf/run-windows.ps1 의 memory 시나리오 결과
+
+#### 기술 스펙 (TRD)
+- tech-spec: -
+- api-spec: -
+- data-model: -
+- ui-spec: -
+
+### TSK-01-10: 시작 표식 기록 오류가 앱을 죽임 (PerfMarks.Mark)
+- category: defect
+- domain: infra
+- model: sonnet
+- status: [ ]
+- priority: low
+- assignee: -
+- schedule: 2026-12-08 ~ 2026-12-10
+- tags: defect, perf
+- depends: TSK-11-03
+- blocked-by: -
+- entry-point: -
+- note: 출처 docs/itest/TSK-11-03.md DEF-03
+
+#### PRD 요구사항
+- prd-ref: PRD 7.2 (측정 자동화)
+- requirements:
+  - ORANDA_PERF_FILE 로 표식 파일을 덧붙이다가 IOException 이 나면 처리되지 않은 예외로 앱이 종료된다(측정 도구가 같은 파일을 읽는 동안 재현). 표식 기록은 진단용이므로 실패를 삼키고 앱 동작에 영향을 주지 않는다
+- acceptance:
+  - 표식 파일이 다른 프로세스에 열려 있어도 앱이 종료되지 않는다 (시험으로 증명)
+- constraints:
+  - 환경 변수가 없을 때의 비용(분기 한 번)은 그대로
+- test-criteria:
+  - PerfMarks 단위 시험: 쓰기 잠금 파일에서 Mark 가 예외를 던지지 않음
+
+#### 기술 스펙 (TRD)
+- tech-spec: -
+- api-spec: -
+- data-model: -
+- ui-spec: -
+
 ## WP-02: 기본 설계·공유 계약
 - schedule: 2026-10-30 ~ 2026-11-09
 
@@ -1050,6 +1149,38 @@ dotnet, testhost, Oranda.App
 - data-model: -
 - ui-spec: -
 
+### TSK-04-09: 문법 검사: 1만 줄 문서 반영 422~497 ms (목표 300 ms) + 디바운스 300 ms
+- category: defect
+- domain: fullstack
+- model: sonnet
+- status: [ ]
+- priority: medium
+- assignee: -
+- schedule: 2026-12-08 ~ 2026-12-10
+- tags: defect, perf, diagnostics
+- depends: TSK-11-03
+- blocked-by: -
+- entry-point: -
+- note: 출처 docs/itest/TSK-11-03.md DEF-04
+
+#### PRD 요구사항
+- prd-ref: PRD 7.2 문법 검사
+- requirements:
+  - 1만 줄 문서 끝에서 문장 하나를 고친 뒤 분석이 돌아 밑줄이 반영되기까지(디바운스 제외) 중앙값 422~497 ms, p95 478~621 ms 다. 증분 분석이 문장 하나가 아니라 문서 전체를 다시 훑는지 확인한다(첫 전체 분석 1.6~2.1 s)
+  - 디바운스(EditorDiagnostics.Debounce) 300 ms 가 PRD 의 「입력 멈춘 뒤 300 ms」 한도를 이미 다 쓴다. 마지막 키 기준 반영은 중앙값 약 0.8~0.95 s 다. PRD 문구를 「디바운스 이후」 로 읽을지 「마지막 키 이후」 로 읽을지 사람이 정하고, 후자면 디바운스를 100 ms 안팎으로 줄인다
+- acceptance:
+  - tests/Oranda.Perf.Ui diagnostics 시나리오에서 정한 기준 값의 p95 가 300 ms 이하
+- constraints:
+  - 타이핑 중 UI 스레드가 막히지 않는다(분석은 백그라운드)
+- test-criteria:
+  - diagnostics 시나리오 결과
+
+#### 기술 스펙 (TRD)
+- tech-spec: -
+- api-spec: -
+- data-model: -
+- ui-spec: -
+
 ## WP-05: 포매터
 - schedule: 2026-11-17 ~ 2026-11-30
 
@@ -1548,6 +1679,72 @@ dotnet, testhost, Oranda.App
   - 결함을 재현하는 통합 시험이 먼저 실패하고, 고친 뒤 통과해야 한다
 - test-criteria:
   - SafetyCrossTests 평문 검색 시험과 이력 시험 통과
+
+#### 기술 스펙 (TRD)
+- tech-spec: -
+- api-spec: -
+- data-model: -
+- ui-spec: -
+
+### TSK-06-11: 실행 취소: PL/SQL 대기 중 취소가 끝날 때까지 59 s, CPU 루프는 1.7 s (목표 1 s)
+- category: defect
+- domain: backend
+- model: sonnet
+- status: [ ]
+- priority: high
+- assignee: -
+- schedule: 2026-12-08 ~ 2026-12-10
+- tags: defect, perf, cancel
+- depends: TSK-11-03
+- blocked-by: -
+- entry-point: -
+- note: 출처 docs/itest/TSK-11-03.md DEF-05. 모든 DB 작업은 취소 가능해야 한다(PRD 7.2)
+
+#### PRD 요구사항
+- prd-ref: PRD 7.2 실행 취소 반응
+- requirements:
+  - begin dbms_session.sleep(60); end; 실행 중 취소 명령을 내려도 60 s 가 다 지난 뒤(10회 모두 59.3 s)에야 「취소됨」 이 된다. OracleCommand.Cancel 이 서버 호출을 끊지 못하거나 취소 신호를 보내는 시점이 늦다
+  - 서버가 CPU 를 쓰는 PL/SQL 루프는 취소까지 중앙값 1.7~1.8 s, p95 2.4~2.5 s 다
+  - (질의가 서버에서 ORA-30009 로 끝나는 경우는 취소 시험 대상이 아니다)
+- acceptance:
+  - tests/Oranda.Perf.Ui cancel 시나리오의 두 항목 p95 가 1,000 ms 이하
+  - 대기(sleep)·CPU 루프·큰 SELECT 가져오기 취소 각각을 통합 시험(Category=Integration)이 단정한다
+- constraints:
+  - 취소 뒤 세션이 쓸 수 있는 상태로 돌아와야 한다(후속 문장 실행 시험)
+- test-criteria:
+  - ExecutionServiceTests 취소 시험 확장, cancel 시나리오
+
+#### 기술 스펙 (TRD)
+- tech-spec: -
+- api-spec: -
+- data-model: -
+- ui-spec: -
+
+### TSK-06-12: 결과 그리드: 가져온 행당 추가 메모리 204~233 bytes (목표 200 bytes)
+- category: defect
+- domain: frontend
+- model: sonnet
+- status: [ ]
+- priority: low
+- assignee: -
+- schedule: 2026-12-08 ~ 2026-12-10
+- tags: defect, perf, grid
+- depends: TSK-11-03
+- blocked-by: -
+- entry-point: -
+- note: 출처 docs/itest/TSK-11-03.md DEF-06. 「행당 200 bytes」 가 데이터를 포함하는지 PRD 에서 확정 필요
+
+#### PRD 요구사항
+- prd-ref: PRD 7.2 100만 행 그리드
+- requirements:
+  - 열 5~6개(NUMBER·VARCHAR2·NUMBER·DATE·NUMBER·VARCHAR2)의 결과를 모두 가져왔을 때 페이지 캐시 추정 204~210 bytes/행, 관리 힙 215 bytes/행, 전용 메모리 증가 233~267 bytes/행이다(데이터 포함)
+  - PRD 의 「추가 메모리 행당 200 bytes」 가 데이터를 뺀 그리드 부담을 뜻하는지 정하고(macOS 참고값은 50열에서 행당 2 KB), 데이터 포함이면 object 박싱 줄이기(열 지향 값 배열, 문자열 중복 제거)를 시도한다
+- acceptance:
+  - tests/Oranda.Perf.Ui grid·memory 시나리오의 행당 메모리가 정한 기준 이하, 기준 정의가 PRD 7.2 에 적힘
+- constraints:
+  - 스크롤 성능(프레임 간격)이 나빠지지 않는다
+- test-criteria:
+  - grid·memory 시나리오 결과
 
 #### 기술 스펙 (TRD)
 - tech-spec: -
@@ -2091,6 +2288,40 @@ dotnet, testhost, Oranda.App
 - data-model: -
 - ui-spec: -
 
+### TSK-10-06: 설치 파일: vpk pack 실패(VelopackApp 호출 없음) · 크기 추정 106 MB (목표 80 MB)
+- category: defect
+- domain: infra
+- model: sonnet
+- status: [ ]
+- priority: high
+- assignee: -
+- schedule: 2026-12-08 ~ 2026-12-10
+- tags: defect, perf, installer
+- depends: TSK-11-03
+- blocked-by: -
+- entry-point: -
+- note: 출처 docs/itest/TSK-11-03.md DEF-07
+
+#### PRD 요구사항
+- prd-ref: PRD 7.2 설치 파일 크기, PRD 업데이트
+- requirements:
+  - vpk pack 1.2.161 이 「VelopackApp 호출을 확인하지 못함」 단계에서 중단된다. 앱 어디에도 Velopack 참조·VelopackApp.Build().Run() 이 없다(자동 업데이트 TSK-10-01 이 이 커밋에 없거나 빠졌다). 확인해 넣는다
+  - 게시 폴더 300 MB 중 libSkiaSharp.pdb 80 MB·libHarfBuzzSharp.pdb 20 MB 가 들어 있다. PDB 를 빼면 압축 크기 추정이 106 MB → 79 MB 다(zip 최대 압축 추정, 실제 Setup.exe 는 부트스트래퍼가 더해진다). 게시에서 *.pdb 를 제외한다(DebugType=none 또는 vpk 제외 옵션)
+  - composite R2R(Oranda.App.r2r.dll 109 MB)은 시작 시간 −0.5 s 의 대가로 약 +30 MB 이므로 크기 목표와 맞바꿔 본다
+- acceptance:
+  - scripts/release/pack-windows.ps1 이 Setup.exe 를 만들고 check-installer-size.ps1 이 80 MB 이하로 통과한다
+  - macOS .pkg 도 CI 크기 검사 단계에서 80 MB 이하
+- constraints:
+  - 서명은 사람 자원(TSK-10-01 보류)이므로 서명 없이 크기만 본다
+- test-criteria:
+  - pack-windows.ps1 실행 결과와 크기 검사
+
+#### 기술 스펙 (TRD)
+- tech-spec: -
+- api-spec: -
+- data-model: -
+- ui-spec: -
+
 ## WP-11: 통합테스트
 - schedule: 2026-12-01 ~ 2026-12-07
 - description: 기능 간 시나리오 E2E·성능·권한 교차 검증 (개별 기능 재검증 아님)
@@ -2335,6 +2566,14 @@ graph LR
   TSK-11-04 --> TSK-09-03
   TSK-11-04 --> TSK-10-04
   TSK-10-02 --> TSK-10-05
+  %% 성능 예산 측정 결함 (2026-10-20 등록, TSK-11-03)
+  TSK-11-03 --> TSK-01-08
+  TSK-11-03 --> TSK-01-09
+  TSK-11-03 --> TSK-01-10
+  TSK-11-03 --> TSK-04-09
+  TSK-11-03 --> TSK-06-11
+  TSK-11-03 --> TSK-06-12
+  TSK-11-03 --> TSK-10-06
   style TSK-01-02 fill:#fff3e0,stroke:#e65100
   style TSK-01-07 fill:#fff3e0,stroke:#e65100
   style TSK-01-02 stroke:#c62828,stroke-width:2px

@@ -195,6 +195,7 @@ public class CompletionTests
     }
 
     /// <summary>TRD 4.5 L1 「1만 줄 문서에서 16 ms 이하」. Release 기준 16 ms, Debug(JIT 최적화 끔)·병렬 시험 부하는 6배 여유.</summary>
+    [Trait("Category", "Perf")]
     [Fact]
     public void Context_on_10k_line_document_is_fast()
     {
@@ -268,6 +269,7 @@ public class CompletionTests
         return p.GetCompletionsAsync(s, text, offset, CancellationToken.None);
     }
 
+    [Trait("Category", "Perf")]
     [Fact]
     public async Task Acceptance_alias_dot_lists_emp_columns_within_150ms()
     {

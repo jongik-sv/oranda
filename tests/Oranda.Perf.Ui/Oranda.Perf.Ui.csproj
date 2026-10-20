@@ -1,0 +1,19 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <IsPackable>false</IsPackable>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <!-- 게시본과 같게: dotnet publish tests/Oranda.Perf.Ui -c Release -r win-x64 (self-contained, PublishReadyToRun=true) -->
+  </PropertyGroup>
+
+  <!--
+    실제 앱(Oranda.App)을 이 프로세스 안에서 진짜 창으로 띄우고(Win32/macOS 플랫폼, 헤드리스 아님) 사용자 동작을 흉내 내어 PRD 7.2 의 창이 필요한 항목을 잰다.
+    시나리오: format, typing, diagnostics, completion, firstrow, cancel, memory, grid. 사용법은 docs/perf/README.md.
+  -->
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Oranda.App\Oranda.App.csproj" />
+    <ProjectReference Include="..\Oranda.Perf.Common\Oranda.Perf.Common.csproj" />
+  </ItemGroup>
+
+</Project>

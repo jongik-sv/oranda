@@ -381,6 +381,7 @@ public class FormatterLayoutTests
 
     // ---- 성능 ----
 
+    [Trait("Category", "Perf")]
     [Fact]
     public void Formats_2000_lines_with_extended_options_within_500ms()
     {

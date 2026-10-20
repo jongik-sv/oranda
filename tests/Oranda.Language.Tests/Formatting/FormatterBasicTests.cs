@@ -478,6 +478,7 @@ public class FormatterBasicTests
 
     // ---- 성능 ----
 
+    [Trait("Category", "Perf")]
     [Fact]
     public void Formats_2000_lines_within_500ms()
     {

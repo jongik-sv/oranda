@@ -288,6 +288,7 @@ public class StatementSplitterTests
         }
     }
 
+    [Trait("Category", "Perf")]
     [Fact]
     public void Incremental_lex_of_10k_lines_meets_budget()
     {
@@ -325,6 +326,7 @@ public class StatementSplitterTests
         Assert.True(best < 16, $"propagate {best} ms");
     }
 
+    [Trait("Category", "Perf")]
     [Fact]
     public void Split_of_10k_lines_is_fast_enough()
     {
