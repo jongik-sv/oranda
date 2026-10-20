@@ -307,64 +307,96 @@ public partial class MainWindow : Window
         if (!_closeConfirmed && _shell is not null)
         {
             e.Cancel = true;
-            if (_closing)
+            if (await TryExitAsync().ConfigureAwait(true))
             {
-                return; // 확인 대화상자가 떠 있는 동안 다시 닫기(⌘Q 두 번)는 무시한다
+                _closeConfirmed = true;
+                Close();
             }
 
-            _closing = true;
-            try
-            {
-                // 미커밋 확인을 먼저 한다: 취소하면 레이아웃 저장·종료 작업을 하지 않고 그대로 둔다(D-017).
-                // 확인이 실패하면 알리고 다음 닫기는 확인 없이 끝낸다(확인이 늘 실패해도 앱을 끌 수 있어야 한다).
-                if (_services is not null && !_exitWithoutConfirm)
-                {
-                    switch (await ConfirmExitAsync(_services))
-                    {
-                        case ExitConfirmResult.Cancelled:
-                            return;
-                        case ExitConfirmResult.Failed:
-                            _exitWithoutConfirm = true;
-                            await NotifyExitConfirmFailedAsync();
-                            return;
-                    }
-                }
-
-                if (_services is not null)
-                {
-                    try
-                    {
-                        await DedicatedSessionCommands.ReleaseAllAsync(_services);
-                    }
-                    catch (Exception ex)
-                    {
-                        Trace.TraceError("전용 세션 정리 실패: {0}", ex);
-                    }
-                }
-
-                try
-                {
-                    _layoutSaveTimer?.Stop();
-                    await _shell.SaveLayoutAsync(CapturePlacement());
-                }
-                catch (Exception ex)
-                {
-                    Trace.TraceError("layout.json 저장 실패: {0}", ex);
-                }
-
-                await _shell.RunShutdownHooksAsync();
-            }
-            finally
-            {
-                _closing = false;
-            }
-
-            _closeConfirmed = true;
-            Close();
             return;
         }
 
         base.OnClosing(e);
+    }
+
+    /// <summary>
+    /// 메인 창을 닫는다. 닫기 확인과 정리(<see cref="TryExitAsync"/>)를 모두 통과하면 창이 닫히고 true,
+    /// 사용자가 취소했거나 이미 닫는 중이면 false. 업데이트의 「지금 다시 시작해 적용」이 같은 흐름을 빌려 쓴다.
+    /// </summary>
+    internal async Task<bool> CloseWithFlowAsync()
+    {
+        if (_shell is null)
+        {
+            return false;
+        }
+
+        if (!await TryExitAsync().ConfigureAwait(true))
+        {
+            return false;
+        }
+
+        _closeConfirmed = true;
+        Close();
+        return true;
+    }
+
+    /// <summary>
+    /// 종료 흐름: 미커밋 확인 → 전용 세션 정리 → 레이아웃 저장 → 종료 작업. 통과하면 true, 취소하면 false(아무것도 정리하지 않고 그대로 둔다).
+    /// </summary>
+    private async Task<bool> TryExitAsync()
+    {
+        if (_closing)
+        {
+            return false; // 확인 대화상자가 떠 있는 동안 다시 닫기(⌘Q 두 번)는 무시한다
+        }
+
+        _closing = true;
+        try
+        {
+            // 미커밋 확인을 먼저 한다: 취소하면 레이아웃 저장·종료 작업을 하지 않고 그대로 둔다(D-017).
+            // 확인이 실패하면 알리고 다음 닫기는 확인 없이 끝낸다(확인이 늘 실패해도 앱을 끌 수 있어야 한다).
+            if (_services is not null && !_exitWithoutConfirm)
+            {
+                switch (await ConfirmExitAsync(_services))
+                {
+                    case ExitConfirmResult.Cancelled:
+                        return false;
+                    case ExitConfirmResult.Failed:
+                        _exitWithoutConfirm = true;
+                        await NotifyExitConfirmFailedAsync();
+                        return false;
+                }
+            }
+
+            if (_services is not null)
+            {
+                try
+                {
+                    await DedicatedSessionCommands.ReleaseAllAsync(_services);
+                }
+                catch (Exception ex)
+                {
+                    Trace.TraceError("전용 세션 정리 실패: {0}", ex);
+                }
+            }
+
+            try
+            {
+                _layoutSaveTimer?.Stop();
+                await _shell!.SaveLayoutAsync(CapturePlacement());
+            }
+            catch (Exception ex)
+            {
+                Trace.TraceError("layout.json 저장 실패: {0}", ex);
+            }
+
+            await _shell!.RunShutdownHooksAsync();
+            return true;
+        }
+        finally
+        {
+            _closing = false;
+        }
     }
 
     private static async Task<ExitConfirmResult> ConfirmExitAsync(ServiceContainer services)

@@ -60,6 +60,14 @@
     <PackageReference Include="Velopack" />
   </ItemGroup>
 
+  <!-- 빌드 때 -p:OrandaUpdateFeed=<주소> 를 주면 업데이트 피드 기본값으로 박힌다(설정의 주소가 비었을 때 쓴다). 비우면 「피드 없음」. -->
+  <ItemGroup Condition="'$(OrandaUpdateFeed)' != ''">
+    <AssemblyAttribute Include="System.Reflection.AssemblyMetadataAttribute">
+      <_Parameter1>OrandaUpdateFeed</_Parameter1>
+      <_Parameter2>$(OrandaUpdateFeed)</_Parameter2>
+    </AssemblyAttribute>
+  </ItemGroup>
+
   <ItemGroup>
     <ProjectReference Include="..\Oranda.Core\Oranda.Core.csproj" />
     <ProjectReference Include="..\Oranda.Language\Oranda.Language.csproj" />

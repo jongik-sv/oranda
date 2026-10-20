@@ -10,6 +10,7 @@ namespace Oranda.App.Shell.Settings;
 /// 실행 중 앱이 쓰는 설정 한 벌(<see cref="Current"/>)과 바꾸고 저장하는 길(<see cref="UpdateAsync"/>).
 /// 저장하면 <see cref="ISettingsStore"/> 가 바뀐 섹션마다 <c>SettingsChanged</c> 를 발행한다.
 /// </summary>
+[System.Diagnostics.CodeAnalysis.SuppressMessage("Design", "CA1001", Justification = "SemaphoreSlim 은 대기 핸들을 만들지 않으면 정리할 자원이 없고, 종료 중 늦은 저장이 정리된 세마포어를 만나지 않게 둔다.")]
 public sealed class SettingsService(ISettingsStore store)
 {
     /// <summary>글자 크게/작게 한 단계(pt).</summary>
@@ -23,6 +24,7 @@ public sealed class SettingsService(ISettingsStore store)
 
     public const double DefaultGridFontSize = 13;
 
+    private readonly SemaphoreSlim _updateGate = new(1, 1);
     private AppSettings _current = new();
 
     public AppSettings Current => Volatile.Read(ref _current);
@@ -46,9 +48,18 @@ public sealed class SettingsService(ISettingsStore store)
     public async Task UpdateAsync(Func<AppSettings, AppSettings> change, CancellationToken ct = default)
     {
         ArgumentNullException.ThrowIfNull(change);
-        var next = change(Current);
-        Volatile.Write(ref _current, next);
-        await store.SaveAsync(next, ct).ConfigureAwait(false);
+        // 계산·대입·저장을 한 번에 하나씩 한다: 백그라운드(업데이트 확인 시각 기록 등)와 화면의 저장이 겹쳐도 서로의 변경을 덮지 않는다.
+        await _updateGate.WaitAsync(ct).ConfigureAwait(false);
+        try
+        {
+            var next = change(Current);
+            Volatile.Write(ref _current, next);
+            await store.SaveAsync(next, ct).ConfigureAwait(false);
+        }
+        finally
+        {
+            _updateGate.Release();
+        }
     }
 
     public Task SetThemeAsync(Theme theme, CancellationToken ct = default) =>

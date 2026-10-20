@@ -555,7 +555,7 @@
 |---|---|---|---|---|---|
 | `oranda.help.docs` | 사용자 문서 | `F1` | 전역 | 항상 | TSK-10-01 |
 | `oranda.help.shortcuts` | 단축키 목록 | - | 전역 | 항상 | TSK-10-01 |
-| `oranda.help.checkUpdate` | 업데이트 확인 | - | 전역 | 항상 | TSK-10-01 |
+| `oranda.help.checkUpdate` | 업데이트 확인… | - | 전역 | 항상 | TSK-10-01 |
 | `oranda.help.crashReport` | 오류 보고서 | - | 전역 | 항상 | TSK-10-01 |
 | `oranda.help.openLogs` | 로그 폴더 열기 | - | 전역 | 항상 | TSK-10-01 |
 | `oranda.help.about` | Oranda 정보 | - | 전역 | 항상 | TSK-03-01 |

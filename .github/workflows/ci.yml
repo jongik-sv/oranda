@@ -28,7 +28,7 @@ jobs:
       - name: Unit and UI tests
         run: dotnet test Oranda.sln -c Release --no-build --filter "Category!=Integration&Category!=Perf"
       - name: Publish app
-        run: dotnet publish src/Oranda.App -c Release -r win-x64 --self-contained -p:PublishReadyToRun=true -o artifacts/publish/win-x64
+        run: dotnet publish src/Oranda.App -c Release -r win-x64 --self-contained -p:PublishReadyToRun=true -p:Version=0.1.${{ github.run_number }} -o artifacts/publish/win-x64
       - name: Startup perf (5 runs)
         # 예산 초과 시 실패시키려면 --enforce 를 붙인다(예산 확정 전까지 보고만).
         run: dotnet run --project tests/Oranda.Perf -c Release -- --exe artifacts/publish/win-x64/Oranda.App.exe --runs 5 --out artifacts/perf
@@ -53,7 +53,7 @@ jobs:
       - name: Unit and UI tests
         run: dotnet test Oranda.sln -c Release --no-build --filter "Category!=Integration&Category!=Perf"
       - name: Publish app
-        run: dotnet publish src/Oranda.App -c Release -r osx-arm64 --self-contained -p:PublishReadyToRun=true -o artifacts/publish/osx-arm64
+        run: dotnet publish src/Oranda.App -c Release -r osx-arm64 --self-contained -p:PublishReadyToRun=true -p:Version=0.1.${{ github.run_number }} -o artifacts/publish/osx-arm64
       - name: Install vpk
         run: dotnet tool install -g vpk --version "$VPK_VERSION"
       - name: Import signing certificate
@@ -84,14 +84,14 @@ jobs:
           APPLE_SIGN_APP_IDENTITY: ${{ secrets.APPLE_SIGN_APP_IDENTITY }}
           APPLE_SIGN_INSTALL_IDENTITY: ${{ secrets.APPLE_SIGN_INSTALL_IDENTITY }}
         run: >
-          vpk pack --packId Oranda --packVersion "0.0.${{ github.run_number }}"
+          vpk pack --packId Oranda --packVersion "0.1.${{ github.run_number }}"
           --packDir artifacts/publish/osx-arm64 --mainExe Oranda.App
           --signAppIdentity "$APPLE_SIGN_APP_IDENTITY" --signInstallIdentity "$APPLE_SIGN_INSTALL_IDENTITY"
           --notaryProfile oranda-notary --outputDir artifacts/release
       - name: Package (unsigned, no secrets)
         if: env.HAS_APPLE_SECRETS != 'true'
         run: >
-          vpk pack --packId Oranda --packVersion "0.0.${{ github.run_number }}"
+          vpk pack --packId Oranda --packVersion "0.1.${{ github.run_number }}"
           --packDir artifacts/publish/osx-arm64 --mainExe Oranda.App --outputDir artifacts/release
       - name: Verify signature and Gatekeeper
         if: env.HAS_APPLE_SECRETS == 'true'

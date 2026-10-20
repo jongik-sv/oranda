@@ -8,23 +8,27 @@ using Avalonia.Input;
 namespace Oranda.App.Shell.Menus;
 
 /// <summary>
-/// macOS 앱 메뉴(시스템 메뉴 막대 맨 왼쪽 「Oranda」)의 앞쪽 항목: 「Oranda 정보」·「설정…(⌘,)」.
+/// macOS 앱 메뉴(시스템 메뉴 막대 맨 왼쪽 「Oranda」)의 앞쪽 항목: 「Oranda 정보」·「업데이트 확인…」·「설정…(⌘,)」.
 /// 서비스·숨기기·종료는 Avalonia 가 이 메뉴 뒤에 기본 항목으로 붙인다(<c>PopulateStandardOSXMenuItems</c>).
 /// </summary>
 public sealed class MacAppMenu
 {
     public const string AboutCommandId = "oranda.help.about";
 
+    public const string UpdateCommandId = "oranda.help.checkUpdate";
+
     public const string SettingsCommandId = "oranda.tools.settings";
 
     private readonly NativeMenuItem _about = new("Oranda 정보");
+    private readonly NativeMenuItem _update = new("업데이트 확인…");
     private readonly NativeMenuItem _settings = new("설정…") { Gesture = new KeyGesture(Key.OemComma, KeyModifiers.Meta) };
 
     public MacAppMenu()
     {
         _about.Click += (_, _) => _ = ShellCommandRunner.RunAsync(AboutCommandId);
+        _update.Click += (_, _) => _ = ShellCommandRunner.RunAsync(UpdateCommandId);
         _settings.Click += (_, _) => _ = ShellCommandRunner.RunAsync(SettingsCommandId);
-        Menu = new NativeMenu { _about, new NativeMenuItemSeparator(), _settings };
+        Menu = new NativeMenu { _about, _update, new NativeMenuItemSeparator(), _settings };
     }
 
     public NativeMenu Menu { get; }
@@ -52,6 +56,7 @@ public sealed class MacAppMenu
     private void Apply(IShellText text)
     {
         _about.Header = text.Lookup("Cmd." + AboutCommandId);
+        _update.Header = text.Lookup("Cmd." + UpdateCommandId);
         _settings.Header = text.Lookup("Cmd." + SettingsCommandId) + "…";
         LocalizeStandardItems(text);
     }
@@ -66,7 +71,7 @@ public sealed class MacAppMenu
         var name = Application.Current?.Name ?? "Oranda";
         foreach (var item in Menu.Items)
         {
-            if (item is not NativeMenuItem native || native == _about || native == _settings)
+            if (item is not NativeMenuItem native || native == _about || native == _update || native == _settings)
             {
                 continue;
             }

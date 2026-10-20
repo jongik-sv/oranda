@@ -5,6 +5,7 @@ using System.Threading.Tasks;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Oranda.App.Features.Localization;
+using Oranda.App.Features.Update;
 using Oranda.App.Shell.Appearance;
 using Oranda.App.ViewModels;
 using Oranda.Core.Execution;
@@ -115,6 +116,34 @@ public sealed partial class SettingsViewModel : ViewModelBase
     [ObservableProperty]
     private bool _schemaSingleClickPreview;
 
+    // ---- 업데이트(TSK-10-01) ----
+
+    /// <summary>설정 창의 선택된 탭(0 시작). 저장을 막는 값이 있으면 그 탭으로 옮겨 보인다.</summary>
+    [ObservableProperty]
+    private int _selectedTab;
+
+    /// <summary>업데이트 탭의 순서(<c>SettingsWindow.axaml</c> 의 마지막 탭).</summary>
+    public const int UpdateTabIndex = 6;
+
+    [ObservableProperty]
+    private bool _updateCheckOnStartup;
+
+    [ObservableProperty]
+    private bool _updateAutoDownload;
+
+    [NotifyPropertyChangedFor(nameof(FeedMessage), nameof(FeedMessageIsError), nameof(HasFeedMessage))]
+    [ObservableProperty]
+    private string _updateFeedUrl;
+
+    [NotifyPropertyChangedFor(nameof(SkippedVersionText), nameof(HasSkippedVersion))]
+    [ObservableProperty]
+    private string? _skippedVersion;
+
+    [ObservableProperty]
+    private string _updateCheckText = string.Empty;
+
+    private bool _skippedCleared;
+
     public SettingsViewModel(SettingsService settings, IShellText text, IEnumerable<string>? installedFonts = null)
     {
         _settings = settings;
@@ -168,6 +197,73 @@ public sealed partial class SettingsViewModel : ViewModelBase
         _restoreOnStartup = s.Workspace.RestoreOnStartup;
         _cacheRetentionDays = s.MetadataCache.RetentionDays;
         _schemaSingleClickPreview = s.SchemaBrowser.SingleClickPreview;
+        _updateCheckOnStartup = s.Update.CheckOnStartup;
+        _updateAutoDownload = s.Update.AutoDownload;
+        _updateFeedUrl = s.Update.FeedUrl ?? string.Empty;
+        _skippedVersion = s.Update.SkippedVersion;
+    }
+
+    // ---- 업데이트 탭 ----
+
+    /// <summary>지금 실행 중인 버전(설치본이면 설치 버전, 아니면 개발 실행본 표시).</summary>
+    public string UpdateVersionText { get; } = AppVersion.Display;
+
+    /// <summary>피드 칸이 비었을 때 회색으로 보일 안내: 빌드 기본값을 알려 주거나 「기본 주소 없음」.</summary>
+    public string UpdateFeedPlaceholder => AppVersion.BuildDefaultFeed ?? _text.Lookup("Shell.settings.update.noDefaultFeed");
+
+    /// <summary>피드 칸 아래 한 줄: 해석할 수 없는 값이면 이유, http 면 암호화 경고. 아니면 비어 있다.</summary>
+    public string FeedMessage
+    {
+        get
+        {
+            if (string.IsNullOrWhiteSpace(UpdateFeedUrl))
+            {
+                return string.Empty;
+            }
+
+            var parsed = UpdateFeedParser.Parse(UpdateFeedUrl);
+            if (!parsed.IsValid)
+            {
+                return _text.Lookup(UpdateFeedParser.ErrorKey(parsed.Error));
+            }
+
+            return parsed.Feed!.IsPlainHttp ? _text.Lookup("Shell.settings.update.httpWarning") : string.Empty;
+        }
+    }
+
+    public bool FeedMessageIsError => !string.IsNullOrWhiteSpace(UpdateFeedUrl) && !UpdateFeedParser.Parse(UpdateFeedUrl).IsValid;
+
+    public bool HasFeedMessage => FeedMessage.Length > 0;
+
+    public string SkippedVersionText => string.IsNullOrEmpty(SkippedVersion) ? _text.Lookup("Shell.settings.update.skippedNone") : SkippedVersion;
+
+    public bool HasSkippedVersion => !string.IsNullOrEmpty(SkippedVersion);
+
+    public string LastCheckedText =>
+        _settings.Current.Update.LastCheckedUtc is { } at
+            ? at.ToLocalTime().ToString("g", System.Globalization.CultureInfo.CurrentCulture)
+            : _text.Lookup("Shell.settings.update.never");
+
+    [RelayCommand]
+    private void ClearSkippedVersion()
+    {
+        SkippedVersion = null;
+        _skippedCleared = true;
+    }
+
+    /// <summary>저장한 설정으로 지금 확인하고 결과 한 줄을 보인다. 새 버전을 받는 일은 업데이트 창이 맡는다.</summary>
+    [RelayCommand]
+    private async Task CheckUpdateNowAsync()
+    {
+        if (UpdateService.Current is not { } service)
+        {
+            return;
+        }
+
+        UpdateCheckText = _text.Lookup("Update.state.checking");
+        await service.CheckAsync(manual: true).ConfigureAwait(true);
+        UpdateCheckText = UpdateTexts.Status(service, _text);
+        OnPropertyChanged(nameof(LastCheckedText));
     }
 
     public IReadOnlyList<ErrorModeChoice> ErrorModes { get; }
@@ -218,6 +314,12 @@ public sealed partial class SettingsViewModel : ViewModelBase
     [RelayCommand]
     public async Task SaveAsync()
     {
+        if (FeedMessageIsError)
+        {
+            SelectedTab = UpdateTabIndex; // 잘못된 피드 주소는 저장하지 않는다: 이유가 보이는 탭으로 옮긴다
+            return;
+        }
+
         var family = string.IsNullOrWhiteSpace(FontFamily) || FontFamily == FontChoices[0] ? null : FontFamily.Trim();
         var gridFamily = string.IsNullOrWhiteSpace(GridFontFamily) || GridFontFamily == FontChoices[0] ? null : GridFontFamily.Trim();
         await _settings.UpdateAsync(s => s with
@@ -265,7 +367,16 @@ public sealed partial class SettingsViewModel : ViewModelBase
             },
             MetadataCache = s.MetadataCache with { RetentionDays = (int)CacheRetentionDays },
             SchemaBrowser = s.SchemaBrowser with { SingleClickPreview = SchemaSingleClickPreview },
+            // 건너뛴 버전·마지막 확인 시각은 백그라운드 확인이 쓸 수 있어 지운 경우에만 덮어쓴다.
+            Update = s.Update with
+            {
+                CheckOnStartup = UpdateCheckOnStartup,
+                AutoDownload = UpdateAutoDownload,
+                FeedUrl = string.IsNullOrWhiteSpace(UpdateFeedUrl) ? null : UpdateFeedUrl.Trim(),
+                SkippedVersion = _skippedCleared ? null : s.Update.SkippedVersion,
+            },
         }).ConfigureAwait(true);
+        UpdateService.Current?.RefreshSettings(); // 건너뛴 버전을 지웠으면 상태 표시줄 표시도 바로 맞춘다
         CloseRequested?.Invoke(this, EventArgs.Empty);
     }
 

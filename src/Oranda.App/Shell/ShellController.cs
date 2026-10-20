@@ -242,7 +242,7 @@ public sealed class ShellController : IShellUi
 
     public void ShowAbout()
     {
-        var version = typeof(ShellController).Assembly.GetName().Version?.ToString(3) ?? "0.1.0";
+        var version = Oranda.App.Features.Update.AppVersion.Display;
         var ok = new Button { Content = _text.Lookup("Shell.about.ok"), MinWidth = 80, HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Right, IsDefault = true, IsCancel = true };
         var window = new Window
         {

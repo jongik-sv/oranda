@@ -25,6 +25,10 @@
       <Setter Property="HorizontalAlignment" Value="Left" />
       <Setter Property="MinWidth" Value="140" />
     </Style>
+    <Style Selector="TextBlock.hint.error">
+      <Setter Property="Opacity" Value="1" />
+      <Setter Property="Foreground" Value="{DynamicResource OrandaEnvProductionBrush}" />
+    </Style>
     <Style Selector="TextBlock.hint">
       <Setter Property="Opacity" Value="0.6" />
       <Setter Property="FontSize" Value="{DynamicResource OrandaFontSizeSmall}" />
@@ -36,7 +40,7 @@
   <!-- 고정 폭·높이를 쓰지 않는다(배율 250% 에서 글자가 잘리지 않게). 단추 줄은 항상 아래에 고정.
        탭 순서 = 적은 순서(범주 → 입력 칸 → 저장 → 닫기)라서 단추 줄을 맨 뒤에 둔다. -->
   <Grid Margin="12" RowDefinitions="*,Auto,Auto">
-    <TabControl Grid.Row="0" Classes="categories" TabStripPlacement="Left" Padding="16,0,0,0">
+    <TabControl Grid.Row="0" Classes="categories" TabStripPlacement="Left" Padding="16,0,0,0" SelectedIndex="{Binding SelectedTab}">
       <TabItem Header="{Binding Strings[tab.general]}">
         <ScrollViewer HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
           <Grid Classes="form" ColumnDefinitions="Auto,*" RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto" ColumnSpacing="12" RowSpacing="10">
@@ -172,6 +176,40 @@
             <TextBlock Grid.Row="0" Text="{Binding Strings[refresh]}" />
             <NumericUpDown Grid.Row="0" Grid.Column="1" Minimum="2" Maximum="60" Increment="1" FormatString="0"
                            Value="{Binding MonitorRefreshSeconds}" AutomationProperties.Name="{Binding Strings[refreshName]}" />
+          </Grid>
+        </ScrollViewer>
+      </TabItem>
+
+      <TabItem Header="{Binding Strings[tab.update]}">
+        <ScrollViewer HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
+          <Grid Classes="form" ColumnDefinitions="Auto,*" RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto" ColumnSpacing="12" RowSpacing="10">
+            <TextBlock Grid.Row="0" Text="{Binding Strings[update.version]}" />
+            <TextBlock Grid.Row="0" Grid.Column="1" x:Name="UpdateVersionText" Text="{Binding UpdateVersionText}" TextAlignment="Left" VerticalAlignment="Center" />
+            <TextBlock Grid.Row="1" Text="{Binding Strings[update.automatic]}" />
+            <StackPanel Grid.Row="1" Grid.Column="1" Spacing="6">
+              <CheckBox x:Name="UpdateCheckOnStartupBox" Content="{Binding Strings[update.checkOnStartup]}" IsChecked="{Binding UpdateCheckOnStartup}"
+                        AutomationProperties.Name="{Binding Strings[update.checkOnStartup]}" />
+              <CheckBox x:Name="UpdateAutoDownloadBox" Content="{Binding Strings[update.autoDownload]}" IsChecked="{Binding UpdateAutoDownload}"
+                        AutomationProperties.Name="{Binding Strings[update.autoDownload]}" />
+            </StackPanel>
+            <TextBlock Grid.Row="2" Text="{Binding Strings[update.feed]}" />
+            <TextBox Grid.Row="2" Grid.Column="1" x:Name="UpdateFeedBox" MinWidth="280" Text="{Binding UpdateFeedUrl}"
+                     PlaceholderText="{Binding UpdateFeedPlaceholder}" AutomationProperties.Name="{Binding Strings[update.feed]}" />
+            <TextBlock Grid.Row="3" Grid.Column="1" x:Name="UpdateFeedMessage" Classes="hint" Classes.error="{Binding FeedMessageIsError}"
+                       TextAlignment="Left" Text="{Binding FeedMessage}" IsVisible="{Binding HasFeedMessage}" />
+            <TextBlock Grid.Row="4" Text="{Binding Strings[update.skipped]}" />
+            <StackPanel Grid.Row="4" Grid.Column="1" Orientation="Horizontal" Spacing="8">
+              <TextBlock Text="{Binding SkippedVersionText}" VerticalAlignment="Center" />
+              <Button x:Name="ClearSkippedButton" Content="{Binding Strings[update.clearSkipped]}" Command="{Binding ClearSkippedVersionCommand}"
+                      IsVisible="{Binding HasSkippedVersion}" />
+            </StackPanel>
+            <TextBlock Grid.Row="5" Text="{Binding Strings[update.lastChecked]}" />
+            <TextBlock Grid.Row="5" Grid.Column="1" Text="{Binding LastCheckedText}" TextAlignment="Left" VerticalAlignment="Center" />
+            <StackPanel Grid.Row="6" Grid.Column="1" Spacing="6">
+              <Button x:Name="CheckUpdateNowButton" Content="{Binding Strings[update.checkNow]}" Command="{Binding CheckUpdateNowCommand}" HorizontalAlignment="Left" />
+              <TextBlock Classes="hint" TextAlignment="Left" Text="{Binding Strings[update.checkNowHint]}" />
+              <TextBlock x:Name="UpdateCheckResult" TextAlignment="Left" Text="{Binding UpdateCheckText}" TextWrapping="Wrap" MaxWidth="360" />
+            </StackPanel>
           </Grid>
         </ScrollViewer>
       </TabItem>

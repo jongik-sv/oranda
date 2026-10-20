@@ -35,6 +35,8 @@ public sealed record AppSettings
     public WorkspaceSettings Workspace { get; init; } = new();
 
     public SchemaBrowserSettings SchemaBrowser { get; init; } = new();
+
+    public UpdateSettings Update { get; init; } = new();
 }
 
 public sealed record UiSettings
@@ -137,4 +139,23 @@ public sealed record SchemaBrowserSettings
 {
     /// <summary>객체를 한 번 누르면(방향키로 고르고 잠깐 멈추면) 미리보기 문서로 연다. 끄면 두 번 누르기·Enter 로만 연다.</summary>
     public bool SingleClickPreview { get; init; } = true;
+}
+
+/// <summary>자동 업데이트(TSK-10-01). 확인은 원격 전송 동의 대상이 아니라서 끄는 길만 둔다(PRD 「원격 전송(업데이트 확인 제외)」).</summary>
+public sealed record UpdateSettings
+{
+    /// <summary>메인 창이 뜬 뒤 백그라운드로 새 버전을 확인한다(24시간에 한 번).</summary>
+    public bool CheckOnStartup { get; init; } = true;
+
+    /// <summary>새 버전을 찾으면 백그라운드로 내려받는다. 끄면 「있음」만 알린다.</summary>
+    public bool AutoDownload { get; init; } = true;
+
+    /// <summary>피드 주소: http(s) 주소, 폴더 경로(UNC 포함), <c>https://github.com/&lt;owner&gt;/&lt;repo&gt;</c>. null·빈 값 = 빌드 때 넣은 기본값.</summary>
+    public string? FeedUrl { get; init; }
+
+    /// <summary>시작 확인에서 알리지 않을 버전(「이 버전 건너뛰기」).</summary>
+    public string? SkippedVersion { get; init; }
+
+    /// <summary>마지막으로 확인을 끝낸 시각(UTC). 시작 확인의 24시간 규칙에 쓴다.</summary>
+    public DateTimeOffset? LastCheckedUtc { get; init; }
 }

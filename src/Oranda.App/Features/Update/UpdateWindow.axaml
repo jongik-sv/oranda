@@ -1,0 +1,58 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:update="using:Oranda.App.Features.Update"
+        x:Class="Oranda.App.Features.Update.UpdateWindow"
+        x:DataType="update:UpdateViewModel"
+        Title="{Binding TitleText}"
+        Width="480" MinWidth="420"
+        SizeToContent="Height"
+        CanResize="False"
+        WindowStartupLocation="CenterOwner"
+        ShowInTaskbar="False"
+        FontSize="{DynamicResource OrandaFontSizeBase}">
+  <Window.Styles>
+    <Style Selector="TextBlock.hint">
+      <Setter Property="Opacity" Value="0.6" />
+    </Style>
+  </Window.Styles>
+
+  <!-- 상태 문구는 한 곳(StatusText)에서 만든다. 버튼은 상태에 맞는 것만 보인다. -->
+  <StackPanel Margin="16" Spacing="12">
+    <Grid ColumnDefinitions="Auto,*" RowDefinitions="Auto,Auto" ColumnSpacing="12" RowSpacing="4">
+      <TextBlock Grid.Row="0" Classes="hint" Text="{Binding Strings[currentVersion]}" />
+      <TextBlock Grid.Row="0" Grid.Column="1" x:Name="CurrentVersionText" Text="{Binding CurrentVersion}" />
+      <TextBlock Grid.Row="1" Classes="hint" Text="{Binding Strings[newVersion]}" IsVisible="{Binding ShowVersions}" />
+      <TextBlock Grid.Row="1" Grid.Column="1" x:Name="NewVersionText" Text="{Binding NewVersion}" IsVisible="{Binding ShowVersions}" FontWeight="SemiBold" />
+    </Grid>
+
+    <TextBlock x:Name="StatusText" Text="{Binding StatusText}" TextWrapping="Wrap" />
+
+    <ProgressBar x:Name="DownloadProgress" Minimum="0" Maximum="100" Value="{Binding Progress}" IsVisible="{Binding ShowProgress}"
+                 AutomationProperties.Name="{Binding StatusText}" />
+    <ProgressBar IsIndeterminate="True" IsVisible="{Binding IsBusy}" Height="4" x:Name="BusyBar" />
+
+    <StackPanel Spacing="4" IsVisible="{Binding HasNotes}">
+      <TextBlock Classes="hint" Text="{Binding Strings[notes]}" />
+      <TextBox x:Name="NotesBox" Text="{Binding Notes}" IsReadOnly="True" AcceptsReturn="True" TextWrapping="Wrap"
+               MaxHeight="180" MinHeight="80" AutomationProperties.Name="{Binding Strings[notes]}" />
+    </StackPanel>
+
+    <WrapPanel Orientation="Horizontal" HorizontalAlignment="Right" ItemSpacing="8" LineSpacing="8">
+      <Button x:Name="DownloadButton" Content="{Binding Strings[btn.download]}" Command="{Binding DownloadCommand}"
+              IsVisible="{Binding CanDownload}" Classes="accent" />
+      <Button x:Name="ApplyNowButton" Content="{Binding Strings[btn.applyNow]}" Command="{Binding ApplyNowCommand}"
+              IsVisible="{Binding CanApply}" Classes="accent" />
+      <Button x:Name="ApplyOnExitButton" Content="{Binding Strings[btn.applyOnExit]}" Command="{Binding ApplyOnExitCommand}"
+              IsVisible="{Binding CanApply}" />
+      <Button x:Name="SkipButton" Content="{Binding Strings[btn.skip]}" Command="{Binding SkipCommand}"
+              IsVisible="{Binding CanSkip}" />
+      <Button x:Name="CancelDownloadButton" Content="{Binding Strings[btn.cancelDownload]}" Command="{Binding CancelDownloadCommand}"
+              IsVisible="{Binding CanCancelDownload}" />
+      <Button x:Name="SettingsButton" Content="{Binding Strings[btn.settings]}" Command="{Binding OpenSettingsCommand}"
+              IsVisible="{Binding CanOpenSettings}" Classes="accent" />
+      <Button x:Name="RecheckButton" Content="{Binding Strings[btn.recheck]}" Command="{Binding RecheckCommand}"
+              IsVisible="{Binding CanRecheck}" />
+      <Button x:Name="CloseButton" Content="{Binding Strings[btn.close]}" Command="{Binding CloseCommand}" IsCancel="True" />
+    </WrapPanel>
+  </StackPanel>
+</Window>

@@ -2156,7 +2156,7 @@ dotnet, testhost, Oranda.App
 - depends: TSK-01-07, TSK-02-05
 - blocked-by: -
 - entry-point: 메뉴 > 도움말 > 업데이트 확인, 도움말 > 오류 보고서
-- note: -
+- note: 자동 업데이트 부분 구현(2026-10-20, lane/auto-update): Velopack UpdateManager 를 IAppUpdater 로 감싸고(Features/Update), 도움말 > 업데이트 확인…·명령 팔레트·macOS 앱 메뉴 항목, 업데이트 창(확인/다운로드/적용), 상태 표시줄 「업데이트 x.y.z 준비됨/있음」, 설정 > 업데이트(시작 확인·자동 다운로드·피드 주소·건너뛴 버전), 시작 20초 뒤 24시간에 한 번 백그라운드 확인. 적용은 종료할 때(기본) 또는 「지금 다시 시작해 적용」이며 둘 다 메인 창의 기존 닫기 흐름(저장 안 한 탭·미커밋 확인·작업 공간 저장)을 모두 통과한 뒤에만 Velopack 갱신기를 예약한다(ApplyUpdatesAndRestart 직접 호출 없음). 무결성 = 릴리스 메타데이터 해시(서명 확인 아님, 서명 빌드는 사람 자원). 피드 주소는 http(s)·폴더(UNC 포함)·GitHub 저장소 주소를 받고 기본값은 빌드 속성 OrandaUpdateFeed(지금 비어 있음). 남은 일: 피드 게시(GitHub Releases 또는 사내 서버)·릴리스 워크플로, 충돌 보고, 사용자 문서, 서명 확인.
 
 #### PRD 요구사항
 - prd-ref: PRD APP-05, APP-06, 7.4

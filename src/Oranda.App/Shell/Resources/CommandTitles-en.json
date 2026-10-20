@@ -126,7 +126,7 @@
   "Cmd.oranda.grid.toggleTextMode": "Text Result Mode",
   "Cmd.oranda.grid.viewValue": "View Value (LOB Editor)",
   "Cmd.oranda.help.about": "About Oranda",
-  "Cmd.oranda.help.checkUpdate": "Check for Updates",
+  "Cmd.oranda.help.checkUpdate": "Check for Updates…",
   "Cmd.oranda.help.crashReport": "Error Report",
   "Cmd.oranda.help.docs": "User Guide",
   "Cmd.oranda.help.openLogs": "Open Log Folder",

@@ -262,23 +262,26 @@ public class NativeMenuTests
     });
 
     [Fact]
-    public Task App_menu_has_about_and_settings_with_command_key() => HeadlessHost.Run(() =>
+    public Task App_menu_has_about_update_and_settings_with_command_key() => HeadlessHost.Run(() =>
     {
         var text = new ShellText(language: "ko");
         var app = new MacAppMenu();
         app.Bind(text);
 
         var items = app.Menu.Items;
-        Assert.Equal(3, items.Count);
+        Assert.Equal(4, items.Count);
         var about = Assert.IsType<NativeMenuItem>(items[0]);
-        Assert.IsType<NativeMenuItemSeparator>(items[1]);
-        var settings = Assert.IsType<NativeMenuItem>(items[2]);
+        var update = Assert.IsType<NativeMenuItem>(items[1]); // 「Oranda 정보」 바로 아래(macOS 관례)
+        Assert.IsType<NativeMenuItemSeparator>(items[2]);
+        var settings = Assert.IsType<NativeMenuItem>(items[3]);
         Assert.Equal("Oranda 정보", about.Header);
+        Assert.Equal("업데이트 확인…", update.Header);
         Assert.Equal("설정…", settings.Header);
         Assert.Equal(new KeyGesture(Key.OemComma, KeyModifiers.Meta), settings.Gesture);
 
         text.SetLanguage("en");
         Assert.Equal("About Oranda", about.Header);
+        Assert.Equal("Check for Updates…", update.Header);
         Assert.Equal("Settings…", settings.Header);
     });
 
@@ -323,14 +326,15 @@ public class NativeMenuTests
         {
             var app = new MacAppMenu();
             ((INativeMenuItemExporterEventsImplBridge)app.Menu.Items[0]).RaiseClicked();
-            ((INativeMenuItemExporterEventsImplBridge)app.Menu.Items[2]).RaiseClicked();
+            ((INativeMenuItemExporterEventsImplBridge)app.Menu.Items[1]).RaiseClicked();
+            ((INativeMenuItemExporterEventsImplBridge)app.Menu.Items[3]).RaiseClicked();
         }
         finally
         {
             ShellCommandRunner.Runner = previous;
         }
 
-        Assert.Equal(["oranda.help.about", "oranda.tools.settings"], ran);
+        Assert.Equal(["oranda.help.about", "oranda.help.checkUpdate", "oranda.tools.settings"], ran);
     });
 
     [Fact]

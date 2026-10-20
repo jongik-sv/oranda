@@ -214,7 +214,7 @@
   "Cmd.oranda.window.toggleResultPane": "결과 영역 보이기/숨기기",
   "Cmd.oranda.help.docs": "사용자 문서",
   "Cmd.oranda.help.shortcuts": "단축키 목록",
-  "Cmd.oranda.help.checkUpdate": "업데이트 확인",
+  "Cmd.oranda.help.checkUpdate": "업데이트 확인…",
   "Cmd.oranda.help.crashReport": "오류 보고서",
   "Cmd.oranda.help.openLogs": "로그 폴더 열기",
   "Cmd.oranda.help.about": "Oranda 정보"

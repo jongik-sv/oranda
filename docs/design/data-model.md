@@ -90,6 +90,11 @@
 | `workspace.lastWorkspaceId` | string | ○ | `"default"` | 종료 때 보고 있던 작업 공간(다음 시작 때 활성) |
 | `workspace.openWorkspaceIds` | string[] | ○ | `["default"]` | 종료 때 열려 있던 작업 공간들(문서 탭 순서). 다음 시작 때 모두 다시 연다 |
 | `schemaBrowser.singleClickPreview` | bool | ○ | true | 스키마 브라우저에서 객체를 한 번 누르면(방향키로 고르고 잠깐 멈추면) 미리보기 문서로 연다. false 면 두 번 누르기·Enter 로만 연다(SCH-01) |
+| `update.checkOnStartup` | bool | ○ | true | 메인 창이 뜬 20초 뒤 백그라운드로 새 버전 확인(24시간에 한 번). 확인은 원격 전송 동의 대상이 아니다(PRD 7.4) |
+| `update.autoDownload` | bool | ○ | true | 새 버전을 찾으면 백그라운드로 내려받는다. 끄면 「있음」만 알린다 |
+| `update.feedUrl` | string | ○ | `null`(빌드 기본값 `OrandaUpdateFeed`) | http(s) 주소, 폴더·UNC 경로, `https://github.com/<owner>/<repo>`. http 는 설정 화면에 암호화 경고 |
+| `update.skippedVersion` | string | ○ | `null` | 「이 버전 건너뛰기」 한 버전. 시작 확인에서 알리지 않는다 |
+| `update.lastCheckedUtc` | datetime(UTC) | ○ | `null` | 마지막으로 확인을 끝낸 시각. 시작 확인의 24시간 규칙 |
 
 ### 2.2 `connections.json` — `ConnectionsDocument`
 
@@ -504,7 +509,7 @@ connections.json ◀────── credentialRef 문자열만 저장 ("orand
 
 | JSON / 테이블 | C# 형식 | 네임스페이스 |
 |---|---|---|
-| `settings.json` | `AppSettings`, `UiSettings`, `EditorSettings`, `ExecutionSettings`, `GridSettings`, `HistorySettings`, `MetadataCacheSettings`, `MonitorSettings`, `WorkspaceSettings`, `SchemaBrowserSettings`, enum `Theme` | `Oranda.Core.Settings` |
+| `settings.json` | `AppSettings`, `UiSettings`, `EditorSettings`, `ExecutionSettings`, `GridSettings`, `HistorySettings`, `MetadataCacheSettings`, `MonitorSettings`, `WorkspaceSettings`, `SchemaBrowserSettings`, `UpdateSettings`, enum `Theme` | `Oranda.Core.Settings` |
 | (공통) | `SchemaVersions`(static), `ISettingsMigration` | `Oranda.Core.Settings` |
 | `connections.json` | `ConnectionsDocument`, `ConnectionProfile`(기존), `NlsSettings`, enum `AuthMode`(기존+3값), `ConnectionEnvironment`, `LicensePack` | `Oranda.Core.Connection` |
 | `formatter/*.json` | `FormatterProfile`, `FormatterOptions`, `CaseOptions`, `IndentOptions`, `LineBreakOptions`, `AlignOptions`, `CommentOptions`, enum `LetterCase`, `CommaPosition`, `SelectListLayout`, `AndOrBreak`, `StatementTerminator` | `Oranda.Core.Formatting` |
