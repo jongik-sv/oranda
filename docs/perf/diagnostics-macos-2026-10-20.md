@@ -8,7 +8,7 @@ L2 분석 캐시(문장 원문 → 결과)가 4,096개에 닿으면 분석 도�
 
 고친 내용(`4467728`): 캐시 상한 16,384, 분석이 끝난 뒤에만 오래 안 쓴 문장부터 버리고 이번·직전 분석이 쓴 문장은 남긴다. 편집하면 바뀐 문장만 파싱하고 나머지는 결과를 새 위치로 옮겨 쓴다. L1 문장 분리는 그대로 문서 전체를 훑는다(1만 줄 약 8 ms, 아래).
 
-디바운스(`4b3a0a5`): 값(300 ms)은 그대로다. 타이머가 75 ms 마다 확인하던 방식이라 분석이 마지막 키 뒤 300~375 ms 에 시작하던 것을, 마지막 키 뒤 정확히 300 ms 에 시작하게 했다.
+디바운스(`4b3a0a5`): 값(300 ms)은 그대로다. 타이머가 75 ms 마다 확인하던 방식이라 분석이 마지막 키 뒤 300~375 ms 에 시작하던 것을, 마지막 키 뒤 약 300 ms(헤드리스 실측 300.2 ms)에 시작하게 했다. 실제 OS 타이머는 해상도만큼(Windows 약 15.6 ms) 늦을 수 있다. 값을 바꾸지 않았어도 이 변경만으로 「마지막 키 → 반영」 은 평균 약 37 ms 줄어든다.
 
 ## 환경과 방법
 
@@ -87,6 +87,25 @@ PRD 7.2 「문법 검사 반영 (1만 줄 파일, 입력 멈춘 뒤) 300 ms 이�
 | 마지막 키 뒤 300 ms (디바운스 100, 참고) | 마지막 키 → 반영 p95 | - | 중앙값 117.8, p95 139.6 → 충족 예상 |
 
 「마지막 키 뒤」 로 읽으면 디바운스 300 ms 는 분석이 0 ms 여도 한도를 넘는다. 그 해석이면 `EditorDiagnostics.Debounce` 를 100 ms 안팎으로 줄여야 한다(값은 그 한 곳에서만 정한다). 디바운스를 줄이면 입력 중 분석이 더 자주 시작·취소되지만 고친 뒤 분석 한 번이 수십 ms 라 부담은 작다.
+
+## 시험
+
+- `dotnet build Oranda.sln -c Release`: 경고 0, 오류 0 (필터 없는 출력으로 확인).
+- `dotnet test tests/Oranda.Language.Tests -c Release` 372 통과, `tests/Oranda.App.Tests` 1,056 통과, `tests/Oranda.Architecture.Tests` 11 통과.
+- 새 Language 시험(`IncrementalAnalysisTests`): 편집 14가지(앞·중간·끝, 문장 추가·삭제, 세미콜론 삭제로 두 문장 합치기, PL/SQL 블록 안 편집, 작은따옴표 열기, 문서 전체 바꾸기 등)마다 앞서 분석한 서비스의 결과가 처음 보는 서비스의 전체 분석 결과와 같은지 기본 캐시·작은 캐시(8) 두 가지로 단정한다. 블록 주석을 열었다 닫는 편집, 연속 입력, 캐시 상한 유지, 1만 줄 문서의 편집당 파싱 문장 수도 단정한다. 고치기 전 캐시로 돌리면 3개가 실패한다.
+- 새 App 시험(`DiagnosticsLatencyTests`): 디바운스보다 짧은 간격의 입력 묶음에 분석이 한 번이고, 마지막 키에서 디바운스가 지나기 전에는 시작하지 않는다. 1만 줄 측정은 `Category=Perf` 라 기본 실행에서 빠진다.
+
+## 바뀐 파일
+
+| 파일 | 왜 |
+|---|---|
+| `src/Oranda.Language/LanguageService.Analysis.cs` | 캐시 상한·퇴출 방식(원인 수정) |
+| `src/Oranda.App/Features/Diagnostics/EditorDiagnostics.cs` | 디바운스 타이머를 마지막 키 기준으로 다시 걸기, 값은 이 한 곳 |
+| `tests/Oranda.Perf.Ui/DiagnosticsScenario.cs` | 결과표 이름의 「300 ms」 를 `EditorDiagnostics.Debounce` 에서 읽기(표시 글만, 측정 방법은 그대로) |
+| `tests/Oranda.Language.Tests/Parsing/IncrementalAnalysisTests.cs` | 새 시험 |
+| `tests/Oranda.App.Tests/Features/Diagnostics/DiagnosticsLatencyTests.cs` | 새 시험·헤드리스 측정 |
+| `docs/wbs.md` | TSK-04-09 note 줄만 (status 는 `[ ]` 유지) |
+| `docs/perf/diagnostics-macos-2026-10-20.md` | 이 기록 |
 
 ## 한계
 

@@ -1161,7 +1161,7 @@ dotnet, testhost, Oranda.App
 - depends: TSK-11-03
 - blocked-by: -
 - entry-point: -
-- note: 출처 docs/itest/TSK-11-03.md DEF-04. 2026-10-20 수정(4467728, 4b3a0a5): 원인은 L2 캐시(상한 4,096)가 문장 7,500개 문서에서 분석마다 비워져 편집마다 전체를 다시 파싱한 것. 고친 뒤 편집당 파싱 0~1문장, macOS 헤드리스 디바운스 뒤 → 반영 중앙값 15.3 / p95 56.2 ms(전 240.5 / 1,098.7), 디바운스는 마지막 키 뒤 정확히 300 ms(전 300~375 ms). 기록 docs/perf/diagnostics-macos-2026-10-20.md. 인수조건은 사람 결정(PRD 「입력 멈춘 뒤 300 ms」 를 디바운스 뒤로 읽을지 마지막 키 뒤로 읽을지, 후자면 Debounce 100 ms 안팎)과 Windows Perf.Ui diagnostics 재측정 뒤에 판정
+- note: 출처 docs/itest/TSK-11-03.md DEF-04. 2026-10-20 수정(4467728, 4b3a0a5): 원인은 L2 캐시(상한 4,096)가 문장 7,500개 문서에서 분석마다 비워져 편집마다 전체를 다시 파싱한 것. 고친 뒤 편집당 파싱 0~1문장, macOS 헤드리스 디바운스 뒤 → 반영 중앙값 15.3 / p95 56.2 ms(전 240.5 / 1,098.7), 디바운스 값은 그대로이고 분석 시작은 마지막 키 뒤 약 300 ms(헤드리스 300.2, 전 300~375 ms). 기록 docs/perf/diagnostics-macos-2026-10-20.md. 인수조건은 사람 결정(PRD 「입력 멈춘 뒤 300 ms」 를 디바운스 뒤로 읽을지 마지막 키 뒤로 읽을지, 후자면 Debounce 100 ms 안팎)과 Windows Perf.Ui diagnostics 재측정 뒤에 판정
 
 #### PRD 요구사항
 - prd-ref: PRD 7.2 문법 검사
