@@ -218,3 +218,11 @@
 - **Rationale**: 두 PC 가 같은 wbs 를 함께 고치므로 담당 표시로 겹침을 막음
 - **Reversible**: yes
 - **Source**: 사용자 요청(2026-10-20, 「wbs에 등록하고 진행하자. 새로 등록한 것은 mac 용이라고 표시를 해야 된다」)
+
+## D-028 (2026-10-20T16:00:00Z)
+- **Phase**: 작업 공간 파일 이름 규칙(EDIT-09)
+- **Decision needed**: 작업 공간을 `이름.md` 로 저장하면 일반 Markdown 과 섞인다. 이름만 보고 작업 공간이면서 Markdown 인 것을 알 수 있는 규칙
+- **Decision made**: 새로 저장하는 작업 공간 파일은 `이름.workspace.md`. 앱 안의 이름은 `.workspace` 를 뗀다. 예전 `이름.md` 작업 공간은 그대로 열고 그 경로에 다시 쓴다(다른 이름으로 저장하면 `.workspace.md` 를 제안). 파일 열기 필터 첫 항목은 「Oranda 작업 공간 (*.workspace.md)」. `.sqd`·MyBatis 에서 저장하면 `같은 이름.workspace.md` 를 제안한다
+- **Rationale**: 끝 확장자가 `.md` 라 어느 편집기·GitHub 에서도 Markdown 으로 보이고, 이름에 workspace 가 보인다. 전용 확장자(.osw 등)는 Markdown 인지 알 수 없다. 대가: OS 파일 연결은 마지막 확장자로만 되므로 더블 클릭으로 Oranda 가 뜨지는 않는다
+- **Reversible**: yes
+- **Source**: 사용자 결정(2026-10-20, 「작업공간 이름 규칙을 추천 대로 진행해」), 검토 문서 https://claude.ai/code/artifact/b267e982-d892-46b2-9203-4b7236f80d02

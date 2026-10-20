@@ -85,7 +85,7 @@
   "Shell.dialog.apply": "적용",
   "Shell.dialog.cancel": "취소",
   "Shell.dialog.current": "현재",
-  "Shell.dialog.filter.markdown": "Markdown (*.md)",
+  "Shell.dialog.filter.markdown": "Markdown 파일 (*.md)",
   "Shell.dialog.filter.mybatis": "MyBatis 매퍼",
   "Shell.dialog.filter.sqd": "Orange 작업 공간 (*.sqd)",
   "Shell.dialog.filter.sql": "SQL 파일",

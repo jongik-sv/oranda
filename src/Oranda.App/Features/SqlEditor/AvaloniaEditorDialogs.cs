@@ -24,7 +24,7 @@ public sealed class AvaloniaEditorDialogs : IEditorDialogs
         AppleUniformTypeIdentifiers = ["net.daringfireball.markdown"],
     };
 
-    private static FilePickerFileType MarkdownFiles => new(UiText.Get("Shell.dialog.filter.markdown", "Markdown (*.md)")) { Patterns = ["*.md", "*.markdown"] };
+    private static FilePickerFileType MarkdownFiles => new(UiText.Get("Shell.dialog.filter.markdown", "Markdown 파일 (*.md)")) { Patterns = ["*.md", "*.markdown"] };
 
     private static FilePickerFileType MyBatisFiles => new(UiText.Get("Shell.dialog.filter.mybatis", "MyBatis 매퍼")) { Patterns = ["*.xml"] };
 
