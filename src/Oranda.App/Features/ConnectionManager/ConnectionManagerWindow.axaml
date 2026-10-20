@@ -5,7 +5,7 @@
         x:Class="Oranda.App.Features.ConnectionManager.ConnectionManagerWindow"
         x:DataType="cm:ConnectionManagerViewModel"
         Title="접속 관리자"
-        Width="900" Height="640" MinWidth="640" MinHeight="420"
+        Width="960" Height="640" MinWidth="640" MinHeight="420"
         WindowStartupLocation="CenterOwner"
         ShowInTaskbar="False"
         DragDrop.AllowDrop="True"

@@ -1,6 +1,10 @@
 using System;
 using System.Threading;
 using System.Threading.Tasks;
+using Avalonia;
+using Avalonia.Controls;
+using Avalonia.VisualTree;
+using Oranda.App.Features.ResultGrid;
 using Oranda.Core.Settings;
 using Oranda.Core.Shell;
 
@@ -95,19 +99,25 @@ public sealed class ViewShellCommandHandler(IShellUi ui) : ICommandHandler
                 await ui.Settings.SetThemeAsync(Theme.System, cancellationToken).ConfigureAwait(true);
                 break;
             case "oranda.view.zoomIn":
-                await ui.Settings.ZoomAsync(Settings.SettingsService.ZoomStep, cancellationToken).ConfigureAwait(true);
+                await (FocusIsInGrid() ? ui.Settings.GridZoomAsync(Settings.SettingsService.ZoomStep, cancellationToken) : ui.Settings.ZoomAsync(Settings.SettingsService.ZoomStep, cancellationToken)).ConfigureAwait(true);
                 break;
             case "oranda.view.zoomOut":
-                await ui.Settings.ZoomAsync(-Settings.SettingsService.ZoomStep, cancellationToken).ConfigureAwait(true);
+                await (FocusIsInGrid() ? ui.Settings.GridZoomAsync(-Settings.SettingsService.ZoomStep, cancellationToken) : ui.Settings.ZoomAsync(-Settings.SettingsService.ZoomStep, cancellationToken)).ConfigureAwait(true);
                 break;
             case "oranda.view.zoomReset":
-                await ui.Settings.ZoomResetAsync(cancellationToken).ConfigureAwait(true);
+                await (FocusIsInGrid() ? ui.Settings.GridZoomResetAsync(cancellationToken) : ui.Settings.ZoomResetAsync(cancellationToken)).ConfigureAwait(true);
                 break;
             case "oranda.view.resetLayout":
                 ui.Docking.Reset();
                 break;
         }
     }
+
+    /// <summary>키보드 포커스가 결과 그리드 안이면 글자 크기 명령이 에디터 대신 그리드 크기를 바꾼다.</summary>
+    private bool FocusIsInGrid() =>
+        ui is ShellController { MainWindow: { } window }
+        && TopLevel.GetTopLevel(window)?.FocusManager?.GetFocusedElement() is Visual focused
+        && (focused is ResultGridControl || focused.FindAncestorOfType<ResultGridControl>() is not null);
 }
 
 /// <summary>도구 메뉴: 설정.</summary>

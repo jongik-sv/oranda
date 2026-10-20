@@ -21,6 +21,12 @@ public static class TextClipping
                 continue;
             }
 
+            // 세로 스크롤 뷰포트 경계에 걸치거나 밖에 있는 항목(목록의 미리 만든 항목·스크롤 중인 줄)은 뷰포트가 자르므로 보지 않는다. 가로로 넘치는 것은 그대로 본다.
+            if (IsCutByScrollViewport(tb))
+            {
+                continue;
+            }
+
             // 의도한 자르기(말줄임 + 도움말)는 허용한다. 줄바꿈 글은 폭에 맞춰 늘어나므로 높이로 본다.
             if (tb.TextTrimming != TextTrimming.None)
             {
@@ -49,6 +55,21 @@ public static class TextClipping
         }
 
         return offenders;
+    }
+
+    private static bool IsCutByScrollViewport(Control v)
+    {
+        foreach (var presenter in v.GetVisualAncestors().OfType<Avalonia.Controls.Presenters.ScrollContentPresenter>())
+        {
+            var origin = v.TranslatePoint(new Point(0, 0), presenter);
+            var far = v.TranslatePoint(new Point(v.Bounds.Width, v.Bounds.Height), presenter);
+            if (origin is { } o && far is { } f && (o.Y < 0 || f.Y > presenter.Bounds.Height))
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private static string Path(Visual v)

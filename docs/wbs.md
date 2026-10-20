@@ -620,6 +620,7 @@ dotnet, testhost, Oranda.App
 - requirements:
   - 도킹 레이아웃 표시·저장·복원
   - 밝은·어두운 테마와 OS 설정 따르기, 에디터 글꼴 설정
+  - 결과 그리드 글꼴·크기 설정(Grid.FontFamily·FontSize, Ctrl+휠·글자 크게/작게가 포커스 영역을 따름), 기본 화면 글자 14/12pt
   - HiDPI 100-250% 표시
   - 명령 팔레트(명령 이름 검색·실행)
   - 설정 파일 읽기·쓰기(TSK-02-01 스키마)

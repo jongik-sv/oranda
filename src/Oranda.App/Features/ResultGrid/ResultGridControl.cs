@@ -5,6 +5,7 @@ using Avalonia.Input;
 using Avalonia.Media;
 using Avalonia.Media.Immutable;
 using Avalonia.Styling;
+using Oranda.App.Shell.Appearance;
 using Oranda.Core.Grid;
 
 namespace Oranda.App.Features.ResultGrid;
@@ -30,6 +31,9 @@ public sealed class ResultGridControl : Control
     private ResultGridModel? _model;
     private Palette? _palette;
     private double _fontSize = 13;
+    private FontFamily _fontFamily = new(ThemeService.DefaultGridFontFamily);
+    private IDisposable? _fontSizeSub;
+    private IDisposable? _fontFamilySub;
     private double _offsetX;
     private double _offsetY;
     private bool _dragSelecting;
@@ -48,6 +52,12 @@ public sealed class ResultGridControl : Control
 
     /// <summary>스크롤 위치·범위가 바뀌었다(스크롤바 갱신용).</summary>
     public event EventHandler? ScrollChanged;
+
+    /// <summary>
+    /// 사용자가 Ctrl+휠로 바꾼 글자 크기를 설정에 저장하는 길. 앱이 시작할 때 채운다(<see cref="ThemeService"/>).
+    /// 저장하면 앱 리소스가 바뀌어 열린 모든 그리드가 같은 크기를 따른다.
+    /// </summary>
+    public static Func<double, Task>? FontSizeSaver { get; set; }
 
     public ResultGridModel? Model
     {
@@ -100,6 +110,62 @@ public sealed class ResultGridControl : Control
         }
     }
 
+    /// <summary>글꼴. 설정의 결과 그리드 글꼴(앱 리소스)을 따른다.</summary>
+    public FontFamily GridFontFamily
+    {
+        get => _fontFamily;
+        set
+        {
+            if (_fontFamily.Equals(value))
+            {
+                return;
+            }
+
+            _fontFamily = value;
+            ResetTextCaches();
+            _model?.AutoSizeColumns(Factory.CharWidth);
+        }
+    }
+
+    private void SubscribeFontResources()
+    {
+        UnsubscribeFontResources();
+        _fontSizeSub = this.GetResourceObservable(ThemeService.GridFontSizeKey).Subscribe(new ActionObserver(v =>
+        {
+            if (v is double d)
+            {
+                GridFontSize = d;
+            }
+        }));
+        _fontFamilySub = this.GetResourceObservable(ThemeService.GridFontFamilyKey).Subscribe(new ActionObserver(v =>
+        {
+            if (v is FontFamily f)
+            {
+                GridFontFamily = f;
+            }
+        }));
+    }
+
+    private void UnsubscribeFontResources()
+    {
+        _fontSizeSub?.Dispose();
+        _fontFamilySub?.Dispose();
+        _fontSizeSub = _fontFamilySub = null;
+    }
+
+    private sealed class ActionObserver(Action<object?> onNext) : IObserver<object?>
+    {
+        public void OnCompleted()
+        {
+        }
+
+        public void OnError(Exception error)
+        {
+        }
+
+        public void OnNext(object? value) => onNext(value);
+    }
+
     public double RowHeight => Factory.LineHeight + 2 * RowPadY;
 
     public double HeaderHeight => RowHeight + 2;
@@ -124,7 +190,7 @@ public sealed class ResultGridControl : Control
     public double MaxOffsetX => Math.Max(0, ExtentWidth - ViewportWidth);
 
     private GridTextFactory Factory =>
-        _factory ??= new GridTextFactory(new Typeface(new FontFamily("Cascadia Mono, Consolas, Menlo, monospace")), _fontSize);
+        _factory ??= new GridTextFactory(new Typeface(_fontFamily), _fontSize);
 
     public void ScrollTo(double x, double y)
     {
@@ -191,6 +257,7 @@ public sealed class ResultGridControl : Control
         }
 
         ActualThemeVariantChanged += OnThemeChanged;
+        SubscribeFontResources();
         _palette = null;
     }
 
@@ -204,6 +271,7 @@ public sealed class ResultGridControl : Control
         }
 
         ActualThemeVariantChanged -= OnThemeChanged;
+        UnsubscribeFontResources();
         _cells.Clear();
         _headers.Clear();
         _rowHeads.Clear();
@@ -708,6 +776,7 @@ public sealed class ResultGridControl : Control
         if (e.KeyModifiers.HasFlag(KeyModifiers.Control) && _model is not null)
         {
             GridFontSize += e.Delta.Y > 0 ? 1 : -1;
+            _ = FontSizeSaver?.Invoke(_fontSize);
         }
         else if (e.KeyModifiers.HasFlag(KeyModifiers.Shift))
         {

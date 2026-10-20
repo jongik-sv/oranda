@@ -165,7 +165,7 @@ public class LocalizationHeadlessTests
             vm.HighContrast = true;
             await vm.SaveAsync();
             await HeadlessHost.WaitUntil(() => h.Get<IShellText>().Language == "en");
-            await HeadlessHost.WaitUntil(() => Equals(Application.Current!.Resources[ThemeService.UiFontSizeBaseKey], 13 * 1.5));
+            await HeadlessHost.WaitUntil(() => Equals(Application.Current!.Resources[ThemeService.UiFontSizeBaseKey], ThemeService.BaseUiFontSize * 1.5));
 
             var reread = (await h.Get<ISettingsStore>().LoadAsync(default)).Value;
             Assert.Equal("en", reread.Ui.Language);
@@ -200,9 +200,9 @@ public class LocalizationHeadlessTests
         {
             var settings = h.Get<SettingsService>();
             await settings.UpdateAsync(s => s with { Ui = s.Ui with { UiScale = 99 } });
-            await HeadlessHost.WaitUntil(() => Equals(Application.Current!.Resources[ThemeService.UiFontSizeBaseKey], 13 * 2.5));
+            await HeadlessHost.WaitUntil(() => Equals(Application.Current!.Resources[ThemeService.UiFontSizeBaseKey], ThemeService.BaseUiFontSize * 2.5));
             await settings.UpdateAsync(s => s with { Ui = s.Ui with { UiScale = -1 } });
-            await HeadlessHost.WaitUntil(() => Equals(Application.Current!.Resources[ThemeService.UiFontSizeBaseKey], 13 * 0.8));
+            await HeadlessHost.WaitUntil(() => Equals(Application.Current!.Resources[ThemeService.UiFontSizeBaseKey], ThemeService.BaseUiFontSize * 0.8));
         }
         finally
         {
@@ -220,16 +220,16 @@ public class LocalizationHeadlessTests
         try
         {
             var settings = h.Get<SettingsService>();
-            Assert.Equal(13.0, Application.Current!.Resources[ThemeService.UiFontSizeBaseKey]);
+            Assert.Equal(ThemeService.BaseUiFontSize, Application.Current!.Resources[ThemeService.UiFontSizeBaseKey]);
 
             await settings.UpdateAsync(s => s with { Ui = s.Ui with { UiScale = 2.0 } });
-            await HeadlessHost.WaitUntil(() => Equals(Application.Current.Resources[ThemeService.UiFontSizeBaseKey], 26.0));
-            Assert.Equal(22.0, Application.Current.Resources[ThemeService.UiFontSizeSmallKey]);
-            Assert.Equal(26.0, h.Window.FontSize);
+            await HeadlessHost.WaitUntil(() => Equals(Application.Current.Resources[ThemeService.UiFontSizeBaseKey], ThemeService.BaseUiFontSize * 2));
+            Assert.Equal(ThemeService.SmallUiFontSize * 2, Application.Current.Resources[ThemeService.UiFontSizeSmallKey]);
+            Assert.Equal(ThemeService.BaseUiFontSize * 2, h.Window.FontSize);
 
             await settings.UpdateAsync(s => s with { Ui = s.Ui with { UiScale = 1.0 } });
-            await HeadlessHost.WaitUntil(() => Equals(Application.Current.Resources[ThemeService.UiFontSizeBaseKey], 13.0));
-            Assert.Equal(13.0, h.Window.FontSize);
+            await HeadlessHost.WaitUntil(() => Equals(Application.Current.Resources[ThemeService.UiFontSizeBaseKey], ThemeService.BaseUiFontSize));
+            Assert.Equal(ThemeService.BaseUiFontSize, h.Window.FontSize);
         }
         finally
         {

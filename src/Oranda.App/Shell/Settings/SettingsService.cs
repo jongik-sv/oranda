@@ -21,6 +21,8 @@ public sealed class SettingsService(ISettingsStore store)
 
     public const double DefaultEditorFontSize = 13;
 
+    public const double DefaultGridFontSize = 13;
+
     private AppSettings _current = new();
 
     public AppSettings Current => Volatile.Read(ref _current);
@@ -58,4 +60,17 @@ public sealed class SettingsService(ISettingsStore store)
 
     public Task ZoomResetAsync(CancellationToken ct = default) =>
         UpdateAsync(s => s with { Editor = s.Editor with { FontSize = DefaultEditorFontSize } }, ct);
+
+    /// <summary>결과 그리드 글자 크기를 한 단계 바꾼다(8~32). 모든 그리드가 같은 크기를 쓴다.</summary>
+    public Task GridZoomAsync(double delta, CancellationToken ct = default) =>
+        SetGridFontSizeAsync(Current.Grid.FontSize + delta, ct);
+
+    public Task GridZoomResetAsync(CancellationToken ct = default) =>
+        SetGridFontSizeAsync(DefaultGridFontSize, ct);
+
+    public Task SetGridFontSizeAsync(double size, CancellationToken ct = default)
+    {
+        var clamped = Math.Clamp(size, MinEditorFontSize, MaxEditorFontSize);
+        return UpdateAsync(s => s with { Grid = s.Grid with { FontSize = clamped } }, ct);
+    }
 }

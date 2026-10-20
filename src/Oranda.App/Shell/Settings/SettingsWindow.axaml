@@ -124,7 +124,7 @@
 
       <TabItem Header="{Binding Strings[tab.grid]}">
         <ScrollViewer HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
-          <Grid Classes="form" ColumnDefinitions="Auto,*" RowDefinitions="Auto,Auto,Auto" ColumnSpacing="12" RowSpacing="10">
+          <Grid Classes="form" ColumnDefinitions="Auto,*" RowDefinitions="Auto,Auto,Auto,Auto,Auto" ColumnSpacing="12" RowSpacing="10">
             <TextBlock Grid.Row="0" Text="{Binding Strings[page]}" />
             <NumericUpDown Grid.Row="0" Grid.Column="1" Minimum="50" Maximum="100000" Increment="100" FormatString="0"
                            Value="{Binding PageSize}" AutomationProperties.Name="{Binding Strings[pageName]}" />
@@ -134,6 +134,14 @@
             <TextBlock Grid.Row="2" Text="{Binding Strings[lob]}" />
             <NumericUpDown Grid.Row="2" Grid.Column="1" Minimum="0" Maximum="1048576" Increment="1000" FormatString="0"
                            Value="{Binding LobFetchSize}" AutomationProperties.Name="{Binding Strings[lobName]}" />
+            <TextBlock Grid.Row="3" Text="{Binding GridFontLabel}" />
+            <ComboBox Grid.Row="3" Grid.Column="1" MinWidth="220" HorizontalAlignment="Stretch" x:Name="GridFontBox"
+                      IsEditable="True" ItemsSource="{Binding FontChoices}" Text="{Binding GridFontFamily, Mode=TwoWay}"
+                      AutomationProperties.Name="{Binding GridFontLabel}" />
+            <TextBlock Grid.Row="4" Text="{Binding GridFontSizeLabel}" />
+            <NumericUpDown Grid.Row="4" Grid.Column="1" x:Name="GridFontSizeBox"
+                           Minimum="8" Maximum="32" Increment="1" FormatString="0.#"
+                           Value="{Binding GridFontSize}" AutomationProperties.Name="{Binding GridFontSizeLabel}" />
           </Grid>
         </ScrollViewer>
       </TabItem>

@@ -100,6 +100,12 @@ public sealed partial class SettingsViewModel : ViewModelBase
     private decimal _autosaveSeconds;
 
     [ObservableProperty]
+    private string _gridFontFamily;
+
+    [ObservableProperty]
+    private decimal _gridFontSize;
+
+    [ObservableProperty]
     private bool _restoreOnStartup;
 
     [ObservableProperty]
@@ -151,6 +157,8 @@ public sealed partial class SettingsViewModel : ViewModelBase
         _pageSize = s.Grid.PageSize;
         _memoryLimitMb = s.Grid.MemoryLimitMb;
         _lobFetchSize = s.Grid.InitialLobFetchSize;
+        _gridFontFamily = string.IsNullOrWhiteSpace(s.Grid.FontFamily) ? FontChoices[0] : s.Grid.FontFamily;
+        _gridFontSize = (decimal)s.Grid.FontSize;
         _historyEnabled = s.History.Enabled;
         _saveBindValues = s.History.SaveBindValues;
         _historyMaxEntries = s.History.MaxEntries;
@@ -193,6 +201,10 @@ public sealed partial class SettingsViewModel : ViewModelBase
 
     public string FontSizeLabel => _text.Lookup("Shell.settings.editorFontSize");
 
+    public string GridFontLabel => _text.Lookup("Shell.settings.gridFont");
+
+    public string GridFontSizeLabel => _text.Lookup("Shell.settings.gridFontSize");
+
     public string TabSizeLabel => _text.Lookup("Shell.settings.tabSize");
 
     public string SaveLabel => _text.Lookup("Shell.settings.save");
@@ -207,6 +219,7 @@ public sealed partial class SettingsViewModel : ViewModelBase
     public async Task SaveAsync()
     {
         var family = string.IsNullOrWhiteSpace(FontFamily) || FontFamily == FontChoices[0] ? null : FontFamily.Trim();
+        var gridFamily = string.IsNullOrWhiteSpace(GridFontFamily) || GridFontFamily == FontChoices[0] ? null : GridFontFamily.Trim();
         await _settings.UpdateAsync(s => s with
         {
             Ui = s.Ui with
@@ -234,6 +247,8 @@ public sealed partial class SettingsViewModel : ViewModelBase
                 PageSize = (int)PageSize,
                 MemoryLimitMb = (int)MemoryLimitMb,
                 InitialLobFetchSize = (int)LobFetchSize,
+                FontFamily = gridFamily,
+                FontSize = Math.Clamp((double)GridFontSize, SettingsService.MinEditorFontSize, SettingsService.MaxEditorFontSize),
             },
             History = s.History with
             {

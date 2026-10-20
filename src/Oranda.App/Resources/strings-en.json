@@ -111,6 +111,8 @@
   "Shell.settings.editorFontSize": "Editor font size",
   "Shell.settings.errorLabel": "Script errors",
   "Shell.settings.errorName": "Script error handling",
+  "Shell.settings.gridFont": "Result grid font",
+  "Shell.settings.gridFontSize": "Result grid font size",
   "Shell.settings.highContrast": "High contrast colors",
   "Shell.settings.history": "Execution history",
   "Shell.settings.historyOn": "Record executed SQL",

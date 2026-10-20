@@ -79,6 +79,12 @@ public sealed record GridSettings
     public int MemoryLimitMb { get; init; } = 200;
 
     public int InitialLobFetchSize { get; init; } = 4000;
+
+    /// <summary>결과 그리드 글꼴. null 이면 기본 고정폭 글꼴 목록.</summary>
+    public string? FontFamily { get; init; }
+
+    /// <summary>결과 그리드 글자 크기(pt, 8~32). 화면 글자 배율을 곱하지 않는다.</summary>
+    public double FontSize { get; init; } = 13;
 }
 
 public sealed record HistorySettings

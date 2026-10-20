@@ -5,6 +5,7 @@ using Avalonia.Media;
 using Avalonia.Platform;
 using Avalonia.Styling;
 using Avalonia.Threading;
+using Oranda.App.Features.ResultGrid;
 using Oranda.App.Shell.Settings;
 using Oranda.Core.Events;
 using CoreTheme = Oranda.Core.Settings.Theme;
@@ -25,13 +26,20 @@ public sealed class ThemeService : IDisposable
     /// <summary>편집기 들여쓰기 칸 수(int). 편집기 View 가 옵션으로 옮긴다(AvaloniaEdit 옵션은 스타일 속성이 아니다).</summary>
     public const string EditorTabSizeKey = "OrandaEditorTabSize";
 
+    /// <summary>탭 머리글 글자 크기 키(Fluent 탭 템플릿이 읽는다). 기본 글자 크기보다 0.5 작게 쓴다.</summary>
+    public const string TabHeaderFontSizeKey = "TabItemHeaderFontSize";
+
+    public const string GridFontFamilyKey = "OrandaGridFontFamily";
+
+    public const string GridFontSizeKey = "OrandaGridFontSize";
+
     public const string UiFontSizeBaseKey = "OrandaFontSizeBase";
 
     public const string UiFontSizeSmallKey = "OrandaFontSizeSmall";
 
-    public const double BaseUiFontSize = 13;
+    public const double BaseUiFontSize = 14;
 
-    public const double SmallUiFontSize = 11;
+    public const double SmallUiFontSize = 12;
 
     public const double MinUiScale = 0.8;
 
@@ -50,11 +58,15 @@ public sealed class ThemeService : IDisposable
     {
         _settings = settings;
         _subscription = events.Subscribe<SettingsChanged>(this, OnSettingsChanged);
+        ResultGridControl.FontSizeSaver = size => settings.SetGridFontSizeAsync(size);
     }
 
     /// <summary>플랫폼 기본 고정폭 글꼴 목록(한글 대체 포함).</summary>
     public static string DefaultEditorFontFamily =>
         OperatingSystem.IsMacOS() ? "SF Mono, Menlo, Apple SD Gothic Neo" : "Cascadia Mono, Consolas, Malgun Gothic";
+
+    /// <summary>결과 그리드 기본 글꼴 목록(고정폭, 사용자가 고른 글꼴이 앞에 붙는다).</summary>
+    public const string DefaultGridFontFamily = "Cascadia Mono, Consolas, Menlo, monospace";
 
     /// <summary>글자 배율을 허용 범위(0.8~2.5)로 맞춘다. 숫자가 아니면 1.0.</summary>
     public static double ClampScale(double scale) =>
@@ -90,12 +102,17 @@ public sealed class ThemeService : IDisposable
         var scale = ClampScale(s.Ui.UiScale);
         app.Resources[UiFontSizeBaseKey] = BaseUiFontSize * scale;
         app.Resources[UiFontSizeSmallKey] = SmallUiFontSize * scale;
+        app.Resources[TabHeaderFontSizeKey] = (BaseUiFontSize - 0.5) * scale;
         var family = string.IsNullOrWhiteSpace(s.Editor.FontFamily)
             ? DefaultEditorFontFamily
             : s.Editor.FontFamily + ", " + DefaultEditorFontFamily;
         app.Resources[EditorFontFamilyKey] = new FontFamily(family);
         app.Resources[EditorFontSizeKey] = s.Editor.FontSize;
         app.Resources[EditorTabSizeKey] = s.Editor.TabSize;
+        app.Resources[GridFontFamilyKey] = new FontFamily(string.IsNullOrWhiteSpace(s.Grid.FontFamily)
+            ? DefaultGridFontFamily
+            : s.Grid.FontFamily + ", " + DefaultGridFontFamily);
+        app.Resources[GridFontSizeKey] = Math.Clamp(s.Grid.FontSize, SettingsService.MinEditorFontSize, SettingsService.MaxEditorFontSize);
     }
 
     private static ResourceDictionary BuildHighContrastDictionary()
@@ -120,7 +137,7 @@ public sealed class ThemeService : IDisposable
 
     private void OnSettingsChanged(SettingsChanged e)
     {
-        if (e.Section is "ui" or "editor")
+        if (e.Section is "ui" or "editor" or "grid")
         {
             if (Dispatcher.UIThread.CheckAccess())
             {

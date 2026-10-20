@@ -111,6 +111,8 @@
   "Shell.settings.editorFontSize": "에디터 글자 크기",
   "Shell.settings.errorLabel": "스크립트 오류",
   "Shell.settings.errorName": "스크립트 오류 처리",
+  "Shell.settings.gridFont": "결과 그리드 글꼴",
+  "Shell.settings.gridFontSize": "결과 그리드 글자 크기",
   "Shell.settings.highContrast": "고대비 색",
   "Shell.settings.history": "실행 이력",
   "Shell.settings.historyOn": "실행한 SQL 을 기록",
