@@ -69,6 +69,38 @@ public static partial class DataSourceComposer
 
         return dataSource.AsSpan().IndexOfAny("/:(=?") >= 0 ? ConnectionMode.EasyConnect : ConnectionMode.TnsAlias;
     }
+
+    /// <summary>
+    /// 저장된 프로필의 연결 문자열(SQL*Plus·SQLcl 식 <c>user@접속 문자열 [AS 역할]</c>). 비밀번호는 넣지 않는다.
+    /// </summary>
+    public static string Describe(ConnectionProfile profile)
+    {
+        ArgumentNullException.ThrowIfNull(profile);
+        return Describe(profile.User, profile.ProxyUser, profile.DataSource, profile.Auth);
+    }
+
+    /// <summary>
+    /// 연결 문자열 미리보기: <c>ft@localhost:1522/FREEPDB1</c>, TCPS 면 <c>ft@tcps://host:2484/svc</c>, 프록시면 <c>app[ft]@…</c>.
+    /// 비밀번호 칸은 받지 않으며, 접속 문자열이나 사용자에 비밀이 섞여 있으면(저장 때 거부되는 값) 빈 글자를 돌려준다.
+    /// </summary>
+    public static string Describe(string? user, string? proxyUser, string? dataSource, AuthMode auth)
+    {
+        var target = dataSource?.Trim() ?? string.Empty;
+        var who = user?.Trim() ?? string.Empty;
+        var proxy = proxyUser?.Trim() ?? string.Empty;
+        if (target.Length == 0 || ConnectionProfileValidator.ContainsSecret(target) || who.Contains('/', StringComparison.Ordinal) || proxy.Contains('/', StringComparison.Ordinal))
+        {
+            return string.Empty;
+        }
+
+        if (proxy.Length > 0)
+        {
+            who = $"{proxy}[{who}]";
+        }
+
+        var text = who.Length == 0 ? target : $"{who}@{target}";
+        return auth == AuthMode.Default ? text : $"{text} AS {auth.ToString().ToUpperInvariant()}";
+    }
 }
 
 /// <summary>환경 라벨 색 규칙(ui-shell.md 4.1): 빨강 계열은 운영만 쓴다.</summary>

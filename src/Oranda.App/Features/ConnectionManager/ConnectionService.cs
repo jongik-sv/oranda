@@ -86,6 +86,12 @@ public interface IConnectionService
 
     /// <summary>ADB 지갑 zip 으로 프로필을 만들어 저장한다(지갑은 데이터 폴더 <c>wallets/{id}</c> 에 푼다). 비밀번호는 비워 둔다.</summary>
     Task<ConnectionProfile> ImportWalletAsync(string zipPath, string? walletAlias, CancellationToken ct);
+
+    /// <summary>
+    /// 프로필을 복제해 저장한다. 이름 뒤에 「 (사본)」 을 붙이고(겹치면 「 (사본) (2)」 …), 비밀번호·마지막 접속 시각은 옮기지 않는다.
+    /// 앱이 풀어 놓은 지갑 폴더(<c>wallets/{id}</c>)를 쓰면 사본의 폴더로 복사한다(원본을 지워도 사본이 접속되게).
+    /// </summary>
+    Task<ConnectionProfile> DuplicateProfileAsync(Guid id, CancellationToken ct);
 }
 
 /// <summary>비밀번호 변경 도구(ODP.NET <c>OpenWithNewPassword</c>). 시험은 가짜로 바꾼다.</summary>
@@ -411,6 +417,36 @@ public sealed class ConnectionService : IConnectionService, IDisposable
         return await SaveProfileAsync(profile, null, savePassword: false, ct).ConfigureAwait(false);
     }
 
+    public async Task<ConnectionProfile> DuplicateProfileAsync(Guid id, CancellationToken ct)
+    {
+        var doc = await _store.LoadAsync(ct).ConfigureAwait(false);
+        var original = doc.Value.Profiles.FirstOrDefault(p => p.Id == id)
+            ?? throw new ConnectionValidationException("복제할 접속이 없다(이미 지워졌을 수 있다).");
+
+        var copyId = Guid.NewGuid();
+        var copy = original with
+        {
+            Id = copyId,
+            Name = UniqueName(original.Name + " (사본)", doc.Value.Profiles.Select(p => p.Name)),
+            CredentialRef = null,
+            LastConnectedAt = null,
+        };
+
+        var ownWallet = WalletFolder(original.Id);
+        if (SamePath(original.WalletLocation, ownWallet) && Directory.Exists(ownWallet))
+        {
+            var target = WalletFolder(copyId);
+            CopyWalletFolder(ownWallet, target);
+            copy = copy with
+            {
+                WalletLocation = target,
+                TnsAdmin = SamePath(original.TnsAdmin, ownWallet) ? target : original.TnsAdmin,
+            };
+        }
+
+        return await SaveProfileAsync(copy, null, savePassword: false, ct).ConfigureAwait(false);
+    }
+
     /// <summary>ORA-28001(비밀번호 만료). 드라이버 예외 번호 또는 메시지로 판별한다.</summary>
     internal static bool IsPasswordExpired(Exception ex) =>
         ex is OracleException { Number: 28001 } || ex.Message.Contains("ORA-28001", StringComparison.Ordinal);
@@ -494,6 +530,29 @@ public sealed class ConnectionService : IConnectionService, IDisposable
         var text = Encoding.UTF8.GetString(bytes);
         Array.Clear(bytes);
         return (text, null);
+    }
+
+    private static bool SamePath(string? a, string b) =>
+        !string.IsNullOrWhiteSpace(a)
+        && string.Equals(Path.GetFullPath(a).TrimEnd('\\', '/'), Path.GetFullPath(b).TrimEnd('\\', '/'), StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>풀어 놓은 지갑 파일을 새 폴더로 복사하고 sqlnet.ora 의 지갑 위치를 새 폴더로 고쳐 쓴다.</summary>
+    private static void CopyWalletFolder(string source, string target)
+    {
+        Directory.CreateDirectory(target);
+        foreach (var file in Directory.EnumerateFiles(source))
+        {
+            var name = Path.GetFileName(file);
+            var destination = Path.Combine(target, name);
+            if (string.Equals(name, "sqlnet.ora", StringComparison.OrdinalIgnoreCase))
+            {
+                File.WriteAllText(destination, WalletImporter.RewriteWalletDirectory(File.ReadAllText(file), target));
+            }
+            else
+            {
+                File.Copy(file, destination, overwrite: true);
+            }
+        }
     }
 
     private void DeleteOwnWalletFolder(ConnectionProfile removed)

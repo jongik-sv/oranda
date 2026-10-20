@@ -111,6 +111,7 @@ public sealed class ConnectionCommandHandler(ServiceContainer container) : IComm
         var vm = new ConnectionManagerViewModel(service);
         await vm.LoadAsync().ConfigureAwait(true);
         var window = new ConnectionManagerWindow { DataContext = vm };
+        vm.ImportConnections = () => ConnectionImport.ConnectionImportHandler.RunAsync(container, window, CancellationToken.None);
         window.Closed += (_, _) => _window = null;
         _window = window;
         if (Owner is { IsVisible: true } owner)

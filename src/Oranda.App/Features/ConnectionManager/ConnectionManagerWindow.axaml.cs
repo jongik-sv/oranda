@@ -4,6 +4,8 @@ using System.Linq;
 using System.Threading.Tasks;
 using Avalonia.Controls;
 using Avalonia.Input;
+using Avalonia.Input.Platform;
+using Avalonia.Interactivity;
 using Avalonia.Platform.Storage;
 
 namespace Oranda.App.Features.ConnectionManager;
@@ -19,6 +21,11 @@ public partial class ConnectionManagerWindow : Window
         InitializeComponent();
         AddHandler(DragDrop.DragOverEvent, OnDragOver);
         AddHandler(DragDrop.DropEvent, OnDrop);
+
+        // 목록 단축키(SQL Developer·Toad 관례). 터널로 먼저 받아 Enter 가 기본 단추(접속)로 한 번 더 가지 않게 한다.
+        ConnectionTree.AddHandler(KeyDownEvent, OnTreeKeyDown, RoutingStrategies.Tunnel);
+        ConnectionTree.AddHandler(PointerPressedEvent, OnTreePressed, RoutingStrategies.Tunnel, handledEventsToo: true);
+        ConnectionTree.DoubleTapped += OnTreeDoubleTapped;
         DataContextChanged += (_, _) =>
         {
             if (DataContext is ConnectionManagerViewModel vm)
@@ -27,8 +34,84 @@ public partial class ConnectionManagerWindow : Window
                 vm.AskPassword ??= profile => ConnectionDialogs.PromptPasswordAsync(this, profile);
                 vm.AskChangePassword ??= (profile, typed) => ConnectionDialogs.ChangePasswordAsync(this, profile, typed);
                 vm.Confirm ??= message => ConnectionDialogs.ConfirmAsync(this, message);
+                vm.CopyText ??= CopyToClipboardAsync;
             }
         };
+    }
+
+    private ConnectionManagerViewModel? Model => DataContext as ConnectionManagerViewModel;
+
+    private async Task CopyToClipboardAsync(string text)
+    {
+        if (Clipboard is { } clipboard)
+        {
+            await clipboard.SetTextAsync(text).ConfigureAwait(true);
+        }
+    }
+
+    /// <summary>Enter = 접속(폴더면 펼치기/접기), Delete = 삭제(확인), F2 = 이름 칸으로.</summary>
+    private void OnTreeKeyDown(object? sender, KeyEventArgs e)
+    {
+        if (Model is not { } vm || e.KeyModifiers != KeyModifiers.None)
+        {
+            return;
+        }
+
+        switch (e.Key)
+        {
+            case Key.Enter when vm.Selected is { IsFolder: true } folder:
+                folder.IsExpanded = !folder.IsExpanded;
+                e.Handled = true;
+                break;
+            case Key.Enter:
+                Run(vm.ConnectCommand);
+                e.Handled = true;
+                break;
+            case Key.Delete:
+                Run(vm.DeleteCommand);
+                e.Handled = true;
+                break;
+            case Key.F2:
+                FocusNameBox();
+                e.Handled = true;
+                break;
+        }
+    }
+
+    /// <summary>오른쪽 단추는 누른 줄을 먼저 고른다(오른쪽 클릭 메뉴가 그 접속에 대해 열린다).</summary>
+    private void OnTreePressed(object? sender, PointerPressedEventArgs e)
+    {
+        if (Model is { } vm && e.GetCurrentPoint(ConnectionTree).Properties.IsRightButtonPressed
+            && (e.Source as Control)?.DataContext is ConnectionTreeNode { IsFolder: false } node)
+        {
+            vm.Selected = node;
+        }
+    }
+
+    private void OnTreeDoubleTapped(object? sender, TappedEventArgs e)
+    {
+        if (Model is { } vm && (e.Source as Control)?.DataContext is ConnectionTreeNode { IsFolder: false })
+        {
+            Run(vm.ConnectCommand);
+        }
+    }
+
+    /// <summary>이름 칸으로 초점을 옮기고 글자를 모두 고른다(F2).</summary>
+    public void FocusNameBox()
+    {
+        if (EditorView.FindControl<TextBox>("NameBox") is { } box)
+        {
+            box.Focus();
+            box.SelectAll();
+        }
+    }
+
+    private static void Run(System.Windows.Input.ICommand command)
+    {
+        if (command.CanExecute(null))
+        {
+            command.Execute(null);
+        }
     }
 
     /// <summary>끌어 놓은 파일 가운데 zip 만 허용한다.</summary>

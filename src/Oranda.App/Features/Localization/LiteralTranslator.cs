@@ -171,6 +171,12 @@ public static class LiteralTranslator
             yield return HeaderedItemsControl.HeaderProperty;
         }
 
+        // 오른쪽 클릭 메뉴 항목(MenuItem)은 HeaderedSelectingItemsControl 이다.
+        if (c is HeaderedSelectingItemsControl)
+        {
+            yield return HeaderedSelectingItemsControl.HeaderProperty;
+        }
+
         if (c is TextBox)
         {
             yield return TextBox.PlaceholderTextProperty;

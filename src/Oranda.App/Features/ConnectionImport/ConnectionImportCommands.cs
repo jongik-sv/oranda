@@ -93,6 +93,7 @@ public static class ConnectionImportCommands
         await vm.LoadAsync(ct).ConfigureAwait(true);
         vm.Selected = Flatten(vm.Tree).FirstOrDefault(n => n.Profile?.Id == profile.Id);
         var window = new ConnectionManagerWindow { DataContext = vm };
+        vm.ImportConnections = () => ConnectionImportHandler.RunAsync(container, window, CancellationToken.None);
         var owner = container.GetService<ShellController>()?.MainWindow;
         if (owner is { IsVisible: true })
         {
@@ -127,18 +128,26 @@ public sealed record ImportSummary(int Added, IReadOnlyList<string> Warnings)
         : $"접속 {Added}개를 가져왔다." + (Warnings.Count == 0 ? string.Empty : " " + string.Join(" ", Warnings));
 }
 
-/// <summary>「파일 &gt; 접속 가져오기」: 원본 형식별 파일 선택 → 가져오기 → 접속 관리자 열기.</summary>
+/// <summary>「파일 &gt; 접속 가져오기」: 원본 형식별 파일 선택 → 가져오기 → 결과 알림. 접속 관리자의 「가져오기」 단추도 같은 흐름을 쓴다.</summary>
 [OrandaCommand("oranda.conn.import", CommandCategory.Connection, Placements = ["menu:file/connImport@450"])]
 public sealed class ConnectionImportHandler(ServiceContainer container) : ICommandHandler
 {
     public async Task ExecuteAsync(CommandContext context, CancellationToken cancellationToken)
     {
-        var owner = container.GetService<ShellController>()?.MainWindow;
-        if (owner is null)
+        if (container.GetService<ShellController>()?.MainWindow is { } owner)
         {
-            return;
+            await RunAsync(container, owner, cancellationToken).ConfigureAwait(true);
         }
+    }
 
+    /// <summary>
+    /// 파일을 골라 접속을 가져오고 결과를 <paramref name="owner"/> 위에 알린다. 하나라도 가져왔으면 true.
+    /// 접속 관리자 창에서 부를 때는 그 창을 주인으로 넘긴다(모달 창 뒤에 파일 대화상자가 숨지 않게).
+    /// </summary>
+    public static async Task<bool> RunAsync(ServiceContainer container, Window owner, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(container);
+        ArgumentNullException.ThrowIfNull(owner);
         var importers = (container.GetService<IEnumerable<IConnectionImporter>>() ?? []).ToList();
         var files = await owner.StorageProvider.OpenFilePickerAsync(new FilePickerOpenOptions
         {
@@ -151,7 +160,7 @@ public sealed class ConnectionImportHandler(ServiceContainer container) : IComma
         }).ConfigureAwait(true);
         if (files.Count == 0 || files[0].TryGetLocalPath() is not { } path)
         {
-            return;
+            return false;
         }
 
         var ext = System.IO.Path.GetExtension(path);
@@ -159,15 +168,18 @@ public sealed class ConnectionImportHandler(ServiceContainer container) : IComma
         if (importer is null)
         {
             await ConnectionDialogs.MessageAsync(owner, "지원하지 않는 파일 형식이다: " + ext).ConfigureAwait(true);
-            return;
+            return false;
         }
 
         string message;
+        var added = 0;
         try
         {
             var items = await importer.ImportAsync(path, cancellationToken).ConfigureAwait(true);
             var service = ConnectionManagerCommands.Resolve(container);
-            message = (await ConnectionImportCommands.SaveAsync(service, items, cancellationToken).ConfigureAwait(true)).Message;
+            var summary = await ConnectionImportCommands.SaveAsync(service, items, cancellationToken).ConfigureAwait(true);
+            added = summary.Added;
+            message = summary.Message;
         }
         catch (Exception ex) when (ex is System.IO.IOException or InvalidOperationException or ArgumentException or UnauthorizedAccessException)
         {
@@ -175,5 +187,6 @@ public sealed class ConnectionImportHandler(ServiceContainer container) : IComma
         }
 
         await ConnectionDialogs.MessageAsync(owner, message).ConfigureAwait(true);
+        return added > 0;
     }
 }

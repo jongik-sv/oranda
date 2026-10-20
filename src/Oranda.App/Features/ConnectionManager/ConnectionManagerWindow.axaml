@@ -35,7 +35,11 @@
         <Border DockPanel.Dock="Top" Classes="panel-toolbar" Margin="0,0,0,4">
           <StackPanel Orientation="Horizontal" Spacing="2">
             <Button x:Name="AddButton" Classes="tool" Content="새 접속" Command="{Binding AddNewCommand}" icons:ButtonIcon.Key="add" />
+            <Button x:Name="DuplicateButton" Classes="tool" Content="복제" Command="{Binding DuplicateCommand}" icons:ButtonIcon.Key="copy"
+                    ToolTip.Tip="고른 접속을 복제합니다(비밀번호는 복사하지 않습니다)" />
             <Button x:Name="DeleteButton" Classes="tool" Content="삭제" Command="{Binding DeleteCommand}" icons:ButtonIcon.Key="delete" />
+            <Button x:Name="ImportButton" Classes="tool" Content="가져오기" Command="{Binding ImportCommand}" icons:ButtonIcon.Key="import"
+                    ToolTip.Tip="SQL Developer·tnsnames.ora·Orange 접속 목록에서 가져옵니다" />
           </StackPanel>
         </Border>
         <Grid DockPanel.Dock="Top" ColumnDefinitions="*,Auto" ColumnSpacing="6" Margin="0,0,0,4">
@@ -46,8 +50,18 @@
         </Grid>
         <TextBlock DockPanel.Dock="Bottom" Margin="0,8,0,0" TextWrapping="Wrap" Opacity="0.6" FontSize="{DynamicResource OrandaFontSizeSmall}"
                    Text="ADB 지갑(Wallet_*.zip)을 이 창에 끌어 놓으면 접속이 만들어집니다." />
+        <!-- Enter·두 번 누르기 = 접속, Delete = 삭제, F2 = 이름 칸으로(창 코드). 오른쪽 클릭은 누른 줄을 먼저 고른다. -->
         <TreeView x:Name="ConnectionTree" Classes="compact" ItemsSource="{Binding Tree}" SelectedItem="{Binding Selected}"
                   AutomationProperties.Name="접속 목록">
+          <TreeView.ContextMenu>
+            <ContextMenu x:Name="TreeMenu">
+              <MenuItem x:Name="MenuConnect" Header="접속" Command="{Binding ConnectCommand}" InputGesture="Enter" />
+              <MenuItem x:Name="MenuDuplicate" Header="복제" Command="{Binding DuplicateCommand}" />
+              <MenuItem x:Name="MenuDelete" Header="삭제" Command="{Binding DeleteCommand}" InputGesture="Delete" />
+              <Separator />
+              <MenuItem x:Name="MenuCopyConnectString" Header="연결 문자열 복사" Command="{Binding CopyConnectionStringCommand}" />
+            </ContextMenu>
+          </TreeView.ContextMenu>
           <TreeView.Styles>
             <Style Selector="TreeViewItem" x:DataType="cm:ConnectionTreeNode">
               <Setter Property="IsExpanded" Value="{Binding IsExpanded, Mode=TwoWay}" />

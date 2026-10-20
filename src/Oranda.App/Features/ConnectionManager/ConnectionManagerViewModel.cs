@@ -98,7 +98,7 @@ public sealed partial class ConnectionManagerViewModel : ViewModelBase
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(HasSelection))]
-    [NotifyCanExecuteChangedFor(nameof(DeleteCommand), nameof(ConnectCommand))]
+    [NotifyCanExecuteChangedFor(nameof(DeleteCommand), nameof(ConnectCommand), nameof(DuplicateCommand), nameof(CopyConnectionStringCommand))]
     private ConnectionTreeNode? _selected;
 
     [ObservableProperty]
@@ -126,6 +126,8 @@ public sealed partial class ConnectionManagerViewModel : ViewModelBase
 
     /// <summary>마지막으로 읽은 프로필 전체(찾기·정렬은 이 목록으로 트리를 다시 만든다).</summary>
     private List<ConnectionProfile> _profiles = [];
+
+    private Func<Task<bool>>? _importConnections;
 
     /// <summary>사용자가 접은 그룹(창이 열려 있는 동안만 기억한다).</summary>
     private readonly HashSet<string> _collapsed = new(StringComparer.CurrentCultureIgnoreCase);
@@ -158,6 +160,23 @@ public sealed partial class ConnectionManagerViewModel : ViewModelBase
 
     /// <summary>삭제 같은 되돌릴 수 없는 작업 확인(메시지 → 예/아니오). 지정하지 않으면 예.</summary>
     public Func<string, Task<bool>>? Confirm { get; set; }
+
+    /// <summary>
+    /// 접속 가져오기(「파일 &gt; 접속 가져오기」 와 같은 흐름: 파일 고르기 → 저장 → 결과 알림). 창을 띄운 쪽이 채운다.
+    /// 하나라도 가져왔으면 true 를 돌려주고, 그러면 목록을 다시 읽는다.
+    /// </summary>
+    public Func<Task<bool>>? ImportConnections
+    {
+        get => _importConnections;
+        set
+        {
+            _importConnections = value;
+            ImportCommand.NotifyCanExecuteChanged();
+        }
+    }
+
+    /// <summary>글자를 클립보드에 넣는다(화면이 채운다). 연결 문자열 복사에 쓰며 비밀번호는 넘기지 않는다.</summary>
+    public Func<string, Task>? CopyText { get; set; }
 
     public bool HasSelection => Selected?.Profile is not null;
 
@@ -208,6 +227,74 @@ public sealed partial class ConnectionManagerViewModel : ViewModelBase
         Editor = null;
         await LoadAsync().ConfigureAwait(true);
         SetStatus(StatusKind.Info, $"'{profile.Name}' 접속을 지웠습니다.");
+    }
+
+    /// <summary>고른 접속을 복제한다(이름 뒤 「 (사본)」, 비밀번호는 복사하지 않는다). 사본을 골라 둔다.</summary>
+    [RelayCommand(CanExecute = nameof(HasSelection))]
+    private async Task DuplicateAsync()
+    {
+        if (Selected?.Profile is not { } profile)
+        {
+            return;
+        }
+
+        ConnectionProfile copy;
+        try
+        {
+            copy = await _service.DuplicateProfileAsync(profile.Id, CancellationToken.None).ConfigureAwait(true);
+        }
+        catch (Exception ex) when (ex is ConnectionValidationException or System.IO.IOException or UnauthorizedAccessException)
+        {
+            SetStatus(StatusKind.Error, ex.Message);
+            return;
+        }
+
+        var doc = await _service.LoadAsync(CancellationToken.None).ConfigureAwait(true);
+        Rebuild(doc.Value.Profiles, copy.Id);
+        SetStatus(StatusKind.Info, $"'{profile.Name}' 을(를) '{copy.Name}' (으)로 복제했습니다. 비밀번호는 복사하지 않았습니다.");
+    }
+
+    /// <summary>접속 가져오기 흐름을 돌리고, 가져왔으면 목록을 다시 읽는다(편집 중인 값은 그대로 둔다).</summary>
+    [RelayCommand(CanExecute = nameof(CanImport))]
+    private async Task ImportAsync()
+    {
+        if (ImportConnections is null || !await ImportConnections().ConfigureAwait(true))
+        {
+            return;
+        }
+
+        var doc = await _service.LoadAsync(CancellationToken.None).ConfigureAwait(true);
+        FileNotice = doc.Notice;
+        _profiles = [.. doc.Value.Profiles];
+        ApplyView(null, reloadEditor: false);
+    }
+
+    private bool CanImport() => ImportConnections is not null;
+
+    /// <summary>고른 접속의 저장된 연결 문자열을 클립보드에 넣는다(비밀번호 없음).</summary>
+    [RelayCommand(CanExecute = nameof(HasSelection))]
+    private async Task CopyConnectionStringAsync()
+    {
+        if (Selected?.Profile is { } profile)
+        {
+            await CopyToClipboardAsync(DataSourceComposer.Describe(profile)).ConfigureAwait(true);
+        }
+    }
+
+    private async Task CopyToClipboardAsync(string text)
+    {
+        if (text.Length == 0)
+        {
+            SetStatus(StatusKind.Error, "복사할 연결 문자열이 없습니다.");
+            return;
+        }
+
+        if (CopyText is not null)
+        {
+            await CopyText(text).ConfigureAwait(true);
+        }
+
+        SetStatus(StatusKind.Info, "연결 문자열을 복사했습니다(비밀번호는 넣지 않습니다).");
     }
 
     [RelayCommand]
