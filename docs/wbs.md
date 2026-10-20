@@ -926,6 +926,37 @@ dotnet, testhost, Oranda.App
 - data-model: -
 - ui-spec: docs/design/ui-shell.md 툴바 접속 콤보(34행), 접속을 따르는 도구 창(140행), 환경 칩(200행), 창 테두리·상태 표시줄(202행)
 
+### TSK-03-09: 접속 폴더 정렬이 문화권에 따라 달라 시험이 한국어 환경에서 실패 [win144]
+- category: defect
+- domain: frontend
+- model: sonnet
+- status: [ ]
+- priority: low
+- assignee: -
+- schedule: 2027-01-21 ~ 2027-01-27
+- tags: defect, connection, test, win144
+- depends: -
+- blocked-by: -
+- entry-point: 접속 관리자 > 접속 목록
+- note: 담당 PC: win144. 출처 TSK-11-05 화면 기능 전체 시험(docs/itest/TSK-11-05.md). ConnectionManagerUxTests.Groups_become_folders_on_top...·ConnectionManagerFolderTests.Folders_sort_by_name_above_connections... 2건이 한국어 문화권에서 실패(폴더 `[고객사]` 가 `[ADB]` 앞). 앱은 CurrentCultureIgnoreCase 로 정렬한다.
+
+#### PRD 요구사항
+- prd-ref: PRD CONN-14, CONN-17
+- requirements:
+  - 접속 폴더·접속의 이름순 정렬 기준을 정한다(문화권 따름 또는 고정). 정한 대로 시험이 문화권과 무관하게 같은 결과를 낸다
+- acceptance:
+  - 한국어·영어 문화권 어느 쪽에서도 위 시험 2건이 통과한다
+- constraints:
+  - 결함을 재현하는 시험이 먼저 실패하고, 고친 뒤 통과해야 한다
+- test-criteria:
+  - 위 시험 2건을 CurrentCulture 를 바꿔 돌려 통과
+
+#### 기술 스펙 (TRD)
+- tech-spec: -
+- api-spec: -
+- data-model: -
+- ui-spec: -
+
 ## WP-04: SQL 편집기·언어 서비스
 - schedule: 2026-11-10 ~ 2026-11-30
 
@@ -1917,6 +1948,37 @@ dotnet, testhost, Oranda.App
 - data-model: -
 - ui-spec: -
 
+### TSK-06-13: GridRowCounterTests 가 전체 병렬 실행에서 가끔 실패 [win144]
+- category: defect
+- domain: test
+- model: sonnet
+- status: [ ]
+- priority: low
+- assignee: -
+- schedule: 2027-01-21 ~ 2027-01-27
+- tags: defect, test, flaky, win144
+- depends: -
+- blocked-by: -
+- entry-point: tests/Oranda.App.Tests Features/Execution/GridRowCounterTests
+- note: 담당 PC: win144. 출처 TSK-11-05 화면 기능 전체 시험(docs/itest/TSK-11-05.md). Count_runs_through_the_engine_with_current_bind_values_and_skips_history 가 App 단위 전체 실행에서 한 번 실패, 단독 5/5 통과(TSK-11-05, 2026-10-21).
+
+#### PRD 요구사항
+- prd-ref: PRD EXEC-11
+- requirements:
+  - 병렬 실행에서만 실패하는 원인(공유 상태·타이밍)을 찾아 시험 또는 코드를 고친다
+- acceptance:
+  - App 단위 시험을 3회 연속 전체 실행해도 이 시험이 실패하지 않는다
+- constraints:
+  - 결함을 재현하는 시험이 먼저 실패하고, 고친 뒤 통과해야 한다
+- test-criteria:
+  - App 단위 전체 3회 실행
+
+#### 기술 스펙 (TRD)
+- tech-spec: -
+- api-spec: -
+- data-model: -
+- ui-spec: -
+
 ## WP-07: 실행 계획·스키마 브라우저
 - schedule: 2026-11-16 ~ 2026-11-30
 
@@ -2727,7 +2789,7 @@ dotnet, testhost, Oranda.App
 - category: itest
 - domain: test
 - model: sonnet
-- status: [ ]
+- status: [im]
 - priority: high
 - assignee: -
 - schedule: 2027-01-21 ~ 2027-01-27
@@ -2735,7 +2797,7 @@ dotnet, testhost, Oranda.App
 - depends: TSK-10-07
 - blocked-by: -
 - entry-point: 실제 앱(Windows) 전체 메뉴·명령·도구 창
-- note: 담당 PC: win144(Windows 개발 PC) — 맥북 세션은 이 Task 를 하지 않는다. 2026-10-20 사용자 지시: 리팩터링(TSK-10-07)이 끝나면 화면에서 기능을 모두 시험한다. 대상 DB = 26ai 컨테이너·11g 컨테이너·사내 테스트 DB UBMADQ(SELECT 위주, 테스트계)
+- note: Headless·통합 1차 끝(2026-10-21), 실제 앱 눈 확인 6항목 남음(결과서 5장) — 사용자 확인 뒤 [xx]. 담당 PC: win144(Windows 개발 PC) — 맥북 세션은 이 Task 를 하지 않는다. 2026-10-20 사용자 지시: 리팩터링(TSK-10-07)이 끝나면 화면에서 기능을 모두 시험한다. 대상 DB = 26ai 컨테이너·11g 컨테이너·사내 테스트 DB UBMADQ(SELECT 위주, 테스트계) 결과: docs/itest/TSK-11-05.md — 기능 ID 119개 결과표(통과 78·부분 25·눈 확인 대기 6·해당 없음 7·시험 없음 1·결함 2). 시험 PC 화면이 잠겨 실제 앱 손 조작은 못 했고 Headless·Oracle 통합(26ai·11g, UBMADQ 미사용)으로 대체, 눈 확인 목록은 결과서 5장. 결함 TSK-03-09·TSK-06-13 등록, 취소 시험 버그(시간대) 수정.
 
 #### PRD 요구사항
 - prd-ref: PRD 전체 기능 목록

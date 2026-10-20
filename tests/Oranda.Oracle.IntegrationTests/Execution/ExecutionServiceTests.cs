@@ -335,11 +335,11 @@ public sealed class ExecutionServiceTests : IAsyncLifetime
     public async Task Cancel_during_plsql_cpu_loop_ends_cancelled_and_session_runs_next_statement()
     {
         await using var s = await OpenAsync();
-        // 서버 CPU 를 30 s 동안 쓰는 루프(취소가 안 먹으면 30 s 뒤 스스로 끝난다).
+        // 서버 CPU 를 30 s 동안 쓰는 루프(취소가 안 먹으면 30 s 뒤 스스로 끝난다). t 는 시간대 있는 형식이어야 한다: TIMESTAMP 면 세션 시간대(KST)와 서버(UTC) 차이로 즉시 끝난다.
         const string loop = """
             DECLARE
               x NUMBER := 0;
-              t TIMESTAMP := SYSTIMESTAMP + INTERVAL '30' SECOND;
+              t TIMESTAMP WITH TIME ZONE := SYSTIMESTAMP + INTERVAL '30' SECOND;
             BEGIN
               WHILE SYSTIMESTAMP < t LOOP
                 FOR i IN 1 .. 10000 LOOP x := x + SQRT(i); END LOOP;
