@@ -1,4 +1,13 @@
 {
+  "Blocker.chip.blocking": "Blocking {0} sessions",
+  "Blocker.chip.disabled": "Watch off",
+  "Blocker.chip.killIn": "Server ends this session in {0} min",
+  "Blocker.chip.longTxn": "Uncommitted {0} min",
+  "Blocker.tip.blocking": "This session is blocking {0} sessions. Click to open the blocking tree in Session Monitor",
+  "Blocker.tip.killIn": "By the server setting (MAX_IDLE_BLOCKER_TIME) the server ends this session in {0} min.",
+  "Blocker.tip.longTxn": "The transaction has been uncommitted for over {0} min. Commit or roll back.",
+  "Blocker.tip.noCredential": "Watch off: password is not saved. Click to enter it and turn watching on.",
+  "Blocker.tip.noPrivilege": "Watch off: no permission (V$ view access required)",
   "Cat.Connection": "Connection",
   "Cat.Database": "Database",
   "Cat.Edit": "Edit",

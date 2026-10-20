@@ -24,6 +24,7 @@ public partial class SessionCatalogTests
     [InlineData("session.wait_history")]
     [InlineData("session.longops")]
     [InlineData("session.open_cursors")]
+    [InlineData("session.my_blocking")]
     public void Query_exists_for_19_and_26(string id)
     {
         Assert.Equal(19, Catalog.Get(id, 19).Header.MinVersion);
@@ -50,7 +51,7 @@ public partial class SessionCatalogTests
     public void Instance_wide_queries_use_gv_views()
     {
         foreach (var id in new[] { "session.list", "session.detail", "session.blocking_tree", "session.transaction", "session.locks", "session.stats", "session.trace_file",
-            "session.io", "session.wait_history", "session.longops", "session.open_cursors" })
+            "session.io", "session.wait_history", "session.longops", "session.open_cursors", "session.my_blocking" })
         {
             var query = Catalog.Get(id, 19);
             Assert.Equal(CatalogRac.Gv, query.Header.Rac);
@@ -79,6 +80,7 @@ public partial class SessionCatalogTests
     [InlineData("session.stats", "inst_id,sid")]
     [InlineData("session.longops", "inst_id,serial,sid")]
     [InlineData("session.transaction", "inst_id,serial,sid")]
+    [InlineData("session.my_blocking", "sid")]
     public void Detail_section_queries_bind_the_names_the_service_adds(string id, string expected)
     {
         var binds = BindName().Matches(Catalog.Get(id, 26).Sql).Select(m => m.Groups[1].Value).ToHashSet(StringComparer.Ordinal);
@@ -102,6 +104,23 @@ public partial class SessionCatalogTests
 
         Assert.Contains("ORDER BY", sql, StringComparison.Ordinal);
         Assert.EndsWith("FETCH FIRST 200 ROWS ONLY", sql, StringComparison.Ordinal);
+    }
+
+    /// <summary>TSK-13-02: 11.2 처럼 19 미만 서버에는 변형이 없다. 로더는 예외로 알려 주고 호출 쪽이 기능만 숨긴다.</summary>
+    [Fact]
+    public void My_blocking_has_no_variant_below_19()
+    {
+        Assert.Throws<CatalogQueryNotFoundException>(() => Catalog.Get("session.my_blocking", 11));
+    }
+
+    [Fact]
+    public void My_blocking_always_returns_one_row_from_dual_and_reads_max_idle_blocker_time()
+    {
+        var sql = Catalog.Get("session.my_blocking", 19).Sql;
+
+        Assert.Contains("FROM dual", sql, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("max_idle_blocker_time", sql, StringComparison.Ordinal);
+        Assert.DoesNotContain("FETCH FIRST", sql, StringComparison.OrdinalIgnoreCase);
     }
 
     [GeneratedRegex(@":([a-z_]+)")]

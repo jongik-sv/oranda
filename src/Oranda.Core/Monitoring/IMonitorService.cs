@@ -31,6 +31,32 @@ public interface IMonitorService
 
     /// <summary>SQL 전문·바인드 캡처. TSK-09-02.</summary>
     Task<SqlDetail> GetSqlDetailAsync(ISession monitor, CursorRef cursor, CancellationToken ct);
+
+    /// <summary>
+    /// 작업 세션(<paramref name="workSid"/>)이 남을 막고 있는지와 오래 열린 트랜잭션 정보. 모니터 세션으로 읽는다. TSK-13-02.
+    /// 기본 구현은 지원하지 않음(시험용 가짜가 구현하지 않아도 되게 한다).
+    /// </summary>
+    Task<BlockerSnapshot> GetMyBlockingAsync(ISession monitor, long workSid, CancellationToken ct) =>
+        throw new NotSupportedException();
+}
+
+/// <summary>
+/// 내 세션이 남을 막고 있는지의 한 번 조회 결과(TSK-13-02).
+/// <see cref="TransactionAgeSeconds"/> 는 서버 시각 기준 내 트랜잭션 경과 초(트랜잭션이 없으면 null),
+/// <see cref="MaxIdleBlockerMinutes"/> 는 MAX_IDLE_BLOCKER_TIME(0 이거나 없으면 서버가 끊지 않음).
+/// </summary>
+public sealed record BlockerSnapshot(int BlockedCount)
+{
+    public long? TransactionAgeSeconds { get; init; }
+
+    public long? LastCallElapsedSeconds { get; init; }
+
+    public long MaxIdleBlockerMinutes { get; init; }
+
+    /// <summary>서버가 막고 있는 이 세션을 끊기까지 남은 분(올림). 설정이 없거나 막고 있지 않으면 null.</summary>
+    public long? MinutesUntilKilled => BlockedCount > 0 && MaxIdleBlockerMinutes > 0
+        ? Math.Max(0, (long)Math.Ceiling(MaxIdleBlockerMinutes - (LastCallElapsedSeconds ?? 0) / 60.0))
+        : null;
 }
 
 /// <summary>세션 식별. 비 RAC 는 <see cref="InstanceId"/> = 1.</summary>

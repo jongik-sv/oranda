@@ -93,6 +93,19 @@ internal sealed partial class OracleMonitorService : IMonitorService
         return BuildBlockingTree(rows.Select(ToBlockingRow));
     }
 
+    public async Task<BlockerSnapshot> GetMyBlockingAsync(ISession monitor, long workSid, CancellationToken ct)
+    {
+        ArgumentNullException.ThrowIfNull(monitor);
+        var rows = await SessionQueryAsync(monitor, "session.my_blocking", c => AddLong(c, "sid", workSid), ct);
+        var r = rows.Count == 0 ? new object?[4] : rows[0];
+        return new BlockerSnapshot(Int(r[0]) ?? 0)
+        {
+            TransactionAgeSeconds = Long(r[1]),
+            LastCallElapsedSeconds = Long(r[2]),
+            MaxIdleBlockerMinutes = Long(r[3]) ?? 0,
+        };
+    }
+
     public async Task<SessionDetail> GetSessionDetailAsync(ISession monitor, SessionKey target, CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(monitor);
