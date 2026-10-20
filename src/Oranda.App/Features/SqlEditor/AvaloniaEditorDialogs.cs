@@ -21,6 +21,8 @@ public sealed class AvaloniaEditorDialogs : IEditorDialogs
 
     private static FilePickerFileType MyBatisFiles => new(UiText.Get("Shell.dialog.filter.mybatis", "MyBatis 매퍼")) { Patterns = ["*.xml"] };
 
+    private static FilePickerFileType SqdFiles => new(UiText.Get("Shell.dialog.filter.sqd", "Orange 작업 공간 (*.sqd)")) { Patterns = ["*.sqd"] };
+
     private static Window? Owner
         => (Application.Current?.ApplicationLifetime as IClassicDesktopStyleApplicationLifetime)?.MainWindow;
 
@@ -80,7 +82,7 @@ public sealed class AvaloniaEditorDialogs : IEditorDialogs
         {
             Title = UiText.Get("Shell.dialog.openWorkspaceFile", "작업 공간 파일 열기"),
             AllowMultiple = false,
-            FileTypeFilter = [new FilePickerFileType(UiText.Get("Shell.dialog.filter.workspaceOrMapper", "작업 공간·MyBatis 매퍼")) { Patterns = ["*.md", "*.markdown", "*.xml"] }, WorkspaceFiles, MyBatisFiles],
+            FileTypeFilter = [new FilePickerFileType(UiText.Get("Shell.dialog.filter.workspaceOrMapper", "작업 공간·MyBatis 매퍼·Orange 작업 공간")) { Patterns = ["*.md", "*.markdown", "*.xml", "*.sqd"] }, WorkspaceFiles, MyBatisFiles, SqdFiles],
         }).ConfigureAwait(true);
         return files.Count == 0 ? null : files[0].TryGetLocalPath();
     }

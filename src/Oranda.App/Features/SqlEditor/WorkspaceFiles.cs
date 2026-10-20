@@ -3,11 +3,14 @@ using System.Text;
 using System.Text.RegularExpressions;
 using System.Xml;
 using System.Xml.Linq;
+using Oranda.Core.Execution;
+using Oranda.Core.Security;
+using Oranda.Core.Workspaces;
 
 namespace Oranda.App.Features.SqlEditor;
 
-/// <summary>작업 공간 파일 안의 탭 하나: 탭 이름과 SQL. <see cref="Connection"/> 은 접속 프로필 ID(없으면 null).</summary>
-public sealed record WorkspaceFileTab(string Title, string Text, string? Connection = null);
+/// <summary>작업 공간 파일 안의 탭 하나: 탭 이름과 SQL. <see cref="Connection"/> 은 접속 프로필 ID(없으면 null), <see cref="Binds"/> 는 파일이 싣고 있는 바인드 값(없으면 null).</summary>
+public sealed record WorkspaceFileTab(string Title, string Text, string? Connection = null, IReadOnlyList<WorkspaceBind>? Binds = null);
 
 /// <summary>읽은 작업 공간 파일. <see cref="Notes"/> 는 읽으면서 바꾼 것에 대한 알림(MyBatis 동적 태그 단순화 등).</summary>
 public sealed record WorkspaceFile(string Name, IReadOnlyList<WorkspaceFileTab> Tabs, IReadOnlyList<string> Notes);
@@ -24,12 +27,196 @@ public static class WorkspaceFiles
     public static bool IsMyBatis(string path) =>
         string.Equals(Path.GetExtension(path), ".xml", StringComparison.OrdinalIgnoreCase);
 
-    /// <summary>파일을 읽는다: .xml 은 MyBatis 매퍼, 나머지는 Markdown.</summary>
+    public static bool IsSqd(string path) =>
+        string.Equals(Path.GetExtension(path), ".sqd", StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>다른 도구가 만든 읽기 전용 원본(MyBatis .xml, Orange .sqd). 저장은 Markdown 작업 공간으로 간다.</summary>
+    public static bool IsReadOnlySource(string path) => IsMyBatis(path) || IsSqd(path);
+
+    /// <summary>파일을 읽는다: .xml 은 MyBatis 매퍼, .sqd 는 Orange 작업 공간, 나머지는 Markdown.</summary>
     public static WorkspaceFile Load(string path)
     {
-        var text = File.ReadAllText(path);
         var name = Path.GetFileNameWithoutExtension(path);
+        if (IsSqd(path))
+        {
+            return ReadSqd(File.ReadAllBytes(path), name);
+        }
+
+        var text = File.ReadAllText(path);
         return IsMyBatis(path) ? ReadMyBatis(text, name) : ReadMarkdown(text, name);
+    }
+
+    // ---- Orange .sqd ----------------------------------------------------------------------
+
+    /// <summary>바이트로 읽는다: BOM 이 있으면 그 인코딩, 없으면 UTF-8 로 읽히는지 보고 아니면 CP949.</summary>
+    public static WorkspaceFile ReadSqd(byte[] bytes, string fallbackName)
+    {
+        ArgumentNullException.ThrowIfNull(bytes);
+        return ReadSqd(FileEncoding.Decode(bytes).Text, fallbackName);
+    }
+
+    /// <summary>
+    /// Orange 5.x 작업 공간(.sqd). <c>[WORKSPACE]</c> 구역에서 탭마다 <c>NAME=</c>, <c>STMT=줄 수</c>, 그 줄 수만큼 SQL,
+    /// <c>VAR=개수</c>, 그 개수만큼 <c>:이름=타입,값</c>. SQL 은 줄 수로 잘라 읽으므로 본문 줄이 NAME= 처럼 보여도 키로 읽지 않는다.
+    /// 깨진 곳은 읽은 만큼 열고 알림에 남긴다. 이름에 pass·pwd·secret·token 이 든 바인드는 값을 버린다.
+    /// </summary>
+    public static WorkspaceFile ReadSqd(string text, string fallbackName)
+    {
+        ArgumentNullException.ThrowIfNull(text);
+        if (text.Length > 0 && text[0] == '﻿')
+        {
+            text = text[1..];
+        }
+
+        var lines = text.Replace("\r\n", "\n", StringComparison.Ordinal).Split('\n');
+        var inv = CultureInfo.InvariantCulture;
+        var notes = new List<string>();
+        var start = Array.FindIndex(lines, l => l.Trim().Equals("[WORKSPACE]", StringComparison.OrdinalIgnoreCase));
+        if (start < 0)
+        {
+            throw new FormatException("Orange 작업 공간 파일이 아니다([WORKSPACE] 구역이 없다).");
+        }
+
+        var i = start + 1;
+        int? count = null;
+        if (i < lines.Length && lines[i].StartsWith("COUNT=", StringComparison.OrdinalIgnoreCase))
+        {
+            count = int.TryParse(lines[i][6..].Trim(), NumberStyles.None, inv, out var c) ? c : null;
+            i++;
+        }
+
+        var tabs = new List<WorkspaceFileTab>();
+        var unknownTypes = new SortedSet<string>(StringComparer.Ordinal);
+        var skipped = false;
+        while (i < lines.Length)
+        {
+            if (!lines[i].StartsWith("NAME=", StringComparison.Ordinal))
+            {
+                if (lines[i].Trim().Length > 0)
+                {
+                    skipped = true;
+                }
+
+                i++;
+                continue;
+            }
+
+            var title = lines[i][5..].Trim();
+            if (title.Length == 0)
+            {
+                title = "SQL " + (tabs.Count + 1).ToString(inv);
+            }
+
+            i++;
+            var label = $"탭 {(tabs.Count + 1).ToString(inv)}({title})";
+            var body = new List<string>();
+            if (i < lines.Length && lines[i].StartsWith("STMT=", StringComparison.Ordinal))
+            {
+                if (!int.TryParse(lines[i][5..].Trim(), NumberStyles.None, inv, out var stmt))
+                {
+                    notes.Add($"{label}: STMT 값을 읽지 못해 본문을 비웠다.");
+                    stmt = 0;
+                }
+
+                i++;
+                var take = Math.Min(stmt, lines.Length - i);
+                for (var k = 0; k < take; k++)
+                {
+                    body.Add(lines[i + k]);
+                }
+
+                i += take;
+                if (take < stmt)
+                {
+                    notes.Add($"{label}: 본문이 {stmt.ToString(inv)}줄이어야 하는데 {take.ToString(inv)}줄만 읽었다.");
+                }
+            }
+            else
+            {
+                notes.Add($"{label}: STMT 줄이 없어 본문을 비웠다.");
+            }
+
+            var binds = new List<WorkspaceBind>();
+            if (i < lines.Length && lines[i].StartsWith("VAR=", StringComparison.Ordinal))
+            {
+                int.TryParse(lines[i][4..].Trim(), NumberStyles.None, inv, out var vars);
+                i++;
+                var take = Math.Min(vars, lines.Length - i);
+                for (var k = 0; k < take; k++)
+                {
+                    if (ParseSqdBind(lines[i + k], unknownTypes) is { } bind)
+                    {
+                        binds.Add(bind);
+                    }
+                    else
+                    {
+                        notes.Add($"{label}: 바인드 줄을 읽지 못했다.");
+                    }
+                }
+
+                i += take;
+                if (take < vars)
+                {
+                    notes.Add($"{label}: 바인드가 {vars.ToString(inv)}개여야 하는데 {take.ToString(inv)}개만 읽었다.");
+                }
+            }
+
+            tabs.Add(new WorkspaceFileTab(title, string.Join('\n', body), null, binds.Count > 0 ? binds : null));
+        }
+
+        if (skipped)
+        {
+            notes.Add("탭 사이에 읽을 수 없는 줄이 있어 건너뛰었다.");
+        }
+
+        if (count is { } expected && expected != tabs.Count)
+        {
+            notes.Add($"COUNT 는 {expected.ToString(inv)}인데 실제 탭은 {tabs.Count.ToString(inv)}개다. 읽은 만큼 열었다.");
+        }
+
+        if (count is null)
+        {
+            notes.Add("COUNT 를 읽지 못했다. 읽은 만큼 열었다.");
+        }
+
+        if (unknownTypes.Count > 0)
+        {
+            notes.Add("모르는 바인드 타입 코드(" + string.Join(", ", unknownTypes) + ")는 문자열로 읽었다.");
+        }
+
+        if (tabs.Count == 0)
+        {
+            notes.Add("탭이 없다.");
+        }
+
+        return new WorkspaceFile(fallbackName, tabs, notes);
+    }
+
+    /// <summary><c>:이름=타입,값</c>. 값은 첫 쉼표 뒤 전부(비어 있을 수 있다).</summary>
+    private static WorkspaceBind? ParseSqdBind(string line, SortedSet<string> unknownTypes)
+    {
+        var eq = line.IndexOf('=', StringComparison.Ordinal);
+        var name = (eq < 0 ? line : line[..eq]).Trim().TrimStart(':');
+        if (eq < 0 || name.Length == 0)
+        {
+            return null;
+        }
+
+        var rest = line[(eq + 1)..];
+        var comma = rest.IndexOf(',', StringComparison.Ordinal);
+        var type = comma < 0 ? rest.Trim() : rest[..comma].Trim();
+        var value = comma < 0 ? string.Empty : rest[(comma + 1)..];
+        if (type != "0")
+        {
+            unknownTypes.Add(type);
+        }
+
+        if (SensitiveBindNames.IsSensitive(name))
+        {
+            value = string.Empty;
+        }
+
+        return new WorkspaceBind { Name = name, Type = BindDataType.Varchar2, Direction = BindDirection.In, Value = value, IsNull = value.Length == 0 };
     }
 
     // ---- Markdown -------------------------------------------------------------------------

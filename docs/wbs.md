@@ -1228,7 +1228,7 @@ dotnet, testhost, Oranda.App
 - category: dev
 - domain: fullstack
 - model: sonnet
-- status: [ ]
+- status: [xx]
 - priority: high
 - assignee: -
 - schedule: 2026-12-14 ~ 2026-12-16
@@ -1236,7 +1236,8 @@ dotnet, testhost, Oranda.App
 - depends: TSK-04-02
 - blocked-by: -
 - entry-point: 파일 > 작업 공간 열기(파일 대화상자 .sqd), 파일 끌어 놓기, 명령줄 인자
-- note: 담당 PC: win144(Windows 개발 PC) — 맥북 세션은 이 Task 를 하지 않는다. 2026-10-20 사용자 요청. 오렌지 5.0.12 가 저장한 .sqd 표본 30여 개를 개발 PC 에서 확인한 형식(아래 requirements). 표본 파일은 사내 SQL 이라 저장소에 넣지 않는다 — 시험 자료는 직접 만든 가짜 SQL 로 쓴다
+- note: 담당 PC: win144(Windows 개발 PC) — 맥북 세션은 이 Task 를 하지 않는다. 2026-10-20 사용자 요청. 오렌지 5.0.12 가 저장한 .sqd 표본 30여 개를 개발 PC 에서 확인한 형식(아래 requirements). 사용자 허가로 실제 표본 1개(01. 작업.sqd)를 시험 자료로 저장소에 둔다
+- done: 2026-10-20 WorkspaceFiles.ReadSqd(CP949·BOM·줄 수로 읽기·바인드·알림), Load 가 .sqd 로 분기, 읽기 전용(저장은 Markdown 으로), 파일 대화상자 필터, 창 끌어 놓기·명령줄 인자(DroppedWorkspaceFiles). 사용자 허가로 실제 표본 1개를 시험 자료(TestData)에 넣고 .gitattributes 에 *.sqd -text
 
 #### PRD 요구사항
 - prd-ref: PRD EDIT-09 (작업 공간), EXEC-03 (바인드)
@@ -1253,7 +1254,7 @@ dotnet, testhost, Oranda.App
   - 깨진 .sqd(줄 수 모자람, COUNT 불일치)를 열어도 앱이 죽지 않고 알림이 보인다
   - .sqd 로 연 작업 공간에서 저장하면 .sqd 가 바뀌지 않고 다른 이름으로 저장을 묻는다
 - constraints:
-  - 실제 사내 .sqd 표본을 저장소에 넣지 않는다. 시험 자료는 같은 형식의 가짜 SQL 을 CP949 로 만들어 쓴다
+  - 실제 표본은 사용자가 허가한 1개(tests/Oranda.App.Tests/Features/SqlEditor/TestData/orange-workspace-sample.sqd)만 둔다. 깨진 파일 등 나머지 시험 자료는 가짜 SQL 을 CP949 로 만들어 쓴다
 - test-criteria:
   - ReadSqd 단위 시험: CP949 한글, 본문에 NAME=/STMT= 로 시작하는 줄, 빈 바인드 값, 쉼표가 든 바인드 값, 깨진 파일
   - Headless 시험: .sqd 를 열면 작업 공간 문서 탭과 SQL 탭이 생기고 바인드 창이 채워진다

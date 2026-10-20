@@ -9,8 +9,10 @@ using Avalonia.Automation;
 using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Interactivity;
+using Avalonia.Platform.Storage;
 using Avalonia.Threading;
 using Oranda.App.Features.DedicatedSession;
+using Oranda.App.Features.SqlEditor;
 using Oranda.App.Shell;
 using Oranda.App.Shell.Composition;
 using Oranda.App.Shell.Docking;
@@ -74,6 +76,30 @@ public partial class MainWindow : Window
 
     internal MainViewModel? ViewModel => _viewModel;
 
+    private static IEnumerable<string?> DroppedPaths(DragEventArgs e) =>
+        e.DataTransfer.TryGetFiles()?.Select(f => f.TryGetLocalPath()) ?? [];
+
+    /// <summary>Orange 작업 공간(.sqd)을 끌어 오면 놓을 수 있게 한다.</summary>
+    private void OnWorkspaceDragOver(object? sender, DragEventArgs e)
+    {
+        if (DroppedWorkspaceFiles.Pick(DroppedPaths(e)).Count > 0)
+        {
+            e.DragEffects = DragDropEffects.Copy;
+        }
+    }
+
+    private async void OnWorkspaceDrop(object? sender, DragEventArgs e)
+    {
+        var paths = DroppedPaths(e).ToList();
+        if (DroppedWorkspaceFiles.Pick(paths).Count == 0)
+        {
+            return;
+        }
+
+        e.Handled = true;
+        await DroppedWorkspaceFiles.OpenAsync(SqlEditorHost.Current, paths, default);
+    }
+
     /// <summary>앱 조립이 끝난 뒤 창을 셸에 묶는다(메뉴·툴바·키 처리·배치 복원·종료 저장).</summary>
     public void Attach(ServiceContainer services)
     {
@@ -103,6 +129,9 @@ public partial class MainWindow : Window
             },
             _dispatcher);
         AddHandler(KeyDownEvent, OnKeyDownTunnel, RoutingStrategies.Tunnel);
+        DragDrop.SetAllowDrop(this, true);
+        AddHandler(DragDrop.DragOverEvent, OnWorkspaceDragOver);
+        AddHandler(DragDrop.DropEvent, OnWorkspaceDrop);
 
         // 포커스가 옮겨지면 그 화면의 포커스 자리를 문맥 키로(commands.md 2.2). 자리가 없는 곳(툴바·메뉴)은 직전 자리를 둔다.
         ContextKeyService.Shared = _keys;
@@ -417,7 +446,7 @@ public partial class MainWindow : Window
     {
         try
         {
-            await Oranda.App.Features.SqlEditor.SqlEditorHost.Current.Dialogs.ShowMessageAsync(
+            await SqlEditorHost.Current.Dialogs.ShowMessageAsync(
                 Oranda.App.Features.Localization.UiText.Get("Execution.exitConfirmFailed.title", "종료"),
                 Oranda.App.Features.Localization.UiText.Get("Execution.exitConfirmFailed",
                     "종료하기 전 미커밋 확인에 실패했습니다. 커밋하지 않은 변경이 있을 수 있습니다. 다시 닫으면 확인 없이 종료하며, 커밋하지 않은 변경은 롤백됩니다."),

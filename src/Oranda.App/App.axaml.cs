@@ -55,6 +55,7 @@ public partial class App : Application
             Start(services, window, preload);
             desktop.MainWindow = window;
             ScheduleStartupTasks(services);
+            OpenCommandLineFiles(desktop.Args);
             desktop.Exit += (_, _) => Services?.Dispose();
         }
 
@@ -75,6 +76,19 @@ public partial class App : Application
         AppMenu?.Bind(shell.Text);
         window.Attach(services);
         PerfMarks.Mark("shell-attached");
+    }
+
+    /// <summary>명령줄 인자로 받은 Orange 작업 공간(.sqd)을 첫 프레임 뒤에 작업 공간으로 연다.</summary>
+    private static void OpenCommandLineFiles(string[]? args)
+    {
+        if (args is not { Length: > 0 })
+        {
+            return;
+        }
+
+        Dispatcher.UIThread.Post(
+            () => _ = Features.SqlEditor.DroppedWorkspaceFiles.OpenAsync(Features.SqlEditor.SqlEditorHost.Current, args, CancellationToken.None),
+            DispatcherPriority.Background);
     }
 
     /// <summary>첫 프레임 뒤 유휴로 보고 지연 어셈블리를 훑기까지 기다리는 시간.</summary>

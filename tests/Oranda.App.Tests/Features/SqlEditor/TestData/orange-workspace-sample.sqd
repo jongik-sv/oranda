@@ -1,0 +1,1623 @@
+[HEADER]
+VERSION=5.0.12
+TOOL=
+CHAR=ASCII
+DATE=2023-09-04 08:39
+[WORKSPACE]
+COUNT=19
+NAME=라인길이 계산 공정.sql
+STMT=35
+SELECT PROC_CD 공정, COIL_ID 코일ID, LN_SPD  "L/S", 작업시간, COIL_THY_LTH  이론길이, 수정작업시간 계산작업시간
+FROM ( 
+        select  A.PROC_CD, A.ord_no, A.ord_ln, A.MTL_CD, A.coil_id, A.COIL_WGT, A.COIL_WTH, A.MTL_COIL_WTH, A.COIL_LTH, A.COIL_LTH1, 
+                COIL_THY_LTH, A.LN_SPD, 
+                A.coil_wk_tim 작업시간,  
+                CASE  
+                    WHEN  (A.PROC_CD IN ('74', '76', '77') OR A.PROC_CD LIKE '6%') AND MOD(A.MTL_COIL_WTH, A.COIL_WTH) < 100 THEN 
+                        ROUND(COIL_LTH / ROUND(MTL_COIL_WTH / A.COIL_WTH) / A.LN_SPD, 1) 
+                    WHEN  (A.PROC_CD IN ('74', '76', '77') OR A.PROC_CD LIKE '6%') AND MOD(A.MTL_COIL_WTH, A.COIL_WTH) >= 100 THEN 
+                        ROUND(COIL_LTH / (MTL_COIL_WTH / A.COIL_WTH) / A.LN_SPD, 1) 
+                    ELSE ROUND(A.COIL_LTH / A.LN_SPD, 1)  
+                END 수정작업시간 
+        from   (select  A.PROC_CD, A.ord_no, A.ord_ln, A.MTL_CD, A.coil_id, A.COIL_WGT, A.COIL_WTH, B.MTL_COIL_WTH,  
+                        CASE  
+                            WHEN A.PROC_CD LIKE 'A%' AND IN_LN_SHR_WK_YN = 'Y' THEN -1 
+                            ELSE A.COIL_LTH 
+                        END COIL_LTH, 
+                        A.COIL_LTH COIL_LTH1, 
+                        A.COIL_THY_LTH, 
+                        A.LN_SPD, 
+                        A.coil_wk_tim 
+                         
+                from    mesapuser.tb_m47_prd_act_cmn A, mesapuser.TB_M47_WK_ACT_CMN B 
+                where   A.PDN_PST_DD BETWEEN to_char(sysdate - 36, 'yyyymmdd') AND to_char(sysdate, 'yyyymmdd') 
+                AND     A.PCOIL_ID = B.COIL_ID 
+                AND     A.PROC_CD = B.PROC_CD 
+                AND     A.MTL_CD NOT IN ('HZ000001') 
+ 
+                AND     (SUBSTR(A.PROC_CD, 1, 1) IN ('3', '5', '6', '7', '9', 'A') OR A.PROC_CD = '82') 
+                AND     SUBSTR(A.PROC_CD, 2, 1) NOT IN ('O', 'I') 
+                ) A 
+        ) 
+WHERE  COIL_LTH != -1 -- CCL INLINE은 SHL 작업시간 적용 
+AND   (DECODE(수정작업시간, 0, 0.1, 수정작업시간) not between 작업시간 * 0.8 and 작업시간 * 1.2 OR     작업시간 > 200 ) 
+ORDER BY COIL_ID;
+VAR=3
+:작업시간=0,
+:하영재=0,
+:문종배=0,
+NAME=작업시간(휴지).sql
+STMT=84
+WITH   PAU AS 
+(
+    SELECT PROC_CD, PAU_STR_DH, PAU_END_DH
+    FROM   MESAPUSER.TB_M47_PAU_ACT 
+    WHERE  PAU_PST_DD  BETWEEN TO_CHAR(SYSDATE - 36, 'YYYYMMDD') AND TO_CHAR(SYSDATE, 'YYYYMMDD')
+    AND    PROC_CD IN ('1P', '83', '84', '85')
+)
+,
+PRD AS 
+(
+    SELECT  A.PROC_CD, A.ORD_NO, A.ORD_LN, A.COIL_ID, A.COIL_WGT, 
+            A.WK_STR_DH, A.WK_END_DH, A.COIL_WK_TIM,   
+            NVL((SELECT MAX(1) FROM PAU 
+                 WHERE  PROC_CD    = A.PROC_CD 
+                 AND    (   PAU_STR_DH BETWEEN A.WK_STR_DH AND A.WK_END_DH)),0) PAU_FLAG1,
+            NVL((SELECT MAX(1) FROM PAU 
+                 WHERE  PROC_CD    = A.PROC_CD 
+                 AND    (   PAU_END_DH BETWEEN A.WK_STR_DH AND A.WK_END_DH)),0) PAU_FLAG2
+                 
+    FROM    MESAPUSER.TB_M47_PRD_ACT_CMN A
+    WHERE   A.PDN_PST_DD BETWEEN TO_CHAR(SYSDATE - 36, 'YYYYMMDD') AND TO_CHAR(SYSDATE, 'YYYYMMDD') 
+    AND     A.PROC_CD IN ('1P', '83', '84', '85')
+)
+--SELECT PROC_CD || '-' || COIL_ID || ', 작업시간(현재) : ' || TO_CHAR(COIL_WK_TIM, '90.99')  || ', (실제)' || TO_CHAR(REAL_WORK_TIM, '90.99') ERR
+SELECT PROC_CD 공정, COIL_ID 코일ID, COIL_WGT, COIL_WK_TIM 현재작업시간, REAL_WORK_TIM "재계산된 작업시간"
+FROM (
+        SELECT  PROC_CD, ORD_NO, ORD_LN, COIL_ID, COIL_WGT, 
+                WK_STR_DH, WK_END_DH, COIL_WK_TIM, PAU_FLAG1, PAU_FLAG2,
+                CASE WHEN PAU_FLAG1 + PAU_FLAG2 != 0 THEN MESAPUSER.FUNC_REAL_PRD_TIM(WK_STR_DH, WK_END_DH, PROC_CD)
+                     ELSE (WK_END_DH - WK_STR_DH) * 24 * 60 END AS REAL_WORK_TIM
+        FROM    PRD
+     )
+WHERE  COIL_WK_TIM NOT BETWEEN DECODE(REAL_WORK_TIM,0,0.1,REAL_WORK_TIM) * 0.8 AND DECODE(REAL_WORK_TIM,0,0.1,REAL_WORK_TIM) * 1.2 
+OR     COIL_WK_TIM > 200 
+ORDER BY PROC_CD, COIL_ID;
+
+
+
+
+/*+ M473030030 작업시간(휴지)조회 M473030030.select.workTim_pau */ 
+WITH   PAU AS 
+(
+    SELECT PROC_CD, PAU_STR_DH, PAU_END_DH
+    FROM   MESAPUSER.TB_M47_PAU_ACT 
+    WHERE  PAU_PST_DD  BETWEEN '20230801' AND '20230831'
+    AND    PROC_CD IN ('1P', '83', '84', '85')
+)
+,
+PRD AS 
+(
+    SELECT  A.PROC_CD, A.ORD_NO, A.ORD_LN, A.COIL_ID, A.COIL_WGT, 
+            A.WK_STR_DH, A.WK_END_DH, A.COIL_WK_TIM,   
+            NVL((SELECT MAX(1) FROM PAU 
+                 WHERE  PROC_CD    = A.PROC_CD 
+                 AND    (   PAU_STR_DH BETWEEN A.WK_STR_DH AND A.WK_END_DH)),0) PAU_FLAG1,
+            NVL((SELECT MAX(1) FROM PAU 
+                 WHERE  PROC_CD    = A.PROC_CD 
+                 AND    (   PAU_END_DH BETWEEN A.WK_STR_DH AND A.WK_END_DH)),0) PAU_FLAG2
+                 
+    FROM    MESAPUSER.TB_M47_PRD_ACT_CMN A
+    WHERE   A.PDN_PST_DD BETWEEN '20230801' AND '20230831'
+    AND     A.PROC_CD IN ('1P', '83', '84', '85')
+)
+--SELECT PROC_CD || '-' || COIL_ID || ', 작업시간(현재) : ' || TO_CHAR(COIL_WK_TIM, '90.99')  || ', (실제)' || TO_CHAR(REAL_WORK_TIM, '90.99') ERR
+SELECT PROC_CD, COIL_ID, COIL_WGT, COIL_WK_TIM, REAL_WORK_TIM
+        , TO_CHAR(WK_STR_DH, 'YYYY-MM-DD HH24:MI:SS') AS WK_STR_DH
+        , TO_CHAR(WK_END_DH, 'YYYY-MM-DD HH24:MI:SS') AS WK_END_DH
+        , TO_CHAR(PAU_STR_DH, 'YYYY-MM-DD HH24:MI:SS') AS PAU_STR_DH
+        , TO_CHAR(PAU_END_DH, 'YYYY-MM-DD HH24:MI:SS') AS PAU_END_DH
+FROM (
+        SELECT  PROC_CD, ORD_NO, ORD_LN, COIL_ID, COIL_WGT, 
+                WK_STR_DH, WK_END_DH, COIL_WK_TIM, PAU_FLAG1, PAU_FLAG2,
+                CASE WHEN PAU_FLAG1 + PAU_FLAG2 != 0 THEN MESAPUSER.FUNC_REAL_PRD_TIM(WK_STR_DH, WK_END_DH, PROC_CD)
+                     ELSE (WK_END_DH - WK_STR_DH) * 24 * 60 END AS REAL_WORK_TIM,
+                DECODE(PAU_FLAG1, 1, ( SELECT MAX(PAU_STR_DH) FROM PAU WHERE PROC_CD = PRD.PROC_CD
+                                       AND    ( PAU_STR_DH BETWEEN PRD.WK_STR_DH AND PRD.WK_END_DH)), NULL) AS PAU_STR_DH,
+                DECODE(PAU_FLAG2, 1, ( SELECT MAX(PAU_END_DH) FROM PAU WHERE PROC_CD = PRD.PROC_CD
+                                       AND    ( PAU_END_DH BETWEEN PRD.WK_STR_DH AND PRD.WK_END_DH)), NULL) AS PAU_END_DH
+        FROM    PRD
+     )
+WHERE	PROC_CD LIKE '%'  
+AND		(COIL_WK_TIM NOT BETWEEN DECODE(REAL_WORK_TIM,0,0.1,REAL_WORK_TIM) * '0.8' AND DECODE(REAL_WORK_TIM,0,0.1,REAL_WORK_TIM) * '1.2' 
+OR     COIL_WK_TIM > '200')
+ORDER BY PROC_CD, COIL_ID
+VAR=0
+NAME=코일이력
+STMT=60
+with rmt_coil_id as
+                (
+                    select coil_id rmt_coil_id from tb_m42_master
+                    where  rmtl_no in (
+                                        select rmtl_no from tb_m47_coil_cmn --as of timestamp(sysdate - 6/24)
+                                        where  coil_id = 'E6QA80L')
+                ),
+                
+/*
+CBL004M
+CBL006G
+CBR0088
+CBS000B
+CBV0059
+*/
+ coil_ids as
+                (
+                    select coil_id 
+                    from   tb_m47_coil_id_hst
+                    where  fr_coil_id = (select rmt_coil_id from rmt_coil_id)
+                )
+                select level level1, -- decode(level, 1, '*', lpad('   ', level*2) || 'ㄴ') indet, 
+                        pcoil_id_h, 
+                        rmtl_no,
+                        ord_no,
+                        decode(level, 1, coil_id_h) coil_id_1,
+                        decode(level, 2, coil_id_h) coil_id_2,
+                        decode(level, 3, coil_id_h) coil_id_3,
+                        decode(level, 4, coil_id_h) coil_id_4,
+                        decode(level, 5, coil_id_h) coil_id_5,
+                        decode(level, 6, coil_id_h) coil_id_6,
+                        decode(level, 7, coil_id_h) coil_id_7,
+                        decode(level, 8, coil_id_h) coil_id_8,
+                        decode(level, 9, coil_id_h) coil_id_9,
+                        decode(level, 10, coil_id_h) coil_id_10,
+--                        decode(level, 11, coil_id_h) coil_id_11, 
+--                        decode(level, 12, coil_id_h) coil_id_12,
+--                        decode(level, 13, coil_id_h) coil_id_13,
+--                        decode(level, 14, coil_id_h) coil_id_14,
+--                        decode(level, 15, coil_id_h) coil_id_15,
+--                        
+--                        decode(level, 16, coil_id_h) coil_id_16,
+--                        decode(level, 17, coil_id_h) coil_id_17,
+--                        decode(level, 18, coil_id_h) coil_id_18,
+--                        decode(level, 19, coil_id_h) coil_id_19, 
+--                        decode(level, 20, coil_id_h) coil_id_20,
+                        coil_id_h, coil_wgt_1 coil_wgt, COIL_AW1,rmtl_aw_1 rmtl_aw, coil_wth, REQ_TST_PIC_ID, mo_no, 
+                        a.proc_cd, op_grd, a.coil_inf_crt_tp, PASS_BOD_MTL_AW, CREATION_TIMESTAMP   --, a.*
+                from  ( select  nvl(b.pcoil_id, a.pcoil_id) pcoil_id_h, nvl(b.coil_id, a.coil_id) coil_id_h,
+                                nvl(b.coil_wgt, a.coil_wgt) coil_wgt_1, nvl(b.rmtl_aw, a.rmtl_aw) rmtl_aw_1, A.COIL_AW COIL_AW1, a.* 
+                        from tb_m47_coil_cmn a, (select * 
+                                                 from   tb_m47_prd_act_cmn 
+                                                 where  coil_id != pcoil_id
+                                                 and    coil_id in (select coil_id from coil_ids)) b
+                        where  a.coil_id = b.coil_id (+)
+                        and    a.coil_id in (select coil_id from coil_ids)
+                        order by coil_inf_crt_tp desc) a
+                connect by prior coil_id_h = pcoil_id_h
+                start with coil_id = (select rmt_coil_id from rmt_coil_id)
+                ;
+VAR=0
+NAME=3004
+STMT=218
+select ROWID
+     , rmtl_no
+     , pcoil_id
+     , a.*
+from   tb_m47_coil_cmn a
+where  coil_id in ( 
+'E6QA80L',
+'E6VA80S',
+'E6VA80V',
+'E6VA80W',
+'E6VA80Y',
+'E6VA80Z',
+'E6VA810',
+'',
+'',
+'',
+'');
+
+E6QA80L
+E6VA80S
+E6VA80V
+E6VA80W
+E6VA80Y
+E6VA80Z
+E6VA810
+;
+select * from tb_m47_pak_act_cmn
+where  coil_id = 'E73A218'
+;
+select  ROWID, pcoil_id, coil_id, evn_typ, gi_coil_aw_1, coil_wgt, gi_mtl_cd_1, mtl_cd, fr_ord_no_1, fr_ord_ln_1, ord_no, ord_ln,   
+a.* from  EAIAPUSER.TB_M47_B47S3004 a
+where  'B9MA60Y' in (pcoil_id, coil_id)
+ORDER BY A.COIL_ID, a.if_grp_id, a.seq_no, a.p_date, a.p_Time;
+
+
+
+select * from tb_m42_master
+where  coil_id = 'B5K0058'
+;
+select ROWID, a.* from tb_m47_pak_act_cmn a
+where  coil_id in ( '','B9M681W','B9M681Z', '', '');
+B9M681W
+B9M681Z
+;
+select ROWID, a.pcoil_id, a.ord_no,a.ord_ln, a.* from tb_m47_coil_cmn  a-- as of timestamp(sysdate -1.8)
+where  'B9MA60Y' in (pcoil_id, coil_id)
+order by coil_id;
+
+
+CBTH201
+CBTH202
+CBTH203;
+
+
+select  ROWID, pcoil_id, coil_id, evn_typ, proc_cd, gi_coil_aw_1, coil_wgt, gi_mtl_cd_1, mtl_cd, fr_ord_no_1, fr_ord_ln_1, ord_no, ord_ln,   
+a.* from  EAIAPUSER.TB_M47_B47S3004 a
+where coil_id in ('',
+'',
+--'B6T7O0X',
+--'E73A217',
+'E77AA2W',
+'E776A2F',
+'',
+'',
+'',
+'',
+'',
+'',
+'')
+--and   evn_typ = 'A1'
+--and   proc_cd = 'PK'
+ORDER BY A.COIL_ID, a.if_grp_id, a.seq_no, a.p_date, a.p_Time
+;
+select * from tb_m47_coil_cmn
+where  mo_no in ( 'V802065','V802066','V802067')
+and   op_grd = '1'
+;
+1360
+1420
+1470
+1460
+1380
+730
+;
+    SELECT mo_no, ORD_WGT,
+           MTL_FG || CLR_FG, PRD_GRP
+    FROM   APSUSER.TB_APS_MO_HEA A
+    where  mo_no in ( 'V802065','V802066','V802067');
+V802065	20000	YY	2
+V802066	15000	YY	2
+V802067	6000	YY	5
+;
+select  ROWID, pcoil_id, coil_id, evn_typ, gi_coil_aw_1, coil_wgt, gi_mtl_cd_1, mtl_cd, fr_ord_no_1, fr_ord_ln_1, ord_no, ord_ln,   
+a.* from  EAIAPUSER.TB_M47_B47S3004 a
+where coil_id in ('',
+'B9MA61G',
+'B9MA61C',
+'',
+'')
+ 
+ORDER BY A.COIL_ID, A.IF_GRP_ID
+;
+
+;
+
+
+B3N6805
+B3N851B
+B3N851C
+
+;
+select  ROWID, pcoil_id,coil_id, evn_typ, gi_coil_aw_1, coil_wgt, gi_mtl_cd_1, mtl_cd, fr_ord_no_1, fr_ord_ln_1, ord_no, ord_ln,   
+a.* from  EAIAPUSER.TB_M47_B47S3004 a
+where extid in ('',
+'2019100115010602B92K1',
+'',
+'',
+''
+);
+2019092016281063BA9H1 
+
+
+
+;
+
+select ROWID, coil_id, evn_typ, gi_coil_aw_1, coil_wgt, gi_mtl_cd_1, mtl_cd, fr_ord_no_1, fr_ord_ln_1, ord_no, ord_ln,   
+a.* from  EAIAPUSER.TB_M47_B47S3004 a
+where extid in (
+
+'',
+'2019092016255457BA9H1',
+'2019092016260461BA9H1',
+'2019092315165998BA5H1',
+'2019092316025408BA2H1',
+'2019092318002041BA5H1',
+'2019092318003718BA5H1',
+'2019092318003920BA5H1',
+'',
+'',
+'',
+'',
+'',
+'',
+''
+)
+ORDER BY A.COIL_ID, A.IF_GRP_ID
+;
+투입량까지 해서 다시 올려드리겠습니다.
+
+2019092016255457BA9H1    6,170    4,010
+2019092016260461BA9H1    4,130    3,840
+2019092315165998BA5H1    5,950    5,950 - 재고부족
+2019092316025408BA2H1    2,520    2,490
+2019092318002041BA5H1    3,950    3,930
+2019092318003718BA5H1    6,440    3,135
+2019092318003920BA5H1    3,120    155
+
+;
+select ROWID,pcoil_id, coil_id, evn_typ, gi_coil_aw_1, coil_wgt, gi_mtl_cd_1, mtl_cd, fr_ord_no_1, fr_ord_ln_1, ord_no, ord_ln,   
+a.* from  EAIAPUSER.TB_M47_B47S3004 a
+where coil_id in (
+
+'B8LA522',
+'',
+'',
+'',
+'',
+'',
+''
+)
+ORDER BY A.COIL_ID, A.IF_GRP_ID
+;
+
+B6A1P02 0.5 
+B6E1P61 0.3 
+B6M1P13 2.6 
+B6T1P0S 0.4 
+B6V1P01 0.3 
+B6W1P1N 0.3 
+
+
+
+
+select  ROWID, coil_id, evn_typ, gi_coil_aw_1, coil_wgt, gi_mtl_cd_1, mtl_cd, fr_ord_no_1, fr_ord_ln_1, ord_no, ord_ln,   
+a.* from  EAIAPUSER.TB_M47_B47S3004 a
+where IF_GRP_ID BETWEEN '20190321' AND '201903221331'
+AND    EVN_TYP = 'J1';
+
+
+select  ROWID, coil_id, evn_typ, gi_coil_aw_1, coil_wgt, gi_mtl_cd_1, mtl_cd, fr_ord_no_1, fr_ord_ln_1, ord_no, ord_ln,   
+a.* from  EAIAPUSER.TB_M47_B47S3004 a
+where IF_GRP_ID BETWEEN '20190301' AND '201903221331'
+AND   ORD_NO = '080'
+and   evn_typ = 'A1'
+--AND    FR_ORD_LN_1 != '070'
+ORDER BY A.IF_GRP_ID, A.COIL_ID
+;
+
+
+update EAIAPUSER.TB_M47_B47S3004 a
+set    ord_no = FR_ORD_NO_1,
+       orD_ln = fr_ord_ln_1
+where IF_GRP_ID BETWEEN '20190301' AND '201903221331'
+AND   ORD_NO = '180'
+and   evn_typ = 'A1';
+
+
+select  ROWID, 
+A.COIL_ID, A.LN_SPD, A.COIL_WK_TIM, A.* from  TB_M47_PRD_ACT_CMN a
+where coil_id in ('',
+'BA48236',
+'BAE8203',
+'BAN8201',
+'BAR8208',
+'',
+'',
+''
+)
+VAR=0
+NAME=30042
+STMT=34
+select  coil_id, evn_typ, gi_coil_aw_1, coil_wgt, gi_mtl_cd_1, mtl_cd, fr_ord_no_1, fr_ord_ln_1, ord_no, ord_ln,   
+a.* from  EAIAPUSER.TB_M47_B47S3004 a
+where coil_id in ('',
+
+'',
+'B5QA31N',
+'',
+'',
+'',
+'',
+'',
+'',
+'',
+'',
+'')
+--and   proc_cd != 'PK'
+;
+
+
+B3N6805
+B3N851B
+B3N851C
+;
+select  coil_id, evn_typ, gi_coil_aw_1, coil_wgt, gi_mtl_cd_1, mtl_cd, fr_ord_no_1, fr_ord_ln_1, ord_no, ord_ln,   
+a.* from  EAIAPUSER.TB_M47_B47S3004 a
+where extid in (
+'2019032121543249BPKA1'
+)
+
+;
+
+select ROWID, pcoil_id, a.* from tb_m47_coil_cmn a
+where  coil_id in ( '','CB7A21N','', '', '');
+
+VAR=0
+NAME=코일삭제
+STMT=20
+-- 자코일
+--B6T7O0W, B6T7O0X, B6T7O0Y, B6T7O0Z
+SELECT ROWID, A.* FROM EAIAPUSER.TB_M47_B47S3004 A WHERE COIL_ID IN ('B6T7O0W', 'B6T7O0Y'); --'B6T7O0W', 'B6T7O0X', 'B6T7O0Y', 'B6T7O0Z');
+SELECT ROWID, A.* FROM TB_M47_COIL_CMN           A WHERE COIL_ID IN ('B6T7O0W', 'B6T7O0Y');
+SELECT ROWID, A.* FROM TB_M47_COIL_ID_HST        AS OF TIMESTAMP(SYSDATE - 2/24) A WHERE COIL_ID IN ('B6T7O0W', 'B6T7O0Y');
+SELECT ROWID, A.* FROM TB_M47_PAK_ACT_CMN        AS OF TIMESTAMP(SYSDATE - 2/24) A WHERE COIL_ID IN ('B6T7O0W', 'B6T7O0Y');
+SELECT ROWID, A.* FROM TB_M47_PRD_ACT_CMN        AS OF TIMESTAMP(SYSDATE - 2/24) A WHERE COIL_ID IN ('B6T7O0W', 'B6T7O0Y');
+SELECT ROWID, A.* FROM TB_M47_COIL_DEF_HST       AS OF TIMESTAMP(SYSDATE - 2/24) A WHERE COIL_ID IN ('B6T7O0W', 'B6T7O0Y');
+SELECT ROWID, A.* FROM TB_M47_COIL_HLD           AS OF TIMESTAMP(SYSDATE - 2/24) A WHERE COIL_ID IN ('B6T7O0W', 'B6T7O0Y');
+
+-- 모코일
+SELECT ROWID, A.* FROM TB_M47_COIL_CMN           A WHERE COIL_ID IN (select pcoil_id from tb_m47_coil_cmn where coil_id in ('B5N6O05', 'B5V6O0G', 'B5W6O03'));
+
+B6T7O0
+B6T7O0
+B6T7O0
+B6T7O0
+B6T7O0
+B6T7O0
+
+VAR=0
+NAME=SQL2
+STMT=52
+SELECT * FROM C10APUSER.TB_C10_QLT_DSN_CMN
+WHERE  ORD_NO IN ( 
+'E190312062',
+'D190322004'
+)
+AND    ORD_LN = '070';
+
+
+SELECT * FROM APSUSER.TB_APS_MO_HEA
+WHERE  ORD_NO = 'E190312062'
+AND    ORD_LN = '070';
+
+D190322004	070
+E190305001	070
+D190312066	070
+
+;
+
+
+SELECT * FROM TB_M47_coil_CMN
+where coil_id in ('',
+
+'B6T7O0W', 
+'B6T7O0Y',
+'B6GA30L',
+'B6GA30K',
+'',
+'',
+'',
+'',
+'',
+'',
+''
+);
+
+-- 자코일
+SELECT ROWID, A.* FROM EAIAPUSER.TB_M47_B47S3004 A WHERE COIL_ID IN ('B5N6O05', 'B5V6O0G', 'B5W6O03');
+SELECT ROWID, A.* FROM TB_M47_COIL_CMN           A WHERE COIL_ID IN ('B5N6O05', 'B5V6O0G', 'B5W6O03');
+SELECT ROWID, A.* FROM TB_M47_COIL_ID_HST        A WHERE COIL_ID IN ('B5N6O05', 'B5V6O0G', 'B5W6O03');
+SELECT ROWID, A.* FROM TB_M47_PAK_ACT_CMN        A WHERE COIL_ID IN ('B5N6O05', 'B5V6O0G', 'B5W6O03');
+SELECT ROWID, A.* FROM TB_M47_PRD_ACT_CMN        A WHERE COIL_ID IN ('B5N6O05', 'B5V6O0G', 'B5W6O03');
+SELECT ROWID, A.* FROM TB_M47_COIL_DEF_HST       A WHERE COIL_ID IN ('B5N6O05', 'B5V6O0G', 'B5W6O03');
+SELECT ROWID, A.* FROM TB_M47_COIL_HLD           A WHERE COIL_ID IN ('B5N6O05', 'B5V6O0G', 'B5W6O03');
+
+-- 모코일
+SELECT ROWID, A.* FROM TB_M47_COIL_CMN           A WHERE COIL_ID IN (select pcoil_id from tb_m47_coil_cmn where coil_id in ('B5N6O05', 'B5V6O0G', 'B5W6O03'));
+
+;
+SELECT * FROM TB_M47_COIL_HLD
+where coil_id in ('B3M630F',
+''
+);
+VAR=0
+NAME=SQL3
+STMT=63
+select *
+from MESAPUSER.TB_M47_ROLL_BRG_HEDR
+where  1 = 1
+and    po_no = '1111111111'
+--and    seq_no = 11071
+and    brg_mak = 'NSK LTD.'
+and    proc_cd = '1P'
+and    roll_tp = 'IMR'; -- 94172
+
+
+INSERT
+INTO /*장종익 - 김태호 요청 서비스 요청 (정보처리의뢰서 2020- 02313) */MESAPUSER.TB_M47_ROLL_BRG_HEDR
+SELECT '1111111111' PO_NO
+     , 94184 SEQ_NO
+     , null BRG_NO
+     , ROLL_TP
+     , PROC_CD
+     , BRG_MAK
+     , '2018' BRG_MNF_YR
+     , null RGS_DH
+     , null BRG_STR_DD
+     , null BRG_DUS_DD
+     , 0 BRG_STS 
+     , 'U25131377' MTL_NO
+     , '20200220' BRG_WHS_DD
+     , CUS_CD
+     , MAK_CD
+     , 5088000 BRG_WHS_AMT
+     , null MDF_DH
+     , MDF_PRS_ID
+     , MDF_PRS_NM
+     , 'N' APV_YN
+     , null APV_PRS_ID
+     , null APV_DD
+     , 'D-TAPER ROLLER BRG' BRG_PRD_NM
+     , 'STF279KVS3954-A-EG01' BRG_SPC
+     , '20190617' BRG_PORD_DD
+     , 0 ORG_SEQ_NO
+     , null CIR_ITM_QTY
+     , null CIR_ITM_QTY_UNT
+     , null BRG_HLD_TP
+     , null BRG_DUS_RSN
+     , 'P' CREATED_OBJECT_TYPE
+     , '수작업' CREATED_OBJECT_ID
+     , '수작업등록' CREATED_PROGRAM_ID
+     , sysdate CREATION_TIMESTAMP
+     , 'P' LAST_UPDATED_OBJECT_TYPE
+     , '수작업' LAST_UPDATED_OBJECT_ID
+     , '수작업등록' LAST_UPDATE_PROGRAM_ID
+     , sysdate LAST_UPDATE_TIMESTAMP
+     , DATA_END_STATUS
+     , DATA_END_OBJECT_TYPE
+     , DATA_END_OBJECT_ID
+     , DATA_END_PROGRAM_ID
+     , DATA_END_TIMESTAMP
+     , ARCHIVE_COMPLETED_FLAG
+     , ARCHIVED_EMPLOYEE_NUM
+     , ARCHIVED_TIMESTAMP
+     , ARCHIVE_PROGRAM_ID
+FROM   MESAPUSER.TB_M47_ROLL_BRG_HEDR
+where  1 = 1
+and    po_no = '1111111111'
+and    seq_no = 11071
+VAR=0
+NAME=전수검사 미완료
+STMT=16
+SELECT A.COIL_ID, SUBSTR(PDN_PST_DD , 1, 6) MM, B.COIL_ID
+FROM   TB_M47_COIL_CMN A, TB_M47_PRD_ACT_CMN B
+WHERE  A.RCD_STS_TP = '2'
+AND    A.PROC_CD = '6I'
+AND    A.WK_PRG_STS = 'G2'
+AND    A.COIL_ID = B.PCOIL_ID
+ORDER BY A.COIL_ID, B.COIL_ID;
+
+
+
+
+C6P690P
+C79680H
+C7J670P
+C7J670R
+C7J670T
+VAR=0
+NAME=M20
+STMT=8
+select * from EAIAPUSER.TB_M20_B20S3050
+
+where  if_grp_id like '2019080609';
+
+select * from EAIAPUSER.TB_M20_B20R5010
+where  if_grp_id = 'SD054020190806091334';
+
+
+VAR=0
+NAME=전문Invoke
+STMT=6
+BEGIN
+
+    EAIAPUSER.PL_EAI_HTTP_INVOKER_PRC
+    (    'TB_M20_B20R5010', 'SD054020190806091334')
+    ;
+END;
+VAR=0
+NAME=SQL4
+STMT=18
+select * from apsuser.tb_aps_coil_inst
+where  coil_id = 'B9MA60Y';
+select * from tb_m47_coil_def_hst
+where  coil_id = 'B9MA60Y';
+
+
+
+select * from tb_m47_wk_act_cmn
+where  coil_id in ( 'B9MA60Y', 'B9MA60Z', 'B9MA610');
+
+
+
+select * from tb_m47_coil_cmn
+where  coil_id = 'B9MA60Y';
+
+
+
+V900982	E190814039	060	HE53ANE-MX01637	7A2AEA	XZTA7CUT0000
+VAR=0
+NAME=SQL6
+STMT=162
+INSERT INTO /*+ M47   작업실적공통   M47WrkActCmn.insert   박철오  */
+    TB_M47_WK_ACT_CMN
+       (
+         COIL_ID
+        ,PROC_CD
+        ,PAS_PROC_SEQ
+        ,PLN_PROC_SEQ
+        ,COIL_RPROC_CNT
+        ,FAC_CD
+        ,MTL_COIL_THK
+        ,MTL_COIL_WTH
+        ,MTL_COIL_LTH
+        ,MTL_COIL_WGT
+        ,MTL_COIL_GRS_WGT
+        ,MTL_COIL_IDIA
+        ,MTL_COIL_ODIA
+        ,MTL_WGT_DCS_MTH_TP
+        ,MTL_COIL_RMW_WGT
+        ,MTL_COIL_THY_WGT
+        ,MTL_COIL_GAL_WGT
+        ,MTL_COIL_COT_WGT
+        ,MTL_COIL_SLV_WGT
+        ,PTT_FLM_WGT
+        ,MTL_COIL_GRS_RMW_WGT
+        ,MTL_COIL_GRS_THY_WGT
+        ,EXIT_SD_RJT_SHT_CNT
+        ,EXIT_SD_RJT_WGT
+        ,PASS_CNT
+        ,LN_SPD
+        ,ENT_COIL_THK
+        ,ENT_COIL_WTH
+        ,ENT_COIL_LTH
+        ,ENT_COIL_WGT
+        ,ENT_COIL_IDIA
+        ,ENT_COIL_ODIA
+        ,EXIT_SD_COIL_THK
+        ,EXIT_SD_COIL_WTH
+        ,EXIT_SD_TOT_WGT
+        ,EXIT_SD_COIL_WGT
+        ,WK_STR_DH
+        ,WK_END_DH
+        ,COIL_WK_TIM
+        ,PDN_PST_DD
+        ,WK_SHF_GRP
+        ,ENT_PTL_YN
+        ,COIL_JNT_STC_TP
+        ,PRD_NM_CD
+        ,ANN_BAS_NO
+        ,ANN_BTH_ID
+        ,MTL_CD
+        ,CLS_CD
+        ,SUB_CLS_CD
+        ,MQL_CD
+        ,MO_NO
+        ,ORD_NO
+        ,ORD_LN
+        ,BF_PROC_CD
+        ,ENT_SPC_TXT
+        ,EMP_ID
+        ,EXIT_SD_EMP_ID
+        , HED_OFF_GAG_AMT                    --HeadOffGauge량
+        , TL_OFF_GAG_AMT                     --TailOffGauge량
+        , PTL_CAU                            --분할원인
+        , HND_DMD                            --처치요구
+        , DEF_CAU_OCC_LOC                    --부적합원인발생위치
+        , PTL_LTH                            --분할길이
+        , PTL_WGT                            --분할중량
+        , PTL_ODIA                           --분할외경
+        , INSR_ID                            --검사자ID
+        , DEF_CAU_CD                         --부적합원인코드
+        , QLT_DSN_MNF_TP                     --품질설계제조구분
+        , HST_SEQ_NO
+        , CREATED_OBJECT_TYPE                --생성Object유형
+        , CREATED_OBJECT_ID                  --생성ObjectID
+        , CREATED_PROGRAM_ID                 --생성프로그램ID
+        , CREATION_TIMESTAMP                 --생성일시
+        , LAST_UPDATED_OBJECT_TYPE           --수정Object유형
+        , LAST_UPDATED_OBJECT_ID             --수정ObjectID
+        , LAST_UPDATE_PROGRAM_ID             --수정프로그램ID
+        , LAST_UPDATE_TIMESTAMP              --수정일시
+       )
+VALUES
+       (
+         'B9MA60Y'
+        ,'A6'
+        ,DECODE(null,'D',NVL('6',0),NVL('6',0) + 1)
+        ,'7'
+        ,null
+        ,'U'
+        ,'0.382'
+        ,'749'
+        ,'3350'
+        ,'7420'
+        ,'7420'
+        ,'508'
+        ,'1375'
+        ,'NC'
+        ,'7420'
+        ,'7585'
+        ,'100'
+        ,'0'
+        ,'0'
+        ,'0'
+        ,'7420'
+        ,'7585'
+        ,null
+        ,null
+        ,null
+        ,null
+        ,'0.382'
+        ,'749'
+        ,null
+        ,'7407'
+        ,null
+        ,'1544'
+        ,null
+        ,null
+        ,null
+        ,null
+        ,TO_TIMESTAMP('2019-09-21 18:07:45.0', 'YYYY-MM-DD HH24:MI:SS.FF3')
+        ,null
+        ,null
+        ,PL_M47_COMMON_FNC_PKG.PDN_PST_DD(TO_TIMESTAMP('2019-09-21 18:07:45.0', 'YYYY-MM-DD HH24:MI:SS.FF3'))
+        ,PL_M47_COMMON_FNC_PKG.WK_SHF_GRP(TO_TIMESTAMP('2019-09-21 18:07:45.0', 'YYYY-MM-DD HH24:MI:SS.FF3'), 'A6')
+        ,null
+        ,null
+        ,'2'
+        ,null
+        ,null
+        ,'HE53ANE-MX01637'
+        ,'7A2AEA'
+        ,'XZTA7CUT0000'
+        ,null
+        ,'V900982'
+        ,'E190814039'
+        ,'060'
+        ,'92'
+        ,null
+        , NVL(null, null)
+        , null
+        , null                   --HeadOffGauge량
+        , null                    --TailOffGauge량
+        , null                           --분할원인
+        , null                           --처치요구
+        , null                   --부적합원인발생위치
+        , null                           --분할길이
+        , null                           --분할중량
+        , null                          --분할외경
+        , null                           --검사자ID
+        , null                        --부적합원인코드
+        , '1'
+        , '8'
+        , 'B'
+        , 'B47RA602'
+        , 'B47RA602-service'
+        , TO_TIMESTAMP('2019-09-21 18:07:45.812', 'YYYY-MM-DD HH24:MI:SS.FF3')
+        , 'B'
+        , 'B47RA602'
+        , 'B47RA602-service'
+        , TO_TIMESTAMP('2019-09-21 18:07:45.812', 'YYYY-MM-DD HH24:MI:SS.FF3')
+       )
+
+VAR=0
+NAME=SQL7
+STMT=6
+select * from EAIAPUSER.TB_M20_B20S3040
+where  coil_id in (
+'B959119',
+'B9PA406',
+''
+);
+VAR=0
+NAME=SQL8
+STMT=33
+select * from APSUSER.TB_APS_EMAIL_MNG
+--where  phone_num is not null
+order by group_nm
+;
+
+
+select * from TB_M30_SMTL_CRYT_REQ_CMN;
+
+
+
+select * from TB_M30_SMTL_APPR_USR_MNG
+where  appr_prs_id = '12030005';
+
+SELECT * 
+        FROM TB_M30_SMTL_APPR_USR_MNG
+       WHERE APPR_TP='2'
+         AND ROWNUM ='1'
+         AND ( SMTL_KND_TP,SMTL_LOC) IN (SELECT SMTL_KND_TP,SMTL_LOC 
+                                           FROM TB_M30_SMTL_APPR_USR_MNG
+                                          WHERE APPR_TP='1'
+                                            AND APPR_PRS_ID= 
+                                            AND ROWNUM = 1);
+
+
+
+생산일보를 예로 들자면 둘 다 동일한 데이터 소스로 자료를 산출합니다.
+
+
+
+그래서 같아야 정상이지만 실적 수정 등으로 인해 데이터 산출하는 시점에 따라 달라질 수 있습니다.
+
+
+
+VAR=1
+:ObjectId=0,
+NAME=SQL9
+STMT=20
+select rowid, a.* from MESAPUSER.DML_HIST_RESULT@USMEAN a
+where   sql_text like '%장종익%'
+order by result_insert_time desc;
+
+
+
+  
+  
+INSERT INTO /*장종익 - 김태호 요청 서비스 요청 (정보처리의뢰서 2020- 02313) */MESAPUSER.TB_M47_ROLL_BRG_HEDR SELECT '1111111111' PO_NO      , 94184 SEQ_NO      , null BRG_NO      , ROLL_TP      , PROC_CD      , BRG_MAK      , '2018' BRG_MNF_YR      , null RGS_DH      , null BRG_STR_DD      , null BRG_DUS_DD      , 0 BRG_STS       , 'U25131377' MTL_NO      , '20200220' BRG_WHS_DD      , CUS_CD      , MAK_CD      , 5088000 BRG_WHS_AMT      , null MDF_DH      , MDF_PRS_ID      , MDF_PRS_NM      , 'N' APV_YN      , null APV_PRS_ID      , null APV_DD      , 'D-TAPER ROLLER BRG' BRG_PRD_NM      , 'STF279KVS3954-A-EG01' BRG_SPC      , '20190617' BRG_PORD_DD      , 0 ORG_SEQ_NO      , null CIR_ITM_QTY      , null CIR_ITM_QTY_UNT      , null BRG_HLD_TP      , null BRG_DUS_RSN      , 'P' CREATED_OBJECT_TYPE      , '수작업' CREATED_OBJECT_ID      , '수작업등록' CREATED_PROGRAM_ID      , sysdate CREATION_TIMESTAMP      , 'P' LAST_UPDATED_OBJECT_TYPE      , '수작업' L
+  ;
+  
+  
+  select rowid, a.* from MESAPUSER.DML_HIST_RESULT@USMEAN a
+where  doc_no is null or dev_name is null
+order by result_insert_time desc;
+
+
+
+UPDATE /*장종익 작업, 허지훈 요청, 작업시간 변경요청 */TB_M47_PRD_ACT_CMN SET     COIL_WK_TIM = 0.4 WHERE  COIL_ID IN ( 'C741P01' )
+update /* 허지훈대리 요청, 장종익 처리, 작업시간 오류 수정*/ EAIAPUSER.TB_M47_B47S3004 set    coil_wk_tim = 13 where  coil_id = 'C411P2N' and    evn_typ = 'A1'
+VAR=0
+NAME=SQL5
+STMT=33
+UPDATE /*장종익 작업, 허지훈 요청, 작업시간 변경요청 */TB_M47_PRD_ACT_CMN SET     COIL_WK_TIM = 0.9 WHERE  COIL_ID IN ( 'CB41P3D' );
+UPDATE /*장종익 작업, 허지훈 요청, 작업시간 변경요청 */TB_M47_PRD_ACT_CMN SET     COIL_WK_TIM = 0.6 WHERE  COIL_ID IN ( 'CBB1P07' );
+UPDATE /*장종익 작업, 허지훈 요청, 작업시간 변경요청 */TB_M47_PRD_ACT_CMN SET     COIL_WK_TIM = 0.3 WHERE  COIL_ID IN ( 'CBD1P14' );
+UPDATE /*장종익 작업, 허지훈 요청, 작업시간 변경요청 */TB_M47_PRD_ACT_CMN SET     COIL_WK_TIM = 0.9 WHERE  COIL_ID IN ( 'CBD1P1P' );
+UPDATE /*장종익 작업, 허지훈 요청, 작업시간 변경요청 */TB_M47_PRD_ACT_CMN SET     COIL_WK_TIM = 0.5 WHERE  COIL_ID IN ( 'CBF1P3H' );
+UPDATE /*장종익 작업, 허지훈 요청, 작업시간 변경요청 */TB_M47_PRD_ACT_CMN SET     COIL_WK_TIM = 0.3 WHERE  COIL_ID IN ( 'CBH1P0S' );
+UPDATE /*장종익 작업, 허지훈 요청, 작업시간 변경요청 */TB_M47_PRD_ACT_CMN SET     COIL_WK_TIM = 0.4 WHERE  COIL_ID IN ( 'CBK1P0Y' );
+UPDATE /*장종익 작업, 허지훈 요청, 작업시간 변경요청 */TB_M47_PRD_ACT_CMN SET     COIL_WK_TIM = 0.3 WHERE  COIL_ID IN ( 'CBK1P40' );
+UPDATE /*장종익 작업, 허지훈 요청, 작업시간 변경요청 */TB_M47_PRD_ACT_CMN SET     COIL_WK_TIM = 0.4 WHERE  COIL_ID IN ( 'CBQ1P02' );
+UPDATE /*장종익 작업, 허지훈 요청, 작업시간 변경요청 */TB_M47_PRD_ACT_CMN SET     COIL_WK_TIM = 0.4 WHERE  COIL_ID IN ( 'CBR1P5X' );
+UPDATE /*장종익 작업, 허지훈 요청, 작업시간 변경요청 */TB_M47_PRD_ACT_CMN SET     COIL_WK_TIM = 0.6 WHERE  COIL_ID IN ( 'CBS1P2D' );
+UPDATE /*장종익 작업, 허지훈 요청, 작업시간 변경요청 */TB_M47_PRD_ACT_CMN SET     COIL_WK_TIM = 0.5 WHERE  COIL_ID IN ( 'CBV1P01' );
+                                                                                                            
+
+UPDATE /*장종익 작업, 허지훈 요청, 작업시간 변경요청 */ EAIAPUSER.TB_M47_B47S3004 SET     COIL_WK_TIM = 0.9 WHERE  COIL_ID IN ( 'CB41P3D' ) AND    EVN_TYP = 'A1';
+UPDATE /*장종익 작업, 허지훈 요청, 작업시간 변경요청 */ EAIAPUSER.TB_M47_B47S3004 SET     COIL_WK_TIM = 0.6 WHERE  COIL_ID IN ( 'CBB1P07' ) AND    EVN_TYP = 'A1';
+UPDATE /*장종익 작업, 허지훈 요청, 작업시간 변경요청 */ EAIAPUSER.TB_M47_B47S3004 SET     COIL_WK_TIM = 0.3 WHERE  COIL_ID IN ( 'CBD1P14' ) AND    EVN_TYP = 'A1';
+UPDATE /*장종익 작업, 허지훈 요청, 작업시간 변경요청 */ EAIAPUSER.TB_M47_B47S3004 SET     COIL_WK_TIM = 0.9 WHERE  COIL_ID IN ( 'CBD1P1P' ) AND    EVN_TYP = 'A1';
+UPDATE /*장종익 작업, 허지훈 요청, 작업시간 변경요청 */ EAIAPUSER.TB_M47_B47S3004 SET     COIL_WK_TIM = 0.5 WHERE  COIL_ID IN ( 'CBF1P3H' ) AND    EVN_TYP = 'A1';
+UPDATE /*장종익 작업, 허지훈 요청, 작업시간 변경요청 */ EAIAPUSER.TB_M47_B47S3004 SET     COIL_WK_TIM = 0.3 WHERE  COIL_ID IN ( 'CBH1P0S' ) AND    EVN_TYP = 'A1';
+UPDATE /*장종익 작업, 허지훈 요청, 작업시간 변경요청 */ EAIAPUSER.TB_M47_B47S3004 SET     COIL_WK_TIM = 0.4 WHERE  COIL_ID IN ( 'CBK1P0Y' ) AND    EVN_TYP = 'A1';
+UPDATE /*장종익 작업, 허지훈 요청, 작업시간 변경요청 */ EAIAPUSER.TB_M47_B47S3004 SET     COIL_WK_TIM = 0.3 WHERE  COIL_ID IN ( 'CBK1P40' ) AND    EVN_TYP = 'A1';
+UPDATE /*장종익 작업, 허지훈 요청, 작업시간 변경요청 */ EAIAPUSER.TB_M47_B47S3004 SET     COIL_WK_TIM = 0.4 WHERE  COIL_ID IN ( 'CBQ1P02' ) AND    EVN_TYP = 'A1';
+UPDATE /*장종익 작업, 허지훈 요청, 작업시간 변경요청 */ EAIAPUSER.TB_M47_B47S3004 SET     COIL_WK_TIM = 0.4 WHERE  COIL_ID IN ( 'CBR1P5X' ) AND    EVN_TYP = 'A1';
+UPDATE /*장종익 작업, 허지훈 요청, 작업시간 변경요청 */ EAIAPUSER.TB_M47_B47S3004 SET     COIL_WK_TIM = 0.6 WHERE  COIL_ID IN ( 'CBS1P2D' ) AND    EVN_TYP = 'A1';
+UPDATE /*장종익 작업, 허지훈 요청, 작업시간 변경요청 */ EAIAPUSER.TB_M47_B47S3004 SET     COIL_WK_TIM = 0.5 WHERE  COIL_ID IN ( 'CBV1P01' ) AND    EVN_TYP = 'A1';
+                                                                                                                                
+                                                                                                                  
+                                                                                                                  
+                                                                                                                  
+
+
+
+VAR=0
+NAME=생산일보
+STMT=588
+/*+
+입측대기량  G3 전공정 + E1,F1,G1,G2 현공정 
+불량대기량  H3,H4 + H1,H2 현공정
+*/     
+WITH TT AS  /*+ M17 생산일보 M173020020.M173020020_GRID_1.SELECT 노덕기 */
+(
+    SELECT 
+        PDN_PST_DD AS WK_END_DH 
+        ,decode(PROC_CD,'RH','CP', PROC_CD) PROC_CD
+        ,NVL(COIL_RPROC_CNT,0) AS COIL_RPROC_CNT
+        ,NVL(PRD_WGT,0) AS PRC_WGT -- 생산량
+        ,NVL(COIL_WGT,0) AS COIL_WGT -- 처리량 
+        --,COIL_WGT - PRD_WGT AS RPROC_WGT --재처리량
+        ,CASE WHEN COIL_RPROC_CNT >= 1 THEN COIL_WGT ELSE 0 END AS RPROC_WGT --재처리량
+        ,COIL_WGT / DECODE(COIL_THK,0,NULL) / 7.85 * 1000 AS COIL_AREA
+        ,COIL_WGT / DECODE(COIL_THK,0,NULL) / 7.85 * 1000 / DECODE(COIL_WTH,0,NULL) * 1000 AS COIL_LTH
+        ,COIL_THK
+        ,COIL_WTH
+    FROM  MESAPUSER.TB_M47_PRD_ACT_CMN
+    WHERE PDN_PST_DD  BETWEEN  SUBSTR(REPLACE(:WORD_DH,'-',''),1,6)||'01' AND REPLACE(:WORD_DH,'-','')
+    AND   NVL(PASS_BOD_PAK_MTL_TP,' ') <> 'D' --통판재인것 게외
+    AND   COIL_WGT != 0
+    AND   COIL_THK != 0
+    AND   COIL_WTH != 0
+) 
+,MT AS -- 공정별 처리량,생산량,재처리량 누계
+(
+    SELECT PROC_CD
+          ,SUM(PRC_WGT) AS PRC_WGT --생산량
+          ,SUM(COIL_WGT) AS TOT_ACT --처리량
+          ,SUM(RPROC_WGT) AS TOT_RPROC
+          ,SUM(COIL_WGT)/SUM(COIL_WGT/(COIL_THK*7.85))/7.85 AS COIL_THK_TOTAL --두께
+          ,SUM(COIL_WGT/(COIL_THK*7.85))/SUM((COIL_WGT/(COIL_THK*7.85))/COIL_WTH) AS COIL_WTH_TOTAL --폭
+    FROM  TT
+    GROUP BY PROC_CD
+)
+,DT AS --공정별 생산량,재처리량 일계
+(
+    SELECT PROC_CD
+          ,NVL(SUM(COIL_WGT),0) AS DAY_ACT
+          ,NVL(SUM(RPROC_WGT),0) AS DAY_RPROC
+          ,ROUND(SUM(COIL_WGT) / DECODE(SUM(COIL_AREA),0,NULL) / 7.85 * 1000,3) AS AVG_THK
+          ,ROUND(SUM(COIL_AREA) / DECODE(SUM(COIL_LTH),0,NULL) / 7.85 * 1000,1) AS AVG_WTH
+    FROM  TT
+    WHERE WK_END_DH = REPLACE(:WORD_DH,'-','')
+    GROUP BY PROC_CD
+)
+,PAU_ACT AS-- 기간동안의 휴지실적
+(
+  SELECT BB.PROC_CD
+        ,BB.AGAINST_TIME
+        ,SUM(BB.TOTAL_PLN_PAU_TIM)  AS TOTAL_PLN_PAU_TIM -- 계획휴지
+        ,SUM(BB.TOTAL_FREE_TIM)     AS TOTAL_FREE_TIM    -- 총여유
+        ,SUM(BB.TOTAL_CCT_WORK_TIM) AS TOTAL_CCT_WORK_TIM -- 부수작업
+        ,SUM(BB.TOTAL_EQU_OCC_TIM)  AS TOTAL_EQU_OCC_TIM -- 설비고장
+        ,SUM(BB.CNT_EQU_OCC_TIM)    AS CNT_EQU_OCC_TIM   --설비고장건수
+        ,((BB.AGAINST_TIME - SUM(BB.TOTAL_PLN_PAU_TIM)) / BB.AGAINST_TIME) * 100 AS WK_PCT --조업율(조업시간/역시간)
+        ,DECODE((BB.AGAINST_TIME - SUM(BB.TOTAL_PLN_PAU_TIM)),0,100, ROUND((((BB.AGAINST_TIME - SUM(BB.TOTAL_PLN_PAU_TIM)) - SUM(BB.TOTAL_FREE_TIM)) / (BB.AGAINST_TIME - SUM(BB.TOTAL_PLN_PAU_TIM))) * 100,2)) AS OPP_PCT --가동율(가동시간/조업시간)
+        ,DECODE(((BB.AGAINST_TIME - SUM(BB.TOTAL_PLN_PAU_TIM)) - SUM(BB.TOTAL_FREE_TIM)),0,100, ROUND((((BB.AGAINST_TIME - SUM(BB.TOTAL_PLN_PAU_TIM)) - SUM(BB.TOTAL_FREE_TIM) - SUM(BB.TOTAL_CCT_WORK_TIM)) / ((BB.AGAINST_TIME - SUM(BB.TOTAL_PLN_PAU_TIM)) - SUM(BB.TOTAL_FREE_TIM))) * 100,2)) AS WORK_PCT--작업율(작업시간/가동시간)
+  FROM (SELECT C.PROC_CD --휴지시간 구분으로 합을 구함
+              ,NVL((TO_DATE(REPLACE(:WORD_DH,'-'),'YYYYMMDD') - TO_DATE(SUBSTR(REPLACE(:WORD_DH,'-',''),1,6)||'01','YYYYMMDD')+1)*24,0) AS AGAINST_TIME  
+              ,NVL(SUM(DECODE(SUBSTR(B.PAU_CD,1,1),'A',B.PAU_TIM,0))/60,0) AS TOTAL_PLN_PAU_TIM      
+              ,NVL(SUM((CASE WHEN SUBSTR(B.PAU_CD, 1, 1) IN ( 'B', 'C', 'D', 'E', 'F', 'G' ) THEN B.PAU_TIM END)) / 60,0) AS TOTAL_FREE_TIM     
+              ,NVL(SUM((CASE WHEN SUBSTR(B.PAU_CD, 1, 1) IN ( 'H', 'J', 'K' ) THEN B.PAU_TIM * decode(substr(B.PAU_CD, 1, 1), 'K', (DECEL_RT/100), 1) END)) / 60,0) AS TOTAL_CCT_WORK_TIM   
+              ,NVL(SUM((CASE WHEN SUBSTR(B.PAU_REA_CD, 1, 2) IN ('03','04','52','53') THEN B.PAU_TIM END)) / 60,0) AS TOTAL_EQU_OCC_TIM
+              ,NVL((SELECT COUNT(DISTINCT ACTL_PAU_STR_DH) AS CNT FROM TB_M47_PAU_ACT 
+                    WHERE  SUBSTR(PAU_REA_CD, 1, 2) IN ('03','04','52','53') 
+                    AND    PAU_PST_DD BETWEEN SUBSTR(REPLACE(:WORD_DH,'-',''),1,6)||'01' AND REPLACE(:WORD_DH,'-','')
+                    AND    PROC_CD = C.PROC_CD),0) AS CNT_EQU_OCC_TIM
+        FROM TB_M47_PAU_ACT B,
+             (SELECT CD_V AS PROC_CD, CD_V_MEANING AS PROC_NM
+              FROM   M00APUSER.VI_M00_CODE_ACCESS
+              WHERE  CD_TP = 'PROC_CD'
+              AND    CATEGORY_GROUP_NM = 'SZ0000' 
+              AND    SUBSTR(CD_V,1,1) IN ('1','3','5','8','9','A')
+              AND    SUBSTR(CD_V,2,1) NOT IN ('I','O','Z','U')
+             ) C
+        WHERE C.PROC_CD = B.PROC_CD (+)
+        AND   B.PAU_PST_DD(+) BETWEEN SUBSTR(REPLACE(:WORD_DH,'-',''),1,6)||'01' AND REPLACE(:WORD_DH,'-','')   
+        GROUP BY C.PROC_CD
+     ) BB
+ GROUP BY BB.PROC_CD,BB.AGAINST_TIME
+) 
+,APS_PLN AS
+(
+    SELECT PROC_CD
+           ,HDL_QTY AS PDN_PLN_QTY --처리량목표
+           ,PDN_MAN_RAT   --(조업율)
+           ,MN_TAR_SZ_WTH --(롤링목표SIZE 폭)
+           ,MN_TAR_SZ_THK --(롤링목표SIZE 두께)
+     FROM APSUSER.TB_APS_MN_CRP_PLN
+     WHERE PLN_FND_YR_MN||PLN_VER = (SELECT MAX(PLN_FND_YR_MN||PLN_VER)  
+                                     FROM   APSUSER.TB_APS_MN_CRP_PLN
+                                     WHERE  PLN_TP ='R'   
+                                     AND    PLN_YR_MN = SUBSTR(REPLACE(:WORD_DH,'-',''),1,6))
+     AND PLN_YR_MN = SUBSTR(REPLACE(:WORD_DH,'-',''),1,6) 
+     AND PLN_TP ='R'    
+     UNION ALL
+     SELECT PROC_CD     --공정코드
+           ,SUM(PDN_PLN_QTY) AS PDN_PLN_QTY --생산계획량
+           ,0 AS PDN_MAN_RAT   --(조업율)
+           ,0 AS MN_TAR_SZ_WTH --(롤링목표SIZE 폭)
+           ,0 AS MN_TAR_SZ_THK --(롤링목표SIZE 두께)
+     FROM  APSUSER.TB_APS_MN_CRP_PLN_ETC
+     WHERE PLN_YR_MN = SUBSTR(REPLACE(:WORD_DH,'-',''),1,6)
+     GROUP BY PROC_CD
+)
+,CAL_TIM AS -- 해당월 역시간
+(
+    SELECT SUBSTR(TO_CHAR(LAST_DAY(TO_DATE(REPLACE(:WORD_DH,'-', ''),'YYYYMMDD')),'YYYYMMDD'),7,2) CALENDAR_TIM
+    FROM   DUAL
+)
+,
+ANN_PLN_PROC AS -- 소둔월처리목표
+(
+    SELECT  SUM(PDN_PLN_QTY) AS PDN_PLN_QTY --생산계획량
+    FROM   APSUSER.TB_APS_MN_CRP_PLN_ETC
+    WHERE  PLN_YR_MN = SUBSTR(REPLACE(:WORD_DH, '-', ''), 1, 6)
+    AND    PROC_CD LIKE '4%'
+)
+,
+APS_DAY AS
+(
+    SELECT APS.PROC_CD, 
+           SUM(MO_PDN_PLN_QTY) AS WGT
+    FROM   APSUSER.TB_APS_COIL_INST_MES APS
+    WHERE  APS.WORK_DD = REPLACE(:WORD_DH,'-','')
+    AND    SUBSTR(PROC_CD,1,1) IN ('6','7','C')
+    GROUP BY APS.PROC_CD
+    UNION
+    SELECT '44' PROC_CD, (SELECT PDN_PLN_QTY FROM ANN_PLN_PROC) / (SELECT CALENDAR_TIM FROM CAL_TIM) WGT 
+    FROM   DUAL
+)
+, 
+FREE_TIM AS -- 총여유시간
+(
+    SELECT  BB.PROC_CD,
+            SUM(BB.TOTAL_FREE_TIM) AS TOTAL_FREE_TIM    -- 총여유
+    FROM
+      (SELECT C.PROC_CD,
+              NVL(SUM((CASE WHEN SUBSTR(B.PAU_CD, 1, 1) IN ( 'B', 'C', 'D', 'E', 'F', 'G' ) THEN B.PAU_TIM END)) / 60,0) AS TOTAL_FREE_TIM    
+       FROM  TB_M47_PAU_ACT B,
+             (SELECT CD_V AS PROC_CD, CD_V_MEANING AS PROC_NM
+              FROM   M00APUSER.VI_M00_CODE_ACCESS
+              WHERE  CD_TP = 'PROC_CD'
+              AND    CATEGORY_GROUP_NM = 'SZ0000' 
+              AND    SUBSTR(CD_V,1,1) IN ('1','3','5','8','9','A')
+              AND    SUBSTR(CD_V,2,1) NOT IN ('I','O','Z','U')
+             ) C
+       WHERE      C.PROC_CD = B.PROC_CD (+)
+       AND        B.PAU_PST_DD BETWEEN SUBSTR(REPLACE(:WORD_DH,'-',''),1,6)||'01' AND REPLACE(:WORD_DH,'-','')   
+       GROUP BY   C.PROC_CD
+     ) BB
+    GROUP BY BB.PROC_CD
+    ORDER BY BB.PROC_CD
+)
+,
+APS_TAR_TPH AS -- APS 목표 T/H
+(
+    SELECT PROC_CD, NVL(TAR_TPH,0) TAR_TPH 
+    FROM APSUSER.TB_APS_MN_CRP_PLN
+    WHERE SUBSTR(PROC_CD,1,1) IN ('1', '8', '9', 'A')
+    AND      PLN_TP    = 'R'
+    AND (PLN_YR_MN , PLN_VER, PLN_FND_YR_MN) IN (select aa.PLN_YR_MN,
+                                                        max(a.PLN_VER) PLN_VER ,
+                                                        aa.PLN_FND_YR_MN
+                                                 from   APSUSER.TB_APS_MN_CRP_PLN a,                                          
+                                                 (
+                                                     SELECT   PLN_YR_MN, MAX(PLN_FND_YR_MN) PLN_FND_YR_MN
+                                                     FROM     APSUSER.TB_APS_MN_CRP_PLN
+                                                     WHERE    PLN_YR_MN = SUBSTR(REPLACE(:WORD_DH,'-',''),1,6)
+                                                     AND      PLN_TP    = 'R'
+                                                     GROUP BY PLN_YR_MN
+                                                 ) aa
+                                                 where a.PLN_YR_MN = aa.PLN_YR_MN
+                                                 and   a.PLN_FND_YR_MN = aa.PLN_FND_YR_MN
+                                                 AND   a.PLN_TP    = 'R'
+                                                 group by aa.PLN_YR_MN, aa.PLN_FND_YR_MN)
+    UNION                                
+    SELECT '33' PROC_CD, 40  TAR_TPH FROM DUAL
+    UNION 
+    SELECT '51' PROC_CD, 50  TAR_TPH FROM DUAL
+)
+,
+AA AS -- 총여유 * 목표 T/H
+(
+    SELECT A.PROC_CD,
+           (A.TOTAL_FREE_TIM * NVL(B.TAR_TPH,0)) BB
+    FROM FREE_TIM A,
+         APS_TAR_TPH B
+    WHERE A.PROC_CD = B.PROC_CD(+)
+    ORDER BY B.PROC_CD
+)
+,
+WK_WGT AS -- 투입량
+(
+    SELECT  A.PROC_CD,
+            SUM(NVL(COIL_AW,0)) AS COIL_WGT
+    FROM   TB_M47_PRD_ACT_CMN A
+    WHERE  SUBSTR(PROC_CD,1,1) IN ('1', '3', '5', '9', 'A')
+    AND    PDN_PST_DD BETWEEN REPLACE(:WORD_DH,'-','') AND REPLACE(:WORD_DH,'-','')
+    GROUP BY A.PROC_CD
+    UNION
+    SELECT  A.PROC_CD,
+            sum( round((A.coil_wk_tim/60) * nvl(B.TPH_QTY,C.TAR_TPH)))  as COIL_WGT           
+    FROM   TB_M47_PRD_ACT_CMN A,
+           apsuser.TB_APS_LINE_COMPAT B,
+           APS_TAR_TPH C
+    WHERE  SUBSTR(A.PROC_CD,1,1) IN ('8')
+    AND    PDN_PST_DD BETWEEN REPLACE(:WORD_DH,'-','') AND REPLACE(:WORD_DH,'-','')
+    and    a.proc_cd       = b.proc_cd (+)
+    and    a.mo_no         = b.mo_no   (+)
+    and    a.PLN_PROC_SEQ  = b.PROC_SEQ(+)
+    and    a.proc_cd       = c.proc_cd (+)
+    and    nvl(a.pass_bod_pak_mtl_tp, 'X') not in ('D')
+    GROUP BY A.PROC_CD
+),
+DAY_PLN AS -- 소둔, 정전공정 제외 순처리 일계 목표
+(
+    SELECT B.PROC_CD, 
+           (B.COIL_WGT+A.BB) AS WGT
+    FROM AA A,
+         WK_WGT B
+    WHERE A.PROC_CD = B.PROC_CD     
+)
+,APS_SUM AS
+(
+    SELECT PROC_CD
+          ,SUM(COIL_WGT) AS WGT
+    FROM  APSUSER.TB_APS_COIL_INST_MES APS
+    WHERE WORK_DD BETWEEN  SUBSTR(REPLACE(:WORD_DH,'-',''),1,6)||'01' AND REPLACE(:WORD_DH,'-','')
+    GROUP BY PROC_CD
+)
+,
+WAIT_WGT AS
+(
+    SELECT DECODE(HALF_COIL_WGT2, 0, PROC_CD, NXT_PROC_CD) PROC_CD,-- PRD_NM_CD,
+            ROUND((SUM(HALF_COIL_WGT1) + SUM(HALF_COIL_WGT2))/1000, 0) WAIT_CNT,
+            SUM(DEF_COIL_WGT_E)/1000 DEF_CNT_E, --부적합입측
+            SUM(DEF_COIL_WGT_D)/1000 DEF_CNT_D, --부적합출측
+            ROUND(SUM(DUM_COIL_WGT)/1000, 0) DUM_CNT
+     FROM   (SELECT  PROC_CD, NXT_PROC_CD,-- PRD_NM_CD,
+                    CASE WHEN NVL(M47_CMN.PASS_BOD_PAK_MTL_TP,' ') <> 'D' --통판재 제외
+                              AND WK_PRG_STS IN ('E1','F1','G1') THEN COIL_WGT
+                    ELSE 0
+                    END HALF_COIL_WGT1, -- 입측반제품
+                    CASE WHEN NVL(M47_CMN.PASS_BOD_PAK_MTL_TP,' ') <> 'D' --통판재 제외
+                              AND WK_PRG_STS IN ('G3') THEN COIL_WGT
+                    ELSE 0
+                    END HALF_COIL_WGT2, -- 출측반제품
+                    CASE WHEN NVL(M47_CMN.PASS_BOD_PAK_MTL_TP,' ') <> 'D' --통판재 제외
+                              AND WK_PRG_STS IN ('H1','H2') THEN COIL_WGT
+                    ELSE 0
+                    END DEF_COIL_WGT_E, -- 부적합 입측
+                    CASE WHEN NVL(M47_CMN.PASS_BOD_PAK_MTL_TP,' ') <> 'D' --통판재 제외
+                              AND WK_PRG_STS IN ('H3','H4') THEN COIL_WGT
+                    ELSE 0
+                    END DEF_COIL_WGT_D, -- 부적합출측
+                    CASE WHEN NVL(M47_CMN.PASS_BOD_PAK_MTL_TP,' ') = 'D' THEN COIL_WGT
+                    ELSE 0
+                    END DUM_COIL_WGT
+            -- ROUND(SUM(COIL_WGT)/1000,2)
+            FROM   MESAPUSER.TB_M47_DLY_WIP_MNG M47_CMN
+            WHERE  M47_CMN.WIP_MNG_DD = TO_CHAR(TO_DATE(REPLACE(:WORD_DH,'-',''),'YYYYMMDD')+1,'YYYYMMDD')
+            AND    M47_CMN.RCD_STS_TP IN ('2') --반제품이고
+            )
+    GROUP BY DECODE(HALF_COIL_WGT2, 0, PROC_CD, NXT_PROC_CD) --, PRD_NM_CD
+)
+,RST AS
+(
+    SELECT DECODE(SUBSTR(VI.PROC_CD,0,1),'4','4Z',VI.PROC_CD) AS PROC_CD
+          ,(SELECT CD_V_MEANING FROM M00APUSER.VI_M00_CODE_ACCESS
+            WHERE CD_TP = 'PROC_CD' AND CATEGORY_GROUP_NM = 'SZ0000'
+            AND CD_V = MT.PROC_CD) AS PROC_CD_NM
+        ,NVL(APS_PLN.PDN_PLN_QTY,0) AS MON_TAR
+        ,MESAPUSER.FC_M17_PER_TRN_RT(VI.PROC_CD,SUBSTR(REPLACE(:WORD_DH,'-',''),1,6)||'01',REPLACE(:WORD_DH,'-',''),NULL) AS PER_TRN_RT -- 기간경과율
+        ,DECODE(SUBSTR(VI.PROC_CD,0,1),'4',
+            NVL((SELECT WGT FROM APS_SUM WHERE PROC_CD = APS_PLN.PROC_CD),0),
+            NVL(APS_PLN.PDN_PLN_QTY,0)*MESAPUSER.FC_M17_PER_TRN_RT(VI.PROC_CD,SUBSTR(REPLACE(:WORD_DH,'-',''),1,6)||'01',REPLACE(:WORD_DH,'-',''),NULL)/100) AS TOT_TAR
+        ,NVL(MT.TOT_ACT,0) AS TOT_ACT
+        ,NVL(MT.TOT_RPROC,0) AS TOT_RPROC --재처리량 누계
+        ,NVL(DT.DAY_RPROC,0) AS DAY_RPROC --재처리량 일계
+        ,CASE WHEN SUBSTR(VI.PROC_CD,1,1) IN ('4','6','7','C') THEN NVL(APS_DAY.WGT,0) 
+              WHEN SUBSTR(VI.PROC_CD,1,1) IN ('1', '3', '5', '8', '9', 'A') THEN NVL(DAY_PLN.WGT,0)
+         END AS DAY_TAR
+        ,NVL(DT.DAY_ACT,0) AS DAY_ACT
+        ,NVL(DT.AVG_THK,0) AS AVG_THK
+        ,NVL(DT.AVG_WTH,0) AS AVG_WTH
+        ,WAIT_WGT.WAIT_CNT
+        ,WAIT_WGT.DEF_CNT_E
+        ,WAIT_WGT.DEF_CNT_D
+        ,WAIT_WGT.DUM_CNT
+        ,MT.COIL_THK_TOTAL --평균두께 누적
+        ,MT.COIL_WTH_TOTAL --평균폭  누적
+        ,APS_PLN.PDN_MAN_RAT   --(조업율 목표)
+        ,APS_PLN.MN_TAR_SZ_WTH --(롤링목표SIZE 폭)
+        ,APS_PLN.MN_TAR_SZ_THK --(롤링목표SIZE 두께)
+    FROM MT
+        ,MESAPUSER.VI_M17_PROC_CD_M173020020 VI
+        ,DT 
+        ,APS_PLN
+        ,DAY_PLN
+        ,APS_DAY
+        ,WAIT_WGT
+    WHERE VI.PROC_CD = APS_PLN.PROC_CD(+)
+    AND  VI.PROC_CD = MT.PROC_CD(+)
+    AND  VI.PROC_CD = DT.PROC_CD(+)
+    AND  VI.PROC_CD = DAY_PLN.PROC_CD(+)
+    AND  VI.PROC_CD = APS_DAY.PROC_CD(+)    
+    AND  VI.PROC_CD = WAIT_WGT.PROC_CD(+)    
+        -- VIEW 테이블 OUTER JOIN 으로 변경 20120705 노덕기
+    ORDER BY PROC_CD
+)
+
+
+
+,RT AS
+(
+    SELECT PROC_CD
+          ,MON_TAR
+          ,PER_TRN_RT --기간경과율
+          ,MON_TAR*PER_TRN_RT/100 AS TOT_TAR
+          ,TOT_ACT
+          ,TOT_RPROC --재처리량 누계
+          ,DAY_RPROC --재처리량 일계
+          ,DECODE(TOT_TAR,0,0,ROUND((TOT_ACT/DECODE(TOT_TAR,0,NULL))*100,2)) AS TOT_ACH 
+          ,DAY_TAR
+          ,DAY_ACT 
+          ,DECODE(PROC_CD,'1P',0,ROUND(WAIT_CNT,0)) AS WAIT_CNT
+          -- 1P의 입측대기량은 0 으로 세팅 2012 07 10 요청
+          ,DEF_CNT_E
+          ,DEF_CNT_D
+          ,ROUND(DUM_CNT,0) AS DUM_CNT
+          ,COIL_THK_TOTAL --평균두께 누적
+          ,COIL_WTH_TOTAL --평균폭  누적
+          ,PDN_MAN_RAT   --(조업율 목표)
+          ,MN_TAR_SZ_WTH --(롤링목표SIZE 폭)
+          ,MN_TAR_SZ_THK --(롤링목표SIZE 두께)
+    FROM   RST
+    WHERE  SUBSTR(PROC_CD,2,1) != 'Z'
+    UNION ALL
+
+    SELECT PROC_CD
+          ,SUM(MON_TAR) AS MON_TAR
+          ,AVG(PER_TRN_RT ) AS PER_TRN_RT
+          ,SUM(TOT_TAR) AS TOT_TAR
+          ,SUM(TOT_ACT) AS TOT_ACT
+          ,SUM(TOT_RPROC) AS TOT_RPROC --재처리량 누계
+          ,SUM(DAY_RPROC) AS DAY_RPROC --재처리량 일계
+          ,SUM(TOT_ACH) AS TOT_ACH
+          ,SUM(DAY_TAR) AS DAY_TAR
+          ,SUM(DAY_ACT) AS DAY_ACT
+          ,ROUND(SUM(WAIT_CNT),0) AS WAIT_CNT
+          ,SUM(DEF_CNT_E) AS DEF_CNT_E
+          ,SUM(DEF_CNT_D) AS DEF_CNT_D
+          ,ROUND(SUM(DUM_CNT),0) AS DUM_CNT
+          ,NULL AS COIL_THK_TOTAL --평균두께 누적
+          ,NULL AS COIL_WTH_TOTAL --평균폭  누적
+          ,NULL AS PDN_MAN_RAT   --(조업율 목표)
+          ,NULL AS MN_TAR_SZ_WTH --(롤링목표SIZE 폭)
+          ,NULL AS MN_TAR_SZ_THK --(롤링목표SIZE 두께)
+    FROM(SELECT DECODE(SUBSTR(RST.PROC_CD,0,1),'1','1O' --PLTCM계
+                                              ,'2','2Z' -- RM계
+                                              ,'3','3Z' -- ECL계
+                                              ,'4','4Z' -- ANN계
+                                              ,'5','5Z' -- TM계
+                                              ,'8','8Z' -- CGL계
+                                              ,'9','9Z' -- EGL계
+                                              ,'A','AZ' -- CCL계
+                                              ,'6','7Z' -- SHL계
+                                              ,'7','7Z' -- RS계
+                                              ,'C','7Z' -- CPL계
+                                              ,'ZZ'     -- 후공정계
+                                          ) AS PROC_CD
+                ,SUM(MON_TAR) AS MON_TAR
+                ,AVG(PER_TRN_RT ) AS PER_TRN_RT
+                ,SUM(TOT_TAR) AS TOT_TAR
+                ,SUM(TOT_ACT) AS TOT_ACT
+                ,SUM(TOT_RPROC) AS TOT_RPROC --재처리량 누계
+                ,SUM(DAY_RPROC) AS DAY_RPROC --재처리량 일계
+                ,DECODE(SUM(TOT_TAR),0,0,ROUND((SUM(TOT_ACT)/DECODE(SUM(TOT_TAR),0,NULL))*100,2)) AS TOT_ACH 
+                ,SUM(DAY_TAR) AS DAY_TAR
+                ,SUM(DAY_ACT) AS DAY_ACT 
+                ,SUM(WAIT_CNT) AS WAIT_CNT
+                ,SUM(DEF_CNT_E) AS DEF_CNT_E
+                ,SUM(DEF_CNT_D) AS DEF_CNT_D
+                ,SUM(DUM_CNT) AS DUM_CNT
+          FROM  RST
+          WHERE SUBSTR(PROC_CD,2,1) != 'Z' OR PROC_CD = '4Z'
+          GROUP BY SUBSTR(RST.PROC_CD,0,1)
+        )
+     GROUP BY PROC_CD
+)
+,INST AS (
+    SELECT DECODE(SUBSTR(PROC_CD,0,1),'4','4Z',PROC_CD) AS PROC_CD,
+           PRD_NM_CD,
+           ROUND(SUM(COIL_WGT)/1000) AS CNT
+    FROM (
+            SELECT M47_CMN.PROC_CD
+                 , M47_CMN.PRD_NM_CD
+                 , M47_CMN.COIL_ID
+                 , M47_CMN.COIL_WGT
+            FROM   MESAPUSER.TB_M47_DLY_WIP_MNG M47_CMN
+                 ,MESAPUSER.VI_M17_PROC_CD_M173020020 VI
+            WHERE  M47_CMN.WIP_MNG_DD = TO_CHAR(TO_DATE(REPLACE(:WORD_DH,'-',''),'YYYYMMDD')+1,'YYYYMMDD')
+            AND    M47_CMN.RCD_STS_TP IN (2) --반제품이고
+            AND    M47_CMN.PROC_CD = VI.PROC_CD
+            AND    M47_CMN.WK_PRG_STS IN ('E1' ,'F1' ,'G1' ) --현공정입측대기물량 이거나 [G2 제거 7월9일 이규호]
+            AND    M47_CMN.PRD_NM_CD IS NOT NULL
+            UNION ALL
+            SELECT M47_CMN.NXT_PROC_CD AS NXT_PROC_CD
+                 , M47_CMN.PRD_NM_CD
+                 , M47_CMN.COIL_ID
+                 , M47_CMN.COIL_WGT
+            FROM   MESAPUSER.TB_M47_DLY_WIP_MNG M47_CMN
+                 ,MESAPUSER.VI_M17_PROC_CD_M173020020 VI
+            WHERE  M47_CMN.WIP_MNG_DD = TO_CHAR(TO_DATE(REPLACE(:WORD_DH,'-',''),'YYYYMMDD')+1,'YYYYMMDD')
+            AND    M47_CMN.RCD_STS_TP IN (2) --반제품이고
+            AND    M47_CMN.NXT_PROC_CD = VI.PROC_CD
+            AND    M47_CMN.WK_PRG_STS IN ('G3') --분기전 물량   
+            AND    M47_CMN.PRD_NM_CD IS NOT NULL
+        )
+      GROUP BY PROC_CD,PRD_NM_CD
+)
+,ETC as (           -- 특이사항 만들기
+    select
+        PROC_CD 
+         , wm_concat(
+         (select CD_V_MEANING from M00APUSER.VI_M00_CODE_ACCESS
+            where CD_TP = 'PRD_NM_CD' and CATEGORY_GROUP_NM = 'SZ0000'
+            and CD_V = PRD_NM_CD)  
+         ||':'||CNT) as  ETC
+    from
+        INST
+    group by PROC_CD
+)
+,PAU AS (
+SELECT PAU_PST_DD, PROC_CD, PAU_CD,
+        CASE WHEN PAU_CD IN ('A04') THEN '정기보수'
+             ELSE '휴무'
+        END PAU_NM
+        , TO_CHAR(ACTL_PAU_STR_DH, 'MM/DD HH24:MI') STR
+        , TO_CHAR(PAU_END_DH, 'MM/DD HH24:MI') END
+        , ACTL_PAU_STR_DH PAU_STR_DH, PAU_END_DH
+FROM TB_M47_PAU_ACT
+WHERE PAU_CD LIKE 'A%'
+AND   SUBSTR(PROC_CD, 1, 1) IN ('1', '8', '9', 'A')
+AND   PAU_PST_DD = REPLACE(:WORD_DH, '-', '')
+ORDER BY PROC_CD, PAU_STR_DH
+),
+PAU3 AS (
+    SELECT PAU_PST_DD, PROC_CD, PAU_NM, PAU_CD, STR GRP_STR, MAX(END) GRP_END, MAX(PAU_END_DH) GRP_PAU_END_DH
+    FROM PAU
+    GROUP BY PAU_PST_DD,PROC_CD, PAU_NM, PAU_CD, STR
+),
+PAU_CONTINUE AS (
+    
+    SELECT PAU3.*, B.PAU_STR_DH tomm_str,
+            CASE WHEN B.PAU_STR_DH is null then GRP_END 
+                 ELSE ' ' 
+            END END_TIME --, '연결되는 휴지가 없을 경우만 END TIME이 결정됨'
+    FROM   PAU3, TB_M47_PAU_ACT B
+    WHERE  TO_CHAR(TO_DATE(PAU3.PAU_PST_DD, 'YYYYMMDD') + 1, 'YYYYMMDD') = B.PAU_PST_DD (+)
+    AND    PAU3.GRP_PAU_END_DH = B.PAU_STR_DH  (+)
+    AND    PAU3.PROC_CD = B.PROC_CD (+)
+    AND    PAU3.PAU_CD = B.PAU_CD (+)
+    ORDER BY PAU3.PROC_CD, PAU3.GRP_STR
+)
+,
+PAU_ETC AS (
+
+    SELECT A.PROC_CD, REPLACE(WM_CONCAT(GRP_STR || '~' || END_TIME || ' ' || PAU_NM) , ',', ', ') ETC
+    FROM PAU_CONTINUE A
+    GROUP BY A.PROC_CD
+    --ORDER BY PROC_CD
+)
+,
+APL_ACC AS (
+        SELECT A.PAK_LOC_CD
+             , COUNT(DISTINCT A.COIL_ID) CNT_ACC
+        FROM   TB_M47_PAK_ACT_CMN A
+        WHERE  A.PAK_PST_DD BETWEEN SUBSTR(REPLACE(:WORD_DH,'-',''),1,6)||'01' AND REPLACE(:WORD_DH, '-', '')
+        AND    A.PAK_LOC_CD IN ('PP1', 'PP2')
+        GROUP BY A.PAK_LOC_CD
+),
+APL_DAY AS (
+        SELECT A.PAK_LOC_CD
+              , COUNT(DISTINCT A.COIL_ID) CNT_DAY
+        FROM   TB_M47_PAK_ACT_CMN A
+        WHERE  A.PAK_PST_DD  = REPLACE(:WORD_DH, '-', '')
+        AND    A.PAK_LOC_CD IN ('PP1', 'PP2')
+        GROUP BY A.PAK_LOC_CD
+        ORDER BY PAK_LOC_CD
+),
+APL_DAY_PROC AS (
+
+    SELECT A.PAK_LOC_CD, A.PROC_CD
+          , COUNT(DISTINCT A.COIL_ID) CNT
+    FROM   TB_M47_PAK_ACT_CMN A
+    WHERE  A.PAK_PST_DD  = REPLACE(:WORD_DH, '-', '')
+    AND    A.PAK_LOC_CD IN ('PP1', 'PP2')
+    GROUP BY A.PAK_LOC_CD, A.PROC_CD
+    ORDER BY PAK_LOC_CD, PROC_CD
+), 
+APL_ETC AS (
+    SELECT PAK_LOC_CD
+         , WM_CONCAT(
+             (select CD_V_MEANING from M00APUSER.VI_M00_CODE_ACCESS
+                where CD_TP = 'PROC_CD' and CATEGORY_GROUP_NM = 'SZ0000'
+                and CD_V = PROC_CD)  
+             ||'('||CNT||')본 ') as  ETC
+    FROM APL_DAY_PROC
+    GROUP BY PAK_LOC_CD
+),
+FIN AS (
+
+    SELECT 
+        VI.PROC_CD_NM
+        ,ROUND(RT.MON_TAR/1000,0) AS  MON_TAR                        -- 월처리목표
+        ,ROUND(RT.PER_TRN_RT ,2) AS  PER_TRN_RT                    -- 기간경과율
+        ,DECODE(VI.PROC_CD_NM,'ANN계',ROUND(ROUND(RT.MON_TAR/1000,0)*ROUND(RT.PER_TRN_RT,2)/100,0),ROUND(RT.TOT_TAR/1000,0)) AS  TOT_TAR                       -- 생산누계 목표
+        ,ROUND((RT.TOT_ACT-RT.TOT_RPROC)/1000,0) AS  TOT_ACT                       -- 생산누계 실적
+        ,ROUND(DECODE(RT.MON_TAR,0,0,((RT.TOT_ACT-RT.TOT_RPROC)/RT.MON_TAR)*100),2) AS  TOT_ACH  -- 생산누계 달성률
+        ,ROUND(RT.TOT_RPROC/1000,0) AS TOT_GAP  --증감에 재처리량 누계를 표시
+         -- FC_M17_PER_TRN_RT의 옵션이 '2' 일 경우 라인가동 계획을 가져옴
+        ,DECODE(MESAPUSER.FC_M17_PER_TRN_RT(RT.PROC_CD,SUBSTR(REPLACE(:WORD_DH,'-',''),1,6)||'01',REPLACE(:WORD_DH,'-',''),'2'),1,'계휴',2,'철야',3,'정수',4,'갑을',5,'을병',6,'갑',7,'을',8,'병') AS DAY_OPR
+                                 -- 전일 가동    
+        ,DECODE(MESAPUSER.FC_M17_PER_TRN_RT(RT.PROC_CD,NULL,TO_CHAR(TO_DATE(REPLACE(:WORD_DH,'-',''),'YYYYMMDD')+1,'YYYYMMDD'),'2'),1,'계휴',2,'철야',3,'정수',4,'갑을',5,'을병',6,'갑',7,'을',8,'병') AS TODAY_OPR
+                                            -- 금일 가동
+        ,ROUND(RT.DAY_TAR/1000,0) AS DAY_TAR                        -- 전일 목표
+        ,ROUND((RT.DAY_ACT-RT.DAY_RPROC)/1000,0) AS DAY_ACT                        -- 전일 실적 
+        ,ROUND(RT.DAY_RPROC/1000,0) AS DAY_GAP --증감에 재처리량 일계를 표시
+        ,ROUND((COIL_THK_TOTAL*COIL_WTH_TOTAL)
+               /DECODE(MN_TAR_SZ_WTH*MN_TAR_SZ_THK,0,NULL,
+                       MN_TAR_SZ_WTH*MN_TAR_SZ_THK)*100, 2) AS RT_SIZE --사이즈달성률
+        ,ROUND(PAU_ACT.WK_PCT, 2)                           AS RT_WK_PCT --조업율
+        ,ROUND(PAU_ACT.WORK_PCT, 2)                         AS RT_WORK_PCT -- 작업율
+        ,VI.WAIT_MAX                        -- 대기량 최대
+        ,RT.WAIT_CNT                        -- 입측대기량 
+        ,RT.DEF_CNT_E                       -- 입측부적합량 
+        ,RT.DEF_CNT_D                       -- 출측부적합량 
+        ,RT.DUM_CNT                         -- 통판재량 
+        ,NVL(PAU_ETC.ETC, ETC.ETC) ETC                            -- 특이사항
+    FROM
+        MESAPUSER.VI_M17_PROC_CD_M173020020 VI
+        , RT RT
+        , ETC ETC
+        , PAU_ACT 
+        , PAU_ETC
+    WHERE 
+        VI.PROC_CD = RT.PROC_CD(+)
+        AND VI.PROC_CD = ETC.PROC_CD(+)
+        AND VI.HIDDEN ='N'
+        AND VI.PROC_CD = PAU_ACT.PROC_CD(+)
+        AND VI.PROC_CD = PAU_ETC.PROC_CD(+)
+    ORDER BY VI.SORT_SEQ
+)
+SELECT * FROM FIN
+UNION ALL 
+   SELECT  (SELECT CD_V_MEANING from M00APUSER.VI_M00_CODE_ACCESS
+                where CD_TP = 'PROC_CD' and CATEGORY_GROUP_NM = 'SZ0000'
+                and CD_V = SUBSTR(A.PAK_LOC_CD, 2, 3)) PROC_CD_NM
+           , 270 * TO_CHAR(LAST_DAY(TO_DATE(REPLACE(:WORD_DH,'-',''), 'YYYYMMDD')), 'DD') MON_TAR
+           , MESAPUSER.FC_M17_PER_TRN_RT(NULL,SUBSTR(REPLACE(:WORD_DH,'-',''),1,6)||'01',REPLACE(:WORD_DH,'-',''),NULL) AS PER_TRN_RT
+           , 270* SUBSTR(REPLACE(:WORD_DH, '-', ''), 7, 2) TOT_TAR
+           , A.CNT_ACC TOT_ACT
+           , ROUND(A.CNT_ACC  / (270 * SUBSTR(REPLACE(:WORD_DH, '-', ''), 7, 2) ) * 100, 2) TOT_ACH
+           , NULL TOT_GAP
+           , NULL DAY_OPR
+           , NULL TODAY_OPR
+           , 270 DAY_TAR
+           , B.CNT_DAY DAY_ACT
+           , NULL DAY_GAP
+           , NULL RT_SIZE
+           , NULL RT_WK_PCT
+           , NULL RT_WORK_PCT
+           , NULL WAIT_MAX
+           , NULL WAIT_CNT
+           , NULL DEF_CNT_E
+           , NULL DEF_CNT_D
+           , NULL DUM_CNT
+           , C.ETC
+FROM APL_ACC A, APL_DAY B, APL_ETC C
+WHERE A.PAK_LOC_CD = B.PAK_LOC_CD (+)
+AND   A.PAK_LOC_CD = C.PAK_LOC_CD (+)
+
+
+외주SHL(5)본 ,5CCL(62)본 ,3CGL(15)본 
+VAR=1
+:WORD_DH=0,2022-07-12
+NAME=SQL10
+STMT=96
+        WITH  MQL_CD AS
+        (
+            -- 재질코드는 따로 빼냄
+            -- FUNC_DECODE를 사용하면 속도가 3배 느려짐
+            SELECT CD_V CD, CD_V || '-' || CD_V_MEANING NM
+            FROM   M00APUSER.VI_M00_CODE_ACCESS
+            WHERE  CD_TP = 'MQL_CD'
+            AND    CATEGORY_GROUP_NM = 'SZ0000'
+        )      
+        SELECT A.PRD_NM_CD "제품군", A.PROC_CD "공정", A.COIL_PAK_DH "포장일시",
+               A.COIL_ID "코일ID", A.OP_GRD "등급",
+               D.ORD_EXC_THK "주문두께", D.ORD_EXC_WTH "주문폭", D.CLS_CD  "클래스코드", 
+               PL_M47_COMMON_FNC_PKG.GET_MAST_NM('DEF_CD', E.DEF_CD, 'SA0000', '#CD-#NM') AS "부적합명",
+               E.OCC_DH "부적합발생일시", B.EXIT_SPC_TXT "출측특기사항",
+               C.RMTL_MAK_FAC_CD||C.RMTL_ATB_CD "원자재MAKER", 
+               ( SELECT PL_M47_COMMON_FNC_PKG.GET_MAST_NM('RMTL_MAK_FAC_CD'   , C.RMTL_MAK_FAC_CD) FROM DUAL )   AS "원자재MAKER명",               
+               C.PLN_PROC "계획공정", C.PAS_PROC "통과공정",
+               PL_M47_COMMON_FNC_PKG.GET_MAST_NM('CUS_CD', D.CUS_CD, 'SZ0000') AS "고객사명",
+               PL_M47_COMMON_FNC_PKG.GET_MAST_NM('CUS_CD', D.ACT_CUS_CD , 'SZ0000') AS "수요가명",
+               ROUND((NVL(A.COIL_WGT,0)-NVL(A.COIL_GAL_WGT,0)-NVL(A.COIL_COT_WGT,0))*FUNC_GET_RMT_DIS(A.COIL_ID),3) AS "원자재배분중량", 
+               NVL(A.COIL_WGT,0)-NVL(A.COIL_GAL_WGT,0)-NVL(A.COIL_COT_WGT,0)                          AS "제품원판중량", 
+               DECODE(A.OP_GRD,'1',(NVL(A.COIL_WGT,0)-NVL(A.COIL_GAL_WGT,0)-NVL(A.COIL_COT_WGT,0)),0) AS "1급원판중량",
+               DECODE(A.OP_GRD,'2',(NVL(A.COIL_WGT,0)-NVL(A.COIL_GAL_WGT,0)-NVL(A.COIL_COT_WGT,0)),0) AS "2급원판중량",
+               DECODE(A.OP_GRD,'3',(NVL(A.COIL_WGT,0)-NVL(A.COIL_GAL_WGT,0)-NVL(A.COIL_COT_WGT,0)),0) AS "3급원판중량",
+               DECODE(A.OP_GRD,'4',(NVL(A.COIL_WGT,0)-NVL(A.COIL_GAL_WGT,0)-NVL(A.COIL_COT_WGT,0)),0) AS "4급원판중량",
+               NVL(A.COIL_WGT,0) AS "제품중량",
+               NVL(A.COIL_GAL_WGT,0) AS "도금중량",
+               NVL(A.COIL_COT_WGT,0) AS "도장중량",
+               ( SELECT PL_M47_COMMON_FNC_PKG.GET_MAST_NM('ORD_USG_CD'   , D.ORD_USG_CD) FROM DUAL )   AS "주문용도코드",
+               D.CCL_BOM_NO AS "CCL_BOM",
+               G.RMTL_WTH  AS "원자재폭",
+               F.MTL_COIL_WTH AS "입측폭",
+               B.COIL_WTH  AS "제품폭",
+               G.RMTL_KND_TP AS "원자재유형",
+               G.RMTL_MQL_TP AS "원자재재질",
+               D.ORD_USG_CD AS "용도",
+               D.ORD_TEM_CD AS "영업팀",                
+               DECODE(SUBSTR(C.MTL_CD, 9, 1), '1','1-COATING', '2','1-COATING',
+                                              '3','2-COATING', '4','2-COATING', '5','2-COATING',
+                                              '6','3-COATING', '7','3-COATING', '8','3-COATING', '9','3-COATING',
+                                              'A','4-COATING', 'B','4-COATING', 'C','4-COATING', 'D','4-COATING', 'E','4-COATING',
+                                              'F','PRINT',     'G','PRINT',     'H','PRINT',     'J','PRINT',  'K','INKJET',
+                                              'X','LAMINA',    'Y','LAMINA',    'Z','LAMINA', 
+                                              'OTHERS') AS 코팅타입,
+               C.MTL_CD AS "자재코드",
+               D1.PLTCM_EDG_ASG_TP "ST유무(설계)",
+               H.ST_YN  AS "ST유무(APS)",
+               -- (select nm from MQL_CD where CD = D.MQL_CD) AS 재질코드, -- 속도느림
+               MQL_CD.NM AS "재질코드", -- 속도 빠름, 아래 조인 필요
+               -- MESAPUSER.FUNC_DECODE('MQL_CD', 'SZ0000',  D.MQL_CD) AS 재질코드, -- 속도느림
+               D.EMBS_CD "EMBOSS무늬"             
+        FROM   TB_M47_PAK_ACT_CMN A
+             , TB_M47_PRD_ACT_CMN B
+             , TB_M47_COIL_CMN C
+             , C10APUSER.TB_C10_QLT_DSN_CMN D
+             , C10APUSER.TB_C10_QLT_DSN_MNF D1
+             , TB_M47_COIL_DEF_HST E
+             , TB_M47_WK_ACT_CMN F
+             , TB_M42_MASTER G
+             , APSUSER.TB_APS_MO_DAT H
+             , MQL_CD 
+        WHERE  A.OP_GRD  IN ('1','2','3','4','S') 
+        AND   ( (XRADIO1 = 'MON' AND  A.PAK_PST_DD LIKE SUBSTR(REPLACE(:XFR_DATE,'-',''),0,6) || '%')
+               OR
+                (XRADIO1 = 'DAY' AND  A.PAK_PST_DD BETWEEN SUBSTR(REPLACE(:XFR_DATE,'-',''),0,8)
+                                                  AND     SUBSTR(REPLACE(:XTO_DATE,'-',''),0,8)))
+        AND   ( (XRET_YN = 'all')
+               OR 
+                (XRET_YN = 'Y' AND  A.COIL_RPROC_CNT  != 0
+                               AND  MOD(A.COIL_RPROC_CNT, 2) = 0 )
+               OR 
+                (XRET_YN = 'N' AND A.COIL_RPROC_CNT  = 0) )
+        AND    A.COIL_ID = B.COIL_ID (+)
+        AND    A.PROC_CD = B.PROC_CD (+)
+        AND    A.COIL_ID = C.COIL_ID
+        AND    A.ORD_NO  = D.ORD_NO  (+)
+        AND    A.ORD_LN  = D.ORD_LN  (+)
+        AND    C.COIL_ID = E.COIL_ID (+)
+        AND    C.PROC_CD = E.PROC_CD (+)
+        AND    B.PCOIL_ID= F.COIL_ID (+)
+        AND    B.PROC_CD = F.PROC_CD (+)
+        AND    C.RMTL_NO = G.RMTL_NO (+)
+        AND    B.PAS_PROC_SEQ = F.PAS_PROC_SEQ (+)
+        AND    C.PAS_PROC_SEQ = E.PAS_PROC_SEQ (+)
+        AND    C.MO_NO   = H.MO_NO (+)
+        AND    C.ORD_NO  = D1.ORD_NO  (+)
+        AND    C.ORD_LN  = D1.ORD_LN  (+)
+        AND    C.QLT_DSN_MNF_TP  = D1.QLT_DSN_MNF_TP (+)
+        AND    D.MQL_CD = MQL_CD.CD
+        AND    NVL(A.PRD_HALF_TP,' ') NOT IN ('H')
+        AND    NVL(E.SEQ_NO,0)          = (SELECT NVL(MAX(SEQ_NO),0)
+                                           FROM   TB_M47_COIL_DEF_HST
+                                           WHERE  COIL_ID = C.COIL_ID
+                                           AND    PROC_CD = C.PROC_CD
+                                           AND    PAS_PROC_SEQ = C.PAS_PROC_SEQ)                
+        ORDER BY A.PRD_NM_CD, A.PROC_CD, A.COIL_PAK_DH;
+VAR=2
+:XFR_DATE=0,20220701
+:XTO_DATE=0,20220701

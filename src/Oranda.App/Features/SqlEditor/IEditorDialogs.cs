@@ -26,7 +26,7 @@ public interface IEditorDialogs
     /// </summary>
     Task<bool> PreviewEditAsync(string title, string before, string after, CancellationToken ct);
 
-    /// <summary>작업 공간 파일(.md, 열 때는 MyBatis .xml 도) 고르기. 기본은 일반 파일 고르기와 같다.</summary>
+    /// <summary>작업 공간 파일(.md, 열 때는 MyBatis .xml·Orange .sqd 도) 고르기. 기본은 일반 파일 고르기와 같다.</summary>
     Task<string?> PickWorkspaceFileAsync(bool save, string suggestedName, CancellationToken ct)
         => save ? PickSaveFileAsync(suggestedName, ct) : PickOpenFileAsync(ct);
 

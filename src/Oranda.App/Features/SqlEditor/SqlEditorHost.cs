@@ -79,7 +79,7 @@ public sealed class SqlEditorHost : ObservableObject, IDisposable
     public string WorkspaceName => _activeWorkspace?.Name ?? DefaultWorkspaceName;
 
     /// <summary>보고 있는 작업 공간이 Markdown 작업 공간 파일에서 왔거나 그리로 저장됐으면 그 경로. 「작업 공간 파일로 저장」은 여기에 덮어쓴다.</summary>
-    public string? WorkspaceFilePath => _activeWorkspace?.SourcePath is { } p && !WorkspaceFiles.IsMyBatis(p) ? p : null;
+    public string? WorkspaceFilePath => _activeWorkspace?.SourcePath is { } p && !WorkspaceFiles.IsReadOnlySource(p) ? p : null;
 
     /// <summary>시작 때 마지막에 열려 있던 작업 공간들을 다시 연다(설정 <c>workspace.restoreOnStartup</c>).</summary>
     public bool RestoreOnStartup { get; set; } = true;
@@ -1019,6 +1019,7 @@ public sealed class SqlEditorHost : ObservableObject, IDisposable
                 vm.ConnectionProfileId = profile;
             }
 
+            Binds.Restore(t.Binds);
             first ??= vm;
         }
 

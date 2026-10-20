@@ -281,7 +281,7 @@ public sealed class SqlEditorCommandHandler : ICommandHandler
         }
     }
 
-    private static async Task OpenWorkspaceFileAsync(SqlEditorHost host, string? path, CancellationToken ct)
+    internal static async Task OpenWorkspaceFileAsync(SqlEditorHost host, string? path, CancellationToken ct)
     {
         try
         {
