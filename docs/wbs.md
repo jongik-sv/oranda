@@ -1358,7 +1358,7 @@ dotnet, testhost, Oranda.App
 - depends: TSK-04-02, TSK-06-01, TSK-06-03
 - blocked-by: -
 - entry-point: SQL 편집기 탭(F5, Ctrl+Enter, Ctrl+Break)
-- note: -
+- note: 2026-10-20 D-017 전용 세션 SQL 탭(PRD EXEC-13) 구현: SessionPurpose.Dedicated, 탭 → 세션 등록부(Features/DedicatedSession, 키 = 탭 객체), ExecutionState 세션별 상태·보이는 세션(Shown*)·문맥 키 dedicatedSession, 명령 oranda.file.newDedicatedSqlEditor(기본 키 없음), SQL 탭 닫기 가드로 미커밋 확인(저장 확인 다음, 확인 중 실행 잠금), 문서 탭 × 는 DockWorkspace.CloseConfirm, 앱 종료는 MainWindow.OnClosing 이 확인 → 전용 세션 닫기 → 레이아웃 저장·종료 작업 순(ExecutionController.AttachWindow 대체)
 
 #### PRD 요구사항
 - prd-ref: PRD EXEC-01, EXEC-02, EXEC-03, EXEC-04, EXEC-06, EXEC-10, EXEC-11, SAFE-01, SAFE-03, SAFE-08

@@ -1,5 +1,6 @@
 using System.Runtime.CompilerServices;
 using Oranda.App.Features.ConnectionManager;
+using Oranda.App.Features.DedicatedSession;
 using Oranda.App.Features.GridEdit;
 using Oranda.App.Features.SqlEditor;
 using Oranda.App.Shell;
@@ -79,6 +80,7 @@ public static class ExecutionCommands
                 Log = ExecutionLog.For(bus),
                 Dialogs = ExecutionDialogs.Current,
                 Session = () => ConnectionManagerCommands.Resolve(container).ActiveSession,
+                TabSession = tab => DedicatedSessionCommands.Resolve(container).SessionOf(tab),
                 Execution = () =>
                 {
                     EnsureEngineServices(container, state);
@@ -114,13 +116,23 @@ public static class ExecutionCommands
             var interaction = container.GetService<IExecutionInteraction>();
             if (interaction is null)
             {
-                container.AddInstance<IExecutionInteraction>(new AppExecutionInteraction { ProfileProvider = () => state.Profile });
+                container.AddInstance<IExecutionInteraction>(new AppExecutionInteraction { ProfileProvider = () => ExecutionController.RunningProfile ?? state.ShownProfile });
             }
             else if (interaction is AppExecutionInteraction app)
             {
-                app.ProfileProvider ??= () => state.Profile;
+                app.ProfileProvider ??= () => ExecutionController.RunningProfile ?? state.ShownProfile;
             }
         }
+    }
+
+    /// <summary>
+    /// 활성 SQL 탭이 쓰는 세션: 전용 세션 탭(D-017)이면 그 세션, 아니면 공유 작업 세션. 결과 그리드·실행 계획처럼 활성 탭을 따르는 기능이 쓴다.
+    /// </summary>
+    public static Oranda.Core.Sessions.ISession? ActiveTabSession(ServiceContainer container)
+    {
+        ArgumentNullException.ThrowIfNull(container);
+        return DedicatedSessionCommands.Resolve(container).SessionOf(SqlEditorHost.Current.Active)
+            ?? ConnectionManagerCommands.Resolve(container).ActiveSession;
     }
 
     /// <summary>
@@ -134,7 +146,7 @@ public static class ExecutionCommands
         return new GridRowCounter(
             state,
             BindVariableStore.For(bus),
-            () => ConnectionManagerCommands.Resolve(container).ActiveSession,
+            () => ActiveTabSession(container),
             () =>
             {
                 EnsureEngineServices(container, state);
@@ -152,7 +164,7 @@ public static class ExecutionCommands
         return new GridFilterRunner(
             state,
             BindVariableStore.For(bus),
-            () => ConnectionManagerCommands.Resolve(container).ActiveSession,
+            () => ActiveTabSession(container),
             () =>
             {
                 EnsureEngineServices(container, state);
@@ -216,33 +228,26 @@ public static class ExecutionCommands
         void Notify(string text) => Avalonia.Threading.Dispatcher.UIThread.Post(() => log.AddMessage(MessageKind.Info, text));
         HistoryScripts.HistoryScriptsCommands.Notify ??= Notify;
         DataTransfer.DataTransferCommands.Notify ??= Notify;
-        var state = ExecutionState.For(container.GetService<IEventBus>());
-        state.PropertyChanged += (_, e) =>
-        {
-            if (e.PropertyName == nameof(ExecutionState.TxnPending) && state.TxnPending)
-            {
-                Resolve(container).AttachWindow(container.GetService<ShellController>()?.MainWindow);
-            }
-        };
+        DedicatedSessionCommands.Resolve(container); // 활성 탭이 바뀌면 상태 표시줄·문맥 키가 그 탭의 세션을 보이게 한다(D-017)
     }
 }
 
 /// <summary>실행·취소·커밋·롤백 등 TSK-06-02 소유 명령의 처리기. 한 클래스가 명령 ID 로 나눠 처리한다.</summary>
-[OrandaCommand("oranda.exec.runStatement", CommandCategory.Sql, When = "sqlDocFocus", Enablement = "hasSession && !sessionBusy",
+[OrandaCommand("oranda.exec.runStatement", CommandCategory.Sql, When = "sqlDocFocus", Enablement = "(hasSession || dedicatedSession) && !sessionBusy",
     Icon = "run", Placements = ["menu:sql/runStatement@10", "toolbar:main/run@210", "context:editor/runStatement@1000"])]
-[OrandaCommand("oranda.exec.runSubquery", CommandCategory.Sql, When = "sqlDocFocus", Enablement = "hasSession && !sessionBusy",
+[OrandaCommand("oranda.exec.runSubquery", CommandCategory.Sql, When = "sqlDocFocus", Enablement = "(hasSession || dedicatedSession) && !sessionBusy",
     Placements = ["menu:sql/runSubquery@11", "context:editor/runSubquery@1005"])]
-[OrandaCommand("oranda.exec.runSelection", CommandCategory.Sql, When = "sqlDocFocus", Enablement = "hasSession && !sessionBusy && hasSelection",
+[OrandaCommand("oranda.exec.runSelection", CommandCategory.Sql, When = "sqlDocFocus", Enablement = "(hasSession || dedicatedSession) && !sessionBusy && hasSelection",
     Placements = ["menu:sql/runSelection@12"])]
-[OrandaCommand("oranda.exec.runScript", CommandCategory.Sql, When = "sqlDocFocus", Enablement = "hasSession && !sessionBusy",
+[OrandaCommand("oranda.exec.runScript", CommandCategory.Sql, When = "sqlDocFocus", Enablement = "(hasSession || dedicatedSession) && !sessionBusy",
     Icon = "runScript", Placements = ["menu:sql/runScript@14", "toolbar:main/runScript@220", "context:editor/runScript@1010"])]
-[OrandaCommand("oranda.exec.runFromCursor", CommandCategory.Sql, When = "sqlDocFocus", Enablement = "hasSession && !sessionBusy",
+[OrandaCommand("oranda.exec.runFromCursor", CommandCategory.Sql, When = "sqlDocFocus", Enablement = "(hasSession || dedicatedSession) && !sessionBusy",
     Placements = ["menu:sql/runFromCursor@16"])]
-[OrandaCommand("oranda.exec.runStep", CommandCategory.Sql, When = "sqlDocFocus", Enablement = "hasSession && !sessionBusy",
+[OrandaCommand("oranda.exec.runStep", CommandCategory.Sql, When = "sqlDocFocus", Enablement = "(hasSession || dedicatedSession) && !sessionBusy",
     Placements = ["menu:sql/runStep@18"])]
-[OrandaCommand("oranda.exec.runToNewResultTab", CommandCategory.Sql, When = "sqlDocFocus", Enablement = "hasSession && !sessionBusy",
+[OrandaCommand("oranda.exec.runToNewResultTab", CommandCategory.Sql, When = "sqlDocFocus", Enablement = "(hasSession || dedicatedSession) && !sessionBusy",
     Placements = ["menu:sql/runToNewResultTab@20"])]
-[OrandaCommand("oranda.exec.runAllTabs", CommandCategory.Sql, Enablement = "hasSession && !sessionBusy",
+[OrandaCommand("oranda.exec.runAllTabs", CommandCategory.Sql, Enablement = "(hasSession || dedicatedSession) && !sessionBusy",
     Placements = ["menu:sql/runAllTabs@22"])]
 [OrandaCommand("oranda.exec.cancel", CommandCategory.Sql, When = "sqlDocFocus", Enablement = "sessionBusy",
     Icon = "cancel", Placements = ["menu:sql/cancel@50", "toolbar:main/cancel@240"])]
@@ -262,11 +267,11 @@ public static class ExecutionCommands
     Placements = ["menu:sql/goToError@90"])]
 [OrandaCommand("oranda.exec.toggleBlankLineDelimiter", CommandCategory.Sql, Enablement = "sqlDocActive",
     Placements = ["menu:sql/toggleBlankLineDelimiter@95"])]
-[OrandaCommand("oranda.txn.commit", CommandCategory.Sql, Enablement = "hasSession && txnPending && !sessionBusy",
+[OrandaCommand("oranda.txn.commit", CommandCategory.Sql, Enablement = "(hasSession || dedicatedSession) && txnPending && !sessionBusy",
     Icon = "commit", Placements = ["menu:sql/commit@100", "toolbar:main/commit@310"])]
-[OrandaCommand("oranda.txn.rollback", CommandCategory.Sql, Enablement = "hasSession && txnPending && !sessionBusy",
+[OrandaCommand("oranda.txn.rollback", CommandCategory.Sql, Enablement = "(hasSession || dedicatedSession) && txnPending && !sessionBusy",
     Icon = "rollback", Placements = ["menu:sql/rollback@110", "toolbar:main/rollback@320"])]
-[OrandaCommand("oranda.txn.toggleAutoCommit", CommandCategory.Sql, Enablement = "hasSession && !readOnlySession",
+[OrandaCommand("oranda.txn.toggleAutoCommit", CommandCategory.Sql, Enablement = "(hasSession || dedicatedSession) && !readOnlySession",
     Placements = ["menu:sql/toggleAutoCommit@120"])]
 [OrandaCommand("oranda.view.output", CommandCategory.View, Placements = ["menu:view/output@20"])]
 [OrandaCommand("oranda.view.messages", CommandCategory.View, Placements = ["menu:view/messages@30"])]
@@ -278,7 +283,6 @@ public sealed class ExecutionCommandHandler(ServiceContainer container) : IComma
     {
         ArgumentNullException.ThrowIfNull(context);
         var c = ExecutionCommands.Resolve(container);
-        c.AttachWindow(container.GetService<ShellController>()?.MainWindow);
         var state = c.State;
 
         switch (context.CommandId)

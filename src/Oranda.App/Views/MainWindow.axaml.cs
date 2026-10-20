@@ -10,6 +10,7 @@ using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Interactivity;
 using Avalonia.Threading;
+using Oranda.App.Features.DedicatedSession;
 using Oranda.App.Shell;
 using Oranda.App.Shell.Composition;
 using Oranda.App.Shell.Icons;
@@ -41,6 +42,8 @@ public partial class MainWindow : Window
     private WindowPlacement? _lastNormal;
     private DispatcherTimer? _layoutSaveTimer;
     private bool _closeConfirmed;
+    private bool _closing;
+    private bool _exitWithoutConfirm;
 
     public MainWindow()
     {
@@ -225,17 +228,57 @@ public partial class MainWindow : Window
         if (!_closeConfirmed && _shell is not null)
         {
             e.Cancel = true;
-            try
+            if (_closing)
             {
-                _layoutSaveTimer?.Stop();
-                await _shell.SaveLayoutAsync(CapturePlacement());
-            }
-            catch (Exception ex)
-            {
-                Trace.TraceError("layout.json 저장 실패: {0}", ex);
+                return; // 확인 대화상자가 떠 있는 동안 다시 닫기(⌘Q 두 번)는 무시한다
             }
 
-            await _shell.RunShutdownHooksAsync();
+            _closing = true;
+            try
+            {
+                // 미커밋 확인을 먼저 한다: 취소하면 레이아웃 저장·종료 작업을 하지 않고 그대로 둔다(D-017).
+                // 확인이 실패하면 알리고 다음 닫기는 확인 없이 끝낸다(확인이 늘 실패해도 앱을 끌 수 있어야 한다).
+                if (_services is not null && !_exitWithoutConfirm)
+                {
+                    switch (await ConfirmExitAsync(_services))
+                    {
+                        case ExitConfirmResult.Cancelled:
+                            return;
+                        case ExitConfirmResult.Failed:
+                            _exitWithoutConfirm = true;
+                            await NotifyExitConfirmFailedAsync();
+                            return;
+                    }
+                }
+
+                if (_services is not null)
+                {
+                    try
+                    {
+                        await DedicatedSessionCommands.ReleaseAllAsync(_services);
+                    }
+                    catch (Exception ex)
+                    {
+                        Trace.TraceError("전용 세션 정리 실패: {0}", ex);
+                    }
+                }
+
+                try
+                {
+                    _layoutSaveTimer?.Stop();
+                    await _shell.SaveLayoutAsync(CapturePlacement());
+                }
+                catch (Exception ex)
+                {
+                    Trace.TraceError("layout.json 저장 실패: {0}", ex);
+                }
+
+                await _shell.RunShutdownHooksAsync();
+            }
+            finally
+            {
+                _closing = false;
+            }
 
             _closeConfirmed = true;
             Close();
@@ -243,6 +286,36 @@ public partial class MainWindow : Window
         }
 
         base.OnClosing(e);
+    }
+
+    private static async Task<ExitConfirmResult> ConfirmExitAsync(ServiceContainer services)
+    {
+        try
+        {
+            return await DedicatedSessionCommands.ConfirmExitAsync(services, CancellationToken.None);
+        }
+        catch (Exception ex)
+        {
+            Trace.TraceError("종료 확인 실패: {0}", ex);
+            return ExitConfirmResult.Failed;
+        }
+    }
+
+    /// <summary>종료 전 확인이 실패했다고 알린다. 이번 닫기는 취소되고, 다음 닫기는 확인 없이 끝낸다.</summary>
+    private static async Task NotifyExitConfirmFailedAsync()
+    {
+        try
+        {
+            await Oranda.App.Features.SqlEditor.SqlEditorHost.Current.Dialogs.ShowMessageAsync(
+                Oranda.App.Features.Localization.UiText.Get("Execution.exitConfirmFailed.title", "종료"),
+                Oranda.App.Features.Localization.UiText.Get("Execution.exitConfirmFailed",
+                    "종료하기 전 미커밋 확인에 실패했습니다. 커밋하지 않은 변경이 있을 수 있습니다. 다시 닫으면 확인 없이 종료하며, 커밋하지 않은 변경은 롤백됩니다."),
+                CancellationToken.None);
+        }
+        catch (Exception ex)
+        {
+            Trace.TraceError("종료 확인 실패 알림을 띄우지 못했습니다: {0}", ex);
+        }
     }
 
     private void OnKeyDownTunnel(object? sender, KeyEventArgs e)

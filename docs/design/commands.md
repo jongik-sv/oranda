@@ -79,8 +79,9 @@
 |---|---|
 | `hasDocument`, `sqlDocActive`, `plsqlDocActive`, `sqlDocOpen` | 문서 있음 / 활성 문서 종류 / SQL 편집기가 하나 이상 열림 |
 | `sqlWorkspaceActive` | 보고 있는 SQL 작업 공간이 있음(SQL 탭이 없어도 참) |
-| `hasSession`, `sessionBusy`, `sessionBroken`, `readOnlySession` | 활성 문서 접속 상태(연결됨·실행 중·끊김·읽기 전용 프로필) |
-| `txnPending` | 미커밋 트랜잭션 있음 |
+| `hasSession`, `sessionBusy`, `sessionBroken`, `readOnlySession` | 활성 문서 접속 상태(연결됨·실행 중·끊김·읽기 전용 프로필). `hasSession`·`sessionBroken` 은 공유 작업 세션, `sessionBusy`·`readOnlySession` 은 활성 SQL 탭의 세션 기준 |
+| `txnPending` | 미커밋 트랜잭션 있음(활성 SQL 탭의 세션 기준: 전용 세션 탭이면 그 세션) |
+| `dedicatedSession` | 활성 SQL 탭이 전용 세션 탭이고 그 세션이 끊기지 않음(D-017). 공유 접속이 없어도 실행 명령을 켠다 |
 | `hasSelection`, `canUndo`, `canRedo`, `hasFindText`, `hasBookmark`, `readOnlyDoc`, `canNavigateBack`, `canNavigateForward` | 편집기 상태 |
 | `hasExecError`, `hasLastSqlId` | 마지막 실행 결과 |
 | `gridHasResult`, `gridHasSelection`, `gridHasMoreRows`, `gridQueryResult`, `gridEditing`, `gridDirty`, `gridNotEditable`, `singleTable`, `joinResult` | 그리드 상태(`gridQueryResult` = 질의 문장이 만든 결과, PL/SQL REF CURSOR 결과 제외 — 전체 행 수 세기·결과 거르기가 쓴다) |
@@ -269,7 +270,7 @@
 
 ## 7. 1.0 명령 목록
 
-- 아래 표가 1.0 의 **명령 ID 전체**다(218개). 기본 키는 `default.json` 기준, 다른 프리셋은 6.1.
+- 아래 표가 1.0 의 **명령 ID 전체**다(219개). 기본 키는 `default.json` 기준, 다른 프리셋은 6.1.
 - 「키 범위(when)」는 키맵 `when`, 「활성 조건」은 명령 `Enablement` 다.
 - 소유 Task 가 처리기·제목·아이콘·Placements 를 만든다. 셸(TSK-03-01)은 이 표를 하드코딩하지 않는다 — 레지스트리 자동 수집만 한다.
 - 새 명령이 필요하면 기능 Task 가 규칙(1장)대로 ID 를 만들고 이 표에 행을 더하는 요청을 낸다. 키를 주려면 4개 프리셋 모두 충돌 검사를 통과해야 한다.
@@ -280,6 +281,7 @@
 |---|---|---|---|---|---|
 | `oranda.file.newSqlEditor` | 새 SQL 편집기 | `Ctrl+N` | 전역 | 항상 | TSK-04-02 |
 | `oranda.file.newPlsqlEditor` | 새 PL/SQL 편집기 | `Ctrl+Shift+N` | 전역 | 항상 | TSK-08-01 |
+| `oranda.file.newDedicatedSqlEditor` | 새 SQL 탭(전용 세션) | - | 전역 | `hasSession` | TSK-06-02 |
 | `oranda.file.open` | 파일 열기 | `Ctrl+O` | 전역 | 항상 | TSK-04-02 |
 | `oranda.file.save` | 저장 | `Ctrl+S` | 전역 | `hasDocument` | TSK-04-02 |
 | `oranda.file.saveAs` | 다른 이름으로 저장 | - | 전역 | `hasDocument` | TSK-04-02 |
@@ -377,14 +379,14 @@
 
 | ID | 제목 | 기본 키 | 키 범위(when) | 활성 조건 | 소유 Task |
 |---|---|---|---|---|---|
-| `oranda.exec.runStatement` | 현재 문장 실행(선택 시 선택 영역) | `Ctrl+Enter` | `sqlDocFocus` | `hasSession && !sessionBusy` | TSK-06-02 |
-| `oranda.exec.runSubquery` | 커서의 하위 쿼리 실행 | `Alt+Shift+Enter` | `sqlDocFocus` | `hasSession && !sessionBusy` | TSK-06-02 |
-| `oranda.exec.runSelection` | 선택 영역 실행 | - | `sqlDocFocus` | `hasSession && !sessionBusy && hasSelection` | TSK-06-02 |
-| `oranda.exec.runScript` | 스크립트 전체 실행 | `F5` | `sqlDocFocus` | `hasSession && !sessionBusy` | TSK-06-02 |
-| `oranda.exec.runFromCursor` | 커서 문장부터 끝까지 실행 | `Alt+F5` | `sqlDocFocus` | `hasSession && !sessionBusy` | TSK-06-02 |
-| `oranda.exec.runStep` | 순차 실행(실행 후 다음 문장으로) | `Ctrl+Shift+Enter` | `sqlDocFocus` | `hasSession && !sessionBusy` | TSK-06-02 |
-| `oranda.exec.runToNewResultTab` | 새 결과 탭으로 실행 | `F11` | `sqlDocFocus` | `hasSession && !sessionBusy` | TSK-06-02 |
-| `oranda.exec.runAllTabs` | 모든 탭 실행 | - | 전역 | `hasSession && !sessionBusy` | TSK-06-02 |
+| `oranda.exec.runStatement` | 현재 문장 실행(선택 시 선택 영역) | `Ctrl+Enter` | `sqlDocFocus` | `(hasSession \|\| dedicatedSession) && !sessionBusy` | TSK-06-02 |
+| `oranda.exec.runSubquery` | 커서의 하위 쿼리 실행 | `Alt+Shift+Enter` | `sqlDocFocus` | `(hasSession \|\| dedicatedSession) && !sessionBusy` | TSK-06-02 |
+| `oranda.exec.runSelection` | 선택 영역 실행 | - | `sqlDocFocus` | `(hasSession \|\| dedicatedSession) && !sessionBusy && hasSelection` | TSK-06-02 |
+| `oranda.exec.runScript` | 스크립트 전체 실행 | `F5` | `sqlDocFocus` | `(hasSession \|\| dedicatedSession) && !sessionBusy` | TSK-06-02 |
+| `oranda.exec.runFromCursor` | 커서 문장부터 끝까지 실행 | `Alt+F5` | `sqlDocFocus` | `(hasSession \|\| dedicatedSession) && !sessionBusy` | TSK-06-02 |
+| `oranda.exec.runStep` | 순차 실행(실행 후 다음 문장으로) | `Ctrl+Shift+Enter` | `sqlDocFocus` | `(hasSession \|\| dedicatedSession) && !sessionBusy` | TSK-06-02 |
+| `oranda.exec.runToNewResultTab` | 새 결과 탭으로 실행 | `F11` | `sqlDocFocus` | `(hasSession \|\| dedicatedSession) && !sessionBusy` | TSK-06-02 |
+| `oranda.exec.runAllTabs` | 모든 탭 실행 | - | 전역 | `(hasSession \|\| dedicatedSession) && !sessionBusy` | TSK-06-02 |
 | `oranda.exec.runForEdit` | 결과 편집 모드로 실행 | `F9` | `sqlDocFocus` | `hasSession && !sessionBusy && !readOnlySession` | TSK-06-04 |
 | `oranda.exec.cancel` | 실행 취소(서버 중단) | `Ctrl+Break` | `sqlDocFocus` | `sessionBusy` | TSK-06-02 |
 | `oranda.exec.bindVariables` | 바인드 변수 창 | - | `sqlDocFocus` | `sqlDocActive` | TSK-06-02 |
@@ -396,11 +398,11 @@
 | `oranda.exec.goToError` | 오류 문장으로 이동 | - | `sqlDocFocus` | `hasExecError` | TSK-06-02 |
 | `oranda.exec.toggleBlankLineDelimiter` | 빈 줄로 문장 나누기 켜기/끄기 | - | 전역 | `sqlDocActive` | TSK-06-02 |
 | `oranda.exec.toggleStatistics` | 실행 통계 수집 켜기/끄기 | - | 전역 | `sqlDocActive` | TSK-06-06 |
-| `oranda.txn.commit` | 커밋 | - | 전역 | `hasSession && txnPending && !sessionBusy` | TSK-06-02 |
-| `oranda.txn.rollback` | 롤백 | - | 전역 | `hasSession && txnPending && !sessionBusy` | TSK-06-02 |
-| `oranda.txn.toggleAutoCommit` | 자동 커밋 켜기/끄기 | - | 전역 | `hasSession && !readOnlySession` | TSK-06-02 |
-| `oranda.plan.explain` | 예상 실행 계획 | `Ctrl+E` | `sqlDocFocus` | `hasSession && !sessionBusy` | TSK-07-01 |
-| `oranda.plan.actual` | 실제 실행 계획(마지막 실행) | `Ctrl+Shift+E` | `sqlDocFocus` | `hasSession && hasLastSqlId` | TSK-07-01 |
+| `oranda.txn.commit` | 커밋 | - | 전역 | `(hasSession \|\| dedicatedSession) && txnPending && !sessionBusy` | TSK-06-02 |
+| `oranda.txn.rollback` | 롤백 | - | 전역 | `(hasSession \|\| dedicatedSession) && txnPending && !sessionBusy` | TSK-06-02 |
+| `oranda.txn.toggleAutoCommit` | 자동 커밋 켜기/끄기 | - | 전역 | `(hasSession \|\| dedicatedSession) && !readOnlySession` | TSK-06-02 |
+| `oranda.plan.explain` | 예상 실행 계획 | `Ctrl+E` | `sqlDocFocus` | `(hasSession \|\| dedicatedSession) && !sessionBusy` | TSK-07-01 |
+| `oranda.plan.actual` | 실제 실행 계획(마지막 실행) | `Ctrl+Shift+E` | `sqlDocFocus` | `(hasSession \|\| dedicatedSession) && hasLastSqlId` | TSK-07-01 |
 | `oranda.plan.displayCursorOptions` | DISPLAY_CURSOR 형식 옵션 | - | 전역 | `hasSession` | TSK-07-01 |
 | `oranda.plan.pinForCompare` | 이 계획 고정(비교 기준) | - | 전역 | 항상 | TSK-07-01 |
 | `oranda.plan.compare` | 고정한 계획과 비교 | - | 전역 | 항상 | TSK-07-01 |

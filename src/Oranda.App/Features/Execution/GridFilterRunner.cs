@@ -66,7 +66,7 @@ public sealed class GridFilterRunner(ExecutionState state, BindVariableStore bin
 
         // 목록에 없는 이름은 더하지 않는다(거르기는 목록·포커스를 건드리지 않는다). 원래 실행 뒤 값을 바꿨으면 지금 값으로 거른다.
         var values = GridRowCounter.BuildBinds(binds, stmt.BindNames, request.Binds);
-        state.BeginRun();
+        state.BeginRun(s.Id);
         try
         {
             var exec = execution();
@@ -75,7 +75,7 @@ public sealed class GridFilterRunner(ExecutionState state, BindVariableStore bin
         }
         finally
         {
-            state.EndRun();
+            state.EndRun(s.Id);
         }
     }
 
@@ -99,12 +99,12 @@ public sealed class GridFilterRunner(ExecutionState state, BindVariableStore bin
             throw new InvalidOperationException("접속이 없습니다. 접속한 뒤 다시 거르세요.");
         }
 
-        if (state.RunState == SessionRunState.Broken)
+        if (state.IsBroken(s.Id))
         {
             throw new InvalidOperationException("세션이 끊겼습니다. 다시 접속한 뒤 거르세요.");
         }
 
-        if (state.Busy)
+        if (state.IsBusy(s.Id))
         {
             throw new InvalidOperationException("다른 문장을 실행하는 중입니다. 끝난 뒤 다시 거르세요.");
         }

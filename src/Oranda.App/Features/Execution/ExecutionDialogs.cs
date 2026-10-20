@@ -32,6 +32,9 @@ public interface IExecutionDialogs
 
     Task<UncommittedChoice> AskUncommittedAsync(CancellationToken ct);
 
+    /// <summary>전용 세션 탭(D-017)의 미커밋 확인. <paramref name="subject"/> = 탭 이름. 기본은 탭 이름 없이 묻는다.</summary>
+    Task<UncommittedChoice> AskUncommittedAsync(string subject, CancellationToken ct) => AskUncommittedAsync(ct);
+
     /// <summary>DML 미리보기(그리드 반영 전, GRID-05). true = 반영.</summary>
     Task<bool> PreviewDmlAsync(string text, CancellationToken ct);
 }

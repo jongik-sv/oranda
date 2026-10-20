@@ -5,6 +5,7 @@ using Avalonia.Layout;
 using Avalonia.Media;
 using Avalonia.Styling;
 using Avalonia.Threading;
+using Oranda.App.Features.Localization;
 using Oranda.Core.Execution;
 
 namespace Oranda.App.Features.Execution;
@@ -38,7 +39,10 @@ public sealed class AvaloniaExecutionDialogs : IExecutionDialogs
         => OnUi(() => ScriptErrorCoreAsync(stmt, failure));
 
     public Task<UncommittedChoice> AskUncommittedAsync(CancellationToken ct)
-        => OnUi(UncommittedCoreAsync);
+        => OnUi(() => UncommittedCoreAsync(null));
+
+    public Task<UncommittedChoice> AskUncommittedAsync(string subject, CancellationToken ct)
+        => OnUi(() => UncommittedCoreAsync(subject));
 
     public Task<bool> PreviewDmlAsync(string text, CancellationToken ct)
         => OnUi(() => PreviewCoreAsync(text));
@@ -187,30 +191,44 @@ public sealed class AvaloniaExecutionDialogs : IExecutionDialogs
 
     // ---- 미커밋 종료 -----------------------------------------------------------------------
 
-    private async Task<UncommittedChoice> UncommittedCoreAsync()
+    private async Task<UncommittedChoice> UncommittedCoreAsync(string? subject)
+    {
+        var choice = UncommittedChoice.Cancel;
+        var dialog = CreateUncommittedDialog(subject, c => choice = c);
+        await ShowAsync(dialog).ConfigureAwait(true);
+        return choice;
+    }
+
+    /// <summary>
+    /// 미커밋 확인 창을 만든다(띄우지는 않는다). <paramref name="subject"/> 가 있으면 어느 탭의 세션인지 글에 넣는다(전용 세션 탭, D-017).
+    /// 단추를 누르면 <paramref name="chosen"/> 을 부르고 창을 닫는다. 「취소」·창 닫기는 부르지 않는다.
+    /// </summary>
+    internal static Window CreateUncommittedDialog(string? subject, Action<UncommittedChoice> chosen)
     {
         var dialog = NewWindow("미커밋 트랜잭션");
-        var choice = UncommittedChoice.Cancel;
         var commit = new Button { Content = "커밋", MinWidth = 80 };
         var rollback = new Button { Content = "롤백", MinWidth = 80 };
         var cancel = new Button { Content = "취소", MinWidth = 80, IsDefault = true, IsCancel = true };
         commit.Click += (_, _) =>
         {
-            choice = UncommittedChoice.Commit;
+            chosen(UncommittedChoice.Commit);
             dialog.Close();
         };
         rollback.Click += (_, _) =>
         {
-            choice = UncommittedChoice.Rollback;
+            chosen(UncommittedChoice.Rollback);
             dialog.Close();
         };
         cancel.Click += (_, _) => dialog.Close();
+        var text = subject is null
+            ? "커밋하지 않은 변경이 있습니다. 어떻게 할까요?"
+            : UiText.Get("Execution.uncommitted.dedicated", "「{0}」 탭의 전용 세션에 커밋하지 않은 변경이 있습니다. 어떻게 할까요?")
+                .Replace("{0}", subject, StringComparison.Ordinal);
         dialog.Content = Framed(
-            new TextBlock { Text = "커밋하지 않은 변경이 있습니다. 어떻게 할까요?", TextWrapping = TextWrapping.Wrap, MaxWidth = 420 },
+            new TextBlock { Text = text, TextWrapping = TextWrapping.Wrap, MaxWidth = 420 },
             Buttons(commit, rollback, cancel));
         dialog.Opened += (_, _) => cancel.Focus();
-        await ShowAsync(dialog).ConfigureAwait(true);
-        return choice;
+        return dialog;
     }
 
     // ---- DML 미리보기 ------------------------------------------------------------------------

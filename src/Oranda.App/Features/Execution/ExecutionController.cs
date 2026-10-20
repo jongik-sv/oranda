@@ -1,8 +1,8 @@
 using System.Globalization;
 using System.Text;
-using Avalonia.Controls;
 using Oranda.App.Features.GridEdit;
 using Oranda.App.Features.SqlEditor;
+using Oranda.Core.Connection;
 using Oranda.Core.Execution;
 using Oranda.Core.Grid;
 using Oranda.Core.History;
@@ -47,7 +47,11 @@ public sealed class ExecutionDeps
 
     public required IExecutionDialogs Dialogs { get; init; }
 
+    /// <summary>공유 작업 세션(접속 관리자의 활성 세션). 전용 세션 탭은 <see cref="TabSession"/> 이 먼저다.</summary>
     public required Func<ISession?> Session { get; init; }
+
+    /// <summary>탭의 전용 세션(D-017). 없으면 null → 공유 작업 세션을 쓴다.</summary>
+    public Func<SqlEditorViewModel, ISession?> TabSession { get; init; } = _ => null;
 
     public required Func<IExecutionService> Execution { get; init; }
 
@@ -77,10 +81,8 @@ public sealed class ExecutionDeps
 public sealed class ExecutionController : IDisposable
 {
     private readonly ExecutionDeps _d;
-    private CancellationTokenSource? _cts;
-    private Window? _window;
-    private bool _exitApproved;
-    private bool _lastCancelled;
+    private readonly Dictionary<Guid, CancellationTokenSource> _runs = []; // 세션 ID → 실행 중 취소 토큰(전용 세션 탭은 따로 돈다)
+    private readonly HashSet<Guid> _lastCancelled = [];
     /// <summary>결과·오류를 보이는 아래 도구 창(<see cref="ResultsPanelViewModel"/>).</summary>
     public const string ResultsPanelId = "oranda.panel.results";
 
@@ -103,13 +105,30 @@ public sealed class ExecutionController : IDisposable
 
     private SqlEditorHost Host => _d.Host();
 
+    /// <summary>탭이 쓰는 세션: 전용 세션이 있으면 그것, 없으면 공유 작업 세션. 탭이 null 이면 공유 작업 세션.</summary>
+    public ISession? SessionFor(SqlEditorViewModel? tab) => (tab is null ? null : _d.TabSession(tab)) ?? _d.Session();
+
+    /// <summary>
+    /// 지금 실행 중인 문장의 세션 프로필(실행 흐름마다). 실행 확인 대화상자의 머리 띠가 활성 탭이 아니라 실행하는 세션의 접속을 보이게 한다.
+    /// </summary>
+    public static ConnectionProfile? RunningProfile => s_runningProfile.Value;
+
+    private static readonly AsyncLocal<ConnectionProfile?> s_runningProfile = new();
+
+    /// <summary>
+    /// 상태 표시줄이 보여 주는 세션(<see cref="ExecutionState.FocusedDedicated"/>)과 같은 세션: SQL 작업 공간이 아닌 문서가 활성이면
+    /// 활성 SQL 탭이 전용 세션 탭이어도 공유 작업 세션이다. 탭을 고르지 않는 커밋·롤백·취소 명령이 쓴다.
+    /// </summary>
+    private ISession? FocusedSession() =>
+        SessionFor(Host.Active) is { } s && (!State.IsDedicated(s.Id) || State.FocusedDedicated == s.Id) ? s : _d.Session();
+
     // ---- 실행 ------------------------------------------------------------------------------
 
     /// <summary>편집기 <paramref name="tab"/>(없으면 활성 탭)에서 <paramref name="mode"/> 범위를 실행한다.</summary>
     public async Task<bool> RunAsync(RunMode mode, bool newResultTab = false, SqlEditorViewModel? tab = null, CancellationToken ct = default)
     {
         tab ??= Host.Active;
-        if (tab is null || State.Busy)
+        if (tab is null || IsBusy(SessionFor(tab)))
         {
             return false;
         }
@@ -133,30 +152,57 @@ public sealed class ExecutionController : IDisposable
         return ok;
     }
 
-    /// <summary>모든 탭을 차례로 스크립트로 실행한다. 취소하면 거기서 멈춘다.</summary>
+    /// <summary>
+    /// 모든 탭을 차례로 스크립트로 실행한다. 취소하면 거기서 멈춘다. 실행하는 탭을 활성으로 바꾼다: 탭마다 세션이 다를 수 있어
+    /// 취소 명령·상태 표시줄이 지금 실행 중인 탭의 세션을 봐야 한다(D-017).
+    /// </summary>
     public async Task RunAllTabsAsync(CancellationToken ct = default)
     {
-        foreach (var tab in Host.Tabs.ToList())
+        var start = Host.Active;
+        try
         {
-            _lastCancelled = false;
-            await RunAsync(RunMode.Script, newResultTab: false, tab, ct).ConfigureAwait(true);
-            if (_lastCancelled)
+            foreach (var tab in Host.Tabs.ToList())
             {
-                break;
+                if (Host.WorkspaceOf(tab) is null)
+                {
+                    continue; // 앞 탭을 실행하는 동안 닫혔다
+                }
+
+                Host.Active = tab;
+                var id = SessionFor(tab)?.Id ?? Guid.Empty;
+                _lastCancelled.Remove(id);
+                await RunAsync(RunMode.Script, newResultTab: false, tab, ct).ConfigureAwait(true);
+                if (_lastCancelled.Contains(id))
+                {
+                    break;
+                }
+            }
+        }
+        finally
+        {
+            if (start is not null && Host.WorkspaceOf(start) is not null)
+            {
+                Host.Active = start; // 시작할 때의 탭으로 돌아간다
             }
         }
     }
 
-    /// <summary>실행 취소. 서버에서 중단하고(엔진이 <c>OracleCommand.Cancel</c>) 상태는 「취소 중」으로 바뀐다.</summary>
+    /// <summary>
+    /// 실행 취소. 서버에서 중단하고(엔진이 <c>OracleCommand.Cancel</c>) 상태는 「취소 중」으로 바뀐다.
+    /// 끊는 것은 활성 탭 세션의 실행이다(다른 전용 세션 탭의 실행은 그대로 둔다).
+    /// </summary>
     public void Cancel()
     {
-        if (_cts is { IsCancellationRequested: false } cts)
+        if (FocusedSession() is { } session
+            && _runs.TryGetValue(session.Id, out var cts) && !cts.IsCancellationRequested)
         {
-            State.MarkCancelling();
+            State.MarkCancelling(session.Id);
             Log.AddMessage(MessageKind.Info, "실행 취소를 요청했습니다.");
             cts.Cancel();
         }
     }
+
+    private bool IsBusy(ISession? session) => session is null ? State.Busy : State.IsBusy(session.Id);
 
     /// <summary>
     /// 결과를 끝까지 가져오는 긴 작업(「모두 가져오기」)을 실행 상태로 돌린다. 그동안 취소 명령이 켜지고, 누르면 페이지 가져오기를
@@ -165,7 +211,7 @@ public sealed class ExecutionController : IDisposable
     public async Task FetchAsync(Func<CancellationToken, Task> fetch, CancellationToken ct = default)
     {
         ArgumentNullException.ThrowIfNull(fetch);
-        if (State.Busy || _d.Session() is not { } session)
+        if (SessionFor(Host.Active) is not { } session || State.IsBusy(session.Id))
         {
             await fetch(ct).ConfigureAwait(true);
             return;
@@ -178,7 +224,7 @@ public sealed class ExecutionController : IDisposable
     public async Task RerunForEditAsync(SqlStatement? query, CancellationToken ct)
     {
         var tab = Host.Active;
-        if (tab is null || State.Busy)
+        if (tab is null || IsBusy(SessionFor(tab)))
         {
             return;
         }
@@ -197,7 +243,7 @@ public sealed class ExecutionController : IDisposable
 
         if (tab.ResultPane is not ResultTabsViewModel tabs
             || tabs.Selected is not { Pane.Model: { } model } item
-            || _d.Session() is not { } session
+            || SessionFor(tab) is not { } session
             || _d.RowEditor() is not { } editor
             || _d.Metadata() is not { } metadata)
         {
@@ -221,9 +267,15 @@ public sealed class ExecutionController : IDisposable
 
     // ---- 트랜잭션 ---------------------------------------------------------------------------
 
-    public async Task CommitAsync(CancellationToken ct = default)
+    /// <summary>활성 탭 세션을 커밋한다(<c>oranda.txn.commit</c>).</summary>
+    public Task CommitAsync(CancellationToken ct = default) => CommitAsync(FocusedSession(), ct);
+
+    /// <summary>활성 탭 세션을 롤백한다(<c>oranda.txn.rollback</c>).</summary>
+    public Task RollbackAsync(CancellationToken ct = default) => RollbackAsync(FocusedSession(), ct);
+
+    public async Task CommitAsync(ISession? s, CancellationToken ct = default)
     {
-        if (_d.Session() is not { } s)
+        if (s is null)
         {
             return;
         }
@@ -231,7 +283,7 @@ public sealed class ExecutionController : IDisposable
         try
         {
             await Task.Run(() => s.CommitAsync(ct), CancellationToken.None).ConfigureAwait(true);
-            State.ApplyTransaction(s.HasPendingTransaction);
+            State.ApplyTransaction(s.Id, s.HasPendingTransaction);
             Log.AddMessage(MessageKind.Info, "커밋했습니다.");
         }
         catch (Exception e) when (e is not OperationCanceledException)
@@ -240,9 +292,9 @@ public sealed class ExecutionController : IDisposable
         }
     }
 
-    public async Task RollbackAsync(CancellationToken ct = default)
+    public async Task RollbackAsync(ISession? s, CancellationToken ct = default)
     {
-        if (_d.Session() is not { } s)
+        if (s is null)
         {
             return;
         }
@@ -250,7 +302,7 @@ public sealed class ExecutionController : IDisposable
         try
         {
             await Task.Run(() => s.RollbackAsync(ct), CancellationToken.None).ConfigureAwait(true);
-            State.ApplyTransaction(s.HasPendingTransaction);
+            State.ApplyTransaction(s.Id, s.HasPendingTransaction);
             Log.AddMessage(MessageKind.Info, "롤백했습니다.");
         }
         catch (Exception e) when (e is not OperationCanceledException)
@@ -263,56 +315,44 @@ public sealed class ExecutionController : IDisposable
     public void ToggleAutoCommit() => State.AutoCommit = !State.AutoCommit;
 
     /// <summary>
-    /// 미커밋 트랜잭션이 있으면 커밋/롤백/취소를 묻는다(SAFE: 종료 시 확인). true = 계속 닫아도 된다.
+    /// 공유 작업 세션에 미커밋 트랜잭션이 있으면 커밋/롤백/취소를 묻는다(SAFE: 종료 시 확인). true = 계속 닫아도 된다.
+    /// 전용 세션 탭은 SQL 탭 닫기 가드가 묻는다(D-017). 앱 종료 때 주 창(<c>MainWindow.OnClosing</c>)이 부른다.
     /// </summary>
     public async Task<bool> ConfirmCloseAsync(CancellationToken ct = default)
     {
-        if (!State.TxnPending)
+        if (!State.TxnPending || _d.Session() is not { } session)
         {
             return true;
         }
 
-        var choice = await _d.Dialogs.AskUncommittedAsync(ct).ConfigureAwait(true);
+        return await ConfirmUncommittedAsync(session, null, ct).ConfigureAwait(true);
+    }
+
+    /// <summary>
+    /// <paramref name="session"/> 에 미커밋 트랜잭션이 있으면 커밋/롤백/취소를 묻고 고른 대로 한다. true = 이제 미커밋이 없다(닫아도 된다).
+    /// 커밋·롤백이 실패하면(메시지 창에 남는다) 트랜잭션이 남으므로 false. <paramref name="subject"/> = 전용 세션 탭 이름(대화상자 글).
+    /// </summary>
+    public async Task<bool> ConfirmUncommittedAsync(ISession session, string? subject, CancellationToken ct = default)
+    {
+        ArgumentNullException.ThrowIfNull(session);
+        if (!State.IsTxnPending(session.Id) && !session.HasPendingTransaction)
+        {
+            return true;
+        }
+
+        var choice = subject is null
+            ? await _d.Dialogs.AskUncommittedAsync(ct).ConfigureAwait(true)
+            : await _d.Dialogs.AskUncommittedAsync(subject, ct).ConfigureAwait(true);
         switch (choice)
         {
             case UncommittedChoice.Commit:
-                await CommitAsync(ct).ConfigureAwait(true);
-                return !State.TxnPending;
+                await CommitAsync(session, ct).ConfigureAwait(true);
+                return !State.IsTxnPending(session.Id) && !session.HasPendingTransaction;
             case UncommittedChoice.Rollback:
-                await RollbackAsync(ct).ConfigureAwait(true);
-                return !State.TxnPending;
+                await RollbackAsync(session, ct).ConfigureAwait(true);
+                return !State.IsTxnPending(session.Id) && !session.HasPendingTransaction;
             default:
                 return false;
-        }
-    }
-
-    /// <summary>주 창이 닫힐 때 미커밋을 묻도록 건다. 창이 처음 닫힐 때 한 번만 가로챈다.</summary>
-    public void AttachWindow(Window? window)
-    {
-        if (window is null || ReferenceEquals(_window, window))
-        {
-            return;
-        }
-
-        _window = window;
-        window.Closing += (_, e) =>
-        {
-            if (_exitApproved || !State.TxnPending)
-            {
-                return;
-            }
-
-            e.Cancel = true;
-            _ = CloseAfterConfirmAsync(window);
-        };
-    }
-
-    private async Task CloseAfterConfirmAsync(Window window)
-    {
-        if (await ConfirmCloseAsync().ConfigureAwait(true))
-        {
-            _exitApproved = true;
-            window.Close();
         }
     }
 
@@ -573,8 +613,9 @@ public sealed class ExecutionController : IDisposable
         }
 
         Present(tab, results, stmt, result, results.NextOrdinal()); // 고정한 탭(GRID-06)이 남아 있으면 그 번호를 피한다
-        _lastCancelled = result.Status == ExecutionStatus.Cancelled;
-        return !_lastCancelled;
+        var cancelled = result.Status == ExecutionStatus.Cancelled;
+        MarkCancelled(session, cancelled);
+        return !cancelled;
     }
 
     private async Task<bool> RunScriptAsync(SqlEditorViewModel tab, IReadOnlyList<SqlStatement> stmts, bool newResultTab, CancellationToken ct)
@@ -644,8 +685,20 @@ public sealed class ExecutionController : IDisposable
             results.Selected = firstQuery;
         }
 
-        _lastCancelled = cancelled;
+        MarkCancelled(session, cancelled);
         return !cancelled;
+    }
+
+    private void MarkCancelled(ISession session, bool cancelled)
+    {
+        if (cancelled)
+        {
+            _lastCancelled.Add(session.Id);
+        }
+        else
+        {
+            _lastCancelled.Remove(session.Id);
+        }
     }
 
     /// <summary>실행하는 범위를 편집기에 잠깐 칠한다. 문서 밖에서 만든 문장(범위 없음)은 건너뛴다.</summary>
@@ -657,10 +710,10 @@ public sealed class ExecutionController : IDisposable
         }
     }
 
-    /// <summary>실행 직전 준비: 세션 확인, 결과 영역을 편집기에 붙임.</summary>
+    /// <summary>실행 직전 준비: 세션 확인(탭의 전용 세션 → 공유 작업 세션), 결과 영역을 편집기에 붙임.</summary>
     private ResultTabsViewModel Prepare(SqlEditorViewModel tab, out ISession? session)
     {
-        session = _d.Session();
+        session = SessionFor(tab);
         var results = EnsureResults(tab, session);
         _d.ActivatePanel(ResultsPanelId); // 결과·오류는 아래 「조회 결과」 탭에(포커스는 편집기에 남는다)
         if (session is null)
@@ -670,9 +723,11 @@ public sealed class ExecutionController : IDisposable
             results.Clear();
             results.AddMessage("메시지", none, isError: true);
         }
-        else if (State.RunState == SessionRunState.Broken)
+        else if (State.IsBroken(session.Id))
         {
-            const string broken = "세션이 끊겼습니다. 다시 접속한 뒤 실행하세요.";
+            var broken = State.IsDedicated(session.Id)
+                ? "전용 세션이 끊겼습니다. 이 탭을 닫고 새 전용 세션 탭을 여세요."
+                : "세션이 끊겼습니다. 다시 접속한 뒤 실행하세요.";
             Log.AddMessage(MessageKind.Warning, broken);
             results.Clear();
             results.AddMessage("메시지", broken, isError: true);
@@ -701,8 +756,9 @@ public sealed class ExecutionController : IDisposable
     private async Task GuardedAsync(ISession session, Func<CancellationToken, Task> body, CancellationToken outer)
     {
         using var cts = CancellationTokenSource.CreateLinkedTokenSource(outer);
-        _cts = cts;
-        State.BeginRun();
+        _runs[session.Id] = cts;
+        s_runningProfile.Value = session.Profile;
+        State.BeginRun(session.Id);
         try
         {
             await body(cts.Token).ConfigureAwait(true);
@@ -718,16 +774,16 @@ public sealed class ExecutionController : IDisposable
         }
         finally
         {
-            _cts = null;
-            State.ApplyTransaction(session.HasPendingTransaction);
-            State.EndRun();
+            _runs.Remove(session.Id);
+            State.ApplyTransaction(session.Id, session.HasPendingTransaction);
+            State.EndRun(session.Id);
         }
     }
 
     /// <summary>자동 커밋이 켜져 있으면 성공한 변경 뒤에 커밋한다.</summary>
     private async Task AfterStatementAsync(ISession session, ExecutionResult r, CancellationToken ct)
     {
-        if (State.AutoCommit && r.Status == ExecutionStatus.Succeeded && r.TransactionPending && !State.ReadOnly)
+        if (State.AutoCommit && r.Status == ExecutionStatus.Succeeded && r.TransactionPending && !session.Profile.ReadOnly)
         {
             await Task.Run(() => session.CommitAsync(ct), CancellationToken.None).ConfigureAwait(true);
         }
@@ -876,5 +932,11 @@ public sealed class ExecutionController : IDisposable
         return true;
     }
 
-    public void Dispose() => _cts?.Cancel();
+    public void Dispose()
+    {
+        foreach (var cts in _runs.Values.ToList())
+        {
+            cts.Cancel();
+        }
+    }
 }

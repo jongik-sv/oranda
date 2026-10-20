@@ -12,7 +12,7 @@ using Oranda.Core.Shell;
 namespace Oranda.App.Features.Execution;
 
 /// <summary>
-/// 상태 표시줄 구간(ui-shell.md 1.2)의 공통 바탕. 값은 <see cref="ExecutionState"/> 에서 읽는다.
+/// 상태 표시줄 구간(ui-shell.md 1.2)의 공통 바탕. 값은 <see cref="ExecutionState"/> 의 보이는 세션(활성 탭의 세션, <c>Shown*</c>)에서 읽는다.
 /// 생성자는 이벤트 버스·문맥 키만 받는다(등록된 서비스라 시작 때 Oracle·Language 어셈블리를 깨우지 않는다).
 /// </summary>
 public abstract class ExecutionStatusItemViewModel : ViewModelBase, IStatusBarItem
@@ -45,7 +45,7 @@ public abstract class ExecutionStatusItemViewModel : ViewModelBase, IStatusBarIt
     }
 }
 
-/// <summary>2번 구간: 연결됨 / 실행 중(경과 시간) / 취소 중 / 끊김.</summary>
+/// <summary>2번 구간: 연결됨 / 실행 중(경과 시간) / 취소 중 / 끊김. 활성 탭이 전용 세션 탭이면 앞에 「전용 세션」(D-017).</summary>
 [OrandaStatusBarItem("oranda.status.session", 2, CollapseRank = 0)]
 public sealed class SessionStatusViewModel : ExecutionStatusItemViewModel
 {
@@ -54,9 +54,9 @@ public sealed class SessionStatusViewModel : ExecutionStatusItemViewModel
     {
     }
 
-    public override string Text => State.SessionText;
+    public override string Text => State.ShownSessionText;
 
-    public override string? DotBrushKey => State.RunState == SessionRunState.Broken ? "OrandaEnvProductionBrush" : null;
+    public override string? DotBrushKey => State.ShownRunState == SessionRunState.Broken ? "OrandaEnvProductionBrush" : null;
 }
 
 /// <summary>3번 구간: 미커밋(주황 점 + 「미커밋」), 자동 커밋이 켜져 있으면 「자동 커밋」.</summary>
@@ -68,9 +68,9 @@ public sealed class TransactionStatusViewModel : ExecutionStatusItemViewModel
     {
     }
 
-    public override string Text => State.TransactionText;
+    public override string Text => State.ShownTransactionText;
 
-    public override string? DotBrushKey => State.TxnPending ? "OrandaUncommittedBrush" : null;
+    public override string? DotBrushKey => State.ShownTxnPending ? "OrandaUncommittedBrush" : null;
 }
 
 /// <summary>4번 구간: 마지막 실행의 행 수·소요 시간·오류 번호.</summary>
@@ -82,7 +82,7 @@ public sealed class LastRunStatusViewModel : ExecutionStatusItemViewModel
     {
     }
 
-    public override string Text => State.HasSession ? State.LastRunText : string.Empty;
+    public override string Text => State.ShownHasSession ? State.ShownLastRunText : string.Empty;
 }
 
 /// <summary>6번 구간: 「읽기 전용」(읽기 전용 프로필).</summary>
@@ -94,7 +94,7 @@ public sealed class ProtectionStatusViewModel : ExecutionStatusItemViewModel
     {
     }
 
-    public override string Text => State.HasSession && State.ReadOnly ? "읽기 전용" : string.Empty;
+    public override string Text => State.ShownHasSession && State.ShownReadOnly ? "읽기 전용" : string.Empty;
 
     public override string? DotBrushKey => Text.Length > 0 ? "OrandaEnvTestBrush" : null;
 }

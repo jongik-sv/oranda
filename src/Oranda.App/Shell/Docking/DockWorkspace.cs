@@ -1,8 +1,11 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Threading;
+using System.Threading.Tasks;
 using Dock.Model.Controls;
 using Dock.Model.Core;
+using Dock.Model.Core.Events;
 using Dock.Model.Mvvm;
 using Oranda.App.Shell.Layout;
 using Oranda.Core.Shell;
@@ -40,6 +43,7 @@ public sealed class DockWorkspace
             HideDocumentsOnClose = false,
         };
         Factory.ActiveDockableChanged += (_, _) => ActiveDocumentChanged?.Invoke(this, EventArgs.Empty);
+        Factory.DockableClosing += OnDockableClosing;
         Factory.DockableClosed += (_, e) =>
         {
             if (e.Dockable is PanelDocument closed)
@@ -95,6 +99,57 @@ public sealed class DockWorkspace
         foreach (var dock in DocumentDocks().OfType<Dock.Model.Mvvm.Controls.DocumentDock>())
         {
             dock.EmptyContent = _emptyDocumentContent();
+        }
+    }
+
+    /// <summary>
+    /// 문서 탭이 닫히기 전 확인(탭의 × 단추·탭 닫기 명령 모두). 문서를 받아 확인이 필요하면 확인 함수(true = 닫아도 된다)를, 필요 없으면 null 을 돌려준다.
+    /// 확인이 필요하면 닫기를 일단 막고 확인을 기다린 뒤 다시 닫는다. Dock 의 닫기 이벤트는 동기라서 비동기 대화상자를 기다릴 수 없기 때문이다.
+    /// 확인이 필요 없는 문서는 지금처럼 바로 닫힌다(<see cref="DocumentClosed"/> 시점이 바뀌지 않는다).
+    /// </summary>
+    public Func<PanelDocument, Func<CancellationToken, Task<bool>>?>? CloseConfirm { get; set; }
+
+    private PanelDocument? _confirmedClose;
+
+    private void OnDockableClosing(object? sender, DockableClosingEventArgs e)
+    {
+        if (e.Dockable is not PanelDocument document || ReferenceEquals(document, _confirmedClose)
+            || CloseConfirm?.Invoke(document) is not { } confirm)
+        {
+            return;
+        }
+
+        e.Cancel = true;
+        _ = CloseAfterConfirmAsync(document, confirm);
+    }
+
+    private async Task CloseAfterConfirmAsync(PanelDocument document, Func<CancellationToken, Task<bool>> confirm)
+    {
+        bool ok;
+        try
+        {
+            ok = await confirm(CancellationToken.None).ConfigureAwait(true);
+        }
+        catch (Exception ex)
+        {
+            // 확인하다 실패하면 닫지 않는다(미커밋 변경을 잃는 쪽이 더 나쁘다).
+            System.Diagnostics.Trace.TraceError("문서 닫기 확인 실패(닫기 취소): {0}", ex);
+            ok = false;
+        }
+
+        if (!ok || !Documents.Contains(document))
+        {
+            return; // 취소했거나 확인하는 동안 다른 경로로 이미 닫혔다
+        }
+
+        _confirmedClose = document;
+        try
+        {
+            CloseDocument(document);
+        }
+        finally
+        {
+            _confirmedClose = null;
         }
     }
 

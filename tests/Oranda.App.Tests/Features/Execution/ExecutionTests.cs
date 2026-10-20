@@ -258,16 +258,16 @@ public sealed class ExecutionTests
         }
 
         Assert.Equal(23, ExecutionCommands.Ids.Length);
-        Assert.Equal("hasSession && !sessionBusy", registry.Find("oranda.exec.runStatement")!.Enablement);
-        Assert.Equal("hasSession && !sessionBusy", registry.Find("oranda.exec.runSubquery")!.Enablement);
+        Assert.Equal("(hasSession || dedicatedSession) && !sessionBusy", registry.Find("oranda.exec.runStatement")!.Enablement);
+        Assert.Equal("(hasSession || dedicatedSession) && !sessionBusy", registry.Find("oranda.exec.runSubquery")!.Enablement);
         Assert.Equal("sqlDocFocus", registry.Find("oranda.exec.runSubquery")!.When);
         Assert.Contains("context:editor/runSubquery@1005", registry.Find("oranda.exec.runSubquery")!.Placements);
-        Assert.Equal("hasSession && !sessionBusy && hasSelection", registry.Find("oranda.exec.runSelection")!.Enablement);
+        Assert.Equal("(hasSession || dedicatedSession) && !sessionBusy && hasSelection", registry.Find("oranda.exec.runSelection")!.Enablement);
         Assert.Equal("sessionBusy", registry.Find("oranda.exec.cancel")!.Enablement);
         Assert.Equal("hasExecError", registry.Find("oranda.exec.goToError")!.Enablement);
-        Assert.Equal("hasSession && txnPending && !sessionBusy", registry.Find("oranda.txn.commit")!.Enablement);
-        Assert.Equal("hasSession && txnPending && !sessionBusy", registry.Find("oranda.txn.rollback")!.Enablement);
-        Assert.Equal("hasSession && !readOnlySession", registry.Find("oranda.txn.toggleAutoCommit")!.Enablement);
+        Assert.Equal("(hasSession || dedicatedSession) && txnPending && !sessionBusy", registry.Find("oranda.txn.commit")!.Enablement);
+        Assert.Equal("(hasSession || dedicatedSession) && txnPending && !sessionBusy", registry.Find("oranda.txn.rollback")!.Enablement);
+        Assert.Equal("(hasSession || dedicatedSession) && !readOnlySession", registry.Find("oranda.txn.toggleAutoCommit")!.Enablement);
         Assert.Equal("sqlDocFocus", registry.Find("oranda.exec.runScript")!.When);
         Assert.Null(registry.Find("oranda.view.output")!.Enablement);
     }
@@ -1260,28 +1260,6 @@ public sealed class ExecutionTests
         Assert.True(await rig.Controller.ConfirmCloseAsync());
         Assert.Equal(1, rig.Session.Commits);
         Assert.Equal(3, rig.Dialogs.UncommittedAsked);
-    });
-
-    [Fact]
-    public Task Closing_the_main_window_with_pending_changes_is_held_until_the_user_answers() => Ui.Run(async () =>
-    {
-        using var rig = new Rig();
-        var window = new Window { Width = 200, Height = 100 };
-        window.Show();
-        rig.Controller.AttachWindow(window);
-        rig.Session.HasPendingTransaction = true;
-        rig.Bus.Publish(new TransactionStateChanged(rig.Session.Id, true));
-
-        rig.Dialogs.UncommittedAnswer = UncommittedChoice.Cancel;
-        window.Close();
-        await HeadlessHost.WaitUntil(() => rig.Dialogs.UncommittedAsked == 1);
-        Dispatcher.UIThread.RunJobs();
-        Assert.True(window.IsVisible);
-
-        rig.Dialogs.UncommittedAnswer = UncommittedChoice.Rollback;
-        window.Close();
-        await HeadlessHost.WaitUntil(() => !window.IsVisible);
-        Assert.Equal(1, rig.Session.Rollbacks);
     });
 
     // ---------- 그리드 편집 연결 ----------

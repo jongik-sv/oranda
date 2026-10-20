@@ -2,7 +2,7 @@ using System;
 using System.Threading;
 using System.Threading.Tasks;
 using Avalonia.Threading;
-using Oranda.App.Features.ConnectionManager;
+using Oranda.App.Features.Execution;
 using Oranda.App.Shell;
 using Oranda.App.Shell.Composition;
 using Oranda.Core.Events;
@@ -33,9 +33,9 @@ public static class ExecutionPlanCommands
 /// 예상 계획(Ctrl+E)·실제 계획(Ctrl+Shift+E)·형식 옵션·창 열기·비교 기준 고정·고정 계획과 비교(PLAN-04).
 /// 편집기 현재 문장은 <see cref="IEditorContext"/> 로 얻고(소비만), 마지막 실행의 sql_id 는 <c>StatementExecuted</c> 이벤트의 커서를 기억한다.
 /// </summary>
-[OrandaCommand("oranda.plan.explain", CommandCategory.Sql, When = "sqlDocFocus", Enablement = "hasSession && !sessionBusy",
+[OrandaCommand("oranda.plan.explain", CommandCategory.Sql, When = "sqlDocFocus", Enablement = "(hasSession || dedicatedSession) && !sessionBusy",
     Icon = "explainPlan", Placements = ["menu:sql/explain@50", "toolbar:main/explain@230", "context:editor/explain@1020"])]
-[OrandaCommand("oranda.plan.actual", CommandCategory.Sql, When = "sqlDocFocus", Enablement = "hasSession",
+[OrandaCommand("oranda.plan.actual", CommandCategory.Sql, When = "sqlDocFocus", Enablement = "hasSession || dedicatedSession",
     Placements = ["menu:sql/actualPlan@60"])]
 [OrandaCommand("oranda.plan.displayCursorOptions", CommandCategory.Sql, Enablement = "hasSession",
     Placements = ["menu:sql/displayCursorOptions@70"])]
@@ -93,7 +93,7 @@ public sealed class ExecutionPlanCommandHandler : ICommandHandler
             return;
         }
 
-        var session = ConnectionManagerCommands.Resolve(_container).ActiveSession;
+        var session = ExecutionCommands.ActiveTabSession(_container); // 활성 탭의 세션(전용 세션 탭이면 그 세션, D-017)
         if (vm is null || session is null)
         {
             return;

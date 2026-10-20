@@ -44,7 +44,7 @@ public sealed class RelatedRowsRunner(ExecutionState state, Func<ISession?> sess
         var state = ExecutionState.For(container.GetService<IEventBus>());
         return new RelatedRowsRunner(
             state,
-            () => ConnectionManagerCommands.Resolve(container).ActiveSession,
+            () => ExecutionCommands.ActiveTabSession(container), // 활성 탭의 세션(전용 세션 탭이면 그 세션)
             () =>
             {
                 ExecutionCommands.EnsureEngineServices(container, state);
@@ -128,7 +128,7 @@ public sealed class RelatedRowsRunner(ExecutionState state, Func<ISession?> sess
     {
         var column = source.Names[request.Ordinal]
                      ?? throw new InvalidOperationException($"열 {request.Columns[request.Ordinal].Name} 은(는) {RowEditPlanner.Display(source.Table)} 의 열이 아닙니다.");
-        var info = await BusyAsync(() => meta.GetTableAsync(s, source.Table, ct)).ConfigureAwait(true);
+        var info = await BusyAsync(s, () => meta.GetTableAsync(s, source.Table, ct)).ConfigureAwait(true);
         var fks = info.Constraints
             .Where(c => c.Kind == ConstraintKind.ForeignKey && c.ReferencedTable is not null && c.Columns.Count > 0
                         && c.Columns.Contains(column, StringComparer.OrdinalIgnoreCase))
@@ -149,7 +149,7 @@ public sealed class RelatedRowsRunner(ExecutionState state, Func<ISession?> sess
         var binds = BindValues(request, source.Names, fk.Columns, $"외래키 {fk.Name} 의 열",
             $"외래키 {fk.Name} 값이 NULL 이라 따라갈 부모 행이 없습니다.");
         var parent = fk.ReferencedTable!;
-        return await BusyAsync(async () =>
+        return await BusyAsync(s, async () =>
         {
             var parentInfo = await meta.GetTableAsync(s, parent, ct).ConfigureAwait(true);
             var key = ReferencedKey(parentInfo, fk)
@@ -167,7 +167,7 @@ public sealed class RelatedRowsRunner(ExecutionState state, Func<ISession?> sess
     private async Task<RelatedRowsResult?> OpenChildrenAsync(RelatedRowsRequest request, ISession s, IMetadataProvider meta, SourceTable source,
                                                              CancellationToken ct)
     {
-        var (info, detail) = await BusyAsync(async () =>
+        var (info, detail) = await BusyAsync(s, async () =>
         {
             var table = await meta.GetTableAsync(s, source.Table, ct).ConfigureAwait(true);
             var objectDetail = await meta.GetObjectDetailAsync(s, source.Table, ct).ConfigureAwait(true);
@@ -220,7 +220,7 @@ public sealed class RelatedRowsRunner(ExecutionState state, Func<ISession?> sess
         var binds = BindValues(request, source.Names, referenced.Columns, $"키 {referenced.Name} 의 열",
             $"키 {referenced.Name} 값이 NULL 이라 이 행을 참조하는 행이 없습니다.");
         var stmt = BuildQuery(new DbObjectRef(child.Owner, child.Table, "TABLE"), child.Columns);
-        return await BusyAsync(async () =>
+        return await BusyAsync(s, async () =>
         {
             var rs = await ExecuteAsync(s, stmt, binds, ct).ConfigureAwait(true);
             return new RelatedRowsResult(rs, $"자식: {child.Table}({child.Name})", stmt, binds);
@@ -360,17 +360,17 @@ public sealed class RelatedRowsRunner(ExecutionState state, Func<ISession?> sess
     }
 
     /// <summary>세션을 「실행 중」으로 두고 일을 한다(다른 실행과 겹치지 않게, 시작 전에 접속·바쁨을 다시 본다).</summary>
-    private async Task<T> BusyAsync<T>(Func<Task<T>> body)
+    private async Task<T> BusyAsync<T>(ISession s, Func<Task<T>> body)
     {
-        Check();
-        state.BeginRun();
+        Check(s); // 처음 고른 세션 그대로(그사이 활성 탭이 바뀌어도 다른 세션을 바쁨으로 두지 않는다)
+        state.BeginRun(s.Id);
         try
         {
             return await body().ConfigureAwait(true);
         }
         finally
         {
-            state.EndRun();
+            state.EndRun(s.Id);
         }
     }
 
@@ -381,12 +381,17 @@ public sealed class RelatedRowsRunner(ExecutionState state, Func<ISession?> sess
             throw new InvalidOperationException("접속이 없습니다. 접속한 뒤 다시 하세요.");
         }
 
-        if (state.RunState == SessionRunState.Broken)
+        return Check(s);
+    }
+
+    private ISession Check(ISession s)
+    {
+        if (state.IsBroken(s.Id))
         {
             throw new InvalidOperationException("세션이 끊겼습니다. 다시 접속한 뒤 하세요.");
         }
 
-        if (state.Busy)
+        if (state.IsBusy(s.Id))
         {
             throw new InvalidOperationException("다른 문장을 실행하는 중입니다. 끝난 뒤 다시 하세요.");
         }

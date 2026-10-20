@@ -28,11 +28,15 @@ public interface ISession : IAsyncDisposable
     Task RollbackAsync(CancellationToken ct);
 }
 
-/// <summary>편집 도구가 공유하는 작업 세션 / 모니터링 도구 전용 세션(CONN-07).</summary>
+/// <summary>
+/// 편집 도구가 공유하는 작업 세션 / 모니터링 도구 전용 세션(CONN-07) / SQL 탭 하나만 쓰는 전용 세션(D-017, SQL Developer 의 unshared worksheet).
+/// 전용 세션은 주 작업 세션을 바꾸지 않는다(작업 세션을 고르는 곳은 <see cref="Work"/> 만 본다).
+/// </summary>
 public enum SessionPurpose
 {
     Work,
     Monitor,
+    Dedicated,
 }
 
 public enum SessionState

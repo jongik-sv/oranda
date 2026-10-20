@@ -1,4 +1,4 @@
-using Oranda.App.Features.ConnectionManager;
+using Oranda.App.Features.Execution;
 using Oranda.App.Features.GridEdit;
 using Oranda.App.Features.ResultGrid;
 using Oranda.App.Shell;
@@ -142,7 +142,8 @@ public sealed class LobRowViewCommandHandler : ICommandHandler
         }
     }
 
-    private ISession? ActiveSession() => _container is null ? null : ConnectionManagerCommands.Resolve(_container).ActiveSession;
+    // 활성 탭의 세션: 전용 세션 탭(D-017)의 결과면 그 세션으로 LOB 를 읽는다.
+    private ISession? ActiveSession() => _container is null ? null : ExecutionCommands.ActiveTabSession(_container);
 
     private void Show(string panelId)
     {

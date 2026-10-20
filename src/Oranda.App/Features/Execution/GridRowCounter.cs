@@ -52,12 +52,12 @@ public sealed class GridRowCounter(ExecutionState state, BindVariableStore binds
             throw new InvalidOperationException("접속이 없습니다. 접속한 뒤 다시 세세요.");
         }
 
-        if (state.RunState == SessionRunState.Broken)
+        if (state.IsBroken(s.Id))
         {
             throw new InvalidOperationException("세션이 끊겼습니다. 다시 접속한 뒤 세세요.");
         }
 
-        if (state.Busy)
+        if (state.IsBusy(s.Id))
         {
             throw new InvalidOperationException("다른 문장을 실행하는 중입니다. 끝난 뒤 다시 세세요.");
         }
@@ -66,7 +66,7 @@ public sealed class GridRowCounter(ExecutionState state, BindVariableStore binds
         var values = BuildBinds(binds, query.BindNames, extra);
 
         var stmt = BuildCountStatement(query);
-        state.BeginRun();
+        state.BeginRun(s.Id);
         try
         {
             var exec = execution();
@@ -75,7 +75,7 @@ public sealed class GridRowCounter(ExecutionState state, BindVariableStore binds
         }
         finally
         {
-            state.EndRun();
+            state.EndRun(s.Id);
         }
     }
 
