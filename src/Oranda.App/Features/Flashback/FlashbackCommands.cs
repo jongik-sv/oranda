@@ -23,7 +23,7 @@ namespace Oranda.App.Features.Flashback;
     Placements = ["context:grid/flashback@10"])]
 [OrandaCommand("oranda.grid.flashback.history", CommandCategory.Result, Title = "이 행 변경 이력", When = "gridFocus", Enablement = "gridHasSelection",
     Placements = ["context:grid/flashback@20"])]
-[OrandaCommand("oranda.grid.flashback.restore", CommandCategory.Result, Title = "이전 값으로 되돌리기 UPDATE…", When = "gridFocus", Enablement = "gridHasSelection && !sessionBusy",
+[OrandaCommand("oranda.grid.flashback.restore", CommandCategory.Result, Title = "이전 값으로 되돌리기…", When = "gridFocus", Enablement = "gridHasSelection && !sessionBusy",
     Placements = ["context:grid/flashback@30"])]
 public sealed class FlashbackCommandHandler : ICommandHandler
 {
