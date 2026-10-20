@@ -212,8 +212,8 @@ public sealed class ResultGridTests
         Assert.Equal("1\tn9\n2\tn8", clip);
         await m.CopyAsync(CopyFormat.Tsv, includeHeaders: true);
         Assert.Equal("ID\tNAME\n1\tn9\n2\tn8", clip);
-        await m.CopyAsync(CopyFormat.Insert);
-        Assert.Equal("INSERT INTO TABLE_NAME (ID, NAME) VALUES (1, 'n9');\nINSERT INTO TABLE_NAME (ID, NAME) VALUES (2, 'n8');", clip);
+        await m.CopyAsync(CopyFormat.Insert); // INSERT 문은 고른 칸이 걸친 행의 모든 열(오렌지·Toad 처럼)
+        Assert.Equal("INSERT INTO TABLE_NAME (ID, NAME, GRP) VALUES (1, 'n9', 'g0');\nINSERT INTO TABLE_NAME (ID, NAME, GRP) VALUES (2, 'n8', 'g0');", clip);
         await m.CopyAsync(CopyFormat.InList);
         Assert.Equal("(1, 'n9', 2, 'n8')", clip);
 
@@ -331,7 +331,8 @@ public sealed class ResultGridTests
             .Cast<OrandaCommandAttribute>().Select(a => a.Id).ToHashSet();
         string[] expected =
         [
-            "oranda.grid.copy", "oranda.grid.copyWithHeaders", "oranda.grid.copyAsCsv", "oranda.grid.copyAsInsert", "oranda.grid.copyAsInList",
+            "oranda.grid.copy", "oranda.grid.copyWithHeaders", "oranda.grid.copyRows", "oranda.grid.copyRowsWithHeaders",
+            "oranda.grid.copyAsCsv", "oranda.grid.copyAsInsert", "oranda.grid.copyAsInList",
             "oranda.grid.find", "oranda.grid.fetchAll", "oranda.grid.toggleTextMode", "oranda.grid.freezeColumns", "oranda.grid.hideColumn",
             "oranda.grid.showAllColumns", "oranda.grid.toggleRepeatHide", "oranda.grid.closeResultTab", "oranda.grid.countRows",
             "oranda.grid.toggleFilterBar", "oranda.grid.filterByValue", "oranda.grid.filterExcludeValue", "oranda.grid.filterNullRows",

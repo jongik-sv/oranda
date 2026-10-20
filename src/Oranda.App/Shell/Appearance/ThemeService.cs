@@ -110,6 +110,9 @@ public sealed class ThemeService : IDisposable
             ["OrandaUncommittedBrush"] = Brush(0xFFFFD400),
             ["OrandaSeparatorBrush"] = Brush(0xFFFFFFFF),
             ["OrandaFocusBrush"] = Brush(0xFFFFFF00),
+            ["OrandaGridCurrentRowBrush"] = Brush(0x40FFFFFF),
+            ["OrandaGridRowMarkerBrush"] = Brush(0xFFFFFF00),
+            ["OrandaGridNeedsChangeBrush"] = Brush(0xFFB35C00),
         };
     }
 

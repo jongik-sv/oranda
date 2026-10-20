@@ -42,6 +42,7 @@ public sealed class SqlResultPaneViewModel : ToolPanelViewModelBase
     private bool _hasStatementBinds;
     private bool _isOpeningRelated;
     private string? _relatedMessage;
+    private string? _gridNotice;
 
     public string StatusText
     {
@@ -267,6 +268,8 @@ public sealed class SqlResultPaneViewModel : ToolPanelViewModelBase
         m.CellFilterRequested += OnCellFilterRequested;
         m.PinRequested += OnPinRequested;
         m.RelatedRowsRequested += OnRelatedRowsRequested;
+        m.EditHintRequested += OnEditHintRequested;
+        m.NoticeRequested += OnNoticeRequested;
         Model = m;
         UpdateStatus();
     }
@@ -721,6 +724,14 @@ public sealed class SqlResultPaneViewModel : ToolPanelViewModelBase
         FindMessage = await _model.FindNextAsync(FindText).ConfigureAwait(true) ? string.Empty : "찾지 못했습니다.";
     }
 
+    private void OnEditHintRequested(object? sender, EventArgs e) => ShowEditHint();
+
+    private void OnNoticeRequested(object? sender, string message)
+    {
+        _gridNotice = message;
+        UpdateStatus();
+    }
+
     private void OnEditChanged(object? sender, EventArgs e)
     {
         OnPropertyChanged(nameof(IsEditMode));
@@ -745,6 +756,7 @@ public sealed class SqlResultPaneViewModel : ToolPanelViewModelBase
         ResetCount();
         ResetFilter();
         _relatedMessage = null;
+        _gridNotice = null;
         _summaryScope = null;
         if (_model is null)
         {
@@ -759,6 +771,8 @@ public sealed class SqlResultPaneViewModel : ToolPanelViewModelBase
         _model.CellFilterRequested -= OnCellFilterRequested;
         _model.PinRequested -= OnPinRequested;
         _model.RelatedRowsRequested -= OnRelatedRowsRequested;
+        _model.EditHintRequested -= OnEditHintRequested;
+        _model.NoticeRequested -= OnNoticeRequested;
         if (ReferenceEquals(ResultGridCommands.Active, _model))
         {
             ResultGridCommands.Active = null;
@@ -857,6 +871,11 @@ public sealed class SqlResultPaneViewModel : ToolPanelViewModelBase
         if (_relatedMessage is { } relatedMessage)
         {
             text += " · " + relatedMessage;
+        }
+
+        if (_gridNotice is { } gridNotice)
+        {
+            text += " · " + gridNotice; // 행 붙여넣기·복제 결과(열 수 불일치 등)
         }
 
         StatusText = text;

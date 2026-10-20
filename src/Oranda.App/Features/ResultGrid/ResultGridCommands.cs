@@ -12,6 +12,9 @@ public static class ResultGridCommands
     /// <summary>포커스가 있는 결과 그리드. 그리드 컨트롤이 포커스를 받을 때 채운다.</summary>
     public static ResultGridModel? Active { get; set; }
 
+    /// <summary>마지막 「행 복사」의 앱 안 사본(그리드 사이에 함께 쓴다). 「행 붙여넣기」가 읽는다.</summary>
+    public static GridRowsCopy? CopiedRows { get; set; }
+
     /// <summary>
     /// 「전체 행 수 세기」(<c>oranda.grid.countRows</c>): 결과를 만든 질의를 <c>SELECT COUNT(*) FROM (…)</c> 로 감싸 같은 바인드로 실행하고
     /// 행 수를 돌려준다(못 읽으면 null). 실패는 이유를 담은 예외, 취소는 <see cref="OperationCanceledException"/>.
@@ -40,6 +43,8 @@ public static class ResultGridCommands
 /// <summary>결과 영역 명령 처리기. 활성 그리드가 없으면 아무것도 하지 않는다.</summary>
 [OrandaCommand("oranda.grid.copy", CommandCategory.Result, When = "gridFocus", Enablement = "gridHasSelection", Placements = ["context:grid/copy@10"])]
 [OrandaCommand("oranda.grid.copyWithHeaders", CommandCategory.Result, When = "gridFocus", Enablement = "gridHasSelection", Placements = ["context:grid/copy@20"])]
+[OrandaCommand("oranda.grid.copyRows", CommandCategory.Result, When = "gridFocus", Enablement = "gridHasSelection", Placements = ["context:grid/copy@22"])]
+[OrandaCommand("oranda.grid.copyRowsWithHeaders", CommandCategory.Result, When = "gridFocus", Enablement = "gridHasSelection", Placements = ["context:grid/copy@24"])]
 [OrandaCommand("oranda.grid.copyAsCsv", CommandCategory.Result, When = "gridFocus", Enablement = "gridHasSelection", Placements = ["context:grid/copy@30"])]
 [OrandaCommand("oranda.grid.copyAsInsert", CommandCategory.Result, When = "gridFocus", Enablement = "gridHasSelection", Placements = ["context:grid/copy@40"])]
 [OrandaCommand("oranda.grid.copyAsInList", CommandCategory.Result, When = "gridFocus", Enablement = "gridHasSelection", Placements = ["context:grid/copy@50"])]
@@ -85,6 +90,12 @@ public sealed class ResultGridCommandHandler : ICommandHandler
                 break;
             case "oranda.grid.copyWithHeaders":
                 await g.CopyAsync(CopyFormat.Tsv, true, cancellationToken).ConfigureAwait(true);
+                break;
+            case "oranda.grid.copyRows":
+                await g.CopyRowsAsync(includeHeaders: false, cancellationToken).ConfigureAwait(true); // 고른 칸이 걸친 행 전체 + 앱 안 사본
+                break;
+            case "oranda.grid.copyRowsWithHeaders":
+                await g.CopyRowsAsync(includeHeaders: true, cancellationToken).ConfigureAwait(true);
                 break;
             case "oranda.grid.copyAsCsv":
                 await g.CopyAsync(CopyFormat.Csv, true, cancellationToken).ConfigureAwait(true);

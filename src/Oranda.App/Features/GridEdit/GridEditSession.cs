@@ -31,6 +31,7 @@ public sealed class GridEditSession
     private readonly Dictionary<long, Dictionary<int, object?>> _inserts = [];
     private readonly HashSet<long> _deletes = [];
     private readonly Dictionary<long, string> _failures = [];
+    private readonly Dictionary<long, Dictionary<int, object?>> _copiedKeys = [];
     private long _nextInsert = -1;
 
     private GridEditSession(IRowEditor editor, IMetadataProvider metadata, ISession session, SqlStatement query,
@@ -183,6 +184,48 @@ public sealed class GridEditSession
         return row;
     }
 
+    /// <summary>
+    /// 값을 채운 새 행을 더한다(행 붙여넣기·행 복제). 편집할 수 있는 열의 NULL 이 아닌 값만 넣는다 — ROWID·대상 테이블 밖 열·LOB 은 비우고,
+    /// NULL 은 넣지 않아 INSERT 에 그 열이 빠진다(열 DEFAULT 가 들어간다). <paramref name="flagKeys"/> 면 키 열(ROWID 가 아닌 PK·유니크 키)에 넣은 값을
+    /// 「바꿔야 함」으로 표시한다(<see cref="NeedsChange"/>, 같은 키로 반영하면 키 위반). 편집할 수 없으면 0.
+    /// </summary>
+    public long AddRowWith(IEnumerable<KeyValuePair<int, object?>> values, bool flagKeys = false)
+    {
+        ArgumentNullException.ThrowIfNull(values);
+        if (!CanEdit)
+        {
+            return 0;
+        }
+
+        var row = _nextInsert--;
+        var ins = new Dictionary<int, object?>();
+        foreach (var (ordinal, value) in values)
+        {
+            if (IsEditableColumn(ordinal) && Normalize(value) is { } v)
+            {
+                ins[ordinal] = v;
+            }
+        }
+
+        _inserts[row] = ins;
+        if (flagKeys && !Plan.UsesRowId)
+        {
+            var keys = Capability.KeyColumnOrdinals.Where(ins.ContainsKey).ToDictionary(o => o, o => ins[o]);
+            if (keys.Count > 0)
+            {
+                _copiedKeys[row] = keys;
+            }
+        }
+
+        OnChanged();
+        return row;
+    }
+
+    /// <summary>복제한 새 행의 키 칸이 아직 복제한 값 그대로면 true(반영 전에 바꿔야 한다, 그리드 경고 색).</summary>
+    public bool NeedsChange(long row, int ordinal) =>
+        _copiedKeys.TryGetValue(row, out var keys) && keys.TryGetValue(ordinal, out var copied)
+        && TryGetPendingValue(row, ordinal, out var now) && Equals(Normalize(now), Normalize(copied));
+
     public void DeleteRow(long row)
     {
         if (!CanEdit)
@@ -193,6 +236,7 @@ public sealed class GridEditSession
         if (row < 0)
         {
             _inserts.Remove(row);
+            _copiedKeys.Remove(row);
         }
         else
         {
@@ -208,6 +252,7 @@ public sealed class GridEditSession
     {
         _updates.Remove(row);
         _inserts.Remove(row);
+        _copiedKeys.Remove(row);
         _deletes.Remove(row);
         _failures.Remove(row);
         OnChanged();
@@ -219,6 +264,7 @@ public sealed class GridEditSession
         _inserts.Clear();
         _deletes.Clear();
         _failures.Clear();
+        _copiedKeys.Clear();
         Notice = null;
         OnChanged();
     }
@@ -298,6 +344,7 @@ public sealed class GridEditSession
                 _updates.Remove(c.RowIndex);
                 _inserts.Remove(c.RowIndex);
                 _deletes.Remove(c.RowIndex);
+                _copiedKeys.Remove(c.RowIndex);
             }
         }
 

@@ -70,6 +70,9 @@ public sealed class ResultGridModel : IAsyncDisposable
     /// <summary>복사 결과를 클립보드에 쓰는 함수. View 가 채운다.</summary>
     public Func<string, Task>? ClipboardWriter { get; set; }
 
+    /// <summary>클립보드 글을 읽는 함수(「행 붙여넣기」). View 가 채운다. 글이 없으면 null.</summary>
+    public Func<Task<string?>>? ClipboardReader { get; set; }
+
     /// <summary>데이터·열 상태·선택이 바뀌어 다시 그려야 할 때.</summary>
     public event EventHandler? Changed;
 
@@ -93,6 +96,9 @@ public sealed class ResultGridModel : IAsyncDisposable
 
     /// <summary>행 표시(바뀜·새 행·지울 행).</summary>
     public GridRowMark RowMarkOf(long viewRow) => EditOverlay?.RowMark(viewRow) ?? GridRowMark.None;
+
+    /// <summary>복제한 새 행의 키 열처럼 반영 전에 값을 바꿔야 하는 칸이면 true(경고 색).</summary>
+    public bool NeedsChange(long viewRow, int ordinal) => EditOverlay?.NeedsChange(viewRow, ordinal) ?? false;
 
     /// <summary>편집 상태가 바뀌었으니 다시 그린다.</summary>
     public void NotifyEditChanged() => RaiseChanged();
@@ -253,6 +259,9 @@ public sealed class ResultGridModel : IAsyncDisposable
 
     private long SourceRow(long viewRow) => _order is { } o && viewRow >= 0 && viewRow < o.Length ? o[viewRow] : viewRow;
 
+    /// <summary>화면 행 → 질의 결과 행(정렬 순서표를 거치기 전의 순번). 편집 모드에서 새로 더한 행이면 -1.</summary>
+    public long BaseRowOf(long viewRow) => EditOverlay is { } edit ? edit.BaseRowOf(viewRow) : viewRow;
+
     /// <summary>원시 값. 페이지가 아직 없으면 <c>false</c>(백그라운드 요청은 <see cref="Prefetch"/> 몫).</summary>
     public bool TryGetValue(long viewRow, int ordinal, out object? value)
     {
@@ -264,7 +273,8 @@ public sealed class ResultGridModel : IAsyncDisposable
                 return true;
             }
 
-            if (viewRow >= BaseRowCount)
+            viewRow = edit.BaseRowOf(viewRow);
+            if (viewRow < 0)
             {
                 value = null;
                 return true;
@@ -291,7 +301,7 @@ public sealed class ResultGridModel : IAsyncDisposable
     {
         if (!TryGetValue(viewRow, ordinal, out var v))
         {
-            RequestPage((int)(SourceRow(viewRow) / PageSize));
+            RequestPage((int)(SourceRow(BaseRowOf(viewRow)) / PageSize));
             return string.Empty;
         }
 
@@ -591,7 +601,10 @@ public sealed class ResultGridModel : IAsyncDisposable
 
     // ---- 복사 ----
 
-    /// <summary>선택 범위를 복사 글자로 만든다. 선택이 없으면 빈 글자. 아직 못 받은 행은 가져온다.</summary>
+    /// <summary>
+    /// 선택 범위를 복사 글자로 만든다. 선택이 없으면 빈 글자. 아직 못 받은 행은 가져온다.
+    /// INSERT 문은 고른 칸의 열이 아니라 고른 칸이 걸친 행의 모든 열로 만든다(숨긴 열·ROWID 같은 의사 열은 빼고 결과 열 순서대로, 오렌지·Toad 처럼).
+    /// </summary>
     public async Task<string> BuildCopyTextAsync(CopyFormat format, bool includeHeaders = false, CancellationToken ct = default)
     {
         if (!HasSelection)
@@ -600,23 +613,16 @@ public sealed class ResultGridModel : IAsyncDisposable
         }
 
         var (from, to) = SelectionRect();
-        var ordinals = _visible.Skip(from.Col).Take(to.Col - from.Col + 1).ToList();
-        var cols = ordinals.Select(o => Columns[o]).ToList();
-        var rows = new List<IReadOnlyList<object?>>((int)Math.Min(to.Row - from.Row + 1, 100_000));
-        for (var r = from.Row; r <= to.Row; r++)
+        var ordinals = format == CopyFormat.Insert
+            ? _visible.Where(o => !IsPseudoColumn(Columns[o])).ToList()
+            : _visible.Skip(from.Col).Take(to.Col - from.Col + 1).ToList();
+        if (ordinals.Count == 0)
         {
-            var src = SourceRow(r);
-            var page = await _cache.GetPageAsync((int)(src / PageSize), ct).ConfigureAwait(true);
-            OnPage(page);
-            var i = (int)(src - page.FirstRowIndex);
-            if (i < 0 || i >= page.RowCount)
-            {
-                break;
-            }
-
-            rows.Add(ordinals.Select(o => page.Columns[o][i]).ToList());
+            return string.Empty;
         }
 
+        var cols = ordinals.Select(o => Columns[o]).ToList();
+        var rows = await ReadSelectedRowsAsync(ordinals, ct).ConfigureAwait(true);
         var first = cols[0];
         var table = first.BaseTable is { } t
             ? (first.BaseOwner is { } owner ? $"{CellValueFormatter.QuoteIdentifier(owner)}." : string.Empty) + CellValueFormatter.QuoteIdentifier(t)
@@ -632,6 +638,94 @@ public sealed class ResultGridModel : IAsyncDisposable
         {
             await w(text).ConfigureAwait(true);
         }
+    }
+
+    /// <summary>
+    /// 「행 복사」(<c>oranda.grid.copyRows</c>): 고른 칸이 걸친 행 전체(보이는 열 모두, 숨긴 열은 빼고)를 TSV 로 클립보드에 쓴다.
+    /// 앱 안에서 붙여 넣을 때 NULL·날짜·숫자 형식을 잃지 않게 원시 값 사본을 <see cref="ResultGridCommands.CopiedRows"/> 에 함께 둔다.
+    /// 선택이 없으면 아무것도 하지 않고 null.
+    /// </summary>
+    public async Task<GridRowsCopy?> CopyRowsAsync(bool includeHeaders = false, CancellationToken ct = default)
+    {
+        if (!HasSelection || _visible.Count == 0)
+        {
+            return null;
+        }
+
+        var ordinals = _visible.ToList();
+        var cols = ordinals.Select(o => Columns[o]).ToList();
+        var rows = await ReadSelectedRowsAsync(ordinals, ct).ConfigureAwait(true);
+        var text = SelectionCopyFormatter.Format(CopyFormat.Tsv, cols, rows, new CopyOptions { IncludeHeaders = includeHeaders });
+        var copy = new GridRowsCopy(cols, rows, text);
+        ResultGridCommands.CopiedRows = copy;
+        if (ClipboardWriter is { } w)
+        {
+            await w(text).ConfigureAwait(true);
+        }
+
+        return copy;
+    }
+
+    /// <summary>
+    /// 선택 범위가 걸친 행(화면 순서)의 값을 <paramref name="ordinals"/> 열 순서로 읽는다. 아직 못 받은 페이지는 가져온다.
+    /// 편집 모드에서는 화면에 보이는 그대로 읽는다(바꾼 값이 원본보다 앞서고, 새 행도 읽는다).
+    /// </summary>
+    public async Task<List<IReadOnlyList<object?>>> ReadSelectedRowsAsync(IReadOnlyList<int> ordinals, CancellationToken ct = default)
+    {
+        ArgumentNullException.ThrowIfNull(ordinals);
+        var rows = new List<IReadOnlyList<object?>>();
+        if (!HasSelection)
+        {
+            return rows;
+        }
+
+        var (from, to) = SelectionRect();
+        rows.Capacity = (int)Math.Min(to.Row - from.Row + 1, 100_000);
+        for (var r = from.Row; r <= to.Row; r++)
+        {
+            var values = new object?[ordinals.Count];
+            if (BaseRowOf(r) is var baseRow && baseRow >= 0)
+            {
+                var src = SourceRow(baseRow);
+                var page = await _cache.GetPageAsync((int)(src / PageSize), ct).ConfigureAwait(true);
+                OnPage(page);
+                var i = (int)(src - page.FirstRowIndex);
+                if (i < 0 || i >= page.RowCount)
+                {
+                    break;
+                }
+
+                for (var k = 0; k < ordinals.Count; k++)
+                {
+                    values[k] = page.Columns[ordinals[k]][i];
+                }
+            }
+
+            if (EditOverlay is { } edit)
+            {
+                for (var k = 0; k < ordinals.Count; k++)
+                {
+                    if (edit.TryGetValue(r, ordinals[k], out var pending))
+                    {
+                        values[k] = pending;
+                    }
+                }
+            }
+
+            rows.Add(values);
+        }
+
+        return rows;
+    }
+
+    /// <summary>INSERT 문 복사에서 빼는 의사 열: ROWID 종류 열과 이름이 ROWID·ROWNUM·ORA_ROWSCN 인 열.</summary>
+    public static bool IsPseudoColumn(ResultColumn column)
+    {
+        ArgumentNullException.ThrowIfNull(column);
+        return column.Kind == ColumnDataKind.RowId
+            || column.Name.Equals("ROWID", StringComparison.OrdinalIgnoreCase)
+            || column.Name.Equals("ROWNUM", StringComparison.OrdinalIgnoreCase)
+            || column.Name.Equals("ORA_ROWSCN", StringComparison.OrdinalIgnoreCase);
     }
 
     // ---- 찾기 ----
@@ -712,6 +806,26 @@ public sealed class ResultGridModel : IAsyncDisposable
     /// <summary>외래키 따라가기 명령이 활성 행의 부모·자식 행을 새 결과 탭에 열라고 알린다(문장은 결과 영역이 안다, GRID-11).</summary>
     public event EventHandler<RelatedRowsKind>? RelatedRowsRequested;
 
+    /// <summary>읽기 전용 결과에 행 붙여넣기·복제를 하려 했다. 결과 영역이 「편집 모드로 다시 실행」 안내 막대를 띄운다.</summary>
+    public event EventHandler? EditHintRequested;
+
+    /// <summary>명령 결과 알림(행 붙여넣기의 열 수 불일치 등). 결과 영역이 상태 줄에 보인다.</summary>
+    public event EventHandler<string>? NoticeRequested;
+
+    /// <summary>이 칸이 보이게 스크롤해 달라는 요청(새로 더한 행으로 옮길 때). 그리드 컨트롤이 받는다.</summary>
+    public event EventHandler<GridCell>? RevealRequested;
+
+    public void RequestEditHint() => EditHintRequested?.Invoke(this, EventArgs.Empty);
+
+    public void ReportNotice(string message) => NoticeRequested?.Invoke(this, message);
+
+    /// <summary>칸을 골라 보이게 한다(셀 커서와 행 머리 ▶ 가 그 행으로 간다).</summary>
+    public void SelectAndReveal(GridCell cell)
+    {
+        SelectCell(cell);
+        RevealRequested?.Invoke(this, Active);
+    }
+
     public void RequestFind() => FindRequested?.Invoke(this, EventArgs.Empty);
 
     public void RequestClose() => CloseRequested?.Invoke(this, EventArgs.Empty);
@@ -758,6 +872,17 @@ public sealed class ResultGridModel : IAsyncDisposable
     }
 }
 
+/// <summary>
+/// 「행 복사」가 앱 안에 남기는 사본. <see cref="Rows"/> 는 원시 값(NULL·날짜·숫자 형식 그대로), <see cref="Text"/> 는 클립보드에 쓴 TSV.
+/// 붙여 넣을 때 클립보드 글이 <see cref="Text"/> 와 같을 때만 이 사본을 쓴다(그 사이 다른 곳에서 복사했으면 클립보드 글을 쓴다).
+/// </summary>
+public sealed record GridRowsCopy(IReadOnlyList<ResultColumn> Columns, IReadOnlyList<IReadOnlyList<object?>> Rows, string Text)
+{
+    /// <summary>클립보드 글이 이 사본이 쓴 글과 같다(줄 끝 차이는 무시한다: 운영체제가 LF 를 CRLF 로 바꿔 둘 수 있다).</summary>
+    public bool Matches(string? clipboard) =>
+        clipboard is not null && string.Equals(clipboard.ReplaceLineEndings("\n").TrimEnd('\n'), Text.ReplaceLineEndings("\n").TrimEnd('\n'), StringComparison.Ordinal);
+}
+
 /// <summary>편집 행 표시.</summary>
 public enum GridRowMark
 {
@@ -779,4 +904,10 @@ public interface IGridEditOverlay
     bool IsEdited(long viewRow, int ordinal);
 
     GridRowMark RowMark(long viewRow);
+
+    /// <summary>화면 행 → 질의 결과 행(<see cref="ResultGridModel.BaseRowOf"/>). 새 행이면 -1.</summary>
+    long BaseRowOf(long viewRow);
+
+    /// <summary>반영 전에 값을 바꿔야 하는 칸(복제한 새 행의 키 열)이면 true.</summary>
+    bool NeedsChange(long viewRow, int ordinal);
 }

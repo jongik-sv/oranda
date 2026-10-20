@@ -53,11 +53,15 @@
         </WrapPanel>
       </DockPanel>
     </Border>
-    <!-- 편집 모드(F9) 툴바: 오렌지 결과 그리드처럼 행 추가·삭제·반영·되돌리기를 아이콘으로 바로 쓴다(오른쪽 클릭 메뉴와 같은 명령). -->
+    <!-- 편집 모드(F9) 툴바: 오렌지 결과 그리드처럼 행 추가·복제·붙여넣기·삭제·반영·되돌리기를 아이콘으로 바로 쓴다(오른쪽 클릭 메뉴와 같은 명령). -->
     <Border Grid.Row="3" Classes="panel-toolbar" IsVisible="{Binding IsEditMode}">
       <StackPanel Orientation="Horizontal" Spacing="1">
         <Button Classes="toolbar" Focusable="False" Tag="oranda.grid.edit.addRow" Content="행 추가"
                 icons:ButtonIcon.Key="rowAdd" icons:ButtonIcon.IconOnly="True" />
+        <Button Classes="toolbar" Focusable="False" Tag="oranda.grid.edit.duplicateRow" Content="행 복제"
+                icons:ButtonIcon.Key="rowDuplicate" icons:ButtonIcon.IconOnly="True" />
+        <Button Classes="toolbar" Focusable="False" Tag="oranda.grid.edit.pasteRows" Content="행 붙여넣기"
+                icons:ButtonIcon.Key="rowPaste" icons:ButtonIcon.IconOnly="True" />
         <Button Classes="toolbar" Focusable="False" Tag="oranda.grid.edit.deleteRow" Content="행 삭제"
                 icons:ButtonIcon.Key="rowDelete" icons:ButtonIcon.IconOnly="True" />
         <Separator Classes="toolbar" />

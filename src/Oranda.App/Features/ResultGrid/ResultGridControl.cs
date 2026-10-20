@@ -12,6 +12,8 @@ namespace Oranda.App.Features.ResultGrid;
 /// <summary>
 /// 직접 그리기 가상 결과 그리드(TSK-06-03, D-008). 셀 컨트롤 0개, 보이는 행·열만 <see cref="Render"/> 에서 그린다.
 /// 상태는 <see cref="ResultGridModel"/>, 스크롤바는 View 가 <see cref="ScrollChanged"/> 로 맞춘다.
+/// 왼쪽 좁은 행 머리에 현재 행(셀 커서가 있는 행) ▶ 와 편집 행 상태(새 행 *, 고친 행 ✎, 지울 행 ✕, 실패 !)를 그리고,
+/// 현재 행 전체에 옅은 띠를 깐다(오렌지·Toad·SQL Developer 처럼). 텍스트 결과 모드에는 행 머리가 없다.
 /// </summary>
 public sealed class ResultGridControl : Control
 {
@@ -21,13 +23,17 @@ public sealed class ResultGridControl : Control
 
     private readonly GridTextCache _cells = new();
     private readonly GridTextCache _headers = new();
+    private readonly GridTextCache _rowHeads = new();
     private GridTextFactory? _factory;
+    private StreamGeometry? _marker;
+    private double _markerSize;
     private ResultGridModel? _model;
     private Palette? _palette;
     private double _fontSize = 13;
     private double _offsetX;
     private double _offsetY;
     private bool _dragSelecting;
+    private bool _dragRows;
     private int _resizeColumn = -1;
     private double _resizeStartX;
     private double _resizeStartWidth;
@@ -56,15 +62,18 @@ public sealed class ResultGridControl : Control
             if (_model is not null)
             {
                 _model.Changed -= OnModelChanged;
+                _model.RevealRequested -= OnRevealRequested;
             }
 
             _model = value;
             _cells.Clear();
             _headers.Clear();
+            _rowHeads.Clear();
             _offsetX = _offsetY = 0;
             if (_model is not null)
             {
                 _model.Changed += OnModelChanged;
+                _model.RevealRequested += OnRevealRequested;
                 _ = LoadAsync(_model);
             }
 
@@ -99,7 +108,10 @@ public sealed class ResultGridControl : Control
 
     public double OffsetY => _offsetY;
 
-    public double ExtentWidth => _model is null ? 0 : (_model.IsTextMode ? TextExtentWidth() : TotalColumnsWidth());
+    public double ExtentWidth => _model is null ? 0 : (_model.IsTextMode ? TextExtentWidth() : RowHeaderWidth + TotalColumnsWidth());
+
+    /// <summary>왼쪽 행 머리 너비(▶ 와 행 상태 글자 한 칸씩). 결과가 없거나 텍스트 결과 모드면 0.</summary>
+    public double RowHeaderWidth => _model is null || _model.IsTextMode ? 0 : Math.Ceiling((Factory.CharWidth * 3) + 8);
 
     public double ExtentHeight => (_model?.RowCount ?? 0) * RowHeight;
 
@@ -153,7 +165,7 @@ public sealed class ResultGridControl : Control
         {
             var left = ColumnLeft(cell.Col) - FrozenWidth();
             var right = left + _model.GetColumnWidth(_model.VisibleColumns[cell.Col]);
-            var view = ViewportWidth - FrozenWidth();
+            var view = ViewportWidth - ScrollLeft();
             if (left < x)
             {
                 x = left;
@@ -194,6 +206,7 @@ public sealed class ResultGridControl : Control
         ActualThemeVariantChanged -= OnThemeChanged;
         _cells.Clear();
         _headers.Clear();
+        _rowHeads.Clear();
     }
 
     private void OnScalingChanged(object? sender, EventArgs e) => ResetTextCaches();
@@ -207,8 +220,10 @@ public sealed class ResultGridControl : Control
     private void ResetTextCaches()
     {
         _factory = null;
+        _marker = null;
         _cells.Clear();
         _headers.Clear();
+        _rowHeads.Clear();
         InvalidateVisual();
         ScrollChanged?.Invoke(this, EventArgs.Empty);
     }
@@ -235,11 +250,16 @@ public sealed class ResultGridControl : Control
         ScrollChanged?.Invoke(this, EventArgs.Empty);
     }
 
+    private void OnRevealRequested(object? sender, GridCell cell) => EnsureVisible(cell);
+
     // ---- 배치 ----
 
     private double TotalColumnsWidth() => _model!.VisibleColumns.Sum(c => _model.GetColumnWidth(c));
 
     private double TextExtentWidth() => (_model!.GetTextHeader().Split(Environment.NewLine)[0].Length + 2) * Factory.CharWidth;
+
+    /// <summary>스크롤하는 열이 시작하는 화면 x(행 머리 + 고정 열). 그 왼쪽은 스크롤해도 움직이지 않는다.</summary>
+    private double ScrollLeft() => RowHeaderWidth + FrozenWidth();
 
     private double FrozenWidth()
     {
@@ -267,7 +287,7 @@ public sealed class ResultGridControl : Control
             return null;
         }
 
-        var left = ColumnLeft(cell.Col) - (cell.Col < _model.FrozenCount ? 0 : _offsetX);
+        var left = RowHeaderWidth + ColumnLeft(cell.Col) - (cell.Col < _model.FrozenCount ? 0 : _offsetX);
         var top = HeaderHeight + (cell.Row * RowHeight) - _offsetY;
         var w = _model.GetColumnWidth(_model.VisibleColumns[cell.Col]);
         return top < HeaderHeight || top > Bounds.Height ? null : new Rect(left, top, w, RowHeight);
@@ -297,7 +317,10 @@ public sealed class ResultGridControl : Control
         return x;
     }
 
-    /// <summary>화면 x 좌표 → (보이는 열 위치, 열 오른쪽 경계까지의 거리). 고정 열 영역은 스크롤하지 않는다.</summary>
+    /// <summary>
+    /// 화면 x 좌표 → (보이는 열 위치, 열 오른쪽 경계까지의 거리). 행 머리·고정 열 영역은 스크롤하지 않는다.
+    /// 스크롤 열이 고정 열 밑으로 반쯤 들어가 있으면 보이는 부분만 맞힌다. 행 머리 위면 -1.
+    /// </summary>
     private (int Col, double RightEdgeDistance) HitColumn(double x)
     {
         if (_model is null)
@@ -305,14 +328,16 @@ public sealed class ResultGridControl : Control
             return (-1, double.MaxValue);
         }
 
-        var frozen = FrozenWidth();
+        var head = RowHeaderWidth;
+        var frozen = ScrollLeft();
         double left = 0;
         for (var i = 0; i < _model.VisibleColumns.Count; i++)
         {
             var w = _model.GetColumnWidth(_model.VisibleColumns[i]);
-            var screenLeft = i < _model.FrozenCount ? left : left - _offsetX;
             var inScrollRegion = i >= _model.FrozenCount;
-            if (!(inScrollRegion && screenLeft < frozen) && x >= screenLeft && x < screenLeft + w)
+            var screenLeft = head + (inScrollRegion ? left - _offsetX : left);
+            var visibleLeft = inScrollRegion ? Math.Max(screenLeft, frozen) : screenLeft;
+            if (x >= visibleLeft && x < screenLeft + w)
             {
                 return (i, screenLeft + w - x);
             }
@@ -347,6 +372,7 @@ public sealed class ResultGridControl : Control
         {
             _cells.BeginFrame();
             _headers.BeginFrame();
+            _rowHeads.BeginFrame();
         }
 
         var rh = RowHeight;
@@ -403,6 +429,7 @@ public sealed class ResultGridControl : Control
         var f = Factory;
         var scale = _top?.RenderScaling ?? 1.0;
         var frozen = FrozenWidth();
+        var head = RowHeaderWidth;
 
         for (var r = first; r <= last; r++)
         {
@@ -422,7 +449,7 @@ public sealed class ResultGridControl : Control
                 var ord = m.VisibleColumns[i];
                 var w = m.GetColumnWidth(ord);
                 var isFrozen = i < m.FrozenCount;
-                var x = isFrozen ? left : left - _offsetX;
+                var x = head + (isFrozen ? left : left - _offsetX);
                 left += w;
                 if ((pass == 0) == isFrozen || x + w < 0 || x > size.Width)
                 {
@@ -432,6 +459,8 @@ public sealed class ResultGridControl : Control
                 DrawColumn(ctx, size, pal, f, scale, i, ord, x, w, first, last, yStart, isFrozen);
             }
         }
+
+        DrawRowHeaders(ctx, size, pal, f, first, last, yStart);
 
         // 가로선
         for (var r = first; r <= last + 1; r++)
@@ -450,7 +479,7 @@ public sealed class ResultGridControl : Control
                 var ord = m.VisibleColumns[i];
                 var w = m.GetColumnWidth(ord);
                 var isFrozen = i < m.FrozenCount;
-                var x = isFrozen ? hx : hx - _offsetX;
+                var x = head + (isFrozen ? hx : hx - _offsetX);
                 hx += w;
                 if ((pass == 0) == isFrozen || x + w < 0 || x > size.Width)
                 {
@@ -462,10 +491,107 @@ public sealed class ResultGridControl : Control
         }
 
         ctx.DrawLine(pal.Line, new Point(0, hh - 0.5), new Point(size.Width, hh - 0.5));
+        var hx2 = Snap(head, scale);
+        ctx.DrawLine(pal.Line, new Point(hx2, 0), new Point(hx2, size.Height));
         if (frozen > 0)
         {
-            var fx = Snap(frozen, scale);
+            var fx = Snap(head + frozen, scale);
             ctx.DrawLine(pal.FrozenLine, new Point(fx, 0), new Point(fx, size.Height));
+        }
+    }
+
+    /// <summary>행 머리 글자: 편집 행 상태(새 행 *, 고친 행 ✎, 지울 행 ✕, 반영 실패 !). 상태가 없으면 빈 글자.</summary>
+    public static string RowMarkGlyph(GridRowMark mark) => mark switch
+    {
+        GridRowMark.Inserted => "*",
+        GridRowMark.Modified => "✎",
+        GridRowMark.Deleted => "✕",
+        GridRowMark.Failed => "!",
+        _ => string.Empty,
+    };
+
+    /// <summary>
+    /// 현재 행 ▶ 표시의 화면 사각형(이 컨트롤 좌표). 고른 칸이 없거나, 텍스트 결과 모드거나, 현재 행이 화면 밖이면 null.
+    /// 그리기와 같은 계산을 쓴다(시험이 키보드·마우스·스크롤 뒤에 이 값으로 표시 위치를 확인한다).
+    /// </summary>
+    public Rect? CurrentRowMarkerBounds
+    {
+        get
+        {
+            if (_model is not { HasSelection: true } m || m.IsTextMode)
+            {
+                return null;
+            }
+
+            var top = HeaderHeight + (m.Active.Row * RowHeight) - _offsetY;
+            if (top + RowHeight <= HeaderHeight || top >= Bounds.Height)
+            {
+                return null;
+            }
+
+            var size = MarkerSize();
+            return new Rect(3, top + ((RowHeight - size) / 2), size, size);
+        }
+    }
+
+    private double MarkerSize() => Math.Max(4, Math.Min(RowHeight * 0.5, Factory.CharWidth * 1.2));
+
+    /// <summary>▶ 모양(크기가 바뀔 때만 다시 만든다).</summary>
+    private StreamGeometry Marker(double size)
+    {
+        if (_marker is null || Math.Abs(_markerSize - size) > 0.01)
+        {
+            var g = new StreamGeometry();
+            using (var c = g.Open())
+            {
+                c.BeginFigure(new Point(0, 0), true);
+                c.LineTo(new Point(size * 0.9, size / 2));
+                c.LineTo(new Point(0, size));
+                c.EndFigure(true);
+            }
+
+            _marker = g;
+            _markerSize = size;
+        }
+
+        return _marker;
+    }
+
+    /// <summary>
+    /// 왼쪽 행 머리: 보이는 행만 그린다. 현재 행은 옅은 띠 + ▶, 편집 모드 행은 상태 글자.
+    /// 열을 다 그린 뒤 맨 위에 덮으므로 가로 스크롤한 열이 행 머리 밑으로 비치지 않는다.
+    /// </summary>
+    private void DrawRowHeaders(DrawingContext ctx, Size size, Palette pal, GridTextFactory f, long first, long last, double yStart)
+    {
+        var m = _model!;
+        var rh = RowHeight;
+        var hh = HeaderHeight;
+        var head = RowHeaderWidth;
+        ctx.FillRectangle(pal.Header, new Rect(0, hh, head, Math.Max(0, size.Height - hh)));
+        var editing = m.EditOverlay is not null;
+        var current = m.HasSelection ? m.Active.Row : -1;
+        for (var r = first; r <= last; r++)
+        {
+            var y = yStart + (r - first) * rh;
+            if (r == current)
+            {
+                ctx.FillRectangle(pal.CurrentRow, new Rect(0, y, head, rh));
+                var ms = MarkerSize();
+                using (ctx.PushTransform(Matrix.CreateTranslation(3, y + ((rh - ms) / 2))))
+                {
+                    ctx.DrawGeometry(pal.RowMarker, null, Marker(ms));
+                }
+            }
+
+            var mark = editing ? m.RowMarkOf(r) : GridRowMark.None;
+            if (mark == GridRowMark.None)
+            {
+                continue;
+            }
+
+            var brush = mark is GridRowMark.Deleted or GridRowMark.Failed ? pal.StrikeText : pal.Text;
+            var t = _rowHeads.Get((r << 3) | (long)mark, RowMarkGlyph(mark), s => f.Create(s, brush));
+            t.Draw(ctx, new Point(head - t.Width - 4, y + ((rh - t.Height) / 2)));
         }
     }
 
@@ -474,7 +600,8 @@ public sealed class ResultGridControl : Control
         var m = _model!;
         var rh = RowHeight;
         var hh = HeaderHeight;
-        var clipLeft = isFrozen ? x : Math.Max(x, FrozenWidth());
+        var clipLeft = isFrozen ? x : Math.Max(x, ScrollLeft());
+        var current = m.HasSelection ? m.Active.Row : -1;
         using (ctx.PushClip(new Rect(clipLeft, hh, Math.Max(0, x + w - clipLeft - 1), Math.Max(0, size.Height - hh))))
         {
             if (isFrozen)
@@ -502,9 +629,19 @@ public sealed class ResultGridControl : Control
                     GridRowMark.Deleted or GridRowMark.Failed => pal.DeletedRow,
                     _ => m.EditOverlay is not null && m.IsEdited(r, ord) ? pal.EditedCell : null,
                 };
+                if (m.EditOverlay is not null && m.NeedsChange(r, ord))
+                {
+                    editBrush = pal.NeedsChange; // 복제한 새 행의 키 열: 반영 전에 바꿔야 한다
+                }
+
                 if (editBrush is not null)
                 {
                     ctx.FillRectangle(editBrush, new Rect(x, y, w, rh));
+                }
+
+                if (r == current)
+                {
+                    ctx.FillRectangle(pal.CurrentRow, new Rect(x, y, w, rh)); // 현재 행 띠(반투명, 편집 색 위·선택 색 아래)
                 }
 
                 if (selected)
@@ -545,7 +682,7 @@ public sealed class ResultGridControl : Control
     private void DrawHeader(DrawingContext ctx, Palette pal, GridTextFactory f, double scale, int ord, double x, double w, double hh, bool isFrozen)
     {
         var m = _model!;
-        var clipLeft = isFrozen ? x : Math.Max(x, FrozenWidth());
+        var clipLeft = isFrozen ? x : Math.Max(x, ScrollLeft());
         var label = m.Columns[ord].Name + (m.SortColumn == ord ? (m.SortDescending ? " ▼" : " ▲") : string.Empty);
         using (ctx.PushClip(new Rect(clipLeft, 0, Math.Max(0, x + w - clipLeft - 1), hh)))
         {
@@ -602,6 +739,13 @@ public sealed class ResultGridControl : Control
                 return;
             }
 
+            if (p.X < RowHeaderWidth)
+            {
+                _model.SelectAll(); // 행 머리 위 모서리: 전체 선택(Excel·SQL Developer 처럼)
+                e.Handled = true;
+                return;
+            }
+
             var (col, edge) = HitColumn(p.X);
             if (col < 0)
             {
@@ -640,6 +784,20 @@ public sealed class ResultGridControl : Control
         if (_model.IsTextMode)
         {
             _model.SelectRow(row, e.KeyModifiers.HasFlag(KeyModifiers.Shift));
+        }
+        else if (p.X < RowHeaderWidth)
+        {
+            // 행 머리: 그 행 전체를 고르고, 끌면 행 단위로 넓힌다. 고른 행 안에서 오른쪽 클릭은 선택을 유지한다.
+            if (!(props.IsRightButtonPressed && _model.IsSelected(row, 0)))
+            {
+                _model.SelectRow(row, e.KeyModifiers.HasFlag(KeyModifiers.Shift));
+            }
+
+            _dragSelecting = _dragRows = props.IsLeftButtonPressed;
+            if (_dragSelecting)
+            {
+                e.Pointer.Capture(this);
+            }
         }
         else if (c >= 0)
         {
@@ -694,9 +852,15 @@ public sealed class ResultGridControl : Control
             }
 
             var (row, col) = HitCell(new Point(Math.Clamp(p.X, 0, Bounds.Width - 1), Math.Clamp(p.Y, HeaderHeight, Math.Max(HeaderHeight, Bounds.Height - 1))));
+            if (_dragRows)
+            {
+                _model.SelectRow(row, extend: true);
+                return;
+            }
+
             if (col < 0)
             {
-                col = p.X < 0 ? 0 : _model.VisibleColumns.Count - 1;
+                col = p.X < RowHeaderWidth ? 0 : _model.VisibleColumns.Count - 1;
             }
 
             _model.ExtendTo(new GridCell(row, col));
@@ -712,6 +876,7 @@ public sealed class ResultGridControl : Control
     {
         base.OnPointerReleased(e);
         _dragSelecting = false;
+        _dragRows = false;
         _resizeColumn = -1;
         e.Pointer.Capture(null);
     }
@@ -804,6 +969,17 @@ public sealed class ResultGridControl : Control
 
         public required IPen Strike { get; init; }
 
+        public required IBrush StrikeText { get; init; }
+
+        /// <summary>현재 행 띠(반투명: 편집 색이 비치고 선택 색보다 옅다).</summary>
+        public required IBrush CurrentRow { get; init; }
+
+        /// <summary>행 머리의 현재 행 ▶.</summary>
+        public required IBrush RowMarker { get; init; }
+
+        /// <summary>반영 전에 바꿔야 하는 칸(복제한 새 행의 키 열) 경고 색.</summary>
+        public required IBrush NeedsChange { get; init; }
+
         public required IBrush Text { get; init; }
 
         public required IBrush NullText { get; init; }
@@ -816,7 +992,9 @@ public sealed class ResultGridControl : Control
 
         public static Palette Create(Control owner)
         {
-            var dark = owner.ActualThemeVariant == ThemeVariant.Dark;
+            // 고대비 변형은 어두운 테마를 바탕으로 한다(ThemeService.HighContrastVariant): 어두운 기본값을 쓴다.
+            var variant = owner.ActualThemeVariant;
+            var dark = variant == ThemeVariant.Dark || variant.InheritVariant == ThemeVariant.Dark;
             IBrush Brush(string key, uint light, uint darkColor) =>
                 owner.TryFindResource(key, owner.ActualThemeVariant, out var v) && v is IBrush b
                     ? b
@@ -824,6 +1002,7 @@ public sealed class ResultGridControl : Control
 
             var line = Brush("OrandaGridLineBrush", 0xFFD0D4DA, 0xFF3A3F47);
             var accent = Brush("OrandaGridAccentBrush", 0xFF2F6FDE, 0xFF5B9BFF);
+            var strike = Brush("OrandaGridStrikeBrush", 0xFFC42B1C, 0xFFFF6B5E);
             return new Palette
             {
                 Background = Brush("OrandaGridBackgroundBrush", 0xFFFFFFFF, 0xFF1E2024),
@@ -833,7 +1012,11 @@ public sealed class ResultGridControl : Control
                 EditedCell = Brush("OrandaGridEditedBrush", 0xFFFFF4CE, 0xFF4A3F12),
                 InsertedRow = Brush("OrandaGridInsertedBrush", 0xFFE6F4EA, 0xFF1E3A27),
                 DeletedRow = Brush("OrandaGridDeletedBrush", 0xFFFDE7E9, 0xFF4A1F24),
-                Strike = new Pen(Brush("OrandaGridStrikeBrush", 0xFFC42B1C, 0xFFFF6B5E), 1),
+                Strike = new Pen(strike, 1),
+                StrikeText = strike,
+                CurrentRow = Brush("OrandaGridCurrentRowBrush", 0x1A2F6FDE, 0x265B9BFF),
+                RowMarker = Brush("OrandaGridRowMarkerBrush", 0xFF2F6FDE, 0xFF5B9BFF),
+                NeedsChange = Brush("OrandaGridNeedsChangeBrush", 0xFFFFD8A8, 0xFF6B3A10),
                 Text = Brush("OrandaGridTextBrush", 0xFF202020, 0xFFDCDDDE),
                 NullText = Brush("OrandaGridNullBrush", 0xFF9AA0A6, 0xFF7C828A),
                 Line = new Pen(line, 1),

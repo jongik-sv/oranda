@@ -87,6 +87,11 @@ public static class GridEditBinding
         public bool IsEdited(long viewRow, int ordinal) =>
             session.TryGetPendingValue(ToEditRow(model, session, viewRow), ordinal, out _);
 
+        // 새 행은 질의 결과 뒤에만 붙는다(복제·붙여넣기한 행도 끝에 더한다).
+        public long BaseRowOf(long viewRow) => viewRow < model.BaseRowCount ? viewRow : -1;
+
+        public bool NeedsChange(long viewRow, int ordinal) => session.NeedsChange(ToEditRow(model, session, viewRow), ordinal);
+
         public GridRowMark RowMark(long viewRow) => session.GetRowState(ToEditRow(model, session, viewRow)) switch
         {
             GridEditRowState.Modified => GridRowMark.Modified,

@@ -271,6 +271,8 @@ public partial class SqlResultPaneView : UserControl
                     await cb.SetTextAsync(text);
                 }
             };
+            m.ClipboardReader = async () =>
+                TopLevel.GetTopLevel(this)?.Clipboard is { } cb ? await cb.TryGetTextAsync() : null;
         }
 
         SyncBars();

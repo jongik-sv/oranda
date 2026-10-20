@@ -26,11 +26,18 @@ public static class GridEditCommands
     public static Func<SqlStatement?, CancellationToken, Task>? Rerun { get; set; }
 }
 
-/// <summary>편집 모드 명령 처리기. 편집 모드가 아니면(활성 세션 없음) 아무것도 하지 않는다.</summary>
+/// <summary>
+/// 편집 모드 명령 처리기. 편집 모드가 아니면(활성 세션 없음) 아무것도 하지 않는다.
+/// 행 붙여넣기·행 복제는 읽기 전용 결과에서도 불러 「편집 모드로 다시 실행」 안내 막대를 띄운다(활성 조건이 <c>gridEditing</c> 이 아니다).
+/// </summary>
 [OrandaCommand("oranda.exec.runForEdit", CommandCategory.Sql, When = "sqlDocFocus",
     Enablement = "hasSession && !sessionBusy && !readOnlySession", Placements = ["menu:sql/runForEdit@40"])]
 [OrandaCommand("oranda.grid.edit.addRow", CommandCategory.Result, When = "gridFocus", Enablement = "gridEditing",
     Placements = ["context:grid/edit@10"])]
+[OrandaCommand("oranda.grid.edit.duplicateRow", CommandCategory.Result, When = "gridFocus", Enablement = "gridHasSelection",
+    Placements = ["context:grid/edit@12"])]
+[OrandaCommand("oranda.grid.edit.pasteRows", CommandCategory.Result, When = "gridFocus", Enablement = "gridHasResult",
+    Placements = ["context:grid/edit@14"])]
 [OrandaCommand("oranda.grid.edit.deleteRow", CommandCategory.Result, When = "gridFocus", Enablement = "gridEditing",
     Placements = ["context:grid/edit@20"])]
 [OrandaCommand("oranda.grid.edit.previewDml", CommandCategory.Result, When = "gridFocus", Enablement = "gridDirty",
@@ -56,6 +63,18 @@ public sealed class GridEditCommandHandler : ICommandHandler
             if (GridEditCommands.Rerun is { } run)
             {
                 await run(null, cancellationToken).ConfigureAwait(true);
+            }
+
+            return;
+        }
+
+        if (context.CommandId is "oranda.grid.edit.pasteRows" or "oranda.grid.edit.duplicateRow")
+        {
+            if (ResultGrid.ResultGridCommands.Active is { } focused)
+            {
+                await (context.CommandId == "oranda.grid.edit.pasteRows"
+                    ? GridRowTransfer.PasteRowsAsync(focused, cancellationToken)
+                    : GridRowTransfer.DuplicateRowsAsync(focused, cancellationToken)).ConfigureAwait(true);
             }
 
             return;

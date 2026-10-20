@@ -12,7 +12,7 @@ namespace Oranda.App.Tests.Features.GridEdit;
 
 /// <summary>TSK-06-04 편집 모드 화면 논리: 편집 불가 표시, 변경 추적, 미리보기 확인 후 반영, 실패 행 표시.</summary>
 [Collection("GridEditStatics")]
-public sealed class GridEditTests : IDisposable
+public sealed partial class GridEditTests : IDisposable
 {
     private static readonly DbObjectRef Emp = new("SCOTT", "EMP", "TABLE");
 
@@ -23,6 +23,8 @@ public sealed class GridEditTests : IDisposable
         GridEditCommands.Active = null;
         GridEditCommands.ConfirmPreview = null;
         GridEditCommands.Rerun = null;
+        Oranda.App.Features.ResultGrid.ResultGridCommands.Active = null;
+        Oranda.App.Features.ResultGrid.ResultGridCommands.CopiedRows = null;
     }
 
     private static readonly object?[][] Data =
@@ -310,7 +312,7 @@ public sealed class GridEditTests : IDisposable
             .Cast<OrandaCommandAttribute>().Select(a => a.Id).ToList();
 
         Assert.Contains("oranda.exec.runForEdit", ids);
-        Assert.Equal(11, ids.Count);
+        Assert.Equal(13, ids.Count);
         Assert.All(ids.Where(i => i != "oranda.exec.runForEdit"), i => Assert.StartsWith("oranda.grid.edit.", i, StringComparison.Ordinal));
     }
 

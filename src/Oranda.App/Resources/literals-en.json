@@ -343,6 +343,8 @@
   "프리셋": "Preset",
   "프리셋 키로": "Use preset keys",
   "행 되돌리기": "Revert row",
+  "행 복제": "Duplicate row",
+  "행 붙여넣기": "Paste rows",
   "행 삭제": "Delete row",
   "행 수 세기": "Count rows",
   "행 수 세기 취소": "Cancel row count",
