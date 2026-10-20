@@ -1,18 +1,19 @@
 using System;
 using System.Globalization;
 using System.Runtime.CompilerServices;
-using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using Oranda.App.Features.ConnectionManager;
 using Oranda.App.Shell;
 using Oranda.App.Shell.Composition;
+using Oranda.Core.Connection;
 using Oranda.Core.Events;
 using Oranda.Core.Execution;
 using Oranda.Core.Monitoring;
 using Oranda.Core.Security;
 using Oranda.Core.Sessions;
 using Oranda.Core.Shell;
+using Oranda.Core.Storage;
 
 namespace Oranda.App.Features.SessionMonitor;
 
@@ -23,12 +24,6 @@ public static class SessionMonitorCommands
 {
     /// <summary>문서 종류 ID.</summary>
     public const string PanelId = "oranda.panel.sessionMonitor";
-
-    /// <summary>
-    /// 상태 키: 작업 세션 계정이 <c>v$session</c> 을 읽지 못한다(접속 점검 <c>CanQueryPerformanceViews</c> = false).
-    /// 「세션 모니터」 메뉴는 <c>hasSession &amp;&amp; !noMonitorPrivilege</c> 일 때만 켜진다.
-    /// </summary>
-    public const string NoPrivilegeKey = "noMonitorPrivilege";
 
     /// <summary>이 Task 가 등록하는 명령 ID 전체(시험이 등록 누락을 잡는다).</summary>
     public static readonly string[] Ids =
@@ -48,7 +43,8 @@ public static class SessionMonitorCommands
     private static readonly ConditionalWeakTable<ContextKeyService, IDisposable> Attached = new();
 
     /// <summary>
-    /// 작업 세션이 열릴 때 서버 점검 결과로 메뉴 키(<see cref="NoPrivilegeKey"/>, <c>canKillSession</c>, <c>canTraceSessions</c>)를 맞춘다.
+    /// 작업 세션이 열릴 때 서버 점검 결과로 메뉴 키(<c>canKillSession</c>, <c>canTraceSessions</c>)를 맞춘다.
+    /// 「세션 모니터」·「SQL 모니터」 메뉴는 이 키로 끄지 않는다(권한이 없으면 창이 이유와 해결 방법을 보인다).
     /// 같은 키 저장소에 두 번 붙이지 않는다. 셸 조립이 시작 때 부르고, 이 기능의 처리기·화면도 처음 만들어질 때 부른다.
     /// </summary>
     public static void AttachPrivilegeKeys(IEventBus bus, ContextKeyService keys)
@@ -77,7 +73,6 @@ public static class SessionMonitorCommands
     {
         ArgumentNullException.ThrowIfNull(keys);
         ArgumentNullException.ThrowIfNull(caps);
-        keys.Set(NoPrivilegeKey, !caps.CanQueryPerformanceViews);
         keys.Set("canKillSession", caps.CanQueryPerformanceViews && caps.CanKillSession);
         keys.Set("canTraceSessions", caps.CanQueryPerformanceViews && caps.CanTraceSessions);
     }
@@ -102,46 +97,34 @@ public static class SessionMonitorCommands
     }
 
     /// <summary>
-    /// 지금 작업 세션과 같은 접속으로 전용 모니터 세션(<see cref="SessionPurpose.Monitor"/>)을 연다.
-    /// 비밀번호는 안전 저장소에서 꺼내고, 없으면 묻는다. 작업 세션이 없거나 사용자가 취소하면 null.
+    /// 모니터 전용 세션(<see cref="SessionPurpose.Monitor"/>)을 여는 도구를 만든다. <paramref name="monitorId"/> 는 기억하는 프로필의 구분 키.
+    /// 비밀번호는 안전 저장소에서 꺼내고 없으면 묻는다. 프로필 고르기·비밀번호 묻기는 주 창을 소유자로 띄운다.
     /// </summary>
-    public static async Task<ISession?> OpenMonitorSessionAsync(ServiceContainer container, CancellationToken ct)
+    public static MonitorSessionOpener CreateOpener(ServiceContainer container, string monitorId)
     {
         ArgumentNullException.ThrowIfNull(container);
-        var connection = ConnectionManagerCommands.Resolve(container);
-        if (connection.ActiveSession is not { } work)
-        {
-            return null;
-        }
-
-        var profile = work.Profile;
-        string? secret = null;
-        if (profile.CredentialRef is { } reference && container.GetService<ICredentialStore>() is { } store
-            && await store.LoadAsync(reference).ConfigureAwait(true) is { } bytes)
-        {
-            secret = Encoding.UTF8.GetString(bytes);
-            Array.Clear(bytes);
-        }
-
-        if (string.IsNullOrEmpty(secret) && container.GetService<ShellController>()?.MainWindow is { } owner)
-        {
-            secret = await ConnectionDialogs.PromptPasswordAsync(owner, profile).ConfigureAwait(true);
-        }
-
-        if (string.IsNullOrEmpty(secret))
-        {
-            return null;
-        }
-
-        using var credential = new SecureCredential(secret);
-        return await container.GetRequiredService<ISessionManager>()
-            .OpenAsync(profile, credential, SessionPurpose.Monitor, ct).ConfigureAwait(true);
+        var paths = container.GetService<IAppDataPaths>();
+        var opener = new MonitorSessionOpener(
+            ConnectionManagerCommands.Resolve(container),
+            container.GetRequiredService<ISessionManager>(),
+            container.GetService<ICredentialStore>(),
+            paths is null ? null : new MonitorProfileMemory(System.IO.Path.Combine(paths.DataDirectory, "monitor-profiles.json")),
+            monitorId);
+        var shell = container.GetService<ShellController>();
+        opener.PickProfile = (profiles, current) => shell?.MainWindow is { } owner
+            ? MonitorProfilePickerWindow.PickAsync(owner, profiles, current, MonitorName(monitorId))
+            : Task.FromResult<ConnectionProfile?>(null);
+        opener.AskPassword = profile => shell?.MainWindow is { } owner
+            ? ConnectionDialogs.PromptPasswordAsync(owner, profile)
+            : Task.FromResult<string?>(null);
+        return opener;
     }
+
+    private static string MonitorName(string monitorId) => monitorId == "sqlMonitor" ? "SQL 모니터" : "세션 모니터";
 }
 
 /// <summary>모니터 메뉴·명령 팔레트의 세션 모니터 명령(SESS-01~05).</summary>
-[OrandaCommand("oranda.monitor.sessions", CommandCategory.Monitor, Enablement = "hasSession && !noMonitorPrivilege",
-    Icon = "sessions", Placements = ["menu:monitor/sessions@10", "toolbar:main/sessions@510"])]
+[OrandaCommand("oranda.monitor.sessions", CommandCategory.Monitor, Icon = "sessions", Placements = ["menu:monitor/sessions@10", "toolbar:main/sessions@510"])]
 [OrandaCommand("oranda.monitor.refresh", CommandCategory.Monitor, When = "monitorFocus", Enablement = "monitorSessionOpen",
     Placements = ["menu:monitor/refresh@100", "context:monitor/refresh@10"])]
 [OrandaCommand("oranda.monitor.toggleAutoRefresh", CommandCategory.Monitor, When = "monitorFocus", Enablement = "monitorSessionOpen",
@@ -236,7 +219,10 @@ public sealed class SessionMonitorCommandHandler : ICommandHandler
 
         if (vm.OpenSession is null)
         {
-            vm.OpenSession = c => SessionMonitorCommands.OpenMonitorSessionAsync(container, c);
+            var opener = SessionMonitorCommands.CreateOpener(container, "sessionMonitor");
+            vm.OpenSession = opener.OpenDefaultAsync;
+            vm.ChooseSession = opener.OpenChosenAsync;
+            vm.Remember = opener.Remember;
             vm.Confirm ??= message => container.GetService<ShellController>()?.MainWindow is { } owner
                 ? ConnectionDialogs.ConfirmAsync(owner, message)
                 : Task.FromResult(false);

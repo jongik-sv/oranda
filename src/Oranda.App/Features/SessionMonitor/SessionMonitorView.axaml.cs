@@ -17,6 +17,8 @@ public partial class SessionMonitorView : UserControl
         TraceOffButton.Click += (_, _) => Run(vm => vm.SetTraceAsync(false));
         DetailButton.Click += (_, _) => Run(vm => vm.LoadDetailAsync());
         SessionList.DoubleTapped += (_, _) => Run(vm => vm.LoadDetailAsync());
+        OtherAccountButton.Click += (_, _) => Run(vm => vm.OpenWithOtherAccountAsync());
+        AccessBanner.OtherAccountRequested += (_, _) => Run(vm => vm.OpenWithOtherAccountAsync());
     }
 
     private void Run(System.Func<SessionMonitorViewModel, System.Threading.Tasks.Task> action)

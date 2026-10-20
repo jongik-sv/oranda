@@ -137,6 +137,8 @@ public class SqlMonitorTests
         Assert.True(h.Session.Disposed);
         Assert.Equal(0, h.Monitor.SearchCalls);
         Assert.Contains("권한", h.Vm.StatusText, StringComparison.Ordinal);
+        Assert.True(h.Vm.Access.HasNotice);
+        Assert.StartsWith("GRANT SELECT_CATALOG_ROLE TO ", h.Vm.Access.GrantSql, StringComparison.Ordinal);
     }
 
     [Fact]

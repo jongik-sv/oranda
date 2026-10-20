@@ -40,30 +40,31 @@ public class SessionMonitorTests
     }
 
     [Fact]
-    public void Session_monitor_menu_is_disabled_for_account_without_privileges()
+    public void Monitor_menus_stay_enabled_for_account_without_privileges()
     {
         var registry = new CommandRegistry(App.Commands);
         var keys = new ContextKeyService();
         var bus = new EventBus();
         SessionMonitorCommands.AttachPrivilegeKeys(bus, keys);
         SessionMonitorCommands.AttachPrivilegeKeys(bus, keys);
-        keys.Set("hasSession", true);
 
+        // 접속이 없어도 켜져 있다(열면 프로필을 고른다). 권한이 없는 이유는 창이 안내 띠로 알린다.
+        Assert.True(registry.CanExecute("oranda.monitor.sessions", keys));
+        Assert.True(registry.CanExecute("oranda.monitor.sql", keys));
+
+        keys.Set("hasSession", true);
         bus.Publish(new SessionOpened(Guid.NewGuid(), Profile(), Server(NoPrivilege), SessionPurpose.Work));
-        Assert.False(registry.CanExecute("oranda.monitor.sessions", keys));
+        Assert.True(registry.CanExecute("oranda.monitor.sessions", keys));
+        Assert.True(registry.CanExecute("oranda.monitor.sql", keys));
         Assert.False(keys.Get("canKillSession"));
 
         // 모니터 세션이 열려도(목적 Monitor) 작업 세션 기준 키는 바뀌지 않는다.
         bus.Publish(new SessionOpened(Guid.NewGuid(), Profile(), Server(Dba), SessionPurpose.Monitor));
-        Assert.False(registry.CanExecute("oranda.monitor.sessions", keys));
+        Assert.False(keys.Get("canKillSession"));
 
         bus.Publish(new SessionOpened(Guid.NewGuid(), Profile(), Server(Dba), SessionPurpose.Work));
-        Assert.True(registry.CanExecute("oranda.monitor.sessions", keys));
         Assert.True(keys.Get("canKillSession"));
         Assert.True(keys.Get("canTraceSessions"));
-
-        keys.Set("hasSession", false);
-        Assert.False(registry.CanExecute("oranda.monitor.sessions", keys));
     }
 
     [Fact]
@@ -105,6 +106,12 @@ public class SessionMonitorTests
         Assert.Contains("권한이 없어", h.Vm.StatusText, StringComparison.Ordinal);
         Assert.False(h.Keys.Get("monitorSessionOpen"));
         Assert.Equal(0, h.Monitor.ListCalls);
+
+        // 이유와 해결 방법이 안내 띠에 실제 계정 이름으로 보인다.
+        Assert.True(h.Vm.Access.HasNotice);
+        Assert.Contains("이 접속(scott)", h.Vm.Access.Notice, StringComparison.Ordinal);
+        Assert.Contains("GRANT SELECT_CATALOG_ROLE TO SCOTT;", h.Vm.Access.Notice, StringComparison.Ordinal);
+        Assert.Equal("GRANT SELECT_CATALOG_ROLE TO SCOTT;", h.Vm.Access.GrantSql);
     }
 
     [Fact]

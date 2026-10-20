@@ -6,6 +6,11 @@
              x:Class="Oranda.App.Features.SessionMonitor.SessionMonitorView"
              keymaps:FocusSlot.Name="monitor"
              x:DataType="vm:SessionMonitorViewModel">
+  <UserControl.Styles>
+    <Style Selector="TextBlock.account.production">
+      <Setter Property="Foreground" Value="{DynamicResource OrandaEnvProductionBrush}" />
+    </Style>
+  </UserControl.Styles>
   <DockPanel>
     <!-- 툴바(Orange Session Monitor 의 Sub Toolbar): 새로 고침·자동·간격·델타 | 상세·KILL·DISCONNECT | 트레이스 -->
     <Border DockPanel.Dock="Top" Classes="panel-toolbar">
@@ -30,8 +35,14 @@
         <Button x:Name="TraceOffButton" Classes="tool" Content="끄기" IsEnabled="{Binding CanTrace}" icons:ButtonIcon.Key="clear" />
         <CheckBox Margin="4,0" Content="waits" IsChecked="{Binding TraceWaits, Mode=TwoWay}" VerticalAlignment="Center" />
         <CheckBox Content="binds" IsChecked="{Binding TraceBinds, Mode=TwoWay}" VerticalAlignment="Center" />
+        <Separator Classes="toolbar" />
+        <Button x:Name="OtherAccountButton" Classes="tool" Content="다른 접속…" icons:ButtonIcon.Key="connect"
+                ToolTip.Tip="저장된 접속 중에서 골라 모니터 전용 세션을 그 접속으로 엽니다(작업 접속은 그대로)" />
+        <TextBlock Classes="account" Classes.production="{Binding Access.IsProduction}" Text="{Binding Access.AccountText}"
+                   IsVisible="{Binding Access.HasAccount}" VerticalAlignment="Center" Margin="6,0" FontWeight="SemiBold" />
       </WrapPanel>
     </Border>
+    <vm:MonitorAccessBanner x:Name="AccessBanner" DockPanel.Dock="Top" DataContext="{Binding Access}" />
     <!-- 거르기 줄 -->
     <WrapPanel DockPanel.Dock="Top" Margin="4,4,4,2">
       <TextBox Classes="compact search" Width="140" Margin="0,0,6,0" PlaceholderText="사용자" Text="{Binding UsernameFilter, Mode=TwoWay}"

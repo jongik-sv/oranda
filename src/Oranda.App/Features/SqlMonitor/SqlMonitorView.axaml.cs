@@ -35,6 +35,8 @@ public partial class SqlMonitorView : UserControl
             }
         };
         SearchButton.Click += (_, _) => Run(vm => vm.SearchAsync());
+        OtherAccountButton.Click += (_, _) => Run(vm => vm.OpenWithOtherAccountAsync());
+        AccessBanner.OtherAccountRequested += (_, _) => Run(vm => vm.OpenWithOtherAccountAsync());
         // 계획·바인드를 읽으면 아래 탭도 그 내용으로 넘긴다(결과가 숨은 탭에 들어가 안 보이지 않게).
         PlanButton.Click += (_, _) => Run(vm => vm.ShowPlanAsync(), tab: 1);
         BindsButton.Click += (_, _) => Run(vm => vm.ShowBindsAsync(), tab: 0);

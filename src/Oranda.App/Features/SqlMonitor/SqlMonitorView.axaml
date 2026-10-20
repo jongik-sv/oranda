@@ -3,9 +3,15 @@
              xmlns:keymaps="using:Oranda.App.Shell.Keymaps"
              xmlns:icons="using:Oranda.App.Shell.Icons"
              xmlns:vm="using:Oranda.App.Features.SqlMonitor"
+             xmlns:mon="using:Oranda.App.Features.SessionMonitor"
              x:Class="Oranda.App.Features.SqlMonitor.SqlMonitorView"
              keymaps:FocusSlot.Name="monitor"
              x:DataType="vm:SqlMonitorViewModel">
+  <UserControl.Styles>
+    <Style Selector="TextBlock.account.production">
+      <Setter Property="Foreground" Value="{DynamicResource OrandaEnvProductionBrush}" />
+    </Style>
+  </UserControl.Styles>
   <DockPanel>
     <!-- 툴바(Orange SQL Monitor): 프리셋·정렬·Top N 과 검색 | 실제 계획·전문·바인드 -->
     <Border DockPanel.Dock="Top" Classes="panel-toolbar">
@@ -21,8 +27,14 @@
         <Separator Classes="toolbar" />
         <Button x:Name="PlanButton" Classes="tool" Content="실제 계획" IsEnabled="{Binding IsOpen}" icons:ButtonIcon.Key="plan" />
         <Button x:Name="BindsButton" Classes="tool" Content="전문·바인드" IsEnabled="{Binding IsOpen}" icons:ButtonIcon.Key="binds" />
+        <Separator Classes="toolbar" />
+        <Button x:Name="OtherAccountButton" Classes="tool" Content="다른 접속…" icons:ButtonIcon.Key="connect"
+                ToolTip.Tip="저장된 접속 중에서 골라 모니터 전용 세션을 그 접속으로 엽니다(작업 접속은 그대로)" />
+        <TextBlock Classes="account" Classes.production="{Binding Access.IsProduction}" Text="{Binding Access.AccountText}"
+                   IsVisible="{Binding Access.HasAccount}" VerticalAlignment="Center" Margin="6,0" FontWeight="SemiBold" />
       </WrapPanel>
     </Border>
+    <mon:MonitorAccessBanner x:Name="AccessBanner" DockPanel.Dock="Top" DataContext="{Binding Access}" />
     <!-- 거르기 줄: 값이 있는 칸만 조건이 된다. -->
     <WrapPanel DockPanel.Dock="Top" Margin="4,4,4,2">
       <TextBox Classes="compact search" Width="220" Margin="0,0,6,0" PlaceholderText="SQL 텍스트·SQL ID" Text="{Binding TextFilter, Mode=TwoWay}" />

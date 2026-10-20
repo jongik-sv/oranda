@@ -1,0 +1,27 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:Oranda.App.Features.SessionMonitor"
+             x:Class="Oranda.App.Features.SessionMonitor.MonitorAccessBanner"
+             x:DataType="vm:MonitorAccessState"
+             IsVisible="{Binding HasNotice}">
+  <!-- 권한 없음 안내 띠: 이유 + 해결 방법, 「다른 접속으로 열기…」「SQL 복사」. 경고색은 테마 리소스(라이트·다크·고대비)를 따른다. -->
+  <UserControl.Styles>
+    <!-- 공통 단추 모양(테두리·바탕)을 그대로 쓰되 높이만 띠에 맞게 줄인다. -->
+    <Style Selector="Button">
+      <Setter Property="MinHeight" Value="26" />
+      <Setter Property="Padding" Value="10,2" />
+      <Setter Property="VerticalContentAlignment" Value="Center" />
+    </Style>
+  </UserControl.Styles>
+  <Border x:Name="Strip" Margin="4,4,4,0" Padding="10,8" CornerRadius="3" BorderThickness="1"
+          Background="{DynamicResource OrandaGridNeedsChangeBrush}" BorderBrush="{DynamicResource OrandaUncommittedBrush}"
+          AutomationProperties.Name="모니터 권한 없음 안내">
+    <DockPanel>
+      <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" Spacing="6" Margin="12,0,0,0" VerticalAlignment="Center">
+        <Button x:Name="OtherAccountButton" Classes="accent" Content="다른 접속으로 열기…" />
+        <Button x:Name="CopyGrantButton" Content="SQL 복사" ToolTip.Tip="{Binding GrantSql}" />
+      </StackPanel>
+      <TextBlock Text="{Binding Notice}" TextWrapping="Wrap" VerticalAlignment="Center" />
+    </DockPanel>
+  </Border>
+</UserControl>

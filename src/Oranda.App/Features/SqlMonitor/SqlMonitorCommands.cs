@@ -26,8 +26,7 @@ public static class SqlMonitorCommands
 }
 
 /// <summary>모니터 메뉴의 SQL 모니터 명령(SQLM-01·02).</summary>
-[OrandaCommand("oranda.monitor.sql", CommandCategory.Monitor, Enablement = "hasSession && !noMonitorPrivilege",
-    Icon = "sqlMonitor", Placements = ["menu:monitor/sql@20", "toolbar:main/sqlMonitor@520"])]
+[OrandaCommand("oranda.monitor.sql", CommandCategory.Monitor, Icon = "sqlMonitor", Placements = ["menu:monitor/sql@20", "toolbar:main/sqlMonitor@520"])]
 [OrandaCommand("oranda.monitor.sqlSearch", CommandCategory.Monitor, When = "monitorFocus", Enablement = "monitorSqlOpen",
     Placements = ["menu:monitor/sqlSearch@300"])]
 [OrandaCommand("oranda.monitor.sqlShowPlan", CommandCategory.Monitor, When = "monitorFocus", Enablement = "monitorSqlSelected",
@@ -90,7 +89,10 @@ public sealed class SqlMonitorCommandHandler : ICommandHandler
 
         if (vm.OpenSession is null)
         {
-            vm.OpenSession = c => SessionMonitorCommands.OpenMonitorSessionAsync(container, c);
+            var opener = SessionMonitorCommands.CreateOpener(container, "sqlMonitor");
+            vm.OpenSession = opener.OpenDefaultAsync;
+            vm.ChooseSession = opener.OpenChosenAsync;
+            vm.Remember = opener.Remember;
 
             // 문서 탭이 닫히면 모니터 세션도 닫는다.
             void OnLayout(object? sender, EventArgs e)

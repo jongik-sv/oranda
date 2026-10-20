@@ -2004,10 +2004,10 @@ dotnet, testhost, Oranda.App
 - depends: TSK-06-01, TSK-02-05
 - blocked-by: -
 - entry-point: 메뉴 > 모니터 > 세션 모니터
-- note: -
+- note: SESS-07(모니터 접속 선택) 2026-10-20 추가: 메뉴는 늘 켜고, 권한 없음은 안내 띠·다른 접속으로 열기로 처리
 
 #### PRD 요구사항
-- prd-ref: PRD SESS-01, SESS-02, SESS-03, SESS-04, SESS-05, SESS-06
+- prd-ref: PRD SESS-01, SESS-02, SESS-03, SESS-04, SESS-05, SESS-06, SESS-07
 - requirements:
   - IMonitorService 세션 부분(전용 세션, 주기 조회 2-60 s, 델타)
   - 세션 목록·필터·자동 새로고침, RAC gv$
@@ -2018,7 +2018,7 @@ dotnet, testhost, Oranda.App
   - 계약 Task design.md 「기능 Task 편집 지점」 의 자기 소유 파일만 고친다
 - acceptance:
   - 잠금 경합 시나리오에서 블로킹 트리가 보유자·대기자를 보여 주고 Kill 로 풀린다
-  - 권한 없는 계정에서는 메뉴가 비활성이다
+  - 권한 없는 계정에서는 창 위 안내 띠가 이유와 GRANT 문을 보이고, 「다른 접속으로 열기…」로 권한 있는 프로필의 전용 세션으로 열 수 있다(SESS-07)
 - constraints:
   - license 태그 쿼리를 쓰지 않는다
 - test-criteria:
@@ -2046,10 +2046,10 @@ dotnet, testhost, Oranda.App
 - depends: TSK-06-01, TSK-02-05
 - blocked-by: -
 - entry-point: 메뉴 > 모니터 > SQL 모니터
-- note: -
+- note: SESS-07 공통 적용(2026-10-20): 메뉴는 늘 켜고 권한 없음은 안내 띠·다른 접속으로 열기
 
 #### PRD 요구사항
-- prd-ref: PRD SQLM-01, SQLM-02
+- prd-ref: PRD SQLM-01, SQLM-02, SESS-07
 - requirements:
   - IMonitorService Top SQL 부분
   - v$sql 조건 검색(소요 시간·읽은 블록·실행 횟수·텍스트), Orange 사전 정의 구간
