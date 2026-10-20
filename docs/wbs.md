@@ -840,7 +840,7 @@ dotnet, testhost, Oranda.App
 - data-model: -
 - ui-spec: -
 
-### TSK-03-07: Oracle 11.2 서버 접속 지원 (버전 관문·11g 카탈로그 변형)
+### TSK-03-07: Oracle 11.2 서버 접속 지원 (버전 관문·11g 카탈로그 변형) [win144]
 - category: dev
 - domain: backend
 - model: opus
@@ -848,11 +848,11 @@ dotnet, testhost, Oranda.App
 - priority: high
 - assignee: -
 - schedule: 2026-12-14 ~ 2026-12-18
-- tags: oracle-11g, catalog, compatibility
+- tags: oracle-11g, catalog, compatibility, win144
 - depends: TSK-03-03
 - blocked-by: -
 - entry-point: 접속 관리자에서 11.2 서버로 접속 → SQL 실행·스키마 브라우저·실행 계획·세션 모니터
-- note: 2026-10-20 사용자 결정(D-026)으로 D-06 의 11.2 「나중 검토」 를 지금 한다. 사전 점검(개발 PC, 사내 시험 DB 11.2.0.3 AL32UTF8): ODP.NET Core 23.26.301 과 19.x 둘 다 접속·조회됨 → 구버전 드라이버 불필요. 카탈로그 57개 중 15개가 11g 에서 실패: FETCH FIRST 8개(meta/objects, dbinfo/object_search·source_search·column_search(하위질의 안), session/open_cursors·sql_text, sql/full_text·top), 12c+ 열 7개 파일(dbinfo/database v$database.cdb, dbinfo/instance v$instance.edition·version_full, dbinfo/version v$version.banner_full, meta/columns·columns.23 all_tab_cols.identity_column·user_generated, meta/constraints search_condition_vc, meta/detail_general all_objects.editionable). 그 시험 DB 의 사용자 스키마에 plan_id 없는 옛 PLAN_TABLE 이 있어 plan/explain_steps 도 실패(버전 무관). 나머지 41개는 통과
+- note: 담당 PC: win144(Windows 개발 PC) — 맥북 세션은 이 Task 를 하지 않는다. 2026-10-20 사용자 결정(D-026)으로 D-06 의 11.2 「나중 검토」 를 지금 한다. 사전 점검(개발 PC, 사내 시험 DB 11.2.0.3 AL32UTF8): ODP.NET Core 23.26.301 과 19.x 둘 다 접속·조회됨 → 구버전 드라이버 불필요. 카탈로그 57개 중 15개가 11g 에서 실패: FETCH FIRST 8개(meta/objects, dbinfo/object_search·source_search·column_search(하위질의 안), session/open_cursors·sql_text, sql/full_text·top), 12c+ 열 7개 파일(dbinfo/database v$database.cdb, dbinfo/instance v$instance.edition·version_full, dbinfo/version v$version.banner_full, meta/columns·columns.23 all_tab_cols.identity_column·user_generated, meta/constraints search_condition_vc, meta/detail_general all_objects.editionable). 그 시험 DB 의 사용자 스키마에 plan_id 없는 옛 PLAN_TABLE 이 있어 plan/explain_steps 도 실패(버전 무관). 나머지 41개는 통과
 
 #### PRD 요구사항
 - prd-ref: PRD 6.x 지원 서버·C-03·D-06·11.3
@@ -1224,7 +1224,7 @@ dotnet, testhost, Oranda.App
 - data-model: -
 - ui-spec: -
 
-### TSK-04-10: Orange 작업 공간 파일(.sqd) 열기
+### TSK-04-10: Orange 작업 공간 파일(.sqd) 열기 [win144]
 - category: dev
 - domain: fullstack
 - model: sonnet
@@ -1232,11 +1232,11 @@ dotnet, testhost, Oranda.App
 - priority: high
 - assignee: -
 - schedule: 2026-12-14 ~ 2026-12-16
-- tags: workspace, orange-migration, import
+- tags: workspace, orange-migration, import, win144
 - depends: TSK-04-02
 - blocked-by: -
 - entry-point: 파일 > 작업 공간 열기(파일 대화상자 .sqd), 파일 끌어 놓기, 명령줄 인자
-- note: 2026-10-20 사용자 요청. 오렌지 5.0.12 가 저장한 .sqd 표본 30여 개를 개발 PC 에서 확인한 형식(아래 requirements). 표본 파일은 사내 SQL 이라 저장소에 넣지 않는다 — 시험 자료는 직접 만든 가짜 SQL 로 쓴다
+- note: 담당 PC: win144(Windows 개발 PC) — 맥북 세션은 이 Task 를 하지 않는다. 2026-10-20 사용자 요청. 오렌지 5.0.12 가 저장한 .sqd 표본 30여 개를 개발 PC 에서 확인한 형식(아래 requirements). 표본 파일은 사내 SQL 이라 저장소에 넣지 않는다 — 시험 자료는 직접 만든 가짜 SQL 로 쓴다
 
 #### PRD 요구사항
 - prd-ref: PRD EDIT-09 (작업 공간), EXEC-03 (바인드)
