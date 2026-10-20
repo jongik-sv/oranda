@@ -128,6 +128,24 @@ public partial class KeymapLoaderTests
         }
     }
 
+    /// <summary>외래키 따라가기(GRID-11): F4 부모 행, Shift+F4 자식 행. 4개 프리셋 모두 그리드 포커스에서 두 열(Windows·mac)이 같다.</summary>
+    [Fact]
+    public void Every_preset_binds_f4_and_shift_f4_to_foreign_key_navigation_in_the_grid()
+    {
+        foreach (var id in KeymapLoader.PresetIds)
+        {
+            var bindings = KeymapLoader.LoadPreset(id).Bindings;
+            var follow = Assert.Single(bindings, b => b.Command == "oranda.grid.followForeignKey");
+            var children = Assert.Single(bindings, b => b.Command == "oranda.grid.showReferencingRows");
+            Assert.Equal("gridFocus", follow.When);
+            Assert.Equal("gridFocus", children.When);
+            Assert.Equal(["F4"], follow.KeysFor(macOS: false));
+            Assert.Equal(["F4"], follow.KeysFor(macOS: true));
+            Assert.Equal(["Shift+F4"], children.KeysFor(macOS: false));
+            Assert.Equal(["Shift+F4"], children.KeysFor(macOS: true));
+        }
+    }
+
     [Fact]
     public void Primary_maps_to_ctrl_on_windows_and_cmd_on_mac()
     {

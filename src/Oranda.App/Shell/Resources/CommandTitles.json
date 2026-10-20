@@ -119,6 +119,8 @@
   "Cmd.oranda.grid.filterExcludeValue": "이 값 빼고 거르기",
   "Cmd.oranda.grid.filterNullRows": "NULL 인 행만",
   "Cmd.oranda.grid.pinResultTab": "결과 탭 고정",
+  "Cmd.oranda.grid.followForeignKey": "참조하는 행 열기(부모)",
+  "Cmd.oranda.grid.showReferencingRows": "이 행을 참조하는 행 열기(자식)",
   "Cmd.oranda.grid.rowView": "행 보기",
   "Cmd.oranda.grid.viewValue": "값 보기(LOB 편집기)",
   "Cmd.oranda.grid.export": "내보내기",
