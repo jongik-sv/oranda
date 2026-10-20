@@ -109,6 +109,12 @@ public sealed record ConstraintInfo(string Name, ConstraintKind Kind, IReadOnlyL
 {
     public DbObjectRef? ReferencedTable { get; init; }
 
+    /// <summary>
+    /// 외래키가 참조하는 부모 테이블의 기본키·유일 키 이름(r_constraint_name). 외래키가 아니거나 모르면 null.
+    /// 부모 키 열은 <see cref="Columns"/> 와 위치(position) 순서로 짝을 이룬다.
+    /// </summary>
+    public string? ReferencedConstraint { get; init; }
+
     public string? Condition { get; init; }
 
     public bool IsEnabled { get; init; } = true;

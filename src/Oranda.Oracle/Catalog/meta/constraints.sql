@@ -4,7 +4,7 @@
 -- requires: dba_constraints, all_constraints, dba_cons_columns, all_cons_columns
 -- license: none
 SELECT c.constraint_name, c.constraint_type, c.status, c.search_condition_vc, c.r_owner, rc.table_name AS r_table_name,
-       cc.column_name, cc.position
+       cc.column_name, cc.position, c.r_constraint_name
   FROM @PFX@_constraints c
   LEFT JOIN @PFX@_cons_columns cc ON cc.owner = c.owner AND cc.constraint_name = c.constraint_name
   LEFT JOIN @PFX@_constraints rc ON rc.owner = c.r_owner AND rc.constraint_name = c.r_constraint_name

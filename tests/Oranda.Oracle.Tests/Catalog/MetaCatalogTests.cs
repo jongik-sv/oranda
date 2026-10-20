@@ -64,6 +64,15 @@ public partial class MetaCatalogTests
         Assert.Contains("LISTAGG(cc.column_name, ', ') WITHIN GROUP (ORDER BY cc.position)", sql, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public void Constraints_select_the_referenced_key_name_last_after_column_position()
+    {
+        // 외래키 따라가기(GRID-11)가 부모의 어느 키를 참조하는지 안다. 앞 열 번호(0~7)는 그대로 두고 맨 뒤(8)에 더했다.
+        var sql = Catalog.Get("meta.constraints", 26).Sql;
+
+        Assert.Contains("cc.column_name, cc.position, c.r_constraint_name", sql, StringComparison.Ordinal);
+    }
+
     /// <summary>상세 구역은 BindTable(owner, name)만 묶는다. 본문의 바인드 이름이 정확히 그 둘이어야 한다(이름은 글자로 잇지 않는다).</summary>
     [Theory]
     [InlineData("meta.detail_triggers")]

@@ -30,8 +30,11 @@ namespace Oranda.Oracle.Metadata;
 [OrandaService(typeof(IMetadataProvider))]
 internal sealed partial class OracleMetadataProvider : IMetadataProvider
 {
-    /// <summary>payload_json 형식 버전(맨 위 <c>"v"</c>). 다르면 캐시가 없는 것으로 본다.</summary>
-    internal const int PayloadVersion = 1;
+    /// <summary>
+    /// payload_json 형식 버전(맨 위 <c>"v"</c>). 다르면 캐시가 없는 것으로 본다.
+    /// 2: 외래키 제약에 참조 키 이름(<see cref="ConstraintInfo.ReferencedConstraint"/>)을 더했다.
+    /// </summary>
+    internal const int PayloadVersion = 2;
 
     private static readonly Lazy<SqlCatalog> Catalog = new(EmbeddedCatalog.Load);
 
@@ -511,6 +514,7 @@ internal sealed partial class OracleMetadataProvider : IMetadataProvider
                 ReferencedTable = kind == ConstraintKind.ForeignKey && first[4] is not null && first[5] is not null
                     ? new DbObjectRef(Str(first[4])!, Str(first[5])!, "TABLE")
                     : null,
+                ReferencedConstraint = kind == ConstraintKind.ForeignKey && first.Length > 8 ? Str(first[8]) : null,
             });
         }
 
