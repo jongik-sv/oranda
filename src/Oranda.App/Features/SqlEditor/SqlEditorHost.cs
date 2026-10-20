@@ -41,6 +41,8 @@ public sealed class SqlEditorHost : ObservableObject, IDisposable
     {
         _store = store;
         Dialogs = dialogs ?? new NoDialogs();
+        // 저장 확인은 언제나 첫 번째 가드다(외부 가드는 이 뒤에 등록되므로 저장 확인이 먼저 끝난다).
+        RegisterCloseGuard(ConfirmSaveAsync);
     }
 
     /// <summary>프로세스 안의 기본 호스트. 셸의 DI 가 붙으면 그쪽이 <c>Current</c> 를 설정한다.</summary>
@@ -575,6 +577,66 @@ public sealed class SqlEditorHost : ObservableObject, IDisposable
 
     /// <summary>앱을 끝내도 되는지 모든 탭을 두고 가드에 묻는다(<see cref="SqlCloseReason.AppExit"/>). 끝내기 전에 셸이 부른다.</summary>
     public Task<bool> CanShutdownAsync(CancellationToken ct) => CanCloseAsync(Tabs.ToList(), SqlCloseReason.AppExit, ct);
+
+    /// <summary>
+    /// 고친 SQL 탭이 닫히기 전에 저장할지 묻는다. 탭 닫기·같은 ID 복원으로 교체될 때만 묻는다:
+    /// 작업 공간 닫기와 앱 종료는 작업 공간 파일이 내용을 보존한다. 이름 없는 탭의 저장은 「다른 이름으로」이고, 파일 고르기를 취소하면 닫기도 취소다.
+    /// </summary>
+    private async Task<bool> ConfirmSaveAsync(IReadOnlyList<SqlEditorViewModel> tabs, SqlCloseReason reason, CancellationToken ct)
+    {
+        if (reason is not (SqlCloseReason.Tab or SqlCloseReason.Replace))
+        {
+            return true;
+        }
+
+        foreach (var tab in tabs.Where(NeedsSaveConfirm))
+        {
+            switch (await Dialogs.AskSaveChangesAsync(tab.Title, ct).ConfigureAwait(true))
+            {
+                case SaveChoice.Save:
+                    try
+                    {
+                        if (!await SaveAsync(tab, ct).ConfigureAwait(true))
+                        {
+                            return false;
+                        }
+                    }
+                    catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+                    {
+                        // 저장하지 못했으니 닫지 않는다. 아무 말 없이 창만 사라진 것처럼 보이지 않게 알린다.
+                        await Dialogs.ShowMessageAsync("저장", $"'{tab.Title}' 을(를) 저장하지 못했다: {ex.Message}", ct).ConfigureAwait(true);
+                        return false;
+                    }
+
+                    break;
+                case SaveChoice.DontSave:
+                    break;
+                default:
+                    return false;
+            }
+        }
+
+        return true;
+    }
+
+    /// <summary>
+    /// 파일에 묶인 탭은 고쳤을 때, 이름 없는 탭은 내용이 있을 때 묻는다. 읽기 전용 탭은 고칠 수 없으니 묻지 않는다.
+    /// 복원 때 파일을 못 읽어 비어 있는 탭도 묻지 않는다: 저장하면 빈 내용이 원본을 덮어쓴다.
+    /// </summary>
+    private static bool NeedsSaveConfirm(SqlEditorViewModel tab)
+    {
+        if (tab.IsReadOnly)
+        {
+            return false;
+        }
+
+        if (tab.FilePath is null)
+        {
+            return !string.IsNullOrWhiteSpace(tab.Text);
+        }
+
+        return tab.IsDirty && !(tab.FileUnreadable && string.IsNullOrWhiteSpace(tab.Text));
+    }
 
     private sealed class CloseGuardEntry(SqlCloseGuard guard)
     {

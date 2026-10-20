@@ -182,6 +182,9 @@ public sealed partial class SqlEditorViewModel : ToolPanelViewModelBase
 
     public void MarkSaved() => IsDirty = false;
 
+    /// <summary>작업 공간에서 복원할 때 파일을 못 읽어 빈 문서 + 변경됨으로 열린 탭이면 true. 닫을 때 빈 내용으로 원본을 덮어쓰지 않는 근거다.</summary>
+    public bool FileUnreadable { get; private set; }
+
     /// <summary>글자 연산 결과를 문서에 적용(실행 취소 1단계)하고 선택을 옮긴다.</summary>
     public bool Apply(TextOpResult? result)
     {
@@ -562,6 +565,7 @@ public sealed partial class SqlEditorViewModel : ToolPanelViewModelBase
         // 파일이 있어야 하는데 못 읽었고 저장된 내용도 없으면 빈 문서 + 변경됨으로 두어 닫을 때 알린다.
         bool dirty = tab.IsDirty || (tab.Content is null && fileText is null && tab.FilePath is not null);
         vm.LoadText(text, dirty);
+        vm.FileUnreadable = tab.Content is null && fileText is null && tab.FilePath is not null;
         // 선택 영역은 복원하지 않고 커서 위치만 되살린다. 전체 선택이 복원된 채 키 입력이 들어가
         // 복원한 내용을 덮어쓴 사고가 있었다. 저장 형식(SelectionStart)은 읽기 호환을 위해 그대로 둔다.
         vm.Select(vm.OffsetOf(tab.Caret), 0);

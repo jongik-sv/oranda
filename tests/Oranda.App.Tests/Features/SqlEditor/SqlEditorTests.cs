@@ -818,7 +818,7 @@ public sealed partial class SqlEditorTests : IDisposable
     [Fact]
     public Task Closing_last_tab_keeps_the_workspace_and_new_sql_goes_into_it() => Ui.Run(async () =>
     {
-        var host = new SqlEditorHost();
+        var host = new SqlEditorHost(dialogs: new FakeDialogs());
         host.NewDocument("a");
         var second = host.NewWorkspace();
         host.Close(host.Active!);
@@ -1221,6 +1221,13 @@ public sealed partial class SqlEditorTests : IDisposable
 
         public bool AcceptPreview { get; set; }
 
+        /// <summary>저장 확인 대화상자의 답. 기본은 저장 안 함(닫기를 막지 않는다).</summary>
+        public SaveChoice SaveAnswer { get; set; } = SaveChoice.DontSave;
+
+        public List<string> SaveAsked { get; } = [];
+
+        public List<string> Messages { get; } = [];
+
         public int SaveCalls { get; private set; }
 
         public int ConfirmCalls { get; private set; }
@@ -1253,6 +1260,18 @@ public sealed partial class SqlEditorTests : IDisposable
         {
             ConfirmCalls++;
             return Task.FromResult(Confirm);
+        }
+
+        public Task ShowMessageAsync(string title, string message, CancellationToken ct)
+        {
+            Messages.Add(message);
+            return Task.CompletedTask;
+        }
+
+        public Task<SaveChoice> AskSaveChangesAsync(string tabName, CancellationToken ct)
+        {
+            SaveAsked.Add(tabName);
+            return Task.FromResult(SaveAnswer);
         }
 
         public Task<bool> PreviewEditAsync(string title, string before, string after, CancellationToken ct)

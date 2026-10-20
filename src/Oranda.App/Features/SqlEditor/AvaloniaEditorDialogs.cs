@@ -103,6 +103,77 @@ public sealed class AvaloniaEditorDialogs : IEditorDialogs
     public Task<bool> ConfirmAsync(string message, CancellationToken ct)
         => ShowAsync("Oranda", new TextBlock { Text = message, TextWrapping = TextWrapping.Wrap, MaxWidth = 420 }, false, ok => ok);
 
+    public async Task<SaveChoice> AskSaveChangesAsync(string tabName, CancellationToken ct)
+    {
+        var owner = Owner;
+        if (owner is null)
+        {
+            return SaveChoice.Cancel;
+        }
+
+        // 창의 닫기 단추도 취소다.
+        var answer = SaveChoice.Cancel;
+        var dialog = BuildSaveChangesDialog(tabName, choice => answer = choice);
+        await dialog.ShowDialog(owner).ConfigureAwait(true);
+        return answer;
+    }
+
+    /// <summary>
+    /// 저장 확인 대화상자를 만든다(보여 주지는 않는다). 단추를 누르면 <paramref name="onAnswer"/> 를 부르고 창을 닫는다.
+    /// Enter = 저장(기본 단추), Esc = 취소. 시험·렌더 점검이 창만 따로 띄울 수 있게 나눠 두었다.
+    /// </summary>
+    public static Window BuildSaveChangesDialog(string tabName, Action<SaveChoice> onAnswer)
+    {
+        ArgumentNullException.ThrowIfNull(onAnswer);
+        var save = new Button { Content = "저장", IsDefault = true, MinWidth = 80, Classes = { "accent" } };
+        var dontSave = new Button { Content = "저장 안 함", MinWidth = 80 };
+        var cancel = new Button { Content = "취소", IsCancel = true, MinWidth = 80 };
+        var dialog = new Window
+        {
+            Title = "저장하지 않은 변경",
+            SizeToContent = SizeToContent.WidthAndHeight,
+            WindowStartupLocation = WindowStartupLocation.CenterOwner,
+            CanResize = false,
+            ShowInTaskbar = false,
+            MinWidth = 320,
+        };
+        save.Click += (_, _) =>
+        {
+            onAnswer(SaveChoice.Save);
+            dialog.Close();
+        };
+        dontSave.Click += (_, _) =>
+        {
+            onAnswer(SaveChoice.DontSave);
+            dialog.Close();
+        };
+        cancel.Click += (_, _) =>
+        {
+            onAnswer(SaveChoice.Cancel);
+            dialog.Close();
+        };
+        dialog.Content = new StackPanel
+        {
+            Margin = new Thickness(16),
+            Spacing = 12,
+            Children =
+            {
+                new StackPanel
+                {
+                    Spacing = 4,
+                    Children =
+                    {
+                        new TextBlock { Text = tabName, FontWeight = FontWeight.SemiBold, TextWrapping = TextWrapping.Wrap, MaxWidth = 420 },
+                        new TextBlock { Text = "변경 내용을 저장할까요?", TextWrapping = TextWrapping.Wrap, MaxWidth = 420 },
+                    },
+                },
+                new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8, HorizontalAlignment = HorizontalAlignment.Right, Children = { save, dontSave, cancel } },
+            },
+        };
+        dialog.Opened += (_, _) => save.Focus();
+        return dialog;
+    }
+
     public Task<bool> PreviewEditAsync(string title, string before, string after, CancellationToken ct)
     {
         var panel = new Grid { ColumnDefinitions = new ColumnDefinitions("*,*"), RowDefinitions = new RowDefinitions("Auto,*"), MinWidth = 640, MinHeight = 240 };

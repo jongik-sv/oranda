@@ -9,7 +9,7 @@ public sealed partial class SqlEditorTests
     [Fact]
     public Task Guards_run_in_registration_order_and_a_cancel_stops_the_close() => Ui.Run(async () =>
     {
-        var host = new SqlEditorHost();
+        var host = new SqlEditorHost(dialogs: new FakeDialogs());
         var tab = host.NewDocument("a");
         var calls = new List<string>();
         host.RegisterCloseGuard((_, _, _) => { calls.Add("first"); return Task.FromResult(true); });
@@ -25,7 +25,7 @@ public sealed partial class SqlEditorTests
     [Fact]
     public Task Disposed_guard_is_not_called_and_close_goes_through() => Ui.Run(async () =>
     {
-        var host = new SqlEditorHost();
+        var host = new SqlEditorHost(dialogs: new FakeDialogs());
         var tab = host.NewDocument("a");
         var called = 0;
         var registration = host.RegisterCloseGuard((_, _, _) => { called++; return Task.FromResult(false); });
@@ -40,7 +40,7 @@ public sealed partial class SqlEditorTests
     [Fact]
     public Task Guard_receives_the_closing_tabs_with_the_reason_for_each_path() => Ui.Run(async () =>
     {
-        var host = new SqlEditorHost();
+        var host = new SqlEditorHost(dialogs: new FakeDialogs());
         var a = host.NewDocument("a");
         var b = host.NewDocument("b");
         var seen = new List<(SqlCloseReason Reason, int Count)>();
@@ -62,7 +62,7 @@ public sealed partial class SqlEditorTests
     [Fact]
     public Task Cancelled_guard_keeps_the_workspace_open_and_the_tabs_in_it() => Ui.Run(async () =>
     {
-        var host = new SqlEditorHost();
+        var host = new SqlEditorHost(dialogs: new FakeDialogs());
         var tab = host.NewDocument("a");
         var workspace = host.ActiveWorkspace!;
         host.RegisterCloseGuard((_, _, _) => Task.FromResult(false));
@@ -77,7 +77,7 @@ public sealed partial class SqlEditorTests
     [Fact]
     public Task Throwing_guard_cancels_and_second_close_while_guard_runs_is_refused() => Ui.Run(async () =>
     {
-        var host = new SqlEditorHost();
+        var host = new SqlEditorHost(dialogs: new FakeDialogs());
         var tab = host.NewDocument("a");
         var gate = new TaskCompletionSource<bool>();
         var failing = host.RegisterCloseGuard((_, _, _) => throw new InvalidOperationException("boom"));
@@ -96,7 +96,7 @@ public sealed partial class SqlEditorTests
     [Fact]
     public Task Dispose_removes_only_its_own_registration_so_order_holds() => Ui.Run(async () =>
     {
-        var host = new SqlEditorHost();
+        var host = new SqlEditorHost(dialogs: new FakeDialogs());
         var tab = host.NewDocument("a");
         var calls = new List<string>();
         Task<bool> Same(IReadOnlyList<SqlEditorViewModel> t, SqlCloseReason r, CancellationToken c)
@@ -119,7 +119,7 @@ public sealed partial class SqlEditorTests
     [Fact]
     public Task Combined_delegate_is_rejected() => Ui.Run(() =>
     {
-        var host = new SqlEditorHost();
+        var host = new SqlEditorHost(dialogs: new FakeDialogs());
         SqlCloseGuard a = (_, _, _) => Task.FromResult(true);
         SqlCloseGuard b = (_, _, _) => Task.FromResult(false);
 
@@ -130,7 +130,7 @@ public sealed partial class SqlEditorTests
     [Fact]
     public Task Shell_close_returns_true_when_the_guard_cancels_so_the_workspace_stays() => Ui.Run(async () =>
     {
-        var host = new SqlEditorHost();
+        var host = new SqlEditorHost(dialogs: new FakeDialogs());
         var tab = host.NewDocument("a");
         var workspace = host.ActiveWorkspace!;
         host.RegisterCloseGuard((_, _, _) => Task.FromResult(false));
@@ -144,7 +144,7 @@ public sealed partial class SqlEditorTests
     [Fact]
     public Task Restore_is_refused_when_tabs_changed_while_the_guard_was_asking() => Ui.Run(async () =>
     {
-        var host = new SqlEditorHost();
+        var host = new SqlEditorHost(dialogs: new FakeDialogs());
         host.NewDocument("a");
         var workspace = host.ActiveWorkspace!;
         host.RegisterCloseGuard((_, _, _) => { host.NewDocument("added meanwhile"); return Task.FromResult(true); });

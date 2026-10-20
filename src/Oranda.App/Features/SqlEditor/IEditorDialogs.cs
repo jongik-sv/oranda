@@ -30,8 +30,22 @@ public interface IEditorDialogs
     Task<string?> PickWorkspaceFileAsync(bool save, string suggestedName, CancellationToken ct)
         => save ? PickSaveFileAsync(suggestedName, ct) : PickOpenFileAsync(ct);
 
+    /// <summary>
+    /// 고친 SQL 탭을 닫기 전에 저장할지 묻는다(저장·저장 안 함·취소). 창을 그냥 닫으면 취소.
+    /// 기본은 취소: 대화상자가 없는 환경에서는 글을 잃는 쪽으로 가지 않는다.
+    /// </summary>
+    Task<SaveChoice> AskSaveChangesAsync(string tabName, CancellationToken ct) => Task.FromResult(SaveChoice.Cancel);
+
     /// <summary>알림 한 개(확인 단추만). 기본은 아무것도 하지 않는다.</summary>
     Task ShowMessageAsync(string title, string message, CancellationToken ct) => Task.CompletedTask;
+}
+
+/// <summary>고친 탭을 닫을 때 저장 확인 대화상자의 답.</summary>
+public enum SaveChoice
+{
+    Save,
+    DontSave,
+    Cancel,
 }
 
 /// <summary>대화상자가 없는 환경(시험·헤드리스)의 기본값: 모두 취소·거절로 답한다. 제안 편집은 절대 자동 적용하지 않는다.</summary>
