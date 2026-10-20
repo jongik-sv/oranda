@@ -12,6 +12,7 @@ using Oranda.Core.Shell;
 namespace Oranda.App.Tests.Features.ConnectionManager;
 
 /// <summary>접속 관리자 배치: 영어(긴 글자)에서도 툴바 단추 글자가 잘리지 않는다.</summary>
+[Collection("UiLanguage")]
 public class ConnectionManagerLayoutTests
 {
     [Fact]

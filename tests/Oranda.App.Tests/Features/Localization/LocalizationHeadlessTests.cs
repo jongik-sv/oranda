@@ -26,6 +26,7 @@ namespace Oranda.App.Tests.Features.Localization;
 /// TSK-10-02 Headless 시험: 설정의 언어 전환(메뉴·도구 창·대화상자·단추), 키보드 탐색(탭 순서·접근 키),
 /// 화면 낭독기 이름(AutomationProperties), 글자 배율·고대비·포커스 표시.
 /// </summary>
+[Collection("UiLanguage")]
 public class LocalizationHeadlessTests
 {
     private static readonly string[] DialogCommands = ["oranda.tools.settings", "oranda.help.about", "oranda.view.commandPalette"];
