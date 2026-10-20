@@ -313,7 +313,7 @@ public sealed class ExecutionServiceTests : IClassFixture<OracleFreeFixture>, IA
 
     // TSK-06-11: 엔진은 취소 즉시 브레이크를 보낸다. 서버가 그것을 언제 읽는지는 서버 sqlnet.ora 에 달렸다.
     // 시험 이미지(gvenzl)는 DISABLE_OOB=ON·BREAK_POLL_SKIP=1000 이라 in-band 브레이크만 받고, PL/SQL 대기 중에는 읽지 않는다.
-    // 대기·CPU 루프의 1 s 단정은 OOB 가 통하는 경로에서만 켠다(ORANDA_IT_CANCEL_STRICT=1). 큰 SELECT 가져오기는 늘 1 s.
+    // 1 s 단정은 OOB 가 통하는 경로에서만 켠다(ORANDA_IT_CANCEL_STRICT=1). 그 밖에서는 취소가 먹었는지(스스로 끝나기 전에 끝남)만 본다.
     private static bool StrictCancel => Environment.GetEnvironmentVariable("ORANDA_IT_CANCEL_STRICT") == "1";
 
     private static readonly TimeSpan CancelBudget = TimeSpan.FromSeconds(1);
@@ -354,17 +354,20 @@ public sealed class ExecutionServiceTests : IClassFixture<OracleFreeFixture>, IA
     }
 
     [Fact]
-    public async Task Cancel_during_large_fetch_ends_within_one_second_and_session_runs_next_statement()
+    public async Task Cancel_during_large_fetch_keeps_rows_in_order_and_session_runs_next_statement()
     {
         await using var s = await OpenAsync();
-        var r = await Service().ExecuteAsync(s,
-            Q("SELECT level AS n, RPAD('x', 200, 'x') AS pad FROM dual CONNECT BY level <= 5000000"), NoBinds, null, default);
+        // 900만 행(깊은 CONNECT BY 는 ORA-30009 위험이 있어 얕은 둘을 곱한다). n 은 1부터 빈틈없이 는다.
+        var r = await Service().ExecuteAsync(s, Q("""
+            SELECT ROWNUM AS n, RPAD('x', 200, 'x') AS pad
+              FROM (SELECT 1 FROM dual CONNECT BY level <= 3000), (SELECT 1 FROM dual CONNECT BY level <= 3000)
+            """), NoBinds, null, default);
         Assert.Equal(ExecutionStatus.Succeeded, r.Status);
-        var rs = r.ResultSet!;
+        var rs = Assert.IsType<OracleResultSet>(r.ResultSet);
 
         using var cts = new CancellationTokenSource();
-        // 페이지 9,000(약 450만 행)까지 가져오는 중에 취소한다.
-        var fetch = rs.GetPageAsync(9000, cts.Token);
+        // 페이지 17,000(약 850만 행)까지 가져오는 중에 취소한다.
+        var fetch = rs.GetPageAsync(17000, cts.Token);
         await Task.Delay(1000);
         Assert.False(fetch.IsCompleted);
         Assert.Equal(SessionState.Busy, s.State);
@@ -372,8 +375,16 @@ public sealed class ExecutionServiceTests : IClassFixture<OracleFreeFixture>, IA
         await cts.CancelAsync();
         await Assert.ThrowsAnyAsync<OperationCanceledException>(() => fetch);
         sw.Stop();
+        // BREAK_POLL_SKIP=1000 이면 서버가 행을 보내는 중에도 브레이크를 드물게 확인한다(측정 0~1,036 ms, 기본값이면 0~38 ms).
+        var limit = StrictCancel ? CancelBudget : TimeSpan.FromSeconds(3);
+        Assert.True(sw.Elapsed < limit, $"취소 반영 {sw.ElapsedMilliseconds} ms (한도 {limit.TotalMilliseconds:F0} ms)");
 
-        Assert.True(sw.Elapsed < CancelBudget, $"취소 반영 {sw.ElapsedMilliseconds} ms");
+        // 취소 뒤에도 같은 결과를 이어 가져온다: 페이지 중간에서 끊겼어도 행이 빠지거나 밀리지 않는다.
+        var next = await rs.GetPageAsync(rs.NextPageIndex, default);
+        Assert.Equal(500, next.RowCount);
+        Assert.Equal(next.FirstRowIndex + 1, Convert.ToInt64(next.Columns[0][0], System.Globalization.CultureInfo.InvariantCulture));
+        Assert.Equal(next.FirstRowIndex + 500, Convert.ToInt64(next.Columns[0][499], System.Globalization.CultureInfo.InvariantCulture));
+
         await rs.DisposeAsync();
         await AssertRunsNextStatementAsync(s);
     }

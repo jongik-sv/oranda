@@ -16,6 +16,7 @@ internal sealed class OracleResultSet : IResultSet
     private readonly OracleDataReader _reader;
     private readonly int _pageSize;
     private ResultPage? _last;
+    private List<object?>[]? _partial; // 취소로 끊긴 페이지에 이미 읽은 행. 다음 요청이 이어서 채운다
     private int _nextPage;
     private long _rowsRead;
     private bool _complete;
@@ -45,6 +46,9 @@ internal sealed class OracleResultSet : IResultSet
 
     /// <summary>시험용: 리더에 설정한 FetchSize.</summary>
     internal long FetchSize => _reader.FetchSize;
+
+    /// <summary>시험용: 다음에 읽을 페이지 번호.</summary>
+    internal int NextPageIndex => _nextPage;
 
     public async Task<ResultPage> GetPageAsync(int pageIndex, CancellationToken ct)
     {
@@ -96,16 +100,12 @@ internal sealed class OracleResultSet : IResultSet
     {
         var index = _nextPage;
         var first = Interlocked.Read(ref _rowsRead);
-        var buffers = new List<object?>[Columns.Count];
-        for (var c = 0; c < buffers.Length; c++)
+        var buffers = _partial ?? NewBuffers();
+        _partial = null;
+        var count = buffers.Length == 0 ? 0 : buffers[0].Count;
+        try
         {
-            buffers[c] = new List<object?>(Math.Min(_pageSize, 1024));
-        }
-
-        var count = 0;
-        if (!_complete)
-        {
-            while (count < _pageSize)
+            while (!_complete && count < _pageSize)
             {
                 if (!await _reader.ReadAsync(ct))
                 {
@@ -121,12 +121,29 @@ internal sealed class OracleResultSet : IResultSet
                 count++;
             }
         }
+        catch (Exception ex) when (ex is OperationCanceledException or OracleException { Number: OracleExecutionService.CancelledNumber })
+        {
+            // 취소 뒤에도 커서는 이어진다(TSK-06-11 실측). 읽은 행을 버리면 다음 페이지부터 행이 빠지고 밀린다.
+            _partial = buffers;
+            throw;
+        }
 
         Interlocked.Add(ref _rowsRead, count);
         _nextPage = index + 1;
         var page = new ResultPage(index, first, count, buffers) { IsLast = _complete };
         _last = page;
         return page;
+    }
+
+    private List<object?>[] NewBuffers()
+    {
+        var buffers = new List<object?>[Columns.Count];
+        for (var c = 0; c < buffers.Length; c++)
+        {
+            buffers[c] = new List<object?>(Math.Min(_pageSize, 1024));
+        }
+
+        return buffers;
     }
 
     public async ValueTask DisposeAsync()
