@@ -297,5 +297,37 @@ public sealed class TemplatesPanelHeadlessTests : IDisposable
         Assert.Equal(4, vm.Groups.Count);
         Assert.Equal("ko", vm.Language);
         Assert.NotNull(vm.ShowEditor);
+        Assert.IsAssignableFrom<Window>(TopLevel.GetTopLevel(view)); // 「새 조각」 대화상자의 owner
+
+        // 셸 단축키 처리가 있는 실제 창에서도 키보드만으로 찾기 → 목록 → 삽입이 되고, 넣은 뒤 초점은 편집기로 간다.
+        // 하네스는 시작 작업을 예약하지 않는다: 작업 공간 ↔ 문서 연결만 직접 돌려 편집기를 문서 영역에 띄운다.
+        var wiring = h.Services.GetService<IEnumerable<Oranda.Core.Composition.IStartupTask>>()!.OfType<SqlEditorDockWiring>().Single();
+        await wiring.RunAsync(default);
+        var registry = h.Get<Oranda.Core.Shell.ICommandRegistry>();
+        var keys = h.Get<Oranda.Core.Shell.IContextKeys>();
+        await registry.ExecuteAsync("oranda.file.newSqlEditor", keys);
+        Dispatcher.UIThread.RunJobs();
+        Assert.Same(SqlEditorHost.Current, vm.Host);
+        var tab = SqlEditorHost.Current.Active!;
+        await HeadlessHost.WaitUntil(() => tab.Surface is not null);
+        // 편집기로 초점이 가면 자동 숨김 도구 창이 닫힌다. 다시 열고 화면에 붙은 View 를 새로 찾는다.
+        await registry.ExecuteAsync("oranda.view.templates", keys);
+        await HeadlessHost.WaitUntil(() => (view = h.Window.GetVisualDescendants().OfType<TemplatesView>().FirstOrDefault(v => TopLevel.GetTopLevel(v) is not null)) is not null);
+        Dispatcher.UIThread.RunJobs();
+        Assert.Same(vm, view!.DataContext);
+        var search = Named<TextBox>(view, "SearchBox");
+        search.Focus();
+        h.Window.KeyTextInput("nvl2");
+        Dispatcher.UIThread.RunJobs();
+        Assert.Equal("NVL2", vm.Selected?.Prefix);
+        h.Window.KeyPress(Key.Down, RawInputModifiers.None, PhysicalKey.ArrowDown, null);
+        Dispatcher.UIThread.RunJobs();
+        Assert.IsType<TreeViewItem>(h.Window.FocusManager!.GetFocusedElement());
+        h.Window.KeyPress(Key.Enter, RawInputModifiers.None, PhysicalKey.Enter, null);
+        Dispatcher.UIThread.RunJobs();
+        Assert.Equal("SELECT NVL2(comm, 'Y', 'N') FROM emp", tab.Text);
+        var focused = h.Window.FocusManager!.GetFocusedElement() as Visual;
+        Assert.NotNull(focused);
+        Assert.Contains(focused!.GetSelfAndVisualAncestors(), v => v is SqlEditorView);
     });
 }
