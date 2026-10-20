@@ -83,7 +83,7 @@
 | `txnPending` | 미커밋 트랜잭션 있음 |
 | `hasSelection`, `canUndo`, `canRedo`, `hasFindText`, `hasBookmark`, `readOnlyDoc`, `canNavigateBack`, `canNavigateForward` | 편집기 상태 |
 | `hasExecError`, `hasLastSqlId` | 마지막 실행 결과 |
-| `gridHasResult`, `gridHasSelection`, `gridHasMoreRows`, `gridEditing`, `gridDirty`, `gridNotEditable`, `singleTable`, `joinResult` | 그리드 상태 |
+| `gridHasResult`, `gridHasSelection`, `gridHasMoreRows`, `gridQueryResult`, `gridEditing`, `gridDirty`, `gridNotEditable`, `singleTable`, `joinResult` | 그리드 상태(`gridQueryResult` = 질의 문장이 만든 결과, PL/SQL REF CURSOR 결과 제외) |
 | `schemaNodeSelected`, `plsqlNodeSelected`, `recyclebinNodeSelected` | 스키마 트리 선택 |
 | `isPackageDoc`, `serverSourceChanged`, `plsqlRunnable` | PL/SQL 편집기 |
 | `monitorSessionOpen`, `monitorSessionSelected`, `monitorSqlOpen`, `monitorSqlSelected` | 모니터 |
@@ -262,7 +262,7 @@
 
 ## 7. 1.0 명령 목록
 
-- 아래 표가 1.0 의 **명령 ID 전체**다(198개). 기본 키는 `default.json` 기준, 다른 프리셋은 6.1.
+- 아래 표가 1.0 의 **명령 ID 전체**다(199개). 기본 키는 `default.json` 기준, 다른 프리셋은 6.1.
 - 「키 범위(when)」는 키맵 `when`, 「활성 조건」은 명령 `Enablement` 다.
 - 소유 Task 가 처리기·제목·아이콘·Placements 를 만든다. 셸(TSK-03-01)은 이 표를 하드코딩하지 않는다 — 레지스트리 자동 수집만 한다.
 - 새 명령이 필요하면 기능 Task 가 규칙(1장)대로 ID 를 만들고 이 표에 행을 더하는 요청을 낸다. 키를 주려면 4개 프리셋 모두 충돌 검사를 통과해야 한다.
@@ -411,6 +411,7 @@
 | `oranda.grid.showAllColumns` | 숨긴 열 모두 보이기 | - | `gridFocus` | `gridHasResult` | TSK-06-03 |
 | `oranda.grid.toggleRepeatHide` | 같은 값 숨김 | - | `gridFocus` | `gridHasResult` | TSK-06-03 |
 | `oranda.grid.closeResultTab` | 결과 탭 닫기 | - | `gridFocus` | `gridHasResult` | TSK-06-03 |
+| `oranda.grid.countRows` | 전체 행 수 세기 | - | `gridFocus` | `gridQueryResult && hasSession && !sessionBusy` | TSK-06-03 |
 | `oranda.grid.rowView` | 행 보기 | `Alt+Enter` | `gridFocus` | `gridHasSelection` | TSK-06-05 |
 | `oranda.grid.viewValue` | 값 보기(LOB 편집기) | - | `gridFocus` | `gridHasSelection` | TSK-06-05 |
 | `oranda.grid.export` | 내보내기 | - | `gridFocus` | `gridHasResult` | TSK-06-07 |

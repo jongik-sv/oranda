@@ -91,6 +91,7 @@
   "Cmd.oranda.grid.copyAsInList": "Copy as IN List",
   "Cmd.oranda.grid.copyAsInsert": "Copy as INSERT Statements",
   "Cmd.oranda.grid.copyWithHeaders": "Copy with Headers",
+  "Cmd.oranda.grid.countRows": "Count All Rows",
   "Cmd.oranda.grid.edit.addRow": "Add Row",
   "Cmd.oranda.grid.edit.addRowidAndRerun": "Add ROWID and Rerun",
   "Cmd.oranda.grid.edit.apply": "Apply (No Commit)",
