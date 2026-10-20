@@ -215,7 +215,8 @@ public static class ExecutionCommands
         }
 
         GridEditCommands.Rerun ??= (stmt, ct) => Resolve(container).RerunForEditAsync(stmt, ct);
-        GridEditCommands.ConfirmPreview ??= (text, ct) => Resolve(container).ConfirmPreviewAsync(text, ct);
+        GridEditCommands.ConfirmPreview ??= (text, commit, ct) => Resolve(container).ConfirmPreviewAsync(text, commit, ct);
+        GridEditCommands.Report ??= notice => Resolve(container).ReportGridApply(notice);
         ResultGrid.ResultGridCommands.CountRows ??= (stmt, ct) => RowCounter(container).CountAsync(stmt, ct);
         ResultGrid.ResultGridCommands.Filter ??= (request, ct) => FilterRunner(container).RunAsync(request, ct);
         ResultGrid.ResultGridCommands.CountFiltered ??= (request, ct) => FilterRunner(container).CountAsync(request, ct);

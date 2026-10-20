@@ -96,7 +96,8 @@ public sealed class ExecutionController : IDisposable
 
         // 그리드 편집(TSK-06-04)이 비워 둔 연결 지점을 채운다.
         GridEditCommands.Rerun = RerunForEditAsync;
-        GridEditCommands.ConfirmPreview = (text, ct) => _d.Dialogs.PreviewDmlAsync(text, ct);
+        GridEditCommands.ConfirmPreview = (text, commit, ct) => _d.Dialogs.PreviewDmlAsync(text, commit, ct);
+        GridEditCommands.Report = ReportGridApply;
     }
 
     public ExecutionState State => _d.State;
@@ -360,7 +361,11 @@ public sealed class ExecutionController : IDisposable
     public void ToggleResultPane() => _d.TogglePanel(ResultsPanelId);
 
     /// <summary>그리드 편집 반영 전 DML 미리보기. 사용자가 확인하면 true.</summary>
-    public Task<bool> ConfirmPreviewAsync(string text, CancellationToken ct) => _d.Dialogs.PreviewDmlAsync(text, ct);
+    public Task<bool> ConfirmPreviewAsync(string text, bool commit, CancellationToken ct) => _d.Dialogs.PreviewDmlAsync(text, commit, ct);
+
+    /// <summary>그리드 반영 결과(커밋 여부 포함)를 메시지 창에 남긴다. 실패 행이 있으면 경고로 보인다.</summary>
+    public void ReportGridApply(string notice)
+        => Log.AddMessage(notice.Contains("반영하지 않았습니다", StringComparison.Ordinal) ? MessageKind.Warning : MessageKind.Info, notice);
 
     // ---- 바인드 ----------------------------------------------------------------------------
 

@@ -358,7 +358,9 @@ public sealed class GridEditSession
         }
 
         Notice = result.Failures.Count == 0
-            ? $"{result.AppliedCount} 행 반영{(result.Committed ? ", 커밋함" : " (커밋 안 함)")}."
+            ? result.Committed
+                ? $"{result.AppliedCount} 행 반영, 커밋함."
+                : $"{result.AppliedCount} 행 반영(커밋 안 함). 커밋하려면 커밋 단추, 되돌리려면 롤백."
             : $"{result.AppliedCount} 행 반영, {result.Failures.Count} 행은 반영하지 않았습니다: {result.Failures[0].Error?.Message}"
               + (commit && !result.Committed ? " 커밋하지 않았습니다." : string.Empty);
         OnChanged();
@@ -462,6 +464,15 @@ public sealed class GridEditSession
         values.OrderBy(p => p.Key).ToDictionary(p => Plan.ColumnNames[p.Key]!, p => p.Value, StringComparer.Ordinal);
 
     private static object? Normalize(object? v) => v is DBNull ? null : v;
+
+    /// <summary>
+    /// 반영 뒤 다시 읽어 새로 열린 편집 세션에 이전 세션의 반영 결과 안내를 옮겨 보인다(결과 창의 요약 줄).
+    /// </summary>
+    internal void Announce(string notice)
+    {
+        Notice = notice;
+        OnChanged();
+    }
 
     private void OnChanged() => Changed?.Invoke(this, EventArgs.Empty);
 }

@@ -37,6 +37,12 @@ public interface IExecutionDialogs
 
     /// <summary>DML 미리보기(그리드 반영 전, GRID-05). true = 반영.</summary>
     Task<bool> PreviewDmlAsync(string text, CancellationToken ct);
+
+    /// <summary>
+    /// 반영 동작을 밝히는 DML 미리보기. <paramref name="commit"/> = 반영 뒤 바로 커밋하는 동작(제목·주 단추 글자가 갈린다).
+    /// 기본은 동작을 밝히지 않는 <see cref="PreviewDmlAsync(string, CancellationToken)"/> 로 넘긴다.
+    /// </summary>
+    Task<bool> PreviewDmlAsync(string text, bool commit, CancellationToken ct) => PreviewDmlAsync(text, ct);
 }
 
 /// <summary>바인드 값 한 개의 입력: 이름·형식·방향·글자(EXEC-03). 「바인드 변수」 목록 줄이 실행 값으로 바꿀 때 쓴다.</summary>

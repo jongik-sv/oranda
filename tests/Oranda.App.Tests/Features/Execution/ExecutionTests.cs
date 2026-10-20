@@ -1279,7 +1279,7 @@ public sealed class ExecutionTests
         await GridEditCommands.Rerun!(withRowId, default);
         Assert.Equal("select rowid as oranda_rid, a from t", rig.Exec.Statements[1].Text);
 
-        Assert.True(await GridEditCommands.ConfirmPreview!("UPDATE t SET a = 1 WHERE ROWID = 'X'", default));
+        Assert.True(await GridEditCommands.ConfirmPreview!("UPDATE t SET a = 1 WHERE ROWID = 'X'", false, default));
         Assert.Equal("UPDATE t SET a = 1 WHERE ROWID = 'X'", rig.Dialogs.PreviewText);
     });
 

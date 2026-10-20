@@ -45,7 +45,10 @@ public sealed class AvaloniaExecutionDialogs : IExecutionDialogs
         => OnUi(() => UncommittedCoreAsync(subject));
 
     public Task<bool> PreviewDmlAsync(string text, CancellationToken ct)
-        => OnUi(() => PreviewCoreAsync(text));
+        => OnUi(() => PreviewCoreAsync(text, commit: false));
+
+    public Task<bool> PreviewDmlAsync(string text, bool commit, CancellationToken ct)
+        => OnUi(() => PreviewCoreAsync(text, commit));
 
     private static Task<T> OnUi<T>(Func<Task<T>> body)
         => Dispatcher.UIThread.CheckAccess() ? body() : Dispatcher.UIThread.InvokeAsync(body);
@@ -233,11 +236,13 @@ public sealed class AvaloniaExecutionDialogs : IExecutionDialogs
 
     // ---- DML 미리보기 ------------------------------------------------------------------------
 
-    private async Task<bool> PreviewCoreAsync(string text)
+    private async Task<bool> PreviewCoreAsync(string text, bool commit)
     {
-        var dialog = NewWindow("DML 미리보기");
+        // 어느 동작인지 제목·주 단추·안내 글로 밝힌다(툴바 단추가 아이콘뿐이라 확인 창에서 구분해야 한다).
+        var action = commit ? "반영 후 커밋" : "반영(커밋 안 함)";
+        var dialog = NewWindow("DML 미리보기 · " + action);
         bool accepted = false;
-        var ok = new Button { Content = "반영", MinWidth = 80 };
+        var ok = new Button { Content = action };
         var cancel = new Button { Content = "취소", MinWidth = 80, IsDefault = true, IsCancel = true };
         ok.Click += (_, _) =>
         {
@@ -246,7 +251,13 @@ public sealed class AvaloniaExecutionDialogs : IExecutionDialogs
         };
         cancel.Click += (_, _) => dialog.Close();
         var box = new TextBox { Text = text, IsReadOnly = true, AcceptsReturn = true, FontFamily = Mono, MinWidth = 520, MinHeight = 200, MaxHeight = 420 };
-        dialog.Content = Framed(box, Buttons(ok, cancel));
+        var hint = new TextBlock
+        {
+            Text = commit ? "아래 DML 을 실행한 뒤 바로 커밋합니다." : "아래 DML 만 실행하고 커밋하지 않습니다. 커밋 또는 롤백을 해야 확정됩니다.",
+            TextWrapping = TextWrapping.Wrap,
+            MaxWidth = 520,
+        };
+        dialog.Content = Framed(new StackPanel { Spacing = 8, Children = { hint, box } }, Buttons(ok, cancel));
         dialog.Opened += (_, _) => cancel.Focus();
         await ShowAsync(dialog).ConfigureAwait(true);
         return accepted;

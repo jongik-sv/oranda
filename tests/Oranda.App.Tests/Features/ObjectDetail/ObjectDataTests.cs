@@ -207,7 +207,7 @@ public sealed class ObjectDataTests : IDisposable
             editorReruns++;
             return Task.CompletedTask;
         };
-        GridEditCommands.ConfirmPreview = (_, _) => Task.FromResult(true);
+        GridEditCommands.ConfirmPreview = (_, _, _) => Task.FromResult(true);
         var h = new Harness();
         await h.LoadAsync();
         Assert.True(h.Vm.Data.IsTable);

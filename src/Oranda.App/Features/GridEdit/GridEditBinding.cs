@@ -20,7 +20,18 @@ public static class GridEditBinding
         ArgumentNullException.ThrowIfNull(session);
         Sessions.AddOrUpdate(model, session);
         model.EditOverlay = new Overlay(model, session);
-        session.Changed += (_, _) => model.NotifyEditChanged();
+        var shown = session.Notice;
+        session.Changed += (_, _) =>
+        {
+            model.NotifyEditChanged();
+
+            // 반영 결과 안내(커밋 여부)를 결과 창 요약 줄에 보인다. 편집을 이어 하면 안내가 비워지며 함께 지운다.
+            if (!string.Equals(shown, session.Notice, StringComparison.Ordinal))
+            {
+                shown = session.Notice;
+                model.ReportNotice(shown ?? string.Empty);
+            }
+        };
     }
 
     /// <summary>

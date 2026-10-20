@@ -14,10 +14,16 @@ public static class GridEditCommands
     public static GridEditSession? Active { get; set; }
 
     /// <summary>
-    /// DML 미리보기 대화상자(GRID-05). 글을 보여 주고 사용자가 확인하면 true.
+    /// DML 미리보기 대화상자(GRID-05). 글을 보여 주고 사용자가 확인하면 true. 둘째 인자 = 반영 뒤 바로 커밋하는 동작인지(창이 동작을 밝힌다).
     /// 비어 있으면 반영하지 않는다(미리보기 없이 반영하는 경로를 두지 않는다).
     /// </summary>
-    public static Func<string, CancellationToken, Task<bool>>? ConfirmPreview { get; set; }
+    public static Func<string, bool, CancellationToken, Task<bool>>? ConfirmPreview { get; set; }
+
+    /// <summary>
+    /// 반영 결과 안내(「n 행 반영(커밋 안 함)…」)를 눈에 띄는 곳(메시지 창)에 알린다. 반영 뒤 다시 읽으면 결과 창이 새로 만들어져
+    /// 편집 세션의 <see cref="GridEditSession.Notice"/> 가 사라지므로 이 안내가 남는 자리다.
+    /// </summary>
+    public static Action<string>? Report { get; set; }
 
     /// <summary>
     /// 편집 모드로 다시 실행. 인자 null = 편집기 현재 문장(F9), 아니면 그 문장(「ROWID 추가 후 다시 실행」).
@@ -113,7 +119,7 @@ public sealed class GridEditCommandHandler : ICommandHandler
                 break;
             case "oranda.grid.edit.previewDml":
                 // 미리보기 창의 「반영」은 커밋 없이 반영한다(취소면 아무것도 하지 않는다).
-                if (GridEditCommands.ConfirmPreview is { } show && await show(s.BuildPreview(), cancellationToken).ConfigureAwait(true))
+                if (GridEditCommands.ConfirmPreview is { } show && await show(s.BuildPreview(), false, cancellationToken).ConfigureAwait(true))
                 {
                     await ApplyConfirmedAsync(s, commit: false, cancellationToken).ConfigureAwait(true);
                 }
@@ -149,7 +155,7 @@ public sealed class GridEditCommandHandler : ICommandHandler
             return false;
         }
 
-        if (!await confirm(s.BuildPreview(), ct).ConfigureAwait(true))
+        if (!await confirm(s.BuildPreview(), commit, ct).ConfigureAwait(true))
         {
             return false;
         }
@@ -162,12 +168,23 @@ public sealed class GridEditCommandHandler : ICommandHandler
     private static async Task ApplyConfirmedAsync(GridEditSession s, bool commit, CancellationToken ct)
     {
         await s.ApplyAsync(commit, ct).ConfigureAwait(true);
+        var notice = s.Notice;
+        if (notice is not null)
+        {
+            GridEditCommands.Report?.Invoke(notice);
+        }
 
         // 모두 반영됐으면 같은 질의를 편집 모드로 다시 읽어 그리드가 반영된 값을 보인다(실패 행이 남으면 그대로 둔다).
         // 편집기 밖 결과(객체 상세 「데이터」 탭)는 그 결과가 정한 방법으로 다시 읽는다.
         if (!s.IsDirty && (s.Rerun ?? GridEditCommands.Rerun) is { } rerun)
         {
             await rerun(s.Query, ct).ConfigureAwait(true);
+
+            // 새로 열린 결과 창의 요약 줄에도 안내를 남긴다(옛 세션의 안내는 창과 함께 사라졌다).
+            if (notice is not null)
+            {
+                GridEditCommands.Active?.Announce(notice);
+            }
         }
     }
 }

@@ -17,12 +17,14 @@ public sealed partial class GridEditTests : IDisposable
     private static readonly DbObjectRef Emp = new("SCOTT", "EMP", "TABLE");
 
     private readonly RecordingExecution _exec = new();
+    private TestSession _session = null!;
 
     public void Dispose()
     {
         GridEditCommands.Active = null;
         GridEditCommands.ConfirmPreview = null;
         GridEditCommands.Rerun = null;
+        GridEditCommands.Report = null;
         Oranda.App.Features.ResultGrid.ResultGridCommands.Active = null;
         Oranda.App.Features.ResultGrid.ResultGridCommands.CopiedRows = null;
     }
@@ -47,7 +49,7 @@ public sealed partial class GridEditTests : IDisposable
         {
             Constraints = [new ConstraintInfo("PK_EMP", ConstraintKind.PrimaryKey, ["EMPNO"])],
         });
-        var session = new TestSession(readOnly);
+        var session = _session = new TestSession(readOnly);
         return GridEditSession.OpenAsync(new RowEditor(_exec), meta, session,
             new SqlStatement(sql, default, StatementKind.Query) { Verb = "SELECT" }, cols ?? EmpCols,
             (r, c) => data[r][c], () => data.Length, target: null, default);
@@ -180,12 +182,12 @@ public sealed partial class GridEditTests : IDisposable
         // 미리보기 연결이 없거나 사용자가 거절하면 반영하지 않는다.
         await Run("oranda.grid.edit.applyAndCommit");
         Assert.Empty(_exec.Dml);
-        GridEditCommands.ConfirmPreview = (_, _) => Task.FromResult(false);
+        GridEditCommands.ConfirmPreview = (_, _, _) => Task.FromResult(false);
         await Run("oranda.grid.edit.applyAndCommit");
         Assert.Empty(_exec.Dml);
 
         string? shown = null;
-        GridEditCommands.ConfirmPreview = (text, _) => { shown = text; return Task.FromResult(true); };
+        GridEditCommands.ConfirmPreview = (text, _, _) => { shown = text; return Task.FromResult(true); };
         await Run("oranda.grid.edit.applyAndCommit");
 
         Assert.Equal(preview, shown);
@@ -193,6 +195,73 @@ public sealed partial class GridEditTests : IDisposable
         Assert.All(_exec.Calls, c => Assert.Equal(Oranda.Core.History.HistorySource.GridEdit, c.Options!.Source));
         Assert.False(s.IsDirty);
         Assert.Contains("커밋함", s.Notice, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task Apply_without_commit_and_apply_and_commit_differ_in_dialog_commit_and_notice()
+    {
+        var s = await OpenAsync("SELECT empno, ename, sal FROM emp");
+        GridEditCommands.Active = s;
+        var asked = new List<bool>();
+        var reported = new List<string>();
+        GridEditCommands.ConfirmPreview = (_, commit, _) => { asked.Add(commit); return Task.FromResult(true); };
+        GridEditCommands.Report = reported.Add;
+
+        s.SetCell(0, 1, "X");
+        await Run("oranda.grid.edit.apply");
+        Assert.Equal(0, _session.Commits);
+        Assert.Contains("커밋 안 함", s.Notice, StringComparison.Ordinal);
+        Assert.Contains("롤백", s.Notice, StringComparison.Ordinal);
+
+        s.SetCell(0, 1, "Y");
+        await Run("oranda.grid.edit.applyAndCommit");
+        Assert.Equal(1, _session.Commits);
+        Assert.Contains("커밋함", s.Notice, StringComparison.Ordinal);
+
+        s.SetCell(0, 1, "Z");
+        await Run("oranda.grid.edit.previewDml");
+        Assert.Equal(1, _session.Commits); // 미리보기 창의 「반영」은 커밋하지 않는다
+
+        Assert.Equal([false, true, false], asked);
+        Assert.Equal(3, reported.Count);
+        Assert.Contains("커밋 안 함", reported[0], StringComparison.Ordinal);
+        Assert.Contains("커밋함", reported[1], StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task Apply_and_commit_with_failed_row_does_not_commit_and_says_so()
+    {
+        var s = await OpenAsync("SELECT empno, ename, sal FROM emp");
+        GridEditCommands.Active = s;
+        GridEditCommands.ConfirmPreview = (_, _, _) => Task.FromResult(true);
+        _exec.RowsFor = stmt => stmt.Text.Contains("UPDATE", StringComparison.Ordinal) ? 0 : 1;
+        s.SetCell(0, 1, "X");
+
+        await Run("oranda.grid.edit.applyAndCommit");
+
+        Assert.Equal(0, _session.Commits);
+        Assert.Contains("커밋하지 않았습니다", s.Notice, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task Rerun_after_apply_carries_the_notice_to_the_new_edit_session()
+    {
+        var first = await OpenAsync("SELECT empno, ename, sal FROM emp");
+        GridEditCommands.Active = first;
+        GridEditCommands.ConfirmPreview = (_, _, _) => Task.FromResult(true);
+        GridEditSession? reopened = null;
+        GridEditCommands.Rerun = async (_, _) =>
+        {
+            reopened = await OpenAsync("SELECT empno, ename, sal FROM emp");
+            GridEditCommands.Active = reopened;
+        };
+        first.SetCell(0, 1, "X");
+
+        await Run("oranda.grid.edit.apply");
+
+        Assert.NotNull(reopened);
+        Assert.Equal(first.Notice, reopened.Notice);
+        Assert.Contains("커밋 안 함", reopened.Notice, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -393,7 +462,13 @@ public sealed partial class GridEditTests : IDisposable
 
         public bool HasPendingTransaction { get; private set; }
 
-        public Task CommitAsync(CancellationToken ct) => Task.CompletedTask;
+        public int Commits { get; private set; }
+
+        public Task CommitAsync(CancellationToken ct)
+        {
+            Commits++;
+            return Task.CompletedTask;
+        }
 
         public Task RollbackAsync(CancellationToken ct) => Task.CompletedTask;
 
