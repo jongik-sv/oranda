@@ -143,7 +143,7 @@ public sealed class UpdateUiTests
 
         Assert.Equal("0.1.9", Named<TextBlock>(window, "NewVersionText").Text);
         Assert.Contains("0.1.9", Named<TextBlock>(window, "StatusText").Text, StringComparison.Ordinal);
-        Assert.Equal("- 고침", Named<TextBox>(window, "NotesBox").Text);
+        Assert.Equal("• 고침", Named<SelectableTextBlock>(window, "NotesBox").Inlines!.Select(i => ((Avalonia.Controls.Documents.Run)i).Text).Single());
         AssertVisible(window, download: true, skip: true, close: true);
         window.Close();
     });

@@ -48,7 +48,13 @@ public sealed partial class UpdateViewModel : ViewModelBase, IDisposable
 
     public string Notes => _service.Phase is UpdatePhase.Available or UpdatePhase.Downloading or UpdatePhase.Error ? _service.Offer?.NotesMarkdown ?? string.Empty : string.Empty;
 
-    public bool HasNotes => Notes.Length > 0;
+    /// <summary>화면에 그릴 릴리스 노트 줄(비었으면 빈 목록).</summary>
+    public IReadOnlyList<NoteLine> NoteLines => ReleaseNotesFormatter.Format(Notes);
+
+    /// <summary>노트 영역은 새 버전을 보여 주는 동안 나오며, 노트가 비어 있으면 「릴리스 노트 없음」 을 보인다.</summary>
+    public bool HasNotes => _service.Phase is UpdatePhase.Available or UpdatePhase.Downloading or UpdatePhase.Error && _service.Offer is not null;
+
+    public bool NotesEmpty => NoteLines.Count == 0;
 
     public bool ShowVersions => _service.Phase is UpdatePhase.Available or UpdatePhase.Downloading or UpdatePhase.Ready or UpdatePhase.UpToDate;
 

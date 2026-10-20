@@ -241,7 +241,7 @@ public sealed partial class SettingsViewModel : ViewModelBase
 
     public string LastCheckedText =>
         _settings.Current.Update.LastCheckedUtc is { } at
-            ? at.ToLocalTime().ToString("g", System.Globalization.CultureInfo.CurrentCulture)
+            ? at.ToLocalTime().ToString("yyyy-MM-dd HH:mm", System.Globalization.CultureInfo.InvariantCulture)
             : _text.Lookup("Shell.settings.update.never");
 
     [RelayCommand]

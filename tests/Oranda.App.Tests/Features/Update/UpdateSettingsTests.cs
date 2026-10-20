@@ -108,6 +108,25 @@ public sealed class UpdateSettingsTests
         Assert.Equal(stamp, store.Saved.Update.LastCheckedUtc);
     }
 
+    [Theory]
+    [InlineData("en-US")]
+    [InlineData("ko-KR")]
+    public async Task Last_checked_uses_a_fixed_local_format_in_any_culture(string culture)
+    {
+        var stamp = new DateTimeOffset(2026, 10, 20, 8, 3, 0, TimeSpan.Zero);
+        var (_, _, vm) = await Create(u => u with { LastCheckedUtc = stamp });
+        var saved = System.Globalization.CultureInfo.CurrentCulture;
+        try
+        {
+            System.Globalization.CultureInfo.CurrentCulture = new System.Globalization.CultureInfo(culture);
+            Assert.Equal(stamp.ToLocalTime().ToString("yyyy-MM-dd HH:mm", System.Globalization.CultureInfo.InvariantCulture), vm.LastCheckedText);
+        }
+        finally
+        {
+            System.Globalization.CultureInfo.CurrentCulture = saved;
+        }
+    }
+
     [Fact]
     public async Task Clearing_the_skipped_version_is_saved()
     {

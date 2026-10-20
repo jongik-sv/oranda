@@ -33,8 +33,14 @@
 
     <StackPanel Spacing="4" IsVisible="{Binding HasNotes}">
       <TextBlock Classes="hint" Text="{Binding Strings[notes]}" />
-      <TextBox x:Name="NotesBox" Text="{Binding Notes}" IsReadOnly="True" AcceptsReturn="True" TextWrapping="Wrap"
-               MaxHeight="180" MinHeight="80" AutomationProperties.Name="{Binding Strings[notes]}" />
+      <Border BorderThickness="1" BorderBrush="{DynamicResource OrandaSeparatorBrush}" CornerRadius="4" Padding="8,6" MaxHeight="180" MinHeight="80">
+        <ScrollViewer VerticalScrollBarVisibility="Auto">
+          <Panel>
+            <SelectableTextBlock x:Name="NotesBox" TextWrapping="Wrap" AutomationProperties.Name="{Binding Strings[notes]}" />
+            <TextBlock x:Name="NotesEmptyText" Classes="hint" Text="{Binding Strings[notesNone]}" IsVisible="{Binding NotesEmpty}" />
+          </Panel>
+        </ScrollViewer>
+      </Border>
     </StackPanel>
 
     <WrapPanel Orientation="Horizontal" HorizontalAlignment="Right" ItemSpacing="8" LineSpacing="8">

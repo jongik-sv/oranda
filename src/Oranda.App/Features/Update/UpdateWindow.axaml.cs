@@ -1,4 +1,7 @@
+using System.ComponentModel;
 using Avalonia.Controls;
+using Avalonia.Controls.Documents;
+using Avalonia.Media;
 using Oranda.App.Shell;
 
 namespace Oranda.App.Features.Update;
@@ -16,6 +19,8 @@ public partial class UpdateWindow : Window
             if (DataContext is UpdateViewModel vm)
             {
                 vm.CloseRequested += (_, _) => Close();
+                vm.PropertyChanged += OnViewModelChanged;
+                RenderNotes(vm);
             }
         };
         Closed += (_, _) =>
@@ -26,6 +31,37 @@ public partial class UpdateWindow : Window
                 _open = null;
             }
         };
+    }
+
+    private void OnViewModelChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        if (sender is UpdateViewModel vm && string.IsNullOrEmpty(e.PropertyName))
+        {
+            RenderNotes(vm);
+        }
+    }
+
+    /// <summary>릴리스 노트 줄을 굵은 머리글·일반 줄로 그린다.</summary>
+    private void RenderNotes(UpdateViewModel vm)
+    {
+        if (this.FindControl<SelectableTextBlock>("NotesBox") is not { } box)
+        {
+            return;
+        }
+
+        box.Inlines ??= new InlineCollection();
+        box.Inlines.Clear();
+        var first = true;
+        foreach (var line in vm.NoteLines)
+        {
+            if (!first)
+            {
+                box.Inlines.Add(new LineBreak());
+            }
+
+            first = false;
+            box.Inlines.Add(new Run(line.Text) { FontWeight = line.Bold ? FontWeight.Bold : FontWeight.Normal });
+        }
     }
 
     /// <summary>열려 있는 업데이트 창(없으면 null). 시험이 살펴본다.</summary>

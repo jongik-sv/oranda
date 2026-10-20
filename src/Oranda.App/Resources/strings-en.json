@@ -219,6 +219,7 @@
   "Update.feed.error.url": "The address format is not valid.",
   "Update.newVersion": "New version",
   "Update.notes": "Release notes",
+"Update.notesNone": "No release notes",
   "Update.state.available": "Version {0} is available.",
   "Update.state.availableSkipped": "Version {0} is available. (skipped version)",
   "Update.state.checking": "Checking for updates…",
