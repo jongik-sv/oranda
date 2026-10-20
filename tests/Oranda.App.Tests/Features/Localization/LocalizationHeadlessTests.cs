@@ -580,6 +580,10 @@ public class LocalizationHeadlessTests
         var panel = new StackPanel { Children = { title, save, search, custom, named } };
         var window = new Window { Title = "데이터 가져오기", Content = panel };
         window.Show();
+
+        // 번역기는 창이 Loaded 를 받을 때 창 목록에 올린다. 느린 CI 에서는 Show 직후 아직 Loaded 전일 수 있으니 기다린다
+        // (그 전에 언어를 바꾸면 이 창은 다시 번역할 목록에 없어 한국어로 남는다).
+        await HeadlessHost.WaitUntil(() => window.IsLoaded && title.IsLoaded);
         Dispatcher.UIThread.RunJobs();
         Assert.Equal("접속 관리자", title.Text);
 
@@ -598,6 +602,7 @@ public class LocalizationHeadlessTests
         panel.Children.Add(late);
         Dispatcher.UIThread.RunJobs();
         window.UpdateLayout();
+        await HeadlessHost.WaitUntil(() => late.IsLoaded); // 올라올 때(Loaded) 바뀐다
         Assert.Equal("Close", late.Text);
 
         // 영어 상태에서 다른 값이 들어왔다가 한국어로 돌아와도 그 값은 그대로 둔다.
