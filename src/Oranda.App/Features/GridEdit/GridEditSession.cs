@@ -65,6 +65,12 @@ public sealed class GridEditSession
 
     public bool IsDirty => _updates.Count > 0 || _inserts.Count > 0 || _deletes.Count > 0;
 
+    /// <summary>
+    /// 이 결과를 다시 읽는 방법(반영 뒤 다시 읽기·「ROWID 추가 후 다시 실행」). 편집기 밖 결과(객체 상세 「데이터」 탭)가 채운다.
+    /// null 이면 <see cref="GridEditCommands.Rerun"/>(편집기의 현재 문서에서 다시 실행).
+    /// </summary>
+    public Func<SqlStatement?, CancellationToken, Task>? Rerun { get; set; }
+
     /// <summary>마지막 반영 결과 알림(실패 행 수·이유). 없으면 null.</summary>
     public string? Notice { get; private set; }
 

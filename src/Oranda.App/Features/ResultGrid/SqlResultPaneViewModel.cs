@@ -124,6 +124,11 @@ public sealed class SqlResultPaneViewModel : ToolPanelViewModelBase
         }
     }
 
+    /// <summary>
+    /// 편집기 밖에서 이 결과 영역을 쓰는 쪽(객체 상세 「데이터」 탭)의 실행 연결. null 이면 공용 연결(편집기의 활성 세션)을 쓴다.
+    /// </summary>
+    public ResultPaneRunner? Runner { get; init; }
+
     /// <summary>편집 모드(F9)로 열려 고칠 수 있는 결과. 결과 위에 편집 툴바를 보인다.</summary>
     public bool IsEditMode => _editSession is { CanEdit: true };
 
@@ -306,7 +311,7 @@ public sealed class SqlResultPaneViewModel : ToolPanelViewModelBase
             return ShellCommandRunner.RunAsync("oranda.grid.edit.addRowidAndRerun");
         }
 
-        return GridEditCommands.Rerun?.Invoke(Statement, CancellationToken.None) ?? Task.CompletedTask;
+        return (Runner?.RerunForEdit ?? GridEditCommands.Rerun)?.Invoke(Statement, CancellationToken.None) ?? Task.CompletedTask;
     }
 
     public void Clear()
@@ -331,10 +336,10 @@ public sealed class SqlResultPaneViewModel : ToolPanelViewModelBase
         // 거른 결과면 거른 질의(셀 값 바인드 포함, 정렬은 빼고)를 센다 — 「전체 M행」이 거르기 전 행 수가 되지 않게.
         // 외래키로 연 결과는 이 결과 영역이 가진 바인드 값으로 센다(「바인드 변수」 목록에는 그 이름이 없다).
         Func<SqlStatement, CancellationToken, Task<long?>>? count = _activeFilter is { } filter
-            ? ResultGridCommands.CountFiltered is { } countFiltered ? (_, token) => countFiltered(filter with { OrderBy = string.Empty }, token) : null
+            ? (Runner?.CountFiltered ?? ResultGridCommands.CountFiltered) is { } countFiltered ? (_, token) => countFiltered(filter with { OrderBy = string.Empty }, token) : null
             : _hasStatementBinds
-                ? ResultGridCommands.CountFiltered is { } countOwn ? (q, token) => countOwn(OwnBindsRequest(q), token) : null
-                : ResultGridCommands.CountRows;
+                ? (Runner?.CountFiltered ?? ResultGridCommands.CountFiltered) is { } countOwn ? (q, token) => countOwn(OwnBindsRequest(q), token) : null
+                : Runner?.CountRows ?? ResultGridCommands.CountRows;
         if (count is null)
         {
             _countMessage = "전체 행 수를 셀 수 없습니다(실행 엔진이 연결되지 않았습니다).";
@@ -547,7 +552,7 @@ public sealed class SqlResultPaneViewModel : ToolPanelViewModelBase
             return;
         }
 
-        if (ResultGridCommands.Filter is not { } run)
+        if ((Runner?.Filter ?? ResultGridCommands.Filter) is not { } run)
         {
             ShowFilterMessage("거를 수 없습니다(실행 엔진이 연결되지 않았습니다).");
             return;

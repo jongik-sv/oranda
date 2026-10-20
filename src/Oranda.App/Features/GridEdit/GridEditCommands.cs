@@ -112,7 +112,7 @@ public sealed class GridEditCommandHandler : ICommandHandler
                 await s.ChooseTargetAsync(target, cancellationToken).ConfigureAwait(true);
                 break;
             case "oranda.grid.edit.addRowidAndRerun":
-                if (s.Capability is { CanAddRowId: true, QueryWithRowId: { } q } && GridEditCommands.Rerun is { } rerun)
+                if (s.Capability is { CanAddRowId: true, QueryWithRowId: { } q } && (s.Rerun ?? GridEditCommands.Rerun) is { } rerun)
                 {
                     await rerun(q, cancellationToken).ConfigureAwait(true);
                 }
@@ -144,7 +144,8 @@ public sealed class GridEditCommandHandler : ICommandHandler
         await s.ApplyAsync(commit, ct).ConfigureAwait(true);
 
         // 모두 반영됐으면 같은 질의를 편집 모드로 다시 읽어 그리드가 반영된 값을 보인다(실패 행이 남으면 그대로 둔다).
-        if (!s.IsDirty && GridEditCommands.Rerun is { } rerun)
+        // 편집기 밖 결과(객체 상세 「데이터」 탭)는 그 결과가 정한 방법으로 다시 읽는다.
+        if (!s.IsDirty && (s.Rerun ?? GridEditCommands.Rerun) is { } rerun)
         {
             await rerun(s.Query, ct).ConfigureAwait(true);
         }
