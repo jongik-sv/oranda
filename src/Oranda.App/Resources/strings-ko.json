@@ -137,6 +137,7 @@
   "Shell.settings.language.en": "English",
   "Shell.settings.language.ko": "한국어",
   "Shell.settings.language.system": "OS 언어 따르기",
+  "Shell.settings.lintEnabled": "SQL 점검(lint) 켜기",
   "Shell.settings.lob": "LOB 미리 읽기(바이트)",
   "Shell.settings.lobName": "LOB 미리 읽기 크기",
   "Shell.settings.maxAge": "보관 일수",

@@ -15,17 +15,36 @@ using AvaloniaEdit.Document;
 using AvaloniaEdit.Rendering;
 using Oranda.App.Features.SqlEditor;
 using Oranda.Core.Language;
+using Oranda.Core.Sessions;
 
 namespace Oranda.App.Features.Diagnostics;
+
+/// <summary>밑줄이 어디서 왔는지. 각 출처는 자기 결과만 바꾸고 지운다.</summary>
+public enum DiagnosticSource
+{
+    /// <summary>L2 문법 분석.</summary>
+    Analysis,
+
+    /// <summary>서버 컴파일 오류(user_errors).</summary>
+    Server,
+
+    /// <summary>SQL 점검(lint, TSK-13-04).</summary>
+    Lint,
+}
 
 /// <summary>밑줄 하나. 문서가 바뀌면 AvaloniaEdit 가 위치를 따라 옮긴다.</summary>
 public sealed class DiagnosticSegment : TextSegment
 {
     public DiagnosticSegment(Diagnostic diagnostic, bool fromServer)
+        : this(diagnostic, fromServer ? DiagnosticSource.Server : DiagnosticSource.Analysis)
+    {
+    }
+
+    public DiagnosticSegment(Diagnostic diagnostic, DiagnosticSource source)
     {
         ArgumentNullException.ThrowIfNull(diagnostic);
         Diagnostic = diagnostic;
-        FromServer = fromServer;
+        Source = source;
         StartOffset = diagnostic.Range.Start;
         Length = diagnostic.Range.Length;
     }
@@ -33,7 +52,9 @@ public sealed class DiagnosticSegment : TextSegment
     public Diagnostic Diagnostic { get; }
 
     /// <summary>서버 컴파일 오류(user_errors)에서 왔는지. L2 재분석은 이것을 지우지 않는다.</summary>
-    public bool FromServer { get; }
+    public bool FromServer => Source == DiagnosticSource.Server;
+
+    public DiagnosticSource Source { get; }
 }
 
 /// <summary>
@@ -81,6 +102,15 @@ public sealed class EditorDiagnostics : IBackgroundRenderer
     /// <summary>언어 서비스를 얻는 방법. 시작 작업(<see cref="EditorDiagnosticsStartup"/>)이 컨테이너로 채운다. 백그라운드 스레드에서 부른다.</summary>
     public static Func<ILanguageService?> LanguageServiceProvider { get; set; } = () => null;
 
+    /// <summary>SQL 점검 서비스를 얻는 방법(TSK-13-04). null 을 돌려주면 점검하지 않는다. 백그라운드 스레드에서 부른다.</summary>
+    public static Func<ILintService?> LintServiceProvider { get; set; } = () => null;
+
+    /// <summary>점검에 쓸 세션(표 정의 캐시의 키). 없으면 null: 메타데이터 규칙만 건너뛴다. UI 스레드에서 부른다.</summary>
+    public static Func<ISession?> LintSessionProvider { get; set; } = () => null;
+
+    /// <summary>설정 「SQL 점검(lint) 켜기」. UI 스레드에서 부른다.</summary>
+    public static Func<bool> LintEnabledProvider { get; set; } = () => true;
+
     /// <summary>마지막으로 반영한 L2 분석 횟수(시험·진단용).</summary>
     public int AppliedAnalyses { get; private set; }
 
@@ -120,7 +150,7 @@ public sealed class EditorDiagnostics : IBackgroundRenderer
     public void SetServerDiagnostics(IReadOnlyList<Diagnostic> diagnostics)
     {
         ArgumentNullException.ThrowIfNull(diagnostics);
-        Replace(fromServer: true, diagnostics);
+        Replace(DiagnosticSource.Server, diagnostics);
     }
 
     /// <summary>디바운스를 건너뛰고 지금 분석한다(시험·명령용).</summary>
@@ -256,6 +286,18 @@ public sealed class EditorDiagnostics : IBackgroundRenderer
         long version = vm.Version;
         try
         {
+            bool lintOn = false;
+            ISession? lintSession = null;
+            try
+            {
+                lintOn = LintEnabledProvider();
+                lintSession = lintOn ? LintSessionProvider() : null;
+            }
+            catch (Exception e) when (e is not OperationCanceledException)
+            {
+                lintOn = false; // 점검 설정·세션을 못 읽어도 문법 분석은 그대로 한다
+            }
+
             // 언어 서비스를 찾는 일(지연 어셈블리 로드)도 파싱도 UI 스레드 밖에서 한다.
             var language = await Task.Run(_language, cts.Token).ConfigureAwait(true);
             if (language is null)
@@ -269,8 +311,29 @@ public sealed class EditorDiagnostics : IBackgroundRenderer
                 return;
             }
 
-            Replace(fromServer: false, result);
+            Replace(DiagnosticSource.Analysis, result);
             AppliedAnalyses++;
+
+            // 점검(lint)은 문법 분석과 별도 단계다: 문법 오류 밑줄을 먼저 보이고, 그 뒤 같은 취소 토큰으로 돌린다.
+            IReadOnlyList<Diagnostic> lint = [];
+            if (lintOn)
+            {
+                try
+                {
+                    lint = await Task.Run(() => LintServiceProvider()?.Lint(text, lintSession, cts.Token) ?? [], cts.Token).ConfigureAwait(true);
+                }
+                catch (Exception e) when (e is not OperationCanceledException)
+                {
+                    lint = []; // 점검이 실패해도 이전 점검 밑줄은 지운다(옮겨진 위치에 남지 않게)
+                }
+            }
+
+            if (cts.IsCancellationRequested || !ReferenceEquals(vm, _vm) || vm.Version != version)
+            {
+                return;
+            }
+
+            Replace(DiagnosticSource.Lint, lint);
         }
         catch (OperationCanceledException)
         {
@@ -287,14 +350,14 @@ public sealed class EditorDiagnostics : IBackgroundRenderer
         }
     }
 
-    private void Replace(bool fromServer, IReadOnlyList<Diagnostic> diagnostics)
+    private void Replace(DiagnosticSource source, IReadOnlyList<Diagnostic> diagnostics)
     {
         if (_segments is null || _vm is null)
         {
             return;
         }
 
-        foreach (var old in _segments.Where(s => s.FromServer == fromServer).ToList())
+        foreach (var old in _segments.Where(s => s.Source == source).ToList())
         {
             _segments.Remove(old);
         }
@@ -304,7 +367,7 @@ public sealed class EditorDiagnostics : IBackgroundRenderer
         {
             if (d.Range.Start >= 0 && d.Range.Start + d.Range.Length <= length)
             {
-                _segments.Add(new DiagnosticSegment(d, fromServer));
+                _segments.Add(new DiagnosticSegment(d, source));
             }
         }
 

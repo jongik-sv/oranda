@@ -70,6 +70,7 @@
 | `editor.fontFamily` | string | ○ | `null`(플랫폼 기본 고정폭) | |
 | `editor.fontSize` | double | ○ | 13 | pt |
 | `editor.tabSize` | int | ○ | 4 | |
+| `editor.lintEnabled` | bool | ○ | true | SQL 점검(lint) 켜기, TSK-13-04 |
 | `keymapId` | string | ○ | `"default"` | 프리셋 id 또는 `{data}/keymaps/{id}` |
 | `formatterProfileId` | string | ○ | `"oranda-default"` | 기본 포매터 프로필(FMT-08) |
 | `execution.autoCommit` | bool | ○ | false | SAFE-04 |

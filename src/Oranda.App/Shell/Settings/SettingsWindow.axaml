@@ -86,7 +86,7 @@
 
       <TabItem Header="{Binding Strings[tab.editor]}">
         <ScrollViewer HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
-          <Grid Classes="form" ColumnDefinitions="Auto,*" RowDefinitions="Auto,Auto,Auto" ColumnSpacing="12" RowSpacing="10">
+          <Grid Classes="form" ColumnDefinitions="Auto,*" RowDefinitions="Auto,Auto,Auto,Auto" ColumnSpacing="12" RowSpacing="10">
             <TextBlock Grid.Row="0" Text="{Binding FontLabel}" />
             <!-- 편집 가능한 콤보: 설치되지 않은 글꼴 이름도 그대로 둔다(목록에 없다고 지우지 않는다). -->
             <ComboBox Grid.Row="0" Grid.Column="1" MinWidth="220" HorizontalAlignment="Stretch" x:Name="FontBox"
@@ -100,6 +100,7 @@
             <NumericUpDown Grid.Row="2" Grid.Column="1" x:Name="TabSizeBox"
                            Minimum="1" Maximum="16" Increment="1" FormatString="0"
                            Value="{Binding TabSize}" AutomationProperties.Name="{Binding TabSizeLabel}" />
+            <CheckBox Grid.Row="3" Grid.Column="1" Content="{Binding LintLabel}" IsChecked="{Binding LintEnabled}" />
           </Grid>
         </ScrollViewer>
       </TabItem>

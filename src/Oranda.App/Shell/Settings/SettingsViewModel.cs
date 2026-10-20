@@ -59,6 +59,9 @@ public sealed partial class SettingsViewModel : ViewModelBase
     [ObservableProperty]
     private decimal _tabSize;
 
+    [ObservableProperty]
+    private bool _lintEnabled;
+
     // ---- 실행 · 결과 그리드 · 이력 · 모니터 · 작업 공간(Orange 옵션 창의 Data·Grid·Session·Startup 자리) ----
 
     [ObservableProperty]
@@ -172,6 +175,7 @@ public sealed partial class SettingsViewModel : ViewModelBase
         _fontFamily = string.IsNullOrWhiteSpace(s.Editor.FontFamily) ? FontChoices[0] : s.Editor.FontFamily;
         _fontSize = (decimal)s.Editor.FontSize;
         _tabSize = s.Editor.TabSize;
+        _lintEnabled = s.Editor.LintEnabled;
 
         ErrorModes =
         [
@@ -303,6 +307,8 @@ public sealed partial class SettingsViewModel : ViewModelBase
 
     public string TabSizeLabel => _text.Lookup("Shell.settings.tabSize");
 
+    public string LintLabel => _text.Lookup("Shell.settings.lintEnabled");
+
     public string SaveLabel => _text.Lookup("Shell.settings.save");
 
     public string CloseLabel => _text.Lookup("Shell.settings.close");
@@ -336,6 +342,7 @@ public sealed partial class SettingsViewModel : ViewModelBase
                 FontFamily = family,
                 FontSize = (double)FontSize,
                 TabSize = (int)TabSize,
+                LintEnabled = LintEnabled,
             },
             Execution = s.Execution with
             {

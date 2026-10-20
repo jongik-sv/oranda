@@ -61,6 +61,9 @@ public sealed record EditorSettings
     public double FontSize { get; init; } = 13;
 
     public int TabSize { get; init; } = 4;
+
+    /// <summary>실행 전에 흔한 SQL 실수를 경고 밑줄로 알린다(SQL 점검 lint, TSK-13-04).</summary>
+    public bool LintEnabled { get; init; } = true;
 }
 
 public sealed record ExecutionSettings

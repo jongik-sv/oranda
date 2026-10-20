@@ -3,7 +3,10 @@ using System.Threading;
 using System.Threading.Tasks;
 using Avalonia.Interactivity;
 using Avalonia.Threading;
+using Oranda.App.Features.Execution;
 using Oranda.App.Features.SqlEditor;
+using Oranda.App.Shell.Composition;
+using Oranda.App.Shell.Settings;
 using Oranda.Core.Composition;
 using Oranda.Core.Language;
 
@@ -36,6 +39,16 @@ public sealed class EditorDiagnosticsStartup : IStartupTask
         if (_services is { } services)
         {
             EditorDiagnostics.LanguageServiceProvider = () => services.GetService(typeof(ILanguageService)) as ILanguageService;
+            EditorDiagnostics.LintServiceProvider = () => services.GetService(typeof(ILintService)) as ILintService;
+            if (services.GetService(typeof(SettingsService)) is SettingsService settings)
+            {
+                EditorDiagnostics.LintEnabledProvider = () => settings.Current.Editor.LintEnabled;
+            }
+
+            if (services is ServiceContainer container)
+            {
+                EditorDiagnostics.LintSessionProvider = () => ExecutionCommands.ActiveTabSession(container);
+            }
         }
 
         return Dispatcher.UIThread.InvokeAsync(Install).GetTask();
