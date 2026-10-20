@@ -459,7 +459,8 @@ public sealed partial class ProfileEditorViewModel : ViewModelBase
         }
         else if (IsBlank(TnsAlias))
         {
-            TnsAliasDetail = string.Format(CultureInfo.CurrentCulture, UiText.Get("Connection.tns.count", "tnsnames.ora 별칭 {0}개"), TnsAliases.Count);
+            TnsAliasDetail = UiText.Get("Connection.tns.count", "tnsnames.ora 별칭 {0}개")
+                .Replace("{0}", TnsAliases.Count.ToString(CultureInfo.CurrentCulture), StringComparison.Ordinal);
         }
         else if (TnsResolver.TryResolve(dir, TnsAlias, out var descriptor))
         {
