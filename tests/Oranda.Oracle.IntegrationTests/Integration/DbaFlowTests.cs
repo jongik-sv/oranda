@@ -20,8 +20,9 @@ namespace Oranda.Oracle.IntegrationTests.Integration;
 // 소유: TSK-11-02. DBA 흐름 통합시험(세션 → 블로킹 → Kill → Top SQL → 실행 계획) + 라이선스 트레이스 0건.
 //
 // 상주 컨테이너(oracle-26ai-free, 127.0.0.1:1521/FREEPDB1)를 쓴다. 새 컨테이너를 띄우지 않는다.
-//   ORANDA_IT_SYSTEM_PASSWORD  (필수) SYSTEM 비밀번호
+//   ORANDA_IT_SYSTEM_PASSWORD  (선택) SYSTEM 비밀번호. 있으면 상주 컨테이너를 쓴다
 //   ORANDA_IT_DATASOURCE       (선택) 기본 127.0.0.1:1521/FREEPDB1
+// 변수가 없으면(CI) 공유 컨테이너(OracleFreeShared 컬렉션의 OracleFreeFixture)의 DB 와 SYSTEM 비밀번호를 쓴다.
 // 시험마다 고유한 사용자·표·감사 정책을 만들고 끝나면 지운다.
 //
 // 라이선스 트레이스 확인 방법: 시험마다 통합 감사 정책(UNIFIED AUDIT)을 만들어 팩 필요 객체
@@ -29,15 +30,20 @@ namespace Oranda.Oracle.IntegrationTests.Integration;
 // SELECT/EXECUTE 를 기록하고, 이 시험이 연 세션(AUDSID)의 감사 행이 0건인지 본다.
 // 정책이 실제로 동작하는지는 대조군(팩 객체를 일부러 조회 → 1건 이상)으로 같은 시험에서 확인한다.
 
-/// <summary>상주 컨테이너 접속 정보.</summary>
+/// <summary>접속 정보: 상주 컨테이너 환경 변수가 있으면 그것을, 없으면 공유 컨테이너(<see cref="OracleFreeFixture"/>)를 쓴다.</summary>
 internal static class ResidentDb
 {
-    public static string DataSource => Environment.GetEnvironmentVariable("ORANDA_IT_DATASOURCE") is { Length: > 0 } d ? d : "127.0.0.1:1521/FREEPDB1";
+    /// <summary>시험 클래스 생성자가 넣는다. 환경 변수가 없을 때의 접속 대상.</summary>
+    public static OracleFreeFixture? Shared { get; set; }
+
+    private static string? Env(string name) => Environment.GetEnvironmentVariable(name) is { Length: > 0 } v ? v : null;
+
+    public static string DataSource =>
+        Env("ORANDA_IT_DATASOURCE") ?? (Env("ORANDA_IT_SYSTEM_PASSWORD") is null && Shared is { } f ? f.DataSource : "127.0.0.1:1521/FREEPDB1");
 
     public static string SystemPassword =>
-        Environment.GetEnvironmentVariable("ORANDA_IT_SYSTEM_PASSWORD") is { Length: > 0 } p
-            ? p
-            : throw new InvalidOperationException("ORANDA_IT_SYSTEM_PASSWORD 가 없다. 상주 컨테이너 SYSTEM 비밀번호를 환경 변수로 준다(조용히 통과하지 않는다).");
+        Env("ORANDA_IT_SYSTEM_PASSWORD") ?? Shared?.SystemPassword
+            ?? throw new InvalidOperationException("ORANDA_IT_SYSTEM_PASSWORD 도 공유 컨테이너도 없다(조용히 통과하지 않는다).");
 }
 
 /// <summary>시험 하나가 쓰는 고유 사용자·표·감사 정책 묶음. DisposeAsync 가 모두 지운다.</summary>
@@ -423,8 +429,12 @@ public class DbaFlowLicenseStaticTests
 }
 
 [Trait("Category", "Integration")]
+[Collection(OracleFreeShared.Name)]
 public sealed class DbaFlowTests
 {
+    // 공유 컨테이너가 먼저 떠 있도록 컬렉션 fixture 를 받고, 환경 변수가 없을 때의 접속 대상으로 넘긴다.
+    public DbaFlowTests(OracleFreeFixture db) => ResidentDb.Shared = db;
+
     private static async Task WaitUntilAsync(Func<Task<bool>> cond, int seconds = 20, string what = "조건")
     {
         for (var i = 0; i < seconds * 2; i++)
