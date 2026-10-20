@@ -1,3 +1,4 @@
+using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Threading;
 using Avalonia.VisualTree;
@@ -66,6 +67,33 @@ public class ConnectionManagerLayoutTests
         Assert.True(clipped.Count == 0, string.Join(Environment.NewLine, clipped));
         var scroll = dialog.FindControl<ScrollViewer>("EditorScroll")!;
         Assert.True(scroll.Extent.Height <= scroll.Viewport.Height + 0.5, $"폼 높이 {scroll.Extent.Height} > 보이는 높이 {scroll.Viewport.Height}");
+        dialog.Close();
+    });
+
+    [Fact]
+    public Task Long_connect_strings_are_trimmed_and_the_last_connected_time_stays_inside_the_list() => HeadlessHost.Run(async () =>
+    {
+        // 줄이 목록 폭을 넘어 마지막 접속 시각이 오른쪽 밖으로 잘려 「0」 만 보이던 결함(실제 창에서 발견).
+        using var h = new ShellHarness();
+        using var fx = new ServiceFixture();
+        var host = "very-long-database-host-name.internal.example.com:1521/SOME_REALLY_LONG_SERVICE_NAME";
+        await fx.Service.SaveProfileAsync(
+            new Oranda.Core.Connection.ConnectionProfile("ft-dba", "system", host, LastConnectedAt: DateTimeOffset.UtcNow.AddDays(-400)),
+            "pw", true, CancellationToken.None);
+        var vm = new ConnectionManagerViewModel(fx.Service);
+        await vm.LoadAsync();
+        var dialog = new ConnectionManagerWindow { DataContext = vm };
+        dialog.Show();
+        Dispatcher.UIThread.RunJobs();
+        dialog.UpdateLayout();
+        Dispatcher.UIThread.RunJobs();
+        dialog.UpdateLayout();
+
+        var tree = dialog.FindControl<TreeView>("ConnectionTree")!;
+        var node = vm.AllNodes().Single(n => n.Title == "ft-dba");
+        var time = tree.GetVisualDescendants().OfType<TextBlock>().Single(t => t.Text == node.LastConnectedText && !string.IsNullOrEmpty(t.Text));
+        var right = time.TranslatePoint(new Point(time.Bounds.Width, 0), tree)!.Value.X;
+        Assert.True(right <= tree.Bounds.Width + 0.5, $"마지막 접속 시각 오른쪽 끝 {right} > 목록 폭 {tree.Bounds.Width}");
         dialog.Close();
     });
 

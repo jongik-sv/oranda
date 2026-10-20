@@ -62,7 +62,7 @@
                    Text="ADB 지갑(Wallet_*.zip)을 이 창에 끌어 놓으면 접속이 만들어집니다." />
         <!-- Enter·두 번 누르기 = 접속, Delete = 삭제, F2 = 이름 칸으로(창 코드). 오른쪽 클릭은 누른 줄을 먼저 고른다. -->
         <TreeView x:Name="ConnectionTree" Classes="compact" ItemsSource="{Binding Tree}" SelectedItem="{Binding Selected}"
-                  AutomationProperties.Name="접속 목록">
+                  ScrollViewer.HorizontalScrollBarVisibility="Disabled" AutomationProperties.Name="접속 목록">
           <TreeView.ContextMenu>
             <ContextMenu x:Name="TreeMenu">
               <MenuItem x:Name="MenuConnect" Header="접속" Command="{Binding ConnectCommand}" InputGesture="Enter" />
@@ -75,6 +75,11 @@
           <TreeView.Styles>
             <Style Selector="TreeViewItem" x:DataType="cm:ConnectionTreeNode">
               <Setter Property="IsExpanded" Value="{Binding IsExpanded, Mode=TwoWay}" />
+            </Style>
+            <!-- 줄 내용을 목록 폭에 맞춘다(가로 스크롤 없이): user@접속은 말줄임, 마지막 접속 시각은 오른쪽 끝에 남는다. -->
+            <Style Selector="TreeViewItem /template/ ContentPresenter#PART_HeaderPresenter">
+              <Setter Property="HorizontalAlignment" Value="Stretch" />
+              <Setter Property="HorizontalContentAlignment" Value="Stretch" />
             </Style>
           </TreeView.Styles>
           <TreeView.ItemTemplate>
