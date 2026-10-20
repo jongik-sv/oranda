@@ -141,6 +141,16 @@ public class ShellLogicTests
     }
 
     [Fact]
+    public void Container_does_not_scan_deferred_assemblies_for_framework_types()
+    {
+        var c = new ServiceContainer();
+        c.AddDeferredAssembly("Oranda.Language");
+
+        Assert.Null(c.GetService<TimeProvider>());
+        Assert.False(c.DeferredScanned, c.DeferredScanTrigger);
+    }
+
+    [Fact]
     public void Starting_the_composition_does_not_scan_deferred_assemblies()
     {
         var dir = Path.Combine(Path.GetTempPath(), "oranda-comp-" + Guid.NewGuid().ToString("N"));

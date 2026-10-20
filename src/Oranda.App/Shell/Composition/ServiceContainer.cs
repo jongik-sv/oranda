@@ -230,20 +230,26 @@ public sealed class ServiceContainer : IServiceProvider, IDisposable
             }
         }
 
-        DeferredScanTrigger ??= serviceType.FullName;
-        ScanDeferred();
-        lock (_gate)
+        if (MayBeDeferred(serviceType))
         {
-            if (_registrations.TryGetValue(serviceType, out var found) && found.Count > 0)
+            DeferredScanTrigger ??= serviceType.FullName;
+            ScanDeferred();
+            lock (_gate)
             {
-                list = found;
-                return true;
+                if (_registrations.TryGetValue(serviceType, out var found) && found.Count > 0)
+                {
+                    list = found;
+                    return true;
+                }
             }
         }
 
         list = [];
         return false;
     }
+
+    // 프레임워크 형식(예: TimeProvider)은 지연 어셈블리가 등록하지 않으므로 훑지 않는다.
+    private static bool MayBeDeferred(Type t) => t.Namespace?.StartsWith("System", StringComparison.Ordinal) != true;
 
     private bool CanSatisfy(ParameterInfo p)
     {
@@ -272,7 +278,7 @@ public sealed class ServiceContainer : IServiceProvider, IDisposable
         }
 
         // 지연 어셈블리 안 형식일 수 있으니 훑은 뒤 다시 본다(이미 훑었으면 값이 바뀌지 않는다).
-        if (!DeferredScanned)
+        if (!DeferredScanned && MayBeDeferred(t))
         {
             DeferredScanTrigger ??= t.FullName;
             ScanDeferred();

@@ -619,7 +619,7 @@ public class ShellHeadlessTests
             h.Window.RebuildMenus();
             Dispatcher.UIThread.RunJobs();
 
-            Assert.False(h.Services.DeferredScanned);
+            Assert.False(h.Services.DeferredScanned, h.Services.DeferredScanTrigger);
         }
         finally
         {

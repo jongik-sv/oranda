@@ -2977,6 +2977,35 @@ dotnet, testhost, Oranda.App
 - data-model: -
 - ui-spec: -
 
+### TSK-13-09: 시작 때 Oranda.Language·Oranda.Oracle 어셈블리 로드(시작 시험 실패) [mac]
+- category: defect
+- domain: fullstack
+- model: sonnet
+- status: [xx]
+- priority: medium
+- assignee: -
+- schedule: 2026-10-20 ~ 2026-10-21
+- tags: startup, assembly, mac
+- depends: -
+- blocked-by: -
+- entry-point: 앱 시작(AppComposition.Create)
+- note: 담당 PC: mac(맥북). ShellHeadlessTests.Startup_does_not_load_oracle_or_antlr_assemblies 실패 수정(크기 S).
+
+#### PRD 요구사항
+- prd-ref: PRD NFR (시작 시간)
+- requirements:
+  - 시작 경로가 지연 어셈블리(Oranda.Language·Oranda.Oracle)를 로드하지 않는다
+- acceptance:
+  - 시작 시험이 통과하고, 수집한 명령·도구 창·상태 표시줄 결과가 바뀌지 않는다
+- test-criteria:
+  - ShellHeadlessTests·ShellLogicTests
+
+#### 기술 스펙 (TRD)
+- tech-spec: -
+- api-spec: -
+- data-model: -
+- ui-spec: -
+
 ## 의존 그래프
 
 ### 그래프 (Mermaid)
