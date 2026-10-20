@@ -35,8 +35,24 @@ public sealed partial class SqlWorkspaceViewModel : ToolPanelViewModelBase, IInn
     [NotifyPropertyChangedFor(nameof(DisplayTitle))]
     private string _name;
 
-    /// <summary>이 작업 공간을 연 Markdown 작업 공간 파일(.md) 또는 MyBatis 매퍼(.xml). 파일에서 열지 않았으면 null.</summary>
-    public string? SourcePath { get; internal set; }
+    private string? _sourcePath;
+
+    /// <summary>이 작업 공간을 연 파일(Markdown 작업 공간 .md, MyBatis 매퍼 .xml, Orange .sqd). 파일에서 열지 않았으면 null.</summary>
+    public string? SourcePath
+    {
+        get => _sourcePath;
+        internal set
+        {
+            if (SetProperty(ref _sourcePath, value))
+            {
+                OnPropertyChanged(nameof(Kind));
+                OnPropertyChanged(nameof(DisplayTitle));
+            }
+        }
+    }
+
+    /// <summary>문서 탭에 붙는 원본 종류: md·sqd·MyBatis. 파일 없이 앱 안에만 저장되는 작업 공간이면 null.</summary>
+    public string? Kind => WorkspaceFiles.KindOf(SourcePath);
 
     /// <summary>이 작업 공간의 SQL 탭(열린 순서).</summary>
     public ObservableCollection<SqlEditorViewModel> Tabs { get; } = [];
@@ -52,8 +68,8 @@ public sealed partial class SqlWorkspaceViewModel : ToolPanelViewModelBase, IInn
 
     public bool IsDirty => Tabs.Any(t => t.IsDirty);
 
-    /// <summary>문서 탭 머리글: 고친 SQL 탭이 있으면 「* 이름」.</summary>
-    public string DisplayTitle => (IsDirty ? "* " : string.Empty) + Name;
+    /// <summary>문서 탭 머리글: 고친 SQL 탭이 있으면 「* 이름」, 파일에서 연 작업 공간이면 뒤에 종류(「이름 (sqd)」).</summary>
+    public string DisplayTitle => (IsDirty ? "* " : string.Empty) + Name + (Kind is { } kind ? $" ({kind})" : string.Empty);
 
     partial void OnActiveTabChanged(SqlEditorViewModel? value) => Host.OnWorkspaceTabSelected(this, value);
 

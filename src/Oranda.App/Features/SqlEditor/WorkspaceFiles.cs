@@ -59,6 +59,9 @@ public static class WorkspaceFiles
         return (markdown ? path[..^ext.Length] : path) + Extension;
     }
 
+    /// <summary>작업 공간 원본 파일의 종류 표시: .sqd → sqd, .xml → MyBatis, 그 밖(.workspace.md·.md) → md. 경로가 없으면 null.</summary>
+    public static string? KindOf(string? path) => path is null ? null : IsSqd(path) ? "sqd" : IsMyBatis(path) ? "MyBatis" : "md";
+
     /// <summary>일반 「파일 열기」로 골라도 작업 공간으로 여는 파일: Orange <c>.sqd</c>, Oranda <c>.workspace.md</c>.</summary>
     public static bool OpensAsWorkspace(string path) =>
         IsSqd(path) || path.EndsWith(Extension, StringComparison.OrdinalIgnoreCase);

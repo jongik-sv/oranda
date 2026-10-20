@@ -155,4 +155,30 @@ public sealed partial class SqlEditorTests
         Assert.Equal(3, host.Workspaces.Count);
         Assert.Equal("그냥.sql", host.Active!.Title);
     });
+
+    [Fact]
+    public Task Document_tab_title_shows_where_the_workspace_came_from() => Ui.Run(async () =>
+    {
+        var sqd = WriteSqd("종류.sqd", "COUNT=1", "NAME=a", "STMT=1", "select 1 from dual", "VAR=0");
+        var md = Path.Combine(_root, "종류.workspace.md");
+        await File.WriteAllTextAsync(md, WorkspaceFiles.WriteMarkdown("종류 md", [new("x", "select 2 from dual")]));
+        var xml = Path.Combine(_root, "UserMapper.xml");
+        await File.WriteAllTextAsync(xml, "<mapper namespace=\"u\"><select id=\"a\">select 3 from dual</select></mapper>");
+        var host = new SqlEditorHost(NewStore(), new FakeDialogs { SavePath = Path.Combine(_root, "저장본") });
+        host.NewDocument("select 0 from dual");
+        var plain = host.ActiveWorkspace!;
+
+        Assert.Equal(SqlEditorHost.DefaultWorkspaceName, plain.DisplayTitle); // 앱 안에만 저장되는 기본 작업 공간은 종류 표시가 없다
+        await host.OpenWorkspaceFileAsync(sqd, default);
+        Assert.Equal("종류 (sqd)", host.ActiveWorkspace!.DisplayTitle);
+        await host.OpenWorkspaceFileAsync(md, default);
+        Assert.Equal("종류 md (md)", host.ActiveWorkspace!.DisplayTitle);
+        await host.OpenWorkspaceFileAsync(xml, default);
+        Assert.Equal("UserMapper (MyBatis)", host.ActiveWorkspace!.DisplayTitle);
+
+        // 기본 작업 공간을 파일로 저장하면 md 가 붙는다.
+        host.ActiveWorkspace = plain;
+        Assert.True(await host.SaveWorkspaceFileAsync(askPath: true, default));
+        Assert.Equal("저장본 (md)", plain.DisplayTitle);
+    });
 }
