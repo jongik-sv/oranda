@@ -97,6 +97,8 @@
   "Cmd.oranda.plan.explain": "예상 실행 계획",
   "Cmd.oranda.plan.actual": "실제 실행 계획(마지막 실행)",
   "Cmd.oranda.plan.displayCursorOptions": "DISPLAY_CURSOR 형식 옵션",
+  "Cmd.oranda.plan.pinForCompare": "이 계획 고정(비교 기준)",
+  "Cmd.oranda.plan.compare": "고정한 계획과 비교",
   "Cmd.oranda.sqlplus.runFile": "@파일 실행",
   "Cmd.oranda.grid.copy": "복사(TSV)",
   "Cmd.oranda.grid.copyWithHeaders": "머리글 포함 복사",

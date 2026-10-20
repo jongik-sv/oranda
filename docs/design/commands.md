@@ -105,7 +105,7 @@
 |---|---|---|
 | 파일, 접속 | 파일 | 문서 탭 머리 |
 | 편집, 탐색, 포맷 | 편집 | 편집기 |
-| SQL | SQL | 편집기(실행 묶음) |
+| SQL | SQL | 편집기(실행 묶음), 실행 계획 트리(`context:plan` — 고정·비교) |
 | 결과 | 결과 | 그리드 |
 | 보기 | 보기 | — |
 | 데이터베이스 | 데이터베이스 | 스키마 트리, PL/SQL 편집기 |
@@ -264,7 +264,7 @@
 
 ## 7. 1.0 명령 목록
 
-- 아래 표가 1.0 의 **명령 ID 전체**다(210개). 기본 키는 `default.json` 기준, 다른 프리셋은 6.1.
+- 아래 표가 1.0 의 **명령 ID 전체**다(212개). 기본 키는 `default.json` 기준, 다른 프리셋은 6.1.
 - 「키 범위(when)」는 키맵 `when`, 「활성 조건」은 명령 `Enablement` 다.
 - 소유 Task 가 처리기·제목·아이콘·Placements 를 만든다. 셸(TSK-03-01)은 이 표를 하드코딩하지 않는다 — 레지스트리 자동 수집만 한다.
 - 새 명령이 필요하면 기능 Task 가 규칙(1장)대로 ID 를 만들고 이 표에 행을 더하는 요청을 낸다. 키를 주려면 4개 프리셋 모두 충돌 검사를 통과해야 한다.
@@ -397,6 +397,8 @@
 | `oranda.plan.explain` | 예상 실행 계획 | `Ctrl+E` | `sqlDocFocus` | `hasSession && !sessionBusy` | TSK-07-01 |
 | `oranda.plan.actual` | 실제 실행 계획(마지막 실행) | `Ctrl+Shift+E` | `sqlDocFocus` | `hasSession && hasLastSqlId` | TSK-07-01 |
 | `oranda.plan.displayCursorOptions` | DISPLAY_CURSOR 형식 옵션 | - | 전역 | `hasSession` | TSK-07-01 |
+| `oranda.plan.pinForCompare` | 이 계획 고정(비교 기준) | - | 전역 | 항상 | TSK-07-01 |
+| `oranda.plan.compare` | 고정한 계획과 비교 | - | 전역 | 항상 | TSK-07-01 |
 | `oranda.sqlplus.runFile` | @파일 실행 | - | `sqlDocFocus` | `hasSession && !sessionBusy` | TSK-06-06 |
 
 ### 결과
