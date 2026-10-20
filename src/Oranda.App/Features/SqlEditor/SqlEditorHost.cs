@@ -964,12 +964,8 @@ public sealed class SqlEditorHost : ObservableObject, IDisposable
             return false;
         }
 
-        if (!path.EndsWith(".md", StringComparison.OrdinalIgnoreCase) && !path.EndsWith(".markdown", StringComparison.OrdinalIgnoreCase))
-        {
-            path += ".md";
-        }
-
-        var name = Path.GetFileNameWithoutExtension(path);
+        path = WorkspaceFiles.SavePath(path); // 새 파일은 이름.workspace.md (D-028)
+        var name = WorkspaceFiles.NameOf(path);
         var tabs = ws.Tabs.Select(t => new WorkspaceFileTab(t.Title, t.Text, t.ConnectionProfileId?.ToString()));
         await File.WriteAllTextAsync(path, WorkspaceFiles.WriteMarkdown(name, tabs), new UTF8Encoding(false), ct).ConfigureAwait(true);
         ws.SourcePath = Path.GetFullPath(path);

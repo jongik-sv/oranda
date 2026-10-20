@@ -17,7 +17,14 @@ public sealed class AvaloniaEditorDialogs : IEditorDialogs
     // 이름이 언어를 따라가야 하므로 부를 때마다 만든다(글자는 Shell 리소스 Shell.dialog.*).
     private static FilePickerFileType SqlFiles => new(UiText.Get("Shell.dialog.filter.sql", "SQL 파일")) { Patterns = ["*.sql", "*.pls", "*.pks", "*.pkb", "*.txt"] };
 
-    private static FilePickerFileType WorkspaceFiles => new(UiText.Get("Shell.dialog.filter.workspace", "작업 공간(Markdown)")) { Patterns = ["*.md", "*.markdown"] };
+    // Oranda 작업 공간은 이름.workspace.md(D-028). macOS 피커는 확장자 하나만 알아서 UTI 는 Markdown 으로 준다.
+    private static FilePickerFileType WorkspaceFiles => new(UiText.Get("Shell.dialog.filter.workspace", "Oranda 작업 공간 (*.workspace.md)"))
+    {
+        Patterns = ["*" + SqlEditor.WorkspaceFiles.Extension],
+        AppleUniformTypeIdentifiers = ["net.daringfireball.markdown"],
+    };
+
+    private static FilePickerFileType MarkdownFiles => new(UiText.Get("Shell.dialog.filter.markdown", "Markdown (*.md)")) { Patterns = ["*.md", "*.markdown"] };
 
     private static FilePickerFileType MyBatisFiles => new(UiText.Get("Shell.dialog.filter.mybatis", "MyBatis 매퍼")) { Patterns = ["*.xml"] };
 
@@ -73,7 +80,7 @@ public sealed class AvaloniaEditorDialogs : IEditorDialogs
                 Title = UiText.Get("Shell.dialog.saveWorkspaceFile", "작업 공간 파일로 저장"),
                 SuggestedFileName = suggestedName,
                 DefaultExtension = Path.HasExtension(suggestedName) ? null : "md",
-                FileTypeChoices = [WorkspaceFiles],
+                FileTypeChoices = [WorkspaceFiles, MarkdownFiles],
             }).ConfigureAwait(true);
             return SaveFileNames.CollapseDoubled(file?.TryGetLocalPath(), suggestedName, "md");
         }
@@ -82,7 +89,7 @@ public sealed class AvaloniaEditorDialogs : IEditorDialogs
         {
             Title = UiText.Get("Shell.dialog.openWorkspaceFile", "작업 공간 파일 열기"),
             AllowMultiple = false,
-            FileTypeFilter = [new FilePickerFileType(UiText.Get("Shell.dialog.filter.workspaceOrMapper", "작업 공간·MyBatis 매퍼·Orange 작업 공간")) { Patterns = ["*.md", "*.markdown", "*.xml", "*.sqd"] }, WorkspaceFiles, MyBatisFiles, SqdFiles],
+            FileTypeFilter = [new FilePickerFileType(UiText.Get("Shell.dialog.filter.workspaceOrMapper", "작업 공간·MyBatis 매퍼·Orange 작업 공간")) { Patterns = ["*.md", "*.markdown", "*.xml", "*.sqd"] }, WorkspaceFiles, MarkdownFiles, MyBatisFiles, SqdFiles],
         }).ConfigureAwait(true);
         return files.Count == 0 ? null : files[0].TryGetLocalPath();
     }

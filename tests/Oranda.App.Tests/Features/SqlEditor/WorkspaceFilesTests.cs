@@ -109,4 +109,35 @@ public sealed class WorkspaceFilesTests
         var read = WorkspaceFiles.ReadMyBatis(Mapper, "m");
         Assert.Equal(3, read.Tabs.Count);
     }
+
+    [Theory]
+    [InlineData("/d/01. 작업.workspace.md", "01. 작업")]
+    [InlineData("/d/코일이력.WORKSPACE.MD", "코일이력")]
+    [InlineData("/d/예전.md", "예전")]
+    [InlineData("/d/UserMapper.xml", "UserMapper")]
+    [InlineData("/d/01. 작업.sqd", "01. 작업")]
+    public void Workspace_name_drops_the_workspace_md_suffix(string path, string expected)
+        => Assert.Equal(expected, WorkspaceFiles.NameOf(path));
+
+    [Fact]
+    public void New_files_are_saved_as_name_dot_workspace_dot_md_and_existing_markdown_keeps_its_path()
+    {
+        var dir = Directory.CreateTempSubdirectory("oranda-ws-name-").FullName;
+        try
+        {
+            var old = Path.Combine(dir, "예전 작업.md");
+            File.WriteAllText(old, WorkspaceFiles.WriteMarkdown("예전 작업", [new("a", "select 1 from dual")]));
+
+            Assert.Equal(Path.Combine(dir, "새 작업.workspace.md"), WorkspaceFiles.SavePath(Path.Combine(dir, "새 작업")));
+            Assert.Equal(Path.Combine(dir, "새 작업.workspace.md"), WorkspaceFiles.SavePath(Path.Combine(dir, "새 작업.md")));
+            Assert.Equal(Path.Combine(dir, "새 작업.workspace.md"), WorkspaceFiles.SavePath(Path.Combine(dir, "새 작업.markdown")));
+            Assert.Equal(Path.Combine(dir, "새 작업.workspace.md"), WorkspaceFiles.SavePath(Path.Combine(dir, "새 작업.workspace.md")));
+            Assert.Equal(Path.Combine(dir, "v1.2.workspace.md"), WorkspaceFiles.SavePath(Path.Combine(dir, "v1.2")));
+            Assert.Equal(old, WorkspaceFiles.SavePath(old)); // 예전 이름.md 작업 공간은 그 자리에 다시 쓴다
+        }
+        finally
+        {
+            Directory.Delete(dir, true);
+        }
+    }
 }

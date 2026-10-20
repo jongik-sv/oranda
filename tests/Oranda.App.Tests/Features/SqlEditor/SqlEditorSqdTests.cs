@@ -56,8 +56,12 @@ public sealed partial class SqlEditorTests
 
         Assert.Equal(1, dialogs.SaveCalls);
         Assert.Equal(before, File.ReadAllBytes(sqd));
-        Assert.Contains("select 1 from dual", await File.ReadAllTextAsync(md), StringComparison.Ordinal);
-        Assert.Equal(Path.GetFullPath(md), host.WorkspaceFilePath);
+        // 새 .md 경로는 작업 공간 이름 규칙(D-028)에 따라 복사본.workspace.md 로 저장된다.
+        var saved = Path.Combine(_root, "복사본.workspace.md");
+        Assert.False(File.Exists(md));
+        Assert.Contains("select 1 from dual", await File.ReadAllTextAsync(saved), StringComparison.Ordinal);
+        Assert.Equal(Path.GetFullPath(saved), host.WorkspaceFilePath);
+        Assert.Equal("복사본", host.ActiveWorkspace!.Name);
     });
 
     [Fact]

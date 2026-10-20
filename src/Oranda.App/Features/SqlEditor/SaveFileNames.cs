@@ -8,15 +8,15 @@ internal static class SaveFileNames
 {
     private static readonly string[] SqlExtensions = [".sql", ".pls", ".pks", ".pkb", ".prc", ".fnc", ".trg", ".vw", ".ddl"];
 
-    private static readonly string[] WorkspaceExtensions = [".md", ".markdown"];
+    private static readonly string[] WorkspaceExtensions = [WorkspaceFiles.Extension];
 
     private static readonly char[] Invalid = ['/', '\\', ':', '*', '?', '"', '<', '>', '|'];
 
     /// <summary>SQL 탭의 제안 이름. SQL 계열 확장자로 끝나면 그대로, 아니면 .sql 을 붙인다.</summary>
     public static string SuggestSql(string title) => Suggest(title, SqlExtensions, ".sql");
 
-    /// <summary>작업 공간 파일의 제안 이름. .md·.markdown 으로 끝나면 그대로, 아니면 .md 를 붙인다.</summary>
-    public static string SuggestWorkspace(string name) => Suggest(name, WorkspaceExtensions, ".md");
+    /// <summary>작업 공간 파일의 제안 이름. .workspace.md 로 끝나면 그대로, 아니면 .workspace.md 를 붙인다(D-028).</summary>
+    public static string SuggestWorkspace(string name) => Suggest(name, WorkspaceExtensions, WorkspaceFiles.Extension);
 
     /// <summary>
     /// 피커가 제안 이름에 기본 확장자를 겹쳐 붙여 돌려준 경우(제안 「x.sql」 → 「x.sql.sql」)만 한 번으로 정리한다.

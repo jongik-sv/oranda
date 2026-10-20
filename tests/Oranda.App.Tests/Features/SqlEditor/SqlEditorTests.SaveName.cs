@@ -44,9 +44,10 @@ public sealed partial class SqlEditorTests
         => Assert.Equal(expected, SaveFileNames.CollapseDoubled(returned, suggested, ext));
 
     [Theory]
-    [InlineData("x", "x.md")]
-    [InlineData("x.md", "x.md")]
-    [InlineData("x.markdown", "x.markdown")]
-    public void Workspace_file_suggestion_keeps_markdown_extension(string name, string expected)
+    [InlineData("x", "x.workspace.md")]
+    [InlineData("01. 작업", "01. 작업.workspace.md")]
+    [InlineData("x.workspace.md", "x.workspace.md")]
+    [InlineData("a/b", "a_b.workspace.md")]
+    public void Workspace_file_suggestion_is_name_dot_workspace_dot_md(string name, string expected)
         => Assert.Equal(expected, SaveFileNames.SuggestWorkspace(name));
 }

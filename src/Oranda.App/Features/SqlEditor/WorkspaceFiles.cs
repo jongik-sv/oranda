@@ -24,6 +24,41 @@ public static class WorkspaceFiles
     /// <summary>Markdown 파일 둘째 줄의 표지. 읽을 때 꼭 있어야 하지는 않다(손으로 쓴 Markdown 도 연다).</summary>
     public const string Marker = "<!-- oranda-workspace 1 -->";
 
+    /// <summary>
+    /// 작업 공간 파일의 확장자(D-028). 이름만 보고 작업 공간이면서 Markdown 인 것을 알 수 있게 <c>이름.workspace.md</c> 로 쓴다.
+    /// 예전에 <c>이름.md</c> 로 저장한 파일도 그대로 연다.
+    /// </summary>
+    public const string Extension = ".workspace.md";
+
+    /// <summary>파일 경로에서 작업 공간 이름: <c>.workspace.md</c> 면 그것을, 아니면 마지막 확장자만 뗀다.</summary>
+    public static string NameOf(string path)
+    {
+        var file = Path.GetFileName(path);
+        return file.EndsWith(Extension, StringComparison.OrdinalIgnoreCase) ? file[..^Extension.Length] : Path.GetFileNameWithoutExtension(file);
+    }
+
+    /// <summary>
+    /// 저장할 경로를 규칙에 맞춘다. 확장자가 없으면 <c>.workspace.md</c> 를 붙이고, 아직 없는 새 <c>.md</c>·<c>.markdown</c> 경로는
+    /// <c>.workspace.md</c> 로 바꾼다. 이미 있는 파일(예전 <c>이름.md</c> 작업 공간)은 그 경로에 그대로 쓴다.
+    /// </summary>
+    public static string SavePath(string path)
+    {
+        ArgumentNullException.ThrowIfNull(path);
+        if (path.EndsWith(Extension, StringComparison.OrdinalIgnoreCase))
+        {
+            return path;
+        }
+
+        var ext = Path.GetExtension(path);
+        var markdown = string.Equals(ext, ".md", StringComparison.OrdinalIgnoreCase) || string.Equals(ext, ".markdown", StringComparison.OrdinalIgnoreCase);
+        if (markdown && File.Exists(path))
+        {
+            return path;
+        }
+
+        return (markdown ? path[..^ext.Length] : path) + Extension;
+    }
+
     public static bool IsMyBatis(string path) =>
         string.Equals(Path.GetExtension(path), ".xml", StringComparison.OrdinalIgnoreCase);
 
@@ -36,7 +71,7 @@ public static class WorkspaceFiles
     /// <summary>파일을 읽는다: .xml 은 MyBatis 매퍼, .sqd 는 Orange 작업 공간, 나머지는 Markdown.</summary>
     public static WorkspaceFile Load(string path)
     {
-        var name = Path.GetFileNameWithoutExtension(path);
+        var name = NameOf(path);
         if (IsSqd(path))
         {
             return ReadSqd(File.ReadAllBytes(path), name);
