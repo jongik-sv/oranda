@@ -41,6 +41,7 @@ public sealed class DockWorkspace
         {
             HideToolsOnClose = true,
             HideDocumentsOnClose = false,
+            DefaultHostWindowLocator = () => new FloatHostWindow(),
         };
         Factory.ActiveDockableChanged += (_, _) => ActiveDocumentChanged?.Invoke(this, EventArgs.Empty);
         Factory.DockableClosing += OnDockableClosing;

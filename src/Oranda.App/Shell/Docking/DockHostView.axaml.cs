@@ -28,6 +28,7 @@ public partial class DockHostView : UserControl
 
     public DockHostView()
     {
+        DockPanelTemplates.Register();
         InitializeComponent();
         DataContextChanged += (_, _) => Attach(DataContext as DockWorkspace);
 

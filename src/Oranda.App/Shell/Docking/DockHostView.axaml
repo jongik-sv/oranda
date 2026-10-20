@@ -4,14 +4,6 @@
              xmlns:docking="using:Oranda.App.Shell.Docking"
              x:Class="Oranda.App.Shell.Docking.DockHostView"
              x:DataType="docking:DockWorkspace">
-  <UserControl.DataTemplates>
-    <DataTemplate DataType="docking:PanelTool" x:DataType="docking:PanelTool">
-      <ContentControl Content="{Binding Panel}" />
-    </DataTemplate>
-    <DataTemplate DataType="docking:PanelDocument" x:DataType="docking:PanelDocument">
-      <ContentControl Content="{Binding Panel}" />
-    </DataTemplate>
-  </UserControl.DataTemplates>
   <UserControl.Styles>
     <!-- 미리보기 탭(VS Code 방식)은 머리글을 기울임꼴로 보인다. 고정하면 바로 곧은 글꼴로 돌아온다. -->
     <Style Selector="dock|DocumentTabStripItem" x:DataType="docking:PanelDocument">
