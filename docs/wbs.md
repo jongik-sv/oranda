@@ -2394,7 +2394,7 @@ dotnet, testhost, Oranda.App
 - category: itest
 - domain: test
 - model: sonnet
-- status: [ ]
+- status: [xx]
 - priority: high
 - assignee: -
 - schedule: 2026-12-01 ~ 2026-12-04
