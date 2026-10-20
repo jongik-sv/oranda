@@ -1,3 +1,4 @@
+using System.Globalization;
 using CommunityToolkit.Mvvm.ComponentModel;
 using Oranda.App.Features.GridEdit;
 using Oranda.App.Shell;
@@ -13,12 +14,20 @@ namespace Oranda.App.Features.ResultGrid;
 public sealed class SqlResultPaneViewModel : ToolPanelViewModelBase
 {
     private ResultGridModel? _model;
+    private SqlStatement? _statement;
     private string _statusText = string.Empty;
     private bool _isFindVisible;
     private string _findText = string.Empty;
     private string _findMessage = string.Empty;
     private GridEditSession? _editSession;
     private string? _editHint;
+    private string? _selectionSummary;
+    private SelectionScope? _summaryScope;
+    private long? _totalRows;
+    private string? _countMessage;
+    private bool _isCountingRows;
+    private int _countGeneration;
+    private Action? _cancelCount;
 
     public string StatusText
     {
@@ -47,11 +56,58 @@ public sealed class SqlResultPaneViewModel : ToolPanelViewModelBase
     public ResultGridModel? Model
     {
         get => _model;
-        private set => SetProperty(ref _model, value);
+        private set
+        {
+            if (SetProperty(ref _model, value))
+            {
+                OnPropertyChanged(nameof(CanCountRows));
+            }
+        }
     }
 
+    /// <summary>
+    /// 여러 칸을 고르면 개수·합계·평균·최소·최대(가져온 행만, <see cref="SelectionAggregate"/>). 한 칸 이하면 null.
+    /// 상태 줄 오른쪽에 보이고, 누르면 이 글을 복사한다.
+    /// </summary>
+    public string? SelectionSummary
+    {
+        get => _selectionSummary;
+        private set
+        {
+            if (SetProperty(ref _selectionSummary, value))
+            {
+                OnPropertyChanged(nameof(HasSelectionSummary));
+            }
+        }
+    }
+
+    public bool HasSelectionSummary => _selectionSummary is not null;
+
+    /// <summary>「전체 행 수 세기」를 할 수 있다: 질의 문장이 만든 결과이고 오류가 없다(PL/SQL 의 REF CURSOR 결과는 아니다).</summary>
+    public bool CanCountRows => Statement is { Kind: StatementKind.Query } && _model is { HasResult: true, Error: null };
+
+    /// <summary>전체 행 수를 세는 중(상태 줄에 취소 단추를 보인다).</summary>
+    public bool IsCountingRows
+    {
+        get => _isCountingRows;
+        private set => SetProperty(ref _isCountingRows, value);
+    }
+
+    /// <summary>「전체 행 수 세기」로 센 전체 행 수. 세지 않았으면 null.</summary>
+    public long? CountedRowCount => _totalRows;
+
     /// <summary>이 결과를 만든 문장(「편집 모드로 다시 실행」이 같은 문장을 다시 실행한다). 모르면 null(편집기 커서 문장).</summary>
-    public SqlStatement? Statement { get; set; }
+    public SqlStatement? Statement
+    {
+        get => _statement;
+        set
+        {
+            if (SetProperty(ref _statement, value))
+            {
+                OnPropertyChanged(nameof(CanCountRows));
+            }
+        }
+    }
 
     /// <summary>편집 모드(F9)로 열려 고칠 수 있는 결과. 결과 위에 편집 툴바를 보인다.</summary>
     public bool IsEditMode => _editSession is { CanEdit: true };
@@ -112,6 +168,7 @@ public sealed class SqlResultPaneViewModel : ToolPanelViewModelBase
         m.Changed += OnModelChanged;
         m.FindRequested += OnFindRequested;
         m.CloseRequested += OnCloseRequested;
+        m.CountRowsRequested += OnCountRowsRequested;
         Model = m;
         UpdateStatus();
     }
@@ -162,7 +219,69 @@ public sealed class SqlResultPaneViewModel : ToolPanelViewModelBase
         Detach();
         Model = null;
         StatusText = string.Empty;
+        SelectionSummary = null;
     }
+
+    /// <summary>
+    /// 「전체 행 수 세기」(<c>oranda.grid.countRows</c>): 이 결과를 만든 질의의 전체 행 수를 세어 상태 줄에 「가져온 N행 / 전체 M행」으로 보인다.
+    /// 실패·취소도 상태 줄에 보이고 밖으로 던지지 않는다. 세는 사이 결과가 바뀌면 그 값은 버린다.
+    /// </summary>
+    public async Task CountAllRowsAsync(CancellationToken ct = default)
+    {
+        if (_isCountingRows || !CanCountRows || Statement is not { } stmt)
+        {
+            return;
+        }
+
+        if (ResultGridCommands.CountRows is not { } count)
+        {
+            _countMessage = "전체 행 수를 셀 수 없습니다(실행 엔진이 연결되지 않았습니다).";
+            UpdateStatus();
+            return;
+        }
+
+        var generation = ++_countGeneration;
+        using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        _cancelCount = cts.Cancel;
+        _totalRows = null;
+        _countMessage = "전체 행 수 세는 중…";
+        IsCountingRows = true;
+        UpdateStatus();
+
+        long? total = null;
+        string? message;
+        try
+        {
+            total = await count(stmt, cts.Token).ConfigureAwait(true);
+            message = total is null ? "전체 행 수를 읽지 못했습니다." : null;
+        }
+        catch (OperationCanceledException)
+        {
+            message = "전체 행 수 세기를 취소했습니다.";
+        }
+        catch (Exception e)
+        {
+            message = "전체 행 수를 세지 못했습니다: " + e.Message.ReplaceLineEndings(" ");
+        }
+
+        if (generation != _countGeneration)
+        {
+            return; // 그새 결과가 바뀌었다(Detach 가 상태를 이미 비웠다)
+        }
+
+        _cancelCount = null;
+        _totalRows = total;
+        _countMessage = message;
+        IsCountingRows = false;
+        UpdateStatus();
+    }
+
+    /// <summary>세는 중인 「전체 행 수 세기」를 취소한다(서버 중단은 실행 엔진 몫).</summary>
+    public void CancelCountRows() => _cancelCount?.Invoke();
+
+    /// <summary>상태 줄의 선택 집계 글을 클립보드에 쓴다(그리드의 복사와 같은 창구).</summary>
+    public Task CopySelectionSummaryAsync() =>
+        _selectionSummary is { } text && _model?.ClipboardWriter is { } write ? write(text) : Task.CompletedTask;
 
     public async Task FindNextAsync()
     {
@@ -195,6 +314,8 @@ public sealed class SqlResultPaneViewModel : ToolPanelViewModelBase
     private void Detach()
     {
         DetachEditSession();
+        ResetCount();
+        _summaryScope = null;
         if (_model is null)
         {
             return;
@@ -203,6 +324,7 @@ public sealed class SqlResultPaneViewModel : ToolPanelViewModelBase
         _model.Changed -= OnModelChanged;
         _model.FindRequested -= OnFindRequested;
         _model.CloseRequested -= OnCloseRequested;
+        _model.CountRowsRequested -= OnCountRowsRequested;
         if (ReferenceEquals(ResultGridCommands.Active, _model))
         {
             ResultGridCommands.Active = null;
@@ -218,25 +340,74 @@ public sealed class SqlResultPaneViewModel : ToolPanelViewModelBase
 
     private void OnCloseRequested(object? sender, EventArgs e) => CloseRequested?.Invoke(this, EventArgs.Empty);
 
+    private void OnCountRowsRequested(object? sender, EventArgs e) => _ = CountAllRowsAsync();
+
+    /// <summary>결과를 바꾸거나 닫을 때: 세는 중이면 취소하고 센 값·안내를 비운다.</summary>
+    private void ResetCount()
+    {
+        _countGeneration++;
+        _cancelCount?.Invoke();
+        _cancelCount = null;
+        _totalRows = null;
+        _countMessage = null;
+        IsCountingRows = false;
+    }
+
     private void UpdateStatus()
     {
         if (_model is null)
         {
             StatusText = string.Empty;
+            SelectionSummary = null;
             return;
         }
 
         if (_model.Error is { } err)
         {
             StatusText = "오류: " + err.Message;
+            SelectionSummary = null;
+            OnPropertyChanged(nameof(CanCountRows));
             return;
         }
 
-        var loaded = _model.LoadedRowCount.ToString("N0", System.Globalization.CultureInfo.CurrentCulture);
-        StatusText = _model.HasMoreRows ? $"{loaded} 행 (더 있음)" : $"{loaded} 행";
+        var culture = CultureInfo.CurrentCulture;
+        var loaded = _model.LoadedRowCount.ToString("N0", culture);
+        var text = _totalRows is { } total
+            ? $"가져온 {loaded}행 / 전체 {total.ToString("N0", culture)}행"
+            : _model.HasMoreRows ? $"{loaded} 행 (더 있음)" : $"{loaded} 행";
         if (_model.EditOverlay?.ExtraRows is > 0 and var added)
         {
-            StatusText += $" · 새 행 {added}"; // 편집 모드에서 아직 반영하지 않은 새 행
+            text += $" · 새 행 {added}"; // 편집 모드에서 아직 반영하지 않은 새 행
         }
+
+        if (_countMessage is { } message)
+        {
+            text += " · " + message;
+        }
+
+        StatusText = text;
+        UpdateSelectionSummary(_model);
+    }
+
+    /// <summary>
+    /// 선택 집계를 다시 센다. 칸 범위·열·정렬이 그대로면 건너뛴다(페이지가 올 때마다 Changed 가 오므로).
+    /// 편집 모드에서는 값이 바뀌어도 범위가 같을 수 있어 매번 센다.
+    /// </summary>
+    private void UpdateSelectionSummary(ResultGridModel m)
+    {
+        if (SelectionAggregate.ScopeOf(m) is not { } scope)
+        {
+            _summaryScope = null;
+            SelectionSummary = null;
+            return;
+        }
+
+        if (m.EditOverlay is null && _summaryScope == scope)
+        {
+            return;
+        }
+
+        _summaryScope = scope;
+        SelectionSummary = SelectionAggregate.Compute(m)?.ToText(CultureInfo.CurrentCulture);
     }
 }

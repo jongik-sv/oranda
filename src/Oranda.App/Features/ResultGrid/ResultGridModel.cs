@@ -697,9 +697,14 @@ public sealed class ResultGridModel : IAsyncDisposable
     /// <summary>「결과 탭 닫기」 명령이 이 결과를 닫아 달라고 알린다(탭 묶음은 편집기 문서 쪽).</summary>
     public event EventHandler? CloseRequested;
 
+    /// <summary>「전체 행 수 세기」 명령이 이 결과를 만든 질의의 전체 행 수를 세어 달라고 알린다(문장은 결과 영역이 안다).</summary>
+    public event EventHandler? CountRowsRequested;
+
     public void RequestFind() => FindRequested?.Invoke(this, EventArgs.Empty);
 
     public void RequestClose() => CloseRequested?.Invoke(this, EventArgs.Empty);
+
+    public void RequestCountRows() => CountRowsRequested?.Invoke(this, EventArgs.Empty);
 
     private void RaiseChanged()
     {

@@ -53,6 +53,14 @@ public partial class SqlResultPaneView : UserControl
         EditHintClose.Click += (_, _) => Vm?.HideEditHint();
         EditHintRerun.Click += async (_, _) => await RunEditHintActionAsync();
         EditHintRowId.Click += async (_, _) => await RunEditHintActionAsync();
+        CountCancelButton.Click += (_, _) => Vm?.CancelCountRows();
+        SelectionSummaryText.Tapped += async (_, _) =>
+        {
+            if (Vm is { } vm)
+            {
+                await vm.CopySelectionSummaryAsync();
+            }
+        };
 
         // 편집 툴바 단추: Tag 의 명령을 실행한다(오른쪽 클릭 메뉴와 같은 명령, 포커스는 그리드에 둔다).
         AddHandler(Button.ClickEvent, async (_, e) =>
@@ -274,6 +282,7 @@ public partial class SqlResultPaneView : UserControl
 
         keys.Set("gridHasResult", m.HasResult);
         keys.Set("gridHasSelection", m.HasSelection);
+        keys.Set("gridQueryResult", Vm?.CanCountRows ?? false); // 「전체 행 수 세기」: 질의 문장이 만든 결과
 
         // 편집 모드 키(commands.md: 행 추가·반영 등의 활성 조건). 이 그리드의 세션을 편집 명령의 대상으로 둔다.
         var es = Oranda.App.Features.GridEdit.GridEditBinding.Of(m);

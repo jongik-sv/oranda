@@ -1,3 +1,4 @@
+using Oranda.Core.Execution;
 using Oranda.Core.Grid;
 using Oranda.Core.Shell;
 
@@ -10,6 +11,13 @@ public static class ResultGridCommands
 {
     /// <summary>포커스가 있는 결과 그리드. 그리드 컨트롤이 포커스를 받을 때 채운다.</summary>
     public static ResultGridModel? Active { get; set; }
+
+    /// <summary>
+    /// 「전체 행 수 세기」(<c>oranda.grid.countRows</c>): 결과를 만든 질의를 <c>SELECT COUNT(*) FROM (…)</c> 로 감싸 같은 바인드로 실행하고
+    /// 행 수를 돌려준다(못 읽으면 null). 실패는 이유를 담은 예외, 취소는 <see cref="OperationCanceledException"/>.
+    /// 실행 화면(<c>ExecutionCommands.Install</c>)이 채운다. 비어 있으면 셀 수 없다고 안내한다.
+    /// </summary>
+    public static Func<SqlStatement, CancellationToken, Task<long?>>? CountRows { get; set; }
 }
 
 /// <summary>결과 영역 명령 처리기. 활성 그리드가 없으면 아무것도 하지 않는다.</summary>
@@ -26,6 +34,8 @@ public static class ResultGridCommands
 [OrandaCommand("oranda.grid.showAllColumns", CommandCategory.Result, When = "gridFocus", Enablement = "gridHasResult", Placements = ["context:grid/columns@30"])]
 [OrandaCommand("oranda.grid.toggleRepeatHide", CommandCategory.Result, When = "gridFocus", Enablement = "gridHasResult")]
 [OrandaCommand("oranda.grid.closeResultTab", CommandCategory.Result, When = "gridFocus", Enablement = "gridHasResult")]
+[OrandaCommand("oranda.grid.countRows", CommandCategory.Result, When = "gridFocus", Enablement = "gridQueryResult && hasSession && !sessionBusy",
+    Placements = ["context:grid/rows@10"])]
 public sealed class ResultGridCommandHandler : ICommandHandler
 {
     public async Task ExecuteAsync(CommandContext context, CancellationToken cancellationToken)
@@ -77,6 +87,9 @@ public sealed class ResultGridCommandHandler : ICommandHandler
                 break;
             case "oranda.grid.closeResultTab":
                 g.RequestClose();
+                break;
+            case "oranda.grid.countRows":
+                g.RequestCountRows(); // 결과 영역이 문장을 알고 세는 동안 상태 줄에 보인다(실패도 상태 줄에, 명령 밖으로 던지지 않는다)
                 break;
             default:
                 break;

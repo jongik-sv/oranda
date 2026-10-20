@@ -60,7 +60,17 @@
       <ScrollBar x:Name="HBar" Grid.Row="1" Grid.Column="0" Orientation="Horizontal" AllowAutoHide="False" />
     </Grid>
     <Border Grid.Row="4" Classes="panel-status">
-      <TextBlock Text="{Binding StatusText}" />
+      <DockPanel>
+        <!-- 여러 칸을 고르면 개수·합계·평균·최소·최대(가져온 행만). 누르면 이 글을 복사한다. -->
+        <TextBlock x:Name="SelectionSummaryText" DockPanel.Dock="Right" Margin="12,0,0,0" VerticalAlignment="Center"
+                   Cursor="Hand" Background="Transparent" Text="{Binding SelectionSummary}"
+                   IsVisible="{Binding HasSelectionSummary}" ToolTip.Tip="눌러서 집계 복사" />
+        <TextBlock DockPanel.Dock="Left" Text="{Binding StatusText}" VerticalAlignment="Center" />
+        <!-- 전체 행 수를 세는 동안(oranda.grid.countRows)만 보이는 취소 단추. -->
+        <Button x:Name="CountCancelButton" DockPanel.Dock="Left" Classes="tool" Padding="4,0" Margin="6,0,0,0" Focusable="False"
+                Content="행 수 세기 취소" IsVisible="{Binding IsCountingRows}" icons:ButtonIcon.Key="cancel" />
+        <Panel />
+      </DockPanel>
     </Border>
   </Grid>
 </UserControl>
