@@ -412,6 +412,7 @@ public sealed class LobRowViewTests : IDisposable
     {
         var grid = await LoadGridAsync(DocColumns(), [[1m, null], [2m, new LobValue(LobKind.Clob, 3) { TextPreview = "abc" }]]);
         grid.SelectCell(new GridCell(1, 0));
+        await Task.Delay(100); // 그리드 Changed 는 다른 스레드로 게시된다: 창을 붙이기 전에 밀린 알림을 비운다
         ResultGridCommands.Active = grid;
         string? shown = null;
         using var vm = new RowViewerViewModel();
@@ -427,7 +428,7 @@ public sealed class LobRowViewTests : IDisposable
         Assert.Equal("abc", vm.Fields[1].Text);
 
         grid.SelectCell(new GridCell(0, 0));
-        for (var i = 0; i < 100 && vm.Row != 0; i++)
+        for (var i = 0; i < 100 && (vm.Row != 0 || vm.Fields.Count != 2 || !vm.Fields[1].IsNull); i++)
         {
             await Task.Delay(20); // 그리드 Changed 는 UI 문맥으로 게시된다
         }
@@ -437,7 +438,7 @@ public sealed class LobRowViewTests : IDisposable
 
         vm.MoveRow(1);
         Assert.Equal(1, grid.Active.Row);
-        for (var i = 0; i < 100 && vm.Row != 1; i++)
+        for (var i = 0; i < 100 && (vm.Row != 1 || vm.Fields.Count != 2 || vm.Fields[1].IsNull); i++)
         {
             await Task.Delay(20);
         }
