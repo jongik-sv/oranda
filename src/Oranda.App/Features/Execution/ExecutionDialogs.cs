@@ -12,6 +12,18 @@ public enum UncommittedChoice
     Cancel,
 }
 
+/// <summary>접속 안 됨 탭을 실행할 때의 선택(CONN-06).</summary>
+public enum MissingConnectionChoice
+{
+    /// <summary>탭에 묶인 접속으로 다시 접속한다.</summary>
+    Reconnect,
+
+    /// <summary>탭을 지금 접속으로 옮긴다.</summary>
+    UseCurrent,
+
+    Cancel,
+}
+
 /// <summary>실행 확인 대화상자에 필요한 것. 접속은 머리 띠(접속 이름·사용자·서비스)에 크게 보인다.</summary>
 public sealed record ConfirmRequest(SqlStatement Statement, PolicyDecision Decision, ConnectionProfile? Profile);
 
@@ -34,6 +46,20 @@ public interface IExecutionDialogs
 
     /// <summary>전용 세션 탭(D-017)의 미커밋 확인. <paramref name="subject"/> = 탭 이름. 기본은 탭 이름 없이 묻는다.</summary>
     Task<UncommittedChoice> AskUncommittedAsync(string subject, CancellationToken ct) => AskUncommittedAsync(ct);
+
+    /// <summary>
+    /// 접속 하나의 미커밋 확인(접속 끊기·앱 종료 때 접속마다, CONN-06). <paramref name="connection"/> = 「번호 - 사용자@이름」.
+    /// 기본은 접속 이름 없이 묻는다.
+    /// </summary>
+    Task<UncommittedChoice> AskConnectionUncommittedAsync(string connection, CancellationToken ct) => AskUncommittedAsync(ct);
+
+    /// <summary>
+    /// 탭에 묶인 접속이 열려 있지 않은데 실행하려 한다(CONN-06): 다시 접속 / 지금 접속(<paramref name="current"/>)으로 바꾸기 / 취소.
+    /// <paramref name="profile"/> = 탭에 묶인 접속 이름, <paramref name="current"/> = 지금 접속 이름(없으면 null, 그 단추를 감춘다).
+    /// 기본은 취소(실행하지 않는다).
+    /// </summary>
+    Task<MissingConnectionChoice> AskMissingConnectionAsync(string profile, string? current, CancellationToken ct) =>
+        Task.FromResult(MissingConnectionChoice.Cancel);
 
     /// <summary>DML 미리보기(그리드 반영 전, GRID-05). true = 반영.</summary>
     Task<bool> PreviewDmlAsync(string text, CancellationToken ct);

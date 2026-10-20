@@ -146,14 +146,7 @@ public sealed class NavigationService
             return SessionProvider(tab);
         }
 
-        var sessions = (_services?.GetService(typeof(ISessionManager)) as ISessionManager)?.Sessions;
-        if (sessions is null)
-        {
-            return null;
-        }
-
-        var work = sessions.Where(s => s.Purpose == SessionPurpose.Work && s.State != SessionState.Closed).ToList();
-        return work.LastOrDefault(s => tab.ConnectionProfileId is { } id && s.Profile.Id == id) ?? work.LastOrDefault();
+        return ConnectionManager.SessionRouter.ForTab(_services, tab);
     }
 
     private SymbolReference? SymbolAt(string text, int offset)

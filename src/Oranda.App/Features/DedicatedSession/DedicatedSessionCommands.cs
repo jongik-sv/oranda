@@ -91,7 +91,9 @@ public static class DedicatedSessionCommands
                 return result;
             }
 
-            var ok = !ExecutionState.For(container.GetService<IEventBus>()).TxnPending
+            // 공유 작업 세션은 열린 접속마다 묻는다(CONN-06).
+            var state = ExecutionState.For(container.GetService<IEventBus>());
+            var ok = (!state.TxnPending && state.PendingWorkSessions.Count == 0)
                 || await ExecutionCommands.Resolve(container).ConfirmCloseAsync(ct).ConfigureAwait(true);
             result = ok ? ExitConfirmResult.Proceed : ExitConfirmResult.Cancelled;
             return result;
@@ -121,13 +123,14 @@ public static class DedicatedSessionCommands
     }
 
     /// <summary>
-    /// 지금 작업 세션과 같은 접속으로 전용 세션(<see cref="SessionPurpose.Dedicated"/>)을 연다. 비밀번호는 안전 저장소에서 꺼내고,
+    /// 활성 SQL 탭의 접속(<see cref="SessionRouter.SessionFor"/>)과 같은 접속으로 전용 세션(<see cref="SessionPurpose.Dedicated"/>)을 연다. 비밀번호는 안전 저장소에서 꺼내고,
     /// 없으면 묻는다(<c>SessionMonitorCommands.OpenMonitorSessionAsync</c> 와 같은 순서). 작업 세션이 없거나 사용자가 취소하면 null.
     /// </summary>
     public static async Task<ISession?> OpenSessionAsync(ServiceContainer container, CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(container);
-        if (ConnectionManagerCommands.Resolve(container).ActiveSession is not { } work)
+        // 활성 SQL 탭의 접속(전용 세션 탭이면 그 접속)을 복제한다. 탭이 없으면 지금 접속.
+        if (SessionRouter.Resolve(container).SessionFor(SqlEditorHost.Current.Active) is not { } work)
         {
             return null;
         }

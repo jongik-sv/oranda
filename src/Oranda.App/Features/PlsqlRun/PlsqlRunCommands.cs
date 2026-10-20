@@ -126,7 +126,10 @@ public static class PlsqlRunCommands
         state.UseKeys(container.GetService<ContextKeyService>());
         return new PlsqlRunDeps
         {
-            Session = () => ConnectionManagerCommands.Resolve(container).ActiveSession,
+            // 활성 문서가 PL/SQL 편집기면 그 편집기의 세션(연 접속), 아니면(스키마 브라우저에서 실행) 지금 접속.
+            Session = () => container.GetService<IShellUi>() is ShellController { Docking.ActiveDocument.Panel: PlsqlEditor.PlsqlEditorViewModel { Session: { } own } }
+                ? own
+                : SessionRouter.CurrentOf(container),
             Metadata = () => container.GetService<IMetadataProvider>(),
             Execution = () =>
             {

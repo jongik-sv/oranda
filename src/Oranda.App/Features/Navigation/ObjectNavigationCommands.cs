@@ -316,18 +316,11 @@ public sealed class ObjectNavigationCommandHandler : ICommandHandler
             return SessionProvider();
         }
 
-        var sessions = Get<ISessionManager>()?.Sessions;
-        if (sessions is null)
-        {
-            return null;
-        }
-
-        var work = sessions.Where(s => s.Purpose == SessionPurpose.Work && s.State != SessionState.Closed).ToList();
         var profileId = EditorContext?.GetActiveDocument()?.ConnectionProfileId;
         var browser = Get<IShellUi>() is { } shell ? FindBrowser(shell) : null;
-        return (profileId is { } id ? work.LastOrDefault(s => s.Profile.Id == id) : null)
+        return (profileId is { } id ? ConnectionManager.SessionRouter.ForProfile(_services, id) : null)
             ?? (browser?.CurrentSession is { State: not SessionState.Closed } shown ? shown : null)
-            ?? work.LastOrDefault();
+            ?? ConnectionManager.SessionRouter.CurrentOf(_services);
     }
 
     private T? Get<T>()

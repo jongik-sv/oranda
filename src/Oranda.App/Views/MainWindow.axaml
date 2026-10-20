@@ -35,6 +35,8 @@
           </Button>
           <Button x:Name="OverflowButton" DockPanel.Dock="Right" Classes="toolbar toolbar-text" Content="…" IsVisible="False"
                   AutomationProperties.Name="더 보기" />
+          <!-- 접속 콤보(ui-shell.md 1장): 맨 왼쪽, 활성 문서의 접속. 내용은 Attach 가 넣는다. -->
+          <ContentControl x:Name="ConnectionComboHost" DockPanel.Dock="Left" VerticalAlignment="Center" />
           <StackPanel x:Name="ToolbarPanel" Orientation="Horizontal" Spacing="1" />
         </DockPanel>
       </Border>

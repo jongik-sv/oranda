@@ -17,6 +17,7 @@ namespace Oranda.App.Features.ConnectionManager;
 /// <summary>
 /// 상태 표시줄 1번 구간(ui-shell.md 1.2): 환경 칩 + <c>사용자@접속 이름</c> + 서버 버전(<c>19c</c>·<c>26ai</c>).
 /// Orange 의 세션 콤보처럼 지금 어디에 붙어 있는지 늘 보이게 한다. 누르면 접속 관리자를 연다.
+/// 활성 문서의 접속(<see cref="SessionRouter.ShownSession"/>)을 따른다. 라우터는 접속 서비스와 함께 생기므로 그 전에는
 /// 세션 열림·닫힘 이벤트만 듣는다(Oracle 어셈블리를 깨우지 않는다).
 /// </summary>
 [OrandaStatusBarItem("oranda.status.connection", 1, CollapseRank = 0)]
@@ -24,24 +25,40 @@ public sealed class ConnectionStatusViewModel : ViewModelBase, IStatusBarItem
 {
     private readonly List<SessionOpened> _open = [];
     private readonly ServiceContainer? _container;
+    private readonly Func<SessionRouter?> _router;
+    private SessionRouter? _hooked;
 
-    public ConnectionStatusViewModel(IEventBus? events = null, ServiceContainer? container = null)
+    public ConnectionStatusViewModel(IEventBus? events = null, ServiceContainer? container = null, Func<SessionRouter?>? router = null)
     {
         _container = container;
+        _router = router ?? (() => SessionRouter.Find(container));
         events?.Subscribe<SessionOpened>(this, e => Post(() => Opened(e)));
         events?.Subscribe<SessionClosed>(this, e => Post(() => Closed(e.SessionId)));
     }
 
     public bool IsVisible => true;
 
-    /// <summary>지금 보이는 작업 세션(가장 최근에 연 것). 없으면 null.</summary>
-    public SessionOpened? Current => _open.Count == 0 ? null : _open[^1];
+    /// <summary>
+    /// 보이는 세션: 라우터가 있으면 활성 문서의 접속(접속 안 됨 탭이면 null), 없으면 가장 최근에 연 작업 세션. 없으면 null.
+    /// </summary>
+    public SessionOpened? Current => Hook() is { } router
+        ? router.ShownSession is { } s ? new SessionOpened(s.Id, s.Profile, s.Server, s.Purpose) : null
+        : _open.Count == 0 ? null : _open[^1];
 
     public string Text => Current is { } s
-        ? $"{s.Profile.User}@{s.Profile.Name}  {ShortVersion(s.Server.Version)}".TrimEnd()
-        : "접속 안 됨";
+        ? $"{s.Profile.User}@{s.Profile.Name}  {ShortVersion(s.Server.Version)}".TrimEnd() + (ShownBroken ? " (끊김)" : string.Empty)
+        : _hooked?.ShownMissing is { } missing ? $"접속 안 됨({_hooked.ProfileName(missing) ?? "?"})" : "접속 안 됨";
 
-    public string EnvironmentText => Current?.Profile.Environment switch
+    /// <summary>보이는 접속이 끊겼다(콤보의 「(끊김)」 과 같다).</summary>
+    private bool ShownBroken => _hooked?.ShownSession is { } shown && _hooked.IsBroken(shown);
+
+    public string EnvironmentText => EnvironmentTextOf(Current?.Profile.Environment);
+
+    /// <summary>환경 칩 색 리소스 키(테두리 색과 같다).</summary>
+    public string? EnvironmentBrushKey => EnvironmentBrushKeyOf(Current?.Profile.Environment);
+
+    /// <summary>환경 칩 글(개발·테스트·운영). 환경이 없으면 빈 글.</summary>
+    public static string EnvironmentTextOf(ConnectionEnvironment? environment) => environment switch
     {
         ConnectionEnvironment.Production => "운영",
         ConnectionEnvironment.Test => "테스트",
@@ -49,8 +66,8 @@ public sealed class ConnectionStatusViewModel : ViewModelBase, IStatusBarItem
         _ => string.Empty,
     };
 
-    /// <summary>환경 칩 색 리소스 키(테두리 색과 같다).</summary>
-    public string? EnvironmentBrushKey => Current?.Profile.Environment switch
+    /// <summary>환경 칩 색 리소스 키(창 테두리 색과 같다). 환경이 없으면 null.</summary>
+    public static string? EnvironmentBrushKeyOf(ConnectionEnvironment? environment) => environment switch
     {
         ConnectionEnvironment.Production => "OrandaEnvProductionBrush",
         ConnectionEnvironment.Test => "OrandaEnvTestBrush",
@@ -116,6 +133,19 @@ public sealed class ConnectionStatusViewModel : ViewModelBase, IStatusBarItem
         {
             Changed();
         }
+    }
+
+    /// <summary>라우터가 생겼으면 그 바뀜(탭 전환·콤보 선택)을 듣는다.</summary>
+    private SessionRouter? Hook()
+    {
+        var router = _router();
+        if (router is not null && !ReferenceEquals(router, _hooked))
+        {
+            _hooked = router;
+            router.Changed += (_, _) => Changed();
+        }
+
+        return router;
     }
 
     private void Changed()

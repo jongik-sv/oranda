@@ -79,8 +79,13 @@ public static class ExecutionCommands
                 State = state,
                 Log = ExecutionLog.For(bus),
                 Dialogs = ExecutionDialogs.Current,
-                Session = () => ConnectionManagerCommands.Resolve(container).ActiveSession,
-                TabSession = tab => DedicatedSessionCommands.Resolve(container).SessionOf(tab),
+                Session = () => SessionRouter.Resolve(container).Current,
+                TabSession = tab => SessionRouter.Resolve(container).SessionFor(tab),
+                MissingConnection = tab => SessionRouter.Resolve(container).MissingProfileOf(tab),
+                WorkSessions = () => SessionRouter.Resolve(container).Sessions,
+                ConnectionLabel = s => SessionRouter.Resolve(container).LabelOf(s),
+                ProfileName = id => SessionRouter.Resolve(container).ProfileNameAsync(id),
+                Reconnect = (id, _) => SessionRouter.Resolve(container).ReconnectAsync(id, () => ConnectionManagerCommands.ConnectProfileAsync(container, id)),
                 Execution = () =>
                 {
                     EnsureEngineServices(container, state);
@@ -126,13 +131,13 @@ public static class ExecutionCommands
     }
 
     /// <summary>
-    /// 활성 SQL 탭이 쓰는 세션: 전용 세션 탭(D-017)이면 그 세션, 아니면 공유 작업 세션. 결과 그리드·실행 계획처럼 활성 탭을 따르는 기능이 쓴다.
+    /// 활성 SQL 탭이 쓰는 세션: 전용 세션 탭(D-017)이면 그 세션, 아니면 탭에 묶인 접속(<see cref="SessionRouter.SessionFor"/>, 열려 있지 않으면 null).
+    /// 결과 그리드·실행 계획처럼 활성 탭을 따르는 기능이 쓴다.
     /// </summary>
     public static Oranda.Core.Sessions.ISession? ActiveTabSession(ServiceContainer container)
     {
         ArgumentNullException.ThrowIfNull(container);
-        return DedicatedSessionCommands.Resolve(container).SessionOf(SqlEditorHost.Current.Active)
-            ?? ConnectionManagerCommands.Resolve(container).ActiveSession;
+        return SessionRouter.Resolve(container).SessionFor(SqlEditorHost.Current.Active);
     }
 
     /// <summary>
@@ -234,21 +239,21 @@ public static class ExecutionCommands
 }
 
 /// <summary>실행·취소·커밋·롤백 등 TSK-06-02 소유 명령의 처리기. 한 클래스가 명령 ID 로 나눠 처리한다.</summary>
-[OrandaCommand("oranda.exec.runStatement", CommandCategory.Sql, When = "sqlDocFocus", Enablement = "(hasSession || dedicatedSession) && !sessionBusy",
+[OrandaCommand("oranda.exec.runStatement", CommandCategory.Sql, When = "sqlDocFocus", Enablement = "(hasSession || dedicatedSession || tabConnectionMissing) && !sessionBusy",
     Icon = "run", Placements = ["menu:sql/runStatement@10", "toolbar:main/run@210", "context:editor/runStatement@1000"])]
-[OrandaCommand("oranda.exec.runSubquery", CommandCategory.Sql, When = "sqlDocFocus", Enablement = "(hasSession || dedicatedSession) && !sessionBusy",
+[OrandaCommand("oranda.exec.runSubquery", CommandCategory.Sql, When = "sqlDocFocus", Enablement = "(hasSession || dedicatedSession || tabConnectionMissing) && !sessionBusy",
     Placements = ["menu:sql/runSubquery@11", "context:editor/runSubquery@1005"])]
-[OrandaCommand("oranda.exec.runSelection", CommandCategory.Sql, When = "sqlDocFocus", Enablement = "(hasSession || dedicatedSession) && !sessionBusy && hasSelection",
+[OrandaCommand("oranda.exec.runSelection", CommandCategory.Sql, When = "sqlDocFocus", Enablement = "(hasSession || dedicatedSession || tabConnectionMissing) && !sessionBusy && hasSelection",
     Placements = ["menu:sql/runSelection@12"])]
-[OrandaCommand("oranda.exec.runScript", CommandCategory.Sql, When = "sqlDocFocus", Enablement = "(hasSession || dedicatedSession) && !sessionBusy",
+[OrandaCommand("oranda.exec.runScript", CommandCategory.Sql, When = "sqlDocFocus", Enablement = "(hasSession || dedicatedSession || tabConnectionMissing) && !sessionBusy",
     Icon = "runScript", Placements = ["menu:sql/runScript@14", "toolbar:main/runScript@220", "context:editor/runScript@1010"])]
-[OrandaCommand("oranda.exec.runFromCursor", CommandCategory.Sql, When = "sqlDocFocus", Enablement = "(hasSession || dedicatedSession) && !sessionBusy",
+[OrandaCommand("oranda.exec.runFromCursor", CommandCategory.Sql, When = "sqlDocFocus", Enablement = "(hasSession || dedicatedSession || tabConnectionMissing) && !sessionBusy",
     Placements = ["menu:sql/runFromCursor@16"])]
-[OrandaCommand("oranda.exec.runStep", CommandCategory.Sql, When = "sqlDocFocus", Enablement = "(hasSession || dedicatedSession) && !sessionBusy",
+[OrandaCommand("oranda.exec.runStep", CommandCategory.Sql, When = "sqlDocFocus", Enablement = "(hasSession || dedicatedSession || tabConnectionMissing) && !sessionBusy",
     Placements = ["menu:sql/runStep@18"])]
-[OrandaCommand("oranda.exec.runToNewResultTab", CommandCategory.Sql, When = "sqlDocFocus", Enablement = "(hasSession || dedicatedSession) && !sessionBusy",
+[OrandaCommand("oranda.exec.runToNewResultTab", CommandCategory.Sql, When = "sqlDocFocus", Enablement = "(hasSession || dedicatedSession || tabConnectionMissing) && !sessionBusy",
     Placements = ["menu:sql/runToNewResultTab@20"])]
-[OrandaCommand("oranda.exec.runAllTabs", CommandCategory.Sql, Enablement = "(hasSession || dedicatedSession) && !sessionBusy",
+[OrandaCommand("oranda.exec.runAllTabs", CommandCategory.Sql, Enablement = "(hasSession || dedicatedSession || tabConnectionMissing) && !sessionBusy",
     Placements = ["menu:sql/runAllTabs@22"])]
 [OrandaCommand("oranda.exec.cancel", CommandCategory.Sql, When = "sqlDocFocus", Enablement = "sessionBusy",
     Icon = "cancel", Placements = ["menu:sql/cancel@50", "toolbar:main/cancel@240"])]

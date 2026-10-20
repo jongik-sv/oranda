@@ -38,7 +38,7 @@ public static class GridEditCommands
 /// 두 명령의 대상은 Parameter 가 결과 그리드면 그 그리드, 아니면 활성(포커스) 그리드다.
 /// </summary>
 [OrandaCommand("oranda.exec.runForEdit", CommandCategory.Sql, When = "sqlDocFocus",
-    Enablement = "hasSession && !sessionBusy && !readOnlySession", Placements = ["menu:sql/runForEdit@40"])]
+    Enablement = "(hasSession || tabConnectionMissing) && !sessionBusy && !readOnlySession", Placements = ["menu:sql/runForEdit@40"])]
 [OrandaCommand("oranda.grid.edit.addRow", CommandCategory.Result, When = "gridFocus", Enablement = "gridEditing",
     Placements = ["context:grid/edit@10"])]
 [OrandaCommand("oranda.grid.edit.duplicateRow", CommandCategory.Result, When = "gridFocus", Enablement = "gridHasSelection",

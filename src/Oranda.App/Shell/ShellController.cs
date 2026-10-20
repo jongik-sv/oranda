@@ -67,6 +67,7 @@ public sealed class ShellController : IShellUi
     private readonly List<Func<CancellationToken, Task>> _shutdownHooks = [];
     private CommandPaletteWindow? _palette;
     private ConnectionEnvironment? _activeEnvironment;
+    private bool _productionOpen;
 
     public ShellController(
         ICommandRegistry registry,
@@ -144,6 +145,23 @@ public sealed class ShellController : IShellUi
             if (_activeEnvironment != value)
             {
                 _activeEnvironment = value;
+                EnvironmentChanged?.Invoke(this, EventArgs.Empty);
+            }
+        }
+    }
+
+    /// <summary>
+    /// 운영 접속이 하나라도 열려 있다(창 제목 <c>[운영]</c>, ui-shell.md 4.2). 활성 문서가 운영 접속이 아니어도
+    /// 다른 탭이 운영 접속을 쓸 수 있으므로 제목에 남긴다. 접속 관리자(TSK-03-08)가 접속이 열리고 닫힐 때 갱신한다.
+    /// </summary>
+    public bool ProductionOpen
+    {
+        get => _productionOpen;
+        set
+        {
+            if (_productionOpen != value)
+            {
+                _productionOpen = value;
                 EnvironmentChanged?.Invoke(this, EventArgs.Empty);
             }
         }

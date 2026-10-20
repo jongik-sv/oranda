@@ -45,6 +45,27 @@ public class MainViewModelTests
     }
 
     [Fact]
+    public void Title_keeps_the_production_mark_while_any_production_connection_is_open()
+    {
+        var vm = Create(out var shell, out var services);
+        using (services)
+        {
+            var changed = new List<string?>();
+            vm.PropertyChanged += (_, e) => changed.Add(e.PropertyName);
+            shell.ActiveEnvironment = ConnectionEnvironment.Development;
+            changed.Clear();
+
+            shell.ProductionOpen = true;
+            Assert.Equal("Oranda [운영]", vm.Title);
+            Assert.Equal("env-development", vm.EnvironmentClass); // 테두리는 활성 문서의 접속 그대로
+            Assert.Contains(nameof(MainViewModel.Title), changed);
+
+            shell.ProductionOpen = false;
+            Assert.Equal("Oranda", vm.Title);
+        }
+    }
+
+    [Fact]
     public void Status_bar_entry_collapses_without_hiding_the_item_itself()
     {
         var entry = new StatusBarEntry(new StatusBarItemDefinition("oranda.status.t", 1, 3, typeof(Item)), new Item());

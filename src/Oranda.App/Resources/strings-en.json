@@ -26,6 +26,8 @@
   "Execution.exitConfirmFailed.title": "Exit",
   "Execution.status.dedicated": "Dedicated session",
   "Execution.uncommitted.dedicated": "The dedicated session of tab “{0}” has uncommitted changes. What do you want to do?",
+  "Execution.uncommitted.connection": "Connection “{0}” has uncommitted changes. What do you want to do?",
+  "Execution.missing.message": "The connection “{0}” of this tab is not open. What do you want to do?",
   "Menu.app.hide": "Hide {0}",
   "Menu.app.hideOthers": "Hide Others",
   "Menu.app.quit": "Quit {0}",

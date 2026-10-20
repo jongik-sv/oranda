@@ -57,6 +57,11 @@ public sealed class DedicatedSessionRegistry
     /// <summary>실행 상태가 보여 줄 세션을 활성 탭·활성 문서에 다시 맞춘다.</summary>
     public void Refocus() => SyncFocus();
 
+    /// <summary>
+    /// 보이는 세션 맞추기를 대신할 곳(<see cref="ConnectionManager.SessionRouter.Refocus"/>: 탭에 묶인 접속까지 본다). 없으면 전용 세션만 본다.
+    /// </summary>
+    public Action? FocusSync { get; set; }
+
     /// <summary>탭 중 하나라도 전용 세션 탭이면 true(문서 탭 × 를 가로챌지 정할 때).</summary>
     public bool HasAny(IEnumerable<SqlEditorViewModel> tabs) => tabs.Any(_byTab.ContainsKey);
 
@@ -283,7 +288,17 @@ public sealed class DedicatedSessionRegistry
         }
     }
 
-    private void SyncFocus() => _state.Focus(SqlDocumentActive?.Invoke() is false ? null : SessionOf(_host.Active)?.Id);
+    private void SyncFocus()
+    {
+        if (FocusSync is { } sync)
+        {
+            sync();
+        }
+        else
+        {
+            _state.Focus(SqlDocumentActive?.Invoke() is false ? null : SessionOf(_host.Active)?.Id);
+        }
+    }
 
     private static void Post(Action action)
     {

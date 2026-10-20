@@ -515,9 +515,21 @@ public class MonitorAccessTests
 
         public bool IsBroken => false;
 
+        public IReadOnlyList<ISession> Sessions => Active is null ? [] : [Active];
+
 #pragma warning disable CS0067 // 시험에서 쓰지 않는 이벤트
         public event EventHandler? ActiveSessionChanged;
+
+        public event EventHandler<ISession>? Connected;
 #pragma warning restore CS0067
+
+        public ISession? SessionOf(Guid profileId) => Active?.Profile.Id == profileId ? Active : null;
+
+        public bool IsSessionBroken(Guid sessionId) => false;
+
+        public bool Switch(ISession session) => ReferenceEquals(session, Active);
+
+        public Task DisconnectAsync(ISession session, CancellationToken ct) => throw new NotSupportedException();
 
         public Task<StoredDocument<ConnectionsDocument>> LoadAsync(CancellationToken ct) =>
             Task.FromResult(new StoredDocument<ConnectionsDocument>(new ConnectionsDocument { Profiles = Profiles }));

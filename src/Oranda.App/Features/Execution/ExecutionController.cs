@@ -50,8 +50,23 @@ public sealed class ExecutionDeps
     /// <summary>공유 작업 세션(접속 관리자의 활성 세션). 전용 세션 탭은 <see cref="TabSession"/> 이 먼저다.</summary>
     public required Func<ISession?> Session { get; init; }
 
-    /// <summary>탭의 전용 세션(D-017). 없으면 null → 공유 작업 세션을 쓴다.</summary>
+    /// <summary>탭의 세션(전용 세션 D-017·탭에 묶인 접속 CONN-06). null 이고 <see cref="MissingConnection"/> 도 null 이면 공유 작업 세션을 쓴다.</summary>
     public Func<SqlEditorViewModel, ISession?> TabSession { get; init; } = _ => null;
+
+    /// <summary>탭에 묶인 접속이 열려 있지 않으면 그 프로필 ID(접속 안 됨: 공유 작업 세션으로 대신하지 않는다).</summary>
+    public Func<SqlEditorViewModel, Guid?> MissingConnection { get; init; } = _ => null;
+
+    /// <summary>열린 작업 세션(접속, 연 순서). 앱 종료 미커밋 확인이 접속마다 묻는다. null 이면 <see cref="Session"/> 하나.</summary>
+    public Func<IReadOnlyList<ISession>>? WorkSessions { get; init; }
+
+    /// <summary>대화상자에 보일 접속 이름(「번호 - 사용자@이름」).</summary>
+    public Func<ISession, string> ConnectionLabel { get; init; } = s => $"{s.Profile.User}@{s.Profile.Name}";
+
+    /// <summary>프로필 이름(접속 안 됨 탭 묻기, 저장된 프로필을 아직 안 읽었으면 읽는다). 모르면 null.</summary>
+    public Func<Guid, Task<string?>> ProfileName { get; init; } = _ => Task.FromResult<string?>(null);
+
+    /// <summary>프로필로 다시 접속한다(비밀번호를 물을 수 있다). 연 세션, 못 열었거나 사용자가 취소하면 null.</summary>
+    public Func<Guid, CancellationToken, Task<ISession?>> Reconnect { get; init; } = (_, _) => Task.FromResult<ISession?>(null);
 
     public required Func<IExecutionService> Execution { get; init; }
 
@@ -106,8 +121,12 @@ public sealed class ExecutionController : IDisposable
 
     private SqlEditorHost Host => _d.Host();
 
-    /// <summary>탭이 쓰는 세션: 전용 세션이 있으면 그것, 없으면 공유 작업 세션. 탭이 null 이면 공유 작업 세션.</summary>
-    public ISession? SessionFor(SqlEditorViewModel? tab) => (tab is null ? null : _d.TabSession(tab)) ?? _d.Session();
+    /// <summary>
+    /// 탭이 쓰는 세션: 탭의 세션(전용 세션·묶인 접속)이 있으면 그것, 없으면 공유 작업 세션. 묶인 접속이 열려 있지 않은 탭은 null(접속 안 됨).
+    /// 탭이 null 이면 공유 작업 세션.
+    /// </summary>
+    public ISession? SessionFor(SqlEditorViewModel? tab) =>
+        tab is null ? _d.Session() : _d.TabSession(tab) ?? (_d.MissingConnection(tab) is null ? _d.Session() : null);
 
     /// <summary>
     /// 지금 실행 중인 문장의 세션 프로필(실행 흐름마다). 실행 확인 대화상자의 머리 띠가 활성 탭이 아니라 실행하는 세션의 접속을 보이게 한다.
@@ -120,8 +139,17 @@ public sealed class ExecutionController : IDisposable
     /// 상태 표시줄이 보여 주는 세션(<see cref="ExecutionState.FocusedDedicated"/>)과 같은 세션: SQL 작업 공간이 아닌 문서가 활성이면
     /// 활성 SQL 탭이 전용 세션 탭이어도 공유 작업 세션이다. 탭을 고르지 않는 커밋·롤백·취소 명령이 쓴다.
     /// </summary>
-    private ISession? FocusedSession() =>
-        SessionFor(Host.Active) is { } s && (!State.IsDedicated(s.Id) || State.FocusedDedicated == s.Id) ? s : _d.Session();
+    private ISession? FocusedSession()
+    {
+        if (State.FocusedNothing)
+        {
+            return null; // 활성 SQL 탭의 접속이 닫혔다: 다른 접속을 커밋하지 않는다
+        }
+
+        // 보이는 세션이 활성 탭의 세션일 때만 그것(SQL 작업 공간이 아닌 문서가 활성이면 보이는 세션은 지금 접속이다).
+        var tab = SessionFor(Host.Active);
+        return tab is not null && State.FocusedSessionId == tab.Id ? tab : _d.Session();
+    }
 
     // ---- 실행 ------------------------------------------------------------------------------
 
@@ -129,7 +157,7 @@ public sealed class ExecutionController : IDisposable
     public async Task<bool> RunAsync(RunMode mode, bool newResultTab = false, SqlEditorViewModel? tab = null, CancellationToken ct = default)
     {
         tab ??= Host.Active;
-        if (tab is null || IsBusy(SessionFor(tab)))
+        if (tab is null || !await EnsureConnectionAsync(tab, ct).ConfigureAwait(true) || IsBusy(SessionFor(tab)))
         {
             return false;
         }
@@ -170,6 +198,11 @@ public sealed class ExecutionController : IDisposable
                 }
 
                 Host.Active = tab;
+                if (!await EnsureConnectionAsync(tab, ct).ConfigureAwait(true))
+                {
+                    break; // 접속 안 됨 탭에서 취소했다: 남은 탭도 돌리지 않는다
+                }
+
                 var id = SessionFor(tab)?.Id ?? Guid.Empty;
                 _lastCancelled.Remove(id);
                 await RunAsync(RunMode.Script, newResultTab: false, tab, ct).ConfigureAwait(true);
@@ -205,6 +238,61 @@ public sealed class ExecutionController : IDisposable
 
     private bool IsBusy(ISession? session) => session is null ? State.Busy : State.IsBusy(session.Id);
 
+    private ISession? Usable(ISession? session) =>
+        session is null || session.State is SessionState.Broken or SessionState.Closed || State.IsBroken(session.Id) ? null : session;
+
+    /// <summary>
+    /// 탭에 묶인 접속이 열려 있지 않으면 묻는다(CONN-06): 다시 접속 / 지금 접속으로 바꾸기 / 취소. 다른 접속으로 몰래 실행하지 않는다.
+    /// true = 이제 탭에 접속이 있다(묶인 접속이 열려 있거나 묶이지 않았다).
+    /// </summary>
+    public async Task<bool> EnsureConnectionAsync(SqlEditorViewModel tab, CancellationToken ct = default)
+    {
+        ArgumentNullException.ThrowIfNull(tab);
+        if (_d.MissingConnection(tab) is not { } profileId)
+        {
+            return true;
+        }
+
+        var name = await _d.ProfileName(profileId).ConfigureAwait(true) ?? "?";
+        var current = Usable(_d.Session()); // 끊긴 지금 접속으로는 옮기지 않는다
+        var choice = await _d.Dialogs.AskMissingConnectionAsync(name, current is null ? null : _d.ConnectionLabel(current), ct).ConfigureAwait(true);
+        switch (choice)
+        {
+            case MissingConnectionChoice.Reconnect:
+                if (await _d.Reconnect(profileId, ct).ConfigureAwait(true) is null)
+                {
+                    Log.AddMessage(MessageKind.Warning, $"「{name}」 에 다시 접속하지 않았습니다.");
+                    return false;
+                }
+
+                break;
+            case MissingConnectionChoice.UseCurrent when current is not null:
+                if (!ReferenceEquals(Usable(_d.Session()), current))
+                {
+                    Log.AddMessage(MessageKind.Warning, "묻는 사이에 지금 접속이 바뀌었거나 끊겼습니다. 다시 실행하세요.");
+                    return false;
+                }
+
+                tab.ConnectionProfileId = current.Profile.Id;
+                break;
+            default:
+                return false;
+        }
+
+        if (Host.WorkspaceOf(tab) is null || _d.MissingConnection(tab) is not null)
+        {
+            return false; // 접속하는 사이에 탭을 닫았거나 다른 접속으로 옮겼다
+        }
+
+        if (IsBusy(SessionFor(tab)))
+        {
+            Log.AddMessage(MessageKind.Warning, "그 접속은 지금 실행 중입니다. 실행이 끝난 뒤 다시 실행하세요.");
+            return false;
+        }
+
+        return true;
+    }
+
     /// <summary>
     /// 결과를 끝까지 가져오는 긴 작업(「모두 가져오기」)을 실행 상태로 돌린다. 그동안 취소 명령이 켜지고, 누르면 페이지 가져오기를
     /// 서버에서 끊는다(EXEC-02, TSK-06-11). 이미 실행 중이거나 접속이 없으면 상태 없이 그냥 돌린다.
@@ -225,7 +313,7 @@ public sealed class ExecutionController : IDisposable
     public async Task RerunForEditAsync(SqlStatement? query, CancellationToken ct)
     {
         var tab = Host.Active;
-        if (tab is null || IsBusy(SessionFor(tab)))
+        if (tab is null || !await EnsureConnectionAsync(tab, ct).ConfigureAwait(true) || IsBusy(SessionFor(tab)))
         {
             return;
         }
@@ -316,34 +404,67 @@ public sealed class ExecutionController : IDisposable
     public void ToggleAutoCommit() => State.AutoCommit = !State.AutoCommit;
 
     /// <summary>
-    /// 공유 작업 세션에 미커밋 트랜잭션이 있으면 커밋/롤백/취소를 묻는다(SAFE: 종료 시 확인). true = 계속 닫아도 된다.
-    /// 전용 세션 탭은 SQL 탭 닫기 가드가 묻는다(D-017). 앱 종료 때 주 창(<c>MainWindow.OnClosing</c>)이 부른다.
+    /// 열린 접속(공유 작업 세션)마다 미커밋 트랜잭션이 있으면 커밋/롤백/취소를 묻는다(SAFE: 종료 시 확인, CONN-06). true = 계속 닫아도 된다.
+    /// 하나라도 취소하면 거기서 멈춘다. 전용 세션 탭은 SQL 탭 닫기 가드가 묻는다(D-017). 앱 종료 때 주 창(<c>MainWindow.OnClosing</c>)이 부른다.
     /// </summary>
     public async Task<bool> ConfirmCloseAsync(CancellationToken ct = default)
     {
-        if (!State.TxnPending || _d.Session() is not { } session)
+        var sessions = _d.WorkSessions?.Invoke() ?? (_d.Session() is { } only ? [only] : []);
+        foreach (var session in sessions.ToList())
         {
-            return true;
+            if (sessions.Count > 1 && !State.IsTracked(session.Id) && !session.HasPendingTransaction)
+            {
+                continue; // 자기 상태가 없는 세션에 지금 접속의 미커밋을 묻지 않는다
+            }
+
+            if (!await ConfirmConnectionUncommittedAsync(session, ct).ConfigureAwait(true))
+            {
+                return false;
+            }
         }
 
-        return await ConfirmUncommittedAsync(session, null, ct).ConfigureAwait(true);
+        return true;
+    }
+
+    /// <summary>
+    /// 접속 하나(<paramref name="session"/>)에 미커밋 트랜잭션이 있으면 접속 이름을 밝혀 커밋/롤백/취소를 묻는다(접속 끊기·앱 종료).
+    /// true = 이제 미커밋이 없다.
+    /// </summary>
+    public Task<bool> ConfirmConnectionUncommittedAsync(ISession session, CancellationToken ct = default)
+    {
+        ArgumentNullException.ThrowIfNull(session);
+        return ConfirmUncommittedCoreAsync(session, () => _d.Dialogs.AskConnectionUncommittedAsync(_d.ConnectionLabel(session), ct), ct);
     }
 
     /// <summary>
     /// <paramref name="session"/> 에 미커밋 트랜잭션이 있으면 커밋/롤백/취소를 묻고 고른 대로 한다. true = 이제 미커밋이 없다(닫아도 된다).
     /// 커밋·롤백이 실패하면(메시지 창에 남는다) 트랜잭션이 남으므로 false. <paramref name="subject"/> = 전용 세션 탭 이름(대화상자 글).
     /// </summary>
-    public async Task<bool> ConfirmUncommittedAsync(ISession session, string? subject, CancellationToken ct = default)
+    public Task<bool> ConfirmUncommittedAsync(ISession session, string? subject, CancellationToken ct = default)
     {
         ArgumentNullException.ThrowIfNull(session);
+        return ConfirmUncommittedCoreAsync(
+            session,
+            () => subject is null ? _d.Dialogs.AskUncommittedAsync(ct) : _d.Dialogs.AskUncommittedAsync(subject, ct),
+            ct);
+    }
+
+    private async Task<bool> ConfirmUncommittedCoreAsync(ISession session, Func<Task<UncommittedChoice>> ask, CancellationToken ct)
+    {
         if (!State.IsTxnPending(session.Id) && !session.HasPendingTransaction)
         {
             return true;
         }
 
-        var choice = subject is null
-            ? await _d.Dialogs.AskUncommittedAsync(ct).ConfigureAwait(true)
-            : await _d.Dialogs.AskUncommittedAsync(subject, ct).ConfigureAwait(true);
+        if (session.State == SessionState.Broken || State.IsBroken(session.Id))
+        {
+            // 끊긴 세션은 커밋·롤백할 수 없고 서버가 이미 되돌렸다: 묻지 않고 알린 뒤 닫게 둔다(종료·끊기가 막히지 않게).
+            State.ApplyTransaction(session.Id, false);
+            Log.AddMessage(MessageKind.Warning, $"「{session.Profile.User}@{session.Profile.Name}」 접속이 끊겨 커밋하지 않은 변경은 서버에서 되돌려졌습니다.");
+            return true;
+        }
+
+        var choice = await ask().ConfigureAwait(true);
         switch (choice)
         {
             case UncommittedChoice.Commit:

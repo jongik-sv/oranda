@@ -237,18 +237,10 @@ public sealed class CompletionController
             return null; // 접속이 없으면 세션 관리자(Oracle 어셈블리)를 꺼내지 않는다
         }
 
-        var manager = sp.GetService<ISessionManager>();
-        if (tab?.ConnectionProfileId is { } profileId
-            && manager?.Sessions.LastOrDefault(s => s.Purpose == SessionPurpose.Work && s.Profile.Id == profileId) is { } bound)
-        {
-            return bound;
-        }
-
-        if (sp.GetService<IConnectionService>() is { ActiveSession: { } active, IsBroken: false })
-        {
-            return active;
-        }
-
-        return manager?.Sessions.LastOrDefault(s => s.Purpose == SessionPurpose.Work && s.State != SessionState.Broken);
+        // 탭의 세션(전용 세션·묶인 접속, 묶이지 않았으면 지금 접속). 끊긴 세션에는 묻지 않는다.
+        return SessionRouter.ForTab(sp, tab) is { State: not (SessionState.Broken or SessionState.Closed) } session
+            && sp.GetService<IConnectionService>()?.IsSessionBroken(session.Id) != true
+                ? session
+                : null;
     }
 }

@@ -49,7 +49,7 @@ public sealed class TableSpecCommandHandler : ICommandHandler
 
         var schemaVm = FindSchemaBrowser();
         var session = SessionProvider?.Invoke() ?? schemaVm?.CurrentSession
-            ?? (_services?.GetService(typeof(ISessionManager)) as ISessionManager)?.Sessions.LastOrDefault(s => s.Purpose == SessionPurpose.Work);
+            ?? ConnectionManager.SessionRouter.CurrentOf(_services);
         if (session is null)
         {
             return Task.CompletedTask;

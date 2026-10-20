@@ -26,6 +26,8 @@
   "Execution.exitConfirmFailed.title": "종료",
   "Execution.status.dedicated": "전용 세션",
   "Execution.uncommitted.dedicated": "「{0}」 탭의 전용 세션에 커밋하지 않은 변경이 있습니다. 어떻게 할까요?",
+  "Execution.uncommitted.connection": "접속 「{0}」 에 커밋하지 않은 변경이 있습니다. 어떻게 할까요?",
+  "Execution.missing.message": "이 탭의 접속 「{0}」 이(가) 열려 있지 않습니다. 어떻게 할까요?",
   "Menu.app.hide": "{0} 가리기",
   "Menu.app.hideOthers": "기타 가리기",
   "Menu.app.quit": "{0} 종료",

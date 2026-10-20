@@ -2,6 +2,7 @@ using System;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using Oranda.App.Features.ConnectionManager;
 using Oranda.App.Shell;
 using Oranda.Core.Execution;
 using Oranda.Core.Extensibility;
@@ -30,28 +31,18 @@ public static class HistoryScriptsCommands
     /// <summary>실행 통계 수집 켜짐(<c>oranda.exec.toggleStatistics</c>). 켜면 세션에 <c>SET STATISTICS ON</c> 을 보낸다.</summary>
     public static bool StatisticsEnabled { get; private set; }
 
-    /// <summary>지금 작업할 세션: 활성 편집기의 세션, 없으면 선호 프로필(이력 항목의 접속)의 작업 세션, 없으면 마지막 작업 세션.</summary>
+    /// <summary>
+    /// 지금 작업할 세션: 선호 프로필(이력 항목의 접속)이 있으면 그 프로필의 열린 작업 세션(열려 있지 않으면 null — 다른 접속으로 대신하지 않는다),
+    /// 없으면 활성 문서의 접속(<see cref="SessionRouter.ShownOf"/>: 활성 SQL 탭의 세션, 접속 안 됨 탭이면 null).
+    /// </summary>
     internal static ISession? ResolveSession(IServiceProvider services, Guid? preferredProfileId = null)
     {
-        var manager = services.GetService(typeof(ISessionManager)) as ISessionManager;
-        var work = manager?.Sessions.Where(s => s.Purpose == SessionPurpose.Work).ToList() ?? [];
-        if (work.Count == 0)
+        if (preferredProfileId is { } pid)
         {
-            return null;
+            return SessionRouter.ForProfile(services, pid);
         }
 
-        if (preferredProfileId is { } pid && work.LastOrDefault(s => s.Profile.Id == pid) is { } byProfile)
-        {
-            return byProfile;
-        }
-
-        var snapshot = (services.GetService(typeof(IEditorContext)) as IEditorContext)?.GetActiveDocument();
-        if (snapshot?.SessionId is { } sid && work.FirstOrDefault(s => s.Id == sid) is { } active)
-        {
-            return active;
-        }
-
-        return work[^1];
+        return SessionRouter.ShownOf(services);
     }
 
     /// <summary>

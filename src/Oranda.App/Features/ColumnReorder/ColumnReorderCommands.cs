@@ -52,7 +52,7 @@ public sealed class ColumnReorderCommandHandler : ICommandHandler
             _ => schemaVm?.SelectedNode?.Ref,
         };
         var session = SessionProvider?.Invoke() ?? schemaVm?.CurrentSession
-            ?? (_services.GetService(typeof(ISessionManager)) as ISessionManager)?.Sessions.LastOrDefault(s => s.Purpose == SessionPurpose.Work);
+            ?? ConnectionManager.SessionRouter.CurrentOf(_services);
         if (target is null || session is null || !string.Equals(target.ObjectType, "TABLE", StringComparison.Ordinal))
         {
             return;

@@ -1,8 +1,10 @@
 using System;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Avalonia.Controls;
 using Avalonia.Threading;
+using Oranda.App.Features.Execution;
 using Oranda.App.Shell;
 using Oranda.App.Shell.Composition;
 using Oranda.Core.Events;
@@ -52,15 +54,61 @@ public static class ConnectionManagerCommands
                 container.GetRequiredService<IAppDataPaths>(),
                 container.GetRequiredService<IEventBus>(),
                 keys: container.GetService<ContextKeyService>());
-            if (container.GetService<ShellController>() is { } shell)
+            container.AddInstance<IConnectionService>(service);
+
+            // 탭 → 세션 고르기·창 테두리(환경 색)는 라우터가 맡는다. 접속 서비스와 함께 만들어 첫 접속부터 이벤트를 받는다
+            // (시작 때 만들면 Oracle 어셈블리를 깨운다).
+            SessionRouter.Resolve(container);
+            if (container.GetService<ContextKeyService>() is { } keys)
             {
-                // 접속은 스레드 풀에서 끝나므로 창(환경 테두리)을 바꾸는 일은 UI 스레드로 넘긴다.
-                service.ActiveSessionChanged += (_, _) => Dispatcher.UIThread.Post(() => shell.ActiveEnvironment = service.ActiveSession?.Profile.Environment);
+                // 세션 모니터 권한 키(kill·trace)는 마지막에 연 접속이 아니라 지금 접속의 권한을 따른다.
+                service.ActiveSessionChanged += (_, _) =>
+                {
+                    if (service.ActiveSession is { } active)
+                    {
+                        SessionMonitor.SessionMonitorCommands.ApplyPrivilegeKeys(keys, active.Server.Capabilities);
+                    }
+                    else
+                    {
+                        keys.Set("canKillSession", false);
+                        keys.Set("canTraceSessions", false);
+                    }
+                };
             }
 
-            container.AddInstance<IConnectionService>(service);
             return service;
         }
+    }
+
+    /// <summary>
+    /// 저장된 프로필로 접속한다(비밀번호가 없으면 묻는다, 접속 관리자와 같은 순서). 접속 안 됨 탭의 「다시 접속」 이 쓴다.
+    /// 연 작업 세션, 프로필이 없거나 못 열었거나 사용자가 취소하면 null.
+    /// </summary>
+    public static async Task<ISession?> ConnectProfileAsync(ServiceContainer container, Guid profileId)
+    {
+        ArgumentNullException.ThrowIfNull(container);
+        var service = Resolve(container);
+        var doc = await service.LoadAsync(CancellationToken.None).ConfigureAwait(true);
+        if (doc.Value.Profiles.FirstOrDefault(p => p.Id == profileId) is not { } profile)
+        {
+            return null;
+        }
+
+        var owner = container.GetService<ShellController>()?.MainWindow;
+        var vm = new ConnectionManagerViewModel(service)
+        {
+            AskPassword = p => owner is null ? Task.FromResult<string?>(null) : ConnectionDialogs.PromptPasswordAsync(owner, p),
+            AskChangePassword = (p, old) => owner is null
+                ? Task.FromResult<(string? Old, string New)?>(null)
+                : ConnectionDialogs.ChangePasswordAsync(owner, p, old),
+        };
+        var outcome = await vm.ConnectWithPromptsAsync(profile).ConfigureAwait(true);
+        if (outcome is { IsConnected: false, Message: { Length: > 0 } message })
+        {
+            ExecutionLog.For(container.GetService<IEventBus>()).AddMessage(MessageKind.Error, $"「{profile.Name}」 접속 실패: {message}");
+        }
+
+        return outcome?.IsConnected == true ? service.SessionOf(profileId) : null;
     }
 }
 
@@ -80,11 +128,18 @@ public sealed class ConnectionCommandHandler(ServiceContainer container) : IComm
         switch (context.CommandId)
         {
             case "oranda.conn.manage":
-            case "oranda.conn.switchSession":
                 await ShowManagerAsync(service).ConfigureAwait(true);
                 break;
+            case "oranda.conn.switchSession":
+                // 오렌지 F7: 툴바 접속 콤보를 펼친다. 열린 접속이 없으면 접속 관리자.
+                if (ConnectionComboViewModel.For(container)?.OpenList() != true)
+                {
+                    await ShowManagerAsync(service).ConfigureAwait(true);
+                }
+
+                break;
             case "oranda.conn.disconnect":
-                await service.DisconnectAsync(cancellationToken).ConfigureAwait(true);
+                await DisconnectAsync(service, cancellationToken).ConfigureAwait(true);
                 break;
             case "oranda.conn.reconnect":
                 await new ConnectionManagerViewModel(service) { AskPassword = Prompt }.ReconnectAsync().ConfigureAwait(true);
@@ -96,6 +151,38 @@ public sealed class ConnectionCommandHandler(ServiceContainer container) : IComm
     }
 
     private Window? Owner => container.GetService<ShellController>()?.MainWindow;
+
+    /// <summary>
+    /// 보이는 접속(활성 SQL 탭의 접속, 그 밖의 문서·전용 세션 탭이면 지금 접속)을 끊는다. 미커밋이면 접속 이름을 밝혀 먼저 묻고,
+    /// 취소하면 끊지 않는다(CONN-06). 활성 탭의 접속이 이미 닫혔으면 할 일이 없다.
+    /// </summary>
+    private async Task DisconnectAsync(IConnectionService service, CancellationToken ct)
+    {
+        var router = SessionRouter.Resolve(container);
+        var target = router.ShownSession is { } shown && service.Sessions.Contains(shown)
+            ? shown
+            : router.ShownMissing is null ? service.ActiveSession : null;
+        var log = ExecutionLog.For(container.GetService<IEventBus>());
+        if (target is null)
+        {
+            log.AddMessage(MessageKind.Info, "이 탭의 접속은 이미 닫혀 있습니다.");
+            return;
+        }
+
+        var execution = ExecutionCommands.Resolve(container);
+        if (execution.State.IsRunning(target.Id))
+        {
+            log.AddMessage(MessageKind.Warning, $"「{router.LabelOf(target)}」 에서 실행 중입니다. 실행을 취소하거나 끝난 뒤 접속을 끊으세요.");
+            return;
+        }
+
+        if (!await execution.ConfirmConnectionUncommittedAsync(target, ct).ConfigureAwait(true))
+        {
+            return;
+        }
+
+        await service.DisconnectAsync(target, ct).ConfigureAwait(true);
+    }
 
     private Task<string?> Prompt(Oranda.Core.Connection.ConnectionProfile profile) =>
         Owner is { } owner ? ConnectionDialogs.PromptPasswordAsync(owner, profile) : Task.FromResult<string?>(null);

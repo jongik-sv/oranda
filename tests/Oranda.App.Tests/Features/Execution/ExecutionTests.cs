@@ -39,7 +39,7 @@ internal sealed class FakeSession(ConnectionProfile profile) : ISession
 
     public string DbKey => "FREE/FREEPDB1/SCOTT";
 
-    public SessionState State => SessionState.Idle;
+    public SessionState State { get; set; } = SessionState.Idle;
 
     public bool HasPendingTransaction { get; set; }
 
@@ -139,6 +139,27 @@ internal sealed class FakeDialogs : IExecutionDialogs
     {
         UncommittedAsked++;
         return Task.FromResult(UncommittedAnswer);
+    }
+
+    /// <summary>접속마다 미커밋 확인에서 물은 접속 이름(차례대로).</summary>
+    public List<string> ConnectionsAsked { get; } = [];
+
+    public Task<UncommittedChoice> AskConnectionUncommittedAsync(string connection, CancellationToken ct)
+    {
+        ConnectionsAsked.Add(connection);
+        UncommittedAsked++;
+        return Task.FromResult(UncommittedAnswer);
+    }
+
+    public MissingConnectionChoice MissingAnswer { get; set; } = MissingConnectionChoice.Cancel;
+
+    /// <summary>접속 안 됨 탭 묻기: (탭 접속 이름, 지금 접속 이름).</summary>
+    public List<(string Profile, string? Current)> MissingAsked { get; } = [];
+
+    public Task<MissingConnectionChoice> AskMissingConnectionAsync(string profile, string? current, CancellationToken ct)
+    {
+        MissingAsked.Add((profile, current));
+        return Task.FromResult(MissingAnswer);
     }
 
     public Task<bool> PreviewDmlAsync(string text, CancellationToken ct)
@@ -258,11 +279,11 @@ public sealed class ExecutionTests
         }
 
         Assert.Equal(23, ExecutionCommands.Ids.Length);
-        Assert.Equal("(hasSession || dedicatedSession) && !sessionBusy", registry.Find("oranda.exec.runStatement")!.Enablement);
-        Assert.Equal("(hasSession || dedicatedSession) && !sessionBusy", registry.Find("oranda.exec.runSubquery")!.Enablement);
+        Assert.Equal("(hasSession || dedicatedSession || tabConnectionMissing) && !sessionBusy", registry.Find("oranda.exec.runStatement")!.Enablement);
+        Assert.Equal("(hasSession || dedicatedSession || tabConnectionMissing) && !sessionBusy", registry.Find("oranda.exec.runSubquery")!.Enablement);
         Assert.Equal("sqlDocFocus", registry.Find("oranda.exec.runSubquery")!.When);
         Assert.Contains("context:editor/runSubquery@1005", registry.Find("oranda.exec.runSubquery")!.Placements);
-        Assert.Equal("(hasSession || dedicatedSession) && !sessionBusy && hasSelection", registry.Find("oranda.exec.runSelection")!.Enablement);
+        Assert.Equal("(hasSession || dedicatedSession || tabConnectionMissing) && !sessionBusy && hasSelection", registry.Find("oranda.exec.runSelection")!.Enablement);
         Assert.Equal("sessionBusy", registry.Find("oranda.exec.cancel")!.Enablement);
         Assert.Equal("hasExecError", registry.Find("oranda.exec.goToError")!.Enablement);
         Assert.Equal("(hasSession || dedicatedSession) && txnPending && !sessionBusy", registry.Find("oranda.txn.commit")!.Enablement);

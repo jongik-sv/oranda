@@ -886,7 +886,7 @@ dotnet, testhost, Oranda.App
 - category: defect
 - domain: fullstack
 - model: opus
-- status: [ ]
+- status: [xx]
 - priority: critical
 - assignee: -
 - schedule: 2026-12-28 ~ 2027-01-08
@@ -894,7 +894,7 @@ dotnet, testhost, Oranda.App
 - depends: TSK-03-03, TSK-03-04
 - blocked-by: -
 - entry-point: 툴바 접속 콤보(1 - MESAPUSER@UBMADQ, 2 - …), 접속 관리자 「접속」, 작업 공간·SQL 탭
-- note: 담당 PC: win144(Windows 개발 PC) — 맥북 세션은 이 Task 를 하지 않는다. 2026-10-20 사용자 요청(오렌지처럼 여러 세션 연결). PRD CONN-06(P0, M1)·ui-shell.md 34·140·200·202행에 이미 정해진 요구인데 구현이 빠졌다. 현황(조사): ConnectionService 가 작업 세션 하나(_active, ActiveSession)만 들고 ConnectAsync 가 새 접속에 성공하면 이전 작업 세션을 닫는다(ConnectionService.cs 403-411). ExecutionState 도 공유 세션 하나만 안다. 기능마다 세션을 고르는 방법이 제각각이다: ActiveSession(실행·PL/SQL 실행·모니터 기본), Sessions.LastOrDefault(Work)(PL/SQL 편집기·객체 상세·표 정의서·DB 도구·열 순서), 스키마 브라우저 CurrentSession(새 Work 세션으로 늘 바뀜), 탭 ConnectionProfileId(자동완성·탐색·데이터 이동·이력). SqlEditorViewModel.ConnectionProfileId 는 작업 공간 저장용으로만 쓰이고 일반 새 SQL 탭은 null 이다
+- note: 담당 PC: win144(Windows 개발 PC) — 맥북 세션은 이 Task 를 하지 않는다. 2026-10-20 사용자 요청(오렌지처럼 여러 세션 연결). PRD CONN-06(P0, M1)·ui-shell.md 34·140·200·202행에 이미 정해진 요구인데 구현이 빠졌다. 2026-10-20 구현: ConnectionService 가 작업 세션을 여러 개(연 순서, 상한 10, 프로필당 1개) 들고 「지금 접속」(ActiveSession)을 따로 둔다 — 새 접속은 기존 세션을 닫지 않고, 이미 열린 프로필이면 그 접속으로 바꾸며, 끊긴 것은 같은 번호 자리에 다시 연다. ExecutionState 는 세션마다 상태(실행·미커밋·경과)를 든다. 세션 고르기는 SessionRouter(Features/ConnectionManager) 한 곳: 탭 → 전용 세션 → ConnectionProfileId 의 열린 세션(없으면 접속 안 됨) → 지금 접속, Sessions.LastOrDefault(Work)·ActiveSession 추측을 걷어냈다. 툴바 맨 왼쪽 접속 콤보(「번호 - 사용자@이름」+환경 칩, 접속 안 됨(이름)), switchSession = 콤보 펼치기, 탭 전환·콤보 선택 → 상태 표시줄·창 테두리·스키마 브라우저가 따른다, 창 제목 [운영] = 운영 접속이 하나라도 열려 있으면. 실행·트랜잭션·전용 세션·PL/SQL 실행·그리드 편집·데이터 이동·이력은 탭 접속 세션으로, 접속 안 됨 탭 실행은 「다시 접속 / 지금 접속으로 / 취소」 묻기, 접속 끊기는 보이는 접속 하나, 앱 종료 미커밋 확인은 접속마다(끊긴 접속은 서버가 되돌렸다고 알림). 작업 공간 복원은 탭 접속 프로필을 기억하고 자동 접속하지 않는다. 시험: 단위·Headless(콤보·탭 동기화·복원) + 26ai 통합 MultiConnectionFlowTests(사용자 2명, 탭별 USER·트랜잭션 분리·끊기 영향 범위). 남김(낮음): 같은 프로필 다시 접속 두 번이면 비밀번호 창 두 번, 대화상자 제목·단추 글 한국어 고정, 객체 탐색이 닫힌 프로필이면 지금 접속으로 메타데이터 조회
 
 #### PRD 요구사항
 - prd-ref: PRD CONN-06, CONN-07, EDIT-09, EXEC-13(D-017), ui-shell.md 툴바 접속 콤보·접속 따르는 도구 창·창 테두리

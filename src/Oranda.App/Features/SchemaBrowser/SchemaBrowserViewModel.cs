@@ -55,6 +55,7 @@ public sealed partial class SchemaBrowserViewModel : ToolPanelViewModelBase, IDi
     private readonly IServiceProvider? _services;
     private bool _resolved;
     private readonly List<IDisposable> _subscriptions = [];
+    private bool _followingConnections;
     private IMetadataProvider? _meta;
     private ISchemaTreeProvider? _treeProvider;
     private ISchemaAdminProvider? _admin;
@@ -126,11 +127,41 @@ public sealed partial class SchemaBrowserViewModel : ToolPanelViewModelBase, IDi
         }
 
         ResolveServices();
+        FollowConnections();
         var session = _sessionManager?.Sessions.FirstOrDefault(s => s.Id == e.SessionId);
-        if (session is not null)
+        // 지금 접속을 따라가면 새 접속이 지금 접속이 될 때(ActiveSessionChanged) 바꾼다: 동시 접속으로 곧 닫힐 세션을 먼저 읽지 않게.
+        if (session is not null && (!_followingConnections || ReferenceEquals(ConnectionManager.SessionRouter.CurrentOf(_services), session)))
         {
-            await SetSessionAsync(session);
+            await SetSessionAsync(session); // 새 접속은 지금 접속이 된다
         }
+    }
+
+    /// <summary>
+    /// 지금 접속이 바뀌면(툴바 콤보·탭 전환, CONN-06) 트리를 그 접속으로 바꾼다. 접속 서비스는 첫 작업 세션이 열린 뒤에 꺼낸다
+    /// (그 전에는 Oracle 어셈블리를 깨우지 않게).
+    /// </summary>
+    private void FollowConnections()
+    {
+        if (_followingConnections || _services?.GetService(typeof(ConnectionManager.IConnectionService)) is not ConnectionManager.IConnectionService connections)
+        {
+            return;
+        }
+
+        _followingConnections = true;
+        EventHandler handler = (_, _) => PostToUi(() =>
+        {
+            if (ConnectionManager.SessionRouter.CurrentOf(_services) is { } current && current.Id != CurrentSession?.Id)
+            {
+                _ = SetSessionAsync(current);
+            }
+        });
+        connections.ActiveSessionChanged += handler;
+        _subscriptions.Add(new Unsubscriber(() => connections.ActiveSessionChanged -= handler));
+    }
+
+    private sealed class Unsubscriber(Action dispose) : IDisposable
+    {
+        public void Dispose() => dispose();
     }
 
     private async Task OnSessionClosedAsync(SessionClosed e)
@@ -138,8 +169,8 @@ public sealed partial class SchemaBrowserViewModel : ToolPanelViewModelBase, IDi
         if (CurrentSession?.Id == e.SessionId)
         {
             ResolveServices();
-            var next = _sessionManager?.Sessions.LastOrDefault(s => s.Id != e.SessionId && s.Purpose == SessionPurpose.Work);
-            await SetSessionAsync(next);
+            var next = ConnectionManager.SessionRouter.CurrentOf(_services);
+            await SetSessionAsync(next?.Id == e.SessionId ? null : next);
         }
     }
 
@@ -305,7 +336,8 @@ public sealed partial class SchemaBrowserViewModel : ToolPanelViewModelBase, IDi
     public async Task LoadAsync(CancellationToken ct = default)
     {
         ResolveServices();
-        CurrentSession ??= _sessionManager?.Sessions.LastOrDefault(s => s.Purpose == SessionPurpose.Work);
+        FollowConnections(); // 첫 접속 뒤에 만든 창도 지금 접속을 따라간다
+        CurrentSession ??= ConnectionManager.SessionRouter.CurrentOf(_services);
         var gen = Interlocked.Increment(ref _generation);
         Roots.Clear();
         _favoritesNode = null;

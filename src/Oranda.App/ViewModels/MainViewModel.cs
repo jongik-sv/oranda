@@ -26,7 +26,11 @@ public partial class MainViewModel : ViewModelBase
         Docking = shell.Docking;
         StatusItems = [.. statusBar.Items.Select(i => new StatusBarEntry(i, (IStatusBarItem)services.Create(i.ItemType)))];
         _environment = shell.ActiveEnvironment;
-        shell.EnvironmentChanged += (_, _) => Environment = shell.ActiveEnvironment;
+        shell.EnvironmentChanged += (_, _) =>
+        {
+            Environment = shell.ActiveEnvironment;
+            OnPropertyChanged(nameof(Title)); // 운영 접속 열림(ProductionOpen)만 바뀌었을 수 있다
+        };
         Docking.ActiveDocumentChanged += (_, _) => FollowActiveDocument();
         FollowActiveDocument();
     }
@@ -39,15 +43,15 @@ public partial class MainViewModel : ViewModelBase
     public IReadOnlyList<StatusBarEntry> StatusItems { get; }
 
     /// <summary>
-    /// 창 제목. 운영 접속이 활성이면 <c>[운영]</c> 을 붙인다(ui-shell.md 4.2). 활성 문서가 있으면 오렌지처럼
+    /// 창 제목. 운영 접속이 활성이거나 하나라도 열려 있으면 <c>[운영]</c> 을 붙인다(ui-shell.md 4.2). 활성 문서가 있으면 오렌지처럼
     /// <c>- [문서 / 안쪽 탭]</c>(예: <c>Oranda - [기본 / SQL 1]</c>)을 붙여 지금 어느 작업 공간·탭인지 보인다.
     /// </summary>
     public string Title
     {
         get
         {
-            var title = Environment == ConnectionEnvironment.Production
-                ? $"{_shell.Text.Lookup("Shell.window.title")} [운영]"
+            var title = Environment == ConnectionEnvironment.Production || _shell.ProductionOpen
+                ?$"{_shell.Text.Lookup("Shell.window.title")} [운영]"
                 : _shell.Text.Lookup("Shell.window.title");
             if (_document is not { } doc)
             {

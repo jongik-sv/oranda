@@ -61,20 +61,38 @@ public sealed record ConnectionProbeResult(bool Succeeded, string? ServerVersion
     public static ConnectionProbeResult Fail(int? errorNumber, string message) => new(false, null, errorNumber, message);
 }
 
-/// <summary>접속 프로필 관리와 현재 접속(작업 세션). 접속 관리자 화면·명령·다른 기능이 쓴다.</summary>
+/// <summary>
+/// 접속 프로필 관리와 열린 접속(작업 세션, CONN-06). 접속은 여러 개를 동시에 열고, 그중 하나가 「지금 접속」(<see cref="ActiveSession"/>)이다.
+/// 탭·문서가 쓸 세션은 직접 고르지 않고 <see cref="SessionRouter"/> 에 묻는다. 접속 관리자 화면·명령·다른 기능이 쓴다.
+/// </summary>
 public interface IConnectionService
 {
-    /// <summary>현재 작업 세션. 없으면 null.</summary>
+    /// <summary>지금 접속(활성 문서의 접속). 없으면 null.</summary>
     ISession? ActiveSession { get; }
 
-    /// <summary>마지막으로 접속한 프로필(끊겨도 남는다. 「다시 접속」용).</summary>
+    /// <summary>열린 작업 세션(접속). 연 순서이고 툴바 콤보 번호는 위치 + 1 이다. 프로필마다 하나뿐이다.</summary>
+    IReadOnlyList<ISession> Sessions { get; }
+
+    /// <summary>지금 접속의 프로필, 지금 접속이 없으면 마지막으로 접속한 프로필(끊겨도 남는다. 「다시 접속」용).</summary>
     ConnectionProfile? LastProfile { get; }
 
-    /// <summary>현재 세션이 끊긴 상태.</summary>
+    /// <summary>지금 접속이 끊긴 상태.</summary>
     bool IsBroken { get; }
 
-    /// <summary>현재 세션·끊김 상태가 바뀌었다.</summary>
+    /// <summary>지금 접속·열린 접속 목록·끊김 상태가 바뀌었다. 아무 스레드에서나 온다.</summary>
     event EventHandler? ActiveSessionChanged;
+
+    /// <summary>접속에 성공했다(새로 열었거나 이미 열린 접속을 지금 접속으로 바꿨다). 활성 SQL 탭이 이 접속을 따른다.</summary>
+    event EventHandler<ISession>? Connected;
+
+    /// <summary>프로필의 열린 작업 세션(끊긴 것 포함). 없으면 null.</summary>
+    ISession? SessionOf(Guid profileId);
+
+    /// <summary>열린 작업 세션 중 끊긴 것인지.</summary>
+    bool IsSessionBroken(Guid sessionId);
+
+    /// <summary>열린 작업 세션 하나를 지금 접속으로 바꾼다. 목록에 없으면 false.</summary>
+    bool Switch(ISession session);
 
     Task<StoredDocument<ConnectionsDocument>> LoadAsync(CancellationToken ct);
 
@@ -88,10 +106,17 @@ public interface IConnectionService
     /// <summary>프로필과 저장된 비밀번호·풀어 놓은 지갑을 지운다.</summary>
     Task DeleteProfileAsync(Guid id, CancellationToken ct);
 
-    /// <summary>접속한다. 성공하면 이전 작업 세션은 닫는다.</summary>
+    /// <summary>
+    /// 접속한다. 다른 접속은 닫지 않고 목록에 더하며 새 접속이 지금 접속이 된다. 같은 프로필이 이미 열려 있으면 새로 열지 않고
+    /// 그 접속을 지금 접속으로 바꾼다(끊긴 것이면 닫고 같은 자리에 다시 연다). 열린 접속이 <see cref="ConnectionService.MaxSessions"/> 개면 실패.
+    /// </summary>
     Task<ConnectOutcome> ConnectAsync(ConnectionProfile profile, string? password, CancellationToken ct);
 
+    /// <summary>지금 접속을 끊는다. 다른 접속은 그대로이고 마지막에 연 접속이 지금 접속이 된다.</summary>
     Task DisconnectAsync(CancellationToken ct);
+
+    /// <summary>열린 작업 세션 하나를 끊는다(목록에 없으면 아무것도 안 한다).</summary>
+    Task DisconnectAsync(ISession session, CancellationToken ct);
 
     /// <summary>마지막 프로필로 다시 접속한다(저장된 비밀번호가 있을 때).</summary>
     Task<ConnectOutcome> ReconnectAsync(string? password, CancellationToken ct);
@@ -221,8 +246,16 @@ public sealed class ConnectionService : IConnectionService, IDisposable
     private readonly ContextKeyService? _keys;
     private readonly SemaphoreSlim _gate = new(1, 1);
     private readonly List<IDisposable> _subscriptions = [];
+
+    // 열린 작업 세션(연 순서)·끊긴 세션·지금 접속. 세션 이벤트는 아무 스레드에서나 오므로 _sync 안에서만 바꾼다.
+    private readonly Lock _sync = new();
+    private readonly List<ISession> _open = [];
+    private readonly HashSet<Guid> _brokenIds = [];
     private ISession? _active;
-    private bool _broken;
+    private ConnectionProfile? _lastProfile;
+
+    /// <summary>동시에 열 수 있는 접속(공유 작업 세션) 수. 전용 세션(D-017)·도구 세션(CONN-07)은 세지 않는다.</summary>
+    public const int MaxSessions = 10;
 
     public ConnectionService(
         IConnectionStore store,
@@ -248,6 +281,8 @@ public sealed class ConnectionService : IConnectionService, IDisposable
 
     public event EventHandler? ActiveSessionChanged;
 
+    public event EventHandler<ISession>? Connected;
+
     public void Dispose()
     {
         foreach (var s in _subscriptions)
@@ -258,11 +293,93 @@ public sealed class ConnectionService : IConnectionService, IDisposable
         _gate.Dispose();
     }
 
-    public ISession? ActiveSession => Volatile.Read(ref _active);
+    public ISession? ActiveSession
+    {
+        get
+        {
+            lock (_sync)
+            {
+                return _active;
+            }
+        }
+    }
 
-    public ConnectionProfile? LastProfile { get; private set; }
+    public IReadOnlyList<ISession> Sessions
+    {
+        get
+        {
+            lock (_sync)
+            {
+                return [.. _open];
+            }
+        }
+    }
 
-    public bool IsBroken => Volatile.Read(ref _broken);
+    public ConnectionProfile? LastProfile
+    {
+        get
+        {
+            lock (_sync)
+            {
+                return _active?.Profile ?? _lastProfile;
+            }
+        }
+    }
+
+    public bool IsBroken
+    {
+        get
+        {
+            lock (_sync)
+            {
+                return _active is { } a && _brokenIds.Contains(a.Id);
+            }
+        }
+    }
+
+    public ISession? SessionOf(Guid profileId)
+    {
+        if (profileId == Guid.Empty)
+        {
+            return null;
+        }
+
+        lock (_sync)
+        {
+            return _open.FirstOrDefault(s => s.Profile.Id == profileId);
+        }
+    }
+
+    public bool IsSessionBroken(Guid sessionId)
+    {
+        lock (_sync)
+        {
+            return _brokenIds.Contains(sessionId);
+        }
+    }
+
+    public bool Switch(ISession session)
+    {
+        ArgumentNullException.ThrowIfNull(session);
+        lock (_sync)
+        {
+            if (!_open.Contains(session))
+            {
+                return false;
+            }
+
+            if (ReferenceEquals(_active, session))
+            {
+                return true;
+            }
+
+            _active = session;
+            _lastProfile = session.Profile;
+        }
+
+        RaiseChanged();
+        return true;
+    }
 
     /// <summary>비밀번호 저장 키 형식(data-model 5.1).</summary>
     public static string CredentialRefFor(Guid profileId) => "oranda:conn:" + profileId.ToString("D").ToLowerInvariant();
@@ -362,6 +479,19 @@ public sealed class ConnectionService : IConnectionService, IDisposable
     {
         ArgumentNullException.ThrowIfNull(profile);
 
+        // 프로필마다 공유 작업 세션은 하나(CONN-06): 살아 있는 접속이 있으면 새로 열지 않고 지금 접속으로 바꾼다.
+        if (LiveSessionOf(profile.Id) is { } existing)
+        {
+            Switch(existing);
+            Connected?.Invoke(this, existing);
+            return new ConnectOutcome(ConnectStatus.Connected, $"{profile.Name} 은(는) 이미 접속되어 있어 지금 접속으로 바꿨습니다.", existing, existing.Server.Version);
+        }
+
+        if (!HasRoomFor(profile.Id))
+        {
+            return new ConnectOutcome(ConnectStatus.Failed, $"접속은 {MaxSessions}개까지 열 수 있습니다. 쓰지 않는 접속을 끊고 다시 하세요.");
+        }
+
         var secret = password;
         string? storeProblem = null;
         if (string.IsNullOrEmpty(secret))
@@ -400,32 +530,125 @@ public sealed class ConnectionService : IConnectionService, IDisposable
             return new ConnectOutcome(ConnectStatus.Failed, FirstLine(ex.Message));
         }
 
-        var previous = Interlocked.Exchange(ref _active, session);
-        Volatile.Write(ref _broken, false);
-        LastProfile = profile;
-        UpdateKeys();
-        ActiveSessionChanged?.Invoke(this, EventArgs.Empty);
-        if (previous is not null)
+        ISession? replaced = null;
+        ISession? duplicate = null;
+        var full = false;
+        lock (_sync)
         {
-            await CloseAsync(previous).ConfigureAwait(false);
+            if (_open.Count >= MaxSessions && !_open.Any(s => profile.Id != Guid.Empty && s.Profile.Id == profile.Id))
+            {
+                full = true; // 여는 동안 다른 접속이 자리를 채웠다
+            }
+            else if (_open.FirstOrDefault(s => profile.Id != Guid.Empty && s.Profile.Id == profile.Id) is { } same)
+            {
+                if (!_brokenIds.Contains(same.Id) && same.State != SessionState.Broken)
+                {
+                    // 같은 프로필을 동시에 두 번 접속했다: 먼저 열린 것을 쓰고 이것은 닫는다.
+                    duplicate = session;
+                    session = same;
+                }
+                else
+                {
+                    // 끊긴 접속을 다시 열었다: 같은 자리(콤보 번호)에 새 세션을 둔다.
+                    replaced = same;
+                    _open[_open.IndexOf(same)] = session;
+                    _brokenIds.Remove(same.Id);
+                }
+            }
+            else
+            {
+                _open.Add(session);
+            }
+
+            if (!full)
+            {
+                _active = session;
+                _lastProfile = profile;
+            }
+        }
+
+        if (full)
+        {
+            await CloseAsync(session).ConfigureAwait(false);
+            RaiseChanged(); // 실행 상태가 닫은 세션을 지금 접속으로 잡았을 수 있다
+            return new ConnectOutcome(ConnectStatus.Failed, $"접속은 {MaxSessions}개까지 열 수 있습니다. 쓰지 않는 접속을 끊고 다시 하세요.");
+        }
+
+        RaiseChanged();
+        Connected?.Invoke(this, session);
+        if (duplicate is not null)
+        {
+            await CloseAsync(duplicate).ConfigureAwait(false);
+            return new ConnectOutcome(ConnectStatus.Connected, $"{profile.Name} 은(는) 이미 접속되어 있어 지금 접속으로 바꿨습니다.", session, session.Server.Version);
+        }
+
+        if (replaced is not null)
+        {
+            await CloseAsync(replaced).ConfigureAwait(false);
         }
 
         await RecordConnectedAsync(profile, ct).ConfigureAwait(false);
         return new ConnectOutcome(ConnectStatus.Connected, $"{profile.Name} 에 접속했습니다({VersionText(session.Server)}).", session, session.Server.Version);
     }
 
-    public async Task DisconnectAsync(CancellationToken ct)
+    public Task DisconnectAsync(CancellationToken ct) =>
+        ActiveSession is { } active ? DisconnectAsync(active, ct) : Task.CompletedTask;
+
+    public async Task DisconnectAsync(ISession session, CancellationToken ct)
     {
+        ArgumentNullException.ThrowIfNull(session);
         ct.ThrowIfCancellationRequested();
-        var previous = Interlocked.Exchange(ref _active, null);
-        Volatile.Write(ref _broken, false);
+        if (!Remove(session))
+        {
+            return;
+        }
 
         // 접속 끊기는 화면에 먼저 반영하고 세션은 그 뒤에 닫는다. 닫기는 UI 스레드 밖에서 시간 제한을 두고 기다린다.
-        UpdateKeys();
-        ActiveSessionChanged?.Invoke(this, EventArgs.Empty);
-        if (previous is not null)
+        RaiseChanged();
+        await CloseAsync(session).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// 목록에서 뺀다. 지금 접속이었으면 남은 것 중 마지막에 연 접속이 지금 접속이 된다(없으면 null, 프로필은 「다시 접속」용으로 남긴다).
+    /// 빼지 않았으면(목록에 없음) false.
+    /// </summary>
+    private bool Remove(ISession session)
+    {
+        lock (_sync)
         {
-            await CloseAsync(previous).ConfigureAwait(false);
+            if (!_open.Remove(session))
+            {
+                return false;
+            }
+
+            _brokenIds.Remove(session.Id);
+            if (ReferenceEquals(_active, session))
+            {
+                _lastProfile = session.Profile;
+                _active = _open.Count == 0 ? null : _open[^1];
+            }
+
+            return true;
+        }
+    }
+
+    /// <summary>프로필의 살아 있는(끊기지 않은) 작업 세션.</summary>
+    private ISession? LiveSessionOf(Guid profileId)
+    {
+        lock (_sync)
+        {
+            return profileId == Guid.Empty
+                ? null
+                : _open.FirstOrDefault(s => s.Profile.Id == profileId && !_brokenIds.Contains(s.Id) && s.State != SessionState.Broken);
+        }
+    }
+
+    /// <summary>새 접속을 열 자리가 있는지(같은 프로필의 끊긴 접속을 바꿔 여는 것은 자리를 더 쓰지 않는다).</summary>
+    private bool HasRoomFor(Guid profileId)
+    {
+        lock (_sync)
+        {
+            return _open.Count < MaxSessions || (profileId != Guid.Empty && _open.Any(s => s.Profile.Id == profileId));
         }
     }
 
@@ -776,30 +999,43 @@ public sealed class ConnectionService : IConnectionService, IDisposable
 
     private void OnBroken(SessionBroken e)
     {
-        if (Volatile.Read(ref _active) is { } active && active.Id == e.SessionId)
+        lock (_sync)
         {
-            Volatile.Write(ref _broken, true);
-            UpdateKeys();
-            ActiveSessionChanged?.Invoke(this, EventArgs.Empty);
+            if (!_open.Any(s => s.Id == e.SessionId) || !_brokenIds.Add(e.SessionId))
+            {
+                return;
+            }
         }
+
+        RaiseChanged();
     }
 
     private void OnClosed(SessionClosed e)
     {
-        if (Volatile.Read(ref _active) is { } active && active.Id == e.SessionId)
+        // 밖에서 닫힌 접속(세션 관리자 정리 등)은 목록에서 뺀다. 「다시 접속」 은 LastProfile 로 한다.
+        ISession? closed;
+        lock (_sync)
         {
-            // 「다시 접속」 은 LastProfile 로 하므로 세션만 비운다.
-            Interlocked.CompareExchange(ref _active, null, active);
-            Volatile.Write(ref _broken, false);
-            UpdateKeys();
-            ActiveSessionChanged?.Invoke(this, EventArgs.Empty);
+            closed = _open.FirstOrDefault(s => s.Id == e.SessionId);
         }
+
+        if (closed is not null && Remove(closed))
+        {
+            RaiseChanged();
+        }
+    }
+
+    private void RaiseChanged()
+    {
+        UpdateKeys();
+        ActiveSessionChanged?.Invoke(this, EventArgs.Empty);
     }
 
     private void UpdateKeys()
     {
-        _keys?.Set("hasSession", ActiveSession is not null && !IsBroken);
-        _keys?.Set("sessionBroken", IsBroken);
+        var broken = IsBroken;
+        _keys?.Set("hasSession", ActiveSession is not null && !broken);
+        _keys?.Set("sessionBroken", broken);
     }
 
     private static string VersionText(ServerInfo server) =>

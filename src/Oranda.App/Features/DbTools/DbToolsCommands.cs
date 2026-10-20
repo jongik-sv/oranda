@@ -58,7 +58,7 @@ public sealed class DbToolsCommandHandler : ICommandHandler
         }
 
         var session = SessionProvider?.Invoke()
-            ?? (_services?.GetService(typeof(ISessionManager)) as ISessionManager)?.Sessions.LastOrDefault(s => s.Purpose == SessionPurpose.Work);
+            ?? ConnectionManager.SessionRouter.CurrentOf(_services);
         if (session is null)
         {
             return;

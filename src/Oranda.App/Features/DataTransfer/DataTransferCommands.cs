@@ -4,6 +4,8 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Avalonia.Controls;
+using Oranda.App.Features.ConnectionManager;
+using Oranda.App.Features.SqlEditor;
 using Oranda.App.Shell;
 using Oranda.Core.Execution;
 using Oranda.Core.Extensibility;
@@ -55,19 +57,15 @@ public static class DataTransferCommands
     internal static ISession? ResolveSession(IServiceProvider services)
     {
         var manager = services.GetService(typeof(ISessionManager)) as ISessionManager;
-        var work = manager?.Sessions.Where(s => s.Purpose == SessionPurpose.Work).ToList() ?? [];
-        if (work.Count == 0)
-        {
-            return null;
-        }
-
         var snapshot = (services.GetService(typeof(IEditorContext)) as IEditorContext)?.GetActiveDocument();
-        if (snapshot?.SessionId is { } sid && work.FirstOrDefault(s => s.Id == sid) is { } active)
+        if (snapshot?.SessionId is { } sid
+            && manager?.Sessions.FirstOrDefault(s => s.Purpose == SessionPurpose.Work && s.Id == sid) is { } active)
         {
             return active;
         }
 
-        return work[^1];
+        // 문서가 세션을 알리지 못하면 활성 SQL 탭의 세션(탭이 없으면 지금 접속). 마지막 작업 세션을 짐작하지 않는다.
+        return SessionRouter.ForTab(services, SqlEditorHost.Current.Active);
     }
 }
 

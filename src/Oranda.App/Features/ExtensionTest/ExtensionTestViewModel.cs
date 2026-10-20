@@ -7,6 +7,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using Oranda.App.Features.ConnectionManager;
 using Oranda.App.Shell;
 using Oranda.Core.Execution;
 using Oranda.Core.Extensibility;
@@ -371,23 +372,14 @@ public sealed partial class ExtensionTestViewModel : ToolPanelViewModelBase
         }
 
         var manager = Resolve<ISessionManager>();
-        var work = manager?.Sessions.Where(s => s.Purpose == SessionPurpose.Work).ToList() ?? [];
-        if (work.Count == 0)
-        {
-            return null;
-        }
-
-        if (snapshot?.SessionId is { } sid && work.FirstOrDefault(s => s.Id == sid) is { } bySession)
+        if (snapshot?.SessionId is { } sid
+            && manager?.Sessions.FirstOrDefault(s => s.Purpose == SessionPurpose.Work && s.Id == sid) is { } bySession)
         {
             return bySession;
         }
 
-        if (snapshot?.ConnectionProfileId is { } pid && work.LastOrDefault(s => s.Profile.Id == pid) is { } byProfile)
-        {
-            return byProfile;
-        }
-
-        return work[^1];
+        // 문서의 접속이 열려 있지 않으면 null(다른 접속으로 대신하지 않는다). 접속이 없는 문서는 지금 접속.
+        return SessionRouter.ForProfile(_services, snapshot?.ConnectionProfileId);
     }
 
     private T? Resolve<T>()

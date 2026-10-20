@@ -114,6 +114,10 @@ public partial class MainWindow : Window
         _viewModel = (MainViewModel)services.Create(typeof(MainViewModel));
         DataContext = _viewModel;
         _shell.MainWindow = this;
+        ConnectionComboHost.Content = new Features.ConnectionManager.ConnectionComboView
+        {
+            DataContext = new Features.ConnectionManager.ConnectionComboViewModel(services.GetService<IEventBus>(), services),
+        };
 
         _dispatcher = new KeyDispatcher(() => _keymap.Table, _registry, _keys);
         _controls = new MenuControls(
@@ -146,6 +150,7 @@ public partial class MainWindow : Window
         PaletteIcon.Content = ShellIcons.Create("find", 14);
         PaletteButton.Click += (_, _) => _shell.ShowCommandPalette();
         ToolbarHost.SizeChanged += (_, _) => UpdateToolbarOverflow();
+        ConnectionComboHost.SizeChanged += (_, _) => UpdateToolbarOverflow(); // 접속 콤보 폭은 고른 접속 이름을 따라 바뀐다
         SizeChanged += (_, _) => UpdateStatusBarCollapse();
         PositionChanged += (_, _) => RememberNormalBounds();
         Resized += (_, _) => RememberNormalBounds();
@@ -293,7 +298,7 @@ public partial class MainWindow : Window
         }
 
         var widths = children.Select(c => c.DesiredSize.Width).ToList();
-        var reserved = Math.Max(PaletteButton.DesiredSize.Width, PaletteButton.MinWidth) + 12;
+        var reserved = Math.Max(PaletteButton.DesiredSize.Width, PaletteButton.MinWidth) + ConnectionComboHost.Bounds.Width + 12;
         var available = Math.Max(0, ToolbarHost.Bounds.Width - reserved);
         if (ToolbarHost.Bounds.Width <= 0)
         {

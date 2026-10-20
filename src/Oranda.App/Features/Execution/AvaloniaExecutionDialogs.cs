@@ -44,6 +44,12 @@ public sealed class AvaloniaExecutionDialogs : IExecutionDialogs
     public Task<UncommittedChoice> AskUncommittedAsync(string subject, CancellationToken ct)
         => OnUi(() => UncommittedCoreAsync(subject));
 
+    public Task<UncommittedChoice> AskConnectionUncommittedAsync(string connection, CancellationToken ct)
+        => OnUi(() => UncommittedCoreAsync(null, connection));
+
+    public Task<MissingConnectionChoice> AskMissingConnectionAsync(string profile, string? current, CancellationToken ct)
+        => OnUi(() => MissingConnectionCoreAsync(profile, current));
+
     public Task<bool> PreviewDmlAsync(string text, CancellationToken ct)
         => OnUi(() => PreviewCoreAsync(text, commit: false));
 
@@ -194,19 +200,20 @@ public sealed class AvaloniaExecutionDialogs : IExecutionDialogs
 
     // ---- 미커밋 종료 -----------------------------------------------------------------------
 
-    private async Task<UncommittedChoice> UncommittedCoreAsync(string? subject)
+    private async Task<UncommittedChoice> UncommittedCoreAsync(string? subject, string? connection = null)
     {
         var choice = UncommittedChoice.Cancel;
-        var dialog = CreateUncommittedDialog(subject, c => choice = c);
+        var dialog = CreateUncommittedDialog(subject, c => choice = c, connection);
         await ShowAsync(dialog).ConfigureAwait(true);
         return choice;
     }
 
     /// <summary>
     /// 미커밋 확인 창을 만든다(띄우지는 않는다). <paramref name="subject"/> 가 있으면 어느 탭의 세션인지 글에 넣는다(전용 세션 탭, D-017).
+    /// <paramref name="connection"/> 이 있으면 어느 접속인지 글에 넣는다(접속 끊기·앱 종료 때 접속마다, CONN-06).
     /// 단추를 누르면 <paramref name="chosen"/> 을 부르고 창을 닫는다. 「취소」·창 닫기는 부르지 않는다.
     /// </summary>
-    internal static Window CreateUncommittedDialog(string? subject, Action<UncommittedChoice> chosen)
+    internal static Window CreateUncommittedDialog(string? subject, Action<UncommittedChoice> chosen, string? connection = null)
     {
         var dialog = NewWindow("미커밋 트랜잭션");
         var commit = new Button { Content = "커밋", MinWidth = 80 };
@@ -223,13 +230,64 @@ public sealed class AvaloniaExecutionDialogs : IExecutionDialogs
             dialog.Close();
         };
         cancel.Click += (_, _) => dialog.Close();
-        var text = subject is null
+        var text = connection is not null
+            ? UiText.Get("Execution.uncommitted.connection", "접속 「{0}」 에 커밋하지 않은 변경이 있습니다. 어떻게 할까요?")
+                .Replace("{0}", connection, StringComparison.Ordinal)
+            : subject is null
             ? "커밋하지 않은 변경이 있습니다. 어떻게 할까요?"
             : UiText.Get("Execution.uncommitted.dedicated", "「{0}」 탭의 전용 세션에 커밋하지 않은 변경이 있습니다. 어떻게 할까요?")
                 .Replace("{0}", subject, StringComparison.Ordinal);
         dialog.Content = Framed(
             new TextBlock { Text = text, TextWrapping = TextWrapping.Wrap, MaxWidth = 420 },
             Buttons(commit, rollback, cancel));
+        dialog.Opened += (_, _) => cancel.Focus();
+        return dialog;
+    }
+
+    // ---- 접속 안 됨 탭 실행 ----------------------------------------------------------------------
+
+    private async Task<MissingConnectionChoice> MissingConnectionCoreAsync(string profile, string? current)
+    {
+        var choice = MissingConnectionChoice.Cancel;
+        var dialog = CreateMissingConnectionDialog(profile, current, c => choice = c);
+        await ShowAsync(dialog).ConfigureAwait(true);
+        return choice;
+    }
+
+    /// <summary>
+    /// 접속 안 됨 탭 실행 확인 창을 만든다(띄우지는 않는다): 다시 접속 / 지금 접속으로 바꾸기(<paramref name="current"/> 가 있을 때만) / 취소.
+    /// 단추를 누르면 <paramref name="chosen"/> 을 부르고 창을 닫는다. 「취소」·창 닫기는 부르지 않는다.
+    /// </summary>
+    internal static Window CreateMissingConnectionDialog(string profile, string? current, Action<MissingConnectionChoice> chosen)
+    {
+        var dialog = NewWindow("접속 안 됨");
+        var reconnect = new Button { Content = "다시 접속", MinWidth = 80 };
+        var cancel = new Button { Content = "취소", MinWidth = 80, IsDefault = true, IsCancel = true };
+        reconnect.Click += (_, _) =>
+        {
+            chosen(MissingConnectionChoice.Reconnect);
+            dialog.Close();
+        };
+        cancel.Click += (_, _) => dialog.Close();
+        var buttons = new List<Button> { reconnect };
+        if (current is not null)
+        {
+            // 다른 DB 에서 실행하게 되므로 바꿀 접속 이름을 단추에 밝힌다.
+            var useCurrent = new Button { Content = $"「{current}」 로 바꾸기" };
+            useCurrent.Click += (_, _) =>
+            {
+                chosen(MissingConnectionChoice.UseCurrent);
+                dialog.Close();
+            };
+            buttons.Add(useCurrent);
+        }
+
+        buttons.Add(cancel);
+        var text = UiText.Get("Execution.missing.message", "이 탭의 접속 「{0}」 이(가) 열려 있지 않습니다. 어떻게 할까요?")
+            .Replace("{0}", profile, StringComparison.Ordinal);
+        dialog.Content = Framed(
+            new TextBlock { Text = text, TextWrapping = TextWrapping.Wrap, MaxWidth = 420 },
+            Buttons([.. buttons]));
         dialog.Opened += (_, _) => cancel.Focus();
         return dialog;
     }

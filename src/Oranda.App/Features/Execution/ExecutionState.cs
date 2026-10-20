@@ -24,13 +24,14 @@ public enum SessionRunState
 }
 
 /// <summary>
-/// 실행 화면이 보여 주는 작업 세션 상태(ui-shell.md 1.2 의 2·3·4·6번 구간 + 문맥 키 <c>sessionBusy</c>·<c>txnPending</c>·
+/// 실행 화면이 보여 주는 세션 상태(ui-shell.md 1.2 의 2·3·4·6번 구간 + 문맥 키 <c>sessionBusy</c>·<c>txnPending</c>·
 /// <c>readOnlySession</c>·<c>hasExecError</c>·<c>dedicatedSession</c>). 이벤트 버스(<c>SessionOpened</c> 등)만 보고 갱신한다 — 그래서 상태 표시줄 구간은
 /// 시작 때 Oracle·Language 어셈블리를 만지지 않는다. 이벤트 버스마다 하나(<see cref="For"/>).
 /// <para>
-/// 매개변수 없는 멤버(<see cref="RunState"/>·<see cref="TxnPending"/>·<see cref="BeginRun()"/> 등)는 공유 작업 세션의 상태다.
-/// 전용 세션 SQL 탭(D-017)은 세션마다 상태를 따로 두고(<see cref="AddDedicated"/>, 세션 ID 를 받는 멤버), 상태 표시줄·문맥 키는
-/// 활성 탭의 세션(<see cref="Focus"/>)을 보여 준다(<c>Shown*</c> 멤버).
+/// 세션마다 상태를 따로 둔다: 열린 작업 세션(접속, CONN-06)마다 하나(<c>SessionOpened</c> 로 생긴다), 전용 세션 SQL 탭(D-017)마다 하나
+/// (<see cref="AddDedicated"/>). 매개변수 없는 멤버(<see cref="RunState"/>·<see cref="TxnPending"/>·<see cref="BeginRun()"/> 등)는
+/// 「지금 접속」 작업 세션(<see cref="UsePrimary"/>)의 상태이고, 세션 ID 를 받는 멤버는 그 세션의 상태다.
+/// 상태 표시줄·문맥 키는 활성 문서의 세션(<see cref="Focus"/>)을 보여 준다(<c>Shown*</c> 멤버).
 /// </para>
 /// </summary>
 public sealed class ExecutionState : ObservableObject
@@ -38,12 +39,19 @@ public sealed class ExecutionState : ObservableObject
     private static readonly ConditionalWeakTable<IEventBus, ExecutionState> PerBus = [];
     private static readonly Lock Gate = new();
 
+    private static readonly string[] PrimaryProperties =
+    [
+        nameof(SessionId), nameof(Profile), nameof(RunState), nameof(Busy), nameof(HasSession), nameof(ReadOnly),
+        nameof(TxnPending), nameof(TransactionText), nameof(SessionText), nameof(LastRunText), nameof(Elapsed),
+    ];
+
+    private readonly Dictionary<Guid, Track> _tracks = [];
+    private readonly HashSet<Guid> _released = []; // 닫은 세션(세션 ID 는 다시 쓰이지 않는다)
+    private readonly Track _none = new(null, dedicated: false) { Run = SessionRunState.NoSession }; // 지금 접속이 없을 때
     private Guid? _sessionId;
-    private ConnectionProfile? _profile;
-    private SessionRunState _runState = SessionRunState.NoSession;
-    private bool _txnPending;
+    private Guid? _focus;
+    private bool _focusNone;
     private bool _autoCommit;
-    private string _lastRunText = string.Empty;
     private bool _hasExecError;
     private DbError? _lastError;
     private SqlStatement? _lastErrorStatement;
@@ -51,18 +59,16 @@ public sealed class ExecutionState : ObservableObject
     private ScriptErrorMode _errorMode = ScriptErrorMode.Ask;
     private bool _dbmsOutputEnabled = true;
     private bool _blankLineDelimiter;
-    private DateTime _startedUtc;
-    private TimeSpan _elapsed;
     private DispatcherTimer? _timer;
     private ContextKeyService? _keys;
-    private readonly Dictionary<Guid, Track> _dedicated = [];
-    private readonly HashSet<Guid> _released = []; // 닫은 전용 세션(세션 ID 는 다시 쓰이지 않는다)
-    private Guid? _focus;
 
-    /// <summary>전용 세션 하나의 실행 상태(공유 작업 세션의 상태는 위 필드).</summary>
-    private sealed class Track(ConnectionProfile profile)
+    /// <summary>세션 하나의 실행 상태.</summary>
+    private sealed class Track(ConnectionProfile? profile, bool dedicated)
     {
-        public ConnectionProfile Profile { get; } = profile;
+        public ConnectionProfile? Profile { get; } = profile;
+
+        /// <summary>전용 세션 SQL 탭(D-017)의 세션. 아니면 작업 세션(접속).</summary>
+        public bool Dedicated { get; } = dedicated;
 
         public SessionRunState Run { get; set; } = SessionRunState.Idle;
 
@@ -116,46 +122,26 @@ public sealed class ExecutionState : ObservableObject
 
     private static ExecutionState? Fallback { get; set; }
 
+    /// <summary>지금 접속 작업 세션의 상태. 없으면 「세션 없음」 상태(그래도 실행 시작·끝은 받는다).</summary>
+    private Track P => _sessionId is { } id && _tracks.TryGetValue(id, out var t) ? t : _none;
+
+    /// <summary>지금 접속 작업 세션 ID.</summary>
     public Guid? SessionId => _sessionId;
 
-    public ConnectionProfile? Profile => _profile;
+    public ConnectionProfile? Profile => P.Profile;
 
-    public SessionRunState RunState
-    {
-        get => _runState;
-        private set
-        {
-            if (SetProperty(ref _runState, value))
-            {
-                OnPropertyChanged(nameof(Busy));
-                OnPropertyChanged(nameof(SessionText));
-                OnPropertyChanged(nameof(HasSession));
-                RaiseShown();
-            }
-        }
-    }
+    public SessionRunState RunState => P.Run;
 
-    public bool HasSession => _runState != SessionRunState.NoSession;
+    public bool HasSession => RunState != SessionRunState.NoSession;
 
-    /// <summary>공유 작업 세션이 실행 중이거나 취소 중. 문맥 키 <c>sessionBusy</c> 는 <see cref="ShownBusy"/>.</summary>
-    public bool Busy => _runState is SessionRunState.Running or SessionRunState.Cancelling;
+    /// <summary>지금 접속이 실행 중이거나 취소 중. 문맥 키 <c>sessionBusy</c> 는 <see cref="ShownBusy"/>.</summary>
+    public bool Busy => P.Busy;
 
-    public bool ReadOnly => _profile?.ReadOnly ?? false;
+    public bool ReadOnly => P.Profile?.ReadOnly ?? false;
 
-    public bool TxnPending
-    {
-        get => _txnPending;
-        private set
-        {
-            if (SetProperty(ref _txnPending, value))
-            {
-                OnPropertyChanged(nameof(TransactionText));
-                RaiseShown();
-            }
-        }
-    }
+    public bool TxnPending => P.TxnPending;
 
-    /// <summary>자동 커밋(화면 수준: 켜면 성공한 변경 문장 뒤에 바로 커밋한다). 전용 세션 탭에도 같이 적용한다.</summary>
+    /// <summary>자동 커밋(화면 수준: 켜면 성공한 변경 문장 뒤에 바로 커밋한다). 모든 접속·전용 세션 탭에 같이 적용한다.</summary>
     public bool AutoCommit
     {
         get => _autoCommit;
@@ -169,17 +155,7 @@ public sealed class ExecutionState : ObservableObject
         }
     }
 
-    public string LastRunText
-    {
-        get => _lastRunText;
-        private set
-        {
-            if (SetProperty(ref _lastRunText, value))
-            {
-                RaiseShown();
-            }
-        }
-    }
+    public string LastRunText => P.LastRunText;
 
     public bool HasExecError
     {
@@ -220,57 +196,62 @@ public sealed class ExecutionState : ObservableObject
         set => SetProperty(ref _blankLineDelimiter, value);
     }
 
-    public TimeSpan Elapsed
-    {
-        get => _elapsed;
-        private set
-        {
-            if (SetProperty(ref _elapsed, value))
-            {
-                OnPropertyChanged(nameof(SessionText));
-                RaiseShown();
-            }
-        }
-    }
+    public TimeSpan Elapsed => P.Elapsed;
 
-    /// <summary>공유 작업 세션의 상태 글. 상태 표시줄 2번 구간은 <see cref="ShownSessionText"/>.</summary>
-    public string SessionText => DescribeSession(_runState, _elapsed);
+    /// <summary>지금 접속의 상태 글. 상태 표시줄 2번 구간은 <see cref="ShownSessionText"/>.</summary>
+    public string SessionText => DescribeSession(P.Run, P.Elapsed);
 
-    /// <summary>공유 작업 세션의 트랜잭션 글. 상태 표시줄 3번 구간은 <see cref="ShownTransactionText"/>.</summary>
-    public string TransactionText => DescribeTransaction(HasSession, _txnPending);
+    /// <summary>지금 접속의 트랜잭션 글. 상태 표시줄 3번 구간은 <see cref="ShownTransactionText"/>.</summary>
+    public string TransactionText => DescribeTransaction(HasSession, P.TxnPending);
 
-    // ---- 보이는 세션(활성 탭의 세션) ------------------------------------------------------------
+    /// <summary>미커밋 트랜잭션이 있는 작업 세션(접속) ID. 앱 종료 확인이 접속마다 묻는다.</summary>
+    public IReadOnlyList<Guid> PendingWorkSessions => [.. _tracks.Where(kv => !kv.Value.Dedicated && kv.Value.TxnPending).Select(kv => kv.Key)];
 
-    /// <summary>활성 탭이 전용 세션 탭이면 그 세션 ID. 아니면 null(공유 작업 세션을 보여 준다).</summary>
-    public Guid? FocusedDedicated => Shown is null ? null : _focus;
+    // ---- 보이는 세션(활성 문서의 세션) -----------------------------------------------------------
+
+    /// <summary>보이는 세션이 전용 세션이면 그 ID. 아니면 null.</summary>
+    public Guid? FocusedDedicated => Shown is { Dedicated: true } ? _focus : null;
+
+    /// <summary>보이는 세션이 없다(<see cref="FocusNothing"/>: 활성 SQL 탭에 묶인 접속이 열려 있지 않다).</summary>
+    public bool FocusedNothing => _focusNone;
+
+    /// <summary>보이는 세션 ID(<see cref="Focus"/> 로 고른 것, 없으면 지금 접속). <see cref="FocusNothing"/> 이면 null.</summary>
+    public Guid? FocusedSessionId => _focusNone ? null : _focus ?? _sessionId;
 
     /// <summary>보이는 세션이 전용 세션이다(상태 표시줄 「전용 세션」, 문맥 키 <c>dedicatedSession</c>).</summary>
-    public bool IsDedicatedShown => Shown is not null;
+    public bool IsDedicatedShown => Shown is { Dedicated: true };
 
-    private Track? Shown => _focus is { } id && _dedicated.TryGetValue(id, out var t) ? t : null;
+    /// <summary>
+    /// 보이는 세션: <see cref="FocusNothing"/> 이면 없음(접속이 닫힌 탭), <see cref="Focus"/> 로 고른 세션이 있으면 그것, 아니면 지금 접속.
+    /// </summary>
+    private Track? Shown => _focusNone ? null : _focus is { } id && _tracks.TryGetValue(id, out var t) ? t : P;
 
-    public SessionRunState ShownRunState => Shown?.Run ?? _runState;
+    public SessionRunState ShownRunState => Shown?.Run ?? SessionRunState.NoSession;
 
     public bool ShownHasSession => ShownRunState != SessionRunState.NoSession;
 
     /// <summary>보이는 세션이 실행 중이거나 취소 중(문맥 키 <c>sessionBusy</c>).</summary>
-    public bool ShownBusy => Shown is { } t ? t.Busy || t.Closing : Busy;
+    public bool ShownBusy => Shown is { } t && (t.Busy || t.Closing);
 
     /// <summary>보이는 세션에 미커밋 트랜잭션이 있다(문맥 키 <c>txnPending</c>).</summary>
-    public bool ShownTxnPending => Shown?.TxnPending ?? _txnPending;
+    public bool ShownTxnPending => Shown?.TxnPending ?? false;
 
     /// <summary>보이는 세션의 접속(확인 대화상자 머리 띠).</summary>
-    public ConnectionProfile? ShownProfile => Shown?.Profile ?? _profile;
+    public ConnectionProfile? ShownProfile => Shown?.Profile;
 
     public bool ShownReadOnly => ShownProfile?.ReadOnly ?? false;
 
-    public string ShownLastRunText => Shown?.LastRunText ?? _lastRunText;
+    public string ShownLastRunText => Shown?.LastRunText ?? string.Empty;
 
     /// <summary>상태 표시줄 2번 구간 글. 전용 세션 탭이면 앞에 「전용 세션」을 붙인다.</summary>
-    public string ShownSessionText => Shown is { } t ? UiText.Get("Execution.status.dedicated", "전용 세션") + " · " + DescribeSession(t.Run, t.Elapsed) : SessionText;
+    public string ShownSessionText => Shown is not { } t
+        ? string.Empty
+        : t.Dedicated
+            ? UiText.Get("Execution.status.dedicated", "전용 세션") + " · " + DescribeSession(t.Run, t.Elapsed)
+            : DescribeSession(t.Run, t.Elapsed);
 
     /// <summary>상태 표시줄 3번 구간 글. 비어 있으면 구간을 접는다.</summary>
-    public string ShownTransactionText => Shown is { } t ? DescribeTransaction(true, t.TxnPending) : TransactionText;
+    public string ShownTransactionText => Shown is { } t ? DescribeTransaction(t.Run != SessionRunState.NoSession, t.TxnPending) : string.Empty;
 
     /// <summary>문맥 키를 이 값들로 맞출 대상(셸의 <see cref="ContextKeyService"/>).</summary>
     public void UseKeys(ContextKeyService? keys)
@@ -302,35 +283,14 @@ public sealed class ExecutionState : ObservableObject
         ? string.Empty
         : pending ? "미커밋" : _autoCommit ? "자동 커밋" : string.Empty;
 
-    // ---- 컨트롤러가 부른다 -------------------------------------------------------------------
+    // ---- 지금 접속(매개변수 없는 멤버) -------------------------------------------------------------
 
     /// <summary>실행을 시작했다. 경과 시간을 세기 시작한다.</summary>
-    public void BeginRun()
-    {
-        _startedUtc = DateTime.UtcNow;
-        Elapsed = TimeSpan.Zero;
-        RunState = SessionRunState.Running;
-        ClearError();
-        StartTimer();
-    }
+    public void BeginRun() => Begin(P);
 
-    public void MarkCancelling()
-    {
-        if (_runState == SessionRunState.Running)
-        {
-            RunState = SessionRunState.Cancelling;
-        }
-    }
+    public void MarkCancelling() => Cancelling(P);
 
-    public void EndRun()
-    {
-        if (_runState is SessionRunState.Running or SessionRunState.Cancelling)
-        {
-            RunState = SessionRunState.Idle;
-        }
-
-        StopTimerIfIdle();
-    }
+    public void EndRun() => End(P);
 
     public void SetError(SqlStatement stmt, DbError? error, Guid? tab)
     {
@@ -341,7 +301,7 @@ public sealed class ExecutionState : ObservableObject
     }
 
     /// <summary>커밋·롤백 뒤처럼 컨트롤러가 알고 있는 트랜잭션 상태를 반영한다.</summary>
-    public void ApplyTransaction(bool pending) => TxnPending = pending;
+    public void ApplyTransaction(bool pending) => SetTxn(P, pending);
 
     public void ClearError()
     {
@@ -355,17 +315,35 @@ public sealed class ExecutionState : ObservableObject
     public void Tick()
     {
         var now = DateTime.UtcNow;
-        foreach (var t in _dedicated.Values.Where(t => t.Busy))
+        foreach (var t in _tracks.Values.Append(_none).Where(t => t.Busy))
         {
             t.Elapsed = now - t.StartedUtc;
         }
 
-        Elapsed = now - _startedUtc;
-        RaiseShown();
+        RaiseAll();
     }
 
-    // ---- 세션별(전용 세션 탭, D-017) ------------------------------------------------------------
-    // 세션 ID 가 전용 세션이 아니면(공유 작업 세션) 위의 매개변수 없는 멤버와 같다.
+    /// <summary>
+    /// 매개변수 없는 멤버가 가리킬 「지금 접속」 작업 세션을 바꾼다(접속 콤보·탭 전환). 열린 작업 세션이 아니면 무시한다. null = 지금 접속 없음.
+    /// </summary>
+    public void UsePrimary(Guid? workSessionId)
+    {
+        if (workSessionId is { } id && (!_tracks.TryGetValue(id, out var t) || t.Dedicated))
+        {
+            return;
+        }
+
+        if (_sessionId == workSessionId)
+        {
+            return;
+        }
+
+        _sessionId = workSessionId;
+        RaiseAll();
+    }
+
+    // ---- 세션별 ----------------------------------------------------------------------------
+    // 모르는 세션 ID(시험의 가짜 세션처럼 SessionOpened 없이 쓰인 세션)는 지금 접속과 같다. 닫은 세션은 무시한다.
 
     /// <summary>
     /// 전용 세션의 상태를 만든다. 세션을 연 쪽이 돌려받은 세션으로 바로 부른다(<c>SessionOpened</c> 는 UI 스레드로 늦게 올 수 있다).
@@ -373,7 +351,7 @@ public sealed class ExecutionState : ObservableObject
     public void AddDedicated(Guid sessionId, ConnectionProfile profile)
     {
         ArgumentNullException.ThrowIfNull(profile);
-        if (_dedicated.TryAdd(sessionId, new Track(profile)))
+        if (_tracks.TryAdd(sessionId, new Track(profile, dedicated: true)))
         {
             RaiseShown();
         }
@@ -382,39 +360,54 @@ public sealed class ExecutionState : ObservableObject
     /// <summary>전용 세션의 상태를 지운다(세션을 닫았다).</summary>
     public void RemoveDedicated(Guid sessionId)
     {
-        if (_dedicated.Remove(sessionId))
+        if (_tracks.TryGetValue(sessionId, out var t) && t.Dedicated)
         {
-            _released.Add(sessionId); // 늦게 끝난 실행의 상태 갱신이 공유 작업 세션으로 넘어가지 않게
-            StopTimerIfIdle();
-            RaiseShown();
+            Forget(sessionId);
         }
     }
 
-    public bool IsDedicated(Guid sessionId) => _dedicated.ContainsKey(sessionId);
+    public bool IsDedicated(Guid sessionId) => _tracks.TryGetValue(sessionId, out var t) && t.Dedicated;
 
-    /// <summary>상태 표시줄·문맥 키가 보여 줄 세션: 활성 탭의 전용 세션 ID. null 이면 공유 작업 세션.</summary>
-    public void Focus(Guid? dedicatedSessionId)
+    /// <summary>
+    /// 상태 표시줄·문맥 키가 보여 줄 세션(활성 문서의 세션: 전용 세션 또는 작업 세션). null 이면 지금 접속.
+    /// </summary>
+    public void Focus(Guid? sessionId)
     {
-        if (_focus == dedicatedSessionId)
+        if (_focus == sessionId && !_focusNone)
         {
             return;
         }
 
-        _focus = dedicatedSessionId;
+        _focus = sessionId;
+        _focusNone = false;
         RaiseShown();
     }
 
-    /// <summary>실행 중·취소 중이거나 닫기 확인 중(<see cref="SetClosing"/>)이면 true. 이미 닫은 전용 세션은 false.</summary>
-    public bool IsBusy(Guid sessionId) => _dedicated.TryGetValue(sessionId, out var t) ? t.Busy || t.Closing : !_released.Contains(sessionId) && Busy;
+    /// <summary>활성 문서에 세션이 없다(접속이 닫힌 SQL 탭): 상태 표시줄은 「세션 없음」 을 보이고 문맥 키는 꺼진다.</summary>
+    public void FocusNothing()
+    {
+        if (_focusNone)
+        {
+            return;
+        }
+
+        _focusNone = true;
+        _focus = null;
+        RaiseShown();
+    }
+
+    /// <summary>실행 중·취소 중이거나 닫기 확인 중(<see cref="SetClosing"/>)이면 true. 이미 닫은 세션은 false.</summary>
+    public bool IsBusy(Guid sessionId) => TrackOf(sessionId) is { } t && (t.Busy || t.Closing);
 
     /// <summary>실제로 실행 중·취소 중이면 true(<see cref="IsBusy"/> 와 달리 닫기 확인 중은 넣지 않는다).</summary>
-    public bool IsRunning(Guid sessionId) => _dedicated.TryGetValue(sessionId, out var t) ? t.Busy : !_released.Contains(sessionId) && Busy;
+    public bool IsRunning(Guid sessionId) => TrackOf(sessionId) is { Busy: true };
 
-    public bool IsBroken(Guid sessionId) => _dedicated.TryGetValue(sessionId, out var t)
-        ? t.Run == SessionRunState.Broken
-        : !_released.Contains(sessionId) && _runState == SessionRunState.Broken;
+    public bool IsBroken(Guid sessionId) => TrackOf(sessionId) is { Run: SessionRunState.Broken };
 
-    public bool IsTxnPending(Guid sessionId) => _dedicated.TryGetValue(sessionId, out var t) ? t.TxnPending : !_released.Contains(sessionId) && _txnPending;
+    public bool IsTxnPending(Guid sessionId) => TrackOf(sessionId) is { TxnPending: true };
+
+    /// <summary>세션이 자기 상태를 갖는지(모르는 ID 는 지금 접속 상태로 대신하므로, 접속마다 묻는 쪽이 남의 상태를 보지 않게 가린다).</summary>
+    public bool IsTracked(Guid sessionId) => _tracks.ContainsKey(sessionId);
 
     /// <summary>
     /// 전용 세션 탭의 닫기 확인이 도는 동안 그 세션을 「바쁨」으로 둔다: 확인을 마친 뒤 닫히기 전에 새 실행·커밋이 끼어들면
@@ -422,7 +415,7 @@ public sealed class ExecutionState : ObservableObject
     /// </summary>
     public void SetClosing(Guid sessionId, bool closing)
     {
-        if (_dedicated.TryGetValue(sessionId, out var t) && t.Closing != closing)
+        if (_tracks.TryGetValue(sessionId, out var t) && t.Dedicated && t.Closing != closing)
         {
             t.Closing = closing;
             RaiseShown();
@@ -431,81 +424,92 @@ public sealed class ExecutionState : ObservableObject
 
     public void BeginRun(Guid sessionId)
     {
-        if (!_dedicated.TryGetValue(sessionId, out var t))
+        if (TrackOf(sessionId) is { } t)
         {
-            if (!_released.Contains(sessionId))
-            {
-                BeginRun();
-            }
-
-            return;
+            Begin(t);
         }
-
-        t.StartedUtc = DateTime.UtcNow;
-        t.Elapsed = TimeSpan.Zero;
-        t.Run = SessionRunState.Running;
-        ClearError();
-        StartTimer();
-        RaiseShown();
     }
 
     public void MarkCancelling(Guid sessionId)
     {
-        if (!_dedicated.TryGetValue(sessionId, out var t))
+        if (TrackOf(sessionId) is { } t)
         {
-            if (!_released.Contains(sessionId))
-            {
-                MarkCancelling();
-            }
-
-            return;
-        }
-
-        if (t.Run == SessionRunState.Running)
-        {
-            t.Run = SessionRunState.Cancelling;
-            RaiseShown();
+            Cancelling(t);
         }
     }
 
     public void EndRun(Guid sessionId)
     {
-        if (!_dedicated.TryGetValue(sessionId, out var t))
+        if (TrackOf(sessionId) is { } t)
         {
-            if (!_released.Contains(sessionId))
-            {
-                EndRun();
-            }
-
-            return;
+            End(t);
         }
-
-        if (t.Busy)
-        {
-            t.Run = SessionRunState.Idle;
-        }
-
-        StopTimerIfIdle();
-        RaiseShown();
     }
 
     public void ApplyTransaction(Guid sessionId, bool pending)
     {
-        if (!_dedicated.TryGetValue(sessionId, out var t))
+        if (TrackOf(sessionId) is { } t)
         {
-            if (!_released.Contains(sessionId))
-            {
-                ApplyTransaction(pending);
-            }
+            SetTxn(t, pending);
+        }
+    }
 
-            return;
+    // ---- 상태 바꾸기 --------------------------------------------------------------------------
+
+    private Track? TrackOf(Guid sessionId) =>
+        _tracks.TryGetValue(sessionId, out var t) ? t : _released.Contains(sessionId) ? null : P;
+
+    private void Begin(Track t)
+    {
+        t.StartedUtc = DateTime.UtcNow;
+        t.Elapsed = TimeSpan.Zero;
+        t.Run = SessionRunState.Running;
+        ClearError();
+        StartTimer();
+        RaiseAll();
+    }
+
+    private void Cancelling(Track t)
+    {
+        if (t.Run == SessionRunState.Running)
+        {
+            t.Run = SessionRunState.Cancelling;
+            RaiseAll();
+        }
+    }
+
+    private void End(Track t)
+    {
+        if (t.Busy)
+        {
+            // 세션 없이 시작한 실행(지금 접속이 없을 때)은 「세션 없음」 으로 돌아간다.
+            t.Run = ReferenceEquals(t, _none) ? SessionRunState.NoSession : SessionRunState.Idle;
         }
 
+        StopTimerIfIdle();
+        RaiseAll();
+    }
+
+    private void SetTxn(Track t, bool pending)
+    {
         if (t.TxnPending != pending)
         {
             t.TxnPending = pending;
-            RaiseShown();
+            RaiseAll();
         }
+    }
+
+    private void Forget(Guid sessionId)
+    {
+        _tracks.Remove(sessionId);
+        _released.Add(sessionId); // 늦게 끝난 실행의 상태 갱신이 다른 세션으로 넘어가지 않게
+        if (_sessionId == sessionId)
+        {
+            _sessionId = null;
+        }
+
+        StopTimerIfIdle();
+        RaiseAll();
     }
 
     // ---- 이벤트 ----------------------------------------------------------------------------
@@ -514,75 +518,42 @@ public sealed class ExecutionState : ObservableObject
     {
         if (e.Purpose != SessionPurpose.Work)
         {
-            return; // 모니터·전용 세션은 공유 작업 세션을 바꾸지 않는다(전용 세션은 연 쪽이 AddDedicated 로 등록).
+            return; // 모니터·전용 세션은 작업 세션이 아니다(전용 세션은 연 쪽이 AddDedicated 로 등록).
         }
 
+        // 새 접속이 지금 접속이 된다(ConnectionService 와 같다). 접속 콤보로 바꾸면 UsePrimary 가 다시 고른다.
+        _tracks[e.SessionId] = new Track(e.Profile, dedicated: false);
         _sessionId = e.SessionId;
-        _profile = e.Profile;
-        _txnPending = false;
         ClearError();
-        LastRunText = string.Empty;
-        OnPropertyChanged(nameof(ReadOnly));
-        OnPropertyChanged(nameof(Profile));
-        OnPropertyChanged(nameof(TxnPending));
-        OnPropertyChanged(nameof(TransactionText));
-        RunState = SessionRunState.Idle;
+        RaiseAll();
     }
 
     private void OnClosed(SessionClosed e)
     {
-        if (_dedicated.ContainsKey(e.SessionId))
+        if (_tracks.ContainsKey(e.SessionId))
         {
-            RemoveDedicated(e.SessionId);
-            return;
+            Forget(e.SessionId);
         }
-
-        if (e.SessionId != _sessionId)
-        {
-            return;
-        }
-
-        _sessionId = null;
-        _profile = null;
-        _txnPending = false;
-        OnPropertyChanged(nameof(ReadOnly));
-        OnPropertyChanged(nameof(Profile));
-        OnPropertyChanged(nameof(TxnPending));
-        OnPropertyChanged(nameof(TransactionText));
-        RunState = SessionRunState.NoSession;
-        StopTimerIfIdle();
     }
 
     private void OnBroken(SessionBroken e)
     {
-        if (_dedicated.TryGetValue(e.SessionId, out var t))
-        {
-            t.TxnPending = e.HadPendingTransaction;
-            t.Run = SessionRunState.Broken;
-            StopTimerIfIdle();
-            RaiseShown();
-            return;
-        }
-
-        if (e.SessionId != _sessionId)
+        if (!_tracks.TryGetValue(e.SessionId, out var t))
         {
             return;
         }
 
-        TxnPending = e.HadPendingTransaction;
-        RunState = SessionRunState.Broken;
+        t.TxnPending = e.HadPendingTransaction;
+        t.Run = SessionRunState.Broken;
         StopTimerIfIdle();
+        RaiseAll();
     }
 
     private void OnTransaction(TransactionStateChanged e)
     {
-        if (_dedicated.ContainsKey(e.SessionId))
+        if (_tracks.TryGetValue(e.SessionId, out var t))
         {
-            ApplyTransaction(e.SessionId, e.Pending);
-        }
-        else if (e.SessionId == _sessionId)
-        {
-            TxnPending = e.Pending;
+            SetTxn(t, e.Pending);
         }
     }
 
@@ -594,14 +565,10 @@ public sealed class ExecutionState : ObservableObject
             return;
         }
 
-        if (_dedicated.TryGetValue(e.SessionId, out var t))
+        if (_tracks.TryGetValue(e.SessionId, out var t))
         {
             t.LastRunText = DescribeRun(e.Result);
-            RaiseShown();
-        }
-        else if (e.SessionId == _sessionId)
-        {
-            LastRunText = DescribeRun(e.Result);
+            RaiseAll();
         }
     }
 
@@ -620,6 +587,17 @@ public sealed class ExecutionState : ObservableObject
     }
 
     // ---- 내부 ------------------------------------------------------------------------------
+
+    /// <summary>지금 접속 값과 보이는 세션 값이 바뀌었을 수 있다: 모두 알린다.</summary>
+    private void RaiseAll()
+    {
+        foreach (var name in PrimaryProperties)
+        {
+            OnPropertyChanged(name);
+        }
+
+        RaiseShown();
+    }
 
     /// <summary>보이는 세션 값(<c>Shown*</c>)이 바뀌었을 수 있다: 알리고 문맥 키를 맞춘다.</summary>
     private void RaiseShown()
@@ -641,7 +619,8 @@ public sealed class ExecutionState : ObservableObject
         keys.Set("txnPending", ShownTxnPending);
         keys.Set("readOnlySession", ShownReadOnly);
         keys.Set("hasExecError", _hasExecError);
-        keys.Set("dedicatedSession", Shown is { Run: not SessionRunState.Broken });
+        keys.Set("dedicatedSession", Shown is { Dedicated: true, Run: not SessionRunState.Broken });
+        keys.Set("tabConnectionMissing", _focusNone); // 접속 안 됨 탭도 실행을 눌러 「다시 접속」 을 고를 수 있게(CONN-06)
     }
 
     private void StartTimer()
@@ -658,7 +637,7 @@ public sealed class ExecutionState : ObservableObject
     /// <summary>실행 중인 세션이 하나도 없으면 경과 시간 타이머를 멈춘다.</summary>
     private void StopTimerIfIdle()
     {
-        if (Busy || _dedicated.Values.Any(t => t.Busy))
+        if (_none.Busy || _tracks.Values.Any(t => t.Busy))
         {
             return;
         }
