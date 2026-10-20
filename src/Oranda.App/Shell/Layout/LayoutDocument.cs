@@ -20,6 +20,9 @@ public sealed record LayoutDocument
 
     /// <summary>닫아 둔 도구 창 ID.</summary>
     public IReadOnlyList<string> HiddenTools { get; init; } = [];
+
+    /// <summary>이름 붙인 레이아웃(<c>layouts/*.json</c>)의 이름. <c>layout.json</c> 에서는 쓰지 않는다(null 이면 쓰지 않는다).</summary>
+    public string? Name { get; init; }
 }
 
 /// <summary>창 위치·크기(DIP).</summary>

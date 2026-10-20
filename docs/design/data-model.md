@@ -26,6 +26,7 @@
 | `{data}/formatter/{id}.json` | 사용자 포매터 프로필(1 파일 = 1 프로필) | JSON | `FormatterProfile` | 2.3 |
 | `{data}/keymaps/{id}.json` | 사용자 키맵(프리셋 위에 덮어쓰기) | JSON | `Keymap` | 2.4 |
 | `{data}/layout.json` | 창 위치·도킹 배치 | JSON | `LayoutDocument` (App DTO) | 2.5 |
+| `{data}/layouts/{id}.json` | 이름 붙인 레이아웃(창 → 레이아웃 이름 붙여 저장) | JSON | `LayoutDocument`(+`name`, 창 위치 없음) | 2.5 |
 | `{data}/workspaces/{id}.json` | 작업 공간(탭 목록) | JSON | `Workspace` | 2.6 |
 | `{data}/autosave/{workspaceId}.json` | 복구용 자동 저장(10 s 간격) | JSON | `Workspace` (같은 스키마) | 2.6 |
 | `{data}/oranda.db` (+ `-wal`, `-shm`) | 실행 이력, 메타데이터 캐시 | SQLite | — | 3 |
@@ -209,7 +210,8 @@ TRD 4.11 대로 앱 DTO 다(Core 가 아니라 `Oranda.App`). Dock.Avalonia 의 
 | 필드 | 형식 | 필수 | 기본값 | 설명 |
 |---|---|---|---|---|
 | `schemaVersion` | int | ● | 2 | 1 → 2: 예전 기본 모양을 왼쪽 묶음 전체 높이 모양으로 옮긴다(ui-shell 2.1) |
-| `window` | `WindowPlacement` | ○ | null(화면 가운데 기본 크기) | |
+| `window` | `WindowPlacement` | ○ | null(화면 가운데 기본 크기) | 이름 붙인 레이아웃에는 싣지 않는다 |
+| `name` | string | ○ | null | 이름 붙인 레이아웃(`layouts/{id}.json`)의 이름. 이름으로 찾고 같은 이름은 덮어쓴다. `layout.json` 에서는 쓰지 않는다 |
 | `window.x`, `window.y` | int | ● | | 논리 좌표(DIP) |
 | `window.width`, `window.height` | int | ● | | DIP. 최소 800×500 |
 | `window.state` | `WindowStateKind` = `Normal`\|`Maximized`\|`FullScreen` | ○ | `Normal` | 최소화로는 저장하지 않음 |

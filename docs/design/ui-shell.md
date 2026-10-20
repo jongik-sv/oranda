@@ -87,6 +87,7 @@
 - 첫 실행 = 위 배치. 사용자가 바꾼 배치는 종료 때 `layout.json`(앱 DTO, 스키마 버전 필드, TSK-02-01 data-model)에 저장하고 시작 때 복원한다. Dock 의 직렬화 형식을 그대로 저장하지 않는다(라이브러리 버전이 바뀌어도 파일이 깨지지 않게).
 - 복원할 때 등록되지 않은 도구 창 ID(플러그인 제거 등)는 건너뛰고, 새로 등록된 도구 창은 자기 기본 위치에 추가한다. 그 위치에 묶음이 있으면 묶음 안에서 자기 순서(`Order`) 자리에 넣는다(맨 뒤가 아니라 기본 배치와 같은 자리).
 - `view.resetLayout` = 기본 배치로 되돌림.
+- 이름 붙인 레이아웃(Toad Desktop Layout·PL/SQL Developer 레이아웃 저장처럼): 창 메뉴의 `window.saveLayoutAs`·`window.applyLayout`·`window.deleteLayout`. 도구 창 배치만 저장·적용하고 열린 문서(작업 공간)는 그대로 둔다(`{data}/layouts/{id}.json`, data-model 2.5).
 - 시작 시간(D-006): 첫 프레임에는 문서 영역·스키마 브라우저 틀만 그린다. 숨겨진 도구 창의 View 는 처음 보일 때 만든다(지연 생성).
 
 ### 2.2 도구 창·문서 종류 목록

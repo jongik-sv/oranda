@@ -194,9 +194,12 @@
   "Cmd.oranda.view.zoomIn": "Larger Text",
   "Cmd.oranda.view.zoomOut": "Smaller Text",
   "Cmd.oranda.view.zoomReset": "Reset Text Size",
+  "Cmd.oranda.window.applyLayout": "Apply Saved Layout",
+  "Cmd.oranda.window.deleteLayout": "Delete Saved Layout",
   "Cmd.oranda.window.focusDocument": "Focus Document",
   "Cmd.oranda.window.nextDocument": "Next Tab",
   "Cmd.oranda.window.previousDocument": "Previous Tab",
+  "Cmd.oranda.window.saveLayoutAs": "Save Layout As",
   "Cmd.oranda.window.splitDown": "Split Down",
   "Cmd.oranda.window.splitRight": "Split Right",
   "Cmd.oranda.window.toggleResultPane": "Show/Hide Result Pane"

@@ -264,7 +264,7 @@
 
 ## 7. 1.0 명령 목록
 
-- 아래 표가 1.0 의 **명령 ID 전체**다(201개). 기본 키는 `default.json` 기준, 다른 프리셋은 6.1.
+- 아래 표가 1.0 의 **명령 ID 전체**다(204개). 기본 키는 `default.json` 기준, 다른 프리셋은 6.1.
 - 「키 범위(when)」는 키맵 `when`, 「활성 조건」은 명령 `Enablement` 다.
 - 소유 Task 가 처리기·제목·아이콘·Placements 를 만든다. 셸(TSK-03-01)은 이 표를 하드코딩하지 않는다 — 레지스트리 자동 수집만 한다.
 - 새 명령이 필요하면 기능 Task 가 규칙(1장)대로 ID 를 만들고 이 표에 행을 더하는 요청을 낸다. 키를 주려면 4개 프리셋 모두 충돌 검사를 통과해야 한다.
@@ -521,6 +521,9 @@
 | `oranda.window.previousDocument` | 이전 탭 | `Ctrl+Shift+Tab` | 전역 | `hasDocument` | TSK-03-01 |
 | `oranda.window.splitRight` | 오른쪽으로 분할 | - | 전역 | `hasDocument` | TSK-03-01 |
 | `oranda.window.splitDown` | 아래로 분할 | - | 전역 | `hasDocument` | TSK-03-01 |
+| `oranda.window.saveLayoutAs` | 레이아웃 이름 붙여 저장 | - | 전역 | 항상 | TSK-03-01 |
+| `oranda.window.applyLayout` | 저장한 레이아웃 적용 | - | 전역 | 항상 | TSK-03-01 |
+| `oranda.window.deleteLayout` | 저장한 레이아웃 지우기 | - | 전역 | 항상 | TSK-03-01 |
 | `oranda.window.focusDocument` | 문서로 포커스 | - | 전역 | `hasDocument` | TSK-03-01 |
 | `oranda.window.toggleResultPane` | 결과 영역 보이기/숨기기 | `Ctrl+Shift+R` | `sqlDocFocus` | `sqlDocActive` | TSK-06-02 |
 
