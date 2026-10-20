@@ -97,10 +97,12 @@
             <Grid ColumnDefinitions="Auto,Auto,*" Background="Transparent" ToolTip.Tip="{Binding ToolTip}">
               <ContentControl Content="{Binding IconKey, Converter={x:Static icons:IconKeyConverter.Instance}, ConverterParameter=14}"
                               VerticalAlignment="Center" Margin="0,0,6,0" />
-              <TextBlock Grid.Column="1" Text="{Binding Prefix}" FontFamily="{DynamicResource OrandaEditorFontFamily}"
+              <TextBlock Grid.Column="1" vm:MatchHighlight.Text="{Binding Prefix}" vm:MatchHighlight.Query="{Binding Highlight}"
+                         FontFamily="{DynamicResource OrandaEditorFontFamily}"
                          FontWeight="SemiBold" MinWidth="60" MaxWidth="150" Margin="0,0,8,0" VerticalAlignment="Center"
                          TextTrimming="CharacterEllipsis" />
-              <TextBlock Grid.Column="2" Text="{Binding Summary}" Opacity="0.7" VerticalAlignment="Center"
+              <TextBlock Grid.Column="2" vm:MatchHighlight.Text="{Binding Summary}" vm:MatchHighlight.Query="{Binding Highlight}"
+                         Opacity="0.7" VerticalAlignment="Center"
                          TextTrimming="CharacterEllipsis" />
             </Grid>
           </DataTemplate>

@@ -445,7 +445,7 @@ public sealed partial class TemplatesViewModel : ToolPanelViewModelBase
                 var name = SnippetLibrary.DisplayName(s, language);
                 var description = SnippetLibrary.DisplayDescription(s, language);
                 var tip = description.Length > 0 ? name + "\n" + description : name;
-                group.Items.Add(new TemplateItemRow(s, SnippetLibrary.Summary(s, language), tip));
+                group.Items.Add(new TemplateItemRow(s, SnippetLibrary.Summary(s, language), tip, Query));
             }
 
             group.Title = KindName(kind);

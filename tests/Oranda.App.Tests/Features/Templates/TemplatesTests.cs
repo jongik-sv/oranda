@@ -544,6 +544,17 @@ public sealed class TemplatesTests : IDisposable
     }
 
     [Fact]
+    public void Match_ranges_merge_overlaps_and_ignore_case()
+    {
+        Assert.Empty(MatchHighlight.Ranges("ROWNUM", " "));
+        Assert.Empty(MatchHighlight.Ranges("ROWNUM", "zz"));
+        Assert.Equal([(0, 3)], MatchHighlight.Ranges("ROWNUM", "row"));
+        Assert.Equal([(0, 6)], MatchHighlight.Ranges("ROWNUM", "row num"));
+        Assert.Equal([(0, 2), (4, 2)], MatchHighlight.Ranges("ab  AB", "ab"));
+        Assert.Equal([(5, 4)], MatchHighlight.Ranges("NVL2(expr)", "exp xpr"));
+    }
+
+    [Fact]
     public void Templates_text_keys_exist_in_both_languages()
     {
         var dir = AppContext.BaseDirectory;

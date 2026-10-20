@@ -112,6 +112,14 @@ public sealed class TemplatesPanelHeadlessTests : IDisposable
         Assert.Equal("nvl2", vm.Query);
         Assert.Equal("NVL2", vm.Selected?.Prefix);
 
+        // 찾은 낱말은 줄임말에서 굵게 강조한다.
+        window.UpdateLayout();
+        var found = (TreeViewItem)Named<TreeView>(view, "List").TreeContainerFromItem(vm.SelectedRow!)!;
+        var prefix = found.GetVisualDescendants().OfType<TextBlock>().First(t => t.Inlines is { Count: > 0 });
+        var bold = Assert.IsType<Avalonia.Controls.Documents.Run>(prefix.Inlines![0]);
+        Assert.Equal("NVL2", bold.Text);
+        Assert.Equal(Avalonia.Media.FontWeight.Bold, bold.FontWeight);
+
         // 미리보기: 이름·설명 줄과 강조된 SQL.
         var preview = Named<SqlCodeView>(view, "Preview");
         Assert.Equal("SELECT NVL2(comm, 'Y', 'N') FROM emp", preview.TextEditorControl.Text);

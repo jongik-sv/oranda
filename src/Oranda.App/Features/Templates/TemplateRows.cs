@@ -48,8 +48,8 @@ public sealed partial class TemplateGroupRow : TemplateRow
     public ObservableCollection<TemplateItemRow> Items { get; } = [];
 }
 
-/// <summary>항목 한 줄: 아이콘, 줄임말(고정폭), 짧은 설명(흐리게). 도움말 풍선에 이름과 설명 전체.</summary>
-public sealed class TemplateItemRow(Snippet snippet, string summary, string toolTip) : TemplateRow
+/// <summary>항목 한 줄: 아이콘, 줄임말(고정폭), 짧은 설명(흐리게). 도움말 풍선에 이름과 설명 전체. 찾는 낱말은 강조한다.</summary>
+public sealed class TemplateItemRow(Snippet snippet, string summary, string toolTip, string highlight = "") : TemplateRow
 {
     public Snippet Snippet { get; } = snippet;
 
@@ -59,6 +59,9 @@ public sealed class TemplateItemRow(Snippet snippet, string summary, string tool
     public string Summary { get; } = summary;
 
     public string ToolTip { get; } = toolTip;
+
+    /// <summary>강조할 찾기 글(<see cref="MatchHighlight"/>).</summary>
+    public string Highlight { get; } = highlight;
 
     public override string IconKey => IconOf(Snippet.Kind, Snippet.IsUser);
 }
