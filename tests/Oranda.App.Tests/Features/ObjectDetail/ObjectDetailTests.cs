@@ -71,6 +71,28 @@ public class ObjectDetailTests
     }
 
     [Fact]
+    public async Task Schema_properties_put_triggers_and_referencing_keys_right_after_indexes()
+    {
+        var meta = new FakeMeta
+        {
+            Sections =
+            [
+                new DetailSection("의존", ["방향"], [["참조됨"]]),
+                new DetailSection("통계", ["항목", "값"], [["행 수", 3L]]),
+                new DetailSection("참조됨", ["소유자", "테이블"], [["SCOTT", "EMP"]]),
+                new DetailSection("트리거", ["이름"], [["DEPT_BI"]]),
+                new DetailSection("인덱스", ["이름"], [["DEPT_PK"]]),
+                new DetailSection("열", ["이름", "형식"], [["ID", "NUMBER"]]),
+            ],
+        };
+        using var props = new SchemaPropertiesViewModel(() => meta, () => new FakeSession()) { Delay = TimeSpan.Zero };
+
+        await props.ShowAsync(new DbObjectRef("SCOTT", "DEPT", "TABLE"));
+
+        Assert.Equal(["열", "인덱스", "트리거", "참조됨", "통계", "의존", "정의"], props.Tabs.Select(t => t.Title));
+    }
+
+    [Fact]
     public async Task Schema_properties_report_a_failed_read_in_the_header()
     {
         using var props = new SchemaPropertiesViewModel(() => new FakeMeta { DetailFails = true }, () => new FakeSession()) { Delay = TimeSpan.Zero };
@@ -229,6 +251,9 @@ public class ObjectDetailTests
 
         public DdlOptions? LastOptions { get; private set; }
 
+        /// <summary>돌려줄 구역(null 이면 권한·열 두 개).</summary>
+        public IReadOnlyList<DetailSection>? Sections { get; init; }
+
         public Task<string> GetDdlAsync(ISession s, DbObjectRef obj, DdlOptions o, CancellationToken ct)
         {
             LastOptions = o;
@@ -240,7 +265,7 @@ public class ObjectDetailTests
         public Task<Oranda.Core.Metadata.ObjectDetail> GetObjectDetailAsync(ISession s, DbObjectRef obj, CancellationToken ct)
             => DetailFails
                 ? Task.FromException<Oranda.Core.Metadata.ObjectDetail>(new InvalidOperationException("boom"))
-                : Task.FromResult(new Oranda.Core.Metadata.ObjectDetail(obj,
+                : Task.FromResult(new Oranda.Core.Metadata.ObjectDetail(obj, Sections ??
                 [
                     new DetailSection("권한", ["받는 사람", "권한"], [["HR", "SELECT"]]),
                     new DetailSection("열", ["이름", "형식"], [["ID", "NUMBER"]]),

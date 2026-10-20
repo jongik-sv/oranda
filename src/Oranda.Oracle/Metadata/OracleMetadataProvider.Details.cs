@@ -95,8 +95,26 @@ internal sealed partial class OracleMetadataProvider
             AddTableSections(sections, table);
         }
 
+        if (type is "TABLE" or "VIEW")
+        {
+            // 뷰는 INSTEAD OF 트리거가 같은 쿼리로 나온다.
+            var triggers = await TryQueryAsync(s, "meta.detail_triggers", BindTable, ct);
+            if (triggers is { Count: > 0 })
+            {
+                sections.Add(new DetailSection("트리거", ["이름", "유형", "이벤트", "상태", "WHEN 조건", "소유자"],
+                    [.. triggers.Select(r => (IReadOnlyList<object?>)[Str(r[0]), Str(r[1]), Str(r[2]), Str(r[3]), Str(r[4]), Str(r[5])])]));
+            }
+        }
+
         if (string.Equals(type, "TABLE", StringComparison.Ordinal))
         {
+            var referencedBy = await TryQueryAsync(s, "meta.detail_referenced_by", BindTable, ct);
+            if (referencedBy is { Count: > 0 })
+            {
+                sections.Add(new DetailSection("참조됨", ["소유자", "테이블", "외래키", "열", "참조 키", "삭제 규칙", "상태"],
+                    [.. referencedBy.Select(r => (IReadOnlyList<object?>)[Str(r[0]), Str(r[1]), Str(r[2]), Str(r[3]), Str(r[4]), Str(r[5]), Str(r[6])])]));
+            }
+
             var partitions = await QueryAsync(s, "meta.detail_partitions", BindTable, ct);
             if (partitions.Count > 0)
             {
@@ -199,11 +217,15 @@ internal sealed partial class OracleMetadataProvider
     }
 
     /// <summary>dba 권한이 있으면 dba_segments, 없으면 자기 스키마일 때만 user_segments. 못 읽으면 null(크기 절을 빼고 계속한다).</summary>
-    private static async Task<List<object?[]>?> ReadSizesAsync(ISession s, Action<OracleCommand> bind, CancellationToken ct)
+    private static Task<List<object?[]>?> ReadSizesAsync(ISession s, Action<OracleCommand> bind, CancellationToken ct)
+        => TryQueryAsync(s, s.Server.Capabilities.CanQueryDictionary ? "meta.detail_size" : "meta.detail_size_user", bind, ct);
+
+    /// <summary>덧붙이는 구역 하나를 읽는다. 권한·뷰 문제로 실패하면 null(그 구역만 빼고 상세는 계속한다).</summary>
+    private static async Task<List<object?[]>?> TryQueryAsync(ISession s, string id, Action<OracleCommand> bind, CancellationToken ct)
     {
         try
         {
-            return await QueryAsync(s, s.Server.Capabilities.CanQueryDictionary ? "meta.detail_size" : "meta.detail_size_user", bind, ct);
+            return await QueryAsync(s, id, bind, ct);
         }
         catch (OracleException)
         {

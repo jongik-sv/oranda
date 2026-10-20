@@ -51,7 +51,7 @@ public sealed partial class SchemaPropertiesViewModel : ObservableObject, IDispo
     public const string DefinitionTitle = "정의";
 
     /// <summary>오렌지 Property 창의 탭 순서(Column, General, Comment, …, Segment). 목록에 없는 구역은 뒤에 붙는다.</summary>
-    private static readonly string[] Order = ["열", "일반", "설명", "제약", "인덱스", "통계", "크기", "파티션", "권한", "의존"];
+    private static readonly string[] Order = ["열", "일반", "설명", "제약", "인덱스", "트리거", "참조됨", "통계", "크기", "파티션", "권한", "의존"];
 
     private readonly Func<IMetadataProvider?> _meta;
     private readonly Func<ISession?> _session;

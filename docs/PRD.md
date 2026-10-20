@@ -221,7 +221,7 @@
 |---|---|---|---|
 | SCH-01 | 스키마별 객체 트리: 테이블, 뷰, 머티리얼라이즈드 뷰, 인덱스, 시퀀스, 시노님, 프로시저·함수·패키지, 트리거, 타입, DB 링크, 스케줄러 잡, 디렉터리, 휴지통. 26ai 객체(Duality View, Domain, Property Graph) 포함 | P0 | M1 |
 | SCH-02 | 권한에 따라 `dba_*`/`all_*`/`user_*` 뷰를 자동 선택 | P0 | M1 |
-| SCH-03 | 객체 상세: 컬럼(도메인·주석·가상·identity·invisible), 제약, 인덱스, 파티션, 권한, 의존 관계, 통계, 크기 | P0 | M1 |
+| SCH-03 | 객체 상세: 컬럼(도메인·주석·가상·identity·invisible), 제약, 인덱스, 트리거(뷰는 INSTEAD OF), 참조됨(이 테이블의 키를 참조하는 외래키), 파티션, 권한, 의존 관계, 통계, 크기 | P0 | M1 |
 | SCH-04 | DDL 보기: `DBMS_METADATA.GET_DDL`(서버가 지원하면 `DBMS_DEVELOPER.GET_METADATA` 우선 검토). 저장 속성 표시 여부 옵션 | P0 | M1 |
 | SCH-05 | 검색·필터(이름 패턴, 객체 유형, INVALID만), 접속별 즐겨찾기 | P0 | M1 |
 | SCH-06 | INVALID 객체 일괄 컴파일, 휴지통 Purge·Flashback | P1 | M2 |

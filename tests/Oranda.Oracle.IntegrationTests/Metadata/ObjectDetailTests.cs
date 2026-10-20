@@ -58,6 +58,8 @@ public sealed class ObjectDetailIntegrationTests : IClassFixture<OracleFreeFixtu
             $"ALTER TABLE {u}.modern ALLOCATE EXTENT", // 세그먼트 지연 생성을 피해 크기 절을 채운다
             $"CREATE TABLE {u}.part_t (id NUMBER, d DATE) PARTITION BY RANGE (id) (PARTITION p1 VALUES LESS THAN (100), PARTITION p2 VALUES LESS THAN (MAXVALUE))",
             $"CREATE VIEW {u}.dept_v AS SELECT id, name FROM {u}.dept",
+            $"CREATE TRIGGER {u}.dept_bi BEFORE INSERT ON {u}.dept FOR EACH ROW WHEN (new.id > 0) BEGIN NULL; END;",
+            $"CREATE TRIGGER {u}.dept_v_io INSTEAD OF INSERT ON {u}.dept_v FOR EACH ROW BEGIN NULL; END;",
             $"CREATE PROCEDURE {u}.sp AS BEGIN NULL; END;",
             $"CREATE PACKAGE {u}.pk AS PROCEDURE a; END;",
             $"CREATE PACKAGE BODY {u}.pk AS PROCEDURE a IS BEGIN NULL; END; END;",
@@ -230,6 +232,44 @@ public sealed class ObjectDetailIntegrationTests : IClassFixture<OracleFreeFixtu
 
         Assert.Contains(Section(view, "의존").Rows, r => (string?)r[0] == "참조함" && (string?)r[2] == "DEPT");
         Assert.Contains(Section(table, "의존").Rows, r => (string?)r[0] == "참조됨" && (string?)r[2] == "DEPT_V");
+    }
+
+    [Fact]
+    public async Task Table_detail_lists_its_triggers_and_the_foreign_keys_that_reference_it()
+    {
+        var provider = NewProvider();
+        var s = await OpenAsync("system", _db.SystemPassword);
+
+        var dept = await provider.GetObjectDetailAsync(s, new DbObjectRef(_owner, "DEPT", "TABLE"), default);
+
+        var trigger = Assert.Single(Section(dept, "트리거").Rows);
+        Assert.Equal("DEPT_BI", trigger[0]);
+        Assert.Equal("BEFORE EACH ROW", trigger[1]);
+        Assert.Equal("INSERT", trigger[2]);
+        Assert.Equal("ENABLED", trigger[3]);
+        Assert.Contains("id > 0", (string?)trigger[4], StringComparison.OrdinalIgnoreCase);
+        Assert.Equal(_owner, trigger[5]);
+
+        var fk = Assert.Single(Section(dept, "참조됨").Rows);
+        Assert.Equal([_owner, "MODERN", "MODERN_DEPT_FK", "DEPT_ID", "DEPT_PK", "NO ACTION", "ENABLED"], fk.Select(v => (string?)v));
+
+        // MODERN 은 트리거도, 자기를 참조하는 외래키도 없다: 빈 구역은 넣지 않는다.
+        var modern = await provider.GetObjectDetailAsync(s, new DbObjectRef(_owner, "MODERN", "TABLE"), default);
+        Assert.DoesNotContain(modern.Sections, x => x.Title is "트리거" or "참조됨");
+    }
+
+    [Fact]
+    public async Task View_detail_lists_instead_of_triggers()
+    {
+        var provider = NewProvider();
+        var s = await OpenAsync("system", _db.SystemPassword);
+
+        var view = await provider.GetObjectDetailAsync(s, new DbObjectRef(_owner, "DEPT_V", "VIEW"), default);
+
+        var trigger = Assert.Single(Section(view, "트리거").Rows);
+        Assert.Equal("DEPT_V_IO", trigger[0]);
+        Assert.Equal("INSTEAD OF", trigger[1]);
+        Assert.DoesNotContain(view.Sections, x => x.Title == "참조됨");
     }
 
     [Fact]

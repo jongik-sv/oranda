@@ -1,3 +1,4 @@
+using System.Text.RegularExpressions;
 using Oranda.Core.Catalog;
 using Oranda.Oracle.Catalog;
 
@@ -5,7 +6,7 @@ namespace Oranda.Oracle.Tests.Catalog;
 
 // 소유: TSK-04-04. meta/ 폴더 카탈로그: id 존재, 라이선스 없음, 23 전용 열은 min-version 23 으로만.
 [Trait("Category", "Catalog")]
-public class MetaCatalogTests
+public partial class MetaCatalogTests
 {
     private static readonly SqlCatalog Catalog = EmbeddedCatalog.Load();
 
@@ -18,6 +19,8 @@ public class MetaCatalogTests
     [InlineData("meta.table_comment")]
     [InlineData("meta.procedures")]
     [InlineData("meta.arguments")]
+    [InlineData("meta.detail_triggers")]
+    [InlineData("meta.detail_referenced_by")]
     public void Query_exists_for_19_and_needs_no_license_pack(string id)
     {
         var query = Catalog.Get(id, 19);
@@ -39,6 +42,40 @@ public class MetaCatalogTests
     }
 
     [Fact]
+    public void Trigger_detail_binds_table_owner_and_name_and_skips_the_long_body()
+    {
+        var sql = Catalog.Get("meta.detail_triggers", 26).Sql;
+
+        Assert.Contains("t.table_owner = :owner", sql, StringComparison.Ordinal);
+        Assert.Contains("t.table_name = :name", sql, StringComparison.Ordinal);
+        Assert.Contains("t.when_clause", sql, StringComparison.Ordinal);
+        Assert.DoesNotContain("trigger_body", sql, StringComparison.OrdinalIgnoreCase); // LONG 열은 읽지 않는다
+    }
+
+    [Fact]
+    public void Referenced_by_detail_finds_foreign_keys_pointing_at_the_table_keys()
+    {
+        var sql = Catalog.Get("meta.detail_referenced_by", 26).Sql;
+
+        Assert.Contains("c.constraint_type = 'R'", sql, StringComparison.Ordinal);
+        Assert.Contains("r.owner = c.r_owner AND r.constraint_name = c.r_constraint_name", sql, StringComparison.Ordinal);
+        Assert.Contains("r.owner = :owner", sql, StringComparison.Ordinal);
+        Assert.Contains("r.table_name = :name", sql, StringComparison.Ordinal);
+        Assert.Contains("LISTAGG(cc.column_name, ', ') WITHIN GROUP (ORDER BY cc.position)", sql, StringComparison.Ordinal);
+    }
+
+    /// <summary>상세 구역은 BindTable(owner, name)만 묶는다. 본문의 바인드 이름이 정확히 그 둘이어야 한다(이름은 글자로 잇지 않는다).</summary>
+    [Theory]
+    [InlineData("meta.detail_triggers")]
+    [InlineData("meta.detail_referenced_by")]
+    public void Detail_section_queries_bind_exactly_owner_and_name(string id)
+    {
+        var binds = BindName().Matches(Catalog.Get(id, 26).Sql).Select(m => m.Groups[1].Value).ToHashSet(StringComparer.Ordinal);
+
+        Assert.Equal(["name", "owner"], binds.Order(StringComparer.Ordinal));
+    }
+
+    [Fact]
     public void Meta_queries_never_read_password_columns()
     {
         foreach (var header in Catalog.Entries.Where(h => h.Id.StartsWith("meta.", StringComparison.Ordinal)))
@@ -47,4 +84,7 @@ public class MetaCatalogTests
             Assert.DoesNotContain("password", sql, StringComparison.OrdinalIgnoreCase);
         }
     }
+
+    [GeneratedRegex(@":([a-z_]+)")]
+    private static partial Regex BindName();
 }
