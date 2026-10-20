@@ -355,6 +355,35 @@ public sealed class SessionMonitorTests : IClassFixture<OracleFreeFixture>, IAsy
     }
 
     [Fact]
+    public async Task Session_detail_has_io_wait_history_long_ops_and_open_cursor_sections()
+    {
+        var monitor = await OpenMonitorAsync("system", _db.SystemPassword);
+        var target = await RawAsync();
+        var key = await KeyOfAsync(target);
+        await ExecAsync(target, "BEGIN DBMS_SESSION.SLEEP(0.1); END;");
+        var service = Service();
+
+        var detail = await service.GetSessionDetailAsync(monitor, key, default);
+
+        // 권한 문제면 구역이 ["오류"] 한 열이 된다. 여기서는 모두 제 열 머리여야 한다.
+        var io = Assert.Single(detail.Sections, x => x.Title == "I/O");
+        Assert.Equal("블록 읽기", io.Columns[0]);
+        Assert.Single(io.Rows);
+
+        var waits = Assert.Single(detail.Sections, x => x.Title == "대기 이력");
+        Assert.Equal("순번", waits.Columns[0]);
+        Assert.NotEmpty(waits.Rows);
+
+        var cursors = Assert.Single(detail.Sections, x => x.Title == "열린 커서");
+        Assert.Equal("SQL ID", cursors.Columns[0]);
+        Assert.InRange(cursors.Rows.Count, 1, 200);
+
+        // 진행 중인 긴 작업이 없으면 빈 구역(오류 아님).
+        var longOps = Assert.Single(detail.Sections, x => x.Title == "긴 작업");
+        Assert.Equal("작업", longOps.Columns[0]);
+    }
+
+    [Fact]
     public async Task Trace_on_returns_trace_file_path_and_off_returns_null()
     {
         var monitor = await OpenMonitorAsync("system", _db.SystemPassword);

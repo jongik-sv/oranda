@@ -247,7 +247,7 @@
 |---|---|---|---|
 | SESS-01 | 세션 목록: 사용자·프로그램·모듈·상태·대기 이벤트·SQL ID·경과 시간. 필터(활성만, 백그라운드 제외, 사용자, 모듈), 자동 새로고침(간격 지정) | P0 | M2 |
 | SESS-02 | 블로킹 트리: `blocking_session`·`final_blocking_session` 기반. RAC는 `gv$` + `inst_id` | P0 | M2 |
-| SESS-03 | 세션 상세: 현재·직전 SQL 전문, 실제 실행 계획, 트랜잭션(undo 사용량), 잠금 대상 객체, 세션 통계 | P0 | M2 |
+| SESS-03 | 세션 상세: 현재·직전 SQL 전문, 실제 실행 계획, 트랜잭션(undo 사용량), 잠금 대상 객체, 세션 통계, I/O(`v$sess_io`), 대기 이력(`v$session_wait_history`), 긴 작업(`v$session_longops`), 열린 커서(`v$open_cursor`, 200개까지). 모두 팩 불필요 뷰이며 권한이 없으면 그 구역에만 오류를 보인다 | P0 | M2 |
 | SESS-04 | 세션 Kill(`ALTER SYSTEM KILL SESSION ... IMMEDIATE`)과 Disconnect. 확인 대화상자에 대상 세션 정보 표시 | P0 | M2 |
 | SESS-05 | SQL 트레이스 켜기/끄기(`DBMS_MONITOR`, waits·binds 선택), 트레이스 파일 위치(`v$diag_info`) 표시 | P1 | M2 |
 | SESS-06 | 델타 모드(새로고침 사이 증가량), 사용자 지정 통계 열 | P2 | 이후 |

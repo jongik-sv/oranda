@@ -118,17 +118,17 @@ internal sealed partial class OracleMonitorService : IMonitorService
             await SectionAsync(monitor, "트랜잭션", ["XID", "상태", "시작", "UNDO 블록", "UNDO 레코드", "논리 I/O", "물리 I/O"],
                 "session.transaction", c => BindKey(c, target), ct),
             await SectionAsync(monitor, "잠금 객체", ["소유자", "객체", "유형", "잠금 모드"],
-                "session.locks", c =>
-                {
-                    AddInt(c, "inst_id", target.InstanceId);
-                    AddLong(c, "sid", target.Sid);
-                }, ct),
+                "session.locks", c => BindSid(c, target), ct),
             await SectionAsync(monitor, "통계", ["이름", "값"],
-                "session.stats", c =>
-                {
-                    AddInt(c, "inst_id", target.InstanceId);
-                    AddLong(c, "sid", target.Sid);
-                }, ct),
+                "session.stats", c => BindSid(c, target), ct),
+            await SectionAsync(monitor, "I/O", ["블록 읽기", "일관 읽기", "물리 읽기", "블록 변경", "일관 변경"],
+                "session.io", c => BindSid(c, target), ct),
+            await SectionAsync(monitor, "대기 이력", ["순번", "이벤트", "대기(µs)", "직전 대기 후(µs)", "P1", "P2", "P3"],
+                "session.wait_history", c => BindSid(c, target), ct),
+            await SectionAsync(monitor, "긴 작업", ["작업", "대상", "진행률(%)", "처리", "전체", "단위", "경과(초)", "남은 시간(초)", "시작", "메시지"],
+                "session.longops", c => BindKey(c, target), ct),
+            await SectionAsync(monitor, "열린 커서", ["SQL ID", "커서 유형", "마지막 실행", "SQL"],
+                "session.open_cursors", c => BindSid(c, target), ct),
         };
 
         CursorRef? cursor = null;
@@ -441,6 +441,13 @@ internal sealed partial class OracleMonitorService : IMonitorService
         AddInt(c, "inst_id", key.InstanceId);
         AddLong(c, "sid", key.Sid);
         AddLong(c, "serial", key.Serial);
+    }
+
+    /// <summary>SERIAL# 열이 없는 뷰(잠금·통계·I/O·대기 이력·열린 커서)용: inst_id, sid 만 묶는다.</summary>
+    private static void BindSid(OracleCommand c, SessionKey key)
+    {
+        AddInt(c, "inst_id", key.InstanceId);
+        AddLong(c, "sid", key.Sid);
     }
 
     private static void AddText(OracleCommand c, string name, string? value) =>
