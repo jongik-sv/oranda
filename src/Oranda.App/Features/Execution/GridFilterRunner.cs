@@ -112,8 +112,11 @@ public sealed class GridFilterRunner(ExecutionState state, BindVariableStore bin
         return s;
     }
 
-    /// <summary>성공한 결과 집합을 넘겨받는다. 실패·거부·취소·결과 없음은 예외로 바꾸고, 받은 결과 집합이 있으면 닫는다.</summary>
-    private static async Task<IResultSet> TakeResultAsync(ExecutionResult result, CancellationToken ct)
+    /// <summary>
+    /// 성공한 결과 집합을 넘겨받는다. 실패·거부·취소·결과 없음은 예외로 바꾸고, 받은 결과 집합이 있으면 닫는다.
+    /// 외래키 따라가기(<see cref="RelatedRowsRunner"/>)도 쓴다.
+    /// </summary>
+    internal static async Task<IResultSet> TakeResultAsync(ExecutionResult result, CancellationToken ct, string noResult = "거른 질의가 결과를 돌려주지 않았습니다.")
     {
         if (result.Status == ExecutionStatus.Succeeded && result.ResultSet is { } rs)
         {
@@ -130,7 +133,7 @@ public sealed class GridFilterRunner(ExecutionState state, BindVariableStore bin
             ExecutionStatus.Cancelled => new OperationCanceledException(ct),
             ExecutionStatus.Denied => new InvalidOperationException(result.Policy?.Message ?? "정책 관문이 막았습니다."),
             ExecutionStatus.Failed => new InvalidOperationException(DbErrorText.Format(result.Error, "실행하지 못했습니다.")),
-            _ => new InvalidOperationException("거른 질의가 결과를 돌려주지 않았습니다."),
+            _ => new InvalidOperationException(noResult),
         };
     }
 

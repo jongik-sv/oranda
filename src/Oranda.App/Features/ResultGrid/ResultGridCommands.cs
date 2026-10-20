@@ -28,6 +28,13 @@ public static class ResultGridCommands
 
     /// <summary>거른 결과의 전체 행 수(「전체 행 수 세기」를 거른 결과에서 할 때). 셀 값 바인드를 함께 넘긴다.</summary>
     public static Func<ResultFilterRequest, CancellationToken, Task<long?>>? CountFiltered { get; set; }
+
+    /// <summary>
+    /// 외래키 따라가기(GRID-11, <c>oranda.grid.followForeignKey</c>·<c>oranda.grid.showReferencingRows</c>): 요청한 행의 키 값을 바인드로 묶어
+    /// 부모 또는 자식 테이블을 조회하고 새 결과 탭에 열 결과를 돌려준다(결과 집합의 수명은 받는 쪽이 가진다). 외래키 고르기를 취소하면 null.
+    /// 실패는 이유를 담은 예외, 취소는 <see cref="OperationCanceledException"/>. 실행 화면(<c>ExecutionCommands.Install</c>)이 채운다.
+    /// </summary>
+    public static Func<RelatedRowsRequest, CancellationToken, Task<RelatedRowsResult?>>? OpenRelatedRows { get; set; }
 }
 
 /// <summary>결과 영역 명령 처리기. 활성 그리드가 없으면 아무것도 하지 않는다.</summary>
@@ -56,6 +63,10 @@ public static class ResultGridCommands
     Enablement = "gridQueryResult && gridHasSelection && hasSession && !sessionBusy", Placements = ["context:grid/filter@40"])]
 [OrandaCommand("oranda.grid.pinResultTab", CommandCategory.Result, When = "gridFocus", Enablement = "gridHasResult",
     Icon = "pin", Placements = ["context:grid/tab@10"])]
+[OrandaCommand("oranda.grid.followForeignKey", CommandCategory.Result, When = "gridFocus",
+    Enablement = "gridQueryResult && gridHasSelection && hasSession && !sessionBusy", Placements = ["context:grid/navigate@10"])]
+[OrandaCommand("oranda.grid.showReferencingRows", CommandCategory.Result, When = "gridFocus",
+    Enablement = "gridQueryResult && gridHasSelection && hasSession && !sessionBusy", Placements = ["context:grid/navigate@20"])]
 public sealed class ResultGridCommandHandler : ICommandHandler
 {
     public async Task ExecuteAsync(CommandContext context, CancellationToken cancellationToken)
@@ -125,6 +136,12 @@ public sealed class ResultGridCommandHandler : ICommandHandler
                 break;
             case "oranda.grid.pinResultTab":
                 g.RequestPin(); // 결과 탭 묶음이 그 탭을 고정하거나 푼다
+                break;
+            case "oranda.grid.followForeignKey":
+                g.RequestRelatedRows(RelatedRowsKind.Parent); // 결과 영역이 활성 행의 외래키 값을 바인드로 묶어 부모 행을 새 결과 탭에 연다(실패는 상태 줄에)
+                break;
+            case "oranda.grid.showReferencingRows":
+                g.RequestRelatedRows(RelatedRowsKind.Children); // 이 행의 키를 참조하는 자식 행을 새 결과 탭에(외래키가 여럿이면 고른다)
                 break;
             default:
                 break;

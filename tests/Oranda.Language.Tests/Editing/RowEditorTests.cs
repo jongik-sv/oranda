@@ -168,6 +168,23 @@ public class RowEditorTests
     }
 
     [Fact]
+    public void Column_sources_map_result_columns_to_from_tables_even_without_a_key()
+    {
+        // 키가 결과에 없어도(편집은 못 해도) 열의 출처는 안다 — 외래키 따라가기(GRID-11)가 쓴다.
+        var shape = SelectAnalyzer.Analyze("SELECT e.ename, d.dname, e.sal * 2 AS x, d.deptno FROM emp e JOIN scott.dept d ON d.deptno = e.deptno");
+        var sources = RowEditPlanner.MapColumns(shape, Cols("ENAME", "DNAME", "X", "DEPTNO"));
+
+        Assert.Equal("ENAME", sources[0]!.Column);
+        Assert.Equal("EMP", sources[0]!.Table.Name);
+        Assert.Null(sources[0]!.Table.Owner);
+        Assert.Equal("DNAME", sources[1]!.Column);
+        Assert.Equal("SCOTT", sources[1]!.Table.Owner);
+        Assert.Null(sources[2]); // 식
+        Assert.Same(sources[1]!.Table, sources[3]!.Table);
+        Assert.Equal("DEPTNO", sources[3]!.Column);
+    }
+
+    [Fact]
     public void Target_missing_from_from_clause_is_not_analyzable()
     {
         var cap = Analyze("SELECT empno FROM emp", new TableKeyInfo(Dept, TableKeyKind.PrimaryKey, ["DEPTNO"]), "EMPNO");

@@ -39,6 +39,9 @@ public sealed class SqlResultPaneViewModel : ToolPanelViewModelBase
     private int _filterBindCounter;
     private Action? _cancelFilter;
     private readonly Dictionary<string, BindValue> _filterBinds = new(StringComparer.OrdinalIgnoreCase);
+    private bool _hasStatementBinds;
+    private bool _isOpeningRelated;
+    private string? _relatedMessage;
 
     public string StatusText
     {
@@ -151,14 +154,14 @@ public sealed class SqlResultPaneViewModel : ToolPanelViewModelBase
 
     /// <summary>안내 막대 단추 글: 읽기 전용이면 「편집 모드로 다시 실행」, 키가 없어 못 고치면 「ROWID 추가 후 다시 실행」.</summary>
     public string? EditHintAction => _editHint is null ? null
-        : _editSession is null ? (_activeFilter is null ? "편집 모드로 다시 실행" : null)
+        : _editSession is null ? (_activeFilter is null && !_hasStatementBinds ? "편집 모드로 다시 실행" : null)
         : _editSession.Capability.CanAddRowId ? "ROWID 추가 후 다시 실행"
         : null;
 
     public bool HasEditHintAction => EditHintAction is not null;
 
-    /// <summary>안내 막대에 「편집 모드로 다시 실행」 단추를 보인다(읽기 전용 결과, 거른 결과는 빼고).</summary>
-    public bool OffersRerunForEdit => _editHint is not null && _editSession is null && _activeFilter is null;
+    /// <summary>안내 막대에 「편집 모드로 다시 실행」 단추를 보인다(읽기 전용 결과, 거른 결과·외래키로 연 결과는 빼고).</summary>
+    public bool OffersRerunForEdit => _editHint is not null && _editSession is null && _activeFilter is null && !_hasStatementBinds;
 
     /// <summary>안내 막대에 「ROWID 추가 후 다시 실행」 단추를 보인다(키가 없어 고칠 수 없는 결과).</summary>
     public bool OffersRowIdRerun => _editHint is not null && _editSession is { CanEdit: false, Capability.CanAddRowId: true };
@@ -206,6 +209,15 @@ public sealed class SqlResultPaneViewModel : ToolPanelViewModelBase
     /// <summary>지금 결과가 거른 결과다(편집 모드를 쓸 수 없다: 감싼 질의는 키·ROWID 를 알아낼 수 없다).</summary>
     public bool IsFiltered => _activeFilter is not null;
 
+    /// <summary>
+    /// 결과를 만든 문장의 바인드 값을 이 결과 영역이 가진다(외래키 따라가기로 연 결과, GRID-11). 거르기·전체 행 수 세기가 이 값을 넘기고,
+    /// 「바인드 변수」 목록에서 읽지 않는다. 편집 모드로 다시 실행할 수는 없다(실행 화면은 목록에서 바인드를 읽는다).
+    /// </summary>
+    public bool HasStatementBinds => _hasStatementBinds;
+
+    /// <summary>외래키 따라가기로 부모·자식 행을 여는 중.</summary>
+    public bool IsOpeningRelatedRows => _isOpeningRelated;
+
     /// <summary>최근에 적용한 조건(새것부터, 최대 <see cref="ResultFilter.HistorySize"/>개). 이 결과 영역 안에서만 남는다.</summary>
     public ObservableCollection<string> FilterHistory { get; } = [];
 
@@ -225,6 +237,12 @@ public sealed class SqlResultPaneViewModel : ToolPanelViewModelBase
     /// </summary>
     public event EventHandler? FilterApplied;
 
+    /// <summary>
+    /// 외래키 따라가기(GRID-11)로 부모·자식 행 결과를 받았다. 결과 탭 묶음이 받아 새 결과 탭에 연다(결과 집합의 수명도 넘긴다).
+    /// 받는 곳이 없으면 이 결과 영역은 따라가기를 하지 않는다.
+    /// </summary>
+    public event EventHandler<RelatedRowsResult>? RelatedRowsOpened;
+
     /// <summary>새 결과를 보인다. 호출한 쪽은 <paramref name="result"/> 의 수명을 이 영역에 넘긴다.</summary>
     public void SetResult(IResultSet result, GridDisplayOptions? display = null)
     {
@@ -243,6 +261,7 @@ public sealed class SqlResultPaneViewModel : ToolPanelViewModelBase
         m.FilterBarRequested += OnFilterBarRequested;
         m.CellFilterRequested += OnCellFilterRequested;
         m.PinRequested += OnPinRequested;
+        m.RelatedRowsRequested += OnRelatedRowsRequested;
         Model = m;
         UpdateStatus();
     }
@@ -268,6 +287,7 @@ public sealed class SqlResultPaneViewModel : ToolPanelViewModelBase
         EditHint = _editSession switch
         {
             null when _activeFilter is not null => "거른 결과는 편집할 수 없습니다. 값을 고치려면 거르기를 지운 뒤 결과 편집 모드로 다시 실행하세요(F9).",
+            null when _hasStatementBinds => "외래키로 연 결과는 편집할 수 없습니다. 값을 고치려면 그 테이블을 편집기에서 조회해 결과 편집 모드로 실행하세요(F9).",
             null => "읽기 전용 결과입니다. 값을 고치려면 결과 편집 모드로 다시 실행하세요(F9).",
             { CanEdit: false } es => "이 결과는 편집할 수 없습니다: " + (es.Capability.Message ?? es.Capability.Reason.ToString()),
             _ => null,
@@ -309,9 +329,12 @@ public sealed class SqlResultPaneViewModel : ToolPanelViewModelBase
         }
 
         // 거른 결과면 거른 질의(셀 값 바인드 포함, 정렬은 빼고)를 센다 — 「전체 M행」이 거르기 전 행 수가 되지 않게.
+        // 외래키로 연 결과는 이 결과 영역이 가진 바인드 값으로 센다(「바인드 변수」 목록에는 그 이름이 없다).
         Func<SqlStatement, CancellationToken, Task<long?>>? count = _activeFilter is { } filter
             ? ResultGridCommands.CountFiltered is { } countFiltered ? (_, token) => countFiltered(filter with { OrderBy = string.Empty }, token) : null
-            : ResultGridCommands.CountRows;
+            : _hasStatementBinds
+                ? ResultGridCommands.CountFiltered is { } countOwn ? (q, token) => countOwn(OwnBindsRequest(q), token) : null
+                : ResultGridCommands.CountRows;
         if (count is null)
         {
             _countMessage = "전체 행 수를 셀 수 없습니다(실행 엔진이 연결되지 않았습니다).";
@@ -357,6 +380,127 @@ public sealed class SqlResultPaneViewModel : ToolPanelViewModelBase
 
     /// <summary>세는 중인 「전체 행 수 세기」를 취소한다(서버 중단은 실행 엔진 몫).</summary>
     public void CancelCountRows() => _cancelCount?.Invoke();
+
+    // ---- 외래키 따라가기(GRID-11) -----------------------------------------------------------
+
+    /// <summary>
+    /// 이 결과를 만든 문장의 바인드 값을 넘겨받는다(외래키 따라가기로 연 결과). 거르기·전체 행 수 세기가 함께 넘긴다.
+    /// 셀 값 바인드와 같은 곳에 두므로 결과를 바꿔도(거르기·거르기 지우기) 남는다.
+    /// </summary>
+    public void UseStatementBinds(IReadOnlyDictionary<string, BindValue> binds)
+    {
+        ArgumentNullException.ThrowIfNull(binds);
+        foreach (var (name, value) in binds)
+        {
+            _filterBinds[name] = value;
+        }
+
+        _hasStatementBinds = binds.Count > 0;
+        OnPropertyChanged(nameof(HasStatementBinds));
+        OnPropertyChanged(nameof(EditHintAction));
+        OnPropertyChanged(nameof(HasEditHintAction));
+        OnPropertyChanged(nameof(OffersRerunForEdit));
+    }
+
+    /// <summary>
+    /// 외래키 따라가기(<c>oranda.grid.followForeignKey</c>·<c>oranda.grid.showReferencingRows</c>): 활성 행의 값과 활성 칸의 열로
+    /// 부모 행(이 열이 든 외래키가 참조하는 행) 또는 자식 행(이 행의 키를 참조하는 행)을 조회해 새 결과 탭에 연다(<see cref="RelatedRowsOpened"/>).
+    /// 이 결과는 그대로 둔다. 실패·취소는 상태 줄에 보이고 밖으로 던지지 않는다. 그새 결과가 바뀌면 받은 결과는 버린다.
+    /// </summary>
+    public async Task OpenRelatedRowsAsync(RelatedRowsKind kind, CancellationToken ct = default)
+    {
+        if (_isOpeningRelated || Statement is not { Kind: StatementKind.Query } query || _model is not { HasResult: true, HasSelection: true } m)
+        {
+            return;
+        }
+
+        if (RelatedRowsOpened is null)
+        {
+            ShowRelatedMessage("이 결과 영역에서는 새 결과 탭을 열 수 없습니다.");
+            return;
+        }
+
+        if (IsEditDirty)
+        {
+            ShowRelatedMessage("반영하지 않은 편집이 있습니다. 반영하거나 되돌린 뒤 따라가세요.");
+            return;
+        }
+
+        if (ResultGridCommands.OpenRelatedRows is not { } open)
+        {
+            ShowRelatedMessage("외래키를 따라갈 수 없습니다(실행 엔진이 연결되지 않았습니다).");
+            return;
+        }
+
+        var cell = m.Active;
+        if (cell.Col < 0 || cell.Col >= m.VisibleColumns.Count)
+        {
+            return;
+        }
+
+        // 행 값은 지금(UI 스레드에서) 읽어 둔다. 숨긴 열도 키일 수 있으므로 모든 열을 읽는다.
+        var row = new object?[m.Columns.Count];
+        for (var i = 0; i < row.Length; i++)
+        {
+            if (!m.TryGetValue(cell.Row, i, out row[i]))
+            {
+                ShowRelatedMessage("행 값을 아직 가져오지 않았습니다. 잠시 뒤 다시 하세요.");
+                return;
+            }
+        }
+
+        var request = new RelatedRowsRequest(kind, query, m.Columns, m.VisibleColumns[cell.Col], row);
+        var generation = _resultGeneration;
+        _isOpeningRelated = true;
+        OnPropertyChanged(nameof(IsOpeningRelatedRows));
+        ShowRelatedMessage(kind == RelatedRowsKind.Parent ? "부모 행 여는 중…" : "참조하는 행 여는 중…");
+
+        RelatedRowsResult? result = null;
+        string? message = null;
+        try
+        {
+            result = await open(request, ct).ConfigureAwait(true);
+        }
+        catch (OperationCanceledException)
+        {
+            message = "외래키 따라가기를 취소했습니다.";
+        }
+        catch (Exception e)
+        {
+            message = (kind == RelatedRowsKind.Parent ? "부모 행을 열지 못했습니다: " : "참조하는 행을 열지 못했습니다: ")
+                      + e.Message.ReplaceLineEndings(" ");
+        }
+
+        _isOpeningRelated = false;
+        OnPropertyChanged(nameof(IsOpeningRelatedRows));
+        if (generation != _resultGeneration || RelatedRowsOpened is not { } opened)
+        {
+            // 그새 결과 영역이 비었거나 다른 결과로 바뀌었다: 늦게 온 결과는 버린다.
+            if (result is not null)
+            {
+                await result.Result.DisposeAsync().ConfigureAwait(true);
+            }
+
+            return;
+        }
+
+        ShowRelatedMessage(message);
+        if (result is not null)
+        {
+            opened(this, result);
+        }
+    }
+
+    private ResultFilterRequest OwnBindsRequest(SqlStatement query) => new(query, string.Empty, string.Empty)
+    {
+        Binds = new Dictionary<string, BindValue>(_filterBinds, StringComparer.OrdinalIgnoreCase),
+    };
+
+    private void ShowRelatedMessage(string? message)
+    {
+        _relatedMessage = message;
+        UpdateStatus();
+    }
 
     // ---- 결과 거르기(GRID-10) ---------------------------------------------------------------
 
@@ -595,6 +739,7 @@ public sealed class SqlResultPaneViewModel : ToolPanelViewModelBase
         DetachEditSession();
         ResetCount();
         ResetFilter();
+        _relatedMessage = null;
         _summaryScope = null;
         if (_model is null)
         {
@@ -608,6 +753,7 @@ public sealed class SqlResultPaneViewModel : ToolPanelViewModelBase
         _model.FilterBarRequested -= OnFilterBarRequested;
         _model.CellFilterRequested -= OnCellFilterRequested;
         _model.PinRequested -= OnPinRequested;
+        _model.RelatedRowsRequested -= OnRelatedRowsRequested;
         if (ReferenceEquals(ResultGridCommands.Active, _model))
         {
             ResultGridCommands.Active = null;
@@ -630,6 +776,8 @@ public sealed class SqlResultPaneViewModel : ToolPanelViewModelBase
     private void OnCellFilterRequested(object? sender, CellFilterKind kind) => _ = FilterByCellAsync(kind);
 
     private void OnPinRequested(object? sender, EventArgs e) => PinRequested?.Invoke(this, EventArgs.Empty);
+
+    private void OnRelatedRowsRequested(object? sender, RelatedRowsKind kind) => _ = OpenRelatedRowsAsync(kind);
 
     /// <summary>
     /// 결과를 바꾸거나 닫을 때: 거르는 중이면 취소하고(늦게 온 결과는 버린다) 「거른 결과」 표시를 지운다.
@@ -669,7 +817,8 @@ public sealed class SqlResultPaneViewModel : ToolPanelViewModelBase
 
         if (_model.Error is { } err)
         {
-            StatusText = "오류: " + err.Message + (_filterMessage is { } failed ? " · " + failed : string.Empty);
+            StatusText = "오류: " + err.Message + (_filterMessage is { } failed ? " · " + failed : string.Empty)
+                         + (_relatedMessage is { } related ? " · " + related : string.Empty);
             SelectionSummary = null;
             OnPropertyChanged(nameof(CanCountRows));
             return;
@@ -698,6 +847,11 @@ public sealed class SqlResultPaneViewModel : ToolPanelViewModelBase
         if (_filterMessage is { } filterMessage)
         {
             text += " · " + filterMessage;
+        }
+
+        if (_relatedMessage is { } relatedMessage)
+        {
+            text += " · " + relatedMessage;
         }
 
         StatusText = text;

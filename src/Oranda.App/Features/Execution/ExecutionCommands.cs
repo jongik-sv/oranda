@@ -188,6 +188,7 @@ public static class ExecutionCommands
         ResultGrid.ResultGridCommands.CountRows ??= (stmt, ct) => RowCounter(container).CountAsync(stmt, ct);
         ResultGrid.ResultGridCommands.Filter ??= (request, ct) => FilterRunner(container).RunAsync(request, ct);
         ResultGrid.ResultGridCommands.CountFiltered ??= (request, ct) => FilterRunner(container).CountAsync(request, ct);
+        ResultGrid.ResultGridCommands.OpenRelatedRows ??= (request, ct) => RelatedRowsRunner.Create(container).OpenAsync(request, ct); // 외래키 따라가기(GRID-11)
 
         // 이력 「다시 실행」·내보내기/가져오기의 완료 알림은 메시지 창으로 보낸다(받는 곳이 없으면 조용히 사라졌다).
         var log = ExecutionLog.For(container.GetService<IEventBus>());

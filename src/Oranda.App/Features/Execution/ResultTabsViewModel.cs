@@ -151,7 +151,20 @@ public sealed partial class ResultTabsViewModel : ViewModelBase
         pane.CloseRequested += (_, _) => Close(tab);
         pane.PinRequested += (_, _) => tab.TogglePin();
         pane.FilterApplied += (_, _) => LeaveEditMode(tab);
+        pane.RelatedRowsOpened += (_, related) => AddRelated(related, pane);
         Add(tab);
+        return tab;
+    }
+
+    /// <summary>
+    /// 외래키 따라가기(GRID-11)로 받은 부모·자식 행 결과를 새 탭에 연다(「부모: DEPT」·「자식: EMP(FK_EMP_DEPT)」).
+    /// 그 문장이 새 결과 영역의 문장이 되고, 문장의 바인드 값은 새 결과 영역이 가진다 — 거르기 줄·전체 행 수 세기가 그 위에서 그대로 된다.
+    /// </summary>
+    public ResultTabItem AddRelated(RelatedRowsResult related, SqlResultPaneViewModel? source = null)
+    {
+        ArgumentNullException.ThrowIfNull(related);
+        var tab = AddQuery(related.Result, related.Title, related.Statement, source?.Model?.Display);
+        tab.Pane!.UseStatementBinds(related.Binds);
         return tab;
     }
 

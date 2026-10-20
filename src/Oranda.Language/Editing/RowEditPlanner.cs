@@ -20,6 +20,9 @@ public sealed record RowEditPlan(EditCapability Capability, IReadOnlyList<string
     public IReadOnlyList<SelectTableRef> Candidates { get; init; } = [];
 }
 
+/// <summary>결과 열 1개의 출처: FROM 절 테이블(인라인 뷰 아님)과 그 테이블의 열 이름(ROWID 열은 <c>ROWID</c>).</summary>
+public sealed record ColumnSource(SelectTableRef Table, string Column);
+
 /// <summary>
 /// PRD 6.5.1 행 식별 규칙. PK(없으면 NOT NULL 유니크 키) 전체 열 또는 ROWID 가 결과에 있어야 편집할 수 있다.
 /// 둘 다 있으면 PK 를 쓴다. 집계·DISTINCT·GROUP BY·집합 연산은 편집 불가. 조인은 대상 테이블 열만 편집한다.
@@ -174,11 +177,20 @@ public static class RowEditPlanner
         return match;
     }
 
-    private sealed record Source(SelectTableRef Table, string Column);
-
-    private static Source?[] MapSources(SelectShape shape, IReadOnlyList<ResultColumn> cols)
+    /// <summary>
+    /// 결과 열마다 출처(FROM 절 테이블과 그 열 이름). 식·인라인 뷰 열처럼 알 수 없으면 null.
+    /// 편집 계획과 같은 규칙으로 맞춘다(외래키 따라가기도 이것으로 열이 어느 테이블 열인지 안다).
+    /// </summary>
+    public static IReadOnlyList<ColumnSource?> MapColumns(SelectShape shape, IReadOnlyList<ResultColumn> cols)
     {
-        var result = new Source?[cols.Count];
+        ArgumentNullException.ThrowIfNull(shape);
+        ArgumentNullException.ThrowIfNull(cols);
+        return MapSources(shape, cols);
+    }
+
+    private static ColumnSource?[] MapSources(SelectShape shape, IReadOnlyList<ResultColumn> cols)
+    {
+        var result = new ColumnSource?[cols.Count];
         var items = shape.Items;
         var stars = items.Count(i => i.IsStar);
         var single = shape.Tables.Count == 1 ? shape.Tables[0] : null;
@@ -200,7 +212,7 @@ public static class RowEditPlanner
                         var table = item.Qualifier is null ? single ?? FromBase(shape, col) : Resolve(shape, item.Qualifier);
                         if (table is not null && !table.IsInlineView)
                         {
-                            result[ord] = new Source(table, col.Kind == ColumnDataKind.RowId ? "ROWID" : SelectAnalyzer.NormalizeIdentifier(col.BaseColumn ?? col.Name));
+                            result[ord] = new ColumnSource(table, col.Kind == ColumnDataKind.RowId ? "ROWID" : SelectAnalyzer.NormalizeIdentifier(col.BaseColumn ?? col.Name));
                         }
                     }
                     else if (item.Column is { } c)
@@ -208,7 +220,7 @@ public static class RowEditPlanner
                         var table = item.Qualifier is null ? single ?? FromBase(shape, col) : Resolve(shape, item.Qualifier);
                         if (table is not null && !table.IsInlineView)
                         {
-                            result[ord] = new Source(table, c);
+                            result[ord] = new ColumnSource(table, c);
                         }
                     }
                 }
@@ -223,7 +235,7 @@ public static class RowEditPlanner
             var col = cols[i];
             if (col.BaseColumn is not null && FromBase(shape, col) is { IsInlineView: false } t)
             {
-                result[i] = new Source(t, SelectAnalyzer.NormalizeIdentifier(col.BaseColumn));
+                result[i] = new ColumnSource(t, SelectAnalyzer.NormalizeIdentifier(col.BaseColumn));
             }
         }
 
