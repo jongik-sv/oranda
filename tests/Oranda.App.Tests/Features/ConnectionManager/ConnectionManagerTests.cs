@@ -947,7 +947,7 @@ public sealed class ConnectionManagerTests
             // 접속 방식에 따라 입력칸이 바뀐다.
             vm.Editor!.Mode = ConnectionMode.TnsAlias;
             Dispatcher.UIThread.RunJobs();
-            Assert.True(editor.FindControl<TextBox>("TnsAliasBox")!.IsEffectivelyVisible);
+            Assert.True(editor.FindControl<AutoCompleteBox>("TnsAliasBox")!.IsEffectivelyVisible);
             Assert.False(editor.FindControl<TextBox>("HostBox")!.IsEffectivelyVisible);
 
             Assert.True(window.Bounds.Width <= 960 + 0.5 && window.Bounds.Height <= 600 + 0.5);

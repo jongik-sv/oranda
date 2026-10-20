@@ -41,6 +41,7 @@
   "SQL 편집기": "SQL Editor",
   "TNS 디렉터리": "TNS directory",
   "TNS 별칭": "TNS alias",
+  "TNS 디렉터리를 넣으면 tnsnames.ora 의 별칭이 나옵니다": "Enter a TNS folder to list the aliases in tnsnames.ora",
   "cwallet.sso 가 있는 폴더(선택)": "Folder containing cwallet.sso (optional)",
   "host:1521/service?connect_timeout=5 또는 tcps://…": "host:1521/service?connect_timeout=5 or tcps://...",
   "tnsnames.ora 가 있는 폴더(선택)": "Folder containing tnsnames.ora (optional)",

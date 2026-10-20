@@ -15,8 +15,8 @@ public static class TnsResolver
     public static bool TryResolve(string tnsAdmin, string alias, out string descriptor)
     {
         descriptor = string.Empty;
-        var file = Path.Combine(tnsAdmin, "tnsnames.ora");
-        if (string.IsNullOrWhiteSpace(alias) || !File.Exists(file))
+        var file = FindTnsNames(tnsAdmin);
+        if (string.IsNullOrWhiteSpace(alias) || file is null)
         {
             return false;
         }
@@ -33,6 +33,53 @@ public static class TnsResolver
         {
             return false;
         }
+    }
+
+    /// <summary>
+    /// 폴더 안의 tnsnames.ora 경로. 이름 대소문자는 가리지 않는다(Instant Client 가 <c>TNSNAMES.ORA</c> 로 두는 경우, macOS 등).
+    /// 폴더나 파일이 없으면 null.
+    /// </summary>
+    public static string? FindTnsNames(string? tnsAdmin)
+    {
+        if (string.IsNullOrWhiteSpace(tnsAdmin) || !Directory.Exists(tnsAdmin))
+        {
+            return null;
+        }
+
+        try
+        {
+            return Directory.EnumerateFiles(tnsAdmin)
+                .FirstOrDefault(f => string.Equals(Path.GetFileName(f), "tnsnames.ora", StringComparison.OrdinalIgnoreCase));
+        }
+        catch (IOException)
+        {
+            return null;
+        }
+        catch (UnauthorizedAccessException)
+        {
+            return null;
+        }
+    }
+
+    /// <summary>기술자에서 화면에 보일 요약 <c>host:port/service</c>(SID 면 <c>host:port:sid</c>). 못 읽으면 null.</summary>
+    public static string? Summarize(string descriptor)
+    {
+        ArgumentNullException.ThrowIfNull(descriptor);
+        static string? Value(string text, string key) =>
+            System.Text.RegularExpressions.Regex.Match(text, @"\(\s*" + key + @"\s*=\s*([^)\s]+)\s*\)", System.Text.RegularExpressions.RegexOptions.IgnoreCase) is { Success: true } m
+                ? m.Groups[1].Value
+                : null;
+
+        var host = Value(descriptor, "HOST");
+        if (host is null)
+        {
+            return null;
+        }
+
+        var port = Value(descriptor, "PORT") ?? "1521";
+        return Value(descriptor, "SERVICE_NAME") is { } service ? $"{host}:{port}/{service}"
+            : Value(descriptor, "SID") is { } sid ? $"{host}:{port}:{sid}"
+            : $"{host}:{port}";
     }
 
     /// <summary>tnsnames.ora 본문에서 별칭의 기술자를 찾는다(대소문자 무시, <c>#</c> 주석 제거).</summary>

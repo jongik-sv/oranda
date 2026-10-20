@@ -98,15 +98,6 @@
                PlaceholderText="host:1521/service?connect_timeout=5 또는 tcps://…" AutomationProperties.Name="접속 문자열" />
     </Grid>
 
-    <Grid IsVisible="{Binding IsTnsMode}" ColumnSpacing="12">
-      <Grid.ColumnDefinitions>
-        <ColumnDefinition Width="Auto" SharedSizeGroup="Label" />
-        <ColumnDefinition Width="*" />
-      </Grid.ColumnDefinitions>
-      <TextBlock Text="TNS 별칭" Classes.error="{Binding TnsAliasMissing}" />
-      <TextBox x:Name="TnsAliasBox" Grid.Column="1" Text="{Binding TnsAlias}" Classes.missing="{Binding TnsAliasMissing}" AutomationProperties.Name="TNS 별칭" />
-    </Grid>
-
     <Grid RowDefinitions="Auto,Auto" ColumnSpacing="12" RowSpacing="6">
       <Grid.ColumnDefinitions>
         <ColumnDefinition Width="Auto" SharedSizeGroup="Label" />
@@ -116,6 +107,20 @@
       <TextBox x:Name="TnsAdminBox" Grid.Row="0" Grid.Column="1" Text="{Binding TnsAdmin}" PlaceholderText="tnsnames.ora 가 있는 폴더(선택)" AutomationProperties.Name="TNS 디렉터리" />
       <TextBlock Grid.Row="1" Text="지갑 폴더" />
       <TextBox x:Name="WalletBox" Grid.Row="1" Grid.Column="1" Text="{Binding WalletLocation}" PlaceholderText="cwallet.sso 가 있는 폴더(선택)" AutomationProperties.Name="지갑 폴더" />
+    </Grid>
+
+    <Grid IsVisible="{Binding IsTnsMode}" RowDefinitions="Auto,Auto" ColumnSpacing="12" RowSpacing="2">
+      <Grid.ColumnDefinitions>
+        <ColumnDefinition Width="Auto" SharedSizeGroup="Label" />
+        <ColumnDefinition Width="*" />
+      </Grid.ColumnDefinitions>
+      <TextBlock Text="TNS 별칭" Classes.error="{Binding TnsAliasMissing}" />
+      <!-- TNS 디렉터리의 tnsnames.ora 별칭을 제안한다(직접 입력해도 된다). 아래 줄은 고른 별칭의 host:port/service. -->
+      <AutoCompleteBox x:Name="TnsAliasBox" Grid.Column="1" Text="{Binding TnsAlias}" ItemsSource="{Binding TnsAliases}"
+                       MinimumPrefixLength="0" FilterMode="Contains" Classes.missing="{Binding TnsAliasMissing}"
+                       PlaceholderText="TNS 디렉터리를 넣으면 tnsnames.ora 의 별칭이 나옵니다" AutomationProperties.Name="TNS 별칭" />
+      <TextBlock x:Name="TnsAliasDetail" Grid.Row="1" Grid.Column="1" Text="{Binding TnsAliasDetail}" Opacity="0.7"
+                 FontSize="{DynamicResource OrandaFontSizeSmall}" IsVisible="{Binding TnsAliasDetail, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
     </Grid>
 
     <Border Classes="section">

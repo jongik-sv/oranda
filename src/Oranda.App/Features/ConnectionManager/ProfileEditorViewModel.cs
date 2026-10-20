@@ -4,6 +4,7 @@ using System.ComponentModel;
 using System.Globalization;
 using System.Text.RegularExpressions;
 using CommunityToolkit.Mvvm.ComponentModel;
+using Oranda.App.Features.Localization;
 using Oranda.App.ViewModels;
 using Oranda.Core.Connection;
 using Oranda.Platform.Storage;
@@ -209,6 +210,17 @@ public sealed partial class ProfileEditorViewModel : ViewModelBase
     [ObservableProperty]
     private string _tnsAdmin = string.Empty;
 
+    /// <summary>TNS 디렉터리의 tnsnames.ora 에서 읽은 별칭(별칭 칸이 제안한다). 직접 입력해도 된다.</summary>
+    [ObservableProperty]
+    private IReadOnlyList<string> _tnsAliases = [];
+
+    /// <summary>고른 별칭의 접속 요약(<c>host:port/service</c>) 또는 TNS 디렉터리 안내. 보일 것이 없으면 빈 글자.</summary>
+    [ObservableProperty]
+    private string _tnsAliasDetail = string.Empty;
+
+    /// <summary>이름 칸을 별칭으로 채웠는지(별칭을 바꾸면 이름도 따라 바꾼다. 사람이 고친 이름은 건드리지 않는다).</summary>
+    private string? _nameFromAlias;
+
     [ObservableProperty]
     private string _walletLocation = string.Empty;
 
@@ -380,6 +392,82 @@ public sealed partial class ProfileEditorViewModel : ViewModelBase
         if (!_loading && e.PropertyName is { } name && Array.IndexOf(Derived, name) < 0)
         {
             RefreshDerived();
+        }
+    }
+
+    /// <summary>
+    /// TNS 디렉터리가 바뀌면 tnsnames.ora 의 별칭을 읽어 별칭 칸 제안으로 둔다. 편집 중이면(불러오는 중이 아니면) 미리 채운다:
+    /// 호스트·접속 문자열이 비어 있으면 접속 방식을 「TNS 별칭」 으로 바꾸고, 별칭이 하나뿐이고 칸이 비어 있으면 그 별칭을 넣는다.
+    /// </summary>
+    partial void OnTnsAdminChanged(string value)
+    {
+        var file = TnsResolver.FindTnsNames(value.Trim());
+        IReadOnlyList<string> aliases = [];
+        if (file is not null)
+        {
+            try
+            {
+                aliases = [.. WalletImporter.ReadAliases(File.ReadAllText(file)).Order(StringComparer.OrdinalIgnoreCase)];
+            }
+            catch (IOException)
+            {
+            }
+            catch (UnauthorizedAccessException)
+            {
+            }
+        }
+
+        TnsAliases = aliases;
+        if (!_loading && aliases.Count > 0)
+        {
+            if (Mode != ConnectionMode.TnsAlias && IsBlank(Host) && IsBlank(EasyConnect))
+            {
+                Mode = ConnectionMode.TnsAlias;
+            }
+
+            if (IsBlank(TnsAlias) && aliases.Count == 1)
+            {
+                TnsAlias = aliases[0];
+            }
+        }
+
+        UpdateTnsAliasDetail();
+    }
+
+    /// <summary>별칭을 고르면 접속 요약을 보이고, 이름이 비었거나 앞서 별칭으로 채운 이름이면 이름도 별칭으로 채운다.</summary>
+    partial void OnTnsAliasChanged(string value)
+    {
+        if (!_loading && !IsBlank(value) && (IsBlank(Name) || Name == _nameFromAlias))
+        {
+            Name = value.Trim();
+            _nameFromAlias = Name;
+        }
+
+        UpdateTnsAliasDetail();
+    }
+
+    private void UpdateTnsAliasDetail()
+    {
+        var dir = TnsAdmin.Trim();
+        if (dir.Length == 0)
+        {
+            TnsAliasDetail = string.Empty;
+        }
+        else if (TnsResolver.FindTnsNames(dir) is null)
+        {
+            TnsAliasDetail = UiText.Get("Connection.tns.noFile", "이 폴더에 tnsnames.ora 가 없습니다.");
+        }
+        else if (IsBlank(TnsAlias))
+        {
+            TnsAliasDetail = string.Format(CultureInfo.CurrentCulture, UiText.Get("Connection.tns.count", "tnsnames.ora 별칭 {0}개"), TnsAliases.Count);
+        }
+        else if (TnsResolver.TryResolve(dir, TnsAlias, out var descriptor))
+        {
+            TnsAliasDetail = TnsResolver.Summarize(descriptor) is { } summary ? "→ " + summary : string.Empty;
+        }
+        else
+        {
+            TnsAliasDetail = UiText.Get("Connection.tns.unknown", "tnsnames.ora 에 이 별칭이 없습니다.");
         }
     }
 
