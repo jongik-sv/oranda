@@ -32,6 +32,15 @@
     <Style Selector="ListBox#SqlTabs ListBoxItem:selected TextBlock.tab-title">
       <Setter Property="FontWeight" Value="SemiBold" />
     </Style>
+    <!-- 끌어서 순서 바꾸기: 놓일 자리를 대상 탭 머리의 왼쪽/오른쪽 굵은 선으로 보인다. -->
+    <Style Selector="ListBox#SqlTabs ListBoxItem.drop-before">
+      <Setter Property="BorderBrush" Value="{DynamicResource OrandaFocusBrush}" />
+      <Setter Property="BorderThickness" Value="3,1,1,0" />
+    </Style>
+    <Style Selector="ListBox#SqlTabs ListBoxItem.drop-after">
+      <Setter Property="BorderBrush" Value="{DynamicResource OrandaFocusBrush}" />
+      <Setter Property="BorderThickness" Value="1,1,3,0" />
+    </Style>
     <Style Selector="Button.tab-close">
       <Setter Property="Padding" Value="2" />
       <Setter Property="MinHeight" Value="0" />
@@ -60,7 +69,28 @@
           <ListBox.ItemTemplate>
             <DataTemplate x:DataType="vm:SqlEditorViewModel">
               <StackPanel Orientation="Horizontal" ToolTip.Tip="{Binding FilePath}">
-                <TextBlock Classes="tab-title" Text="{Binding DisplayTitle}" VerticalAlignment="Center" />
+                <StackPanel.ContextMenu>
+                  <ContextMenu>
+                    <MenuItem Header="이름 바꾸기" InputGesture="F2"
+                              Command="{Binding $parent[UserControl].((vm:SqlWorkspaceViewModel)DataContext).BeginRenameTabCommand}"
+                              CommandParameter="{Binding}" />
+                    <Separator />
+                    <MenuItem Header="닫기"
+                              Command="{Binding $parent[UserControl].((vm:SqlWorkspaceViewModel)DataContext).CloseTabCommand}"
+                              CommandParameter="{Binding}" />
+                    <MenuItem Header="다른 탭 닫기"
+                              Command="{Binding $parent[UserControl].((vm:SqlWorkspaceViewModel)DataContext).CloseOtherTabsCommand}"
+                              CommandParameter="{Binding}" />
+                    <MenuItem Header="오른쪽 탭 닫기"
+                              Command="{Binding $parent[UserControl].((vm:SqlWorkspaceViewModel)DataContext).CloseRightTabsCommand}"
+                              CommandParameter="{Binding}" />
+                  </ContextMenu>
+                </StackPanel.ContextMenu>
+                <TextBlock Classes="tab-title" Text="{Binding DisplayTitle}" VerticalAlignment="Center"
+                           IsVisible="{Binding !IsRenaming}" />
+                <TextBox Classes="tab-rename" Text="{Binding EditTitle, Mode=TwoWay}" IsVisible="{Binding IsRenaming}"
+                         MinWidth="80" Padding="2,0" MinHeight="0" VerticalAlignment="Center"
+                         AutomationProperties.Name="탭 이름 편집" />
                 <Button Classes="tab-close" Content="SQL 탭 닫기" Focusable="False"
                         Command="{Binding $parent[UserControl].((vm:SqlWorkspaceViewModel)DataContext).CloseTabCommand}"
                         CommandParameter="{Binding}" icons:ButtonIcon.Key="clear" icons:ButtonIcon.IconOnly="True" />

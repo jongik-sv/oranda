@@ -87,6 +87,10 @@ public sealed partial class SqlEditorDockWiring(
                     await host.Dialogs.ShowMessageAsync("작업 공간 닫기", $"'{ws.Name}' 을(를) 저장하지 못했다: {ex.Message}", CancellationToken.None);
                 }
             };
+
+            // 문서 탭을 끌어 순서를 바꾸면 호스트의 작업 공간 순서도 따라간다(다음 시작 때 그 순서로 복원).
+            docking.LayoutChanged += (_, _) => host.ReorderWorkspaces(
+                [.. docking.Documents.Select(d => d.Panel).OfType<SqlWorkspaceViewModel>()]);
             host.ActiveWorkspaceChanged += (_, _) => ShowActive(host);
             host.ActiveChanged += (_, _) =>
             {

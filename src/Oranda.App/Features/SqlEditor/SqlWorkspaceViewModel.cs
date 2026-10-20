@@ -14,7 +14,7 @@ namespace Oranda.App.Features.SqlEditor;
 /// Markdown 작업 공간 파일이나 MyBatis 매퍼를 열면 작업 공간 하나가 된다(<see cref="SourcePath"/>).
 /// 탭을 더하고 빼는 일과 활성 탭은 <see cref="SqlEditorHost"/> 가 맡는다(호스트의 <c>Active</c> 가 앱 전체의 「활성 SQL 탭」 신호다).
 /// </summary>
-public sealed partial class SqlWorkspaceViewModel : ToolPanelViewModelBase, IInnerTabsDocument
+public sealed partial class SqlWorkspaceViewModel : ToolPanelViewModelBase, IInnerTabsDocument, Oranda.App.Shell.Docking.IDockTabActions
 {
     private string? _autosaveStamp;
 
@@ -74,6 +74,38 @@ public sealed partial class SqlWorkspaceViewModel : ToolPanelViewModelBase, IInn
             await Host.CloseAsync(tab, CancellationToken.None).ConfigureAwait(true);
         }
     }
+
+    [RelayCommand]
+    private void BeginRenameTab(SqlEditorViewModel? tab)
+    {
+        if (tab is not null)
+        {
+            ActiveTab = tab;
+            tab.BeginRename();
+        }
+    }
+
+    [RelayCommand]
+    private async Task CloseOtherTabsAsync(SqlEditorViewModel? tab)
+    {
+        if (tab is not null)
+        {
+            await Host.CloseTabsAsync(tab, rightOnly: false, CancellationToken.None).ConfigureAwait(true);
+        }
+    }
+
+    [RelayCommand]
+    private async Task CloseRightTabsAsync(SqlEditorViewModel? tab)
+    {
+        if (tab is not null)
+        {
+            await Host.CloseTabsAsync(tab, rightOnly: true, CancellationToken.None).ConfigureAwait(true);
+        }
+    }
+
+    public Task RenameFromTabAsync(CancellationToken ct) => Host.RenameWorkspaceAsync(this, ct);
+
+    public Task CloseFromTabAsync(CancellationToken ct) => Host.TryCloseWorkspaceAsync(this, ct);
 
     public async Task<bool> CloseActiveInnerTabAsync(CancellationToken ct)
     {

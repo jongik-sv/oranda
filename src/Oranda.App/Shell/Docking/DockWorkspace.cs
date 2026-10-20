@@ -179,7 +179,13 @@ public sealed class DockWorkspace
     public void Apply(LayoutDocument layout)
     {
         var planned = LayoutPlanner.Reconcile(layout, _registry.Panels);
-        var keepDocuments = Layout is null ? [] : Documents.ToList();
+        var keepDocuments = Layout is null ? [] : Documents.Concat(FloatingDocuments()).ToList(); // 떠 있던 문서도 메인 문서 영역으로 들인다
+        foreach (var doc in keepDocuments.Where(d => d.Owner is IDock { VisibleDockables: { } own } && own.Contains(d)))
+        {
+            // 옛 창이 닫힐 때 그 안의 문서까지 정리되지 않도록 옛 문서 영역에서 먼저 뺀다.
+            ((IDock)doc.Owner!).VisibleDockables!.Remove(doc);
+        }
+
         var active = ActiveDocument;
 
         var rootNode = planned.Root!;
@@ -433,6 +439,27 @@ public sealed class DockWorkspace
                 found.Add(dd);
             }
         });
+        return found;
+    }
+
+    /// <summary>떠 있는 창 안의 문서 탭(메인 배치 트리 밖이라 <see cref="Documents"/> 에는 없다).</summary>
+    private List<PanelDocument> FloatingDocuments()
+    {
+        var found = new List<PanelDocument>();
+        foreach (var window in (Layout as IRootDock)?.Windows ?? [])
+        {
+            if (window.Layout is { } floating)
+            {
+                Visit(floating, d =>
+                {
+                    if (d is PanelDocument doc)
+                    {
+                        found.Add(doc);
+                    }
+                });
+            }
+        }
+
         return found;
     }
 

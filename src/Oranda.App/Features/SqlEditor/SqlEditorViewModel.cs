@@ -146,6 +146,38 @@ public sealed partial class SqlEditorViewModel : ToolPanelViewModelBase
 
     public string DisplayTitle => (IsDirty ? "* " : string.Empty) + Title;
 
+    /// <summary>탭 머리에서 이름을 제자리 편집하는 중(두 번 누르기·F2·오른쪽 클릭 「이름 바꾸기」).</summary>
+    [ObservableProperty]
+    public partial bool IsRenaming { get; set; }
+
+    /// <summary>제자리 편집 중인 이름(확정 전 글자).</summary>
+    [ObservableProperty]
+    public partial string EditTitle { get; set; } = string.Empty;
+
+    /// <summary>제자리 이름 편집을 시작한다. 편집 글자는 지금 이름에서 출발한다.</summary>
+    public void BeginRename()
+    {
+        EditTitle = Title;
+        IsRenaming = true;
+    }
+
+    /// <summary>편집한 이름을 확정한다. 빈 이름은 거절하고(편집 상태 유지) false.</summary>
+    public bool CommitRename()
+    {
+        var name = EditTitle?.Trim();
+        if (string.IsNullOrEmpty(name))
+        {
+            return false;
+        }
+
+        Title = name;
+        IsRenaming = false;
+        return true;
+    }
+
+    /// <summary>제자리 이름 편집을 취소하고 원래 이름을 그대로 둔다.</summary>
+    public void CancelRename() => IsRenaming = false;
+
     partial void OnIsDirtyChanged(bool value) => OnPropertyChanged(nameof(DisplayTitle));
 
     partial void OnTitleChanged(string value) => OnPropertyChanged(nameof(DisplayTitle));

@@ -40,7 +40,7 @@ public sealed class PanelDocument : Document
         Panel = panel;
         Id = id;
         Title = title;
-        CanFloat = true;
+        CanFloat = panel is not IDockTabActions; // SQL 작업 공간은 떼어 내지 않는다(두 번 누르기 = 이름 바꾸기)
     }
 
     public ToolPanelDefinition Definition { get; }
@@ -59,7 +59,7 @@ public sealed class PanelDocument : Document
         {
             if (SetProperty(ref _isPreview, value))
             {
-                CanFloat = !value;
+                CanFloat = !value && Panel is not IDockTabActions;
             }
         }
     }

@@ -31,6 +31,14 @@ internal static class DockFloatRedock
 
     private static void OnDoubleTapped(DocumentTabStripItem item, TappedEventArgs e)
     {
+        if (item.DataContext is PanelDocument { Panel: IDockTabActions actions })
+        {
+            // SQL 작업 공간 문서: 두 번 누르기 = 이름 바꾸기(떼어 내기·제자리 붙이기 아님).
+            _ = actions.RenameFromTabAsync(default);
+            e.Handled = true;
+            return;
+        }
+
         if (item.DataContext is IDockable dockable && Redock(dockable))
         {
             // Dock 의 탭 항목 처리기는 처리된 이벤트를 받지 않으므로, 여기서 처리됨으로 표시하면 다시 떼어 내지 않는다.

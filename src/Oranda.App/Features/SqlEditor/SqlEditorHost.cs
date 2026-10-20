@@ -1055,6 +1055,85 @@ public sealed class SqlEditorHost : ObservableObject, IDisposable
         return true;
     }
 
+    /// <summary>같은 작업 공간 안에서 탭을 <paramref name="newIndex"/> 자리로 옮긴다(끌어서 순서 바꾸기). 활성 탭은 그대로 유지한다.</summary>
+    public bool MoveTab(SqlEditorViewModel tab, int newIndex)
+    {
+        ArgumentNullException.ThrowIfNull(tab);
+        if (WorkspaceOf(tab) is not { } ws)
+        {
+            return false;
+        }
+
+        var oldIndex = ws.Tabs.IndexOf(tab);
+        newIndex = Math.Clamp(newIndex, 0, ws.Tabs.Count - 1);
+        if (oldIndex == newIndex)
+        {
+            return false;
+        }
+
+        var active = ws.ActiveTab;
+        ws.Tabs.Move(oldIndex, newIndex);
+        Tabs.Remove(tab);
+        InsertIntoAllTabs(ws, tab);
+        if (!ReferenceEquals(ws.ActiveTab, active))
+        {
+            ws.ActiveTab = active; // 목록 이동이 선택을 풀었으면 되돌린다
+        }
+
+        return true;
+    }
+
+    /// <summary>
+    /// 문서 탭을 끌어 순서를 바꿨을 때 호스트의 작업 공간 순서를 그 순서에 맞춘다(종료 때 저장하는 열린 작업 공간 순서가 된다).
+    /// <paramref name="order"/> 가 열린 작업 공간과 같은 집합이 아니면(닫는 중 등) 건드리지 않고 false.
+    /// </summary>
+    public bool ReorderWorkspaces(IReadOnlyList<SqlWorkspaceViewModel> order)
+    {
+        ArgumentNullException.ThrowIfNull(order);
+        if (order.Count != Workspaces.Count || order.Any(w => !Workspaces.Contains(w)) || order.Distinct().Count() != order.Count
+            || Workspaces.SequenceEqual(order))
+        {
+            return false;
+        }
+
+        for (var i = 0; i < order.Count; i++)
+        {
+            Workspaces.Move(Workspaces.IndexOf(order[i]), i);
+        }
+
+        var all = Workspaces.SelectMany(w => w.Tabs).ToList();
+        for (var i = 0; i < all.Count; i++)
+        {
+            Tabs.Move(Tabs.IndexOf(all[i]), i);
+        }
+
+        return true;
+    }
+
+    /// <summary>탭 머리 메뉴 「다른 탭 닫기」/「오른쪽 탭 닫기」: 기준 탭을 뺀 대상 탭들을 가드 확인 뒤 닫는다.</summary>
+    public async Task<bool> CloseTabsAsync(SqlEditorViewModel anchor, bool rightOnly, CancellationToken ct)
+    {
+        ArgumentNullException.ThrowIfNull(anchor);
+        if (WorkspaceOf(anchor) is not { } ws)
+        {
+            return false;
+        }
+
+        var at = ws.Tabs.IndexOf(anchor);
+        var targets = ws.Tabs.Where((t, i) => rightOnly ? i > at : i != at).ToList();
+        if (targets.Count == 0 || !await CanCloseAsync(targets, SqlCloseReason.Tab, ct).ConfigureAwait(true))
+        {
+            return false;
+        }
+
+        foreach (var t in targets.Where(t => WorkspaceOf(t) is not null))
+        {
+            Close(t);
+        }
+
+        return true;
+    }
+
     /// <summary>작업 공간 이름 → 파일 ID(<c>^[a-z0-9][a-z0-9-]{0,63}$</c>).</summary>
     public static string SlugOf(string name)
     {

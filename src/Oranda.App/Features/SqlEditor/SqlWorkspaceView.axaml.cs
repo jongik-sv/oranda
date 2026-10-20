@@ -1,7 +1,10 @@
 using System.Collections.Specialized;
 using System.ComponentModel;
+using Avalonia;
 using Avalonia.Controls;
+using Avalonia.Input;
 using Avalonia.Threading;
+using Avalonia.VisualTree;
 
 namespace Oranda.App.Features.SqlEditor;
 
@@ -15,9 +18,40 @@ public partial class SqlWorkspaceView : UserControl
     private readonly Dictionary<SqlEditorViewModel, SqlEditorView> _views = [];
     private SqlWorkspaceViewModel? _vm;
 
+    private const double DragThreshold = 6;
+
+    private SqlEditorViewModel? _dragTab;
+    private Point _dragStart;
+    private bool _dragging;
+    private ListBoxItem? _dropItem;
+    private int _dropIndex = -1;
+
+    static SqlWorkspaceView() =>
+        // 이름 편집 칸이 보이면 바로 포커스를 주고 글자를 모두 선택한다.
+        Visual.IsVisibleProperty.Changed.AddClassHandler<TextBox>((box, e) =>
+        {
+            if (box.Classes.Contains("tab-rename") && e.NewValue is true)
+            {
+                Dispatcher.UIThread.Post(
+                    () =>
+                    {
+                        box.Focus();
+                        box.SelectAll();
+                    },
+                    DispatcherPriority.Input);
+            }
+        });
+
     public SqlWorkspaceView()
     {
         InitializeComponent();
+        SqlTabs.DoubleTapped += OnTabDoubleTapped;
+        SqlTabs.AddHandler(KeyDownEvent, OnTabKeyDown, Avalonia.Interactivity.RoutingStrategies.Bubble);
+        SqlTabs.AddHandler(LostFocusEvent, OnTabLostFocus, Avalonia.Interactivity.RoutingStrategies.Bubble);
+        SqlTabs.AddHandler(PointerPressedEvent, OnTabPointerPressed, Avalonia.Interactivity.RoutingStrategies.Tunnel);
+        SqlTabs.AddHandler(PointerMovedEvent, OnTabPointerMoved, Avalonia.Interactivity.RoutingStrategies.Tunnel);
+        SqlTabs.AddHandler(PointerReleasedEvent, OnTabPointerReleased, Avalonia.Interactivity.RoutingStrategies.Tunnel);
+        AddHandler(KeyDownEvent, OnWorkspaceKeyDown, Avalonia.Interactivity.RoutingStrategies.Bubble);
         DataContextChanged += (_, _) => Bind(DataContext as SqlWorkspaceViewModel);
 
         // 도킹이 문서를 떼었다 붙이면(분할·옮기기) 떨어져 있는 동안 구독을 풀어 둔다.
@@ -50,6 +84,160 @@ public partial class SqlWorkspaceView : UserControl
         }
 
         ShowTab(_vm?.ActiveTab);
+    }
+
+    private static SqlEditorViewModel? TabOf(object? source) =>
+        (source as Visual)?.FindAncestorOfType<ListBoxItem>(includeSelf: true)?.DataContext as SqlEditorViewModel;
+
+    private static bool IsInteractive(object? source) =>
+        source is Visual v && (v.FindAncestorOfType<Button>(includeSelf: true) is not null || v.FindAncestorOfType<TextBox>(includeSelf: true) is not null);
+
+    /// <summary>탭 머리를 두 번 누르면 제자리 이름 편집.</summary>
+    private void OnTabDoubleTapped(object? sender, TappedEventArgs e)
+    {
+        if (!IsInteractive(e.Source) && TabOf(e.Source) is { } tab && _vm is not null)
+        {
+            _vm.BeginRenameTabCommand.Execute(tab);
+            e.Handled = true;
+        }
+    }
+
+    /// <summary>편집 칸에서 Enter 는 확정(빈 이름이면 편집 유지), Esc 는 취소. 활성 탭이 있을 때 F2 는 편집 시작.</summary>
+    private void OnTabKeyDown(object? sender, KeyEventArgs e)
+    {
+        if (e.Source is TextBox && TabOf(e.Source) is { IsRenaming: true } tab)
+        {
+            if (e.Key == Key.Enter)
+            {
+                if (tab.CommitRename())
+                {
+                    _views.GetValueOrDefault(tab)?.FocusEditor();
+                }
+
+                e.Handled = true;
+            }
+            else if (e.Key == Key.Escape)
+            {
+                tab.CancelRename();
+                _views.GetValueOrDefault(tab)?.FocusEditor();
+                e.Handled = true;
+            }
+        }
+    }
+
+    private void OnWorkspaceKeyDown(object? sender, KeyEventArgs e)
+    {
+        if (e is { Key: Key.F2, KeyModifiers: KeyModifiers.None, Handled: false } && e.Source is not TextBox && _vm?.ActiveTab is { } tab)
+        {
+            _vm.BeginRenameTabCommand.Execute(tab);
+            e.Handled = true;
+        }
+    }
+
+    /// <summary>편집 칸이 포커스를 잃으면 확정한다(빈 이름이면 원래대로).</summary>
+    private void OnTabLostFocus(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
+    {
+        if (e.Source is TextBox && TabOf(e.Source) is { IsRenaming: true } tab && !tab.CommitRename())
+        {
+            tab.CancelRename();
+        }
+    }
+
+    private void OnTabPointerPressed(object? sender, PointerPressedEventArgs e)
+    {
+        _dragTab = null;
+        _dragging = false;
+        if (!IsInteractive(e.Source) && e.GetCurrentPoint(SqlTabs).Properties.IsLeftButtonPressed)
+        {
+            _dragTab = TabOf(e.Source);
+            _dragStart = e.GetPosition(SqlTabs);
+        }
+    }
+
+    private void OnTabPointerMoved(object? sender, PointerEventArgs e)
+    {
+        if (_dragTab is null || _vm is null)
+        {
+            return;
+        }
+
+        var pos = e.GetPosition(SqlTabs);
+        if (!_dragging)
+        {
+            if (Math.Abs(pos.X - _dragStart.X) < DragThreshold && Math.Abs(pos.Y - _dragStart.Y) < DragThreshold)
+            {
+                return;
+            }
+
+            _dragging = true;
+            e.Pointer.Capture(SqlTabs);
+        }
+
+        UpdateDropTarget(pos);
+        e.Handled = true;
+    }
+
+    private void OnTabPointerReleased(object? sender, PointerReleasedEventArgs e)
+    {
+        var tab = _dragTab;
+        var index = _dropIndex;
+        var wasDragging = _dragging;
+        _dragTab = null;
+        _dragging = false;
+        ClearDropMarker();
+        if (wasDragging)
+        {
+            e.Pointer.Capture(null);
+            e.Handled = true;
+            if (tab is not null && _vm is not null && index >= 0)
+            {
+                _vm.Host.MoveTab(tab, index);
+            }
+        }
+    }
+
+    /// <summary>포인터가 가리키는 탭 머리와 그 앞/뒤를 정해 놓일 자리를 표시한다.</summary>
+    private void UpdateDropTarget(Point pos)
+    {
+        ClearDropMarker();
+        if (_vm is null || _dragTab is null)
+        {
+            return;
+        }
+
+        foreach (var tab in _vm.Tabs)
+        {
+            if (SqlTabs.ContainerFromItem(tab) is not ListBoxItem item || item.TranslatePoint(default, SqlTabs) is not { } origin)
+            {
+                continue;
+            }
+
+            var rect = new Rect(origin, item.Bounds.Size);
+            if (!rect.Contains(pos))
+            {
+                continue;
+            }
+
+            var after = pos.X > rect.Center.X;
+            var target = _vm.Tabs.IndexOf(tab);
+            var from = _vm.Tabs.IndexOf(_dragTab);
+            // 앞/뒤 삽입 자리를 Move 가 받는 최종 인덱스로 바꾼다(빼고 넣으므로 원래 자리보다 뒤면 하나 당겨진다).
+            var insert = after ? target + 1 : target;
+            _dropIndex = insert > from ? insert - 1 : insert;
+            _dropItem = item;
+            item.Classes.Set(after ? "drop-after" : "drop-before", true);
+            return;
+        }
+
+        _dropIndex = -1;
+    }
+
+    private void ClearDropMarker()
+    {
+        _dropItem?.Classes.Remove("drop-before");
+        _dropItem?.Classes.Remove("drop-after");
+        _dropItem = null;
+        _dropIndex = -1;
     }
 
     private void OnVmPropertyChanged(object? sender, PropertyChangedEventArgs e)
