@@ -28,6 +28,88 @@
             <Setter Property="MinHeight" Value="28" />
         </Style>
 
+        <!-- 일반 단추(Dock 의 머리·탭 단추는 PART_* 이름으로 제외한다): 옅은 바탕 + 1 DIP 테두리(TextBox·ComboBox 와 같은 줄 높이). 툴바·도구 단추·팔레트 칸·시작 목록은 아래 자기 클래스 규칙이 따로 정한다.
+             쓸 수 없을 때는 바탕을 칠하지 않고 글자·테두리만 흐리게 한다. 파란 접속 단추(accent)는 Fluent 모양을 그대로 쓴다. -->
+        <Style Selector="Button:not(.toolbar):not(.tool):not(.palette-box):not(.start-item):not(#PART_CloseButton):not(#PART_PinButton):not(#PART_MenuButton):not(#PART_ToolCloseButton):not(#PART_ToolPinButton):not(#PART_ToolMenuButton):not(#PART_MaximizeButton):not(#PART_MaximizeRestoreButton):not(#PART_MinimizeButton):not(#PART_PopoverCloseButton):not(#PART_PopoverFullScreenButton)">
+            <Setter Property="Background" Value="{DynamicResource OrandaButtonBackgroundBrush}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource OrandaButtonBorderBrush}" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="CornerRadius" Value="4" />
+            <Setter Property="MinHeight" Value="28" />
+            <Setter Property="Padding" Value="12,3" />
+            <Setter Property="VerticalContentAlignment" Value="Center" />
+        </Style>
+        <Style Selector="Button:not(.toolbar):not(.tool):not(.palette-box):not(.start-item):not(#PART_CloseButton):not(#PART_PinButton):not(#PART_MenuButton):not(#PART_ToolCloseButton):not(#PART_ToolPinButton):not(#PART_ToolMenuButton):not(#PART_MaximizeButton):not(#PART_MaximizeRestoreButton):not(#PART_MinimizeButton):not(#PART_PopoverCloseButton):not(#PART_PopoverFullScreenButton):not(.accent):pointerover /template/ ContentPresenter#PART_ContentPresenter">
+            <Setter Property="Background" Value="{DynamicResource OrandaToolbarHoverBrush}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource OrandaButtonBorderBrush}" />
+        </Style>
+        <Style Selector="Button:not(.toolbar):not(.tool):not(.palette-box):not(.start-item):not(#PART_CloseButton):not(#PART_PinButton):not(#PART_MenuButton):not(#PART_ToolCloseButton):not(#PART_ToolPinButton):not(#PART_ToolMenuButton):not(#PART_MaximizeButton):not(#PART_MaximizeRestoreButton):not(#PART_MinimizeButton):not(#PART_PopoverCloseButton):not(#PART_PopoverFullScreenButton):not(.accent):pressed /template/ ContentPresenter#PART_ContentPresenter">
+            <Setter Property="Background" Value="{DynamicResource OrandaToolbarPressedBrush}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource OrandaButtonBorderBrush}" />
+        </Style>
+        <Style Selector="Button:not(.toolbar):not(.tool):not(.palette-box):not(.start-item):not(#PART_CloseButton):not(#PART_PinButton):not(#PART_MenuButton):not(#PART_ToolCloseButton):not(#PART_ToolPinButton):not(#PART_ToolMenuButton):not(#PART_MaximizeButton):not(#PART_MaximizeRestoreButton):not(#PART_MinimizeButton):not(#PART_PopoverCloseButton):not(#PART_PopoverFullScreenButton):not(.accent):disabled /template/ ContentPresenter#PART_ContentPresenter">
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="Opacity" Value="0.45" />
+        </Style>
+
+        <!-- 증감 칸: Fluent 템플릿은 ▲▼ 를 가로로 놓고 단추가 칸보다 커서, 같은 PART 이름(PART_SpinnerPanel·PART_IncreaseButton·PART_DecreaseButton)을
+             유지한 템플릿으로 바꾼다. ▲▼ 는 칸 오른쪽에 위아래로 쌓여 칸 높이 안에 들어가고, 한계값에서 꺼진 단추는 바탕 없이 흐린 글리프만 남는다. -->
+        <Style Selector="ButtonSpinner">
+            <Setter Property="Template">
+                <ControlTemplate>
+                    <DataValidationErrors>
+                        <Border Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="{TemplateBinding CornerRadius}"
+                                MinHeight="{TemplateBinding MinHeight}" ClipToBounds="True">
+                            <Grid ColumnDefinitions="*,Auto">
+                                <ContentPresenter Name="PART_ContentPresenter" Grid.Column="0"
+                                                  Content="{TemplateBinding Content}" ContentTemplate="{TemplateBinding ContentTemplate}"
+                                                  HorizontalContentAlignment="{TemplateBinding HorizontalContentAlignment}"
+                                                  VerticalContentAlignment="{TemplateBinding VerticalContentAlignment}"
+                                                  Padding="{TemplateBinding Padding}" />
+                                <Grid Name="PART_SpinnerPanel" Grid.Column="1" RowDefinitions="*,*" Width="22" IsVisible="{TemplateBinding ShowButtonSpinner}">
+                                    <RepeatButton Name="PART_IncreaseButton" Grid.Row="0" Classes="spin" Focusable="{TemplateBinding AllowSpin}">
+                                        <PathIcon Width="8" Height="5" Data="{DynamicResource ButtonSpinnerIncreaseButtonIcon}" />
+                                    </RepeatButton>
+                                    <RepeatButton Name="PART_DecreaseButton" Grid.Row="1" Classes="spin" Focusable="{TemplateBinding AllowSpin}">
+                                        <PathIcon Width="8" Height="5" Data="{DynamicResource ButtonSpinnerDecreaseButtonIcon}" />
+                                    </RepeatButton>
+                                </Grid>
+                            </Grid>
+                        </Border>
+                    </DataValidationErrors>
+                </ControlTemplate>
+            </Setter>
+        </Style>
+        <Style Selector="RepeatButton.spin">
+            <Setter Property="MinWidth" Value="0" />
+            <Setter Property="MinHeight" Value="0" />
+            <Setter Property="Padding" Value="0" />
+            <Setter Property="Margin" Value="0" />
+            <Setter Property="CornerRadius" Value="0" />
+            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="HorizontalAlignment" Value="Stretch" />
+            <Setter Property="VerticalAlignment" Value="Stretch" />
+            <Setter Property="HorizontalContentAlignment" Value="Center" />
+            <Setter Property="VerticalContentAlignment" Value="Center" />
+        </Style>
+        <Style Selector="RepeatButton.spin /template/ ContentPresenter#PART_ContentPresenter">
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="CornerRadius" Value="0" />
+        </Style>
+        <Style Selector="RepeatButton.spin:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+            <Setter Property="Background" Value="{DynamicResource OrandaToolbarHoverBrush}" />
+        </Style>
+        <Style Selector="RepeatButton.spin:pressed /template/ ContentPresenter#PART_ContentPresenter">
+            <Setter Property="Background" Value="{DynamicResource OrandaToolbarPressedBrush}" />
+        </Style>
+        <Style Selector="RepeatButton.spin:disabled /template/ ContentPresenter#PART_ContentPresenter">
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="Opacity" Value="0.3" />
+        </Style>
+
         <!-- 키보드 포커스 표시(7.5 접근성): 어떤 컨트롤이든 Tab 으로 포커스가 오면 2 DIP 테두리가 보인다. 색은 OrandaFocusBrush. -->
         <Style Selector=":is(Control)">
             <Setter Property="FocusAdorner">
@@ -241,6 +323,8 @@
                     <SolidColorBrush x:Key="OrandaEnvChipForegroundBrush" Color="#FFFFFF" />
                     <SolidColorBrush x:Key="OrandaUncommittedBrush" Color="#B65A00" />
                     <SolidColorBrush x:Key="OrandaSeparatorBrush" Color="#D0D0D0" />
+                    <SolidColorBrush x:Key="OrandaButtonBackgroundBrush" Color="#F7F7F7" />
+                    <SolidColorBrush x:Key="OrandaButtonBorderBrush" Color="#BDBDBD" />
                     <SolidColorBrush x:Key="OrandaToolbarBackgroundBrush" Color="#F3F3F3" />
                     <SolidColorBrush x:Key="OrandaToolbarHoverBrush" Color="#DCE6F4" />
                     <SolidColorBrush x:Key="OrandaToolbarPressedBrush" Color="#C3D5EE" />
@@ -270,6 +354,8 @@
                     <SolidColorBrush x:Key="OrandaEnvChipForegroundBrush" Color="#000000" />
                     <SolidColorBrush x:Key="OrandaUncommittedBrush" Color="#F0A04B" />
                     <SolidColorBrush x:Key="OrandaSeparatorBrush" Color="#404040" />
+                    <SolidColorBrush x:Key="OrandaButtonBackgroundBrush" Color="#2D2D2D" />
+                    <SolidColorBrush x:Key="OrandaButtonBorderBrush" Color="#5A5A5A" />
                     <SolidColorBrush x:Key="OrandaToolbarBackgroundBrush" Color="#2B2B2B" />
                     <SolidColorBrush x:Key="OrandaToolbarHoverBrush" Color="#3A4556" />
                     <SolidColorBrush x:Key="OrandaToolbarPressedBrush" Color="#46566E" />
@@ -304,6 +390,12 @@
             <x:Double x:Key="TabItemVerticalPipeHeight">16</x:Double>
             <Thickness x:Key="TabItemHeaderMargin">10,0,10,0</Thickness>
             <FontWeight x:Key="TabItemHeaderThemeFontWeight">Normal</FontWeight>
+
+            <!-- Expander 머리: 단추처럼 큰 chevron 상자를 글자 줄 높이에 맞춘 작은 것으로 줄인다. -->
+            <x:Double x:Key="ExpanderMinHeight">28</x:Double>
+            <x:Double x:Key="ExpanderChevronButtonSize">20</x:Double>
+            <Thickness x:Key="ExpanderChevronMargin">0,0,4,0</Thickness>
+            <Thickness x:Key="ExpanderHeaderPadding">10,0,6,0</Thickness>
         </ResourceDictionary>
     </Application.Resources>
 </Application>
