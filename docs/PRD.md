@@ -214,8 +214,8 @@
 |---|---|---|---|
 | PLAN-01 | 예상 계획: `EXPLAIN PLAN` + `DBMS_XPLAN.DISPLAY`, 트리와 텍스트 보기. SELECT 외 DML도 지원 | P0 | M1 |
 | PLAN-02 | 실제 계획: 실행한 문장의 `sql_id`·child로 `DBMS_XPLAN.DISPLAY_CURSOR(..., 'ALLSTATS LAST')` | P0 | M1 |
-| PLAN-03 | 계획 트리에서 위험 단계(Full Table Scan, Index Full Scan, Cartesian join)와 예상·실제 행 수 차이가 큰 단계 강조, 조건(predicate) 표시 | P1 | M2 |
-| PLAN-04 | 두 계획 비교(plan_hash_value 차이 표시) | P2 | 이후 |
+| PLAN-03 | 계획 트리에서 위험 단계(Full Table Scan, Index Full Scan, Cartesian join)와 예상·실제 행 수 차이가 큰 단계 강조, 조건(predicate) 표시. 단계마다 비용 비중 막대(옅은 막대 = 누적 비용 ÷ 전체, 진한 막대 = 자체 비용 ÷ 전체; 자체 = 누적 − 바로 아래 자식 누적 합)와 실제 비중 막대(실제 계획: 누적·자체 A-Time, 시간 통계가 없으면 A-Rows ÷ 가장 많은 단계), 실행 순서 열(자식 먼저, 형제는 Id 순), 가장 비싼 단계 바탕 강조(자체 시간, 없으면 자체 비용이 가장 큰 단계 — 누적 값은 늘 Id 0 이 가장 커서 쓰지 않음) | P1 | M2 |
+| PLAN-04 | 두 계획 비교: 「이 계획 고정」(`oranda.plan.pinForCompare`)으로 기준을 고정하면 다음 계획이 올 때마다 비교 탭이 새로 맞춰지고, `oranda.plan.compare` 가 비교 탭을 연다. plan_hash_value 같음/다름(DBMS_XPLAN 글의 「Plan hash value」 기준 — EXPLAIN 의 plan_id 는 해시가 아님), 전체 비용 변화, 단계별 같음(=)·바뀜(≠, 「← 이전 연산·객체」)·추가(+)·빠짐(−)과 비용·E-Rows·A-Rows 「기준 → 지금」 및 변화율, 2배 이상(큰 쪽 10 이상) 바뀐 수치 강조. 맞추기: Id 순 단계 열쇠(연산+옵션+객체, 깊이 제외)의 최장 공통 부분열로 같음을 짝짓고, 짝 사이 남은 단계는 자리 순서로 짝지어 바뀜, 나머지는 추가·빠짐(가운데 부분이 400만 칸을 넘으면 자리 순서로만) | P2 | 이후 |
 | PLAN-05 | `DISPLAY_CURSOR` 형식 옵션 UI: 수준(BASIC/TYPICAL/SERIAL/ALL/ADVANCED/ADAPTIVE), 통계(IOSTATS/MEMSTATS/ALLSTATS, LAST), 항목 켜기/끄기(ROWS, BYTES, COST, PARTITION, PARALLEL, PEEKED_BINDS, PREDICATE, PROJECTION, OUTLINE, ALIAS, REMOTE) | P1 | M2 |
 | PLAN-06 | 계획 분석 묶음 저장: SQL·계획·관련 객체 통계를 한 파일로 저장해 오프라인 분석·공유 | P2 | 이후 |
 
