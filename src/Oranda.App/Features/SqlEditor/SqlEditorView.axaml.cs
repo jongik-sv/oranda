@@ -6,6 +6,7 @@ using Avalonia.Input;
 using Avalonia.Threading;
 using AvaloniaEdit.Folding;
 using AvaloniaEdit.Rendering;
+using Oranda.App.Shell.Appearance;
 using Oranda.App.Shell.Menus;
 using Oranda.Core.Text;
 
@@ -19,6 +20,9 @@ public partial class SqlEditorView : UserControl, IEditorSurface
 {
     /// <summary>입력이 이만큼 멈추면 접기·짝을 다시 계산한다. 타이머는 이 간격의 1/4 로 돌며 키마다 다시 맞추지 않는다(타이머 재설정이 키당 ≈0.8 ms 였다).</summary>
     private static readonly TimeSpan StructureDelay = TimeSpan.FromMilliseconds(400);
+
+    /// <summary>설정의 들여쓰기 칸 수(앱 리소스 <see cref="ThemeService.EditorTabSizeKey"/>). 바뀌면 편집기 옵션으로 옮긴다.</summary>
+    private static readonly StyledProperty<int> TabSizeProperty = AvaloniaProperty.Register<SqlEditorView, int>("TabSize", 4);
 
     private readonly BracketHighlightRenderer _brackets = new();
     private readonly RangeFlashRenderer _flash;
@@ -50,6 +54,7 @@ public partial class SqlEditorView : UserControl, IEditorSurface
         };
 
         Editor.Options.IndentationSize = 4;
+        Bind(TabSizeProperty, this.GetResourceObservable(ThemeService.EditorTabSizeKey)); // 글꼴·크기는 XAML 의 DynamicResource
         Editor.Options.ConvertTabsToSpaces = true;
         Editor.TextArea.Caret.PositionChanged += (_, _) => OnCaretOrSelectionChanged();
         Editor.TextArea.SelectionChanged += (_, _) => OnCaretOrSelectionChanged();
@@ -80,6 +85,15 @@ public partial class SqlEditorView : UserControl, IEditorSurface
 
     public int FirstVisibleLine
         => Editor.TextArea.TextView.GetDocumentLineByVisualTop(Editor.TextArea.TextView.ScrollOffset.Y)?.LineNumber ?? 1;
+
+    protected override void OnPropertyChanged(AvaloniaPropertyChangedEventArgs change)
+    {
+        base.OnPropertyChanged(change);
+        if (change.Property == TabSizeProperty)
+        {
+            Editor.Options.IndentationSize = Math.Clamp(change.GetNewValue<int>(), 1, 16);
+        }
+    }
 
     protected override void OnDataContextChanged(EventArgs e)
     {

@@ -22,6 +22,9 @@ public sealed class ThemeService : IDisposable
 
     public const string EditorFontSizeKey = "OrandaEditorFontSize";
 
+    /// <summary>편집기 들여쓰기 칸 수(int). 편집기 View 가 옵션으로 옮긴다(AvaloniaEdit 옵션은 스타일 속성이 아니다).</summary>
+    public const string EditorTabSizeKey = "OrandaEditorTabSize";
+
     public const string UiFontSizeBaseKey = "OrandaFontSizeBase";
 
     public const string UiFontSizeSmallKey = "OrandaFontSizeSmall";
@@ -92,6 +95,7 @@ public sealed class ThemeService : IDisposable
             : s.Editor.FontFamily + ", " + DefaultEditorFontFamily;
         app.Resources[EditorFontFamilyKey] = new FontFamily(family);
         app.Resources[EditorFontSizeKey] = s.Editor.FontSize;
+        app.Resources[EditorTabSizeKey] = s.Editor.TabSize;
     }
 
     private static ResourceDictionary BuildHighContrastDictionary()

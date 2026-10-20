@@ -38,8 +38,8 @@
 
     <ae:TextEditor Grid.Row="1" Name="Editor"
                    ShowLineNumbers="True"
-                   FontFamily="Cascadia Mono,Consolas,Menlo,monospace"
-                   FontSize="13"
+                   FontFamily="{DynamicResource OrandaEditorFontFamily}"
+                   FontSize="{DynamicResource OrandaEditorFontSize}"
                    HorizontalScrollBarVisibility="Auto"
                    VerticalScrollBarVisibility="Auto"
                    AutomationProperties.Name="SQL 편집기" />

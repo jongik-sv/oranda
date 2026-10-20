@@ -3,6 +3,7 @@ using Avalonia.Controls;
 using Avalonia.Markup.Xaml.Styling;
 using Avalonia.Media;
 using AvaloniaEdit;
+using Oranda.App.Shell.Appearance;
 
 namespace Oranda.App.Features.SqlEditor;
 
@@ -19,8 +20,6 @@ public sealed class SqlCodeView : UserControl
     {
         IsReadOnly = true,
         ShowLineNumbers = true,
-        FontFamily = new FontFamily("Cascadia Mono,Consolas,Menlo,monospace"),
-        FontSize = 13,
         HorizontalScrollBarVisibility = Avalonia.Controls.Primitives.ScrollBarVisibility.Auto,
         VerticalScrollBarVisibility = Avalonia.Controls.Primitives.ScrollBarVisibility.Auto,
     };
@@ -33,6 +32,9 @@ public sealed class SqlCodeView : UserControl
         {
             Source = new Uri("avares://AvaloniaEdit/Themes/Fluent/AvaloniaEdit.xaml"),
         });
+        // 글꼴·크기는 설정(도구 → 설정, 보기 → 확대·축소)을 따른다(ThemeService 가 앱 리소스로 내보낸다).
+        _editor.Bind(TextEditor.FontFamilyProperty, _editor.GetResourceObservable(ThemeService.EditorFontFamilyKey));
+        _editor.Bind(TextEditor.FontSizeProperty, _editor.GetResourceObservable(ThemeService.EditorFontSizeKey));
         Content = _editor;
     }
 
