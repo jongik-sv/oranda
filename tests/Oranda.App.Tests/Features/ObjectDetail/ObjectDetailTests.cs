@@ -110,7 +110,7 @@ public class ObjectDetailTests
         await vm.OpenAsync(new FakeSession(), Emp, showDdl: true);
 
         Assert.Equal("SCOTT.EMP", vm.Title);
-        Assert.Equal(["권한", "열"], vm.Sections.Select(s => s.Title));
+        Assert.Equal(["권한", "열", "데이터"], vm.Sections.Select(s => s.Title)); // 표는 「열」 바로 뒤에 「데이터」 탭
         Assert.Equal("열", vm.SelectedSection?.Title);
         Assert.Equal("CREATE TABLE EMP;", vm.DdlText);
         Assert.True(vm.IsDdlSelected);
@@ -144,7 +144,7 @@ public class ObjectDetailTests
 
         await vm.OpenAsync(new FakeSession(), Emp, showDdl: true);
 
-        Assert.Equal(2, vm.Sections.Count);
+        Assert.Equal(3, vm.Sections.Count); // 권한·열·데이터
         Assert.Equal(string.Empty, vm.DdlText);
         Assert.Contains("DDL 을 읽지 못했다", vm.StatusText);
         Assert.Contains("ORA-31603", vm.StatusText);
@@ -191,7 +191,7 @@ public class ObjectDetailTests
 
         await handler.ExecuteAsync(new CommandContext("oranda.schema.openDetail", FakeContextKeys.AllTrue, Emp), default);
         Assert.False(opened.IsDdlSelected);
-        Assert.Equal(2, opened.Sections.Count);
+        Assert.Equal(3, opened.Sections.Count); // 권한·열·데이터
     }
 
     [Fact]

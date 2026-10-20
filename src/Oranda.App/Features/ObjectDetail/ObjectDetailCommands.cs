@@ -70,7 +70,28 @@ public sealed class ObjectDetailCommandHandler : ICommandHandler
             return;
         }
 
+        CloseDataWithDocument(vm);
         await vm.OpenAsync(session, target, context.CommandId == "oranda.schema.showDdl", cancellationToken);
+    }
+
+    /// <summary>문서 탭을 닫으면 「데이터」 탭의 결과(열린 커서)도 닫는다.</summary>
+    private void CloseDataWithDocument(ObjectDetailViewModel vm)
+    {
+        if (OpenDocument is not null || _services?.GetService(typeof(IShellUi)) is not IShellUi { Docking: { } docking })
+        {
+            return;
+        }
+
+        void OnClosed(object? sender, PanelDocument doc)
+        {
+            if (ReferenceEquals(doc.Panel, vm))
+            {
+                docking.DocumentClosed -= OnClosed;
+                vm.Data.Close();
+            }
+        }
+
+        docking.DocumentClosed += OnClosed;
     }
 
     /// <summary>도킹 트리에서 스키마 브라우저 도구 창의 ViewModel 을 찾는다(없으면 null).</summary>
@@ -104,7 +125,12 @@ public sealed class ObjectDetailCommandHandler : ICommandHandler
     }
 }
 
-/// <summary>자리 표시 클래스(ui-contract 소유 파일 규약). 실제 처리기는 <see cref="ObjectDetailCommandHandler"/>.</summary>
+/// <summary>객체 상세의 바깥 연결 지점(ui-contract 소유 파일 규약). 명령 처리기는 <see cref="ObjectDetailCommandHandler"/>.</summary>
 public static class ObjectDetailCommands
 {
+    /// <summary>
+    /// 「데이터」 탭의 실행 쪽: 상세 문서의 세션으로 데이터 질의·거르기·행 수 세기를 돌린다.
+    /// 실행 화면(<c>ExecutionCommands.Install</c>)이 채운다(실행 엔진은 부를 때 해석한다). 비어 있으면 데이터를 읽을 수 없다고 안내한다.
+    /// </summary>
+    public static Func<ISession, ObjectDataRunner>? DataRunner { get; set; }
 }

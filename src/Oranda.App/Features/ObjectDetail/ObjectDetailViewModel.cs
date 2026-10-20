@@ -8,6 +8,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using CommunityToolkit.Mvvm.ComponentModel;
 using Oranda.App.Shell;
+using Oranda.Core.Grid;
 using Oranda.Core.Metadata;
 using Oranda.Core.Sessions;
 using Oranda.Core.Shell;
@@ -28,12 +29,19 @@ public sealed class ObjectDetailSection
 
     public string Title { get; }
 
+    /// <summary>「데이터」 탭(표 대신 데이터 그리드를 보인다, <see cref="ObjectDataViewModel"/>).</summary>
+    public bool IsData { get; private init; }
+
     public IReadOnlyList<string> Columns { get; }
 
     public IReadOnlyList<IReadOnlyList<object?>> Rows { get; }
 
     /// <summary>열 너비를 맞춘 표 텍스트(첫 줄 = 머리).</summary>
     public string Text { get; }
+
+    /// <summary>「데이터」 탭 항목(표 내용 없음).</summary>
+    internal static ObjectDetailSection CreateData() =>
+        new(new DetailSection(ObjectDataViewModel.SectionTitle, [], [])) { IsData = true };
 
     internal static string Cell(object? v) => v switch
     {
@@ -77,8 +85,9 @@ public sealed class ObjectDetailSection
 }
 
 /// <summary>
-/// <c>oranda.panel.objectDetail</c> — 객체 상세 탭(열·제약·인덱스·파티션·권한·의존·통계·크기)과 DDL 보기(TSK-07-03).
-/// 데이터는 <see cref="IMetadataProvider"/> 만 쓴다. 서비스는 처음 쓸 때 꺼낸다(시작 경로에서 Oracle 어셈블리를 올리지 않기 위해).
+/// <c>oranda.panel.objectDetail</c> — 객체 상세 탭(열·제약·인덱스·파티션·권한·의존·통계·크기)과 DDL 보기(TSK-07-03),
+/// 표·뷰의 「데이터」 탭(<see cref="ObjectDataViewModel"/>).
+/// 상세는 <see cref="IMetadataProvider"/> 만 쓴다. 서비스는 처음 쓸 때 꺼낸다(시작 경로에서 Oracle 어셈블리를 올리지 않기 위해).
 /// </summary>
 [OrandaToolPanel("oranda.panel.objectDetail", ToolPanelKind.Document, DockLocation.Document, AllowMultiple = true)]
 public sealed partial class ObjectDetailViewModel : ToolPanelViewModelBase
@@ -86,6 +95,7 @@ public sealed partial class ObjectDetailViewModel : ToolPanelViewModelBase
     private readonly IServiceProvider? _services;
     private IMetadataProvider? _meta;
     private ISession? _session;
+    private ObjectDataViewModel? _data;
     private int _generation;
     private bool _opening;
 
@@ -106,11 +116,30 @@ public sealed partial class ObjectDetailViewModel : ToolPanelViewModelBase
 
     public ObservableCollection<ObjectDetailSection> Sections { get; } = [];
 
+    /// <summary>
+    /// 「데이터」 탭(표·뷰·머티리얼라이즈드 뷰, 구역 목록의 「열」 바로 뒤). 상세를 열 때는 읽지 않고 그 탭을 처음 고를 때 읽는다.
+    /// 실행 쪽은 <see cref="ObjectDetailCommands.DataRunner"/>(상세 문서의 세션), 편집은 서비스의 <see cref="IRowEditor"/>.
+    /// </summary>
+    public ObjectDataViewModel Data => _data ??= new ObjectDataViewModel(
+        s => DataRunner is { } run ? run(s) : ObjectDetailCommands.DataRunner?.Invoke(s),
+        () => RowEditor ?? _services?.GetService(typeof(IRowEditor)) as IRowEditor,
+        ResolveMeta);
+
+    /// <summary>시험용: 「데이터」 탭의 실행 쪽을 바꾼다(기본 = <see cref="ObjectDetailCommands.DataRunner"/>).</summary>
+    internal Func<ISession, ObjectDataRunner?>? DataRunner { get; set; }
+
+    /// <summary>시험용: 「데이터」 탭의 행 편집기를 바꾼다(기본 = 서비스의 <see cref="IRowEditor"/>).</summary>
+    internal IRowEditor? RowEditor { get; set; }
+
     [ObservableProperty]
     private string _title = "객체 상세";
 
     [ObservableProperty]
     private ObjectDetailSection? _selectedSection;
+
+    /// <summary>true 면 「데이터」 탭이 선택돼 있다(오른쪽에 표 대신 데이터 그리드).</summary>
+    [ObservableProperty]
+    private bool _isDataSelected;
 
     /// <summary>true 면 DDL 탭이 선택돼 있다.</summary>
     [ObservableProperty]
@@ -162,6 +191,15 @@ public sealed partial class ObjectDetailViewModel : ToolPanelViewModelBase
 
     partial void OnIncludeDependentObjectsChanged(bool value) => ReloadDdlOnOptionChange();
 
+    partial void OnSelectedSectionChanged(ObjectDetailSection? value)
+    {
+        IsDataSelected = value is { IsData: true };
+        if (IsDataSelected)
+        {
+            _ = Data.EnsureLoadedAsync(); // 처음 고를 때만 읽는다(실패는 데이터 탭 안내에)
+        }
+    }
+
     private void ReloadDdlOnOptionChange()
     {
         if (!_opening && Target is not null && _session is not null)
@@ -184,6 +222,7 @@ public sealed partial class ObjectDetailViewModel : ToolPanelViewModelBase
         SelectedSection = null;
         DdlText = string.Empty;
         DdlError = null;
+        Data.Reset(session, target);
         var gen = Interlocked.Increment(ref _generation);
 
         var meta = ResolveMeta();
@@ -211,7 +250,14 @@ public sealed partial class ObjectDetailViewModel : ToolPanelViewModelBase
                     Sections.Add(new ObjectDetailSection(s));
                 }
 
-                SelectedSection = Sections.FirstOrDefault(s => s.Title == "열") ?? Sections.FirstOrDefault();
+                // 「데이터」 탭은 「열」 바로 뒤(SQL Developer 테이블 편집기의 Columns → Data 순서). 고르기 전에는 읽지 않는다.
+                if (ObjectDataViewModel.Supports(target))
+                {
+                    var columns = Sections.FirstOrDefault(s => s.Title == "열");
+                    Sections.Insert(columns is null ? Sections.Count : Sections.IndexOf(columns) + 1, ObjectDetailSection.CreateData());
+                }
+
+                SelectedSection = Sections.FirstOrDefault(s => s.Title == "열") ?? Sections.FirstOrDefault(s => !s.IsData);
             }
             catch (OperationCanceledException)
             {

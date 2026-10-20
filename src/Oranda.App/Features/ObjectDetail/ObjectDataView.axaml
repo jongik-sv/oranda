@@ -1,0 +1,35 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:Oranda.App.Features.ObjectDetail"
+             xmlns:rg="using:Oranda.App.Features.ResultGrid"
+             xmlns:icons="using:Oranda.App.Shell.Icons"
+             x:Class="Oranda.App.Features.ObjectDetail.ObjectDataView"
+             x:DataType="vm:ObjectDataViewModel">
+  <DockPanel>
+    <!-- SQL Developer 테이블 편집기의 Data 탭처럼: 새로 고침 · 편집(표만) · 거르기 줄 · 행 수 세기. 이 탭의 안내는 오른쪽에. -->
+    <Border DockPanel.Dock="Top" Classes="panel-toolbar">
+      <DockPanel>
+        <StackPanel DockPanel.Dock="Left" Orientation="Horizontal" Spacing="1">
+          <Button x:Name="RefreshButton" Classes="toolbar" Focusable="False" Content="새로 고침" IsEnabled="{Binding CanRefresh}"
+                  icons:ButtonIcon.Key="refresh" icons:ButtonIcon.IconOnly="True" />
+          <Button x:Name="CancelButton" Classes="toolbar" Focusable="False" Content="데이터 읽기 취소" IsVisible="{Binding IsLoading}"
+                  icons:ButtonIcon.Key="cancel" icons:ButtonIcon.IconOnly="True" />
+          <Separator Classes="toolbar" />
+          <!-- 켜면 지금 결과에 편집 모드(행 추가·삭제·DML 미리보기·반영/커밋 툴바)를 연다. 읽기 전용 접속이면 이유만 보인다. -->
+          <ToggleButton x:Name="EditToggle" Classes="tool" Focusable="False" Content="편집" IsVisible="{Binding IsTable}"
+                        IsEnabled="{Binding CanToggleEdit}" icons:ButtonIcon.Key="tableEdit"
+                        ToolTip.Tip="ROWID 로 행을 찾아 고칩니다(반영 전에 DML 을 미리 봅니다)" />
+          <Button x:Name="FilterButton" Classes="toolbar" Focusable="False" Content="거르기 줄" IsEnabled="{Binding IsLoaded}"
+                  icons:ButtonIcon.Key="filter" icons:ButtonIcon.IconOnly="True" />
+          <Separator Classes="toolbar" />
+          <Button x:Name="CountButton" Classes="tool" Focusable="False" Content="행 수 세기" IsEnabled="{Binding CanCountRows}"
+                  icons:ButtonIcon.Key="info" />
+          <TextBlock Text="{Binding RowCountText}" VerticalAlignment="Center" Margin="6,0,0,0" />
+        </StackPanel>
+        <TextBlock Text="{Binding StatusText}" VerticalAlignment="Center" Margin="12,0,4,0" TextTrimming="CharacterEllipsis"
+                   ToolTip.Tip="{Binding StatusText}" />
+      </DockPanel>
+    </Border>
+    <rg:SqlResultPaneView DataContext="{Binding Pane}" />
+  </DockPanel>
+</UserControl>

@@ -22,7 +22,14 @@
             </ListBox.ItemTemplate>
           </ListBox>
           <Border BorderThickness="1,0,0,0" BorderBrush="{DynamicResource OrandaSeparatorBrush}">
-            <ctl:DetailTable x:Name="SectionTable" Columns="{Binding SelectedSection.Columns}" Rows="{Binding SelectedSection.Rows}" />
+            <Panel>
+              <ctl:DetailTable x:Name="SectionTable" Columns="{Binding SelectedSection.Columns}" Rows="{Binding SelectedSection.Rows}"
+                               IsVisible="{Binding !IsDataSelected}" />
+              <!-- 「데이터」 탭(표·뷰): 처음 고를 때 읽는다. 결과 영역은 편집기 결과와 같다(거르기·행 수·편집). -->
+              <Panel IsVisible="{Binding IsDataSelected}">
+                <vm:ObjectDataView x:Name="DataView" DataContext="{Binding Data}" />
+              </Panel>
+            </Panel>
           </Border>
         </DockPanel>
       </TabItem>
