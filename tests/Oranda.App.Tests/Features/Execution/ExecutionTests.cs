@@ -256,8 +256,11 @@ public sealed class ExecutionTests
             Assert.NotNull(registry.Find(id));
         }
 
-        Assert.Equal(22, ExecutionCommands.Ids.Length);
+        Assert.Equal(23, ExecutionCommands.Ids.Length);
         Assert.Equal("hasSession && !sessionBusy", registry.Find("oranda.exec.runStatement")!.Enablement);
+        Assert.Equal("hasSession && !sessionBusy", registry.Find("oranda.exec.runSubquery")!.Enablement);
+        Assert.Equal("sqlDocFocus", registry.Find("oranda.exec.runSubquery")!.When);
+        Assert.Contains("context:editor/runSubquery@1005", registry.Find("oranda.exec.runSubquery")!.Placements);
         Assert.Equal("hasSession && !sessionBusy && hasSelection", registry.Find("oranda.exec.runSelection")!.Enablement);
         Assert.Equal("sessionBusy", registry.Find("oranda.exec.cancel")!.Enablement);
         Assert.Equal("hasExecError", registry.Find("oranda.exec.goToError")!.Enablement);
@@ -744,6 +747,69 @@ public sealed class ExecutionTests
         Assert.False(await rig.Controller.RunAsync(RunMode.Statement)); // 처음 보는 바인드: 실행 보류
 
         Assert.Empty(flashes);
+    });
+
+    // ---------- 컨트롤러: 커서의 하위 쿼리 ----------
+
+    [Fact]
+    public Task Subquery_run_executes_only_the_innermost_query_with_its_document_range() => Ui.Run(async () =>
+    {
+        using var rig = new Rig();
+        const string Text = "select 1 from dual;\nselect * from (select count(*) c from emp where deptno = 10) t;";
+        var tab = rig.Host.NewDocument(Text);
+        var flashes = new List<Oranda.Core.Text.TextRange>();
+        tab.FlashRequested += (_, r) => flashes.Add(r);
+        tab.Select(Text.IndexOf("*) c", StringComparison.Ordinal), 0); // count(*) 괄호 안이어도 바깥 하위 쿼리
+        rig.Exec.Handler = (s, _) => Task.FromResult(Rig.Query(s));
+
+        Assert.True(await rig.Controller.RunAsync(RunMode.Subquery));
+
+        var ran = Assert.Single(rig.Exec.Statements);
+        Assert.Equal("select count(*) c from emp where deptno = 10", ran.Text);
+        Assert.Equal(StatementKind.Query, ran.Kind);
+        Assert.Equal(new Oranda.Core.Text.TextRange(Text.IndexOf("select count", StringComparison.Ordinal), ran.Text.Length), ran.Range);
+        Assert.Equal(ran.Range, Assert.Single(flashes));
+        Assert.NotNull(Assert.Single(Assert.IsType<ResultTabsViewModel>(tab.ResultPane).Tabs).Pane?.Model);
+    });
+
+    [Fact]
+    public Task Subquery_run_outside_a_subquery_runs_the_whole_statement() => Ui.Run(async () =>
+    {
+        using var rig = new Rig();
+        const string Text = "select 1 from dual;\nselect * from (select a from t) x where b in (1, 2);";
+        var tab = rig.Host.NewDocument(Text);
+
+        tab.Select(Text.IndexOf("* from", StringComparison.Ordinal), 0);
+        await rig.Controller.RunAsync(RunMode.Subquery);
+        tab.Select(Text.IndexOf("2)", StringComparison.Ordinal), 0); // IN 목록은 하위 쿼리가 아니다
+        await rig.Controller.RunAsync(RunMode.Subquery);
+
+        Assert.All(rig.Exec.Statements, s => Assert.Equal("select * from (select a from t) x where b in (1, 2)", s.Text));
+        Assert.Equal(2, rig.Exec.Statements.Count);
+    });
+
+    [Fact]
+    public Task Subquery_run_resolves_binds_through_the_bind_list() => Ui.Run(async () =>
+    {
+        using var rig = new Rig();
+        const string Text = "select * from (select :x n from dual where :y = 1) t where t.n = :z";
+        var tab = rig.Host.NewDocument(Text);
+        tab.Select(Text.IndexOf("n from", StringComparison.Ordinal), 0);
+
+        // 하위 쿼리의 바인드만 목록에 더하고 실행을 미룬다(바깥 문장의 :z 는 묻지 않는다).
+        Assert.False(await rig.Controller.RunAsync(RunMode.Subquery));
+        Assert.Empty(rig.Exec.Statements);
+        Assert.Equal(["x", "y"], rig.Binds.Rows.Select(r => r.Name));
+
+        rig.Binds.Find("x")!.Text = "a";
+        rig.Binds.Find("y")!.Type = BindDataType.Number;
+        rig.Binds.Find("y")!.Text = "1";
+        Assert.True(await rig.Controller.RunAsync(RunMode.Subquery));
+
+        Assert.Equal("select :x n from dual where :y = 1", Assert.Single(rig.Exec.Statements).Text);
+        Assert.Equal("a", rig.Exec.LastBinds!["x"].Value);
+        Assert.Equal(1m, rig.Exec.LastBinds["y"].Value);
+        Assert.False(rig.Exec.LastBinds.ContainsKey("z"));
     });
 
     [Fact]

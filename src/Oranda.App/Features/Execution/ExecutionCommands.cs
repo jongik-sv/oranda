@@ -29,6 +29,7 @@ public static class ExecutionCommands
     public static readonly string[] Ids =
     [
         "oranda.exec.runStatement",
+        "oranda.exec.runSubquery",
         "oranda.exec.runSelection",
         "oranda.exec.runScript",
         "oranda.exec.runFromCursor",
@@ -186,6 +187,8 @@ public static class ExecutionCommands
 /// <summary>실행·취소·커밋·롤백 등 TSK-06-02 소유 명령의 처리기. 한 클래스가 명령 ID 로 나눠 처리한다.</summary>
 [OrandaCommand("oranda.exec.runStatement", CommandCategory.Sql, When = "sqlDocFocus", Enablement = "hasSession && !sessionBusy",
     Icon = "run", Placements = ["menu:sql/runStatement@10", "toolbar:main/run@210", "context:editor/runStatement@1000"])]
+[OrandaCommand("oranda.exec.runSubquery", CommandCategory.Sql, When = "sqlDocFocus", Enablement = "hasSession && !sessionBusy",
+    Placements = ["menu:sql/runSubquery@11", "context:editor/runSubquery@1005"])]
 [OrandaCommand("oranda.exec.runSelection", CommandCategory.Sql, When = "sqlDocFocus", Enablement = "hasSession && !sessionBusy && hasSelection",
     Placements = ["menu:sql/runSelection@12"])]
 [OrandaCommand("oranda.exec.runScript", CommandCategory.Sql, When = "sqlDocFocus", Enablement = "hasSession && !sessionBusy",
@@ -239,6 +242,9 @@ public sealed class ExecutionCommandHandler(ServiceContainer container) : IComma
         {
             case "oranda.exec.runStatement":
                 await c.RunAsync(RunMode.Statement, ct: cancellationToken).ConfigureAwait(true);
+                break;
+            case "oranda.exec.runSubquery":
+                await c.RunAsync(RunMode.Subquery, ct: cancellationToken).ConfigureAwait(true);
                 break;
             case "oranda.exec.runSelection":
                 await c.RunAsync(RunMode.Selection, ct: cancellationToken).ConfigureAwait(true);

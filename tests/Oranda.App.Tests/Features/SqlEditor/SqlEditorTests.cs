@@ -271,6 +271,59 @@ public sealed class SqlEditorTests : IDisposable
         Assert.Equal(7, vm.CaretOffset);
     }
 
+    // ---- 구조: 커서의 하위 쿼리(oranda.exec.runSubquery) ----------------------------------------
+
+    private static string? SubqueryAt(string text, string marker, int selectionLength = 0)
+    {
+        int at = text.IndexOf(marker, StringComparison.Ordinal);
+        Assert.True(at >= 0, marker);
+        return SqlStructure.FindSubqueryAt(text, at, at + selectionLength) is { } r ? text.Substring(r.Start, r.Length) : null;
+    }
+
+    [Fact]
+    public void Subquery_is_the_innermost_parenthesised_select_around_the_caret()
+    {
+        const string Text = "select * from (select a from (select a from t where b = 1) x) y";
+        Assert.Equal("select a from t where b = 1", SubqueryAt(Text, "where"));
+        Assert.Equal("select a from (select a from t where b = 1) x", SubqueryAt(Text, "a from (select"));
+        Assert.Null(SubqueryAt(Text, "* from")); // 하위 쿼리 밖
+    }
+
+    [Fact]
+    public void Subquery_skips_function_parens_and_in_lists_to_the_enclosing_query()
+    {
+        const string Text = "select * from t where x in (select count(*) from u where k in (1, 2))";
+        Assert.Equal("select count(*) from u where k in (1, 2)", SubqueryAt(Text, "*) from"));
+        Assert.Equal("select count(*) from u where k in (1, 2)", SubqueryAt(Text, "2))"));
+        Assert.Null(SqlStructure.FindSubqueryAt("select nvl(a, 0) from t", 11, 11));
+    }
+
+    [Fact]
+    public void Subquery_accepts_with_comments_and_trims_trailing_space()
+    {
+        const string Text = "select * from ( /* c */\n  with q as (select 1 n from dual) select n from q\n  ) z";
+        Assert.Equal("with q as (select 1 n from dual) select n from q", SubqueryAt(Text, "n from q"));
+        Assert.Equal("select 1 n from dual", SubqueryAt(Text, "1 n"));
+    }
+
+    [Fact]
+    public void Subquery_ignores_parens_and_keywords_in_strings_and_comments()
+    {
+        Assert.Null(SubqueryAt("select '(select 1 from dual)' from t", "1 from"));
+        Assert.Null(SubqueryAt("select a -- (select\nfrom t", "a --"));
+        Assert.Null(SubqueryAt("select ( -- select\n 1 + 2) from t", "1 +"));
+    }
+
+    [Fact]
+    public void Subquery_must_contain_the_whole_selection()
+    {
+        const string Text = "select (select max(a) from t) m, (select 1 from dual) n from dual";
+        Assert.Equal("select max(a) from t", SubqueryAt(Text, "max(a)", selectionLength: 6));
+        Assert.Null(SubqueryAt(Text, "max(a) from t) m, (select", selectionLength: 25)); // 두 하위 쿼리에 걸친 선택
+        Assert.Null(SqlStructure.FindSubqueryAt(Text, 10, 5)); // 잘못된 범위
+        Assert.Null(SqlStructure.FindSubqueryAt(Text, 0, Text.Length + 1));
+    }
+
     // ---- 찾기·바꾸기 ---------------------------------------------------------------------
 
     [Fact]

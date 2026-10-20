@@ -31,7 +31,11 @@ public static class SqlStructure
     public static IReadOnlyList<StructurePair> FindPairs(string text)
     {
         ArgumentNullException.ThrowIfNull(text);
-        var tokens = SqlLexer.Tokenize(text);
+        return FindPairs(text, SqlLexer.Tokenize(text));
+    }
+
+    private static List<StructurePair> FindPairs(string text, List<Token> tokens)
+    {
         var pairs = new List<StructurePair>();
         var stack = new List<(PairKind Kind, TextRange Open)>();
 
@@ -87,6 +91,85 @@ public static class SqlStructure
 
         pairs.Sort((a, b) => a.Close.Start.CompareTo(b.Close.Start));
         return pairs;
+    }
+
+    /// <summary>
+    /// [<paramref name="start"/>, <paramref name="end"/>] 를 품은 괄호 가운데, 안쪽이 SELECT·WITH 로 시작하는(하위 쿼리) 가장 안쪽 것의 본문 범위.
+    /// 범위는 첫 키워드부터 닫는 괄호 앞(뒷공백 제외)까지다. 없으면 null(DataGrip 「가장 작은 하위 쿼리」, <c>oranda.exec.runSubquery</c>).
+    /// 커서가 하위 쿼리 안의 함수 괄호·IN 목록에 있어도 그 바깥 하위 쿼리를 찾는다. 문자열·주석 안의 괄호·키워드는 보지 않는다.
+    /// </summary>
+    public static TextRange? FindSubqueryAt(string text, int start, int end)
+    {
+        ArgumentNullException.ThrowIfNull(text);
+        if (start < 0 || end < start || end > text.Length)
+        {
+            return null;
+        }
+
+        var tokens = SqlLexer.Tokenize(text);
+        TextRange? best = null;
+        int bestOpen = -1;
+        foreach (var p in FindPairs(text, tokens))
+        {
+            // 괄호 안(여는 괄호 뒤 ~ 닫는 괄호 앞)에 범위가 있고, 지금 고른 것보다 안쪽인 것만 본다.
+            if (p.Kind != PairKind.Paren || p.Open.End > start || end > p.Close.Start || p.Open.Start <= bestOpen)
+            {
+                continue;
+            }
+
+            int i = FirstTokenAtOrAfter(tokens, p.Open.End);
+            while (i < tokens.Count && tokens[i].Kind is TokenKind.Comment or TokenKind.Hint)
+            {
+                i++;
+            }
+
+            if (i >= tokens.Count || tokens[i].Start >= p.Close.Start || !IsQueryStart(text, tokens[i]))
+            {
+                continue;
+            }
+
+            int from = tokens[i].Start, to = p.Close.Start;
+            while (to > from && char.IsWhiteSpace(text[to - 1]))
+            {
+                to--;
+            }
+
+            best = new TextRange(from, to - from);
+            bestOpen = p.Open.Start;
+        }
+
+        return best;
+    }
+
+    private static bool IsQueryStart(string text, Token t)
+    {
+        if (t.Kind is not (TokenKind.Keyword or TokenKind.Identifier))
+        {
+            return false;
+        }
+
+        var word = text.AsSpan(t.Start, t.Length);
+        return word.Equals("SELECT", StringComparison.OrdinalIgnoreCase) || word.Equals("WITH", StringComparison.OrdinalIgnoreCase);
+    }
+
+    /// <summary>시작 위치가 <paramref name="offset"/> 이상인 첫 토큰의 번호(토큰은 시작 순). 없으면 토큰 수.</summary>
+    private static int FirstTokenAtOrAfter(List<Token> tokens, int offset)
+    {
+        int lo = 0, hi = tokens.Count;
+        while (lo < hi)
+        {
+            int mid = (lo + hi) >>> 1;
+            if (tokens[mid].Start < offset)
+            {
+                lo = mid + 1;
+            }
+            else
+            {
+                hi = mid;
+            }
+        }
+
+        return lo;
     }
 
     private static bool IsOpenBlockComment(string text, Token t)
