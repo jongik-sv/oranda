@@ -497,6 +497,7 @@ public sealed class ExecutionController : IDisposable
             return false;
         }
 
+        Flash(tab, stmt.Range.Start, stmt.Range.End);
         ExecutionResult? result = null;
         await GuardedAsync(session, async token =>
         {
@@ -541,6 +542,7 @@ public sealed class ExecutionController : IDisposable
             results.Clear();
         }
 
+        Flash(tab, stmts[0].Range.Start, stmts[^1].Range.End);
         int ok = 0, failed = 0, done = 0;
         bool cancelled = false;
         var summary = new StringBuilder();
@@ -590,6 +592,15 @@ public sealed class ExecutionController : IDisposable
 
         _lastCancelled = cancelled;
         return !cancelled;
+    }
+
+    /// <summary>실행하는 범위를 편집기에 잠깐 칠한다. 문서 밖에서 만든 문장(범위 없음)은 건너뛴다.</summary>
+    private static void Flash(SqlEditorViewModel tab, int start, int end)
+    {
+        if (end > start && end <= tab.Document.TextLength)
+        {
+            tab.FlashRange(start, end - start);
+        }
     }
 
     /// <summary>실행 직전 준비: 세션 확인, 결과 영역을 편집기에 붙임.</summary>

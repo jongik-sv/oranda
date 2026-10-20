@@ -259,6 +259,23 @@ public sealed partial class SqlEditorViewModel : ToolPanelViewModelBase
 
     public SqlStatement? GetStatementAtCaret() => StatementSplitter.GetStatementAt(Text, CaretOffset, SplitOptions.Default);
 
+    /// <summary>실행한 범위를 잠깐 칠해 달라는 요청. View 가 옅은 배경을 칠했다가 서서히 지운다(View 가 없으면 아무 일도 없다).</summary>
+    public event EventHandler<TextRange>? FlashRequested;
+
+    /// <summary>
+    /// 실행 범위 잠깐 강조(DataGrip·SQL Developer 의 실행 문장 표시). 실행 컨트롤러가 실행 직전에 부른다.
+    /// 범위는 문서 안으로 자르고, 빈 범위는 무시한다.
+    /// </summary>
+    public void FlashRange(int start, int length)
+    {
+        start = Math.Clamp(start, 0, Document.TextLength);
+        length = Math.Clamp(length, 0, Document.TextLength - start);
+        if (length > 0)
+        {
+            FlashRequested?.Invoke(this, new TextRange(start, length));
+        }
+    }
+
     /// <summary>커서 옆 괄호·BEGIN/END 의 짝으로 커서를 옮긴다(<c>oranda.edit.goToMatchingBracket</c>).</summary>
     public bool GoToMatchingBracket()
     {

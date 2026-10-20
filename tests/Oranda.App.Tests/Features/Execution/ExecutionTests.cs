@@ -701,6 +701,51 @@ public sealed class ExecutionTests
         Assert.Equal(20, tab.CaretOffset);
     });
 
+    // ---------- 컨트롤러: 실행 범위 강조 ----------
+
+    [Fact]
+    public Task Statement_run_flashes_the_statement_range_in_the_editor() => Ui.Run(async () =>
+    {
+        using var rig = new Rig();
+        var tab = rig.Host.NewDocument("select 1 from dual;\nselect 2 from dual;");
+        var flashes = new List<Oranda.Core.Text.TextRange>();
+        tab.FlashRequested += (_, r) => flashes.Add(r);
+        tab.Select(25, 0);
+
+        await rig.Controller.RunAsync(RunMode.Statement);
+
+        Assert.Equal(new Oranda.Core.Text.TextRange(20, 18), Assert.Single(flashes));
+    });
+
+    [Fact]
+    public Task Script_run_flashes_from_the_first_to_the_last_statement() => Ui.Run(async () =>
+    {
+        using var rig = new Rig();
+        const string Text = "-- head\nselect 1 from dual;\nselect 2 from dual;\n";
+        var tab = rig.Host.NewDocument(Text);
+        var flashes = new List<Oranda.Core.Text.TextRange>();
+        tab.FlashRequested += (_, r) => flashes.Add(r);
+
+        await rig.Controller.RunAsync(RunMode.Script);
+
+        int start = Text.IndexOf("select 1", StringComparison.Ordinal);
+        int end = Text.IndexOf("select 2", StringComparison.Ordinal) + "select 2 from dual".Length;
+        Assert.Equal(new Oranda.Core.Text.TextRange(start, end - start), Assert.Single(flashes));
+    });
+
+    [Fact]
+    public Task Run_that_does_not_execute_does_not_flash() => Ui.Run(async () =>
+    {
+        using var rig = new Rig();
+        var tab = rig.Host.NewDocument("select :a from dual");
+        var flashes = new List<Oranda.Core.Text.TextRange>();
+        tab.FlashRequested += (_, r) => flashes.Add(r);
+
+        Assert.False(await rig.Controller.RunAsync(RunMode.Statement)); // 처음 보는 바인드: 실행 보류
+
+        Assert.Empty(flashes);
+    });
+
     [Fact]
     public Task New_result_tab_run_keeps_earlier_results_and_a_normal_run_replaces_them() => Ui.Run(async () =>
     {

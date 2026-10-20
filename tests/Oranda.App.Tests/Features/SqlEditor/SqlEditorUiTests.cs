@@ -171,6 +171,69 @@ public sealed class SqlEditorUiTests(ITestOutputHelper output)
     });
 
     [Fact]
+    public Task Flash_paints_the_range_fades_out_and_stops_its_timer() => Ui.Run(() =>
+    {
+        var (window, view, vm) = Show("select 1 from dual;\nselect 2 from dual;");
+        var flash = view.Flash;
+        Assert.Null(flash.Range);
+        Assert.False(flash.IsTimerRunning); // 강조가 없으면 타이머도 없다
+
+        vm.FlashRange(20, 18);
+        Assert.Equal(new Oranda.Core.Text.TextRange(20, 18), flash.Range);
+        Assert.Equal(0, flash.Step);
+        Assert.True(flash.IsTimerRunning);
+        Assert.Contains(flash, view.TextEditorControl.TextArea.TextView.BackgroundRenderers);
+
+        flash.Advance(RangeFlashRenderer.HoldTime + (RangeFlashRenderer.FadeTime / 2));
+        Assert.True(flash.Step > 0, "머문 뒤에는 옅어진다");
+        flash.Advance(RangeFlashRenderer.HoldTime + RangeFlashRenderer.FadeTime);
+        Assert.Null(flash.Range);
+        Assert.False(flash.IsTimerRunning);
+
+        // 문서 밖 범위는 잘리고, 빈 범위는 무시한다.
+        vm.FlashRange(30, 1000);
+        Assert.Equal(new Oranda.Core.Text.TextRange(30, vm.Document.TextLength - 30), flash.Range);
+        flash.Clear();
+        vm.FlashRange(5, 0);
+        Assert.Null(flash.Range);
+        window.Close();
+    });
+
+    [Fact]
+    public Task Flash_is_cleared_by_typing_and_by_detaching_the_view() => Ui.Run(() =>
+    {
+        var (window, view, vm) = Show("select 1 from dual");
+        vm.FlashRange(0, 8);
+        vm.Document.Insert(0, "-- x\n");
+        Assert.Null(view.Flash.Range);
+        Assert.False(view.Flash.IsTimerRunning);
+
+        vm.FlashRange(0, 8);
+        view.DataContext = null;
+        Assert.Null(view.Flash.Range);
+        Assert.False(view.Flash.IsTimerRunning);
+        Assert.DoesNotContain(view.Flash, view.TextEditorControl.TextArea.TextView.BackgroundRenderers);
+
+        vm.FlashRange(0, 8); // 떨어진 View 는 더 듣지 않는다
+        Assert.Null(view.Flash.Range);
+        window.Close();
+    });
+
+    [Fact]
+    public void Flash_steps_hold_then_fade_to_nothing()
+    {
+        Assert.Equal(0, RangeFlashRenderer.StepAt(TimeSpan.Zero));
+        Assert.Equal(0, RangeFlashRenderer.StepAt(RangeFlashRenderer.HoldTime - TimeSpan.FromMilliseconds(1)));
+        var steps = Enumerable.Range(0, 20)
+            .Select(i => RangeFlashRenderer.StepAt(RangeFlashRenderer.HoldTime + (RangeFlashRenderer.FadeTime * i / 20)))
+            .ToList();
+        Assert.Equal(steps.Order(), steps); // 단계는 줄곧 옅어지기만 한다
+        Assert.True(steps[^1] > 0);
+        Assert.Equal(-1, RangeFlashRenderer.StepAt(RangeFlashRenderer.HoldTime + RangeFlashRenderer.FadeTime));
+        Assert.InRange(RangeFlashRenderer.HoldTime + RangeFlashRenderer.FadeTime, TimeSpan.FromMilliseconds(600), TimeSpan.FromMilliseconds(800));
+    }
+
+    [Fact]
     public Task Caret_and_selection_flow_both_ways_between_view_and_view_model() => Ui.Run(() =>
     {
         var (window, view, vm) = Show("line1\nline2\nline3");
