@@ -30,7 +30,7 @@ internal static class TransferWriters
         TransferFormat.Tsv => new DelimitedWriter(destination, '\t', options.IncludeHeader),
         TransferFormat.Json => new JsonRowWriter(destination),
         TransferFormat.Insert => new InsertWriter(destination, options.InsertTableName),
-        TransferFormat.Xlsx => new XlsxWriter(destination, options.IncludeHeader, options.MaxRowsPerSheet),
+        TransferFormat.Xlsx => new XlsxWriter(destination, options.IncludeHeader, options.MaxRowsPerSheet, options.SheetName),
         _ => throw new ArgumentOutOfRangeException(nameof(options)),
     };
 
@@ -57,6 +57,36 @@ internal static class TransferWriters
     }
 
     private static bool IsNull(object? v) => v is null or DBNull;
+
+    /// <summary>
+    /// xlsx 시트 이름. Excel 은 31자 이하이고 <c>[ ] : * ? / \</c> 를 못 쓰며 앞뒤 작은따옴표·빈 이름·<c>History</c> 도 안 된다.
+    /// 이름이 비면 <c>Sheet{index}</c>. 둘째 시트부터는 <c>_{index}</c> 를 붙여 31자 안에서 겹치지 않게 한다.
+    /// </summary>
+    internal static string XlsxSheetName(string? name, int index)
+    {
+        var clean = new string((name ?? string.Empty).Select(ch => ch is '[' or ']' or ':' or '*' or '?' or '/' or '\\' || char.IsControl(ch) ? '_' : ch).ToArray())
+            .Trim().Trim('\'').Trim();
+        if (clean.Length == 0)
+        {
+            return "Sheet" + index.ToString(CultureInfo.InvariantCulture);
+        }
+
+        if (clean.Equals("History", StringComparison.OrdinalIgnoreCase))
+        {
+            clean += "_";
+        }
+
+        var suffix = index > 1 ? "_" + index.ToString(CultureInfo.InvariantCulture) : string.Empty;
+        var room = 31 - suffix.Length;
+        if (clean.Length > room)
+        {
+            // 서로게이트 쌍을 가운데서 자르지 않는다.
+            var cut = char.IsHighSurrogate(clean[room - 1]) ? room - 1 : room;
+            clean = clean[..cut];
+        }
+
+        return clean + suffix;
+    }
 
     // ---- CSV / TSV ----
     private sealed class DelimitedWriter : ITransferWriter
@@ -358,9 +388,17 @@ internal static class TransferWriters
         private static readonly DateTime Epoch = new(1899, 12, 30, 0, 0, 0, DateTimeKind.Unspecified);
         private static readonly DateTime MinDate = new(1900, 3, 1, 0, 0, 0, DateTimeKind.Unspecified);
 
+        /// <summary>열 너비를 맞추려고 살펴보는 앞쪽 행 수.</summary>
+        private const int WidthSampleRows = 1000;
+
+        private const double MaxColumnWidth = 60;
+
         private readonly ZipArchive _zip;
         private readonly bool _header;
         private readonly long _maxData;
+        private readonly string? _sheetName;
+        private List<object?[]>? _pending;
+        private double[] _widths = [];
         private IReadOnlyList<ResultColumn> _columns = [];
         private string[] _colRefs = [];
         private XmlWriter? _xml;
@@ -369,8 +407,9 @@ internal static class TransferWriters
         private long _rowNo;
         private long _dataInSheet;
 
-        public XlsxWriter(Stream destination, bool header, int maxRowsPerSheet)
+        public XlsxWriter(Stream destination, bool header, int maxRowsPerSheet, string? sheetName)
         {
+            _sheetName = sheetName;
             _zip = new ZipArchive(destination, ZipArchiveMode.Create, leaveOpen: true);
             _header = header;
             var cap = header ? 1_048_575L : 1_048_576L;
@@ -383,10 +422,40 @@ internal static class TransferWriters
         {
             _columns = columns;
             _colRefs = Enumerable.Range(0, columns.Count).Select(ColumnName).ToArray();
-            StartSheet();
+
+            // 열 너비는 시트 머리(cols)에 먼저 적어야 하므로 앞 행을 모아 둔 뒤 첫 시트를 연다.
+            _pending = [];
         }
 
         public void WriteRow(object?[] values)
+        {
+            if (_pending is { } pending)
+            {
+                pending.Add((object?[])values.Clone());
+                if (pending.Count >= WidthSampleRows)
+                {
+                    OpenFirstSheet();
+                }
+
+                return;
+            }
+
+            WriteDataRow(values);
+        }
+
+        private void OpenFirstSheet()
+        {
+            var pending = _pending!;
+            _pending = null;
+            _widths = MeasureWidths(pending);
+            StartSheet();
+            foreach (var row in pending)
+            {
+                WriteDataRow(row);
+            }
+        }
+
+        private void WriteDataRow(object?[] values)
         {
             if (_dataInSheet >= _maxData)
             {
@@ -409,9 +478,9 @@ internal static class TransferWriters
 
         public void Finish()
         {
-            if (_xml is null)
+            if (_pending is not null)
             {
-                StartSheet();
+                OpenFirstSheet();
             }
 
             EndSheet();
@@ -461,6 +530,22 @@ internal static class TransferWriters
                 x.WriteEndElement();
             }
 
+            if (_widths.Length > 0)
+            {
+                x.WriteStartElement("cols");
+                for (var i = 0; i < _widths.Length; i++)
+                {
+                    x.WriteStartElement("col");
+                    x.WriteAttributeString("min", Num(i + 1));
+                    x.WriteAttributeString("max", Num(i + 1));
+                    x.WriteAttributeString("width", _widths[i].ToString("0.##", CultureInfo.InvariantCulture));
+                    x.WriteAttributeString("customWidth", "1");
+                    x.WriteEndElement();
+                }
+
+                x.WriteEndElement();
+            }
+
             x.WriteStartElement("sheetData");
             _rowNo = 0;
             _dataInSheet = 0;
@@ -486,6 +571,13 @@ internal static class TransferWriters
             }
 
             _xml.WriteEndElement(); // sheetData
+            if (_header && _colRefs.Length > 0)
+            {
+                _xml.WriteStartElement("autoFilter");
+                _xml.WriteAttributeString("ref", $"A1:{_colRefs[^1]}{Num(_rowNo)}");
+                _xml.WriteEndElement();
+            }
+
             _xml.WriteEndElement(); // worksheet
             _xml.WriteEndDocument();
             _xml.Flush();
@@ -585,13 +677,20 @@ internal static class TransferWriters
             text = Sanitize(text);
             if (text.Length > MaxCellChars)
             {
-                var msg = "셀 글자 수가 Excel 한도(32,767)를 넘어 잘랐다.";
+                var msg = "셀 글자 수가 Excel 한도(32,767)를 넘어 잘라 끝에 …를 붙였다.";
                 if (!Warnings.Contains(msg))
                 {
                     Warnings.Add(msg);
                 }
 
-                text = text[..MaxCellChars];
+                // 끝에 「…」 한 글자를 붙여 잘렸음을 알린다. 서로게이트 쌍을 가운데서 자르지 않는다.
+                var cut = MaxCellChars - 1;
+                if (char.IsHighSurrogate(text[cut - 1]))
+                {
+                    cut--;
+                }
+
+                text = text[..cut] + "…";
             }
 
             x.WriteStartElement("c");
@@ -609,6 +708,55 @@ internal static class TransferWriters
             x.WriteEndElement();
             x.WriteEndElement();
             x.WriteEndElement();
+        }
+
+        /// <summary>머리글과 앞 행의 표시 길이로 열 너비(글자 수 단위)를 정한다. 한글 같은 넓은 글자는 두 칸, 최대 60.</summary>
+        private double[] MeasureWidths(List<object?[]> rows)
+        {
+            var widths = new double[_columns.Count];
+            for (var c = 0; c < widths.Length; c++)
+            {
+                // 머리글은 굵고 자동 필터 단추가 붙으므로 여유를 더 둔다.
+                var w = _header ? DisplayWidth(_columns[c].Name) + 3 : 0;
+                foreach (var row in rows)
+                {
+                    w = Math.Max(w, DisplayWidth(Sample(_columns[c], row[c])));
+                }
+
+                widths[c] = Math.Clamp(w + 2, 8, MaxColumnWidth);
+            }
+
+            return widths;
+        }
+
+        private static string Sample(ResultColumn c, object? v)
+        {
+            switch (v)
+            {
+                case null or DBNull:
+                    return string.Empty;
+                case LobValue lob:
+                    return lob.Kind is LobKind.Blob or LobKind.BFile ? new string('0', (int)Math.Min(lob.BinaryPreview.Length * 2L, 64)) : lob.TextPreview ?? string.Empty;
+                case DateTime:
+                    return c.Kind == ColumnDataKind.Timestamp ? "0000-00-00 00:00:00.000" : "0000-00-00 00:00:00";
+                case string s:
+                    // 줄 바꿈이 있는 글은 가장 긴 줄 기준.
+                    return s.Split('\n').MaxBy(l => l.Length) ?? string.Empty;
+                default:
+                    return CellValueFormatter.Format(c, v, ExportDisplay);
+            }
+        }
+
+        private static int DisplayWidth(string s)
+        {
+            var w = 0;
+            foreach (var ch in s)
+            {
+                w += ch >= 0x1100 && (ch <= 0x115F || (ch >= 0x2E80 && ch <= 0xA4CF) || (ch >= 0xAC00 && ch <= 0xD7A3) || (ch >= 0xF900 && ch <= 0xFAFF)
+                    || (ch >= 0xFE30 && ch <= 0xFE6F) || (ch >= 0xFF00 && ch <= 0xFF60) || (ch >= 0xFFE0 && ch <= 0xFFE6)) ? 2 : 1;
+            }
+
+            return w;
         }
 
         /// <summary>XML 1.0 에서 쓸 수 없는 글자를 뺀다.</summary>
@@ -689,7 +837,7 @@ internal static class TransferWriters
                 for (var i = 1; i <= _sheetCount; i++)
                 {
                     w.WriteStartElement("sheet");
-                    w.WriteAttributeString("name", "Sheet" + Num(i));
+                    w.WriteAttributeString("name", XlsxSheetName(_sheetName, i));
                     w.WriteAttributeString("sheetId", Num(i));
                     w.WriteAttributeString("r", "id", RelNs, "rId" + Num(i));
                     w.WriteEndElement();
@@ -723,14 +871,15 @@ internal static class TransferWriters
                 w.WriteAttributeString("count", "2");
                 w.WriteRaw("<font><sz val=\"11\"/><name val=\"Calibri\"/></font><font><b/><sz val=\"11\"/><name val=\"Calibri\"/></font>");
                 w.WriteEndElement();
-                w.WriteRaw("<fills count=\"2\"><fill><patternFill patternType=\"none\"/></fill><fill><patternFill patternType=\"gray125\"/></fill></fills>");
+                w.WriteRaw("<fills count=\"3\"><fill><patternFill patternType=\"none\"/></fill><fill><patternFill patternType=\"gray125\"/></fill>"
+                    + "<fill><patternFill patternType=\"solid\"><fgColor rgb=\"FFEDEDED\"/><bgColor indexed=\"64\"/></patternFill></fill></fills>");
                 w.WriteRaw("<borders count=\"1\"><border><left/><right/><top/><bottom/><diagonal/></border></borders>");
                 w.WriteRaw("<cellStyleXfs count=\"1\"><xf numFmtId=\"0\" fontId=\"0\" fillId=\"0\" borderId=\"0\"/></cellStyleXfs>");
                 w.WriteRaw("<cellXfs count=\"4\">"
                     + "<xf numFmtId=\"0\" fontId=\"0\" fillId=\"0\" borderId=\"0\" xfId=\"0\"/>"
                     + "<xf numFmtId=\"164\" fontId=\"0\" fillId=\"0\" borderId=\"0\" xfId=\"0\" applyNumberFormat=\"1\"/>"
                     + "<xf numFmtId=\"165\" fontId=\"0\" fillId=\"0\" borderId=\"0\" xfId=\"0\" applyNumberFormat=\"1\"/>"
-                    + "<xf numFmtId=\"0\" fontId=\"1\" fillId=\"0\" borderId=\"0\" xfId=\"0\" applyFont=\"1\"/>"
+                    + "<xf numFmtId=\"0\" fontId=\"1\" fillId=\"2\" borderId=\"0\" xfId=\"0\" applyFont=\"1\" applyFill=\"1\"/>"
                     + "</cellXfs>");
                 w.WriteRaw("<cellStyles count=\"1\"><cellStyle name=\"Normal\" xfId=\"0\" builtinId=\"0\"/></cellStyles>");
                 w.WriteEndElement();

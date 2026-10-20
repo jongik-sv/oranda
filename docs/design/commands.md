@@ -438,6 +438,7 @@
 | `oranda.grid.rowView` | 행 보기 | `Alt+Enter` | `gridFocus` | `gridHasSelection` | TSK-06-05 |
 | `oranda.grid.viewValue` | 값 보기(LOB 편집기) | - | `gridFocus` | `gridHasSelection` | TSK-06-05 |
 | `oranda.grid.export` | 내보내기 | - | `gridFocus` | `gridHasResult` | TSK-06-07 |
+| `oranda.grid.exportExcel` | Excel 로 내보내기… | `Ctrl+Alt+E` | `gridFocus` | `gridHasResult` | TSK-06-07 |
 | `oranda.grid.edit.addRow` | 행 추가 | `Alt+Insert` | `gridFocus` | `gridEditing` | TSK-06-04 |
 | `oranda.grid.edit.duplicateRow` | 행 복제 | `Ctrl+Shift+D` | `gridFocus` | `gridHasSelection` | TSK-06-04 |
 | `oranda.grid.edit.pasteRows` | 행 붙여넣기 | `Ctrl+Shift+V` | `gridFocus` | `gridHasResult` | TSK-06-04 |

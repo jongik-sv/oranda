@@ -93,6 +93,38 @@ internal sealed class OracleDataTransferService : IDataTransferService
         }
     }
 
+    public async Task<TransferSummary> ExportRowsAsync(IReadOnlyList<ResultColumn> columns, IAsyncEnumerable<IReadOnlyList<object?>> rows, ExportOptions options, Stream destination, IProgress<long>? progress, CancellationToken ct)
+    {
+        ArgumentNullException.ThrowIfNull(columns);
+        ArgumentNullException.ThrowIfNull(rows);
+        ArgumentNullException.ThrowIfNull(options);
+        ArgumentNullException.ThrowIfNull(destination);
+        var sw = Stopwatch.StartNew();
+        using var writer = TransferWriters.Create(options, destination);
+        writer.Begin(columns);
+        long count = 0;
+        await foreach (var values in rows.WithCancellation(ct).ConfigureAwait(false))
+        {
+            var row = new object?[columns.Count];
+            for (var c = 0; c < row.Length && c < values.Count; c++)
+            {
+                row[c] = values[c];
+            }
+
+            writer.WriteRow(row);
+            count++;
+            if (count % 1000 == 0)
+            {
+                progress?.Report(count);
+            }
+        }
+
+        writer.Finish();
+        await destination.FlushAsync(ct).ConfigureAwait(false);
+        progress?.Report(count);
+        return new TransferSummary(count, sw.Elapsed) { Warnings = writer.Warnings.ToList() };
+    }
+
     public async Task<TransferSummary> ImportAsync(ISession s, ImportOptions options, Stream source, IProgress<long>? progress, CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(s);

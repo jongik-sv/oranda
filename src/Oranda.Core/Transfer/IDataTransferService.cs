@@ -1,4 +1,5 @@
 using Oranda.Core.Execution;
+using Oranda.Core.Grid;
 using Oranda.Core.Metadata;
 using Oranda.Core.Sessions;
 
@@ -13,6 +14,14 @@ public interface IDataTransferService
     Task<TransferSummary> ExportAsync(ISession s, SqlStatement query, IReadOnlyDictionary<string, BindValue> binds,
                                       ExportOptions options, Stream destination, IProgress<long>? progress,
                                       CancellationToken ct);
+
+    /// <summary>
+    /// 이미 손에 든 행(그리드에 불러온 행·선택한 칸)을 서버를 거치지 않고 그대로 쓴다. 행 한 줄은 <paramref name="columns"/> 순서의 원시 값이다.
+    /// 쓰기 형식·옵션은 <see cref="ExportAsync"/> 와 같다.
+    /// </summary>
+    Task<TransferSummary> ExportRowsAsync(IReadOnlyList<ResultColumn> columns, IAsyncEnumerable<IReadOnlyList<object?>> rows,
+                                          ExportOptions options, Stream destination, IProgress<long>? progress,
+                                          CancellationToken ct);
 
     Task<TransferSummary> ImportAsync(ISession s, ImportOptions options, Stream source, IProgress<long>? progress,
                                       CancellationToken ct);
@@ -36,6 +45,9 @@ public sealed record ExportOptions(TransferFormat Format)
 
     /// <summary>xlsx 한 시트 최대 행(넘으면 시트 분할).</summary>
     public int MaxRowsPerSheet { get; init; } = 1_048_575;
+
+    /// <summary>xlsx 시트 이름(표 이름 등). 31자·금지 문자는 쓰는 쪽이 정리한다. 비어 있으면 <c>Sheet1</c>.</summary>
+    public string? SheetName { get; init; }
 }
 
 /// <summary>원본 열 → 대상 열 매핑. 대상이 null 이면 그 열은 건너뛴다.</summary>

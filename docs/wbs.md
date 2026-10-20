@@ -1560,8 +1560,8 @@ dotnet, testhost, Oranda.App
 - tags: m2, export
 - depends: TSK-06-03, TSK-06-01
 - blocked-by: -
-- entry-point: 결과 그리드 메뉴 > 내보내기, 메뉴 > 도구 > 가져오기
-- note: -
+- entry-point: 결과 그리드 메뉴 > 내보내기, 결과 > Excel 로 내보내기(Ctrl/Cmd+Shift+E, 결과 창 툴바 단추), 메뉴 > 도구 > 가져오기
+- note: 「Excel 로 내보내기」 빠른 경로(oranda.grid.exportExcel, PRD EXP-03) 추가: 범위 3가지·저장 뒤 열기·XlsxWriter 서식 보강. 외부 패키지 없이 기존 XlsxWriter 사용
 
 #### PRD 요구사항
 - prd-ref: PRD EXP-01, EXP-02

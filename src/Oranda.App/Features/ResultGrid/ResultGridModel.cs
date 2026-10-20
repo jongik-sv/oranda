@@ -727,15 +727,25 @@ public sealed class ResultGridModel : IAsyncDisposable
     public async Task<List<IReadOnlyList<object?>>> ReadSelectedRowsAsync(IReadOnlyList<int> ordinals, CancellationToken ct = default)
     {
         ArgumentNullException.ThrowIfNull(ordinals);
-        var rows = new List<IReadOnlyList<object?>>();
         if (!HasSelection)
         {
-            return rows;
+            return [];
         }
 
         var (from, to) = SelectionRect();
-        rows.Capacity = (int)Math.Min(to.Row - from.Row + 1, 100_000);
-        for (var r = from.Row; r <= to.Row; r++)
+        return await ReadRowsAsync(from.Row, to.Row, ordinals, ct).ConfigureAwait(true);
+    }
+
+    /// <summary>
+    /// 화면 행 <paramref name="firstRow"/>~<paramref name="lastRow"/>(양끝 포함)의 값을 <paramref name="ordinals"/> 열 순서로 읽는다.
+    /// 아직 못 받은 페이지는 가져온다. 편집 모드에서는 화면에 보이는 그대로 읽는다.
+    /// </summary>
+    public async Task<List<IReadOnlyList<object?>>> ReadRowsAsync(long firstRow, long lastRow, IReadOnlyList<int> ordinals, CancellationToken ct = default)
+    {
+        ArgumentNullException.ThrowIfNull(ordinals);
+        var rows = new List<IReadOnlyList<object?>>();
+        rows.Capacity = (int)Math.Clamp(lastRow - firstRow + 1, 0, 100_000);
+        for (var r = firstRow; r <= lastRow; r++)
         {
             var values = new object?[ordinals.Count];
             if (BaseRowOf(r) is var baseRow && baseRow >= 0)

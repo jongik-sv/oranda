@@ -2,6 +2,7 @@ using System.Reflection;
 using Oranda.App.Features.DataTransfer;
 using Oranda.Core.Connection;
 using Oranda.Core.Execution;
+using Oranda.Core.Grid;
 using Oranda.Core.Metadata;
 using Oranda.Core.Sessions;
 using Oranda.Core.Shell;
@@ -183,6 +184,26 @@ public sealed class DataTransferTests : IDisposable
 
             progress?.Report(3);
             return new TransferSummary(3, TimeSpan.FromSeconds(1));
+        }
+
+        public ExportOptions? LastRowsOptions { get; private set; }
+
+        public IReadOnlyList<ResultColumn>? LastRowsColumns { get; private set; }
+
+        public List<IReadOnlyList<object?>> LastRows { get; } = [];
+
+        public async Task<TransferSummary> ExportRowsAsync(IReadOnlyList<ResultColumn> columns, IAsyncEnumerable<IReadOnlyList<object?>> rows, ExportOptions options, Stream destination, IProgress<long>? progress, CancellationToken ct)
+        {
+            LastRowsOptions = options;
+            LastRowsColumns = columns;
+            await foreach (var r in rows.WithCancellation(ct))
+            {
+                LastRows.Add(r);
+            }
+
+            await destination.WriteAsync("rows"u8.ToArray(), ct);
+            progress?.Report(LastRows.Count);
+            return new TransferSummary(LastRows.Count, TimeSpan.FromSeconds(1));
         }
 
         public Task<TransferSummary> ImportAsync(ISession s, ImportOptions options, Stream source, IProgress<long>? progress, CancellationToken ct)

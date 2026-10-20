@@ -61,6 +61,7 @@
     { "command": "oranda.grid.copyWithHeaders", "keys": ["Primary+Shift+C"], "when": "gridFocus" },
     { "command": "oranda.grid.copyRows", "keys": ["Primary+Alt+C"], "when": "gridFocus" },
     { "command": "oranda.grid.find", "keys": ["Primary+F"], "when": "gridFocus" },
+    { "command": "oranda.grid.exportExcel", "keys": ["Primary+Alt+E"], "when": "gridFocus" },
     { "command": "oranda.grid.fetchAll", "keys": ["Alt+End"], "when": "gridFocus" },
     { "command": "oranda.grid.followForeignKey", "keys": ["F4"], "when": "gridFocus" },
     { "command": "oranda.grid.showReferencingRows", "keys": ["Shift+F4"], "when": "gridFocus" },

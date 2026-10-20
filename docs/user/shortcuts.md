@@ -12,6 +12,7 @@
 | 찾기 / 다음 찾기 | Primary+F / F3 |
 | DB 객체로 이동 / 스키마 브라우저에서 찾기 | Primary+P / Alt+F1 (macOS Option+F1) |
 | 결과 그리드: 외래키로 부모 행 열기 / 이 행을 참조하는 행 열기 | F4 / Shift+F4 |
+| 결과 그리드: Excel 로 내보내기 | Primary+Alt+E (macOS Cmd+Option+E) |
 | 사용자 문서 | F1 |
 
 다른 프로그램에 익숙하면 설정 > 키맵 에서 Orange5·PL/SQL Developer·SQL Developer 프리셋을 고를 수 있다.

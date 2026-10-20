@@ -53,29 +53,35 @@
         </WrapPanel>
       </DockPanel>
     </Border>
-    <!-- 편집 모드(F9) 툴바: 오렌지 결과 그리드처럼 행 추가·복제·붙여넣기·삭제·반영·되돌리기를 아이콘으로 바로 쓴다(오른쪽 클릭 메뉴와 같은 명령). -->
-    <Border Grid.Row="3" Classes="panel-toolbar" IsVisible="{Binding IsEditMode}">
+    <!-- 결과 툴바: 「Excel 로 내보내기」는 늘 보인다. 편집 모드(F9)에서는 오렌지 결과 그리드처럼 행 추가·복제·붙여넣기·삭제·반영·되돌리기를
+         아이콘으로 바로 쓴다(오른쪽 클릭 메뉴와 같은 명령). -->
+    <Border Grid.Row="3" Classes="panel-toolbar">
       <StackPanel Orientation="Horizontal" Spacing="1">
-        <Button Classes="toolbar" Focusable="False" Tag="oranda.grid.edit.addRow" Content="행 추가"
-                icons:ButtonIcon.Key="rowAdd" icons:ButtonIcon.IconOnly="True" />
-        <Button Classes="toolbar" Focusable="False" Tag="oranda.grid.edit.duplicateRow" Content="행 복제"
-                icons:ButtonIcon.Key="rowDuplicate" icons:ButtonIcon.IconOnly="True" />
-        <Button Classes="toolbar" Focusable="False" Tag="oranda.grid.edit.pasteRows" Content="행 붙여넣기"
-                icons:ButtonIcon.Key="rowPaste" icons:ButtonIcon.IconOnly="True" />
-        <Button Classes="toolbar" Focusable="False" Tag="oranda.grid.edit.deleteRow" Content="행 삭제"
-                icons:ButtonIcon.Key="rowDelete" icons:ButtonIcon.IconOnly="True" />
-        <Separator Classes="toolbar" />
-        <Button Classes="toolbar" Focusable="False" Tag="oranda.grid.edit.previewDml" Content="반영할 DML 미리보기"
-                IsEnabled="{Binding IsEditDirty}" icons:ButtonIcon.Key="objView" icons:ButtonIcon.IconOnly="True" />
-        <Button Classes="toolbar" Focusable="False" Tag="oranda.grid.edit.apply" Content="반영(커밋 안 함)"
-                IsEnabled="{Binding IsEditDirty}" icons:ButtonIcon.Key="save" icons:ButtonIcon.IconOnly="True" />
-        <Button Classes="toolbar" Focusable="False" Tag="oranda.grid.edit.applyAndCommit" Content="반영 후 커밋"
-                IsEnabled="{Binding IsEditDirty}" icons:ButtonIcon.Key="commit" icons:ButtonIcon.IconOnly="True" />
-        <Separator Classes="toolbar" />
-        <Button Classes="toolbar" Focusable="False" Tag="oranda.grid.edit.resetRow" Content="행 되돌리기"
-                IsEnabled="{Binding IsEditDirty}" icons:ButtonIcon.Key="reset" icons:ButtonIcon.IconOnly="True" />
-        <Button Classes="toolbar" Focusable="False" Tag="oranda.grid.edit.resetAll" Content="모두 되돌리기"
-                IsEnabled="{Binding IsEditDirty}" icons:ButtonIcon.Key="eraser" icons:ButtonIcon.IconOnly="True" />
+        <Button Classes="toolbar" Focusable="False" Tag="oranda.grid.exportExcel" Content="Excel 로 내보내기"
+                icons:ButtonIcon.Key="export" icons:ButtonIcon.IconOnly="True" />
+        <StackPanel Orientation="Horizontal" Spacing="1" IsVisible="{Binding IsEditMode}">
+          <Separator Classes="toolbar" />
+          <Button Classes="toolbar" Focusable="False" Tag="oranda.grid.edit.addRow" Content="행 추가"
+                  icons:ButtonIcon.Key="rowAdd" icons:ButtonIcon.IconOnly="True" />
+          <Button Classes="toolbar" Focusable="False" Tag="oranda.grid.edit.duplicateRow" Content="행 복제"
+                  icons:ButtonIcon.Key="rowDuplicate" icons:ButtonIcon.IconOnly="True" />
+          <Button Classes="toolbar" Focusable="False" Tag="oranda.grid.edit.pasteRows" Content="행 붙여넣기"
+                  icons:ButtonIcon.Key="rowPaste" icons:ButtonIcon.IconOnly="True" />
+          <Button Classes="toolbar" Focusable="False" Tag="oranda.grid.edit.deleteRow" Content="행 삭제"
+                  icons:ButtonIcon.Key="rowDelete" icons:ButtonIcon.IconOnly="True" />
+          <Separator Classes="toolbar" />
+          <Button Classes="toolbar" Focusable="False" Tag="oranda.grid.edit.previewDml" Content="반영할 DML 미리보기"
+                  IsEnabled="{Binding IsEditDirty}" icons:ButtonIcon.Key="objView" icons:ButtonIcon.IconOnly="True" />
+          <Button Classes="toolbar" Focusable="False" Tag="oranda.grid.edit.apply" Content="반영(커밋 안 함)"
+                  IsEnabled="{Binding IsEditDirty}" icons:ButtonIcon.Key="save" icons:ButtonIcon.IconOnly="True" />
+          <Button Classes="toolbar" Focusable="False" Tag="oranda.grid.edit.applyAndCommit" Content="반영 후 커밋"
+                  IsEnabled="{Binding IsEditDirty}" icons:ButtonIcon.Key="commit" icons:ButtonIcon.IconOnly="True" />
+          <Separator Classes="toolbar" />
+          <Button Classes="toolbar" Focusable="False" Tag="oranda.grid.edit.resetRow" Content="행 되돌리기"
+                  IsEnabled="{Binding IsEditDirty}" icons:ButtonIcon.Key="reset" icons:ButtonIcon.IconOnly="True" />
+          <Button Classes="toolbar" Focusable="False" Tag="oranda.grid.edit.resetAll" Content="모두 되돌리기"
+                  IsEnabled="{Binding IsEditDirty}" icons:ButtonIcon.Key="eraser" icons:ButtonIcon.IconOnly="True" />
+        </StackPanel>
       </StackPanel>
     </Border>
     <Grid Grid.Row="4" ColumnDefinitions="*,Auto" RowDefinitions="*,Auto">

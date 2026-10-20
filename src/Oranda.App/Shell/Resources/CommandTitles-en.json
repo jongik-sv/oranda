@@ -108,6 +108,7 @@
   "Cmd.oranda.grid.edit.resetRow": "Revert Row",
   "Cmd.oranda.grid.edit.toggleOptimisticLock": "Toggle Optimistic Locking",
   "Cmd.oranda.grid.export": "Export",
+  "Cmd.oranda.grid.exportExcel": "Export to Excel…",
   "Cmd.oranda.grid.fetchAll": "Fetch All",
   "Cmd.oranda.grid.filterByValue": "Filter by This Value",
   "Cmd.oranda.grid.filterExcludeValue": "Filter Excluding This Value",
