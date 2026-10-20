@@ -1309,6 +1309,43 @@ dotnet, testhost, Oranda.App
 - data-model: -
 - ui-spec: -
 
+### TSK-04-11: 바인드 변수를 SQL 탭마다 따로 (EXEC-03) [win144]
+- category: defect
+- domain: fullstack
+- model: sonnet
+- status: [ ]
+- priority: high
+- assignee: -
+- schedule: 2027-01-11 ~ 2027-01-13
+- tags: defect, binds, orange-parity, win144
+- depends: TSK-04-02, TSK-03-08
+- blocked-by: -
+- entry-point: 바인드 변수 창(oranda.panel.binds), SQL 탭 전환·실행
+- note: 담당 PC: win144(Windows 개발 PC) — 맥북 세션은 이 Task 를 하지 않는다. 2026-10-20 사용자 지적: 바인드 변수 설정은 SQL 탭별로 있어야 한다. 현황: BindVariableStore 가 이벤트 버스(앱)마다 하나(BindVariableStore.For(bus))라 모든 SQL 탭이 같은 목록·같은 값을 쓴다. 저장(작업 공간 tabs[].binds·.sql 끝 바인드 블록)만 탭이 참조하는 이름으로 나눠 저장하고, 다시 열면 공용 목록에 섞여 들어간다(SqlEditorHost.Binds.Restore). 같은 이름 :ID 를 두 탭이 다른 값으로 쓸 수 없다. TSK-03-08(탭마다 접속) 다음에 같은 레인이 한다(SqlEditorHost·Execution 이 겹침)
+
+#### PRD 요구사항
+- prd-ref: PRD EXEC-03
+- requirements:
+  - 바인드 목록·값·형식·방향을 SQL 탭(SqlEditorViewModel)마다 둔다. 바인드 변수 창은 활성 SQL 탭의 목록을 보이고, 탭을 바꾸면 그 탭의 목록으로 바뀐다
+  - 실행·그리드 필터·행 수·Excel 내보내기·플래시백·객체 데이터·PL/SQL 실행·MyBatis 로그 붙여 넣기·LOB 쓰기 등 바인드를 읽는 곳은 실행한 탭의 목록을 쓴다(지금 BindVariableStore 를 쓰는 곳 전부)
+  - 작업 공간 저장·복원, .sql 바인드 블록, .sqd VAR 줄은 그 탭의 목록으로 들어간다(다른 탭 목록에 섞이지 않음)
+  - 비밀 이름(pass·pwd·secret·token) 저장 금지 규칙은 그대로
+- acceptance:
+  - 두 SQL 탭에서 같은 :ID 에 다른 값을 넣고 각각 실행하면 각자 자기 값으로 실행된다
+  - 탭을 바꾸면 바인드 창 목록이 바뀌고, 작업 공간을 닫았다 열어도 탭마다 값이 남는다
+  - .sqd 를 열면 탭마다 자기 VAR 값만 보인다
+- constraints:
+  - 바인드 창이 없는 도구 창(PL/SQL 편집기 등)은 지금 동작 유지(필요하면 그 창 전용 목록)
+- test-criteria:
+  - 단위: 탭별 목록 분리, 저장·복원, .sqd 탭별 VAR
+  - Headless: 탭 전환 때 바인드 창 목록 교체
+
+#### 기술 스펙 (TRD)
+- tech-spec: -
+- api-spec: -
+- data-model: -
+- ui-spec: -
+
 ## WP-05: 포매터
 - schedule: 2026-11-17 ~ 2026-11-30
 
@@ -3206,6 +3243,7 @@ graph LR
   TSK-11-03 --> TSK-10-06
   TSK-07-02 --> TSK-07-05
   TSK-03-04 --> TSK-03-08
+  TSK-03-08 --> TSK-04-11
   TSK-07-04 --> TSK-07-06
   %% 2026-10-20 사용자 요청
   TSK-03-03 --> TSK-03-07
