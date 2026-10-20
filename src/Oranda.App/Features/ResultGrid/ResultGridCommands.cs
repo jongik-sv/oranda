@@ -46,7 +46,10 @@ public static class ResultGridCommands
     public static Func<Func<CancellationToken, Task>, CancellationToken, Task>? RunFetch { get; set; }
 }
 
-/// <summary>결과 영역 명령 처리기. 활성 그리드가 없으면 아무것도 하지 않는다.</summary>
+/// <summary>
+/// 결과 영역 명령 처리기. 대상은 Parameter 가 결과 그리드면 그 그리드, 아니면 활성(포커스) 그리드다(메뉴·키·툴바는 Parameter 없이 부른다).
+/// 활성 그리드가 없으면 아무것도 하지 않는다.
+/// </summary>
 [OrandaCommand("oranda.grid.copy", CommandCategory.Result, When = "gridFocus", Enablement = "gridHasSelection", Placements = ["context:grid/copy@10"])]
 [OrandaCommand("oranda.grid.copyWithHeaders", CommandCategory.Result, When = "gridFocus", Enablement = "gridHasSelection", Placements = ["context:grid/copy@20"])]
 [OrandaCommand("oranda.grid.copyRows", CommandCategory.Result, When = "gridFocus", Enablement = "gridHasSelection", Placements = ["context:grid/copy@22"])]
@@ -83,7 +86,7 @@ public sealed class ResultGridCommandHandler : ICommandHandler
     public async Task ExecuteAsync(CommandContext context, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(context);
-        var g = ResultGridCommands.Active;
+        var g = context.Parameter as ResultGridModel ?? ResultGridCommands.Active;
         if (g is null)
         {
             return;

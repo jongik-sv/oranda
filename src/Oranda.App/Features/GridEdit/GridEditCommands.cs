@@ -29,6 +29,7 @@ public static class GridEditCommands
 /// <summary>
 /// 편집 모드 명령 처리기. 편집 모드가 아니면(활성 세션 없음) 아무것도 하지 않는다.
 /// 행 붙여넣기·행 복제는 읽기 전용 결과에서도 불러 「편집 모드로 다시 실행」 안내 막대를 띄운다(활성 조건이 <c>gridEditing</c> 이 아니다).
+/// 두 명령의 대상은 Parameter 가 결과 그리드면 그 그리드, 아니면 활성(포커스) 그리드다.
 /// </summary>
 [OrandaCommand("oranda.exec.runForEdit", CommandCategory.Sql, When = "sqlDocFocus",
     Enablement = "hasSession && !sessionBusy && !readOnlySession", Placements = ["menu:sql/runForEdit@40"])]
@@ -70,7 +71,7 @@ public sealed class GridEditCommandHandler : ICommandHandler
 
         if (context.CommandId is "oranda.grid.edit.pasteRows" or "oranda.grid.edit.duplicateRow")
         {
-            if (ResultGrid.ResultGridCommands.Active is { } focused)
+            if ((context.Parameter as ResultGrid.ResultGridModel ?? ResultGrid.ResultGridCommands.Active) is { } focused)
             {
                 await (context.CommandId == "oranda.grid.edit.pasteRows"
                     ? GridRowTransfer.PasteRowsAsync(focused, cancellationToken)

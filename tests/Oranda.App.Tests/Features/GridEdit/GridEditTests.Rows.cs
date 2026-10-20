@@ -65,7 +65,7 @@ public sealed partial class GridEditTests
                 Constraints = [new Oranda.Core.Metadata.ConstraintInfo("PK_EMP", Oranda.Core.Metadata.ConstraintKind.PrimaryKey, ["EMPNO"])],
             });
             s = await GridEditSession.OpenAsync(new RowEditor(_exec), meta, new TestSession(false), stmt, m.Columns,
-                (r, c) => m.TryGetValue(r, c, out var v) ? v : null, () => m.LoadedRowCount, target: null, default);
+                GridEditBinding.OriginalValues(m), () => m.LoadedRowCount, target: null, default);
             GridEditBinding.Attach(m, s);
             pane.SetEditSession(s);
             GridEditCommands.Active = s;
@@ -75,8 +75,15 @@ public sealed partial class GridEditTests
         return (pane, m, s, clip);
     }
 
-    private static Task RunGrid(string id) =>
-        new ResultGridCommandHandler().ExecuteAsync(new Oranda.Core.Shell.CommandContext(id, new NoKeys()), default);
+    /// <summary>
+    /// 그리드를 Parameter 로 넘겨 명령을 부른다. 활성 그리드(정적)는 다른 시험의 헤드리스 창이 포커스를 옮길 때 UI 스레드에서 바뀔 수 있어
+    /// 그것에 기대면 가끔 다른 그리드에 실행된다.
+    /// </summary>
+    private static Task RunGrid(string id, ResultGridModel grid) =>
+        new ResultGridCommandHandler().ExecuteAsync(new Oranda.Core.Shell.CommandContext(id, new NoKeys(), grid), default);
+
+    private static Task RunOn(string id, ResultGridModel grid) =>
+        new GridEditCommandHandler().ExecuteAsync(new Oranda.Core.Shell.CommandContext(id, new NoKeys(), grid), default);
 
     [Fact]
     public async Task Copy_rows_copies_every_visible_column_of_the_spanned_rows_and_keeps_raw_values()
@@ -87,7 +94,7 @@ public sealed partial class GridEditTests
             m.SelectCell(new GridCell(0, 1));
             m.ExtendTo(new GridCell(1, 1)); // ENAME 두 칸만 골라도 행 전체
 
-            await RunGrid("oranda.grid.copyRows");
+            await RunGrid("oranda.grid.copyRows", m);
 
             Assert.Equal("7369\tSMITH\t1980-12-17 00:00:00\t800\t\tAAAR3sAAEAAAACXAAA\n"
                          + "7499\tO'NEIL\t1981-02-20 00:00:00\t1600.5\t300\tAAAR3sAAEAAAACXAAB", clip.Text);
@@ -98,11 +105,11 @@ public sealed partial class GridEditTests
             Assert.Null(copy.Rows[0][4]); // NULL 은 빈 글자가 아니라 null
             Assert.True(copy.Matches(clip.Text!.Replace("\n", "\r\n", StringComparison.Ordinal))); // 운영체제가 CRLF 로 바꿔도 같은 사본
 
-            await RunGrid("oranda.grid.copyRowsWithHeaders");
+            await RunGrid("oranda.grid.copyRowsWithHeaders", m);
             Assert.StartsWith("EMPNO\tENAME\tHIREDATE\tSAL\tCOMM\tROWID\n7369\t", clip.Text, StringComparison.Ordinal);
 
             m.HideColumn(4); // 숨긴 열은 기존 복사처럼 뺀다
-            await RunGrid("oranda.grid.copyRows");
+            await RunGrid("oranda.grid.copyRows", m);
             Assert.StartsWith("7369\tSMITH\t1980-12-17 00:00:00\t800\tAAAR3sAAEAAAACXAAA\n", clip.Text, StringComparison.Ordinal);
         }
         finally
@@ -120,7 +127,7 @@ public sealed partial class GridEditTests
             m.SelectCell(new GridCell(0, 3));
             m.ExtendTo(new GridCell(1, 3)); // SAL 열만 골랐다
 
-            await RunGrid("oranda.grid.copyAsInsert");
+            await RunGrid("oranda.grid.copyAsInsert", m);
 
             Assert.Equal(
                 "INSERT INTO SCOTT.EMP (EMPNO, ENAME, HIREDATE, SAL, COMM) VALUES (7369, 'SMITH', TO_DATE('1980-12-17 00:00:00', 'YYYY-MM-DD HH24:MI:SS'), 800, NULL);\n"
@@ -129,7 +136,7 @@ public sealed partial class GridEditTests
 
             m.HideColumn(3); // 숨긴 SAL 은 빠지고 순서는 결과 열 순서
             m.SelectCell(new GridCell(1, 0));
-            await RunGrid("oranda.grid.copyAsInsert");
+            await RunGrid("oranda.grid.copyAsInsert", m);
             Assert.Equal(
                 "INSERT INTO SCOTT.EMP (EMPNO, ENAME, HIREDATE, COMM) VALUES (7499, 'O''NEIL', TO_DATE('1981-02-20 00:00:00', 'YYYY-MM-DD HH24:MI:SS'), 300);",
                 clip.Text);
@@ -150,9 +157,9 @@ public sealed partial class GridEditTests
         {
             m.SelectCell(new GridCell(0, 0));
             m.ExtendTo(new GridCell(1, 0));
-            await RunGrid("oranda.grid.copyRows");
+            await RunGrid("oranda.grid.copyRows", m);
 
-            await Run("oranda.grid.edit.pasteRows");
+            await RunOn("oranda.grid.edit.pasteRows", m);
 
             Assert.Equal(4, m.RowCount);
             Assert.Equal(GridRowMark.Inserted, m.RowMarkOf(2));
@@ -186,10 +193,10 @@ public sealed partial class GridEditTests
         try
         {
             m.SelectCell(new GridCell(0, 0));
-            await RunGrid("oranda.grid.copyRows"); // 앱 안 사본이 있어도
+            await RunGrid("oranda.grid.copyRows", m); // 앱 안 사본이 있어도
             clip.Text = "EMPNO\tENAME\tHIREDATE\tSAL\r\n8001\t\"A\tB\"\t2026-01-02 03:04:05\t1,000\r\n"; // 그 사이 Excel 에서 복사했다
 
-            await Run("oranda.grid.edit.pasteRows");
+            await RunOn("oranda.grid.edit.pasteRows", m);
 
             Assert.Equal(3, m.RowCount);
             Assert.True(m.TryGetValue(2, 0, out var no) && Equals(no, 8001m));
@@ -213,7 +220,7 @@ public sealed partial class GridEditTests
         {
             clip.Text = "9001\tX\t2026-01-01\t10\t20\tROWIDX\textra1\textra2\n9002\tY\n";
 
-            await Run("oranda.grid.edit.pasteRows");
+            await RunOn("oranda.grid.edit.pasteRows", m);
 
             Assert.Equal(4, m.RowCount);
             Assert.True(m.TryGetValue(2, 4, out var comm) && Equals(comm, 20m));
@@ -227,7 +234,7 @@ public sealed partial class GridEditTests
             Assert.DoesNotContain("extra", preview, StringComparison.Ordinal);
 
             clip.Text = "\r\n";
-            await Run("oranda.grid.edit.pasteRows");
+            await RunOn("oranda.grid.edit.pasteRows", m);
             Assert.Equal(4, m.RowCount);
             Assert.Contains("클립보드에 붙여 넣을 행이 없습니다.", pane.StatusText, StringComparison.Ordinal);
         }
@@ -245,7 +252,7 @@ public sealed partial class GridEditTests
         {
             m.SelectCell(new GridCell(1, 1));
 
-            await Run("oranda.grid.edit.duplicateRow");
+            await RunOn("oranda.grid.edit.duplicateRow", m);
 
             Assert.Equal(3, m.RowCount);
             Assert.Equal(new GridCell(2, 1), m.Active); // 새 행으로, 같은 열
@@ -267,7 +274,7 @@ public sealed partial class GridEditTests
 
             m.SelectCell(new GridCell(0, 0));
             m.ExtendTo(new GridCell(1, 0));
-            await Run("oranda.grid.edit.duplicateRow"); // 여러 행은 그 행들을 끝에, 커서는 첫 새 행
+            await RunOn("oranda.grid.edit.duplicateRow", m); // 여러 행은 그 행들을 끝에, 커서는 첫 새 행
             Assert.Equal(5, m.RowCount);
             Assert.Equal(new GridCell(3, 0), m.Active);
             Assert.True(m.TryGetValue(3, 1, out var first) && Equals(first, "SMITH"));
@@ -291,7 +298,7 @@ public sealed partial class GridEditTests
             m.SelectCell(new GridCell(0, 0));
             clip.Text = "1\tA";
 
-            await Run("oranda.grid.edit.pasteRows");
+            await RunOn("oranda.grid.edit.pasteRows", m);
 
             Assert.True(pane.HasEditHint);
             Assert.True(pane.OffersRerunForEdit);
@@ -299,7 +306,7 @@ public sealed partial class GridEditTests
             Assert.Equal(2, m.RowCount);
 
             pane.HideEditHint();
-            await Run("oranda.grid.edit.duplicateRow");
+            await RunOn("oranda.grid.edit.duplicateRow", m);
             Assert.True(pane.HasEditHint);
             Assert.Equal(2, m.RowCount);
         }
@@ -321,7 +328,7 @@ public sealed partial class GridEditTests
             pane.HideEditHint();
             clip.Text = "X\t1";
 
-            await Run("oranda.grid.edit.pasteRows");
+            await RunOn("oranda.grid.edit.pasteRows", m);
 
             Assert.True(pane.HasEditHint);
             Assert.True(pane.OffersRowIdRerun);
