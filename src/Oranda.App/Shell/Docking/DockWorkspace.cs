@@ -101,6 +101,9 @@ public sealed class DockWorkspace
     /// <summary>문서 탭이 닫혔다(탭의 × 단추·탭 닫기 명령 모두). 문서를 가진 기능이 자기 목록을 맞춘다.</summary>
     public event EventHandler<PanelDocument>? DocumentClosed;
 
+    /// <summary>문서 내용으로 키보드 포커스를 옮겨 달라는 요청(<see cref="FocusDocument"/>). 보기 쪽(<see cref="DockHostView"/>)이 처리한다.</summary>
+    public event EventHandler<PanelDocument>? DocumentFocusRequested;
+
     /// <summary>지금 열린 문서 탭(여러 문서 영역이 있으면 모두).</summary>
     public IReadOnlyList<PanelDocument> Documents =>
         DocumentDocks().SelectMany(d => d.VisibleDockables ?? []).OfType<PanelDocument>().ToList();
@@ -232,6 +235,62 @@ public sealed class DockWorkspace
         Factory.AddDockable(dock, doc);
         Activate(doc);
         return doc;
+    }
+
+    /// <summary>지금 미리보기 탭(<see cref="PanelDocument.IsPreview"/>). 없으면 null.</summary>
+    public PanelDocument? PreviewDocument => Documents.FirstOrDefault(d => d.IsPreview);
+
+    /// <summary>
+    /// 미리보기 탭으로 연다(VS Code 방식). 미리보기 탭이 이미 있으면 그 자리에 새 탭을 넣고 옛 탭을 닫는다 — 탭 수가 늘지 않는다.
+    /// 새 탭을 먼저 넣고 옛 탭을 닫으므로 문서가 하나뿐이어도 시작 화면이 끼어 보이지 않는다. 옛 탭을 닫을 때
+    /// <see cref="DocumentClosed"/> 가 나가므로 문서를 가진 기능의 정리(열린 커서 닫기 등)가 그대로 돈다.
+    /// 여러 개를 열 수 없는 종류는 미리보기 없이 <see cref="OpenDocument"/> 와 같다.
+    /// </summary>
+    public PanelDocument? OpenPreviewDocument(string panelId, object viewModel, string title)
+    {
+        if (_registry.Find(panelId) is not { Kind: ToolPanelKind.Document } def || DocumentDocks().FirstOrDefault() is not { } dock)
+        {
+            return null;
+        }
+
+        if (!def.AllowMultiple)
+        {
+            return OpenDocument(panelId, viewModel, title);
+        }
+
+        var doc = new PanelDocument(def, $"{panelId}#{++_documentSerial}", title, viewModel) { IsPreview = true };
+        var old = PreviewDocument;
+        if (old is { Owner: IDock owner } && owner.VisibleDockables?.IndexOf(old) is int index and >= 0)
+        {
+            Factory.InsertDockable(owner, doc, index);
+            Activate(doc);
+            Factory.CloseDockable(old);
+        }
+        else
+        {
+            Factory.AddDockable(dock, doc);
+        }
+
+        Activate(doc);
+        return doc;
+    }
+
+    /// <summary>미리보기 탭을 고정한다(다음 미리보기가 이 탭을 바꿔 끼우지 않는다). 이미 고정이면 아무것도 안 한다.</summary>
+    public void Pin(PanelDocument document)
+    {
+        ArgumentNullException.ThrowIfNull(document);
+        if (document.IsPreview && Documents.Contains(document))
+        {
+            document.IsPreview = false;
+        }
+    }
+
+    /// <summary>문서를 활성으로 하고 그 내용으로 키보드 포커스를 옮겨 달라고 알린다(보기가 화면에 붙은 뒤 옮긴다).</summary>
+    public void FocusDocument(PanelDocument document)
+    {
+        ArgumentNullException.ThrowIfNull(document);
+        Activate(document);
+        DocumentFocusRequested?.Invoke(this, document);
     }
 
     public void Activate(PanelDocument document)

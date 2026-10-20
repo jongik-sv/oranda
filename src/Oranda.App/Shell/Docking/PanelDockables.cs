@@ -46,4 +46,23 @@ public sealed class PanelDocument : Document
     public ToolPanelDefinition Definition { get; }
 
     public object Panel { get; }
+
+    /// <summary>
+    /// 미리보기 탭(VS Code 방식, 탭 머리글이 기울임꼴)이면 true. 문서 영역에 하나뿐이고, 다음 미리보기가 이 탭 자리를 차지한다.
+    /// 고정하면(<see cref="DockWorkspace.Pin"/>) false 가 되어 그대로 남는다. 미리보기 동안은 떼어 내지 않는다(<c>CanFloat</c> 끔) —
+    /// Dock 은 탭 머리글을 두 번 누르면 창으로 떼어 내는데, 미리보기 탭에서는 그 동작이 「고정」이어야 해서다.
+    /// </summary>
+    public bool IsPreview
+    {
+        get => _isPreview;
+        set
+        {
+            if (SetProperty(ref _isPreview, value))
+            {
+                CanFloat = !value;
+            }
+        }
+    }
+
+    private bool _isPreview;
 }

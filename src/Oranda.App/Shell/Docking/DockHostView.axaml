@@ -12,5 +12,11 @@
       <ContentControl Content="{Binding Panel}" />
     </DataTemplate>
   </UserControl.DataTemplates>
+  <UserControl.Styles>
+    <!-- 미리보기 탭(VS Code 방식)은 머리글을 기울임꼴로 보인다. 고정하면 바로 곧은 글꼴로 돌아온다. -->
+    <Style Selector="dock|DocumentTabStripItem" x:DataType="docking:PanelDocument">
+      <Setter Property="FontStyle" Value="{Binding IsPreview, Converter={x:Static docking:DockHostView.PreviewFontStyle}}" />
+    </Style>
+  </UserControl.Styles>
   <dock:DockControl x:Name="DockRoot" InitializeLayout="True" InitializeFactory="True" />
 </UserControl>

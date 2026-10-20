@@ -5,7 +5,7 @@ using Avalonia.Controls;
 namespace Oranda.App.Features.PlsqlEditor;
 
 /// <summary>PL/SQL 편집 탭 화면. 논리는 <see cref="PlsqlEditorViewModel"/> 에 있다.</summary>
-public partial class PlsqlEditorView : UserControl
+public partial class PlsqlEditorView : UserControl, Oranda.App.Shell.Docking.IFocusableDocumentView
 {
     private PlsqlEditorViewModel? _vm;
 
@@ -37,6 +37,13 @@ public partial class PlsqlEditorView : UserControl
         SiblingButton.Click += async (_, _) => await Run(async () => { if (_vm is not null) { await _vm.OpenSiblingAsync(); } });
         GotFocus += (_, _) => Activate();
         EditorView.GotFocus += (_, _) => Activate();
+    }
+
+    /// <summary>문서로 포커스를 옮길 때(스키마 브라우저에서 두 번 누르기·Enter) 글자 편집 영역에 준다.</summary>
+    public bool FocusContent()
+    {
+        EditorView.FocusEditor();
+        return EditorView.IsKeyboardFocusWithin;
     }
 
     protected override void OnDataContextChanged(EventArgs e)
