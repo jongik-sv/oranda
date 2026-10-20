@@ -258,3 +258,11 @@
 - **Rationale**: Orange 의 툴바 접속 콤보 동작을 따르되, 실행 중·미커밋 작업이 다른 접속으로 넘어가 사고가 나는 경로를 막는다. 세션 선택을 SessionRouter 한 곳에 모아 기능마다 세션을 짐작하던 코드를 없앴다
 - **Reversible**: yes
 - **Source**: 사용자 결정(2026-10-20, 「오렌지 처럼 여러 세션 연결을 지원하도록 하자」), multiconn 레인 결정 후보, 조정 세션 확정
+
+## D-033 (2026-10-20T23:50:00Z)
+- **Phase**: TSK-04-11 바인드 변수를 SQL 탭마다 따로(EXEC-03)
+- **Decision needed**: 바인드 목록을 앱 하나로 둘지 탭마다 둘지, 탭이 없는 도구 창은 무엇을 쓸지
+- **Decision made**: 바인드 목록은 SQL 탭마다 하나(SqlEditorViewModel.Binds, BindVariableStore.ForTab)로 둔다. 실행·행 수·그리드 필터·MyBatis 붙여 넣기는 실행한 탭의 목록을 쓴다. 작업 공간·.sql 바인드 블록·.sqd VAR 은 탭별로 저장·복원한다. 탭이 없는 도구 창(객체 상세 데이터 탭)만 For(bus) 기본 목록을 쓴다
+- **Rationale**: 두 탭이 같은 이름 :ID 를 다른 값으로 쓸 수 있어야 한다(Orange 와 같음). 탭 접속(D-032)과 같은 「탭 → 그 탭의 것」 자리를 써서 실행 경로가 한 가지 방식만 가진다
+- **Reversible**: yes
+- **Source**: 사용자 지적(2026-10-20, 「바인드 변수 설정은 SQL 탭별로 있어야 해」), binds 레인 결정 후보, 조정 세션 확정
