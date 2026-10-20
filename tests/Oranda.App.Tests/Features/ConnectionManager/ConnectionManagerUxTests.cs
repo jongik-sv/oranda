@@ -470,6 +470,8 @@ public sealed class ConnectionManagerUxTests
         Assert.True(vm.TestCommand.IsRunning);
         Assert.False(vm.TestCommand.CanExecute(null));
         Assert.False(vm.ConnectCommand.CanExecute(null));
+        Assert.False(vm.DeleteCommand.CanExecute(null));
+        Assert.False(vm.DuplicateCommand.CanExecute(null));
         Assert.True(vm.TestCancelCommand.CanExecute(null));
 
         vm.TestCancelCommand.Execute(null);
@@ -587,6 +589,14 @@ public sealed class ConnectionManagerUxTests
         Assert.False(vm.Editor.IsDirty);
         Assert.False(vm.AllNodes().Single(n => n.Title == "ft-dev").IsModified);
         Assert.Equal("new", fx.Credentials.Text(vm.Editor.Original.CredentialRef!));
+
+        // 찾기 글자에 걸려 목록에서 빠진 접속을 저장해도 편집기는 저장된 값으로 돌아온다.
+        vm.SearchText = "zeta";
+        vm.Editor.Port = "1523";
+        Assert.True(await vm.SaveCurrentAsync());
+        Assert.False(vm.Editor.IsDirty);
+        Assert.Equal("1523", vm.Editor.Port);
+        vm.SearchText = string.Empty;
 
         // 찾기·정렬로 트리를 다시 만들어도 편집 중인 값과 변경 표시는 남는다.
         vm.Editor.Group = "새그룹";

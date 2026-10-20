@@ -113,7 +113,7 @@ public sealed partial class ConnectionManagerViewModel : ViewModelBase
     private StatusKind _statusKind;
 
     [ObservableProperty]
-    [NotifyCanExecuteChangedFor(nameof(ConnectCommand), nameof(TestCommand), nameof(SaveCommand))]
+    [NotifyCanExecuteChangedFor(nameof(ConnectCommand), nameof(TestCommand), nameof(SaveCommand), nameof(DeleteCommand), nameof(DuplicateCommand))]
     private bool _isBusy;
 
     [ObservableProperty]
@@ -243,7 +243,7 @@ public sealed partial class ConnectionManagerViewModel : ViewModelBase
         }
     }
 
-    [RelayCommand(CanExecute = nameof(HasSelection))]
+    [RelayCommand(CanExecute = nameof(CanChangeSelection))]
     private async Task DeleteAsync()
     {
         if (Selected?.Profile is not { } profile)
@@ -273,7 +273,7 @@ public sealed partial class ConnectionManagerViewModel : ViewModelBase
     }
 
     /// <summary>고른 접속을 복제한다(이름 뒤 「 (사본)」, 비밀번호는 복사하지 않는다). 사본을 골라 둔다.</summary>
-    [RelayCommand(CanExecute = nameof(HasSelection))]
+    [RelayCommand(CanExecute = nameof(CanChangeSelection))]
     private async Task DuplicateAsync()
     {
         if (Selected?.Profile is not { } profile || !await ResolveUnsavedAsync().ConfigureAwait(true))
@@ -412,6 +412,9 @@ public sealed partial class ConnectionManagerViewModel : ViewModelBase
     }
 
     private bool CanTest() => Editor is { HasRequiredFields: true } && !IsBusy;
+
+    /// <summary>고른 접속을 지우거나 복제할 수 있는지(시험·접속 중에는 끈다).</summary>
+    private bool CanChangeSelection() => HasSelection && !IsBusy;
 
     private bool CanConnect() => Editor is { HasRequiredFields: true } && !IsBusy;
 
@@ -773,7 +776,8 @@ public sealed partial class ConnectionManagerViewModel : ViewModelBase
             _rebuilding = false;
         }
 
-        if (reloadEditor && selectNode?.Profile is { } profile)
+        // 찾기 글자에 걸려 목록에서 빠진 접속이어도 편집기는 저장된 값으로 다시 채운다(저장 뒤 변경 표시가 남지 않게).
+        if (reloadEditor && (selectNode?.Profile ?? _profiles.FirstOrDefault(p => p.Id == keep)) is { } profile)
         {
             Editor = ProfileEditorViewModel.From(profile);
         }
