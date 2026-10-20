@@ -7,6 +7,7 @@ using Oranda.Core.History;
 using Oranda.Core.Security;
 using Oranda.Core.Settings;
 using Oranda.Core.Storage;
+using Oranda.Core.Text;
 
 namespace Oranda.Platform.Storage;
 
@@ -111,7 +112,7 @@ internal sealed class SqliteHistoryStore : IHistoryStore, IDisposable
                 else
                 {
                     where.Add("h.sql_text LIKE $like ESCAPE '\\'");
-                    cmd.Parameters.AddWithValue("$like", "%" + EscapeLike(text) + "%");
+                    cmd.Parameters.AddWithValue("$like", "%" + SqlLike.Escape(text) + "%");
                 }
             }
 
@@ -259,9 +260,6 @@ internal sealed class SqliteHistoryStore : IHistoryStore, IDisposable
         ErrorMessage = r.IsDBNull(13) ? null : r.GetString(13),
         BindsJson = r.IsDBNull(14) ? null : r.GetString(14),
     };
-
-    private static string EscapeLike(string text)
-        => text.Replace("\\", "\\\\", StringComparison.Ordinal).Replace("%", "\\%", StringComparison.Ordinal).Replace("_", "\\_", StringComparison.Ordinal);
 
     /// <summary>첫 줄만, 1,000자까지(data-model 5.3 표).</summary>
     private static string LimitError(string message)

@@ -10,6 +10,7 @@ using Oranda.Core.Grid;
 using Oranda.Core.History;
 using Oranda.Core.Metadata;
 using Oranda.Core.Sessions;
+using Oranda.Core.Text;
 using Oranda.Language.Editing;
 
 namespace Oranda.App.Features.Execution;
@@ -350,7 +351,7 @@ public sealed class RelatedRowsRunner(ExecutionState state, Func<ISession?> sess
     private static string Quote(string name) =>
         string.IsNullOrEmpty(name) || name.Contains('"', StringComparison.Ordinal) || name.Contains('\0', StringComparison.Ordinal)
             ? throw new InvalidOperationException($"이름 {name} 은(는) SQL 에 쓸 수 없습니다.")
-            : "\"" + name + "\"";
+            : SqlIdentifier.QuoteAlways(name);
 
     /// <summary>목록에서 하나 고르기. 고른 번호, 취소하면 -1.</summary>
     private async Task<int> ChooseAsync(string title, List<string> labels, CancellationToken ct)

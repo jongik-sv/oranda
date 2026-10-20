@@ -105,13 +105,7 @@ public static class CellValueFormatter
     public static string Quote(string s) => "'" + s.Replace("'", "''", StringComparison.Ordinal) + "'";
 
     /// <summary>식별자가 단순 대문자 이름이면 그대로, 아니면 큰따옴표로 감싼다.</summary>
-    public static string QuoteIdentifier(string name)
-    {
-        ArgumentNullException.ThrowIfNull(name);
-        var simple = name.Length > 0 && name[0] is >= 'A' and <= 'Z'
-            && name.All(c => c is >= 'A' and <= 'Z' or >= '0' and <= '9' or '_' or '$' or '#');
-        return simple ? name : "\"" + name.Replace("\"", "\"\"", StringComparison.Ordinal) + "\"";
-    }
+    public static string QuoteIdentifier(string name) => Oranda.Core.Text.SqlIdentifier.Quote(name);
 
     /// <summary>JSON 글자를 압축 또는 들여쓰기 형태로. 파싱 실패 시 원문.</summary>
     public static string FormatJson(string json, GridDisplayOptions options)

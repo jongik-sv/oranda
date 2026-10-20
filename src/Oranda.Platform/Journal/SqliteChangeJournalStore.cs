@@ -5,6 +5,7 @@ using Oranda.Core.Composition;
 using Oranda.Core.Journal;
 using Oranda.Core.Security;
 using Oranda.Core.Storage;
+using Oranda.Core.Text;
 using Oranda.Platform.Storage;
 
 namespace Oranda.Platform.Journal;
@@ -133,7 +134,7 @@ internal sealed class SqliteChangeJournalStore : IChangeJournalStore, IDisposabl
             {
                 where.Add("(owner LIKE $like ESCAPE '\\' OR name LIKE $like ESCAPE '\\' OR statement_summary LIKE $like ESCAPE '\\' "
                     + "OR previous_ddl LIKE $like ESCAPE '\\')");
-                cmd.Parameters.AddWithValue("$like", "%" + EscapeLike(text) + "%");
+                cmd.Parameters.AddWithValue("$like", "%" + SqlLike.Escape(text) + "%");
             }
 
             Filter(cmd, where, "db_key", "$db", query.DbKey);
@@ -239,10 +240,6 @@ internal sealed class SqliteChangeJournalStore : IChangeJournalStore, IDisposabl
         ContentHash = r.IsDBNull(12) ? null : r.GetString(12),
         FailureReason = r.IsDBNull(13) ? null : r.GetString(13),
     };
-
-    private static string EscapeLike(string text)
-        => text.Replace("\\", "\\\\", StringComparison.Ordinal).Replace("%", "\\%", StringComparison.Ordinal)
-            .Replace("_", "\\_", StringComparison.Ordinal);
 
     private static string Limit(string text, int max)
     {

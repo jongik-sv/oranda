@@ -3,6 +3,7 @@ using Oranda.Core.Composition;
 using Oranda.Core.Metadata;
 using Oranda.Core.Settings;
 using Oranda.Core.Storage;
+using Oranda.Core.Text;
 
 namespace Oranda.Platform.Storage;
 
@@ -92,7 +93,7 @@ public sealed class SqliteMetadataCache : IMetadataCache, IDisposable
             await using var cmd = c.CreateCommand();
             cmd.CommandText = Select + " WHERE db_key = $k AND name LIKE $p ESCAPE '\\' ORDER BY name, owner, type LIMIT $n";
             cmd.Parameters.AddWithValue("$k", dbKey);
-            cmd.Parameters.AddWithValue("$p", EscapeLike(namePrefix) + "%");
+            cmd.Parameters.AddWithValue("$p", SqlLike.Escape(namePrefix) + "%");
             cmd.Parameters.AddWithValue("$n", limit <= 0 ? -1 : limit);
             return await ReadObjectsAsync(cmd, ct);
         }, ct);
@@ -208,9 +209,6 @@ public sealed class SqliteMetadataCache : IMetadataCache, IDisposable
     }
 
     private const string Select = "SELECT db_key, owner, name, type, status, last_ddl_time, payload_json, fetched_at FROM meta_object";
-
-    private static string EscapeLike(string text)
-        => text.Replace("\\", "\\\\", StringComparison.Ordinal).Replace("%", "\\%", StringComparison.Ordinal).Replace("_", "\\_", StringComparison.Ordinal);
 
     private static async Task ExecAsync(SqliteConnection c, SqliteTransaction tx, string sql, string dbKey, CancellationToken ct)
     {

@@ -1,4 +1,5 @@
 using System.Runtime.CompilerServices;
+using Oranda.App.Features.Binds;
 using Oranda.App.Features.Execution;
 using Oranda.Core.Connection;
 using Oranda.Core.Events;

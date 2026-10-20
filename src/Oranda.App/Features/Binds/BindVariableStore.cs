@@ -3,13 +3,12 @@ using System.Globalization;
 using System.Runtime.CompilerServices;
 using System.Text;
 using CommunityToolkit.Mvvm.ComponentModel;
-using Oranda.App.Features.SqlEditor;
 using Oranda.Core.Events;
 using Oranda.Core.Execution;
 using Oranda.Core.Security;
 using Oranda.Core.Workspaces;
 
-namespace Oranda.App.Features.Execution;
+namespace Oranda.App.Features.Binds;
 
 /// <summary>형식 콤보 한 칸. 오렌지 Bind Variable List 의 네 형식(문자열·숫자·날짜·고정 길이 문자)을 맨 위에 둔다.</summary>
 public sealed record BindTypeChoice(BindDataType Type, string Label)
@@ -122,7 +121,7 @@ public sealed class BindVariableStore
     /// 탭의 바인드 목록(TSK-04-11): SQL 탭마다 자기 목록을 가진다. 탭이 없으면(도구 창 등) <paramref name="bus"/> 의 기본 목록
     /// (<see cref="For"/>)을 돌려준다.
     /// </summary>
-    public static BindVariableStore ForTab(SqlEditorViewModel? tab, IEventBus? bus) => tab?.Binds ?? For(bus);
+    public static BindVariableStore ForTab(IBindOwner? tab, IEventBus? bus) => tab?.Binds ?? For(bus);
 
     public ObservableCollection<BindVariableRow> Rows { get; } = [];
 
@@ -305,4 +304,10 @@ public sealed class BindVariableStore
             Rows[i].Number = i + 1;
         }
     }
+}
+
+/// <summary>자기 바인드 목록을 가진 것(SQL 탭). 바인드 저장소가 편집기 형식을 몰라도 되게 하는 경계.</summary>
+public interface IBindOwner
+{
+    BindVariableStore Binds { get; }
 }

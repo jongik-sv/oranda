@@ -1,4 +1,5 @@
 using System.Text;
+using Oranda.App.Features.Binds;
 using Oranda.App.Features.Execution;
 using Oranda.App.Features.SqlEditor;
 using Oranda.Core.Execution;

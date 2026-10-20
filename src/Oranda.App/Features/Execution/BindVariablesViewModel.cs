@@ -1,6 +1,7 @@
 using System.Collections.ObjectModel;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using Oranda.App.Features.Binds;
 using Oranda.App.Features.SqlEditor;
 using Oranda.App.Shell;
 using Oranda.Core.Events;

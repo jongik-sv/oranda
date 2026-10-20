@@ -1,6 +1,5 @@
 using System.Text.RegularExpressions;
 using Avalonia.Threading;
-using Oranda.App.Features.Execution;
 using Oranda.App.Shell;
 using Oranda.App.Shell.Docking;
 using Oranda.App.Shell.Settings;

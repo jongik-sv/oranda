@@ -1,6 +1,7 @@
 using System.Text.RegularExpressions;
 using Oranda.Core.Execution;
 using Oranda.Core.Metadata;
+using Oranda.Core.Text;
 
 namespace Oranda.Oracle.Schema;
 
@@ -24,8 +25,7 @@ public static partial class SchemaStatements
     [GeneratedRegex(@"^(\d+[KMGTkmgt]?|TRUE|FALSE|true|false)$")]
     private static partial Regex BareValueRegex();
 
-    public static string Quote(string identifier)
-        => "\"" + identifier.Replace("\"", "\"\"", StringComparison.Ordinal) + "\"";
+    public static string Quote(string identifier) => SqlIdentifier.QuoteAlways(identifier);
 
     /// <summary>컴파일할 수 없는 유형이면 null.</summary>
     public static SqlStatement? Compile(DbObjectRef obj)

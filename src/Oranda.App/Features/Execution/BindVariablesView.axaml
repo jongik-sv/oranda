@@ -2,6 +2,7 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:icons="using:Oranda.App.Shell.Icons"
              xmlns:vm="using:Oranda.App.Features.Execution"
+             xmlns:binds="using:Oranda.App.Features.Binds"
              x:Class="Oranda.App.Features.Execution.BindVariablesView"
              x:DataType="vm:BindVariablesViewModel">
   <UserControl.Styles>
@@ -78,7 +79,7 @@
     <ListBox x:Name="RowList" ItemsSource="{Binding Rows}" SelectedItem="{Binding Selected, Mode=TwoWay}"
              AutomationProperties.Name="바인드 변수 목록">
       <ListBox.ItemTemplate>
-        <DataTemplate x:DataType="vm:BindVariableRow">
+        <DataTemplate x:DataType="binds:BindVariableRow">
           <Grid>
             <Grid.ColumnDefinitions>
               <ColumnDefinition Width="24" />
@@ -99,20 +100,20 @@
                        AutomationProperties.Name="바인드 변수 값" />
             </Border>
             <Border Grid.Column="3" Classes="cell">
-              <ComboBox Classes="cell" ItemsSource="{x:Static vm:BindTypeChoice.All}"
+              <ComboBox Classes="cell" ItemsSource="{x:Static binds:BindTypeChoice.All}"
                         SelectedItem="{Binding TypeChoice, Mode=TwoWay}" AutomationProperties.Name="바인드 변수 형식">
                 <ComboBox.ItemTemplate>
-                  <DataTemplate x:DataType="vm:BindTypeChoice">
+                  <DataTemplate x:DataType="binds:BindTypeChoice">
                     <TextBlock Text="{Binding Label}" TextTrimming="CharacterEllipsis" />
                   </DataTemplate>
                 </ComboBox.ItemTemplate>
               </ComboBox>
             </Border>
             <Border Grid.Column="4" Classes="cell">
-              <ComboBox Classes="cell" ItemsSource="{x:Static vm:BindDirectionChoice.All}"
+              <ComboBox Classes="cell" ItemsSource="{x:Static binds:BindDirectionChoice.All}"
                         SelectedItem="{Binding DirectionChoice, Mode=TwoWay}" AutomationProperties.Name="바인드 변수 방향">
                 <ComboBox.ItemTemplate>
-                  <DataTemplate x:DataType="vm:BindDirectionChoice">
+                  <DataTemplate x:DataType="binds:BindDirectionChoice">
                     <TextBlock Text="{Binding Label}" />
                   </DataTemplate>
                 </ComboBox.ItemTemplate>

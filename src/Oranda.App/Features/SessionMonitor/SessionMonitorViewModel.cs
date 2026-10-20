@@ -319,13 +319,6 @@ public sealed partial class SessionMonitorViewModel : ToolPanelViewModelBase, ID
         PostToUi(() => Apply(rows, tree));
     }, ct);
 
-    /// <summary>블로킹 트리만 다시 읽는다.</summary>
-    public Task LoadBlockingTreeAsync(CancellationToken ct = default) => RunAsync(async (monitor, session) =>
-    {
-        var tree = await monitor.GetBlockingTreeAsync(session, ct);
-        PostToUi(() => ApplyTree(tree));
-    }, ct);
-
     /// <summary>선택한 세션의 상세(현재·직전 SQL, 실제 계획, 트랜잭션, 잠금, 통계).</summary>
     public Task LoadDetailAsync(CancellationToken ct = default)
     {

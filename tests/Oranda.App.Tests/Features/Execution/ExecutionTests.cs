@@ -2,6 +2,7 @@ using System.Diagnostics;
 using System.Runtime.CompilerServices;
 using Avalonia.Controls;
 using Avalonia.Threading;
+using Oranda.App.Features.Binds;
 using Oranda.App.Features.ConnectionManager;
 using Oranda.App.Features.Execution;
 using Oranda.App.Features.GridEdit;

@@ -1,6 +1,6 @@
 using AvaloniaEdit.Document;
 using CommunityToolkit.Mvvm.ComponentModel;
-using Oranda.App.Features.Execution;
+using Oranda.App.Features.Binds;
 using Oranda.App.Shell;
 using Oranda.Core.Execution;
 using Oranda.Core.Language;
@@ -58,7 +58,7 @@ public interface IEditorSurface
 /// 실행 쪽 상태(접속·결과)는 다른 Task 가 붙인다. <see cref="ConnectionProfileId"/> 만 작업 공간 저장을 위해 둔다.
 /// </summary>
 [OrandaToolPanel("oranda.panel.sqlEditor", ToolPanelKind.Document, DockLocation.Document, AllowMultiple = true)]
-public sealed partial class SqlEditorViewModel : ToolPanelViewModelBase
+public sealed partial class SqlEditorViewModel : ToolPanelViewModelBase, IBindOwner
 {
     private readonly List<TextAnchor> _bookmarks = [];
     private int _suppressDirty;

@@ -3,6 +3,7 @@ using System.Text;
 using Oranda.Core.Execution;
 using Oranda.Core.Grid;
 using Oranda.Core.Metadata;
+using Oranda.Core.Text;
 
 namespace Oranda.Language.Editing;
 
@@ -148,10 +149,7 @@ public static class RowDmlBuilder
             throw new ArgumentException($"식별자에 쓸 수 없는 문자가 있습니다: {name}", nameof(name));
         }
 
-        var plain = name[0] is >= 'A' and <= 'Z' && name.Length <= 128
-                    && name.All(c => c is (>= 'A' and <= 'Z') or (>= '0' and <= '9') or '_' or '$' or '#')
-                    && !Reserved.Contains(name);
-        return plain ? name : "\"" + name + "\"";
+        return name.Length <= 128 ? SqlIdentifier.Quote(name, Reserved.Contains) : SqlIdentifier.QuoteAlways(name);
     }
 
     /// <summary>.NET 값 → 바인드(형식은 값으로 정한다). NULL 은 VARCHAR2 NULL(어느 열에나 들어간다).</summary>

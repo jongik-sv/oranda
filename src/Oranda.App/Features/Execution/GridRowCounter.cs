@@ -1,4 +1,5 @@
 using System.Globalization;
+using Oranda.App.Features.Binds;
 using Oranda.Core.Execution;
 using Oranda.Core.History;
 using Oranda.Core.Sessions;

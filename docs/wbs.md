@@ -2561,7 +2561,7 @@ dotnet, testhost, Oranda.App
 - category: infra
 - domain: fullstack
 - model: opus
-- status: [ ]
+- status: [xx]
 - priority: medium
 - assignee: -
 - schedule: 2027-01-14 ~ 2027-01-20
@@ -2569,7 +2569,7 @@ dotnet, testhost, Oranda.App
 - depends: TSK-03-08, TSK-04-11
 - blocked-by: -
 - entry-point: -
-- note: 담당 PC: win144(Windows 개발 PC) — 맥북 세션은 이 Task 를 하지 않는다. 2026-10-20 사용자 지시: 바인드 변수 처리(TSK-04-11)까지 끝나면 리팩터링한다. 동작은 바꾸지 않는다. 맥북 세션이 같은 dev 에 계속 push 하므로 겹치는 파일은 작게 나눠 커밋한다
+- note: 담당 PC: win144(Windows 개발 PC) — 맥북 세션은 이 Task 를 하지 않는다. 2026-10-20 사용자 지시: 바인드 변수 처리(TSK-04-11)까지 끝나면 리팩터링한다. 동작은 바꾸지 않는다. 맥북 세션이 같은 dev 에 계속 push 하므로 겹치는 파일은 작게 나눠 커밋한다 2026-10-21 완료(win144). 조사표 요약: 600줄 넘는 파일 25개, 식별자 따옴표 6벌, EscapeLike 3벌, Execution↔SqlEditor 순환, 죽은 코드 3곳 의심. 한 일: ① 식별자 따옴표 6벌→Core.Text.SqlIdentifier ② 바인드 타입을 Features/Binds 로 옮겨 SqlEditor→Execution 참조 0 ③ SqlEditorHost 6개 partial 분할+UnregisterCloseGuard 삭제 ④ SchemaBrowserViewModel 5개 partial 분할 ⑤ EscapeLike 3벌→Core.Text.SqlLike, SessionMonitorViewModel.LoadBlockingTreeAsync 삭제, TransferWriters Json·Xlsx partial 분할, ConnectionTreeNode·접속 시험 도구 별도 파일. 안 한 일: CommandCancellation 은 OracleExecutionService 3곳이 써서 유지(조사표 정정), ExecutionController·ExecutionState·OracleExecutionService·ConnectionManagerViewModel 본체 분할은 위험 대비 효과로 보류, ResultGridControl·ResultGridModel·SqlResultPaneViewModel 등 나머지 600줄 넘는 파일, SchemaBrowserViewModel.SingleClickPreviewProvider(채워지는 곳 없음, 후보)
 
 #### PRD 요구사항
 - prd-ref: TRD 코드 구조

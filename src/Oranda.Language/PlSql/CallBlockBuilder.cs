@@ -3,6 +3,7 @@ using System.Text;
 using System.Text.RegularExpressions;
 using Oranda.Core.Execution;
 using Oranda.Core.Metadata;
+using Oranda.Core.Text;
 
 namespace Oranda.Language.PlSql;
 
@@ -107,13 +108,11 @@ public static class CallBlockBuilder
 
     private const int MaxBindNameLength = 28;
 
-    private static readonly Regex SimpleIdentifier = new("^[A-Z][A-Z0-9_$#]*$", RegexOptions.Compiled | RegexOptions.CultureInvariant);
-
     /// <summary>식별자를 필요할 때만 큰따옴표로 감싼다(대문자 단순 이름은 그대로).</summary>
     public static string Quote(string name)
     {
         ArgumentException.ThrowIfNullOrEmpty(name);
-        return SimpleIdentifier.IsMatch(name) && !IsReserved(name) ? name : "\"" + name.Replace("\"", "\"\"", StringComparison.Ordinal) + "\"";
+        return SqlIdentifier.Quote(name, IsReserved);
     }
 
     /// <summary>오버로드 한 개를 대화상자 줄로 풀어 준다(반환값이 있으면 맨 앞). 지원하지 않는 형식은 이유를 단다.</summary>

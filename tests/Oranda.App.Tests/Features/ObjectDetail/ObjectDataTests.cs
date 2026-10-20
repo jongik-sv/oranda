@@ -4,6 +4,7 @@ using Avalonia.Controls;
 using Avalonia.Controls.Primitives;
 using Avalonia.Threading;
 using Avalonia.VisualTree;
+using Oranda.App.Features.Binds;
 using Oranda.App.Features.Execution;
 using Oranda.App.Features.GridEdit;
 using Oranda.App.Features.ObjectDetail;

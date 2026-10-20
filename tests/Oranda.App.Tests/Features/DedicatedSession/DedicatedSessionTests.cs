@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using Avalonia.Threading;
+using Oranda.App.Features.Binds;
 using Oranda.App.Features.DedicatedSession;
 using Oranda.App.Features.Execution;
 using Oranda.App.Features.SqlEditor;

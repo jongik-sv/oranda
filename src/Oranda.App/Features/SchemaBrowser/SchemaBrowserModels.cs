@@ -3,12 +3,12 @@ using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Linq;
 using System.Text;
-using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
 using CommunityToolkit.Mvvm.ComponentModel;
 using Oranda.Core.Metadata;
 using Oranda.Core.Sessions;
+using Oranda.Core.Text;
 
 namespace Oranda.App.Features.SchemaBrowser;
 
@@ -288,11 +288,7 @@ public static partial class SchemaSql
 
     public static string FavoriteKey(DbObjectRef r) => $"{r.Owner}.{r.Name}|{r.ObjectType}";
 
-    [GeneratedRegex("^[A-Z][A-Z0-9_$#]*$")]
-    private static partial Regex PlainIdentifier();
-
-    public static string Quote(string identifier) =>
-        PlainIdentifier().IsMatch(identifier) ? identifier : "\"" + identifier.Replace("\"", "\"\"", StringComparison.Ordinal) + "\"";
+    public static string Quote(string identifier) => SqlIdentifier.Quote(identifier);
 
     public static string QualifiedName(DbObjectRef r) => $"{Quote(r.Owner)}.{Quote(r.Name)}";
 

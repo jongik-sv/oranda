@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.Text;
+using Oranda.App.Features.Binds;
 using Oranda.App.Features.GridEdit;
 using Oranda.App.Features.SqlEditor;
 using Oranda.Core.Connection;
