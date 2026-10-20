@@ -1,6 +1,7 @@
 using Avalonia.Input;
 using Oranda.App.Features.SqlEditor;
 using Oranda.App.Features.Templates;
+using Oranda.App.Shell;
 using Oranda.App.Shell.Keymaps;
 using Oranda.App.Shell.Settings;
 using Oranda.App.Tests.Shell;
@@ -328,49 +329,237 @@ public sealed class TemplatesTests : IDisposable
 
     // ---- 템플릿 창 ---------------------------------------------------------------------------
 
+    private TemplatesViewModel Panel(string name, SqlEditorHost? host = null, string language = "ko") =>
+        new(Paths(name), new ShellText(language: language)) { Host = host ?? new SqlEditorHost() };
+
     [Fact]
-    public async Task Templates_panel_searches_inserts_and_manages_user_snippets()
+    public void Templates_panel_kind_filter_always_has_one_choice_and_groups_by_kind()
     {
-        var paths = Paths("tpl");
-        var host = new SqlEditorHost();
-        var vm = new TemplatesViewModel(paths) { Host = host };
+        var vm = Panel("kinds");
 
-        vm.Query = "rownum";
-        Assert.Contains(vm.Items, s => s.Kind == SnippetKind.PseudoColumn);
-        vm.Selected = vm.Items[0];
-        Assert.Contains("ROWNUM", vm.Detail, StringComparison.Ordinal);
+        // 처음은 전체: 네 종류 묶음이 모두 있고 개수가 내장 목록과 같다.
+        Assert.True(vm.IsAllKinds);
+        Assert.Null(vm.KindFilter);
+        Assert.Equal([SnippetKind.Snippet, SnippetKind.Hint, SnippetKind.Function, SnippetKind.PseudoColumn], vm.Groups.Select(g => g.Kind));
+        Assert.Equal(SnippetLibrary.Snippets.Count, vm.Groups[0].Count);
+        Assert.Equal(SnippetLibrary.Hints.Count, vm.Groups[1].Count);
+        Assert.Equal(SnippetLibrary.Functions.Count, vm.Groups[2].Count);
+        Assert.Equal(SnippetLibrary.PseudoColumns.Count, vm.Groups[3].Count);
+        Assert.All(vm.Groups, g => Assert.Equal(g.Count, g.Items.Count));
+        Assert.Equal(["조각", "힌트", "함수", "의사 열"], vm.Groups.Select(g => g.Title));
 
-        vm.Query = string.Empty;
-        vm.KindFilter = SnippetKind.Hint;
+        // 힌트만 → 힌트 묶음 하나. 켜진 단추가 꺼지는 값(false)이 와도 빈 거르기가 되지 않는다.
+        vm.IsHintKind = true;
+        Assert.Equal(SnippetKind.Hint, vm.KindFilter);
+        Assert.Equal(SnippetKind.Hint, Assert.Single(vm.Groups).Kind);
         Assert.All(vm.Items, s => Assert.Equal(SnippetKind.Hint, s.Kind));
+        vm.IsHintKind = false;
+        Assert.True(vm.IsHintKind);
+        Assert.False(vm.IsAllKinds);
 
-        vm.EditPrefix = "mine";
-        vm.EditName = "내 조각";
-        vm.EditBody = "SELECT ${1:x} FROM dual$0";
-        await vm.AddUserSnippetAsync();
-        var tab = host.NewDocument(); // 문서는 만든 스레드에서만 읽을 수 있어 await 뒤에 만든다.
-        vm.KindFilter = SnippetKind.Snippet;
-        vm.Query = "mine";
-        vm.Selected = vm.Items.First(s => s.IsUser);
-        Assert.True(vm.InsertSelected());
-        Assert.Equal("SELECT x FROM dual", tab.Text);
+        vm.IsPseudoColumnKind = true;
+        Assert.False(vm.IsHintKind);
+        Assert.Equal(SnippetLibrary.PseudoColumns.Count, Assert.Single(vm.Groups).Count);
 
-        var again = new TemplatesViewModel(paths) { Host = host };
-        await again.LoadUserAsync();
-        Assert.Single(again.UserSnippets);
-        again.Query = "mine";
-        again.Selected = again.Items.First();
-        await again.DeleteUserSnippetAsync();
-        Assert.Empty(again.UserSnippets);
+        // 다시 전체.
+        vm.IsAllKinds = true;
+        Assert.Null(vm.KindFilter);
+        Assert.Equal(4, vm.Groups.Count);
+        Assert.Equal(SnippetLibrary.All.Count, vm.Items.Count);
     }
 
     [Fact]
-    public async Task Templates_panel_rejects_bad_user_snippet()
+    public void Templates_panel_search_counts_matches_per_group_and_expands_collapsed_groups()
     {
-        var vm = new TemplatesViewModel(Paths("bad2")) { EditPrefix = "has space", EditBody = "x" };
-        await vm.AddUserSnippetAsync();
-        Assert.Empty(vm.UserSnippets);
+        var vm = Panel("search");
+        var functions = vm.Groups.First(g => g.Kind == SnippetKind.Function);
+        TemplatesViewModel.Toggle(functions);
+        Assert.False(functions.IsExpanded);
+
+        vm.Query = "to_";
+        Assert.True(functions.IsExpanded);
+        Assert.Equal(SnippetKind.Function, Assert.Single(vm.Groups).Kind);
+        Assert.Equal(4, functions.Count); // TO_CHAR, TO_DATE, TO_NUMBER, TO_TIMESTAMP
+
+        // 찾을 때는 첫 항목을 골라 둔다(Enter 로 바로 넣게).
+        Assert.Equal("TO_CHAR", vm.Selected?.Prefix);
+
+        vm.Query = "rownum";
+        Assert.Contains(vm.Items, s => s.Kind == SnippetKind.PseudoColumn && s.Prefix == "ROWNUM");
+        Assert.Equal(vm.Items.Count, vm.Groups.Sum(g => g.Count));
+
+        vm.Query = "zzzz-없음";
+        Assert.Empty(vm.Groups);
+        Assert.Null(vm.Selected);
+    }
+
+    [Fact]
+    public void Templates_panel_rows_show_description_instead_of_repeating_the_prefix()
+    {
+        var vm = Panel("rows");
+        var rows = vm.Groups.SelectMany(g => g.Items).ToList();
+        var rowid = rows.First(r => r.Prefix == "ROWID");
+        Assert.Equal("행의 물리 주소. 가장 빠른 행 접근 방법이지만 행이 옮겨지면 바뀔 수 있다.", rowid.Summary);
+        Assert.All(rows, r => Assert.False(string.Equals(r.Summary, r.Prefix, StringComparison.OrdinalIgnoreCase), r.Prefix));
+        Assert.Contains("ROWID", rowid.ToolTip, StringComparison.Ordinal);
+        Assert.Equal("column", rowid.IconKey);
+        Assert.Equal("objFunction", rows.First(r => r.Prefix == "NVL").IconKey);
+
+        var en = Panel("rows-en", language: "en");
+        Assert.Equal(["Snippets", "Hints", "Functions", "Pseudo-columns"], en.Groups.Select(g => g.Title));
+        Assert.StartsWith("Physical address", en.Groups.SelectMany(g => g.Items).First(r => r.Prefix == "ROWID").Summary, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Templates_panel_preview_follows_the_selected_row()
+    {
+        var vm = Panel("preview");
+        Assert.False(vm.HasSelection);
+        Assert.Empty(vm.PreviewText);
+
+        var selr = vm.Groups[0].Items.First(r => r.Prefix == "selr");
+        vm.SelectedRow = selr;
+        Assert.Same(selr.Snippet, vm.Selected);
+        Assert.Equal("SELECT 상위 N건", vm.PreviewTitle);
+        Assert.Equal("FETCH FIRST 로 상위 N건", vm.PreviewDescription);
+        Assert.Equal("SELECT *\n  FROM table_name\n ORDER BY 1\n FETCH FIRST 10 ROWS ONLY", vm.PreviewText);
+        Assert.False(vm.IsUserSelected);
+
+        var hint = SnippetLibrary.Hints.First(h => h.Prefix == "USE_NL");
+        vm.Selected = hint;
+        Assert.Equal(hint, (vm.SelectedRow as TemplateItemRow)?.Snippet);
+        Assert.Equal("SELECT /*+ USE_NL(e) */ * FROM dept d, emp e WHERE e.deptno = d.deptno", vm.PreviewText);
+
+        // 묶음 머리를 고르면 미리보기가 빈다.
+        vm.SelectedRow = vm.Groups[2];
+        Assert.Null(vm.Selected);
+        Assert.Empty(vm.PreviewText);
+    }
+
+    [Fact]
+    public void Templates_panel_inserts_selected_item_into_the_active_editor()
+    {
+        var host = new SqlEditorHost();
+        var vm = Panel("insert", host);
+        vm.Selected = SnippetLibrary.FindByPrefix("del");
+        Assert.False(vm.InsertSelected());
         Assert.NotEmpty(vm.Status);
+
+        var tab = host.NewDocument();
+        Assert.True(vm.InsertSelected());
+        Assert.Equal("DELETE FROM table_name\n WHERE id = value", tab.Text);
+        Assert.Empty(vm.Status);
+
+        vm.Query = "sysdate";
+        Assert.True(vm.SelectFirst());
+        tab.Select(tab.Text.Length, 0);
+        Assert.True(vm.InsertSelected());
+        Assert.EndsWith("SELECT SYSDATE FROM dual", tab.Text, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task Templates_panel_creates_edits_duplicates_and_deletes_user_snippets()
+    {
+        var paths = Paths("tpl");
+        var vm = new TemplatesViewModel(paths, new ShellText()) { Host = new SqlEditorHost() };
+        Func<SnippetEditViewModel, Task<bool>>? fill = null;
+        vm.ShowEditor = e => fill!(e);
+
+        // 새로 만들기(대화상자에서 입력하고 저장).
+        fill = e =>
+        {
+            Assert.Equal("새 조각", e.Title);
+            e.Prefix = "mine";
+            e.Name = "내 조각";
+            e.Body = "SELECT ${1:x} FROM dual$0";
+            return Task.FromResult(true);
+        };
+        Assert.True(await vm.NewSnippetAsync());
+        Assert.Single(vm.UserSnippets);
+        Assert.Equal("mine", vm.Selected?.Prefix);
+        Assert.Equal("docEdit", vm.Groups[0].Items[0].IconKey); // 찾는 글이 없으면 사용자 조각이 묶음 맨 앞
+        Assert.Equal(SnippetLibrary.Snippets.Count + 1, vm.Groups[0].Count);
+        Assert.Contains("mine", vm.Status, StringComparison.Ordinal);
+
+        // 고치기: 같은 조각이 바뀐다(개수 그대로).
+        fill = e =>
+        {
+            Assert.Equal("조각 편집", e.Title);
+            Assert.Equal("mine", e.Prefix);
+            e.Description = "설명을 붙였다";
+            e.Prefix = "mine2";
+            return Task.FromResult(true);
+        };
+        Assert.True(await vm.EditSelectedAsync());
+        Assert.Equal("mine2", Assert.Single(vm.UserSnippets).Prefix);
+        Assert.Equal("설명을 붙였다", vm.Groups[0].Items.First(r => r.Snippet.IsUser).Summary);
+
+        // 기본 제공 항목은 고칠 수 없다.
+        vm.Selected = SnippetLibrary.FindByPrefix("sel");
+        Assert.Null(vm.BeginEdit());
+        Assert.False(await vm.DeleteUserSnippetAsync());
+        Assert.NotEmpty(vm.Status);
+
+        // 복제: 기본 조각과 겹치지 않는 줄임말을 제안하고, 본문·이름·설명을 가져온다.
+        fill = e =>
+        {
+            Assert.Equal("sel_2", e.Prefix);
+            Assert.Equal("SELECT", e.Name);
+            Assert.Equal(SnippetLibrary.FindByPrefix("sel")!.Body, e.Body);
+            Assert.False(e.HasNote);
+            return Task.FromResult(true);
+        };
+        Assert.True(await vm.DuplicateSelectedAsync());
+        Assert.Equal(2, vm.UserSnippets.Count);
+
+        // 같은 줄임말(대소문자 무시)의 사용자 조각은 거부한다. 기본 조각과 같은 줄임말은 「대신한다」 알림만.
+        var dup = vm.BeginNew();
+        dup.Prefix = "MINE2";
+        dup.Body = "SELECT 2";
+        Assert.False(await vm.CommitAsync(dup));
+        Assert.Contains("mine2", dup.Error, StringComparison.Ordinal);
+        dup.Prefix = "has space";
+        Assert.False(dup.Validate());
+        dup.Prefix = "sel";
+        Assert.True(dup.HasNote);
+        dup.Body = "  ";
+        Assert.False(dup.Validate());
+        Assert.Equal(2, vm.UserSnippets.Count);
+
+        // 대화상자에서 취소하면 아무것도 바뀌지 않는다.
+        fill = _ => Task.FromResult(false);
+        Assert.False(await vm.NewSnippetAsync());
+        Assert.Equal(2, vm.UserSnippets.Count);
+
+        // 다시 열어도 남아 있고, 지우면 파일에서도 빠진다.
+        var again = new TemplatesViewModel(paths, new ShellText()) { Host = new SqlEditorHost() };
+        await again.LoadUserAsync();
+        Assert.Equal(["mine2", "sel_2"], again.UserSnippets.Select(s => s.Prefix));
+        again.Query = "mine2";
+        Assert.True(again.SelectFirst());
+        Assert.True(again.IsUserSelected);
+        Assert.True(await again.DeleteUserSnippetAsync());
+        Assert.Equal(["sel_2"], again.UserSnippets.Select(s => s.Prefix));
+        Assert.Single(await new SnippetStore(paths).LoadAsync());
+    }
+
+    [Fact]
+    public void Templates_text_keys_exist_in_both_languages()
+    {
+        var dir = AppContext.BaseDirectory;
+        while (Directory.GetFiles(dir, "Oranda.sln*").Length == 0)
+        {
+            dir = Path.GetDirectoryName(dir) ?? throw new InvalidOperationException("저장소 루트를 찾지 못했다.");
+        }
+
+        var keys = Directory.EnumerateFiles(Path.Combine(dir, "src", "Oranda.App", "Features", "Templates"), "*.cs")
+            .SelectMany(f => System.Text.RegularExpressions.Regex.Matches(File.ReadAllText(f), "\"(Templates\\.[A-Za-z.]+)\"").Select(m => m.Groups[1].Value))
+            .ToHashSet();
+        Assert.True(keys.Count >= 20, "키 검색이 동작하지 않는다");
+        foreach (var lang in Oranda.App.Features.Localization.StringCatalog.Languages)
+        {
+            Assert.Empty(keys.Where(k => Oranda.App.Features.Localization.StringCatalog.Get(lang, k) is null).Select(k => lang + ":" + k));
+        }
     }
 
     // ---- 명령 처리기 ---------------------------------------------------------------------------

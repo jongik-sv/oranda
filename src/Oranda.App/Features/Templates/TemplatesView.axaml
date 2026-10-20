@@ -2,35 +2,137 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:icons="using:Oranda.App.Shell.Icons"
              xmlns:vm="using:Oranda.App.Features.Templates"
-             xmlns:ls="using:Oranda.Language.Snippets"
+             xmlns:se="using:Oranda.App.Features.SqlEditor"
              x:Class="Oranda.App.Features.Templates.TemplatesView"
              x:DataType="vm:TemplatesViewModel">
-  <Grid RowDefinitions="Auto,*,Auto,Auto,Auto" Margin="6">
-    <Grid Grid.Row="0" ColumnDefinitions="*,Auto" Margin="0,0,0,6">
-      <TextBox Grid.Column="0" PlaceholderText="조각·힌트·함수 찾기" Text="{Binding Query}" />
-      <ComboBox Grid.Column="1" ItemsSource="{Binding Kinds}" SelectedItem="{Binding KindFilter}" Margin="6,0,0,0" MinWidth="110" />
-    </Grid>
-    <ListBox Grid.Row="1" ItemsSource="{Binding Items}" SelectedItem="{Binding Selected}" DoubleTapped="OnInsert">
-      <ListBox.ItemTemplate>
-        <DataTemplate x:DataType="ls:Snippet">
-          <StackPanel Orientation="Horizontal" Spacing="8">
-            <TextBlock Text="{Binding Prefix}" FontWeight="SemiBold" MinWidth="70" />
-            <TextBlock Text="{Binding Name}" />
+  <UserControl.Resources>
+    <!-- 종류 거르기 단추: 라디오 묶음(켜진 것을 다시 눌러도 꺼지지 않는다)을 도구 단추 모양으로 그린다. -->
+    <ControlTheme x:Key="KindChipTheme" TargetType="RadioButton">
+      <Setter Property="Background" Value="Transparent" />
+      <Setter Property="BorderBrush" Value="Transparent" />
+      <Setter Property="BorderThickness" Value="1" />
+      <Setter Property="CornerRadius" Value="3" />
+      <Setter Property="Padding" Value="5,3" />
+      <Setter Property="VerticalAlignment" Value="Center" />
+      <Setter Property="Template">
+        <ControlTemplate>
+          <ContentPresenter Name="PART_ContentPresenter"
+                            Background="{TemplateBinding Background}"
+                            BorderBrush="{TemplateBinding BorderBrush}"
+                            BorderThickness="{TemplateBinding BorderThickness}"
+                            CornerRadius="{TemplateBinding CornerRadius}"
+                            Padding="{TemplateBinding Padding}"
+                            Content="{TemplateBinding Content}"
+                            ContentTemplate="{TemplateBinding ContentTemplate}"
+                            HorizontalContentAlignment="Center"
+                            VerticalContentAlignment="Center" />
+        </ControlTemplate>
+      </Setter>
+      <Style Selector="^:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+        <Setter Property="Background" Value="{DynamicResource OrandaToolbarHoverBrush}" />
+      </Style>
+      <Style Selector="^:checked /template/ ContentPresenter#PART_ContentPresenter">
+        <Setter Property="Background" Value="{DynamicResource OrandaToolbarPressedBrush}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource OrandaIconBlueBrush}" />
+      </Style>
+    </ControlTheme>
+  </UserControl.Resources>
+
+  <DockPanel>
+    <!-- 위: 찾기 칸, 그 아래 종류 단추 줄(전체·조각·힌트·함수·의사 열)과 「새 조각」. -->
+    <Border DockPanel.Dock="Top" Classes="panel-toolbar">
+      <StackPanel Spacing="3">
+        <TextBox x:Name="SearchBox" Classes="compact search" Text="{Binding Query, Mode=TwoWay}"
+                 PlaceholderText="줄임말·이름·설명 찾기" AutomationProperties.Name="템플릿 찾기" />
+        <DockPanel>
+          <Button x:Name="NewButton" DockPanel.Dock="Right" Classes="tool" icons:ButtonIcon.Key="add" Content="새 조각"
+                  ToolTip.Tip="사용자 조각 만들기" />
+          <StackPanel x:Name="KindBar" Orientation="Horizontal" Spacing="1">
+            <RadioButton x:Name="KindAll" Theme="{StaticResource KindChipTheme}"
+                         icons:ButtonIcon.Key="palette" icons:ButtonIcon.IconOnly="True" Content="전체 보기"
+                         IsChecked="{Binding IsAllKinds, Mode=TwoWay}" />
+            <RadioButton x:Name="KindSnippet" Theme="{StaticResource KindChipTheme}"
+                         icons:ButtonIcon.Key="newPlsql" icons:ButtonIcon.IconOnly="True" Content="코드 조각만"
+                         IsChecked="{Binding IsSnippetKind, Mode=TwoWay}" />
+            <RadioButton x:Name="KindHint" Theme="{StaticResource KindChipTheme}"
+                         icons:ButtonIcon.Key="explainPlan" icons:ButtonIcon.IconOnly="True" Content="옵티마이저 힌트만"
+                         IsChecked="{Binding IsHintKind, Mode=TwoWay}" />
+            <RadioButton x:Name="KindFunction" Theme="{StaticResource KindChipTheme}"
+                         icons:ButtonIcon.Key="objFunction" icons:ButtonIcon.IconOnly="True" Content="내장 함수만"
+                         IsChecked="{Binding IsFunctionKind, Mode=TwoWay}" />
+            <RadioButton x:Name="KindPseudoColumn" Theme="{StaticResource KindChipTheme}"
+                         icons:ButtonIcon.Key="column" icons:ButtonIcon.IconOnly="True" Content="의사 열만"
+                         IsChecked="{Binding IsPseudoColumnKind, Mode=TwoWay}" />
           </StackPanel>
-        </DataTemplate>
-      </ListBox.ItemTemplate>
-    </ListBox>
-    <TextBox Grid.Row="2" Text="{Binding Detail}" IsReadOnly="True" AcceptsReturn="True" TextWrapping="Wrap" MinHeight="90" MaxHeight="160" Margin="0,6,0,0" FontFamily="Consolas,monospace" />
-    <StackPanel Grid.Row="3" Margin="0,6,0,0" Spacing="4">
-      <StackPanel Orientation="Horizontal" Spacing="6">
-        <Button Classes="tool" icons:ButtonIcon.Key="add" Content="삽입" Click="OnInsert" />
-        <Button Classes="tool" icons:ButtonIcon.Key="delete" Content="사용자 조각 지우기" Click="OnDelete" />
+        </DockPanel>
       </StackPanel>
-      <TextBox PlaceholderText="줄임말" Text="{Binding EditPrefix}" />
-      <TextBox PlaceholderText="이름" Text="{Binding EditName}" />
-      <TextBox PlaceholderText="본문 ($1, ${1:기본값}, $0)" Text="{Binding EditBody}" AcceptsReturn="True" MinHeight="60" />
-      <Button Classes="tool" icons:ButtonIcon.Key="save" Content="사용자 조각 저장" Click="OnAdd" />
-    </StackPanel>
-    <TextBlock Grid.Row="4" Text="{Binding Status}" TextWrapping="Wrap" />
-  </Grid>
+    </Border>
+
+    <Border DockPanel.Dock="Bottom" Classes="panel-status">
+      <TextBlock x:Name="FooterText" Text="{Binding Footer}" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding Footer}" />
+    </Border>
+
+    <!-- 가운데: 종류별 묶음 목록 / 아래: 미리보기(이름·설명 한 줄 + 편집기와 같은 강조). 나누기 막대로 높이를 바꾼다. -->
+    <Grid RowDefinitions="*,Auto,150">
+      <TreeView x:Name="List" Grid.Row="0" Classes="compact" MinHeight="60"
+                ItemsSource="{Binding Groups}" SelectedItem="{Binding SelectedRow, Mode=TwoWay}"
+                ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                AutomationProperties.Name="템플릿 목록">
+        <TreeView.Styles>
+          <Style Selector="TreeViewItem" x:DataType="vm:TemplateRow">
+            <Setter Property="IsExpanded" Value="{Binding IsExpanded, Mode=TwoWay}" />
+          </Style>
+        </TreeView.Styles>
+        <TreeView.DataTemplates>
+          <TreeDataTemplate DataType="vm:TemplateGroupRow" ItemsSource="{Binding Items}">
+            <Grid ColumnDefinitions="Auto,*,Auto" Background="Transparent">
+              <ContentControl Content="{Binding IconKey, Converter={x:Static icons:IconKeyConverter.Instance}, ConverterParameter=14}"
+                              VerticalAlignment="Center" Margin="0,0,6,0" />
+              <TextBlock Grid.Column="1" Text="{Binding Title}" FontWeight="SemiBold" VerticalAlignment="Center"
+                         TextTrimming="CharacterEllipsis" />
+              <TextBlock Grid.Column="2" Classes="panel-caption" Text="{Binding Count}" VerticalAlignment="Center" Margin="8,0,6,0" />
+            </Grid>
+          </TreeDataTemplate>
+          <DataTemplate DataType="vm:TemplateItemRow">
+            <Grid ColumnDefinitions="Auto,Auto,*" Background="Transparent" ToolTip.Tip="{Binding ToolTip}">
+              <ContentControl Content="{Binding IconKey, Converter={x:Static icons:IconKeyConverter.Instance}, ConverterParameter=14}"
+                              VerticalAlignment="Center" Margin="0,0,6,0" />
+              <TextBlock Grid.Column="1" Text="{Binding Prefix}" FontFamily="{DynamicResource OrandaEditorFontFamily}"
+                         FontWeight="SemiBold" MinWidth="60" MaxWidth="150" Margin="0,0,8,0" VerticalAlignment="Center"
+                         TextTrimming="CharacterEllipsis" />
+              <TextBlock Grid.Column="2" Text="{Binding Summary}" Opacity="0.7" VerticalAlignment="Center"
+                         TextTrimming="CharacterEllipsis" />
+            </Grid>
+          </DataTemplate>
+        </TreeView.DataTemplates>
+      </TreeView>
+
+      <GridSplitter Grid.Row="1" Height="5" HorizontalAlignment="Stretch" ResizeDirection="Rows"
+                    Background="{DynamicResource OrandaSplitterBrush}" AutomationProperties.Name="목록과 미리보기 나누기" />
+
+      <DockPanel Grid.Row="2" MinHeight="0">
+        <Border DockPanel.Dock="Top" Classes="panel-toolbar" IsVisible="{Binding HasSelection}">
+          <DockPanel>
+            <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" Spacing="1">
+              <Button x:Name="InsertButton" Classes="toolbar" icons:ButtonIcon.Key="tabAdd" icons:ButtonIcon.IconOnly="True"
+                      Content="편집기에 삽입 (Enter)" />
+              <Button x:Name="DuplicateButton" Classes="toolbar" icons:ButtonIcon.Key="copy" icons:ButtonIcon.IconOnly="True"
+                      Content="사용자 조각으로 복제" />
+              <Button x:Name="EditButton" Classes="toolbar" icons:ButtonIcon.Key="docEdit" icons:ButtonIcon.IconOnly="True"
+                      Content="사용자 조각 편집 (F2)" IsVisible="{Binding IsUserSelected}" />
+              <Button x:Name="DeleteButton" Classes="toolbar" icons:ButtonIcon.Key="delete" icons:ButtonIcon.IconOnly="True"
+                      Content="사용자 조각 지우기 (Delete)" IsVisible="{Binding IsUserSelected}" />
+            </StackPanel>
+            <TextBlock x:Name="PreviewHeader" VerticalAlignment="Center" Margin="2,0,6,0" TextTrimming="CharacterEllipsis"
+                       ToolTip.Tip="{Binding PreviewDescription}">
+              <Run Text="{Binding PreviewTitle}" FontWeight="SemiBold" />
+              <Run Text="  " />
+              <Run Text="{Binding PreviewDescription}" Foreground="{DynamicResource OrandaIconNeutralBrush}" />
+            </TextBlock>
+          </DockPanel>
+        </Border>
+        <se:SqlCodeView x:Name="Preview" Text="{Binding PreviewText}" />
+      </DockPanel>
+    </Grid>
+  </DockPanel>
 </UserControl>
