@@ -311,6 +311,103 @@ public sealed class ExecutionServiceTests : IClassFixture<OracleFreeFixture>, IA
         await after.ResultSet!.DisposeAsync();
     }
 
+    // TSK-06-11: 엔진은 취소 즉시 브레이크를 보낸다. 서버가 그것을 언제 읽는지는 서버 sqlnet.ora 에 달렸다.
+    // 시험 이미지(gvenzl)는 DISABLE_OOB=ON·BREAK_POLL_SKIP=1000 이라 in-band 브레이크만 받고, PL/SQL 대기 중에는 읽지 않는다.
+    // 대기·CPU 루프의 1 s 단정은 OOB 가 통하는 경로에서만 켠다(ORANDA_IT_CANCEL_STRICT=1). 큰 SELECT 가져오기는 늘 1 s.
+    private static bool StrictCancel => Environment.GetEnvironmentVariable("ORANDA_IT_CANCEL_STRICT") == "1";
+
+    private static readonly TimeSpan CancelBudget = TimeSpan.FromSeconds(1);
+
+    [Fact]
+    public async Task Cancel_during_plsql_sleep_ends_cancelled_and_session_runs_next_statement()
+    {
+        await using var s = await OpenAsync();
+        var elapsed = await CancelWhileRunningAsync(s, Block("BEGIN DBMS_SESSION.SLEEP(5); END;"));
+
+        // in-band 브레이크면 서버가 남은 잠(약 4 s)을 다 잔 뒤 ORA-01013 을 돌려준다.
+        var limit = StrictCancel ? CancelBudget : TimeSpan.FromSeconds(10);
+        Assert.True(elapsed < limit, $"취소 반영 {elapsed.TotalMilliseconds:F0} ms (한도 {limit.TotalMilliseconds:F0} ms)");
+        await AssertRunsNextStatementAsync(s);
+    }
+
+    [Fact]
+    public async Task Cancel_during_plsql_cpu_loop_ends_cancelled_and_session_runs_next_statement()
+    {
+        await using var s = await OpenAsync();
+        // 서버 CPU 를 30 s 동안 쓰는 루프(취소가 안 먹으면 30 s 뒤 스스로 끝난다).
+        const string loop = """
+            DECLARE
+              x NUMBER := 0;
+              t TIMESTAMP := SYSTIMESTAMP + INTERVAL '30' SECOND;
+            BEGIN
+              WHILE SYSTIMESTAMP < t LOOP
+                FOR i IN 1 .. 10000 LOOP x := x + SQRT(i); END LOOP;
+              END LOOP;
+            END;
+            """;
+        var elapsed = await CancelWhileRunningAsync(s, Block(loop));
+
+        // BREAK_POLL_SKIP=1000 이면 서버가 브레이크를 몇 초 뒤에 읽는다(측정 1.7~11 s). 루프가 스스로 끝나기 전이면 취소가 먹은 것이다.
+        var limit = StrictCancel ? CancelBudget : TimeSpan.FromSeconds(20);
+        Assert.True(elapsed < limit, $"취소 반영 {elapsed.TotalMilliseconds:F0} ms (한도 {limit.TotalMilliseconds:F0} ms)");
+        await AssertRunsNextStatementAsync(s);
+    }
+
+    [Fact]
+    public async Task Cancel_during_large_fetch_ends_within_one_second_and_session_runs_next_statement()
+    {
+        await using var s = await OpenAsync();
+        var r = await Service().ExecuteAsync(s,
+            Q("SELECT level AS n, RPAD('x', 200, 'x') AS pad FROM dual CONNECT BY level <= 5000000"), NoBinds, null, default);
+        Assert.Equal(ExecutionStatus.Succeeded, r.Status);
+        var rs = r.ResultSet!;
+
+        using var cts = new CancellationTokenSource();
+        // 페이지 9,000(약 450만 행)까지 가져오는 중에 취소한다.
+        var fetch = rs.GetPageAsync(9000, cts.Token);
+        await Task.Delay(1000);
+        Assert.False(fetch.IsCompleted);
+        Assert.Equal(SessionState.Busy, s.State);
+        var sw = Stopwatch.StartNew();
+        await cts.CancelAsync();
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => fetch);
+        sw.Stop();
+
+        Assert.True(sw.Elapsed < CancelBudget, $"취소 반영 {sw.ElapsedMilliseconds} ms");
+        await rs.DisposeAsync();
+        await AssertRunsNextStatementAsync(s);
+    }
+
+    /// <summary>문장을 실행하고 1 s 뒤(서버가 일하는 중) 취소한다. 취소 명령 → 「취소됨」 결과까지 걸린 시간.</summary>
+    private async Task<TimeSpan> CancelWhileRunningAsync(OracleSession s, SqlStatement stmt)
+    {
+        using var cts = new CancellationTokenSource();
+        var task = Service().ExecuteAsync(s, stmt, NoBinds, null, cts.Token);
+        await Task.Delay(1000);
+        Assert.False(task.IsCompleted);
+        Assert.Equal(SessionState.Busy, s.State);
+
+        var sw = Stopwatch.StartNew();
+        await cts.CancelAsync();
+        var r = await task;
+        sw.Stop();
+
+        Assert.Equal(ExecutionStatus.Cancelled, r.Status);
+        Assert.Null(r.Error); // ORA-01013 은 실패가 아니라 취소다
+        return sw.Elapsed;
+    }
+
+    /// <summary>취소 뒤 세션이 유휴로 돌아와 다음 문장을 실행한다.</summary>
+    private async Task AssertRunsNextStatementAsync(OracleSession s)
+    {
+        Assert.Equal(SessionState.Idle, s.State);
+        var next = await Service().ExecuteAsync(s, Q("SELECT 1 FROM dual"), NoBinds, null, default);
+        Assert.Equal(ExecutionStatus.Succeeded, next.Status);
+        var page = await next.ResultSet!.GetPageAsync(0, default);
+        Assert.Equal(1m, page.Columns[0][0]);
+        await next.ResultSet.DisposeAsync();
+    }
+
     [Fact]
     public async Task Dml_is_not_autocommitted_and_pending_is_tracked()
     {
