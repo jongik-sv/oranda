@@ -290,9 +290,9 @@ public sealed class LobRowViewTests : IDisposable
         new(1, "DOC", "CLOB", ColumnDataKind.Clob),
     ];
 
-    private static async Task<ResultGridModel> LoadGridAsync(ResultColumn[] cols, object?[][] rows)
+    private static async Task<ResultGridModel> LoadGridAsync(ResultColumn[] cols, object?[][] rows, bool knownCount = true)
     {
-        var m = new ResultGridModel(new MemResult(cols, rows));
+        var m = new ResultGridModel(new MemResult(cols, rows, knownCount));
         await m.LoadFirstPageAsync();
         return m;
     }
@@ -448,6 +448,157 @@ public sealed class LobRowViewTests : IDisposable
         Assert.Equal(["DOC"], vm.Fields.Select(f => f.Name));
     }
 
+    // ---- 행 보기 표(R1~R4) ----------------------------------------------------------------------
+
+    private static ResultColumn[] NameColumns() =>
+    [
+        new(0, "ID", "NUMBER", ColumnDataKind.Number),
+        new(1, "NAME", "VARCHAR2", ColumnDataKind.Text),
+    ];
+
+    private static async Task<(RowViewerViewModel Vm, ResultGridModel Grid)> OpenViewerAsync(object?[][] rows, bool knownCount = true)
+    {
+        var grid = await LoadGridAsync(NameColumns(), rows, knownCount);
+        grid.SelectCell(new GridCell(0, 0));
+        await Task.Delay(100); // 그리드 Changed 는 다른 스레드로 게시된다: 창을 붙이기 전에 밀린 알림을 비운다
+        var vm = new RowViewerViewModel();
+        vm.Attach(grid);
+        return (vm, grid);
+    }
+
+    [Fact]
+    public async Task Row_viewer_moves_first_last_and_shows_position()
+    {
+        var (vm, _) = await OpenViewerAsync([[1m, "a"], [2m, "b"], [3m, "c"]]);
+        using var _v = vm;
+
+        Assert.Equal("1 / 3", vm.HeaderText);
+        Assert.False(vm.CanGoBack);
+        Assert.True(vm.CanGoForward);
+        Assert.Equal(1, vm.Fields[0].Number);
+        Assert.Equal("NAME", vm.Fields[1].Name);
+
+        vm.MoveLast();
+        for (var i = 0; i < 100 && vm.HeaderText != "3 / 3"; i++)
+        {
+            await Task.Delay(20);
+        }
+
+        Assert.Equal("3 / 3", vm.HeaderText);
+        Assert.False(vm.CanGoForward);
+
+        vm.MoveFirst();
+        for (var i = 0; i < 100 && vm.Row != 0; i++)
+        {
+            await Task.Delay(20);
+        }
+
+        Assert.Equal("1 / 3", vm.HeaderText);
+    }
+
+    [Fact]
+    public async Task Row_viewer_marks_unknown_total_with_plus()
+    {
+        var (vm, grid) = await OpenViewerAsync([[1m, "a"], [2m, "b"]], knownCount: false);
+        using var _v = vm;
+
+        Assert.Null(grid.TotalRowCount);
+        Assert.Equal("1 / 2+", vm.HeaderText);
+    }
+
+    [Fact]
+    public async Task Row_viewer_copies_selected_value_and_all_fields_and_shows_null()
+    {
+        var (vm, _) = await OpenViewerAsync([[1m, null]]);
+        using var _v = vm;
+
+        Assert.True(vm.Fields[1].IsNull);
+        Assert.Equal("(null)", vm.Fields[1].Text);
+
+        vm.SelectedField = vm.Fields[0];
+        Assert.Equal("1", vm.SelectedValueText());
+        vm.SelectedField = vm.Fields[1];
+        Assert.Equal(string.Empty, vm.SelectedValueText());
+        Assert.Equal("ID = 1" + Environment.NewLine + "NAME = (null)", vm.AllFieldsText());
+
+        vm.FilterText = "name";
+        Assert.Equal("NAME = (null)", vm.AllFieldsText());
+    }
+
+    [Fact]
+    public async Task Row_viewer_is_read_only_without_edit_session()
+    {
+        var (vm, _) = await OpenViewerAsync([[1m, "a"]]);
+        using var _v = vm;
+
+        Assert.All(vm.Fields, f => Assert.False(f.CanEdit));
+        RowViewerViewModel.BeginEdit(vm.Fields[1]);
+        Assert.False(vm.Fields[1].IsEditing);
+    }
+
+    /// <summary>NAME 필드. 그리드 Changed 가 다른 스레드에서 목록을 다시 채우는 중이면 null.</summary>
+    private static RowField? NameField(RowViewerViewModel vm)
+    {
+        try
+        {
+            return vm.Fields.Count > 1 ? vm.Fields[1] : null;
+        }
+        catch (ArgumentOutOfRangeException)
+        {
+            return null;
+        }
+    }
+
+    [Fact]
+    public async Task Row_viewer_edit_updates_grid_blocks_key_and_syncs_back()
+    {
+        var (vm, grid) = await OpenViewerAsync([[1m, "a"], [2m, "b"]]);
+        using var _v = vm;
+        var meta = new OneTable(new TableInfo(Emp, [new ColumnInfo("ID", 1, "NUMBER") { IsNullable = false }, new ColumnInfo("NAME", 2, "VARCHAR2")])
+        {
+            Constraints = [new ConstraintInfo("PK_EMP", ConstraintKind.PrimaryKey, ["ID"])],
+        });
+        var edit = await GridEditSession.OpenAsync(new RowEditor(new FakeExecution()), meta, Session(false),
+            new SqlStatement("SELECT id, name FROM scott.emp", default, StatementKind.Query) { Verb = "SELECT" }, grid.Columns,
+            GridEditBinding.OriginalValues(grid), () => grid.LoadedRowCount, target: null, default);
+        GridEditBinding.Attach(grid, edit);
+        await Task.Delay(100); // 편집 세션을 붙이며 게시된 알림이 목록을 다시 채우도록 기다린다
+        vm.Refresh();
+
+        Assert.False(vm.Fields[0].CanEdit); // 키 열은 막는다
+        Assert.True(vm.Fields[1].CanEdit);
+
+        RowViewerViewModel.BeginEdit(vm.Fields[0]);
+        Assert.False(vm.Fields[0].IsEditing);
+
+        var field = vm.Fields[1];
+        RowViewerViewModel.BeginEdit(field);
+        Assert.True(field.IsEditing);
+        Assert.Equal("a", field.EditText);
+        field.EditText = "zzz";
+        vm.CommitEdit(field);
+
+        Assert.True(grid.IsEdited(0, 1));
+        Assert.True(grid.TryGetValue(0, 1, out var shown));
+        Assert.Equal("zzz", shown);
+        for (var i = 0; i < 100 && NameField(vm) is not { IsEdited: true }; i++)
+        {
+            await Task.Delay(20); // 그리드 Changed 는 UI 문맥으로 게시된다
+        }
+
+        Assert.True(NameField(vm)!.IsEdited);
+        Assert.Equal("zzz", NameField(vm)!.Text);
+
+        // 그리드 쪽에서 고치면 행 보기에도 반영된다.
+        Assert.True(edit.SetCell(0, 1, "yyy"));
+        for (var i = 0; i < 100 && NameField(vm)?.Text != "yyy"; i++)
+        {
+            await Task.Delay(20);
+        }
+
+        Assert.Equal("yyy", NameField(vm)!.Text);
+    }
+
     // ---- 가짜 -----------------------------------------------------------------------------------
 
     private sealed class FakeAccessor : ILobAccessor
@@ -468,19 +619,19 @@ public sealed class LobRowViewTests : IDisposable
         public bool Evaluate(string? expression) => true;
     }
 
-    private sealed class MemResult(ResultColumn[] cols, object?[][] rows) : IResultSet
+    private sealed class MemResult(ResultColumn[] cols, object?[][] rows, bool knownCount = true) : IResultSet
     {
         public IReadOnlyList<ResultColumn> Columns { get; } = cols;
 
         public bool IsComplete => true;
 
-        public long? KnownRowCount => rows.Length;
+        public long? KnownRowCount => knownCount ? rows.Length : null;
 
         public Task<ResultPage> GetPageAsync(int pageIndex, CancellationToken ct)
         {
             IReadOnlyList<IReadOnlyList<object?>> data = [.. cols.Select((_, c) => (IReadOnlyList<object?>)rows.Select(r => r[c]).ToList())];
             return Task.FromResult(pageIndex == 0
-                ? new ResultPage(0, 0, rows.Length, data) { IsLast = true }
+                ? new ResultPage(0, 0, rows.Length, data) { IsLast = knownCount }
                 : new ResultPage(pageIndex, 0, 0, [.. cols.Select(_ => (IReadOnlyList<object?>)[])]) { IsLast = true });
         }
 

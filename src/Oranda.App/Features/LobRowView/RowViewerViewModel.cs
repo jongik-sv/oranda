@@ -1,5 +1,6 @@
 using System.Collections.ObjectModel;
 using CommunityToolkit.Mvvm.ComponentModel;
+using Oranda.App.Features.GridEdit;
 using Oranda.App.Features.ResultGrid;
 using Oranda.App.Shell;
 using Oranda.Core.Grid;
@@ -7,8 +8,40 @@ using Oranda.Core.Shell;
 
 namespace Oranda.App.Features.LobRowView;
 
-/// <summary>행 보기의 필드 한 줄: 열 이름·형식·값 글자.</summary>
-public sealed record RowField(int Ordinal, string Name, string TypeName, string Text, bool IsNull, bool IsLob);
+/// <summary>행 보기의 필드 한 줄: 번호·열 이름·형식·값 글자. 편집 모드 결과면 값 칸을 고칠 수 있다.</summary>
+public sealed partial class RowField(int ordinal, string name, string typeName, string text, bool isNull, bool isLob) : ObservableObject
+{
+    public int Ordinal { get; } = ordinal;
+
+    /// <summary>화면에 보이는 번호(1부터).</summary>
+    public int Number => Ordinal + 1;
+
+    /// <summary>줄무늬용: 홀수 번째 열.</summary>
+    public bool IsAlt => Ordinal % 2 == 1;
+
+    public string Name { get; } = name;
+
+    public string TypeName { get; } = typeName;
+
+    /// <summary>값 표시 글자(NULL 이면 그리드 NULL 표시 설정의 글자).</summary>
+    public string Text { get; } = text;
+
+    public bool IsNull { get; } = isNull;
+
+    public bool IsLob { get; } = isLob;
+
+    /// <summary>편집 모드에서 바꾼 값이면 true(그리드의 편집 표시와 같다).</summary>
+    public bool IsEdited { get; init; }
+
+    /// <summary>이 값 칸을 고칠 수 있으면 true.</summary>
+    public bool CanEdit { get; init; }
+
+    [ObservableProperty]
+    private bool _isEditing;
+
+    [ObservableProperty]
+    private string _editText = string.Empty;
+}
 
 /// <summary>
 /// <c>oranda.panel.rowView</c> — 행 보기(GRID-07, TSK-06-05). 결과 그리드에서 고른 행 하나를 세로 필드 목록(열 이름 | 값)으로 보인다.
@@ -51,6 +84,12 @@ public sealed partial class RowViewerViewModel : ToolPanelViewModelBase, IDispos
 
     /// <summary>지금 보는 행 번호(0부터). 없으면 -1.</summary>
     public long Row => _row;
+
+    /// <summary>처음 행이 아니면 true(처음·이전 단추).</summary>
+    public bool CanGoBack => _row > 0;
+
+    /// <summary>마지막으로 가져온 행이 아니면 true(다음·마지막 단추).</summary>
+    public bool CanGoForward => _model is { } m && _row >= 0 && _row < m.RowCount - 1;
 
     [ObservableProperty]
     private string _headerText = "행 보기: 결과 그리드에서 행을 고르세요.";
@@ -98,14 +137,22 @@ public sealed partial class RowViewerViewModel : ToolPanelViewModelBase, IDispos
     }
 
     /// <summary>앞(-1)·뒤(+1) 행으로. 그리드 선택도 따라 옮긴다.</summary>
-    public void MoveRow(int delta)
+    public void MoveRow(int delta) => MoveTo(_row + delta);
+
+    /// <summary>처음 행으로.</summary>
+    public void MoveFirst() => MoveTo(0);
+
+    /// <summary>이미 가져온 마지막 행으로(남은 행을 가져오지 않는다).</summary>
+    public void MoveLast() => MoveTo(long.MaxValue);
+
+    private void MoveTo(long row)
     {
         if (_model is not { HasResult: true } m || m.RowCount == 0 || _row < 0)
         {
             return;
         }
 
-        var target = Math.Clamp(_row + delta, 0, m.RowCount - 1);
+        var target = Math.Clamp(row, 0, m.RowCount - 1);
         if (target == _row)
         {
             return;
@@ -134,6 +181,8 @@ public sealed partial class RowViewerViewModel : ToolPanelViewModelBase, IDispos
     {
         _row = row;
         OnPropertyChanged(nameof(Row));
+        OnPropertyChanged(nameof(CanGoBack));
+        OnPropertyChanged(nameof(CanGoForward));
         Rebuild();
     }
 
@@ -159,7 +208,11 @@ public sealed partial class RowViewerViewModel : ToolPanelViewModelBase, IDispos
             }
 
             var isNull = v is null or DBNull;
-            all.Add(new RowField(c.Ordinal, c.Name, c.DbTypeName, CellValueFormatter.Format(c, v, m.Display), isNull, v is LobValue));
+            all.Add(new RowField(c.Ordinal, c.Name, c.DbTypeName, CellValueFormatter.Format(c, v, m.Display), isNull, v is LobValue)
+            {
+                IsEdited = m.IsEdited(_row, c.Ordinal),
+                CanEdit = v is not LobValue && GridEditBinding.CanEditCell(m, _row, c.Ordinal),
+            });
         }
 
         var filter = FilterText.Trim();
@@ -173,8 +226,50 @@ public sealed partial class RowViewerViewModel : ToolPanelViewModelBase, IDispos
             }
         }
 
-        var total = m.TotalRowCount is { } t ? t.ToString("N0", System.Globalization.CultureInfo.CurrentCulture) : "?";
-        HeaderText = $"행 {_row + 1:N0} / {total}" + (loaded ? string.Empty : " (불러오는 중…)");
+        // 전체 수를 모르면 지금까지 가져온 수 뒤에 「+」.
+        var total = m.RowCount.ToString("N0", System.Globalization.CultureInfo.CurrentCulture) + (m.TotalRowCount is null ? "+" : string.Empty);
+        HeaderText = $"{_row + 1:N0} / {total}" + (loaded ? string.Empty : " (불러오는 중…)");
+    }
+
+    /// <summary>선택한 칸의 값(NULL 이면 빈 글자). 선택이 없으면 null.</summary>
+    public string? SelectedValueText() => SelectedField is { } f ? (f.IsNull ? string.Empty : f.Text) : null;
+
+    /// <summary>보이는 필드 전체를 줄마다 「이름 = 값」으로.</summary>
+    public string AllFieldsText() => string.Join(Environment.NewLine, Fields.Select(f => $"{f.Name} = {f.Text}"));
+
+    /// <summary>값 칸 편집을 연다. 고칠 수 없는 칸이면 무시한다.</summary>
+    public static void BeginEdit(RowField? field)
+    {
+        if (field is not { CanEdit: true })
+        {
+            return;
+        }
+
+        field.EditText = field.IsNull ? string.Empty : field.Text;
+        field.IsEditing = true;
+    }
+
+    /// <summary>입력한 값을 편집 세션에 반영한다. 그리드의 편집 표시도 따라 바뀐다(그리드 <c>Changed</c>).</summary>
+    public void CommitEdit(RowField? field)
+    {
+        if (field is not { IsEditing: true })
+        {
+            return;
+        }
+
+        field.IsEditing = false;
+        if (_model is { } m && _row >= 0)
+        {
+            GridEditBinding.TrySetCell(m, _row, field.Ordinal, field.EditText);
+        }
+    }
+
+    public static void CancelEdit(RowField? field)
+    {
+        if (field is not null)
+        {
+            field.IsEditing = false;
+        }
     }
 
     public void Dispose()

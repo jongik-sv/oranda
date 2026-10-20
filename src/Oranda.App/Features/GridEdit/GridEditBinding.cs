@@ -84,6 +84,34 @@ public static class GridEditBinding
         return text;
     }
 
+    /// <summary>
+    /// 화면 셀을 값 하나 단위로 고칠 수 있는지(행 보기 창). 편집 세션의 열 목록이 그리드와 같고(<c>ResolveTarget</c> 과 같은 검사),
+    /// 키가 아닌 편집 가능 열이며, 지울 행이 아닐 때만 true.
+    /// </summary>
+    public static bool CanEditCell(ResultGridModel model, long viewRow, int ordinal)
+    {
+        ArgumentNullException.ThrowIfNull(model);
+        if (Of(model) is not { } es || !ReferenceEquals(es.Columns, model.Columns))
+        {
+            return false;
+        }
+
+        return es.IsEditableColumn(ordinal)
+            && !es.Capability.KeyColumnOrdinals.Contains(ordinal)
+            && es.GetRowState(ToEditRow(model, es, viewRow)) != GridEditRowState.Deleted;
+    }
+
+    /// <summary>화면 셀에 글자로 입력한 값을 반영한다(<see cref="Parse"/> 후 <see cref="GridEditSession.SetCell"/>). 고칠 수 없으면 false.</summary>
+    public static bool TrySetCell(ResultGridModel model, long viewRow, int ordinal, string? text)
+    {
+        if (!CanEditCell(model, viewRow, ordinal) || Of(model) is not { } es)
+        {
+            return false;
+        }
+
+        return es.SetCell(ToEditRow(model, es, viewRow), ordinal, Parse(model, ordinal, text));
+    }
+
     /// <summary>새 행 번호를 화면 순서로(-1, -2 …).</summary>
     private static List<long> Inserted(GridEditSession session) => [.. session.InsertedRows.OrderByDescending(r => r)];
 
