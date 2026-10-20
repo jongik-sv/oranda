@@ -255,7 +255,7 @@ public static class StartupRunner
     {
         try
         {
-            // 앱이 같은 파일에 덧붙이는 중이므로 쓰기 공유로 연다(안 그러면 앱의 PerfMarks.Mark 가 IOException 으로 죽는다).
+            // 앱이 같은 파일에 덧붙이는 중이므로 쓰기 공유로 연다(안 그러면 앱의 PerfMarks.Mark 가 그 표식을 버린다, TSK-01-10).
             using var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
             using var reader = new StreamReader(stream);
             while (reader.ReadLine() is { } l)

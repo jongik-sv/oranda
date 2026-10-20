@@ -23,13 +23,29 @@ internal static class PerfMarks
 
         var ms = (DateTime.Now - Process.GetCurrentProcess().StartTime).TotalMilliseconds;
         var line = string.Create(CultureInfo.InvariantCulture, $"ORANDA_PERF stage={stage} ms={ms:F1}");
-        if (!string.IsNullOrEmpty(FilePath))
+        Append(FilePath, line);
+    }
+
+    /// <summary>
+    /// 표식 한 줄을 쓴다. 표식은 진단용이므로 쓰기에 실패하면 그 표식만 버린다 (TSK-01-10, DEF-03:
+    /// 측정 도구가 같은 파일을 쓰기 공유 없이 열면 IOException 이 나서 처리되지 않은 예외로 앱이 종료됐다).
+    /// </summary>
+    internal static void Append(string? filePath, string line)
+    {
+        try
         {
-            File.AppendAllText(FilePath, line + Environment.NewLine);
+            if (!string.IsNullOrEmpty(filePath))
+            {
+                File.AppendAllText(filePath, line + Environment.NewLine);
+            }
+            else
+            {
+                Console.Out.WriteLine(line);
+            }
         }
-        else
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
-            Console.Out.WriteLine(line);
+            // 표식을 못 남겨도 앱은 계속 쓴다.
         }
     }
 }
