@@ -128,6 +128,37 @@ public sealed class DiagnosticsLatencyTests(ITestOutputHelper output)
         window.Close();
     });
 
+    [Fact]
+    [Trait("Category", "Perf")]
+    public Task Typing_in_a_10k_line_document_never_blocks_the_ui_thread_for_long() => Ui.Run(async () =>
+    {
+        // 디바운스(100 ms)보다 짧은 간격으로 계속 입력하며 UI 스레드가 한 번에 묶이는 가장 긴 시간을 잰다(분석은 백그라운드여야 한다).
+        const int Keys = 60;
+        var (window, view, vm) = Show(TenThousandLineDocument());
+        var diagnostics = EditorDiagnostics.Attach(view, () => Language);
+        await WaitUntil(() => diagnostics.AppliedAnalyses >= 1 && !diagnostics.IsPending, 120_000);
+
+        var longest = TimeSpan.Zero;
+        for (var i = 0; i < Keys; i++)
+        {
+            long t0 = Stopwatch.GetTimestamp();
+            vm.Document.Insert(vm.Document.TextLength, " ");
+            Dispatcher.UIThread.RunJobs();
+            var blocked = Stopwatch.GetElapsedTime(t0);
+            if (blocked > longest)
+            {
+                longest = blocked;
+            }
+
+            await Pump(TimeSpan.FromMilliseconds(30));
+        }
+
+        await WaitUntil(() => !diagnostics.IsPending, 120_000);
+        output.WriteLine(string.Create(CultureInfo.InvariantCulture, $"1만 줄 입력 {Keys}회(간격 30 ms): UI 스레드 한 번에 묶인 최장 시간 {longest.TotalMilliseconds:F1} ms"));
+        Assert.True(longest.TotalMilliseconds < 100, $"타이핑 중 UI 스레드가 {longest.TotalMilliseconds:F1} ms 묶였다");
+        window.Close();
+    });
+
     private static (Window Window, SqlEditorView View, SqlEditorViewModel Vm) Show(string text)
     {
         var vm = new SqlEditorViewModel(Guid.NewGuid(), text);

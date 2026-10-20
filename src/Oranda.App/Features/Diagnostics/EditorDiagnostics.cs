@@ -46,9 +46,9 @@ public sealed class EditorDiagnostics : IBackgroundRenderer
 {
     /// <summary>
     /// 입력이 이만큼 멈춘 뒤 분석한다(TRD 4.5). 값은 이 한 곳에서만 정한다(측정 시나리오도 이것을 읽는다).
-    /// PRD 7.2 「입력 멈춘 뒤 300 ms」 를 디바운스 뒤로 읽을지 마지막 키 뒤로 읽을지 정해지면 바꾼다(TSK-04-09).
+    /// PRD 7.2 「입력 멈춘 뒤 300 ms」 는 마지막 키 기준이라 디바운스가 한도의 일부만 쓰도록 100 ms 로 둔다(D-020, TSK-04-09).
     /// </summary>
-    public static readonly TimeSpan Debounce = TimeSpan.FromMilliseconds(300);
+    public static readonly TimeSpan Debounce = TimeSpan.FromMilliseconds(100);
 
     private static readonly ConditionalWeakTable<SqlEditorView, EditorDiagnostics> s_attached = new();
 

@@ -285,11 +285,17 @@ public sealed class ResultPageCache : IAsyncDisposable
         public static long EstimateBytes(ResultPage page)
         {
             long total = 64;
+            var seen = new HashSet<object>(ReferenceEqualityComparer.Instance);
             foreach (var col in page.Columns)
             {
                 total += 24 + 8L * col.Count;
                 foreach (var v in col)
                 {
+                    if (v is not null && !seen.Add(v))
+                    {
+                        continue; // PageValueSharer 가 같은 객체를 여러 칸이 가리키게 한 값은 한 번만 센다.
+                    }
+
                     total += v switch
                     {
                         null => 0,

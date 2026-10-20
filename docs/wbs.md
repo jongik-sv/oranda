@@ -1732,7 +1732,7 @@ dotnet, testhost, Oranda.App
 - depends: TSK-11-03
 - blocked-by: -
 - entry-point: -
-- note: 결정 D-023(2026-10-20): 「행당 200 bytes」 = 데이터 포함, PRD 6열 데이터셋 기준(PRD 7.2 반영). 출처 docs/itest/TSK-11-03.md DEF-06
+- note: 결정 D-023(2026-10-20): 「행당 200 bytes」 = 데이터 포함, PRD 6열 데이터셋 기준(PRD 7.2 반영). 출처 docs/itest/TSK-11-03.md DEF-06. 진행(2026-10-20): 페이지는 이미 열 지향이라 구조는 그대로 두고 저위험 절감만 넣었다 — PageValueSharer(페이지 안 같은 열의 반복 문자열·NUMBER(값·소수 자릿수 같을 때)·DATE 를 한 객체로 공유, 안 겹치는 열은 64개 보고 포기), 마지막 페이지 버퍼 TrimExcess, EstimateBytes 가 공유 객체를 한 번만 셈. 합성 6열 20만 행(Core.Tests ResultPageMemoryTests, GC.GetTotalMemory) 관리 힙 행당 489.9 → 355.8 bytes(−27%, 값이 많이 겹치는 데이터 기준). 데이터가 모두 고유하면 절감 없음. 안 한 것: object 박싱 제거(ResultPage 공개 계약 변경), 열 형식별 배열(편집 세션 영향) — 위험이 커서 보류. 남은 일: Windows Perf.Ui grid·memory 재측정
 
 #### PRD 요구사항
 - prd-ref: PRD 7.2 100만 행 그리드

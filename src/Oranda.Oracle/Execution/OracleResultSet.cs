@@ -103,6 +103,7 @@ internal sealed class OracleResultSet : IResultSet
         var buffers = _partial ?? NewBuffers();
         _partial = null;
         var count = buffers.Length == 0 ? 0 : buffers[0].Count;
+        var sharer = new PageValueSharer(buffers.Length);
         try
         {
             while (!_complete && count < _pageSize)
@@ -115,7 +116,7 @@ internal sealed class OracleResultSet : IResultSet
 
                 for (var c = 0; c < buffers.Length; c++)
                 {
-                    buffers[c].Add(OracleValues.ReadCell(_reader, c, Columns[c].Kind));
+                    buffers[c].Add(sharer.Share(c, OracleValues.ReadCell(_reader, c, Columns[c].Kind)));
                 }
 
                 count++;
@@ -126,6 +127,11 @@ internal sealed class OracleResultSet : IResultSet
             // 취소 뒤에도 커서는 이어진다(TSK-06-11 실측). 읽은 행을 버리면 다음 페이지부터 행이 빠지고 밀린다.
             _partial = buffers;
             throw;
+        }
+
+        foreach (var buffer in buffers)
+        {
+            buffer.TrimExcess();
         }
 
         Interlocked.Add(ref _rowsRead, count);
