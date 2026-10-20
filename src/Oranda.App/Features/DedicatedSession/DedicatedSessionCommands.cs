@@ -185,7 +185,7 @@ public static class DedicatedSessionCommands
         if (registry.IsShutDown)
         {
             // 접속하는 동안 앱을 끝내기 시작했다: 탭을 만들지 않고 세션을 바로 닫는다(종료 정리가 이미 끝났을 수 있다).
-            await session.DisposeAsync().ConfigureAwait(true);
+            await ConnectionService.CloseAsync(session).ConfigureAwait(true);
             log.AddMessage(MessageKind.Warning, "앱을 끝내는 중이라 전용 세션을 닫았습니다.");
             return null;
         }
@@ -198,7 +198,7 @@ public static class DedicatedSessionCommands
         }
         catch
         {
-            await session.DisposeAsync().ConfigureAwait(true); // 붙이지 못한 세션을 열어 두지 않는다
+            await ConnectionService.CloseAsync(session).ConfigureAwait(true); // 붙이지 못한 세션을 열어 두지 않는다
             throw;
         }
 

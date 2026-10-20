@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using Avalonia.Threading;
 using Oranda.App.Features.DedicatedSession;
 using Oranda.App.Features.Execution;
@@ -67,6 +68,7 @@ public sealed class DedicatedSessionTests
         Assert.Equal(answer == UncommittedChoice.Commit ? 1 : 0, session.Commits);
         Assert.Equal(answer == UncommittedChoice.Rollback ? 1 : 0, session.Rollbacks);
         Assert.Equal(closed, !rig.Host.Tabs.Contains(tab));
+        await rig.Registry.WhenReleasedAsync();
         Assert.Equal(closed, session.Disposed); // 닫힌 탭의 세션은 닫힌다(누수 없음)
         Assert.Equal(closed ? 0 : 1, rig.Registry.Count);
     });
@@ -80,6 +82,7 @@ public sealed class DedicatedSessionTests
         Assert.True(await rig.Host.CloseAsync(tab, default));
 
         Assert.Empty(rig.Dialogs.Asked);
+        await rig.Registry.WhenReleasedAsync();
         Assert.True(session.Disposed);
         Assert.Equal(0, rig.Registry.Count);
         Assert.False(rig.State.IsDedicated(session.Id));
@@ -114,6 +117,7 @@ public sealed class DedicatedSessionTests
 
         Assert.Equal([tab.Title], rig.Editor.SaveAsked);
         Assert.Equal(uncommittedAsked, rig.Dialogs.Asked.Count); // 저장 확인을 취소하면 커밋/롤백은 묻지 않는다
+        await rig.Registry.WhenReleasedAsync();
         Assert.Equal(closed, session.Disposed);
     });
 
@@ -128,6 +132,7 @@ public sealed class DedicatedSessionTests
         Assert.True(await rig.Host.CloseAsync(tab, default));
 
         Assert.Empty(rig.Dialogs.Asked);
+        await rig.Registry.WhenReleasedAsync();
         Assert.True(session.Disposed);
         Assert.Contains(rig.Notices, n => n.Contains(tab.Title, StringComparison.Ordinal) && n.Contains("롤백", StringComparison.Ordinal));
     });
@@ -188,6 +193,7 @@ public sealed class DedicatedSessionTests
 
         Assert.Empty(rig.Editor.SaveAsked);
         Assert.Single(rig.Dialogs.Asked);
+        await rig.Registry.WhenReleasedAsync();
         Assert.Equal(exit, dirty.Disposed);
         Assert.Equal(exit, pending.Disposed);
         Assert.Equal(exit ? 0 : 2, rig.Registry.Count);
@@ -232,6 +238,7 @@ public sealed class DedicatedSessionTests
         Assert.Equal(2, asked);
         Assert.DoesNotContain(dedicatedDoc, dock.Documents);
         Assert.DoesNotContain(tab, host.Tabs);
+        await registry.WhenReleasedAsync();
         Assert.True(session.Disposed);
         Assert.Equal(0, registry.Count);
     });
@@ -345,6 +352,7 @@ public sealed class DedicatedSessionTests
         var tab = await DedicatedSessionCommands.NewTabAsync(rig.Registry, _ => Task.FromResult<ISession?>(session), rig.Log, default);
 
         Assert.Null(tab);
+        await rig.Registry.WhenReleasedAsync();
         Assert.True(session.Disposed);
         Assert.Equal(before, rig.Host.Tabs.Count);
         Assert.Equal(0, rig.Registry.Count);
@@ -378,7 +386,50 @@ public sealed class DedicatedSessionTests
         h.Window.Close(); // 다음 닫기는 확인 없이 끝낸다
         await HeadlessHost.WaitUntil(() => !h.Window.IsVisible);
         Assert.Equal(1, asked);
+        await registry.WhenReleasedAsync();
         Assert.True(session.Disposed);
+    });
+
+    [Fact]
+    public Task Release_does_not_block_ui_thread_on_a_stuck_dispose() => Ui.Run(async () =>
+    {
+        using var gate = new ManualResetEventSlim(false);
+        var rig = new DedicatedRig();
+        var (tab, session) = rig.NewDedicatedTab();
+        session.DisposeGate = gate;
+
+        var clock = Stopwatch.StartNew();
+        var release = rig.Registry.ReleaseAsync(tab);
+
+        Assert.True(clock.Elapsed < TimeSpan.FromSeconds(3), $"UI 스레드가 {clock.Elapsed} 동안 막혔다");
+        Assert.Null(rig.Registry.SessionOf(tab)); // 탭에서는 이미 떨어졌다
+        Assert.False(release.IsCompleted);
+
+        gate.Set(); // 막힌 Dispose 가 백그라운드에서 나중에 끝난다
+        await release.WaitAsync(TimeSpan.FromSeconds(3));
+        await rig.Registry.WhenReleasedAsync();
+        Assert.True(session.Disposed);
+    });
+
+    [Fact]
+    public Task Exit_cleanup_runs_all_stuck_disposes_in_parallel_without_blocking_ui() => Ui.Run(async () =>
+    {
+        using var gate = new ManualResetEventSlim(false);
+        var rig = new DedicatedRig();
+        var (_, sa) = rig.NewDedicatedTab();
+        var (_, sb) = rig.NewDedicatedTab();
+        sa.DisposeGate = gate;
+        sb.DisposeGate = gate;
+
+        var clock = Stopwatch.StartNew();
+        var all = rig.Registry.ReleaseAllAsync();
+
+        Assert.True(clock.Elapsed < TimeSpan.FromSeconds(3), $"UI 스레드가 {clock.Elapsed} 동안 막혔다");
+        Assert.False(all.IsCompleted);
+
+        gate.Set();
+        await all.WaitAsync(TimeSpan.FromSeconds(3));
+        Assert.True(sa.Disposed && sb.Disposed);
     });
 
     [Fact]
@@ -499,8 +550,12 @@ internal sealed class DedicatedFakeSession(ConnectionProfile profile) : ISession
         return Task.CompletedTask;
     }
 
+    /// <summary>설정하면 DisposeAsync 가 이 신호를 받을 때까지 호출 스레드를 막는다(응답 없는 서버의 ODP Dispose 흉내). 안전장치로 10초 뒤엔 풀린다.</summary>
+    public ManualResetEventSlim? DisposeGate { get; set; }
+
     public ValueTask DisposeAsync()
     {
+        DisposeGate?.Wait(TimeSpan.FromSeconds(10));
         Disposed = true;
         State = SessionState.Closed;
         return ValueTask.CompletedTask;

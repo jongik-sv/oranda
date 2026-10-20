@@ -17,6 +17,7 @@ internal sealed class OracleSession : ISession
 
     private readonly IEventBus _events;
     private readonly Action<Guid>? _onDisposed;
+    private readonly Func<ValueTask> _closeConnection;
     private readonly Timer? _keepAlive;
     private readonly SemaphoreSlim _gate = new(1, 1);
     private int _state = (int)SessionState.Idle;
@@ -24,9 +25,11 @@ internal sealed class OracleSession : ISession
     private int _disposed;
 
     public OracleSession(Guid id, ConnectionProfile profile, ServerInfo server, SessionPurpose purpose, string dbKey,
-                         OracleConnection connection, IEventBus events, Action<Guid>? onDisposed = null)
+                         OracleConnection connection, IEventBus events, Action<Guid>? onDisposed = null,
+                         Func<ValueTask>? closeConnection = null)
     {
         _onDisposed = onDisposed;
+        _closeConnection = closeConnection ?? connection.DisposeAsync;
         Id = id;
         Profile = profile;
         Server = server;
@@ -116,10 +119,22 @@ internal sealed class OracleSession : ISession
         _keepAlive?.Dispose();
         Connection.StateChange -= OnConnectionStateChange;
         Volatile.Write(ref _state, (int)SessionState.Closed);
-        await Connection.DisposeAsync();
-        _gate.Dispose();
+
+        // 상태·목록·이벤트를 먼저 반영한다. 연결 닫기는 서버가 응답하지 않으면 끝나지 않으므로(UI 스레드 정지 원인) 그 뒤에 떼어 낸다.
         _onDisposed?.Invoke(Id);
         _events.Publish(new SessionClosed(Id));
+        var closed = true;
+        try
+        {
+            closed = await SessionCloser.RunAsync(_closeConnection, "세션 " + Id.ToString("N")[..8]).ConfigureAwait(false);
+        }
+        finally
+        {
+            if (closed)
+            {
+                _gate.Dispose(); // 닫기가 아직 도는 중이면 진행 중인 작업이 _gate 를 놓을 수 있으므로 그대로 둔다
+            }
+        }
     }
 
     private async Task ExecAsync(string sql, CancellationToken ct)

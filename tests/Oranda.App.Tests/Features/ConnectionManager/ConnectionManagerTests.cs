@@ -64,8 +64,12 @@ internal sealed class StubSession(ConnectionProfile profile, ServerInfo server, 
 
     public Task RollbackAsync(CancellationToken ct) => Task.CompletedTask;
 
+    /// <summary>설정하면 DisposeAsync 가 이 신호를 받을 때까지 호출 스레드를 막는다(응답 없는 서버의 ODP Dispose 흉내). 안전장치로 10초 뒤엔 풀린다.</summary>
+    public ManualResetEventSlim? DisposeGate { get; set; }
+
     public ValueTask DisposeAsync()
     {
+        DisposeGate?.Wait(TimeSpan.FromSeconds(10));
         State = SessionState.Closed;
         events.Publish(new SessionClosed(Id));
         return ValueTask.CompletedTask;
@@ -83,6 +87,9 @@ internal sealed class StubSessionManager(IEventBus events) : ISessionManager
 
     public List<(ConnectionProfile Profile, string Password)> Calls { get; } = [];
 
+    /// <summary>설정하면 이후 열리는 세션의 DisposeAsync 가 이 신호를 기다린다.</summary>
+    public ManualResetEventSlim? DisposeGate { get; set; }
+
     public Task<ISession> OpenAsync(ConnectionProfile profile, SecureCredential credential, SessionPurpose purpose, CancellationToken ct)
     {
         var password = credential.Secret.ToString();
@@ -94,7 +101,7 @@ internal sealed class StubSessionManager(IEventBus events) : ISessionManager
 
         var info = new ServerInfo("23.26.0.0.0", "FREE", "localhost", "FREEPDB1", "FREE", "FREEPDB1", true, 1,
             new ServerCapabilities(false, true, true, false, false), DbUniqueName: "FREE", SessionUser: profile.User.ToUpperInvariant());
-        var session = new StubSession(profile, info, events);
+        var session = new StubSession(profile, info, events) { DisposeGate = DisposeGate };
         _sessions.Add(session);
         return Task.FromResult<ISession>(session);
     }

@@ -52,7 +52,8 @@ internal sealed class OracleSessionManager : ISessionManager
         }
         catch
         {
-            await connection.DisposeAsync();
+            // 열다 실패한 연결도 UI 스레드에서 직접 닫지 않는다(응답 없는 서버면 Dispose 가 끝나지 않는다).
+            await SessionCloser.RunAsync(connection.DisposeAsync, "열다 실패한 연결").ConfigureAwait(false);
             throw;
         }
     }

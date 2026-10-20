@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using Avalonia;
 using Avalonia.Threading;
+using Oranda.App.Features.ConnectionManager;
 using Oranda.App.Features.Execution;
 using Oranda.App.Features.SqlEditor;
 using Oranda.Core.Events;
@@ -126,6 +127,9 @@ public sealed class DedicatedSessionRegistry
         return task;
     }
 
+    /// <summary>지금 닫는 중인 세션이 모두 닫힐 때까지 기다린다(닫기는 UI 스레드 밖에서 도므로 시험이 닫힘을 확인할 때 쓴다).</summary>
+    internal Task WhenReleasedAsync() => Task.WhenAll(_releasing.ToList());
+
     private async Task ForgetWhenDoneAsync(Task task)
     {
         try
@@ -142,7 +146,7 @@ public sealed class DedicatedSessionRegistry
     {
         try
         {
-            await session.DisposeAsync().ConfigureAwait(true);
+            await ConnectionService.CloseAsync(session, Notify).ConfigureAwait(true);
             if (broken)
             {
                 Notify(lost

@@ -403,13 +403,13 @@ public sealed class ConnectionService : IConnectionService, IDisposable
         var previous = Interlocked.Exchange(ref _active, session);
         Volatile.Write(ref _broken, false);
         LastProfile = profile;
-        if (previous is not null)
-        {
-            await previous.DisposeAsync().ConfigureAwait(false);
-        }
-
         UpdateKeys();
         ActiveSessionChanged?.Invoke(this, EventArgs.Empty);
+        if (previous is not null)
+        {
+            await CloseAsync(previous).ConfigureAwait(false);
+        }
+
         await RecordConnectedAsync(profile, ct).ConfigureAwait(false);
         return new ConnectOutcome(ConnectStatus.Connected, $"{profile.Name} 에 접속했습니다({VersionText(session.Server)}).", session, session.Server.Version);
     }
@@ -419,13 +419,24 @@ public sealed class ConnectionService : IConnectionService, IDisposable
         ct.ThrowIfCancellationRequested();
         var previous = Interlocked.Exchange(ref _active, null);
         Volatile.Write(ref _broken, false);
-        if (previous is not null)
-        {
-            await previous.DisposeAsync().ConfigureAwait(false);
-        }
 
+        // 접속 끊기는 화면에 먼저 반영하고 세션은 그 뒤에 닫는다. 닫기는 UI 스레드 밖에서 시간 제한을 두고 기다린다.
         UpdateKeys();
         ActiveSessionChanged?.Invoke(this, EventArgs.Empty);
+        if (previous is not null)
+        {
+            await CloseAsync(previous).ConfigureAwait(false);
+        }
+    }
+
+    /// <summary>
+    /// 세션 닫기를 호출한 스레드(UI)에서 떼어 내고 <see cref="SessionCloser.Timeout"/> 까지만 기다린다.
+    /// ODP.NET 의 Dispose 는 서버가 응답하지 않으면 끝나지 않으므로 UI 스레드에서 직접 기다리지 않는다.
+    /// </summary>
+    internal static Task CloseAsync(ISession session, Action<string>? warn = null, TimeSpan? timeout = null)
+    {
+        ArgumentNullException.ThrowIfNull(session);
+        return SessionCloser.RunAsync(session.DisposeAsync, "세션 " + session.Id.ToString("N")[..8], warn, timeout);
     }
 
     public async Task<ConnectOutcome> ReconnectAsync(string? password, CancellationToken ct)
