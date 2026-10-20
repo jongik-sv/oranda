@@ -252,8 +252,30 @@ TRD 4.11 대로 앱 DTO 다(Core 가 아니라 `Oranda.App`). Dock.Avalonia 의 
 | `tabs[].selectionStart` | `TextPosition` | ○ | null | 선택이 있을 때만 |
 | `tabs[].scrollLine` | int | ○ | 1 | 맨 위에 보이던 줄 |
 | `tabs[].connectionProfileId` | Guid | ○ | null | 탭이 쓰던 접속. 열 때 자동 접속하지 않고 「다시 접속」 버튼만 둔다 |
+| `tabs[].binds` | `WorkspaceBind[]` | ○ | null | 탭의 SQL 이 참조하는 바인드 변수의 값(EXEC-03). SQL 에 처음 나온 순서. 바인드 변수 창에 없는 이름, 기본값(빈 값·`Varchar2`·`In`)인 줄, 이름에 `pass`·`pwd`·`secret`·`token` 이 든 바인드는 넣지 않는다. 탭을 열면 이 값으로 창의 줄을 만들거나 덮어쓴다 |
+| `tabs[].binds[].name` | string | ● | | 콜론 없는 이름 |
+| `tabs[].binds[].type` | `BindDataType` | ○ | `"Varchar2"` | `Varchar2`·`NVarchar2`·`FixedChar`·`Number`·`BinaryDouble`·`Date`·`Timestamp`·`TimestampTz`·`Clob`·`Blob`·`Raw`·`Boolean`·`Json`·`RefCursor` |
+| `tabs[].binds[].direction` | `BindDirection` | ○ | `"In"` | `In`·`Out`·`InOut` |
+| `tabs[].binds[].value` | string | ○ | `""` | 값 칸의 글자 그대로. NULL 이면 빈 문자열 |
+| `tabs[].binds[].isNull` | bool | ○ | false | 값이 NULL(값 칸이 빔) |
 | `sourcePath` | string | ○ | null | 이 작업 공간을 연 Markdown 작업 공간 파일(.md)·MyBatis 매퍼(.xml)의 절대 경로. 같은 파일을 다시 열면 이 작업 공간으로 옮겨 간다 |
 | `layout` | string | ○ | `"layout.json"` | 쓸 레이아웃 파일(`{data}` 상대). 1.0 은 항상 `layout.json` |
+
+`tabs[].binds` 는 선택 필드 추가라 `schemaVersion` 은 1 그대로다(4.1). 이 필드가 없는 옛 파일은 바인드 값 없이 읽힌다. 자동 저장은 탭의 바인드 값(이름·형식·방향·값·NULL)이 바뀌어도 쓴다: 값만 바꾸고 비정상 종료해도 복구하면 그 값이 돌아온다.
+
+**.sql 파일 끝 바인드 블록.** SQL 편집기가 `.sql` 파일을 저장할 때(저장·다른 이름으로 저장·모두 저장) 위와 같은 규칙으로 고른 값을 본문 끝에 `--` 줄 주석 블록으로 붙인다. MyBatis(.xml)·Markdown 작업 공간(.md)·PL/SQL 편집기 저장과 다른 확장자에는 붙이지 않는다.
+
+```
+select * from emp where empno = :empno;
+
+-- @oranda-binds v1
+-- {"name":"EMPNO","type":"Number","direction":"In","value":"1002","isNull":false}
+```
+
+- 첫 줄은 고유 표지 `-- @oranda-binds v1`, 다음 줄마다 `-- ` 뒤에 `WorkspaceBind` JSON 한 개(필드 이름·열거형 표기는 `tabs[].binds[]` 와 같다). JSON 은 기본 이스케이프라 줄바꿈·따옴표·`&`·비 ASCII 글자가 `\uXXXX` 꼴이 되어 블록은 ASCII 한 줄씩이다(cp949·UTF-16 파일에서도 왕복하고, 주석 안의 `&` 도 치환 변수로 묻는 SQL*Plus 에 걸리지 않는다).
+- 본문과 표지 사이에는 본문 끝 줄바꿈 유무와 상관없이 줄바꿈 하나를 넣고(본문의 줄바꿈 종류를 따른다. 위 예는 본문이 줄바꿈으로 끝나서 빈 줄이 하나 생겼다), 뗄 때 그 하나만 뗀다. 그래서 블록 앞 본문은 인코딩·줄바꿈 종류·끝 줄바꿈까지 바이트 그대로 돌아온다.
+- 파일을 열면(작업 공간 복원에서 파일을 다시 읽을 때도) 표지 줄부터 파일 끝까지 모든 줄이 `-- ` 로 시작하고 JSON 으로 읽히는 경우에만 블록을 떼어 편집기에는 본문만 보이고 값은 바인드 변수 창에 넣는다(작업 공간에 남은 값이 있으면 그것이 이긴다). 하나라도 어긋나면 떼지 않는다. 형식·방향 이름은 대소문자·공백·밑줄을 가리지 않고 읽는다(`NUMBER`, `IN OUT`).
+- 편집기 글에는 블록이 없으므로 몇 번을 저장해도 블록은 하나다. 저장할 값이 없으면 블록을 쓰지 않아 예전과 같은 바이트가 된다. 바인드 값만 바꾸면 탭은 변경됨(`*`)이 되지 않는다(「모두 저장」은 변경된 탭만 쓴다).
 
 ---
 
@@ -431,14 +453,15 @@ connections.json ◀────── credentialRef 문자열만 저장 ("orand
 | `formatter/*.json` | 없음 | 서식 옵션만 | 시험 ① |
 | `keymaps/*.json` | 없음 | 명령 ID·키만 | 시험 ① |
 | `layout.json` | 없음 | 좌표·도구 ID만 | 시험 ① |
-| `workspaces/*.json`, `autosave/*.json` | `tabs[].content`(사용자가 쓴 SQL 본문) | 사용자 작성 내용이므로 가리지 않는다. 대신 접속 비밀번호를 앱이 넣는 경로는 없다 | 시험 ② |
+| `workspaces/*.json`, `autosave/*.json` | `tabs[].content`(사용자가 쓴 SQL 본문), `tabs[].binds[].value`(바인드 값) | 사용자 작성 내용이므로 가리지 않는다. 대신 접속 비밀번호를 앱이 넣는 경로는 없다. 이름에 `pass`·`pwd`·`secret`·`token` 이 든 바인드는 저장하지 않는다(이력 가림과 같은 규칙, Core `SensitiveBindNames`) | 시험 ② + 바인드 저장 시험 |
+| SQL 편집기의 `.sql` 파일(사용자 폴더) | 끝 바인드 블록(2.6) | 위와 같은 규칙으로 비밀로 보이는 바인드는 넣지 않는다 | 바인드 저장 시험 |
 | `oranda.db` `history.sql_text` | `IDENTIFIED BY …`, `CONNECT u/p@…` 같은 문장 | 기록 전 5.3 가림 규칙 적용 | 시험 ③ |
 | `oranda.db` `history.binds_json` | 바인드 값 | 기본 끔(`history.saveBindValues=false`). 켜도 이름이 `pass`·`pwd`·`secret`·`token` 을 포함하는 바인드는 `***` | 시험 ③ |
 | `oranda.db` `history.error_message` | 서버 오류문 | 서버가 비밀번호를 오류문에 넣지 않음. 첫 줄·1,000자 제한 | — |
 | `oranda.db` `meta_*` | 서버 메타데이터(소스 코드 일부일 수 있음) | 비밀번호 아님. DB 링크 비밀번호 열(`*_LINKS.PASSWORD`)은 조회 대상에서 뺀다 | — |
 | `credentials/*.bin` | **암호화된 비밀** | DPAPI 사용자 범위. 다른 사용자·다른 PC에서 못 풂 | — |
 | `logs/` | 연결 문자열·바인드 | TRD 9 Serilog 마스킹 필터(범위 밖, 같은 가림 규칙 공유) | 별도 Task |
-| 바인드 마지막 값(EXEC-03) | 바인드 값 | 세션 메모리에만 기억. 디스크에 쓰지 않는다 | — |
+| 바인드 마지막 값(EXEC-03) | 바인드 값 | 탭의 SQL 이 참조하는 이름의 값만 작업 공간 `tabs[].binds` 와 `.sql` 끝 블록에 저장한다(2.6). 비밀로 보이는 이름은 빼고, 나머지 목록은 메모리에만 있다 | 바인드 저장 시험 |
 
 자동 검사(PRD 9.2 「비밀번호가 설정 파일·로그 어디에도 평문으로 없다」):
 
