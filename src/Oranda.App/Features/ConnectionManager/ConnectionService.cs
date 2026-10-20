@@ -117,6 +117,12 @@ public interface IConnectionService
     /// 앱이 풀어 놓은 지갑 폴더(<c>wallets/{id}</c>)를 쓰면 사본의 폴더로 복사한다(원본을 지워도 사본이 접속되게).
     /// </summary>
     Task<ConnectionProfile> DuplicateProfileAsync(Guid id, CancellationToken ct);
+
+    /// <summary>
+    /// 폴더 목록·접속의 폴더(<c>Group</c>)를 한 번에 바꿔 저장한다(<see cref="ConnectionFolders"/> 의 작업을 넘긴다).
+    /// 비밀번호·안전 저장소 항목은 건드리지 않는다. 읽기 전용 파일이면 <see cref="ConnectionValidationException"/>.
+    /// </summary>
+    Task UpdateFoldersAsync(Func<ConnectionsDocument, ConnectionsDocument> edit, CancellationToken ct);
 }
 
 /// <summary>비밀번호 변경 도구(ODP.NET <c>OpenWithNewPassword</c>). 시험은 가짜로 바꾼다.</summary>
@@ -545,6 +551,26 @@ public sealed class ConnectionService : IConnectionService, IDisposable
         return int.TryParse(head, System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture, out var major)
             ? major >= 23 ? "26ai" : major + "c"
             : null;
+    }
+
+    public async Task UpdateFoldersAsync(Func<ConnectionsDocument, ConnectionsDocument> edit, CancellationToken ct)
+    {
+        ArgumentNullException.ThrowIfNull(edit);
+        await _gate.WaitAsync(ct).ConfigureAwait(false);
+        try
+        {
+            var doc = await _store.LoadAsync(ct).ConfigureAwait(false);
+            if (doc.IsReadOnly)
+            {
+                throw new ConnectionValidationException("connections.json 이(가) 읽기 전용이라 폴더를 바꾸지 않는다. " + doc.Notice);
+            }
+
+            await _store.SaveAsync(edit(doc.Value), ct).ConfigureAwait(false);
+        }
+        finally
+        {
+            _gate.Release();
+        }
     }
 
     public async Task<ConnectionProfile> DuplicateProfileAsync(Guid id, CancellationToken ct)

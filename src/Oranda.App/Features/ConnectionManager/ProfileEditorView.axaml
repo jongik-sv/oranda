@@ -44,7 +44,9 @@
       <TextBlock Grid.Row="0" Text="이름" Classes.error="{Binding NameMissing}" />
       <TextBox x:Name="NameBox" Grid.Row="0" Grid.Column="1" Text="{Binding Name}" Classes.missing="{Binding NameMissing}" AutomationProperties.Name="이름" />
       <TextBlock Grid.Row="1" Text="그룹" />
-      <TextBox x:Name="GroupBox" Grid.Row="1" Grid.Column="1" Text="{Binding Group}" PlaceholderText="폴더 이름(선택)" AutomationProperties.Name="그룹" />
+      <!-- 기존 폴더를 고르거나 「부모/자식」 형태로 직접 입력한다. -->
+      <AutoCompleteBox x:Name="GroupBox" Grid.Row="1" Grid.Column="1" Text="{Binding Group}" ItemsSource="{Binding KnownGroups}"
+                       MinimumPrefixLength="0" FilterMode="Contains" PlaceholderText="폴더 경로(선택, 하위는 부모/자식)" AutomationProperties.Name="그룹" />
       <TextBlock Grid.Row="2" Text="환경" />
       <Grid Grid.Row="2" Grid.Column="1" ColumnDefinitions="*,Auto,*" ColumnSpacing="12">
         <ComboBox x:Name="EnvironmentBox" Grid.Column="0" HorizontalAlignment="Stretch"

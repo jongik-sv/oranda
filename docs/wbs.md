@@ -736,7 +736,7 @@ dotnet, testhost, Oranda.App
 - depends: TSK-02-05, TSK-03-01, TSK-03-02, TSK-03-03
 - blocked-by: -
 - entry-point: 메뉴 > 파일 > 접속 (Ctrl+Shift+O)
-- note: -
+- note: 2026-10-20 접속 폴더(빈 폴더 저장·하위 폴더·끌어 놓기·이름 바꾸기·삭제) 추가, PRD CONN-17
 
 #### PRD 요구사항
 - prd-ref: PRD CONN-01, CONN-02, CONN-03, CONN-04, CONN-06, CONN-08

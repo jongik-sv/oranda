@@ -175,6 +175,10 @@ public sealed partial class ProfileEditorViewModel : ViewModelBase
     [ObservableProperty]
     private string _group = string.Empty;
 
+    /// <summary>그룹 칸이 제안하는 기존 폴더 경로(접속 관리자가 채운다). 목록에 없는 경로를 직접 입력해도 된다.</summary>
+    [ObservableProperty]
+    private IReadOnlyList<string> _knownGroups = [];
+
     [ObservableProperty]
     private ConnectionEnvironment _environment = ConnectionEnvironment.Development;
 

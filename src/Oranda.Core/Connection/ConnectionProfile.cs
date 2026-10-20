@@ -76,4 +76,10 @@ public sealed record ConnectionsDocument
     public int SchemaVersion { get; init; } = Settings.SchemaVersions.Connections;
 
     public IReadOnlyList<ConnectionProfile> Profiles { get; init; } = [];
+
+    /// <summary>
+    /// 접속이 하나도 없어도 남기는 폴더 경로 목록(「부모/자식」). 접속의 <c>Group</c> 이 가리키는 폴더는 여기 없어도 있는 것으로 본다.
+    /// 이전 형식 파일에는 없고, 없으면 빈 목록이다.
+    /// </summary>
+    public IReadOnlyList<string> Folders { get; init; } = [];
 }

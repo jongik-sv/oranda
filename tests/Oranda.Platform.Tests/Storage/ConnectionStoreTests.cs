@@ -40,6 +40,31 @@ public sealed class ConnectionStoreTests : IDisposable
     }
 
     [Fact]
+    public async Task Empty_folders_survive_save_and_reload_and_groups_are_normalized()
+    {
+        using var store = NewStore();
+        await store.SaveAsync(new ConnectionsDocument { Folders = ["빈 폴더", " a / b ", "A/B"], Profiles = [new ConnectionProfile("p", "scott", "db:1521/s", Group: " dev / team ")] }, CancellationToken.None);
+
+        var loaded = (await store.LoadAsync(CancellationToken.None)).Value;
+        Assert.Equal(["빈 폴더", "a/b"], loaded.Folders.ToArray());
+        Assert.Equal("dev/team", loaded.Profiles[0].Group);
+    }
+
+    [Fact]
+    public async Task File_written_before_folders_existed_still_loads_with_no_folders()
+    {
+        File.WriteAllText(
+            Path.Combine(_dir, "connections.json"),
+            """{"schemaVersion":1,"profiles":[{"name":"old","user":"scott","dataSource":"db:1521/s","group":"ADB"}]}""");
+        using var store = NewStore();
+
+        var loaded = (await store.LoadAsync(CancellationToken.None)).Value;
+        Assert.Empty(loaded.Folders);
+        Assert.Equal("ADB", Assert.Single(loaded.Profiles).Group);
+        Assert.Equal(["ADB"], ConnectionFolders.All(loaded).ToArray());
+    }
+
+    [Fact]
     public async Task Save_assigns_ids_and_round_trips_all_fields()
     {
         using var store = NewStore();

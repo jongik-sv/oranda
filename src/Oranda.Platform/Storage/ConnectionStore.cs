@@ -128,7 +128,7 @@ internal sealed class ConnectionStore : IConnectionStore, IDisposable
                 notice = notice is null ? text : notice + Environment.NewLine + text;
             }
 
-            return new StoredDocument<ConnectionsDocument>(result.Value with { Profiles = profiles }, result.IsReadOnly) { Notice = notice };
+            return new StoredDocument<ConnectionsDocument>(result.Value with { Profiles = profiles, Folders = ConnectionFolders.Distinct(result.Value.Folders) }, result.IsReadOnly) { Notice = notice };
         }
         finally
         {
@@ -159,7 +159,7 @@ internal sealed class ConnectionStore : IConnectionStore, IDisposable
                 return;
             }
 
-            var normalized = new ConnectionsDocument { SchemaVersion = SchemaVersions.Connections, Profiles = profiles };
+            var normalized = new ConnectionsDocument { SchemaVersion = SchemaVersions.Connections, Profiles = profiles, Folders = ConnectionFolders.Distinct(document.Folders) };
             await JsonDocumentFile.WriteAsync(_paths.ConnectionsFile, normalized, OrandaJsonContext.Default.ConnectionsDocument, ct).ConfigureAwait(false);
         }
         finally
@@ -168,9 +168,10 @@ internal sealed class ConnectionStore : IConnectionStore, IDisposable
         }
     }
 
-    /// <summary>keepAliveSeconds 1~59 → 60 (CONN-12). 음수는 0(끔).</summary>
+    /// <summary>keepAliveSeconds 1~59 → 60 (CONN-12). 음수는 0(끔). 그룹(폴더 경로)은 단계마다 공백을 다듬는다.</summary>
     internal static ConnectionProfile NormalizeProfile(ConnectionProfile p) => p with
     {
+        Group = ConnectionFolders.Normalize(p.Group),
         KeepAliveSeconds = p.KeepAliveSeconds switch
         {
             <= 0 => 0,

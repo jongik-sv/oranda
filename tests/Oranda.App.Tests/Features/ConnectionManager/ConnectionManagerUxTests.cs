@@ -334,12 +334,19 @@ public sealed class ConnectionManagerUxTests
             var menu = tree.ContextMenu!;
             menu.Open(tree);
             Dispatcher.UIThread.RunJobs();
-            Assert.Equal(["접속", "복제", "삭제", "연결 문자열 복사"], menu.Items.OfType<MenuItem>().Select(m => (string)m.Header!));
-            Assert.All(menu.Items.OfType<MenuItem>(), m => Assert.False(m.IsEffectivelyEnabled));
+            Assert.Equal(
+                ["접속", "복제", "삭제", "새 폴더", "폴더 이름 바꾸기", "폴더로 이동…", "연결 문자열 복사"],
+                menu.Items.OfType<MenuItem>().Select(m => (string)m.Header!));
 
+            // 고른 줄이 없으면 「새 폴더」 만 쓸 수 있다.
+            Assert.Equal(["새 폴더"], menu.Items.OfType<MenuItem>().Where(m => m.IsEffectivelyEnabled).Select(m => (string)m.Header!));
+
+            // 접속을 고르면 폴더 이름 바꾸기만 꺼진다(폴더로 이동은 폴더 선택 창을 지정해야 켜진다).
+            vm.AskFolder = (_, _) => Task.FromResult<FolderChoice?>(null);
             vm.Selected = vm.AllNodes().Single(n => n.Title == "ft-dev");
             Dispatcher.UIThread.RunJobs();
-            Assert.All(menu.Items.OfType<MenuItem>(), m => Assert.True(m.IsEffectivelyEnabled));
+            Assert.All(menu.Items.OfType<MenuItem>().Where(m => m.Name != "MenuRenameFolder"), m => Assert.True(m.IsEffectivelyEnabled));
+            Assert.False(menu.Items.OfType<MenuItem>().Single(m => m.Name == "MenuRenameFolder").IsEffectivelyEnabled);
             Assert.Same(vm.DuplicateCommand, menu.Items.OfType<MenuItem>().Single(m => m.Name == "MenuDuplicate").Command);
             Assert.True(window.FindControl<Button>("DuplicateButton")!.IsEffectivelyEnabled);
             menu.Close();

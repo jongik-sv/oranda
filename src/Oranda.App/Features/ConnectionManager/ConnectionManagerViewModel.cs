@@ -30,13 +30,33 @@ public sealed partial class ConnectionTreeNode : ObservableObject
     [ObservableProperty]
     private bool _isModified;
 
-    public ConnectionTreeNode(string title, ConnectionProfile? profile = null)
+    /// <summary>폴더 이름을 고치는 중(트리 줄이 글자 입력칸으로 바뀐다).</summary>
+    [ObservableProperty]
+    private bool _isEditing;
+
+    /// <summary>폴더 이름 입력칸의 글자.</summary>
+    [ObservableProperty]
+    private string _editText = string.Empty;
+
+    /// <summary>끌어 놓을 대상으로 강조 중인 폴더 줄.</summary>
+    [ObservableProperty]
+    private bool _isDropTarget;
+
+    public ConnectionTreeNode(string title, ConnectionProfile? profile = null, string? path = null)
     {
         Title = title;
         Profile = profile;
+        Path = path ?? string.Empty;
     }
 
+    /// <summary>폴더면 이름(경로의 마지막 단계), 접속이면 접속 이름.</summary>
     public string Title { get; }
+
+    /// <summary>폴더면 전체 경로(「부모/자식」), 접속이면 빈 글자.</summary>
+    public string Path { get; }
+
+    /// <summary>폴더면 하위 폴더까지 포함한 접속 수(트리를 채운 뒤 정한다).</summary>
+    public int ProfileCount { get; set; }
 
     /// <summary>접속이면 그 프로필, 폴더면 null.</summary>
     public ConnectionProfile? Profile { get; }
@@ -71,7 +91,7 @@ public sealed partial class ConnectionTreeNode : ObservableObject
         ? Title
         : Profile.Environment == ConnectionEnvironment.Production ? $"{Title}, 운영 접속" : $"{Title}, {EnvironmentLabel}";
 
-    public string Subtitle => Profile is null ? $"({Children.Count})" : $"{Profile.User}@{Profile.DataSource}";
+    public string Subtitle => Profile is null ? $"({ProfileCount})" : $"{Profile.User}@{Profile.DataSource}";
 
     /// <summary>마지막 접속 시각(짧게). 접속한 적이 없거나 폴더면 빈 글자.</summary>
     public string LastConnectedText => Profile?.LastConnectedAt is { } at ? FormatWhen(at, DateTimeOffset.Now) : string.Empty;
@@ -97,8 +117,8 @@ public sealed partial class ConnectionManagerViewModel : ViewModelBase
     private readonly IConnectionService _service;
 
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(HasSelection))]
-    [NotifyCanExecuteChangedFor(nameof(DeleteCommand), nameof(ConnectCommand), nameof(DuplicateCommand), nameof(CopyConnectionStringCommand))]
+    [NotifyPropertyChangedFor(nameof(HasSelection), nameof(HasAnySelection))]
+    [NotifyCanExecuteChangedFor(nameof(DeleteCommand), nameof(ConnectCommand), nameof(DuplicateCommand), nameof(CopyConnectionStringCommand), nameof(RenameFolderCommand), nameof(MoveToFolderCommand))]
     private ConnectionTreeNode? _selected;
 
     [ObservableProperty]
@@ -128,6 +148,9 @@ public sealed partial class ConnectionManagerViewModel : ViewModelBase
 
     /// <summary>마지막으로 읽은 프로필 전체(찾기·정렬은 이 목록으로 트리를 다시 만든다).</summary>
     private List<ConnectionProfile> _profiles = [];
+
+    /// <summary>마지막으로 읽은 폴더 경로 전체(빈 폴더와 접속이 가리키는 폴더, 상위 폴더 포함).</summary>
+    private IReadOnlyList<string> _allFolders = [];
 
     private Func<Task<bool>>? _importConnections;
 
@@ -164,6 +187,15 @@ public sealed partial class ConnectionManagerViewModel : ViewModelBase
     public Func<string, Task<bool>>? Confirm { get; set; }
 
     /// <summary>
+    /// 「폴더로 이동…」 에서 폴더를 고른다(고를 수 있는 폴더 경로 목록, 지금 폴더 → 고른 결과, 취소하면 null).
+    /// 지정하지 않으면 이동하지 않는다.
+    /// </summary>
+    public Func<IReadOnlyList<string>, string?, Task<FolderChoice?>>? AskFolder { get; set; }
+
+    /// <summary>폴더 이름 편집을 시작했다(화면이 입력칸에 초점을 준다).</summary>
+    public event EventHandler<ConnectionTreeNode>? FolderEditRequested;
+
+    /// <summary>
     /// 접속 가져오기(「파일 &gt; 접속 가져오기」 와 같은 흐름: 파일 고르기 → 저장 → 결과 알림). 창을 띄운 쪽이 채운다.
     /// 하나라도 가져왔으면 true 를 돌려주고, 그러면 목록을 다시 읽는다.
     /// </summary>
@@ -191,6 +223,12 @@ public sealed partial class ConnectionManagerViewModel : ViewModelBase
 
     public bool HasSelection => Selected?.Profile is not null;
 
+    /// <summary>접속 또는 폴더가 골라져 있다(삭제·이동 대상).</summary>
+    public bool HasAnySelection => Selected is not null;
+
+    /// <summary>폴더 경로 전체(편집기 그룹 칸과 「폴더로 이동」 목록이 쓴다).</summary>
+    public IReadOnlyList<string> AllFolders => _allFolders;
+
     public bool StatusIsError => StatusKind == StatusKind.Error;
 
     /// <summary>접속에 성공한 마지막 결과(시험·호출자용).</summary>
@@ -200,7 +238,7 @@ public sealed partial class ConnectionManagerViewModel : ViewModelBase
     {
         var doc = await _service.LoadAsync(ct).ConfigureAwait(true);
         FileNotice = doc.Notice;
-        Rebuild(doc.Value.Profiles, null);
+        Rebuild(doc.Value, null);
     }
 
     [RelayCommand]
@@ -243,9 +281,15 @@ public sealed partial class ConnectionManagerViewModel : ViewModelBase
         }
     }
 
-    [RelayCommand(CanExecute = nameof(CanChangeSelection))]
+    [RelayCommand(CanExecute = nameof(CanDelete))]
     private async Task DeleteAsync()
     {
+        if (Selected is { IsFolder: true } folder)
+        {
+            await DeleteFolderAsync(folder).ConfigureAwait(true);
+            return;
+        }
+
         if (Selected?.Profile is not { } profile)
         {
             return;
@@ -293,7 +337,7 @@ public sealed partial class ConnectionManagerViewModel : ViewModelBase
         }
 
         var doc = await _service.LoadAsync(CancellationToken.None).ConfigureAwait(true);
-        Rebuild(doc.Value.Profiles, copy.Id);
+        Rebuild(doc.Value, copy.Id);
         SetStatus(StatusKind.Info, $"'{profile.Name}' 을(를) '{copy.Name}' (으)로 복제했습니다. 비밀번호는 복사하지 않았습니다.");
     }
 
@@ -308,7 +352,7 @@ public sealed partial class ConnectionManagerViewModel : ViewModelBase
 
         var doc = await _service.LoadAsync(CancellationToken.None).ConfigureAwait(true);
         FileNotice = doc.Notice;
-        _profiles = [.. doc.Value.Profiles];
+        AdoptDocument(doc.Value);
         ApplyView(null, reloadEditor: false);
     }
 
@@ -416,6 +460,8 @@ public sealed partial class ConnectionManagerViewModel : ViewModelBase
     /// <summary>고른 접속을 지우거나 복제할 수 있는지(시험·접속 중에는 끈다).</summary>
     private bool CanChangeSelection() => HasSelection && !IsBusy;
 
+    private bool CanDelete() => HasAnySelection && !IsBusy;
+
     private bool CanConnect() => Editor is { HasRequiredFields: true } && !IsBusy;
 
     /// <summary>마지막 접속 시험 결과(시험용).</summary>
@@ -449,7 +495,7 @@ public sealed partial class ConnectionManagerViewModel : ViewModelBase
             var saved = await _service.SaveProfileAsync(profile, Editor.Password, Editor.SavePassword, CancellationToken.None).ConfigureAwait(true);
             Editor.Password = string.Empty;
             var doc = await _service.LoadAsync(CancellationToken.None).ConfigureAwait(true);
-            Rebuild(doc.Value.Profiles, saved.Id);
+            Rebuild(doc.Value, saved.Id);
             SetStatus(StatusKind.Info, $"'{saved.Name}' 을(를) 저장했습니다.");
             return saved;
         }
@@ -563,7 +609,7 @@ public sealed partial class ConnectionManagerViewModel : ViewModelBase
             }
 
             var doc = await _service.LoadAsync(CancellationToken.None).ConfigureAwait(true);
-            Rebuild(doc.Value.Profiles, created.Id);
+            Rebuild(doc.Value, created.Id);
             SetStatus(StatusKind.Info, $"지갑으로 접속 '{created.Name}' 을(를) 만들었습니다. 사용자와 비밀번호를 확인하세요.");
 
             if (thenConnect)
@@ -665,6 +711,11 @@ public sealed partial class ConnectionManagerViewModel : ViewModelBase
             newValue.PropertyChanged += OnEditorPropertyChanged;
         }
 
+        if (newValue is not null)
+        {
+            newValue.KnownGroups = _allFolders;
+        }
+
         UpdateModifiedMarker();
     }
 
@@ -713,63 +764,72 @@ public sealed partial class ConnectionManagerViewModel : ViewModelBase
     }
 
     /// <summary>트리 전체 노드(폴더 포함, 위에서 아래 순서).</summary>
-    public IEnumerable<ConnectionTreeNode> AllNodes() => Tree.SelectMany(n => n.IsFolder ? n.Children.Prepend(n) : [n]);
+    public IEnumerable<ConnectionTreeNode> AllNodes() => Flatten(Tree);
 
-    private void Rebuild(IReadOnlyList<ConnectionProfile> profiles, Guid? select)
+    private static IEnumerable<ConnectionTreeNode> Flatten(IEnumerable<ConnectionTreeNode> nodes) =>
+        nodes.SelectMany(n => Flatten(n.Children).Prepend(n));
+
+    private void Rebuild(ConnectionsDocument doc, Guid? select)
     {
-        _profiles = [.. profiles];
+        AdoptDocument(doc);
         ApplyView(select, reloadEditor: true);
+    }
+
+    private void AdoptDocument(ConnectionsDocument doc)
+    {
+        _profiles = [.. doc.Profiles];
+        _allFolders = ConnectionFolders.All(doc);
+        OnPropertyChanged(nameof(AllFolders));
+        if (Editor is { } editor)
+        {
+            editor.KnownGroups = _allFolders;
+        }
     }
 
     /// <summary>
     /// 찾기·정렬·접힘 상태로 트리를 다시 만든다. <paramref name="select"/> 가 없으면 지금 편집 중인 프로필을 다시 고른다.
     /// <paramref name="reloadEditor"/> 가 false 면 편집기(저장 안 한 값 포함)는 그대로 둔다.
+    /// <paramref name="selectFolder"/> 가 없고 폴더가 골라져 있었다면 같은 경로의 폴더를 다시 고른다.
     /// </summary>
-    private void ApplyView(Guid? select, bool reloadEditor)
+    private void ApplyView(Guid? select, bool reloadEditor, string? selectFolder = null)
     {
         var keep = select ?? (Editor is { IsNew: false } current ? current.Original.Id : null);
+        var keepFolder = selectFolder ?? (select is null && Selected is { IsFolder: true } f ? f.Path : null);
         var filtering = !string.IsNullOrWhiteSpace(SearchText);
         ConnectionTreeNode? selectNode = null;
+        ConnectionTreeNode? folderNode = null;
+        var visible = _profiles.Where(p => Matches(p, SearchText));
+        var ordered = (SortOrder == ConnectionSortOrder.RecentlyConnected
+            ? visible.OrderByDescending(p => p.LastConnectedAt.HasValue).ThenByDescending(p => p.LastConnectedAt).ThenBy(p => p.Name, StringComparer.CurrentCultureIgnoreCase)
+            : visible.OrderBy(p => p.Name, StringComparer.CurrentCultureIgnoreCase)).ToList();
+
+        // 찾는 중에는 맞는 접속이 있는 폴더만, 아니면 빈 폴더까지 모두 보인다.
+        IReadOnlyList<string> paths = filtering
+            ? ConnectionFolders.All(new ConnectionsDocument { Profiles = ordered })
+            : _allFolders;
+
         _rebuilding = true;
         try
         {
-            foreach (var folder in Tree.Where(n => n.IsFolder))
+            foreach (var folder in Flatten(Tree).Where(n => n.IsFolder))
             {
                 folder.PropertyChanged -= OnFolderChanged;
             }
 
             Tree.Clear();
-            var visible = _profiles.Where(p => Matches(p, SearchText));
-            var ordered = SortOrder == ConnectionSortOrder.RecentlyConnected
-                ? visible.OrderByDescending(p => p.LastConnectedAt.HasValue).ThenByDescending(p => p.LastConnectedAt).ThenBy(p => p.Name, StringComparer.CurrentCultureIgnoreCase)
-                : visible.OrderBy(p => p.Name, StringComparer.CurrentCultureIgnoreCase);
-
-            // 그룹이 있는 접속은 폴더로 묶어 위에, 그룹 없는 접속은 맨 아래 최상위에 둔다.
             // 폴더는 자식을 다 채운 뒤에 트리에 넣는다(화면이 폴더 줄의 개수 글자를 한 번에 읽는다).
-            foreach (var group in ordered.GroupBy(p => p.Group ?? string.Empty).OrderBy(g => g.Key.Length == 0 ? 1 : 0).ThenBy(g => g.Key, StringComparer.CurrentCultureIgnoreCase))
+            // 같은 단계에서는 폴더가 위(이름순), 접속이 아래(정렬 선택대로).
+            foreach (var path in ChildFolders(paths, null))
             {
-                var folder = group.Key.Length > 0 ? new ConnectionTreeNode(group.Key) : null;
-                var target = folder?.Children ?? Tree;
-                foreach (var p in group)
-                {
-                    var node = new ConnectionTreeNode(p.Name, p);
-                    target.Add(node);
-                    if (p.Id == keep)
-                    {
-                        selectNode = node;
-                    }
-                }
-
-                if (folder is not null)
-                {
-                    // 찾는 중에는 맞는 접속이 보이도록 모두 펼친다(사용자가 접어 둔 상태는 바꾸지 않는다).
-                    folder.IsExpanded = filtering || !_collapsed.Contains(group.Key) || (selectNode is not null && folder.Children.Contains(selectNode));
-                    folder.PropertyChanged += OnFolderChanged;
-                    Tree.Add(folder);
-                }
+                Tree.Add(BuildFolder(path));
             }
 
-            Selected = selectNode;
+            foreach (var p in ordered.Where(p => ConnectionFolders.Normalize(p.Group) is null))
+            {
+                Tree.Add(NewProfileNode(p));
+            }
+
+            Selected = selectNode ?? folderNode;
         }
         finally
         {
@@ -783,7 +843,50 @@ public sealed partial class ConnectionManagerViewModel : ViewModelBase
         }
 
         UpdateModifiedMarker();
+
+        ConnectionTreeNode NewProfileNode(ConnectionProfile p)
+        {
+            var node = new ConnectionTreeNode(p.Name, p);
+            if (p.Id == keep)
+            {
+                selectNode = node;
+            }
+
+            return node;
+        }
+
+        ConnectionTreeNode BuildFolder(string path)
+        {
+            var folder = new ConnectionTreeNode(ConnectionFolders.NameOf(path), null, path);
+            foreach (var child in ChildFolders(paths, path))
+            {
+                folder.Children.Add(BuildFolder(child));
+            }
+
+            foreach (var p in ordered.Where(p => ConnectionFolders.PathEquals(ConnectionFolders.Normalize(p.Group), path)))
+            {
+                folder.Children.Add(NewProfileNode(p));
+            }
+
+            folder.ProfileCount = folder.Children.Sum(c => c.IsFolder ? c.ProfileCount : 1);
+            if (keepFolder is not null && ConnectionFolders.PathEquals(keepFolder, path))
+            {
+                folderNode = folder;
+            }
+
+            // 찾는 중에는 맞는 접속이 보이도록 모두 펼친다(사용자가 접어 둔 상태는 바꾸지 않는다).
+            folder.IsExpanded = filtering || !_collapsed.Contains(path)
+                || (selectNode is not null && Flatten(folder.Children).Contains(selectNode))
+                || (folderNode is not null && Flatten(folder.Children).Contains(folderNode));
+            folder.PropertyChanged += OnFolderChanged;
+            return folder;
+        }
     }
+
+    /// <summary><paramref name="parent"/> 바로 아래 폴더 경로, 이름순(null = 맨 위).</summary>
+    private static IEnumerable<string> ChildFolders(IReadOnlyList<string> paths, string? parent) =>
+        paths.Where(p => ConnectionFolders.PathEquals(ConnectionFolders.Parent(p), parent))
+            .OrderBy(ConnectionFolders.NameOf, StringComparer.CurrentCultureIgnoreCase);
 
     private void OnFolderChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
     {
@@ -794,13 +897,245 @@ public sealed partial class ConnectionManagerViewModel : ViewModelBase
 
         if (folder.IsExpanded)
         {
-            _collapsed.Remove(folder.Title);
+            _collapsed.Remove(folder.Path);
         }
         else
         {
-            _collapsed.Add(folder.Title);
+            _collapsed.Add(folder.Path);
         }
     }
+
+    // ---- 폴더 ----
+
+    /// <summary>
+    /// 새 폴더를 만들고 이름 편집 상태로 둔다. 폴더를 골랐으면 그 안, 접속을 골랐으면 그 접속의 폴더 안, 아니면 맨 위.
+    /// 이름은 「새 폴더」, 겹치면 「새 폴더 (2)」.
+    /// </summary>
+    [RelayCommand(CanExecute = nameof(CanEditFolders))]
+    private async Task NewFolderAsync()
+    {
+        var parent = Selected switch
+        {
+            { IsFolder: true } folder => folder.Path,
+            { Profile: { } p } => ConnectionFolders.Normalize(p.Group),
+            _ => null,
+        };
+
+        string? created = null;
+        if (!await TryEditFoldersAsync(doc =>
+            {
+                created = ConnectionFolders.Combine(parent, ConnectionFolders.UniqueName(ConnectionFolders.All(doc), parent));
+                return ConnectionFolders.Create(doc, created);
+            }).ConfigureAwait(true) || created is null)
+        {
+            return;
+        }
+
+        await ReloadAsync(null, created, created).ConfigureAwait(true);
+        if (FindFolder(created) is { } node)
+        {
+            BeginEdit(node);
+        }
+
+        SetStatus(StatusKind.Info, $"폴더 '{ConnectionFolders.NameOf(created)}' 을(를) 만들었습니다. 이름을 입력하고 Enter 를 누르세요.");
+    }
+
+    private bool CanEditFolders() => !IsBusy;
+
+    /// <summary>고른 폴더의 이름 편집을 시작한다(F2).</summary>
+    [RelayCommand(CanExecute = nameof(CanRenameFolder))]
+    private void RenameFolder()
+    {
+        if (Selected is { IsFolder: true } folder)
+        {
+            BeginEdit(folder);
+        }
+    }
+
+    private bool CanRenameFolder() => Selected is { IsFolder: true } && !IsBusy;
+
+    private void BeginEdit(ConnectionTreeNode folder)
+    {
+        folder.EditText = folder.Title;
+        folder.IsEditing = true;
+        FolderEditRequested?.Invoke(this, folder);
+    }
+
+    /// <summary>입력칸의 이름으로 폴더 이름을 바꾼다(Enter·초점 잃음). 안의 접속과 하위 폴더 경로가 함께 바뀐다.</summary>
+    public async Task CommitFolderEditAsync(ConnectionTreeNode folder)
+    {
+        ArgumentNullException.ThrowIfNull(folder);
+        if (!folder.IsEditing)
+        {
+            return;
+        }
+
+        folder.IsEditing = false;
+        var name = folder.EditText.Trim();
+        if (name == folder.Title)
+        {
+            return;
+        }
+
+        if (!ConnectionFolders.IsValidName(name))
+        {
+            SetStatus(StatusKind.Error, $"폴더 이름은 비어 있거나 '{ConnectionFolders.Separator}' 를 포함할 수 없습니다.");
+            return;
+        }
+
+        await MoveFolderAsync(folder.Path, ConnectionFolders.Combine(ConnectionFolders.Parent(folder.Path), name)).ConfigureAwait(true);
+    }
+
+    /// <summary>이름 편집을 취소한다(Esc). 폴더는 지금 이름 그대로 남는다.</summary>
+    public static void CancelFolderEdit(ConnectionTreeNode folder)
+    {
+        ArgumentNullException.ThrowIfNull(folder);
+        folder.IsEditing = false;
+    }
+
+    private async Task DeleteFolderAsync(ConnectionTreeNode folder)
+    {
+        var path = folder.Path;
+        var profiles = _profiles.Count(p => ConnectionFolders.IsSameOrUnder(ConnectionFolders.Normalize(p.Group), path));
+        var subfolders = _allFolders.Count(f => ConnectionFolders.IsSameOrUnder(f, path) && !ConnectionFolders.PathEquals(f, path));
+        if (profiles + subfolders > 0)
+        {
+            var where = ConnectionFolders.Parent(path) is { } up ? $"'{up}' 폴더" : "맨 위";
+            var ok = Confirm is null || await Confirm($"'{path}' 폴더를 지울까요? 안의 접속 {profiles}개와 하위 폴더는 지우지 않고 {where}(으)로 옮깁니다.").ConfigureAwait(true);
+            if (!ok)
+            {
+                return;
+            }
+        }
+
+        if (!await ResolveUnsavedIfInFolderAsync(path).ConfigureAwait(true)
+            || !await TryEditFoldersAsync(doc => ConnectionFolders.Delete(doc, path)).ConfigureAwait(true))
+        {
+            return;
+        }
+
+        await ReloadAsync(null, null, ConnectionFolders.Parent(path)).ConfigureAwait(true);
+        SetStatus(StatusKind.Info, $"폴더 '{path}' 을(를) 지웠습니다.");
+    }
+
+    /// <summary>「폴더로 이동…」: 폴더 목록(「(폴더 없음)」 포함)에서 골라 고른 줄을 옮긴다.</summary>
+    [RelayCommand(CanExecute = nameof(CanMoveToFolder))]
+    private async Task MoveToFolderAsync()
+    {
+        if (Selected is not { } node || AskFolder is null)
+        {
+            return;
+        }
+
+        var candidates = _allFolders.Where(f => node.IsFolder is false || !ConnectionFolders.IsSameOrUnder(f, node.Path)).ToList();
+        var current = node.IsFolder ? ConnectionFolders.Parent(node.Path) : ConnectionFolders.Normalize(node.Profile?.Group);
+        if (await AskFolder(candidates, current).ConfigureAwait(true) is { } choice)
+        {
+            await MoveNodeAsync(node, choice.Path).ConfigureAwait(true);
+        }
+    }
+
+    private bool CanMoveToFolder() => HasAnySelection && !IsBusy && AskFolder is not null;
+
+    /// <summary>끌어 놓을 수 있는지: 접속은 다른 폴더로만, 폴더는 자기·자기 하위·지금 부모가 아닌 곳으로만.</summary>
+    public static bool CanDrop(ConnectionTreeNode node, string? targetFolder)
+    {
+        ArgumentNullException.ThrowIfNull(node);
+        var target = ConnectionFolders.Normalize(targetFolder);
+        return node.IsFolder
+            ? !ConnectionFolders.IsSameOrUnder(target, node.Path) && !ConnectionFolders.PathEquals(ConnectionFolders.Parent(node.Path), target)
+            : !ConnectionFolders.PathEquals(ConnectionFolders.Normalize(node.Profile?.Group), target);
+    }
+
+    /// <summary>접속 또는 폴더를 폴더로 옮긴다(끌어 놓기·「폴더로 이동」). <paramref name="targetFolder"/> 가 null 이면 맨 위.</summary>
+    public async Task<bool> MoveNodeAsync(ConnectionTreeNode node, string? targetFolder)
+    {
+        ArgumentNullException.ThrowIfNull(node);
+        var target = ConnectionFolders.Normalize(targetFolder);
+        if (!CanDrop(node, target))
+        {
+            if (node.IsFolder && ConnectionFolders.IsSameOrUnder(target, node.Path))
+            {
+                SetStatus(StatusKind.Error, "폴더를 자기 자신이나 그 하위로 옮길 수 없습니다.");
+            }
+
+            return false;
+        }
+
+        if (node.Profile is { } profile)
+        {
+            if (Editor is { IsNew: false, IsDirty: true } editor && editor.Original.Id == profile.Id && !await ResolveUnsavedAsync().ConfigureAwait(true))
+            {
+                return false;
+            }
+
+            if (!await TryEditFoldersAsync(doc => ConnectionFolders.MoveProfile(doc, profile.Id, target)).ConfigureAwait(true))
+            {
+                return false;
+            }
+
+            await ReloadAsync(profile.Id, null, target).ConfigureAwait(true);
+            SetStatus(StatusKind.Info, $"'{profile.Name}' 을(를) {(target is null ? "맨 위" : $"'{target}' 폴더")}(으)로 옮겼습니다.");
+            return true;
+        }
+
+        return await MoveFolderAsync(node.Path, ConnectionFolders.Combine(target, node.Title)).ConfigureAwait(true);
+    }
+
+    private async Task<bool> MoveFolderAsync(string from, string to)
+    {
+        if (!await ResolveUnsavedIfInFolderAsync(from).ConfigureAwait(true)
+            || !await TryEditFoldersAsync(doc => ConnectionFolders.Move(doc, from, to)).ConfigureAwait(true))
+        {
+            return false;
+        }
+
+        await ReloadAsync(null, to, ConnectionFolders.Parent(to)).ConfigureAwait(true);
+        SetStatus(StatusKind.Info, $"폴더 '{from}' 을(를) '{to}' (으)로 바꿨습니다.");
+        return true;
+    }
+
+    /// <summary>편집 중인 접속이 폴더 안에 있고 저장 안 한 값이 있으면 먼저 정리한다(폴더가 바뀌면 편집 값의 그룹이 어긋난다).</summary>
+    private async Task<bool> ResolveUnsavedIfInFolderAsync(string folderPath) =>
+        Editor is not { IsNew: false, IsDirty: true } editor
+        || !ConnectionFolders.IsSameOrUnder(ConnectionFolders.Normalize(editor.Original.Group), folderPath)
+        || await ResolveUnsavedAsync().ConfigureAwait(true);
+
+    private async Task<bool> TryEditFoldersAsync(Func<ConnectionsDocument, ConnectionsDocument> edit)
+    {
+        try
+        {
+            await _service.UpdateFoldersAsync(edit, CancellationToken.None).ConfigureAwait(true);
+            return true;
+        }
+        catch (Exception ex) when (ex is ConnectionValidationException or ConnectionFolderException or System.IO.IOException or UnauthorizedAccessException)
+        {
+            SetStatus(StatusKind.Error, ex.Message);
+            return false;
+        }
+    }
+
+    /// <summary>저장소를 다시 읽어 트리를 만들고 지정한 줄을 고른다. <paramref name="reveal"/> 폴더와 그 상위 폴더는 펼친다.</summary>
+    private async Task ReloadAsync(Guid? selectProfile, string? selectFolder, string? reveal)
+    {
+        for (var path = reveal; path is not null; path = ConnectionFolders.Parent(path))
+        {
+            _collapsed.Remove(path);
+        }
+
+        var doc = await _service.LoadAsync(CancellationToken.None).ConfigureAwait(true);
+        FileNotice = doc.Notice;
+        AdoptDocument(doc.Value);
+
+        // 저장 안 한 편집이 없을 때만 편집기를 저장된 값으로 다시 채운다(옮긴 접속의 그룹 칸이 바로 바뀌게).
+        ApplyView(selectProfile, reloadEditor: Editor is not { IsDirty: true }, selectFolder);
+    }
+
+    /// <summary>경로의 폴더 줄(없으면 null).</summary>
+    public ConnectionTreeNode? FindFolder(string path) => AllNodes().FirstOrDefault(n => n.IsFolder && ConnectionFolders.PathEquals(n.Path, path));
+
+    /// <summary>화면 코드가 상태 줄에 오류를 알린다.</summary>
+    public void ReportError(string text) => SetStatus(StatusKind.Error, text);
 
     private void SetStatus(StatusKind kind, string text)
     {
@@ -808,6 +1143,9 @@ public sealed partial class ConnectionManagerViewModel : ViewModelBase
         Status = text;
     }
 }
+
+/// <summary>「폴더로 이동」 에서 고른 폴더. <see cref="Path"/> 가 null 이면 「(폴더 없음)」.</summary>
+public sealed record FolderChoice(string? Path);
 
 /// <summary>저장하지 않은 편집을 어떻게 할지(저장 확인 대화상자의 답).</summary>
 public enum UnsavedChoice

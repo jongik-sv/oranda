@@ -18,17 +18,19 @@
   </Window.Styles>
   <!-- 고정 크기 칸을 쓰지 않는다: 왼쪽 목록은 비율, 오른쪽 폼은 스크롤. 단추 줄은 항상 아래에 고정. -->
   <DockPanel Margin="12">
-    <Grid DockPanel.Dock="Bottom" ColumnDefinitions="*,Auto" Margin="0,12,0,0">
-      <TextBlock x:Name="StatusText" Grid.Column="0" Text="{Binding Status}" TextWrapping="Wrap" VerticalAlignment="Center"
-                 Classes.error="{Binding StatusIsError}" AutomationProperties.Name="상태" />
-      <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8" Margin="12,0,0,0">
-        <!-- 시험(SQL Developer 의 Test): 시험하는 동안에는 「시험 취소」 로 바뀐다. -->
-        <Button x:Name="TestButton" MinWidth="80" Content="시험" Command="{Binding TestCommand}" IsVisible="{Binding !TestCommand.IsRunning}"
+    <Grid DockPanel.Dock="Bottom" ColumnDefinitions="Auto,*,Auto" Margin="0,12,0,0">
+      <!-- 시험(SQL Developer 의 Test)은 왼쪽 끝: 시험하는 동안에는 「시험 취소」 로 바뀐다. 상태 글은 시험 오른쪽 남는 칸. -->
+      <StackPanel Grid.Column="0" Orientation="Horizontal">
+        <Button x:Name="TestButton" Content="시험" Command="{Binding TestCommand}" IsVisible="{Binding !TestCommand.IsRunning}"
                 ToolTip.Tip="지금 값으로 임시 연결을 열어 서버 버전과 걸린 시간을 보이고 바로 닫습니다" />
-        <Button x:Name="CancelTestButton" MinWidth="80" Content="시험 취소" Command="{Binding TestCancelCommand}" IsVisible="{Binding TestCommand.IsRunning}" />
-        <Button x:Name="SaveButton" MinWidth="80" Content="저장" Command="{Binding SaveCommand}" />
-        <Button x:Name="ConnectButton" MinWidth="80" Content="접속" Command="{Binding ConnectCommand}" IsDefault="True" Classes="accent" />
-        <Button x:Name="CloseButton" MinWidth="80" Content="닫기" Command="{Binding CloseCommand}" IsCancel="True" />
+        <Button x:Name="CancelTestButton" Content="시험 취소" Command="{Binding TestCancelCommand}" IsVisible="{Binding TestCommand.IsRunning}" />
+      </StackPanel>
+      <TextBlock x:Name="StatusText" Grid.Column="1" Text="{Binding Status}" TextWrapping="Wrap" VerticalAlignment="Center" Margin="12,0"
+                 Classes.error="{Binding StatusIsError}" AutomationProperties.Name="상태" />
+      <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="8">
+        <Button x:Name="SaveButton" Content="저장" Command="{Binding SaveCommand}" />
+        <Button x:Name="ConnectButton" Content="접속" Command="{Binding ConnectCommand}" IsDefault="True" Classes="accent" />
+        <Button x:Name="CloseButton" Content="닫기" Command="{Binding CloseCommand}" IsCancel="True" />
       </StackPanel>
     </Grid>
     <TextBlock DockPanel.Dock="Bottom" Text="{Binding FileNotice}" IsVisible="{Binding FileNotice, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"
@@ -43,14 +45,17 @@
       </Grid.ColumnDefinitions>
       <DockPanel Grid.Column="0">
         <Border DockPanel.Dock="Top" Classes="panel-toolbar" Margin="0,0,0,4">
-          <StackPanel Orientation="Horizontal" Spacing="2">
+          <!-- 단추가 늘어도 가로 스크롤 없이 목록 폭에서 줄을 바꾼다. -->
+          <WrapPanel Orientation="Horizontal">
             <Button x:Name="AddButton" Classes="tool" Content="새 접속" Command="{Binding AddNewCommand}" icons:ButtonIcon.Key="add" />
+            <Button x:Name="NewFolderButton" Classes="tool" Content="새 폴더" Command="{Binding NewFolderCommand}" icons:ButtonIcon.Key="folderAdd"
+                    ToolTip.Tip="폴더를 만듭니다(폴더를 고르면 그 안에). 접속을 폴더 위로 끌어 놓아 옮길 수 있습니다" />
             <Button x:Name="DuplicateButton" Classes="tool" Content="복제" Command="{Binding DuplicateCommand}" icons:ButtonIcon.Key="copy"
                     ToolTip.Tip="고른 접속을 복제합니다(비밀번호는 복사하지 않습니다)" />
             <Button x:Name="DeleteButton" Classes="tool" Content="삭제" Command="{Binding DeleteCommand}" icons:ButtonIcon.Key="delete" />
             <Button x:Name="ImportButton" Classes="tool" Content="가져오기" Command="{Binding ImportCommand}" icons:ButtonIcon.Key="import"
                     ToolTip.Tip="SQL Developer·tnsnames.ora·Orange 접속 목록에서 가져옵니다" />
-          </StackPanel>
+          </WrapPanel>
         </Border>
         <Grid DockPanel.Dock="Top" ColumnDefinitions="*,Auto" ColumnSpacing="6" Margin="0,0,0,4">
           <TextBox x:Name="SearchBox" Grid.Column="0" Text="{Binding SearchText}" PlaceholderText="찾기(이름·사용자·호스트·서비스·그룹)"
@@ -69,6 +74,10 @@
               <MenuItem x:Name="MenuDuplicate" Header="복제" Command="{Binding DuplicateCommand}" />
               <MenuItem x:Name="MenuDelete" Header="삭제" Command="{Binding DeleteCommand}" InputGesture="Delete" />
               <Separator />
+              <MenuItem x:Name="MenuNewFolder" Header="새 폴더" Command="{Binding NewFolderCommand}" />
+              <MenuItem x:Name="MenuRenameFolder" Header="폴더 이름 바꾸기" Command="{Binding RenameFolderCommand}" InputGesture="F2" />
+              <MenuItem x:Name="MenuMoveToFolder" Header="폴더로 이동…" Command="{Binding MoveToFolderCommand}" />
+              <Separator />
               <MenuItem x:Name="MenuCopyConnectString" Header="연결 문자열 복사" Command="{Binding CopyConnectionStringCommand}" />
             </ContextMenu>
           </TreeView.ContextMenu>
@@ -77,6 +86,10 @@
               <Setter Property="IsExpanded" Value="{Binding IsExpanded, Mode=TwoWay}" />
             </Style>
             <!-- 줄 내용을 목록 폭에 맞춘다(가로 스크롤 없이): user@접속은 말줄임, 마지막 접속 시각은 오른쪽 끝에 남는다. -->
+            <!-- 끌어 놓을 폴더 줄 강조. -->
+            <Style Selector="Grid.drop">
+              <Setter Property="Background" Value="{DynamicResource SystemControlHighlightListAccentLowBrush}" />
+            </Style>
             <Style Selector="TreeViewItem /template/ ContentPresenter#PART_HeaderPresenter">
               <Setter Property="HorizontalAlignment" Value="Stretch" />
               <Setter Property="HorizontalContentAlignment" Value="Stretch" />
@@ -85,11 +98,15 @@
           <TreeView.ItemTemplate>
             <TreeDataTemplate DataType="cm:ConnectionTreeNode" ItemsSource="{Binding Children}">
               <!-- 칩 · 이름 · 변경 표시 · user@접속(남는 폭, 말줄임) · 마지막 접속 시각(오른쪽). -->
-              <Grid ColumnDefinitions="Auto,Auto,Auto,*,Auto" ColumnSpacing="8" AutomationProperties.Name="{Binding AccessibleName}">
+              <Grid ColumnDefinitions="Auto,Auto,Auto,*,Auto" ColumnSpacing="8" AutomationProperties.Name="{Binding AccessibleName}"
+                    Classes.drop="{Binding IsDropTarget}">
                 <Border Grid.Column="0" IsVisible="{Binding HasChip}" Background="{Binding EnvironmentColor}" CornerRadius="3" Padding="6,1" VerticalAlignment="Center">
                   <TextBlock Text="{Binding EnvironmentLabel}" Foreground="White" FontSize="12" />
                 </Border>
-                <TextBlock Grid.Column="1" Text="{Binding Title}" VerticalAlignment="Center" />
+                <TextBlock Grid.Column="1" Text="{Binding Title}" VerticalAlignment="Center" IsVisible="{Binding !IsEditing}" />
+                <!-- 폴더 이름 편집: Enter 확정, Esc 취소(창 코드). -->
+                <TextBox x:Name="FolderNameBox" Grid.Column="1" Text="{Binding EditText}" IsVisible="{Binding IsEditing}"
+                         MinWidth="140" MaxWidth="280" HorizontalAlignment="Left" Padding="4,0" MinHeight="22" AutomationProperties.Name="폴더 이름" />
                 <TextBlock Grid.Column="2" Text="●" IsVisible="{Binding IsModified}" VerticalAlignment="Center" FontSize="10"
                            Foreground="{DynamicResource OrandaUncommittedBrush}" ToolTip.Tip="저장하지 않은 변경" />
                 <TextBlock Grid.Column="3" Text="{Binding Subtitle}" VerticalAlignment="Center" Opacity="0.6" FontSize="12" TextTrimming="CharacterEllipsis" />

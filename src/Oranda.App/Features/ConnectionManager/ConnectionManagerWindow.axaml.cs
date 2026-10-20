@@ -1,5 +1,6 @@
 using System;
 using System.IO;
+using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
 using Avalonia.Controls;
@@ -7,6 +8,8 @@ using Avalonia.Input;
 using Avalonia.Input.Platform;
 using Avalonia.Interactivity;
 using Avalonia.Platform.Storage;
+using Avalonia.Threading;
+using Avalonia.VisualTree;
 
 namespace Oranda.App.Features.ConnectionManager;
 
@@ -20,11 +23,15 @@ public partial class ConnectionManagerWindow : Window
     {
         InitializeComponent();
         AddHandler(DragDrop.DragOverEvent, OnDragOver);
+        AddHandler(DragDrop.DragLeaveEvent, OnDragLeave);
         AddHandler(DragDrop.DropEvent, OnDrop);
 
         // 목록 단축키(SQL Developer·Toad 관례). 터널로 먼저 받아 Enter 가 기본 단추(접속)로 한 번 더 가지 않게 한다.
         ConnectionTree.AddHandler(KeyDownEvent, OnTreeKeyDown, RoutingStrategies.Tunnel);
         ConnectionTree.AddHandler(PointerPressedEvent, OnTreePressed, RoutingStrategies.Tunnel, handledEventsToo: true);
+        ConnectionTree.AddHandler(PointerMovedEvent, OnTreeMoved, RoutingStrategies.Tunnel, handledEventsToo: true);
+        ConnectionTree.AddHandler(PointerReleasedEvent, (_, _) => _pressNode = null, RoutingStrategies.Tunnel, handledEventsToo: true);
+        ConnectionTree.AddHandler(LostFocusEvent, OnTreeLostFocus);
         ConnectionTree.DoubleTapped += OnTreeDoubleTapped;
         Closing += OnClosing;
         DataContextChanged += (_, _) =>
@@ -37,6 +44,8 @@ public partial class ConnectionManagerWindow : Window
                 vm.Confirm ??= message => ConnectionDialogs.ConfirmAsync(this, message);
                 vm.AskUnsaved ??= message => ConnectionDialogs.AskUnsavedAsync(this, message);
                 vm.CopyText ??= CopyToClipboardAsync;
+                vm.AskFolder ??= (folders, current) => ConnectionDialogs.PickFolderAsync(this, folders, current);
+                vm.FolderEditRequested += (_, node) => FocusFolderEditor(node, retry: true);
             }
         };
     }
@@ -71,11 +80,34 @@ public partial class ConnectionManagerWindow : Window
         }
     }
 
-    /// <summary>Enter = 접속(폴더면 펼치기/접기), Delete = 삭제(확인), F2 = 이름 칸으로.</summary>
+    /// <summary>
+    /// Enter = 접속(폴더면 펼치기/접기), Delete = 삭제(확인), F2 = 이름 칸으로(폴더면 폴더 이름 편집).
+    /// 폴더 이름 입력칸에서는 Enter = 확정, Esc = 취소만 받는다.
+    /// </summary>
     private void OnTreeKeyDown(object? sender, KeyEventArgs e)
     {
         if (Model is not { } vm || e.KeyModifiers != KeyModifiers.None)
         {
+            return;
+        }
+
+        if (e.Source is TextBox box)
+        {
+            if (box.DataContext is ConnectionTreeNode { IsEditing: true } editing && e.Key is Key.Enter or Key.Escape)
+            {
+                if (e.Key == Key.Enter)
+                {
+                    _ = vm.CommitFolderEditAsync(editing);
+                }
+                else
+                {
+                    ConnectionManagerViewModel.CancelFolderEdit(editing);
+                }
+
+                e.Handled = true;
+                ConnectionTree.Focus();
+            }
+
             return;
         }
 
@@ -93,6 +125,10 @@ public partial class ConnectionManagerWindow : Window
                 Run(vm.DeleteCommand);
                 e.Handled = true;
                 break;
+            case Key.F2 when vm.Selected is { IsFolder: true }:
+                Run(vm.RenameFolderCommand);
+                e.Handled = true;
+                break;
             case Key.F2:
                 FocusNameBox();
                 e.Handled = true;
@@ -100,14 +136,135 @@ public partial class ConnectionManagerWindow : Window
         }
     }
 
-    /// <summary>오른쪽 단추는 누른 줄을 먼저 고른다(오른쪽 클릭 메뉴가 그 접속에 대해 열린다).</summary>
+    /// <summary>줄 끌기를 시작하려고 누른 접속·폴더 줄과 그 눌림(끌기 시작에 필요하다).</summary>
+    private ConnectionTreeNode? _pressNode;
+
+    private PointerPressedEventArgs? _pressArgs;
+    private Avalonia.Point _pressPoint;
+
+    /// <summary>지금 끌고 있는 줄(파일 끌기와 구분한다).</summary>
+    private ConnectionTreeNode? _dragNode;
+
+    private ConnectionTreeNode? _hoverFolder;
+
+    /// <summary>오른쪽 단추는 누른 줄을 먼저 고른다(오른쪽 클릭 메뉴가 그 줄에 대해 열린다). 왼쪽 단추는 줄 끌기의 시작점이 된다.</summary>
     private void OnTreePressed(object? sender, PointerPressedEventArgs e)
     {
-        if (Model is { } vm && e.GetCurrentPoint(ConnectionTree).Properties.IsRightButtonPressed
-            && (e.Source as Control)?.DataContext is ConnectionTreeNode { IsFolder: false } node)
+        var node = (e.Source as Control)?.DataContext as ConnectionTreeNode;
+        var point = e.GetCurrentPoint(ConnectionTree);
+        if (Model is { } vm && point.Properties.IsRightButtonPressed && node is not null)
         {
             vm.Selected = node;
         }
+
+        _pressNode = point.Properties.IsLeftButtonPressed && node is { IsEditing: false } && e.Source is not TextBox ? node : null;
+        _pressArgs = e;
+        _pressPoint = e.GetPosition(ConnectionTree);
+    }
+
+    /// <summary>눌린 채로 조금 움직이면 줄 끌기를 시작한다(접속·폴더를 폴더 위로).</summary>
+    private async void OnTreeMoved(object? sender, PointerEventArgs e)
+    {
+        if (_dragNode is not null || _pressNode is not { } node || _pressArgs is null || !e.GetCurrentPoint(ConnectionTree).Properties.IsLeftButtonPressed)
+        {
+            return;
+        }
+
+        var d = e.GetPosition(ConnectionTree) - _pressPoint;
+        if (Math.Abs(d.X) < 6 && Math.Abs(d.Y) < 6)
+        {
+            return;
+        }
+
+        var args = _pressArgs;
+        _pressNode = null;
+        _dragNode = node;
+        try
+        {
+            var data = new Avalonia.Input.DataTransfer();
+            data.Add(DataTransferItem.CreateText(node.Title));
+            await DragDrop.DoDragDropAsync(args, data, DragDropEffects.Move).ConfigureAwait(true);
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or NotSupportedException)
+        {
+            Model?.ReportError("끌어 놓기를 시작하지 못했습니다: " + ex.Message);
+        }
+        finally
+        {
+            _dragNode = null;
+            SetHoverFolder(null);
+        }
+    }
+
+    /// <summary>끌어 놓을 폴더 경로. 폴더 줄 = 그 폴더, 접속 줄 = 그 접속의 폴더, 목록의 빈 곳 = 맨 위. 목록 밖이면 놓을 수 없다.</summary>
+    private bool TryGetDropFolder(DragEventArgs e, out string? folder)
+    {
+        folder = null;
+        var p = e.GetPosition(ConnectionTree);
+        if (p.X < 0 || p.Y < 0 || p.X > ConnectionTree.Bounds.Width || p.Y > ConnectionTree.Bounds.Height)
+        {
+            return false;
+        }
+
+        switch ((e.Source as Control)?.DataContext)
+        {
+            case ConnectionTreeNode { IsFolder: true } f:
+                folder = f.Path;
+                break;
+            case ConnectionTreeNode { Profile: { } profile }:
+                folder = Oranda.Core.Connection.ConnectionFolders.Normalize(profile.Group);
+                break;
+        }
+
+        return true;
+    }
+
+    private void SetHoverFolder(ConnectionTreeNode? folder)
+    {
+        if (ReferenceEquals(_hoverFolder, folder))
+        {
+            return;
+        }
+
+        if (_hoverFolder is not null)
+        {
+            _hoverFolder.IsDropTarget = false;
+        }
+
+        _hoverFolder = folder;
+        if (folder is not null)
+        {
+            folder.IsDropTarget = true;
+        }
+    }
+
+    /// <summary>폴더 이름 입력칸이 초점을 잃으면 확정한다(Esc 로 취소했으면 이미 편집이 끝나 있다).</summary>
+    private void OnTreeLostFocus(object? sender, RoutedEventArgs e)
+    {
+        if (Model is { } vm && e.Source is TextBox { DataContext: ConnectionTreeNode { IsEditing: true } node })
+        {
+            _ = vm.CommitFolderEditAsync(node);
+        }
+    }
+
+    /// <summary>폴더 이름 입력칸에 초점을 주고 글자를 모두 고른다. 줄이 아직 그려지지 않았으면 한 번 더 기다린다.</summary>
+    private void FocusFolderEditor(ConnectionTreeNode node, bool retry)
+    {
+        Dispatcher.UIThread.Post(
+            () =>
+            {
+                var box = (ConnectionTree.TreeContainerFromItem(node) as Control)?.GetVisualDescendants().OfType<TextBox>().FirstOrDefault(b => b.Name == "FolderNameBox");
+                if (box is not null && box.IsEffectivelyVisible)
+                {
+                    box.Focus();
+                    box.SelectAll();
+                }
+                else if (retry && node.IsEditing)
+                {
+                    FocusFolderEditor(node, retry: false);
+                }
+            },
+            DispatcherPriority.Loaded);
     }
 
     private void OnTreeDoubleTapped(object? sender, TappedEventArgs e)
@@ -142,11 +299,36 @@ public partial class ConnectionManagerWindow : Window
             .Select(f => f.TryGetLocalPath())
             .FirstOrDefault(p => p is not null && string.Equals(Path.GetExtension(p), ".zip", StringComparison.OrdinalIgnoreCase));
 
-    private static void OnDragOver(object? sender, DragEventArgs e) =>
+    private void OnDragOver(object? sender, DragEventArgs e)
+    {
+        if (_dragNode is { } node)
+        {
+            var ok = TryGetDropFolder(e, out var folder) && ConnectionManagerViewModel.CanDrop(node, folder);
+            SetHoverFolder(ok && folder is not null ? Model?.FindFolder(folder) : null);
+            e.DragEffects = ok ? DragDropEffects.Move : DragDropEffects.None;
+            e.Handled = true;
+            return;
+        }
+
         e.DragEffects = FirstZip(e) is null ? DragDropEffects.None : DragDropEffects.Copy;
+    }
+
+    private void OnDragLeave(object? sender, DragEventArgs e) => SetHoverFolder(null);
 
     private async void OnDrop(object? sender, DragEventArgs e)
     {
+        if (_dragNode is { } node && Model is { } moving)
+        {
+            e.Handled = true;
+            SetHoverFolder(null);
+            if (TryGetDropFolder(e, out var folder))
+            {
+                await moving.MoveNodeAsync(node, folder).ConfigureAwait(true);
+            }
+
+            return;
+        }
+
         if (FirstZip(e) is { } zip && DataContext is ConnectionManagerViewModel vm)
         {
             e.Handled = true;
@@ -228,6 +410,35 @@ public static class ConnectionDialogs
         };
         cancel.Click += (_, _) => window.Close();
         window.Opened += (_, _) => (string.IsNullOrEmpty(oldBox.Text) ? oldBox : newBox).Focus();
+        await ShowAsync(window, owner).ConfigureAwait(true);
+        return result;
+    }
+
+    /// <summary>
+    /// 폴더 목록에서 폴더 하나를 고른다(맨 위에 「(폴더 없음)」). 취소하면 null.
+    /// </summary>
+    public static async Task<FolderChoice?> PickFolderAsync(Window owner, IReadOnlyList<string> folders, string? current)
+    {
+        const string None = "(폴더 없음)";
+        var list = new ListBox { ItemsSource = new[] { None }.Concat(folders).ToList(), MinWidth = 280, MaxHeight = 280 };
+        Avalonia.Automation.AutomationProperties.SetName(list, "폴더 목록");
+        list.SelectedItem = current is not null && folders.Contains(current, StringComparer.OrdinalIgnoreCase) ? folders.First(f => string.Equals(f, current, StringComparison.OrdinalIgnoreCase)) : None;
+        var ok = new Button { Content = "이동", MinWidth = 80, IsDefault = true };
+        var cancel = new Button { Content = "취소", MinWidth = 80, IsCancel = true };
+        var window = Build("폴더로 이동", [new TextBlock { Text = "옮길 폴더를 고르세요." }, list], ok, cancel);
+        FolderChoice? result = null;
+        void Accept()
+        {
+            if (list.SelectedItem is string picked)
+            {
+                result = new FolderChoice(picked == None ? null : picked);
+                window.Close();
+            }
+        }
+
+        ok.Click += (_, _) => Accept();
+        list.DoubleTapped += (_, _) => Accept();
+        cancel.Click += (_, _) => window.Close();
         await ShowAsync(window, owner).ConfigureAwait(true);
         return result;
     }
