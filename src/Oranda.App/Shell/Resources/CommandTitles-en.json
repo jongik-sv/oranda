@@ -59,6 +59,7 @@
   "Cmd.oranda.exec.runSelection": "Run Selection",
   "Cmd.oranda.exec.runStatement": "Run Current Statement (or Selection)",
   "Cmd.oranda.exec.runStep": "Run Step by Step (Then Move to Next)",
+  "Cmd.oranda.exec.runSubquery": "Run Subquery at Cursor",
   "Cmd.oranda.exec.runToNewResultTab": "Run into New Result Tab",
   "Cmd.oranda.exec.toggleBlankLineDelimiter": "Toggle Split Statements on Blank Line",
   "Cmd.oranda.exec.toggleDbmsOutput": "Toggle DBMS_OUTPUT Collection",

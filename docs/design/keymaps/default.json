@@ -49,6 +49,7 @@
     { "command": "oranda.schema.reveal", "keys": ["Alt+F1"] },
     { "command": "oranda.format.document", "keys": ["Primary+Shift+F"], "when": "editorFocus" },
     { "command": "oranda.exec.runStatement", "keys": ["Primary+Enter"], "when": "sqlDocFocus" },
+    { "command": "oranda.exec.runSubquery", "keys": ["Alt+Shift+Enter"], "when": "sqlDocFocus" },
     { "command": "oranda.exec.runScript", "keys": ["F5"], "when": "sqlDocFocus" },
     { "command": "oranda.exec.runFromCursor", "keys": ["Alt+F5"], "when": "sqlDocFocus" },
     { "command": "oranda.exec.runStep", "keys": ["Primary+Shift+Enter"], "when": "sqlDocFocus" },

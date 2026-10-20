@@ -208,10 +208,10 @@
 
 | 파일 | 프리셋 | 키 수 | 기준 |
 |---|---|---|---|
-| [keymaps/default.json](keymaps/default.json) | 기본 | 82 | Orange 5 사용자에게 익숙한 실행 키(F5·Ctrl+Enter·F9·F8·Ctrl+E·F11) + 일반 편집기 관례(Ctrl+F/H/G, Ctrl+/) |
-| [keymaps/orange5.json](keymaps/orange5.json) | Orange 5 | 89 | `docs/orange5-features.md` 29장 통합 단축키 표 |
-| [keymaps/plsqldev.json](keymaps/plsqldev.json) | PL/SQL Developer | 85 | PL/SQL Developer 기본 키(F8 실행, F5 계획, Shift+Esc 중단, F10/Shift+F10 커밋/롤백, Ctrl+E 이전 문장 불러오기) |
-| [keymaps/sqldev.json](keymaps/sqldev.json) | SQL Developer | 84 | SQL Developer 기본 키(Ctrl+Enter/F9 문장, F5 스크립트, F10 계획, F6 Autotrace, F11/F12 커밋/롤백, Ctrl+F7 포맷, F8 이력, Shift+F4 설명, Ctrl+' 대소문자) |
+| [keymaps/default.json](keymaps/default.json) | 기본 | 83 | Orange 5 사용자에게 익숙한 실행 키(F5·Ctrl+Enter·F9·F8·Ctrl+E·F11) + 일반 편집기 관례(Ctrl+F/H/G, Ctrl+/) |
+| [keymaps/orange5.json](keymaps/orange5.json) | Orange 5 | 90 | `docs/orange5-features.md` 29장 통합 단축키 표 |
+| [keymaps/plsqldev.json](keymaps/plsqldev.json) | PL/SQL Developer | 86 | PL/SQL Developer 기본 키(F8 실행, F5 계획, Shift+Esc 중단, F10/Shift+F10 커밋/롤백, Ctrl+E 이전 문장 불러오기) |
+| [keymaps/sqldev.json](keymaps/sqldev.json) | SQL Developer | 85 | SQL Developer 기본 키(Ctrl+Enter/F9 문장, F5 스크립트, F10 계획, F6 Autotrace, F11/F12 커밋/롤백, Ctrl+F7 포맷, F8 이력, Shift+F4 설명, Ctrl+' 대소문자) |
 
 - 각 파일은 **완전한 표**다(다른 프리셋을 상속하지 않음). 로더가 겹치기 계산을 하지 않아도 되고, 파일 하나만 보고 충돌을 검사할 수 있다.
 - 커밋·롤백은 기본·Orange 5 프리셋에서 단축키를 주지 않았다(실수 방지, 툴바·메뉴·팔레트로 실행). PL/SQL Developer·SQL Developer 프리셋은 원래 도구의 키를 따른다.
@@ -264,7 +264,7 @@
 
 ## 7. 1.0 명령 목록
 
-- 아래 표가 1.0 의 **명령 ID 전체**다(204개). 기본 키는 `default.json` 기준, 다른 프리셋은 6.1.
+- 아래 표가 1.0 의 **명령 ID 전체**다(205개). 기본 키는 `default.json` 기준, 다른 프리셋은 6.1.
 - 「키 범위(when)」는 키맵 `when`, 「활성 조건」은 명령 `Enablement` 다.
 - 소유 Task 가 처리기·제목·아이콘·Placements 를 만든다. 셸(TSK-03-01)은 이 표를 하드코딩하지 않는다 — 레지스트리 자동 수집만 한다.
 - 새 명령이 필요하면 기능 Task 가 규칙(1장)대로 ID 를 만들고 이 표에 행을 더하는 요청을 낸다. 키를 주려면 4개 프리셋 모두 충돌 검사를 통과해야 한다.
@@ -373,6 +373,7 @@
 | ID | 제목 | 기본 키 | 키 범위(when) | 활성 조건 | 소유 Task |
 |---|---|---|---|---|---|
 | `oranda.exec.runStatement` | 현재 문장 실행(선택 시 선택 영역) | `Ctrl+Enter` | `sqlDocFocus` | `hasSession && !sessionBusy` | TSK-06-02 |
+| `oranda.exec.runSubquery` | 커서의 하위 쿼리 실행 | `Alt+Shift+Enter` | `sqlDocFocus` | `hasSession && !sessionBusy` | TSK-06-02 |
 | `oranda.exec.runSelection` | 선택 영역 실행 | - | `sqlDocFocus` | `hasSession && !sessionBusy && hasSelection` | TSK-06-02 |
 | `oranda.exec.runScript` | 스크립트 전체 실행 | `F5` | `sqlDocFocus` | `hasSession && !sessionBusy` | TSK-06-02 |
 | `oranda.exec.runFromCursor` | 커서 문장부터 끝까지 실행 | `Alt+F5` | `sqlDocFocus` | `hasSession && !sessionBusy` | TSK-06-02 |
