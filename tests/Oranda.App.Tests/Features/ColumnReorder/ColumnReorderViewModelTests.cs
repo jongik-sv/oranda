@@ -108,6 +108,33 @@ public class ColumnReorderViewModelTests
         Assert.False(vm.ShowPreview);
     }
 
+    [Fact]
+    public async Task Production_runs_all_statements_as_one_block_so_the_gate_confirms_once()
+    {
+        var (vm, _, _, exec) = await OpenAsync(new ReorderSession(production: true));
+        vm.MoveTo(vm.Items[1], 0); // NAME, ID, HIRED, SAL
+        await vm.ShowPreviewAsync();
+
+        Assert.True(await vm.RunAsync());
+
+        var block = Assert.Single(exec.Ran);
+        Assert.StartsWith("-- 열 순서 바꾸기 SCOTT.EMP: ALTER TABLE 8문장", block, StringComparison.Ordinal);
+        Assert.Contains("BEGIN\n  EXECUTE IMMEDIATE 'ALTER TABLE \"SCOTT\".\"EMP\" MODIFY (\"NAME\" INVISIBLE)';", block.ReplaceLineEndings("\n"), StringComparison.Ordinal);
+        Assert.EndsWith("END;", block, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task Development_keeps_statement_by_statement_execution()
+    {
+        var (vm, _, _, exec) = await OpenAsync(new ReorderSession(production: false));
+        vm.MoveTo(vm.Items[1], 0);
+        await vm.ShowPreviewAsync();
+
+        await vm.RunAsync();
+
+        Assert.Equal(8, exec.Ran.Count);
+    }
+
     [Theory]
     [InlineData(ExecutionStatus.Failed)]
     [InlineData(ExecutionStatus.Denied)]

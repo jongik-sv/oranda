@@ -108,6 +108,26 @@ public static class ColumnReorderScripts
         return statements;
     }
 
+    /// <summary>
+    /// 방식 ① 문장 전체를 익명 PL/SQL 블록 하나로 묶는다. 운영 접속에서 정책 관문의 확인을 문장마다가 아니라 한 번만 받기 위함이다
+    /// (맨 윗줄 주석에 대상 표·문장 수가 보여 확인 대화상자에 그대로 뜬다). 문장은 순서대로 돌고 처음 오류에서 멈춘다.
+    /// </summary>
+    public static SqlStatement AsSingleBlock(DbObjectRef table, IReadOnlyList<SqlStatement> statements)
+    {
+        ArgumentNullException.ThrowIfNull(table);
+        ArgumentNullException.ThrowIfNull(statements);
+        var sb = new StringBuilder();
+        sb.AppendLine(CultureInfo.InvariantCulture, $"-- 열 순서 바꾸기 {table.Owner}.{table.Name}: ALTER TABLE {statements.Count}문장을 한 번에 실행한다");
+        sb.AppendLine("BEGIN");
+        foreach (var statement in statements)
+        {
+            sb.AppendLine(CultureInfo.InvariantCulture, $"  EXECUTE IMMEDIATE '{statement.Text.Replace("'", "''", StringComparison.Ordinal)}';");
+        }
+
+        sb.Append("END;");
+        return new SqlStatement(sb.ToString(), default, StatementKind.PlSql) { Verb = "BEGIN" };
+    }
+
     /// <summary>방식 ① 문장을 <c>;</c> 로 끝나는 텍스트로(미리보기용).</summary>
     public static string ToText(IReadOnlyList<SqlStatement> statements)
     {

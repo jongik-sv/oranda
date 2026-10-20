@@ -151,4 +151,17 @@ public class ColumnReorderScriptsTests
     [InlineData("CREATE TABLE T (A NUMBER);", "something else", "something else")]
     public void DependentPart_strips_the_table_ddl_prefix(string tableDdl, string full, string expected)
         => Assert.Equal(expected, ColumnReorderScripts.DependentPart(tableDdl, full));
+
+    [Fact]
+    public void AsSingleBlock_wraps_statements_in_one_plsql_block_with_a_summary_comment()
+    {
+        var statements = ColumnReorderScripts.InvisibleVisible(new DbObjectRef("U", "T'1", "TABLE"), ["A", "B"], ["B", "A"]);
+
+        var block = ColumnReorderScripts.AsSingleBlock(new DbObjectRef("U", "T'1", "TABLE"), statements);
+
+        Assert.Equal(Oranda.Core.Execution.StatementKind.PlSql, block.Kind);
+        Assert.StartsWith("-- 열 순서 바꾸기 U.T'1: ALTER TABLE 4문장", block.Text, StringComparison.Ordinal);
+        Assert.Contains("EXECUTE IMMEDIATE 'ALTER TABLE \"U\".\"T''1\" MODIFY (\"B\" INVISIBLE)';", block.Text, StringComparison.Ordinal); // 작은따옴표는 두 번
+        Assert.EndsWith("END;", block.Text, StringComparison.Ordinal);
+    }
 }

@@ -7,6 +7,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using CommunityToolkit.Mvvm.ComponentModel;
 using Oranda.Core.Catalog;
+using Oranda.Core.Connection;
 using Oranda.Core.Execution;
 using Oranda.Core.History;
 using Oranda.Core.Metadata;
@@ -267,12 +268,16 @@ public sealed partial class ColumnReorderViewModel : ObservableObject, IDisposab
         }
 
         var statements = ColumnReorderScripts.InvisibleVisible(Table, _original, CurrentOrder());
+
+        // 운영 접속은 정책 관문이 문장마다 확인하므로 한 블록으로 묶어 한 번만 확인받는다(개발 접속은 문장별 그대로).
+        var asBlock = _session.Profile.Environment == ConnectionEnvironment.Production && statements.Count > 1;
+        IReadOnlyList<SqlStatement> toRun = asBlock ? [ColumnReorderScripts.AsSingleBlock(Table, statements)] : statements;
         IsBusy = true;
         try
         {
             var done = 0;
             await foreach (var result in _exec.ExecuteScriptAsync(
-                _session, statements, ScriptErrorMode.Stop, new ExecutionOptions { Source = HistorySource.SchemaBrowser }, ct).ConfigureAwait(true))
+                _session, toRun, ScriptErrorMode.Stop, new ExecutionOptions { Source = HistorySource.SchemaBrowser }, ct).ConfigureAwait(true))
             {
                 if (result.ResultSet is { } rs)
                 {
@@ -281,18 +286,20 @@ public sealed partial class ColumnReorderViewModel : ObservableObject, IDisposab
 
                 if (result.Status != ExecutionStatus.Succeeded)
                 {
-                    StatusText = $"{done}/{statements.Count} 문장까지 실행하고 멈췄다: " + Describe(result);
+                    StatusText = (asBlock
+                        ? "한 블록 실행이 멈췄다(앞쪽 문장은 이미 적용됐을 수 있다. 표 상세에서 현재 순서를 확인한다): "
+                        : $"{done}/{statements.Count} 문장까지 실행하고 멈췄다: ") + Describe(result);
                     NotifyActions();
                     return false;
                 }
 
                 done++;
-                StatusText = $"실행 중 {done}/{statements.Count}";
+                StatusText = $"실행 중 {done}/{toRun.Count}";
             }
 
-            if (done < statements.Count)
+            if (done < toRun.Count)
             {
-                StatusText = $"{done}/{statements.Count} 문장까지 실행하고 멈췄다(취소했다)";
+                StatusText = asBlock ? "취소했다" : $"{done}/{statements.Count} 문장까지 실행하고 멈췄다(취소했다)";
                 return false;
             }
         }

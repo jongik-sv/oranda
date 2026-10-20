@@ -225,6 +225,7 @@
   "순서": "Order",
   "스크립트 미리보기": "Preview Script",
   "스크립트 미리보기 (방식 ① 은 이 문장을 그대로 실행한다)": "Script preview (method ① runs these statements as shown)",
+  "스크립트 미리보기 (방식 ② 는 실행하지 않는다. 새 편집기 탭에서 검토한 뒤 직접 실행한다)": "Script preview (method ② is not run: review it in a new editor tab, then run it yourself)",
   "스크립트 폴더 연결": "Link script folder",
   "스키마": "Schema",
   "스키마 브라우저에서 찾기": "Select in Schema Browser",

@@ -8,11 +8,14 @@ using Oranda.Core.Sessions;
 namespace Oranda.App.Tests.Features.ColumnReorder;
 
 /// <summary>TSK-13-01 시험용 가짜 세션·메타데이터·실행 엔진.</summary>
-internal sealed class ReorderSession(string version = "19.0.0.0", string? edition = "Enterprise") : ISession
+internal sealed class ReorderSession(string version = "19.0.0.0", string? edition = "Enterprise", bool production = false) : ISession
 {
     public Guid Id { get; } = Guid.NewGuid();
 
-    public ConnectionProfile Profile { get; } = new("t", "SCOTT", "localhost/FREEPDB1", Id: Guid.NewGuid());
+    public ConnectionProfile Profile { get; } = new("t", "SCOTT", "localhost/FREEPDB1", Id: Guid.NewGuid())
+    {
+        Environment = production ? ConnectionEnvironment.Production : ConnectionEnvironment.Development,
+    };
 
     public ServerInfo Server { get; } = new(version, "FREE", "h", "FREEPDB1", "FREE", "FREEPDB1", true, 1,
         new ServerCapabilities(false, true, true, false, false), Edition: edition);
