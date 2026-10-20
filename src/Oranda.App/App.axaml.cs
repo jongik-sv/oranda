@@ -56,6 +56,7 @@ public partial class App : Application
             desktop.MainWindow = window;
             ScheduleStartupTasks(services);
             OpenCommandLineFiles(desktop.Args);
+            OpenCommandLineConnect(services, desktop.Args);
             desktop.Exit += (_, _) => Services?.Dispose();
         }
 
@@ -88,6 +89,23 @@ public partial class App : Application
 
         Dispatcher.UIThread.Post(
             () => _ = Features.SqlEditor.DroppedWorkspaceFiles.OpenAsync(Features.SqlEditor.SqlEditorHost.Current, args, CancellationToken.None),
+            DispatcherPriority.Background);
+    }
+
+    /// <summary>
+    /// 명령줄 <c>oranda user@alias [as sysdba]</c>(TSK-03-05): 첫 프레임 뒤 접속 관리자를 그 프로필을 고른 채로 연다.
+    /// 있는 파일 경로(이름에 @ 가 든 .sqd 등)는 접속 대상으로 보지 않는다.
+    /// </summary>
+    private static void OpenCommandLineConnect(ServiceContainer services, string[]? args)
+    {
+        var tokens = args?.Where(a => !File.Exists(a)).ToArray() ?? [];
+        if (tokens.Length == 0)
+        {
+            return;
+        }
+
+        Dispatcher.UIThread.Post(
+            () => _ = Features.ConnectionImport.ConnectionImportCommands.OpenFromCommandLineAsync(services, tokens),
             DispatcherPriority.Background);
     }
 
