@@ -210,3 +210,11 @@
 - **Rationale**: 사내 시험 DB(11.2.0.3)에서 ODP.NET 23 접속·조회가 확인됐고(구버전 드라이버 불필요), 카탈로그 57개 중 깨지는 것은 FETCH FIRST·12c+ 열을 쓰는 15개뿐이라 PRD 11.3 의 「적은 비용」 경우에 해당한다. 사내에 11.2 DB 가 남아 있음
 - **Reversible**: yes
 - **Source**: 사용자 결정(2026-10-20, 「11g 만들고 진행하자」)
+
+## D-027 (2026-10-20T09:30:00Z)
+- **Phase**: 작업 배정(PC 간 분담)
+- **Decision needed**: idea 추가 기능 8건(WP-13)을 어느 PC 가 할지
+- **Decision made**: mac(맥북 조정 세션)이 한다. wbs 에 제목 [mac]·tags mac·note 「담당 PC: mac」 으로 표시하고, win144 세션은 이 Task 들을 하지 않는다(반대로 [win144] 표시 Task 는 mac 이 하지 않는다)
+- **Rationale**: 두 PC 가 같은 wbs 를 함께 고치므로 담당 표시로 겹침을 막음
+- **Reversible**: yes
+- **Source**: 사용자 요청(2026-10-20, 「wbs에 등록하고 진행하자. 새로 등록한 것은 mac 용이라고 표시를 해야 된다」)

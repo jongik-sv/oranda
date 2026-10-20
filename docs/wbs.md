@@ -2663,6 +2663,319 @@ dotnet, testhost, Oranda.App
 - data-model: -
 - ui-spec: -
 
+## WP-13: idea 추가 기능 (맥북 담당) [mac]
+- schedule: 2026-10-21 ~ 2026-10-30
+- description: 담당 PC: mac(맥북) — win144 세션은 이 WP 의 Task 를 하지 않는다. 2026-10-20 사용자 요청으로 고른 추가 기능(D-027)
+
+### TSK-13-01: 컬럼 순서 바꾸기 [mac]
+- category: dev
+- domain: fullstack
+- model: sonnet
+- status: [ ]
+- priority: medium
+- assignee: -
+- schedule: 2026-10-21 ~ 2026-10-30
+- tags: schema, ddl, mac
+- depends: TSK-07-03
+- blocked-by: -
+- entry-point: 표 상세 > 컬럼 순서 바꾸기(또는 스키마 브라우저 표 문맥 메뉴)
+- note: 담당 PC: mac(맥북) — win144 세션은 이 Task 를 하지 않는다. 2026-10-20 사용자 요청(D-027).
+
+#### PRD 요구사항
+- prd-ref: PRD SCH-03 (객체 상세), SCH-04 (DDL 보기), SAFE-03 (운영 확인)
+- requirements:
+  - 표 상세(또는 스키마 브라우저 표 문맥 메뉴)에서 열 순서를 끌기와 위아래 단추로 정한다
+  - 방식 ① 12c 이상 INVISIBLE→VISIBLE: 처음 달라지는 위치부터 원하는 순서대로 열마다 INVISIBLE 다음 바로 VISIBLE 로 바꾼다(메타데이터만 바뀌므로 큰 표도 즉시 끝남)
+  - 방식 ② 재생성 스크립트: EE 면 DBMS_REDEFINITION, 아니면 CTAS + RENAME 으로 제약·인덱스·트리거·권한·주석을 함께 옮기는 스크립트를 새 편집기 탭에 연다(실행 단추 없음)
+  - 열 목록 없이 쓴 `INSERT INTO t VALUES (…)` 와 `SELECT *` 를 쓰는 소스를 소스 검색으로 찾아 경고한다. 한 줄 단위 검색이라는 한계는 화면에 적는다
+- acceptance:
+  - 방식 ① 을 실행하면 상세 화면이 새 순서로 보인다
+  - 방식 ② 는 스크립트만 만든다
+  - 외부·임시·클러스터 표와 원래 INVISIBLE 인 열은 이유를 보이고 막는다
+- constraints:
+  - 실행 전 DDL 미리보기를 보이고 운영 접속은 SAFE-03 확인을 거친다
+  - 서버에 보조 객체를 설치하지 않는다
+  - 11.2 서버에서는 방식 ① 을 숨긴다
+- test-criteria:
+  - 스크립트 생성 단위 시험
+  - App 헤드리스 시험
+  - 조정 세션 실 DB 확인(column_id 순서)
+
+#### 기술 스펙 (TRD)
+- tech-spec: -
+- api-spec: -
+- data-model: -
+- ui-spec: -
+
+### TSK-13-02: 내 세션이 남을 막고 있음 알림 [mac]
+- category: dev
+- domain: fullstack
+- model: sonnet
+- status: [ ]
+- priority: medium
+- assignee: -
+- schedule: 2026-10-21 ~ 2026-10-30
+- tags: monitor, transaction, mac
+- depends: TSK-09-01, TSK-03-03
+- blocked-by: -
+- entry-point: 상태 표시줄 「N 세션 막음」 → 세션 모니터 블로킹 트리
+- note: 담당 PC: mac(맥북) — win144 세션은 이 Task 를 하지 않는다. 2026-10-20 사용자 요청(D-027).
+
+#### PRD 요구사항
+- prd-ref: PRD SESS-02 (블로킹 트리), CONN-07 (도구별 별도 세션), SESS-07 (모니터 접속·권한 안내), EXEC-06 (트랜잭션)
+- requirements:
+  - 작업 세션에 미커밋 트랜잭션이 있을 때만 그 프로필의 모니터 연결(CONN-07)로 15초마다 확인한다
+  - 내 세션이 막고 있는 세션이 있으면 상태 표시줄을 빨갛게 하고 「N 세션 막음」 을 보인다. 누르면 세션 모니터의 블로킹 트리를 연다
+  - 미커밋 상태가 10분을 넘으면 알린다
+  - 19c 이상에서 MAX_IDLE_BLOCKER_TIME 이 0 보다 크면 「N분 뒤 서버가 이 세션을 끊음」 을 보인다
+  - V$ 권한이 없으면 감시를 끄되, 「권한이 없어 감시 꺼짐」 을 사용자가 한 번은 볼 수 있게 한다(상태 표시줄 툴팁 또는 안내)
+- acceptance:
+  - 다른 세션을 막으면 15초 안에 표시되고 풀면 사라진다
+  - 권한 없는 계정에서 오류 창 없이 꺼지고 이유를 확인할 수 있다
+- constraints:
+  - 작업 세션을 쓰지 않는다(모니터 세션만 쓴다)
+  - 시작 경로에서 Oracle 어셈블리를 올리지 않는다
+  - RAC 와 serial# 정밀 구분은 범위 밖이다
+- test-criteria:
+  - 감시기 단위 시험(가짜 모니터)
+  - 카탈로그 시험
+  - 조정 세션 실 DB 2세션 잠금 재현(DBA 계정은 표시, 일반 계정은 꺼짐)
+
+#### 기술 스펙 (TRD)
+- tech-spec: -
+- api-spec: -
+- data-model: -
+- ui-spec: -
+
+### TSK-13-03: MyBatis 로그 SQL 재현 [mac]
+- category: dev
+- domain: fullstack
+- model: sonnet
+- status: [ ]
+- priority: medium
+- assignee: -
+- schedule: 2026-10-21 ~ 2026-10-30
+- tags: editor, binds, mybatis, mac
+- depends: TSK-06-02
+- blocked-by: -
+- entry-point: 편집기 명령: MyBatis 로그 붙여넣기
+- note: 담당 PC: mac(맥북) — win144 세션은 이 Task 를 하지 않는다. 2026-10-20 사용자 요청(D-027).
+
+#### PRD 요구사항
+- prd-ref: PRD EXEC-03 (바인드 변수 창), EDIT-09 (작업 공간·MyBatis 원본)
+- requirements:
+  - MyBatis 로그(`==>  Preparing: …` 와 `==> Parameters: 1(Integer), abc(String)`)를 붙여 넣는 명령을 둔다
+  - `?` 를 `:p1..:pN` 바인드로 바꾸고 바인드 창(EXEC-03)에 값과 타입을 채운다
+  - Preparing/Parameters 쌍이 여러 개인 로그, `null`, 쉼표가 든 문자열 값을 처리한다
+  - Java 타입(Integer·Long·String·Timestamp·Date·BigDecimal 등)을 바인드 타입으로 대응시킨다
+- acceptance:
+  - 붙여 넣은 뒤 바로 실행할 수 있다
+- constraints:
+  - 바인드 저장 형식은 바꾸지 않는다(TSK-04-10 과 공존한다)
+  - 매퍼 XML 의 if·foreach 평가는 범위 밖이다(백로그)
+- test-criteria:
+  - Language 파서 단위 시험
+  - App 시험
+
+#### 기술 스펙 (TRD)
+- tech-spec: -
+- api-spec: -
+- data-model: -
+- ui-spec: -
+
+### TSK-13-04: SQL 점검(lint) [mac]
+- category: dev
+- domain: fullstack
+- model: sonnet
+- status: [ ]
+- priority: medium
+- assignee: -
+- schedule: 2026-10-21 ~ 2026-10-30
+- tags: editor, language, lint, mac
+- depends: TSK-04-03
+- blocked-by: -
+- entry-point: 편집기 입력 중 경고 밑줄, 설정 > 편집기 > SQL 점검
+- note: 담당 PC: mac(맥북) — win144 세션은 이 Task 를 하지 않는다. 2026-10-20 사용자 요청(D-027).
+
+#### PRD 요구사항
+- prd-ref: PRD EDIT-03 (문법 오류 표시), EDIT-01 (파서)
+- requirements:
+  - 실행 전에 흔한 실수를 문법 오류와 같은 밑줄(경고 색)로 알린다. 규칙은 8개다
+  - ① 상관 UPDATE `SET c = (SELECT …)` 에 WHERE 가 없어 짝 없는 행이 NULL 이 됨
+  - ② `ROWNUM <= n` 과 `ORDER BY` 가 같은 단계에 있음
+  - ③ `NOT IN (하위 질의)` 의 열이 NULL 허용
+  - ④ 조인 조건이 빠진 표(카테시안 곱)
+  - ⑤ `= NULL`, `!= NULL`
+  - ⑥ 문자 열을 숫자와 비교(암시적 변환, ORA-01722)
+  - ⑦ 인덱스 열에 함수를 씀(`TO_CHAR(dt,'YYYYMMDD') = …`)
+  - ⑧ 바깥 조인 `(+)` 를 일부 조건에만 붙임
+  - 설정에서 규칙을 켜고 끌 수 있다
+- acceptance:
+  - 규칙마다 양성·음성 예제가 맞게 판정된다
+- constraints:
+  - 문법 검사 지연 예산(TSK-04-09)을 넘지 않는다
+  - 분석 중 DB 호출을 하지 않는다(메타데이터 캐시에 있을 때만 ③⑥⑦ 을 판정한다)
+- test-criteria:
+  - 규칙별 단위 시험
+  - 지연 시험(DiagnosticsLatencyTests) 통과
+
+#### 기술 스펙 (TRD)
+- tech-spec: -
+- api-spec: -
+- data-model: -
+- ui-spec: -
+
+### TSK-13-05: 플래시백 조회·복구 [mac]
+- category: dev
+- domain: fullstack
+- model: sonnet
+- status: [ ]
+- priority: medium
+- assignee: -
+- schedule: 2026-10-21 ~ 2026-10-30
+- tags: grid, safety, flashback, mac
+- depends: TSK-06-04
+- blocked-by: -
+- entry-point: 결과 그리드 문맥 메뉴 > N분 전 값 보기 / 변경 이력
+- note: 담당 PC: mac(맥북) — win144 세션은 이 Task 를 하지 않는다. 2026-10-20 사용자 요청(D-027).
+
+#### PRD 요구사항
+- prd-ref: PRD GRID-04 (셀 편집·행 식별), GRID-05 (편집 미리보기), SAFE-03 (운영 확인)
+- requirements:
+  - 편집 가능한 단일 표 결과에서 「N분 전 값 보기」 를 둔다. 같은 행을 `AS OF TIMESTAMP` 로 다시 읽어 새 결과 탭에 보이고, 지금 값과 다른 칸을 강조한다
+  - 잘못 고친 행을 골라 이전 값으로 되돌리는 UPDATE 를 만든다(미리보기 뒤 실행)
+  - `VERSIONS BETWEEN` 으로 한 행의 변경 이력을 보인다
+  - undo 보존 시간(undo_retention)이 지났거나 FLASHBACK 권한이 없으면 이유를 안내한다(ORA-01555·08180·01466·01031)
+- acceptance:
+  - 바꾼 행의 이전 값이 강조된다
+  - UPDATE 를 미리 본 뒤 실행한다
+- constraints:
+  - 운영 접속은 SAFE-03 확인을 거친다
+  - 여러 표가 얽힌 결과에서는 끈다
+  - FLASHBACK TABLE 은 범위 밖이다
+- test-criteria:
+  - 질의 생성 단위 시험
+  - App 시험
+  - 조정 세션 실 DB 확인
+
+#### 기술 스펙 (TRD)
+- tech-spec: -
+- api-spec: -
+- data-model: -
+- ui-spec: -
+
+### TSK-13-06: 테이블 정의서 생성 [mac]
+- category: dev
+- domain: fullstack
+- model: sonnet
+- status: [ ]
+- priority: medium
+- assignee: -
+- schedule: 2026-10-21 ~ 2026-10-30
+- tags: schema, export, document, mac
+- depends: TSK-07-03, TSK-06-07
+- blocked-by: -
+- entry-point: 스키마 브라우저 표 문맥 메뉴 > 테이블 정의서, 이름 패턴 선택
+- note: 담당 PC: mac(맥북) — win144 세션은 이 Task 를 하지 않는다. 2026-10-20 사용자 요청(D-027).
+
+#### PRD 요구사항
+- prd-ref: PRD SCH-03 (객체 상세), EXP-01 (내보내기), SCH-10 (DDL 일괄 추출)
+- requirements:
+  - 표 하나(스키마 브라우저 문맥 메뉴) 또는 소유자·이름 패턴으로 고른 여러 표의 정보를 문서로 만든다
+  - 담는 내용은 열 이름·타입·NULL·PK·FK·기본값·주석과 인덱스다
+  - 형식은 xlsx(표마다 시트 + 목차 시트), Markdown, HTML 이다
+- acceptance:
+  - 세 형식 파일이 열리고 내용이 DB 정의와 맞다
+- constraints:
+  - 외부 라이브러리를 더하지 않는다
+  - 서식 템플릿과 트리 다중 선택은 범위 밖이다
+- test-criteria:
+  - 쓰기 단위 시험
+  - App 시험
+
+#### 기술 스펙 (TRD)
+- tech-spec: -
+- api-spec: -
+- data-model: -
+- ui-spec: -
+
+### TSK-13-07: 변경 전 DDL 자동 보관·PL/SQL 소스 이력 [mac]
+- category: dev
+- domain: fullstack
+- model: sonnet
+- status: [ ]
+- priority: medium
+- assignee: -
+- schedule: 2026-10-21 ~ 2026-10-30
+- tags: execution, plsql, history, mac
+- depends: TSK-06-01, TSK-08-01
+- blocked-by: -
+- entry-point: 도구 > 변경 일지(객체별 버전 목록·차이 보기·되돌리기)
+- note: 담당 PC: mac(맥북) — win144 세션은 이 Task 를 하지 않는다. 2026-10-20 사용자 요청(D-027).
+
+#### PRD 요구사항
+- prd-ref: PRD EXEC-07 (실행 이력), PLSQL-01 (객체 소스 저장=컴파일), PLSQL-04 (저장 전 충돌 확인), SCH-04 (DDL 보기)
+- requirements:
+  - DROP·ALTER·CREATE OR REPLACE·RENAME 을 실행하기 직전에 대상 객체의 DDL 을 로컬 「변경 일지」 에 저장한다
+  - PL/SQL 컴파일 직전에 서버 소스를 로컬에 저장한다
+  - 객체별 버전 목록, 차이 보기, 되돌리기를 둔다. 되돌리기는 이전 DDL 을 새 편집기 탭에 여는 데까지이고 자동 실행하지 않는다
+  - 같은 내용(해시)은 중복 저장하지 않는다
+- acceptance:
+  - DDL 실행 뒤 일지에 이전 DDL 이 있다
+  - 컴파일 2회 뒤 버전 2개와 차이가 보인다
+- constraints:
+  - 보관 실패가 실행을 막지 않는다(실패 이유는 일지에 남긴다)
+  - 비밀을 가린다(IDENTIFIED BY 등)
+  - 로컬 DB 마이그레이션 번호 0002 를 이 Task 가 쓴다
+  - 서버에 설치하지 않는다
+  - 보존은 기본 365일, 객체당 50버전이다
+- test-criteria:
+  - Core·Platform·Language 단위 시험
+  - App 시험
+  - 조정 세션 실 DB(DBMS_METADATA) 확인
+
+#### 기술 스펙 (TRD)
+- tech-spec: -
+- api-spec: -
+- data-model: -
+- ui-spec: -
+
+### TSK-13-08: 스키마 브라우저 표 하위 폴더 [mac]
+- category: dev
+- domain: fullstack
+- model: sonnet
+- status: [ ]
+- priority: medium
+- assignee: -
+- schedule: 2026-10-21 ~ 2026-10-30
+- tags: schema, tree, mac
+- depends: TSK-07-02
+- blocked-by: -
+- entry-point: 스키마 브라우저 트리: 표·뷰 노드 펼치기
+- note: 담당 PC: mac(맥북) — win144 세션은 이 Task 를 하지 않는다. 2026-10-20 사용자 요청(D-027).
+
+#### PRD 요구사항
+- prd-ref: PRD SCH-01 (객체 트리), SCH-03 (객체 상세), SCH-07 (끌어다 놓기)
+- requirements:
+  - 표 노드 아래에 Columns·Indexes·Constraints·Triggers·Snapshot Log·Recycle Bin 폴더를 둔다(Orange 방식). 뷰 노드 아래에는 Columns·Triggers 를 둔다
+  - 폴더는 펼칠 때 읽는다
+  - Snapshot Log 는 그 표의 MView log 이고, Recycle Bin 은 그 표 이름이 원래 이름인 휴지통 항목이다
+  - 하위 항목을 누르면 기존 열기 규칙을 따른다(트리거는 객체로 열기, 인덱스·제약은 표 상세)
+- acceptance:
+  - 열 노드 끌어 놓기·넣기(Ctrl·Shift 포함)가 지금과 같다
+  - 비어 있는 폴더는 「없음」, 권한이 없으면 「권한 없음」 을 보인다
+- constraints:
+  - 기존 카탈로그를 재사용한다. 새 카탈로그는 MView log 하나뿐이다
+- test-criteria:
+  - SchemaBrowser·끌기 시험
+  - 카탈로그 시험
+
+#### 기술 스펙 (TRD)
+- tech-spec: -
+- api-spec: -
+- data-model: -
+- ui-spec: -
+
 ## 의존 그래프
 
 ### 그래프 (Mermaid)
@@ -2787,6 +3100,17 @@ graph LR
   %% 2026-10-20 사용자 요청
   TSK-03-03 --> TSK-03-07
   TSK-04-02 --> TSK-04-10
+  %% 2026-10-20 mac 추가 기능
+  TSK-07-03 --> TSK-13-01
+  TSK-09-01 --> TSK-13-02
+  TSK-06-02 --> TSK-13-03
+  TSK-04-03 --> TSK-13-04
+  TSK-06-04 --> TSK-13-05
+  TSK-07-03 --> TSK-13-06
+  TSK-06-07 --> TSK-13-06
+  TSK-06-01 --> TSK-13-07
+  TSK-08-01 --> TSK-13-07
+  TSK-07-02 --> TSK-13-08
   style TSK-01-02 fill:#fff3e0,stroke:#e65100
   style TSK-01-07 fill:#fff3e0,stroke:#e65100
   style TSK-01-02 stroke:#c62828,stroke-width:2px
