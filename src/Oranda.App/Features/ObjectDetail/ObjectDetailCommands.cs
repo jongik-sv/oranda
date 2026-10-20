@@ -82,6 +82,13 @@ public sealed class ObjectDetailCommandHandler : ICommandHandler
             return;
         }
 
+        CloseDataWithDocument(docking, vm);
+    }
+
+    /// <summary>문서 탭을 닫으면(미리보기 탭이 다음 객체로 바뀔 때 포함) 「데이터」 탭의 결과(열린 커서)도 닫는다.</summary>
+    internal static void CloseDataWithDocument(DockWorkspace docking, ObjectDetailViewModel vm)
+    {
+        ArgumentNullException.ThrowIfNull(docking);
         void OnClosed(object? sender, PanelDocument doc)
         {
             if (ReferenceEquals(doc.Panel, vm))

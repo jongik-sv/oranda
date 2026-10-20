@@ -114,6 +114,9 @@ public sealed partial class ObjectDetailViewModel : ToolPanelViewModelBase
 
     public DbObjectRef? Target { get; private set; }
 
+    /// <summary>이 문서가 읽는 세션(같은 객체를 다시 열 때 접속이 같은지 본다). 열기 전에는 null.</summary>
+    public ISession? Session => _session;
+
     public ObservableCollection<ObjectDetailSection> Sections { get; } = [];
 
     /// <summary>

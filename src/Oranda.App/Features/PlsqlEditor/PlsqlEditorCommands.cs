@@ -195,7 +195,13 @@ public sealed class PlsqlEditorCommandHandler : ICommandHandler
             return false;
         }
 
-        // 소스를 읽은 뒤 정해지는 제목(「FT.EMP_PKG」)도 탭 머리글에 따라간다(처음엔 「PL/SQL」로 열린다).
+        FollowTitle(doc, vm);
+        return true;
+    }
+
+    /// <summary>소스를 읽은 뒤 정해지는 제목(「FT.EMP_PKG」)도 탭 머리글에 따라간다(처음엔 「PL/SQL」로 열린다).</summary>
+    internal static void FollowTitle(PanelDocument doc, PlsqlEditorViewModel vm)
+    {
         vm.PropertyChanged += (_, e) =>
         {
             if (e.PropertyName == nameof(PlsqlEditorViewModel.Title))
@@ -203,7 +209,6 @@ public sealed class PlsqlEditorCommandHandler : ICommandHandler
                 doc.Title = vm.Title;
             }
         };
-        return true;
     }
 }
 

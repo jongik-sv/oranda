@@ -2,7 +2,9 @@ using System;
 using System.Linq;
 using Avalonia;
 using Avalonia.Controls;
+using Avalonia.Controls.Primitives;
 using Avalonia.Input;
+using Avalonia.Interactivity;
 using Avalonia.Threading;
 using Avalonia.VisualTree;
 using Oranda.App.Shell.Icons;
@@ -16,6 +18,7 @@ public partial class SchemaBrowserView : UserControl
     private SchemaNode? _pressNode;
     private bool _dragging;
     private PointerPressedEventArgs? _pressArgs;
+    private bool _pressExpanded;
     private SchemaBrowserViewModel? _revealSource;
 
     public SchemaBrowserView()
@@ -36,7 +39,11 @@ public partial class SchemaBrowserView : UserControl
         ShellContextMenus.Attach(Tree, "schema");
         Tree.AddHandler(PointerPressedEvent, OnTreePressed, handledEventsToo: true);
         Tree.AddHandler(PointerMovedEvent, OnTreeMoved, handledEventsToo: true);
-        Tree.DoubleTapped += OnTreeDoubleTapped;
+        // 객체 노드의 머리글을 두 번 누르면 트리가 펼침을 바꾼 뒤 이벤트를 처리됨으로 표시하므로, 처리된 것도 받는다.
+        Tree.AddHandler(DoubleTappedEvent, OnTreeDoubleTapped, RoutingStrategies.Bubble, handledEventsToo: true);
+        Tree.AddHandler(TappedEvent, OnTreeTapped, RoutingStrategies.Bubble, handledEventsToo: true);
+        Tree.AddHandler(KeyDownEvent, OnTreeEnter, RoutingStrategies.Tunnel);
+        Tree.AddHandler(KeyDownEvent, OnTreeNavigated, RoutingStrategies.Bubble, handledEventsToo: true);
         DataContextChanged += (_, _) =>
         {
             if (DataContext is SchemaBrowserViewModel vm)
@@ -108,19 +115,89 @@ public partial class SchemaBrowserView : UserControl
         item.Focus();
     }
 
-    private void OnTreeDoubleTapped(object? sender, TappedEventArgs e)
+    /// <summary>
+    /// 두 번 누르기: 「더 보기」는 다음 쪽을 올리고, 객체 노드는 고정 문서로 연다(포커스는 그 문서로).
+    /// 표·뷰 노드는 트리가 두 번 누르기로 펼침을 바꾸므로 누르기 전 상태로 되돌린다(여는 동작만 남긴다).
+    /// </summary>
+    private async void OnTreeDoubleTapped(object? sender, TappedEventArgs e)
     {
-        if (DataContext is SchemaBrowserViewModel vm && vm.SelectedNode is { Kind: SchemaNodeKind.More } more)
+        if (DataContext is not SchemaBrowserViewModel vm)
+        {
+            return;
+        }
+
+        if (vm.SelectedNode is { Kind: SchemaNodeKind.More } more)
         {
             vm.ShowMore(more);
+            return;
+        }
+
+        if (NodeFrom(e.Source) is not { Kind: SchemaNodeKind.Item, Ref: not null } node || IsExpander(e.Source))
+        {
+            return;
+        }
+
+        if (node.IsExpanded != _pressExpanded)
+        {
+            node.IsExpandedSilently = _pressExpanded;
+        }
+
+        await vm.OpenPinnedAsync(node);
+    }
+
+    /// <summary>한 번 누르기: 객체 노드면 미리보기를 예약한다(펼침 단추를 누른 것은 빼고). 포커스는 트리에 남는다.</summary>
+    private void OnTreeTapped(object? sender, TappedEventArgs e)
+    {
+        if (DataContext is SchemaBrowserViewModel vm && NodeFrom(e.Source) is { } node && !IsExpander(e.Source))
+        {
+            vm.SchedulePreview(node);
         }
     }
+
+    /// <summary>Enter: 「더 보기」는 다음 쪽, 객체 노드는 고정 문서로 연다(포커스는 그 문서로).</summary>
+    private async void OnTreeEnter(object? sender, KeyEventArgs e)
+    {
+        if (e.Key != Key.Enter || e.KeyModifiers != KeyModifiers.None || DataContext is not SchemaBrowserViewModel vm)
+        {
+            return;
+        }
+
+        switch (vm.SelectedNode)
+        {
+            case { Kind: SchemaNodeKind.More } more:
+                e.Handled = true;
+                vm.ShowMore(more);
+                break;
+            case { Kind: SchemaNodeKind.Item, Ref: not null } node:
+                e.Handled = true;
+                await vm.OpenPinnedAsync(node);
+                break;
+        }
+    }
+
+    /// <summary>방향키·Home·End·Page 로 고른 뒤: 잠깐 멈추면 미리보기로 연다(누르고 있는 동안은 계속 미룬다).</summary>
+    private void OnTreeNavigated(object? sender, KeyEventArgs e)
+    {
+        if (e.Key is Key.Up or Key.Down or Key.Home or Key.End or Key.PageUp or Key.PageDown
+            && DataContext is SchemaBrowserViewModel vm)
+        {
+            vm.SchedulePreview(vm.SelectedNode);
+        }
+    }
+
+    private static SchemaNode? NodeFrom(object? source) => (source as Control)?.DataContext as SchemaNode;
+
+    /// <summary>트리 항목 앞의 펼침 단추(▸)를 누른 것인지.</summary>
+    private static bool IsExpander(object? source) =>
+        source is Control c && (c as ToggleButton ?? c.FindAncestorOfType<ToggleButton>()) is { } toggle
+        && toggle.FindAncestorOfType<TreeViewItem>() is not null;
 
     private void OnTreePressed(object? sender, PointerPressedEventArgs e)
     {
         _pressArgs = e;
         _pressPoint = e.GetPosition(Tree);
         _pressNode = (e.Source as Control)?.DataContext as SchemaNode;
+        _pressExpanded = _pressNode?.IsExpanded ?? false;
         _dragging = false;
 
         // 오른쪽 단추는 누른 노드를 먼저 고른다(오른쪽 클릭 메뉴가 그 노드에 대해 열린다).

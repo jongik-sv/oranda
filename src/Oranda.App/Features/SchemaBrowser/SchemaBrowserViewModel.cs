@@ -5,7 +5,9 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using CommunityToolkit.Mvvm.ComponentModel;
+using Oranda.App.Features.Localization;
 using Oranda.App.Shell;
+using Oranda.App.Shell.Settings;
 using Avalonia.Threading;
 using Oranda.Core.Events;
 using Oranda.Core.Extensibility;
@@ -63,6 +65,8 @@ public sealed partial class SchemaBrowserViewModel : ToolPanelViewModelBase, IDi
     private readonly Dictionary<string, HashSet<string>> _invalidByOwner = new(StringComparer.Ordinal);
     private int _generation;
     private CancellationTokenSource? _debounce;
+    private CancellationTokenSource? _previewDelay;
+    private SchemaObjectOpener? _opener;
     private bool _suppressFilterSchedule;
 
     /// <summary>시험·디자이너용: 서비스 없이 만든다(빈 트리).</summary>
@@ -166,6 +170,7 @@ public sealed partial class SchemaBrowserViewModel : ToolPanelViewModelBase, IDi
         _properties?.Dispose();
         _debounce?.Cancel();
         _debounce?.Dispose();
+        CancelPendingPreview();
         foreach (var d in _subscriptions)
         {
             d.Dispose();
@@ -197,6 +202,20 @@ public sealed partial class SchemaBrowserViewModel : ToolPanelViewModelBase, IDi
 
     /// <summary>필터 입력 뒤 자동 적용까지 기다리는 시간(ms). 0 이면 바로.</summary>
     public int DebounceMilliseconds { get; set; } = 300;
+
+    /// <summary>한 번 누르기·방향키로 고른 뒤 미리보기를 열기까지 기다리는 시간(ms). 0 이면 바로. 그 사이 다른 노드를 고르면 앞의 것은 열지 않는다.</summary>
+    public int PreviewDelayMilliseconds { get; set; } = 250;
+
+    /// <summary>객체를 「해당 편집기」로 여는 쪽(시험은 도킹을 바꿔 넣는다).</summary>
+    internal SchemaObjectOpener Opener => _opener ??= new SchemaObjectOpener(_services);
+
+    /// <summary>시험용: 설정 「한 번 눌러 미리보기 열기」 값(기본 = 앱 설정 <c>schemaBrowser.singleClickPreview</c>).</summary>
+    internal Func<bool>? SingleClickPreviewProvider { get; set; }
+
+    /// <summary>한 번 누르기로 미리보기를 연다(설정, 기본 켬). 끄면 한 번 누르기는 속성 창만 바꾸고 두 번 누르기·Enter 로 연다.</summary>
+    public bool SingleClickPreview => SingleClickPreviewProvider?.Invoke()
+        ?? (_services?.GetService(typeof(SettingsService)) as SettingsService)?.Current.SchemaBrowser.SingleClickPreview
+        ?? true;
 
     /// <summary><c>oranda.schema.filter</c> 가 필터 입력칸으로 포커스를 옮기라고 알린다.</summary>
     public event EventHandler? FilterFocusRequested;
@@ -558,6 +577,99 @@ public sealed partial class SchemaBrowserViewModel : ToolPanelViewModelBase, IDi
 
         cat.Children.Remove(more);
         AddPage(cat);
+    }
+
+    // ---- 객체 열기(SCH-01): 한 번 누르기 = 미리보기, 두 번 누르기·Enter = 고정 -------------------
+
+    /// <summary>
+    /// 사용자가 노드를 한 번 누르거나 방향키로 골랐을 때 View 가 부른다(코드가 고른 선택 — 트리에서 찾기·필터 다시 읽기 — 는 부르지 않는다).
+    /// 설정이 켜져 있고 객체 노드면 잠깐(<see cref="PreviewDelayMilliseconds"/>) 뒤 미리보기 문서로 연다. 포커스는 트리에 남는다.
+    /// 앞서 예약한 미리보기는 취소된다.
+    /// </summary>
+    public void SchedulePreview(SchemaNode? node)
+    {
+        CancelPendingPreview();
+        if (node is not { Kind: SchemaNodeKind.Item, Ref: not null } || !SingleClickPreview)
+        {
+            return;
+        }
+
+        if (PreviewDelayMilliseconds <= 0)
+        {
+            _ = OpenNodeAsync(node, pin: false, CancellationToken.None);
+            return;
+        }
+
+        var cts = _previewDelay = new CancellationTokenSource();
+        _ = DelayedPreviewAsync(node, cts.Token);
+    }
+
+    private async Task DelayedPreviewAsync(SchemaNode node, CancellationToken ct)
+    {
+        try
+        {
+            await Task.Delay(PreviewDelayMilliseconds, ct);
+        }
+        catch (OperationCanceledException)
+        {
+            return;
+        }
+
+        // 기다리는 사이 다른 노드로 옮겨 갔으면(코드가 고른 선택 포함) 열지 않는다. 예약 취소 토큰은 읽기에 넘기지 않는다 —
+        // 이어서 두 번 누르면 이 미리보기 탭을 고정하는데, 그때 읽던 내용이 끊기면 안 된다(탭을 닫으면 읽기는 opener 가 멈춘다).
+        if (ReferenceEquals(SelectedNode, node))
+        {
+            await OpenNodeAsync(node, pin: false, CancellationToken.None);
+        }
+    }
+
+    /// <summary>
+    /// 두 번 누르기·Enter: 고정 문서로 열고 그 문서로 키보드 포커스를 옮긴다. 예약된 미리보기는 취소하고, 같은 객체의 미리보기가
+    /// 이미 열려 있으면 그 탭을 고정한다(탭을 하나 더 만들지 않는다). 연 문서가 있으면 true.
+    /// </summary>
+    public Task<bool> OpenPinnedAsync(SchemaNode? node, CancellationToken ct = default)
+    {
+        CancelPendingPreview();
+        return OpenNodeAsync(node ?? SelectedNode, pin: true, ct);
+    }
+
+    private void CancelPendingPreview()
+    {
+        _previewDelay?.Cancel();
+        _previewDelay?.Dispose();
+        _previewDelay = null;
+    }
+
+    /// <summary>객체 노드만 연다(스키마·범주·「더 보기」·메시지·열 노드는 열지 않는다). 접속이 없거나 세션이 바쁘면 상태 줄에 알린다.</summary>
+    private async Task<bool> OpenNodeAsync(SchemaNode? node, bool pin, CancellationToken ct)
+    {
+        if (node is not { Kind: SchemaNodeKind.Item, Ref: { } target })
+        {
+            return false;
+        }
+
+        if (CurrentSession is not { } session)
+        {
+            StatusText = UiText.Get("Shell.schemaOpen.noSession", "접속이 없어 객체를 열지 않았다");
+            return false;
+        }
+
+        if (session.State != SessionState.Idle)
+        {
+            StatusText = session.State == SessionState.Busy
+                ? UiText.Get("Shell.schemaOpen.busy", "세션이 실행 중이라 객체를 열지 않았다 — 끝난 뒤 다시 연다")
+                : UiText.Get("Shell.schemaOpen.closed", "세션이 끊겨 객체를 열지 않았다");
+            return false;
+        }
+
+        try
+        {
+            return await Opener.OpenAsync(target, session, preview: !pin, focus: pin, ct) is not null;
+        }
+        catch (OperationCanceledException)
+        {
+            return false;
+        }
     }
 
     // ---- 트리에서 찾기(oranda.schema.reveal) -----------------------------------------------
