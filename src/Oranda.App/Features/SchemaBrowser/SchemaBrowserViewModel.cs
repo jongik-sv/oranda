@@ -63,6 +63,7 @@ public sealed partial class SchemaBrowserViewModel : ToolPanelViewModelBase, IDi
     private readonly Dictionary<string, HashSet<string>> _invalidByOwner = new(StringComparer.Ordinal);
     private int _generation;
     private CancellationTokenSource? _debounce;
+    private bool _suppressFilterSchedule;
 
     /// <summary>시험·디자이너용: 서비스 없이 만든다(빈 트리).</summary>
     public SchemaBrowserViewModel()
@@ -200,6 +201,9 @@ public sealed partial class SchemaBrowserViewModel : ToolPanelViewModelBase, IDi
     /// <summary><c>oranda.schema.filter</c> 가 필터 입력칸으로 포커스를 옮기라고 알린다.</summary>
     public event EventHandler? FilterFocusRequested;
 
+    /// <summary><see cref="RevealAsync(DbObjectRef, ISession?, CancellationToken)"/> 가 노드를 골랐다. View 가 그 노드를 화면에 보이고 포커스를 준다.</summary>
+    public event EventHandler<SchemaNode>? RevealRequested;
+
     public bool HasSession => CurrentSession is not null;
 
     public bool IsNodeSelected => SelectedNode is { Ref: not null };
@@ -243,6 +247,11 @@ public sealed partial class SchemaBrowserViewModel : ToolPanelViewModelBase, IDi
 
     private void ScheduleFilter()
     {
+        if (_suppressFilterSchedule)
+        {
+            return;
+        }
+
         _debounce?.Cancel();
         if (DebounceMilliseconds <= 0)
         {
@@ -549,6 +558,159 @@ public sealed partial class SchemaBrowserViewModel : ToolPanelViewModelBase, IDi
 
         cat.Children.Remove(more);
         AddPage(cat);
+    }
+
+    // ---- 트리에서 찾기(oranda.schema.reveal) -----------------------------------------------
+
+    /// <summary>
+    /// 객체를 트리에서 찾아 고른다(DataGrip 「Select in Database Tree」): 스키마 → 유형 범주를 트리처럼 지연 로딩으로 펼치고
+    /// 노드를 선택한다(아래 속성 창도 선택을 따라간다). 찾으면 true.
+    /// </summary>
+    public Task<bool> RevealAsync(DbObjectRef target, CancellationToken ct = default) => RevealAsync(target, null, ct);
+
+    /// <summary>
+    /// <paramref name="session"/> 을 주면 그 접속 대상(DbKey)의 트리에서 찾는다(지금 보이는 대상과 다르면 트리를 바꾼다).
+    /// 이름 필터·유형 필터 등에 가려 못 찾으면 필터를 풀고 한 번 더 찾는다.
+    /// </summary>
+    public async Task<bool> RevealAsync(DbObjectRef target, ISession? session, CancellationToken ct = default)
+    {
+        ArgumentNullException.ThrowIfNull(target);
+        ResolveServices();
+        target = target with { SubName = null };
+
+        if (session is not null && (CurrentSession is null || !string.Equals(CurrentSession.DbKey, session.DbKey, StringComparison.Ordinal)))
+        {
+            await SetSessionAsync(session, ct);
+        }
+        else
+        {
+            // 접속 직후 등 트리를 짓는 중이면 끝나기를 기다린다. 도구 창을 방금 만들었으면 트리가 비어 있으니 지금 짓는다.
+            await WaitWhileAsync(() => IsBusy, ct);
+            if (CurrentSession is null || !Roots.Any(r => r.Kind == SchemaNodeKind.Schema))
+            {
+                await LoadAsync(ct);
+            }
+        }
+
+        var node = await FindNodeAsync(target, ct);
+        if (node is null && !_filter.IsEmpty)
+        {
+            await ClearFilterAsync(ct);
+            node = await FindNodeAsync(target, ct);
+        }
+
+        if (node is null)
+        {
+            StatusText = $"트리에서 {target.Owner}.{target.Name} 을(를) 찾지 못했다";
+            return false;
+        }
+
+        for (var p = node.Parent; p is not null; p = p.Parent)
+        {
+            p.IsExpandedSilently = true;
+        }
+
+        SelectedNode = node;
+        StatusText = $"{target.Owner}.{target.Name} ({target.ObjectType})";
+        RevealRequested?.Invoke(this, node);
+        return true;
+    }
+
+    /// <summary>스키마 → 범주 → 객체 노드를 찾는다. 범주가 쪽으로 나뉘어 있으면 그 객체가 보일 때까지 「더 보기」를 누른다.</summary>
+    private async Task<SchemaNode?> FindNodeAsync(DbObjectRef target, CancellationToken ct)
+    {
+        var schemas = Roots.Where(r => r.Kind == SchemaNodeKind.Schema).ToList();
+        var schema = schemas.FirstOrDefault(r => string.Equals(r.Owner, target.Owner, StringComparison.Ordinal))
+            ?? schemas.FirstOrDefault(r => string.Equals(r.Owner, target.Owner, StringComparison.OrdinalIgnoreCase));
+        if (schema is null || !await EnsureLoadedAsync(schema, ct))
+        {
+            return null;
+        }
+
+        // 같은 유형 범주를 먼저, 본문(PACKAGE BODY 등)이면 명세 범주를, 그래도 없으면 다른 범주에서 같은 이름을 찾는다.
+        var categories = schema.Children.Where(c => c.Kind == SchemaNodeKind.Category && c.CategoryType is not null).ToList();
+        var spec = target.ObjectType.EndsWith(" BODY", StringComparison.Ordinal) ? target.ObjectType[..^5] : null;
+        var ordered = categories
+            .OrderBy(c => string.Equals(c.CategoryType, target.ObjectType, StringComparison.Ordinal) ? 0
+                : string.Equals(c.CategoryType, spec, StringComparison.Ordinal) ? 1 : 2)
+            .ToList();
+        foreach (var cat in ordered)
+        {
+            var index = IndexOfName(cat.Items, target.Name);
+            if (index < 0)
+            {
+                continue;
+            }
+
+            if (!await EnsureLoadedAsync(cat, ct))
+            {
+                return null;
+            }
+
+            while (cat.Shown <= index && cat.Children.LastOrDefault() is { Kind: SchemaNodeKind.More } more)
+            {
+                ShowMore(more);
+            }
+
+            return cat.Children.FirstOrDefault(c => c.Kind == SchemaNodeKind.Item && c.Ref is { } r
+                && string.Equals(r.Name, target.Name, StringComparison.Ordinal));
+        }
+
+        return null;
+    }
+
+    private static int IndexOfName(IReadOnlyList<DbObjectRef> items, string name)
+    {
+        for (var i = 0; i < items.Count; i++)
+        {
+            if (string.Equals(items[i].Name, name, StringComparison.Ordinal))
+            {
+                return i;
+            }
+        }
+
+        return -1;
+    }
+
+    /// <summary>노드의 자식을 읽어 둔다. 다른 쪽(트리 짓기·사용자 펼침)이 읽는 중이면 끝나기를 기다린다.</summary>
+    private async Task<bool> EnsureLoadedAsync(SchemaNode node, CancellationToken ct)
+    {
+        await WaitWhileAsync(() => node.Loading, ct);
+        if (!node.Loaded)
+        {
+            await ExpandAsync(node, ct);
+            await WaitWhileAsync(() => node.Loading, ct);
+        }
+
+        return node.Loaded;
+    }
+
+    private static async Task WaitWhileAsync(Func<bool> condition, CancellationToken ct)
+    {
+        for (var i = 0; i < 400 && condition(); i++)
+        {
+            await Task.Delay(25, ct);
+        }
+    }
+
+    /// <summary>필터를 모두 풀고 바로 적용한다(입력 지연 타이머는 쓰지 않는다 — 다시 읽기가 겹치지 않게).</summary>
+    private async Task ClearFilterAsync(CancellationToken ct)
+    {
+        _suppressFilterSchedule = true;
+        try
+        {
+            FilterText = string.Empty;
+            TypeFilter = null;
+            InvalidOnly = false;
+            FavoritesOnly = false;
+        }
+        finally
+        {
+            _suppressFilterSchedule = false;
+        }
+
+        _debounce?.Cancel();
+        await ApplyFilterAsync(ct);
     }
 
     private async Task LoadColumnsAsync(SchemaNode node, ISession session, CancellationToken ct)

@@ -1,0 +1,41 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:nav="using:Oranda.App.Features.Navigation"
+        xmlns:icons="using:Oranda.App.Shell.Icons"
+        x:Class="Oranda.App.Features.Navigation.QuickOpenObjectWindow"
+        x:DataType="nav:QuickOpenObjectViewModel"
+        Title="DB 객체로 이동"
+        Width="640" MinWidth="360"
+        SizeToContent="Height"
+        CanResize="False"
+        ShowInTaskbar="False"
+        WindowStartupLocation="CenterOwner"
+        WindowDecorations="BorderOnly"
+        FontSize="{DynamicResource OrandaFontSizeBase}">
+  <!-- 명령 팔레트(CommandPaletteWindow)와 같은 모양: 입력칸 → 목록 → 아래 상태 줄. Enter 열기, Alt+Enter 스키마 브라우저에서 찾기, Esc 닫기. -->
+  <DockPanel Margin="8">
+    <TextBox x:Name="QueryBox" DockPanel.Dock="Top"
+             Text="{Binding Query, Mode=TwoWay}"
+             PlaceholderText="객체 이름 (소유자.이름, * 와일드카드)"
+             AutomationProperties.Name="DB 객체로 이동" />
+    <DockPanel DockPanel.Dock="Bottom" Margin="4,6,0,0">
+      <Button x:Name="RevealButton" DockPanel.Dock="Right" Classes="tool" Margin="8,0,0,0"
+              Content="스키마 브라우저에서 찾기" IsEnabled="{Binding HasResults}" />
+      <TextBlock Text="{Binding StatusText}" Opacity="0.7" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
+    </DockPanel>
+    <ListBox x:Name="ResultList" Margin="0,6,0,0" MaxHeight="360"
+             ItemsSource="{Binding Results}" SelectedItem="{Binding Selected, Mode=TwoWay}"
+             IsVisible="{Binding HasResults}" AutomationProperties.Name="찾은 객체">
+      <ListBox.ItemTemplate>
+        <DataTemplate x:DataType="nav:QuickOpenItem">
+          <Grid ColumnDefinitions="Auto,*,Auto">
+            <ContentControl Margin="0,0,6,0" VerticalAlignment="Center"
+                            Content="{Binding IconKey, Converter={x:Static icons:IconKeyConverter.Instance}}" />
+            <TextBlock Grid.Column="1" Text="{Binding Display}" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
+            <TextBlock Grid.Column="2" Margin="12,0,0,0" Text="{Binding TypeText}" Opacity="0.6" VerticalAlignment="Center" />
+          </Grid>
+        </DataTemplate>
+      </ListBox.ItemTemplate>
+    </ListBox>
+  </DockPanel>
+</Window>

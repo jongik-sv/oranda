@@ -1,8 +1,10 @@
 using System;
+using System.Linq;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Threading;
+using Avalonia.VisualTree;
 using Oranda.App.Shell.Icons;
 using Oranda.App.Shell.Menus;
 
@@ -14,6 +16,7 @@ public partial class SchemaBrowserView : UserControl
     private SchemaNode? _pressNode;
     private bool _dragging;
     private PointerPressedEventArgs? _pressArgs;
+    private SchemaBrowserViewModel? _revealSource;
 
     public SchemaBrowserView()
     {
@@ -40,7 +43,69 @@ public partial class SchemaBrowserView : UserControl
             {
                 vm.FilterFocusRequested += (_, _) => Dispatcher.UIThread.Post(() => FilterBox.Focus());
             }
+
+            ListenForReveal(TopLevel.GetTopLevel(this) is not null);
         };
+    }
+
+    protected override void OnAttachedToVisualTree(VisualTreeAttachmentEventArgs e)
+    {
+        base.OnAttachedToVisualTree(e);
+        ListenForReveal(attached: true);
+    }
+
+    protected override void OnDetachedFromVisualTree(VisualTreeAttachmentEventArgs e)
+    {
+        base.OnDetachedFromVisualTree(e);
+        ListenForReveal(attached: false);
+    }
+
+    /// <summary>
+    /// 화면에 붙어 있는 동안만 「트리에서 찾기」 알림을 받는다. 도킹 배치를 다시 지으면 이 View 가 새로 만들어지므로,
+    /// 떨어진 옛 View 가 ViewModel 에 매달려 남지 않게 한다.
+    /// </summary>
+    private void ListenForReveal(bool attached)
+    {
+        var wanted = attached ? DataContext as SchemaBrowserViewModel : null;
+        if (ReferenceEquals(wanted, _revealSource))
+        {
+            return;
+        }
+
+        if (_revealSource is not null)
+        {
+            _revealSource.RevealRequested -= OnRevealRequested;
+        }
+
+        _revealSource = wanted;
+        if (wanted is not null)
+        {
+            wanted.RevealRequested += OnRevealRequested;
+        }
+    }
+
+    private void OnRevealRequested(object? sender, SchemaNode node) =>
+        Dispatcher.UIThread.Post(() => ShowRevealedNode(node, 0), DispatcherPriority.Background);
+
+    /// <summary>
+    /// 트리에서 찾은 노드를 화면에 보이고 포커스를 준다(방향키로 바로 이어 다니게). 막 펼친 노드는 컨테이너가 아직 없을 수 있어
+    /// 잠깐 뒤 몇 번 더 본다.
+    /// </summary>
+    private void ShowRevealedNode(SchemaNode node, int attempt)
+    {
+        var item = Tree.GetVisualDescendants().OfType<TreeViewItem>().FirstOrDefault(i => ReferenceEquals(i.DataContext, node));
+        if (item is null)
+        {
+            if (attempt < 10)
+            {
+                DispatcherTimer.RunOnce(() => ShowRevealedNode(node, attempt + 1), TimeSpan.FromMilliseconds(50));
+            }
+
+            return;
+        }
+
+        item.BringIntoView();
+        item.Focus();
     }
 
     private void OnTreeDoubleTapped(object? sender, TappedEventArgs e)
