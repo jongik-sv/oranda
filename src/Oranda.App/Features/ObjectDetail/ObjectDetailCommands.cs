@@ -47,7 +47,7 @@ public sealed class ObjectDetailCommandHandler : ICommandHandler
             return;
         }
 
-        var schemaVm = FindSchemaBrowser();
+        var schemaVm = FindSchemaBrowser(_services);
         var target = context.Parameter switch
         {
             SchemaNode n => n.Ref,
@@ -102,9 +102,9 @@ public sealed class ObjectDetailCommandHandler : ICommandHandler
     }
 
     /// <summary>도킹 트리에서 스키마 브라우저 도구 창의 ViewModel 을 찾는다(없으면 null).</summary>
-    private SchemaBrowserViewModel? FindSchemaBrowser()
+    internal static SchemaBrowserViewModel? FindSchemaBrowser(IServiceProvider? services)
     {
-        if (_services?.GetService(typeof(IShellUi)) is not IShellUi { Docking.Layout: { } root })
+        if (services?.GetService(typeof(IShellUi)) is not IShellUi { Docking.Layout: { } root })
         {
             return null;
         }

@@ -183,7 +183,7 @@ internal sealed partial class OracleMetadataProvider
 
         sections.Add(new DetailSection("열",
             ["#", "이름", "형식", "길이", "정밀도", "소수", "NULL 허용", "기본값", "가상", "Identity", "보이지 않음", "도메인", "주석"],
-            [.. table.Columns.Select(c => (IReadOnlyList<object?>)
+            [.. ColumnOrdering.ByColumnId(table.Columns).Select(c => (IReadOnlyList<object?>)
             [
                 c.Position, c.Name, c.DataType, c.Length, c.Precision, c.Scale, c.IsNullable ? "Y" : "N", c.DefaultValue,
                 c.IsVirtual ? "Y" : null, c.IsIdentity ? "Y" : null, c.IsInvisible ? "Y" : null, c.Domain, c.Comment,

@@ -1,0 +1,99 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="using:Oranda.App.Features.ColumnReorder"
+        xmlns:se="using:Oranda.App.Features.SqlEditor"
+        x:Class="Oranda.App.Features.ColumnReorder.ColumnReorderWindow"
+        x:DataType="vm:ColumnReorderViewModel"
+        Title="열 순서 바꾸기"
+        Width="1000" Height="680" MinWidth="760" MinHeight="520"
+        WindowStartupLocation="CenterOwner"
+        ShowInTaskbar="False"
+        FontSize="{DynamicResource OrandaFontSizeBase}">
+  <Window.Styles>
+    <Style Selector="TextBlock.error">
+      <Setter Property="Foreground" Value="{DynamicResource OrandaIconRedBrush}" />
+    </Style>
+    <Style Selector="TextBlock.hint">
+      <Setter Property="Opacity" Value="0.65" />
+    </Style>
+  </Window.Styles>
+
+  <Grid Margin="16" RowDefinitions="Auto,Auto,*,Auto,Auto" RowSpacing="10">
+    <!-- 방식: ① 은 11.2 서버에서 숨긴다. 막는 이유는 아래 줄에 보인다. -->
+    <StackPanel Grid.Row="0" Spacing="4">
+      <TextBlock x:Name="TableText" FontWeight="SemiBold" />
+      <StackPanel Orientation="Horizontal" Spacing="16">
+        <RadioButton x:Name="InvisibleRadio" GroupName="method" IsVisible="{Binding CanUseInvisible}"
+                     IsChecked="{Binding IsInvisibleMethod, Mode=OneWay}"
+                     Content="① INVISIBLE → VISIBLE (12c 이상, 즉시 끝남)" AutomationProperties.Name="방식 1: INVISIBLE에서 VISIBLE로" />
+        <RadioButton x:Name="RebuildRadio" GroupName="method"
+                     IsChecked="{Binding IsRebuildMethod, Mode=OneWay}"
+                     Content="② 재생성 스크립트 (스크립트만 만듦)" AutomationProperties.Name="방식 2: 재생성 스크립트" />
+      </StackPanel>
+    </StackPanel>
+
+    <ItemsControl Grid.Row="1" ItemsSource="{Binding BlockReasons}" IsVisible="{Binding HasBlockReasons}">
+      <ItemsControl.ItemTemplate>
+        <DataTemplate x:DataType="x:String">
+          <TextBlock Classes="error" Text="{Binding StringFormat='⛔ {0}'}" TextWrapping="Wrap" />
+        </DataTemplate>
+      </ItemsControl.ItemTemplate>
+    </ItemsControl>
+
+    <Grid Grid.Row="2" ColumnDefinitions="Auto,*" ColumnSpacing="12">
+      <!-- 열 목록: 끌어서 옮기거나 위·아래 단추. 이름·타입·NULL 여부. -->
+      <DockPanel Grid.Column="0" Width="400">
+        <StackPanel DockPanel.Dock="Right" Spacing="6" Margin="8,0,0,0" VerticalAlignment="Top">
+          <Button x:Name="UpButton" Content="▲ 위" AutomationProperties.Name="위로" />
+          <Button x:Name="DownButton" Content="▼ 아래" AutomationProperties.Name="아래로" />
+        </StackPanel>
+        <ListBox x:Name="ColumnList" ItemsSource="{Binding Items}" AutomationProperties.Name="열 목록">
+          <ListBox.ItemTemplate>
+            <DataTemplate x:DataType="vm:ColumnReorderItem">
+              <Grid ColumnDefinitions="100,*,72" ColumnSpacing="8">
+                <TextBlock Text="{Binding Name}" TextTrimming="CharacterEllipsis" />
+                <TextBlock Grid.Column="1" Classes="hint" Text="{Binding TypeText}" />
+                <TextBlock Grid.Column="2" Classes="hint" Text="{Binding NullableText}" MinWidth="64" />
+              </Grid>
+            </DataTemplate>
+          </ListBox.ItemTemplate>
+        </ListBox>
+      </DockPanel>
+
+      <DockPanel Grid.Column="1">
+        <TextBlock DockPanel.Dock="Top" Classes="hint" Margin="0,0,0,4"
+                   Text="스크립트 미리보기 (방식 ① 은 이 문장을 그대로 실행한다)" />
+        <Border BorderThickness="1" BorderBrush="{DynamicResource OrandaSeparatorBrush}">
+          <se:SqlCodeView x:Name="PreviewView" Text="{Binding PreviewText}" />
+        </Border>
+      </DockPanel>
+    </Grid>
+
+    <!-- 소스 경고: 이 표를 쓰는 PL/SQL 의 SELECT * · 열 목록 없는 INSERT 후보 -->
+    <Expander Grid.Row="3" Header="소스 경고 (SELECT * · 열 목록 없는 INSERT 후보)" IsExpanded="True" HorizontalAlignment="Stretch">
+      <StackPanel Spacing="4">
+        <ScrollViewer MaxHeight="110" IsVisible="{Binding HasWarnings}">
+          <ItemsControl x:Name="WarningList" ItemsSource="{Binding Warnings}">
+            <ItemsControl.ItemTemplate>
+              <DataTemplate x:DataType="vm:ColumnReorderWarning">
+                <TextBlock Text="{Binding Text}" TextTrimming="CharacterEllipsis" FontFamily="Cascadia Mono,Consolas,Menlo,monospace" />
+              </DataTemplate>
+            </ItemsControl.ItemTemplate>
+          </ItemsControl>
+        </ScrollViewer>
+        <TextBlock x:Name="WarningNoteText" Classes="hint" Text="{Binding WarningNote}" TextWrapping="Wrap" />
+      </StackPanel>
+    </Expander>
+
+    <StackPanel Grid.Row="4" Spacing="8">
+      <TextBlock x:Name="StatusLine" Text="{Binding StatusText}" TextWrapping="Wrap" AutomationProperties.Name="상태" />
+      <ProgressBar IsIndeterminate="True" IsVisible="{Binding IsBusy}" Height="4" />
+      <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8">
+        <Button x:Name="PreviewButton" Content="스크립트 미리보기" IsEnabled="{Binding CanPreview}" />
+        <Button x:Name="RunButton" Content="실행" Classes="accent" IsVisible="{Binding IsInvisibleMethod}" IsEnabled="{Binding CanRun}" />
+        <Button x:Name="OpenScriptButton" Content="새 편집기 탭에 열기" Classes="accent" IsVisible="{Binding IsRebuildMethod}" IsEnabled="{Binding CanOpenScript}" />
+        <Button x:Name="CloseButton" Content="닫기" IsCancel="True" />
+      </StackPanel>
+    </StackPanel>
+  </Grid>
+</Window>

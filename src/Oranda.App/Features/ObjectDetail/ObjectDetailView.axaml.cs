@@ -1,4 +1,6 @@
 using System.ComponentModel;
+using System.Threading;
+using System.Threading.Tasks;
 using Avalonia.Controls;
 using Avalonia.Input.Platform;
 
@@ -18,6 +20,7 @@ public partial class ObjectDetailView : UserControl, Oranda.App.Shell.Docking.IF
                 await clipboard.SetTextAsync(_vm.DdlText);
             }
         };
+        ReorderColumnsButton.Click += async (_, _) => await OpenReorderDialogAsync();
         Tabs.SelectionChanged += (_, _) =>
         {
             if (_vm is not null)
@@ -51,6 +54,18 @@ public partial class ObjectDetailView : UserControl, Oranda.App.Shell.Docking.IF
 
         // 목록 자체보다 고른 구역 줄에 준다(방향키가 바로 먹는다). 구역을 아직 못 읽었으면 false — 잠깐 뒤 다시 불린다.
         return SectionList.SelectedItem is { } selected && SectionList.ContainerFromItem(selected) is { } row && row.Focus();
+    }
+
+    /// <summary>「열 순서 바꾸기…」: 대화상자를 열고, 방식 ① 이 끝나면 상세를 새로 읽는다.</summary>
+    private async Task OpenReorderDialogAsync()
+    {
+        if (_vm is not { Services: { } services, Session: { } session, Target: { } target } vm)
+        {
+            return;
+        }
+
+        await Oranda.App.Features.ColumnReorder.ColumnReorderLauncher.OpenAsync(
+            services, session, target, (_, _) => _ = vm.OpenAsync(session, target, vm.IsDdlSelected), CancellationToken.None);
     }
 
     private void OnVmChanged(object? sender, PropertyChangedEventArgs e) => Sync();

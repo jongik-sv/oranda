@@ -170,6 +170,7 @@
   "Cmd.oranda.schema.insertColumns": "편집기에 열 목록 넣기",
   "Cmd.oranda.schema.openDetail": "객체 상세 열기",
   "Cmd.oranda.schema.showDdl": "DDL 보기",
+  "Cmd.oranda.schema.reorderColumns": "열 순서 바꾸기…",
   "Cmd.oranda.schema.reveal": "스키마 브라우저에서 찾기",
   "Cmd.oranda.schema.compileInvalid": "INVALID 객체 일괄 컴파일",
   "Cmd.oranda.schema.recyclebinPurge": "휴지통 비우기(Purge)",

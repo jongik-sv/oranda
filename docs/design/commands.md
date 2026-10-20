@@ -489,6 +489,7 @@
 | `oranda.schema.insertColumns` | 편집기에 열 목록 넣기 | - | `schemaFocus` | `schemaNodeSelected && sqlDocOpen` | TSK-07-02 |
 | `oranda.schema.openDetail` | 객체 상세 열기 | - | `schemaFocus` | `schemaNodeSelected` | TSK-07-03 |
 | `oranda.schema.showDdl` | DDL 보기 | - | `schemaFocus` | `schemaNodeSelected` | TSK-07-03 |
+| `oranda.schema.reorderColumns` | 열 순서 바꾸기… | - | `schemaFocus` | `schemaNodeSelected && !readOnlySession` | TSK-13-01 |
 | `oranda.schema.compileInvalid` | INVALID 객체 일괄 컴파일 | - | 전역 | `hasSession && !readOnlySession` | TSK-07-04 |
 | `oranda.schema.recyclebinPurge` | 휴지통 비우기(Purge) | - | `schemaFocus` | `recyclebinNodeSelected && !readOnlySession` | TSK-07-04 |
 | `oranda.schema.recyclebinFlashback` | 휴지통에서 되살리기 | - | `schemaFocus` | `recyclebinNodeSelected && !readOnlySession` | TSK-07-04 |

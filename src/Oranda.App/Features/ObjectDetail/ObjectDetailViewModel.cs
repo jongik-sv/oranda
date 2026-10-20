@@ -134,6 +134,13 @@ public sealed partial class ObjectDetailViewModel : ToolPanelViewModelBase
     /// <summary>시험용: 「데이터」 탭의 행 편집기를 바꾼다(기본 = 서비스의 <see cref="IRowEditor"/>).</summary>
     internal IRowEditor? RowEditor { get; set; }
 
+    /// <summary>열 순서 바꾸기 대화상자 등 이 문서에서 다른 화면을 여는 쪽이 서비스를 꺼내는 곳.</summary>
+    internal IServiceProvider? Services => _services;
+
+    /// <summary>true 면 「열」 탭이 선택돼 있고 대상이 표다(「열 순서 바꾸기…」 단추가 보인다).</summary>
+    [ObservableProperty]
+    private bool _canReorderColumns;
+
     [ObservableProperty]
     private string _title = "객체 상세";
 
@@ -196,6 +203,7 @@ public sealed partial class ObjectDetailViewModel : ToolPanelViewModelBase
 
     partial void OnSelectedSectionChanged(ObjectDetailSection? value)
     {
+        CanReorderColumns = value is { Title: "열" } && Target is { ObjectType: "TABLE" };
         IsDataSelected = value is { IsData: true };
         if (IsDataSelected)
         {
