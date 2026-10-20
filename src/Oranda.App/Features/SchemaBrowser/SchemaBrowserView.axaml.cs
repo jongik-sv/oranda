@@ -19,6 +19,7 @@ public partial class SchemaBrowserView : UserControl
     private bool _dragging;
     private PointerPressedEventArgs? _pressArgs;
     private bool _pressExpanded;
+    private SchemaNode? _keySelected;
     private SchemaBrowserViewModel? _revealSource;
 
     public SchemaBrowserView()
@@ -154,10 +155,16 @@ public partial class SchemaBrowserView : UserControl
         }
     }
 
-    /// <summary>Enter: 「더 보기」는 다음 쪽, 객체 노드는 고정 문서로 연다(포커스는 그 문서로).</summary>
+    /// <summary>Enter: 「더 보기」는 다음 쪽, 객체 노드는 고정 문서로 연다(포커스는 그 문서로). 다른 키는 누르기 전 선택만 적어 둔다.</summary>
     private async void OnTreeEnter(object? sender, KeyEventArgs e)
     {
-        if (e.Key != Key.Enter || e.KeyModifiers != KeyModifiers.None || DataContext is not SchemaBrowserViewModel vm)
+        if (DataContext is not SchemaBrowserViewModel vm)
+        {
+            return;
+        }
+
+        _keySelected = vm.SelectedNode;
+        if (e.Key != Key.Enter || e.KeyModifiers != KeyModifiers.None)
         {
             return;
         }
@@ -175,11 +182,10 @@ public partial class SchemaBrowserView : UserControl
         }
     }
 
-    /// <summary>방향키·Home·End·Page 로 고른 뒤: 잠깐 멈추면 미리보기로 연다(누르고 있는 동안은 계속 미룬다).</summary>
+    /// <summary>키(방향키·Home·End·Page·글자 찾기)로 다른 노드를 고른 뒤: 잠깐 멈추면 미리보기로 연다(누르고 있는 동안은 계속 미룬다).</summary>
     private void OnTreeNavigated(object? sender, KeyEventArgs e)
     {
-        if (e.Key is Key.Up or Key.Down or Key.Home or Key.End or Key.PageUp or Key.PageDown
-            && DataContext is SchemaBrowserViewModel vm)
+        if (DataContext is SchemaBrowserViewModel vm && !ReferenceEquals(vm.SelectedNode, _keySelected))
         {
             vm.SchedulePreview(vm.SelectedNode);
         }
