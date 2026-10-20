@@ -195,12 +195,13 @@ public sealed class ObjectDetailIntegrationTests : IAsyncLifetime
 
         var columns = Section(detail, "열");
         var names = columns.Rows.Select(r => (string?)r[1]).ToList();
-        Assert.Equal(["ID", "FLAG", "EMB", "DEPT_ID", "SECRET", "TAX"], names);
+        // INVISIBLE 열은 column_id 가 없어 보이는 열 뒤에 온다(TSK-13-01 ColumnOrdering).
+        Assert.Equal(["ID", "FLAG", "EMB", "DEPT_ID", "TAX", "SECRET"], names);
         Assert.Equal("BOOLEAN", columns.Rows[1][2]);
         Assert.Equal("VECTOR", columns.Rows[2][2]);
         Assert.Equal("Y", columns.Rows[0][9]);   // identity
-        Assert.Equal("Y", columns.Rows[4][10]);  // invisible
-        Assert.Equal("Y", columns.Rows[5][8]);   // virtual
+        Assert.Equal("Y", columns.Rows[5][10]);  // invisible
+        Assert.Equal("Y", columns.Rows[4][8]);   // virtual
 
         Assert.Contains(Section(detail, "제약").Rows, r => (string?)r[1] == "FOREIGN KEY" && (string?)r[3] == $"{_owner}.DEPT");
         Assert.Contains(Section(detail, "인덱스").Rows, r => (string?)r[0] == "MODERN_DEPT_IX");
