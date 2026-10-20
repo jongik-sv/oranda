@@ -122,3 +122,75 @@
 - **Rationale**: 잘못된 권한으로 조용히 접속하는 것을 막음
 - **Reversible**: yes
 - **Source**: WP-02 마감 커밋
+
+## D-016 (2026-10-20T09:00:00Z)
+- **Phase**: 편집기 탭 닫기
+- **Decision needed**: 고친 SQL 탭을 닫을 때 동작
+- **Decision made**: 고친 SQL 탭 닫기는 저장 / 저장 안 함 / 취소를 묻는다. 이름 없는 탭은 「저장」이 다른 이름으로 저장이다. 작업 공간 닫기와 앱 종료는 묻지 않는다. 대상은 SQL 탭만이다. 사용자가 결정을 조정자에게 위임(2026-10-20), 뒤집을 수 있음
+- **Rationale**: SQL Developer·DBeaver 와 같은 기대를 맞추되 종료 흐름은 막지 않음
+- **Reversible**: yes
+- **Source**: 조정 세션 확정(perf-decisions 레인 지시)
+
+## D-017 (2026-10-20T09:00:00Z)
+- **Phase**: 편집기 세션
+- **Decision needed**: 전용 세션 SQL 탭(SQL Developer 의 unshared worksheet) 도입 방식
+- **Decision made**: 탭마다 자기 세션을 가진다. 닫을 때 미커밋 변경이 있으면 커밋 / 롤백 / 취소를 묻는다. 상태 표시줄에 전용 세션임을 표시한다. 시작 복원 때는 공유 세션 탭으로 되살린다. 사용자가 결정을 조정자에게 위임(2026-10-20), 뒤집을 수 있음
+- **Rationale**: 세션 상태가 탭에 묶이므로 닫기 확인이 필요하고, 복원 때 연결을 몰래 여러 개 열지 않음
+- **Reversible**: yes
+- **Source**: 조정 세션 확정(perf-decisions 레인 지시)
+
+## D-018 (2026-10-20T09:00:00Z)
+- **Phase**: 범위
+- **Decision needed**: 스키마 비교·보고서·차트
+- **Decision made**: 이번 회차에 구현하지 않고 wbs 백로그 Task 로만 등록한다(TSK-12-01~03). 사용자가 결정을 조정자에게 위임(2026-10-20), 뒤집을 수 있음
+- **Rationale**: 일정 안에 들어가지 않으며 우선순위가 낮음
+- **Reversible**: yes
+- **Source**: 조정 세션 확정(perf-decisions 레인 지시)
+
+## D-019 (2026-10-20T09:00:00Z)
+- **Phase**: 시작 복원
+- **Decision needed**: 편집기를 되살릴 때 복원 범위
+- **Decision made**: 선택 영역은 버리고 커서 위치만 복원한다. 사용자가 결정을 조정자에게 위임(2026-10-20), 뒤집을 수 있음
+- **Rationale**: 선택 복원은 이득이 작고 어긋난 위치에서 오히려 혼란을 줌
+- **Reversible**: yes
+- **Source**: 조정 세션 확정(perf-decisions 레인 지시)
+
+## D-020 (2026-10-20T09:00:00Z)
+- **Phase**: TSK-04-09
+- **Decision needed**: PRD 7.2 「입력 멈춘 뒤 300 ms」 해석과 디바운스
+- **Decision made**: 「입력 멈춘 뒤」 는 마지막 키를 기준으로 읽는다. 따라서 EditorDiagnostics.Debounce 를 300 ms 에서 100 ms 로 줄인다. 사용자가 결정을 조정자에게 위임(2026-10-20), 뒤집을 수 있음
+- **Rationale**: 디바운스만 300 ms 면 분석 시간을 더하기 전에 한도를 다 쓰게 됨
+- **Reversible**: yes
+- **Source**: 조정 세션 확정(perf-decisions 레인 지시)
+
+## D-021 (2026-10-20T09:00:00Z)
+- **Phase**: TSK-06-11
+- **Decision needed**: PRD 7.2 취소 반응 측정 조건(선택지 나)
+- **Decision made**: 취소 측정 조건은 OOB 가 통하는 실제 서버 경로로 한다. gvenzl 이미지 기본 sqlnet.ora 의 DISABLE_OOB 경로는 측정 대상이 아니다. CI 의 ORANDA_IT_CANCEL_STRICT 는 끈 채로 둔다. 사용자가 결정을 조정자에게 위임(2026-10-20), 뒤집을 수 있음
+- **Rationale**: 앱은 취소 즉시 Break 를 보내며(단위 시험 확인) 지연은 시험 컨테이너 설정 탓임
+- **Reversible**: yes
+- **Source**: 조정 세션 확정(perf-decisions 레인 지시)
+
+## D-022 (2026-10-20T09:00:00Z)
+- **Phase**: TSK-10-06
+- **Decision needed**: composite R2R 과 설치 파일 80 MB
+- **Decision made**: macOS 에서 composite 와 어셈블리별 R2R 의 시작 시간 차가 0.3 s 이하이면 composite 를 끈다. 측정 결과로 확정한다(P4 에서 기록). 사용자가 결정을 조정자에게 위임(2026-10-20), 뒤집을 수 있음
+- **Rationale**: composite 는 시작 −0.5~0.6 s 의 대가로 설치 파일이 약 29 MB 커짐
+- **Reversible**: yes
+- **Source**: 조정 세션 확정(perf-decisions 레인 지시)
+
+## D-023 (2026-10-20T09:00:00Z)
+- **Phase**: TSK-06-12
+- **Decision needed**: PRD 7.2 「추가 메모리 행당 200 bytes」 정의
+- **Decision made**: 데이터를 포함한 값이며, 기준 데이터셋은 PRD 의 6열(NUMBER·VARCHAR2·NUMBER·DATE·NUMBER·VARCHAR2)이다. 가져온 행 기준이다. 사용자가 결정을 조정자에게 위임(2026-10-20), 뒤집을 수 있음
+- **Rationale**: 데이터를 빼면 측정 기준이 열 수에 따라 흔들림
+- **Reversible**: yes
+- **Source**: 조정 세션 확정(perf-decisions 레인 지시)
+
+## D-024 (2026-10-20T09:00:00Z)
+- **Phase**: 기타 확정
+- **Decision needed**: GRID-12/13 우선순위, 새 행만 있을 때 정렬, 템플릿 줄임말 규칙, SCH-01 위치
+- **Decision made**: GRID-12/13 은 PRD 205·206행 그대로 P1/M2 로 두고 wbs Task 를 더하지 않는다. 새 행(삽입)만 있어도 정렬을 막는다(GridEditSession.IsDirty 가 _inserts 를 포함, GridEditTests.Sort.cs 로 확인). 템플릿 줄임말 규칙은 지금 구현(TemplatesViewModel.cs 291~307행: 영문·숫자·밑줄, 대소문자 무시 중복 금지, 커밋 c58c6d6)을 따른다. SCH-01 위치도 지금 구현을 따른다. 사용자가 결정을 조정자에게 위임(2026-10-20), 뒤집을 수 있음
+- **Rationale**: 이미 구현·검증된 동작을 정본으로 삼아 문서와 맞춤
+- **Reversible**: yes
+- **Source**: 조정 세션 확정(perf-decisions 레인 지시)

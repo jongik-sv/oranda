@@ -1161,7 +1161,7 @@ dotnet, testhost, Oranda.App
 - depends: TSK-11-03
 - blocked-by: -
 - entry-point: -
-- note: 출처 docs/itest/TSK-11-03.md DEF-04. 2026-10-20 수정(4467728, 4b3a0a5): 원인은 L2 캐시(상한 4,096)가 문장 7,500개 문서에서 분석마다 비워져 편집마다 전체를 다시 파싱한 것. 고친 뒤 편집당 파싱 0~1문장, macOS 헤드리스 디바운스 뒤 → 반영 중앙값 15.3 / p95 56.2 ms(전 240.5 / 1,098.7), 디바운스 값은 그대로이고 분석 시작은 마지막 키 뒤 약 300 ms(헤드리스 300.2, 전 300~375 ms). 기록 docs/perf/diagnostics-macos-2026-10-20.md. 인수조건은 사람 결정(PRD 「입력 멈춘 뒤 300 ms」 를 디바운스 뒤로 읽을지 마지막 키 뒤로 읽을지, 후자면 Debounce 100 ms 안팎)과 Windows Perf.Ui diagnostics 재측정 뒤에 판정
+- note: 결정 D-020(2026-10-20): PRD 「입력 멈춘 뒤 300 ms」 = 마지막 키 기준, 디바운스 300 → 100 ms. 출처 docs/itest/TSK-11-03.md DEF-04. 2026-10-20 수정(4467728, 4b3a0a5): 원인은 L2 캐시(상한 4,096)가 문장 7,500개 문서에서 분석마다 비워져 편집마다 전체를 다시 파싱한 것. 고친 뒤 편집당 파싱 0~1문장, macOS 헤드리스 디바운스 뒤 → 반영 중앙값 15.3 / p95 56.2 ms(전 240.5 / 1,098.7), 디바운스 값은 그대로이고 분석 시작은 마지막 키 뒤 약 300 ms(헤드리스 300.2, 전 300~375 ms). 기록 docs/perf/diagnostics-macos-2026-10-20.md. 인수조건은 사람 결정(PRD 「입력 멈춘 뒤 300 ms」 를 디바운스 뒤로 읽을지 마지막 키 뒤로 읽을지, 후자면 Debounce 100 ms 안팎)과 Windows Perf.Ui diagnostics 재측정 뒤에 판정
 
 #### PRD 요구사항
 - prd-ref: PRD 7.2 문법 검사
@@ -1696,9 +1696,9 @@ dotnet, testhost, Oranda.App
 - schedule: 2026-12-08 ~ 2026-12-10
 - tags: defect, perf, cancel
 - depends: TSK-11-03
-- blocked-by: 사람 결정: 측정 환경
+- blocked-by: -
 - entry-point: -
-- note: 출처 docs/itest/TSK-11-03.md DEF-05. 모든 DB 작업은 취소 가능해야 한다(PRD 7.2). 결과(2026-10-20): 원인은 시험 컨테이너 설정이고 앱은 취소 즉시 Break 를 보낸다(토큰 → OracleCommand.Cancel → 드라이버 Break, 단위 시험 CommandCancellationTests). gvenzl 이미지가 서버 sqlnet.ora 에 DISABLE_OOB=ON, BREAK_POLL_SKIP=1000 을 넣어(gvenzl/oci-oracle-xe#43) 서버는 in-band 브레이크만 받고 DBMS_SESSION.SLEEP 중에는 읽지 않는다. oranda-ft 실측(ODP.NET 23.26.301 프로브): 원래 설정은 sleep 이 남은 잠을 다 자고(9.2~10.2 s) CPU 루프 3.1~11.2 s, 큰 SELECT 가져오기 0~1,036 ms(기본값 서버는 0~38 ms). BREAK_POLL_SKIP 만 기본값이면 CPU 11~330 ms, sleep 2~5 s. 서버 OOB 켬 + 브리지 IP 직접 접속은 sleep 116 ms(1회 3.6 s)·CPU 190~753 ms. OOB 켬 + 포트 중계(gvproxy)는 긴급 데이터가 사라져 sleep 9.0 s(잠을 다 잠)·CPU 6.7~10.8 s. 모든 경우 취소 뒤 다음 문장 성공. 개발 PC(Windows)의 59 s 도 같은 이미지를 포트 중계로 붙인 환경이었을 가능성이 높다. 통합 시험 3종(ExecutionServiceTests)은 1 s 를 ORANDA_IT_CANCEL_STRICT=1(OOB 가 통하는 경로)일 때만 단정하고, 평소에는 취소가 먹었는지·다음 문장 실행·취소 뒤 가져온 행 순서를 단정한다. 앱 보강: 「모두 가져오기」 도 실행 상태로 돌려 취소 명령이 끊고(ExecutionController.FetchAsync), 취소로 끊긴 페이지의 행을 버리던 OracleResultSet 을 고쳤다(취소 뒤 커서는 이어진다, 실측 누락 0). B 실험 결론: OOB 켬 + 중계 없는 경로면 1 s 가 대체로 가능하나(4회 중 3회 1 s 미만) 표본이 적고 메모리가 모자란 VM 이라 안정성은 보이지 못했다. 시험 뒤 sqlnet.ora 는 원복했고 원본과 diff 가 같다. 닫으려면 둘 중 하나가 필요하다: (가) CI 에 취소 시험 전용 컨테이너를 두고 시작 때 서버 sqlnet.ora 의 DISABLE_OOB·BREAK_POLL_SKIP 를 지운 뒤 브리지 IP 로 직접 붙어 STRICT 를 켠다, (나) PRD 7.2 의 측정 조건을 실제 서버(OOB 가 통하는 경로) 기준으로 사람이 확정하고 그 환경에서 Perf.Ui cancel 을 다시 잰다
+- note: 결정 D-021(2026-10-20): 측정 조건 = OOB 가 통하는 실제 서버 경로(gvenzl 기본 sqlnet.ora 의 DISABLE_OOB 경로 제외), CI 의 STRICT 는 끈 채로 둠. 출처 docs/itest/TSK-11-03.md DEF-05. 모든 DB 작업은 취소 가능해야 한다(PRD 7.2). 결과(2026-10-20): 원인은 시험 컨테이너 설정이고 앱은 취소 즉시 Break 를 보낸다(토큰 → OracleCommand.Cancel → 드라이버 Break, 단위 시험 CommandCancellationTests). gvenzl 이미지가 서버 sqlnet.ora 에 DISABLE_OOB=ON, BREAK_POLL_SKIP=1000 을 넣어(gvenzl/oci-oracle-xe#43) 서버는 in-band 브레이크만 받고 DBMS_SESSION.SLEEP 중에는 읽지 않는다. oranda-ft 실측(ODP.NET 23.26.301 프로브): 원래 설정은 sleep 이 남은 잠을 다 자고(9.2~10.2 s) CPU 루프 3.1~11.2 s, 큰 SELECT 가져오기 0~1,036 ms(기본값 서버는 0~38 ms). BREAK_POLL_SKIP 만 기본값이면 CPU 11~330 ms, sleep 2~5 s. 서버 OOB 켬 + 브리지 IP 직접 접속은 sleep 116 ms(1회 3.6 s)·CPU 190~753 ms. OOB 켬 + 포트 중계(gvproxy)는 긴급 데이터가 사라져 sleep 9.0 s(잠을 다 잠)·CPU 6.7~10.8 s. 모든 경우 취소 뒤 다음 문장 성공. 개발 PC(Windows)의 59 s 도 같은 이미지를 포트 중계로 붙인 환경이었을 가능성이 높다. 통합 시험 3종(ExecutionServiceTests)은 1 s 를 ORANDA_IT_CANCEL_STRICT=1(OOB 가 통하는 경로)일 때만 단정하고, 평소에는 취소가 먹었는지·다음 문장 실행·취소 뒤 가져온 행 순서를 단정한다. 앱 보강: 「모두 가져오기」 도 실행 상태로 돌려 취소 명령이 끊고(ExecutionController.FetchAsync), 취소로 끊긴 페이지의 행을 버리던 OracleResultSet 을 고쳤다(취소 뒤 커서는 이어진다, 실측 누락 0). B 실험 결론: OOB 켬 + 중계 없는 경로면 1 s 가 대체로 가능하나(4회 중 3회 1 s 미만) 표본이 적고 메모리가 모자란 VM 이라 안정성은 보이지 못했다. 시험 뒤 sqlnet.ora 는 원복했고 원본과 diff 가 같다. 닫으려면 둘 중 하나가 필요하다: (가) CI 에 취소 시험 전용 컨테이너를 두고 시작 때 서버 sqlnet.ora 의 DISABLE_OOB·BREAK_POLL_SKIP 를 지운 뒤 브리지 IP 로 직접 붙어 STRICT 를 켠다, (나) PRD 7.2 의 측정 조건을 실제 서버(OOB 가 통하는 경로) 기준으로 사람이 확정하고 그 환경에서 Perf.Ui cancel 을 다시 잰다
 
 #### PRD 요구사항
 - prd-ref: PRD 7.2 실행 취소 반응
@@ -1732,7 +1732,7 @@ dotnet, testhost, Oranda.App
 - depends: TSK-11-03
 - blocked-by: -
 - entry-point: -
-- note: 출처 docs/itest/TSK-11-03.md DEF-06. 「행당 200 bytes」 가 데이터를 포함하는지 PRD 에서 확정 필요
+- note: 결정 D-023(2026-10-20): 「행당 200 bytes」 = 데이터 포함, PRD 6열 데이터셋 기준(PRD 7.2 반영). 출처 docs/itest/TSK-11-03.md DEF-06
 
 #### PRD 요구사항
 - prd-ref: PRD 7.2 100만 행 그리드
@@ -2300,7 +2300,7 @@ dotnet, testhost, Oranda.App
 - depends: TSK-11-03
 - blocked-by: -
 - entry-point: -
-- note: 출처 docs/itest/TSK-11-03.md DEF-07. 진행(2026-10-20, 맥): Velopack 1.2.161 을 넣고 Program.Main 첫 줄에서 VelopackApp.Build().Run() 을 부른다. 게시에서 PDB 를 뺐다(win-x64 게시 폴더 301 → 199 MB). vpk 는 원래 *.pdb 를 빼므로 106 MB 추정은 과대였다. 맥 교차 패키징(vpk "[win]" pack, 무서명) Setup.exe 는 composite 에서 92.3 MB(초과), composite 를 끄면 63.4 MB, macOS .pkg 66.3 MB(scripts/release/README.md 크기 표). 남은 일: composite(−0.6 s)와 80 MB 목표 중 사람 결정, Windows 에서 pack-windows.ps1 실행·check-installer-size.ps1, CI 의 서명 .pkg 크기 확인
+- note: 결정 D-022(2026-10-20): macOS 에서 composite 대 어셈블리별 R2R 시작 시간 차가 0.3 s 이하이면 composite 를 끈다(측정으로 확정). 출처 docs/itest/TSK-11-03.md DEF-07. 진행(2026-10-20, 맥): Velopack 1.2.161 을 넣고 Program.Main 첫 줄에서 VelopackApp.Build().Run() 을 부른다. 게시에서 PDB 를 뺐다(win-x64 게시 폴더 301 → 199 MB). vpk 는 원래 *.pdb 를 빼므로 106 MB 추정은 과대였다. 맥 교차 패키징(vpk "[win]" pack, 무서명) Setup.exe 는 composite 에서 92.3 MB(초과), composite 를 끄면 63.4 MB, macOS .pkg 66.3 MB(scripts/release/README.md 크기 표). 남은 일: composite(−0.6 s)와 80 MB 목표 중 사람 결정, Windows 에서 pack-windows.ps1 실행·check-installer-size.ps1, CI 의 서명 .pkg 크기 확인
 
 #### PRD 요구사항
 - prd-ref: PRD 7.2 설치 파일 크기, PRD 업데이트
@@ -2445,6 +2445,96 @@ dotnet, testhost, Oranda.App
   - 평문 0건
   - 수용 시험 차단 이슈 0건
   - 발견 결함은 해당 기능 WP에 defect Task로 등록됨
+- constraints: -
+- test-criteria: -
+
+#### 기술 스펙 (TRD)
+- tech-spec: -
+- api-spec: -
+- data-model: -
+- ui-spec: -
+
+## WP-12: 백로그 (일정 미정)
+- description: 이번 회차에 구현하지 않기로 한 기능. 일정이 잡히면 앞 WP 로 옮긴다
+
+### TSK-12-01: 스키마 비교
+- category: feat
+- domain: fullstack
+- model: sonnet
+- status: [ ]
+- priority: low
+- assignee: -
+- schedule: -
+- tags: backlog
+- depends: -
+- blocked-by: -
+- entry-point: -
+- note: 결정 D-018(2026-10-20): 이번 회차에 구현하지 않고 백로그로만 등록
+
+#### PRD 요구사항
+- prd-ref: -
+- requirements:
+  - 두 스키마(접속)의 객체 차이를 비교하고 변경 스크립트를 만든다
+- acceptance:
+  - 일정이 잡히면 요구사항과 인수조건을 정한다
+- constraints: -
+- test-criteria: -
+
+#### 기술 스펙 (TRD)
+- tech-spec: -
+- api-spec: -
+- data-model: -
+- ui-spec: -
+
+### TSK-12-02: 보고서
+- category: feat
+- domain: fullstack
+- model: sonnet
+- status: [ ]
+- priority: low
+- assignee: -
+- schedule: -
+- tags: backlog
+- depends: -
+- blocked-by: -
+- entry-point: -
+- note: 결정 D-018(2026-10-20): 이번 회차에 구현하지 않고 백로그로만 등록
+
+#### PRD 요구사항
+- prd-ref: -
+- requirements:
+  - 질의 결과를 보고서 형태로 구성해 내보낸다
+- acceptance:
+  - 일정이 잡히면 요구사항과 인수조건을 정한다
+- constraints: -
+- test-criteria: -
+
+#### 기술 스펙 (TRD)
+- tech-spec: -
+- api-spec: -
+- data-model: -
+- ui-spec: -
+
+### TSK-12-03: 차트
+- category: feat
+- domain: fullstack
+- model: sonnet
+- status: [ ]
+- priority: low
+- assignee: -
+- schedule: -
+- tags: backlog
+- depends: -
+- blocked-by: -
+- entry-point: -
+- note: 결정 D-018(2026-10-20): 이번 회차에 구현하지 않고 백로그로만 등록
+
+#### PRD 요구사항
+- prd-ref: -
+- requirements:
+  - 질의 결과를 차트로 그린다
+- acceptance:
+  - 일정이 잡히면 요구사항과 인수조건을 정한다
 - constraints: -
 - test-criteria: -
 
