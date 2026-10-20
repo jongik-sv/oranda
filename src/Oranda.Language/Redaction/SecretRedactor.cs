@@ -15,8 +15,6 @@ internal sealed class SecretRedactor : ISecretRedactor
 {
     private const string Mask = "***";
 
-    private static readonly string[] SensitiveNameParts = ["pass", "pwd", "secret", "token"];
-
     public string Redact(string sqlText)
     {
         if (string.IsNullOrEmpty(sqlText))
@@ -100,23 +98,7 @@ internal sealed class SecretRedactor : ISecretRedactor
         return Apply(sqlText, edits);
     }
 
-    public bool IsSensitiveBindName(string bindName)
-    {
-        if (string.IsNullOrEmpty(bindName))
-        {
-            return false;
-        }
-
-        foreach (var part in SensitiveNameParts)
-        {
-            if (bindName.Contains(part, StringComparison.OrdinalIgnoreCase))
-            {
-                return true;
-            }
-        }
-
-        return false;
-    }
+    public bool IsSensitiveBindName(string bindName) => SensitiveBindNames.IsSensitive(bindName);
 
     private static bool IsWord(Token t) => t.Kind is TokenKind.Identifier or TokenKind.Keyword;
 
