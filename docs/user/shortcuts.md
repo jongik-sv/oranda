@@ -10,6 +10,7 @@
 | 탭 닫기 / 닫은 탭 다시 열기 | Primary+W / Shift+T |
 | 접속 관리 | Primary+Shift+O |
 | 찾기 / 다음 찾기 | Primary+F / F3 |
+| DB 객체로 이동 / 스키마 브라우저에서 찾기 | Primary+P / Alt+F1 (macOS Option+F1) |
 | 사용자 문서 | F1 |
 
 다른 프로그램에 익숙하면 설정 > 키맵 에서 Orange5·PL/SQL Developer·SQL Developer 프리셋을 고를 수 있다.

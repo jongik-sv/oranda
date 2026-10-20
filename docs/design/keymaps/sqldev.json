@@ -44,6 +44,8 @@
     { "command": "oranda.nav.findReferences", "keys": ["Shift+F12"], "when": "editorFocus" },
     { "command": "oranda.nav.back", "keys": ["Alt+Left"], "when": "editorFocus", "mac": ["Primary+Ctrl+Left"] },
     { "command": "oranda.nav.forward", "keys": ["Alt+Right"], "when": "editorFocus", "mac": ["Primary+Ctrl+Right"] },
+    { "command": "oranda.nav.quickOpenObject", "keys": ["Primary+P"] },
+    { "command": "oranda.schema.reveal", "keys": ["Alt+F1"] },
     { "command": "oranda.format.document", "keys": ["Primary+F7"], "when": "editorFocus" },
     { "command": "oranda.exec.runStatement", "keys": ["Primary+Enter", "F9"], "when": "sqlDocFocus" },
     { "command": "oranda.exec.runScript", "keys": ["F5"], "when": "sqlDocFocus" },
