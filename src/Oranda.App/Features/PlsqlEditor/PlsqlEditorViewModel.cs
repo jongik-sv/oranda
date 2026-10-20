@@ -351,6 +351,23 @@ public sealed partial class PlsqlEditorViewModel : ToolPanelViewModelBase
         return true;
     }
 
+    /// <summary>
+    /// 서버 소스 줄 번호(<c>all_source.line</c>, 1부터)로 커서를 옮긴다. 앞에 붙인 <c>CREATE OR REPLACE</c>·머리 주석만큼 줄을 맞춘다.
+    /// 편집기가 아직 화면에 붙지 않았으면 붙을 때 그 줄을 보이도록 <c>ScrollLine</c> 도 정한다. 줄이 범위 밖이면 false.
+    /// </summary>
+    public bool GoToServerLine(int line)
+    {
+        var (lineOffset, _) = PlsqlSourceText.SourceStart(Editor.Text);
+        var target = line + lineOffset;
+        if (line < 1 || target > Editor.Document.LineCount)
+        {
+            return false;
+        }
+
+        Editor.ScrollLine = target;
+        return Editor.GoToLine(target);
+    }
+
     /// <summary>차이 보기 열기(서버 소스를 새로 읽어 내 소스와 비교).</summary>
     public async Task ShowServerDiffAsync(CancellationToken ct = default)
     {

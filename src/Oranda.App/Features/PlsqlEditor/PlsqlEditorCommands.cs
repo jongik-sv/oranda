@@ -109,6 +109,7 @@ public sealed class PlsqlEditorCommandHandler : ICommandHandler
     {
         var target = parameter switch
         {
+            PlsqlSourceLocation at => at.Ref,
             SchemaNode n => n.Ref,
             DbObjectRef r => r,
             _ => FindSchemaBrowser()?.SelectedNode?.Ref,
@@ -126,7 +127,10 @@ public sealed class PlsqlEditorCommandHandler : ICommandHandler
             return;
         }
 
-        await vm.OpenAsync(session, target, ct).ConfigureAwait(true);
+        if (await vm.OpenAsync(session, target, ct).ConfigureAwait(true) && parameter is PlsqlSourceLocation { Line: > 0 } location)
+        {
+            vm.GoToServerLine(location.Line);
+        }
     }
 
     private void ShowErrors()
@@ -202,6 +206,9 @@ public sealed class PlsqlEditorCommandHandler : ICommandHandler
         return true;
     }
 }
+
+/// <summary><c>oranda.plsql.openSource</c> 인자: 객체와 서버 소스 줄 번호(1부터, <c>all_source.line</c>). 열고 나서 그 줄로 커서를 옮긴다.</summary>
+public sealed record PlsqlSourceLocation(DbObjectRef Ref, int Line);
 
 /// <summary>자리 표시 클래스(ui-contract 소유 파일 규약). 실제 처리기는 <see cref="PlsqlEditorCommandHandler"/>.</summary>
 public static class PlsqlEditorCommands

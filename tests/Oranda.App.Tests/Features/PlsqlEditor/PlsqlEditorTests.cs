@@ -409,6 +409,32 @@ public class PlsqlEditorTests
     }
 
     [Fact]
+    public async Task Open_source_command_with_a_line_moves_the_caret_to_that_server_line()
+    {
+        var meta = new FakeMeta { Source = BodySource };
+        PlsqlEditorViewModel? vm = null;
+        var handler = new PlsqlEditorCommandHandler(new NoServices())
+        {
+            ViewModelFactory = () => new PlsqlEditorViewModel(meta, new FakeExec()),
+            SessionProvider = () => new FakeSession(),
+            OpenDocument = (v, _) =>
+            {
+                vm = v;
+                return true;
+            },
+        };
+
+        await handler.ExecuteAsync(new CommandContext("oranda.plsql.openSource", new NoKeys(), new PlsqlSourceLocation(Body, 3)), default);
+
+        Assert.NotNull(vm);
+        Assert.Equal(3, vm.Editor.CaretPosition.Line);
+        Assert.Equal(1, vm.Editor.CaretPosition.Column);
+        Assert.Equal(3, vm.Editor.ScrollLine); // 편집기가 화면에 붙을 때 그 줄을 보인다
+        Assert.False(vm.GoToServerLine(99));
+        Assert.False(vm.GoToServerLine(0));
+    }
+
+    [Fact]
     public async Task Compile_command_compiles_active_tab_and_shows_error_panel()
     {
         var meta = new FakeMeta { Source = BodySource, Errors = [new CompileError(3, 5, "x", false)] };
