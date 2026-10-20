@@ -15,6 +15,10 @@
       <Setter Property="BorderThickness" Value="0" />
       <Setter Property="VerticalAlignment" Value="Center" />
     </Style>
+    <!-- 탭 머리 줄 오른쪽 끝을 Excel 단추 자리로 비워 둔다(탭이 많으면 탭 쪽이 줄어들어 단추는 가려지지 않는다). -->
+    <Style Selector="TabControl#Tabs /template/ ItemsPresenter#PART_ItemsPresenter">
+      <Setter Property="Margin" Value="0,0,34,0" />
+    </Style>
   </UserControl.Styles>
   <DockPanel>
     <!-- 접속 라벨 띠(운영 = 빨강, ui-shell.md 4.2). 개발 접속이고 읽기 전용이 아니면 숨긴다. -->
@@ -23,6 +27,7 @@
       <TextBlock Text="{Binding Banner}" FontWeight="SemiBold" TextTrimming="CharacterEllipsis"
                  AutomationProperties.Name="접속 라벨" />
     </Border>
+    <Grid>
     <TabControl x:Name="Tabs" ItemsSource="{Binding Tabs}" SelectedItem="{Binding Selected, Mode=TwoWay}">
       <TabControl.ItemTemplate>
         <DataTemplate x:DataType="vm:ResultTabItem">
@@ -44,5 +49,11 @@
         </DataTemplate>
       </TabControl.ContentTemplate>
     </TabControl>
+    <!-- 선택한 결과 탭의 결과를 Excel 로 내보낸다(oranda.grid.exportExcel). 결과 그리드가 없는 탭이면 꺼진다. -->
+    <Button x:Name="ExcelButton" Classes="toolbar" HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,2,4,0"
+            Focusable="False" Tag="oranda.grid.exportExcel" Content="Excel 로 내보내기"
+            IsEnabled="{Binding Selected.HasPane, FallbackValue=False}"
+            icons:ButtonIcon.Key="excel" icons:ButtonIcon.IconOnly="True" />
+    </Grid>
   </DockPanel>
 </UserControl>

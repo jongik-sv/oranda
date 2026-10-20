@@ -63,20 +63,14 @@ public partial class SqlResultPaneView : UserControl
             }
         };
 
-        // 툴바 단추(편집 명령·Excel 로 내보내기): Tag 의 명령을 실행한다(오른쪽 클릭 메뉴와 같은 명령, 포커스는 그리드에 둔다).
+        // 툴바 단추(편집 명령): Tag 의 명령을 실행한다(오른쪽 클릭 메뉴와 같은 명령, 포커스는 그리드에 둔다).
         AddHandler(Button.ClickEvent, async (_, e) =>
         {
-            if (e.Source is Button { Tag: string id } && (id.StartsWith("oranda.grid.edit.", StringComparison.Ordinal) || id == "oranda.grid.exportExcel"))
+            if (e.Source is Button { Tag: string id } && id.StartsWith("oranda.grid.edit.", StringComparison.Ordinal))
             {
                 e.Handled = true;
                 ResultGridCommands.Active = GridControl.Model ?? ResultGridCommands.Active; // 이 창의 결과를 대상으로 삼는다
                 PushGridKeys();
-                if (id == "oranda.grid.exportExcel")
-                {
-                    // 질의를 실행한 직후처럼 포커스가 편집기에 있어도 눌리게 한다(PushGridKeys 는 그리드에 포커스가 있을 때만 키를 맞춘다).
-                    ContextKeyService.Shared?.Set("gridHasResult", GridControl.Model?.HasResult ?? false);
-                }
-
                 await ShellCommandRunner.RunAsync(id);
             }
         });
