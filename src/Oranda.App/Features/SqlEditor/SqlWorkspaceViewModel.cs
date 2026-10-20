@@ -16,7 +16,7 @@ namespace Oranda.App.Features.SqlEditor;
 /// </summary>
 public sealed partial class SqlWorkspaceViewModel : ToolPanelViewModelBase, IInnerTabsDocument
 {
-    private List<(Guid Id, long Version, bool Dirty)>? _autosaveStamp;
+    private string? _autosaveStamp;
 
     internal SqlWorkspaceViewModel(SqlEditorHost host, string id, string name)
     {
@@ -122,14 +122,24 @@ public sealed partial class SqlWorkspaceViewModel : ToolPanelViewModelBase, IInn
         SourcePath = SourcePath,
     };
 
-    /// <summary>지난 자동 저장 뒤로 바뀐 것이 있으면 true 와 새 표지를 돌려준다.</summary>
-    internal bool ChangedSinceAutosave(out List<(Guid Id, long Version, bool Dirty)> stamp)
+    /// <summary>
+    /// 지난 자동 저장 뒤로 바뀐 것이 있으면 true 와 새 표지를 돌려준다. 내용(판·변경 표시)뿐 아니라 작업 공간 이름·원본 파일·
+    /// 활성 탭·탭 이름도 넣는다(이름만 바꾸고 죽어도 복구가 옛 이름으로 돌아가지 않게).
+    /// </summary>
+    internal bool ChangedSinceAutosave(out string stamp)
     {
-        stamp = [.. Tabs.Select(t => (t.TabId, t.Version, t.IsDirty))];
-        return _autosaveStamp is null || !_autosaveStamp.SequenceEqual(stamp);
+        var sb = new System.Text.StringBuilder()
+            .Append(Name).Append('\u0001').Append(SourcePath).Append('\u0001').Append(ActiveTab?.TabId);
+        foreach (var t in Tabs)
+        {
+            sb.Append('\u0002').Append(t.TabId).Append(':').Append(t.Version).Append(':').Append(t.IsDirty).Append(':').Append(t.Title);
+        }
+
+        stamp = sb.ToString();
+        return !string.Equals(_autosaveStamp, stamp, StringComparison.Ordinal);
     }
 
-    internal void MarkAutosaved(List<(Guid Id, long Version, bool Dirty)>? stamp) => _autosaveStamp = stamp;
+    internal void MarkAutosaved(string? stamp) => _autosaveStamp = stamp;
 
     private void OnTabsChanged(object? sender, NotifyCollectionChangedEventArgs e)
     {

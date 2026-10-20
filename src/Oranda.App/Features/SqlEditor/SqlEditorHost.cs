@@ -91,11 +91,8 @@ public sealed class SqlEditorHost : ObservableObject, IDisposable
             }
 
             _activeWorkspace = value;
-            OnPropertyChanged();
-            OnPropertyChanged(nameof(WorkspaceId));
-            OnPropertyChanged(nameof(WorkspaceName));
-            ActiveWorkspaceChanged?.Invoke(this, EventArgs.Empty);
-            SetActive(value?.ActiveTab);
+            SetActive(value?.ActiveTab); // 알림 받는 쪽이 Active 를 읽으면 이미 새 작업 공간의 탭이다
+            RaiseActiveWorkspaceChanged();
         }
     }
 
@@ -105,20 +102,22 @@ public sealed class SqlEditorHost : ObservableObject, IDisposable
         get => _active;
         set
         {
+            var switched = false;
             if (value is not null && WorkspaceOf(value) is { } ws)
             {
                 ws.ActiveTab = value;
                 if (!ReferenceEquals(_activeWorkspace, ws))
                 {
                     _activeWorkspace = ws;
-                    OnPropertyChanged(nameof(ActiveWorkspace));
-                    OnPropertyChanged(nameof(WorkspaceId));
-                    OnPropertyChanged(nameof(WorkspaceName));
-                    ActiveWorkspaceChanged?.Invoke(this, EventArgs.Empty);
+                    switched = true;
                 }
             }
 
             SetActive(value);
+            if (switched)
+            {
+                RaiseActiveWorkspaceChanged();
+            }
         }
     }
 
@@ -141,6 +140,14 @@ public sealed class SqlEditorHost : ObservableObject, IDisposable
     public event EventHandler<SqlEditorViewModel>? TabOpened;
 
     public event EventHandler<SqlEditorViewModel>? TabClosed;
+
+    private void RaiseActiveWorkspaceChanged()
+    {
+        OnPropertyChanged(nameof(ActiveWorkspace));
+        OnPropertyChanged(nameof(WorkspaceId));
+        OnPropertyChanged(nameof(WorkspaceName));
+        ActiveWorkspaceChanged?.Invoke(this, EventArgs.Empty);
+    }
 
     /// <summary>탭이 들어 있는 작업 공간.</summary>
     public SqlWorkspaceViewModel? WorkspaceOf(SqlEditorViewModel tab) =>
@@ -230,6 +237,13 @@ public sealed class SqlEditorHost : ObservableObject, IDisposable
 
     private void RemoveWorkspace(SqlWorkspaceViewModel workspace, int index)
     {
+        // 닫히는 탭이 활성인 채로 TabClosed 를 받는 쪽이 없게, 먼저 이웃 작업 공간으로 옮긴다.
+        if (ReferenceEquals(_activeWorkspace, workspace))
+        {
+            var others = Workspaces.Where(w => !ReferenceEquals(w, workspace)).ToList();
+            ActiveWorkspace = others.Count == 0 ? null : others[Math.Min(index, others.Count - 1)];
+        }
+
         foreach (var tab in workspace.Tabs.ToList())
         {
             workspace.Tabs.Remove(tab);
@@ -237,12 +251,9 @@ public sealed class SqlEditorHost : ObservableObject, IDisposable
             TabClosed?.Invoke(this, tab);
         }
 
+        workspace.ActiveTab = null;
         Workspaces.RemoveAt(index);
         WorkspaceClosed?.Invoke(this, workspace);
-        if (ReferenceEquals(_activeWorkspace, workspace))
-        {
-            ActiveWorkspace = Workspaces.Count == 0 ? null : Workspaces[Math.Min(index, Workspaces.Count - 1)];
-        }
     }
 
     /// <summary>「작업 공간 이름 바꾸기」. 저장 파일 ID 는 「작업 공간 저장」 때만 바뀐다(닫았다 열어도 같은 파일).</summary>
@@ -549,6 +560,12 @@ public sealed class SqlEditorHost : ObservableObject, IDisposable
         }
         else
         {
+            if (ReferenceEquals(_activeWorkspace, ws))
+            {
+                SetActive(null); // 바꿔 끼우는 동안 빠지는 탭이 활성으로 남지 않게
+            }
+
+            ws.ActiveTab = null;
             foreach (var old in ws.Tabs.ToList())
             {
                 ws.Tabs.Remove(old);
@@ -611,17 +628,25 @@ public sealed class SqlEditorHost : ObservableObject, IDisposable
         }
 
         var oldId = ws.Id;
-        var id = SlugOf(name.Trim());
-        for (int n = 2; Workspaces.Any(w => !ReferenceEquals(w, ws) && w.Id == id); n++)
+        var baseId = SlugOf(name.Trim());
+        var id = baseId;
+        if (id != oldId)
         {
-            id = SlugOf(name.Trim()) + "-" + n.ToString(CultureInfo.InvariantCulture); // 다른 열린 작업 공간의 파일을 덮어쓰지 않는다
+            // 다른 작업 공간(열려 있든 닫아 두었든)의 파일을 덮어쓰지 않는다. 같은 작업 공간을 같은 이름으로 다시 저장하는 것만 덮어쓴다.
+            var taken = Workspaces.Where(w => !ReferenceEquals(w, ws)).Select(w => w.Id).Concat(ListWorkspaceIds())
+                .ToHashSet(StringComparer.Ordinal);
+            for (int n = 2; taken.Contains(id); n++)
+            {
+                id = baseId + "-" + n.ToString(CultureInfo.InvariantCulture);
+            }
         }
 
+        // 먼저 새 ID 로 저장하고, 성공한 뒤에 메모리의 ID·이름을 바꾼다(저장이 실패하면 아무것도 바뀌지 않는다).
+        await _store.SaveAsync(ws.ToWorkspace() with { Id = id, Name = name.Trim() }, ct).ConfigureAwait(true);
         ws.Name = name.Trim();
         ws.Id = id;
         OnPropertyChanged(nameof(WorkspaceId));
         OnPropertyChanged(nameof(WorkspaceName));
-        await _store.SaveAsync(ws.ToWorkspace(), ct).ConfigureAwait(true);
         if (oldId != id)
         {
             await _store.DeleteAutosaveAsync(oldId, ct).ConfigureAwait(true); // 옛 ID 의 자동 저장이 남으면 복구 때 둘로 열린다
@@ -806,7 +831,18 @@ public sealed class SqlEditorHost : ObservableObject, IDisposable
         var autos = new List<Workspace>();
         foreach (var id in await _store.ListAutosaveIdsAsync(ct).ConfigureAwait(true))
         {
-            if (await _store.LoadAutosaveAsync(id, ct).ConfigureAwait(true) is { Tabs.Count: > 0 } auto)
+            Workspace? auto;
+            try
+            {
+                auto = await _store.LoadAutosaveAsync(id, ct).ConfigureAwait(true);
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or System.Text.Json.JsonException)
+            {
+                System.Diagnostics.Trace.TraceError("자동 저장 '{0}' 을(를) 읽지 못했다: {1}", id, ex.Message);
+                continue; // 한 파일이 나빠도 나머지 작업 공간은 복구한다
+            }
+
+            if (auto is { Tabs.Count: > 0 })
             {
                 autos.Add(auto);
             }
@@ -892,14 +928,18 @@ public sealed class SqlEditorHost : ObservableObject, IDisposable
         var wrote = false;
         foreach (var ws in Workspaces.ToList())
         {
-            if (!ws.ChangedSinceAutosave(out var stamp))
+            if (!Workspaces.Contains(ws) || !ws.ChangedSinceAutosave(out var stamp))
             {
-                continue;
+                continue; // 앞 작업 공간을 쓰는 동안 닫혔으면 건너뛴다
             }
 
             await _store.AutosaveAsync(ws.ToWorkspace(), ct).ConfigureAwait(true);
             ws.MarkAutosaved(stamp);
             wrote = true;
+            if (!Workspaces.Contains(ws))
+            {
+                await _store.DeleteAutosaveAsync(ws.Id, ct).ConfigureAwait(true); // 쓰는 사이 닫혔다: 다음 시작에 복구로 다시 나타나지 않게
+            }
         }
 
         return wrote;
@@ -926,9 +966,10 @@ public sealed class SqlEditorHost : ObservableObject, IDisposable
                     {
                         await Dispatcher.UIThread.InvokeAsync(() => AutosaveAsync(cts.Token)).ConfigureAwait(false);
                     }
-                    catch (IOException)
+                    catch (Exception ex) when (ex is not OperationCanceledException)
                     {
-                        // 디스크 오류는 다음 틱에 다시 시도한다.
+                        // 디스크 오류 등은 다음 틱에 다시 시도한다(한 번 실패로 자동 저장이 멈추면 복구할 것이 없어진다).
+                        System.Diagnostics.Trace.TraceError("자동 저장 실패: {0}", ex.Message);
                     }
                 }
             }

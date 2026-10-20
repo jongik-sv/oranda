@@ -916,6 +916,56 @@ public sealed class SqlEditorTests : IDisposable
         Assert.Equal("select 2", run2.Active!.Text);
     });
 
+    [Fact]
+    public Task Saving_under_the_name_of_a_closed_saved_workspace_does_not_overwrite_it() => Ui.Run(async () =>
+    {
+        var host = new SqlEditorHost(NewStore(), new FakeDialogs { Prompt = "Report" }) { ListWorkspaceIds = () => ["report"] };
+        host.NewDocument("select 1");
+
+        Assert.True(await host.SaveWorkspaceAsync(default));
+
+        Assert.Equal("report-2", host.WorkspaceId);
+        Assert.Equal("Report", host.WorkspaceName);
+    });
+
+    [Fact]
+    public Task Workspace_events_see_the_new_active_tab_and_closed_tabs_are_never_active() => Ui.Run(async () =>
+    {
+        var host = new SqlEditorHost(NewStore());
+        var a = host.NewDocument("a");
+        var second = host.NewWorkspace();
+        var seen = new List<SqlEditorViewModel?>();
+        host.ActiveWorkspaceChanged += (_, _) => seen.Add(host.Active);
+        var activeWhenClosed = new List<bool>();
+        host.TabClosed += (_, t) => activeWhenClosed.Add(ReferenceEquals(host.Active, t));
+
+        host.ActiveWorkspace = host.Workspaces[0];
+        Assert.Equal([a], seen); // 알림을 받을 때 Active 는 이미 새 작업 공간의 탭이다
+
+        host.ActiveWorkspace = second;
+        await host.CloseWorkspaceAsync(second, default);
+        Assert.Equal([false], activeWhenClosed);
+        Assert.Same(a, host.Active);
+    });
+
+    [Fact]
+    public Task Renaming_a_workspace_or_switching_tabs_is_autosaved() => Ui.Run(async () =>
+    {
+        var host = new SqlEditorHost(NewStore(), new FakeDialogs { Prompt = "월말" });
+        var a = host.NewDocument("a");
+        host.NewDocument("b");
+        Assert.True(await host.AutosaveAsync(default));
+
+        await host.RenameWorkspaceAsync(host.ActiveWorkspace!, default);
+        Assert.True(await host.AutosaveAsync(default));
+        Assert.Equal("월말", (await NewStore().LoadAutosaveAsync("default", default))!.Name);
+
+        host.Active = a;
+        Assert.True(await host.AutosaveAsync(default));
+        Assert.Equal(a.TabId, (await NewStore().LoadAutosaveAsync("default", default))!.ActiveTabId);
+        Assert.False(await host.AutosaveAsync(default));
+    });
+
     [Theory]
     [InlineData("My Project 1!", "my-project-1")]
     [InlineData("  --A--B--  ", "a-b")]

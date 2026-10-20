@@ -67,11 +67,21 @@ public sealed partial class SqlEditorDockWiring(
             host.TabClosed += (_, _) => PushKeys(host);
 
             // 문서 탭의 × 로 작업 공간을 닫으면 호스트에서도 닫는다(저장하고 자동 저장을 지운다).
-            docking.DocumentClosed += (_, doc) =>
+            docking.DocumentClosed += async (_, doc) =>
             {
-                if (doc.Panel is SqlWorkspaceViewModel ws && host.Workspaces.Contains(ws))
+                if (doc.Panel is not SqlWorkspaceViewModel ws || !host.Workspaces.Contains(ws))
                 {
-                    _ = host.CloseWorkspaceAsync(ws, CancellationToken.None);
+                    return;
+                }
+
+                try
+                {
+                    await host.CloseWorkspaceAsync(ws, CancellationToken.None);
+                }
+                catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+                {
+                    // 저장에 실패해도 자동 저장 파일은 남아 있다(다음 시작 때 복구로 돌아온다). 사용자에게는 알린다.
+                    await host.Dialogs.ShowMessageAsync("작업 공간 닫기", $"'{ws.Name}' 을(를) 저장하지 못했다: {ex.Message}", CancellationToken.None);
                 }
             };
             host.ActiveWorkspaceChanged += (_, _) => ShowActive(host);

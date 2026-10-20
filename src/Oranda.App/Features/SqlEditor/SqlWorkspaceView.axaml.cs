@@ -19,17 +19,29 @@ public partial class SqlWorkspaceView : UserControl
     {
         InitializeComponent();
         DataContextChanged += (_, _) => Bind(DataContext as SqlWorkspaceViewModel);
+
+        // 도킹이 문서를 떼었다 붙이면(분할·옮기기) 떨어져 있는 동안 구독을 풀어 둔다.
+        DetachedFromVisualTree += (_, _) => Unsubscribe();
+        AttachedToVisualTree += (_, _) => Bind(DataContext as SqlWorkspaceViewModel);
     }
 
-    private void Bind(SqlWorkspaceViewModel? vm)
+    private void Unsubscribe()
     {
         if (_vm is not null)
         {
             _vm.PropertyChanged -= OnVmPropertyChanged;
             _vm.Tabs.CollectionChanged -= OnTabsChanged;
         }
+    }
 
-        _views.Clear();
+    private void Bind(SqlWorkspaceViewModel? vm)
+    {
+        Unsubscribe();
+        if (!ReferenceEquals(_vm, vm))
+        {
+            _views.Clear(); // 다른 작업 공간이 들어왔다. 같은 작업 공간이 다시 붙은 것이면 편집기 View 를 그대로 쓴다.
+        }
+
         _vm = vm;
         if (_vm is not null)
         {
