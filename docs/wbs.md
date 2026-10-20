@@ -1911,6 +1911,41 @@ dotnet, testhost, Oranda.App
 - ui-spec:
   - 검색 창, DB 정보 창, 일괄 추출 마법사
 
+### TSK-07-05: 스키마 브라우저: Windows 에서 트리를 끌면 앱이 죽음 (DoDragDrop COMException)
+- category: defect
+- domain: frontend
+- model: sonnet
+- status: [ ]
+- priority: critical
+- assignee: -
+- schedule: 2026-12-08 ~ 2026-12-10
+- tags: defect, crash, windows, drag-drop
+- depends: TSK-07-02
+- blocked-by: -
+- entry-point: 스키마 브라우저 트리에서 노드를 누른 채 끌기
+- note: 2026-10-20 Windows 11 수동 시험(dev 832fcb7, Debug)에서 발생. 로그 %APPDATA%/Oranda/logs/oranda-20261020.log 07:15:00Z. macOS 에서는 보고 없음
+
+#### PRD 요구사항
+- prd-ref: PRD SCH-01 (끌어 놓기)
+- requirements:
+  - SchemaBrowserView.OnTreeMoved(SchemaBrowserView.axaml.cs 255행)가 `await vm.PrepareDragTextAsync(...)` 뒤에 `DragDrop.DoDragDropAsync(_pressArgs, ...)` 를 부른다. Windows 에서 OLE DoDragDrop 이 HRESULT 0x80004005 로 실패하고 COMException 이 난다
+  - catch 가 InvalidOperationException·NotSupportedException 만 잡아서 COMException 이 async void 밖으로 나가 처리되지 않은 예외로 앱이 종료된다
+  - 끌기 시작 실패는 앱을 죽이지 않고 상태줄 안내로 끝낸다. Windows 에서 끌어 놓기가 실제로 되도록 끌 문자열 준비를 끌기 시작 전에 끝내거나(동기·캐시) 누름 이벤트가 살아 있는 동안 DoDragDrop 을 부른다
+  - 같은 패턴(await 뒤 DoDragDropAsync, 좁은 catch)이 다른 끌기 지점(접속 관리자 폴더 끌기, SQL 탭 끌기 등)에도 있는지 확인하고 같이 막는다
+- acceptance:
+  - Windows 에서 표·뷰·열 노드를 편집기로 끌면 앱이 죽지 않고 SELECT 문·이름·열 목록이 들어간다
+  - 끌기 시작이 실패해도 앱이 살아 있고 상태줄에 이유가 보인다
+- constraints:
+  - 결함을 재현하는 시험이 먼저 실패하고, 고친 뒤 통과해야 한다
+- test-criteria:
+  - 끌기 시작 실패(COMException 포함)를 흉내 낸 Headless 시험에서 처리되지 않은 예외가 없다
+
+#### 기술 스펙 (TRD)
+- tech-spec: -
+- api-spec: -
+- data-model: -
+- ui-spec: -
+
 ## WP-08: PL/SQL 도구
 - schedule: 2026-11-24 ~ 2026-11-30
 
@@ -2666,6 +2701,7 @@ graph LR
   TSK-11-03 --> TSK-06-11
   TSK-11-03 --> TSK-06-12
   TSK-11-03 --> TSK-10-06
+  TSK-07-02 --> TSK-07-05
   style TSK-01-02 fill:#fff3e0,stroke:#e65100
   style TSK-01-07 fill:#fff3e0,stroke:#e65100
   style TSK-01-02 stroke:#c62828,stroke-width:2px
