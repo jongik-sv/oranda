@@ -304,7 +304,7 @@ public sealed class Oracle11gTests : IAsyncLifetime
             foreach (var prefix in new[] { "dba", "all" })
             {
                 var sql = query.Sql.Replace("@PFX@", prefix, StringComparison.Ordinal)
-                    .Replace("@SIZE@", "CAST(NULL AS NUMBER)", StringComparison.Ordinal);
+                    .Replace("@SEGMENTS@", "dba_segments", StringComparison.Ordinal);
                 try
                 {
                     await ParseOnlyAsync(raw, sql);

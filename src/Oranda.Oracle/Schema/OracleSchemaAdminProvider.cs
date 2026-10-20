@@ -14,14 +14,12 @@ internal sealed class OracleSchemaAdminProvider : ISchemaAdminProvider
         ArgumentNullException.ThrowIfNull(s);
         ArgumentNullException.ThrowIfNull(q);
 
-        // 크기는 세그먼트 뷰에서 구한다. DBA 권한이 없으면 현재 사용자의 세그먼트만 본다.
-        var dba = s.Server.Capabilities.CanQueryDictionary;
-        var size = $"(SELECT SUM(g.bytes) FROM {(dba ? "dba_segments" : "user_segments")} g "
-            + "WHERE g.segment_name = o.object_name AND g.segment_type LIKE o.object_type || '%'"
-            + (dba ? " AND g.owner = o.owner" : " AND o.owner = USER")
-            + ")";
+        // 크기는 세그먼트 뷰에서 한 번 모아 붙인다(TSK-07-06). DBA 권한이 없으면 현재 사용자의 세그먼트만 본다.
+        var segments = s.Server.Capabilities.CanQueryDictionary
+            ? "dba_segments"
+            : "(SELECT USER AS owner, segment_name, segment_type, bytes FROM user_segments)";
 
-        var table = await SchemaQuery.RunAsync(s, "dbinfo.object_search", new Dictionary<string, string> { ["@SIZE@"] = size }, c =>
+        var table = await SchemaQuery.RunAsync(s, "dbinfo.object_search", new Dictionary<string, string> { ["@SEGMENTS@"] = segments }, c =>
         {
             c.Parameters.Add(new OracleParameter("owner", OracleDbType.Varchar2) { Value = (object?)q.Owner ?? DBNull.Value });
             c.Parameters.Add(new OracleParameter("types", OracleDbType.Varchar2)

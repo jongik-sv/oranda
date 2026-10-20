@@ -68,9 +68,12 @@ public class PlSqlAnalyzerTests(ITestOutputHelper output)
         var failures = new List<string>();
         foreach (var file in files)
         {
-            // 카탈로그 자리 표시자: @PFX@ 는 뷰 접두사, 그 밖의 @이름@(예: @SIZE@ 크기 식)은 실행 때 식으로 바뀐다.
+            // 카탈로그 자리 표시자: @PFX@ 는 뷰 접두사, @SEGMENTS@ 는 세그먼트 뷰(표 자리), 그 밖의 @이름@ 은 실행 때 식으로 바뀐다.
             var sql = System.Text.RegularExpressions.Regex.Replace(
-                (await File.ReadAllTextAsync(file)).Replace("@PFX@", "dba", StringComparison.Ordinal), "@[A-Z_]+@", "NULL");
+                (await File.ReadAllTextAsync(file)).Replace("@PFX@", "dba", StringComparison.Ordinal)
+                    .Replace("@SEGMENTS@", "dba_segments", StringComparison.Ordinal),
+                "@[A-Z_]+@",
+                "NULL");
             var diagnostics = await service.AnalyzeAsync(sql, CancellationToken.None);
             failures.AddRange(diagnostics.Where(d => d.Severity == DiagnosticSeverity.Error)
                 .Select(d => $"{Path.GetFileName(file)}@{d.Range.Start}: {d.Message}"));
