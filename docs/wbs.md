@@ -371,7 +371,7 @@ dotnet, testhost, Oranda.App
 - category: defect
 - domain: infra
 - model: sonnet
-- status: [ ]
+- status: [xx]
 - priority: low
 - assignee: -
 - schedule: 2026-12-08 ~ 2026-12-10
@@ -379,7 +379,7 @@ dotnet, testhost, Oranda.App
 - depends: TSK-11-03
 - blocked-by: -
 - entry-point: -
-- note: 출처 docs/itest/TSK-11-03.md DEF-03
+- note: 출처 docs/itest/TSK-11-03.md DEF-03. 결과(2026-10-20): PerfMarks.Append 가 IOException·UnauthorizedAccessException 을 삼키고 그 표식만 버린다. 시험 PerfMarksTests 2개(다른 스트림이 FileShare.None 으로 연 파일, 없는 폴더)는 고치기 전 IOException 으로 실패했다
 
 #### PRD 요구사항
 - prd-ref: PRD 7.2 (측정 자동화)
@@ -2300,7 +2300,7 @@ dotnet, testhost, Oranda.App
 - depends: TSK-11-03
 - blocked-by: -
 - entry-point: -
-- note: 출처 docs/itest/TSK-11-03.md DEF-07
+- note: 출처 docs/itest/TSK-11-03.md DEF-07. 진행(2026-10-20, 맥): Velopack 1.2.161 을 넣고 Program.Main 첫 줄에서 VelopackApp.Build().Run() 을 부른다. 게시에서 PDB 를 뺐다(win-x64 게시 폴더 301 → 199 MB). vpk 는 원래 *.pdb 를 빼므로 106 MB 추정은 과대였다. 맥 교차 패키징(vpk "[win]" pack, 무서명) Setup.exe 는 composite 에서 92.3 MB(초과), composite 를 끄면 63.4 MB, macOS .pkg 66.3 MB(scripts/release/README.md 크기 표). 남은 일: composite(−0.6 s)와 80 MB 목표 중 사람 결정, Windows 에서 pack-windows.ps1 실행·check-installer-size.ps1, CI 의 서명 .pkg 크기 확인
 
 #### PRD 요구사항
 - prd-ref: PRD 7.2 설치 파일 크기, PRD 업데이트
