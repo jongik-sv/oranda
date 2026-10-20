@@ -34,9 +34,9 @@
     <TextBlock Text="{Binding Status}" TextWrapping="Wrap" Classes.error="{Binding StatusIsError}" AutomationProperties.Name="상태" />
 
     <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8">
-      <Button x:Name="StartButton" MinWidth="88" Content="내보내기" Command="{Binding StartCommand}" IsDefault="True" />
-      <Button x:Name="CancelButton" MinWidth="88" Content="중단" Command="{Binding CancelCommand}" />
-      <Button x:Name="CloseButton" MinWidth="88" Content="닫기" IsCancel="True" />
+      <Button x:Name="StartButton" Content="내보내기" Command="{Binding StartCommand}" IsDefault="True" />
+      <Button x:Name="CancelButton" Content="중단" Command="{Binding CancelCommand}" />
+      <Button x:Name="CloseButton" Content="닫기" IsCancel="True" />
     </StackPanel>
   </StackPanel>
 </Window>
