@@ -86,9 +86,11 @@ internal sealed class OracleExecutionPlanService : IExecutionPlanService
             var planSteps = BuildSteps(steps.Select(r => new RawStep(
                 Int(r[0]) ?? 0, Int(r[1]), Str(r[3]) ?? string.Empty, Str(r[4]), Str(r[5]), Str(r[6]),
                 Long(r[7]), Long(r[8]), null, null, null, Str(r[9]), Str(r[10]))));
-            return new ExecutionPlan(planSteps, JoinLines(text))
+            // plan_table.plan_id(r[11])는 EXPLAIN 마다 새로 매기는 번호라 계획 해시가 아니다. DBMS_XPLAN 글의 「Plan hash value」를 쓴다(PLAN-04 비교).
+            var planText = JoinLines(text);
+            return new ExecutionPlan(planSteps, planText)
             {
-                PlanHashValue = steps.Count > 0 ? Long(steps[0][11]) : null,
+                PlanHashValue = ExecutionPlanText.ParsePlanHashValue(planText),
             };
         }
         finally
