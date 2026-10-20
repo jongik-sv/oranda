@@ -1,5 +1,6 @@
 using System;
 using System.Threading.Tasks;
+using Avalonia;
 using Avalonia.Controls;
 
 namespace Oranda.App.Features.DbTools;
@@ -17,6 +18,38 @@ public partial class ObjectSearchView : UserControl
             if (e.Key == Avalonia.Input.Key.Enter)
             {
                 Run(vm => vm.SearchAsync());
+            }
+        };
+        SourceTypeBox.ItemsSource = ObjectSearchViewModel.SourceTypes;
+        SourceSearchButton.Click += (_, _) => Run(vm => vm.SearchSourceAsync());
+        SourceTextBox.KeyDown += (_, e) =>
+        {
+            if (e.Key == Avalonia.Input.Key.Enter)
+            {
+                Run(vm => vm.SearchSourceAsync());
+            }
+        };
+        // 두 번 누른 줄(빈 곳이면 아무것도 안 한다)을 연다.
+        SourceList.DoubleTapped += (_, e) =>
+        {
+            if ((e.Source as StyledElement)?.DataContext is SourceSearchItem item)
+            {
+                Run(vm => vm.OpenSourceHitAsync(item));
+            }
+        };
+        ColumnSearchButton.Click += (_, _) => Run(vm => vm.SearchColumnsAsync());
+        ColumnNameBox.KeyDown += (_, e) =>
+        {
+            if (e.Key == Avalonia.Input.Key.Enter)
+            {
+                Run(vm => vm.SearchColumnsAsync());
+            }
+        };
+        ColumnList.DoubleTapped += (_, e) =>
+        {
+            if ((e.Source as StyledElement)?.DataContext is ColumnSearchItem item)
+            {
+                Run(vm => vm.OpenColumnHitAsync(item));
             }
         };
         CompileButton.Click += (_, _) => Run(vm => vm.CompileInvalidAsync());

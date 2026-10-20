@@ -79,6 +79,18 @@ public class SchemaStatementsTests
         Assert.Equal("CREATE TABLE \"B\".\"A\" (X NUMBER); CREATE INDEX \"IX\" ON \"B\".\"A\"(X);", result);
     }
 
+    [Theory]
+    [InlineData("VARCHAR2", 30L, null, null, "VARCHAR2(30)")]
+    [InlineData("NUMBER", null, 10L, 2L, "NUMBER(10,2)")]
+    [InlineData("NUMBER", null, 6L, 0L, "NUMBER(6)")]
+    [InlineData("NUMBER", null, null, 0L, "NUMBER(*,0)")]
+    [InlineData("NUMBER", null, null, null, "NUMBER")]
+    [InlineData("FLOAT", null, 126L, null, "FLOAT(126)")]
+    [InlineData("RAW", 16L, null, null, "RAW(16)")]
+    [InlineData("TIMESTAMP(6)", null, null, 6L, "TIMESTAMP(6)")]
+    public void Column_search_type_text(string type, long? length, long? precision, long? scale, string expected)
+        => Assert.Equal(expected, OracleSchemaAdminProvider.TypeText(type, length, precision, scale));
+
     [Fact]
     public void Dbinfo_catalog_queries_are_collected()
     {
@@ -88,6 +100,7 @@ public class SchemaStatementsTests
         {
             "dbinfo.instance", "dbinfo.database", "dbinfo.version", "dbinfo.options", "dbinfo.parameters", "dbinfo.nls",
             "dbinfo.object_search", "dbinfo.references", "dbinfo.recyclebin",
+            "dbinfo.source_search", "dbinfo.regex_check", "dbinfo.column_search",
         })
         {
             Assert.Equal(CatalogLicense.None, catalog.Get(id, server).Header.License);
@@ -213,6 +226,83 @@ public sealed class DatabaseInfoIntegrationTests : IClassFixture<OracleFreeFixtu
 
         Assert.Contains(sized, r => r.Ref.Name == "DEPT" && r.SizeBytes > 0);
         Assert.DoesNotContain(sized, r => r.SizeBytes is null);
+    }
+
+    [Fact]
+    public async Task Source_search_finds_lines_by_text_case_whole_word_and_regex()
+    {
+        await using (var conn = await OpenSystemAsync())
+        {
+            // all_source 줄 번호: 명세 1~3, 본문 1~9.
+            await ExecAsync(conn, $"CREATE PACKAGE {_owner}.find_pkg AS\n  PROCEDURE run_it;\nEND find_pkg;");
+            await ExecAsync(conn, $"CREATE PACKAGE BODY {_owner}.find_pkg AS\n  PROCEDURE run_it IS\n    v_total  NUMBER;\n    v_totalx NUMBER;\n  BEGIN\n"
+                + "    v_total := 0; -- Needle_Mark\n    v_totalx := 1;\n  END run_it;\nEND find_pkg;");
+        }
+
+        var s = await OpenAsync("system", _db.SystemPassword);
+        var admin = new OracleSchemaAdminProvider();
+        async Task<SearchHits<SourceSearchHit>> Find(SourceSearchQuery q) => await admin.SearchSourceAsync(s, q with { Owner = _owner }, default);
+
+        var mark = Assert.Single((await Find(new SourceSearchQuery { Text = "needle_mark" })).Rows);
+        Assert.Equal(new DbObjectRef(_owner, "FIND_PKG", "PACKAGE BODY"), mark.Ref);
+        Assert.Equal(6, mark.Line);
+        Assert.EndsWith("-- Needle_Mark", mark.Text, StringComparison.Ordinal); // 줄 끝 줄바꿈은 뗀다
+
+        Assert.Empty((await Find(new SourceSearchQuery { Text = "needle_mark", MatchCase = true })).Rows);
+        Assert.Equal([3, 4, 6, 7], (await Find(new SourceSearchQuery { Text = "V_TOTAL" })).Rows.Select(h => h.Line));
+        Assert.Equal([3, 6], (await Find(new SourceSearchQuery { Text = "v_total", WholeWord = true })).Rows.Select(h => h.Line));
+        Assert.Equal([6, 7], (await Find(new SourceSearchQuery { Text = @"^\s*v_total(x)?\s*:=", UseRegex = true })).Rows.Select(h => h.Line));
+
+        // 줄 끝 줄바꿈을 떼고 맞추므로 $ 가 줄 끝에 맞는다. 명세(3줄)와 본문(9줄) 모두.
+        var ends = (await Find(new SourceSearchQuery { Text = "^end find_pkg;$", UseRegex = true })).Rows;
+        Assert.Equal([("PACKAGE", 3), ("PACKAGE BODY", 9)], ends.Select(h => (h.Ref.ObjectType, h.Line)));
+
+        var specOnly = await Find(new SourceSearchQuery { Text = "find_pkg", ObjectTypes = ["PACKAGE"] });
+        Assert.NotEmpty(specOnly.Rows);
+        Assert.All(specOnly.Rows, h => Assert.Equal("PACKAGE", h.Ref.ObjectType));
+
+        var capped = await Find(new SourceSearchQuery { Text = "v_total", Limit = 1 });
+        Assert.Single(capped.Rows);
+        Assert.True(capped.Capped);
+        Assert.False((await Find(new SourceSearchQuery { Text = "v_total", Limit = 4 })).Capped);
+    }
+
+    [Fact]
+    public async Task Source_search_reports_a_bad_regex_even_when_no_line_would_be_read()
+    {
+        var s = await OpenAsync("system", _db.SystemPassword);
+        var admin = new OracleSchemaAdminProvider();
+
+        var bad = await Assert.ThrowsAsync<SearchPatternException>(() =>
+            admin.SearchSourceAsync(s, new SourceSearchQuery { Owner = _owner, Text = "(abc", UseRegex = true }, default));
+        Assert.Contains("ORA-12725", bad.Message, StringComparison.Ordinal);
+
+        // 소스가 하나도 없는 스키마에서도 틀린 정규식을 알린다(dual 검사).
+        var none = await Assert.ThrowsAsync<SearchPatternException>(() =>
+            admin.SearchSourceAsync(s, new SourceSearchQuery { Owner = _recycleUser, Text = "[abc", UseRegex = true }, default));
+        Assert.Contains("ORA-12726", none.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task Column_search_finds_columns_case_insensitively_with_type_and_nullability()
+    {
+        var s = await OpenAsync("system", _db.SystemPassword);
+        var admin = new OracleSchemaAdminProvider();
+
+        var names = await admin.SearchColumnsAsync(s, new ColumnSearchQuery { Owner = _owner, NamePattern = "%name%" }, default);
+        Assert.False(names.Capped);
+        Assert.Equal([("DEPT", "TABLE"), ("DEPT_V", "VIEW")], names.Rows.Select(h => (h.Table.Name, h.Table.ObjectType)));
+        var deptName = names.Rows[0];
+        Assert.Equal("NAME", deptName.ColumnName);
+        Assert.Equal("VARCHAR2(30)", deptName.DataType);
+        Assert.False(deptName.IsNullable);
+
+        var ids = await admin.SearchColumnsAsync(s, new ColumnSearchQuery { Owner = _owner, NamePattern = "%ID%" }, default);
+        Assert.Contains(ids.Rows, h => h.Table.Name == "EMP" && h.ColumnName == "DEPT_ID" && h.DataType == "NUMBER(6)" && h.IsNullable);
+
+        var capped = await admin.SearchColumnsAsync(s, new ColumnSearchQuery { Owner = _owner, NamePattern = "%", Limit = 1 }, default);
+        Assert.Single(capped.Rows);
+        Assert.True(capped.Capped);
     }
 
     [Fact]

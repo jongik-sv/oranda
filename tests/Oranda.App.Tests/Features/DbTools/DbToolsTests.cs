@@ -155,6 +155,178 @@ public class DbToolsTests
         Assert.Contains("VIEW SCOTT.EMP_V", vm.ReferencesText);
     }
 
+    // ---- 소스 검색·열 이름 검색 ----
+
+    [Fact]
+    public void Source_query_carries_owner_type_text_and_options()
+    {
+        var vm = new ObjectSearchViewModel(new FakeAdmin(), new FakeExec())
+        {
+            Owner = " scott ",
+            SourceText = "v_total",
+            SourceTypeFilter = "PACKAGE BODY",
+            SourceMatchCase = true,
+            SourceWholeWord = true,
+            SourceRegex = true,
+        };
+
+        var q = vm.BuildSourceQuery();
+
+        Assert.Equal("SCOTT", q.Owner);
+        Assert.Equal(["PACKAGE BODY"], q.ObjectTypes);
+        Assert.Equal("v_total", q.Text);
+        Assert.True(q.MatchCase && q.WholeWord && q.UseRegex);
+        Assert.Equal(ObjectSearchViewModel.MaxHits, q.Limit);
+        Assert.Empty(new ObjectSearchViewModel(new FakeAdmin(), new FakeExec()).BuildSourceQuery().ObjectTypes);
+    }
+
+    [Fact]
+    public async Task Source_search_lists_lines_with_trimmed_text_and_says_when_capped()
+    {
+        var body = new DbObjectRef("SCOTT", "PK", "PACKAGE BODY");
+        var admin = new FakeAdmin
+        {
+            SourceHits = new([new SourceSearchHit(body, 6, "    v_total := 0;  "), new SourceSearchHit(body, 9, "\tRETURN v_total;")], Capped: false),
+        };
+        var vm = new ObjectSearchViewModel(admin, new FakeExec()) { SourceText = "v_total" };
+        vm.Attach(new FakeSession());
+
+        await vm.SearchSourceAsync();
+
+        Assert.Equal([6, 9], vm.SourceHits.Select(h => h.Line));
+        Assert.Equal("SCOTT.PK", vm.SourceHits[0].Title);
+        Assert.Equal("PACKAGE BODY", vm.SourceHits[0].ObjectType);
+        Assert.Equal("v_total := 0;", vm.SourceHits[0].Text);
+        Assert.Equal("RETURN v_total;", vm.SourceHits[1].Text);
+        Assert.Equal("6", vm.SourceHits[0].LineText);
+        Assert.Equal("2줄 찾음(1개 객체)", vm.StatusText);
+        Assert.Equal("SCOTT", admin.LastSourceQuery?.Owner);
+        Assert.False(vm.IsBusy);
+
+        admin.SourceHits = admin.SourceHits with { Capped = true };
+        await vm.SearchSourceAsync();
+        Assert.StartsWith($"처음 {ObjectSearchViewModel.MaxHits}줄만 보인다", vm.StatusText);
+        Assert.Contains("더 있다", vm.StatusText);
+    }
+
+    [Fact]
+    public async Task Source_search_needs_text_and_shows_a_rejected_pattern_instead_of_failing()
+    {
+        var admin = new FakeAdmin
+        {
+            SourceHits = new([new SourceSearchHit(new DbObjectRef("SCOTT", "P", "PROCEDURE"), 1, "x")], Capped: false),
+        };
+        var vm = new ObjectSearchViewModel(admin, new FakeExec()) { SourceText = "   " };
+        vm.Attach(new FakeSession());
+
+        await vm.SearchSourceAsync();
+        Assert.Equal("찾을 글자를 넣으세요", vm.StatusText);
+        Assert.Null(admin.LastSourceQuery);
+
+        vm.SourceText = "x";
+        await vm.SearchSourceAsync();
+        Assert.Single(vm.SourceHits);
+
+        admin.SourceFailure = new SearchPatternException(SourceSearchPattern.Describe(12725));
+        vm.SourceText = "(abc";
+        vm.SourceRegex = true;
+        await vm.SearchSourceAsync();
+
+        Assert.Empty(vm.SourceHits);
+        Assert.Equal("정규식이 올바르지 않다 — 괄호 ( ) 짝이 맞지 않는다 (ORA-12725)", vm.StatusText);
+        Assert.False(vm.IsBusy);
+
+        admin.SourceFailure = new InvalidOperationException("ORA-00942: table or view does not exist");
+        await vm.SearchSourceAsync();
+        Assert.StartsWith("소스를 검색하지 못했다: ORA-00942", vm.StatusText);
+    }
+
+    [Fact]
+    public async Task Column_search_matches_name_case_insensitively_and_lists_type_and_nullability()
+    {
+        var admin = new FakeAdmin
+        {
+            ColumnHits = new(
+            [
+                new ColumnSearchHit(new DbObjectRef("SCOTT", "EMP", "TABLE"), "EMP_ID", "NUMBER(6)", false),
+                new ColumnSearchHit(new DbObjectRef("SCOTT", "EMP_V", "VIEW"), "EMP_ID", "NUMBER(6)", true),
+            ], Capped: false),
+        };
+        var vm = new ObjectSearchViewModel(admin, new FakeExec());
+        vm.Attach(new FakeSession());
+
+        await vm.SearchColumnsAsync();
+        Assert.Equal("찾을 열 이름을 넣으세요", vm.StatusText);
+        Assert.Null(admin.LastColumnQuery);
+
+        vm.ColumnNameText = "emp_id";
+        await vm.SearchColumnsAsync();
+
+        Assert.Equal("%EMP\\_ID%", admin.LastColumnQuery?.NamePattern);
+        Assert.Equal("SCOTT", admin.LastColumnQuery?.Owner);
+        Assert.Equal(["SCOTT.EMP", "SCOTT.EMP_V"], vm.ColumnHits.Select(h => h.Title));
+        Assert.Equal(["N", "Y"], vm.ColumnHits.Select(h => h.Nullable));
+        Assert.Equal("VIEW", vm.ColumnHits[1].ObjectType);
+        Assert.Equal("NUMBER(6)", vm.ColumnHits[0].DataType);
+        Assert.Equal("2개 열 찾음(2개 테이블·뷰)", vm.StatusText);
+
+        admin.ColumnHits = admin.ColumnHits with { Capped = true };
+        await vm.SearchColumnsAsync();
+        Assert.StartsWith($"처음 {ObjectSearchViewModel.MaxHits}개 열만 보인다", vm.StatusText);
+    }
+
+    [Fact]
+    public async Task Double_click_opens_the_source_line_in_the_plsql_editor_and_the_column_table_detail()
+    {
+        var session = new FakeSession();
+        var body = new DbObjectRef("SCOTT", "PK", "PACKAGE BODY");
+        var emp = new DbObjectRef("SCOTT", "EMP", "TABLE");
+        var openedSource = new List<(ISession, DbObjectRef, int)>();
+        var openedDetail = new List<(ISession, DbObjectRef)>();
+        var vm = new ObjectSearchViewModel(new FakeAdmin(), new FakeExec())
+        {
+            OpenSourceAt = (s, r, line, _) =>
+            {
+                openedSource.Add((s, r, line));
+                return Task.CompletedTask;
+            },
+            OpenDetail = (s, r, _) =>
+            {
+                openedDetail.Add((s, r));
+                return Task.CompletedTask;
+            },
+        };
+
+        // 접속 전에는 아무것도 열지 않는다.
+        await vm.OpenSourceHitAsync(new SourceSearchItem(new SourceSearchHit(body, 6, "x")));
+        Assert.Empty(openedSource);
+
+        vm.Attach(session);
+        await vm.OpenSourceHitAsync(new SourceSearchItem(new SourceSearchHit(body, 6, "x")));
+        vm.SelectedColumnHit = new ColumnSearchItem(new ColumnSearchHit(emp, "EMP_ID", "NUMBER", true));
+        await vm.OpenColumnHitAsync();
+
+        var (sourceSession, sourceRef, line) = Assert.Single(openedSource);
+        Assert.Same(session, sourceSession);
+        Assert.Equal(body, sourceRef);
+        Assert.Equal(6, line);
+        var (detailSession, detailRef) = Assert.Single(openedDetail);
+        Assert.Same(session, detailSession);
+        Assert.Equal(emp, detailRef);
+    }
+
+    [Fact]
+    public async Task Opening_hits_without_hooks_or_services_does_nothing()
+    {
+        var vm = new ObjectSearchViewModel(new FakeAdmin(), new FakeExec());
+        vm.Attach(new FakeSession());
+
+        await vm.OpenSourceHitAsync(new SourceSearchItem(new SourceSearchHit(new DbObjectRef("SCOTT", "P", "PROCEDURE"), 1, "x")));
+        await vm.OpenColumnHitAsync();
+
+        Assert.Equal(string.Empty, vm.StatusText);
+    }
+
     // ---- INVALID 일괄 컴파일 ----
 
     [Fact]
@@ -528,6 +700,16 @@ public class DbToolsTests
 
         public ObjectSearchQuery? LastQuery { get; private set; }
 
+        public SearchHits<SourceSearchHit> SourceHits { get; set; } = new([], Capped: false);
+
+        public Exception? SourceFailure { get; set; }
+
+        public SourceSearchQuery? LastSourceQuery { get; private set; }
+
+        public SearchHits<ColumnSearchHit> ColumnHits { get; set; } = new([], Capped: false);
+
+        public ColumnSearchQuery? LastColumnQuery { get; private set; }
+
         public Task<IReadOnlyList<ObjectSearchRow>> SearchObjectsAsync(ISession s, ObjectSearchQuery q, CancellationToken ct)
         {
             LastQuery = q;
@@ -548,6 +730,18 @@ public class DbToolsTests
         }
 
         public Task<IReadOnlyList<RecycleBinItem>> ListRecycleBinAsync(ISession s, CancellationToken ct) => Task.FromResult(Bin);
+
+        public Task<SearchHits<SourceSearchHit>> SearchSourceAsync(ISession s, SourceSearchQuery q, CancellationToken ct)
+        {
+            LastSourceQuery = q;
+            return SourceFailure is { } e ? Task.FromException<SearchHits<SourceSearchHit>>(e) : Task.FromResult(SourceHits);
+        }
+
+        public Task<SearchHits<ColumnSearchHit>> SearchColumnsAsync(ISession s, ColumnSearchQuery q, CancellationToken ct)
+        {
+            LastColumnQuery = q;
+            return Task.FromResult(ColumnHits);
+        }
     }
 
     private sealed class FakeExec : IExecutionService

@@ -7,6 +7,8 @@ using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using CommunityToolkit.Mvvm.ComponentModel;
+using Oranda.App.Features.ObjectDetail;
+using Oranda.App.Features.PlsqlEditor;
 using Oranda.App.Features.SchemaBrowser;
 using Oranda.App.Shell;
 using Oranda.Core.Execution;
@@ -42,6 +44,47 @@ public sealed class ObjectSearchItem
     public string Modified => Row.LastDdlTime?.ToString("yyyy-MM-dd HH:mm", CultureInfo.InvariantCulture) ?? string.Empty;
 
     public string Size => DbToolsSupport.FormatSize(Row.SizeBytes);
+}
+
+/// <summary>소스 검색 결과 한 줄(화면용). 두 번 누르면 PL/SQL 편집기에서 그 줄을 연다.</summary>
+public sealed class SourceSearchItem
+{
+    public SourceSearchItem(SourceSearchHit hit) => Hit = hit ?? throw new ArgumentNullException(nameof(hit));
+
+    public SourceSearchHit Hit { get; }
+
+    public DbObjectRef Ref => Hit.Ref;
+
+    public string Title => $"{Ref.Owner}.{Ref.Name}";
+
+    public string ObjectType => Ref.ObjectType;
+
+    public int Line => Hit.Line;
+
+    public string LineText => Hit.Line.ToString(CultureInfo.InvariantCulture);
+
+    /// <summary>앞뒤 공백을 뗀 줄 글자.</summary>
+    public string Text => Hit.Text.Trim();
+}
+
+/// <summary>열 이름 검색 결과 한 줄(화면용). 두 번 누르면 그 테이블·뷰의 객체 상세를 연다.</summary>
+public sealed class ColumnSearchItem
+{
+    public ColumnSearchItem(ColumnSearchHit hit) => Hit = hit ?? throw new ArgumentNullException(nameof(hit));
+
+    public ColumnSearchHit Hit { get; }
+
+    public DbObjectRef Table => Hit.Table;
+
+    public string Title => $"{Table.Owner}.{Table.Name}";
+
+    public string ObjectType => Table.ObjectType;
+
+    public string Column => Hit.ColumnName;
+
+    public string DataType => Hit.DataType;
+
+    public string Nullable => Hit.IsNullable ? "Y" : "N";
 }
 
 /// <summary>INVALID 일괄 컴파일 결과 한 줄.</summary>
@@ -90,7 +133,8 @@ public sealed class RecycleBinRow
 }
 
 /// <summary>
-/// <c>oranda.panel.objectSearch</c> — 객체 검색(이름·유형·크기·생성일·변경일, 참조 관계)과 INVALID 일괄 컴파일·휴지통 Purge/Flashback(TSK-07-04).
+/// <c>oranda.panel.objectSearch</c> — 객체 검색(이름·유형·크기·생성일·변경일, 참조 관계), 소스 본문 검색(줄 번호까지), 열 이름 검색과
+/// INVALID 일괄 컴파일·휴지통 Purge/Flashback(TSK-07-04).
 /// 읽기는 <see cref="ISchemaAdminProvider"/>, 상태를 바꾸는 문장(컴파일·Purge·Flashback)은 반드시 <see cref="IExecutionService"/> 로 보낸다
 /// (정책 관문·위험 명령 확인·읽기 전용 접속 차단은 그쪽 몫). 서비스는 처음 쓸 때 꺼낸다.
 /// </summary>
@@ -106,10 +150,21 @@ public sealed partial class ObjectSearchViewModel : ToolPanelViewModelBase
         "TYPE", "TYPE BODY", "TRIGGER", "DATABASE LINK",
     ];
 
+    /// <summary>소스·열 검색 한 번에 보이는 최대 줄 수. 더 있으면 상태 줄에 알린다.</summary>
+    public const int MaxHits = 1000;
+
+    /// <summary>소스 검색 유형(PL/SQL 편집기로 열 수 있는 것).</summary>
+    public static IReadOnlyList<string> SourceTypes { get; } =
+    [
+        "PACKAGE", "PACKAGE BODY", "PROCEDURE", "FUNCTION", "TRIGGER", "TYPE", "TYPE BODY",
+    ];
+
     private readonly IServiceProvider? _services;
     private ISchemaAdminProvider? _admin;
     private IExecutionService? _exec;
     private int _generation;
+    private int _sourceGeneration;
+    private int _columnGeneration;
 
     public ObjectSearchViewModel()
     {
@@ -135,6 +190,16 @@ public sealed partial class ObjectSearchViewModel : ToolPanelViewModelBase
     public ObservableCollection<CompileResultItem> CompileResults { get; } = [];
 
     public ObservableCollection<RecycleBinRow> RecycleBin { get; } = [];
+
+    public ObservableCollection<SourceSearchItem> SourceHits { get; } = [];
+
+    public ObservableCollection<ColumnSearchItem> ColumnHits { get; } = [];
+
+    /// <summary>시험용: 소스 줄 열기(세션, 객체, 서버 줄 번호). 기본 = <c>oranda.plsql.openSource</c> 처리기.</summary>
+    internal Func<ISession, DbObjectRef, int, CancellationToken, Task>? OpenSourceAt { get; set; }
+
+    /// <summary>시험용: 객체 상세 열기. 기본 = <c>oranda.schema.openDetail</c> 처리기.</summary>
+    internal Func<ISession, DbObjectRef, CancellationToken, Task>? OpenDetail { get; set; }
 
     [ObservableProperty]
     private string _owner = string.Empty;
@@ -174,6 +239,33 @@ public sealed partial class ObjectSearchViewModel : ToolPanelViewModelBase
     /// <summary>휴지통 항목을 되살릴 때 새 이름(비우면 원래 이름).</summary>
     [ObservableProperty]
     private string _flashbackName = string.Empty;
+
+    /// <summary>소스에서 찾을 글자(정규식 모드면 Oracle 정규식).</summary>
+    [ObservableProperty]
+    private string _sourceText = string.Empty;
+
+    [ObservableProperty]
+    private bool _sourceMatchCase;
+
+    [ObservableProperty]
+    private bool _sourceWholeWord;
+
+    [ObservableProperty]
+    private bool _sourceRegex;
+
+    /// <summary>빈 문자열 = 소스 유형 모두.</summary>
+    [ObservableProperty]
+    private string? _sourceTypeFilter;
+
+    [ObservableProperty]
+    private SourceSearchItem? _selectedSourceHit;
+
+    /// <summary>열 이름 조건(<c>*</c>·<c>%</c> 와일드카드, 없으면 「포함」, 대소문자 무시).</summary>
+    [ObservableProperty]
+    private string _columnNameText = string.Empty;
+
+    [ObservableProperty]
+    private ColumnSearchItem? _selectedColumnHit;
 
     [ObservableProperty]
     private string _statusText = string.Empty;
@@ -301,6 +393,199 @@ public sealed partial class ObjectSearchViewModel : ToolPanelViewModelBase
             ReferencesText = "참조 관계를 읽지 못했다: " + ex.Message.ReplaceLineEndings(" ");
         }
     }
+
+    public SourceSearchQuery BuildSourceQuery() => new()
+    {
+        Owner = NormalizeOwner(),
+        ObjectTypes = string.IsNullOrWhiteSpace(SourceTypeFilter) ? [] : [SourceTypeFilter.Trim()],
+        Text = SourceText,
+        MatchCase = SourceMatchCase,
+        WholeWord = SourceWholeWord,
+        UseRegex = SourceRegex,
+        Limit = MaxHits,
+    };
+
+    /// <summary>PL/SQL 소스 본문을 줄 단위로 찾는다. 정규식이 틀리면 서버가 알려 준 까닭을 상태 줄에 보인다.</summary>
+    public async Task SearchSourceAsync(CancellationToken ct = default)
+    {
+        if (Session is not { } session || ResolveAdmin() is not { } admin)
+        {
+            StatusText = Session is null ? "접속이 없다" : "검색 제공자가 없다";
+            return;
+        }
+
+        if (string.IsNullOrWhiteSpace(SourceText))
+        {
+            StatusText = "찾을 글자를 넣으세요";
+            return;
+        }
+
+        var gen = Interlocked.Increment(ref _sourceGeneration);
+        IsBusy = true;
+        try
+        {
+            var hits = await admin.SearchSourceAsync(session, BuildSourceQuery(), ct);
+            if (gen != _sourceGeneration)
+            {
+                return;
+            }
+
+            SourceHits.Clear();
+            foreach (var h in hits.Rows)
+            {
+                SourceHits.Add(new SourceSearchItem(h));
+            }
+
+            var objects = hits.Rows.Select(h => h.Ref).Distinct().Count();
+            StatusText = hits.Rows.Count == 0
+                ? "맞는 소스 줄이 없다"
+                : hits.Capped
+                    ? $"처음 {MaxHits}줄만 보인다({objects}개 객체) — 더 있다. 스키마·유형·검색어로 좁히세요"
+                    : $"{hits.Rows.Count}줄 찾음({objects}개 객체)";
+        }
+        catch (OperationCanceledException)
+        {
+        }
+        catch (SearchPatternException ex)
+        {
+            if (gen == _sourceGeneration)
+            {
+                SourceHits.Clear();
+                StatusText = ex.Message;
+            }
+        }
+        catch (Exception ex)
+        {
+            StatusText = "소스를 검색하지 못했다: " + ex.Message.ReplaceLineEndings(" ");
+        }
+        finally
+        {
+            if (gen == _sourceGeneration)
+            {
+                IsBusy = false;
+            }
+        }
+    }
+
+    public ColumnSearchQuery BuildColumnQuery() => new()
+    {
+        Owner = NormalizeOwner(),
+        NamePattern = SchemaFilter.ToLikePattern(ColumnNameText),
+        Limit = MaxHits,
+    };
+
+    /// <summary>테이블·뷰의 열을 이름으로 찾는다(대소문자 무시).</summary>
+    public async Task SearchColumnsAsync(CancellationToken ct = default)
+    {
+        if (Session is not { } session || ResolveAdmin() is not { } admin)
+        {
+            StatusText = Session is null ? "접속이 없다" : "검색 제공자가 없다";
+            return;
+        }
+
+        if (string.IsNullOrWhiteSpace(ColumnNameText))
+        {
+            StatusText = "찾을 열 이름을 넣으세요";
+            return;
+        }
+
+        var gen = Interlocked.Increment(ref _columnGeneration);
+        IsBusy = true;
+        try
+        {
+            var hits = await admin.SearchColumnsAsync(session, BuildColumnQuery(), ct);
+            if (gen != _columnGeneration)
+            {
+                return;
+            }
+
+            ColumnHits.Clear();
+            foreach (var h in hits.Rows)
+            {
+                ColumnHits.Add(new ColumnSearchItem(h));
+            }
+
+            var tables = hits.Rows.Select(h => h.Table).Distinct().Count();
+            StatusText = hits.Rows.Count == 0
+                ? "맞는 열이 없다"
+                : hits.Capped
+                    ? $"처음 {MaxHits}개 열만 보인다({tables}개 테이블·뷰) — 더 있다. 스키마·이름으로 좁히세요"
+                    : $"{hits.Rows.Count}개 열 찾음({tables}개 테이블·뷰)";
+        }
+        catch (OperationCanceledException)
+        {
+        }
+        catch (Exception ex)
+        {
+            StatusText = "열을 검색하지 못했다: " + ex.Message.ReplaceLineEndings(" ");
+        }
+        finally
+        {
+            if (gen == _columnGeneration)
+            {
+                IsBusy = false;
+            }
+        }
+    }
+
+    /// <summary>소스 검색 결과 줄을 PL/SQL 편집기에서 그 줄로 연다. 항목을 안 주면 선택 항목.</summary>
+    public async Task OpenSourceHitAsync(SourceSearchItem? item = null, CancellationToken ct = default)
+    {
+        item ??= SelectedSourceHit;
+        if (item is null || Session is not { } session)
+        {
+            return;
+        }
+
+        try
+        {
+            await (OpenSourceAt ?? OpenSourceWithCommand)(session, item.Ref, item.Line, ct);
+        }
+        catch (OperationCanceledException)
+        {
+        }
+        catch (Exception ex)
+        {
+            StatusText = "소스를 열지 못했다: " + ex.Message.ReplaceLineEndings(" ");
+        }
+    }
+
+    /// <summary>열 검색 결과 줄의 테이블·뷰 객체 상세를 연다. 항목을 안 주면 선택 항목.</summary>
+    public async Task OpenColumnHitAsync(ColumnSearchItem? item = null, CancellationToken ct = default)
+    {
+        item ??= SelectedColumnHit;
+        if (item is null || Session is not { } session)
+        {
+            return;
+        }
+
+        try
+        {
+            await (OpenDetail ?? OpenDetailWithCommand)(session, item.Table, ct);
+        }
+        catch (OperationCanceledException)
+        {
+        }
+        catch (Exception ex)
+        {
+            StatusText = "객체 상세를 열지 못했다: " + ex.Message.ReplaceLineEndings(" ");
+        }
+    }
+
+    // 스키마 브라우저 선택과 상관없이 연다(두 명령의 사용 조건은 스키마 브라우저 노드 선택이라 명령 등록부를 거치지 않는다). 세션은 이 검색의 세션.
+    private Task OpenSourceWithCommand(ISession session, DbObjectRef target, int line, CancellationToken ct)
+        => _services is null
+            ? Task.CompletedTask
+            : new PlsqlEditorCommandHandler(_services) { SessionProvider = () => session }
+                .ExecuteAsync(new CommandContext("oranda.plsql.openSource", AnyKeys.Instance, new PlsqlSourceLocation(target, line)), ct);
+
+    private Task OpenDetailWithCommand(ISession session, DbObjectRef target, CancellationToken ct)
+        => _services is null
+            ? Task.CompletedTask
+            : new ObjectDetailCommandHandler(_services) { SessionProvider = () => session }
+                .ExecuteAsync(new CommandContext("oranda.schema.openDetail", AnyKeys.Instance, target), ct);
+
+    private string? NormalizeOwner() => string.IsNullOrWhiteSpace(Owner) ? null : Owner.Trim().ToUpperInvariant();
 
     /// <summary>
     /// 스키마의 INVALID 객체를 모두 컴파일한다. 객체마다 <c>ALTER … COMPILE</c> 을 실행 엔진으로 보내고, 의존 순서 때문에 남는 것은
@@ -520,4 +805,12 @@ public sealed partial class ObjectSearchViewModel : ToolPanelViewModelBase
 
     private IExecutionService? ResolveExec()
         => _exec ??= (IExecutionService?)_services?.GetService(typeof(IExecutionService));
+
+    /// <summary>모든 문맥 키 식을 참으로 보는 키(명령 처리기를 직접 부를 때).</summary>
+    private sealed class AnyKeys : IContextKeys
+    {
+        public static readonly AnyKeys Instance = new();
+
+        public bool Evaluate(string? expression) => true;
+    }
 }

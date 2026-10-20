@@ -56,6 +56,72 @@
           </Grid>
         </DockPanel>
       </TabItem>
+      <TabItem Header="소스 검색">
+        <DockPanel>
+          <Border DockPanel.Dock="Top" Classes="panel-toolbar">
+            <WrapPanel>
+            <TextBox Width="110" Margin="0,0,6,4" PlaceholderText="스키마" Text="{Binding Owner, Mode=TwoWay}" />
+            <TextBox x:Name="SourceTextBox" Width="220" Margin="0,0,6,4" PlaceholderText="찾을 글자" Text="{Binding SourceText, Mode=TwoWay}" />
+            <ComboBox x:Name="SourceTypeBox" Width="150" Margin="0,0,6,4" PlaceholderText="모든 소스 유형" SelectedItem="{Binding SourceTypeFilter, Mode=TwoWay}" />
+            <CheckBox Margin="0,0,10,4" Content="대소문자 구분" IsChecked="{Binding SourceMatchCase, Mode=TwoWay}" />
+            <CheckBox Margin="0,0,10,4" Content="단어 단위" IsChecked="{Binding SourceWholeWord, Mode=TwoWay}" />
+            <CheckBox Margin="0,0,10,4" Content="정규식" IsChecked="{Binding SourceRegex, Mode=TwoWay}" />
+            <Button Classes="tool" icons:ButtonIcon.Key="find" x:Name="SourceSearchButton" Margin="0,0,6,4" Content="검색" IsEnabled="{Binding !IsBusy}" />
+          </WrapPanel>
+          </Border>
+          <Grid DockPanel.Dock="Top" Margin="6,2" ColumnDefinitions="220,110,60,*" Opacity="0.7">
+            <TextBlock Grid.Column="0" Text="객체" />
+            <TextBlock Grid.Column="1" Text="유형" />
+            <TextBlock Grid.Column="2" Margin="0,0,10,0" HorizontalAlignment="Right" Text="줄" />
+            <TextBlock Grid.Column="3" Text="내용" />
+          </Grid>
+          <ListBox x:Name="SourceList" ItemsSource="{Binding SourceHits}" SelectedItem="{Binding SelectedSourceHit, Mode=TwoWay}"
+                   ToolTip.Tip="두 번 누르면 PL/SQL 편집기에서 그 줄을 연다">
+            <ListBox.ItemTemplate>
+              <DataTemplate x:DataType="vm:SourceSearchItem">
+                <Grid ColumnDefinitions="220,110,60,*">
+                  <TextBlock Grid.Column="0" Text="{Binding Title}" TextTrimming="CharacterEllipsis" />
+                  <TextBlock Grid.Column="1" Text="{Binding ObjectType}" TextTrimming="CharacterEllipsis" />
+                  <TextBlock Grid.Column="2" Margin="0,0,10,0" HorizontalAlignment="Right" Text="{Binding LineText}" />
+                  <TextBlock Grid.Column="3" Text="{Binding Text}" FontFamily="Consolas,Menlo,monospace" TextTrimming="CharacterEllipsis" />
+                </Grid>
+              </DataTemplate>
+            </ListBox.ItemTemplate>
+          </ListBox>
+        </DockPanel>
+      </TabItem>
+      <TabItem Header="열 이름 검색">
+        <DockPanel>
+          <Border DockPanel.Dock="Top" Classes="panel-toolbar">
+            <WrapPanel>
+            <TextBox Width="110" Margin="0,0,6,4" PlaceholderText="스키마" Text="{Binding Owner, Mode=TwoWay}" />
+            <TextBox x:Name="ColumnNameBox" Width="200" Margin="0,0,6,4" PlaceholderText="열 이름 (* 와일드카드)" Text="{Binding ColumnNameText, Mode=TwoWay}" />
+            <Button Classes="tool" icons:ButtonIcon.Key="find" x:Name="ColumnSearchButton" Margin="0,0,6,4" Content="검색" IsEnabled="{Binding !IsBusy}" />
+          </WrapPanel>
+          </Border>
+          <Grid DockPanel.Dock="Top" Margin="6,2" ColumnDefinitions="*,130,*,170,50" Opacity="0.7">
+            <TextBlock Grid.Column="0" Text="테이블" />
+            <TextBlock Grid.Column="1" Text="유형" />
+            <TextBlock Grid.Column="2" Text="열" />
+            <TextBlock Grid.Column="3" Text="데이터 형식" />
+            <TextBlock Grid.Column="4" Text="NULL 허용" TextTrimming="CharacterEllipsis" />
+          </Grid>
+          <ListBox x:Name="ColumnList" ItemsSource="{Binding ColumnHits}" SelectedItem="{Binding SelectedColumnHit, Mode=TwoWay}"
+                   ToolTip.Tip="두 번 누르면 객체 상세를 연다">
+            <ListBox.ItemTemplate>
+              <DataTemplate x:DataType="vm:ColumnSearchItem">
+                <Grid ColumnDefinitions="*,130,*,170,50">
+                  <TextBlock Grid.Column="0" Text="{Binding Title}" TextTrimming="CharacterEllipsis" />
+                  <TextBlock Grid.Column="1" Text="{Binding ObjectType}" TextTrimming="CharacterEllipsis" />
+                  <TextBlock Grid.Column="2" Text="{Binding Column}" TextTrimming="CharacterEllipsis" />
+                  <TextBlock Grid.Column="3" Text="{Binding DataType}" TextTrimming="CharacterEllipsis" />
+                  <TextBlock Grid.Column="4" Text="{Binding Nullable}" />
+                </Grid>
+              </DataTemplate>
+            </ListBox.ItemTemplate>
+          </ListBox>
+        </DockPanel>
+      </TabItem>
       <TabItem Header="INVALID 컴파일">
         <DockPanel>
           <Border DockPanel.Dock="Top" Classes="panel-toolbar">
