@@ -28,7 +28,7 @@ public sealed class SettingsStrings(IShellText text)
 public sealed record ErrorModeChoice(ScriptErrorMode Mode, string Label);
 
 /// <summary>
-/// 설정 창(<c>Ctrl+,</c>)의 모델: 일반(테마)·편집기(글꼴·크기·탭)·실행·결과 그리드·이력·모니터·작업 공간. 「저장」을 누르면 한 번에 저장하고
+/// 설정 창(<c>Ctrl+,</c>)의 모델: 일반(테마·스키마 브라우저)·편집기(글꼴·크기·탭)·실행·결과 그리드·이력·모니터·작업 공간. 「저장」을 누르면 한 번에 저장하고
 /// 저장소가 바뀐 섹션마다 <c>SettingsChanged</c> 를 낸다(테마·글꼴은 재시작 없이 바뀐다).
 /// </summary>
 public sealed partial class SettingsViewModel : ViewModelBase
@@ -105,6 +105,10 @@ public sealed partial class SettingsViewModel : ViewModelBase
     [ObservableProperty]
     private decimal _cacheRetentionDays;
 
+    /// <summary>스키마 브라우저: 객체를 한 번 누르면 미리보기 문서로 연다.</summary>
+    [ObservableProperty]
+    private bool _schemaSingleClickPreview;
+
     public SettingsViewModel(SettingsService settings, IShellText text, IEnumerable<string>? installedFonts = null)
     {
         _settings = settings;
@@ -155,6 +159,7 @@ public sealed partial class SettingsViewModel : ViewModelBase
         _autosaveSeconds = s.Workspace.AutosaveSeconds;
         _restoreOnStartup = s.Workspace.RestoreOnStartup;
         _cacheRetentionDays = s.MetadataCache.RetentionDays;
+        _schemaSingleClickPreview = s.SchemaBrowser.SingleClickPreview;
     }
 
     public IReadOnlyList<ErrorModeChoice> ErrorModes { get; }
@@ -244,6 +249,7 @@ public sealed partial class SettingsViewModel : ViewModelBase
                 RestoreOnStartup = RestoreOnStartup,
             },
             MetadataCache = s.MetadataCache with { RetentionDays = (int)CacheRetentionDays },
+            SchemaBrowser = s.SchemaBrowser with { SingleClickPreview = SchemaSingleClickPreview },
         }).ConfigureAwait(true);
         CloseRequested?.Invoke(this, EventArgs.Empty);
     }

@@ -128,6 +128,8 @@
   "Shell.settings.refreshName": "모니터 새로 고침 간격",
   "Shell.settings.restore": "시작할 때 마지막 작업 공간 열기",
   "Shell.settings.save": "저장",
+  "Shell.settings.schemaBrowser": "스키마 브라우저",
+  "Shell.settings.schemaPreview": "한 번 눌러 미리보기 열기",
   "Shell.settings.split": "빈 줄을 문장 끝으로 보기",
   "Shell.settings.splitLabel": "문장 나누기",
   "Shell.settings.tab.editor": "편집기",

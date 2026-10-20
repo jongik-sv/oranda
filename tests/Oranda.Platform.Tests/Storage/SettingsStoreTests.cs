@@ -238,6 +238,18 @@ public sealed partial class SettingsStoreTests : IDisposable
     }
 
     [Fact]
+    public async Task Schema_browser_preview_setting_defaults_on_and_publishes_its_own_section()
+    {
+        var store = NewStore();
+        Assert.True((await store.LoadAsync(default)).Value.SchemaBrowser.SingleClickPreview);
+
+        await store.SaveAsync(new AppSettings { SchemaBrowser = new SchemaBrowserSettings { SingleClickPreview = false } }, default);
+
+        Assert.Equal(["schemaBrowser"], _bus.PublishedOf<SettingsChanged>().Select(e => e.Section));
+        Assert.False((await NewStore().LoadAsync(default)).Value.SchemaBrowser.SingleClickPreview);
+    }
+
+    [Fact]
     public async Task Values_are_clamped_to_documented_ranges()
     {
         var store = NewStore();

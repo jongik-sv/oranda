@@ -133,6 +133,7 @@ internal sealed class SettingsStore : ISettingsStore, IDisposable
         Add(before.MetadataCache != after.MetadataCache, "metadataCache");
         Add(before.Monitor != after.Monitor, "monitor");
         Add(before.Workspace != after.Workspace, "workspace");
+        Add(before.SchemaBrowser != after.SchemaBrowser, "schemaBrowser");
         return list;
     }
 }

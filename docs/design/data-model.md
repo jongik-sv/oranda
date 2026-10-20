@@ -89,6 +89,7 @@
 | `workspace.restoreOnStartup` | bool | ○ | true | 마지막 작업 공간 다시 열기 |
 | `workspace.lastWorkspaceId` | string | ○ | `"default"` | 종료 때 보고 있던 작업 공간(다음 시작 때 활성) |
 | `workspace.openWorkspaceIds` | string[] | ○ | `["default"]` | 종료 때 열려 있던 작업 공간들(문서 탭 순서). 다음 시작 때 모두 다시 연다 |
+| `schemaBrowser.singleClickPreview` | bool | ○ | true | 스키마 브라우저에서 객체를 한 번 누르면(방향키로 고르고 잠깐 멈추면) 미리보기 문서로 연다. false 면 두 번 누르기·Enter 로만 연다(SCH-01) |
 
 ### 2.2 `connections.json` — `ConnectionsDocument`
 
@@ -503,7 +504,7 @@ connections.json ◀────── credentialRef 문자열만 저장 ("orand
 
 | JSON / 테이블 | C# 형식 | 네임스페이스 |
 |---|---|---|
-| `settings.json` | `AppSettings`, `UiSettings`, `EditorSettings`, `ExecutionSettings`, `GridSettings`, `HistorySettings`, `MetadataCacheSettings`, `MonitorSettings`, `WorkspaceSettings`, enum `Theme` | `Oranda.Core.Settings` |
+| `settings.json` | `AppSettings`, `UiSettings`, `EditorSettings`, `ExecutionSettings`, `GridSettings`, `HistorySettings`, `MetadataCacheSettings`, `MonitorSettings`, `WorkspaceSettings`, `SchemaBrowserSettings`, enum `Theme` | `Oranda.Core.Settings` |
 | (공통) | `SchemaVersions`(static), `ISettingsMigration` | `Oranda.Core.Settings` |
 | `connections.json` | `ConnectionsDocument`, `ConnectionProfile`(기존), `NlsSettings`, enum `AuthMode`(기존+3값), `ConnectionEnvironment`, `LicensePack` | `Oranda.Core.Connection` |
 | `formatter/*.json` | `FormatterProfile`, `FormatterOptions`, `CaseOptions`, `IndentOptions`, `LineBreakOptions`, `AlignOptions`, `CommentOptions`, enum `LetterCase`, `CommaPosition`, `SelectListLayout`, `AndOrBreak`, `StatementTerminator` | `Oranda.Core.Formatting` |

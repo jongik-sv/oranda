@@ -39,7 +39,7 @@
     <TabControl Grid.Row="0" Classes="categories" TabStripPlacement="Left" Padding="16,0,0,0">
       <TabItem Header="{Binding Strings[tab.general]}">
         <ScrollViewer HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
-          <Grid Classes="form" ColumnDefinitions="Auto,*" RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto" ColumnSpacing="12" RowSpacing="10">
+          <Grid Classes="form" ColumnDefinitions="Auto,*" RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto" ColumnSpacing="12" RowSpacing="10">
             <TextBlock Grid.Row="0" Text="{Binding ThemeLabel}" />
             <ComboBox Grid.Row="0" Grid.Column="1" MinWidth="220" HorizontalAlignment="Stretch" x:Name="ThemeBox"
                       ItemsSource="{Binding Themes}" SelectedItem="{Binding SelectedTheme}"
@@ -73,6 +73,9 @@
             <TextBlock Grid.Row="5" Text="{Binding Strings[autosave]}" />
             <NumericUpDown Grid.Row="5" Grid.Column="1" Minimum="1" Maximum="10" Increment="1" FormatString="0"
                            Value="{Binding AutosaveSeconds}" AutomationProperties.Name="{Binding Strings[autosaveName]}" />
+            <TextBlock Grid.Row="6" Text="{Binding Strings[schemaBrowser]}" />
+            <CheckBox Grid.Row="6" Grid.Column="1" x:Name="SchemaPreviewBox" Content="{Binding Strings[schemaPreview]}"
+                      IsChecked="{Binding SchemaSingleClickPreview}" AutomationProperties.Name="{Binding Strings[schemaPreview]}" />
           </Grid>
         </ScrollViewer>
       </TabItem>

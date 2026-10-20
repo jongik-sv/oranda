@@ -33,6 +33,8 @@ public sealed record AppSettings
     public MonitorSettings Monitor { get; init; } = new();
 
     public WorkspaceSettings Workspace { get; init; } = new();
+
+    public SchemaBrowserSettings SchemaBrowser { get; init; } = new();
 }
 
 public sealed record UiSettings
@@ -123,4 +125,10 @@ public sealed record WorkspaceSettings
         && OpenWorkspaceIds.SequenceEqual(other.OpenWorkspaceIds);
 
     public override int GetHashCode() => HashCode.Combine(AutosaveSeconds, RestoreOnStartup, LastWorkspaceId, OpenWorkspaceIds.Count);
+}
+
+public sealed record SchemaBrowserSettings
+{
+    /// <summary>객체를 한 번 누르면(방향키로 고르고 잠깐 멈추면) 미리보기 문서로 연다. 끄면 두 번 누르기·Enter 로만 연다.</summary>
+    public bool SingleClickPreview { get; init; } = true;
 }
