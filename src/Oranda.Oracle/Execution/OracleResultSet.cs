@@ -106,9 +106,23 @@ internal sealed class OracleResultSet : IResultSet
         var sharer = new PageValueSharer(buffers.Length);
         try
         {
+            var staleRetried = false;
             while (!_complete && count < _pageSize)
             {
-                if (!await _reader.ReadAsync(ct))
+                bool more;
+                try
+                {
+                    more = await _reader.ReadAsync(ct);
+                }
+                catch (Exception ex) when (!staleRetried && !ct.IsCancellationRequested && IsServerCancel(ex))
+                {
+                    // 이번 호출의 토큰은 취소되지 않았다: 앞선 취소의 늦은 브레이크 응답(ORA-01013)이 이 호출에 도착한 것이다
+                    // (서버가 DISABLE_OOB 라 브레이크를 늦게 처리하는 경우). 커서는 이어지므로 한 번만 다시 읽는다.
+                    staleRetried = true;
+                    continue;
+                }
+
+                if (!more)
                 {
                     Volatile.Write(ref _complete, true);
                     break;
@@ -140,6 +154,10 @@ internal sealed class OracleResultSet : IResultSet
         _last = page;
         return page;
     }
+
+    private static bool IsServerCancel(Exception ex) =>
+        ex is OracleException { Number: OracleExecutionService.CancelledNumber }
+        || (ex is OperationCanceledException { InnerException: OracleException { Number: OracleExecutionService.CancelledNumber } });
 
     private List<object?>[] NewBuffers()
     {
