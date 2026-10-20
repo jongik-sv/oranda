@@ -65,7 +65,7 @@ internal sealed class OracleResultSet : IResultSet
                 throw new InvalidOperationException($"결과 커서는 앞으로만 갑니다. 페이지 {pageIndex} 는 이미 지났습니다.");
             }
 
-            using var reg = _command is null ? default : ct.Register(static c => ((OracleCommand)c!).Cancel(), _command);
+            using var reg = _command is null ? default : _command.CancelOnToken(ct);
             ResultPage page;
             do
             {

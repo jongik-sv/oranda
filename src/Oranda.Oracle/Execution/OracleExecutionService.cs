@@ -224,7 +224,7 @@ internal sealed partial class OracleExecutionService : IExecutionService
 
             IResultSet? resultSet = null;
             long? rows = null;
-            using (ct.Register(static c => ((OracleCommand)c!).Cancel(), cmd))
+            using (cmd.CancelOnToken(ct))
             {
                 // 질의와 분류가 불확실한 문장은 리더로 받는다(결과가 있으면 결과 집합).
                 if (stmt.Kind == StatementKind.Query || stmt.IsClassificationUncertain)
