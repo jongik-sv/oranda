@@ -122,7 +122,7 @@ public sealed class SqlEditorCommandHandler : ICommandHandler
                 await host.RenameWorkspaceAsync(renamed, cancellationToken).ConfigureAwait(true);
                 return;
             case "oranda.file.closeWorkspace" when host.ActiveWorkspace is { } closing:
-                await host.CloseWorkspaceAsync(closing, cancellationToken).ConfigureAwait(true);
+                await host.TryCloseWorkspaceAsync(closing, cancellationToken).ConfigureAwait(true);
                 return;
             case "oranda.file.renameTab" when tab is not null:
                 await host.RenameTabAsync(tab, cancellationToken).ConfigureAwait(true);

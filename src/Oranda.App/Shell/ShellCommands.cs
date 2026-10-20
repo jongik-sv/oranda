@@ -43,14 +43,15 @@ public static class ShellCommands
 [OrandaCommand("oranda.file.exit", CommandCategory.File, Placements = ["menu:file/exit@900"])]
 public sealed class FileShellCommandHandler(IShellUi ui) : ICommandHandler
 {
-    public Task ExecuteAsync(CommandContext context, CancellationToken cancellationToken)
+    public async Task ExecuteAsync(CommandContext context, CancellationToken cancellationToken)
     {
         switch (context.CommandId)
         {
             case "oranda.file.close":
                 // SQL 작업 공간은 안쪽 SQL 탭부터 닫는다. 탭이 하나도 없으면 작업 공간(문서)을 닫는다.
                 if (ui.Docking.ActiveDocument is { } active
-                    && !(active.Panel is IInnerTabsDocument inner && inner.CloseActiveInnerTab()))
+                    && !(active.Panel is IInnerTabsDocument inner
+                        && await inner.CloseActiveInnerTabAsync(cancellationToken).ConfigureAwait(true)))
                 {
                     ui.Docking.CloseDocument(active);
                 }
@@ -63,8 +64,6 @@ public sealed class FileShellCommandHandler(IShellUi ui) : ICommandHandler
                 ui.CloseMainWindow();
                 break;
         }
-
-        return Task.CompletedTask;
     }
 }
 

@@ -67,22 +67,23 @@ public sealed partial class SqlWorkspaceViewModel : ToolPanelViewModelBase, IInn
 
     /// <summary>탭 머리글의 ×.</summary>
     [RelayCommand]
-    private void CloseTab(SqlEditorViewModel? tab)
+    private async Task CloseTabAsync(SqlEditorViewModel? tab)
     {
         if (tab is not null)
         {
-            Host.Close(tab);
+            await Host.CloseAsync(tab, CancellationToken.None).ConfigureAwait(true);
         }
     }
 
-    public bool CloseActiveInnerTab()
+    public async Task<bool> CloseActiveInnerTabAsync(CancellationToken ct)
     {
-        if (ActiveTab is not { } tab)
+        // 활성 탭이 잠깐 비어도 탭이 남아 있으면 true: false 는 셸이 작업 공간을 가드 없이 닫는 신호다.
+        if ((ActiveTab ?? Tabs.LastOrDefault()) is not { } tab)
         {
             return false;
         }
 
-        Host.Close(tab);
+        await Host.CloseAsync(tab, ct).ConfigureAwait(true);
         return true;
     }
 

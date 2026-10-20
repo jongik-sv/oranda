@@ -9,8 +9,11 @@ public interface IInnerTabsDocument : System.ComponentModel.INotifyPropertyChang
     /// <summary>안쪽 활성 탭의 이름(창 제목에 「문서 / 탭」으로 보인다). 바뀌면 이 이름으로 PropertyChanged 를 낸다.</summary>
     string? ActiveInnerTitle { get; }
 
-    /// <summary>안쪽 활성 탭을 닫는다. 닫을 탭이 없으면 false(그러면 셸이 문서 자체를 닫는다).</summary>
-    bool CloseActiveInnerTab();
+    /// <summary>
+    /// 안쪽 활성 탭을 닫는다. 닫을 탭이 없으면 false(그러면 셸이 문서 자체를 닫는다).
+    /// 탭이 있었으면 true: 확인 대화상자에서 사용자가 취소해 탭이 남아도 true 다(셸이 문서까지 닫아 버리지 않게).
+    /// </summary>
+    Task<bool> CloseActiveInnerTabAsync(CancellationToken ct);
 
     /// <summary>안쪽 탭을 <paramref name="offset"/> 칸 옮긴다. 끝을 넘으면 옮기지 않고 false.</summary>
     bool CycleInnerTab(int offset);

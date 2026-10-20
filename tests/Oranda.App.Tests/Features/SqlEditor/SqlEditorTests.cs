@@ -816,7 +816,7 @@ public sealed partial class SqlEditorTests : IDisposable
     });
 
     [Fact]
-    public Task Closing_last_tab_keeps_the_workspace_and_new_sql_goes_into_it() => Ui.Run(() =>
+    public Task Closing_last_tab_keeps_the_workspace_and_new_sql_goes_into_it() => Ui.Run(async () =>
     {
         var host = new SqlEditorHost();
         host.NewDocument("a");
@@ -831,9 +831,8 @@ public sealed partial class SqlEditorTests : IDisposable
 
         var again = host.NewDocument("b");
         Assert.Equal([again], second.Tabs);
-        Assert.True(second.CloseActiveInnerTab());
-        Assert.False(second.CloseActiveInnerTab()); // 닫을 탭이 없으면 셸이 작업 공간 문서를 닫는다
-        return Task.CompletedTask;
+        Assert.True(await second.CloseActiveInnerTabAsync(default));
+        Assert.False(await second.CloseActiveInnerTabAsync(default)); // 닫을 탭이 없으면 셸이 작업 공간 문서를 닫는다
     });
 
     [Fact]

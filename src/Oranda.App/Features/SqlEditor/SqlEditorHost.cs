@@ -31,6 +31,8 @@ public sealed class SqlEditorHost : ObservableObject, IDisposable
 
     private IWorkspaceStore? _store;
     private readonly Stack<WorkspaceTab> _closed = new();
+    private readonly List<CloseGuardEntry> _closeGuards = [];
+    private bool _guardsRunning;
     private CancellationTokenSource? _autosaveCts;
     private SqlEditorViewModel? _active;
     private SqlWorkspaceViewModel? _activeWorkspace;
@@ -425,6 +427,165 @@ public sealed class SqlEditorHost : ObservableObject, IDisposable
         TabClosed?.Invoke(this, tab);
     }
 
+    // ---- 닫기 가드 ------------------------------------------------------------------------
+
+    /// <summary>
+    /// 닫기 가드를 등록한다. 가드는 등록한 순서대로 불리고, 하나라도 취소하면 닫기가 중단된다(나머지 가드는 부르지 않는다).
+    /// 돌려받은 값을 <see cref="IDisposable.Dispose"/> 하면 이 등록만 해제한다. 같은 가드를 두 번 등록하면 두 번 불린다.
+    /// 여러 delegate 를 합친 가드는 결과를 하나만 볼 수 있어 받지 않는다(따로 등록한다).
+    /// </summary>
+    public IDisposable RegisterCloseGuard(SqlCloseGuard guard)
+    {
+        ArgumentNullException.ThrowIfNull(guard);
+        if (guard.GetInvocationList().Length > 1)
+        {
+            throw new ArgumentException("합쳐진 delegate 는 등록할 수 없다. 가드마다 따로 등록한다.", nameof(guard));
+        }
+
+        var entry = new CloseGuardEntry(guard);
+        _closeGuards.Add(entry);
+        return new CloseGuardRegistration(this, entry);
+    }
+
+    /// <summary>delegate 로 해제한다. 등록돼 있었으면 true(같은 가드가 여럿이면 가장 먼저 등록한 하나). 등록 값의 Dispose 와 겹쳐 쓰지 않는다.</summary>
+    public bool UnregisterCloseGuard(SqlCloseGuard guard)
+    {
+        ArgumentNullException.ThrowIfNull(guard);
+        var index = _closeGuards.FindIndex(e => e.Guard == guard);
+        if (index < 0)
+        {
+            return false;
+        }
+
+        _closeGuards.RemoveAt(index);
+        return true;
+    }
+
+    /// <summary>가드가 확인을 하는 중이면 true. 이때 들어온 닫기 요청은 취소로 처리된다(false).</summary>
+    public bool IsCloseGuardRunning => _guardsRunning;
+
+    /// <summary>
+    /// 닫아도 되는지 가드에 차례로 묻는다. 모두 동의하면 true. 가드가 이미 도는 중이거나(두 번째 ×, <see cref="IsCloseGuardRunning"/>) 가드가 예외를 던지면 false.
+    /// 닫을 탭이 없으면 가드를 부르지 않고 true. 닫기 자체는 하지 않는다: 호출한 쪽이 true 를 받은 뒤 닫는다.
+    /// </summary>
+    public async Task<bool> CanCloseAsync(IReadOnlyList<SqlEditorViewModel> tabs, SqlCloseReason reason, CancellationToken ct)
+    {
+        ArgumentNullException.ThrowIfNull(tabs);
+        if (tabs.Count == 0 || _closeGuards.Count == 0)
+        {
+            return true;
+        }
+
+        if (_guardsRunning)
+        {
+            return false;
+        }
+
+        _guardsRunning = true;
+        try
+        {
+            foreach (var entry in _closeGuards.ToList())
+            {
+                if (!await entry.Guard(tabs, reason, ct).ConfigureAwait(true))
+                {
+                    return false;
+                }
+            }
+
+            return true;
+        }
+#pragma warning disable CA1031 // 가드가 실패하면 글을 잃지 않도록 닫기를 취소한다.
+        catch (Exception ex)
+#pragma warning restore CA1031
+        {
+            System.Diagnostics.Trace.TraceError("닫기 가드 실패(닫기 취소): {0}", ex);
+            return false;
+        }
+        finally
+        {
+            _guardsRunning = false;
+        }
+    }
+
+    /// <summary>탭을 닫는다(가드 이유 <see cref="SqlCloseReason.Tab"/>). 가드가 취소하면 닫지 않고 false.</summary>
+    public async Task<bool> CloseAsync(SqlEditorViewModel tab, CancellationToken ct)
+    {
+        ArgumentNullException.ThrowIfNull(tab);
+        if (WorkspaceOf(tab) is null)
+        {
+            return false;
+        }
+
+        if (!await CanCloseAsync([tab], SqlCloseReason.Tab, ct).ConfigureAwait(true))
+        {
+            return false;
+        }
+
+        if (WorkspaceOf(tab) is null)
+        {
+            return false; // 대화상자가 떠 있는 동안 다른 경로로 이미 닫혔다
+        }
+
+        Close(tab);
+        return true;
+    }
+
+    /// <summary>작업 공간을 닫는다(가드 이유 <see cref="SqlCloseReason.Workspace"/>). 가드가 취소하면 닫지 않고 false.</summary>
+    public async Task<bool> TryCloseWorkspaceAsync(SqlWorkspaceViewModel workspace, CancellationToken ct)
+    {
+        ArgumentNullException.ThrowIfNull(workspace);
+        if (!await CanCloseAsync(workspace.Tabs.ToList(), SqlCloseReason.Workspace, ct).ConfigureAwait(true))
+        {
+            return false;
+        }
+
+        if (!Workspaces.Contains(workspace))
+        {
+            return false;
+        }
+
+        await CloseWorkspaceAsync(workspace, ct).ConfigureAwait(true);
+        return true;
+    }
+
+    /// <summary>
+    /// 작업 공간을 복원한다(<see cref="Restore"/>). 같은 ID 의 작업 공간이 열려 있어 그 탭이 교체되면 가드
+    /// (<see cref="SqlCloseReason.Replace"/>)에 먼저 묻고, 취소하면 복원하지 않고 null.
+    /// </summary>
+    public async Task<SqlWorkspaceViewModel?> RestoreAsync(Workspace workspace, CancellationToken ct)
+    {
+        ArgumentNullException.ThrowIfNull(workspace);
+        if (Workspaces.FirstOrDefault(w => w.Id == workspace.Id) is { } open)
+        {
+            var asked = open.Tabs.ToList();
+            if (!await CanCloseAsync(asked, SqlCloseReason.Replace, ct).ConfigureAwait(true))
+            {
+                return null;
+            }
+
+            // 확인하는 동안 탭이 바뀌었으면 묻지 않은 탭을 버리게 되므로 복원하지 않는다.
+            if (Workspaces.FirstOrDefault(w => w.Id == workspace.Id) is not { } now || !now.Tabs.SequenceEqual(asked))
+            {
+                return null;
+            }
+        }
+
+        return Restore(workspace);
+    }
+
+    /// <summary>앱을 끝내도 되는지 모든 탭을 두고 가드에 묻는다(<see cref="SqlCloseReason.AppExit"/>). 끝내기 전에 셸이 부른다.</summary>
+    public Task<bool> CanShutdownAsync(CancellationToken ct) => CanCloseAsync(Tabs.ToList(), SqlCloseReason.AppExit, ct);
+
+    private sealed class CloseGuardEntry(SqlCloseGuard guard)
+    {
+        public SqlCloseGuard Guard { get; } = guard;
+    }
+
+    private sealed class CloseGuardRegistration(SqlEditorHost host, CloseGuardEntry entry) : IDisposable
+    {
+        public void Dispose() => host._closeGuards.Remove(entry);
+    }
+
     private static WorkspaceTab SnapshotForReopen(SqlEditorViewModel tab)
     {
         // 다시 열 때 파일을 새로 읽지 않고 닫을 때의 내용을 쓰도록 항상 내용을 담는다.
@@ -721,8 +882,7 @@ public sealed class SqlEditorHost : ObservableObject, IDisposable
             return false;
         }
 
-        Restore(doc.Value);
-        return true;
+        return await RestoreAsync(doc.Value, ct).ConfigureAwait(true) is not null;
     }
 
     // ---- 작업 공간 파일(Orange SQL Tool 의 Workspace 파일) ------------------------------------
