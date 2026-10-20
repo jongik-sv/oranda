@@ -86,7 +86,8 @@ public class ExecutionPlanLogicTests
 
 /// <summary>26ai 컨테이너에서 예상·실제 계획을 읽는다.</summary>
 [Trait("Category", "Integration")]
-public sealed class ExecutionPlanTests : IClassFixture<OracleFreeFixture>, IAsyncLifetime
+[Collection(OracleFreeShared.Name)]
+public sealed class ExecutionPlanTests : IAsyncLifetime
 {
     private readonly OracleFreeFixture _db;
     private readonly ExecBus _bus = new();

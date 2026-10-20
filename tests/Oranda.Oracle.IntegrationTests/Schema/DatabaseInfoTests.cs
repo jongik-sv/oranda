@@ -109,7 +109,8 @@ public class SchemaStatementsTests
 }
 
 [Trait("Category", "Integration")]
-public sealed class DatabaseInfoIntegrationTests : IClassFixture<OracleFreeFixture>, IAsyncLifetime
+[Collection(OracleFreeShared.Name)]
+public sealed class DatabaseInfoIntegrationTests : IAsyncLifetime
 {
     private readonly OracleFreeFixture _db;
     private readonly string _owner = "ADM_" + Guid.NewGuid().ToString("N")[..8].ToUpperInvariant();

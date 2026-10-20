@@ -19,7 +19,8 @@ namespace Oranda.Oracle.IntegrationTests.Execution;
 // 소유: TSK-08-02. PL/SQL 실행 대화상자 — 메타데이터(all_arguments) → 호출 블록 생성 → 실행 엔진 → OUT 값·커서·DBMS_OUTPUT.
 
 [Trait("Category", "Integration")]
-public sealed class PlsqlCallDialogTests : IClassFixture<OracleFreeFixture>, IAsyncLifetime
+[Collection(OracleFreeShared.Name)]
+public sealed class PlsqlCallDialogTests : IAsyncLifetime
 {
     private readonly OracleFreeFixture _db;
     private readonly string _owner = "PRN_" + Guid.NewGuid().ToString("N")[..8].ToUpperInvariant();

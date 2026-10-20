@@ -81,7 +81,8 @@ internal sealed class MemoryMetadataCache : IMetadataCache
 }
 
 [Trait("Category", "Integration")]
-public sealed class MetadataProviderIntegrationTests : IClassFixture<OracleFreeFixture>, IAsyncLifetime
+[Collection(OracleFreeShared.Name)]
+public sealed class MetadataProviderIntegrationTests : IAsyncLifetime
 {
     private readonly OracleFreeFixture _db;
     private readonly string _owner = "META_" + Guid.NewGuid().ToString("N")[..8].ToUpperInvariant();

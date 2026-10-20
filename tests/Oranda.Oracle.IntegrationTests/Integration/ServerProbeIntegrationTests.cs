@@ -9,7 +9,8 @@ using Testcontainers.Oracle;
 namespace Oranda.Oracle.IntegrationTests.Integration;
 
 /// <summary>
-/// 26ai 컨테이너(gvenzl/oracle-free:23-slim)를 한 번 띄우고 시험 클래스가 공유한다.
+/// 26ai 컨테이너(gvenzl/oracle-free:23-slim)를 한 번 띄우고 모든 시험 클래스가 <see cref="OracleFreeShared"/> 으로 공유한다.
+/// 시험 클래스는 서로 다른 DB 를 받지 못하므로 객체 이름(사용자·표)에 클래스마다 고유한 값을 넣고 DisposeAsync 에서 지운다.
 /// 컨테이너 런타임(podman/Docker)이 없으면 이 클래스의 시험은 실패한다 — 기본 실행은 필터 Category!=Integration 으로 뺀다.
 /// </summary>
 public sealed class OracleFreeFixture : IAsyncLifetime
@@ -78,8 +79,19 @@ public sealed class OracleFreeFixture : IAsyncLifetime
     public async Task DisposeAsync() => await _container.DisposeAsync();
 }
 
+/// <summary>
+/// 컨테이너를 어셈블리 전체에서 하나만 띄우기 위한 컬렉션. 이 컬렉션의 시험 클래스는 차례로 실행되므로(xUnit 은 같은 컬렉션을 병렬로 돌리지 않는다)
+/// 클래스 사이에 서버 부하와 세션 수가 겹치지 않는다. 클래스는 [Collection(OracleFreeShared.Name)] 을 붙이고 생성자로 <see cref="OracleFreeFixture"/> 를 받는다.
+/// </summary>
+[CollectionDefinition(Name)]
+public sealed class OracleFreeShared : ICollectionFixture<OracleFreeFixture>
+{
+    public const string Name = "OracleFree";
+}
+
 [Trait("Category", "Integration")]
-public sealed class OracleFreeProbeTests : IClassFixture<OracleFreeFixture>
+[Collection(OracleFreeShared.Name)]
+public sealed class OracleFreeProbeTests
 {
     private readonly OracleFreeFixture _db;
 

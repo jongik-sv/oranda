@@ -17,7 +17,8 @@ namespace Oranda.Oracle.IntegrationTests.Grid;
 
 // 소유: TSK-06-05. LOB 읽기(스트림)와 LOB 바인드 쓰기 — 컨테이너 26ai. 시간은 단정하지 않는다.
 [Trait("Category", "Integration")]
-public sealed class LobAccessorTests : IClassFixture<OracleFreeFixture>, IAsyncLifetime
+[Collection(OracleFreeShared.Name)]
+public sealed class LobAccessorTests : IAsyncLifetime
 {
     private const int TenMb = 10 * 1024 * 1024;
 

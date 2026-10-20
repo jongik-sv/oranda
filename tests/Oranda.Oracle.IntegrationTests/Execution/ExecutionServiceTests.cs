@@ -160,7 +160,8 @@ public class ExecutionServiceLogicTests
 }
 
 [Trait("Category", "Integration")]
-public sealed class ExecutionServiceTests : IClassFixture<OracleFreeFixture>, IAsyncLifetime
+[Collection(OracleFreeShared.Name)]
+public sealed class ExecutionServiceTests : IAsyncLifetime
 {
     private readonly OracleFreeFixture _db;
     private readonly ExecBus _bus = new();

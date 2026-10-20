@@ -121,7 +121,8 @@ internal sealed class RecordingBus : IEventBus
 }
 
 [Trait("Category", "Integration")]
-public sealed class SessionManagerIntegrationTests : IClassFixture<OracleFreeFixture>
+[Collection(OracleFreeShared.Name)]
+public sealed class SessionManagerIntegrationTests
 {
     private readonly OracleFreeFixture _db;
 

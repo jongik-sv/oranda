@@ -19,7 +19,8 @@ namespace Oranda.Oracle.IntegrationTests.Editing;
 // 소유: TSK-06-04. 그리드 편집 시나리오(컨테이너 26ai): 키 없는 결과 거부, ROWID 추가 후 편집, PK 바인드 DML,
 // 동시 삭제·중복 키·영향 행 2·낙관적 잠금에서 반영 안 됨, 읽기 전용 프로필.
 [Trait("Category", "Integration")]
-public sealed class RowEditorIntegrationTests : IClassFixture<OracleFreeFixture>, IAsyncLifetime
+[Collection(OracleFreeShared.Name)]
+public sealed class RowEditorIntegrationTests : IAsyncLifetime
 {
     private readonly OracleFreeFixture _db;
     private readonly ExecBus _bus = new();

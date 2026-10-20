@@ -291,7 +291,8 @@ internal sealed class SyncProgress(Action<long> action) : IProgress<long>
 
 /// <summary>26ai 컨테이너: 서버에서 다시 스트리밍한 내보내기, 오류 행 보고가 있는 가져오기, 정책 관문.</summary>
 [Trait("Category", "Integration")]
-public sealed class DataTransferTests : IClassFixture<OracleFreeFixture>, IAsyncLifetime
+[Collection(OracleFreeShared.Name)]
+public sealed class DataTransferTests : IAsyncLifetime
 {
     private readonly OracleFreeFixture _db;
     private readonly ExecBus _bus = new();

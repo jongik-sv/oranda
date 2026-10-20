@@ -381,7 +381,8 @@ public sealed class SqlPlusCommandLogicTests : IDisposable
 
 /// <summary>실제 26ai 컨테이너에서 실제 실행 엔진과 함께 도는 시험.</summary>
 [Trait("Category", "Integration")]
-public sealed class SqlPlusCommandTests : IClassFixture<OracleFreeFixture>, IAsyncLifetime
+[Collection(OracleFreeShared.Name)]
+public sealed class SqlPlusCommandTests : IAsyncLifetime
 {
     private readonly OracleFreeFixture _db;
     private readonly string _dir = Path.Combine(Path.GetTempPath(), "oranda-sqlplus-it-" + Guid.NewGuid().ToString("N"));

@@ -56,7 +56,8 @@ public class TopSqlLogicTests
 
 /// <summary>26ai 컨테이너에서 무거운 SQL 을 돌려 조건 검색·전문·바인드 캡처·실제 계획을 확인한다.</summary>
 [Trait("Category", "Integration")]
-public sealed class TopSqlTests : IClassFixture<OracleFreeFixture>, IAsyncLifetime
+[Collection(OracleFreeShared.Name)]
+public sealed class TopSqlTests : IAsyncLifetime
 {
     private readonly OracleFreeFixture _db;
     private readonly ExecBus _bus = new();

@@ -29,7 +29,8 @@ public class ObjectDetailLogicTests
 }
 
 [Trait("Category", "Integration")]
-public sealed class ObjectDetailIntegrationTests : IClassFixture<OracleFreeFixture>, IAsyncLifetime
+[Collection(OracleFreeShared.Name)]
+public sealed class ObjectDetailIntegrationTests : IAsyncLifetime
 {
     private readonly OracleFreeFixture _db;
     private readonly ITestOutputHelper _output;

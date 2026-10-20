@@ -17,7 +17,8 @@ namespace Oranda.Oracle.IntegrationTests.Metadata;
 // 소유: TSK-08-01. 소스·컴파일 오류·충돌 확인(last_ddl_time)·실행 엔진 경유 컴파일.
 
 [Trait("Category", "Integration")]
-public sealed class PlSqlSourceTests : IClassFixture<OracleFreeFixture>, IAsyncLifetime
+[Collection(OracleFreeShared.Name)]
+public sealed class PlSqlSourceTests : IAsyncLifetime
 {
     private readonly OracleFreeFixture _db;
     private readonly string _owner = "PLS_" + Guid.NewGuid().ToString("N")[..8].ToUpperInvariant();

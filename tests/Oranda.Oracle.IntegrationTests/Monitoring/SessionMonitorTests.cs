@@ -174,7 +174,8 @@ public class SessionMonitorLogicTests
 
 /// <summary>26ai 컨테이너에서 잠금 경합을 만들어 목록·블로킹 트리·상세·Kill·트레이스를 확인한다.</summary>
 [Trait("Category", "Integration")]
-public sealed class SessionMonitorTests : IClassFixture<OracleFreeFixture>, IAsyncLifetime
+[Collection(OracleFreeShared.Name)]
+public sealed class SessionMonitorTests : IAsyncLifetime
 {
     private readonly OracleFreeFixture _db;
     private readonly ExecBus _bus = new();

@@ -124,8 +124,27 @@ jobs:
           dotnet-version: 10.0.x
       # gvenzl/oracle-free:23-slim 은 Testcontainers 가 직접 pull·기동한다. 러너의 Docker 사용.
       - run: dotnet build Oranda.sln -c Release
-      # 2026-10-20: 통합 단계가 49분 만에 「러너 통신 끊김」으로 죽어 로그가 남지 않았다. 단계 제한 시간을 두어 로그를 남기고,
-      # 시험마다 진행을 찍고, 8분 넘게 멈춘 시험은 blame 으로 이름을 남기고 끊는다.
+      # 2026-10-20: 통합 단계가 49분 만에 「러너 통신 끊김」으로 죽어 로그가 남지 않았다(러너 메모리 고갈 의심: 시험 클래스 15개가 각자 컨테이너를 띄워 동시에 최대 4개).
+      # 이제 컨테이너는 하나를 모든 클래스가 공유하고(OracleFreeShared 컬렉션) 클래스는 차례로 돈다. 아래 단계는 그 효과를 로그로 남긴다.
+      - name: Resource baseline (before integration tests)
+        run: |
+          free -m
+          docker pull gvenzl/oracle-free:23-slim
+          docker system df
+          free -m
+      # 단계 제한 시간을 두어 로그를 남기고, 시험마다 진행을 찍고, 8분 넘게 멈춘 시험은 blame 으로 이름을 남기고 끊는다.
+      # 30초마다 free -m·docker stats 를 같은 단계 로그에 찍어, 러너가 또 죽어도 죽기 직전 메모리가 남게 한다.
+      # 시간 기대값(측정 전 추정): 컨테이너 1개를 차례로 쓰므로 기동 2~4분 + 시험 합계. 병렬 때보다 길어질 수 있으나 40분 안에 끝나야 한다.
       - name: Integration tests
         timeout-minutes: 40
-        run: dotnet test Oranda.sln -c Release --no-build --filter "Category=Integration" --logger "console;verbosity=normal" --blame-hang-timeout 8m --blame-hang-dump-type none
+        run: |
+          ( while true; do echo "--- resources $(date -u +%H:%M:%S)"; free -m | sed -n 1,2p; docker stats --no-stream --format 'table {{.Name}}\t{{.MemUsage}}\t{{.CPUPerc}}'; sleep 30; done ) &
+          SAMPLER=$!
+          trap 'kill $SAMPLER 2>/dev/null || true' EXIT
+          dotnet test Oranda.sln -c Release --no-build --filter "Category=Integration" --logger "console;verbosity=normal" --blame-hang-timeout 8m --blame-hang-dump-type none
+      - name: Resource report (after integration tests)
+        if: always()
+        run: |
+          free -m
+          docker ps -a --format 'table {{.Names}}\t{{.Status}}' || true
+          sudo dmesg 2>/dev/null | grep -iE "out of memory|oom|killed process" | tail -n 20 || true
