@@ -423,6 +423,11 @@ public sealed class ResultFilterTests : IDisposable
         Assert.Equal("ENAME IS NULL", asked[0].Where);
         Assert.Equal(1, focus); // 셀 값 거르기는 포커스를 그리드에 둔다
 
+        ResultGridCommands.Active = vm.Model; // 거르면 결과(모델)가 바뀐다
+        await h.ExecuteAsync(new CommandContext("oranda.grid.pinResultTab", new AllKeys()), CancellationToken.None);
+        Assert.True(tab.IsPinned);
+        await h.ExecuteAsync(new CommandContext("oranda.grid.pinResultTab", new AllKeys()), CancellationToken.None);
+        Assert.False(tab.IsPinned);
         tabs.Clear();
     }
 
@@ -439,15 +444,44 @@ public sealed class ResultFilterTests : IDisposable
             Assert.Equal("gridFocus", defs[id].When);
             Assert.StartsWith("context:grid/filter@", Assert.Single(defs[id].Placements!), StringComparison.Ordinal);
         }
+
+        Assert.Equal("gridHasResult", defs["oranda.grid.pinResultTab"].Enablement);
     }
 
     [Fact]
     public Task Pin_and_filter_icons_exist() => Oranda.App.Tests.Features.SqlEditor.Ui.Run(() =>
     {
         // 아이콘 경로는 Avalonia 렌더 인터페이스로 읽으므로 헤드리스 UI 스레드에서 확인한다.
+        Assert.True(Oranda.App.Shell.Icons.ShellIcons.Contains("pin"));
         Assert.True(Oranda.App.Shell.Icons.ShellIcons.Contains("filter"));
         Assert.True(Oranda.App.Shell.Icons.ShellIcons.Contains("filterClear"));
     });
+
+    // ---- 결과 탭 고정(GRID-06) -----------------------------------------------------------------
+
+    [Fact]
+    public void Clearing_result_tabs_keeps_pinned_tabs_and_new_numbers_avoid_them()
+    {
+        var tabs = new ResultTabsViewModel();
+        var first = tabs.AddQuery(Emp(), "결과 1", Query);
+        var second = tabs.AddQuery(Emp(), "결과 2", Query);
+        second.TogglePin();
+
+        tabs.Clear();
+
+        Assert.Same(second, Assert.Single(tabs.Tabs));
+        Assert.Same(second, tabs.Selected);
+        Assert.Null(first.Pane!.Model); // 고정하지 않은 탭의 결과는 닫혔다
+        Assert.NotNull(second.Pane!.Model);
+        Assert.Equal(3, tabs.NextOrdinal()); // 「결과 2」는 고정한 탭이 쓴다
+
+        second.UnpinCommand.Execute(null);
+        Assert.False(second.IsPinned);
+        tabs.Clear();
+        Assert.Empty(tabs.Tabs);
+        Assert.Null(tabs.Selected);
+        Assert.Equal(1, tabs.NextOrdinal());
+    }
 
     private sealed class AllKeys : IContextKeys
     {

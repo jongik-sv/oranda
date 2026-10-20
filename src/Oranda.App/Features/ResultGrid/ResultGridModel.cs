@@ -706,6 +706,9 @@ public sealed class ResultGridModel : IAsyncDisposable
     /// <summary>셀 값 거르기 명령이 활성 칸의 값으로 거르라고 알린다(문장·바인드는 결과 영역이 안다).</summary>
     public event EventHandler<CellFilterKind>? CellFilterRequested;
 
+    /// <summary>「결과 탭 고정」 명령이 이 결과의 탭을 고정하거나 풀라고 알린다(탭 묶음은 결과 탭 쪽).</summary>
+    public event EventHandler? PinRequested;
+
     public void RequestFind() => FindRequested?.Invoke(this, EventArgs.Empty);
 
     public void RequestClose() => CloseRequested?.Invoke(this, EventArgs.Empty);
@@ -715,6 +718,8 @@ public sealed class ResultGridModel : IAsyncDisposable
     public void RequestFilterBar() => FilterBarRequested?.Invoke(this, EventArgs.Empty);
 
     public void RequestCellFilter(CellFilterKind kind) => CellFilterRequested?.Invoke(this, kind);
+
+    public void RequestPin() => PinRequested?.Invoke(this, EventArgs.Empty);
 
     private void RaiseChanged()
     {

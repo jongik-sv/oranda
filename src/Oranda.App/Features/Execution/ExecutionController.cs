@@ -556,7 +556,7 @@ public sealed class ExecutionController : IDisposable
             results.Clear();
         }
 
-        Present(tab, results, stmt, result, newResultTab ? results.Tabs.Count + 1 : 1);
+        Present(tab, results, stmt, result, results.NextOrdinal()); // 고정한 탭(GRID-06)이 남아 있으면 그 번호를 피한다
         _lastCancelled = result.Status == ExecutionStatus.Cancelled;
         return !_lastCancelled;
     }
@@ -610,7 +610,7 @@ public sealed class ExecutionController : IDisposable
 
                     await AfterStatementAsync(session, r, token).ConfigureAwait(true);
                     summary.AppendLine(CultureInfo.InvariantCulture, $"{StatusMark(r.Status)} {Brief(r.Statement)} — {Describe(r)}");
-                    Present(tab, results, r.Statement, r, results.Tabs.Count + 1, scriptMode: true);
+                    Present(tab, results, r.Statement, r, results.NextOrdinal(), scriptMode: true);
                 }
             }
             finally
@@ -621,7 +621,7 @@ public sealed class ExecutionController : IDisposable
 
         var line = $"스크립트: {stmts.Count.ToString(CultureInfo.InvariantCulture)}개 중 {done.ToString(CultureInfo.InvariantCulture)}개 실행, 성공 {ok.ToString(CultureInfo.InvariantCulture)}, 실패 {failed.ToString(CultureInfo.InvariantCulture)}" + (cancelled ? ", 취소됨" : string.Empty);
         Log.AddMessage(failed > 0 ? MessageKind.Warning : MessageKind.Info, line);
-        var firstQuery = results.Tabs.FirstOrDefault(t => t.HasPane);
+        var firstQuery = results.Tabs.FirstOrDefault(t => t.HasPane && !t.IsPinned);
         results.AddMessage("스크립트", line + Environment.NewLine + summary, failed > 0);
         if (firstQuery is not null)
         {

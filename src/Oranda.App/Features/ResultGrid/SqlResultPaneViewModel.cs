@@ -214,6 +214,9 @@ public sealed class SqlResultPaneViewModel : ToolPanelViewModelBase
     /// <summary>결과 탭을 닫아 달라는 요청(편집기 문서가 받는다).</summary>
     public event EventHandler? CloseRequested;
 
+    /// <summary>이 결과의 탭을 고정하거나 풀어 달라는 요청(<c>oranda.grid.pinResultTab</c>, 결과 탭 묶음이 받는다).</summary>
+    public event EventHandler? PinRequested;
+
     /// <summary>거르기 줄을 열었으니 WHERE 칸으로 포커스를 옮겨 달라는 요청(셀 값 거르기는 그리드에 포커스를 둔다).</summary>
     public event EventHandler? FilterFocusRequested;
 
@@ -239,6 +242,7 @@ public sealed class SqlResultPaneViewModel : ToolPanelViewModelBase
         m.CountRowsRequested += OnCountRowsRequested;
         m.FilterBarRequested += OnFilterBarRequested;
         m.CellFilterRequested += OnCellFilterRequested;
+        m.PinRequested += OnPinRequested;
         Model = m;
         UpdateStatus();
     }
@@ -603,6 +607,7 @@ public sealed class SqlResultPaneViewModel : ToolPanelViewModelBase
         _model.CountRowsRequested -= OnCountRowsRequested;
         _model.FilterBarRequested -= OnFilterBarRequested;
         _model.CellFilterRequested -= OnCellFilterRequested;
+        _model.PinRequested -= OnPinRequested;
         if (ReferenceEquals(ResultGridCommands.Active, _model))
         {
             ResultGridCommands.Active = null;
@@ -623,6 +628,8 @@ public sealed class SqlResultPaneViewModel : ToolPanelViewModelBase
     private void OnFilterBarRequested(object? sender, EventArgs e) => ToggleFilterBar();
 
     private void OnCellFilterRequested(object? sender, CellFilterKind kind) => _ = FilterByCellAsync(kind);
+
+    private void OnPinRequested(object? sender, EventArgs e) => PinRequested?.Invoke(this, EventArgs.Empty);
 
     /// <summary>
     /// 결과를 바꾸거나 닫을 때: 거르는 중이면 취소하고(늦게 온 결과는 버린다) 「거른 결과」 표시를 지운다.

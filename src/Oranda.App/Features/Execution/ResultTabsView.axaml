@@ -1,8 +1,21 @@
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:icons="using:Oranda.App.Shell.Icons"
              xmlns:vm="using:Oranda.App.Features.Execution"
              x:Class="Oranda.App.Features.Execution.ResultTabsView"
              x:DataType="vm:ResultTabsViewModel">
+  <UserControl.Styles>
+    <!-- 고정한 결과 탭의 핀(GRID-06). 누르면 고정을 푼다. -->
+    <Style Selector="Button.tab-pin">
+      <Setter Property="Padding" Value="1" />
+      <Setter Property="MinHeight" Value="0" />
+      <Setter Property="MinWidth" Value="0" />
+      <Setter Property="Margin" Value="0,0,4,0" />
+      <Setter Property="Background" Value="Transparent" />
+      <Setter Property="BorderThickness" Value="0" />
+      <Setter Property="VerticalAlignment" Value="Center" />
+    </Style>
+  </UserControl.Styles>
   <DockPanel>
     <!-- 접속 라벨 띠(운영 = 빨강, ui-shell.md 4.2). 개발 접속이고 읽기 전용이 아니면 숨긴다. -->
     <Border x:Name="BannerBorder" DockPanel.Dock="Top" Padding="8,2" BorderThickness="0,3,0,0"
@@ -13,7 +26,11 @@
     <TabControl x:Name="Tabs" ItemsSource="{Binding Tabs}" SelectedItem="{Binding Selected, Mode=TwoWay}">
       <TabControl.ItemTemplate>
         <DataTemplate x:DataType="vm:ResultTabItem">
-          <TextBlock Text="{Binding Title}" />
+          <StackPanel Orientation="Horizontal">
+            <Button Classes="tab-pin" Content="결과 탭 고정 풀기" Focusable="False" IsVisible="{Binding IsPinned}"
+                    Command="{Binding UnpinCommand}" icons:ButtonIcon.Key="pin" icons:ButtonIcon.IconOnly="True" />
+            <TextBlock Text="{Binding Title}" VerticalAlignment="Center" />
+          </StackPanel>
         </DataTemplate>
       </TabControl.ItemTemplate>
       <TabControl.ContentTemplate>

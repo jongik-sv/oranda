@@ -1,5 +1,7 @@
 using System.Collections.ObjectModel;
+using System.Globalization;
 using CommunityToolkit.Mvvm.ComponentModel;
+using CommunityToolkit.Mvvm.Input;
 using Oranda.App.Features.ResultGrid;
 using Oranda.App.ViewModels;
 using Oranda.Core.Connection;
@@ -27,9 +29,23 @@ public sealed partial class ResultTabItem : ObservableObject
     /// <summary>편집 모드로 열린 결과의 편집 상태(F9). 편집 모드가 아니면 null.</summary>
     public Oranda.App.Features.GridEdit.GridEditSession? EditSession { get; set; }
 
+    /// <summary>
+    /// 고정한 결과 탭(GRID-06, <c>oranda.grid.pinResultTab</c>). 다음 실행이 지우지 않고 결과를 새 탭에 연다.
+    /// 탭 머리에 핀이 보이고, 핀을 누르거나 명령을 다시 쓰면 풀린다. 「결과 탭 닫기」로는 닫힌다.
+    /// </summary>
+    [ObservableProperty]
+    public partial bool IsPinned { get; set; }
+
     public bool HasPane => Pane is not null;
 
     public bool HasMessage => Pane is null;
+
+    /// <summary>결과 탭 고정을 바꾼다(<c>oranda.grid.pinResultTab</c>).</summary>
+    public void TogglePin() => IsPinned = !IsPinned;
+
+    /// <summary>탭 머리의 핀 단추: 고정을 푼다.</summary>
+    [RelayCommand]
+    private void Unpin() => IsPinned = false;
 }
 
 /// <summary>
@@ -95,17 +111,35 @@ public sealed partial class ResultTabsViewModel : ViewModelBase
         OnPropertyChanged(nameof(IsProduction));
     }
 
-    /// <summary>탭을 모두 닫는다(결과 집합 정리 포함).</summary>
+    /// <summary>
+    /// 고정하지 않은 탭을 모두 닫는다(결과 집합 정리 포함). 고정한 탭(<see cref="ResultTabItem.IsPinned"/>)은 남는다 —
+    /// 실행이 결과를 바꿀 때 이것을 부르므로, 고정한 결과는 바뀌지 않고 다음 결과는 새 탭에 열린다.
+    /// </summary>
     public void Clear()
     {
-        foreach (var t in Tabs.ToList())
+        foreach (var t in Tabs.Where(t => !t.IsPinned).ToList())
         {
+            Tabs.Remove(t);
             Dispose(t);
         }
 
-        Tabs.Clear();
-        Selected = null;
+        Selected = Tabs.Count == 0 ? null : Tabs[^1];
     }
+
+    /// <summary>
+    /// 새 결과 탭 번호: 남은 탭 수 + 1. 고정한 탭이 이미 그 번호(「결과 N」)를 쓰고 있으면 쓰지 않은 다음 번호.
+    /// </summary>
+    public int NextOrdinal()
+    {
+        var n = Tabs.Count + 1;
+        while (Tabs.Any(t => UsesOrdinal(t.Title, n)))
+        {
+            n++;
+        }
+
+        return n;
+    }
+
 
     /// <summary>질의 결과 탭을 더한다. 결과 집합의 수명은 탭(결과 영역)이 가진다.</summary>
     public ResultTabItem AddQuery(IResultSet result, string title, SqlStatement? statement, GridDisplayOptions? display = null)
@@ -115,6 +149,7 @@ public sealed partial class ResultTabsViewModel : ViewModelBase
         pane.SetResult(result, display);
         var tab = new ResultTabItem { Title = title, Pane = pane, Statement = statement };
         pane.CloseRequested += (_, _) => Close(tab);
+        pane.PinRequested += (_, _) => tab.TogglePin();
         pane.FilterApplied += (_, _) => LeaveEditMode(tab);
         Add(tab);
         return tab;
@@ -165,5 +200,11 @@ public sealed partial class ResultTabsViewModel : ViewModelBase
         {
             tab.Title = tab.Title[..^editing.Length];
         }
+    }
+
+    private static bool UsesOrdinal(string title, int n)
+    {
+        var name = "결과 " + n.ToString(CultureInfo.InvariantCulture);
+        return title == name || title.StartsWith(name + " ", StringComparison.Ordinal);
     }
 }

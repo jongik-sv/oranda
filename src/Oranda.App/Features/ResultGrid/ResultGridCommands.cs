@@ -54,6 +54,8 @@ public static class ResultGridCommands
     Enablement = "gridQueryResult && gridHasSelection && hasSession && !sessionBusy", Placements = ["context:grid/filter@30"])]
 [OrandaCommand("oranda.grid.filterNullRows", CommandCategory.Result, When = "gridFocus",
     Enablement = "gridQueryResult && gridHasSelection && hasSession && !sessionBusy", Placements = ["context:grid/filter@40"])]
+[OrandaCommand("oranda.grid.pinResultTab", CommandCategory.Result, When = "gridFocus", Enablement = "gridHasResult",
+    Icon = "pin", Placements = ["context:grid/tab@10"])]
 public sealed class ResultGridCommandHandler : ICommandHandler
 {
     public async Task ExecuteAsync(CommandContext context, CancellationToken cancellationToken)
@@ -120,6 +122,9 @@ public sealed class ResultGridCommandHandler : ICommandHandler
                 break;
             case "oranda.grid.filterNullRows":
                 g.RequestCellFilter(CellFilterKind.IsNull);
+                break;
+            case "oranda.grid.pinResultTab":
+                g.RequestPin(); // 결과 탭 묶음이 그 탭을 고정하거나 푼다
                 break;
             default:
                 break;
