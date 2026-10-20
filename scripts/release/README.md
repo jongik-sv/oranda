@@ -26,4 +26,4 @@ Velopack 은 릴리스 메타데이터의 해시로 패키지 무결성을 확�
 | Windows 같은 게시, composite 끔 (`-p:PublishReadyToRunComposite=false`) | 66,478,983 bytes (63.4 MB) | 이하 |
 | macOS `Oranda-osx-Setup.pkg`, 일반 ReadyToRun (CI 와 같은 게시) | 69,514,156 bytes (66.3 MB) | 이하 |
 
-composite 는 입력 가능까지 약 −0.6 s(`spikes/TSK-01-04/RESULT.md`, 1670 ms 대 2276 ms)의 대가로 설치 파일을 30 MB 키운다. 80 MB 목표와 함께 둘 수 없으므로 어느 쪽을 바꿀지 사람이 정한다.
+composite 는 입력 가능까지 약 −0.6 s(`spikes/TSK-01-04/RESULT.md`, 1670 ms 대 2276 ms)의 대가로 설치 파일을 30 MB 키운다. 결정 D-025(2026-10-20): 시작 시간 이득이 기준(0.3 s)보다 커서 composite 는 유지하고, 80 MB 는 다른 수단(트리밍, composite 범위 축소, 불필요한 파일 정리)으로 줄인다. 후보는 docs/wbs.md TSK-10-06 note 에 있다.

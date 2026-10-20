@@ -194,3 +194,11 @@
 - **Rationale**: 이미 구현·검증된 동작을 정본으로 삼아 문서와 맞춤
 - **Reversible**: yes
 - **Source**: 조정 세션 확정(perf-decisions 레인 지시)
+
+## D-025 (2026-10-20T10:00:00Z)
+- **Phase**: TSK-10-06 composite 판정(D-022 적용 결과)
+- **Decision needed**: D-022 규칙(macOS 에서 composite 와 어셈블리별 R2R 의 시작 시간 차가 0.3 s 이하이면 composite 끔)을 어떤 값으로 적용할지
+- **Decision made**: macOS 는 측정하지 않는다. composite 는 win-* RID 전용이라 macOS 값이 Windows 설치 파일 결정을 대변하지 못하고, 실제 창이 포커스를 가져가 사용자 입력을 방해할 위험이 있다. 기존 Windows 실측(spikes/TSK-01-04/RESULT.md, input-ready 1670 ms 대 2276 ms, 차 −0.5~0.6 s)에 D-022 규칙을 적용하면 차가 기준 0.3 s 보다 크므로 composite 를 유지한다. 80 MB 목표는 composite 를 끄는 대신 다른 수단으로 줄인다(후보는 wbs TSK-10-06 note). 사용자가 결정을 조정자에게 위임(2026-10-20), 뒤집을 수 있음
+- **Rationale**: 시작 시간 −0.5~0.6 s 는 PRD 시작 목표(1.5 s)와 직결되고, 크기는 다른 수단이 남아 있음
+- **Reversible**: yes
+- **Source**: 조정 세션 확정(perf-decisions 레인 지시 6), D-022 의 적용 결과 기록(D-022 본문은 고치지 않음)

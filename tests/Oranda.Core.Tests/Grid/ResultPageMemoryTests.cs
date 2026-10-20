@@ -40,6 +40,8 @@ public sealed class ResultPageMemoryTests(ITestOutputHelper output)
         var d = new DateTime(2026, 1, 1, 12, 0, 0, DateTimeKind.Utc);
         Assert.Same(sharer.Share(2, d), sharer.Share(2, d));
         Assert.Equal(DateTimeKind.Utc, ((DateTime)sharer.Share(2, d)!).Kind);
+        var local = new DateTime(d.Ticks, DateTimeKind.Unspecified);
+        Assert.Equal(DateTimeKind.Unspecified, ((DateTime)sharer.Share(2, local)!).Kind);
     }
 
     /// <summary>OracleResultSet 이 만드는 것과 같은 모양(열마다 <c>List&lt;object?&gt;</c>)의 페이지를 쌓고 GC 뒤 힙 증가를 행 수로 나눈다.</summary>

@@ -229,6 +229,7 @@ Avalonia 는 모든 크기를 DIP(1/96 인치) 단위로 다루고 배율을 자
 | 색 정의 | 앱 색은 `ThemeDictionaries` 의 `Light`·`Dark` 두 벌에 리소스 키로만 둔다(`OrandaEnvProductionBrush`, `OrandaUncommittedBrush` 등). 코드에 색 값 직접 쓰기 금지 |
 | 에디터 색 | 구문 강조 색표는 테마별 2벌(Light·Dark). 사용자 색표 변경은 1.0 범위 밖 |
 | 그리드 | 홀짝 행 바탕, 선택, NULL 표시 색, 편집 불가 열 색, 변경 셀 색 — 모두 테마 리소스 |
+| 단추·숫자 입력 | 일반 `Button` 은 `OrandaButtonBackgroundBrush`·`OrandaButtonBorderBrush` 로 1 DIP 테두리·높이 28 로 그린다. accent 단추는 Fluent 모양을 따르고, `.toolbar`·`.tool`·`.palette-box`·`.start-item` 과 Dock 의 `PART_*` 단추는 제외한다. `NumericUpDown` 은 `ButtonSpinner` 템플릿을 교체해 ▲▼ 를 세로로 쌓고, 한계값에서 disabled 가 되면 흐린 글리프만 남긴다. 색은 Light·Dark 리소스 키만 쓴다 |
 | 강조색 | Fluent 기본 강조색(OS 강조색 따르지 않음 — 빨강 강조색이 운영 라벨과 헷갈리지 않게) |
 | 고대비 | Windows 고대비 모드에서는 OS 시스템 색을 쓰고, 환경 라벨은 테두리 두께 3 DIP + 글자로만 구분 |
 

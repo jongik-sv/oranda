@@ -1483,7 +1483,7 @@ dotnet, testhost, Oranda.App
 - depends: TSK-06-03
 - blocked-by: -
 - entry-point: 결과 그리드 셀 메뉴 > 값 보기
-- note: -
+- note: 사용자 결정 후보(2026-10-20, row-viewer-table 머지 때 확인): 행 보기는 키 열 수정을 막고 그리드는 허용한다. 두 곳의 동작이 다르므로 맞출지 사용자가 정한다(PRD GRID-07 은 「키가 아닌 열 값 수정」 으로 적음)
 
 #### PRD 요구사항
 - prd-ref: PRD GRID-07
@@ -2300,7 +2300,7 @@ dotnet, testhost, Oranda.App
 - depends: TSK-11-03
 - blocked-by: -
 - entry-point: -
-- note: 결정 D-022(2026-10-20): macOS 에서 composite 대 어셈블리별 R2R 시작 시간 차가 0.3 s 이하이면 composite 를 끈다(측정으로 확정). 출처 docs/itest/TSK-11-03.md DEF-07. 진행(2026-10-20, 맥): Velopack 1.2.161 을 넣고 Program.Main 첫 줄에서 VelopackApp.Build().Run() 을 부른다. 게시에서 PDB 를 뺐다(win-x64 게시 폴더 301 → 199 MB). vpk 는 원래 *.pdb 를 빼므로 106 MB 추정은 과대였다. 맥 교차 패키징(vpk "[win]" pack, 무서명) Setup.exe 는 composite 에서 92.3 MB(초과), composite 를 끄면 63.4 MB, macOS .pkg 66.3 MB(scripts/release/README.md 크기 표). 남은 일: composite(−0.6 s)와 80 MB 목표 중 사람 결정, Windows 에서 pack-windows.ps1 실행·check-installer-size.ps1, CI 의 서명 .pkg 크기 확인
+- note: 결정 D-022(2026-10-20): macOS 에서 composite 대 어셈블리별 R2R 시작 시간 차가 0.3 s 이하이면 composite 를 끈다(측정으로 확정). 출처 docs/itest/TSK-11-03.md DEF-07. 진행(2026-10-20, 맥): Velopack 1.2.161 을 넣고 Program.Main 첫 줄에서 VelopackApp.Build().Run() 을 부른다. 게시에서 PDB 를 뺐다(win-x64 게시 폴더 301 → 199 MB). vpk 는 원래 *.pdb 를 빼므로 106 MB 추정은 과대였다. 맥 교차 패키징(vpk "[win]" pack, 무서명) Setup.exe 는 composite 에서 92.3 MB(초과), composite 를 끄면 63.4 MB, macOS .pkg 66.3 MB(scripts/release/README.md 크기 표). D-025(2026-10-20): D-022 를 Windows 실측(−0.5~0.6 s > 0.3 s)에 적용해 composite 유지 확정, 80 MB 는 별도 수단으로 줄인다(macOS 측정 안 함). 줄여야 할 양 = 무서명 Setup.exe 92.3 MB → 80 MB 이하, 약 12.3 MB(13%). 다음 후보(효과는 근거 있는 것만): (1) PublishTrimmed — 게시 폴더 −52 MB(235→183 MB, R2R 기준, spikes/TSK-01-04), 시간 효과 없음. composite 와 함께 쓸 때 설치 파일 효과는 미측정. 경고: ViewLocator IL2026 1건·ODP.NET IL2104 1건(고유 메시지 54건), 리플렉션 의존이라 동작 검증 필요 (2) composite 범위를 Oranda·Avalonia 로 좁힘 — Oranda.App.r2r.dll 109 MB 가 composite 증가분의 본체이나 범위를 좁힐 때의 크기·시작 시간은 미측정 (3) 위성 어셈블리·언어 리소스, 미사용 네이티브 라이브러리 정리 — 게시 폴더 구성을 파일별로 뽑아 본 적이 없어 효과 미상(먼저 파일별 크기 표를 만들 것). 소프트웨어 렌더링은 크기와 무관. 남은 일: 위 후보 중 하나를 골라 Windows 에서 pack-windows.ps1·check-installer-size.ps1 로 확인, CI 의 서명 .pkg 크기 확인
 
 #### PRD 요구사항
 - prd-ref: PRD 7.2 설치 파일 크기, PRD 업데이트

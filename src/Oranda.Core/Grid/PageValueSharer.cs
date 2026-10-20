@@ -4,7 +4,7 @@ namespace Oranda.Core.Grid;
 
 /// <summary>
 /// 페이지 1개를 채우는 동안 같은 열의 반복 값(문자열·NUMBER·날짜)이 객체 하나를 가리키게 한다(TSK-06-12, D-023).
-/// 값은 바뀌지 않는다: NUMBER 는 값과 소수 자릿수가 모두 같을 때만 같은 상자를 쓴다(1.0 과 1 은 따로).
+/// 값은 바뀌지 않는다: DATE 는 Ticks 와 Kind 가 모두 같을 때만 공유하고, NUMBER 는 값과 소수 자릿수가 모두 같을 때만 같은 상자를 쓴다(1.0 과 1 은 따로).
 /// 페이지가 끝나면 버린다. 값이 거의 안 겹치는 열은 처음 <see cref="Probe"/> 개를 보고 공유를 멈춰 조회 비용을 줄인다.
 /// </summary>
 public sealed class PageValueSharer
@@ -37,7 +37,7 @@ public sealed class PageValueSharer
     {
         private Dictionary<string, string>? _strings;
         private Dictionary<(decimal Value, byte Scale), object>? _decimals;
-        private Dictionary<DateTime, object>? _dates;
+        private Dictionary<(long Ticks, DateTimeKind Kind), object>? _dates;
         private int _seen, _hits;
         private bool _off;
 
@@ -52,7 +52,7 @@ public sealed class PageValueSharer
             {
                 string s => ShareIn(ref _strings, s, s, s),
                 decimal d => ShareIn(ref _decimals, (d, (byte)((decimal.GetBits(d)[3] >> 16) & 0xFF)), value, value),
-                DateTime t => ShareIn(ref _dates, t, value, value),
+                DateTime t => ShareIn(ref _dates, (t.Ticks, t.Kind), value, value),
                 _ => value,
             };
 
