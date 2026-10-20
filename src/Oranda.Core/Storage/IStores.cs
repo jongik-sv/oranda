@@ -62,6 +62,9 @@ public interface IWorkspaceStore
 
     /// <summary>정상 종료 때 자동 저장 파일을 지운다.</summary>
     Task DeleteAutosaveAsync(string id, CancellationToken ct);
+
+    /// <summary>남아 있는 자동 저장 파일의 작업 공간 ID 들(작업 공간을 여러 개 열므로 비정상 종료 복구가 모두 훑는다).</summary>
+    Task<IReadOnlyList<string>> ListAutosaveIdsAsync(CancellationToken ct);
 }
 
 /// <summary>이력 검색 조건(EXEC-07). <see cref="Text"/> 는 trigram 부분 문자열 검색.</summary>

@@ -5,7 +5,7 @@ using static Oranda.App.Features.SqlEditor.EditorTextOps;
 namespace Oranda.App.Features.SqlEditor;
 
 /// <summary>
-/// TSK-04-02 이 소유한 명령 49개의 처리기(commands.md 7장). 한 클래스가 <see cref="CommandContext.CommandId"/> 로 나눠 처리한다.
+/// TSK-04-02 이 소유한 명령 52개의 처리기(commands.md 7장). 한 클래스가 <see cref="CommandContext.CommandId"/> 로 나눠 처리한다.
 /// 활성 탭은 <see cref="SqlEditorHost.Active"/>. 탭이 없을 때 편집 명령은 아무것도 하지 않는다(활성 조건은 셸이 막는다).
 /// </summary>
 [OrandaCommand("oranda.file.newSqlEditor", CommandCategory.File, Icon = "newSql", Placements = ["menu:file/newSqlEditor@10", "toolbar:main/newSql@10"])]
@@ -19,6 +19,9 @@ namespace Oranda.App.Features.SqlEditor;
 [OrandaCommand("oranda.file.openWorkspace", CommandCategory.File, Placements = ["menu:file/openWorkspace@90"])]
 [OrandaCommand("oranda.file.saveWorkspaceFile", CommandCategory.File, Enablement = "hasDocument", Icon = "workspaceSave", Placements = ["menu:file/saveWorkspaceFile@92"])]
 [OrandaCommand("oranda.file.openWorkspaceFile", CommandCategory.File, Icon = "workspaceOpen", Placements = ["menu:file/openWorkspaceFile@94"])]
+[OrandaCommand("oranda.file.newWorkspace", CommandCategory.File, Icon = "folderAdd", Placements = ["menu:file/newWorkspace@12", "toolbar:main/newWorkspace@12"])]
+[OrandaCommand("oranda.file.renameWorkspace", CommandCategory.File, Enablement = "sqlWorkspaceActive", Placements = ["menu:file/renameWorkspace@96"])]
+[OrandaCommand("oranda.file.closeWorkspace", CommandCategory.File, Enablement = "sqlWorkspaceActive", Placements = ["menu:file/closeWorkspace@805"])]
 [OrandaCommand("oranda.file.renameTab", CommandCategory.File, Enablement = "sqlDocActive", Icon = "rename", Placements = ["menu:file/renameTab@75", "context:editor/renameTab@900"])]
 [OrandaCommand("oranda.edit.undo", CommandCategory.Edit, When = "editorFocus", Enablement = "canUndo", Placements = ["menu:edit/undo@10", "context:editor/undo@10"])]
 [OrandaCommand("oranda.edit.redo", CommandCategory.Edit, When = "editorFocus", Enablement = "canRedo", Placements = ["menu:edit/redo@20", "context:editor/redo@20"])]
@@ -111,6 +114,15 @@ public sealed class SqlEditorCommandHandler : ICommandHandler
                 return;
             case "oranda.file.openWorkspaceFile":
                 await OpenWorkspaceFileAsync(host, context.Parameter as string, cancellationToken).ConfigureAwait(true);
+                return;
+            case "oranda.file.newWorkspace":
+                host.NewWorkspace();
+                return;
+            case "oranda.file.renameWorkspace" when host.ActiveWorkspace is { } renamed:
+                await host.RenameWorkspaceAsync(renamed, cancellationToken).ConfigureAwait(true);
+                return;
+            case "oranda.file.closeWorkspace" when host.ActiveWorkspace is { } closing:
+                await host.CloseWorkspaceAsync(closing, cancellationToken).ConfigureAwait(true);
                 return;
             case "oranda.file.renameTab" when tab is not null:
                 await host.RenameTabAsync(tab, cancellationToken).ConfigureAwait(true);

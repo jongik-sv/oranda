@@ -20,6 +20,9 @@ public sealed record Workspace
 
     public IReadOnlyList<WorkspaceTab> Tabs { get; init; } = [];
 
+    /// <summary>이 작업 공간을 연 Markdown 작업 공간 파일(.md) 또는 MyBatis 매퍼(.xml)의 절대 경로. 파일에서 열지 않았으면 null.</summary>
+    public string? SourcePath { get; init; }
+
     public string Layout { get; init; } = "layout.json";
 }
 

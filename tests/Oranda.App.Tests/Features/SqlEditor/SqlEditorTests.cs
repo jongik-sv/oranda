@@ -49,7 +49,7 @@ public sealed class SqlEditorTests : IDisposable
             .Where(l => l.StartsWith("| `oranda.", StringComparison.Ordinal) && l.Contains("TSK-04-02", StringComparison.Ordinal))
             .Select(l => l.Trim('|').Split('|').Select(c => c.Trim()).ToArray())
             .ToList();
-        Assert.Equal(49, rows.Count);
+        Assert.Equal(52, rows.Count);
 
         var registered = ShellTestHelpers.AppContributions.Commands.ToDictionary(c => c.Definition.Id);
         foreach (var r in rows)
@@ -723,6 +723,197 @@ public sealed class SqlEditorTests : IDisposable
         Assert.True(await other.OpenWorkspaceAsync(default));
         Assert.Equal(["select 1", "select 2"], other.Tabs.Select(t => t.Text));
         Assert.Equal("My Project 1!", other.WorkspaceName);
+    });
+
+    // ---- 여러 작업 공간(오렌지 SQL Tool 창 여러 개, 작업 공간마다 SQL 탭 여러 개) ----------------------
+
+    [Fact]
+    public Task Workspaces_keep_their_own_tabs_and_switching_moves_the_active_tab() => Ui.Run(() =>
+    {
+        var host = new SqlEditorHost();
+        var a1 = host.NewDocument("select 1");
+        var first = host.ActiveWorkspace!;
+        Assert.Equal(SqlEditorHost.DefaultWorkspaceId, first.Id);
+        Assert.Equal("기본", first.Name);
+
+        var second = host.NewWorkspace();
+        var b1 = host.Active!;
+        var b2 = host.NewDocument("select 2");
+
+        Assert.Equal(2, host.Workspaces.Count);
+        Assert.Equal([a1], first.Tabs);
+        Assert.Equal([b1, b2], second.Tabs);
+        Assert.Equal([a1, b1, b2], host.Tabs);
+        Assert.Equal("SQL 1", b1.Title); // 탭 번호는 작업 공간마다 따로 센다
+        Assert.Same(b2, host.Active);
+
+        host.ActiveWorkspace = first;
+        Assert.Same(a1, host.Active);
+        host.Active = b1; // 다른 작업 공간의 탭을 고르면 그 작업 공간으로 옮겨 간다
+        Assert.Same(second, host.ActiveWorkspace);
+        Assert.Same(b1, second.ActiveTab);
+
+        second.ActiveTab = b2; // 탭 줄에서 고르기
+        Assert.Same(b2, host.Active);
+        first.ActiveTab = a1; // 보이지 않는 작업 공간의 탭 줄은 앱의 활성 탭을 바꾸지 않는다
+        Assert.Same(b2, host.Active);
+        return Task.CompletedTask;
+    });
+
+    [Fact]
+    public Task Closing_last_tab_keeps_the_workspace_and_new_sql_goes_into_it() => Ui.Run(() =>
+    {
+        var host = new SqlEditorHost();
+        host.NewDocument("a");
+        var second = host.NewWorkspace();
+        host.Close(host.Active!);
+
+        Assert.True(second.IsEmpty);
+        Assert.Same(second, host.ActiveWorkspace);
+        Assert.Null(host.Active);
+        Assert.False(host.GetContextKeys()["sqlDocActive"]);
+        Assert.True(host.GetContextKeys()["sqlWorkspaceActive"]);
+
+        var again = host.NewDocument("b");
+        Assert.Equal([again], second.Tabs);
+        Assert.True(second.CloseActiveInnerTab());
+        Assert.False(second.CloseActiveInnerTab()); // 닫을 탭이 없으면 셸이 작업 공간 문서를 닫는다
+        return Task.CompletedTask;
+    });
+
+    [Fact]
+    public Task Inner_tab_cycling_stops_at_the_edges() => Ui.Run(() =>
+    {
+        var host = new SqlEditorHost();
+        var a = host.NewDocument("a");
+        var b = host.NewDocument("b");
+        var ws = host.ActiveWorkspace!;
+
+        Assert.False(ws.CycleInnerTab(1)); // b 가 마지막이다
+        Assert.True(ws.CycleInnerTab(-1));
+        Assert.Same(a, host.Active);
+        Assert.False(ws.CycleInnerTab(-1));
+        ws.SelectEdgeInnerTab(first: false);
+        Assert.Same(b, host.Active);
+        return Task.CompletedTask;
+    });
+
+    [Fact]
+    public Task Workspace_file_and_mybatis_mapper_open_as_one_workspace_each() => Ui.Run(async () =>
+    {
+        Directory.CreateDirectory(_root);
+        var md = Path.Combine(_root, "월말 점검.md");
+        await File.WriteAllTextAsync(md, WorkspaceFiles.WriteMarkdown("월말 점검", [new("매출", "select 1 from dual"), new("재고", "select 2 from dual")]));
+        var xml = Path.Combine(_root, "UserMapper.xml");
+        await File.WriteAllTextAsync(xml, """
+            <mapper namespace="user">
+              <select id="findAll">select * from users</select>
+              <delete id="remove">delete from users where id = #{id}</delete>
+            </mapper>
+            """);
+        var host = new SqlEditorHost();
+        host.NewDocument("select 0 from dual");
+
+        await host.OpenWorkspaceFileAsync(md, default);
+        var month = host.ActiveWorkspace!;
+        await host.OpenWorkspaceFileAsync(xml, default);
+        var mapper = host.ActiveWorkspace!;
+
+        Assert.Equal(3, host.Workspaces.Count);
+        Assert.Equal("월말 점검", month.Name);
+        Assert.Equal(["매출", "재고"], month.Tabs.Select(t => t.Title));
+        Assert.Equal(Path.GetFullPath(md), month.SourcePath);
+        Assert.Equal(2, mapper.Tabs.Count);
+        Assert.Equal("UserMapper", mapper.Name);
+        Assert.Matches("^[a-z0-9][a-z0-9-]{0,63}$", month.Id);
+        Assert.NotEqual(month.Id, mapper.Id);
+        Assert.Null(host.WorkspaceFilePath); // MyBatis 매퍼에는 다시 쓰지 않는다(Markdown 으로 저장할 때 경로를 묻는다)
+
+        // 같은 파일을 다시 열면 새로 만들지 않고 그 작업 공간으로 옮겨 간다.
+        await host.OpenWorkspaceFileAsync(md, default);
+        Assert.Equal(3, host.Workspaces.Count);
+        Assert.Same(month, host.ActiveWorkspace);
+        Assert.Equal(Path.GetFullPath(md), host.WorkspaceFilePath);
+    });
+
+    [Fact]
+    public Task Closing_a_workspace_saves_it_and_it_can_be_opened_again() => Ui.Run(async () =>
+    {
+        var store = NewStore();
+        var host = new SqlEditorHost(store, new FakeDialogs { Choice = "workspace-2" });
+        var a = host.NewDocument("select 'a' from dual");
+        var second = host.NewWorkspace();
+        host.Active!.Document.Insert(0, "select 'b' from dual");
+        Assert.Equal("workspace-2", second.Id);
+        await host.AutosaveAsync(default);
+
+        await host.CloseWorkspaceAsync(second, default);
+
+        Assert.Single(host.Workspaces);
+        Assert.Equal([a], host.Tabs);
+        Assert.Same(a, host.Active);
+        Assert.Null(await NewStore().LoadAutosaveAsync("workspace-2", default)); // 닫으면 자동 저장을 지운다(복구 때 다시 열리지 않게)
+        var saved = (await NewStore().LoadAsync("workspace-2", default))!.Value;
+        Assert.Equal("select 'b' from dual", Assert.Single(saved.Tabs).Content);
+
+        Assert.True(await host.OpenWorkspaceAsync(default));
+        Assert.Equal(2, host.Workspaces.Count);
+        Assert.Equal("select 'b' from dual", host.Active!.Text);
+    });
+
+    [Fact]
+    public Task New_workspace_does_not_reuse_the_id_of_a_saved_closed_workspace() => Ui.Run(() =>
+    {
+        var host = new SqlEditorHost { ListWorkspaceIds = () => ["default", "workspace-2"] };
+        var ws = host.EnsureWorkspace();
+        Assert.Equal("workspace-3", ws.Id); // 닫아 둔 default·workspace-2 파일을 덮어쓰지 않는다
+        return Task.CompletedTask;
+    });
+
+    [Fact]
+    public Task Crash_recovery_restores_every_open_workspace_in_their_order() => Ui.Run(async () =>
+    {
+        var run1 = new SqlEditorHost(NewStore());
+        run1.NewDocument("select 1");
+        var second = run1.NewWorkspace("보고서");
+        run1.Active!.Document.Insert(0, "select 2");
+        Assert.True(await run1.AutosaveAsync(default));
+
+        var dialogs = new FakeDialogs { Confirm = true };
+        var run2 = new SqlEditorHost(NewStore(), dialogs)
+        {
+            OpenWorkspaceIds = [second.Id, "default"],
+            LastWorkspaceId = "default",
+        };
+        Assert.True(await run2.InitializeAsync(default));
+
+        Assert.Equal(1, dialogs.ConfirmCalls); // 작업 공간이 여러 개여도 한 번만 묻는다
+        Assert.Equal(["보고서", "기본"], run2.Workspaces.Select(w => w.Name));
+        Assert.Equal("default", run2.ActiveWorkspace!.Id);
+        Assert.Equal(["select 1", "select 2"], run2.Tabs.Select(t => t.Text).Order());
+    });
+
+    [Fact]
+    public Task Clean_restart_reopens_the_workspaces_that_were_open() => Ui.Run(async () =>
+    {
+        var run1 = new SqlEditorHost(NewStore());
+        run1.NewDocument("select 1");
+        var report = run1.NewWorkspace("보고서");
+        run1.Active!.Document.Insert(0, "select 2");
+        await run1.ShutdownAsync(default);
+        Assert.Empty(await NewStore().ListAutosaveIdsAsync(default));
+
+        var dialogs = new FakeDialogs { Confirm = true };
+        var run2 = new SqlEditorHost(NewStore(), dialogs)
+        {
+            OpenWorkspaceIds = ["default", report.Id],
+            LastWorkspaceId = report.Id,
+        };
+        Assert.False(await run2.InitializeAsync(default));
+
+        Assert.Equal(0, dialogs.ConfirmCalls);
+        Assert.Equal(["기본", "보고서"], run2.Workspaces.Select(w => w.Name));
+        Assert.Equal("select 2", run2.Active!.Text);
     });
 
     [Theory]

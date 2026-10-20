@@ -86,7 +86,8 @@
 | `monitor.refreshSeconds` | int | ○ | 5 | 2~60 |
 | `workspace.autosaveSeconds` | int | ○ | 10 | 1~10 (PRD 복구 요구: 10 s 이하) |
 | `workspace.restoreOnStartup` | bool | ○ | true | 마지막 작업 공간 다시 열기 |
-| `workspace.lastWorkspaceId` | string | ○ | `"default"` | |
+| `workspace.lastWorkspaceId` | string | ○ | `"default"` | 종료 때 보고 있던 작업 공간(다음 시작 때 활성) |
+| `workspace.openWorkspaceIds` | string[] | ○ | `["default"]` | 종료 때 열려 있던 작업 공간들(문서 탭 순서). 다음 시작 때 모두 다시 연다 |
 
 ### 2.2 `connections.json` — `ConnectionsDocument`
 
@@ -227,7 +228,9 @@ TRD 4.11 대로 앱 DTO 다(Core 가 아니라 `Oranda.App`). Dock.Avalonia 의 
 
 ### 2.6 `workspaces/{id}.json` — `Workspace`
 
-자동 저장 `autosave/{workspaceId}.json` 도 같은 스키마다. 정상 종료하면 자동 저장 파일을 지운다. 시작할 때 자동 저장 파일이 남아 있으면 비정상 종료로 보고 복구를 묻는다.
+자동 저장 `autosave/{workspaceId}.json` 도 같은 스키마다. 작업 공간은 여러 개를 동시에 열 수 있고(문서 탭 하나 = 작업 공간 하나), 열린 작업 공간마다 파일이 하나씩이다. 정상 종료하면 열린 작업 공간을 모두 저장하고 자동 저장 파일을 지운다. 작업 공간 문서를 닫아도 저장하고 그 자동 저장을 지운다(「작업 공간 열기」로 다시 연다). 시작할 때 자동 저장 파일이 하나라도 남아 있으면 비정상 종료로 보고 복구를 한 번 묻고, 예 하면 남은 작업 공간을 모두 연다.
+
+새 작업 공간 ID 는 열려 있지도 저장돼 있지도 않으면 `default`, 아니면 `workspace-N` 이다(닫아 둔 작업 공간 파일을 덮어쓰지 않는다). Markdown 작업 공간 파일·MyBatis 매퍼에서 연 작업 공간은 `{파일 이름 slug}-{경로 해시 8자}` 라서 같은 파일은 늘 같은 ID 다.
 
 | 필드 | 형식 | 필수 | 기본값 | 설명 |
 |---|---|---|---|---|
@@ -247,6 +250,7 @@ TRD 4.11 대로 앱 DTO 다(Core 가 아니라 `Oranda.App`). Dock.Avalonia 의 
 | `tabs[].selectionStart` | `TextPosition` | ○ | null | 선택이 있을 때만 |
 | `tabs[].scrollLine` | int | ○ | 1 | 맨 위에 보이던 줄 |
 | `tabs[].connectionProfileId` | Guid | ○ | null | 탭이 쓰던 접속. 열 때 자동 접속하지 않고 「다시 접속」 버튼만 둔다 |
+| `sourcePath` | string | ○ | null | 이 작업 공간을 연 Markdown 작업 공간 파일(.md)·MyBatis 매퍼(.xml)의 절대 경로. 같은 파일을 다시 열면 이 작업 공간으로 옮겨 간다 |
 | `layout` | string | ○ | `"layout.json"` | 쓸 레이아웃 파일(`{data}` 상대). 1.0 은 항상 `layout.json` |
 
 ---

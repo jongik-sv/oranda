@@ -1,5 +1,7 @@
 using System.Collections.ObjectModel;
 using System.Globalization;
+using System.Security.Cryptography;
+using System.Text;
 using Avalonia.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
 using Oranda.Core.Storage;
@@ -8,27 +10,34 @@ using Oranda.Core.Workspaces;
 namespace Oranda.App.Features.SqlEditor;
 
 /// <summary>
-/// 열린 SQL 편집기 탭 모음과 그 수명(열기·저장·닫기·복제·작업 공간·자동 저장·비정상 종료 복구).
-/// 명령 처리기·개요 창·<c>IEditorContext</c> 가 같은 객체를 본다. DI 가 붙기 전에는 <see cref="Current"/> 를 쓴다.
+/// 열린 SQL 작업 공간과 그 안의 SQL 탭 모음, 그리고 그 수명(열기·저장·닫기·복제·작업 공간·자동 저장·비정상 종료 복구).
+/// 오렌지처럼 작업 공간(SQL Tool 창) 여러 개를 열고, 작업 공간마다 SQL 탭 여러 개를 둔다(<see cref="Workspaces"/>).
+/// <see cref="Tabs"/> 는 모든 작업 공간의 탭을 한데 모은 목록이고, <see cref="Active"/> 는 활성 작업 공간의 활성 탭이다:
+/// 명령 처리기·결과 창·개요 창·<c>IEditorContext</c> 는 작업 공간을 몰라도 이 둘만 보면 된다.
+/// DI 가 붙기 전에는 <see cref="Current"/> 를 쓴다.
 /// UI 스레드에서만 쓴다(자동 저장 타이머는 스냅샷을 UI 스레드에서 만든다).
 /// </summary>
 public sealed class SqlEditorHost : ObservableObject, IDisposable
 {
     private const int ClosedHistoryLimit = 20;
 
+    /// <summary>처음 만드는 작업 공간(예전 단일 작업 공간과 같은 파일).</summary>
+    public const string DefaultWorkspaceId = "default";
+
+    public const string DefaultWorkspaceName = "기본";
+
     private static SqlEditorHost? s_current;
 
     private IWorkspaceStore? _store;
     private readonly Stack<WorkspaceTab> _closed = new();
-    private List<(Guid Id, long Version, bool Dirty)>? _lastAutosaveStamp;
     private CancellationTokenSource? _autosaveCts;
     private SqlEditorViewModel? _active;
+    private SqlWorkspaceViewModel? _activeWorkspace;
 
-    public SqlEditorHost(IWorkspaceStore? store = null, IEditorDialogs? dialogs = null, string workspaceId = "default")
+    public SqlEditorHost(IWorkspaceStore? store = null, IEditorDialogs? dialogs = null)
     {
         _store = store;
         Dialogs = dialogs ?? new NoDialogs();
-        WorkspaceId = workspaceId;
     }
 
     /// <summary>프로세스 안의 기본 호스트. 셸의 DI 가 붙으면 그쪽이 <c>Current</c> 를 설정한다.</summary>
@@ -47,38 +56,84 @@ public sealed class SqlEditorHost : ObservableObject, IDisposable
         set => _store = value;
     }
 
+    /// <summary>열린 작업 공간(문서 탭 순서).</summary>
+    public ObservableCollection<SqlWorkspaceViewModel> Workspaces { get; } = [];
+
+    /// <summary>모든 작업 공간의 SQL 탭(작업 공간 순서, 그 안에서는 열린 순서).</summary>
     public ObservableCollection<SqlEditorViewModel> Tabs { get; } = [];
 
-    /// <summary>쓰고 있는 작업 공간 ID(자동 저장 파일 이름도 같다).</summary>
-    public string WorkspaceId { get; private set; }
+    /// <summary>보고 있는 작업 공간의 ID(없으면 기본 작업 공간 ID). 자동 저장 파일 이름도 같다.</summary>
+    public string WorkspaceId => _activeWorkspace?.Id ?? DefaultWorkspaceId;
 
-    public string WorkspaceName { get; private set; } = "기본";
+    public string WorkspaceName => _activeWorkspace?.Name ?? DefaultWorkspaceName;
 
-    /// <summary>시작 때 마지막 작업 공간을 다시 연다(설정 <c>workspace.restoreOnStartup</c>).</summary>
+    /// <summary>보고 있는 작업 공간이 Markdown 작업 공간 파일에서 왔거나 그리로 저장됐으면 그 경로. 「작업 공간 파일로 저장」은 여기에 덮어쓴다.</summary>
+    public string? WorkspaceFilePath => _activeWorkspace?.SourcePath is { } p && !WorkspaceFiles.IsMyBatis(p) ? p : null;
+
+    /// <summary>시작 때 마지막에 열려 있던 작업 공간들을 다시 연다(설정 <c>workspace.restoreOnStartup</c>).</summary>
     public bool RestoreOnStartup { get; set; } = true;
 
+    /// <summary>시작 때 다시 열 작업 공간 ID 들(설정 <c>workspace.openWorkspaceIds</c>, 셸이 넣는다).</summary>
+    public IReadOnlyList<string> OpenWorkspaceIds { get; set; } = [DefaultWorkspaceId];
+
+    /// <summary>시작 때 활성으로 둘 작업 공간(설정 <c>workspace.lastWorkspaceId</c>).</summary>
+    public string? LastWorkspaceId { get; set; }
+
+    /// <summary>보고 있는 작업 공간. 바꾸면 <see cref="Active"/> 도 그 작업 공간의 활성 탭으로 바뀐다.</summary>
+    public SqlWorkspaceViewModel? ActiveWorkspace
+    {
+        get => _activeWorkspace;
+        set
+        {
+            if (ReferenceEquals(_activeWorkspace, value))
+            {
+                return;
+            }
+
+            _activeWorkspace = value;
+            OnPropertyChanged();
+            OnPropertyChanged(nameof(WorkspaceId));
+            OnPropertyChanged(nameof(WorkspaceName));
+            ActiveWorkspaceChanged?.Invoke(this, EventArgs.Empty);
+            SetActive(value?.ActiveTab);
+        }
+    }
+
+    /// <summary>활성 SQL 탭(활성 작업 공간의 활성 탭). 다른 작업 공간의 탭을 넣으면 그 작업 공간이 활성이 된다.</summary>
     public SqlEditorViewModel? Active
     {
         get => _active;
         set
         {
-            if (ReferenceEquals(_active, value))
+            if (value is not null && WorkspaceOf(value) is { } ws)
             {
-                return;
+                ws.ActiveTab = value;
+                if (!ReferenceEquals(_activeWorkspace, ws))
+                {
+                    _activeWorkspace = ws;
+                    OnPropertyChanged(nameof(ActiveWorkspace));
+                    OnPropertyChanged(nameof(WorkspaceId));
+                    OnPropertyChanged(nameof(WorkspaceName));
+                    ActiveWorkspaceChanged?.Invoke(this, EventArgs.Empty);
+                }
             }
 
-            _active = value;
-            OnPropertyChanged();
-            ActiveChanged?.Invoke(this, EventArgs.Empty);
+            SetActive(value);
         }
     }
 
     public event EventHandler? ActiveChanged;
 
+    public event EventHandler? ActiveWorkspaceChanged;
+
+    public event EventHandler<SqlWorkspaceViewModel>? WorkspaceOpened;
+
+    public event EventHandler<SqlWorkspaceViewModel>? WorkspaceClosed;
+
     /// <summary>저장된 작업 공간 ID 목록을 돌려주는 함수(셸이 <c>IAppDataPaths</c> 로 채운다). 기본은 빈 목록.</summary>
     public Func<IReadOnlyList<string>> ListWorkspaceIds { get; set; } = () => [];
 
-    /// <summary>문서 개요 창을 보이거나 개요로 이동하라는 요청(<c>oranda.view.outline</c>, <c>oranda.nav.documentOutline</c>). 셸이 도구 창을 연다.</summary>
+    /// <summary>개요 창을 보여 달라는 요청(<c>oranda.nav.documentOutline</c>). 셸이 받아 도구 창을 연다.</summary>
     public event EventHandler? OutlineRequested;
 
     public void RequestOutline() => OutlineRequested?.Invoke(this, EventArgs.Empty);
@@ -87,55 +142,239 @@ public sealed class SqlEditorHost : ObservableObject, IDisposable
 
     public event EventHandler<SqlEditorViewModel>? TabClosed;
 
-    // ---- 탭 -----------------------------------------------------------------------------
+    /// <summary>탭이 들어 있는 작업 공간.</summary>
+    public SqlWorkspaceViewModel? WorkspaceOf(SqlEditorViewModel tab) =>
+        Workspaces.FirstOrDefault(w => w.Tabs.Contains(tab));
 
-    public SqlEditorViewModel NewDocument(string? text = null)
+    private void SetActive(SqlEditorViewModel? value)
     {
-        var vm = new SqlEditorViewModel(Guid.NewGuid(), text ?? string.Empty) { Title = NextUntitledName() };
-        vm.IsDirty = false;
-        AddTab(vm);
-        return vm;
+        if (ReferenceEquals(_active, value))
+        {
+            return;
+        }
+
+        _active = value;
+        OnPropertyChanged(nameof(Active));
+        ActiveChanged?.Invoke(this, EventArgs.Empty);
     }
 
-    private string NextUntitledName()
+    /// <summary>작업 공간의 탭 줄에서 탭을 골랐다. 그 작업 공간이 활성이면 앱의 활성 탭도 바꾼다.</summary>
+    internal void OnWorkspaceTabSelected(SqlWorkspaceViewModel workspace, SqlEditorViewModel? tab)
     {
-        for (int n = 1; ; n++)
+        if (ReferenceEquals(_activeWorkspace, workspace))
         {
-            var name = "SQL " + n.ToString(CultureInfo.InvariantCulture);
-            if (!Tabs.Any(t => t.FilePath is null && t.Title == name))
+            SetActive(tab);
+        }
+    }
+
+    // ---- 작업 공간 -----------------------------------------------------------------------
+
+    /// <summary>「새 작업 공간」: 빈 SQL 탭 하나를 가진 작업 공간을 열고 활성으로 둔다.</summary>
+    public SqlWorkspaceViewModel NewWorkspace(string? name = null)
+    {
+        var ws = OpenWorkspace(NewWorkspaceId(), name ?? NextWorkspaceName());
+        ActiveWorkspace = ws;
+        NewDocument();
+        return ws;
+    }
+
+    /// <summary>보고 있는 작업 공간. 없으면 기본 작업 공간을 만든다(처음 실행·작업 공간을 모두 닫은 뒤의 「새 SQL」).</summary>
+    public SqlWorkspaceViewModel EnsureWorkspace()
+    {
+        if (_activeWorkspace is { } active)
+        {
+            return active;
+        }
+
+        if (Workspaces.FirstOrDefault() is { } first)
+        {
+            ActiveWorkspace = first;
+            return first;
+        }
+
+        var id = NewWorkspaceId();
+        var ws = OpenWorkspace(id, id == DefaultWorkspaceId ? DefaultWorkspaceName : NextWorkspaceName());
+        ActiveWorkspace = ws;
+        return ws;
+    }
+
+    private SqlWorkspaceViewModel OpenWorkspace(string id, string name)
+    {
+        var ws = new SqlWorkspaceViewModel(this, id, name);
+        Workspaces.Add(ws);
+        WorkspaceOpened?.Invoke(this, ws);
+        return ws;
+    }
+
+    /// <summary>
+    /// 작업 공간을 닫는다: <c>workspaces/{id}.json</c> 에 저장하고(저장 안 한 SQL 도 그 안에 남는다) 자동 저장을 지운다.
+    /// 그래서 닫아도 내용을 잃지 않고 「작업 공간 열기」로 다시 연다.
+    /// </summary>
+    public async Task CloseWorkspaceAsync(SqlWorkspaceViewModel workspace, CancellationToken ct)
+    {
+        ArgumentNullException.ThrowIfNull(workspace);
+        var index = Workspaces.IndexOf(workspace);
+        if (index < 0)
+        {
+            return;
+        }
+
+        var snapshot = workspace.ToWorkspace();
+        RemoveWorkspace(workspace, index);
+        if (_store is not null)
+        {
+            await _store.SaveAsync(snapshot, ct).ConfigureAwait(true);
+            await _store.DeleteAutosaveAsync(snapshot.Id, ct).ConfigureAwait(true);
+        }
+    }
+
+    private void RemoveWorkspace(SqlWorkspaceViewModel workspace, int index)
+    {
+        foreach (var tab in workspace.Tabs.ToList())
+        {
+            workspace.Tabs.Remove(tab);
+            Tabs.Remove(tab);
+            TabClosed?.Invoke(this, tab);
+        }
+
+        Workspaces.RemoveAt(index);
+        WorkspaceClosed?.Invoke(this, workspace);
+        if (ReferenceEquals(_activeWorkspace, workspace))
+        {
+            ActiveWorkspace = Workspaces.Count == 0 ? null : Workspaces[Math.Min(index, Workspaces.Count - 1)];
+        }
+    }
+
+    /// <summary>「작업 공간 이름 바꾸기」. 저장 파일 ID 는 「작업 공간 저장」 때만 바뀐다(닫았다 열어도 같은 파일).</summary>
+    public async Task<bool> RenameWorkspaceAsync(SqlWorkspaceViewModel workspace, CancellationToken ct)
+    {
+        ArgumentNullException.ThrowIfNull(workspace);
+        var name = await Dialogs.PromptAsync("작업 공간 이름 바꾸기", workspace.Name, ct).ConfigureAwait(true);
+        if (string.IsNullOrWhiteSpace(name))
+        {
+            return false;
+        }
+
+        workspace.Name = name.Trim();
+        return true;
+    }
+
+    /// <summary>
+    /// 새 작업 공간 ID: 기본 작업 공간이 열려 있지도 저장돼 있지도 않으면 <c>default</c>, 아니면 <c>workspace-N</c>
+    /// (열린 것·저장된 것과 겹치지 않게. 닫아 둔 작업 공간 파일을 덮어쓰지 않는다).
+    /// </summary>
+    private string NewWorkspaceId()
+    {
+        var taken = Workspaces.Select(w => w.Id).Concat(ListWorkspaceIds()).ToHashSet(StringComparer.Ordinal);
+        if (!taken.Contains(DefaultWorkspaceId))
+        {
+            return DefaultWorkspaceId;
+        }
+
+        for (int n = 2; ; n++)
+        {
+            var id = "workspace-" + n.ToString(CultureInfo.InvariantCulture);
+            if (!taken.Contains(id))
+            {
+                return id;
+            }
+        }
+    }
+
+    private string NextWorkspaceName()
+    {
+        for (int n = Workspaces.Count + 1; ; n++)
+        {
+            var name = "작업 공간 " + n.ToString(CultureInfo.InvariantCulture);
+            if (!Workspaces.Any(w => w.Name == name))
             {
                 return name;
             }
         }
     }
 
-    private void AddTab(SqlEditorViewModel vm)
+    /// <summary>파일에서 연 작업 공간의 ID: 이름 + 경로 해시. 같은 파일은 늘 같은 ID(다시 열면 그 저장본을 쓴다), 다른 파일과는 겹치지 않는다.</summary>
+    internal static string FileWorkspaceId(string name, string fullPath)
     {
-        Tabs.Add(vm);
+        var hash = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(fullPath.ToUpperInvariant())))[..8].ToLowerInvariant();
+        var slug = SlugOf(name);
+        if (slug.StartsWith("workspace-", StringComparison.Ordinal) && !name.Contains("workspace", StringComparison.OrdinalIgnoreCase))
+        {
+            slug = "file"; // 한글 이름 등 ASCII 가 없으면 무작위 꼬리 대신 고정 접두어
+        }
+
+        slug = slug.Length > 55 ? slug[..55].TrimEnd('-') : slug;
+        return slug + "-" + hash;
+    }
+
+    // ---- 탭 -----------------------------------------------------------------------------
+
+    /// <summary>보고 있는 작업 공간에 빈 SQL 탭을 더한다(없으면 기본 작업 공간을 만든다).</summary>
+    public SqlEditorViewModel NewDocument(string? text = null)
+    {
+        var ws = EnsureWorkspace();
+        var vm = new SqlEditorViewModel(Guid.NewGuid(), text ?? string.Empty) { Title = NextUntitledName(ws) };
+        vm.IsDirty = false;
+        AddTab(ws, vm);
+        return vm;
+    }
+
+    private static string NextUntitledName(SqlWorkspaceViewModel ws)
+    {
+        for (int n = 1; ; n++)
+        {
+            var name = "SQL " + n.ToString(CultureInfo.InvariantCulture);
+            if (!ws.Tabs.Any(t => t.FilePath is null && t.Title == name))
+            {
+                return name;
+            }
+        }
+    }
+
+    private void AddTab(SqlWorkspaceViewModel ws, SqlEditorViewModel vm)
+    {
+        ws.Tabs.Add(vm);
+        InsertIntoAllTabs(ws, vm);
         TabOpened?.Invoke(this, vm);
         Active = vm;
+    }
+
+    /// <summary>전체 탭 목록에서도 작업 공간 순서를 지킨다(그 작업 공간의 마지막 탭 바로 뒤).</summary>
+    private void InsertIntoAllTabs(SqlWorkspaceViewModel ws, SqlEditorViewModel vm)
+    {
+        var at = 0;
+        foreach (var w in Workspaces)
+        {
+            at += w.Tabs.Count(t => !ReferenceEquals(t, vm));
+            if (ReferenceEquals(w, ws))
+            {
+                break;
+            }
+        }
+
+        Tabs.Insert(Math.Min(at, Tabs.Count), vm);
     }
 
     public SqlEditorViewModel Duplicate(SqlEditorViewModel source)
     {
         ArgumentNullException.ThrowIfNull(source);
+        var ws = WorkspaceOf(source) ?? EnsureWorkspace();
         var vm = new SqlEditorViewModel(Guid.NewGuid(), source.Text)
         {
-            Title = NextUntitledName(),
+            Title = NextUntitledName(ws),
             ConnectionProfileId = source.ConnectionProfileId,
         };
         vm.IsDirty = false;
         vm.Select(source.SelectionStart, source.SelectionLength);
-        AddTab(vm);
+        AddTab(ws, vm);
         return vm;
     }
 
-    /// <summary>탭을 닫는다(저장 확인은 호출한 쪽이 한다). 「닫은 탭 다시 열기」용으로 내용을 기억한다.</summary>
+    /// <summary>탭을 닫는다(저장 확인은 호출한 쪽이 한다). 「닫은 탭 다시 열기」용으로 내용을 기억한다. 작업 공간은 비어도 남는다.</summary>
     public void Close(SqlEditorViewModel tab)
     {
         ArgumentNullException.ThrowIfNull(tab);
-        int index = Tabs.IndexOf(tab);
-        if (index < 0)
+        if (WorkspaceOf(tab) is not { } ws)
         {
             return;
         }
@@ -152,10 +391,17 @@ public sealed class SqlEditorHost : ObservableObject, IDisposable
             }
         }
 
-        Tabs.RemoveAt(index);
-        if (ReferenceEquals(Active, tab))
+        var index = ws.Tabs.IndexOf(tab);
+        ws.Tabs.RemoveAt(index);
+        Tabs.Remove(tab);
+        if (ReferenceEquals(ws.ActiveTab, tab))
         {
-            Active = Tabs.Count == 0 ? null : Tabs[Math.Min(index, Tabs.Count - 1)];
+            ws.ActiveTab = ws.Tabs.Count == 0 ? null : ws.Tabs[Math.Min(index, ws.Tabs.Count - 1)];
+        }
+
+        if (ReferenceEquals(_active, tab))
+        {
+            SetActive(ReferenceEquals(_activeWorkspace, ws) ? ws.ActiveTab : null);
         }
 
         TabClosed?.Invoke(this, tab);
@@ -178,7 +424,7 @@ public sealed class SqlEditorHost : ObservableObject, IDisposable
 
         var tab = _closed.Pop();
         var vm = SqlEditorViewModel.FromWorkspaceTab(tab, null);
-        AddTab(vm);
+        AddTab(EnsureWorkspace(), vm);
         return vm;
     }
 
@@ -209,7 +455,7 @@ public sealed class SqlEditorHost : ObservableObject, IDisposable
             Encoding = enc,
         };
         vm.IsDirty = false;
-        AddTab(vm);
+        AddTab(EnsureWorkspace(), vm);
         return vm;
     }
 
@@ -283,24 +529,37 @@ public sealed class SqlEditorHost : ObservableObject, IDisposable
         tab.MarkSaved();
     }
 
-    // ---- 작업 공간 -----------------------------------------------------------------------
+    // ---- 작업 공간 저장·열기 --------------------------------------------------------------
 
-    public Workspace BuildWorkspace()
-        => new()
-        {
-            Id = WorkspaceId,
-            Name = WorkspaceName,
-            SavedAt = DateTimeOffset.UtcNow,
-            ActiveTabId = Active?.TabId,
-            Tabs = [.. Tabs.Select(t => t.ToWorkspaceTab())],
-        };
+    /// <summary>보고 있는 작업 공간의 저장 모습(없으면 빈 기본 작업 공간).</summary>
+    public Workspace BuildWorkspace() =>
+        _activeWorkspace?.ToWorkspace() ?? new Workspace { Id = DefaultWorkspaceId, Name = DefaultWorkspaceName, SavedAt = DateTimeOffset.UtcNow };
 
-    /// <summary>작업 공간의 탭들로 지금 탭을 바꾼다(파일 탭은 파일을 다시 읽는다).</summary>
-    public void Restore(Workspace workspace)
+    /// <summary>
+    /// 저장된 작업 공간을 연다: 같은 ID 의 작업 공간이 열려 있으면 그 탭들을 바꾸고, 아니면 새 작업 공간으로 연다.
+    /// 파일 탭은 파일을 다시 읽는다. 연 작업 공간이 활성이 된다.
+    /// </summary>
+    public SqlWorkspaceViewModel Restore(Workspace workspace)
     {
         ArgumentNullException.ThrowIfNull(workspace);
-        Tabs.Clear();
-        Active = null;
+        var ws = Workspaces.FirstOrDefault(w => w.Id == workspace.Id);
+        if (ws is null)
+        {
+            ws = OpenWorkspace(workspace.Id, workspace.Name);
+        }
+        else
+        {
+            foreach (var old in ws.Tabs.ToList())
+            {
+                ws.Tabs.Remove(old);
+                Tabs.Remove(old);
+                TabClosed?.Invoke(this, old);
+            }
+
+            ws.Name = workspace.Name;
+        }
+
+        ws.SourcePath = workspace.SourcePath;
         foreach (var t in workspace.Tabs)
         {
             string? fileText = null;
@@ -317,17 +576,26 @@ public sealed class SqlEditorHost : ObservableObject, IDisposable
             }
 
             var vm = SqlEditorViewModel.FromWorkspaceTab(t, fileText);
-            Tabs.Add(vm);
+            ws.Tabs.Add(vm);
+            InsertIntoAllTabs(ws, vm);
             TabOpened?.Invoke(this, vm);
         }
 
-        Active = Tabs.FirstOrDefault(t => t.TabId == workspace.ActiveTabId) ?? Tabs.FirstOrDefault();
-        WorkspaceId = workspace.Id;
-        WorkspaceName = workspace.Name;
-        _lastAutosaveStamp = null;
+        ws.ActiveTab = ws.Tabs.FirstOrDefault(t => t.TabId == workspace.ActiveTabId) ?? ws.Tabs.FirstOrDefault();
+        ws.MarkAutosaved(null);
+        if (ReferenceEquals(_activeWorkspace, ws))
+        {
+            SetActive(ws.ActiveTab);
+        }
+        else
+        {
+            ActiveWorkspace = ws;
+        }
+
+        return ws;
     }
 
-    /// <summary>「작업 공간 저장」: 이름을 물어 <c>workspaces/{id}.json</c> 에 저장한다.</summary>
+    /// <summary>「작업 공간 저장」: 이름을 물어 보고 있는 작업 공간을 <c>workspaces/{id}.json</c> 에 저장한다.</summary>
     public async Task<bool> SaveWorkspaceAsync(CancellationToken ct)
     {
         if (_store is null)
@@ -335,19 +603,35 @@ public sealed class SqlEditorHost : ObservableObject, IDisposable
             return false;
         }
 
-        var name = await Dialogs.PromptAsync("작업 공간 이름", WorkspaceName, ct).ConfigureAwait(true);
+        var ws = EnsureWorkspace();
+        var name = await Dialogs.PromptAsync("작업 공간 이름", ws.Name, ct).ConfigureAwait(true);
         if (string.IsNullOrWhiteSpace(name))
         {
             return false;
         }
 
-        WorkspaceName = name.Trim();
-        WorkspaceId = SlugOf(WorkspaceName);
-        await _store.SaveAsync(BuildWorkspace(), ct).ConfigureAwait(true);
+        var oldId = ws.Id;
+        var id = SlugOf(name.Trim());
+        for (int n = 2; Workspaces.Any(w => !ReferenceEquals(w, ws) && w.Id == id); n++)
+        {
+            id = SlugOf(name.Trim()) + "-" + n.ToString(CultureInfo.InvariantCulture); // 다른 열린 작업 공간의 파일을 덮어쓰지 않는다
+        }
+
+        ws.Name = name.Trim();
+        ws.Id = id;
+        OnPropertyChanged(nameof(WorkspaceId));
+        OnPropertyChanged(nameof(WorkspaceName));
+        await _store.SaveAsync(ws.ToWorkspace(), ct).ConfigureAwait(true);
+        if (oldId != id)
+        {
+            await _store.DeleteAutosaveAsync(oldId, ct).ConfigureAwait(true); // 옛 ID 의 자동 저장이 남으면 복구 때 둘로 열린다
+            ws.MarkAutosaved(null);
+        }
+
         return true;
     }
 
-    /// <summary>「작업 공간 열기」: 저장된 ID 를 골라 연다.</summary>
+    /// <summary>「작업 공간 열기」: 저장된 ID 를 골라 연다. 이미 열려 있으면 그 작업 공간으로 옮겨 간다.</summary>
     public async Task<bool> OpenWorkspaceAsync(CancellationToken ct)
     {
         if (_store is null)
@@ -359,6 +643,12 @@ public sealed class SqlEditorHost : ObservableObject, IDisposable
         if (id is null)
         {
             return false;
+        }
+
+        if (Workspaces.FirstOrDefault(w => w.Id == id) is { } open)
+        {
+            ActiveWorkspace = open;
+            return true;
         }
 
         var doc = await _store.LoadAsync(id, ct).ConfigureAwait(true);
@@ -373,14 +663,15 @@ public sealed class SqlEditorHost : ObservableObject, IDisposable
 
     // ---- 작업 공간 파일(Orange SQL Tool 의 Workspace 파일) ------------------------------------
 
-    /// <summary>파일에서 열었거나 파일로 저장한 작업 공간의 .md 경로. 그 뒤 「작업 공간 파일로 저장」은 이 파일에 덮어쓴다.</summary>
-    public string? WorkspaceFilePath { get; private set; }
-
-    /// <summary>열린 탭 전체를 Markdown 작업 공간 파일 하나로 저장한다. 처음이거나 <paramref name="askPath"/> 면 경로를 묻는다.</summary>
+    /// <summary>
+    /// 보고 있는 작업 공간의 탭을 Markdown 작업 공간 파일 하나로 저장한다. 처음이거나 MyBatis 에서 왔거나
+    /// <paramref name="askPath"/> 면 경로를 묻는다.
+    /// </summary>
     public async Task<bool> SaveWorkspaceFileAsync(bool askPath, CancellationToken ct)
     {
+        var ws = EnsureWorkspace();
         var path = askPath || WorkspaceFilePath is null
-            ? await Dialogs.PickWorkspaceFileAsync(save: true, WorkspaceName + ".md", ct).ConfigureAwait(true)
+            ? await Dialogs.PickWorkspaceFileAsync(save: true, ws.Name + ".md", ct).ConfigureAwait(true)
             : WorkspaceFilePath;
         if (string.IsNullOrWhiteSpace(path))
         {
@@ -393,11 +684,12 @@ public sealed class SqlEditorHost : ObservableObject, IDisposable
         }
 
         var name = Path.GetFileNameWithoutExtension(path);
-        var tabs = Tabs.Select(t => new WorkspaceFileTab(t.Title, t.Text, t.ConnectionProfileId?.ToString()));
-        await File.WriteAllTextAsync(path, WorkspaceFiles.WriteMarkdown(name, tabs), new System.Text.UTF8Encoding(false), ct).ConfigureAwait(true);
-        WorkspaceFilePath = path;
-        WorkspaceName = name;
-        foreach (var t in Tabs.Where(t => t.FilePath is null))
+        var tabs = ws.Tabs.Select(t => new WorkspaceFileTab(t.Title, t.Text, t.ConnectionProfileId?.ToString()));
+        await File.WriteAllTextAsync(path, WorkspaceFiles.WriteMarkdown(name, tabs), new UTF8Encoding(false), ct).ConfigureAwait(true);
+        ws.SourcePath = Path.GetFullPath(path);
+        ws.Name = name;
+        OnPropertyChanged(nameof(WorkspaceName));
+        foreach (var t in ws.Tabs.Where(t => t.FilePath is null))
         {
             t.IsDirty = false; // 파일 없는 탭은 작업 공간 파일에 들어갔다.
         }
@@ -406,8 +698,8 @@ public sealed class SqlEditorHost : ObservableObject, IDisposable
     }
 
     /// <summary>
-    /// 작업 공간 파일(.md)이나 MyBatis 매퍼(.xml)를 열어 탭마다 새 편집기로 연다. 지금 열린 탭은 그대로 둔다.
-    /// 읽은 결과(알림 포함)를 돌려주고, 취소하면 null.
+    /// 작업 공간 파일(.md)이나 MyBatis 매퍼(.xml)를 새 작업 공간 하나로 연다(파일의 탭·문장 하나가 SQL 탭 하나).
+    /// 같은 파일을 연 작업 공간이 이미 있으면 그리로 옮겨 간다. 읽은 결과(알림 포함)를 돌려주고, 취소하면 null.
     /// </summary>
     public async Task<WorkspaceFile?> OpenWorkspaceFileAsync(string? path, CancellationToken ct)
     {
@@ -417,7 +709,20 @@ public sealed class SqlEditorHost : ObservableObject, IDisposable
             return null;
         }
 
-        var file = WorkspaceFiles.Load(path);
+        var full = Path.GetFullPath(path);
+        if (Workspaces.FirstOrDefault(w => string.Equals(w.SourcePath, full, StringComparison.OrdinalIgnoreCase)) is { } open)
+        {
+            ActiveWorkspace = open;
+            return new WorkspaceFile(open.Name, [], []);
+        }
+
+        var file = WorkspaceFiles.Load(full);
+
+        // MyBatis 는 namespace(대개 com.example.UserMapper 처럼 길다) 대신 파일 이름을 작업 공간 이름으로 쓴다.
+        var name = WorkspaceFiles.IsMyBatis(full) ? Path.GetFileNameWithoutExtension(full) : file.Name;
+        var ws = OpenWorkspace(UniqueId(FileWorkspaceId(name, full)), name);
+        ws.SourcePath = full;
+        ActiveWorkspace = ws;
         SqlEditorViewModel? first = null;
         foreach (var t in file.Tabs)
         {
@@ -436,13 +741,18 @@ public sealed class SqlEditorHost : ObservableObject, IDisposable
             Active = first;
         }
 
-        if (!WorkspaceFiles.IsMyBatis(path))
+        return file;
+    }
+
+    private string UniqueId(string id)
+    {
+        var candidate = id;
+        for (int n = 2; Workspaces.Any(w => w.Id == candidate); n++)
         {
-            WorkspaceFilePath = path;
-            WorkspaceName = file.Name;
+            candidate = id + "-" + n.ToString(CultureInfo.InvariantCulture);
         }
 
-        return file;
+        return candidate;
     }
 
     /// <summary>탭 이름 바꾸기(Orange 의 Change Tab Name). 파일 탭은 화면 이름만 바뀐다.</summary>
@@ -462,6 +772,7 @@ public sealed class SqlEditorHost : ObservableObject, IDisposable
     /// <summary>작업 공간 이름 → 파일 ID(<c>^[a-z0-9][a-z0-9-]{0,63}$</c>).</summary>
     public static string SlugOf(string name)
     {
+        ArgumentNullException.ThrowIfNull(name);
         var chars = name.Trim().ToLowerInvariant()
             .Select(c => c is >= 'a' and <= 'z' or >= '0' and <= '9' ? c : '-')
             .ToArray();
@@ -482,8 +793,8 @@ public sealed class SqlEditorHost : ObservableObject, IDisposable
     // ---- 시작·자동 저장·종료 ---------------------------------------------------------------
 
     /// <summary>
-    /// 시작 때 한 번. 자동 저장 파일이 남아 있으면 비정상 종료로 보고 복구 여부를 묻는다(data-model 2.6).
-    /// 없으면 마지막 작업 공간을 연다. 복구했으면 true.
+    /// 시작 때 한 번. 자동 저장 파일이 남아 있으면 비정상 종료로 보고 한 번 묻고, 예 하면 그 작업 공간들을 모두 복구한다(data-model 2.6).
+    /// 없으면 지난번 열려 있던 작업 공간들(<see cref="OpenWorkspaceIds"/>)을 다시 연다. 복구했으면 true.
     /// </summary>
     public async Task<bool> InitializeAsync(CancellationToken ct)
     {
@@ -492,33 +803,83 @@ public sealed class SqlEditorHost : ObservableObject, IDisposable
             return false;
         }
 
-        var auto = await _store.LoadAutosaveAsync(WorkspaceId, ct).ConfigureAwait(true);
-        if (auto is not null && auto.Tabs.Count > 0)
+        var autos = new List<Workspace>();
+        foreach (var id in await _store.ListAutosaveIdsAsync(ct).ConfigureAwait(true))
+        {
+            if (await _store.LoadAutosaveAsync(id, ct).ConfigureAwait(true) is { Tabs.Count: > 0 } auto)
+            {
+                autos.Add(auto);
+            }
+            else
+            {
+                await _store.DeleteAutosaveAsync(id, ct).ConfigureAwait(true); // 빈 자동 저장은 복구할 것이 없다
+            }
+        }
+
+        if (autos.Count > 0)
         {
             var yes = await Dialogs.ConfirmAsync("지난 실행이 정상 종료되지 않았다. 저장하지 않은 편집 내용을 복구할까요?", ct).ConfigureAwait(true);
             if (yes)
             {
-                Restore(auto);
+                foreach (var auto in autos.OrderBy(a => OrderOf(a.Id)))
+                {
+                    Restore(auto);
+                }
+
+                ActivateLast();
                 return true;
             }
 
-            await _store.DeleteAutosaveAsync(WorkspaceId, ct).ConfigureAwait(true);
+            foreach (var auto in autos)
+            {
+                await _store.DeleteAutosaveAsync(auto.Id, ct).ConfigureAwait(true);
+            }
         }
 
         if (RestoreOnStartup)
         {
-            var saved = await _store.LoadAsync(WorkspaceId, ct).ConfigureAwait(true);
-            if (saved is not null)
+            foreach (var id in OpenWorkspaceIds.Distinct(StringComparer.Ordinal))
             {
-                Restore(saved.Value);
+                if (await LoadSavedAsync(id, ct).ConfigureAwait(true) is { } saved)
+                {
+                    Restore(saved);
+                }
             }
+
+            ActivateLast();
         }
 
         return false;
     }
 
+    private int OrderOf(string id)
+    {
+        var i = OpenWorkspaceIds.ToList().IndexOf(id);
+        return i < 0 ? int.MaxValue : i;
+    }
+
+    private void ActivateLast()
+    {
+        if (LastWorkspaceId is { } last && Workspaces.FirstOrDefault(w => w.Id == last) is { } ws)
+        {
+            ActiveWorkspace = ws;
+        }
+    }
+
+    private async Task<Workspace?> LoadSavedAsync(string id, CancellationToken ct)
+    {
+        try
+        {
+            return (await _store!.LoadAsync(id, ct).ConfigureAwait(true))?.Value;
+        }
+        catch (ArgumentException)
+        {
+            return null; // 설정에 잘못된 ID 가 들어 있어도 시작은 막지 않는다
+        }
+    }
+
     /// <summary>
-    /// 지금 상태를 <c>autosave/{id}.json</c> 에 쓴다. 지난번 이후 바뀐 것이 없으면 쓰지 않는다. 쓰면 true.
+    /// 열린 작업 공간마다 바뀐 것이 있으면 <c>autosave/{id}.json</c> 에 쓴다. 하나라도 썼으면 true.
     /// UI 스레드에서 부른다(스냅샷 때문).
     /// </summary>
     public async Task<bool> AutosaveAsync(CancellationToken ct)
@@ -528,16 +889,20 @@ public sealed class SqlEditorHost : ObservableObject, IDisposable
             return false;
         }
 
-        var stamp = Tabs.Select(t => (t.TabId, t.Version, t.IsDirty)).ToList();
-        if (_lastAutosaveStamp is not null && _lastAutosaveStamp.SequenceEqual(stamp))
+        var wrote = false;
+        foreach (var ws in Workspaces.ToList())
         {
-            return false;
+            if (!ws.ChangedSinceAutosave(out var stamp))
+            {
+                continue;
+            }
+
+            await _store.AutosaveAsync(ws.ToWorkspace(), ct).ConfigureAwait(true);
+            ws.MarkAutosaved(stamp);
+            wrote = true;
         }
 
-        var snapshot = BuildWorkspace();
-        await _store.AutosaveAsync(snapshot, ct).ConfigureAwait(true);
-        _lastAutosaveStamp = stamp;
-        return true;
+        return wrote;
     }
 
     /// <summary>자동 저장 타이머를 켠다(기본 10 초, 설정 <c>workspace.autosaveSeconds</c> 1~10).</summary>
@@ -582,7 +947,10 @@ public sealed class SqlEditorHost : ObservableObject, IDisposable
         _autosaveCts = null;
     }
 
-    /// <summary>정상 종료: 작업 공간을 저장하고 자동 저장 파일을 지운다. 지워야 다음 시작이 「정상」으로 보인다.</summary>
+    /// <summary>
+    /// 정상 종료: 열린 작업 공간을 모두 저장하고 자동 저장 파일을 지운다. 지워야 다음 시작이 「정상」으로 보인다.
+    /// 다음 시작 때 다시 열 목록은 <see cref="Workspaces"/>·<see cref="WorkspaceId"/> 로 셸이 설정에 적는다.
+    /// </summary>
     public async Task ShutdownAsync(CancellationToken ct)
     {
         StopAutosave();
@@ -591,8 +959,11 @@ public sealed class SqlEditorHost : ObservableObject, IDisposable
             return;
         }
 
-        await _store.SaveAsync(BuildWorkspace(), ct).ConfigureAwait(true);
-        await _store.DeleteAutosaveAsync(WorkspaceId, ct).ConfigureAwait(true);
+        foreach (var ws in Workspaces.ToList())
+        {
+            await _store.SaveAsync(ws.ToWorkspace(), ct).ConfigureAwait(true);
+            await _store.DeleteAutosaveAsync(ws.Id, ct).ConfigureAwait(true);
+        }
     }
 
     // ---- 문맥 키 ------------------------------------------------------------------------
@@ -612,6 +983,7 @@ public sealed class SqlEditorHost : ObservableObject, IDisposable
             ["hasFindText"] = a?.HasFindText ?? false,
             ["hasBookmark"] = a?.HasBookmark ?? false,
             ["readOnlyDoc"] = a?.IsReadOnly ?? false,
+            ["sqlWorkspaceActive"] = _activeWorkspace is not null,
         };
     }
 }

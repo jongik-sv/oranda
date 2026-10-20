@@ -27,16 +27,73 @@ public partial class MainViewModel : ViewModelBase
         StatusItems = [.. statusBar.Items.Select(i => new StatusBarEntry(i, (IStatusBarItem)services.Create(i.ItemType)))];
         _environment = shell.ActiveEnvironment;
         shell.EnvironmentChanged += (_, _) => Environment = shell.ActiveEnvironment;
+        Docking.ActiveDocumentChanged += (_, _) => FollowActiveDocument();
+        FollowActiveDocument();
     }
+
+    private PanelDocument? _document;
+    private IInnerTabsDocument? _inner;
 
     public DockWorkspace Docking { get; }
 
     public IReadOnlyList<StatusBarEntry> StatusItems { get; }
 
-    /// <summary>창 제목. 운영 접속이 활성이면 <c>[운영]</c> 을 붙인다(ui-shell.md 4.2).</summary>
-    public string Title => Environment == ConnectionEnvironment.Production
-        ? $"{_shell.Text.Lookup("Shell.window.title")} [운영]"
-        : _shell.Text.Lookup("Shell.window.title");
+    /// <summary>
+    /// 창 제목. 운영 접속이 활성이면 <c>[운영]</c> 을 붙인다(ui-shell.md 4.2). 활성 문서가 있으면 오렌지처럼
+    /// <c>- [문서 / 안쪽 탭]</c>(예: <c>Oranda - [기본 / SQL 1]</c>)을 붙여 지금 어느 작업 공간·탭인지 보인다.
+    /// </summary>
+    public string Title
+    {
+        get
+        {
+            var title = Environment == ConnectionEnvironment.Production
+                ? $"{_shell.Text.Lookup("Shell.window.title")} [운영]"
+                : _shell.Text.Lookup("Shell.window.title");
+            if (_document is not { } doc)
+            {
+                return title;
+            }
+
+            var inner = _inner?.ActiveInnerTitle is { Length: > 0 } t ? " / " + t : string.Empty;
+            return $"{title} - [{doc.Title}{inner}]";
+        }
+    }
+
+    /// <summary>활성 문서(와 그 안쪽 탭)의 이름이 바뀌면 창 제목을 다시 알린다.</summary>
+    private void FollowActiveDocument()
+    {
+        if (_document is not null)
+        {
+            _document.PropertyChanged -= OnDocumentPropertyChanged;
+        }
+
+        if (_inner is not null)
+        {
+            _inner.PropertyChanged -= OnDocumentPropertyChanged;
+        }
+
+        _document = Docking.ActiveDocument;
+        _inner = _document?.Panel as IInnerTabsDocument;
+        if (_document is not null)
+        {
+            _document.PropertyChanged += OnDocumentPropertyChanged;
+        }
+
+        if (_inner is not null)
+        {
+            _inner.PropertyChanged += OnDocumentPropertyChanged;
+        }
+
+        OnPropertyChanged(nameof(Title));
+    }
+
+    private void OnDocumentPropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName is nameof(PanelDocument.Title) or nameof(IInnerTabsDocument.ActiveInnerTitle))
+        {
+            OnPropertyChanged(nameof(Title));
+        }
+    }
 
     /// <summary>테두리 스타일 클래스(<c>env-production</c> 등). 접속 없음이면 null.</summary>
     public string? EnvironmentClass => Environment switch

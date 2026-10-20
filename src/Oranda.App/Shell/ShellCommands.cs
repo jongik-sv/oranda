@@ -48,7 +48,9 @@ public sealed class FileShellCommandHandler(IShellUi ui) : ICommandHandler
         switch (context.CommandId)
         {
             case "oranda.file.close":
-                if (ui.Docking.ActiveDocument is { } active)
+                // SQL 작업 공간은 안쪽 SQL 탭부터 닫는다. 탭이 하나도 없으면 작업 공간(문서)을 닫는다.
+                if (ui.Docking.ActiveDocument is { } active
+                    && !(active.Panel is IInnerTabsDocument inner && inner.CloseActiveInnerTab()))
                 {
                     ui.Docking.CloseDocument(active);
                 }
@@ -133,10 +135,10 @@ public sealed class WindowShellCommandHandler(IShellUi ui) : ICommandHandler
         switch (context.CommandId)
         {
             case "oranda.window.nextDocument":
-                ui.Docking.CycleDocument(1);
+                Cycle(1);
                 break;
             case "oranda.window.previousDocument":
-                ui.Docking.CycleDocument(-1);
+                Cycle(-1);
                 break;
             case "oranda.window.splitRight":
                 ui.Docking.SplitActiveDocument(right: true);
@@ -150,6 +152,24 @@ public sealed class WindowShellCommandHandler(IShellUi ui) : ICommandHandler
         }
 
         return Task.CompletedTask;
+    }
+
+    /// <summary>
+    /// 작업 공간 안의 SQL 탭을 차례로 지나고, 끝에 닿으면 다음(이전) 문서로 넘어가 그 문서의 첫(마지막) 안쪽 탭을 고른다.
+    /// 그래서 Ctrl+Tab 은 예전처럼 모든 SQL 탭을 한 줄로 돈다.
+    /// </summary>
+    private void Cycle(int step)
+    {
+        if (ui.Docking.ActiveDocument?.Panel is IInnerTabsDocument inner && inner.CycleInnerTab(step))
+        {
+            return;
+        }
+
+        ui.Docking.CycleDocument(step);
+        if (ui.Docking.ActiveDocument?.Panel is IInnerTabsDocument next)
+        {
+            next.SelectEdgeInnerTab(first: step > 0);
+        }
     }
 }
 

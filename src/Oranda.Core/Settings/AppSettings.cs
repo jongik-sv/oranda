@@ -108,5 +108,19 @@ public sealed record WorkspaceSettings
 
     public bool RestoreOnStartup { get; init; } = true;
 
+    /// <summary>마지막으로 보던(활성) 작업 공간.</summary>
     public string LastWorkspaceId { get; init; } = "default";
+
+    /// <summary>종료할 때 열려 있던 작업 공간들(열린 순서). 다음 시작 때 모두 다시 연다.</summary>
+    public IReadOnlyList<string> OpenWorkspaceIds { get; init; } = ["default"];
+
+    // 목록은 참조가 아니라 내용으로 비교한다(설정 구역별 변경 알림이 같은 값을 「바뀜」으로 보지 않게).
+    public bool Equals(WorkspaceSettings? other) =>
+        other is not null
+        && AutosaveSeconds == other.AutosaveSeconds
+        && RestoreOnStartup == other.RestoreOnStartup
+        && LastWorkspaceId == other.LastWorkspaceId
+        && OpenWorkspaceIds.SequenceEqual(other.OpenWorkspaceIds);
+
+    public override int GetHashCode() => HashCode.Combine(AutosaveSeconds, RestoreOnStartup, LastWorkspaceId, OpenWorkspaceIds.Count);
 }

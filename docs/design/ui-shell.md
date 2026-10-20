@@ -95,7 +95,7 @@
 
 | ID | 이름 | kind | 기본 위치 | 여러 개 | 여는 명령 | 소유 Task |
 |---|---|---|---|---|---|---|
-| `oranda.panel.sqlEditor` | SQL 편집기(+결과 영역) | document | 문서 | 예 | `oranda.file.newSqlEditor` | TSK-04-02 (결과 영역 TSK-06-03) |
+| `oranda.panel.sqlEditor` | SQL 작업 공간(안쪽 SQL 탭 줄 + 편집기. 문서 탭 하나 = 작업 공간 하나) | document | 문서 | 예 | `oranda.file.newWorkspace`(작업 공간), `oranda.file.newSqlEditor`(보고 있는 작업 공간에 SQL 탭) | TSK-04-02 (결과 영역 TSK-06-03) |
 | `oranda.panel.plsqlEditor` | PL/SQL 편집기 | document | 문서 | 예 | `oranda.file.newPlsqlEditor`, `oranda.plsql.openSource` | TSK-08-01 |
 | `oranda.panel.objectDetail` | 객체 상세·DDL | document | 문서 | 예 | `oranda.schema.openDetail` | TSK-07-03 |
 | `oranda.panel.lobEditor` | LOB 편집기 | document | 문서 | 예 | `oranda.grid.viewValue` | TSK-06-05 |

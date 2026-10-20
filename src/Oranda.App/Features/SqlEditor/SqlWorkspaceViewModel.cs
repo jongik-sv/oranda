@@ -1,0 +1,163 @@
+using System.Collections.ObjectModel;
+using System.Collections.Specialized;
+using System.ComponentModel;
+using CommunityToolkit.Mvvm.ComponentModel;
+using CommunityToolkit.Mvvm.Input;
+using Oranda.App.Shell;
+using Oranda.Core.Workspaces;
+
+namespace Oranda.App.Features.SqlEditor;
+
+/// <summary>
+/// SQL 작업 공간(오렌지 SQL Tool 창 하나). 문서 영역의 탭 하나이고, 안에 SQL 탭(편집기) 여러 개를 가진다.
+/// 작업 공간마다 <c>workspaces/{id}.json</c>(비정상 종료 대비 <c>autosave/{id}.json</c>) 하나로 저장된다.
+/// Markdown 작업 공간 파일이나 MyBatis 매퍼를 열면 작업 공간 하나가 된다(<see cref="SourcePath"/>).
+/// 탭을 더하고 빼는 일과 활성 탭은 <see cref="SqlEditorHost"/> 가 맡는다(호스트의 <c>Active</c> 가 앱 전체의 「활성 SQL 탭」 신호다).
+/// </summary>
+public sealed partial class SqlWorkspaceViewModel : ToolPanelViewModelBase, IInnerTabsDocument
+{
+    private List<(Guid Id, long Version, bool Dirty)>? _autosaveStamp;
+
+    internal SqlWorkspaceViewModel(SqlEditorHost host, string id, string name)
+    {
+        Host = host;
+        Id = id;
+        _name = name;
+        Tabs.CollectionChanged += OnTabsChanged;
+    }
+
+    public SqlEditorHost Host { get; }
+
+    /// <summary>파일 ID(<c>^[a-z0-9][a-z0-9-]{0,63}$</c>). 「작업 공간 저장」으로 이름을 바꾸면 함께 바뀐다.</summary>
+    public string Id { get; internal set; }
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(DisplayTitle))]
+    private string _name;
+
+    /// <summary>이 작업 공간을 연 Markdown 작업 공간 파일(.md) 또는 MyBatis 매퍼(.xml). 파일에서 열지 않았으면 null.</summary>
+    public string? SourcePath { get; internal set; }
+
+    /// <summary>이 작업 공간의 SQL 탭(열린 순서).</summary>
+    public ObservableCollection<SqlEditorViewModel> Tabs { get; } = [];
+
+    /// <summary>이 작업 공간에서 보이는 SQL 탭. 작업 공간이 활성이면 호스트의 활성 탭과 같다.</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(ActiveInnerTitle))]
+    private SqlEditorViewModel? _activeTab;
+
+    public string? ActiveInnerTitle => ActiveTab?.Title;
+
+    public bool IsEmpty => Tabs.Count == 0;
+
+    public bool IsDirty => Tabs.Any(t => t.IsDirty);
+
+    /// <summary>문서 탭 머리글: 고친 SQL 탭이 있으면 「* 이름」.</summary>
+    public string DisplayTitle => (IsDirty ? "* " : string.Empty) + Name;
+
+    partial void OnActiveTabChanged(SqlEditorViewModel? value) => Host.OnWorkspaceTabSelected(this, value);
+
+    /// <summary>탭 줄의 「+」: 이 작업 공간에 빈 SQL 탭을 더한다.</summary>
+    [RelayCommand]
+    private void NewTab()
+    {
+        Host.ActiveWorkspace = this;
+        Host.NewDocument();
+    }
+
+    /// <summary>탭 머리글의 ×.</summary>
+    [RelayCommand]
+    private void CloseTab(SqlEditorViewModel? tab)
+    {
+        if (tab is not null)
+        {
+            Host.Close(tab);
+        }
+    }
+
+    public bool CloseActiveInnerTab()
+    {
+        if (ActiveTab is not { } tab)
+        {
+            return false;
+        }
+
+        Host.Close(tab);
+        return true;
+    }
+
+    public bool CycleInnerTab(int offset)
+    {
+        if (ActiveTab is not { } tab)
+        {
+            return false;
+        }
+
+        var next = Tabs.IndexOf(tab) + offset;
+        if (next < 0 || next >= Tabs.Count)
+        {
+            return false; // 끝을 넘으면 셸이 다음 문서(작업 공간)로 넘어간다
+        }
+
+        ActiveTab = Tabs[next];
+        return true;
+    }
+
+    public void SelectEdgeInnerTab(bool first)
+    {
+        if (Tabs.Count > 0)
+        {
+            ActiveTab = first ? Tabs[0] : Tabs[^1];
+        }
+    }
+
+    /// <summary>저장할 모습(<c>workspaces/{id}.json</c>·자동 저장 같은 형식).</summary>
+    public Workspace ToWorkspace() => new()
+    {
+        Id = Id,
+        Name = Name,
+        SavedAt = DateTimeOffset.UtcNow,
+        ActiveTabId = ActiveTab?.TabId,
+        Tabs = [.. Tabs.Select(t => t.ToWorkspaceTab())],
+        SourcePath = SourcePath,
+    };
+
+    /// <summary>지난 자동 저장 뒤로 바뀐 것이 있으면 true 와 새 표지를 돌려준다.</summary>
+    internal bool ChangedSinceAutosave(out List<(Guid Id, long Version, bool Dirty)> stamp)
+    {
+        stamp = [.. Tabs.Select(t => (t.TabId, t.Version, t.IsDirty))];
+        return _autosaveStamp is null || !_autosaveStamp.SequenceEqual(stamp);
+    }
+
+    internal void MarkAutosaved(List<(Guid Id, long Version, bool Dirty)>? stamp) => _autosaveStamp = stamp;
+
+    private void OnTabsChanged(object? sender, NotifyCollectionChangedEventArgs e)
+    {
+        foreach (var t in e.OldItems?.OfType<SqlEditorViewModel>() ?? [])
+        {
+            t.PropertyChanged -= OnTabPropertyChanged;
+        }
+
+        foreach (var t in e.NewItems?.OfType<SqlEditorViewModel>() ?? [])
+        {
+            t.PropertyChanged += OnTabPropertyChanged;
+        }
+
+        OnPropertyChanged(nameof(IsEmpty));
+        OnPropertyChanged(nameof(IsDirty));
+        OnPropertyChanged(nameof(DisplayTitle));
+    }
+
+    private void OnTabPropertyChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName == nameof(SqlEditorViewModel.IsDirty))
+        {
+            OnPropertyChanged(nameof(IsDirty));
+            OnPropertyChanged(nameof(DisplayTitle));
+        }
+        else if (e.PropertyName == nameof(SqlEditorViewModel.Title) && ReferenceEquals(sender, ActiveTab))
+        {
+            OnPropertyChanged(nameof(ActiveInnerTitle));
+        }
+    }
+}

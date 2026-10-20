@@ -82,6 +82,11 @@ internal sealed partial class WorkspaceStore(IAppDataPaths paths) : IWorkspaceSt
     public async Task DeleteAutosaveAsync(string id, CancellationToken ct)
     {
         var path = PathOf(paths.AutosaveDirectory, id);
+        if (!Directory.Exists(paths.AutosaveDirectory))
+        {
+            return; // 한 번도 자동 저장하지 않았다(File.Delete 는 폴더가 없으면 예외를 낸다)
+        }
+
         await WriteLock.WaitAsync(ct).ConfigureAwait(false);
         try
         {
@@ -92,6 +97,19 @@ internal sealed partial class WorkspaceStore(IAppDataPaths paths) : IWorkspaceSt
         {
             WriteLock.Release();
         }
+    }
+
+    public Task<IReadOnlyList<string>> ListAutosaveIdsAsync(CancellationToken ct)
+    {
+        var dir = paths.AutosaveDirectory;
+        IReadOnlyList<string> ids = Directory.Exists(dir)
+            ? [.. Directory.EnumerateFiles(dir, "*.json")
+                .Select(Path.GetFileNameWithoutExtension)
+                .OfType<string>()
+                .Where(id => IdPattern().IsMatch(id))
+                .Order(StringComparer.Ordinal)]
+            : [];
+        return Task.FromResult(ids);
     }
 
     private static string PathOf(string directory, string id)

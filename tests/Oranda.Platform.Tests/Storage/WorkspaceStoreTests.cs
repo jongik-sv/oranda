@@ -45,6 +45,33 @@ public sealed class WorkspaceStoreTests : IDisposable
     };
 
     [Fact]
+    public async Task Lists_autosave_ids_and_deleting_before_any_autosave_is_harmless()
+    {
+        var store = NewStore();
+        Assert.Empty(await store.ListAutosaveIdsAsync(default)); // 폴더가 아직 없다
+        await store.DeleteAutosaveAsync("default", default); // 예외 없이 지나간다
+
+        await store.AutosaveAsync(Sample("default"), default);
+        await store.AutosaveAsync(Sample("workspace-2"), default);
+        File.WriteAllText(Path.Combine(_root, "autosave", "Not An Id.json"), "{}"); // ID 규칙에 맞지 않는 파일은 무시
+
+        Assert.Equal(["default", "workspace-2"], await store.ListAutosaveIdsAsync(default));
+        await store.DeleteAutosaveAsync("default", default);
+        Assert.Equal(["workspace-2"], await store.ListAutosaveIdsAsync(default));
+    }
+
+    [Fact]
+    public async Task Source_path_round_trips()
+    {
+        var store = NewStore();
+        await store.SaveAsync(Sample("usermapper-1a2b3c4d") with { SourcePath = "/tmp/UserMapper.xml" }, default);
+
+        var back = await NewStore().LoadAsync("usermapper-1a2b3c4d", default);
+
+        Assert.Equal("/tmp/UserMapper.xml", back!.Value.SourcePath);
+    }
+
+    [Fact]
     public async Task Save_then_load_round_trips_all_fields()
     {
         var store = NewStore();

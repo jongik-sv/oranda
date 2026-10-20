@@ -1,0 +1,80 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:icons="using:Oranda.App.Shell.Icons"
+             xmlns:vm="using:Oranda.App.Features.SqlEditor"
+             x:Class="Oranda.App.Features.SqlEditor.SqlWorkspaceView"
+             x:DataType="vm:SqlWorkspaceViewModel">
+  <UserControl.Styles>
+    <!-- 작업 공간 안의 SQL 탭 줄(오렌지 SQL Tool 의 SQL1 | SQL2 | SQL3). 문서 탭보다 작고 촘촘하게. -->
+    <Style Selector="Border.sql-tabs">
+      <Setter Property="Background" Value="{DynamicResource OrandaToolbarBackgroundBrush}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource OrandaSeparatorBrush}" />
+      <Setter Property="BorderThickness" Value="0,0,0,1" />
+      <Setter Property="Padding" Value="2,2,2,0" />
+    </Style>
+    <Style Selector="ListBox#SqlTabs">
+      <Setter Property="Background" Value="Transparent" />
+      <Setter Property="BorderThickness" Value="0" />
+      <Setter Property="Padding" Value="0" />
+    </Style>
+    <Style Selector="ListBox#SqlTabs ListBoxItem">
+      <Setter Property="Padding" Value="8,3,2,3" />
+      <Setter Property="MinHeight" Value="0" />
+      <Setter Property="Margin" Value="0,0,2,0" />
+      <Setter Property="FontSize" Value="{DynamicResource OrandaFontSizeSmall}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource OrandaSeparatorBrush}" />
+      <Setter Property="BorderThickness" Value="1,1,1,0" />
+      <Setter Property="CornerRadius" Value="3,3,0,0" />
+    </Style>
+    <Style Selector="ListBox#SqlTabs ListBoxItem:selected /template/ ContentPresenter#PART_ContentPresenter">
+      <Setter Property="Background" Value="{DynamicResource OrandaToolbarPressedBrush}" />
+    </Style>
+    <Style Selector="ListBox#SqlTabs ListBoxItem:selected TextBlock.tab-title">
+      <Setter Property="FontWeight" Value="SemiBold" />
+    </Style>
+    <Style Selector="Button.tab-close">
+      <Setter Property="Padding" Value="2" />
+      <Setter Property="MinHeight" Value="0" />
+      <Setter Property="MinWidth" Value="0" />
+      <Setter Property="Margin" Value="4,0,0,0" />
+      <Setter Property="Background" Value="Transparent" />
+      <Setter Property="BorderThickness" Value="0" />
+      <Setter Property="Opacity" Value="0.6" />
+    </Style>
+    <Style Selector="Button.tab-close:pointerover">
+      <Setter Property="Opacity" Value="1" />
+    </Style>
+  </UserControl.Styles>
+  <DockPanel>
+    <Border DockPanel.Dock="Top" Classes="sql-tabs">
+      <DockPanel>
+        <Button DockPanel.Dock="Right" Classes="toolbar" Content="새 SQL 탭" Command="{Binding NewTabCommand}"
+                VerticalAlignment="Center" icons:ButtonIcon.Key="tabAdd" icons:ButtonIcon.IconOnly="True" />
+        <ListBox x:Name="SqlTabs" ItemsSource="{Binding Tabs}" SelectedItem="{Binding ActiveTab, Mode=TwoWay}"
+                 ScrollViewer.HorizontalScrollBarVisibility="Disabled" AutomationProperties.Name="SQL 탭">
+          <ListBox.ItemsPanel>
+            <ItemsPanelTemplate>
+              <WrapPanel Orientation="Horizontal" />
+            </ItemsPanelTemplate>
+          </ListBox.ItemsPanel>
+          <ListBox.ItemTemplate>
+            <DataTemplate x:DataType="vm:SqlEditorViewModel">
+              <StackPanel Orientation="Horizontal" ToolTip.Tip="{Binding FilePath}">
+                <TextBlock Classes="tab-title" Text="{Binding DisplayTitle}" VerticalAlignment="Center" />
+                <Button Classes="tab-close" Content="SQL 탭 닫기" Focusable="False"
+                        Command="{Binding $parent[UserControl].((vm:SqlWorkspaceViewModel)DataContext).CloseTabCommand}"
+                        CommandParameter="{Binding}" icons:ButtonIcon.Key="clear" icons:ButtonIcon.IconOnly="True" />
+              </StackPanel>
+            </DataTemplate>
+          </ListBox.ItemTemplate>
+        </ListBox>
+      </DockPanel>
+    </Border>
+    <Grid>
+      <!-- 보이는 SQL 탭의 편집기. 탭마다 View 를 하나씩 두고 바꿔 끼운다(되돌리기 기록·접기·스크롤을 잃지 않게). -->
+      <ContentControl x:Name="EditorHost" />
+      <TextBlock x:Name="EmptyHint" Text="SQL 탭이 없습니다. 「새 SQL」이나 탭 줄의 + 로 SQL 탭을 엽니다."
+                 IsVisible="{Binding IsEmpty}" HorizontalAlignment="Center" VerticalAlignment="Center" Opacity="0.6" />
+    </Grid>
+  </DockPanel>
+</UserControl>
