@@ -146,7 +146,7 @@ SELECT s.inst_id, s.sid, s.serial#, s.username, ...
 - **트랜잭션 추적**: DML 성공 후 `DBMS_TRANSACTION.LOCAL_TRANSACTION_ID` 확인으로 미커밋 상태 갱신(Orange 방식). 자동 커밋은 기본 끔.
 - **DBMS_OUTPUT**: 세션 시작 시 `DBMS_OUTPUT.ENABLE(NULL)`(설정 시), 실행 후 `GET_LINES` 배열로 한 번에 수거.
 - **스크립트 실행**: 문장 단위로 순차 실행, 오류 처리(묻기/중지/계속, EXEC-10), 진행 표시, 문장별 결과 탭.
-- **취소(EXEC-02)**: 실행과 페이지 가져오기 모두 취소 토큰 → `OracleCommand.Cancel`. 드라이버는 그 자리에서 서버에 브레이크를 보낸다(OOB 가 협상되면 TCP 긴급 데이터, 아니면 in-band 마커). 서버가 브레이크를 읽는 시점은 서버 `sqlnet.ora`(`DISABLE_OOB`, `BREAK_POLL_SKIP`)와 경로가 긴급 데이터를 전달하는지에 달렸다. OOB 가 꺼진 서버는 PL/SQL 대기(`DBMS_SESSION.SLEEP`) 중 취소를 대기가 끝난 뒤 처리한다(TSK-06-11). 결과는 ORA-01013 → 「취소됨」 이고 세션은 그대로 쓴다.
+- **취소(EXEC-02)**: 실행과 페이지 가져오기 모두 취소 토큰 → `OracleCommand.Cancel`. 드라이버는 그 자리에서 서버에 브레이크를 보낸다(OOB 가 협상되면 TCP 긴급 데이터, 아니면 in-band 마커). 서버가 브레이크를 읽는 시점은 서버 `sqlnet.ora`(`DISABLE_OOB`, `BREAK_POLL_SKIP`)와 경로가 긴급 데이터를 전달하는지에 달렸다. OOB 가 꺼진 서버는 PL/SQL 대기(`DBMS_SESSION.SLEEP`) 중 취소를 대기가 끝난 뒤 처리한다(TSK-06-11). 결과는 ORA-01013 → 「취소됨」 이고 세션은 그대로 쓴다. 「모두 가져오기」 도 실행 상태로 돌아 취소 명령이 끊고, 취소로 끊긴 페이지는 읽은 행을 남겨 다음 요청이 잇는다(커서는 취소 뒤에도 이어진다).
 - **이력**: 실행마다 SQLite에 기록(5.3). 바인드 값 저장은 사용자 설정(기본 끔).
 
 ### 4.4 결과 그리드 (GRID)
