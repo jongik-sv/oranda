@@ -1,4 +1,6 @@
 using System.Diagnostics;
+using Avalonia.Controls;
+using Avalonia.Headless;
 using Oranda.App.Features.Execution;
 using Oranda.App.Features.ResultGrid;
 using Oranda.Core.Execution;
@@ -397,6 +399,43 @@ public sealed class ResultFilterTests : IDisposable
         Assert.DoesNotContain("SAL > 2", vm.FilterHistory);
         vm.Clear();
     }
+
+    [Fact]
+    public Task Filter_bar_keys_apply_with_enter_and_escape_clears_then_closes() => Oranda.App.Tests.Shell.Headless.HeadlessHost.Run(async () =>
+    {
+        var asked = RecordFilters();
+        var vm = new SqlResultPaneViewModel { Statement = Query };
+        vm.SetResult(Emp());
+        var view = new SqlResultPaneView { DataContext = vm };
+        var window = new Window { Content = view, Width = 900, Height = 400 };
+        window.Show();
+        try
+        {
+            vm.ToggleFilterBar();
+            Avalonia.Threading.Dispatcher.UIThread.RunJobs();
+            var where = view.FindControl<TextBox>("WhereBox")!;
+            Assert.True(where.IsEffectivelyVisible);
+            Assert.True(where.IsFocused); // 줄을 열면 WHERE 칸으로
+
+            where.Text = "SAL > 1";
+            window.KeyPress(Avalonia.Input.Key.Enter, Avalonia.Input.RawInputModifiers.None, Avalonia.Input.PhysicalKey.Enter, null);
+            await WaitAsync(() => asked.Count == 1);
+            Assert.Equal("SAL > 1", asked[0].Where);
+
+            where.Focus();
+            window.KeyPress(Avalonia.Input.Key.Escape, Avalonia.Input.RawInputModifiers.None, Avalonia.Input.PhysicalKey.Escape, null);
+            Assert.Equal(string.Empty, vm.WhereText); // 글이 있으면 비운다
+            Assert.True(vm.IsFilterBarVisible);
+            window.KeyPress(Avalonia.Input.Key.Escape, Avalonia.Input.RawInputModifiers.None, Avalonia.Input.PhysicalKey.Escape, null);
+            Assert.False(vm.IsFilterBarVisible); // 빈 칸이면 줄을 닫는다
+            Assert.True(vm.IsFiltered); // 닫아도 걸어 둔 거르기는 그대로
+        }
+        finally
+        {
+            window.Close();
+            vm.Clear();
+        }
+    });
 
     // ---- 명령 경로 ------------------------------------------------------------------------
 
