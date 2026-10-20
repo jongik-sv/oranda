@@ -225,7 +225,7 @@
 |---|---|---|---|
 | SCH-01 | 스키마별 객체 트리: 테이블, 뷰, 머티리얼라이즈드 뷰, 인덱스, 시퀀스, 시노님, 프로시저·함수·패키지, 트리거, 타입, DB 링크, 스케줄러 잡, 디렉터리, 휴지통. 26ai 객체(Duality View, Domain, Property Graph) 포함 | P0 | M1 |
 | SCH-02 | 권한에 따라 `dba_*`/`all_*`/`user_*` 뷰를 자동 선택 | P0 | M1 |
-| SCH-03 | 객체 상세: 컬럼(도메인·주석·가상·identity·invisible), 제약, 인덱스, 트리거(뷰는 INSTEAD OF), 참조됨(이 테이블의 키를 참조하는 외래키), 파티션, 권한, 의존 관계, 통계, 크기 | P0 | M1 |
+| SCH-03 | 객체 상세: 컬럼(도메인·주석·가상·identity·invisible), 제약, 인덱스, 트리거(뷰는 INSTEAD OF), 참조됨(이 테이블의 키를 참조하는 외래키), 파티션, 권한, 의존 관계, 통계, 크기. 표·뷰·머티리얼라이즈드 뷰는 「열」 바로 뒤에 데이터 탭(SQL Developer 테이블 편집기의 Data 탭·DataGrip 테이블 데이터 보기 대응): 그 탭을 처음 고를 때만 읽고(표 `SELECT t.ROWID, t.* FROM 소유자.이름 t`, 뷰 `SELECT * FROM 소유자.이름`) 상세 문서의 세션으로 정책 관문을 거친다. 결과 그리드와 같이 필요한 만큼 가져오기·거르기 줄(WHERE·ORDER BY)·선택 집계·행 수 세기·모두 가져오기·복사·새로 고침을 쓰고, 표는 「편집」을 켜면 ROWID 로 행을 고친다(DML 미리보기 뒤 반영·커밋, 읽기 전용 접속은 편집 불가). 스키마 브라우저 아래 속성 창에는 두지 않는다 | P0 | M1 |
 | SCH-04 | DDL 보기: `DBMS_METADATA.GET_DDL`(서버가 지원하면 `DBMS_DEVELOPER.GET_METADATA` 우선 검토). 저장 속성 표시 여부 옵션 | P0 | M1 |
 | SCH-05 | 검색·필터(이름 패턴, 객체 유형, INVALID만), 접속별 즐겨찾기. 스키마 브라우저에서 찾기(Alt+F1, DataGrip 「Select in Database Tree」 대응): 편집기 커서 아래 이름·객체 상세·DB 객체로 이동(Alt+Enter)에서 트리의 스키마→유형을 펼쳐 그 노드를 고른다(필터에 가리면 필터를 푼다) | P0 | M1 |
 | SCH-06 | INVALID 객체 일괄 컴파일, 휴지통 Purge·Flashback | P1 | M2 |
