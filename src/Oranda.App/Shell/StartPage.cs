@@ -19,6 +19,7 @@ public sealed class StartPage : UserControl
     private static readonly string[] Commands =
     [
         "oranda.file.newSqlEditor",
+        "oranda.file.newWorkspace",
         "oranda.file.newPlsqlEditor",
         "oranda.conn.manage",
         "oranda.file.open",

@@ -7,7 +7,7 @@ using Oranda.Core.Shell;
 namespace Oranda.App.Features.Execution;
 
 /// <summary><c>oranda.panel.messages</c> — 실행 로그·스크립트 오류 메시지 창. 줄은 <see cref="ExecutionLog"/> 에서 온다.</summary>
-[OrandaToolPanel("oranda.panel.messages", ToolPanelKind.Tool, DockLocation.Bottom, Order = 20)]
+[OrandaToolPanel("oranda.panel.messages", ToolPanelKind.Tool, DockLocation.Bottom, Order = 8)]
 public sealed partial class MessagesViewModel : ToolPanelViewModelBase
 {
     // 생성자는 이것 하나만 둔다(OutputViewModel 참고).
