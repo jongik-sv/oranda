@@ -10,6 +10,12 @@
         ShowInTaskbar="False"
         DragDrop.AllowDrop="True"
         FontSize="{DynamicResource OrandaFontSizeBase}">
+  <Window.Styles>
+    <!-- 실패한 상태 글과 비어 있는 필수 칸은 빨강(테마별 리소스 색). -->
+    <Style Selector="TextBlock.error">
+      <Setter Property="Foreground" Value="{DynamicResource OrandaIconRedBrush}" />
+    </Style>
+  </Window.Styles>
   <!-- 고정 크기 칸을 쓰지 않는다: 왼쪽 목록은 비율, 오른쪽 폼은 스크롤. 단추 줄은 항상 아래에 고정. -->
   <DockPanel Margin="12">
     <Grid DockPanel.Dock="Bottom" ColumnDefinitions="*,Auto" Margin="0,12,0,0">
@@ -32,19 +38,35 @@
             <Button x:Name="DeleteButton" Classes="tool" Content="삭제" Command="{Binding DeleteCommand}" icons:ButtonIcon.Key="delete" />
           </StackPanel>
         </Border>
+        <Grid DockPanel.Dock="Top" ColumnDefinitions="*,Auto" ColumnSpacing="6" Margin="0,0,0,4">
+          <TextBox x:Name="SearchBox" Grid.Column="0" Text="{Binding SearchText}" PlaceholderText="찾기(이름·사용자·호스트·서비스·그룹)"
+                   AutomationProperties.Name="접속 찾기" />
+          <ComboBox x:Name="SortBox" Grid.Column="1" MinWidth="110" ItemsSource="{Binding SortOrders}" SelectedValueBinding="{ReflectionBinding Value}"
+                    SelectedValue="{Binding SortOrder}" AutomationProperties.Name="정렬" />
+        </Grid>
         <TextBlock DockPanel.Dock="Bottom" Margin="0,8,0,0" TextWrapping="Wrap" Opacity="0.6" FontSize="{DynamicResource OrandaFontSizeSmall}"
                    Text="ADB 지갑(Wallet_*.zip)을 이 창에 끌어 놓으면 접속이 만들어집니다." />
         <TreeView x:Name="ConnectionTree" Classes="compact" ItemsSource="{Binding Tree}" SelectedItem="{Binding Selected}"
                   AutomationProperties.Name="접속 목록">
+          <TreeView.Styles>
+            <Style Selector="TreeViewItem" x:DataType="cm:ConnectionTreeNode">
+              <Setter Property="IsExpanded" Value="{Binding IsExpanded, Mode=TwoWay}" />
+            </Style>
+          </TreeView.Styles>
           <TreeView.ItemTemplate>
             <TreeDataTemplate DataType="cm:ConnectionTreeNode" ItemsSource="{Binding Children}">
-              <StackPanel Orientation="Horizontal" Spacing="8" AutomationProperties.Name="{Binding AccessibleName}">
-                <Border IsVisible="{Binding HasChip}" Background="{Binding EnvironmentColor}" CornerRadius="3" Padding="6,1" VerticalAlignment="Center">
+              <!-- 칩 · 이름 · 변경 표시 · user@접속(남는 폭, 말줄임) · 마지막 접속 시각(오른쪽). -->
+              <Grid ColumnDefinitions="Auto,Auto,Auto,*,Auto" ColumnSpacing="8" AutomationProperties.Name="{Binding AccessibleName}">
+                <Border Grid.Column="0" IsVisible="{Binding HasChip}" Background="{Binding EnvironmentColor}" CornerRadius="3" Padding="6,1" VerticalAlignment="Center">
                   <TextBlock Text="{Binding EnvironmentLabel}" Foreground="White" FontSize="12" />
                 </Border>
-                <TextBlock Text="{Binding Title}" VerticalAlignment="Center" />
-                <TextBlock Text="{Binding Subtitle}" VerticalAlignment="Center" Opacity="0.6" FontSize="12" />
-              </StackPanel>
+                <TextBlock Grid.Column="1" Text="{Binding Title}" VerticalAlignment="Center" />
+                <TextBlock Grid.Column="2" Text="●" IsVisible="{Binding IsModified}" VerticalAlignment="Center" FontSize="10"
+                           Foreground="{DynamicResource OrandaUncommittedBrush}" ToolTip.Tip="저장하지 않은 변경" />
+                <TextBlock Grid.Column="3" Text="{Binding Subtitle}" VerticalAlignment="Center" Opacity="0.6" FontSize="12" TextTrimming="CharacterEllipsis" />
+                <TextBlock Grid.Column="4" Text="{Binding LastConnectedText}" ToolTip.Tip="{Binding LastConnectedTip}" VerticalAlignment="Center"
+                           Opacity="0.6" FontSize="12" Margin="0,0,4,0" />
+              </Grid>
             </TreeDataTemplate>
           </TreeView.ItemTemplate>
         </TreeView>

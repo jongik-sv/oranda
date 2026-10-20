@@ -1,6 +1,7 @@
 using System;
 using System.Collections.ObjectModel;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
@@ -12,9 +13,23 @@ using Oranda.Platform.Storage;
 
 namespace Oranda.App.Features.ConnectionManager;
 
-/// <summary>접속 트리의 한 줄: 폴더(그룹) 또는 접속.</summary>
-public sealed class ConnectionTreeNode
+/// <summary>접속 목록 정렬(이름 또는 최근 접속이 먼저).</summary>
+public enum ConnectionSortOrder
 {
+    Name,
+    RecentlyConnected,
+}
+
+/// <summary>접속 트리의 한 줄: 폴더(그룹) 또는 접속.</summary>
+public sealed partial class ConnectionTreeNode : ObservableObject
+{
+    /// <summary>폴더면 접혀 있는지, 접속이면 편집 중인 값이 저장되지 않았는지를 화면이 그린다.</summary>
+    [ObservableProperty]
+    private bool _isExpanded = true;
+
+    [ObservableProperty]
+    private bool _isModified;
+
     public ConnectionTreeNode(string title, ConnectionProfile? profile = null)
     {
         Title = title;
@@ -56,7 +71,21 @@ public sealed class ConnectionTreeNode
         ? Title
         : Profile.Environment == ConnectionEnvironment.Production ? $"{Title}, 운영 접속" : $"{Title}, {EnvironmentLabel}";
 
-    public string Subtitle => Profile is null ? string.Empty : $"{Profile.User}@{Profile.DataSource}";
+    public string Subtitle => Profile is null ? $"({Children.Count})" : $"{Profile.User}@{Profile.DataSource}";
+
+    /// <summary>마지막 접속 시각(짧게). 접속한 적이 없거나 폴더면 빈 글자.</summary>
+    public string LastConnectedText => Profile?.LastConnectedAt is { } at ? FormatWhen(at, DateTimeOffset.Now) : string.Empty;
+
+    /// <summary>마지막 접속 시각 전체(풍선 도움말).</summary>
+    public string? LastConnectedTip => Profile?.LastConnectedAt?.ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss", CultureInfo.InvariantCulture);
+
+    /// <summary>오늘이면 <c>HH:mm</c>, 올해면 <c>MM-dd</c>, 그 전이면 <c>yyyy-MM-dd</c>(목록 폭이 좁아서 짧게 쓴다).</summary>
+    public static string FormatWhen(DateTimeOffset when, DateTimeOffset now)
+    {
+        var local = when.ToOffset(now.Offset);
+        var format = local.Date == now.Date ? "HH:mm" : local.Year == now.Year ? "MM-dd" : "yyyy-MM-dd";
+        return local.ToString(format, CultureInfo.InvariantCulture);
+    }
 }
 
 /// <summary>
@@ -88,12 +117,35 @@ public sealed partial class ConnectionManagerViewModel : ViewModelBase
     [ObservableProperty]
     private string? _fileNotice;
 
+    /// <summary>목록 찾기 글자(이름·사용자·그룹·접속 문자열에서 대소문자 무시 부분 일치).</summary>
+    [ObservableProperty]
+    private string _searchText = string.Empty;
+
+    [ObservableProperty]
+    private ConnectionSortOrder _sortOrder = ConnectionSortOrder.Name;
+
+    /// <summary>마지막으로 읽은 프로필 전체(찾기·정렬은 이 목록으로 트리를 다시 만든다).</summary>
+    private List<ConnectionProfile> _profiles = [];
+
+    /// <summary>사용자가 접은 그룹(창이 열려 있는 동안만 기억한다).</summary>
+    private readonly HashSet<string> _collapsed = new(StringComparer.CurrentCultureIgnoreCase);
+
+    /// <summary>트리를 다시 만드는 중(이때 생기는 선택 변화는 편집기를 바꾸지 않는다).</summary>
+    private bool _rebuilding;
+
     public ConnectionManagerViewModel(IConnectionService service)
     {
         _service = service;
     }
 
     public ObservableCollection<ConnectionTreeNode> Tree { get; } = [];
+
+    /// <summary>정렬 선택지(화면 콤보).</summary>
+    public IReadOnlyList<ChoiceItem<ConnectionSortOrder>> SortOrders { get; } =
+    [
+        new(ConnectionSortOrder.Name, "이름순"),
+        new(ConnectionSortOrder.RecentlyConnected, "최근 접속순"),
+    ];
 
     /// <summary>접속 성공 뒤 대화상자를 닫으라는 신호.</summary>
     public event EventHandler? CloseRequested;
@@ -331,44 +383,120 @@ public sealed partial class ConnectionManagerViewModel : ViewModelBase
 
     partial void OnSelectedChanged(ConnectionTreeNode? value)
     {
+        if (_rebuilding)
+        {
+            return;
+        }
+
         if (value?.Profile is { } profile)
         {
             Editor = ProfileEditorViewModel.From(profile);
         }
     }
 
+    partial void OnSearchTextChanged(string value) => ApplyView(null, reloadEditor: false);
+
+    partial void OnSortOrderChanged(ConnectionSortOrder value) => ApplyView(null, reloadEditor: false);
+
+    /// <summary>찾기 글자가 프로필에 맞는지. 접속 문자열에 호스트·포트·서비스·TNS 별칭이 다 들어 있다.</summary>
+    public static bool Matches(ConnectionProfile profile, string? search)
+    {
+        ArgumentNullException.ThrowIfNull(profile);
+        if (string.IsNullOrWhiteSpace(search))
+        {
+            return true;
+        }
+
+        var text = search.Trim();
+        return Contains(profile.Name) || Contains(profile.User) || Contains(profile.DataSource) || Contains(profile.Group) || Contains(profile.ProxyUser);
+
+        bool Contains(string? field) => field is not null && field.Contains(text, StringComparison.CurrentCultureIgnoreCase);
+    }
+
+    /// <summary>트리 전체 노드(폴더 포함, 위에서 아래 순서).</summary>
+    public IEnumerable<ConnectionTreeNode> AllNodes() => Tree.SelectMany(n => n.IsFolder ? n.Children.Prepend(n) : [n]);
+
     private void Rebuild(IReadOnlyList<ConnectionProfile> profiles, Guid? select)
     {
-        Tree.Clear();
+        _profiles = [.. profiles];
+        ApplyView(select, reloadEditor: true);
+    }
+
+    /// <summary>
+    /// 찾기·정렬·접힘 상태로 트리를 다시 만든다. <paramref name="select"/> 가 없으면 지금 편집 중인 프로필을 다시 고른다.
+    /// <paramref name="reloadEditor"/> 가 false 면 편집기(저장 안 한 값 포함)는 그대로 둔다.
+    /// </summary>
+    private void ApplyView(Guid? select, bool reloadEditor)
+    {
+        var keep = select ?? (Editor is { IsNew: false } current ? current.Original.Id : null);
+        var filtering = !string.IsNullOrWhiteSpace(SearchText);
         ConnectionTreeNode? selectNode = null;
-        foreach (var group in profiles.GroupBy(p => p.Group ?? string.Empty).OrderBy(g => g.Key.Length == 0 ? 1 : 0).ThenBy(g => g.Key, StringComparer.CurrentCultureIgnoreCase))
+        _rebuilding = true;
+        try
         {
-            ConnectionTreeNode? folder = null;
-            if (group.Key.Length > 0)
+            foreach (var folder in Tree.Where(n => n.IsFolder))
             {
-                folder = new ConnectionTreeNode(group.Key);
-                Tree.Add(folder);
+                folder.PropertyChanged -= OnFolderChanged;
             }
 
-            foreach (var p in group)
+            Tree.Clear();
+            var visible = _profiles.Where(p => Matches(p, SearchText));
+            var ordered = SortOrder == ConnectionSortOrder.RecentlyConnected
+                ? visible.OrderByDescending(p => p.LastConnectedAt.HasValue).ThenByDescending(p => p.LastConnectedAt).ThenBy(p => p.Name, StringComparer.CurrentCultureIgnoreCase)
+                : visible.OrderBy(p => p.Name, StringComparer.CurrentCultureIgnoreCase);
+
+            // 그룹이 있는 접속은 폴더로 묶어 위에, 그룹 없는 접속은 맨 아래 최상위에 둔다.
+            // 폴더는 자식을 다 채운 뒤에 트리에 넣는다(화면이 폴더 줄의 개수 글자를 한 번에 읽는다).
+            foreach (var group in ordered.GroupBy(p => p.Group ?? string.Empty).OrderBy(g => g.Key.Length == 0 ? 1 : 0).ThenBy(g => g.Key, StringComparer.CurrentCultureIgnoreCase))
             {
-                var node = new ConnectionTreeNode(p.Name, p);
-                (folder?.Children ?? Tree).Add(node);
-                if (p.Id == select)
+                var folder = group.Key.Length > 0 ? new ConnectionTreeNode(group.Key) : null;
+                var target = folder?.Children ?? Tree;
+                foreach (var p in group)
                 {
-                    selectNode = node;
+                    var node = new ConnectionTreeNode(p.Name, p);
+                    target.Add(node);
+                    if (p.Id == keep)
+                    {
+                        selectNode = node;
+                    }
+                }
+
+                if (folder is not null)
+                {
+                    // 찾는 중에는 맞는 접속이 보이도록 모두 펼친다(사용자가 접어 둔 상태는 바꾸지 않는다).
+                    folder.IsExpanded = filtering || !_collapsed.Contains(group.Key) || (selectNode is not null && folder.Children.Contains(selectNode));
+                    folder.PropertyChanged += OnFolderChanged;
+                    Tree.Add(folder);
                 }
             }
+
+            Selected = selectNode;
+        }
+        finally
+        {
+            _rebuilding = false;
         }
 
-        if (selectNode is not null)
+        if (reloadEditor && selectNode?.Profile is { } profile)
         {
-            Selected = selectNode;
-            Editor = ProfileEditorViewModel.From(selectNode.Profile!);
+            Editor = ProfileEditorViewModel.From(profile);
         }
-        else if (Selected is not null)
+    }
+
+    private void OnFolderChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
+    {
+        if (_rebuilding || e.PropertyName != nameof(ConnectionTreeNode.IsExpanded) || sender is not ConnectionTreeNode folder || !string.IsNullOrWhiteSpace(SearchText))
         {
-            Selected = null;
+            return;
+        }
+
+        if (folder.IsExpanded)
+        {
+            _collapsed.Remove(folder.Title);
+        }
+        else
+        {
+            _collapsed.Add(folder.Title);
         }
     }
 
