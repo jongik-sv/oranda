@@ -23,6 +23,7 @@ public sealed class ResultGridModel : IAsyncDisposable
     private int[]? _order;
     private long _loadedRows;
     private long? _knownRows;
+    private bool _sortRefused;
     private bool _disposed;
 
     public ResultGridModel(IResultSet source, ResultPageCacheOptions? cacheOptions = null, int pageSize = DefaultPageSize)
@@ -438,16 +439,27 @@ public sealed class ResultGridModel : IAsyncDisposable
 
     // ---- 정렬 ----
 
+    /// <summary>편집 모드에서 반영하지 않은 변경이 있어 정렬하지 않을 때 상태 줄에 보이는 안내.</summary>
+    public const string SortBlockedNotice = "반영하지 않은 편집이 있어 정렬하지 않았습니다. 반영하거나 되돌린 뒤 정렬할 수 있습니다.";
+
     /// <summary>
     /// 열 정렬. 커서가 앞으로만 가므로 끝까지 가져온 뒤 행 순서표를 만든다. 같은 열을 다시 부르면 내림차순 → 해제 순.
+    /// 편집 모드에서 반영하지 않은 변경(바꾼 값·새 행·지울 행)이 있으면 정렬하지 않고 알린다 — 편집 세션은 변경을 화면 행 번호로 기억하므로
+    /// 순서가 바뀌면 바꾼 값이 다른 행에 보이고, 그 행을 고치면 원래 행이 바뀐다.
     /// </summary>
     public async Task ToggleSortAsync(int ordinal, CancellationToken ct = default)
     {
+        if (RefuseSortForEdits())
+        {
+            return;
+        }
+
         if (SortColumn == ordinal && SortDescending)
         {
             SortColumn = -1;
             SortDescending = false;
             _order = null;
+            ClearSortNotice();
             RaiseChanged();
             return;
         }
@@ -472,10 +484,39 @@ public sealed class ResultGridModel : IAsyncDisposable
             var c = CompareValues(keys[a], keys[b], kind, desc);
             return c != 0 ? c : a.CompareTo(b);
         });
+        if (RefuseSortForEdits())
+        {
+            return; // 끝까지 가져오는 사이에 셀을 고쳤다
+        }
+
         _order = order;
         SortColumn = ordinal;
         SortDescending = desc;
+        ClearSortNotice();
         RaiseChanged();
+    }
+
+    /// <summary>반영하지 않은 편집이 있으면 정렬하지 않는다고 알리고 true.</summary>
+    private bool RefuseSortForEdits()
+    {
+        if (EditOverlay is not { HasPendingChanges: true })
+        {
+            return false;
+        }
+
+        _sortRefused = true;
+        ReportNotice(SortBlockedNotice);
+        return true;
+    }
+
+    /// <summary>정렬했으니 앞서 보인 「정렬하지 않았습니다」 안내를 지운다.</summary>
+    private void ClearSortNotice()
+    {
+        if (_sortRefused)
+        {
+            _sortRefused = false;
+            ReportNotice(string.Empty);
+        }
     }
 
     private static int CompareValues(object? a, object? b, ColumnDataKind kind, bool desc)
@@ -822,7 +863,7 @@ public sealed class ResultGridModel : IAsyncDisposable
     /// <summary>읽기 전용 결과에 행 붙여넣기·복제를 하려 했다. 결과 영역이 「편집 모드로 다시 실행」 안내 막대를 띄운다.</summary>
     public event EventHandler? EditHintRequested;
 
-    /// <summary>명령 결과 알림(행 붙여넣기의 열 수 불일치 등). 결과 영역이 상태 줄에 보인다.</summary>
+    /// <summary>명령 결과 알림(행 붙여넣기의 열 수 불일치, 정렬하지 않은 이유 등). 결과 영역이 상태 줄에 보인다. 빈 글이면 알림을 지운다.</summary>
     public event EventHandler<string>? NoticeRequested;
 
     /// <summary>이 칸이 보이게 스크롤해 달라는 요청(새로 더한 행으로 옮길 때). 그리드 컨트롤이 받는다.</summary>
@@ -923,4 +964,7 @@ public interface IGridEditOverlay
 
     /// <summary>반영 전에 값을 바꿔야 하는 칸(복제한 새 행의 키 열)이면 true.</summary>
     bool NeedsChange(long viewRow, int ordinal);
+
+    /// <summary>반영하지 않은 변경(바꾼 값·새 행·지울 행)이 있다. 있으면 정렬하지 않는다(<see cref="ResultGridModel.ToggleSortAsync"/>).</summary>
+    bool HasPendingChanges { get; }
 }

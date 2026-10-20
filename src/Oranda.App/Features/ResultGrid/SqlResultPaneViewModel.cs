@@ -728,7 +728,7 @@ public sealed class SqlResultPaneViewModel : ToolPanelViewModelBase
 
     private void OnNoticeRequested(object? sender, string message)
     {
-        _gridNotice = message;
+        _gridNotice = message.Length == 0 ? null : message;
         UpdateStatus();
     }
 

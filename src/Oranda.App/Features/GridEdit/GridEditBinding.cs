@@ -91,6 +91,8 @@ public static class GridEditBinding
     {
         public int ExtraRows => session.InsertedRows.Count();
 
+        public bool HasPendingChanges => session.IsDirty;
+
         public bool TryGetValue(long viewRow, int ordinal, out object? value) =>
             session.TryGetPendingValue(ToEditRow(model, session, viewRow), ordinal, out value);
 

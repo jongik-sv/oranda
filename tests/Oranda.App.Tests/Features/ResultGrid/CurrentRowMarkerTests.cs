@@ -130,6 +130,8 @@ public sealed class CurrentRowMarkerTests
         public long BaseRowOf(long viewRow) => viewRow < baseRows ? viewRow : -1;
 
         public bool NeedsChange(long viewRow, int ordinal) => viewRow >= baseRows && ordinal == 0;
+
+        public bool HasPendingChanges => true;
     }
 
     [Fact]
