@@ -242,3 +242,11 @@
 - **Rationale**: 시험을 못 했을 뿐 일부러 막을 이유가 없다. 쓰는 사람이 기존 도구 대신 Oranda 를 쓸 수 있고, 문제가 나면 결함으로 받는다
 - **Reversible**: yes
 - **Source**: 사용자 결정(2026-10-20, 「12c, 18c, 21c를 일부러 막을 필요는 없잖아. 테스트를 못할 뿐이지. 그냥 놔둬」)
+
+## D-031 (2026-10-20T20:00:00Z)
+- **Phase**: TSK-03-07 후속, 11g 실행 중 취소(OOB)
+- **Decision needed**: 개발 PC 의 11g 컨테이너에서 실행 중 취소가 끝나지 않아 `OracleConfiguration.DisableOOB` 를 앱 기본으로 켤지
+- **Decision made**: 켜지 않는다(드라이버 기본값 유지). `DisableOOB` 는 컨테이너 통합 시험(`ORANDA_IT_11G_DISABLE_OOB=1`)에서만 쓴다
+- **Rationale**: 사내 시험 DB(11.2.0.3)에 실제 망으로 붙어 60 초 넘게 도는 SELECT 를 3 초 뒤 취소하니 OOB 켜짐·꺼짐 모두 ORA-01013 이 5~22 ms 안에 오고 세션도 다시 쓸 수 있었다. 끝나지 않던 것은 podman 포트 중계가 긴급(OOB) 데이터를 버리는 개발 PC 환경 문제다. PL/SQL 대기(DBMS_LOCK)는 그 계정에 권한이 없어 확인하지 못했다
+- **Reversible**: yes
+- **Source**: 사용자 결정(2026-10-20, 「OOB도 추천대로 할께」 = 실망에서 먼저 확인), 조정 세션 측정
