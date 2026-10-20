@@ -882,6 +882,50 @@ dotnet, testhost, Oranda.App
 - data-model: -
 - ui-spec: -
 
+### TSK-03-08: 동시 접속 여러 개: 툴바 접속 콤보·문서마다 접속 (CONN-06) [win144]
+- category: defect
+- domain: fullstack
+- model: opus
+- status: [ ]
+- priority: critical
+- assignee: -
+- schedule: 2026-12-28 ~ 2027-01-08
+- tags: defect, connection, multi-session, orange-parity, win144
+- depends: TSK-03-03, TSK-03-04
+- blocked-by: -
+- entry-point: 툴바 접속 콤보(1 - MESAPUSER@UBMADQ, 2 - …), 접속 관리자 「접속」, 작업 공간·SQL 탭
+- note: 담당 PC: win144(Windows 개발 PC) — 맥북 세션은 이 Task 를 하지 않는다. 2026-10-20 사용자 요청(오렌지처럼 여러 세션 연결). PRD CONN-06(P0, M1)·ui-shell.md 34·140·200·202행에 이미 정해진 요구인데 구현이 빠졌다. 현황(조사): ConnectionService 가 작업 세션 하나(_active, ActiveSession)만 들고 ConnectAsync 가 새 접속에 성공하면 이전 작업 세션을 닫는다(ConnectionService.cs 403-411). ExecutionState 도 공유 세션 하나만 안다. 기능마다 세션을 고르는 방법이 제각각이다: ActiveSession(실행·PL/SQL 실행·모니터 기본), Sessions.LastOrDefault(Work)(PL/SQL 편집기·객체 상세·표 정의서·DB 도구·열 순서), 스키마 브라우저 CurrentSession(새 Work 세션으로 늘 바뀜), 탭 ConnectionProfileId(자동완성·탐색·데이터 이동·이력). SqlEditorViewModel.ConnectionProfileId 는 작업 공간 저장용으로만 쓰이고 일반 새 SQL 탭은 null 이다
+
+#### PRD 요구사항
+- prd-ref: PRD CONN-06, CONN-07, EDIT-09, EXEC-13(D-017), ui-shell.md 툴바 접속 콤보·접속 따르는 도구 창·창 테두리
+- requirements:
+  - 접속을 여러 개 동시에 연다. 새 접속은 기존 작업 세션을 닫지 않고 목록에 더한다. 끊기는 접속 하나만 닫는다(접속 끊기 명령은 「지금 접속」 을 닫는다, 미커밋이면 지금처럼 묻는다)
+  - 툴바 접속 콤보: 열린 접속을 「번호 - 사용자@별칭」 과 환경 표시(개발/테스트/운영 색)로 보인다(오렌지 SQL Tool 콤보). 고르면 그 접속이 「지금 접속」 이 된다(oranda.conn.switchSession, 오렌지 F7)
+  - 「지금 접속」 은 활성 문서의 접속이다. SQL 탭(작업 공간 탭)은 자기 접속(ConnectionProfileId → 열린 세션)을 갖는다. 새 SQL 탭·새 작업 공간은 그때의 지금 접속을 물려받는다. 탭을 바꾸면 콤보·상태 표시줄·창 환경 테두리가 그 탭의 접속을 따른다. 콤보로 접속을 바꾸면 활성 SQL 탭의 접속이 바뀐다
+  - 실행·커밋·롤백·취소·실행 계획·행 수·관련 행·LOB 보기·그리드 편집·PL/SQL 실행·바인드·DBMS 출력·트랜잭션 표시(미커밋)는 그 탭 접속의 세션에서 한다. 전용 세션 탭(D-017)은 그 탭 접속을 복제한다
+  - 접속을 따르는 도구 창(스키마 브라우저, 객체 상세, PL/SQL 편집기, DB 정보·도구, 표 정의서, 열 순서, 세션·SQL 모니터 기본값, 자동완성 메타 캐시)은 「지금 접속」 을 따른다. 세션을 고르는 방법을 한 곳(예: IConnectionService.Current / SessionFor(tab))으로 모으고 Sessions.LastOrDefault(Work) 같은 추측을 없앤다
+  - 끊긴(broken) 접속, 접속이 닫힌 탭(접속 없음 표시, 실행 때 다시 접속을 묻거나 지금 접속으로 바꿀지 묻는다), 앱 종료 때 미커밋 확인을 접속마다 한다
+  - 작업 공간 저장·복원은 탭마다 접속 프로필을 기억한다(이미 있는 <!-- connection: --> 를 쓴다). 복원 때 자동 접속은 하지 않고 탭에 「접속 안 됨(프로필 이름)」 을 보인다
+- acceptance:
+  - 서로 다른 DB 접속 3개(예: 26ai 개발·테스트·조회 전용)를 열면 콤보에 3개가 보이고, 탭마다 다른 접속으로 실행하면 각 결과가 그 접속에서 나온다(USER·SYS_CONTEXT 로 확인)
+  - 한 접속의 미커밋 변경이 다른 접속 탭의 트랜잭션 표시에 나타나지 않는다
+  - 콤보·탭 전환 때 상태 표시줄·창 테두리(운영 = 빨강)·스키마 브라우저가 따라간다
+  - 접속 하나를 끊어도 다른 접속의 탭은 그대로 실행된다
+  - 접속 하나일 때 동작과 기존 시험은 바뀌지 않는다
+- constraints:
+  - 세션 수 상한(예: 접속 10개)과 접속마다 공유 작업 세션 1개 원칙을 지킨다(CONN-07 도구 세션·D-017 전용 세션은 지금처럼 추가)
+  - 결정이 필요한 UX(콤보 위치·번호 규칙·접속 없는 탭 실행 동작)는 decisions.md 에 남긴다
+- test-criteria:
+  - 26ai 컨테이너에 사용자 2~3개로 다중 접속 통합 시험(탭별 실행 세션, 트랜잭션 분리, 끊기 영향 범위)
+  - Headless: 콤보 목록·선택·탭 전환 동기화, 상태 표시줄·테두리
+  - 단위: 세션 선택 규칙(탭 → 프로필 → 열린 세션), 복원 때 접속 없음 표시
+
+#### 기술 스펙 (TRD)
+- tech-spec: -
+- api-spec: -
+- data-model: -
+- ui-spec: docs/design/ui-shell.md 툴바 접속 콤보(34행), 접속을 따르는 도구 창(140행), 환경 칩(200행), 창 테두리·상태 표시줄(202행)
+
 ## WP-04: SQL 편집기·언어 서비스
 - schedule: 2026-11-10 ~ 2026-11-30
 
@@ -3161,6 +3205,7 @@ graph LR
   TSK-11-03 --> TSK-06-12
   TSK-11-03 --> TSK-10-06
   TSK-07-02 --> TSK-07-05
+  TSK-03-04 --> TSK-03-08
   TSK-07-04 --> TSK-07-06
   %% 2026-10-20 사용자 요청
   TSK-03-03 --> TSK-03-07
