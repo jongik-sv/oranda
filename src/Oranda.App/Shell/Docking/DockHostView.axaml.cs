@@ -20,6 +20,8 @@ public partial class DockHostView : UserControl
 
     private DockWorkspace? _workspace;
 
+    static DockHostView() => DockFloatRedock.Register();
+
     public DockHostView()
     {
         InitializeComponent();
