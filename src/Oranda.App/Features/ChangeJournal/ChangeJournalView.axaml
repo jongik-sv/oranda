@@ -1,0 +1,76 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:icons="using:Oranda.App.Shell.Icons"
+             xmlns:vm="using:Oranda.App.Features.ChangeJournal"
+             x:Class="Oranda.App.Features.ChangeJournal.ChangeJournalView"
+             x:DataType="vm:ChangeJournalViewModel">
+  <UserControl.Styles>
+    <Style Selector="Border.added">
+      <Setter Property="Background" Value="#3028A745" />
+    </Style>
+    <Style Selector="Border.removed">
+      <Setter Property="Background" Value="#30DC3545" />
+    </Style>
+  </UserControl.Styles>
+  <DockPanel>
+    <Border DockPanel.Dock="Top" Classes="panel-toolbar">
+      <WrapPanel>
+        <TextBox x:Name="SearchBox" Classes="compact search" Width="240" Margin="0,0,6,0" PlaceholderText="객체 이름·DDL 검색"
+                 Text="{Binding SearchText, Mode=TwoWay}" />
+        <CheckBox Content="이 접속만" Margin="0,0,6,0" IsChecked="{Binding CurrentConnectionOnly, Mode=TwoWay}" />
+        <CheckBox Content="보관된 것만" Margin="0,0,6,0" IsChecked="{Binding OnlySucceeded, Mode=TwoWay}" />
+        <StackPanel Orientation="Horizontal" Spacing="4" Margin="0,0,6,0" IsVisible="{Binding HasObjectFilter}">
+          <TextBlock Text="{Binding ObjectFilterText}" VerticalAlignment="Center" />
+          <Button Classes="tool" icons:ButtonIcon.Key="delete" x:Name="ClearFilterButton" Content="해제" />
+        </StackPanel>
+        <Button Classes="tool" icons:ButtonIcon.Key="refresh" x:Name="RefreshButton" Content="새로 고침" Margin="0,0,4,0" />
+        <Button Classes="tool" icons:ButtonIcon.Key="docEdit" x:Name="OpenButton" Content="이 DDL 을 새 편집기에 열기" />
+      </WrapPanel>
+    </Border>
+    <Border DockPanel.Dock="Bottom" Classes="panel-status">
+      <TextBlock Text="{Binding StatusMessage}" TextTrimming="CharacterEllipsis" />
+    </Border>
+    <Grid RowDefinitions="*,6,*">
+      <ListBox x:Name="List" Grid.Row="0" Classes="log" ItemsSource="{Binding Items}" SelectionMode="Multiple">
+        <ListBox.ItemTemplate>
+          <DataTemplate x:DataType="vm:JournalItem">
+            <Grid ColumnDefinitions="110,220,120,80,110,*" ToolTip.Tip="{Binding SummaryText}">
+              <TextBlock Grid.Column="0" Text="{Binding TimeText}" />
+              <TextBlock Grid.Column="1" Text="{Binding ObjectText}" TextTrimming="CharacterEllipsis" />
+              <TextBlock Grid.Column="2" Text="{Binding TypeText}" TextTrimming="CharacterEllipsis" Opacity="0.8" />
+              <TextBlock Grid.Column="3" Text="{Binding CauseText}" />
+              <TextBlock Grid.Column="4" Text="{Binding ProfileName}" TextTrimming="CharacterEllipsis" Opacity="0.8" />
+              <TextBlock Grid.Column="5" Text="{Binding SummaryText}" TextTrimming="CharacterEllipsis" FontFamily="Consolas, Menlo, monospace" />
+            </Grid>
+          </DataTemplate>
+        </ListBox.ItemTemplate>
+      </ListBox>
+      <GridSplitter Grid.Row="1" ResizeDirection="Rows" />
+      <Grid Grid.Row="2" ColumnDefinitions="*,6,*">
+        <DockPanel Grid.Column="0">
+          <TextBlock DockPanel.Dock="Top" Margin="6,2" Opacity="0.7" Text="{Binding DetailTitle}" TextTrimming="CharacterEllipsis" />
+          <TextBox x:Name="DetailBox" IsReadOnly="True" AcceptsReturn="True" FontFamily="Consolas, Menlo, monospace"
+                   Text="{Binding DetailText, Mode=OneWay}" />
+        </DockPanel>
+        <GridSplitter Grid.Column="1" ResizeDirection="Columns" />
+        <DockPanel Grid.Column="2">
+          <TextBlock DockPanel.Dock="Top" Margin="6,2" Opacity="0.7" Text="{Binding DiffTitle}" TextTrimming="CharacterEllipsis" />
+          <ScrollViewer HorizontalScrollBarVisibility="Auto">
+            <ItemsControl x:Name="DiffList" ItemsSource="{Binding Diff}">
+              <ItemsControl.ItemTemplate>
+                <DataTemplate x:DataType="vm:DiffLine">
+                  <Border Padding="6,0" Classes.added="{Binding IsAdded}" Classes.removed="{Binding IsRemoved}">
+                    <Grid ColumnDefinitions="16,*">
+                      <TextBlock Grid.Column="0" Text="{Binding Kind}" FontFamily="Consolas, Menlo, monospace" Opacity="0.7" />
+                      <TextBlock Grid.Column="1" Text="{Binding Text}" FontFamily="Consolas, Menlo, monospace" />
+                    </Grid>
+                  </Border>
+                </DataTemplate>
+              </ItemsControl.ItemTemplate>
+            </ItemsControl>
+          </ScrollViewer>
+        </DockPanel>
+      </Grid>
+    </Grid>
+  </DockPanel>
+</UserControl>

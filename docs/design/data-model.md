@@ -29,7 +29,7 @@
 | `{data}/layouts/{id}.json` | 이름 붙인 레이아웃(창 → 레이아웃 이름 붙여 저장) | JSON | `LayoutDocument`(+`name`, 창 위치 없음) | 2.5 |
 | `{data}/workspaces/{id}.json` | 작업 공간(탭 목록) | JSON | `Workspace` | 2.6 |
 | `{data}/autosave/{workspaceId}.json` | 복구용 자동 저장(10 s 간격) | JSON | `Workspace` (같은 스키마) | 2.6 |
-| `{data}/oranda.db` (+ `-wal`, `-shm`) | 실행 이력, 메타데이터 캐시 | SQLite | — | 3 |
+| `{data}/oranda.db` (+ `-wal`, `-shm`) | 실행 이력, 메타데이터 캐시, 변경 일지 | SQLite | — | 3 |
 | `{data}/credentials/{hash}.bin` | **Windows 만**. DPAPI(현재 사용자)로 암호화한 비밀 | 바이너리 | — | 5 |
 | `{data}/logs/` | Serilog 파일(7일 보관) | 텍스트 | — | 범위 밖 |
 | `{data}/backup/` | 마이그레이션 전 백업 | 원본 그대로 | — | 4 |
@@ -366,7 +366,46 @@ CREATE INDEX ix_meta_object_type ON meta_object(db_key, owner, type);  -- 스키
 | `status` | `Succeeded`, `Failed`, `Cancelled`, `Denied`(정책 관문 거부) |
 
 - `payload_json` 내용은 메타데이터 Task(SCH)가 정한다. 맨 위에 `"v"`(정수) 필드를 두고, 앱이 아는 `v` 와 다르면 캐시가 없는 것으로 본다(DB 마이그레이션 없이 형식 변경 가능).
-- `meta_*` 는 언제든 다시 만들 수 있는 캐시다. `history` 만 사용자 데이터다.
+- `meta_*` 는 언제든 다시 만들 수 있는 캐시다. `history`·`change_journal` 은 사용자 데이터다.
+
+### 3.2.1 `change_journal` (v2, 마이그레이션 `0002_change_journal.sql`, TSK-13-07)
+
+DDL 실행 직전·PL/SQL 컴파일 직전에 대상 객체의 **이전 DDL(서버에 있던 그대로)** 을 보관한다. 서버에는 아무것도 설치하지 않고, 앱이 같은 세션에서 `DBMS_METADATA.GET_DDL`(SELECT)로 읽어 로컬에만 쌓는다.
+
+```sql
+CREATE TABLE change_journal (
+  id                INTEGER PRIMARY KEY,
+  captured_at       TEXT    NOT NULL,           -- 보관 시각(UTC)
+  profile_id        TEXT    NOT NULL,           -- 프로필을 지워도 남도록 이름을 같이 둔다
+  profile_name      TEXT    NOT NULL,
+  db_key            TEXT    NOT NULL,           -- 3.3. 같은 DB·같은 사용자면 프로필이 달라도 한 객체의 버전으로 본다
+  server_name       TEXT,                       -- 접속 대상(DataSource) 표시용
+  owner             TEXT    NOT NULL,
+  name              TEXT    NOT NULL,
+  object_type       TEXT    NOT NULL,           -- Oracle OBJECT_TYPE('TABLE', 'PACKAGE BODY')
+  cause             TEXT    NOT NULL CHECK (cause IN ('Ddl','Compile')),
+  statement_summary TEXT,                       -- 실행한 문장의 첫 줄(비밀 가림 후, 200자)
+  previous_ddl      TEXT,                       -- 이전 DDL. 보관에 실패하면 NULL
+  content_hash      TEXT,                       -- previous_ddl(가림 후) SHA-256 소문자 hex. 줄바꿈 CRLF→LF, 앞뒤 공백 무시
+  failure_reason    TEXT                        -- 보관 실패 이유(권한·시간 초과·객체 없음). 성공이면 NULL
+);
+CREATE INDEX ix_change_journal_object ON change_journal(db_key, owner, name, object_type, id DESC);
+CREATE INDEX ix_change_journal_time   ON change_journal(captured_at DESC);
+```
+
+| 항목 | 규칙 |
+|---|---|
+| 대상 | `ALTER`·`DROP`·`CREATE OR REPLACE`·`RENAME`. 새 객체를 만드는 `CREATE`(보관할 이전 DDL 없음)·`TRUNCATE`(데이터 작업)·`COMMENT`(`GET_DDL('TABLE')` 에 주석이 들어가지 않아 되돌리기에 쓸 수 없음)는 제외 |
+| 읽기 | `DBMS_METADATA.OPEN` 핸들에 `DDL` 변환을 걸고 `SQLTERMINATOR` 만 켠다. 세션 변환 설정(DDL 보기에서 저장소·테이블스페이스를 껐을 때 등)을 물려받지 않아 보관본과 해시가 세션 설정에 흔들리지 않는다. 핸들은 항상 닫는다. `FETCH_CLOB` 이 NULL 이면 `ALL_OBJECTS` 로 「없음(ORA-31603)」과 「있으나 읽을 권한 없음(ORA-01031)」을 가른다 |
+| 순서 | `Ddl` 원인: 정책 관문·SAFE-03 확인을 통과한 뒤, 사용자 문장을 보내기 직전에 같은 세션에서 읽는다. `Compile` 원인(PL/SQL 편집기)은 편집기가 실행 엔진 호출 직전에 읽으므로 정책이 거부하거나 사용자가 확인을 취소한 컴파일도 행이 남을 수 있다(같은 내용은 쌓이지 않아 피해가 작다). 조회는 SELECT 뿐이라 COMMIT·ROLLBACK·세션 변환 설정을 건드리지 않는다 |
+| 실패 | 보관 실패는 실행을 막지 않는다. 권한(ORA-01031)·제한 시간(10초)·`ORA-31603`(객체 없음, ALTER·DROP·RENAME 한정)은 `failure_reason` 이 있는 행 1줄로 남긴다. `CREATE OR REPLACE` 로 만드는 새 객체의 `ORA-31603` 은 행을 남기지 않는다 |
+| PACKAGE·TYPE | 명세와 본문은 별개 버전이다(`PACKAGE` / `PACKAGE BODY`). `DROP`·`ALTER` 는 둘 다, `CREATE OR REPLACE PACKAGE` 는 명세만 보관한다 |
+| 중복 | 같은 `(db_key, owner, name, object_type)` 의 **마지막 성공 행**과 `content_hash` 가 같으면 쌓지 않는다. 실패 행이 사이에 끼어도 같다 |
+| 원인 | `Ddl` = 실행 엔진이 읽은 `GET_DDL` 본문, `Compile` = PL/SQL 편집기가 컴파일 직전에 읽은 소스(`CREATE OR REPLACE` + 소유자를 붙인 편집기 글자). 형식이 달라 같은 객체라도 두 원인의 해시는 다를 수 있다 |
+| 크기 | `previous_ddl` 2 MiB(UTF-8) 초과 시 본문 없이 실패 행으로 남긴다 |
+| 보존 | 365일(`captured_at`) 지난 행, 객체(`db_key`·`owner`·`name`·`object_type`)당 성공 50버전 초과분(오래된 것부터)을 지운다. 실패 행은 기간으로만 지운다. 상수이며 설정 화면에 두지 않는다. 시작 후 1회 + 기록 100건마다 |
+| 한계 | 문장 안 `EXECUTE IMMEDIATE '...'` 로 나가는 DDL(익명 블록)과 대상 이름을 치환 변수(`&t`)로 쓴 문장은 대상을 알 수 없어 보관하지 않는다. 호출하는 쪽이 `SqlStatement.ChangeTarget` 을 직접 채우면 보관된다 |
+| 검색 | `owner`·`name`·`statement_summary`·`previous_ddl` 의 부분 문자열(LIKE) |
 
 ### 3.3 `db_key`
 
@@ -381,6 +420,7 @@ CREATE INDEX ix_meta_object_type ON meta_object(db_key, owner, type);  -- 스키
 | `history` 기간 | `executed_at` 이 `history.maxAgeDays`(기본 180일)보다 오래되면 지움 | 같음 |
 | `history.sql_text` | 256 KiB(UTF-8 바이트) 넘으면 앞부분만 저장, `sql_truncated=1` | 기록할 때 |
 | `history.enabled=false` | 새 기록 안 함. 기존 이력은 유지(지우기는 이력 창 명령) | |
+| `change_journal` | 3.2.1. 365일 지난 행, 객체당 성공 50버전 초과분을 지움(상수) | 앱 시작 후 백그라운드 1회 + 기록 100건마다 |
 | `meta_source` | `last_used_at` 이 `metadataCache.retentionDays`(기본 30일) 지나면 행 삭제 → `meta_object` 연쇄 삭제 | 앱 시작 후 백그라운드 1회 |
 | 파일 크기 | 자동 정리 뒤에는 `VACUUM` 하지 않는다(빈 페이지는 SQLite 가 재사용). 사용자가 이력 창에서 「이력 비우기」를 할 때만 백그라운드 `VACUUM` | UI 멈춤 방지 |
 
@@ -462,6 +502,7 @@ connections.json ◀────── credentialRef 문자열만 저장 ("orand
 | `workspaces/*.json`, `autosave/*.json` | `tabs[].content`(사용자가 쓴 SQL 본문), `tabs[].binds[].value`(바인드 값) | 사용자 작성 내용이므로 가리지 않는다. 대신 접속 비밀번호를 앱이 넣는 경로는 없다. 이름에 `pass`·`pwd`·`secret`·`token` 이 든 바인드는 저장하지 않는다(이력 가림과 같은 규칙, Core `SensitiveBindNames`) | 시험 ② + 바인드 저장 시험 |
 | SQL 편집기의 `.sql` 파일(사용자 폴더) | 끝 바인드 블록(2.6) | 위와 같은 규칙으로 비밀로 보이는 바인드는 넣지 않는다 | 바인드 저장 시험 |
 | `oranda.db` `history.sql_text` | `IDENTIFIED BY …`, `CONNECT u/p@…` 같은 문장 | 기록 전 5.3 가림 규칙 적용 | 시험 ③ |
+| `oranda.db` `change_journal.previous_ddl`·`statement_summary` | 서버에서 읽은 이전 DDL(USER·DB 링크 DDL 의 `IDENTIFIED BY VALUES`), 실행한 문장 | 기록 전 5.3 가림 규칙 적용. **저장 소스(PACKAGE·PROCEDURE·FUNCTION·TRIGGER·TYPE 와 각 BODY·LIBRARY·JAVA SOURCE)의 본문은 가리지 않는다**: 변수 이름 `password` 같은 코드를 `***` 로 바꾸면 되돌리기 본문이 깨진다. 요약은 항상 가림 | 변경 일지 저장소 시험 |
 | `oranda.db` `history.binds_json` | 바인드 값 | 기본 끔(`history.saveBindValues=false`). 켜도 이름이 `pass`·`pwd`·`secret`·`token` 을 포함하는 바인드는 `***` | 시험 ③ |
 | `oranda.db` `history.error_message` | 서버 오류문 | 서버가 비밀번호를 오류문에 넣지 않음. 첫 줄·1,000자 제한 | — |
 | `oranda.db` `meta_*` | 서버 메타데이터(소스 코드 일부일 수 있음) | 비밀번호 아님. DB 링크 비밀번호 열(`*_LINKS.PASSWORD`)은 조회 대상에서 뺀다 | — |

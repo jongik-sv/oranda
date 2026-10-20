@@ -1,3 +1,4 @@
+using Oranda.Core.Journal;
 using Oranda.Core.Text;
 
 namespace Oranda.Core.Execution;
@@ -37,6 +38,9 @@ public sealed record SqlStatement(string Text, TextRange Range, StatementKind Ki
 
     /// <summary>DROP·TRUNCATE·ALTER SYSTEM 같은 위험 명령의 대상 이름(이름 재입력 확인용). 없으면 null.</summary>
     public string? DangerousTarget { get; init; }
+
+    /// <summary>ALTER·DROP·CREATE OR REPLACE·RENAME 의 대상 객체(변경 일지가 실행 전에 이전 DDL 을 보관). 대상이 아니면 null.</summary>
+    public ChangeTarget? ChangeTarget { get; init; }
 
     /// <summary>언어 서비스가 분류에 확신이 없으면 true(정책 관문이 보수적으로 판단).</summary>
     public bool IsClassificationUncertain { get; init; }

@@ -47,7 +47,7 @@ public sealed class MetadataCacheTests : IDisposable
         await c.OpenAsync();
         await using var cmd = c.CreateCommand();
         cmd.CommandText = "SELECT MAX(version) FROM schema_version";
-        Assert.Equal(1L, await cmd.ExecuteScalarAsync());
+        Assert.Equal((long)OrandaDatabase.LatestVersion, await cmd.ExecuteScalarAsync());
         cmd.CommandText = "SELECT group_concat(name) FROM sqlite_master WHERE name IN ('history','history_fts','meta_source','meta_object','schema_version')";
         var names = (string?)await cmd.ExecuteScalarAsync();
         Assert.Contains("meta_object", names, StringComparison.Ordinal);

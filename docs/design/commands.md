@@ -470,6 +470,7 @@
 | `oranda.view.outline` | 문서 개요 | - | 전역 | 항상 | TSK-04-02 |
 | `oranda.view.compileErrors` | 컴파일 오류 | - | 전역 | 항상 | TSK-08-01 |
 | `oranda.view.templates` | 템플릿 | - | 전역 | 항상 | TSK-04-07 |
+| `oranda.view.changeJournal` | 변경 일지 | - | 전역 | 항상 | TSK-13-07 |
 | `oranda.view.rowView` | 행 보기 창 | - | 전역 | 항상 | TSK-06-05 |
 | `oranda.view.extensionTest` | 확장 시험 패널 | - | 전역 | `devBuild` | TSK-10-03 |
 | `oranda.view.resetLayout` | 레이아웃 초기화 | - | 전역 | 항상 | TSK-03-01 |
@@ -501,6 +502,7 @@
 | `oranda.db.ddlExtract` | DDL 일괄 추출 | - | 전역 | `hasSession` | TSK-07-04 |
 | `oranda.schema.tableSpec` | 테이블 정의서… | - | `schemaFocus` | `tableNodeSelected && hasSession` | TSK-13-06 |
 | `oranda.plsql.openSource` | PL/SQL 소스 열기 | - | `schemaFocus` | `plsqlNodeSelected` | TSK-08-01 |
+| `oranda.journal.showForObject` | 변경 일지 보기 | - | `schemaFocus` | `schemaNodeSelected` | TSK-13-07 |
 | `oranda.plsql.compile` | 컴파일(저장) | `F5` | `plsqlEditorFocus` | `hasSession && !sessionBusy && !readOnlySession` | TSK-08-01 |
 | `oranda.plsql.toggleSpecBody` | 명세/본문 전환 | `Ctrl+Shift+B` | `plsqlEditorFocus` | `isPackageDoc` | TSK-08-01 |
 | `oranda.plsql.showServerDiff` | 서버 소스와 차이 보기 | - | `plsqlEditorFocus` | `serverSourceChanged` | TSK-08-01 |

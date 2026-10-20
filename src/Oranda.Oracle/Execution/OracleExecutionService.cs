@@ -7,6 +7,7 @@ using Oranda.Core.Events;
 using Oranda.Core.Execution;
 using Oranda.Core.Grid;
 using Oranda.Core.History;
+using Oranda.Core.Journal;
 using Oranda.Core.Sessions;
 using Oranda.Oracle.Sessions;
 
@@ -216,6 +217,7 @@ internal sealed partial class OracleExecutionService : IExecutionService
         try
         {
             await PrepareSessionAsync(session, runtime, ct);
+            await CaptureBeforeChangeAsync(session, stmt, ct);
 
             cmd = conn.CreateCommand();
             cmd.BindByName = true;
@@ -308,6 +310,45 @@ internal sealed partial class OracleExecutionService : IExecutionService
             {
                 await cmd.DisposeAsync();
             }
+        }
+    }
+
+    /// <summary>
+    /// 변경 일지(TSK-13-07): ALTER·DROP·CREATE OR REPLACE·RENAME 를 보내기 직전에 대상의 현재 DDL 을 같은 세션에서 읽어
+    /// <see cref="ChangeSnapshotCaptured"/> 로 알린다. 정책·확인을 통과한 뒤에 부르므로 거부된 문장은 남지 않는다.
+    /// DBMS_METADATA 조회는 SELECT 뿐이다(세션 변환 설정·COMMIT·ROLLBACK 없음). 그래서 사용자 트랜잭션에 영향이 없고,
+    /// 뒤이은 DDL 의 암시적 커밋과도 섞이지 않는다. 보관 실패(권한·시간 초과·객체 없음)는 일지에 이유만 남기고 실행은 계속한다.
+    /// 사용자의 취소만 밖으로 전파한다.
+    /// </summary>
+    private async Task CaptureBeforeChangeAsync(OracleSession session, SqlStatement stmt, CancellationToken ct)
+    {
+        if (stmt.ChangeTarget is not { } target || stmt.Kind != StatementKind.Ddl)
+        {
+            return;
+        }
+
+        try
+        {
+            var template = new JournalEntry
+            {
+                ProfileId = session.Profile.Id,
+                ProfileName = session.Profile.Name,
+                DbKey = session.DbKey,
+                ServerName = session.Profile.DataSource,
+                Cause = JournalCause.Ddl,
+                StatementSummary = ChangeCapture.Summarize(stmt.Text),
+            };
+            var fallbackOwner = (session.Server.SessionUser ?? session.Profile.User).ToUpperInvariant();
+            var entries = await ChangeCapture.CaptureAsync(target, template, fallbackOwner, new OracleDdlSource(session.Connection),
+                ChangeCapture.Timeout, ct);
+            foreach (var entry in entries)
+            {
+                _events.Publish(new ChangeSnapshotCaptured(entry));
+            }
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException || !ct.IsCancellationRequested)
+        {
+            // 일지는 부가 기능이다. 어떤 이유로든 실행을 막지 않는다.
         }
     }
 
@@ -515,5 +556,268 @@ internal sealed partial class OracleExecutionService : IExecutionService
         public bool Prepared { get; set; }
 
         public Dictionary<string, string> Defines { get; } = new(StringComparer.OrdinalIgnoreCase);
+    }
+
+    /// <summary><see cref="ChangeCapture"/> 가 서버에서 읽은 DDL 한 건. 실패면 <see cref="Ddl"/> 이 null 이고 오류 번호·문구가 있다.</summary>
+    internal readonly record struct DdlRead(string? Ddl, string? Owner, int? ErrorNumber = null, string? ErrorMessage = null);
+
+    /// <summary>서버 DDL 읽기(DBMS_METADATA). 시험이 가짜로 바꿔 끼운다.</summary>
+    internal interface IDdlSource
+    {
+        /// <summary>RENAME 처럼 문장에 종류가 없을 때 객체 종류를 찾는다. 없으면 null.</summary>
+        Task<string?> ResolveTypeAsync(string? owner, string name, CancellationToken ct);
+
+        /// <summary><paramref name="getDdlType"/> 은 DBMS_METADATA 형식 이름(<c>PACKAGE_BODY</c>). 오류는 예외가 아니라 결과로 돌려준다.</summary>
+        Task<DdlRead> ReadAsync(string getDdlType, string? owner, string name, CancellationToken ct);
+    }
+
+    /// <summary>변경 일지 보관 규칙: 무엇을 읽을지(계획), 실패를 일지 행으로 바꾸는 방법, 제한 시간.</summary>
+    internal static class ChangeCapture
+    {
+        /// <summary>ORA-31603: 객체가 없다.</summary>
+        internal const int ObjectNotFound = 31603;
+
+        /// <summary>객체는 있으나 DDL 을 읽을 수 없다(ORA-31603 + ALL_OBJECTS 에 있음). 실패 행으로 남긴다. 번호는 내부 표지로 ORA-01031 을 빌린다.</summary>
+        internal const int InsufficientPrivileges = 1031;
+
+        /// <summary>보관 전체의 제한 시간. 넘으면 일지에 시간 초과 행을 남기고 실행은 계속한다.</summary>
+        internal static readonly TimeSpan Timeout = TimeSpan.FromSeconds(10);
+
+        internal static string Summarize(string text)
+        {
+            foreach (var line in text.Split('\n'))
+            {
+                if (line.Trim() is { Length: > 0 } t)
+                {
+                    return t.Length <= 200 ? t : t[..200];
+                }
+            }
+
+            return string.Empty;
+        }
+
+        /// <summary>
+        /// 대상의 현재 DDL 을 읽어 일지 행으로 돌려준다. 새 객체를 만드는 CREATE OR REPLACE 처럼 객체가 아직 없으면(ORA-31603) 행이 없다.
+        /// 사용자 취소(<paramref name="ct"/>)는 예외로 전파하고, 제한 시간·서버 오류는 실패 행이 된다.
+        /// </summary>
+        internal static async Task<IReadOnlyList<JournalEntry>> CaptureAsync(ChangeTarget target, JournalEntry template, string fallbackOwner,
+                                                                              IDdlSource source, TimeSpan timeout, CancellationToken ct)
+        {
+            using var limit = CancellationTokenSource.CreateLinkedTokenSource(ct);
+            limit.CancelAfter(timeout);
+            var rows = new List<JournalEntry>();
+            var type = target.ObjectType;
+            try
+            {
+                if (type is null)
+                {
+                    type = await source.ResolveTypeAsync(target.Owner, target.Name, limit.Token);
+                    if (type is null)
+                    {
+                        ct.ThrowIfCancellationRequested();
+                        rows.Add(Row(template, target.Owner ?? fallbackOwner, target.Name, "OBJECT", null, "객체를 찾지 못했다"));
+                        return rows;
+                    }
+                }
+
+                foreach (var (journalType, getDdlType, optional) in Plan(type, target.Operation))
+                {
+                    var read = await source.ReadAsync(getDdlType, target.Owner, target.Name, limit.Token);
+                    ct.ThrowIfCancellationRequested();
+                    if (limit.IsCancellationRequested)
+                    {
+                        throw new OperationCanceledException(limit.Token);
+                    }
+
+                    var owner = read.Owner ?? target.Owner ?? fallbackOwner;
+                    if (!string.IsNullOrEmpty(read.Ddl))
+                    {
+                        rows.Add(Row(template, owner, target.Name, journalType, read.Ddl, null));
+                    }
+                    else if (read.ErrorNumber == ObjectNotFound && (optional || target.Operation == ChangeOperation.CreateOrReplace))
+                    {
+                        continue; // 새 객체(보관할 이전 DDL 없음) 또는 본문이 없는 패키지.
+                    }
+                    else
+                    {
+                        var reason = read.ErrorNumber is { } n ? $"ORA-{n:D5} {read.ErrorMessage}".TrimEnd() : "서버가 DDL 을 돌려주지 않았다";
+                        rows.Add(Row(template, owner, target.Name, journalType, null, reason));
+                    }
+                }
+            }
+            catch (OperationCanceledException) when (!ct.IsCancellationRequested)
+            {
+                rows.Add(Row(template, target.Owner ?? fallbackOwner, target.Name, type ?? "OBJECT", null,
+                    $"시간 초과({timeout.TotalSeconds:0}초)"));
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                // 가짜·드라이버가 던진 예상 밖 오류도 실행을 막지 못한다. 그때까지 모은 행은 버리고 실패 한 줄만 남긴다.
+                rows.Clear();
+                rows.Add(Row(template, target.Owner ?? fallbackOwner, target.Name, type ?? "OBJECT", null, $"보관 중 오류: {ex.Message}"));
+            }
+
+            return rows;
+        }
+
+        /// <summary>
+        /// 문장 종류 → (일지 객체 종류, DBMS_METADATA 형식, 없어도 되는지). PACKAGE·TYPE 은 명세와 본문이 따로 버전이다:
+        /// CREATE OR REPLACE PACKAGE 는 명세만 바꾸고, DROP·ALTER 는 본문까지 영향을 준다.
+        /// </summary>
+        internal static IEnumerable<(string JournalType, string GetDdlType, bool Optional)> Plan(string type, ChangeOperation operation)
+        {
+            switch (type)
+            {
+                case "PACKAGE" or "TYPE":
+                    yield return (type, type + "_SPEC", false);
+                    if (operation != ChangeOperation.CreateOrReplace)
+                    {
+                        yield return (type + " BODY", type + "_BODY", true);
+                    }
+
+                    break;
+                case "DATABASE LINK":
+                    yield return (type, "DB_LINK", false);
+                    break;
+                default:
+                    yield return (type, type.Replace(' ', '_'), false);
+                    break;
+            }
+        }
+
+        private static JournalEntry Row(JournalEntry template, string owner, string name, string type, string? ddl, string? failure)
+            => template with { CapturedAt = DateTimeOffset.UtcNow, Owner = owner, Name = name, ObjectType = type, PreviousDdl = ddl, FailureReason = failure };
+    }
+
+    /// <summary>같은 세션의 연결로 DBMS_METADATA·딕셔너리를 읽는다. 시간 제한은 토큰 취소(드라이버 Break)와 명령 제한 시간 둘 다 건다.</summary>
+    private sealed class OracleDdlSource(OracleConnection connection) : IDdlSource
+    {
+        private const string DefaultOwner = "NVL(:owner, SYS_CONTEXT('USERENV', 'CURRENT_SCHEMA'))"; // ResolveTypeAsync 용
+
+        public async Task<string?> ResolveTypeAsync(string? owner, string name, CancellationToken ct)
+        {
+            try
+            {
+                await using var cmd = Command();
+                cmd.CommandText = $"""
+                    SELECT object_type FROM (
+                      SELECT object_type FROM all_objects
+                       WHERE owner = {DefaultOwner} AND object_name = :name
+                         AND object_type IN ('TABLE', 'VIEW', 'SEQUENCE', 'SYNONYM', 'MATERIALIZED VIEW')
+                       ORDER BY DECODE(object_type, 'MATERIALIZED VIEW', 0, 'TABLE', 1, 'VIEW', 2, 3))
+                     WHERE ROWNUM = 1
+                    """;
+                Bind(cmd, owner, name);
+                using (cmd.CancelOnToken(ct))
+                {
+                    return OracleValues.ToText(await cmd.ExecuteScalarAsync(ct));
+                }
+            }
+            catch (OracleException)
+            {
+                return null;
+            }
+        }
+
+        /// <summary>
+        /// 핸들(<c>DBMS_METADATA.OPEN</c>)에 변환 설정을 직접 걸어 읽는다: 사용자가 DDL 보기에서 세션 변환(저장소·테이블스페이스 등)을
+        /// 바꿔 두었어도 보관본이 달라지지 않는다(같으면 해시가 같아 중복이 쌓이지 않는다). 끝맺음(<c>SQLTERMINATOR</c>)은 켠다.
+        /// DDL 이 없으면(ORA-31603 예외, 본문 없는 패키지는 NULL) ALL_OBJECTS 로 「객체 없음」과 「있으나 읽을 수 없음」을 가른다(실 DB 확인: 없는 표·SYS.DUAL 모두 ORA-31603).
+        /// </summary>
+        private const string ReadBlock = """
+            DECLARE
+              h NUMBER;
+              th NUMBER;
+              l_open BOOLEAN := TRUE;
+              l_owner VARCHAR2(128) := NVL(:owner, SYS_CONTEXT('USERENV', 'CURRENT_SCHEMA'));
+              l_ddl CLOB;
+              l_exists NUMBER := 0;
+              l_type VARCHAR2(40) := CASE :type WHEN 'PACKAGE_SPEC' THEN 'PACKAGE' WHEN 'TYPE_SPEC' THEN 'TYPE' ELSE REPLACE(:type, '_', ' ') END;
+            BEGIN
+              h := DBMS_METADATA.OPEN(:type);
+              BEGIN
+                DBMS_METADATA.SET_FILTER(h, 'SCHEMA', l_owner);
+                DBMS_METADATA.SET_FILTER(h, 'NAME', :name);
+                th := DBMS_METADATA.ADD_TRANSFORM(h, 'DDL');
+                DBMS_METADATA.SET_TRANSFORM_PARAM(th, 'SQLTERMINATOR', TRUE);
+                l_ddl := DBMS_METADATA.FETCH_CLOB(h);
+              EXCEPTION
+                WHEN OTHERS THEN
+                  BEGIN
+                    DBMS_METADATA.CLOSE(h);
+                  EXCEPTION
+                    WHEN OTHERS THEN NULL;
+                  END;
+                  l_open := FALSE;
+                  -- 없는 객체(와 볼 수 없는 SYS 객체)는 NULL 이 아니라 ORA-31603 예외로 온다. 그 밖의 오류는 그대로 올린다.
+                  IF SQLCODE <> -31603 THEN
+                    RAISE;
+                  END IF;
+              END;
+              IF l_open THEN
+                DBMS_METADATA.CLOSE(h);
+              END IF;
+              IF l_ddl IS NULL AND :type <> 'DB_LINK' THEN
+                SELECT COUNT(*) INTO l_exists FROM all_objects WHERE owner = l_owner AND object_name = :name AND object_type = l_type;
+              END IF;
+              :out_owner := l_owner;
+              :out_exists := l_exists;
+              :out_ddl := l_ddl;
+            END;
+            """;
+
+        public async Task<DdlRead> ReadAsync(string getDdlType, string? owner, string name, CancellationToken ct)
+        {
+            try
+            {
+                await using var cmd = Command();
+                cmd.CommandText = ReadBlock;
+                cmd.Parameters.Add(new OracleParameter("owner", OracleDbType.Varchar2) { Value = (object?)owner ?? DBNull.Value });
+                cmd.Parameters.Add(new OracleParameter("type", OracleDbType.Varchar2) { Value = getDdlType });
+                cmd.Parameters.Add(new OracleParameter("name", OracleDbType.Varchar2) { Value = name });
+                var outOwner = cmd.Parameters.Add("out_owner", OracleDbType.Varchar2, 128, null, System.Data.ParameterDirection.Output);
+                var outExists = cmd.Parameters.Add("out_exists", OracleDbType.Int32, null, System.Data.ParameterDirection.Output);
+                var outDdl = cmd.Parameters.Add("out_ddl", OracleDbType.Clob, null, System.Data.ParameterDirection.Output);
+                using (cmd.CancelOnToken(ct))
+                {
+                    await cmd.ExecuteNonQueryAsync(ct);
+                }
+
+                var ownerText = OracleValues.ToText(outOwner.Value);
+                var ddl = OracleValues.ToText(outDdl.Value);
+                if (!string.IsNullOrEmpty(ddl))
+                {
+                    return new DdlRead(ddl, ownerText);
+                }
+
+                return OracleValues.ToInt(outExists.Value) > 0
+                    ? new DdlRead(null, ownerText, ChangeCapture.InsufficientPrivileges, "ORA-31603: 객체는 있으나 DDL 을 읽을 수 없다(권한 부족 등)")
+                    : new DdlRead(null, ownerText, ChangeCapture.ObjectNotFound, "ORA-31603: 객체를 찾지 못했다");
+            }
+            catch (OracleException ex)
+            {
+                return new DdlRead(null, null, ex.Number, FirstLine(ex.Message));
+            }
+        }
+
+        private OracleCommand Command()
+        {
+            var cmd = connection.CreateCommand();
+            cmd.BindByName = true;
+            cmd.CommandTimeout = (int)ChangeCapture.Timeout.TotalSeconds;
+            return cmd;
+        }
+
+        private static void Bind(OracleCommand cmd, string? owner, string name)
+        {
+            cmd.Parameters.Add(new OracleParameter("owner", OracleDbType.Varchar2) { Value = (object?)owner ?? DBNull.Value });
+            cmd.Parameters.Add(new OracleParameter("name", OracleDbType.Varchar2) { Value = name });
+        }
+
+        private static string FirstLine(string message)
+        {
+            var line = message.Split('\n')[0].Trim();
+            return line.Length <= 300 ? line : line[..300];
+        }
     }
 }

@@ -8,8 +8,10 @@ using System.Threading.Tasks;
 using CommunityToolkit.Mvvm.ComponentModel;
 using Oranda.App.Features.SqlEditor;
 using Oranda.App.Shell;
+using Oranda.Core.Events;
 using Oranda.Core.Execution;
 using Oranda.Core.History;
+using Oranda.Core.Journal;
 using Oranda.Core.Metadata;
 using Oranda.Core.Sessions;
 using Oranda.Core.Shell;
@@ -56,6 +58,7 @@ public sealed partial class PlsqlEditorViewModel : ToolPanelViewModelBase
     private readonly IServiceProvider? _services;
     private IMetadataProvider? _meta;
     private IExecutionService? _exec;
+    private IEventBus? _events;
     private ISession? _session;
     private DateTime? _baseline;
     private int _generation;
@@ -74,11 +77,12 @@ public sealed partial class PlsqlEditorViewModel : ToolPanelViewModelBase
     }
 
     /// <summary>시험용: 제공자·실행 서비스를 직접 넣는다.</summary>
-    internal PlsqlEditorViewModel(IMetadataProvider meta, IExecutionService exec)
+    internal PlsqlEditorViewModel(IMetadataProvider meta, IExecutionService exec, IEventBus? events = null)
         : this()
     {
         _meta = meta;
         _exec = exec;
+        _events = events;
     }
 
     /// <summary>지금 포커스를 가진 PL/SQL 편집 탭(명령 처리기가 쓴다). 보기가 설정한다.</summary>
@@ -285,6 +289,7 @@ public sealed partial class PlsqlEditorViewModel : ToolPanelViewModelBase
 
             WarningText = string.Empty;
             DiffText = string.Empty;
+            await ArchiveServerSourceAsync(meta, effective, ct).ConfigureAwait(true);
             var stmt = new SqlStatement(text, default, StatementKind.Ddl) { Verb = "CREATE" };
             var result = await exec.ExecuteAsync(_session, stmt, new Dictionary<string, BindValue>(),
                 new ExecutionOptions { Source = HistorySource.Editor }, ct).ConfigureAwait(true);
@@ -506,6 +511,68 @@ public sealed partial class PlsqlEditorViewModel : ToolPanelViewModelBase
         keys.Set("isPackageDoc", IsPackageDoc);
         keys.Set("serverSourceChanged", ServerSourceChanged);
     }
+
+    /// <summary>
+    /// 변경 일지(TSK-13-07): 컴파일이 서버 소스를 덮어쓰기 직전에 지금 서버에 있는 소스를 보관한다(같은 내용은 기록기가 쌓지 않는다).
+    /// 객체가 아직 없으면(새 객체) 보관할 것이 없어 건너뛴다. 읽기 실패는 일지에 이유만 남기고 컴파일은 계속한다.
+    /// 문장에 <c>ChangeTarget</c> 을 두지 않으므로 실행 엔진의 DDL 보관과 겹치지 않는다.
+    /// </summary>
+    private async Task ArchiveServerSourceAsync(IMetadataProvider? meta, DbObjectRef target, CancellationToken ct)
+    {
+        if (meta is null || _session is null || ResolveEvents() is not { } events)
+        {
+            return;
+        }
+
+        var entry = new JournalEntry
+        {
+            CapturedAt = DateTimeOffset.UtcNow,
+            ProfileId = _session.Profile.Id,
+            ProfileName = _session.Profile.Name,
+            DbKey = _session.DbKey,
+            ServerName = _session.Profile.DataSource,
+            Owner = target.Owner,
+            Name = target.Name,
+            ObjectType = target.ObjectType,
+            Cause = JournalCause.Compile,
+            StatementSummary = $"컴파일 {target.ObjectType} {target.Owner}.{target.Name}",
+        };
+        try
+        {
+            // 보관이 컴파일을 오래 붙잡지 않게 제한 시간을 둔다(사용자 취소는 그대로 전파).
+            using var limit = CancellationTokenSource.CreateLinkedTokenSource(ct);
+            limit.CancelAfter(TimeSpan.FromSeconds(10));
+            string source;
+            try
+            {
+                source = await meta.GetSourceAsync(_session, target, limit.Token).ConfigureAwait(true);
+            }
+            catch (OperationCanceledException) when (!ct.IsCancellationRequested)
+            {
+                throw new TimeoutException("10초 안에 읽지 못했다");
+            }
+
+            if (!string.IsNullOrWhiteSpace(source))
+            {
+                // 되돌리기로 새 편집기에 열면 바로 컴파일되는 글자(CREATE OR REPLACE + 소유자)로 보관한다.
+                events.Publish(new ChangeSnapshotCaptured(entry with { PreviousDdl = PlsqlSourceText.ToEditorText(source, target.Owner, out _) }));
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (InvalidOperationException)
+        {
+            // 소스를 찾을 수 없다: 새 객체라 보관할 이전 소스가 없다.
+        }
+        catch (Exception ex)
+        {
+            events.Publish(new ChangeSnapshotCaptured(entry with { FailureReason = "서버 소스를 읽지 못했다: " + ex.Message }));
+        }
+    }
+
+    private IEventBus? ResolveEvents() => _events ??= (IEventBus?)_services?.GetService(typeof(IEventBus));
 
     private IMetadataProvider? ResolveMeta() => _meta ??= (IMetadataProvider?)_services?.GetService(typeof(IMetadataProvider));
 

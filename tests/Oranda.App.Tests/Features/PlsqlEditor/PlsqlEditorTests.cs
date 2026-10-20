@@ -1,6 +1,8 @@
 using Oranda.App.Features.PlsqlEditor;
 using Oranda.App.Tests.Shell;
 using Oranda.Core.Connection;
+using Oranda.Core.Events;
+using Oranda.Core.Journal;
 using Oranda.Core.Execution;
 using Oranda.Core.Metadata;
 using Oranda.Core.Sessions;
@@ -185,6 +187,61 @@ public class PlsqlEditorTests
         Assert.Equal(2, vm.Errors.Count);
         Assert.False(vm.Editor.IsDirty);
         Assert.Contains("오류 1건", outcome.Message);
+    }
+
+    // ---- 변경 일지(TSK-13-07 J3) ----
+
+    [Fact]
+    public async Task Compile_archives_current_server_source_before_overwriting_and_twice_gives_two_versions()
+    {
+        var bus = new FakeEventBus();
+        var meta = new FakeMeta { Source = BodySource };
+        var exec = new FakeExec();
+        var vm = new PlsqlEditorViewModel(meta, exec, bus);
+        await vm.OpenAsync(new FakeSession(), Body);
+        var captured = new List<JournalEntry>();
+        bus.Subscribe<ChangeSnapshotCaptured>(this, e => captured.Add(e.Entry));
+
+        await vm.CompileAsync();
+        meta.Source = BodySource.Replace("NULL;", "NULL; NULL;", StringComparison.Ordinal); // 첫 컴파일 뒤 서버 소스
+        await vm.CompileAsync(force: true);
+
+        Assert.Equal(2, captured.Count);
+        Assert.All(captured, e =>
+        {
+            Assert.Equal(JournalCause.Compile, e.Cause);
+            Assert.Equal(("SCOTT", "PK", "PACKAGE BODY"), (e.Owner, e.Name, e.ObjectType));
+            Assert.Equal("FREE/FREEPDB1/SCOTT", e.DbKey);
+            Assert.False(e.IsFailure);
+        });
+        Assert.StartsWith("CREATE OR REPLACE PACKAGE BODY \"SCOTT\".pk AS\n", captured[0].PreviousDdl);
+        Assert.NotEqual(captured[0].PreviousDdl, captured[1].PreviousDdl);
+        Assert.NotEmpty(PlsqlSourceText.BuildDiff(captured[0].PreviousDdl!, captured[1].PreviousDdl!));
+        Assert.All(exec.Statements.Where(s => s.Verb == "CREATE"), s => Assert.Null(s.ChangeTarget)); // 실행 엔진 보관과 겹치지 않는다.
+    }
+
+    [Fact]
+    public async Task Compile_of_new_object_archives_nothing_and_read_failure_is_logged_but_compile_proceeds()
+    {
+        var bus = new FakeEventBus();
+        var captured = new List<JournalEntry>();
+        bus.Subscribe<ChangeSnapshotCaptured>(this, e => captured.Add(e.Entry));
+        var meta = new FakeMeta { Source = BodySource };
+        var exec = new FakeExec();
+        var vm = new PlsqlEditorViewModel(meta, exec, bus);
+        await vm.OpenAsync(new FakeSession(), Body);
+
+        meta.SourceFails = true; // 서버가 소스를 못 찾음: 새 객체와 같다.
+        Assert.Equal(PlsqlCompileStatus.Compiled, (await vm.CompileAsync()).Status);
+        Assert.Empty(captured);
+
+        meta.SourceFails = false;
+        meta.SourceError = new TimeoutException("slow");
+        Assert.Equal(PlsqlCompileStatus.Compiled, (await vm.CompileAsync(force: true)).Status);
+        var failure = Assert.Single(captured);
+        Assert.True(failure.IsFailure);
+        Assert.Contains("slow", failure.FailureReason, StringComparison.Ordinal);
+        Assert.Equal(2, exec.Statements.Count(s => s.Verb == "CREATE")); // 보관 실패와 무관하게 컴파일은 갔다.
     }
 
     [Fact]
@@ -491,6 +548,37 @@ public class PlsqlEditorTests
         public object? GetService(Type serviceType) => null;
     }
 
+    private sealed class FakeEventBus : IEventBus
+    {
+        private readonly List<(Type Type, Action<OrandaEvent> Handler)> _handlers = [];
+
+        public IDisposable Subscribe<TEvent>(object owner, Action<TEvent> handler)
+            where TEvent : OrandaEvent
+        {
+            _handlers.Add((typeof(TEvent), e => handler((TEvent)e)));
+            return new Noop();
+        }
+
+        public void Publish<TEvent>(TEvent e)
+            where TEvent : OrandaEvent
+        {
+            foreach (var (type, handler) in _handlers.ToList())
+            {
+                if (type == typeof(TEvent))
+                {
+                    handler(e);
+                }
+            }
+        }
+
+        private sealed class Noop : IDisposable
+        {
+            public void Dispose()
+            {
+            }
+        }
+    }
+
     private sealed class FakeSession : ISession
     {
         public Guid Id { get; } = Guid.NewGuid();
@@ -520,12 +608,15 @@ public class PlsqlEditorTests
 
         public bool SourceFails { get; set; }
 
+        public Exception? SourceError { get; set; }
+
         public DateTime LastDdl { get; set; } = new(2026, 10, 20, 9, 0, 0, DateTimeKind.Utc);
 
         public IReadOnlyList<CompileError> Errors { get; set; } = [];
 
         public Task<string> GetSourceAsync(ISession s, DbObjectRef obj, CancellationToken ct)
-            => SourceFails ? Task.FromException<string>(new InvalidOperationException("none")) : Task.FromResult(Source);
+            => SourceError is not null ? Task.FromException<string>(SourceError)
+                : SourceFails ? Task.FromException<string>(new InvalidOperationException("none")) : Task.FromResult(Source);
 
         public Task<IReadOnlyList<CompileError>> GetCompileErrorsAsync(ISession s, DbObjectRef obj, CancellationToken ct) => Task.FromResult(Errors);
 

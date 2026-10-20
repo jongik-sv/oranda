@@ -1,5 +1,6 @@
 using System.Collections.Frozen;
 using Oranda.Core.Execution;
+using Oranda.Core.Journal;
 using Oranda.Core.Text;
 
 namespace Oranda.Language.Lexing;
@@ -99,6 +100,7 @@ internal static class StatementClassifier
             SubstitutionNames = subs,
             IsUnfilteredDml = kind == StatementKind.Dml && w0 is "UPDATE" or "DELETE" && !hasWhere,
             DangerousTarget = danger,
+            ChangeTarget = kind == StatementKind.Ddl ? ChangeTargetOf(text, toks, w0) : null,
             IsClassificationUncertain = uncertain,
         };
     }
@@ -147,4 +149,142 @@ internal static class StatementClassifier
 
         return sb.Length == 0 ? null : sb.ToString();
     }
+
+    /// <summary>변경 일지가 이전 DDL 을 보관할 수 있는 객체 종류의 첫 단어(PACKAGE·TYPE 은 뒤에 BODY 가 올 수 있다).</summary>
+    static readonly FrozenSet<string> JournalTypeWords = new[]
+    {
+        "TABLE", "INDEX", "VIEW", "SEQUENCE", "PROCEDURE", "FUNCTION", "TRIGGER", "SYNONYM", "PACKAGE", "TYPE", "MATERIALIZED", "DATABASE",
+    }.ToFrozenSet(StringComparer.Ordinal);
+
+    /// <summary>CREATE OR REPLACE 와 객체 종류 사이에 올 수 있는 수식어.</summary>
+    static readonly FrozenSet<string> CreateModifiers = new[] { "FORCE", "NOFORCE", "EDITIONABLE", "NONEDITIONABLE", "EDITIONING" }
+        .ToFrozenSet(StringComparer.Ordinal);
+
+    /// <summary>
+    /// ALTER·DROP·CREATE OR REPLACE·RENAME 의 대상(변경 일지용). 종류가 보관 대상이 아니거나(ALTER SESSION·USER 등)
+    /// 새 객체를 만드는 CREATE, TRUNCATE·COMMENT 는 null. 기존 분류 결과에는 영향을 주지 않는다.
+    /// </summary>
+    static ChangeTarget? ChangeTargetOf(string text, List<Token> toks, string? w0)
+    {
+        switch (w0)
+        {
+            case "RENAME":
+                {
+                    var rename = ReadName(text, toks, 1, out _);
+                    return rename is { Count: 1 } ? new ChangeTarget(null, rename[0], null, ChangeOperation.Rename) : null;
+                }
+
+            case "ALTER":
+                return ObjectTarget(text, toks, 1, ChangeOperation.Alter);
+            case "DROP":
+                return ObjectTarget(text, toks, 1, ChangeOperation.Drop);
+            case "CREATE" when Is(text, toks, 1, "OR") && Is(text, toks, 2, "REPLACE"):
+                {
+                    var i = 3;
+                    while (Word(text, toks, i) is { } w && (CreateModifiers.Contains(w) || (w == "NO" && Is(text, toks, i + 1, "FORCE"))))
+                    {
+                        i += w == "NO" ? 2 : 1;
+                    }
+
+                    return ObjectTarget(text, toks, i, ChangeOperation.CreateOrReplace);
+                }
+
+            default:
+                return null;
+        }
+    }
+
+    static ChangeTarget? ObjectTarget(string text, List<Token> toks, int i, ChangeOperation operation)
+    {
+        var isPublic = false;
+        if (Is(text, toks, i, "PUBLIC"))
+        {
+            isPublic = true;
+            i++;
+        }
+
+        string? type;
+        switch (Word(text, toks, i))
+        {
+            case "PACKAGE" or "TYPE" when Is(text, toks, i + 1, "BODY"):
+                type = Word(text, toks, i) + " BODY";
+                i += 2;
+                break;
+            case "MATERIALIZED" when Is(text, toks, i + 1, "VIEW") && !Is(text, toks, i + 2, "LOG"): // MATERIALIZED VIEW LOG 는 객체 DDL 이 아니다.
+                type = "MATERIALIZED VIEW";
+                i += 2;
+                break;
+            case "DATABASE" when Is(text, toks, i + 1, "LINK"):
+                type = "DATABASE LINK";
+                i += 2;
+                break;
+            case { } w when JournalTypeWords.Contains(w) && w is not ("MATERIALIZED" or "DATABASE"):
+                type = w;
+                i++;
+                break;
+            default:
+                return null;
+        }
+
+        if (isPublic && type is not ("SYNONYM" or "DATABASE LINK"))
+        {
+            return null;
+        }
+
+        if (Is(text, toks, i, "IF") && Is(text, toks, i + 1, "EXISTS")) // DROP/ALTER ... IF EXISTS name
+        {
+            i += 2;
+        }
+
+        var parts = ReadName(text, toks, i, out _);
+        if (parts is null)
+        {
+            return null;
+        }
+
+        var publicOwner = isPublic ? "PUBLIC" : null;
+        if (type == "DATABASE LINK")
+        {
+            return new ChangeTarget(publicOwner, string.Join('.', parts), type, operation); // 링크 이름은 점을 포함할 수 있다(sales.world).
+        }
+
+        return parts.Count switch
+        {
+            1 => new ChangeTarget(publicOwner, parts[0], type, operation),
+            2 when !isPublic => new ChangeTarget(parts[0], parts[1], type, operation),
+            _ => null,
+        };
+    }
+
+    /// <summary><paramref name="i"/> 부터 <c>a.b.c</c> 모양의 이름을 읽는다. 따옴표 없는 부분은 대문자, 따옴표 이름은 따옴표를 벗기고 그대로.</summary>
+    static List<string>? ReadName(string text, List<Token> toks, int i, out int next)
+    {
+        var parts = new List<string>();
+        next = i;
+        while (next < toks.Count && toks[next].Kind is TokenKind.Keyword or TokenKind.Identifier or TokenKind.QuotedIdent)
+        {
+            var t = toks[next];
+            var raw = text.Substring(t.Start, t.Length);
+            parts.Add(t.Kind == TokenKind.QuotedIdent && raw.Length >= 2 && raw[0] == '"'
+                ? raw[1..^1].Replace("\"\"", "\"", StringComparison.Ordinal)
+                : raw.ToUpperInvariant());
+            next++;
+            if (next < toks.Count && toks[next].Kind == TokenKind.Punct && text[toks[next].Start] == '.')
+            {
+                next++;
+                if (next >= toks.Count || toks[next].Kind is not (TokenKind.Keyword or TokenKind.Identifier or TokenKind.QuotedIdent))
+                {
+                    return null; // 점 뒤가 이름이 아니다(치환 변수 scott.&t 등): 대상을 모른다.
+                }
+
+                continue;
+            }
+
+            break;
+        }
+
+        return parts.Count == 0 ? null : parts;
+    }
+
+    static bool Is(string text, List<Token> toks, int i, string word) => Word(text, toks, i) == word;
 }
