@@ -1230,6 +1230,8 @@ public sealed partial class SqlEditorTests : IDisposable
 
         public int SaveCalls { get; private set; }
 
+        public string? LastSuggested { get; private set; }
+
         public int ConfirmCalls { get; private set; }
 
         public string? PreviewBefore { get; private set; }
@@ -1244,6 +1246,7 @@ public sealed partial class SqlEditorTests : IDisposable
 
         public Task<string?> PickSaveFileAsync(string suggestedName, CancellationToken ct)
         {
+            LastSuggested = suggestedName;
             if (SavePath is not null)
             {
                 SaveCalls++;

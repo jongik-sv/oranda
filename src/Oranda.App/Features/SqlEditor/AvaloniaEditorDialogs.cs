@@ -51,10 +51,10 @@ public sealed class AvaloniaEditorDialogs : IEditorDialogs
         {
             Title = UiText.Get("Shell.dialog.save", "저장"),
             SuggestedFileName = suggestedName,
-            DefaultExtension = "sql",
+            DefaultExtension = Path.HasExtension(suggestedName) ? null : "sql", // 이름에 확장자가 있으면 macOS 가 또 붙이지 않게 한다
             FileTypeChoices = [SqlFiles, FilePickerFileTypes.All],
         }).ConfigureAwait(true);
-        return file?.TryGetLocalPath();
+        return SaveFileNames.CollapseDoubled(file?.TryGetLocalPath(), suggestedName, "sql");
     }
 
     public async Task<string?> PickWorkspaceFileAsync(bool save, string suggestedName, CancellationToken ct)
@@ -70,10 +70,10 @@ public sealed class AvaloniaEditorDialogs : IEditorDialogs
             {
                 Title = UiText.Get("Shell.dialog.saveWorkspaceFile", "작업 공간 파일로 저장"),
                 SuggestedFileName = suggestedName,
-                DefaultExtension = "md",
+                DefaultExtension = Path.HasExtension(suggestedName) ? null : "md",
                 FileTypeChoices = [WorkspaceFiles],
             }).ConfigureAwait(true);
-            return file?.TryGetLocalPath();
+            return SaveFileNames.CollapseDoubled(file?.TryGetLocalPath(), suggestedName, "md");
         }
 
         var files = await sp.OpenFilePickerAsync(new FilePickerOpenOptions

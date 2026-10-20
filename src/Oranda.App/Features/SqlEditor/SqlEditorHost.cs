@@ -724,7 +724,7 @@ public sealed class SqlEditorHost : ObservableObject, IDisposable
     public async Task<bool> SaveAsAsync(SqlEditorViewModel tab, CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(tab);
-        var suggested = tab.FilePath is null ? tab.Title + ".sql" : Path.GetFileName(tab.FilePath);
+        var suggested = tab.FilePath is null ? SaveFileNames.SuggestSql(tab.Title) : Path.GetFileName(tab.FilePath);
         var path = await Dialogs.PickSaveFileAsync(suggested, ct).ConfigureAwait(true);
         if (path is null)
         {
@@ -957,7 +957,7 @@ public sealed class SqlEditorHost : ObservableObject, IDisposable
     {
         var ws = EnsureWorkspace();
         var path = askPath || WorkspaceFilePath is null
-            ? await Dialogs.PickWorkspaceFileAsync(save: true, ws.Name + ".md", ct).ConfigureAwait(true)
+            ? await Dialogs.PickWorkspaceFileAsync(save: true, SaveFileNames.SuggestWorkspace(ws.Name), ct).ConfigureAwait(true)
             : WorkspaceFilePath;
         if (string.IsNullOrWhiteSpace(path))
         {
