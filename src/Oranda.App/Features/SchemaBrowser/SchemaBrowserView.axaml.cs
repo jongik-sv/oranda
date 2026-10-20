@@ -19,6 +19,7 @@ public partial class SchemaBrowserView : UserControl
     private bool _dragging;
     private PointerPressedEventArgs? _pressArgs;
     private bool _pressExpanded;
+    private int _pressClicks;
     private SchemaNode? _keySelected;
     private SchemaBrowserViewModel? _revealSource;
 
@@ -118,13 +119,18 @@ public partial class SchemaBrowserView : UserControl
 
     /// <summary>
     /// 두 번 누르기: 「더 보기」는 다음 쪽을 올리고, 객체 노드는 고정 문서로 연다(포커스는 그 문서로).
-    /// 표·뷰 노드는 트리가 두 번 누르기로 펼침을 바꾸므로 누르기 전 상태로 되돌린다(여는 동작만 남긴다).
+    /// 펼침은 첫 번째 누르기에서 한 번 바뀐 상태를 유지한다. 트리가 두 번 누르기로 펼침을 한 번 더 바꾸므로 두 번째 누르기 전 상태로 되돌린다.
     /// </summary>
     private async void OnTreeDoubleTapped(object? sender, TappedEventArgs e)
     {
         if (DataContext is not SchemaBrowserViewModel vm)
         {
             return;
+        }
+
+        if (NodeFrom(e.Source) is { HasChildrenToLoad: true } expandable && !IsExpander(e.Source) && expandable.IsExpanded != _pressExpanded)
+        {
+            expandable.IsExpandedSilently = _pressExpanded;
         }
 
         if (vm.SelectedNode is { Kind: SchemaNodeKind.More } more)
@@ -138,21 +144,27 @@ public partial class SchemaBrowserView : UserControl
             return;
         }
 
-        if (node.IsExpanded != _pressExpanded)
-        {
-            node.IsExpandedSilently = _pressExpanded;
-        }
-
         await vm.OpenPinnedAsync(node);
     }
 
-    /// <summary>한 번 누르기: 객체 노드면 미리보기를 예약한다(펼침 단추를 누른 것은 빼고). 포커스는 트리에 남는다.</summary>
+    /// <summary>
+    /// 한 번 누르기(왼쪽 단추): 자식을 가질 수 있는 노드는 줄 어디를 눌러도 펼침을 바꾸고, 객체 노드면 미리보기도 예약한다.
+    /// 펼침 단추(▸)를 누른 것은 단추가 직접 바꾸므로 뺀다. 두 번째 누르기는 펼침을 다시 바꾸지 않는다. 끌기 뒤에는 바꾸지 않는다.
+    /// 포커스는 트리에 남는다.
+    /// </summary>
     private void OnTreeTapped(object? sender, TappedEventArgs e)
     {
-        if (DataContext is SchemaBrowserViewModel vm && NodeFrom(e.Source) is { } node && !IsExpander(e.Source))
+        if (DataContext is not SchemaBrowserViewModel vm || NodeFrom(e.Source) is not { } node || IsExpander(e.Source))
         {
-            vm.SchedulePreview(node);
+            return;
         }
+
+        if (node.HasChildrenToLoad && _pressClicks <= 1 && !_dragging)
+        {
+            node.IsExpanded = !node.IsExpanded;
+        }
+
+        vm.SchedulePreview(node);
     }
 
     /// <summary>Enter: 「더 보기」는 다음 쪽, 객체 노드는 고정 문서로 연다(포커스는 그 문서로). 다른 키는 누르기 전 선택만 적어 둔다.</summary>
@@ -204,6 +216,7 @@ public partial class SchemaBrowserView : UserControl
         _pressPoint = e.GetPosition(Tree);
         _pressNode = (e.Source as Control)?.DataContext as SchemaNode;
         _pressExpanded = _pressNode?.IsExpanded ?? false;
+        _pressClicks = e.ClickCount;
         _dragging = false;
 
         // 오른쪽 단추는 누른 노드를 먼저 고른다(오른쪽 클릭 메뉴가 그 노드에 대해 열린다).

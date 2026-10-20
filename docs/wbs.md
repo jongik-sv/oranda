@@ -1820,6 +1820,7 @@ dotnet, testhost, Oranda.App
 - acceptance:
   - 객체 1만 개 스키마에서 트리 펼침이 멈추지 않는다
   - 테이블을 편집기로 끌어 놓으면 SELECT문이 들어간다
+  - 자식이 있는 노드는 줄 어디를 한 번 눌러도 펼침/접힘이 바뀐다(펼침 단추는 한 번만, 두 번 누르기는 첫 번째 누르기 상태 유지, 끌기·오른쪽 클릭·키보드는 펼침 그대로)
 - constraints: -
 - test-criteria:
   - Headless UI 시험 + 통합 시험
