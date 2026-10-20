@@ -29,7 +29,10 @@ public static class HeadlessHost
 
     public static Task Run(Action body) => Session.Value.Dispatch(body, CancellationToken.None);
 
-    /// <summary>조건이 될 때까지 UI 스레드 작업을 처리하며 기다린다.</summary>
+    /// <summary>
+    /// 조건이 될 때까지 기다린다. UI 스레드에서 불렀을 때만 UI 작업을 직접 처리한다.
+    /// 시험 본문이 <see cref="Run(Func{Task})"/> 밖(xunit 스레드)이면 RunJobs 가 소유 스레드 예외를 내므로 조건만 기다린다.
+    /// </summary>
     public static async Task WaitUntil(Func<bool> condition, int timeoutMs = 5000)
     {
         var until = DateTime.UtcNow.AddMilliseconds(timeoutMs);
@@ -40,7 +43,11 @@ public static class HeadlessHost
                 throw new TimeoutException("조건이 시간 안에 참이 되지 않았다.");
             }
 
-            Dispatcher.UIThread.RunJobs();
+            if (Dispatcher.UIThread.CheckAccess())
+            {
+                Dispatcher.UIThread.RunJobs();
+            }
+
             await Task.Delay(10);
         }
     }
