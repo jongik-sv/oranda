@@ -336,7 +336,7 @@ public sealed partial class ObjectDataViewModel : ObservableObject
         {
             es = await GridEditSession.OpenAsync(
                 editor, metadata, session, query, model.Columns,
-                (row, col) => model.TryGetValue(row, col, out var v) ? v : null,
+                GridEditBinding.OriginalValues(model), // 원래 값(WHERE 키·낙관적 잠금): 그리드에 보이는 바꾼 값이 아니다
                 () => model.LoadedRowCount, _target, ct).ConfigureAwait(true);
         }
         catch (OperationCanceledException)

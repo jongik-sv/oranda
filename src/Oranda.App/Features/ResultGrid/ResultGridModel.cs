@@ -281,14 +281,27 @@ public sealed class ResultGridModel : IAsyncDisposable
             }
         }
 
-        var src = SourceRow(viewRow);
-        if (_cache.TryGetResident((int)(src / PageSize), out var page))
+        return TryGetBaseValue(viewRow, ordinal, out value);
+    }
+
+    /// <summary>
+    /// 질의 결과의 원래 값(편집 모드에서 바꾼 값을 거치지 않는다). <paramref name="baseRow"/> 는 질의 결과 행(<see cref="BaseRowOf"/>, 편집 세션의 행 번호와 같다).
+    /// 편집 세션이 UPDATE·DELETE 의 WHERE 키, 낙관적 잠금의 원래 값, 「원래 값과 같으면 변경 지움」에 쓴다(<c>GridEditBinding.OriginalValues</c>).
+    /// 새 행(질의 결과 밖)이거나 페이지가 메모리에 없으면 false.
+    /// </summary>
+    public bool TryGetBaseValue(long baseRow, int ordinal, out object? value)
+    {
+        if (baseRow >= 0 && baseRow < BaseRowCount)
         {
-            var i = (int)(src - page.FirstRowIndex);
-            if (i >= 0 && i < page.RowCount)
+            var src = SourceRow(baseRow);
+            if (_cache.TryGetResident((int)(src / PageSize), out var page))
             {
-                value = page.Columns[ordinal][i];
-                return true;
+                var i = (int)(src - page.FirstRowIndex);
+                if (i >= 0 && i < page.RowCount)
+                {
+                    value = page.Columns[ordinal][i];
+                    return true;
+                }
             }
         }
 

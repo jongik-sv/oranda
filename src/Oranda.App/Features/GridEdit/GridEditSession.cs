@@ -19,6 +19,8 @@ public enum GridEditRowState
 /// <summary>
 /// 결과 그리드 1개의 편집 모드(GRID-04·05, PRD 6.5.1) — TSK-06-04.
 /// 원본 값은 그리드에서 읽기만 하고(<see cref="ReadCell"/>), 바뀐 값은 이 객체가 들고 있다가 반영 때 <see cref="IRowEditor"/> 로 보낸다.
+/// 읽기 함수는 질의 결과의 원래 값을 돌려줘야 한다(<see cref="GridEditBinding.OriginalValues"/>: 그리드에 보이는 바꾼 값이 아니다) —
+/// UPDATE·DELETE 의 WHERE 키, 낙관적 잠금의 원래 값, 「원래 값과 같으면 변경 지움」이 이 값을 쓴다(PRD 6.5.1-3·6).
 /// 새 행은 음수 행 번호(-1, -2 …)를 쓴다. 편집 가능 여부는 <see cref="Capability"/>(읽기 전용 프로필·키 보존까지 반영).
 /// </summary>
 public sealed class GridEditSession
@@ -32,6 +34,7 @@ public sealed class GridEditSession
     private readonly HashSet<long> _deletes = [];
     private readonly Dictionary<long, string> _failures = [];
     private readonly Dictionary<long, Dictionary<int, object?>> _copiedKeys = [];
+    private readonly Dictionary<long, object?[]> _originals = [];
     private long _nextInsert = -1;
 
     private GridEditSession(IRowEditor editor, IMetadataProvider metadata, ISession session, SqlStatement query,
@@ -80,8 +83,8 @@ public sealed class GridEditSession
 
     public IEnumerable<long> InsertedRows => _inserts.Keys.OrderByDescending(k => k);
 
-    /// <summary>원읽기 함수로 결과의 (행, 열) 값을 읽는다(그리드 모델의 TryGetValue).</summary>
-    public object? ReadCell(long row, int ordinal) => _read(row, ordinal);
+    /// <summary>질의 결과 (행, 열)의 원래 값(바꾸기 전 값). 새 행은 원본이 없어 null.</summary>
+    public object? ReadCell(long row, int ordinal) => Original(row, ordinal);
 
     /// <summary>
     /// 편집 모드를 연다. 대상 테이블은 <paramref name="target"/>, 없으면 FROM 절 첫 테이블(PRD 6.5.1-5).
@@ -136,7 +139,8 @@ public sealed class GridEditSession
         }
         else
         {
-            var original = _read(row, ordinal);
+            Remember(row);
+            var original = Original(row, ordinal);
             if (!_updates.TryGetValue(row, out var upd))
             {
                 upd = [];
@@ -149,6 +153,7 @@ public sealed class GridEditSession
                 if (upd.Count == 0)
                 {
                     _updates.Remove(row);
+                    _originals.Remove(row);
                 }
             }
             else
@@ -240,6 +245,7 @@ public sealed class GridEditSession
         }
         else
         {
+            Remember(row); // 고친 뒤 지운 행도 WHERE 키는 원래 값
             _updates.Remove(row);
             _deletes.Add(row);
         }
@@ -250,6 +256,7 @@ public sealed class GridEditSession
 
     public void ResetRow(long row)
     {
+        _originals.Remove(row);
         _updates.Remove(row);
         _inserts.Remove(row);
         _copiedKeys.Remove(row);
@@ -265,6 +272,7 @@ public sealed class GridEditSession
         _deletes.Clear();
         _failures.Clear();
         _copiedKeys.Clear();
+        _originals.Clear();
         Notice = null;
         OnChanged();
     }
@@ -345,6 +353,7 @@ public sealed class GridEditSession
                 _inserts.Remove(c.RowIndex);
                 _deletes.Remove(c.RowIndex);
                 _copiedKeys.Remove(c.RowIndex);
+                _originals.Remove(c.RowIndex);
             }
         }
 
@@ -417,8 +426,25 @@ public sealed class GridEditSession
         return cap;
     }
 
+    /// <summary>
+    /// 질의 결과 행의 원래 값. 행을 처음 고치거나 지울 때 그 행 전체를 기억해 두므로(<see cref="Remember"/>) 반영 전에 그 페이지가
+    /// 메모리에서 밀려나도(결과 페이지 캐시가 디스크로 내림) 같은 값이다. 기억한 값이 NULL 이면(그때 페이지가 없었을 수도 있다) 다시 읽는다.
+    /// 질의 결과는 세션 동안 바뀌지 않으므로 두 값은 같다. 새 행(음수)은 원본이 없다.
+    /// </summary>
+    private object? Original(long row, int ordinal) =>
+        row < 0 ? null : (_originals.TryGetValue(row, out var values) ? values[ordinal] : null) ?? _read(row, ordinal);
+
+    /// <summary>질의 결과 행의 원래 값을 처음 한 번 기억한다(그 행이 화면에 있어 페이지가 메모리에 있을 때 부른다).</summary>
+    private void Remember(long row)
+    {
+        if (row >= 0 && !_originals.ContainsKey(row))
+        {
+            _originals[row] = [.. Enumerable.Range(0, Columns.Count).Select(o => _read(row, o))];
+        }
+    }
+
     private Dictionary<string, object?> KeyOf(long row) =>
-        Capability.KeyColumnOrdinals.ToDictionary(o => Plan.ColumnNames[o]!, o => _read(row, o), StringComparer.Ordinal);
+        Capability.KeyColumnOrdinals.ToDictionary(o => Plan.ColumnNames[o]!, o => Original(row, o), StringComparer.Ordinal);
 
     private Dictionary<string, object?> OriginalsOf(long row)
     {
@@ -429,7 +455,7 @@ public sealed class GridEditSession
 
         var keys = Capability.KeyColumnOrdinals;
         return Capability.EditableColumnOrdinals.Where(o => !keys.Contains(o))
-            .ToDictionary(o => Plan.ColumnNames[o]!, o => _read(row, o), StringComparer.Ordinal);
+            .ToDictionary(o => Plan.ColumnNames[o]!, o => Original(row, o), StringComparer.Ordinal);
     }
 
     private Dictionary<string, object?> Named(Dictionary<int, object?> values) =>

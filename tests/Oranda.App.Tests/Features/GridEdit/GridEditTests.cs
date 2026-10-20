@@ -349,19 +349,22 @@ public sealed partial class GridEditTests : IDisposable
 
     private sealed class RecordingExecution : IExecutionService
     {
-        public List<(SqlStatement Statement, ExecutionOptions? Options)> Calls { get; } = [];
+        public List<(SqlStatement Statement, ExecutionOptions? Options, IReadOnlyDictionary<string, BindValue> Binds)> Calls { get; } = [];
 
         public List<SqlStatement> Dml => [.. Calls.Select(c => c.Statement).Where(x => x.Kind == StatementKind.Dml)];
 
         public Func<SqlStatement, long> RowsFor { get; set; } = _ => 1;
 
+        /// <summary>DML 문장과 바인드 값 → 영향 행 수(가짜 테이블). 있으면 <see cref="RowsFor"/> 보다 앞선다.</summary>
+        public Func<SqlStatement, IReadOnlyDictionary<string, BindValue>, long>? RowsForBinds { get; set; }
+
         public Task<ExecutionResult> ExecuteAsync(ISession s, SqlStatement stmt, IReadOnlyDictionary<string, BindValue> binds,
                                                   ExecutionOptions? options, CancellationToken ct)
         {
-            Calls.Add((stmt, options));
+            Calls.Add((stmt, options, binds));
             return Task.FromResult(new ExecutionResult(stmt, ExecutionStatus.Succeeded)
             {
-                RowsAffected = stmt.Kind == StatementKind.Dml ? RowsFor(stmt) : null,
+                RowsAffected = stmt.Kind == StatementKind.Dml ? RowsForBinds?.Invoke(stmt, binds) ?? RowsFor(stmt) : null,
             });
         }
 

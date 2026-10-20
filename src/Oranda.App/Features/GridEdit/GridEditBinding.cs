@@ -23,6 +23,16 @@ public static class GridEditBinding
         session.Changed += (_, _) => model.NotifyEditChanged();
     }
 
+    /// <summary>
+    /// 편집 세션에 넘기는 원래 값 읽기(<see cref="GridEditSession.OpenAsync"/> 의 read). 그리드에 보이는 바꾼 값을 거치지 않고 질의 결과 값을 읽는다
+    /// (<see cref="ResultGridModel.TryGetBaseValue"/>) — 키 열을 고친 행의 UPDATE 가 새 키로 행을 찾거나, 낙관적 잠금이 바꾼 값을 원래 값으로 보내 거짓 충돌이 나지 않게.
+    /// </summary>
+    public static Func<long, int, object?> OriginalValues(ResultGridModel model)
+    {
+        ArgumentNullException.ThrowIfNull(model);
+        return (row, ordinal) => model.TryGetBaseValue(row, ordinal, out var v) ? v : null;
+    }
+
     /// <summary>이 그리드의 편집 세션(편집 모드가 아니면 null).</summary>
     public static GridEditSession? Of(ResultGridModel? model) =>
         model is not null && Sessions.TryGetValue(model, out var s) ? s : null;

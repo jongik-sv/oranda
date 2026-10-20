@@ -305,7 +305,7 @@ public sealed class LobRowViewTests : IDisposable
         });
         return GridEditSession.OpenAsync(new RowEditor(new FakeExecution()), meta, Session(readOnly),
             new SqlStatement(sql, default, StatementKind.Query) { Verb = "SELECT" }, grid.Columns,
-            (r, c) => grid.TryGetValue(r, c, out var v) ? v : null, () => grid.LoadedRowCount, target: null, default);
+            Oranda.App.Features.GridEdit.GridEditBinding.OriginalValues(grid), () => grid.LoadedRowCount, target: null, default);
     }
 
     [Fact]
