@@ -162,8 +162,11 @@ public partial class ConnectionManagerWindow : Window
         _pressPoint = e.GetPosition(ConnectionTree);
     }
 
+    /// <summary>끌기를 시작하는 호출. 제품은 <see cref="DragDrop.DoDragDropAsync"/> 를 쓰고, 시험이 실패를 흉내 내려고 바꾼다.</summary>
+    internal Func<PointerPressedEventArgs, IDataTransfer, DragDropEffects, Task<DragDropEffects>> DragStarter { get; set; } = DragStart.Default;
+
     /// <summary>눌린 채로 조금 움직이면 줄 끌기를 시작한다(접속·폴더를 폴더 위로).</summary>
-    private async void OnTreeMoved(object? sender, PointerEventArgs e)
+    private void OnTreeMoved(object? sender, PointerEventArgs e)
     {
         if (_dragNode is not null || _pressNode is not { } node || _pressArgs is null || !e.GetCurrentPoint(ConnectionTree).Properties.IsLeftButtonPressed)
         {
@@ -179,16 +182,21 @@ public partial class ConnectionManagerWindow : Window
         var args = _pressArgs;
         _pressNode = null;
         _dragNode = node;
+        _ = StartDragAsync(node, args);
+    }
+
+    /// <summary>끌기를 시작하고 끝날 때까지 기다린다. 시작 실패는 모두 잡아 상태줄에 알리고 앱은 계속 쓴다.</summary>
+    private async Task StartDragAsync(ConnectionTreeNode node, PointerPressedEventArgs args)
+    {
         try
         {
             var data = new Avalonia.Input.DataTransfer();
             data.Add(DataTransferItem.CreateText(node.Title));
-            await DragDrop.DoDragDropAsync(args, data, DragDropEffects.Move).ConfigureAwait(true);
+            await DragStart.RunAsync(DragStarter, args, data, DragDropEffects.Move, message => Model?.ReportError(message));
         }
         catch (Exception ex)
         {
-            // async void 라서 여기서 못 잡으면 앱이 죽는다(Windows OLE 는 COMException 을 던진다, TSK-07-05).
-            Model?.ReportError("끌어 놓기를 시작하지 못했습니다: " + ex.Message);
+            DragStart.Fail(ex, message => Model?.ReportError(message));
         }
         finally
         {

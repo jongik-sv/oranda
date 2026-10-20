@@ -1923,7 +1923,7 @@ dotnet, testhost, Oranda.App
 - depends: TSK-07-02
 - blocked-by: -
 - entry-point: 스키마 브라우저 트리에서 노드를 누른 채 끌기
-- note: 2026-10-20 Windows 11 수동 시험(dev 832fcb7, Debug)에서 발생. 로그 %APPDATA%/Oranda/logs/oranda-20261020.log 07:15:00Z. macOS 에서는 보고 없음
+- note: 2026-10-20 Windows 11 수동 시험(dev 832fcb7, Debug)에서 발생. 로그 %APPDATA%/Oranda/logs/oranda-20261020.log 07:15:00Z. macOS 에서는 보고 없음. 2026-10-20 개발 PC 수정(de5832f) 위에 합침: DragStart 이음매(COMException 흉내 Headless 시험), 끌기 시작 실패를 세 지점 모두 상태줄 안내·로그로, 스키마 브라우저는 누름 때 열 목록을 미리 불러 이동 이벤트에서 await 없이 끌기 시작
 
 #### PRD 요구사항
 - prd-ref: PRD SCH-01 (끌어 놓기)

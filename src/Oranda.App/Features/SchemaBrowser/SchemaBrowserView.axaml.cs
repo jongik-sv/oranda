@@ -21,9 +21,11 @@ public partial class SchemaBrowserView : UserControl
     private PointerPressedEventArgs? _pressArgs;
     private bool _pressExpanded;
     private int _pressClicks;
-    private Task<string?>? _pressText;
     private SchemaNode? _keySelected;
     private SchemaBrowserViewModel? _revealSource;
+
+    /// <summary>끌기를 시작하는 호출. 제품은 <see cref="DragDrop.DoDragDropAsync"/> 를 쓰고, 시험이 실패를 흉내 내려고 바꾼다.</summary>
+    internal Func<PointerPressedEventArgs, IDataTransfer, DragDropEffects, Task<DragDropEffects>> DragStarter { get; set; } = DragStart.Default;
 
     public SchemaBrowserView()
     {
@@ -220,13 +222,11 @@ public partial class SchemaBrowserView : UserControl
         _pressExpanded = _pressNode?.IsExpanded ?? false;
         _pressClicks = e.ClickCount;
         _dragging = false;
-        _pressText = null;
 
-        // 끌기 텍스트(표·뷰는 열 정보가 필요)를 누를 때 미리 읽는다. 끌기는 누름 이벤트 안에서 기다림 없이 시작해야 한다(Windows OLE).
-        if (_pressNode is { Kind: SchemaNodeKind.Item or SchemaNodeKind.Column } pressed
-            && e.GetCurrentPoint(Tree).Properties.IsLeftButtonPressed && DataContext is SchemaBrowserViewModel model)
+        // 끌 글자의 재료(열 목록)는 끌기가 시작되기 전에 불러 둔다(끌기 시작 때는 await 를 둘 수 없다).
+        if (_pressNode is { } pressed && e.GetCurrentPoint(Tree).Properties.IsLeftButtonPressed && DataContext is SchemaBrowserViewModel loader)
         {
-            _pressText = PrefetchDragText(model, pressed, e.KeyModifiers);
+            _ = loader.PreloadDragMaterialAsync(pressed);
         }
 
         // 오른쪽 단추는 누른 노드를 먼저 고른다(오른쪽 클릭 메뉴가 그 노드에 대해 열린다).
@@ -236,7 +236,7 @@ public partial class SchemaBrowserView : UserControl
         }
     }
 
-    private async void OnTreeMoved(object? sender, PointerEventArgs e)
+    private void OnTreeMoved(object? sender, PointerEventArgs e)
     {
         if (_dragging || _pressNode is not { } node || _pressArgs is null || DataContext is not SchemaBrowserViewModel vm
             || !e.GetCurrentPoint(Tree).Properties.IsLeftButtonPressed)
@@ -251,48 +251,42 @@ public partial class SchemaBrowserView : UserControl
         }
 
         _dragging = true;
-        var args = _pressArgs;
-        var prefetched = _pressText;
-        _pressText = null;
+        _ = StartDragAsync(node, _pressArgs, vm, e.KeyModifiers.HasFlag(KeyModifiers.Control), e.KeyModifiers.HasFlag(KeyModifiers.Shift));
+    }
+
+    /// <summary>
+    /// 끌기를 시작한다. 포인터 이벤트가 살아 있는 동안 OS 끌기 호출까지 가야 하므로(Windows OLE) 호출 전에 <c>await</c> 를 두지 않는다.
+    /// 끌 글자는 누름 때 미리 불러 둔 재료로 동기로 만든다. Ctrl = 이름만, Shift = 열 목록, 그 밖 = SELECT 문(표·뷰).
+    /// 편집기는 일반 텍스트 끌어 놓기로 받는다.
+    /// </summary>
+    private async Task StartDragAsync(SchemaNode node, PointerPressedEventArgs pressArgs, SchemaBrowserViewModel vm, bool ctrl, bool shift)
+    {
         try
         {
-            // Ctrl = 이름만, Shift = 열 목록, 그 밖 = SELECT 문(표·뷰). 편집기는 일반 텍스트 끌어 놓기로 받는다.
-            // 여기서 await 한 뒤 끌기를 시작하면 Windows 에서 DoDragDrop 이 COMException 으로 실패한다(TSK-07-05).
-            var ctrl = e.KeyModifiers.HasFlag(KeyModifiers.Control);
-            var shift = e.KeyModifiers.HasFlag(KeyModifiers.Shift);
-            var text = prefetched is { IsCompletedSuccessfully: true } done && done.Result is { } ready
-                ? ready
-                : SchemaBrowserViewModel.DragTextWithoutMetadata(node, ctrl, shift);
+            var (text, columnsMissing) = vm.BuildDragText(node, ctrl, shift);
             if (text is null)
             {
                 return;
             }
 
+            if (columnsMissing)
+            {
+                vm.StatusText = shift
+                    ? "열 목록을 아직 불러오지 못해 이름만 넣었습니다"
+                    : "열 목록을 아직 불러오지 못해 SELECT * 로 넣었습니다";
+            }
+
             var data = new Avalonia.Input.DataTransfer();
             data.Add(DataTransferItem.CreateText(text));
-            await DragDrop.DoDragDropAsync(args, data, DragDropEffects.Copy);
+            await DragStart.RunAsync(DragStarter, pressArgs, data, DragDropEffects.Copy, message => vm.StatusText = message);
         }
         catch (Exception ex)
         {
-            // async void 라서 여기서 못 잡으면 앱이 죽는다. 끌기 실패는 안내만 한다.
-            vm.StatusText = "끌어 놓기를 시작하지 못했다: " + ex.Message;
+            DragStart.Fail(ex, message => vm.StatusText = message);
         }
         finally
         {
             _pressNode = null;
-        }
-    }
-
-    /// <summary>누를 때의 Ctrl·Shift 로 끌기 텍스트를 미리 만든다. 실패는 null(끌 때 메타데이터 없는 텍스트로 대신한다).</summary>
-    private static async Task<string?> PrefetchDragText(SchemaBrowserViewModel vm, SchemaNode node, KeyModifiers modifiers)
-    {
-        try
-        {
-            return await vm.PrepareDragTextAsync(node, modifiers.HasFlag(KeyModifiers.Control), modifiers.HasFlag(KeyModifiers.Shift));
-        }
-        catch (Exception)
-        {
-            return null;
         }
     }
 }

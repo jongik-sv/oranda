@@ -112,6 +112,7 @@ public sealed partial class SchemaBrowserViewModel : ToolPanelViewModelBase, IDi
     public Task SetSessionAsync(ISession? session, CancellationToken ct = default)
     {
         CurrentSession = session;
+        _dragColumns.Clear();
         return LoadAsync(ct);
     }
 
@@ -144,6 +145,7 @@ public sealed partial class SchemaBrowserViewModel : ToolPanelViewModelBase, IDi
     {
         if (CurrentSession is { } s && string.Equals(s.DbKey, e.DbKey, StringComparison.Ordinal))
         {
+            _dragColumns.Clear(); // 표 구조가 바뀌었을 수 있다.
             await ApplyFilterAsync();
         }
     }
@@ -1003,6 +1005,54 @@ public sealed partial class SchemaBrowserViewModel : ToolPanelViewModelBase, IDi
     /// <summary>끌기 시작 때 쓸 텍스트: 표·뷰는 SELECT 문, 그 밖은 이름. Ctrl = 이름, Shift = 열 목록.</summary>
     public Task<string?> PrepareDragTextAsync(SchemaNode node, bool ctrl, bool shift, CancellationToken ct = default) =>
         BuildTextAsync(node, DragMode(ctrl, shift), ct);
+
+    /// <summary>누름 때 불러 둔 열 목록(표·뷰). 끌기 시작에서는 DB 를 부를 수 없어(await 금지) 이 캐시로 글자를 만든다.</summary>
+    private readonly Dictionary<DbObjectRef, IReadOnlyList<ColumnInfo>> _dragColumns = [];
+
+    /// <summary>
+    /// 누른 노드의 끌 글자 재료(표·뷰의 열 목록)를 미리 불러 캐시한다. 끌기가 시작되기 전에 끝나면 <see cref="BuildDragText"/> 가 쓴다.
+    /// 실패해도 던지지 않는다(재료가 없으면 끌기 때 대체 글자로 끈다).
+    /// </summary>
+    public async Task PreloadDragMaterialAsync(SchemaNode node, CancellationToken ct = default)
+    {
+        ResolveServices();
+        if (node.Ref is not { } r || !SchemaNode.IsTableLike(r.ObjectType) || _meta is null || CurrentSession is not { } session)
+        {
+            return;
+        }
+
+        // 옛 열 목록으로 끌지 않도록 비운다. 새로 불러오기 전에 끌면 대체 글자와 안내로 끈다.
+        _dragColumns.Remove(r);
+        try
+        {
+            var info = await _meta.GetTableAsync(session, r, ct);
+            if (ReferenceEquals(CurrentSession, session))
+            {
+                _dragColumns[r] = info.Columns;
+            }
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            System.Diagnostics.Trace.TraceWarning("끌 글자 재료(열 목록)를 불러오지 못했다 ({0}): {1}", SchemaSql.QualifiedName(r), ex.Message);
+        }
+    }
+
+    /// <summary>
+    /// 끌기 시작 때 쓸 글자를 <b>DB 를 부르지 않고 동기로</b> 만든다. 재료가 있으면 <see cref="PrepareDragTextAsync"/> 와 같은 글자.
+    /// 표·뷰의 열 목록이 아직 필요한데 없으면 <see cref="DragTextWithoutMetadata"/> 로 대신하고 <c>ColumnsMissing</c> 을 켠다.
+    /// </summary>
+    public (string? Text, bool ColumnsMissing) BuildDragText(SchemaNode node, bool ctrl, bool shift)
+    {
+        var mode = DragMode(ctrl, shift);
+        if (mode != SchemaInsertMode.Name && node is { Kind: SchemaNodeKind.Item, Ref: { } r } && SchemaNode.IsTableLike(r.ObjectType))
+        {
+            return _dragColumns.TryGetValue(r, out var columns)
+                ? (mode == SchemaInsertMode.Select ? SchemaSql.Select(r, columns) : SchemaSql.ColumnList(columns), false)
+                : (DragTextWithoutMetadata(node, ctrl, shift), true);
+        }
+
+        return (DragTextWithoutMetadata(node, ctrl, shift), false);
+    }
 
     /// <summary>
     /// 메타데이터 없이 곧바로 만드는 끌기 텍스트. Windows OLE 끌기는 누름 이벤트 안에서 시작해야 하므로

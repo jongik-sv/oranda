@@ -140,7 +140,10 @@ public partial class TemplatesView : UserControl
         }
     }
 
-    private async void OnListMoved(object? sender, PointerEventArgs e)
+    /// <summary>끌기를 시작하는 호출. 제품은 <see cref="DragDrop.DoDragDropAsync"/> 를 쓰고, 시험이 실패를 흉내 내려고 바꾼다.</summary>
+    internal Func<PointerPressedEventArgs, IDataTransfer, DragDropEffects, Task<DragDropEffects>> DragStarter { get; set; } = DragStart.Default;
+
+    private void OnListMoved(object? sender, PointerEventArgs e)
     {
         if (_dragging || _pressRow is not { } row || _pressArgs is null || !e.GetCurrentPoint(List).Properties.IsLeftButtonPressed)
         {
@@ -154,20 +157,30 @@ public partial class TemplatesView : UserControl
         }
 
         _dragging = true;
+        _ = StartDragAsync(row, _pressArgs);
+    }
+
+    /// <summary>끌기를 시작하고 끝날 때까지 기다린다. 시작 실패는 모두 잡아 상태줄에 알리고 앱은 계속 쓴다.</summary>
+    private async Task StartDragAsync(TemplateItemRow row, PointerPressedEventArgs pressArgs)
+    {
+        void Report(string message)
+        {
+            if (Vm is { } vm)
+            {
+                vm.Status = message;
+            }
+        }
+
         try
         {
             // 편집기는 일반 텍스트 끌어 놓기로 받는다(자리 표시자는 기본값으로 풀린 글자).
             var data = new Avalonia.Input.DataTransfer();
             data.Add(DataTransferItem.CreateText(row.Snippet.Example));
-            await DragDrop.DoDragDropAsync(_pressArgs, data, DragDropEffects.Copy).ConfigureAwait(true);
+            await DragStart.RunAsync(DragStarter, pressArgs, data, DragDropEffects.Copy, Report);
         }
         catch (Exception ex)
         {
-            // async void 라서 여기서 못 잡으면 앱이 죽는다(Windows OLE 는 COMException 을 던진다, TSK-07-05).
-            if (Vm is { } vm)
-            {
-                vm.Status = ex.Message;
-            }
+            DragStart.Fail(ex, Report);
         }
         finally
         {
