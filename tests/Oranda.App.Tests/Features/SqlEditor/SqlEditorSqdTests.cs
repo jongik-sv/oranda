@@ -131,4 +131,28 @@ public sealed partial class SqlEditorTests
         Assert.Empty(file!.Notes);
         Assert.Contains(host.Binds.Rows, r => r.Name.Trim() == "WORD_DH" && r.Text == "2022-07-12");
     });
+
+    [Fact]
+    public Task File_open_on_a_sqd_or_workspace_md_opens_a_workspace_not_raw_text() => Ui.Run(async () =>
+    {
+        var sqd = WriteSqd("파일 열기.sqd", "COUNT=2", "NAME=a", "STMT=1", "select 1 from dual", "VAR=0", "NAME=b", "STMT=1", "select 2 from dual", "VAR=0");
+        var md = Path.Combine(_root, "점검.workspace.md");
+        await File.WriteAllTextAsync(md, WorkspaceFiles.WriteMarkdown("점검", [new("x", "select 3 from dual")]));
+        var sql = Path.Combine(_root, "그냥.sql");
+        await File.WriteAllTextAsync(sql, "select 4 from dual");
+        var host = new SqlEditorHost();
+        host.NewDocument("select 0 from dual");
+
+        await Run(host, "oranda.file.open", sqd);
+        Assert.Equal("파일 열기", host.ActiveWorkspace!.Name);
+        Assert.Equal(["a", "b"], host.ActiveWorkspace.Tabs.Select(t => t.Title));
+
+        await Run(host, "oranda.file.open", md);
+        Assert.Equal("점검", host.ActiveWorkspace!.Name);
+        Assert.Equal(Path.GetFullPath(md), host.WorkspaceFilePath);
+
+        await Run(host, "oranda.file.open", sql); // .sql 은 지금처럼 보고 있는 작업 공간의 SQL 탭으로
+        Assert.Equal(3, host.Workspaces.Count);
+        Assert.Equal("그냥.sql", host.Active!.Title);
+    });
 }

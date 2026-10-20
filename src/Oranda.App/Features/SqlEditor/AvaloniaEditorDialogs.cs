@@ -44,7 +44,7 @@ public sealed class AvaloniaEditorDialogs : IEditorDialogs
         {
             Title = UiText.Get("Shell.dialog.openFile", "파일 열기"),
             AllowMultiple = false,
-            FileTypeFilter = [SqlFiles, FilePickerFileTypes.All],
+            FileTypeFilter = [SqlFiles, WorkspaceFiles, SqdFiles, FilePickerFileTypes.All],
         }).ConfigureAwait(true);
         return files.Count == 0 ? null : files[0].TryGetLocalPath();
     }

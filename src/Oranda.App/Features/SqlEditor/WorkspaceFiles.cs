@@ -59,6 +59,10 @@ public static class WorkspaceFiles
         return (markdown ? path[..^ext.Length] : path) + Extension;
     }
 
+    /// <summary>일반 「파일 열기」로 골라도 작업 공간으로 여는 파일: Orange <c>.sqd</c>, Oranda <c>.workspace.md</c>.</summary>
+    public static bool OpensAsWorkspace(string path) =>
+        IsSqd(path) || path.EndsWith(Extension, StringComparison.OrdinalIgnoreCase);
+
     public static bool IsMyBatis(string path) =>
         string.Equals(Path.GetExtension(path), ".xml", StringComparison.OrdinalIgnoreCase);
 

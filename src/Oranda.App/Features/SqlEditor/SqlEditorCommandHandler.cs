@@ -86,8 +86,25 @@ public sealed class SqlEditorCommandHandler : ICommandHandler
                 host.NewDocument();
                 return;
             case "oranda.file.open":
-                await host.OpenFileAsync(context.Parameter as string, cancellationToken).ConfigureAwait(true);
+            {
+                // 파일 열기로 고른 Orange .sqd·Oranda .workspace.md 는 글자 그대로가 아니라 작업 공간으로 연다.
+                var path = context.Parameter as string ?? await host.Dialogs.PickOpenFileAsync(cancellationToken).ConfigureAwait(true);
+                if (path is null)
+                {
+                    return;
+                }
+
+                if (WorkspaceFiles.OpensAsWorkspace(path))
+                {
+                    await OpenWorkspaceFileAsync(host, path, cancellationToken).ConfigureAwait(true);
+                }
+                else
+                {
+                    await host.OpenFileAsync(path, cancellationToken).ConfigureAwait(true);
+                }
+
                 return;
+            }
             case "oranda.file.save" when tab is not null:
                 await host.SaveAsync(tab, cancellationToken).ConfigureAwait(true);
                 return;
