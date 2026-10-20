@@ -5,6 +5,7 @@ using Avalonia.Threading;
 using Oranda.App.Features.ConnectionManager;
 using Oranda.App.Features.Execution;
 using Oranda.App.Features.GridEdit;
+using Oranda.App.Features.ResultGrid;
 using Oranda.App.Features.SqlEditor;
 using Oranda.App.Shell;
 using Oranda.App.Shell.Composition;
@@ -954,6 +955,57 @@ public sealed class ExecutionTests
         Assert.False(rig.State.Busy);
         Assert.Equal(SessionRunState.Idle, rig.State.RunState);
     });
+
+    [Fact]
+    public Task Cancel_stops_fetch_all_within_one_second() => Ui.Run(async () =>
+    {
+        // TSK-06-11: 「모두 가져오기」 도 실행 상태로 돌아 취소 명령(sessionBusy)이 켜지고 그것이 끊는다.
+        using var rig = new Rig();
+        var started = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var fetch = rig.Controller.FetchAsync(async ct =>
+        {
+            started.TrySetResult();
+            await Task.Delay(Timeout.Infinite, ct); // 끝없는 가져오기: 취소 토큰만 끝낸다
+        });
+        await started.Task;
+        Assert.True(rig.State.Busy);
+
+        var clock = Stopwatch.StartNew();
+        rig.Controller.Cancel();
+        Assert.Equal(SessionRunState.Cancelling, rig.State.RunState);
+        await fetch;
+        clock.Stop();
+
+        Assert.True(clock.ElapsedMilliseconds < 1000, $"취소 후 {clock.ElapsedMilliseconds} ms");
+        Assert.False(rig.State.Busy);
+        Assert.Contains(rig.Log.Messages, m => m.Text == "취소되었습니다.");
+    });
+
+    [Fact]
+    public async Task Fetch_all_command_runs_through_the_execution_hook()
+    {
+        var previous = (ResultGridCommands.RunFetch, ResultGridCommands.Active);
+        await using var model = new ResultGridModel(new OneColumnResult("a", "b"));
+        var fetches = new List<Func<CancellationToken, Task>>();
+        try
+        {
+            ResultGridCommands.Active = model;
+            ResultGridCommands.RunFetch = async (fetch, ct) =>
+            {
+                fetches.Add(fetch);
+                await fetch(ct);
+            };
+
+            await new ResultGridCommandHandler().ExecuteAsync(new CommandContext("oranda.grid.fetchAll", FakeContextKeys.AllTrue), CancellationToken.None);
+
+            // 활성 그리드의 「모두 가져오기」 를 실행 상태(취소 명령이 끊는 곳)로 넘긴다.
+            Assert.Same(model, Assert.Single(fetches).Target);
+        }
+        finally
+        {
+            (ResultGridCommands.RunFetch, ResultGridCommands.Active) = previous;
+        }
+    }
 
     [Fact]
     public Task A_second_run_is_ignored_while_busy() => Ui.Run(async () =>

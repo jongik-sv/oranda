@@ -182,7 +182,7 @@ public static class ExecutionCommands
     /// <summary>
     /// 시작 때 불러도 되는 가벼운 설치: 그리드 편집의 <see cref="GridEditCommands.Rerun"/>·<see cref="GridEditCommands.ConfirmPreview"/> 를
     /// 컨트롤러로 잇는 얇은 위임자와 결과 그리드 「전체 행 수 세기」(<see cref="ResultGrid.ResultGridCommands.CountRows"/>)·
-    /// 「결과 거르기」(<see cref="ResultGrid.ResultGridCommands.Filter"/>)를 걸고, 미커밋이 생기면 주 창 닫기 확인을 건다. 컨트롤러·서비스는 만들지 않는다.
+    /// 「결과 거르기」(<see cref="ResultGrid.ResultGridCommands.Filter"/>)·「모두 가져오기」(<see cref="ResultGrid.ResultGridCommands.RunFetch"/>)를 걸고, 미커밋이 생기면 주 창 닫기 확인을 건다. 컨트롤러·서비스는 만들지 않는다.
     /// 상태 표시줄 구간(시작 때 만들어진다)이 부른다.
     /// </summary>
     public static void Install(ServiceContainer? container)
@@ -208,6 +208,7 @@ public static class ExecutionCommands
         ResultGrid.ResultGridCommands.Filter ??= (request, ct) => FilterRunner(container).RunAsync(request, ct);
         ResultGrid.ResultGridCommands.CountFiltered ??= (request, ct) => FilterRunner(container).CountAsync(request, ct);
         ResultGrid.ResultGridCommands.OpenRelatedRows ??= (request, ct) => RelatedRowsRunner.Create(container).OpenAsync(request, ct); // 외래키 따라가기(GRID-11)
+        ResultGrid.ResultGridCommands.RunFetch ??= (fetch, ct) => Resolve(container).FetchAsync(fetch, ct); // 「모두 가져오기」도 취소 명령이 끊는다
         ObjectDetail.ObjectDetailCommands.DataRunner ??= session => DataRunner(container, session);
 
         // 이력 「다시 실행」·내보내기/가져오기의 완료 알림은 메시지 창으로 보낸다(받는 곳이 없으면 조용히 사라졌다).

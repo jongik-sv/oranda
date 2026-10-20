@@ -158,6 +158,22 @@ public sealed class ExecutionController : IDisposable
         }
     }
 
+    /// <summary>
+    /// 결과를 끝까지 가져오는 긴 작업(「모두 가져오기」)을 실행 상태로 돌린다. 그동안 취소 명령이 켜지고, 누르면 페이지 가져오기를
+    /// 서버에서 끊는다(EXEC-02, TSK-06-11). 이미 실행 중이거나 접속이 없으면 상태 없이 그냥 돌린다.
+    /// </summary>
+    public async Task FetchAsync(Func<CancellationToken, Task> fetch, CancellationToken ct = default)
+    {
+        ArgumentNullException.ThrowIfNull(fetch);
+        if (State.Busy || _d.Session() is not { } session)
+        {
+            await fetch(ct).ConfigureAwait(true);
+            return;
+        }
+
+        await GuardedAsync(session, fetch, ct).ConfigureAwait(true);
+    }
+
     /// <summary>F9 · 「ROWID 추가 후 다시 실행」: 한 문장을 실행하고 결과를 편집 모드로 연다. <paramref name="query"/> 가 null 이면 커서 문장.</summary>
     public async Task RerunForEditAsync(SqlStatement? query, CancellationToken ct)
     {

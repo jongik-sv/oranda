@@ -38,6 +38,12 @@ public static class ResultGridCommands
     /// 실패는 이유를 담은 예외, 취소는 <see cref="OperationCanceledException"/>. 실행 화면(<c>ExecutionCommands.Install</c>)이 채운다.
     /// </summary>
     public static Func<RelatedRowsRequest, CancellationToken, Task<RelatedRowsResult?>>? OpenRelatedRows { get; set; }
+
+    /// <summary>
+    /// 「모두 가져오기」(<c>oranda.grid.fetchAll</c>)를 돌리는 곳. 실행 화면(<c>ExecutionCommands.Install</c>)이 채워 실행 상태로 돌린다:
+    /// 그동안 취소 명령(Ctrl+Break)이 켜지고, 누르면 가져오기를 서버에서 끊는다(TSK-06-11). 비어 있으면 그냥 가져온다.
+    /// </summary>
+    public static Func<Func<CancellationToken, Task>, CancellationToken, Task>? RunFetch { get; set; }
 }
 
 /// <summary>결과 영역 명령 처리기. 활성 그리드가 없으면 아무것도 하지 않는다.</summary>
@@ -110,7 +116,15 @@ public sealed class ResultGridCommandHandler : ICommandHandler
                 g.RequestFind();
                 break;
             case "oranda.grid.fetchAll":
-                await g.FetchAllAsync(cancellationToken).ConfigureAwait(true);
+                if (ResultGridCommands.RunFetch is { } run)
+                {
+                    await run(g.FetchAllAsync, cancellationToken).ConfigureAwait(true);
+                }
+                else
+                {
+                    await g.FetchAllAsync(cancellationToken).ConfigureAwait(true);
+                }
+
                 break;
             case "oranda.grid.toggleTextMode":
                 g.ToggleTextMode();
