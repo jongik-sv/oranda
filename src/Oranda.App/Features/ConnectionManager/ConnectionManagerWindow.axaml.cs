@@ -26,6 +26,7 @@ public partial class ConnectionManagerWindow : Window
         ConnectionTree.AddHandler(KeyDownEvent, OnTreeKeyDown, RoutingStrategies.Tunnel);
         ConnectionTree.AddHandler(PointerPressedEvent, OnTreePressed, RoutingStrategies.Tunnel, handledEventsToo: true);
         ConnectionTree.DoubleTapped += OnTreeDoubleTapped;
+        Closing += OnClosing;
         DataContextChanged += (_, _) =>
         {
             if (DataContext is ConnectionManagerViewModel vm)
@@ -34,12 +35,33 @@ public partial class ConnectionManagerWindow : Window
                 vm.AskPassword ??= profile => ConnectionDialogs.PromptPasswordAsync(this, profile);
                 vm.AskChangePassword ??= (profile, typed) => ConnectionDialogs.ChangePasswordAsync(this, profile, typed);
                 vm.Confirm ??= message => ConnectionDialogs.ConfirmAsync(this, message);
+                vm.AskUnsaved ??= message => ConnectionDialogs.AskUnsavedAsync(this, message);
                 vm.CopyText ??= CopyToClipboardAsync;
             }
         };
     }
 
     private ConnectionManagerViewModel? Model => DataContext as ConnectionManagerViewModel;
+
+    /// <summary>저장 확인을 마치고 닫는 중(Closing 을 다시 막지 않는다).</summary>
+    private bool _closeConfirmed;
+
+    /// <summary>저장하지 않은 편집이 있으면 닫기를 멈추고 저장·버리기·취소를 묻는다. 앱 종료 때는 묻지 않는다.</summary>
+    private async void OnClosing(object? sender, WindowClosingEventArgs e)
+    {
+        if (_closeConfirmed || Model is not { Editor.IsDirty: true } vm
+            || e.CloseReason is WindowCloseReason.ApplicationShutdown or WindowCloseReason.OSShutdown)
+        {
+            return;
+        }
+
+        e.Cancel = true;
+        if (await vm.ResolveUnsavedAsync().ConfigureAwait(true))
+        {
+            _closeConfirmed = true;
+            Close();
+        }
+    }
 
     private async Task CopyToClipboardAsync(string text)
     {
@@ -223,6 +245,30 @@ public static class ConnectionDialogs
             window.Close();
         };
         no.Click += (_, _) => window.Close();
+        await ShowAsync(window, owner).ConfigureAwait(true);
+        return answer;
+    }
+
+    /// <summary>저장하지 않은 편집을 어떻게 할지 묻는다(저장·버리기·취소). 창을 그냥 닫으면 취소.</summary>
+    public static async Task<UnsavedChoice> AskUnsavedAsync(Window owner, string message)
+    {
+        var save = new Button { Content = "저장", MinWidth = 80, IsDefault = true };
+        var discard = new Button { Content = "버리기", MinWidth = 80 };
+        var cancel = new Button { Content = "취소", MinWidth = 80, IsCancel = true };
+        var window = Build("저장하지 않은 변경", [new TextBlock { Text = message, TextWrapping = Avalonia.Media.TextWrapping.Wrap, MaxWidth = 420 }], save, discard);
+        ((StackPanel)((StackPanel)window.Content!).Children[^1]).Children.Add(cancel);
+        var answer = UnsavedChoice.Cancel;
+        save.Click += (_, _) =>
+        {
+            answer = UnsavedChoice.Save;
+            window.Close();
+        };
+        discard.Click += (_, _) =>
+        {
+            answer = UnsavedChoice.Discard;
+            window.Close();
+        };
+        cancel.Click += (_, _) => window.Close();
         await ShowAsync(window, owner).ConfigureAwait(true);
         return answer;
     }

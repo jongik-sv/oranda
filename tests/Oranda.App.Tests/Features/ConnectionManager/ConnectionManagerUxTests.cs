@@ -1,9 +1,11 @@
 using System.IO.Compression;
 using System.Text;
+using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Headless;
 using Avalonia.Input;
 using Avalonia.Threading;
+using Avalonia.VisualTree;
 using Oranda.App.Features.ConnectionManager;
 using Oranda.App.Tests.Shell.Headless;
 using Oranda.Core.Connection;
@@ -495,5 +497,329 @@ public sealed class ConnectionManagerUxTests
 
         Assert.True(vm.StatusIsError);
         Assert.Equal("접속 시험이 제한 시간(1초)을 넘겨 멈췄습니다.", vm.Status);
+    }
+
+    // ---------- 4. 연결 문자열 미리보기 ----------
+
+    [Fact]
+    public void Preview_shows_ezconnect_tcps_alias_proxy_and_role_but_never_the_password()
+    {
+        var e = ProfileEditorViewModel.ForNew();
+        e.User = "ft";
+        e.Host = "localhost";
+        e.Port = "1522";
+        e.Service = "FREEPDB1";
+        e.Password = "pw-secret";
+        Assert.Equal("ft@localhost:1522/FREEPDB1", e.ConnectionStringPreview);
+
+        e.UseTls = true;
+        Assert.Equal("ft@tcps://localhost:1522/FREEPDB1", e.ConnectionStringPreview);
+
+        e.ProxyUser = "app";
+        e.Auth = AuthMode.SysDba;
+        Assert.Equal("app[ft]@tcps://localhost:1522/FREEPDB1 AS SYSDBA", e.ConnectionStringPreview);
+
+        e.ProxyUser = string.Empty;
+        e.Auth = AuthMode.Default;
+        e.Mode = ConnectionMode.TnsAlias;
+        e.TnsAlias = "SALES_HIGH";
+        Assert.Equal("ft@SALES_HIGH", e.ConnectionStringPreview);
+
+        // 비밀이 섞인 접속 문자열(저장 때 거부되는 값)은 미리보기에도 내보내지 않는다.
+        e.Mode = ConnectionMode.EasyConnect;
+        e.EasyConnect = "h:1521/s?password=x";
+        Assert.Empty(e.ConnectionStringPreview);
+        e.User = "scott/tiger";
+        e.EasyConnect = "h:1521/s";
+        Assert.Empty(e.ConnectionStringPreview);
+
+        // 주소가 모자라면 비운다.
+        e.User = "ft";
+        e.Mode = ConnectionMode.HostPortService;
+        e.Service = string.Empty;
+        Assert.Empty(e.ConnectionStringPreview);
+        Assert.DoesNotContain("pw-secret", DataSourceComposer.Describe(new ConnectionProfile("n", "ft", "h/s")), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task Copy_preview_button_copies_the_unsaved_form_string()
+    {
+        using var fx = new ServiceFixture();
+        var vm = await SelectAsync(fx, "ft-dev");
+        var copied = new List<string>();
+        vm.CopyText = text =>
+        {
+            copied.Add(text);
+            return Task.CompletedTask;
+        };
+        vm.Editor!.UseTls = true;
+        vm.Editor.Password = "typed";
+
+        await vm.CopyPreviewCommand.ExecuteAsync(null);
+
+        Assert.Equal(["ft@tcps://localhost:1522/FREEPDB1"], copied);
+    }
+
+    // ---------- 5. 편집 상태·저장 확인·필수 칸 ----------
+
+    [Fact]
+    public async Task Editing_turns_on_save_and_marks_the_row_and_undoing_clears_it()
+    {
+        using var fx = new ServiceFixture();
+        var vm = await SelectAsync(fx, "ft-dev");
+        var row = vm.Selected!;
+        Assert.False(vm.Editor!.IsDirty);
+        Assert.False(vm.SaveCommand.CanExecute(null));
+        Assert.False(row.IsModified);
+
+        vm.Editor.Host = "otherhost";
+        Assert.True(vm.Editor.IsDirty);
+        Assert.True(vm.SaveCommand.CanExecute(null));
+        Assert.True(row.IsModified);
+
+        vm.Editor.Host = "localhost";
+        Assert.False(vm.Editor.IsDirty);
+        Assert.False(row.IsModified);
+
+        vm.Editor.Password = "new";
+        Assert.True(vm.Editor.IsDirty);
+        Assert.True(await vm.SaveCurrentAsync());
+        Assert.False(vm.Editor.IsDirty);
+        Assert.False(vm.AllNodes().Single(n => n.Title == "ft-dev").IsModified);
+        Assert.Equal("new", fx.Credentials.Text(vm.Editor.Original.CredentialRef!));
+
+        // 찾기·정렬로 트리를 다시 만들어도 편집 중인 값과 변경 표시는 남는다.
+        vm.Editor.Group = "새그룹";
+        vm.SearchText = "ft";
+        Assert.Equal("새그룹", vm.Editor.Group);
+        Assert.True(vm.AllNodes().Single(n => n.Title == "ft-dev").IsModified);
+        Assert.Same(vm.AllNodes().Single(n => n.Title == "ft-dev"), vm.Selected);
+    }
+
+    [Theory]
+    [InlineData(UnsavedChoice.Cancel)]
+    [InlineData(UnsavedChoice.Discard)]
+    [InlineData(UnsavedChoice.Save)]
+    public async Task Picking_another_row_with_unsaved_edits_asks_save_discard_or_cancel(UnsavedChoice answer)
+    {
+        using var fx = new ServiceFixture();
+        var vm = await SelectAsync(fx, "ft-dev");
+        var asked = new List<string>();
+        vm.AskUnsaved = message =>
+        {
+            asked.Add(message);
+            return Task.FromResult(answer);
+        };
+        vm.Editor!.Host = "edited";
+
+        vm.Selected = vm.AllNodes().Single(n => n.Title == "zeta");
+        await vm.PendingSelection;
+
+        Assert.Equal("'ft-dev' 의 바뀐 내용을 저장할까요?", Assert.Single(asked));
+        var stored = (await fx.Service.LoadAsync(CancellationToken.None)).Value.Profiles.Single(p => p.Name == "ft-dev");
+        switch (answer)
+        {
+            case UnsavedChoice.Cancel:
+                Assert.Equal("ft-dev", vm.Selected!.Title);
+                Assert.Equal("edited", vm.Editor!.Host);
+                Assert.True(vm.Selected.IsModified);
+                Assert.Equal("localhost:1522/FREEPDB1", stored.DataSource);
+                break;
+            case UnsavedChoice.Discard:
+                Assert.Equal("zeta", vm.Selected!.Title);
+                Assert.Equal("zeta", vm.Editor!.Name);
+                Assert.Equal("localhost:1522/FREEPDB1", stored.DataSource);
+                Assert.DoesNotContain(vm.AllNodes(), n => n.IsModified);
+                break;
+            default:
+                Assert.Equal("zeta", vm.Selected!.Title);
+                Assert.Equal("zeta", vm.Editor!.Name);
+                Assert.Equal("edited:1522/FREEPDB1", stored.DataSource);
+                break;
+        }
+    }
+
+    [Fact]
+    public async Task New_and_duplicate_ask_before_dropping_unsaved_edits()
+    {
+        using var fx = new ServiceFixture();
+        var vm = await SelectAsync(fx, "ft-dev");
+        var asked = 0;
+        vm.AskUnsaved = _ =>
+        {
+            asked++;
+            return Task.FromResult(UnsavedChoice.Cancel);
+        };
+        vm.Editor!.Name = "renamed";
+
+        await vm.AddNewCommand.ExecuteAsync(null);
+        await vm.DuplicateCommand.ExecuteAsync(null);
+
+        Assert.Equal(2, asked);
+        Assert.Equal("renamed", vm.Editor!.Name);
+        Assert.Equal(4, vm.AllNodes().Count(n => !n.IsFolder));
+    }
+
+    [Fact]
+    public async Task Missing_required_fields_are_flagged_and_disable_connect_and_test()
+    {
+        using var fx = new ServiceFixture();
+        var vm = await SeedAsync(fx);
+        await vm.AddNewCommand.ExecuteAsync(null);
+        var e = vm.Editor!;
+
+        // 새 접속은 무엇이든 입력하기 전까지 빨간 표시를 늘어놓지 않지만 단추는 꺼져 있다.
+        Assert.False(e.ShowRequired);
+        Assert.False(e.NameMissing);
+        Assert.False(e.HasRequiredFields);
+        Assert.False(vm.ConnectCommand.CanExecute(null));
+        Assert.False(vm.TestCommand.CanExecute(null));
+
+        e.Name = "new";
+        Assert.True(e.ShowRequired);
+        Assert.False(e.NameMissing);
+        Assert.True(e.UserMissing);
+        Assert.True(e.HostMissing);
+        Assert.True(e.ServiceMissing);
+        Assert.False(e.TnsAliasMissing);
+
+        e.User = "u";
+        e.Host = "h";
+        e.Service = "s";
+        Assert.True(e.HasRequiredFields);
+        Assert.True(vm.ConnectCommand.CanExecute(null));
+        Assert.True(vm.TestCommand.CanExecute(null));
+
+        e.Mode = ConnectionMode.TnsAlias;
+        Assert.True(e.TnsAliasMissing);
+        Assert.False(e.HostMissing);
+        Assert.False(vm.ConnectCommand.CanExecute(null));
+        e.TnsAlias = "SALES";
+        Assert.True(vm.TestCommand.CanExecute(null));
+
+        e.Mode = ConnectionMode.EasyConnect;
+        Assert.True(e.EasyConnectMissing);
+        Assert.False(vm.TestCommand.CanExecute(null));
+
+        // 저장된 접속은 처음부터 표시한다(이름을 지우면 바로 빨강).
+        vm.AskUnsaved = _ => Task.FromResult(UnsavedChoice.Discard);
+        vm.Selected = vm.AllNodes().Single(n => n.Title == "zeta");
+        await vm.PendingSelection;
+        vm.Editor!.Name = " ";
+        Assert.True(vm.Editor.NameMissing);
+        Assert.False(vm.ConnectCommand.CanExecute(null));
+    }
+
+    [Fact]
+    public async Task Connect_saves_a_new_profile_first_and_uses_the_typed_password_even_when_not_saving_it()
+    {
+        using var fx = new ServiceFixture();
+        var vm = await SeedAsync(fx);
+        var closed = false;
+        vm.CloseRequested += (_, _) => closed = true;
+        vm.AskPassword = _ => throw new InvalidOperationException("묻지 않아야 한다");
+        await vm.AddNewCommand.ExecuteAsync(null);
+        var e = vm.Editor!;
+        e.Name = "brand-new";
+        e.User = "u";
+        e.Host = "h";
+        e.Service = "s";
+        e.SavePassword = false;
+        e.Password = "once";
+
+        await vm.ConnectCommand.ExecuteAsync(null);
+
+        Assert.True(closed);
+        Assert.Equal("once", Assert.Single(fx.Sessions.Calls).Password);
+        Assert.Contains((await fx.Service.LoadAsync(CancellationToken.None)).Value.Profiles, p => p.Name == "brand-new" && p.CredentialRef is null);
+        Assert.DoesNotContain(fx.Credentials.Items.Keys, k => fx.Credentials.Text(k) == "once");
+    }
+
+    [Fact]
+    public async Task Closing_with_unsaved_edits_asks_and_cancel_keeps_the_window_open()
+    {
+        using var fx = new ServiceFixture();
+        var vm = await SelectAsync(fx, "ft-dev");
+        var answers = new Queue<UnsavedChoice>([UnsavedChoice.Cancel, UnsavedChoice.Discard]);
+        var asked = 0;
+        vm.AskUnsaved = _ =>
+        {
+            asked++;
+            return Task.FromResult(answers.Dequeue());
+        };
+        await HeadlessHost.Run(async () =>
+        {
+            var window = new ConnectionManagerWindow { DataContext = vm, Width = 900, Height = 640 };
+            var closed = false;
+            window.Closed += (_, _) => closed = true;
+            window.Show();
+            vm.Editor!.User = "changed";
+
+            window.Close();
+            await HeadlessHost.WaitUntil(() => asked == 1);
+            Dispatcher.UIThread.RunJobs();
+            Assert.False(closed);
+            Assert.True(window.IsVisible);
+
+            vm.CloseCommand.Execute(null);
+            await HeadlessHost.WaitUntil(() => closed);
+            Assert.Equal(2, asked);
+            Assert.Equal("ft", (await fx.Service.LoadAsync(CancellationToken.None)).Value.Profiles.Single(p => p.Name == "ft-dev").User);
+        });
+    }
+
+    // ---------- 6. 배치(구역·GridSplitter·스크롤 없음) ----------
+
+    [Fact]
+    public async Task Form_is_split_into_sections_fits_900x640_without_scrolling_and_flags_missing_fields_in_red()
+    {
+        using var fx = new ServiceFixture();
+        var vm = await SelectAsync(fx, "ft-dev");
+        await HeadlessHost.Run(() =>
+        {
+            var window = new ConnectionManagerWindow { DataContext = vm, Width = 900, Height = 640 };
+            window.Show();
+            Dispatcher.UIThread.RunJobs();
+            window.UpdateLayout();
+
+            var editor = window.FindControl<ProfileEditorView>("EditorView")!;
+            var headers = editor.GetVisualDescendants().OfType<Border>().Where(b => b.Classes.Contains("section"))
+                .Select(b => ((TextBlock)b.Child!).Text).ToList();
+            Assert.Equal(["일반", "접속", "인증"], headers);
+            Assert.False(editor.FindControl<Expander>("AdvancedExpander")!.IsExpanded);
+            Assert.NotNull(window.FindControl<GridSplitter>("ListSplitter"));
+            Assert.Equal("ft@localhost:1522/FREEPDB1", window.FindControl<TextBox>("PreviewBox")!.Text);
+            Assert.True(window.FindControl<TextBox>("PreviewBox")!.IsReadOnly);
+
+            // 고급 설정을 접은 기본 상태에서는 오른쪽 폼에 스크롤이 생기지 않는다(세 접속 방식 모두).
+            var scroll = window.FindControl<ScrollViewer>("EditorScroll")!;
+            foreach (var mode in new[] { ConnectionMode.HostPortService, ConnectionMode.EasyConnect, ConnectionMode.TnsAlias })
+            {
+                vm.Editor!.Mode = mode;
+                Dispatcher.UIThread.RunJobs();
+                window.UpdateLayout();
+                Assert.True(scroll.Extent.Height <= scroll.Viewport.Height + 0.5, $"{mode}: 폼 높이 {scroll.Extent.Height} > 보이는 높이 {scroll.Viewport.Height}");
+            }
+
+            // 목록 툴바 단추 넷이 왼쪽 칸 안에 들어간다.
+            var toolbar = window.FindControl<Button>("ImportButton")!;
+            var right = toolbar.TranslatePoint(new Avalonia.Point(toolbar.Bounds.Width, 0), window.FindControl<TreeView>("ConnectionTree")!)!.Value.X;
+            Assert.True(right <= window.FindControl<TreeView>("ConnectionTree")!.Bounds.Width + 0.5, $"툴바 끝 {right}");
+
+            // 필수 칸이 비면 라벨과 칸 테두리가 빨강이다.
+            vm.Editor!.Mode = ConnectionMode.HostPortService;
+            vm.Editor.Name = string.Empty;
+            Dispatcher.UIThread.RunJobs();
+            window.UpdateLayout();
+            var nameBox = editor.FindControl<TextBox>("NameBox")!;
+            Assert.Contains("missing", nameBox.Classes);
+            // 빨간 테두리 스타일이 겨냥하는 템플릿 부품이 실제로 있다(시험 앱에는 테마 색 리소스가 없어 색 값은 보지 않는다).
+            Assert.Contains(nameBox.GetVisualDescendants().OfType<Border>(), b => b.Name == "PART_BorderElement");
+            Assert.Contains(editor.GetVisualDescendants().OfType<TextBlock>(), t => t.Text == "이름" && t.Classes.Contains("error"));
+            Assert.False(window.FindControl<Button>("ConnectButton")!.IsEffectivelyEnabled);
+            Assert.False(window.FindControl<Button>("TestButton")!.IsEffectivelyEnabled);
+            Assert.True(window.FindControl<Button>("SaveButton")!.IsEffectivelyEnabled);
+            window.Close();
+        });
     }
 }

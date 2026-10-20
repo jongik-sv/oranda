@@ -34,7 +34,13 @@
     <TextBlock DockPanel.Dock="Bottom" Text="{Binding FileNotice}" IsVisible="{Binding FileNotice, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"
                TextWrapping="Wrap" Margin="0,8,0,0" />
 
-    <Grid ColumnDefinitions="2*,3*" ColumnSpacing="12">
+    <!-- 왼쪽 목록과 오른쪽 폼 사이의 GridSplitter 로 목록 폭을 바꾼다. -->
+    <Grid x:Name="BodyGrid">
+      <Grid.ColumnDefinitions>
+        <ColumnDefinition Width="2*" MinWidth="220" />
+        <ColumnDefinition Width="12" />
+        <ColumnDefinition Width="3*" MinWidth="380" />
+      </Grid.ColumnDefinitions>
       <DockPanel Grid.Column="0">
         <Border DockPanel.Dock="Top" Classes="panel-toolbar" Margin="0,0,0,4">
           <StackPanel Orientation="Horizontal" Spacing="2">
@@ -90,10 +96,25 @@
         </TreeView>
       </DockPanel>
 
-      <ScrollViewer Grid.Column="1" HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto"
-                    IsVisible="{Binding Editor, Converter={x:Static ObjectConverters.IsNotNull}}">
-        <cm:ProfileEditorView x:Name="EditorView" DataContext="{Binding Editor}" Margin="0,0,12,0" />
-      </ScrollViewer>
+      <GridSplitter x:Name="ListSplitter" Grid.Column="1" ResizeDirection="Columns" Width="5" HorizontalAlignment="Center"
+                    Background="{DynamicResource OrandaSplitterBrush}" AutomationProperties.Name="목록 폭 조절" />
+
+      <TextBlock Grid.Column="2" Text="왼쪽 목록에서 접속을 고르거나 「새 접속」을 누르세요." TextWrapping="Wrap" Opacity="0.6"
+                 HorizontalAlignment="Center" VerticalAlignment="Center"
+                 IsVisible="{Binding Editor, Converter={x:Static ObjectConverters.IsNull}}" />
+      <DockPanel Grid.Column="2" IsVisible="{Binding Editor, Converter={x:Static ObjectConverters.IsNotNull}}">
+        <!-- 연결 문자열 미리보기(읽기 전용, 비밀번호는 넣지 않는다): 폼을 스크롤해도 늘 보이게 아래에 붙인다. -->
+        <Grid DockPanel.Dock="Bottom" ColumnDefinitions="Auto,*,Auto" ColumnSpacing="12" Margin="0,8,12,0">
+          <TextBlock Grid.Column="0" Text="연결 문자열" MinWidth="96" TextAlignment="Right" VerticalAlignment="Center" />
+          <TextBox x:Name="PreviewBox" Grid.Column="1" Text="{Binding Editor.ConnectionStringPreview, Mode=OneWay}" IsReadOnly="True"
+                   FontFamily="Consolas,Menlo,monospace" AutomationProperties.Name="연결 문자열 미리보기" />
+          <Button x:Name="CopyPreviewButton" Grid.Column="2" Classes="tool" Content="복사" Command="{Binding CopyPreviewCommand}"
+                  icons:ButtonIcon.Key="copy" ToolTip.Tip="연결 문자열을 클립보드에 복사합니다(비밀번호는 넣지 않습니다)" />
+        </Grid>
+        <ScrollViewer x:Name="EditorScroll" HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
+          <cm:ProfileEditorView x:Name="EditorView" DataContext="{Binding Editor}" Margin="0,0,12,0" />
+        </ScrollViewer>
+      </DockPanel>
     </Grid>
   </DockPanel>
 </Window>

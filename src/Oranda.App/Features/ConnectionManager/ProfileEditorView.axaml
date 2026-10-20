@@ -8,118 +8,167 @@
     <Style Selector="Grid > TextBlock">
       <Setter Property="MinWidth" Value="96" />
       <Setter Property="TextAlignment" Value="Right" />
+      <Setter Property="VerticalAlignment" Value="Center" />
+    </Style>
+    <!-- 한 줄에 칸 둘을 놓을 때 둘째 라벨(포트·라벨 색·인증)은 글자 폭만 쓴다. -->
+    <Style Selector="Grid > TextBlock.inline">
+      <Setter Property="MinWidth" Value="0" />
+    </Style>
+    <!-- 구역 머리글(일반·접속·인증): 굵은 글자 + 아래 구분선. -->
+    <Style Selector="Border.section">
+      <Setter Property="BorderBrush" Value="{DynamicResource OrandaSeparatorBrush}" />
+      <Setter Property="BorderThickness" Value="0,0,0,1" />
+      <Setter Property="Padding" Value="0,0,0,2" />
+    </Style>
+    <Style Selector="Border.section > TextBlock">
+      <Setter Property="FontWeight" Value="SemiBold" />
+    </Style>
+    <!-- 비어 있는 필수 칸: 라벨 글자와 칸 테두리를 빨강으로(접속·시험 단추도 꺼진다). -->
+    <Style Selector="TextBlock.error">
+      <Setter Property="Foreground" Value="{DynamicResource OrandaIconRedBrush}" />
+    </Style>
+    <Style Selector="TextBox.missing /template/ Border#PART_BorderElement">
+      <Setter Property="BorderBrush" Value="{DynamicResource OrandaIconRedBrush}" />
     </Style>
   </UserControl.Styles>
-  <StackPanel Spacing="8" Grid.IsSharedSizeScope="True">
-      <Grid  RowDefinitions="Auto,Auto,Auto,Auto,Auto" ColumnSpacing="12" RowSpacing="8">
-        <Grid.ColumnDefinitions>
-          <ColumnDefinition Width="Auto" SharedSizeGroup="Label" />
-          <ColumnDefinition Width="*" />
-        </Grid.ColumnDefinitions>
-        <TextBlock Grid.Row="0" Text="이름" VerticalAlignment="Center" />
-        <TextBox x:Name="NameBox" Grid.Row="0" Grid.Column="1" Text="{Binding Name}" AutomationProperties.Name="이름" />
-        <TextBlock Grid.Row="1" Text="그룹" VerticalAlignment="Center" />
-        <TextBox x:Name="GroupBox" Grid.Row="1" Grid.Column="1" Text="{Binding Group}" PlaceholderText="폴더 이름(선택)" AutomationProperties.Name="그룹" />
-        <TextBlock Grid.Row="2" Text="환경" VerticalAlignment="Center" />
-        <ComboBox x:Name="EnvironmentBox" Grid.Row="2" Grid.Column="1" HorizontalAlignment="Stretch"
+  <!-- 900×640 창에서 고급 설정을 접은 채로 스크롤 없이 보이도록 구역(일반·접속·인증·고급)으로 나누고, 짧은 칸은 한 줄에 둘씩 놓는다. -->
+  <StackPanel Spacing="6" Grid.IsSharedSizeScope="True">
+    <Border Classes="section">
+      <TextBlock Text="일반" />
+    </Border>
+    <Grid RowDefinitions="Auto,Auto,Auto" ColumnSpacing="12" RowSpacing="6">
+      <Grid.ColumnDefinitions>
+        <ColumnDefinition Width="Auto" SharedSizeGroup="Label" />
+        <ColumnDefinition Width="*" />
+      </Grid.ColumnDefinitions>
+      <TextBlock Grid.Row="0" Text="이름" Classes.error="{Binding NameMissing}" />
+      <TextBox x:Name="NameBox" Grid.Row="0" Grid.Column="1" Text="{Binding Name}" Classes.missing="{Binding NameMissing}" AutomationProperties.Name="이름" />
+      <TextBlock Grid.Row="1" Text="그룹" />
+      <TextBox x:Name="GroupBox" Grid.Row="1" Grid.Column="1" Text="{Binding Group}" PlaceholderText="폴더 이름(선택)" AutomationProperties.Name="그룹" />
+      <TextBlock Grid.Row="2" Text="환경" />
+      <Grid Grid.Row="2" Grid.Column="1" ColumnDefinitions="*,Auto,*" ColumnSpacing="12">
+        <ComboBox x:Name="EnvironmentBox" Grid.Column="0" HorizontalAlignment="Stretch"
                   ItemsSource="{Binding Environments}" SelectedValueBinding="{ReflectionBinding Value}"
                   SelectedValue="{Binding Environment}" AutomationProperties.Name="환경" />
-        <TextBlock Grid.Row="3" Text="라벨 색" VerticalAlignment="Center" />
-        <TextBox x:Name="ColorBox" Grid.Row="3" Grid.Column="1" Text="{Binding ColorText}" PlaceholderText="#RRGGBB (운영은 항상 빨강)"
+        <TextBlock Grid.Column="1" Classes="inline" Text="라벨 색" />
+        <TextBox x:Name="ColorBox" Grid.Column="2" Text="{Binding ColorText}" PlaceholderText="#RRGGBB" ToolTip.Tip="#RRGGBB (운영은 항상 빨강)"
                  IsEnabled="{Binding CanPickColor}" AutomationProperties.Name="라벨 색" />
-        <TextBlock Grid.Row="4" Text="접속 방식" VerticalAlignment="Center" />
-        <ComboBox x:Name="ModeBox" Grid.Row="4" Grid.Column="1" HorizontalAlignment="Stretch"
-                  ItemsSource="{Binding Modes}" SelectedValueBinding="{ReflectionBinding Value}"
-                  SelectedValue="{Binding Mode}" AutomationProperties.Name="접속 방식" />
       </Grid>
-  
-      <Grid IsVisible="{Binding IsHostPortMode}"  RowDefinitions="Auto,Auto" ColumnSpacing="12" RowSpacing="8">
+    </Grid>
+
+    <Border Classes="section">
+      <TextBlock Text="접속" />
+    </Border>
+    <Grid ColumnSpacing="12">
+      <Grid.ColumnDefinitions>
+        <ColumnDefinition Width="Auto" SharedSizeGroup="Label" />
+        <ColumnDefinition Width="*" />
+      </Grid.ColumnDefinitions>
+      <TextBlock Text="접속 방식" />
+      <ComboBox x:Name="ModeBox" Grid.Column="1" HorizontalAlignment="Stretch"
+                ItemsSource="{Binding Modes}" SelectedValueBinding="{ReflectionBinding Value}"
+                SelectedValue="{Binding Mode}" AutomationProperties.Name="접속 방식" />
+    </Grid>
+
+    <Grid IsVisible="{Binding IsHostPortMode}" RowDefinitions="Auto,Auto" ColumnSpacing="12" RowSpacing="6">
+      <Grid.ColumnDefinitions>
+        <ColumnDefinition Width="Auto" SharedSizeGroup="Label" />
+        <ColumnDefinition Width="*" />
+        <ColumnDefinition Width="Auto" />
+        <ColumnDefinition Width="Auto" />
+      </Grid.ColumnDefinitions>
+      <TextBlock Grid.Row="0" Text="호스트" Classes.error="{Binding HostMissing}" />
+      <TextBox x:Name="HostBox" Grid.Row="0" Grid.Column="1" Text="{Binding Host}" Classes.missing="{Binding HostMissing}" AutomationProperties.Name="호스트" />
+      <TextBlock Grid.Row="0" Grid.Column="2" Classes="inline" Text="포트" />
+      <TextBox x:Name="PortBox" Grid.Row="0" Grid.Column="3" Width="80" Text="{Binding Port}" AutomationProperties.Name="포트" />
+      <TextBlock Grid.Row="1" Text="서비스" Classes.error="{Binding ServiceMissing}" />
+      <TextBox x:Name="ServiceBox" Grid.Row="1" Grid.Column="1" Text="{Binding Service}" Classes.missing="{Binding ServiceMissing}" AutomationProperties.Name="서비스" />
+      <CheckBox x:Name="TlsBox" Grid.Row="1" Grid.Column="2" Grid.ColumnSpan="2" Content="TLS(tcps)" IsChecked="{Binding UseTls}" />
+    </Grid>
+
+    <Grid IsVisible="{Binding IsEasyConnectMode}" ColumnSpacing="12">
+      <Grid.ColumnDefinitions>
+        <ColumnDefinition Width="Auto" SharedSizeGroup="Label" />
+        <ColumnDefinition Width="*" />
+      </Grid.ColumnDefinitions>
+      <TextBlock Text="접속 문자열" Classes.error="{Binding EasyConnectMissing}" />
+      <TextBox x:Name="EasyConnectBox" Grid.Column="1" Text="{Binding EasyConnect}" Classes.missing="{Binding EasyConnectMissing}"
+               PlaceholderText="host:1521/service?connect_timeout=5 또는 tcps://…" AutomationProperties.Name="접속 문자열" />
+    </Grid>
+
+    <Grid IsVisible="{Binding IsTnsMode}" ColumnSpacing="12">
+      <Grid.ColumnDefinitions>
+        <ColumnDefinition Width="Auto" SharedSizeGroup="Label" />
+        <ColumnDefinition Width="*" />
+      </Grid.ColumnDefinitions>
+      <TextBlock Text="TNS 별칭" Classes.error="{Binding TnsAliasMissing}" />
+      <TextBox x:Name="TnsAliasBox" Grid.Column="1" Text="{Binding TnsAlias}" Classes.missing="{Binding TnsAliasMissing}" AutomationProperties.Name="TNS 별칭" />
+    </Grid>
+
+    <Grid RowDefinitions="Auto,Auto" ColumnSpacing="12" RowSpacing="6">
+      <Grid.ColumnDefinitions>
+        <ColumnDefinition Width="Auto" SharedSizeGroup="Label" />
+        <ColumnDefinition Width="*" />
+      </Grid.ColumnDefinitions>
+      <TextBlock Grid.Row="0" Text="TNS 디렉터리" />
+      <TextBox x:Name="TnsAdminBox" Grid.Row="0" Grid.Column="1" Text="{Binding TnsAdmin}" PlaceholderText="tnsnames.ora 가 있는 폴더(선택)" AutomationProperties.Name="TNS 디렉터리" />
+      <TextBlock Grid.Row="1" Text="지갑 폴더" />
+      <TextBox x:Name="WalletBox" Grid.Row="1" Grid.Column="1" Text="{Binding WalletLocation}" PlaceholderText="cwallet.sso 가 있는 폴더(선택)" AutomationProperties.Name="지갑 폴더" />
+    </Grid>
+
+    <Border Classes="section">
+      <TextBlock Text="인증" />
+    </Border>
+    <Grid RowDefinitions="Auto,Auto" ColumnSpacing="12" RowSpacing="6">
+      <Grid.ColumnDefinitions>
+        <ColumnDefinition Width="Auto" SharedSizeGroup="Label" />
+        <ColumnDefinition Width="*" />
+        <ColumnDefinition Width="Auto" />
+        <ColumnDefinition Width="Auto" />
+      </Grid.ColumnDefinitions>
+      <TextBlock Grid.Row="0" Text="사용자" Classes.error="{Binding UserMissing}" />
+      <TextBox x:Name="UserBox" Grid.Row="0" Grid.Column="1" Text="{Binding User}" Classes.missing="{Binding UserMissing}" AutomationProperties.Name="사용자" />
+      <TextBlock Grid.Row="0" Grid.Column="2" Classes="inline" Text="인증" />
+      <ComboBox x:Name="AuthBox" Grid.Row="0" Grid.Column="3" MinWidth="130"
+                ItemsSource="{Binding AuthModes}" SelectedValueBinding="{ReflectionBinding Value}"
+                SelectedValue="{Binding Auth}" AutomationProperties.Name="인증 모드" />
+      <TextBlock Grid.Row="1" Text="비밀번호" />
+      <TextBox x:Name="PasswordBox" Grid.Row="1" Grid.Column="1" Text="{Binding Password}" PasswordChar="●"
+               PlaceholderText="비워 두면 저장된 값을 씁니다" AutomationProperties.Name="비밀번호" />
+      <CheckBox x:Name="SavePasswordBox" Grid.Row="1" Grid.Column="2" Grid.ColumnSpan="2" Content="비밀번호 저장"
+                ToolTip.Tip="비밀번호 저장(안전 저장소). 끄면 접속할 때마다 묻습니다." IsChecked="{Binding SavePassword}" />
+    </Grid>
+
+    <Expander x:Name="AdvancedExpander" Header="고급 설정(프록시·읽기 전용·NLS·시간 제한)" IsExpanded="False" HorizontalAlignment="Stretch">
+      <Grid RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto" ColumnSpacing="12" RowSpacing="8" Margin="0,8,0,0">
         <Grid.ColumnDefinitions>
           <ColumnDefinition Width="Auto" SharedSizeGroup="Label" />
           <ColumnDefinition Width="*" />
-          <ColumnDefinition Width="Auto" />
-          <ColumnDefinition Width="Auto" />
         </Grid.ColumnDefinitions>
-        <TextBlock Grid.Row="0" Text="호스트" VerticalAlignment="Center" />
-        <TextBox x:Name="HostBox" Grid.Row="0" Grid.Column="1" Text="{Binding Host}" AutomationProperties.Name="호스트" />
-        <TextBlock Grid.Row="0" Grid.Column="2" Text="포트" VerticalAlignment="Center" />
-        <TextBox x:Name="PortBox" Grid.Row="0" Grid.Column="3" Width="80" Text="{Binding Port}" AutomationProperties.Name="포트" />
-        <TextBlock Grid.Row="1" Text="서비스" VerticalAlignment="Center" />
-        <TextBox x:Name="ServiceBox" Grid.Row="1" Grid.Column="1" Text="{Binding Service}" AutomationProperties.Name="서비스" />
-        <CheckBox x:Name="TlsBox" Grid.Row="1" Grid.Column="2" Grid.ColumnSpan="2" Content="TLS(tcps)" IsChecked="{Binding UseTls}" />
+        <TextBlock Grid.Row="0" Text="프록시 사용자" />
+        <TextBox x:Name="ProxyBox" Grid.Row="0" Grid.Column="1" Text="{Binding ProxyUser}" PlaceholderText="비워 두면 프록시를 쓰지 않습니다" AutomationProperties.Name="프록시 사용자" />
+        <CheckBox x:Name="ReadOnlyBox" Grid.Row="1" Grid.Column="1" Content="읽기 전용 접속(쓰기 문장 차단)" IsChecked="{Binding ReadOnly}" />
+        <TextBlock Grid.Row="2" Text="관리 팩" />
+        <ComboBox x:Name="PackBox" Grid.Row="2" Grid.Column="1" HorizontalAlignment="Stretch"
+                  ItemsSource="{Binding Packs}" SelectedValueBinding="{ReflectionBinding Value}"
+                  SelectedValue="{Binding LicensePack}" AutomationProperties.Name="관리 팩" />
+        <TextBlock Grid.Row="3" Text="접속 제한(초)" />
+        <NumericUpDown x:Name="TimeoutBox" Grid.Row="3" Grid.Column="1" HorizontalAlignment="Left" MinWidth="120"
+                       Minimum="1" Maximum="3600" FormatString="0" Value="{Binding ConnectTimeoutSeconds}" />
+        <TextBlock Grid.Row="4" Text="연결 유지(초)" />
+        <NumericUpDown x:Name="KeepAliveBox" Grid.Row="4" Grid.Column="1" HorizontalAlignment="Left" MinWidth="120"
+                       Minimum="0" Maximum="86400" FormatString="0" Value="{Binding KeepAliveSeconds}" />
+        <TextBlock Grid.Row="5" Text="NLS 날짜 형식" />
+        <TextBox x:Name="NlsDateBox" Grid.Row="5" Grid.Column="1" Text="{Binding NlsDateFormat}" PlaceholderText="NLS_DATE_FORMAT" />
+        <TextBlock Grid.Row="6" Text="NLS 타임스탬프" />
+        <TextBox x:Name="NlsTimestampBox" Grid.Row="6" Grid.Column="1" Text="{Binding NlsTimestampFormat}" PlaceholderText="NLS_TIMESTAMP_FORMAT" />
+        <TextBlock Grid.Row="7" Text="NLS 언어" />
+        <TextBox x:Name="NlsLanguageBox" Grid.Row="7" Grid.Column="1" Text="{Binding NlsLanguage}" PlaceholderText="NLS_LANGUAGE" />
+        <TextBlock Grid.Row="8" Text="NLS 지역" />
+        <TextBox x:Name="NlsTerritoryBox" Grid.Row="8" Grid.Column="1" Text="{Binding NlsTerritory}" PlaceholderText="NLS_TERRITORY" />
+        <TextBlock Grid.Row="9" Text="NLS 정렬" />
+        <TextBox x:Name="NlsSortBox" Grid.Row="9" Grid.Column="1" Text="{Binding NlsSort}" PlaceholderText="NLS_SORT" />
       </Grid>
-  
-      <Grid IsVisible="{Binding IsEasyConnectMode}"  ColumnSpacing="12">
-        <Grid.ColumnDefinitions>
-          <ColumnDefinition Width="Auto" SharedSizeGroup="Label" />
-          <ColumnDefinition Width="*" />
-        </Grid.ColumnDefinitions>
-        <TextBlock Text="접속 문자열" VerticalAlignment="Center" />
-        <TextBox x:Name="EasyConnectBox" Grid.Column="1" Text="{Binding EasyConnect}"
-                 PlaceholderText="host:1521/service?connect_timeout=5 또는 tcps://…" AutomationProperties.Name="접속 문자열" />
-      </Grid>
-  
-      <Grid IsVisible="{Binding IsTnsMode}"  ColumnSpacing="12">
-        <Grid.ColumnDefinitions>
-          <ColumnDefinition Width="Auto" SharedSizeGroup="Label" />
-          <ColumnDefinition Width="*" />
-        </Grid.ColumnDefinitions>
-        <TextBlock Text="TNS 별칭" VerticalAlignment="Center" />
-        <TextBox x:Name="TnsAliasBox" Grid.Column="1" Text="{Binding TnsAlias}" AutomationProperties.Name="TNS 별칭" />
-      </Grid>
-  
-      <Grid  RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto" ColumnSpacing="12" RowSpacing="8">
-        <Grid.ColumnDefinitions>
-          <ColumnDefinition Width="Auto" SharedSizeGroup="Label" />
-          <ColumnDefinition Width="*" />
-        </Grid.ColumnDefinitions>
-        <TextBlock Grid.Row="0" Text="TNS 디렉터리" VerticalAlignment="Center" />
-        <TextBox x:Name="TnsAdminBox" Grid.Row="0" Grid.Column="1" Text="{Binding TnsAdmin}" PlaceholderText="tnsnames.ora 가 있는 폴더(선택)" AutomationProperties.Name="TNS 디렉터리" />
-        <TextBlock Grid.Row="1" Text="지갑 폴더" VerticalAlignment="Center" />
-        <TextBox x:Name="WalletBox" Grid.Row="1" Grid.Column="1" Text="{Binding WalletLocation}" PlaceholderText="cwallet.sso 가 있는 폴더(선택)" AutomationProperties.Name="지갑 폴더" />
-        <TextBlock Grid.Row="2" Text="사용자" VerticalAlignment="Center" />
-        <TextBox x:Name="UserBox" Grid.Row="2" Grid.Column="1" Text="{Binding User}" AutomationProperties.Name="사용자" />
-        <TextBlock Grid.Row="3" Text="비밀번호" VerticalAlignment="Center" />
-        <TextBox x:Name="PasswordBox" Grid.Row="3" Grid.Column="1" Text="{Binding Password}" PasswordChar="●"
-                 PlaceholderText="비워 두면 저장된 값을 씁니다" AutomationProperties.Name="비밀번호" />
-        <CheckBox x:Name="SavePasswordBox" Grid.Row="4" Grid.Column="1" Content="비밀번호 저장(안전 저장소). 끄면 접속할 때마다 묻습니다."
-                  IsChecked="{Binding SavePassword}" />
-        <TextBlock Grid.Row="5" Text="인증" VerticalAlignment="Center" />
-        <ComboBox x:Name="AuthBox" Grid.Row="5" Grid.Column="1" HorizontalAlignment="Stretch"
-                  ItemsSource="{Binding AuthModes}" SelectedValueBinding="{ReflectionBinding Value}"
-                  SelectedValue="{Binding Auth}" AutomationProperties.Name="인증 모드" />
-      </Grid>
-  
-      <Expander Header="고급 설정(프록시·읽기 전용·NLS·시간 제한)" IsExpanded="False" HorizontalAlignment="Stretch">
-        <Grid  RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto" ColumnSpacing="12" RowSpacing="8" Margin="0,8,0,0">
-        <Grid.ColumnDefinitions>
-          <ColumnDefinition Width="Auto" SharedSizeGroup="Label" />
-          <ColumnDefinition Width="*" />
-        </Grid.ColumnDefinitions>
-          <TextBlock Grid.Row="0" Text="프록시 사용자" VerticalAlignment="Center" />
-          <TextBox x:Name="ProxyBox" Grid.Row="0" Grid.Column="1" Text="{Binding ProxyUser}" PlaceholderText="비워 두면 프록시를 쓰지 않습니다" AutomationProperties.Name="프록시 사용자" />
-          <CheckBox x:Name="ReadOnlyBox" Grid.Row="1" Grid.Column="1" Content="읽기 전용 접속(쓰기 문장 차단)" IsChecked="{Binding ReadOnly}" />
-          <TextBlock Grid.Row="2" Text="관리 팩" VerticalAlignment="Center" />
-          <ComboBox x:Name="PackBox" Grid.Row="2" Grid.Column="1" HorizontalAlignment="Stretch"
-                    ItemsSource="{Binding Packs}" SelectedValueBinding="{ReflectionBinding Value}"
-                    SelectedValue="{Binding LicensePack}" AutomationProperties.Name="관리 팩" />
-          <TextBlock Grid.Row="3" Text="접속 제한(초)" VerticalAlignment="Center" />
-          <NumericUpDown x:Name="TimeoutBox" Grid.Row="3" Grid.Column="1" HorizontalAlignment="Left" MinWidth="120"
-                         Minimum="1" Maximum="3600" FormatString="0" Value="{Binding ConnectTimeoutSeconds}" />
-          <TextBlock Grid.Row="4" Text="연결 유지(초)" VerticalAlignment="Center" />
-          <NumericUpDown x:Name="KeepAliveBox" Grid.Row="4" Grid.Column="1" HorizontalAlignment="Left" MinWidth="120"
-                         Minimum="0" Maximum="86400" FormatString="0" Value="{Binding KeepAliveSeconds}" />
-          <TextBlock Grid.Row="5" Text="NLS 날짜 형식" VerticalAlignment="Center" />
-          <TextBox x:Name="NlsDateBox" Grid.Row="5" Grid.Column="1" Text="{Binding NlsDateFormat}" PlaceholderText="NLS_DATE_FORMAT" />
-          <TextBlock Grid.Row="6" Text="NLS 타임스탬프" VerticalAlignment="Center" />
-          <TextBox x:Name="NlsTimestampBox" Grid.Row="6" Grid.Column="1" Text="{Binding NlsTimestampFormat}" PlaceholderText="NLS_TIMESTAMP_FORMAT" />
-          <TextBlock Grid.Row="7" Text="NLS 언어" VerticalAlignment="Center" />
-          <TextBox x:Name="NlsLanguageBox" Grid.Row="7" Grid.Column="1" Text="{Binding NlsLanguage}" PlaceholderText="NLS_LANGUAGE" />
-          <TextBlock Grid.Row="8" Text="NLS 지역" VerticalAlignment="Center" />
-          <TextBox x:Name="NlsTerritoryBox" Grid.Row="8" Grid.Column="1" Text="{Binding NlsTerritory}" PlaceholderText="NLS_TERRITORY" />
-          <TextBlock Grid.Row="9" Text="NLS 정렬" VerticalAlignment="Center" />
-          <TextBox x:Name="NlsSortBox" Grid.Row="9" Grid.Column="1" Text="{Binding NlsSort}" PlaceholderText="NLS_SORT" />
-        </Grid>
-      </Expander>
-    </StackPanel>
+    </Expander>
+  </StackPanel>
 </UserControl>

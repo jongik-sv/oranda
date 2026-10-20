@@ -177,6 +177,15 @@ public sealed partial class ConnectionManagerViewModel : ViewModelBase
         }
     }
 
+    /// <summary>
+    /// 저장하지 않은 편집이 있을 때 다른 접속을 고르거나 창을 닫으려 하면 묻는다(메시지 → 저장·버리기·취소).
+    /// 지정하지 않으면 버린다(이전 동작).
+    /// </summary>
+    public Func<string, Task<UnsavedChoice>>? AskUnsaved { get; set; }
+
+    /// <summary>저장 확인 때문에 미뤄 둔 접속 전환(시험이 끝나기를 기다릴 때 쓴다). 없으면 끝난 작업.</summary>
+    public Task PendingSelection { get; private set; } = Task.CompletedTask;
+
     /// <summary>글자를 클립보드에 넣는다(화면이 채운다). 연결 문자열 복사에 쓰며 비밀번호는 넘기지 않는다.</summary>
     public Func<string, Task>? CopyText { get; set; }
 
@@ -195,11 +204,43 @@ public sealed partial class ConnectionManagerViewModel : ViewModelBase
     }
 
     [RelayCommand]
-    private void AddNew()
+    private async Task AddNewAsync()
     {
-        Selected = null;
+        if (!await ResolveUnsavedAsync().ConfigureAwait(true))
+        {
+            return;
+        }
+
+        SelectQuietly(null);
         Editor = ProfileEditorViewModel.ForNew();
         SetStatus(StatusKind.Info, "새 접속을 입력하세요.");
+    }
+
+    /// <summary>
+    /// 저장하지 않은 편집이 있으면 저장·버리기·취소를 묻는다. 진행해도 되면 true(저장 성공 또는 버림), 취소하거나 저장에 실패하면 false.
+    /// 창을 닫기 전, 새 접속·복제 전, 다른 접속을 고를 때 쓴다.
+    /// </summary>
+    public async Task<bool> ResolveUnsavedAsync()
+    {
+        if (Editor is not { IsDirty: true } editor)
+        {
+            return true;
+        }
+
+        var name = editor.IsNew ? (string.IsNullOrWhiteSpace(editor.Name) ? "새 접속" : editor.Name.Trim()) : editor.Original.Name;
+        var choice = AskUnsaved is null
+            ? UnsavedChoice.Discard
+            : await AskUnsaved($"'{name}' 의 바뀐 내용을 저장할까요?").ConfigureAwait(true);
+        switch (choice)
+        {
+            case UnsavedChoice.Save:
+                return await SaveCurrentAsync().ConfigureAwait(true);
+            case UnsavedChoice.Discard:
+                Editor = editor.IsNew ? null : ProfileEditorViewModel.From(editor.Original);
+                return true;
+            default:
+                return false;
+        }
     }
 
     [RelayCommand(CanExecute = nameof(HasSelection))]
@@ -235,7 +276,7 @@ public sealed partial class ConnectionManagerViewModel : ViewModelBase
     [RelayCommand(CanExecute = nameof(HasSelection))]
     private async Task DuplicateAsync()
     {
-        if (Selected?.Profile is not { } profile)
+        if (Selected?.Profile is not { } profile || !await ResolveUnsavedAsync().ConfigureAwait(true))
         {
             return;
         }
@@ -282,6 +323,10 @@ public sealed partial class ConnectionManagerViewModel : ViewModelBase
             await CopyToClipboardAsync(DataSourceComposer.Describe(profile)).ConfigureAwait(true);
         }
     }
+
+    /// <summary>폼 아래 연결 문자열 미리보기를 클립보드에 넣는다(비밀번호 없음).</summary>
+    [RelayCommand]
+    private Task CopyPreviewAsync() => CopyToClipboardAsync(Editor?.ConnectionStringPreview ?? string.Empty);
 
     private async Task CopyToClipboardAsync(string text)
     {
@@ -366,29 +411,34 @@ public sealed partial class ConnectionManagerViewModel : ViewModelBase
         }
     }
 
-    private bool CanTest() => Editor is not null && !IsBusy;
+    private bool CanTest() => Editor is { HasRequiredFields: true } && !IsBusy;
 
-    private bool CanConnect() => HasSelection && !IsBusy;
+    private bool CanConnect() => Editor is { HasRequiredFields: true } && !IsBusy;
 
     /// <summary>마지막 접속 시험 결과(시험용).</summary>
     public ConnectionTestOutcome? LastTestOutcome { get; private set; }
 
-    [RelayCommand]
+    [RelayCommand(CanExecute = nameof(CanSave))]
     private async Task SaveAsync() => await SaveCurrentAsync().ConfigureAwait(true);
 
+    private bool CanSave() => Editor is { IsDirty: true } && !IsBusy;
+
     /// <summary>편집 중인 내용을 저장한다. 성공하면 true.</summary>
-    public async Task<bool> SaveCurrentAsync()
+    public async Task<bool> SaveCurrentAsync() => await SaveAndGetAsync().ConfigureAwait(true) is not null;
+
+    /// <summary>편집 중인 내용을 저장하고 저장된 프로필을 돌려준다. 검증에 걸리거나 실패하면 null(상태 줄에 이유).</summary>
+    private async Task<ConnectionProfile?> SaveAndGetAsync()
     {
         if (Editor is null)
         {
-            return false;
+            return null;
         }
 
         var profile = Editor.TryBuild(out var errors);
         if (profile is null)
         {
             SetStatus(StatusKind.Error, string.Join(Environment.NewLine, errors));
-            return false;
+            return null;
         }
 
         try
@@ -398,12 +448,12 @@ public sealed partial class ConnectionManagerViewModel : ViewModelBase
             var doc = await _service.LoadAsync(CancellationToken.None).ConfigureAwait(true);
             Rebuild(doc.Value.Profiles, saved.Id);
             SetStatus(StatusKind.Info, $"'{saved.Name}' 을(를) 저장했습니다.");
-            return true;
+            return saved;
         }
         catch (ConnectionValidationException ex)
         {
             SetStatus(StatusKind.Error, ex.Message);
-            return false;
+            return null;
         }
     }
 
@@ -411,7 +461,7 @@ public sealed partial class ConnectionManagerViewModel : ViewModelBase
     [RelayCommand(CanExecute = nameof(CanConnect))]
     private async Task ConnectAsync()
     {
-        if (Editor is null || Selected?.Profile is null)
+        if (Editor is not { } editor)
         {
             return;
         }
@@ -419,18 +469,15 @@ public sealed partial class ConnectionManagerViewModel : ViewModelBase
         IsBusy = true;
         try
         {
-            if (!await SaveCurrentAsync().ConfigureAwait(true))
-            {
-                return;
-            }
-
-            var profile = Selected?.Profile;
+            // 저장 안 한 값이 있으면 먼저 저장한다. 비밀번호 칸의 값은 저장하지 않는 설정이어도 이번 접속에는 쓴다.
+            var typed = string.IsNullOrEmpty(editor.Password) ? null : editor.Password;
+            var profile = editor.IsNew || editor.IsDirty ? await SaveAndGetAsync().ConfigureAwait(true) : editor.Original;
             if (profile is null)
             {
                 return;
             }
 
-            var outcome = await ConnectWithPromptsAsync(profile).ConfigureAwait(true);
+            var outcome = await ConnectWithPromptsAsync(profile, typed).ConfigureAwait(true);
             if (outcome?.IsConnected == true)
             {
                 CloseRequested?.Invoke(this, EventArgs.Empty);
@@ -443,9 +490,9 @@ public sealed partial class ConnectionManagerViewModel : ViewModelBase
     }
 
     /// <summary>접속을 시도하고, 비밀번호가 필요하거나 만료되면 묻는다. 취소하면 null.</summary>
-    public async Task<ConnectOutcome?> ConnectWithPromptsAsync(ConnectionProfile profile)
+    public async Task<ConnectOutcome?> ConnectWithPromptsAsync(ConnectionProfile profile, string? password = null)
     {
-        string? typed = null;
+        var typed = password;
         var changedOnce = false;
         while (true)
         {
@@ -493,6 +540,11 @@ public sealed partial class ConnectionManagerViewModel : ViewModelBase
     /// <summary>ADB 지갑 zip 을 끌어 놓았을 때: 프로필을 만들고 선택한 뒤, 비밀번호를 물어 접속한다.</summary>
     public async Task ImportWalletAsync(string zipPath, bool thenConnect = true)
     {
+        if (!await ResolveUnsavedAsync().ConfigureAwait(true))
+        {
+            return;
+        }
+
         IsBusy = true;
         try
         {
@@ -544,16 +596,97 @@ public sealed partial class ConnectionManagerViewModel : ViewModelBase
     [RelayCommand]
     private void Close() => CloseRequested?.Invoke(this, EventArgs.Empty);
 
-    partial void OnSelectedChanged(ConnectionTreeNode? value)
+    partial void OnSelectedChanged(ConnectionTreeNode? oldValue, ConnectionTreeNode? newValue)
     {
-        if (_rebuilding)
+        if (_rebuilding || newValue?.Profile is not { } profile)
+        {
+            // 폴더를 고르거나 트리를 다시 만드는 중이면 편집기를 그대로 둔다.
+            return;
+        }
+
+        if (Editor is { IsNew: false } current && current.Original.Id == profile.Id)
         {
             return;
         }
 
-        if (value?.Profile is { } profile)
+        if (Editor is { IsDirty: true })
         {
+            PendingSelection = SwitchAfterAskingAsync(profile.Id);
+            return;
+        }
+
+        Editor = ProfileEditorViewModel.From(profile);
+    }
+
+    /// <summary>저장 안 한 편집을 정리(저장·버리기)한 뒤 고른 접속으로 바꾼다. 취소하면 앞의 선택으로 되돌린다.</summary>
+    private async Task SwitchAfterAskingAsync(Guid target)
+    {
+        if (!await ResolveUnsavedAsync().ConfigureAwait(true))
+        {
+            SelectQuietly(Editor is { IsNew: false } editor ? FindNode(editor.Original.Id) : null);
+            return;
+        }
+
+        if (FindNode(target) is { Profile: { } profile } node)
+        {
+            SelectQuietly(node);
             Editor = ProfileEditorViewModel.From(profile);
+        }
+    }
+
+    private ConnectionTreeNode? FindNode(Guid id) => AllNodes().FirstOrDefault(n => n.Profile?.Id == id);
+
+    /// <summary>편집기를 바꾸지 않고 트리 선택만 바꾼다.</summary>
+    private void SelectQuietly(ConnectionTreeNode? node)
+    {
+        _rebuilding = true;
+        try
+        {
+            Selected = node;
+        }
+        finally
+        {
+            _rebuilding = false;
+        }
+    }
+
+    partial void OnEditorChanged(ProfileEditorViewModel? oldValue, ProfileEditorViewModel? newValue)
+    {
+        if (oldValue is not null)
+        {
+            oldValue.PropertyChanged -= OnEditorPropertyChanged;
+        }
+
+        if (newValue is not null)
+        {
+            newValue.PropertyChanged += OnEditorPropertyChanged;
+        }
+
+        UpdateModifiedMarker();
+    }
+
+    private void OnEditorPropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
+    {
+        switch (e.PropertyName)
+        {
+            case nameof(ProfileEditorViewModel.IsDirty):
+                UpdateModifiedMarker();
+                SaveCommand.NotifyCanExecuteChanged();
+                break;
+            case nameof(ProfileEditorViewModel.HasRequiredFields):
+                ConnectCommand.NotifyCanExecuteChanged();
+                TestCommand.NotifyCanExecuteChanged();
+                break;
+        }
+    }
+
+    /// <summary>편집 중인 접속 줄에 「저장 안 함」 표시를 붙이거나 뗀다.</summary>
+    private void UpdateModifiedMarker()
+    {
+        var dirtyId = Editor is { IsNew: false, IsDirty: true } editor ? editor.Original.Id : (Guid?)null;
+        foreach (var node in AllNodes())
+        {
+            node.IsModified = node.Profile is { } p && p.Id == dirtyId;
         }
     }
 
@@ -644,6 +777,8 @@ public sealed partial class ConnectionManagerViewModel : ViewModelBase
         {
             Editor = ProfileEditorViewModel.From(profile);
         }
+
+        UpdateModifiedMarker();
     }
 
     private void OnFolderChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
@@ -668,6 +803,14 @@ public sealed partial class ConnectionManagerViewModel : ViewModelBase
         StatusKind = kind;
         Status = text;
     }
+}
+
+/// <summary>저장하지 않은 편집을 어떻게 할지(저장 확인 대화상자의 답).</summary>
+public enum UnsavedChoice
+{
+    Save,
+    Discard,
+    Cancel,
 }
 
 /// <summary>상태 줄 종류.</summary>
