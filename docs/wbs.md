@@ -2557,7 +2557,7 @@ dotnet, testhost, Oranda.App
 - data-model: -
 - ui-spec: -
 
-### TSK-10-07: 리팩터링: 동시 접속·탭별 바인드 뒤 코드 구조 정리 [win144]
+### TSK-10-07: 리팩터링: 동시 접속·탭별 바인드 뒤 큰 파일 분할·중복 제거 [win144]
 - category: infra
 - domain: fullstack
 - model: opus
@@ -2575,7 +2575,7 @@ dotnet, testhost, Oranda.App
 - prd-ref: TRD 코드 구조
 - requirements:
   - 먼저 조사: 큰 파일·큰 클래스, 중복 코드, 세션·바인드를 직접 잡는 남은 경로, 쓰지 않는 코드, 기능 폴더 경계를 넘는 참조
-  - 조사 결과에서 효과 큰 순서로 정리(파일 나누기·중복 합치기·죽은 코드 지우기·이름 맞추기)
+  - 조사 결과에서 효과 큰 순서로 파일을 나누고, 중복 코드를 합치고, 죽은 코드를 지우고, 이름을 맞춘다
   - 공개 동작·설정 파일 형식·작업 공간 형식은 바꾸지 않는다
 - acceptance:
   - dotnet build -warnaserror 통과, 단위·Headless·통합 시험 결과가 리팩터링 전과 같다(알려진 실패 제외)
