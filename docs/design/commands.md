@@ -96,7 +96,7 @@
 2. 같은 검사를 macOS 로 바꾼 키(5장)에도 한다.
 3. 사용자 키맵에서 충돌이 생기면 단축키 설정 화면(TSK-04-07)이 경고하고, 저장된 파일에서는 **뒤에 적힌 바인딩**이 이긴다.
 4. 프리셋 4종은 이 규칙으로 검사했다(충돌 0). TSK-02-05 키맵 로더 시험에 같은 검사를 넣는다.
-5. 편집기 기본 키(방향키·Home/End·Tab·Shift+Tab·Backspace·Delete·Alt+드래그 열 선택·Alt+클릭 커서 추가)는 AvaloniaEdit·다중 커서 확장(D-007) 몫이며 키맵에 넣지 않는다. 그리드 기본 키(방향키·PageUp/Down·F2 셀 편집·Esc)도 같다.
+5. 편집기 기본 키(방향키·Home/End·Tab·Shift+Tab·Backspace·Delete·Alt+드래그 열 선택·Alt+클릭 커서 추가)는 AvaloniaEdit·다중 커서 확장(D-007) 몫이며 키맵에 넣지 않는다. 그리드 기본 키(방향키·PageUp/Down·F2 셀 편집·Esc)도 같다. 접속 관리자 대화상자 목록의 키(Enter·두 번 누르기 접속, Delete 삭제, F2 이름 칸, Esc 닫기, CONN-14)도 대화상자 몫이라 명령으로 등록하지 않고 키맵에 넣지 않는다.
 6. 시스템이 쓰는 키는 바인딩하지 않는다: Windows `Alt+F4`, `Alt+Space`, `Ctrl+Esc`, `Win+…`, 메뉴 접근 `Alt+문자`(Orange 5 `Alt+C`·`Alt+B` 만 예외 — 메뉴 접근 키 C·B 없음), macOS 5.2 목록.
 
 ## 3. 범주 = 메뉴 묶음
