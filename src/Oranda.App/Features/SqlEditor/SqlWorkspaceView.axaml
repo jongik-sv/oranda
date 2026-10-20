@@ -59,11 +59,17 @@
       <DockPanel>
         <Button DockPanel.Dock="Right" Classes="toolbar" Content="새 SQL 탭" Command="{Binding NewTabCommand}"
                 VerticalAlignment="Center" icons:ButtonIcon.Key="tabAdd" icons:ButtonIcon.IconOnly="True" />
+        <!-- 탭이 줄에 다 들어가지 않을 때만 보이는 탭 목록(고르면 그 탭으로 옮겨 가고 줄이 그 탭까지 스크롤된다). -->
+        <Button x:Name="TabListButton" DockPanel.Dock="Right" Classes="toolbar" Content="SQL 탭 목록" IsVisible="False"
+                VerticalAlignment="Center" icons:ButtonIcon.Key="down" icons:ButtonIcon.IconOnly="True"
+                AutomationProperties.Name="SQL 탭 목록" />
+        <!-- 탭은 한 줄. 넘치면 마우스 휠(가로)로 스크롤하고, 고른 탭은 늘 보이게 스크롤한다. 스크롤 막대는 숨긴다. -->
         <ListBox x:Name="SqlTabs" ItemsSource="{Binding Tabs}" SelectedItem="{Binding ActiveTab, Mode=TwoWay}"
-                 ScrollViewer.HorizontalScrollBarVisibility="Disabled" AutomationProperties.Name="SQL 탭">
+                 ScrollViewer.HorizontalScrollBarVisibility="Hidden" ScrollViewer.VerticalScrollBarVisibility="Disabled"
+                 AutomationProperties.Name="SQL 탭">
           <ListBox.ItemsPanel>
             <ItemsPanelTemplate>
-              <WrapPanel Orientation="Horizontal" />
+              <StackPanel Orientation="Horizontal" />
             </ItemsPanelTemplate>
           </ListBox.ItemsPanel>
           <ListBox.ItemTemplate>

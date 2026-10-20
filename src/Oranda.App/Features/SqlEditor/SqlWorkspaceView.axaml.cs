@@ -26,6 +26,14 @@ public partial class SqlWorkspaceView : UserControl
     private ListBoxItem? _dropItem;
     private int _dropIndex = -1;
 
+    /// <summary>탭 줄의 스크롤 영역(ListBox 템플릿의 PART_ScrollViewer). 템플릿이 붙기 전에는 null.</summary>
+    private ScrollViewer? _tabScroller;
+
+    /// <summary>휠 한 칸에 옮기는 가로 거리, 끌기 중 가장자리에 닿았을 때 한 번에 옮기는 거리.</summary>
+    private const double WheelStep = 48;
+
+    private const double EdgeScrollZone = 24;
+
     static SqlWorkspaceView() =>
         // 이름 편집 칸이 보이면 바로 포커스를 주고 글자를 모두 선택한다.
         Visual.IsVisibleProperty.Changed.AddClassHandler<TextBox>((box, e) =>
@@ -51,6 +59,9 @@ public partial class SqlWorkspaceView : UserControl
         SqlTabs.AddHandler(PointerPressedEvent, OnTabPointerPressed, Avalonia.Interactivity.RoutingStrategies.Tunnel);
         SqlTabs.AddHandler(PointerMovedEvent, OnTabPointerMoved, Avalonia.Interactivity.RoutingStrategies.Tunnel);
         SqlTabs.AddHandler(PointerReleasedEvent, OnTabPointerReleased, Avalonia.Interactivity.RoutingStrategies.Tunnel);
+        SqlTabs.AddHandler(PointerWheelChangedEvent, OnTabWheel, Avalonia.Interactivity.RoutingStrategies.Tunnel);
+        SqlTabs.TemplateApplied += (_, e) => AttachTabScroller(e.NameScope.Find<ScrollViewer>("PART_ScrollViewer"));
+        TabListButton.Click += (_, _) => ShowTabList();
         AddHandler(KeyDownEvent, OnWorkspaceKeyDown, Avalonia.Interactivity.RoutingStrategies.Bubble);
         DataContextChanged += (_, _) => Bind(DataContext as SqlWorkspaceViewModel);
 
@@ -200,6 +211,16 @@ public partial class SqlWorkspaceView : UserControl
     private void UpdateDropTarget(Point pos)
     {
         ClearDropMarker();
+
+        // 끌어서 줄 가장자리에 닿으면 그쪽으로 스크롤해 가려진 탭 자리에도 놓을 수 있게 한다.
+        if (pos.X < EdgeScrollZone)
+        {
+            ScrollTabsBy(-WheelStep / 4);
+        }
+        else if (pos.X > SqlTabs.Bounds.Width - EdgeScrollZone)
+        {
+            ScrollTabsBy(WheelStep / 4);
+        }
         if (_vm is null || _dragTab is null)
         {
             return;
@@ -230,6 +251,72 @@ public partial class SqlWorkspaceView : UserControl
         }
 
         _dropIndex = -1;
+    }
+
+    private void AttachTabScroller(ScrollViewer? scroller)
+    {
+        if (_tabScroller is not null)
+        {
+            _tabScroller.ScrollChanged -= OnTabScrollChanged;
+        }
+
+        _tabScroller = scroller;
+        if (_tabScroller is not null)
+        {
+            _tabScroller.ScrollChanged += OnTabScrollChanged;
+        }
+    }
+
+    /// <summary>탭이 줄에 다 들어가지 않을 때만 탭 목록 단추를 보인다.</summary>
+    private void OnTabScrollChanged(object? sender, ScrollChangedEventArgs e) =>
+        TabListButton.IsVisible = _tabScroller is { } s && s.Extent.Width > s.Viewport.Width + 0.5;
+
+    /// <summary>탭 줄 위의 휠은 가로 스크롤이다(세로 휠·가로 휠 모두).</summary>
+    private void OnTabWheel(object? sender, PointerWheelEventArgs e)
+    {
+        var delta = Math.Abs(e.Delta.X) > Math.Abs(e.Delta.Y) ? e.Delta.X : e.Delta.Y;
+        if (delta != 0 && ScrollTabsBy(-delta * WheelStep))
+        {
+            e.Handled = true;
+        }
+    }
+
+    /// <summary>탭 줄을 가로로 옮긴다. 옮길 수 있었으면 true.</summary>
+    private bool ScrollTabsBy(double dx)
+    {
+        if (_tabScroller is not { } s)
+        {
+            return false;
+        }
+
+        var max = Math.Max(0, s.Extent.Width - s.Viewport.Width);
+        var x = Math.Clamp(s.Offset.X + dx, 0, max);
+        if (Math.Abs(x - s.Offset.X) < 0.01)
+        {
+            return false;
+        }
+
+        s.Offset = s.Offset.WithX(x);
+        return true;
+    }
+
+    /// <summary>모든 SQL 탭을 메뉴로 보인다. 고르면 그 탭으로 옮겨 간다.</summary>
+    private void ShowTabList()
+    {
+        if (_vm is not { } vm)
+        {
+            return;
+        }
+
+        var menu = new MenuFlyout();
+        foreach (var tab in vm.Tabs)
+        {
+            var item = new MenuItem { Header = tab.DisplayTitle, FontWeight = ReferenceEquals(tab, vm.ActiveTab) ? Avalonia.Media.FontWeight.SemiBold : Avalonia.Media.FontWeight.Normal };
+            item.Click += (_, _) => vm.ActiveTab = tab;
+            menu.Items.Add(item);
+        }
+
+        menu.ShowAt(TabListButton);
     }
 
     private void ClearDropMarker()
@@ -272,6 +359,17 @@ public partial class SqlWorkspaceView : UserControl
         }
 
         EditorHost.Content = view;
+
+        // 줄이 넘쳐도 고른 탭 머리는 보이게(배치가 끝난 뒤에 스크롤한다).
+        Dispatcher.UIThread.Post(
+            () =>
+            {
+                if (ReferenceEquals(_vm?.ActiveTab, tab))
+                {
+                    SqlTabs.ScrollIntoView(tab);
+                }
+            },
+            DispatcherPriority.Loaded);
 
         // 탭을 고르거나 새로 열면 바로 칠 수 있게 편집기로 포커스를 옮긴다(보고 있는 작업 공간일 때만).
         if (_vm is { } vm && ReferenceEquals(vm.Host.ActiveWorkspace, vm))

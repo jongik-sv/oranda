@@ -1,3 +1,4 @@
+using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Threading;
 using Oranda.App.Features.SqlEditor;
@@ -73,6 +74,56 @@ public class SqlWorkspaceShellTests
         Dispatcher.UIThread.RunJobs();
         Assert.DoesNotContain(second, host.Workspaces);
         Assert.Same(first, host.ActiveWorkspace);
+        window.Close();
+    });
+
+    [Fact]
+    public Task Many_sql_tabs_stay_on_one_row_and_the_chosen_tab_scrolls_into_view() => HeadlessHost.Run(async () =>
+    {
+        using var h = new ShellHarness();
+        var wiring = h.Services.GetService<IEnumerable<Oranda.Core.Composition.IStartupTask>>()!.OfType<SqlEditorDockWiring>().Single();
+        await wiring.RunAsync(default);
+        Dispatcher.UIThread.RunJobs();
+        var registry = h.Get<ICommandRegistry>();
+        var keys = h.Get<IContextKeys>();
+        await registry.ExecuteAsync("oranda.file.newSqlEditor", keys);
+        Dispatcher.UIThread.RunJobs();
+        var ws = Assert.IsType<SqlWorkspaceViewModel>(h.Get<DockWorkspace>().ActiveDocument!.Panel);
+
+        var view = new SqlWorkspaceView { DataContext = ws };
+        var window = new Window { Content = view, Width = 600, Height = 400 };
+        window.Show();
+        Dispatcher.UIThread.RunJobs();
+        var strip = view.FindControl<ListBox>("SqlTabs")!;
+        var list = view.FindControl<Button>("TabListButton")!;
+        var oneRow = strip.Bounds.Height;
+        Assert.False(list.IsVisible); // 다 들어가면 탭 목록 단추는 숨는다
+
+        for (var i = 0; i < 24; i++)
+        {
+            await registry.ExecuteAsync("oranda.file.newSqlEditor", keys);
+        }
+
+        Dispatcher.UIThread.RunJobs();
+        Assert.Equal(25, ws.Tabs.Count);
+        Assert.Equal(oneRow, strip.Bounds.Height); // 줄을 바꾸지 않는다
+        Assert.True(list.IsVisible);
+
+        bool Visible(SqlEditorViewModel tab)
+        {
+            var item = (Control)strip.ContainerFromItem(tab)!;
+            var x = item.TranslatePoint(default, strip)!.Value.X;
+            return x >= -0.5 && x + item.Bounds.Width <= strip.Bounds.Width + 0.5;
+        }
+
+        ws.ActiveTab = ws.Tabs[0];
+        Dispatcher.UIThread.RunJobs();
+        Assert.True(Visible(ws.Tabs[0]));
+        Assert.False(Visible(ws.Tabs[^1]));
+
+        ws.ActiveTab = ws.Tabs[^1];
+        Dispatcher.UIThread.RunJobs();
+        Assert.True(Visible(ws.Tabs[^1]));
         window.Close();
     });
 }
