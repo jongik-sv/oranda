@@ -86,10 +86,12 @@ public class SchemaBrowserTests
         await h.Vm.ExpandAsync(tables);
         var emp = tables.Children.First(c => c.Title == "EMP");
         await h.Vm.ExpandAsync(emp);
+        var columns = emp.Children[0];
+        await h.Vm.ExpandAsync(columns);
 
-        Assert.Equal(["EMPNO", "ENAME", "HIDDEN"], emp.Children.Select(c => c.Title));
-        Assert.Equal("NUMBER(4) NOT NULL", emp.Children[0].Detail);
-        Assert.Equal("VARCHAR2(10)", emp.Children[1].Detail);
+        Assert.Equal(["EMPNO", "ENAME", "HIDDEN"], columns.Children.Select(c => c.Title));
+        Assert.Equal("NUMBER(4) NOT NULL", columns.Children[0].Detail);
+        Assert.Equal("VARCHAR2(10)", columns.Children[1].Detail);
     }
 
     [Fact]
@@ -325,7 +327,7 @@ public class SchemaBrowserTests
         Assert.True(condition());
     }
 
-    private sealed class Harness
+    internal sealed class Harness
     {
         public Harness()
         {
@@ -357,6 +359,10 @@ public class SchemaBrowserTests
 
         public TestMeta Meta { get; } = new();
 
+        public ISchemaTreeProvider? Tree { get; set; }
+
+        public ISchemaAdminProvider? Admin { get; set; }
+
         public TestEditor Editor { get; } = new();
 
         public InMemorySchemaFavoriteStore Favorites { get; } = new();
@@ -364,7 +370,7 @@ public class SchemaBrowserTests
         public SchemaBrowserViewModel Vm { get; }
     }
 
-    private sealed class Services(Harness h) : IServiceProvider
+    internal sealed class Services(Harness h) : IServiceProvider
     {
         public object? GetService(Type serviceType) =>
             serviceType == typeof(IMetadataProvider) ? h.Meta
@@ -372,16 +378,18 @@ public class SchemaBrowserTests
             : serviceType == typeof(ISessionManager) ? h.Manager
             : serviceType == typeof(IEditorContext) ? h.Editor
             : serviceType == typeof(ISchemaFavoriteStore) ? h.Favorites
+            : serviceType == typeof(ISchemaTreeProvider) ? h.Tree
+            : serviceType == typeof(ISchemaAdminProvider) ? h.Admin
             : null;
     }
 
-    private sealed class TestSession : ISession
+    internal sealed class TestSession : ISession
     {
         public Guid Id { get; } = Guid.NewGuid();
 
         public ConnectionProfile Profile { get; } = new("t", "SCOTT", "localhost/FREEPDB1", Id: Guid.NewGuid());
 
-        public ServerInfo Server => throw new NotSupportedException();
+        public ServerInfo Server { get; } = new("23.26.0.0.0", null, null, null, null, null, false, 1, new ServerCapabilities(false, false, false, false, false));
 
         public SessionPurpose Purpose => SessionPurpose.Work;
 
@@ -398,7 +406,7 @@ public class SchemaBrowserTests
         public ValueTask DisposeAsync() => ValueTask.CompletedTask;
     }
 
-    private sealed class TestManager : ISessionManager
+    internal sealed class TestManager : ISessionManager
     {
         public List<ISession> Sessions { get; } = [];
 
@@ -408,7 +416,7 @@ public class SchemaBrowserTests
             throw new NotSupportedException();
     }
 
-    private sealed class TestEditor : IEditorContext
+    internal sealed class TestEditor : IEditorContext
     {
         public EditorSnapshot? Doc { get; set; }
 
@@ -425,7 +433,7 @@ public class SchemaBrowserTests
         }
     }
 
-    private sealed class TestMeta : IMetadataProvider
+    internal sealed class TestMeta : IMetadataProvider
     {
         public List<string> Schemas { get; } = [];
 
@@ -434,6 +442,8 @@ public class SchemaBrowserTests
         public Dictionary<DbObjectRef, TableInfo> Tables { get; } = [];
 
         public int ListObjectsCalls { get; private set; }
+
+        public int TableCalls { get; private set; }
 
         public ObjectQuery? LastQuery { get; private set; }
 
@@ -453,7 +463,11 @@ public class SchemaBrowserTests
             return Task.FromResult<IReadOnlyList<DbObjectRef>>(r);
         }
 
-        public Task<TableInfo> GetTableAsync(ISession s, DbObjectRef table, CancellationToken ct) => Task.FromResult(Tables[table]);
+        public Task<TableInfo> GetTableAsync(ISession s, DbObjectRef table, CancellationToken ct)
+        {
+            TableCalls++;
+            return Task.FromResult(Tables[table]);
+        }
 
         public Task<IReadOnlyList<ProcedureInfo>> GetProceduresAsync(ISession s, DbObjectRef obj, CancellationToken ct) => throw new NotSupportedException();
 

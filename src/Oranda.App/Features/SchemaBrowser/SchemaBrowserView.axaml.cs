@@ -143,7 +143,7 @@ public partial class SchemaBrowserView : UserControl
             return;
         }
 
-        if (NodeFrom(e.Source) is not { Kind: SchemaNodeKind.Item, Ref: not null } node || IsExpander(e.Source))
+        if (NodeFrom(e.Source) is not { OpenTarget: not null } node || IsExpander(e.Source))
         {
             return;
         }
@@ -191,7 +191,7 @@ public partial class SchemaBrowserView : UserControl
                 e.Handled = true;
                 vm.ShowMore(more);
                 break;
-            case { Kind: SchemaNodeKind.Item, Ref: not null } node:
+            case { OpenTarget: not null } node:
                 e.Handled = true;
                 await vm.OpenPinnedAsync(node);
                 break;

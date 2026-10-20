@@ -18,10 +18,24 @@ public enum SchemaNodeKind
     Schema,
     Category,
     Item,
+    Folder,
     Column,
+    Index,
+    Constraint,
     More,
     Placeholder,
     Message,
+}
+
+/// <summary>표·뷰 노드 아래 폴더 종류(TSK-13-08). 선언 순서가 화면 순서다.</summary>
+public enum SchemaFolderKind
+{
+    Columns,
+    Indexes,
+    Constraints,
+    Triggers,
+    SnapshotLog,
+    RecycleBin,
 }
 
 /// <summary>편집기에 넣을 내용 3종(SCH-07).</summary>
@@ -54,7 +68,19 @@ public sealed partial class SchemaNode : ObservableObject
 
     public string? Owner { get; internal init; }
 
+    /// <summary>폴더 노드의 종류. 다른 노드는 null.</summary>
+    public SchemaFolderKind? FolderKind { get; internal init; }
+
+    /// <summary>표·뷰 노드: 폴더들이 같이 쓰는 <c>GetTableAsync</c> 결과(Columns·Indexes·Constraints 가 한 번만 읽는다).</summary>
+    internal Task<TableInfo>? TableLoad { get; set; }
+
     public string? Status { get; internal set; }
+
+    /// <summary>인덱스·제약 노드: 누르면 여는 표(<see cref="Ref"/> 는 비워 즐겨찾기·속성 창이 따라가지 않게 한다).</summary>
+    internal DbObjectRef? OpenRef { get; init; }
+
+    /// <summary>누르면 열 대상. 객체 노드는 자기 자신, 인덱스·제약은 소속 표, 그 밖은 null.</summary>
+    internal DbObjectRef? OpenTarget => Kind == SchemaNodeKind.Item ? Ref : Kind is SchemaNodeKind.Index or SchemaNodeKind.Constraint ? OpenRef : null;
 
     /// <summary>열 노드의 자료형 요약 등 부가 설명.</summary>
     public string? Detail { get; internal init; }
@@ -88,6 +114,18 @@ public sealed partial class SchemaNode : ObservableObject
         SchemaNodeKind.Category => IconForType(CategoryType),
         SchemaNodeKind.Item => IconForType(Ref?.ObjectType),
         SchemaNodeKind.Column => "column",
+        SchemaNodeKind.Index => "objIndex",
+        SchemaNodeKind.Constraint => "key",
+        SchemaNodeKind.Folder => FolderKind switch
+        {
+            SchemaFolderKind.Columns => "column",
+            SchemaFolderKind.Indexes => "objIndex",
+            SchemaFolderKind.Constraints => "key",
+            SchemaFolderKind.Triggers => "objTrigger",
+            SchemaFolderKind.SnapshotLog => "objMview",
+            SchemaFolderKind.RecycleBin => "recycle",
+            _ => null,
+        },
         _ => null,
     };
 
@@ -110,7 +148,7 @@ public sealed partial class SchemaNode : ObservableObject
         _ => "objOther",
     };
 
-    public bool HasChildrenToLoad => Kind is SchemaNodeKind.Favorites or SchemaNodeKind.Schema or SchemaNodeKind.Category
+    public bool HasChildrenToLoad => Kind is SchemaNodeKind.Favorites or SchemaNodeKind.Schema or SchemaNodeKind.Category or SchemaNodeKind.Folder
         || (Kind == SchemaNodeKind.Item && Ref is { } r && IsTableLike(r.ObjectType));
 
     public bool IsExpanded
@@ -143,6 +181,7 @@ public sealed partial class SchemaNode : ObservableObject
         Loaded = false;
         Items = [];
         Shown = 0;
+        TableLoad = null;
         if (HasChildrenToLoad)
         {
             Children.Add(new SchemaNode(null, SchemaNodeKind.Placeholder, "…"));
