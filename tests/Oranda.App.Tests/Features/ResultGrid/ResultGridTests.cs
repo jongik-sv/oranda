@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using Avalonia.Controls;
 using Oranda.App.Features.ResultGrid;
 using Oranda.Core.Grid;
 using Oranda.Core.Shell;
@@ -65,6 +66,36 @@ public sealed class ResultGridTests
             await Task.Delay(5);
         }
     }
+
+    [Fact]
+    public Task Focused_grid_reports_more_rows_so_fetch_all_is_enabled() => Oranda.App.Tests.Shell.Headless.HeadlessHost.Run(async () =>
+    {
+        var keys = new Oranda.App.Shell.ContextKeyService();
+        var previous = Oranda.App.Shell.ContextKeyService.Shared;
+        Oranda.App.Shell.ContextKeyService.Shared = keys;
+        try
+        {
+            var vm = new SqlResultPaneViewModel();
+            vm.SetResult(new GeneratedResultSet(2000));
+            var view = new SqlResultPaneView { DataContext = vm };
+            var window = new Avalonia.Controls.Window { Content = view, Width = 800, Height = 400 };
+            window.Show();
+            await WaitAsync(() => vm.Model!.LoadedRowCount >= 500);
+            view.FindControl<ResultGridControl>("GridControl")!.Focus();
+            Avalonia.Threading.Dispatcher.UIThread.RunJobs();
+
+            Assert.True(keys.Get("gridHasMoreRows")); // 「모두 가져오기」 활성 조건
+
+            await vm.Model!.FetchAllAsync();
+            Avalonia.Threading.Dispatcher.UIThread.RunJobs();
+            Assert.False(keys.Get("gridHasMoreRows"));
+            window.Close();
+        }
+        finally
+        {
+            Oranda.App.Shell.ContextKeyService.Shared = previous;
+        }
+    });
 
     [Fact]
     public void Frame_exists()

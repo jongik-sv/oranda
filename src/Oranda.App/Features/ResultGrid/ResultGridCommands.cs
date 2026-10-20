@@ -27,7 +27,7 @@ public static class ResultGridCommands
 [OrandaCommand("oranda.grid.copyAsInsert", CommandCategory.Result, When = "gridFocus", Enablement = "gridHasSelection", Placements = ["context:grid/copy@40"])]
 [OrandaCommand("oranda.grid.copyAsInList", CommandCategory.Result, When = "gridFocus", Enablement = "gridHasSelection", Placements = ["context:grid/copy@50"])]
 [OrandaCommand("oranda.grid.find", CommandCategory.Result, When = "gridFocus", Enablement = "gridHasResult")]
-[OrandaCommand("oranda.grid.fetchAll", CommandCategory.Result, When = "gridFocus", Enablement = "gridHasMoreRows")]
+[OrandaCommand("oranda.grid.fetchAll", CommandCategory.Result, When = "gridFocus", Enablement = "gridHasMoreRows", Placements = ["context:grid/rows@20"])]
 [OrandaCommand("oranda.grid.toggleTextMode", CommandCategory.Result, When = "gridFocus", Enablement = "gridHasResult")]
 [OrandaCommand("oranda.grid.freezeColumns", CommandCategory.Result, When = "gridFocus", Enablement = "gridHasResult", Placements = ["context:grid/columns@10"])]
 [OrandaCommand("oranda.grid.hideColumn", CommandCategory.Result, When = "gridFocus", Enablement = "gridHasResult", Placements = ["context:grid/columns@20"])]

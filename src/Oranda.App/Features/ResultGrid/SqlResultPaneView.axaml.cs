@@ -282,6 +282,7 @@ public partial class SqlResultPaneView : UserControl
 
         keys.Set("gridHasResult", m.HasResult);
         keys.Set("gridHasSelection", m.HasSelection);
+        keys.Set("gridHasMoreRows", m.HasMoreRows); // 「모두 가져오기」(이 키를 아무도 넣지 않아 늘 꺼져 있었다)
         keys.Set("gridQueryResult", Vm?.CanCountRows ?? false); // 「전체 행 수 세기」: 질의 문장이 만든 결과
 
         // 편집 모드 키(commands.md: 행 추가·반영 등의 활성 조건). 이 그리드의 세션을 편집 명령의 대상으로 둔다.
