@@ -12,6 +12,15 @@
     <PublishReadyToRunComposite>true</PublishReadyToRunComposite>
   </PropertyGroup>
 
+  <!-- 게시본에는 PDB 를 넣지 않는다 (TSK-10-06). win-x64 게시 폴더 301 MB 중 103 MB 가 PDB 였다(SkiaSharp·HarfBuzz 네이티브 PDB 100 MB).
+       DebugType 은 빌드 출력의 PDB 까지 없애 개발 디버깅을 막고, 패키지가 넣는 네이티브 PDB 는 빼지 못하므로 게시 목록에서만 뺀다.
+       vpk pack 도 기본으로 *.pdb 를 빼므로 설치본은 원래 PDB 가 없었다. -->
+  <Target Name="ExcludePdbFromPublish" AfterTargets="ComputeResolvedFilesToPublishList">
+    <ItemGroup>
+      <ResolvedFileToPublish Remove="@(ResolvedFileToPublish)" Condition="'%(Extension)' == '.pdb'" />
+    </ItemGroup>
+  </Target>
+
   <ItemGroup>
     <Folder Include="Models\" />
     <AvaloniaResource Include="Assets\**" />
@@ -48,6 +57,7 @@
     <PackageReference Include="Dock.Avalonia" />
     <PackageReference Include="Dock.Avalonia.Themes.Fluent" />
     <PackageReference Include="Dock.Model.Mvvm" />
+    <PackageReference Include="Velopack" />
   </ItemGroup>
 
   <ItemGroup>

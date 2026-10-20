@@ -33,6 +33,11 @@
     <PackageVersion Include="SQLitePCLRaw.lib.e_sqlite3" Version="2.1.14" />
   </ItemGroup>
 
+  <ItemGroup Label="Release">
+    <!-- 설치·자동 업데이트(TSK-10-01). 패키징 도구 vpk(CI 의 VPK_VERSION)와 같은 버전이어야 한다. -->
+    <PackageVersion Include="Velopack" Version="1.2.161" />
+  </ItemGroup>
+
   <ItemGroup Label="Test">
     <PackageVersion Include="Avalonia.Headless" Version="12.1.4" />
     <PackageVersion Include="coverlet.collector" Version="6.0.0" />
