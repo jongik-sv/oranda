@@ -16,8 +16,29 @@ public sealed class MenuControls(ICommandRegistry registry, IContextKeys keys, F
     Func<object?>? focused = null, Func<KeyGesture, string?>? resolve = null, KeyDispatcher? dispatcher = null)
 {
     private readonly List<RegistryCommand> _commands = [];
-    private readonly List<(NativeMenuItem Item, string PanelId)> _nativePanels = [];
-    private readonly List<(NativeMenuItem Item, string CommandId, KeyGesture Gesture)> _nativeGestures = [];
+
+    /// <summary>시스템 메뉴 뿌리(창)마다 따로 갖는 추적 목록. 창이 여럿(메인 창·떠 있는 도킹 창)이어도 각자 자기 메뉴 인스턴스를 갖는다.</summary>
+    private readonly Dictionary<NativeMenu, NativeSet> _natives = [];
+
+    private NativeSet? _building;
+
+    private sealed class NativeSet(Func<object?> focused)
+    {
+        public Func<object?> Focused { get; } = focused;
+
+        public List<RegistryCommand> Commands { get; } = [];
+
+        public List<(NativeMenuItem Item, string PanelId)> Panels { get; } = [];
+
+        public List<(NativeMenuItem Item, string CommandId, KeyGesture Gesture)> Gestures { get; } = [];
+
+        public void Clear()
+        {
+            Commands.Clear();
+            Panels.Clear();
+            Gestures.Clear();
+        }
+    }
 
     /// <summary>문맥 키가 바뀌면 모든 메뉴·단추의 활성 상태를 다시 계산한다.</summary>
     public void RefreshEnablement()
@@ -27,18 +48,26 @@ public sealed class MenuControls(ICommandRegistry registry, IContextKeys keys, F
             c.RaiseCanExecuteChanged();
         }
 
-        foreach (var (item, panelId) in _nativePanels)
+        foreach (var set in _natives.Values)
         {
-            item.IsChecked = workspace.IsToolVisible(panelId);
-        }
-
-        // 단축키는 지금 문맥에서 키맵이 이 명령으로 보낼 때만 메뉴가 가져간다(그리드에서 ⌘C 를 편집기 복사가 가로채지 않게).
-        foreach (var (item, commandId, key) in _nativeGestures)
-        {
-            var mine = resolve is null || string.Equals(resolve(key), commandId, StringComparison.Ordinal);
-            if (mine != (item.Gesture is not null))
+            foreach (var c in set.Commands)
             {
-                item.Gesture = mine ? key : null;
+                c.RaiseCanExecuteChanged();
+            }
+
+            foreach (var (item, panelId) in set.Panels)
+            {
+                item.IsChecked = workspace.IsToolVisible(panelId);
+            }
+
+            // 단축키는 지금 문맥에서 키맵이 이 명령으로 보낼 때만 메뉴가 가져간다(그리드에서 ⌘C 를 편집기 복사가 가로채지 않게).
+            foreach (var (item, commandId, key) in set.Gestures)
+            {
+                var mine = resolve is null || string.Equals(resolve(key), commandId, StringComparison.Ordinal);
+                if (mine != (item.Gesture is not null))
+                {
+                    item.Gesture = mine ? key : null;
+                }
             }
         }
     }
@@ -50,30 +79,42 @@ public sealed class MenuControls(ICommandRegistry registry, IContextKeys keys, F
     }
 
     /// <summary>
-    /// macOS 시스템 메뉴 막대의 뿌리 메뉴. 창에 한 번만 붙이고 <see cref="FillNativeMenu"/> 로 항목만 갈아 끼운다
-    /// (Avalonia 가 창에 처음 붙은 <see cref="NativeMenu"/> 인스턴스가 아닌 메뉴로는 갱신을 거부한다).
+    /// macOS 시스템 메뉴 막대의 뿌리 메뉴. 창마다 하나씩 만들어 그 창에 한 번만 붙이고 <see cref="FillNativeMenu"/> 로 항목만 갈아 끼운다
+    /// (Avalonia 가 창에 처음 붙은 <see cref="NativeMenu"/> 인스턴스가 아닌 메뉴로는 갱신을 거부하고, 한 인스턴스를 두 창에 붙일 수도 없다).
     /// 메뉴를 열거나 단축키를 찾을 때(<see cref="NativeMenu.NeedsUpdate"/>) 활성·체크·단축키 상태를 다시 계산한다.
     /// </summary>
-    public NativeMenu CreateNativeRoot()
+    /// <param name="windowFocus">이 창에서 포커스를 가진 요소(입력 칸 편집 키 전달용). 없으면 생성자에서 받은 것을 쓴다.</param>
+    public NativeMenu CreateNativeRoot(Func<object?>? windowFocus = null)
     {
         var root = new NativeMenu();
         root.NeedsUpdate += (_, _) => RefreshEnablement();
+        _natives[root] = new NativeSet(windowFocus ?? focused ?? (() => null));
         return root;
     }
 
+    /// <summary>창이 닫힐 때 그 창의 뿌리 메뉴 추적을 거둔다.</summary>
+    public void ReleaseNativeRoot(NativeMenu root) => _natives.Remove(root);
+
     /// <summary>
-    /// <see cref="BuildMenuBar"/> 와 같은 <see cref="MenuNode"/> 모델로 <paramref name="root"/> 의 항목을 다시 채운다.
+    /// <see cref="BuildMenuBar"/> 와 같은 <see cref="MenuNode"/> 모델로 <paramref name="root"/>(<see cref="CreateNativeRoot"/> 로 만든 것)의 항목을 다시 채운다.
     /// 접근 키 표기는 쓰지 않고(「파일」), 단축키는 <see cref="NativeMenuItem.Gesture"/> 로 보이며 시스템이 같은 키를 먼저 실행한다.
     /// </summary>
     public void FillNativeMenu(NativeMenu root, IReadOnlyList<MenuNode> bar)
     {
-        _commands.Clear();
-        _nativePanels.Clear();
-        _nativeGestures.Clear();
+        var set = _natives[root];
+        set.Clear();
         root.Items.Clear();
-        foreach (var n in bar)
+        _building = set;
+        try
         {
-            root.Add(NativeItemFor(n));
+            foreach (var n in bar)
+            {
+                root.Add(NativeItemFor(n));
+            }
+        }
+        finally
+        {
+            _building = null;
         }
     }
 
@@ -112,21 +153,24 @@ public sealed class MenuControls(ICommandRegistry registry, IContextKeys keys, F
                         workspace.ToggleTool(id);
                         item.IsChecked = workspace.IsToolVisible(id);
                     };
-                    _nativePanels.Add((item, id));
+                    _building!.Panels.Add((item, id));
                     return item;
                 }
 
             default:
                 {
                     var key = gesture(n.CommandId!);
+                    var set = _building!;
+                    var command = new RegistryCommand(n.CommandId!, registry, keys);
+                    set.Commands.Add(command);
                     var item = new NativeMenuItem(n.Title.Replace("_", "__", StringComparison.Ordinal))
                     {
-                        Command = new NativeMenuCommand(Track(n.CommandId!), key, focused ?? (() => null), dispatcher),
+                        Command = new NativeMenuCommand(command, key, set.Focused, dispatcher),
                         Gesture = key,
                     };
                     if (key is not null)
                     {
-                        _nativeGestures.Add((item, n.CommandId!, key));
+                        set.Gestures.Add((item, n.CommandId!, key));
                     }
 
                     return item;

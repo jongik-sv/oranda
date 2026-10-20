@@ -13,6 +13,7 @@ using Avalonia.Threading;
 using Oranda.App.Features.DedicatedSession;
 using Oranda.App.Shell;
 using Oranda.App.Shell.Composition;
+using Oranda.App.Shell.Docking;
 using Oranda.App.Shell.Icons;
 using Oranda.App.Shell.Keymaps;
 using Oranda.App.Shell.Layout;
@@ -39,6 +40,7 @@ public partial class MainWindow : Window
     private KeyDispatcher? _dispatcher;
     private MainViewModel? _viewModel;
     private IReadOnlyList<MenuNode> _toolbarModel = [];
+    private readonly List<(Window Window, NativeMenu Root)> _floatMenus = [];
     private WindowPlacement? _lastNormal;
     private DispatcherTimer? _layoutSaveTimer;
     private bool _closeConfirmed;
@@ -150,6 +152,8 @@ public partial class MainWindow : Window
             RebuildMenus();
         });
 
+        FloatHostWindow.Presenting = UseNativeMenu ? AttachFloatMenu : null;
+
         ApplyStaticText();
         RebuildMenus();
         ShellCommandRunner.Runner = id => _registry is null || _keys is null ? Task.CompletedTask : _registry.ExecuteAsync(id, _keys);
@@ -204,6 +208,10 @@ public partial class MainWindow : Window
             }
 
             _controls.FillNativeMenu(root, bar);
+            foreach (var (_, floatRoot) in _floatMenus)
+            {
+                _controls.FillNativeMenu(floatRoot, bar);
+            }
         }
         else
         {
@@ -215,6 +223,29 @@ public partial class MainWindow : Window
         ToolbarPanel.Children.AddRange(_controls.BuildToolbarItems(_toolbarModel));
         UpdateToolbarOverflow();
         _controls.RefreshEnablement();
+    }
+
+    /// <summary>
+    /// 떠 있는 도킹 창에도 같은 메뉴를 시스템 막대에 보이게 한다(창마다 자기 NativeMenu 뿌리 하나).
+    /// 창이 닫히면 추적을 거둔다.
+    /// </summary>
+    private void AttachFloatMenu(Window host)
+    {
+        if (_controls is null || _registry is null || _panels is null || _keymap is null || _shell is null || !UseNativeMenu)
+        {
+            return;
+        }
+
+        var root = _controls.CreateNativeRoot(() => host.FocusManager?.GetFocusedElement());
+        NativeMenu.SetMenu(host, root);
+        _floatMenus.Add((host, root));
+        _controls.FillNativeMenu(root, MenuModelBuilder.BuildMenuBar(_registry.Commands, _shell.Text, _keymap.ShortcutText, _panels.Panels));
+        _controls.RefreshEnablement();
+        host.Closed += (_, _) =>
+        {
+            _floatMenus.RemoveAll(f => f.Window == host);
+            _controls.ReleaseNativeRoot(root);
+        };
     }
 
     /// <summary>툴바 폭이 모자라면 오른쪽 단추부터 「…」 메뉴로 접는다.</summary>

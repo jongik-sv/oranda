@@ -1,8 +1,13 @@
 using Avalonia;
 using Avalonia.Controls;
+using Avalonia.Headless;
 using Avalonia.Input;
 using Avalonia.Threading;
+using Avalonia.VisualTree;
+using Dock.Avalonia.Controls;
+using Dock.Model.Controls;
 using Oranda.App.Shell;
+using Oranda.App.Shell.Docking;
 using Oranda.App.Shell.Keymaps;
 using Oranda.App.Shell.Menus;
 using Oranda.Core.Shell;
@@ -136,6 +141,39 @@ public class NativeMenuTests
     });
 
     [Fact]
+    public Task Floating_dock_window_gets_its_own_native_menu_with_the_same_items() => HeadlessHost.Run(async () =>
+    {
+        using var h = new ShellHarness(nativeMenu: true);
+        var ws = h.Get<DockWorkspace>();
+        ws.OpenDocument("oranda.panel.sqlEditor");
+        var b = ws.OpenDocument("oranda.panel.sqlEditor")!;
+        Dispatcher.UIThread.RunJobs();
+        var tab = h.Window.GetVisualDescendants().OfType<DocumentTabStripItem>().First(t => ReferenceEquals(t.DataContext, b));
+        var center = tab.TranslatePoint(new Point(tab.Bounds.Width / 2, tab.Bounds.Height / 2), h.Window)!.Value;
+        for (var i = 0; i < 2; i++)
+        {
+            h.Window.MouseDown(center, MouseButton.Left);
+            h.Window.MouseUp(center, MouseButton.Left);
+        }
+
+        await HeadlessHost.WaitUntil(() => ((IRootDock)ws.Layout!).Windows?.Count == 1);
+
+        var host = (Window)((IRootDock)ws.Layout!).Windows![0].Host!;
+        var floating = NativeMenu.GetMenu(host);
+        Assert.NotNull(floating);
+        Assert.NotSame(h.Window.NativeMenuBar, floating); // 창마다 자기 뿌리 메뉴 인스턴스
+        Assert.Equal(TopTitles, floating.Items.OfType<NativeMenuItem>().Select(m => m.Header!));
+
+        // 메뉴를 다시 만들어도 두 창의 인스턴스는 유지되고 항목은 같이 갱신된다.
+        var mainRoot = h.Window.NativeMenuBar;
+        h.Window.RebuildMenus();
+        Dispatcher.UIThread.RunJobs();
+        Assert.Same(mainRoot, h.Window.NativeMenuBar);
+        Assert.Same(floating, NativeMenu.GetMenu(host));
+        AssertSameStructure(Model(h), floating, id => ExpectedGesture(h, id));
+    });
+
+    [Fact]
     public Task Native_shortcut_is_claimed_only_where_the_keymap_routes_the_key_to_that_command() => HeadlessHost.Run(() =>
     {
         // 편집 > 복사(편집기 포커스)와 결과 > 복사(그리드 포커스)는 같은 ⌘C 다. 메뉴가 엉뚱한 쪽을 가져가면 안 된다.
@@ -242,6 +280,33 @@ public class NativeMenuTests
         text.SetLanguage("en");
         Assert.Equal("About Oranda", about.Header);
         Assert.Equal("Settings…", settings.Header);
+    });
+
+    [Fact]
+    public Task App_menu_localizes_the_default_items_Avalonia_appends() => HeadlessHost.Run(() =>
+    {
+        // Avalonia 가 AfterSetup 에서 영어로 붙이는 기본 항목을 같은 모양으로 흉내 낸다.
+        var app = new MacAppMenu();
+        app.Menu.Add(new NativeMenuItemSeparator());
+        var services = new NativeMenuItem("Services");
+        var hide = new NativeMenuItem("Hide Oranda");
+        var hideOthers = new NativeMenuItem("Hide Others") { Gesture = new KeyGesture(Key.Q, KeyModifiers.Meta | KeyModifiers.Alt) };
+        var showAll = new NativeMenuItem("Show All");
+        var quit = new NativeMenuItem("Quit") { Gesture = new KeyGesture(Key.Q, KeyModifiers.Meta) };
+        foreach (var i in new[] { services, hide, hideOthers, showAll, quit })
+        {
+            app.Menu.Add(i);
+        }
+
+        var text = new ShellText(language: "ko");
+        app.Bind(text);
+
+        Assert.Equal(["서비스", "Oranda 가리기", "기타 가리기", "모두 보기", "Oranda 종료"], new[] { services, hide, hideOthers, showAll, quit }.Select(i => i.Header));
+        Assert.Equal(new KeyGesture(Key.H, KeyModifiers.Meta | KeyModifiers.Alt), hideOthers.Gesture);
+        Assert.Equal(new KeyGesture(Key.Q, KeyModifiers.Meta), quit.Gesture);
+
+        text.SetLanguage("en");
+        Assert.Equal(["Services", "Hide Oranda", "Hide Others", "Show All", "Quit Oranda"], new[] { services, hide, hideOthers, showAll, quit }.Select(i => i.Header));
     });
 
     [Fact]

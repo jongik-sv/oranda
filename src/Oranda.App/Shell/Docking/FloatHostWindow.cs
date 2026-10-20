@@ -15,6 +15,12 @@ public sealed class FloatHostWindow : HostWindow, IHostWindow
 {
     protected override Type StyleKeyOverride => typeof(HostWindow);
 
+    /// <summary>
+    /// 떠 있는 창을 보이기 직전에 부르는 창구. 주 창이 macOS 시스템 메뉴를 이 창에도 붙이는 데 쓴다
+    /// (떠 있는 창이 key 창일 때 시스템 막대가 앱 메뉴만 남지 않게). 주 창이 붙을 때 채운다.
+    /// </summary>
+    public static Action<Window>? Presenting { get; set; }
+
     public new void Present(bool isDialog)
     {
         var main = Window?.Factory?.DockControls.Select(c => TopLevel.GetTopLevel(c as Visual)).OfType<Window>().FirstOrDefault(w => w is not HostWindow);
@@ -36,6 +42,7 @@ public sealed class FloatHostWindow : HostWindow, IHostWindow
             return;
         }
 
+        Presenting?.Invoke(this);
         if (main is not null)
         {
             // 소유자가 없으니 메인 창이 닫힐 때 직접 닫아야 앱이 끝난다(레이아웃은 메인 창이 닫히기 전에 저장된다).

@@ -63,6 +63,8 @@
 - 앱 메뉴(Oranda): 「Oranda 정보」(`oranda.help.about`), 「설정…」(`oranda.tools.settings`, ⌘,), 그 뒤에 Avalonia 가 서비스·숨기기·모두 보기·종료를 붙인다(`MacAppMenu`). 도구 > 설정 항목은 그대로 둔다.
 - 단축키: `NativeMenuItem.Gesture` 가 표시와 실행을 함께 맡는다. AppKit 이 ⌘ 키를 창보다 먼저 메뉴에서 찾고, 활성 항목에 맞으면 이벤트를 소비하므로 키맵 `KeyDispatcher` 로는 가지 않는다(한 번만 실행). 항목이 비활성이면 키는 창으로 내려가 키맵이 처리한다. 입력 칸(TextBox)에 포커스가 있을 때의 글자 편집 키(⌘C·X·V·A·Z·⇧⌘Z)는 `NativeMenuCommand` 가 그 입력 칸에 직접 전달한다.
 - 활성·체크 갱신: 메뉴를 열거나 단축키를 찾을 때(`NativeMenu.NeedsUpdate`) 그리고 문맥 키가 바뀔 때 `RegistryCommand.CanExecute` 로 다시 계산한다. 보기 > 도구 창은 `ToggleType=CheckBox` 로 보임 상태를 체크한다.
+- 떠 있는 도킹 창(`FloatHostWindow`)도 key 창일 때 같은 메뉴가 시스템 막대에 보이도록, 창마다 자기 `NativeMenu` 뿌리를 가진다(`FloatHostWindow.Presenting` → `MainWindow.AttachFloatMenu`). 대화상자(모달)는 앱 메뉴만 남아도 된다.
+- 앱 메뉴 기본 항목(서비스·Oranda 가리기·기타 가리기·모두 보기·Oranda 종료)은 Avalonia 가 영어로 붙이지만 우리가 넘긴 `NativeMenu` 안에 들어 있어, `MacAppMenu` 가 UI 언어에 맞춰 글자를 바꾼다(`Menu.app.*`). 「기타 가리기」 단축키는 표준 ⌥⌘H 로 바로잡는다.
 - 아이콘은 시스템 메뉴에 그리지 않는다(글자만).
 
 ### 1.2 상태 표시줄 구간
