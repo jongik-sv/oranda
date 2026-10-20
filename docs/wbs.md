@@ -840,6 +840,48 @@ dotnet, testhost, Oranda.App
 - data-model: -
 - ui-spec: -
 
+### TSK-03-07: Oracle 11.2 서버 접속 지원 (버전 관문·11g 카탈로그 변형)
+- category: dev
+- domain: backend
+- model: opus
+- status: [ ]
+- priority: high
+- assignee: -
+- schedule: 2026-12-14 ~ 2026-12-18
+- tags: oracle-11g, catalog, compatibility
+- depends: TSK-03-03
+- blocked-by: -
+- entry-point: 접속 관리자에서 11.2 서버로 접속 → SQL 실행·스키마 브라우저·실행 계획·세션 모니터
+- note: 2026-10-20 사용자 결정(D-026)으로 D-06 의 11.2 「나중 검토」 를 지금 한다. 사전 점검(개발 PC, 사내 시험 DB 11.2.0.3 AL32UTF8): ODP.NET Core 23.26.301 과 19.x 둘 다 접속·조회됨 → 구버전 드라이버 불필요. 카탈로그 57개 중 15개가 11g 에서 실패: FETCH FIRST 8개(meta/objects, dbinfo/object_search·source_search·column_search(하위질의 안), session/open_cursors·sql_text, sql/full_text·top), 12c+ 열 7개 파일(dbinfo/database v$database.cdb, dbinfo/instance v$instance.edition·version_full, dbinfo/version v$version.banner_full, meta/columns·columns.23 all_tab_cols.identity_column·user_generated, meta/constraints search_condition_vc, meta/detail_general all_objects.editionable). 그 시험 DB 의 사용자 스키마에 plan_id 없는 옛 PLAN_TABLE 이 있어 plan/explain_steps 도 실패(버전 무관). 나머지 41개는 통과
+
+#### PRD 요구사항
+- prd-ref: PRD 6.x 지원 서버·C-03·D-06·11.3
+- requirements:
+  - SupportedServerPolicy 의 허용 주 버전에 11 을 더한다(11.2 만, 11.1 이하·12c·18c·21c 는 계속 막음). 안내 문구·PRD 지원 서버 표·C-03·D-06·11.3 을 같이 고친다
+  - SQL 카탈로그에 min-version: 11 변형을 둔다. 위 15개는 11g 에서 도는 문장(FETCH FIRST → ROWNUM 감싸기, 없는 열은 NULL 또는 11g 대체 열)으로 만들고, 선택 규칙이 서버 버전 이하 중 가장 높은 min-version 을 고르는지 확인한다
+  - 카탈로그 밖의 C# 안 SQL·ServerCapabilities(CDB/PDB, identity, invisible 열, 23ai 타입 등)도 11g 에서 끄거나 대체한다. 기능이 꺼지면 화면은 숨기거나 「이 서버 버전에서는 쓸 수 없음」 안내
+  - constraints 의 search_condition 은 11g 에서 LONG 이므로 LONG 읽기(InitialLONGFetchSize)로 가져온다
+  - EXPLAIN PLAN 결과를 읽을 때 PLAN_TABLE 에 plan_id 등 열이 없어도 실패하지 않게 한다(버전 무관, 옛 개인 PLAN_TABLE)
+  - 카탈로그 빌드 검사(TSK-02-04)에 11 변형이 FETCH FIRST·12c+ 열을 쓰지 않는지 검사를 더한다
+- acceptance:
+  - 11.2 서버에 접속하면 막지 않고, 상태 표시줄·DB 정보에 11.2 가 보인다
+  - 11.2 에서 SQL 실행·결과 그리드·LOB 보기·실행 취소·스키마 브라우저(트리·상세·DDL)·자동완성 메타·실행 계획(예상·실제)·세션 모니터·Top SQL 이 오류 없이 동작한다
+  - 12c·18c·21c·11.1 은 지금처럼 막고 안내한다
+  - 19c·23ai/26ai 의 동작과 시험 결과는 바뀌지 않는다
+- constraints:
+  - 드라이버는 지금 것(ODP.NET Core 23.26.301) 하나만 쓴다. 구버전 드라이버를 싣지 않는다
+  - 사내 시험 DB 계정·TNS 주소를 저장소에 넣지 않는다(공개 저장소)
+- test-criteria:
+  - 11g 컨테이너(gvenzl/oracle-xe:11-slim, 11.2.0.2 XE)로 카탈로그 전 항목·핵심 흐름 통합 시험(Category=Integration, 기존 공유 컨테이너 방식과 같게 시작). 컨테이너를 받을 수 없으면 그 사실을 결과에 남긴다
+  - 정책·카탈로그 선택 단위 시험(11.2 허용, 11.1·12·18·21 거부, 11 변형 선택)
+  - 사내 시험 DB(11.2.0.3) 수동 확인은 조정 세션이 따로 한다
+
+#### 기술 스펙 (TRD)
+- tech-spec: -
+- api-spec: -
+- data-model: -
+- ui-spec: -
+
 ## WP-04: SQL 편집기·언어 서비스
 - schedule: 2026-11-10 ~ 2026-11-30
 
@@ -1178,6 +1220,46 @@ dotnet, testhost, Oranda.App
 
 #### 기술 스펙 (TRD)
 - tech-spec: -
+- api-spec: -
+- data-model: -
+- ui-spec: -
+
+### TSK-04-10: Orange 작업 공간 파일(.sqd) 열기
+- category: dev
+- domain: fullstack
+- model: sonnet
+- status: [ ]
+- priority: high
+- assignee: -
+- schedule: 2026-12-14 ~ 2026-12-16
+- tags: workspace, orange-migration, import
+- depends: TSK-04-02
+- blocked-by: -
+- entry-point: 파일 > 작업 공간 열기(파일 대화상자 .sqd), 파일 끌어 놓기, 명령줄 인자
+- note: 2026-10-20 사용자 요청. 오렌지 5.0.12 가 저장한 .sqd 표본 30여 개를 개발 PC 에서 확인한 형식(아래 requirements). 표본 파일은 사내 SQL 이라 저장소에 넣지 않는다 — 시험 자료는 직접 만든 가짜 SQL 로 쓴다
+
+#### PRD 요구사항
+- prd-ref: PRD EDIT-09 (작업 공간), EXEC-03 (바인드)
+- requirements:
+  - .sqd 를 MyBatis 매퍼처럼 읽기 전용 작업 공간 원본으로 연다(WorkspaceFiles 에 ReadSqd 추가). 문서 탭 하나 = 작업 공간 하나, .sqd 안의 문장 하나 = SQL 탭 하나, 탭 이름 = NAME
+  - 형식: CP949(코드 페이지 949) 텍스트, 줄 끝 CRLF. [HEADER] 구역(VERSION=5.0.12, TOOL=, CHAR=ASCII, DATE=yyyy-MM-dd HH:mm), [WORKSPACE] 구역(COUNT=n) 다음에 탭마다 NAME=이름, STMT=줄 수, 그 줄 수만큼 SQL 본문 줄, VAR=개수, 그 개수만큼 `:바인드이름=타입,값` 줄(표본의 타입은 모두 0 = 문자열, 값은 비어 있을 수 있고 쉼표 뒤 전체가 값)
+  - SQL 본문은 줄 수(STMT)로 잘라 읽는다. 본문 줄이 NAME= 처럼 보여도 키로 읽지 않는다
+  - CHAR 가 ASCII 가 아니거나 UTF-8 BOM·UTF-16 BOM 이 있으면 그 인코딩으로 읽는다. 줄 수가 모자라거나 COUNT 가 실제와 다르면 읽은 만큼 열고 알림(Notes)에 남긴다
+  - 바인드는 탭 바인드(tabs[].binds, EXEC-03 바인드 창)로 채운다. 타입 0 은 문자열, 모르는 타입 코드는 문자열로 읽고 알림에 남긴다. 이름에 pass·pwd·secret·token 이 든 바인드는 값을 버린다(EXEC-03 규칙)
+  - 저장은 원본(.sqd)에 쓰지 않는다. MyBatis 와 같게 다른 이름으로 저장(Markdown 작업 공간)으로 간다
+  - 파일 열기 대화상자 필터에 「Orange 작업 공간 (*.sqd)」 을 더하고, 끌어 놓기·명령줄 인자로 .sqd 를 주면 작업 공간으로 연다. 같은 파일을 다시 열면 그 작업 공간으로 옮겨 간다(EDIT-09)
+- acceptance:
+  - 오렌지가 만든 .sqd(한글 탭 이름·한글 주석·여러 줄 SQL·바인드 포함)를 열면 탭 수·탭 이름·SQL 본문·바인드 값이 오렌지와 같다
+  - 깨진 .sqd(줄 수 모자람, COUNT 불일치)를 열어도 앱이 죽지 않고 알림이 보인다
+  - .sqd 로 연 작업 공간에서 저장하면 .sqd 가 바뀌지 않고 다른 이름으로 저장을 묻는다
+- constraints:
+  - 실제 사내 .sqd 표본을 저장소에 넣지 않는다. 시험 자료는 같은 형식의 가짜 SQL 을 CP949 로 만들어 쓴다
+- test-criteria:
+  - ReadSqd 단위 시험: CP949 한글, 본문에 NAME=/STMT= 로 시작하는 줄, 빈 바인드 값, 쉼표가 든 바인드 값, 깨진 파일
+  - Headless 시험: .sqd 를 열면 작업 공간 문서 탭과 SQL 탭이 생기고 바인드 창이 채워진다
+
+#### 기술 스펙 (TRD)
+- tech-spec: CP949 디코딩은 CodePagesEncodingProvider 등록이 필요하다(System.Text.Encoding.CodePages, .NET 10 에 기본 포함 여부 확인)
 - api-spec: -
 - data-model: -
 - ui-spec: -
@@ -2702,6 +2784,9 @@ graph LR
   TSK-11-03 --> TSK-06-12
   TSK-11-03 --> TSK-10-06
   TSK-07-02 --> TSK-07-05
+  %% 2026-10-20 사용자 요청
+  TSK-03-03 --> TSK-03-07
+  TSK-04-02 --> TSK-04-10
   style TSK-01-02 fill:#fff3e0,stroke:#e65100
   style TSK-01-07 fill:#fff3e0,stroke:#e65100
   style TSK-01-02 stroke:#c62828,stroke-width:2px
