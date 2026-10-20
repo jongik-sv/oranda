@@ -4,7 +4,7 @@
              xmlns:vm="using:Oranda.App.Features.ResultGrid"
              x:Class="Oranda.App.Features.ResultGrid.SqlResultPaneView"
              x:DataType="vm:SqlResultPaneViewModel">
-  <Grid RowDefinitions="Auto,Auto,Auto,*,Auto">
+  <Grid RowDefinitions="Auto,Auto,Auto,Auto,*,Auto">
     <!-- 찾기 줄(oranda.grid.find) -->
     <StackPanel Grid.Row="0" Orientation="Horizontal" Spacing="6" Margin="4"
                 IsVisible="{Binding IsFindVisible}">
@@ -13,8 +13,32 @@
       <Button x:Name="FindCloseButton" Classes="toolbar" Content="닫기" icons:ButtonIcon.Key="clear" icons:ButtonIcon.IconOnly="True" />
       <TextBlock Text="{Binding FindMessage}" VerticalAlignment="Center" />
     </StackPanel>
+    <!-- 결과 거르기 줄(oranda.grid.toggleFilterBar, GRID-10): 결과를 만든 질의를 WHERE·ORDER BY 로 감싸 같은 바인드로 다시 실행한다.
+         Enter 적용, Esc 는 칸을 비우고 빈 칸이면 줄을 닫는다. 실패·취소는 아래 상태 줄에 보인다. -->
+    <Border Grid.Row="1" Classes="panel-toolbar" IsVisible="{Binding IsFilterBarVisible}">
+      <Grid ColumnDefinitions="Auto,3*,Auto,Auto,2*,Auto">
+        <TextBlock Grid.Column="0" Text="WHERE" VerticalAlignment="Center" Margin="4,0,6,0" FontWeight="SemiBold" />
+        <TextBox x:Name="WhereBox" Grid.Column="1" Classes="compact" MinWidth="120" Text="{Binding WhereText}"
+                 PlaceholderText="거를 조건(예: DEPTNO = 10)" AutomationProperties.Name="거를 조건" />
+        <Button x:Name="FilterHistoryButton" Grid.Column="2" Classes="toolbar" Focusable="False" Content="최근 조건"
+                IsEnabled="{Binding HasFilterHistory}" icons:ButtonIcon.Key="history" icons:ButtonIcon.IconOnly="True" />
+        <TextBlock Grid.Column="3" Text="ORDER BY" VerticalAlignment="Center" Margin="8,0,6,0" FontWeight="SemiBold" />
+        <TextBox x:Name="OrderByBox" Grid.Column="4" Classes="compact" MinWidth="80" Text="{Binding OrderByText}"
+                 PlaceholderText="정렬(예: SAL DESC)" AutomationProperties.Name="정렬" />
+        <StackPanel Grid.Column="5" Orientation="Horizontal" Spacing="1" Margin="4,0,0,0">
+          <Button x:Name="FilterApplyButton" Classes="toolbar" Focusable="False" Content="거르기 적용"
+                  IsEnabled="{Binding CanApplyFilter}" icons:ButtonIcon.Key="filter" icons:ButtonIcon.IconOnly="True" />
+          <Button x:Name="FilterCancelButton" Classes="toolbar" Focusable="False" Content="거르기 취소"
+                  IsVisible="{Binding IsFiltering}" icons:ButtonIcon.Key="cancel" icons:ButtonIcon.IconOnly="True" />
+          <Button x:Name="FilterClearButton" Classes="toolbar" Focusable="False" Content="거르기 지우기"
+                  IsEnabled="{Binding CanApplyFilter}" icons:ButtonIcon.Key="filterClear" icons:ButtonIcon.IconOnly="True" />
+          <Button x:Name="FilterCloseButton" Classes="toolbar" Focusable="False" Content="거르기 줄 닫기"
+                  icons:ButtonIcon.Key="clear" icons:ButtonIcon.IconOnly="True" />
+        </StackPanel>
+      </Grid>
+    </Border>
     <!-- 편집할 수 없는 결과를 고치려 할 때의 안내(읽기 전용이면 편집 모드로 다시 실행, 키가 없으면 그 이유). -->
-    <Border Grid.Row="1" IsVisible="{Binding HasEditHint}" Background="{DynamicResource OrandaPanelHeaderBrush}"
+    <Border Grid.Row="2" IsVisible="{Binding HasEditHint}" Background="{DynamicResource OrandaPanelHeaderBrush}"
             BorderBrush="{DynamicResource OrandaIconAmberBrush}" BorderThickness="3,0,0,0" Padding="6,3">
       <DockPanel>
         <Button x:Name="EditHintClose" DockPanel.Dock="Right" Classes="toolbar" Content="안내 닫기" Focusable="False"
@@ -30,7 +54,7 @@
       </DockPanel>
     </Border>
     <!-- 편집 모드(F9) 툴바: 오렌지 결과 그리드처럼 행 추가·삭제·반영·되돌리기를 아이콘으로 바로 쓴다(오른쪽 클릭 메뉴와 같은 명령). -->
-    <Border Grid.Row="2" Classes="panel-toolbar" IsVisible="{Binding IsEditMode}">
+    <Border Grid.Row="3" Classes="panel-toolbar" IsVisible="{Binding IsEditMode}">
       <StackPanel Orientation="Horizontal" Spacing="1">
         <Button Classes="toolbar" Focusable="False" Tag="oranda.grid.edit.addRow" Content="행 추가"
                 icons:ButtonIcon.Key="rowAdd" icons:ButtonIcon.IconOnly="True" />
@@ -50,7 +74,7 @@
                 IsEnabled="{Binding IsEditDirty}" icons:ButtonIcon.Key="eraser" icons:ButtonIcon.IconOnly="True" />
       </StackPanel>
     </Border>
-    <Grid Grid.Row="3" ColumnDefinitions="*,Auto" RowDefinitions="*,Auto">
+    <Grid Grid.Row="4" ColumnDefinitions="*,Auto" RowDefinitions="*,Auto">
       <vm:ResultGridControl x:Name="GridControl" Grid.Row="0" Grid.Column="0" />
       <!-- 셀 편집기(편집 모드에서 두 번 누르기·F2): 셀 위에 겹쳐 띄운다. Enter 반영·Esc 취소. -->
       <TextBox x:Name="CellEditor" Grid.Row="0" Grid.Column="0" IsVisible="False" MinHeight="0" Padding="4,0"
@@ -59,7 +83,7 @@
       <ScrollBar x:Name="VBar" Grid.Row="0" Grid.Column="1" Orientation="Vertical" AllowAutoHide="False" />
       <ScrollBar x:Name="HBar" Grid.Row="1" Grid.Column="0" Orientation="Horizontal" AllowAutoHide="False" />
     </Grid>
-    <Border Grid.Row="4" Classes="panel-status">
+    <Border Grid.Row="5" Classes="panel-status">
       <DockPanel>
         <!-- 여러 칸을 고르면 개수·합계·평균·최소·최대(가져온 행만). 누르면 이 글을 복사한다. -->
         <TextBlock x:Name="SelectionSummaryText" DockPanel.Dock="Right" Margin="12,0,0,0" VerticalAlignment="Center"

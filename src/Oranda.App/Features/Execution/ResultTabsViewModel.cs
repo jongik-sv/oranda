@@ -115,6 +115,7 @@ public sealed partial class ResultTabsViewModel : ViewModelBase
         pane.SetResult(result, display);
         var tab = new ResultTabItem { Title = title, Pane = pane, Statement = statement };
         pane.CloseRequested += (_, _) => Close(tab);
+        pane.FilterApplied += (_, _) => LeaveEditMode(tab);
         Add(tab);
         return tab;
     }
@@ -149,4 +150,20 @@ public sealed partial class ResultTabsViewModel : ViewModelBase
     }
 
     private static void Dispose(ResultTabItem tab) => tab.Pane?.Clear();
+
+    /// <summary>거르기로 결과를 바꾸면 편집 모드(F9)는 풀린다: 탭의 편집 상태와 「(편집)」 표시를 지운다.</summary>
+    private static void LeaveEditMode(ResultTabItem tab)
+    {
+        if (tab.EditSession is null)
+        {
+            return;
+        }
+
+        tab.EditSession = null;
+        const string editing = " (편집)";
+        if (tab.Title.EndsWith(editing, StringComparison.Ordinal))
+        {
+            tab.Title = tab.Title[..^editing.Length];
+        }
+    }
 }

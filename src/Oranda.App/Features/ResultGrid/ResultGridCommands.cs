@@ -18,6 +18,16 @@ public static class ResultGridCommands
     /// 실행 화면(<c>ExecutionCommands.Install</c>)이 채운다. 비어 있으면 셀 수 없다고 안내한다.
     /// </summary>
     public static Func<SqlStatement, CancellationToken, Task<long?>>? CountRows { get; set; }
+
+    /// <summary>
+    /// 결과 거르기(GRID-10): 요청의 질의를 <c>SELECT * FROM (…) WHERE … ORDER BY …</c> 로 감싸 같은 바인드로 실행하고 새 결과를 돌려준다
+    /// (결과 집합의 수명은 받는 쪽이 가진다). 실패는 이유를 담은 예외, 취소는 <see cref="OperationCanceledException"/>.
+    /// 실행 화면(<c>ExecutionCommands.Install</c>)이 채운다. 비어 있으면 거를 수 없다고 안내한다.
+    /// </summary>
+    public static Func<ResultFilterRequest, CancellationToken, Task<IResultSet>>? Filter { get; set; }
+
+    /// <summary>거른 결과의 전체 행 수(「전체 행 수 세기」를 거른 결과에서 할 때). 셀 값 바인드를 함께 넘긴다.</summary>
+    public static Func<ResultFilterRequest, CancellationToken, Task<long?>>? CountFiltered { get; set; }
 }
 
 /// <summary>결과 영역 명령 처리기. 활성 그리드가 없으면 아무것도 하지 않는다.</summary>
@@ -36,6 +46,14 @@ public static class ResultGridCommands
 [OrandaCommand("oranda.grid.closeResultTab", CommandCategory.Result, When = "gridFocus", Enablement = "gridHasResult")]
 [OrandaCommand("oranda.grid.countRows", CommandCategory.Result, When = "gridFocus", Enablement = "gridQueryResult && hasSession && !sessionBusy",
     Placements = ["context:grid/rows@10"])]
+[OrandaCommand("oranda.grid.toggleFilterBar", CommandCategory.Result, When = "gridFocus", Enablement = "gridQueryResult",
+    Icon = "filter", Placements = ["context:grid/filter@10"])]
+[OrandaCommand("oranda.grid.filterByValue", CommandCategory.Result, When = "gridFocus",
+    Enablement = "gridQueryResult && gridHasSelection && hasSession && !sessionBusy", Placements = ["context:grid/filter@20"])]
+[OrandaCommand("oranda.grid.filterExcludeValue", CommandCategory.Result, When = "gridFocus",
+    Enablement = "gridQueryResult && gridHasSelection && hasSession && !sessionBusy", Placements = ["context:grid/filter@30"])]
+[OrandaCommand("oranda.grid.filterNullRows", CommandCategory.Result, When = "gridFocus",
+    Enablement = "gridQueryResult && gridHasSelection && hasSession && !sessionBusy", Placements = ["context:grid/filter@40"])]
 public sealed class ResultGridCommandHandler : ICommandHandler
 {
     public async Task ExecuteAsync(CommandContext context, CancellationToken cancellationToken)
@@ -90,6 +108,18 @@ public sealed class ResultGridCommandHandler : ICommandHandler
                 break;
             case "oranda.grid.countRows":
                 g.RequestCountRows(); // 결과 영역이 문장을 알고 세는 동안 상태 줄에 보인다(실패도 상태 줄에, 명령 밖으로 던지지 않는다)
+                break;
+            case "oranda.grid.toggleFilterBar":
+                g.RequestFilterBar();
+                break;
+            case "oranda.grid.filterByValue":
+                g.RequestCellFilter(CellFilterKind.Equal); // 결과 영역이 활성 칸 값을 바인드로 묶어 다시 실행한다(실패는 상태 줄에)
+                break;
+            case "oranda.grid.filterExcludeValue":
+                g.RequestCellFilter(CellFilterKind.NotEqual);
+                break;
+            case "oranda.grid.filterNullRows":
+                g.RequestCellFilter(CellFilterKind.IsNull);
                 break;
             default:
                 break;

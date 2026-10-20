@@ -33,7 +33,13 @@ public sealed class GridRowCounter(ExecutionState state, BindVariableStore binds
     }
 
     /// <summary>전체 행 수. 결과가 비어 읽을 수 없으면 null.</summary>
-    public async Task<long?> CountAsync(SqlStatement query, CancellationToken ct)
+    public Task<long?> CountAsync(SqlStatement query, CancellationToken ct) => CountAsync(query, null, ct);
+
+    /// <summary>
+    /// 전체 행 수. <paramref name="extra"/> 는 「바인드 변수」 목록보다 먼저 쓰는 값(거른 결과의 셀 값 바인드, GRID-10).
+    /// 결과가 비어 읽을 수 없으면 null.
+    /// </summary>
+    public async Task<long?> CountAsync(SqlStatement query, IReadOnlyDictionary<string, BindValue>? extra, CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(query);
         if (query.Kind != StatementKind.Query)
@@ -57,10 +63,7 @@ public sealed class GridRowCounter(ExecutionState state, BindVariableStore binds
         }
 
         // 목록에 없는 이름은 더하지 않는다(세기는 목록·포커스를 건드리지 않는다). 원래 실행 뒤 값을 바꿨으면 지금 값으로 센다.
-        if (!binds.TryBuild(query.BindNames, out var values, out var error))
-        {
-            throw new InvalidOperationException(error ?? "바인드 값을 읽을 수 없습니다.");
-        }
+        var values = BuildBinds(binds, query.BindNames, extra);
 
         var stmt = BuildCountStatement(query);
         state.BeginRun();
@@ -74,6 +77,33 @@ public sealed class GridRowCounter(ExecutionState state, BindVariableStore binds
         {
             state.EndRun();
         }
+    }
+
+    /// <summary>
+    /// 문장에 나온 바인드 이름마다 값을 만든다: <paramref name="extra"/> 에 있으면 그 값, 없으면 「바인드 변수」 목록의 지금 값.
+    /// 문장에 없는 이름은 넘기지 않는다(드라이버가 남는 매개변수를 오류로 본다). 목록에 없거나 형식이 틀리면 이유를 담은 예외.
+    /// </summary>
+    internal static Dictionary<string, BindValue> BuildBinds(BindVariableStore store, IReadOnlyList<string> names,
+                                                             IReadOnlyDictionary<string, BindValue>? extra)
+    {
+        var fromStore = extra is null ? names : [.. names.Where(n => !extra.ContainsKey(n))];
+        if (!store.TryBuild(fromStore, out var values, out var error))
+        {
+            throw new InvalidOperationException(error ?? "바인드 값을 읽을 수 없습니다.");
+        }
+
+        if (extra is not null)
+        {
+            foreach (var name in names)
+            {
+                if (extra.TryGetValue(name, out var value))
+                {
+                    values[name] = value;
+                }
+            }
+        }
+
+        return values;
     }
 
     private static async Task<long?> ReadCountAsync(ExecutionResult result, CancellationToken ct)

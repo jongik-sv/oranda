@@ -334,6 +334,7 @@ public sealed class ResultGridTests
             "oranda.grid.copy", "oranda.grid.copyWithHeaders", "oranda.grid.copyAsCsv", "oranda.grid.copyAsInsert", "oranda.grid.copyAsInList",
             "oranda.grid.find", "oranda.grid.fetchAll", "oranda.grid.toggleTextMode", "oranda.grid.freezeColumns", "oranda.grid.hideColumn",
             "oranda.grid.showAllColumns", "oranda.grid.toggleRepeatHide", "oranda.grid.closeResultTab", "oranda.grid.countRows",
+            "oranda.grid.toggleFilterBar", "oranda.grid.filterByValue", "oranda.grid.filterExcludeValue", "oranda.grid.filterNullRows",
         ];
         Assert.Equal(expected.Order(), ids.Order());
     }

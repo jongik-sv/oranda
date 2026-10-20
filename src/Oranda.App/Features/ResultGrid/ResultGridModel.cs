@@ -700,11 +700,21 @@ public sealed class ResultGridModel : IAsyncDisposable
     /// <summary>「전체 행 수 세기」 명령이 이 결과를 만든 질의의 전체 행 수를 세어 달라고 알린다(문장은 결과 영역이 안다).</summary>
     public event EventHandler? CountRowsRequested;
 
+    /// <summary>「거르기 줄 보이기/숨기기」 명령이 결과 위 WHERE·ORDER BY 줄을 열거나 닫으라고 알린다(GRID-10).</summary>
+    public event EventHandler? FilterBarRequested;
+
+    /// <summary>셀 값 거르기 명령이 활성 칸의 값으로 거르라고 알린다(문장·바인드는 결과 영역이 안다).</summary>
+    public event EventHandler<CellFilterKind>? CellFilterRequested;
+
     public void RequestFind() => FindRequested?.Invoke(this, EventArgs.Empty);
 
     public void RequestClose() => CloseRequested?.Invoke(this, EventArgs.Empty);
 
     public void RequestCountRows() => CountRowsRequested?.Invoke(this, EventArgs.Empty);
+
+    public void RequestFilterBar() => FilterBarRequested?.Invoke(this, EventArgs.Empty);
+
+    public void RequestCellFilter(CellFilterKind kind) => CellFilterRequested?.Invoke(this, kind);
 
     private void RaiseChanged()
     {

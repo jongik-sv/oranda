@@ -143,8 +143,27 @@ public static class ExecutionCommands
     }
 
     /// <summary>
+    /// 결과 거르기 줄(GRID-10)의 실행 쪽. 행 수 세기와 같이 세션·실행 엔진은 부를 때 해석하고, 상태·바인드 목록은 버스마다 하나인 것을 쓴다.
+    /// </summary>
+    private static GridFilterRunner FilterRunner(ServiceContainer container)
+    {
+        var bus = container.GetService<IEventBus>();
+        var state = ExecutionState.For(bus);
+        return new GridFilterRunner(
+            state,
+            BindVariableStore.For(bus),
+            () => ConnectionManagerCommands.Resolve(container).ActiveSession,
+            () =>
+            {
+                EnsureEngineServices(container, state);
+                return container.GetRequiredService<IExecutionService>();
+            });
+    }
+
+    /// <summary>
     /// 시작 때 불러도 되는 가벼운 설치: 그리드 편집의 <see cref="GridEditCommands.Rerun"/>·<see cref="GridEditCommands.ConfirmPreview"/> 를
-    /// 컨트롤러로 잇는 얇은 위임자와 결과 그리드 「전체 행 수 세기」(<see cref="ResultGrid.ResultGridCommands.CountRows"/>)를 걸고, 미커밋이 생기면 주 창 닫기 확인을 건다. 컨트롤러·서비스는 만들지 않는다.
+    /// 컨트롤러로 잇는 얇은 위임자와 결과 그리드 「전체 행 수 세기」(<see cref="ResultGrid.ResultGridCommands.CountRows"/>)·
+    /// 「결과 거르기」(<see cref="ResultGrid.ResultGridCommands.Filter"/>)를 걸고, 미커밋이 생기면 주 창 닫기 확인을 건다. 컨트롤러·서비스는 만들지 않는다.
     /// 상태 표시줄 구간(시작 때 만들어진다)이 부른다.
     /// </summary>
     public static void Install(ServiceContainer? container)
@@ -167,6 +186,8 @@ public static class ExecutionCommands
         GridEditCommands.Rerun ??= (stmt, ct) => Resolve(container).RerunForEditAsync(stmt, ct);
         GridEditCommands.ConfirmPreview ??= (text, ct) => Resolve(container).ConfirmPreviewAsync(text, ct);
         ResultGrid.ResultGridCommands.CountRows ??= (stmt, ct) => RowCounter(container).CountAsync(stmt, ct);
+        ResultGrid.ResultGridCommands.Filter ??= (request, ct) => FilterRunner(container).RunAsync(request, ct);
+        ResultGrid.ResultGridCommands.CountFiltered ??= (request, ct) => FilterRunner(container).CountAsync(request, ct);
 
         // 이력 「다시 실행」·내보내기/가져오기의 완료 알림은 메시지 창으로 보낸다(받는 곳이 없으면 조용히 사라졌다).
         var log = ExecutionLog.For(container.GetService<IEventBus>());

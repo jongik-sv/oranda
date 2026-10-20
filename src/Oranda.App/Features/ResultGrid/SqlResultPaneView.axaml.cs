@@ -48,6 +48,7 @@ public partial class SqlResultPaneView : UserControl
             }
         };
         DataContextChanged += (_, _) => Bind();
+        WireFilterBar();
 
         GridControl.EditRequested += (_, cell) => BeginEdit(cell);
         EditHintClose.Click += (_, _) => Vm?.HideEditHint();
@@ -216,6 +217,7 @@ public partial class SqlResultPaneView : UserControl
         if (_bound is not null)
         {
             _bound.PropertyChanged -= OnVmPropertyChanged;
+            _bound.FilterFocusRequested -= OnFilterFocusRequested;
             _bound = null;
         }
 
@@ -227,6 +229,7 @@ public partial class SqlResultPaneView : UserControl
 
         _bound = vm;
         vm.PropertyChanged += OnVmPropertyChanged;
+        vm.FilterFocusRequested += OnFilterFocusRequested;
         AttachModel(vm);
     }
 
@@ -246,6 +249,9 @@ public partial class SqlResultPaneView : UserControl
             FindBox.Focus();
         }
     }
+
+    private void OnFilterFocusRequested(object? sender, EventArgs e) =>
+        Avalonia.Threading.Dispatcher.UIThread.Post(() => WhereBox.Focus()); // 줄이 보인 뒤에 포커스를 옮긴다
 
     private void AttachModel(SqlResultPaneViewModel vm)
     {
@@ -310,6 +316,75 @@ public partial class SqlResultPaneView : UserControl
         {
             GridControl.EnsureVisible(m.Active);
         }
+    }
+
+    /// <summary>
+    /// 거르기 줄(GRID-10): Enter 적용, Esc 는 칸을 비우고 빈 칸이면 줄을 닫는다. 단추는 적용·취소·지우기·닫기·최근 조건.
+    /// </summary>
+    private void WireFilterBar()
+    {
+        void OnFilterKey(TextBox box, KeyEventArgs e)
+        {
+            if (e.Key == Key.Enter)
+            {
+                e.Handled = true;
+                _ = Vm?.ApplyFilterAsync();
+            }
+            else if (e.Key == Key.Escape)
+            {
+                e.Handled = true;
+                if (!string.IsNullOrEmpty(box.Text))
+                {
+                    box.Text = string.Empty;
+                }
+                else
+                {
+                    CloseFilterBar();
+                }
+            }
+        }
+
+        WhereBox.KeyDown += (_, e) => OnFilterKey(WhereBox, e);
+        OrderByBox.KeyDown += (_, e) => OnFilterKey(OrderByBox, e);
+        FilterApplyButton.Click += async (_, _) => await (Vm?.ApplyFilterAsync() ?? Task.CompletedTask);
+        FilterCancelButton.Click += (_, _) => Vm?.CancelFilter();
+        FilterClearButton.Click += async (_, _) => await (Vm?.ClearFilterAsync() ?? Task.CompletedTask);
+        FilterCloseButton.Click += (_, _) => CloseFilterBar();
+        FilterHistoryButton.Click += (_, _) => ShowFilterHistory();
+    }
+
+    /// <summary>최근 조건 목록을 단추 아래에 띄운다. 고르면 WHERE 칸에 넣고 바로 거른다.</summary>
+    private void ShowFilterHistory()
+    {
+        if (Vm is not { HasFilterHistory: true } vm)
+        {
+            return;
+        }
+
+        var flyout = new MenuFlyout();
+        foreach (var condition in vm.FilterHistory)
+        {
+            // 머리글을 글 블록으로 둔다: 문자열이면 밑줄(_)을 접근 키로 읽어 DEPT_NO 의 밑줄이 사라진다.
+            var item = new MenuItem { Header = new TextBlock { Text = condition } };
+            item.Click += async (_, _) =>
+            {
+                vm.WhereText = condition;
+                await vm.ApplyFilterAsync();
+            };
+            flyout.Items.Add(item);
+        }
+
+        flyout.ShowAt(FilterHistoryButton);
+    }
+
+    private void CloseFilterBar()
+    {
+        if (Vm is { } vm)
+        {
+            vm.IsFilterBarVisible = false;
+        }
+
+        GridControl.Focus();
     }
 
     private void CloseFind()

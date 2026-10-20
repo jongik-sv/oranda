@@ -231,6 +231,79 @@ public sealed class GridEditTests : IDisposable
     }
 
     [Fact]
+    public async Task Filtering_an_edit_mode_result_reruns_it_read_only_and_drops_the_edit_mark()
+    {
+        var stmt = new SqlStatement("SELECT empno, ename, sal FROM emp", default, StatementKind.Query) { Verb = "SELECT" };
+        var tabs = new Oranda.App.Features.Execution.ResultTabsViewModel();
+        var tab = tabs.AddQuery(new MemoryResult(EmpCols, Data), "결과 1", stmt);
+        var s = await OpenAsync(stmt.Text);
+        tab.EditSession = s;
+        tab.Title += " (편집)";
+        tab.Pane!.SetEditSession(s);
+        GridEditCommands.Active = s;
+        Oranda.App.Features.ResultGrid.ResultFilterRequest? asked = null;
+        Oranda.App.Features.ResultGrid.ResultGridCommands.Filter = (request, _) =>
+        {
+            asked = request;
+            return Task.FromResult<IResultSet>(new MemoryResult(EmpCols, Data));
+        };
+        try
+        {
+            Assert.True(tab.Pane.IsEditMode);
+            tab.Pane.WhereText = "SAL > 1000";
+
+            await tab.Pane.ApplyFilterAsync();
+
+            Assert.Same(stmt, asked?.Query);
+            Assert.False(tab.Pane.IsEditMode); // 감싼 질의는 키·ROWID 를 알 수 없어 편집 없이 다시 연다
+            Assert.True(tab.Pane.IsFiltered);
+            Assert.Null(tab.EditSession);
+            Assert.Equal("결과 1", tab.Title);
+            Assert.Null(GridEditCommands.Active);
+        }
+        finally
+        {
+            Oranda.App.Features.ResultGrid.ResultGridCommands.Filter = null;
+            tabs.Clear();
+        }
+    }
+
+    [Fact]
+    public async Task Unapplied_edits_block_filtering()
+    {
+        var stmt = new SqlStatement("SELECT empno, ename, sal FROM emp", default, StatementKind.Query) { Verb = "SELECT" };
+        var pane = new Oranda.App.Features.ResultGrid.SqlResultPaneViewModel { Statement = stmt };
+        pane.SetResult(new MemoryResult(EmpCols, Data));
+        await pane.Model!.LoadFirstPageAsync();
+        var s = await OpenAsync(stmt.Text);
+        pane.SetEditSession(s);
+        Assert.True(s.SetCell(0, 1, "SCOTT"));
+        var calls = 0;
+        Oranda.App.Features.ResultGrid.ResultGridCommands.Filter = (_, _) =>
+        {
+            calls++;
+            return Task.FromResult<IResultSet>(new MemoryResult(EmpCols, Data));
+        };
+        try
+        {
+            pane.WhereText = "SAL > 1000";
+            await pane.ApplyFilterAsync();
+            pane.Model.SelectCell(new Oranda.App.Features.ResultGrid.GridCell(0, 1));
+            await pane.FilterByCellAsync(Oranda.App.Features.ResultGrid.CellFilterKind.Equal);
+
+            Assert.Equal(0, calls); // 반영하지 않은 편집을 조용히 버리지 않는다
+            Assert.True(pane.IsEditDirty);
+            Assert.Equal("SAL > 1000", pane.WhereText);
+            Assert.Contains("반영하지 않은 편집", pane.StatusText, StringComparison.Ordinal);
+        }
+        finally
+        {
+            Oranda.App.Features.ResultGrid.ResultGridCommands.Filter = null;
+            pane.Clear();
+        }
+    }
+
+    [Fact]
     public void Handler_is_registered_for_every_grid_edit_command()
     {
         var ids = typeof(GridEditCommandHandler).GetCustomAttributes(typeof(OrandaCommandAttribute), false)
@@ -247,6 +320,29 @@ public sealed class GridEditTests : IDisposable
     private sealed class NoKeys : IContextKeys
     {
         public bool Evaluate(string? expression) => true;
+    }
+
+    /// <summary>열과 행을 그대로 돌려주는 메모리 결과(한 페이지).</summary>
+    private sealed class MemoryResult(ResultColumn[] columns, object?[][] rows) : IResultSet
+    {
+        public IReadOnlyList<ResultColumn> Columns => columns;
+
+        public bool IsComplete => true;
+
+        public long? KnownRowCount => rows.Length;
+
+        public Task<ResultPage> GetPageAsync(int pageIndex, CancellationToken ct)
+        {
+            var cols = new List<IReadOnlyList<object?>>();
+            for (var c = 0; c < columns.Length; c++)
+            {
+                cols.Add(pageIndex == 0 ? [.. rows.Select(r => r[c])] : []);
+            }
+
+            return Task.FromResult(new ResultPage(pageIndex, 0, pageIndex == 0 ? rows.Length : 0, cols) { IsLast = true });
+        }
+
+        public ValueTask DisposeAsync() => ValueTask.CompletedTask;
     }
 
     private sealed class RecordingExecution : IExecutionService
