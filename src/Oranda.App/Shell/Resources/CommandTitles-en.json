@@ -30,6 +30,7 @@
   "Cmd.oranda.edit.outdent": "Outdent",
   "Cmd.oranda.edit.parameterHints": "Parameter Hints",
   "Cmd.oranda.edit.paste": "Paste",
+  "Cmd.oranda.edit.pasteMyBatisLog": "Paste MyBatis Log",
   "Cmd.oranda.edit.previousBookmark": "Previous Bookmark",
   "Cmd.oranda.edit.redo": "Redo",
   "Cmd.oranda.edit.replace": "Replace",

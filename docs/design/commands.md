@@ -320,6 +320,7 @@
 | `oranda.edit.cut` | 잘라내기 | `Ctrl+X` | `editorFocus` | `hasSelection` | TSK-04-02 |
 | `oranda.edit.copy` | 복사 | `Ctrl+C` | `editorFocus` | `hasSelection` | TSK-04-02 |
 | `oranda.edit.paste` | 붙여넣기 | `Ctrl+V` | `editorFocus` | 항상 | TSK-04-02 |
+| `oranda.edit.pasteMyBatisLog` | MyBatis 로그 붙여 넣기 | - | `editorFocus` | `sqlDocActive` | TSK-13-03 |
 | `oranda.edit.selectAll` | 모두 선택 | `Ctrl+A` | `editorFocus` | 항상 | TSK-04-02 |
 | `oranda.edit.find` | 찾기 | `Ctrl+F` | `editorFocus` | 항상 | TSK-04-02 |
 | `oranda.edit.replace` | 바꾸기 | `Ctrl+H` | `editorFocus` | `!readOnlyDoc` | TSK-04-02 |
