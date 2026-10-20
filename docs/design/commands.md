@@ -499,6 +499,7 @@
 | `oranda.schema.objectSearch` | 객체 검색 | - | 전역 | `hasSession` | TSK-07-04 |
 | `oranda.db.info` | DB 정보 | - | 전역 | `hasSession` | TSK-07-04 |
 | `oranda.db.ddlExtract` | DDL 일괄 추출 | - | 전역 | `hasSession` | TSK-07-04 |
+| `oranda.schema.tableSpec` | 테이블 정의서… | - | `schemaFocus` | `tableNodeSelected && hasSession` | TSK-13-06 |
 | `oranda.plsql.openSource` | PL/SQL 소스 열기 | - | `schemaFocus` | `plsqlNodeSelected` | TSK-08-01 |
 | `oranda.plsql.compile` | 컴파일(저장) | `F5` | `plsqlEditorFocus` | `hasSession && !sessionBusy && !readOnlySession` | TSK-08-01 |
 | `oranda.plsql.toggleSpecBody` | 명세/본문 전환 | `Ctrl+Shift+B` | `plsqlEditorFocus` | `isPackageDoc` | TSK-08-01 |
@@ -538,6 +539,7 @@
 | `oranda.tools.exportSettings` | 설정 내보내기 | - | 전역 | 항상 | TSK-04-07 |
 | `oranda.tools.importSettings` | 설정 가져오기 | - | 전역 | 항상 | TSK-04-07 |
 | `oranda.tools.import` | 데이터 가져오기(CSV·xlsx) | - | 전역 | `hasSession && !readOnlySession` | TSK-06-07 |
+| `oranda.tools.tableSpec` | 테이블 정의서… | - | 전역 | `hasSession` | TSK-13-06 |
 | `oranda.tools.language` | UI 언어 | - | 전역 | 항상 | TSK-10-02 |
 
 ### 창

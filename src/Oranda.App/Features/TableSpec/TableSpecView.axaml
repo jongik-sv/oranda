@@ -1,0 +1,39 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:icons="using:Oranda.App.Shell.Icons"
+             xmlns:vm="using:Oranda.App.Features.TableSpec"
+             x:Class="Oranda.App.Features.TableSpec.TableSpecView"
+             x:DataType="vm:TableSpecViewModel">
+  <DockPanel>
+    <Border DockPanel.Dock="Bottom" Classes="panel-status">
+      <TextBlock Text="{Binding StatusText}" TextTrimming="CharacterEllipsis" />
+    </Border>
+    <ProgressBar DockPanel.Dock="Bottom" Margin="6,2" Minimum="0" Maximum="100" Value="{Binding Progress}" />
+    <Grid ColumnDefinitions="360,4,*">
+      <StackPanel Grid.Column="0" Margin="8" Spacing="6">
+        <TextBlock Text="1. 대상" FontWeight="SemiBold" />
+        <TextBox PlaceholderText="스키마" Text="{Binding Owner, Mode=TwoWay}" AutomationProperties.Name="스키마" />
+        <TextBox PlaceholderText="표 이름 (* 와일드카드, 비우면 전체)" Text="{Binding NameText, Mode=TwoWay}" AutomationProperties.Name="표 이름" />
+        <TextBlock Text="2. 형식" FontWeight="SemiBold" />
+        <ComboBox x:Name="FormatBox" HorizontalAlignment="Stretch" ItemsSource="{x:Static vm:TableSpecViewModel.Formats}"
+                  SelectedItem="{Binding Format, Mode=TwoWay}" AutomationProperties.Name="출력 형식">
+          <ComboBox.ItemTemplate>
+            <DataTemplate x:DataType="vm:TableSpecFormatChoice">
+              <TextBlock Text="{Binding Title}" />
+            </DataTemplate>
+          </ComboBox.ItemTemplate>
+        </ComboBox>
+        <TextBlock Text="3. 저장" FontWeight="SemiBold" />
+        <Button Classes="tool" icons:ButtonIcon.Key="exportFile" x:Name="RunButton" Content="정의서 만들기…" HorizontalAlignment="Left" IsEnabled="{Binding CanRun}" />
+      </StackPanel>
+      <GridSplitter Grid.Column="1" ResizeDirection="Columns" />
+      <ListBox Grid.Column="2" ItemsSource="{Binding Results}">
+        <ListBox.ItemTemplate>
+          <DataTemplate x:DataType="x:String">
+            <TextBlock Text="{Binding}" TextTrimming="CharacterEllipsis" />
+          </DataTemplate>
+        </ListBox.ItemTemplate>
+      </ListBox>
+    </Grid>
+  </DockPanel>
+</UserControl>

@@ -181,6 +181,8 @@
   "Cmd.oranda.schema.objectSearch": "객체 검색",
   "Cmd.oranda.db.info": "DB 정보",
   "Cmd.oranda.db.ddlExtract": "DDL 일괄 추출",
+  "Cmd.oranda.schema.tableSpec": "테이블 정의서…",
+  "Cmd.oranda.tools.tableSpec": "테이블 정의서…",
   "Cmd.oranda.plsql.openSource": "PL/SQL 소스 열기",
   "Cmd.oranda.plsql.compile": "컴파일(저장)",
   "Cmd.oranda.plsql.toggleSpecBody": "명세/본문 전환",

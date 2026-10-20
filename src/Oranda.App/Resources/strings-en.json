@@ -77,6 +77,7 @@
   "Panel.oranda.panel.sessionMonitor": "Session Monitor",
   "Panel.oranda.panel.sqlEditor": "SQL Editor",
   "Panel.oranda.panel.sqlMonitor": "SQL Monitor",
+  "Panel.oranda.panel.tableSpec": "Table Specification",
   "Panel.oranda.panel.templates": "Templates",
   "Shell.about.ok": "OK",
   "Shell.about.title": "About Oranda",
