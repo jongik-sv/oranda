@@ -893,7 +893,7 @@ dotnet, testhost, Oranda.App
 - depends: TSK-02-05, TSK-04-01
 - blocked-by: -
 - entry-point: 메뉴 > 파일 > 새 SQL 편집기 (Ctrl+N)
-- note: -
+- note: 결정 D-016·D-019(2026-10-20): 고친 SQL 탭 닫기 = 저장 / 저장 안 함 / 취소(작업 공간 닫기·앱 종료는 묻지 않음), 시작 복원 = 커서만(PRD EDIT-09, 닫기 가드 docs/design/ui-contract.md 2.5). 사용자 결정 후보: 작업 공간 파일(.md·MyBatis)에서 연 탭을 닫을 때 「다른 이름으로 저장(.sql)」 을 묻는 동작을 유지할지
 
 #### PRD 요구사항
 - prd-ref: PRD EDIT-02, EDIT-06, EDIT-07, EDIT-09, EDIT-11
