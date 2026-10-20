@@ -7,9 +7,9 @@ namespace Oranda.Perf.Ui;
 
 /// <summary>
 /// PRD 7.2 「문법 검사 반영 (1만 줄 파일, 입력 멈춘 뒤) 300 ms 이하」.
-/// 편집기는 입력이 300 ms(EditorDiagnostics.Debounce, TRD 4.5) 멈추면 분석을 시작한다. 그래서 두 값을 따로 잰다.
+/// 편집기는 입력이 EditorDiagnostics.Debounce(지금 300 ms, TRD 4.5) 만큼 멈추면 분석을 시작한다. 그래서 두 값을 따로 잰다.
 ///  - 분석 반영: 디바운스가 끝난 시점부터 밑줄이 문서에 반영될 때까지(= 분석 + 반영). 판정 값.
-///  - 마지막 키 → 반영: 마지막 키 입력부터 반영까지(디바운스 300 ms 포함). PRD 문구를 「마지막 키 기준」 으로 읽으면 이 값이 기준이다.
+///  - 마지막 키 → 반영: 마지막 키 입력부터 반영까지(디바운스 포함). PRD 문구를 「마지막 키 기준」 으로 읽으면 이 값이 기준이다.
 /// 진단은 문서 맨 끝 한 줄에 오류(닫히지 않은 괄호)를 넣었다 빼는 편집으로 만든다.
 /// </summary>
 internal static class DiagnosticsScenario
@@ -88,8 +88,9 @@ internal static class DiagnosticsScenario
             }
         }
 
-        ctx.Report.Rows.Add(ReportRow.Create($"문법 검사 {lines}줄: 디바운스 뒤 → 반영(분석+반영)", "ms", 300, analyzeNow, "p95", "AnalyzeNowAsync(디바운스 건너뜀). 판정 값(TRD 4.5 의 300 ms 멈춤 이후 기준)"));
-        ctx.Report.Rows.Add(ReportRow.Create($"문법 검사 {lines}줄: 마지막 키 → 반영(디바운스 300 ms 포함)", "ms", 300, fromLastKey, "p95", "PRD 문구를 마지막 키 기준으로 읽으면 이 값. 디바운스 300 ms 가 이미 한도 전부"));
+        var debounce = EditorDiagnostics.Debounce.TotalMilliseconds.ToString("F0", System.Globalization.CultureInfo.InvariantCulture) + " ms";
+        ctx.Report.Rows.Add(ReportRow.Create($"문법 검사 {lines}줄: 디바운스 뒤 → 반영(분석+반영)", "ms", 300, analyzeNow, "p95", $"AnalyzeNowAsync(디바운스 건너뜀). 판정 값(TRD 4.5 의 {debounce} 멈춤 이후 기준)"));
+        ctx.Report.Rows.Add(ReportRow.Create($"문법 검사 {lines}줄: 마지막 키 → 반영(디바운스 {debounce} 포함)", "ms", 300, fromLastKey, "p95", "PRD 문구를 마지막 키 기준으로 읽으면 이 값. 디바운스가 한도 300 ms 의 대부분(지금은 전부)을 쓴다"));
         ctx.Report.Rows.Add(ReportRow.Create($"문법 검사 {lines}줄: 첫 전체 분석", "ms", null, [cold], "max", "문서를 연 뒤 첫 반영까지(디바운스 포함). 표본 1개, 참고"));
         host.Close(tab);
     }

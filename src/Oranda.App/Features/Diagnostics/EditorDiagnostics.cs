@@ -37,14 +37,17 @@ public sealed class DiagnosticSegment : TextSegment
 }
 
 /// <summary>
-/// SQL 편집기 1개의 문법 오류 표시(TSK-04-03, EDIT-03). 입력이 300 ms 멈추면 문서를 <see cref="ILanguageService.AnalyzeAsync"/> 로
+/// SQL 편집기 1개의 문법 오류 표시(TSK-04-03, EDIT-03). 입력이 <see cref="Debounce"/> 만큼 멈추면 문서를 <see cref="ILanguageService.AnalyzeAsync"/> 로
 /// 백그라운드 분석하고(언어 서비스가 바뀐 문장만 다시 파싱), 결과를 물결 밑줄과 마우스 올림 설명으로 보인다.
 /// 다시 입력하면 진행 중 분석을 취소한다. 서버 컴파일 오류는 <see cref="SetServerDiagnostics"/> 로 같은 밑줄에 얹는다.
 /// UI 스레드에서만 다룬다(파싱은 UI 스레드에서 하지 않는다). 소유: TSK-04-03.
 /// </summary>
 public sealed class EditorDiagnostics : IBackgroundRenderer
 {
-    /// <summary>입력이 이만큼 멈춘 뒤 분석한다(TRD 4.5).</summary>
+    /// <summary>
+    /// 입력이 이만큼 멈춘 뒤 분석한다(TRD 4.5). 값은 이 한 곳에서만 정한다(측정 시나리오도 이것을 읽는다).
+    /// PRD 7.2 「입력 멈춘 뒤 300 ms」 를 디바운스 뒤로 읽을지 마지막 키 뒤로 읽을지 정해지면 바꾼다(TSK-04-09).
+    /// </summary>
     public static readonly TimeSpan Debounce = TimeSpan.FromMilliseconds(300);
 
     private static readonly ConditionalWeakTable<SqlEditorView, EditorDiagnostics> s_attached = new();
@@ -65,7 +68,7 @@ public sealed class EditorDiagnostics : IBackgroundRenderer
     {
         _view = view;
         _language = language;
-        _timer = new DispatcherTimer { Interval = Debounce / 4 };
+        _timer = new DispatcherTimer { Interval = Debounce };
         _timer.Tick += OnTick;
         var textView = view.TextEditorControl.TextArea.TextView;
         textView.BackgroundRenderers.Add(this);
@@ -219,15 +222,20 @@ public sealed class EditorDiagnostics : IBackgroundRenderer
         _lastChange = Stopwatch.GetTimestamp();
         if (!_timer.IsEnabled)
         {
+            _timer.Interval = Debounce;
             _timer.Start();
         }
     }
 
     private void OnTick(object? sender, EventArgs e)
     {
-        if (Stopwatch.GetElapsedTime(_lastChange) < Debounce)
+        var remaining = Debounce - Stopwatch.GetElapsedTime(_lastChange);
+        if (remaining > TimeSpan.Zero)
         {
-            return; // 아직 입력 중
+            // 아직 입력 중: 마지막 키에서 Debounce 가 지나는 때에 다시 깬다. 키마다 타이머를 다시 걸지 않고,
+            // 예전처럼 Debounce/4 마다 확인하지도 않는다(확인 주기만큼 늦게 시작하던 0~75 ms 를 없앤다, TSK-04-09).
+            _timer.Interval = remaining;
+            return;
         }
 
         _timer.Stop();
