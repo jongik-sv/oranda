@@ -1002,5 +1002,32 @@ public sealed partial class SchemaBrowserViewModel : ToolPanelViewModelBase, IDi
 
     /// <summary>끌기 시작 때 쓸 텍스트: 표·뷰는 SELECT 문, 그 밖은 이름. Ctrl = 이름, Shift = 열 목록.</summary>
     public Task<string?> PrepareDragTextAsync(SchemaNode node, bool ctrl, bool shift, CancellationToken ct = default) =>
-        BuildTextAsync(node, ctrl ? SchemaInsertMode.Name : shift ? SchemaInsertMode.Columns : SchemaInsertMode.Select, ct);
+        BuildTextAsync(node, DragMode(ctrl, shift), ct);
+
+    /// <summary>
+    /// 메타데이터 없이 곧바로 만드는 끌기 텍스트. Windows OLE 끌기는 누름 이벤트 안에서 시작해야 하므로
+    /// 열 정보를 아직 못 읽었으면 이것으로 시작한다(표·뷰 SELECT 는 <c>SELECT *</c>, 열 목록은 이름으로).
+    /// </summary>
+    public static string? DragTextWithoutMetadata(SchemaNode node, bool ctrl, bool shift)
+    {
+        if (node.Kind == SchemaNodeKind.Column)
+        {
+            return SchemaSql.Quote(node.Title);
+        }
+
+        if (node.Ref is not { } r)
+        {
+            return null;
+        }
+
+        return DragMode(ctrl, shift) switch
+        {
+            SchemaInsertMode.Select when SchemaNode.IsTableLike(r.ObjectType) => $"SELECT *\nFROM   {SchemaSql.QualifiedName(r)}",
+            SchemaInsertMode.Select => SchemaSql.Select(r, null),
+            _ => SchemaSql.QualifiedName(r),
+        };
+    }
+
+    private static SchemaInsertMode DragMode(bool ctrl, bool shift) =>
+        ctrl ? SchemaInsertMode.Name : shift ? SchemaInsertMode.Columns : SchemaInsertMode.Select;
 }

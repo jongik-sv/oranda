@@ -185,8 +185,9 @@ public partial class ConnectionManagerWindow : Window
             data.Add(DataTransferItem.CreateText(node.Title));
             await DragDrop.DoDragDropAsync(args, data, DragDropEffects.Move).ConfigureAwait(true);
         }
-        catch (Exception ex) when (ex is InvalidOperationException or NotSupportedException)
+        catch (Exception ex)
         {
+            // async void 라서 여기서 못 잡으면 앱이 죽는다(Windows OLE 는 COMException 을 던진다, TSK-07-05).
             Model?.ReportError("끌어 놓기를 시작하지 못했습니다: " + ex.Message);
         }
         finally

@@ -1,5 +1,6 @@
 using System;
 using System.Linq;
+using System.Threading.Tasks;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.Primitives;
@@ -20,6 +21,7 @@ public partial class SchemaBrowserView : UserControl
     private PointerPressedEventArgs? _pressArgs;
     private bool _pressExpanded;
     private int _pressClicks;
+    private Task<string?>? _pressText;
     private SchemaNode? _keySelected;
     private SchemaBrowserViewModel? _revealSource;
 
@@ -218,6 +220,14 @@ public partial class SchemaBrowserView : UserControl
         _pressExpanded = _pressNode?.IsExpanded ?? false;
         _pressClicks = e.ClickCount;
         _dragging = false;
+        _pressText = null;
+
+        // 끌기 텍스트(표·뷰는 열 정보가 필요)를 누를 때 미리 읽는다. 끌기는 누름 이벤트 안에서 기다림 없이 시작해야 한다(Windows OLE).
+        if (_pressNode is { Kind: SchemaNodeKind.Item or SchemaNodeKind.Column } pressed
+            && e.GetCurrentPoint(Tree).Properties.IsLeftButtonPressed && DataContext is SchemaBrowserViewModel model)
+        {
+            _pressText = PrefetchDragText(model, pressed, e.KeyModifiers);
+        }
 
         // 오른쪽 단추는 누른 노드를 먼저 고른다(오른쪽 클릭 메뉴가 그 노드에 대해 열린다).
         if (_pressNode is { } node && e.GetCurrentPoint(Tree).Properties.IsRightButtonPressed && DataContext is SchemaBrowserViewModel vm)
@@ -241,10 +251,18 @@ public partial class SchemaBrowserView : UserControl
         }
 
         _dragging = true;
+        var args = _pressArgs;
+        var prefetched = _pressText;
+        _pressText = null;
         try
         {
             // Ctrl = 이름만, Shift = 열 목록, 그 밖 = SELECT 문(표·뷰). 편집기는 일반 텍스트 끌어 놓기로 받는다.
-            var text = await vm.PrepareDragTextAsync(node, e.KeyModifiers.HasFlag(KeyModifiers.Control), e.KeyModifiers.HasFlag(KeyModifiers.Shift));
+            // 여기서 await 한 뒤 끌기를 시작하면 Windows 에서 DoDragDrop 이 COMException 으로 실패한다(TSK-07-05).
+            var ctrl = e.KeyModifiers.HasFlag(KeyModifiers.Control);
+            var shift = e.KeyModifiers.HasFlag(KeyModifiers.Shift);
+            var text = prefetched is { IsCompletedSuccessfully: true } done && done.Result is { } ready
+                ? ready
+                : SchemaBrowserViewModel.DragTextWithoutMetadata(node, ctrl, shift);
             if (text is null)
             {
                 return;
@@ -252,15 +270,29 @@ public partial class SchemaBrowserView : UserControl
 
             var data = new Avalonia.Input.DataTransfer();
             data.Add(DataTransferItem.CreateText(text));
-            await DragDrop.DoDragDropAsync(_pressArgs!, data, DragDropEffects.Copy);
+            await DragDrop.DoDragDropAsync(args, data, DragDropEffects.Copy);
         }
-        catch (Exception ex) when (ex is InvalidOperationException or NotSupportedException)
+        catch (Exception ex)
         {
+            // async void 라서 여기서 못 잡으면 앱이 죽는다. 끌기 실패는 안내만 한다.
             vm.StatusText = "끌어 놓기를 시작하지 못했다: " + ex.Message;
         }
         finally
         {
             _pressNode = null;
+        }
+    }
+
+    /// <summary>누를 때의 Ctrl·Shift 로 끌기 텍스트를 미리 만든다. 실패는 null(끌 때 메타데이터 없는 텍스트로 대신한다).</summary>
+    private static async Task<string?> PrefetchDragText(SchemaBrowserViewModel vm, SchemaNode node, KeyModifiers modifiers)
+    {
+        try
+        {
+            return await vm.PrepareDragTextAsync(node, modifiers.HasFlag(KeyModifiers.Control), modifiers.HasFlag(KeyModifiers.Shift));
+        }
+        catch (Exception)
+        {
+            return null;
         }
     }
 }

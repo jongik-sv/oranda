@@ -161,8 +161,9 @@ public partial class TemplatesView : UserControl
             data.Add(DataTransferItem.CreateText(row.Snippet.Example));
             await DragDrop.DoDragDropAsync(_pressArgs, data, DragDropEffects.Copy).ConfigureAwait(true);
         }
-        catch (Exception ex) when (ex is InvalidOperationException or NotSupportedException)
+        catch (Exception ex)
         {
+            // async void 라서 여기서 못 잡으면 앱이 죽는다(Windows OLE 는 COMException 을 던진다, TSK-07-05).
             if (Vm is { } vm)
             {
                 vm.Status = ex.Message;

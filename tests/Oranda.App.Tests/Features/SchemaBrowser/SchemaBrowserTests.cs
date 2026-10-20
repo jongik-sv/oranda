@@ -200,6 +200,22 @@ public class SchemaBrowserTests
     }
 
     [Fact]
+    public async Task Drag_text_without_metadata_starts_without_waiting()
+    {
+        // TSK-07-05: Windows OLE 끌기는 누름 이벤트 안에서 기다림 없이 시작해야 한다. 열 정보가 없을 때 쓰는 텍스트.
+        var h = new Harness();
+        await h.Vm.SetSessionAsync(h.Session);
+        var node = h.Vm.Roots[1].Children[0];
+        await h.Vm.ExpandAsync(node);
+        var emp = node.Children.First(c => c.Title == "EMP");
+
+        Assert.Equal("SELECT *\nFROM   SCOTT.EMP", SchemaBrowserViewModel.DragTextWithoutMetadata(emp, false, false));
+        Assert.Equal("SCOTT.EMP", SchemaBrowserViewModel.DragTextWithoutMetadata(emp, true, false));
+        Assert.Equal("SCOTT.EMP", SchemaBrowserViewModel.DragTextWithoutMetadata(emp, false, true));
+        Assert.Null(SchemaBrowserViewModel.DragTextWithoutMetadata(node, false, false));
+    }
+
+    [Fact]
     public void Sequence_and_procedure_text()
     {
         Assert.Equal("SELECT HR.SEQ1.NEXTVAL FROM DUAL", SchemaSql.Select(new DbObjectRef("HR", "SEQ1", "SEQUENCE"), null));

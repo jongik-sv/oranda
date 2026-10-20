@@ -1915,7 +1915,7 @@ dotnet, testhost, Oranda.App
 - category: defect
 - domain: frontend
 - model: sonnet
-- status: [ ]
+- status: [xx]
 - priority: critical
 - assignee: -
 - schedule: 2026-12-08 ~ 2026-12-10
