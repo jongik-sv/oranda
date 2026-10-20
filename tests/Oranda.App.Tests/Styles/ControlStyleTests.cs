@@ -2,8 +2,12 @@ using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.Presenters;
 using Avalonia.Controls.Primitives;
+using Avalonia.Media;
 using Avalonia.Threading;
 using Avalonia.VisualTree;
+using AvaloniaEdit.Editing;
+using Dock.Avalonia.Controls;
+using Oranda.App.Shell.Docking;
 using Oranda.App.Tests.Shell.Headless;
 
 namespace Oranda.App.Tests.Styles;
@@ -21,6 +25,60 @@ public class ControlStyleTests
         Assert.Equal(new Thickness(1), plain.BorderThickness);
         Assert.True(plain.Bounds.Height >= 28, $"단추 높이 {plain.Bounds.Height}");
         Assert.Equal(new Thickness(0), toolbar.BorderThickness);
+        window.Close();
+    });
+
+    [Fact]
+    public Task Disabled_plain_button_keeps_its_box_so_it_still_looks_like_a_button() => HeadlessHost.Run(() =>
+    {
+        var enabled = new Button { Content = "시험" };
+        var disabled = new Button { Content = "저장", IsEnabled = false };
+        var window = Show(new StackPanel { Children = { enabled, disabled } });
+
+        Assert.Equal(new Thickness(1), disabled.BorderThickness);
+        Assert.Equal(enabled.Bounds.Height, disabled.Bounds.Height);
+        Assert.True(disabled.Bounds.Width >= 84, $"최소 폭 {disabled.Bounds.Width}");
+        var presenter = disabled.GetVisualDescendants().OfType<ContentPresenter>().First();
+        Assert.True(presenter.Background is Avalonia.Media.ISolidColorBrush { Color.A: > 0 }, "비활성 단추의 바탕이 사라졌다");
+        Assert.True(presenter.BorderBrush is Avalonia.Media.ISolidColorBrush { Color.A: > 0 }, "비활성 단추의 테두리가 사라졌다");
+        Assert.Equal(1.0, presenter.Opacity);
+        window.Close();
+    });
+
+    [Fact]
+    public Task Document_tab_buttons_do_not_get_the_plain_button_box() => HeadlessHost.Run(() =>
+    {
+        using var h = new ShellHarness();
+        h.Get<DockWorkspace>().OpenDocument("oranda.panel.sqlEditor");
+        Dispatcher.UIThread.RunJobs();
+        h.Window.UpdateLayout();
+
+        var buttons = h.Window.GetVisualDescendants().OfType<DocumentTabStrip>()
+            .SelectMany(strip => strip.GetVisualDescendants().OfType<Button>()).ToList();
+        Assert.NotEmpty(buttons);
+        var plain = Brush(h.Window, "OrandaButtonBackgroundBrush");
+        foreach (var button in buttons)
+        {
+            Assert.Equal(new Thickness(0), button.BorderThickness);
+            Assert.False(button.Background is ISolidColorBrush b && b.Color == plain.Color, "문서 탭 단추에 일반 단추 바탕이 입혀졌다");
+        }
+    });
+
+    [Fact]
+    public Task Editor_text_area_uses_the_light_selection_resource_and_keeps_syntax_colors() => HeadlessHost.Run(() =>
+    {
+        var area = new TextArea();
+        var window = Show(area);
+
+        var inactive = Brush(window, "OrandaEditorSelectionInactiveBrush");
+        Assert.True(area.SelectionBrush is ISolidColorBrush i && i.Color == inactive.Color, $"포커스 없는 선택 색 {area.SelectionBrush}");
+
+        area.Focus();
+        Dispatcher.UIThread.RunJobs();
+        var resource = Brush(window, "OrandaEditorSelectionBrush");
+        Assert.True(area.SelectionBrush is ISolidColorBrush b && b.Color == resource.Color, $"선택 색 {area.SelectionBrush}");
+        Assert.Null(area.SelectionForeground);
+        Assert.Null(area.SelectionBorder);
         window.Close();
     });
 
@@ -56,6 +114,12 @@ public class ControlStyleTests
 
     private static RepeatButton Part(NumericUpDown box, string name) =>
         box.GetVisualDescendants().OfType<RepeatButton>().Single(b => b.Name == name);
+
+    private static ISolidColorBrush Brush(Window window, string key)
+    {
+        Assert.True(window.TryFindResource(key, window.ActualThemeVariant, out var value), key);
+        return Assert.IsAssignableFrom<ISolidColorBrush>(value);
+    }
 
     private static Window Show(Control content)
     {

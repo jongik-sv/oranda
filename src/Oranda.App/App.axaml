@@ -2,6 +2,7 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:dock="using:Dock.Avalonia.Themes.Fluent"
              xmlns:dockctl="using:Dock.Avalonia.Controls"
+             xmlns:aedit="using:AvaloniaEdit.Editing"
              x:Class="Oranda.App.App"
              xmlns:local="using:Oranda.App"
              RequestedThemeVariant="Default">
@@ -28,28 +29,92 @@
             <Setter Property="MinHeight" Value="28" />
         </Style>
 
-        <!-- 일반 단추(Dock 의 머리·탭 단추는 PART_* 이름으로 제외한다): 옅은 바탕 + 1 DIP 테두리(TextBox·ComboBox 와 같은 줄 높이). 툴바·도구 단추·팔레트 칸·시작 목록은 아래 자기 클래스 규칙이 따로 정한다.
-             쓸 수 없을 때는 바탕을 칠하지 않고 글자·테두리만 흐리게 한다. 파란 접속 단추(accent)는 Fluent 모양을 그대로 쓴다. -->
+        <!-- 일반 단추(Dock 의 머리·탭 단추는 PART_* 이름으로 제외한다): macOS 풍 — 높이 30·모서리 6·1 DIP 테두리·아주 옅은 아래 그림자, 좌우 여백 16·최소 폭 84(대화상자 단추 줄이 들쭉날쭉하지 않게).
+             툴바·도구 단추·팔레트 칸·시작 목록은 아래 자기 클래스 규칙이 따로 정한다. hover = 바탕 한 단계, pressed = 두 단계 어둡게.
+             쓸 수 없을 때도 바탕·테두리 상자는 그대로 두고 글자만 흐리게 한다(단추처럼 안 보이는 결함 방지). 기본 단추(accent)는 앱 강조 파랑 채움·흰 글자·테두리 없음(상자 크기는 같게 투명 테두리). -->
         <Style Selector="Button:not(.toolbar):not(.tool):not(.palette-box):not(.start-item):not(#PART_CloseButton):not(#PART_PinButton):not(#PART_MenuButton):not(#PART_ToolCloseButton):not(#PART_ToolPinButton):not(#PART_ToolMenuButton):not(#PART_MaximizeButton):not(#PART_MaximizeRestoreButton):not(#PART_MinimizeButton):not(#PART_PopoverCloseButton):not(#PART_PopoverFullScreenButton)">
             <Setter Property="Background" Value="{DynamicResource OrandaButtonBackgroundBrush}" />
             <Setter Property="BorderBrush" Value="{DynamicResource OrandaButtonBorderBrush}" />
             <Setter Property="BorderThickness" Value="1" />
-            <Setter Property="CornerRadius" Value="4" />
-            <Setter Property="MinHeight" Value="28" />
-            <Setter Property="Padding" Value="12,3" />
+            <Setter Property="CornerRadius" Value="6" />
+            <Setter Property="MinHeight" Value="30" />
+            <Setter Property="MinWidth" Value="84" />
+            <Setter Property="Padding" Value="16,3" />
+            <Setter Property="FontWeight" Value="Normal" />
+            <Setter Property="HorizontalContentAlignment" Value="Center" />
             <Setter Property="VerticalContentAlignment" Value="Center" />
         </Style>
+        <Style Selector="Button:not(.toolbar):not(.tool):not(.palette-box):not(.start-item):not(#PART_CloseButton):not(#PART_PinButton):not(#PART_MenuButton):not(#PART_ToolCloseButton):not(#PART_ToolPinButton):not(#PART_ToolMenuButton):not(#PART_MaximizeButton):not(#PART_MaximizeRestoreButton):not(#PART_MinimizeButton):not(#PART_PopoverCloseButton):not(#PART_PopoverFullScreenButton):not(.accent) /template/ ContentPresenter#PART_ContentPresenter">
+            <Setter Property="BoxShadow" Value="0 1 1 0 #18000000" />
+        </Style>
         <Style Selector="Button:not(.toolbar):not(.tool):not(.palette-box):not(.start-item):not(#PART_CloseButton):not(#PART_PinButton):not(#PART_MenuButton):not(#PART_ToolCloseButton):not(#PART_ToolPinButton):not(#PART_ToolMenuButton):not(#PART_MaximizeButton):not(#PART_MaximizeRestoreButton):not(#PART_MinimizeButton):not(#PART_PopoverCloseButton):not(#PART_PopoverFullScreenButton):not(.accent):pointerover /template/ ContentPresenter#PART_ContentPresenter">
-            <Setter Property="Background" Value="{DynamicResource OrandaToolbarHoverBrush}" />
+            <Setter Property="Background" Value="{DynamicResource OrandaButtonHoverBrush}" />
             <Setter Property="BorderBrush" Value="{DynamicResource OrandaButtonBorderBrush}" />
         </Style>
         <Style Selector="Button:not(.toolbar):not(.tool):not(.palette-box):not(.start-item):not(#PART_CloseButton):not(#PART_PinButton):not(#PART_MenuButton):not(#PART_ToolCloseButton):not(#PART_ToolPinButton):not(#PART_ToolMenuButton):not(#PART_MaximizeButton):not(#PART_MaximizeRestoreButton):not(#PART_MinimizeButton):not(#PART_PopoverCloseButton):not(#PART_PopoverFullScreenButton):not(.accent):pressed /template/ ContentPresenter#PART_ContentPresenter">
-            <Setter Property="Background" Value="{DynamicResource OrandaToolbarPressedBrush}" />
+            <Setter Property="Background" Value="{DynamicResource OrandaButtonPressedBrush}" />
             <Setter Property="BorderBrush" Value="{DynamicResource OrandaButtonBorderBrush}" />
         </Style>
         <Style Selector="Button:not(.toolbar):not(.tool):not(.palette-box):not(.start-item):not(#PART_CloseButton):not(#PART_PinButton):not(#PART_MenuButton):not(#PART_ToolCloseButton):not(#PART_ToolPinButton):not(#PART_ToolMenuButton):not(#PART_MaximizeButton):not(#PART_MaximizeRestoreButton):not(#PART_MinimizeButton):not(#PART_PopoverCloseButton):not(#PART_PopoverFullScreenButton):not(.accent):disabled /template/ ContentPresenter#PART_ContentPresenter">
+            <Setter Property="Background" Value="{DynamicResource OrandaButtonDisabledBackgroundBrush}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource OrandaButtonBorderBrush}" />
+            <Setter Property="Foreground" Value="{DynamicResource OrandaButtonDisabledForegroundBrush}" />
+            <Setter Property="Opacity" Value="1" />
+        </Style>
+        <Style Selector="Button:not(.toolbar):not(.tool):not(.palette-box):not(.start-item):not(#PART_CloseButton):not(#PART_PinButton):not(#PART_MenuButton):not(#PART_ToolCloseButton):not(#PART_ToolPinButton):not(#PART_ToolMenuButton):not(#PART_MaximizeButton):not(#PART_MaximizeRestoreButton):not(#PART_MinimizeButton):not(#PART_PopoverCloseButton):not(#PART_PopoverFullScreenButton).accent /template/ ContentPresenter#PART_ContentPresenter">
+            <Setter Property="Background" Value="{DynamicResource OrandaButtonAccentBrush}" />
+            <Setter Property="Foreground" Value="White" />
+            <Setter Property="BorderBrush" Value="Transparent" />
+        </Style>
+        <Style Selector="Button:not(.toolbar):not(.tool):not(.palette-box):not(.start-item):not(#PART_CloseButton):not(#PART_PinButton):not(#PART_MenuButton):not(#PART_ToolCloseButton):not(#PART_ToolPinButton):not(#PART_ToolMenuButton):not(#PART_MaximizeButton):not(#PART_MaximizeRestoreButton):not(#PART_MinimizeButton):not(#PART_PopoverCloseButton):not(#PART_PopoverFullScreenButton).accent:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+            <Setter Property="Background" Value="{DynamicResource OrandaButtonAccentHoverBrush}" />
+            <Setter Property="BorderBrush" Value="Transparent" />
+        </Style>
+        <Style Selector="Button:not(.toolbar):not(.tool):not(.palette-box):not(.start-item):not(#PART_CloseButton):not(#PART_PinButton):not(#PART_MenuButton):not(#PART_ToolCloseButton):not(#PART_ToolPinButton):not(#PART_ToolMenuButton):not(#PART_MaximizeButton):not(#PART_MaximizeRestoreButton):not(#PART_MinimizeButton):not(#PART_PopoverCloseButton):not(#PART_PopoverFullScreenButton).accent:pressed /template/ ContentPresenter#PART_ContentPresenter">
+            <Setter Property="Background" Value="{DynamicResource OrandaButtonAccentPressedBrush}" />
+            <Setter Property="BorderBrush" Value="Transparent" />
+        </Style>
+        <Style Selector="Button:not(.toolbar):not(.tool):not(.palette-box):not(.start-item):not(#PART_CloseButton):not(#PART_PinButton):not(#PART_MenuButton):not(#PART_ToolCloseButton):not(#PART_ToolPinButton):not(#PART_ToolMenuButton):not(#PART_MaximizeButton):not(#PART_MaximizeRestoreButton):not(#PART_MinimizeButton):not(#PART_PopoverCloseButton):not(#PART_PopoverFullScreenButton).accent:disabled /template/ ContentPresenter#PART_ContentPresenter">
+            <Setter Property="Opacity" Value="0.5" />
+        </Style>
+
+        <!-- 문서 탭 줄 안의 Dock 단추(탭 닫기 ×, 새 문서 +)는 이름 없이 Dock 테마가 만든 것이라 위 :not 이름 제외로 걸러지지 않는다.
+             일반 단추 규칙이 입힌 상자(흰 바탕·테두리·그림자·최소 크기)를 되돌려 평평한 아이콘 단추로 둔다(hover·pressed 는 툴바 단추와 같은 색). -->
+        <Style Selector="dockctl|DocumentTabStrip Button">
             <Setter Property="Background" Value="Transparent" />
-            <Setter Property="Opacity" Value="0.45" />
+            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="CornerRadius" Value="0" />
+            <Setter Property="MinHeight" Value="0" />
+            <Setter Property="MinWidth" Value="0" />
+            <Setter Property="Padding" Value="0" />
+        </Style>
+        <Style Selector="dockctl|DocumentTabStrip Button /template/ ContentPresenter#PART_ContentPresenter">
+            <Setter Property="BoxShadow" Value="none" />
+        </Style>
+        <Style Selector="dockctl|DocumentTabStrip Button:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+            <Setter Property="Background" Value="{DynamicResource OrandaToolbarHoverBrush}" />
+            <Setter Property="BorderBrush" Value="Transparent" />
+        </Style>
+        <Style Selector="dockctl|DocumentTabStrip Button:pressed /template/ ContentPresenter#PART_ContentPresenter">
+            <Setter Property="Background" Value="{DynamicResource OrandaToolbarPressedBrush}" />
+            <Setter Property="BorderBrush" Value="Transparent" />
+        </Style>
+        <Style Selector="dockctl|DocumentTabStrip Button:disabled /template/ ContentPresenter#PART_ContentPresenter">
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="BorderBrush" Value="Transparent" />
+            <Setter Property="Opacity" Value="0.4" />
+        </Style>
+
+        <!-- 편집기 선택 색: 기본값(시스템 강조색 채움)은 너무 진해 문법 색이 묻히므로 옅은 파랑으로 바꾸고, 선택 글자색·테두리는 두지 않아 문법 색이 그대로 보이게 한다.
+             편집기가 포커스를 잃으면(다른 창·다른 칸) 선택 색을 회색조로 더 옅게 한다. SQL 편집기·코드 보기 등 앱 안의 AvaloniaEdit 모두에 걸린다. -->
+        <Style Selector="aedit|TextArea">
+            <Setter Property="SelectionBrush" Value="{DynamicResource OrandaEditorSelectionBrush}" />
+            <Setter Property="SelectionForeground" Value="{x:Null}" />
+            <Setter Property="SelectionBorder" Value="{x:Null}" />
+            <Setter Property="SelectionCornerRadius" Value="2" />
+        </Style>
+        <Style Selector="aedit|TextArea:not(:focus)">
+            <Setter Property="SelectionBrush" Value="{DynamicResource OrandaEditorSelectionInactiveBrush}" />
         </Style>
 
         <!-- 증감 칸: Fluent 템플릿은 ▲▼ 를 가로로 놓고 단추가 칸보다 커서, 같은 PART 이름(PART_SpinnerPanel·PART_IncreaseButton·PART_DecreaseButton)을
@@ -323,8 +388,17 @@
                     <SolidColorBrush x:Key="OrandaEnvChipForegroundBrush" Color="#FFFFFF" />
                     <SolidColorBrush x:Key="OrandaUncommittedBrush" Color="#B65A00" />
                     <SolidColorBrush x:Key="OrandaSeparatorBrush" Color="#D0D0D0" />
-                    <SolidColorBrush x:Key="OrandaButtonBackgroundBrush" Color="#F7F7F7" />
-                    <SolidColorBrush x:Key="OrandaButtonBorderBrush" Color="#BDBDBD" />
+                    <SolidColorBrush x:Key="OrandaButtonBackgroundBrush" Color="#FFFFFF" />
+                    <SolidColorBrush x:Key="OrandaButtonBorderBrush" Color="#D1D1D6" />
+                    <SolidColorBrush x:Key="OrandaButtonHoverBrush" Color="#F2F2F7" />
+                    <SolidColorBrush x:Key="OrandaButtonPressedBrush" Color="#E5E5EA" />
+                    <SolidColorBrush x:Key="OrandaButtonDisabledBackgroundBrush" Color="#FFFFFF" />
+                    <SolidColorBrush x:Key="OrandaButtonDisabledForegroundBrush" Color="#66000000" />
+                    <SolidColorBrush x:Key="OrandaButtonAccentBrush" Color="#0A64C8" />
+                    <SolidColorBrush x:Key="OrandaButtonAccentHoverBrush" Color="#0956AD" />
+                    <SolidColorBrush x:Key="OrandaButtonAccentPressedBrush" Color="#074A95" />
+                    <SolidColorBrush x:Key="OrandaEditorSelectionBrush" Color="#ADD6FF" />
+                    <SolidColorBrush x:Key="OrandaEditorSelectionInactiveBrush" Color="#E5EBF1" />
                     <SolidColorBrush x:Key="OrandaToolbarBackgroundBrush" Color="#F3F3F3" />
                     <SolidColorBrush x:Key="OrandaToolbarHoverBrush" Color="#DCE6F4" />
                     <SolidColorBrush x:Key="OrandaToolbarPressedBrush" Color="#C3D5EE" />
@@ -354,8 +428,17 @@
                     <SolidColorBrush x:Key="OrandaEnvChipForegroundBrush" Color="#000000" />
                     <SolidColorBrush x:Key="OrandaUncommittedBrush" Color="#F0A04B" />
                     <SolidColorBrush x:Key="OrandaSeparatorBrush" Color="#404040" />
-                    <SolidColorBrush x:Key="OrandaButtonBackgroundBrush" Color="#2D2D2D" />
-                    <SolidColorBrush x:Key="OrandaButtonBorderBrush" Color="#5A5A5A" />
+                    <SolidColorBrush x:Key="OrandaButtonBackgroundBrush" Color="#3A3A3C" />
+                    <SolidColorBrush x:Key="OrandaButtonBorderBrush" Color="#545458" />
+                    <SolidColorBrush x:Key="OrandaButtonHoverBrush" Color="#444446" />
+                    <SolidColorBrush x:Key="OrandaButtonPressedBrush" Color="#4E4E50" />
+                    <SolidColorBrush x:Key="OrandaButtonDisabledBackgroundBrush" Color="#3A3A3C" />
+                    <SolidColorBrush x:Key="OrandaButtonDisabledForegroundBrush" Color="#66FFFFFF" />
+                    <SolidColorBrush x:Key="OrandaButtonAccentBrush" Color="#0A64C8" />
+                    <SolidColorBrush x:Key="OrandaButtonAccentHoverBrush" Color="#0956AD" />
+                    <SolidColorBrush x:Key="OrandaButtonAccentPressedBrush" Color="#074A95" />
+                    <SolidColorBrush x:Key="OrandaEditorSelectionBrush" Color="#264F78" />
+                    <SolidColorBrush x:Key="OrandaEditorSelectionInactiveBrush" Color="#3A3D41" />
                     <SolidColorBrush x:Key="OrandaToolbarBackgroundBrush" Color="#2B2B2B" />
                     <SolidColorBrush x:Key="OrandaToolbarHoverBrush" Color="#3A4556" />
                     <SolidColorBrush x:Key="OrandaToolbarPressedBrush" Color="#46566E" />
