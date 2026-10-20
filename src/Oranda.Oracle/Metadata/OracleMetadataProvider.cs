@@ -493,7 +493,11 @@ internal sealed partial class OracleMetadataProvider : IMetadataProvider
         Comment = Str(r[12]),
     };
 
-    private static List<ConstraintInfo> BuildConstraints(List<object?[]> rows)
+    /// <summary>
+    /// 제약 행 → 제약 목록. NOT NULL 검사 제약은 열 정보에 있으므로 뺀다. 19 이상은 SQL 이 이미 거르고,
+    /// 11g 는 조건 열이 LONG 이라 SQL 에서 거르지 못해 여기서 뺀다(meta/constraints.11.sql).
+    /// </summary>
+    internal static List<ConstraintInfo> BuildConstraints(List<object?[]> rows)
     {
         var result = new List<ConstraintInfo>();
         foreach (var group in rows.GroupBy(r => Str(r[0])!, StringComparer.Ordinal))
@@ -506,6 +510,11 @@ internal sealed partial class OracleMetadataProvider : IMetadataProvider
                 "R" => ConstraintKind.ForeignKey,
                 _ => ConstraintKind.Check,
             };
+            if (kind == ConstraintKind.Check && IsNotNullCheck(Str(first[3])))
+            {
+                continue;
+            }
+
             var columns = group.Where(r => r[6] is not null).Select(r => Str(r[6])!).ToList();
             result.Add(new ConstraintInfo(group.Key, kind, columns)
             {
@@ -520,6 +529,10 @@ internal sealed partial class OracleMetadataProvider : IMetadataProvider
 
         return result;
     }
+
+    /// <summary>SQL 의 <c>search_condition_vc LIKE '%IS NOT NULL'</c> 과 같은 판정(대소문자 구분, 끝 일치).</summary>
+    internal static bool IsNotNullCheck(string? condition)
+        => condition is not null && condition.EndsWith("IS NOT NULL", StringComparison.Ordinal);
 
     private static List<IndexInfo> BuildIndexes(List<object?[]> rows)
         => [.. rows.GroupBy(r => Str(r[0])!, StringComparer.Ordinal).Select(g => new IndexInfo(

@@ -1,6 +1,6 @@
 -- 세션의 트랜잭션(undo 사용량). 바인드: inst_id, sid, serial
 -- id: session.transaction
--- min-version: 19
+-- min-version: 11
 -- requires: gv$transaction, gv$session
 -- license: none
 -- rac: gv

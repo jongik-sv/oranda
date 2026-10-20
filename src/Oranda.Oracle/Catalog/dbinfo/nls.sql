@@ -1,6 +1,6 @@
 -- NLS 설정(데이터베이스·세션).
 -- id: dbinfo.nls
--- min-version: 19
+-- min-version: 11
 -- requires: nls_database_parameters, nls_session_parameters
 -- license: none
 SELECT scope, parameter, value

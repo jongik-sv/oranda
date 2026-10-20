@@ -76,17 +76,16 @@ internal sealed class OracleExecutionPlanService : IExecutionPlanService
 
         try
         {
-            var steps = await QueryAsync(s, "plan.explain_steps", c => AddText(c, "stmt_id", statementId), ct);
+            var names = new List<string>();
+            var steps = await QueryAsync(s, "plan.explain_steps", c => AddText(c, "stmt_id", statementId), ct, names);
             var text = await QueryAsync(s, "plan.explain_text", c =>
             {
                 AddText(c, "stmt_id", statementId);
                 AddText(c, "format", "TYPICAL");
             }, ct);
 
-            var planSteps = BuildSteps(steps.Select(r => new RawStep(
-                Int(r[0]) ?? 0, Int(r[1]), Str(r[3]) ?? string.Empty, Str(r[4]), Str(r[5]), Str(r[6]),
-                Long(r[7]), Long(r[8]), null, null, null, Str(r[9]), Str(r[10]))));
-            // plan_table.plan_id(r[11])는 EXPLAIN 마다 새로 매기는 번호라 계획 해시가 아니다. DBMS_XPLAN 글의 「Plan hash value」를 쓴다(PLAN-04 비교).
+            var planSteps = BuildSteps(ReadPlanTableRows(names, steps));
+            // plan_table.plan_id 는 EXPLAIN 마다 새로 매기는 번호라 계획 해시가 아니다. DBMS_XPLAN 글의 「Plan hash value」를 쓴다(PLAN-04 비교).
             var planText = JoinLines(text);
             return new ExecutionPlan(planSteps, planText)
             {
@@ -209,10 +208,32 @@ internal sealed class OracleExecutionPlanService : IExecutionPlanService
         return risk;
     }
 
+    /// <summary>
+    /// PLAN_TABLE 행(<c>SELECT p.*</c>)을 열 이름으로 읽는다. 사용자 스키마에 옛 PLAN_TABLE(plan_id·access_predicates 등이 없는 것)이
+    /// 있어도 실패하지 않게, 없는 열은 null 로 본다(서버 버전 무관, TSK-03-07).
+    /// </summary>
+    internal static IEnumerable<RawStep> ReadPlanTableRows(IReadOnlyList<string> names, IEnumerable<object?[]> rows)
+    {
+        ArgumentNullException.ThrowIfNull(names);
+        ArgumentNullException.ThrowIfNull(rows);
+        var index = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+        for (var i = 0; i < names.Count; i++)
+        {
+            index.TryAdd(names[i], i);
+        }
+
+        object? At(object?[] r, string name) => index.TryGetValue(name, out var i) && i < r.Length ? r[i] : null;
+
+        return rows.Select(r => new RawStep(
+            Int(At(r, "ID")) ?? 0, Int(At(r, "PARENT_ID")), Str(At(r, "OPERATION")) ?? string.Empty, Str(At(r, "OPTIONS")),
+            Str(At(r, "OBJECT_OWNER")), Str(At(r, "OBJECT_NAME")), Long(At(r, "COST")), Long(At(r, "CARDINALITY")),
+            null, null, null, Str(At(r, "ACCESS_PREDICATES")), Str(At(r, "FILTER_PREDICATES"))));
+    }
+
     private static string JoinLines(List<object?[]> rows) =>
         string.Join(Environment.NewLine, rows.Select(r => Str(r[0]) ?? string.Empty));
 
-    private static async Task<List<object?[]>> QueryAsync(ISession s, string id, Action<OracleCommand> bind, CancellationToken ct)
+    private static async Task<List<object?[]>> QueryAsync(ISession s, string id, Action<OracleCommand> bind, CancellationToken ct, List<string>? columnNames = null)
     {
         var session = s as OracleSession ?? throw new ArgumentException("OracleSession 이 아닌 세션은 쓸 수 없습니다.", nameof(s));
         var query = Catalog.Value.Get(id, s.Server);
@@ -225,11 +246,20 @@ internal sealed class OracleExecutionPlanService : IExecutionPlanService
             await using var cmd = session.Connection.CreateCommand();
             cmd.BindByName = true;
             cmd.InitialLOBFetchSize = -1;
+            cmd.InitialLONGFetchSize = -1; // PLAN_TABLE.other 는 LONG(p.* 로 읽는다)
             cmd.CommandText = query.Sql;
             bind(cmd);
 
             var rows = new List<object?[]>();
             await using var reader = await cmd.ExecuteReaderAsync(ct);
+            if (columnNames is not null)
+            {
+                for (var i = 0; i < reader.FieldCount; i++)
+                {
+                    columnNames.Add(reader.GetName(i));
+                }
+            }
+
             while (await reader.ReadAsync(ct))
             {
                 var row = new object?[reader.FieldCount];

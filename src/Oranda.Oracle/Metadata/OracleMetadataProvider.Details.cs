@@ -1,6 +1,7 @@
 using System.Globalization;
 using Oracle.ManagedDataAccess.Client;
 using Oracle.ManagedDataAccess.Types;
+using Oranda.Core.Connection;
 using Oranda.Core.Metadata;
 using Oranda.Core.Sessions;
 
@@ -84,7 +85,7 @@ internal sealed partial class OracleMetadataProvider
                 ["상태", Str(g[1])],
                 ["생성", g[2]],
                 ["마지막 DDL", g[3]],
-                ["편집 가능(editionable)", Str(g[4])],
+                ["편집 가능(editionable)", s.Server.Features.Release12Columns ? Str(g[4]) : ServerFeatures.UnavailableText],
                 ["객체 ID", Str(g[5])],
             ]));
         }
@@ -92,7 +93,7 @@ internal sealed partial class OracleMetadataProvider
         if (TableLike.Contains(type))
         {
             var table = await GetTableAsync(s, obj, ct);
-            AddTableSections(sections, table);
+            AddTableSections(sections, table, s.Server.Features);
         }
 
         if (type is "TABLE" or "VIEW")
@@ -174,20 +175,29 @@ internal sealed partial class OracleMetadataProvider
         return new ObjectDetail(obj, sections);
     }
 
-    private static void AddTableSections(List<DetailSection> sections, TableInfo table)
+    private static void AddTableSections(List<DetailSection> sections, TableInfo table, ServerFeatures features)
     {
         if (!string.IsNullOrEmpty(table.Comment))
         {
             sections.Add(new DetailSection("설명", ["항목", "값"], [["테이블 주석", table.Comment]]));
         }
 
-        sections.Add(new DetailSection("열",
-            ["#", "이름", "형식", "길이", "정밀도", "소수", "NULL 허용", "기본값", "가상", "Identity", "보이지 않음", "도메인", "주석"],
-            [.. ColumnOrdering.ByColumnId(table.Columns).Select(c => (IReadOnlyList<object?>)
-            [
-                c.Position, c.Name, c.DataType, c.Length, c.Precision, c.Scale, c.IsNullable ? "Y" : "N", c.DefaultValue,
-                c.IsVirtual ? "Y" : null, c.IsIdentity ? "Y" : null, c.IsInvisible ? "Y" : null, c.Domain, c.Comment,
-            ])]));
+        sections.Add(features.Release12Columns
+            ? new DetailSection("열",
+                ["#", "이름", "형식", "길이", "정밀도", "소수", "NULL 허용", "기본값", "가상", "Identity", "보이지 않음", "도메인", "주석"],
+                [.. ColumnOrdering.ByColumnId(table.Columns).Select(c => (IReadOnlyList<object?>)
+                [
+                    c.Position, c.Name, c.DataType, c.Length, c.Precision, c.Scale, c.IsNullable ? "Y" : "N", c.DefaultValue,
+                    c.IsVirtual ? "Y" : null, c.IsIdentity ? "Y" : null, c.IsInvisible ? "Y" : null, c.Domain, c.Comment,
+                ])])
+            // 11g: identity·invisible 열·도메인이 없는 서버라 그 칸을 숨긴다(TSK-03-07).
+            : new DetailSection("열",
+                ["#", "이름", "형식", "길이", "정밀도", "소수", "NULL 허용", "기본값", "가상", "주석"],
+                [.. ColumnOrdering.ByColumnId(table.Columns).Select(c => (IReadOnlyList<object?>)
+                [
+                    c.Position, c.Name, c.DataType, c.Length, c.Precision, c.Scale, c.IsNullable ? "Y" : "N", c.DefaultValue,
+                    c.IsVirtual ? "Y" : null, c.Comment,
+                ])]));
 
         if (table.Constraints.Count > 0)
         {

@@ -1,6 +1,6 @@
 -- 세션 I/O 누계(gv$sess_io, 팩 불필요). 바인드: inst_id, sid
 -- id: session.io
--- min-version: 19
+-- min-version: 11
 -- requires: gv$sess_io
 -- license: none
 -- rac: gv

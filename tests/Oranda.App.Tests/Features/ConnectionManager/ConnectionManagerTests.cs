@@ -467,12 +467,12 @@ public sealed class ConnectionManagerTests
     public async Task Unsupported_server_shows_version_and_reason_and_does_not_become_active()
     {
         using var fx = new ServiceFixture();
-        fx.Sessions.Behavior = (_, _) => new UnsupportedServerException("11.2.0.4.0", "Oranda 는 Oracle 19.x·23.x 만 지원합니다. 이 서버는 11 계열입니다.");
+        fx.Sessions.Behavior = (_, _) => new UnsupportedServerException("11.1.0.7.0", "Oranda 는 Oracle 11.2·19.x·23.x 만 지원합니다. 이 서버는 11.1 입니다.");
         var outcome = await fx.Service.ConnectAsync(Profile(), "pw", CancellationToken.None);
 
         Assert.Equal(ConnectStatus.Unsupported, outcome.Status);
-        Assert.Equal("11.2.0.4.0", outcome.ServerVersion);
-        Assert.Contains("11.2.0.4.0", outcome.Message, StringComparison.Ordinal);
+        Assert.Equal("11.1.0.7.0", outcome.ServerVersion);
+        Assert.Contains("11.1.0.7.0", outcome.Message, StringComparison.Ordinal);
         Assert.Contains("19.x", outcome.Message, StringComparison.Ordinal);
         Assert.Null(fx.Service.ActiveSession);
         Assert.False(fx.Keys.Get("hasSession"));
@@ -601,7 +601,7 @@ public sealed class ConnectionManagerTests
     {
         using var fx = new ServiceFixture();
         var saved = await fx.Service.SaveProfileAsync(Profile(), "pw", true, CancellationToken.None);
-        fx.Sessions.Behavior = (_, _) => new UnsupportedServerException("12.2.0.1.0", "Oranda 는 Oracle 19.x·23.x 만 지원합니다. 이 서버는 12 계열입니다.");
+        fx.Sessions.Behavior = (_, _) => new UnsupportedServerException("12.2.0.1.0", "Oranda 는 Oracle 11.2·19.x·23.x 만 지원합니다. 이 서버는 12 계열입니다.");
         var vm = new ConnectionManagerViewModel(fx.Service);
 
         var outcome = await vm.ConnectWithPromptsAsync(saved);

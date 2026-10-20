@@ -1,6 +1,6 @@
 -- 세션의 최근 대기 10건(gv$session_wait_history, 팩 불필요). seq# 1 이 가장 최근. 바인드: inst_id, sid
 -- id: session.wait_history
--- min-version: 19
+-- min-version: 11
 -- requires: gv$session_wait_history
 -- license: none
 -- rac: gv

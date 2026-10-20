@@ -27,6 +27,49 @@ public class SqlCatalogTests
         Assert.Equal(expected, catalog.Get("session.list", server).Header.MinVersion);
     }
 
+    private static readonly CatalogSource[] ThreeVersions =
+    [
+        Entry("session/list.11.sql", "session.list", 11),
+        Entry("session/list.sql", "session.list", 19),
+        Entry("session/list.23.sql", "session.list", 23),
+    ];
+
+    // TSK-03-07: 11 변형을 더해도 19·23 선택은 그대로이고, 11.2 서버는 11 변형을 받는다.
+    [Theory]
+    [InlineData(11, 11)]
+    [InlineData(12, 11)]
+    [InlineData(18, 11)]
+    [InlineData(19, 19)]
+    [InlineData(21, 19)]
+    [InlineData(23, 23)]
+    [InlineData(26, 23)]
+    public void Eleven_variant_is_picked_only_below_19(int server, int expected)
+    {
+        var catalog = new SqlCatalog(ThreeVersions);
+
+        Assert.Equal(expected, catalog.Get("session.list", server).Header.MinVersion);
+        Assert.Equal($"SELECT {expected} FROM dual", catalog.Get("session.list", server).Sql);
+    }
+
+    [Fact]
+    public void Server_info_11_2_gets_11_variant()
+    {
+        var catalog = new SqlCatalog(ThreeVersions);
+        var server = new ServerInfo("11.2.0.2.0", null, null, null, null, null, false, 1,
+            new ServerCapabilities(false, false, false, false, false));
+
+        Assert.Equal(11, catalog.Get("session.list", server).Header.MinVersion);
+    }
+
+    [Fact]
+    public void Server_10_is_below_every_candidate()
+    {
+        var catalog = new SqlCatalog(ThreeVersions);
+
+        var error = Assert.Throws<CatalogQueryNotFoundException>(() => catalog.Get("session.list", 10));
+        Assert.Equal(10, error.MajorVersion);
+    }
+
     [Fact]
     public void Get_by_server_info_uses_major_version()
     {
@@ -81,7 +124,7 @@ public class SqlCatalogTests
         CatalogSource[] sources =
         [
             new("session/a.sql", "SELECT 1 FROM dual"),
-            Entry("session/b.sql", "session.b", 18),
+            Entry("session/b.sql", "session.b", 10),
         ];
 
         var error = Assert.Throws<CatalogFormatException>(() => new SqlCatalog(sources));

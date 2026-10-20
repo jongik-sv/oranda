@@ -1,6 +1,6 @@
 -- 열 순서 바꾸기 대상 표 종류(임시·클러스터·외부). 바인드: owner, name
 -- id: dbinfo.column_reorder_traits
--- min-version: 19
+-- min-version: 11
 -- requires: dba_tables, all_tables, dba_external_tables, all_external_tables
 -- license: none
 SELECT t.temporary,

@@ -1,6 +1,6 @@
 -- 세션이 잠근 객체. @PFX@ = dba 또는 all. 바인드: inst_id, sid
 -- id: session.locks
--- min-version: 19
+-- min-version: 11
 -- requires: gv$locked_object, dba_objects, all_objects
 -- license: none
 -- rac: gv

@@ -1,6 +1,6 @@
 -- EXPLAIN PLAN 텍스트(DBMS_XPLAN.DISPLAY). 바인드: stmt_id, format
 -- id: plan.explain_text
--- min-version: 19
+-- min-version: 11
 -- requires: plan_table
 -- license: none
 SELECT plan_table_output

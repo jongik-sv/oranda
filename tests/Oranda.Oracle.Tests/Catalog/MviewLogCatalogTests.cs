@@ -15,7 +15,7 @@ public class MviewLogCatalogTests
         var query = Catalog.Get("meta.mview_log", 19);
 
         Assert.Equal(CatalogLicense.None, query.Header.License);
-        Assert.Equal(19, query.Header.MinVersion);
+        Assert.Equal(11, query.Header.MinVersion); // 11g 에도 all_mview_logs 의 같은 열이 있다(TSK-03-07)
         Assert.Contains("@PFX@_mview_logs", query.Sql, StringComparison.Ordinal);
         Assert.Contains("l.log_owner = :owner", query.Sql, StringComparison.Ordinal);
         Assert.Contains("l.master = :name", query.Sql, StringComparison.Ordinal);
@@ -23,9 +23,10 @@ public class MviewLogCatalogTests
     }
 
     [Fact]
-    public void Server_older_than_19_has_no_variant_and_the_loader_reports_it_instead_of_crashing()
+    public void Server_older_than_11_has_no_variant_and_the_loader_reports_it_instead_of_crashing()
     {
-        // 트리 제공자가 이 예외를 잡아 폴더만 비운다.
-        Assert.Throws<CatalogQueryNotFoundException>(() => Catalog.Get("meta.mview_log", 18));
+        // 트리 제공자가 이 예외를 잡아 폴더만 비운다. 11.2 는 같은 쿼리를 쓴다(TSK-03-07).
+        Assert.Equal(11, Catalog.Get("meta.mview_log", 11).Header.MinVersion);
+        Assert.Throws<CatalogQueryNotFoundException>(() => Catalog.Get("meta.mview_log", 10));
     }
 }

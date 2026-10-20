@@ -82,6 +82,14 @@ public sealed class ConnectionStatusViewModel : ViewModelBase, IStatusBarItem
             return minor.ToString(CultureInfo.InvariantCulture) + "ai";
         }
 
+        // 11g 는 11.2 만 들어오므로 둘째 자리까지 보인다(TSK-03-07).
+        if (major < 12)
+        {
+            return parts.Length > 1 && int.TryParse(parts[1], NumberStyles.Integer, CultureInfo.InvariantCulture, out var minor11)
+                ? string.Create(CultureInfo.InvariantCulture, $"{major}.{minor11}")
+                : major.ToString(CultureInfo.InvariantCulture) + "g";
+        }
+
         return major >= 23 ? major.ToString(CultureInfo.InvariantCulture) + "ai" : major.ToString(CultureInfo.InvariantCulture) + "c";
     }
 

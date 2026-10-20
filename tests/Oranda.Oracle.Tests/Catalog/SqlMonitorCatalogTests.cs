@@ -15,7 +15,8 @@ public class SqlMonitorCatalogTests
     [InlineData("sql.binds")]
     public void Query_exists_for_19_and_26(string id)
     {
-        Assert.Equal(19, Catalog.Get(id, 19).Header.MinVersion);
+        Assert.InRange(Catalog.Get(id, 19).Header.MinVersion, 11, 19);
+        Assert.Equal(id, Catalog.Get(id, 11).Header.Id); // 11.2 (TSK-03-07)
         Assert.Equal(id, Catalog.Get(id, 26).Header.Id);
     }
 
@@ -23,14 +24,17 @@ public class SqlMonitorCatalogTests
     public void Sql_monitor_queries_need_no_pack_and_avoid_pack_views()
     {
         var headers = Catalog.Entries.Where(h => h.Id.StartsWith("sql.", StringComparison.Ordinal)).ToList();
-        Assert.Equal(3, headers.Count);
+        Assert.Equal(3, headers.Select(h => h.Id).Distinct(StringComparer.Ordinal).Count());
         foreach (var header in headers)
         {
             Assert.Equal(CatalogLicense.None, header.License);
-            var sql = Catalog.Get(header.Id, 26).Sql;
-            foreach (var view in new[] { "active_session_history", "dba_hist_", "sql_monitor", "sqltune", "advisor" })
+            foreach (var version in new[] { 11, 26 })
             {
-                Assert.DoesNotContain(view, sql, StringComparison.OrdinalIgnoreCase);
+                var sql = Catalog.Get(header.Id, version).Sql;
+                foreach (var view in new[] { "active_session_history", "dba_hist_", "sql_monitor", "sqltune", "advisor" })
+                {
+                    Assert.DoesNotContain(view, sql, StringComparison.OrdinalIgnoreCase);
+                }
             }
         }
     }

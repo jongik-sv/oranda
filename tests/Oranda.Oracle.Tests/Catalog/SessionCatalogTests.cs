@@ -27,7 +27,11 @@ public partial class SessionCatalogTests
     [InlineData("session.my_blocking")]
     public void Query_exists_for_19_and_26(string id)
     {
-        Assert.Equal(19, Catalog.Get(id, 19).Header.MinVersion);
+        Assert.InRange(Catalog.Get(id, 19).Header.MinVersion, 11, 19);
+        if (id != "session.my_blocking") // 19 이상 전용(TSK-13-02, 11.2 에서는 기능을 숨긴다)
+        {
+            Assert.Equal(id, Catalog.Get(id, 11).Header.Id); // 11.2 (TSK-03-07)
+        }
         Assert.Equal(id, Catalog.Get(id, 26).Header.Id);
     }
 

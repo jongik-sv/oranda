@@ -1,6 +1,6 @@
 -- 파티션 목록. 바인드: owner, name. high_value 는 LONG(InitialLONGFetchSize = -1 로 읽는다).
 -- id: meta.detail_partitions
--- min-version: 19
+-- min-version: 11
 -- requires: dba_tab_partitions, all_tab_partitions, dba_part_tables, all_part_tables
 -- license: none
 SELECT p.partition_position, p.partition_name, pt.partitioning_type, pt.subpartitioning_type,

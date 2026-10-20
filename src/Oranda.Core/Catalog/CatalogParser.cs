@@ -18,6 +18,9 @@ public static class CatalogRules
     public const string IdFolderMismatch = "id-folder-mismatch";
     public const string DuplicateId = "duplicate-id";
     public const string BodyEmpty = "body-empty";
+
+    /// <summary>min-version 12 미만(11g) 파일이 12c 이후 문법·열·뷰를 쓴다.</summary>
+    public const string Pre12cFeature = "pre12c-feature";
 }
 
 /// <summary>
@@ -136,6 +139,14 @@ public static partial class CatalogParser
         {
             problems.Add(Problem(source, CatalogRules.BodyEmpty, "머리 주석 뒤에 SQL 본문이 없다"));
         }
+        else if (minVersion >= CatalogHeader.LowestMinVersion && minVersion < CatalogHeader.Release12)
+        {
+            foreach (var feature in FindPre12cFeatures(body))
+            {
+                problems.Add(Problem(source, CatalogRules.Pre12cFeature,
+                    $"min-version {minVersion} 파일이 12c 이후 기능 '{feature}' 를 쓴다(ROWNUM 감싸기·NULL·11g 대체 열로 바꾼다)"));
+            }
+        }
 
         if (problems.Count > 0)
         {
@@ -145,6 +156,27 @@ public static partial class CatalogParser
         var header = new CatalogHeader(id!, minVersion, requires, license, rac, source.Path);
         return (new CatalogQuery(header, body), problems);
     }
+
+    /// <summary>
+    /// 11g 에서 쓸 수 없는 문법·열·뷰(TRD 4.2 「19 미만 대상에 FETCH FIRST 금지」, TSK-03-07).
+    /// 주석은 빼고 본다. 열 이름은 11g 사전 점검에서 실제로 없던 것과 12c 이후 다중 테넌트 이름이다.
+    /// </summary>
+    public static IReadOnlyList<string> FindPre12cFeatures(string body)
+    {
+        ArgumentNullException.ThrowIfNull(body);
+        var code = Comments().Replace(body, " ");
+        return [.. Pre12cPattern().Matches(code).Select(m => m.Value.ToUpperInvariant()).Distinct(StringComparer.Ordinal)];
+    }
+
+    [GeneratedRegex(@"/\*.*?\*/|--[^\n]*", RegexOptions.Singleline)]
+    private static partial Regex Comments();
+
+    [GeneratedRegex(
+        @"\bFETCH\s+(FIRST|NEXT)\b|\bOFFSET\s+\S+\s+ROWS?\b" +
+        @"|\b(identity_column|user_generated|search_condition_vc|editionable|banner_full|version_full|con_id|con_name|cdb_name|default_on_null|default_collation|oracle_maintained)\b" +
+        @"|\.(cdb|edition)\b|\bv\$pdbs\b|\bcdb_[a-z_$]+",
+        RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
+    private static partial Regex Pre12cPattern();
 
     /// <summary>Catalog/ 아래 첫 폴더 이름. 폴더 없이 놓인 파일은 빈 문자열.</summary>
     public static string TopFolder(string path)

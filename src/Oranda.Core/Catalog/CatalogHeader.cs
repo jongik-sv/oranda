@@ -15,8 +15,14 @@ public sealed record CatalogHeader(
     CatalogRac Rac,
     string Path)
 {
-    /// <summary>지원 서버 하한(PRD D-06). 나중에 구버전을 더하면 이 값만 내리고 같은 id 의 낮은 min-version 파일을 더한다.</summary>
-    public const int LowestMinVersion = 19;
+    /// <summary>지원 서버 하한(PRD D-06, D-026: 11.2 추가). 구버전을 더하면 이 값만 내리고 같은 id 의 낮은 min-version 파일을 더한다.</summary>
+    public const int LowestMinVersion = 11;
+
+    /// <summary>
+    /// 이 값보다 낮은 min-version 파일(11g 용)은 12c 이후 문법(<c>FETCH FIRST</c>·<c>OFFSET … ROWS</c>)과
+    /// 12c 이후 열·뷰를 쓰면 안 된다(<see cref="CatalogRules.Pre12cFeature"/>).
+    /// </summary>
+    public const int Release12 = 12;
 }
 
 /// <summary>

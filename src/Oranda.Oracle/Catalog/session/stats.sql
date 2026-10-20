@@ -1,6 +1,6 @@
 -- 세션 통계(0 이 아닌 것). 바인드: inst_id, sid
 -- id: session.stats
--- min-version: 19
+-- min-version: 11
 -- requires: gv$sesstat, gv$statname
 -- license: none
 -- rac: gv

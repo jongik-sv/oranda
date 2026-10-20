@@ -1,6 +1,6 @@
 -- 세션 한 개(상세 머리). 열 순서는 session.list 의 0~22 와 같다. 바인드: inst_id, sid, serial
 -- id: session.detail
--- min-version: 19
+-- min-version: 11
 -- requires: gv$session
 -- license: none
 -- rac: gv

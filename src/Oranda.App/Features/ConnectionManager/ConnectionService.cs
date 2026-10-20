@@ -555,12 +555,12 @@ public sealed class ConnectionService : IConnectionService, IDisposable
         return new ConnectionTestOutcome(status, $"{prefix}: {message}", probe.ServerVersion, watch.Elapsed, probe.ErrorNumber);
     }
 
-    /// <summary>서버 버전 문자열의 짧은 이름(23 이상 = 26ai, 19 = 19c). 읽을 수 없으면 null.</summary>
+    /// <summary>서버 버전 문자열의 짧은 이름(23 이상 = 26ai, 19 = 19c, 11 = 11g). 읽을 수 없으면 null.</summary>
     internal static string? ServerLabel(string? version)
     {
         var head = version?.Split('.', 2)[0];
         return int.TryParse(head, System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture, out var major)
-            ? major >= 23 ? "26ai" : major + "c"
+            ? major >= 23 ? "26ai" : major < 12 ? major + "g" : major + "c"
             : null;
     }
 
@@ -803,7 +803,7 @@ public sealed class ConnectionService : IConnectionService, IDisposable
     }
 
     private static string VersionText(ServerInfo server) =>
-        server.IsAutonomous ? "ADB" : server.MajorVersion >= 23 ? "26ai" : server.MajorVersion + "c";
+        server.IsAutonomous ? "ADB" : ServerLabel(server.Version) ?? server.Version;
 
     private static string UniqueName(string wanted, IEnumerable<string> existing)
     {

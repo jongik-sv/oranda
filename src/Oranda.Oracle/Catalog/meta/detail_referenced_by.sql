@@ -1,6 +1,6 @@
 -- 이 테이블의 기본키·유일 키를 참조하는 외래키(다른 테이블 또는 자기 자신). 바인드: owner, name
 -- id: meta.detail_referenced_by
--- min-version: 19
+-- min-version: 11
 -- requires: dba_constraints, all_constraints, dba_cons_columns, all_cons_columns
 -- license: none
 SELECT c.owner, c.table_name, c.constraint_name,

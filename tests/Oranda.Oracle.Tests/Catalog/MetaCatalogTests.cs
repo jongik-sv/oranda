@@ -26,13 +26,15 @@ public partial class MetaCatalogTests
         var query = Catalog.Get(id, 19);
 
         Assert.Equal(CatalogLicense.None, query.Header.License);
-        Assert.Equal(19, query.Header.MinVersion);
+        Assert.InRange(query.Header.MinVersion, 11, 19);
+        Assert.Equal(id, Catalog.Get(id, 11).Header.Id); // 11.2 (TSK-03-07)
         Assert.Contains("@PFX@_", query.Sql, StringComparison.Ordinal);
     }
 
     [Fact]
     public void Domain_column_is_selected_only_on_23_and_later()
     {
+        Assert.Equal(11, Catalog.Get("meta.columns", 11).Header.MinVersion);
         Assert.Equal(19, Catalog.Get("meta.columns", 19).Header.MinVersion);
         Assert.Equal(19, Catalog.Get("meta.columns", 21).Header.MinVersion);
         Assert.Equal(23, Catalog.Get("meta.columns", 23).Header.MinVersion);

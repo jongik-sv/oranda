@@ -2,7 +2,7 @@
 -- 바인드: username(null=전체), active_only(0/1), include_bg(0/1), text(null=전체, 사용자·머신·프로그램·모듈·SQL ID 부분 문자열)
 -- 열 순서는 OracleMonitorService 의 행 매핑과 같다(0~22 = session.detail 과 같음, 23~27 = 통계).
 -- id: session.list
--- min-version: 19
+-- min-version: 11
 -- requires: gv$session, gv$sesstat, gv$statname
 -- license: none
 -- rac: gv

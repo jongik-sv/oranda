@@ -9,7 +9,7 @@
 |------|------|
 | `src/Oranda.Core/Catalog/ISqlCatalog.cs` | 계약 `CatalogQuery Get(string id, ServerInfo server)` (TRD 6장) |
 | `src/Oranda.Core/Catalog/CatalogQuery.cs` | `CatalogQuery(Header, Sql)`, 원문 `CatalogSource(Path, Text)` |
-| `src/Oranda.Core/Catalog/CatalogHeader.cs` | 머리 주석 record, `CatalogLicense`, `CatalogRac`, 하한 `LowestMinVersion = 19` |
+| `src/Oranda.Core/Catalog/CatalogHeader.cs` | 머리 주석 record, `CatalogLicense`, `CatalogRac`, 하한 `LowestMinVersion = 11` |
 | `src/Oranda.Core/Catalog/CatalogParser.cs` | 머리 주석 파서, 검사 규칙 이름 `CatalogRules`, 문제 `CatalogProblem` |
 | `src/Oranda.Core/Catalog/SqlCatalog.cs` | `ISqlCatalog` 구현(검사 + 선택), `CatalogFormatException`, `CatalogQueryNotFoundException` |
 | `src/Oranda.Oracle/Catalog/EmbeddedCatalog.cs` | 임베디드 리소스 자동 수집 `ReadSources(assembly)`, `Load()` |
@@ -26,7 +26,7 @@ Core 는 원문 목록만 받는다(ODP.NET·어셈블리 리소스 모름). 리
 | 키 | 필수 | 값 | 기본 | 뜻 |
 |----|:---:|----|------|----|
 | `id` | ○ | `폴더.이름` 소문자·숫자·`_`, 점으로 2마디 이상 (예: `session.blocking_tree`) | - | 기능 코드가 부르는 이름. **첫 마디 = 소유 폴더 이름** |
-| `min-version` | ○ | 서버 주 버전 정수. 19 이상 | - | 이 파일을 쓸 수 있는 가장 낮은 서버 버전. 23ai/26ai 전용은 `23` |
+| `min-version` | ○ | 서버 주 버전 정수. 11 이상 | - | 이 파일을 쓸 수 있는 가장 낮은 서버 버전. 11g 에서도 도는 문장은 `11`, 12c 이후 문법·열을 쓰면 `19`, 23ai/26ai 전용은 `23` |
 | `license` | ○ | `none` \| `diagnostics` \| `tuning` | - | 필요한 관리 팩(TC-06) |
 | `requires` | | 권한·뷰 이름, 쉼표 구분 | 빈 목록 | 접속 점검 결과와 대조할 대상(예: `v$session, v$sql`) |
 | `rac` | | `v` \| `gv` | `v` | `gv` = `gv$` 뷰로 모든 인스턴스를 본다(`inst_id` 포함) |
@@ -79,12 +79,13 @@ SELECT s.inst_id, s.sid, s.serial#, s.username
 2. 그중 `min-version` 이 가장 높은 것을 돌려준다.
 3. 하나도 없으면 `CatalogQueryNotFoundException(id, 버전)`.
 
-| 후보 | 서버 19 | 서버 21 | 서버 23 | 서버 26(23.26) | 서버 18 |
-|------|---------|---------|---------|----------------|---------|
-| `list.sql`(19), `list.23.sql`(23) | 19 | 19 | 23 | 23 | 없음 |
+| 후보 | 서버 11 | 서버 19 | 서버 21 | 서버 23 | 서버 26(23.26) | 서버 18 |
+|------|---------|---------|---------|---------|----------------|---------|
+| `list.sql`(19), `list.23.sql`(23) | 없음 | 19 | 19 | 23 | 23 | 없음 |
+| `list.11.sql`(11), `list.sql`(19), `list.23.sql`(23) | 11 | 19 | 19 | 23 | 23 | 11 |
 
-나중에 11.2·12c·18c 를 지원하면 `CatalogHeader.LowestMinVersion` 을 내리고 같은 id 로 `min-version: 11` 파일만 더한다(TC-03). 선택 규칙은 그대로다.
-지원 버전 관문(19.x·23.x 만 접속 허용)은 TSK-03-03 의 설정 한 곳이 맡고, 카탈로그는 버전을 거르지 않는다.
+11.2 지원(D-026, TSK-03-07)으로 `CatalogHeader.LowestMinVersion` 을 11 로 내렸다. 11g 에서 도는 파일은 `min-version: 11`, 11g 에서 깨지는 15개는 원래 파일(19)을 두고 같은 id 로 `<이름>.11.sql` 변형을 더했다. 선택 규칙은 그대로다.
+지원 버전 관문(11.2·19.x·23.x 만 접속 허용)은 `SupportedServerPolicy` 한 곳이 맡고, 카탈로그는 버전을 거르지 않는다.
 
 ## 5. 검사 규칙 (빌드 검사)
 
@@ -95,12 +96,13 @@ SELECT s.inst_id, s.sid, s.serial#, s.username
 |----------------------|---------|
 | `header-missing` | 머리 주석 필드가 하나도 없다 |
 | `header-invalid` | 필수 키(id·min-version·license) 없음, 값 형식 오류, 모르는 키, 같은 키 두 번, id 형식 오류 |
-| `min-version-too-low` | `min-version` 이 19(지원 하한) 미만 |
+| `min-version-too-low` | `min-version` 이 11(지원 하한) 미만 |
+| `pre12c-feature` | `min-version` 12 미만(11g) 파일이 `FETCH FIRST/NEXT`·`OFFSET … ROWS`, 12c 이후 열(`identity_column`·`user_generated`·`search_condition_vc`·`editionable`·`banner_full`·`version_full`·`.cdb`·`.edition`·`con_id`·`CON_NAME` 등)·뷰(`v$pdbs`·`cdb_*`)를 쓴다. 주석은 빼고 본다 |
 | `id-folder-mismatch` | id 첫 마디가 소유 폴더 이름과 다르다 |
 | `duplicate-id` | 같은 `id` + 같은 `min-version` 이 두 파일 이상 |
 | `body-empty` | 머리 주석 뒤 SQL 본문이 없다 |
 
-TRD 4.2 의 "19 미만 대상에 `FETCH FIRST` 금지" 는 지금 19 미만 파일을 둘 수 없으므로 `min-version-too-low` 로 덮인다. 구버전을 추가할 때 규칙을 더한다.
+TRD 4.2 의 "19 미만 대상에 `FETCH FIRST` 금지" 는 `pre12c-feature` 가 맡는다. 열 이름 규칙은 점으로 한정한 `.cdb`·`.edition` 외에는 낱말 전체로 잡으므로, 11 변형은 12c 열 이름을 별칭으로도 쓰지 않는다.
 
 | 시험 | 단정 |
 |------|------|

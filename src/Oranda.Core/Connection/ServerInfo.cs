@@ -24,6 +24,9 @@ public sealed record ServerInfo(
     /// <summary>12c 이상이면 true. 12c 부터 CDB/PDB, DBMS_DEBUG_JDWP, blocking_session 컬럼 등이 달라진다.</summary>
     public bool IsAtLeast12c => MajorVersion >= 12;
 
+    /// <summary>서버 버전으로 정해지는 기능 켜짐(11g 에서 12c 이후 기능 끄기, TSK-03-07).</summary>
+    public ServerFeatures Features => ServerFeatures.For(MajorVersion);
+
     public int MajorVersion =>
         int.TryParse(Version.Split('.')[0], out var major) ? major : 0;
 }

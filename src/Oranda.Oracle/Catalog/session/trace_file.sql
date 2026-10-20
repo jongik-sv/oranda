@@ -1,6 +1,6 @@
 -- 대상 세션의 트레이스 파일 경로와 진단 트레이스 폴더(v$diag_info 'Diag Trace'). 바인드: inst_id, sid, serial
 -- id: session.trace_file
--- min-version: 19
+-- min-version: 11
 -- requires: gv$session, gv$process, gv$diag_info
 -- license: none
 -- rac: gv

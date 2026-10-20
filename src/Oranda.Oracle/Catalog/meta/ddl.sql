@@ -1,6 +1,6 @@
 -- DBMS_METADATA DDL. 바인드: type(DBMS_METADATA 형식 이름), name, owner, terminator, storage, segment_attributes, tablespace, dependents(0|1), ddl(OUT CLOB).
 -- id: meta.ddl
--- min-version: 19
+-- min-version: 11
 -- requires: dbms_metadata
 -- license: none
 DECLARE

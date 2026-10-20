@@ -1,6 +1,6 @@
 -- 인덱스와 열. 바인드: owner, name
 -- id: meta.indexes
--- min-version: 19
+-- min-version: 11
 -- requires: dba_indexes, all_indexes, dba_ind_columns, all_ind_columns
 -- license: none
 SELECT i.index_name, i.uniqueness, i.index_type, ic.column_name, ic.column_position

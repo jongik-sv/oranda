@@ -1,6 +1,6 @@
 -- 세그먼트 크기(테이블·인덱스·LOB). 바인드: owner, name. dba 권한이 있을 때만 쓴다.
 -- id: meta.detail_size
--- min-version: 19
+-- min-version: 11
 -- requires: dba_segments, dba_indexes, dba_lobs
 -- license: none
 SELECT s.segment_name, s.segment_type, SUM(s.bytes) AS bytes, SUM(s.extents) AS extents

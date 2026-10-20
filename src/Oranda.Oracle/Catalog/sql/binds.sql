@@ -1,6 +1,6 @@
 -- 바인드 캡처(v$sql_bind_capture). 서버가 캡처한 값만 있다(최초 실행·주기 갱신). 바인드: inst_id(null=전체), sql_id, child(null=전체 자식)
 -- id: sql.binds
--- min-version: 19
+-- min-version: 11
 -- requires: gv$sql_bind_capture
 -- license: none
 -- rac: gv

@@ -1,6 +1,6 @@
 -- 세션의 진행 중인 긴 작업(gv$session_longops, 팩 불필요). 최근 시작한 것부터. 바인드: inst_id, sid, serial
 -- id: session.longops
--- min-version: 19
+-- min-version: 11
 -- requires: gv$session_longops
 -- license: none
 -- rac: gv

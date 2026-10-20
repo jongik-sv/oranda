@@ -1,6 +1,6 @@
 -- 세그먼트 크기(자기 스키마 객체). 바인드: owner, name. dba 권한이 없고 owner 가 접속 사용자일 때 쓴다.
 -- id: meta.detail_size_user
--- min-version: 19
+-- min-version: 11
 -- requires: user_segments, user_indexes, user_lobs
 -- license: none
 SELECT s.segment_name, s.segment_type, SUM(s.bytes) AS bytes, SUM(s.extents) AS extents

@@ -17,7 +17,8 @@ public partial class DbInfoCatalogTests
     [InlineData("dbinfo.column_search")]
     public void Query_exists_for_19_and_26_and_needs_no_license_pack(string id)
     {
-        Assert.Equal(19, Catalog.Get(id, 19).Header.MinVersion);
+        Assert.InRange(Catalog.Get(id, 19).Header.MinVersion, 11, 19);
+        Assert.Equal(id, Catalog.Get(id, 11).Header.Id); // 11.2 (TSK-03-07)
         Assert.Equal(id, Catalog.Get(id, 26).Header.Id);
         Assert.Equal(CatalogLicense.None, Catalog.Get(id, 26).Header.License);
     }

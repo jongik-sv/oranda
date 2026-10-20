@@ -18,6 +18,9 @@ public class SupportedServerPolicyTests
     [InlineData("19.25.0.0.0")]
     [InlineData("23.26.0.0.0")]
     [InlineData("23.4")]
+    [InlineData("11.2.0.2.0")]
+    [InlineData("11.2.0.3.0")]
+    [InlineData("11.2.0.4.0")]
     public void Supported_versions_pass(string version)
     {
         Assert.True(SupportedServerPolicy.IsSupported(version, out var reason));
@@ -29,13 +32,17 @@ public class SupportedServerPolicyTests
     [InlineData("18.0.0.0.0", "18")]
     [InlineData("21.3.0.0.0", "21")]
     [InlineData("12.2.0.1.0", "12")]
-    [InlineData("11.2.0.4.0", "11")]
+    [InlineData("11.1.0.7.0", "11.1")]
+    [InlineData("11.0.0.0.0", "11.0")]
+    [InlineData("11", "11")]
+    [InlineData("10.2.0.5.0", "10")]
     [InlineData("26.1.0.0.0", "26")]
     public void Unsupported_versions_are_rejected_with_version_and_reason(string version, string major)
     {
         Assert.False(SupportedServerPolicy.IsSupported(version, out var reason));
         Assert.Contains(major, reason, StringComparison.Ordinal);
         Assert.Contains("19.x", reason, StringComparison.Ordinal);
+        Assert.Contains("11.2", reason, StringComparison.Ordinal);
 
         var ex = Assert.Throws<UnsupportedServerException>(() => SupportedServerPolicy.EnsureSupported(version));
         Assert.Equal(version, ex.ServerVersion);
@@ -48,6 +55,7 @@ public class SupportedServerPolicyTests
     [InlineData("  ")]
     [InlineData("abc")]
     [InlineData("-19.0")]
+    [InlineData("11.x.0")]
     public void Unreadable_versions_are_rejected(string? version)
     {
         Assert.False(SupportedServerPolicy.IsSupported(version, out var reason));

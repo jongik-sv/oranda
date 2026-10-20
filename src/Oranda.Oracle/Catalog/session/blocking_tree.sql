@@ -1,7 +1,7 @@
 -- 블로킹 트리 재료: 대기자(blocking_session 있음)와 그 보유자. final_blocking_* 는 뿌리 확인용.
 -- 대기자 행의 locked_object 는 기다리는 행의 객체(row_wait_obj#). @PFX@ = dba 또는 all.
 -- id: session.blocking_tree
--- min-version: 19
+-- min-version: 11
 -- requires: gv$session, dba_objects, all_objects
 -- license: none
 -- rac: gv
