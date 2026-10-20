@@ -539,7 +539,7 @@ public sealed partial class SqlEditorViewModel : ToolPanelViewModelBase
     }
 
     /// <summary>
-    /// 작업 공간 탭을 복원한다. <paramref name="fileText"/> 는 파일에서 다시 읽은 내용(없으면 null). .sql 끝의 바인드 블록은
+    /// 작업 공간 탭을 복원한다(커서만, 선택 영역은 버린다). <paramref name="fileText"/> 는 파일에서 다시 읽은 내용(없으면 null). .sql 끝의 바인드 블록은
     /// 편집기에 보이지 않게 뗀다(값은 호스트가 바인드 변수 목록에 넣는다).
     /// </summary>
     public static SqlEditorViewModel FromWorkspaceTab(WorkspaceTab tab, string? fileText)
@@ -562,17 +562,9 @@ public sealed partial class SqlEditorViewModel : ToolPanelViewModelBase
         // 파일이 있어야 하는데 못 읽었고 저장된 내용도 없으면 빈 문서 + 변경됨으로 두어 닫을 때 알린다.
         bool dirty = tab.IsDirty || (tab.Content is null && fileText is null && tab.FilePath is not null);
         vm.LoadText(text, dirty);
-        var caret = vm.OffsetOf(tab.Caret);
-        if (tab.SelectionStart is { } selFrom)
-        {
-            var a = vm.OffsetOf(selFrom);
-            vm.Select(Math.Min(a, caret), Math.Abs(caret - a));
-            vm.CaretOffset = caret;
-        }
-        else
-        {
-            vm.Select(caret, 0);
-        }
+        // 선택 영역은 복원하지 않고 커서 위치만 되살린다. 전체 선택이 복원된 채 키 입력이 들어가
+        // 복원한 내용을 덮어쓴 사고가 있었다. 저장 형식(SelectionStart)은 읽기 호환을 위해 그대로 둔다.
+        vm.Select(vm.OffsetOf(tab.Caret), 0);
 
         return vm;
     }

@@ -535,7 +535,7 @@ public sealed partial class SqlEditorTests : IDisposable
     }
 
     [Fact]
-    public void Workspace_tab_round_trips_caret_selection_and_connection()
+    public void Workspace_tab_restores_caret_only_dropping_selection_and_keeps_connection()
     {
         var profile = Guid.NewGuid();
         var vm = new SqlEditorViewModel(Guid.NewGuid(), "line1\nline2\nline3") { Title = "SQL 7", ConnectionProfileId = profile, Encoding = "cp949" };
@@ -546,7 +546,8 @@ public sealed partial class SqlEditorTests : IDisposable
 
         var back = SqlEditorViewModel.FromWorkspaceTab(tab, null);
         Assert.Equal(vm.TabId, back.TabId);
-        Assert.Equal((8, 3, 11), (back.SelectionStart, back.SelectionLength, back.CaretOffset));
+        // 선택은 저장되지만 복원 때는 버리고 커서(선택 끝)만 되살린다.
+        Assert.Equal((11, 0, 11), (back.SelectionStart, back.SelectionLength, back.CaretOffset));
         Assert.Equal(profile, back.ConnectionProfileId);
         Assert.Equal("cp949", back.Encoding);
         Assert.Equal(vm.IsDirty, back.IsDirty);
@@ -716,7 +717,8 @@ public sealed partial class SqlEditorTests : IDisposable
         Assert.Equal(1, dialogs.ConfirmCalls);
         Assert.Equal(2, run2.Tabs.Count);
         Assert.Equal("select '미저장' from scratch", run2.Tabs[0].Text);
-        Assert.Equal((7, 5), (run2.Tabs[0].SelectionStart, run2.Tabs[0].SelectionLength));
+        // 선택은 버리고 커서(선택 끝)만 복원한다.
+        Assert.Equal((12, 0), (run2.Tabs[0].CaretOffset, run2.Tabs[0].SelectionLength));
         Assert.Equal("/* edited */ select 'disk' from dual", run2.Tabs[1].Text);
         Assert.True(run2.Tabs[1].IsDirty);
         Assert.Equal(file, run2.Tabs[1].FilePath);
