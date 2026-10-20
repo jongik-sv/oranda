@@ -2029,6 +2029,40 @@ dotnet, testhost, Oranda.App
 - data-model: -
 - ui-spec: -
 
+### TSK-07-06: 객체 검색: 크기 계산 때문에 사내 DB 에서 한 스키마 검색이 약 45 초 [win144]
+- category: defect
+- domain: backend
+- model: sonnet
+- status: [ ]
+- priority: high
+- assignee: -
+- schedule: 2026-12-21 ~ 2026-12-23
+- tags: defect, performance, schema, win144
+- depends: TSK-07-04
+- blocked-by: -
+- entry-point: 스키마 브라우저 > 객체 검색
+- note: 담당 PC: win144(Windows 개발 PC) — 맥북 세션은 이 Task 를 하지 않는다. 2026-10-20 사내 시험 DB(11.2.0.3, 객체가 많은 운영 복제 스키마)에서 dbinfo.object_search(11 변형)를 owner 1개·max_rows 5 로 돌려 all·dba 각각 약 45 초 걸림(30 초 제한이면 ORA-01013). 원인 후보: 모든 객체마다 @SIZE@ 상관 하위질의(user_segments/dba_segments SUM)를 계산한 뒤에 ROWNUM·FETCH FIRST 로 자른다. 19c 문장도 구조가 같아 버전과 무관할 가능성이 큼
+
+#### PRD 요구사항
+- prd-ref: PRD SCH 객체 검색
+- requirements:
+  - 크기 조건(min_size·max_size)이 없으면 크기를 계산하지 않거나, 이름·유형·날짜로 먼저 거르고 자른 행에만 크기를 붙인다
+  - 크기 조건이 있으면 세그먼트를 먼저 모아(GROUP BY) 붙이는 방식으로 바꿔 객체마다 하위질의를 돌리지 않는다
+  - 19 문장과 11 변형을 함께 고친다
+- acceptance:
+  - 같은 사내 시험 DB 에서 한 스키마 객체 검색(크기 조건 없음)이 5 초 안에 첫 결과를 보인다
+  - 크기 조건 검색 결과가 고치기 전과 같다
+- constraints:
+  - 결함을 재현하는 시험(세그먼트가 많은 스키마)이 먼저 느리고, 고친 뒤 빨라져야 한다
+- test-criteria:
+  - 26ai·11g 컨테이너 통합 시험에서 결과 동일성, 실행 계획에 상관 하위질의 반복이 없음
+
+#### 기술 스펙 (TRD)
+- tech-spec: -
+- api-spec: -
+- data-model: -
+- ui-spec: -
+
 ## WP-08: PL/SQL 도구
 - schedule: 2026-11-24 ~ 2026-11-30
 
@@ -3127,6 +3161,7 @@ graph LR
   TSK-11-03 --> TSK-06-12
   TSK-11-03 --> TSK-10-06
   TSK-07-02 --> TSK-07-05
+  TSK-07-04 --> TSK-07-06
   %% 2026-10-20 사용자 요청
   TSK-03-03 --> TSK-03-07
   TSK-04-02 --> TSK-04-10

@@ -226,3 +226,11 @@
 - **Rationale**: 끝 확장자가 `.md` 라 어느 편집기·GitHub 에서도 Markdown 으로 보이고, 이름에 workspace 가 보인다. 전용 확장자(.osw 등)는 Markdown 인지 알 수 없다. 대가: OS 파일 연결은 마지막 확장자로만 되므로 더블 클릭으로 Oranda 가 뜨지는 않는다
 - **Reversible**: yes
 - **Source**: 사용자 결정(2026-10-20, 「작업공간 이름 규칙을 추천 대로 진행해」), 검토 문서 https://claude.ai/code/artifact/b267e982-d892-46b2-9203-4b7236f80d02
+
+## D-029 (2026-10-20T18:00:00Z)
+- **Phase**: TSK-03-07 Oracle 11.2 지원 구현 중 정한 것
+- **Decision needed**: 버전에 따른 기능 켜짐을 어디에 둘지, 카탈로그 min-version 을 어떻게 적을지, 11.2 에 없는 기능 처리
+- **Decision made**: (1) 서버 버전으로 정해지는 기능 켜짐은 권한용 `ServerCapabilities` 와 나눠 `ServerInfo.Features`(ServerFeatures)에 둔다. (2) 카탈로그 min-version 은 그 문장이 실제로 도는 가장 낮은 버전으로 적는다: 11g 에서 도는 파일은 11, 12c 이후 문법·열을 쓰면 19 와 `.11.sql` 변형을 함께 둔다. 빌드 검사 규칙 `pre12c-feature` 가 11 변형의 FETCH FIRST·OFFSET·12c+ 열을 막는다. (3) `session.my_blocking` 은 19 이상 전용으로 두고 11.2 에서는 기능을 숨긴다
+- **Rationale**: 권한과 버전은 바뀌는 이유가 달라 섞으면 끄기 조건이 엉킨다. min-version 을 실제 하한으로 적어야 새 파일이 11g 를 자동으로 덮는지 빌드 검사가 알 수 있다
+- **Reversible**: yes
+- **Source**: TSK-03-07 레인 결정 후보, 조정 세션 확정
