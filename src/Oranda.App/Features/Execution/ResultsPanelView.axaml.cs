@@ -58,6 +58,13 @@ public partial class ResultsPanelView : UserControl
 
         if (!ReferenceEquals(PaneHost.Content, view))
         {
+            // 도킹이 결과 창을 다시 만들면(옮기기·띄우기·레이아웃 바꾸기) 옛 창이 떨어지기 전에 새 창이 같은 View 를 원한다.
+            // 한 컨트롤은 부모를 둘 가질 수 없으므로 옛 자리에서 먼저 빼 온다(그대로 넣으면 처리되지 않은 예외로 앱이 죽는다).
+            if (view.Parent is ContentControl { } owner && !ReferenceEquals(owner, PaneHost))
+            {
+                owner.Content = null;
+            }
+
             PaneHost.Content = view;
         }
     }

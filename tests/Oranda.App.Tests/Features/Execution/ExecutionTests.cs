@@ -1324,6 +1324,39 @@ public sealed class ExecutionTests
         return Task.CompletedTask;
     });
 
+    [Fact]
+    public Task A_second_results_panel_view_takes_over_the_shared_result_view() => Ui.Run(() =>
+    {
+        // 도킹이 결과 창을 다시 만들어 옛 View 가 아직 붙어 있는 동안 새 View 가 같은 결과를 보이려 한다.
+        // 예전에는 「already has a visual parent」 예외가 측정 중에 나서 앱이 죽었다.
+        using var rig = new Rig();
+        var a = rig.Host.NewDocument("select 1 from dual");
+        a.ResultPane = new ResultTabsViewModel(null);
+        using var vm = ResultsPanelViewModel.ForHost(rig.Host);
+        var oldView = new ResultsPanelView { DataContext = vm };
+        var newView = new ResultsPanelView();
+        var window = new Avalonia.Controls.Window
+        {
+            Width = 800,
+            Height = 600,
+            Content = new Avalonia.Controls.StackPanel { Children = { oldView, newView } },
+        };
+        window.Show();
+        Avalonia.Threading.Dispatcher.UIThread.RunJobs();
+        var oldHost = oldView.FindControl<Avalonia.Controls.ContentControl>("PaneHost")!;
+        var shared = Assert.IsType<ResultTabsView>(oldHost.Content);
+
+        newView.DataContext = vm;
+        Avalonia.Threading.Dispatcher.UIThread.RunJobs();
+        window.UpdateLayout();
+
+        var newHost = newView.FindControl<Avalonia.Controls.ContentControl>("PaneHost")!;
+        Assert.Same(shared, newHost.Content);
+        Assert.Null(oldHost.Content);
+        window.Close();
+        return Task.CompletedTask;
+    });
+
     // ---------- 명령 처리기 ----------
 
     [Fact]
