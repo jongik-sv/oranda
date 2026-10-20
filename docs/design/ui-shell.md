@@ -97,8 +97,8 @@
 | ID | 이름 | kind | 기본 위치 | 여러 개 | 여는 명령 | 소유 Task |
 |---|---|---|---|---|---|---|
 | `oranda.panel.sqlEditor` | SQL 작업 공간(안쪽 SQL 탭 줄 + 편집기. 문서 탭 하나 = 작업 공간 하나) | document | 문서 | 예 | `oranda.file.newWorkspace`(작업 공간), `oranda.file.newSqlEditor`(보고 있는 작업 공간에 SQL 탭) | TSK-04-02 (결과 영역 TSK-06-03) |
-| `oranda.panel.plsqlEditor` | PL/SQL 편집기 | document | 문서 | 예 | `oranda.file.newPlsqlEditor`, `oranda.plsql.openSource` | TSK-08-01 |
-| `oranda.panel.objectDetail` | 객체 상세·DDL | document | 문서 | 예 | `oranda.schema.openDetail` | TSK-07-03 |
+| `oranda.panel.plsqlEditor` | PL/SQL 편집기 | document | 문서 | 예 | `oranda.file.newPlsqlEditor`, `oranda.plsql.openSource`, 스키마 브라우저에서 누르기 | TSK-08-01 |
+| `oranda.panel.objectDetail` | 객체 상세·DDL | document | 문서 | 예 | `oranda.schema.openDetail`, 스키마 브라우저에서 누르기 | TSK-07-03 |
 | `oranda.panel.lobEditor` | LOB 편집기 | document | 문서 | 예 | `oranda.grid.viewValue` | TSK-06-05 |
 | `oranda.panel.sessionMonitor` | 세션 모니터 | document | 문서 | 아니요(접속당 1) | `oranda.monitor.sessions` | TSK-09-01 |
 | `oranda.panel.sqlMonitor` | SQL 모니터 | document | 문서 | 아니요(접속당 1) | `oranda.monitor.sql` | TSK-09-02 |
@@ -126,6 +126,11 @@
 - 도구 창 ID = `oranda.panel.<camelCase>`. 그 도구 창을 보이는 명령 = `oranda.view.<같은 이름>`(문서 종류는 위 표의 명령).
 - 도구 창 등록 정보: ID, 이름(리소스 키), kind, 기본 위치, 기본 크기, 여러 개 허용, 아이콘, 순서, ViewModel 형식. 특성(attribute)으로 달고 셸이 어셈블리를 스캔한다(TSK-02-05). **셸 파일을 고치지 않고** 도구 창이 늘어난다.
 - 접속에 묶인 도구 창(출력·메시지·계획·이력·컴파일 오류)은 **활성 문서의 접속**을 따라 내용이 바뀐다. 모니터는 자기 전용 세션(CONN-07)을 가진다.
+- 스키마 브라우저에서 객체 열기(SCH-01): 객체 노드를 누르면 종류에 맞는 문서로 연다. PL/SQL 단위는 `oranda.panel.plsqlEditor`(서버 소스), 그 밖은 `oranda.panel.objectDetail` 이다(종류 나누기는 DB 객체로 이동과 같다). 열기 규칙은 `SchemaObjectOpener` 한 곳에 둔다.
+  - 미리보기 탭(VS Code 방식): 한 번 누르기, 또는 방향키(↑·↓·Home·End·PageUp·PageDown)로 고르고 250 ms 멈추면 미리보기 탭으로 연다. 미리보기 탭은 문서 영역에 하나뿐이고 머리글이 기울임꼴이다. 다음 미리보기는 그 탭 자리에 새 탭을 넣고 옛 탭을 닫는다(`DockWorkspace.OpenPreviewDocument`). 옛 탭을 닫을 때의 정리(데이터 탭 커서 닫기)와 읽기 취소가 그대로 돈다. 키보드 포커스는 트리에 남는다.
+  - 고정: 두 번 누르기·Enter(연 문서로 포커스를 옮긴다. PL/SQL 은 글 편집 영역, 객체 상세는 구역 목록), 미리보기 탭 머리글 두 번 누르기, PL/SQL 글 고침, 데이터 탭 편집 켬. 고친 내용이 남은 미리보기는 바꿔 끼우지 않는다. 미리보기 동안은 창으로 떼어 내기를 끈다. Dock 은 탭 머리글을 두 번 누르면 창으로 떼어 내는데, 미리보기 탭에서는 그 동작이 고정이어야 하기 때문이다(고정 탭은 지금처럼 떼어 낸다).
+  - 같은 접속(DbKey)의 같은 객체(소유자·이름·유형. 패키지와 패키지 본문은 다른 객체)가 이미 열려 있으면 새로 열지 않고 그 탭을 앞으로 낸다. 스키마·범주·「더 보기」·열·메시지 노드는 열지 않는다. 표·뷰 노드를 두 번 눌러도 트리 펼침은 바뀌지 않는다.
+  - 코드가 고른 선택(트리에서 찾기·필터 다시 읽기·오른쪽 단추)은 미리보기를 열지 않는다. 설정 `schemaBrowser.singleClickPreview`(설정 창 「일반」, 기본 켬)를 끄면 한 번 누르기는 속성 창만 바꾼다. 접속이 없거나 세션이 실행 중·끊김이면 열지 않고 스키마 브라우저 상태 줄에 알린다.
 - DB 객체로 이동(`oranda.nav.quickOpenObject`, TSK-04-06)은 도킹하지 않는 작은 창이다. 명령 팔레트와 같은 모양(입력칸·객체 목록(유형 아이콘·`소유자.이름`·유형)·상태 줄)이고 Enter 열기·Alt+Enter 스키마 브라우저에서 찾기·Esc 닫기. 스키마 브라우저에서 찾기(`oranda.schema.reveal`)는 스키마 브라우저 도구 창을 앞으로 내고 트리 노드를 고른다.
 - 템플릿 창(`oranda.panel.templates`, 오렌지 Template·SQL Developer Snippets 창처럼)은 위에서부터 찾기 칸, 종류 단추 줄과 「새 조각」, 종류별 묶음 목록, 나누기 막대, 미리보기, 상태 줄이다.
   - 종류 단추: 전체·조각·힌트·함수·의사 열. 좁은 도구 창에 맞게 아이콘만 그리고 이름은 도움말 풍선·낭독기 이름으로 낸다. 라디오 묶음이라 늘 하나가 켜져 있다(빈 칸 없음).
