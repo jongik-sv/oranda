@@ -285,4 +285,17 @@ public sealed class TemplatesPanelHeadlessTests : IDisposable
             window.Close();
         }
     });
+
+    [Fact]
+    public Task View_templates_command_opens_the_panel_built_by_the_shell() => HeadlessHost.Run(async () =>
+    {
+        using var h = new ShellHarness();
+        await h.Get<Oranda.Core.Shell.ICommandRegistry>().ExecuteAsync("oranda.view.templates", h.Get<Oranda.Core.Shell.IContextKeys>());
+        TemplatesView? view = null;
+        await HeadlessHost.WaitUntil(() => (view = h.Window.GetVisualDescendants().OfType<TemplatesView>().FirstOrDefault()) is not null);
+        var vm = Assert.IsType<TemplatesViewModel>(view!.DataContext);
+        Assert.Equal(4, vm.Groups.Count);
+        Assert.Equal("ko", vm.Language);
+        Assert.NotNull(vm.ShowEditor);
+    });
 }
