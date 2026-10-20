@@ -1,7 +1,7 @@
 namespace Oranda.Language.Snippets;
 
 /// <summary>코드 조각·옵티마이저 힌트·내장 함수·의사 컬럼 설명(EDIT-08, EDIT-10). 소유: TSK-04-07. 사용자 조각은 <see cref="UserSnippetFile"/>.</summary>
-public static class SnippetLibrary
+public static partial class SnippetLibrary
 {
     /// <summary>삽입용 기본 조각.</summary>
     public static IReadOnlyList<Snippet> Snippets { get; } =
@@ -126,7 +126,7 @@ public static class SnippetLibrary
     public static IReadOnlyList<Snippet> All { get; } = [.. Snippets, .. Hints, .. Functions, .. PseudoColumns];
 
     /// <summary>
-    /// 이름·줄임말·설명에서 찾는다(대소문자 무시, 공백으로 나눈 낱말이 모두 들어 있어야 함). 줄임말이 같거나 앞이 같은 것이 먼저.
+    /// 이름·줄임말·설명(영어 글 포함)에서 찾는다(대소문자 무시, 공백으로 나눈 낱말이 모두 들어 있어야 함). 줄임말이 같거나 앞이 같은 것이 먼저.
     /// </summary>
     public static IReadOnlyList<Snippet> Search(string? query, SnippetKind? kind = null, IEnumerable<Snippet>? user = null)
     {
@@ -135,7 +135,9 @@ public static class SnippetLibrary
         var words = (query ?? string.Empty).Split(' ', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
         if (words.Length > 0)
         {
-            q = q.Where(s => words.All(w => Has(s.Prefix, w) || Has(s.Name, w) || Has(s.Description, w)));
+            // 화면 언어와 상관없이 한·영 이름과 설명을 모두 본다(영어 화면에서 한국어 낱말로도 찾게).
+            q = q.Where(s => words.All(w => Has(s.Prefix, w) || Has(s.Name, w) || Has(s.Description, w)
+                || Has(DisplayName(s, "en"), w) || Has(DisplayDescription(s, "en"), w)));
         }
 
         var first = words.Length > 0 ? words[0] : string.Empty;

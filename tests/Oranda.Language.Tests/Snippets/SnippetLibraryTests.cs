@@ -98,6 +98,50 @@ public class SnippetLibraryTests
     }
 
     [Fact]
+    public void Every_builtin_has_an_english_description_and_a_name_without_korean()
+    {
+        var hangul = new System.Text.RegularExpressions.Regex("[\\uAC00-\\uD7A3]");
+        Assert.All(SnippetLibrary.All, s =>
+        {
+            Assert.True(SnippetLibrary.HasEnglish(s), $"영어 글 없음: {s.Kind} {s.Prefix}");
+            var name = SnippetLibrary.DisplayName(s, "en");
+            var description = SnippetLibrary.DisplayDescription(s, "en");
+            Assert.False(hangul.IsMatch(name), $"영어 이름에 한글: {s.Prefix} → {name}");
+            Assert.False(string.IsNullOrWhiteSpace(description));
+            Assert.False(hangul.IsMatch(description), $"영어 설명에 한글: {s.Prefix} → {description}");
+
+            // 한국어는 원래 글 그대로다.
+            Assert.Equal(s.Name, SnippetLibrary.DisplayName(s, "ko"));
+            Assert.Equal(s.Description, SnippetLibrary.DisplayDescription(s, "ko"));
+        });
+    }
+
+    [Fact]
+    public void Summary_never_repeats_the_prefix()
+    {
+        // 의사 열·함수처럼 이름이 줄임말과 같아도 설명을 보인다(「ROWID ROWID」 가 아니다).
+        var rowid = SnippetLibrary.PseudoColumns.First(p => p.Prefix == "ROWID");
+        Assert.Equal(rowid.Description, SnippetLibrary.Summary(rowid, "ko"));
+        Assert.StartsWith("Physical address", SnippetLibrary.Summary(rowid, "en"), StringComparison.Ordinal);
+        Assert.All(SnippetLibrary.All, s => Assert.False(string.Equals(SnippetLibrary.Summary(s, "ko"), s.Prefix, StringComparison.OrdinalIgnoreCase), s.Prefix));
+
+        // 설명이 없는 사용자 조각: 이름이 줄임말과 다르면 이름, 같으면 본문 첫 줄.
+        Assert.Equal("내 조회", SnippetLibrary.Summary(new Snippet("my", "내 조회", "", "SELECT 1", IsUser: true), "ko"));
+        Assert.Equal("SELECT x", SnippetLibrary.Summary(new Snippet("my", "my", " ", "\n  SELECT ${1:x}\nFROM dual", IsUser: true), "en"));
+
+        // 사용자 조각은 번역하지 않는다.
+        var mine = new Snippet("sel", "내 SELECT", "내 설명", "SELECT 1", IsUser: true);
+        Assert.Equal("내 설명", SnippetLibrary.DisplayDescription(mine, "en"));
+    }
+
+    [Fact]
+    public void Search_finds_by_english_text_in_either_language()
+    {
+        Assert.Contains(SnippetLibrary.Search("nested loops"), s => s.Prefix == "USE_NL");
+        Assert.Contains(SnippetLibrary.Search("물리 주소"), s => s.Prefix == "ROWID");
+    }
+
+    [Fact]
     public void UserSnippetFile_round_trips()
     {
         var list = new[] { new Snippet("my", "내 조각", "설명", "SELECT ${1:x}\n  FROM dual$0", IsUser: true) };
