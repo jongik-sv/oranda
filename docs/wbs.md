@@ -2557,6 +2557,40 @@ dotnet, testhost, Oranda.App
 - data-model: -
 - ui-spec: -
 
+### TSK-10-07: 리팩터링: 동시 접속·탭별 바인드 뒤 코드 구조 정리 [win144]
+- category: infra
+- domain: fullstack
+- model: opus
+- status: [ ]
+- priority: medium
+- assignee: -
+- schedule: 2027-01-14 ~ 2027-01-20
+- tags: refactor, win144
+- depends: TSK-03-08, TSK-04-11
+- blocked-by: -
+- entry-point: -
+- note: 담당 PC: win144(Windows 개발 PC) — 맥북 세션은 이 Task 를 하지 않는다. 2026-10-20 사용자 지시: 바인드 변수 처리(TSK-04-11)까지 끝나면 리팩터링한다. 동작은 바꾸지 않는다. 맥북 세션이 같은 dev 에 계속 push 하므로 겹치는 파일은 작게 나눠 커밋한다
+
+#### PRD 요구사항
+- prd-ref: TRD 코드 구조
+- requirements:
+  - 먼저 조사: 큰 파일·큰 클래스, 중복 코드, 세션·바인드를 직접 잡는 남은 경로, 쓰지 않는 코드, 기능 폴더 경계를 넘는 참조
+  - 조사 결과에서 효과 큰 순서로 정리(파일 나누기·중복 합치기·죽은 코드 지우기·이름 맞추기)
+  - 공개 동작·설정 파일 형식·작업 공간 형식은 바꾸지 않는다
+- acceptance:
+  - dotnet build -warnaserror 통과, 단위·Headless·통합 시험 결과가 리팩터링 전과 같다(알려진 실패 제외)
+  - 조사표와 한 일·안 한 일을 note 에 남긴다
+- constraints:
+  - 성능 예산(TSK-11-03)을 나쁘게 하지 않는다
+- test-criteria:
+  - 리팩터링 전후 같은 시험 묶음 결과 비교
+
+#### 기술 스펙 (TRD)
+- tech-spec: -
+- api-spec: -
+- data-model: -
+- ui-spec: -
+
 ## WP-11: 통합테스트
 - schedule: 2026-12-01 ~ 2026-12-07
 - description: 기능 간 시나리오 E2E·성능·권한 교차 검증 (개별 기능 재검증 아님)
@@ -2681,6 +2715,39 @@ dotnet, testhost, Oranda.App
   - 수용 시험 차단 이슈 0건
   - 발견 결함은 해당 기능 WP에 defect Task로 등록됨
 - constraints: -
+- test-criteria: -
+
+#### 기술 스펙 (TRD)
+- tech-spec: -
+- api-spec: -
+- data-model: -
+- ui-spec: -
+
+### TSK-11-05: 화면 기능 전체 시험: 실제 앱에서 모든 기능을 손으로 확인 [win144]
+- category: itest
+- domain: test
+- model: sonnet
+- status: [ ]
+- priority: high
+- assignee: -
+- schedule: 2027-01-21 ~ 2027-01-27
+- tags: integration, e2e, ui, win144
+- depends: TSK-10-07
+- blocked-by: -
+- entry-point: 실제 앱(Windows) 전체 메뉴·명령·도구 창
+- note: 담당 PC: win144(Windows 개발 PC) — 맥북 세션은 이 Task 를 하지 않는다. 2026-10-20 사용자 지시: 리팩터링(TSK-10-07)이 끝나면 화면에서 기능을 모두 시험한다. 대상 DB = 26ai 컨테이너·11g 컨테이너·사내 테스트 DB UBMADQ(SELECT 위주, 테스트계)
+
+#### PRD 요구사항
+- prd-ref: PRD 전체 기능 목록
+- requirements:
+  - PRD 기능 ID 마다 실제 앱 화면에서 한 번 이상 실행해 본다(메뉴·단축키·명령 팔레트·도구 창)
+  - 여러 접속(TSK-03-08)·탭별 바인드(TSK-04-11)·작업 공간(.workspace.md·.sqd·MyBatis)을 함께 쓰는 흐름을 포함한다
+  - 결과를 기능 ID·화면·결과·스크린숏 경로 표로 docs/itest/TSK-11-05.md 에 남긴다
+- acceptance:
+  - 모든 기능 ID 에 결과(통과·결함·해당 없음)가 있다
+  - 발견 결함은 해당 기능 WP 에 defect Task 로 등록됨
+- constraints:
+  - UBMADQ 는 테스트계라도 쓰기·DDL·Kill 은 하지 않는다(쓰기 시험은 컨테이너에서)
 - test-criteria: -
 
 #### 기술 스펙 (TRD)
