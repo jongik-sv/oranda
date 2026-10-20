@@ -52,6 +52,8 @@ public class OrandaJsonContextTests
         Assert.Equal(2, value.Tabs.Count);
         Assert.Equal(new TextPosition(42, 7), value.Tabs[0].Caret);
         Assert.True(value.Tabs[1].IsDirty);
+        Assert.Null(value.Tabs[0].Binds);
+        Assert.Equal("HR", Assert.Single(value.Tabs[1].Binds!).Value);
     }
 
     [Fact]

@@ -22,7 +22,10 @@
       "isDirty": true,
       "caret": { "line": 4, "column": 22 },
       "selectionStart": { "line": 1, "column": 1 },
-      "connectionProfileId": "4e0a9b13-2c55-4d7e-8a19-63f0b2c4d5e7"
+      "connectionProfileId": "4e0a9b13-2c55-4d7e-8a19-63f0b2c4d5e7",
+      "binds": [
+        { "name": "owner", "type": "Varchar2", "direction": "In", "value": "HR", "isNull": false }
+      ]
     }
   ],
   "layout": "layout.json"

@@ -29,7 +29,7 @@ public enum BindDirection
 
 /// <summary>
 /// 바인드 값 하나. <see cref="Value"/> 는 .NET 기본 형식(string, decimal, DateTime, DateTimeOffset, byte[], bool) 또는 null.
-/// 디스크에 저장하지 않는다(EXEC-03 「마지막 값」은 세션 메모리에만).
+/// 이 값 자체는 디스크에 저장하지 않는다. 바인드 변수 창의 입력(값 글자·형식·방향)만 탭과 함께 저장된다(<c>WorkspaceBind</c>, EXEC-03).
 /// </summary>
 public sealed record BindValue(BindDataType Type, object? Value, BindDirection Direction = BindDirection.In)
 {

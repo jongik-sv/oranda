@@ -13,7 +13,7 @@ using static Oranda.App.Features.SqlEditor.EditorTextOps;
 namespace Oranda.App.Tests.Features.SqlEditor;
 
 /// <summary>TSK-04-02 SQL 편집기: 글자 연산·구조(접기·짝)·찾기·ViewModel·탭 관리·작업 공간 복구·명령 등록·IEditorContext.</summary>
-public sealed class SqlEditorTests : IDisposable
+public sealed partial class SqlEditorTests : IDisposable
 {
     private readonly string _root = Path.Combine(Path.GetTempPath(), "oranda-ed-" + Guid.NewGuid().ToString("N"));
 

@@ -1,5 +1,6 @@
 using AvaloniaEdit.Document;
 using CommunityToolkit.Mvvm.ComponentModel;
+using Oranda.App.Features.Execution;
 using Oranda.App.Shell;
 using Oranda.Core.Execution;
 using Oranda.Core.Language;
@@ -61,6 +62,8 @@ public sealed partial class SqlEditorViewModel : ToolPanelViewModelBase
 {
     private readonly List<TextAnchor> _bookmarks = [];
     private int _suppressDirty;
+    private long _bindNamesVersion = -1;
+    private IReadOnlyList<string> _bindNames = [];
 
     public SqlEditorViewModel()
         : this(Guid.NewGuid(), string.Empty)
@@ -258,6 +261,26 @@ public sealed partial class SqlEditorViewModel : ToolPanelViewModelBase
     // ---- 문장·짝 ------------------------------------------------------------------------
 
     public SqlStatement? GetStatementAtCaret() => StatementSplitter.GetStatementAt(Text, CaretOffset, SplitOptions.Default);
+
+    /// <summary>
+    /// 글 전체가 참조하는 바인드 이름(처음 나온 순서, 대소문자만 다른 이름은 하나). 작업 공간·.sql 저장과 자동 저장 표지가 쓴다.
+    /// 판(<see cref="Version"/>)이 그대로면 다시 나누지 않는다(자동 저장이 틱마다 부른다).
+    /// </summary>
+    public IReadOnlyList<string> ReferencedBindNames
+    {
+        get
+        {
+            if (_bindNamesVersion != Version)
+            {
+                _bindNames = [.. StatementSplitter.Split(Text, SplitOptions.Default)
+                    .SelectMany(s => s.BindNames)
+                    .Distinct(StringComparer.OrdinalIgnoreCase)];
+                _bindNamesVersion = Version;
+            }
+
+            return _bindNames;
+        }
+    }
 
     /// <summary>실행한 범위를 잠깐 칠해 달라는 요청. View 가 옅은 배경을 칠했다가 서서히 지운다(View 가 없으면 아무 일도 없다).</summary>
     public event EventHandler<TextRange>? FlashRequested;
@@ -493,10 +516,12 @@ public sealed partial class SqlEditorViewModel : ToolPanelViewModelBase
 
     /// <summary>
     /// 작업 공간 탭으로 만든다. 글자는 저장 안 된 문서(파일 없음 또는 변경됨)만 담는다(data-model 2.6).
+    /// <paramref name="binds"/> 를 주면 이 탭이 참조하는 바인드의 값도 담는다.
     /// </summary>
-    public WorkspaceTab ToWorkspaceTab()
+    public WorkspaceTab ToWorkspaceTab(BindVariableStore? binds = null)
     {
         bool keepContent = FilePath is null || IsDirty;
+        var values = binds?.Snapshot(ReferencedBindNames);
         return new WorkspaceTab
         {
             Id = TabId,
@@ -509,10 +534,14 @@ public sealed partial class SqlEditorViewModel : ToolPanelViewModelBase
             SelectionStart = SelectionLength > 0 ? PositionOf(SelectionStart) : null,
             ScrollLine = Surface?.FirstVisibleLine ?? ScrollLine,
             ConnectionProfileId = ConnectionProfileId,
+            Binds = values is { Count: > 0 } ? values : null,
         };
     }
 
-    /// <summary>작업 공간 탭을 복원한다. <paramref name="fileText"/> 는 파일에서 다시 읽은 내용(없으면 null).</summary>
+    /// <summary>
+    /// 작업 공간 탭을 복원한다. <paramref name="fileText"/> 는 파일에서 다시 읽은 내용(없으면 null). .sql 끝의 바인드 블록은
+    /// 편집기에 보이지 않게 뗀다(값은 호스트가 바인드 변수 목록에 넣는다).
+    /// </summary>
     public static SqlEditorViewModel FromWorkspaceTab(WorkspaceTab tab, string? fileText)
     {
         ArgumentNullException.ThrowIfNull(tab);
@@ -524,6 +553,11 @@ public sealed partial class SqlEditorViewModel : ToolPanelViewModelBase
             ConnectionProfileId = tab.ConnectionProfileId,
             ScrollLine = tab.ScrollLine,
         };
+        if (fileText is not null && SqlEditorHost.CarriesBinds(tab.FilePath))
+        {
+            fileText = SqlFileBinds.Split(fileText).Body;
+        }
+
         var text = tab.Content ?? fileText ?? string.Empty;
         // 파일이 있어야 하는데 못 읽었고 저장된 내용도 없으면 빈 문서 + 변경됨으로 두어 닫을 때 알린다.
         bool dirty = tab.IsDirty || (tab.Content is null && fileText is null && tab.FilePath is not null);

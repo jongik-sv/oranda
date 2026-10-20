@@ -118,13 +118,13 @@ public sealed partial class SqlWorkspaceViewModel : ToolPanelViewModelBase, IInn
         Name = Name,
         SavedAt = DateTimeOffset.UtcNow,
         ActiveTabId = ActiveTab?.TabId,
-        Tabs = [.. Tabs.Select(t => t.ToWorkspaceTab())],
+        Tabs = [.. Tabs.Select(t => t.ToWorkspaceTab(Host.Binds))],
         SourcePath = SourcePath,
     };
 
     /// <summary>
     /// 지난 자동 저장 뒤로 바뀐 것이 있으면 true 와 새 표지를 돌려준다. 내용(판·변경 표시)뿐 아니라 작업 공간 이름·원본 파일·
-    /// 활성 탭·탭 이름도 넣는다(이름만 바꾸고 죽어도 복구가 옛 이름으로 돌아가지 않게).
+    /// 활성 탭·탭 이름, 탭이 참조하는 바인드 값도 넣는다(이름이나 바인드 값만 바꾸고 죽어도 복구가 옛 값으로 돌아가지 않게).
     /// </summary>
     internal bool ChangedSinceAutosave(out string stamp)
     {
@@ -132,7 +132,8 @@ public sealed partial class SqlWorkspaceViewModel : ToolPanelViewModelBase, IInn
             .Append(Name).Append('\u0001').Append(SourcePath).Append('\u0001').Append(ActiveTab?.TabId);
         foreach (var t in Tabs)
         {
-            sb.Append('\u0002').Append(t.TabId).Append(':').Append(t.Version).Append(':').Append(t.IsDirty).Append(':').Append(t.Title);
+            sb.Append('\u0002').Append(t.TabId).Append(':').Append(t.Version).Append(':').Append(t.IsDirty).Append(':').Append(t.Title)
+                .Append('\u0001').Append(Host.Binds.Fingerprint(t.ReferencedBindNames));
         }
 
         stamp = sb.ToString();

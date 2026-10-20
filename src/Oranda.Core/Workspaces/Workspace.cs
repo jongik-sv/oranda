@@ -1,3 +1,4 @@
+using Oranda.Core.Execution;
 using Oranda.Core.Settings;
 
 namespace Oranda.Core.Workspaces;
@@ -48,4 +49,30 @@ public sealed record WorkspaceTab
     public int ScrollLine { get; init; } = 1;
 
     public Guid? ConnectionProfileId { get; init; }
+
+    /// <summary>
+    /// 이 탭의 SQL 이 참조하는 바인드 변수의 값(바인드 변수 창에 기본값이 아닌 줄이 있는 이름만, SQL 에 처음 나온 순서).
+    /// 없으면 null. 탭을 열면 이 값으로 바인드 변수 창의 줄을 만들거나 덮어쓴다.
+    /// </summary>
+    public IReadOnlyList<WorkspaceBind>? Binds { get; init; }
+}
+
+/// <summary>
+/// 바인드 변수 값 하나(EXEC-03 바인드 변수 창 한 줄). 작업 공간 <c>tabs[].binds</c> 와 .sql 파일 끝 바인드 블록
+/// (<see cref="SqlFileBinds"/>)이 같은 모양을 쓴다. 이름이 비밀로 보이면(<see cref="Security.SensitiveBindNames"/>) 만들지 않는다.
+/// </summary>
+public sealed record WorkspaceBind
+{
+    /// <summary>콜론 없는 이름(<c>:EMPNO</c> → <c>EMPNO</c>).</summary>
+    public string Name { get; init; } = string.Empty;
+
+    public BindDataType Type { get; init; } = BindDataType.Varchar2;
+
+    public BindDirection Direction { get; init; } = BindDirection.In;
+
+    /// <summary>값 칸의 글자 그대로. <see cref="IsNull"/> 이면 빈 문자열.</summary>
+    public string Value { get; init; } = string.Empty;
+
+    /// <summary>값이 NULL(값 칸이 빔).</summary>
+    public bool IsNull { get; init; }
 }

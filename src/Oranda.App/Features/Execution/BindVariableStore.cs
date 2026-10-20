@@ -5,6 +5,8 @@ using System.Text;
 using CommunityToolkit.Mvvm.ComponentModel;
 using Oranda.Core.Events;
 using Oranda.Core.Execution;
+using Oranda.Core.Security;
+using Oranda.Core.Workspaces;
 
 namespace Oranda.App.Features.Execution;
 
@@ -93,7 +95,8 @@ public sealed partial class BindVariableRow : ObservableObject
 /// <summary>
 /// 바인드 변수 목록(EXEC-03, 오렌지 Bind Variable List 방식). 「바인드 변수」 창이 보이고 고치는 목록이며, 실행은 묻지 않고 이 값을 쓴다.
 /// 문장에 처음 보는 이름이 있으면 목록에 줄을 더하고 실행하지 않는다(값 없이 INSERT 등이 NULL 로 실행되지 않게).
-/// 값은 세션 메모리에만 둔다(data-model: 디스크에 쓰지 않는다). 이벤트 버스(앱)마다 하나.
+/// 이벤트 버스(앱)마다 하나. 목록 자체는 메모리에 있고, 탭이 참조하는 이름의 값만 작업 공간(<c>tabs[].binds</c>)과
+/// .sql 파일 끝 바인드 블록에 함께 저장된다(<see cref="Snapshot"/>·<see cref="Restore"/>, data-model 2.6).
 /// </summary>
 public sealed class BindVariableStore
 {
@@ -157,6 +160,66 @@ public sealed class BindVariableStore
     }
 
     public void Clear() => Rows.Clear();
+
+    /// <summary>
+    /// 디스크에 남길 값(작업 공간 <c>tabs[].binds</c>·.sql 바인드 블록). <paramref name="names"/> 순서로, 목록에 있고 기본값
+    /// (빈 값·문자열·IN — 실행이 만들어 둔 빈 줄)이 아닌 줄만 담는다. 비밀로 보이는 이름(<see cref="SensitiveBindNames"/>)은 뺀다.
+    /// </summary>
+    public IReadOnlyList<WorkspaceBind> Snapshot(IEnumerable<string> names)
+    {
+        ArgumentNullException.ThrowIfNull(names);
+        var binds = new List<WorkspaceBind>();
+        foreach (var name in names.Distinct(StringComparer.OrdinalIgnoreCase))
+        {
+            if (SensitiveBindNames.IsSensitive(name) || Find(name) is not { } row
+                || (row.Text.Length == 0 && row.Type == BindDataType.Varchar2 && row.Direction == BindDirection.In))
+            {
+                continue;
+            }
+
+            binds.Add(new WorkspaceBind
+            {
+                Name = row.Name.Trim(),
+                Type = row.Type,
+                Direction = row.Direction,
+                Value = row.Text,
+                IsNull = row.Text.Length == 0,
+            });
+        }
+
+        return binds;
+    }
+
+    /// <summary>저장해 둔 값으로 줄을 만들거나 덮어쓴다(탭을 열 때). null 이면 아무것도 하지 않는다.</summary>
+    public void Restore(IEnumerable<WorkspaceBind>? binds)
+    {
+        foreach (var b in binds ?? [])
+        {
+            var name = b.Name.Trim();
+            if (name.Length == 0)
+            {
+                continue;
+            }
+
+            var row = Find(name) ?? Add(name);
+            row.Text = b.IsNull ? string.Empty : b.Value;
+            row.Type = b.Type;
+            row.Direction = b.Direction;
+        }
+    }
+
+    /// <summary>자동 저장 변경 감지용 표지: <see cref="Snapshot"/> 이 담을 이름·형식·방향·NULL·값.</summary>
+    public string Fingerprint(IEnumerable<string> names)
+    {
+        var sb = new StringBuilder();
+        foreach (var b in Snapshot(names))
+        {
+            sb.Append(b.Name).Append('\u0003').Append(b.Type).Append('\u0003').Append(b.Direction).Append('\u0003')
+                .Append(b.IsNull).Append('\u0003').Append(b.Value.Length).Append(':').Append(b.Value).Append('\u0004');
+        }
+
+        return sb.ToString();
+    }
 
     public void RequestFocus(string name)
     {

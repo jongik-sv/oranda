@@ -10,7 +10,9 @@ namespace Oranda.App.Features.Execution;
 /// <summary>
 /// <c>oranda.panel.binds</c> — 바인드 변수 창(EXEC-03, 오렌지 Bind Variable List). 편집기 오른쪽에 붙어 바인드 변수의
 /// 값·형식·방향을 둔다. 실행은 묻지 않고 이 값을 쓴다. 처음 보는 변수는 실행할 때 여기에 줄이 생긴다. 직접 더할 수도 있다.
-/// 값은 세션 메모리에만 있다(디스크에 쓰지 않는다).
+/// 탭의 SQL 이 참조하는 이름의 값은 그 탭과 함께 작업 공간(<c>workspaces/{id}.json</c>·<c>autosave/{id}.json</c>)과
+/// .sql 파일 끝 바인드 블록(<c>-- @oranda-binds v1</c>)에 저장되고, 탭이나 파일을 다시 열면 이 창에 그 값이 들어간다.
+/// 이름이 비밀로 보이는 바인드(pass·pwd·secret·token)는 저장하지 않는다.
 /// </summary>
 [OrandaToolPanel("oranda.panel.binds", ToolPanelKind.Tool, DockLocation.Right, Order = 20, DefaultSize = 380)]
 public sealed partial class BindVariablesViewModel : ToolPanelViewModelBase
