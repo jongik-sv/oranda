@@ -22,6 +22,10 @@
       <TextBlock x:Name="StatusText" Grid.Column="0" Text="{Binding Status}" TextWrapping="Wrap" VerticalAlignment="Center"
                  Classes.error="{Binding StatusIsError}" AutomationProperties.Name="상태" />
       <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8" Margin="12,0,0,0">
+        <!-- 시험(SQL Developer 의 Test): 시험하는 동안에는 「시험 취소」 로 바뀐다. -->
+        <Button x:Name="TestButton" MinWidth="80" Content="시험" Command="{Binding TestCommand}" IsVisible="{Binding !TestCommand.IsRunning}"
+                ToolTip.Tip="지금 값으로 임시 연결을 열어 서버 버전과 걸린 시간을 보이고 바로 닫습니다" />
+        <Button x:Name="CancelTestButton" MinWidth="80" Content="시험 취소" Command="{Binding TestCancelCommand}" IsVisible="{Binding TestCommand.IsRunning}" />
         <Button x:Name="SaveButton" MinWidth="80" Content="저장" Command="{Binding SaveCommand}" />
         <Button x:Name="ConnectButton" MinWidth="80" Content="접속" Command="{Binding ConnectCommand}" IsDefault="True" Classes="accent" />
         <Button x:Name="CloseButton" MinWidth="80" Content="닫기" Command="{Binding CloseCommand}" IsCancel="True" />

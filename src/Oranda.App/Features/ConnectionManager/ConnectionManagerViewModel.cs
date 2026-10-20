@@ -102,6 +102,7 @@ public sealed partial class ConnectionManagerViewModel : ViewModelBase
     private ConnectionTreeNode? _selected;
 
     [ObservableProperty]
+    [NotifyCanExecuteChangedFor(nameof(TestCommand), nameof(ConnectCommand), nameof(SaveCommand))]
     private ProfileEditorViewModel? _editor;
 
     [ObservableProperty]
@@ -112,6 +113,7 @@ public sealed partial class ConnectionManagerViewModel : ViewModelBase
     private StatusKind _statusKind;
 
     [ObservableProperty]
+    [NotifyCanExecuteChangedFor(nameof(ConnectCommand), nameof(TestCommand), nameof(SaveCommand))]
     private bool _isBusy;
 
     [ObservableProperty]
@@ -297,6 +299,80 @@ public sealed partial class ConnectionManagerViewModel : ViewModelBase
         SetStatus(StatusKind.Info, "연결 문자열을 복사했습니다(비밀번호는 넣지 않습니다).");
     }
 
+    /// <summary>
+    /// 접속 시험: 지금 폼 값(저장 안 한 값 포함)으로 임시 연결을 열어 서버 버전·걸린 시간을 상태 줄에 보이고 바로 닫는다.
+    /// 비밀번호 칸이 비면 저장된 값을, 그것도 없으면 비밀번호 대화상자를 쓴다. 비밀번호는 저장하지 않는다.
+    /// 시험하는 동안 이 명령은 꺼지고 <c>TestCancelCommand</c> 로 멈출 수 있다. 시간 제한은 폼의 「접속 제한(초)」.
+    /// </summary>
+    [RelayCommand(IncludeCancelCommand = true, CanExecute = nameof(CanTest))]
+    private async Task TestAsync(CancellationToken cancel)
+    {
+        if (Editor is null)
+        {
+            return;
+        }
+
+        var profile = Editor.TryBuild(out var errors);
+        if (profile is null)
+        {
+            SetStatus(StatusKind.Error, string.Join(Environment.NewLine, errors));
+            return;
+        }
+
+        var typed = string.IsNullOrEmpty(Editor.Password) ? null : Editor.Password;
+        var limit = TimeSpan.FromSeconds(profile.ConnectTimeoutSeconds);
+        IsBusy = true;
+        try
+        {
+            while (true)
+            {
+                SetStatus(StatusKind.Info, $"'{profile.Name}' 접속을 시험하는 중입니다…");
+                ConnectionTestOutcome outcome;
+                using (var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancel))
+                {
+                    timeout.CancelAfter(limit);
+                    try
+                    {
+                        outcome = await _service.TestConnectionAsync(profile, typed, timeout.Token).ConfigureAwait(true);
+                    }
+                    catch (OperationCanceledException)
+                    {
+                        SetStatus(
+                            cancel.IsCancellationRequested ? StatusKind.Info : StatusKind.Error,
+                            cancel.IsCancellationRequested ? "접속 시험을 취소했습니다." : $"접속 시험이 제한 시간({limit.TotalSeconds:0}초)을 넘겨 멈췄습니다.");
+                        return;
+                    }
+                }
+
+                if (outcome.Status != ConnectStatus.PasswordRequired)
+                {
+                    LastTestOutcome = outcome;
+                    SetStatus(outcome.Succeeded ? StatusKind.Info : StatusKind.Error, outcome.Message);
+                    return;
+                }
+
+                if (AskPassword is null || await AskPassword(profile).ConfigureAwait(true) is not { } pw)
+                {
+                    SetStatus(StatusKind.Info, "접속 시험을 취소했습니다.");
+                    return;
+                }
+
+                typed = pw;
+            }
+        }
+        finally
+        {
+            IsBusy = false;
+        }
+    }
+
+    private bool CanTest() => Editor is not null && !IsBusy;
+
+    private bool CanConnect() => HasSelection && !IsBusy;
+
+    /// <summary>마지막 접속 시험 결과(시험용).</summary>
+    public ConnectionTestOutcome? LastTestOutcome { get; private set; }
+
     [RelayCommand]
     private async Task SaveAsync() => await SaveCurrentAsync().ConfigureAwait(true);
 
@@ -332,7 +408,7 @@ public sealed partial class ConnectionManagerViewModel : ViewModelBase
     }
 
     /// <summary>편집 내용을 저장하고(필요하면) 접속한다. 성공하면 <see cref="CloseRequested"/>.</summary>
-    [RelayCommand(CanExecute = nameof(HasSelection))]
+    [RelayCommand(CanExecute = nameof(CanConnect))]
     private async Task ConnectAsync()
     {
         if (Editor is null || Selected?.Profile is null)

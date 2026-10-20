@@ -13,6 +13,21 @@ namespace Oranda.App.Tests.Features.ConnectionManager;
 // 소유: TSK-03-04. 접속 관리자 사용성 개선(찾기·묶기·정렬, 행 동작·단축키, 접속 시험, 연결 문자열, 편집 상태, 배치) 시험.
 // 서비스·가짜 저장소는 ConnectionManagerTests.cs 의 ServiceFixture 를 같이 쓴다.
 
+/// <summary>접속 시험 가짜 도구: 받은 프로필·비밀번호를 적어 두고 <see cref="Behavior"/> 대로 답한다(기본은 26ai 성공).</summary>
+internal sealed class StubConnectionTester : IConnectionTester
+{
+    public Func<ConnectionProfile, string, CancellationToken, Task<ConnectionProbeResult>> Behavior { get; set; } =
+        (_, _, _) => Task.FromResult(ConnectionProbeResult.Ok("23.26.0.0.0"));
+
+    public List<(ConnectionProfile Profile, string Password)> Calls { get; } = [];
+
+    public Task<ConnectionProbeResult> ProbeAsync(ConnectionProfile driverProfile, string password, CancellationToken ct)
+    {
+        Calls.Add((driverProfile, password));
+        return Behavior(driverProfile, password, ct);
+    }
+}
+
 public sealed class ConnectionManagerUxTests
 {
     private static readonly DateTimeOffset Yesterday = DateTimeOffset.UtcNow.AddDays(-1);
@@ -328,5 +343,157 @@ public sealed class ConnectionManagerUxTests
             menu.Close();
             window.Close();
         });
+    }
+
+    // ---------- 3. 접속 시험 ----------
+
+    private static async Task<ConnectionManagerViewModel> SelectAsync(ServiceFixture fx, string name)
+    {
+        var vm = await SeedAsync(fx);
+        vm.Selected = vm.AllNodes().Single(n => n.Title == name);
+        return vm;
+    }
+
+    [Fact]
+    public async Task Test_uses_unsaved_form_values_and_stored_password_and_shows_version_and_time_without_touching_sessions()
+    {
+        using var fx = new ServiceFixture();
+        var vm = await SelectAsync(fx, "ft-dev");
+        var before = fx.ConnectionsJson;
+        vm.Editor!.Host = "otherhost";
+
+        await vm.TestCommand.ExecuteAsync(null);
+
+        var call = Assert.Single(fx.Tester.Calls);
+        Assert.Equal("otherhost:1522/FREEPDB1", call.Profile.DataSource);
+        Assert.Equal("pw", call.Password);
+        Assert.False(vm.StatusIsError);
+        Assert.Matches(@"^접속 시험 성공: 서버 23\.26\.0\.0\.0\(26ai\), \d+ ms 걸림\.$", vm.Status);
+        Assert.True(vm.LastTestOutcome!.Succeeded);
+
+        // 앱 접속·세션·저장 파일·마지막 접속 시각은 그대로다.
+        Assert.Empty(fx.Sessions.Calls);
+        Assert.Null(fx.Service.ActiveSession);
+        Assert.Null(fx.Service.LastProfile);
+        Assert.Equal(before, fx.ConnectionsJson);
+        Assert.Equal("otherhost", vm.Editor!.Host);
+    }
+
+    [Theory]
+    [InlineData(1017, "ORA-01017: invalid credential or not authorized; logon denied\nhttps://docs.oracle.com/error-help/db/ora-01017/", "ORA-01017: invalid credential or not authorized; logon denied")]
+    [InlineData(12541, "Cannot connect. No listener at host otherhost port 1522.", "ORA-12541: Cannot connect. No listener at host otherhost port 1522.")]
+    public async Task Failed_test_shows_ora_number_and_message_in_red(int number, string driverMessage, string shown)
+    {
+        using var fx = new ServiceFixture();
+        fx.Tester.Behavior = (_, _, _) => Task.FromResult(ConnectionProbeResult.Fail(number, driverMessage));
+        var vm = await SelectAsync(fx, "ft-dev");
+
+        await vm.TestCommand.ExecuteAsync(null);
+
+        Assert.True(vm.StatusIsError);
+        Assert.Equal("접속 시험 실패: " + shown, vm.Status);
+        Assert.Equal(number, vm.LastTestOutcome!.ErrorNumber);
+        Assert.Null(fx.Service.ActiveSession);
+    }
+
+    [Fact]
+    public async Task Unsupported_server_version_is_reported_as_a_failed_test()
+    {
+        using var fx = new ServiceFixture();
+        fx.Tester.Behavior = (_, _, _) => Task.FromResult(new ConnectionProbeResult(false, "12.2.0.1.0", null, "12c 는 지원하지 않는다"));
+        var vm = await SelectAsync(fx, "ft-dev");
+
+        await vm.TestCommand.ExecuteAsync(null);
+
+        Assert.True(vm.StatusIsError);
+        Assert.Equal("지원하지 않는 서버 버전 12.2.0.1.0: 12c 는 지원하지 않는다", vm.Status);
+    }
+
+    [Fact]
+    public async Task Test_without_stored_password_asks_and_never_saves_or_shows_the_typed_password()
+    {
+        using var fx = new ServiceFixture();
+        fx.Tester.Behavior = (_, pw, _) => Task.FromResult(ConnectionProbeResult.Fail(1017, $"ORA-01017: rejected {pw}"));
+        var vm = await SelectAsync(fx, "zeta");
+        var asked = 0;
+        vm.AskPassword = _ =>
+        {
+            asked++;
+            return Task.FromResult<string?>("typed-secret");
+        };
+
+        await vm.TestCommand.ExecuteAsync(null);
+
+        Assert.Equal(1, asked);
+        Assert.Equal("typed-secret", Assert.Single(fx.Tester.Calls).Password);
+        Assert.DoesNotContain("typed-secret", vm.Status, StringComparison.Ordinal);
+        Assert.Contains("***", vm.Status, StringComparison.Ordinal);
+        Assert.Empty(fx.Credentials.Items.Where(kv => fx.Credentials.Text(kv.Key) == "typed-secret"));
+        Assert.DoesNotContain("typed-secret", fx.ConnectionsJson, StringComparison.Ordinal);
+
+        // 비밀번호 칸에 적은 값이 있으면 묻지 않고 그 값을 쓴다(저장하지 않는다).
+        fx.Tester.Behavior = (_, _, _) => Task.FromResult(ConnectionProbeResult.Ok("19.24.0.0.0"));
+        vm.Editor!.Password = "field-secret";
+        await vm.TestCommand.ExecuteAsync(null);
+        Assert.Equal(1, asked);
+        Assert.Equal("field-secret", fx.Tester.Calls[^1].Password);
+        Assert.Contains("(19c)", vm.Status, StringComparison.Ordinal);
+        Assert.DoesNotContain("field-secret", fx.ConnectionsJson, StringComparison.Ordinal);
+        Assert.Empty(fx.Credentials.Items.Where(kv => fx.Credentials.Text(kv.Key) == "field-secret"));
+
+        // 대화상자를 취소하면 시험하지 않는다.
+        vm.Editor.Password = string.Empty;
+        vm.AskPassword = _ => Task.FromResult<string?>(null);
+        await vm.TestCommand.ExecuteAsync(null);
+        Assert.Equal(2, fx.Tester.Calls.Count);
+        Assert.Equal("접속 시험을 취소했습니다.", vm.Status);
+    }
+
+    [Fact]
+    public async Task Running_test_disables_buttons_and_can_be_cancelled()
+    {
+        using var fx = new ServiceFixture();
+        var started = new TaskCompletionSource();
+        fx.Tester.Behavior = async (_, _, ct) =>
+        {
+            started.TrySetResult();
+            await Task.Delay(Timeout.Infinite, ct);
+            return ConnectionProbeResult.Ok("23.26.0.0.0");
+        };
+        var vm = await SelectAsync(fx, "ft-dev");
+
+        var running = vm.TestCommand.ExecuteAsync(null);
+        await started.Task.WaitAsync(TimeSpan.FromSeconds(5));
+
+        Assert.True(vm.TestCommand.IsRunning);
+        Assert.False(vm.TestCommand.CanExecute(null));
+        Assert.False(vm.ConnectCommand.CanExecute(null));
+        Assert.True(vm.TestCancelCommand.CanExecute(null));
+
+        vm.TestCancelCommand.Execute(null);
+        await running.WaitAsync(TimeSpan.FromSeconds(5));
+
+        Assert.Equal("접속 시험을 취소했습니다.", vm.Status);
+        Assert.False(vm.StatusIsError);
+        Assert.True(vm.TestCommand.CanExecute(null));
+        Assert.True(vm.ConnectCommand.CanExecute(null));
+    }
+
+    [Fact]
+    public async Task Test_stops_at_the_profile_connect_timeout()
+    {
+        using var fx = new ServiceFixture();
+        fx.Tester.Behavior = async (_, _, ct) =>
+        {
+            await Task.Delay(Timeout.Infinite, ct);
+            return ConnectionProbeResult.Ok("23.26.0.0.0");
+        };
+        var vm = await SelectAsync(fx, "ft-dev");
+        vm.Editor!.ConnectTimeoutSeconds = 1;
+
+        await vm.TestCommand.ExecuteAsync(null).WaitAsync(TimeSpan.FromSeconds(10));
+
+        Assert.True(vm.StatusIsError);
+        Assert.Equal("접속 시험이 제한 시간(1초)을 넘겨 멈췄습니다.", vm.Status);
     }
 }

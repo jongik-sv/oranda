@@ -13,6 +13,7 @@ using Oranda.Core.Security;
 using Oranda.Core.Sessions;
 using Oranda.Core.Storage;
 using Oranda.Oracle.Connection;
+using Oranda.Oracle.Sessions;
 using Oranda.Platform.Storage;
 
 namespace Oranda.App.Features.ConnectionManager;
@@ -42,6 +43,23 @@ public sealed record ConnectOutcome(ConnectStatus Status, string Message, ISessi
 
 /// <summary>비밀번호 변경 시도 결과.</summary>
 public sealed record PasswordChangeOutcome(bool Succeeded, string Message);
+
+/// <summary>
+/// 접속 시험 결과(SQL Developer 의 Test, DBeaver 의 Test Connection). 비밀번호는 담지 않는다.
+/// <see cref="ConnectStatus.Connected"/> 면 서버 버전과 걸린 시간을, 실패면 ORA 번호와 메시지를 담는다.
+/// </summary>
+public sealed record ConnectionTestOutcome(ConnectStatus Status, string Message, string? ServerVersion = null, TimeSpan Elapsed = default, int? ErrorNumber = null)
+{
+    public bool Succeeded => Status == ConnectStatus.Connected;
+}
+
+/// <summary>접속 시험 도구가 돌려주는 날 결과(서버 버전 또는 오류 번호·메시지).</summary>
+public sealed record ConnectionProbeResult(bool Succeeded, string? ServerVersion, int? ErrorNumber, string? Message)
+{
+    public static ConnectionProbeResult Ok(string? serverVersion) => new(true, serverVersion, null, null);
+
+    public static ConnectionProbeResult Fail(int? errorNumber, string message) => new(false, null, errorNumber, message);
+}
 
 /// <summary>접속 프로필 관리와 현재 접속(작업 세션). 접속 관리자 화면·명령·다른 기능이 쓴다.</summary>
 public interface IConnectionService
@@ -88,6 +106,13 @@ public interface IConnectionService
     Task<ConnectionProfile> ImportWalletAsync(string zipPath, string? walletAlias, CancellationToken ct);
 
     /// <summary>
+    /// 지금 값(저장 안 한 편집 값 포함)으로 임시 연결을 열어 서버 버전을 읽고 바로 닫는다.
+    /// 세션 관리자를 거치지 않으므로 앱의 활성 접속·세션 목록·마지막 접속 시각은 바뀌지 않고, 비밀번호도 저장하지 않는다.
+    /// <paramref name="password"/> 가 비면 저장된 비밀번호를 쓰고, 그것도 없으면 <see cref="ConnectStatus.PasswordRequired"/>.
+    /// </summary>
+    Task<ConnectionTestOutcome> TestConnectionAsync(ConnectionProfile profile, string? password, CancellationToken ct);
+
+    /// <summary>
     /// 프로필을 복제해 저장한다. 이름 뒤에 「 (사본)」 을 붙이고(겹치면 「 (사본) (2)」 …), 비밀번호·마지막 접속 시각은 옮기지 않는다.
     /// 앱이 풀어 놓은 지갑 폴더(<c>wallets/{id}</c>)를 쓰면 사본의 폴더로 복사한다(원본을 지워도 사본이 접속되게).
     /// </summary>
@@ -98,6 +123,64 @@ public interface IConnectionService
 public interface IPasswordChanger
 {
     Task ChangeAsync(ConnectionProfile profile, string oldPassword, string newPassword, CancellationToken ct);
+}
+
+/// <summary>접속 시험 도구(ODP.NET 연결 하나를 열고 닫는다). 시험은 가짜로 바꾼다.</summary>
+public interface IConnectionTester
+{
+    /// <summary>드라이버용 프로필(<see cref="ConnectionService.ToDriverProfile"/> 를 거친 값)로 연결을 열어 본다. 취소되면 <see cref="OperationCanceledException"/>.</summary>
+    Task<ConnectionProbeResult> ProbeAsync(ConnectionProfile driverProfile, string password, CancellationToken ct);
+}
+
+/// <inheritdoc />
+public sealed class OdpConnectionTester : IConnectionTester
+{
+    public async Task<ConnectionProbeResult> ProbeAsync(ConnectionProfile driverProfile, string password, CancellationToken ct)
+    {
+        ArgumentNullException.ThrowIfNull(driverProfile);
+        ct.ThrowIfCancellationRequested();
+        driverProfile.ApplyProcessSettings();
+
+        // 접속 제한 시간은 연결 문자열(Connection Timeout)에 들어간다. 취소 단추는 기다림만 끊고,
+        // 이미 시작한 연결 시도는 끝난 뒤에 닫는다(열리는 중인 연결을 다른 스레드에서 닫지 않는다).
+        var connection = new OracleConnection(driverProfile.BuildConnectionString(password));
+        var open = connection.OpenAsync(ct);
+        try
+        {
+            await open.WaitAsync(ct).ConfigureAwait(false);
+            var version = connection.ServerVersion;
+            return SupportedServerPolicy.IsSupported(version, out var reason)
+                ? ConnectionProbeResult.Ok(version)
+                : new ConnectionProbeResult(false, version, null, reason);
+        }
+        catch (OracleException ex)
+        {
+            return ConnectionProbeResult.Fail(ex.Number, ex.Message);
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or ArgumentException or IOException or TimeoutException)
+        {
+            return ConnectionProbeResult.Fail(null, ex.Message);
+        }
+        finally
+        {
+            if (open.IsCompleted)
+            {
+                await connection.DisposeAsync().ConfigureAwait(false);
+            }
+            else
+            {
+                _ = open.ContinueWith(
+                    t =>
+                    {
+                        _ = t.Exception;
+                        connection.Dispose();
+                    },
+                    CancellationToken.None,
+                    TaskContinuationOptions.None,
+                    TaskScheduler.Default);
+            }
+        }
+    }
 }
 
 /// <inheritdoc />
@@ -128,6 +211,7 @@ public sealed class ConnectionService : IConnectionService, IDisposable
     private readonly ISessionManager _sessions;
     private readonly IAppDataPaths _paths;
     private readonly IPasswordChanger _passwordChanger;
+    private readonly IConnectionTester _tester;
     private readonly ContextKeyService? _keys;
     private readonly SemaphoreSlim _gate = new(1, 1);
     private readonly List<IDisposable> _subscriptions = [];
@@ -141,7 +225,8 @@ public sealed class ConnectionService : IConnectionService, IDisposable
         IAppDataPaths paths,
         IEventBus events,
         IPasswordChanger? passwordChanger = null,
-        ContextKeyService? keys = null)
+        ContextKeyService? keys = null,
+        IConnectionTester? tester = null)
     {
         ArgumentNullException.ThrowIfNull(events);
         _store = store;
@@ -149,6 +234,7 @@ public sealed class ConnectionService : IConnectionService, IDisposable
         _sessions = sessions;
         _paths = paths;
         _passwordChanger = passwordChanger ?? new OdpPasswordChanger();
+        _tester = tester ?? new OdpConnectionTester();
         _keys = keys;
         _subscriptions.Add(events.Subscribe<SessionBroken>(this, OnBroken));
         _subscriptions.Add(events.Subscribe<SessionClosed>(this, OnClosed));
@@ -415,6 +501,50 @@ public sealed class ConnectionService : IConnectionService, IDisposable
         var name = UniqueName(info.SuggestedName, doc.Value.Profiles.Select(p => p.Name));
         var profile = new ConnectionProfile(name, "ADMIN", chosen, TnsAdmin: folder, WalletLocation: folder, Id: id, Group: "ADB");
         return await SaveProfileAsync(profile, null, savePassword: false, ct).ConfigureAwait(false);
+    }
+
+    public async Task<ConnectionTestOutcome> TestConnectionAsync(ConnectionProfile profile, string? password, CancellationToken ct)
+    {
+        ArgumentNullException.ThrowIfNull(profile);
+        var secret = string.IsNullOrEmpty(password) ? await LoadStoredAsync(profile).ConfigureAwait(false) : password;
+        if (string.IsNullOrEmpty(secret))
+        {
+            return new ConnectionTestOutcome(ConnectStatus.PasswordRequired, $"'{profile.Name}' 의 비밀번호를 입력하세요.");
+        }
+
+        var watch = System.Diagnostics.Stopwatch.StartNew();
+        var probe = await _tester.ProbeAsync(ToDriverProfile(profile), secret, ct).ConfigureAwait(false);
+        watch.Stop();
+        if (probe.Succeeded)
+        {
+            var version = probe.ServerVersion ?? "(알 수 없음)";
+            var label = ServerLabel(version);
+            return new ConnectionTestOutcome(
+                ConnectStatus.Connected,
+                $"접속 시험 성공: 서버 {version}{(label is null ? string.Empty : $"({label})")}, {watch.Elapsed.TotalMilliseconds:0} ms 걸림.",
+                version,
+                watch.Elapsed);
+        }
+
+        // 드라이버 메시지에 비밀번호가 섞여 나오는 일은 없어야 하지만, 상태 줄로 나가기 전에 한 번 더 지운다.
+        var message = FirstLine(probe.Message ?? string.Empty).Replace(secret, "***", StringComparison.Ordinal);
+        if (probe.ErrorNumber is { } number && !message.StartsWith("ORA-", StringComparison.OrdinalIgnoreCase))
+        {
+            message = $"ORA-{number:00000}: {message}";
+        }
+
+        var status = probe.ServerVersion is null ? ConnectStatus.Failed : ConnectStatus.Unsupported;
+        var prefix = status == ConnectStatus.Unsupported ? $"지원하지 않는 서버 버전 {probe.ServerVersion}" : "접속 시험 실패";
+        return new ConnectionTestOutcome(status, $"{prefix}: {message}", probe.ServerVersion, watch.Elapsed, probe.ErrorNumber);
+    }
+
+    /// <summary>서버 버전 문자열의 짧은 이름(23 이상 = 26ai, 19 = 19c). 읽을 수 없으면 null.</summary>
+    internal static string? ServerLabel(string? version)
+    {
+        var head = version?.Split('.', 2)[0];
+        return int.TryParse(head, System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture, out var major)
+            ? major >= 23 ? "26ai" : major + "c"
+            : null;
     }
 
     public async Task<ConnectionProfile> DuplicateProfileAsync(Guid id, CancellationToken ct)

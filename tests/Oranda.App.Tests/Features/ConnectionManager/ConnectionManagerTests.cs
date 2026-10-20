@@ -127,7 +127,8 @@ internal sealed class ServiceFixture : IDisposable
         Sessions = new StubSessionManager(Events);
         Keys = new ContextKeyService();
         Changer = new StubPasswordChanger();
-        Service = new ConnectionService(Store, Credentials, Sessions, Paths, Events, Changer, Keys);
+        Tester = new StubConnectionTester();
+        Service = new ConnectionService(Store, Credentials, Sessions, Paths, Events, Changer, Keys, Tester);
     }
 
     public string Directory { get; }
@@ -147,6 +148,9 @@ internal sealed class ServiceFixture : IDisposable
     public ContextKeyService Keys { get; }
 
     public StubPasswordChanger Changer { get; }
+
+    /// <summary>접속 시험용 가짜 도구(ConnectionManagerUxTests).</summary>
+    public StubConnectionTester Tester { get; }
 
     public ConnectionService Service { get; }
 
