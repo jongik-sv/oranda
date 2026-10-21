@@ -1411,6 +1411,39 @@ dotnet, testhost, Oranda.App
 - data-model: -
 - ui-spec: -
 
+### TSK-04-12: 바인드 변수 이름을 자동으로 대문자로 [win144]
+- category: dev
+- domain: frontend
+- model: sonnet
+- status: [ ]
+- priority: medium
+- assignee: -
+- schedule: 2027-01-14 ~ 2027-01-14
+- tags: binds, win144
+- depends: TSK-04-11
+- blocked-by: -
+- entry-point: 바인드 변수 창(oranda.panel.binds)
+- note: 담당 PC: win144(Windows 개발 PC) — 맥북 세션은 이 Task 를 하지 않는다. 2026-10-21 사용자 요청: 바인드 변수는 자동으로 대문자로 변환한다. Oracle 바인드 이름은 대소문자를 가리지 않으므로 목록 이름을 대문자로 맞춘다. SQL 본문은 바꾸지 않는다.
+
+#### PRD 요구사항
+- prd-ref: PRD EXEC-03
+- requirements:
+  - 바인드 목록 줄 이름(BindVariableRow.Name)을 대문자로 둔다: 실행이 만든 줄, 작업 공간·.sql·.sqd 에서 복원한 줄, 사람이 창에서 입력·고친 이름 모두
+  - 큰따옴표로 감싼 이름(:"x")은 그대로 둔다
+- acceptance:
+  - select :id from dual 을 실행하면 바인드 창에 ID 로 보이고, 값을 넣고 다시 실행하면 그 값으로 실행된다
+  - 예전에 소문자로 저장한 작업 공간을 열어도 대문자로 보이고 값이 남는다
+- constraints:
+  - 편집기의 SQL 글자는 바꾸지 않는다
+- test-criteria:
+  - 단위: Ensure·Add·Restore·이름 편집 뒤 대문자, 따옴표 이름 유지, TryBuild 값 연결
+
+#### 기술 스펙 (TRD)
+- tech-spec: -
+- api-spec: -
+- data-model: -
+- ui-spec: -
+
 ## WP-05: 포매터
 - schedule: 2026-11-17 ~ 2026-11-30
 
@@ -2006,6 +2039,40 @@ dotnet, testhost, Oranda.App
   - 결함을 재현하는 시험이 먼저 실패하고, 고친 뒤 통과해야 한다
 - test-criteria:
   - App 단위 전체 3회 실행
+
+#### 기술 스펙 (TRD)
+- tech-spec: -
+- api-spec: -
+- data-model: -
+- ui-spec: -
+
+### TSK-06-14: display_cursor(sql_id=>null) 가 사용자 문장 대신 앱이 몰래 부른 DBMS_OUTPUT.GET_LINES 를 보인다 [win144]
+- category: defect
+- domain: backend
+- model: sonnet
+- status: [ ]
+- priority: high
+- assignee: -
+- schedule: 2027-01-28 ~ 2027-01-30
+- tags: defect, execution, plan, win144
+- depends: -
+- blocked-by: -
+- entry-point: SQL 편집기 > 스크립트 실행
+- note: 담당 PC: win144(Windows 개발 PC) — 맥북 세션은 이 Task 를 하지 않는다. 2026-10-21 사용자 보고: ALTER SESSION SET STATISTICS_LEVEL=ALL → SELECT … → SELECT * FROM table(dbms_xplan.display_cursor(sql_id=>null, format=>'ALLSTATS LAST')) 결과가 「BEGIN DBMS_OUTPUT.GET_LINES(:lines, :n); END;」 의 계획(cannot fetch plan)이다. 원인: OracleExecutionService.RunOnDriverAsync 가 문장마다 실행 뒤 같은 세션에서 DBMS_OUTPUT.GET_LINES(와 DML·FOR UPDATE 뒤 DBMS_TRANSACTION.LOCAL_TRANSACTION_ID)를 불러 세션의 직전 커서(prev_sql_id)를 덮는다.
+
+#### PRD 요구사항
+- prd-ref: PRD EXEC-01, PLAN-02
+- requirements:
+  - 질의(SELECT·WITH, FOR UPDATE 아님) 실행 뒤에는 같은 세션에 숨은 문장을 보내지 않는다. 그래서 다음 문장의 display_cursor(null) 가 사용자 질의를 가리킨다
+  - 질의 안 함수가 낸 DBMS_OUTPUT 은 다음 질의 아닌 문장 실행 뒤 함께 거둔다(유실 없음)
+- acceptance:
+  - 위 사용자 스크립트를 실행하면 마지막 결과가 tb_m47_coil_cmn 질의의 계획(ALLSTATS)이다
+  - PL/SQL 블록의 DBMS_OUTPUT 은 지금처럼 그 실행 뒤 바로 보인다
+- constraints:
+  - DML 뒤 트랜잭션 표시(커밋 대기)는 지금처럼 유지한다
+- test-criteria:
+  - 통합(26ai 컨테이너): SELECT 뒤 display_cursor(null) 가 그 SELECT 의 SQL_ID 를 보인다
+  - 단위·통합: PL/SQL 출력은 즉시, 질의 안 출력은 다음 PL/SQL 뒤
 
 #### 기술 스펙 (TRD)
 - tech-spec: -
