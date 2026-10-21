@@ -2787,6 +2787,41 @@ dotnet, testhost, Oranda.App
 - data-model: -
 - ui-spec: -
 
+### TSK-10-08: 설치 파일 코드 서명: 모든 exe·dll 서명과 서명 검사 [win144]
+- category: infra
+- domain: infra
+- model: opus
+- status: [ ]
+- priority: high
+- assignee: -
+- schedule: 2026-10-22 ~ 2026-10-23
+- tags: installer, signing, win144
+- depends: TSK-10-01
+- blocked-by: -
+- entry-point: -
+- note: 담당 PC: win144(Windows 개발 PC) — 맥북 세션은 이 Task 를 하지 않는다. 2026-10-22 사용자 보고: 다른 PC 에서 Setup.exe 설치가 「제대로 설치되지 않았을 수 있습니다」로 끝나고 Portable 도 실행되지 않는다. 사용자는 서명 없는 dll 때문으로 보고 「공인 인증서로 전부 서명」을 골랐다. 조사(2026-10-22): Portable zip 의 exe·dll 254개 중 서명 17개(.NET 네이티브 런타임·SkiaSharp·ANGLE), 무서명 237개. ReadyToRun composite 가 Microsoft·Oracle 이 서명한 관리 dll(System.*·mscorlib·Oracle.ManagedDataAccess)을 다시 컴파일해 서명이 사라진다. 스마트 앱 컨트롤·WDAC·AppLocker 는 무서명 dll 로드를 막는다. 인증서(Authenticode OV/EV 또는 Azure Trusted Signing)는 사람 자원
+
+#### PRD 요구사항
+- prd-ref: PRD 배포, TRD 설치·업데이트
+- requirements:
+  - pack-windows.ps1 이 signtool 매개변수(pfx 또는 인증서 저장소 지문) 또는 Azure Trusted Signing 메타데이터로 서명한다. 타임스탬프를 넣는다
+  - 패키징 뒤 Setup.exe 와 Portable zip 안의 exe·dll 서명을 모두 검사해, 서명을 요청했는데 무서명 파일이 있으면 실패한다
+  - 서명 방법·인증서 준비를 scripts/release/README.md 에 적는다
+- acceptance:
+  - 시험 인증서로 pack-windows.ps1 을 돌리면 Setup.exe·Update.exe·Oranda.exe 와 current/ 의 exe·dll 전부가 서명된다(검사 스크립트 통과)
+  - 서명 없이 돌리면 검사 스크립트가 무서명 개수를 경고로 알린다
+  - 공인 인증서 서명본을 스마트 앱 컨트롤이 켜진 PC 에서 설치·실행(사람 자원)
+- constraints:
+  - 인증서·암호는 저장소에 넣지 않는다(환경 변수·CI 비밀)
+- test-criteria:
+  - 자체 서명 시험 인증서로 패키징 → check-signatures.ps1 결과
+
+#### 기술 스펙 (TRD)
+- tech-spec: -
+- api-spec: -
+- data-model: -
+- ui-spec: -
+
 ## WP-11: 통합테스트
 - schedule: 2026-12-01 ~ 2026-12-07
 - description: 기능 간 시나리오 E2E·성능·권한 교차 검증 (개별 기능 재검증 아님)
@@ -3504,6 +3539,7 @@ graph LR
   TSK-11-03 --> TSK-06-11
   TSK-11-03 --> TSK-06-12
   TSK-11-03 --> TSK-10-06
+  TSK-10-01 --> TSK-10-08
   TSK-07-02 --> TSK-07-05
   TSK-03-04 --> TSK-03-08
   TSK-03-08 --> TSK-04-11
