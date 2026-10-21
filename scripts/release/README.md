@@ -15,6 +15,19 @@ Velopack 은 릴리스 메타데이터의 해시로 패키지 무결성을 확�
 - 설치하지 않고 실행하면 `Run()` 은 바로 돌아온다. 다만 Velopack 진단 로그 몇 줄을 남긴다(Windows `%LocalAppData%\velopack\velopack.log`, macOS `~/Library/Logs/velopack.log`).
 - 게시본에는 PDB 가 없다(`Oranda.App.csproj` 의 `ExcludePdbFromPublish`). vpk 도 기본으로 `*.pdb` 를 뺀다.
 
+## 코드 서명 (TSK-10-08)
+
+무서명 게시본은 스마트 앱 컨트롤·WDAC·AppLocker 가 켜진 PC 에서 dll 로드가 막혀 실행되지 않고, Setup.exe 는 「제대로 설치되지 않았을 수 있습니다」로 끝난다. ReadyToRun composite 가 Microsoft·Oracle 이 서명한 관리 dll(System.*·Oracle.ManagedDataAccess 등)을 다시 컴파일해 원래 서명을 지우므로, 무서명 빌드는 exe·dll 254개 중 237개가 서명이 없다(2026-10-22). 그래서 vpk 가 패키지의 exe·dll 과 Setup.exe·Update.exe 를 모두 다시 서명한다.
+
+- 인증서: 공인 CA 의 Authenticode 코드 서명 인증서(OV·EV, 하드웨어 토큰 포함) 또는 Azure Trusted Signing. 사내 CA 인증서는 대상 PC 에 GPO 로 루트를 배포할 때만 쓸 수 있다.
+- signtool 은 vpk 에 딸려 온다(`vendor/signing/signtool.exe`). 따로 설치하지 않는다.
+- 매개변수는 `ORANDA_SIGN_PARAMS` 또는 `-SignParams` 로 준다. 타임스탬프를 꼭 넣는다(인증서 만료 뒤에도 서명이 유효).
+  - pfx 파일: `/fd sha256 /tr http://timestamp.digicert.com /td sha256 /f C:\secure\oranda.pfx /p <암호>`
+  - 인증서 저장소·EV 토큰: `/fd sha256 /tr http://timestamp.digicert.com /td sha256 /sha1 <인증서 지문>`
+  - Azure Trusted Signing: `ORANDA_AZURE_SIGN_FILE` 또는 `-AzureSignFile metadata.json`
+- `pack-windows.ps1` 은 패키징 뒤 `check-signatures.ps1` 로 Setup.exe 와 Portable zip 안의 exe·dll 을 모두 검사한다. 서명을 요청했는데 무서명 파일이 있으면 실패하고, 서명 없이 돌리면 무서명 개수를 경고한다. 공인 인증서 서명본은 `check-signatures.ps1 -RequireTrusted` 로 이 PC 가 신뢰하는지까지 본다.
+- 2026-10-22 자체 서명 시험 인증서로 확인: 무서명 238개(Setup.exe 포함) → 0개, 전부 타임스탬프 있음, 서명된 Portable 이 실행됨. 자체 서명이라 상태는 UnknownError(신뢰 안 됨)이고, 공인 인증서 서명본을 스마트 앱 컨트롤이 켜진 PC 에서 설치·실행하는 확인은 남았다.
+
 ## 크기 (TSK-10-06)
 
 맥에서 미리 볼 수 있다: 게시 뒤 `vpk "[win]" pack ... --runtime win-x64` 는 서명 없이 Windows `Setup.exe` 를 만든다. 정식 확인은 Windows 에서 `pack-windows.ps1` 로 한다.

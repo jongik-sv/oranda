@@ -2799,7 +2799,7 @@ dotnet, testhost, Oranda.App
 - depends: TSK-10-01
 - blocked-by: -
 - entry-point: -
-- note: 담당 PC: win144(Windows 개발 PC) — 맥북 세션은 이 Task 를 하지 않는다. 2026-10-22 사용자 보고: 다른 PC 에서 Setup.exe 설치가 「제대로 설치되지 않았을 수 있습니다」로 끝나고 Portable 도 실행되지 않는다. 사용자는 서명 없는 dll 때문으로 보고 「공인 인증서로 전부 서명」을 골랐다. 조사(2026-10-22): Portable zip 의 exe·dll 254개 중 서명 17개(.NET 네이티브 런타임·SkiaSharp·ANGLE), 무서명 237개. ReadyToRun composite 가 Microsoft·Oracle 이 서명한 관리 dll(System.*·mscorlib·Oracle.ManagedDataAccess)을 다시 컴파일해 서명이 사라진다. 스마트 앱 컨트롤·WDAC·AppLocker 는 무서명 dll 로드를 막는다. 인증서(Authenticode OV/EV 또는 Azure Trusted Signing)는 사람 자원
+- note: 담당 PC: win144(Windows 개발 PC) — 맥북 세션은 이 Task 를 하지 않는다. 2026-10-22 사용자 보고: 다른 PC 에서 Setup.exe 설치가 「제대로 설치되지 않았을 수 있습니다」로 끝나고 Portable 도 실행되지 않는다. 사용자는 서명 없는 dll 때문으로 보고 「공인 인증서로 전부 서명」을 골랐다. 조사(2026-10-22): Portable zip 의 exe·dll 254개 중 서명 17개(.NET 네이티브 런타임·SkiaSharp·ANGLE), 무서명 237개. ReadyToRun composite 가 Microsoft·Oracle 이 서명한 관리 dll(System.*·mscorlib·Oracle.ManagedDataAccess)을 다시 컴파일해 서명이 사라진다. 스마트 앱 컨트롤·WDAC·AppLocker 는 무서명 dll 로드를 막는다. 인증서(Authenticode OV/EV 또는 Azure Trusted Signing)는 사람 자원. 진행(2026-10-22, win144): pack-windows.ps1 에 -SignParams·-AzureSignFile, 패키징 뒤 check-signatures.ps1(Setup.exe·Portable zip 안 exe·dll 전부) 검사, README 「코드 서명」. 자체 서명 시험 인증서로 무서명 238개 → 0개, 전부 타임스탬프, 서명된 Portable 실행 확인. 남은 일: 공인 인증서 서명본을 스마트 앱 컨트롤 켜진 PC 에서 설치·실행(사람 자원)
 
 #### PRD 요구사항
 - prd-ref: PRD 배포, TRD 설치·업데이트
