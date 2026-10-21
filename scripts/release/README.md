@@ -22,9 +22,10 @@ Velopack 은 릴리스 메타데이터의 해시로 패키지 무결성을 확�
 - 인증서: 공인 CA 의 Authenticode 코드 서명 인증서(OV·EV, 하드웨어 토큰 포함) 또는 Azure Trusted Signing. 사내 CA 인증서는 대상 PC 에 GPO 로 루트를 배포할 때만 쓸 수 있다.
 - signtool 은 vpk 에 딸려 온다(`vendor/signing/signtool.exe`). 따로 설치하지 않는다.
 - 매개변수는 `ORANDA_SIGN_PARAMS` 또는 `-SignParams` 로 준다. 타임스탬프를 꼭 넣는다(인증서 만료 뒤에도 서명이 유효).
-  - pfx 파일: `/fd sha256 /tr http://timestamp.digicert.com /td sha256 /f C:\secure\oranda.pfx /p <암호>`
-  - 인증서 저장소·EV 토큰: `/fd sha256 /tr http://timestamp.digicert.com /td sha256 /sha1 <인증서 지문>`
-  - Azure Trusted Signing: `ORANDA_AZURE_SIGN_FILE` 또는 `-AzureSignFile metadata.json`
+  - 인증서 저장소·USB 토큰(공인 인증서, 2023-06 부터 키는 하드웨어에만 둔다): `/fd sha256 /tr http://timestamp.digicert.com /td sha256 /sha1 <인증서 지문>`
+  - pfx 파일(사내 CA 인증서만): `/fd sha256 /tr <사내 또는 공인 타임스탬프 주소> /td sha256 /f C:\secure\oranda.pfx /p <암호>`
+  - 클라우드 서명(DigiCert KeyLocker·SSL.com eSigner 등)은 업체 도구 명령을 vpk `--signTemplate "<명령> {{file}}"` 로 넘겨야 한다 — 아직 pack-windows.ps1 매개변수 없음
+  - Azure Artifact Signing(구 Trusted Signing): `ORANDA_AZURE_SIGN_FILE` 또는 `-AzureSignFile metadata.json`. 2026-01 기준 미국·캐나다·EU·영국 조직만 가입 가능
 - `pack-windows.ps1` 은 패키징 뒤 `check-signatures.ps1` 로 Setup.exe 와 Portable zip 안의 exe·dll 을 모두 검사한다. 서명을 요청했는데 무서명 파일이 있으면 실패하고, 서명 없이 돌리면 무서명 개수를 경고한다. 공인 인증서 서명본은 `check-signatures.ps1 -RequireTrusted` 로 이 PC 가 신뢰하는지까지 본다.
 - 2026-10-22 자체 서명 시험 인증서로 확인: 무서명 238개(Setup.exe 포함) → 0개, 전부 타임스탬프 있음, 서명된 Portable 이 실행됨. 자체 서명이라 상태는 UnknownError(신뢰 안 됨)이고, 공인 인증서 서명본을 스마트 앱 컨트롤이 켜진 PC 에서 설치·실행하는 확인은 남았다.
 
