@@ -98,15 +98,19 @@
                PlaceholderText="host:1521/service?connect_timeout=5 또는 tcps://…" AutomationProperties.Name="접속 문자열" />
     </Grid>
 
+    <!-- 폴더 칸은 직접 입력하거나 「찾아보기…」 로 폴더 선택 창에서 고른다. -->
     <Grid RowDefinitions="Auto,Auto" ColumnSpacing="12" RowSpacing="6">
       <Grid.ColumnDefinitions>
         <ColumnDefinition Width="Auto" SharedSizeGroup="Label" />
         <ColumnDefinition Width="*" />
+        <ColumnDefinition Width="Auto" />
       </Grid.ColumnDefinitions>
       <TextBlock Grid.Row="0" Text="TNS 디렉터리" />
       <TextBox x:Name="TnsAdminBox" Grid.Row="0" Grid.Column="1" Text="{Binding TnsAdmin}" PlaceholderText="tnsnames.ora 가 있는 폴더(선택)" AutomationProperties.Name="TNS 디렉터리" />
+      <Button x:Name="TnsAdminBrowseButton" Grid.Row="0" Grid.Column="2" Content="찾아보기…" AutomationProperties.Name="TNS 디렉터리 찾아보기" />
       <TextBlock Grid.Row="1" Text="지갑 폴더" />
       <TextBox x:Name="WalletBox" Grid.Row="1" Grid.Column="1" Text="{Binding WalletLocation}" PlaceholderText="cwallet.sso 가 있는 폴더(선택)" AutomationProperties.Name="지갑 폴더" />
+      <Button x:Name="WalletBrowseButton" Grid.Row="1" Grid.Column="2" Content="찾아보기…" AutomationProperties.Name="지갑 폴더 찾아보기" />
     </Grid>
 
     <Grid IsVisible="{Binding IsTnsMode}" RowDefinitions="Auto,Auto" ColumnSpacing="12" RowSpacing="2">
