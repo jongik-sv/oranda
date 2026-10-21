@@ -509,6 +509,7 @@ public sealed class ExecutionController : IDisposable
         }
 
         var binds = BindsOf(tab);
+        binds.Prune(tab.ReferencedBindNames);
         binds.Ensure(stmt.BindNames);
         binds.RequestFocus(stmt.BindNames[0]);
         return Task.FromResult(true);
@@ -521,6 +522,9 @@ public sealed class ExecutionController : IDisposable
     private Dictionary<string, BindValue>? ResolveBinds(SqlEditorViewModel tab, IEnumerable<string> names, ResultTabsViewModel? results)
     {
         var store = BindsOf(tab);
+        // 탭 글에서 사라진 이름(고치기 전 :EMP 등)은 목록에서 뺀다(TSK-04-12).
+        store.Prune(tab.ReferencedBindNames.Concat(names));
+
         var list = names.Distinct(StringComparer.OrdinalIgnoreCase).ToList();
         if (list.Count == 0)
         {

@@ -52,12 +52,28 @@ public sealed partial class BindVariableRow : ObservableObject
 {
     public BindVariableRow(string name)
     {
-        _name = name;
+        _name = Normalize(name);
     }
 
-    /// <summary>콜론 없는 이름(<c>:ID</c> → <c>ID</c>).</summary>
+    /// <summary>콜론 없는 이름(<c>:ID</c> → <c>ID</c>). 대문자로 둔다(TSK-04-12, Oracle 바인드 이름은 대소문자를 가리지 않는다).</summary>
     [ObservableProperty]
     private string _name;
+
+    /// <summary>바인드 이름을 대문자로. 큰따옴표로 감싼 이름(<c>"x"</c>)은 그대로 둔다.</summary>
+    public static string Normalize(string name)
+    {
+        ArgumentNullException.ThrowIfNull(name);
+        return name.TrimStart().StartsWith('"') ? name : name.ToUpperInvariant();
+    }
+
+    partial void OnNameChanged(string value)
+    {
+        var upper = Normalize(value);
+        if (!string.Equals(upper, value, StringComparison.Ordinal))
+        {
+            Name = upper;
+        }
+    }
 
     [ObservableProperty]
     private string _text = string.Empty;
@@ -166,6 +182,27 @@ public sealed class BindVariableStore
     }
 
     public void Clear() => Rows.Clear();
+
+    /// <summary>
+    /// <paramref name="keep"/> 에 없는 줄을 지운다(TSK-04-12: 글에서 사라진 이름이 목록에 남지 않게). 지운 줄이 있으면 true.
+    /// </summary>
+    public bool Prune(IEnumerable<string> keep)
+    {
+        ArgumentNullException.ThrowIfNull(keep);
+        var names = new HashSet<string>(keep.Select(n => n.Trim()), StringComparer.OrdinalIgnoreCase);
+        var stale = Rows.Where(r => !names.Contains(r.Name.Trim())).ToList();
+        foreach (var row in stale)
+        {
+            Rows.Remove(row);
+        }
+
+        if (stale.Count > 0)
+        {
+            Renumber();
+        }
+
+        return stale.Count > 0;
+    }
 
     /// <summary>
     /// 디스크에 남길 값(작업 공간 <c>tabs[].binds</c>·.sql 바인드 블록). <paramref name="names"/> 순서로, 목록에 있고 기본값

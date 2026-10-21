@@ -1415,7 +1415,7 @@ dotnet, testhost, Oranda.App
 - category: dev
 - domain: frontend
 - model: sonnet
-- status: [ ]
+- status: [xx]
 - priority: medium
 - assignee: -
 - schedule: 2027-01-14 ~ 2027-01-14
@@ -1423,15 +1423,17 @@ dotnet, testhost, Oranda.App
 - depends: TSK-04-11
 - blocked-by: -
 - entry-point: 바인드 변수 창(oranda.panel.binds)
-- note: 담당 PC: win144(Windows 개발 PC) — 맥북 세션은 이 Task 를 하지 않는다. 2026-10-21 사용자 요청: 바인드 변수는 자동으로 대문자로 변환한다. Oracle 바인드 이름은 대소문자를 가리지 않으므로 목록 이름을 대문자로 맞춘다. SQL 본문은 바꾸지 않는다.
+- note: 담당 PC: win144(Windows 개발 PC) — 맥북 세션은 이 Task 를 하지 않는다. 2026-10-21 사용자 요청: 바인드 변수는 자동으로 대문자로 변환한다. Oracle 바인드 이름은 대소문자를 가리지 않으므로 목록 이름을 대문자로 맞춘다. SQL 본문은 바꾸지 않는다. 같은 날 사용자 지적(화면 캡처): 글에는 :EMP_NO 하나인데 바인드 창에 emp·emp_no 두 줄이 보인다 — 목록이 늘기만 한다. 함께 고친다. / 2026-10-21 완료(win144): BindVariableRow.Normalize(대문자, 큰따옴표 이름 유지)·BindVariableStore.Prune. 실행·바인드 창 명령 때 탭 글이 참조하지 않는 줄을 지운다.
 
 #### PRD 요구사항
 - prd-ref: PRD EXEC-03
 - requirements:
   - 바인드 목록 줄 이름(BindVariableRow.Name)을 대문자로 둔다: 실행이 만든 줄, 작업 공간·.sql·.sqd 에서 복원한 줄, 사람이 창에서 입력·고친 이름 모두
   - 큰따옴표로 감싼 이름(:"x")은 그대로 둔다
+  - 실행·바인드 창 명령 때 탭 글이 더는 참조하지 않는 이름의 줄을 목록에서 지운다(남은 줄 값은 유지)
 - acceptance:
   - select :id from dual 을 실행하면 바인드 창에 ID 로 보이고, 값을 넣고 다시 실행하면 그 값으로 실행된다
+  - :EMP 를 :EMP_NO 로 고친 뒤 실행하면 바인드 창에 EMP_NO 한 줄만 남는다
   - 예전에 소문자로 저장한 작업 공간을 열어도 대문자로 보이고 값이 남는다
 - constraints:
   - 편집기의 SQL 글자는 바꾸지 않는다

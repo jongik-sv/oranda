@@ -822,7 +822,7 @@ public sealed class ExecutionTests
         // 하위 쿼리의 바인드만 목록에 더하고 실행을 미룬다(바깥 문장의 :z 는 묻지 않는다).
         Assert.False(await rig.Controller.RunAsync(RunMode.Subquery));
         Assert.Empty(rig.Exec.Statements);
-        Assert.Equal(["x", "y"], rig.Binds.Rows.Select(r => r.Name));
+        Assert.Equal(["X", "Y"], rig.Binds.Rows.Select(r => r.Name));
 
         rig.Binds.Find("x")!.Text = "a";
         rig.Binds.Find("y")!.Type = BindDataType.Number;
@@ -1087,7 +1087,7 @@ public sealed class ExecutionTests
         // 처음 보는 이름: 목록에 줄을 더하고 실행하지 않는다(값 없이 NULL 로 돌지 않게). 바인드 변수 창을 보인다.
         Assert.False(await rig.Controller.RunAsync(RunMode.Statement));
         Assert.Empty(rig.Exec.Statements);
-        Assert.Equal(["a", "b"], rig.Binds.Rows.Select(r => r.Name));
+        Assert.Equal(["A", "B"], rig.Binds.Rows.Select(r => r.Name));
         Assert.Contains("show " + ExecutionController.BindsPanelId, rig.Panels);
         Assert.Equal("a", rig.Binds.PendingFocus);
         Assert.Contains(rig.Log.Messages, m => m.Kind == MessageKind.Warning && m.Text.Contains(":a, :b", StringComparison.Ordinal));
@@ -1121,7 +1121,7 @@ public sealed class ExecutionTests
 
         Assert.Empty(rig.Exec.Statements);
         Assert.False(rig.State.Busy);
-        Assert.Contains(rig.Log.Messages, m => m.Kind == MessageKind.Error && m.Text.Contains(":n", StringComparison.Ordinal));
+        Assert.Contains(rig.Log.Messages, m => m.Kind == MessageKind.Error && m.Text.Contains(":N", StringComparison.Ordinal));
         Assert.Equal("show " + ExecutionController.BindsPanelId, rig.Panels[^1]);
     });
 
@@ -1134,7 +1134,7 @@ public sealed class ExecutionTests
         Assert.True(await rig.Controller.EditBindsAsync());
 
         Assert.Empty(rig.Exec.Statements);
-        Assert.Equal("a", Assert.Single(rig.Binds.Rows).Name);
+        Assert.Equal("A", Assert.Single(rig.Binds.Rows).Name);
         Assert.Contains("show " + ExecutionController.BindsPanelId, rig.Panels);
     });
 
