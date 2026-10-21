@@ -957,6 +957,40 @@ dotnet, testhost, Oranda.App
 - data-model: -
 - ui-spec: -
 
+### TSK-03-10: 프로필 편집기 TNS 디렉터리·지갑 폴더를 폴더 선택 창으로 고르기 [win144]
+- category: dev
+- domain: frontend
+- model: sonnet
+- status: [ ]
+- priority: medium
+- assignee: -
+- schedule: 2027-01-21 ~ 2027-01-22
+- tags: connection, tns, win144
+- depends: -
+- blocked-by: -
+- entry-point: 접속 관리자 > 프로필 편집기 > TNS 디렉터리
+- note: 담당 PC: win144(Windows 개발 PC) — 맥북 세션은 이 Task 를 하지 않는다. 2026-10-21 사용자 요청: TNS 별칭을 고를 때 TNS 폴더를 폴더 선택 창으로 고를 수 있게 한다.
+
+#### PRD 요구사항
+- prd-ref: PRD CONN-01, CONN-03
+- requirements:
+  - 프로필 편집기(ProfileEditorView.axaml)의 TNS 디렉터리 칸 옆에 「찾아보기…」 단추를 둔다. 단추를 누르면 폴더 선택 창이 열리고, 고른 폴더 경로가 칸에 들어간다
+  - 지갑 폴더 칸에도 같은 단추를 둔다
+  - 경로가 들어가면 기존 동작대로 tnsnames.ora 별칭 제안·접속 방식 전환이 일어난다
+- acceptance:
+  - 단추로 폴더를 고르면 칸에 그 경로가 들어가고 TNS 별칭 칸에 그 폴더의 별칭이 제안된다
+  - 선택 창을 취소하면 칸 값이 바뀌지 않는다
+- constraints:
+  - 칸에 직접 입력하는 기존 방법은 그대로 둔다
+- test-criteria:
+  - Headless 시험: 단추가 있고, 폴더 선택 결과를 넣으면 TnsAdmin 이 바뀐다
+
+#### 기술 스펙 (TRD)
+- tech-spec: Avalonia StorageProvider.OpenFolderPickerAsync
+- api-spec: -
+- data-model: -
+- ui-spec: -
+
 ## WP-04: SQL 편집기·언어 서비스
 - schedule: 2026-11-10 ~ 2026-11-30
 
