@@ -2052,7 +2052,7 @@ dotnet, testhost, Oranda.App
 - category: defect
 - domain: backend
 - model: sonnet
-- status: [ ]
+- status: [xx]
 - priority: high
 - assignee: -
 - schedule: 2027-01-28 ~ 2027-01-30
@@ -2060,7 +2060,7 @@ dotnet, testhost, Oranda.App
 - depends: -
 - blocked-by: -
 - entry-point: SQL 편집기 > 스크립트 실행
-- note: 담당 PC: win144(Windows 개발 PC) — 맥북 세션은 이 Task 를 하지 않는다. 2026-10-21 사용자 보고: ALTER SESSION SET STATISTICS_LEVEL=ALL → SELECT … → SELECT * FROM table(dbms_xplan.display_cursor(sql_id=>null, format=>'ALLSTATS LAST')) 결과가 「BEGIN DBMS_OUTPUT.GET_LINES(:lines, :n); END;」 의 계획(cannot fetch plan)이다. 원인: OracleExecutionService.RunOnDriverAsync 가 문장마다 실행 뒤 같은 세션에서 DBMS_OUTPUT.GET_LINES(와 DML·FOR UPDATE 뒤 DBMS_TRANSACTION.LOCAL_TRANSACTION_ID)를 불러 세션의 직전 커서(prev_sql_id)를 덮는다.
+- note: 담당 PC: win144(Windows 개발 PC) — 맥북 세션은 이 Task 를 하지 않는다. 2026-10-21 사용자 보고: ALTER SESSION SET STATISTICS_LEVEL=ALL → SELECT … → SELECT * FROM table(dbms_xplan.display_cursor(sql_id=>null, format=>'ALLSTATS LAST')) 결과가 「BEGIN DBMS_OUTPUT.GET_LINES(:lines, :n); END;」 의 계획(cannot fetch plan)이다. 원인: OracleExecutionService.RunOnDriverAsync 가 문장마다 실행 뒤 같은 세션에서 DBMS_OUTPUT.GET_LINES(와 DML·FOR UPDATE 뒤 DBMS_TRANSACTION.LOCAL_TRANSACTION_ID)를 불러 세션의 직전 커서(prev_sql_id)를 덮는다. / 2026-10-21 완료(win144): 잠금 없는 질의 뒤에는 GET_LINES·트랜잭션 조회를 보내지 않는다(OracleExecutionService.IsPlainQuery). 질의 안 출력은 버퍼에 남아 다음 질의 아닌 문장 뒤에 나온다. 통합 시험 ExecutionServiceTests.Display_cursor_with_null_sql_id_shows_the_previous_user_query(26ai). DML 뒤 display_cursor(null) 는 트랜잭션 조회 때문에 여전히 가려진다(범위 밖).
 
 #### PRD 요구사항
 - prd-ref: PRD EXEC-01, PLAN-02

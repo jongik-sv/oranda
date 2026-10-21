@@ -473,6 +473,31 @@ public sealed class ExecutionServiceTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task Display_cursor_with_null_sql_id_shows_the_previous_user_query()
+    {
+        // TSK-06-14: 질의 뒤에 숨은 GET_LINES 를 보내면 display_cursor(null) 가 그 문장을 보였다.
+        await using var s = await OpenAsync();
+        var service = Service();
+        var marker = "oranda_06_14_" + Guid.NewGuid().ToString("N")[..8];
+        var q = await service.ExecuteAsync(s, Q($"SELECT /* {marker} */ level AS n FROM dual CONNECT BY level < 10"), NoBinds, null, default);
+        await using (var rs = Assert.IsType<OracleResultSet>(q.ResultSet))
+        {
+            Assert.Equal(9, (await rs.GetPageAsync(0, default)).RowCount);
+        }
+
+        var plan = await service.ExecuteAsync(s, Q("SELECT * FROM table(dbms_xplan.display_cursor(sql_id => null, format => 'ALLSTATS LAST'))"), NoBinds, null, default);
+        await using var planRows = Assert.IsType<OracleResultSet>(plan.ResultSet);
+        var page = await planRows.GetPageAsync(0, default);
+        var text = string.Join("\n", Enumerable.Range(0, page.RowCount).Select(i => page.Columns[0][i] as string));
+        Assert.Contains(marker, text, StringComparison.Ordinal);
+        Assert.DoesNotContain("GET_LINES", text, StringComparison.Ordinal);
+
+        // 질의 안에서 낸 출력은 버리지 않고 다음 PL/SQL 뒤에 나온다.
+        var put = await service.ExecuteAsync(s, Block("BEGIN DBMS_OUTPUT.PUT_LINE('later'); END;"), NoBinds, null, default);
+        Assert.Equal(["later"], put.DbmsOutput);
+    }
+
+    [Fact]
     public async Task Binds_in_out_and_ref_cursor()
     {
         await using var s = await OpenAsync();

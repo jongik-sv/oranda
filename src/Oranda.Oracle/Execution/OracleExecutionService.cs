@@ -258,7 +258,10 @@ internal sealed partial class OracleExecutionService : IExecutionService
 
             sw.Stop();
             var pending = await TrackTransactionAsync(session, stmt, kind, ct);
-            var output = await CollectDbmsOutputAsync(session, runtime, ct);
+            // 질의 뒤에는 숨은 문장(GET_LINES)을 보내지 않는다: 세션의 직전 커서가 바뀌면 다음 문장의
+            // dbms_xplan.display_cursor(sql_id => null) 가 사용자 질의 대신 그 문장을 보인다(TSK-06-14).
+            // 질의 안 함수가 낸 출력은 버퍼에 남아 다음 질의 아닌 문장 뒤에 함께 나온다.
+            IReadOnlyList<string> output = IsPlainQuery(stmt, kind) ? [] : await CollectDbmsOutputAsync(session, runtime, ct);
 
             if (kind == StatementKind.Ddl)
             {
@@ -384,7 +387,7 @@ internal sealed partial class OracleExecutionService : IExecutionService
             return false;
         }
 
-        if (kind == StatementKind.Query && !ForUpdateRegex().IsMatch(stmt.Text))
+        if (IsPlainQuery(stmt, kind))
         {
             return session.HasPendingTransaction;
         }
@@ -544,6 +547,10 @@ internal sealed partial class OracleExecutionService : IExecutionService
 
         return new DbError($"ORA-{ex.Number:D5}", ex.Message) { Number = ex.Number, Offset = offset, Line = line, Column = column };
     }
+
+    /// <summary>잠금 없는 질의(SELECT·WITH, FOR UPDATE 아님): 트랜잭션도 출력도 바꾸지 않는다고 보고 뒤따르는 숨은 문장을 보내지 않는다.</summary>
+    private static bool IsPlainQuery(SqlStatement stmt, StatementKind kind) =>
+        kind == StatementKind.Query && !ForUpdateRegex().IsMatch(stmt.Text);
 
     [GeneratedRegex(@"\bFOR\s+UPDATE\b", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
     private static partial Regex ForUpdateRegex();
