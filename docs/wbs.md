@@ -1446,6 +1446,37 @@ dotnet, testhost, Oranda.App
 - data-model: -
 - ui-spec: -
 
+### TSK-04-13: 바인드 변수 창 열이 줄마다 어긋난다 [win144]
+- category: defect
+- domain: frontend
+- model: sonnet
+- status: [xx]
+- priority: high
+- assignee: -
+- schedule: 2027-01-15 ~ 2027-01-15
+- tags: defect, binds, ui, win144
+- depends: TSK-04-12
+- blocked-by: -
+- entry-point: 바인드 변수 창(oranda.panel.binds)
+- note: 담당 PC: win144(Windows 개발 PC) — 맥북 세션은 이 Task 를 하지 않는다. 2026-10-21 사용자 보고(화면 캡처): 이름 길이가 다른 바인드가 여러 개면 값·자료형·방향 열이 줄마다 다른 자리에서 시작한다. 원인: 줄 Grid 의 * 열이 가로 스크롤(무한 폭) 안에서 글자 폭을 따라간다. / 2026-10-21 완료(win144): 표 폭을 창 폭(최소 290)으로 고정하고, 열 폭을 픽셀로 계산해 머리글과 모든 줄에 같은 값을 넣는다(BindVariablesView.ApplyColumns). Headless 시험 Bind_panel_columns_line_up_across_rows_whatever_the_name_length(폭 200·390·800).
+
+#### PRD 요구사항
+- prd-ref: PRD EXEC-03
+- requirements:
+  - 바인드 변수 창은 표 형태로, 모든 줄의 열(번호·변수·값·자료형·방향)이 머리글과 같은 자리에서 시작한다
+- acceptance:
+  - 이름 길이가 다른 바인드 24개를 넣어도 값 열의 시작 위치가 모든 줄에서 같다
+- constraints:
+  - 창이 최소 폭보다 좁으면 가로로 스크롤한다(방향 열을 자르지 않음)
+- test-criteria:
+  - Headless: 창 폭 200·390·800 에서 값 칸 왼쪽 위치가 모든 줄·머리글에서 같다
+
+#### 기술 스펙 (TRD)
+- tech-spec: -
+- api-spec: -
+- data-model: -
+- ui-spec: -
+
 ## WP-05: 포매터
 - schedule: 2026-11-17 ~ 2026-11-30
 

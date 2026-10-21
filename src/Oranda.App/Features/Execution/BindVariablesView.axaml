@@ -10,6 +10,8 @@
     <Style Selector="ListBox#RowList ListBoxItem">
       <Setter Property="Padding" Value="0" />
       <Setter Property="MinHeight" Value="0" />
+      <!-- 줄 Grid 를 줄 폭으로 펴야 * 열이 모든 줄에서 같다(왼쪽 맞춤이면 줄마다 글자 폭만큼만 쓴다). -->
+      <Setter Property="HorizontalContentAlignment" Value="Stretch" />
     </Style>
     <Style Selector="Border.cell">
       <Setter Property="BorderBrush" Value="{DynamicResource OrandaSeparatorBrush}" />
@@ -57,11 +59,13 @@
     <Border DockPanel.Dock="Bottom" Classes="panel-status">
       <TextBlock Text="실행하면 문장의 :변수가 여기에 채워집니다. 빈 값은 NULL." TextTrimming="CharacterEllipsis" />
     </Border>
-    <!-- 창이 표의 최소 폭보다 좁으면 방향 열을 자르지 않고 가로로 스크롤한다. -->
-    <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled">
-    <DockPanel MinWidth="290">
+    <!-- 창이 표의 최소 폭보다 좁으면 방향 열을 자르지 않고 가로로 스크롤한다.
+         열 폭은 표 폭(창 폭, 최소 290)에서 픽셀로 계산해 머리글과 모든 줄에 같은 값을 넣는다(코드 숨김 ApplyColumns).
+         * 열을 줄마다 두면 처음 무한 폭으로 잰 줄이 글자 폭을 따라가 열이 어긋난다. -->
+    <ScrollViewer x:Name="TableScroll" HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled">
+    <DockPanel x:Name="Table" MinWidth="290">
     <Border DockPanel.Dock="Top" Classes="grid-header">
-      <Grid Height="26">
+      <Grid x:Name="HeaderGrid" Height="26">
         <Grid.ColumnDefinitions>
           <ColumnDefinition Width="24" />
           <ColumnDefinition Width="2*" MinWidth="56" />
@@ -76,11 +80,13 @@
         <TextBlock Grid.Column="4" Classes="head" Text="방향" />
       </Grid>
     </Border>
+    <!-- 목록 자체의 가로 스크롤을 끈다: 켜 두면 줄을 무한 폭으로 재서 * 열이 줄마다 글자 폭을 따라간다(가로 스크롤은 바깥 TableScroll 이 한다). -->
     <ListBox x:Name="RowList" ItemsSource="{Binding Rows}" SelectedItem="{Binding Selected, Mode=TwoWay}"
+             ScrollViewer.HorizontalScrollBarVisibility="Disabled"
              AutomationProperties.Name="바인드 변수 목록">
       <ListBox.ItemTemplate>
         <DataTemplate x:DataType="binds:BindVariableRow">
-          <Grid>
+          <Grid Classes="row" Loaded="OnRowGridLoaded">
             <Grid.ColumnDefinitions>
               <ColumnDefinition Width="24" />
               <ColumnDefinition Width="2*" MinWidth="56" />

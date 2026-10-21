@@ -2,6 +2,7 @@ using System.Diagnostics;
 using System.Runtime.CompilerServices;
 using Avalonia.Controls;
 using Avalonia.Threading;
+using Avalonia.VisualTree;
 using Oranda.App.Features.Binds;
 using Oranda.App.Features.ConnectionManager;
 using Oranda.App.Features.Execution;
@@ -1234,6 +1235,35 @@ public sealed class ExecutionTests
 
         vm.DeleteCommand.Execute(null);
         Assert.Equal(2, vm.Rows.Count);
+        window.Close();
+        return Task.CompletedTask;
+    });
+
+    [Theory]
+    [InlineData(390)]
+    [InlineData(800)]
+    [InlineData(200)] // 최소 폭보다 좁으면 가로 스크롤(열은 그래도 맞다)
+    public Task Bind_panel_columns_line_up_across_rows_whatever_the_name_length(double width) => Ui.Run(() =>
+    {
+        var vm = new BindVariablesViewModel(new EventBus());
+        vm.Store.Ensure(["PROC_CD", "PDN_PST_DD_FR", "TRST_PROC_CMP_CD", "OP_GRD"]);
+        var view = new BindVariablesView { DataContext = vm };
+        var window = new Avalonia.Controls.Window { Width = width, Height = 400, Content = view };
+        window.Show();
+        Avalonia.Threading.Dispatcher.UIThread.RunJobs();
+        window.UpdateLayout();
+
+        var list = view.FindControl<Avalonia.Controls.ListBox>("RowList")!;
+        var valueLefts = vm.Rows.Select(r =>
+        {
+            var box = ((Avalonia.Controls.Control)list.ContainerFromItem(r)!).GetVisualDescendants()
+                .OfType<Avalonia.Controls.TextBox>().Single(t => t.Name == "ValueBox");
+            return Math.Round(Avalonia.VisualExtensions.TranslatePoint(box, default, view)!.Value.X, 1);
+        }).Distinct().ToList();
+        Assert.Single(valueLefts);
+        // 머리글 「값」 도 같은 자리에서 시작한다.
+        var head = view.GetVisualDescendants().OfType<Avalonia.Controls.TextBlock>().Single(t => t.Text == "값");
+        Assert.Equal(valueLefts[0], Math.Round(Avalonia.VisualExtensions.TranslatePoint(head, default, view)!.Value.X - head.Margin.Left, 1));
         window.Close();
         return Task.CompletedTask;
     });
