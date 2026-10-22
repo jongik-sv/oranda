@@ -27,8 +27,8 @@ public sealed class GridEditSession
 {
     private readonly IRowEditor _editor;
     private readonly IMetadataProvider _metadata;
-    private readonly Func<long, int, object?> _read;
-    private readonly Func<long> _loadedRows;
+    private Func<long, int, object?> _read;
+    private Func<long> _loadedRows;
     private readonly Dictionary<long, Dictionary<int, object?>> _updates = [];
     private readonly Dictionary<long, Dictionary<int, object?>> _inserts = [];
     private readonly HashSet<long> _deletes = [];
@@ -107,6 +107,19 @@ public sealed class GridEditSession
         var s = new GridEditSession(editor, metadata, session, query, columns, read, loadedRows, plan);
         s.Capability = s.Guard(plan);
         return s;
+    }
+
+    /// <summary>
+    /// 같은 열 구성의 새 결과(서버 ORDER BY 로 다시 조회한 결과)로 읽는 곳을 바꾼다. 편집 대상·키 계획은 그대로 두고 바꾼 값은 버린다
+    /// (다시 조회는 반영하지 않은 변경이 없을 때만 한다). 원래 문장이 결과의 정본이므로 <see cref="Query"/> 는 바뀌지 않는다.
+    /// </summary>
+    public void Rebind(Func<long, int, object?> read, Func<long> loadedRows)
+    {
+        ArgumentNullException.ThrowIfNull(read);
+        ArgumentNullException.ThrowIfNull(loadedRows);
+        _read = read;
+        _loadedRows = loadedRows;
+        ResetAll();
     }
 
     /// <summary>조인 결과에서 편집 대상 테이블을 바꾼다. 바뀐 값은 버린다.</summary>

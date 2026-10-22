@@ -115,7 +115,7 @@ public sealed partial class ExportDialogViewModel : ViewModelBase, IDisposable
             TransferSummary summary;
             await using (var fs = new FileStream(path, FileMode.Create, FileAccess.Write, FileShare.None, 81920, FileOptions.Asynchronous))
             {
-                summary = await _service.ExportAsync(_source.Session, _source.Query, _source.Binds, options, fs,
+                summary = await _service.ExportAsync(_source.Session, _source.QueryInColumnOrder(), _source.Binds, options, fs,
                     new Progress<long>(n => RowCount = n), _cts.Token).ConfigureAwait(true);
             }
 

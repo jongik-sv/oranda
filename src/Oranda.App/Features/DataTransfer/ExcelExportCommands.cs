@@ -116,7 +116,7 @@ public static class ExcelExportRunner
         if (job.Scope == ExcelExportScope.AllRows)
         {
             var source = job.Source ?? throw new InvalidOperationException("다시 실행할 질의를 알 수 없습니다.");
-            return transfer.ExportAsync(source.Session, source.Query, source.Binds, options, destination, null, ct);
+            return transfer.ExportAsync(source.Session, source.QueryInColumnOrder(), source.Binds, options, destination, null, ct);
         }
 
         var grid = job.Grid ?? throw new InvalidOperationException("내보낼 결과 그리드가 없습니다.");

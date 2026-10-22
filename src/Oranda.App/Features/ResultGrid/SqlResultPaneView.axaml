@@ -98,6 +98,11 @@
         <!-- 전체 행 수를 세는 동안(oranda.grid.countRows)만 보이는 취소 단추. -->
         <Button x:Name="CountCancelButton" DockPanel.Dock="Left" Classes="tool" Padding="4,0" Margin="6,0,0,0" Focusable="False"
                 Content="행 수 세기 취소" IsVisible="{Binding IsCountingRows}" icons:ButtonIcon.Key="cancel" />
+        <!-- 머리글 정렬하는 동안(TSK-13-17)만 보이는 진행 글과 취소 단추(Esc 도 같다). -->
+        <TextBlock DockPanel.Dock="Left" Margin="12,0,0,0" VerticalAlignment="Center" Text="{Binding SortStatusText}"
+                   IsVisible="{Binding IsSorting}" />
+        <Button x:Name="SortCancelButton" DockPanel.Dock="Left" Classes="tool" Padding="4,0" Margin="6,0,0,0" Focusable="False"
+                Content="정렬 취소" IsVisible="{Binding IsSorting}" icons:ButtonIcon.Key="cancel" />
         <Panel />
       </DockPanel>
     </Border>

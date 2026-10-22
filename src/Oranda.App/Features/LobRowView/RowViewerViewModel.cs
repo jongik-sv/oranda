@@ -13,11 +13,14 @@ public sealed partial class RowField(int ordinal, string name, string typeName, 
 {
     public int Ordinal { get; } = ordinal;
 
+    /// <summary>이 표에서의 순서(0부터). 그리드에서 열을 끌어 옮겼으면 그 화면 순서다(<see cref="Ordinal"/> 은 원래 열 번호로 편집·값 읽기에 쓴다).</summary>
+    public int Position { get; init; } = ordinal;
+
     /// <summary>화면에 보이는 번호(1부터).</summary>
-    public int Number => Ordinal + 1;
+    public int Number => Position + 1;
 
     /// <summary>줄무늬용: 홀수 번째 열.</summary>
-    public bool IsAlt => Ordinal % 2 == 1;
+    public bool IsAlt => Position % 2 == 1;
 
     public string Name { get; } = name;
 
@@ -197,19 +200,23 @@ public sealed partial class RowViewerViewModel : ToolPanelViewModelBase, IDispos
 
         var loaded = true;
         var all = new List<RowField>(m.Columns.Count);
-        foreach (var c in m.Columns)
+        var position = 0;
+        foreach (var ordinal in m.ColumnsInDisplayOrder()) // 그리드에서 옮긴 열 순서를 따른다(숨긴 열은 뒤에)
         {
+            var c = m.Columns[ordinal];
+            var pos = position++;
             if (!m.TryGetValue(_row, c.Ordinal, out var v))
             {
                 loaded = false;
                 m.Prefetch(_row, _row);
-                all.Add(new RowField(c.Ordinal, c.Name, c.DbTypeName, string.Empty, false, false));
+                all.Add(new RowField(c.Ordinal, c.Name, c.DbTypeName, string.Empty, false, false) { Position = pos });
                 continue;
             }
 
             var isNull = v is null or DBNull;
             all.Add(new RowField(c.Ordinal, c.Name, c.DbTypeName, CellValueFormatter.Format(c, v, m.Display), isNull, v is LobValue)
             {
+                Position = pos,
                 IsEdited = m.IsEdited(_row, c.Ordinal),
                 CanEdit = v is not LobValue && GridEditBinding.CanEditCell(m, _row, c.Ordinal),
             });

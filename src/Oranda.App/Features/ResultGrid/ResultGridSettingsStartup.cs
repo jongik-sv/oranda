@@ -1,0 +1,19 @@
+using Oranda.App.Shell.Settings;
+using Oranda.Core.Composition;
+
+namespace Oranda.App.Features.ResultGrid;
+
+/// <summary>
+/// 결과 그리드가 설정 <c>grid.localSortMaxRows</c> 를 정렬할 때마다 읽도록 연결한다(TSK-13-17). 값은 읽는 순간의 현재 설정이라 설정을 바꾸면 바로 따라간다.
+/// </summary>
+[OrandaService(typeof(IStartupTask))]
+public sealed class ResultGridSettingsStartup(SettingsService settings) : IStartupTask
+{
+    public StartupPhase Phase => StartupPhase.AfterFirstFrame;
+
+    public Task RunAsync(CancellationToken ct)
+    {
+        ResultGridModel.LocalSortMaxRowsProvider = () => settings.Current.Grid.LocalSortMaxRows;
+        return Task.CompletedTask;
+    }
+}

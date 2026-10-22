@@ -40,6 +40,12 @@ public sealed class ResultGridControl : Control
     private bool _dragSelecting;
     private bool _dragRows;
     private int _resizeColumn = -1;
+
+    // 머리글 누르기·끌기(TSK-13-17): 누른 열 위치, 누른 점, 끌기 중인지, 놓일 자리(그 위치 앞). 끌기 없이 놓으면 정렬, 끌고 놓으면 열 순서만 바꾼다.
+    private int _headerPressCol = -1;
+    private Point _headerPressPoint;
+    private bool _headerDragging;
+    private int _dropIndex = -1;
     private double _resizeStartX;
     private double _resizeStartWidth;
     private TopLevel? _top;
@@ -591,7 +597,21 @@ public sealed class ResultGridControl : Control
             var fx = Snap(head + frozen, scale);
             ctx.DrawLine(pal.FrozenLine, new Point(fx, 0), new Point(fx, size.Height));
         }
+
+        if (_headerDragging && _headerPressCol >= 0 && _headerPressCol < m.VisibleColumns.Count)
+        {
+            // 끄는 열은 머리글을 옅게 덮고, 놓일 자리는 세로선으로 보인다.
+            var pw = m.GetColumnWidth(m.VisibleColumns[_headerPressCol]);
+            ctx.FillRectangle(pal.CurrentRow, new Rect(DropLineXOfColumn(_headerPressCol), 0, pw, hh));
+            if (_dropIndex >= 0)
+            {
+                var lx = Snap(DropLineX(_dropIndex), scale);
+                ctx.DrawLine(new Pen(pal.ActiveBorder.Brush, 2), new Point(lx, 0), new Point(lx, size.Height));
+            }
+        }
     }
+
+    private double DropLineXOfColumn(int col) => DropLineX(col);
 
     /// <summary>행 머리 글자: 편집 행 상태(새 행 *, 고친 행 ✎, 지울 행 ✕, 반영 실패 !). 상태가 없으면 빈 글자.</summary>
     public static string RowMarkGlyph(GridRowMark mark) => mark switch
@@ -867,7 +887,12 @@ public sealed class ResultGridControl : Control
                 }
                 else
                 {
-                    _ = SortAsync(ord);
+                    // 누르는 순간에는 정렬하지 않는다. 끌지 않고 놓으면(OnPointerReleased) 그때 정렬한다.
+                    _headerPressCol = col;
+                    _headerPressPoint = p;
+                    _headerDragging = false;
+                    _dropIndex = -1;
+                    e.Pointer.Capture(this);
                 }
             }
             else if (props.IsRightButtonPressed && !_model.IsSelected(0, col))
@@ -940,6 +965,22 @@ public sealed class ResultGridControl : Control
             return;
         }
 
+        if (_headerPressCol >= 0)
+        {
+            if (!_headerDragging && _headerPressCol >= _model.FrozenCount && Math.Abs(p.X - _headerPressPoint.X) >= HeaderDragThreshold(e))
+            {
+                _headerDragging = true;
+            }
+
+            if (_headerDragging)
+            {
+                _dropIndex = DropIndexAt(p.X);
+                InvalidateVisual();
+            }
+
+            return;
+        }
+
         if (_dragSelecting)
         {
             // 가장자리에 닿으면 스크롤하면서 선택을 넓힌다.
@@ -974,10 +1015,79 @@ public sealed class ResultGridControl : Control
     protected override void OnPointerReleased(PointerReleasedEventArgs e)
     {
         base.OnPointerReleased(e);
+        if (_headerPressCol >= 0 && _model is { } pressed)
+        {
+            var col = _headerPressCol;
+            var dragged = _headerDragging;
+            var drop = _dropIndex;
+            CancelHeaderPress();
+            if (dragged)
+            {
+                pressed.MoveColumn(col, drop); // 끌었으면 정렬하지 않고 열 순서만 바꾼다
+            }
+            else if (col < pressed.VisibleColumns.Count)
+            {
+                _ = SortAsync(pressed.VisibleColumns[col]);
+            }
+        }
+
         _dragSelecting = false;
         _dragRows = false;
         _resizeColumn = -1;
         e.Pointer.Capture(null);
+    }
+
+    protected override void OnPointerCaptureLost(PointerCaptureLostEventArgs e)
+    {
+        base.OnPointerCaptureLost(e);
+        CancelHeaderPress(); // 창을 옮기거나 포인터를 뺏기면 정렬도 이동도 하지 않는다
+    }
+
+    /// <summary>머리글 끌기 문턱(DIP). 플랫폼의 누르기 허용 거리, 없으면 4.</summary>
+    internal static double HeaderDragThreshold(PointerEventArgs e)
+    {
+        var tap = Application.Current?.PlatformSettings?.GetTapSize(e.Pointer.Type).Width ?? 0;
+        return tap > 0 ? tap : 4;
+    }
+
+    /// <summary>머리글 누르기·끌기 상태를 지운다(Esc 취소·놓기·포인터 잃음).</summary>
+    private void CancelHeaderPress()
+    {
+        var was = _headerDragging;
+        _headerPressCol = -1;
+        _headerDragging = false;
+        _dropIndex = -1;
+        if (was)
+        {
+            InvalidateVisual();
+        }
+    }
+
+    /// <summary>끄는 중인 머리글을 놓을 자리: 화면 x 가 가리키는 열 중간선 기준으로 그 열 앞(마지막 열의 오른쪽이면 열 수). 고정 열 안으로는 놓지 못한다.</summary>
+    private int DropIndexAt(double x)
+    {
+        var m = _model!;
+        double left = 0;
+        for (var i = 0; i < m.VisibleColumns.Count; i++)
+        {
+            var w = m.GetColumnWidth(m.VisibleColumns[i]);
+            if (i >= m.FrozenCount && x < RowHeaderWidth + left - _offsetX + w / 2)
+            {
+                return i;
+            }
+
+            left += w;
+        }
+
+        return m.VisibleColumns.Count;
+    }
+
+    /// <summary>열 위치 <paramref name="insertBefore"/> 앞 경계의 화면 x.</summary>
+    private double DropLineX(int insertBefore)
+    {
+        var m = _model!;
+        var x = ColumnLeft(insertBefore);
+        return RowHeaderWidth + (insertBefore < m.FrozenCount ? x : x - _offsetX);
     }
 
     protected override void OnGotFocus(FocusChangedEventArgs e)
@@ -991,6 +1101,20 @@ public sealed class ResultGridControl : Control
         base.OnKeyDown(e);
         if (_model is null || !_model.HasResult)
         {
+            return;
+        }
+
+        if (e.Key == Key.Escape && _model.IsSorting)
+        {
+            _model.CancelSort(); // 정렬하느라 가져오거나 계산하는 중이면 멈춘다(원래 순서 유지)
+            e.Handled = true;
+            return;
+        }
+
+        if (e.Key == Key.Escape && _headerPressCol >= 0)
+        {
+            CancelHeaderPress(); // 끌기를 취소하고, 놓아도 정렬하지 않는다
+            e.Handled = true;
             return;
         }
 
@@ -1087,7 +1211,7 @@ public sealed class ResultGridControl : Control
 
         public required IPen FrozenLine { get; init; }
 
-        public required IPen ActiveBorder { get; init; }
+        public required Pen ActiveBorder { get; init; }
 
         public static Palette Create(Control owner)
         {

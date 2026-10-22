@@ -116,7 +116,7 @@ public static class GridEditBinding
 
     /// <summary>
     /// 화면 셀을 값 하나 단위로 고칠 수 있는지(행 보기 창). 편집 세션의 열 목록이 그리드와 같고(<c>ResolveTarget</c> 과 같은 검사),
-    /// 키가 아닌 편집 가능 열이며, 지울 행이 아닐 때만 true.
+    /// 편집 가능 열(키 열 포함, ROWID 는 제외)이며, 지울 행이 아닐 때만 true. 규칙은 그리드 셀 편집과 같다(TSK-13-20).
     /// </summary>
     public static bool CanEditCell(ResultGridModel model, long viewRow, int ordinal)
     {
@@ -127,7 +127,6 @@ public static class GridEditBinding
         }
 
         return es.IsEditableColumn(ordinal)
-            && !es.Capability.KeyColumnOrdinals.Contains(ordinal)
             && es.GetRowState(ToEditRow(model, es, viewRow)) != GridEditRowState.Deleted;
     }
 

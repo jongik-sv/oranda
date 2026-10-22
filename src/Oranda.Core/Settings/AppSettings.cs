@@ -90,6 +90,13 @@ public sealed record GridSettings
 
     /// <summary>결과 그리드 글자 크기(pt, 8~32). 화면 글자 배율을 곱하지 않는다.</summary>
     public double FontSize { get; init; } = 13;
+
+    /// <summary>
+    /// 머리글 정렬을 이 PC 에서 바로 하는 행 수의 문턱(<see cref="DefaultLocalSortMaxRows"/>). 이 수에 닿으면 「서버에서 ORDER BY 로 다시 조회」 등을 묻는다.
+    /// </summary>
+    public int LocalSortMaxRows { get; init; } = DefaultLocalSortMaxRows;
+
+    public const int DefaultLocalSortMaxRows = 100_000;
 }
 
 public sealed record HistorySettings

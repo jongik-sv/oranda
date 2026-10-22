@@ -22,6 +22,24 @@ public sealed record ExportSource(ISession Session, SqlStatement Query, IReadOnl
 
     /// <summary>저장 대화상자의 기본 파일 이름(확장자 제외).</summary>
     public string? SuggestedFileName { get; init; }
+
+    /// <summary>
+    /// 그리드의 열 정보(TSK-13-17). <see cref="ColumnOrder"/> 와 함께 있으면 서버에서 다시 읽는 내보내기도 그리드의 화면 열 순서를 따른다.
+    /// </summary>
+    public IReadOnlyList<Oranda.Core.Grid.ResultColumn>? Columns { get; init; }
+
+    /// <summary>그리드의 화면 열 순서(열 ordinal 나열). 없으면 질의 순서 그대로 내보낸다.</summary>
+    public IReadOnlyList<int>? ColumnOrder { get; init; }
+
+    /// <summary>
+    /// 서버에서 읽을 질의. 열 순서를 옮겼고 감쌀 수 있으면 원래 문장을 인라인 뷰로 감싸 그 순서로 고른 문장, 아니면 원래 문장이다
+    /// (열 이름이 겹치거나 FOR UPDATE 가 있으면 원래 순서로 저장한다).
+    /// </summary>
+    public SqlStatement QueryInColumnOrder() =>
+        Columns is { } cols && ColumnOrder is { } order
+        && ResultGrid.ResultQueryWrapper.Reorder(Query.Text, cols, order) is { } wrapped
+            ? Query with { Text = wrapped, Range = default }
+            : Query;
 }
 
 /// <summary>
@@ -132,7 +150,13 @@ public sealed class DataTransferCommandHandler : ICommandHandler
             return null;
         }
 
-        return new ExportSource(session, statement, new Dictionary<string, BindValue>());
+        // 포커스 있는 결과 그리드가 있으면 그 화면 열 순서를 따른다(열 이름이 겹치는 결과는 감싸지 못해 원래 순서로 저장).
+        var grid = ResultGrid.ResultGridCommands.Active;
+        return new ExportSource(session, statement, new Dictionary<string, BindValue>())
+        {
+            Columns = grid is { HasResult: true } ? grid.Columns : null,
+            ColumnOrder = grid is { HasResult: true } ? grid.ColumnsInDisplayOrder() : null,
+        };
     }
 }
 

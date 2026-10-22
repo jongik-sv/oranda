@@ -551,7 +551,48 @@ public sealed class LobRowViewTests : IDisposable
     }
 
     [Fact]
-    public async Task Row_viewer_edit_updates_grid_blocks_key_and_syncs_back()
+    public async Task Row_viewer_key_edit_becomes_the_same_change_as_a_grid_edit()
+    {
+        var (vm, grid) = await OpenViewerAsync([[1m, "a"], [2m, "b"]]);
+        using var _v = vm;
+        var meta = new OneTable(new TableInfo(Emp, [new ColumnInfo("ID", 1, "NUMBER") { IsNullable = false }, new ColumnInfo("NAME", 2, "VARCHAR2")])
+        {
+            Constraints = [new ConstraintInfo("PK_EMP", ConstraintKind.PrimaryKey, ["ID"])],
+        });
+        var edit = await GridEditSession.OpenAsync(new RowEditor(new FakeExecution()), meta, Session(false),
+            new SqlStatement("SELECT id, name FROM scott.emp", default, StatementKind.Query) { Verb = "SELECT" }, grid.Columns,
+            GridEditBinding.OriginalValues(grid), () => grid.LoadedRowCount, target: null, default);
+        GridEditBinding.Attach(grid, edit);
+        await Task.Delay(100);
+        vm.Refresh();
+
+        RowViewerViewModel.BeginEdit(vm.Fields[0]);
+        vm.Fields[0].EditText = "99";
+        vm.CommitEdit(vm.Fields[0]);
+
+        var change = Assert.Single(edit.BuildChanges());
+        Assert.Equal(RowChangeKind.Update, change.Kind);
+        Assert.Equal(99m, change.NewValues["ID"]);
+        Assert.Equal(1m, change.Key["ID"]); // WHERE 는 원래 키 값
+    }
+
+    [Fact]
+    public async Task Row_viewer_lists_fields_in_the_grid_column_order_with_positional_numbers()
+    {
+        var (vm, grid) = await OpenViewerAsync([[1m, "a"], [2m, "b"]]);
+        using var _v = vm;
+
+        Assert.True(grid.MoveColumn(1, 0)); // NAME 을 맨 앞으로
+        vm.Refresh();
+
+        Assert.Equal(["NAME", "ID"], vm.Fields.Select(f => f.Name));
+        Assert.Equal([1, 2], vm.Fields.Select(f => f.Number));
+        Assert.Equal([1, 0], vm.Fields.Select(f => f.Ordinal)); // 편집·값 읽기는 원래 열 번호
+        Assert.Equal("a", vm.Fields[0].Text);
+    }
+
+    [Fact]
+    public async Task Row_viewer_edit_updates_grid_allows_key_and_syncs_back()
     {
         var (vm, grid) = await OpenViewerAsync([[1m, "a"], [2m, "b"]]);
         using var _v = vm;
@@ -566,11 +607,12 @@ public sealed class LobRowViewTests : IDisposable
         await Task.Delay(100); // 편집 세션을 붙이며 게시된 알림이 목록을 다시 채우도록 기다린다
         vm.Refresh();
 
-        Assert.False(vm.Fields[0].CanEdit); // 키 열은 막는다
+        Assert.True(vm.Fields[0].CanEdit); // 키 열도 그리드와 같은 규칙으로 고칠 수 있다(TSK-13-20)
         Assert.True(vm.Fields[1].CanEdit);
 
         RowViewerViewModel.BeginEdit(vm.Fields[0]);
-        Assert.False(vm.Fields[0].IsEditing);
+        Assert.True(vm.Fields[0].IsEditing);
+        vm.Fields[0].IsEditing = false;
 
         var field = vm.Fields[1];
         RowViewerViewModel.BeginEdit(field);

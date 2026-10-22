@@ -80,6 +80,7 @@
 | `grid.pageSize` | int | ○ | 500 | 행/페이지 |
 | `grid.memoryLimitMb` | int | ○ | 200 | 페이지 캐시 상한 |
 | `grid.initialLobFetchSize` | int | ○ | 4000 | 문자 |
+| `grid.localSortMaxRows` | int | ○ | 100000 | 머리글 정렬을 이 PC 에서 바로 하는 행 수 문턱. 닿으면 「서버에서 ORDER BY 로 다시 조회」를 묻는다(TSK-13-17) |
 | `history.enabled` | bool | ○ | true | 실행 이력 기록 |
 | `history.saveBindValues` | bool | ○ | **false** | 켜야만 `binds_json` 기록 |
 | `history.maxEntries` | int | ○ | 50000 | 3.4 보존 정책 |

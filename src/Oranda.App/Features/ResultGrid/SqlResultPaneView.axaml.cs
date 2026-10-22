@@ -55,6 +55,7 @@ public partial class SqlResultPaneView : UserControl
         EditHintRerun.Click += async (_, _) => await RunEditHintActionAsync();
         EditHintRowId.Click += async (_, _) => await RunEditHintActionAsync();
         CountCancelButton.Click += (_, _) => Vm?.CancelCountRows();
+        SortCancelButton.Click += (_, _) => Vm?.CancelSort();
         SelectionSummaryText.Tapped += async (_, _) =>
         {
             if (Vm is { } vm)
@@ -272,6 +273,7 @@ public partial class SqlResultPaneView : UserControl
                     await cb.SetTextAsync(text);
                 }
             };
+            m.ConfirmLargeSort = (request, ct) => LargeSortDialog.AskAsync(TopLevel.GetTopLevel(this) as Window, request, ct);
             m.ClipboardReader = async () =>
                 TopLevel.GetTopLevel(this)?.Clipboard is { } cb ? await cb.TryGetTextAsync() : null;
         }
