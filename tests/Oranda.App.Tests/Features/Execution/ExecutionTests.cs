@@ -370,7 +370,7 @@ public sealed class ExecutionTests
     // ---------- 상태·상태 표시줄 ----------
 
     [Fact]
-    public void State_follows_session_transaction_and_statement_events()
+    public Task State_follows_session_transaction_and_statement_events() => Ui.Run(() =>
     {
         var bus = new EventBus();
         var keys = new ContextKeyService();
@@ -419,10 +419,10 @@ public sealed class ExecutionTests
         Assert.False(protect.IsVisible);
         Assert.False(txn.IsVisible);
         Assert.False(keys.Get("txnPending"));
-    }
+    });
 
     [Fact]
-    public void Transaction_text_shows_auto_commit_when_enabled_and_nothing_pending()
+    public Task Transaction_text_shows_auto_commit_when_enabled_and_nothing_pending() => Ui.Run(() =>
     {
         var bus = new EventBus();
         var state = ExecutionState.For(bus);
@@ -434,10 +434,10 @@ public sealed class ExecutionTests
         Assert.Equal("자동 커밋", state.TransactionText);
         bus.Publish(new TransactionStateChanged(fake.Id, true));
         Assert.Equal("미커밋", state.TransactionText);
-    }
+    });
 
     [Fact]
-    public void Running_text_counts_elapsed_and_cancelling_replaces_it()
+    public Task Running_text_counts_elapsed_and_cancelling_replaces_it() => Ui.Run(() =>
     {
         var bus = new EventBus();
         var state = ExecutionState.For(bus);
@@ -455,12 +455,12 @@ public sealed class ExecutionTests
         Assert.False(state.Busy);
         Assert.Equal("01:05", ExecutionState.FormatElapsed(TimeSpan.FromSeconds(65)));
         Assert.Equal("1:01:05", ExecutionState.FormatElapsed(TimeSpan.FromSeconds(3665)));
-    }
+    });
 
     // ---------- DBMS_OUTPUT · 메시지 ----------
 
     [Fact]
-    public void Dbms_output_events_fill_the_output_panel_until_collection_is_turned_off()
+    public Task Dbms_output_events_fill_the_output_panel_until_collection_is_turned_off() => Ui.Run(() =>
     {
         var bus = new EventBus();
         var vm = new OutputViewModel(bus);
@@ -477,7 +477,7 @@ public sealed class ExecutionTests
         state.DbmsOutputEnabled = true;
         vm.ClearCommand.Execute(null);
         Assert.Equal(string.Empty, vm.Text);
-    }
+    });
 
     [Fact]
     public void Output_keeps_only_the_newest_text_beyond_the_limit()

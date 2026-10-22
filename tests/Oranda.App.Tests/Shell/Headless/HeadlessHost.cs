@@ -16,7 +16,13 @@ public static class HeadlessAppBuilder
 /// <summary>한 시험 프로세스에서 Avalonia UI 스레드 하나를 공유한다. 본문은 모두 UI 스레드에서 돈다.</summary>
 public static class HeadlessHost
 {
-    private static readonly Lazy<HeadlessUnitTestSession> Session = new(() => HeadlessUnitTestSession.StartNew(typeof(HeadlessAppBuilder)));
+    // 기본 격리(PerTest)는 Dispatch 마다 Application·Dispatcher 를 새로 만든다. 그 설정 틈에 병렬로 도는 다른 시험이 Dispatcher.UIThread 를
+    // 먼저 건드리면 새 디스패처를 그 스레드가 소유해 VerifyAccess 가 간헐로 실패한다. 앱 하나를 계속 쓰면 설정이 한 번뿐이다.
+    private static readonly Lazy<HeadlessUnitTestSession> Session = new(
+        () => HeadlessUnitTestSession.StartNew(typeof(HeadlessAppBuilder), AvaloniaTestIsolationLevel.PerAssembly));
+
+    /// <summary>세션을 띄우고 첫 Dispatch 까지 기다린다(시험 프레임워크가 시험 전에 한 번 부른다).</summary>
+    internal static void WarmUp() => Session.Value.Dispatch(() => { }, CancellationToken.None).GetAwaiter().GetResult();
 
     public static Task Run(Func<Task> body) =>
         Session.Value.Dispatch(
@@ -94,6 +100,7 @@ public sealed class ShellHarness : IDisposable
     {
         Window.CloseWithoutSaving();
         Dispatcher.UIThread.RunJobs();
+        (Application.Current as Oranda.App.App)?.ReleaseServices(Services);
         Services.Dispose();
         Oranda.App.Features.SqlEditor.SqlEditorHost.Current = _previousHost;
         if (_ownsDirectory)

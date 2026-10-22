@@ -21,6 +21,18 @@ public partial class App : Application
     /// <summary>앱 조립 결과. 시험이 <see cref="Start"/> 로 직접 조립한 값을 넣을 수도 있다.</summary>
     public ServiceContainer? Services { get; private set; }
 
+    /// <summary>
+    /// 시험이 조립한 서비스를 닫기 전에 참조를 거둔다: 앱이 시험 사이에 남는 헤드리스 세션에서 <c>(Application.Current as App)?.Services</c> 가
+    /// 닫힌 컨테이너를 집지 않게 한다. 그 사이 다른 조립으로 바뀌었으면 건드리지 않는다.
+    /// </summary>
+    internal void ReleaseServices(ServiceContainer services)
+    {
+        if (ReferenceEquals(Services, services))
+        {
+            Services = null;
+        }
+    }
+
     /// <summary>macOS 앱 메뉴(Oranda)의 앞쪽 항목. macOS 가 아니면 null.</summary>
     public MacAppMenu? AppMenu { get; private set; }
 

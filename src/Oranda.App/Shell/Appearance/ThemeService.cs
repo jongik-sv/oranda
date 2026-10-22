@@ -100,19 +100,30 @@ public sealed class ThemeService : IDisposable
 
         app.RequestedThemeVariant = highContrast ? HighContrastVariant : ToVariant(s.Ui.Theme);
         var scale = ClampScale(s.Ui.UiScale);
-        app.Resources[UiFontSizeBaseKey] = BaseUiFontSize * scale;
-        app.Resources[UiFontSizeSmallKey] = SmallUiFontSize * scale;
-        app.Resources[TabHeaderFontSizeKey] = (BaseUiFontSize - 0.5) * scale;
+        SetIfChanged(app, UiFontSizeBaseKey, BaseUiFontSize * scale);
+        SetIfChanged(app, UiFontSizeSmallKey, SmallUiFontSize * scale);
+        SetIfChanged(app, TabHeaderFontSizeKey, (BaseUiFontSize - 0.5) * scale);
         var family = string.IsNullOrWhiteSpace(s.Editor.FontFamily)
             ? DefaultEditorFontFamily
             : s.Editor.FontFamily + ", " + DefaultEditorFontFamily;
-        app.Resources[EditorFontFamilyKey] = new FontFamily(family);
-        app.Resources[EditorFontSizeKey] = s.Editor.FontSize;
-        app.Resources[EditorTabSizeKey] = s.Editor.TabSize;
-        app.Resources[GridFontFamilyKey] = new FontFamily(string.IsNullOrWhiteSpace(s.Grid.FontFamily)
+        SetIfChanged(app, EditorFontFamilyKey, new FontFamily(family));
+        SetIfChanged(app, EditorFontSizeKey, s.Editor.FontSize);
+        SetIfChanged(app, EditorTabSizeKey, s.Editor.TabSize);
+        SetIfChanged(app, GridFontFamilyKey, new FontFamily(string.IsNullOrWhiteSpace(s.Grid.FontFamily)
             ? DefaultGridFontFamily
-            : s.Grid.FontFamily + ", " + DefaultGridFontFamily);
-        app.Resources[GridFontSizeKey] = Math.Clamp(s.Grid.FontSize, SettingsService.MinEditorFontSize, SettingsService.MaxEditorFontSize);
+            : s.Grid.FontFamily + ", " + DefaultGridFontFamily));
+        SetIfChanged(app, GridFontSizeKey, Math.Clamp(s.Grid.FontSize, SettingsService.MinEditorFontSize, SettingsService.MaxEditorFontSize));
+    }
+
+    /// <summary>값이 달라졌을 때만 앱 리소스에 넣는다: 같은 값을 다시 넣어도 리소스 변경 통지가 앱 전체로 퍼져 비싸다.</summary>
+    private static void SetIfChanged(Application app, string key, object value)
+    {
+        if (app.Resources.TryGetValue(key, out var current) && Equals(current, value))
+        {
+            return;
+        }
+
+        app.Resources[key] = value;
     }
 
     private static ResourceDictionary BuildHighContrastDictionary()
