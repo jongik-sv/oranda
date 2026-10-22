@@ -15,10 +15,11 @@ namespace Oranda.App.Features.SqlEditor;
 [OrandaCommand("oranda.file.saveAll", CommandCategory.File, Enablement = "hasDocument", Placements = ["menu:file/saveAll@50"])]
 [OrandaCommand("oranda.file.reopenClosed", CommandCategory.File, Placements = ["menu:file/reopenClosed@60"])]
 [OrandaCommand("oranda.file.duplicateTab", CommandCategory.File, Enablement = "sqlDocActive", Placements = ["menu:file/duplicateTab@70"])]
-[OrandaCommand("oranda.file.saveWorkspace", CommandCategory.File, Enablement = "hasDocument", Placements = ["menu:file/saveWorkspace@80"])]
-[OrandaCommand("oranda.file.openWorkspace", CommandCategory.File, Placements = ["menu:file/openWorkspace@90"])]
+[OrandaCommand("oranda.file.saveWorkspace", CommandCategory.File, Enablement = "hasDocument")]
+[OrandaCommand("oranda.file.openWorkspace", CommandCategory.File)]
+[OrandaCommand("oranda.file.openWorkspaceFile", CommandCategory.File, Icon = "workspaceOpen", Placements = ["menu:file/openWorkspaceFile@90"])]
 [OrandaCommand("oranda.file.saveWorkspaceFile", CommandCategory.File, Enablement = "hasDocument", Icon = "workspaceSave", Placements = ["menu:file/saveWorkspaceFile@92"])]
-[OrandaCommand("oranda.file.openWorkspaceFile", CommandCategory.File, Icon = "workspaceOpen", Placements = ["menu:file/openWorkspaceFile@94"])]
+[OrandaCommand("oranda.file.saveWorkspaceFileAs", CommandCategory.File, Enablement = "hasDocument", Placements = ["menu:file/saveWorkspaceFileAs@94"])]
 [OrandaCommand("oranda.file.newWorkspace", CommandCategory.File, Icon = "folderAdd", Placements = ["menu:file/newWorkspace@12", "toolbar:main/newWorkspace@12"])]
 [OrandaCommand("oranda.file.renameWorkspace", CommandCategory.File, Enablement = "sqlWorkspaceActive", Placements = ["menu:file/renameWorkspace@96"])]
 [OrandaCommand("oranda.file.closeWorkspace", CommandCategory.File, Enablement = "sqlWorkspaceActive", Placements = ["menu:file/closeWorkspace@805"])]
@@ -128,6 +129,9 @@ public sealed class SqlEditorCommandHandler : ICommandHandler
                 return;
             case "oranda.file.saveWorkspaceFile":
                 await host.SaveWorkspaceFileAsync(askPath: context.Parameter is true, cancellationToken).ConfigureAwait(true);
+                return;
+            case "oranda.file.saveWorkspaceFileAs":
+                await host.SaveWorkspaceFileAsync(askPath: true, cancellationToken).ConfigureAwait(true);
                 return;
             case "oranda.file.openWorkspaceFile":
                 await OpenWorkspaceFileAsync(host, context.Parameter as string, cancellationToken).ConfigureAwait(true);

@@ -290,11 +290,12 @@
 | `oranda.file.closeAll` | 모든 탭 닫기 | - | 전역 | `hasDocument` | TSK-03-01 |
 | `oranda.file.reopenClosed` | 닫은 탭 다시 열기 | `Ctrl+Shift+T` | 전역 | 항상 | TSK-04-02 |
 | `oranda.file.duplicateTab` | 탭 복사(새 탭에) | - | 전역 | `sqlDocActive` | TSK-04-02 |
-| `oranda.file.saveWorkspace` | 작업 공간 저장 | - | 전역 | `hasDocument` | TSK-04-02 |
-| `oranda.file.openWorkspace` | 작업 공간 열기 | - | 전역 | 항상 | TSK-04-02 |
+| `oranda.file.saveWorkspace` | 작업 공간 저장(저장소) | - | 전역 | `hasDocument` | TSK-04-02 |
+| `oranda.file.openWorkspace` | 작업 공간 열기(저장소) | - | 전역 | 항상 | TSK-04-02 |
 | `oranda.file.renameTab` | 탭 이름 바꾸기 | - | 전역 | `sqlDocActive` | TSK-04-02 |
-| `oranda.file.saveWorkspaceFile` | 작업 공간 파일로 저장 | - | 전역 | `hasDocument` | TSK-04-02 |
-| `oranda.file.openWorkspaceFile` | 작업 공간 파일 열기(Markdown·MyBatis) | - | 전역 | 항상 | TSK-04-02 |
+| `oranda.file.saveWorkspaceFile` | 작업 공간 저장(묶인 파일에 바로 씀, 없으면 다른 이름으로 저장) | - | 전역 | `hasDocument` | TSK-04-02 |
+| `oranda.file.saveWorkspaceFileAs` | 작업 공간 다른 이름으로 저장… | - | 전역 | `hasDocument` | TSK-13-19 |
+| `oranda.file.openWorkspaceFile` | 작업 공간 열기…(Markdown·MyBatis) | - | 전역 | 항상 | TSK-04-02 |
 | `oranda.file.newWorkspace` | 새 작업 공간 | - | 전역 | 항상 | TSK-04-02 |
 | `oranda.file.renameWorkspace` | 작업 공간 이름 바꾸기 | - | 전역 | `sqlWorkspaceActive` | TSK-04-02 |
 | `oranda.file.closeWorkspace` | 작업 공간 닫기 | - | 전역 | `sqlWorkspaceActive` | TSK-04-02 |
