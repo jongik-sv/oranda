@@ -31,6 +31,17 @@ public sealed class DetailTable : UserControl
     public static readonly StyledProperty<IReadOnlyList<IReadOnlyList<object?>>?> RowsProperty =
         AvaloniaProperty.Register<DetailTable, IReadOnlyList<IReadOnlyList<object?>>?>(nameof(Rows));
 
+    /// <summary>행 머리 칸에 행 번호를 쓸지(기본 true). 표에 자체 「#」 칸이 있으면 끈다(▶ 표시는 그대로).</summary>
+    public static readonly StyledProperty<bool> RowNumbersProperty =
+        AvaloniaProperty.Register<DetailTable, bool>(nameof(RowNumbers), true);
+
+    /// <summary>
+    /// true 면 <see cref="Rows"/> 가 같은 줄 수로 바뀔 때(칸 값만 고친 경우) 고른 행·현재 행을 같은 자리에 남긴다(기본 false = 지운다).
+    /// 객체 상세가 인덱스 열을 읽은 뒤 위 표의 「열」 칸을 식으로 바꿀 때 쓴다.
+    /// </summary>
+    public static readonly StyledProperty<bool> KeepSelectionOnSameShapeProperty =
+        AvaloniaProperty.Register<DetailTable, bool>(nameof(KeepSelectionOnSameShape));
+
     /// <summary>한 번에 그릴 최대 행(그 뒤는 상태 줄에 「…」). 거르기로 좁혀 보게 한다.</summary>
     public const int MaxRows = 2000;
 
@@ -88,8 +99,29 @@ public sealed class DetailTable : UserControl
         set => SetValue(RowsProperty, value);
     }
 
+    public bool RowNumbers
+    {
+        get => GetValue(RowNumbersProperty);
+        set => SetValue(RowNumbersProperty, value);
+    }
+
+    public bool KeepSelectionOnSameShape
+    {
+        get => GetValue(KeepSelectionOnSameShapeProperty);
+        set => SetValue(KeepSelectionOnSameShapeProperty, value);
+    }
+
     /// <summary>행을 눌렀다. 값은 그 행의 칸들.</summary>
     public event EventHandler<IReadOnlyList<object?>>? RowActivated;
+
+    /// <summary>현재 행(▶)이 바뀌었다 — 누르거나 키보드로 옮겨 갔을 때. 값은 그 행의 칸들.</summary>
+    public event EventHandler<IReadOnlyList<object?>>? CurrentRowChanged;
+
+    /// <summary>현재 행(▶). 없으면 null.</summary>
+    internal IReadOnlyList<object?>? CurrentRow => _current;
+
+    /// <summary>현재 행의 표 안 번호(0부터). 없으면 -1.</summary>
+    internal int CurrentRowIndex => _current is null ? -1 : _items.FindIndex(i => ReferenceEquals(i.Tag, _current));
 
     /// <summary>고른 행(표 순서).</summary>
     internal IReadOnlyList<IReadOnlyList<object?>> SelectedRows
@@ -146,9 +178,32 @@ public sealed class DetailTable : UserControl
     protected override void OnPropertyChanged(AvaloniaPropertyChangedEventArgs change)
     {
         base.OnPropertyChanged(change);
-        if (change.Property == ColumnsProperty || change.Property == RowsProperty)
+        if (change.Property == ColumnsProperty || change.Property == RowNumbersProperty)
         {
             Build();
+        }
+        else if (change.Property == RowsProperty)
+        {
+            var keep = KeepSelectionOnSameShape && change.OldValue is IReadOnlyList<IReadOnlyList<object?>> old && change.NewValue is IReadOnlyList<IReadOnlyList<object?>> now && old.Count == now.Count;
+            var picked = keep ? _items.Select((item, i) => (item, i)).Where(x => x.item.IsSelected).Select(x => x.i).ToList() : [];
+            var current = keep ? CurrentRowIndex : -1;
+            var hadFocus = keep && _list.IsKeyboardFocusWithin;
+            Build();
+            foreach (var i in picked.Where(i => i < _items.Count))
+            {
+                _list.SelectedItems?.Add(_items[i]);
+            }
+
+            if (current >= 0 && current < _items.Count)
+            {
+                SetCurrent((IReadOnlyList<object?>)_items[current].Tag!, raise: false);
+                if (hadFocus)
+                {
+                    // 키보드로 이어서 옮겨 다닐 수 있게 새 줄에 포커스를 돌려준다(줄이 화면에 붙은 뒤).
+                    var item = _items[current];
+                    Avalonia.Threading.Dispatcher.UIThread.Post(() => item.Focus(), Avalonia.Threading.DispatcherPriority.Loaded);
+                }
+            }
         }
     }
 
@@ -193,7 +248,7 @@ public sealed class DetailTable : UserControl
             var head = new DockPanel
             {
                 MinWidth = 28,
-                Children = { marker, new TextBlock { Text = (r + 1).ToString(CultureInfo.InvariantCulture), Classes = { "num", "dim" }, FontSize = 12, VerticalAlignment = VerticalAlignment.Center } },
+                Children = { marker, new TextBlock { Text = RowNumbers ? (r + 1).ToString(CultureInfo.InvariantCulture) : string.Empty, Classes = { "num", "dim" }, FontSize = 12, VerticalAlignment = VerticalAlignment.Center } },
             };
             var cells = new List<Control> { head };
             for (var c = 0; c < columns.Count; c++)
@@ -244,7 +299,7 @@ public sealed class DetailTable : UserControl
 
         if ((e.Source as Visual)?.FindAncestorOfType<ListBoxItem>(includeSelf: true)?.Tag is IReadOnlyList<object?> row)
         {
-            SetCurrent(row);
+            SetCurrent(row, raise: true);
             RowActivated?.Invoke(this, row);
         }
     }
@@ -254,12 +309,13 @@ public sealed class DetailTable : UserControl
     {
         if ((TopLevel.GetTopLevel(this)?.FocusManager?.GetFocusedElement() as Visual)?.FindAncestorOfType<ListBoxItem>(includeSelf: true)?.Tag is IReadOnlyList<object?> row)
         {
-            SetCurrent(row);
+            SetCurrent(row, raise: true);
         }
     }
 
-    private void SetCurrent(IReadOnlyList<object?> row)
+    private void SetCurrent(IReadOnlyList<object?> row, bool raise)
     {
+        var changed = !ReferenceEquals(_current, row);
         if (_current is { } old && _markers.TryGetValue(old, out var before))
         {
             before.Text = string.Empty;
@@ -269,6 +325,11 @@ public sealed class DetailTable : UserControl
         if (_markers.TryGetValue(row, out var now))
         {
             now.Text = "▶";
+        }
+
+        if (raise && changed)
+        {
+            CurrentRowChanged?.Invoke(this, row);
         }
     }
 

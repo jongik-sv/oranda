@@ -15,29 +15,78 @@ using Oranda.Core.Shell;
 
 namespace Oranda.App.Features.ObjectDetail;
 
-/// <summary>상세 탭 하나(열·제약·인덱스 …). 표를 글자 맞춤 텍스트로 만들어 보여 준다(읽기 전용·복사 가능).</summary>
-public sealed class ObjectDetailSection
+/// <summary>구역 줄을 고르면 열을 따로 읽는 키 종류(TSK-13-34).</summary>
+public enum DetailKeyKind
 {
+    None,
+    Index,
+    Constraint,
+}
+
+/// <summary>상세 탭 하나(열·제약·인덱스 …). 화면은 격자 표(<see cref="Oranda.App.Shell.Controls.DetailTable"/>), <see cref="Text"/> 는 글자 맞춤 텍스트(복사·DB 정보용).</summary>
+public sealed class ObjectDetailSection : ObservableObject
+{
+    private IReadOnlyList<IReadOnlyList<object?>> _rows;
+
     public ObjectDetailSection(DetailSection source)
     {
         ArgumentNullException.ThrowIfNull(source);
         Title = source.Title;
         Columns = source.Columns;
-        Rows = source.Rows;
-        Text = Format(source);
+        _rows = source.Rows;
+        KeyKind = source.Title switch
+        {
+            "인덱스" => DetailKeyKind.Index,
+            "제약" => DetailKeyKind.Constraint,
+            _ => DetailKeyKind.None,
+        };
     }
 
     public string Title { get; }
+
+    /// <summary>인덱스·제약 구역이면 그 종류(줄의 첫 칸 = 키 이름).</summary>
+    public DetailKeyKind KeyKind { get; }
+
+    /// <summary>표에 자체 「#」 칸(열 위치 등)이 첫 칸으로 있다 — 표의 행 머리에 번호를 겹쳐 쓰지 않는다.</summary>
+    public bool HasNumberColumn => Columns.Count > 0 && Columns[0] == "#";
 
     /// <summary>「데이터」 탭(표 대신 데이터 그리드를 보인다, <see cref="ObjectDataViewModel"/>).</summary>
     public bool IsData { get; private init; }
 
     public IReadOnlyList<string> Columns { get; }
 
-    public IReadOnlyList<IReadOnlyList<object?>> Rows { get; }
+    public IReadOnlyList<IReadOnlyList<object?>> Rows
+    {
+        get => _rows;
+        private set
+        {
+            if (SetProperty(ref _rows, value))
+            {
+                OnPropertyChanged(nameof(Text));
+            }
+        }
+    }
 
     /// <summary>열 너비를 맞춘 표 텍스트(첫 줄 = 머리).</summary>
-    public string Text { get; }
+    public string Text => Format(new DetailSection(Title, Columns, Rows));
+
+    /// <summary>첫 칸이 <paramref name="key"/> 인 줄의 <paramref name="column"/> 칸을 바꾼다(인덱스 열을 읽은 뒤 식·DESC 로 바꿔 보일 때). 바뀌면 true.</summary>
+    internal bool ReplaceCell(string key, string column, object? value)
+    {
+        var c = Columns.ToList().IndexOf(column);
+        var r = Rows.ToList().FindIndex(row => row.Count > 0 && string.Equals(row[0] as string, key, StringComparison.Ordinal));
+        if (c < 0 || r < 0 || c >= Rows[r].Count || Equals(Rows[r][c], value))
+        {
+            return false;
+        }
+
+        var rows = Rows.ToList();
+        var row = rows[r].ToArray();
+        row[c] = value;
+        rows[r] = row;
+        Rows = rows;
+        return true;
+    }
 
     /// <summary>「데이터」 탭 항목(표 내용 없음).</summary>
     internal static ObjectDetailSection CreateData() =>
@@ -93,7 +142,12 @@ public sealed class ObjectDetailSection
 public sealed partial class ObjectDetailViewModel : ToolPanelViewModelBase
 {
     private readonly IServiceProvider? _services;
+    private readonly Dictionary<(DetailKeyKind Kind, string Name), (ObjectDetailSection Table, string Status)> _keyCache = [];
     private IMetadataProvider? _meta;
+    private ITableKeyDetailProvider? _keys;
+    private bool _keysResolved;
+    private CancellationTokenSource? _keyCts;
+    private int _keySerial;
     private ISession? _session;
     private ObjectDataViewModel? _data;
     private int _generation;
@@ -111,6 +165,15 @@ public sealed partial class ObjectDetailViewModel : ToolPanelViewModelBase
 
     /// <summary>시험용: 제공자를 직접 넣는다.</summary>
     internal ObjectDetailViewModel(IMetadataProvider meta) => _meta = meta;
+
+    /// <summary>시험용: 제공자 둘을 직접 넣는다(<paramref name="keys"/> 가 null 이면 인덱스·제약 열 표가 없다).</summary>
+    internal ObjectDetailViewModel(IMetadataProvider meta, ITableKeyDetailProvider? keys)
+    {
+        KeyReadDelay = TimeSpan.Zero;
+        _meta = meta;
+        _keys = keys;
+        _keysResolved = true;
+    }
 
     public DbObjectRef? Target { get; private set; }
 
@@ -146,6 +209,21 @@ public sealed partial class ObjectDetailViewModel : ToolPanelViewModelBase
 
     [ObservableProperty]
     private ObjectDetailSection? _selectedSection;
+
+    /// <summary>true 면 인덱스·제약 구역이 선택돼 있고 열을 읽을 제공자가 있다(아래에 열 표가 보인다).</summary>
+    [ObservableProperty]
+    private bool _hasKeyColumns;
+
+    /// <summary>고른 인덱스·제약의 열 표(인덱스: #·열/식·정렬, 제약: #·열·참조 표·참조 열). 줄을 고르기 전·읽는 중에는 null.</summary>
+    [ObservableProperty]
+    private ObjectDetailSection? _keyColumns;
+
+    /// <summary>줄을 고른 뒤 열을 읽기 전 기다리는 시간(빠른 방향키 이동 때 줄마다 묻지 않게). 시험 생성자는 0.</summary>
+    internal TimeSpan KeyReadDelay { get; set; } = TimeSpan.FromMilliseconds(150);
+
+    /// <summary>열 표 위 한 줄(무엇의 열인지·읽는 중·권한 없음·오류).</summary>
+    [ObservableProperty]
+    private string _keyStatus = string.Empty;
 
     /// <summary>true 면 「데이터」 탭이 선택돼 있다(오른쪽에 표 대신 데이터 그리드).</summary>
     [ObservableProperty]
@@ -205,6 +283,7 @@ public sealed partial class ObjectDetailViewModel : ToolPanelViewModelBase
     {
         CanReorderColumns = value is { Title: "열" } && Target is { ObjectType: "TABLE" };
         IsDataSelected = value is { IsData: true };
+        ResetKeyColumns(value);
         if (IsDataSelected)
         {
             _ = Data.EnsureLoadedAsync(); // 처음 고를 때만 읽는다(실패는 데이터 탭 안내에)
@@ -234,6 +313,8 @@ public sealed partial class ObjectDetailViewModel : ToolPanelViewModelBase
         DdlText = string.Empty;
         DdlError = null;
         Data.Reset(session, target);
+        _keyCache.Clear();
+        ResetKeyColumns(null);
         var gen = Interlocked.Increment(ref _generation);
 
         var meta = ResolveMeta();
@@ -354,6 +435,145 @@ public sealed partial class ObjectDetailViewModel : ToolPanelViewModelBase
             {
                 DdlText = string.Empty;
                 DdlError = "DDL 을 읽지 못했다: " + ex.Message;
+            }
+        }
+    }
+
+    private static bool En => Oranda.App.Features.Localization.LiteralTranslator.Language == "en";
+
+    private ITableKeyDetailProvider? ResolveKeys()
+    {
+        if (!_keysResolved)
+        {
+            _keys = _services?.GetService(typeof(ITableKeyDetailProvider)) as ITableKeyDetailProvider;
+            _keysResolved = true;
+        }
+
+        return _keys;
+    }
+
+    private void ResetKeyColumns(ObjectDetailSection? section)
+    {
+        _keyCts?.Cancel();
+        _keyCts = null;
+        _keySerial++;
+        KeyColumns = null;
+        HasKeyColumns = section is { KeyKind: not DetailKeyKind.None } && ResolveKeys() is not null;
+        KeyStatus = !HasKeyColumns ? string.Empty
+            : section!.KeyKind == DetailKeyKind.Index
+                ? (En ? "Select an index to see its columns" : "인덱스를 고르면 그 열이 보인다")
+                : (En ? "Select a constraint to see its columns" : "제약을 고르면 그 열이 보인다");
+    }
+
+    /// <summary>
+    /// 인덱스·제약 구역에서 현재 줄이 바뀌었다(표의 ▶). 그 키의 열을 읽어 <see cref="KeyColumns"/> 에 둔다.
+    /// 고를 때마다 앞의 읽기를 취소하고, 같은 (종류, 이름)은 다시 읽지 않는다. 함수 기반·내림차순 인덱스는 위 표의 「열」 칸도 식으로 바꾼다.
+    /// </summary>
+    public async Task SelectKeyRowAsync(IReadOnlyList<object?>? row)
+    {
+        if (SelectedSection is not { KeyKind: not DetailKeyKind.None } section || ResolveKeys() is not { } keys
+            || _session is not { } session || Target is not { } target)
+        {
+            return;
+        }
+
+        if (row is not null && !section.Rows.Any(r => ReferenceEquals(r, row)))
+        {
+            return; // 다른 구역의 줄(구역을 바꾸는 사이에 늦게 온 알림)
+        }
+
+        if (row is not { Count: > 0 } || row[0] is not string { Length: > 0 } name)
+        {
+            ResetKeyColumns(section);
+            return;
+        }
+
+        _keyCts?.Cancel();
+        var serial = ++_keySerial;
+        var gen = _generation;
+        if (_keyCache.TryGetValue((section.KeyKind, name), out var hit))
+        {
+            _keyCts = null;
+            KeyColumns = hit.Table;
+            KeyStatus = hit.Status;
+            return;
+        }
+
+        using var cts = new CancellationTokenSource();
+        _keyCts = cts;
+        KeyColumns = null;
+        KeyStatus = En ? $"Reading columns of {name}…" : $"{name} 의 열을 읽는 중…";
+        try
+        {
+            if (KeyReadDelay > TimeSpan.Zero)
+            {
+                await Task.Delay(KeyReadDelay, cts.Token); // 방향키로 빠르게 지나가는 줄마다 서버에 묻지 않는다
+            }
+
+            ObjectDetailSection table;
+            bool denied;
+            if (section.KeyKind == DetailKeyKind.Index)
+            {
+                var result = await keys.GetIndexColumnsAsync(session, target, name, cts.Token);
+                cts.Token.ThrowIfCancellationRequested();
+                denied = result.Denied;
+                table = new ObjectDetailSection(new DetailSection(
+                    "인덱스 열",
+                    ["#", "열/식", "정렬"],
+                    [.. result.Items.Select(c => (IReadOnlyList<object?>)[c.Position, c.Expression ?? c.Column, c.Descending ? "DESC" : "ASC"])]));
+                if (serial == _keySerial && gen == _generation && result.Items.Count > 0)
+                {
+                    // 위 표의 「열」 칸은 숨은 열 이름(SYS_NC…$)이 보이므로 같은 결과로 식·DESC 를 채운다.
+                    section.ReplaceCell(name, "열", string.Join(", ", result.Items.Select(c => (c.Expression ?? c.Column) + (c.Descending ? " DESC" : string.Empty))));
+                }
+            }
+            else
+            {
+                var result = await keys.GetConstraintColumnsAsync(session, target, name, cts.Token);
+                cts.Token.ThrowIfCancellationRequested();
+                denied = result.Denied;
+                table = new ObjectDetailSection(new DetailSection(
+                    "제약 열",
+                    ["#", "열", "참조 표", "참조 열"],
+                    [.. result.Items.Select(c => (IReadOnlyList<object?>)
+                    [
+                        c.Position, c.Column,
+                        c.ReferencedTable is { } t ? (c.ReferencedOwner is { } o ? $"{o}.{t}" : t) : null,
+                        c.ReferencedColumn,
+                    ])]));
+            }
+
+            if (serial != _keySerial || gen != _generation)
+            {
+                return; // 그새 다른 줄·다른 객체를 골랐다
+            }
+
+            var status = denied
+                ? (En ? $"No privilege to read the columns of {name}" : $"권한이 없어 {name} 의 열을 읽지 못했다")
+                : (En ? $"{name} · {table.Rows.Count} columns" : $"{name} · 열 {table.Rows.Count}개");
+            if (!denied)
+            {
+                _keyCache[(section.KeyKind, name)] = (table, status); // 권한 없음은 권한을 받은 뒤 다시 고르면 다시 읽는다
+            }
+
+            KeyColumns = table;
+            KeyStatus = status;
+        }
+        catch (OperationCanceledException)
+        {
+        }
+        catch (Exception ex)
+        {
+            if (serial == _keySerial && gen == _generation)
+            {
+                KeyStatus = (En ? "Could not read the columns: " : "열을 읽지 못했다: ") + ex.Message;
+            }
+        }
+        finally
+        {
+            if (ReferenceEquals(_keyCts, cts))
+            {
+                _keyCts = null;
             }
         }
     }

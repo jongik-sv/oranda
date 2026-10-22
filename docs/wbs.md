@@ -4254,6 +4254,42 @@ dotnet, testhost, Oranda.App
 - data-model: -
 - ui-spec: -
 
+### TSK-13-34: 객체(테이블) 상세: 표를 C안 격자로, 행 선택, 인덱스·제약 고르면 그 열, SQL 창 종속 패널 숨기기 [win144]
+- category: feat
+- domain: frontend
+- model: opus
+- status: [xx]
+- priority: medium
+- assignee: -
+- schedule: 2026-10-22 ~ 2026-10-23
+- tags: object-detail, grid-c, docking, win144
+- depends: TSK-13-35
+- blocked-by: -
+- entry-point: 스키마 브라우저 표 두 번 누르기·「상세 열기」 → 객체 상세 문서의 구역(열·제약·인덱스 …) 표
+- note: 담당 PC: win144. 2026-10-22 실제 앱 사용 중 사용자 요청(「테이블 상세 표 모양이 맘에 안 든다. 행으로 선택도 안 되고 인덱스를 선택해도 어떠한 컬럼 값도 보여 주지 않는다. 조회 결과는 SQL 창에 종속된 것이라 테이블 설명에 조회 결과·메시지 등이 오면 안 된다」「표 모양은 모두 C안 타입」). 크기 M. 결과: SQL 창 종속 도구 창 7종을 활성 문서가 SQL·PL/SQL 편집기가 아니면 잠시 숨김(배치 재구성 없음·자리·크기·순서 복원·layout.json 에 숨김 없음), 객체 상세 표를 공유 DetailTable(C안)로 바꾸고 RowNumbers·KeepSelectionOnSameShape·CurrentRowChanged 추가, 인덱스·제약 줄을 고르면 ITableKeyDetailProvider(meta.index_columns·constraint_columns, 11.2 호환)로 열·식·DESC·FK 참조 열 표시. App 1903·Oracle 282 통과, 26ai 통합 시험 통과
+
+#### PRD 요구사항
+- prd-ref: PRD SCH-04, PRD UI
+- requirements:
+  - 객체 상세의 구역 표와 열 표가 C안 격자(공유 DetailTable: 행 머리·▶·격자선·상태 줄)로 보인다. 자체 「#」 칸이 있는 표는 행 머리에 번호를 겹쳐 쓰지 않는다
+  - 행 단위로 고른다(클릭·Shift·Ctrl/⌘·전체). Ctrl+C = 고른 행 TSV, 오른쪽 클릭 「머리글 포함 복사」
+  - 인덱스 줄을 고르면 아래 표에 그 인덱스의 열(#·열 이름 또는 함수 식·ASC/DESC), 제약 줄을 고르면 그 제약의 열(#·열·참조 표·참조 열)이 보인다. 고를 때만 서버에서 읽고(상세를 열 때 왕복 증가 없음), 내림차순·함수 기반 인덱스는 위 표 「열」 칸의 숨은 이름(SYS_NC…$)을 식·DESC 로 바꾼다
+  - 활성 문서가 SQL·PL/SQL 편집기가 아니면 SQL 창 종속 도구 창(결과·메시지·출력·계획·컴파일 오류·바인드·행 보기)을 숨기고, SQL 편집기로 돌아오면 같은 자리·크기로 다시 보인다. 실행 이력·변경 일지·템플릿·개요·스키마 브라우저 등은 그대로. 사용자가 닫은 창은 다시 열지 않고, 숨김은 배치 파일(layout.json)에 저장하지 않는다
+- acceptance:
+  - 테이블 상세에서 인덱스·제약 줄을 누르면 그 열이 아래 표에 보인다(DESC·함수 식·FK 참조 열 포함)
+  - 상세 탭으로 가면 결과·메시지 창이 사라지고 SQL 탭으로 돌아오면 같은 크기로 돌아온다(4회 왕복), 숨긴 동안 저장한 배치를 다시 열어도 창이 그대로 있다
+- constraints:
+  - 서버에 보조 객체를 설치하지 않는다. 새 카탈로그 SQL 은 11.2 호환(min-version 11)
+  - IMetadataProvider·DetailSection 은 바꾸지 않는다(새 Core 인터페이스 ITableKeyDetailProvider)
+- test-criteria:
+  - 패널 숨김(문서 전환 4회 왕복·크기·닫은 창·저장 뒤 복원·활성 문서 없음·ShowTool/ActivateTool), 인덱스 열·식·DESC·한글 이름, 제약 열·FK 참조, 취소·늦은 결과·캐시·권한 없음·오류·제공자 없음, 행 선택·복사·행 번호 끄기·선택 유지, 실제 26ai 사전 조회
+
+#### 기술 스펙 (TRD)
+- tech-spec: -
+- api-spec: -
+- data-model: -
+- ui-spec: -
+
 ### TSK-13-35: DB 정보 창·스키마 브라우저 속성 창의 표를 C안 격자로 [win144]
 - category: feat
 - domain: frontend

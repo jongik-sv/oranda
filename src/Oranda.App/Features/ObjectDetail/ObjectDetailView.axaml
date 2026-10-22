@@ -28,8 +28,18 @@
                 <Button x:Name="ReorderColumnsButton" Classes="tool" Content="열 순서 바꾸기…" AutomationProperties.Name="열 순서 바꾸기" />
               </Border>
             <Panel>
-              <ctl:DetailTable x:Name="SectionTable" Columns="{Binding SelectedSection.Columns}" Rows="{Binding SelectedSection.Rows}"
-                               IsVisible="{Binding !IsDataSelected}" />
+              <!-- 구역 표(C안 격자, 행 선택·복사). 인덱스·제약 구역이면 아래에 고른 줄의 열 표(TSK-13-34). -->
+              <Grid x:Name="SectionGrid" RowDefinitions="*,Auto,0" IsVisible="{Binding !IsDataSelected}">
+                <ctl:DetailTable x:Name="SectionTable" Columns="{Binding SelectedSection.Columns}" Rows="{Binding SelectedSection.Rows}"
+                                 RowNumbers="{Binding !SelectedSection.HasNumberColumn}" KeepSelectionOnSameShape="True" />
+                <GridSplitter Grid.Row="1" Height="4" ResizeDirection="Rows" IsVisible="{Binding HasKeyColumns}" Background="{DynamicResource OrandaSeparatorBrush}" />
+                <DockPanel Grid.Row="2" IsVisible="{Binding HasKeyColumns}">
+                  <Border DockPanel.Dock="Top" Classes="panel-toolbar">
+                    <TextBlock x:Name="KeyStatusText" Text="{Binding KeyStatus}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" Margin="4,0" />
+                  </Border>
+                  <ctl:DetailTable x:Name="KeyTable" Columns="{Binding KeyColumns.Columns}" Rows="{Binding KeyColumns.Rows}" RowNumbers="False" />
+                </DockPanel>
+              </Grid>
               <!-- 「데이터」 탭(표·뷰): 처음 고를 때 읽는다. 결과 영역은 편집기 결과와 같다(거르기·행 수·편집). -->
               <Panel IsVisible="{Binding IsDataSelected}">
                 <vm:ObjectDataView x:Name="DataView" DataContext="{Binding Data}" />

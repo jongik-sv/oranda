@@ -19,7 +19,7 @@ namespace Oranda.App.Shell.Docking;
 /// <c>Dock.*</c> 형식은 이 폴더 밖으로 새지 않는다(ui-shell.md 3장 조건 2). 배치 규칙은 <see cref="LayoutPlanner"/> 가 정한다.
 /// 도구 창 보이기·숨기기는 「DTO 로 읽기 → 계획 바꾸기 → 다시 짓기」 한 길로만 한다(결정 가능하고 시험하기 쉽다).
 /// </summary>
-public sealed class DockWorkspace
+public sealed partial class DockWorkspace
 {
     /// <summary>문서 영역 도킹 ID.</summary>
     public const string DocumentsId = "oranda.documents";
@@ -44,6 +44,7 @@ public sealed class DockWorkspace
             DefaultHostWindowLocator = () => new FloatHostWindow(),
         };
         Factory.ActiveDockableChanged += (_, _) => ActiveDocumentChanged?.Invoke(this, EventArgs.Empty);
+        ActiveDocumentChanged += (_, _) => ScheduleScopedUpdate(); // SQL 창 도구 창 숨기기(.ScopedTools.cs)
         Factory.DockableClosing += OnDockableClosing;
         Factory.DockableClosed += (_, e) =>
         {
@@ -178,7 +179,7 @@ public sealed class DockWorkspace
 
     /// <summary>보이는 도구 창 ID(트리에 있는 것).</summary>
     public IReadOnlyList<string> VisibleToolIds =>
-        Layout is null ? [] : LayoutPlanner.ToolIds(CaptureRoot());
+        Layout is null ? [] : LayoutPlanner.ToolIds(CaptureRoot()).Where(id => !IsScopedHidden(id)).ToList();
 
     /// <summary>만들어진 도구 창 ViewModel 이 있는 ID(지연 생성 확인용).</summary>
     public IReadOnlyCollection<string> CreatedToolIds => _tools.Where(t => t.Value.IsPanelCreated).Select(t => t.Key).ToList();
@@ -189,16 +190,28 @@ public sealed class DockWorkspace
     /// <summary>저장된 배치를 현재 등록 목록에 맞춰 도킹 모델로 짓는다. 열려 있던 문서는 새 문서 영역으로 옮긴다.</summary>
     public void Apply(LayoutDocument layout)
     {
+        var rehide = BeginScopedApply(); // 짓는 동안 생기는 활성 변경은 숨기기 판단에 쓰지 않는다(.ScopedTools.cs)
+        try
+        {
+            ApplyCore(layout);
+        }
+        finally
+        {
+            EndScopedApply(rehide);
+        }
+    }
+
+    private void ApplyCore(LayoutDocument layout)
+    {
         var planned = LayoutPlanner.Reconcile(layout, _registry.Panels);
         _migrations = planned.Migrations;
         var keepDocuments = Layout is null ? [] : Documents.Concat(FloatingDocuments()).ToList(); // 떠 있던 문서도 메인 문서 영역으로 들인다
+        var active = ActiveDocument; // 옛 영역에서 문서를 빼기 전에 읽는다(뺀 뒤에는 탭 줄이 남은 탭을 활성으로 써 넣어 다른 문서가 된다)
         foreach (var doc in keepDocuments.Where(d => d.Owner is IDock { VisibleDockables: { } own } && own.Contains(d)))
         {
             // 옛 창이 닫힐 때 그 안의 문서까지 정리되지 않도록 옛 문서 영역에서 먼저 뺀다.
             ((IDock)doc.Owner!).VisibleDockables!.Remove(doc);
         }
-
-        var active = ActiveDocument;
 
         var rootNode = planned.Root!;
         var dockRoot = Factory.CreateRootDock();
@@ -233,7 +246,7 @@ public sealed class DockWorkspace
         var root = CaptureRoot();
         var inTree = LayoutPlanner.ToolIds(root).ToHashSet(StringComparer.Ordinal);
         var hidden = _registry.Panels
-            .Where(p => p.Kind == ToolPanelKind.Tool && !inTree.Contains(p.Id))
+            .Where(p => p.Kind == ToolPanelKind.Tool && !inTree.Contains(p.Id) && !IsScopedHidden(p.Id)) // 잠시 숨긴 창은 닫힌 창이 아니다
             .Select(p => p.Id)
             .ToList();
         return new LayoutDocument { Window = window, Root = root, HiddenTools = hidden, Migrations = _migrations };
@@ -250,12 +263,26 @@ public sealed class DockWorkspace
         }
 
         var current = LayoutPlanner.Reconcile(Capture(), _registry.Panels);
-        Apply(LayoutPlanner.ShowTool(current, def));
+        _showingTool = toolId;
+        try
+        {
+            Apply(LayoutPlanner.ShowTool(current, def));
+        }
+        finally
+        {
+            _showingTool = null;
+        }
+
         return true;
     }
 
     public bool HideTool(string toolId)
     {
+        if (ForgetScopedTool(toolId))
+        {
+            return true; // 잠시 숨긴 창을 「닫기」: 정말 닫힌 것으로 저장된다(나머지는 숨긴 채)
+        }
+
         if (!IsToolVisible(toolId))
         {
             return false;
@@ -274,6 +301,11 @@ public sealed class DockWorkspace
     /// </summary>
     public bool ActivateTool(string toolId)
     {
+        if (IsScopedHidden(toolId))
+        {
+            RestoreScopedTool(toolId); // 기능이 직접 부르면(컴파일 오류 등) 활성 문서와 상관없이 그 창만 보인다
+        }
+
         if (_tools.TryGetValue(toolId, out var tool) && tool.Owner is IDock owner && IsToolVisible(toolId))
         {
             if (!ReferenceEquals(owner.ActiveDockable, tool))
@@ -596,7 +628,7 @@ public sealed class DockWorkspace
 
     private DockNode? CaptureNode(IDockable dockable)
     {
-        double? Proportion() => double.IsNaN(dockable.Proportion) ? null : Math.Round(dockable.Proportion, 4);
+        double? Proportion() => ScopedProportion(dockable) is var p && double.IsNaN(p) ? null : Math.Round(p, 4);
 
         switch (dockable)
         {
@@ -623,7 +655,7 @@ public sealed class DockWorkspace
 
             case IToolDock group:
                 {
-                    var ids = (group.VisibleDockables ?? []).OfType<PanelTool>().Select(t => t.Id).ToList();
+                    var (ids, active) = ScopedToolIds(group); // 잠시 숨긴 창도 원래 자리에 적는다
                     if (ids.Count == 0)
                     {
                         return null;
@@ -634,7 +666,7 @@ public sealed class DockWorkspace
                         Kind = DockNodeKind.ToolGroup,
                         Proportion = Proportion(),
                         Tools = ids,
-                        ActiveTool = (group.ActiveDockable as PanelTool)?.Id ?? ids[0],
+                        ActiveTool = active ?? ids[0],
                     };
                 }
 

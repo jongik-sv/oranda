@@ -21,6 +21,8 @@ public partial class ObjectDetailView : UserControl, Oranda.App.Shell.Docking.IF
             }
         };
         ReorderColumnsButton.Click += async (_, _) => await OpenReorderDialogAsync();
+        // 누른 줄의 선택이 끝난 뒤에 읽는다(읽은 결과가 위 표 칸을 고쳐 목록을 다시 지으면 진행 중인 클릭 선택이 사라진다).
+        SectionTable.CurrentRowChanged += (_, row) => Avalonia.Threading.Dispatcher.UIThread.Post(() => _ = _vm?.SelectKeyRowAsync(row));
         Tabs.SelectionChanged += (_, _) =>
         {
             if (_vm is not null)
@@ -40,6 +42,7 @@ public partial class ObjectDetailView : UserControl, Oranda.App.Shell.Docking.IF
             {
                 _vm.PropertyChanged += OnVmChanged;
                 Sync();
+                SyncKeyPane();
             }
         };
     }
@@ -68,7 +71,37 @@ public partial class ObjectDetailView : UserControl, Oranda.App.Shell.Docking.IF
             services, session, target, (_, _) => _ = vm.OpenAsync(session, target, vm.IsDdlSelected), CancellationToken.None);
     }
 
-    private void OnVmChanged(object? sender, PropertyChangedEventArgs e) => Sync();
+    private void OnVmChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        Sync();
+        if (e.PropertyName == nameof(ObjectDetailViewModel.HasKeyColumns))
+        {
+            SyncKeyPane();
+        }
+    }
+
+    private (GridLength Top, GridLength Bottom) _keyPaneHeights = (new GridLength(3, GridUnitType.Star), new GridLength(2, GridUnitType.Star));
+
+    /// <summary>열 표 칸 높이: 처음엔 위 표와 3:2, 사용자가 끌어 바꾼 높이는 구역을 오가도 그대로, 숨길 때 0.</summary>
+    private void SyncKeyPane()
+    {
+        var rows = SectionGrid.RowDefinitions;
+        if (_vm?.HasKeyColumns != true)
+        {
+            if (rows[2].Height.Value > 0)
+            {
+                _keyPaneHeights = (rows[0].Height, rows[2].Height); // 끌어 바꾼 높이를 다음에 그대로 쓴다
+            }
+
+            rows[0].Height = new GridLength(1, GridUnitType.Star);
+            rows[2].Height = new GridLength(0);
+        }
+        else if (rows[2].Height.Value == 0)
+        {
+            rows[0].Height = _keyPaneHeights.Top;
+            rows[2].Height = _keyPaneHeights.Bottom;
+        }
+    }
 
     private void Sync()
     {

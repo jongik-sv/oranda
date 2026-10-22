@@ -254,7 +254,7 @@ internal sealed partial class OracleMetadataProvider : IMetadataProvider
 
     private static string ViewPrefix(ISession s) => s.Server.Capabilities.CanQueryDictionary ? "dba" : "all";
 
-    private static async Task<List<object?[]>> QueryAsync(ISession s, string id, Action<OracleCommand> bind, CancellationToken ct)
+    internal static async Task<List<object?[]>> QueryAsync(ISession s, string id, Action<OracleCommand> bind, CancellationToken ct)
     {
         var session = AsOracle(s);
         var query = Catalog.Value.Get(id, s.Server);
