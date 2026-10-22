@@ -3474,7 +3474,7 @@ dotnet, testhost, Oranda.App
 - depends: TSK-03-04
 - blocked-by: -
 - entry-point: 접속 관리자 > 프로필 편집기 > 라벨 색 · TNS 별칭
-- note: 담당 PC: mac(맥북) — win144 세션은 이 Task 를 하지 않는다. 2026-10-22 사용자 요청: 「접속 관리자에서 라벨 색은 실제 색을 고를 수 있게 해 줘」, 「TNS 별칭은 콤보 박스로 — 그냥 콤보보다 입력되는 콤보가 낫다」. 지금 라벨 색은 #RRGGBB 글자 칸이고, TNS 별칭은 입력 제안 칸(AutoCompleteBox)이라 ▾ 단추로 전체 별칭을 펼쳐 볼 수 없다. / 2026-10-22 완료(mac): 라벨 색은 DropDownButton(견본 + 값) 펼침 창 — 견본 10개·기본 색·ColorSpectrum + 밝기 막대(ColorView 는 350×338 로 커서 쓰지 않음)·#RRGGBB 칸·빨강 경고 글. 색 고르기 테마는 ProfileEditorView 에서만 StyleInclude. TNS 별칭은 ComboBox IsEditable(Text 양방향). Avalonia.Controls.ColorPicker 12.1.4(MIT) 추가
+- note: 담당 PC: mac(맥북) — win144 세션은 이 Task 를 하지 않는다. 2026-10-22 사용자 요청: 「접속 관리자에서 라벨 색은 실제 색을 고를 수 있게 해 줘」, 「TNS 별칭은 콤보 박스로 — 그냥 콤보보다 입력되는 콤보가 낫다」. 지금 라벨 색은 #RRGGBB 글자 칸이고, TNS 별칭은 입력 제안 칸(AutoCompleteBox)이라 ▾ 단추로 전체 별칭을 펼쳐 볼 수 없다. / 2026-10-22 완료(mac): 라벨 색은 DropDownButton(견본 + 값) 펼침 창 — 견본 10개·기본 색·ColorSpectrum + 밝기 막대(ColorView 는 350×338 로 커서 쓰지 않음)·#RRGGBB 칸·빨강 경고 글. 색 고르기 테마는 ProfileEditorView 에서만 StyleInclude. TNS 별칭은 ComboBox IsEditable(Text 양방향). Avalonia.Controls.ColorPicker 12.1.4(MIT) 추가. 같은 날 사용자 지적 「새 접속·새 폴더·복제 아이콘이 계속 2줄로 나와 불편」 → 목록 툴바를 아이콘 한 줄로
 
 #### PRD 요구사항
 - prd-ref: PRD CONN-06 (환경 라벨·색), CONN-01 (TNS 별칭)
@@ -3483,11 +3483,13 @@ dotnet, testhost, Oranda.App
   - 운영 환경이면 단추를 끈다(운영은 항상 빨강)
   - TNS 별칭 칸을 입력되는 콤보(ComboBox IsEditable)로 바꾼다. ▾ 단추로 tnsnames.ora 의 별칭 전체를 펼쳐 고르고, 목록에 없는 별칭도 직접 입력한다
   - 별칭 칸의 빈 필수 칸 표시(빨간 테두리)와 아래 host:port/service 줄은 그대로 둔다
+  - (2026-10-22 추가 요청) 접속 목록 툴바(새 접속·새 폴더·복제·삭제·가져오기)를 한 줄로: 아이콘만 그리는 toolbar 단추(이름은 도움말·낭독기 이름), 간격 2, 줄 바꿈 없음
 - acceptance:
   - 견본을 누르면 라벨 색이 그 색이 되고, 단추의 견본·글자가 바뀐다
   - 운영이 아닌 접속에서 빨강 계열을 고르면 입력할 때처럼 저장이 거부된다(빨강은 운영만)
   - 별칭 콤보를 펼치면 입력한 글자와 상관없이 별칭이 모두 보이고, 고르면 별칭·이름·접속 요약이 채워진다
   - 저장된 접속을 열기만 해서는 변경으로 치지 않는다(라벨 색·별칭 칸이 값을 되쓰지 않는다)
+  - 접속 관리자 기본 폭(960)과 최소 폭(640)에서 목록 툴바 단추가 모두 같은 줄에 있고 목록 폭 안에 든다
 - constraints:
   - 빨강 계열 판정은 기존 LabelColorRules 를 그대로 쓴다. 색 고르기 테마는 편집기 화면에서만 읽는다(앱 시작 경로에 넣지 않는다)
   - XAML 한국어 글자는 literals-en.json 영어 짝을 둔다
@@ -3495,6 +3497,7 @@ dotnet, testhost, Oranda.App
   - Headless: 견본 고르기로 ColorText 설정, ColorView 로 빨강을 고르면 저장 거부, 운영이면 단추 꺼짐, 기본 견본에 빨강 계열 없음
   - Headless: 별칭 콤보가 TnsAliases 를 보이고, 펼치면 전체 별칭, 글자 입력으로 TnsAlias 설정, 항목 고르기로 TnsAlias 설정
   - 저장된 프로필을 화면에 띄워도 IsDirty 가 false 이고 색·별칭이 그대로
+  - Headless: 기본·최소 폭에서 목록 툴바 단추의 Y 가 같다(ConnectionManagerLayoutTests)
 
 #### 기술 스펙 (TRD)
 - tech-spec: Avalonia.Controls.ColorPicker 12.1.4(ColorSpectrum·ColorSlider), ComboBox IsEditable
