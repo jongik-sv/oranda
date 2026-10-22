@@ -2052,7 +2052,7 @@ dotnet, testhost, Oranda.App
 - category: defect
 - domain: test
 - model: sonnet
-- status: [ ]
+- status: [xx]
 - priority: low
 - assignee: -
 - schedule: 2027-01-21 ~ 2027-01-27
@@ -2060,7 +2060,7 @@ dotnet, testhost, Oranda.App
 - depends: -
 - blocked-by: -
 - entry-point: tests/Oranda.App.Tests Features/Execution/GridRowCounterTests
-- note: 담당 PC: win144. 출처 TSK-11-05 화면 기능 전체 시험(docs/itest/TSK-11-05.md). Count_runs_through_the_engine_with_current_bind_values_and_skips_history 가 App 단위 전체 실행에서 한 번 실패, 단독 5/5 통과(TSK-11-05, 2026-10-21).
+- note: 담당 PC: win144. 출처 TSK-11-05 화면 기능 전체 시험(docs/itest/TSK-11-05.md). Count_runs_through_the_engine_with_current_bind_values_and_skips_history 가 App 단위 전체 실행에서 한 번 실패, 단독 5/5 통과(TSK-11-05, 2026-10-21). 결과(2026-10-22): 원인 = 공유 헤드리스 앱이 떠 있으면 ExecutionState 가 버스 이벤트를 UI 스레드로 넘겨 시험의 세션 등록이 늦게 반영(Busy 표시 엉킴). 시험의 Setup 이 UI 스레드에서 발행하도록 고침, 재현 시험 추가.
 
 #### PRD 요구사항
 - prd-ref: PRD EXEC-11

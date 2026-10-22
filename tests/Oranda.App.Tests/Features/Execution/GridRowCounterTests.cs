@@ -1,6 +1,9 @@
 using System.Runtime.CompilerServices;
+using Avalonia;
+using Avalonia.Threading;
 using Oranda.App.Features.Binds;
 using Oranda.App.Features.Execution;
+using Oranda.App.Tests.Shell.Headless;
 using Oranda.Core.Connection;
 using Oranda.Core.Events;
 using Oranda.Core.Execution;
@@ -77,11 +80,28 @@ public sealed class GridRowCounterTests
             State = new ExecutionState(Bus);
             if (Session is not null)
             {
-                Bus.Publish(new SessionOpened(Session.Id, profile, Session.Server, SessionPurpose.Work));
+                PublishOpened(new SessionOpened(Session.Id, profile, Session.Server, SessionPurpose.Work));
             }
 
             Binds.Add("d").Text = "10";
             Counter = new GridRowCounter(State, Binds, () => Session, () => Engine);
+        }
+
+        /// <summary>
+        /// 공유 헤드리스 앱이 떠 있으면 <see cref="ExecutionState"/> 는 버스 이벤트를 UI 스레드로 넘기고, 그 스레드는 다른 시험이 일을 맡길 때만
+        /// 돈다. 시험이 UI 스레드 밖에서 그냥 발행하면 세션 등록이 언제 끝날지 몰라 「바쁨」 표시가 엉키므로, UI 스레드에서 발행해
+        /// 등록을 끝낸 뒤에 돌아온다(UI 스레드이거나 앱이 없으면 이벤트가 바로 처리된다).
+        /// </summary>
+        private void PublishOpened(SessionOpened e)
+        {
+            if (Application.Current is not null && !Dispatcher.UIThread.CheckAccess())
+            {
+                HeadlessHost.Run(() => Bus.Publish(e)).GetAwaiter().GetResult();
+            }
+            else
+            {
+                Bus.Publish(e);
+            }
         }
 
         public EventBus Bus { get; } = new();
@@ -95,6 +115,19 @@ public sealed class GridRowCounterTests
         public RecordingEngine Engine { get; } = new();
 
         public GridRowCounter Counter { get; }
+    }
+
+    [Fact]
+    public async Task Setup_has_the_session_registered_even_when_the_shared_ui_thread_is_busy()
+    {
+        // 공유 헤드리스 앱이 떠 있으면 세션 열림 이벤트는 UI 스레드로 넘어가 늦게 반영된다(전체 병렬 실행에서 흔들린 원인).
+        var uiBusy = HeadlessHost.Run(() => Thread.Sleep(300));
+        await Task.Delay(50);
+
+        var t = await Task.Run(() => new Setup());
+
+        Assert.Equal(t.Session!.Id, t.State.SessionId);
+        await uiBusy;
     }
 
     [Fact]
