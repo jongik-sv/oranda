@@ -18,10 +18,36 @@ public sealed class MenuControls(ICommandRegistry registry, IContextKeys keys, F
 {
     private readonly List<RegistryCommand> _commands = [];
 
+    /// <summary>숨김·이유 계산에 쓰는 문맥 키(PL/SQL 탭 여부를 도킹에서 채운다, <see cref="MenuScopeKeys"/>).</summary>
+    private readonly IContextKeys _menuKeys = new MenuScopeKeys(keys, () => workspace.ActiveDocument?.Panel is Features.PlsqlEditor.PlsqlEditorViewModel);
+
     /// <summary>시스템 메뉴 뿌리(창)마다 따로 갖는 추적 목록. 창이 여럿(메인 창·떠 있는 도킹 창)이어도 각자 자기 메뉴 인스턴스를 갖는다.</summary>
     private readonly Dictionary<NativeMenu, NativeSet> _natives = [];
 
+    /// <summary>창 안 메뉴 막대의 최상위 메뉴마다 묶은 컨트롤(숨김·이유 툴팁·빈 메뉴 안내를 다시 계산할 때 쓴다).</summary>
+    private readonly List<Bound> _bar = [];
+
     private NativeSet? _building;
+
+    /// <summary>
+    /// 메뉴 모델 한 마디와 그것을 그린 컨트롤. <see cref="Children"/> 은 <see cref="MenuNode.Children"/> 과 같은 차례다.
+    /// 상태는 <see cref="MenuVisibility.Evaluate"/> 로 계산해 그대로 옮긴다.
+    /// </summary>
+    private sealed class Bound(MenuNode node, Action<bool> setVisible, Action<string?> setTip)
+    {
+        public MenuNode Node { get; } = node;
+
+        public Action<bool> SetVisible { get; } = setVisible;
+
+        public Action<string?> SetTip { get; } = setTip;
+
+        public List<Bound> Children { get; } = [];
+
+        /// <summary>최상위 메뉴만: 빈 메뉴 안내 줄 보이기.</summary>
+        public Action<bool>? SetEmpty { get; set; }
+
+        public static Bound Top(MenuNode node) => new(node, _ => { }, _ => { });
+    }
 
     private sealed class NativeSet(Func<object?> focused)
     {
@@ -33,15 +59,18 @@ public sealed class MenuControls(ICommandRegistry registry, IContextKeys keys, F
 
         public List<(NativeMenuItem Item, string CommandId, KeyGesture Gesture)> Gestures { get; } = [];
 
+        public List<Bound> Tops { get; } = [];
+
         public void Clear()
         {
+            Tops.Clear();
             Commands.Clear();
             Panels.Clear();
             Gestures.Clear();
         }
     }
 
-    /// <summary>문맥 키가 바뀌면 모든 메뉴·단추의 활성 상태를 다시 계산한다.</summary>
+    /// <summary>문맥 키가 바뀌면 모든 메뉴·단추의 활성 상태와 주 메뉴의 숨김·이유 툴팁을 다시 계산한다.</summary>
     public void RefreshEnablement()
     {
         foreach (var c in _commands)
@@ -49,11 +78,21 @@ public sealed class MenuControls(ICommandRegistry registry, IContextKeys keys, F
             c.RaiseCanExecuteChanged();
         }
 
+        foreach (var top in _bar)
+        {
+            ApplyState(top);
+        }
+
         foreach (var set in _natives.Values)
         {
             foreach (var c in set.Commands)
             {
                 c.RaiseCanExecuteChanged();
+            }
+
+            foreach (var top in set.Tops)
+            {
+                ApplyState(top);
             }
 
             foreach (var (item, panelId) in set.Panels)
@@ -73,10 +112,118 @@ public sealed class MenuControls(ICommandRegistry registry, IContextKeys keys, F
         }
     }
 
+    /// <summary>
+    /// 창 안 메뉴 막대. 주 메뉴 규칙(<see cref="MenuVisibility"/>)으로 지금 탭·패널에 맞지 않는 명령은 숨기고,
+    /// 회색 명령에는 이유 툴팁을 단다. 상태는 <see cref="RefreshEnablement"/> 때마다 다시 계산한다.
+    /// </summary>
     public IReadOnlyList<Control> BuildMenuBar(IReadOnlyList<MenuNode> bar)
     {
         _commands.Clear();
-        return [.. bar.Select(top => (Control)MenuItemFor(top, topLevel: true))];
+        _bar.Clear();
+        var result = new List<Control>();
+        foreach (var top in bar)
+        {
+            var item = new MenuItem { Header = top.AccessHeader ?? top.Title };
+            AutomationProperties.SetName(item, top.Title);
+            var bound = Bound.Top(top);
+            var children = BarLevel(top.Children, bound);
+            if (top.EmptyText is { } emptyText)
+            {
+                var empty = new MenuItem { Header = emptyText, IsEnabled = false, IsVisible = false, Classes = { "menu-empty" } };
+                AutomationProperties.SetName(empty, emptyText);
+                children.Add(empty);
+                bound.SetEmpty = v => empty.IsVisible = v;
+            }
+
+            item.ItemsSource = children;
+
+            // 문맥 키가 그대로여도 보이는 문서가 바뀌었을 수 있다(PL/SQL 탭 등): 메뉴를 열 때 한 번 더 맞춘다.
+            item.SubmenuOpened += (_, _) => ApplyState(bound);
+            _bar.Add(bound);
+            ApplyState(bound);
+            result.Add(item);
+        }
+
+        return result;
+    }
+
+    private List<object> BarLevel(IReadOnlyList<MenuNode> nodes, Bound owner)
+    {
+        var list = new List<object>(nodes.Count);
+        foreach (var n in nodes)
+        {
+            Control control;
+            Bound bound;
+            switch (n.Kind)
+            {
+                case MenuNodeKind.Separator:
+                    {
+                        var separator = new Separator();
+                        control = separator;
+                        bound = new Bound(n, v => separator.IsVisible = v, _ => { });
+                        break;
+                    }
+
+                case MenuNodeKind.Submenu:
+                    {
+                        var sub = new MenuItem { Header = n.Title };
+                        AutomationProperties.SetName(sub, n.Title);
+                        control = sub;
+                        bound = new Bound(n, v => sub.IsVisible = v, _ => { });
+                        sub.ItemsSource = BarLevel(n.Children, bound);
+                        break;
+                    }
+
+                default:
+                    {
+                        var item = MenuItemFor(n);
+                        control = item;
+                        if (n.Kind == MenuNodeKind.Command)
+                        {
+                            ToolTip.SetShowOnDisabled(item, true);
+                        }
+
+                        bound = new Bound(n, v => item.IsVisible = v, tip => SetTip(item, tip));
+                        break;
+                    }
+            }
+
+            owner.Children.Add(bound);
+            list.Add(control);
+        }
+
+        return list;
+    }
+
+    private static void SetTip(Control control, string? tip)
+    {
+        if (!Equals(ToolTip.GetTip(control), tip))
+        {
+            ToolTip.SetTip(control, tip);
+        }
+    }
+
+    /// <summary>최상위 메뉴 하나의 지금 상태를 컨트롤에 옮긴다.</summary>
+    private void ApplyState(Bound top)
+    {
+        var state = MenuVisibility.Evaluate(top.Node, _menuKeys);
+        ApplyChildren(top, state);
+        top.SetEmpty?.Invoke(state.ShowEmpty);
+    }
+
+    private static void ApplyChildren(Bound bound, MenuState state)
+    {
+        for (var i = 0; i < bound.Children.Count && i < state.Children.Count; i++)
+        {
+            var child = bound.Children[i];
+            var s = state.Children[i];
+            child.SetVisible(s.Visible);
+            child.SetTip(s.Reason);
+            if (child.Children.Count > 0)
+            {
+                ApplyChildren(child, s);
+            }
+        }
     }
 
     /// <summary>
@@ -108,9 +255,20 @@ public sealed class MenuControls(ICommandRegistry registry, IContextKeys keys, F
         _building = set;
         try
         {
-            foreach (var n in bar)
+            foreach (var top in bar)
             {
-                root.Add(NativeItemFor(n));
+                var bound = Bound.Top(top);
+                var menu = NativeLevel(top.Children, bound);
+                if (top.EmptyText is { } emptyText)
+                {
+                    var empty = new NativeMenuItem(emptyText) { IsEnabled = false, IsVisible = false };
+                    menu.Add(empty);
+                    bound.SetEmpty = v => empty.IsVisible = v;
+                }
+
+                root.Add(new NativeMenuItem(top.Title) { Menu = menu });
+                set.Tops.Add(bound);
+                ApplyState(bound);
             }
         }
         finally
@@ -119,27 +277,38 @@ public sealed class MenuControls(ICommandRegistry registry, IContextKeys keys, F
         }
     }
 
-    private NativeMenu NativeLevel(IEnumerable<MenuNode> nodes)
+    /// <summary>시스템 메뉴 한 단계. 창 안 메뉴와 같은 숨김 규칙을 쓰고, 회색 이유는 <see cref="NativeMenuItem.ToolTip"/> 로 단다(보이는지는 플랫폼 몫).</summary>
+    private NativeMenu NativeLevel(IEnumerable<MenuNode> nodes, Bound owner)
     {
         var menu = new NativeMenu();
         menu.NeedsUpdate += (_, _) => RefreshEnablement();
         foreach (var n in nodes)
         {
-            menu.Add(NativeItemFor(n));
+            menu.Add(NativeItemFor(n, owner));
         }
 
         return menu;
     }
 
-    private NativeMenuItemBase NativeItemFor(MenuNode n)
+    private NativeMenuItemBase NativeItemFor(MenuNode n, Bound owner)
     {
         switch (n.Kind)
         {
             case MenuNodeKind.Separator:
-                return new NativeMenuItemSeparator();
+                {
+                    var separator = new NativeMenuItemSeparator();
+                    owner.Children.Add(new Bound(n, v => separator.IsVisible = v, _ => { }));
+                    return separator;
+                }
 
             case MenuNodeKind.Submenu:
-                return new NativeMenuItem(n.Title) { Menu = NativeLevel(n.Children) };
+                {
+                    var sub = new NativeMenuItem(n.Title);
+                    var bound = new Bound(n, v => sub.IsVisible = v, _ => { });
+                    owner.Children.Add(bound);
+                    sub.Menu = NativeLevel(n.Children, bound);
+                    return sub;
+                }
 
             case MenuNodeKind.PanelToggle:
                 {
@@ -155,6 +324,7 @@ public sealed class MenuControls(ICommandRegistry registry, IContextKeys keys, F
                         item.IsChecked = workspace.IsToolVisible(id);
                     };
                     _building!.Panels.Add((item, id));
+                    owner.Children.Add(new Bound(n, v => item.IsVisible = v, _ => { }));
                     return item;
                 }
 
@@ -174,6 +344,7 @@ public sealed class MenuControls(ICommandRegistry registry, IContextKeys keys, F
                         set.Gestures.Add((item, n.CommandId!, key));
                     }
 
+                    owner.Children.Add(new Bound(n, v => item.IsVisible = v, tip => item.ToolTip = tip));
                     return item;
                 }
         }
@@ -233,14 +404,13 @@ public sealed class MenuControls(ICommandRegistry registry, IContextKeys keys, F
         return c;
     }
 
-    private MenuItem MenuItemFor(MenuNode n, bool topLevel = false, bool track = true)
+    private MenuItem MenuItemFor(MenuNode n, bool track = true)
     {
         switch (n.Kind)
         {
             case MenuNodeKind.Submenu:
                 {
-                    var header = topLevel ? n.AccessHeader ?? n.Title : n.Title;
-                    var item = new MenuItem { Header = header };
+                    var item = new MenuItem { Header = n.Title };
                     AutomationProperties.SetName(item, n.Title);
                     item.ItemsSource = n.Children.Select(c => c.Kind == MenuNodeKind.Separator ? (object)new Separator() : MenuItemFor(c, track: track)).ToList();
                     return item;

@@ -101,6 +101,21 @@
 6. 시스템이 쓰는 키는 바인딩하지 않는다: Windows `Alt+F4`, `Alt+Space`, `Ctrl+Esc`, `Win+…`, 메뉴 접근 `Alt+문자`(Orange 5 `Alt+C`·`Alt+B` 만 예외 — 메뉴 접근 키 C·B 없음), macOS 5.2 목록.
 7. 스키마 브라우저 트리의 객체 열기 키(Enter·두 번 누르기 = 고정 문서로 열기, 방향키로 고르고 멈추기 = 미리보기, SCH-01)는 트리 보기 몫이라 명령으로 등록하지 않고 키맵에 넣지 않는다. 그래서 `schemaFocus` 에는 Enter 를 바인딩하지 않는다.
 
+### 2.4 주 메뉴의 숨김과 회색 이유 (TSK-13-36)
+
+주 메뉴 막대(창 안 메뉴·macOS 시스템 메뉴)만 쓰는 규칙이다. 오른쪽 클릭 메뉴·툴바·명령 팔레트는 지금 규칙 그대로다(팔레트는 회색으로 모두 보임).
+
+| 경우 | 주 메뉴 |
+|---|---|
+| 명령의 `When` 이 가리키는 탭·패널이 지금 없음 | 숨김 |
+| `When` 은 맞고 `Enablement` 가 거짓 | 회색. 마우스를 올리면 이유 툴팁 |
+| 둘 다 참 | 보임 |
+
+- `When` 은 키맵 기본 키 범위(포커스 키)라 「마지막 포커스」로 보지 않고 「그 탭·패널이 열려 있음」으로 바꿔 본다(`MenuVisibility.TabScopes`): `sqlEditorFocus`·`sqlDocFocus`·`gridFocus` → `sqlDocActive`, `editorFocus` → `sqlDocActive || plsqlDocActive || plsqlEditorFocus`, `plsqlEditorFocus` → `plsqlDocActive || plsqlEditorFocus`, `monitorFocus` → `monitorSessionOpen || monitorSqlOpen`, `schemaFocus` → 언제나(늘 있는 도구 창).
+- 숨긴 뒤 구분선이 맨 앞·끝에 남거나 두 줄 겹치지 않게 하고, 항목이 다 숨은 하위 메뉴도 숨긴다. 최상위 메뉴가 통째로 비면 메뉴는 남기고 회색 안내 한 줄(`Menu.<메뉴>.empty`, 없으면 `Menu.empty`)을 보인다.
+- 이유 문구 = `Enablement` 식에서 거짓을 만든 첫 키의 사람 말. `&&` 는 거짓인 항을 앞에서부터, `||` 는 문구가 있는 첫 항, `!x` 가 거짓이면 `not.x`. 문구 표는 `strings-ko/en.json` 의 `Menu.disabled.<키>`·`Menu.disabled.not.<키>` 한 곳이고, 표에 없는 키는 툴팁을 달지 않는다.
+- 문맥 키가 바뀔 때마다(탭 전환·접속·끊기·행 선택) 활성 상태와 함께 다시 계산한다(`MenuControls.RefreshEnablement`).
+
 ## 3. 범주 = 메뉴 묶음
 
 | 범주 | 메뉴 | 오른쪽 클릭 메뉴 |

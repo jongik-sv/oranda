@@ -79,6 +79,18 @@ public sealed record MenuNode(MenuNodeKind Kind, string Title, int Order)
 
     public IReadOnlyList<MenuNode> Children { get; init; } = [];
 
+    /// <summary>명령의 <c>When</c>(주 메뉴 숨김, <see cref="MenuVisibility"/>).</summary>
+    public string? When { get; init; }
+
+    /// <summary>명령의 <c>Enablement</c>(회색 이유 툴팁, <see cref="MenuVisibility"/>).</summary>
+    public string? Enablement { get; init; }
+
+    /// <summary>최상위 메뉴의 항목이 모두 숨었을 때 보일 회색 안내 한 줄.</summary>
+    public string? EmptyText { get; init; }
+
+    /// <summary>최상위 메뉴: 이유 문구 키(<see cref="ContextKeyReasons.PhrasePrefix"/> 로 시작) → 지금 언어 글자. 없으면 null.</summary>
+    public Func<string, string?>? ReasonText { get; init; }
+
     public static MenuNode Separator(int order) => new(MenuNodeKind.Separator, string.Empty, order);
 }
 
@@ -130,6 +142,8 @@ public static class MenuModelBuilder
                     CommandId = c.Id,
                     Shortcut = shortcut(c.Id),
                     Icon = c.Icon,
+                    When = c.When,
+                    Enablement = c.Enablement,
                 }));
             }
         }
@@ -167,6 +181,8 @@ public static class MenuModelBuilder
             {
                 Children = children,
                 AccessHeader = text.TryLookup($"Menu.{id}.access"),
+                EmptyText = text.TryLookup($"Menu.{id}.empty") ?? text.Lookup("Menu.empty"),
+                ReasonText = text.TryLookup,
             });
         }
 
@@ -213,6 +229,8 @@ public static class MenuModelBuilder
                         CommandId = c.Id,
                         Shortcut = shortcut(c.Id),
                         Icon = c.Icon,
+                        When = c.When, // 오른쪽 클릭 메뉴는 쓰지 않는다. 결과·데이터베이스 메뉴로 옮겨 실을 때 쓴다.
+                        Enablement = c.Enablement,
                     }));
                 }
             }

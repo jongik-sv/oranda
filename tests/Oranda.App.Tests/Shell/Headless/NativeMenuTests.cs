@@ -77,10 +77,20 @@ public class NativeMenuTests
         return match.Kind == KeyMatchKind.Match && match.CommandId == commandId ? g : null;
     }
 
-    /// <summary>모델과 NativeMenu 트리를 같은 순서로 맞춰 본다(구분선·항목 수·글자·단축키).</summary>
-    private static void AssertSameStructure(IReadOnlyList<MenuNode> nodes, NativeMenu menu, Func<string, KeyGesture?> gesture)
+    /// <summary>
+    /// 모델과 NativeMenu 트리를 같은 순서로 맞춰 본다(구분선·항목 수·글자·단축키).
+    /// 최상위 메뉴 안에는 끝에 빈 메뉴 안내 한 줄(TSK-13-36, 회색)이 더 있다.
+    /// </summary>
+    private static void AssertSameStructure(IReadOnlyList<MenuNode> nodes, NativeMenu menu, Func<string, KeyGesture?> gesture, string? emptyText = null)
     {
-        Assert.Equal(nodes.Count, menu.Items.Count);
+        Assert.Equal(nodes.Count + (emptyText is null ? 0 : 1), menu.Items.Count);
+        if (emptyText is not null)
+        {
+            var notice = Assert.IsType<NativeMenuItem>(menu.Items[^1]);
+            Assert.Equal(emptyText, notice.Header);
+            Assert.False(notice.IsEnabled);
+        }
+
         for (var i = 0; i < nodes.Count; i++)
         {
             var node = nodes[i];
@@ -93,7 +103,7 @@ public class NativeMenuTests
                 case MenuNodeKind.Submenu:
                     var sub = Assert.IsType<NativeMenuItem>(item);
                     Assert.Equal(node.Title, sub.Header);
-                    AssertSameStructure(node.Children, sub.Menu!, gesture);
+                    AssertSameStructure(node.Children, sub.Menu!, gesture, node.EmptyText);
                     break;
                 case MenuNodeKind.PanelToggle:
                     var toggle = Assert.IsType<NativeMenuItem>(item);
