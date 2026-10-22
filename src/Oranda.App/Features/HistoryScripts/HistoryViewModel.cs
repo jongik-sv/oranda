@@ -33,6 +33,18 @@ public sealed record HistoryItem(HistoryEntry Entry)
         _ => "거부",
     };
 
+    /// <summary>상태 아이콘 키(성공 ✓, 실패 ●, 취소 ■, 거부 자물쇠).</summary>
+    public string StatusIconKey => Entry.Status switch
+    {
+        HistoryStatus.Succeeded => "ok",
+        HistoryStatus.Failed => "error",
+        HistoryStatus.Cancelled => "cancel",
+        _ => "lock",
+    };
+
+    /// <summary>실패·거부(오류 글자를 빨갛게 보인다).</summary>
+    public bool IsProblem => Entry.Status is HistoryStatus.Failed or HistoryStatus.Denied;
+
     public string ElapsedText => Entry.ElapsedMs is { } ms ? (ms < 1000 ? $"{ms} ms" : (ms / 1000.0).ToString("0.##", CultureInfo.InvariantCulture) + " s") : string.Empty;
 
     public string RowsText => Entry.RowsAffected?.ToString(CultureInfo.InvariantCulture) ?? string.Empty;

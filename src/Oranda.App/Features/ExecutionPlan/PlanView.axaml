@@ -141,17 +141,6 @@
     <Style Selector="TabControl.bare /template/ ItemsPresenter#PART_ItemsPresenter">
       <Setter Property="IsVisible" Value="False" />
     </Style>
-    <Style Selector="TextBox.plan-text">
-      <Setter Property="BorderThickness" Value="0" />
-      <Setter Property="Background" Value="Transparent" />
-      <Setter Property="Padding" Value="10,6" />
-      <Setter Property="FontFamily" Value="{DynamicResource OrandaGridFontFamily}" />
-      <Setter Property="FontSize" Value="{DynamicResource OrandaEditorFontSize}" />
-    </Style>
-    <Style Selector="TextBox.plan-text:focus /template/ Border#PART_BorderElement, TextBox.plan-text:pointerover /template/ Border#PART_BorderElement">
-      <Setter Property="Background" Value="Transparent" />
-      <Setter Property="BorderThickness" Value="0" />
-    </Style>
   </UserControl.Styles>
 
   <DockPanel>
@@ -389,7 +378,7 @@
       </TabItem>
 
       <TabItem Header="텍스트">
-        <TextBox Classes="plan-text" Text="{Binding PlanText}" IsReadOnly="True" AcceptsReturn="True" TextWrapping="NoWrap"
+        <TextBox Classes="code-view" Text="{Binding PlanText}" IsReadOnly="True" AcceptsReturn="True" TextWrapping="NoWrap"
                  ScrollViewer.HorizontalScrollBarVisibility="Auto" AutomationProperties.Name="DBMS_XPLAN 텍스트" />
       </TabItem>
 

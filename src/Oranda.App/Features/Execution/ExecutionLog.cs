@@ -23,6 +23,18 @@ public sealed record MessageEntry(DateTimeOffset Time, MessageKind Kind, string 
     public string TimeText => Time.ToLocalTime().ToString("HH:mm:ss", CultureInfo.InvariantCulture);
 
     public string Line => $"{TimeText}  {Text}";
+
+    /// <summary>앞 아이콘 키(정보 = 파란 i, 경고 = 노란 삼각형, 오류 = 빨간 원).</summary>
+    public string IconKey => Kind switch
+    {
+        MessageKind.Error => "error",
+        MessageKind.Warning => "warn",
+        _ => "info",
+    };
+
+    public bool IsWarning => Kind == MessageKind.Warning;
+
+    public bool IsError => Kind == MessageKind.Error;
 }
 
 /// <summary>

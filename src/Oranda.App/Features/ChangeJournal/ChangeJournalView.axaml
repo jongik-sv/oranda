@@ -5,64 +5,113 @@
              x:Class="Oranda.App.Features.ChangeJournal.ChangeJournalView"
              x:DataType="vm:ChangeJournalViewModel">
   <UserControl.Styles>
-    <Style Selector="Border.added">
-      <Setter Property="Background" Value="#3028A745" />
+    <!-- 아래 두 칸(DDL·차이)의 제목 띠 -->
+    <Style Selector="Border.pane-title">
+      <Setter Property="Background" Value="{DynamicResource OrandaPanelHeaderBrush}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource OrandaSeparatorBrush}" />
+      <Setter Property="BorderThickness" Value="0,1,0,1" />
+      <Setter Property="Padding" Value="8,3" />
     </Style>
-    <Style Selector="Border.removed">
-      <Setter Property="Background" Value="#30DC3545" />
+    <Style Selector="Border.pane-title TextBlock">
+      <Setter Property="FontSize" Value="{DynamicResource OrandaFontSizeSmall}" />
+      <Setter Property="FontWeight" Value="SemiBold" />
     </Style>
   </UserControl.Styles>
   <DockPanel>
+    <!-- 툴바 한 줄: 검색 · 이 접속만 · 보관된 것만 · (대상 칩) | 새로 고침 · 새 편집기에 열기 -->
     <Border DockPanel.Dock="Top" Classes="panel-toolbar">
       <WrapPanel>
-        <TextBox x:Name="SearchBox" Classes="compact search" Width="240" Margin="0,0,6,0" PlaceholderText="객체 이름·DDL 검색"
-                 Text="{Binding SearchText, Mode=TwoWay}" />
-        <CheckBox Content="이 접속만" Margin="0,0,6,0" IsChecked="{Binding CurrentConnectionOnly, Mode=TwoWay}" />
-        <CheckBox Content="보관된 것만" Margin="0,0,6,0" IsChecked="{Binding OnlySucceeded, Mode=TwoWay}" />
-        <StackPanel Orientation="Horizontal" Spacing="4" Margin="0,0,6,0" IsVisible="{Binding HasObjectFilter}">
-          <TextBlock Text="{Binding ObjectFilterText}" VerticalAlignment="Center" />
-          <Button Classes="tool" icons:ButtonIcon.Key="delete" x:Name="ClearFilterButton" Content="해제" />
-        </StackPanel>
-        <Button Classes="tool" icons:ButtonIcon.Key="refresh" x:Name="RefreshButton" Content="새로 고침" Margin="0,0,4,0" />
-        <Button Classes="tool" icons:ButtonIcon.Key="docEdit" x:Name="OpenButton" Content="이 DDL 을 새 편집기에 열기" />
+        <TextBox x:Name="SearchBox" Classes="compact search" Width="240" Margin="0,0,6,0" VerticalAlignment="Center"
+                 PlaceholderText="객체 이름·DDL 검색" Text="{Binding SearchText, Mode=TwoWay}">
+          <TextBox.InnerLeftContent>
+            <ContentControl Opacity="0.7" VerticalAlignment="Center"
+                            Content="{Binding Source='find', Converter={x:Static icons:IconKeyConverter.Instance}, ConverterParameter=14}" />
+          </TextBox.InnerLeftContent>
+        </TextBox>
+        <ToggleButton Classes="tool" Content="이 접속만" icons:ButtonIcon.Key="connect" IsChecked="{Binding CurrentConnectionOnly, Mode=TwoWay}"
+                      ToolTip.Tip="지금 접속의 변경만 보기" />
+        <ToggleButton Classes="tool" Content="보관된 것만" icons:ButtonIcon.Key="filter" IsChecked="{Binding OnlySucceeded, Mode=TwoWay}"
+                      ToolTip.Tip="보관에 실패한 줄은 숨기기" />
+        <Border Classes="chip" Margin="4,0,6,0" IsVisible="{Binding HasObjectFilter}">
+          <StackPanel Orientation="Horizontal" Spacing="4">
+            <TextBlock Text="{Binding ObjectFilterText}" VerticalAlignment="Center" />
+            <Button Classes="toolbar" x:Name="ClearFilterButton" Content="해제" Padding="1" icons:ButtonIcon.Key="clear" icons:ButtonIcon.IconOnly="True"
+                    ToolTip.Tip="대상 거르기 해제" />
+          </StackPanel>
+        </Border>
+        <Separator Classes="toolbar" />
+        <Button Classes="toolbar" x:Name="RefreshButton" Content="새로 고침" icons:ButtonIcon.Key="refresh" icons:ButtonIcon.IconOnly="True" />
+        <Button Classes="toolbar" x:Name="OpenButton" Content="이 DDL 을 새 편집기에 열기" icons:ButtonIcon.Key="docEdit" icons:ButtonIcon.IconOnly="True" />
       </WrapPanel>
     </Border>
     <Border DockPanel.Dock="Bottom" Classes="panel-status">
       <TextBlock Text="{Binding StatusMessage}" TextTrimming="CharacterEllipsis" />
     </Border>
-    <Grid RowDefinitions="*,6,*">
-      <ListBox x:Name="List" Grid.Row="0" Classes="log" ItemsSource="{Binding Items}" SelectionMode="Multiple">
-        <ListBox.ItemTemplate>
-          <DataTemplate x:DataType="vm:JournalItem">
-            <Grid ColumnDefinitions="110,220,120,80,110,*" ToolTip.Tip="{Binding SummaryText}">
-              <TextBlock Grid.Column="0" Text="{Binding TimeText}" />
-              <TextBlock Grid.Column="1" Text="{Binding ObjectText}" TextTrimming="CharacterEllipsis" />
-              <TextBlock Grid.Column="2" Text="{Binding TypeText}" TextTrimming="CharacterEllipsis" Opacity="0.8" />
-              <TextBlock Grid.Column="3" Text="{Binding CauseText}" />
-              <TextBlock Grid.Column="4" Text="{Binding ProfileName}" TextTrimming="CharacterEllipsis" Opacity="0.8" />
-              <TextBlock Grid.Column="5" Text="{Binding SummaryText}" TextTrimming="CharacterEllipsis" FontFamily="Consolas, Menlo, monospace" />
-            </Grid>
-          </DataTemplate>
-        </ListBox.ItemTemplate>
-      </ListBox>
-      <GridSplitter Grid.Row="1" ResizeDirection="Rows" />
-      <Grid Grid.Row="2" ColumnDefinitions="*,6,*">
+    <Grid RowDefinitions="*,5,*">
+      <!-- 표: 아이콘 | 시간 | 객체 | 종류 | 원인 | 접속 | 요약 -->
+      <DockPanel Grid.Row="0">
+        <Border DockPanel.Dock="Top" Classes="grid-header">
+          <Grid x:Name="JournalHeader" ColumnDefinitions="28,124,220,120,84,120,*">
+            <TextBlock Grid.Column="1" Padding="6,0" Text="시간" />
+            <TextBlock Grid.Column="2" Padding="6,0" Text="객체" />
+            <TextBlock Grid.Column="3" Padding="6,0" Text="종류" />
+            <TextBlock Grid.Column="4" Padding="6,0" Text="원인" />
+            <TextBlock Grid.Column="5" Padding="6,0" Text="접속" />
+            <TextBlock Grid.Column="6" Padding="6,0" Text="요약" />
+          </Grid>
+        </Border>
+        <ListBox x:Name="List" Classes="table" ItemsSource="{Binding Items}" SelectionMode="Multiple"
+                 ScrollViewer.HorizontalScrollBarVisibility="Disabled" AutomationProperties.Name="변경 일지">
+          <ListBox.ItemTemplate>
+            <DataTemplate x:DataType="vm:JournalItem">
+              <Grid ColumnDefinitions="28,124,220,120,84,120,*" ToolTip.Tip="{Binding SummaryText}">
+                <ContentControl Grid.Column="0" HorizontalAlignment="Center" VerticalAlignment="Center"
+                                Content="{Binding IconKey, Converter={x:Static icons:IconKeyConverter.Instance}, ConverterParameter=14}" />
+                <TextBlock Grid.Column="1" Padding="6,0" VerticalAlignment="Center" Classes="mono dim" Text="{Binding TimeText}" />
+                <TextBlock Grid.Column="2" Padding="6,0" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" FontWeight="SemiBold" Text="{Binding ObjectText}" />
+                <TextBlock Grid.Column="3" Padding="6,0" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" Classes="dim" Text="{Binding TypeText}" />
+                <TextBlock Grid.Column="4" Padding="6,0" VerticalAlignment="Center" Text="{Binding CauseText}" />
+                <TextBlock Grid.Column="5" Padding="6,0" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" Classes="dim" Text="{Binding ProfileName}" />
+                <TextBlock Grid.Column="6" Padding="6,0,10,0" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" Classes="mono"
+                           Classes.danger-text="{Binding IsFailure}" Text="{Binding SummaryText}" />
+              </Grid>
+            </DataTemplate>
+          </ListBox.ItemTemplate>
+        </ListBox>
+      </DockPanel>
+      <GridSplitter Grid.Row="1" ResizeDirection="Rows" Background="Transparent" />
+      <Grid Grid.Row="2" ColumnDefinitions="*,5,*">
+        <!-- 고른 항목의 보관된 DDL -->
         <DockPanel Grid.Column="0">
-          <TextBlock DockPanel.Dock="Top" Margin="6,2" Opacity="0.7" Text="{Binding DetailTitle}" TextTrimming="CharacterEllipsis" />
-          <TextBox x:Name="DetailBox" IsReadOnly="True" AcceptsReturn="True" FontFamily="Consolas, Menlo, monospace"
-                   Text="{Binding DetailText, Mode=OneWay}" />
+          <Border DockPanel.Dock="Top" Classes="pane-title">
+            <DockPanel>
+              <ContentControl DockPanel.Dock="Left" Margin="0,0,6,0" VerticalAlignment="Center"
+                              Content="{Binding Source='fileSql', Converter={x:Static icons:IconKeyConverter.Instance}, ConverterParameter=13}" />
+              <TextBlock Text="{Binding DetailTitle}" TextTrimming="CharacterEllipsis" />
+            </DockPanel>
+          </Border>
+          <TextBox x:Name="DetailBox" Classes="code-view" IsReadOnly="True" AcceptsReturn="True" Text="{Binding DetailText, Mode=OneWay}"
+                   Background="{DynamicResource OrandaCodeBackgroundBrush}" AutomationProperties.Name="보관된 DDL" />
         </DockPanel>
-        <GridSplitter Grid.Column="1" ResizeDirection="Columns" />
+        <GridSplitter Grid.Column="1" ResizeDirection="Columns" Background="Transparent" />
+        <!-- 차이: + 새 쪽에만(초록) · − 옛 쪽에만(빨강) -->
         <DockPanel Grid.Column="2">
-          <TextBlock DockPanel.Dock="Top" Margin="6,2" Opacity="0.7" Text="{Binding DiffTitle}" TextTrimming="CharacterEllipsis" />
-          <ScrollViewer HorizontalScrollBarVisibility="Auto">
-            <ItemsControl x:Name="DiffList" ItemsSource="{Binding Diff}">
+          <Border DockPanel.Dock="Top" Classes="pane-title">
+            <DockPanel>
+              <ContentControl DockPanel.Dock="Left" Margin="0,0,6,0" VerticalAlignment="Center"
+                              Content="{Binding Source='diff', Converter={x:Static icons:IconKeyConverter.Instance}, ConverterParameter=13}" />
+              <TextBlock Text="{Binding DiffTitle}" TextTrimming="CharacterEllipsis" />
+            </DockPanel>
+          </Border>
+          <ScrollViewer HorizontalScrollBarVisibility="Auto" Background="{DynamicResource OrandaCodeBackgroundBrush}">
+            <ItemsControl x:Name="DiffList" ItemsSource="{Binding Diff}" Margin="0,4">
               <ItemsControl.ItemTemplate>
                 <DataTemplate x:DataType="vm:DiffLine">
-                  <Border Padding="6,0" Classes.added="{Binding IsAdded}" Classes.removed="{Binding IsRemoved}">
-                    <Grid ColumnDefinitions="16,*">
-                      <TextBlock Grid.Column="0" Text="{Binding Kind}" FontFamily="Consolas, Menlo, monospace" Opacity="0.7" />
-                      <TextBlock Grid.Column="1" Text="{Binding Text}" FontFamily="Consolas, Menlo, monospace" />
+                  <Border Classes="diff" Padding="6,0" Classes.added="{Binding IsAdded}" Classes.removed="{Binding IsRemoved}">
+                    <Grid ColumnDefinitions="18,*">
+                      <TextBlock Grid.Column="0" Classes="mono" Opacity="0.7" Text="{Binding Kind}"
+                                 Classes.success-text="{Binding IsAdded}" Classes.danger-text="{Binding IsRemoved}" />
+                      <TextBlock Grid.Column="1" Classes="mono" Text="{Binding Text}" />
                     </Grid>
                   </Border>
                 </DataTemplate>

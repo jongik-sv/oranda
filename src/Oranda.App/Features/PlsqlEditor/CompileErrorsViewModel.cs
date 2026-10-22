@@ -62,6 +62,16 @@ public sealed partial class CompileErrorsViewModel : ToolPanelViewModelBase
     [ObservableProperty]
     public partial string Header { get; set; } = "컴파일 오류 없음";
 
+    [ObservableProperty]
+    public partial int ErrorCount { get; set; }
+
+    [ObservableProperty]
+    public partial int WarningCount { get; set; }
+
+    /// <summary>머리 줄 아이콘: 아직 컴파일한 탭 없음 = 컴파일, 오류 있음 = 오류, 경고만 = 경고, 깨끗함 = 확인.</summary>
+    [ObservableProperty]
+    public partial string HeaderIconKey { get; set; } = "compile";
+
     partial void OnSelectedItemChanged(CompileErrorItem? value)
     {
         if (value is not null)
@@ -90,6 +100,9 @@ public sealed partial class CompileErrorsViewModel : ToolPanelViewModelBase
     {
         Items.Clear();
         SelectedItem = null;
+        ErrorCount = 0;
+        WarningCount = 0;
+        HeaderIconKey = "compile";
         if (Source is null)
         {
             return;
@@ -110,5 +123,8 @@ public sealed partial class CompileErrorsViewModel : ToolPanelViewModelBase
         }
 
         Header = Items.Count == 0 ? $"{Source.Title}: 컴파일 오류 없음" : $"{Source.Title}: 오류 {errors}건, 경고 {Items.Count - errors}건";
+        ErrorCount = errors;
+        WarningCount = Items.Count - errors;
+        HeaderIconKey = errors > 0 ? "error" : WarningCount > 0 ? "warn" : "ok";
     }
 }

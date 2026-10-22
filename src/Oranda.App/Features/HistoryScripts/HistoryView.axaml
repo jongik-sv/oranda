@@ -5,44 +5,79 @@
              x:Class="Oranda.App.Features.HistoryScripts.HistoryView"
              x:DataType="vm:HistoryViewModel">
   <DockPanel>
+    <!-- 툴바 한 줄: 검색 · 상태 · 이 접속만 | 다시 실행 · 편집기로 | 지우기 · 모두 비우기 -->
     <Border DockPanel.Dock="Top" Classes="panel-toolbar">
       <WrapPanel>
-      <TextBox x:Name="SearchBox" Classes="compact search" Width="240" Margin="0,0,6,0" PlaceholderText="SQL 검색 (3자 이상 부분 일치)"
-               Text="{Binding SearchText, Mode=TwoWay}" />
-      <ComboBox x:Name="StatusBox" MinWidth="90" Margin="0,0,6,0" ItemsSource="{Binding StatusFilters}"
-                SelectedItem="{Binding StatusFilter, Mode=TwoWay}">
-        <ComboBox.ItemTemplate>
-          <DataTemplate x:DataType="vm:HistoryStatusFilter">
-            <TextBlock Text="{Binding Title}" />
-          </DataTemplate>
-        </ComboBox.ItemTemplate>
-      </ComboBox>
-      <CheckBox Content="이 접속만" Margin="0,0,6,0" IsChecked="{Binding CurrentConnectionOnly, Mode=TwoWay}" />
-      <Button Classes="tool" icons:ButtonIcon.Key="run" x:Name="RerunButton" Content="다시 실행" Margin="0,0,4,0" />
-      <Button Classes="tool" icons:ButtonIcon.Key="docEdit" x:Name="ToEditorButton" Content="편집기로" Margin="0,0,4,0" />
-      <Button Classes="tool" icons:ButtonIcon.Key="delete" x:Name="DeleteButton" Content="지우기" Margin="0,0,4,0" />
-      <Button Classes="tool" icons:ButtonIcon.Key="eraser" x:Name="ClearButton" Content="모두 비우기" />
-    </WrapPanel>
+        <TextBox x:Name="SearchBox" Classes="compact search" Width="240" Margin="0,0,6,0" VerticalAlignment="Center"
+                 PlaceholderText="SQL 검색 (3자 이상 부분 일치)" Text="{Binding SearchText, Mode=TwoWay}">
+          <TextBox.InnerLeftContent>
+            <ContentControl Opacity="0.7" VerticalAlignment="Center"
+                            Content="{Binding Source='find', Converter={x:Static icons:IconKeyConverter.Instance}, ConverterParameter=14}" />
+          </TextBox.InnerLeftContent>
+        </TextBox>
+        <ComboBox x:Name="StatusBox" Classes="compact" MinWidth="90" Margin="0,0,4,0" VerticalAlignment="Center" ItemsSource="{Binding StatusFilters}"
+                  SelectedItem="{Binding StatusFilter, Mode=TwoWay}" AutomationProperties.Name="상태 거르기">
+          <ComboBox.ItemTemplate>
+            <DataTemplate x:DataType="vm:HistoryStatusFilter">
+              <TextBlock Text="{Binding Title}" />
+            </DataTemplate>
+          </ComboBox.ItemTemplate>
+        </ComboBox>
+        <ToggleButton Classes="tool" Content="이 접속만" icons:ButtonIcon.Key="connect" IsChecked="{Binding CurrentConnectionOnly, Mode=TwoWay}"
+                      ToolTip.Tip="지금 접속의 이력만 보기" />
+        <Separator Classes="toolbar" />
+        <Button Classes="toolbar" x:Name="RerunButton" Content="다시 실행" icons:ButtonIcon.Key="run" icons:ButtonIcon.IconOnly="True"
+                ToolTip.Tip="고른 문장 다시 실행 (Enter)" />
+        <Button Classes="toolbar" x:Name="ToEditorButton" Content="편집기로" icons:ButtonIcon.Key="docEdit" icons:ButtonIcon.IconOnly="True"
+                ToolTip.Tip="고른 문장을 편집기로 (두 번 누르기)" />
+        <Separator Classes="toolbar" />
+        <Button Classes="toolbar" x:Name="DeleteButton" Content="지우기" icons:ButtonIcon.Key="delete" icons:ButtonIcon.IconOnly="True"
+                ToolTip.Tip="고른 이력 지우기 (Delete)" />
+        <Button Classes="toolbar" x:Name="ClearButton" Content="모두 비우기" icons:ButtonIcon.Key="eraser" icons:ButtonIcon.IconOnly="True" />
+      </WrapPanel>
     </Border>
-    <StackPanel DockPanel.Dock="Bottom" Orientation="Horizontal" Margin="6,2" Spacing="8">
-      <TextBlock Text="{Binding StatusMessage}" Opacity="0.7" />
-      <Button Classes="tool" icons:ButtonIcon.Key="down" x:Name="MoreButton" Content="더 보기" IsVisible="{Binding CanLoadMore}" />
-    </StackPanel>
-    <Border DockPanel.Dock="Bottom" Padding="6,2" IsVisible="{Binding Selected, Converter={x:Static ObjectConverters.IsNotNull}}">
-      <TextBox x:Name="DetailBox" IsReadOnly="True" AcceptsReturn="True" MaxHeight="120" FontFamily="Consolas, Menlo, monospace"
-               Text="{Binding Selected.FullSql, Mode=OneWay}" />
+    <Border DockPanel.Dock="Bottom" Classes="panel-status">
+      <DockPanel>
+        <Button DockPanel.Dock="Right" Classes="tool" icons:ButtonIcon.Key="down" x:Name="MoreButton" Content="더 보기" Padding="6,0"
+                IsVisible="{Binding CanLoadMore}" />
+        <TextBlock Text="{Binding StatusMessage}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
+      </DockPanel>
     </Border>
-    <ListBox x:Name="List" Classes="log" ItemsSource="{Binding Items}" SelectedItem="{Binding Selected, Mode=TwoWay}" SelectionMode="Multiple">
+    <!-- 고른 문장 전체(고정폭, 읽기 전용) -->
+    <Border DockPanel.Dock="Bottom" BorderBrush="{DynamicResource OrandaSeparatorBrush}" BorderThickness="0,1,0,0"
+            Background="{DynamicResource OrandaCodeBackgroundBrush}"
+            IsVisible="{Binding Selected, Converter={x:Static ObjectConverters.IsNotNull}}">
+      <TextBox x:Name="DetailBox" Classes="code-view" IsReadOnly="True" AcceptsReturn="True" MaxHeight="120"
+               Text="{Binding Selected.FullSql, Mode=OneWay}" AutomationProperties.Name="고른 문장" />
+    </Border>
+    <!-- 표: 시간 | 상태 | 접속 | 경과 | 행 | SQL (+ 오류). 머리글과 줄이 같은 열 폭을 쓴다. -->
+    <Border DockPanel.Dock="Top" Classes="grid-header">
+      <Grid x:Name="HistoryHeader" ColumnDefinitions="128,74,120,72,72,*,Auto">
+        <TextBlock Grid.Column="0" Padding="8,0,6,0" Text="시간" />
+        <TextBlock Grid.Column="1" Padding="6,0" Text="상태" />
+        <TextBlock Grid.Column="2" Padding="6,0" Text="접속" />
+        <TextBlock Grid.Column="3" Padding="6,0" Classes="num" Text="경과" />
+        <TextBlock Grid.Column="4" Padding="6,0" Classes="num" Text="행" />
+        <TextBlock Grid.Column="5" Padding="10,0,6,0" Text="SQL" />
+      </Grid>
+    </Border>
+    <ListBox x:Name="List" Classes="table" ItemsSource="{Binding Items}" SelectedItem="{Binding Selected, Mode=TwoWay}" SelectionMode="Multiple"
+             ScrollViewer.HorizontalScrollBarVisibility="Disabled" AutomationProperties.Name="실행 이력">
       <ListBox.ItemTemplate>
         <DataTemplate x:DataType="vm:HistoryItem">
-          <Grid ColumnDefinitions="110,110,44,64,64,*,Auto" ToolTip.Tip="{Binding FullSql}">
-            <TextBlock Grid.Column="0" Text="{Binding TimeText}" />
-            <TextBlock Grid.Column="1" Text="{Binding ProfileName}" TextTrimming="CharacterEllipsis" />
-            <TextBlock Grid.Column="2" Text="{Binding StatusText}" />
-            <TextBlock Grid.Column="3" Text="{Binding ElapsedText}" HorizontalAlignment="Right" Margin="0,0,8,0" />
-            <TextBlock Grid.Column="4" Text="{Binding RowsText}" HorizontalAlignment="Right" Margin="0,0,8,0" />
-            <TextBlock Grid.Column="5" Text="{Binding SqlPreview}" TextTrimming="CharacterEllipsis" FontFamily="Consolas, Menlo, monospace" />
-            <TextBlock Grid.Column="6" Text="{Binding ErrorText}" Opacity="0.7" Margin="8,0,0,0" MaxWidth="260" TextTrimming="CharacterEllipsis" />
+          <Grid ColumnDefinitions="128,74,120,72,72,*,Auto" ToolTip.Tip="{Binding FullSql}">
+            <TextBlock Grid.Column="0" Padding="8,0,6,0" VerticalAlignment="Center" Classes="mono dim" Text="{Binding TimeText}" />
+            <StackPanel Grid.Column="1" Margin="6,0" Orientation="Horizontal" Spacing="5" VerticalAlignment="Center">
+              <ContentControl VerticalAlignment="Center"
+                              Content="{Binding StatusIconKey, Converter={x:Static icons:IconKeyConverter.Instance}, ConverterParameter=13}" />
+              <TextBlock Text="{Binding StatusText}" VerticalAlignment="Center" Classes.danger-text="{Binding IsProblem}" />
+            </StackPanel>
+            <TextBlock Grid.Column="2" Padding="6,0" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" Text="{Binding ProfileName}" />
+            <TextBlock Grid.Column="3" Padding="6,0" VerticalAlignment="Center" Classes="num" Text="{Binding ElapsedText}" />
+            <TextBlock Grid.Column="4" Padding="6,0" VerticalAlignment="Center" Classes="num" Text="{Binding RowsText}" />
+            <TextBlock Grid.Column="5" Padding="10,0,6,0" VerticalAlignment="Center" Classes="mono" TextTrimming="CharacterEllipsis" Text="{Binding SqlPreview}" />
+            <TextBlock Grid.Column="6" Padding="6,0,10,0" VerticalAlignment="Center" MaxWidth="320" Classes="danger-text" TextTrimming="CharacterEllipsis"
+                       Text="{Binding ErrorText}" IsVisible="{Binding ErrorText, Converter={x:Static ObjectConverters.IsNotNull}}" />
           </Grid>
         </DataTemplate>
       </ListBox.ItemTemplate>

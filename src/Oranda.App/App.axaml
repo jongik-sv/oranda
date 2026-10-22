@@ -392,19 +392,19 @@
         <Style Selector="Border.grid-header TextBlock.num">
             <Setter Property="FontFamily" Value="{x:Static FontFamily.Default}" />
         </Style>
-        <Style Selector="TextBlock.mono, SelectableTextBlock.mono">
+        <Style Selector=":is(TextBlock).mono">
             <Setter Property="FontFamily" Value="{DynamicResource OrandaGridFontFamily}" />
         </Style>
         <Style Selector="TextBlock.dim">
             <Setter Property="Opacity" Value="0.65" />
         </Style>
-        <Style Selector="TextBlock.warning-text">
+        <Style Selector=":is(TextBlock).warning-text">
             <Setter Property="Foreground" Value="{DynamicResource OrandaWarningForegroundBrush}" />
         </Style>
-        <Style Selector="TextBlock.danger-text">
+        <Style Selector=":is(TextBlock).danger-text">
             <Setter Property="Foreground" Value="{DynamicResource OrandaDangerForegroundBrush}" />
         </Style>
-        <Style Selector="TextBlock.success-text">
+        <Style Selector=":is(TextBlock).success-text">
             <Setter Property="Foreground" Value="{DynamicResource OrandaSuccessForegroundBrush}" />
         </Style>
         <!-- 상세 칸의 작은 제목·조건절·DDL 같은 코드 상자, 짧은 표시 칩. -->
@@ -419,6 +419,18 @@
             <Setter Property="BorderThickness" Value="1" />
             <Setter Property="CornerRadius" Value="4" />
             <Setter Property="Padding" Value="8,5" />
+        </Style>
+        <!-- 읽기 전용 코드 보기(계획 텍스트·이력 문장·보관된 DDL): 테두리 없이 고정폭 글자. -->
+        <Style Selector="TextBox.code-view">
+            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="Padding" Value="10,6" />
+            <Setter Property="FontFamily" Value="{DynamicResource OrandaGridFontFamily}" />
+            <Setter Property="FontSize" Value="{DynamicResource OrandaGridFontSize}" />
+        </Style>
+        <Style Selector="TextBox.code-view:focus /template/ Border#PART_BorderElement, TextBox.code-view:pointerover /template/ Border#PART_BorderElement">
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="BorderThickness" Value="0" />
         </Style>
         <Style Selector="Border.chip">
             <Setter Property="Background" Value="{DynamicResource OrandaToolbarBackgroundBrush}" />

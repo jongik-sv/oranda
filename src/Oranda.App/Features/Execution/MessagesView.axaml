@@ -11,10 +11,18 @@
                 icons:ButtonIcon.Key="eraser" icons:ButtonIcon.IconOnly="True" />
       </StackPanel>
     </Border>
-    <ListBox x:Name="MessageList" Classes="log" ItemsSource="{Binding Messages}" AutomationProperties.Name="실행 메시지">
+    <!-- 한 줄 = 심각도 아이콘 | 시각 | 내용(줄바꿈, 고를 수 있음). 오류는 빨강, 경고는 주황 글자. -->
+    <ListBox x:Name="MessageList" Classes="table" ItemsSource="{Binding Messages}" AutomationProperties.Name="실행 메시지"
+             ScrollViewer.HorizontalScrollBarVisibility="Disabled">
       <ListBox.ItemTemplate>
         <DataTemplate x:DataType="vm:MessageEntry">
-          <SelectableTextBlock Text="{Binding Line}" FontFamily="Cascadia Mono,Consolas,Menlo,monospace" TextWrapping="Wrap" />
+          <Grid ColumnDefinitions="30,72,*" Margin="0,3">
+            <ContentControl Grid.Column="0" HorizontalAlignment="Center" VerticalAlignment="Top" Margin="0,1,0,0"
+                            Content="{Binding IconKey, Converter={x:Static icons:IconKeyConverter.Instance}, ConverterParameter=14}" />
+            <TextBlock Grid.Column="1" Classes="mono dim" VerticalAlignment="Top" Text="{Binding TimeText}" />
+            <SelectableTextBlock Grid.Column="2" Margin="0,0,10,0" TextWrapping="Wrap" Text="{Binding Text}"
+                                 Classes.danger-text="{Binding IsError}" Classes.warning-text="{Binding IsWarning}" />
+          </Grid>
         </DataTemplate>
       </ListBox.ItemTemplate>
     </ListBox>

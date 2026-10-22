@@ -37,6 +37,9 @@ public sealed record JournalItem(JournalEntry Entry)
     public string SummaryText => Entry.FailureReason is { } reason ? "보관 실패: " + reason : Entry.StatementSummary ?? string.Empty;
 
     public bool IsFailure => Entry.IsFailure;
+
+    /// <summary>앞 아이콘 키: 보관 실패 = 오류, 컴파일 = 컴파일, DDL 실행 = SQL.</summary>
+    public string IconKey => IsFailure ? "error" : Entry.Cause == JournalCause.Compile ? "compile" : "fileSql";
 }
 
 /// <summary>차이 보기 한 줄. <see cref="Kind"/> 은 <c>+</c>(새 쪽에만), <c>-</c>(옛 쪽에만), 공백(같음).</summary>
