@@ -62,8 +62,10 @@ public class DockScopedToolsTests
             Pump();
             Assert.DoesNotContain(Results, ws.VisibleToolIds);
             Assert.DoesNotContain(Messages, ws.VisibleToolIds);
-            Assert.Contains(History, ws.VisibleToolIds); // 실행 이력은 그대로
-            Assert.Equal(order.Where(id => !DockWorkspace.SqlScopedToolIds.Contains(id!)).ToList(), group.VisibleDockables!.Select(d => d.Id).ToList());
+            Assert.DoesNotContain(History, ws.VisibleToolIds); // 실행 이력도 SQL 계열 문서에서만(TSK-13-41)
+            Assert.Contains(History, ws.ScopedHiddenToolIds);
+            Assert.Contains("oranda.panel.schemaBrowser", ws.VisibleToolIds); // 탐색 창은 늘 보임
+            Assert.Equal(order.Where(id => !DockWorkspace.SqlOnlyToolIds.Contains(id!)).ToList(), group.VisibleDockables!.Select(d => d.Id).ToList());
             Assert.Contains(Results, ws.ScopedHiddenToolIds);
 
             // 숨긴 동안 저장해도 배치 파일에는 숨김이 없다.
@@ -315,15 +317,12 @@ public class DockScopedToolsTests
         using var h = new ShellHarness();
         var ws = h.Get<DockWorkspace>();
         var (sql, detail) = Setup(ws);
+        var group = (IDock)ws.Factory.FindDockable(ws.Layout!, d => d.Id == History)!.Owner!;
         ws.Activate(detail);
         Pump();
 
-        // 숨긴 동안 사용자가 그 묶음의 남은 창(실행 이력 등)을 모두 다른 곳으로 옮겨 묶음이 트리에서 사라졌다.
-        var group = (IDock)ws.Factory.FindDockable(ws.Layout!, d => d.Id == History)!.Owner!;
-        foreach (var t in group.VisibleDockables!.ToList())
-        {
-            ws.Factory.RemoveDockable(t, collapse: true);
-        }
+        // 숨긴 동안 사용자가 그 묶음(남은 창 포함)을 모두 치워 묶음이 트리에서 사라졌다.
+        ws.Factory.RemoveDockable(group, collapse: true);
 
         Pump();
         var saved = ws.Capture();
@@ -344,5 +343,94 @@ public class DockScopedToolsTests
         Assert.Contains(Results, ws2.VisibleToolIds);
         Assert.Contains(Messages, ws2.VisibleToolIds);
 
+    });
+
+    private static readonly string[] SqlOnlyTools =
+    [
+        "oranda.panel.results", "oranda.panel.messages", "oranda.panel.output", "oranda.panel.plan", "oranda.panel.compileErrors",
+        "oranda.panel.binds", "oranda.panel.rowView", "oranda.panel.history", "oranda.panel.changeJournal", "oranda.panel.templates",
+        "oranda.panel.extensionTest", "oranda.panel.outline",
+    ];
+
+    // TSK-13-41 조사 표: 문서 종류 × 도구 창. SQL 계열(SQL·PL/SQL 편집기)만 SQL 전용 창을 보고, 탐색 창은 어느 문서에서나 보인다.
+    [Theory]
+    [InlineData("oranda.panel.sqlEditor", true)]
+    [InlineData("oranda.panel.plsqlEditor", true)]
+    [InlineData("oranda.panel.objectDetail", false)]
+    [InlineData("oranda.panel.dbInfo", false)]
+    [InlineData("oranda.panel.ddlExtract", false)]
+    [InlineData("oranda.panel.objectSearch", false)]
+    [InlineData("oranda.panel.formatterProfiles", false)]
+    [InlineData("oranda.panel.lobEditor", false)]
+    [InlineData("oranda.panel.sessionMonitor", false)]
+    [InlineData("oranda.panel.sqlMonitor", false)]
+    [InlineData("oranda.panel.tableSpec", false)]
+    public void Tool_visibility_table_per_document_kind(string documentId, bool sqlFamily)
+    {
+        foreach (var tool in SqlOnlyTools)
+        {
+            Assert.Equal(sqlFamily, DockWorkspace.IsToolShownFor(tool, documentId));
+        }
+
+        Assert.True(DockWorkspace.IsToolShownFor("oranda.panel.schemaBrowser", documentId));
+        Assert.True(DockWorkspace.IsToolShownFor("oranda.panel.scripts", documentId));
+    }
+
+    [Theory]
+    [InlineData("oranda.panel.sessionMonitor")]
+    [InlineData("oranda.panel.formatterProfiles")]
+    [InlineData("oranda.panel.sqlMonitor")]
+    [InlineData("oranda.panel.dbInfo")]
+    [InlineData("oranda.panel.tableSpec")]
+    public Task Non_sql_documents_hide_every_sql_only_tool_and_sql_tab_brings_them_back(string documentId) => HeadlessHost.Run(() =>
+    {
+        using var h = new ShellHarness();
+        var ws = h.Get<DockWorkspace>();
+        foreach (var t in SqlOnlyTools)
+        {
+            ws.ShowTool(t);
+        }
+
+        var sql = ws.OpenDocument("oranda.panel.sqlEditor")!;
+        var other = ws.OpenDocument(documentId)!;
+        ws.Activate(sql);
+        Pump();
+        var shownBefore = ws.VisibleToolIds.Order(StringComparer.Ordinal).ToList();
+        var before = System.Text.Json.JsonSerializer.Serialize(ws.Capture().Root);
+        var order = ((IDock)ws.Factory.FindDockable(ws.Layout!, d => d.Id == Results)!.Owner!).VisibleDockables!.Select(d => d.Id).ToList();
+
+        for (var round = 0; round < 4; round++)
+        {
+            ws.Activate(other);
+            Pump();
+            Assert.Empty(ws.VisibleToolIds.Intersect(SqlOnlyTools));
+            Assert.Contains("oranda.panel.schemaBrowser", ws.VisibleToolIds);
+            Assert.Equal(before, System.Text.Json.JsonSerializer.Serialize(ws.Capture().Root)); // layout.json 에 숨김이 남지 않는다
+            Assert.Empty(ws.Capture().HiddenTools?.Intersect(SqlOnlyTools) ?? []);
+
+            ws.Activate(sql);
+            Pump();
+            Assert.Equal(shownBefore, ws.VisibleToolIds.Order(StringComparer.Ordinal).ToList());
+            Assert.Equal(order, ((IDock)ws.Factory.FindDockable(ws.Layout!, d => d.Id == Results)!.Owner!).VisibleDockables!.Select(d => d.Id).ToList());
+        }
+    });
+
+    [Fact]
+    public Task Opening_history_directly_on_a_non_sql_document_shows_only_that_window() => HeadlessHost.Run(() =>
+    {
+        using var h = new ShellHarness();
+        var ws = h.Get<DockWorkspace>();
+        var (sql, detail) = Setup(ws);
+        ws.Activate(detail);
+        Pump();
+        Assert.DoesNotContain(History, ws.VisibleToolIds);
+        Assert.True(ws.ActivateTool(History));
+        Pump();
+        Assert.Contains(History, ws.VisibleToolIds);
+        Assert.DoesNotContain(Results, ws.VisibleToolIds);
+        ws.Activate(sql);
+        Pump();
+        Assert.Contains(Results, ws.VisibleToolIds);
+        Assert.Empty(ws.ScopedHiddenToolIds);
     });
 }

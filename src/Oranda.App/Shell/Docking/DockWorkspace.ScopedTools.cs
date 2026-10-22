@@ -8,7 +8,7 @@ using Dock.Model.Core;
 namespace Oranda.App.Shell.Docking;
 
 /// <summary>
-/// SQL 창에 딸린 도구 창(결과·메시지·출력·계획·컴파일 오류·바인드·행 보기)을 활성 문서가 SQL·PL/SQL 편집기가 아닐 때 잠시 숨긴다(TSK-13-34).
+/// SQL 편집기 문서에서만 쓰는 도구 창(결과·메시지·출력·계획·컴파일 오류·바인드·행 보기·실행 이력·변경 일지·템플릿·확장 시험·개요)을 활성 문서가 SQL·PL/SQL 편집기가 아닐 때 잠시 숨긴다(TSK-13-34).
 /// <para>
 /// 배치를 다시 짓지 않는다: 그 도구 창을 자기 묶음(<see cref="IToolDock"/>)의 <c>VisibleDockables</c> 에서 잠시 빼고(묶음·자리·활성 여부를 기억),
 /// SQL 편집기로 돌아오면 같은 자리에 되넣는다. 묶음이 비면 Dock 이 그 칸을 접는다. 접힐 때 옆 칸 비율이 늘어나므로
@@ -22,8 +22,8 @@ namespace Oranda.App.Shell.Docking;
 /// </summary>
 public sealed partial class DockWorkspace
 {
-    /// <summary>SQL 창에 딸린 도구 창 ID.</summary>
-    internal static readonly IReadOnlySet<string> SqlScopedToolIds = new HashSet<string>(StringComparer.Ordinal)
+    /// <summary>SQL·PL/SQL 편집기 문서에서만 보이는 도구 창 ID. 실행 이력·변경 일지도 SQL 작업의 기록이라 다른 문서에서는 숨겨 문서가 아래까지 차지하게 한다(TSK-13-41).</summary>
+    internal static readonly IReadOnlySet<string> SqlOnlyToolIds = new HashSet<string>(StringComparer.Ordinal)
     {
         "oranda.panel.results",
         "oranda.panel.messages",
@@ -32,7 +32,19 @@ public sealed partial class DockWorkspace
         "oranda.panel.compileErrors",
         "oranda.panel.binds",
         "oranda.panel.rowView",
+        "oranda.panel.history",
+        "oranda.panel.changeJournal",
+        "oranda.panel.templates",
+        "oranda.panel.extensionTest",
+        "oranda.panel.outline",
     };
+
+    /// <summary>
+    /// 이 도구 창을 활성 문서 <paramref name="documentId"/> 에서 보이는가. 표에 없는 도구 창(스키마 브라우저·스크립트 같은 탐색 창, 확장이 더한 창)은 늘 보인다.
+    /// 지금은 SQL 전용 창만 문서 종류를 가린다 — 조사 표는 TSK-13-41 참고.
+    /// </summary>
+    internal static bool IsToolShownFor(string toolId, string documentId) =>
+        !SqlOnlyToolIds.Contains(toolId) || SqlDocumentIds.Contains(documentId);
 
     /// <summary>위 도구 창을 보이는 문서(SQL·PL/SQL 편집기).</summary>
     internal static readonly IReadOnlySet<string> SqlDocumentIds = new HashSet<string>(StringComparer.Ordinal)
@@ -110,7 +122,7 @@ public sealed partial class DockWorkspace
             {
                 var full = ScopedToolIds(group).Ids;
                 targets.AddRange(list.OfType<PanelTool>()
-                    .Where(t => SqlScopedToolIds.Contains(t.Id) && !string.Equals(t.Id, keep, StringComparison.Ordinal))
+                    .Where(t => SqlOnlyToolIds.Contains(t.Id) && !string.Equals(t.Id, keep, StringComparison.Ordinal))
                     .Select(t => (t, group, full.IndexOf(t.Id), ReferenceEquals(group.ActiveDockable, t))));
             }
         });

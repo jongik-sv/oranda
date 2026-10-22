@@ -4388,6 +4388,38 @@ dotnet, testhost, Oranda.App
 - data-model: -
 - ui-spec: -
 
+### TSK-13-41: 도구 창을 필요한 문서에서만 보여 나머지 문서는 화면을 넓게 [win144]
+- category: defect
+- domain: frontend
+- model: sonnet
+- status: [xx]
+- priority: medium
+- assignee: -
+- schedule: 2026-10-22 ~ 2026-10-23
+- tags: docking, scoped-tools, win144
+- depends: TSK-13-34
+- blocked-by: -
+- entry-point: 포매터 프로필·세션 모니터·SQL 모니터·객체 상세 등 SQL 아닌 문서
+- note: 담당 PC: win144. 2026-10-22 사용자 요청(「필요 없는 것들은 넓게 보이게」). TSK-13-34 가 실행 이력·변경 일지를 남겨 아래 묶음이 두 탭만 남은 채 자리를 차지함. 문서 11종 x 도구 창 14종 조사(survey.md) 후 SQL 전용 창 12개(결과·메시지·출력·계획·컴파일 오류·바인드·행 보기·실행 이력·변경 일지·템플릿·확장 시험·개요)를 SQL·PL/SQL 편집기에서만 보임. 스키마 브라우저·스크립트는 늘 보임. 크기 S. 결과: SQL 전용 창 12개는 SQL·PL/SQL 편집기에서만 보이고 나머지 9종 문서에서는 아래·오른쪽 묶음이 접힘(탐색 창 2개만 남음), 새 시험 통과
+
+#### PRD 요구사항
+- prd-ref: PRD UI
+- requirements:
+  - SQL 계열이 아닌 문서가 활성이면 SQL 전용 도구 창 묶음이 접혀 문서가 그 자리까지 차지한다
+  - SQL 탭으로 돌아오면 같은 자리·크기·탭 순서로 되돌아온다
+- acceptance:
+  - 세션 모니터·포매터 프로필 등에서 아래·오른쪽 SQL 전용 묶음이 없고, 명령으로 직접 연 창은 보인다
+- constraints:
+  - layout.json 에 숨김을 남기지 않는다. 사용자가 닫은 창은 다시 열지 않는다
+- test-criteria:
+  - 문서 종류별 표 시험, 4회 왕복, 직접 열기, 저장
+
+#### 기술 스펙 (TRD)
+- tech-spec: -
+- api-spec: -
+- data-model: -
+- ui-spec: -
+
 ### TSK-13-36: 주 메뉴의 회색 항목 정리: 상황 전용 명령은 숨기고, 못 쓰는 이유를 보임 [win144]
 - category: feat
 - domain: frontend
