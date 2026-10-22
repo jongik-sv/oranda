@@ -4023,6 +4023,72 @@ dotnet, testhost, Oranda.App
 - data-model: -
 - ui-spec: -
 
+### TSK-13-27: 고친 PL/SQL 편집기 탭을 닫을 때 저장 확인 [mac]
+- category: feat
+- domain: frontend
+- model: sonnet
+- status: [ ]
+- priority: medium
+- assignee: -
+- schedule: 2026-10-22 ~ 2026-10-23
+- tags: plsql, editor, mac
+- depends: TSK-08-01
+- blocked-by: -
+- entry-point: PL/SQL 편집기 탭 닫기
+- note: 담당 PC: mac(맥북) — win144 세션은 이 Task 를 하지 않는다. 2026-10-22 실제 앱 확인에서 고친 「새 PL/SQL」 탭이 묻지 않고 닫힘(EDIT-09 가 PL/SQL 편집기를 저장 확인 대상에서 뺐음) → 사용자 결정 「yes」(PL/SQL 편집기도 저장 확인)
+
+#### PRD 요구사항
+- prd-ref: PRD EDIT-09, PLSQL-01
+- requirements:
+  - 고친 PL/SQL 편집기 탭(서버 소스와 다르거나 파일에 묶여 바뀌었거나 내용이 있는 새 탭)을 닫으면 저장 / 저장 안 함 / 취소를 묻는다(SQL 탭 규칙과 같음, Enter = 저장, Esc = 취소)
+  - 저장 = 파일에 묶였으면 파일 저장, 서버 객체면 「컴파일해서 서버에 저장」이 아니라 로컬 파일 다른 이름으로 저장(서버 반영은 명시적 컴파일만)
+  - 앱 종료·작업 공간 닫기 때 규칙은 SQL 탭과 같게 정리하고 PRD EDIT-09 문구를 고친다
+- acceptance:
+  - 고친 PL/SQL 탭을 닫으면 확인 창이 뜨고, 취소하면 탭이 남는다
+- constraints:
+  - 서버에 몰래 컴파일하지 않는다
+- test-criteria:
+  - PL/SQL 탭 닫기 저장 확인 시험(새 탭·파일 탭·서버 객체 탭·안 고친 탭)
+
+#### 기술 스펙 (TRD)
+- tech-spec: -
+- api-spec: -
+- data-model: -
+- ui-spec: -
+
+### TSK-13-28: SQL 편집기에서 만든 PL/SQL 객체의 오류를 컴파일 오류 창에 [mac]
+- category: feat
+- domain: frontend
+- model: sonnet
+- status: [ ]
+- priority: medium
+- assignee: -
+- schedule: 2026-10-22 ~ 2026-10-23
+- tags: plsql, execution, mac
+- depends: TSK-08-01
+- blocked-by: -
+- entry-point: SQL 편집기 실행(CREATE PROCEDURE·FUNCTION·PACKAGE·TRIGGER·TYPE)
+- note: 담당 PC: mac(맥북) — win144 세션은 이 Task 를 하지 않는다. 2026-10-22 실제 앱 확인에서 SQL 편집기로 만든 잘못된 프로시저의 오류가 컴파일 오류 창에 안 들어감(지금은 PL/SQL 편집기 컴파일만 채움) → 사용자 결정 「yes」
+
+#### PRD 요구사항
+- prd-ref: PRD EDIT-03, PLSQL-02
+- requirements:
+  - SQL 편집기에서 PL/SQL 객체를 만드는 문장을 실행해 「오류가 있는 채로 컴파일됨」(ORA-24344 등)이 오면 그 객체의 오류(ALL_ERRORS)를 읽어 컴파일 오류 창에 채우고 창을 보인다
+  - 오류 줄을 누르면 SQL 편집기의 그 문장 안 위치로 간다(문장 시작 줄 기준으로 줄 번호를 옮김)
+  - 오류 없이 컴파일되면 그 객체의 이전 오류 항목을 지운다
+- acceptance:
+  - SQL 편집기에서 틀린 프로시저를 만들면 컴파일 오류 창에 줄·열·메시지가 보이고 눌러서 그 위치로 간다
+- constraints:
+  - ALL_ERRORS 를 읽는 SQL 은 11.2 에서도 도는 형식
+- test-criteria:
+  - 문장 종류 판정·줄 번호 옮기기 단위 시험, 오류 채우기 시험(가짜 세션)
+
+#### 기술 스펙 (TRD)
+- tech-spec: -
+- api-spec: -
+- data-model: -
+- ui-spec: -
+
 ## 의존 그래프
 
 ### 그래프 (Mermaid)
@@ -4180,6 +4246,8 @@ graph LR
   TSK-13-11 --> TSK-13-24
   TSK-13-10 --> TSK-13-25
   TSK-13-17 --> TSK-13-26
+  TSK-08-01 --> TSK-13-27
+  TSK-08-01 --> TSK-13-28
   style TSK-01-02 fill:#fff3e0,stroke:#e65100
   style TSK-01-07 fill:#fff3e0,stroke:#e65100
   style TSK-01-02 stroke:#c62828,stroke-width:2px
