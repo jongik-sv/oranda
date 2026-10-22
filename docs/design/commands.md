@@ -205,7 +205,7 @@
 
 `edit.triggerCompletion` 을 `Option+Esc` 로 둔 이유: 맥 기본 `Ctrl+Space` 는 한/영 입력 소스 전환이다. 사용자 키맵으로 바꿀 수 있다.
 
-`nav.describeObject`(`F4`·`Alt+C`)는 커서 아래 이름이 표·뷰면 테이블 레이아웃 창(Orange 의 Alt+C)을, 아니면 요약 팝업을 연다(TSK-13-32). 맥에서는 `Option+C` 와 기존 `Ctrl+Option+C` 가 둘 다 열고, 같은 `editorFocus` 에서 겹치는 키가 없다(`Cmd+Option+C` = `grid.copyRows` 는 `gridFocus`).
+`nav.describeObject`(`F4`·`Alt+C`)는 커서 아래 이름이 표·뷰면 테이블 레이아웃 창(Orange 의 Alt+C)을, 아니면 요약 팝업을 연다(TSK-13-32). 창에서는 행을 클릭·Shift(범위)·`Cmd`/`Ctrl`+클릭(개별)·`Cmd`/`Ctrl`+`A`(전체)로 고르고, `Enter`·「넣기」·두 번 누르기(누른 행이 선택 안이면 선택 전체)로 편집기에 넣고, `Cmd`/`Ctrl`+`C` 로 같은 글을 복사한다. 글은 늘 표 순서로 한 줄 「COL1, COL2, …」(별칭·소문자·쉼표 넣기 반영)이고, 주석 넣기를 켜면 열마다 한 줄 「COL1, -- 주석」에 끝에도 줄을 바꾸며 둘째 줄부터 편집기 커서 열에 맞춰 들인다. 맥에서는 `Option+C` 와 기존 `Ctrl+Option+C` 가 둘 다 열고, 같은 `editorFocus` 에서 겹치는 키가 없다(`Cmd+Option+C` = `grid.copyRows` 는 `gridFocus`).
 
 `grid.followForeignKey`(`F4`)·`grid.showReferencingRows`(`Shift+F4`)는 `gridFocus` 에서만 쓴다 — `F4`·`Shift+F4` 의 다른 바인딩(`nav.describeObject`)은 `editorFocus` 라 포커스 자리가 겹치지 않는다. DataGrip 「Related Rows」(F4)를 따랐고, 4개 프리셋 모두 두 열(Windows·mac)이 같다.
 

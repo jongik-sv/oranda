@@ -47,11 +47,111 @@ public class TableLayoutTests
         Assert.Equal("a.coil_id", TableLayoutPaste.Build([Id], Opts("A", lower: true)));
         Assert.Equal("T.COIL_ID, T.RCD_STS_TP", TableLayoutPaste.Build([Id, Sts], Opts("T")));
         Assert.Equal("T.COIL_ID, T.RCD_STS_TP, ", TableLayoutPaste.Build([Id, Sts], Opts("T", comma: true)));
-        Assert.Equal("COIL_ID -- 코일 번호", TableLayoutPaste.Build([Id], Opts(comment: true)));
-        Assert.Equal("COIL_ID, -- 코일 번호", TableLayoutPaste.Build([Id], Opts(comma: true, comment: true)));
-        Assert.Equal("COIL_ID, -- 코일 번호\nRCD_STS_TP", TableLayoutPaste.Build([Id, Sts], Opts(comment: true)));
-        Assert.Equal("RCD_STS_TP", TableLayoutPaste.Build([Sts], Opts(comment: true)));
+        Assert.Equal("COIL_ID -- 코일 번호\n", TableLayoutPaste.Build([Id], Opts(comment: true)));
+        Assert.Equal("COIL_ID, -- 코일 번호\n", TableLayoutPaste.Build([Id], Opts(comma: true, comment: true)));
+        Assert.Equal("COIL_ID, -- 코일 번호\nRCD_STS_TP\n", TableLayoutPaste.Build([Id, Sts], Opts(comment: true)));
+        Assert.Equal("RCD_STS_TP\n", TableLayoutPaste.Build([Sts], Opts(comment: true)));
         Assert.Equal(string.Empty, TableLayoutPaste.Build([], Opts()));
+    }
+
+    [Fact]
+    public void Several_rows_join_on_one_line_in_table_order_whatever_the_selection_order()
+    {
+        Assert.Equal("COIL_ID, RCD_STS_TP, \"Mixed Case\"", TableLayoutPaste.Build([Mixed, Id, Sts], Opts()));
+        Assert.Equal("a.coil_id, a.rcd_sts_tp, ", TableLayoutPaste.Build([Sts, Id], Opts("A", comma: true, lower: true)));
+    }
+
+    [Fact]
+    public void Comment_option_puts_one_column_per_line_indented_to_the_caret_column_even_without_comments()
+    {
+        Assert.Equal("COIL_ID, -- 코일 번호\n    RCD_STS_TP,\n    \"Mixed Case\" -- 혼합\n    ", TableLayoutPaste.Build([Sts, Mixed, Id], Opts(comment: true), "    "));
+        Assert.Equal("t.rcd_sts_tp,\n\tt.\"Mixed Case\", -- 혼합\n\t", TableLayoutPaste.Build([Sts, Mixed], Opts("T", comma: true, lower: true, comment: true), "\t"));
+        var noComment = Sts with { Index = 4, Name = "UPD_DT" };
+        Assert.Equal("RCD_STS_TP,\nUPD_DT\n", TableLayoutPaste.Build([noComment, Sts], Opts(comment: true)));
+        Assert.Equal("RCD_STS_TP, UPD_DT", TableLayoutPaste.Build([noComment, Sts], Opts()));
+    }
+
+    // 실앱 결함(2026-10-22): 별칭 a·쉼표 넣기·주석 넣기로 넣었더니 「a.DEPT_CD, -- 부서 코드a.USE_TP, -- 사용 구분…」처럼
+    // 줄바꿈이 없어 뒤 열이 모두 주석에 묻히고 고른 순서대로 나왔다. 한 번에 넣든 한 행씩 이어 넣든 열마다 한 줄, 표 순서여야 한다.
+    [Fact]
+    public void Comment_mode_regression_columns_never_end_up_inside_a_previous_comment()
+    {
+        TableLayoutRow Col(int i, string name, string comment) => new(i, name, "VARCHAR2(10)", false, null, comment, false);
+        var userCategory = Col(3, "USER_CATEGORY_CD", "사용자 분류 코드");
+        var email = Col(5, "EMAIL", "이메일");
+        var dept = Col(7, "DEPT_CD", "부서 코드");
+        var use = Col(9, "USE_TP", "사용 구분");
+        var options = Opts("a", comma: true, comment: true);
+        var expected = "a.USER_CATEGORY_CD, -- 사용자 분류 코드\n       a.EMAIL, -- 이메일\n       a.DEPT_CD, -- 부서 코드\n       a.USE_TP, -- 사용 구분\n       ";
+
+        var (tab, session, _) = NewSession("select ", options);
+        tab.UpdateCaret(7, 7, 0);
+        Assert.True(session.Paste([dept, use, email, userCategory]));
+        Assert.Equal("select " + expected, tab.Text);
+
+        (tab, session, _) = NewSession("select ", options);
+        tab.UpdateCaret(7, 7, 0);
+        foreach (var row in new[] { userCategory, email, dept, use })
+        {
+            Assert.True(session.Paste([row]));
+        }
+
+        Assert.Equal("select " + expected, tab.Text);
+
+        // 주석 없는 열이 섞여 한 행씩 이어 넣어도 열마다 한 줄이다.
+        (tab, session, _) = NewSession("select ", options);
+        tab.UpdateCaret(7, 7, 0);
+        var plain = Col(4, "USE_YN", "x") with { Comment = null };
+        Assert.True(session.Paste([plain]));
+        Assert.True(session.Paste([email]));
+        Assert.Equal("select a.USE_YN,\n       a.EMAIL, -- 이메일\n       ", tab.Text);
+    }
+
+    [Fact]
+    public void Comment_mode_uses_the_documents_line_ending()
+    {
+        var (tab, session, _) = NewSession("select\r\n  ", Opts(comment: true));
+        tab.UpdateCaret(10, 10, 0);
+        Assert.Equal("COIL_ID, -- 코일 번호\r\n  RCD_STS_TP\r\n  ", session.TextFor([Id, Sts]));
+    }
+
+    [Fact]
+    public void Indent_copies_the_text_before_the_caret_as_spaces_and_tabs()
+    {
+        Assert.Equal("       ", TableLayoutPaste.IndentFor("select ", 7));
+        Assert.Equal("\t   ", TableLayoutPaste.IndentFor("x\n\tab c", 6));
+        Assert.Equal(string.Empty, TableLayoutPaste.IndentFor("abc\n", 4));
+    }
+
+    [Fact]
+    public void Double_click_inside_the_selection_takes_the_selection_and_outside_only_that_row()
+    {
+        Assert.Equal([Id, Sts], TableLayoutPaste.DoubleClickRows(Sts, [Id, Sts]));
+        Assert.Equal([Mixed], TableLayoutPaste.DoubleClickRows(Mixed, [Id, Sts]));
+    }
+
+    [Fact]
+    public void Filter_matches_name_or_comment_ignoring_case()
+    {
+        TableLayoutRow[] rows = [Id, Sts, Mixed];
+        Assert.Equal([Sts], TableLayoutPaste.Filter(rows, "sts"));
+        Assert.Equal([Id], TableLayoutPaste.Filter(rows, "코일"));
+        Assert.Equal(rows, TableLayoutPaste.Filter(rows, "  "));
+    }
+
+    [Fact]
+    public void Copied_text_equals_the_pasted_text_including_the_caret_indent()
+    {
+        var (tab, session, _) = NewSession("select\n  from emp", Opts("e", comment: true));
+        tab.UpdateCaret(7, 7, 0);
+        var copied = session.TextFor([Sts, Id]);
+        Assert.Equal("e.COIL_ID, -- 코일 번호\ne.RCD_STS_TP\n", copied);
+
+        tab.UpdateCaret(9, 9, 0);
+        copied = session.TextFor([Sts, Id]);
+        Assert.Equal("e.COIL_ID, -- 코일 번호\n  e.RCD_STS_TP\n  ", copied);
+        Assert.True(session.Paste([Sts, Id]));
+        Assert.Equal("select\n  " + copied + "from emp", tab.Text);
     }
 
     [Fact]

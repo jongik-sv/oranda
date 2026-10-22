@@ -1,0 +1,45 @@
+<Styles xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <!-- 격자 표(C안, Orange 격자형 — 테이블 레이아웃 창·객체 상세 표 공용).
+         ListBox.grid-c 의 줄마다 GridC.Row 로 칸을 만든다: 칸 = Border.grid-c-cell(오른쪽·아래 가는 선), 첫 칸 = 행 머리(.row-head, 머리글 색 바탕).
+         머리글 줄은 Border.grid-c-header 로 감싼다. 줄 높이 24 DIP, 줄무늬 없음, 고른 줄은 표 목록과 같은 옅은 파랑. 색은 앱 테마 자원만 쓴다. -->
+    <Style Selector="ListBox.grid-c">
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="FontSize" Value="{DynamicResource OrandaGridFontSize}" />
+        <Setter Property="Padding" Value="0" />
+        <Setter Property="BorderThickness" Value="0" />
+    </Style>
+    <Style Selector="ListBox.grid-c ListBoxItem">
+        <Setter Property="Padding" Value="0" />
+        <Setter Property="MinHeight" Value="24" />
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+        <Setter Property="VerticalContentAlignment" Value="Stretch" />
+    </Style>
+    <Style Selector="ListBox.grid-c ListBoxItem:selected /template/ ContentPresenter#PART_ContentPresenter, ListBox.grid-c ListBoxItem:selected:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+        <Setter Property="Background" Value="{DynamicResource OrandaTableSelectionBrush}" />
+    </Style>
+    <Style Selector="Border.grid-c-header">
+        <Setter Property="Background" Value="{DynamicResource OrandaPanelHeaderBrush}" />
+    </Style>
+    <Style Selector="Border.grid-c-header TextBlock">
+        <Setter Property="FontWeight" Value="SemiBold" />
+        <Setter Property="FontSize" Value="{DynamicResource OrandaFontSizeSmall}" />
+    </Style>
+    <Style Selector="Border.grid-c-header Border.grid-c-cell">
+        <Setter Property="MinHeight" Value="24" />
+    </Style>
+    <Style Selector="Border.grid-c-cell">
+        <Setter Property="BorderBrush" Value="{DynamicResource OrandaSeparatorBrush}" />
+        <Setter Property="BorderThickness" Value="0,0,1,1" />
+        <Setter Property="Padding" Value="6,0" />
+    </Style>
+    <Style Selector="Border.grid-c-cell.row-head">
+        <Setter Property="Background" Value="{DynamicResource OrandaPanelHeaderBrush}" />
+    </Style>
+    <!-- 행 머리의 현재 행 표시(▶). -->
+    <Style Selector="TextBlock.grid-c-marker">
+        <Setter Property="FontSize" Value="9" />
+        <Setter Property="VerticalAlignment" Value="Center" />
+    </Style>
+</Styles>

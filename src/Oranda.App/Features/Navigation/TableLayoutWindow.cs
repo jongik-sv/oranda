@@ -1,52 +1,63 @@
+using System.Globalization;
 using Avalonia;
+using Avalonia.Automation;
 using Avalonia.Controls;
 using Avalonia.Controls.Primitives;
 using Avalonia.Input;
+using Avalonia.Input.Platform;
 using Avalonia.Interactivity;
 using Avalonia.Layout;
 using Avalonia.Media;
 using Avalonia.VisualTree;
 using Oranda.App.Features.Localization;
 using Oranda.App.Shell.Icons;
+using Oranda.App.Styles;
 
 namespace Oranda.App.Features.Navigation;
 
 /// <summary>
-/// 테이블 레이아웃 창(Orange 의 Alt+C). 제목은 「소유자.표」, 위에 별칭 칸과 확인란 4개, 아래에 열 표.
-/// 이름 칸(어느 칸이든 그 행)을 두 번 누르면 그 열을, 여러 행을 고르고 Enter 를 누르면 고른 순서대로 편집기에 넣는다. Esc 로 닫는다.
-/// 비모달이라 창을 연 채 편집기를 계속 쓸 수 있다.
+/// 테이블 레이아웃 창(Orange 의 Alt+C). 도구 막대(넣기·복사 | 옵션 토글 4개 | 별칭 · 거르기) / 격자 표(행 머리 칸·현재 행 ▶) /
+/// 상태 줄(객체·종류·컬럼 수·선택 수·PK | 키 힌트).
+/// 행은 클릭·Shift(범위)·⌘ 또는 Ctrl(개별)·⌘A 로 고르고, Enter·「넣기」·두 번 누르기로 편집기에 넣고 ⌘C 로 같은 글을 복사한다.
+/// 넣는 글은 늘 표 순서다(<see cref="TableLayoutPaste.Build"/>). 비모달이라 창을 연 채 편집기를 계속 쓸 수 있고 Esc 로 닫는다.
 /// </summary>
 public sealed class TableLayoutWindow : Window
 {
     // 「형식」「NULL」은 literals-en.json 의 기존 번역(Format·Nullable)과 달라서 언어를 보고 직접 고른다.
-    private static readonly string[] HeadersKo = ["", "이름", "형식", "NULL", "기본값", "주석"];
-    private static readonly string[] HeadersEn = ["", "Name", "Type", "Nullable", "Default", "Comment"];
+    private static readonly string[] HeadersKo = ["", "이름", "형식", "Null", "기본값", "주석"];
+    private static readonly string[] HeadersEn = ["", "Name", "Type", "Null", "Default", "Comment"];
+    private const string Group = "tl";
     private static TableLayoutWindow? s_open;
 
     private readonly TableLayoutSession _session;
-    private readonly TextBox _alias = new() { MinWidth = 140, MinHeight = 0, Padding = new Thickness(4, 2), VerticalContentAlignment = VerticalAlignment.Center };
-    private readonly CheckBox _comma = Check("쉼표 넣기");
-    private readonly CheckBox _lower = Check("소문자");
-    private readonly CheckBox _pk = Check("PK 표시");
-    private readonly CheckBox _comment = Check("주석 넣기");
+    private readonly TextBox _alias = new() { Classes = { "compact" }, Width = 64, PlaceholderText = "별칭", VerticalAlignment = VerticalAlignment.Center };
+    private readonly TextBox _filter = new() { Classes = { "compact", "search" }, Width = 150, PlaceholderText = "컬럼 거르기", VerticalAlignment = VerticalAlignment.Center };
+    private readonly ToggleButton _comma = Toggle(Glyph(","), "쉼표 넣기");
+    private readonly ToggleButton _lower = Toggle(Glyph("aa"), "소문자");
+    private readonly ToggleButton _pk = Toggle(ShellIcons.Create("key", 14)!, "PK 표시");
+    private readonly ToggleButton _comment = Toggle(Glyph("--"), "주석 넣기");
+    private readonly TextBlock _status = new() { VerticalAlignment = VerticalAlignment.Center, TextTrimming = TextTrimming.CharacterEllipsis };
+    private readonly Dictionary<TableLayoutRow, TextBlock> _markers = [];
+    private TableLayoutRow? _current;
     private readonly ListBox _list = new()
     {
+        Classes = { "grid-c" },
         SelectionMode = SelectionMode.Multiple,
-        Padding = new Thickness(0),
-        BorderThickness = new Thickness(0),
     };
+
+    // 두 번 누르기의 첫 클릭이 선택을 그 행 하나로 줄이기 전에 잡아 둔 선택(누른 행이 이 안에 있으면 선택 전체를 넣는다).
+    private List<TableLayoutRow> _pressSelection = [];
 
     public TableLayoutWindow(TableLayoutSession session)
     {
         ArgumentNullException.ThrowIfNull(session);
         _session = session;
         Title = session.Model.Title;
-        Width = 640;
-        Height = 360;
-        MinWidth = 360;
-        MinHeight = 160;
+        Width = 760;
+        Height = 380;
+        MinWidth = 420;
+        MinHeight = 180;
         ShowInTaskbar = false;
-        FontSize = 12;
         Content = BuildContent();
 
         var o = session.Options;
@@ -58,12 +69,16 @@ public sealed class TableLayoutWindow : Window
         Rebuild();
 
         _alias.TextChanged += (_, _) => OptionsChanged();
-        foreach (var c in new[] { _comma, _lower, _pk, _comment })
+        _filter.TextChanged += (_, _) => Rebuild();
+        foreach (var t in new[] { _comma, _lower, _pk, _comment })
         {
-            c.IsCheckedChanged += (_, _) => OptionsChanged();
+            t.IsCheckedChanged += (_, _) => OptionsChanged();
         }
 
+        _list.SelectionChanged += OnSelectionChanged;
+        _list.AddHandler(PointerPressedEvent, OnListPressed, RoutingStrategies.Tunnel);
         _list.DoubleTapped += OnDoubleTapped;
+        _list.KeyUp += OnListKeyUp;
         AddHandler(KeyDownEvent, OnKeyDown, RoutingStrategies.Tunnel);
         Opened += (_, _) => _list.Focus();
         Closed += (_, _) =>
@@ -74,6 +89,19 @@ public sealed class TableLayoutWindow : Window
             }
         };
     }
+
+    /// <summary>지금 표에 보이는 행(거르기 적용 뒤).</summary>
+    internal IReadOnlyList<TableLayoutRow> VisibleRows => Items().Select(i => (TableLayoutRow)i.Tag!).ToList();
+
+    /// <summary>고른 행(보이는 행만).</summary>
+    internal IReadOnlyList<TableLayoutRow> SelectedRows => _list.SelectedItems?.OfType<ListBoxItem>().Select(i => i.Tag).OfType<TableLayoutRow>().ToList() ?? [];
+
+    internal ListBox List => _list;
+
+    /// <summary>현재 행(▶).</summary>
+    internal TableLayoutRow? CurrentRow => _current;
+
+    internal TextBox FilterBox => _filter;
 
     /// <summary>이미 떠 있는 창이 있으면 닫고 새로 연다. 편집기 View 가 없으면(시험) 아무것도 하지 않는다.</summary>
     public static void Show(TableLayoutSession session)
@@ -101,89 +129,219 @@ public sealed class TableLayoutWindow : Window
         s_open = null;
     }
 
-    private static CheckBox Check(string text) => new() { Content = text, Margin = new Thickness(0, 0, 14, 0), MinHeight = 0, Padding = new Thickness(4, 0, 0, 0) };
+    /// <summary>고른 행을 편집기에 넣는다(Enter·「넣기」).</summary>
+    internal bool PasteSelection() => SelectedRows is { Count: > 0 } rows && _session.Paste(rows);
+
+    /// <summary>고른 행의 넣기 글을 클립보드에 둔다(⌘C·Ctrl+C).</summary>
+    internal async Task<bool> CopySelectionAsync()
+    {
+        var text = _session.TextFor(SelectedRows);
+        if (text.Length == 0 || Clipboard is not { } clipboard)
+        {
+            return false;
+        }
+
+        try
+        {
+            await clipboard.SetTextAsync(text).ConfigureAwait(true);
+            return true;
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or System.Runtime.InteropServices.ExternalException)
+        {
+            return false; // 다른 프로그램이 클립보드를 쥐고 있으면(Windows) 이번 복사만 건너뛴다.
+        }
+    }
+
+    /// <summary>두 번 누른 행: 누르기 전 선택 안이면 그 선택 전체를, 밖이면 그 행 하나를 넣는다.</summary>
+    internal bool PasteDoubleClicked(TableLayoutRow row)
+    {
+        var rows = TableLayoutPaste.DoubleClickRows(row, _pressSelection);
+        if (rows.Count > 1)
+        {
+            Select(rows); // 첫 클릭이 줄인 선택을 되돌린다.
+        }
+
+        return _session.Paste(rows);
+    }
+
+    internal void Select(IEnumerable<TableLayoutRow> rows)
+    {
+        var set = rows.ToHashSet();
+        _list.SelectedItems?.Clear();
+        foreach (var item in Items().Where(i => set.Contains((TableLayoutRow)i.Tag!)))
+        {
+            _list.SelectedItems?.Add(item);
+        }
+    }
+
+    private IEnumerable<ListBoxItem> Items() => _list.ItemsSource?.OfType<ListBoxItem>() ?? [];
+
+    private static TextBlock Glyph(string text) => new()
+    {
+        Text = text,
+        Classes = { "mono" },
+        FontSize = 12,
+        FontWeight = FontWeight.SemiBold,
+        MinWidth = 14,
+        TextAlignment = TextAlignment.Center,
+    };
+
+    private static ToggleButton Toggle(Control content, string tip)
+    {
+        var t = new ToggleButton { Classes = { "toolbar" }, Content = content, Padding = new Thickness(5, 3), Focusable = false };
+        ToolTip.SetTip(t, tip);
+        AutomationProperties.SetName(t, tip);
+        return t;
+    }
+
+    private static Button IconButton(string icon, string tip, Action click)
+    {
+        var b = new Button { Classes = { "toolbar" }, Content = tip, Focusable = false };
+        ButtonIcon.SetKey(b, icon);
+        ButtonIcon.SetIconOnly(b, true);
+        b.Click += (_, _) => click();
+        return b;
+    }
+
+    private static bool En => LiteralTranslator.Language == "en";
 
     private DockPanel BuildContent()
     {
-        var top = new StackPanel { Margin = new Thickness(8, 6), Spacing = 4 };
-        var aliasRow = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8 };
-        aliasRow.Children.Add(new TextBlock { Text = "테이블 별칭", VerticalAlignment = VerticalAlignment.Center });
-        aliasRow.Children.Add(_alias);
-        top.Children.Add(aliasRow);
-        top.Children.Add(new WrapPanel { Children = { _comma, _lower, _pk, _comment } });
+        _filter.InnerLeftContent = ShellIcons.Create("find", 14);
 
-        var header = ItemGrid((LiteralTranslator.Language == "en" ? HeadersEn : HeadersKo).Select(h => (Control)new TextBlock { Text = h, FontWeight = FontWeight.SemiBold }).ToList(), isHeader: true);
-        var headerBorder = new Border { Classes = { "grid-header" }, Child = header };
+        // 도구 막대: 넣기·복사 | 옵션 토글 4개 | 별칭 칸 ………… 거르기 칸.
+        var tools = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 1, VerticalAlignment = VerticalAlignment.Center };
+        tools.Children.Add(IconButton("add", "넣기", () => PasteSelection()));
+        tools.Children.Add(IconButton("copy", "복사", () => _ = CopySelectionAsync()));
+        tools.Children.Add(new Separator { Classes = { "toolbar" } });
+        tools.Children.Add(_comma);
+        tools.Children.Add(_lower);
+        tools.Children.Add(_pk);
+        tools.Children.Add(_comment);
+        tools.Children.Add(new Separator { Classes = { "toolbar" } });
+        tools.Children.Add(new TextBlock { Text = "별칭", FontSize = 12, Margin = new Thickness(4, 0), VerticalAlignment = VerticalAlignment.Center });
+        tools.Children.Add(_alias);
+        var bar = new DockPanel();
+        DockPanel.SetDock(_filter, Avalonia.Controls.Dock.Right);
+        bar.Children.Add(_filter);
+        bar.Children.Add(tools);
 
+        var hint = new TextBlock
+        {
+            Text = (En ? "Enter · double-click = insert · {0} = copy" : "Enter·두 번 누르기 = 넣기 · {0} = 복사").Replace("{0}", OperatingSystem.IsMacOS() ? "⌘C" : "Ctrl+C", StringComparison.Ordinal),
+        };
+
+        // 격자 표(Styles/GridC): 머리글과 줄이 같은 칸 묶음 이름(tl)을 써서 너비가 맞는다.
         var body = new DockPanel();
-        DockPanel.SetDock(headerBorder, Avalonia.Controls.Dock.Top);
-        body.Children.Add(headerBorder);
+        var header = GridC.Header(En ? HeadersEn : HeadersKo, Group);
+        DockPanel.SetDock(header, Avalonia.Controls.Dock.Top);
+        body.Children.Add(header);
         body.Children.Add(_list);
         Grid.SetIsSharedSizeScope(body, true);
 
-        var root = new DockPanel();
-        DockPanel.SetDock(top, Avalonia.Controls.Dock.Top);
-        root.Children.Add(top);
-        root.Children.Add(body);
-        return root;
-    }
-
-    // 머리글과 행이 같은 SharedSizeGroup 을 써서 칸 너비가 맞는다(마지막 칸만 남는 너비를 차지).
-    private static Grid ItemGrid(List<Control> cells, bool isHeader)
-    {
-        var grid = new Grid { Margin = new Thickness(0, isHeader ? 4 : 1) };
-        for (var i = 0; i < cells.Count; i++)
+        var root = GridC.Frame(bar, body, _status, hint);
+        if (_session.Model.Comment is { } comment)
         {
-            var last = i == cells.Count - 1;
-            grid.ColumnDefinitions.Add(new ColumnDefinition(last ? GridLength.Star : GridLength.Auto) { SharedSizeGroup = last ? null : "c" + i, MinWidth = last ? 80 : 0 });
-            cells[i].Margin = new Thickness(8, 0, 12, 0);
-            cells[i].VerticalAlignment = VerticalAlignment.Center;
-            Grid.SetColumn(cells[i], i);
-            grid.Children.Add(cells[i]);
+            ToolTip.SetTip(_status, comment);
         }
 
-        return grid;
-    }
-
-    // Orange 표처럼 행마다 가는 가로줄을 둔다(구분선 색은 앱 공용 자원).
-    private static Border Ruled(Control row)
-    {
-        var line = new Border { BorderThickness = new Thickness(0, 0, 0, 1), Child = row };
-        line.Bind(Border.BorderBrushProperty, line.GetResourceObservable("OrandaSeparatorBrush"));
-        return line;
+        return root;
     }
 
     private void Rebuild()
     {
         var showPk = _session.Options.ShowPk;
+        var selected = SelectedRows.ToHashSet();
         var items = new List<ListBoxItem>();
-        foreach (var r in _session.Model.Rows)
+        _markers.Clear();
+        foreach (var r in TableLayoutPaste.Filter(_session.Model.Rows, _filter.Text))
         {
+            var marker = new TextBlock { Text = ReferenceEquals(r, _current) ? "▶" : string.Empty, Classes = { "grid-c-marker" } };
+            _markers[r] = marker;
+            var head = new DockPanel { MinWidth = 28, Children = { marker, new TextBlock { Text = r.Index.ToString(CultureInfo.InvariantCulture), Classes = { "num", "dim" }, FontSize = 12, VerticalAlignment = VerticalAlignment.Center } } };
             var name = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 4 };
-            if (showPk && r.IsPk)
+            if (showPk)
             {
-                name.Children.Add((Control)ShellIcons.Create("key", 12)!);
+                // 열쇠 자리를 늘 비워 둬서 PK 가 아닌 이름도 같은 자리에서 시작한다.
+                name.Children.Add(r.IsPk ? ShellIcons.Create("key", 12)! : new Control { Width = 12 });
             }
 
             name.Children.Add(new TextBlock { Text = r.Name });
             var cells = new List<Control>
             {
-                new TextBlock { Text = r.Index.ToString(System.Globalization.CultureInfo.InvariantCulture), HorizontalAlignment = HorizontalAlignment.Right, Opacity = 0.6 },
+                head,
                 name,
-                new TextBlock { Text = r.TypeText },
-                new TextBlock { Text = r.NotNull ? "Not Null" : string.Empty },
-                new TextBlock { Text = r.DefaultValue ?? string.Empty, TextTrimming = TextTrimming.CharacterEllipsis },
-                new TextBlock { Text = r.Comment ?? string.Empty, TextTrimming = TextTrimming.CharacterEllipsis },
+                new TextBlock { Text = r.TypeText, Classes = { "mono", "dim" } },
+                new TextBlock { Text = r.NotNull ? "N" : "Y", Classes = { r.NotNull ? "warning-text" : "dim" } },
+                new TextBlock { Text = r.DefaultValue ?? string.Empty, Classes = { "mono" }, TextTrimming = TextTrimming.CharacterEllipsis, MaxWidth = 160 },
+                new TextBlock { Text = r.Comment ?? string.Empty, Classes = { "dim" }, TextTrimming = TextTrimming.CharacterEllipsis },
             };
-            items.Add(new ListBoxItem { Tag = r, Padding = new Thickness(0), MinHeight = 0, Content = Ruled(ItemGrid(cells, isHeader: false)) });
+
+            items.Add(new ListBoxItem { Tag = r, Content = GridC.Row(cells, rowHead: true, Group) });
         }
 
-        var selected = _list.SelectedItems?.OfType<ListBoxItem>().Select(i => i.Tag).ToHashSet() ?? [];
         _list.ItemsSource = items;
-        foreach (var item in items.Where(i => selected.Contains(i.Tag)))
+        foreach (var item in items.Where(i => selected.Contains((TableLayoutRow)i.Tag!)))
         {
             _list.SelectedItems?.Add(item);
         }
+
+        UpdateStatus();
+    }
+
+    private void OnSelectionChanged(object? sender, SelectionChangedEventArgs e) => UpdateStatus();
+
+    // 현재 행 ▶ = 사용자가 마지막으로 누른 행·키보드로 옮겨 간 행(선택 순서가 아니라 포커스가 있는 줄).
+    private void OnListKeyUp(object? sender, KeyEventArgs e)
+    {
+        if ((FocusManager?.GetFocusedElement() as Visual)?.FindAncestorOfType<ListBoxItem>(includeSelf: true)?.Tag is TableLayoutRow row)
+        {
+            SetCurrent(row);
+        }
+    }
+
+    private void SetCurrent(TableLayoutRow row)
+    {
+        if (_current is { } old && _markers.TryGetValue(old, out var before))
+        {
+            before.Text = string.Empty;
+        }
+
+        _current = row;
+        if (_markers.TryGetValue(row, out var now))
+        {
+            now.Text = "▶";
+        }
+    }
+
+    private void UpdateStatus()
+    {
+        var model = _session.Model;
+        var shown = Items().Count();
+        var total = model.Rows.Count;
+        var picked = _list.SelectedItems?.Count ?? 0;
+        var parts = new List<string>
+        {
+            $"{model.Title} ({model.Kind})",
+            En ? $"{total} columns" : $"{total} 컬럼",
+        };
+        if (shown != total)
+        {
+            parts.Add(En ? $"{shown} shown" : $"{shown}개 보임");
+        }
+
+        if (picked > 0)
+        {
+            parts.Add(En ? $"{picked} selected" : $"{picked}개 선택");
+        }
+
+        var pk = model.Rows.Where(r => r.IsPk).Select(r => r.Name).ToList();
+        if (pk.Count > 0)
+        {
+            parts.Add("PK: " + string.Join(", ", pk));
+        }
+
+        _status.Text = string.Join(" · ", parts);
     }
 
     private void OptionsChanged()
@@ -196,11 +354,24 @@ public sealed class TableLayoutWindow : Window
         }
     }
 
+    private void OnListPressed(object? sender, PointerPressedEventArgs e)
+    {
+        if (e.ClickCount == 1)
+        {
+            _pressSelection = SelectedRows.ToList();
+        }
+
+        if ((e.Source as Visual)?.FindAncestorOfType<ListBoxItem>(includeSelf: true)?.Tag is TableLayoutRow row)
+        {
+            SetCurrent(row);
+        }
+    }
+
     private void OnDoubleTapped(object? sender, TappedEventArgs e)
     {
         if ((e.Source as Visual)?.FindAncestorOfType<ListBoxItem>(includeSelf: true)?.Tag is TableLayoutRow row)
         {
-            _session.Paste([row]);
+            PasteDoubleClicked(row);
             e.Handled = true;
         }
     }
@@ -211,11 +382,39 @@ public sealed class TableLayoutWindow : Window
         {
             e.Handled = true;
             Close();
+            return;
         }
-        else if (e.Key is Key.Enter && !_alias.IsFocused && _list.SelectedItems is { Count: > 0 } sel)
+
+        // 별칭·거르기 칸에서는 Enter·복사·전체 선택이 그 칸의 글 편집이다. 거르기 칸의 ↓ 는 표로 옮겨 간다.
+        if (e.Source is Visual v && v.FindAncestorOfType<TextBox>(includeSelf: true) is { } box)
+        {
+            if (ReferenceEquals(box, _filter) && e.Key == Key.Down)
+            {
+                e.Handled = true;
+                _list.Focus();
+                if (_list.SelectedItems is { Count: 0 })
+                {
+                    _list.SelectedIndex = 0;
+                }
+            }
+
+            return;
+        }
+
+        var keys = Application.Current?.PlatformSettings?.HotkeyConfiguration;
+        if (e.Key is Key.Enter)
+        {
+            e.Handled = PasteSelection();
+        }
+        else if (keys?.Copy.Any(g => g.Matches(e)) == true)
         {
             e.Handled = true;
-            _session.Paste(sel.OfType<ListBoxItem>().Select(i => i.Tag).OfType<TableLayoutRow>().ToList());
+            _ = CopySelectionAsync();
+        }
+        else if (keys?.SelectAll.Any(g => g.Matches(e)) == true)
+        {
+            e.Handled = true;
+            _list.SelectAll();
         }
     }
 }

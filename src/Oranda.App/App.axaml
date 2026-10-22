@@ -16,6 +16,8 @@
     <Application.Styles>
         <FluentTheme />
         <dock:DockFluentTheme />
+        <!-- 격자 표(C안) 공용 스타일: ListBox.grid-c·Border.grid-c-header·Border.grid-c-cell(Styles/GridC.cs 도우미와 함께 쓴다). -->
+        <StyleInclude Source="avares://Oranda.App/Styles/GridC.axaml" />
 
         <!-- 앱 전체 밀도: Fluent 기본(32 DIP)보다 조금 촘촘하게(Orange·SQL Developer 수준). -->
         <Style Selector="TextBox">
