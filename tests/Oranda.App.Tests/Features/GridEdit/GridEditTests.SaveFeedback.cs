@@ -92,6 +92,7 @@ public sealed partial class GridEditTests
         await using var oldModel = new Oranda.App.Features.ResultGrid.ResultGridModel(new SaveTestResultSet());
         GridEditBinding.Attach(oldModel, first);
         await using var newModel = new Oranda.App.Features.ResultGrid.ResultGridModel(new SaveTestResultSet());
+        await newModel.ReadRowsAsync(0, 1, [0]);
         GridEditCommands.Rerun = async (_, _) =>
         {
             var reopened = await OpenAsync("SELECT empno, ename, sal FROM emp");
@@ -104,6 +105,30 @@ public sealed partial class GridEditTests
 
         Assert.True(newModel.IsFlashing(1));
         Assert.False(oldModel.HasFlash);
+        SaveFeedback.Clear();
+    }
+
+    [Fact]
+    public async Task Flash_after_rerun_finds_the_saved_row_by_key_when_the_order_differs()
+    {
+        SaveFeedback.Clear();
+        var first = await OpenAsync("SELECT empno, ename, sal FROM emp");
+        GridEditCommands.Active = first;
+        GridEditCommands.ConfirmPreview = (_, _, _) => Task.FromResult(true);
+        await using var newModel = new Oranda.App.Features.ResultGrid.ResultGridModel(new SaveTestResultSet([Data[1], Data[0]]));
+        await newModel.ReadRowsAsync(0, 1, [0]);
+        GridEditCommands.Rerun = async (_, _) =>
+        {
+            var reopened = await OpenAsync("SELECT empno, ename, sal FROM emp");
+            GridEditBinding.Attach(newModel, reopened);
+            GridEditCommands.Active = reopened;
+        };
+        first.SetCell(0, 1, "X"); // SMITH(7369) 를 고친다. 다시 읽은 결과에서는 둘째 줄이다.
+
+        await Run("oranda.grid.edit.apply");
+
+        Assert.False(newModel.IsFlashing(0));
+        Assert.True(newModel.IsFlashing(1));
         SaveFeedback.Clear();
     }
 
@@ -138,8 +163,10 @@ public sealed partial class GridEditTests
         }
     });
 
-    private sealed class SaveTestResultSet : Oranda.Core.Grid.IResultSet
+    private sealed class SaveTestResultSet(object?[][]? rows = null) : Oranda.Core.Grid.IResultSet
     {
+        private readonly object?[][] _rows = rows ?? Data;
+
         public IReadOnlyList<Oranda.Core.Grid.ResultColumn> Columns => EmpCols;
 
         public bool IsComplete => true;
@@ -148,7 +175,7 @@ public sealed partial class GridEditTests
 
         public Task<Oranda.Core.Grid.ResultPage> GetPageAsync(int pageIndex, CancellationToken ct) =>
             Task.FromResult(new Oranda.Core.Grid.ResultPage(pageIndex, 0, 2,
-                [.. Enumerable.Range(0, 3).Select(c => (IReadOnlyList<object?>)[.. Data.Select(r => r[c])])]) { IsLast = true });
+                [.. Enumerable.Range(0, 3).Select(c => (IReadOnlyList<object?>)[.. _rows.Select(r => r[c])])]) { IsLast = true });
 
         public ValueTask DisposeAsync() => ValueTask.CompletedTask;
     }

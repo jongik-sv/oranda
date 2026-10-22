@@ -165,10 +165,26 @@ public sealed class GridEditCommandHandler : ICommandHandler
         return true;
     }
 
+    /// <summary>반영한 뒤 그 행을 찾는 키: 원래 키에 같은 열의 새 값을 덮는다.</summary>
+    private static Dictionary<string, object?> KeyAfterApply(RowChange c)
+    {
+        var key = new Dictionary<string, object?>(c.Key, StringComparer.OrdinalIgnoreCase);
+        foreach (var name in key.Keys.ToList())
+        {
+            if (c.NewValues.TryGetValue(name, out var v))
+            {
+                key[name] = v;
+            }
+        }
+
+        return key;
+    }
+
     /// <summary>확인을 받은 변경을 반영한다.</summary>
     private static async Task ApplyConfirmedAsync(GridEditSession s, bool commit, CancellationToken ct)
     {
-        var updated = s.BuildChanges().Where(c => c.Kind == RowChangeKind.Update).Select(c => c.RowIndex).ToList();
+        var updatedChanges = s.BuildChanges().Where(c => c.Kind == RowChangeKind.Update).ToList();
+        var updated = updatedChanges.Select(c => c.RowIndex).ToList();
         ApplyResult result;
         try
         {
@@ -201,7 +217,9 @@ public sealed class GridEditCommandHandler : ICommandHandler
                 GridEditCommands.Active?.Announce(notice);
             }
 
-            GridEditBinding.ModelOf(GridEditCommands.Active)?.FlashSavedRows(savedRows);
+            // 다시 읽은 결과는 정렬이 풀려 행 번호가 달라지므로, 반영한 행의 키(키 열을 고쳤으면 고친 값)로 새 그리드에서 찾는다.
+            var savedKeys = updatedChanges.Where(c => savedRows.Contains(c.RowIndex)).Select(KeyAfterApply).ToList();
+            GridEditBinding.ModelOf(GridEditCommands.Active)?.FlashRowsByKey(savedKeys);
         }
         else
         {

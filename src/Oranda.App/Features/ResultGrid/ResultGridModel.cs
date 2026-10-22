@@ -1,3 +1,4 @@
+using System.Globalization;
 using Oranda.Core.Grid;
 
 namespace Oranda.App.Features.ResultGrid;
@@ -135,6 +136,78 @@ public sealed class ResultGridModel : IAsyncDisposable
         _flashRows = set;
         RaiseChanged();
         FlashStarted?.Invoke(this, EventArgs.Empty);
+    }
+
+    /// <summary>
+    /// 반영한 행의 키(PK·UK 열 또는 ROWID)로 다시 읽은 결과에서 행을 찾아 강조한다(TSK-13-23). 표시 위치·정렬·열 순서와 무관하다.
+    /// 메모리에 있는 페이지만 훑으므로 아직 가져오지 않은 행은 강조하지 않는다(더 가져오지 않는다).
+    /// </summary>
+    public void FlashRowsByKey(IEnumerable<IReadOnlyDictionary<string, object?>> keys)
+    {
+        ArgumentNullException.ThrowIfNull(keys);
+        var wanted = keys.Where(k => k.Count > 0).ToList();
+        if (wanted.Count == 0)
+        {
+            return;
+        }
+
+        var found = new List<long>();
+        foreach (var key in wanted)
+        {
+            var ordinals = new List<(int Ordinal, object? Value)>();
+            foreach (var (name, value) in key)
+            {
+                var col = Columns.FirstOrDefault(c => string.Equals(c.Name, name, StringComparison.OrdinalIgnoreCase));
+                if (col is null)
+                {
+                    ordinals.Clear();
+                    break;
+                }
+
+                ordinals.Add((col.Ordinal, value));
+            }
+
+            if (ordinals.Count == 0)
+            {
+                continue;
+            }
+
+            for (var r = 0L; r < BaseRowCount; r++)
+            {
+                if (ordinals.All(o => TryGetBaseValue(r, o.Ordinal, out var v) && SameKeyValue(v, o.Value)))
+                {
+                    found.Add(r);
+                    break;
+                }
+            }
+        }
+
+        FlashSavedRows(found);
+    }
+
+    private static bool SameKeyValue(object? a, object? b)
+    {
+        a = a is DBNull ? null : a;
+        b = b is DBNull ? null : b;
+        if (a is null || b is null)
+        {
+            return a is null && b is null;
+        }
+
+        if (a is IConvertible && b is IConvertible && a is not string && b is not string
+            && a is not DateTime && b is not DateTime)
+        {
+            try
+            {
+                return Convert.ToDecimal(a, CultureInfo.InvariantCulture) == Convert.ToDecimal(b, CultureInfo.InvariantCulture);
+            }
+            catch (Exception e) when (e is FormatException or InvalidCastException or OverflowException)
+            {
+                // 숫자가 아니면 아래 비교로 넘어간다.
+            }
+        }
+
+        return a.Equals(b) || string.Equals(Convert.ToString(a, CultureInfo.InvariantCulture), Convert.ToString(b, CultureInfo.InvariantCulture), StringComparison.Ordinal);
     }
 
     /// <summary>강조를 지운다.</summary>
