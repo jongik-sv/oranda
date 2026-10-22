@@ -930,7 +930,7 @@ dotnet, testhost, Oranda.App
 - category: defect
 - domain: frontend
 - model: sonnet
-- status: [ ]
+- status: [xx]
 - priority: low
 - assignee: -
 - schedule: 2027-01-21 ~ 2027-01-27
@@ -938,7 +938,7 @@ dotnet, testhost, Oranda.App
 - depends: -
 - blocked-by: -
 - entry-point: 접속 관리자 > 접속 목록
-- note: 담당 PC: win144. 출처 TSK-11-05 화면 기능 전체 시험(docs/itest/TSK-11-05.md). ConnectionManagerUxTests.Groups_become_folders_on_top...·ConnectionManagerFolderTests.Folders_sort_by_name_above_connections... 2건이 한국어 문화권에서 실패(폴더 `[고객사]` 가 `[ADB]` 앞). 앱은 CurrentCultureIgnoreCase 로 정렬한다.
+- note: 담당 PC: win144. 출처 TSK-11-05 화면 기능 전체 시험(docs/itest/TSK-11-05.md). ConnectionManagerUxTests.Groups_become_folders_on_top...·ConnectionManagerFolderTests.Folders_sort_by_name_above_connections... 2건이 한국어 문화권에서 실패(폴더 `[고객사]` 가 `[ADB]` 앞). 앱은 CurrentCultureIgnoreCase 로 정렬한다. 결과(2026-10-22): 접속 폴더·접속 이름순을 OrdinalIgnoreCase(문화권 무관 고정)로 바꿔 ko-KR·en-US·de-DE·sv-SE 모두 통과, 재현 시험 ConnectionManagerCultureSortTests 추가.
 
 #### PRD 요구사항
 - prd-ref: PRD CONN-14, CONN-17

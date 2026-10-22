@@ -69,7 +69,7 @@ public sealed partial class ConnectionManagerViewModel : ViewModelBase
     private Func<Task<bool>>? _exportConnections;
 
     /// <summary>사용자가 접은 그룹(창이 열려 있는 동안만 기억한다).</summary>
-    private readonly HashSet<string> _collapsed = new(StringComparer.CurrentCultureIgnoreCase);
+    private readonly HashSet<string> _collapsed = new(StringComparer.OrdinalIgnoreCase);
 
     /// <summary>트리를 다시 만드는 중(이때 생기는 선택 변화는 편집기를 바꾸지 않는다).</summary>
     private bool _rebuilding;
@@ -738,8 +738,8 @@ public sealed partial class ConnectionManagerViewModel : ViewModelBase
         ConnectionTreeNode? folderNode = null;
         var visible = _profiles.Where(p => Matches(p, SearchText));
         var ordered = (SortOrder == ConnectionSortOrder.RecentlyConnected
-            ? visible.OrderByDescending(p => p.LastConnectedAt.HasValue).ThenByDescending(p => p.LastConnectedAt).ThenBy(p => p.Name, StringComparer.CurrentCultureIgnoreCase)
-            : visible.OrderBy(p => p.Name, StringComparer.CurrentCultureIgnoreCase)).ToList();
+            ? visible.OrderByDescending(p => p.LastConnectedAt.HasValue).ThenByDescending(p => p.LastConnectedAt).ThenBy(p => p.Name, StringComparer.OrdinalIgnoreCase)
+            : visible.OrderBy(p => p.Name, StringComparer.OrdinalIgnoreCase)).ToList();
 
         // 찾는 중에는 맞는 접속이 있는 폴더만, 아니면 빈 폴더까지 모두 보인다.
         IReadOnlyList<string> paths = filtering
@@ -824,7 +824,7 @@ public sealed partial class ConnectionManagerViewModel : ViewModelBase
     /// <summary><paramref name="parent"/> 바로 아래 폴더 경로, 이름순(null = 맨 위).</summary>
     private static IEnumerable<string> ChildFolders(IReadOnlyList<string> paths, string? parent) =>
         paths.Where(p => ConnectionFolders.PathEquals(ConnectionFolders.Parent(p), parent))
-            .OrderBy(ConnectionFolders.NameOf, StringComparer.CurrentCultureIgnoreCase);
+            .OrderBy(ConnectionFolders.NameOf, StringComparer.OrdinalIgnoreCase);
 
     private void OnFolderChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
     {
