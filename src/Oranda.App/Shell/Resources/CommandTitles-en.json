@@ -1,6 +1,7 @@
 {
   "Cmd.oranda.conn.changePassword": "Change Password",
   "Cmd.oranda.conn.disconnect": "Disconnect",
+  "Cmd.oranda.conn.export": "Export Connections",
   "Cmd.oranda.conn.import": "Import Connections",
   "Cmd.oranda.conn.manage": "Connection Manager",
   "Cmd.oranda.conn.reconnect": "Reconnect",

@@ -24,6 +24,7 @@
   "Cmd.oranda.conn.reconnect": "다시 접속",
   "Cmd.oranda.conn.changePassword": "비밀번호 변경",
   "Cmd.oranda.conn.import": "접속 가져오기",
+  "Cmd.oranda.conn.export": "접속 내보내기",
   "Cmd.oranda.edit.undo": "실행 취소",
   "Cmd.oranda.edit.redo": "다시 실행",
   "Cmd.oranda.edit.cut": "잘라내기",

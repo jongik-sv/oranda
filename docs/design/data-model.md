@@ -143,6 +143,17 @@
 | `name` 중복 | 저장 거부 |
 | `keepAliveSeconds` 가 1~59 | 60 으로 올림 |
 
+접속 내보내기 파일(`ConnectionExportDocument`, TSK-13-13 — 「파일 > 접속 내보내기」 가 쓰고 「접속 가져오기」 가 읽는다. 기본 이름 `oranda-connections.json`):
+
+| 필드 | 형식 | 필수 | 기본값 | 설명 |
+|---|---|---|---|---|
+| `format` | string | ● | `"oranda.connections"` | 형식 표시. SQL Developer 의 `.json` 과 이 값으로 가른다 |
+| `schemaVersion` | int | ● | 1 | 읽는 쪽보다 크면 가져오기를 거부한다 |
+| `exportedAt` | DateTimeOffset | ○ | null | 참고용 |
+| `profiles` | `ConnectionProfile[]` | ○ | `[]` | 위 `profiles[]` 와 같은 모양. **`credentialRef`·`lastConnectedAt` 은 쓰지 않고, 읽을 때도 버린다.** 비밀번호는 어디에도 없다 |
+
+가져오기는 새 `id` 를 발급하고, 이름·사용자·접속 문자열이 같은 접속이 이미 있으면 「이미 있음」 으로 기본 제외한다(골라 넣으면 「이름 (2)」).
+
 ### 2.3 `formatter/{id}.json` — `FormatterProfile`
 
 내보내기·가져오기(FMT-08 팀 공유)도 이 파일 그대로 쓴다.

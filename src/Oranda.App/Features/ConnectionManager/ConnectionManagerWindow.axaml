@@ -59,7 +59,10 @@
                     icons:ButtonIcon.Key="delete" icons:ButtonIcon.IconOnly="True" />
             <Button x:Name="ImportButton" Classes="toolbar" Content="가져오기" Command="{Binding ImportCommand}"
                     icons:ButtonIcon.Key="import" icons:ButtonIcon.IconOnly="True"
-                    ToolTip.Tip="SQL Developer·tnsnames.ora·Orange 접속 목록에서 가져옵니다" />
+                    ToolTip.Tip="SQL Developer·tnsnames.ora·Orange 접속 목록·Oranda 접속 파일에서 가져옵니다" />
+            <Button x:Name="ExportButton" Classes="toolbar" Content="내보내기" Command="{Binding ExportCommand}"
+                    icons:ButtonIcon.Key="export" icons:ButtonIcon.IconOnly="True"
+                    ToolTip.Tip="고른 접속을 Oranda 접속 파일로 내보냅니다(비밀번호는 넣지 않습니다)" />
           </StackPanel>
         </Border>
         <Grid DockPanel.Dock="Top" ColumnDefinitions="*,Auto" ColumnSpacing="6" Margin="0,0,0,4">

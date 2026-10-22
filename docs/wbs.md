@@ -3549,7 +3549,7 @@ dotnet, testhost, Oranda.App
 - category: dev
 - domain: fullstack
 - model: sonnet
-- status: [ ]
+- status: [xx]
 - priority: medium
 - assignee: -
 - schedule: 2026-10-22 ~ 2026-10-23
@@ -3557,7 +3557,7 @@ dotnet, testhost, Oranda.App
 - depends: TSK-03-05, TSK-13-12
 - blocked-by: -
 - entry-point: 메뉴 > 파일 > 접속 내보내기 · 접속 관리자 툴바 「내보내기」 · 파일 > 접속 가져오기(Oranda 접속 파일)
-- note: 담당 PC: mac(맥북) — win144 세션은 이 Task 를 하지 않는다. 2026-10-22 사용자 요청: 「접속정보 내보내기, 가져오기를 만들어 줘. 접속정보 내보내기 하면 접속정보 리스트가 나오고 내보내고 싶은 것들을 선택해서 내보낼 수 있도록」. 지금은 Orange·SQL Developer·tnsnames.ora 가져오기(TSK-03-05)만 있고 Oranda 접속을 내보내는 길이 없다
+- note: 담당 PC: mac(맥북) — win144 세션은 이 Task 를 하지 않는다. 2026-10-22 사용자 요청: 「접속정보 내보내기, 가져오기를 만들어 줘. 접속정보 내보내기 하면 접속정보 리스트가 나오고 내보내고 싶은 것들을 선택해서 내보낼 수 있도록」. 지금은 Orange·SQL Developer·tnsnames.ora 가져오기(TSK-03-05)만 있고 Oranda 접속을 내보내는 길이 없다. / 2026-10-22 완료(mac): Core ConnectionExport(쓰기·읽기·형식 판정·같은 접속), App ConnectionPickDialog(내보내기·가져오기 공용 체크 목록, 저장할 수 없는 값은 문제 글과 함께 못 고름), ConnectionTransfer, oranda.conn.export(파일 메뉴 @460)·접속 관리자 「내보내기」 아이콘. 가져오기는 .json 본문의 format 으로 SQL Developer 와 가른다. 가져오기 실패 알림에 InvalidDataException·JsonException·ConnectionValidationException 도 넣었다
 
 #### PRD 요구사항
 - prd-ref: PRD CONN-09 (접속 가져오기·내보내기)

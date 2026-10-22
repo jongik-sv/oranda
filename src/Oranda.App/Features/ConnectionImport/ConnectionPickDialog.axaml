@@ -1,0 +1,54 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:ci="using:Oranda.App.Features.ConnectionImport"
+        x:Class="Oranda.App.Features.ConnectionImport.ConnectionPickDialog"
+        x:DataType="ci:ConnectionPickViewModel"
+        Title="{Binding Title}"
+        Width="600" Height="460" MinWidth="420" MinHeight="300"
+        WindowStartupLocation="CenterOwner"
+        ShowInTaskbar="False"
+        FontSize="{DynamicResource OrandaFontSizeBase}">
+  <!-- 접속 내보내기·가져오기 공용 고르기 창(TSK-13-13): 안내 글 · 모두 선택/해제 · 체크 목록 · 개수와 확인/취소. -->
+  <DockPanel Margin="12">
+    <TextBlock DockPanel.Dock="Top" Text="{Binding Caption}" TextWrapping="Wrap" Opacity="0.8" Margin="0,0,0,8" />
+    <Border DockPanel.Dock="Top" Classes="panel-toolbar" Margin="0,0,0,4">
+      <StackPanel Orientation="Horizontal" Spacing="2">
+        <Button x:Name="SelectAllButton" Classes="tool" Content="모두 선택" Command="{Binding SelectAllCommand}" />
+        <Button x:Name="SelectNoneButton" Classes="tool" Content="모두 해제" Command="{Binding SelectNoneCommand}" />
+      </StackPanel>
+    </Border>
+    <Grid DockPanel.Dock="Bottom" ColumnDefinitions="*,Auto" Margin="0,12,0,0">
+      <TextBlock x:Name="CountText" Text="{Binding CountText}" VerticalAlignment="Center" Opacity="0.8" />
+      <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8">
+        <Button x:Name="ConfirmButton" Content="{Binding ConfirmText}" IsEnabled="{Binding CanConfirm}" IsDefault="True" Classes="accent" />
+        <Button x:Name="CancelButton" Content="취소" IsCancel="True" />
+      </StackPanel>
+    </Grid>
+    <Border BorderBrush="{DynamicResource OrandaSeparatorBrush}" BorderThickness="1" CornerRadius="4">
+      <ScrollViewer HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
+        <ItemsControl x:Name="PickList" ItemsSource="{Binding Items}" Margin="4" AutomationProperties.Name="접속 목록">
+          <ItemsControl.ItemTemplate>
+            <DataTemplate x:DataType="ci:ConnectionPickItem">
+              <!-- 체크 · 환경 색 · 이름 · 폴더 · user@접속(말줄임) · 이미 있음/문제(오른쪽). -->
+              <CheckBox IsChecked="{Binding IsChecked}" IsEnabled="{Binding CanCheck}" AutomationProperties.Name="{Binding Name}"
+                        HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch" MinHeight="26" Padding="6,0,4,0">
+                <DockPanel>
+                  <TextBlock DockPanel.Dock="Right" Text="{Binding Note}" IsVisible="{Binding HasNote}" Margin="8,0,0,0" VerticalAlignment="Center"
+                             MaxWidth="220" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding Note}"
+                             Foreground="{DynamicResource OrandaUncommittedBrush}" FontSize="{DynamicResource OrandaFontSizeSmall}" />
+                  <Border DockPanel.Dock="Left" Width="10" Height="10" CornerRadius="2" Margin="0,0,6,0" VerticalAlignment="Center"
+                          Background="{Binding EnvironmentColor}" />
+                  <TextBlock DockPanel.Dock="Left" Text="{Binding Name}" VerticalAlignment="Center" />
+                  <TextBlock DockPanel.Dock="Left" Text="{Binding Folder}" Margin="8,0,0,0" VerticalAlignment="Center" Opacity="0.6"
+                             FontSize="{DynamicResource OrandaFontSizeSmall}" />
+                  <TextBlock Text="{Binding Detail}" Margin="8,0,0,0" VerticalAlignment="Center" Opacity="0.6" TextTrimming="CharacterEllipsis"
+                             FontSize="{DynamicResource OrandaFontSizeSmall}" />
+                </DockPanel>
+              </CheckBox>
+            </DataTemplate>
+          </ItemsControl.ItemTemplate>
+        </ItemsControl>
+      </ScrollViewer>
+    </Border>
+  </DockPanel>
+</Window>
