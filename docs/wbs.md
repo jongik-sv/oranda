@@ -3545,6 +3545,48 @@ dotnet, testhost, Oranda.App
 - data-model: docs/design/data-model.md 2.2 `profiles[].comment`
 - ui-spec: -
 
+### TSK-13-13: 접속 정보 내보내기·가져오기 [mac]
+- category: dev
+- domain: fullstack
+- model: sonnet
+- status: [ ]
+- priority: medium
+- assignee: -
+- schedule: 2026-10-22 ~ 2026-10-23
+- tags: connection, export, import, mac
+- depends: TSK-03-05, TSK-13-12
+- blocked-by: -
+- entry-point: 메뉴 > 파일 > 접속 내보내기 · 접속 관리자 툴바 「내보내기」 · 파일 > 접속 가져오기(Oranda 접속 파일)
+- note: 담당 PC: mac(맥북) — win144 세션은 이 Task 를 하지 않는다. 2026-10-22 사용자 요청: 「접속정보 내보내기, 가져오기를 만들어 줘. 접속정보 내보내기 하면 접속정보 리스트가 나오고 내보내고 싶은 것들을 선택해서 내보낼 수 있도록」. 지금은 Orange·SQL Developer·tnsnames.ora 가져오기(TSK-03-05)만 있고 Oranda 접속을 내보내는 길이 없다
+
+#### PRD 요구사항
+- prd-ref: PRD CONN-09 (접속 가져오기·내보내기)
+- requirements:
+  - 새 명령 `oranda.conn.export`(파일 메뉴, 접속 가져오기 다음)와 접속 관리자 툴바 「내보내기」 아이콘 단추
+  - 내보내기 창: 모든 접속을 체크 목록(폴더·이름·user@접속)으로 보이고 모두 선택·모두 해제, 고른 것만 저장 대화상자에서 고른 파일(기본 이름 oranda-connections.json)로 쓴다
+  - 파일은 Oranda 형식 표시(format·schemaVersion)가 있는 JSON 이고 폴더(group)·환경·라벨 색·설명(comment)·NLS 등 프로필 값을 담는다
+  - 비밀번호·자격 증명 참조(credentialRef)·마지막 접속 시각은 내보내지 않는다(창에 안내 글)
+  - 가져오기: 기존 「접속 가져오기」 의 파일 종류에 「Oranda 접속 파일」 을 더한다. 내용의 형식 표시로 SQL Developer JSON 과 구분한다
+  - Oranda 파일을 고르면 같은 체크 목록 창을 보이고, 이미 있는 접속(이름·사용자·접속 문자열이 같음)은 「이미 있음」 으로 표시해 기본으로 끈다. 가져온 접속은 새 Id 를 받고 비밀번호는 처음 접속할 때 묻는다
+- acceptance:
+  - 접속 셋 중 둘을 골라 내보내고 다른 데이터 폴더에서 가져오면 그 둘이 폴더·환경·색·설명과 함께 생긴다
+  - 내보낸 파일에 비밀번호·credentialRef 가 없다
+  - 이미 있는 접속을 굳이 골라 가져오면 「이름 (2)」 로 덧붙는다
+  - 형식이 틀린 파일·더 새 schemaVersion 은 알림만 보이고 아무것도 바꾸지 않는다
+- constraints:
+  - 다른 원본(Orange·SQL Developer·tnsnames)의 가져오기 흐름은 그대로 둔다
+  - 단축키는 넣지 않는다. 명령 제목은 CommandTitles(한/영)·commands.md 에 둔다
+- test-criteria:
+  - Core: 쓰기→읽기 왕복, 비밀 없음, 형식·버전 거부, 같은 접속 판정
+  - App: 내보내기는 고른 것만, 가져오기 왕복(새 Id·값 유지·이름 (2)), 이미 있음 표시·기본 끔, 모두 선택·해제
+  - Headless: 내보내기 창 체크 목록에서 둘을 골라 확인하면 그 둘만 돌려준다, 툴바 한 줄 시험 유지
+
+#### 기술 스펙 (TRD)
+- tech-spec: OrandaJsonContext(ConnectionExportDocument), StorageProvider 저장·열기 대화상자
+- api-spec: -
+- data-model: docs/design/data-model.md 2.2 내보내기 파일
+- ui-spec: -
+
 ## 의존 그래프
 
 ### 그래프 (Mermaid)
@@ -3687,6 +3729,8 @@ graph LR
   TSK-07-02 --> TSK-13-10
   TSK-03-04 --> TSK-13-11
   TSK-03-04 --> TSK-13-12
+  TSK-03-05 --> TSK-13-13
+  TSK-13-12 --> TSK-13-13
   style TSK-01-02 fill:#fff3e0,stroke:#e65100
   style TSK-01-07 fill:#fff3e0,stroke:#e65100
   style TSK-01-02 stroke:#c62828,stroke-width:2px
