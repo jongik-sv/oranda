@@ -7,8 +7,8 @@
   <UserControl.Styles>
     <!-- 트리 표 칸 폭(머리글과 줄이 같은 클래스를 써서 세로로 맞는다). -->
     <Style Selector=":is(Control).c-id"><Setter Property="Width" Value="34" /></Style>
-    <Style Selector=":is(Control).c-order"><Setter Property="Width" Value="38" /></Style>
-    <Style Selector=":is(Control).c-op"><Setter Property="Width" Value="300" /></Style>
+    <Style Selector=":is(Control).c-order"><Setter Property="Width" Value="48" /></Style>
+    <Style Selector=":is(Control).c-op"><Setter Property="Width" Value="290" /></Style>
     <Style Selector=":is(Control).c-obj"><Setter Property="Width" Value="150" /></Style>
     <Style Selector=":is(Control).c-risk"><Setter Property="Width" Value="96" /></Style>
     <Style Selector=":is(Control).c-cost"><Setter Property="Width" Value="66" /></Style>
