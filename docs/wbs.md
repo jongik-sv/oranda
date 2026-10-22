@@ -3854,6 +3854,106 @@ dotnet, testhost, Oranda.App
 - data-model: -
 - ui-spec: -
 
+### TSK-13-22: macOS 메뉴 막대 명령이 다른 작업 공간에서 실행되고, 탭을 닫으면 남은 탭이 활성화되지 않음 [mac]
+- category: defect
+- domain: frontend
+- model: sonnet
+- status: [ ]
+- priority: critical
+- assignee: -
+- schedule: 2026-10-22 ~ 2026-10-23
+- tags: menu, workspace, focus, mac
+- depends: TSK-13-19
+- blocked-by: -
+- entry-point: macOS 시스템 메뉴 막대 명령, SQL 탭 닫기, PL/SQL 편집기 ⌘A
+- note: 담당 PC: mac(맥북) — win144 세션은 이 Task 를 하지 않는다. 2026-10-22 실제 앱 화면 확인(9e62e2d 빌드, 자동 조작)에서 발견. 시스템 메뉴 막대로 「스크립트 전체 실행」「예상 실행 계획」을 보내자 활성 작업 공간이 「EmpMapper (MyBatis)」로 바뀌고 명령이 그 탭에서 실행됨(운영 접속이면 엉뚱한 문장 실행 위험). 탭을 닫으면 남은 탭이 활성화되지 않아 편집기가 빈칸. PL/SQL 편집기에서 ⌘A 전체 선택이 안 됨
+
+#### PRD 요구사항
+- prd-ref: PRD EDIT-09
+- requirements:
+  - macOS 시스템 메뉴 막대에서 고른 명령은 창 안에서 같은 명령을 실행할 때와 같은 대상(지금 보고 있는 작업 공간·탭)에서 실행된다. 메뉴 막대를 누르는 순간 포커스·키 창이 바뀌어도 대상이 바뀌지 않는다
+  - SQL 탭을 닫으면 이웃 탭이 활성화되고 편집기에 그 내용이 보인다
+  - PL/SQL 편집기에서 ⌘A(Windows Ctrl+A)가 전체 선택이다
+- acceptance:
+  - 작업 공간 둘 이상을 연 상태에서 메뉴 막대 명령이 보이는 탭에서 실행된다
+  - 탭 닫기 뒤 빈 편집기가 보이지 않는다
+- constraints:
+  - 헤드리스 시험은 앱과 같은 도킹·등록 경로로 화면을 만들어 확인한다
+- test-criteria:
+  - 메뉴 막대 명령 대상 결정 시험(포커스가 메뉴로 옮겨 간 상태 포함)
+  - 탭 닫기 뒤 활성 탭 시험
+  - PL/SQL 편집기 전체 선택 시험
+
+#### 기술 스펙 (TRD)
+- tech-spec: -
+- api-spec: -
+- data-model: -
+- ui-spec: -
+
+### TSK-13-23: 저장 뒤 강조가 정렬된 결과에서 다른 행에 들어감 [mac]
+- category: defect
+- domain: frontend
+- model: sonnet
+- status: [ ]
+- priority: high
+- assignee: -
+- schedule: 2026-10-22 ~ 2026-10-23
+- tags: grid, edit, mac
+- depends: TSK-13-18
+- blocked-by: -
+- entry-point: 결과 그리드 편집 반영(oranda.grid.edit.apply·applyAndCommit)
+- note: 담당 PC: mac(맥북) — win144 세션은 이 Task 를 하지 않는다. 2026-10-22 실제 앱 화면 확인(9e62e2d 빌드, 자동 조작)에서 발견. V 열 내림차순으로 정렬한 편집 모드 결과에서 ID 3 을 고쳐 반영하자, 다시 조회되며 정렬이 풀리고 맨 위 ID 1 행이 강조됨
+
+#### PRD 요구사항
+- prd-ref: PRD GRID-04
+- requirements:
+  - 반영 뒤 강조는 표시 위치가 아니라 키·ROWID 로 찾은 바로 그 행에 들어간다(다시 읽은 그리드, 정렬·열 순서와 무관)
+- acceptance:
+  - 정렬한 결과에서 반영해도 고친 행이 강조된다
+- constraints:
+  - 헤드리스 시험은 앱과 같은 도킹·등록 경로로 화면을 만들어 확인한다
+- test-criteria:
+  - 정렬·열 순서를 바꾼 결과에서 반영 뒤 강조 행 시험
+
+#### 기술 스펙 (TRD)
+- tech-spec: -
+- api-spec: -
+- data-model: -
+- ui-spec: -
+
+### TSK-13-24: 접속 관리자를 열면 메인 창이 밀려 내려감 외 화면 다듬기 [mac]
+- category: defect
+- domain: frontend
+- model: sonnet
+- status: [ ]
+- priority: low
+- assignee: -
+- schedule: 2026-10-22 ~ 2026-10-23
+- tags: ui, connection, mac
+- depends: TSK-13-11
+- blocked-by: -
+- entry-point: 접속 관리자, 접속 목록 둘째 줄, 바인드 변수 표
+- note: 담당 PC: mac(맥북) — win144 세션은 이 Task 를 하지 않는다. 2026-10-22 실제 앱 화면 확인(9e62e2d 빌드, 자동 조작)에서 발견. 접속 관리자를 연 뒤 메인 창이 아래로 내려가 하단이 화면 밖으로 나감. 접속 목록 둘째 줄이 기본 폭에서 「…FREEPDB1 ·…」로 잘려 메모가 안 보임. 바인드 변수 표 아래에 가로 스크롤 막대
+
+#### PRD 요구사항
+- prd-ref: PRD UI 셸
+- requirements:
+  - 접속 관리자를 열고 닫아도 메인 창 위치·크기가 그대로다
+  - 접속 목록 둘째 줄에서 메모가 보이도록 접속 문자열보다 메모를 먼저 줄이거나 셋째 줄로 둔다
+  - 바인드 변수 표가 기본 폭에서 가로 스크롤 없이 들어간다
+- acceptance:
+  - 세 증상이 기본 창 크기에서 재현되지 않는다
+- constraints:
+  - 헤드리스 시험은 앱과 같은 도킹·등록 경로로 화면을 만들어 확인한다
+- test-criteria:
+  - 창 위치 유지 시험, 둘째 줄 구성 시험, 바인드 표 폭 PNG
+
+#### 기술 스펙 (TRD)
+- tech-spec: -
+- api-spec: -
+- data-model: -
+- ui-spec: -
+
 ## 의존 그래프
 
 ### 그래프 (Mermaid)
@@ -4006,6 +4106,9 @@ graph LR
   TSK-04-02 --> TSK-13-19
   TSK-06-05 --> TSK-13-20
   TSK-10-01 --> TSK-13-21
+  TSK-13-19 --> TSK-13-22
+  TSK-13-18 --> TSK-13-23
+  TSK-13-11 --> TSK-13-24
   style TSK-01-02 fill:#fff3e0,stroke:#e65100
   style TSK-01-07 fill:#fff3e0,stroke:#e65100
   style TSK-01-02 stroke:#c62828,stroke-width:2px
