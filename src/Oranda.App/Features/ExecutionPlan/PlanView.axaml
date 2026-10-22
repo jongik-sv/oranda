@@ -5,33 +5,56 @@
              x:Class="Oranda.App.Features.ExecutionPlan.PlanView"
              x:DataType="vm:PlanViewModel">
   <UserControl.Styles>
-    <!-- 가장 비싼 단계·비교 줄 바탕. 반투명이라 밝은·어두운 테마 모두에서 글자가 읽힌다. -->
-    <Style Selector="Border.hot">
-      <Setter Property="Background" Value="#38FF8C00" />
+    <!-- 트리 표 칸 폭(머리글과 줄이 같은 클래스를 써서 세로로 맞는다). -->
+    <Style Selector=":is(Control).c-id"><Setter Property="Width" Value="34" /></Style>
+    <Style Selector=":is(Control).c-order"><Setter Property="Width" Value="38" /></Style>
+    <Style Selector=":is(Control).c-op"><Setter Property="Width" Value="300" /></Style>
+    <Style Selector=":is(Control).c-obj"><Setter Property="Width" Value="150" /></Style>
+    <Style Selector=":is(Control).c-risk"><Setter Property="Width" Value="96" /></Style>
+    <Style Selector=":is(Control).c-cost"><Setter Property="Width" Value="66" /></Style>
+    <Style Selector=":is(Control).c-share"><Setter Property="Width" Value="100" /></Style>
+    <Style Selector=":is(Control).c-erows"><Setter Property="Width" Value="94" /></Style>
+    <Style Selector=":is(Control).c-arows"><Setter Property="Width" Value="94" /></Style>
+    <Style Selector=":is(Control).c-starts"><Setter Property="Width" Value="62" /></Style>
+    <Style Selector=":is(Control).c-time"><Setter Property="Width" Value="66" /></Style>
+    <Style Selector=":is(Control).c-ashare"><Setter Property="Width" Value="100" /></Style>
+    <!-- 비교 표 칸 폭. -->
+    <Style Selector=":is(Control).k-mark"><Setter Property="Width" Value="30" /></Style>
+    <Style Selector=":is(Control).k-id"><Setter Property="Width" Value="56" /></Style>
+    <Style Selector=":is(Control).k-op"><Setter Property="Width" Value="420" /></Style>
+    <Style Selector=":is(Control).k-obj"><Setter Property="Width" Value="210" /></Style>
+    <Style Selector=":is(Control).k-pair"><Setter Property="Width" Value="150" /></Style>
+    <Style Selector=":is(Control).k-delta"><Setter Property="Width" Value="68" /></Style>
+
+    <!-- 줄 틀: 왼쪽 3 DIP 띠는 가장 비싼 단계에서만 색이 든다(나머지 줄도 같은 폭을 비워 칸이 어긋나지 않는다). -->
+    <Style Selector="Border.plan-row">
+      <Setter Property="BorderThickness" Value="3,0,0,0" />
+      <Setter Property="BorderBrush" Value="Transparent" />
     </Style>
-    <Style Selector="Border.changed">
-      <Setter Property="Background" Value="#30FFC107" />
+    <Style Selector="Border.plan-row.hot">
+      <Setter Property="Background" Value="{DynamicResource OrandaHotRowBrush}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource OrandaIconOrangeBrush}" />
     </Style>
-    <Style Selector="Border.added">
-      <Setter Property="Background" Value="#3028A745" />
+    <!-- 고른 줄이면 고른 줄 색이 보이게 바탕 띠만 빼고(왼쪽 주황 띠·굵은 글자·주황 막대는 남는다). -->
+    <Style Selector="ListBoxItem:selected Border.plan-row.hot">
+      <Setter Property="Background" Value="Transparent" />
     </Style>
-    <Style Selector="Border.removed">
-      <Setter Property="Background" Value="#30DC3545" />
-    </Style>
-    <Style Selector="TextBlock.big">
-      <Setter Property="Foreground" Value="OrangeRed" />
+    <Style Selector="Border.plan-row.hot TextBlock.op">
       <Setter Property="FontWeight" Value="SemiBold" />
     </Style>
+
+    <!-- 비중 막대: 옅은 막대 = 누적, 진한 막대 = 자체. 얇은 둥근 막대 + 오른쪽 비율 글자. -->
     <Style Selector="Border.bar-track">
       <Setter Property="Width" Value="60" />
-      <Setter Property="Height" Value="10" />
+      <Setter Property="Height" Value="6" />
+      <Setter Property="CornerRadius" Value="3" />
       <Setter Property="HorizontalAlignment" Value="Left" />
       <Setter Property="VerticalAlignment" Value="Center" />
-      <Setter Property="Background" Value="{DynamicResource OrandaSeparatorBrush}" />
-      <Setter Property="Opacity" Value="0.35" />
+      <Setter Property="Background" Value="{DynamicResource OrandaBarTrackBrush}" />
     </Style>
     <Style Selector="Border.bar">
-      <Setter Property="Height" Value="10" />
+      <Setter Property="Height" Value="6" />
+      <Setter Property="CornerRadius" Value="3" />
       <Setter Property="HorizontalAlignment" Value="Left" />
       <Setter Property="VerticalAlignment" Value="Center" />
     </Style>
@@ -42,124 +65,403 @@
       <Setter Property="Background" Value="{DynamicResource OrandaIconBlueBrush}" />
     </Style>
     <Style Selector="Border.bar.actual">
+      <Setter Property="Background" Value="{DynamicResource OrandaIconTealBrush}" />
+    </Style>
+    <Style Selector="Border.plan-row.hot Border.bar.cost:not(.total), Border.plan-row.hot Border.bar.actual:not(.total)">
       <Setter Property="Background" Value="{DynamicResource OrandaIconOrangeBrush}" />
     </Style>
+    <Style Selector="TextBlock.pct">
+      <Setter Property="FontSize" Value="{DynamicResource OrandaFontSizeSmall}" />
+      <Setter Property="Opacity" Value="0.75" />
+      <Setter Property="Padding" Value="0" />
+    </Style>
+
+    <!-- 비교: 크게 바뀐 수치, 줄 종류 표시(≠ + − =). -->
+    <Style Selector="TextBlock.big">
+      <Setter Property="Foreground" Value="{DynamicResource OrandaWarningForegroundBrush}" />
+      <Setter Property="FontWeight" Value="SemiBold" />
+    </Style>
+    <Style Selector="TextBlock.mark">
+      <Setter Property="FontWeight" Value="Bold" />
+      <Setter Property="TextAlignment" Value="Center" />
+      <Setter Property="Opacity" Value="0.45" />
+    </Style>
+    <Style Selector="TextBlock.mark.changed">
+      <Setter Property="Foreground" Value="{DynamicResource OrandaWarningForegroundBrush}" />
+      <Setter Property="Opacity" Value="1" />
+    </Style>
+    <Style Selector="TextBlock.mark.added">
+      <Setter Property="Foreground" Value="{DynamicResource OrandaSuccessForegroundBrush}" />
+      <Setter Property="Opacity" Value="1" />
+    </Style>
+    <Style Selector="TextBlock.mark.removed">
+      <Setter Property="Foreground" Value="{DynamicResource OrandaDangerForegroundBrush}" />
+      <Setter Property="Opacity" Value="1" />
+    </Style>
+    <Style Selector="Border.compare-banner">
+      <Setter Property="Background" Value="{DynamicResource OrandaToolbarBackgroundBrush}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource OrandaSeparatorBrush}" />
+      <Setter Property="BorderThickness" Value="0,0,0,1" />
+      <Setter Property="Padding" Value="10,6" />
+    </Style>
+    <Style Selector="Border.compare-banner.differs">
+      <Setter Property="Background" Value="{DynamicResource OrandaDiffChangedBrush}" />
+    </Style>
+
+    <!-- 보기 바꾸기(트리·텍스트·비교): 툴바 안의 붙은 단추 묶음. 탭 머리글 줄 대신 써서 세로 공간을 아낀다. -->
+    <Style Selector="ListBox.segmented">
+      <Setter Property="Background" Value="Transparent" />
+      <Setter Property="BorderBrush" Value="{DynamicResource OrandaSeparatorBrush}" />
+      <Setter Property="BorderThickness" Value="1" />
+      <Setter Property="CornerRadius" Value="5" />
+      <Setter Property="Padding" Value="1" />
+      <Setter Property="VerticalAlignment" Value="Center" />
+      <Setter Property="ItemsPanel">
+        <ItemsPanelTemplate>
+          <StackPanel Orientation="Horizontal" Spacing="1" />
+        </ItemsPanelTemplate>
+      </Setter>
+    </Style>
+    <Style Selector="ListBox.segmented ListBoxItem">
+      <Setter Property="Padding" Value="8,2" />
+      <Setter Property="MinHeight" Value="0" />
+      <Setter Property="CornerRadius" Value="4" />
+      <Setter Property="FontSize" Value="{DynamicResource OrandaFontSizeSmall}" />
+    </Style>
+    <Style Selector="ListBox.segmented ListBoxItem:selected /template/ ContentPresenter#PART_ContentPresenter">
+      <Setter Property="Background" Value="{DynamicResource OrandaToolbarPressedBrush}" />
+    </Style>
+    <Style Selector="ListBox.segmented ListBoxItem:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+      <Setter Property="Background" Value="{DynamicResource OrandaToolbarHoverBrush}" />
+    </Style>
+    <Style Selector="ListBox.segmented ListBoxItem:selected TextBlock">
+      <Setter Property="FontWeight" Value="SemiBold" />
+    </Style>
+    <!-- 탭 머리글은 위 묶음이 대신하므로 숨긴다(탭 내용 전환은 그대로). -->
+    <Style Selector="TabControl.bare /template/ ItemsPresenter#PART_ItemsPresenter">
+      <Setter Property="IsVisible" Value="False" />
+    </Style>
+    <Style Selector="TextBox.plan-text">
+      <Setter Property="BorderThickness" Value="0" />
+      <Setter Property="Background" Value="Transparent" />
+      <Setter Property="Padding" Value="10,6" />
+      <Setter Property="FontFamily" Value="{DynamicResource OrandaGridFontFamily}" />
+      <Setter Property="FontSize" Value="{DynamicResource OrandaEditorFontSize}" />
+    </Style>
+    <Style Selector="TextBox.plan-text:focus /template/ Border#PART_BorderElement, TextBox.plan-text:pointerover /template/ Border#PART_BorderElement">
+      <Setter Property="Background" Value="Transparent" />
+      <Setter Property="BorderThickness" Value="0" />
+    </Style>
   </UserControl.Styles>
+
   <DockPanel>
+    <!-- 툴바 한 줄: 보기 | 형식(펼침) · sql_id | 고정 · 비교 · 해제 | 고정한 계획 표시 -->
     <Border DockPanel.Dock="Top" Classes="panel-toolbar">
-      <WrapPanel>
-      <ComboBox Width="110" Margin="0,0,6,4" ItemsSource="{x:Static vm:PlanViewModel.BaseFormats}" SelectedItem="{Binding BaseFormat, Mode=TwoWay}" />
-      <CheckBox Margin="0,0,6,4" Content="LAST" IsChecked="{Binding LastOnly, Mode=TwoWay}" />
-      <CheckBox Margin="0,0,6,4" Content="바인드 엿보기" IsChecked="{Binding PeekedBinds, Mode=TwoWay}" />
-      <CheckBox Margin="0,0,6,4" Content="별칭" IsChecked="{Binding Alias, Mode=TwoWay}" />
-      <CheckBox Margin="0,0,10,4" Content="아웃라인" IsChecked="{Binding Outline, Mode=TwoWay}" />
-      <TextBox Width="150" Margin="0,0,10,4" PlaceholderText="sql_id" Text="{Binding SqlIdText, Mode=TwoWay}" />
-      <Button x:Name="PinButton" Classes="tool" Margin="0,0,4,4" Content="이 계획 고정" icons:ButtonIcon.Key="lock"
-              ToolTip.Tip="지금 계획을 비교 기준으로 고정" />
-      <Button x:Name="CompareButton" Classes="tool" Margin="0,0,4,4" Content="비교" icons:ButtonIcon.Key="diff" IsEnabled="{Binding HasPinned}"
-              ToolTip.Tip="고정한 계획과 지금 계획 비교" />
-      <Button x:Name="UnpinButton" Classes="tool" Margin="0,0,6,4" Content="고정 해제" icons:ButtonIcon.Key="clear" IsEnabled="{Binding HasPinned}" />
-      <TextBlock Margin="0,0,6,4" VerticalAlignment="Center" Opacity="0.75" Text="{Binding PinnedText}" />
-    </WrapPanel>
+      <DockPanel>
+        <StackPanel DockPanel.Dock="Left" Orientation="Horizontal" Spacing="2">
+          <ListBox x:Name="ViewSwitch" Classes="segmented" SelectedIndex="{Binding SelectedTabIndex, Mode=TwoWay}"
+                   AutomationProperties.Name="계획 보기">
+            <ListBoxItem ToolTip.Tip="계획 트리">
+              <StackPanel Orientation="Horizontal" Spacing="5">
+                <ContentControl Content="{Binding Source='plan', Converter={x:Static icons:IconKeyConverter.Instance}, ConverterParameter=14}" VerticalAlignment="Center" />
+                <TextBlock Text="트리" VerticalAlignment="Center" />
+              </StackPanel>
+            </ListBoxItem>
+            <ListBoxItem ToolTip.Tip="DBMS_XPLAN 텍스트">
+              <StackPanel Orientation="Horizontal" Spacing="5">
+                <ContentControl Content="{Binding Source='console', Converter={x:Static icons:IconKeyConverter.Instance}, ConverterParameter=14}" VerticalAlignment="Center" />
+                <TextBlock Text="텍스트" VerticalAlignment="Center" />
+              </StackPanel>
+            </ListBoxItem>
+            <ListBoxItem ToolTip.Tip="고정한 계획과 비교">
+              <StackPanel Orientation="Horizontal" Spacing="5">
+                <ContentControl Content="{Binding Source='diff', Converter={x:Static icons:IconKeyConverter.Instance}, ConverterParameter=14}" VerticalAlignment="Center" />
+                <TextBlock Text="비교" VerticalAlignment="Center" />
+              </StackPanel>
+            </ListBoxItem>
+          </ListBox>
+          <Separator Classes="toolbar" />
+          <Button x:Name="FormatButton" Classes="tool" ToolTip.Tip="실제 계획(DISPLAY_CURSOR) 형식" AutomationProperties.Name="실제 계획 형식">
+            <StackPanel Orientation="Horizontal" Spacing="5">
+              <ContentControl Content="{Binding Source='settings', Converter={x:Static icons:IconKeyConverter.Instance}, ConverterParameter=14}" VerticalAlignment="Center" />
+              <TextBlock Text="{Binding FormatText}" FontFamily="{DynamicResource OrandaGridFontFamily}" VerticalAlignment="Center" />
+              <PathIcon Width="8" Height="8" Opacity="0.7" Data="{DynamicResource ButtonSpinnerDecreaseButtonIcon}" VerticalAlignment="Center" />
+            </StackPanel>
+            <Button.Flyout>
+              <Flyout Placement="BottomEdgeAlignedLeft">
+                <StackPanel Spacing="6" MinWidth="230">
+                  <TextBlock Classes="section-label" Text="DBMS_XPLAN 형식" />
+                  <ComboBox Classes="compact" HorizontalAlignment="Stretch" ItemsSource="{x:Static vm:PlanViewModel.BaseFormats}"
+                            SelectedItem="{Binding BaseFormat, Mode=TwoWay}" AutomationProperties.Name="기본 형식" />
+                  <CheckBox Content="LAST (마지막 실행만)" IsChecked="{Binding LastOnly, Mode=TwoWay}" />
+                  <CheckBox Content="바인드 엿보기 (+PEEKED_BINDS)" IsChecked="{Binding PeekedBinds, Mode=TwoWay}" />
+                  <CheckBox Content="별칭 (+ALIAS)" IsChecked="{Binding Alias, Mode=TwoWay}" />
+                  <CheckBox Content="아웃라인 (+OUTLINE)" IsChecked="{Binding Outline, Mode=TwoWay}" />
+                  <TextBlock Classes="panel-caption" MaxWidth="240" TextWrapping="Wrap"
+                             Text="실제 계획(Ctrl+Shift+E)을 읽을 때 씁니다." />
+                </StackPanel>
+              </Flyout>
+            </Button.Flyout>
+          </Button>
+          <TextBox Classes="compact search" Width="130" VerticalAlignment="Center" PlaceholderText="sql_id" Text="{Binding SqlIdText, Mode=TwoWay}"
+                   FontFamily="{DynamicResource OrandaGridFontFamily}" AutomationProperties.Name="sql_id"
+                   ToolTip.Tip="실제 계획(Ctrl+Shift+E)을 읽을 sql_id. 비우면 마지막으로 실행한 문장" />
+          <Separator Classes="toolbar" />
+          <Button x:Name="PinButton" Classes="toolbar" Content="이 계획 고정" icons:ButtonIcon.Key="lock" icons:ButtonIcon.IconOnly="True"
+                  ToolTip.Tip="지금 계획을 비교 기준으로 고정" />
+          <Button x:Name="CompareButton" Classes="toolbar" Content="비교" icons:ButtonIcon.Key="diff" icons:ButtonIcon.IconOnly="True" IsEnabled="{Binding HasPinned}"
+                  ToolTip.Tip="고정한 계획과 지금 계획 비교" />
+          <Button x:Name="UnpinButton" Classes="toolbar" Content="고정 해제" icons:ButtonIcon.Key="clear" icons:ButtonIcon.IconOnly="True" IsEnabled="{Binding HasPinned}"
+                  ToolTip.Tip="비교 기준 고정 풀기" />
+        </StackPanel>
+        <Border Classes="chip" Margin="6,0,0,0" HorizontalAlignment="Left" IsVisible="{Binding HasPinned}" ToolTip.Tip="{Binding PinnedText}">
+          <DockPanel>
+            <ContentControl DockPanel.Dock="Left" Margin="0,0,4,0" VerticalAlignment="Center"
+                            Content="{Binding Source='lock', Converter={x:Static icons:IconKeyConverter.Instance}, ConverterParameter=12}" />
+            <TextBlock Text="{Binding PinnedText}" TextTrimming="CharacterEllipsis" />
+          </DockPanel>
+        </Border>
+      </DockPanel>
     </Border>
     <Border DockPanel.Dock="Bottom" Classes="panel-status">
       <TextBlock Text="{Binding StatusText}" TextTrimming="CharacterEllipsis" />
     </Border>
-    <TabControl SelectedIndex="{Binding SelectedTabIndex, Mode=TwoWay}">
+
+    <TabControl Classes="bare" Padding="0" SelectedIndex="{Binding SelectedTabIndex, Mode=TwoWay}">
       <TabItem Header="트리">
-        <DockPanel>
-          <Grid DockPanel.Dock="Top" Margin="6,2" ColumnDefinitions="40,44,300,160,80,100,90,90,70,70,100,110,*" Opacity="0.7">
-            <TextBlock Grid.Column="0" Text="Id" />
-            <TextBlock Grid.Column="1" Text="순서" ToolTip.Tip="실행 순서: 자식이 부모보다 먼저, 형제는 Id 순(보통의 규칙)" />
-            <TextBlock Grid.Column="2" Text="연산" />
-            <TextBlock Grid.Column="3" Text="객체" />
-            <TextBlock Grid.Column="4" Text="비용" />
-            <TextBlock Grid.Column="5" Text="비용 비중" ToolTip.Tip="옅은 막대: 누적 비용 비중, 진한 막대: 자체 비용 비중" />
-            <TextBlock Grid.Column="6" Text="E-Rows" />
-            <TextBlock Grid.Column="7" Text="A-Rows" />
-            <TextBlock Grid.Column="8" Text="Starts" />
-            <TextBlock Grid.Column="9" Text="시간(s)" />
-            <TextBlock Grid.Column="10" Text="실제 비중" ToolTip.Tip="실제 계획: 누적·자체 A-Time 비중(시간 통계가 없으면 A-Rows)" />
-            <TextBlock Grid.Column="11" Text="위험" />
-            <TextBlock Grid.Column="12" Text="조건절" />
-          </Grid>
-          <ListBox x:Name="PlanList" ItemsSource="{Binding Rows}">
-            <ListBox.ItemTemplate>
-              <DataTemplate x:DataType="vm:PlanRowItem">
-                <Border Classes.hot="{Binding IsHottest}" ToolTip.Tip="{Binding HotTip}">
-                  <Grid ColumnDefinitions="40,44,300,160,80,100,90,90,70,70,100,110,*">
-                    <TextBlock Grid.Column="0" Text="{Binding Id}" />
-                    <TextBlock Grid.Column="1" Text="{Binding ExecutionOrderText}" Opacity="0.75" />
-                    <TextBlock Grid.Column="2" Text="{Binding Operation}" FontFamily="Consolas,Menlo,monospace" />
-                    <TextBlock Grid.Column="3" Text="{Binding ObjectText}" TextTrimming="CharacterEllipsis" />
-                    <TextBlock Grid.Column="4" Text="{Binding CostText}" />
-                    <Panel Grid.Column="5" Background="Transparent" ToolTip.Tip="{Binding CostTip}">
-                      <Border Classes="bar-track" />
-                      <Border Classes="bar cost total" Width="{Binding CostBarWidth}" />
-                      <Border Classes="bar cost" Width="{Binding SelfCostBarWidth}" />
-                      <TextBlock Margin="64,0,0,0" Text="{Binding CostShareText}" />
-                    </Panel>
-                    <TextBlock Grid.Column="6" Text="{Binding EstimatedText}" />
-                    <TextBlock Grid.Column="7" Text="{Binding ActualText}" />
-                    <TextBlock Grid.Column="8" Text="{Binding StartsText}" />
-                    <TextBlock Grid.Column="9" Text="{Binding TimeText}" />
-                    <Panel Grid.Column="10" Background="Transparent" ToolTip.Tip="{Binding ActualTip}">
-                      <Border Classes="bar actual total" Width="{Binding ActualBarWidth}" />
-                      <Border Classes="bar actual" Width="{Binding SelfActualBarWidth}" />
-                      <TextBlock Margin="64,0,0,0" Text="{Binding ActualShareText}" />
-                    </Panel>
-                    <TextBlock Grid.Column="11" Text="{Binding RiskText}" Foreground="OrangeRed" FontWeight="SemiBold" />
-                    <TextBlock Grid.Column="12" Text="{Binding Predicates}" TextTrimming="CharacterEllipsis" />
-                  </Grid>
+        <Panel>
+          <!-- 계획이 없을 때 안내 -->
+          <StackPanel x:Name="EmptyHint" IsVisible="{Binding !Rows.Count}" HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="6">
+            <ContentControl HorizontalAlignment="Center" Opacity="0.55"
+                            Content="{Binding Source='explainPlan', Converter={x:Static icons:IconKeyConverter.Instance}, ConverterParameter=32}" />
+            <TextBlock HorizontalAlignment="Center" FontWeight="SemiBold" Text="실행 계획이 없습니다" />
+            <TextBlock HorizontalAlignment="Center" Classes="dim" Text="SQL 편집기에서 Ctrl+E 는 예상 계획, Ctrl+Shift+E 는 실제 계획" />
+          </StackPanel>
+
+          <Grid ColumnDefinitions="*,5,290" IsVisible="{Binding !!Rows.Count}">
+            <!-- 머리글과 줄을 같은 가로 스크롤에 넣는다(창이 좁아도 칸이 어긋나지 않는다). -->
+            <ScrollViewer Grid.Column="0" HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled">
+              <DockPanel>
+                <Border x:Name="TreeHeader" DockPanel.Dock="Top" Classes="grid-header">
+                  <StackPanel Orientation="Horizontal" Classes="cells" Margin="3,0,0,0">
+                    <TextBlock Classes="c-id num" Text="Id" />
+                    <TextBlock Classes="c-order num" Text="순서" ToolTip.Tip="실행 순서: 자식이 부모보다 먼저, 형제는 Id 순(보통의 규칙)" />
+                    <TextBlock Classes="c-op" Text="연산" />
+                    <TextBlock Classes="c-obj" Text="객체" />
+                    <TextBlock Classes="c-risk" Text="위험" />
+                    <TextBlock Classes="c-cost num" Text="비용" />
+                    <TextBlock Classes="c-share" Text="비용 비중" ToolTip.Tip="옅은 막대: 누적 비용 비중, 진한 막대: 자체 비용 비중" />
+                    <TextBlock Classes="c-erows num" Text="E-Rows" ToolTip.Tip="예상 행 수" />
+                    <TextBlock Classes="c-arows num" Text="A-Rows" ToolTip.Tip="실제 행 수" IsVisible="{Binding HasActuals}" />
+                    <TextBlock Classes="c-starts num" Text="Starts" IsVisible="{Binding HasActuals}" />
+                    <TextBlock Classes="c-time num" Text="시간(s)" ToolTip.Tip="누적 A-Time(초)" IsVisible="{Binding HasActuals}" />
+                    <TextBlock Classes="c-ashare" Text="실제 비중" ToolTip.Tip="실제 계획: 누적·자체 A-Time 비중(시간 통계가 없으면 A-Rows)" IsVisible="{Binding HasActuals}" />
+                  </StackPanel>
                 </Border>
-              </DataTemplate>
-            </ListBox.ItemTemplate>
-          </ListBox>
-        </DockPanel>
+                <ListBox x:Name="PlanList" Classes="table" ItemsSource="{Binding Rows}" SelectedItem="{Binding SelectedRow, Mode=TwoWay}"
+                         ScrollViewer.HorizontalScrollBarVisibility="Disabled" AutomationProperties.Name="계획 트리">
+                  <ListBox.ItemTemplate>
+                    <DataTemplate x:DataType="vm:PlanRowItem">
+                      <Border Classes="plan-row" Classes.hot="{Binding IsHottest}" ToolTip.Tip="{Binding HotTip}">
+                        <StackPanel Orientation="Horizontal" Classes="cells">
+                          <TextBlock Classes="c-id num dim" Text="{Binding Id}" />
+                          <TextBlock Classes="c-order num dim" Text="{Binding ExecutionOrderText}" />
+                          <Border Classes="c-op" Padding="6,0,0,0">
+                          <DockPanel>
+                            <vm:PlanTreeGuides DockPanel.Dock="Left" Lines="{Binding TreeLines}" Stroke="{DynamicResource OrandaTreeGuideBrush}" />
+                            <ContentControl DockPanel.Dock="Left" Width="14" Height="14" Margin="0,0,5,0" VerticalAlignment="Center"
+                                            Content="{Binding IconKey, Converter={x:Static icons:IconKeyConverter.Instance}, ConverterParameter=14}" />
+                            <ContentControl DockPanel.Dock="Right" Margin="4,0,6,0" VerticalAlignment="Center" Opacity="0.7" IsVisible="{Binding HasPredicates}"
+                                            Background="Transparent" ToolTip.Tip="{Binding Predicates}"
+                                            Content="{Binding Source='filter', Converter={x:Static icons:IconKeyConverter.Instance}, ConverterParameter=12}" />
+                            <TextBlock Classes="op" Text="{Binding OperationText}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis"
+                                       ToolTip.Tip="{Binding OperationText}" />
+                          </DockPanel>
+                          </Border>
+                          <TextBlock Classes="c-obj" Text="{Binding ObjectText}" ToolTip.Tip="{Binding ObjectText}" />
+                          <Border Classes="c-risk" Padding="6,0,0,0">
+                          <DockPanel IsVisible="{Binding IsRisky}">
+                            <ContentControl DockPanel.Dock="Left" Margin="0,0,4,0" VerticalAlignment="Center"
+                                            Content="{Binding Source='warn', Converter={x:Static icons:IconKeyConverter.Instance}, ConverterParameter=12}" />
+                            <TextBlock Classes="warning-text" Text="{Binding RiskText}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis"
+                                       ToolTip.Tip="{Binding RiskText}" />
+                          </DockPanel>
+                          </Border>
+                          <TextBlock Classes="c-cost num" Text="{Binding CostText}" />
+                          <Grid Classes="c-share" ColumnDefinitions="66,*" Background="Transparent" ToolTip.Tip="{Binding CostTip}">
+                            <Panel Margin="6,0,0,0">
+                              <Border Classes="bar-track" />
+                              <Border Classes="bar cost total" Width="{Binding CostBarWidth}" />
+                              <Border Classes="bar cost" Width="{Binding SelfCostBarWidth}" />
+                            </Panel>
+                            <TextBlock Grid.Column="1" Classes="num pct" Margin="0,0,6,0" VerticalAlignment="Center" Text="{Binding CostShareText}" />
+                          </Grid>
+                          <TextBlock Classes="c-erows num" Text="{Binding EstimatedText}" />
+                          <TextBlock Classes="c-arows num" Text="{Binding ActualText}" IsVisible="{Binding HasActuals}" />
+                          <TextBlock Classes="c-starts num" Text="{Binding StartsText}" IsVisible="{Binding HasActuals}" />
+                          <TextBlock Classes="c-time num" Text="{Binding TimeText}" IsVisible="{Binding HasActuals}" />
+                          <Grid Classes="c-ashare" ColumnDefinitions="66,*" Background="Transparent" ToolTip.Tip="{Binding ActualTip}" IsVisible="{Binding HasActuals}">
+                            <Panel Margin="6,0,0,0">
+                              <Border Classes="bar-track" />
+                              <Border Classes="bar actual total" Width="{Binding ActualBarWidth}" />
+                              <Border Classes="bar actual" Width="{Binding SelfActualBarWidth}" />
+                            </Panel>
+                            <TextBlock Grid.Column="1" Classes="num pct" Margin="0,0,6,0" VerticalAlignment="Center" Text="{Binding ActualShareText}" />
+                          </Grid>
+                        </StackPanel>
+                      </Border>
+                    </DataTemplate>
+                  </ListBox.ItemTemplate>
+                </ListBox>
+              </DockPanel>
+            </ScrollViewer>
+            <GridSplitter Grid.Column="1" ResizeDirection="Columns" Background="Transparent" />
+
+            <!-- 고른 단계 상세: 연산·객체, 표시(가장 비쌈·위험), 조건절 전체(고정폭·줄바꿈), 비용·실제 비중 설명. -->
+            <Border x:Name="DetailsPane" Grid.Column="2" BorderBrush="{DynamicResource OrandaSeparatorBrush}" BorderThickness="1,0,0,0">
+              <Panel>
+                <TextBlock Margin="12" Classes="dim" TextWrapping="Wrap" Text="단계를 고르면 조건절과 비용이 여기에 보입니다."
+                           IsVisible="{Binding SelectedRow, Converter={x:Static ObjectConverters.IsNull}}" />
+                <ScrollViewer HorizontalScrollBarVisibility="Disabled" IsVisible="{Binding SelectedRow, Converter={x:Static ObjectConverters.IsNotNull}}">
+                  <StackPanel Margin="12,8,12,10" Spacing="8">
+                    <DockPanel>
+                      <ContentControl DockPanel.Dock="Left" Margin="0,2,7,0" VerticalAlignment="Top"
+                                      Content="{Binding SelectedRow.IconKey, Converter={x:Static icons:IconKeyConverter.Instance}, ConverterParameter=16}" />
+                      <StackPanel Spacing="1">
+                        <TextBlock FontWeight="SemiBold" TextWrapping="Wrap" Text="{Binding SelectedRow.OperationText}" />
+                        <TextBlock Classes="dim" TextWrapping="Wrap" Text="{Binding SelectedRow.ObjectText}"
+                                   IsVisible="{Binding !!SelectedRow.ObjectText.Length}" />
+                      </StackPanel>
+                    </DockPanel>
+                    <WrapPanel>
+                      <Border Classes="chip" Margin="0,0,4,4">
+                        <StackPanel Orientation="Horizontal" Spacing="4">
+                          <TextBlock Text="Id" Opacity="0.7" />
+                          <TextBlock Text="{Binding SelectedRow.Id}" FontWeight="SemiBold" />
+                        </StackPanel>
+                      </Border>
+                      <Border Classes="chip" Margin="0,0,4,4" IsVisible="{Binding !!SelectedRow.ExecutionOrderText.Length}"
+                              ToolTip.Tip="실행 순서: 자식이 부모보다 먼저, 형제는 Id 순(보통의 규칙)">
+                        <StackPanel Orientation="Horizontal" Spacing="4">
+                          <TextBlock Text="순서" Opacity="0.7" />
+                          <TextBlock Text="{Binding SelectedRow.ExecutionOrderText}" FontWeight="SemiBold" />
+                        </StackPanel>
+                      </Border>
+                      <Border Classes="chip" Margin="0,0,4,4" IsVisible="{Binding SelectedRow.IsHottest}"
+                              Background="{DynamicResource OrandaHotRowBrush}" BorderBrush="{DynamicResource OrandaIconOrangeBrush}">
+                        <TextBlock Text="{Binding SelectedRow.HotTip}" />
+                      </Border>
+                      <Border Classes="chip" Margin="0,0,4,4" IsVisible="{Binding SelectedRow.IsRisky}">
+                        <StackPanel Orientation="Horizontal" Spacing="4">
+                          <ContentControl VerticalAlignment="Center"
+                                          Content="{Binding Source='warn', Converter={x:Static icons:IconKeyConverter.Instance}, ConverterParameter=12}" />
+                          <TextBlock Classes="warning-text" Text="{Binding SelectedRow.RiskText}" />
+                        </StackPanel>
+                      </Border>
+                    </WrapPanel>
+                    <StackPanel Spacing="3" IsVisible="{Binding SelectedRow.AccessPredicates, Converter={x:Static ObjectConverters.IsNotNull}}">
+                      <TextBlock Classes="section-label" Text="액세스 조건 (access)" />
+                      <Border Classes="code">
+                        <SelectableTextBlock Classes="mono" TextWrapping="Wrap" Text="{Binding SelectedRow.AccessPredicates}" />
+                      </Border>
+                    </StackPanel>
+                    <StackPanel Spacing="3" IsVisible="{Binding SelectedRow.FilterPredicates, Converter={x:Static ObjectConverters.IsNotNull}}">
+                      <TextBlock Classes="section-label" Text="필터 조건 (filter)" />
+                      <Border Classes="code">
+                        <SelectableTextBlock Classes="mono" TextWrapping="Wrap" Text="{Binding SelectedRow.FilterPredicates}" />
+                      </Border>
+                    </StackPanel>
+                    <TextBlock Classes="dim" Text="조건절 없음" IsVisible="{Binding !SelectedRow.HasPredicates}" />
+                    <StackPanel Spacing="3" IsVisible="{Binding SelectedRow.CostTip, Converter={x:Static ObjectConverters.IsNotNull}}">
+                      <TextBlock Classes="section-label" Text="비용" />
+                      <TextBlock TextWrapping="Wrap" Text="{Binding SelectedRow.CostTip}" />
+                    </StackPanel>
+                    <StackPanel Spacing="3" IsVisible="{Binding SelectedRow.ActualTip, Converter={x:Static ObjectConverters.IsNotNull}}">
+                      <TextBlock Classes="section-label" Text="실제" />
+                      <TextBlock TextWrapping="Wrap" Text="{Binding SelectedRow.ActualTip}" />
+                    </StackPanel>
+                  </StackPanel>
+                </ScrollViewer>
+              </Panel>
+            </Border>
+          </Grid>
+        </Panel>
       </TabItem>
+
       <TabItem Header="텍스트">
-        <TextBox Text="{Binding PlanText}" IsReadOnly="True" AcceptsReturn="True" TextWrapping="NoWrap"
-                 FontFamily="Consolas,Menlo,monospace" ScrollViewer.HorizontalScrollBarVisibility="Auto" />
+        <TextBox Classes="plan-text" Text="{Binding PlanText}" IsReadOnly="True" AcceptsReturn="True" TextWrapping="NoWrap"
+                 ScrollViewer.HorizontalScrollBarVisibility="Auto" AutomationProperties.Name="DBMS_XPLAN 텍스트" />
       </TabItem>
+
       <TabItem Header="비교">
         <DockPanel>
-          <StackPanel DockPanel.Dock="Top" Margin="6,4">
-            <TextBlock Text="{Binding CompareHashText}" Classes.big="{Binding CompareHashDiffers}" TextWrapping="Wrap" />
-            <TextBlock Text="{Binding CompareSummaryText}" TextWrapping="Wrap" Opacity="0.85" />
-          </StackPanel>
-          <Grid DockPanel.Dock="Top" Margin="6,2" ColumnDefinitions="28,56,56,320,180,150,64,170,64,150,64" Opacity="0.7">
-            <TextBlock Grid.Column="1" Text="기준 Id" ToolTip.Tip="고정한 계획의 Id" />
-            <TextBlock Grid.Column="2" Text="지금 Id" ToolTip.Tip="지금 계획의 Id" />
-            <TextBlock Grid.Column="3" Text="연산 (← 기준)" />
-            <TextBlock Grid.Column="4" Text="객체 (← 기준)" />
-            <TextBlock Grid.Column="5" Text="비용 기준 → 지금" />
-            <TextBlock Grid.Column="6" Text="변화" />
-            <TextBlock Grid.Column="7" Text="E-Rows 기준 → 지금" />
-            <TextBlock Grid.Column="8" Text="변화" />
-            <TextBlock Grid.Column="9" Text="A-Rows 기준 → 지금" />
-            <TextBlock Grid.Column="10" Text="변화" />
-          </Grid>
-          <ListBox ItemsSource="{Binding CompareRows}">
-            <ListBox.ItemTemplate>
-              <DataTemplate x:DataType="vm:PlanCompareRowItem">
-                <Border Classes.changed="{Binding IsChanged}" Classes.added="{Binding IsAdded}" Classes.removed="{Binding IsRemoved}">
-                  <Grid ColumnDefinitions="28,56,56,320,180,150,64,170,64,150,64">
-                    <TextBlock Grid.Column="0" Text="{Binding KindMark}" ToolTip.Tip="{Binding KindTip}" FontWeight="SemiBold" HorizontalAlignment="Center" />
-                    <TextBlock Grid.Column="1" Text="{Binding PinnedIdText}" />
-                    <TextBlock Grid.Column="2" Text="{Binding CurrentIdText}" />
-                    <TextBlock Grid.Column="3" Text="{Binding Operation}" FontFamily="Consolas,Menlo,monospace" TextTrimming="CharacterEllipsis" />
-                    <TextBlock Grid.Column="4" Text="{Binding ObjectText}" TextTrimming="CharacterEllipsis" />
-                    <TextBlock Grid.Column="5" Text="{Binding CostText}" Classes.big="{Binding CostBig}" />
-                    <TextBlock Grid.Column="6" Text="{Binding CostDeltaText}" Classes.big="{Binding CostBig}" />
-                    <TextBlock Grid.Column="7" Text="{Binding RowsText}" Classes.big="{Binding RowsBig}" />
-                    <TextBlock Grid.Column="8" Text="{Binding RowsDeltaText}" Classes.big="{Binding RowsBig}" />
-                    <TextBlock Grid.Column="9" Text="{Binding ActualRowsText}" Classes.big="{Binding ActualRowsBig}" />
-                    <TextBlock Grid.Column="10" Text="{Binding ActualRowsDeltaText}" Classes.big="{Binding ActualRowsBig}" />
-                  </Grid>
-                </Border>
-              </DataTemplate>
-            </ListBox.ItemTemplate>
-          </ListBox>
+          <Border DockPanel.Dock="Top" Classes="compare-banner" Classes.differs="{Binding CompareHashDiffers}">
+            <DockPanel>
+              <Panel DockPanel.Dock="Left" Margin="0,1,8,0" VerticalAlignment="Top">
+                <ContentControl IsVisible="{Binding CompareHashDiffers}"
+                                Content="{Binding Source='warn', Converter={x:Static icons:IconKeyConverter.Instance}, ConverterParameter=16}" />
+                <ContentControl IsVisible="{Binding !CompareHashDiffers}"
+                                Content="{Binding Source='info', Converter={x:Static icons:IconKeyConverter.Instance}, ConverterParameter=16}" />
+              </Panel>
+              <StackPanel Spacing="2">
+                <TextBlock FontWeight="SemiBold" TextWrapping="Wrap" Text="{Binding CompareHashText}" Classes.big="{Binding CompareHashDiffers}" />
+                <TextBlock Classes="dim" FontSize="{DynamicResource OrandaFontSizeSmall}" TextWrapping="Wrap" Text="{Binding CompareSummaryText}"
+                           IsVisible="{Binding !!CompareSummaryText.Length}" />
+              </StackPanel>
+            </DockPanel>
+          </Border>
+          <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled">
+            <DockPanel>
+              <Border DockPanel.Dock="Top" Classes="grid-header">
+                <StackPanel Orientation="Horizontal" Classes="cells">
+                  <TextBlock Classes="k-mark" Text="" />
+                  <TextBlock Classes="k-id num" Text="기준 Id" ToolTip.Tip="고정한 계획의 Id" />
+                  <TextBlock Classes="k-id num" Text="지금 Id" ToolTip.Tip="지금 계획의 Id" />
+                  <TextBlock Classes="k-op" Text="연산 (← 기준)" />
+                  <TextBlock Classes="k-obj" Text="객체 (← 기준)" />
+                  <TextBlock Classes="k-pair num" Text="비용 기준 → 지금" />
+                  <TextBlock Classes="k-delta num" Text="변화" />
+                  <TextBlock Classes="k-pair num" Text="E-Rows 기준 → 지금" />
+                  <TextBlock Classes="k-delta num" Text="변화" />
+                  <TextBlock Classes="k-pair num" Text="A-Rows 기준 → 지금" />
+                  <TextBlock Classes="k-delta num" Text="변화" />
+                </StackPanel>
+              </Border>
+              <ListBox Classes="table" ItemsSource="{Binding CompareRows}" ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                       AutomationProperties.Name="계획 비교">
+                <ListBox.ItemTemplate>
+                  <DataTemplate x:DataType="vm:PlanCompareRowItem">
+                    <Border Classes="diff" Classes.changed="{Binding IsChanged}" Classes.added="{Binding IsAdded}" Classes.removed="{Binding IsRemoved}">
+                      <StackPanel Orientation="Horizontal" Classes="cells">
+                        <TextBlock Classes="k-mark mark" Classes.changed="{Binding IsChanged}" Classes.added="{Binding IsAdded}" Classes.removed="{Binding IsRemoved}"
+                                   Text="{Binding KindMark}" ToolTip.Tip="{Binding KindTip}" />
+                        <TextBlock Classes="k-id num dim" Text="{Binding PinnedIdText}" />
+                        <TextBlock Classes="k-id num dim" Text="{Binding CurrentIdText}" />
+                        <Border Classes="k-op" Padding="6,0,0,0">
+                        <DockPanel>
+                          <Border DockPanel.Dock="Left" Width="{Binding IndentWidth}" />
+                          <ContentControl DockPanel.Dock="Left" Width="14" Height="14" Margin="0,0,5,0" VerticalAlignment="Center"
+                                          Content="{Binding IconKey, Converter={x:Static icons:IconKeyConverter.Instance}, ConverterParameter=14}" />
+                          <TextBlock DockPanel.Dock="Left" Text="{Binding OperationText}" VerticalAlignment="Center" />
+                          <TextBlock Classes="dim" Margin="6,0,6,0" VerticalAlignment="Center" TextTrimming="CharacterEllipsis"
+                                     IsVisible="{Binding HasPreviousOperation}" Text="{Binding PreviousOperationText, StringFormat='← {0}'}"
+                                     ToolTip.Tip="{Binding PreviousOperationText}" />
+                        </DockPanel>
+                        </Border>
+                        <TextBlock Classes="k-obj" Text="{Binding ObjectText}" ToolTip.Tip="{Binding ObjectText}" />
+                        <TextBlock Classes="k-pair num" Text="{Binding CostText}" Classes.big="{Binding CostBig}" />
+                        <TextBlock Classes="k-delta num" Text="{Binding CostDeltaText}" Classes.big="{Binding CostBig}" />
+                        <TextBlock Classes="k-pair num" Text="{Binding RowsText}" Classes.big="{Binding RowsBig}" />
+                        <TextBlock Classes="k-delta num" Text="{Binding RowsDeltaText}" Classes.big="{Binding RowsBig}" />
+                        <TextBlock Classes="k-pair num" Text="{Binding ActualRowsText}" Classes.big="{Binding ActualRowsBig}" />
+                        <TextBlock Classes="k-delta num" Text="{Binding ActualRowsDeltaText}" Classes.big="{Binding ActualRowsBig}" />
+                      </StackPanel>
+                    </Border>
+                  </DataTemplate>
+                </ListBox.ItemTemplate>
+              </ListBox>
+            </DockPanel>
+          </ScrollViewer>
         </DockPanel>
       </TabItem>
     </TabControl>

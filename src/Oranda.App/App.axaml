@@ -360,6 +360,89 @@
             <Setter Property="Foreground" Value="{DynamicResource OrandaIconRedBrush}" />
         </Style>
 
+        <!-- 표 모양 목록(계획 트리·비교, 실행 이력, 변경 일지, 메시지, 컴파일 오류 — TSK-13-14·15).
+             줄은 24 DIP·줄 폭을 채우고(배경이 끝까지), 짝수 줄은 옅은 줄무늬. 칸 글자는 결과 그리드와 같은 크기. -->
+        <Style Selector="ListBox.table">
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="FontSize" Value="{DynamicResource OrandaGridFontSize}" />
+        </Style>
+        <Style Selector="ListBox.table ListBoxItem">
+            <Setter Property="Padding" Value="0" />
+            <Setter Property="MinHeight" Value="24" />
+            <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+            <Setter Property="VerticalContentAlignment" Value="Stretch" />
+        </Style>
+        <Style Selector="ListBox.table ListBoxItem:nth-child(2n)">
+            <Setter Property="Background" Value="{DynamicResource OrandaRowAltBrush}" />
+        </Style>
+        <!-- 고른 줄: Fluent 기본(진한 강조색)보다 옅은 파랑. 줄 안의 색 글자·막대가 묻히지 않는다. -->
+        <Style Selector="ListBox.table ListBoxItem:selected /template/ ContentPresenter#PART_ContentPresenter, ListBox.table ListBoxItem:selected:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+            <Setter Property="Background" Value="{DynamicResource OrandaTableSelectionBrush}" />
+        </Style>
+        <!-- 표 칸: 가로로 늘어놓은 고정 폭 칸(머리글과 줄이 같은 클래스·폭을 쓴다). 숫자 칸은 오른쪽 맞춤 고정폭 글꼴(자릿수가 세로로 맞는다). -->
+        <Style Selector="StackPanel.cells > TextBlock">
+            <Setter Property="Padding" Value="6,0" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+            <Setter Property="TextTrimming" Value="CharacterEllipsis" />
+        </Style>
+        <Style Selector="TextBlock.num">
+            <Setter Property="TextAlignment" Value="Right" />
+            <Setter Property="FontFamily" Value="{DynamicResource OrandaGridFontFamily}" />
+        </Style>
+        <Style Selector="Border.grid-header TextBlock.num">
+            <Setter Property="FontFamily" Value="{x:Static FontFamily.Default}" />
+        </Style>
+        <Style Selector="TextBlock.mono, SelectableTextBlock.mono">
+            <Setter Property="FontFamily" Value="{DynamicResource OrandaGridFontFamily}" />
+        </Style>
+        <Style Selector="TextBlock.dim">
+            <Setter Property="Opacity" Value="0.65" />
+        </Style>
+        <Style Selector="TextBlock.warning-text">
+            <Setter Property="Foreground" Value="{DynamicResource OrandaWarningForegroundBrush}" />
+        </Style>
+        <Style Selector="TextBlock.danger-text">
+            <Setter Property="Foreground" Value="{DynamicResource OrandaDangerForegroundBrush}" />
+        </Style>
+        <Style Selector="TextBlock.success-text">
+            <Setter Property="Foreground" Value="{DynamicResource OrandaSuccessForegroundBrush}" />
+        </Style>
+        <!-- 상세 칸의 작은 제목·조건절·DDL 같은 코드 상자, 짧은 표시 칩. -->
+        <Style Selector="TextBlock.section-label">
+            <Setter Property="FontSize" Value="{DynamicResource OrandaFontSizeSmall}" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+            <Setter Property="Opacity" Value="0.7" />
+        </Style>
+        <Style Selector="Border.code">
+            <Setter Property="Background" Value="{DynamicResource OrandaCodeBackgroundBrush}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource OrandaSeparatorBrush}" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="CornerRadius" Value="4" />
+            <Setter Property="Padding" Value="8,5" />
+        </Style>
+        <Style Selector="Border.chip">
+            <Setter Property="Background" Value="{DynamicResource OrandaToolbarBackgroundBrush}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource OrandaSeparatorBrush}" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="CornerRadius" Value="10" />
+            <Setter Property="Padding" Value="7,1" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+        </Style>
+        <Style Selector="Border.chip TextBlock">
+            <Setter Property="FontSize" Value="{DynamicResource OrandaFontSizeSmall}" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+        </Style>
+        <!-- 차이 줄(계획 비교·변경 일지 차이 보기): 추가 초록·빠짐 빨강·바뀜 노랑. -->
+        <Style Selector="Border.diff.added">
+            <Setter Property="Background" Value="{DynamicResource OrandaDiffAddedBrush}" />
+        </Style>
+        <Style Selector="Border.diff.removed">
+            <Setter Property="Background" Value="{DynamicResource OrandaDiffRemovedBrush}" />
+        </Style>
+        <Style Selector="Border.diff.changed">
+            <Setter Property="Background" Value="{DynamicResource OrandaDiffChangedBrush}" />
+        </Style>
+
         <Style Selector="MenuItem:disabled Viewbox.shell-icon">
             <Setter Property="Opacity" Value="0.4" />
         </Style>
@@ -424,6 +507,20 @@
                     <SolidColorBrush x:Key="OrandaGridCurrentRowBrush" Color="#1A2F6FDE" />
                     <SolidColorBrush x:Key="OrandaGridRowMarkerBrush" Color="#2F6FDE" />
                     <SolidColorBrush x:Key="OrandaGridNeedsChangeBrush" Color="#FFD8A8" />
+                    <!-- 표 모양 목록(계획·이력·변경 일지·메시지·컴파일 오류): 줄무늬·강조 줄·차이 줄 바탕은 반투명이라 어떤 바탕 위에서도 글자가 읽힌다. -->
+                    <SolidColorBrush x:Key="OrandaRowAltBrush" Color="#08000000" />
+                    <SolidColorBrush x:Key="OrandaTableSelectionBrush" Color="#D3E5FA" />
+                    <SolidColorBrush x:Key="OrandaHotRowBrush" Color="#1FE8710A" />
+                    <SolidColorBrush x:Key="OrandaDiffAddedBrush" Color="#2E1E8E3E" />
+                    <SolidColorBrush x:Key="OrandaDiffRemovedBrush" Color="#2ED13438" />
+                    <SolidColorBrush x:Key="OrandaDiffChangedBrush" Color="#33D99A16" />
+                    <SolidColorBrush x:Key="OrandaBarTrackBrush" Color="#14000000" />
+                    <SolidColorBrush x:Key="OrandaTreeGuideBrush" Color="#B4B4B4" />
+                    <SolidColorBrush x:Key="OrandaCodeBackgroundBrush" Color="#F7F7F8" />
+                    <!-- 글자색: 아이콘 색보다 진해 흰 바탕에서도 읽힌다. -->
+                    <SolidColorBrush x:Key="OrandaWarningForegroundBrush" Color="#B65A00" />
+                    <SolidColorBrush x:Key="OrandaDangerForegroundBrush" Color="#C42B1C" />
+                    <SolidColorBrush x:Key="OrandaSuccessForegroundBrush" Color="#107C10" />
                 </ResourceDictionary>
                 <ResourceDictionary x:Key="Dark">
                     <SolidColorBrush x:Key="OrandaEnvProductionBrush" Color="#FF6B5E" />
@@ -462,6 +559,18 @@
                     <SolidColorBrush x:Key="OrandaGridCurrentRowBrush" Color="#265B9BFF" />
                     <SolidColorBrush x:Key="OrandaGridRowMarkerBrush" Color="#5B9BFF" />
                     <SolidColorBrush x:Key="OrandaGridNeedsChangeBrush" Color="#6B3A10" />
+                    <SolidColorBrush x:Key="OrandaRowAltBrush" Color="#0BFFFFFF" />
+                    <SolidColorBrush x:Key="OrandaTableSelectionBrush" Color="#2E4B6E" />
+                    <SolidColorBrush x:Key="OrandaHotRowBrush" Color="#33FFA25C" />
+                    <SolidColorBrush x:Key="OrandaDiffAddedBrush" Color="#335CC27A" />
+                    <SolidColorBrush x:Key="OrandaDiffRemovedBrush" Color="#33FF6B6B" />
+                    <SolidColorBrush x:Key="OrandaDiffChangedBrush" Color="#33F2C14E" />
+                    <SolidColorBrush x:Key="OrandaBarTrackBrush" Color="#1FFFFFFF" />
+                    <SolidColorBrush x:Key="OrandaTreeGuideBrush" Color="#5A5A5A" />
+                    <SolidColorBrush x:Key="OrandaCodeBackgroundBrush" Color="#1E1E1E" />
+                    <SolidColorBrush x:Key="OrandaWarningForegroundBrush" Color="#F0A04B" />
+                    <SolidColorBrush x:Key="OrandaDangerForegroundBrush" Color="#FF7B72" />
+                    <SolidColorBrush x:Key="OrandaSuccessForegroundBrush" Color="#6CCB5F" />
                 </ResourceDictionary>
             </ResourceDictionary.ThemeDictionaries>
 
