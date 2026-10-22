@@ -8,6 +8,8 @@
 # .NET
 bin/
 obj/
+# 게시·릴리스·성능 측정 빌드 결과(scripts/release, scripts/perf)
+/artifacts/
 *.user
 .vs/
 
