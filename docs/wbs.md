@@ -3462,6 +3462,72 @@ dotnet, testhost, Oranda.App
 - data-model: docs/design/data-model.md `schemaBrowser.filters`·`schemaBrowser.activeFilters`
 - ui-spec: -
 
+### TSK-13-14: 실행 계획 창 디자인 다듬기 [mac]
+- category: design
+- domain: frontend
+- model: sonnet
+- status: [im]
+- priority: medium
+- assignee: -
+- schedule: 2026-10-22 ~ 2026-10-24
+- tags: plan, ui, mac
+- depends: TSK-07-01
+- blocked-by: -
+- entry-point: 실행 계획 창(oranda.panel.plan)
+- note: 담당 PC: mac(맥북) — win144 세션은 이 Task 를 하지 않는다. 2026-10-22 사용자 요청: 「실행 계획 창이 너무 보기 싫게 디자인 되어 있어. 보기 좋게 바꿔줘」. 참고: SQL Developer Explain Plan, Orange 실행 계획, DataGrip 계획 트리
+
+#### PRD 요구사항
+- prd-ref: PRD EXEC 실행 계획
+- requirements:
+  - 트리 표: 들여쓰기 안내선과 연산 종류 아이콘이 있는 연산 열, 객체·비용·행 수·바이트·시간 열(숫자 오른쪽 맞춤)
+  - 가장 비싼 단계 하나만 또렷하게 강조, 비용 비중은 가는 막대
+  - 접근·필터 조건은 고정폭 글꼴로 줄바꿈해 읽기 쉽게
+  - 툴바는 다른 창처럼 아이콘 단추 한 줄
+- acceptance:
+  - 지금 있는 기능(옵션·DISPLAY_CURSOR·비교·복사)이 모두 그대로 동작한다
+  - 밝은·어두운 테마 모두에서 글자와 강조가 읽힌다
+- constraints:
+  - 테마 자원(DynamicResource)만 쓴다
+- test-criteria:
+  - 기존 실행 계획 시험 통과, 바꾸기 전후 화면 캡처 비교
+
+#### 기술 스펙 (TRD)
+- tech-spec: -
+- api-spec: -
+- data-model: -
+- ui-spec: -
+
+### TSK-13-15: 메시지·실행 이력·변경 일지·컴파일 오류 창 디자인 다듬기 [mac]
+- category: design
+- domain: frontend
+- model: sonnet
+- status: [im]
+- priority: medium
+- assignee: -
+- schedule: 2026-10-22 ~ 2026-10-24
+- tags: ui, mac
+- depends: TSK-13-14
+- blocked-by: -
+- entry-point: 아래 도구 창(oranda.panel.messages·history·changeJournal·compileErrors)
+- note: 담당 PC: mac(맥북) — win144 세션은 이 Task 를 하지 않는다. 2026-10-22 사용자 요청: 「메시지, 실행 이력, 변경 일지, 컴파일 오류 도 마찬가지겠다」(TSK-13-14 와 같은 디자인 언어)
+
+#### PRD 요구사항
+- prd-ref: -
+- requirements:
+  - 네 창이 실행 계획 창과 같은 머리글·줄 모양·아이콘 툴바·심각도 아이콘과 색을 쓴다
+- acceptance:
+  - 기능은 그대로, 밝은·어두운 테마 모두 읽힌다
+- constraints:
+  - 공통 스타일은 앱의 공통 스타일 자리에 둔다
+- test-criteria:
+  - 기존 시험 통과, 창마다 바꾸기 전후 화면 캡처 비교
+
+#### 기술 스펙 (TRD)
+- tech-spec: -
+- api-spec: -
+- data-model: -
+- ui-spec: -
+
 ## 의존 그래프
 
 ### 그래프 (Mermaid)
@@ -3602,6 +3668,8 @@ graph LR
   TSK-08-01 --> TSK-13-07
   TSK-07-02 --> TSK-13-08
   TSK-07-02 --> TSK-13-10
+  TSK-07-01 --> TSK-13-14
+  TSK-13-14 --> TSK-13-15
   style TSK-01-02 fill:#fff3e0,stroke:#e65100
   style TSK-01-07 fill:#fff3e0,stroke:#e65100
   style TSK-01-02 stroke:#c62828,stroke-width:2px
