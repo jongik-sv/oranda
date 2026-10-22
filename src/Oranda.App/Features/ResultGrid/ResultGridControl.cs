@@ -5,6 +5,7 @@ using Avalonia.Input;
 using Avalonia.Media;
 using Avalonia.Media.Immutable;
 using Avalonia.Styling;
+using Avalonia.Threading;
 using Oranda.App.Shell.Appearance;
 using Oranda.Core.Grid;
 
@@ -73,6 +74,7 @@ public sealed class ResultGridControl : Control
             {
                 _model.Changed -= OnModelChanged;
                 _model.RevealRequested -= OnRevealRequested;
+                _model.FlashStarted -= OnFlashStarted;
             }
 
             _model = value;
@@ -84,6 +86,12 @@ public sealed class ResultGridControl : Control
             {
                 _model.Changed += OnModelChanged;
                 _model.RevealRequested += OnRevealRequested;
+                _model.FlashStarted += OnFlashStarted;
+                if (_model.HasFlash)
+                {
+                    OnFlashStarted(_model, EventArgs.Empty); // 강조가 컨트롤보다 먼저 시작됐다(다시 읽은 새 그리드)
+                }
+
                 _ = LoadAsync(_model);
             }
 
@@ -319,6 +327,23 @@ public sealed class ResultGridControl : Control
     }
 
     private void OnRevealRequested(object? sender, GridCell cell) => EnsureVisible(cell);
+
+    /// <summary>저장된 행 강조 시간. 지나면 강조를 지운다(입력은 그동안에도 막지 않는다).</summary>
+    internal static TimeSpan FlashDuration { get; set; } = TimeSpan.FromMilliseconds(800);
+
+    private DispatcherTimer? _flashTimer;
+
+    private void OnFlashStarted(object? sender, EventArgs e)
+    {
+        _flashTimer?.Stop();
+        _flashTimer = new DispatcherTimer { Interval = FlashDuration };
+        _flashTimer.Tick += (_, _) =>
+        {
+            _flashTimer?.Stop();
+            _model?.ClearFlash();
+        };
+        _flashTimer.Start();
+    }
 
     // ---- 배치 ----
 
@@ -705,6 +730,11 @@ public sealed class ResultGridControl : Control
                 if (editBrush is not null)
                 {
                     ctx.FillRectangle(editBrush, new Rect(x, y, w, rh));
+                }
+
+                if (m.IsFlashing(r))
+                {
+                    ctx.FillRectangle(pal.InsertedRow, new Rect(x, y, w, rh)); // 저장 직후 잠깐(TSK-13-18)
                 }
 
                 if (r == current)

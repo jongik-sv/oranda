@@ -123,6 +123,7 @@ public sealed partial class ExportDialogViewModel : ViewModelBase, IDisposable
             RowCount = summary.Rows;
             Status = $"{summary.Rows:N0}행을 저장했다({summary.Elapsed.TotalSeconds:0.0}초). {string.Join(' ', summary.Warnings)}".TrimEnd();
             DataTransferCommands.Notify?.Invoke(Status);
+            GridEdit.SaveFeedback.ShowExported(summary.Rows, path);
             Finished?.Invoke(this, EventArgs.Empty);
         }
         catch (OperationCanceledException)
@@ -133,6 +134,7 @@ public sealed partial class ExportDialogViewModel : ViewModelBase, IDisposable
         {
             StatusIsError = true;
             Status = ex.Message;
+            GridEdit.SaveFeedback.ShowExportFailed(ex.Message);
         }
         finally
         {

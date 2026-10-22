@@ -81,6 +81,7 @@ public static class ExcelExportRunner
             ExcelExportPlan.LastFolder = Path.GetDirectoryName(Path.GetFullPath(path));
             var message = $"{summary.Rows:N0} 행을 Excel 로 내보냄 ({path}) {string.Join(' ', summary.Warnings)}".TrimEnd();
             DataTransferCommands.Notify?.Invoke(message);
+            GridEdit.SaveFeedback.ShowExported(summary.Rows, path);
             if (openAfter && !OpenFile(path))
             {
                 DataTransferCommands.Notify?.Invoke($"파일을 기본 앱으로 열지 못했습니다: {path}");
@@ -96,6 +97,7 @@ public static class ExcelExportRunner
         catch (Exception ex) when (ex is InvalidOperationException or IOException or UnauthorizedAccessException or NotSupportedException)
         {
             DataTransferCommands.Notify?.Invoke($"Excel 내보내기에 실패했습니다: {ex.Message}");
+            GridEdit.SaveFeedback.ShowExportFailed(ex.Message);
             return null;
         }
         finally

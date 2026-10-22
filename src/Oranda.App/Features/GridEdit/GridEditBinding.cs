@@ -48,6 +48,25 @@ public static class GridEditBinding
     public static GridEditSession? Of(ResultGridModel? model) =>
         model is not null && Sessions.TryGetValue(model, out var s) ? s : null;
 
+    /// <summary>편집 세션이 붙은 그리드(저장 효과를 그릴 곳). 붙은 그리드가 없으면 null.</summary>
+    public static ResultGridModel? ModelOf(GridEditSession? session)
+    {
+        if (session is null)
+        {
+            return null;
+        }
+
+        foreach (var (model, bound) in Sessions)
+        {
+            if (ReferenceEquals(bound, session))
+            {
+                return model;
+            }
+        }
+
+        return null;
+    }
+
     /// <summary>화면 행 → 편집 행 번호(질의 결과 뒤의 행은 새 행의 음수 번호).</summary>
     public static long ToEditRow(ResultGridModel model, GridEditSession session, long viewRow)
     {

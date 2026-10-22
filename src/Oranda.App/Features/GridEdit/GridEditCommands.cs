@@ -1,4 +1,5 @@
 using Oranda.Core.Execution;
+using Oranda.Core.Grid;
 using Oranda.Core.Metadata;
 using Oranda.Core.Shell;
 
@@ -167,7 +168,21 @@ public sealed class GridEditCommandHandler : ICommandHandler
     /// <summary>확인을 받은 변경을 반영한다.</summary>
     private static async Task ApplyConfirmedAsync(GridEditSession s, bool commit, CancellationToken ct)
     {
-        await s.ApplyAsync(commit, ct).ConfigureAwait(true);
+        var updated = s.BuildChanges().Where(c => c.Kind == RowChangeKind.Update).Select(c => c.RowIndex).ToList();
+        ApplyResult result;
+        try
+        {
+            result = await s.ApplyAsync(commit, ct).ConfigureAwait(true);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            SaveFeedback.ShowApplyFailed();
+            throw;
+        }
+
+        // 저장 효과(TSK-13-18): 상태 표시줄 알림 + 반영된 행 잠깐 강조(다시 읽으면 새 그리드에서).
+        SaveFeedback.ShowApplied(result.AppliedCount, result.Failures.Count, result.Committed);
+        var savedRows = updated.Where(r => s.GetRowState(r) != GridEditRowState.Failed).ToList();
         var notice = s.Notice;
         if (notice is not null)
         {
@@ -185,6 +200,12 @@ public sealed class GridEditCommandHandler : ICommandHandler
             {
                 GridEditCommands.Active?.Announce(notice);
             }
+
+            GridEditBinding.ModelOf(GridEditCommands.Active)?.FlashSavedRows(savedRows);
+        }
+        else
+        {
+            GridEditBinding.ModelOf(s)?.FlashSavedRows(savedRows);
         }
     }
 }

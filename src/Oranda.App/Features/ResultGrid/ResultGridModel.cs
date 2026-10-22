@@ -104,6 +104,44 @@ public sealed class ResultGridModel : IAsyncDisposable
     /// <summary>편집 상태가 바뀌었으니 다시 그린다.</summary>
     public void NotifyEditChanged() => RaiseChanged();
 
+    private HashSet<long>? _flashRows;
+
+    /// <summary>저장이 끝나 잠깐 강조 중인 행이면 true(TSK-13-18). 강조는 그리기에만 쓰고 입력은 막지 않는다.</summary>
+    public bool IsFlashing(long viewRow) => _flashRows?.Contains(viewRow) ?? false;
+
+    /// <summary>강조 중인 행이 있으면 true. 컨트롤이 강조 뒤에 붙었을 때 지울 시각을 세려고 읽는다.</summary>
+    public bool HasFlash => _flashRows is not null;
+
+    /// <summary>강조를 시작했다는 알림. 그리드 컨트롤이 받아 잠시 뒤 <see cref="ClearFlash"/> 를 부른다.</summary>
+    public event EventHandler? FlashStarted;
+
+    /// <summary>저장된 행을 잠깐 강조한다. 빈 목록이면 아무것도 하지 않는다.</summary>
+    public void FlashSavedRows(IEnumerable<long> viewRows)
+    {
+        ArgumentNullException.ThrowIfNull(viewRows);
+        var set = new HashSet<long>(viewRows);
+        if (set.Count == 0)
+        {
+            return;
+        }
+
+        _flashRows = set;
+        RaiseChanged();
+        FlashStarted?.Invoke(this, EventArgs.Empty);
+    }
+
+    /// <summary>강조를 지운다.</summary>
+    public void ClearFlash()
+    {
+        if (_flashRows is null)
+        {
+            return;
+        }
+
+        _flashRows = null;
+        RaiseChanged();
+    }
+
     public bool HasMoreRows => TotalRowCount is null;
 
     public bool HasResult => Columns.Count > 0;
