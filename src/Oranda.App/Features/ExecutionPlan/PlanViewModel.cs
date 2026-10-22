@@ -30,11 +30,17 @@ public sealed class PlanRowItem
     {
     }
 
-    public PlanRowItem(PlanStep step, PlanStepMetrics metrics, PlanActualMetric actual, bool hottest)
+    public PlanRowItem(PlanStep step, PlanStepMetrics metrics, PlanActualMetric actual, bool hottest, PlanTreeLines? lines = null)
     {
         ArgumentNullException.ThrowIfNull(step);
         Step = step;
-        Operation = new string(' ', step.Depth * 2) + OperationName(step);
+        OperationText = OperationName(step);
+        Operation = new string(' ', step.Depth * 2) + OperationText;
+        IconKey = PlanOperationIcons.KeyFor(step);
+        TreeLines = lines ?? new PlanTreeLines(step.Depth, true, false, new bool[Math.Max(0, step.Depth - 1)]);
+        HasActuals = actual != PlanActualMetric.None;
+        AccessPredicates = string.IsNullOrEmpty(step.AccessPredicates) ? null : step.AccessPredicates;
+        FilterPredicates = string.IsNullOrEmpty(step.FilterPredicates) ? null : step.FilterPredicates;
         ObjectText = ObjectName(step);
         CostText = Fmt(step.Cost);
         EstimatedText = Fmt(step.EstimatedRows);
@@ -87,8 +93,30 @@ public sealed class PlanRowItem
     /// <summary>실행 순서(자식 먼저, 형제는 Id 순).</summary>
     public string ExecutionOrderText { get; }
 
-    /// <summary>깊이만큼 들여쓴 연산 이름.</summary>
+    /// <summary>깊이만큼 들여쓴 연산 이름(글 표현용). 화면 트리는 <see cref="OperationText"/> 와 <see cref="TreeLines"/> 로 그린다.</summary>
     public string Operation { get; }
+
+    /// <summary>들여쓰지 않은 연산 이름(예: <c>TABLE ACCESS FULL</c>).</summary>
+    public string OperationText { get; }
+
+    public int Depth => Step.Depth;
+
+    /// <summary>연산 종류 아이콘 키(<see cref="PlanOperationIcons"/>).</summary>
+    public string IconKey { get; }
+
+    /// <summary>들여쓰기 안내선(├ └ │).</summary>
+    public PlanTreeLines TreeLines { get; }
+
+    /// <summary>실제 통계(A-Rows·시간)가 있는 계획이면 실제 열을 보인다.</summary>
+    public bool HasActuals { get; }
+
+    /// <summary>access 조건절(없으면 null).</summary>
+    public string? AccessPredicates { get; }
+
+    /// <summary>filter 조건절(없으면 null).</summary>
+    public string? FilterPredicates { get; }
+
+    public bool HasPredicates => AccessPredicates is not null || FilterPredicates is not null;
 
     public string ObjectText { get; }
 
@@ -188,19 +216,32 @@ public sealed partial class PlanViewModel : ToolPanelViewModelBase
     private IExecutionPlanService? _plans;
 
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(FormatText))]
     private string _baseFormat = "ALLSTATS";
 
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(FormatText))]
     private bool _lastOnly = true;
 
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(FormatText))]
     private bool _peekedBinds;
 
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(FormatText))]
     private bool _alias;
 
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(FormatText))]
     private bool _outline;
+
+    /// <summary>트리에서 고른 단계(상세 칸이 조건절을 보인다). 새 계획을 받으면 가장 비싼 단계를 고른다.</summary>
+    [ObservableProperty]
+    private PlanRowItem? _selectedRow;
+
+    /// <summary>지금 계획에 실제 통계가 있으면 실제 열(A-Rows·Starts·시간·실제 비중)을 보인다.</summary>
+    [ObservableProperty]
+    private bool _hasActuals;
 
     [ObservableProperty]
     private string _planText = string.Empty;
@@ -299,6 +340,9 @@ public sealed partial class PlanViewModel : ToolPanelViewModelBase
         }
     };
 
+    /// <summary>지금 옵션의 형식 문자열(툴바 형식 단추에 보인다).</summary>
+    public string FormatText => BuildFormat();
+
     /// <summary>옵션 패널 값 → DBMS_XPLAN 형식 문자열(예: <c>ALLSTATS LAST +PEEKED_BINDS</c>).</summary>
     public string BuildFormat()
     {
@@ -361,17 +405,22 @@ public sealed partial class PlanViewModel : ToolPanelViewModelBase
     {
         ArgumentNullException.ThrowIfNull(plan);
         var metrics = PlanMetrics.Compute(plan.Steps);
+        var lines = PlanTreeLines.Compute([.. plan.Steps.Select(s => s.Depth)]);
         var rows = new List<PlanRowItem>(plan.Steps.Count);
         for (var i = 0; i < plan.Steps.Count; i++)
         {
-            rows.Add(new PlanRowItem(plan.Steps[i], metrics.Steps[i], metrics.Actual, i == metrics.HottestIndex));
+            rows.Add(new PlanRowItem(plan.Steps[i], metrics.Steps[i], metrics.Actual, i == metrics.HottestIndex, lines[i]));
         }
 
+        SelectedRow = null;
         Rows.Clear();
         foreach (var row in rows)
         {
             Rows.Add(row);
         }
+
+        HasActuals = metrics.Actual != PlanActualMetric.None;
+        SelectedRow = metrics.HottestIndex >= 0 ? rows[metrics.HottestIndex] : null;
 
         CurrentPlan = plan;
         CurrentKind = kind;

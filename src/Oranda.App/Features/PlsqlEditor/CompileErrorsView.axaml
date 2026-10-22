@@ -5,19 +5,34 @@
              x:Class="Oranda.App.Features.PlsqlEditor.CompileErrorsView"
              x:DataType="vm:CompileErrorsViewModel">
   <DockPanel>
+    <!-- 머리 줄: 상태 아이콘(오류·경고·깨끗함) + 「탭: 오류 n건, 경고 m건」 -->
     <Border DockPanel.Dock="Top" Classes="panel-toolbar">
-      <TextBlock Text="{Binding Header}" Classes="panel-caption" Margin="2,2" />
+      <StackPanel Orientation="Horizontal" Spacing="6" Margin="2,3">
+        <ContentControl VerticalAlignment="Center"
+                        Content="{Binding HeaderIconKey, Converter={x:Static icons:IconKeyConverter.Instance}, ConverterParameter=14}" />
+        <TextBlock Text="{Binding Header}" FontWeight="SemiBold" FontSize="{DynamicResource OrandaFontSizeSmall}" VerticalAlignment="Center" />
+      </StackPanel>
     </Border>
-    <ListBox Classes="log" ItemsSource="{Binding Items}" SelectedItem="{Binding SelectedItem, Mode=TwoWay}"
-             AutomationProperties.Name="컴파일 오류 목록">
+    <!-- 표: 아이콘 | 종류 | 줄:열 | 메시지. 머리글과 줄이 같은 열 폭을 쓴다. -->
+    <Border DockPanel.Dock="Top" Classes="grid-header">
+      <Grid x:Name="ErrorsHeader" ColumnDefinitions="30,56,76,*">
+        <TextBlock Grid.Column="1" Padding="6,0" Text="종류" />
+        <TextBlock Grid.Column="2" Padding="6,0" Classes="num" Text="줄:열" />
+        <TextBlock Grid.Column="3" Padding="6,0" Text="메시지" />
+      </Grid>
+    </Border>
+    <ListBox Classes="table" ItemsSource="{Binding Items}" SelectedItem="{Binding SelectedItem, Mode=TwoWay}"
+             ScrollViewer.HorizontalScrollBarVisibility="Disabled" AutomationProperties.Name="컴파일 오류 목록">
       <ListBox.ItemTemplate>
         <DataTemplate x:DataType="vm:CompileErrorItem">
-          <StackPanel Orientation="Horizontal" Spacing="8" ToolTip.Tip="두 번 누르면 그 줄로 이동">
-            <ContentControl Content="{Binding IconKey, Converter={x:Static icons:IconKeyConverter.Instance}, ConverterParameter=14}" VerticalAlignment="Center" />
-            <TextBlock Text="{Binding Kind}" MinWidth="28" VerticalAlignment="Center" />
-            <TextBlock Text="{Binding Position}" MinWidth="56" FontFamily="Consolas,Menlo,monospace" VerticalAlignment="Center" />
-            <TextBlock Text="{Binding Message}" VerticalAlignment="Center" />
-          </StackPanel>
+          <Grid ColumnDefinitions="30,56,76,*" Margin="0,3" Background="Transparent" ToolTip.Tip="두 번 누르면 그 줄로 이동">
+            <ContentControl Grid.Column="0" HorizontalAlignment="Center" VerticalAlignment="Top" Margin="0,1,0,0"
+                            Content="{Binding IconKey, Converter={x:Static icons:IconKeyConverter.Instance}, ConverterParameter=14}" />
+            <TextBlock Grid.Column="1" Padding="6,0" VerticalAlignment="Top" Text="{Binding Kind}"
+                       Classes.danger-text="{Binding !Error.IsWarning}" Classes.warning-text="{Binding Error.IsWarning}" />
+            <TextBlock Grid.Column="2" Padding="6,0" VerticalAlignment="Top" Classes="num" Text="{Binding Position}" />
+            <TextBlock Grid.Column="3" Padding="6,0" Margin="0,0,6,0" TextWrapping="Wrap" Text="{Binding Message}" />
+          </Grid>
         </DataTemplate>
       </ListBox.ItemTemplate>
     </ListBox>

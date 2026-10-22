@@ -389,6 +389,27 @@ public class PlsqlEditorTests
     }
 
     [Fact]
+    public async Task Error_list_counts_errors_and_warnings_and_picks_the_header_icon()
+    {
+        var errorsVm = new CompileErrorsViewModel();
+        var meta = new FakeMeta { Source = BodySource, Errors = [new CompileError(3, 5, "PLS-00103: x", false), new CompileError(4, 1, "PLW-06009: y", true)] };
+        var vm = new PlsqlEditorViewModel(meta, new FakeExec());
+        await vm.OpenAsync(new FakeSession(), Body);
+
+        Assert.Equal(1, errorsVm.ErrorCount);
+        Assert.Equal(1, errorsVm.WarningCount);
+        Assert.Equal("error", errorsVm.HeaderIconKey);
+
+        vm.Errors.RemoveAt(0);
+        Assert.Equal(0, errorsVm.ErrorCount);
+        Assert.Equal("warn", errorsVm.HeaderIconKey);
+
+        vm.Errors.Clear();
+        Assert.Equal(0, errorsVm.WarningCount);
+        Assert.Equal("ok", errorsVm.HeaderIconKey);
+    }
+
+    [Fact]
     public async Task Check_server_changed_detects_other_sessions_ddl()
     {
         var meta = new FakeMeta { Source = BodySource };

@@ -29,12 +29,16 @@ public sealed class PlanCompareRowItem
         CurrentIdText = current?.Id.ToString(CultureInfo.InvariantCulture) ?? string.Empty;
 
         var operation = PlanRowItem.OperationName(shown);
+        OperationText = operation;
+        IconKey = PlanOperationIcons.KeyFor(shown);
+        Depth = shown.Depth;
         var obj = PlanRowItem.ObjectName(shown);
         if (row.Kind == PlanDiffKind.Changed && pinned is not null)
         {
             var before = PlanRowItem.OperationName(pinned);
             if (!string.Equals(before, operation, StringComparison.Ordinal))
             {
+                PreviousOperationText = before;
                 operation += "  ← " + before;
             }
 
@@ -76,8 +80,24 @@ public sealed class PlanCompareRowItem
 
     public string CurrentIdText { get; }
 
-    /// <summary>지금 계획 기준으로 들여쓴 연산(빠짐이면 고정 계획 기준). 바뀌었으면 「← 이전 연산」을 붙인다.</summary>
+    /// <summary>지금 계획 기준으로 들여쓴 연산(빠짐이면 고정 계획 기준). 바뀌었으면 「← 이전 연산」을 붙인다(글 표현용).</summary>
     public string Operation { get; }
+
+    /// <summary>들여쓰지 않은 지금(빠짐이면 고정) 연산 이름. 화면은 <see cref="Depth"/> 만큼 들여 그린다.</summary>
+    public string OperationText { get; }
+
+    /// <summary>바뀐 줄의 이전 연산(같으면 빈 문자열).</summary>
+    public string PreviousOperationText { get; } = string.Empty;
+
+    public bool HasPreviousOperation => PreviousOperationText.Length > 0;
+
+    public int Depth { get; }
+
+    /// <summary>들여쓰기 폭(DIP). 트리 탭 안내선 칸 폭(16)과 같다.</summary>
+    public double IndentWidth => Depth * 16;
+
+    /// <summary>연산 종류 아이콘 키.</summary>
+    public string IconKey { get; }
 
     public string ObjectText { get; }
 
