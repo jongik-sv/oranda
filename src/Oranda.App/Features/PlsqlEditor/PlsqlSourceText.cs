@@ -12,9 +12,14 @@ public static class PlsqlSourceText
     /// <summary>편집기에 보이는 소스 앞에 붙이는 말. 서버 소스 첫 줄(<c>PACKAGE BODY x AS</c>)과 같은 줄에 붙여 줄 번호가 서버 오류와 맞는다.</summary>
     public const string CreatePrefix = "CREATE OR REPLACE ";
 
-    private static readonly Regex Header = new(
-        @"^\s*(?:CREATE\s+(?:OR\s+REPLACE\s+)?(?:(?:NON)?EDITIONABLE\s+)?)?(?<type>PACKAGE\s+BODY|PACKAGE|PROCEDURE|FUNCTION|TRIGGER|TYPE\s+BODY|TYPE)\s+(?<a>""[^""]+""|[\w$#]+)(?:\s*\.\s*(?<b>""[^""]+""|[\w$#]+))?",
-        RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+    private const string CreateWords = @"CREATE\s+(?:OR\s+REPLACE\s+)?(?:(?:NON)?EDITIONABLE\s+)?";
+
+    private const string TypeAndName = @"(?<type>PACKAGE\s+BODY|PACKAGE|PROCEDURE|FUNCTION|TRIGGER|TYPE\s+BODY|TYPE)\s+(?<a>""[^""]+""|[\w$#]+)(?:\s*\.\s*(?<b>""[^""]+""|[\w$#]+))?";
+
+    private static readonly Regex Header = new(@"^\s*(?:" + CreateWords + ")?" + TypeAndName, RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+
+    /// <summary>머리가 <c>CREATE</c> 로 시작해야 하는 형태(SQL 편집기에서 실행한 문장 판정용).</summary>
+    private static readonly Regex CreateHeader = new(@"^\s*" + CreateWords + TypeAndName, RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
 
     /// <summary>소스를 가진 객체 유형(Oracle OBJECT_TYPE).</summary>
     public static IReadOnlySet<string> SourceTypes { get; } = new HashSet<string>(StringComparer.Ordinal)
@@ -97,6 +102,23 @@ public static class PlsqlSourceText
     public static (string ObjectType, string? Owner, string Name)? ParseHeader(string text)
     {
         var m = Header.Match(StripLeadingComments(text));
+        if (!m.Success)
+        {
+            return null;
+        }
+
+        var type = Regex.Replace(m.Groups["type"].Value.ToUpperInvariant(), @"\s+", " ");
+        var a = Unquote(m.Groups["a"].Value);
+        return m.Groups["b"].Success ? (type, a, Unquote(m.Groups["b"].Value)) : (type, null, a);
+    }
+
+    /// <summary>
+    /// <c>CREATE [OR REPLACE] PROCEDURE|FUNCTION|PACKAGE [BODY]|TRIGGER|TYPE [BODY] 이름</c> 문장이면 유형·이름을, 아니면 null.
+    /// <see cref="ParseHeader"/> 와 달리 <c>CREATE</c> 가 없는 글(<c>TYPE BODY t AS</c>)은 받지 않는다.
+    /// </summary>
+    public static (string ObjectType, string? Owner, string Name)? ParseCreateHeader(string text)
+    {
+        var m = CreateHeader.Match(StripLeadingComments(text));
         if (!m.Success)
         {
             return null;

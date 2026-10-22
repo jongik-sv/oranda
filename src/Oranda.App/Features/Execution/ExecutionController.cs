@@ -2,6 +2,7 @@ using System.Globalization;
 using System.Text;
 using Oranda.App.Features.Binds;
 using Oranda.App.Features.GridEdit;
+using Oranda.App.Features.PlsqlEditor;
 using Oranda.App.Features.SqlEditor;
 using Oranda.Core.Connection;
 using Oranda.Core.Execution;
@@ -736,7 +737,7 @@ public sealed class ExecutionController : IDisposable
             result = await Task.Run(
                 () => exec.ExecuteAsync(session, stmt, binds, new ExecutionOptions { Source = HistorySource.Editor }, token),
                 CancellationToken.None).ConfigureAwait(true);
-            await AfterStatementAsync(session, result, token).ConfigureAwait(true);
+            await AfterStatementAsync(tab, session, stmt, result, token).ConfigureAwait(true);
         }, ct).ConfigureAwait(true);
 
         if (result is null)
@@ -802,7 +803,7 @@ public sealed class ExecutionController : IDisposable
                         failed++;
                     }
 
-                    await AfterStatementAsync(session, r, token).ConfigureAwait(true);
+                    await AfterStatementAsync(tab, session, r.Statement, r, token).ConfigureAwait(true);
                     summary.AppendLine(CultureInfo.InvariantCulture, $"{StatusMark(r.Status)} {Brief(r.Statement)} — {Describe(r)}");
                     Present(tab, results, r.Statement, r, results.NextOrdinal(), scriptMode: true);
                 }
@@ -918,11 +919,17 @@ public sealed class ExecutionController : IDisposable
     }
 
     /// <summary>자동 커밋이 켜져 있으면 성공한 변경 뒤에 커밋한다.</summary>
-    private async Task AfterStatementAsync(ISession session, ExecutionResult r, CancellationToken ct)
+    private async Task AfterStatementAsync(SqlEditorViewModel tab, ISession session, SqlStatement stmt, ExecutionResult r, CancellationToken ct)
     {
         if (State.AutoCommit && r.Status == ExecutionStatus.Succeeded && r.TransactionPending && !session.Profile.ReadOnly)
         {
             await Task.Run(() => session.CommitAsync(ct), CancellationToken.None).ConfigureAwait(true);
+        }
+
+        // 만든 PL/SQL 객체가 오류와 함께 컴파일됐으면 컴파일 오류 창을 채운다(TSK-13-28).
+        if (_d.Metadata() is { } meta && await SqlCompileErrors.CaptureAsync(meta, session, tab, stmt, r, ct).ConfigureAwait(true))
+        {
+            _d.ActivatePanel("oranda.panel.compileErrors");
         }
     }
 

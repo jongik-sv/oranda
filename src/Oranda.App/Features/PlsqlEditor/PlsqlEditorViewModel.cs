@@ -53,7 +53,7 @@ public sealed record PlsqlCompileOutcome(PlsqlCompileStatus Status, IReadOnlyLis
 /// 서비스는 처음 쓸 때 꺼낸다(시작 경로에서 Oracle 어셈블리를 올리지 않기 위해).
 /// </summary>
 [OrandaToolPanel("oranda.panel.plsqlEditor", ToolPanelKind.Document, DockLocation.Document, AllowMultiple = true)]
-public sealed partial class PlsqlEditorViewModel : ToolPanelViewModelBase
+public sealed partial class PlsqlEditorViewModel : ToolPanelViewModelBase, ICompileErrorSource
 {
     private readonly IServiceProvider? _services;
     private IMetadataProvider? _meta;
@@ -337,18 +337,18 @@ public sealed partial class PlsqlEditorViewModel : ToolPanelViewModelBase
     }
 
     /// <summary>오류의 줄·열을 편집기 위치로 옮겨 커서를 둔다. 서버 오류는 소스 시작(유형 낱말)부터 센다.</summary>
-    public bool NavigateTo(CompileError error)
+    public bool NavigateTo(CompileError item)
     {
-        ArgumentNullException.ThrowIfNull(error);
+        ArgumentNullException.ThrowIfNull(item);
         var (lineOffset, colOffset) = PlsqlSourceText.SourceStart(Editor.Text);
-        var line = error.Line + lineOffset;
+        var line = item.Line + lineOffset;
         if (line < 1 || line > Editor.Document.LineCount)
         {
             return false;
         }
 
         var dl = Editor.Document.GetLineByNumber(line);
-        var col = error.Column + (error.Line == 1 ? colOffset + _line1Shift : 0);
+        var col = item.Column + (item.Line == 1 ? colOffset + _line1Shift : 0);
         var offset = dl.Offset + Math.Clamp(col - 1, 0, dl.Length);
         Editor.Select(offset, 0);
         Editor.Surface?.ScrollToLine(line);

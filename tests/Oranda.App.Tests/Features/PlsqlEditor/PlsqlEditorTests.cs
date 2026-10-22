@@ -1,9 +1,11 @@
 using Oranda.App.Features.PlsqlEditor;
 using Oranda.App.Features.SqlEditor;
+using Oranda.App.Tests.Features.SqlEditor;
 using Oranda.App.Tests.Shell;
 using Oranda.Core.Connection;
 using Oranda.Core.Events;
 using Oranda.Core.Journal;
+using Oranda.Core.Text;
 using Oranda.Core.Execution;
 using Oranda.Core.Metadata;
 using Oranda.Core.Sessions;
@@ -700,6 +702,81 @@ public class PlsqlEditorTests
         vm.StartNew(PlsqlEditorCommandHandler.NewTemplate, null);
 
         Assert.False(await vm.ConfirmCloseAsync(new SqlEditorHost(dialogs: new AnswerDialogs(SaveChoice.Save)), default));
+    }
+
+    // ---- SQL 편집기에서 만든 PL/SQL 객체의 컴파일 오류(TSK-13-28) ----
+
+    [Theory]
+    [InlineData("CREATE OR REPLACE PROCEDURE p IS BEGIN NULL; END;", "PROCEDURE", null, "P")]
+    [InlineData("create function scott.f return number is begin return 1; end;", "FUNCTION", "SCOTT", "F")]
+    [InlineData("-- 설명\nCREATE OR REPLACE EDITIONABLE PACKAGE BODY pk AS END;", "PACKAGE BODY", null, "PK")]
+    [InlineData("CREATE OR REPLACE TRIGGER trg BEFORE INSERT ON t BEGIN NULL; END;", "TRIGGER", null, "TRG")]
+    [InlineData("CREATE TYPE BODY ty AS END;", "TYPE BODY", null, "TY")]
+    public void Create_header_is_recognised(string text, string type, string? owner, string name)
+        => Assert.Equal((type, owner, name), PlsqlSourceText.ParseCreateHeader(text));
+
+    [Theory]
+    [InlineData("TYPE BODY t AS END;")]
+    [InlineData("SELECT 1 FROM dual")]
+    [InlineData("CREATE TABLE t (a NUMBER)")]
+    [InlineData("DROP PROCEDURE p")]
+    public void Create_header_rejects_other_statements(string text)
+        => Assert.Null(PlsqlSourceText.ParseCreateHeader(text));
+
+    private static (SqlEditorViewModel Tab, SqlStatement Stmt) SqlTab(string text, string statement)
+    {
+        var tab = new SqlEditorViewModel();
+        tab.LoadText(text);
+        var start = text.IndexOf(statement, StringComparison.Ordinal);
+        return (tab, new SqlStatement(statement, new TextRange(start, statement.Length), StatementKind.Ddl) { Verb = "CREATE" });
+    }
+
+    [Fact]
+    public Task Sql_editor_create_with_errors_fills_errors_and_maps_line_into_the_sql_tab() => Ui.Run(async () =>
+    {
+        var statement = "CREATE OR REPLACE PROCEDURE bad_proc\nIS\nBEGIN\n  x := ;\nEND;";
+        var (tab, stmt) = SqlTab("SELECT 1 FROM dual;\n\n" + statement, statement);
+        var meta = new FakeMeta { Errors = [new CompileError(4, 7, "PLS-00103: x", false)] };
+        var result = new ExecutionResult(stmt, ExecutionStatus.Succeeded);
+        var errorsVm = new CompileErrorsViewModel();
+
+        Assert.True(await SqlCompileErrors.CaptureAsync(meta, new FakeSession(), tab, stmt, result, default));
+
+        Assert.Single(errorsVm.Items);
+        Assert.Contains("SCOTT.BAD_PROC", errorsVm.Header);
+        errorsVm.SelectedItem = errorsVm.Items[0];
+        Assert.Equal(3 + 4 - 1, tab.CaretPosition.Line); // 문장은 3줄째에서 시작: 3 + 오류 줄 4 − 1
+        Assert.Equal(7, tab.CaretPosition.Column);
+    });
+
+    [Fact]
+    public Task Sql_editor_create_without_errors_clears_the_previous_entries() => Ui.Run(async () =>
+    {
+        var statement = "CREATE OR REPLACE PROCEDURE clear_proc IS BEGIN NULL; END;";
+        var (tab, stmt) = SqlTab(statement, statement);
+        var session = new FakeSession();
+        var meta = new FakeMeta { Errors = [new CompileError(1, 1, "PLS-00103: x", false)] };
+        var errorsVm = new CompileErrorsViewModel();
+        var result = new ExecutionResult(stmt, ExecutionStatus.Succeeded);
+        Assert.True(await SqlCompileErrors.CaptureAsync(meta, session, tab, stmt, result, default));
+        Assert.Single(errorsVm.Items);
+
+        meta.Errors = [];
+        Assert.False(await SqlCompileErrors.CaptureAsync(meta, session, tab, stmt, result, default));
+
+        Assert.Empty(errorsVm.Items);
+    });
+
+    [Fact]
+    public void Capture_applies_only_to_create_statements_that_succeeded_or_compiled_with_errors()
+    {
+        var (_, create) = SqlTab("CREATE PROCEDURE p IS BEGIN NULL; END;", "CREATE PROCEDURE p IS BEGIN NULL; END;");
+        var (_, select) = SqlTab("SELECT 1 FROM dual", "SELECT 1 FROM dual");
+
+        Assert.True(SqlCompileErrors.ShouldCapture(create, new ExecutionResult(create, ExecutionStatus.Succeeded)));
+        Assert.True(SqlCompileErrors.ShouldCapture(create, new ExecutionResult(create, ExecutionStatus.Failed) { Error = new DbError("ORA-24344", "success with compilation error") }));
+        Assert.False(SqlCompileErrors.ShouldCapture(create, new ExecutionResult(create, ExecutionStatus.Failed) { Error = new DbError("ORA-00900", "invalid SQL statement") }));
+        Assert.False(SqlCompileErrors.ShouldCapture(select, new ExecutionResult(select, ExecutionStatus.Succeeded)));
     }
 
     private sealed class AnswerDialogs(SaveChoice answer) : IEditorDialogs

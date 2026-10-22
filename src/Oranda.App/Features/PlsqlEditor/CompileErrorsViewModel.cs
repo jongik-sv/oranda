@@ -22,7 +22,7 @@ public sealed record CompileErrorItem(CompileError Error)
 }
 
 /// <summary>
-/// <c>oranda.panel.compileErrors</c> — 마지막으로 컴파일한(또는 연) PL/SQL 탭의 오류·경고 목록. 줄을 고르면 그 탭의 그 줄로 간다(TSK-08-01).
+/// <c>oranda.panel.compileErrors</c> — 마지막으로 컴파일한(또는 연) PL/SQL 탭, 또는 SQL 편집기에서 만든 PL/SQL 객체의 오류·경고 목록. 줄을 고르면 그 탭의 그 줄로 간다(TSK-08-01, TSK-13-28).
 /// </summary>
 [OrandaToolPanel("oranda.panel.compileErrors", ToolPanelKind.Tool, DockLocation.Bottom, Order = 50)]
 public sealed partial class CompileErrorsViewModel : ToolPanelViewModelBase
@@ -42,17 +42,17 @@ public sealed partial class CompileErrorsViewModel : ToolPanelViewModelBase
     public static CompileErrorsViewModel? Current { get; private set; }
 
     /// <summary>마지막으로 오류 목록을 올린 탭. 창이 아직 없을 때도 기억해 두었다가 창이 생기면 보여 준다.</summary>
-    public static PlsqlEditorViewModel? LastSource { get; private set; }
+    public static ICompileErrorSource? LastSource { get; private set; }
 
     /// <summary>편집 탭이 컴파일 결과를 올린다. 창이 있으면 바로 보이고, 없으면 창이 만들어질 때 보인다.</summary>
-    public static void Publish(PlsqlEditorViewModel source)
+    public static void Publish(ICompileErrorSource source)
     {
         ArgumentNullException.ThrowIfNull(source);
         LastSource = source;
         Current?.Show(source);
     }
 
-    public PlsqlEditorViewModel? Source { get; private set; }
+    public ICompileErrorSource? Source { get; private set; }
 
     public ObservableCollection<CompileErrorItem> Items { get; } = [];
 
@@ -81,7 +81,7 @@ public sealed partial class CompileErrorsViewModel : ToolPanelViewModelBase
     }
 
     /// <summary>이 편집 탭의 오류 목록을 보여 준다.</summary>
-    public void Show(PlsqlEditorViewModel source)
+    public void Show(ICompileErrorSource source)
     {
         ArgumentNullException.ThrowIfNull(source);
         if (Source is not null)

@@ -246,7 +246,7 @@
 | ID | 요구사항 | 우선 | 단계 |
 |---|---|---|---|
 | PLSQL-01 | 객체 소스 열기·편집·저장(=컴파일), 패키지 명세/본문 전환 | P0 | M2 |
-| PLSQL-02 | 컴파일 오류·경고(`PLSQL_WARNINGS`) 목록, 클릭 시 위치로 이동 | P0 | M2 |
+| PLSQL-02 | 컴파일 오류·경고(`PLSQL_WARNINGS`) 목록, 클릭 시 위치로 이동. SQL 편집기에서 `CREATE [OR REPLACE] PROCEDURE·FUNCTION·PACKAGE [BODY]·TRIGGER·TYPE [BODY]` 를 실행해 「오류가 있는 채로 컴파일됨」으로 끝나도 같은 목록을 채우고 컴파일 오류 창을 앞으로 가져오며(오류 줄 = SQL 편집기 안의 그 문장 위치로 이동), 오류 없이 끝나면 그 객체의 이전 항목을 지운다 | P0 | M2 |
 | PLSQL-03 | 실행 대화상자: 인자 입력 폼 생성(`all_arguments`), 결과·OUT 값·REF CURSOR 결과 표시 | P0 | M2 |
 | PLSQL-04 | 저장 전 충돌 확인: 편집 시작 후 서버 소스가 바뀌었으면(`last_ddl_time`) 차이를 보여 준다 | P0 | M2 |
 | PLSQL-05 | 다른 세션이 사용 중인 객체를 컴파일하려 하면 경고(라이브러리 캐시 잠금 대기 방지) | P1 | M2 |
