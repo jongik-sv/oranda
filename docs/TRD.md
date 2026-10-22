@@ -43,6 +43,7 @@
 | DB 드라이버 | Oracle.ManagedDataAccess.Core | 23.26.301 | Oracle Free Use Terms | Thin, 19c 이상, 23부터 실제 비동기. 파이프라이닝은 끈다(취소·타임아웃 미지원). 딸려 오는 `System.Security.Cryptography.Pkcs` 8.0.1에 알려진 취약점이 있어 10.0.13을 직접 참조한다 |
 | 에디터 | Avalonia.AvaloniaEdit (+ AvaloniaEdit.TextMate) | 12.0.0 | MIT | 문서 rope·줄 가상화, 접기, 자동완성 창, 열 선택. **다중 커서 정식 지원 없음** → EDIT-07은 자체 확장 또는 단계 조정(T-D03) |
 | 도킹 | Dock.Avalonia | 12.1.0.12 | MIT | 사실상 유일한 OSS 도킹. 레이아웃 직렬화는 앱 자체 DTO로 감싼다 |
+| 색 고르기 | Avalonia.Controls.ColorPicker | 12.1.4 | MIT | 접속 라벨 색(TSK-13-11). 색 스펙트럼·밝기 막대만 쓰고, 테마는 프로필 편집기 화면에서만 읽는다 |
 | 결과 그리드 | **자체 구현 가상 그리드** | — | — | 100만 행·넓은 테이블 대응(4.4). 보조 표(속성 창 등)는 Avalonia.Controls.DataGrid 12.1.2 |
 | 파서 | 자체 렉서 + 경량 하향식 파서 / Antlr4.Runtime.Standard + grammars-v4 PL/SQL | 4.13.1 | BSD-3 / MIT | 2계층(4.5). ANTLR은 분석·포매터용으로 백그라운드에서 |
 | Excel | MiniExcel | 1.46.0 (1.x 고정) | Apache-2.0 | DataReader에서 바로 스트리밍. 1,048,576행 초과 시 시트 분할 |

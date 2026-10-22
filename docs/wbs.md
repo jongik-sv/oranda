@@ -3466,7 +3466,7 @@ dotnet, testhost, Oranda.App
 - category: dev
 - domain: frontend
 - model: sonnet
-- status: [ ]
+- status: [xx]
 - priority: medium
 - assignee: -
 - schedule: 2026-10-22 ~ 2026-10-22
@@ -3474,12 +3474,12 @@ dotnet, testhost, Oranda.App
 - depends: TSK-03-04
 - blocked-by: -
 - entry-point: 접속 관리자 > 프로필 편집기 > 라벨 색 · TNS 별칭
-- note: 담당 PC: mac(맥북) — win144 세션은 이 Task 를 하지 않는다. 2026-10-22 사용자 요청: 「접속 관리자에서 라벨 색은 실제 색을 고를 수 있게 해 줘」, 「TNS 별칭은 콤보 박스로 — 그냥 콤보보다 입력되는 콤보가 낫다」. 지금 라벨 색은 #RRGGBB 글자 칸이고, TNS 별칭은 입력 제안 칸(AutoCompleteBox)이라 ▾ 단추로 전체 별칭을 펼쳐 볼 수 없다
+- note: 담당 PC: mac(맥북) — win144 세션은 이 Task 를 하지 않는다. 2026-10-22 사용자 요청: 「접속 관리자에서 라벨 색은 실제 색을 고를 수 있게 해 줘」, 「TNS 별칭은 콤보 박스로 — 그냥 콤보보다 입력되는 콤보가 낫다」. 지금 라벨 색은 #RRGGBB 글자 칸이고, TNS 별칭은 입력 제안 칸(AutoCompleteBox)이라 ▾ 단추로 전체 별칭을 펼쳐 볼 수 없다. / 2026-10-22 완료(mac): 라벨 색은 DropDownButton(견본 + 값) 펼침 창 — 견본 10개·기본 색·ColorSpectrum + 밝기 막대(ColorView 는 350×338 로 커서 쓰지 않음)·#RRGGBB 칸·빨강 경고 글. 색 고르기 테마는 ProfileEditorView 에서만 StyleInclude. TNS 별칭은 ComboBox IsEditable(Text 양방향). Avalonia.Controls.ColorPicker 12.1.4(MIT) 추가
 
 #### PRD 요구사항
 - prd-ref: PRD CONN-06 (환경 라벨·색), CONN-01 (TNS 별칭)
 - requirements:
-  - 라벨 색 칸을 작은 단추(색 견본 + #RRGGBB)로 바꾼다. 누르면 펼침 창에 빨강이 아닌 기본 색 견본 여러 개(파랑·초록·청록·보라·주황·회색 등)와 「기본 색」(환경 기본색으로 되돌림), 사용자 지정 색 고르기(Avalonia ColorView), #RRGGBB 입력 칸을 둔다
+  - 라벨 색 칸을 작은 단추(색 견본 + #RRGGBB)로 바꾼다. 누르면 펼침 창에 빨강이 아닌 기본 색 견본 여러 개(파랑·초록·청록·보라·주황·회색 등)와 「기본 색」(환경 기본색으로 되돌림), 사용자 지정 색 고르기(Avalonia.Controls.ColorPicker 의 색 스펙트럼 + 밝기 막대), #RRGGBB 입력 칸을 둔다
   - 운영 환경이면 단추를 끈다(운영은 항상 빨강)
   - TNS 별칭 칸을 입력되는 콤보(ComboBox IsEditable)로 바꾼다. ▾ 단추로 tnsnames.ora 의 별칭 전체를 펼쳐 고르고, 목록에 없는 별칭도 직접 입력한다
   - 별칭 칸의 빈 필수 칸 표시(빨간 테두리)와 아래 host:port/service 줄은 그대로 둔다
@@ -3497,7 +3497,7 @@ dotnet, testhost, Oranda.App
   - 저장된 프로필을 화면에 띄워도 IsDirty 가 false 이고 색·별칭이 그대로
 
 #### 기술 스펙 (TRD)
-- tech-spec: Avalonia.Controls.ColorPicker(ColorView), ComboBox IsEditable
+- tech-spec: Avalonia.Controls.ColorPicker 12.1.4(ColorSpectrum·ColorSlider), ComboBox IsEditable
 - api-spec: -
 - data-model: -
 - ui-spec: -

@@ -61,14 +61,7 @@ public sealed partial class ConnectionTreeNode : ObservableObject
     };
 
     /// <summary>환경 칩 바탕색(<c>#RRGGBB</c>). 운영은 항상 빨강, 나머지는 사용자 색 또는 환경 기본색.</summary>
-    public string EnvironmentColor => Profile switch
-    {
-        null => "#00000000",
-        { Environment: ConnectionEnvironment.Production } => "#C42B1C",
-        { Color: { Length: > 0 } c } when LabelColorRules.TryParse(c, out _, out _, out _) => c,
-        { Environment: ConnectionEnvironment.Test } => "#B65A00",
-        _ => "#107C10",
-    };
+    public string EnvironmentColor => Profile is null ? "#00000000" : LabelColorRules.Effective(Profile.Environment, Profile.Color);
 
     public bool HasChip => Profile is not null;
 

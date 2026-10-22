@@ -108,6 +108,21 @@ public static partial class DataSourceComposer
 /// <summary>환경 라벨 색 규칙(ui-shell.md 4.1): 빨강 계열은 운영만 쓴다.</summary>
 public static class LabelColorRules
 {
+    /// <summary>운영이 아닌 접속에 빨강 계열을 넣었을 때(입력·고르기 같은 글).</summary>
+    public const string RedReservedMessage = "빨강 계열 색은 운영 접속만 씁니다. 다른 색을 고르세요.";
+
+    /// <summary>바이트 셋을 <c>#RRGGBB</c>(대문자)로.</summary>
+    public static string ToHex(byte r, byte g, byte b) => string.Create(CultureInfo.InvariantCulture, $"#{r:X2}{g:X2}{b:X2}");
+
+    /// <summary>화면에 보일 라벨 색: 운영은 항상 빨강, 나머지는 사용자 색(형식이 맞을 때) 또는 환경 기본색.</summary>
+    public static string Effective(ConnectionEnvironment environment, string? color) => environment switch
+    {
+        ConnectionEnvironment.Production => "#C42B1C",
+        _ when TryParse(color?.Trim(), out var r, out var g, out var b) => ToHex(r, g, b),
+        ConnectionEnvironment.Test => "#B65A00",
+        _ => "#107C10",
+    };
+
     /// <summary><c>#RRGGBB</c> 를 읽는다. 형식이 틀리면 false.</summary>
     public static bool TryParse(string? hex, out byte r, out byte g, out byte b)
     {
@@ -272,6 +287,7 @@ public sealed partial class ProfileEditorViewModel : ViewModelBase
         nameof(IsDirty), nameof(ShowRequired), nameof(NameMissing), nameof(UserMissing), nameof(HostMissing), nameof(ServiceMissing),
         nameof(EasyConnectMissing), nameof(TnsAliasMissing), nameof(HasRequiredFields), nameof(ConnectionStringPreview),
         nameof(IsHostPortMode), nameof(IsEasyConnectMode), nameof(IsTnsMode), nameof(CanPickColor),
+        nameof(EffectiveColor), nameof(ColorLabel), nameof(ColorWarning),
     ];
 
     /// <summary>저장된 값을 채우는 중(변경으로 치지 않는다).</summary>
@@ -331,6 +347,41 @@ public sealed partial class ProfileEditorViewModel : ViewModelBase
 
     /// <summary>운영은 색을 바꿀 수 없다(항상 빨강).</summary>
     public bool CanPickColor => Environment != ConnectionEnvironment.Production;
+
+    /// <summary>라벨 색 펼침 창의 견본(빨강 계열 없음). 이름은 지금 언어.</summary>
+    public IReadOnlyList<LabelColorPreset> ColorPresets { get; } =
+    [
+        new(UiText.Get("Connection.color.blue", "파랑"), "#0063B1"),
+        new(UiText.Get("Connection.color.navy", "남색"), "#2E3A87"),
+        new(UiText.Get("Connection.color.teal", "청록"), "#00737A"),
+        new(UiText.Get("Connection.color.green", "초록"), "#107C10"),
+        new(UiText.Get("Connection.color.olive", "올리브"), "#5A7400"),
+        new(UiText.Get("Connection.color.orange", "주황"), "#B65A00"),
+        new(UiText.Get("Connection.color.brown", "갈색"), "#7A5230"),
+        new(UiText.Get("Connection.color.purple", "보라"), "#6B3FA0"),
+        new(UiText.Get("Connection.color.magenta", "자주"), "#B4009E"),
+        new(UiText.Get("Connection.color.gray", "회색"), "#5D5D5D"),
+    ];
+
+    /// <summary>라벨 색 단추의 견본 색(<c>#RRGGBB</c>).</summary>
+    public string EffectiveColor => LabelColorRules.Effective(Environment, ColorText);
+
+    /// <summary>라벨 색 단추 글자: 사용자 색이면 그 값, 아니면 「기본 색」.</summary>
+    public string ColorLabel => !CanPickColor || IsBlank(ColorText)
+        ? UiText.Get("Connection.color.default", "기본 색")
+        : ColorText.Trim().ToUpperInvariant();
+
+    /// <summary>운영이 아닌데 빨강 계열이면 경고 글(저장도 거부된다). 아니면 빈 글자.</summary>
+    public string ColorWarning => CanPickColor && LabelColorRules.IsRedFamily(ColorText.Trim()) ? LabelColorRules.RedReservedMessage : string.Empty;
+
+    /// <summary>견본·색 고르기로 고른 색을 넣는다. null 이면 환경 기본색(빈 값). 운영이면 무시한다.</summary>
+    public void PickColor(string? hex)
+    {
+        if (CanPickColor)
+        {
+            ColorText = hex?.Trim().ToUpperInvariant() ?? string.Empty;
+        }
+    }
 
     /// <summary>편집을 시작한 뒤 값을 바꿨는지(되돌리면 다시 false). 비밀번호 칸에 글자가 있으면 저장할 것이 있으므로 true.</summary>
     public bool IsDirty { get; private set; }
@@ -519,7 +570,7 @@ public sealed partial class ProfileEditorViewModel : ViewModelBase
             }
             else if (LabelColorRules.IsRedFamily(text))
             {
-                list.Add("빨강 계열 색은 운영 접속만 씁니다. 다른 색을 고르세요.");
+                list.Add(LabelColorRules.RedReservedMessage);
             }
             else
             {
@@ -652,6 +703,13 @@ public sealed partial class ProfileEditorViewModel : ViewModelBase
     }
 
     private static string? NullIfBlank(string? text) => string.IsNullOrWhiteSpace(text) ? null : text.Trim();
+}
+
+/// <summary>라벨 색 견본 하나(이름 + <c>#RRGGBB</c>).</summary>
+public sealed record LabelColorPreset(string Name, string Hex)
+{
+    /// <summary>풍선 도움말·낭독기 이름.</summary>
+    public string Tip => $"{Name} {Hex}";
 }
 
 /// <summary>콤보 상자 한 줄(값 + 글자).</summary>
