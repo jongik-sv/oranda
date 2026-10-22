@@ -3502,6 +3502,46 @@ dotnet, testhost, Oranda.App
 - data-model: -
 - ui-spec: -
 
+### TSK-13-12: 접속 관리자 접속별 설명(comment) [mac]
+- category: dev
+- domain: fullstack
+- model: sonnet
+- status: [ ]
+- priority: medium
+- assignee: -
+- schedule: 2026-10-22 ~ 2026-10-22
+- tags: connection, comment, mac
+- depends: TSK-03-04
+- blocked-by: -
+- entry-point: 접속 관리자 > 프로필 편집기 > 설명 · 접속 목록 줄 도움말
+- note: 담당 PC: mac(맥북) — win144 세션은 이 Task 를 하지 않는다. 2026-10-22 사용자 요청: 「접속 관리자에 각 접속에 대한 comment 도 넣을 수 있게 해 줘」. 지금 ConnectionProfile 에는 설명 칸이 없다
+
+#### PRD 요구사항
+- prd-ref: PRD CONN-01 (프로필), CONN-17 (접속 목록)
+- requirements:
+  - ConnectionProfile 에 선택 칸 `Comment`(string?, null = 없음)를 끝에 덧붙이고(D-004) connections.json `comment` 로 저장한다. 키가 없는 옛 파일은 null 로 읽는다
+  - 프로필 편집기 「일반」 구역에 여러 줄(2~3줄) 「설명」 칸을 둔다
+  - 접속 목록 줄의 풍선 도움말에 설명을 보이고, 흐린 보조 글(user@접속 뒤)에 설명 첫 줄을 붙인다
+  - 접속 목록 찾기 칸이 설명 글도 찾는다
+  - 복제는 설명을 그대로 옮긴다
+- acceptance:
+  - 설명을 넣고 저장하면 connections.json 에 남고, 다시 열면 칸에 보인다. 비우면 키가 사라진다
+  - 목록 줄에 마우스를 올리면 설명이 보이고, 찾기에 설명 낱말을 치면 그 접속이 남는다
+  - 900×640(영어) 접속 관리자에서 고급 설정을 접은 폼이 스크롤 없이 보인다
+- constraints:
+  - 비밀번호를 설명에 넣지 말라는 안내는 하지 않는다(검증 대상 아님). 설명은 줄바꿈을 그대로 둔다(앞뒤 공백만 뺀다)
+  - XAML 한국어 글자는 literals-en.json 영어 짝을 둔다
+- test-criteria:
+  - Core: 예제 connections.json 왕복(comment 포함), 키 없는 프로필은 null
+  - App: 편집기 왕복·변경 여부, 빈 설명은 null, 목록 도움말·보조 글, 찾기, 복제
+  - Headless: 설명 칸 여러 줄 입력, 접속 관리자 배치(영어) 시험 통과
+
+#### 기술 스펙 (TRD)
+- tech-spec: -
+- api-spec: -
+- data-model: docs/design/data-model.md 2.2 `profiles[].comment`
+- ui-spec: -
+
 ## 의존 그래프
 
 ### 그래프 (Mermaid)
@@ -3643,6 +3683,7 @@ graph LR
   TSK-07-02 --> TSK-13-08
   TSK-07-02 --> TSK-13-10
   TSK-03-04 --> TSK-13-11
+  TSK-03-04 --> TSK-13-12
   style TSK-01-02 fill:#fff3e0,stroke:#e65100
   style TSK-01-07 fill:#fff3e0,stroke:#e65100
   style TSK-01-02 stroke:#c62828,stroke-width:2px
