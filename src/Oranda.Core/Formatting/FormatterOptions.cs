@@ -22,6 +22,23 @@ public enum SelectListLayout
     FillToWidth,
 }
 
+/// <summary>절 키워드 맞춤(Orange SQL Formatter 「Keyword Align」). Right = 키워드 끝을 SELECT 끝에 맞춘 강(river) 형식.</summary>
+public enum KeywordAlign
+{
+    Left,
+    Right,
+}
+
+/// <summary>GROUP BY·ORDER BY 목록 배치(Orange 「Group/Order By Column List」).</summary>
+public enum ByListLayout
+{
+    /// <summary>한 줄(최대 폭을 넘으면 그때만 감는다).</summary>
+    SingleLine,
+
+    /// <summary>한 줄에 하나씩.</summary>
+    MultiLine,
+}
+
 public enum AndOrBreak
 {
     Before,
@@ -56,6 +73,9 @@ public sealed record FormatterOptions
     public IndentOptions Indent { get; init; } = new();
 
     public CommaPosition CommaPosition { get; init; } = CommaPosition.Trailing;
+
+    /// <summary>절 키워드 맞춤(TSK-13-38). 기본 Left = 지금 출력.</summary>
+    public KeywordAlign KeywordAlign { get; init; } = KeywordAlign.Left;
 
     public bool OperatorSpacing { get; init; } = true;
 
@@ -100,6 +120,9 @@ public sealed record IndentOptions
 public sealed record LineBreakOptions
 {
     public SelectListLayout SelectList { get; init; } = SelectListLayout.OnePerLine;
+
+    /// <summary>GROUP BY·ORDER BY 목록(TSK-13-38). 기본 SingleLine = 지금 출력.</summary>
+    public ByListLayout GroupOrderBy { get; init; } = ByListLayout.SingleLine;
 
     public bool JoinClause { get; init; } = true;
 

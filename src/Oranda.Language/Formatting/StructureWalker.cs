@@ -99,6 +99,7 @@ internal sealed class StructureWalker
         {
             brk = true;
             if (!_plsql) _st.Push(new Frame(FrameKind.Query, 0) { Lead = w });
+            if (!_plsql && IsQueryLead(w)) t.ClauseHead = true;
         }
 
         if (!Decide(t, w, prev, next, ref brk, ref depth, ref post)) return false;
@@ -343,6 +344,7 @@ internal sealed class StructureWalker
                 break;
             case "SELECT" or "INSERT" or "UPDATE" or "DELETE" or "MERGE" or "WITH":
                 _st.Push(new Frame(FrameKind.Query, d) { Lead = w });
+                t.ClauseHead = true;
                 break;
             case "PROCEDURE" or "FUNCTION":
                 _pendingSub = true;
@@ -432,6 +434,7 @@ internal sealed class StructureWalker
                     // 문장 가운데 질의(커서 정의·OPEN FOR·FORALL)
                     brk = true;
                     depth = _stmtDepth + _p;
+                    t.ClauseHead = true;
                     int d = depth;
                     string lead = w;
                     post = () => _st.Push(new Frame(FrameKind.Query, d) { Lead = lead });
@@ -452,6 +455,7 @@ internal sealed class StructureWalker
             q.Lead = w;
             brk = true;
             depth = q.Depth;
+            t.ClauseHead = true;
             return;
         }
 
@@ -461,6 +465,7 @@ internal sealed class StructureWalker
             _afterSetOp = false;
             brk = true;
             depth = q.Depth;
+            t.ClauseHead = true;
             if (w == "SELECT") q.Lead = "SELECT";
             return;
         }
@@ -469,12 +474,13 @@ internal sealed class StructureWalker
         {
             brk = true;
             depth = q.Depth;
+            t.ClauseHead = true;
             if (w is "UNION" or "INTERSECT" or "MINUS" or "EXCEPT") _afterSetOp = true;
             if (w == "SELECT") q.Lead = "SELECT";
         }
-
-        _ = t;
     }
+
+    static bool IsQueryLead(string w) => w is "SELECT" or "INSERT" or "UPDATE" or "DELETE" or "MERGE" or "WITH";
 
     static bool ClauseBreak(Frame q, string w, FormatItem? prev, FormatItem? next)
     {

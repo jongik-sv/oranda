@@ -201,19 +201,10 @@ public sealed class FormatterProfilesCommandHandler : ICommandHandler
             return await OptionsProvider(ct).ConfigureAwait(true);
         }
 
-        var id = FormatterIds.Default;
-        if (_services?.GetService(typeof(ISettingsStore)) is ISettingsStore settings)
-        {
-            id = (await settings.LoadAsync(ct).ConfigureAwait(true)).Value.FormatterProfileId;
-        }
-
-        if (_services?.GetService(typeof(IFormatterProfileStore)) is IFormatterProfileStore store)
-        {
-            var all = await store.ListAsync(ct).ConfigureAwait(true);
-            return (all.FirstOrDefault(p => p.Id == id) ?? (all.Count > 0 ? all[0] : null))?.Options ?? new FormatterOptions();
-        }
-
-        return new FormatterOptions();
+        return await FormatterIds.ActiveOptionsAsync(
+            _services?.GetService(typeof(ISettingsStore)) as ISettingsStore,
+            _services?.GetService(typeof(IFormatterProfileStore)) as IFormatterProfileStore,
+            ct).ConfigureAwait(true);
     }
 
     private Task NotifyAsync(string message)

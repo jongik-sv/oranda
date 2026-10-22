@@ -49,8 +49,8 @@ public class TableLayoutTests
         Assert.Equal("T.COIL_ID, T.RCD_STS_TP, ", TableLayoutPaste.Build([Id, Sts], Opts("T", comma: true)));
         Assert.Equal("COIL_ID -- 코일 번호\n", TableLayoutPaste.Build([Id], Opts(comment: true)));
         Assert.Equal("COIL_ID, -- 코일 번호\n", TableLayoutPaste.Build([Id], Opts(comma: true, comment: true)));
-        Assert.Equal("COIL_ID, -- 코일 번호\nRCD_STS_TP\n", TableLayoutPaste.Build([Id, Sts], Opts(comment: true)));
-        Assert.Equal("RCD_STS_TP\n", TableLayoutPaste.Build([Sts], Opts(comment: true)));
+        Assert.Equal("COIL_ID, -- 코일 번호\nRCD_STS_TP", TableLayoutPaste.Build([Id, Sts], Opts(comment: true)));
+        Assert.Equal("RCD_STS_TP", TableLayoutPaste.Build([Sts], Opts(comment: true)));
         Assert.Equal(string.Empty, TableLayoutPaste.Build([], Opts()));
     }
 
@@ -62,12 +62,12 @@ public class TableLayoutTests
     }
 
     [Fact]
-    public void Comment_option_puts_one_column_per_line_indented_to_the_caret_column_even_without_comments()
+    public void Comment_option_breaks_the_line_only_after_a_column_with_a_comment_indented_to_the_caret_column()
     {
-        Assert.Equal("COIL_ID, -- 코일 번호\n    RCD_STS_TP,\n    \"Mixed Case\" -- 혼합\n    ", TableLayoutPaste.Build([Sts, Mixed, Id], Opts(comment: true), "    "));
-        Assert.Equal("t.rcd_sts_tp,\n\tt.\"Mixed Case\", -- 혼합\n\t", TableLayoutPaste.Build([Sts, Mixed], Opts("T", comma: true, lower: true, comment: true), "\t"));
+        Assert.Equal("COIL_ID, -- 코일 번호\n    RCD_STS_TP, \"Mixed Case\" -- 혼합\n    ", TableLayoutPaste.Build([Sts, Mixed, Id], Opts(comment: true), "    "));
+        Assert.Equal("t.rcd_sts_tp, t.\"Mixed Case\", -- 혼합\n\t", TableLayoutPaste.Build([Sts, Mixed], Opts("T", comma: true, lower: true, comment: true), "\t"));
         var noComment = Sts with { Index = 4, Name = "UPD_DT" };
-        Assert.Equal("RCD_STS_TP,\nUPD_DT\n", TableLayoutPaste.Build([noComment, Sts], Opts(comment: true)));
+        Assert.Equal("RCD_STS_TP, UPD_DT", TableLayoutPaste.Build([noComment, Sts], Opts(comment: true)));
         Assert.Equal("RCD_STS_TP, UPD_DT", TableLayoutPaste.Build([noComment, Sts], Opts()));
     }
 
@@ -98,13 +98,13 @@ public class TableLayoutTests
 
         Assert.Equal("select " + expected, tab.Text);
 
-        // 주석 없는 열이 섞여 한 행씩 이어 넣어도 열마다 한 줄이다.
+        // 주석 없는 열은 줄을 바꾸지 않고 이어 붙이고, 주석 붙은 열 뒤에서만 줄을 바꾼다(TSK-13-38 사용자 요청).
         (tab, session, _) = NewSession("select ", options);
         tab.UpdateCaret(7, 7, 0);
         var plain = Col(4, "USE_YN", "x") with { Comment = null };
         Assert.True(session.Paste([plain]));
         Assert.True(session.Paste([email]));
-        Assert.Equal("select a.USE_YN,\n       a.EMAIL, -- 이메일\n       ", tab.Text);
+        Assert.Equal("select a.USE_YN, a.EMAIL, -- 이메일\n" + new string(' ', 17), tab.Text); // 이어 넣은 행의 들여쓰기 = 그때 커서 열
     }
 
     [Fact]
@@ -112,7 +112,7 @@ public class TableLayoutTests
     {
         var (tab, session, _) = NewSession("select\r\n  ", Opts(comment: true));
         tab.UpdateCaret(10, 10, 0);
-        Assert.Equal("COIL_ID, -- 코일 번호\r\n  RCD_STS_TP\r\n  ", session.TextFor([Id, Sts]));
+        Assert.Equal("COIL_ID, -- 코일 번호\r\n  RCD_STS_TP, \"Mixed Case\" -- 혼합\r\n  ", session.TextFor([Id, Sts, Mixed]));
     }
 
     [Fact]
@@ -145,12 +145,12 @@ public class TableLayoutTests
         var (tab, session, _) = NewSession("select\n  from emp", Opts("e", comment: true));
         tab.UpdateCaret(7, 7, 0);
         var copied = session.TextFor([Sts, Id]);
-        Assert.Equal("e.COIL_ID, -- 코일 번호\ne.RCD_STS_TP\n", copied);
+        Assert.Equal("e.COIL_ID, -- 코일 번호\ne.RCD_STS_TP", copied);
 
         tab.UpdateCaret(9, 9, 0);
-        copied = session.TextFor([Sts, Id]);
-        Assert.Equal("e.COIL_ID, -- 코일 번호\n  e.RCD_STS_TP\n  ", copied);
-        Assert.True(session.Paste([Sts, Id]));
+        copied = session.TextFor([Mixed, Sts, Id]);
+        Assert.Equal("e.COIL_ID, -- 코일 번호\n  e.RCD_STS_TP, e.\"Mixed Case\" -- 혼합\n  ", copied);
+        Assert.True(session.Paste([Mixed, Sts, Id]));
         Assert.Equal("select\n  " + copied + "from emp", tab.Text);
     }
 

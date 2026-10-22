@@ -4,12 +4,16 @@ using System.Linq;
 using System.Threading.Tasks;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using Oranda.App.Features.FormatterProfiles;
 using Oranda.App.Features.Localization;
 using Oranda.App.Features.Update;
 using Oranda.App.Shell.Appearance;
 using Oranda.App.ViewModels;
 using Oranda.Core.Execution;
+using Oranda.Core.Formatting;
 using Oranda.Core.Settings;
+using Oranda.Core.Shell;
+using Oranda.Core.Storage;
 
 namespace Oranda.App.Shell.Settings;
 
@@ -29,7 +33,7 @@ public sealed class SettingsStrings(IShellText text)
 public sealed record ErrorModeChoice(ScriptErrorMode Mode, string Label);
 
 /// <summary>
-/// 설정 창(<c>Ctrl+,</c>)의 모델: 일반(테마·스키마 브라우저)·편집기(글꼴·크기·탭)·실행·결과 그리드·이력·모니터·작업 공간. 「저장」을 누르면 한 번에 저장하고
+/// 설정 창(<c>Ctrl+,</c>)의 모델: 일반(테마·스키마 브라우저)·편집기(글꼴·크기·탭)·SQL 포맷(<see cref="SqlFormatPage"/>)·실행·결과 그리드·이력·모니터·작업 공간. 「저장」을 누르면 한 번에 저장하고
 /// 저장소가 바뀐 섹션마다 <c>SettingsChanged</c> 를 낸다(테마·글꼴은 재시작 없이 바뀐다).
 /// </summary>
 public sealed partial class SettingsViewModel : ViewModelBase
@@ -125,8 +129,11 @@ public sealed partial class SettingsViewModel : ViewModelBase
     [ObservableProperty]
     private int _selectedTab;
 
+    /// <summary>「SQL 포맷」 탭의 순서(편집기 다음).</summary>
+    public const int FormatTabIndex = 2;
+
     /// <summary>업데이트 탭의 순서(<c>SettingsWindow.axaml</c> 의 마지막 탭).</summary>
-    public const int UpdateTabIndex = 6;
+    public const int UpdateTabIndex = 7;
 
     [ObservableProperty]
     private bool _updateCheckOnStartup;
@@ -147,10 +154,15 @@ public sealed partial class SettingsViewModel : ViewModelBase
 
     private bool _skippedCleared;
 
-    public SettingsViewModel(SettingsService settings, IShellText text, IEnumerable<string>? installedFonts = null)
+    // 프로필 복사본을 만들었지만 설정에 아직 쓰지 못한 그 ID(다시 저장할 때 이어 쓴다).
+    private string? _pendingProfileId;
+
+    /// <param name="sqlFormat">「SQL 포맷」 쪽. null 이면 앱 서비스(프로필 저장소·포매터)로 만든다(앱 밖이면 저장하지 않는 기본값 쪽).</param>
+    public SettingsViewModel(SettingsService settings, IShellText text, IEnumerable<string>? installedFonts = null, SqlFormatPage? sqlFormat = null)
     {
         _settings = settings;
         _text = text;
+        SqlFormat = sqlFormat ?? CreateSqlFormatPage(settings, text);
         Themes =
         [
             new ThemeChoice(Theme.System, text.Lookup("Shell.settings.theme.system")),
@@ -205,6 +217,44 @@ public sealed partial class SettingsViewModel : ViewModelBase
         _updateAutoDownload = s.Update.AutoDownload;
         _updateFeedUrl = s.Update.FeedUrl ?? string.Empty;
         _skippedVersion = s.Update.SkippedVersion;
+    }
+
+    /// <summary>「SQL 포맷」 쪽(Orange SQL Formatter 대응, TSK-13-38).</summary>
+    public SqlFormatPage SqlFormat { get; }
+
+    /// <summary>시험용: 「자세히…」가 포매터 프로필 화면을 여는 길(기본 = <c>oranda.format.profiles</c> 명령).</summary>
+    internal Func<Task>? OpenProfiles { get; init; }
+
+    private static SqlFormatPage CreateSqlFormatPage(SettingsService settings, IShellText text)
+    {
+        var services = (Avalonia.Application.Current as App)?.Services;
+        return new SqlFormatPage(
+            services?.GetService<IFormatterProfileStore>(),
+            services?.GetService<ISqlFormatter>(),
+            settings.Current.FormatterProfileId,
+            text);
+    }
+
+    /// <summary>「자세히…」: 설정을 저장하고 창을 닫은 뒤 포매터 프로필 화면을 연다. 저장을 막는 값이 있으면 열지 않는다.</summary>
+    [RelayCommand]
+    private async Task OpenFormatterProfilesAsync()
+    {
+        if (!await SaveCoreAsync().ConfigureAwait(true))
+        {
+            return;
+        }
+
+        if (OpenProfiles is not null)
+        {
+            await OpenProfiles().ConfigureAwait(true);
+            return;
+        }
+
+        var services = (Avalonia.Application.Current as App)?.Services;
+        if (services?.GetService<ICommandRegistry>() is { } registry && services.GetService<IContextKeys>() is { } keys)
+        {
+            await registry.ExecuteAsync(FormatterProfilesCommands.ShowProfiles, keys).ConfigureAwait(true);
+        }
     }
 
     // ---- 업데이트 탭 ----
@@ -318,74 +368,109 @@ public sealed partial class SettingsViewModel : ViewModelBase
 
     /// <summary>화면에서 고른 값으로 설정을 저장한다.</summary>
     [RelayCommand]
-    public async Task SaveAsync()
+    public Task SaveAsync() => SaveCoreAsync();
+
+    /// <summary>저장하고 창을 닫는다. 저장을 막는 값이 있으면 그 탭으로 옮기고 false.</summary>
+    private async Task<bool> SaveCoreAsync()
     {
         if (FeedMessageIsError)
         {
             SelectedTab = UpdateTabIndex; // 잘못된 피드 주소는 저장하지 않는다: 이유가 보이는 탭으로 옮긴다
-            return;
+            return false;
+        }
+
+        // 포맷 프로필을 먼저 쓴다: 실패하면 설정도 그대로 두고 이유를 그 탭에 보인다.
+        string? profileId;
+        try
+        {
+            profileId = await SqlFormat.SaveAsync().ConfigureAwait(true) ?? _pendingProfileId;
+            _pendingProfileId = profileId;
+            SqlFormat.ErrorText = string.Empty;
+        }
+        catch (Exception ex) when (IsSaveError(ex))
+        {
+            SqlFormat.ErrorText = ex.Message;
+            SelectedTab = FormatTabIndex;
+            return false;
         }
 
         var family = string.IsNullOrWhiteSpace(FontFamily) || FontFamily == FontChoices[0] ? null : FontFamily.Trim();
         var gridFamily = string.IsNullOrWhiteSpace(GridFontFamily) || GridFontFamily == FontChoices[0] ? null : GridFontFamily.Trim();
-        await _settings.UpdateAsync(s => s with
+        try
         {
-            Ui = s.Ui with
+            await _settings.UpdateAsync(s => s with
             {
-                Theme = SelectedTheme.Theme,
-                Language = SelectedLanguage.Code,
-                UiScale = ThemeService.ClampScale((double)UiScalePercent / 100),
-                HighContrast = HighContrast,
-            },
-            Editor = s.Editor with
-            {
-                FontFamily = family,
-                FontSize = (double)FontSize,
-                TabSize = (int)TabSize,
-                LintEnabled = LintEnabled,
-            },
-            Execution = s.Execution with
-            {
-                AutoCommit = AutoCommit,
-                DbmsOutput = DbmsOutput,
-                ScriptErrorMode = SelectedErrorMode.Mode,
-                SplitOnBlankLine = SplitOnBlankLine,
-            },
-            Grid = s.Grid with
-            {
-                PageSize = (int)PageSize,
-                MemoryLimitMb = (int)MemoryLimitMb,
-                InitialLobFetchSize = (int)LobFetchSize,
-                FontFamily = gridFamily,
-                FontSize = Math.Clamp((double)GridFontSize, SettingsService.MinEditorFontSize, SettingsService.MaxEditorFontSize),
-            },
-            History = s.History with
-            {
-                Enabled = HistoryEnabled,
-                SaveBindValues = SaveBindValues,
-                MaxEntries = (int)HistoryMaxEntries,
-                MaxAgeDays = (int)HistoryMaxAgeDays,
-            },
-            Monitor = s.Monitor with { RefreshSeconds = Math.Clamp((int)MonitorRefreshSeconds, 2, 60) },
-            Workspace = s.Workspace with
-            {
-                AutosaveSeconds = Math.Clamp((int)AutosaveSeconds, 1, 10),
-                RestoreOnStartup = RestoreOnStartup,
-            },
-            MetadataCache = s.MetadataCache with { RetentionDays = (int)CacheRetentionDays },
-            SchemaBrowser = s.SchemaBrowser with { SingleClickPreview = SchemaSingleClickPreview },
-            // 건너뛴 버전·마지막 확인 시각은 백그라운드 확인이 쓸 수 있어 지운 경우에만 덮어쓴다.
-            Update = s.Update with
-            {
-                CheckOnStartup = UpdateCheckOnStartup,
-                AutoDownload = UpdateAutoDownload,
-                FeedUrl = string.IsNullOrWhiteSpace(UpdateFeedUrl) ? null : UpdateFeedUrl.Trim(),
-                SkippedVersion = _skippedCleared ? null : s.Update.SkippedVersion,
-            },
-        }).ConfigureAwait(true);
+                FormatterProfileId = profileId ?? s.FormatterProfileId,
+                Ui = s.Ui with
+                {
+                    Theme = SelectedTheme.Theme,
+                    Language = SelectedLanguage.Code,
+                    UiScale = ThemeService.ClampScale((double)UiScalePercent / 100),
+                    HighContrast = HighContrast,
+                },
+                Editor = s.Editor with
+                {
+                    FontFamily = family,
+                    FontSize = (double)FontSize,
+                    TabSize = (int)TabSize,
+                    LintEnabled = LintEnabled,
+                },
+                Execution = s.Execution with
+                {
+                    AutoCommit = AutoCommit,
+                    DbmsOutput = DbmsOutput,
+                    ScriptErrorMode = SelectedErrorMode.Mode,
+                    SplitOnBlankLine = SplitOnBlankLine,
+                },
+                Grid = s.Grid with
+                {
+                    PageSize = (int)PageSize,
+                    MemoryLimitMb = (int)MemoryLimitMb,
+                    InitialLobFetchSize = (int)LobFetchSize,
+                    FontFamily = gridFamily,
+                    FontSize = Math.Clamp((double)GridFontSize, SettingsService.MinEditorFontSize, SettingsService.MaxEditorFontSize),
+                },
+                History = s.History with
+                {
+                    Enabled = HistoryEnabled,
+                    SaveBindValues = SaveBindValues,
+                    MaxEntries = (int)HistoryMaxEntries,
+                    MaxAgeDays = (int)HistoryMaxAgeDays,
+                },
+                Monitor = s.Monitor with { RefreshSeconds = Math.Clamp((int)MonitorRefreshSeconds, 2, 60) },
+                Workspace = s.Workspace with
+                {
+                    AutosaveSeconds = Math.Clamp((int)AutosaveSeconds, 1, 10),
+                    RestoreOnStartup = RestoreOnStartup,
+                },
+                MetadataCache = s.MetadataCache with { RetentionDays = (int)CacheRetentionDays },
+                SchemaBrowser = s.SchemaBrowser with { SingleClickPreview = SchemaSingleClickPreview },
+                // 건너뛴 버전·마지막 확인 시각은 백그라운드 확인이 쓸 수 있어 지운 경우에만 덮어쓴다.
+                Update = s.Update with
+                {
+                    CheckOnStartup = UpdateCheckOnStartup,
+                    AutoDownload = UpdateAutoDownload,
+                    FeedUrl = string.IsNullOrWhiteSpace(UpdateFeedUrl) ? null : UpdateFeedUrl.Trim(),
+                    SkippedVersion = _skippedCleared ? null : s.Update.SkippedVersion,
+                },
+            }).ConfigureAwait(true);
+        }
+        catch (Exception ex) when (IsSaveError(ex) && profileId is not null)
+        {
+            // 프로필 복사본은 만들었는데 설정을 못 썼다: 이유를 보이고 창을 둔다(다시 저장하면 그 복사본을 이어 쓴다).
+            SqlFormat.ErrorText = ex.Message;
+            SelectedTab = FormatTabIndex;
+            return false;
+        }
+
+        _pendingProfileId = null;
         UpdateService.Current?.RefreshSettings(); // 건너뛴 버전을 지웠으면 상태 표시줄 표시도 바로 맞춘다
         CloseRequested?.Invoke(this, EventArgs.Empty);
+        return true;
     }
+
+    private static bool IsSaveError(Exception ex) =>
+        ex is InvalidOperationException or ArgumentException or System.IO.IOException or UnauthorizedAccessException;
 
     [RelayCommand]
     public void Close() => CloseRequested?.Invoke(this, EventArgs.Empty);

@@ -347,7 +347,15 @@ public sealed class TableLayoutWindow : Window
     private void OptionsChanged()
     {
         var before = _session.Options.ShowPk;
-        _session.SetOptions(new TableLayoutOptions(_alias.Text ?? string.Empty, _comma.IsChecked == true, _lower.IsChecked == true, _pk.IsChecked == true, _comment.IsChecked == true));
+        // 쉼표 위치(Comma)는 창의 입력이 아니므로 지금 옵션에서 그대로 이어 간다.
+        _session.SetOptions(_session.Options with
+        {
+            Alias = _alias.Text ?? string.Empty,
+            InsertComma = _comma.IsChecked == true,
+            LowerCase = _lower.IsChecked == true,
+            ShowPk = _pk.IsChecked == true,
+            ShowComment = _comment.IsChecked == true,
+        });
         if (before != _session.Options.ShowPk)
         {
             Rebuild();

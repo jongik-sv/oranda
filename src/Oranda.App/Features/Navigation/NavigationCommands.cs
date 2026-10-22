@@ -1,7 +1,10 @@
+using Oranda.App.Features.FormatterProfiles;
 using Oranda.App.Features.SqlEditor;
 using Oranda.App.Shell.Settings;
+using Oranda.Core.Formatting;
 using Oranda.Core.Settings;
 using Oranda.Core.Shell;
+using Oranda.Core.Storage;
 
 namespace Oranda.App.Features.Navigation;
 
@@ -70,7 +73,9 @@ public sealed class NavigationCommandHandler : ICommandHandler
                     var info = await svc.DescribeAsync(tab, tab.CaretOffset, cancellationToken).ConfigureAwait(true);
                     if (info is not null)
                     {
-                        Show(tab, info);
+                        // 테이블 레이아웃 창의 쉼표 위치 = 설정 「SQL 포맷」의 목록 쉼표(TSK-13-38).
+                        var comma = info.Layout is null ? CommaPosition.Trailing : await CommaAsync(cancellationToken).ConfigureAwait(true);
+                        Show(tab, info, comma);
                     }
 
                     break;
@@ -81,7 +86,7 @@ public sealed class NavigationCommandHandler : ICommandHandler
                     var refs = NavigationService.FindReferences(tab, tab.CaretOffset);
                     if (refs is not null)
                     {
-                        Show(tab, refs.Summary);
+                        Show(tab, refs.Summary, CommaPosition.Trailing);
                     }
 
                     break;
@@ -98,7 +103,34 @@ public sealed class NavigationCommandHandler : ICommandHandler
         }
     }
 
-    private void Show(SqlEditorViewModel tab, ObjectInfo info)
+    /// <summary>시험용: 쉼표 위치를 바꾼다(기본 = 설정의 기본 포매터 프로필).</summary>
+    internal Func<CancellationToken, Task<CommaPosition>>? CommaProvider { get; set; }
+
+    /// <summary>테이블 레이아웃 창을 열 때 받은 옵션(시험이 본다).</summary>
+    internal TableLayoutOptions? LastLayoutOptions { get; private set; }
+
+    private async Task<CommaPosition> CommaAsync(CancellationToken ct)
+    {
+        if (CommaProvider is not null)
+        {
+            return await CommaProvider(ct).ConfigureAwait(true);
+        }
+
+        try
+        {
+            var o = await FormatterIds.ActiveOptionsAsync(
+                _services?.GetService(typeof(ISettingsStore)) as ISettingsStore,
+                _services?.GetService(typeof(IFormatterProfileStore)) as IFormatterProfileStore,
+                ct).ConfigureAwait(true);
+            return o.CommaPosition;
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidOperationException)
+        {
+            return CommaPosition.Trailing; // 프로필을 읽지 못해도 창은 연다.
+        }
+    }
+
+    private void Show(SqlEditorViewModel tab, ObjectInfo info, CommaPosition comma)
     {
         if (Presenter is not null)
         {
@@ -108,7 +140,7 @@ public sealed class NavigationCommandHandler : ICommandHandler
 
         if (info.Layout is { } layout)
         {
-            TableLayoutWindow.Show(NewSession(tab, layout));
+            TableLayoutWindow.Show(NewSession(tab, layout, comma));
             return;
         }
 
@@ -116,10 +148,11 @@ public sealed class NavigationCommandHandler : ICommandHandler
     }
 
     // 확인란 4개는 설정에서 읽고(설정이 없는 시험은 기본값), 바뀌면 바로 저장해 다음 팝업에도 유지한다.
-    private TableLayoutSession NewSession(SqlEditorViewModel tab, TableLayoutModel layout)
+    private TableLayoutSession NewSession(SqlEditorViewModel tab, TableLayoutModel layout, CommaPosition comma)
     {
         var settings = _services?.GetService(typeof(SettingsService)) as SettingsService;
-        var options = TableLayoutOptions.From(settings?.Current.TableLayout ?? new TableLayoutSettings());
+        var options = TableLayoutOptions.From(settings?.Current.TableLayout ?? new TableLayoutSettings()) with { Comma = comma };
+        LastLayoutOptions = options;
         return new TableLayoutSession(tab, layout, options, settings is null ? null : s => _ = SaveAsync(settings, s));
     }
 

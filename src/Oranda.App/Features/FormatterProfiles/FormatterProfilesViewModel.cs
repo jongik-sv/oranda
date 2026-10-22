@@ -370,7 +370,7 @@ public sealed partial class FormatterProfilesViewModel : ToolPanelViewModelBase
         return wrapper.Deserialize(OrandaJsonContext.Default.FormatterProfile)?.Options ?? new FormatterOptions();
     }
 
-    private static bool IsBuiltInId(string id) => id is FormatterIds.Default or FormatterIds.Orange5 or FormatterIds.Compact;
+    private static bool IsBuiltInId(string id) => FormatterIds.IsBuiltIn(id);
 
     private static string UniqueName(IReadOnlyList<FormatterProfile> all, string baseName)
     {
@@ -401,4 +401,31 @@ public static class FormatterIds
     public const string Default = "oranda-default";
     public const string Orange5 = "orange5";
     public const string Compact = "compact";
+
+    /// <summary>설정 창 「SQL 포맷」 쪽이 기본 제공 프로필을 고칠 때 복사해 두는 사용자 프로필(TSK-13-38).</summary>
+    public const string SettingsCopy = "sql-format";
+
+    /// <summary>기본 제공(고칠 수 없는) 프로필인가.</summary>
+    public static bool IsBuiltIn(string id) => id is Default or Orange5 or Compact;
+
+    /// <summary>
+    /// 설정의 기본 프로필(<c>formatterProfileId</c>) 옵션. 그 프로필이 없으면 첫 프로필, 저장소가 없으면 기본값.
+    /// 포맷 명령·테이블 레이아웃 창(쉼표 위치)이 쓴다.
+    /// </summary>
+    public static async Task<FormatterOptions> ActiveOptionsAsync(ISettingsStore? settings, IFormatterProfileStore? store, CancellationToken ct)
+    {
+        var id = Default;
+        if (settings is not null)
+        {
+            id = (await settings.LoadAsync(ct).ConfigureAwait(true)).Value.FormatterProfileId;
+        }
+
+        if (store is null)
+        {
+            return new FormatterOptions();
+        }
+
+        var all = await store.ListAsync(ct).ConfigureAwait(true);
+        return (all.FirstOrDefault(p => p.Id == id) ?? (all.Count > 0 ? all[0] : null))?.Options ?? new FormatterOptions();
+    }
 }

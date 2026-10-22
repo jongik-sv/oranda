@@ -29,6 +29,37 @@
       <Setter Property="Opacity" Value="1" />
       <Setter Property="Foreground" Value="{DynamicResource OrandaEnvProductionBrush}" />
     </Style>
+    <!-- SQL 포맷 쪽: Orange 옵션 창처럼 테두리 묶음 안에 촘촘한 라디오 단추. -->
+    <Style Selector="Border.fmt-group">
+      <Setter Property="BorderBrush" Value="{DynamicResource OrandaSeparatorBrush}" />
+      <Setter Property="BorderThickness" Value="1" />
+      <Setter Property="CornerRadius" Value="2" />
+      <Setter Property="Padding" Value="8,4,8,6" />
+    </Style>
+    <Style Selector="Border.fmt-group TextBlock.fmt-title">
+      <Setter Property="FontWeight" Value="SemiBold" />
+      <Setter Property="Margin" Value="0,0,0,2" />
+    </Style>
+    <Style Selector="Border.fmt-group RadioButton">
+      <Setter Property="MinHeight" Value="0" />
+      <Setter Property="Height" Value="28" />
+      <Setter Property="Padding" Value="4,0,0,0" />
+    </Style>
+    <Style Selector="TextBlock.fmt-hint">
+      <Setter Property="Opacity" Value="0.6" />
+      <Setter Property="FontSize" Value="{DynamicResource OrandaFontSizeSmall}" />
+      <Setter Property="HorizontalAlignment" Value="Left" />
+      <Setter Property="VerticalAlignment" Value="Center" />
+    </Style>
+    <Style Selector="Button.fmt-link">
+      <Setter Property="Background" Value="Transparent" />
+      <Setter Property="BorderThickness" Value="0" />
+      <Setter Property="Padding" Value="2,0" />
+      <Setter Property="MinHeight" Value="0" />
+      <Setter Property="FontSize" Value="{DynamicResource OrandaFontSizeSmall}" />
+      <Setter Property="Foreground" Value="{DynamicResource OrandaFocusBrush}" />
+      <Setter Property="Cursor" Value="Hand" />
+    </Style>
     <Style Selector="TextBlock.hint">
       <Setter Property="Opacity" Value="0.6" />
       <Setter Property="FontSize" Value="{DynamicResource OrandaFontSizeSmall}" />
@@ -102,6 +133,65 @@
                            Value="{Binding TabSize}" AutomationProperties.Name="{Binding TabSizeLabel}" />
             <CheckBox Grid.Row="3" Grid.Column="1" Content="{Binding LintLabel}" IsChecked="{Binding LintEnabled}" />
           </Grid>
+        </ScrollViewer>
+      </TabItem>
+
+      <TabItem Header="{Binding Strings[tab.format]}">
+        <ScrollViewer HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
+          <StackPanel Spacing="8" x:Name="SqlFormatPanel">
+            <Grid ColumnDefinitions="*,*" RowDefinitions="Auto,Auto" ColumnSpacing="8" RowSpacing="8">
+              <Border Grid.Row="0" Grid.Column="0" Classes="fmt-group">
+                <StackPanel>
+                  <TextBlock Classes="fmt-title" Text="{Binding Strings[fmt.keywordAlign]}" />
+                  <StackPanel Orientation="Horizontal" Spacing="12">
+                    <RadioButton x:Name="FmtAlignLeft" GroupName="fmtAlign" Content="{Binding Strings[fmt.left]}" IsChecked="{Binding SqlFormat.AlignLeft}" />
+                    <RadioButton x:Name="FmtAlignRight" GroupName="fmtAlign" Content="{Binding Strings[fmt.right]}" IsChecked="{Binding SqlFormat.AlignRight}" />
+                  </StackPanel>
+                </StackPanel>
+              </Border>
+              <Border Grid.Row="0" Grid.Column="1" Classes="fmt-group">
+                <StackPanel>
+                  <TextBlock Classes="fmt-title" Text="{Binding Strings[fmt.comma]}" />
+                  <StackPanel Orientation="Horizontal" Spacing="12">
+                    <RadioButton x:Name="FmtCommaTrailing" GroupName="fmtComma" Content="{Binding Strings[fmt.trailing]}" IsChecked="{Binding SqlFormat.CommaTrailing}" />
+                    <RadioButton x:Name="FmtCommaLeading" GroupName="fmtComma" Content="{Binding Strings[fmt.leading]}" IsChecked="{Binding SqlFormat.CommaLeading}" />
+                  </StackPanel>
+                </StackPanel>
+              </Border>
+              <Border Grid.Row="1" Grid.Column="0" Classes="fmt-group">
+                <StackPanel>
+                  <TextBlock Classes="fmt-title" Text="{Binding Strings[fmt.keywordCase]}" />
+                  <RadioButton x:Name="FmtCaseAsIs" GroupName="fmtCase" Content="{Binding Strings[fmt.noChange]}" IsChecked="{Binding SqlFormat.CaseAsIs}" />
+                  <RadioButton x:Name="FmtCaseUpper" GroupName="fmtCase" Content="{Binding Strings[fmt.upper]}" IsChecked="{Binding SqlFormat.CaseUpper}" />
+                  <RadioButton x:Name="FmtCaseLower" GroupName="fmtCase" Content="{Binding Strings[fmt.lower]}" IsChecked="{Binding SqlFormat.CaseLower}" />
+                </StackPanel>
+              </Border>
+              <Border Grid.Row="1" Grid.Column="1" Classes="fmt-group">
+                <StackPanel>
+                  <TextBlock Classes="fmt-title" Text="{Binding Strings[fmt.byList]}" />
+                  <RadioButton x:Name="FmtBySingle" GroupName="fmtBy" Content="{Binding Strings[fmt.singleLine]}" IsChecked="{Binding SqlFormat.ByListSingle}" />
+                  <RadioButton x:Name="FmtByMulti" GroupName="fmtBy" Content="{Binding Strings[fmt.multiLine]}" IsChecked="{Binding SqlFormat.ByListMulti}" />
+                </StackPanel>
+              </Border>
+            </Grid>
+            <DockPanel>
+              <Button x:Name="FmtDefaultButton" DockPanel.Dock="Left" Content="{Binding Strings[fmt.default]}" Command="{Binding SqlFormat.ResetDefaultsCommand}" />
+              <Button x:Name="FmtMoreButton" DockPanel.Dock="Right" Classes="fmt-link" VerticalAlignment="Center"
+                      Content="{Binding Strings[fmt.more]}" Command="{Binding OpenFormatterProfilesCommand}"
+                      ToolTip.Tip="{Binding Strings[fmt.moreTip]}" IsEnabled="{Binding !IsReadOnly}" />
+              <TextBlock x:Name="FmtProfile" Classes="fmt-hint" Margin="8,0" TextTrimming="CharacterEllipsis"
+                         Text="{Binding SqlFormat.ProfileText}" ToolTip.Tip="{Binding SqlFormat.ProfileText}" />
+            </DockPanel>
+            <TextBlock x:Name="FmtError" Classes="hint error" TextAlignment="Left" Text="{Binding SqlFormat.ErrorText}"
+                       IsVisible="{Binding SqlFormat.ErrorText, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+            <StackPanel Spacing="2" IsVisible="{Binding SqlFormat.HasPreview}">
+              <TextBlock Classes="fmt-hint" Text="{Binding Strings[fmt.preview]}" />
+              <Border Background="{DynamicResource OrandaCodeBackgroundBrush}" BorderBrush="{DynamicResource OrandaSeparatorBrush}"
+                      BorderThickness="1" Padding="6,4">
+                <TextBlock x:Name="FmtPreview" Classes="mono" FontSize="{DynamicResource OrandaFontSizeSmall}" Text="{Binding SqlFormat.Preview}" />
+              </Border>
+            </StackPanel>
+          </StackPanel>
         </ScrollViewer>
       </TabItem>
 

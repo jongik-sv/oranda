@@ -4420,6 +4420,42 @@ dotnet, testhost, Oranda.App
 - data-model: -
 - ui-spec: -
 
+### TSK-13-38: 설정 창 「SQL 포맷」 쪽(Orange SQL Formatter 대응), 테이블 레이아웃 창 쉼표 위치가 이 설정을 따름 [win144]
+- category: feat
+- domain: fullstack
+- model: opus
+- status: [xx]
+- priority: medium
+- assignee: -
+- schedule: 2026-10-22 ~ 2026-10-23
+- tags: formatter, settings, table-layout, win144
+- depends: TSK-05-03, TSK-13-32
+- blocked-by: -
+- entry-point: 도구 > 설정(Ctrl+,) > 「SQL 포맷」 쪽 / 편집기 Alt+C·F4 테이블 레이아웃 창 넣기·복사
+- note: 담당 PC: win144. 2026-10-22 사용자 요청(「쿼리 포맷에 대한 설정이 없어. alt + c, F4 를 눌러서 나오는 테이블 정보에서 콤마가 추가되는 위치도 이 설정으로 정해져야 해」, Orange Options > Common > SQL Formatter 그림). 크기 M. 결과: 설정 창 「SQL 포맷」 탭(라디오 4묶음·기본값·미리보기·자세히…, 기본 제공 프로필은 sql-format 복사본으로 저장), 엔진 keywordAlign Right(river)·lineBreaks.groupOrderBy MultiLine 추가(기본값 출력 불변), Alt+C 넣기 쉼표가 commaPosition 을 따르고 줄바꿈은 주석 붙은 열 뒤에서만. Language 490·Core 243·Platform 136·App 통과
+
+#### PRD 요구사항
+- prd-ref: PRD FMT-02, FMT-04, FMT-05, FMT-08
+- requirements:
+  - 설정 창에 「SQL 포맷」 쪽: Keyword Align(왼쪽·오른쪽)·Comma in List(뒤·앞)·Keyword Case(그대로·대문자·소문자)·Group/Order By 목록(한 줄·여러 줄) 라디오 4묶음, 「기본값」 단추(이 4항목만), 작은 미리보기(바꿀 때마다 다시 포맷), 「자세히…」 = 포매터 프로필 화면
+  - 값은 지금 쓰는 포매터 프로필(settings.formatterProfileId)의 옵션으로 읽고 쓴다. 기본 제공 프로필이면 사용자 프로필로 복사해 저장하고 그 프로필로 바꾼다. 저장은 설정 창의 「저장」, 「닫기」는 버린다
+  - 포맷 엔진: 키워드 오른쪽 맞춤(river)·GROUP BY/ORDER BY 목록 여러 줄 옵션 추가. 기본값은 지금 출력 그대로
+  - 테이블 레이아웃 창 넣기·복사의 쉼표 위치가 Comma in List 를 따른다(앞 쉼표 = 「, COL2」)
+  - 테이블 레이아웃 창 넣기는 주석(「-- 주석」)을 붙인 열 뒤에서만 줄을 바꾸고, 주석이 없으면 한 줄로 잇는다(2026-10-22 사용자 추가 요청)
+- acceptance:
+  - 설정 창에서 Comma in List = Leading 으로 저장하면 편집기 포맷과 Alt+C 창 여러 컬럼 넣기가 앞 쉼표가 된다
+  - 기존 포맷 시험이 기본값으로 모두 그대로 통과한다
+- constraints:
+  - FormatterOptions 는 선택 필드 추가만(기존 기본값 불변), Platform 프로필 저장소는 바꾸지 않는다
+- test-criteria:
+  - 새 엔진 옵션 정상·경계(빈 목록·한 항목·주석 낀 목록·하위 질의), 설정 쪽 저장·다시 열기·기본값·닫기 되돌림·기본 제공 프로필 복사, 테이블 레이아웃 Trailing·Leading × 한 줄·여러 줄 × 쉼표 넣기
+
+#### 기술 스펙 (TRD)
+- tech-spec: -
+- api-spec: -
+- data-model: docs/design/data-model.md 2.3 (keywordAlign·lineBreaks.groupOrderBy)
+- ui-spec: -
+
 ## 의존 그래프
 
 ### 그래프 (Mermaid)

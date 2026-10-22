@@ -45,7 +45,7 @@ public class FormatterProfilesTests
     {
         var paths = FormatterOptionSchema.All.Select(d => d.Path).ToList();
 
-        Assert.Equal(24, paths.Count);
+        Assert.Equal(26, paths.Count);
         foreach (var expected in new[] { "case.keyword", "indent.size", "commaPosition", "lineBreaks.maxLineWidth", "align.equals", "comments.maxBlankLines", "statementTerminator", "honorFormatterOff" })
         {
             Assert.Contains(expected, paths);
@@ -319,7 +319,7 @@ public class FormatterProfilesTests
         Dispatcher.UIThread.RunJobs();
 
         var list = view.FindControl<ItemsControl>("OptionList")!;
-        Assert.Equal(24, list.ItemsSource!.Cast<object>().Count());
+        Assert.Equal(26, list.ItemsSource!.Cast<object>().Count());
         Assert.Contains("SELECT", view.FindControl<Oranda.App.Features.SqlEditor.SqlCodeView>("PreviewBox")!.Text);
 
         vm.Rows.Single(r => r.Path == "case.keyword").ChoiceValue = nameof(LetterCase.Lower);

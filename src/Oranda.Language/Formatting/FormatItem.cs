@@ -74,6 +74,12 @@ internal sealed class FormatItem
     /// <summary>이 항목이 놓인 출력 줄의 들여쓰기 단계.</summary>
     public int LineDepth { get; set; }
 
+    /// <summary>질의 절 머리(SELECT·FROM·WHERE … 줄 첫 키워드). 키워드 오른쪽 맞춤(TSK-13-38)이 쓴다.</summary>
+    public bool ClauseHead { get; set; }
+
+    /// <summary>줄 첫 항목일 때 들여쓰기 뒤에 더할(빼면 음수) 칸 수. 키워드 오른쪽 맞춤만 쓴다.</summary>
+    public int Extra { get; set; }
+
     /// <summary><see cref="GapKind.NewLine"/> 일 때 넣을 빈 줄 수.</summary>
     public int BlankLines { get; set; }
 

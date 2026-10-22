@@ -462,7 +462,7 @@ internal static partial class FormatEngine
             var it = items[i];
             if (i == 0)
             {
-                if (!it.IsRaw) Indent(sb, baseIndent, unit, it.Depth);
+                if (!it.IsRaw) Indent(sb, baseIndent, unit, it.Depth, it.Extra, ind);
             }
             else
             {
@@ -475,7 +475,7 @@ internal static partial class FormatEngine
                         break;
                     case GapKind.NewLine:
                         for (int b = 0; b <= it.BlankLines; b++) sb.Append(newline);
-                        if (!it.IsRaw) Indent(sb, baseIndent, unit, it.Depth);
+                        if (!it.IsRaw) Indent(sb, baseIndent, unit, it.Depth, it.Extra, ind);
                         break;
                     case GapKind.Verbatim:
                         AppendVerbatim(sb, it.OrigGap, newline);
@@ -490,10 +490,25 @@ internal static partial class FormatEngine
         return sb.ToString();
     }
 
-    static void Indent(StringBuilder sb, string baseIndent, string unit, int depth)
+    static void Indent(StringBuilder sb, string baseIndent, string unit, int depth, int extra, IndentOptions ind)
     {
         sb.Append(baseIndent);
-        for (int d = 0; d < depth; d++) sb.Append(unit);
+        if (extra == 0)
+        {
+            for (int d = 0; d < depth; d++) sb.Append(unit);
+            return;
+        }
+
+        // 키워드 오른쪽 맞춤: 칸 수로 셈한다(탭이면 들여쓰기 칸 수만큼 탭, 나머지는 공백).
+        int size = Math.Clamp(ind.Size, 1, 16);
+        int cols = Math.Max(0, (depth * size) + extra);
+        if (ind.UseTabs)
+        {
+            sb.Append('	', cols / size);
+            cols %= size;
+        }
+
+        sb.Append(' ', cols);
     }
 
     static void AppendVerbatim(StringBuilder sb, string gap, string newline)

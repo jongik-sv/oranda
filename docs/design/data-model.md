@@ -181,9 +181,11 @@
 | `indent.case` | int (0~4) | 1 | FMT-03 |
 | `indent.plsqlBlock` | int (0~4) | 1 | FMT-03 |
 | `commaPosition` | `CommaPosition` = `Leading`\|`Trailing` | `Trailing` | FMT-04 |
+| `keywordAlign` | `KeywordAlign` = `Left`\|`Right` | `Left` | FMT-05 (Right = 절 키워드 끝을 SELECT 끝에 맞춤, TSK-13-38) |
 | `operatorSpacing` | bool | true | FMT-04 |
 | `parenInnerSpace` | bool | false | FMT-04 |
 | `lineBreaks.selectList` | `SelectListLayout` = `OnePerLine`\|`FillToWidth` | `OnePerLine` | FMT-05 |
+| `lineBreaks.groupOrderBy` | `ByListLayout` = `SingleLine`\|`MultiLine` | `SingleLine` | FMT-05 (GROUP BY·ORDER BY 목록, TSK-13-38) |
 | `lineBreaks.joinClause` | bool | true | FMT-05 |
 | `lineBreaks.andOr` | `AndOrBreak` = `Before`\|`After`\|`None` | `Before` | FMT-05 |
 | `lineBreaks.inListThreshold` | int (0 = 줄바꿈 안 함) | 5 | FMT-05 |
