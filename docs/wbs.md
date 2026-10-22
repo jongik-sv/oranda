@@ -3591,7 +3591,7 @@ dotnet, testhost, Oranda.App
 - category: design
 - domain: frontend
 - model: sonnet
-- status: [im]
+- status: [xx]
 - priority: medium
 - assignee: -
 - schedule: 2026-10-22 ~ 2026-10-24
@@ -3626,7 +3626,7 @@ dotnet, testhost, Oranda.App
 - category: design
 - domain: frontend
 - model: sonnet
-- status: [im]
+- status: [xx]
 - priority: medium
 - assignee: -
 - schedule: 2026-10-22 ~ 2026-10-24
