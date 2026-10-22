@@ -6,6 +6,7 @@ using System.Threading.Tasks;
 using Avalonia.Controls;
 using Avalonia.Platform.Storage;
 using Oranda.App.Features.ConnectionManager;
+using Oranda.App.Features.Localization;
 using Oranda.App.Shell;
 using Oranda.App.Shell.Composition;
 using Oranda.Core.Connection;
@@ -94,6 +95,7 @@ public static class ConnectionImportCommands
         vm.Selected = Flatten(vm.Tree).FirstOrDefault(n => n.Profile?.Id == profile.Id);
         var window = new ConnectionManagerWindow { DataContext = vm };
         vm.ImportConnections = () => ConnectionImportHandler.RunAsync(container, window, CancellationToken.None);
+        vm.ExportConnections = () => ConnectionExportHandler.RunAsync(container, window, CancellationToken.None);
         var owner = container.GetService<ShellController>()?.MainWindow;
         if (owner is { IsVisible: true })
         {
@@ -155,11 +157,36 @@ public sealed class ConnectionImportHandler(ServiceContainer container) : IComma
             AllowMultiple = false,
             FileTypeFilter =
             [
+                new FilePickerFileType(UiText.Get("Connection.transfer.fileType", "Oranda 접속 파일")) { Patterns = ["*.json"] },
                 .. importers.Select(i => new FilePickerFileType(i.SourceName) { Patterns = [.. i.FileExtensions.Select(e => "*" + e)] }),
             ],
         }).ConfigureAwait(true);
         if (files.Count == 0 || files[0].TryGetLocalPath() is not { } path)
         {
+            return false;
+        }
+
+        // Oranda 내보내기 파일(TSK-13-13)은 SQL Developer 와 같은 .json 이라 본문의 형식 표시로 가른다: 고르기 창을 거친다.
+        var service = ConnectionManagerCommands.Resolve(container);
+        try
+        {
+            if (await OrandaFileSniffer.ReadIfExportAsync(path, cancellationToken).ConfigureAwait(true) is { } exported)
+            {
+                var picked = await ConnectionTransfer.ImportFileAsync(
+                    service, exported, model => ConnectionPickDialog.ShowAsync(owner, model), cancellationToken).ConfigureAwait(true);
+                if (picked is null)
+                {
+                    return false;
+                }
+
+                await ConnectionDialogs.MessageAsync(owner, picked.Message).ConfigureAwait(true);
+                return picked.Added > 0;
+            }
+        }
+        catch (Exception ex) when (IsImportFailure(ex))
+        {
+            await ConnectionDialogs.MessageAsync(owner, UiText.Get("Connection.transfer.readFailed", "Oranda 접속 파일을 가져오지 못했다: ") + ex.Message)
+                .ConfigureAwait(true);
             return false;
         }
 
@@ -176,12 +203,11 @@ public sealed class ConnectionImportHandler(ServiceContainer container) : IComma
         try
         {
             var items = await importer.ImportAsync(path, cancellationToken).ConfigureAwait(true);
-            var service = ConnectionManagerCommands.Resolve(container);
             var summary = await ConnectionImportCommands.SaveAsync(service, items, cancellationToken).ConfigureAwait(true);
             added = summary.Added;
             message = summary.Message;
         }
-        catch (Exception ex) when (ex is System.IO.IOException or InvalidOperationException or ArgumentException or UnauthorizedAccessException)
+        catch (Exception ex) when (IsImportFailure(ex))
         {
             message = $"{importer.SourceName} 파일을 가져오지 못했다: {ex.Message}";
         }
@@ -189,4 +215,9 @@ public sealed class ConnectionImportHandler(ServiceContainer container) : IComma
         await ConnectionDialogs.MessageAsync(owner, message).ConfigureAwait(true);
         return added > 0;
     }
+
+    /// <summary>알림으로 끝낼 가져오기 실패(파일·형식·검증). 그 밖의 예외는 그대로 올린다.</summary>
+    private static bool IsImportFailure(Exception ex) =>
+        ex is System.IO.IOException or System.IO.InvalidDataException or System.Text.Json.JsonException or InvalidOperationException
+            or ArgumentException or UnauthorizedAccessException or Oranda.Platform.Storage.ConnectionValidationException;
 }

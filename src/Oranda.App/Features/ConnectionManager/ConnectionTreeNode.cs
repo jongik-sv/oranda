@@ -61,14 +61,7 @@ public sealed partial class ConnectionTreeNode : ObservableObject
     };
 
     /// <summary>환경 칩 바탕색(<c>#RRGGBB</c>). 운영은 항상 빨강, 나머지는 사용자 색 또는 환경 기본색.</summary>
-    public string EnvironmentColor => Profile switch
-    {
-        null => "#00000000",
-        { Environment: ConnectionEnvironment.Production } => "#C42B1C",
-        { Color: { Length: > 0 } c } when LabelColorRules.TryParse(c, out _, out _, out _) => c,
-        { Environment: ConnectionEnvironment.Test } => "#B65A00",
-        _ => "#107C10",
-    };
+    public string EnvironmentColor => Profile is null ? "#00000000" : LabelColorRules.Effective(Profile.Environment, Profile.Color);
 
     public bool HasChip => Profile is not null;
 
@@ -77,7 +70,23 @@ public sealed partial class ConnectionTreeNode : ObservableObject
         ? Title
         : Profile.Environment == ConnectionEnvironment.Production ? $"{Title}, 운영 접속" : $"{Title}, {EnvironmentLabel}";
 
-    public string Subtitle => Profile is null ? $"({ProfileCount})" : $"{Profile.User}@{Profile.DataSource}";
+    /// <summary>흐린 보조 글: 폴더면 접속 수, 접속이면 user@접속 문자열(설명이 있으면 「 · 첫 줄」 을 붙인다).</summary>
+    public string Subtitle => Profile switch
+    {
+        null => $"({ProfileCount})",
+        { Comment: { } c } when FirstLine(c) is { Length: > 0 } line => $"{Profile.User}@{Profile.DataSource} · {line}",
+        _ => $"{Profile.User}@{Profile.DataSource}",
+    };
+
+    /// <summary>줄 풍선 도움말: 접속 설명 전체. 없거나 폴더면 null.</summary>
+    public string? Tip => string.IsNullOrWhiteSpace(Profile?.Comment) ? null : Profile.Comment;
+
+    private static string FirstLine(string text)
+    {
+        var trimmed = text.Trim();
+        var end = trimmed.AsSpan().IndexOfAny('\r', '\n');
+        return (end < 0 ? trimmed : trimmed[..end]).TrimEnd();
+    }
 
     /// <summary>마지막 접속 시각(짧게). 접속한 적이 없거나 폴더면 빈 글자.</summary>
     public string LastConnectedText => Profile?.LastConnectedAt is { } at ? FormatWhen(at, DateTimeOffset.Now) : string.Empty;

@@ -45,20 +45,28 @@
       </Grid.ColumnDefinitions>
       <DockPanel Grid.Column="0">
         <Border DockPanel.Dock="Top" Classes="panel-toolbar" Margin="0,0,0,4">
-          <!-- 단추가 늘어도 가로 스크롤 없이 목록 폭에서 줄을 바꾼다. -->
-          <WrapPanel Orientation="Horizontal">
-            <Button x:Name="AddButton" Classes="tool" Content="새 접속" Command="{Binding AddNewCommand}" icons:ButtonIcon.Key="add" />
-            <Button x:Name="NewFolderButton" Classes="tool" Content="새 폴더" Command="{Binding NewFolderCommand}" icons:ButtonIcon.Key="folderAdd"
+          <!-- 아이콘만 한 줄(Orange Sub Toolbar). 이름은 도움말·낭독기 이름으로 옮긴다. 줄을 바꾸지 않는다(최소 폭에서도 들어간다). -->
+          <StackPanel x:Name="ListToolbar" Orientation="Horizontal" Spacing="2">
+            <Button x:Name="AddButton" Classes="toolbar" Content="새 접속" Command="{Binding AddNewCommand}"
+                    icons:ButtonIcon.Key="add" icons:ButtonIcon.IconOnly="True" />
+            <Button x:Name="NewFolderButton" Classes="toolbar" Content="새 폴더" Command="{Binding NewFolderCommand}"
+                    icons:ButtonIcon.Key="folderAdd" icons:ButtonIcon.IconOnly="True"
                     ToolTip.Tip="폴더를 만듭니다(폴더를 고르면 그 안에). 접속을 폴더 위로 끌어 놓아 옮길 수 있습니다" />
-            <Button x:Name="DuplicateButton" Classes="tool" Content="복제" Command="{Binding DuplicateCommand}" icons:ButtonIcon.Key="copy"
+            <Button x:Name="DuplicateButton" Classes="toolbar" Content="복제" Command="{Binding DuplicateCommand}"
+                    icons:ButtonIcon.Key="copy" icons:ButtonIcon.IconOnly="True"
                     ToolTip.Tip="고른 접속을 복제합니다(비밀번호는 복사하지 않습니다)" />
-            <Button x:Name="DeleteButton" Classes="tool" Content="삭제" Command="{Binding DeleteCommand}" icons:ButtonIcon.Key="delete" />
-            <Button x:Name="ImportButton" Classes="tool" Content="가져오기" Command="{Binding ImportCommand}" icons:ButtonIcon.Key="import"
-                    ToolTip.Tip="SQL Developer·tnsnames.ora·Orange 접속 목록에서 가져옵니다" />
-          </WrapPanel>
+            <Button x:Name="DeleteButton" Classes="toolbar" Content="삭제" Command="{Binding DeleteCommand}"
+                    icons:ButtonIcon.Key="delete" icons:ButtonIcon.IconOnly="True" />
+            <Button x:Name="ImportButton" Classes="toolbar" Content="가져오기" Command="{Binding ImportCommand}"
+                    icons:ButtonIcon.Key="import" icons:ButtonIcon.IconOnly="True"
+                    ToolTip.Tip="SQL Developer·tnsnames.ora·Orange 접속 목록·Oranda 접속 파일에서 가져옵니다" />
+            <Button x:Name="ExportButton" Classes="toolbar" Content="내보내기" Command="{Binding ExportCommand}"
+                    icons:ButtonIcon.Key="export" icons:ButtonIcon.IconOnly="True"
+                    ToolTip.Tip="고른 접속을 Oranda 접속 파일로 내보냅니다(비밀번호는 넣지 않습니다)" />
+          </StackPanel>
         </Border>
         <Grid DockPanel.Dock="Top" ColumnDefinitions="*,Auto" ColumnSpacing="6" Margin="0,0,0,4">
-          <TextBox x:Name="SearchBox" Grid.Column="0" Text="{Binding SearchText}" PlaceholderText="찾기(이름·사용자·호스트·서비스·그룹)"
+          <TextBox x:Name="SearchBox" Grid.Column="0" Text="{Binding SearchText}" PlaceholderText="찾기(이름·사용자·호스트·서비스·그룹·설명)"
                    AutomationProperties.Name="접속 찾기" />
           <ComboBox x:Name="SortBox" Grid.Column="1" MinWidth="110" ItemsSource="{Binding SortOrders}" SelectedValueBinding="{ReflectionBinding Value}"
                     SelectedValue="{Binding SortOrder}" AutomationProperties.Name="정렬" />
@@ -99,7 +107,7 @@
             <TreeDataTemplate DataType="cm:ConnectionTreeNode" ItemsSource="{Binding Children}">
               <!-- 칩 · 이름 · 변경 표시 · user@접속(남는 폭, 말줄임) · 마지막 접속 시각(오른쪽). -->
               <Grid ColumnDefinitions="Auto,Auto,Auto,*,Auto" ColumnSpacing="8" AutomationProperties.Name="{Binding AccessibleName}"
-                    Classes.drop="{Binding IsDropTarget}">
+                    Classes.drop="{Binding IsDropTarget}" ToolTip.Tip="{Binding Tip}">
                 <Border Grid.Column="0" IsVisible="{Binding HasChip}" Background="{Binding EnvironmentColor}" CornerRadius="3" Padding="6,1" VerticalAlignment="Center">
                   <TextBlock Text="{Binding EnvironmentLabel}" Foreground="White" FontSize="12" />
                 </Border>

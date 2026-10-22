@@ -33,8 +33,46 @@ public class ConnectionManagerLayoutTests
         dialog.UpdateLayout();
         Dispatcher.UIThread.RunJobs();
         dialog.UpdateLayout();
-        Assert.Equal("New connection", ToolbarText(dialog.FindControl<Button>("AddButton")!));
+        // 목록 툴바는 아이콘만 그리고 이름은 도움말·낭독기 이름으로 옮긴다(영어로 바뀐다).
+        var add = dialog.FindControl<Button>("AddButton")!;
+        Assert.Equal("New connection", Avalonia.Automation.AutomationProperties.GetName(add));
+        Assert.Equal("New connection", ToolTip.GetTip(add));
         Assert.Empty(TextClipping.Find(dialog));
+        dialog.Close();
+    });
+
+    [Fact]
+    public Task List_toolbar_buttons_stay_on_one_row_at_default_and_minimum_width() => HeadlessHost.Run(async () =>
+    {
+        // 사용자 지적(2026-10-22): 새 접속·새 폴더·복제… 단추가 두 줄로 내려간다.
+        using var fx = new ServiceFixture();
+        var vm = new ConnectionManagerViewModel(fx.Service);
+        await vm.LoadAsync();
+        var dialog = new ConnectionManagerWindow { DataContext = vm };
+        dialog.Show();
+        Dispatcher.UIThread.RunJobs();
+
+        foreach (var width in new[] { dialog.Width, dialog.MinWidth })
+        {
+            dialog.Width = width;
+            dialog.UpdateLayout();
+            Dispatcher.UIThread.RunJobs();
+            dialog.UpdateLayout();
+
+            var toolbar = dialog.FindControl<Panel>("ListToolbar")!;
+            var buttons = toolbar.Children.OfType<Button>().Where(b => b.IsVisible).ToList();
+            Assert.True(buttons.Count >= 5, $"단추 {buttons.Count}개");
+            var tops = buttons.Select(b => Math.Round(b.TranslatePoint(new Point(0, 0), dialog)!.Value.Y)).Distinct().ToList();
+            Assert.True(tops.Count == 1, $"폭 {width}: 단추 줄 {tops.Count}개");
+
+            var tree = dialog.FindControl<TreeView>("ConnectionTree")!;
+            var listRight = tree.TranslatePoint(new Point(tree.Bounds.Width, 0), dialog)!.Value.X;
+            var last = buttons[^1];
+            var lastRight = last.TranslatePoint(new Point(last.Bounds.Width, 0), dialog)!.Value.X;
+            Assert.True(lastRight <= listRight + 0.5, $"폭 {width}: 마지막 단추 오른쪽 {lastRight} > 목록 오른쪽 {listRight}");
+            Assert.All(buttons, b => Assert.False(string.IsNullOrEmpty(Avalonia.Automation.AutomationProperties.GetName(b))));
+        }
+
         dialog.Close();
     });
 
@@ -59,7 +97,7 @@ public class ConnectionManagerLayoutTests
         dialog.UpdateLayout();
 
         Assert.Equal("Test", ToolbarText(dialog.FindControl<Button>("TestButton")!));
-        Assert.Equal("Duplicate", ToolbarText(dialog.FindControl<Button>("DuplicateButton")!));
+        Assert.Equal("Duplicate", Avalonia.Automation.AutomationProperties.GetName(dialog.FindControl<Button>("DuplicateButton")!));
         Assert.Contains(dialog.FindControl<ProfileEditorView>("EditorView")!.GetVisualDescendants().OfType<TextBlock>(), t => t.Text == "General");
         // 입력 칸 안내 글(PART_Placeholder)은 TextBox 가 칸 경계에서 잘라 그리므로 뺀다.
         // 헤드리스 글꼴은 글자마다 13px 고정폭이라 긴 영어 안내 글이 칸 밖까지 계산된다.

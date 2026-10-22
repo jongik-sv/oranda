@@ -19,7 +19,8 @@
         "timestampFormat": "YYYY-MM-DD HH24:MI:SS.FF3"
       },
       "credentialRef": "oranda:conn:b1f6c2d4-7a3e-4c1b-9f2a-1d0e5c8b7a61",
-      "lastConnectedAt": "2026-10-19T08:00:00Z"
+      "lastConnectedAt": "2026-10-19T08:00:00Z",
+      "comment": "주문 조회 전용 계정.\n배치 시간(02~04시)에는 쓰지 않는다"
     },
     {
       "id": "4e0a9b13-2c55-4d7e-8a19-63f0b2c4d5e7",

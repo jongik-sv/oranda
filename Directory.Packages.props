@@ -9,6 +9,8 @@
     <PackageVersion Include="Avalonia.Desktop" Version="12.1.4" />
     <PackageVersion Include="Avalonia.Themes.Fluent" Version="12.1.4" />
     <PackageVersion Include="Avalonia.Fonts.Inter" Version="12.1.4" />
+    <!-- 접속 라벨 색 고르기(TSK-13-11). Avalonia 와 같은 버전이어야 한다. MIT. -->
+    <PackageVersion Include="Avalonia.Controls.ColorPicker" Version="12.1.4" />
     <PackageVersion Include="AvaloniaUI.DiagnosticsSupport" Version="2.2.3" />
     <PackageVersion Include="CommunityToolkit.Mvvm" Version="8.4.2" />
     <!-- TSK-04-02: 지정 11.4.1 은 Avalonia 12 에서 TypeLoadException(spikes/TSK-01-05/RESULT.md 1절). 12.0.0 사용. -->

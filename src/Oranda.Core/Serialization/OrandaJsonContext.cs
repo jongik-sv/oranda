@@ -18,6 +18,7 @@ namespace Oranda.Core.Serialization;
     Converters = [typeof(UtcDateTimeOffsetConverter)])]
 [JsonSerializable(typeof(AppSettings))]
 [JsonSerializable(typeof(ConnectionsDocument))]
+[JsonSerializable(typeof(ConnectionExportDocument))]
 [JsonSerializable(typeof(FormatterProfile))]
 [JsonSerializable(typeof(Workspace))]
 public sealed partial class OrandaJsonContext : JsonSerializerContext

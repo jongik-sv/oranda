@@ -66,6 +66,8 @@ public sealed partial class ConnectionManagerViewModel : ViewModelBase
 
     private Func<Task<bool>>? _importConnections;
 
+    private Func<Task<bool>>? _exportConnections;
+
     /// <summary>사용자가 접은 그룹(창이 열려 있는 동안만 기억한다).</summary>
     private readonly HashSet<string> _collapsed = new(StringComparer.CurrentCultureIgnoreCase);
 
@@ -118,6 +120,17 @@ public sealed partial class ConnectionManagerViewModel : ViewModelBase
         {
             _importConnections = value;
             ImportCommand.NotifyCanExecuteChanged();
+        }
+    }
+
+    /// <summary>접속 내보내기(「파일 &gt; 접속 내보내기」 와 같은 흐름: 체크 목록 → 저장 대화상자 → 알림, TSK-13-13). 창을 띄운 쪽이 채운다.</summary>
+    public Func<Task<bool>>? ExportConnections
+    {
+        get => _exportConnections;
+        set
+        {
+            _exportConnections = value;
+            ExportCommand.NotifyCanExecuteChanged();
         }
     }
 
@@ -269,6 +282,18 @@ public sealed partial class ConnectionManagerViewModel : ViewModelBase
     }
 
     private bool CanImport() => ImportConnections is not null;
+
+    /// <summary>접속 내보내기 흐름을 돌린다(저장된 접속을 내보내므로 편집 중인 값은 넣지 않는다).</summary>
+    [RelayCommand(CanExecute = nameof(CanExport))]
+    private async Task ExportAsync()
+    {
+        if (ExportConnections is not null)
+        {
+            await ExportConnections().ConfigureAwait(true);
+        }
+    }
+
+    private bool CanExport() => ExportConnections is not null;
 
     /// <summary>고른 접속의 저장된 연결 문자열을 클립보드에 넣는다(비밀번호 없음).</summary>
     [RelayCommand(CanExecute = nameof(HasSelection))]
@@ -660,7 +685,7 @@ public sealed partial class ConnectionManagerViewModel : ViewModelBase
 
     partial void OnSortOrderChanged(ConnectionSortOrder value) => ApplyView(null, reloadEditor: false);
 
-    /// <summary>찾기 글자가 프로필에 맞는지. 접속 문자열에 호스트·포트·서비스·TNS 별칭이 다 들어 있다.</summary>
+    /// <summary>찾기 글자가 프로필에 맞는지. 접속 문자열에 호스트·포트·서비스·TNS 별칭이 다 들어 있다. 설명도 찾는다.</summary>
     public static bool Matches(ConnectionProfile profile, string? search)
     {
         ArgumentNullException.ThrowIfNull(profile);
@@ -670,7 +695,8 @@ public sealed partial class ConnectionManagerViewModel : ViewModelBase
         }
 
         var text = search.Trim();
-        return Contains(profile.Name) || Contains(profile.User) || Contains(profile.DataSource) || Contains(profile.Group) || Contains(profile.ProxyUser);
+        return Contains(profile.Name) || Contains(profile.User) || Contains(profile.DataSource) || Contains(profile.Group) || Contains(profile.ProxyUser)
+            || Contains(profile.Comment);
 
         bool Contains(string? field) => field is not null && field.Contains(text, StringComparison.CurrentCultureIgnoreCase);
     }

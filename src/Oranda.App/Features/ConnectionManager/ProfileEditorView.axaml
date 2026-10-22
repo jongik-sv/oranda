@@ -1,6 +1,7 @@
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:cm="using:Oranda.App.Features.ConnectionManager"
+             xmlns:cp="using:Avalonia.Controls.Primitives"
              x:Class="Oranda.App.Features.ConnectionManager.ProfileEditorView"
              x:DataType="cm:ProfileEditorViewModel">
   <UserControl.Styles>
@@ -30,13 +31,33 @@
     <Style Selector="TextBox.missing /template/ Border#PART_BorderElement">
       <Setter Property="BorderBrush" Value="{DynamicResource OrandaIconRedBrush}" />
     </Style>
+    <Style Selector="ComboBox.missing /template/ Border#Background">
+      <Setter Property="BorderBrush" Value="{DynamicResource OrandaIconRedBrush}" />
+    </Style>
+    <!-- 라벨 색 견본 단추: 작은 색 칸(앱 공통 단추 크기·여백을 쓰지 않는다). -->
+    <Style Selector="Button.swatch">
+      <Setter Property="Width" Value="20" />
+      <Setter Property="Height" Value="20" />
+      <Setter Property="MinWidth" Value="0" />
+      <Setter Property="MinHeight" Value="0" />
+      <Setter Property="Padding" Value="0" />
+      <Setter Property="CornerRadius" Value="3" />
+      <Setter Property="BorderThickness" Value="1" />
+      <Setter Property="BorderBrush" Value="{DynamicResource OrandaSeparatorBrush}" />
+    </Style>
+    <Style Selector="Button.swatch:pointerover /template/ ContentPresenter#PART_ContentPresenter, Button.swatch:pressed /template/ ContentPresenter#PART_ContentPresenter">
+      <Setter Property="Background" Value="{Binding $parent[Button].Background}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource OrandaIconBlueBrush}" />
+    </Style>
+    <!-- 색 고르기(스펙트럼·밝기 막대) 테마는 이 화면에서만 읽는다(앱 시작 경로에 넣지 않는다). -->
+    <StyleInclude Source="avares://Avalonia.Controls.ColorPicker/Themes/Fluent/Fluent.xaml" />
   </UserControl.Styles>
   <!-- 900×640 창에서 고급 설정을 접은 채로 스크롤 없이 보이도록 구역(일반·접속·인증·고급)으로 나누고, 짧은 칸은 한 줄에 둘씩 놓는다. -->
   <StackPanel Spacing="6" Grid.IsSharedSizeScope="True">
     <Border Classes="section">
       <TextBlock Text="일반" />
     </Border>
-    <Grid RowDefinitions="Auto,Auto,Auto" ColumnSpacing="12" RowSpacing="6">
+    <Grid RowDefinitions="Auto,Auto,Auto,Auto" ColumnSpacing="12" RowSpacing="6">
       <Grid.ColumnDefinitions>
         <ColumnDefinition Width="Auto" SharedSizeGroup="Label" />
         <ColumnDefinition Width="*" />
@@ -53,9 +74,49 @@
                   ItemsSource="{Binding Environments}" SelectedValueBinding="{ReflectionBinding Value}"
                   SelectedValue="{Binding Environment}" AutomationProperties.Name="환경" />
         <TextBlock Grid.Column="1" Classes="inline" Text="라벨 색" />
-        <TextBox x:Name="ColorBox" Grid.Column="2" Text="{Binding ColorText}" PlaceholderText="#RRGGBB" ToolTip.Tip="#RRGGBB (운영은 항상 빨강)"
-                 IsEnabled="{Binding CanPickColor}" AutomationProperties.Name="라벨 색" />
+        <!-- 견본 + 값 단추. 펼침 창: 빨강이 아닌 견본, 기본 색, 사용자 지정 색(스펙트럼 + 밝기), #RRGGBB 입력. 빨강 판정은 저장 때(TryBuild)와 같다. -->
+        <DropDownButton x:Name="ColorButton" Grid.Column="2" HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch"
+                        MinHeight="28" Padding="6,2" IsEnabled="{Binding CanPickColor}"
+                        ToolTip.Tip="#RRGGBB (운영은 항상 빨강)" AutomationProperties.Name="라벨 색">
+          <DockPanel>
+            <Border x:Name="ColorSwatch" DockPanel.Dock="Left" Width="16" Height="16" Margin="0,0,6,0" CornerRadius="3" BorderThickness="1"
+                    BorderBrush="{DynamicResource OrandaSeparatorBrush}" Background="{Binding EffectiveColor}" VerticalAlignment="Center" />
+            <TextBlock x:Name="ColorLabelText" Text="{Binding ColorLabel}" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
+          </DockPanel>
+          <DropDownButton.Flyout>
+            <Flyout Placement="BottomEdgeAlignedLeft">
+              <StackPanel Width="226" Spacing="8">
+                <ItemsControl x:Name="ColorPresetList" ItemsSource="{Binding ColorPresets}">
+                  <ItemsControl.ItemsPanel>
+                    <ItemsPanelTemplate>
+                      <WrapPanel ItemSpacing="4" LineSpacing="4" />
+                    </ItemsPanelTemplate>
+                  </ItemsControl.ItemsPanel>
+                  <ItemsControl.ItemTemplate>
+                    <DataTemplate x:DataType="cm:LabelColorPreset">
+                      <Button Classes="swatch" Background="{Binding Hex}" ToolTip.Tip="{Binding Tip}" AutomationProperties.Name="{Binding Tip}" />
+                    </DataTemplate>
+                  </ItemsControl.ItemTemplate>
+                </ItemsControl>
+                <Button x:Name="ColorDefaultButton" Classes="tool" Content="기본 색" HorizontalAlignment="Left"
+                        ToolTip.Tip="환경 기본색으로 되돌립니다" AutomationProperties.Name="기본 색" />
+                <cp:ColorSpectrum x:Name="ColorSpectrum" Height="110" Components="HueSaturation" Shape="Box"
+                                  AutomationProperties.Name="사용자 지정 색" />
+                <cp:ColorSlider x:Name="ColorValueSlider" Orientation="Horizontal" ColorModel="Hsva" IsAlphaVisible="False"
+                                ColorComponent="{Binding #ColorSpectrum.ThirdComponent}" HsvColor="{Binding #ColorSpectrum.HsvColor}"
+                                AutomationProperties.Name="밝기" />
+                <TextBox x:Name="ColorBox" Text="{Binding ColorText}" PlaceholderText="#RRGGBB" AutomationProperties.Name="색 코드" />
+                <TextBlock x:Name="ColorWarningText" Classes="error" Text="{Binding ColorWarning}" TextWrapping="Wrap"
+                           IsVisible="{Binding ColorWarning, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+              </StackPanel>
+            </Flyout>
+          </DropDownButton.Flyout>
+        </DropDownButton>
       </Grid>
+      <!-- 접속 설명(여러 줄, 2줄 높이에서 3줄까지 늘고 그 뒤는 스크롤). 접속 목록 줄 도움말·찾기에 쓰인다. -->
+      <TextBlock Grid.Row="3" Text="설명" VerticalAlignment="Top" Margin="0,5,0,0" />
+      <TextBox x:Name="CommentBox" Grid.Row="3" Grid.Column="1" Text="{Binding Comment}" AcceptsReturn="True" TextWrapping="Wrap"
+               MinHeight="44" MaxHeight="64" PlaceholderText="이 접속에 대한 메모(선택, 여러 줄)" AutomationProperties.Name="설명" />
     </Grid>
 
     <Border Classes="section">
@@ -119,10 +180,10 @@
         <ColumnDefinition Width="*" />
       </Grid.ColumnDefinitions>
       <TextBlock Text="TNS 별칭" Classes.error="{Binding TnsAliasMissing}" />
-      <!-- TNS 디렉터리의 tnsnames.ora 별칭을 제안한다(직접 입력해도 된다). 아래 줄은 고른 별칭의 host:port/service. -->
-      <AutoCompleteBox x:Name="TnsAliasBox" Grid.Column="1" Text="{Binding TnsAlias}" ItemsSource="{Binding TnsAliases}"
-                       MinimumPrefixLength="0" FilterMode="Contains" Classes.missing="{Binding TnsAliasMissing}"
-                       PlaceholderText="TNS 디렉터리를 넣으면 tnsnames.ora 의 별칭이 나옵니다" AutomationProperties.Name="TNS 별칭" />
+      <!-- 입력되는 콤보: ▾ 로 TNS 디렉터리 tnsnames.ora 의 별칭 전체를 펼쳐 고르고, 목록에 없는 별칭도 직접 친다. 아래 줄은 고른 별칭의 host:port/service. -->
+      <ComboBox x:Name="TnsAliasBox" Grid.Column="1" IsEditable="True" HorizontalAlignment="Stretch" MaxDropDownHeight="320"
+                Text="{Binding TnsAlias, Mode=TwoWay}" ItemsSource="{Binding TnsAliases}" Classes.missing="{Binding TnsAliasMissing}"
+                PlaceholderText="TNS 디렉터리를 넣으면 tnsnames.ora 의 별칭이 나옵니다" AutomationProperties.Name="TNS 별칭" />
       <TextBlock x:Name="TnsAliasDetail" Grid.Row="1" Grid.Column="1" Text="{Binding TnsAliasDetail}" Opacity="0.7"
                  FontSize="{DynamicResource OrandaFontSizeSmall}" IsVisible="{Binding TnsAliasDetail, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
     </Grid>

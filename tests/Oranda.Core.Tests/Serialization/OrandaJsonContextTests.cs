@@ -82,6 +82,8 @@ public class OrandaJsonContextTests
         Assert.Equal(LicensePack.DiagnosticsAndTuning, value.Profiles[1].LicensePack);
         Assert.Equal(AuthMode.SysDba, value.Profiles[2].Auth);
         Assert.Equal(new DateTimeOffset(2026, 10, 19, 8, 0, 0, TimeSpan.Zero), value.Profiles[0].LastConnectedAt);
+        Assert.Equal("주문 조회 전용 계정.\n배치 시간(02~04시)에는 쓰지 않는다", value.Profiles[0].Comment);
+        Assert.Null(value.Profiles[1].Comment); // 키가 없으면 null
     }
 
     [Fact]

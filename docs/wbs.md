@@ -3462,6 +3462,131 @@ dotnet, testhost, Oranda.App
 - data-model: docs/design/data-model.md `schemaBrowser.filters`·`schemaBrowser.activeFilters`
 - ui-spec: -
 
+### TSK-13-11: 접속 관리자 라벨 색 고르기·TNS 별칭 입력 콤보 [mac]
+- category: dev
+- domain: frontend
+- model: sonnet
+- status: [xx]
+- priority: medium
+- assignee: -
+- schedule: 2026-10-22 ~ 2026-10-22
+- tags: connection, color, tns, ui, mac
+- depends: TSK-03-04
+- blocked-by: -
+- entry-point: 접속 관리자 > 프로필 편집기 > 라벨 색 · TNS 별칭
+- note: 담당 PC: mac(맥북) — win144 세션은 이 Task 를 하지 않는다. 2026-10-22 사용자 요청: 「접속 관리자에서 라벨 색은 실제 색을 고를 수 있게 해 줘」, 「TNS 별칭은 콤보 박스로 — 그냥 콤보보다 입력되는 콤보가 낫다」. 지금 라벨 색은 #RRGGBB 글자 칸이고, TNS 별칭은 입력 제안 칸(AutoCompleteBox)이라 ▾ 단추로 전체 별칭을 펼쳐 볼 수 없다. / 2026-10-22 완료(mac): 라벨 색은 DropDownButton(견본 + 값) 펼침 창 — 견본 10개·기본 색·ColorSpectrum + 밝기 막대(ColorView 는 350×338 로 커서 쓰지 않음)·#RRGGBB 칸·빨강 경고 글. 색 고르기 테마는 ProfileEditorView 에서만 StyleInclude. TNS 별칭은 ComboBox IsEditable(Text 양방향). Avalonia.Controls.ColorPicker 12.1.4(MIT) 추가. 같은 날 사용자 지적 「새 접속·새 폴더·복제 아이콘이 계속 2줄로 나와 불편」 → 목록 툴바를 아이콘 한 줄로
+
+#### PRD 요구사항
+- prd-ref: PRD CONN-06 (환경 라벨·색), CONN-01 (TNS 별칭)
+- requirements:
+  - 라벨 색 칸을 작은 단추(색 견본 + #RRGGBB)로 바꾼다. 누르면 펼침 창에 빨강이 아닌 기본 색 견본 여러 개(파랑·초록·청록·보라·주황·회색 등)와 「기본 색」(환경 기본색으로 되돌림), 사용자 지정 색 고르기(Avalonia.Controls.ColorPicker 의 색 스펙트럼 + 밝기 막대), #RRGGBB 입력 칸을 둔다
+  - 운영 환경이면 단추를 끈다(운영은 항상 빨강)
+  - TNS 별칭 칸을 입력되는 콤보(ComboBox IsEditable)로 바꾼다. ▾ 단추로 tnsnames.ora 의 별칭 전체를 펼쳐 고르고, 목록에 없는 별칭도 직접 입력한다
+  - 별칭 칸의 빈 필수 칸 표시(빨간 테두리)와 아래 host:port/service 줄은 그대로 둔다
+  - (2026-10-22 추가 요청) 접속 목록 툴바(새 접속·새 폴더·복제·삭제·가져오기)를 한 줄로: 아이콘만 그리는 toolbar 단추(이름은 도움말·낭독기 이름), 간격 2, 줄 바꿈 없음
+- acceptance:
+  - 견본을 누르면 라벨 색이 그 색이 되고, 단추의 견본·글자가 바뀐다
+  - 운영이 아닌 접속에서 빨강 계열을 고르면 입력할 때처럼 저장이 거부된다(빨강은 운영만)
+  - 별칭 콤보를 펼치면 입력한 글자와 상관없이 별칭이 모두 보이고, 고르면 별칭·이름·접속 요약이 채워진다
+  - 저장된 접속을 열기만 해서는 변경으로 치지 않는다(라벨 색·별칭 칸이 값을 되쓰지 않는다)
+  - 접속 관리자 기본 폭(960)과 최소 폭(640)에서 목록 툴바 단추가 모두 같은 줄에 있고 목록 폭 안에 든다
+- constraints:
+  - 빨강 계열 판정은 기존 LabelColorRules 를 그대로 쓴다. 색 고르기 테마는 편집기 화면에서만 읽는다(앱 시작 경로에 넣지 않는다)
+  - XAML 한국어 글자는 literals-en.json 영어 짝을 둔다
+- test-criteria:
+  - Headless: 견본 고르기로 ColorText 설정, ColorView 로 빨강을 고르면 저장 거부, 운영이면 단추 꺼짐, 기본 견본에 빨강 계열 없음
+  - Headless: 별칭 콤보가 TnsAliases 를 보이고, 펼치면 전체 별칭, 글자 입력으로 TnsAlias 설정, 항목 고르기로 TnsAlias 설정
+  - 저장된 프로필을 화면에 띄워도 IsDirty 가 false 이고 색·별칭이 그대로
+  - Headless: 기본·최소 폭에서 목록 툴바 단추의 Y 가 같다(ConnectionManagerLayoutTests)
+
+#### 기술 스펙 (TRD)
+- tech-spec: Avalonia.Controls.ColorPicker 12.1.4(ColorSpectrum·ColorSlider), ComboBox IsEditable
+- api-spec: -
+- data-model: -
+- ui-spec: -
+
+### TSK-13-12: 접속 관리자 접속별 설명(comment) [mac]
+- category: dev
+- domain: fullstack
+- model: sonnet
+- status: [xx]
+- priority: medium
+- assignee: -
+- schedule: 2026-10-22 ~ 2026-10-22
+- tags: connection, comment, mac
+- depends: TSK-03-04
+- blocked-by: -
+- entry-point: 접속 관리자 > 프로필 편집기 > 설명 · 접속 목록 줄 도움말
+- note: 담당 PC: mac(맥북) — win144 세션은 이 Task 를 하지 않는다. 2026-10-22 사용자 요청: 「접속 관리자에 각 접속에 대한 comment 도 넣을 수 있게 해 줘」. 지금 ConnectionProfile 에는 설명 칸이 없다. / 2026-10-22 완료(mac): ConnectionProfile.Comment(끝 매개변수), 편집기 「일반」 의 설명 칸(2~3줄), 목록 줄 도움말(ConnectionTreeNode.Tip)·보조 글 「user@접속 · 첫 줄」, 찾기(Matches), 복제는 record with 로 그대로. 예제 connections.json·data-model 2.2 갱신
+
+#### PRD 요구사항
+- prd-ref: PRD CONN-01 (프로필), CONN-17 (접속 목록)
+- requirements:
+  - ConnectionProfile 에 선택 칸 `Comment`(string?, null = 없음)를 끝에 덧붙이고(D-004) connections.json `comment` 로 저장한다. 키가 없는 옛 파일은 null 로 읽는다
+  - 프로필 편집기 「일반」 구역에 여러 줄(2~3줄) 「설명」 칸을 둔다
+  - 접속 목록 줄의 풍선 도움말에 설명을 보이고, 흐린 보조 글(user@접속 뒤)에 설명 첫 줄을 붙인다
+  - 접속 목록 찾기 칸이 설명 글도 찾는다
+  - 복제는 설명을 그대로 옮긴다
+- acceptance:
+  - 설명을 넣고 저장하면 connections.json 에 남고, 다시 열면 칸에 보인다. 비우면 키가 사라진다
+  - 목록 줄에 마우스를 올리면 설명이 보이고, 찾기에 설명 낱말을 치면 그 접속이 남는다
+  - 900×640(영어) 접속 관리자에서 고급 설정을 접은 폼이 스크롤 없이 보인다
+- constraints:
+  - 비밀번호를 설명에 넣지 말라는 안내는 하지 않는다(검증 대상 아님). 설명은 줄바꿈을 그대로 둔다(앞뒤 공백만 뺀다)
+  - XAML 한국어 글자는 literals-en.json 영어 짝을 둔다
+- test-criteria:
+  - Core: 예제 connections.json 왕복(comment 포함), 키 없는 프로필은 null
+  - App: 편집기 왕복·변경 여부, 빈 설명은 null, 목록 도움말·보조 글, 찾기, 복제
+  - Headless: 설명 칸 여러 줄 입력, 접속 관리자 배치(영어) 시험 통과
+
+#### 기술 스펙 (TRD)
+- tech-spec: -
+- api-spec: -
+- data-model: docs/design/data-model.md 2.2 `profiles[].comment`
+- ui-spec: -
+
+### TSK-13-13: 접속 정보 내보내기·가져오기 [mac]
+- category: dev
+- domain: fullstack
+- model: sonnet
+- status: [xx]
+- priority: medium
+- assignee: -
+- schedule: 2026-10-22 ~ 2026-10-23
+- tags: connection, export, import, mac
+- depends: TSK-03-05, TSK-13-12
+- blocked-by: -
+- entry-point: 메뉴 > 파일 > 접속 내보내기 · 접속 관리자 툴바 「내보내기」 · 파일 > 접속 가져오기(Oranda 접속 파일)
+- note: 담당 PC: mac(맥북) — win144 세션은 이 Task 를 하지 않는다. 2026-10-22 사용자 요청: 「접속정보 내보내기, 가져오기를 만들어 줘. 접속정보 내보내기 하면 접속정보 리스트가 나오고 내보내고 싶은 것들을 선택해서 내보낼 수 있도록」. 지금은 Orange·SQL Developer·tnsnames.ora 가져오기(TSK-03-05)만 있고 Oranda 접속을 내보내는 길이 없다. / 2026-10-22 완료(mac): Core ConnectionExport(쓰기·읽기·형식 판정·같은 접속), App ConnectionPickDialog(내보내기·가져오기 공용 체크 목록, 저장할 수 없는 값은 문제 글과 함께 못 고름), ConnectionTransfer, oranda.conn.export(파일 메뉴 @460)·접속 관리자 「내보내기」 아이콘. 가져오기는 .json 본문의 format 으로 SQL Developer 와 가른다. 가져오기 실패 알림에 InvalidDataException·JsonException·ConnectionValidationException 도 넣었다
+
+#### PRD 요구사항
+- prd-ref: PRD CONN-09 (접속 가져오기·내보내기)
+- requirements:
+  - 새 명령 `oranda.conn.export`(파일 메뉴, 접속 가져오기 다음)와 접속 관리자 툴바 「내보내기」 아이콘 단추
+  - 내보내기 창: 모든 접속을 체크 목록(폴더·이름·user@접속)으로 보이고 모두 선택·모두 해제, 고른 것만 저장 대화상자에서 고른 파일(기본 이름 oranda-connections.json)로 쓴다
+  - 파일은 Oranda 형식 표시(format·schemaVersion)가 있는 JSON 이고 폴더(group)·환경·라벨 색·설명(comment)·NLS 등 프로필 값을 담는다
+  - 비밀번호·자격 증명 참조(credentialRef)·마지막 접속 시각은 내보내지 않는다(창에 안내 글)
+  - 가져오기: 기존 「접속 가져오기」 의 파일 종류에 「Oranda 접속 파일」 을 더한다. 내용의 형식 표시로 SQL Developer JSON 과 구분한다
+  - Oranda 파일을 고르면 같은 체크 목록 창을 보이고, 이미 있는 접속(이름·사용자·접속 문자열이 같음)은 「이미 있음」 으로 표시해 기본으로 끈다. 가져온 접속은 새 Id 를 받고 비밀번호는 처음 접속할 때 묻는다
+- acceptance:
+  - 접속 셋 중 둘을 골라 내보내고 다른 데이터 폴더에서 가져오면 그 둘이 폴더·환경·색·설명과 함께 생긴다
+  - 내보낸 파일에 비밀번호·credentialRef 가 없다
+  - 이미 있는 접속을 굳이 골라 가져오면 「이름 (2)」 로 덧붙는다
+  - 형식이 틀린 파일·더 새 schemaVersion 은 알림만 보이고 아무것도 바꾸지 않는다
+- constraints:
+  - 다른 원본(Orange·SQL Developer·tnsnames)의 가져오기 흐름은 그대로 둔다
+  - 단축키는 넣지 않는다. 명령 제목은 CommandTitles(한/영)·commands.md 에 둔다
+- test-criteria:
+  - Core: 쓰기→읽기 왕복, 비밀 없음, 형식·버전 거부, 같은 접속 판정
+  - App: 내보내기는 고른 것만, 가져오기 왕복(새 Id·값 유지·이름 (2)), 이미 있음 표시·기본 끔, 모두 선택·해제
+  - Headless: 내보내기 창 체크 목록에서 둘을 골라 확인하면 그 둘만 돌려준다, 툴바 한 줄 시험 유지
+
+#### 기술 스펙 (TRD)
+- tech-spec: OrandaJsonContext(ConnectionExportDocument), StorageProvider 저장·열기 대화상자
+- api-spec: -
+- data-model: docs/design/data-model.md 2.2 내보내기 파일
+- ui-spec: -
+
 ### TSK-13-14: 실행 계획 창 디자인 다듬기 [mac]
 - category: design
 - domain: frontend
@@ -3668,6 +3793,10 @@ graph LR
   TSK-08-01 --> TSK-13-07
   TSK-07-02 --> TSK-13-08
   TSK-07-02 --> TSK-13-10
+  TSK-03-04 --> TSK-13-11
+  TSK-03-04 --> TSK-13-12
+  TSK-03-05 --> TSK-13-13
+  TSK-13-12 --> TSK-13-13
   TSK-07-01 --> TSK-13-14
   TSK-13-14 --> TSK-13-15
   style TSK-01-02 fill:#fff3e0,stroke:#e65100

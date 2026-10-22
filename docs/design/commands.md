@@ -310,6 +310,7 @@
 | `oranda.conn.reconnect` | 다시 접속 | - | 전역 | `sessionBroken` | TSK-03-04 |
 | `oranda.conn.changePassword` | 비밀번호 변경 | - | 전역 | `hasSession` | TSK-03-04 |
 | `oranda.conn.import` | 접속 가져오기 | - | 전역 | 항상 | TSK-03-05 |
+| `oranda.conn.export` | 접속 내보내기 | - | 전역 | 항상 | TSK-13-13 |
 
 ### 편집
 
