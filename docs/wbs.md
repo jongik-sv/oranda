@@ -4254,6 +4254,38 @@ dotnet, testhost, Oranda.App
 - data-model: -
 - ui-spec: -
 
+### TSK-13-35: DB 정보 창·스키마 브라우저 속성 창의 표를 C안 격자로 [win144]
+- category: feat
+- domain: frontend
+- model: sonnet
+- status: [xx]
+- priority: medium
+- assignee: -
+- schedule: 2026-10-22 ~ 2026-10-23
+- tags: grid-c, detail-table, win144
+- depends: TSK-13-32
+- blocked-by: -
+- entry-point: DB 정보 창(도구 창)·스키마 브라우저 속성 창의 구역/탭 표
+- note: 담당 PC: win144. 2026-10-22 사용자 요청(「DB 정보 창과 스키마 브라우저 속성 창도 바꿔」). 공유 표 컨트롤 DetailTable 을 테이블 레이아웃 창과 같은 C안 격자(Styles/GridC)로 다시 만들어 두 화면이 함께 바뀐다. 크기 S. 결과: DetailTable 을 GridC 격자로 교체(행 번호 머리 칸·현재 행 ▶·행 선택·Ctrl+C TSV·머리글 포함 복사·아래 상태 줄), 새 시험 9개 통과
+
+#### PRD 요구사항
+- prd-ref: PRD UI
+- requirements:
+  - DB 정보 창·스키마 속성 창의 표가 전체 격자선·행 번호 머리 칸·현재 행 ▶·아래 상태 줄(행 수·선택 수)로 보인다
+  - 행 단위로 고른다(클릭·Shift·Ctrl). Ctrl+C·오른쪽 클릭 「복사」는 고른 행의 TSV, 「머리글 포함 복사」는 열 이름 줄을 앞에 붙인다. 행을 누르면 기존처럼 RowActivated 가 난다(파라미터 변경 미리보기 채우기)
+- acceptance:
+  - 여러 행을 골라 Ctrl+C 하면 표 순서대로 탭으로 나눈 글이 클립보드에 들어간다
+- constraints:
+  - 공유 표 컨트롤의 공개 속성(Columns·Rows·RowActivated)을 유지한다
+- test-criteria:
+  - 행 선택(클릭·Shift·Ctrl·전체), TSV·머리글 포함, RowActivated·현재 행 표시, 빈 표·최대 행 초과
+
+#### 기술 스펙 (TRD)
+- tech-spec: -
+- api-spec: -
+- data-model: -
+- ui-spec: -
+
 ## 의존 그래프
 
 ### 그래프 (Mermaid)
