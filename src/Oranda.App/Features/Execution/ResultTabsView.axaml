@@ -15,6 +15,19 @@
       <Setter Property="BorderThickness" Value="0" />
       <Setter Property="VerticalAlignment" Value="Center" />
     </Style>
+    <Style Selector="Button.tab-close">
+      <Setter Property="Padding" Value="2" />
+      <Setter Property="MinHeight" Value="0" />
+      <Setter Property="MinWidth" Value="0" />
+      <Setter Property="Margin" Value="4,0,0,0" />
+      <Setter Property="Background" Value="Transparent" />
+      <Setter Property="BorderThickness" Value="0" />
+      <Setter Property="Opacity" Value="0.6" />
+      <Setter Property="VerticalAlignment" Value="Center" />
+    </Style>
+    <Style Selector="Button.tab-close:pointerover">
+      <Setter Property="Opacity" Value="1" />
+    </Style>
     <!-- 탭 머리 줄 오른쪽 끝을 Excel 단추 자리로 비워 둔다(탭이 많으면 탭 쪽이 줄어들어 단추는 가려지지 않는다). -->
     <Style Selector="TabControl#Tabs /template/ ItemsPresenter#PART_ItemsPresenter">
       <Setter Property="Margin" Value="0,0,34,0" />
@@ -32,9 +45,16 @@
       <TabControl.ItemTemplate>
         <DataTemplate x:DataType="vm:ResultTabItem">
           <StackPanel Orientation="Horizontal">
+            <StackPanel.ContextMenu>
+              <ContextMenu IsEnabled="{Binding IsClosable}">
+                <MenuItem Header="결과 탭 닫기" Command="{Binding CloseTabCommand}" />
+              </ContextMenu>
+            </StackPanel.ContextMenu>
             <Button Classes="tab-pin" Content="결과 탭 고정 풀기" Focusable="False" IsVisible="{Binding IsPinned}"
                     Command="{Binding UnpinCommand}" icons:ButtonIcon.Key="pin" icons:ButtonIcon.IconOnly="True" />
             <TextBlock Text="{Binding Title}" VerticalAlignment="Center" />
+            <Button Classes="tab-close" Content="결과 탭 닫기" Focusable="False" IsVisible="{Binding IsClosable}"
+                    Command="{Binding CloseTabCommand}" icons:ButtonIcon.Key="clear" icons:ButtonIcon.IconOnly="True" />
           </StackPanel>
         </DataTemplate>
       </TabControl.ItemTemplate>

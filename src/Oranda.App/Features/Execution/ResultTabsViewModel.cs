@@ -36,12 +36,31 @@ public sealed partial class ResultTabItem : ObservableObject
     [ObservableProperty]
     public partial bool IsPinned { get; set; }
 
+    /// <summary>
+    /// 닫을 수 있는 탭(외래키 따라가기·플래시백으로 연 결과). 탭 머리에 닫기(×) 단추와 문맥 메뉴 「결과 탭 닫기」가 생긴다.
+    /// 원래 질의 결과 탭은 닫을 수 없다(다음 실행이 바꾼다).
+    /// </summary>
+    public bool IsClosable { get; init; }
+
+    /// <summary>탭을 품은 결과 영역이 닫기 단추를 이어 주는 자리.</summary>
+    internal Action<ResultTabItem>? CloseHandler { get; set; }
+
     public bool HasPane => Pane is not null;
 
     public bool HasMessage => Pane is null;
 
     /// <summary>결과 탭 고정을 바꾼다(<c>oranda.grid.pinResultTab</c>).</summary>
     public void TogglePin() => IsPinned = !IsPinned;
+
+    /// <summary>탭 머리의 닫기(×) 단추·문맥 메뉴: 이 탭을 닫고 왼쪽 이웃 탭을 보인다.</summary>
+    [RelayCommand]
+    private void CloseTab()
+    {
+        if (IsClosable)
+        {
+            CloseHandler?.Invoke(this);
+        }
+    }
 
     /// <summary>탭 머리의 핀 단추: 고정을 푼다.</summary>
     [RelayCommand]
@@ -142,12 +161,13 @@ public sealed partial class ResultTabsViewModel : ViewModelBase
 
 
     /// <summary>질의 결과 탭을 더한다. 결과 집합의 수명은 탭(결과 영역)이 가진다.</summary>
-    public ResultTabItem AddQuery(IResultSet result, string title, SqlStatement? statement, GridDisplayOptions? display = null)
+    public ResultTabItem AddQuery(IResultSet result, string title, SqlStatement? statement, GridDisplayOptions? display = null, bool closable = false)
     {
         ArgumentNullException.ThrowIfNull(result);
         var pane = new SqlResultPaneViewModel { Statement = statement };
         pane.SetResult(result, display);
-        var tab = new ResultTabItem { Title = title, Pane = pane, Statement = statement };
+        var tab = new ResultTabItem { Title = title, Pane = pane, Statement = statement, IsClosable = closable };
+        tab.CloseHandler = CloseToLeft;
         pane.CloseRequested += (_, _) => Close(tab);
         pane.PinRequested += (_, _) => tab.TogglePin();
         pane.FilterApplied += (_, _) => LeaveEditMode(tab);
@@ -163,7 +183,7 @@ public sealed partial class ResultTabsViewModel : ViewModelBase
     public ResultTabItem AddRelated(RelatedRowsResult related, SqlResultPaneViewModel? source = null)
     {
         ArgumentNullException.ThrowIfNull(related);
-        var tab = AddQuery(related.Result, related.Title, related.Statement, source?.Model?.Display);
+        var tab = AddQuery(related.Result, related.Title, related.Statement, source?.Model?.Display, closable: true);
         tab.Pane!.UseStatementBinds(related.Binds);
         return tab;
     }
@@ -188,6 +208,18 @@ public sealed partial class ResultTabsViewModel : ViewModelBase
         if (ReferenceEquals(Selected, tab))
         {
             Selected = Tabs.Count == 0 ? null : Tabs[Math.Min(i, Tabs.Count - 1)];
+        }
+    }
+
+    /// <summary>닫기 단추로 닫으면 활성 탭은 왼쪽 이웃(없으면 새 첫 탭)이 된다.</summary>
+    private void CloseToLeft(ResultTabItem tab)
+    {
+        int i = Tabs.IndexOf(tab);
+        bool wasSelected = ReferenceEquals(Selected, tab);
+        Close(tab);
+        if (wasSelected && Tabs.Count > 0)
+        {
+            Selected = Tabs[Math.Max(i - 1, 0)];
         }
     }
 
