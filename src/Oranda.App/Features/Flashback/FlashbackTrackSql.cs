@@ -11,8 +11,12 @@ namespace Oranda.App.Features.Flashback;
 /// </summary>
 internal static class FlashbackTrackSql
 {
-    /// <summary>한 줄 주석(대상 표·키·한계)과 변경 이력 질의 한 문장. 키 값이 NULL 이면 <see cref="ArgumentException"/>.</summary>
-    public static string Build(DbObjectRef table, IReadOnlyList<string> columns, IReadOnlyList<string> keyColumns, IReadOnlyList<object?> keyValues)
+    /// <summary>
+    /// 한 줄 주석(대상 표·키·한계)과 변경 이력 질의 한 문장. 키 값이 NULL 이면 <see cref="ArgumentException"/>.
+    /// <paramref name="currentUser"/> 가 표 소유자와 다르면 주석에 FLASHBACK 권한 안내를 덧붙인다.
+    /// </summary>
+    public static string Build(DbObjectRef table, IReadOnlyList<string> columns, IReadOnlyList<string> keyColumns, IReadOnlyList<object?> keyValues,
+                               string? currentUser = null)
     {
         ArgumentNullException.ThrowIfNull(table);
         ArgumentNullException.ThrowIfNull(columns);
@@ -40,7 +44,13 @@ internal static class FlashbackTrackSql
 
         var sb = new StringBuilder();
         sb.Append("-- ").Append(OneLine(RowDmlBuilder.QualifiedName(table))).Append(" 의 변경 이력(키: ").Append(OneLine(string.Join(", ", shown)))
-          .Append("). undo 보존 기간과 표 정의 변경 시점까지만 보입니다.").Append('\n');
+          .Append("). undo 보존 기간과 표 정의 변경 시점까지만 보입니다.");
+        if (currentUser is not null && !string.Equals(table.Owner, currentUser, StringComparison.OrdinalIgnoreCase))
+        {
+            sb.Append(" 다른 스키마 표는 FLASHBACK 권한이 있어야 합니다.");
+        }
+
+        sb.Append('\n');
         sb.Append("SELECT VERSIONS_STARTTIME, VERSIONS_ENDTIME, VERSIONS_OPERATION, RAWTOHEX(VERSIONS_XID) AS VERSIONS_XID, ")
           .AppendJoin(", ", columns.Select(Column)).Append('\n')
           .Append("FROM ").Append(RowDmlBuilder.QualifiedName(table)).Append(" VERSIONS BETWEEN SCN MINVALUE AND MAXVALUE\n")

@@ -50,7 +50,7 @@ internal static class OracleValues
     /// <summary>리더의 열 정의. ROWID 는 스키마 표의 IsRowID 로 알아본다(ODP 는 VARCHAR2 로 알린다).</summary>
     public static IReadOnlyList<ResultColumn> ReadColumns(OracleDataReader reader)
     {
-        var schema = reader.GetSchemaTable();
+        var schema = SchemaOrNull(reader.GetSchemaTable);
         var columns = new List<ResultColumn>(reader.FieldCount);
         for (var i = 0; i < reader.FieldCount; i++)
         {
@@ -75,6 +75,22 @@ internal static class OracleValues
         }
 
         return columns;
+    }
+
+    /// <summary>
+    /// 스키마 표 조회. ODP 는 이 호출에서 FROM 뒤 낱말을 표 이름으로 읽어 보조 질의를 보내므로, <c>표 VERSIONS BETWEEN …</c>·<c>표 AS OF …</c> 같은
+    /// 문장에서는 ORA-00942 로 실패한다. 열 출처·ROWID 표시는 덤이므로 실패하면 건너뛰고 본 결과는 그대로 보여 준다.
+    /// </summary>
+    internal static DataTable? SchemaOrNull(Func<DataTable?> read)
+    {
+        try
+        {
+            return read();
+        }
+        catch (Exception e) when (e is OracleException or InvalidOperationException)
+        {
+            return null;
+        }
     }
 
     /// <summary>셀 값 1개. null 은 SQL NULL.</summary>

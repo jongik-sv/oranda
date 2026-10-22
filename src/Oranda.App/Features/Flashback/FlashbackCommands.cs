@@ -229,7 +229,8 @@ public sealed class FlashbackCommandHandler : ICommandHandler
 
         var host = SqlEditorHost.Current;
         var profileId = host.Active?.ConnectionProfileId ?? edit.Session.Profile.Id;
-        var text = FlashbackTrackSql.Build(target.Table, target.Names, target.KeyNames, target.KeyOf(row));
+        var text = FlashbackTrackSql.Build(target.Table, target.Names, target.KeyNames, target.KeyOf(row),
+            edit.Session.Server.SessionUser ?? edit.Session.Profile.User);
         await OpenAndRunAsync(host, text, profileId, token => ExecutionCommands.Resolve(container).RunAsync(RunMode.Statement, ct: token), ct).ConfigureAwait(true);
         model.ReportNotice(string.Empty);
     }

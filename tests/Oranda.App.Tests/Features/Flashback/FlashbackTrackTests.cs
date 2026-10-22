@@ -28,6 +28,16 @@ public sealed class FlashbackTrackTests
     }
 
     [Fact]
+    public void Other_schema_table_adds_flashback_privilege_hint_to_comment_only()
+    {
+        var other = FlashbackTrackSql.Build(Emp, ["EMPNO"], ["EMPNO"], [1m], "HR").Split('\n')[0];
+        var own = FlashbackTrackSql.Build(Emp, ["EMPNO"], ["EMPNO"], [1m], "scott").Split('\n')[0];
+
+        Assert.EndsWith("다른 스키마 표는 FLASHBACK 권한이 있어야 합니다.", other, StringComparison.Ordinal);
+        Assert.DoesNotContain("다른 스키마", own, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void Composite_key_joins_conditions_and_string_quotes_are_escaped()
     {
         var sql = FlashbackTrackSql.Build(Emp, ["A", "B"], ["A", "B"], ["O'Neil", 5]);

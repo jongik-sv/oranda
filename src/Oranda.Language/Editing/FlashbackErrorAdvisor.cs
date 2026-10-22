@@ -35,6 +35,7 @@ public static partial class FlashbackErrorAdvisor
             "08180" => "요청한 시각이 너무 오래전이라 그 시각에 맞는 SCN 을 찾을 수 없습니다(ORA-08180). 더 짧은 시간을 넣어 보세요.",
             "01466" => "그 시각 뒤에 표 정의가 바뀌어(DDL, 표 생성 포함) 그 시점의 값을 읽을 수 없습니다(ORA-01466).",
             "01031" => "FLASHBACK 권한이 부족합니다(ORA-01031). 표 소유자에게 FLASHBACK 또는 FLASHBACK ANY TABLE 권한을 받아야 합니다.",
+            "41900" => "이 표의 FLASHBACK 권한이 없습니다. 소유자나 DBA 에게 GRANT FLASHBACK ON <소유자.표> TO <접속 사용자> 를 요청하세요(ORA-41900).",
             "30052" => "VERSIONS 의 시작 시각이 undo 보관 범위를 벗어났습니다(ORA-30052). 더 짧은 시간을 넣어 보세요.",
             "00942" => "표나 뷰가 없거나 읽을 권한이 없습니다(ORA-00942).",
             _ => null,
