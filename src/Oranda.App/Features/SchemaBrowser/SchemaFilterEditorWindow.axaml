@@ -7,6 +7,13 @@
         Width="500" Height="580" MinWidth="420" MinHeight="460"
         WindowStartupLocation="CenterOwner" ShowInTaskbar="False">
   <!-- 오렌지 Schema Browser Filter 와 같은 구성: 위 필터 고르기(새로 만들기·저장·삭제), 가운데 스키마·객체·옵션 탭, 아래 확인·취소. -->
+  <Window.Styles>
+    <!-- 줄이 많은 목록이라 촘촘하게: 스키마 목록 줄 높이를 줄인다(유형 줄은 높이를 직접 준다). -->
+    <Style Selector="ListBox#SchemaList ListBoxItem">
+      <Setter Property="Padding" Value="8,3" />
+      <Setter Property="MinHeight" Value="0" />
+    </Style>
+  </Window.Styles>
   <DockPanel Margin="12">
     <DockPanel DockPanel.Dock="Bottom" Margin="0,10,0,0">
       <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" Spacing="8" VerticalAlignment="Bottom">
@@ -44,7 +51,7 @@
     <TabControl x:Name="Tabs" Margin="0,10,0,0" IsEnabled="{Binding HasSelection}">
       <TabItem Header="스키마">
         <DockPanel Margin="0,8,0,0">
-          <StackPanel DockPanel.Dock="Top" Spacing="4">
+          <StackPanel DockPanel.Dock="Top" Spacing="0">
             <RadioButton GroupName="scope" Content="모든 스키마" IsChecked="{Binding Selected.IsAllScope, Mode=TwoWay, FallbackValue=False}" />
             <RadioButton GroupName="scope" Content="로그온 스키마만" IsChecked="{Binding Selected.IsLogonScope, Mode=TwoWay, FallbackValue=False}" />
             <RadioButton GroupName="scope" Content="객체를 가진 스키마만" IsChecked="{Binding Selected.IsWithObjectsScope, Mode=TwoWay, FallbackValue=False}" />
@@ -90,11 +97,13 @@
                 <ItemsControl x:Name="TypeRows" ItemsSource="{Binding Selected.Types, FallbackValue={x:Null}}">
                   <ItemsControl.ItemTemplate>
                     <DataTemplate x:DataType="vm:FilterTypeRow">
-                      <Grid ColumnDefinitions="190,*" Margin="0,1">
-                        <CheckBox Margin="8,0,0,0" IsChecked="{Binding IsShown, Mode=TwoWay}" AutomationProperties.Name="{Binding Title}">
-                          <TextBlock Text="{Binding Title}" />
+                      <Grid ColumnDefinitions="190,*" Height="25">
+                        <CheckBox Margin="8,0,0,0" MinHeight="0" Padding="6,0,0,0" VerticalAlignment="Center"
+                                  IsChecked="{Binding IsShown, Mode=TwoWay}" AutomationProperties.Name="{Binding Title}">
+                          <TextBlock Text="{Binding Title}" VerticalAlignment="Center" />
                         </CheckBox>
-                        <TextBox Grid.Column="1" Classes="compact" Margin="0,0,6,0" Text="{Binding Pattern, Mode=TwoWay}"
+                        <TextBox Grid.Column="1" Classes="compact" Margin="0,0,6,0" MinHeight="0" Height="22" Padding="5,1"
+                                 VerticalAlignment="Center" VerticalContentAlignment="Center" Text="{Binding Pattern, Mode=TwoWay}"
                                  IsEnabled="{Binding IsShown}" PlaceholderText="모두" AutomationProperties.Name="이름 필터" />
                       </Grid>
                     </DataTemplate>

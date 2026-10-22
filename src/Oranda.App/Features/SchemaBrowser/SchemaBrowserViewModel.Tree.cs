@@ -324,7 +324,7 @@ public sealed partial class SchemaBrowserViewModel
             node.Children.Add(new SchemaNode(null, SchemaNodeKind.Message, "해당하는 객체가 없다"));
         }
 
-        StatusText = $"{node.Owner}: 객체 {objects.Count}개";
+        StatusText = $"{node.Owner}: 객체 {objects.Count}개" + (ActiveSavedFilter is { } saved ? $" · 필터 「{saved.Name}」" : "");
     }
 
     private void AddPage(SchemaNode category)

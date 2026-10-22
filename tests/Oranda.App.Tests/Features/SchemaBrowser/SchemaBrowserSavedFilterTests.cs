@@ -61,6 +61,7 @@ public sealed class SchemaBrowserSavedFilterTests
         Assert.Equal(["SCOTT"], SchemaTitles(h));
         Assert.True(Root(h, "SCOTT").IsExpanded);
         Assert.Contains(Root(h, "SCOTT").Children, c => c.CategoryType == "TABLE");
+        Assert.EndsWith(" · 필터 「나」", h.Vm.StatusText, StringComparison.Ordinal); // 스키마를 다시 읽은 뒤에도 필터 이름이 보인다
     }
 
     [Fact]
