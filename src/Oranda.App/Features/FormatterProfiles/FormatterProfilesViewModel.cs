@@ -409,7 +409,7 @@ public static class FormatterIds
     public static bool IsBuiltIn(string id) => id is Default or Orange5 or Compact;
 
     /// <summary>
-    /// 설정의 기본 프로필(<c>formatterProfileId</c>) 옵션. 그 프로필이 없으면 첫 프로필, 저장소가 없으면 기본값.
+    /// 설정의 기본 프로필(<c>formatterProfileId</c>) 옵션. 그 프로필이 없으면 첫 프로필, 저장소가 없으면 「Oranda 기본」(<see cref="FormatterOptions.OrandaDefault"/>).
     /// 포맷 명령·테이블 레이아웃 창(쉼표 위치)이 쓴다.
     /// </summary>
     public static async Task<FormatterOptions> ActiveOptionsAsync(ISettingsStore? settings, IFormatterProfileStore? store, CancellationToken ct)
@@ -422,10 +422,10 @@ public static class FormatterIds
 
         if (store is null)
         {
-            return new FormatterOptions();
+            return FormatterOptions.OrandaDefault;
         }
 
         var all = await store.ListAsync(ct).ConfigureAwait(true);
-        return (all.FirstOrDefault(p => p.Id == id) ?? (all.Count > 0 ? all[0] : null))?.Options ?? new FormatterOptions();
+        return (all.FirstOrDefault(p => p.Id == id) ?? (all.Count > 0 ? all[0] : null))?.Options ?? FormatterOptions.OrandaDefault;
     }
 }

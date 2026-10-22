@@ -81,9 +81,12 @@ internal static partial class FormatEngine
         readonly List<Token> _buf = new(4);
         readonly List<(ListKind Kind, List<(int S, int E)> Elems)> _lists = [];
         readonly List<(int First, int Last, int On)> _regions = [];
+        readonly FormatLayout _layout;
+        bool[] _column = [];
 
         public LayoutRules(FormatLayout layout)
         {
+            _layout = layout;
             _items = layout.Items;
             _code = layout.Code;
             _o = layout.Options;
@@ -113,6 +116,7 @@ internal static partial class FormatEngine
             if (!_o.OperatorSpacing) TightOperators();
             if (_o.ParenInnerSpace) InnerSpaces();
             LayoutPass();
+            if (_o.ClauseLayout == ClauseLayout.Column) _column = new ColumnLayout(_layout, _bad, _frozen).Run();
             if (_o.KeywordAlign == KeywordAlign.Right) RiverPass();
             if (_al.Alias) AlignAlias();
             if (_al.Assignment) AlignLines(":=", sameDepth: true);
@@ -367,7 +371,7 @@ internal static partial class FormatEngine
                     top.Elems = [];
                     top.ElemStart = -2;
                 }
-                else if (w is "GROUP" or "ORDER" && _lb.GroupOrderBy == ByListLayout.MultiLine)
+                else if ((w == "GROUP" ? _lb.GroupOrderBy : w == "ORDER" ? _lb.EffectiveOrderBy : ByListLayout.SingleLine) == ByListLayout.MultiLine)
                 {
                     // GROUP BY·ORDER BY 목록 한 줄에 하나씩(TSK-13-38). 원소 범위는 정렬에 쓰지 않는다.
                     top.Kind = ListKind.ByList;
@@ -683,6 +687,13 @@ internal static partial class FormatEngine
                 if (lineStart && it.IsComment)
                 {
                     pending.Add(it);
+                    continue;
+                }
+
+                if (it.Piece >= 0 && it.Piece < _column.Length && _column[it.Piece])
+                {
+                    // 사내 서식 배치(ColumnLayout)가 열을 정한 문장.
+                    pending.Clear();
                     continue;
                 }
 

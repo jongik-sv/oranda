@@ -1,0 +1,89 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<!--
+  출처: 사내 쿼리 서식 샘플 query-format-mybatis.xml 사본(2026-10-22, TSK-13-43). 서식 규칙 = 쿼리 서식 4.6 MyBatis XML · 4.7 정적 SQL
+  이 파일의 표·칼럼(TB_M47_*)은 서식을 보여 주려는 예시 이름이며 실재하지 않아도 된다.
+  보여 주는 것: 정적 SQL(동적 태그·${} 없이 SQL 글자가 늘 같다), WHERE 선택 조건, 값에 따라 바뀌는 비교 칼럼,
+               JSON_TABLE 가변 IN 목록, ORDER BY CASE 정렬 선택, <![CDATA[ ]]> 본문.
+  규칙: 본문은 <select> 바로 안을 <![CDATA[ ... ]]> 하나로 감싼다. SQL 을 그대로 복사해 SQL Developer 에서
+        #{이름} 만 :이름 으로 바꿔 돌릴 수 있다. CDATA 안의 SQL 은 4칸 들여 쓰고 4.1~4.5 서식을 따른다.
+        선택 조건은 AND    (#{p} IS NULL OR 칼럼 = #{p}) 로 쓴다. '' 도 NULL 이라 조건 없음이 된다.
+        NULL 바인드는 공통 설정 jdbcTypeForNull=NULL 이 처리한다(이 설정이 없으면 #{p, jdbcType=VARCHAR}).
+-->
+<mapper namespace="sample.queryFormat">
+
+    <!-- 선택 조건: 값이 없으면 조건이 사라지는 것이 아니라 (#{p} IS NULL OR ...) 가 참이 된다 -->
+    <select id="selectProcList" parameterType="map" resultType="map">
+        <![CDATA[
+        SELECT A.PROC_CD
+             , B.PROC_NM
+             , C.LINE_NM
+             , A.COIL_WGT
+        FROM   TB_M47_PRD_ACT_CMN A
+             , TB_M47_PROC B
+             , TB_M47_LINE C
+        WHERE  B.PROC_CD = A.PROC_CD
+        AND    C.LINE_CD(+) = A.LINE_CD
+        AND    C.USE_YN(+)  = 'Y'
+        AND    A.PDN_PST_DD BETWEEN #{fromDd} AND #{toDd}
+        AND    (#{procCd} IS NULL OR A.PROC_CD = #{procCd})
+        AND    (#{lotNo} IS NULL OR A.LOT_NO LIKE #{lotNo} || '%')
+        ORDER BY A.PDN_PST_DD DESC, A.PROC_CD
+        ]]>
+    </select>
+
+    <!-- 가변 IN 목록: 서비스가 ["1P","33"] 같은 JSON 배열 문자열 하나를 넘긴다(목록이 비면 null = 조건 없음).
+         SQL 글자가 목록 길이와 무관하게 같고 IN 1000개 한도(ORA-01795)도 없다. 바인드 문자열은 4000바이트 안 -->
+    <select id="selectByProcCds" parameterType="map" resultType="map">
+        <![CDATA[
+        SELECT A.PROC_CD
+             , A.PRD_NM_CD
+             , SUM(A.COIL_WGT) WGT
+        FROM   TB_M47_PRD_ACT_CMN A
+        WHERE  A.PDN_PST_DD BETWEEN #{fromDd} AND #{toDd}
+        AND    (
+                   #{procCdsJson} IS NULL
+                OR A.PROC_CD IN (SELECT J.V FROM JSON_TABLE(#{procCdsJson}, '$[*]' COLUMNS (V VARCHAR2(20) PATH '$')) J)
+               )
+        GROUP BY A.PROC_CD
+             , A.PRD_NM_CD
+        ORDER BY A.PROC_CD, A.PRD_NM_CD
+        ]]>
+    </select>
+
+    <!-- 값에 따라 비교 칼럼이 바뀌는 경우(pDiv)와 정렬 칼럼·방향 선택: 둘 다 조건으로 푼다 -->
+    <select id="selectCodeList" parameterType="map" resultType="map">
+        <![CDATA[
+        SELECT A.PROC_CD
+             , A.CODE_VAL
+             , A.CODE_VAL_MEAN
+        FROM   TB_M47_CODE A
+        WHERE  A.USE_YN = 'Y'
+        AND    (
+                   #{pDiv} IS NULL
+                OR (#{pDiv} = 'CODE_VAL' AND A.CODE_VAL LIKE #{pValue} || '%')
+                OR (#{pDiv} = 'CODE_VAL_MEAN' AND A.CODE_VAL_MEAN LIKE #{pValue} || '%')
+               )
+        ORDER BY CASE WHEN #{sortCol} = 'CODE_VAL' AND #{sortDir} = 'DESC' THEN A.CODE_VAL END DESC
+             , CASE WHEN #{sortCol} = 'CODE_VAL' THEN A.CODE_VAL END
+             , CASE WHEN #{sortCol} = 'CODE_VAL_MEAN' AND #{sortDir} = 'DESC' THEN A.CODE_VAL_MEAN END DESC
+             , CASE WHEN #{sortCol} = 'CODE_VAL_MEAN' THEN A.CODE_VAL_MEAN END
+             , A.PROC_CD
+        ]]>
+    </select>
+
+    <!-- CDATA 안이라 '<' 비교를 그대로 쓴다. 칼럼에 함수를 씌우지 않고 반열린 구간으로 비교한다 -->
+    <select id="selectActLog" parameterType="map" resultType="map">
+        <![CDATA[
+        SELECT A.PROC_CD
+             , A.ACT_STR_DTM
+        FROM   TB_M47_PRD_ACT_LOG A
+        WHERE  A.ACT_STR_DTM >= TO_DATE(#{fromDd}, 'YYYYMMDD')
+        AND    A.ACT_STR_DTM <  TO_DATE(#{toDd}, 'YYYYMMDD') + 1
+        ORDER BY A.ACT_STR_DTM DESC
+        FETCH FIRST 100 ROWS ONLY
+        ]]>
+    </select>
+
+</mapper>

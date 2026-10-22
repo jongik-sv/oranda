@@ -4522,6 +4522,39 @@ dotnet, testhost, Oranda.App
 - data-model: docs/design/data-model.md 2.3 (keywordAlign·lineBreaks.groupOrderBy)
 - ui-spec: -
 
+### TSK-13-43: Oranda 기본 포매터 설정을 사내 쿼리 서식 정본(샘플 4개)과 같게 [win144]
+- category: feat
+- domain: backend
+- model: opus
+- status: [xx]
+- priority: medium
+- assignee: -
+- schedule: 2026-10-22 ~ 2026-10-23
+- tags: formatter, house-style, win144
+- depends: TSK-05-02, TSK-13-38
+- blocked-by: -
+- entry-point: 편집기 포맷(Ctrl+Shift+F)·기본 제공 프로필 「Oranda 기본」
+- note: 담당 PC: win144. 2026-10-22 사용자 요청(「…/docs/guide/Database/samples 이것이 oranda의 기본 포매터 설정이면 좋겠어」 「안에 쿼리를 보고 다시 설정해줘」). 정본 = 사내 표준 저장소의 쿼리 서식 샘플 4개(basic·with·analysis·mybatis)와 규칙 글 4장. 크기 L. 결과: oranda-default = FormatterOptions.OrandaDefault(사내 서식), 엔진 clauseLayout Column·lineBreaks.orderBy·align.comparison 추가(속성 기본값은 옛 출력 = 사용자 프로필·Orange 5·간결 불변), 샘플 4개 전체 포맷 차이 0(analysis 1번 사용자 원문 2곳 정규화·with 2번 (나) 한 줄 EXISTS 예외는 시험에 적음), 골든·규칙 시험 94개 통과
+
+#### PRD 요구사항
+- prd-ref: PRD FMT-02, FMT-04, FMT-05
+- requirements:
+  - 기본 프로필(oranda-default)로 포맷하면 샘플 서식이 된다: 키워드·이름 대문자, 절 키워드 맨 앞 열·본문 7번째 열, 앞 쉼표, GROUP BY 여러 줄·ORDER BY 한 줄(넘치면 여러 줄), 여러 줄 괄호 묶음(여는·닫는 괄호 혼자 한 줄, 안쪽 +4), WITH 다음 CTE 는 맨 앞 열 「, 이름 AS」, 짧은 서브쿼리·CASE 는 한 줄, 120자
+  - 옵션만으로 안 되는 규칙은 엔진 옵션을 더하고 oranda-default 에서 켠다. Orange 5 스타일·간결 프로필의 출력은 바뀌지 않는다
+- acceptance:
+  - 샘플 4개의 문장을 (가) 그대로 (나) 한 줄로 뭉갬 (다) 소문자·들여쓰기 흐트림 으로 넣어 포맷하면 샘플과 같다(예외는 시험 파일에 이유와 함께 적음)
+  - 포맷 결과를 다시 포맷해도 같다
+- constraints:
+  - 사용자 프로필은 건드리지 않는다. 11g·12c 문법 차이 없음(서식만)
+- test-criteria:
+  - 골든 시험(문장 × 3변형), 안정성, MyBatis CDATA 안 SQL(4칸 들여), 기존 Language·Core·App 포맷 시험
+
+#### 기술 스펙 (TRD)
+- tech-spec: -
+- api-spec: -
+- data-model: docs/design/data-model.md 2.3
+- ui-spec: -
+
 ## 의존 그래프
 
 ### 그래프 (Mermaid)

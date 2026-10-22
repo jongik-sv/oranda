@@ -169,7 +169,7 @@
 | `name` | string | ● | | 표시 이름 |
 | `options` | `FormatterOptions` | ○ | 아래 기본값 전부 | `ISqlFormatter.Format` 에 그대로 넘긴다 |
 
-`options` (`FormatterOptions`) — 기본값 = 「Oranda 기본」 프로필:
+`options` (`FormatterOptions`) — 기본값 = 옛 「Oranda 기본」 출력(파일에 없는 필드도 이 값으로 읽는다). 기본 제공 「Oranda 기본」(`oranda-default`)은 사내 쿼리 서식 값(`FormatterOptions.OrandaDefault`, TSK-13-43: `case.identifier` `Upper`·`commaPosition` `Leading`·`clauseLayout` `Column`·`lineBreaks.groupOrderBy` `MultiLine`·`lineBreaks.orderBy` `SingleLine`·`lineBreaks.inListThreshold` 0·`align.alias` false·`align.comparison` true):
 
 | 필드 | 형식 | 기본값 | PRD |
 |---|---|---|---|
@@ -183,10 +183,12 @@
 | `indent.plsqlBlock` | int (0~4) | 1 | FMT-03 |
 | `commaPosition` | `CommaPosition` = `Leading`\|`Trailing` | `Trailing` | FMT-04 |
 | `keywordAlign` | `KeywordAlign` = `Left`\|`Right` | `Left` | FMT-05 (Right = 절 키워드 끝을 SELECT 끝에 맞춤, TSK-13-38) |
+| `clauseLayout` | `ClauseLayout` = `Indent`\|`Column` | `Indent` | FMT-05 (Column = 절 키워드 맨 앞 열·본문 7번째 열·여러 줄 괄호 묶음, SELECT·WITH·INSERT·UPDATE·DELETE·CREATE … AS 질의, TSK-13-43) |
 | `operatorSpacing` | bool | true | FMT-04 |
 | `parenInnerSpace` | bool | false | FMT-04 |
 | `lineBreaks.selectList` | `SelectListLayout` = `OnePerLine`\|`FillToWidth` | `OnePerLine` | FMT-05 |
 | `lineBreaks.groupOrderBy` | `ByListLayout` = `SingleLine`\|`MultiLine` | `SingleLine` | FMT-05 (GROUP BY·ORDER BY 목록, TSK-13-38) |
+| `lineBreaks.orderBy` | `OrderByLayout` = `FollowGroupBy`\|`SingleLine`\|`MultiLine` | `FollowGroupBy` | FMT-05 (ORDER BY 만 따로, TSK-13-43) |
 | `lineBreaks.joinClause` | bool | true | FMT-05 |
 | `lineBreaks.andOr` | `AndOrBreak` = `Before`\|`After`\|`None` | `Before` | FMT-05 |
 | `lineBreaks.inListThreshold` | int (0 = 줄바꿈 안 함) | 5 | FMT-05 |
@@ -195,6 +197,7 @@
 | `align.assignment` | bool | true | FMT-06 |
 | `align.columnDefinition` | bool | true | FMT-06 |
 | `align.equals` | bool | false | FMT-06 |
+| `align.comparison` | bool | false | FMT-06 (Column 에서 외부 조인 `(+)` 묶음·같은 칼럼 범위 조건의 비교 연산자·값 열 맞춤, TSK-13-43) |
 | `comments.preserve` | bool | true | FMT-07 |
 | `comments.maxBlankLines` | int (0~5) | 1 | FMT-07 |
 | `statementTerminator` | `StatementTerminator` = `Keep`\|`Add`\|`Remove` | `Keep` | FMT-07 |

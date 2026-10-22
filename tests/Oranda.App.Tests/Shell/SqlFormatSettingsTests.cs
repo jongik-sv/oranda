@@ -310,7 +310,7 @@ public sealed class SqlFormatSettingsTests
 
         var o = await FormatterIds.ActiveOptionsAsync(store, profiles, default);
         Assert.Equal(CommaPosition.Leading, o.CommaPosition);
-        Assert.Equal(new FormatterOptions(), await FormatterIds.ActiveOptionsAsync(null, null, default));
+        Assert.Equal(FormatterOptions.OrandaDefault, await FormatterIds.ActiveOptionsAsync(null, null, default));
     }
 
     [Fact]

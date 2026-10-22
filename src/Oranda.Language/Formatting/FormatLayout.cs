@@ -13,6 +13,9 @@ internal sealed class FormatLayout(List<FormatItem> items, FormatterOptions opti
 
     public FormatterOptions Options { get; } = options;
 
+    /// <summary>모든 줄 앞에 붙는 원래 들여쓰기 글자 수(범위 포맷). 줄 폭 셈에 더한다.</summary>
+    public int BaseIndent { get; init; }
+
     /// <summary>주석·원문 줄을 뺀 코드 항목의 <see cref="Items"/> 위치.</summary>
     public List<int> Code { get; } = BuildCode(items);
 

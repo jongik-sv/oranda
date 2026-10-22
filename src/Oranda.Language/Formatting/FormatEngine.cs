@@ -38,7 +38,7 @@ internal static partial class FormatEngine
         ApplyTerminator(items, tk.Pieces, block, o.StatementTerminator);
         for (int i = 0; i < items.Count; i++) items[i].Index = i;
 
-        var layout = new FormatLayout(items, o);
+        var layout = new FormatLayout(items, o) { BaseIndent = baseIndent.Length };
         Walk(layout, block, fragment);
         PlaceComments(layout);
         ApplyCase(layout);
@@ -346,22 +346,33 @@ internal static partial class FormatEngine
             int i = code[k];
             var c = items[i];
             if (c.Gap != GapKind.Space || i == 0 || !items[i - 1].IsCode) continue;
-            var p = items[i - 1];
-            bool pieceLead = p.Piece >= 0 && (k < 2 || items[code[k - 2]].Piece != p.Piece);
-            if (Adjacent(p, c) && (InSubstitutionRun(items, code, k) || (pieceLead && FormatWords.IsSqlPlusLead(p))))
-            {
-                // 치환 변수는 글자를 이어 붙인다(&tab..col, &a&b). 원문에서 붙어 있던 것은 그대로 붙인다.
-                // 문장 첫 낱말이 SQL*Plus 명령 낱말이면 뒤에 공백을 넣는 순간 SQL*Plus 줄로 읽히므로 그대로 붙인다.
-                c.Gap = GapKind.None;
-                continue;
-            }
-
-            var pp = k >= 2 ? items[code[k - 2]] : null;
-            int j = k - 1;
-            while (j >= 2 && items[code[j - 1]].IsSym(".")) j -= 2;
-            var leader = j >= 1 ? items[code[j - 1]] : null;
-            if (Tight(pp, p, c, leader) && JoinSafe(p, c, line)) c.Gap = GapKind.None;
+            c.Gap = PairGap(items, code, k, line);
         }
+    }
+
+    /// <summary>
+    /// 코드 위치 <paramref name="k"/> 토큰이 바로 앞 코드 토큰과 같은 줄에 올 때의 간격(<see cref="GapKind.None"/>·<see cref="GapKind.Space"/>).
+    /// 앞 항목이 주석이면 Space. 기본 공백 규칙(<see cref="ApplySpacing"/>)과 사내 서식 배치(ColumnLayout)가 같이 쓴다.
+    /// </summary>
+    static GapKind PairGap(List<FormatItem> items, List<int> code, int k, List<Token> line)
+    {
+        int i = code[k];
+        var c = items[i];
+        if (k == 0 || i == 0 || !items[i - 1].IsCode) return GapKind.Space;
+        var p = items[i - 1];
+        bool pieceLead = p.Piece >= 0 && (k < 2 || items[code[k - 2]].Piece != p.Piece);
+        if (Adjacent(p, c) && (InSubstitutionRun(items, code, k) || (pieceLead && FormatWords.IsSqlPlusLead(p))))
+        {
+            // 치환 변수는 글자를 이어 붙인다(&tab..col, &a&b). 원문에서 붙어 있던 것은 그대로 붙인다.
+            // 문장 첫 낱말이 SQL*Plus 명령 낱말이면 뒤에 공백을 넣는 순간 SQL*Plus 줄로 읽히므로 그대로 붙인다.
+            return GapKind.None;
+        }
+
+        var pp = k >= 2 ? items[code[k - 2]] : null;
+        int j = k - 1;
+        while (j >= 2 && items[code[j - 1]].IsSym(".")) j -= 2;
+        var leader = j >= 1 ? items[code[j - 1]] : null;
+        return Tight(pp, p, c, leader) && JoinSafe(p, c, line) ? GapKind.None : GapKind.Space;
     }
 
     static bool Adjacent(FormatItem a, FormatItem b) => a.Start >= 0 && b.Start == a.End && a.EndLine == b.Line;

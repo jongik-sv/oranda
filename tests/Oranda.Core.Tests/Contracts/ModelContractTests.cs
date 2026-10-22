@@ -62,8 +62,17 @@ public class ModelContractTests
     }
 
     [Fact]
-    public void Formatter_option_defaults_are_oranda_default_profile()
+    public void Formatter_option_defaults_keep_the_old_output_and_oranda_default_is_the_house_style()
     {
+        // 속성 기본값 = 옛 출력(저장된 사용자 프로필에 없는 새 속성이 이 값으로 읽힌다). 기본 제공 oranda-default = OrandaDefault(TSK-13-43).
+        var house = FormatterOptions.OrandaDefault;
+        Assert.Equal(ClauseLayout.Column, house.ClauseLayout);
+        Assert.Equal(CommaPosition.Leading, house.CommaPosition);
+        Assert.Equal(LetterCase.Upper, house.Case.Identifier);
+        Assert.Equal(ClauseLayout.Indent, new FormatterOptions().ClauseLayout);
+        Assert.Equal(OrderByLayout.FollowGroupBy, new FormatterOptions().LineBreaks.OrderBy);
+        Assert.False(new FormatterOptions().Align.Comparison);
+
         var o = new FormatterOptions();
 
         Assert.Equal(LetterCase.Upper, o.Case.Keyword);

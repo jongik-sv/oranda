@@ -43,7 +43,7 @@ public sealed class FormatterProfileStoreTests : IDisposable
         var list = await store.ListAsync(default);
 
         Assert.Equal(["oranda-default", "orange5", "compact", "zeta"], list.Select(p => p.Id));
-        Assert.Equal(new FormatterOptions(), list[0].Options);
+        Assert.Equal(FormatterOptions.OrandaDefault, list[0].Options);
     }
 
     [Fact]

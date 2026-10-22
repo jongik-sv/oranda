@@ -39,7 +39,7 @@ internal sealed partial class FormatterProfileStore : IFormatterProfileStore
     /// <summary>기본 제공 3종(지울 수도 고칠 수도 없다. 복사해서 쓴다).</summary>
     public static IReadOnlyList<FormatterProfile> BuiltIns { get; } =
     [
-        new FormatterProfile { Id = DefaultId, Name = "Oranda 기본", Options = new FormatterOptions() },
+        new FormatterProfile { Id = DefaultId, Name = "Oranda 기본", Options = FormatterOptions.OrandaDefault },
         new FormatterProfile
         {
             Id = Orange5Id,

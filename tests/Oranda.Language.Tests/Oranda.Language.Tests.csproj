@@ -16,6 +16,11 @@
   </ItemGroup>
 
   <ItemGroup>
+    <!-- 사내 쿼리 서식 샘플 골든 자료(TSK-13-43). -->
+    <EmbeddedResource Include="Formatting/HouseStyle/*" LogicalName="HouseStyle.%(Filename)%(Extension)" />
+  </ItemGroup>
+
+  <ItemGroup>
     <ProjectReference Include="..\..\src\Oranda.Language\Oranda.Language.csproj" />
     <ProjectReference Include="..\Oranda.Testing\Oranda.Testing.csproj" />
   </ItemGroup>
