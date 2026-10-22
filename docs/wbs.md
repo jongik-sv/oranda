@@ -4322,6 +4322,39 @@ dotnet, testhost, Oranda.App
 - data-model: -
 - ui-spec: -
 
+### TSK-13-37: 세션 모니터·SQL 모니터의 표를 C안 격자로 [win144]
+- category: feat
+- domain: frontend
+- model: sonnet
+- status: [xx]
+- priority: medium
+- assignee: -
+- schedule: 2026-10-22 ~ 2026-10-23
+- tags: grid-c, detail-table, monitor, win144
+- depends: TSK-13-35
+- blocked-by: -
+- entry-point: 세션 모니터 세션 목록·SQL 모니터 검색 결과 목록
+- note: 담당 PC: win144. 2026-10-22 사용자 요청(「세션 모니터와 sql 모니터도 C타입으로 테이블을 바꿔줘」). 두 모니터의 목록을 공유 표 DetailTable(C안 격자)로 바꾸고, 목록↔선택 항목 연결은 MonitorTableBinder 가 맡는다. 크기 M. 결과: 격자 머리글·행 번호·▶·상태 줄·행 선택·Ctrl+C TSV·머리글 포함 복사, 선택 항목 바인딩, 자동 새로 고침 뒤 고른 행·현재 행·스크롤 유지, 오른쪽 클릭 메뉴(context:monitor/*) 유지, 새 시험 7개 통과
+
+#### PRD 요구사항
+- prd-ref: PRD UI
+- requirements:
+  - 세션 목록과 SQL 검색 결과가 전체 격자선·행 번호 머리 칸·현재 행 ▶·아래 상태 줄(행 수·선택 수)로 보인다
+  - 행을 누르면 SelectedSession·SelectedSql 이 바뀌고, 오른쪽 클릭 메뉴 명령은 그 행에 걸린다
+  - 자동 새로 고침 뒤에도 고른 행·현재 행·스크롤 위치가 남는다
+- acceptance:
+  - 여러 행을 골라 Ctrl+C 하면 표 순서대로 탭으로 나눈 글이 클립보드에 들어간다
+- constraints:
+  - DetailTable 의 기존 공개 속성·동작을 유지한다(추가만)
+- test-criteria:
+  - 머리글·행 수, 선택 바인딩, 새로 고침 뒤 선택 유지, Ctrl+C, 오른쪽 클릭
+
+#### 기술 스펙 (TRD)
+- tech-spec: -
+- api-spec: -
+- data-model: -
+- ui-spec: -
+
 ## 의존 그래프
 
 ### 그래프 (Mermaid)

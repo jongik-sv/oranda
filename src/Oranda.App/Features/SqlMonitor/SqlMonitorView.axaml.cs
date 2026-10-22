@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using System.Linq;
 using Avalonia.Controls;
+using Oranda.App.Features.SessionMonitor;
 using Oranda.Core.Monitoring;
 using Oranda.App.Shell.Menus;
 
@@ -9,10 +10,18 @@ namespace Oranda.App.Features.SqlMonitor;
 /// <summary>SQL 모니터 문서. 단추는 <see cref="SqlMonitorViewModel"/> 의 동작을 부른다(명령 ID 와 같은 동작).</summary>
 public partial class SqlMonitorView : UserControl
 {
+    private readonly MonitorTableBinder<TopSqlItem> _grid;
+    private SqlMonitorViewModel? _bound;
+
     public SqlMonitorView()
     {
         InitializeComponent();
-        ShellContextMenus.Attach(ResultList, "monitor");
+        ResultList.ExtraMenuItems = () => ShellContextMenus.Factory?.Invoke("monitor") ?? [];
+        ResultList.RightAlignedColumns = [2, 3, 4, 5, 6];
+        _grid = new MonitorTableBinder<TopSqlItem>(ResultList,
+            ["SQL ID", "자식", "소요(s)", "CPU(s)", "실행", "읽은 블록", "디스크", "스키마", "SQL"],
+            i => [i.SqlId, i.ChildText, i.ElapsedText, i.CpuText, i.ExecutionsText, i.BlocksText, i.DiskText, i.Schema, i.Preview],
+            i => i.Row.Cursor);
         OrderBox.SelectionChanged += (_, _) =>
         {
             if (DataContext is SqlMonitorViewModel vm && OrderBox.SelectedItem is KeyValuePair<string, TopSqlOrder> pick)
@@ -25,6 +34,12 @@ public partial class SqlMonitorView : UserControl
             SyncOrder();
             if (DataContext is SqlMonitorViewModel vm)
             {
+                if (!ReferenceEquals(_bound, vm))
+                {
+                    _bound = vm;
+                    _grid.Attach(vm.Results, vm, nameof(SqlMonitorViewModel.SelectedSql), () => vm.SelectedSql, i => vm.SelectedSql = i);
+                }
+
                 vm.PropertyChanged += (_, e) =>
                 {
                     if (e.PropertyName == nameof(SqlMonitorViewModel.OrderBy))

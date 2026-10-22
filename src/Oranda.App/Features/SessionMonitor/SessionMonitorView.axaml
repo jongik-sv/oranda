@@ -3,6 +3,7 @@
              xmlns:keymaps="using:Oranda.App.Shell.Keymaps"
              xmlns:icons="using:Oranda.App.Shell.Icons"
              xmlns:vm="using:Oranda.App.Features.SessionMonitor"
+             xmlns:ctl="using:Oranda.App.Shell.Controls"
              x:Class="Oranda.App.Features.SessionMonitor.SessionMonitorView"
              keymaps:FocusSlot.Name="monitor"
              x:DataType="vm:SessionMonitorViewModel">
@@ -56,43 +57,8 @@
       <TextBlock Text="{Binding StatusText}" TextTrimming="CharacterEllipsis" />
     </Border>
     <Grid ColumnDefinitions="3*,4,2*">
-      <!-- 머리글과 목록을 같은 가로 스크롤에 넣는다(열이 넓어도 오른쪽 창 머리글과 겹치지 않는다). -->
-      <ScrollViewer Grid.Column="0" HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled">
-      <DockPanel MinWidth="760">
-        <Border DockPanel.Dock="Top" Classes="grid-header">
-        <Grid Margin="6,0" ColumnDefinitions="110,110,70,60,60,200,110,*">
-          <TextBlock Grid.Column="0" Text="SID,SERIAL#" />
-          <TextBlock Grid.Column="1" Text="사용자" />
-          <TextBlock Grid.Column="2" Text="상태" />
-          <TextBlock Grid.Column="3" Text="경과" />
-          <TextBlock Grid.Column="4" Text="블로커" />
-          <TextBlock Grid.Column="5" Text="대기 이벤트" />
-          <TextBlock Grid.Column="6" Text="SQL ID" />
-          <TextBlock Grid.Column="7" Text="프로그램 · 델타" />
-        </Grid>
-        </Border>
-        <ListBox x:Name="SessionList" Classes="log" ItemsSource="{Binding Sessions}" SelectedItem="{Binding SelectedSession, Mode=TwoWay}"
-                 ScrollViewer.HorizontalScrollBarVisibility="Disabled">
-          <ListBox.ItemTemplate>
-            <DataTemplate x:DataType="vm:SessionItem">
-              <Grid ColumnDefinitions="110,110,70,60,60,200,110,*">
-                <TextBlock Grid.Column="0" Text="{Binding KeyText}" FontFamily="Consolas,Menlo,monospace" />
-                <TextBlock Grid.Column="1" Text="{Binding Username}" TextTrimming="CharacterEllipsis" />
-                <TextBlock Grid.Column="2" Text="{Binding Status}" />
-                <TextBlock Grid.Column="3" Text="{Binding Elapsed}" />
-                <TextBlock Grid.Column="4" Text="{Binding BlockedBy}" Foreground="OrangeRed" />
-                <TextBlock Grid.Column="5" Text="{Binding Event}" TextTrimming="CharacterEllipsis" />
-                <TextBlock Grid.Column="6" Text="{Binding SqlId}" FontFamily="Consolas,Menlo,monospace" />
-                <StackPanel Grid.Column="7" Orientation="Horizontal" Spacing="8">
-                  <TextBlock Text="{Binding Program}" TextTrimming="CharacterEllipsis" />
-                  <TextBlock Text="{Binding DeltaText}" Opacity="0.7" />
-                </StackPanel>
-              </Grid>
-            </DataTemplate>
-          </ListBox.ItemTemplate>
-        </ListBox>
-      </DockPanel>
-      </ScrollViewer>
+      <!-- C안 격자(DetailTable): 열 머리글·행 번호·현재 행 ▶·아래 상태 줄. 행은 코드(MonitorTableBinder)가 Sessions 에서 채운다. -->
+      <ctl:DetailTable x:Name="SessionList" Grid.Column="0" />
       <GridSplitter Grid.Column="1" ResizeDirection="Columns" Background="{DynamicResource OrandaSplitterBrush}" />
       <TabControl Grid.Column="2">
         <TabItem Header="블로킹 트리">

@@ -42,6 +42,10 @@ public sealed class DetailTable : UserControl
     public static readonly StyledProperty<bool> KeepSelectionOnSameShapeProperty =
         AvaloniaProperty.Register<DetailTable, bool>(nameof(KeepSelectionOnSameShape));
 
+    /// <summary>true 면 <see cref="Rows"/> 를 다시 만들 때 세로 스크롤 위치를 남긴다(기본 false). 자동 새로 고침하는 모니터 표가 쓴다.</summary>
+    public static readonly StyledProperty<bool> KeepScrollProperty =
+        AvaloniaProperty.Register<DetailTable, bool>(nameof(KeepScroll));
+
     /// <summary>한 번에 그릴 최대 행(그 뒤는 상태 줄에 「…」). 거르기로 좁혀 보게 한다.</summary>
     public const int MaxRows = 2000;
 
@@ -111,6 +115,18 @@ public sealed class DetailTable : UserControl
         set => SetValue(KeepSelectionOnSameShapeProperty, value);
     }
 
+    public bool KeepScroll
+    {
+        get => GetValue(KeepScrollProperty);
+        set => SetValue(KeepScrollProperty, value);
+    }
+
+    /// <summary>오른쪽 클릭 메뉴에 「복사」 아래로 덧붙일 항목을 메뉴가 열릴 때마다 돌려주는 함수(모니터의 context:monitor/* 명령 등). 없으면 복사 둘뿐.</summary>
+    public Func<IReadOnlyList<object>>? ExtraMenuItems { get; set; }
+
+    /// <summary>오른쪽 칼럼 번호(0부터)를 오른쪽 맞춤으로 그릴 열. 값이 글자로 미리 서식된 표가 쓴다(숫자 값은 기존대로 자동).</summary>
+    public IReadOnlyCollection<int>? RightAlignedColumns { get; set; }
+
     /// <summary>행을 눌렀다. 값은 그 행의 칸들.</summary>
     public event EventHandler<IReadOnlyList<object?>>? RowActivated;
 
@@ -125,9 +141,79 @@ public sealed class DetailTable : UserControl
 
     /// <summary>고른 행(표 순서).</summary>
     internal IReadOnlyList<IReadOnlyList<object?>> SelectedRows
-        => _items.Where(i => i.IsSelected).Select(i => (IReadOnlyList<object?>)i.Tag!).ToList();
+        => PickedItems().Select(i => (IReadOnlyList<object?>)i.Tag!).ToList();
+
+    // 고른 칸(표 순서). 화면에 아직 붙지 않은 줄은 IsSelected 가 늦게 켜지므로 선택 모델을 본다.
+    private List<ListBoxItem> PickedItems()
+    {
+        var picked = _list.SelectedItems?.OfType<ListBoxItem>().ToHashSet() ?? [];
+        return _items.Where(picked.Contains).ToList();
+    }
 
     internal ListBox List => _list;
+
+    private Action? _pendingSelect;
+
+    protected override void OnAttachedToVisualTree(VisualTreeAttachmentEventArgs e)
+    {
+        base.OnAttachedToVisualTree(e);
+        if (_pendingSelect is { } pending)
+        {
+            Avalonia.Threading.Dispatcher.UIThread.Post(pending, Avalonia.Threading.DispatcherPriority.Loaded);
+        }
+    }
+
+    /// <summary>
+    /// <paramref name="pick"/> 이 참인 행만 고르고(기존 선택은 푼다), <paramref name="current"/> 가 참인 첫 행을 현재 행(▶)으로 한다(이벤트 없이).
+    /// <paramref name="current"/> 가 null 이면 현재 행은 그대로 둔다.
+    /// </summary>
+    public void SelectRows(Func<IReadOnlyList<object?>, bool> pick, Func<IReadOnlyList<object?>, bool>? current = null)
+    {
+        ArgumentNullException.ThrowIfNull(pick);
+        if (!this.IsAttachedToVisualTree())
+        {
+            // 화면에 붙기 전에 SelectedItems.Add 하면 같은 줄이 두 번 들어간다 — 붙은 뒤에 고른다.
+            _pendingSelect = () => SelectRows(pick, current);
+            return;
+        }
+
+        _pendingSelect = null;
+        _list.SelectedItems?.Clear();
+        foreach (var item in _items)
+        {
+            if (item.Tag is IReadOnlyList<object?> row && pick(row))
+            {
+                _list.SelectedItems?.Add(item);
+            }
+        }
+
+        if (current is not null)
+        {
+            foreach (var item in _items)
+            {
+                if (item.Tag is IReadOnlyList<object?> row && current(row))
+                {
+                    SetCurrent(row, raise: false);
+                    break;
+                }
+            }
+        }
+
+        UpdateStatus();
+    }
+
+    /// <summary>고른 행과 현재 행(▶)을 모두 푼다(이벤트 없이).</summary>
+    public void ClearSelection()
+    {
+        _list.SelectedItems?.Clear();
+        if (_current is { } old && _markers.TryGetValue(old, out var m))
+        {
+            m.Text = string.Empty;
+        }
+
+        _current = null;
+        UpdateStatus();
+    }
 
     internal string StatusText => _status.Text ?? string.Empty;
 
@@ -185,10 +271,23 @@ public sealed class DetailTable : UserControl
         else if (change.Property == RowsProperty)
         {
             var keep = KeepSelectionOnSameShape && change.OldValue is IReadOnlyList<IReadOnlyList<object?>> old && change.NewValue is IReadOnlyList<IReadOnlyList<object?>> now && old.Count == now.Count;
-            var picked = keep ? _items.Select((item, i) => (item, i)).Where(x => x.item.IsSelected).Select(x => x.i).ToList() : [];
+            var pickedNow = keep ? PickedItems().ToHashSet() : [];
+            var picked = keep ? _items.Select((item, i) => (item, i)).Where(x => pickedNow.Contains(x.item)).Select(x => x.i).ToList() : [];
             var current = keep ? CurrentRowIndex : -1;
             var hadFocus = keep && _list.IsKeyboardFocusWithin;
+            var offset = KeepScroll ? _list.FindDescendantOfType<ScrollViewer>()?.Offset : null;
             Build();
+            if (offset is { Y: > 0 } y)
+            {
+                Avalonia.Threading.Dispatcher.UIThread.Post(() =>
+                {
+                    if (_list.FindDescendantOfType<ScrollViewer>() is { } sv)
+                    {
+                        sv.Offset = y;
+                    }
+                }, Avalonia.Threading.DispatcherPriority.Loaded);
+            }
+
             foreach (var i in picked.Where(i => i < _items.Count))
             {
                 _list.SelectedItems?.Add(_items[i]);
@@ -216,7 +315,9 @@ public sealed class DetailTable : UserControl
         var menu = new ContextMenu { ItemsSource = new[] { copy, copyHeaders } };
         menu.Opening += (_, e) =>
         {
-            copy.IsEnabled = copyHeaders.IsEnabled = _items.Any(i => i.IsSelected);
+            var extra = ExtraMenuItems?.Invoke() ?? [];
+            menu.ItemsSource = extra.Count == 0 ? new object[] { copy, copyHeaders } : [copy, copyHeaders, new Separator(), .. extra];
+            copy.IsEnabled = copyHeaders.IsEnabled = (_list.SelectedItems?.Count ?? 0) > 0;
             e.Cancel = _items.Count == 0;
         };
         return menu;
@@ -228,6 +329,7 @@ public sealed class DetailTable : UserControl
         var rows = Rows ?? [];
         _items.Clear();
         _markers.Clear();
+        _pendingSelect = null;
         _current = null;
         _overflow = 0;
         _list.ItemsSource = null;
@@ -257,7 +359,7 @@ public sealed class DetailTable : UserControl
                 cells.Add(new TextBlock
                 {
                     Text = Format(value),
-                    TextAlignment = IsNumber(value) && c < columns.Count - 1 ? TextAlignment.Right : TextAlignment.Left, // 늘어나는 마지막 열은 왼쪽
+                    TextAlignment = (IsNumber(value) || RightAlignedColumns?.Contains(c) == true) && c < columns.Count - 1 ? TextAlignment.Right : TextAlignment.Left, // 늘어나는 마지막 열은 왼쪽
                     Opacity = value is null ? 0.45 : 1,
                 });
             }
@@ -275,7 +377,7 @@ public sealed class DetailTable : UserControl
     private void UpdateStatus()
     {
         var total = Rows?.Count ?? 0;
-        var picked = _items.Count(i => i.IsSelected);
+        var picked = _list.SelectedItems?.Count ?? 0;
         var parts = new List<string> { En ? $"{total:N0} rows" : $"{total:N0}행" };
         if (picked > 0)
         {
@@ -292,13 +394,25 @@ public sealed class DetailTable : UserControl
 
     private void OnPressed(object? sender, PointerPressedEventArgs e)
     {
-        if (!e.GetCurrentPoint(_list).Properties.IsLeftButtonPressed)
+        var props = e.GetCurrentPoint(_list).Properties;
+        if (!props.IsLeftButtonPressed && !props.IsRightButtonPressed)
         {
             return;
         }
 
-        if ((e.Source as Visual)?.FindAncestorOfType<ListBoxItem>(includeSelf: true)?.Tag is IReadOnlyList<object?> row)
+        if ((e.Source as Visual)?.FindAncestorOfType<ListBoxItem>(includeSelf: true) is { Tag: IReadOnlyList<object?> row } hit)
         {
+            if (props.IsRightButtonPressed)
+            {
+                // 오른쪽 클릭: 이미 고른 행 위면 선택을 그대로 두고(여러 행 복사), 아니면 그 행이 현재 행이 된다. 행을 누른 알림(RowActivated)은 왼쪽 클릭만.
+                if (!hit.IsSelected)
+                {
+                    SetCurrent(row, raise: true);
+                }
+
+                return;
+            }
+
             SetCurrent(row, raise: true);
             RowActivated?.Invoke(this, row);
         }
