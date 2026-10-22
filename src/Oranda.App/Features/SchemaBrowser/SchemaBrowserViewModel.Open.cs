@@ -129,7 +129,7 @@ public sealed partial class SchemaBrowserViewModel
         }
 
         var node = await FindNodeAsync(target, ct);
-        if (node is null && !_filter.IsEmpty)
+        if (node is null && (!_filter.IsEmpty || ActiveSavedFilter is not null))
         {
             await ClearFilterAsync(ct);
             node = await FindNodeAsync(target, ct);

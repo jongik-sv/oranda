@@ -69,26 +69,27 @@ public sealed partial class SchemaBrowserViewModel
         {
             var schemas = await _meta.ListSchemasAsync(session, ct);
             var favs = await _favoriteStore.LoadAsync(session.Profile.Id, ct);
+            ActiveSavedFilter = ResolveActiveFilter(session);
+            var matcher = await BuildMatcherAsync(session, ct);
             if (gen != _buildGeneration)
             {
                 return;
             }
 
             _favorites = favs;
+            _allSchemas = schemas;
+            _matcher = matcher;
             _filter = BuildFilter();
             _favoritesNode = new SchemaNode(this, SchemaNodeKind.Favorites, "즐겨찾기");
             _favoritesNode.ResetChildren();
             Roots.Add(_favoritesNode);
-            // 내 스키마(접속 사용자)를 맨 위에 둔다(SQL Developer·Orange 처럼 자기 객체부터 보인다). 나머지는 이름 순서 그대로.
-            var ordered = schemas.OrderBy(n => string.Equals(n, session.Profile.User, StringComparison.OrdinalIgnoreCase) ? 0 : 1).ToList();
-            foreach (var name in ordered)
+            var visible = VisibleSchemas(session);
+            foreach (var name in visible)
             {
-                var n = new SchemaNode(this, SchemaNodeKind.Schema, name) { Owner = name };
-                n.ResetChildren();
-                Roots.Add(n);
+                Roots.Add(NewSchemaNode(name));
             }
 
-            StatusText = $"스키마 {schemas.Count}개";
+            StatusText = SchemaCountText(visible.Count);
             var own = Roots.FirstOrDefault(r => r.Kind == SchemaNodeKind.Schema
                 && string.Equals(r.Owner, session.Profile.User, StringComparison.OrdinalIgnoreCase));
             if (own is not null)
@@ -272,6 +273,7 @@ public sealed partial class SchemaBrowserViewModel
 
         var objects = await _meta!.ListObjectsAsync(session, query, ct);
         var favorites = _favorites;
+        var matcher = _matcher;
         var groups = await Task.Run(
             () =>
             {
@@ -279,6 +281,11 @@ public sealed partial class SchemaBrowserViewModel
                 if (f.FavoritesOnly)
                 {
                     src = src.Where(o => favorites.Contains(SchemaSql.FavoriteKey(o)));
+                }
+
+                if (matcher is not null)
+                {
+                    src = src.Where(matcher.Shows); // 저장 필터: 숨긴 유형·유형별 이름 패턴
                 }
 
                 return src.GroupBy(o => o.ObjectType, StringComparer.Ordinal)
@@ -365,7 +372,7 @@ public sealed partial class SchemaBrowserViewModel
         AddPage(cat);
     }
 
-    /// <summary>필터를 모두 풀고 바로 적용한다(입력 지연 타이머는 쓰지 않는다 — 다시 읽기가 겹치지 않게).</summary>
+    /// <summary>필터를 모두(빠른 필터·저장 필터) 풀고 바로 적용한다(입력 지연 타이머는 쓰지 않는다 — 다시 읽기가 겹치지 않게).</summary>
     private async Task ClearFilterAsync(CancellationToken ct)
     {
         _suppressFilterSchedule = true;
@@ -382,6 +389,13 @@ public sealed partial class SchemaBrowserViewModel
         }
 
         _debounce?.Cancel();
-        await ApplyFilterAsync(ct);
+        if (ActiveSavedFilter is not null)
+        {
+            await SelectSavedFilterAsync(null, ct); // 숨겼던 스키마를 되살리고 다시 거른다
+        }
+        else
+        {
+            await ApplyFilterAsync(ct);
+        }
     }
 }

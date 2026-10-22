@@ -367,6 +367,9 @@ public class SchemaBrowserTests
 
         public InMemorySchemaFavoriteStore Favorites { get; } = new();
 
+        /// <summary>저장 필터 등 스키마 브라우저 설정(메모리에만 저장).</summary>
+        public Oranda.App.Shell.Settings.SettingsService Settings { get; } = new(new Oranda.App.Tests.Features.Update.MemorySettingsStore());
+
         public SchemaBrowserViewModel Vm { get; }
     }
 
@@ -380,6 +383,7 @@ public class SchemaBrowserTests
             : serviceType == typeof(ISchemaFavoriteStore) ? h.Favorites
             : serviceType == typeof(ISchemaTreeProvider) ? h.Tree
             : serviceType == typeof(ISchemaAdminProvider) ? h.Admin
+            : serviceType == typeof(Oranda.App.Shell.Settings.SettingsService) ? h.Settings
             : null;
     }
 
