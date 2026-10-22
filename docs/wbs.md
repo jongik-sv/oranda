@@ -3653,6 +3653,108 @@ dotnet, testhost, Oranda.App
 - data-model: -
 - ui-spec: -
 
+### TSK-13-16: 바인드 변수·템플릿 도구 창을 기본으로 연다 [mac]
+- category: feat
+- domain: frontend
+- model: sonnet
+- status: [ ]
+- priority: medium
+- assignee: -
+- schedule: 2026-10-22 ~ 2026-10-23
+- tags: layout, ui, mac
+- depends: TSK-03-01
+- blocked-by: -
+- entry-point: 앱 시작 직후 오른쪽 도구 창 자리
+- note: 담당 PC: mac(맥북) — win144 세션은 이 Task 를 하지 않는다. 2026-10-22 사용자 요청: 바인드 변수 창과 템플릿 창이 처음부터 보이게. 지금은 LayoutPlanner.CreateDefault 가 오른쪽 도구 창을 모두 hiddenTools 로 둔다
+
+#### PRD 요구사항
+- prd-ref: PRD UI 셸 도킹 배치
+- requirements:
+  - 새 기본 배치에서 바인드 변수 창과 템플릿 창은 오른쪽에 열린 상태로 놓인다. 그 밖의 오른쪽 도구 창은 지금처럼 숨긴다
+  - 이미 저장된 layout.json 도 한 번만 이주해 두 창을 보이게 한다(배치 문서에 이주 표지를 남긴다)
+  - 이주 뒤 사용자가 닫은 창은 다음 실행에도 닫힌 채로 남는다
+- acceptance:
+  - 새 데이터 폴더로 시작하면 두 창이 보인다
+  - 옛 layout.json 으로 시작하면 두 창이 한 번 열리고, 닫은 뒤 다시 시작해도 닫혀 있다
+- constraints:
+  - 이주는 시작할 때마다 다시 돌지 않는다(Reconcile 의 기본 배치 되돌림 경로 포함)
+- test-criteria:
+  - LayoutPlanner 시험: 새 기본 배치, 옛 배치 1회 이주, 이주 뒤 닫은 창 유지
+
+#### 기술 스펙 (TRD)
+- tech-spec: -
+- api-spec: -
+- data-model: layout.json 이주 표지
+- ui-spec: -
+
+### TSK-13-17: 결과 그리드 머리글 끌어 열 순서 바꾸기와 큰 결과 정렬 보호 [mac]
+- category: feat
+- domain: frontend
+- model: sonnet
+- status: [ ]
+- priority: high
+- assignee: -
+- schedule: 2026-10-22 ~ 2026-10-24
+- tags: grid, sort, performance, mac
+- depends: TSK-06-03
+- blocked-by: -
+- entry-point: 조회 결과 그리드 열 머리글(끌기·누르기)
+- note: 담당 PC: mac(맥북) — win144 세션은 이 Task 를 하지 않는다. 2026-10-22 사용자 보고: 143만 건 결과에서 머리글을 잘못 눌러 CPU 가 치솟고 취소가 안 됨(ResultGridModel.ToggleSortAsync 가 확인 없이 전부 가져와 UI 스레드에서 정렬, 머리글 경로가 CancellationToken 을 넘기지 않음). 사용자 결정: 머리글 끌기와 정렬을 한 Task 로, 끌면 정렬하지 않고 열 순서만 바꿈. 10만 행 이상이면 「서버에서 ORDER BY로 다시 조회」를 기본으로 묻는다
+
+#### PRD 요구사항
+- prd-ref: PRD GRID-01
+- requirements:
+  - 머리글을 문턱 이상 끌면 열 순서만 바뀌고 정렬하지 않는다. 끌기 없는 누르기만 정렬한다
+  - 바뀐 열 순서는 복사·내보내기(보이는 순서)에 반영되고, 편집 반영은 열 이름(원래 열)으로 맞춘다
+  - 다 가져온 결과가 grid.localSortMaxRows(기본 100000) 미만이면 묻지 않고 그 자리에서 정렬한다
+  - 아직 다 안 가져왔으면 문턱까지만 더 가져와 보고, 그 안에 끝나면 그 자리에서 정렬한다. 문턱에 닿으면 묻는 창(기본 = 서버에서 ORDER BY 로 다시 조회, 그 밖 = 전부 가져와 정렬·취소)
+  - 정렬과 추가 가져오기는 UI 스레드 밖에서 돌고, 진행 표시·Esc·취소 단추로 멈출 수 있다
+- acceptance:
+  - 143만 행 같은 큰 결과에서 머리글을 눌러도 앱이 멈추지 않고 취소된다
+  - 끌기로 열 순서를 바꾼 뒤 복사한 머리글 순서가 화면 순서와 같다
+- constraints:
+  - 서버 ORDER BY 다시 조회는 단순 SELECT 에만, 편집 모드에 반영 안 한 변경이 있으면 묻거나 막는다(조용히 버리지 않음)
+- test-criteria:
+  - 끌기 문턱과 누르기 구분, 문턱 미만·이상 정렬 경로, 취소, 열 순서 반영 복사 시험
+
+#### 기술 스펙 (TRD)
+- tech-spec: -
+- api-spec: -
+- data-model: 설정 grid.localSortMaxRows
+- ui-spec: -
+
+### TSK-13-18: 조회 결과를 저장할 때 눈에 보이는 효과 [mac]
+- category: feat
+- domain: frontend
+- model: sonnet
+- status: [ ]
+- priority: medium
+- assignee: -
+- schedule: 2026-10-22 ~ 2026-10-23
+- tags: grid, ui, mac
+- depends: TSK-06-04
+- blocked-by: -
+- entry-point: 결과 그리드 편집 반영(oranda.grid.edit.apply·applyAndCommit), 결과 내보내기(oranda.grid.export·exportExcel)
+- note: 담당 PC: mac(맥북) — win144 세션은 이 Task 를 하지 않는다. 2026-10-22 사용자 요청: 「조회 결과를 저장할때 아무런 이펙트가 없는것 같은데」「있으면 수정 안해도 되고 없으면 이펙트가 들어가면 좋겠어」
+
+#### PRD 요구사항
+- prd-ref: PRD GRID-04
+- requirements:
+  - 저장(편집 반영·커밋, 파일 내보내기)이 끝났을 때 이미 보이는 피드백이 있는지 먼저 확인하고, 있으면 고치지 않는다
+  - 없으면 끝난 순간 눈에 띄는 효과를 넣는다(예: 반영된 행 잠깐 강조, 상태 표시줄의 「N행 저장됨」 알림)
+- acceptance:
+  - 저장이 끝나면 성공·실패가 화면에서 바로 구분된다
+- constraints:
+  - 테마 자원(DynamicResource)만 쓴다. 효과는 입력을 막지 않는다
+- test-criteria:
+  - 저장 성공·실패 때 효과가 한 번 나타나는 헤드리스 시험
+
+#### 기술 스펙 (TRD)
+- tech-spec: -
+- api-spec: -
+- data-model: -
+- ui-spec: -
+
 ## 의존 그래프
 
 ### 그래프 (Mermaid)
@@ -3799,6 +3901,9 @@ graph LR
   TSK-13-12 --> TSK-13-13
   TSK-07-01 --> TSK-13-14
   TSK-13-14 --> TSK-13-15
+  TSK-03-01 --> TSK-13-16
+  TSK-06-03 --> TSK-13-17
+  TSK-06-04 --> TSK-13-18
   style TSK-01-02 fill:#fff3e0,stroke:#e65100
   style TSK-01-07 fill:#fff3e0,stroke:#e65100
   style TSK-01-02 stroke:#c62828,stroke-width:2px
