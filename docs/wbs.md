@@ -3987,6 +3987,42 @@ dotnet, testhost, Oranda.App
 - data-model: schemaBrowser.filters 항목 scope Pattern·schemaPattern
 - ui-spec: -
 
+### TSK-13-26: 조회 결과 안에서 거르기(빠른 거르기 칸·열 머리글 자동 필터) [mac]
+- category: feat
+- domain: frontend
+- model: sonnet
+- status: [ ]
+- priority: high
+- assignee: -
+- schedule: 2026-10-22 ~ 2026-10-24
+- tags: grid, filter, mac
+- depends: TSK-13-17
+- blocked-by: -
+- entry-point: 결과 그리드 「결과 안에서 거르기」 칸, 열 머리글 ▾ 자동 필터
+- note: 담당 PC: mac(맥북) — win144 세션은 이 Task 를 하지 않는다. 2026-10-22 사용자 요청: 「조회 결과 자체에 필터를 거는 기능은 어떨까?」 → 서버 다시 조회 방식(GRID-10 거르기 줄)은 이미 있으므로, 가져온 행만 앱에서 거르는 기능 두 가지를 모두 넣기로 결정
+
+#### PRD 요구사항
+- prd-ref: PRD GRID-10
+- requirements:
+  - 빠른 거르기 칸: 글자를 치면 그 글자가 든 행만 바로 남는다(모든 열 또는 고른 열, 대소문자 무시, 화면에 보이는 값 기준). Esc 로 지움
+  - 열 머리글 자동 필터: 머리글 ▾ 에서 가져온 행의 값 목록(개수 포함)을 체크하거나 조건(포함·같음·시작·범위·NULL)을 고른다. 여러 열 조건은 AND. 걸린 열은 머리글에 표시
+  - 서버에 다시 조회하지 않는다. 다 가져오지 않은 결과면 「가져온 N행 중에서 거름」을 보이고, 모두 가져오기는 13-17 의 문턱 규칙을 따른다
+  - 상태 표시: 「거름: 보이는 행 / 가져온 행」. 모든 거르기 지우기 명령
+  - 걸러진 상태에서 정렬·열 순서·편집·행 보기는 원래 행 기준으로 맞게 동작한다. 복사는 보이는 행, 내보내기는 보이는 행이 기본(전체 선택 가능)
+- acceptance:
+  - 10만 행 결과에서 빠른 거르기 입력이 UI 를 멈추지 않는다
+  - 편집 모드에서 거른 뒤 고쳐 반영하면 고친 행이 반영·강조된다
+- constraints:
+  - 서버 거르기 줄(GRID-10)과 함께 쓸 수 있다. 서버 다시 조회 뒤에는 앱 거르기를 새 결과에 다시 적용한다
+- test-criteria:
+  - 빠른 거르기(모든 열·한 열·대소문자·지우기), 자동 필터(값 체크·조건·여러 열 AND·NULL), 정렬·열 순서·편집 반영과의 조합, 복사·내보내기 대상, 큰 결과 응답성 시험
+
+#### 기술 스펙 (TRD)
+- tech-spec: -
+- api-spec: -
+- data-model: -
+- ui-spec: -
+
 ## 의존 그래프
 
 ### 그래프 (Mermaid)
@@ -4143,6 +4179,7 @@ graph LR
   TSK-13-18 --> TSK-13-23
   TSK-13-11 --> TSK-13-24
   TSK-13-10 --> TSK-13-25
+  TSK-13-17 --> TSK-13-26
   style TSK-01-02 fill:#fff3e0,stroke:#e65100
   style TSK-01-07 fill:#fff3e0,stroke:#e65100
   style TSK-01-02 stroke:#c62828,stroke-width:2px
