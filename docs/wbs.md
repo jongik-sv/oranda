@@ -4219,6 +4219,41 @@ dotnet, testhost, Oranda.App
 - data-model: -
 - ui-spec: -
 
+### TSK-13-33: 플래시백 메뉴를 일반 실행 결과에서도 쓰기, 「이 행 변경 이력」과 「변경 추적하기」 합치기 [mac]
+- category: feat
+- domain: frontend
+- model: sonnet
+- status: [ ]
+- priority: medium
+- assignee: -
+- schedule: 2026-10-22 ~ 2026-10-23
+- tags: flashback, mac
+- depends: TSK-13-31
+- blocked-by: -
+- entry-point: 결과 그리드 행 문맥 메뉴 「플래시백」 > 「N분 전 값 보기」·「이 행 변경 이력」
+- note: 담당 PC: mac(맥북) — win144 세션은 이 Task 를 하지 않는다. 2026-10-22 실제 앱 사용 중 사용자 요청(「조회 결과에서 이 행 변경이력, 변경 추적하기가 제대로 동작을 안해」). 13-31 의 동작을 「이 행 변경 이력」으로 합침
+
+#### PRD 요구사항
+- prd-ref: PRD GRID-11
+- requirements:
+  - 편집 모드가 아닌 일반 실행 결과도 단일 표 SELECT 이고 PK 열이 결과에 모두 있으면 「N분 전 값 보기」·「이 행 변경 이력」이 동작한다(편집 세션·ROWID 재실행 없이, 편집 모드와 같은 표·키 판정을 재사용하고 메타데이터는 결과 탭의 접속으로 조회). 편집 모드 결과는 지금처럼 편집 세션의 키(ROWID 포함)를 쓴다
+  - 「이 행 변경 이력」 하나만 남기고 동작은 13-31 의 「변경 추적하기」로 한다(분을 묻지 않음, 전체 기간 VERSIONS BETWEEN SCN MINVALUE AND MAXVALUE 질의를 새 SQL 탭에 쓰고 실행). `oranda.grid.flashback.track` 명령과 쓰지 않게 된 분 묻기 경로를 지운다
+  - 「이전 값으로 되돌리기」(쓰기)는 편집 모드 결과에서만 한다. 일반 결과에서는 편집 모드로 다시 실행하라고 안내한다
+  - 쓸 수 없을 때(여러 표·PK 없음·결과에 PK 열 없음) 이유를 결과 요약 줄뿐 아니라 메시지 창 경고로도 보인다(새 대화상자 없음)
+- acceptance:
+  - 일반 실행(⌘↵) 결과에서 「이 행 변경 이력」이 새 SQL 탭을 열어 실행한다. 메뉴에 「변경 추적하기」가 없다
+  - 쓸 수 없는 결과에서는 이유가 메시지 창에 경고로 남는다
+- constraints:
+  - 서버에 보조 객체를 설치하지 않는다
+- test-criteria:
+  - 일반 결과 + 단일 표 + PK → 대상 생성, PK 열 없음·여러 표 → 이유, 편집 모드 결과 → 기존과 같음, 되돌리기는 일반 결과에서 안내, track 명령이 없어짐
+
+#### 기술 스펙 (TRD)
+- tech-spec: -
+- api-spec: -
+- data-model: -
+- ui-spec: -
+
 ## 의존 그래프
 
 ### 그래프 (Mermaid)
@@ -4383,6 +4418,7 @@ graph LR
   TSK-13-05 --> TSK-13-31
   TSK-13-29 --> TSK-13-31
   TSK-04-06 --> TSK-13-32
+  TSK-13-31 --> TSK-13-33
   style TSK-01-02 fill:#fff3e0,stroke:#e65100
   style TSK-01-07 fill:#fff3e0,stroke:#e65100
   style TSK-01-02 stroke:#c62828,stroke-width:2px

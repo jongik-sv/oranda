@@ -380,8 +380,9 @@ public sealed class GridEditSession
         return result;
     }
 
-    private static async Task<RowEditPlan> PlanAsync(IRowEditor editor, IMetadataProvider metadata, ISession session, SqlStatement query,
-                                                     IReadOnlyList<ResultColumn> columns, DbObjectRef? target, CancellationToken ct)
+    /// <summary>편집 가능 판정(대상 표·키). 편집 세션을 열지 않는 쪽(플래시백의 일반 결과)도 같은 판정을 쓴다.</summary>
+    internal static async Task<RowEditPlan> PlanAsync(IRowEditor editor, IMetadataProvider metadata, ISession session, SqlStatement query,
+                                                      IReadOnlyList<ResultColumn> columns, DbObjectRef? target, CancellationToken ct)
     {
         var shape = SelectAnalyzer.Analyze(query.Text);
         if (shape.Block != EditBlockReason.None)

@@ -3,11 +3,14 @@ using Oranda.App.Features.Execution;
 using Oranda.App.Features.GridEdit;
 using Oranda.App.Features.ResultGrid;
 using Oranda.App.Features.SqlEditor;
+using Oranda.App.Shell;
 using Oranda.App.Shell.Composition;
 using Oranda.Core.Catalog;
 using Oranda.Core.Events;
 using Oranda.Core.Execution;
 using Oranda.Core.Grid;
+using Oranda.Core.Metadata;
+using Oranda.Core.Sessions;
 using Oranda.Core.Shell;
 using Oranda.Language.Editing;
 using Oranda.Oracle.Catalog;
@@ -16,21 +19,20 @@ namespace Oranda.App.Features.Flashback;
 
 /// <summary>
 /// TSK-13-05 플래시백 조회·복구(commands.md 「결과」). 결과 그리드 문맥 메뉴 「플래시백」 묶음.
-/// 대상은 편집 모드(F9)로 연 단일 표 결과(키 PK·ROWID)다. 아닌 결과에서는 누르면 이유를 결과 요약 줄에 보이고 아무것도 하지 않는다.
+/// 읽기 메뉴(N분 전 값 보기·이 행 변경 이력)는 단일 표 SELECT 결과(키 PK, 일반 실행 결과도 포함)에서 동작하고,
+/// 편집 모드(F9) 결과에서는 편집 세션의 키(PK·ROWID)를 쓴다. 되돌리기(쓰기)는 편집 모드 결과에서만 한다.
+/// 쓸 수 없으면 이유를 결과 요약 줄과 메시지 창에 보인다.
 /// 서버에 보조 객체를 설치하지 않는다. 되돌리기는 미리보기를 거쳐 커밋 없이 반영한다(커밋은 사용자가 한다).
 /// </summary>
 [OrandaCommand("oranda.grid.flashback.asOf", CommandCategory.Result, Title = "N분 전 값 보기…", When = "gridFocus", Enablement = "gridHasSelection",
     Placements = ["context:grid/flashback@10"])]
 [OrandaCommand("oranda.grid.flashback.history", CommandCategory.Result, Title = "이 행 변경 이력", When = "gridFocus", Enablement = "gridHasSelection",
     Placements = ["context:grid/flashback@20"])]
-[OrandaCommand("oranda.grid.flashback.track", CommandCategory.Result, Title = "변경 추적하기", When = "gridFocus", Enablement = "gridHasSelection",
-    Placements = ["context:grid/flashback@25"])]
 [OrandaCommand("oranda.grid.flashback.restore", CommandCategory.Result, Title = "이전 값으로 되돌리기…", When = "gridFocus", Enablement = "gridHasSelection && !sessionBusy",
     Placements = ["context:grid/flashback@30"])]
 public sealed class FlashbackCommandHandler : ICommandHandler
 {
     private const int DefaultAsOfMinutes = 10;
-    private const int DefaultHistoryMinutes = 15;
     private const int MaxRestoreRows = 200;
 
     private static readonly Lazy<SqlCatalog> Catalog = new(EmbeddedCatalog.Load);
@@ -53,13 +55,15 @@ public sealed class FlashbackCommandHandler : ICommandHandler
 
         try
         {
-            if (!Locate(model, out var tabs, out var tab, out var target, out var edit, out var why))
+            var (source, why) = await LocateAsync(container, model, cancellationToken).ConfigureAwait(true);
+            if (source is null)
             {
-                model.ReportNotice(why);
+                Notify(container, model, why);
                 return;
             }
 
-            if (edit.IsDirty)
+            var edit = source.Edit;
+            if (edit is { IsDirty: true })
             {
                 model.ReportNotice("반영하지 않은 편집이 있습니다. 반영하거나 되돌린 뒤 플래시백을 쓰세요.");
                 return;
@@ -69,16 +73,16 @@ public sealed class FlashbackCommandHandler : ICommandHandler
             switch (context.CommandId)
             {
                 case "oranda.grid.flashback.asOf":
-                    await AsOfAsync(runner, model, tabs, tab, target, edit, cancellationToken).ConfigureAwait(true);
+                    await AsOfAsync(runner, model, source, cancellationToken).ConfigureAwait(true);
                     break;
                 case "oranda.grid.flashback.history":
-                    await HistoryAsync(runner, model, tabs, tab, target, edit, cancellationToken).ConfigureAwait(true);
+                    await HistoryAsync(container, model, source, cancellationToken).ConfigureAwait(true);
                     break;
-                case "oranda.grid.flashback.track":
-                    await TrackAsync(container, model, target, edit, cancellationToken).ConfigureAwait(true);
+                case "oranda.grid.flashback.restore" when edit is null:
+                    Notify(container, model, FlashbackTarget.RestoreNeedsEditMode);
                     break;
                 case "oranda.grid.flashback.restore":
-                    await RestoreAsync(container, runner, model, target, edit, cancellationToken).ConfigureAwait(true);
+                    await RestoreAsync(container, runner, model, source.Target, edit, cancellationToken).ConfigureAwait(true);
                     break;
             }
         }
@@ -92,45 +96,64 @@ public sealed class FlashbackCommandHandler : ICommandHandler
         }
     }
 
-    /// <summary>그리드가 속한 결과 탭·편집 세션·플래시백 대상을 찾는다. 쓸 수 없으면 false 와 이유.</summary>
-    internal static bool Locate(ResultGridModel model, out ResultTabsViewModel tabs, out ResultTabItem tab, out FlashbackTarget target,
-                                out GridEditSession edit, out string reason)
+    /// <summary>
+    /// 그리드가 속한 결과 탭·접속·플래시백 대상을 찾는다. 편집 모드 결과는 편집 세션의 키를, 일반 실행 결과는 탭의 문장을
+    /// 편집 모드와 같은 판정(<see cref="GridEditSession.PlanAsync"/>)으로 분석해 PK 를 쓴다(편집 세션·ROWID 재실행 없이).
+    /// 쓸 수 없으면 null 과 이유.
+    /// </summary>
+    internal static async Task<(FlashbackSource? Source, string Reason)> LocateAsync(ServiceContainer container, ResultGridModel model, CancellationToken ct)
     {
-        tabs = null!;
-        tab = null!;
-        target = null!;
-        edit = null!;
-        if (SqlEditorHost.Current.Active?.ResultPane is not ResultTabsViewModel t
-            || t.Tabs.FirstOrDefault(x => ReferenceEquals(x.Pane?.Model, model)) is not { } found)
+        if (SqlEditorHost.Current.Active?.ResultPane is not ResultTabsViewModel tabs
+            || tabs.Tabs.FirstOrDefault(x => ReferenceEquals(x.Pane?.Model, model)) is not { } tab)
         {
-            reason = "플래시백은 편집기 결과 탭에서 쓸 수 있습니다.";
-            return false;
+            return (null, "플래시백은 편집기 결과 탭에서 쓸 수 있습니다.");
         }
 
-        tabs = t;
-        tab = found;
-        if (found.EditSession is not { } es)
+        if (tab.EditSession is { } es)
         {
-            reason = FlashbackTarget.NeedsEditMode;
-            return false;
+            var created = FlashbackTarget.TryCreate(es.Capability, es.Plan.ColumnNames, es.Columns, out var reason);
+            return created is null ? (null, reason) : (new FlashbackSource(tabs, tab, es.Session, created, es), string.Empty);
         }
 
-        edit = es;
-        var created = FlashbackTarget.TryCreate(es.Capability, es.Plan.ColumnNames, es.Columns, out reason);
-        if (created is null)
+        if (tab.Statement is not { } statement
+            || ExecutionCommands.ActiveTabSession(container) is not { } session
+            || container.GetService<IRowEditor>() is not { } editor
+            || container.GetService<IMetadataProvider>() is not { } metadata)
         {
-            return false;
+            return (null, FlashbackTarget.NeedsEditMode);
         }
 
-        target = created;
-        return true;
+        var (target, why) = await PlainTargetAsync(editor, metadata, session, statement, model.Columns, ct).ConfigureAwait(true);
+        return target is null ? (null, why) : (new FlashbackSource(tabs, tab, session, target, null), string.Empty);
+    }
+
+    /// <summary>일반 실행 결과의 대상: 문장이 단일 표 SELECT 이고 PK 열이 결과에 모두 있어야 한다(편집 모드와 같은 판정, 키는 PK 뿐).</summary>
+    internal static async Task<(FlashbackTarget? Target, string Reason)> PlainTargetAsync(IRowEditor editor, IMetadataProvider metadata, ISession session,
+                                                                                         SqlStatement statement, IReadOnlyList<ResultColumn> columns, CancellationToken ct)
+    {
+        var plan = await GridEditSession.PlanAsync(editor, metadata, session, statement, columns, null, ct).ConfigureAwait(true);
+        if (plan.IsJoin)
+        {
+            return (null, FlashbackTarget.MultipleTables); // 편집 모드는 조인 결과도 한 표를 골라 고치지만, 플래시백은 표 하나로 정해진 결과만 읽는다
+        }
+
+        var target = FlashbackTarget.TryCreate(plan.Capability, plan.ColumnNames, columns, out var why, plain: true);
+        return (target, why);
+    }
+
+    /// <summary>쓸 수 없는 이유를 결과 요약 줄에 남기고, 눈에 띄도록 메시지 창에 경고로 올려 연다(새 대화상자 없이).</summary>
+    private static void Notify(ServiceContainer container, ResultGridModel model, string text)
+    {
+        model.ReportNotice(text);
+        ExecutionLog.For(container.GetService<IEventBus>()).AddMessage(MessageKind.Warning, text);
+        container.GetService<IShellUi>()?.Docking.ShowTool("oranda.panel.messages");
     }
 
     /// <summary>「N분 전 값 보기」: 불러온 행의 키로 AS OF 질의를 실행해 새 결과 탭에 열고 지금 값과 다른 칸을 강조한다.</summary>
-    private static async Task AsOfAsync(FlashbackRunner runner, ResultGridModel model, ResultTabsViewModel tabs, ResultTabItem tab,
-                                 FlashbackTarget target, GridEditSession edit, CancellationToken ct)
+    private static async Task AsOfAsync(FlashbackRunner runner, ResultGridModel model, FlashbackSource source, CancellationToken ct)
     {
-        var minutes = await AskMinutesAsync(runner, edit, "N분 전 값 보기", DefaultAsOfMinutes, ct).ConfigureAwait(true);
+        var (tabs, tab, session, target) = (source.Tabs, source.Tab, source.Session, source.Target);
+        var minutes = await AskMinutesAsync(runner, session, "N분 전 값 보기", DefaultAsOfMinutes, ct).ConfigureAwait(true);
         if (minutes is not { } n)
         {
             return;
@@ -153,11 +176,11 @@ public sealed class FlashbackCommandHandler : ICommandHandler
         IResultSet rs;
         try
         {
-            rs = await runner.QueryAsync(edit.Session, query, ct).ConfigureAwait(true);
+            rs = await runner.QueryAsync(session, query, ct).ConfigureAwait(true);
         }
         catch (InvalidOperationException e) when (FlashbackErrorAdvisor.IsDefinitionChanged(e.Message))
         {
-            var ddl = await runner.LastDdlAsync(edit.Session, Catalog.Value, target.Table, ct).ConfigureAwait(true);
+            var ddl = await runner.LastDdlAsync(session, Catalog.Value, target.Table, ct).ConfigureAwait(true);
             throw ddl is { } t
                 ? new InvalidOperationException($"{e.Message} 표 정의가 마지막으로 바뀐 시각: {t.ToString("yyyy-MM-dd HH:mm:ss", CultureInfo.InvariantCulture)}. 그 이후 시각만 조회할 수 있습니다.", e)
                 : e;
@@ -175,62 +198,21 @@ public sealed class FlashbackCommandHandler : ICommandHandler
         model.ReportNotice(string.Empty);
     }
 
-    /// <summary>「이 행 변경 이력」: VERSIONS BETWEEN 으로 활성 행의 변경 이력을 새 결과 탭에 연다.</summary>
-    private static async Task HistoryAsync(FlashbackRunner runner, ResultGridModel model, ResultTabsViewModel tabs, ResultTabItem tab,
-                                    FlashbackTarget target, GridEditSession edit, CancellationToken ct)
+    /// <summary>「이 행 변경 이력」: 활성 행의 전체 변경 이력 질의를 새 SQL 탭에 넣고 바로 실행한다(원래 결과를 만든 탭의 접속으로, 기간은 묻지 않는다).</summary>
+    private static async Task HistoryAsync(ServiceContainer container, ResultGridModel model, FlashbackSource source, CancellationToken ct)
     {
-        var minutes = await AskMinutesAsync(runner, edit, "이 행 변경 이력", DefaultHistoryMinutes, ct).ConfigureAwait(true);
-        if (minutes is not { } n)
-        {
-            return;
-        }
-
+        var target = source.Target;
         var row = (await model.ReadRowsAsync(model.Active.Row, model.Active.Row, target.Ordinals, ct).ConfigureAwait(true)).FirstOrDefault();
         if (row is null || target.KeyPositions.Any(p => row[p] is null or DBNull))
         {
-            model.ReportNotice("이 행의 키 값을 읽을 수 없어 이력을 볼 수 없습니다.");
-            return;
-        }
-
-        var query = FlashbackQueryBuilder.BuildVersions(target.Table, target.Names, target.KeyNames, target.KeyOf(row), n);
-        var notice = $"최근 {n}분 동안의 변경 이력입니다(최신이 위). VERSIONS_OPERATION: I 삽입 · U 수정 · D 삭제.";
-        IResultSet rs;
-        try
-        {
-            rs = await runner.QueryAsync(edit.Session, query, ct).ConfigureAwait(true);
-        }
-        catch (InvalidOperationException e) when (FlashbackErrorAdvisor.IsDefinitionChanged(e.Message))
-        {
-            // 최근에 만들었거나 ALTER 한 표: 창 시작을 표 정의가 바뀐 시각 뒤로 당겨 한 번만 다시 한다.
-            if (await runner.LastDdlAsync(edit.Session, Catalog.Value, target.Table, ct).ConfigureAwait(true) is not { } ddl)
-            {
-                throw;
-            }
-
-            query = FlashbackQueryBuilder.BuildVersions(target.Table, target.Names, target.KeyNames, target.KeyOf(row), n, ddl);
-            rs = await runner.QueryAsync(edit.Session, query, ct).ConfigureAwait(true);
-            notice = $"표 정의가 {ddl.ToString("yyyy-MM-dd HH:mm:ss", CultureInfo.InvariantCulture)} 에 바뀌어 그 뒤 이력만 보입니다. VERSIONS_OPERATION: I 삽입 · U 수정 · D 삭제.";
-        }
-
-        var opened = tabs.AddRelated(new RelatedRowsResult(rs, $"이력: {target.Table.Name}", query.Statement, query.Binds), tab.Pane);
-        opened.Pane?.Model?.ReportNotice(notice);
-        model.ReportNotice(string.Empty);
-    }
-
-    /// <summary>「변경 추적하기」: 활성 행의 전체 변경 이력 질의를 새 SQL 탭에 넣고 바로 실행한다(원래 결과를 만든 탭의 접속으로).</summary>
-    private static async Task TrackAsync(ServiceContainer container, ResultGridModel model, FlashbackTarget target, GridEditSession edit, CancellationToken ct)
-    {
-        var row = (await model.ReadRowsAsync(model.Active.Row, model.Active.Row, target.Ordinals, ct).ConfigureAwait(true)).FirstOrDefault();
-        if (row is null || target.KeyPositions.Any(p => row[p] is null or DBNull))
-        {
-            model.ReportNotice("이 행의 키 값을 읽을 수 없어 변경을 추적할 수 없습니다.");
+            model.ReportNotice("이 행의 키 값을 읽을 수 없어 변경 이력을 볼 수 없습니다.");
             return;
         }
 
         var host = SqlEditorHost.Current;
-        var profileId = host.Active?.ConnectionProfileId ?? edit.Session.Profile.Id;
+        var profileId = host.Active?.ConnectionProfileId ?? source.Session.Profile.Id;
         var text = FlashbackTrackSql.Build(target.Table, target.Names, target.KeyNames, target.KeyOf(row),
-            edit.Session.Server.SessionUser ?? edit.Session.Profile.User);
+            source.Session.Server.SessionUser ?? source.Session.Profile.User);
         await OpenAndRunAsync(host, text, profileId, token => ExecutionCommands.Resolve(container).RunAsync(RunMode.Statement, ct: token), ct).ConfigureAwait(true);
         model.ReportNotice(string.Empty);
     }
@@ -256,7 +238,7 @@ public sealed class FlashbackCommandHandler : ICommandHandler
             return;
         }
 
-        var minutes = await AskMinutesAsync(runner, edit, "이전 값으로 되돌리기", DefaultAsOfMinutes, ct).ConfigureAwait(true);
+        var minutes = await AskMinutesAsync(runner, edit.Session, "이전 값으로 되돌리기", DefaultAsOfMinutes, ct).ConfigureAwait(true);
         if (minutes is not { } n)
         {
             return;
@@ -313,9 +295,9 @@ public sealed class FlashbackCommandHandler : ICommandHandler
     }
 
     /// <summary>분 입력 대화상자. 제목에 undo_retention 안내를 붙인다. 취소하거나 잘못 입력하면 null.</summary>
-    private static async Task<int?> AskMinutesAsync(FlashbackRunner runner, GridEditSession edit, string title, int initial, CancellationToken ct)
+    private static async Task<int?> AskMinutesAsync(FlashbackRunner runner, ISession session, string title, int initial, CancellationToken ct)
     {
-        var env = await runner.EnvironmentAsync(edit.Session, Catalog.Value, ct).ConfigureAwait(true);
+        var env = await runner.EnvironmentAsync(session, Catalog.Value, ct).ConfigureAwait(true);
         var text = await new AvaloniaEditorDialogs().PromptAsync($"{title} — 몇 분 전? ({env})", initial.ToString(CultureInfo.InvariantCulture), ct).ConfigureAwait(true);
         if (text is null)
         {

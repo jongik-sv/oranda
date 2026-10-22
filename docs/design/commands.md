@@ -448,8 +448,7 @@
 | `oranda.grid.export` | 내보내기 | - | `gridFocus` | `gridHasResult` | TSK-06-07 |
 | `oranda.grid.exportExcel` | Excel 로 내보내기… | `Ctrl+Alt+E` | `gridFocus` | `gridHasResult` | TSK-06-07 |
 | `oranda.grid.flashback.asOf` | N분 전 값 보기… | - | `gridFocus` | `gridHasSelection` | TSK-13-05 |
-| `oranda.grid.flashback.history` | 이 행 변경 이력 | - | `gridFocus` | `gridHasSelection` | TSK-13-05 |
-| `oranda.grid.flashback.track` | 변경 추적하기 (활성 행의 전체 변경 이력 질의를 새 SQL 탭에 넣고 실행) | - | `gridFocus` | `gridHasSelection` | TSK-13-31 |
+| `oranda.grid.flashback.history` | 이 행 변경 이력 (활성 행의 전체 변경 이력 질의를 새 SQL 탭에 넣고 실행. 일반 실행 결과도 단일 표·PK 가 있으면 동작) | - | `gridFocus` | `gridHasSelection` | TSK-13-05, TSK-13-31, TSK-13-33 |
 | `oranda.grid.flashback.restore` | 이전 값으로 되돌리기… | - | `gridFocus` | `gridHasSelection && !sessionBusy` | TSK-13-05 |
 | `oranda.grid.edit.addRow` | 행 추가 | `Alt+Insert` | `gridFocus` | `gridEditing` | TSK-06-04 |
 | `oranda.grid.edit.duplicateRow` | 행 복제 | `Ctrl+Shift+D` | `gridFocus` | `gridHasSelection` | TSK-06-04 |

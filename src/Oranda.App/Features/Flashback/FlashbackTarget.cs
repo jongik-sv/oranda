@@ -1,7 +1,9 @@
+using Oranda.App.Features.Execution;
 using Oranda.App.Features.GridEdit;
 using Oranda.Core.Execution;
 using Oranda.Core.Grid;
 using Oranda.Core.Metadata;
+using Oranda.Core.Sessions;
 using Oranda.Language.Editing;
 
 namespace Oranda.App.Features.Flashback;
@@ -20,19 +22,30 @@ public sealed record FlashbackTarget(DbObjectRef Table, IReadOnlyList<string> Na
 
     public const string MultipleTables = "여러 표가 얽힌 결과에서는 쓸 수 없습니다.";
 
+    /// <summary>일반 실행 결과에 키(PK) 열이 빠졌을 때: 열을 함께 조회하거나 편집 모드(ROWID 키)로 다시 실행하라고 안내한다.</summary>
+    public static string NeedsKeyColumns => EditModeKey.Localize(
+        "키(PK) 열이 결과에 없어 플래시백을 쓸 수 없습니다. PK 열을 함께 조회하거나 편집 모드{0}로 다시 실행하세요.",
+        "Flashback needs the key (PK) columns in the result. Select the PK columns too, or rerun in edit mode{0}.");
+
+    /// <summary>「이전 값으로 되돌리기」는 쓰기라 편집 모드 결과에서만 한다.</summary>
+    public static string RestoreNeedsEditMode => EditModeKey.Localize(
+        "되돌리기는 편집 모드{0}로 다시 실행한 결과에서만 쓸 수 있습니다.",
+        "Restore works only on a result run in edit mode{0}.");
+
     public IReadOnlyList<string> KeyNames => [.. KeyPositions.Select(p => Names[p])];
 
     /// <summary>결과 열 번호 목록(질의가 읽는 열 순서)에서 키 값만 뽑는다.</summary>
     public object?[] KeyOf(IReadOnlyList<object?> row) => [.. KeyPositions.Select(p => row[p])];
 
     /// <summary>
-    /// 대상을 정한다. 편집 모드가 아니거나 단일 표·키(PK·ROWID)가 없으면 null 이고 <paramref name="reason"/> 에 이유 한 줄.
+    /// 대상을 정한다. 단일 표·키(PK·ROWID)가 없으면 null 이고 <paramref name="reason"/> 에 이유 한 줄.
+    /// <paramref name="plain"/> 은 편집 모드가 아닌 일반 실행 결과(키는 PK 뿐이라 빠지면 열을 더하라고 안내한다).
     /// </summary>
     public static FlashbackTarget? TryCreate(EditCapability? capability, IReadOnlyList<string?>? columnNames, IReadOnlyList<ResultColumn> columns,
-                                             out string reason)
+                                             out string reason, bool plain = false)
     {
         ArgumentNullException.ThrowIfNull(columns);
-        reason = Unavailable(capability);
+        reason = Unavailable(capability, plain);
         if (reason.Length > 0 || capability is not { Target: { } table } || columnNames is null || capability.KeyColumnOrdinals.Count == 0)
         {
             return null;
@@ -64,7 +77,7 @@ public sealed record FlashbackTarget(DbObjectRef Table, IReadOnlyList<string> Na
 
         if (keys.Count != capability.KeyColumnOrdinals.Count)
         {
-            reason = "키 열을 읽을 수 없어 플래시백을 쓸 수 없습니다.";
+            reason = plain ? NeedsKeyColumns : "키 열을 읽을 수 없어 플래시백을 쓸 수 없습니다.";
             return null;
         }
 
@@ -73,7 +86,7 @@ public sealed record FlashbackTarget(DbObjectRef Table, IReadOnlyList<string> Na
     }
 
     /// <summary>쓸 수 없는 이유(쓸 수 있으면 빈 글).</summary>
-    public static string Unavailable(EditCapability? capability)
+    public static string Unavailable(EditCapability? capability, bool plain = false)
     {
         if (capability is null)
         {
@@ -88,6 +101,7 @@ public sealed record FlashbackTarget(DbObjectRef Table, IReadOnlyList<string> Na
         return capability.Reason switch
         {
             EditBlockReason.MultipleTables or EditBlockReason.NotKeyPreserved => MultipleTables,
+            EditBlockReason.NoKeyColumns when plain => NeedsKeyColumns,
             EditBlockReason.NoKeyColumns => "행을 식별할 키(PK·ROWID)가 없는 결과라 플래시백을 쓸 수 없습니다.",
             _ => capability.Message is { Length: > 0 } m ? "편집할 수 없는 결과라 플래시백을 쓸 수 없습니다: " + m : "편집할 수 없는 결과라 플래시백을 쓸 수 없습니다.",
         };
@@ -157,3 +171,6 @@ public static class FlashbackPlanner
         return new FlashbackRestorePlan(changes, unchanged, missing);
     }
 }
+
+/// <summary>플래시백을 실행할 곳: 결과 탭·접속·대상 표. <see cref="Edit"/> 는 편집 모드 결과일 때만 있다(되돌리기·미반영 편집 검사에 쓴다).</summary>
+internal sealed record FlashbackSource(ResultTabsViewModel Tabs, ResultTabItem Tab, ISession Session, FlashbackTarget Target, GridEditSession? Edit);

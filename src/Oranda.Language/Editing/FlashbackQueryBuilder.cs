@@ -52,32 +52,6 @@ public static class FlashbackQueryBuilder
     }
 
     /// <summary>
-    /// 한 행의 변경 이력: <c>VERSIONS BETWEEN TIMESTAMP (N분 전) AND SYSTIMESTAMP</c> 에 <c>VERSIONS_STARTTIME</c>·<c>VERSIONS_ENDTIME</c>·
-    /// <c>VERSIONS_OPERATION</c>·<c>VERSIONS_XID</c>(16진 문자열)를 앞세운다. 최신 변경이 위.
-    /// <paramref name="notBefore"/>(표 정의가 바뀐 시각)가 있으면 창 시작을 <c>GREATEST(N분 전, 그 시각 + 1초)</c> 로 당긴다(ORA-01466 피하기).
-    /// </summary>
-    public static FlashbackQuery BuildVersions(DbObjectRef table, IReadOnlyList<string> columns, IReadOnlyList<string> keyColumns,
-                                               IReadOnlyList<object?> keyValues, int minutes,
-                                               DateTime? notBefore = null)
-    {
-        ArgumentNullException.ThrowIfNull(table);
-        ArgumentNullException.ThrowIfNull(columns);
-        ArgumentNullException.ThrowIfNull(keyColumns);
-        ArgumentNullException.ThrowIfNull(keyValues);
-        CheckMinutes(minutes);
-        CheckKeys(columns, keyColumns);
-        var binds = new Dictionary<string, BindValue>(StringComparer.OrdinalIgnoreCase);
-        var names = new List<string>();
-        var sb = new StringBuilder("SELECT VERSIONS_STARTTIME, VERSIONS_ENDTIME, VERSIONS_OPERATION, RAWTOHEX(VERSIONS_XID) AS VERSIONS_XID, ");
-        sb.AppendJoin(", ", columns.Select(Column)).Append(" FROM ").Append(RowDmlBuilder.QualifiedName(table))
-          .Append(" VERSIONS BETWEEN TIMESTAMP ").Append(notBefore is { } ddl ? WindowStart(binds, names, minutes, ddl) : PastExpression(binds, names, minutes))
-          .Append(" AND SYSTIMESTAMP WHERE ");
-        AppendKeyFilter(sb, keyColumns, [keyValues], binds, names);
-        sb.Append(" ORDER BY VERSIONS_STARTSCN DESC NULLS LAST");
-        return Make(sb, names, binds);
-    }
-
-    /// <summary>
     /// 이전 값으로 되돌리는 UPDATE(<c>UPDATE 표 SET 열 = :v1 … WHERE 키 = :k1</c>). 바꿀 열이 없으면 null.
     /// 키는 <see cref="RowDmlBuilder"/> 의 규칙대로 바인드된다(ROWID 는 <c>:rid</c>).
     /// </summary>
@@ -98,15 +72,6 @@ public static class FlashbackQueryBuilder
         binds["mins"] = new BindValue(BindDataType.Number, (decimal)minutes);
         names.Add("mins");
         return "(SYSTIMESTAMP - NUMTODSINTERVAL(:mins, 'MINUTE'))";
-    }
-
-    private static string WindowStart(Dictionary<string, BindValue> binds, List<string> names, int minutes, DateTime ddl)
-    {
-        binds["mins"] = new BindValue(BindDataType.Number, (decimal)minutes);
-        binds["ddl"] = new BindValue(BindDataType.Date, ddl);
-        names.Add("mins");
-        names.Add("ddl");
-        return "GREATEST(CAST(SYSTIMESTAMP - NUMTODSINTERVAL(:mins, 'MINUTE') AS TIMESTAMP), CAST(:ddl AS TIMESTAMP) + INTERVAL '1' SECOND)";
     }
 
     private static void CheckMinutes(int minutes)

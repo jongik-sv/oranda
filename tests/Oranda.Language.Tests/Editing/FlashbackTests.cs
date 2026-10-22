@@ -61,15 +61,6 @@ public class FlashbackTests
     }
 
     [Fact]
-    public void Versions_selects_version_pseudo_columns_for_one_row()
-    {
-        var q = FlashbackQueryBuilder.BuildVersions(Emp, ["EMPNO", "SAL"], ["EMPNO"], [7369m], 60);
-        Assert.StartsWith("SELECT VERSIONS_STARTTIME, VERSIONS_ENDTIME, VERSIONS_OPERATION, RAWTOHEX(VERSIONS_XID) AS VERSIONS_XID, EMPNO, SAL FROM SCOTT.EMP VERSIONS BETWEEN TIMESTAMP (",
-            q.Statement.Text, StringComparison.Ordinal);
-        Assert.EndsWith("AND SYSTIMESTAMP WHERE EMPNO IN (:k1_1) ORDER BY VERSIONS_STARTSCN DESC NULLS LAST", q.Statement.Text, StringComparison.Ordinal);
-    }
-
-    [Fact]
     public void Restore_builds_update_by_key_with_binds()
     {
         var dml = FlashbackQueryBuilder.BuildRestore(Emp, 3, new Dictionary<string, object?> { ["EMPNO"] = 7369m },
@@ -144,13 +135,8 @@ public class FlashbackTests
     }
 
     [Fact]
-    public void Versions_with_ddl_time_starts_window_after_ddl()
+    public void Definition_changed_is_recognised_by_ora_code()
     {
-        var q = FlashbackQueryBuilder.BuildVersions(Emp, ["EMPNO"], ["EMPNO"], [1m], 15, new DateTime(2026, 10, 20, 9, 0, 0));
-        Assert.Contains("VERSIONS BETWEEN TIMESTAMP GREATEST(CAST(SYSTIMESTAMP - NUMTODSINTERVAL(:mins, 'MINUTE') AS TIMESTAMP), CAST(:ddl AS TIMESTAMP) + INTERVAL '1' SECOND) AND SYSTIMESTAMP",
-            q.Statement.Text, StringComparison.Ordinal);
-        Assert.Equal(new DateTime(2026, 10, 20, 9, 0, 0), q.Binds["ddl"].Value);
-        Assert.Contains("ddl", q.Statement.BindNames);
         Assert.True(FlashbackErrorAdvisor.IsDefinitionChanged("ORA-01466: unable to read data"));
         Assert.False(FlashbackErrorAdvisor.IsDefinitionChanged("ORA-01555"));
     }
