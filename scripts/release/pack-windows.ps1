@@ -8,15 +8,18 @@ param(
     [string]$OutDir = 'artifacts/release'
 )
 $ErrorActionPreference = 'Stop'
+# publish -o 는 출력 폴더를 비우지 않는다. 예전 composite 게시의 Oranda.App.r2r.dll(120 MB) 같은 파일이 남아 패키지에 들어가지 않게 지운다.
+Remove-Item artifacts/publish/win-x64 -Recurse -Force -ErrorAction SilentlyContinue
 dotnet publish src/Oranda.App -c Release -r win-x64 --self-contained -p:PublishReadyToRun=true -o artifacts/publish/win-x64
 if ($FeedUrl) { vpk download http --url $FeedUrl --outputDir $OutDir }  # 델타 생성용 이전 버전
 # --runtime 이 없으면 vpk 가 대상 아키텍처를 x86 으로 가정한다(경고만 낸다). 게시본의 *.pdb 는 csproj 가 빼고, vpk 도 기본으로 뺀다(--exclude).
 $args = @('pack', '--packId', 'Oranda', '--packVersion', $Version, '--runtime', 'win-x64', '--packDir', 'artifacts/publish/win-x64', '--mainExe', 'Oranda.App.exe', '--outputDir', $OutDir)
-# vpk 는 패키지 안의 exe·dll 과 Setup.exe·Update.exe 를 모두 서명한다. composite R2R 이 Microsoft·Oracle dll 의 원래 서명을 지우므로 이 서명이 유일하다.
+# vpk 는 패키지 안의 exe·dll 과 Setup.exe·Update.exe 를 서명한다. Microsoft·Oracle dll 은 원래 서명을 지닌다(D-034, csproj 가 다시 컴파일하지 않음).
+# 원래 서명이 없는 51개(Oranda·Avalonia 등)와 Setup.exe·Update.exe 는 이 서명이 유일하다.
 $signed = $true
 if ($SignParams) { $args += @('--signParams', $SignParams) }  # 비밀값(Authenticode 인증서)은 사람이 CI 비밀로 제공
 elseif ($AzureSignFile) { $args += @('--azureTrustedSignFile', $AzureSignFile) }
-else { $signed = $false; Write-Warning '서명 없이 패키징한다(ORANDA_SIGN_PARAMS·ORANDA_AZURE_SIGN_FILE 없음). 배포용 아님.' }
+else { $signed = $false; Write-Warning '서명 없이 패키징한다(ORANDA_SIGN_PARAMS·ORANDA_AZURE_SIGN_FILE 없음). 스마트 앱 컨트롤·WDAC 가 켜진 PC 에서는 실행되지 않는다(README 「서명 없이 쓰기」).' }
 vpk @args
 if ($LASTEXITCODE) { exit $LASTEXITCODE }
 & "$PSScriptRoot/check-signatures.ps1" -Dir $OutDir -RequireSigned:$signed

@@ -266,3 +266,11 @@
 - **Rationale**: 두 탭이 같은 이름 :ID 를 다른 값으로 쓸 수 있어야 한다(Orange 와 같음). 탭 접속(D-032)과 같은 「탭 → 그 탭의 것」 자리를 써서 실행 경로가 한 가지 방식만 가진다
 - **Reversible**: yes
 - **Source**: 사용자 지적(2026-10-20, 「바인드 변수 설정은 SQL 탭별로 있어야 해」), binds 레인 결정 후보, 조정 세션 확정
+
+## D-034 (2026-10-22T03:50:00Z)
+- **Phase**: TSK-10-08 서명 없는 dll(TSK-10-06 크기에도 영향, D-025 대체)
+- **Decision needed**: 코드 서명 인증서 없이도 Microsoft·Oracle 이 서명한 dll 의 서명을 지키려면 ReadyToRun composite 를 계속 쓸 수 있는지
+- **Decision made**: Windows self-contained 게시는 일반 ReadyToRun 으로 바꾼다(PublishReadyToRunComposite=false). 원래 Authenticode 서명이 있는 패키지 dll 11개(Oracle.ManagedDataAccess·SkiaSharp·HarfBuzzSharp·Microsoft.Data.Sqlite·CommunityToolkit.Mvvm·System.* 6개)는 PublishReadyToRunExclude 로 다시 컴파일하지 않는다. composite 를 유지한 채 서명된 dll 만 빼는 방법은 SDK 10.0.402 에서 되지 않는다(PublishReadyToRunExclude 가 무시되고, PublishReadyToRunCompositeExclusions 로 프레임워크를 빼면 crossgen 이 System.Private.CoreLib 를 찾지 못해 실패)
+- **Rationale**: 맥 win-x64 게시본 측정(PE 보안 디렉터리): composite 는 exe·dll 254개 중 무서명 236개, 일반 R2R + 제외 목록은 253개 중 51개. 일반 R2R 은 이미 R2R 인 런타임 dll 을 건너뛰어 Microsoft 서명이 남는다. 대가: 입력 가능까지 약 +0.5~0.6 s(추정. D-006 의 1670 → 2276 ms 는 모든 dll 을 R2R 로 컴파일한 일반 R2R 값이고, 서명 dll 11개를 JIT 로 남긴 이 구성은 Windows 에서 재지 않았다). 설치 파일은 99,177,093 → 80,016,283 bytes 로 80 MB 기준(83,886,080) 이하가 된다. 무서명 Oranda.App.exe 와 우리 dll 은 남으므로 스마트 앱 컨트롤·WDAC 가 켜진 PC 는 여전히 서명이 필요하다
+- **Reversible**: yes
+- **Source**: 사용자 결정(2026-10-22, 「DLL 서명이 없어도 자연스럽게 실행되도록 하면 된다」, 선택지 「composite 끄고 서명 dll 제외」). D-025 본문은 고치지 않음

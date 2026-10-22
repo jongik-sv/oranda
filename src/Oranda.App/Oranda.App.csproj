@@ -4,13 +4,32 @@
     <ApplicationManifest>app.manifest</ApplicationManifest>
   </PropertyGroup>
 
-  <!-- 게시본 시작 단축 (TSK-01-04): Windows self-contained 게시는 ReadyToRun composite.
-       일반 R2R 대비 입력 가능까지 −0.5~0.6 s, 게시 폴더 +30 MB. composite 는 self-contained 에서만 동작한다.
-       macOS 는 측정 전이라 일반 R2R(CI 의 -p:PublishReadyToRun=true) 그대로 둔다. 트리밍은 시간 효과가 없어 쓰지 않는다. -->
+  <!-- Windows self-contained 게시는 일반 ReadyToRun (D-034, TSK-10-08). composite 는 Microsoft·Oracle 이 서명한 dll 까지 다시 컴파일해
+       서명을 지운다(exe·dll 254개 중 무서명 236개). 일반 R2R 은 이미 R2R 인 런타임 dll 을 건너뛰어 서명이 남는다.
+       대가: 입력 가능까지 약 +0.5~0.6 s(추정. D-006 은 모든 dll 을 R2R 로 컴파일한 일반 R2R 을 쟀고, 이 구성은 Windows 에서 재지 않았다).
+       설치 파일은 99 → 80 MB(80,016,283 bytes)로 줄어 80 MB 목표(TSK-10-06, 83,886,080 bytes)를 맞춘다.
+       트리밍은 시간 효과가 없어 쓰지 않는다. -->
   <PropertyGroup Condition="'$(Configuration)' == 'Release' And $(RuntimeIdentifier.StartsWith('win-')) And '$(SelfContained)' == 'true'">
     <PublishReadyToRun>true</PublishReadyToRun>
-    <PublishReadyToRunComposite>true</PublishReadyToRunComposite>
+    <PublishReadyToRunComposite>false</PublishReadyToRunComposite>
   </PropertyGroup>
+
+  <!-- 원래 Authenticode 서명이 있는 패키지 dll 은 R2R 로 다시 컴파일하지 않는다(다시 쓰면 서명이 사라진다). 그러면 무서명은
+       Oranda 와 원래 서명이 없는 패키지(Avalonia·Dock·SQLitePCLRaw·Velopack 등) 51개만 남는다.
+       패키지를 더하면 R2R 을 끈 게시본(-p:PublishReadyToRun=false)과 서명 수를 비교해 이 목록을 고친다(scripts/release/README.md 「코드 서명」). -->
+  <ItemGroup Condition="$(RuntimeIdentifier.StartsWith('win-'))">
+    <PublishReadyToRunExclude Include="CommunityToolkit.Mvvm.dll" />
+    <PublishReadyToRunExclude Include="HarfBuzzSharp.dll" />
+    <PublishReadyToRunExclude Include="Microsoft.Data.Sqlite.dll" />
+    <PublishReadyToRunExclude Include="Oracle.ManagedDataAccess.dll" />
+    <PublishReadyToRunExclude Include="SkiaSharp.dll" />
+    <PublishReadyToRunExclude Include="System.Configuration.ConfigurationManager.dll" />
+    <PublishReadyToRunExclude Include="System.Diagnostics.EventLog.dll" />
+    <PublishReadyToRunExclude Include="System.Diagnostics.PerformanceCounter.dll" />
+    <PublishReadyToRunExclude Include="System.DirectoryServices.Protocols.dll" />
+    <PublishReadyToRunExclude Include="System.Security.Cryptography.Pkcs.dll" />
+    <PublishReadyToRunExclude Include="System.Security.Cryptography.ProtectedData.dll" />
+  </ItemGroup>
 
   <!-- 게시본에는 PDB 를 넣지 않는다 (TSK-10-06). win-x64 게시 폴더 301 MB 중 103 MB 가 PDB 였다(SkiaSharp·HarfBuzz 네이티브 PDB 100 MB).
        DebugType 은 빌드 출력의 PDB 까지 없애 개발 디버깅을 막고, 패키지가 넣는 네이티브 PDB 는 빼지 못하므로 게시 목록에서만 뺀다.

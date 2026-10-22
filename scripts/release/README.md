@@ -17,7 +17,19 @@ Velopack 은 릴리스 메타데이터의 해시로 패키지 무결성을 확�
 
 ## 코드 서명 (TSK-10-08)
 
-무서명 게시본은 스마트 앱 컨트롤·WDAC·AppLocker 가 켜진 PC 에서 dll 로드가 막혀 실행되지 않고, Setup.exe 는 「제대로 설치되지 않았을 수 있습니다」로 끝난다. ReadyToRun composite 가 Microsoft·Oracle 이 서명한 관리 dll(System.*·Oracle.ManagedDataAccess 등)을 다시 컴파일해 원래 서명을 지우므로, 무서명 빌드는 exe·dll 254개 중 237개가 서명이 없다(2026-10-22). 그래서 vpk 가 패키지의 exe·dll 과 Setup.exe·Update.exe 를 모두 다시 서명한다.
+무서명 게시본은 스마트 앱 컨트롤·WDAC·AppLocker 가 켜진 PC 에서 실행 파일·dll 로드가 막혀 실행되지 않고, Setup.exe 는 「제대로 설치되지 않았을 수 있습니다」로 끝난다. vpk 는 서명 매개변수를 받으면 패키지의 exe·dll 과 Setup.exe·Update.exe 를 서명한다.
+
+게시는 일반 ReadyToRun 이다(결정 D-034, 2026-10-22). 예전 composite 는 Microsoft·Oracle 이 서명한 관리 dll(System.*·Oracle.ManagedDataAccess 등)까지 다시 컴파일해 원래 서명을 지웠다(exe·dll 254개 중 무서명 236개). 일반 R2R 은 이미 R2R 인 런타임 dll 을 건너뛰고, 원래 서명이 있는 패키지 dll 11개는 `Oranda.App.csproj` 의 `PublishReadyToRunExclude` 로 다시 컴파일하지 않는다. 그래서 서명하지 않은 게시본도 무서명은 51개(Oranda 7개 + 원래 무서명인 Avalonia·Dock·SQLitePCLRaw·Velopack 등 44개)뿐이다(맥 win-x64 게시본 측정).
+
+- 패키지를 더하거나 올리면 R2R 을 끈 게시본(`-p:PublishReadyToRun=false`)과 지금 게시본의 무서명 목록을 비교한다. 원래 서명이 있는데 지금 무서명인 dll 을 `PublishReadyToRunExclude` 에 더한다.
+- composite 를 유지한 채 서명된 dll 만 빼는 방법은 없다: composite 에서는 `PublishReadyToRunExclude` 가 무시되고, `PublishReadyToRunCompositeExclusions` 로 프레임워크를 빼면 crossgen 이 System.Private.CoreLib 를 찾지 못한다(SDK 10.0.402).
+- R2R 방식을 바꾼 뒤 확인하려면 csproj 를 고치거나 `obj/Release/net10.0/win-x64/R2R` 를 지운다. 명령줄 `-p:` 만 바꾸면 R2R 단계가 예전 산출물을 그대로 쓴다(입력·출력 시각 비교).
+
+### 서명 없이 쓰기
+
+- 스마트 앱 컨트롤·WDAC·AppLocker 가 꺼진 PC 는 무서명으로 설치·실행된다. 인터넷에서 받은 Setup.exe 는 SmartScreen 이 「Windows의 PC 보호」를 띄우므로 「추가 정보 → 실행」을 누른다. Portable zip 은 풀기 전에 `Unblock-File .\Oranda-win-Portable.zip` 으로 인터넷 표시를 지운다.
+- 스마트 앱 컨트롤·WDAC 가 켜진 PC 는 무서명 Oranda.App.exe·Setup.exe 를 막는다. 빌드로 피할 수 없으며, 공인 인증서로 서명하거나 그 PC 의 정책이 허용해야 한다.
+- 설치·실행이 안 될 때 확인할 곳: Windows 보안 > 앱 및 브라우저 컨트롤 > 스마트 앱 컨트롤 상태, 이벤트 뷰어 > 응용 프로그램 및 서비스 로그 > Microsoft > Windows > CodeIntegrity > Operational 의 차단 이벤트, `%LocalAppData%\velopack\velopack.log`.
 
 - 인증서: 공인 CA 의 Authenticode 코드 서명 인증서(OV·EV, 하드웨어 토큰 포함) 또는 Azure Trusted Signing. 사내 CA 인증서는 대상 PC 에 GPO 로 루트를 배포할 때만 쓸 수 있다.
 - signtool 은 vpk 에 딸려 온다(`vendor/signing/signtool.exe`). 따로 설치하지 않는다.
@@ -33,15 +45,18 @@ Velopack 은 릴리스 메타데이터의 해시로 패키지 무결성을 확�
 
 맥에서 미리 볼 수 있다: 게시 뒤 `vpk "[win]" pack ... --runtime win-x64` 는 서명 없이 Windows `Setup.exe` 를 만든다. 정식 확인은 Windows 에서 `pack-windows.ps1` 로 한다.
 
-2026-10-20 맥북 측정, 무서명. 80 MB = 83,886,080 bytes.
+맥북 측정, 무서명. 80 MB = 83,886,080 bytes. Windows 세 줄은 2026-10-22 같은 커밋에서 obj/R2R 를 비우고 잰 값이다.
 
 | 설치 파일 | 크기 | 판정 |
 |---|---|---|
-| Windows `Oranda-win-Setup.exe`, ReadyToRun composite (현재 설정) | 96,805,788 bytes (92.3 MB) | 초과 |
-| Windows 같은 게시, composite 끔 (`-p:PublishReadyToRunComposite=false`) | 66,478,983 bytes (63.4 MB) | 이하 |
-| macOS `Oranda-osx-Setup.pkg`, 일반 ReadyToRun (CI 와 같은 게시) | 69,514,156 bytes (66.3 MB) | 이하 |
+| Windows `Oranda-win-Setup.exe`, 일반 ReadyToRun + 서명 dll 11개 R2R 제외 (현재 설정) | 80,016,283 bytes (76.3 MB) | 이하 |
+| Windows 같은 게시, ReadyToRun composite (D-034 전 설정) | 99,177,093 bytes (94.6 MB) | 초과 |
+| Windows 같은 게시, R2R 끔 (`-p:PublishReadyToRun=false`) | 67,029,913 bytes (63.9 MB) | 이하 |
+| macOS `Oranda-osx-Setup.pkg`, 일반 ReadyToRun (CI 와 같은 게시, 2026-10-20) | 69,514,156 bytes (66.3 MB) | 이하 |
 
-composite 는 입력 가능까지 약 −0.6 s(`spikes/TSK-01-04/RESULT.md`, 1670 ms 대 2276 ms)의 대가로 설치 파일을 30 MB 키운다. 결정 D-025(2026-10-20): 시작 시간 이득이 기준(0.3 s)보다 커서 composite 는 유지하고, 80 MB 는 다른 수단(트리밍, composite 범위 축소, 불필요한 파일 정리)으로 줄인다. 후보는 docs/wbs.md TSK-10-06 note 에 있다.
+2026-10-20 표의 「composite 끔 66,478,983 bytes」는 명령줄 `-p:PublishReadyToRunComposite=false` 로만 바꿔 obj/R2R 의 composite 산출물을 재사용한 게시본(사실상 R2R 없음)을 잰 값으로 보인다. R2R 끔 값과 비슷하다.
+
+composite 는 입력 가능까지 약 −0.6 s(`spikes/TSK-01-04/RESULT.md`, 1670 ms 대 2276 ms)의 대가로 설치 파일을 약 19 MB 키운다. 결정 D-025(2026-10-20)는 composite 를 유지했지만, D-034(2026-10-22)가 서명 보존을 위해 일반 R2R 로 바꿨다. 현재 설정(서명 dll 11개는 R2R 없이 JIT)의 시작 시간은 Windows 에서 아직 재지 않았다. 현재 설정은 80 MB 기준보다 3.9 MB 작을 뿐이므로, 패키지를 더할 때 크기를 다시 본다.
 
 ## 앱의 자동 업데이트 (TSK-10-01)
 

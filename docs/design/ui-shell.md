@@ -170,7 +170,7 @@
   1. 레이아웃 저장은 앱 DTO(`layout.json`)로 감싼다. `Dock.Serializer.*` 는 쓰더라도 DTO 변환 안에서만.
   2. `Dock.*` 형식은 `Oranda.App` 의 `Shell/Docking/` 안에서만 참조한다. 기능 Task 의 ViewModel 은 `IToolPanelRegistry` 계약 형식만 안다 → 라이브러리를 바꿔도 기능 Task 는 영향 없음.
   3. 게시 직후 판(12.1.0.12, 게시 2일)이므로 TSK-03-01 착수 때 그 시점 최신 12.1.x 패치로 다시 고정할 수 있다. 12.2 이상(Avalonia 12.2 요구)으로는 Avalonia 를 올릴 때만 함께 올린다.
-  4. 시작 시간(D-006): R2R composite 에 포함되고, 첫 프레임 경로에서 리플렉션 직렬화를 하지 않는다(DTO 는 `System.Text.Json` 소스 생성기).
+  4. 시작 시간(D-006): ReadyToRun 으로 미리 컴파일되고(D-034 부터 composite 아님), 첫 프레임 경로에서 리플렉션 직렬화를 하지 않는다(DTO 는 `System.Text.Json` 소스 생성기).
 - 대안(Dock 에 막히는 결함이 생길 때): 고정 3분할(왼쪽·문서·아래, `GridSplitter`) + 도구 창 탭 전환만 하는 단순 셸. 2번 조건 덕분에 셸 내부만 바꾸면 된다.
 
 ## 4. 환경 라벨 규칙 (SAFE-01, CONN-06)
