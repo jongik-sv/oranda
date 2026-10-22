@@ -147,7 +147,9 @@
         <ScrollViewer HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
           <StackPanel Spacing="8" x:Name="SqlFormatPanel">
             <Grid ColumnDefinitions="*,*" RowDefinitions="Auto,Auto" ColumnSpacing="8" RowSpacing="8">
-              <Border Grid.Row="0" Grid.Column="0" Classes="fmt-group">
+              <!-- 절 배치가 열 맞춤(사내 서식)이면 키워드 맞춤은 효과가 없어 회색으로 두고 이유를 툴팁으로(TSK-13-42). -->
+              <Border Grid.Row="0" Grid.Column="0" Classes="fmt-group" x:Name="FmtAlignGroup" IsEnabled="{Binding SqlFormat.KeywordAlignApplies}"
+                      ToolTip.Tip="{Binding SqlFormat.KeywordAlignTip}" ToolTip.ShowOnDisabled="True">
                 <StackPanel>
                   <TextBlock Classes="fmt-title" Text="{Binding Strings[fmt.keywordAlign]}" />
                   <StackPanel Orientation="Horizontal" Spacing="12">

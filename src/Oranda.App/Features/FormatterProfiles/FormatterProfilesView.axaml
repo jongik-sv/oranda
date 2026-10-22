@@ -5,55 +5,228 @@
              xmlns:vm="using:Oranda.App.Features.FormatterProfiles"
              x:Class="Oranda.App.Features.FormatterProfiles.FormatterProfilesView"
              x:DataType="vm:FormatterProfilesViewModel">
+  <!-- TSK-13-42 A안: 왼쪽 프로필 목록(기본 제공 / 내 프로필), 위 아이콘 도구 막대, 오른쪽 안내 띠·이름 줄 → 테두리 묶음(3·2·1단) → 미리보기, 아래 상태 줄. -->
+  <UserControl.Resources>
+    <ResourceDictionary>
+      <ResourceDictionary.ThemeDictionaries>
+        <ResourceDictionary x:Key="Light">
+          <SolidColorBrush x:Key="FormatterInfoBarBrush" Color="#EEF4FC" />
+          <SolidColorBrush x:Key="FormatterInfoBarBorderBrush" Color="#C9DCF3" />
+        </ResourceDictionary>
+        <ResourceDictionary x:Key="Dark">
+          <SolidColorBrush x:Key="FormatterInfoBarBrush" Color="#1F2A38" />
+          <SolidColorBrush x:Key="FormatterInfoBarBorderBrush" Color="#33475F" />
+        </ResourceDictionary>
+      </ResourceDictionary.ThemeDictionaries>
+    </ResourceDictionary>
+  </UserControl.Resources>
+  <UserControl.Styles>
+    <!-- 프로필 목록: 줄 26, 묶음 머리는 작은 흐린 글, 고른 줄은 표 목록과 같은 옅은 파랑. -->
+    <Style Selector="ListBox.profiles ListBoxItem">
+      <Setter Property="MinHeight" Value="26" />
+      <Setter Property="Padding" Value="8,0" />
+      <Setter Property="VerticalContentAlignment" Value="Center" />
+      <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+    </Style>
+    <Style Selector="ListBox.profiles ListBoxItem:selected /template/ ContentPresenter#PART_ContentPresenter, ListBox.profiles ListBoxItem:selected:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+      <Setter Property="Background" Value="{DynamicResource OrandaTableSelectionBrush}" />
+    </Style>
+    <Style Selector="ListBox.profiles ListBoxItem:disabled /template/ ContentPresenter#PART_ContentPresenter">
+      <Setter Property="Background" Value="Transparent" />
+    </Style>
+    <Style Selector="TextBlock.profile-group">
+      <Setter Property="FontSize" Value="{DynamicResource OrandaFontSizeSmall}" />
+      <Setter Property="FontWeight" Value="SemiBold" />
+      <Setter Property="Opacity" Value="0.75" />
+      <Setter Property="Margin" Value="0,6,0,0" />
+    </Style>
+    <Style Selector="TextBlock.profile-hint">
+      <Setter Property="FontSize" Value="{DynamicResource OrandaFontSizeSmall}" />
+      <Setter Property="Opacity" Value="0.7" />
+      <Setter Property="TextWrapping" Value="Wrap" />
+    </Style>
+    <!-- 안내 띠(기본 제공 프로필). -->
+    <Style Selector="Border.fmt-info">
+      <Setter Property="Background" Value="{DynamicResource FormatterInfoBarBrush}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource FormatterInfoBarBorderBrush}" />
+      <Setter Property="BorderThickness" Value="1" />
+      <Setter Property="CornerRadius" Value="3" />
+      <Setter Property="Padding" Value="8,2,2,2" />
+      <Setter Property="MinHeight" Value="30" />
+    </Style>
+    <Style Selector="Border.fmt-info TextBlock">
+      <Setter Property="FontSize" Value="{DynamicResource OrandaFontSizeSmall}" />
+      <Setter Property="VerticalAlignment" Value="Center" />
+    </Style>
+    <!-- 이름 칸: 평소엔 제목처럼 보이고, 마우스를 올리면 테두리, 고치는 중엔 입력 칸. -->
+    <Style Selector="TextBox.profile-name">
+      <Setter Property="FontWeight" Value="SemiBold" />
+      <Setter Property="FontSize" Value="14" />
+      <Setter Property="MinHeight" Value="28" />
+      <Setter Property="MinWidth" Value="80" />
+      <Setter Property="Padding" Value="6,3" />
+      <Setter Property="VerticalContentAlignment" Value="Center" />
+    </Style>
+    <Style Selector="TextBox.profile-name /template/ Border#PART_BorderElement">
+      <Setter Property="Background" Value="Transparent" />
+      <Setter Property="BorderBrush" Value="Transparent" />
+    </Style>
+    <Style Selector="TextBox.profile-name:pointerover /template/ Border#PART_BorderElement">
+      <Setter Property="Background" Value="Transparent" />
+      <Setter Property="BorderBrush" Value="{DynamicResource OrandaSeparatorBrush}" />
+    </Style>
+    <Style Selector="TextBox.profile-name:focus /template/ Border#PART_BorderElement">
+      <Setter Property="Background" Value="{DynamicResource OrandaSearchBoxBrush}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource OrandaFocusBrush}" />
+    </Style>
+    <!-- 옵션 묶음: 설정 창 SQL 포맷 쪽과 같은 테두리 상자, 줄 26(Orange 옵션 창 밀도). -->
+    <Style Selector="Border.fmt-box">
+      <Setter Property="BorderBrush" Value="{DynamicResource OrandaSeparatorBrush}" />
+      <Setter Property="BorderThickness" Value="1" />
+      <Setter Property="CornerRadius" Value="3" />
+      <Setter Property="Padding" Value="8,4,8,6" />
+    </Style>
+    <Style Selector="TextBlock.fmt-box-title">
+      <Setter Property="FontWeight" Value="SemiBold" />
+    </Style>
+    <Style Selector="TextBlock.fmt-box-note, TextBlock.fmt-unit, TextBlock.fmt-col-head">
+      <Setter Property="FontSize" Value="{DynamicResource OrandaFontSizeSmall}" />
+      <Setter Property="Opacity" Value="0.62" />
+      <Setter Property="VerticalAlignment" Value="Center" />
+    </Style>
+    <Style Selector="vm|OptionGroupsPanel.fmt-options RadioButton, vm|OptionGroupsPanel.fmt-options CheckBox">
+      <Setter Property="MinWidth" Value="0" />
+      <Setter Property="MinHeight" Value="0" />
+      <Setter Property="Height" Value="26" />
+      <Setter Property="Padding" Value="4,0,0,0" />
+      <Setter Property="Focusable" Value="True" />
+    </Style>
+    <Style Selector="vm|OptionGroupsPanel.fmt-options NumericUpDown">
+      <Setter Property="Margin" Value="0,1" />
+    </Style>
+  </UserControl.Styles>
+
   <DockPanel>
-    <Border DockPanel.Dock="Bottom" Classes="panel-status">
-      <TextBlock Text="{Binding StatusText}" TextTrimming="CharacterEllipsis" />
+    <!-- 도구 막대: 새로·복사·이름 바꾸기·삭제 | 기본으로 지정 | 가져오기·내보내기 | 저장·되돌리기 (Orange Sub Toolbar). -->
+    <Border DockPanel.Dock="Top" Classes="panel-toolbar">
+      <StackPanel Orientation="Horizontal" Spacing="1">
+        <Button x:Name="NewButton" Classes="toolbar" Content="새 프로필" ToolTip.Tip="새 프로필 (Oranda 기본 값에서)"
+                icons:ButtonIcon.Key="add" icons:ButtonIcon.IconOnly="True" />
+        <Button x:Name="CopyButton" Classes="toolbar" Content="복사" ToolTip.Tip="복사해서 새 프로필"
+                icons:ButtonIcon.Key="copy" icons:ButtonIcon.IconOnly="True" IsEnabled="{Binding CanCopy}" />
+        <Button x:Name="RenameButton" Classes="toolbar" Content="이름 바꾸기" ToolTip.Tip="이름 바꾸기 (F2) — 내 프로필만" ToolTip.ShowOnDisabled="True"
+                icons:ButtonIcon.Key="rename" icons:ButtonIcon.IconOnly="True" IsEnabled="{Binding CanRename}" />
+        <Button x:Name="DeleteButton" Classes="toolbar" Content="삭제" ToolTip.Tip="삭제 (Delete) — 내 프로필만" ToolTip.ShowOnDisabled="True"
+                icons:ButtonIcon.Key="delete" icons:ButtonIcon.IconOnly="True" IsEnabled="{Binding CanDelete}" />
+        <Separator Classes="toolbar" />
+        <Button x:Name="DefaultButton" Classes="toolbar" Content="기본으로 지정" ToolTip.Tip="기본으로 지정 — 편집기 포맷이 이 프로필을 씁니다" ToolTip.ShowOnDisabled="True"
+                icons:ButtonIcon.Key="star" icons:ButtonIcon.IconOnly="True" IsEnabled="{Binding CanSetDefault}" />
+        <Separator Classes="toolbar" />
+        <Button x:Name="ImportButton" Classes="toolbar" Content="가져오기…" icons:ButtonIcon.Key="import" icons:ButtonIcon.IconOnly="True" />
+        <Button x:Name="ExportButton" Classes="toolbar" Content="내보내기…" icons:ButtonIcon.Key="exportFile" icons:ButtonIcon.IconOnly="True"
+                IsEnabled="{Binding CanExport}" />
+        <Separator Classes="toolbar" />
+        <Button x:Name="SaveButton" Classes="toolbar" Content="저장" ToolTip.Tip="저장 — 바꾼 것이 있을 때" ToolTip.ShowOnDisabled="True"
+                icons:ButtonIcon.Key="save" icons:ButtonIcon.IconOnly="True" IsEnabled="{Binding CanSave}" />
+        <Button x:Name="RevertButton" Classes="toolbar" Content="되돌리기" ToolTip.Tip="되돌리기 — 저장한 값으로" ToolTip.ShowOnDisabled="True"
+                icons:ButtonIcon.Key="reset" icons:ButtonIcon.IconOnly="True" IsEnabled="{Binding CanRevert}" />
+      </StackPanel>
     </Border>
-    <StackPanel DockPanel.Dock="Left" Width="230" Margin="4" Spacing="4">
-      <ListBox x:Name="ProfileList" ItemsSource="{Binding Profiles}" SelectedItem="{Binding Selected, Mode=TwoWay}" MinHeight="140">
-        <ListBox.ItemTemplate>
-          <DataTemplate x:DataType="vm:ProfileEntry">
-            <TextBlock Text="{Binding Display}" />
-          </DataTemplate>
-        </ListBox.ItemTemplate>
-      </ListBox>
-      <WrapPanel>
-        <Button Classes="tool" icons:ButtonIcon.Key="copy" x:Name="CopyButton" Margin="0,0,4,4" Content="복사" />
-        <Button Classes="tool" icons:ButtonIcon.Key="delete" x:Name="DeleteButton" Margin="0,0,4,4" Content="삭제" />
-        <Button Classes="tool" icons:ButtonIcon.Key="ok" x:Name="DefaultButton" Margin="0,0,4,4" Content="기본으로 지정" />
-        <Button Classes="tool" icons:ButtonIcon.Key="import" x:Name="ImportButton" Margin="0,0,4,4" Content="가져오기…" />
-        <Button Classes="tool" icons:ButtonIcon.Key="exportFile" x:Name="ExportButton" Margin="0,0,4,4" Content="내보내기…" />
-      </WrapPanel>
-    </StackPanel>
-    <!-- 옵션(이름 + 값)이 잘리지 않게 옵션 쪽을 넓게, 좁으면 가로로 스크롤한다. -->
-    <Grid ColumnDefinitions="3*,6,2*" Margin="4">
-      <DockPanel Grid.Column="0">
-        <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Spacing="6" Margin="0,0,0,4">
-          <TextBox x:Name="NameBox" Width="220" PlaceholderText="프로필 이름" Text="{Binding ProfileName, Mode=TwoWay}" IsEnabled="{Binding IsEditable}" />
-          <Button Classes="tool" icons:ButtonIcon.Key="save" x:Name="SaveButton" Content="저장" IsEnabled="{Binding IsEditable}" />
+
+    <!-- 상태 줄: 왼쪽 요약(옵션 26개 중 N개가 기본과 다름) · 마지막 알림, 오른쪽 점 뜻. -->
+    <Border DockPanel.Dock="Bottom" Classes="panel-status">
+      <DockPanel>
+        <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" Spacing="4" Margin="12,0,0,0">
+          <Ellipse Width="6" Height="6" VerticalAlignment="Center" Fill="{DynamicResource OrandaIconBlueBrush}" />
+          <TextBlock Text="기본과 다름" />
+          <Ellipse Width="6" Height="6" Margin="10,0,0,0" VerticalAlignment="Center" Fill="{DynamicResource OrandaIconOrangeBrush}" />
+          <TextBlock Text="저장 안 한 변경" />
         </StackPanel>
-        <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Auto">
-          <ItemsControl x:Name="OptionList" ItemsSource="{Binding Rows}">
-            <ItemsControl.ItemTemplate>
-              <DataTemplate x:DataType="vm:OptionRow">
-                <Grid ColumnDefinitions="180,Auto" Margin="0,2">
-                  <TextBlock Grid.Column="0" Text="{Binding Label}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding Label}" Margin="0,0,8,0" />
-                  <CheckBox Grid.Column="1" IsVisible="{Binding IsBool}" IsEnabled="{Binding IsEditable}" IsChecked="{Binding BoolValue, Mode=TwoWay}" />
-                  <NumericUpDown Grid.Column="1" IsVisible="{Binding IsInt}" IsEnabled="{Binding IsEditable}" Width="130" HorizontalAlignment="Left"
-                                 Minimum="{Binding Minimum}" Maximum="{Binding Maximum}" FormatString="0" Value="{Binding NumberValue, Mode=TwoWay}" />
-                  <ComboBox Grid.Column="1" IsVisible="{Binding IsChoice}" IsEnabled="{Binding IsEditable}" Width="130"
-                            ItemsSource="{Binding Choices}" SelectedItem="{Binding ChoiceValue, Mode=TwoWay}" />
-                </Grid>
-              </DataTemplate>
-            </ItemsControl.ItemTemplate>
-          </ItemsControl>
-        </ScrollViewer>
+        <TextBlock x:Name="StatusLine" Text="{Binding StatusLine}" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding StatusLine}" />
       </DockPanel>
-      <DockPanel Grid.Column="2">
-        <TextBlock DockPanel.Dock="Top" Text="예제 SQL (고쳐 써도 된다)" FontWeight="SemiBold" />
-        <TextBox DockPanel.Dock="Top" Height="130" AcceptsReturn="True" FontFamily="Consolas,Menlo,monospace" Text="{Binding SampleSql, Mode=TwoWay}" />
-        <TextBlock DockPanel.Dock="Top" Text="미리보기" FontWeight="SemiBold" Margin="0,6,0,0" />
-        <se:SqlCodeView x:Name="PreviewBox" Text="{Binding PreviewText}" />
+    </Border>
+
+    <Grid ColumnDefinitions="200,1,*">
+      <ListBox x:Name="ProfileList" Grid.Column="0" Classes="profiles" Background="Transparent" BorderThickness="0"
+               ItemsSource="{Binding ProfileItems}" SelectedItem="{Binding SelectedItem, Mode=TwoWay}">
+        <ListBox.DataTemplates>
+          <DataTemplate DataType="vm:ProfileGroupHeader">
+            <Panel>
+              <TextBlock Classes="profile-group" Text="기본 제공" IsVisible="{Binding IsBuiltIn}" />
+              <TextBlock Classes="profile-group" Text="내 프로필" IsVisible="{Binding !IsBuiltIn}" />
+            </Panel>
+          </DataTemplate>
+          <DataTemplate DataType="vm:ProfileListHint">
+            <TextBlock Classes="profile-hint" Text="없음 — 복사하거나 새로 만드세요" />
+          </DataTemplate>
+          <DataTemplate DataType="vm:ProfileEntry">
+            <Grid ColumnDefinitions="20,*,Auto" Background="Transparent" ToolTip.Tip="{Binding Tip}">
+              <ContentControl VerticalAlignment="Center" Content="{Binding IconKey, Converter={x:Static icons:IconKeyConverter.Instance}, ConverterParameter=14}" />
+              <TextBlock Grid.Column="1" VerticalAlignment="Center" Text="{Binding Name}" TextTrimming="CharacterEllipsis" />
+              <ContentControl Grid.Column="2" VerticalAlignment="Center"
+                              Content="{Binding StarKey, Converter={x:Static icons:IconKeyConverter.Instance}, ConverterParameter=14}" />
+            </Grid>
+          </DataTemplate>
+        </ListBox.DataTemplates>
+        <ListBox.ContextMenu>
+          <ContextMenu x:Name="ProfileMenu">
+            <!-- 켜짐·꺼짐은 코드가 ViewModel 의 Can* 값으로 맞춘다(메뉴는 열리기 전엔 DataContext 를 받지 않는다). -->
+            <MenuItem x:Name="MenuCopy" Header="복사해서 새 프로필" />
+            <MenuItem x:Name="MenuRename" Header="이름 바꾸기" InputGesture="F2" />
+            <MenuItem x:Name="MenuDelete" Header="삭제" InputGesture="Delete" />
+            <Separator />
+            <MenuItem x:Name="MenuDefault" Header="기본으로 지정" />
+            <Separator />
+            <MenuItem x:Name="MenuExport" Header="내보내기…" />
+          </ContextMenu>
+        </ListBox.ContextMenu>
+      </ListBox>
+      <Border Grid.Column="1" Background="{DynamicResource OrandaSeparatorBrush}" />
+
+      <DockPanel x:Name="RightPanel" Grid.Column="2" Margin="10,8,10,8">
+        <!-- 기본 제공: 안내 띠 + 「복사해서 고치기」 / 내 프로필: 이름 칸 · ★ 기본 프로필 · 저장 안 한 변경 수. -->
+        <Panel DockPanel.Dock="Top" Margin="0,0,0,8">
+          <Border x:Name="ReadOnlyBar" Classes="fmt-info" IsVisible="{Binding IsBuiltInSelected}">
+            <DockPanel>
+              <ContentControl x:Name="InfoIcon" DockPanel.Dock="Left" Margin="0,0,6,0" VerticalAlignment="Center" />
+              <Button x:Name="CopyToEditButton" DockPanel.Dock="Right" Classes="tool" Margin="8,0,0,0" Content="복사해서 고치기" icons:ButtonIcon.Key="copy" />
+              <TextBlock Text="기본 제공 프로필은 고칠 수 없습니다 — 복사해서 고치세요" TextTrimming="CharacterEllipsis" />
+            </DockPanel>
+          </Border>
+          <StackPanel x:Name="TitleLine" Orientation="Horizontal" MinHeight="30" IsVisible="{Binding IsMineSelected}">
+            <TextBox x:Name="NameBox" Classes="profile-name" PlaceholderText="프로필 이름" Text="{Binding ProfileName, Mode=TwoWay}" ToolTip.Tip="이름 바꾸기 (F2) · Enter = 저장 · Esc = 되돌림" />
+            <Border Classes="chip" Margin="6,0,0,0" IsVisible="{Binding IsDefaultSelected}">
+              <StackPanel Orientation="Horizontal" Spacing="3">
+                <ContentControl x:Name="ChipStar" VerticalAlignment="Center" />
+                <TextBlock Text="기본 프로필" />
+              </StackPanel>
+            </Border>
+            <Ellipse Width="6" Height="6" Margin="12,0,5,0" VerticalAlignment="Center" Fill="{DynamicResource OrandaIconOrangeBrush}" IsVisible="{Binding HasDirty}" />
+            <TextBlock Classes="warning-text" VerticalAlignment="Center" FontSize="{DynamicResource OrandaFontSizeSmall}" Text="{Binding DirtyText}" IsVisible="{Binding HasDirty}" />
+          </StackPanel>
+        </Panel>
+
+        <!-- 옵션 묶음(코드가 FormatterOptionGroups 로 채운다). 창이 낮으면 이 칸만 스크롤한다. -->
+        <ScrollViewer x:Name="OptionsScroll" DockPanel.Dock="Top" Margin="0,0,0,8" HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
+          <Decorator x:Name="OptionsHost" TextElement.FontSize="{DynamicResource OrandaGridFontSize}" />
+        </ScrollViewer>
+
+        <DockPanel DockPanel.Dock="Top" MinHeight="28">
+          <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
+            <ToggleButton x:Name="SampleToggle" Classes="toolbar" Content="예제 SQL 고치기" icons:ButtonIcon.Key="docEdit" icons:ButtonIcon.IconOnly="True"
+                          IsChecked="{Binding IsSampleEditing, Mode=TwoWay}" />
+            <Button x:Name="CopyPreviewButton" Classes="toolbar" Content="결과 복사" icons:ButtonIcon.Key="copy" icons:ButtonIcon.IconOnly="True" />
+          </StackPanel>
+          <TextBlock Classes="section-label" VerticalAlignment="Center" Text="미리보기" />
+          <TextBlock Classes="dim" Margin="8,0,0,0" VerticalAlignment="Center" FontSize="{DynamicResource OrandaFontSizeSmall}"
+                     Text="{Binding PreviewInfo}" TextTrimming="CharacterEllipsis" />
+        </DockPanel>
+        <TextBox x:Name="SampleBox" DockPanel.Dock="Top" Height="110" Margin="0,0,0,6" AcceptsReturn="True" TextWrapping="NoWrap"
+                 FontFamily="{DynamicResource OrandaGridFontFamily}" FontSize="{DynamicResource OrandaFontSizeSmall}"
+                 PlaceholderText="예제 SQL (고쳐 쓰면 바로 다시 포맷)" Text="{Binding SampleSql, Mode=TwoWay}" IsVisible="{Binding IsSampleEditing}" />
+        <Border BorderThickness="1" BorderBrush="{DynamicResource OrandaSeparatorBrush}" Background="{DynamicResource OrandaCodeBackgroundBrush}">
+          <se:SqlCodeView x:Name="PreviewBox" Text="{Binding PreviewText}" />
+        </Border>
       </DockPanel>
     </Grid>
   </DockPanel>

@@ -198,19 +198,20 @@ public sealed class SqlFormatSettingsTests
         }, default);
         var (_, _, _, vm) = await Open(profiles, profileId: "team");
 
+        // TSK-13-42: 「기본값」 = 기본 제공 「Oranda 기본」(FormatterOptions.OrandaDefault, 사내 서식)의 4항목.
         vm.SqlFormat.ResetDefaultsCommand.Execute(null);
-        Assert.True(vm.SqlFormat.AlignLeft);
-        Assert.True(vm.SqlFormat.CommaTrailing);
+        Assert.Equal(FormatterOptions.OrandaDefault.KeywordAlign == KeywordAlign.Left, vm.SqlFormat.AlignLeft);
+        Assert.True(vm.SqlFormat.CommaLeading);
         Assert.True(vm.SqlFormat.CaseUpper);
-        Assert.True(vm.SqlFormat.ByListSingle);
+        Assert.True(vm.SqlFormat.ByListMulti);
         await vm.SaveAsync();
 
         var o = profiles.Items.Single(p => p.Id == "team").Options;
-        Assert.Equal(new FormatterOptions().KeywordAlign, o.KeywordAlign);
-        Assert.Equal(CommaPosition.Trailing, o.CommaPosition);
-        Assert.Equal(LetterCase.Upper, o.Case.Keyword);
+        Assert.Equal(FormatterOptions.OrandaDefault.KeywordAlign, o.KeywordAlign);
+        Assert.Equal(FormatterOptions.OrandaDefault.CommaPosition, o.CommaPosition);
+        Assert.Equal(FormatterOptions.OrandaDefault.Case.Keyword, o.Case.Keyword);
         Assert.Equal(LetterCase.Lower, o.Case.Function);
-        Assert.Equal(ByListLayout.SingleLine, o.LineBreaks.GroupOrderBy);
+        Assert.Equal(FormatterOptions.OrandaDefault.LineBreaks.GroupOrderBy, o.LineBreaks.GroupOrderBy);
         Assert.Equal(2, o.Indent.Size);
         Assert.Equal(80, o.LineBreaks.MaxLineWidth);
     }
@@ -274,8 +275,9 @@ public sealed class SqlFormatSettingsTests
         Assert.False(page.CanSave);
         Assert.False(page.HasPreview);
         Assert.Equal(string.Empty, page.Preview);
-        Assert.True(page.CommaTrailing);
-        page.CommaLeading = true;
+        Assert.True(page.CommaLeading); // 프로필이 없으면 「Oranda 기본」(사내 서식) 값을 보인다
+        Assert.False(page.KeywordAlignApplies); // 사내 서식 = 열 맞춤
+        page.CommaTrailing = true;
         Assert.Null(await page.SaveAsync());
     }
 
@@ -345,10 +347,41 @@ public sealed class SqlFormatSettingsTests
         Assert.False(Named<RadioButton>("FmtCommaTrailing").IsChecked);
         Assert.Contains("\n    , e.name", Named<TextBlock>("FmtPreview").Text, StringComparison.Ordinal);
 
+        Named<RadioButton>("FmtCommaTrailing").IsChecked = true;
+        Dispatcher.UIThread.RunJobs();
         Named<Button>("FmtDefaultButton").Command!.Execute(null);
         Dispatcher.UIThread.RunJobs();
-        Assert.True(Named<RadioButton>("FmtCommaTrailing").IsChecked);
+        Assert.True(Named<RadioButton>("FmtCommaLeading").IsChecked); // 「Oranda 기본」 = 앞 쉼표
+        Assert.True(Named<RadioButton>("FmtByMulti").IsChecked);
+        Assert.True(Named<Border>("FmtAlignGroup").IsEnabled); // 시험 저장소의 Oranda 기본 = 들여쓰기 배치
         window.Close();
+    });
+
+    [Fact]
+    public Task Keyword_align_is_greyed_with_a_reason_when_the_profile_uses_the_column_layout() => HeadlessHost.Run(async () =>
+    {
+        var profiles = new ProfileStore();
+        await profiles.SaveAsync(new FormatterProfile { Id = "house", Name = "사내", Options = FormatterOptions.OrandaDefault }, default);
+        var (_, _, _, vm) = await Open(profiles, profileId: "house");
+        Assert.False(vm.SqlFormat.KeywordAlignApplies);
+        Assert.Equal("사내 서식(열 맞춤)에서는 쓰지 않습니다", vm.SqlFormat.KeywordAlignTip);
+
+        var window = new SettingsWindow { DataContext = vm };
+        window.Show();
+        var tabs = window.GetVisualDescendants().OfType<TabControl>().First();
+        tabs.SelectedIndex = SettingsViewModel.FormatTabIndex;
+        Dispatcher.UIThread.RunJobs();
+        window.UpdateLayout();
+        var group = window.GetVisualDescendants().OfType<Border>().First(b => b.Name == "FmtAlignGroup");
+        Assert.False(group.IsEnabled);
+        Assert.False(window.GetVisualDescendants().OfType<RadioButton>().First(r => r.Name == "FmtAlignRight").IsEffectivelyEnabled);
+        Assert.Equal("사내 서식(열 맞춤)에서는 쓰지 않습니다", ToolTip.GetTip(group));
+        Assert.Contains(window.GetVisualDescendants().OfType<TextBlock>(), t => t.Text == "GROUP BY 열 목록");
+        window.Close();
+
+        var (_, _, _, indent) = await Open(profileId: FormatterIds.Orange5);
+        Assert.True(indent.SqlFormat.KeywordAlignApplies);
+        Assert.Null(indent.SqlFormat.KeywordAlignTip);
     });
 
     /// <summary>다음 저장 한 번을 실패시키는 설정 저장소.</summary>

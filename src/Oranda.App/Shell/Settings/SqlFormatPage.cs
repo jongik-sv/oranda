@@ -60,7 +60,7 @@ public sealed partial class SqlFormatPage : ObservableObject
         _formatter = formatter;
         _text = text;
         ProfileId = profileId;
-        Show(new FormatterOptions());
+        Show(FormatterOptions.OrandaDefault);
         Loaded = LoadAsync(profileId);
     }
 
@@ -139,6 +139,15 @@ public sealed partial class SqlFormatPage : ObservableObject
 
     public bool HasPreview => _formatter is not null;
 
+    /// <summary>
+    /// 「키워드 맞춤」이 출력에 효과가 있다. 프로필의 절 배치가 열 맞춤(<see cref="ClauseLayout.Column"/>, 사내 서식)이면 쓰지 않으므로 false
+    /// (설정 창은 그 묶음을 회색으로 두고 <see cref="KeywordAlignTip"/> 를 보인다).
+    /// </summary>
+    public bool KeywordAlignApplies => Compose().ClauseLayout != ClauseLayout.Column;
+
+    /// <summary>「키워드 맞춤」 묶음이 회색일 때의 툴팁(효과가 있으면 null).</summary>
+    public string? KeywordAlignTip => KeywordAlignApplies ? null : _text.Lookup("Shell.settings.fmt.keywordAlignOff");
+
     /// <summary>지금 고른 값으로 <see cref="PreviewSql"/> 을 포맷한 글. 실패하면 원문.</summary>
     public string Preview
     {
@@ -157,7 +166,7 @@ public sealed partial class SqlFormatPage : ObservableObject
     /// <summary>읽은 프로필 옵션에 지금 고른 4항목을 얹은 값.</summary>
     public FormatterOptions Compose()
     {
-        var o = _profile?.Options ?? new FormatterOptions();
+        var o = _profile?.Options ?? FormatterOptions.OrandaDefault;
         return o with
         {
             KeywordAlign = KeywordAlign,
@@ -167,12 +176,12 @@ public sealed partial class SqlFormatPage : ObservableObject
         };
     }
 
-    /// <summary>Orange 「Default」: 4항목만 기본값(<see cref="FormatterOptions"/> 기본 = Oranda 기본 프로필)으로. 저장은 설정 창 「저장」.</summary>
+    /// <summary>Orange 「Default」: 4항목만 기본 제공 「Oranda 기본」 값(<see cref="FormatterOptions.OrandaDefault"/>, 사내 서식)으로. 저장은 설정 창 「저장」.</summary>
     [RelayCommand]
     public void ResetDefaults()
     {
         _touched = true;
-        var d = new FormatterOptions();
+        var d = FormatterOptions.OrandaDefault;
         KeywordAlign = d.KeywordAlign;
         Comma = d.CommaPosition;
         KeywordCase = d.Case.Keyword;
@@ -191,7 +200,7 @@ public sealed partial class SqlFormatPage : ObservableObject
             return null;
         }
 
-        var before = _profile?.Options ?? new FormatterOptions();
+        var before = _profile?.Options ?? FormatterOptions.OrandaDefault;
         var after = Compose();
         if (after == before)
         {
@@ -246,6 +255,8 @@ public sealed partial class SqlFormatPage : ObservableObject
             ProfileId = p.Id;
             ProfileName = p.Name;
             OnPropertyChanged(nameof(ProfileText));
+            OnPropertyChanged(nameof(KeywordAlignApplies));
+            OnPropertyChanged(nameof(KeywordAlignTip));
             if (!_touched)
             {
                 Show(p.Options); // 읽는 동안 사용자가 고른 값은 덮지 않는다.

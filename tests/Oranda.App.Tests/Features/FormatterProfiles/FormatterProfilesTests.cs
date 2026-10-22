@@ -318,8 +318,12 @@ public class FormatterProfilesTests
         window.Show();
         Dispatcher.UIThread.RunJobs();
 
-        var list = view.FindControl<ItemsControl>("OptionList")!;
-        Assert.Equal(29, list.ItemsSource!.Cast<object>().Count());
+        // TSK-13-42: 옵션은 묶음 판(OptionGroupsPanel)에 놓인다. 옵션 칸(Tag·OptionPaths = 경로)이 스키마의 모든 옵션을 덮는다.
+        var panel = view.OptionsPanel!;
+        var paths = Avalonia.VisualTree.VisualExtensions.GetVisualDescendants(panel).OfType<Control>()
+            .SelectMany(c => OptionPaths.Get(c) ?? (c.Classes.Contains("fmt-option") && c.Tag is string p ? [p] : []))
+            .Distinct().ToList();
+        Assert.Equal(FormatterOptionSchema.All.Count, paths.Count);
         Assert.Contains("SELECT", view.FindControl<Oranda.App.Features.SqlEditor.SqlCodeView>("PreviewBox")!.Text);
 
         vm.Rows.Single(r => r.Path == "case.keyword").ChoiceValue = nameof(LetterCase.Lower);
