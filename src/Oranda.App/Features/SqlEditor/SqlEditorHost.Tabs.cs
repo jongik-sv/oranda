@@ -89,14 +89,16 @@ public sealed partial class SqlEditorHost
         }
 
         var index = ws.Tabs.IndexOf(tab);
+        var wasActive = ReferenceEquals(ws.ActiveTab, tab); // 탭 줄(ListBox)이 항목을 빼는 즉시 선택을 null 로 되돌려 ActiveTab 을 먼저 비운다
         ws.Tabs.RemoveAt(index);
         Tabs.Remove(tab);
-        if (ReferenceEquals(ws.ActiveTab, tab))
+        if (wasActive || ReferenceEquals(ws.ActiveTab, tab))
         {
+            // 오른쪽 이웃, 없으면 왼쪽 이웃(SQL Developer·VS Code 와 같다).
             ws.ActiveTab = ws.Tabs.Count == 0 ? null : ws.Tabs[Math.Min(index, ws.Tabs.Count - 1)];
         }
 
-        if (ReferenceEquals(_active, tab))
+        if (ReferenceEquals(_active, tab) || (wasActive && ReferenceEquals(_activeWorkspace, ws)))
         {
             SetActive(ReferenceEquals(_activeWorkspace, ws) ? ws.ActiveTab : null);
         }

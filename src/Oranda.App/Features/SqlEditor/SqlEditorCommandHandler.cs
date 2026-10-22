@@ -156,6 +156,13 @@ public sealed class SqlEditorCommandHandler : ICommandHandler
                 return;
         }
 
+        // 글자 편집 명령(모두 선택·복사·찾기 등)은 포커스가 PL/SQL 편집기에 있으면 그 편집기에서 한다(숨은 SQL 탭이 아니라).
+        if (context.CommandId.StartsWith("oranda.edit.", StringComparison.Ordinal) && context.Keys.Evaluate("plsqlEditorFocus")
+            && PlsqlEditor.PlsqlEditorViewModel.Active is { } plsql)
+        {
+            tab = plsql.Editor;
+        }
+
         if (tab is null)
         {
             return;
