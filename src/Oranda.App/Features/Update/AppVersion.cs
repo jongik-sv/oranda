@@ -47,7 +47,9 @@ public static class AppVersion
     public static string Display => Installed ?? Assembly + " " + UiText.Get("Update.devBuildSuffix", "(개발 실행본)");
 
     /// <summary>빌드 때 <c>-p:OrandaUpdateFeed=…</c> 로 넣은 기본 피드 주소. 넣지 않았으면 null.</summary>
-    public static string? BuildDefaultFeed =>
-        typeof(AppVersion).Assembly.GetCustomAttributes<AssemblyMetadataAttribute>()
-            .FirstOrDefault(a => a.Key == "OrandaUpdateFeed")?.Value is { Length: > 0 } value ? value : null;
+    public static string? BuildDefaultFeed => ReadDefaultFeed(typeof(AppVersion).Assembly.GetCustomAttributes<AssemblyMetadataAttribute>());
+
+    /// <summary>어셈블리 메타데이터에서 <c>OrandaUpdateFeed</c> 값을 읽는다. 없거나 비었으면 null.</summary>
+    internal static string? ReadDefaultFeed(IEnumerable<AssemblyMetadataAttribute> metadata) =>
+        metadata.FirstOrDefault(a => a.Key == "OrandaUpdateFeed")?.Value is { Length: > 0 } value ? value : null;
 }

@@ -3,8 +3,11 @@ name: ci
 on:
   push:
     branches: [main, 'dev-*']
+    # v* 태그 푸시 = 릴리스(아래 release 작업이 GitHub Release 를 만든다). 보통 푸시·PR 은 산출물만 남긴다.
+    tags: ['v*']
   pull_request:
     branches: [main, 'dev-*']
+  workflow_dispatch:
 
 concurrency:
   group: ci-${{ github.ref }}
@@ -14,6 +17,8 @@ env:
   DOTNET_NOLOGO: 1
   DOTNET_CLI_TELEMETRY_OPTOUT: 1
   VPK_VERSION: 1.2.161
+  # 설치본이 기본으로 확인할 업데이트 피드(설정의 주소가 비었을 때). 로컬 빌드는 이 값 없이 「피드 없음」.
+  ORANDA_UPDATE_FEED: https://github.com/jongik-sv/oranda
 
 jobs:
   windows:
@@ -28,7 +33,7 @@ jobs:
       - name: Unit and UI tests
         run: dotnet test Oranda.sln -c Release --no-build --filter "Category!=Integration&Category!=Perf"
       - name: Publish app
-        run: dotnet publish src/Oranda.App -c Release -r win-x64 --self-contained -p:PublishReadyToRun=true -p:Version=0.1.${{ github.run_number }} -o artifacts/publish/win-x64
+        run: dotnet publish src/Oranda.App -c Release -r win-x64 --self-contained -p:PublishReadyToRun=true -p:Version=0.1.${{ github.run_number }} -p:OrandaUpdateFeed=${{ env.ORANDA_UPDATE_FEED }} -o artifacts/publish/win-x64
       - name: Startup perf (5 runs)
         # 예산 초과 시 실패시키려면 --enforce 를 붙인다(예산 확정 전까지 보고만).
         run: dotnet run --project tests/Oranda.Perf -c Release -- --exe artifacts/publish/win-x64/Oranda.App.exe --runs 5 --out artifacts/perf
@@ -44,18 +49,38 @@ jobs:
     runs-on: macos-14
     env:
       HAS_APPLE_SECRETS: ${{ secrets.APPLE_CERTIFICATE_P12_BASE64 != '' }}
+      IS_RELEASE: ${{ startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch' }}
+    outputs:
+      version: ${{ steps.ver.outputs.version }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-dotnet@v4
         with:
           dotnet-version: 10.0.x
+      # 패키지 버전: 태그 vX.Y.Z 면 X.Y.Z, 그 밖에는 0.1.<실행 번호>.
+      - name: Resolve package version
+        id: ver
+        run: |
+          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
+            VER="${GITHUB_REF_NAME#v}"
+            [[ "$VER" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]] || { echo "tag $GITHUB_REF_NAME is not vX.Y.Z"; exit 1; }
+          else
+            VER="0.1.${{ github.run_number }}"
+          fi
+          echo "version=$VER" >> "$GITHUB_OUTPUT"
       - run: dotnet build Oranda.sln -c Release
       - name: Unit and UI tests
         run: dotnet test Oranda.sln -c Release --no-build --filter "Category!=Integration&Category!=Perf"
       - name: Publish app
-        run: dotnet publish src/Oranda.App -c Release -r osx-arm64 --self-contained -p:PublishReadyToRun=true -p:Version=0.1.${{ github.run_number }} -o artifacts/publish/osx-arm64
+        run: dotnet publish src/Oranda.App -c Release -r osx-arm64 --self-contained -p:PublishReadyToRun=true -p:Version=${{ steps.ver.outputs.version }} -p:OrandaUpdateFeed=${{ env.ORANDA_UPDATE_FEED }} -o artifacts/publish/osx-arm64
       - name: Install vpk
         run: dotnet tool install -g vpk --version "$VPK_VERSION"
+      # 릴리스 때만: 이전 릴리스를 받아 두면 vpk pack 이 델타 패키지를 만든다. 첫 릴리스는 받을 것이 없으므로 실패를 넘긴다.
+      - name: Download previous release (for deltas)
+        if: env.IS_RELEASE == 'true'
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: vpk download github --repoUrl "https://github.com/${{ github.repository }}" --token "$GITHUB_TOKEN" --outputDir artifacts/release || echo "no previous release to download"
       - name: Import signing certificate
         if: env.HAS_APPLE_SECRETS == 'true'
         env:
@@ -84,14 +109,14 @@ jobs:
           APPLE_SIGN_APP_IDENTITY: ${{ secrets.APPLE_SIGN_APP_IDENTITY }}
           APPLE_SIGN_INSTALL_IDENTITY: ${{ secrets.APPLE_SIGN_INSTALL_IDENTITY }}
         run: >
-          vpk pack --packId Oranda --packVersion "0.1.${{ github.run_number }}"
+          vpk pack --packId Oranda --packVersion "${{ steps.ver.outputs.version }}"
           --packDir artifacts/publish/osx-arm64 --mainExe Oranda.App
           --signAppIdentity "$APPLE_SIGN_APP_IDENTITY" --signInstallIdentity "$APPLE_SIGN_INSTALL_IDENTITY"
           --notaryProfile oranda-notary --outputDir artifacts/release
       - name: Package (unsigned, no secrets)
         if: env.HAS_APPLE_SECRETS != 'true'
         run: >
-          vpk pack --packId Oranda --packVersion "0.1.${{ github.run_number }}"
+          vpk pack --packId Oranda --packVersion "${{ steps.ver.outputs.version }}"
           --packDir artifacts/publish/osx-arm64 --mainExe Oranda.App --outputDir artifacts/release
       - name: Verify signature and Gatekeeper
         if: env.HAS_APPLE_SECRETS == 'true'
@@ -113,6 +138,33 @@ jobs:
           name: release-macos-arm64
           path: artifacts/release/
           if-no-files-found: warn
+
+  # GitHub Release 올리기: v* 태그 푸시 또는 수동 실행 때만. 쓰기 권한은 이 작업에만 준다(토큰은 GITHUB_TOKEN 뿐).
+  release:
+    name: publish GitHub Release
+    needs: macos
+    if: startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+      - uses: actions/download-artifact@v4
+        with:
+          name: release-macos-arm64
+          path: artifacts/release
+      - name: Install vpk
+        run: dotnet tool install -g vpk --version "$VPK_VERSION"
+      - name: Upload to GitHub Releases
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERSION: ${{ needs.macos.outputs.version }}
+        run: >
+          vpk upload github --outputDir artifacts/release
+          --repoUrl "https://github.com/${{ github.repository }}" --token "$GITHUB_TOKEN"
+          --publish --releaseName "Oranda $VERSION" --tag "v$VERSION" --targetCommitish "$GITHUB_SHA"
 
   integration:
     name: integration (ubuntu, Testcontainers)
