@@ -60,18 +60,18 @@
       <TextBlock Text="실행하면 문장의 :변수가 여기에 채워집니다. 빈 값은 NULL." TextTrimming="CharacterEllipsis" />
     </Border>
     <!-- 창이 표의 최소 폭보다 좁으면 방향 열을 자르지 않고 가로로 스크롤한다.
-         열 폭은 표 폭(창 폭, 최소 290)에서 픽셀로 계산해 머리글과 모든 줄에 같은 값을 넣는다(코드 숨김 ApplyColumns).
+         열 폭은 표 폭(창 폭, 최소 232)에서 픽셀로 계산해 머리글과 모든 줄에 같은 값을 넣는다(코드 숨김 ApplyColumns).
          * 열을 줄마다 두면 처음 무한 폭으로 잰 줄이 글자 폭을 따라가 열이 어긋난다. -->
     <ScrollViewer x:Name="TableScroll" HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled">
-    <DockPanel x:Name="Table" MinWidth="290">
+    <DockPanel x:Name="Table" MinWidth="232">
     <Border DockPanel.Dock="Top" Classes="grid-header">
       <Grid x:Name="HeaderGrid" Height="26">
         <Grid.ColumnDefinitions>
           <ColumnDefinition Width="24" />
-          <ColumnDefinition Width="2*" MinWidth="56" />
-          <ColumnDefinition Width="3*" MinWidth="64" />
-          <ColumnDefinition Width="2.4*" MinWidth="84" />
-          <ColumnDefinition Width="58" />
+          <ColumnDefinition Width="2*" MinWidth="44" />
+          <ColumnDefinition Width="3.5*" MinWidth="48" />
+          <ColumnDefinition Width="2*" MinWidth="64" />
+          <ColumnDefinition Width="52" />
         </Grid.ColumnDefinitions>
         <TextBlock Grid.Column="0" Classes="head" Text="#" HorizontalAlignment="Center" Margin="0" />
         <TextBlock Grid.Column="1" Classes="head" Text="변수" />
@@ -89,10 +89,10 @@
           <Grid Classes="row" Loaded="OnRowGridLoaded">
             <Grid.ColumnDefinitions>
               <ColumnDefinition Width="24" />
-              <ColumnDefinition Width="2*" MinWidth="56" />
-              <ColumnDefinition Width="3*" MinWidth="64" />
-              <ColumnDefinition Width="2.4*" MinWidth="84" />
-              <ColumnDefinition Width="58" />
+              <ColumnDefinition Width="2*" MinWidth="44" />
+              <ColumnDefinition Width="3.5*" MinWidth="48" />
+              <ColumnDefinition Width="2*" MinWidth="64" />
+              <ColumnDefinition Width="52" />
             </Grid.ColumnDefinitions>
             <Border Grid.Column="0" Classes="cell">
               <TextBlock Text="{Binding Number}" HorizontalAlignment="Center" VerticalAlignment="Center" Opacity="0.6" />

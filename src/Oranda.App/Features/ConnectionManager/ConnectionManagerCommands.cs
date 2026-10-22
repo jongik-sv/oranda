@@ -204,6 +204,8 @@ public sealed class ConnectionCommandHandler(ServiceContainer container) : IComm
         _window = window;
         if (Owner is { IsVisible: true } owner)
         {
+            OwnerPlacementGuard.FitInside(owner, window);
+            OwnerPlacementGuard.Hold(owner, window);
             await window.ShowDialog(owner).ConfigureAwait(true);
         }
         else

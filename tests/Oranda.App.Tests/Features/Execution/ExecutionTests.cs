@@ -1268,6 +1268,26 @@ public sealed class ExecutionTests
         return Task.CompletedTask;
     });
 
+    [Theory]
+    [InlineData(240)]
+    [InlineData(280)] // 오른쪽 열 기본 폭(창의 0.23) 근처
+    [InlineData(390)]
+    public Task Bind_panel_has_no_horizontal_scroll_at_default_right_pane_widths(double width) => Ui.Run(() =>
+    {
+        var vm = new BindVariablesViewModel(new EventBus());
+        vm.Store.Ensure(["PROC_CD", "OP_GRD"]);
+        var view = new BindVariablesView { DataContext = vm };
+        var window = new Avalonia.Controls.Window { Width = width, Height = 400, Content = view };
+        window.Show();
+        Avalonia.Threading.Dispatcher.UIThread.RunJobs();
+        window.UpdateLayout();
+
+        var scroll = view.FindControl<Avalonia.Controls.ScrollViewer>("TableScroll")!;
+        Assert.True(scroll.Extent.Width <= scroll.Viewport.Width + 0.5, $"extent {scroll.Extent.Width} > viewport {scroll.Viewport.Width}");
+        window.Close();
+        return Task.CompletedTask;
+    });
+
     // ---------- 트랜잭션 ----------
 
     [Fact]

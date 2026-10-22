@@ -70,11 +70,11 @@ public sealed partial class ConnectionTreeNode : ObservableObject
         ? Title
         : Profile.Environment == ConnectionEnvironment.Production ? $"{Title}, 운영 접속" : $"{Title}, {EnvironmentLabel}";
 
-    /// <summary>흐린 보조 글: 폴더면 접속 수, 접속이면 user@접속 문자열(설명이 있으면 「 · 첫 줄」 을 붙인다).</summary>
+    /// <summary>흐린 보조 글: 폴더면 접속 수, 접속이면 user@접속 문자열(설명이 있으면 목록 기본 폭에서 잘려도 보이게 「첫 줄 · 」 을 앞에 둔다).</summary>
     public string Subtitle => Profile switch
     {
         null => $"({ProfileCount})",
-        { Comment: { } c } when FirstLine(c) is { Length: > 0 } line => $"{Profile.User}@{Profile.DataSource} · {line}",
+        { Comment: { } c } when FirstLine(c) is { Length: > 0 } line => $"{line} · {Profile.User}@{Profile.DataSource}",
         _ => $"{Profile.User}@{Profile.DataSource}",
     };
 

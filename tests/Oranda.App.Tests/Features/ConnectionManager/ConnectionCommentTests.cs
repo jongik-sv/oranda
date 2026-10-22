@@ -38,11 +38,11 @@ public sealed class ConnectionCommentTests
     }
 
     [Fact]
-    public void Tree_row_shows_the_comment_as_tooltip_and_its_first_line_after_the_connect_string()
+    public void Tree_row_shows_the_comment_as_tooltip_and_its_first_line_before_the_connect_string()
     {
         var node = new ConnectionTreeNode("a", Profile("a", Note));
         Assert.Equal(Note, node.Tip);
-        Assert.Equal("scott@localhost:1521/FREEPDB1 · 주문 조회 전용 계정.", node.Subtitle);
+        Assert.Equal("주문 조회 전용 계정. · scott@localhost:1521/FREEPDB1", node.Subtitle);
 
         var plain = new ConnectionTreeNode("b", Profile("b"));
         Assert.Null(plain.Tip);

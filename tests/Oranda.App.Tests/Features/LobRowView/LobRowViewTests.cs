@@ -582,7 +582,17 @@ public sealed class LobRowViewTests : IDisposable
         var (vm, grid) = await OpenViewerAsync([[1m, "a"], [2m, "b"]]);
         using var _v = vm;
 
+        // 열을 옮기면 그리드 Changed 가 UI 문맥으로 게시되고, 행 보기의 처리기(Rebuild)가 시험 본문과 병행으로 돈다.
+        // 처리기가 끝나기 전에 읽으면 Fields 가 비어 보이므로 알림이 전달될 때까지 기다린 뒤 읽는다(뒤 처리기 = 행 보기가 먼저 구독).
+        var delivered = 0;
+        grid.Changed += (_, _) => Interlocked.Increment(ref delivered);
         Assert.True(grid.MoveColumn(1, 0)); // NAME 을 맨 앞으로
+        for (var i = 0; i < 100 && Volatile.Read(ref delivered) == 0; i++)
+        {
+            await Task.Delay(20);
+        }
+
+        Assert.True(Volatile.Read(ref delivered) > 0);
         vm.Refresh();
 
         Assert.Equal(["NAME", "ID"], vm.Fields.Select(f => f.Name));

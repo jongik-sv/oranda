@@ -14,7 +14,7 @@ public partial class BindVariablesView : UserControl
     public BindVariablesView()
     {
         InitializeComponent();
-        // 가로 스크롤 안은 폭이 무한이라 * 열이 줄마다 다른 폭이 된다: 표 폭을 창 폭(최소 290)으로 고정하고,
+        // 가로 스크롤 안은 폭이 무한이라 * 열이 줄마다 다른 폭이 된다: 표 폭을 창 폭(최소 232)으로 고정하고,
         // 열 폭은 그 폭에서 픽셀로 계산해 머리글과 모든 줄에 같은 값을 넣는다.
         TableScroll.SizeChanged += (_, e) =>
         {
@@ -44,9 +44,9 @@ public partial class BindVariablesView : UserControl
 
     private BindVariableStore? _watched;
 
-    // 열: 번호(고정) | 변수 2 | 값 3 | 자료형 2.4 | 방향(고정). 비율 열은 최소 폭을 지킨다.
-    private const double NumberWidth = 24, DirectionWidth = 58;
-    private static readonly (double Weight, double Min)[] Flex = [(2, 56), (3, 64), (2.4, 84)];
+    // 열: 번호(고정) | 변수 2 | 값 3.5(남는 폭) | 자료형 2 | 방향(고정). 비율 열은 최소 폭을 지킨다. 최소 폭 합 = 표 MinWidth(232), 기본 오른쪽 열 폭(0.23)에서 가로 스크롤이 없게.
+    private const double NumberWidth = 24, DirectionWidth = 52;
+    private static readonly (double Weight, double Min)[] Flex = [(2, 44), (3.5, 48), (2, 64)];
 
     private double[] ColumnWidths()
     {
