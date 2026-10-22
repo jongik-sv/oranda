@@ -197,13 +197,15 @@
 | `oranda.window.nextDocument` | `Ctrl+Tab` | `Ctrl+Tab` |
 | `oranda.window.previousDocument` | `Ctrl+Shift+Tab` | `Ctrl+Shift+Tab` |
 | `oranda.edit.goToLine` | `Ctrl+G` | `Cmd+Option+L` |
-| `oranda.nav.describeObject` | `Alt+C` | `Ctrl+Option+C` |
+| `oranda.nav.describeObject` | `F4`, `Alt+C` | `F4`, `Option+C`, `Ctrl+Option+C` |
 | `oranda.exec.bindVariables` | `Alt+B` | `Ctrl+Option+B` |
 | `oranda.exec.runFromCursor` | `Ctrl+M` | `Cmd+Shift+M` |
 | `oranda.txn.commit` | `F11` | `Cmd+F11` |
 | `oranda.exec.runForEdit` | `F9` | `Ctrl+Enter`, `F9` |
 
 `edit.triggerCompletion` 을 `Option+Esc` 로 둔 이유: 맥 기본 `Ctrl+Space` 는 한/영 입력 소스 전환이다. 사용자 키맵으로 바꿀 수 있다.
+
+`nav.describeObject`(`F4`·`Alt+C`)는 커서 아래 이름이 표·뷰면 테이블 레이아웃 창(Orange 의 Alt+C)을, 아니면 요약 팝업을 연다(TSK-13-32). 맥에서는 `Option+C` 와 기존 `Ctrl+Option+C` 가 둘 다 열고, 같은 `editorFocus` 에서 겹치는 키가 없다(`Cmd+Option+C` = `grid.copyRows` 는 `gridFocus`).
 
 `grid.followForeignKey`(`F4`)·`grid.showReferencingRows`(`Shift+F4`)는 `gridFocus` 에서만 쓴다 — `F4`·`Shift+F4` 의 다른 바인딩(`nav.describeObject`)은 `editorFocus` 라 포커스 자리가 겹치지 않는다. DataGrip 「Related Rows」(F4)를 따랐고, 4개 프리셋 모두 두 열(Windows·mac)이 같다.
 
@@ -241,7 +243,7 @@
 | `oranda.edit.cycleCase` | - | - | - | `Ctrl+'` |
 | `oranda.edit.duplicateLine` | `Ctrl+D` | `Ctrl+D` | `Ctrl+D` | - |
 | `oranda.nav.goToDefinition` | `F12` | `F12` | `F12` | - |
-| `oranda.nav.describeObject` | `F4` | `Alt+C`, `F4` | `F4` | `F4`, `Shift+F4` |
+| `oranda.nav.describeObject` | `F4`, `Alt+C` | `F4`, `Alt+C` | `F4`, `Alt+C` | `F4`, `Shift+F4`, `Alt+C` |
 | `oranda.exec.bindVariables` | - | `Alt+B` | - | - |
 | `oranda.format.document` | `Ctrl+Shift+F` | `Ctrl+Shift+F` | `Ctrl+Shift+F` | `Ctrl+F7` |
 | `oranda.exec.runStatement` | `Ctrl+Enter` | `Ctrl+Enter`, `Ctrl+K` | `Ctrl+Enter` | `Ctrl+Enter`, `F9` |
@@ -363,7 +365,7 @@
 | ID | 제목 | 기본 키 | 키 범위(when) | 활성 조건 | 소유 Task |
 |---|---|---|---|---|---|
 | `oranda.nav.goToDefinition` | 정의로 이동 | `F12` | `editorFocus` | `hasSession` | TSK-04-06 |
-| `oranda.nav.describeObject` | 객체 정보 보기 | `F4` | `editorFocus` | `hasSession` | TSK-04-06 |
+| `oranda.nav.describeObject` | 객체 정보 보기 | `F4`, `Alt+C` | `editorFocus` | `hasSession` | TSK-04-06, TSK-13-32 |
 | `oranda.nav.findReferences` | 참조 찾기(현재 파일) | `Shift+F12` | `editorFocus` | 항상 | TSK-04-06 |
 | `oranda.nav.back` | 뒤로 이동 | `Alt+Left` | `editorFocus` | `canNavigateBack` | TSK-04-06 |
 | `oranda.nav.forward` | 앞으로 이동 | `Alt+Right` | `editorFocus` | `canNavigateForward` | TSK-04-06 |

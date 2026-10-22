@@ -37,6 +37,21 @@ public sealed record AppSettings
     public SchemaBrowserSettings SchemaBrowser { get; init; } = new();
 
     public UpdateSettings Update { get; init; } = new();
+
+    /// <summary>테이블 레이아웃 팝업(객체 정보 보기)의 붙여 넣기 옵션(TSK-13-32).</summary>
+    public TableLayoutSettings TableLayout { get; init; } = new();
+}
+
+/// <summary>테이블 레이아웃 팝업의 확인란 4개. 다음에 연 팝업에도 유지한다. 별칭은 표마다 달라 저장하지 않는다.</summary>
+public sealed record TableLayoutSettings
+{
+    public bool InsertComma { get; init; }
+
+    public bool LowerCase { get; init; }
+
+    public bool ShowPk { get; init; }
+
+    public bool ShowComment { get; init; }
 }
 
 public sealed record UiSettings

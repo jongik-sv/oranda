@@ -4186,6 +4186,39 @@ dotnet, testhost, Oranda.App
 - data-model: -
 - ui-spec: -
 
+### TSK-13-32: 테이블 레이아웃 팝업: 편집기의 표·뷰 이름에서 Alt+C, 컬럼 이름을 두 번 눌러 편집기에 붙여 넣기 [mac]
+- category: feat
+- domain: frontend
+- model: sonnet
+- status: [ ]
+- priority: medium
+- assignee: -
+- schedule: 2026-10-22 ~ 2026-10-23
+- tags: navigation, mac
+- depends: TSK-04-06
+- blocked-by: -
+- entry-point: 편집기 표·뷰 이름 위 Alt+C·F4(oranda.nav.describeObject), 메뉴 「탐색」 > 「객체 정보 보기」
+- note: 담당 PC: mac(맥북) — win144 세션은 이 Task 를 하지 않는다. 2026-10-22 실제 앱 사용 중 사용자 요청(Orange 의 테이블 레이아웃 팝업)
+
+#### PRD 요구사항
+- prd-ref: PRD EDIT-05
+- requirements:
+  - 편집기 커서가 표·뷰(동의어면 대상) 이름 위일 때 Alt+C·F4 로 별도 작은 창을 연다. 제목은 「소유자.표」, 위에 별칭 칸과 확인란 4개(쉼표 넣기·소문자·PK 표시·주석 넣기), 아래에 열 표(번호·이름·형식·NULL·기본값·주석)
+  - 열 이름 행을 두 번 누르면 그 열을, 여러 행을 고르고 Enter 를 누르면 고른 순서대로 편집기 커서 자리에 넣는다. 옵션(별칭·쉼표·소문자·주석)을 반영하고, 확인란 4개는 설정에 저장한다
+  - 표·뷰가 아닌 이름에서는 기존 「객체 정보 보기」 내용 그대로, 툴팁 대신 같은 창 틀(고정폭 글꼴·스크롤·선택 복사·Esc)로 보인다
+- acceptance:
+  - 표 이름에서 Alt+C 를 누르면 창이 뜨고, 열 이름을 두 번 누르면 편집기 커서 자리에 들어가며 실행 취소 한 번으로 되돌아간다
+- constraints:
+  - 새 SQL 을 만들지 않고 기존 메타데이터 경로(IMetadataProvider.GetTableAsync)를 쓴다
+- test-criteria:
+  - 팝업 모델(열 목록·NOT NULL·기본값·주석·PK), 표 아닌 이름의 기존 동작, 옵션 조합별 붙여 넣기 글(별칭·쉼표·소문자·주석·따옴표 이름), 키맵 겹침 없음
+
+#### 기술 스펙 (TRD)
+- tech-spec: -
+- api-spec: -
+- data-model: -
+- ui-spec: -
+
 ## 의존 그래프
 
 ### 그래프 (Mermaid)
@@ -4349,6 +4382,7 @@ graph LR
   TSK-06-03 --> TSK-13-30
   TSK-13-05 --> TSK-13-31
   TSK-13-29 --> TSK-13-31
+  TSK-04-06 --> TSK-13-32
   style TSK-01-02 fill:#fff3e0,stroke:#e65100
   style TSK-01-07 fill:#fff3e0,stroke:#e65100
   style TSK-01-02 stroke:#c62828,stroke-width:2px

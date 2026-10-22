@@ -189,6 +189,25 @@ public class NavigationTests
     }
 
     [Fact]
+    public async Task Describe_on_a_table_carries_the_layout_model_but_not_on_a_package()
+    {
+        var (svc, _, tab, _, _) = Setup("select * from emp");
+        var info = await svc.DescribeAsync(tab, 16);
+        var layout = info!.Layout!;
+        Assert.Equal("SCOTT.EMP", layout.Title);
+        Assert.Equal(["EMPNO", "ENAME", "SAL"], layout.Rows.Select(r => r.Name).ToArray());
+        Assert.Equal(["NUMBER(4)", "VARCHAR2(10)", "NUMBER(7,2)"], layout.Rows.Select(r => r.TypeText).ToArray());
+        Assert.Equal([true, true, false], layout.Rows.Select(r => r.NotNull).ToArray());
+        Assert.Equal("급여", layout.Rows[2].Comment);
+        Assert.Equal([1, 2, 3], layout.Rows.Select(r => r.Index).ToArray());
+
+        var (svc2, _, tab2, _, _) = Setup("begin emp_pkg.hire(1); end;");
+        var pkg = await svc2.DescribeAsync(tab2, tab2.Text.IndexOf("emp_pkg", StringComparison.Ordinal) + 2);
+        Assert.Null(pkg!.Layout);
+        Assert.NotEmpty(pkg.Lines);
+    }
+
+    [Fact]
     public Task Ctrl_click_wiring_attaches_once_and_popup_does_not_throw_headless() => Ui.Run(() =>
     {
         var vm = new SqlEditorViewModel(Guid.NewGuid(), "select * from emp");

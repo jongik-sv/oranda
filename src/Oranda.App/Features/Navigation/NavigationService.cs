@@ -29,8 +29,11 @@ public enum NavigationOutcome
 
 public sealed record NavigationResult(NavigationOutcome Outcome, string Message, DbObjectRef? Target = null);
 
-/// <summary>객체 정보 팝업 내용.</summary>
-public sealed record ObjectInfo(string Title, IReadOnlyList<string> Lines);
+/// <summary>객체 정보 팝업 내용. <see cref="Layout"/> 이 있으면(테이블·뷰) 요약 글 대신 테이블 레이아웃 창으로 보인다(TSK-13-32).</summary>
+public sealed record ObjectInfo(string Title, IReadOnlyList<string> Lines)
+{
+    public TableLayoutModel? Layout { get; init; }
+}
 
 /// <summary>참조 찾기 결과. <see cref="Index"/> = 선택한 참조.</summary>
 public sealed record ReferencesResult(IReadOnlyList<TextRange> Ranges, int Index, ObjectInfo Summary);
@@ -338,9 +341,11 @@ public sealed class NavigationService
 
             var lines = new List<string>();
             var head = $"{obj.Owner}.{obj.Name}";
+            TableLayoutModel? layout = null;
             if (obj.ObjectType is "TABLE" or "VIEW" or "MATERIALIZED VIEW")
             {
                 var t = await meta.GetTableAsync(session, obj, ct).ConfigureAwait(true);
+                layout = TableLayoutModel.From(obj, t);
                 lines.Add(obj.ObjectType + (string.IsNullOrEmpty(t.Comment) ? string.Empty : " — " + t.Comment));
                 foreach (var c in t.Columns.OrderBy(c => c.Position))
                 {
@@ -367,7 +372,7 @@ public sealed class NavigationService
                 lines.Add(obj.ObjectType);
             }
 
-            return new ObjectInfo(head, lines);
+            return new ObjectInfo(head, lines) { Layout = layout };
         }
         catch (OperationCanceledException)
         {
@@ -379,15 +384,7 @@ public sealed class NavigationService
         }
     }
 
-    private static string TypeText(ColumnInfo c)
-    {
-        if (c.Precision is { } p)
-        {
-            return c.Scale is { } s and > 0 ? $"{c.DataType}({p},{s})" : $"{c.DataType}({p})";
-        }
-
-        return c.Length is { } l and > 0 && c.DataType.Contains("CHAR", StringComparison.OrdinalIgnoreCase) ? $"{c.DataType}({l})" : c.DataType;
-    }
+    private static string TypeText(ColumnInfo c) => TableLayoutModel.TypeText(c);
 
     private static string Signature(ProcedureInfo p)
     {

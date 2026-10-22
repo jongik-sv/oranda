@@ -1,10 +1,13 @@
 using Oranda.App.Features.SqlEditor;
+using Oranda.App.Shell.Settings;
+using Oranda.Core.Settings;
 using Oranda.Core.Shell;
 
 namespace Oranda.App.Features.Navigation;
 
 /// <summary>
 /// TSK-04-06 정의로 이동·객체 정보·참조 찾기·뒤로·앞으로 명령 처리기(commands.md 7장). 한 클래스가 <see cref="CommandContext.CommandId"/> 로 나눠 처리한다.
+/// 「객체 정보 보기」는 커서 아래가 테이블·뷰면 테이블 레이아웃 창(<see cref="TableLayoutWindow"/>, TSK-13-32), 아니면 요약 팝업을 연다.
 /// 서비스는 실행할 때 꺼낸다(시작 경로에서 Oracle·ANTLR 어셈블리를 올리지 않기 위해). 편집기 생성자는 건드리지 않는다.
 /// </summary>
 [OrandaCommand("oranda.nav.goToDefinition", CommandCategory.Navigate, When = "editorFocus", Enablement = "hasSession",
@@ -103,7 +106,33 @@ public sealed class NavigationCommandHandler : ICommandHandler
             return;
         }
 
+        if (info.Layout is { } layout)
+        {
+            TableLayoutWindow.Show(NewSession(tab, layout));
+            return;
+        }
+
         ObjectInfoPopup.Show(tab, info);
+    }
+
+    // 확인란 4개는 설정에서 읽고(설정이 없는 시험은 기본값), 바뀌면 바로 저장해 다음 팝업에도 유지한다.
+    private TableLayoutSession NewSession(SqlEditorViewModel tab, TableLayoutModel layout)
+    {
+        var settings = _services?.GetService(typeof(SettingsService)) as SettingsService;
+        var options = TableLayoutOptions.From(settings?.Current.TableLayout ?? new TableLayoutSettings());
+        return new TableLayoutSession(tab, layout, options, settings is null ? null : s => _ = SaveAsync(settings, s));
+    }
+
+    private static async Task SaveAsync(SettingsService settings, TableLayoutSettings value)
+    {
+        try
+        {
+            await settings.UpdateAsync(s => s with { TableLayout = value }).ConfigureAwait(true);
+        }
+        catch (IOException)
+        {
+            // 저장하지 못해도 이번 창의 옵션은 그대로 쓴다.
+        }
     }
 }
 

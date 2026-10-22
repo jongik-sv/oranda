@@ -40,7 +40,7 @@
     { "command": "oranda.edit.triggerCompletion", "keys": ["Primary+Space"], "when": "editorFocus", "mac": ["Alt+Escape"] },
     { "command": "oranda.edit.parameterHints", "keys": ["Primary+Shift+Space"], "when": "editorFocus" },
     { "command": "oranda.edit.insertSnippet", "keys": ["Primary+Shift+J"], "when": "editorFocus" },
-    { "command": "oranda.nav.describeObject", "keys": ["F4", "Shift+F4"], "when": "editorFocus" },
+    { "command": "oranda.nav.describeObject", "keys": ["F4", "Shift+F4", "Alt+C"], "when": "editorFocus", "mac": ["F4", "Shift+F4", "Alt+C", "Ctrl+Alt+C"] },
     { "command": "oranda.nav.findReferences", "keys": ["Shift+F12"], "when": "editorFocus" },
     { "command": "oranda.nav.back", "keys": ["Alt+Left"], "when": "editorFocus", "mac": ["Primary+Ctrl+Left"] },
     { "command": "oranda.nav.forward", "keys": ["Alt+Right"], "when": "editorFocus", "mac": ["Primary+Ctrl+Right"] },
