@@ -4153,6 +4153,39 @@ dotnet, testhost, Oranda.App
 - data-model: -
 - ui-spec: -
 
+### TSK-13-31: 플래시백 「변경 추적하기」: 행의 전체 변경 이력 질의를 새 SQL 탭에서 실행 [mac]
+- category: feat
+- domain: frontend
+- model: sonnet
+- status: [ ]
+- priority: medium
+- assignee: -
+- schedule: 2026-10-22 ~ 2026-10-23
+- tags: flashback, mac
+- depends: TSK-13-05, TSK-13-29
+- blocked-by: -
+- entry-point: 결과 그리드 행 문맥 메뉴 「플래시백」 > 「변경 추적하기」
+- note: 담당 PC: mac(맥북) — win144 세션은 이 Task 를 하지 않는다. 2026-10-22 실제 앱 사용 중 사용자 요청(N분 전 보기처럼 플래시백을 쓰는 「변경 추적하기」)
+
+#### PRD 요구사항
+- prd-ref: PRD GRID-11
+- requirements:
+  - 활성 행(편집 모드로 연 단일 표 결과, 키 PK·ROWID)의 변경 이력을 VERSIONS BETWEEN SCN MINVALUE AND MAXVALUE 로 읽는 질의를 만들어 새 SQL 탭에 넣고 바로 실행한다(최신이 위)
+  - 키 값은 리터럴로 넣어 사람이 읽고 고쳐 다시 돌릴 수 있게 하고, 질의 위에 대상 표·키·한계를 적은 한 줄 주석을 둔다
+  - 새 탭의 접속은 원래 결과를 만든 탭의 접속이다. 기존 「이 행 변경 이력」은 바꾸지 않는다
+- acceptance:
+  - 「변경 추적하기」를 누르면 새 SQL 탭에 이력 질의가 들어가 실행되고 결과가 보인다. 쓸 수 없는 결과에서는 이유를 안내한다
+- constraints:
+  - 서버에 보조 객체를 설치하지 않는다
+- test-criteria:
+  - 질의 글 생성(PK 하나·복합 PK·ROWID·문자 따옴표·날짜 키), 새 탭이 열리고 실행이 불리는지(가짜 실행기)
+
+#### 기술 스펙 (TRD)
+- tech-spec: -
+- api-spec: -
+- data-model: -
+- ui-spec: -
+
 ## 의존 그래프
 
 ### 그래프 (Mermaid)
@@ -4314,6 +4347,8 @@ graph LR
   TSK-08-01 --> TSK-13-28
   TSK-07-02 --> TSK-13-29
   TSK-06-03 --> TSK-13-30
+  TSK-13-05 --> TSK-13-31
+  TSK-13-29 --> TSK-13-31
   style TSK-01-02 fill:#fff3e0,stroke:#e65100
   style TSK-01-07 fill:#fff3e0,stroke:#e65100
   style TSK-01-02 stroke:#c62828,stroke-width:2px

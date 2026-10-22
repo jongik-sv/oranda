@@ -114,6 +114,7 @@
   "Cmd.oranda.grid.exportExcel": "Export to Excel…",
   "Cmd.oranda.grid.flashback.asOf": "Values N Min Ago…",
   "Cmd.oranda.grid.flashback.history": "Row Change History",
+  "Cmd.oranda.grid.flashback.track": "Track Changes",
   "Cmd.oranda.grid.flashback.restore": "Restore Values…",
   "Cmd.oranda.grid.fetchAll": "Fetch All",
   "Cmd.oranda.grid.filterByValue": "Filter by This Value",

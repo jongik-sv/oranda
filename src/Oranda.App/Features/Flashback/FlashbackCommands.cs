@@ -23,6 +23,8 @@ namespace Oranda.App.Features.Flashback;
     Placements = ["context:grid/flashback@10"])]
 [OrandaCommand("oranda.grid.flashback.history", CommandCategory.Result, Title = "이 행 변경 이력", When = "gridFocus", Enablement = "gridHasSelection",
     Placements = ["context:grid/flashback@20"])]
+[OrandaCommand("oranda.grid.flashback.track", CommandCategory.Result, Title = "변경 추적하기", When = "gridFocus", Enablement = "gridHasSelection",
+    Placements = ["context:grid/flashback@25"])]
 [OrandaCommand("oranda.grid.flashback.restore", CommandCategory.Result, Title = "이전 값으로 되돌리기…", When = "gridFocus", Enablement = "gridHasSelection && !sessionBusy",
     Placements = ["context:grid/flashback@30"])]
 public sealed class FlashbackCommandHandler : ICommandHandler
@@ -71,6 +73,9 @@ public sealed class FlashbackCommandHandler : ICommandHandler
                     break;
                 case "oranda.grid.flashback.history":
                     await HistoryAsync(runner, model, tabs, tab, target, edit, cancellationToken).ConfigureAwait(true);
+                    break;
+                case "oranda.grid.flashback.track":
+                    await TrackAsync(container, model, target, edit, cancellationToken).ConfigureAwait(true);
                     break;
                 case "oranda.grid.flashback.restore":
                     await RestoreAsync(container, runner, model, target, edit, cancellationToken).ConfigureAwait(true);
@@ -210,6 +215,34 @@ public sealed class FlashbackCommandHandler : ICommandHandler
         var opened = tabs.AddRelated(new RelatedRowsResult(rs, $"이력: {target.Table.Name}", query.Statement, query.Binds), tab.Pane);
         opened.Pane?.Model?.ReportNotice(notice);
         model.ReportNotice(string.Empty);
+    }
+
+    /// <summary>「변경 추적하기」: 활성 행의 전체 변경 이력 질의를 새 SQL 탭에 넣고 바로 실행한다(원래 결과를 만든 탭의 접속으로).</summary>
+    private static async Task TrackAsync(ServiceContainer container, ResultGridModel model, FlashbackTarget target, GridEditSession edit, CancellationToken ct)
+    {
+        var row = (await model.ReadRowsAsync(model.Active.Row, model.Active.Row, target.Ordinals, ct).ConfigureAwait(true)).FirstOrDefault();
+        if (row is null || target.KeyPositions.Any(p => row[p] is null or DBNull))
+        {
+            model.ReportNotice("이 행의 키 값을 읽을 수 없어 변경을 추적할 수 없습니다.");
+            return;
+        }
+
+        var host = SqlEditorHost.Current;
+        var profileId = host.Active?.ConnectionProfileId ?? edit.Session.Profile.Id;
+        var text = FlashbackTrackSql.Build(target.Table, target.Names, target.KeyNames, target.KeyOf(row));
+        await OpenAndRunAsync(host, text, profileId, token => ExecutionCommands.Resolve(container).RunAsync(RunMode.Statement, ct: token), ct).ConfigureAwait(true);
+        model.ReportNotice(string.Empty);
+    }
+
+    /// <summary>새 SQL 탭에 <paramref name="text"/> 를 넣고(캐럿은 글 끝, 접속 지정) <paramref name="run"/> 으로 실행한다.</summary>
+    internal static async Task<SqlEditorViewModel> OpenAndRunAsync(SqlEditorHost host, string text, Guid? profileId, Func<CancellationToken, Task> run, CancellationToken ct)
+    {
+        var doc = host.NewDocument(text);
+        doc.ConnectionProfileId = profileId;
+        doc.IsDirty = false;
+        doc.Select(text.Length, 0);
+        await run(ct).ConfigureAwait(true);
+        return doc;
     }
 
     /// <summary>「이전 값으로 되돌리기 UPDATE」: 고른 행의 N분 전 값으로 UPDATE 를 만들어 미리 보여 주고, 확인하면 커밋 없이 반영한다.</summary>
