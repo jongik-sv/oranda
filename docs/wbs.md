@@ -3954,6 +3954,39 @@ dotnet, testhost, Oranda.App
 - data-model: -
 - ui-spec: -
 
+### TSK-13-25: 스키마 브라우저 저장 필터에 스키마 정규식 패턴 [mac]
+- category: feat
+- domain: frontend
+- model: sonnet
+- status: [ ]
+- priority: medium
+- assignee: -
+- schedule: 2026-10-22 ~ 2026-10-23
+- tags: schema, filter, mac
+- depends: TSK-13-10
+- blocked-by: -
+- entry-point: 스키마 브라우저 ▾ 「필터 편집…」 대화상자의 스키마 고르기
+- note: 담당 PC: mac(맥북) — win144 세션은 이 Task 를 하지 않는다. 2026-10-22 사용자 요청: 「스키마도 정규식 패턴이 들어가면 좋겠어」
+
+#### PRD 요구사항
+- prd-ref: PRD 스키마 브라우저 필터(TSK-13-10)
+- requirements:
+  - 스키마 고르기 방식에 「정규식으로 고르기」를 더한다(저장 필터 scope `Pattern`, 값 `schemaPattern`)
+  - 대소문자 무시, 일부 일치(전체 일치는 `^…$`). 패턴을 바꾸면 대화상자에 맞는 스키마 목록을 바로 보인다
+  - 잘못된 정규식은 칸을 오류로 표시하고 이유를 보이며 저장을 막는다. 정규식 평가에는 시간 제한을 둔다
+- acceptance:
+  - `APUSER$` 패턴 저장 필터를 고르면 그 패턴에 맞는 스키마만 트리에 남고, 다시 접속해도 유지된다
+- constraints:
+  - 서버 SQL 은 바꾸지 않는다(가져온 스키마 목록을 앱에서 거른다). 옛 settings.json 은 그대로 읽힌다
+- test-criteria:
+  - SavedFilterMatcher 정규식 시험(맞음·대소문자·잘못된 패턴·시간 제한), 대화상자 저장 막기 시험, 앱과 같은 경로의 스키마 트리 거르기 시험
+
+#### 기술 스펙 (TRD)
+- tech-spec: -
+- api-spec: -
+- data-model: schemaBrowser.filters 항목 scope Pattern·schemaPattern
+- ui-spec: -
+
 ## 의존 그래프
 
 ### 그래프 (Mermaid)
@@ -4109,6 +4142,7 @@ graph LR
   TSK-13-19 --> TSK-13-22
   TSK-13-18 --> TSK-13-23
   TSK-13-11 --> TSK-13-24
+  TSK-13-10 --> TSK-13-25
   style TSK-01-02 fill:#fff3e0,stroke:#e65100
   style TSK-01-07 fill:#fff3e0,stroke:#e65100
   style TSK-01-02 stroke:#c62828,stroke-width:2px
