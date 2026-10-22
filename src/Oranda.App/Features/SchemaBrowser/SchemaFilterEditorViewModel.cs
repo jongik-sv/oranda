@@ -25,7 +25,7 @@ public sealed partial class SchemaFilterEditorViewModel : ObservableObject
         _persist = persist;
         foreach (var f in filters)
         {
-            Filters.Add(FilterDraft.From(f));
+            AddDraft(FilterDraft.From(f, allSchemas));
         }
 
         Selected = Filters.FirstOrDefault(d => d.Id == selectedId) ?? Filters.FirstOrDefault();
@@ -55,6 +55,9 @@ public sealed partial class SchemaFilterEditorViewModel : ObservableObject
 
     public bool HasError => Error is not null;
 
+    /// <summary>저장·확인 단추가 켜지는 조건: 어떤 필터에도 잘못된 스키마 정규식이 없다.</summary>
+    public bool CanConfirm => Filters.All(f => f.PatternError is null);
+
     /// <summary>확인 뒤 이 접속이 고를 필터 id. 고른 필터가 없으면 null(필터 없음).</summary>
     public string? SelectedId => Selected?.Id;
 
@@ -66,9 +69,22 @@ public sealed partial class SchemaFilterEditorViewModel : ObservableObject
             name = $"{NewName} ({i})";
         }
 
-        var draft = FilterDraft.From(new SchemaBrowserFilter { Name = name });
-        Filters.Add(draft);
+        var draft = FilterDraft.From(new SchemaBrowserFilter { Name = name }, AllSchemas);
+        AddDraft(draft);
         Selected = draft;
+    }
+
+    private void AddDraft(FilterDraft draft)
+    {
+        draft.PropertyChanged += (_, e) =>
+        {
+            if (e.PropertyName == nameof(FilterDraft.PatternError))
+            {
+                OnPropertyChanged(nameof(CanConfirm));
+            }
+        };
+        Filters.Add(draft);
+        OnPropertyChanged(nameof(CanConfirm));
     }
 
     public void Delete()
@@ -80,6 +96,7 @@ public sealed partial class SchemaFilterEditorViewModel : ObservableObject
 
         var index = Filters.IndexOf(current);
         Filters.Remove(current);
+        OnPropertyChanged(nameof(CanConfirm));
         Selected = Filters.Count == 0 ? null : Filters[Math.Min(index, Filters.Count - 1)];
     }
 
@@ -157,6 +174,14 @@ public sealed partial class SchemaFilterEditorViewModel : ObservableObject
             return false;
         }
 
+        var badPattern = Filters.FirstOrDefault(f => f.PatternError is not null);
+        if (badPattern is not null)
+        {
+            Selected = badPattern;
+            Error = $"스키마 패턴이 올바르지 않습니다: {badPattern.PatternError}";
+            return false;
+        }
+
         Error = null;
         return true;
     }
@@ -183,6 +208,8 @@ public sealed partial class SchemaFilterEditorViewModel : ObservableObject
 /// <summary>대화상자에서 고치는 필터 한 개의 사본.</summary>
 public sealed partial class FilterDraft : ObservableObject
 {
+    private IReadOnlyList<string> _allSchemas = [];
+
     private FilterDraft(string id) => Id = id;
 
     public string Id { get; }
@@ -191,8 +218,67 @@ public sealed partial class FilterDraft : ObservableObject
     private string _name = "";
 
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(IsAllScope), nameof(IsLogonScope), nameof(IsWithObjectsScope), nameof(IsSelectedScope))]
+    [NotifyPropertyChangedFor(nameof(IsAllScope), nameof(IsLogonScope), nameof(IsWithObjectsScope), nameof(IsSelectedScope), nameof(IsPatternScope))]
     private SchemaFilterScope _scope;
+
+    /// <summary>정규식으로 고르기에 적은 패턴. 바뀌면 오류·맞는 스키마 목록을 다시 구한다.</summary>
+    [ObservableProperty]
+    private string _schemaPattern = "";
+
+    /// <summary>잘못된 스키마 정규식의 이유. 정규식 범위가 아니거나 올바르면 null(저장·확인을 막는 근거).</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasPatternError))]
+    private string? _patternError;
+
+    /// <summary>패턴에 맞는 스키마 미리보기(지금 접속의 스키마 목록 기준).</summary>
+    public ObservableCollection<string> PatternMatches { get; } = [];
+
+    public bool HasPatternError => PatternError is not null;
+
+    public string PatternMatchCountText => $"맞는 스키마 {PatternMatches.Count}/{_allSchemas.Count}개";
+
+    partial void OnSchemaPatternChanged(string value) => RefreshPattern();
+
+    partial void OnScopeChanged(SchemaFilterScope value) => RefreshPattern();
+
+    private void RefreshPattern()
+    {
+        PatternMatches.Clear();
+        if (Scope != SchemaFilterScope.Pattern)
+        {
+            PatternError = null;
+            OnPropertyChanged(nameof(PatternMatchCountText));
+            return;
+        }
+
+        var regex = SavedFilterMatcher.TryParseSchemaPattern(SchemaPattern, out var error);
+        PatternError = error;
+        if (error is null)
+        {
+            foreach (var schema in _allSchemas)
+            {
+                if (IsMatch(regex, schema))
+                {
+                    PatternMatches.Add(schema);
+                }
+            }
+        }
+
+        OnPropertyChanged(nameof(PatternMatchCountText));
+    }
+
+    // 시간 제한을 넘기면 그 스키마는 안 맞는 것으로 본다(매처와 같은 규칙).
+    private static bool IsMatch(System.Text.RegularExpressions.Regex? regex, string schema)
+    {
+        try
+        {
+            return regex?.IsMatch(schema) ?? true;
+        }
+        catch (System.Text.RegularExpressions.RegexMatchTimeoutException)
+        {
+            return false;
+        }
+    }
 
     [ObservableProperty]
     private bool _underscoreIsWildcard;
@@ -204,7 +290,7 @@ public sealed partial class FilterDraft : ObservableObject
 
     public ObservableCollection<FilterTypeRow> Types { get; } = [];
 
-    // 라디오 단추 넷이 한 값(Scope)을 나눠 쓴다. 꺼짐(false)은 다른 단추가 켜지며 생기므로 무시한다.
+    // 라디오 단추 다섯이 한 값(Scope)을 나눠 쓴다. 꺼짐(false)은 다른 단추가 켜지며 생기므로 무시한다.
     public bool IsAllScope { get => Scope == SchemaFilterScope.All; set => SetScope(value, SchemaFilterScope.All); }
 
     public bool IsLogonScope { get => Scope == SchemaFilterScope.LogonSchema; set => SetScope(value, SchemaFilterScope.LogonSchema); }
@@ -212,6 +298,8 @@ public sealed partial class FilterDraft : ObservableObject
     public bool IsWithObjectsScope { get => Scope == SchemaFilterScope.SchemasWithObjects; set => SetScope(value, SchemaFilterScope.SchemasWithObjects); }
 
     public bool IsSelectedScope { get => Scope == SchemaFilterScope.Selected; set => SetScope(value, SchemaFilterScope.Selected); }
+
+    public bool IsPatternScope { get => Scope == SchemaFilterScope.Pattern; set => SetScope(value, SchemaFilterScope.Pattern); }
 
     private void SetScope(bool on, SchemaFilterScope scope)
     {
@@ -221,16 +309,20 @@ public sealed partial class FilterDraft : ObservableObject
         }
     }
 
-    public static FilterDraft From(SchemaBrowserFilter filter)
+    public static FilterDraft From(SchemaBrowserFilter filter, IReadOnlyList<string>? allSchemas = null)
     {
         ArgumentNullException.ThrowIfNull(filter);
+        // _allSchemas 를 먼저 둬야 패턴·범위를 넣을 때 맞는 스키마 목록이 채워진다.
         var d = new FilterDraft(filter.Id)
         {
+            _allSchemas = allSchemas ?? [],
             Name = filter.Name,
+            SchemaPattern = filter.SchemaPattern ?? "",
             Scope = filter.Scope,
             UnderscoreIsWildcard = filter.UnderscoreIsWildcard,
             WrapWithPercent = filter.WrapWithPercent,
         };
+        d.RefreshPattern();
         foreach (var s in filter.Schemas)
         {
             d.Schemas.Add(s);
@@ -260,6 +352,7 @@ public sealed partial class FilterDraft : ObservableObject
         Name = Name.Trim(),
         Scope = Scope,
         Schemas = [.. Schemas],
+        SchemaPattern = string.IsNullOrWhiteSpace(SchemaPattern) ? null : SchemaPattern.Trim(),
         HiddenTypes = [.. Types.Where(t => !t.IsShown).Select(t => t.Type)],
         NamePatterns = Types.Where(t => !string.IsNullOrWhiteSpace(t.Pattern))
             .ToDictionary(t => t.Type, t => t.Pattern.Trim(), StringComparer.Ordinal),

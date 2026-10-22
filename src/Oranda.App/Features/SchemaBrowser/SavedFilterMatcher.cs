@@ -19,6 +19,12 @@ public sealed class SavedFilterMatcher
     private readonly HashSet<string> _selected;
     private readonly HashSet<string> _hidden;
     private readonly Dictionary<string, Regex?> _patterns;
+    private readonly Regex? _schemaRegex;
+    private readonly string? _schemaPatternError;
+    private bool _schemaPatternTimedOut;
+
+    /// <summary>스키마 정규식 한 번 평가에 주는 시간(밀리초). 넘으면 그 스키마는 안 맞는 것으로 본다.</summary>
+    public const int SchemaPatternTimeoutMs = 100;
 
     public SavedFilterMatcher(SchemaBrowserFilter filter, string? logonUser, IReadOnlySet<string>? schemasWithObjects = null)
     {
@@ -32,9 +38,22 @@ public sealed class SavedFilterMatcher
             kv => kv.Key,
             kv => ToRegex(kv.Value, filter.UnderscoreIsWildcard, filter.WrapWithPercent),
             StringComparer.Ordinal);
+        if (filter.Scope == SchemaFilterScope.Pattern)
+        {
+            _schemaRegex = TryParseSchemaPattern(filter.SchemaPattern, out _schemaPatternError);
+        }
     }
 
     public SchemaBrowserFilter Filter { get; }
+
+    /// <summary>
+    /// 스키마 정규식을 쓸 수 없거나(잘못된 패턴) 평가가 시간 제한을 넘었을 때의 경고. 없으면 null.
+    /// 설정 파일을 손으로 고친 경우에만 잘못된 패턴이 여기까지 온다(대화상자는 저장을 막는다).
+    /// </summary>
+    public string? SchemaPatternWarning =>
+        _schemaPatternError is not null ? $"스키마 패턴이 올바르지 않아 스키마를 보이지 않는다: {_schemaPatternError}"
+        : _schemaPatternTimedOut ? $"스키마 패턴 평가가 {SchemaPatternTimeoutMs} ms 를 넘겨 일부 스키마는 맞지 않는 것으로 처리했다"
+        : null;
 
     /// <summary>「객체를 가진 스키마만」 이라 객체 소유자 목록이 있어야 한다.</summary>
     public bool NeedsSchemasWithObjects => Filter.Scope == SchemaFilterScope.SchemasWithObjects;
@@ -44,8 +63,59 @@ public sealed class SavedFilterMatcher
         SchemaFilterScope.LogonSchema => string.Equals(schema, _logonUser, StringComparison.OrdinalIgnoreCase),
         SchemaFilterScope.SchemasWithObjects => _schemasWithObjects?.Contains(schema) ?? true,
         SchemaFilterScope.Selected => _selected.Contains(schema),
+        SchemaFilterScope.Pattern => MatchesSchemaPattern(schema),
         _ => true,
     };
+
+    // 패턴이 비면 모두. 잘못된 패턴은 아무것도 안 맞는다(경고는 SchemaPatternWarning).
+    private bool MatchesSchemaPattern(string schema)
+    {
+        if (_schemaPatternError is not null)
+        {
+            return false;
+        }
+
+        if (_schemaRegex is null)
+        {
+            return true;
+        }
+
+        try
+        {
+            return _schemaRegex.IsMatch(schema);
+        }
+        catch (RegexMatchTimeoutException)
+        {
+            _schemaPatternTimedOut = true;
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// 스키마 정규식을 만든다. 비면 null(모두 맞음, 오류 없음). 대소문자 무시·일부 일치(전체 일치는 <c>^…$</c>)에
+    /// <see cref="SchemaPatternTimeoutMs"/> 시간 제한. 잘못된 패턴이면 null 과 이유를 돌려준다.
+    /// </summary>
+    public static Regex? TryParseSchemaPattern(string? pattern, out string? error)
+    {
+        error = null;
+        if (string.IsNullOrWhiteSpace(pattern))
+        {
+            return null;
+        }
+
+        try
+        {
+            return new Regex(
+                pattern.Trim(),
+                RegexOptions.IgnoreCase | RegexOptions.CultureInvariant,
+                TimeSpan.FromMilliseconds(SchemaPatternTimeoutMs));
+        }
+        catch (ArgumentException ex)
+        {
+            error = ex.Message;
+            return null;
+        }
+    }
 
     public bool ShowsType(string objectType) => !_hidden.Contains(objectType);
 

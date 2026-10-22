@@ -13,11 +13,18 @@
       <Setter Property="Padding" Value="8,3" />
       <Setter Property="MinHeight" Value="0" />
     </Style>
+    <!-- 잘못된 정규식: 패턴 칸 테두리를 오류색으로(이유는 칸 아래 글, 확인·저장은 꺼짐). -->
+    <Style Selector="TextBox.pattern-invalid">
+      <Setter Property="BorderBrush" Value="{DynamicResource OrandaIconRedBrush}" />
+    </Style>
+    <Style Selector="TextBox.pattern-invalid:focus /template/ Border#PART_BorderElement">
+      <Setter Property="BorderBrush" Value="{DynamicResource OrandaIconRedBrush}" />
+    </Style>
   </Window.Styles>
   <DockPanel Margin="12">
     <DockPanel DockPanel.Dock="Bottom" Margin="0,10,0,0">
       <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" Spacing="8" VerticalAlignment="Bottom">
-        <Button x:Name="OkButton" Content="확인" IsDefault="True" Classes="accent" />
+        <Button x:Name="OkButton" Content="확인" IsDefault="True" Classes="accent" IsEnabled="{Binding CanConfirm}" />
         <Button x:Name="CancelButton" Content="취소" IsCancel="True" />
       </StackPanel>
       <TextBlock x:Name="ErrorText" Classes="invalid" Text="{Binding Error}" IsVisible="{Binding HasError}"
@@ -29,7 +36,8 @@
       <DockPanel Grid.Column="1">
         <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" Spacing="1" Margin="4,0,0,0">
           <Button x:Name="NewButton" Classes="toolbar" ToolTip.Tip="새 필터" AutomationProperties.Name="새 필터" />
-          <Button x:Name="SaveButton" Classes="toolbar" ToolTip.Tip="저장 (창은 열어 둔다)" AutomationProperties.Name="필터 저장" />
+          <Button x:Name="SaveButton" Classes="toolbar" ToolTip.Tip="저장 (창은 열어 둔다)" IsEnabled="{Binding CanConfirm}"
+                  AutomationProperties.Name="필터 저장" />
           <Button x:Name="DeleteButton" Classes="toolbar" ToolTip.Tip="이 필터 삭제" IsEnabled="{Binding HasSelection}"
                   AutomationProperties.Name="필터 삭제" />
         </StackPanel>
@@ -57,9 +65,29 @@
             <RadioButton GroupName="scope" Content="객체를 가진 스키마만" IsChecked="{Binding Selected.IsWithObjectsScope, Mode=TwoWay, FallbackValue=False}" />
             <RadioButton x:Name="SelectedScopeRadio" GroupName="scope" Content="스키마 고르기"
                          IsChecked="{Binding Selected.IsSelectedScope, Mode=TwoWay, FallbackValue=False}" />
+            <RadioButton x:Name="PatternScopeRadio" GroupName="scope" Content="정규식으로 고르기"
+                         IsChecked="{Binding Selected.IsPatternScope, Mode=TwoWay, FallbackValue=False}" />
           </StackPanel>
+          <!-- 정규식 범위: 패턴 칸 · 오류 이유 · 맞는 스키마 미리보기. 스키마 고르기 칸과 같은 자리를 범위에 따라 나눠 쓴다. -->
+          <Grid x:Name="PatternPanel" Margin="24,6,0,0" RowDefinitions="Auto,Auto,Auto,*" RowSpacing="4"
+                IsVisible="{Binding Selected.IsPatternScope, FallbackValue=False}">
+            <TextBox x:Name="SchemaPatternBox" Classes="compact" Text="{Binding Selected.SchemaPattern, Mode=TwoWay, FallbackValue=''}"
+                     Classes.pattern-invalid="{Binding Selected.HasPatternError, FallbackValue=False}"
+                     PlaceholderText="예: APUSER$" AutomationProperties.Name="스키마 정규식 패턴" />
+            <TextBlock x:Name="PatternErrorText" Grid.Row="1" Classes="invalid" TextWrapping="Wrap"
+                       Text="{Binding Selected.PatternError, FallbackValue=''}" IsVisible="{Binding Selected.HasPatternError, FallbackValue=False}" />
+            <TextBlock Grid.Row="2" Classes="panel-caption" TextWrapping="Wrap"
+                       Text="대소문자 무시, 일부 일치. 전체 일치는 ^…$" />
+            <DockPanel Grid.Row="3" Margin="0,2,0,0">
+              <TextBlock x:Name="PatternCountText" DockPanel.Dock="Top" Classes="panel-caption" Margin="0,0,0,2"
+                         Text="{Binding Selected.PatternMatchCountText, FallbackValue=''}" />
+              <ListBox x:Name="PatternMatchList" Classes="compact" ItemsSource="{Binding Selected.PatternMatches, FallbackValue={x:Null}}"
+                       MinHeight="100" AutomationProperties.Name="패턴에 맞는 스키마" />
+            </DockPanel>
+          </Grid>
           <Grid Margin="24,6,0,0" ColumnDefinitions="*,Auto" RowDefinitions="Auto,*" ColumnSpacing="4" RowSpacing="4"
-                IsEnabled="{Binding Selected.IsSelectedScope, FallbackValue=False}">
+                IsEnabled="{Binding Selected.IsSelectedScope, FallbackValue=False}"
+                IsVisible="{Binding !Selected.IsPatternScope, FallbackValue=True}">
             <ComboBox x:Name="SchemaPick" Classes="compact" HorizontalAlignment="Stretch" ItemsSource="{Binding AllSchemas}"
                       SelectedItem="{Binding SchemaToAdd, Mode=TwoWay}" PlaceholderText="스키마" AutomationProperties.Name="추가할 스키마" />
             <Button x:Name="AddSchemaButton" Grid.Column="1" Classes="toolbar" ToolTip.Tip="목록에 추가" AutomationProperties.Name="스키마 추가" />

@@ -217,7 +217,9 @@ public sealed partial class SchemaBrowserViewModel
         return n;
     }
 
-    private string SchemaCountText(int shown) => ActiveSavedFilter is { } f
+    // 스키마 정규식 경고는 VisibleSchemas 가 정규식을 돌린 뒤에야 정해지므로 호출 순서가 그 뒤여야 한다. 맞추기마다 한 번만 보인다.
+    private string SchemaCountText(int shown) => (ActiveSavedFilter is { } f
         ? $"필터 「{f.Name}」 · 스키마 {shown}/{_allSchemas.Count}개"
-        : $"스키마 {shown}개";
+        : $"스키마 {shown}개")
+        + (_matcher?.SchemaPatternWarning is { } warning ? " · " + warning : "");
 }

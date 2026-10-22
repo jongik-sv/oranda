@@ -170,4 +170,70 @@ public sealed class SchemaFilterEditorTests
         Assert.False(await vm.SaveAsync());
         Assert.Equal("AP", Assert.Single(saved!).Name);
     }
+
+    [Fact]
+    public void Pattern_scope_previews_matching_schemas_and_round_trips()
+    {
+        var vm = Make(null);
+        vm.New();
+        vm.Selected!.IsPatternScope = true;
+        vm.Selected.SchemaPattern = "APUSER$";
+
+        Assert.Equal(SchemaFilterScope.Pattern, vm.Selected.Scope);
+        Assert.Equal(["EAIAPUSER", "MESAPUSER"], vm.Selected.PatternMatches);
+        Assert.Equal("맞는 스키마 2/4개", vm.Selected.PatternMatchCountText);
+        Assert.True(vm.CanConfirm);
+
+        vm.Selected.SchemaPattern = "^hr$";
+        Assert.Equal(["HR"], vm.Selected.PatternMatches);
+
+        var f = Assert.Single(vm.BuildFilters());
+        Assert.Equal(SchemaFilterScope.Pattern, f.Scope);
+        Assert.Equal("^hr$", f.SchemaPattern);
+        Assert.Equal("^hr$", FilterDraft.From(f, AllSchemas).SchemaPattern);
+    }
+
+    [Fact]
+    public async Task Invalid_pattern_blocks_save_and_confirm_until_fixed()
+    {
+        var saved = 0;
+        var vm = new SchemaFilterEditorViewModel([], null, AllSchemas, _ =>
+        {
+            saved++;
+            return Task.CompletedTask;
+        });
+        vm.New();
+        vm.Selected!.IsPatternScope = true;
+        vm.Selected.SchemaPattern = "(APUSER";
+
+        Assert.True(vm.Selected.HasPatternError);
+        Assert.NotNull(vm.Selected.PatternError);
+        Assert.Empty(vm.Selected.PatternMatches);
+        Assert.False(vm.CanConfirm);
+        Assert.False(vm.Validate());
+        Assert.StartsWith("스키마 패턴이 올바르지 않습니다", vm.Error, StringComparison.Ordinal);
+        Assert.False(await vm.SaveAsync());
+        Assert.Equal(0, saved);
+
+        vm.Selected.SchemaPattern = "APUSER$";
+        Assert.True(vm.CanConfirm);
+        Assert.True(await vm.SaveAsync());
+        Assert.Equal(1, saved);
+    }
+
+    [Fact]
+    public void Leaving_pattern_scope_clears_the_error()
+    {
+        var vm = Make(null);
+        vm.New();
+        vm.Selected!.IsPatternScope = true;
+        vm.Selected.SchemaPattern = "[";
+        Assert.False(vm.CanConfirm);
+
+        vm.Selected.IsAllScope = true;
+
+        Assert.True(vm.CanConfirm);
+        Assert.Null(vm.Selected.PatternError);
+        Assert.True(vm.Validate());
+    }
 }

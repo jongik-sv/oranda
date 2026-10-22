@@ -87,4 +87,57 @@ public sealed class SavedFilterMatcherTests
         Assert.True(m.Shows(new DbObjectRef("S", "V_ANY", "VIEW")));
         Assert.False(m.Shows(new DbObjectRef("S", "SYNC", "JOB")));
     }
+
+    private static SavedFilterMatcher PatternMatcher(string? pattern) =>
+        new(new SchemaBrowserFilter { Scope = SchemaFilterScope.Pattern, SchemaPattern = pattern }, "SCOTT");
+
+    [Theory]
+    [InlineData("APUSER$", "MESAPUSER", true)]
+    [InlineData("APUSER$", "APUSER_OLD", false)]
+    [InlineData("apuser", "MESAPUSER", true)] // 대소문자 무시, 일부 일치
+    [InlineData("^HR$", "HR", true)]
+    [InlineData("^HR$", "HR2", false)]
+    [InlineData("^(MES|EAI)", "EAIAPUSER", true)]
+    [InlineData("^(MES|EAI)", "SCOTT", false)]
+    [InlineData("  ", "ANY", true)] // 비면 모두
+    [InlineData(null, "ANY", true)]
+    public void Schema_pattern_is_a_case_insensitive_partial_regex(string? pattern, string schema, bool expected)
+    {
+        var m = PatternMatcher(pattern);
+
+        Assert.Equal(expected, m.ShowsSchema(schema));
+        Assert.Null(m.SchemaPatternWarning);
+    }
+
+    [Fact]
+    public void Invalid_schema_pattern_shows_no_schema_and_warns()
+    {
+        var m = PatternMatcher("(APUSER");
+
+        Assert.False(m.ShowsSchema("MESAPUSER"));
+        Assert.NotNull(m.SchemaPatternWarning);
+        Assert.Null(SavedFilterMatcher.TryParseSchemaPattern("[", out var error));
+        Assert.False(string.IsNullOrWhiteSpace(error));
+        Assert.NotNull(SavedFilterMatcher.TryParseSchemaPattern("APUSER$", out error));
+        Assert.Null(error);
+    }
+
+    [Fact]
+    public void Schema_pattern_that_times_out_does_not_match_and_warns()
+    {
+        var m = PatternMatcher("^(a+)+$");
+
+        Assert.False(m.ShowsSchema(new string('A', 60) + "!")); // 100 ms 안에 끝나지 않는 되돌아가기
+        Assert.True(m.ShowsSchema("AAA"));
+        Assert.Contains("100 ms", m.SchemaPatternWarning, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Pattern_scope_does_not_touch_other_scopes_and_old_filters_have_no_pattern()
+    {
+        var all = new SavedFilterMatcher(new SchemaBrowserFilter { SchemaPattern = "NOPE" }, "SCOTT");
+
+        Assert.True(all.ShowsSchema("HR"));
+        Assert.Null(new SchemaBrowserFilter().SchemaPattern);
+    }
 }

@@ -65,6 +65,37 @@ public sealed class SchemaBrowserSavedFilterTests
     }
 
     [Fact]
+    public async Task Pattern_schema_filter_keeps_only_matching_schemas_and_survives_reconnect()
+    {
+        var h = NewHarness();
+        h.Meta.Schemas.Add("MESAPUSER");
+        h.Meta.Schemas.Add("EAIAPUSER");
+        await h.Vm.SetSessionAsync(h.Session);
+
+        var filter = await SaveAndSelectAsync(h, new SchemaBrowserFilter { Name = "AP", Scope = SchemaFilterScope.Pattern, SchemaPattern = "apuser$" });
+
+        Assert.Equal(["MESAPUSER", "EAIAPUSER"], SchemaTitles(h));
+        Assert.Contains("필터 「AP」 · 스키마 2/5개", h.Vm.StatusText, StringComparison.Ordinal);
+        Assert.Equal("apuser$", h.Settings.Current.SchemaBrowser.Filters.Single().SchemaPattern);
+
+        await h.Vm.SetSessionAsync(h.Session); // 다시 접속해도 설정에서 같은 필터를 골라 그대로 거른다
+        Assert.Equal(filter.Id, h.Vm.ActiveSavedFilter?.Id);
+        Assert.Equal(["MESAPUSER", "EAIAPUSER"], SchemaTitles(h));
+    }
+
+    [Fact]
+    public async Task Pattern_schema_filter_with_a_broken_pattern_warns_in_the_status_line()
+    {
+        var h = NewHarness();
+        await h.Vm.SetSessionAsync(h.Session);
+
+        await SaveAndSelectAsync(h, new SchemaBrowserFilter { Name = "깨짐", Scope = SchemaFilterScope.Pattern, SchemaPattern = "(" });
+
+        Assert.Empty(SchemaTitles(h));
+        Assert.Contains("스키마 패턴이 올바르지 않아", h.Vm.StatusText, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task Owning_schema_filter_drops_schemas_without_objects()
     {
         var h = NewHarness();

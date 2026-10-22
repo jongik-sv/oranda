@@ -40,6 +40,22 @@ public class OrandaJsonContextTests
     }
 
     [Fact]
+    public void Saved_filter_schema_pattern_is_optional_and_round_trips()
+    {
+        var old = JsonSerializer.Deserialize(
+            """{ "schemaVersion": 1, "schemaBrowser": { "filters": [ { "id": "f1", "name": "옛", "scope": "Selected", "schemas": ["HR"] } ] } }""",
+            OrandaJsonContext.Default.AppSettings)!;
+        Assert.Null(Assert.Single(old.SchemaBrowser.Filters).SchemaPattern);
+
+        var pattern = new SchemaBrowserFilter { Id = "f2", Name = "AP", Scope = SchemaFilterScope.Pattern, SchemaPattern = "APUSER$" };
+        var json = JsonSerializer.Serialize(old with { SchemaBrowser = old.SchemaBrowser with { Filters = [pattern] } }, OrandaJsonContext.Default.AppSettings);
+        var back = JsonSerializer.Deserialize(json, OrandaJsonContext.Default.AppSettings)!;
+
+        Assert.Equal(pattern, Assert.Single(back.SchemaBrowser.Filters));
+        Assert.NotEqual(pattern, pattern with { SchemaPattern = "X" });
+    }
+
+    [Fact]
     public void Schema_browser_settings_compare_saved_filters_by_content()
     {
         static SchemaBrowserSettings Make(SchemaBrowserFilter f) => new()

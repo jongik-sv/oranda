@@ -185,6 +185,9 @@ public enum SchemaFilterScope
 
     /// <summary><see cref="SchemaBrowserFilter.Schemas"/> 에 고른 스키마만.</summary>
     Selected,
+
+    /// <summary><see cref="SchemaBrowserFilter.SchemaPattern"/> 정규식에 맞는 스키마만(대소문자 무시, 일부 일치).</summary>
+    Pattern,
 }
 
 /// <summary>스키마 브라우저 저장 필터 하나. 스키마 범위 · 숨길 객체 유형 · 유형별 이름 패턴 · 패턴 옵션.</summary>
@@ -199,6 +202,9 @@ public sealed record SchemaBrowserFilter
 
     /// <summary><see cref="SchemaFilterScope.Selected"/> 일 때 보일 스키마.</summary>
     public IReadOnlyList<string> Schemas { get => _schemas; init => _schemas = value ?? []; }
+
+    /// <summary><see cref="SchemaFilterScope.Pattern"/> 일 때 스키마 이름에 거는 .NET 정규식. 옛 설정 파일에는 없어 null.</summary>
+    public string? SchemaPattern { get; init; }
 
     /// <summary>트리에서 숨길 객체 유형(ALL_OBJECTS.OBJECT_TYPE). 목록에 없는 새 유형은 보인다.</summary>
     public IReadOnlyList<string> HiddenTypes { get => _hiddenTypes; init => _hiddenTypes = value ?? []; }
@@ -223,6 +229,7 @@ public sealed record SchemaBrowserFilter
         && Name == other.Name
         && Scope == other.Scope
         && Schemas.SequenceEqual(other.Schemas)
+        && string.Equals(SchemaPattern, other.SchemaPattern, StringComparison.Ordinal)
         && HiddenTypes.SequenceEqual(other.HiddenTypes)
         && ContentEquality.SameEntries(NamePatterns, other.NamePatterns)
         && UnderscoreIsWildcard == other.UnderscoreIsWildcard
