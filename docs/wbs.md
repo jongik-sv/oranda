@@ -3419,6 +3419,49 @@ dotnet, testhost, Oranda.App
 - data-model: -
 - ui-spec: -
 
+### TSK-13-10: 스키마 브라우저 저장 필터·계정 거르기·읽는 중 표시 [mac]
+- category: dev
+- domain: fullstack
+- model: sonnet
+- status: [im]
+- priority: high
+- assignee: -
+- schedule: 2026-10-22 ~ 2026-10-24
+- tags: schema, filter, ui, mac
+- depends: TSK-07-02
+- blocked-by: -
+- entry-point: 스키마 브라우저 툴바 > 필터 단추(▾ 메뉴) · 「필터 편집…」 대화상자
+- note: 담당 PC: mac(맥북) — win144 세션은 이 Task 를 하지 않는다. 2026-10-22 사용자 요청: 오렌지 Schema Browser Filter(docs/orange5-features.md 2.3 Filter, 사용자 화면 캡처 2장)처럼 이름 붙인 필터를 여러 개 저장해 골라 쓰고, 계정(스키마)도 거른다. 필터 목록은 모든 접속 공용, 접속마다 마지막으로 고른 필터를 기억한다. 같은 날 보고 「이름 필터를 쳐도 트리가 그대로」는 다시 해 보니 걸려 재현되지 않았다. 코드에서 찾은 겹친 읽기 경합(노드가 「…」 로 남음, 접속 직후 필터가 오면 트리가 비고 IsBusy 가 풀리지 않음)을 이 Task 에서 함께 고친다. 「데이터 페치 중 표시가 안 난다」 → 스키마 브라우저가 읽는 동안 진행 표시
+
+#### PRD 요구사항
+- prd-ref: PRD SCH-01 (객체 트리·필터)
+- requirements:
+  - 저장 필터: 이름 · 스키마 범위(모든 스키마 / 로그온 스키마만 / 객체를 가진 스키마만 / 고른 스키마) · 객체 유형별 표시 여부와 이름 패턴 · 옵션(`_` 를 한 글자 와일드카드로 볼지, 앞뒤 `%` 자동 부착)
+  - 툴바 필터 단추의 ▾ 메뉴: 「필터 없음」, 저장한 필터(지금 것에 체크), 「필터 편집…」. 필터가 걸려 있으면 단추가 눌린 모양이고 도움말에 이름이 보인다
+  - 「필터 편집…」 대화상자: 이름 콤보 + 새로 만들기·저장·삭제, 스키마·객체·옵션 탭, 확인·취소. 객체 탭은 모두 선택·모두 해제, 아래 패턴 칸 + 모든 유형에 적용 + 초기화
+  - 기존 빠른 필터(이름 칸·유형 콤보·INVALID·즐겨찾기)는 그대로 두고 저장 필터와 함께(AND) 건다
+  - 트리를 읽는 동안 패널에 진행 표시(가는 막대)를 보인다
+  - 트리에서 찾기(Reveal)가 저장 필터에 가려 못 찾으면 저장 필터도 풀고 다시 찾는다
+- acceptance:
+  - 고른 스키마 필터를 고르면 트리에 그 스키마만 남고, 펼쳐 둔 스키마는 펼친 채 다시 읽는다
+  - 끈 유형은 범주째 사라지고, 유형별 패턴은 그 범주에만 걸린다
+  - 필터 이름을 바꿔도 접속별로 고른 필터가 유지되고, 고른 필터를 지우면 「필터 없음」 이 된다
+  - 이름 칸에 빠르게 쳐서 읽기가 겹쳐도 트리가 「…」 로 남지 않고, 진행 표시가 꺼진다
+- constraints:
+  - 필터는 settings.json schemaBrowser 섹션(모든 접속 공용). 접속별 선택은 필터 id 로 기억한다
+  - 「객체를 가진 스키마만」 은 그 모드일 때만 UI 스레드 밖에서 계산한다
+- test-criteria:
+  - 패턴 매칭 단위 시험(`_` 글자/와일드카드, `*`·`%`, 따옴표 대소문자, % 자동 부착 켬/끔)
+  - 설정 내용 비교·JSON 왕복·옛 settings.json 기본값
+  - SchemaBrowser VM 시험(스키마 범위 4가지, 유형·패턴, 필터 바꾸기, 이름 바꾸기·삭제, Reveal), 문(gate)으로 막은 가짜 메타데이터로 겹친 읽기 3가지
+  - Headless: 필터 칸 입력, ▾ 메뉴, 편집 대화상자 확인
+
+#### 기술 스펙 (TRD)
+- tech-spec: -
+- api-spec: -
+- data-model: docs/design/data-model.md `schemaBrowser.filters`·`schemaBrowser.activeFilters`
+- ui-spec: -
+
 ## 의존 그래프
 
 ### 그래프 (Mermaid)
@@ -3558,6 +3601,7 @@ graph LR
   TSK-06-01 --> TSK-13-07
   TSK-08-01 --> TSK-13-07
   TSK-07-02 --> TSK-13-08
+  TSK-07-02 --> TSK-13-10
   style TSK-01-02 fill:#fff3e0,stroke:#e65100
   style TSK-01-07 fill:#fff3e0,stroke:#e65100
   style TSK-01-02 stroke:#c62828,stroke-width:2px
