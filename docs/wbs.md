@@ -4355,6 +4355,39 @@ dotnet, testhost, Oranda.App
 - data-model: -
 - ui-spec: -
 
+### TSK-13-39: 세션 모니터 C안 표 다듬기 — 블로커 빨간 글자·상태 줄 하나·SID·SQL ID 고정폭 [win144]
+- category: defect
+- domain: frontend
+- model: sonnet
+- status: [xx]
+- priority: medium
+- assignee: -
+- schedule: 2026-10-22 ~ 2026-10-23
+- tags: grid-c, detail-table, monitor, win144
+- depends: TSK-13-37
+- blocked-by: -
+- entry-point: 세션 모니터·SQL 모니터 목록 표
+- note: 담당 PC: win144. 2026-10-22 사용자 요청(「기본안으로 하자」). TSK-13-37 에서 생긴 후퇴 3가지: ① 블로커 칸 빨간 글자가 사라짐 ② 상태 줄이 두 줄(표 안 「N행 · M개 선택」 + 화면 아래 StatusText) ③ SID,SERIAL#·SQL ID 고정폭 글꼴이 사라짐. DetailTable 에 추가만(StatusLineVisible·SelectionCount·MonospaceColumns·CellEmphasis, 기본 꺼짐). 크기 S. 결과: 블로커 칸 위험색(OrandaDangerForegroundBrush)·상태 줄 한 줄(「세션 N개 · 대기 중 M개 · K개 선택 · 시각 갱신」, SQL 모니터 포함)·SID·SQL ID 고정폭(OrandaGridFontFamily), 새 시험 7개 통과
+
+#### PRD 요구사항
+- prd-ref: PRD UI
+- requirements:
+  - 세션 모니터 「블로커」 칸에 값이 있으면 위험색(라이트·다크 대응) 글자로 보인다
+  - 모니터 화면 아래 상태 줄은 한 줄이다(예: 「세션 6개 · 대기 중 1개 · 2개 선택 · 21:05:12 갱신」)
+  - 세션 SID,SERIAL#·SQL ID 와 SQL 모니터 SQL ID 는 고정폭 글꼴이다
+- acceptance:
+  - 블로커가 있는 행의 블로커 칸만 위험색이고, 상태 줄에 고른 행 수가 합쳐 한 줄로 나온다
+- constraints:
+  - DetailTable 의 기존 공개 속성·동작을 유지한다(추가만, 기본 꺼짐 = 기존 화면 불변)
+- test-criteria:
+  - 새 옵션 각각(기본값·켠 동작), 세션 모니터의 블로커 칸 색·상태 줄·고정폭 열
+
+#### 기술 스펙 (TRD)
+- tech-spec: -
+- api-spec: -
+- data-model: -
+- ui-spec: -
+
 ## 의존 그래프
 
 ### 그래프 (Mermaid)

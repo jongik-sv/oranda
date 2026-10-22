@@ -3,6 +3,7 @@ using Avalonia.Controls;
 using Avalonia.Headless;
 using Avalonia.Input;
 using Avalonia.Input.Platform;
+using Avalonia.Media;
 using Avalonia.Threading;
 using Avalonia.VisualTree;
 using Oranda.App.Shell.Controls;
@@ -212,6 +213,104 @@ public class DetailTableTests
         {
             Assert.Contains("5행 더 있음", t.StatusText);
             Assert.StartsWith("2,005행", t.StatusText, StringComparison.Ordinal);
+        }
+        finally
+        {
+            w.Close();
+        }
+    });
+
+    private static IEnumerable<TextBlock> CellTexts(DetailTable t, int row)
+        => Item(t, row).GetVisualDescendants().OfType<TextBlock>().Where(b => !b.Classes.Contains("grid-c-marker") && !b.Classes.Contains("num"));
+
+    [Fact]
+    public Task New_options_are_off_by_default_so_the_table_looks_the_same() => HeadlessHost.Run(() =>
+    {
+        var (w, t) = Open();
+        try
+        {
+            Assert.True(t.StatusLineVisible);
+            Assert.Null(t.MonospaceColumns);
+            Assert.Null(t.CellEmphasis);
+            var cell = CellTexts(t, 0).First(b => b.Text == "SGA");
+            Assert.Equal(t.FontFamily, cell.FontFamily);
+            Assert.Equal(4, t.List.GetVisualDescendants().OfType<ListBoxItem>().Count());
+        }
+        finally
+        {
+            w.Close();
+        }
+    });
+
+    [Fact]
+    public Task StatusLineVisible_false_hides_the_bottom_line_but_keeps_the_text_and_count() => HeadlessHost.Run(() =>
+    {
+        var (w, t) = Open();
+        try
+        {
+            var seen = new List<int>();
+            t.SelectionCountChanged += (_, _) => seen.Add(t.SelectionCount);
+            t.StatusLineVisible = false;
+            Dispatcher.UIThread.RunJobs();
+            Assert.DoesNotContain(t.GetVisualDescendants().OfType<Border>(), b => b.Classes.Contains("panel-status") && b.IsEffectivelyVisible);
+            Click(w, t, 1);
+            Click(w, t, 3, Primary);
+            Assert.Equal(2, t.SelectionCount);
+            Assert.Equal("4행 · 2개 선택", t.StatusText);
+            Assert.Equal(2, seen[^1]);
+            t.StatusLineVisible = true;
+            Dispatcher.UIThread.RunJobs();
+            Assert.Contains(t.GetVisualDescendants().OfType<Border>(), b => b.Classes.Contains("panel-status") && b.IsEffectivelyVisible);
+        }
+        finally
+        {
+            w.Close();
+        }
+    });
+
+    [Fact]
+    public Task MonospaceColumns_use_the_grid_font_only_in_those_columns() => HeadlessHost.Run(() =>
+    {
+        var table = new DetailTable { MonospaceColumns = [1] };
+        table.Columns = Columns;
+        table.Rows = Data;
+        var w = new Window { Content = table, Width = 500, Height = 300 };
+        w.Show();
+        Dispatcher.UIThread.RunJobs();
+        try
+        {
+            Assert.True(Application.Current!.TryGetResource("OrandaGridFontFamily", Application.Current.ActualThemeVariant, out var res));
+            var mono = (FontFamily)res!;
+            var cells = CellTexts(table, 0).ToList();
+            Assert.Equal(mono, cells.First(b => b.Text == "1024").FontFamily);
+            Assert.NotEqual(mono, cells.First(b => b.Text == "SGA").FontFamily);
+        }
+        finally
+        {
+            w.Close();
+        }
+    });
+
+    [Fact]
+    public Task CellEmphasis_colours_only_non_empty_cells_it_picks() => HeadlessHost.Run(() =>
+    {
+        var table = new DetailTable { CellEmphasis = (c, row) => c == 2 };
+        table.Columns = Columns;
+        table.Rows = Data;
+        var w = new Window { Content = table, Width = 500, Height = 300 };
+        w.Show();
+        Dispatcher.UIThread.RunJobs();
+        try
+        {
+            Assert.True(Application.Current!.TryGetResource("OrandaDangerForegroundBrush", Application.Current.ActualThemeVariant, out var danger));
+            var plain = CellTexts(table, 0).First(b => b.Text == "SGA").Foreground;
+            var red = CellTexts(table, 0).First(b => b.Text!.StartsWith("메모", StringComparison.Ordinal)).Foreground;
+            Assert.Equal(danger, red);
+            Assert.NotEqual(danger, plain);
+            // 빈 칸(null)은 강조하지 않는다.
+            var emptyCell = CellTexts(table, 1).Last();
+            Assert.Equal(string.Empty, emptyCell.Text);
+            Assert.NotEqual(danger, emptyCell.Foreground);
         }
         finally
         {

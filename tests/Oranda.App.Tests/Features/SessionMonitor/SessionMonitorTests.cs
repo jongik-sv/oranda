@@ -82,7 +82,7 @@ public class SessionMonitorTests
         Assert.True(h.Keys.Get("monitorSessionOpen"));
         Assert.True(h.Keys.Get("canKillSession"));
         Assert.False(h.Keys.Get("monitorSessionSelected"));
-        Assert.Contains("세션 3개, 대기 중 1개", h.Vm.StatusText, StringComparison.Ordinal);
+        Assert.Contains("세션 3개 · 대기 중 1개", h.Vm.StatusText, StringComparison.Ordinal);
         Assert.Equal("scott", h.Monitor.LastFilter?.Username);
 
         h.Vm.SelectedSession = h.Vm.Sessions[1];

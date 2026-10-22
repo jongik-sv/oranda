@@ -46,6 +46,13 @@ public sealed class DetailTable : UserControl
     public static readonly StyledProperty<bool> KeepScrollProperty =
         AvaloniaProperty.Register<DetailTable, bool>(nameof(KeepScroll));
 
+    /// <summary>
+    /// false 면 아래 상태 줄(「N행 · M개 선택」)을 숨긴다(기본 true). 바깥 화면이 자기 상태 줄에 행 수·선택 수를 합쳐 쓸 때 끈다.
+    /// 상태 글(<see cref="StatusText"/>)과 <see cref="SelectionCount"/> 는 숨겨도 갱신된다.
+    /// </summary>
+    public static readonly StyledProperty<bool> StatusLineVisibleProperty =
+        AvaloniaProperty.Register<DetailTable, bool>(nameof(StatusLineVisible), true);
+
     /// <summary>한 번에 그릴 최대 행(그 뒤는 상태 줄에 「…」). 거르기로 좁혀 보게 한다.</summary>
     public const int MaxRows = 2000;
 
@@ -61,15 +68,18 @@ public sealed class DetailTable : UserControl
     };
 
     private readonly TextBlock _status = new() { VerticalAlignment = VerticalAlignment.Center, TextTrimming = TextTrimming.CharacterEllipsis };
+    private readonly Border _statusHost = new() { Classes = { "panel-status" } };
     private readonly Dictionary<IReadOnlyList<object?>, TextBlock> _markers = new(ReferenceEqualityComparer.Instance);
     private readonly Border _headerHost = new();
     private readonly List<ListBoxItem> _items = [];
     private IReadOnlyList<object?>? _current;
     private int _overflow;
+    private int _lastPicked;
 
     public DetailTable()
     {
-        var status = new Border { Classes = { "panel-status" }, Child = _status };
+        var status = _statusHost;
+        status.Child = _status;
         DockPanel.SetDock(status, Avalonia.Controls.Dock.Bottom);
         var root = new DockPanel();
         root.Children.Add(status);
@@ -120,6 +130,26 @@ public sealed class DetailTable : UserControl
         get => GetValue(KeepScrollProperty);
         set => SetValue(KeepScrollProperty, value);
     }
+
+    public bool StatusLineVisible
+    {
+        get => GetValue(StatusLineVisibleProperty);
+        set => SetValue(StatusLineVisibleProperty, value);
+    }
+
+    /// <summary>고른 행 수.</summary>
+    public int SelectionCount => _list.SelectedItems?.Count ?? 0;
+
+    /// <summary>고른 행 수가 바뀌었다(바깥 상태 줄이 받는다).</summary>
+    public event EventHandler? SelectionCountChanged;
+
+    /// <summary>고정폭 글꼴(앱 리소스 OrandaGridFontFamily)로 그릴 열 번호(0부터). SID·SQL ID 처럼 자리 맞춤이 필요한 열. 기본 없음. 행을 채우기 전에 정한다.</summary>
+    public IReadOnlyCollection<int>? MonospaceColumns { get; set; }
+
+    /// <summary>
+    /// (열 번호, 행)을 받아 참이면 그 칸을 위험색(OrandaDangerForegroundBrush, 라이트·다크 대응) 글자로 그린다. 빈 글 칸은 무시. 기본 없음. 행을 채우기 전에 정한다.
+    /// </summary>
+    public Func<int, IReadOnlyList<object?>, bool>? CellEmphasis { get; set; }
 
     /// <summary>오른쪽 클릭 메뉴에 「복사」 아래로 덧붙일 항목을 메뉴가 열릴 때마다 돌려주는 함수(모니터의 context:monitor/* 명령 등). 없으면 복사 둘뿐.</summary>
     public Func<IReadOnlyList<object>>? ExtraMenuItems { get; set; }
@@ -264,7 +294,11 @@ public sealed class DetailTable : UserControl
     protected override void OnPropertyChanged(AvaloniaPropertyChangedEventArgs change)
     {
         base.OnPropertyChanged(change);
-        if (change.Property == ColumnsProperty || change.Property == RowNumbersProperty)
+        if (change.Property == StatusLineVisibleProperty)
+        {
+            _statusHost.IsVisible = StatusLineVisible;
+        }
+        else if (change.Property == ColumnsProperty || change.Property == RowNumbersProperty)
         {
             Build();
         }
@@ -356,12 +390,23 @@ public sealed class DetailTable : UserControl
             for (var c = 0; c < columns.Count; c++)
             {
                 var value = c < row.Count ? row[c] : null;
-                cells.Add(new TextBlock
+                var cell = new TextBlock
                 {
                     Text = Format(value),
                     TextAlignment = (IsNumber(value) || RightAlignedColumns?.Contains(c) == true) && c < columns.Count - 1 ? TextAlignment.Right : TextAlignment.Left, // 늘어나는 마지막 열은 왼쪽
                     Opacity = value is null ? 0.45 : 1,
-                });
+                };
+                if (MonospaceColumns?.Contains(c) == true)
+                {
+                    cell.Bind(TextBlock.FontFamilyProperty, cell.GetResourceObservable("OrandaGridFontFamily"));
+                }
+
+                if (cell.Text.Length > 0 && CellEmphasis?.Invoke(c, row) == true)
+                {
+                    cell.Bind(TextBlock.ForegroundProperty, cell.GetResourceObservable("OrandaDangerForegroundBrush"));
+                }
+
+                cells.Add(cell);
             }
 
             _items.Add(new ListBoxItem { Tag = row, Content = GridC.Row(cells, rowHead: true, Group) });
@@ -390,6 +435,11 @@ public sealed class DetailTable : UserControl
         }
 
         _status.Text = string.Join(" · ", parts);
+        if (picked != _lastPicked)
+        {
+            _lastPicked = picked;
+            SelectionCountChanged?.Invoke(this, EventArgs.Empty);
+        }
     }
 
     private void OnPressed(object? sender, PointerPressedEventArgs e)

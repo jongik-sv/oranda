@@ -556,7 +556,7 @@ public sealed partial class SessionMonitorViewModel : ToolPanelViewModelBase, ID
         ApplyTree(tree);
         var blocked = rows.Count(r => r.BlockingSession is not null);
         StatusText = string.Create(CultureInfo.InvariantCulture,
-            $"세션 {rows.Count}개, 대기 중 {blocked}개 · {DateTime.Now:HH:mm:ss} 갱신");
+            $"세션 {rows.Count}개 · 대기 중 {blocked}개 · {DateTime.Now:HH:mm:ss} 갱신");
     }
 
     private void ApplyTree(BlockingTree tree)

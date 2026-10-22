@@ -46,7 +46,7 @@
       <TextBox Classes="compact" Width="100" Margin="0,0,6,0" PlaceholderText="최근 N분" Text="{Binding ActiveMinutesText, Mode=TwoWay}" />
     </WrapPanel>
     <Border DockPanel.Dock="Bottom" Classes="panel-status">
-      <TextBlock Text="{Binding StatusText}" TextTrimming="CharacterEllipsis" />
+      <TextBlock x:Name="StatusLine" TextTrimming="CharacterEllipsis" />
     </Border>
     <Grid RowDefinitions="3*,4,2*">
       <!-- C안 격자(DetailTable): 행은 코드(MonitorTableBinder)가 Results 에서 채운다. -->

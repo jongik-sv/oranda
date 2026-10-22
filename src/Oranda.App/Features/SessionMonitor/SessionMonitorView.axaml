@@ -54,7 +54,7 @@
       <CheckBox Content="백그라운드" IsChecked="{Binding IncludeBackground, Mode=TwoWay}" />
     </WrapPanel>
     <Border DockPanel.Dock="Bottom" Classes="panel-status">
-      <TextBlock Text="{Binding StatusText}" TextTrimming="CharacterEllipsis" />
+      <TextBlock x:Name="StatusLine" TextTrimming="CharacterEllipsis" />
     </Border>
     <Grid ColumnDefinitions="3*,4,2*">
       <!-- C안 격자(DetailTable): 열 머리글·행 번호·현재 행 ▶·아래 상태 줄. 행은 코드(MonitorTableBinder)가 Sessions 에서 채운다. -->

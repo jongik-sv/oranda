@@ -226,4 +226,64 @@ public class MonitorGridTests
             w.Close();
         }
     });
+
+    [Fact]
+    public void ComposeStatus_puts_the_selection_before_the_last_part_or_at_the_end()
+    {
+        Assert.Equal("세션 6개 · 대기 중 1개 · 2개 선택 · 21:05:12 갱신", MonitorStatusLine.Compose("세션 6개 · 대기 중 1개 · 21:05:12 갱신", 2));
+        Assert.Equal("세션 6개 · 대기 중 1개 · 21:05:12 갱신", MonitorStatusLine.Compose("세션 6개 · 대기 중 1개 · 21:05:12 갱신", 0));
+        Assert.Equal("취소했습니다. · 1개 선택", MonitorStatusLine.Compose("취소했습니다.", 1));
+        Assert.Equal(" · 3개 선택", MonitorStatusLine.Compose("", 3));
+    }
+
+    [Fact]
+    public Task Session_monitor_shows_one_status_line_with_the_selection_count() => HeadlessHost.Run(() =>
+    {
+        var (w, view, vm, t) = OpenSessions();
+        try
+        {
+            vm.StatusText = "세션 3개 · 대기 중 1개 · 21:05:12 갱신";
+            var line = view.FindControl<TextBlock>("StatusLine")!;
+            Assert.Equal("세션 3개 · 대기 중 1개 · 21:05:12 갱신", line.Text);
+            Assert.DoesNotContain(t.GetVisualDescendants().OfType<Border>(), b => b.Classes.Contains("panel-status") && b.IsEffectivelyVisible);
+            Click(w, t, 0);
+            Click(w, t, 2, mods: Primary);
+            Assert.Equal("세션 3개 · 대기 중 1개 · 2개 선택 · 21:05:12 갱신", line.Text);
+            vm.SelectedSession = null;
+            Assert.Equal("세션 3개 · 대기 중 1개 · 21:05:12 갱신", line.Text);
+        }
+        finally
+        {
+            w.Close();
+        }
+    });
+
+    [Fact]
+    public Task Session_monitor_colours_the_blocker_cell_and_sets_ids_in_monospace() => HeadlessHost.Run(() =>
+    {
+        var vm = new SessionMonitorViewModel();
+        vm.Sessions.Add(Sess(10, "INACTIVE", "SCOTT"));
+        vm.Sessions.Add(new SessionItem(new SessionRow(new SessionKey(1, 20, 200), "ACTIVE") { Username = "HR", BlockingSession = new SessionKey(1, 10, 100), SqlId = "7ctxk2vq" }));
+        var view = new SessionMonitorView { DataContext = vm };
+        var w = new Window { Content = view, Width = 1100, Height = 500 };
+        w.Show();
+        Dispatcher.UIThread.RunJobs();
+        try
+        {
+            Assert.True(Application.Current!.TryGetResource("OrandaDangerForegroundBrush", Application.Current.ActualThemeVariant, out var danger));
+            Assert.True(Application.Current.TryGetResource("OrandaGridFontFamily", Application.Current.ActualThemeVariant, out var mono));
+            var t = view.FindControl<DetailTable>("SessionList")!;
+            var cells = Item(t, 1).GetVisualDescendants().OfType<TextBlock>().ToList();
+            Assert.Equal(danger, cells.First(b => b.Text == "10").Foreground); // 블로커 칸
+            Assert.Equal(mono, cells.First(b => b.Text == "20,200").FontFamily);
+            Assert.Equal(mono, cells.First(b => b.Text == "7ctxk2vq").FontFamily);
+            Assert.NotEqual(mono, cells.First(b => b.Text == "HR").FontFamily);
+            // 블로커가 없는 행은 빨갛지 않다.
+            Assert.DoesNotContain(Item(t, 0).GetVisualDescendants().OfType<TextBlock>(), b => Equals(b.Foreground, danger));
+        }
+        finally
+        {
+            w.Close();
+        }
+    });
 }

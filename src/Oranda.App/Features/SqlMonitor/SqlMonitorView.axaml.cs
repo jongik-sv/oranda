@@ -18,6 +18,7 @@ public partial class SqlMonitorView : UserControl
         InitializeComponent();
         ResultList.ExtraMenuItems = () => ShellContextMenus.Factory?.Invoke("monitor") ?? [];
         ResultList.RightAlignedColumns = [2, 3, 4, 5, 6];
+        ResultList.MonospaceColumns = [0]; // SQL ID
         _grid = new MonitorTableBinder<TopSqlItem>(ResultList,
             ["SQL ID", "자식", "소요(s)", "CPU(s)", "실행", "읽은 블록", "디스크", "스키마", "SQL"],
             i => [i.SqlId, i.ChildText, i.ElapsedText, i.CpuText, i.ExecutionsText, i.BlocksText, i.DiskText, i.Schema, i.Preview],
@@ -37,6 +38,7 @@ public partial class SqlMonitorView : UserControl
                 if (!ReferenceEquals(_bound, vm))
                 {
                     _bound = vm;
+                    _grid.AttachStatusLine(StatusLine, vm, () => vm.StatusText);
                     _grid.Attach(vm.Results, vm, nameof(SqlMonitorViewModel.SelectedSql), () => vm.SelectedSql, i => vm.SelectedSql = i);
                 }
 

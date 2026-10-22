@@ -14,6 +14,9 @@ public partial class SessionMonitorView : UserControl
         InitializeComponent();
         SessionList.ExtraMenuItems = () => ShellContextMenus.Factory?.Invoke("monitor") ?? [];
         SessionList.RightAlignedColumns = [3, 4];
+        SessionList.MonospaceColumns = [0, 6]; // SID,SERIAL#·SQL ID
+        SessionList.CellEmphasis = (c, _) => c == 4; // 블로커 칸에 값이 있으면 위험색 글자
+
         _grid = new MonitorTableBinder<SessionItem>(SessionList,
             ["SID,SERIAL#", "사용자", "상태", "경과", "블로커", "대기 이벤트", "SQL ID", "프로그램", "델타"],
             s => [s.KeyText, s.Username, s.Status, s.Elapsed, s.BlockedBy, s.Event, s.SqlId, s.Program, s.DeltaText],
@@ -23,6 +26,7 @@ public partial class SessionMonitorView : UserControl
             if (DataContext is SessionMonitorViewModel vm && !ReferenceEquals(_bound, vm))
             {
                 _bound = vm;
+                _grid.AttachStatusLine(StatusLine, vm, () => vm.StatusText);
                 _grid.Attach(vm.Sessions, vm, nameof(SessionMonitorViewModel.SelectedSession), () => vm.SelectedSession, s => vm.SelectedSession = s);
                 vm.PropertyChanged += (_, e) =>
                 {
