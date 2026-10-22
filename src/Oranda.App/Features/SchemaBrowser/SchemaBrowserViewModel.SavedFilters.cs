@@ -24,6 +24,22 @@ public sealed partial class SchemaBrowserViewModel
 
     public bool HasSavedFilter => ActiveSavedFilter is not null;
 
+    /// <summary>지금 접속의 모든 스키마 이름(편집 대화상자의 스키마 고르기 후보).</summary>
+    public IReadOnlyList<string> AllSchemaNames => _allSchemas;
+
+    /// <summary><c>oranda.schema.editFilters</c> 가 편집 대화상자를 열라고 알린다(창 주인은 View 가 안다).</summary>
+    public event EventHandler? FilterEditorRequested;
+
+    public void RequestFilterEditor() => FilterEditorRequested?.Invoke(this, EventArgs.Empty);
+
+    /// <summary>대화상자의 「저장」: 목록만 바꾸고, 지금 고른 필터가 남아 있으면 그대로 고른다.</summary>
+    public Task SaveFiltersKeepingChoiceAsync(IReadOnlyList<SchemaBrowserFilter> filters, CancellationToken ct = default)
+    {
+        ArgumentNullException.ThrowIfNull(filters);
+        var keep = ActiveSavedFilter is { } current && filters.Any(f => f.Id == current.Id) ? current.Id : null;
+        return SaveFiltersAsync(filters, keep, ct);
+    }
+
     partial void OnActiveSavedFilterChanged(SchemaBrowserFilter? value) => OnPropertyChanged(nameof(HasSavedFilter));
 
     private static string ProfileKey(ISession session) => session.Profile.Id.ToString();

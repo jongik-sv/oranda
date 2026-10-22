@@ -11,6 +11,7 @@ namespace Oranda.App.Features.SchemaBrowser;
 [OrandaCommand("oranda.schema.refresh", CommandCategory.Database, When = "schemaFocus", Enablement = "hasSession",
     Placements = ["context:schema/refresh@10"])]
 [OrandaCommand("oranda.schema.filter", CommandCategory.Database, When = "schemaFocus", Enablement = "hasSession")]
+[OrandaCommand("oranda.schema.editFilters", CommandCategory.Database, Placements = ["context:schema/refresh@15"])]
 [OrandaCommand("oranda.schema.toggleFavorite", CommandCategory.Database, When = "schemaFocus", Enablement = "schemaNodeSelected",
     Placements = ["context:schema/favorite@20"])]
 [OrandaCommand("oranda.schema.insertName", CommandCategory.Database, When = "schemaFocus", Enablement = "schemaNodeSelected && sqlDocOpen",
@@ -45,6 +46,9 @@ public sealed class SchemaBrowserCommandHandler : ICommandHandler
                 break;
             case "oranda.schema.filter":
                 _vm.RequestFilterFocus();
+                break;
+            case "oranda.schema.editFilters":
+                _vm.RequestFilterEditor();
                 break;
             case "oranda.schema.toggleFavorite":
                 await _vm.ToggleFavoriteAsync(node, cancellationToken);

@@ -42,6 +42,26 @@ public partial class SchemaBrowserView : UserControl
             }
         };
         FilterBox.InnerLeftContent = ShellIcons.Create("find", 14);
+        SavedFilterButton.Content = new StackPanel
+        {
+            Orientation = Avalonia.Layout.Orientation.Horizontal,
+            Spacing = 1,
+            Children =
+            {
+                ShellIcons.Create("filter")!,
+                new TextBlock { Text = "▾", FontSize = 9, Opacity = 0.7, VerticalAlignment = Avalonia.Layout.VerticalAlignment.Center },
+            },
+        };
+        var savedFilterMenu = new MenuFlyout();
+        savedFilterMenu.Opening += (_, _) =>
+        {
+            savedFilterMenu.Items.Clear();
+            foreach (var item in BuildSavedFilterMenu())
+            {
+                savedFilterMenu.Items.Add(item);
+            }
+        };
+        SavedFilterButton.Flyout = savedFilterMenu;
         ShellContextMenus.Attach(Tree, "schema");
         Tree.AddHandler(PointerPressedEvent, OnTreePressed, handledEventsToo: true);
         Tree.AddHandler(PointerMovedEvent, OnTreeMoved, handledEventsToo: true);
@@ -55,6 +75,7 @@ public partial class SchemaBrowserView : UserControl
             if (DataContext is SchemaBrowserViewModel vm)
             {
                 vm.FilterFocusRequested += (_, _) => Dispatcher.UIThread.Post(() => FilterBox.Focus());
+                vm.FilterEditorRequested += (_, _) => Dispatcher.UIThread.Post(() => _ = OpenFilterEditorAsync());
             }
 
             ListenForReveal(TopLevel.GetTopLevel(this) is not null);
@@ -94,6 +115,51 @@ public partial class SchemaBrowserView : UserControl
         if (wanted is not null)
         {
             wanted.RevealRequested += OnRevealRequested;
+        }
+    }
+
+    /// <summary>필터 단추 ▾ 메뉴: 필터 없음 · 저장한 필터(지금 것에 체크) · 필터 편집…(열 때마다 새로 만든다).</summary>
+    internal System.Collections.Generic.List<Control> BuildSavedFilterMenu()
+    {
+        var items = new System.Collections.Generic.List<Control>();
+        if (DataContext is not SchemaBrowserViewModel vm)
+        {
+            return items;
+        }
+
+        MenuItem Choice(string header, string? id)
+        {
+            var item = new MenuItem { Header = header, ToggleType = MenuItemToggleType.Radio, IsChecked = vm.ActiveSavedFilter?.Id == id };
+            item.Click += async (_, _) => await vm.SelectSavedFilterAsync(id);
+            return item;
+        }
+
+        items.Add(Choice("필터 없음", null));
+        foreach (var f in vm.SavedFilters)
+        {
+            items.Add(Choice(f.Name, f.Id));
+        }
+
+        items.Add(new Separator());
+        var edit = new MenuItem { Header = "필터 편집…" };
+        edit.Click += async (_, _) => await OpenFilterEditorAsync();
+        items.Add(edit);
+        return items;
+    }
+
+    /// <summary>편집 대화상자를 연다. 저장은 그때그때 목록에 쓰고, 확인은 대화상자에서 고른 필터를 이 접속에 건다.</summary>
+    private async Task OpenFilterEditorAsync()
+    {
+        if (DataContext is not SchemaBrowserViewModel vm || TopLevel.GetTopLevel(this) is not Window owner)
+        {
+            return;
+        }
+
+        var editor = new SchemaFilterEditorViewModel(vm.SavedFilters, vm.ActiveSavedFilter?.Id, vm.AllSchemaNames,
+            list => vm.SaveFiltersKeepingChoiceAsync(list));
+        if (await new SchemaFilterEditorWindow { DataContext = editor }.ShowDialog<bool>(owner))
+        {
+            await vm.SaveFiltersAsync(editor.BuildFilters(), editor.SelectedId);
         }
     }
 

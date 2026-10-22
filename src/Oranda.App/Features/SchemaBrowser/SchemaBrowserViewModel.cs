@@ -51,6 +51,9 @@ public sealed partial class SchemaBrowserViewModel : ToolPanelViewModelBase, IDi
     /// <summary>범주 순서에 있는 객체 유형(필터 콤보 목록).</summary>
     public static IReadOnlyList<string> KnownTypes { get; } = [.. Categories.Select(c => c.Type)];
 
+    /// <summary>범주 순서의 (객체 유형, 트리 제목). 저장 필터 편집의 객체 탭 줄.</summary>
+    internal static IReadOnlyList<(string Type, string Title)> CategoryTitles => Categories;
+
     private readonly IServiceProvider? _services;
     private bool _resolved;
     private readonly List<IDisposable> _subscriptions = [];

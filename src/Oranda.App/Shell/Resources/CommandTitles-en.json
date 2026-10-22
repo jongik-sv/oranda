@@ -170,6 +170,7 @@
   "Cmd.oranda.plsql.toggleSpecBody": "Switch Spec/Body",
   "Cmd.oranda.schema.compileInvalid": "Compile INVALID Objects",
   "Cmd.oranda.schema.filter": "Object Filter",
+  "Cmd.oranda.schema.editFilters": "Edit Schema Browser Filters…",
   "Cmd.oranda.schema.insertColumns": "Insert Column List into Editor",
   "Cmd.oranda.schema.insertName": "Insert Name into Editor",
   "Cmd.oranda.schema.insertSelect": "Insert SELECT into Editor",

@@ -6,11 +6,21 @@
              x:Class="Oranda.App.Features.SchemaBrowser.SchemaBrowserView"
              keymaps:FocusSlot.Name="schema"
              x:DataType="vm:SchemaBrowserViewModel">
+  <UserControl.Styles>
+    <!-- 저장 필터가 걸려 있으면 필터 단추를 눌린 토글처럼 보인다(ToggleButton.toolbar:checked 와 같은 모양). -->
+    <Style Selector="Button.toolbar.on /template/ ContentPresenter#PART_ContentPresenter">
+      <Setter Property="Background" Value="{DynamicResource OrandaToolbarPressedBrush}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource OrandaIconBlueBrush}" />
+      <Setter Property="BorderThickness" Value="1" />
+    </Style>
+  </UserControl.Styles>
   <DockPanel>
-    <!-- 패널 툴바(Orange Schema Browser 처럼 아이콘 단추 한 줄): 유형 고르기 · INVALID 만 · 즐겨찾기만 · 새로 고침 -->
+    <!-- 패널 툴바(Orange Schema Browser 처럼 아이콘 단추 한 줄): 유형 고르기 · 저장 필터 ▾ · INVALID 만 · 즐겨찾기만 · 새로 고침 -->
     <Border DockPanel.Dock="Top" Classes="panel-toolbar">
       <DockPanel>
         <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" Spacing="1">
+          <Button x:Name="SavedFilterButton" Classes="toolbar" Classes.on="{Binding HasSavedFilter}"
+                  ToolTip.Tip="저장 필터 (고르기·편집)" AutomationProperties.Name="저장 필터" />
           <ToggleButton x:Name="InvalidToggle" Classes="toolbar" IsChecked="{Binding InvalidOnly, Mode=TwoWay}"
                         ToolTip.Tip="INVALID 객체만" AutomationProperties.Name="INVALID 객체만" />
           <ToggleButton x:Name="FavoritesToggle" Classes="toolbar" IsChecked="{Binding FavoritesOnly, Mode=TwoWay}"

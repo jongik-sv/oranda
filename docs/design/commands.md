@@ -487,6 +487,7 @@
 |---|---|---|---|---|---|
 | `oranda.schema.refresh` | 새로 고침 | `F5` | `schemaFocus` | `hasSession` | TSK-07-02 |
 | `oranda.schema.filter` | 객체 필터 | `Ctrl+F` | `schemaFocus` | `hasSession` | TSK-07-02 |
+| `oranda.schema.editFilters` | 스키마 브라우저 필터 편집… (저장 필터: 스키마·객체 유형·이름 패턴) | - | - | - | TSK-13-10 |
 | `oranda.schema.toggleFavorite` | 즐겨찾기 추가/빼기 | - | `schemaFocus` | `schemaNodeSelected` | TSK-07-02 |
 | `oranda.schema.insertName` | 편집기에 이름 넣기 | - | `schemaFocus` | `schemaNodeSelected && sqlDocOpen` | TSK-07-02 |
 | `oranda.schema.insertSelect` | 편집기에 SELECT 문 넣기 | - | `schemaFocus` | `schemaNodeSelected && sqlDocOpen` | TSK-07-02 |

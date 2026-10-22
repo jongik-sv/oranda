@@ -175,6 +175,37 @@ public sealed class SchemaBrowserSavedFilterTests
     }
 
     [Fact]
+    public async Task Edit_filters_command_is_registered_and_asks_the_view_to_open_the_editor()
+    {
+        Assert.NotNull(Oranda.App.Tests.Shell.ShellTestHelpers.CreateCommandRegistry().Find("oranda.schema.editFilters"));
+        var h = NewHarness();
+        await h.Vm.SetSessionAsync(h.Session);
+        var asked = 0;
+        h.Vm.FilterEditorRequested += (_, _) => asked++;
+
+        await new SchemaBrowserCommandHandler(h.Vm).ExecuteAsync(
+            new Oranda.Core.Shell.CommandContext("oranda.schema.editFilters", Oranda.App.Tests.Shell.FakeContextKeys.AllTrue), CancellationToken.None);
+
+        Assert.Equal(1, asked);
+        Assert.Equal(["SCOTT", "HR", "EMPTYUSER"], h.Vm.AllSchemaNames.OrderBy(n => n == "SCOTT" ? 0 : 1));
+    }
+
+    [Fact]
+    public async Task Saving_from_the_editor_keeps_the_current_choice_when_it_still_exists()
+    {
+        var h = NewHarness();
+        await h.Vm.SetSessionAsync(h.Session);
+        var f = await SaveAndSelectAsync(h, new SchemaBrowserFilter { Name = "HR만", Scope = SchemaFilterScope.Selected, Schemas = ["HR"] });
+        var other = new SchemaBrowserFilter { Name = "다른" };
+
+        await h.Vm.SaveFiltersKeepingChoiceAsync([f, other]);
+        Assert.Equal(f.Id, h.Vm.ActiveSavedFilter?.Id);
+
+        await h.Vm.SaveFiltersKeepingChoiceAsync([other]);
+        Assert.Null(h.Vm.ActiveSavedFilter);
+    }
+
+    [Fact]
     public async Task Reveal_lifts_a_saved_filter_that_hides_the_object()
     {
         var h = NewHarness();

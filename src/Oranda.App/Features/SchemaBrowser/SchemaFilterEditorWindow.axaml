@@ -1,0 +1,127 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="using:Oranda.App.Features.SchemaBrowser"
+        x:Class="Oranda.App.Features.SchemaBrowser.SchemaFilterEditorWindow"
+        x:DataType="vm:SchemaFilterEditorViewModel"
+        Title="스키마 브라우저 필터"
+        Width="500" Height="580" MinWidth="420" MinHeight="460"
+        WindowStartupLocation="CenterOwner" ShowInTaskbar="False">
+  <!-- 오렌지 Schema Browser Filter 와 같은 구성: 위 필터 고르기(새로 만들기·저장·삭제), 가운데 스키마·객체·옵션 탭, 아래 확인·취소. -->
+  <DockPanel Margin="12">
+    <DockPanel DockPanel.Dock="Bottom" Margin="0,10,0,0">
+      <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" Spacing="8" VerticalAlignment="Bottom">
+        <Button x:Name="OkButton" Content="확인" IsDefault="True" Classes="accent" />
+        <Button x:Name="CancelButton" Content="취소" IsCancel="True" />
+      </StackPanel>
+      <TextBlock x:Name="ErrorText" Classes="invalid" Text="{Binding Error}" IsVisible="{Binding HasError}"
+                 TextWrapping="Wrap" VerticalAlignment="Center" Margin="0,0,10,0" />
+    </DockPanel>
+
+    <Grid DockPanel.Dock="Top" ColumnDefinitions="Auto,*" RowDefinitions="Auto,Auto" ColumnSpacing="8" RowSpacing="6">
+      <TextBlock Text="필터" VerticalAlignment="Center" />
+      <DockPanel Grid.Column="1">
+        <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" Spacing="1" Margin="4,0,0,0">
+          <Button x:Name="NewButton" Classes="toolbar" ToolTip.Tip="새 필터" AutomationProperties.Name="새 필터" />
+          <Button x:Name="SaveButton" Classes="toolbar" ToolTip.Tip="저장 (창은 열어 둔다)" AutomationProperties.Name="필터 저장" />
+          <Button x:Name="DeleteButton" Classes="toolbar" ToolTip.Tip="이 필터 삭제" IsEnabled="{Binding HasSelection}"
+                  AutomationProperties.Name="필터 삭제" />
+        </StackPanel>
+        <ComboBox x:Name="FilterBox" Classes="compact" HorizontalAlignment="Stretch" ItemsSource="{Binding Filters}"
+                  SelectedItem="{Binding Selected, Mode=TwoWay}" PlaceholderText="저장한 필터가 없습니다 — 새 필터를 누르세요"
+                  AutomationProperties.Name="필터">
+          <ComboBox.ItemTemplate>
+            <DataTemplate x:DataType="vm:FilterDraft">
+              <TextBlock Text="{Binding Name}" />
+            </DataTemplate>
+          </ComboBox.ItemTemplate>
+        </ComboBox>
+      </DockPanel>
+      <TextBlock Grid.Row="1" Text="이름" VerticalAlignment="Center" />
+      <TextBox x:Name="NameBox" Grid.Row="1" Grid.Column="1" Classes="compact" IsEnabled="{Binding HasSelection}"
+               Text="{Binding Selected.Name, Mode=TwoWay, FallbackValue=''}" AutomationProperties.Name="필터 이름" />
+    </Grid>
+
+    <TabControl x:Name="Tabs" Margin="0,10,0,0" IsEnabled="{Binding HasSelection}">
+      <TabItem Header="스키마">
+        <DockPanel Margin="0,8,0,0">
+          <StackPanel DockPanel.Dock="Top" Spacing="4">
+            <RadioButton GroupName="scope" Content="모든 스키마" IsChecked="{Binding Selected.IsAllScope, Mode=TwoWay, FallbackValue=False}" />
+            <RadioButton GroupName="scope" Content="로그온 스키마만" IsChecked="{Binding Selected.IsLogonScope, Mode=TwoWay, FallbackValue=False}" />
+            <RadioButton GroupName="scope" Content="객체를 가진 스키마만" IsChecked="{Binding Selected.IsWithObjectsScope, Mode=TwoWay, FallbackValue=False}" />
+            <RadioButton x:Name="SelectedScopeRadio" GroupName="scope" Content="스키마 고르기"
+                         IsChecked="{Binding Selected.IsSelectedScope, Mode=TwoWay, FallbackValue=False}" />
+          </StackPanel>
+          <Grid Margin="24,6,0,0" ColumnDefinitions="*,Auto" RowDefinitions="Auto,*" ColumnSpacing="4" RowSpacing="4"
+                IsEnabled="{Binding Selected.IsSelectedScope, FallbackValue=False}">
+            <ComboBox x:Name="SchemaPick" Classes="compact" HorizontalAlignment="Stretch" ItemsSource="{Binding AllSchemas}"
+                      SelectedItem="{Binding SchemaToAdd, Mode=TwoWay}" PlaceholderText="스키마" AutomationProperties.Name="추가할 스키마" />
+            <Button x:Name="AddSchemaButton" Grid.Column="1" Classes="toolbar" ToolTip.Tip="목록에 추가" AutomationProperties.Name="스키마 추가" />
+            <ListBox x:Name="SchemaList" Grid.Row="1" Classes="compact" ItemsSource="{Binding Selected.Schemas, FallbackValue={x:Null}}"
+                     MinHeight="120" AutomationProperties.Name="고른 스키마" />
+            <Button x:Name="RemoveSchemaButton" Grid.Row="1" Grid.Column="1" Classes="toolbar" VerticalAlignment="Top"
+                    ToolTip.Tip="목록에서 빼기" AutomationProperties.Name="스키마 빼기" />
+          </Grid>
+        </DockPanel>
+      </TabItem>
+
+      <TabItem Header="객체">
+        <DockPanel Margin="0,8,0,0">
+          <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Spacing="6">
+            <Button x:Name="SelectAllButton" Classes="compact" Content="모두 선택" />
+            <Button x:Name="DeselectAllButton" Classes="compact" Content="모두 해제" />
+          </StackPanel>
+          <Grid DockPanel.Dock="Bottom" Margin="0,6,0,0" ColumnDefinitions="Auto,*,Auto,Auto" ColumnSpacing="6">
+            <TextBlock Text="패턴" VerticalAlignment="Center" />
+            <TextBox x:Name="GlobalPatternBox" Grid.Column="1" Classes="compact" Text="{Binding GlobalPattern, Mode=TwoWay}"
+                     PlaceholderText="예: TB_M30*" AutomationProperties.Name="모든 유형에 넣을 패턴" />
+            <Button x:Name="AssignButton" Grid.Column="2" Classes="compact" Content="모든 유형에 적용" />
+            <Button x:Name="ResetButton" Grid.Column="3" Classes="compact" Content="초기화" />
+          </Grid>
+          <Border Margin="0,6,0,0" BorderBrush="{DynamicResource OrandaSeparatorBrush}" BorderThickness="1">
+            <DockPanel>
+              <Border DockPanel.Dock="Top" Background="{DynamicResource OrandaPanelHeaderBrush}"
+                      BorderBrush="{DynamicResource OrandaSeparatorBrush}" BorderThickness="0,0,0,1">
+                <Grid ColumnDefinitions="190,*">
+                  <TextBlock Text="객체 유형" Margin="8,3" FontWeight="SemiBold" />
+                  <TextBlock Grid.Column="1" Text="이름 필터 (* 와일드카드, 비우면 모두)" Margin="4,3" FontWeight="SemiBold" />
+                </Grid>
+              </Border>
+              <ScrollViewer HorizontalScrollBarVisibility="Disabled">
+                <ItemsControl x:Name="TypeRows" ItemsSource="{Binding Selected.Types, FallbackValue={x:Null}}">
+                  <ItemsControl.ItemTemplate>
+                    <DataTemplate x:DataType="vm:FilterTypeRow">
+                      <Grid ColumnDefinitions="190,*" Margin="0,1">
+                        <CheckBox Margin="8,0,0,0" IsChecked="{Binding IsShown, Mode=TwoWay}" AutomationProperties.Name="{Binding Title}">
+                          <TextBlock Text="{Binding Title}" />
+                        </CheckBox>
+                        <TextBox Grid.Column="1" Classes="compact" Margin="0,0,6,0" Text="{Binding Pattern, Mode=TwoWay}"
+                                 IsEnabled="{Binding IsShown}" PlaceholderText="모두" AutomationProperties.Name="이름 필터" />
+                      </Grid>
+                    </DataTemplate>
+                  </ItemsControl.ItemTemplate>
+                </ItemsControl>
+              </ScrollViewer>
+            </DockPanel>
+          </Border>
+        </DockPanel>
+      </TabItem>
+
+      <TabItem Header="옵션">
+        <StackPanel Margin="0,10,0,0" Spacing="4">
+          <CheckBox IsChecked="{Binding Selected.UnderscoreIsWildcard, Mode=TwoWay, FallbackValue=False}"
+                    AutomationProperties.Name="밑줄을 한 글자 와일드카드로">
+            <TextBlock Text="_ 를 한 글자 와일드카드로 본다" />
+          </CheckBox>
+          <TextBlock Classes="panel-caption" Margin="28,0,0,8" TextWrapping="Wrap"
+                     Text="끄면 _ 는 글자 그대로입니다(TB_M30 의 밑줄처럼 이름에 흔한 글자)." />
+          <CheckBox IsChecked="{Binding Selected.WrapWithPercent, Mode=TwoWay, FallbackValue=False}"
+                    AutomationProperties.Name="앞뒤에 퍼센트 붙이기">
+            <TextBlock Text="와일드카드가 없으면 앞뒤에 % 를 붙인다 (포함 검색)" />
+          </CheckBox>
+          <TextBlock Classes="panel-caption" Margin="28,0,0,0" TextWrapping="Wrap"
+                     Text="끄면 이름 전체가 같아야 합니다. * 와 % 는 여러 글자이고, 따옴표로 감싸면 대소문자를 그대로 봅니다." />
+        </StackPanel>
+      </TabItem>
+    </TabControl>
+  </DockPanel>
+</Window>
