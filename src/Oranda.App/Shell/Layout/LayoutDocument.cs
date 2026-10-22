@@ -21,6 +21,12 @@ public sealed record LayoutDocument
     /// <summary>닫아 둔 도구 창 ID.</summary>
     public IReadOnlyList<string> HiddenTools { get; init; } = [];
 
+    /// <summary>
+    /// 이 배치에 이미 적용한 일회성 이주의 이름(예: <see cref="LayoutPlanner.RightToolsOpenMigration"/>). 이름이 있으면 그 이주는 다시 하지 않는다.
+    /// null = 이주 표지가 없는 옛 배치.
+    /// </summary>
+    public IReadOnlyList<string>? Migrations { get; init; }
+
     /// <summary>이름 붙인 레이아웃(<c>layouts/*.json</c>)의 이름. <c>layout.json</c> 에서는 쓰지 않는다(null 이면 쓰지 않는다).</summary>
     public string? Name { get; init; }
 }

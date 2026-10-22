@@ -23,6 +23,12 @@ public static class LayoutPlanner
     /// <summary>도구 창을 끼워 넣을 때 문서 영역이 이보다 좁아지지 않게 한다.</summary>
     public const double MinDocumentsProportion = 0.2;
 
+    /// <summary>바인드 변수·템플릿 창을 기본으로 여는 이주(TSK-13-16)의 표지 이름.</summary>
+    public const string RightToolsOpenMigration = "rightToolsOpen";
+
+    /// <summary>기본으로 열어 두는 오른쪽 도구 창(위에서 아래 순서).</summary>
+    private static readonly string[] OpenRightTools = ["oranda.panel.binds", "oranda.panel.templates"];
+
     /// <summary>문서 영역 노드는 트리에 정확히 1개이고, 그 노드의 <see cref="DockNode.Tools"/> 는 쓰지 않는다.</summary>
     public static LayoutDocument CreateDefault(IEnumerable<ToolPanelDefinition> panels)
     {
@@ -30,8 +36,10 @@ public static class LayoutPlanner
         var left = IdsAt(tools, DockLocation.Left);
         var bottom = IdsAt(tools, DockLocation.Bottom);
 
-        // 오른쪽 도구 창은 기본 숨김(자동 숨김 막대 자리): 트리에 넣지 않고 hiddenTools 에 둔다.
-        var hidden = IdsAt(tools, DockLocation.Right);
+        // 오른쪽 도구 창은 바인드 변수·템플릿만 열어 두고(아래에서 문서 영역 옆에 끼운다) 나머지는 기본 숨김
+        // (자동 숨김 막대 자리): 트리에 넣지 않고 hiddenTools 에 둔다.
+        var open = OpenRightTools.Where(id => tools.Any(t => t.Id == id && t.DefaultLocation == DockLocation.Right)).ToList();
+        var hidden = IdsAt(tools, DockLocation.Right).Where(id => !open.Contains(id)).ToList();
         var documents = new DockNode { Kind = DockNodeKind.Documents };
 
         // 가로: [왼쪽 묶음(창 전체 높이), 세로: [문서, 아래 묶음]] — 오렌지처럼 스키마 브라우저가 왼쪽을 위아래로 다 쓰고,
@@ -58,7 +66,12 @@ public static class LayoutPlanner
             };
         }
 
-        return new LayoutDocument { Root = root, HiddenTools = hidden };
+        if (open.Count > 0)
+        {
+            root = InsertRight(root, StackedGroups(open));
+        }
+
+        return new LayoutDocument { Root = root, HiddenTools = hidden, Migrations = [RightToolsOpenMigration] };
     }
 
     /// <summary>
@@ -71,7 +84,7 @@ public static class LayoutPlanner
         if (saved?.Root is null)
         {
             var fresh = CreateDefault(all);
-            return saved is null ? fresh : saved with { Root = fresh.Root, HiddenTools = fresh.HiddenTools };
+            return saved is null ? fresh : saved with { Root = fresh.Root, HiddenTools = fresh.HiddenTools, Migrations = fresh.Migrations };
         }
 
         var known = all.Where(p => p.Kind == ToolPanelKind.Tool).Select(p => p.Id).ToHashSet(StringComparer.Ordinal);
@@ -80,13 +93,29 @@ public static class LayoutPlanner
         if (root is null || CountDocuments(root) != 1)
         {
             var fresh = CreateDefault(all);
-            return saved with { Root = fresh.Root, HiddenTools = fresh.HiddenTools };
+            return saved with { Root = fresh.Root, HiddenTools = fresh.HiddenTools, Migrations = fresh.Migrations };
         }
 
         var hidden = (saved.HiddenTools ?? [])
             .Where(id => known.Contains(id) && !seen.Contains(id))
             .Distinct(StringComparer.Ordinal)
             .ToList();
+
+        // 일회성 이주: 표지가 없는 옛 배치는 바인드 변수·템플릿 창을 한 번만 연다. 표지를 남기므로 이후 사용자가 닫은 창은 닫힌 채 유지된다.
+        var migrations = (saved.Migrations ?? []).ToList();
+        if (!migrations.Contains(RightToolsOpenMigration))
+        {
+            var toOpen = OpenRightTools.Where(id => known.Contains(id) && !seen.Contains(id)).ToList();
+            hidden = hidden.Where(id => !toOpen.Contains(id)).ToList();
+            if (toOpen.Count > 0)
+            {
+                root = InsertRight(root, StackedGroups(toOpen));
+                seen.UnionWith(toOpen);
+            }
+
+            migrations.Add(RightToolsOpenMigration);
+        }
+
         var hiddenSet = hidden.ToHashSet(StringComparer.Ordinal);
 
         var order = all.Where(p => p.Kind == ToolPanelKind.Tool)
@@ -101,7 +130,7 @@ public static class LayoutPlanner
             }
         }
 
-        return saved with { Root = Rebalance(root), HiddenTools = hidden };
+        return saved with { Root = Rebalance(root), HiddenTools = hidden, Migrations = migrations };
     }
 
     /// <summary>
@@ -347,16 +376,22 @@ public static class LayoutPlanner
             };
         }
 
-        // 왼쪽·오른쪽·문서: 문서 영역이 이미 가로 분할 안에 있으면 그 옆에 끼워 넣고(합 1 유지), 아니면 가로 분할로 감싼다.
+        return InsertRight(root, group, location);
+    }
+
+    /// <summary>오른쪽(또는 문서 옆 왼쪽)에 노드를 끼운다. <paramref name="node"/> 의 비율이 차지할 몫이다.</summary>
+    private static DockNode InsertRight(DockNode root, DockNode node, DockLocation location = DockLocation.Right)
+    {
+        // 문서 영역이 이미 가로 분할 안에 있으면 그 옆에 끼워 넣고(합 1 유지), 아니면 가로 분할로 감싼다.
         var docs = FindDocuments(root)!;
-        var share = group.Proportion!.Value;
+        var share = node.Proportion!.Value;
         var parent = PathTo(root, n => ReferenceEquals(n, docs)) is { Count: > 1 } path ? path[^2] : null;
         if (parent is { Kind: DockNodeKind.Split, Orientation: DockOrientation.Horizontal })
         {
             var kids = (parent.Children ?? []).ToList();
             var index = kids.FindIndex(k => ReferenceEquals(k, docs));
             kids[index] = docs with { Proportion = docs.Proportion is { } dp ? Math.Max(dp - share, MinDocumentsProportion) : null };
-            kids.Insert(location == DockLocation.Right ? index + 1 : index, group);
+            kids.Insert(location == DockLocation.Right ? index + 1 : index, node);
             return Replace(root, parent, parent with { Children = kids });
         }
 
@@ -366,10 +401,27 @@ public static class LayoutPlanner
             Orientation = DockOrientation.Horizontal,
             Proportion = docs.Proportion,
             Children = location == DockLocation.Right
-                ? [docs with { Proportion = 1 - share }, group]
-                : [group, docs with { Proportion = 1 - share }],
+                ? [docs with { Proportion = 1 - share }, node]
+                : [node, docs with { Proportion = 1 - share }],
         };
         return Replace(root, docs, wrapped);
+    }
+
+    /// <summary>오른쪽 한 열: 창마다 묶음 하나씩 위에서 아래로 쌓는다(하나뿐이면 묶음 그대로).</summary>
+    private static DockNode StackedGroups(List<string> ids)
+    {
+        if (ids.Count == 1)
+        {
+            return Group(ids, RightProportion);
+        }
+
+        return new DockNode
+        {
+            Kind = DockNodeKind.Split,
+            Orientation = DockOrientation.Vertical,
+            Proportion = RightProportion,
+            Children = [.. ids.Select(id => Group([id], 1.0 / ids.Count))],
+        };
     }
 
     private static DockNode Replace(DockNode root, DockNode target, DockNode replacement)

@@ -1,3 +1,4 @@
+using System;
 using System.Collections.ObjectModel;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
@@ -24,18 +25,22 @@ public sealed partial class BindVariablesViewModel : ToolPanelViewModelBase
 
     // 이벤트 버스만 받는다(등록된 서비스라 지연 어셈블리를 깨우지 않는다). 생성자는 이것 하나만 둔다.
     public BindVariablesViewModel(IEventBus? events = null)
-        : this(events, SqlEditorHost.Current)
+        : this(events, static () => SqlEditorHost.Current)
     {
     }
 
-    /// <summary>활성 SQL 탭을 주는 호스트를 직접 받는다(시험용).</summary>
-    internal BindVariablesViewModel(IEventBus? events, SqlEditorHost host)
+    // SqlEditorHost 를 생성자 인자로 두면 서비스 컨테이너가 인자를 풀려고 지연 어셈블리를 깨운다(기본 배치에서 이 창이 시작 때 만들어진다).
+    // 그래서 호스트는 Func 로 받고, 컨테이너가 고르지 못하는 비공개 생성자에 둔다.
+    private BindVariablesViewModel(IEventBus? events, Func<SqlEditorHost> hostFactory)
     {
         _events = events;
-        _host = host;
+        _host = hostFactory();
         _store = BindVariableStore.ForTab(_host.Active, _events);
         _host.ActiveChanged += (_, _) => FollowActiveTab();
     }
+
+    /// <summary>활성 SQL 탭을 주는 호스트를 직접 받는다(시험용).</summary>
+    internal static BindVariablesViewModel ForHost(IEventBus? events, SqlEditorHost host) => new(events, () => host);
 
     /// <summary>지금 보이는 목록: 활성 SQL 탭의 것(TSK-04-11). 탭이 없으면 도구 창용 기본 목록.</summary>
     [ObservableProperty]

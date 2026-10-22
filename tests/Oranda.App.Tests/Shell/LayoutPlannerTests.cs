@@ -34,6 +34,7 @@ public class LayoutPlannerTests
         Tool("output", DockLocation.Bottom, 10),
         Tool("messages", DockLocation.Bottom, 20),
         Tool("outline", DockLocation.Right, 10),
+        Tool("binds", DockLocation.Right, 20),
         Tool("templates", DockLocation.Right, 20),
         Doc("sqlEditor"),
     ];
@@ -53,11 +54,19 @@ public class LayoutPlannerTests
         var column = root.Children[1];
         Assert.Equal([Id("schemaBrowser"), Id("scripts")], left.Tools);
         Assert.Equal(DockOrientation.Vertical, column.Orientation);
-        Assert.Equal(DockNodeKind.Documents, column.Children[0].Kind);
+        Assert.Equal(1, CountDocuments(column.Children[0])); // 문서 영역은 오른쪽 열과 가로로 나란히 놓인다.
         Assert.Equal([Id("output"), Id("messages")], column.Children[1].Tools);
 
-        // 오른쪽 도구 창은 기본 숨김(트리에 없고 hiddenTools 에 있다). 문서 종류는 트리에 넣지 않는다.
-        Assert.Equal([Id("outline"), Id("templates")], layout.HiddenTools);
+        // 오른쪽 도구 창은 바인드 변수·템플릿만 열려 있고(TSK-13-16) 나머지는 기본 숨김(트리에 없고 hiddenTools 에 있다). 문서 종류는 트리에 넣지 않는다.
+        Assert.Equal([Id("outline")], layout.HiddenTools);
+        Assert.Contains(Id("binds"), LayoutPlanner.ToolIds(root));
+        Assert.Contains(Id("templates"), LayoutPlanner.ToolIds(root));
+        Assert.Contains(LayoutPlanner.RightToolsOpenMigration, layout.Migrations!);
+        var binds = FindGroup(root, Id("binds"));
+        var templates = FindGroup(root, Id("templates"));
+        Assert.Equal(DockLocation.Right, LayoutPlanner.LocationOf(root, binds));
+        Assert.Equal(DockLocation.Right, LayoutPlanner.LocationOf(root, templates));
+        Assert.NotSame(binds, templates); // 한 열에 위아래로 쌓는다(탭이 아니다).
         Assert.DoesNotContain(Id("sqlEditor"), LayoutPlanner.ToolIds(root));
         Assert.Equal(1, CountDocuments(root));
     }
@@ -91,10 +100,10 @@ public class LayoutPlannerTests
         var r = LayoutPlanner.Reconcile(layout, remaining);
 
         var ids = LayoutPlanner.ToolIds(r.Root);
-        Assert.Equal([Id("schemaBrowser")], ids);
-        // 아래 묶음이 사라지면 문서 쪽 세로 분할도 없어진다: 가로 [왼쪽, 문서].
+        Assert.Equal([Id("schemaBrowser"), Id("binds"), Id("templates")], ids);
+        // 아래 묶음이 사라지면 문서 쪽 세로 분할도 없어진다: 가로 [왼쪽, 가로 [문서, 오른쪽 열]].
         Assert.Equal(DockOrientation.Horizontal, r.Root!.Orientation);
-        Assert.Equal(DockNodeKind.Documents, r.Root.Children[1].Kind);
+        Assert.Equal(DockNodeKind.Documents, r.Root.Children[1].Children[0].Kind);
         Assert.Equal(1, CountDocuments(r.Root));
     }
 
@@ -151,6 +160,53 @@ public class LayoutPlannerTests
 
         Assert.DoesNotContain(Id("scripts"), LayoutPlanner.ToolIds(r.Root));
         Assert.Contains(Id("scripts"), r.HiddenTools);
+    }
+
+    [Fact]
+    public void Reconcile_opens_binds_and_templates_once_for_a_layout_without_the_marker()
+    {
+        var old = LayoutPlanner.CreateDefault(Standard) with
+        {
+            Migrations = null,
+            HiddenTools = [Id("outline"), Id("binds"), Id("templates")],
+        };
+        old = old with { Root = LayoutPlanner.Normalize(LayoutPlanner.HideTool(old, Id("binds")).Root!, Standard) };
+        old = LayoutPlanner.HideTool(old, Id("templates"));
+
+        var migrated = LayoutPlanner.Reconcile(old, Standard);
+
+        Assert.Contains(Id("binds"), LayoutPlanner.ToolIds(migrated.Root));
+        Assert.Contains(Id("templates"), LayoutPlanner.ToolIds(migrated.Root));
+        Assert.Equal([Id("outline")], migrated.HiddenTools);
+        Assert.Contains(LayoutPlanner.RightToolsOpenMigration, migrated.Migrations!);
+        Assert.Equal(1, CountDocuments(migrated.Root!));
+    }
+
+    [Fact]
+    public void Reconcile_keeps_binds_closed_after_the_migration_marker_is_set()
+    {
+        var old = LayoutPlanner.CreateDefault(Standard) with { Migrations = null };
+        var migrated = LayoutPlanner.Reconcile(old, Standard);
+        var closed = LayoutPlanner.HideTool(migrated, Id("binds"));
+
+        var again = LayoutPlanner.Reconcile(closed, Standard);
+
+        Assert.DoesNotContain(Id("binds"), LayoutPlanner.ToolIds(again.Root));
+        Assert.Contains(Id("binds"), again.HiddenTools);
+    }
+
+    [Fact]
+    public void Reset_to_default_and_broken_layout_paths_leave_the_marker()
+    {
+        Assert.Contains(LayoutPlanner.RightToolsOpenMigration, LayoutPlanner.CreateDefault(Standard).Migrations!);
+
+        var broken = new LayoutDocument { Root = new DockNode { Kind = DockNodeKind.ToolGroup, Tools = [Id("output")] } };
+        var fixedUp = LayoutPlanner.Reconcile(broken, Standard);
+        Assert.Contains(LayoutPlanner.RightToolsOpenMigration, fixedUp.Migrations!);
+        Assert.Contains(Id("binds"), LayoutPlanner.ToolIds(fixedUp.Root));
+
+        var noRoot = LayoutPlanner.Reconcile(new LayoutDocument(), Standard);
+        Assert.Contains(LayoutPlanner.RightToolsOpenMigration, noRoot.Migrations!);
     }
 
     [Fact]

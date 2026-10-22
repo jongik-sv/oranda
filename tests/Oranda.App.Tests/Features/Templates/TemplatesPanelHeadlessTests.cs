@@ -213,7 +213,7 @@ public sealed class TemplatesPanelHeadlessTests : IDisposable
         Dispatcher.UIThread.RunJobs();
 
         Assert.Equal("Optimizer hints only", ToolTip.GetTip(Named<RadioButton>(view, "KindHint")));
-        Assert.Equal("Search templates", Named<TextBox>(view, "SearchBox").PlaceholderText);
+        Assert.Equal("Search", Named<TextBox>(view, "SearchBox").PlaceholderText);
         Assert.Equal(["Snippets", "Hints", "Functions", "Pseudo-columns"], vm.Groups.Select(g => g.Title));
         vm.Selected = SnippetLibrary.FindByPrefix("sel");
         Dispatcher.UIThread.RunJobs();

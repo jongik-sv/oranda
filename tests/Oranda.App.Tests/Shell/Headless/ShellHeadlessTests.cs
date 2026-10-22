@@ -92,6 +92,8 @@ public class ShellHeadlessTests
         Assert.Contains("oranda.panel.schemaBrowser", ws.VisibleToolIds);
         Assert.Contains("oranda.panel.output", ws.VisibleToolIds);
         Assert.DoesNotContain("oranda.panel.outline", ws.VisibleToolIds);
+        Assert.Contains("oranda.panel.binds", ws.VisibleToolIds);
+        Assert.Contains("oranda.panel.templates", ws.VisibleToolIds);
         Assert.NotNull(h.Window.Dock.DockControl.Layout);
     });
 
@@ -103,13 +105,11 @@ public class ShellHeadlessTests
 
         // 숨겨진 도구 창은 아직 만들지 않았다. 보이지 않는 탭(활성이 아닌 탭)도 만들지 않는다.
         Assert.DoesNotContain("oranda.panel.outline", ws.CreatedToolIds);
-        Assert.DoesNotContain("oranda.panel.templates", ws.CreatedToolIds);
 
         ws.ShowTool("oranda.panel.outline");
         Dispatcher.UIThread.RunJobs();
 
         Assert.Contains("oranda.panel.outline", ws.CreatedToolIds);
-        Assert.DoesNotContain("oranda.panel.templates", ws.CreatedToolIds);
     });
 
     [Fact]

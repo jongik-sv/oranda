@@ -29,7 +29,7 @@ public sealed partial class SqlEditorTests
     public Task Bind_panel_shows_the_active_tab_list_and_follows_tab_switches() => Ui.Run(() =>
     {
         var host = new SqlEditorHost();
-        var panel = new BindVariablesViewModel(null, host);
+        var panel = BindVariablesViewModel.ForHost(null, host);
         Assert.Same(BindVariableStore.For(null), panel.Store); // 탭이 없으면 도구 창용 기본 목록
 
         var a = host.NewDocument("select :x from dual");

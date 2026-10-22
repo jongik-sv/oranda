@@ -176,10 +176,14 @@ public sealed class DockWorkspace
     /// <summary>만들어진 도구 창 ViewModel 이 있는 ID(지연 생성 확인용).</summary>
     public IReadOnlyCollection<string> CreatedToolIds => _tools.Where(t => t.Value.IsPanelCreated).Select(t => t.Key).ToList();
 
+    /// <summary>마지막으로 적용한 배치의 이주 표지(<see cref="Capture"/> 가 저장 때 그대로 싣는다).</summary>
+    private IReadOnlyList<string>? _migrations;
+
     /// <summary>저장된 배치를 현재 등록 목록에 맞춰 도킹 모델로 짓는다. 열려 있던 문서는 새 문서 영역으로 옮긴다.</summary>
     public void Apply(LayoutDocument layout)
     {
         var planned = LayoutPlanner.Reconcile(layout, _registry.Panels);
+        _migrations = planned.Migrations;
         var keepDocuments = Layout is null ? [] : Documents.Concat(FloatingDocuments()).ToList(); // 떠 있던 문서도 메인 문서 영역으로 들인다
         foreach (var doc in keepDocuments.Where(d => d.Owner is IDock { VisibleDockables: { } own } && own.Contains(d)))
         {
@@ -225,7 +229,7 @@ public sealed class DockWorkspace
             .Where(p => p.Kind == ToolPanelKind.Tool && !inTree.Contains(p.Id))
             .Select(p => p.Id)
             .ToList();
-        return new LayoutDocument { Window = window, Root = root, HiddenTools = hidden };
+        return new LayoutDocument { Window = window, Root = root, HiddenTools = hidden, Migrations = _migrations };
     }
 
     public bool IsToolVisible(string toolId) => VisibleToolIds.Contains(toolId);

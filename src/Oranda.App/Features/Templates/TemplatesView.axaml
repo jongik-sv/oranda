@@ -43,9 +43,9 @@
     <Border DockPanel.Dock="Top" Classes="panel-toolbar">
       <StackPanel Spacing="3">
         <TextBox x:Name="SearchBox" Classes="compact search" Text="{Binding Query, Mode=TwoWay}"
-                 PlaceholderText="줄임말·이름·설명 찾기" AutomationProperties.Name="템플릿 찾기" />
+                 PlaceholderText="이름·설명 찾기" AutomationProperties.Name="템플릿 찾기" />
         <DockPanel>
-          <Button x:Name="NewButton" DockPanel.Dock="Right" Classes="tool" icons:ButtonIcon.Key="add" Content="새 조각"
+          <Button x:Name="NewButton" DockPanel.Dock="Right" Classes="tool" icons:ButtonIcon.Key="add" icons:ButtonIcon.IconOnly="True" Content="새 조각"
                   ToolTip.Tip="사용자 조각 만들기" />
           <StackPanel x:Name="KindBar" Orientation="Horizontal" Spacing="1">
             <RadioButton x:Name="KindAll" Theme="{StaticResource KindChipTheme}"
@@ -73,7 +73,7 @@
     </Border>
 
     <!-- 가운데: 종류별 묶음 목록 / 아래: 미리보기(이름·설명 한 줄 + 편집기와 같은 강조). 나누기 막대로 높이를 바꾼다. -->
-    <Grid RowDefinitions="*,Auto,150">
+    <Grid RowDefinitions="3*,Auto,2*">
       <TreeView x:Name="List" Grid.Row="0" Classes="compact" MinHeight="60"
                 ItemsSource="{Binding Groups}" SelectedItem="{Binding SelectedRow, Mode=TwoWay}"
                 ScrollViewer.HorizontalScrollBarVisibility="Disabled"

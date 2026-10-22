@@ -245,6 +245,7 @@ TRD 4.11 대로 앱 DTO 다(Core 가 아니라 `Oranda.App`). Dock.Avalonia 의 
 | `root.tools` | string[] | ○ | `[]` | `ToolGroup` 만. 도구 창 ID(TSK-02-02) |
 | `root.activeTool` | string | ○ | 첫 항목 | `ToolGroup` 만 |
 | `hiddenTools` | string[] | ○ | `[]` | 닫아 둔 도구 창 ID |
+| `migrations` | string[] | ○ | null(표지 없음) | 이 배치에 이미 적용한 일회성 이주 이름. `rightToolsOpen` 이 없으면 읽을 때 한 번 바인드 변수·템플릿 창을 열고 표지를 남긴다(TSK-13-16). 기본 배치·되돌림에도 표지가 붙는다 |
 
 - 모르는 도구 ID는 버린다. 필수 도구가 빠졌으면 기본 위치에 다시 넣는다.
 - 편집기 탭(문서)은 이 파일이 아니라 작업 공간(2.6)에 있다.
