@@ -1,4 +1,5 @@
 using System;
+using System.Diagnostics;
 using System.Linq;
 using System.Threading.Tasks;
 using Avalonia;
@@ -52,16 +53,7 @@ public partial class SchemaBrowserView : UserControl
                 new TextBlock { Text = "▾", FontSize = 9, Opacity = 0.7, VerticalAlignment = Avalonia.Layout.VerticalAlignment.Center },
             },
         };
-        var savedFilterMenu = new MenuFlyout();
-        savedFilterMenu.Opening += (_, _) =>
-        {
-            savedFilterMenu.Items.Clear();
-            foreach (var item in BuildSavedFilterMenu())
-            {
-                savedFilterMenu.Items.Add(item);
-            }
-        };
-        SavedFilterButton.Flyout = savedFilterMenu;
+        SavedFilterButton.Click += (_, _) => ShowSavedFilterMenu();
         ShellContextMenus.Attach(Tree, "schema");
         Tree.AddHandler(PointerPressedEvent, OnTreePressed, handledEventsToo: true);
         Tree.AddHandler(PointerMovedEvent, OnTreeMoved, handledEventsToo: true);
@@ -70,16 +62,7 @@ public partial class SchemaBrowserView : UserControl
         Tree.AddHandler(TappedEvent, OnTreeTapped, RoutingStrategies.Bubble, handledEventsToo: true);
         Tree.AddHandler(KeyDownEvent, OnTreeEnter, RoutingStrategies.Tunnel);
         Tree.AddHandler(KeyDownEvent, OnTreeNavigated, RoutingStrategies.Bubble, handledEventsToo: true);
-        DataContextChanged += (_, _) =>
-        {
-            if (DataContext is SchemaBrowserViewModel vm)
-            {
-                vm.FilterFocusRequested += (_, _) => Dispatcher.UIThread.Post(() => FilterBox.Focus());
-                vm.FilterEditorRequested += (_, _) => Dispatcher.UIThread.Post(() => _ = OpenFilterEditorAsync());
-            }
-
-            ListenForReveal(TopLevel.GetTopLevel(this) is not null);
-        };
+        DataContextChanged += (_, _) => ListenForReveal(TopLevel.GetTopLevel(this) is not null);
     }
 
     protected override void OnAttachedToVisualTree(VisualTreeAttachmentEventArgs e)
@@ -95,8 +78,8 @@ public partial class SchemaBrowserView : UserControl
     }
 
     /// <summary>
-    /// 화면에 붙어 있는 동안만 「트리에서 찾기」 알림을 받는다. 도킹 배치를 다시 지으면 이 View 가 새로 만들어지므로,
-    /// 떨어진 옛 View 가 ViewModel 에 매달려 남지 않게 한다.
+    /// 화면에 붙어 있는 동안만 ViewModel 의 알림(트리에서 찾기·필터 칸 포커스·필터 편집 대화상자)을 받는다.
+    /// 도킹 배치를 다시 지으면 이 View 가 새로 만들어지므로, 떨어진 옛 View 가 ViewModel 에 매달려 남지 않게 한다.
     /// </summary>
     private void ListenForReveal(bool attached)
     {
@@ -109,13 +92,40 @@ public partial class SchemaBrowserView : UserControl
         if (_revealSource is not null)
         {
             _revealSource.RevealRequested -= OnRevealRequested;
+            _revealSource.FilterFocusRequested -= OnFilterFocusRequested;
+            _revealSource.FilterEditorRequested -= OnFilterEditorRequested;
         }
 
         _revealSource = wanted;
         if (wanted is not null)
         {
             wanted.RevealRequested += OnRevealRequested;
+            wanted.FilterFocusRequested += OnFilterFocusRequested;
+            wanted.FilterEditorRequested += OnFilterEditorRequested;
         }
+    }
+
+    private void OnFilterFocusRequested(object? sender, EventArgs e) => Dispatcher.UIThread.Post(() => FilterBox.Focus());
+
+    private void OnFilterEditorRequested(object? sender, EventArgs e) => Dispatcher.UIThread.Post(() => _ = OpenFilterEditorAsync());
+
+    /// <summary>가장 최근에 연 ▾ 메뉴(시험이 그려진 항목을 확인하는 데 쓴다).</summary>
+    internal MenuFlyout? SavedFilterFlyout { get; private set; }
+
+    /// <summary>
+    /// ▾ 메뉴를 연다. 항목을 채운 새 <see cref="MenuFlyout"/> 을 열 때마다 만든다.
+    /// <c>Opening</c> 시점에는 표시자가 이미 만들어져 있어, 그때 바꾼 항목은 팝업에 그려지지 않고 빈 상자만 뜬다.
+    /// </summary>
+    private void ShowSavedFilterMenu()
+    {
+        var menu = new MenuFlyout();
+        foreach (var item in BuildSavedFilterMenu())
+        {
+            menu.Items.Add(item);
+        }
+
+        SavedFilterFlyout = menu;
+        menu.ShowAt(SavedFilterButton);
     }
 
     /// <summary>필터 단추 ▾ 메뉴: 필터 없음 · 저장한 필터(지금 것에 체크) · 필터 편집…(열 때마다 새로 만든다).</summary>
@@ -150,8 +160,15 @@ public partial class SchemaBrowserView : UserControl
     /// <summary>편집 대화상자를 연다. 저장은 그때그때 목록에 쓰고, 확인은 대화상자에서 고른 필터를 이 접속에 건다.</summary>
     private async Task OpenFilterEditorAsync()
     {
-        if (DataContext is not SchemaBrowserViewModel vm || TopLevel.GetTopLevel(this) is not Window owner)
+        if (DataContext is not SchemaBrowserViewModel vm)
         {
+            Trace.TraceWarning("스키마 브라우저 필터 편집을 건너뜀: DataContext 가 SchemaBrowserViewModel 이 아니다({0}).", DataContext?.GetType().FullName ?? "null");
+            return;
+        }
+
+        if (FindOwnerWindow() is not { } owner)
+        {
+            Trace.TraceWarning("스키마 브라우저 필터 편집을 건너뜀: 대화상자를 띄울 소유자 창을 찾지 못했다(TopLevel={0}).", TopLevel.GetTopLevel(this)?.GetType().FullName ?? "null");
             return;
         }
 
@@ -162,6 +179,13 @@ public partial class SchemaBrowserView : UserControl
             await vm.SaveFiltersAsync(editor.BuildFilters(), editor.SelectedId);
         }
     }
+
+    /// <summary>
+    /// 대화상자의 소유자 창. 이 View 가 놓인 최상위가 창이면 그 창(떠 있는 도구 창 포함), 아니면 앱의 주 창이다.
+    /// </summary>
+    private Window? FindOwnerWindow() =>
+        TopLevel.GetTopLevel(this) as Window
+        ?? (Application.Current?.ApplicationLifetime as Avalonia.Controls.ApplicationLifetimes.IClassicDesktopStyleApplicationLifetime)?.MainWindow;
 
     private void OnRevealRequested(object? sender, SchemaNode node) =>
         Dispatcher.UIThread.Post(() => ShowRevealedNode(node, 0), DispatcherPriority.Background);

@@ -1,3 +1,5 @@
+using System;
+using System.Diagnostics;
 using System.Threading;
 using System.Threading.Tasks;
 using Oranda.Core.Shell;
@@ -6,7 +8,9 @@ namespace Oranda.App.Features.SchemaBrowser;
 
 /// <summary>
 /// TSK-07-02 스키마 브라우저 명령 처리기 (commands.md 7장 「데이터베이스」). 동작은 <see cref="SchemaBrowserViewModel"/> 에 있다.
-/// 셸의 처리기 팩터리(DI)가 ViewModel 을 넣어 준다. 인자 없는 생성자(기본 <c>Activator</c>)는 아무것도 하지 않는다.
+/// 스키마 브라우저 ViewModel 은 DI 에 등록된 서비스가 아니라 도킹 도구 창이 만든다. 그래서 처리기는 서비스 공급자를 받아
+/// 명령을 실행할 때마다 도킹 트리에서 도구 창의 ViewModel 을 찾는다(<see cref="ObjectDetail.ObjectDetailCommandHandler.FindSchemaBrowser"/>).
+/// 인자 없는 생성자(기본 <c>Activator</c>)는 아무것도 하지 않는다.
 /// </summary>
 [OrandaCommand("oranda.schema.refresh", CommandCategory.Database, When = "schemaFocus", Enablement = "hasSession",
     Placements = ["context:schema/refresh@10"])]
@@ -23,17 +27,24 @@ namespace Oranda.App.Features.SchemaBrowser;
 public sealed class SchemaBrowserCommandHandler : ICommandHandler
 {
     private readonly SchemaBrowserViewModel? _vm;
+    private readonly IServiceProvider? _services;
 
     public SchemaBrowserCommandHandler()
     {
     }
 
+    /// <summary>셸의 처리기 팩터리(DI)가 쓰는 생성자.</summary>
+    public SchemaBrowserCommandHandler(IServiceProvider services) => _services = services;
+
+    /// <summary>시험용: 뷰 모델을 바로 지정한다.</summary>
     public SchemaBrowserCommandHandler(SchemaBrowserViewModel vm) => _vm = vm;
 
     public async Task ExecuteAsync(CommandContext context, CancellationToken cancellationToken)
     {
-        if (_vm is null)
+        var vm = _vm ?? ObjectDetail.ObjectDetailCommandHandler.FindSchemaBrowser(_services);
+        if (vm is null)
         {
+            Trace.TraceWarning("스키마 브라우저 명령 {0} 을 건너뜀: 스키마 브라우저 도구 창이 아직 만들어지지 않았다.", context.CommandId);
             return;
         }
 
@@ -42,25 +53,25 @@ public sealed class SchemaBrowserCommandHandler : ICommandHandler
         switch (context.CommandId)
         {
             case "oranda.schema.refresh":
-                await _vm.LoadAsync(cancellationToken);
+                await vm.LoadAsync(cancellationToken);
                 break;
             case "oranda.schema.filter":
-                _vm.RequestFilterFocus();
+                vm.RequestFilterFocus();
                 break;
             case "oranda.schema.editFilters":
-                _vm.RequestFilterEditor();
+                vm.RequestFilterEditor();
                 break;
             case "oranda.schema.toggleFavorite":
-                await _vm.ToggleFavoriteAsync(node, cancellationToken);
+                await vm.ToggleFavoriteAsync(node, cancellationToken);
                 break;
             case "oranda.schema.insertName":
-                await _vm.InsertAsync(node, SchemaInsertMode.Name, cancellationToken);
+                await vm.InsertAsync(node, SchemaInsertMode.Name, cancellationToken);
                 break;
             case "oranda.schema.insertSelect":
-                await _vm.InsertAsync(node, SchemaInsertMode.Select, cancellationToken);
+                await vm.InsertAsync(node, SchemaInsertMode.Select, cancellationToken);
                 break;
             case "oranda.schema.insertColumns":
-                await _vm.InsertAsync(node, SchemaInsertMode.Columns, cancellationToken);
+                await vm.InsertAsync(node, SchemaInsertMode.Columns, cancellationToken);
                 break;
         }
     }
