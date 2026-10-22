@@ -40,6 +40,7 @@ public partial class MainWindow : Window
     private KeymapService? _keymap;
     private MenuControls? _controls;
     private KeyDispatcher? _dispatcher;
+    private OptionTextGuard? _optionText;
     private MainViewModel? _viewModel;
     private IReadOnlyList<MenuNode> _toolbarModel = [];
     private readonly List<(Window Window, NativeMenu Root)> _floatMenus = [];
@@ -121,6 +122,7 @@ public partial class MainWindow : Window
         };
 
         _dispatcher = new KeyDispatcher(() => _keymap.Table, _registry, _keys);
+        _optionText = new OptionTextGuard(_dispatcher);
         _controls = new MenuControls(
             _registry,
             _keys,
@@ -134,6 +136,7 @@ public partial class MainWindow : Window
             },
             _dispatcher);
         AddHandler(KeyDownEvent, OnKeyDownTunnel, RoutingStrategies.Tunnel);
+        AddHandler(TextInputEvent, OnTextInputTunnel, RoutingStrategies.Tunnel);
         DragDrop.SetAllowDrop(this, true);
         AddHandler(DragDrop.DragOverEvent, OnWorkspaceDragOver);
         AddHandler(DragDrop.DropEvent, OnWorkspaceDrop);
@@ -474,6 +477,20 @@ public partial class MainWindow : Window
         }
 
         if (_dispatcher is not null && !e.Handled && _dispatcher.Handle(e.Key, e.KeyModifiers))
+        {
+            e.Handled = true;
+        }
+
+        if (OperatingSystem.IsMacOS())
+        {
+            _optionText?.NoteKeyDown(e.Key, e.KeyModifiers, e.Handled);
+        }
+    }
+
+    // macOS: 명령에 묶인 Option+문자는 글자(c·ç)로 편집기에 들어가지 않게 뒤따르는 TextInput 을 삼킨다.
+    private void OnTextInputTunnel(object? sender, TextInputEventArgs e)
+    {
+        if (OperatingSystem.IsMacOS() && _optionText?.ShouldSwallowText(e.Text) == true)
         {
             e.Handled = true;
         }
