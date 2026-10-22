@@ -43,8 +43,8 @@ public sealed class HeaderDragTests
         try
         {
             await HeadlessHost.WaitUntil(() => m.LoadedRowCount == 5 && grid.Bounds.Height > 0);
-            // 머리글 열 가운데의 창 좌표(열 폭 기본 100)
-            Point Header(int col) => grid.TranslatePoint(new Point(grid.RowHeaderWidth + (m.GetColumnWidth(0) * col) + 50, grid.HeaderHeight / 2), window)!.Value;
+            // 머리글 열 왼쪽 가까운 제목 위의 창 좌표(오른쪽 끝은 ▾·크기 조절 영역이라 피한다)
+            Point Header(int col) => grid.TranslatePoint(new Point(grid.RowHeaderWidth + (m.GetColumnWidth(0) * col) + 20, grid.HeaderHeight / 2), window)!.Value;
             await body(window, grid, m, Header);
         }
         finally

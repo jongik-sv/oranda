@@ -97,6 +97,9 @@
     </Border>
     <Grid Grid.Row="4" ColumnDefinitions="*,Auto" RowDefinitions="*,Auto">
       <vm:ResultGridControl x:Name="GridControl" Grid.Row="0" Grid.Column="0" />
+      <!-- 열 머리글 ▾ 자동 필터 팝업(TSK-13-26): 내용은 눌렀을 때 코드로 채운다(ColumnFilterPanel). -->
+      <Popup x:Name="ColumnFilterHost" Grid.Row="0" Grid.Column="0" IsLightDismissEnabled="True"
+             Placement="BottomEdgeAlignedLeft" PlacementTarget="{Binding #GridControl}" />
       <!-- 셀 편집기(편집 모드에서 두 번 누르기·F2): 셀 위에 겹쳐 띄운다. Enter 반영·Esc 취소. -->
       <TextBox x:Name="CellEditor" Grid.Row="0" Grid.Column="0" IsVisible="False" MinHeight="0" Padding="4,0"
                HorizontalAlignment="Left" VerticalAlignment="Top" VerticalContentAlignment="Center"

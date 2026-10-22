@@ -27,11 +27,17 @@ public sealed record ColumnFilter
 {
     public IReadOnlySet<string>? Values { get; init; }
 
+    /// <summary>
+    /// 값 목록이 길어 일부만 보일 때 체크를 푼 값(이 값만 뺀다). <see cref="Values"/> 와 같이 쓰지 않는다.
+    /// NULL 은 <see cref="IncludeNull"/> 이 정한다.
+    /// </summary>
+    public IReadOnlySet<string>? Excluded { get; init; }
+
     public bool IncludeNull { get; init; } = true;
 
     public ColumnCondition? Condition { get; init; }
 
-    public bool IsEmpty => Values is null && Condition is null;
+    public bool IsEmpty => Values is null && Excluded is null && Condition is null && IncludeNull;
 }
 
 /// <summary>
@@ -161,7 +167,15 @@ public sealed class LocalRowFilter
     {
         var value = page.Columns[ordinal][i];
         var isNull = value is null or DBNull;
-        if (filter.Values is { } values && !(isNull ? filter.IncludeNull : values.Contains(Text(page, i, ordinal, cache))))
+        if (isNull)
+        {
+            if (!filter.IncludeNull)
+            {
+                return false;
+            }
+        }
+        else if ((filter.Values is { } values && !values.Contains(Text(page, i, ordinal, cache)))
+            || (filter.Excluded is { } excluded && excluded.Contains(Text(page, i, ordinal, cache))))
         {
             return false;
         }

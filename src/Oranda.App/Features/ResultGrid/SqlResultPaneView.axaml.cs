@@ -51,6 +51,7 @@ public partial class SqlResultPaneView : UserControl
         WireFilterBar();
         WireQuickFilter();
 
+        GridControl.ColumnFilterRequested += async (_, e) => await OpenColumnFilterAsync(e);
         GridControl.EditRequested += (_, cell) => BeginEdit(cell);
         EditHintClose.Click += (_, _) => Vm?.HideEditHint();
         EditHintRerun.Click += async (_, _) => await RunEditHintActionAsync();
@@ -292,6 +293,45 @@ public partial class SqlResultPaneView : UserControl
             ResultGridCommands.Active = GridControl.Model ?? ResultGridCommands.Active;
             await ShellCommandRunner.RunAsync("oranda.grid.fetchAll");
         };
+    }
+
+    /// <summary>
+    /// 머리글 ▾ 자동 필터 팝업(TSK-13-26): 가져온 행의 서로 다른 값을 모아(UI 스레드 밖) 값 목록·조건 패널을 열고, 적용하면 그 열 필터만 바꾼다.
+    /// 반영하지 않은 편집이 있으면 모델이 거부하고 상태 줄에 알린다.
+    /// </summary>
+    private async Task OpenColumnFilterAsync(ColumnFilterRequestedEventArgs e)
+    {
+        if (Vm is not { Model: { } m } vm)
+        {
+            return;
+        }
+
+        var ordinal = e.Ordinal;
+        ColumnValueList values;
+        try
+        {
+            values = await m.CollectColumnValuesAsync(ordinal);
+        }
+        catch (OperationCanceledException)
+        {
+            return;
+        }
+
+        var panel = new ColumnFilterPanel(m.Columns[ordinal], values, m.LocalFilter.Columns.GetValueOrDefault(ordinal));
+        panel.Applied += async (_, filter) =>
+        {
+            ColumnFilterHost.IsOpen = false;
+            await vm.SetColumnFilterAsync(ordinal, filter);
+            GridControl.Focus();
+        };
+        panel.CloseRequested += (_, _) =>
+        {
+            ColumnFilterHost.IsOpen = false;
+            GridControl.Focus();
+        };
+        ColumnFilterHost.Child = new Border { Child = panel, Background = Avalonia.Media.Brushes.Transparent };
+        ColumnFilterHost.PlacementRect = e.HeaderBounds;
+        ColumnFilterHost.IsOpen = true;
     }
 
     private void OnQuickFilterFocusRequested(object? sender, EventArgs e) =>

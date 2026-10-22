@@ -36,7 +36,8 @@ public static class ExcelExportRunner
 
         var source = DataTransferCommands.ActiveExportSource?.Invoke() ?? DataTransferCommandHandler.FromEditor(services);
         var (selRows, selCols) = ExcelExportPlan.SelectionSize(grid);
-        var vm = new ExcelExportDialogViewModel(source is not null, ExcelExportPlan.LoadedRows(grid), selRows, selCols);
+        var vm = new ExcelExportDialogViewModel(source is not null, ExcelExportPlan.LoadedRows(grid), selRows, selCols,
+            grid.IsLocalFiltered ? ExcelExportPlan.FetchedRows(grid) : null);
         await TransferServices.ShowAsync(services, new ExcelExportDialogWindow { DataContext = vm }).ConfigureAwait(true);
         if (!vm.Accepted)
         {

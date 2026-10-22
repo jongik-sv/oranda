@@ -17,8 +17,11 @@ public enum ExcelExportScope
     /// <summary>질의를 서버에서 다시 실행해 처음부터 끝까지 흘려 저장한다.</summary>
     AllRows,
 
-    /// <summary>다시 실행하지 않고 지금 그리드에 불러온 행을 저장한다.</summary>
+    /// <summary>다시 실행하지 않고 지금 그리드에 불러온 행을 저장한다. 앱 안 거르기가 걸려 있으면 보이는 행만이다.</summary>
     LoadedRows,
+
+    /// <summary>앱 안 거르기와 상관없이 지금까지 가져온 행 전체를 저장한다(거르기가 걸린 때만 고를 수 있다).</summary>
+    FetchedAll,
 
     /// <summary>선택 영역이 걸친 행·열만 저장한다.</summary>
     Selection,
@@ -96,9 +99,16 @@ public static class ExcelExportPlan
         return Math.Min(model.LoadedRowCount, model.RowCount);
     }
 
+    /// <summary>앱 안 거르기와 상관없이 지금까지 가져온 행 수(내보내기 「가져온 전체」).</summary>
+    public static long FetchedRows(ResultGridModel model)
+    {
+        ArgumentNullException.ThrowIfNull(model);
+        return model.LoadedRowCount;
+    }
+
     /// <summary>
     /// 그리드에서 저장할 데이터를 만든다. 열은 지금 보이는 열이고(숨긴 열은 뺀다) 행은 화면 순서(정렬·편집 상태 그대로)다.
-    /// 선택 범위면 선택 영역의 열·행만, 불러온 행이면 불러온 행 전체다. <see cref="ExcelExportScope.AllRows"/> 는 서버에서 읽으므로 여기서 만들지 않는다.
+    /// 선택 범위면 선택 영역의 열·행만, 불러온 행이면 보이는 행 전체(거르기가 걸리면 통과한 행), 가져온 전체면 거르기와 무관한 가져온 행 전체다. <see cref="ExcelExportScope.AllRows"/> 는 서버에서 읽으므로 여기서 만들지 않는다.
     /// </summary>
     public static ExcelExportData FromGrid(ResultGridModel model, ExcelExportScope scope)
     {
@@ -118,6 +128,9 @@ public static class ExcelExportPlan
                 var visible = model.VisibleColumns.ToList();
                 var count = LoadedRows(model);
                 return new ExcelExportData(visible.Select(o => model.Columns[o]).ToList(), Stream(model, visible, 0, count - 1), count);
+            case ExcelExportScope.FetchedAll:
+                var all = model.VisibleColumns.ToList();
+                return new ExcelExportData(all.Select(o => model.Columns[o]).ToList(), model.ReadAllFetchedRowsAsync(all), FetchedRows(model));
             default:
                 throw new ArgumentOutOfRangeException(nameof(scope), scope, "서버에서 다시 읽는 범위는 그리드에서 만들 수 없다.");
         }

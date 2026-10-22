@@ -1,5 +1,7 @@
 using System.Collections.Concurrent;
 using System.Diagnostics;
+using Oranda.App.Features.DataTransfer;
+using Oranda.App.Features.LobRowView;
 using Oranda.App.Features.ResultGrid;
 using Oranda.Core.Execution;
 using Oranda.Core.Grid;
@@ -309,6 +311,129 @@ public sealed class LocalFilterTests
             ResultGridCommands.Filter = null;
             ResultGridCommands.Active = null;
         }
+    }
+
+    // ---- 복사·내보내기·행 보기·편집 반영 조합 (L4) ----
+
+    [Fact]
+    public async Task Export_scopes_split_visible_rows_from_everything_fetched_in_sorted_order()
+    {
+        await using var m = await OpenAsync(30);
+        await m.ToggleSortAsync(0); // ID 오름차순
+        await m.ToggleSortAsync(0); // 내림차순
+        await m.SetLocalFilterAsync(new LocalFilterSpec { QuickText = "g2" });
+        m.HideColumn(1); // 숨긴 NAME 은 내보내지 않는다(GRP 는 보이므로 거르기는 그대로)
+
+        Assert.Equal(4, ExcelExportPlan.LoadedRows(m)); // 「보이는 행만」
+        var visible = ExcelExportPlan.FromGrid(m, ExcelExportScope.LoadedRows);
+        Assert.Equal(["ID", "GRP"], visible.Columns.Select(c => c.Name));
+        Assert.Equal(["23", "16", "9", "2"], (await Drain(visible.Rows)).Select(r => Convert.ToString(r[0], System.Globalization.CultureInfo.InvariantCulture)));
+
+        Assert.Equal(30, ExcelExportPlan.FetchedRows(m)); // 「가져온 전체」: 거르기 무시, 정렬은 유지
+        var all = ExcelExportPlan.FromGrid(m, ExcelExportScope.FetchedAll);
+        Assert.Equal(30, all.RowCount);
+        var ids = (await Drain(all.Rows)).Select(r => Convert.ToString(r[0], System.Globalization.CultureInfo.InvariantCulture)).ToList();
+        Assert.Equal(Enumerable.Range(0, 30).Reverse().Select(i => i.ToString(System.Globalization.CultureInfo.InvariantCulture)), ids);
+    }
+
+    [Fact]
+    public async Task Export_dialog_offers_fetched_all_only_while_a_filter_is_active()
+    {
+        var plain = new ExcelExportDialogViewModel(canAllRows: true, loadedRows: 30, selectionRows: 0, selectionColumns: 0);
+        Assert.False(plain.HasFetchedAll);
+
+        var filtered = new ExcelExportDialogViewModel(canAllRows: false, loadedRows: 4, selectionRows: 0, selectionColumns: 0, fetchedRows: 30);
+        Assert.True(filtered.HasFetchedAll);
+        Assert.True(filtered.IsLoadedRows); // 기본 = 보이는 행만
+        Assert.Contains("보이는 행만(4행", filtered.LoadedLabel, StringComparison.Ordinal);
+        Assert.Contains("가져온 전체(30행", filtered.FetchedLabel, StringComparison.Ordinal);
+        filtered.IsFetchedAll = true;
+        Assert.Equal(ExcelExportScope.FetchedAll, filtered.Scope);
+        Assert.False(filtered.IsLoadedRows);
+        await Task.CompletedTask;
+    }
+
+    [Fact]
+    public async Task Fetched_all_export_uses_edited_values_of_visible_rows_and_leaves_out_new_rows()
+    {
+        await using var m = await OpenAsync(30);
+        await m.SetLocalFilterAsync(new LocalFilterSpec { QuickText = "g2" });
+        m.EditOverlay = new EditedOverlay(extraRows: 1, viewRow: 1, ordinal: 1, value: "EDITED");
+
+        Assert.Equal(5, m.RowCount); // 보이는 4행 + 거르기와 무관한 새 행
+        Assert.Equal(4, m.BaseRowCount);
+        Assert.Equal(-1, m.BaseRowOf(4));
+
+        var rows = await Drain(ExcelExportPlan.FromGrid(m, ExcelExportScope.FetchedAll).Rows);
+        Assert.Equal(30, rows.Count);
+        Assert.Equal("EDITED", rows.Single(r => Equals(r[0], 9m))[1]);
+        Assert.DoesNotContain(rows, r => Equals(r[1], "EDITED") && !Equals(r[0], 9m));
+    }
+
+    [Fact]
+    public async Task Row_viewer_moves_over_visible_rows_only()
+    {
+        await using var m = await OpenAsync(30);
+        await m.SetLocalFilterAsync(new LocalFilterSpec { QuickText = "g2" }); // ID 2, 9, 16, 23
+        using var vm = new RowViewerViewModel();
+
+        vm.Attach(m);
+        Assert.Equal(0, vm.Row);
+        Assert.Equal("2", vm.Fields.Single(f => f.Name == "ID").Text);
+
+        vm.MoveRow(1);
+        await WaitAsync(() => vm.Row == 1 && vm.Fields.Single(f => f.Name == "ID").Text == "9");
+        vm.MoveLast();
+        await WaitAsync(() => vm.Row == 3 && vm.Fields.Single(f => f.Name == "ID").Text == "23");
+        Assert.False(vm.CanGoForward);
+        Assert.Contains("/ 4", vm.HeaderText, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task Flash_by_key_marks_the_visible_row_and_skips_rows_the_filter_hides()
+    {
+        await using var m = await OpenAsync(30);
+        await m.SetLocalFilterAsync(new LocalFilterSpec { QuickText = "g2" }); // ID 2, 9, 16, 23
+
+        m.FlashRowsByKey([new Dictionary<string, object?> { ["ID"] = 16m }, new Dictionary<string, object?> { ["ID"] = 5m }]);
+
+        Assert.True(m.IsFlashing(2)); // 16 은 보이는 셋째 줄
+        Assert.False(m.IsFlashing(0));
+        Assert.False(m.IsFlashing(1));
+        Assert.False(m.IsFlashing(3));
+    }
+
+    private static async Task<List<IReadOnlyList<object?>>> Drain(IAsyncEnumerable<IReadOnlyList<object?>> rows)
+    {
+        var list = new List<IReadOnlyList<object?>>();
+        await foreach (var r in rows)
+        {
+            list.Add(r);
+        }
+
+        return list;
+    }
+
+    /// <summary>화면 행 하나의 칸을 바꾼 것으로 보이게 하고 새 행을 더하는 편집 대역.</summary>
+    private sealed class EditedOverlay(int extraRows, long viewRow, int ordinal, object? value) : IGridEditOverlay
+    {
+        public int ExtraRows => extraRows;
+
+        public bool HasPendingChanges => true;
+
+        public bool TryGetValue(long row, int col, out object? v)
+        {
+            v = value;
+            return row == viewRow && col == ordinal;
+        }
+
+        public bool IsEdited(long row, int col) => row == viewRow && col == ordinal;
+
+        public GridRowMark RowMark(long row) => GridRowMark.None;
+
+        public long BaseRowOf(long row) => row < 4 ? row : -1;
+
+        public bool NeedsChange(long row, int col) => false;
     }
 
     private sealed class PendingOverlay : IGridEditOverlay

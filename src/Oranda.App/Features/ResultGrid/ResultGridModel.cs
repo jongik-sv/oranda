@@ -1092,6 +1092,76 @@ public sealed class ResultGridModel : IAsyncDisposable
         }
     }
 
+    /// <summary>자동 필터 값 목록에 올리는 서로 다른 값의 최대 개수.</summary>
+    public const int MaxFilterValues = 1000;
+
+    /// <summary>
+    /// 열 자동 필터의 값 목록: 가져온 모든 행에서 이 열의 서로 다른 화면 표시 값과 그 개수(NULL 은 따로).
+    /// 페이지를 UI 스레드에서 모으고 세는 일은 <see cref="Task.Run(Action)"/> 안에서 돈다. 서로 다른 값이 <paramref name="maxValues"/> 개를 넘으면 먼저 만난 값만 싣고 <see cref="ColumnValueList.Truncated"/> 를 켠다.
+    /// </summary>
+    public async Task<ColumnValueList> CollectColumnValuesAsync(int ordinal, int maxValues = MaxFilterValues, CancellationToken ct = default)
+    {
+        ArgumentOutOfRangeException.ThrowIfNegative(ordinal);
+        ArgumentOutOfRangeException.ThrowIfGreaterThanOrEqual(ordinal, Columns.Count);
+        var n = (int)Math.Min(int.MaxValue, TotalRowCount ?? _loadedRows);
+        var counts = new Dictionary<string, int>(StringComparer.Ordinal);
+        long nulls = 0;
+        var truncated = false;
+        var column = Columns[ordinal];
+        var display = Display;
+        for (var p = 0; (long)p * PageSize < n; p++)
+        {
+            ct.ThrowIfCancellationRequested();
+            var page = await _cache.GetPageAsync(p, ct).ConfigureAwait(true);
+            var (pageNulls, pageTruncated) = await Task.Run(() =>
+            {
+                long nullCount = 0;
+                var over = false;
+                var values = page.Columns[ordinal];
+                for (var i = 0; i < page.RowCount; i++)
+                {
+                    var v = values[i];
+                    if (v is null or DBNull)
+                    {
+                        nullCount++;
+                        continue;
+                    }
+
+                    var text = CellValueFormatter.Format(column, v, display);
+                    if (counts.TryGetValue(text, out var c))
+                    {
+                        counts[text] = c + 1;
+                    }
+                    else if (counts.Count < maxValues)
+                    {
+                        counts[text] = 1;
+                    }
+                    else
+                    {
+                        over = true;
+                    }
+                }
+
+                return (nullCount, over);
+            }, ct).ConfigureAwait(true);
+            nulls += pageNulls;
+            truncated |= pageTruncated;
+        }
+
+        var list = counts.Select(kv => new ColumnValueCount(kv.Key, kv.Value)).ToList();
+        if (column.Kind is ColumnDataKind.Number or ColumnDataKind.BinaryFloat
+            && list.All(v => decimal.TryParse(v.Text, NumberStyles.Float, CultureInfo.CurrentCulture, out _)))
+        {
+            list.Sort((a, b) => decimal.Parse(a.Text, NumberStyles.Float, CultureInfo.CurrentCulture).CompareTo(decimal.Parse(b.Text, NumberStyles.Float, CultureInfo.CurrentCulture)));
+        }
+        else
+        {
+            list.Sort((a, b) => string.Compare(a.Text, b.Text, StringComparison.OrdinalIgnoreCase));
+        }
+
+        return new ColumnValueList(list, nulls, truncated);
+    }
+
     private void RefreshQuickFilterColumns()
     {
         if (LocalFilter is { HasQuick: true, QuickColumns: null } spec)
@@ -1407,6 +1477,60 @@ public sealed class ResultGridModel : IAsyncDisposable
         return rows;
     }
 
+    /// <summary>
+    /// 앱 안 거르기와 상관없이 지금까지 가져온 모든 행(정렬 순서)의 값을 <paramref name="ordinals"/> 열 순서로 읽는다(내보내기 「가져온 전체」).
+    /// 거르기를 통과한 행은 화면에 보이는 값(편집 중인 값 포함)을, 가려진 행은 가져온 원본 값을 쓴다. 새로 더한 행은 가져온 행이 아니므로 뺀다.
+    /// </summary>
+    public async IAsyncEnumerable<IReadOnlyList<object?>> ReadAllFetchedRowsAsync(IReadOnlyList<int> ordinals,
+        [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken ct = default)
+    {
+        ArgumentNullException.ThrowIfNull(ordinals);
+        var count = _loadedRows;
+        var viewOf = new Dictionary<int, long>();
+        if (_match is not null && _view is { } v)
+        {
+            for (var i = 0; i < v.Length; i++)
+            {
+                viewOf[v[i]] = i;
+            }
+        }
+
+        // 정렬 순열이 있으면 그 순서로, 정렬한 뒤 더 가져온 행은 가져온 순서대로 뒤에 붙인다(RebuildView 와 같은 규칙).
+        var sorted = _order;
+        var sortedLength = Math.Min(sorted?.Length ?? 0, (int)Math.Min(count, int.MaxValue));
+        for (long k = 0; k < count; k++)
+        {
+            ct.ThrowIfCancellationRequested();
+            var src = k < sortedLength ? sorted![k] : (int)k;
+            if (viewOf.TryGetValue(src, out var viewRow))
+            {
+                var visible = await ReadRowsAsync(viewRow, viewRow, ordinals, ct).ConfigureAwait(true);
+                if (visible.Count == 1)
+                {
+                    yield return visible[0];
+                }
+
+                continue;
+            }
+
+            var page = await _cache.GetPageAsync(src / PageSize, ct).ConfigureAwait(true);
+            OnPage(page);
+            var i = (int)(src - page.FirstRowIndex);
+            if (i < 0 || i >= page.RowCount)
+            {
+                yield break;
+            }
+
+            var values = new object?[ordinals.Count];
+            for (var c = 0; c < ordinals.Count; c++)
+            {
+                values[c] = page.Columns[ordinals[c]][i];
+            }
+
+            yield return values;
+        }
+    }
+
     /// <summary>INSERT 문 복사에서 빼는 의사 열: ROWID 종류 열과 이름이 ROWID·ROWNUM·ORA_ROWSCN 인 열.</summary>
     public static bool IsPseudoColumn(ResultColumn column)
     {
@@ -1646,3 +1770,9 @@ public enum LargeSortChoice
 
 /// <summary>큰 결과 정렬을 묻는 창에 보일 내용. <paramref name="ServerBlockedReason"/> 이 있으면 서버 다시 조회를 고를 수 없다.</summary>
 public sealed record LargeSortRequest(int Ordinal, string ColumnName, bool Descending, long LoadedRows, int Threshold, bool AllLoaded, string? ServerBlockedReason);
+
+/// <summary>자동 필터 값 목록의 한 항목: 화면 표시 값과 가져온 행에서의 개수.</summary>
+public readonly record struct ColumnValueCount(string Text, int Count);
+
+/// <summary>열 자동 필터의 값 목록. <paramref name="Truncated"/> 면 서로 다른 값이 너무 많아 일부만 실렸다.</summary>
+public sealed record ColumnValueList(IReadOnlyList<ColumnValueCount> Values, long NullCount, bool Truncated);

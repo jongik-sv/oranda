@@ -138,6 +138,10 @@ public sealed class SqlResultPaneViewModel : ToolPanelViewModelBase
         return false;
     }
 
+    /// <summary>한 열의 자동 필터를 바꾼다(비우면 그 열 필터를 지운다). 다른 열 필터·빠른 거르기 글은 그대로 두고 AND 로 묶는다.</summary>
+    public Task<bool> SetColumnFilterAsync(int ordinal, ColumnFilter? filter) =>
+        _model is { } m ? m.SetLocalFilterAsync(m.LocalFilter.WithColumn(ordinal, filter)) : Task.FromResult(false);
+
     /// <summary>모든 앱 안 거르기(빠른 거르기 글·열 필터)를 지운다(<c>oranda.grid.clearLocalFilters</c>).</summary>
     public Task ClearLocalFiltersAsync()
     {

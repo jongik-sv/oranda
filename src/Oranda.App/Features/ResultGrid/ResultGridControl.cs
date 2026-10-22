@@ -23,6 +23,12 @@ public sealed class ResultGridControl : Control
     private const double RowPadY = 3;
     private const double ResizeGrip = 4;
 
+    /// <summary>머리글 오른쪽 ▾(자동 필터) 영역 너비. 크기 조절 손잡이 안쪽에 둔다.</summary>
+    private const double FilterButtonWidth = 16;
+
+    /// <summary>▾ 를 둘 수 있는 가장 좁은 열 너비(이보다 좁으면 제목이 가려지므로 두지 않는다).</summary>
+    private const double FilterButtonMinColumn = 56;
+
     private readonly GridTextCache _cells = new();
     private readonly GridTextCache _headers = new();
     private readonly GridTextCache _rowHeads = new();
@@ -40,6 +46,7 @@ public sealed class ResultGridControl : Control
     private bool _dragSelecting;
     private bool _dragRows;
     private int _resizeColumn = -1;
+    private int _hoverHeaderCol = -1;
 
     // 머리글 누르기·끌기(TSK-13-17): 누른 열 위치, 누른 점, 끌기 중인지, 놓일 자리(그 위치 앞). 끌기 없이 놓으면 정렬, 끌고 놓으면 열 순서만 바꾼다.
     private int _headerPressCol = -1;
@@ -55,6 +62,25 @@ public sealed class ResultGridControl : Control
         ClipToBounds = true;
         Focusable = true;
         Cursor = new Cursor(StandardCursorType.Arrow);
+    }
+
+    /// <summary>
+    /// 머리글 ▾ 를 눌렀다(열 자동 필터, TSK-13-26). 팝업을 띄우는 쪽(결과 영역)이 받는다.
+    /// ▾ 를 누르는 일은 정렬도 열 끌기도 시작하지 않는다.
+    /// </summary>
+    public event EventHandler<ColumnFilterRequestedEventArgs>? ColumnFilterRequested;
+
+    /// <summary>보이는 열 위치 <paramref name="visibleCol"/> 의 자동 필터를 열어 달라고 알린다(▾ 누르기와 같다).</summary>
+    public void RequestColumnFilter(int visibleCol)
+    {
+        if (_model is not { HasResult: true, IsTextMode: false } m || visibleCol < 0 || visibleCol >= m.VisibleColumns.Count)
+        {
+            return;
+        }
+
+        var ord = m.VisibleColumns[visibleCol];
+        var x = RowHeaderWidth + ColumnLeft(visibleCol) - (visibleCol < m.FrozenCount ? 0 : _offsetX);
+        ColumnFilterRequested?.Invoke(this, new ColumnFilterRequestedEventArgs(ord, new Rect(x, 0, m.GetColumnWidth(ord), HeaderHeight)));
     }
 
     /// <summary>스크롤 위치·범위가 바뀌었다(스크롤바 갱신용).</summary>
@@ -802,7 +828,11 @@ public sealed class ResultGridControl : Control
         var m = _model!;
         var clipLeft = isFrozen ? x : Math.Max(x, ScrollLeft());
         var label = m.Columns[ord].Name + (m.SortColumn == ord ? (m.SortDescending ? " ▼" : " ▲") : string.Empty);
-        using (ctx.PushClip(new Rect(clipLeft, 0, Math.Max(0, x + w - clipLeft - 1), hh)))
+        var filtered = m.LocalFilter.Columns.TryGetValue(ord, out var colFilter) && !colFilter.IsEmpty;
+        var hovered = _hoverHeaderCol >= 0 && _hoverHeaderCol < m.VisibleColumns.Count && m.VisibleColumns[_hoverHeaderCol] == ord;
+        var showFilter = !m.IsTextMode && w >= FilterButtonMinColumn && (filtered || hovered);
+        var textRight = x + w - 1 - (showFilter ? FilterButtonWidth + ResizeGrip : 0);
+        using (ctx.PushClip(new Rect(clipLeft, 0, Math.Max(0, textRight - clipLeft), hh)))
         {
             if (isFrozen)
             {
@@ -813,9 +843,49 @@ public sealed class ResultGridControl : Control
             t.Draw(ctx, new Point(x + CellPadX, (hh - t.Height) / 2));
         }
 
+        if (showFilter)
+        {
+            var cx = x + w - ResizeGrip - FilterButtonWidth / 2;
+            using (ctx.PushClip(new Rect(Math.Max(x, clipLeft), 0, Math.Max(0, x + w - Math.Max(x, clipLeft) - 1), hh)))
+            {
+                ctx.DrawGeometry(filtered ? pal.ActiveBorder.Brush : pal.NullText, null, FilterGlyph(filtered, cx, hh / 2));
+            }
+        }
+
         var lx = Snap(x + w, scale);
         ctx.DrawLine(pal.Line, new Point(lx, 0), new Point(lx, hh));
     }
+
+    /// <summary>머리글 오른쪽의 필터 표시: 걸려 있지 않으면 ▾, 걸려 있으면 깔때기.</summary>
+    private static StreamGeometry FilterGlyph(bool funnel, double cx, double cy)
+    {
+        var g = new StreamGeometry();
+        using var c = g.Open();
+        if (funnel)
+        {
+            c.BeginFigure(new Point(cx - 5, cy - 4), true);
+            c.LineTo(new Point(cx + 5, cy - 4));
+            c.LineTo(new Point(cx + 1, cy + 0.5));
+            c.LineTo(new Point(cx + 1, cy + 4.5));
+            c.LineTo(new Point(cx - 1, cy + 3.5));
+            c.LineTo(new Point(cx - 1, cy + 0.5));
+        }
+        else
+        {
+            c.BeginFigure(new Point(cx - 4, cy - 2), true);
+            c.LineTo(new Point(cx + 4, cy - 2));
+            c.LineTo(new Point(cx, cy + 3));
+        }
+
+        c.EndFigure(true);
+        return g;
+    }
+
+    /// <summary>머리글의 ▾ 영역을 맞혔는지: 열 오른쪽 경계까지의 거리가 크기 조절 손잡이 안쪽 <see cref="FilterButtonWidth"/> 안이고 열이 충분히 넓다.</summary>
+    private bool IsOnFilterButton(int visibleCol, double rightEdgeDistance) =>
+        _model is { IsTextMode: false } m && visibleCol >= 0 && visibleCol < m.VisibleColumns.Count
+        && m.GetColumnWidth(m.VisibleColumns[visibleCol]) >= FilterButtonMinColumn
+        && rightEdgeDistance > ResizeGrip && rightEdgeDistance <= ResizeGrip + FilterButtonWidth;
 
     private static double Snap(double v, double scale) => (Math.Floor(v * scale) + 0.5) / scale;
 
@@ -872,6 +942,14 @@ public sealed class ResultGridControl : Control
             }
 
             var ord = _model.VisibleColumns[col];
+            if (props.IsLeftButtonPressed && IsOnFilterButton(col, edge))
+            {
+                // ▾: 자동 필터 팝업을 연다. 누른 열·끌기 상태를 기록하지 않으므로 놓아도 정렬하지 않고 끌어도 열이 옮겨지지 않는다.
+                RequestColumnFilter(col);
+                e.Handled = true;
+                return;
+            }
+
             if (edge <= ResizeGrip && props.IsLeftButtonPressed)
             {
                 _resizeColumn = ord;
@@ -1007,9 +1085,28 @@ public sealed class ResultGridControl : Control
             return;
         }
 
-        Cursor = p.Y < HeaderHeight && !_model.IsTextMode && HitColumn(p.X).RightEdgeDistance <= ResizeGrip
+        var overHeader = p.Y < HeaderHeight && !_model.IsTextMode && p.X >= RowHeaderWidth;
+        var (hitCol, hitEdge) = overHeader ? HitColumn(p.X) : (-1, double.MaxValue);
+        SetHoverHeader(hitCol);
+        Cursor = overHeader && hitEdge <= ResizeGrip
             ? new Cursor(StandardCursorType.SizeWestEast)
             : new Cursor(StandardCursorType.Arrow);
+    }
+
+    protected override void OnPointerExited(PointerEventArgs e)
+    {
+        base.OnPointerExited(e);
+        SetHoverHeader(-1);
+    }
+
+    /// <summary>마우스가 올라간 머리글 열을 바꾸고, 바뀌었으면 ▾ 를 보이거나 감추려고 다시 그린다.</summary>
+    private void SetHoverHeader(int visibleCol)
+    {
+        if (_hoverHeaderCol != visibleCol)
+        {
+            _hoverHeaderCol = visibleCol;
+            InvalidateVisual();
+        }
     }
 
     protected override void OnPointerReleased(PointerReleasedEventArgs e)
@@ -1248,4 +1345,12 @@ public sealed class ResultGridControl : Control
             };
         }
     }
+}
+
+/// <summary>머리글 ▾ 를 눌렀다는 알림. <paramref name="Ordinal"/> = 열 ordinal, <paramref name="HeaderBounds"/> = 그 열 머리글 칸(그리드 컨트롤 좌표).</summary>
+public sealed class ColumnFilterRequestedEventArgs(int ordinal, Rect headerBounds) : EventArgs
+{
+    public int Ordinal { get; } = ordinal;
+
+    public Rect HeaderBounds { get; } = headerBounds;
 }

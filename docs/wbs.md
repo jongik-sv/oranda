@@ -3991,7 +3991,7 @@ dotnet, testhost, Oranda.App
 - category: feat
 - domain: frontend
 - model: sonnet
-- status: [ ]
+- status: [xx]
 - priority: high
 - assignee: -
 - schedule: 2026-10-22 ~ 2026-10-24

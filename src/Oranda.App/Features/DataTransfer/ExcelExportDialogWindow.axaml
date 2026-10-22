@@ -14,6 +14,8 @@
       <RadioButton GroupName="Scope" Content="전체 행(서버에서 다시 실행)" IsChecked="{Binding IsAllRows}" IsEnabled="{Binding CanAllRows}"
                    AutomationProperties.Name="전체 행" />
       <RadioButton GroupName="Scope" Content="{Binding LoadedLabel}" IsChecked="{Binding IsLoadedRows}" AutomationProperties.Name="그리드에 불러온 행" />
+      <RadioButton GroupName="Scope" Content="{Binding FetchedLabel}" IsChecked="{Binding IsFetchedAll}" IsVisible="{Binding HasFetchedAll}"
+                   AutomationProperties.Name="가져온 전체" />
       <RadioButton GroupName="Scope" Content="{Binding SelectionLabel}" IsChecked="{Binding IsSelection}" IsEnabled="{Binding CanSelection}"
                    AutomationProperties.Name="선택한 셀" />
     </StackPanel>
