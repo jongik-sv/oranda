@@ -44,6 +44,10 @@ public sealed class SqlResultPaneViewModel : ToolPanelViewModelBase
     private bool _isOpeningRelated;
     private string? _relatedMessage;
     private string? _gridNotice;
+    private bool _isQuickFilterVisible;
+    private string _quickFilterText = string.Empty;
+    private QuickFilterColumn? _quickFilterColumn;
+    private CancellationTokenSource? _quickCts;
 
     public string StatusText
     {
@@ -67,6 +71,147 @@ public sealed class SqlResultPaneViewModel : ToolPanelViewModelBase
     {
         get => _findMessage;
         private set => SetProperty(ref _findMessage, value);
+    }
+
+    /// <summary>빠른 거르기 입력이 멈춘 뒤 거르기를 시작할 때까지 기다리는 시간(TSK-13-26).</summary>
+    public TimeSpan QuickFilterDebounce { get; set; } = TimeSpan.FromMilliseconds(150);
+
+    /// <summary>「결과 안에서 거르기」 칸을 보인다(<c>oranda.grid.toggleQuickFilter</c>). 숨겨도 걸어 둔 거르기는 그대로다.</summary>
+    public bool IsQuickFilterVisible
+    {
+        get => _isQuickFilterVisible;
+        set => SetProperty(ref _isQuickFilterVisible, value);
+    }
+
+    /// <summary>빠른 거르기 글. 바꾸면 디바운스 뒤 가져온 행만 거른다(서버에 다시 조회하지 않는다).</summary>
+    public string QuickFilterText
+    {
+        get => _quickFilterText;
+        set
+        {
+            value ??= string.Empty;
+            if (SetProperty(ref _quickFilterText, value))
+            {
+                ScheduleQuickFilter(QuickFilterDebounce);
+            }
+        }
+    }
+
+    /// <summary>빠른 거르기가 볼 열 목록(맨 앞은 「모든 열」). 결과가 바뀌면 다시 채운다.</summary>
+    public ObservableCollection<QuickFilterColumn> QuickFilterColumns { get; } = [];
+
+    /// <summary>빠른 거르기가 보는 열. 「모든 열」이면 그때 보이는 모든 열.</summary>
+    public QuickFilterColumn? SelectedQuickFilterColumn
+    {
+        get => _quickFilterColumn;
+        set
+        {
+            if (SetProperty(ref _quickFilterColumn, value))
+            {
+                ScheduleQuickFilter(TimeSpan.Zero);
+            }
+        }
+    }
+
+    /// <summary>빠른 거르기 칸에 포커스를 옮겨 달라는 요청(칸을 막 열었을 때).</summary>
+    public event EventHandler? QuickFilterFocusRequested;
+
+    /// <summary>앱 안 거르기가 걸려 있다(빠른 거르기 글·열 필터).</summary>
+    public bool HasLocalFilter => _model is { IsLocalFiltered: true } or { IsFilterRunning: true };
+
+    /// <summary>거르고 남은 행이 가져온 일부뿐일 때 「모두 가져오기」 단추를 보인다.</summary>
+    public bool CanFetchAllForFilter => _model is { IsLocalFiltered: true, HasMoreRows: true };
+
+    /// <summary>
+    /// 빠른 거르기 칸의 Esc: 글이 있으면 글을 지우고(true), 이미 비어 있으면 칸을 닫는다(false). 다 안 닫은 거르기는 칸을 닫아도 남는다.
+    /// </summary>
+    public bool ClearOrCloseQuickFilter()
+    {
+        if (_quickFilterText.Length > 0)
+        {
+            QuickFilterText = string.Empty;
+            ScheduleQuickFilter(TimeSpan.Zero);
+            return true;
+        }
+
+        IsQuickFilterVisible = false;
+        return false;
+    }
+
+    /// <summary>모든 앱 안 거르기(빠른 거르기 글·열 필터)를 지운다(<c>oranda.grid.clearLocalFilters</c>).</summary>
+    public Task ClearLocalFiltersAsync()
+    {
+        _quickCts?.Cancel();
+        SetQuickTextSilently(string.Empty);
+        return _model is { } m ? m.ClearLocalFilterAsync() : Task.CompletedTask;
+    }
+
+    private void SetQuickTextSilently(string text)
+    {
+        if (_quickFilterText != text)
+        {
+            _quickFilterText = text;
+            OnPropertyChanged(nameof(QuickFilterText));
+        }
+    }
+
+    private void ScheduleQuickFilter(TimeSpan delay)
+    {
+        _quickCts?.Cancel();
+        var cts = new CancellationTokenSource();
+        _quickCts = cts;
+        _ = ApplyQuickFilterAsync(delay, cts);
+    }
+
+    private async Task ApplyQuickFilterAsync(TimeSpan delay, CancellationTokenSource cts)
+    {
+        var ct = cts.Token;
+        try
+        {
+            if (delay > TimeSpan.Zero)
+            {
+                await Task.Delay(delay, ct).ConfigureAwait(true);
+            }
+
+            if (_model is not { } m)
+            {
+                return;
+            }
+
+            var columns = _quickFilterColumn is { Ordinal: >= 0 } c ? new[] { c.Ordinal } : null;
+            var spec = m.LocalFilter with { QuickText = _quickFilterText, QuickColumns = columns };
+            if (!await m.SetLocalFilterAsync(spec, ct).ConfigureAwait(true) && !ct.IsCancellationRequested)
+            {
+                SetQuickTextSilently(m.LocalFilter.QuickText); // 반영하지 않은 편집이 있어 거부했다: 칸을 실제 거르기에 맞춘다
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            // 새 입력이 와서 이 거르기는 버린다.
+        }
+        finally
+        {
+            if (ReferenceEquals(_quickCts, cts))
+            {
+                _quickCts = null;
+            }
+
+            cts.Dispose();
+        }
+    }
+
+    private void FillQuickFilterColumns(ResultGridModel m)
+    {
+        QuickFilterColumns.Clear();
+        QuickFilterColumns.Add(new QuickFilterColumn(-1, "모든 열"));
+        foreach (var col in m.Columns)
+        {
+            QuickFilterColumns.Add(new QuickFilterColumn(col.Ordinal, col.Name));
+        }
+
+        var keep = m.LocalFilter.QuickColumns is { Count: 1 } one ? QuickFilterColumns.FirstOrDefault(q => q.Ordinal == one[0]) : null;
+        _quickFilterColumn = keep ?? QuickFilterColumns[0];
+        OnPropertyChanged(nameof(SelectedQuickFilterColumn));
     }
 
     public ResultGridModel? Model
@@ -277,9 +422,24 @@ public sealed class SqlResultPaneViewModel : ToolPanelViewModelBase
     public event EventHandler<RelatedRowsResult>? RelatedRowsOpened;
 
     /// <summary>새 결과를 보인다. 호출한 쪽은 <paramref name="result"/> 의 수명을 이 영역에 넘긴다.</summary>
-    public void SetResult(IResultSet result, GridDisplayOptions? display = null)
+    public void SetResult(IResultSet result, GridDisplayOptions? display = null) => SetResultCore(result, display, keepLocalFilter: false);
+
+    /// <summary>
+    /// 결과를 바꾼다. <paramref name="keepLocalFilter"/> 이면 서버 거르기 줄·서버 정렬로 같은 질의를 다시 조회한 경우라 앱 안 거르기(빠른 거르기 글·열 필터)를 새 결과에 다시 적용한다.
+    /// 새 문장의 결과면 앱 안 거르기를 비운다.
+    /// </summary>
+    private void SetResultCore(IResultSet result, GridDisplayOptions? display, bool keepLocalFilter)
     {
         ArgumentNullException.ThrowIfNull(result);
+        LocalFilterSpec? carried = null;
+        IReadOnlyList<ResultColumn>? oldColumns = null;
+        if (keepLocalFilter && _model is { } old && !old.LocalFilter.IsEmpty)
+        {
+            carried = old.LocalFilter;
+            oldColumns = old.Columns;
+        }
+
+        _quickCts?.Cancel();
         Detach();
         var m = new ResultGridModel(result);
         if (display is not null)
@@ -292,6 +452,8 @@ public sealed class SqlResultPaneViewModel : ToolPanelViewModelBase
         m.CloseRequested += OnCloseRequested;
         m.CountRowsRequested += OnCountRowsRequested;
         m.FilterBarRequested += OnFilterBarRequested;
+        m.QuickFilterRequested += OnQuickFilterRequested;
+        m.ClearLocalFiltersRequested += OnClearLocalFiltersRequested;
         m.CellFilterRequested += OnCellFilterRequested;
         m.PinRequested += OnPinRequested;
         m.RelatedRowsRequested += OnRelatedRowsRequested;
@@ -300,7 +462,46 @@ public sealed class SqlResultPaneViewModel : ToolPanelViewModelBase
         m.ServerSort = ServerSortAsync;
         m.ServerSortBlockedReason = ServerSortBlockedReason;
         Model = m;
+        SetQuickTextSilently(string.Empty);
+        FillQuickFilterColumns(m);
+        if (carried is not null && oldColumns is not null)
+        {
+            var remapped = RemapFilter(carried, oldColumns, m.Columns);
+            SetQuickTextSilently(remapped.QuickText);
+            FillQuickFilterColumns(m);
+            _ = m.SetLocalFilterAsync(remapped);
+        }
+
         UpdateStatus();
+    }
+
+    /// <summary>다시 조회한 결과의 열에 거르기를 다시 맞춘다(열 이름으로 찾는다). 없어진 열의 조건은 버린다.</summary>
+    internal static LocalFilterSpec RemapFilter(LocalFilterSpec spec, IReadOnlyList<ResultColumn> from, IReadOnlyList<ResultColumn> to)
+    {
+        int Map(int ordinal) => ordinal >= 0 && ordinal < from.Count
+            ? to.ToList().FindIndex(c => string.Equals(c.Name, from[ordinal].Name, StringComparison.OrdinalIgnoreCase))
+            : -1;
+
+        var map = new Dictionary<int, ColumnFilter>();
+        foreach (var (ordinal, filter) in spec.Columns)
+        {
+            if (Map(ordinal) is >= 0 and var mapped)
+            {
+                map[mapped] = filter;
+            }
+        }
+
+        IReadOnlyList<int>? quick = null;
+        if (spec.QuickColumns is { } qc)
+        {
+            quick = [.. qc.Select(Map).Where(o => o >= 0)];
+            if (quick.Count == 0)
+            {
+                quick = null;
+            }
+        }
+
+        return spec with { Columns = map, QuickColumns = quick };
     }
 
     /// <summary>편집 모드(F9)로 다시 연 결과의 편집 상태를 붙인다. 고칠 수 없는 결과면 이유를 안내 막대에 보인다.</summary>
@@ -635,7 +836,7 @@ public sealed class SqlResultPaneViewModel : ToolPanelViewModelBase
             GridEditCommands.Active = null; // 편집 명령이 버린 편집 상태를 가리키지 않게
         }
 
-        SetResult(result, _model?.Display);
+        SetResultCore(result, _model?.Display, keepLocalFilter: true);
         _activeFilter = request.IsEmpty ? null : request;
         _filterMessage = null;
         Remember(request.Where);
@@ -750,7 +951,7 @@ public sealed class SqlResultPaneViewModel : ToolPanelViewModelBase
 
         var editing = _editSession;
         var filter = _activeFilter;
-        SetResult(result, _model.Display); // 편집 상태·거른 표시를 풀고 새 모델을 만든다. 아래에서 되살린다
+        SetResultCore(result, _model.Display, keepLocalFilter: true); // 편집 상태·거른 표시를 풀고 새 모델을 만든다. 아래에서 되살린다
         _activeFilter = filter is null ? null : filter with { OrderBy = request.OrderBy };
         OnPropertyChanged(nameof(IsFiltered));
         if (_model is { } sorted)
@@ -910,6 +1111,8 @@ public sealed class SqlResultPaneViewModel : ToolPanelViewModelBase
         _model.CloseRequested -= OnCloseRequested;
         _model.CountRowsRequested -= OnCountRowsRequested;
         _model.FilterBarRequested -= OnFilterBarRequested;
+        _model.QuickFilterRequested -= OnQuickFilterRequested;
+        _model.ClearLocalFiltersRequested -= OnClearLocalFiltersRequested;
         _model.CellFilterRequested -= OnCellFilterRequested;
         _model.PinRequested -= OnPinRequested;
         _model.RelatedRowsRequested -= OnRelatedRowsRequested;
@@ -933,6 +1136,17 @@ public sealed class SqlResultPaneViewModel : ToolPanelViewModelBase
     private void OnCountRowsRequested(object? sender, EventArgs e) => _ = CountAllRowsAsync();
 
     private void OnFilterBarRequested(object? sender, EventArgs e) => ToggleFilterBar();
+
+    private void OnQuickFilterRequested(object? sender, EventArgs e)
+    {
+        IsQuickFilterVisible = !IsQuickFilterVisible;
+        if (IsQuickFilterVisible)
+        {
+            QuickFilterFocusRequested?.Invoke(this, EventArgs.Empty);
+        }
+    }
+
+    private void OnClearLocalFiltersRequested(object? sender, EventArgs e) => _ = ClearLocalFiltersAsync();
 
     private void OnCellFilterRequested(object? sender, CellFilterKind kind) => _ = FilterByCellAsync(kind);
 
@@ -971,6 +1185,8 @@ public sealed class SqlResultPaneViewModel : ToolPanelViewModelBase
     {
         OnPropertyChanged(nameof(IsSorting));
         OnPropertyChanged(nameof(SortStatusText));
+        OnPropertyChanged(nameof(HasLocalFilter));
+        OnPropertyChanged(nameof(CanFetchAllForFilter));
         if (_model is null)
         {
             StatusText = string.Empty;
@@ -992,6 +1208,15 @@ public sealed class SqlResultPaneViewModel : ToolPanelViewModelBase
         var text = _totalRows is { } total
             ? $"가져온 {loaded}행 / 전체 {total.ToString("N0", culture)}행"
             : _model.HasMoreRows ? $"{loaded} 행 (더 있음)" : $"{loaded} 행";
+        if (_model.IsLocalFiltered)
+        {
+            var visible = _model.LocalFilterVisibleRows.ToString("N0", culture);
+            text = $"거름: 보이는 {visible} / 가져온 {loaded}행" + (_model.HasMoreRows ? " (전체 아님)" : string.Empty);
+        }
+        else if (_model.IsFilterRunning)
+        {
+            text += " · 거르는 중…";
+        }
         if (_model.EditOverlay?.ExtraRows is > 0 and var added)
         {
             text += $" · 새 행 {added}"; // 편집 모드에서 아직 반영하지 않은 새 행
@@ -1047,4 +1272,10 @@ public sealed class SqlResultPaneViewModel : ToolPanelViewModelBase
         _summaryScope = scope;
         SelectionSummary = SelectionAggregate.Compute(m)?.ToText(CultureInfo.CurrentCulture);
     }
+}
+
+/// <summary>빠른 거르기 칸 옆 열 고르기의 항목. <paramref name="Ordinal"/> 이 -1 이면 「모든 열」.</summary>
+public sealed record QuickFilterColumn(int Ordinal, string Name)
+{
+    public override string ToString() => Name;
 }

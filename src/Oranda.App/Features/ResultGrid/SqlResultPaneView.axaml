@@ -5,13 +5,29 @@
              x:Class="Oranda.App.Features.ResultGrid.SqlResultPaneView"
              x:DataType="vm:SqlResultPaneViewModel">
   <Grid RowDefinitions="Auto,Auto,Auto,Auto,*,Auto">
+    <StackPanel Grid.Row="0">
+    <!-- 결과 안에서 거르기 칸(oranda.grid.toggleQuickFilter, TSK-13-26): 서버에 다시 조회하지 않고 가져온 행만 바로 거른다.
+         Esc 는 글을 지우고, 빈 칸이면 칸을 닫는다(걸어 둔 열 필터는 그대로). -->
+    <Border Classes="panel-toolbar" IsVisible="{Binding IsQuickFilterVisible}">
+      <StackPanel Orientation="Horizontal" Spacing="6">
+        <TextBox x:Name="QuickFilterBox" Classes="compact" Width="240" Text="{Binding QuickFilterText}"
+                 PlaceholderText="결과 안에서 거르기" AutomationProperties.Name="결과 안에서 거르기" />
+        <ComboBox x:Name="QuickFilterColumnBox" Classes="compact" MinWidth="130" ItemsSource="{Binding QuickFilterColumns}"
+                  SelectedItem="{Binding SelectedQuickFilterColumn}" AutomationProperties.Name="거를 열" />
+        <Button x:Name="QuickFilterClearButton" Classes="toolbar" Focusable="False" Content="결과 안 거르기 모두 지우기"
+                IsEnabled="{Binding HasLocalFilter}" icons:ButtonIcon.Key="filterClear" icons:ButtonIcon.IconOnly="True" />
+        <Button x:Name="QuickFilterCloseButton" Classes="toolbar" Focusable="False" Content="닫기"
+                icons:ButtonIcon.Key="clear" icons:ButtonIcon.IconOnly="True" />
+      </StackPanel>
+    </Border>
     <!-- 찾기 줄(oranda.grid.find) -->
-    <StackPanel Grid.Row="0" Orientation="Horizontal" Spacing="6" Margin="4"
+    <StackPanel Orientation="Horizontal" Spacing="6" Margin="4"
                 IsVisible="{Binding IsFindVisible}">
       <TextBox x:Name="FindBox" Classes="compact" Width="220" Text="{Binding FindText}" PlaceholderText="결과에서 찾기" />
       <Button x:Name="FindNextButton" Classes="tool" Content="다음" icons:ButtonIcon.Key="down" />
       <Button x:Name="FindCloseButton" Classes="toolbar" Content="닫기" icons:ButtonIcon.Key="clear" icons:ButtonIcon.IconOnly="True" />
       <TextBlock Text="{Binding FindMessage}" VerticalAlignment="Center" />
+    </StackPanel>
     </StackPanel>
     <!-- 결과 거르기 줄(oranda.grid.toggleFilterBar, GRID-10): 결과를 만든 질의를 WHERE·ORDER BY 로 감싸 같은 바인드로 다시 실행한다.
          Enter 적용, Esc 는 칸을 비우고 빈 칸이면 줄을 닫는다. 실패·취소는 아래 상태 줄에 보인다. -->
@@ -98,6 +114,9 @@
         <!-- 전체 행 수를 세는 동안(oranda.grid.countRows)만 보이는 취소 단추. -->
         <Button x:Name="CountCancelButton" DockPanel.Dock="Left" Classes="tool" Padding="4,0" Margin="6,0,0,0" Focusable="False"
                 Content="행 수 세기 취소" IsVisible="{Binding IsCountingRows}" icons:ButtonIcon.Key="cancel" />
+        <!-- 거르고 남은 행이 가져온 일부뿐일 때(TSK-13-26): 상태 줄의 「거름: 보이는 N / 가져온 M행 (전체 아님)」 옆에 보인다. -->
+        <Button x:Name="FilterFetchAllButton" DockPanel.Dock="Left" Classes="tool" Padding="4,0" Margin="6,0,0,0" Focusable="False"
+                Content="모두 가져오기" IsVisible="{Binding CanFetchAllForFilter}" icons:ButtonIcon.Key="down" />
         <!-- 머리글 정렬하는 동안(TSK-13-17)만 보이는 진행 글과 취소 단추(Esc 도 같다). -->
         <TextBlock DockPanel.Dock="Left" Margin="12,0,0,0" VerticalAlignment="Center" Text="{Binding SortStatusText}"
                    IsVisible="{Binding IsSorting}" />

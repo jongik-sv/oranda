@@ -49,6 +49,7 @@ public partial class SqlResultPaneView : UserControl
         };
         DataContextChanged += (_, _) => Bind();
         WireFilterBar();
+        WireQuickFilter();
 
         GridControl.EditRequested += (_, cell) => BeginEdit(cell);
         EditHintClose.Click += (_, _) => Vm?.HideEditHint();
@@ -220,6 +221,7 @@ public partial class SqlResultPaneView : UserControl
         {
             _bound.PropertyChanged -= OnVmPropertyChanged;
             _bound.FilterFocusRequested -= OnFilterFocusRequested;
+            _bound.QuickFilterFocusRequested -= OnQuickFilterFocusRequested;
             _bound = null;
         }
 
@@ -232,6 +234,7 @@ public partial class SqlResultPaneView : UserControl
         _bound = vm;
         vm.PropertyChanged += OnVmPropertyChanged;
         vm.FilterFocusRequested += OnFilterFocusRequested;
+        vm.QuickFilterFocusRequested += OnQuickFilterFocusRequested;
         AttachModel(vm);
     }
 
@@ -251,6 +254,48 @@ public partial class SqlResultPaneView : UserControl
             FindBox.Focus();
         }
     }
+
+    /// <summary>
+    /// 「결과 안에서 거르기」 칸(TSK-13-26): Esc 는 글을 지우고 빈 칸이면 칸을 닫는다. 지우기 단추는 열 필터까지 모두 지운다.
+    /// 「모두 가져오기」는 가져온 행만 거르는 중일 때 나머지 행을 가져와 거르기에 넣는다.
+    /// </summary>
+    private void WireQuickFilter()
+    {
+        QuickFilterBox.KeyDown += (_, e) =>
+        {
+            if (e.Key == Key.Escape && Vm is { } vm)
+            {
+                e.Handled = true;
+                if (!vm.ClearOrCloseQuickFilter())
+                {
+                    GridControl.Focus();
+                }
+            }
+        };
+        QuickFilterClearButton.Click += async (_, _) =>
+        {
+            if (Vm is { } vm)
+            {
+                await vm.ClearLocalFiltersAsync();
+            }
+        };
+        QuickFilterCloseButton.Click += (_, _) =>
+        {
+            if (Vm is { } vm)
+            {
+                vm.IsQuickFilterVisible = false;
+                GridControl.Focus();
+            }
+        };
+        FilterFetchAllButton.Click += async (_, _) =>
+        {
+            ResultGridCommands.Active = GridControl.Model ?? ResultGridCommands.Active;
+            await ShellCommandRunner.RunAsync("oranda.grid.fetchAll");
+        };
+    }
+
+    private void OnQuickFilterFocusRequested(object? sender, EventArgs e) =>
+        Avalonia.Threading.Dispatcher.UIThread.Post(() => QuickFilterBox.Focus());
 
     private void OnFilterFocusRequested(object? sender, EventArgs e) =>
         Avalonia.Threading.Dispatcher.UIThread.Post(() => WhereBox.Focus()); // 줄이 보인 뒤에 포커스를 옮긴다

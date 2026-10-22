@@ -432,6 +432,8 @@
 | `oranda.grid.closeResultTab` | 결과 탭 닫기 | - | `gridFocus` | `gridHasResult` | TSK-06-03 |
 | `oranda.grid.countRows` | 전체 행 수 세기 | - | `gridFocus` | `gridQueryResult && hasSession && !sessionBusy` | TSK-06-03 |
 | `oranda.grid.toggleFilterBar` | 결과 거르기 줄 | - | `gridFocus` | `gridQueryResult` | TSK-06-03 |
+| `oranda.grid.toggleQuickFilter` | 결과 안에서 거르기 | - | `gridFocus` | `gridHasResult` | TSK-13-26 |
+| `oranda.grid.clearLocalFilters` | 결과 안 거르기 모두 지우기 | - | `gridFocus` | `gridHasResult` | TSK-13-26 |
 | `oranda.grid.filterByValue` | 이 값으로 거르기 | - | `gridFocus` | `gridQueryResult && gridHasSelection && hasSession && !sessionBusy` | TSK-06-03 |
 | `oranda.grid.filterExcludeValue` | 이 값 빼고 거르기 | - | `gridFocus` | `gridQueryResult && gridHasSelection && hasSession && !sessionBusy` | TSK-06-03 |
 | `oranda.grid.filterNullRows` | NULL 인 행만 | - | `gridFocus` | `gridQueryResult && gridHasSelection && hasSession && !sessionBusy` | TSK-06-03 |

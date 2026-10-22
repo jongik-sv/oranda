@@ -128,6 +128,8 @@
   "Cmd.oranda.grid.showAllColumns": "Show All Hidden Columns",
   "Cmd.oranda.grid.showReferencingRows": "Open Referencing Rows (Children)",
   "Cmd.oranda.grid.toggleFilterBar": "Result Filter Bar",
+  "Cmd.oranda.grid.toggleQuickFilter": "Filter Within Results",
+  "Cmd.oranda.grid.clearLocalFilters": "Clear Filters Within Results",
   "Cmd.oranda.grid.toggleRepeatHide": "Hide Repeated Values",
   "Cmd.oranda.grid.toggleTextMode": "Text Result Mode",
   "Cmd.oranda.grid.viewValue": "View Value (LOB Editor)",

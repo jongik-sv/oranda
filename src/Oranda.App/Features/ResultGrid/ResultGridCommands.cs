@@ -69,6 +69,10 @@ public static class ResultGridCommands
     Placements = ["context:grid/rows@10"])]
 [OrandaCommand("oranda.grid.toggleFilterBar", CommandCategory.Result, When = "gridFocus", Enablement = "gridQueryResult",
     Icon = "filter", Placements = ["context:grid/filter@10"])]
+[OrandaCommand("oranda.grid.toggleQuickFilter", CommandCategory.Result, When = "gridFocus", Enablement = "gridHasResult",
+    Icon = "filter", Placements = ["context:grid/filter@5"])]
+[OrandaCommand("oranda.grid.clearLocalFilters", CommandCategory.Result, When = "gridFocus", Enablement = "gridHasResult",
+    Icon = "filterClear", Placements = ["context:grid/filter@6"])]
 [OrandaCommand("oranda.grid.filterByValue", CommandCategory.Result, When = "gridFocus",
     Enablement = "gridQueryResult && gridHasSelection && hasSession && !sessionBusy", Placements = ["context:grid/filter@20"])]
 [OrandaCommand("oranda.grid.filterExcludeValue", CommandCategory.Result, When = "gridFocus",
@@ -152,6 +156,12 @@ public sealed class ResultGridCommandHandler : ICommandHandler
                 break;
             case "oranda.grid.toggleFilterBar":
                 g.RequestFilterBar();
+                break;
+            case "oranda.grid.toggleQuickFilter":
+                g.RequestQuickFilter(); // 결과 영역이 「결과 안에서 거르기」 칸을 열거나 닫는다
+                break;
+            case "oranda.grid.clearLocalFilters":
+                g.RequestClearLocalFilters(); // 결과 영역이 칸의 글과 모델의 거르기를 함께 지운다
                 break;
             case "oranda.grid.filterByValue":
                 g.RequestCellFilter(CellFilterKind.Equal); // 결과 영역이 활성 칸 값을 바인드로 묶어 다시 실행한다(실패는 상태 줄에)

@@ -121,6 +121,8 @@
   "Cmd.oranda.grid.closeResultTab": "결과 탭 닫기",
   "Cmd.oranda.grid.countRows": "전체 행 수 세기",
   "Cmd.oranda.grid.toggleFilterBar": "결과 거르기 줄",
+  "Cmd.oranda.grid.toggleQuickFilter": "결과 안에서 거르기",
+  "Cmd.oranda.grid.clearLocalFilters": "결과 안 거르기 모두 지우기",
   "Cmd.oranda.grid.filterByValue": "이 값으로 거르기",
   "Cmd.oranda.grid.filterExcludeValue": "이 값 빼고 거르기",
   "Cmd.oranda.grid.filterNullRows": "NULL 인 행만",
