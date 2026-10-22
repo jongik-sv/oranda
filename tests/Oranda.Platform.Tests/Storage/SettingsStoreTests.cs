@@ -250,6 +250,31 @@ public sealed partial class SettingsStoreTests : IDisposable
     }
 
     [Fact]
+    public async Task Saved_schema_filters_round_trip_and_same_content_publishes_nothing()
+    {
+        var store = NewStore();
+        await store.LoadAsync(default);
+        var filter = new SchemaBrowserFilter
+        {
+            Name = "APUser",
+            Scope = SchemaFilterScope.Selected,
+            Schemas = ["EAIAPUSER", "MESAPUSER"],
+            NamePatterns = new Dictionary<string, string> { ["TABLE"] = "TB_M30*" },
+        };
+        var settings = new AppSettings
+        {
+            SchemaBrowser = new SchemaBrowserSettings { Filters = [filter], ActiveFilters = new Dictionary<string, string> { ["p"] = filter.Id } },
+        };
+
+        await store.SaveAsync(settings, default);
+        var reloaded = (await NewStore().LoadAsync(default)).Value;
+        await store.SaveAsync(reloaded, default);
+
+        Assert.Equal(settings.SchemaBrowser, reloaded.SchemaBrowser);
+        Assert.Equal(["schemaBrowser"], _bus.PublishedOf<SettingsChanged>().Select(e => e.Section));
+    }
+
+    [Fact]
     public async Task Values_are_clamped_to_documented_ranges()
     {
         var store = NewStore();

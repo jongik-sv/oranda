@@ -142,6 +142,92 @@ public sealed record SchemaBrowserSettings
 {
     /// <summary>객체를 한 번 누르면(방향키로 고르고 잠깐 멈추면) 미리보기 문서로 연다. 끄면 두 번 누르기·Enter 로만 연다.</summary>
     public bool SingleClickPreview { get; init; } = true;
+
+    /// <summary>이름 붙여 저장한 트리 필터(오렌지 Schema Browser Filter, TSK-13-10). 모든 접속이 같이 쓴다.</summary>
+    public IReadOnlyList<SchemaBrowserFilter> Filters { get => _filters; init => _filters = value ?? []; }
+
+    /// <summary>접속 프로필 id → 그 접속에서 마지막으로 고른 필터 id. 없으면 필터 없음.</summary>
+    public IReadOnlyDictionary<string, string> ActiveFilters { get => _activeFilters; init => _activeFilters = value ?? EmptyMap; }
+
+    // 이 키가 생기기 전의 settings.json(구역은 있고 키는 없음)은 소스 생성 직렬화기가 null 을 넣으므로 빈 값으로 받는다.
+    private static readonly IReadOnlyDictionary<string, string> EmptyMap = new Dictionary<string, string>();
+    private readonly IReadOnlyList<SchemaBrowserFilter> _filters = [];
+    private readonly IReadOnlyDictionary<string, string> _activeFilters = EmptyMap;
+
+    // 목록·사전은 참조가 아니라 내용으로 비교한다(설정 구역별 변경 알림이 같은 값을 「바뀜」으로 보지 않게).
+    public bool Equals(SchemaBrowserSettings? other) =>
+        other is not null
+        && SingleClickPreview == other.SingleClickPreview
+        && Filters.SequenceEqual(other.Filters)
+        && ContentEquality.SameEntries(ActiveFilters, other.ActiveFilters);
+
+    public override int GetHashCode() => HashCode.Combine(SingleClickPreview, Filters.Count, ActiveFilters.Count);
+}
+
+/// <summary>저장 필터의 스키마 범위(오렌지 필터 Schema 탭).</summary>
+public enum SchemaFilterScope
+{
+    /// <summary>모든 스키마.</summary>
+    All,
+
+    /// <summary>접속한 사용자의 스키마만.</summary>
+    LogonSchema,
+
+    /// <summary>객체를 하나 이상 가진 스키마만.</summary>
+    SchemasWithObjects,
+
+    /// <summary><see cref="SchemaBrowserFilter.Schemas"/> 에 고른 스키마만.</summary>
+    Selected,
+}
+
+/// <summary>스키마 브라우저 저장 필터 하나. 스키마 범위 · 숨길 객체 유형 · 유형별 이름 패턴 · 패턴 옵션.</summary>
+public sealed record SchemaBrowserFilter
+{
+    /// <summary>바뀌지 않는 식별자(접속별 선택이 이름 바꾸기에 끊기지 않게).</summary>
+    public string Id { get; init; } = Guid.NewGuid().ToString("N");
+
+    public string Name { get; init; } = "";
+
+    public SchemaFilterScope Scope { get; init; } = SchemaFilterScope.All;
+
+    /// <summary><see cref="SchemaFilterScope.Selected"/> 일 때 보일 스키마.</summary>
+    public IReadOnlyList<string> Schemas { get => _schemas; init => _schemas = value ?? []; }
+
+    /// <summary>트리에서 숨길 객체 유형(ALL_OBJECTS.OBJECT_TYPE). 목록에 없는 새 유형은 보인다.</summary>
+    public IReadOnlyList<string> HiddenTypes { get => _hiddenTypes; init => _hiddenTypes = value ?? []; }
+
+    /// <summary>객체 유형 → 이름 패턴(<c>*</c>·<c>%</c> 와일드카드). 없거나 비면 모두.</summary>
+    public IReadOnlyDictionary<string, string> NamePatterns { get => _namePatterns; init => _namePatterns = value ?? new Dictionary<string, string>(); }
+
+    /// <summary><c>_</c> 를 한 글자 와일드카드로 본다. 끄면 글자 그대로.</summary>
+    public bool UnderscoreIsWildcard { get; init; }
+
+    /// <summary>패턴에 와일드카드가 없으면 앞뒤에 <c>%</c> 를 붙여 포함 검색한다. 끄면 이름 전체가 같아야 한다.</summary>
+    public bool WrapWithPercent { get; init; } = true;
+
+    // 키가 빠진 JSON 에서 직렬화기가 넣는 null 은 빈 값으로 받는다.
+    private readonly IReadOnlyList<string> _schemas = [];
+    private readonly IReadOnlyList<string> _hiddenTypes = [];
+    private readonly IReadOnlyDictionary<string, string> _namePatterns = new Dictionary<string, string>();
+
+    public bool Equals(SchemaBrowserFilter? other) =>
+        other is not null
+        && Id == other.Id
+        && Name == other.Name
+        && Scope == other.Scope
+        && Schemas.SequenceEqual(other.Schemas)
+        && HiddenTypes.SequenceEqual(other.HiddenTypes)
+        && ContentEquality.SameEntries(NamePatterns, other.NamePatterns)
+        && UnderscoreIsWildcard == other.UnderscoreIsWildcard
+        && WrapWithPercent == other.WrapWithPercent;
+
+    public override int GetHashCode() => HashCode.Combine(Id, Name, Scope, Schemas.Count, HiddenTypes.Count, NamePatterns.Count);
+}
+
+internal static class ContentEquality
+{
+    public static bool SameEntries(IReadOnlyDictionary<string, string> a, IReadOnlyDictionary<string, string> b) =>
+        a.Count == b.Count && a.All(kv => b.TryGetValue(kv.Key, out var v) && string.Equals(v, kv.Value, StringComparison.Ordinal));
 }
 
 /// <summary>자동 업데이트(TSK-10-01). 확인은 원격 전송 동의 대상이 아니라서 끄는 길만 둔다(PRD 「원격 전송(업데이트 확인 제외)」).</summary>

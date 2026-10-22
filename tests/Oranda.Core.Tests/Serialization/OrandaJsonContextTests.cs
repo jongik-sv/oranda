@@ -21,6 +21,55 @@ public class OrandaJsonContextTests
 
         Assert.Equal("D2Coding", value.Editor.FontFamily);
         Assert.Equal(Theme.System, value.Ui.Theme);
+        var filter = Assert.Single(value.SchemaBrowser.Filters);
+        Assert.Equal(SchemaFilterScope.Selected, filter.Scope);
+        Assert.Equal(["EAIAPUSER", "M90APUSER", "MESAPUSER"], filter.Schemas);
+        Assert.Equal("TB_M30*", filter.NamePatterns["TABLE"]);
+        Assert.Equal(filter.Id, value.SchemaBrowser.ActiveFilters["7d0c3f6e-2b1a-4c5d-9e8f-0a1b2c3d4e5f"]);
+    }
+
+    [Fact]
+    public void Settings_without_saved_filters_read_as_empty()
+    {
+        var value = JsonSerializer.Deserialize("""{ "schemaVersion": 1, "schemaBrowser": { "singleClickPreview": false } }""",
+            OrandaJsonContext.Default.AppSettings)!;
+
+        Assert.Empty(value.SchemaBrowser.Filters);
+        Assert.Empty(value.SchemaBrowser.ActiveFilters);
+        Assert.Equal(new SchemaBrowserSettings { SingleClickPreview = false }, value.SchemaBrowser);
+    }
+
+    [Fact]
+    public void Schema_browser_settings_compare_saved_filters_by_content()
+    {
+        static SchemaBrowserSettings Make(SchemaBrowserFilter f) => new()
+        {
+            Filters = [f],
+            ActiveFilters = new Dictionary<string, string> { ["p1"] = f.Id },
+        };
+
+        var f = new SchemaBrowserFilter
+        {
+            Id = "f1",
+            Name = "APUser",
+            Scope = SchemaFilterScope.Selected,
+            Schemas = ["A", "B"],
+            HiddenTypes = ["JOB"],
+            NamePatterns = new Dictionary<string, string> { ["TABLE"] = "TB*" },
+        };
+        Assert.Equal(Make(f), Make(f with { Schemas = ["A", "B"], NamePatterns = new Dictionary<string, string> { ["TABLE"] = "TB*" } }));
+        Assert.Equal(Make(f).GetHashCode(), Make(f with { Schemas = ["A", "B"] }).GetHashCode());
+
+        Assert.NotEqual(Make(f), Make(f with { Id = "f2" }));
+        Assert.NotEqual(Make(f), Make(f with { Name = "X" }));
+        Assert.NotEqual(Make(f), Make(f with { Scope = SchemaFilterScope.All }));
+        Assert.NotEqual(Make(f), Make(f with { Schemas = ["A"] }));
+        Assert.NotEqual(Make(f), Make(f with { HiddenTypes = [] }));
+        Assert.NotEqual(Make(f), Make(f with { NamePatterns = new Dictionary<string, string> { ["TABLE"] = "X*" } }));
+        Assert.NotEqual(Make(f), Make(f with { UnderscoreIsWildcard = true }));
+        Assert.NotEqual(Make(f), Make(f with { WrapWithPercent = false }));
+        Assert.NotEqual(Make(f), Make(f) with { ActiveFilters = new Dictionary<string, string>() });
+        Assert.NotEqual(Make(f), Make(f) with { SingleClickPreview = false });
     }
 
     [Fact]

@@ -40,6 +40,21 @@
     "lastWorkspaceId": "default"
   },
   "schemaBrowser": {
-    "singleClickPreview": true
+    "singleClickPreview": true,
+    "filters": [
+      {
+        "id": "6f1c2a0e9b8d4c3f8e7a5b4c3d2e1f00",
+        "name": "APUser",
+        "scope": "Selected",
+        "schemas": ["EAIAPUSER", "M90APUSER", "MESAPUSER"],
+        "hiddenTypes": ["JOB", "DIRECTORY"],
+        "namePatterns": { "TABLE": "TB_M30*" },
+        "underscoreIsWildcard": false,
+        "wrapWithPercent": true
+      }
+    ],
+    "activeFilters": {
+      "7d0c3f6e-2b1a-4c5d-9e8f-0a1b2c3d4e5f": "6f1c2a0e9b8d4c3f8e7a5b4c3d2e1f00"
+    }
   }
 }
