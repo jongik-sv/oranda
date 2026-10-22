@@ -140,8 +140,14 @@ public sealed class ColumnFilterPanel : Border
         Refresh();
     }
 
-    private static CheckBox ItemView(ValueItem item)
+    /// <summary>가상화 목록이 컨테이너를 재활용하면서 항목 없이(null) 템플릿을 부르므로 그때는 빈 컨트롤을 돌려준다.</summary>
+    private static Control ItemView(ValueItem? item)
     {
+        if (item is null)
+        {
+            return new Panel();
+        }
+
         var check = new CheckBox
         {
             IsChecked = item.IsChecked,

@@ -2,6 +2,8 @@ using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Headless;
 using Avalonia.Input;
+using Avalonia.Threading;
+using Avalonia.VisualTree;
 using Oranda.App.Features.ResultGrid;
 using Oranda.App.Tests.Shell.Headless;
 using Oranda.Core.Grid;
@@ -250,6 +252,35 @@ public sealed class ColumnFilterTests
             window.MouseDown(title, MouseButton.Left);
             window.MouseUp(title, MouseButton.Left);
             await HeadlessHost.WaitUntil(() => m.SortColumn == 0);
+        }
+        finally
+        {
+            window.Close();
+        }
+    });
+
+    [Fact]
+    public Task Scrolling_a_long_value_list_recycles_rows_without_throwing_and_keeps_checks() => HeadlessHost.Run(async () =>
+    {
+        await using var m = await OpenAsync(900);
+        var list = await m.CollectColumnValuesAsync(0); // ID 는 900개 모두 다르다
+        var panel = new ColumnFilterPanel(Cols[0], list, null);
+        panel.SetChecked("5", false);
+        var window = new Window { Content = panel, Width = 400, Height = 600 };
+        window.Show();
+        try
+        {
+            var listBox = panel.GetVisualDescendants().OfType<ListBox>().Single();
+            await HeadlessHost.WaitUntil(() => listBox.Bounds.Height > 0);
+            for (var round = 0; round < 3; round++)
+            {
+                listBox.ScrollIntoView(899); // 끝으로 갔다가 처음으로 돌아오며 컨테이너를 재활용시킨다
+                Dispatcher.UIThread.RunJobs();
+                listBox.ScrollIntoView(0);
+                Dispatcher.UIThread.RunJobs();
+            }
+
+            Assert.Equal(new HashSet<string>(list.Values.Select(v => v.Text).Where(t => t != "5")), panel.BuildFilter()!.Values);
         }
         finally
         {
