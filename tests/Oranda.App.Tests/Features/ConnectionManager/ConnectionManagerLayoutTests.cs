@@ -14,8 +14,14 @@ namespace Oranda.App.Tests.Features.ConnectionManager;
 
 /// <summary>접속 관리자 배치: 영어(긴 글자)에서도 툴바 단추 글자가 잘리지 않는다.</summary>
 [Collection("UiLanguage")]
-public class ConnectionManagerLayoutTests
+public sealed class ConnectionManagerLayoutTests : IDisposable
 {
+    // ShellController 가 만들어질 때 프로세스 전역 UiText.Current 를 그 셸(여기서는 영어)로 채우고 되돌리지 않으므로,
+    // 이 묶음이 끝난 뒤 한국어 글자를 단정하는 다른 시험(SaveFeedback 등)이 영어 문구를 받지 않게 원래 값으로 되돌린다.
+    private readonly IShellText? _previousText = UiText.Current;
+
+    public void Dispose() => UiText.Current = _previousText;
+
     [Fact]
     public Task English_toolbar_buttons_are_not_clipped() => HeadlessHost.Run(async () =>
     {
