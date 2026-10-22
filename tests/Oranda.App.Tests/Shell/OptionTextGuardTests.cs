@@ -86,6 +86,31 @@ public class OptionTextGuardTests
         Assert.False(guard.ShouldSwallowText("c"));
     }
 
+    [Theory]
+    [InlineData(Key.ImeProcessed, PhysicalKey.C, KeyModifiers.Alt, Key.C)]
+    [InlineData(Key.ImeProcessed, PhysicalKey.C, KeyModifiers.Control | KeyModifiers.Alt, Key.C)]
+    [InlineData(Key.ImeProcessed, PhysicalKey.C, KeyModifiers.None, Key.ImeProcessed)]
+    [InlineData(Key.ImeProcessed, PhysicalKey.C, KeyModifiers.Shift, Key.ImeProcessed)]
+    [InlineData(Key.D, PhysicalKey.C, KeyModifiers.Alt, Key.D)]
+    public void Ime_processed_key_with_modifier_resolves_from_the_physical_key(Key key, PhysicalKey physical, KeyModifiers mods, Key expected)
+        => Assert.Equal(expected, KeyDispatcher.EffectiveKey(key, physical, mods));
+
+    [Fact]
+    public async Task Korean_ime_option_c_runs_the_bound_command_and_swallows_the_text()
+    {
+        var (guard, registry, dispatcher, _, _) = Create();
+
+        // 실앱 기록: KeyDown Key=ImeProcessed Physical=C Mods=Alt 뒤에 TextInput "c"
+        var key = KeyDispatcher.EffectiveKey(Key.ImeProcessed, PhysicalKey.C, KeyModifiers.Alt);
+        var handled = dispatcher.Handle(key, KeyModifiers.Alt);
+        guard.NoteKeyDown(key, KeyModifiers.Alt, handled);
+        await dispatcher.LastRun!;
+
+        Assert.True(handled);
+        Assert.True(guard.ShouldSwallowText("c"));
+        Assert.Equal(["oranda.nav.describeObject"], registry.Executed);
+    }
+
     private sealed class Recorder : ICommandRegistry
     {
         public List<string> Executed { get; } = [];

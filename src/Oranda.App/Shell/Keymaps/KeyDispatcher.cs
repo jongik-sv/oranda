@@ -49,6 +49,21 @@ public sealed class KeyDispatcher(Func<KeyBindingTable> table, ICommandRegistry 
             && key is Key.Left or Key.Right or Key.Back or Key.Delete;
     }
 
+    /// <summary>
+    /// 입력기가 먼저 받은 키는 <see cref="Key.ImeProcessed"/> 로 오므로(한국어 2벌식의 ⌥C 등), 수식키(Alt·Ctrl·Meta)가 있으면
+    /// 실제로 누른 자판 위치(<paramref name="physical"/>)의 영문 키로 바꿔 키맵에 맞춘다. 수식키 없는 입력(한글 조합)은 그대로 둔다.
+    /// </summary>
+    public static Key EffectiveKey(Key key, PhysicalKey physical, KeyModifiers modifiers)
+    {
+        if (key != Key.ImeProcessed || (modifiers & (KeyModifiers.Alt | KeyModifiers.Control | KeyModifiers.Meta)) == 0)
+        {
+            return key;
+        }
+
+        var resolved = physical.ToQwertyKey();
+        return resolved == Key.None ? key : resolved;
+    }
+
     /// <summary>연속 키의 첫 단을 받고 다음 단을 기다리는 중인가(<see cref="ChordTimeout"/> 안).</summary>
     public bool HasPending => _pending.Count > 0 && DateTime.UtcNow - _pendingAt <= ChordTimeout;
 
@@ -58,6 +73,7 @@ public sealed class KeyDispatcher(Func<KeyBindingTable> table, ICommandRegistry 
         if (key is Key.LeftCtrl or Key.RightCtrl or Key.LeftShift or Key.RightShift or Key.LeftAlt or Key.RightAlt
             or Key.LWin or Key.RWin or Key.None)
         {
+            KeyTrace.Ignored(key, modifiers);
             return false;
         }
 
@@ -74,6 +90,11 @@ public sealed class KeyDispatcher(Func<KeyBindingTable> table, ICommandRegistry 
             _pending.Clear();
             _pending.Add((key, modifiers));
             match = table().Find(_pending, keys);
+        }
+
+        if (KeyTrace.Enabled)
+        {
+            KeyTrace.Dispatch(key, modifiers, _pending.Count, match, keys.Evaluate("editorFocus"));
         }
 
         switch (match.Kind)

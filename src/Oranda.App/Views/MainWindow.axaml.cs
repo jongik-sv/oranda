@@ -137,6 +137,12 @@ public partial class MainWindow : Window
             _dispatcher);
         AddHandler(KeyDownEvent, OnKeyDownTunnel, RoutingStrategies.Tunnel);
         AddHandler(TextInputEvent, OnTextInputTunnel, RoutingStrategies.Tunnel);
+        if (KeyTrace.Enabled)
+        {
+            AddHandler(KeyDownEvent, (_, e) => KeyTrace.KeyDown("bubble", e, FocusManager?.GetFocusedElement()), RoutingStrategies.Bubble, handledEventsToo: true);
+            AddHandler(TextInputEvent, (_, e) => KeyTrace.TextInput("bubble", e, FocusManager?.GetFocusedElement()), RoutingStrategies.Bubble, handledEventsToo: true);
+        }
+
         DragDrop.SetAllowDrop(this, true);
         AddHandler(DragDrop.DragOverEvent, OnWorkspaceDragOver);
         AddHandler(DragDrop.DropEvent, OnWorkspaceDrop);
@@ -469,6 +475,7 @@ public partial class MainWindow : Window
 
     private void OnKeyDownTunnel(object? sender, KeyEventArgs e)
     {
+        KeyTrace.KeyDown("tunnel", e, FocusManager?.GetFocusedElement());
         // 입력 칸(도구 창의 찾기·바인드 값 등)에서는 글자 편집 키를 칸에 맡긴다. 포커스 자리가 없는 칸은 직전 자리(편집기)를
         // 그대로 두므로, 가로채면 ⌘A 가 편집기의 「모두 선택」으로 간다. 실행 키(F 키·Primary+Enter)는 그대로 명령으로 보낸다.
         if (e.Source is TextBox && KeyDispatcher.IsTextEditingKey(e.Key, e.KeyModifiers, OperatingSystem.IsMacOS()))
@@ -476,20 +483,22 @@ public partial class MainWindow : Window
             return;
         }
 
-        if (_dispatcher is not null && !e.Handled && _dispatcher.Handle(e.Key, e.KeyModifiers))
+        var key = KeyDispatcher.EffectiveKey(e.Key, e.PhysicalKey, e.KeyModifiers);
+        if (_dispatcher is not null && !e.Handled && _dispatcher.Handle(key, e.KeyModifiers))
         {
             e.Handled = true;
         }
 
         if (OperatingSystem.IsMacOS())
         {
-            _optionText?.NoteKeyDown(e.Key, e.KeyModifiers, e.Handled);
+            _optionText?.NoteKeyDown(key, e.KeyModifiers, e.Handled);
         }
     }
 
     // macOS: 명령에 묶인 Option+문자는 글자(c·ç)로 편집기에 들어가지 않게 뒤따르는 TextInput 을 삼킨다.
     private void OnTextInputTunnel(object? sender, TextInputEventArgs e)
     {
+        KeyTrace.TextInput("tunnel", e, FocusManager?.GetFocusedElement());
         if (OperatingSystem.IsMacOS() && _optionText?.ShouldSwallowText(e.Text) == true)
         {
             e.Handled = true;
