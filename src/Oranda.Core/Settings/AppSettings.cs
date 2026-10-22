@@ -52,6 +52,12 @@ public sealed record TableLayoutSettings
     public bool ShowPk { get; init; }
 
     public bool ShowComment { get; init; }
+
+    /// <summary>「감사 컬럼 빼기」 확인란(TSK-13-40). 켜면 <see cref="AuditColumns"/> 에 맞는 컬럼을 표에서 숨긴다.</summary>
+    public bool HideAudit { get; init; }
+
+    /// <summary>감사 컬럼 이름 목록(쉼표·줄로 나눔, 와일드카드 *·? 허용, 대소문자 무시). 설정 창 편집기 탭에서 정한다. 기본 비움.</summary>
+    public string AuditColumns { get; init; } = string.Empty;
 }
 
 public sealed record UiSettings

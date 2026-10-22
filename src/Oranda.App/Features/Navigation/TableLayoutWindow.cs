@@ -36,6 +36,18 @@ public sealed class TableLayoutWindow : Window
     private readonly ToggleButton _lower = Toggle(Glyph("aa"), "소문자");
     private readonly ToggleButton _pk = Toggle(ShellIcons.Create("key", 14)!, "PK 표시");
     private readonly ToggleButton _comment = Toggle(Glyph("--"), "주석 넣기");
+    private readonly CheckBox _audit = new()
+    {
+        Content = new TextBlock { Text = "감사 컬럼 빼기", FontSize = 12 },
+        MinHeight = 0,
+        Padding = new Thickness(4, 0, 0, 0),
+        Margin = new Thickness(6, 0, 0, 0),
+        VerticalAlignment = VerticalAlignment.Center,
+        Focusable = false,
+    };
+
+    private readonly Border _probeHost = new(); // 전체 컬럼 기준 칸 너비를 고정하는 숨은 줄(GridC.Probe)
+    private int _hidden;
     private readonly TextBlock _status = new() { VerticalAlignment = VerticalAlignment.Center, TextTrimming = TextTrimming.CharacterEllipsis };
     private readonly Dictionary<TableLayoutRow, TextBlock> _markers = [];
     private TableLayoutRow? _current;
@@ -54,9 +66,9 @@ public sealed class TableLayoutWindow : Window
         _session = session;
         Title = session.Model.Title;
         Width = 760;
-        Height = 380;
         MinWidth = 420;
         MinHeight = 180;
+        Height = InitialHeight(session.Model.Rows.Count, ScreenWorkHeight());
         ShowInTaskbar = false;
         Content = BuildContent();
 
@@ -66,6 +78,11 @@ public sealed class TableLayoutWindow : Window
         _lower.IsChecked = o.LowerCase;
         _pk.IsChecked = o.ShowPk;
         _comment.IsChecked = o.ShowComment;
+        var hasAudit = TableLayoutAudit.Parse(o.AuditColumns).Count > 0;
+        _audit.IsEnabled = hasAudit;
+        _audit.IsChecked = hasAudit && o.HideAudit;
+        ToolTip.SetTip(_audit, hasAudit ? "설정의 감사 컬럼 목록에 맞는 컬럼을 표에서 뺀다" : "설정에서 감사 컬럼을 정하세요");
+        AutomationProperties.SetName(_audit, "감사 컬럼 빼기");
         Rebuild();
 
         _alias.TextChanged += (_, _) => OptionsChanged();
@@ -74,6 +91,8 @@ public sealed class TableLayoutWindow : Window
         {
             t.IsCheckedChanged += (_, _) => OptionsChanged();
         }
+
+        _audit.IsCheckedChanged += (_, _) => OptionsChanged();
 
         _list.SelectionChanged += OnSelectionChanged;
         _list.AddHandler(PointerPressedEvent, OnListPressed, RoutingStrategies.Tunnel);
@@ -90,6 +109,43 @@ public sealed class TableLayoutWindow : Window
         };
     }
 
+    /// <summary>한 줄 높이(DIP). Styles/GridC.axaml 의 ListBoxItem MinHeight 와 같다.</summary>
+    internal const double RowHeight = 24;
+
+    /// <summary>처음에 보이게 할 행 수.</summary>
+    internal const int InitialRows = 30;
+
+    // 표 밖의 높이(도구 막대 + 머리글 + 상태 줄 + 여유). 헤드리스 측정으로 맞춘 값(시험이 지킨다).
+    internal const double ChromeHeight = 96;
+
+    /// <summary>
+    /// 첫 창 높이: 약 30행이 보이게 하되 컬럼이 적으면 그 행 수에 맞추고(최소 높이 아래로는 안 줄임), 화면 작업 영역 높이(<paramref name="workAreaHeight"/>, DIP)의 90% 를 넘지 않는다.
+    /// 작업 영역을 모르면(0 이하) 줄이지 않는다.
+    /// </summary>
+    internal static double InitialHeight(int columnCount, double workAreaHeight)
+    {
+        var rows = Math.Clamp(columnCount, 1, InitialRows);
+        var height = ChromeHeight + (rows * RowHeight);
+        if (workAreaHeight > 0)
+        {
+            height = Math.Min(height, workAreaHeight * 0.9);
+        }
+
+        return Math.Max(height, 180);
+    }
+
+    private double ScreenWorkHeight()
+    {
+        try
+        {
+            return Screens?.Primary is { } screen ? screen.WorkingArea.Height / screen.Scaling : 0;
+        }
+        catch (InvalidOperationException)
+        {
+            return 0;
+        }
+    }
+
     /// <summary>지금 표에 보이는 행(거르기 적용 뒤).</summary>
     internal IReadOnlyList<TableLayoutRow> VisibleRows => Items().Select(i => (TableLayoutRow)i.Tag!).ToList();
 
@@ -102,6 +158,11 @@ public sealed class TableLayoutWindow : Window
     internal TableLayoutRow? CurrentRow => _current;
 
     internal TextBox FilterBox => _filter;
+
+    internal CheckBox AuditBox => _audit;
+
+    /// <summary>상태 줄 글.</summary>
+    internal string StatusText => _status.Text ?? string.Empty;
 
     /// <summary>이미 떠 있는 창이 있으면 닫고 새로 연다. 편집기 View 가 없으면(시험) 아무것도 하지 않는다.</summary>
     public static void Show(TableLayoutSession session)
@@ -218,6 +279,7 @@ public sealed class TableLayoutWindow : Window
         tools.Children.Add(_lower);
         tools.Children.Add(_pk);
         tools.Children.Add(_comment);
+        tools.Children.Add(_audit);
         tools.Children.Add(new Separator { Classes = { "toolbar" } });
         tools.Children.Add(new TextBlock { Text = "별칭", FontSize = 12, Margin = new Thickness(4, 0), VerticalAlignment = VerticalAlignment.Center });
         tools.Children.Add(_alias);
@@ -236,6 +298,8 @@ public sealed class TableLayoutWindow : Window
         var header = GridC.Header(En ? HeadersEn : HeadersKo, Group);
         DockPanel.SetDock(header, Avalonia.Controls.Dock.Top);
         body.Children.Add(header);
+        DockPanel.SetDock(_probeHost, Avalonia.Controls.Dock.Top);
+        body.Children.Add(_probeHost);
         body.Children.Add(_list);
         Grid.SetIsSharedSizeScope(body, true);
 
@@ -250,34 +314,16 @@ public sealed class TableLayoutWindow : Window
 
     private void Rebuild()
     {
-        var showPk = _session.Options.ShowPk;
         var selected = SelectedRows.ToHashSet();
         var items = new List<ListBoxItem>();
         _markers.Clear();
-        foreach (var r in TableLayoutPaste.Filter(_session.Model.Rows, _filter.Text))
+        var options = _session.Options;
+        var patterns = options.HideAudit ? TableLayoutAudit.Parse(options.AuditColumns) : [];
+        var all = patterns.Count == 0 ? _session.Model.Rows : _session.Model.Rows.Where(r => !TableLayoutAudit.Matches(patterns, r.Name)).ToList();
+        _hidden = _session.Model.Rows.Count - all.Count;
+        foreach (var r in TableLayoutPaste.Filter(all, _filter.Text))
         {
-            var marker = new TextBlock { Text = ReferenceEquals(r, _current) ? "▶" : string.Empty, Classes = { "grid-c-marker" } };
-            _markers[r] = marker;
-            var head = new DockPanel { MinWidth = 28, Children = { marker, new TextBlock { Text = r.Index.ToString(CultureInfo.InvariantCulture), Classes = { "num", "dim" }, FontSize = 12, VerticalAlignment = VerticalAlignment.Center } } };
-            var name = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 4 };
-            if (showPk)
-            {
-                // 열쇠 자리를 늘 비워 둬서 PK 가 아닌 이름도 같은 자리에서 시작한다.
-                name.Children.Add(r.IsPk ? ShellIcons.Create("key", 12)! : new Control { Width = 12 });
-            }
-
-            name.Children.Add(new TextBlock { Text = r.Name });
-            var cells = new List<Control>
-            {
-                head,
-                name,
-                new TextBlock { Text = r.TypeText, Classes = { "mono", "dim" } },
-                new TextBlock { Text = r.NotNull ? "N" : "Y", Classes = { r.NotNull ? "warning-text" : "dim" } },
-                new TextBlock { Text = r.DefaultValue ?? string.Empty, Classes = { "mono" }, TextTrimming = TextTrimming.CharacterEllipsis, MaxWidth = 160 },
-                new TextBlock { Text = r.Comment ?? string.Empty, Classes = { "dim" }, TextTrimming = TextTrimming.CharacterEllipsis },
-            };
-
-            items.Add(new ListBoxItem { Tag = r, Content = GridC.Row(cells, rowHead: true, Group) });
+            items.Add(new ListBoxItem { Tag = r, Content = GridC.Row(Cells(r, register: true), rowHead: true, Group) });
         }
 
         _list.ItemsSource = items;
@@ -286,7 +332,50 @@ public sealed class TableLayoutWindow : Window
             _list.SelectedItems?.Add(item);
         }
 
+        // 칸 너비는 처음부터 전체 컬럼 기준(거르기와 상관없이 감사 컬럼을 뺀 전체): 스크롤·거르기로 표가 흔들리지 않는다.
+        _probeHost.Child = GridC.Probe(
+            all,
+            6,
+            (r, c) => c switch
+            {
+                0 => all.Count.ToString(CultureInfo.InvariantCulture).Length,
+                1 => GridC.TextWeight(r.Name),
+                2 => GridC.TextWeight(r.TypeText),
+                4 => GridC.TextWeight(r.DefaultValue),
+                _ => 0,
+            },
+            r => Cells(r, register: false),
+            Group);
         UpdateStatus();
+    }
+
+    private List<Control> Cells(TableLayoutRow r, bool register)
+    {
+        var showPk = _session.Options.ShowPk;
+        var marker = new TextBlock { Text = register && ReferenceEquals(r, _current) ? "▶" : string.Empty, Classes = { "grid-c-marker" } };
+        if (register)
+        {
+            _markers[r] = marker;
+        }
+
+        var head = new DockPanel { MinWidth = 28, Children = { marker, new TextBlock { Text = r.Index.ToString(CultureInfo.InvariantCulture), Classes = { "num", "dim" }, FontSize = 12, VerticalAlignment = VerticalAlignment.Center } } };
+        var name = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 4 };
+        if (showPk)
+        {
+            // 열쇠 자리를 늘 비워 둬서 PK 가 아닌 이름도 같은 자리에서 시작한다.
+            name.Children.Add(r.IsPk ? ShellIcons.Create("key", 12)! : new Control { Width = 12 });
+        }
+
+        name.Children.Add(new TextBlock { Text = r.Name });
+        return
+        [
+            head,
+            name,
+            new TextBlock { Text = r.TypeText, Classes = { "mono", "dim" } },
+            new TextBlock { Text = r.NotNull ? "N" : "Y", Classes = { r.NotNull ? "warning-text" : "dim" } },
+            new TextBlock { Text = r.DefaultValue ?? string.Empty, Classes = { "mono" }, TextTrimming = TextTrimming.CharacterEllipsis, MaxWidth = 160 },
+            new TextBlock { Text = r.Comment ?? string.Empty, Classes = { "dim" }, TextTrimming = TextTrimming.CharacterEllipsis },
+        ];
     }
 
     private void OnSelectionChanged(object? sender, SelectionChangedEventArgs e) => UpdateStatus();
@@ -319,13 +408,19 @@ public sealed class TableLayoutWindow : Window
         var model = _session.Model;
         var shown = Items().Count();
         var total = model.Rows.Count;
+        var visibleTotal = total - _hidden;
         var picked = _list.SelectedItems?.Count ?? 0;
         var parts = new List<string>
         {
             $"{model.Title} ({model.Kind})",
             En ? $"{total} columns" : $"{total} 컬럼",
         };
-        if (shown != total)
+        if (_hidden > 0)
+        {
+            parts.Add(En ? $"{_hidden} hidden" : $"{_hidden}개 숨김");
+        }
+
+        if (shown != visibleTotal)
         {
             parts.Add(En ? $"{shown} shown" : $"{shown}개 보임");
         }
@@ -346,7 +441,7 @@ public sealed class TableLayoutWindow : Window
 
     private void OptionsChanged()
     {
-        var before = _session.Options.ShowPk;
+        var before = (_session.Options.ShowPk, _session.Options.HideAudit);
         // 쉼표 위치(Comma)는 창의 입력이 아니므로 지금 옵션에서 그대로 이어 간다.
         _session.SetOptions(_session.Options with
         {
@@ -355,8 +450,9 @@ public sealed class TableLayoutWindow : Window
             LowerCase = _lower.IsChecked == true,
             ShowPk = _pk.IsChecked == true,
             ShowComment = _comment.IsChecked == true,
+            HideAudit = _audit.IsChecked == true,
         });
-        if (before != _session.Options.ShowPk)
+        if (before != (_session.Options.ShowPk, _session.Options.HideAudit))
         {
             Rebuild();
         }

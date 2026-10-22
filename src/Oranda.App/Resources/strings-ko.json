@@ -264,6 +264,8 @@
   "Shell.settings.language.en": "English",
   "Shell.settings.language.ko": "한국어",
   "Shell.settings.language.system": "OS 언어 따르기",
+  "Shell.settings.auditColumns": "감사 컬럼",
+  "Shell.settings.auditColumnsHint": "쉼표 또는 줄로 나눠 적습니다. * 와 ? 를 쓸 수 있고 대소문자는 가립니다. 테이블 레이아웃 창의 「감사 컬럼 빼기」가 이 컬럼을 표에서 뺍니다.",
   "Shell.settings.lintEnabled": "SQL 점검(lint) 켜기",
   "Shell.settings.lob": "LOB 미리 읽기(바이트)",
   "Shell.settings.lobName": "LOB 미리 읽기 크기",

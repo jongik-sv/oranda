@@ -117,7 +117,7 @@
 
       <TabItem Header="{Binding Strings[tab.editor]}">
         <ScrollViewer HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
-          <Grid Classes="form" ColumnDefinitions="Auto,*" RowDefinitions="Auto,Auto,Auto,Auto" ColumnSpacing="12" RowSpacing="10">
+          <Grid Classes="form" ColumnDefinitions="Auto,*" RowDefinitions="Auto,Auto,Auto,Auto,Auto" ColumnSpacing="12" RowSpacing="10">
             <TextBlock Grid.Row="0" Text="{Binding FontLabel}" />
             <!-- 편집 가능한 콤보: 설치되지 않은 글꼴 이름도 그대로 둔다(목록에 없다고 지우지 않는다). -->
             <ComboBox Grid.Row="0" Grid.Column="1" MinWidth="220" HorizontalAlignment="Stretch" x:Name="FontBox"
@@ -132,6 +132,13 @@
                            Minimum="1" Maximum="16" Increment="1" FormatString="0"
                            Value="{Binding TabSize}" AutomationProperties.Name="{Binding TabSizeLabel}" />
             <CheckBox Grid.Row="3" Grid.Column="1" Content="{Binding LintLabel}" IsChecked="{Binding LintEnabled}" />
+            <TextBlock Grid.Row="4" VerticalAlignment="Top" Margin="0,6,0,0" Text="{Binding Strings[auditColumns]}" />
+            <StackPanel Grid.Row="4" Grid.Column="1" Spacing="4">
+              <TextBox x:Name="AuditColumnsBox" AcceptsReturn="True" TextWrapping="Wrap" MinHeight="60" MaxHeight="120"
+                       Text="{Binding AuditColumns, Mode=TwoWay}" PlaceholderText="REG_DT, REG_ID, UPD_DT, UPD_ID, *_USER_ID"
+                       AutomationProperties.Name="{Binding Strings[auditColumns]}" />
+              <TextBlock Classes="hint" Text="{Binding Strings[auditColumnsHint]}" />
+            </StackPanel>
           </Grid>
         </ScrollViewer>
       </TabItem>

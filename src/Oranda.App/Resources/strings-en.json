@@ -264,6 +264,8 @@
   "Shell.settings.language.en": "English",
   "Shell.settings.language.ko": "한국어",
   "Shell.settings.language.system": "Follow OS language",
+  "Shell.settings.auditColumns": "Audit columns",
+  "Shell.settings.auditColumnsHint": "Separate names with commas or new lines. * and ? are allowed; case is ignored. The table layout window hides these columns when \"Hide audit columns\" is checked.",
   "Shell.settings.lintEnabled": "Enable SQL check (lint)",
   "Shell.settings.lob": "LOB prefetch (bytes)",
   "Shell.settings.lobName": "LOB prefetch size",

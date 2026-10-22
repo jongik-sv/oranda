@@ -71,6 +71,7 @@ public sealed class DetailTable : UserControl
     private readonly Border _statusHost = new() { Classes = { "panel-status" } };
     private readonly Dictionary<IReadOnlyList<object?>, TextBlock> _markers = new(ReferenceEqualityComparer.Instance);
     private readonly Border _headerHost = new();
+    private readonly Border _probeHost = new(); // 전체 행 기준 칸 너비를 고정하는 숨은 줄(GridC.Probe)
     private readonly List<ListBoxItem> _items = [];
     private IReadOnlyList<object?>? _current;
     private int _overflow;
@@ -89,6 +90,8 @@ public sealed class DetailTable : UserControl
         var body = new DockPanel();
         DockPanel.SetDock(_headerHost, Avalonia.Controls.Dock.Top);
         body.Children.Add(_headerHost);
+        DockPanel.SetDock(_probeHost, Avalonia.Controls.Dock.Top);
+        body.Children.Add(_probeHost);
         body.Children.Add(_list);
         Grid.SetIsSharedSizeScope(body, true);
         _scroll.Content = body;
@@ -370,6 +373,7 @@ public sealed class DetailTable : UserControl
         if (columns.Count == 0)
         {
             _headerHost.Child = null;
+            _probeHost.Child = null;
             UpdateStatus();
             return;
         }
@@ -379,44 +383,63 @@ public sealed class DetailTable : UserControl
         for (var r = 0; r < shown; r++)
         {
             var row = rows[r];
-            var marker = new TextBlock { Classes = { "grid-c-marker" } };
-            _markers[row] = marker;
-            var head = new DockPanel
-            {
-                MinWidth = 28,
-                Children = { marker, new TextBlock { Text = RowNumbers ? (r + 1).ToString(CultureInfo.InvariantCulture) : string.Empty, Classes = { "num", "dim" }, FontSize = 12, VerticalAlignment = VerticalAlignment.Center } },
-            };
-            var cells = new List<Control> { head };
-            for (var c = 0; c < columns.Count; c++)
-            {
-                var value = c < row.Count ? row[c] : null;
-                var cell = new TextBlock
-                {
-                    Text = Format(value),
-                    TextAlignment = (IsNumber(value) || RightAlignedColumns?.Contains(c) == true) && c < columns.Count - 1 ? TextAlignment.Right : TextAlignment.Left, // 늘어나는 마지막 열은 왼쪽
-                    Opacity = value is null ? 0.45 : 1,
-                };
-                if (MonospaceColumns?.Contains(c) == true)
-                {
-                    cell.Bind(TextBlock.FontFamilyProperty, cell.GetResourceObservable("OrandaGridFontFamily"));
-                }
-
-                if (cell.Text.Length > 0 && CellEmphasis?.Invoke(c, row) == true)
-                {
-                    cell.Bind(TextBlock.ForegroundProperty, cell.GetResourceObservable("OrandaDangerForegroundBrush"));
-                }
-
-                cells.Add(cell);
-            }
-
-            _items.Add(new ListBoxItem { Tag = row, Content = GridC.Row(cells, rowHead: true, Group) });
+            _items.Add(new ListBoxItem { Tag = row, Content = GridC.Row(Cells(row, r, columns.Count, register: true), rowHead: true, Group) });
         }
 
         _list.ItemsSource = _items.ToList();
         var titles = new List<string> { string.Empty };
         titles.AddRange(columns);
         _headerHost.Child = GridC.Header(titles, Group);
+
+        // 칸 너비는 처음부터 전체 행 기준: 칸마다 글이 가장 넓은 행으로 숨은 줄을 만들어 같은 묶음에 참여시킨다(스크롤해도 안 바뀐다).
+        var shownRows = rows.Take(shown).ToList();
+        _probeHost.Child = GridC.Probe(
+            shownRows,
+            columns.Count + 1,
+            (row, c) => c == 0 ? (RowNumbers ? shownRows.Count.ToString(CultureInfo.InvariantCulture).Length : 0) : GridC.TextWeight(Format(c - 1 < row.Count ? row[c - 1] : null)),
+            row => Cells(row, shownRows.Count - 1, columns.Count, register: false),
+            Group);
         UpdateStatus();
+    }
+
+    // 한 행의 칸들(행 머리 + 열마다 한 칸). register 가 거짓이면 현재 행 ▶ 표시를 등록하지 않는다(너비 재기용 사본).
+    private List<Control> Cells(IReadOnlyList<object?> row, int r, int columnCount, bool register)
+    {
+        var marker = new TextBlock { Classes = { "grid-c-marker" } };
+        if (register)
+        {
+            _markers[row] = marker;
+        }
+
+        var head = new DockPanel
+        {
+            MinWidth = 28,
+            Children = { marker, new TextBlock { Text = RowNumbers ? (r + 1).ToString(CultureInfo.InvariantCulture) : string.Empty, Classes = { "num", "dim" }, FontSize = 12, VerticalAlignment = VerticalAlignment.Center } },
+        };
+        var cells = new List<Control> { head };
+        for (var c = 0; c < columnCount; c++)
+        {
+            var value = c < row.Count ? row[c] : null;
+            var cell = new TextBlock
+            {
+                Text = Format(value),
+                TextAlignment = (IsNumber(value) || RightAlignedColumns?.Contains(c) == true) && c < columnCount - 1 ? TextAlignment.Right : TextAlignment.Left, // 늘어나는 마지막 열은 왼쪽
+                Opacity = value is null ? 0.45 : 1,
+            };
+            if (MonospaceColumns?.Contains(c) == true)
+            {
+                cell.Bind(TextBlock.FontFamilyProperty, cell.GetResourceObservable("OrandaGridFontFamily"));
+            }
+
+            if (cell.Text.Length > 0 && CellEmphasis?.Invoke(c, row) == true)
+            {
+                cell.Bind(TextBlock.ForegroundProperty, cell.GetResourceObservable("OrandaDangerForegroundBrush"));
+            }
+
+            cells.Add(cell);
+        }
+
+        return cells;
     }
 
     private void UpdateStatus()

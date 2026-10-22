@@ -57,6 +57,10 @@ public sealed partial class SettingsViewModel : ViewModelBase
     [ObservableProperty]
     private string? _fontFamily;
 
+    /// <summary>감사 컬럼 이름 목록(쉼표·줄로 나눔, 와일드카드 *·? 허용, 대소문자 무시). 테이블 레이아웃 창의 「감사 컬럼 빼기」가 쓴다(TSK-13-40).</summary>
+    [ObservableProperty]
+    private string _auditColumns;
+
     [ObservableProperty]
     private decimal _fontSize;
 
@@ -188,6 +192,7 @@ public sealed partial class SettingsViewModel : ViewModelBase
         _fontSize = (decimal)s.Editor.FontSize;
         _tabSize = s.Editor.TabSize;
         _lintEnabled = s.Editor.LintEnabled;
+        _auditColumns = s.TableLayout.AuditColumns ?? string.Empty;
 
         ErrorModes =
         [
@@ -415,6 +420,7 @@ public sealed partial class SettingsViewModel : ViewModelBase
                     TabSize = (int)TabSize,
                     LintEnabled = LintEnabled,
                 },
+                TableLayout = s.TableLayout with { AuditColumns = (AuditColumns ?? string.Empty).Trim() },
                 Execution = s.Execution with
                 {
                     AutoCommit = AutoCommit,

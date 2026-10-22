@@ -91,6 +91,7 @@
 | `workspace.restoreOnStartup` | bool | ○ | true | 마지막 작업 공간 다시 열기 |
 | `workspace.lastWorkspaceId` | string | ○ | `"default"` | 종료 때 보고 있던 작업 공간(다음 시작 때 활성) |
 | `workspace.openWorkspaceIds` | string[] | ○ | `["default"]` | 종료 때 열려 있던 작업 공간들(문서 탭 순서). 다음 시작 때 모두 다시 연다 |
+| `tableLayout.hideAudit` · `tableLayout.auditColumns` | bool · string | ○ | false · `""` | 테이블 레이아웃 창 「감사 컬럼 빼기」(TSK-13-40). `auditColumns` = 설정 창 편집기 탭에서 정하는 컬럼 이름 목록(쉼표·줄로 나눔, `*`·`?` 와일드카드, 대소문자 무시). 선택 필드 추가라 스키마 버전은 그대로 |
 | `schemaBrowser.singleClickPreview` | bool | ○ | true | 스키마 브라우저에서 객체를 한 번 누르면(방향키로 고르고 잠깐 멈추면) 미리보기 문서로 연다. false 면 두 번 누르기·Enter 로만 연다(SCH-01) |
 | `schemaBrowser.filters` | object[] | ○ | `[]` | 저장 필터(모든 접속 공용, TSK-13-10). 항목: `id`(바뀌지 않는 식별자), `name`, `scope`(`All`·`LogonSchema`·`SchemasWithObjects`·`Selected`·`Pattern`), `schemas`(string[], `Selected` 일 때), `schemaPattern`(string?, `Pattern` 일 때 스키마 이름에 거는 .NET 정규식: 대소문자 무시·일부 일치·시간 제한 100 ms. 옛 파일에는 없음 = null), `hiddenTypes`(숨길 OBJECT_TYPE), `namePatterns`(OBJECT_TYPE → 이름 패턴, `*`·`%` 와일드카드), `underscoreIsWildcard`(기본 false), `wrapWithPercent`(기본 true: 와일드카드가 없으면 포함 검색) |
 | `schemaBrowser.activeFilters` | object | ○ | `{}` | 접속 프로필 id → 그 접속에서 고른 필터 `id`. 없으면 필터 없음 |

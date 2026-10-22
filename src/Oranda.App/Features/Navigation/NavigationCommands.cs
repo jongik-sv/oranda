@@ -160,7 +160,7 @@ public sealed class NavigationCommandHandler : ICommandHandler
     {
         try
         {
-            await settings.UpdateAsync(s => s with { TableLayout = value }).ConfigureAwait(true);
+            await settings.UpdateAsync(s => s with { TableLayout = value with { AuditColumns = s.TableLayout.AuditColumns } }).ConfigureAwait(true); // 감사 목록은 설정 창에서만 바꾼다
         }
         catch (IOException)
         {

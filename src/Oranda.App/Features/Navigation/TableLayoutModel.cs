@@ -59,13 +59,74 @@ public sealed record TableLayoutOptions(string Alias, bool InsertComma, bool Low
     /// <summary>쉼표 위치. Leading 이면 열 사이가 「, COL」(주석 뒤 새 줄도 「, COL」로 시작), 쉼표 넣기면 맨 앞에도 「, 」.</summary>
     public CommaPosition Comma { get; init; } = CommaPosition.Trailing;
 
+    /// <summary>「감사 컬럼 빼기」(TSK-13-40). 켜고 <see cref="AuditColumns"/> 가 비지 않으면 그 이름에 맞는 컬럼을 표에서 숨긴다.</summary>
+    public bool HideAudit { get; init; }
+
+    /// <summary>감사 컬럼 목록 글(설정 창에서 정한 것 그대로). 창에서는 바꾸지 않는다.</summary>
+    public string AuditColumns { get; init; } = string.Empty;
+
     public static TableLayoutOptions From(TableLayoutSettings s, string alias = "")
     {
         ArgumentNullException.ThrowIfNull(s);
-        return new TableLayoutOptions(alias, s.InsertComma, s.LowerCase, s.ShowPk, s.ShowComment);
+        return new TableLayoutOptions(alias, s.InsertComma, s.LowerCase, s.ShowPk, s.ShowComment) { HideAudit = s.HideAudit, AuditColumns = s.AuditColumns ?? string.Empty };
     }
 
-    public TableLayoutSettings ToSettings() => new() { InsertComma = InsertComma, LowerCase = LowerCase, ShowPk = ShowPk, ShowComment = ShowComment };
+    public TableLayoutSettings ToSettings() => new() { InsertComma = InsertComma, LowerCase = LowerCase, ShowPk = ShowPk, ShowComment = ShowComment, HideAudit = HideAudit, AuditColumns = AuditColumns };
+}
+
+/// <summary>
+/// 감사 컬럼 목록(설정 「감사 컬럼」): 쉼표·줄로 나눈 이름, 와일드카드 <c>*</c>(0자 이상)·<c>?</c>(1자), 대소문자 무시.
+/// 빈 목록은 아무것도 맞지 않는다.
+/// </summary>
+public static class TableLayoutAudit
+{
+    public static IReadOnlyList<string> Parse(string? text)
+        => (text ?? string.Empty).Split([',', ';', '\n', '\r'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+
+    public static bool Matches(IReadOnlyList<string> patterns, string name)
+    {
+        ArgumentNullException.ThrowIfNull(patterns);
+        ArgumentNullException.ThrowIfNull(name);
+        return patterns.Any(p => Glob(p, name));
+    }
+
+    public static bool IsAudit(TableLayoutOptions options, string name)
+        => options.HideAudit && Matches(Parse(options.AuditColumns), name);
+
+    // 반복 * 가 있어도 선형으로 끝나는 고전 와일드카드 일치.
+    private static bool Glob(string pattern, string text)
+    {
+        int p = 0, t = 0, star = -1, mark = 0;
+        while (t < text.Length)
+        {
+            if (p < pattern.Length && (pattern[p] == '?' || char.ToUpperInvariant(pattern[p]) == char.ToUpperInvariant(text[t])) && pattern[p] != '*')
+            {
+                p++;
+                t++;
+            }
+            else if (p < pattern.Length && pattern[p] == '*')
+            {
+                star = p++;
+                mark = t;
+            }
+            else if (star >= 0)
+            {
+                p = star + 1;
+                t = ++mark;
+            }
+            else
+            {
+                return false;
+            }
+        }
+
+        while (p < pattern.Length && pattern[p] == '*')
+        {
+            p++;
+        }
+
+        return p == pattern.Length;
+    }
 }
 
 /// <summary>선택한 열을 편집기에 넣을 글로 바꾼다(순수 함수).</summary>

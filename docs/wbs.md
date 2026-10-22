@@ -4420,6 +4420,40 @@ dotnet, testhost, Oranda.App
 - data-model: -
 - ui-spec: -
 
+### TSK-13-40: C안 표 스크롤 중 칸 너비 흔들림 고침(전체 행 기준 고정)·테이블 레이아웃 첫 높이 약 30행·감사 컬럼 빼기 [win144]
+- category: defect
+- domain: frontend
+- model: opus
+- status: [xx]
+- priority: medium
+- assignee: -
+- schedule: 2026-10-22 ~ 2026-10-23
+- tags: grid-c, table-layout, detail-table, audit, win144
+- depends: TSK-13-39
+- blocked-by: -
+- entry-point: 테이블 레이아웃 창(Alt+C)·객체 상세·모니터 표·설정 창 편집기 탭
+- note: 담당 PC: win144. 2026-10-22 사용자 요청 ① 스크롤하면 표 칸 너비가 바뀌며 흔들림 → 처음부터 전체 기준으로 고정 ② 테이블 레이아웃 창 첫 높이 약 30행 ③ 설정에 감사 컬럼 목록을 두고 테이블 레이아웃에서 체크로 빼고 보기. 크기 M. 결과: 원인 = 가상화 ListBox 에서 화면에 있는 줄만 SharedSizeGroup 에 참여해 스크롤 때 칸이 넓어짐 → GridC.Probe(칸마다 글이 가장 넓은 행 4개의 숨은 줄, 같은 묶음)로 처음부터 전체 행 기준 고정(가상화 유지). 테이블 레이아웃 창 첫 높이 약 30행(적으면 그 행 수, 화면 90% 상한). 설정 편집기 탭 「감사 컬럼」 + 창 「감사 컬럼 빼기」 체크(숨긴 수는 상태 줄). 새 시험 21개 통과, 1000행 첫 그리기 전후 비슷(약 2.8초 → 약 2.9초, 헤드리스 콜드)
+
+#### PRD 요구사항
+- prd-ref: PRD UI
+- requirements:
+  - C안 표(GridC)는 스크롤해도 칸 너비·머리글이 바뀌지 않는다(아래쪽 행의 긴 글도 처음부터 반영)
+  - 테이블 레이아웃 창은 처음에 약 30행이 보이는 높이로 열린다(컬럼이 적으면 그만큼, 화면보다 크지 않게)
+  - 설정에 감사 컬럼 이름 목록(와일드카드, 대소문자 무시)을 두고, 테이블 레이아웃 창의 「감사 컬럼 빼기」 체크로 숨긴다
+- acceptance:
+  - 긴 글이 아래 행에만 있어도 스크롤 전후 칸 너비가 같다
+  - 체크를 켜면 목록에 맞는 컬럼이 표에서 빠지고 넣기에도 빠진다
+- constraints:
+  - 설정 필드는 선택 필드 추가만(스키마 버전 유지)
+- test-criteria:
+  - 스크롤 전후 너비, 데이터 바뀜 뒤 다시 잼, 첫 창 높이, 감사 일치·대소문자·빈 목록·설정 저장
+
+#### 기술 스펙 (TRD)
+- tech-spec: -
+- api-spec: -
+- data-model: settings.tableLayout.hideAudit·auditColumns
+- ui-spec: -
+
 ### TSK-13-36: 주 메뉴의 회색 항목 정리: 상황 전용 명령은 숨기고, 못 쓰는 이유를 보임 [win144]
 - category: feat
 - domain: frontend
