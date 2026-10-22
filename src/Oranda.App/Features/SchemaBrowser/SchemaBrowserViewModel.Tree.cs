@@ -50,7 +50,9 @@ public sealed partial class SchemaBrowserViewModel
         ResolveServices();
         FollowConnections(); // 첫 접속 뒤에 만든 창도 지금 접속을 따라간다
         CurrentSession ??= ConnectionManager.SessionRouter.CurrentOf(_services);
-        var gen = Interlocked.Increment(ref _generation);
+        // 트리 짓기는 자기 세대로 낡음을 판단한다: 짓는 사이 필터가 다시 걸려도(_generation) 짓기를 멈추지 않는다.
+        var gen = Interlocked.Increment(ref _buildGeneration);
+        Interlocked.Increment(ref _generation); // 옛 트리 노드의 읽기는 버린다
         Roots.Clear();
         _favoritesNode = null;
         SelectedNode = null;
@@ -67,7 +69,7 @@ public sealed partial class SchemaBrowserViewModel
         {
             var schemas = await _meta.ListSchemasAsync(session, ct);
             var favs = await _favoriteStore.LoadAsync(session.Profile.Id, ct);
-            if (gen != _generation)
+            if (gen != _buildGeneration)
             {
                 return;
             }
@@ -91,8 +93,9 @@ public sealed partial class SchemaBrowserViewModel
                 && string.Equals(r.Owner, session.Profile.User, StringComparison.OrdinalIgnoreCase));
             if (own is not null)
             {
+                // 읽기 전에 펼친 것으로 둔다: 읽는 사이 필터가 다시 걸리면 펼친 스키마로 보고 새 필터로 다시 읽는다.
+                own.IsExpandedSilently = true;
                 await ExpandAsync(own, ct);
-                own.IsExpandedSilently = true; // 화면에서도 펼친 채로 보인다(이미 읽었으니 다시 읽지 않는다).
             }
         }
         catch (OperationCanceledException)
@@ -104,7 +107,7 @@ public sealed partial class SchemaBrowserViewModel
         }
         finally
         {
-            if (gen == _generation)
+            if (gen == _buildGeneration)
             {
                 IsBusy = false;
             }
@@ -162,7 +165,8 @@ public sealed partial class SchemaBrowserViewModel
     public async Task ExpandAsync(SchemaNode node, CancellationToken ct = default)
     {
         ArgumentNullException.ThrowIfNull(node);
-        if (node.Loaded || node.Loading || !node.HasChildrenToLoad)
+        // 같은 세대의 읽기가 이미 돌고 있으면 기다리지 않는다. 앞 세대의 읽기는 끝나도 버려지므로 새로 읽는다.
+        if (node.Loaded || (node.Loading && node.LoadGeneration == _generation) || !node.HasChildrenToLoad)
         {
             return;
         }
@@ -173,8 +177,10 @@ public sealed partial class SchemaBrowserViewModel
             return;
         }
 
-        node.Loading = true;
         var gen = _generation;
+        node.Loading = true;
+        node.LoadGeneration = gen;
+        BeginLoad();
         try
         {
             switch (node.Kind)
@@ -206,16 +212,41 @@ public sealed partial class SchemaBrowserViewModel
         catch (OperationCanceledException)
         {
         }
-        catch (Exception ex)
+        catch (Exception ex) when (gen == _generation)
         {
             node.Children.Clear();
             node.Children.Add(new SchemaNode(null, SchemaNodeKind.Message, "읽지 못했다: " + ex.Message));
         }
+        catch (Exception)
+        {
+            // 버려진 세대의 실패는 새 읽기의 결과를 덮지 않는다.
+        }
         finally
         {
-            node.Loading = false;
+            if (node.LoadGeneration == gen)
+            {
+                node.Loading = false;
+            }
+
+            EndLoad();
         }
     }
+
+    /// <summary>읽기 하나가 시작됐다(트리 짓기·노드 펼치기). 읽는 동안 패널이 진행 표시를 보인다.</summary>
+    private void BeginLoad()
+    {
+        _loadsInFlight++;
+        IsLoading = true;
+    }
+
+    /// <summary>읽기 하나가 끝났다(버려진 읽기 포함). 남은 읽기와 트리 짓기가 없으면 진행 표시를 끈다.</summary>
+    private void EndLoad()
+    {
+        _loadsInFlight--;
+        IsLoading = _loadsInFlight > 0 || IsBusy;
+    }
+
+    partial void OnIsBusyChanged(bool value) => IsLoading = value || _loadsInFlight > 0;
 
     private async Task LoadSchemaAsync(SchemaNode node, ISession session, CancellationToken ct)
     {

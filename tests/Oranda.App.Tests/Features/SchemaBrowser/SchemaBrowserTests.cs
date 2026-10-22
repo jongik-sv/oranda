@@ -447,20 +447,55 @@ public class SchemaBrowserTests
 
         public ObjectQuery? LastQuery { get; private set; }
 
-        public Task<IReadOnlyList<string>> ListSchemasAsync(ISession s, CancellationToken ct) =>
-            Task.FromResult<IReadOnlyList<string>>(Schemas);
+        /// <summary>닫아 두면 스키마 목록 조회가 열릴 때까지 끝나지 않는다(취소도 듣지 않는다 — 늦게 끝나는 실제 조회처럼).</summary>
+        public TaskCompletionSource? SchemasGate { get; set; }
 
-        public Task<IReadOnlyList<DbObjectRef>> ListObjectsAsync(ISession s, ObjectQuery q, CancellationToken ct)
+        /// <summary>닫아 두면 객체 목록 조회가 열릴 때까지 끝나지 않는다.</summary>
+        public TaskCompletionSource? ObjectsGate { get; set; }
+
+        public async Task<IReadOnlyList<string>> ListSchemasAsync(ISession s, CancellationToken ct)
+        {
+            if (SchemasGate is { } gate)
+            {
+                await gate.Task;
+            }
+
+            return Schemas;
+        }
+
+        public async Task<IReadOnlyList<DbObjectRef>> ListObjectsAsync(ISession s, ObjectQuery q, CancellationToken ct)
         {
             ListObjectsCalls++;
             LastQuery = q;
-            var like = q.NamePattern is null ? null : q.NamePattern.Trim('%');
-            var r = Objects
+            if (ObjectsGate is { } gate)
+            {
+                await gate.Task;
+            }
+
+            var like = q.NamePattern is null ? null : LikeToRegex(q.NamePattern);
+            return [.. Objects
                 .Where(o => q.Owner is null || o.Owner == q.Owner)
                 .Where(o => q.ObjectTypes.Count == 0 || q.ObjectTypes.Contains(o.ObjectType))
-                .Where(o => like is null || o.Name.Contains(like, StringComparison.Ordinal))
-                .ToList();
-            return Task.FromResult<IReadOnlyList<DbObjectRef>>(r);
+                .Where(o => like is null || like.IsMatch(o.Name))];
+        }
+
+        /// <summary>서버·캐시와 같은 LIKE(<c>%</c>·<c>_</c>, 이스케이프 <c>\</c>, 대소문자 구분). OracleMetadataProvider.LikeToRegex 와 같다.</summary>
+        private static System.Text.RegularExpressions.Regex LikeToRegex(string like)
+        {
+            var sb = new System.Text.StringBuilder("^");
+            for (var i = 0; i < like.Length; i++)
+            {
+                var ch = like[i];
+                sb.Append(ch switch
+                {
+                    '\\' when i + 1 < like.Length => System.Text.RegularExpressions.Regex.Escape(like[++i].ToString()),
+                    '%' => "(?s:.*)",
+                    '_' => "(?s:.)",
+                    _ => System.Text.RegularExpressions.Regex.Escape(ch.ToString()),
+                });
+            }
+
+            return new System.Text.RegularExpressions.Regex(sb.Append('$').ToString(), System.Text.RegularExpressions.RegexOptions.CultureInvariant);
         }
 
         public Task<TableInfo> GetTableAsync(ISession s, DbObjectRef table, CancellationToken ct)

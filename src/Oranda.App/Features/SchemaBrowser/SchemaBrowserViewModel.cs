@@ -66,6 +66,8 @@ public sealed partial class SchemaBrowserViewModel : ToolPanelViewModelBase, IDi
     private SchemaFilter _filter = new();
     private readonly Dictionary<string, HashSet<string>> _invalidByOwner = new(StringComparer.Ordinal);
     private int _generation;
+    private int _buildGeneration;
+    private int _loadsInFlight;
     private CancellationTokenSource? _debounce;
     private CancellationTokenSource? _previewDelay;
     private SchemaObjectOpener? _opener;
@@ -238,6 +240,10 @@ public sealed partial class SchemaBrowserViewModel : ToolPanelViewModelBase, IDi
 
     [ObservableProperty]
     private bool _isBusy;
+
+    /// <summary>트리를 짓거나 노드를 읽는 중이다(패널의 진행 막대). 버려진 읽기도 끝나면 꺼진다.</summary>
+    [ObservableProperty]
+    private bool _isLoading;
 
     /// <summary>필터 입력 뒤 자동 적용까지 기다리는 시간(ms). 0 이면 바로.</summary>
     public int DebounceMilliseconds { get; set; } = 300;

@@ -56,6 +56,7 @@
   "값 복사": "Copy value",
   "객체": "Object",
   "객체 (← 기준)": "Object (← baseline)",
+  "객체 목록을 읽는 중": "Reading the object list",
   "객체 유형": "Object type",
   "객체 이름 (소유자.이름, * 와일드카드)": "Object name (owner.name, * wildcard)",
   "객체 이름·DDL 검색": "Search object name or DDL",

@@ -21,8 +21,13 @@
                   SelectedItem="{Binding TypeFilter, Mode=TwoWay}" Margin="0,0,4,0" AutomationProperties.Name="객체 유형" />
       </DockPanel>
     </Border>
-    <TextBox x:Name="FilterBox" DockPanel.Dock="Top" Classes="compact search" Margin="4,4,4,2"
-             PlaceholderText="이름 필터 (* 와일드카드)" Text="{Binding FilterText, Mode=TwoWay}" AutomationProperties.Name="이름 필터" />
+    <!-- 읽는 동안 필터 칸 아래 여백에 가는 막대를 겹쳐 보인다(트리가 밀리지 않게 자리를 따로 차지하지 않는다). -->
+    <Panel DockPanel.Dock="Top" Margin="4,4,4,0">
+      <TextBox x:Name="FilterBox" Classes="compact search" Margin="0,0,0,3"
+               PlaceholderText="이름 필터 (* 와일드카드)" Text="{Binding FilterText, Mode=TwoWay}" AutomationProperties.Name="이름 필터" />
+      <ProgressBar x:Name="LoadingBar" IsIndeterminate="True" IsVisible="{Binding IsLoading}" Height="2" MinHeight="2"
+                   VerticalAlignment="Bottom" AutomationProperties.Name="객체 목록을 읽는 중" />
+    </Panel>
     <Border DockPanel.Dock="Bottom" Classes="panel-status">
       <TextBlock Text="{Binding StatusText}" TextTrimming="CharacterEllipsis" />
     </Border>

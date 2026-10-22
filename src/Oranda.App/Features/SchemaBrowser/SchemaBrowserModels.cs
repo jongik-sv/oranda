@@ -96,6 +96,9 @@ public sealed partial class SchemaNode : ObservableObject
 
     internal bool Loading { get; set; }
 
+    /// <summary>지금 읽는 중인 읽기의 세대. 필터를 다시 걸어 세대가 바뀌면 그 읽기는 버려지고 새 읽기가 시작된다.</summary>
+    internal int LoadGeneration { get; set; }
+
     [ObservableProperty]
     private bool _isFavorite;
 
