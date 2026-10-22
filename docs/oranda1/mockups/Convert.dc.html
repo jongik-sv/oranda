@@ -1,0 +1,168 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<title>MyBatis 로 바꾸기</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+body{margin:0}
+a{color:#0A64C8}a:hover{color:#074A95}
+</style>
+</helmet>
+<div style="width: 1440px; height: 900px; box-sizing: border-box; position: relative; background: #FFFFFF; color: #1F1F1F; font-family: 'Segoe UI', 'Malgun Gothic', system-ui, sans-serif; font-size: 12px; overflow: hidden">
+
+  <!-- 뒤 화면(흐리게) -->
+  <div style="position: absolute; left: 0; top: 0; right: 0; height: 44px; background: #F3F3F3; border-bottom: 1px solid #D6D6D6; display: flex; align-items: center; padding: 0 12px; font-weight: 700; font-size: 14px; color: #E8710A">Oranda</div>
+  <div style="position: absolute; left: 0; top: 44px; right: 0; height: 34px; background: #EAEAEA; border-bottom: 1px solid #D6D6D6; display: flex; align-items: flex-end; padding: 0 8px">
+    <div style="display: flex; align-items: center; gap: 6px; height: 30px; padding: 0 12px; background: #FFFFFF; border: 1px solid #D6D6D6; border-bottom: none; border-radius: 4px 4px 0 0; font-weight: 600">주문조회 <span style="padding: 0 5px; border-radius: 3px; background: #E5E5EA; font-size: 10px; font-weight: 400">md</span></div>
+  </div>
+  <!-- 문서 탭 오른쪽 클릭 메뉴 -->
+  <div style="position: absolute; left: 60px; top: 74px; width: 250px; padding: 4px; background: #FFFFFF; border: 1px solid #D1D1D6; border-radius: 6px; box-shadow: 0 6px 18px rgba(0,0,0,.14); display: flex; flex-direction: column">
+    <div style="padding: 6px 10px">이름 바꾸기</div>
+    <div style="padding: 6px 10px">다른 이름으로 저장…</div>
+    <div style="height: 1px; background: #E5E5EA; margin: 4px 0"></div>
+    <div style="padding: 6px 10px; border-radius: 4px; background: #D3E5FA; font-weight: 600">MyBatis 작업 공간으로 바꾸기…</div>
+    <div style="padding: 6px 10px">닫기</div>
+  </div>
+  <div style="position: absolute; left: 0; top: 0; right: 0; bottom: 0; background: rgba(20,20,20,.38)"></div>
+
+  <!-- 대화 상자 -->
+  <div style="position: absolute; left: 180px; top: 90px; width: 1080px; height: 740px; box-sizing: border-box; display: flex; flex-direction: column; background: #FFFFFF; border-radius: 8px; box-shadow: 0 18px 48px rgba(0,0,0,.28); overflow: hidden">
+    <div style="padding: 16px 20px 12px; border-bottom: 1px solid #E5E5EA">
+      <div style="font-size: 16px; font-weight: 600">MyBatis 작업 공간으로 바꾸기</div>
+      <div style="color: #5F6368; margin-top: 4px">주문조회.workspace.md · SQL 탭 4개를 매퍼 xml 문장으로 바꿉니다</div>
+    </div>
+
+    <div style="flex: 1; min-height: 0; display: flex">
+      <!-- 왼쪽: 설정 -->
+      <div style="flex: 1; min-width: 0; padding: 14px 20px; display: flex; flex-direction: column; gap: 14px; overflow: hidden">
+
+        <div style="display: flex; flex-direction: column; gap: 8px">
+          <div style="font-weight: 600">저장할 매퍼</div>
+          <label style="display: flex; align-items: center; gap: 8px"><input type="radio" name="target" checked="checked"> 새 매퍼 파일</label>
+          <div style="display: flex; gap: 6px; padding-left: 22px">
+            <input type="text" aria-label="매퍼 파일 경로" value="D:\src\order-api\src\main\resources\mapper\order\OrderMapper.xml" style="flex: 1; height: 26px; box-sizing: border-box; padding: 0 8px; border: 1px solid #D1D1D6; border-radius: 3px; font: inherit">
+            <button type="button" style="height: 26px; padding: 0 10px; border: 1px solid #D1D1D6; border-radius: 3px; background: #FFFFFF; font: inherit">찾아보기</button>
+          </div>
+          <label style="display: flex; align-items: center; gap: 8px"><input type="radio" name="target"> 기존 매퍼에 문장 추가 <span style="color: #5F6368">(id 가 겹치면 알려 줌)</span></label>
+          <div style="display: flex; align-items: center; gap: 8px">
+            <span style="width: 80px; color: #5F6368">namespace</span>
+            <input type="text" aria-label="namespace" value="com.acme.order.OrderMapper" style="flex: 1; height: 26px; box-sizing: border-box; padding: 0 8px; border: 1px solid #D1D1D6; border-radius: 3px; font-family: 'Cascadia Mono', Consolas, monospace; font-size: 12px">
+          </div>
+        </div>
+
+        <div style="display: flex; flex-direction: column; gap: 6px">
+          <div style="font-weight: 600">바꿀 탭</div>
+          <div style="border: 1px solid #D6D6D6; border-radius: 4px; overflow: hidden">
+            <div style="display: grid; grid-template-columns: 30px 110px 150px 64px minmax(0, 1fr); background: #F3F3F3; border-bottom: 1px solid #D6D6D6; font-weight: 600">
+              <span style="padding: 6px 8px"></span><span style="padding: 6px 8px">탭</span><span style="padding: 6px 8px">문장 id</span><span style="padding: 6px 8px">종류</span><span style="padding: 6px 8px">확인</span>
+            </div>
+            <div style="display: grid; grid-template-columns: 30px 110px 150px 64px minmax(0, 1fr); align-items: center; background: #EAF1FC; border-bottom: 1px solid #ECECEC">
+              <span style="padding: 6px 8px"><input type="checkbox" checked="checked" aria-label="주문 목록 포함"></span>
+              <span style="padding: 6px 8px">주문 목록</span>
+              <span style="padding: 6px 8px; font-family: 'Cascadia Mono', Consolas, monospace">selectOrderList</span>
+              <span style="padding: 6px 8px; color: #8250DF; font-weight: 600">select</span>
+              <span style="padding: 6px 8px; color: #107C10">바인드 2 · 문제 없음</span>
+            </div>
+            <div style="display: grid; grid-template-columns: 30px 110px 150px 64px minmax(0, 1fr); align-items: center; border-bottom: 1px solid #ECECEC">
+              <span style="padding: 6px 8px"><input type="checkbox" checked="checked" aria-label="주문 상세 포함"></span>
+              <span style="padding: 6px 8px">주문 상세</span>
+              <span style="padding: 6px 8px; font-family: 'Cascadia Mono', Consolas, monospace">selectOrder</span>
+              <span style="padding: 6px 8px; color: #8250DF; font-weight: 600">select</span>
+              <span style="padding: 6px 8px; color: #107C10">바인드 1 · 문제 없음</span>
+            </div>
+            <div style="display: grid; grid-template-columns: 30px 110px 150px 64px minmax(0, 1fr); align-items: center; border-bottom: 1px solid #ECECEC">
+              <span style="padding: 6px 8px"><input type="checkbox" checked="checked" aria-label="상태 바꾸기 포함"></span>
+              <span style="padding: 6px 8px">상태 바꾸기</span>
+              <span style="padding: 6px 8px; font-family: 'Cascadia Mono', Consolas, monospace">updateOrderStatus</span>
+              <span style="padding: 6px 8px; color: #E8710A; font-weight: 600">update</span>
+              <span style="padding: 6px 8px; color: #B65A00">&amp;schema → ${schema} 치환 · 값 검증 필요</span>
+            </div>
+            <div style="display: grid; grid-template-columns: 30px 110px 150px 64px minmax(0, 1fr); align-items: center; color: #6E6E73">
+              <span style="padding: 6px 8px"><input type="checkbox" aria-label="임시 집계 포함"></span>
+              <span style="padding: 6px 8px">임시 집계</span>
+              <span style="padding: 6px 8px">—</span>
+              <span style="padding: 6px 8px">PL/SQL</span>
+              <span style="padding: 6px 8px">익명 블록이라 기본으로 뺌</span>
+            </div>
+          </div>
+          <div style="color: #5F6368">문장 id 는 탭 이름과 첫 동사로 제안합니다. 칸을 눌러 고칠 수 있습니다.</div>
+        </div>
+
+        <div style="display: flex; flex-direction: column; gap: 7px">
+          <div style="font-weight: 600">바꾸는 방법</div>
+          <label style="display: flex; align-items: center; gap: 8px"><input type="checkbox" checked="checked"> 바인드 <code style="font-family: 'Cascadia Mono', Consolas, monospace; color: #0F7B8A">:x</code> → <code style="font-family: 'Cascadia Mono', Consolas, monospace; color: #0F7B8A">#{x}</code>, 치환 <code style="font-family: 'Cascadia Mono', Consolas, monospace; color: #0F7B8A">&amp;x</code> → <code style="font-family: 'Cascadia Mono', Consolas, monospace; color: #0F7B8A">${x}</code></label>
+          <label style="display: flex; align-items: center; gap: 8px"><input type="checkbox"> 타입을 아는 바인드에 jdbcType 붙이기 <code style="font-family: 'Cascadia Mono', Consolas, monospace; color: #5F6368">#{fromDt,jdbcType=DATE}</code></label>
+          <label style="display: flex; align-items: center; gap: 8px"><input type="checkbox"> WHERE 의 바인드 조건을 <code style="font-family: 'Cascadia Mono', Consolas, monospace; color: #8250DF">&lt;where&gt;&lt;if test="x != null"&gt;</code> 로 감싸기</label>
+          <label style="display: flex; align-items: center; gap: 8px"><input type="checkbox" checked="checked"> 비교 기호(&lt; &gt;)가 있는 문장은 CDATA 로 감싸기</label>
+          <label style="display: flex; align-items: center; gap: 8px"><input type="checkbox" checked="checked"> 지금 탭의 바인드 값을 첫 시나리오로 저장</label>
+        </div>
+      </div>
+
+      <!-- 오른쪽: 미리보기 -->
+      <div style="width: 440px; flex: none; display: flex; flex-direction: column; border-left: 1px solid #E5E5EA; background: #F7F7F8">
+        <div style="padding: 12px 14px 8px; display: flex; justify-content: space-between">
+          <span style="font-weight: 600">미리보기 · selectOrderList</span>
+          <span style="color: #5F6368">줄 바꿈은 기본 서식</span>
+        </div>
+        <div style="flex: 1; padding: 0 14px; font-family: 'Cascadia Mono', Consolas, 'D2Coding', monospace; font-size: 12px; line-height: 19px">
+          <sc-for list="{{lines}}" as="ln" hint-placeholder-count="12">
+            <div style="white-space: pre"><sc-for list="{{ln.segs}}" as="sg" hint-placeholder-count="2"><span style="color: {{sg.color}}">{{sg.t}}</span></sc-for></div>
+          </sc-for>
+        </div>
+        <div style="margin: 12px 14px 14px; padding: 10px; border-radius: 4px; background: #FFFFFF; border: 1px solid #E5E5EA; line-height: 1.6">
+          <div style="font-weight: 600; margin-bottom: 2px">시나리오 「바꿀 때 값」</div>
+          <div style="font-family: 'Cascadia Mono', Consolas, monospace; color: #3C3C43">custId = 'C0012' · fromDt = DATE '2026-10-01'</div>
+        </div>
+      </div>
+    </div>
+
+    <div style="display: flex; align-items: center; gap: 8px; padding: 12px 20px; border-top: 1px solid #E5E5EA">
+      <span style="color: #5F6368">원래 작업 공간 파일은 그대로 둡니다. 바꾸면 새 MyBatis 문서 탭이 열립니다.</span>
+      <div style="flex: 1"></div>
+      <button type="button" style="height: 30px; padding: 0 14px; border: 1px solid #D1D1D6; border-radius: 4px; background: #FFFFFF; font: inherit">취소</button>
+      <button type="button" style="height: 30px; padding: 0 14px; border: 1px solid #074A95; border-radius: 4px; background: #0A64C8; color: #FFFFFF; font: inherit; font-weight: 600">문장 3개 바꾸고 열기</button>
+    </div>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":900}}'>
+class Component extends DCLogic {
+  seg(text) {
+    var re = /(<!\[CDATA\[|\]\]>)|(<\/?[a-zA-Z]+(?:[^>"']|"[^"]*"|'[^']*')*\/?>)|([#$]\{[^}]+\})|('[^']*')|(\b(?:SELECT|FROM|JOIN|ON|AND|WHERE|ORDER|BY|DESC)\b)/g;
+    var out = [], last = 0, m;
+    while ((m = re.exec(text)) !== null) {
+      if (m.index > last) out.push({ t: text.slice(last, m.index), color: '#1F1F1F' });
+      var c = m[1] ? '#8E8E93' : m[2] ? '#8250DF' : m[3] ? '#0F7B8A' : m[4] ? '#A31515' : '#0A64C8';
+      out.push({ t: m[0], color: c });
+      last = m.index + m[0].length;
+    }
+    if (last < text.length) out.push({ t: text.slice(last), color: '#1F1F1F' });
+    if (out.length === 0) out.push({ t: ' ', color: '#1F1F1F' });
+    return out;
+  }
+  renderVals() {
+    var self = this;
+    var L = [
+      '<select id="selectOrderList" parameterType="map">',
+      '  <![CDATA[',
+      '  SELECT O.ORDER_NO, O.ORDER_DT, O.STATUS,',
+      '         C.CUST_NM',
+      '    FROM ORDERS O',
+      '    JOIN CUSTOMER C ON C.CUST_ID = O.CUST_ID',
+      '   WHERE O.CUST_ID = #{custId}',
+      '     AND O.ORDER_DT >= #{fromDt}',
+      '   ORDER BY O.ORDER_DT DESC',
+      '  ]]>',
+      '</select>'
+    ];
+    return { lines: L.map(function (t) { return { segs: self.seg(t) }; }) };
+  }
+}
+</script>
+</body>
+</html>

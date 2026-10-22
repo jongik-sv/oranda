@@ -1,0 +1,171 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<title>조합 검사</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+body{margin:0}
+a{color:#0A64C8}a:hover{color:#074A95}
+</style>
+</helmet>
+<div style="width: 1440px; height: 900px; box-sizing: border-box; display: flex; flex-direction: column; background: #FFFFFF; color: #1F1F1F; font-family: 'Segoe UI', 'Malgun Gothic', system-ui, sans-serif; font-size: 12px; overflow: hidden">
+
+  <div style="height: 44px; flex: none; display: flex; align-items: center; gap: 8px; padding: 0 12px; background: #F3F3F3; border-bottom: 1px solid #D6D6D6">
+    <div style="font-weight: 700; font-size: 14px; color: #E8710A; margin-right: 8px">Oranda</div>
+    <div style="display: flex; align-items: center; gap: 6px; height: 28px; padding: 0 10px; background: #FFFFFF; border: 1px solid #D1D1D6; border-radius: 4px">
+      <span style="display: inline-block; padding: 1px 6px; border-radius: 3px; background: #107C10; color: #FFFFFF; font-size: 11px; font-weight: 600">개발</span>
+      <span>SCOTT @ DEVDB</span>
+    </div>
+    <div style="width: 1px; height: 22px; background: #D0D0D0; margin: 0 4px"></div>
+    <button type="button" style="height: 28px; padding: 0 10px; border: 1px solid #D1D1D6; border-radius: 4px; background: #FFFFFF; font: inherit">시나리오 값으로 실행</button>
+    <button type="button" style="height: 28px; padding: 0 12px; border: 1px solid #074A95; border-radius: 4px; background: #0A64C8; color: #FFFFFF; font: inherit; font-weight: 600">조합 검사</button>
+    <div style="flex: 1"></div>
+    <div style="color: #5F6368">update·delete 는 검사만 하고 실행하지 않습니다</div>
+  </div>
+
+  <div style="height: 34px; flex: none; display: flex; align-items: flex-end; gap: 2px; padding: 0 8px; background: #EAEAEA; border-bottom: 1px solid #D6D6D6">
+    <div style="display: flex; align-items: center; gap: 6px; height: 30px; padding: 0 12px; background: #FFFFFF; border: 1px solid #D6D6D6; border-bottom: none; border-radius: 4px 4px 0 0; font-weight: 600">EmpMapper <span style="padding: 0 5px; border-radius: 3px; background: #F0E8FC; color: #6B3FC0; font-size: 10px">MyBatis</span></div>
+  </div>
+
+  <div style="flex: 1; min-height: 0; display: flex; flex-direction: column">
+    <div style="height: 32px; flex: none; display: flex; align-items: flex-end; gap: 2px; padding: 0 6px; background: #F3F3F3; border-bottom: 1px solid #D6D6D6">
+      <div style="display: flex; align-items: center; gap: 6px; height: 28px; padding: 0 12px; color: #5F6368"><span style="color: #8250DF; font-size: 10px; font-weight: 700">SEL</span> selectEmpList</div>
+      <div style="display: flex; align-items: center; gap: 6px; height: 28px; padding: 0 12px; background: #FFFFFF; border: 1px solid #D6D6D6; border-bottom: none; border-radius: 3px 3px 0 0"><span style="color: #E8710A; font-size: 10px; font-weight: 700">UPD</span> updateEmpSal <span style="color: #C42B1C; font-size: 10px">오류 2</span></div>
+    </div>
+
+    <!-- 편집기 -->
+    <div style="height: 250px; flex: none; display: flex; padding: 6px 0; font-family: 'Cascadia Mono', Consolas, 'D2Coding', monospace; font-size: 13px; line-height: 20px; border-bottom: 1px solid #D6D6D6">
+      <div style="flex: 1">
+        <sc-for list="{{lines}}" as="ln" hint-placeholder-count="11">
+          <div style="display: flex; align-items: center; background: {{ln.bg}}">
+            <div style="width: 44px; flex: none; text-align: right; padding-right: 6px; color: #9AA0A6">{{ln.no}}</div>
+            <div style="width: 18px; flex: none; display: flex; justify-content: center">
+              <sc-if value="{{ln.err}}" hint-placeholder-val="{{false}}">
+                <svg width="12" height="12" viewBox="0 0 12 12" role="img" aria-label="조합 오류"><circle cx="6" cy="6" r="5" fill="#C42B1C"></circle><path d="M4 4 8 8 M8 4 4 8" stroke="#FFFFFF" stroke-width="1.4"></path></svg>
+              </sc-if>
+            </div>
+            <div style="white-space: pre; padding-left: 4px; text-decoration: {{ln.deco}}; text-decoration-color: #C42B1C"><sc-for list="{{ln.segs}}" as="sg" hint-placeholder-count="2"><span style="color: {{sg.color}}">{{sg.t}}</span></sc-for></div>
+          </div>
+        </sc-for>
+      </div>
+      <div style="width: 360px; flex: none; margin: 4px 14px; align-self: flex-start; padding: 10px 12px; border: 1px solid #F3C98B; background: #FFF8EC; border-radius: 6px; font-family: 'Segoe UI', 'Malgun Gothic', sans-serif; font-size: 12px; line-height: 1.55">
+        <div style="font-weight: 600; margin-bottom: 4px">빠른 고침 · 줄 3–9</div>
+        SET 뒤의 &lt;if&gt; 들을 <span style="font-family: 'Cascadia Mono', Consolas, monospace; color: #8250DF">&lt;set&gt;</span> 으로 감싸면 MyBatis 가 끝 쉼표와 빈 SET 을 정리합니다. 조합 4개가 모두 통과합니다.
+        <div style="display: flex; gap: 6px; margin-top: 8px">
+          <button type="button" style="height: 26px; padding: 0 10px; border: 1px solid #074A95; border-radius: 4px; background: #0A64C8; color: #FFFFFF; font: inherit; font-weight: 600">&lt;set&gt; 으로 고치기</button>
+          <button type="button" style="height: 26px; padding: 0 10px; border: 1px solid #D1D1D6; border-radius: 4px; background: #FFFFFF; font: inherit">미리보기</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 아래 패널: 조합 검사 -->
+    <div style="flex: 1; min-height: 0; display: flex; flex-direction: column">
+      <div style="height: 30px; flex: none; display: flex; align-items: flex-end; gap: 2px; padding: 0 6px; background: #EAEAEA">
+        <div style="height: 26px; display: flex; align-items: center; padding: 0 12px; color: #5F6368">펼친 SQL</div>
+        <div style="height: 26px; display: flex; align-items: center; padding: 0 12px; color: #5F6368">결과</div>
+        <div style="height: 26px; display: flex; align-items: center; padding: 0 12px; background: #FFFFFF; border-radius: 3px 3px 0 0; font-weight: 600">조합 검사</div>
+        <div style="height: 26px; display: flex; align-items: center; padding: 0 12px; color: #5F6368">메시지</div>
+      </div>
+      <div style="height: 44px; flex: none; display: flex; align-items: center; gap: 14px; padding: 0 14px; border-bottom: 1px solid #ECECEC">
+        <span style="font-weight: 600">updateEmpSal · 조건 2개 → 조합 4개</span>
+        <span style="padding: 2px 8px; border-radius: 10px; background: #E7F3E8; color: #107C10; font-weight: 600">통과 2</span>
+        <span style="padding: 2px 8px; border-radius: 10px; background: #FCE8E6; color: #C42B1C; font-weight: 600">오류 2</span>
+        <div style="flex: 1"></div>
+        <span style="color: #5F6368">조합 방식</span>
+        <span style="display: flex; align-items: center; gap: 6px; height: 26px; padding: 0 8px; border: 1px solid #D1D1D6; border-radius: 3px">전부 (조건 8개 이하) <svg width="10" height="10" viewBox="0 0 10 10" aria-hidden="true"><path d="M2 3.5 5 6.5 8 3.5" fill="none" stroke="#5F6368" stroke-width="1.4"></path></svg></span>
+        <span style="color: #5F6368">검사</span>
+        <span style="display: flex; align-items: center; gap: 6px; height: 26px; padding: 0 8px; border: 1px solid #D1D1D6; border-radius: 3px">구문 분석 + 실행 계획 <svg width="10" height="10" viewBox="0 0 10 10" aria-hidden="true"><path d="M2 3.5 5 6.5 8 3.5" fill="none" stroke="#5F6368" stroke-width="1.4"></path></svg></span>
+        <button type="button" style="height: 26px; padding: 0 10px; border: 1px solid #D1D1D6; border-radius: 4px; background: #FFFFFF; font: inherit">다시 검사</button>
+      </div>
+      <div style="flex: 1; min-height: 0; display: flex">
+        <div style="flex: 1; min-width: 0">
+          <div style="display: grid; grid-template-columns: 40px 90px 90px 160px minmax(0, 1fr); background: #F3F3F3; border-bottom: 1px solid #D6D6D6; font-weight: 600">
+            <span style="padding: 6px 8px">#</span><span style="padding: 6px 8px">sal != null</span><span style="padding: 6px 8px">comm != null</span><span style="padding: 6px 8px">결과</span><span style="padding: 6px 8px">펼친 SQL</span>
+          </div>
+          <div style="display: grid; grid-template-columns: 40px 90px 90px 160px minmax(0, 1fr); border-bottom: 1px solid #F0F0F0">
+            <span style="padding: 7px 8px; color: #5F6368">1</span><span style="padding: 7px 8px; color: #107C10">켬</span><span style="padding: 7px 8px; color: #107C10">켬</span><span style="padding: 7px 8px; color: #107C10">✓ 통과</span><span style="padding: 7px 8px; font-family: 'Cascadia Mono', Consolas, monospace; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">UPDATE EMP SET SAL = :sal, COMM = :comm WHERE EMPNO = :empNo</span>
+          </div>
+          <div style="display: grid; grid-template-columns: 40px 90px 90px 160px minmax(0, 1fr); background: #FCECEA; box-shadow: inset 3px 0 0 #C42B1C; border-bottom: 1px solid #F0F0F0">
+            <span style="padding: 7px 8px; color: #5F6368">2</span><span style="padding: 7px 8px; color: #107C10">켬</span><span style="padding: 7px 8px; color: #8E8E93">끔</span><span style="padding: 7px 8px; color: #C42B1C; font-weight: 600">✕ WHERE 앞 쉼표</span><span style="padding: 7px 8px; font-family: 'Cascadia Mono', Consolas, monospace; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">UPDATE EMP SET SAL = :sal, WHERE EMPNO = :empNo</span>
+          </div>
+          <div style="display: grid; grid-template-columns: 40px 90px 90px 160px minmax(0, 1fr); border-bottom: 1px solid #F0F0F0">
+            <span style="padding: 7px 8px; color: #5F6368">3</span><span style="padding: 7px 8px; color: #8E8E93">끔</span><span style="padding: 7px 8px; color: #107C10">켬</span><span style="padding: 7px 8px; color: #107C10">✓ 통과</span><span style="padding: 7px 8px; font-family: 'Cascadia Mono', Consolas, monospace; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">UPDATE EMP SET COMM = :comm WHERE EMPNO = :empNo</span>
+          </div>
+          <div style="display: grid; grid-template-columns: 40px 90px 90px 160px minmax(0, 1fr); border-bottom: 1px solid #F0F0F0">
+            <span style="padding: 7px 8px; color: #5F6368">4</span><span style="padding: 7px 8px; color: #8E8E93">끔</span><span style="padding: 7px 8px; color: #8E8E93">끔</span><span style="padding: 7px 8px; color: #C42B1C; font-weight: 600">✕ SET 뒤가 비어 있음</span><span style="padding: 7px 8px; font-family: 'Cascadia Mono', Consolas, monospace; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">UPDATE EMP SET WHERE EMPNO = :empNo</span>
+          </div>
+          <div style="padding: 10px 8px; color: #5F6368; line-height: 1.6">조건이 많으면 「하나씩 끄기 + 모두 켬 + 모두 끔」으로 줄입니다(if 10개면 1024개 → 12개). 시나리오가 있으면 그 값 묶음도 함께 검사합니다.</div>
+        </div>
+        <div style="width: 420px; flex: none; border-left: 1px solid #D6D6D6; padding: 12px 14px; display: flex; flex-direction: column; gap: 8px; background: #F7F7F8">
+          <div style="font-weight: 600">조합 2 · sal 켬, comm 끔</div>
+          <div style="font-family: 'Cascadia Mono', Consolas, monospace; font-size: 13px; line-height: 20px; white-space: pre; background: #FFFFFF; border: 1px solid #E5E5EA; border-radius: 4px; padding: 8px 10px"><span style="color: #0A64C8">UPDATE</span> EMP
+   <span style="color: #0A64C8">SET</span> SAL = <span style="color: #0F7B8A">:sal</span><span style="background: #F8C9C4; color: #C42B1C; font-weight: 700">,</span>
+ <span style="color: #0A64C8">WHERE</span> EMPNO = <span style="color: #0F7B8A">:empNo</span></div>
+          <div style="color: #C42B1C">구문 오류: WHERE 앞에 쉼표가 남습니다 (줄 5 의 SAL = #{sal},)</div>
+          <div style="color: #3C3C43; line-height: 1.6">이 조합을 시나리오로 저장하면 값을 넣어 다시 확인할 수 있습니다.</div>
+          <div style="display: flex; gap: 6px">
+            <button type="button" style="height: 26px; padding: 0 10px; border: 1px solid #D1D1D6; border-radius: 4px; background: #FFFFFF; font: inherit">시나리오로 저장</button>
+            <button type="button" style="height: 26px; padding: 0 10px; border: 1px solid #D1D1D6; border-radius: 4px; background: #FFFFFF; font: inherit">편집기에서 보기</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div style="height: 24px; flex: none; display: flex; align-items: center; gap: 16px; padding: 0 12px; background: #F3F3F3; border-top: 1px solid #D6D6D6; color: #3C3C43; font-size: 11px">
+    <span>EmpMapper.xml</span>
+    <span style="color: #C42B1C">조합 오류 2 (updateEmpSal)</span>
+    <div style="flex: 1"></div>
+    <span>UTF-8 · LF</span>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":900}}'>
+class Component extends DCLogic {
+  seg(text) {
+    var re = /(<\/?[a-zA-Z]+(?:[^>"']|"[^"]*"|'[^']*')*\/?>)|([#$]\{[^}]+\})|(\b(?:UPDATE|SET|WHERE)\b)/g;
+    var out = [], last = 0, m;
+    while ((m = re.exec(text)) !== null) {
+      if (m.index > last) out.push({ t: text.slice(last, m.index), color: '#1F1F1F' });
+      out.push({ t: m[0], color: m[1] ? '#8250DF' : m[2] ? '#0F7B8A' : '#0A64C8' });
+      last = m.index + m[0].length;
+    }
+    if (last < text.length) out.push({ t: text.slice(last), color: '#1F1F1F' });
+    if (out.length === 0) out.push({ t: ' ', color: '#1F1F1F' });
+    return out;
+  }
+  renderVals() {
+    var self = this;
+    var L = [
+      ['<update id="updateEmpSal" parameterType="map">', ''],
+      ['  UPDATE EMP', ''],
+      ['     SET', 'e'],
+      ['  <if test="sal != null">', 'b'],
+      ['       SAL = #{sal},', 'eu'],
+      ['  </if>', 'b'],
+      ['  <if test="comm != null">', 'b'],
+      ['       COMM = #{comm}', 'b'],
+      ['  </if>', 'b'],
+      ['   WHERE EMPNO = #{empNo}', ''],
+      ['</update>', '']
+    ];
+    var lines = L.map(function (r, i) {
+      return {
+        no: i + 1,
+        segs: self.seg(r[0]),
+        err: r[1].indexOf('e') >= 0,
+        deco: r[1].indexOf('u') >= 0 ? 'underline wavy' : 'none',
+        bg: r[1] ? '#FFF6F5' : 'transparent'
+      };
+    });
+    return { lines: lines };
+  }
+}
+</script>
+</body>
+</html>

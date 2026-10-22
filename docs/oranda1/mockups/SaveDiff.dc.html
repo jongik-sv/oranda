@@ -1,0 +1,139 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<title>매퍼 xml 에 저장</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+body{margin:0}
+a{color:#0A64C8}a:hover{color:#074A95}
+</style>
+</helmet>
+<div style="width: 1440px; height: 900px; box-sizing: border-box; position: relative; background: #FFFFFF; color: #1F1F1F; font-family: 'Segoe UI', 'Malgun Gothic', system-ui, sans-serif; font-size: 12px; overflow: hidden">
+
+  <div style="position: absolute; left: 0; top: 0; right: 0; height: 44px; background: #F3F3F3; border-bottom: 1px solid #D6D6D6; display: flex; align-items: center; padding: 0 12px; font-weight: 700; font-size: 14px; color: #E8710A">Oranda</div>
+  <div style="position: absolute; left: 0; top: 44px; right: 0; height: 34px; background: #EAEAEA; border-bottom: 1px solid #D6D6D6; display: flex; align-items: flex-end; padding: 0 8px">
+    <div style="display: flex; align-items: center; gap: 6px; height: 30px; padding: 0 12px; background: #FFFFFF; border: 1px solid #D6D6D6; border-bottom: none; border-radius: 4px 4px 0 0; font-weight: 600">EmpMapper <span style="padding: 0 5px; border-radius: 3px; background: #F0E8FC; color: #6B3FC0; font-size: 10px">MyBatis</span> <span style="color: #B65A00">●</span></div>
+  </div>
+  <div style="position: absolute; left: 0; top: 0; right: 0; bottom: 0; background: rgba(20,20,20,.38)"></div>
+
+  <!-- 저장 확인 -->
+  <div style="position: absolute; left: 120px; top: 70px; width: 900px; height: 760px; box-sizing: border-box; display: flex; flex-direction: column; background: #FFFFFF; border-radius: 8px; box-shadow: 0 18px 48px rgba(0,0,0,.28); overflow: hidden">
+    <div style="padding: 16px 20px 12px; border-bottom: 1px solid #E5E5EA">
+      <div style="font-size: 16px; font-weight: 600">EmpMapper.xml 에 저장</div>
+      <div style="color: #5F6368; margin-top: 4px">바뀐 문장 2개만 씁니다. 다른 문장, resultMap, 주석, 들여쓰기는 한 글자도 건드리지 않습니다.</div>
+    </div>
+    <div style="flex: 1; min-height: 0; display: flex">
+      <div style="width: 240px; flex: none; border-right: 1px solid #E5E5EA; padding: 12px; display: flex; flex-direction: column; gap: 6px">
+        <label style="display: flex; align-items: flex-start; gap: 8px; padding: 8px; border-radius: 4px; background: #EAF1FC">
+          <input type="checkbox" checked="checked">
+          <span style="display: flex; flex-direction: column; gap: 2px"><span style="font-weight: 600">selectEmpList</span><span style="color: #5F6368">수정 · <span style="color: #107C10">+5</span> <span style="color: #C42B1C">−1</span></span></span>
+        </label>
+        <label style="display: flex; align-items: flex-start; gap: 8px; padding: 8px; border-radius: 4px">
+          <input type="checkbox" checked="checked">
+          <span style="display: flex; flex-direction: column; gap: 2px"><span style="font-weight: 600">insertEmp</span><span style="color: #5F6368">새 문장 · &lt;/mapper&gt; 앞에 추가</span></span>
+        </label>
+        <div style="padding: 8px; color: #6E6E73">바뀌지 않은 문장 6개</div>
+        <div style="flex: 1"></div>
+        <div style="display: flex; flex-direction: column; gap: 6px; padding: 10px; border-radius: 4px; background: #F2F2F7">
+          <div style="font-weight: 600">저장 전 검사</div>
+          <div style="color: #107C10">✓ XML 형식</div>
+          <div style="color: #107C10">✓ 문장 id 겹침 없음</div>
+          <div style="color: #107C10">✓ 연 뒤로 파일이 밖에서 안 바뀜</div>
+          <div style="color: #B65A00">! 조합 검사 안 함 (선택)</div>
+        </div>
+      </div>
+      <div style="flex: 1; min-width: 0; display: flex; flex-direction: column; background: #FFFFFF">
+        <div style="padding: 10px 14px; display: flex; justify-content: space-between; border-bottom: 1px solid #ECECEC">
+          <span style="font-weight: 600">바뀌는 부분 (git diff 와 같은 모양)</span>
+          <span style="color: #5F6368">나란히 보기 · 한 줄 보기</span>
+        </div>
+        <div style="flex: 1; overflow: hidden; padding: 6px 0; font-family: 'Cascadia Mono', Consolas, 'D2Coding', monospace; font-size: 12px; line-height: 19px">
+          <sc-for list="{{rows}}" as="r" hint-placeholder-count="24">
+            <div style="display: flex; background: {{r.bg}}">
+              <div style="width: 40px; flex: none; text-align: right; padding-right: 4px; color: #9AA0A6">{{r.a}}</div>
+              <div style="width: 40px; flex: none; text-align: right; padding-right: 4px; color: #9AA0A6">{{r.b}}</div>
+              <div style="width: 18px; flex: none; text-align: center; color: {{r.signColor}}; font-weight: 700">{{r.sign}}</div>
+              <div style="white-space: pre; color: {{r.color}}; font-style: {{r.fstyle}}">{{r.t}}</div>
+            </div>
+          </sc-for>
+        </div>
+      </div>
+    </div>
+    <div style="display: flex; align-items: center; gap: 8px; padding: 12px 20px; border-top: 1px solid #E5E5EA">
+      <label style="display: flex; align-items: center; gap: 6px; color: #3C3C43"><input type="checkbox" checked="checked"> 저장할 때마다 이 창 보기</label>
+      <div style="flex: 1"></div>
+      <button type="button" style="height: 30px; padding: 0 14px; border: 1px solid #D1D1D6; border-radius: 4px; background: #FFFFFF; font: inherit">취소</button>
+      <button type="button" style="height: 30px; padding: 0 14px; border: 1px solid #074A95; border-radius: 4px; background: #0A64C8; color: #FFFFFF; font: inherit; font-weight: 600">문장 2개 저장</button>
+    </div>
+  </div>
+
+  <!-- 밖에서 바뀌었을 때 -->
+  <div style="position: absolute; left: 1060px; top: 70px; width: 340px; box-sizing: border-box; padding: 16px; display: flex; flex-direction: column; gap: 10px; background: #FFFFFF; border-radius: 8px; box-shadow: 0 18px 48px rgba(0,0,0,.28)">
+    <div style="font-size: 11px; color: #5F6368; font-weight: 600">다른 경우 · 파일이 밖에서 바뀌었을 때</div>
+    <div style="display: flex; gap: 8px; padding: 10px; border-radius: 4px; background: #FFF4E5; border: 1px solid #F3C98B; line-height: 1.5">
+      <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true" style="flex: none; margin-top: 1px"><path d="M8 1.5 15 14H1Z M8 6v4 M8 11.6v.4" fill="none" stroke="#B65A00" stroke-width="1.4"></path></svg>
+      <span>IntelliJ 등에서 EmpMapper.xml 이 바뀌었습니다. <b>selectEmpList</b> 는 양쪽 다 고쳤고, 나머지 바뀐 문장 1개는 내가 안 고친 문장입니다.</span>
+    </div>
+    <div style="display: flex; flex-direction: column; gap: 6px; line-height: 1.5; color: #3C3C43">
+      <div>· 내가 안 고친 문장은 새 파일 내용으로 바로 반영</div>
+      <div>· 양쪽이 고친 문장만 골라 달라고 묻기</div>
+    </div>
+    <div style="display: flex; gap: 6px; flex-wrap: wrap">
+      <button type="button" style="height: 28px; padding: 0 10px; border: 1px solid #074A95; border-radius: 4px; background: #0A64C8; color: #FFFFFF; font: inherit; font-weight: 600">차이 보고 고르기</button>
+      <button type="button" style="height: 28px; padding: 0 10px; border: 1px solid #D1D1D6; border-radius: 4px; background: #FFFFFF; font: inherit">파일 것으로</button>
+      <button type="button" style="height: 28px; padding: 0 10px; border: 1px solid #D1D1D6; border-radius: 4px; background: #FFFFFF; font: inherit">내 것으로</button>
+    </div>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":900}}'>
+class Component extends DCLogic {
+  renderVals() {
+    var R = [
+      ['@', '', '', '@@ selectEmpList · 줄 24–41 @@'],
+      [' ', 28, 28, '  <where>'],
+      [' ', 29, 29, '    <if test="empNo != null">'],
+      [' ', 30, 30, '      AND E.EMPNO = #{empNo}'],
+      [' ', 31, 31, '    </if>'],
+      [' ', 32, 32, '    <if test="ename != null and ename != \'\'">'],
+      ['-', 33, '', '      AND E.ENAME = #{ename}'],
+      ['+', '', 33, '      AND E.ENAME LIKE \'%\' || #{ename} || \'%\''],
+      [' ', 34, 34, '    </if>'],
+      ['+', '', 35, '    <if test="deptIds != null and deptIds.size() > 0">'],
+      ['+', '', 36, '      AND E.DEPTNO IN'],
+      ['+', '', 37, '      <foreach collection="deptIds" item="id" open="(" separator="," close=")">#{id}</foreach>'],
+      ['+', '', 38, '    </if>'],
+      [' ', 35, 39, '  </where>'],
+      [' ', 36, 40, '  ORDER BY ${orderBy}'],
+      ['@', '', '', '@@ insertEmp · 새 문장 @@'],
+      [' ', 88, 92, '  </delete>'],
+      [' ', 89, 93, ''],
+      ['+', '', 94, '  <insert id="insertEmp" parameterType="Emp">'],
+      ['+', '', 95, '    INSERT INTO EMP (EMPNO, ENAME, JOB, SAL, DEPTNO)'],
+      ['+', '', 96, '    VALUES (#{empNo}, #{ename}, #{job}, #{sal}, #{deptNo})'],
+      ['+', '', 97, '  </insert>'],
+      ['+', '', 98, ''],
+      [' ', 90, 99, '</mapper>']
+    ];
+    var rows = R.map(function (r) {
+      var k = r[0];
+      return {
+        a: r[1], b: r[2], t: r[3] === '' ? ' ' : r[3],
+        sign: k === '@' || k === ' ' ? '' : k === '+' ? '+' : '−',
+        signColor: k === '+' ? '#107C10' : '#C42B1C',
+        bg: k === '+' ? '#E6F4EA' : k === '-' ? '#FCE8E6' : k === '@' ? '#F2F2F7' : 'transparent',
+        color: k === '@' ? '#5F6368' : '#1F1F1F',
+        fstyle: k === '@' ? 'italic' : 'normal'
+      };
+    });
+    return { rows: rows };
+  }
+}
+</script>
+</body>
+</html>

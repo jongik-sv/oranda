@@ -1,0 +1,20 @@
+{
+  "v": 3,
+  "createdOnFiles": {"v": 1, "at": "2026-10-23T09:00:00Z"},
+  "title": "Oranda MyBatis 작업 공간 시안",
+  "launch": {"view": "canvas"},
+  "pages": [],
+  "boards": {
+    "Main.dc.html": {"x": 0, "y": 0, "w": 1440, "h": 900, "title": "시안 A — 문장 탭형 (추천) · 시나리오를 눌러 보세요", "is_interactive": true},
+    "SplitView.dc.html": {"x": 1520, "y": 0, "w": 1440, "h": 900, "title": "시안 B — 매퍼 파일 통째 편집형"},
+    "Convert.dc.html": {"x": 0, "y": 1320, "w": 1440, "h": 900, "title": "흐름 1 — 일반 작업 공간을 MyBatis 로 바꾸기"},
+    "SaveDiff.dc.html": {"x": 1520, "y": 1320, "w": 1440, "h": 900, "title": "흐름 2 — 매퍼 xml 에 저장 (바뀐 문장만)"},
+    "Combos.dc.html": {"x": 3040, "y": 1320, "w": 1440, "h": 900, "title": "흐름 3 — 조합 검사"}
+  },
+  "order": ["Main.dc.html", "SplitView.dc.html", "Convert.dc.html", "SaveDiff.dc.html", "Combos.dc.html"],
+  "notes": {
+    "row1": {"x": 0, "y": -300, "text": "레이아웃 시안 — A 문장 탭형(추천) · B 파일 통째 편집형", "kind": "title1", "maxW": 2960},
+    "row2": {"x": 0, "y": 1040, "text": "흐름 — 일반 작업 공간에서 바꾸기 · 저장 · 조합 검사", "kind": "title1", "maxW": 4480}
+  },
+  "designSystems": []
+}

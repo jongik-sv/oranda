@@ -3,7 +3,7 @@
 > version: 1.0
 > date: 2026-10-23
 > 상위 제품: Oranda(Orange 대체 Oracle 클라이언트). 상위 PRD = `docs/PRD.md` — 이 폴더의 문서는 상위 PRD 를 고치지 않고 이 기능만 다룬다.
-> 화면 시안: https://claude.ai/artifact/JeoMQCGye8RCEqGmGVPKEa (시안 A 채택, `decisions.md` D-001)
+> 화면 시안: https://claude.ai/artifact/JeoMQCGye8RCEqGmGVPKEa (시안 A 채택, `decisions.md` D-001). 내려받은 사본 = `docs/oranda1/mockups/`
 
 ## 1. 배경과 목표
 
@@ -63,7 +63,17 @@
 - 오른쪽 「파라미터 · 시나리오」: 시나리오 목록, 값 표
 - 아래: 펼친 SQL · 결과 · 조합 검사 · 메시지
 - 상태 줄: 매퍼 파일, 저장 안 한 문장 수, 파일 감시 상태
-- 흐름 화면: 바꾸기 대화 상자(Convert), 저장 확인(SaveDiff), 조합 검사(Combos) — 시안 캔버스 참고
+- 흐름 화면: 바꾸기 대화 상자(Convert), 저장 확인(SaveDiff), 조합 검사(Combos)
+
+시안 위치:
+
+| 위치 | 내용 |
+|------|------|
+| https://claude.ai/artifact/JeoMQCGye8RCEqGmGVPKEa | 원본 디자인 캔버스(Claude 아티팩트, 비공개 — 소유자 공유 필요) |
+| `docs/oranda1/mockups/` | 2026-10-23 내려받은 사본(`canvas.json` + 아트보드 `.dc.html` 5개, 설명 `README.md`) |
+| `docs/oranda1/mockups/Main.dc.html` | 시안 A(채택) |
+| `docs/oranda1/mockups/SplitView.dc.html` | 시안 B(채택 안 함) |
+| `docs/oranda1/mockups/Convert.dc.html` · `SaveDiff.dc.html` · `Combos.dc.html` | 흐름 1·2·3 |
 
 ## 6. 비기능 요구사항 (NFR)
 

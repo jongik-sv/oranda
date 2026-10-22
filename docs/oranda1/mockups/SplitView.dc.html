@@ -1,0 +1,194 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<title>시안 B 파일 통째 편집형</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+body{margin:0}
+a{color:#0A64C8}a:hover{color:#074A95}
+</style>
+</helmet>
+<div style="width: 1440px; height: 900px; box-sizing: border-box; display: flex; flex-direction: column; background: #FFFFFF; color: #1F1F1F; font-family: 'Segoe UI', 'Malgun Gothic', system-ui, sans-serif; font-size: 12px; overflow: hidden">
+
+  <div style="height: 44px; flex: none; display: flex; align-items: center; gap: 8px; padding: 0 12px; background: #F3F3F3; border-bottom: 1px solid #D6D6D6">
+    <div style="font-weight: 700; font-size: 14px; color: #E8710A; margin-right: 8px">Oranda</div>
+    <div style="display: flex; align-items: center; gap: 6px; height: 28px; padding: 0 10px; background: #FFFFFF; border: 1px solid #D1D1D6; border-radius: 4px">
+      <span style="display: inline-block; padding: 1px 6px; border-radius: 3px; background: #107C10; color: #FFFFFF; font-size: 11px; font-weight: 600">개발</span>
+      <span>SCOTT @ DEVDB</span>
+    </div>
+    <div style="width: 1px; height: 22px; background: #D0D0D0; margin: 0 4px"></div>
+    <button type="button" style="display: flex; align-items: center; gap: 6px; height: 28px; padding: 0 12px; border: 1px solid #074A95; border-radius: 4px; background: #0A64C8; color: #FFFFFF; font: inherit; font-weight: 600">
+      <svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true"><path d="M3 2 10 6 3 10Z" fill="#FFFFFF"></path></svg>
+      커서 문장 실행 <span style="opacity: .8; font-weight: 400">F9</span>
+    </button>
+    <button type="button" style="height: 28px; padding: 0 10px; border: 1px solid #D1D1D6; border-radius: 4px; background: #FFFFFF; font: inherit">실행 계획</button>
+    <button type="button" style="height: 28px; padding: 0 10px; border: 1px solid #D1D1D6; border-radius: 4px; background: #FFFFFF; font: inherit">조합 검사</button>
+    <div style="width: 1px; height: 22px; background: #D0D0D0; margin: 0 4px"></div>
+    <button type="button" style="height: 28px; padding: 0 10px; border: 1px solid #D1D1D6; border-radius: 4px; background: #FFFFFF; font: inherit">xml 에 저장 <span style="color: #5F6368">Ctrl+S</span></button>
+    <div style="flex: 1"></div>
+    <div style="color: #5F6368">파일 전체가 편집기 하나 · 커서가 있는 문장이 오른쪽을 정한다</div>
+  </div>
+
+  <div style="height: 34px; flex: none; display: flex; align-items: flex-end; gap: 2px; padding: 0 8px; background: #EAEAEA; border-bottom: 1px solid #D6D6D6">
+    <div style="display: flex; align-items: center; gap: 6px; height: 30px; padding: 0 12px; background: #FFFFFF; border: 1px solid #D6D6D6; border-bottom: none; border-radius: 4px 4px 0 0; font-weight: 600">
+      EmpMapper.xml
+      <span style="padding: 0 5px; border-radius: 3px; background: #F0E8FC; color: #6B3FC0; font-size: 10px; font-weight: 600">MyBatis</span>
+      <span style="color: #B65A00">●</span>
+    </div>
+    <div style="display: flex; align-items: center; height: 30px; padding: 0 12px; color: #5F6368">주문조회</div>
+  </div>
+
+  <div style="flex: 1; min-height: 0; display: flex">
+    <!-- 파일 전체 편집기 -->
+    <div style="flex: 1; min-width: 0; display: flex; flex-direction: column; border-right: 1px solid #D6D6D6">
+      <div style="height: 30px; flex: none; display: flex; align-items: center; gap: 10px; padding: 0 12px; border-bottom: 1px solid #ECECEC; color: #5F6368">
+        <span>문장으로 이동:</span>
+        <span style="display: flex; align-items: center; gap: 6px; height: 22px; padding: 0 8px; border: 1px solid #D1D1D6; border-radius: 3px; color: #1F1F1F">selectEmpList
+          <svg width="10" height="10" viewBox="0 0 10 10" aria-hidden="true"><path d="M2 3.5 5 6.5 8 3.5" fill="none" stroke="#5F6368" stroke-width="1.4"></path></svg>
+        </span>
+        <div style="flex: 1"></div>
+        <span>▶ 줄 머리 = 그 문장 실행</span>
+      </div>
+      <div style="flex: 1; min-height: 0; overflow: hidden; padding: 6px 0; font-family: 'Cascadia Mono', Consolas, 'D2Coding', monospace; font-size: 13px; line-height: 20px">
+        <sc-for list="{{lines}}" as="ln" hint-placeholder-count="26">
+          <div style="display: flex; background: {{ln.bg}}; box-shadow: {{ln.bar}}">
+            <div style="width: 44px; flex: none; text-align: right; padding-right: 4px; color: #9AA0A6">{{ln.no}}</div>
+            <div style="width: 18px; flex: none; display: flex; align-items: center; justify-content: center">
+              <sc-if value="{{ln.run}}" hint-placeholder-val="{{false}}">
+                <svg width="11" height="11" viewBox="0 0 12 12" role="img" aria-label="이 문장 실행"><path d="M3 2 10 6 3 10Z" fill="#1E8E3E"></path></svg>
+              </sc-if>
+            </div>
+            <div style="white-space: pre; padding-left: 6px"><sc-for list="{{ln.segs}}" as="sg" hint-placeholder-count="2"><span style="color: {{sg.color}}">{{sg.t}}</span></sc-for></div>
+          </div>
+        </sc-for>
+      </div>
+    </div>
+
+    <!-- 오른쪽 -->
+    <div style="width: 540px; flex: none; display: flex; flex-direction: column">
+      <div style="height: 30px; display: flex; align-items: center; justify-content: space-between; padding: 0 12px; background: #EAEAEA; font-weight: 600">
+        <span>커서 문장 · selectEmpList</span>
+        <span style="font-weight: 400; color: #5F6368">select · 동적 태그 5</span>
+      </div>
+      <div style="padding: 10px 12px; display: flex; flex-direction: column; gap: 8px; border-bottom: 1px solid #ECECEC">
+        <div style="display: flex; align-items: center; gap: 8px">
+          <span style="color: #5F6368">시나리오</span>
+          <span style="display: flex; align-items: center; justify-content: space-between; flex: 1; height: 26px; padding: 0 8px; border: 1px solid #0A64C8; border-radius: 3px; background: #FFFFFF">사번 하나 <svg width="10" height="10" viewBox="0 0 10 10" aria-hidden="true"><path d="M2 3.5 5 6.5 8 3.5" fill="none" stroke="#5F6368" stroke-width="1.4"></path></svg></span>
+          <button type="button" style="height: 26px; padding: 0 8px; border: 1px solid #D1D1D6; border-radius: 3px; background: #FFFFFF; font: inherit">+ 추가</button>
+        </div>
+        <div style="display: grid; grid-template-columns: 90px 96px minmax(0, 1fr); gap: 4px 8px; align-items: center">
+          <span style="color: #5F6368; font-size: 11px">이름</span><span style="color: #5F6368; font-size: 11px">타입</span><span style="color: #5F6368; font-size: 11px">값</span>
+          <span style="font-family: 'Cascadia Mono', Consolas, monospace; color: #0F7B8A">empNo</span><span>NUMBER</span><span style="height: 22px; display: flex; align-items: center; padding: 0 6px; border: 1px solid #D1D1D6; border-radius: 3px; font-family: 'Cascadia Mono', Consolas, monospace">7369</span>
+          <span style="font-family: 'Cascadia Mono', Consolas, monospace; color: #0F7B8A">ename</span><span>VARCHAR2</span><span style="height: 22px; display: flex; align-items: center; padding: 0 6px; border: 1px solid #D1D1D6; border-radius: 3px; color: #8E8E93; font-style: italic">(null)</span>
+          <span style="font-family: 'Cascadia Mono', Consolas, monospace; color: #0F7B8A">deptIds</span><span>목록 NUMBER</span><span style="height: 22px; display: flex; align-items: center; padding: 0 6px; border: 1px solid #D1D1D6; border-radius: 3px; color: #8E8E93; font-style: italic">(null)</span>
+          <span style="font-family: 'Cascadia Mono', Consolas, monospace; color: #0F7B8A">orderBy</span><span>${} 글자</span><span style="height: 22px; display: flex; align-items: center; padding: 0 6px; border: 1px solid #D1D1D6; border-radius: 3px; font-family: 'Cascadia Mono', Consolas, monospace">E.EMPNO</span>
+        </div>
+      </div>
+      <div style="flex: 1; min-height: 0; padding: 10px 12px; background: #F7F7F8; font-family: 'Cascadia Mono', Consolas, 'D2Coding', monospace; font-size: 13px; line-height: 20px">
+        <div style="font-family: 'Segoe UI', 'Malgun Gothic', sans-serif; font-size: 11px; color: #5F6368; margin-bottom: 6px">펼친 SQL (입력할 때마다 다시 계산)</div>
+        <sc-for list="{{sqlLines}}" as="ln" hint-placeholder-count="6">
+          <div style="white-space: pre"><sc-for list="{{ln.segs}}" as="sg" hint-placeholder-count="2"><span style="color: {{sg.color}}">{{sg.t}}</span></sc-for></div>
+        </sc-for>
+      </div>
+    </div>
+  </div>
+
+  <!-- 결과 -->
+  <div style="height: 200px; flex: none; display: flex; flex-direction: column; border-top: 1px solid #D6D6D6">
+    <div style="height: 30px; flex: none; display: flex; align-items: flex-end; gap: 2px; padding: 0 6px; background: #EAEAEA">
+      <div style="height: 26px; display: flex; align-items: center; padding: 0 12px; background: #FFFFFF; border-radius: 3px 3px 0 0; font-weight: 600">결과 · selectEmpList</div>
+      <div style="height: 26px; display: flex; align-items: center; padding: 0 12px; color: #5F6368">조합 검사</div>
+      <div style="height: 26px; display: flex; align-items: center; padding: 0 12px; color: #5F6368">메시지</div>
+    </div>
+    <div style="flex: 1; padding: 0">
+      <div style="display: grid; grid-template-columns: 44px 120px 160px 140px 120px 160px; background: #F3F3F3; border-bottom: 1px solid #D6D6D6; font-weight: 600">
+        <span style="padding: 5px 8px"></span><span style="padding: 5px 8px">EMPNO</span><span style="padding: 5px 8px">ENAME</span><span style="padding: 5px 8px">JOB</span><span style="padding: 5px 8px; text-align: right">SAL</span><span style="padding: 5px 8px">DNAME</span>
+      </div>
+      <div style="display: grid; grid-template-columns: 44px 120px 160px 140px 120px 160px; background: #EAF1FC; font-family: 'Cascadia Mono', Consolas, monospace">
+        <span style="padding: 5px 8px; color: #5F6368; text-align: right">1</span><span style="padding: 5px 8px">7369</span><span style="padding: 5px 8px">SMITH</span><span style="padding: 5px 8px">CLERK</span><span style="padding: 5px 8px; text-align: right">800</span><span style="padding: 5px 8px">RESEARCH</span>
+      </div>
+      <div style="padding: 8px; color: #5F6368">1행 · 0.012초 · 시나리오 「사번 하나」</div>
+    </div>
+  </div>
+
+  <div style="height: 24px; flex: none; display: flex; align-items: center; gap: 16px; padding: 0 12px; background: #F3F3F3; border-top: 1px solid #D6D6D6; color: #3C3C43; font-size: 11px">
+    <span>EmpMapper.xml</span>
+    <span style="color: #B65A00">저장 안 함</span>
+    <span>줄 18, 칸 9</span>
+    <div style="flex: 1"></div>
+    <span>UTF-8 · LF</span>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":900}}'>
+class Component extends DCLogic {
+  seg(text, dim) {
+    var re = /(<\/?[a-zA-Z]+(?:[^>"']|"[^"]*"|'[^']*')*\/?>)|([#$]\{[^}]+\})|(:[a-zA-Z_][a-zA-Z0-9_]*)|('[^']*')|(\b(?:SELECT|FROM|JOIN|ON|AND|OR|LIKE|IN|ORDER|BY|WHERE)\b)/g;
+    var out = [], last = 0, m;
+    while ((m = re.exec(text)) !== null) {
+      if (m.index > last) out.push({ t: text.slice(last, m.index), color: '#1F1F1F' });
+      var c = m[1] ? '#8250DF' : (m[2] || m[3]) ? '#0F7B8A' : m[4] ? '#A31515' : '#0A64C8';
+      out.push({ t: m[0], color: c });
+      last = m.index + m[0].length;
+    }
+    if (last < text.length) out.push({ t: text.slice(last), color: '#1F1F1F' });
+    if (out.length === 0) out.push({ t: ' ', color: '#1F1F1F' });
+    if (dim) out = out.map(function (s) { return { t: s.t, color: '#A0A4AA' }; });
+    return out;
+  }
+  renderVals() {
+    var self = this;
+    // [글, 상태] 상태: c = 커서 문장, d = 커서 문장 안에서 이번 값으로 빠지는 줄, r = 문장 시작(실행 표시)
+    var RAW = [
+      ['  <resultMap id="empMap" type="Emp">', ''],
+      ['    <id property="empNo" column="EMPNO"/>', ''],
+      ['    <result property="ename" column="ENAME"/>', ''],
+      ['  </resultMap>', ''],
+      ['', ''],
+      ['  <sql id="empCols">E.EMPNO, E.ENAME, E.JOB, E.SAL, D.DNAME</sql>', ''],
+      ['', ''],
+      ['  <select id="selectEmpList" parameterType="map" resultMap="empMap">', 'cr'],
+      ['    SELECT <include refid="empCols"/>', 'c'],
+      ['      FROM EMP E', 'c'],
+      ['      JOIN DEPT D ON D.DEPTNO = E.DEPTNO', 'c'],
+      ['    <where>', 'c'],
+      ['      <if test="empNo != null">', 'c'],
+      ['        AND E.EMPNO = #{empNo}', 'c'],
+      ['      </if>', 'c'],
+      ['      <if test="ename != null and ename != \'\'">', 'cd'],
+      ['        AND E.ENAME LIKE \'%\' || #{ename} || \'%\'', 'cd'],
+      ['      </if>', 'cd'],
+      ['      <if test="deptIds != null and deptIds.size() > 0">', 'cd'],
+      ['        AND E.DEPTNO IN', 'cd'],
+      ['        <foreach collection="deptIds" item="id" open="(" separator="," close=")">#{id}</foreach>', 'cd'],
+      ['      </if>', 'cd'],
+      ['    </where>', 'c'],
+      ['    ORDER BY ${orderBy}', 'c'],
+      ['  </select>', 'c'],
+      ['', ''],
+      ['  <select id="selectEmp" parameterType="int" resultMap="empMap">', 'r']
+    ];
+    var lines = RAW.map(function (r, i) {
+      var st = r[1];
+      var cur = st.indexOf('c') >= 0;
+      var dim = st.indexOf('d') >= 0;
+      return {
+        no: i + 5,
+        segs: self.seg(r[0], dim),
+        run: st.indexOf('r') >= 0,
+        bg: dim ? '#F1F2F4' : cur ? '#F5F9FF' : 'transparent',
+        bar: cur ? 'inset 3px 0 0 #0A64C8' : 'none'
+      };
+    });
+    var sql = ['SELECT E.EMPNO, E.ENAME, E.JOB, E.SAL, D.DNAME', '  FROM EMP E', '  JOIN DEPT D ON D.DEPTNO = E.DEPTNO', ' WHERE E.EMPNO = :empNo', ' ORDER BY E.EMPNO'];
+    return { lines: lines, sqlLines: sql.map(function (t) { return { segs: self.seg(t, false) }; }) };
+  }
+}
+</script>
+</body>
+</html>
