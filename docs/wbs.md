@@ -3462,6 +3462,46 @@ dotnet, testhost, Oranda.App
 - data-model: docs/design/data-model.md `schemaBrowser.filters`·`schemaBrowser.activeFilters`
 - ui-spec: -
 
+### TSK-13-11: 접속 관리자 라벨 색 고르기·TNS 별칭 입력 콤보 [mac]
+- category: dev
+- domain: frontend
+- model: sonnet
+- status: [ ]
+- priority: medium
+- assignee: -
+- schedule: 2026-10-22 ~ 2026-10-22
+- tags: connection, color, tns, ui, mac
+- depends: TSK-03-04
+- blocked-by: -
+- entry-point: 접속 관리자 > 프로필 편집기 > 라벨 색 · TNS 별칭
+- note: 담당 PC: mac(맥북) — win144 세션은 이 Task 를 하지 않는다. 2026-10-22 사용자 요청: 「접속 관리자에서 라벨 색은 실제 색을 고를 수 있게 해 줘」, 「TNS 별칭은 콤보 박스로 — 그냥 콤보보다 입력되는 콤보가 낫다」. 지금 라벨 색은 #RRGGBB 글자 칸이고, TNS 별칭은 입력 제안 칸(AutoCompleteBox)이라 ▾ 단추로 전체 별칭을 펼쳐 볼 수 없다
+
+#### PRD 요구사항
+- prd-ref: PRD CONN-06 (환경 라벨·색), CONN-01 (TNS 별칭)
+- requirements:
+  - 라벨 색 칸을 작은 단추(색 견본 + #RRGGBB)로 바꾼다. 누르면 펼침 창에 빨강이 아닌 기본 색 견본 여러 개(파랑·초록·청록·보라·주황·회색 등)와 「기본 색」(환경 기본색으로 되돌림), 사용자 지정 색 고르기(Avalonia ColorView), #RRGGBB 입력 칸을 둔다
+  - 운영 환경이면 단추를 끈다(운영은 항상 빨강)
+  - TNS 별칭 칸을 입력되는 콤보(ComboBox IsEditable)로 바꾼다. ▾ 단추로 tnsnames.ora 의 별칭 전체를 펼쳐 고르고, 목록에 없는 별칭도 직접 입력한다
+  - 별칭 칸의 빈 필수 칸 표시(빨간 테두리)와 아래 host:port/service 줄은 그대로 둔다
+- acceptance:
+  - 견본을 누르면 라벨 색이 그 색이 되고, 단추의 견본·글자가 바뀐다
+  - 운영이 아닌 접속에서 빨강 계열을 고르면 입력할 때처럼 저장이 거부된다(빨강은 운영만)
+  - 별칭 콤보를 펼치면 입력한 글자와 상관없이 별칭이 모두 보이고, 고르면 별칭·이름·접속 요약이 채워진다
+  - 저장된 접속을 열기만 해서는 변경으로 치지 않는다(라벨 색·별칭 칸이 값을 되쓰지 않는다)
+- constraints:
+  - 빨강 계열 판정은 기존 LabelColorRules 를 그대로 쓴다. 색 고르기 테마는 편집기 화면에서만 읽는다(앱 시작 경로에 넣지 않는다)
+  - XAML 한국어 글자는 literals-en.json 영어 짝을 둔다
+- test-criteria:
+  - Headless: 견본 고르기로 ColorText 설정, ColorView 로 빨강을 고르면 저장 거부, 운영이면 단추 꺼짐, 기본 견본에 빨강 계열 없음
+  - Headless: 별칭 콤보가 TnsAliases 를 보이고, 펼치면 전체 별칭, 글자 입력으로 TnsAlias 설정, 항목 고르기로 TnsAlias 설정
+  - 저장된 프로필을 화면에 띄워도 IsDirty 가 false 이고 색·별칭이 그대로
+
+#### 기술 스펙 (TRD)
+- tech-spec: Avalonia.Controls.ColorPicker(ColorView), ComboBox IsEditable
+- api-spec: -
+- data-model: -
+- ui-spec: -
+
 ## 의존 그래프
 
 ### 그래프 (Mermaid)
@@ -3602,6 +3642,7 @@ graph LR
   TSK-08-01 --> TSK-13-07
   TSK-07-02 --> TSK-13-08
   TSK-07-02 --> TSK-13-10
+  TSK-03-04 --> TSK-13-11
   style TSK-01-02 fill:#fff3e0,stroke:#e65100
   style TSK-01-07 fill:#fff3e0,stroke:#e65100
   style TSK-01-02 stroke:#c62828,stroke-width:2px
