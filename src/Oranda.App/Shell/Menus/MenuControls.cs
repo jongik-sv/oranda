@@ -4,6 +4,7 @@ using System.Linq;
 using Avalonia.Automation;
 using Avalonia.Controls;
 using Avalonia.Input;
+using Oranda.App.Features.SqlEditor;
 using Oranda.App.Shell.Docking;
 using Oranda.App.Shell.Icons;
 using Oranda.App.Shell.Keymaps;
@@ -165,7 +166,7 @@ public sealed class MenuControls(ICommandRegistry registry, IContextKeys keys, F
                     set.Commands.Add(command);
                     var item = new NativeMenuItem(n.Title.Replace("_", "__", StringComparison.Ordinal))
                     {
-                        Command = new NativeMenuCommand(command, key, set.Focused, dispatcher),
+                        Command = new NativeMenuCommand(command, key, set.Focused, dispatcher, AlignEditorTarget),
                         Gesture = key,
                     };
                     if (key is not null)
@@ -175,6 +176,16 @@ public sealed class MenuControls(ICommandRegistry registry, IContextKeys keys, F
 
                     return item;
                 }
+        }
+    }
+
+    /// <summary>편집기 호스트의 활성 작업 공간을 지금 도킹에서 보이는 SQL 작업 공간에 맞춘다(보이는 문서가 SQL 작업 공간이 아니면 그대로 둔다).</summary>
+    internal void AlignEditorTarget()
+    {
+        var host = SqlEditorHost.Current;
+        if (workspace.ActiveDocument?.Panel is SqlWorkspaceViewModel shown && host.Workspaces.Contains(shown))
+        {
+            host.ActiveWorkspace = shown;
         }
     }
 

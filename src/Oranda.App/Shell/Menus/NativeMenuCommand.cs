@@ -11,7 +11,7 @@ namespace Oranda.App.Shell.Menus;
 /// 입력 칸(TextBox)에 포커스가 있을 때의 글자 편집 키(⌘C·⌘X·⌘V·⌘A·⌘Z·⇧⌘Z)는 명령 대신 그 입력 칸에 전달한다.
 /// 연속 키의 둘째 단은 키맵(<see cref="KeyDispatcher"/>)이 이어 받는다. 그 밖의 경우는 <see cref="RegistryCommand"/> 로 간다.
 /// </summary>
-internal sealed class NativeMenuCommand(RegistryCommand inner, KeyGesture? gesture, Func<object?> focused, KeyDispatcher? dispatcher = null) : ICommand
+internal sealed class NativeMenuCommand(RegistryCommand inner, KeyGesture? gesture, Func<object?> focused, KeyDispatcher? dispatcher = null, Action? alignTarget = null) : ICommand
 {
     public event EventHandler? CanExecuteChanged
     {
@@ -36,6 +36,8 @@ internal sealed class NativeMenuCommand(RegistryCommand inner, KeyGesture? gestu
             return;
         }
 
+        // 메뉴 막대를 누르면 포커스·키 창이 바뀌어 편집기 호스트의 활성 작업 공간이 옛 값일 수 있다: 지금 보이는 문서로 맞춘 뒤 실행한다.
+        alignTarget?.Invoke();
         inner.Execute(parameter);
     }
 

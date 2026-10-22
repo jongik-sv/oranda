@@ -164,10 +164,17 @@ public sealed class DockWorkspace
     public IReadOnlyList<PanelDocument> Documents =>
         DocumentDocks().SelectMany(d => d.VisibleDockables ?? []).OfType<PanelDocument>().ToList();
 
+    /// <summary>
+    /// 지금 보이는 활성 문서. 포커스를 가졌던 문서(<c>Factory.CurrentDockable</c>)가 속한 영역의 보이는 탭을 돌려준다:
+    /// 탭 줄에서 다른 탭을 골라도 포커스 기록은 옛 문서에 남을 수 있어, 그대로 쓰면 창이 다시 활성화될 때 엉뚱한 문서가 활성이 된다.
+    /// </summary>
     public PanelDocument? ActiveDocument =>
         Layout is null ? null
-        : (Factory.CurrentDockable as PanelDocument)
+        : ShownIn(Factory.CurrentDockable as PanelDocument)
             ?? DocumentDocks().Select(d => d.ActiveDockable).OfType<PanelDocument>().FirstOrDefault();
+
+    private static PanelDocument? ShownIn(PanelDocument? focused) =>
+        focused?.Owner is IDock { ActiveDockable: PanelDocument shown } ? shown : focused;
 
     /// <summary>보이는 도구 창 ID(트리에 있는 것).</summary>
     public IReadOnlyList<string> VisibleToolIds =>
