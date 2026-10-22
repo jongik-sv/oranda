@@ -175,6 +175,7 @@
   "Cmd.oranda.schema.filter": "객체 필터",
   "Cmd.oranda.schema.editFilters": "스키마 브라우저 필터 편집…",
   "Cmd.oranda.schema.toggleFavorite": "즐겨찾기 추가/빼기",
+  "Cmd.oranda.schema.newSqlWithSelect": "새 SQL",
   "Cmd.oranda.schema.insertName": "편집기에 이름 넣기",
   "Cmd.oranda.schema.insertSelect": "편집기에 SELECT 문 넣기",
   "Cmd.oranda.schema.insertColumns": "편집기에 열 목록 넣기",

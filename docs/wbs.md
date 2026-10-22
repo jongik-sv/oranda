@@ -4089,6 +4089,70 @@ dotnet, testhost, Oranda.App
 - data-model: -
 - ui-spec: -
 
+### TSK-13-29: 스키마 브라우저 표·뷰 우클릭 「새 SQL」로 SELECT 가 채워진 새 SQL 탭 [mac]
+- category: feat
+- domain: frontend
+- model: sonnet
+- status: [ ]
+- priority: medium
+- assignee: -
+- schedule: 2026-10-22 ~ 2026-10-23
+- tags: schema, mac
+- depends: TSK-07-02
+- blocked-by: -
+- entry-point: 스키마 브라우저 표·뷰 노드 우클릭 「새 SQL」
+- note: 담당 PC: mac(맥북) — win144 세션은 이 Task 를 하지 않는다. 2026-10-22 실제 앱 사용 중 사용자 요청
+
+#### PRD 요구사항
+- prd-ref: PRD SCHEMA-03
+- requirements:
+  - 표·뷰 노드(또는 그 하위 노드)의 문맥 메뉴 「새 SQL」은 새 SQL 탭을 열고 「편집기에 SELECT 문 넣기」와 같은 SELECT 문을 채운다(캐럿은 문장 끝, 실행하지 않음)
+  - 열려 있는 SQL 문서가 없어도 쓸 수 있고, 탭의 접속은 지금 스키마 브라우저의 접속이다
+- acceptance:
+  - 표 노드에서 「새 SQL」을 고르면 SELECT 가 채워진 새 탭이 열리고, 표·뷰가 아닌 노드에서는 활성이 아니다
+- constraints:
+  - 서버에 보조 객체를 설치하지 않는다
+- test-criteria:
+  - 새 탭·SELECT 내용·접속 지정·비표 노드 거부 단위 시험
+
+#### 기술 스펙 (TRD)
+- tech-spec: -
+- api-spec: -
+- data-model: -
+- ui-spec: -
+
+### TSK-13-30: 참조 행(부모/자식)·플래시백 결과 탭 닫기 [mac]
+- category: feat
+- domain: frontend
+- model: sonnet
+- status: [ ]
+- priority: medium
+- assignee: -
+- schedule: 2026-10-22 ~ 2026-10-23
+- tags: schema, mac
+- depends: TSK-06-03
+- blocked-by: -
+- entry-point: 참조 행·플래시백으로 연 결과 탭의 닫기(×) 단추
+- note: 담당 PC: mac(맥북) — win144 세션은 이 Task 를 하지 않는다. 2026-10-22 실제 앱 사용 중 사용자 요청(부모/자식을 열면 닫을 수도 있게)
+
+#### PRD 요구사항
+- prd-ref: PRD GRID-11, GRID-06
+- requirements:
+  - 외래키 따라가기(부모/자식)·플래시백으로 연 결과 탭에 닫기(×) 단추를 둔다(원래 질의 결과 탭은 바꾸지 않음)
+  - 닫은 뒤 활성 탭은 왼쪽 이웃이고, 결과의 편집 세션이 있으면 기존 결과 닫기 규칙을 따른다
+- acceptance:
+  - 부모/자식 결과 탭의 × 를 누르면 그 탭만 닫히고 왼쪽 탭이 활성이 된다
+- constraints:
+  - 서버에 보조 객체를 설치하지 않는다
+- test-criteria:
+  - 닫기 가능 여부·활성 탭 이동 단위 시험
+
+#### 기술 스펙 (TRD)
+- tech-spec: -
+- api-spec: -
+- data-model: -
+- ui-spec: -
+
 ## 의존 그래프
 
 ### 그래프 (Mermaid)
@@ -4248,6 +4312,8 @@ graph LR
   TSK-13-17 --> TSK-13-26
   TSK-08-01 --> TSK-13-27
   TSK-08-01 --> TSK-13-28
+  TSK-07-02 --> TSK-13-29
+  TSK-06-03 --> TSK-13-30
   style TSK-01-02 fill:#fff3e0,stroke:#e65100
   style TSK-01-07 fill:#fff3e0,stroke:#e65100
   style TSK-01-02 stroke:#c62828,stroke-width:2px

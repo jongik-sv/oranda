@@ -69,6 +69,44 @@ public sealed partial class SchemaBrowserViewModel
         return await _editor.ProposeEditAsync(new TextEdit(range, text) { Description = description }, ct);
     }
 
+    /// <summary>「새 SQL」이 새 탭을 만들 편집기 호스트. 시험은 자기 호스트를 꽂는다.</summary>
+    internal Func<SqlEditor.SqlEditorHost> EditorHost { get; set; } = static () => SqlEditor.SqlEditorHost.Current;
+
+    /// <summary>
+    /// 표·뷰 노드(또는 그 하위 노드)로 새 SQL 탭을 열고 <see cref="SchemaInsertMode.Select"/> 와 같은 SELECT 문을 채운다.
+    /// 탭의 접속은 지금 스키마 브라우저의 접속이고 캐럿은 문장 끝이다. 실행은 하지 않는다. 표·뷰가 아니면 false.
+    /// </summary>
+    public async Task<bool> NewSqlWithSelectAsync(SchemaNode? node, CancellationToken ct = default)
+    {
+        node ??= SelectedNode;
+        while (node is not null && !(node.Kind == SchemaNodeKind.Item && node.Ref is { } r && SchemaNode.IsTableLike(r.ObjectType)))
+        {
+            node = node.Parent;
+        }
+
+        if (node is null)
+        {
+            return false;
+        }
+
+        ResolveServices();
+        var text = await BuildTextAsync(node, SchemaInsertMode.Select, ct);
+        if (text is null)
+        {
+            return false;
+        }
+
+        var doc = EditorHost().NewDocument(text);
+        if (CurrentSession is { } session)
+        {
+            doc.ConnectionProfileId = session.Profile.Id;
+        }
+
+        doc.IsDirty = false;
+        doc.Select(text.Length, 0);
+        return true;
+    }
+
     /// <summary>끌기 시작 때 쓸 텍스트: 표·뷰는 SELECT 문, 그 밖은 이름. Ctrl = 이름, Shift = 열 목록.</summary>
     public Task<string?> PrepareDragTextAsync(SchemaNode node, bool ctrl, bool shift, CancellationToken ct = default) =>
         BuildTextAsync(node, DragMode(ctrl, shift), ct);

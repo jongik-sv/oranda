@@ -178,6 +178,7 @@
   "Cmd.oranda.schema.insertColumns": "Insert Column List into Editor",
   "Cmd.oranda.schema.insertName": "Insert Name into Editor",
   "Cmd.oranda.schema.insertSelect": "Insert SELECT into Editor",
+  "Cmd.oranda.schema.newSqlWithSelect": "New SQL",
   "Cmd.oranda.schema.objectSearch": "Object Search",
   "Cmd.oranda.schema.openDetail": "Open Object Detail",
   "Cmd.oranda.schema.recyclebinFlashback": "Flashback from Recycle Bin",

@@ -18,6 +18,8 @@ namespace Oranda.App.Features.SchemaBrowser;
 [OrandaCommand("oranda.schema.editFilters", CommandCategory.Database, Placements = ["context:schema/refresh@15"])]
 [OrandaCommand("oranda.schema.toggleFavorite", CommandCategory.Database, When = "schemaFocus", Enablement = "schemaNodeSelected",
     Placements = ["context:schema/favorite@20"])]
+[OrandaCommand("oranda.schema.newSqlWithSelect", CommandCategory.Database, When = "schemaFocus", Enablement = "tableNodeSelected",
+    Placements = ["context:schema/insert@29"])]
 [OrandaCommand("oranda.schema.insertName", CommandCategory.Database, When = "schemaFocus", Enablement = "schemaNodeSelected && sqlDocOpen",
     Placements = ["context:schema/insert@30"])]
 [OrandaCommand("oranda.schema.insertSelect", CommandCategory.Database, When = "schemaFocus", Enablement = "schemaNodeSelected && sqlDocOpen",
@@ -63,6 +65,9 @@ public sealed class SchemaBrowserCommandHandler : ICommandHandler
                 break;
             case "oranda.schema.toggleFavorite":
                 await vm.ToggleFavoriteAsync(node, cancellationToken);
+                break;
+            case "oranda.schema.newSqlWithSelect":
+                await vm.NewSqlWithSelectAsync(node, cancellationToken);
                 break;
             case "oranda.schema.insertName":
                 await vm.InsertAsync(node, SchemaInsertMode.Name, cancellationToken);
