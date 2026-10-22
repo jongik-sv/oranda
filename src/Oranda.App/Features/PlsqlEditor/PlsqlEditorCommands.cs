@@ -5,6 +5,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using Dock.Model.Core;
 using Oranda.App.Features.SchemaBrowser;
+using Oranda.App.Features.SqlEditor;
 using Oranda.App.Shell;
 using Oranda.App.Shell.Docking;
 using Oranda.Core.Metadata;
@@ -190,13 +191,34 @@ public sealed class PlsqlEditorCommandHandler : ICommandHandler
             return open(vm, vm.Title);
         }
 
-        if ((services?.GetService(typeof(IShellUi)) as IShellUi)?.Docking.OpenDocument(PlsqlEditorCommands.PanelId, vm, vm.Title) is not { } doc)
+        var docking = (services?.GetService(typeof(IShellUi)) as IShellUi)?.Docking;
+        if (docking?.OpenDocument(PlsqlEditorCommands.PanelId, vm, vm.Title) is not { } doc)
         {
             return false;
         }
 
+        InstallCloseConfirm(docking);
         FollowTitle(doc, vm);
         return true;
+    }
+
+    private static readonly System.Runtime.CompilerServices.ConditionalWeakTable<DockWorkspace, object> CloseConfirmInstalled = new();
+
+    /// <summary>
+    /// 고친 PL/SQL 탭을 문서 탭 ×·닫기 명령으로 닫기 전에 저장 확인을 건다(TSK-13-27). 이미 걸려 있던 확인은 PL/SQL 이 아닌 문서에 그대로 넘긴다.
+    /// 앱 종료·작업 공간 닫기는 이 경로를 지나지 않으므로 SQL 탭처럼 묻지 않는다.
+    /// </summary>
+    internal static void InstallCloseConfirm(DockWorkspace docking, Func<SqlEditorHost>? host = null)
+    {
+        if (!CloseConfirmInstalled.TryAdd(docking, new object()))
+        {
+            return;
+        }
+
+        var previous = docking.CloseConfirm;
+        docking.CloseConfirm = document => document.Panel is PlsqlEditorViewModel vm
+            ? (vm.NeedsSaveConfirm ? ct => vm.ConfirmCloseAsync((host ?? (() => SqlEditorHost.Current))(), ct) : null)
+            : previous?.Invoke(document);
     }
 
     /// <summary>소스를 읽은 뒤 정해지는 제목(「FT.EMP_PKG」)도 탭 머리글에 따라간다(처음엔 「PL/SQL」로 열린다).</summary>

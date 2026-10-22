@@ -45,7 +45,8 @@ public static class DedicatedSessionCommands
             Registries.Add(container, registry);
             if (container.GetService<DockWorkspace>() is { } docking)
             {
-                docking.CloseConfirm ??= document => CloseConfirmFor(registry, document);
+                var previous = docking.CloseConfirm; // 다른 기능(PL/SQL 탭 저장 확인)이 건 확인은 이어 붙인다
+                docking.CloseConfirm = document => CloseConfirmFor(registry, document) ?? previous?.Invoke(document);
                 registry.SqlDocumentActive = () => docking.ActiveDocument is not { } active || active.Panel is SqlWorkspaceViewModel;
                 docking.ActiveDocumentChanged += (_, _) => registry.Refocus();
             }

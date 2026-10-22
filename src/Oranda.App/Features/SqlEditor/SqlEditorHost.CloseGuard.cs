@@ -151,32 +151,40 @@ public sealed partial class SqlEditorHost
 
         foreach (var tab in tabs.Where(NeedsSaveConfirm))
         {
-            switch (await Dialogs.AskSaveChangesAsync(tab.Title, ct).ConfigureAwait(true))
+            if (!await AskAndSaveAsync(tab, tab.Title, ct).ConfigureAwait(true))
             {
-                case SaveChoice.Save:
-                    try
-                    {
-                        if (!await SaveAsync(tab, ct).ConfigureAwait(true))
-                        {
-                            return false;
-                        }
-                    }
-                    catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
-                    {
-                        // 저장하지 못했으니 닫지 않는다. 아무 말 없이 창만 사라진 것처럼 보이지 않게 알린다.
-                        await Dialogs.ShowMessageAsync("저장", $"'{tab.Title}' 을(를) 저장하지 못했다: {ex.Message}", ct).ConfigureAwait(true);
-                        return false;
-                    }
-
-                    break;
-                case SaveChoice.DontSave:
-                    break;
-                default:
-                    return false;
+                return false;
             }
         }
 
         return true;
+    }
+
+    /// <summary>
+    /// 탭 하나의 저장 확인(저장 / 저장 안 함 / 취소)과 저장. 닫아도 되면 true, 취소하거나 저장하지 못했으면 false.
+    /// PL/SQL 편집기 탭의 닫기 확인(TSK-13-27)도 같은 흐름·문구를 쓴다. <paramref name="name"/> 은 대화상자에 보일 이름.
+    /// </summary>
+    internal async Task<bool> AskAndSaveAsync(SqlEditorViewModel tab, string name, CancellationToken ct)
+    {
+        switch (await Dialogs.AskSaveChangesAsync(name, ct).ConfigureAwait(true))
+        {
+            case SaveChoice.Save:
+                try
+                {
+                    return await SaveAsync(tab, ct).ConfigureAwait(true);
+                }
+                catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+                {
+                    // 저장하지 못했으니 닫지 않는다. 아무 말 없이 창만 사라진 것처럼 보이지 않게 알린다.
+                    await Dialogs.ShowMessageAsync("저장", $"'{name}' 을(를) 저장하지 못했다: {ex.Message}", ct).ConfigureAwait(true);
+                    return false;
+                }
+
+            case SaveChoice.DontSave:
+                return true;
+            default:
+                return false;
+        }
     }
 
     /// <summary>

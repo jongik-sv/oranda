@@ -399,6 +399,38 @@ public sealed partial class PlsqlEditorViewModel : ToolPanelViewModelBase
 
     public void CloseDiff() => DiffText = string.Empty;
 
+    /// <summary>
+    /// 탭을 닫을 때 저장 여부를 물어야 하는가(TSK-13-27, SQL 탭 규칙과 같다). 읽기 전용은 묻지 않는다.
+    /// 파일에 묶인 탭 = 파일과 달라졌을 때, 서버 객체를 열었거나 컴파일한 탭 = 마지막 읽기·컴파일 뒤로 고쳤을 때, 그 밖의 새 탭 = 내용이 있을 때.
+    /// </summary>
+    public bool NeedsSaveConfirm
+    {
+        get
+        {
+            if (Editor.IsReadOnly)
+            {
+                return false;
+            }
+
+            if (Editor.FilePath is null && Target is null)
+            {
+                return !string.IsNullOrWhiteSpace(Editor.Text);
+            }
+
+            return Editor.IsDirty;
+        }
+    }
+
+    /// <summary>
+    /// 닫기 확인: 저장 / 저장 안 함 / 취소를 묻고 닫아도 되면 true. 저장은 로컬 파일 저장이다(파일에 묶였으면 그 파일, 아니면 다른 이름으로).
+    /// 서버에는 컴파일하지 않는다: 서버 반영은 명시적 컴파일로만 한다.
+    /// </summary>
+    public Task<bool> ConfirmCloseAsync(SqlEditorHost host, CancellationToken ct)
+    {
+        ArgumentNullException.ThrowIfNull(host);
+        return NeedsSaveConfirm ? host.AskAndSaveAsync(Editor, Title, ct) : Task.FromResult(true);
+    }
+
     /// <summary>시험용: 문서 탭을 여는 방법(기본 = 셸 도킹).</summary>
     internal Func<PlsqlEditorViewModel, string, bool>? OpenDocument { get; set; }
 

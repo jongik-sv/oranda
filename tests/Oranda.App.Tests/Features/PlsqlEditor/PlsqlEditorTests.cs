@@ -1,4 +1,5 @@
 using Oranda.App.Features.PlsqlEditor;
+using Oranda.App.Features.SqlEditor;
 using Oranda.App.Tests.Shell;
 using Oranda.Core.Connection;
 using Oranda.Core.Events;
@@ -621,6 +622,103 @@ public class PlsqlEditorTests
         public Task RollbackAsync(CancellationToken ct) => Task.CompletedTask;
 
         public ValueTask DisposeAsync() => ValueTask.CompletedTask;
+    }
+
+    // ---- 탭 닫기 저장 확인(TSK-13-27) ----
+
+    [Fact]
+    public void Close_confirm_asks_for_new_tab_with_content_only()
+    {
+        var vm = new PlsqlEditorViewModel();
+        vm.StartNew(PlsqlEditorCommandHandler.NewTemplate, null);
+        Assert.True(vm.NeedsSaveConfirm);
+
+        vm.Editor.LoadText("  \n");
+        Assert.False(vm.NeedsSaveConfirm);
+    }
+
+    [Fact]
+    public async Task Close_confirm_for_server_object_follows_edits()
+    {
+        var vm = new PlsqlEditorViewModel(new FakeMeta { Source = BodySource }, new FakeExec());
+        Assert.True(await vm.OpenAsync(new FakeSession(), Body));
+        Assert.False(vm.NeedsSaveConfirm);
+
+        vm.Editor.Document.Insert(0, "-- x\n");
+        Assert.True(vm.NeedsSaveConfirm);
+    }
+
+    [Fact]
+    public void Close_confirm_for_file_tab_follows_dirty()
+    {
+        var vm = new PlsqlEditorViewModel();
+        vm.StartNew("CREATE PROCEDURE p IS BEGIN NULL; END;", null);
+        vm.Editor.FilePath = "/x/p.sql";
+        vm.Editor.MarkSaved();
+        Assert.False(vm.NeedsSaveConfirm);
+
+        vm.Editor.Document.Insert(0, "-- x\n");
+        Assert.True(vm.NeedsSaveConfirm);
+    }
+
+    [Fact]
+    public async Task Close_confirm_dont_save_and_cancel_follow_answer()
+    {
+        var vm = new PlsqlEditorViewModel();
+        vm.StartNew(PlsqlEditorCommandHandler.NewTemplate, null);
+
+        Assert.True(await vm.ConfirmCloseAsync(new SqlEditorHost(dialogs: new AnswerDialogs(SaveChoice.DontSave)), default));
+        Assert.False(await vm.ConfirmCloseAsync(new SqlEditorHost(dialogs: new AnswerDialogs(SaveChoice.Cancel)), default));
+    }
+
+    [Fact]
+    public async Task Close_confirm_save_writes_local_file_and_not_the_server()
+    {
+        var path = Path.Combine(Path.GetTempPath(), $"oranda-plsql-{Guid.NewGuid():N}.sql");
+        try
+        {
+            var exec = new FakeExec();
+            var vm = new PlsqlEditorViewModel(new FakeMeta(), exec);
+            vm.StartNew(PlsqlEditorCommandHandler.NewTemplate, null);
+            var dialogs = new AnswerDialogs(SaveChoice.Save) { SavePath = path };
+
+            Assert.True(await vm.ConfirmCloseAsync(new SqlEditorHost(dialogs: dialogs), default));
+
+            Assert.Contains("new_procedure", await File.ReadAllTextAsync(path));
+            Assert.Empty(exec.Statements);
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
+
+    [Fact]
+    public async Task Close_confirm_save_cancelled_picker_keeps_tab()
+    {
+        var vm = new PlsqlEditorViewModel();
+        vm.StartNew(PlsqlEditorCommandHandler.NewTemplate, null);
+
+        Assert.False(await vm.ConfirmCloseAsync(new SqlEditorHost(dialogs: new AnswerDialogs(SaveChoice.Save)), default));
+    }
+
+    private sealed class AnswerDialogs(SaveChoice answer) : IEditorDialogs
+    {
+        public string? SavePath { get; init; }
+
+        public Task<string?> PickOpenFileAsync(CancellationToken ct) => Task.FromResult<string?>(null);
+
+        public Task<string?> PickSaveFileAsync(string suggestedName, CancellationToken ct) => Task.FromResult(SavePath);
+
+        public Task<string?> PromptAsync(string title, string initial, CancellationToken ct) => Task.FromResult<string?>(null);
+
+        public Task<string?> ChooseAsync(string title, IReadOnlyList<string> items, CancellationToken ct) => Task.FromResult<string?>(null);
+
+        public Task<bool> ConfirmAsync(string message, CancellationToken ct) => Task.FromResult(false);
+
+        public Task<bool> PreviewEditAsync(string title, string before, string after, CancellationToken ct) => Task.FromResult(false);
+
+        public Task<SaveChoice> AskSaveChangesAsync(string tabName, CancellationToken ct) => Task.FromResult(answer);
     }
 
     private sealed class FakeMeta : IMetadataProvider
