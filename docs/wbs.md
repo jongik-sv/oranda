@@ -3755,6 +3755,105 @@ dotnet, testhost, Oranda.App
 - data-model: -
 - ui-spec: -
 
+### TSK-13-19: 파일 메뉴의 작업 공간 항목 정리 [mac]
+- category: feat
+- domain: frontend
+- model: sonnet
+- status: [ ]
+- priority: medium
+- assignee: -
+- schedule: 2026-10-22 ~ 2026-10-23
+- tags: workspace, menu, mac
+- depends: TSK-04-02
+- blocked-by: -
+- entry-point: 파일 메뉴 작업 공간 항목(oranda.file.*Workspace*)
+- note: 담당 PC: mac(맥북) — win144 세션은 이 Task 를 하지 않는다. 2026-10-22 사용자 승인(「그렇게 해줘」): 내부 저장소용 작업 공간 저장·열기 메뉴를 빼고, 파일 기반을 「작업 공간 열기… / 저장 / 다른 이름으로 저장…」으로
+
+#### PRD 요구사항
+- prd-ref: PRD EDIT-09
+- requirements:
+  - 파일 메뉴에서 내부 저장소용 「작업 공간 저장」(oranda.file.saveWorkspace)·「작업 공간 열기」(oranda.file.openWorkspace)를 뺀다
+  - 파일 기반 항목은 「작업 공간 열기…」·「작업 공간 저장」·「작업 공간 다른 이름으로 저장…」 세 개로 둔다. 저장은 묶인 파일이 있으면 그 파일에 바로 쓰고, 없으면 다른 이름으로 저장으로 간다
+  - 종료 때 열린 작업 공간 자동 복원·복구는 그대로 둔다
+- acceptance:
+  - 파일 메뉴와 macOS 시스템 메뉴에 작업 공간 파일 항목 세 개만 보인다
+  - 이미 내부 저장소에 저장한 작업 공간을 잃지 않는다(여는 길이 남거나 자동 복원으로 열림)
+- constraints:
+  - 기존 명령 ID 를 쓰는 키맵·팔레트가 깨지지 않는다
+- test-criteria:
+  - 메뉴 배치 시험, 저장(파일 있음·없음) 경로 시험
+
+#### 기술 스펙 (TRD)
+- tech-spec: -
+- api-spec: -
+- data-model: -
+- ui-spec: -
+
+### TSK-13-20: 행 보기 창에서도 키 열 값 수정 허용 [mac]
+- category: feat
+- domain: frontend
+- model: sonnet
+- status: [ ]
+- priority: medium
+- assignee: -
+- schedule: 2026-10-22 ~ 2026-10-23
+- tags: grid, rowview, mac
+- depends: TSK-06-05
+- blocked-by: -
+- entry-point: 행 보기 창(oranda.panel.rowView) 편집 모드
+- note: 담당 PC: mac(맥북) — win144 세션은 이 Task 를 하지 않는다. 2026-10-22 사용자 결정: 결과 그리드와 행 보기 둘 다 키 열 수정을 허용한다(지금은 그리드만 허용, 행 보기는 막음)
+
+#### PRD 요구사항
+- prd-ref: PRD GRID-04
+- requirements:
+  - 편집 모드 결과의 행 보기 창에서 키(PK·UK) 열 값도 그리드와 같은 규칙으로 고칠 수 있다
+- acceptance:
+  - 행 보기에서 키 열을 고치면 그리드와 같은 변경으로 반영된다
+- constraints:
+  - ROWID 는 계속 읽기 전용
+- test-criteria:
+  - 행 보기 키 열 편집 시험
+
+#### 기술 스펙 (TRD)
+- tech-spec: -
+- api-spec: -
+- data-model: -
+- ui-spec: -
+
+### TSK-13-21: 자동 업데이트 피드를 GitHub Releases 로 [mac]
+- category: infra
+- domain: frontend
+- model: sonnet
+- status: [ ]
+- priority: high
+- assignee: -
+- schedule: 2026-10-22 ~ 2026-10-23
+- tags: update, ci, mac
+- depends: TSK-10-01
+- blocked-by: -
+- entry-point: 업데이트 확인(oranda.help.checkUpdate)·CI 릴리스
+- note: 담당 PC: mac(맥북) — win144 세션은 이 Task 를 하지 않는다. 2026-10-22 사용자 결정: 업데이트 피드 = GitHub Releases(저장소 jongik-sv/oranda, 공개)
+
+#### PRD 요구사항
+- prd-ref: PRD APP-05
+- requirements:
+  - CI 가 릴리스 빌드 때 OrandaUpdateFeed 기본값을 이 저장소 GitHub 주소로 박는다
+  - 태그(v*) 푸시 또는 수동 실행 때만 vpk 로 GitHub Release 를 만들어 패키지를 올린다(보통 푸시는 올리지 않음)
+  - 앱은 설정 주소가 비었으면 그 기본값으로 확인한다
+- acceptance:
+  - GitHub Release 에 올린 새 버전을 설치본이 찾아 내려받고 종료할 때 적용한다
+- constraints:
+  - 토큰은 GITHUB_TOKEN 만 쓰고 로그에 남기지 않는다
+  - 서명·공증 단계는 그대로 둔다
+- test-criteria:
+  - UpdateService 의 GitHub 주소 판정 시험, ci.yml 문법 확인(actionlint 가 있으면)
+
+#### 기술 스펙 (TRD)
+- tech-spec: -
+- api-spec: -
+- data-model: -
+- ui-spec: -
+
 ## 의존 그래프
 
 ### 그래프 (Mermaid)
@@ -3904,6 +4003,9 @@ graph LR
   TSK-03-01 --> TSK-13-16
   TSK-06-03 --> TSK-13-17
   TSK-06-04 --> TSK-13-18
+  TSK-04-02 --> TSK-13-19
+  TSK-06-05 --> TSK-13-20
+  TSK-10-01 --> TSK-13-21
   style TSK-01-02 fill:#fff3e0,stroke:#e65100
   style TSK-01-07 fill:#fff3e0,stroke:#e65100
   style TSK-01-02 stroke:#c62828,stroke-width:2px
