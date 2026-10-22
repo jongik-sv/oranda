@@ -302,7 +302,7 @@ public sealed partial class GridEditTests
 
             Assert.True(pane.HasEditHint);
             Assert.True(pane.OffersRerunForEdit);
-            Assert.Contains("F9", pane.EditHint, StringComparison.Ordinal);
+            Assert.Contains(Oranda.App.Features.GridEdit.EditModeKey.Text, pane.EditHint, StringComparison.Ordinal);
             Assert.Equal(2, m.RowCount);
 
             pane.HideEditHint();

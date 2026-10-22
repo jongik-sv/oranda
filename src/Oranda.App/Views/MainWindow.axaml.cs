@@ -110,6 +110,7 @@ public partial class MainWindow : Window
         _panels = services.GetRequiredService<IToolPanelRegistry>();
         _keys = services.GetRequiredService<ContextKeyService>();
         _keymap = services.GetRequiredService<KeymapService>();
+        Features.GridEdit.EditModeKey.Install(() => _keymap?.ShortcutText(Features.GridEdit.EditModeKey.CommandId));
 
         _viewModel = (MainViewModel)services.Create(typeof(MainViewModel));
         DataContext = _viewModel;

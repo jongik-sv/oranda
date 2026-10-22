@@ -85,7 +85,7 @@ public sealed partial class GridEditTests : IDisposable
         pane.ShowEditHint(); // 일반 실행 결과에서 셀을 고치려 했다
 
         Assert.True(pane.HasEditHint);
-        Assert.Contains("F9", pane.EditHint, StringComparison.Ordinal);
+        Assert.Contains(Oranda.App.Features.GridEdit.EditModeKey.Text, pane.EditHint, StringComparison.Ordinal);
         Assert.Equal("편집 모드로 다시 실행", pane.EditHintAction);
         Assert.True(pane.OffersRerunForEdit);
         Assert.False(pane.OffersRowIdRerun);

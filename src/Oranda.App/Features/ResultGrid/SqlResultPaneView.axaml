@@ -69,7 +69,7 @@
         </WrapPanel>
       </DockPanel>
     </Border>
-    <!-- 결과 툴바: 편집 모드(F9)에서만 보인다. 오렌지 결과 그리드처럼 행 추가·복제·붙여넣기·삭제·반영·되돌리기를
+    <!-- 결과 툴바: 편집 모드에서만 보인다. 오렌지 결과 그리드처럼 행 추가·복제·붙여넣기·삭제·반영·되돌리기를
          아이콘으로 바로 쓴다(오른쪽 클릭 메뉴와 같은 명령). Excel 단추는 결과 탭 줄(ResultTabsView)에 있다. -->
     <Border Grid.Row="3" Classes="panel-toolbar" IsVisible="{Binding IsEditMode}">
       <StackPanel Orientation="Horizontal" Spacing="1">

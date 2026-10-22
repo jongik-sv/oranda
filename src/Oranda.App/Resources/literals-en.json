@@ -316,7 +316,6 @@
   "인코딩": "Encoding",
   "일반": "General",
   "읽기": "Read",
-  "읽기 전용 결과입니다. 값을 고치려면 결과 편집 모드로 다시 실행하세요(F9).": "This result is read-only. To change values, rerun it in result edit mode (F9).",
   "읽기 전용 접속(쓰기 문장 차단)": "Read-only connection (blocks write statements)",
   "읽은 SQL": "SQL read",
   "읽은 블록": "Blocks read",

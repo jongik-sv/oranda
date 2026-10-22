@@ -1,3 +1,4 @@
+using Oranda.App.Features.GridEdit;
 using Oranda.Core.Execution;
 using Oranda.Core.Grid;
 using Oranda.Core.Metadata;
@@ -13,7 +14,9 @@ namespace Oranda.App.Features.Flashback;
 public sealed record FlashbackTarget(DbObjectRef Table, IReadOnlyList<string> Names, IReadOnlyList<int> Ordinals,
                                      IReadOnlyList<int> KeyPositions, IReadOnlyList<int> EditablePositions)
 {
-    public const string NeedsEditMode = "편집 모드(F9)로 다시 실행하면 플래시백을 쓸 수 있습니다.";
+    public static string NeedsEditMode => EditModeKey.Localize(
+        "편집 모드{0}로 다시 실행하면 플래시백을 쓸 수 있습니다.",
+        "Rerun in edit mode{0} to use Flashback.");
 
     public const string MultipleTables = "여러 표가 얽힌 결과에서는 쓸 수 없습니다.";
 

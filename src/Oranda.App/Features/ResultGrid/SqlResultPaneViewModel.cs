@@ -528,9 +528,15 @@ public sealed class SqlResultPaneViewModel : ToolPanelViewModelBase
     {
         EditHint = _editSession switch
         {
-            null when _activeFilter is not null => "거른 결과는 편집할 수 없습니다. 값을 고치려면 거르기를 지운 뒤 결과 편집 모드로 다시 실행하세요(F9).",
-            null when _hasStatementBinds => "외래키로 연 결과는 편집할 수 없습니다. 값을 고치려면 그 테이블을 편집기에서 조회해 결과 편집 모드로 실행하세요(F9).",
-            null => "읽기 전용 결과입니다. 값을 고치려면 결과 편집 모드로 다시 실행하세요(F9).",
+            null when _activeFilter is not null => EditModeKey.Localize(
+                "거른 결과는 편집할 수 없습니다. 값을 고치려면 거르기를 지운 뒤 결과 편집 모드로 다시 실행하세요{0}.",
+                "A filtered result cannot be edited. To change values, clear the filter and rerun in result edit mode{0}."),
+            null when _hasStatementBinds => EditModeKey.Localize(
+                "외래키로 연 결과는 편집할 수 없습니다. 값을 고치려면 그 테이블을 편집기에서 조회해 결과 편집 모드로 실행하세요{0}.",
+                "A result opened through a foreign key cannot be edited. To change values, query that table in the editor and run it in result edit mode{0}."),
+            null => EditModeKey.Localize(
+                "읽기 전용 결과입니다. 값을 고치려면 결과 편집 모드로 다시 실행하세요{0}.",
+                "This result is read-only. To change values, rerun it in result edit mode{0}."),
             { CanEdit: false } es => "이 결과는 편집할 수 없습니다: " + (es.Capability.Message ?? es.Capability.Reason.ToString()),
             _ => null,
         };

@@ -201,6 +201,7 @@
 | `oranda.exec.bindVariables` | `Alt+B` | `Ctrl+Option+B` |
 | `oranda.exec.runFromCursor` | `Ctrl+M` | `Cmd+Shift+M` |
 | `oranda.txn.commit` | `F11` | `Cmd+F11` |
+| `oranda.exec.runForEdit` | `F9` | `Ctrl+Enter`, `F9` |
 
 `edit.triggerCompletion` 을 `Option+Esc` 로 둔 이유: 맥 기본 `Ctrl+Space` 는 한/영 입력 소스 전환이다. 사용자 키맵으로 바꿀 수 있다.
 
@@ -249,7 +250,7 @@
 | `oranda.exec.runFromCursor` | `Alt+F5` | `Ctrl+M` | `Alt+F5` | `Alt+F5` |
 | `oranda.exec.runStep` | `Ctrl+Shift+Enter` | `Ctrl+J` | `Ctrl+Shift+Enter` | `Ctrl+Shift+Enter` |
 | `oranda.exec.runToNewResultTab` | `F11` | `F11` | `F11` | - |
-| `oranda.exec.runForEdit` | `F9` | `F9` | `F9` | - |
+| `oranda.exec.runForEdit` | `F9` (macOS `Ctrl+Enter`, `F9`) | `F9` (macOS `Ctrl+Enter`, `F9`) | `F9` (macOS `Ctrl+Enter`, `F9`) | - |
 | `oranda.exec.cancel` | `Ctrl+Break` | `Ctrl+Break` | `Ctrl+Break`, `Shift+Esc` | `Ctrl+Break` |
 | `oranda.exec.toggleStatistics` | - | `Ctrl+Shift+S` | - | - |
 | `oranda.txn.commit` | - | - | `F10` | `F11` |
@@ -390,7 +391,7 @@
 | `oranda.exec.runStep` | 순차 실행(실행 후 다음 문장으로) | `Ctrl+Shift+Enter` | `sqlDocFocus` | `(hasSession \|\| dedicatedSession) && !sessionBusy` | TSK-06-02 |
 | `oranda.exec.runToNewResultTab` | 새 결과 탭으로 실행 | `F11` | `sqlDocFocus` | `(hasSession \|\| dedicatedSession) && !sessionBusy` | TSK-06-02 |
 | `oranda.exec.runAllTabs` | 모든 탭 실행 | - | 전역 | `(hasSession \|\| dedicatedSession) && !sessionBusy` | TSK-06-02 |
-| `oranda.exec.runForEdit` | 결과 편집 모드로 실행 | `F9` | `sqlDocFocus` | `hasSession && !sessionBusy && !readOnlySession` | TSK-06-04 |
+| `oranda.exec.runForEdit` | 결과 편집 모드로 실행 | `F9` (macOS `Ctrl+Enter`) | `sqlDocFocus` | `hasSession && !sessionBusy && !readOnlySession` | TSK-06-04 |
 | `oranda.exec.cancel` | 실행 취소(서버 중단) | `Ctrl+Break` | `sqlDocFocus` | `sessionBusy` | TSK-06-02 |
 | `oranda.exec.bindVariables` | 바인드 변수 창 | - | `sqlDocFocus` | `sqlDocActive` | TSK-06-02 |
 | `oranda.exec.pasteBindValues` | 바인드 값을 편집기에 붙여 넣기 | - | `sqlDocFocus` | `sqlDocActive` | TSK-06-02 |

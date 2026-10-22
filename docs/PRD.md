@@ -85,7 +85,7 @@
 | 자동완성 | 없음 | 단어·객체 목록 | 문맥 해석(별칭→컬럼) | EDIT-04 |
 | 문법 오류 표시 | 없음 | 없음 | 입력 중 표시 | EDIT-03 |
 | 포매터 | 옵션 4종 | 옵션 4종 | 상세 옵션·프로필 공유 | FMT-01~11 |
-| 실행 단축키 체계 | F5, Ctrl+M/J/K/L, F9 | 같음 + F11 새 탭 | Orange 프리셋 제공 | EDIT-10, EXEC-01 |
+| 실행 단축키 체계 | F5, Ctrl+M/J/K/L, F9 (macOS ⌃↵) | 같음 + F11 새 탭 | Orange 프리셋 제공 | EDIT-10, EXEC-01 |
 | 결과 편집 | PK/UK 필수, FROM 첫 테이블 | 같음 | PK/UK 또는 ROWID 필수, 키 보존 검사, 영향 행 1 검증 | GRID-04, 6.5.1 |
 | LOB 보기·편집 | 제한적 | CLOB 편집, BLOB 저장, 이미지 | 같음 + JSON·VECTOR | GRID-02, GRID-07 |
 | SQL 이력 | Cached SQL, Named Script | 같음 | 같음 + 검색 | EXEC-07, EXEC-09 |
