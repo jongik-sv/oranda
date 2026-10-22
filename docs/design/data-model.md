@@ -133,6 +133,7 @@
 | `nls.sort` | string | ○ | null | `NLS_SORT` |
 | `credentialRef` | string | ○ | null | `ICredentialStore` 키. **null = 「저장 안 함」**(접속 때마다 묻기, SAFE-06). 형식은 5.1 |
 | `lastConnectedAt` | DateTimeOffset | ○ | null | 접속에 성공할 때 적는다. 시작 화면 「최근 접속」, 접속 관리자 목록의 마지막 접속 시각·「최근 접속순」 정렬(CONN-14). 접속 시험(CONN-15)과 복제는 적지 않는다 |
+| `comment` | string | ○ | null(없음) | 사람이 적는 설명(여러 줄, 앞뒤 공백만 뺀다). 접속 관리자 목록 줄 도움말·보조 글·찾기에 쓰인다. 복제는 그대로 옮긴다 (TSK-13-12) |
 
 검증(저장·읽기 때 둘 다):
 

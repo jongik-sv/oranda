@@ -63,7 +63,7 @@
           </StackPanel>
         </Border>
         <Grid DockPanel.Dock="Top" ColumnDefinitions="*,Auto" ColumnSpacing="6" Margin="0,0,0,4">
-          <TextBox x:Name="SearchBox" Grid.Column="0" Text="{Binding SearchText}" PlaceholderText="찾기(이름·사용자·호스트·서비스·그룹)"
+          <TextBox x:Name="SearchBox" Grid.Column="0" Text="{Binding SearchText}" PlaceholderText="찾기(이름·사용자·호스트·서비스·그룹·설명)"
                    AutomationProperties.Name="접속 찾기" />
           <ComboBox x:Name="SortBox" Grid.Column="1" MinWidth="110" ItemsSource="{Binding SortOrders}" SelectedValueBinding="{ReflectionBinding Value}"
                     SelectedValue="{Binding SortOrder}" AutomationProperties.Name="정렬" />
@@ -104,7 +104,7 @@
             <TreeDataTemplate DataType="cm:ConnectionTreeNode" ItemsSource="{Binding Children}">
               <!-- 칩 · 이름 · 변경 표시 · user@접속(남는 폭, 말줄임) · 마지막 접속 시각(오른쪽). -->
               <Grid ColumnDefinitions="Auto,Auto,Auto,*,Auto" ColumnSpacing="8" AutomationProperties.Name="{Binding AccessibleName}"
-                    Classes.drop="{Binding IsDropTarget}">
+                    Classes.drop="{Binding IsDropTarget}" ToolTip.Tip="{Binding Tip}">
                 <Border Grid.Column="0" IsVisible="{Binding HasChip}" Background="{Binding EnvironmentColor}" CornerRadius="3" Padding="6,1" VerticalAlignment="Center">
                   <TextBlock Text="{Binding EnvironmentLabel}" Foreground="White" FontSize="12" />
                 </Border>

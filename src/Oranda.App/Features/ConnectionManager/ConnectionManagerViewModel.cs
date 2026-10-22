@@ -660,7 +660,7 @@ public sealed partial class ConnectionManagerViewModel : ViewModelBase
 
     partial void OnSortOrderChanged(ConnectionSortOrder value) => ApplyView(null, reloadEditor: false);
 
-    /// <summary>찾기 글자가 프로필에 맞는지. 접속 문자열에 호스트·포트·서비스·TNS 별칭이 다 들어 있다.</summary>
+    /// <summary>찾기 글자가 프로필에 맞는지. 접속 문자열에 호스트·포트·서비스·TNS 별칭이 다 들어 있다. 설명도 찾는다.</summary>
     public static bool Matches(ConnectionProfile profile, string? search)
     {
         ArgumentNullException.ThrowIfNull(profile);
@@ -670,7 +670,8 @@ public sealed partial class ConnectionManagerViewModel : ViewModelBase
         }
 
         var text = search.Trim();
-        return Contains(profile.Name) || Contains(profile.User) || Contains(profile.DataSource) || Contains(profile.Group) || Contains(profile.ProxyUser);
+        return Contains(profile.Name) || Contains(profile.User) || Contains(profile.DataSource) || Contains(profile.Group) || Contains(profile.ProxyUser)
+            || Contains(profile.Comment);
 
         bool Contains(string? field) => field is not null && field.Contains(text, StringComparison.CurrentCultureIgnoreCase);
     }

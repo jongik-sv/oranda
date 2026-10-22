@@ -57,7 +57,7 @@
     <Border Classes="section">
       <TextBlock Text="일반" />
     </Border>
-    <Grid RowDefinitions="Auto,Auto,Auto" ColumnSpacing="12" RowSpacing="6">
+    <Grid RowDefinitions="Auto,Auto,Auto,Auto" ColumnSpacing="12" RowSpacing="6">
       <Grid.ColumnDefinitions>
         <ColumnDefinition Width="Auto" SharedSizeGroup="Label" />
         <ColumnDefinition Width="*" />
@@ -113,6 +113,10 @@
           </DropDownButton.Flyout>
         </DropDownButton>
       </Grid>
+      <!-- 접속 설명(여러 줄, 2줄 높이에서 3줄까지 늘고 그 뒤는 스크롤). 접속 목록 줄 도움말·찾기에 쓰인다. -->
+      <TextBlock Grid.Row="3" Text="설명" VerticalAlignment="Top" Margin="0,5,0,0" />
+      <TextBox x:Name="CommentBox" Grid.Row="3" Grid.Column="1" Text="{Binding Comment}" AcceptsReturn="True" TextWrapping="Wrap"
+               MinHeight="44" MaxHeight="64" PlaceholderText="이 접속에 대한 메모(선택, 여러 줄)" AutomationProperties.Name="설명" />
     </Grid>
 
     <Border Classes="section">

@@ -70,7 +70,23 @@ public sealed partial class ConnectionTreeNode : ObservableObject
         ? Title
         : Profile.Environment == ConnectionEnvironment.Production ? $"{Title}, 운영 접속" : $"{Title}, {EnvironmentLabel}";
 
-    public string Subtitle => Profile is null ? $"({ProfileCount})" : $"{Profile.User}@{Profile.DataSource}";
+    /// <summary>흐린 보조 글: 폴더면 접속 수, 접속이면 user@접속 문자열(설명이 있으면 「 · 첫 줄」 을 붙인다).</summary>
+    public string Subtitle => Profile switch
+    {
+        null => $"({ProfileCount})",
+        { Comment: { } c } when FirstLine(c) is { Length: > 0 } line => $"{Profile.User}@{Profile.DataSource} · {line}",
+        _ => $"{Profile.User}@{Profile.DataSource}",
+    };
+
+    /// <summary>줄 풍선 도움말: 접속 설명 전체. 없거나 폴더면 null.</summary>
+    public string? Tip => string.IsNullOrWhiteSpace(Profile?.Comment) ? null : Profile.Comment;
+
+    private static string FirstLine(string text)
+    {
+        var trimmed = text.Trim();
+        var end = trimmed.AsSpan().IndexOfAny('\r', '\n');
+        return (end < 0 ? trimmed : trimmed[..end]).TrimEnd();
+    }
 
     /// <summary>마지막 접속 시각(짧게). 접속한 적이 없거나 폴더면 빈 글자.</summary>
     public string LastConnectedText => Profile?.LastConnectedAt is { } at ? FormatWhen(at, DateTimeOffset.Now) : string.Empty;

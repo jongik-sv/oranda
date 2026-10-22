@@ -48,6 +48,7 @@ public sealed record NlsSettings
 /// 접속 정보(<c>connections.json</c> 의 <c>profiles[]</c>, docs/design/data-model.md 2.2).
 /// <see cref="DataSource"/> 는 Easy Connect Plus 문자열 또는 tnsnames.ora 별칭.
 /// 비밀번호는 보관하지 않는다 — <see cref="CredentialRef"/> 로 <c>ICredentialStore</c> 에서 꺼낸다.
+/// <see cref="Comment"/> 는 사람이 적는 여러 줄 설명(null = 없음, TSK-13-12).
 /// D-004: 위치 매개변수 record 를 유지하고 새 매개변수는 끝에 기본값과 함께 덧붙인다.
 /// </summary>
 public sealed record ConnectionProfile(
@@ -68,7 +69,8 @@ public sealed record ConnectionProfile(
     string? ProxyUser = null,
     string? Color = null,
     string? Group = null,
-    DateTimeOffset? LastConnectedAt = null);
+    DateTimeOffset? LastConnectedAt = null,
+    string? Comment = null);
 
 /// <summary><c>connections.json</c> 루트.</summary>
 public sealed record ConnectionsDocument

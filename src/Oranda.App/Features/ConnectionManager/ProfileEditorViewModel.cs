@@ -191,6 +191,10 @@ public sealed partial class ProfileEditorViewModel : ViewModelBase
     [ObservableProperty]
     private string _group = string.Empty;
 
+    /// <summary>접속 설명(여러 줄). 저장 때 앞뒤 공백을 빼고, 비면 null.</summary>
+    [ObservableProperty]
+    private string _comment = string.Empty;
+
     /// <summary>그룹 칸이 제안하는 기존 폴더 경로(접속 관리자가 채운다). 목록에 없는 경로를 직접 입력해도 된다.</summary>
     [ObservableProperty]
     private IReadOnlyList<string> _knownGroups = [];
@@ -546,13 +550,14 @@ public sealed partial class ProfileEditorViewModel : ViewModelBase
     private FormState Capture() => new(
         Name, Group, Environment, ColorText, Mode, Host, Port, Service, UseTls, EasyConnect, TnsAlias, TnsAdmin, WalletLocation,
         User, SavePassword, Auth, ProxyUser, ReadOnly, LicensePack, ConnectTimeoutSeconds, KeepAliveSeconds,
-        NlsDateFormat, NlsTimestampFormat, NlsLanguage, NlsTerritory, NlsSort);
+        NlsDateFormat, NlsTimestampFormat, NlsLanguage, NlsTerritory, NlsSort, Comment);
 
     private sealed record FormState(
         string Name, string Group, ConnectionEnvironment Environment, string ColorText, ConnectionMode Mode, string Host, string Port,
         string Service, bool UseTls, string EasyConnect, string TnsAlias, string TnsAdmin, string WalletLocation, string User,
         bool SavePassword, AuthMode Auth, string ProxyUser, bool ReadOnly, LicensePack LicensePack, decimal ConnectTimeoutSeconds,
-        decimal KeepAliveSeconds, string NlsDateFormat, string NlsTimestampFormat, string NlsLanguage, string NlsTerritory, string NlsSort);
+        decimal KeepAliveSeconds, string NlsDateFormat, string NlsTimestampFormat, string NlsLanguage, string NlsTerritory, string NlsSort,
+        string Comment);
 
     /// <summary>검증을 거쳐 프로필로 만든다. 문제가 있으면 null 과 문제 목록.</summary>
     public ConnectionProfile? TryBuild(out IReadOnlyList<string> errors)
@@ -615,6 +620,7 @@ public sealed partial class ProfileEditorViewModel : ViewModelBase
             ProxyUser = NullIfBlank(ProxyUser),
             Color = color,
             Group = NullIfBlank(Group),
+            Comment = NullIfBlank(Comment),
         };
 
         list.AddRange(ConnectionProfileValidator.Validate(profile));
@@ -627,6 +633,7 @@ public sealed partial class ProfileEditorViewModel : ViewModelBase
     {
         Name = p.Name;
         Group = p.Group ?? string.Empty;
+        Comment = p.Comment ?? string.Empty;
         Environment = p.Environment;
         ColorText = p.Color ?? string.Empty;
         User = p.User;

@@ -3509,7 +3509,7 @@ dotnet, testhost, Oranda.App
 - category: dev
 - domain: fullstack
 - model: sonnet
-- status: [ ]
+- status: [xx]
 - priority: medium
 - assignee: -
 - schedule: 2026-10-22 ~ 2026-10-22
@@ -3517,7 +3517,7 @@ dotnet, testhost, Oranda.App
 - depends: TSK-03-04
 - blocked-by: -
 - entry-point: 접속 관리자 > 프로필 편집기 > 설명 · 접속 목록 줄 도움말
-- note: 담당 PC: mac(맥북) — win144 세션은 이 Task 를 하지 않는다. 2026-10-22 사용자 요청: 「접속 관리자에 각 접속에 대한 comment 도 넣을 수 있게 해 줘」. 지금 ConnectionProfile 에는 설명 칸이 없다
+- note: 담당 PC: mac(맥북) — win144 세션은 이 Task 를 하지 않는다. 2026-10-22 사용자 요청: 「접속 관리자에 각 접속에 대한 comment 도 넣을 수 있게 해 줘」. 지금 ConnectionProfile 에는 설명 칸이 없다. / 2026-10-22 완료(mac): ConnectionProfile.Comment(끝 매개변수), 편집기 「일반」 의 설명 칸(2~3줄), 목록 줄 도움말(ConnectionTreeNode.Tip)·보조 글 「user@접속 · 첫 줄」, 찾기(Matches), 복제는 record with 로 그대로. 예제 connections.json·data-model 2.2 갱신
 
 #### PRD 요구사항
 - prd-ref: PRD CONN-01 (프로필), CONN-17 (접속 목록)

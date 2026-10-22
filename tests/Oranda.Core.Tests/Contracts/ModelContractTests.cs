@@ -28,7 +28,7 @@ public class ModelContractTests
         Assert.Equal(
             ["Name", "User", "DataSource", "Auth", "TnsAdmin", "WalletLocation", "ConnectTimeoutSeconds",
              "Id", "Environment", "ReadOnly", "LicensePack", "KeepAliveSeconds", "Nls", "CredentialRef",
-             "ProxyUser", "Color", "Group", "LastConnectedAt"],
+             "ProxyUser", "Color", "Group", "LastConnectedAt", "Comment"],
             ctor.GetParameters().Select(p => p.Name));
     }
 
@@ -45,6 +45,7 @@ public class ModelContractTests
         Assert.Equal(LicensePack.None, p.LicensePack);
         Assert.Equal(0, p.KeepAliveSeconds);
         Assert.Null(p.CredentialRef);
+        Assert.Null(p.Comment);
     }
 
     [Fact]
