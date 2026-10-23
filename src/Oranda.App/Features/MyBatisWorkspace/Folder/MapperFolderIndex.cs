@@ -83,22 +83,34 @@ public sealed partial class MapperFolderIndex
         return Task.Run(() => Scan(root, ct), ct);
     }
 
-    /// <summary>폴더를 지금 스레드에서 훑는다.</summary>
-    public static MapperFolderIndex Scan(string root, CancellationToken ct)
+    /// <summary>
+    /// 폴더를 훑는다(부른 스레드가 끝날 때까지 기다린다). 파일 읽기·파싱은 코어 수만큼 병렬로 하고(TSK-03-13), 결과는 경로순이다.
+    /// 취소되면 <see cref="OperationCanceledException"/>. 읽을 수 없거나 깨진 파일은 거름 목록에 넣는다.
+    /// </summary>
+    public static MapperFolderIndex Scan(string root, CancellationToken ct) => Scan(root, Environment.ProcessorCount, ct);
+
+    /// <summary>병렬도를 정해 훑는다(시험이 1 로 차례 읽기와 결과를 대조한다).</summary>
+    internal static MapperFolderIndex Scan(string root, int parallelism, CancellationToken ct)
     {
+        ArgumentOutOfRangeException.ThrowIfLessThan(parallelism, 1);
         var full = Path.GetFullPath(root);
-        var files = new List<MapperFolderFile>();
+        ct.ThrowIfCancellationRequested();
+        var paths = EnumerateXml(full).Where(p => !IsExcluded(full, p)).ToArray();
+        var read = new MapperFolderFile?[paths.Length];
+        var options = new ParallelOptions { CancellationToken = ct, MaxDegreeOfParallelism = parallelism };
+        Parallel.For(0, paths.Length, options, i => read[i] = ReadFile(paths[i]));
+
+        var files = new List<MapperFolderFile>(paths.Length);
         var skipped = new HashSet<string>(PathComparer);
-        foreach (var path in EnumerateXml(full).Where(p => !IsExcluded(full, p)))
+        for (int i = 0; i < paths.Length; i++)
         {
-            ct.ThrowIfCancellationRequested();
-            if (ReadFile(path) is { } file)
+            if (read[i] is { } file)
             {
                 files.Add(file);
             }
             else
             {
-                skipped.Add(path);
+                skipped.Add(paths[i]);
             }
         }
 
@@ -108,24 +120,36 @@ public sealed partial class MapperFolderIndex
 
     /// <summary>
     /// 파일 하나를 읽는다. 매퍼가 아니거나(루트 이름), 깨졌거나, 읽을 수 없으면 null.
+    /// 파일은 한 번만 연다: 앞부분을 읽어 루트 이름을 보고, 매퍼(또는 앞부분으로 못 정함)면 같은 흐름에서 나머지를 이어 읽는다.
     /// </summary>
     public static MapperFolderFile? ReadFile(string path)
     {
         IMyBatisMapperDocument document;
         try
         {
-            // 앞부분만 먼저 읽어 루트 이름을 본다: 매퍼가 아닌 큰 xml 을 통째로 읽지 않는다.
-            using (var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete))
+            using var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete, bufferSize: 0);
+            long size = stream.Length;
+            var buffer = new byte[(int)Math.Clamp(size + 1, 1, SniffBytes)];
+            int length = stream.ReadAtLeast(buffer, buffer.Length, throwOnEndOfStream: false);
+
+            // 앞부분만 보고 루트 이름을 정한다: 매퍼가 아닌 큰 xml 을 통째로 읽지 않는다.
+            if (SniffRoot(buffer.AsSpan(0, length)) is { } rootName && !string.Equals(rootName, "mapper", StringComparison.Ordinal))
             {
-                var head = new byte[SniffBytes];
-                int length = stream.ReadAtLeast(head, SniffBytes, throwOnEndOfStream: false);
-                if (SniffRoot(head.AsSpan(0, length)) is { } rootName && !string.Equals(rootName, "mapper", StringComparison.Ordinal))
-                {
-                    return null;
-                }
+                return null;
             }
 
-            document = new MapperParser().Parse(File.ReadAllBytes(path));
+            if (length == buffer.Length)
+            {
+                // 앞부분을 다 채웠다 = 뒤가 더 있을 수 있다. 읽는 동안 파일이 자라도 끝까지 읽는다.
+                using var all = new MemoryStream((int)Math.Min(Math.Max(size, length), Array.MaxLength));
+                all.Write(buffer, 0, length);
+                stream.CopyTo(all);
+                document = new MapperParser().Parse(all.GetBuffer().AsSpan(0, (int)all.Length));
+            }
+            else
+            {
+                document = new MapperParser().Parse(buffer.AsSpan(0, length));
+            }
         }
         catch (Exception ex) when (ex is not (OutOfMemoryException or StackOverflowException))
         {

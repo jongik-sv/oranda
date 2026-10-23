@@ -53,8 +53,22 @@ public sealed class MyBatisWorkspacePerfTests(ITestOutputHelper output) : IDispo
         Directory.CreateDirectory(warmDir);
         File.WriteAllText(Path.Combine(warmDir, "WarmMapper.xml"), "<mapper namespace=\"t.Warm\"><select id=\"a\">SELECT 1 FROM dual</select></mapper>");
         using var folder = new MapperFolderService(dataDirectory: null) { DebounceMilliseconds = 600_000 };
+
+        // 단계별 막힘(TSK-03-12): 트리 다시 짓기 = 폴더 사건에서 ViewModel 처리기 앞뒤(구독 순서대로 불린다) 사이 시간.
+        long changedAt = 0;
+        double rebuildWorst = 0;
+        bool measuring = false;
+        folder.Changed += (_, _) => changedAt = Stopwatch.GetTimestamp();
         var vm = new MapperFolderTreeViewModel(folder);
-        var window = new Window { Width = 320, Height = 800, Content = new MapperFolderTreeView { DataContext = vm } };
+        folder.Changed += (_, _) =>
+        {
+            if (measuring)
+            {
+                rebuildWorst = Math.Max(rebuildWorst, Stopwatch.GetElapsedTime(changedAt).TotalMilliseconds);
+            }
+        };
+        var view = new MapperFolderTreeView { DataContext = vm };
+        var window = new Window { Width = 320, Height = 800, Content = view };
         window.Show();
         Pump();
         Assert.True(await folder.OpenAsync(warmDir, default));
@@ -82,13 +96,23 @@ public sealed class MyBatisWorkspacePerfTests(ITestOutputHelper output) : IDispo
 
         long elapsed;
         bool opened;
+        double startMs;
+        double scanMs;
+        double drawMs;
         try
         {
+            measuring = true;
             var sw = Stopwatch.StartNew();
-            opened = await folder.OpenAsync(_root, default);
+            var opening = folder.OpenAsync(_root, default); // 첫 await 까지(감시 걸기·최근 폴더·빈 트리)는 부른 스레드(UI)에서 돈다
+            startMs = sw.Elapsed.TotalMilliseconds;
+            opened = await opening;
+            scanMs = sw.Elapsed.TotalMilliseconds;
+            var draw = Stopwatch.StartNew();
             Pump();
             window.UpdateLayout();
+            drawMs = draw.Elapsed.TotalMilliseconds;
             elapsed = sw.ElapsedMilliseconds;
+            measuring = false;
         }
         finally
         {
@@ -99,7 +123,10 @@ public sealed class MyBatisWorkspacePerfTests(ITestOutputHelper output) : IDispo
 
         Assert.True(opened);
         Assert.Equal(MapperCount, folder.Index!.Files.Count);
+        Assert.True(view.IsShowingAll); // 나눠 붙인 최상위 노드가 그리기 안에 다 붙었다
         output.WriteLine($"[perf] 매퍼 {MapperCount}개 폴더 훑기: 전체 {elapsed} ms, UI 스레드 최대 막힘 {worst} ms (상한 {UiBlockLimitMs} ms)");
+        output.WriteLine(string.Create(CultureInfo.InvariantCulture,
+            $"[perf] 막힘 단계: 훑기 시작(UI) {startMs:F0} ms / 트리 다시 짓기 최대 {rebuildWorst:F0} ms / 훑기 끝까지 {scanMs:F0} ms / 첫 그리기(나눠 붙이기 합계) {drawMs:F0} ms"));
         Assert.True(worst <= UiBlockLimitMs, $"UI 스레드 최대 막힘 {worst} ms > {UiBlockLimitMs} ms");
     });
 

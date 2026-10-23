@@ -172,6 +172,70 @@ public sealed class MyBatisUserMapperPerfTests(ITestOutputHelper output)
         Assert.True(projected <= ComboLimitMs, $"보통 문장 조합 {ComboTargetCount}개 환산 {projected:F0} ms > {ComboLimitMs} ms");
     });
 
+    /// <summary>
+    /// TSK-03-11: 매퍼를 열면 백그라운드에서 그 문장 모양으로 파서를 데운다. 데우기가 끝난 뒤 조합 검사(구문 분석만)의 첫 결과까지 시간을 잰다.
+    /// 문장 = 위 시험과 같은 보통 문장 8개·가장 긴 문장 3개. 목표 = 첫 결과 1.5 s 이하(보통·긴 문장 모두). 데우기 시간·검사 전체 시간은 관찰만.
+    /// </summary>
+    [Fact]
+    [Trait("Category", "Perf")]
+    public Task First_combo_check_result_after_the_mapper_warm_up_is_within_one_and_a_half_seconds() => Ui.Run(async () =>
+    {
+        if (!Present)
+        {
+            output.WriteLine("사용자 매퍼가 없어 건너뜀");
+            return;
+        }
+
+        using var rig = MyBatisFlowRig.Create();
+        var path = rig.CopyIn(MyBatisFlowRig.UserMapperPath!, "UserMapper.xml");
+        var opened = Stopwatch.StartNew();
+        var (_, session) = await rig.OpenAsync(path);
+        var warm = Oranda.Language.MyBatis.MapperParseWarmUp.Last;
+        int parsed = await warm.WaitAsync(TimeSpan.FromMinutes(5));
+        output.WriteLine($"[perf] 매퍼 열기→파서 데우기 끝: {opened.ElapsedMilliseconds} ms (SQL 문장 {parsed}개 분석, 낮은 우선순위 백그라운드)");
+
+        var conditional = session.VisibleEntries
+            .Where(e => e.IsStatement && e.CanOpen && e.Text.Contains("<if", StringComparison.Ordinal))
+            .OrderBy(e => e.Text.Length).ToList();
+        var typical = conditional.Skip(conditional.Count * 2 / 5).Take(8).ToList();
+        var longest = conditional.TakeLast(3).ToList();
+        var runner = new ComboCheckRunner(rig.Hub.Evaluator!, rig.Get<Oranda.Core.Language.ILanguageService>());
+
+        double worst = 0;
+        foreach (var (label, entries) in new[] { ("보통", typical), ("가장 긴", longest) })
+        {
+            var firsts = new List<double>();
+            foreach (var entry in entries)
+            {
+                var request = new ComboCheckRequest(entry.Id!, session.ElementOf(entry.Id!)!, session.Fragments, []);
+                var first = new FirstReport();
+                var sw = Stopwatch.StartNew();
+                var report = await runner.RunAsync(request, first, default);
+                var all = sw.Elapsed.TotalMilliseconds;
+                firsts.Add(first.At!.Value.TotalMilliseconds);
+                output.WriteLine(string.Create(CultureInfo.InvariantCulture,
+                    $"[perf] 조합 검사 {label} 문장(원문 {entry.Text.Length}자, 조합 {report.Results.Count}개): 첫 결과 {first.At!.Value.TotalMilliseconds:F0} ms / 전체 {all:F0} ms"));
+            }
+
+            output.WriteLine(string.Create(CultureInfo.InvariantCulture, $"[perf] 조합 검사 {label} 문장 {entries.Count}개 첫 결과 최대 {firsts.Max():F0} ms (목표 {FirstResultTargetMs} ms)"));
+            worst = Math.Max(worst, firsts.Max());
+        }
+
+        Assert.True(worst <= FirstResultTargetMs, $"조합 검사 첫 결과 최대 {worst:F0} ms > {FirstResultTargetMs} ms");
+    });
+
+    private const int FirstResultTargetMs = 1500;
+
+    /// <summary>첫 결과가 온 때(검사를 부른 때부터).</summary>
+    private sealed class FirstReport : IProgress<ComboCheckResult>
+    {
+        private readonly Stopwatch _clock = Stopwatch.StartNew();
+
+        public TimeSpan? At { get; private set; }
+
+        public void Report(ComboCheckResult value) => At ??= _clock.Elapsed;
+    }
+
     // 조건을 모두 켠 펼친 SQL.
     private static string AllOnSql(Oranda.Language.MyBatis.IMyBatisEvaluator evaluator, MyBatisWorkspaceSession session, MyBatisStatementEntry entry) =>
         evaluator.Evaluate(session.ElementOf(entry.Id!)!, session.Fragments, new Dictionary<string, object?>(), null, new Oranda.Language.MyBatis.MyBatisEvalOptions(AllOn: true)).Sql;

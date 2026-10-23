@@ -51,9 +51,22 @@
     </Border>
     <Panel>
     <TextBlock Text="일치하는 쿼리 없음" IsVisible="{Binding ShowsNoMatch}" Opacity="0.6" HorizontalAlignment="Center" VerticalAlignment="Top" Margin="0,16,0,0" />
-    <TreeView x:Name="Tree" Classes="compact" ItemsSource="{Binding Roots}" SelectedItem="{Binding SelectedNode, Mode=TwoWay}"
+    <!-- 항목은 코드에서 Roots 를 몇 개씩 나눠 붙인다(TSK-03-12, 훑기 끝 UI 막힘). 패널은 가상화(보이는 노드만 만든다). -->
+    <TreeView x:Name="Tree" Classes="compact" SelectedItem="{Binding SelectedNode, Mode=TwoWay}"
               ScrollViewer.HorizontalScrollBarVisibility="Disabled">
+      <TreeView.ItemsPanel>
+        <ItemsPanelTemplate>
+          <VirtualizingStackPanel />
+        </ItemsPanelTemplate>
+      </TreeView.ItemsPanel>
       <TreeView.Styles>
+        <Style Selector="TreeViewItem">
+          <Setter Property="ItemsPanel">
+            <ItemsPanelTemplate>
+              <VirtualizingStackPanel />
+            </ItemsPanelTemplate>
+          </Setter>
+        </Style>
         <Style Selector="TreeViewItem /template/ Border#PART_LayoutRoot">
           <Setter Property="MinHeight" Value="24" />
         </Style>

@@ -1,3 +1,5 @@
+using System.Collections.ObjectModel;
+using System.Collections.Specialized;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Input;
@@ -9,9 +11,19 @@ namespace Oranda.App.Features.MyBatisWorkspace.Folder;
 
 public partial class MapperFolderTreeView : UserControl
 {
+    /// <summary>한 번에 화면에 붙이는 최상위 노드 수. 노드 하나를 처음 그리는 데 수 ms 가 들어 한 번에 다 붙이면 UI 스레드가 오래 멈춘다(TSK-03-12).</summary>
+    internal const int ShowBatch = 4;
+
+    // 트리에 보이는 최상위 노드: ViewModel 의 Roots 를 따라가되 몇 개씩 나눠(배경 우선순위) 붙인다. 사이사이 입력·그리기가 돈다.
+    private readonly ObservableCollection<MapperFolderTreeNode> _shown = [];
+    private MapperFolderTreeViewModel? _vm;
+    private bool _syncQueued;
+
     public MapperFolderTreeView()
     {
         InitializeComponent();
+        Tree.ItemsSource = _shown;
+        DataContextChanged += (_, _) => Follow(DataContext as MapperFolderTreeViewModel);
 
         // 메뉴 명령의 대상은 고른 노드이므로 메뉴가 열리기 전에(터널 단계) 눌린 노드를 고른다.
         Tree.AddHandler(ContextRequestedEvent, (_, e) =>
@@ -52,6 +64,94 @@ public partial class MapperFolderTreeView : UserControl
         };
     }
 
+    /// <summary>ViewModel 의 최상위 노드를 모두 트리에 붙였다(시험용).</summary>
+    internal bool IsShowingAll => _vm is null ? _shown.Count == 0 : _shown.SequenceEqual(_vm.Roots);
+
+    private void Follow(MapperFolderTreeViewModel? vm)
+    {
+        if (ReferenceEquals(vm, _vm))
+        {
+            return;
+        }
+
+        if (_vm is not null)
+        {
+            _vm.Roots.CollectionChanged -= OnRootsChanged;
+        }
+
+        _vm = vm;
+        if (vm is not null)
+        {
+            vm.Roots.CollectionChanged += OnRootsChanged;
+        }
+
+        QueueSync();
+    }
+
+    private void OnRootsChanged(object? sender, NotifyCollectionChangedEventArgs e) => QueueSync();
+
+    private void QueueSync()
+    {
+        if (!_syncQueued)
+        {
+            _syncQueued = true;
+            Dispatcher.UIThread.Post(Sync, DispatcherPriority.Background);
+        }
+    }
+
+    // 키로 첫 쿼리를 고를 때: 고를 노드가 트리에 있어야 하므로 남은 노드를 지금 다 붙인다.
+    internal void ShowAll()
+    {
+        while (_vm is not null && !IsShowingAll)
+        {
+            Sync(int.MaxValue);
+        }
+    }
+
+    /// <summary>한 차례(<see cref="ShowBatch"/> 개) 붙인다(시험용: 배경 우선순위 차례 하나와 같다).</summary>
+    internal void SyncOnce() => Sync(ShowBatch);
+
+    private void Sync() => Sync(ShowBatch);
+
+    // 앞부분이 같으면 두고, 다른 곳부터 지운 뒤 batch 개만 더 붙인다. 남았으면 다음 차례에 이어 붙인다.
+    private void Sync(int batch)
+    {
+        _syncQueued = false;
+        var source = _vm?.Roots;
+        if (source is null)
+        {
+            _shown.Clear();
+            return;
+        }
+
+        int same = 0;
+        while (same < _shown.Count && same < source.Count && ReferenceEquals(_shown[same], source[same]))
+        {
+            same++;
+        }
+
+        if (same == 0 && _shown.Count > 0)
+        {
+            _shown.Clear();
+        }
+
+        while (_shown.Count > same)
+        {
+            _shown.RemoveAt(_shown.Count - 1);
+        }
+
+        int end = (int)Math.Min(source.Count, (long)same + batch);
+        for (int i = same; i < end; i++)
+        {
+            _shown.Add(source[i]);
+        }
+
+        if (_shown.Count < source.Count)
+        {
+            QueueSync();
+        }
+    }
+
     private void OnClearSearchClick(object? sender, RoutedEventArgs e)
     {
         (DataContext as MapperFolderTreeViewModel)?.ClearSearch();
@@ -80,6 +180,7 @@ public partial class MapperFolderTreeView : UserControl
         else if (e.Key == Key.Down && SearchBox.IsFocused)
         {
             vm.FlushSearch();
+            ShowAll();
             if (vm.FirstElement() is { } first)
             {
                 vm.SelectedNode = first;
@@ -90,6 +191,7 @@ public partial class MapperFolderTreeView : UserControl
         else if (e.Key == Key.Enter && SearchBox.IsFocused)
         {
             vm.FlushSearch();
+            ShowAll();
             var target = vm.SelectedNode is { Kind: MapperFolderNodeKind.Element } picked ? picked : vm.FirstElement();
             if (target is not null)
             {

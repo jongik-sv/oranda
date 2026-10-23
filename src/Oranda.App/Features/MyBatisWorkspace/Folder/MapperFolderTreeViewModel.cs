@@ -25,11 +25,15 @@ public sealed partial class MapperFolderTreeNode : ObservableObject
     [ObservableProperty]
     private bool _isExpanded;
 
-    internal MapperFolderTreeNode(MapperFolderNodeKind kind, string name, string fullPath)
+    private ObservableCollection<MapperFolderTreeNode>? _children;
+    private Func<IEnumerable<MapperFolderTreeNode>>? _createChildren;
+
+    internal MapperFolderTreeNode(MapperFolderNodeKind kind, string name, string fullPath, Func<IEnumerable<MapperFolderTreeNode>>? createChildren = null)
     {
         Kind = kind;
         Name = name;
         FullPath = fullPath;
+        _createChildren = createChildren;
     }
 
     public MapperFolderNodeKind Kind { get; }
@@ -68,7 +72,26 @@ public sealed partial class MapperFolderTreeNode : ObservableObject
     public bool CanFindUsages => Kind == MapperFolderNodeKind.Element && ElementId is not null
         && ElementKind is MyBatisStatementKind.Sql or MyBatisStatementKind.ResultMap;
 
-    public ObservableCollection<MapperFolderTreeNode> Children { get; } = [];
+    /// <summary>
+    /// 자식 노드. 파일 노드의 요소 자식은 처음 읽을 때 만든다(TSK-03-12): 트리를 다시 지을 때 노드 수를 줄여 UI 스레드 막힘을 줄인다.
+    /// 트리는 파일 노드의 항목을 화면에 올릴 때(폴더를 펼칠 때) 읽는다.
+    /// </summary>
+    public ObservableCollection<MapperFolderTreeNode> Children
+    {
+        get
+        {
+            if (_children is null)
+            {
+                _children = _createChildren is { } create ? new ObservableCollection<MapperFolderTreeNode>(create()) : [];
+                _createChildren = null;
+            }
+
+            return _children;
+        }
+    }
+
+    /// <summary>자식을 이미 만들었다(만들지 않은 자식은 펼침 기억을 훑지 않는다).</summary>
+    internal bool HasChildren => _children is not null;
 }
 
 /// <summary>「쓰는 곳 찾기」 결과 한 줄.</summary>
@@ -326,9 +349,11 @@ public sealed partial class MapperFolderTreeViewModel : ObservableObject, IDispo
         }
 
         _builtFiltered = _terms.Length > 0;
-        Roots.Clear();
         var index = _folder.Index;
         RootPath = index?.Root ?? string.Empty;
+
+        // 화면에 붙지 않은 목록에 다 지은 뒤 한 번에 붙인다(트리가 노드마다 바뀜을 받지 않게).
+        var roots = new List<MapperFolderTreeNode>();
         if (index is not null)
         {
             var folders = new Dictionary<string, MapperFolderTreeNode>(MapperFolderIndex.PathComparer);
@@ -337,9 +362,15 @@ public sealed partial class MapperFolderTreeViewModel : ObservableObject, IDispo
                 var dir = Path.GetDirectoryName(file.Path) ?? index.Root;
                 if (FileNode(file) is { } fileNode)
                 {
-                    ChildrenOf(dir, index.Root, folders).Add(fileNode);
+                    ChildrenOf(dir, index.Root, roots, folders).Add(fileNode);
                 }
             }
+        }
+
+        Roots.Clear();
+        foreach (var node in roots)
+        {
+            Roots.Add(node);
         }
 
         ShowsNoMatch = _terms.Length > 0 && Roots.Count == 0;
@@ -352,17 +383,17 @@ public sealed partial class MapperFolderTreeViewModel : ObservableObject, IDispo
         UpdateStatus();
     }
 
-    // 폴더 경로의 노드 목록(루트면 Roots). 없는 중간 폴더 노드는 만든다. 하위 폴더는 파일보다 앞에 둔다.
-    private ObservableCollection<MapperFolderTreeNode> ChildrenOf(string dir, string root, Dictionary<string, MapperFolderTreeNode> folders)
+    // 폴더 경로의 노드 목록(루트면 roots). 없는 중간 폴더 노드는 만든다. 하위 폴더는 파일보다 앞에 둔다.
+    private IList<MapperFolderTreeNode> ChildrenOf(string dir, string root, List<MapperFolderTreeNode> roots, Dictionary<string, MapperFolderTreeNode> folders)
     {
         if (MapperFolderIndex.PathComparer.Equals(dir.TrimEnd(Path.DirectorySeparatorChar), root.TrimEnd(Path.DirectorySeparatorChar)))
         {
-            return Roots;
+            return roots;
         }
 
         if (!folders.TryGetValue(dir, out var node))
         {
-            var parent = ChildrenOf(Path.GetDirectoryName(dir) ?? root, root, folders);
+            var parent = ChildrenOf(Path.GetDirectoryName(dir) ?? root, root, roots, folders);
             node = new MapperFolderTreeNode(MapperFolderNodeKind.Folder, Path.GetFileName(dir), dir)
             {
                 ToolTipText = dir,
@@ -383,32 +414,34 @@ public sealed partial class MapperFolderTreeViewModel : ObservableObject, IDispo
 
     private MapperFolderTreeNode? FileNode(MapperFolderFile file)
     {
-        var elements = file.Elements.Where(e => MyBatisQueryFilter.Matches(e.Id ?? e.Name, _terms)).ToList();
-        if (_terms.Length > 0 && elements.Count == 0)
+        var terms = _terms;
+        var highlight = _appliedSearch;
+        bool filtered = terms.Length > 0;
+        int matched = filtered ? file.Elements.Count(e => MyBatisQueryFilter.Matches(e.Id ?? e.Name, terms)) : file.Elements.Count;
+        if (filtered && matched == 0)
         {
             return null; // 거르는 중에는 맞은 쿼리가 있는 파일만
         }
 
-        var node = new MapperFolderTreeNode(MapperFolderNodeKind.File, Path.GetFileName(file.Path), file.Path)
-        {
-            Detail = (file.Namespace ?? string.Empty) + (_terms.Length > 0 ? string.Create(CultureInfo.InvariantCulture, $" ({elements.Count})") : string.Empty),
-            ToolTipText = file.Path,
-            IsExpanded = _terms.Length > 0 || _expanded.Contains(file.Path),
-        };
-        foreach (var e in elements)
-        {
-            node.Children.Add(new MapperFolderTreeNode(MapperFolderNodeKind.Element, e.Id ?? e.Name, file.Path)
+        // 요소 자식은 처음 읽을 때 만든다(검색 글은 지금 것으로 묶어 둔다).
+        IEnumerable<MapperFolderTreeNode> Elements() => file.Elements
+            .Where(e => !filtered || MyBatisQueryFilter.Matches(e.Id ?? e.Name, terms))
+            .Select(e => new MapperFolderTreeNode(MapperFolderNodeKind.Element, e.Id ?? e.Name, file.Path)
             {
                 Detail = e.Name,
-                Highlight = _appliedSearch,
+                Highlight = highlight,
                 ToolTipText = file.Namespace is null || e.Id is null ? e.Id ?? e.Name : file.Namespace + "." + e.Id,
                 Namespace = file.Namespace,
                 ElementId = e.Id,
                 ElementKind = e.Kind,
             });
-        }
 
-        return node;
+        return new MapperFolderTreeNode(MapperFolderNodeKind.File, Path.GetFileName(file.Path), file.Path, Elements)
+        {
+            Detail = (file.Namespace ?? string.Empty) + (filtered ? string.Create(CultureInfo.InvariantCulture, $" ({matched})") : string.Empty),
+            ToolTipText = file.Path,
+            IsExpanded = filtered || _expanded.Contains(file.Path),
+        };
     }
 
     private void RememberExpanded(IEnumerable<MapperFolderTreeNode> nodes)
@@ -424,7 +457,10 @@ public sealed partial class MapperFolderTreeViewModel : ObservableObject, IDispo
                 _expanded.Remove(node.FullPath);
             }
 
-            RememberExpanded(node.Children);
+            if (node.HasChildren)
+            {
+                RememberExpanded(node.Children); // 만들지 않은 자식은 펼친 적도 없다
+            }
         }
     }
 

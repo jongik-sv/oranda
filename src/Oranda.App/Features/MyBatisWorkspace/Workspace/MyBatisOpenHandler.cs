@@ -82,6 +82,7 @@ public sealed class MyBatisOpenHandler : IMyBatisOpenHandler
         host.ActiveWorkspace = workspace;
         var session = new MyBatisWorkspaceSession(workspace, fullPath, document);
         workspace.MyBatis = session;
+        _ = MapperParseWarmUp.Start(document); // TSK-03-11: 조합 검사 첫 분석을 위해 이 매퍼 문장 모양으로 파서 예측 캐시를 백그라운드에서 데운다
         if (session.VisibleEntries.FirstOrDefault(e => e.IsStatement && e.CanOpen) is { Id: { } first })
         {
             session.OpenStatement(first);
