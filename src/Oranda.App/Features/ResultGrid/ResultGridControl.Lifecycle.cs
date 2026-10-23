@@ -70,7 +70,7 @@ public sealed partial class ResultGridControl
         try
         {
             await m.LoadFirstPageAsync().ConfigureAwait(true);
-            if (ReferenceEquals(_model, m))
+            if (ReferenceEquals(_model, m) && !m.WidthsDecided)
             {
                 m.AutoSizeColumns(Factory.CharWidth);
             }

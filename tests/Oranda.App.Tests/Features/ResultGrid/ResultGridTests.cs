@@ -233,6 +233,27 @@ public sealed class ResultGridTests
     }
 
     [Fact]
+    public async Task User_resized_width_marks_widths_decided_so_tab_switch_keeps_it()
+    {
+        await using var m = await LoadedAsync(3);
+        Assert.False(m.WidthsDecided);
+        m.SetColumnWidth(0, 321);
+        Assert.True(m.WidthsDecided);
+        Assert.Equal(321, m.GetColumnWidth(0));
+    }
+
+    [Fact]
+    public async Task CarryLayoutFrom_copies_widths_for_the_same_columns()
+    {
+        await using var old = await LoadedAsync(3);
+        await using var fresh = await LoadedAsync(3);
+        old.SetColumnWidth(0, 250);
+        fresh.CarryLayoutFrom(old);
+        Assert.True(fresh.WidthsDecided);
+        Assert.Equal(250, fresh.GetColumnWidth(0));
+    }
+
+    [Fact]
     public async Task Text_mode_pads_columns_and_aligns_numbers_right()
     {
         await using var m = await LoadedAsync(12);

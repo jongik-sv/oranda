@@ -24,6 +24,7 @@ public sealed partial class SqlResultPaneViewModel
         ArgumentNullException.ThrowIfNull(result);
         LocalFilterSpec? carried = null;
         IReadOnlyList<ResultColumn>? oldColumns = null;
+        var oldModel = keepLocalFilter ? _model : null;
         if (keepLocalFilter && _model is { } old && !old.LocalFilter.IsEmpty)
         {
             carried = old.LocalFilter;
@@ -52,6 +53,11 @@ public sealed partial class SqlResultPaneViewModel
         m.NoticeRequested += OnNoticeRequested;
         m.ServerSort = ServerSortAsync;
         m.ServerSortBlockedReason = ServerSortBlockedReason;
+        if (oldModel is not null)
+        {
+            m.CarryLayoutFrom(oldModel);
+        }
+
         Model = m;
         SetQuickTextSilently(string.Empty);
         FillQuickFilterColumns(m);

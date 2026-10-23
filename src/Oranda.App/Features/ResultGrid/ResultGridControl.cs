@@ -107,6 +107,8 @@ public sealed partial class ResultGridControl : Control
                 _model.Changed -= OnModelChanged;
                 _model.RevealRequested -= OnRevealRequested;
                 _model.FlashStarted -= OnFlashStarted;
+                _model.SavedOffsetX = _offsetX;
+                _model.SavedOffsetY = _offsetY;
             }
 
             _model = value;
@@ -125,6 +127,10 @@ public sealed partial class ResultGridControl : Control
                 }
 
                 _ = LoadAsync(_model);
+                if (_model.SavedOffsetX > 0 || _model.SavedOffsetY > 0)
+                {
+                    ScrollTo(_model.SavedOffsetX, _model.SavedOffsetY); // 범위를 넘으면 ScrollTo 가 잘라 준다
+                }
             }
 
             InvalidateVisual();

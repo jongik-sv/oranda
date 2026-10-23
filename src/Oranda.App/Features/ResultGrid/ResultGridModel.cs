@@ -244,7 +244,41 @@ public sealed partial class ResultGridModel : IAsyncDisposable
     public void SetColumnWidth(int ordinal, double width)
     {
         _widths[ordinal] = Math.Clamp(width, 30, 2000);
+        WidthsDecided = true;
         RaiseChanged();
+    }
+
+    /// <summary>열 너비를 이미 정했는가(자동 크기 한 번 또는 사용자가 조절). 참이면 결과 탭을 다시 봐도 자동 크기를 하지 않는다.</summary>
+    public bool WidthsDecided { get; private set; }
+
+    /// <summary>탭을 떠날 때 기억하는 스크롤 위치(다시 보면 복원).</summary>
+    public double SavedOffsetX { get; set; }
+
+    public double SavedOffsetY { get; set; }
+
+    /// <summary>같은 질의를 다시 조회한 새 모델이 이전 모델의 열 너비를 이어받는다(열 이름·순서가 같을 때만).</summary>
+    public void CarryLayoutFrom(ResultGridModel old)
+    {
+        if (!old.WidthsDecided || old.Columns.Count != Columns.Count)
+        {
+            return;
+        }
+
+        for (var c = 0; c < Columns.Count; c++)
+        {
+            if (!string.Equals(old.Columns[c].Name, Columns[c].Name, StringComparison.Ordinal))
+            {
+                return;
+            }
+        }
+
+        for (var c = 0; c < Columns.Count; c++)
+        {
+            _widths[c] = old._widths[c];
+            _textWidths[c] = old._textWidths[c];
+        }
+
+        WidthsDecided = true;
     }
 
     /// <summary>머리글·첫 페이지 값 길이로 열 너비를 정한다. <paramref name="charWidth"/> = 글자 1칸 DIP 너비.</summary>
@@ -268,6 +302,7 @@ public sealed partial class ResultGridModel : IAsyncDisposable
             _textWidths[c] = Math.Min(chars, 60);
         }
 
+        WidthsDecided = true;
         RaiseChanged();
     }
 
