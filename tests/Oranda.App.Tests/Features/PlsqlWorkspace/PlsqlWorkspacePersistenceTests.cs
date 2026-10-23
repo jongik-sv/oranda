@@ -340,6 +340,226 @@ public sealed class PlsqlWorkspacePersistenceTests
         }
     });
 
+    // ---- 시작 복원·닫기(B-2 ②) ----
+
+    [Fact]
+    public Task A_workspace_comes_back_after_a_restart_and_its_waiting_tab_keeps_the_keys_off() => HeadlessHost.Run(async () =>
+    {
+        var dir = Path.Combine(Path.GetTempPath(), "oranda-plsql-restart-" + Guid.NewGuid().ToString("N"));
+        try
+        {
+            var procedure = await PlsqlEditorTests.OpenedProcedure();
+            var body = await PlsqlEditorTests.OpenedPackageBody();
+            string id;
+            using (var h = new ShellHarness(dir))
+            {
+                var router = PlsqlWorkspaceRouter.For(h.Get<DockWorkspace>(), h.Services);
+                router.Place(procedure);
+                router.Place(body);
+                body.Editor.Document.Insert(0, "-- mine\n");
+                id = ((PlsqlWorkspaceViewModel)h.Get<DockWorkspace>().Documents.Single().Panel).Id;
+                await Persistence(h).ShutdownAsync(default);
+                PlsqlEditorViewModel.Active = null;
+            }
+
+            using (var h = new ShellHarness(dir))
+            {
+                var keys = h.Get<Oranda.Core.Shell.IContextKeys>();
+                var docking = h.Get<DockWorkspace>();
+                var persistence = Persistence(h);
+                persistence.Wire();
+                await persistence.RestoreAsync(default);
+                Dispatcher.UIThread.RunJobs();
+
+                var doc = Assert.Single(docking.Documents);
+                Assert.Same(doc, docking.ActiveDocument);
+                var workspace = Assert.IsType<PlsqlWorkspaceViewModel>(doc.Panel);
+                Assert.Equal(id, workspace.Id);
+                Assert.Equal(new[] { procedure.Title, body.Title }, workspace.Tabs.Select(t => t.Title));
+                Assert.Equal(procedure.Editor.Text, workspace.Tabs[0].Editor.Text);
+                var restored = workspace.Tabs[1];
+                Assert.Same(restored, workspace.ActiveTab);
+                Assert.Equal(body.Editor.Text, restored.Editor.Text);
+                Assert.Equal(body.BaselineDdlTime, restored.BaselineDdlTime);
+
+                // 접속이 아직 없다: 패키지 본문인데도 명세/본문 전환·실행 키가 꺼져 있다.
+                Assert.Same(restored, PlsqlEditorViewModel.Active);
+                Assert.True(restored.AwaitingSession);
+                Assert.False(keys.Evaluate("isPackageDoc"));
+                Assert.False(keys.Evaluate("plsqlRunnable"));
+                Assert.NotNull(docking.CloseConfirm!(doc)); // 고친 채 저장한 탭은 닫을 때 묻는다
+                h.Window.UpdateLayout();
+                Oranda.App.Tests.Features.MyBatisWorkspace.Flow.MyBatisFlowRig.Render(h.Window, "plsql-workspace-restored",
+                    (int)h.Window.Bounds.Width, (int)h.Window.Bounds.Height);
+            }
+        }
+        finally
+        {
+            PlsqlEditorViewModel.Active = null;
+            try
+            {
+                Directory.Delete(dir, recursive: true);
+            }
+            catch (IOException)
+            {
+            }
+        }
+    });
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)] // 다른 문서(SQL 작업 공간 복원 등)가 먼저 활성이면 빼앗지 않지만 마지막 활성 작업 공간은 그대로 기억한다
+    public Task Restore_opens_at_most_ten_workspaces_and_keeps_the_rest_in_the_index(bool otherActive) => HeadlessHost.Run(async () =>
+    {
+        using var h = new ShellHarness();
+        var docking = h.Get<DockWorkspace>();
+        var persistence = Persistence(h);
+        var other = otherActive ? docking.OpenDocument("oranda.panel.objectDetail", new Oranda.App.Features.ObjectDetail.ObjectDetailViewModel(), "SCOTT.EMP") : null;
+        var ids = Enumerable.Range(0, 12).Select(i => $"w{i:00}").ToList();
+        foreach (var id in ids)
+        {
+            await persistence.Store.SaveAsync(new PlsqlWorkspaceFile { Id = id, Name = "PL/SQL " + id, ActiveTab = 0, Tabs = [new PlsqlTabFile { Title = id, Text = "-- " + id }] });
+        }
+
+        await persistence.Store.SaveIndexAsync(new PlsqlWorkspaceIndex { OpenIds = ids, LastId = "w03" });
+        try
+        {
+            await persistence.RestoreAsync(default);
+            Dispatcher.UIThread.RunJobs();
+
+            var open = docking.Documents.Select(d => d.Panel).OfType<PlsqlWorkspaceViewModel>().ToList();
+            Assert.Equal(ids.Take(PlsqlWorkspacePersistence.RestoreLimit), open.Select(w => w.Id));
+            if (other is null)
+            {
+                Assert.Equal("w03", ((PlsqlWorkspaceViewModel)docking.ActiveDocument!.Panel).Id);
+            }
+            else
+            {
+                Assert.Same(other, docking.ActiveDocument);
+            }
+
+            await persistence.SaveChangedAsync(default);
+            var index = await persistence.Store.LoadIndexAsync();
+            Assert.Equal(ids, index!.OpenIds);
+            Assert.Equal("w03", index.LastId);
+        }
+        finally
+        {
+            PlsqlEditorViewModel.Active = null;
+        }
+    });
+
+    [Fact]
+    public Task Restore_drops_missing_and_corrupt_files_from_the_index_and_keeps_a_newer_one_unopened() => HeadlessHost.Run(async () =>
+    {
+        using var h = new ShellHarness();
+        var docking = h.Get<DockWorkspace>();
+        var persistence = Persistence(h);
+        var folder = persistence.Store.Folder;
+        await persistence.Store.SaveAsync(new PlsqlWorkspaceFile { Id = "fine", Name = "PL/SQL 1" });
+        await File.WriteAllTextAsync(Path.Combine(folder, "bad.json"), "{");
+        const string newer = "{\"schemaVersion\":2,\"id\":\"newer\",\"name\":\"future\",\"tabs\":[]}";
+        await File.WriteAllTextAsync(Path.Combine(folder, "newer.json"), newer);
+        await File.WriteAllTextAsync(Path.Combine(folder, "reshaped.json"), "{\"schemaVersion\":2,\"id\":\"reshaped\"}"); // 이 판으로는 읽히지 않는 새 판
+        await persistence.Store.SaveIndexAsync(new PlsqlWorkspaceIndex { OpenIds = ["gone", "bad", "newer", "reshaped", "fine", "Bad Id"], LastId = "gone" });
+        try
+        {
+            await persistence.RestoreAsync(default);
+            Dispatcher.UIThread.RunJobs();
+
+            Assert.Equal("fine", Assert.IsType<PlsqlWorkspaceViewModel>(Assert.Single(docking.Documents).Panel).Id);
+            await persistence.SaveChangedAsync(default);
+            var index = await persistence.Store.LoadIndexAsync();
+            Assert.Equal(["fine", "newer", "reshaped"], index!.OpenIds.ToArray());
+            Assert.Equal("fine", index.LastId);
+            Assert.Equal(newer, await File.ReadAllTextAsync(Path.Combine(folder, "newer.json")));
+        }
+        finally
+        {
+            PlsqlEditorViewModel.Active = null;
+        }
+    });
+
+    [Fact]
+    public Task An_opened_session_attaches_to_the_waiting_tabs_of_its_profile_in_turn_and_turns_their_keys_on() => HeadlessHost.Run(async () =>
+    {
+        using var h = new ShellHarness();
+        var keys = h.Get<Oranda.Core.Shell.IContextKeys>();
+        var docking = h.Get<DockWorkspace>();
+        var persistence = Persistence(h);
+        var session = new SchemaOpenTests.OpenFakeSession();
+        var otherProfile = Guid.NewGuid();
+        PlsqlTabFile Tab(string name, Guid profile) =>
+            new() { Owner = "SCOTT", Name = name, Type = "PROCEDURE", ConnectionProfileId = profile, Title = "SCOTT." + name, Text = "CREATE OR REPLACE PROCEDURE " + name };
+        await persistence.Store.SaveAsync(new PlsqlWorkspaceFile
+        {
+            Id = "ws", Name = "PL/SQL 1", ActiveTab = 0, Tabs = [Tab("A", session.Profile.Id), Tab("B", session.Profile.Id), Tab("C", otherProfile)],
+        });
+        await persistence.Store.SaveIndexAsync(new PlsqlWorkspaceIndex { OpenIds = ["ws"], LastId = "ws" });
+        try
+        {
+            await persistence.RestoreAsync(default);
+            Dispatcher.UIThread.RunJobs();
+            var tabs = ((PlsqlWorkspaceViewModel)Assert.Single(docking.Documents).Panel).Tabs;
+            Assert.All(tabs, t => Assert.True(t.AwaitingSession));
+            Assert.False(keys.Evaluate("plsqlRunnable"));
+
+            persistence.AttachOpened(session);
+            for (var i = 0; i < 100 && tabs.Take(2).Any(t => t.AwaitingSession || t.IsBusy); i++)
+            {
+                await Task.Delay(20);
+                Dispatcher.UIThread.RunJobs();
+            }
+
+            Assert.Same(session, tabs[0].Session);
+            Assert.Same(session, tabs[1].Session);
+            Assert.True(tabs[2].AwaitingSession); // 다른 접속의 탭은 그대로 기다린다
+            Assert.True(keys.Evaluate("plsqlRunnable"));
+        }
+        finally
+        {
+            PlsqlEditorViewModel.Active = null;
+        }
+    });
+
+    [Fact]
+    public Task Closing_a_workspace_moves_its_file_to_backup_but_closing_during_shutdown_keeps_it() => HeadlessHost.Run(async () =>
+    {
+        using var h = new ShellHarness();
+        var docking = h.Get<DockWorkspace>();
+        var router = PlsqlWorkspaceRouter.For(docking, h.Services);
+        var persistence = Persistence(h);
+        persistence.Wire();
+        var first = new PlsqlEditorViewModel();
+        first.StartNew("-- first\n", null);
+        var second = new PlsqlEditorViewModel();
+        second.StartNew("-- second\n", null);
+        try
+        {
+            var closed = router.Place(first)!;
+            var closedId = ((PlsqlWorkspaceViewModel)closed.Panel).Id;
+            await persistence.SaveChangedAsync(default);
+
+            Assert.True(docking.CloseDocument(closed));
+            await persistence.FlushAsync(default);
+
+            Assert.False(File.Exists(Path.Combine(persistence.Store.Folder, closedId + ".json")));
+            Assert.Single(Directory.GetFiles(persistence.Store.BackupDirectory, closedId + ".json.closed-*"));
+
+            var kept = router.Place(second)!;
+            var keptId = ((PlsqlWorkspaceViewModel)kept.Panel).Id;
+            await persistence.ShutdownAsync(default); // 종료 작업 뒤에는 저장하지 않는다: 창이 닫히며 문서가 닫혀도 파일·목록은 그대로
+            Assert.True(docking.CloseDocument(kept));
+
+            Assert.True(File.Exists(Path.Combine(persistence.Store.Folder, keptId + ".json")));
+            Assert.Equal([keptId], (await persistence.Store.LoadIndexAsync())!.OpenIds.ToArray());
+        }
+        finally
+        {
+            PlsqlEditorViewModel.Active = null;
+        }
+    });
+
     private static PlsqlWorkspacePersistence Persistence(ShellHarness h) =>
         h.Services.GetService<IEnumerable<IStartupTask>>()!.OfType<PlsqlWorkspacePersistence>().Single();
 }

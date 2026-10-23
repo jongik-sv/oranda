@@ -66,6 +66,9 @@ public sealed partial class PlsqlEditorViewModel : ToolPanelViewModelBase, IComp
     private int _generation;
     private int _line1Shift;
 
+    /// <summary>복원한 탭이 연 접속 프로필(결정 71). 그 프로필의 세션이 붙기 전에는 서버 일을 하지 않고, 다른 접속으로 컴파일하지 않는다.</summary>
+    private Guid? _restoredProfileId;
+
     public PlsqlEditorViewModel()
     {
         Editor = new SqlEditorViewModel();
@@ -115,7 +118,13 @@ public sealed partial class PlsqlEditorViewModel : ToolPanelViewModelBase, IComp
     public DbObjectRef? Target { get; private set; }
 
     /// <summary>편집기에서 실행(<c>oranda.plsql.run</c>)할 대상: 서버에서 연 프로시저·함수·패키지. 새 문서·실행 못 하는 유형이면 null.</summary>
-    public DbObjectRef? RunTarget => Target is { } t && PlsqlRunCommands.IsRunnableType(t.ObjectType) ? t : null;
+    public DbObjectRef? RunTarget => !AwaitingSession && Target is { } t && PlsqlRunCommands.IsRunnableType(t.ObjectType) ? t : null;
+
+    /// <summary>복원한 탭이 제 접속을 기다린다(실행·명세/본문 전환 키가 꺼진다).</summary>
+    public bool AwaitingSession => _restoredProfileId is not null && _session is null;
+
+    /// <summary>복원한 탭이 기다리는 접속 프로필(복원한 탭이 아니면 null).</summary>
+    public Guid? RestoredProfileId => _restoredProfileId;
 
     /// <summary>패키지 멤버는 대화상자에서 고른다.</summary>
     public string? RunMember => null;
@@ -130,6 +139,9 @@ public sealed partial class PlsqlEditorViewModel : ToolPanelViewModelBase, IComp
                 _session = value;
                 OnPropertyChanged(nameof(Session));
                 OnPropertyChanged(nameof(ConnectionName));
+                OnPropertyChanged(nameof(AwaitingSession));
+                OnPropertyChanged(nameof(IsPackageDoc));
+                SyncKeys(); // 복원 탭이 접속을 기다리다 세션을 얻으면(붙이기·컴파일) 실행·명세/본문 키가 켜진다
             }
         }
     }
@@ -172,7 +184,7 @@ public sealed partial class PlsqlEditorViewModel : ToolPanelViewModelBase, IComp
     public partial string WarningText { get; set; } = string.Empty;
 
     /// <summary>명세/본문 쌍이 있는 유형(문맥 키 <c>isPackageDoc</c>).</summary>
-    public bool IsPackageDoc => Target is { } t && PlsqlSourceText.SiblingType(t.ObjectType) is not null;
+    public bool IsPackageDoc => !AwaitingSession && Target is { } t && PlsqlSourceText.SiblingType(t.ObjectType) is not null;
 
     public bool HasConflictBanner => ServerSourceChanged || !string.IsNullOrEmpty(WarningText);
 
@@ -189,6 +201,7 @@ public sealed partial class PlsqlEditorViewModel : ToolPanelViewModelBase, IComp
     /// <summary>새 PL/SQL 문서(아직 서버 객체가 아님). 글자만 채운다.</summary>
     public void StartNew(string text, ISession? session)
     {
+        _restoredProfileId = null;
         Session = session;
         Target = null;
         _baseline = null;
@@ -207,9 +220,10 @@ public sealed partial class PlsqlEditorViewModel : ToolPanelViewModelBase, IComp
         ArgumentNullException.ThrowIfNull(session);
         ArgumentNullException.ThrowIfNull(target);
 
+        _restoredProfileId = null;
         Session = session;
         Target = target;
-        Title = $"{target.Owner}.{target.Name}" + (target.ObjectType.EndsWith("BODY", StringComparison.Ordinal) ? " (본문)" : string.Empty);
+        Title = TitleOf(target);
         var gen = Interlocked.Increment(ref _generation);
         var meta = ResolveMeta();
         if (meta is null)
@@ -286,7 +300,7 @@ public sealed partial class PlsqlEditorViewModel : ToolPanelViewModelBase, IComp
         Session ??= ResolveSession();
         if (_session is null)
         {
-            return Report(PlsqlCompileStatus.NoSession, "접속이 없다");
+            return Report(PlsqlCompileStatus.NoSession, _restoredProfileId is null ? "접속이 없다" : "이 탭을 연 접속이 아직 열리지 않았다 — 그 접속을 열면 컴파일한다");
         }
 
         var text = PlsqlSourceText.ToCompileText(Editor.Text);
@@ -462,6 +476,76 @@ public sealed partial class PlsqlEditorViewModel : ToolPanelViewModelBase, IComp
     };
 
     /// <summary>
+    /// 저장한 탭을 되살린다(결정 71). 글은 저장한 그대로 두고(앱을 켤 때는 접속이 없다), 저장한 접속의 세션이 붙으면 <see cref="AttachSessionAsync"/> 가 서버와 견준다.
+    /// 고친 채 저장한 글은 다시 고친 글로 연다(닫을 때 저장을 묻는다). 서버 탭의 깨끗한 기준 글은 저장하지 않으므로 되돌려도 고친 글로 남는다.
+    /// 파일에 묶인 탭도 저장한 글로 연다(앱을 끈 사이 파일이 바뀌었는지는 보지 않는다). 이전 오류·차이·경고는 비운다.
+    /// </summary>
+    public void Restore(PlsqlTabFile file)
+    {
+        ArgumentNullException.ThrowIfNull(file);
+        Interlocked.Increment(ref _generation); // 읽던 소스가 뒤늦게 덮지 않게
+        Session = null;
+        _restoredProfileId = file.ConnectionProfileId;
+        Target = file is { Owner: { } owner, Name: { } name, Type: { } type } ? new DbObjectRef(owner, name, type) : null;
+        _baseline = file.LastDdlTime;
+        _line1Shift = file.Line1Shift;
+        ServerSource = null;
+        ServerSourceChanged = false;
+        DiffText = string.Empty;
+        WarningText = string.Empty;
+        Errors.Clear();
+        IsBusy = false;
+        Title = file.Title ?? (Target is { } t ? TitleOf(t) : "새 PL/SQL");
+        Editor.LoadText(file.Text, dirty: file.IsDirty);
+        Editor.FilePath = file.FilePath;
+        Editor.ConnectionProfileId = file.ConnectionProfileId;
+        Editor.CaretOffset = Math.Clamp(file.Caret, 0, Editor.Document.TextLength);
+        StatusText = Target is null ? string.Empty : "접속하면 서버 소스와 견준다";
+        OnPropertyChanged(nameof(IsPackageDoc));
+        SyncKeys();
+    }
+
+    /// <summary>
+    /// 복원한 탭에 저장한 접속의 작업 세션을 붙이고, 저장한 <c>last_ddl_time</c> 과 서버를 견준다(다르면 충돌 배너). 글은 바꾸지 않는다.
+    /// 기다리는 탭이 아니거나 다른 프로필·작업 세션이 아닌 세션이면 붙이지 않고 false. 세션은 첫 await 앞에서 붙인다(두 번 붙지 않게).
+    /// </summary>
+    public async Task<bool> AttachSessionAsync(ISession session, CancellationToken ct = default)
+    {
+        ArgumentNullException.ThrowIfNull(session);
+        if (!AwaitingSession || session.Profile.Id != _restoredProfileId || session.Purpose != SessionPurpose.Work)
+        {
+            return false;
+        }
+
+        Session = session;
+        if (Target is not { } target)
+        {
+            return true;
+        }
+
+        StatusText = $"{target.ObjectType} {target.Owner}.{target.Name}";
+        IsBusy = true; // 견주는 동안 컴파일이 같은 세션에 겹치지 않게
+        try
+        {
+            await CheckServerChangedAsync(ct).ConfigureAwait(true);
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            StatusText = "서버 소스를 확인하지 못했다: " + ex.Message;
+        }
+        finally
+        {
+            IsBusy = false;
+        }
+
+        return true;
+    }
+
+    /// <summary>
     /// 탭을 닫을 때 저장 여부를 물어야 하는가(TSK-13-27, SQL 탭 규칙과 같다). 읽기 전용은 묻지 않는다.
     /// 파일에 묶인 탭 = 파일과 달라졌을 때, 서버 객체를 열었거나 컴파일한 탭 = 마지막 읽기·컴파일 뒤로 고쳤을 때, 그 밖의 새 탭 = 사용자가 글을 쳤을 때(템플릿 그대로면 묻지 않는다).
     /// </summary>
@@ -527,6 +611,10 @@ public sealed partial class PlsqlEditorViewModel : ToolPanelViewModelBase, IComp
         // 없으면 이 탭이 든 작업 공간에 연다.
         return PlsqlEditorCommands.Dock(_services, OpenDocument, vm, router?.WorkspaceOf(this)) ? vm : null;
     }
+
+    /// <summary>탭 제목: 소유자.이름, 본문이면 「 (본문)」.</summary>
+    private static string TitleOf(DbObjectRef target) =>
+        $"{target.Owner}.{target.Name}" + (target.ObjectType.EndsWith("BODY", StringComparison.Ordinal) ? " (본문)" : string.Empty);
 
     private PlsqlCompileOutcome Report(PlsqlCompileStatus status, string message, IReadOnlyList<CompileError>? errors = null)
     {
@@ -698,6 +786,9 @@ public sealed partial class PlsqlEditorViewModel : ToolPanelViewModelBase, IComp
 
     private IExecutionService? ResolveExec() => _exec ??= (IExecutionService?)_services?.GetService(typeof(IExecutionService));
 
+    /// <summary>컴파일할 세션: 복원한 탭은 저장한 접속의 세션만(없으면 null), 그 밖에는 지금 접속.</summary>
     private ISession? ResolveSession()
-        => ConnectionManager.SessionRouter.CurrentOf(_services);
+        => _restoredProfileId is { } profile
+            ? ConnectionManager.SessionRouter.ForProfile(_services, profile) is { Purpose: SessionPurpose.Work } own && own.Profile.Id == profile ? own : null
+            : ConnectionManager.SessionRouter.CurrentOf(_services);
 }

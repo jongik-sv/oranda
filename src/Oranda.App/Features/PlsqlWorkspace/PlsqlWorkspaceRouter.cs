@@ -60,6 +60,14 @@ public sealed class PlsqlWorkspaceRouter
     /// <summary>마지막으로 활성이던 열린 작업 공간(저장 때 다음 시작의 활성 작업 공간). 미리보기 전용 작업 공간은 건너뛴다. 없으면 null.</summary>
     public PlsqlWorkspaceViewModel? LastActive => _recent.FirstOrDefault(w => !w.IsTransient && Workspaces.Contains(w));
 
+    /// <summary>작업 공간을 최근 차례 맨 앞에 둔다(활성으로 만들지 않고 다음 탭이 들어갈 곳·<see cref="LastActive"/> 로 정한다, 시작 복원이 쓴다).</summary>
+    public void Remember(PlsqlWorkspaceViewModel workspace)
+    {
+        ArgumentNullException.ThrowIfNull(workspace);
+        _recent.Remove(workspace);
+        _recent.Insert(0, workspace);
+    }
+
     public PanelDocument? DocumentOf(PlsqlWorkspaceViewModel workspace) =>
         _docking.Documents.FirstOrDefault(d => ReferenceEquals(d.Panel, workspace));
 
@@ -80,6 +88,48 @@ public sealed class PlsqlWorkspaceRouter
         }
 
         return null;
+    }
+
+    /// <summary>
+    /// 저장한 작업 공간을 문서로 연다(결정 71 시작 복원). 탭은 저장한 글 그대로 되살리고 보이던 탭을 고른다. 활성 문서는 바꾸지 않는다(호출자가 정한다).
+    /// 같은 ID 가 이미 열려 있거나 문서를 열 수 없으면 null. 이름이 열린 작업 공간과 겹치면 새 번호를 준다.
+    /// </summary>
+    public PlsqlWorkspaceViewModel? Import(PlsqlWorkspaceFile file)
+    {
+        ArgumentNullException.ThrowIfNull(file);
+        var open = Workspaces;
+        if (open.Any(w => w.Id == file.Id))
+        {
+            return null;
+        }
+
+        var name = open.Any(w => w.Name == file.Name) ? NextName() : file.Name;
+        var workspace = new PlsqlWorkspaceViewModel { Id = file.Id, Name = name };
+        foreach (var saved in file.Tabs)
+        {
+            var tab = _services is not null ? new PlsqlEditorViewModel(_services) : new PlsqlEditorViewModel();
+            tab.Restore(saved);
+            workspace.Add(tab);
+        }
+
+        if (file.ActiveTab >= 0 && file.ActiveTab < workspace.Tabs.Count)
+        {
+            workspace.ActiveTab = workspace.Tabs[file.ActiveTab];
+        }
+
+        var before = _docking.ActiveDocument;
+        if (_docking.OpenDocument(PanelId, workspace, workspace.Name) is null)
+        {
+            return null;
+        }
+
+        Attach(workspace);
+        if (before is not null && !ReferenceEquals(_docking.ActiveDocument, before))
+        {
+            _docking.Activate(before);
+        }
+
+        return workspace;
     }
 
     /// <summary>
@@ -366,5 +416,7 @@ public sealed class PlsqlWorkspaceRouter
         && string.Equals(open.Owner, target.Owner, StringComparison.Ordinal)
         && string.Equals(open.Name, target.Name, StringComparison.Ordinal)
         && string.Equals(open.ObjectType, target.ObjectType, StringComparison.Ordinal)
-        && (tab.Session is null || string.Equals(tab.Session.DbKey, session.DbKey, StringComparison.Ordinal));
+        && (tab.Session is { } own
+            ? string.Equals(own.DbKey, session.DbKey, StringComparison.Ordinal)
+            : tab.RestoredProfileId is not { } waiting || waiting == session.Profile.Id); // 접속을 기다리는 복원 탭은 저장한 접속만
 }

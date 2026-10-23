@@ -1,4 +1,5 @@
 using Oranda.App.Features.PlsqlEditor;
+using Oranda.App.Features.PlsqlWorkspace;
 using Oranda.App.Features.SqlEditor;
 using Oranda.App.Tests.Features.SqlEditor;
 using Oranda.App.Tests.Shell;
@@ -640,6 +641,83 @@ public class PlsqlEditorTests
         public Task RollbackAsync(CancellationToken ct) => Task.CompletedTask;
 
         public ValueTask DisposeAsync() => ValueTask.CompletedTask;
+    }
+
+    // ---- 작업 공간 복원(결정 71, B-2 ②) ----
+
+    [Fact]
+    public async Task A_restored_tab_keeps_its_text_waits_for_its_own_session_and_then_shows_a_changed_server()
+    {
+        var meta = new FakeMeta { Source = BodySource };
+        var session = new FakeSession();
+        var saved = new PlsqlTabFile
+        {
+            Owner = Body.Owner, Name = Body.Name, Type = Body.ObjectType, ConnectionProfileId = session.Profile.Id,
+            LastDdlTime = meta.LastDdl.AddMinutes(-5), Title = "SCOTT.PK (본문)", Text = "CREATE OR REPLACE PACKAGE BODY mine", IsDirty = true, Caret = 7, Line1Shift = 3,
+        };
+        var vm = new PlsqlEditorViewModel(meta, new FakeExec());
+
+        vm.Restore(saved);
+
+        Assert.Equal(saved, vm.Capture()); // 다시 저장해도 같은 내용(접속 프로필·DDL 시각을 잃지 않는다)
+        Assert.True(vm.NeedsSaveConfirm);
+        Assert.True(vm.AwaitingSession);
+        Assert.Null(vm.RunTarget); // 접속을 기다리는 동안 실행·명세/본문 전환 키가 꺼진다
+        Assert.False(vm.IsPackageDoc);
+        Assert.False(await vm.AttachSessionAsync(new FakeSession())); // 다른 접속은 붙이지 않는다
+
+        Assert.True(await vm.AttachSessionAsync(session));
+
+        Assert.Same(session, vm.Session);
+        Assert.True(vm.IsPackageDoc);
+        Assert.NotNull(vm.RunTarget);
+        Assert.True(vm.ServerSourceChanged); // 저장 뒤 서버가 바뀌었다 → 충돌 배너
+        Assert.Equal(saved.Text, vm.Editor.Text); // 글은 덮지 않는다
+        Assert.False(await vm.AttachSessionAsync(session)); // 두 번 붙지 않는다
+    }
+
+    [Fact]
+    public async Task A_restored_tab_whose_server_did_not_change_attaches_without_a_banner_and_a_clean_tab_does_not_ask_to_save()
+    {
+        var meta = new FakeMeta { Source = BodySource };
+        var session = new FakeSession();
+        var vm = new PlsqlEditorViewModel(meta, new FakeExec());
+
+        vm.Restore(new PlsqlTabFile { Owner = "SCOTT", Name = "P", Type = "PROCEDURE", ConnectionProfileId = session.Profile.Id, LastDdlTime = meta.LastDdl, Text = "x" });
+
+        Assert.False(vm.NeedsSaveConfirm);
+        Assert.True(await vm.AttachSessionAsync(session));
+        Assert.False(vm.ServerSourceChanged);
+    }
+
+    [Fact]
+    public async Task A_restored_tab_never_compiles_on_another_connection()
+    {
+        var exec = new FakeExec();
+        var other = new FakeSession();
+        var services = new ServiceList(new FakeMeta { Source = BodySource }, exec, new SessionList(other));
+        var vm = new PlsqlEditorViewModel(services);
+        vm.Restore(new PlsqlTabFile { Owner = "SCOTT", Name = "P", Type = "PROCEDURE", ConnectionProfileId = Guid.NewGuid(), Text = "CREATE OR REPLACE PROCEDURE p IS BEGIN NULL; END;" });
+
+        var outcome = await vm.CompileAsync(force: true);
+
+        Assert.Equal(PlsqlCompileStatus.NoSession, outcome.Status);
+        Assert.Null(vm.Session);
+        Assert.Empty(exec.Statements);
+    }
+
+    /// <summary>형식이 맞는 첫 서비스를 돌려주는 공급자(접속 서비스 없이 세션 관리자만 있는 컨테이너).</summary>
+    private sealed class ServiceList(params object[] items) : IServiceProvider
+    {
+        public object? GetService(Type serviceType) => items.FirstOrDefault(serviceType.IsInstanceOfType);
+    }
+
+    private sealed class SessionList(params ISession[] sessions) : ISessionManager
+    {
+        public IReadOnlyList<ISession> Sessions => sessions;
+
+        public Task<ISession> OpenAsync(ConnectionProfile profile, Oranda.Core.Security.SecureCredential credential, SessionPurpose purpose, CancellationToken ct) =>
+            throw new NotSupportedException();
     }
 
     // ---- 탭 닫기 저장 확인(TSK-13-27) ----

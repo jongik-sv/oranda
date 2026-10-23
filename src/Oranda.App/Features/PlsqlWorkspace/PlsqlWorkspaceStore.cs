@@ -72,6 +72,15 @@ public sealed partial class PlsqlWorkspaceStore
         return file;
     }
 
+    /// <summary>새 버전 앱이 쓴 작업 공간 파일이다(읽은 적 있을 때만 안다). 복원하지 않고 덮어쓰지 않는다.</summary>
+    public bool IsReadOnly(string id)
+    {
+        lock (_readOnlyIds)
+        {
+            return _readOnlyIds.Contains(id);
+        }
+    }
+
     /// <summary>작업 공간 하나를 쓴다. 새 버전 앱이 쓴 파일은 덮어쓰지 않는다.</summary>
     public Task SaveAsync(PlsqlWorkspaceFile file, CancellationToken ct = default)
     {
