@@ -9,8 +9,15 @@ namespace Oranda.App.Tests.Shell.Headless;
 /// <summary>Headless 시험용 앱 구성(TRD 11). 실제 <see cref="Oranda.App.App"/> 의 스타일·리소스를 그대로 쓴다.</summary>
 public static class HeadlessAppBuilder
 {
-    public static AppBuilder BuildAvaloniaApp() =>
-        AppBuilder.Configure<Oranda.App.App>().UseHeadless(new AvaloniaHeadlessPlatformOptions { UseHeadlessDrawing = true });
+    public static AppBuilder BuildAvaloniaApp()
+    {
+        var builder = AppBuilder.Configure<Oranda.App.App>();
+
+        // 화면 PNG 를 뽑을 때만(ORANDA_RENDER_DIR 가 있을 때) Skia 로 실제 픽셀을 그린다. 평소 시험은 그리지 않는 헤드리스 그리기를 쓴다.
+        return string.IsNullOrEmpty(Environment.GetEnvironmentVariable("ORANDA_RENDER_DIR"))
+            ? builder.UseHeadless(new AvaloniaHeadlessPlatformOptions { UseHeadlessDrawing = true })
+            : builder.UseSkia().UseHeadless(new AvaloniaHeadlessPlatformOptions { UseHeadlessDrawing = false });
+    }
 }
 
 /// <summary>한 시험 프로세스에서 Avalonia UI 스레드 하나를 공유한다. 본문은 모두 UI 스레드에서 돈다.</summary>

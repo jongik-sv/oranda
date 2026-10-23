@@ -200,10 +200,43 @@ levels:
   - acceptance: 쿼리 탭을 열면 오른쪽에 펼친 SQL, 아이콘으로 가로 전환·되돌림 / 탭 없이 목록 선택만 하면 펼친 SQL 없음 / 실행 결과 창이 가려지지 않음 / 바인드 값 바꾸면 300 ms 뒤 다시 계산
   - note: 펼친 SQL 아래 패널을 없애고 쿼리 탭 안 분할(세로 기본·가로·숨김, 방향·비율 설정 기억)로 옮김, 바인드·치환 목록 삭제(치환도 바인드 변수 창 $행), 탭이 있을 때만 보임 — ParamsRunSplitTests 6건·사용자 매퍼 153문장 화면 확인
 
+- [ ] TSK-03-11: 조합 검사 — 처음 보는 문장 모양의 첫 구문 분석이 0.1~7.6 s (ANTLR 예측 캐시 만들기) [win144] w:2 2026-10-24~2026-10-25
+  - category: defect
+  - domain: backend
+  - model: opus
+  - priority: medium
+  - tags: mybatis, combos, perf, antlr, win144
+  - depends: TSK-03-04
+  - prd-ref: MB-07, PRD 6
+  - requirements: 사용자 매퍼(요소 153개)로 조합 검사(구문 분석만)를 하면, 같은 모양을 처음 분석하는 문장의 첫 분석이 보통 문장 92~655 ms, 처음 보는 모양은 2.7~5.8 s, 긴 문장(3.5·10.8·17 KB)은 0.7~7.6 s 걸린다. 같은 글을 다시 분석하면 9 ms, 글자만 다른 변형은 1~40 ms 라 시간은 파싱이 아니라 문장 모양마다 ANTLR 예측 캐시(DFA)를 만드는 데 쓰인다(Debug·Release 동일). 앱은 유휴 때 간단한 문장 4개로만 미리 데운다(PlSqlWarmUpTask). 첫 결과가 3 s 안에 나오게 한다; 후보: 워밍업 문장을 늘리거나 매퍼를 연 뒤 유휴 때 그 매퍼의 문장을 미리 분석, 예측 캐시 공유 범위 점검; 제약: Oranda.Language(TSK-04-03 소유) 수정이라 소유자 검토; 비고: 측정 docs/oranda1/itest/TSK-04-01.md 3c·3d
+  - acceptance: 사용자 매퍼 문장 아무거나 조합 검사 첫 실행의 첫 결과가 3 s 이하(부하 없는 win144) / 합성 조합 256개 3 s 시험(TSK-04-02) 그대로 통과 / 워밍업이 시작 시간(D-006)을 늘리지 않음
+
+- [ ] TSK-03-12: 매퍼 2,000개 폴더 훑기가 끝날 때 UI 스레드 최대 막힘 121~207 ms (상한 100 ms) [win144] w:2 2026-10-24~2026-10-25
+  - category: defect
+  - domain: frontend
+  - model: sonnet
+  - priority: medium
+  - tags: mybatis, folder, perf, ui, win144
+  - depends: TSK-03-07
+  - prd-ref: MB-10, PRD 6
+  - requirements: win144 Release 6회 121/126/167/183/188/207 ms, Debug 438 ms(CPU 24~97 % 부하 속). 막힘을 단계로 쟀다: 훑기 시작 때 60~170 ms(감시 걸기·최근 폴더·빈 트리), 훑기가 끝난 뒤 트리 다시 짓기(MapperFolderTreeViewModel.Rebuild) 30~80 ms, 그 뒤 트리 첫 그리기 100~330 ms. Rebuild 를 떨어진 목록에 지어 한 번에 붙이는 시도는 효과가 구분되지 않아 되돌렸다. 후보: 폴더 노드의 파일 자식을 펼칠 때 만들기(점진 생성)·가상화, 훑기 시작 때 하는 일을 UI 밖으로; 제약: MapperFolderTests 가 펼치지 않고 Children 을 읽으므로 시험 수정이 필요할 수 있다; 비고: 측정 docs/oranda1/itest/TSK-04-01.md 4. 무부하 PC 에서 다시 재서 확정한다
+  - acceptance: MyBatisWorkspacePerfTests.Scanning_a_folder_of_2000_mappers_blocks_the_ui_thread_at_most_100_ms 가 win144 Release 에서 3회 연속 통과 / MapperFolderTests 통과
+
+- [ ] TSK-03-13: 매퍼 2,000개 폴더 훑기 전체가 9~27 s (파일을 한 줄로 차례로 읽음) [win144] w:1 2026-10-24~2026-10-25
+  - category: defect
+  - domain: backend
+  - model: sonnet
+  - priority: low
+  - tags: mybatis, folder, perf, win144
+  - depends: TSK-03-07
+  - prd-ref: MB-10
+  - requirements: MapperFolderIndex.Scan 이 파일을 스레드 풀 한 개로 차례로 열고 파싱한다. win144 에서 2,000개가 Release 9~27 s(맥 Debug 248 ms). UI 는 막지 않지만 큰 폴더를 열면 한참 기다린다. 후보: 파일 읽기·파싱을 병렬로(Parallel.ForEach, 결과는 경로순으로 정렬), 앞부분 읽기와 전체 읽기를 한 번에; 비고: 측정 docs/oranda1/itest/TSK-04-01.md 4. PRD 에 상한이 없어 우선순위 낮음, 원인(Windows 파일 열기 비용·실시간 검사·부하)을 먼저 가른다
+  - acceptance: 같은 합성 폴더 2,000개 훑기 전체가 절반 이하 / 폴더 훑기 시험(MapperFolderTests) 통과
+
 ## WP-04: 통합테스트
 <!-- TSK-04-01 담당 PC: win144(Windows 개발 PC) — 맥북 세션은 TSK-04-01 을 하지 않는다. 기능 간 흐름 검증(개별 기능 재검증 아님). TSK-04-02 는 기능 레인에서 떼어 낸 성능 측정(2026-10-23 대화) -->
 
-- [ ] TSK-04-01: MyBatis 작업 공간 흐름 — 열기→시험→검사→저장→충돌→바꾸기→로그 [win144] w:2 2026-11-06~2026-11-09
+- [x] TSK-04-01: MyBatis 작업 공간 흐름 — 열기→시험→검사→저장→충돌→바꾸기→로그 [win144] w:2 2026-11-06~2026-11-09
   - category: itest
   - domain: test
   - model: sonnet
@@ -213,6 +246,7 @@ levels:
   - prd-ref: PRD 3, PRD 8
   - requirements: 흐름: 매퍼 열기 → 문장 고치기 → 시나리오 만들기 → 시나리오 값으로 실행 → 조합 검사·자동 고침 → 저장(바뀌는 부분 확인) → IDE 에서 같은 파일 고친 뒤 충돌 처리 → 일반 작업 공간 바꾸기 → 로그 붙여 넣기로 문장 찾기 → 매퍼 폴더 열기; 11g 컨테이너(oranda-ora11g)와 19c 이상에서 실행 결과를 확인한다; 성능 수치(PRD 6)를 시험 PC 에서 잰다; 제약: 실앱 눈 확인 항목은 사용자 몫으로 표시한다; 비고: 담당 PC: win144(Windows 개발 PC) — 맥북 세션은 이 Task 를 하지 않는다. 결과서 docs/oranda1/itest/TSK-04-01.md
   - acceptance: 모든 흐름이 끝까지 가고, 저장한 매퍼를 git diff 로 보면 고친 문장 줄만 바뀌어 있다 / 발견 결함은 해당 기능 WP에 defect Task로 등록됨 / 흐름별 결과표(정상·경계·오류·되돌림)
+  - note: 시안·사용자 매퍼(153개) 흐름 시험 8개(열기→탭·분할→고치기→바인드→시나리오→조합 검사·자동 고침→저장 git diff→충돌→바꾸기→로그→폴더) 전부 통과, DB 실행은 사용자 확인으로 남김, 성능 재측정에서 결함 3건(TSK-03-11~13) 등록 — 결과서 docs/oranda1/itest/TSK-04-01.md (win144)
 
 - [x] TSK-04-02: MyBatis 작업 공간 성능 시험 — PRD 6 수치 측정·병목 고침 w:1 2026-11-06~2026-11-09
   - category: itest
