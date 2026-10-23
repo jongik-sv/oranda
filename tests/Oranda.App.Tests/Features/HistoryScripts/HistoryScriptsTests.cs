@@ -1,5 +1,6 @@
 using Avalonia.Controls;
 using Avalonia.Threading;
+using Avalonia.VisualTree;
 using Oranda.App.Features.HistoryScripts;
 using Oranda.App.Tests.Shell.Headless;
 using Oranda.Core.Execution;
@@ -147,6 +148,31 @@ public sealed class HistoryScriptsTests : IDisposable
             var detail = view.FindControl<Oranda.App.Features.SqlEditor.SqlCodeView>("DetailBox")!;
             Assert.NotNull(detail.Colorizer);
             Assert.Equal("SELECT 1 FROM dual", detail.TextEditorControl.Text);
+            window.Close();
+        });
+    }
+
+    [Fact]
+    public async Task History_list_sql_cell_is_colored_inline_and_keeps_the_one_line_text()
+    {
+        var store = new ListStore([Entry(1, "\n  select nvl(e.comm, 0) from emp e where e.sal > 10\n  order by 1")]);
+        using var vm = new HistoryViewModel(store, () => null);
+        vm.CurrentConnectionOnly = false;
+        await vm.ReloadAsync();
+
+        await HeadlessHost.Run(() =>
+        {
+            var view = new HistoryView { DataContext = vm };
+            var window = new Window { Content = view, Width = 900, Height = 300 };
+            window.Show();
+            Dispatcher.UIThread.RunJobs();
+
+            var cell = view.GetVisualDescendants().OfType<TextBlock>().Single(t => Oranda.App.Features.MyBatisWorkspace.Combos.SqlInlineText.GetSql(t) is not null);
+            var runs = cell.Inlines!.OfType<Avalonia.Controls.Documents.Run>().ToList();
+            Assert.Equal("select nvl(e.comm, 0) from emp e where e.sal > 10", string.Concat(runs.Select(r => r.Text)));
+            Assert.NotNull(runs.First(r => r.Text == "select").Foreground);
+            Assert.NotNull(runs.First(r => r.Text == "nvl").Foreground);
+            Assert.NotNull(runs.First(r => r.Text == "10").Foreground);
             window.Close();
         });
     }
