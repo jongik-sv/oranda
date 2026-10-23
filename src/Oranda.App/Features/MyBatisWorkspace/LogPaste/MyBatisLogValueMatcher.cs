@@ -71,7 +71,28 @@ public static partial class MyBatisLogValueMatcher
                 }
 
                 var assigned = Assign(result, entry, substitutions, captured);
-                if (assigned is not null && Replays(evaluator, statement, fragments, assigned, target, bindCount))
+                if (assigned is null)
+                {
+                    continue;
+                }
+
+                // 항목 0개로 맞춘 목록은 먼저 값 없음으로 다시 펼쳐 본다(<if test="ids != null"> 로 거른 절이 꺼진 로그).
+                // 안 맞으면 빈 목록으로 본다: 값이 없으면 계산기가 foreach 를 바인드 자리 하나로 펼치므로(검사용 가정) 0개 로그와 어긋난다.
+                if (Replays(evaluator, statement, fragments, assigned, target, bindCount))
+                {
+                    return assigned;
+                }
+
+                bool emptied = false;
+                for (int i = 0; i < lists.Count; i++)
+                {
+                    if (sizes[i] == 0)
+                    {
+                        emptied |= assigned.TryAdd(lists[i], new MyBatisScenarioValue(MyBatisScenarioValueKind.List, Items: []));
+                    }
+                }
+
+                if (emptied && Replays(evaluator, statement, fragments, assigned, target, bindCount))
                 {
                     return assigned;
                 }

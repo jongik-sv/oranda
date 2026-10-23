@@ -11,7 +11,7 @@ namespace Oranda.App.Features.MyBatisWorkspace.Parameters;
 /// <item>빈 칸 = null, 따옴표 두 개 <c>''</c> = 빈 글자(<c>x != null and x != ''</c> 를 가를 수 있게).</item>
 /// <item>목록(foreach 에 쓰인 행, 또는 값이 <c>[</c> 로 시작): <c>['A', 'B', 'C']</c> 또는 대괄호 없이 <c>'A', 'B'</c>.
 /// 따옴표 안 쉼표는 나누지 않는다. 따옴표 = 글자, 따옴표 없는 수 = 숫자, <c>null</c> = null 항목, <c>true</c>·<c>false</c> = 참거짓,
-/// <c>{"name":"a"}</c> = 객체(<c>#{item.name}</c> 용), <c>[]</c>·빈 칸 = 빈 목록.</item>
+/// <c>{"name":"a"}</c> = 객체(<c>#{item.name}</c> 용), <c>[]</c> = 빈 목록. 빈 칸 = null(값을 모름 → 계산기가 foreach 를 바인드 자리 하나로 펼친다, 2026-10-24).</item>
 /// <item>그 밖은 행 형식대로: 숫자 형식이면 수(못 읽으면 글자 그대로), 참거짓 형식이면 참거짓, 나머지는 칸 글 그대로.</item>
 /// </list>
 /// 실행할 바인드 값은 이것이 아니라 행 형식 규칙(<c>BindInput</c>)으로 만든다(<c>Run/MyBatisRunBinds</c>).
@@ -25,6 +25,11 @@ public static class MyBatisBindText
     public static object? Parse(string? text, BindDataType type, bool asList)
     {
         var trimmed = text?.Trim() ?? string.Empty;
+        if (asList && trimmed.Length == 0)
+        {
+            return null;
+        }
+
         if (asList || trimmed.StartsWith('['))
         {
             return ParseList(trimmed);

@@ -107,9 +107,12 @@ public sealed partial class MyBatisSqlDiagnostics : IMyBatisEditorDecorator
         return list;
     }
 
-    /// <summary>값이 빈 자리가 있는가: null 인 <c>${…}</c> 또는 계산 문제(null collection foreach·계산 못 한 식·조각 없음 등).</summary>
+    /// <summary>
+    /// 값이 빈 자리가 있는가: null 인 <c>${…}</c> 또는 계산 문제(계산 못 한 식·조각 없음 등).
+    /// 검사용 가정(값 없는 foreach 를 바인드 자리 하나로 펼침)은 빈자리가 아니다 — 펼친 SQL 의 구문 오류를 그대로 보인다.
+    /// </summary>
     internal static bool HasHoles(EvalResult result) =>
-        result.Issues.Count > 0 || result.Substitutions.Any(s => s.Value is null);
+        result.Issues.Any(i => i.Kind != MyBatisEvalIssueKind.Assumed) || result.Substitutions.Any(s => s.Value is null);
 
     /// <summary>펼친 줄에 대응하는 원문 줄. 태그·빈 줄·이번 계산에서 꺼진 블록 줄이면 가장 가까운 기준점 쪽 SQL 줄.</summary>
     private static int SqlLine(string source, List<int> starts, MyBatisLineMap map, int expandedLine, HashSet<int> off)

@@ -142,6 +142,7 @@ public partial class MyBatisEvaluatorTests(ITestOutputHelper output)
         Assert.Equal(["ids[0]", "ids[1]", "ids[2]"], r.Binds.Select(b => b.Parameter));
         Assert.Equal([10, 20, 30], r.Binds.Select(b => b.Value));
 
+        // 주어진 빈 목록은 MyBatis 처럼 아무것도 붙이지 않는다(로그 붙여넣기가 0개 로그와 맞춘다). 값을 모를 때만 바인드 자리 하나.
         var empty = Eval(text, V(("ids", L())));
         Assert.Equal("SELECT * FROM T WHERE ID IN", empty.Sql);
         Assert.False(empty.Blocks.Single().IsOn);
@@ -149,13 +150,35 @@ public partial class MyBatisEvaluatorTests(ITestOutputHelper output)
     }
 
     [Fact]
-    public void Foreach_over_null_is_an_invalid_tag_like_the_MyBatis_exception()
+    public void Foreach_over_null_or_a_missing_value_is_one_bind_slot_like_an_equals_bind()
     {
-        const string text = """<select id="s">SELECT * FROM T WHERE ID IN <foreach collection="ids" item="id" open="(" separator="," close=")">#{id}</foreach></select>""";
-        var r = Eval(text, V(("ids", null)));
-        var issue = Assert.Single(r.Issues);
-        Assert.Equal(MyBatisEvalIssueKind.InvalidTag, issue.Kind);
-        Assert.Equal("SELECT * FROM T WHERE ID IN", r.Sql);
+        // 2026-10-24 사용자 결정: foreach 는 '=' 의 #{x} 같은 바인드 자리. 값을 모르면 IN (:id) 로 펼쳐 구문 검사가 진짜 오류를 찾게 한다.
+        const string text = """<select id="s">SELECT * FROM T WHERE ID IN <foreach collection="ids" item="id" open="(" separator="," close=")">#{id}</foreach> AND X = 1</select>""";
+        foreach (var values in new[] { V(("ids", null)), V() })
+        {
+            var r = Eval(text, values);
+            Assert.Equal("SELECT * FROM T WHERE ID IN(:id)AND X = 1", Shape(r.Sql));
+            var bind = Assert.Single(r.Binds);
+            Assert.Equal(("id", null), (bind.Name, bind.Value));
+            var issue = Assert.Single(r.Issues);
+            Assert.Equal(MyBatisEvalIssueKind.Assumed, issue.Kind);
+            Assert.Contains("바인드 자리 하나로 펼쳤습니다", issue.Reason, StringComparison.Ordinal);
+        }
+    }
+
+    [Fact]
+    public void Nullable_foreach_without_a_value_says_so_and_nested_ones_report_once()
+    {
+        const string nullable = """<select id="s">SELECT * FROM T WHERE ID IN <foreach collection="ids" item="id" nullable="true" open="(" separator="," close=")">#{id}</foreach></select>""";
+        var r = Eval(nullable, V());
+        Assert.Equal("SELECT * FROM T WHERE ID IN(:id)", Shape(r.Sql));
+        Assert.Contains("nullable 이면", Assert.Single(r.Issues).Reason, StringComparison.Ordinal);
+
+        // 바깥 foreach 가 두 번 돌아도 안쪽 값 없는 foreach 알림은 하나. 계산 못 한 collection 식도 번호 없는 바인드 자리 하나.
+        const string nested = """<select id="s">SELECT * FROM T WHERE <foreach collection="groups" item="g" separator=" OR ">(D = #{g.deptNo} AND E IN <foreach collection="g.ids" item="id" open="(" separator="," close=")">#{id}</foreach>)</foreach></select>""";
+        var two = Eval(nested, V(("groups", L(V(("deptNo", 10)), V(("deptNo", 20))))));
+        Assert.Equal(MyBatisEvalIssueKind.Assumed, Assert.Single(two.Issues).Kind);
+        Assert.Equal(4, two.Binds.Count);
     }
 
     [Fact]
@@ -264,18 +287,15 @@ public partial class MyBatisEvaluatorTests(ITestOutputHelper output)
     }
 
     [Fact]
-    public void Foreach_override_off_is_empty_and_on_without_values_is_one_item()
+    public void Foreach_is_not_a_condition_so_an_override_on_its_range_changes_nothing()
     {
         const string text = """<select id="s">SELECT * FROM T WHERE ID IN <foreach collection="ids" item="id" open="(" separator="," close=")">#{id}</foreach></select>""";
-        var range = Eval(text, V(("ids", L(1)))).Blocks.Single().Range;
+        var block = Eval(text, V(("ids", L(1)))).Blocks.Single();
+        Assert.False(block.IsCondition);
 
-        var off = Eval(text, V(("ids", L(1, 2))), new Dictionary<TextRange, bool> { [range] = false });
-        Assert.Equal("SELECT * FROM T WHERE ID IN", off.Sql);
-
-        var on = Eval(text, V(), new Dictionary<TextRange, bool> { [range] = true });
-        Assert.Equal("SELECT * FROM T WHERE ID IN(:id_1)", Shape(on.Sql));
-        Assert.Null(Assert.Single(on.Binds).Value);
-        Assert.Empty(on.Issues);
+        var off = Eval(text, V(("ids", L(1, 2))), new Dictionary<TextRange, bool> { [block.Range] = false });
+        Assert.Equal("SELECT * FROM T WHERE ID IN(:id_1,:id_2)", Shape(off.Sql));
+        Assert.False(off.Blocks.Single().IsOverridden);
     }
 
     [Fact]
@@ -291,7 +311,7 @@ public partial class MyBatisEvaluatorTests(ITestOutputHelper output)
             Assert.EndsWith("</" + b.Tag + ">", slice, StringComparison.Ordinal);
         }
 
-        Assert.Equal([false, false, true, true, true, true], r.Blocks.Select(b => b.IsCondition));
+        Assert.Equal([false, false, true, true, true, false], r.Blocks.Select(b => b.IsCondition)); // foreach 는 조건이 아니다(바인드 자리)
         Assert.Equal(["empNo != null", "ename != null and ename != ''", "deptIds != null and deptIds.size() > 0"],
             r.Blocks.Where(b => b.Tag == "if").Select(b => b.Test));
         Assert.Equal("#{empNo}", text.Substring(Evaluator.Evaluate(Emp["selectEmpList"], Emp, V(("empNo", 1)), null).Binds[0].Source.Start, 8));
@@ -450,7 +470,7 @@ public partial class MyBatisEvaluatorTests(ITestOutputHelper output)
     {
         var allOn = Evaluator.Evaluate(Emp["selectEmpList"], Emp, V(), null, new MyBatisEvalOptions(AllOn: true));
         var combos = Evaluator.Combinations(allOn);
-        Assert.Equal(16, combos.Count); // if 3개 + foreach 1개 = 2^4
+        Assert.Equal(8, combos.Count); // if 3개 = 2^3(foreach 는 조건이 아니다)
         Assert.All(combos, c => Assert.Equal(ConditionCombinationKind.Exhaustive, c.Kind));
         Assert.All(combos[0].Overrides.Values, Assert.True);
         Assert.All(combos[^1].Overrides.Values, Assert.False);

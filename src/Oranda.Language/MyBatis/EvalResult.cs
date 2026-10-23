@@ -28,7 +28,7 @@ public sealed record MyBatisSubstitution(string Name, string? Value, TextRange S
 /// 동적 태그 블록 하나와 이번 계산의 켬·끔(MB-02·MB-05). 편집기가 끈 블록을 흐리게 하고 if·when 머리 줄에 점을 찍는다.
 /// <para>
 /// 블록은 원문 태그마다 하나다(foreach 를 여러 번 돌아도, 바깥 foreach 안의 if 가 여러 번 계산돼도 하나. 그 경우 <see cref="IsOn"/> 은 한 번이라도 켜졌으면 참).
-/// 덮어쓰기: if·when 은 test 결과 대신 켬·끔. foreach 는 끔 = 빈 목록으로 봄, 켬 = 값 목록 그대로(값이 없거나 빈 목록이면 항목 하나로 봄).
+/// 덮어쓰기: if·when 은 test 결과 대신 켬·끔. foreach 는 조건이 아니라 바인드 자리라 덮어쓰지 않는다(값이 없거나 null 이면 항목 하나로 펼침).
 /// include 한 조각 안의 블록은 <see cref="Range"/> 가 그 <c>&lt;include&gt;</c> 태그 범위이고 <see cref="Fragment"/> 가 있다. 따로 덮어쓸 수 없고 조합 검사 조건도 아니다(<see cref="IsCondition"/> 거짓).
 /// </para>
 /// </summary>
@@ -37,7 +37,7 @@ public sealed record MyBatisSubstitution(string Name, string? Value, TextRange S
 /// <param name="Test">test 식(if·when). 없으면 null.</param>
 /// <param name="IsOn">이번 값으로 켜졌다(where·set·trim 은 내용이 남았는지, foreach 는 항목이 있는지).</param>
 /// <param name="IsOverridden">계산이 아니라 덮어쓰기로 정했다.</param>
-/// <param name="IsCondition">조합 검사의 조건이다(문장 원문의 if·when, 그리고 foreach 빈 목록/값 있음).</param>
+/// <param name="IsCondition">조합 검사의 조건이다(문장 원문의 if·when. foreach 는 '=' 의 <c>#{x}</c> 같은 바인드 자리라 조건이 아니다).</param>
 /// <param name="Fragment">include 한 조각 안 블록이면 그 refid.</param>
 /// <param name="FragmentRange">조각 원문 안 블록 범위.</param>
 public sealed record MyBatisBlock(
@@ -57,6 +57,12 @@ public enum MyBatisEvalIssueKind
 
     /// <summary>태그·속성이 잘못됐다(foreach collection 없음 등).</summary>
     InvalidTag,
+
+    /// <summary>
+    /// 값을 몰라 검사용 가정으로 펼쳤다(foreach collection 값이 없거나 null → 바인드 자리 하나). 펼친 SQL 은 믿을 수 있으므로
+    /// 빈자리·계산 오류로 세지 않고 알리기만 한다.
+    /// </summary>
+    Assumed,
 }
 
 /// <summary>계산 문제 하나. <paramref name="Range"/> 는 문장 원문 기준(물결 밑줄 자리, 조각 안이면 그 include 태그).</summary>

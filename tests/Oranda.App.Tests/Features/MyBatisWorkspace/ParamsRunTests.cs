@@ -345,6 +345,16 @@ public sealed partial class ParamsRunTests(ITestOutputHelper output)
         return Task.CompletedTask;
     });
 
+    // 목록 행의 빈 칸 = 값 없음(계산기가 foreach 를 바인드 자리 하나로 펼친다), [] = 주어진 빈 목록(MyBatis 처럼 아무것도 붙이지 않음).
+    [Fact]
+    public void An_empty_list_cell_is_no_value_and_brackets_are_an_empty_list()
+    {
+        Assert.Null(MyBatisBindText.Parse(string.Empty, BindDataType.Varchar2, asList: true));
+        Assert.Null(MyBatisBindText.Parse(null, BindDataType.Varchar2, asList: true));
+        Assert.Empty(Assert.IsType<List<object?>>(MyBatisBindText.Parse("[]", BindDataType.Varchar2, asList: true)));
+        Assert.Equal("[]", MyBatisValues.CellText(new MyBatisScenarioValue(MyBatisScenarioValueKind.List, Items: [])));
+    }
+
     // ---- 화면 붙이기 · 명령 단추 ------------------------------------------------------------
 
     [Fact]

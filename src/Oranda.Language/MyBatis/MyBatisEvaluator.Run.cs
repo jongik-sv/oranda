@@ -43,7 +43,7 @@ public sealed partial class MyBatisEvaluator
                     case ElementNode e:
                         if (BlockTags.Contains(e.Name))
                         {
-                            bool condition = e.Origin.Fragment is null && e.Name is "if" or "when" or "foreach";
+                            bool condition = e.Origin.Fragment is null && e.Name is "if" or "when";
                             Register(e, e.Name, e.Name is "if" or "when" ? e.Attr("test") : null, condition);
                         }
 
@@ -326,17 +326,12 @@ public sealed partial class MyBatisEvaluator
             return n;
         }
 
-        // foreach 가 돌 항목(색인·값). 덮어쓰기: 끔 = 빈 목록, 켬 = 값 그대로(없거나 비면 항목 하나). 모두 켬 = 번호 없는 항목 하나.
+        // foreach 가 돌 항목(색인·값). foreach 는 켬·끔 조건이 아니라 '=' 의 #{x} 같은 바인드 자리다(2026-10-24 사용자 결정):
+        // 모두 켬·값이 없거나 null(값을 모름) = 번호 없는 항목 하나(IN (:item)), 주어진 목록 = MyBatis 처럼 항목 수만큼(빈 목록이면 아무것도 붙이지 않음).
         private List<(object? Key, object? Value)> Items(ElementNode e, string collection, out bool numbered)
         {
             numbered = true;
-            bool forced = TryOverride(e, out bool on);
-            if (forced && !on)
-            {
-                return [];
-            }
-
-            if (!forced && allOn)
+            if (allOn)
             {
                 numbered = false;
                 return [(0, null)];
@@ -346,35 +341,36 @@ public sealed partial class MyBatisEvaluator
             if (result.Failure is { } f)
             {
                 Issues.Add(ExpressionIssue(e, "collection", collection, f));
+                numbered = false; // 값을 모르는 것은 null 과 같다: 번호 없는 바인드 자리
                 return [(0, null)];
             }
 
             var value = result.Value;
             if (value is null)
             {
-                if (forced)
+                // MyBatis 3.5 실제 동작(null = BuilderException, nullable="true" 면 아무것도 붙이지 않음)과 다른 검사용 가정이라 알린다.
+                // 바깥 foreach 가 여러 번 돌아도 같은 태그의 알림은 하나다.
+                bool nullable = string.Equals(e.Attr("nullable"), "true", StringComparison.OrdinalIgnoreCase);
+                var assumed = Issue(MyBatisEvalIssueKind.Assumed, e.Origin, collection, nullable
+                    ? $"foreach collection 「{collection}」 값이 없어 바인드 자리 하나로 펼쳤습니다(nullable 이면 MyBatis 는 아무것도 붙이지 않습니다)."
+                    : $"foreach collection 「{collection}」 값이 없어 바인드 자리 하나로 펼쳤습니다(MyBatis 3.5 는 null 이면 BuilderException).");
+                if (!Issues.Contains(assumed))
                 {
-                    return [(0, null)];
+                    Issues.Add(assumed);
                 }
 
-                if (!string.Equals(e.Attr("nullable"), "true", StringComparison.OrdinalIgnoreCase))
-                {
-                    Issues.Add(Issue(MyBatisEvalIssueKind.InvalidTag, e.Origin, collection,
-                        $"foreach collection 「{collection}」 값이 null 이다(MyBatis 3.5 는 BuilderException). 빈 목록으로 계산했다."));
-                }
-
-                return [];
+                numbered = false;
+                return [(0, null)];
             }
 
             if (!IsNumberedList(value))
             {
                 Issues.Add(Issue(MyBatisEvalIssueKind.InvalidTag, e.Origin, collection,
                     $"foreach collection 「{collection}」 값이 목록이 아니다(MyBatis 3.5 는 BuilderException)."));
-                return forced ? [(0, null)] : [];
+                return [];
             }
 
-            var list = Iterate(value).Select(x => (x.Index, x.Item)).ToList();
-            return forced && list.Count == 0 ? [(0, null)] : list;
+            return Iterate(value).Select(x => (x.Index, x.Item)).ToList();
         }
 
         private string CollectionDisplay(string collection)

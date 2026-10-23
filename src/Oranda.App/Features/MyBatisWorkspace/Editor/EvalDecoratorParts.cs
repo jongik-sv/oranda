@@ -118,9 +118,10 @@ internal sealed class EvalDecoration : IDisposable
                 }
             }
 
+            // 검사용 가정(값 없는 foreach 를 바인드 자리 하나로)은 오류가 아니라 펼친 SQL 머리 줄 안내로만 알린다.
             foreach (var issue in result.Issues)
             {
-                if (issue.Range.End <= length && issue.Range.Length > 0)
+                if (issue.Kind != MyBatisEvalIssueKind.Assumed && issue.Range.End <= length && issue.Range.Length > 0)
                 {
                     issues.Add(issue.Range);
                 }

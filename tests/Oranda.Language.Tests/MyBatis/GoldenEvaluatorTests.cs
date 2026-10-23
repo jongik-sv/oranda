@@ -41,8 +41,11 @@ public partial class GoldenEvaluatorTests
 
             if (c.GetProperty("error").GetString() is { } error)
             {
-                // MyBatis 도 실패한 값: foreach null(BuilderException) = InvalidTag, bind 의 null 더하기(NPE) = Unevaluable.
-                var expectedKind = error.Contains("BuilderException", StringComparison.Ordinal) ? MyBatisEvalIssueKind.InvalidTag : MyBatisEvalIssueKind.Unevaluable;
+                // MyBatis 도 실패한 값: foreach null(BuilderException 「evaluated to a null value」) = Assumed(바인드 자리 하나로 펼친 검사용 가정,
+                // 2026-10-24 사용자 결정), 그 밖의 BuilderException(목록 아님) = InvalidTag, bind 의 null 더하기(NPE) = Unevaluable.
+                var expectedKind = error.Contains("evaluated to a null value", StringComparison.Ordinal) ? MyBatisEvalIssueKind.Assumed
+                    : error.Contains("BuilderException", StringComparison.Ordinal) ? MyBatisEvalIssueKind.InvalidTag
+                    : MyBatisEvalIssueKind.Unevaluable;
                 if (!result.Issues.Any(i => i.Kind == expectedKind))
                 {
                     failures.Add($"{caseName}: MyBatis 오류({error})인데 {expectedKind} 문제가 없다");

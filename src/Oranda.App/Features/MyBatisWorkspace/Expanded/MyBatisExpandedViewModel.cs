@@ -11,6 +11,7 @@ using Oranda.App.Shell.Menus;
 using Oranda.App.ViewModels;
 using Oranda.Core.MyBatis;
 using Oranda.Core.Shell;
+using Oranda.Language.MyBatis;
 
 namespace Oranda.App.Features.MyBatisWorkspace.Expanded;
 
@@ -384,10 +385,16 @@ public sealed class MyBatisExpandedViewModel : ViewModelBase, IDisposable
             : MyBatisText.Format("MyBatis.expanded.conditions", "켜진 조건 {0}/{1}", eval.ActiveConditionCount, total);
 
         var notice = string.Empty;
-        if (result.Issues.Count > 0)
+        // 검사용 가정(값 없는 foreach 를 바인드 자리 하나로)은 계산하지 못한 곳이 아니다. 그것만 있으면 그 문구만 보인다.
+        var unresolved = result.Issues.Where(i => i.Kind != MyBatisEvalIssueKind.Assumed).ToList();
+        if (unresolved.Count > 0)
         {
-            notice = MyBatisText.Format("MyBatis.expanded.issues", "계산하지 못한 곳 {0}개: {1}", result.Issues.Count,
-                result.Issues[0].Reason);
+            notice = MyBatisText.Format("MyBatis.expanded.issues", "계산하지 못한 곳 {0}개: {1}", unresolved.Count,
+                unresolved[0].Reason);
+        }
+        else if (result.Issues.Count > 0)
+        {
+            notice = result.Issues[0].Reason;
         }
 
         Apply(header, chip, result.Sql, notice);

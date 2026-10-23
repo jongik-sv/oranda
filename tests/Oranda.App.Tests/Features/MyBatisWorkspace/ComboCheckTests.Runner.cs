@@ -108,18 +108,46 @@ public partial class ComboCheckTests
         Assert.Equal(0, report.ErrorCount);
     }
 
+    // 2026-10-24 사용자 결정: foreach 는 켬·끔 조건이 아니라 '=' 의 #{x} 같은 바인드 자리. 모든 조합에서 항목 하나(IN (:id))로 펼친다.
     [Fact]
-    public async Task Foreach_is_a_condition_and_an_empty_list_is_judged()
+    public async Task Foreach_is_a_bind_slot_not_a_condition_and_real_syntax_errors_still_show()
     {
         const string text =
             "<select id=\"s\">\n  SELECT * FROM EMP WHERE DEPTNO IN\n" +
-            "  <foreach collection=\"ids\" item=\"id\" open=\"(\" separator=\",\" close=\")\">#{id}</foreach>\n</select>";
+            "  <foreach collection=\"ids\" item=\"id\" open=\"(\" separator=\",\" close=\")\">#{id}</foreach>\n  AND SAL > 0\n</select>";
 
         var report = await RunAsync(Request(text, kind: MyBatisElementKind.Select));
 
-        Assert.Equal("foreach ids", Assert.Single(report.Conditions).Label);
-        Assert.Equal(ComboOutcome.Pass, Assert.Single(report.Results, r => r.States[0]).Outcome);
-        Assert.Equal(ComboOutcome.Error, Assert.Single(report.Results, r => !r.States[0]).Outcome);
+        Assert.Empty(report.Conditions);
+        var only = Assert.Single(report.Results);
+        Assert.Equal(ComboOutcome.Pass, only.Outcome);
+        Assert.Contains("(:id)", only.Sql.Replace(" ", string.Empty, StringComparison.Ordinal), StringComparison.Ordinal);
+
+        // 값 없는 foreach 가 빈자리로 숨기지 않는다: 다른 곳의 진짜 구문 오류는 오류로 센다.
+        var broken = await RunAsync(Request(text.Replace("AND SAL > 0", "AND AND SAL > 0", StringComparison.Ordinal), kind: MyBatisElementKind.Select));
+        Assert.Equal(ComboOutcome.Error, Assert.Single(broken.Results).Outcome);
+    }
+
+    [Fact]
+    public void Saving_a_combination_as_a_scenario_gives_foreach_one_item_or_no_value_inside_an_off_condition()
+    {
+        const string text =
+            "<select id=\"s\">\n  SELECT * FROM EMP WHERE 1 = 1\n" +
+            "  <if test=\"ids != null\">AND DEPTNO IN <foreach collection=\"ids\" item=\"id\" open=\"(\" separator=\",\" close=\")\">#{id}</foreach></if>\n" +
+            "  AND JOB IN <foreach collection=\"jobs\" item=\"j\" open=\"(\" separator=\",\" close=\")\">#{j}</foreach>\n</select>";
+        var runner = new ComboCheckRunner(Evaluator, Language);
+        var statement = Statement(text, MyBatisElementKind.Select);
+        var conditions = runner.Plan(new ComboCheckRequest("s", statement, NoFragments.Instance, [])).Conditions;
+        Assert.Single(conditions); // if 하나만(foreach 둘은 조건이 아니다)
+
+        var off = runner.ScenarioValues(statement, NoFragments.Instance, conditions, [false], out bool offMatches);
+        Assert.Equal(MyBatisScenarioValueKind.Null, off["ids"].Kind);
+        Assert.Equal(["1"], off["jobs"].Items);
+        Assert.True(offMatches);
+
+        var on = runner.ScenarioValues(statement, NoFragments.Instance, conditions, [true], out bool onMatches);
+        Assert.Equal(["1"], on["ids"].Items);
+        Assert.True(onMatches);
     }
 
     [Fact]

@@ -84,6 +84,25 @@ public sealed class MyBatisDiagnosticsTests
         Assert.Empty(f.Diagnostics.Current);
     });
 
+    // 값 없는 foreach 는 바인드 자리 하나(IN (:keyStr))로 펼친 검사용 가정이라 빈자리가 아니다: 진짜 오류는 오류로 긋는다(2026-10-24 사용자 결정).
+    [Fact]
+    public Task A_foreach_without_a_value_is_a_bind_slot_so_a_real_error_stays_an_error() => Ui.Run(async () =>
+    {
+        const string text = """
+            <select id="s" resultType="map">
+              select a,
+                from tb
+               where k in <foreach collection="list" item="keyStr" open="(" separator="," close=")">#{keyStr}</foreach>
+            </select>
+            """;
+        using var f = new Fixture(text);
+        f.Attach();
+        await WaitUntil(() => f.Applied >= 1);
+
+        var error = Assert.Single(f.Diagnostics.Current, d => d.Severity == DiagnosticSeverity.Error);
+        Assert.StartsWith("펼친 SQL: ", error.Message, StringComparison.Ordinal);
+    });
+
     [Fact]
     public Task Detaching_clears_the_expanded_sql_underlines_and_keeps_xml_analysis_off() => Ui.Run(async () =>
     {

@@ -3,7 +3,7 @@ using Oranda.Core.Text;
 namespace Oranda.Language.MyBatis;
 
 /// <summary>
-/// 조건 켬·끔 조합(MB-07, TRD 4 Combinations). 조건 = 문장 원문의 if·when·foreach 블록(<see cref="MyBatisBlock.IsCondition"/>).
+/// 조건 켬·끔 조합(MB-07, TRD 4 Combinations). 조건 = 문장 원문의 if·when 블록(<see cref="MyBatisBlock.IsCondition"/>).
 /// 조건 수가 한도 이하면 2^n 전부(모두 켬부터), 넘으면 모두 켬 + 모두 끔 + 하나씩 끄기(n + 2).
 /// 한도는 <see cref="MaxFullLimit"/> 를 넘지 않는다(UI 스레드에서 조합 사전을 수십만 개 만들지 않게). 더 큰 fullLimit 은 이 값으로 본다.
 /// </summary>

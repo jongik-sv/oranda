@@ -117,7 +117,8 @@ internal sealed partial class ComboCheckRunner(IMyBatisEvaluator evaluator, ILan
         var sql = eval.Sql;
 
         // 조각 없음·순환·잘못된 태그는 펼친 SQL 자체를 믿을 수 없다. 계산 못 한 식(Unevaluable)은 조합이 켬·끔을 정했으므로 오류가 아니다.
-        if (eval.Issues.FirstOrDefault(i => i.Kind != MyBatisEvalIssueKind.Unevaluable) is { } issue)
+        // 검사용 가정(Assumed, 값 없는 foreach 를 바인드 자리 하나로)도 펼친 SQL 을 믿을 수 있으므로 오류가 아니다.
+        if (eval.Issues.FirstOrDefault(i => !Trusted(i)) is { } issue)
         {
             int line = ComboErrorClassifier.LineOf(statementText, issue.Range.Start);
             return new(number, title, states, scenario, ComboOutcome.Error, ComboText.EvalError,
@@ -144,7 +145,7 @@ internal sealed partial class ComboCheckRunner(IMyBatisEvaluator evaluator, ILan
                     var placeholders = eval.Substitutions.Where(s => s.Value is null)
                         .Select(s => s.Name).Distinct(StringComparer.Ordinal).ToDictionary(n => n, object? (_) => "X", StringComparer.Ordinal);
                     var filled = withValues(placeholders);
-                    if (filled.Issues.All(i => i.Kind == MyBatisEvalIssueKind.Unevaluable) && filled.Substitutions.All(s => s.Value is not null))
+                    if (filled.Issues.All(Trusted) && filled.Substitutions.All(s => s.Value is not null))
                     {
                         var again = await language.AnalyzeAsync(filled.Sql, ct).ConfigureAwait(false);
                         if (again.FirstOrDefault(d => d.Severity == DiagnosticSeverity.Error) is { } real)
@@ -174,6 +175,9 @@ internal sealed partial class ComboCheckRunner(IMyBatisEvaluator evaluator, ILan
             ? new(number, title, states, scenario, ComboOutcome.Warning, ComboText.Unsupported, diagnostics[0].Message, sql, null, null)
             : new(number, title, states, scenario, ComboOutcome.Pass, ComboText.Pass, string.Empty, sql, null, null);
     }
+
+    // 펼친 SQL 을 믿어도 되는 계산 문제: 조합이 켬·끔을 정한 식, 검사용 가정.
+    private static bool Trusted(MyBatisEvalIssue issue) => issue.Kind is MyBatisEvalIssueKind.Unevaluable or MyBatisEvalIssueKind.Assumed;
 
     private async Task<ComboCheckResult> ExplainAsync(
         int number, string title, IReadOnlyList<bool> states, string? scenario, EvalResult eval, ISession session, CancellationToken ct)
@@ -257,7 +261,7 @@ internal sealed partial class ComboCheckRunner(IMyBatisEvaluator evaluator, ILan
         return (Conditions(allOn, request.Statement.Text), evaluator.Combinations(allOn, request.FullLimit).Count + request.Scenarios.Count);
     }
 
-    /// <summary>조건(문장 원문의 if·when·foreach) 목록. 열 머리는 test 식, foreach 는 컬렉션 이름.</summary>
+    /// <summary>조건(문장 원문의 if·when) 목록. 열 머리는 test 식. foreach 는 조건이 아니라 바인드 자리라 모든 조합에서 항목 하나로 펼친다.</summary>
     internal static IReadOnlyList<ComboCondition> Conditions(EvalResult allOn, string statementText)
     {
         var list = new List<ComboCondition>();
@@ -269,16 +273,15 @@ internal sealed partial class ComboCheckRunner(IMyBatisEvaluator evaluator, ILan
                 continue;
             }
 
-            var label = block.Test
-                ?? (Collection(statementText, block.Range) is { } collection ? $"foreach {collection}" : block.Tag);
-            list.Add(new ComboCondition(block.Range, label, ComboErrorClassifier.LineOf(statementText, block.Range.Start)));
+            list.Add(new ComboCondition(block.Range, block.Test ?? block.Tag, ComboErrorClassifier.LineOf(statementText, block.Range.Start)));
         }
 
         return list;
     }
 
     /// <summary>
-    /// 조합 하나를 시나리오 값으로 바꾼다(「시나리오로 저장」). 끈 조건의 test 식에 쓰인 파라미터는 null, foreach 는 끄면 빈 목록·켜면 항목 하나,
+    /// 조합 하나를 시나리오 값으로 바꾼다(「시나리오로 저장」). 끈 조건의 test 식에 쓰인 파라미터는 null(foreach collection 이어도 값 없음 → 바인드 자리 하나),
+    /// test 식에 쓰이지 않은 foreach collection 은 항목 하나(꺼진 if 본문 안이면 펼쳐지지 않으니 상관없다),
     /// 그 밖의 파라미터는 자리 값 <c>1</c>(jdbcType 이 숫자면 숫자). 그 값으로 다시 펼쳐 조건 켬·끔이 조합과 같은지 <paramref name="matches"/> 로 알린다
     /// (test 식이 <c>!= null</c> 이 아니면 다를 수 있다. 그때는 사용자가 값을 고친다).
     /// </summary>
@@ -306,9 +309,9 @@ internal sealed partial class ComboCheckRunner(IMyBatisEvaluator evaluator, ILan
 
             bool numeric = parameter.JdbcType is { } jdbc && NumericJdbc.Contains(jdbc);
             var kind = numeric ? MyBatisScenarioValueKind.Number : MyBatisScenarioValueKind.Text;
-            values[parameter.Name] = parameter.Usage.HasFlag(MyBatisParameterUsage.Foreach)
-                ? new MyBatisScenarioValue(MyBatisScenarioValueKind.List, Items: inOff ? [] : ["1"], ItemKind: kind)
-                : inOff ? MyBatisScenarioValue.Null : new MyBatisScenarioValue(kind, "1");
+            values[parameter.Name] = inOff ? MyBatisScenarioValue.Null
+                : parameter.Usage.HasFlag(MyBatisParameterUsage.Foreach) ? new MyBatisScenarioValue(MyBatisScenarioValueKind.List, Items: ["1"], ItemKind: kind)
+                : new MyBatisScenarioValue(kind, "1");
         }
 
         var check = new MyBatisScenario { MapperPath = string.Empty, StatementId = string.Empty, Name = string.Empty, Values = values };
@@ -373,22 +376,6 @@ internal sealed partial class ComboCheckRunner(IMyBatisEvaluator evaluator, ILan
         MyBatisScenarioValueKind.Boolean => string.Equals(text, "true", StringComparison.OrdinalIgnoreCase),
         _ => text,
     };
-
-    private static string? Collection(string statementText, TextRange range)
-    {
-        if (range.Start < 0 || range.End > statementText.Length)
-        {
-            return null;
-        }
-
-        var head = statementText.AsSpan(range.Start, range.Length);
-        int close = head.IndexOf('>');
-        var m = CollectionAttr().Match(close < 0 ? head.ToString() : head[..close].ToString());
-        return m.Success ? m.Groups[2].Value : null;
-    }
-
-    [GeneratedRegex("""collection\s*=\s*(["'])(.*?)\1""", RegexOptions.CultureInvariant)]
-    private static partial Regex CollectionAttr();
 
     [GeneratedRegex(@"ORA-\d{5}", RegexOptions.CultureInvariant)]
     private static partial Regex OraCode();

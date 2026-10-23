@@ -307,6 +307,27 @@ public class LogPasteTests
         await env.RunAsync(Pair("a.B.maybe", "SELECT 1 FROM T WHERE K = ?", "K1(String)"));
 
         Assert.Equal("K1", env.Store.All.Single().Values["k"].Text);
+        // 값이 없으면 계산기가 바인드 자리 하나로 펼치므로(검사용 가정) 0개 로그는 빈 목록으로 남긴다.
+        var ids = env.Store.All.Single().Values["ids"];
+        Assert.Equal((MyBatisScenarioValueKind.List, 0), (ids.Kind, ids.Items!.Count));
+    }
+
+    // null 만 거르는 if 안의 foreach: 그 절이 없는 로그는 「값 없음」 으로 맞춘다(빈 목록이면 ids != null 이 참이 되어 절이 붙는다).
+    [Fact]
+    public async Task A_foreach_behind_a_null_check_matches_a_log_without_that_clause_as_no_value()
+    {
+        var xml = """
+            <mapper namespace="a.B">
+              <select id="maybe">SELECT 1 FROM T WHERE K = #{k}<if test="ids != null"> AND ID IN <foreach collection="ids" item="i" open="(" separator="," close=")">#{i}</foreach></if></select>
+            </mapper>
+            """;
+        var env = new Env(xml);
+
+        await env.RunAsync(Pair("a.B.maybe", "SELECT 1 FROM T WHERE K = ?", "K1(String)"));
+
+        var values = env.Store.All.Single().Values;
+        Assert.Equal("K1", values["k"].Text);
+        Assert.False(values.TryGetValue("ids", out var ids) && ids.Kind != MyBatisScenarioValueKind.Null);
     }
 
     [Fact]
