@@ -111,8 +111,16 @@ public sealed class StartPage : UserControl
     /// 호스트(문서 영역 템플릿)마다 시작 화면을 새로 만든다 — 모델에 Control 자체를 두면 템플릿이 다시 만들어질 때 옛 호스트가 붙든 같은 Control 을
     /// 새 호스트에 붙이려다 「already has a visual parent」 예외가 난다(2026-10-24).
     /// </summary>
-    public static IDataTemplate HostTemplate(Func<StartPage> create) =>
-        new FuncDataTemplate<StartPageContent>((_, _) => create(), supportsRecycling: false);
+    public static IDataTemplate HostTemplate(Func<StartPage> create) => new StartPageTemplate(create);
+
+    // FuncDataTemplate<T> 는 형식 검사가 null 도 맞다고 본다. 그러면 메인 창 안에서 내용이 null 인 곳(값을 안 고른 콤보의 선택 칸 등)에도
+    // 시작 화면이 그려진다(2026-10-24, 시나리오 0개 문장의 시나리오 콤보). 그래서 표식만 맞게 직접 판정한다.
+    private sealed class StartPageTemplate(Func<StartPage> create) : IDataTemplate
+    {
+        public bool Match(object? data) => data is StartPageContent;
+
+        public Control? Build(object? param) => param is StartPageContent ? create() : null;
+    }
 }
 
 /// <summary>문서가 하나도 없을 때 문서 영역에 보일 시작 화면의 표식(데이터). 화면은 <see cref="StartPage.HostTemplate"/> 이 호스트마다 만든다.</summary>
