@@ -14,13 +14,13 @@ namespace Oranda.App.Features.SqlEditor;
 /// </summary>
 public sealed class SqlSyntaxColorizer : DocumentColorizingTransformer
 {
-    private sealed record Palette(IBrush Keyword, IBrush String, IBrush Comment, IBrush Number, IBrush Bind, IBrush Hint, IBrush Function, IBrush Quoted);
+    internal sealed record Palette(IBrush Keyword, IBrush String, IBrush Comment, IBrush Number, IBrush Bind, IBrush Hint, IBrush Function, IBrush Quoted);
 
-    private static readonly Palette Light = new(
+    internal static readonly Palette Light = new(
         Brush(0x00, 0x33, 0xB3), Brush(0x06, 0x7D, 0x17), Brush(0x8C, 0x8C, 0x8C), Brush(0x17, 0x50, 0xEB),
         Brush(0x87, 0x10, 0x94), Brush(0x9E, 0x88, 0x0D), Brush(0x00, 0x62, 0x7A), Brush(0x1B, 0x6A, 0x6A));
 
-    private static readonly Palette Dark = new(
+    internal static readonly Palette Dark = new(
         Brush(0x56, 0x9C, 0xD6), Brush(0x6A, 0xAB, 0x73), Brush(0x7A, 0x7E, 0x85), Brush(0x6B, 0x9B, 0xFA),
         Brush(0xC7, 0x8D, 0xE0), Brush(0xD9, 0xC1, 0x4F), Brush(0x56, 0xB6, 0xC2), Brush(0x7F, 0xC7, 0xC7));
 
