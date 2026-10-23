@@ -66,6 +66,8 @@
   "Cmd.oranda.exec.toggleBlankLineDelimiter": "Toggle Split Statements on Blank Line",
   "Cmd.oranda.exec.toggleDbmsOutput": "Toggle DBMS_OUTPUT Collection",
   "Cmd.oranda.exec.toggleStatistics": "Toggle Execution Statistics",
+  "Cmd.oranda.file.clearRecentFiles": "Clear List",
+  "Cmd.oranda.file.clearRecentWorkspaces": "Clear List",
   "Cmd.oranda.file.close": "Close Tab",
   "Cmd.oranda.file.closeAll": "Close All Tabs",
   "Cmd.oranda.file.closeWorkspace": "Close Workspace",

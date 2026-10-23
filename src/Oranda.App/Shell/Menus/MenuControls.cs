@@ -170,7 +170,17 @@ public sealed class MenuControls(ICommandRegistry registry, IContextKeys keys, F
                         AutomationProperties.SetName(sub, n.Title);
                         control = sub;
                         bound = new Bound(n, v => sub.IsVisible = v, _ => { });
-                        sub.ItemsSource = BarLevel(n.Children, bound);
+                        var items = new System.Collections.ObjectModel.ObservableCollection<object>(BarLevel(n.Children, bound));
+                        sub.ItemsSource = items;
+                        if (n.Key is { } key)
+                        {
+                            // 바뀌는 줄(최근 파일 등)은 열 때마다 공급자에게서 다시 받아 명령 줄 앞에 둔다. 숨김·이유 계산(Bound)에는 넣지 않는다.
+                            var added = 0;
+                            void Fill() => added = FillSource(items, added, key);
+                            Fill();
+                            sub.SubmenuOpened += (_, _) => Fill();
+                        }
+
                         break;
                     }
 
@@ -193,6 +203,78 @@ public sealed class MenuControls(ICommandRegistry registry, IContextKeys keys, F
         }
 
         return list;
+    }
+
+    /// <summary>
+    /// 공급자(<see cref="MenuItemSources"/>)의 줄로 <paramref name="items"/> 앞쪽 <paramref name="added"/> 개를 바꾼다. 줄이 있으면 명령 줄과의 사이에 구분선을 둔다.
+    /// 돌려준 수 = 이번에 넣은 개수(구분선 포함).
+    /// </summary>
+    private static int FillSource(System.Collections.ObjectModel.ObservableCollection<object> items, int added, string key)
+    {
+        for (var i = 0; i < added; i++)
+        {
+            items.RemoveAt(0);
+        }
+
+        if (MenuItemSources.Find(key)?.Items() is not { Count: > 0 } lines)
+        {
+            return 0;
+        }
+
+        var at = 0;
+        foreach (var line in lines)
+        {
+            items.Insert(at++, SourceMenuItem(line));
+        }
+
+        if (items.Count > at)
+        {
+            items.Insert(at++, new Separator());
+        }
+
+        return at;
+    }
+
+    /// <summary>바뀌는 줄 하나: 이름 + 회색 보조 글(테마 키), 툴팁 = 전체 글. 실행이 없으면 회색 안내 줄.</summary>
+    private static MenuItem SourceMenuItem(MenuSourceItem line)
+    {
+        object header = line.Title.Replace("_", "__", StringComparison.Ordinal);
+        if (line.Detail is { } detail)
+        {
+            var gray = new TextBlock { Text = detail, Margin = new Avalonia.Thickness(12, 0, 0, 0) };
+            gray.Bind(TextBlock.ForegroundProperty, gray.GetResourceObservable("SystemControlForegroundBaseMediumBrush"));
+            header = new StackPanel
+            {
+                Orientation = Avalonia.Layout.Orientation.Horizontal,
+                Children = { new TextBlock { Text = line.Title }, gray },
+            };
+        }
+
+        var item = new MenuItem { Header = header, IsEnabled = line.Run is not null };
+        AutomationProperties.SetName(item, line.Title);
+        if (line.ToolTip is { } tip)
+        {
+            ToolTip.SetTip(item, tip);
+        }
+
+        if (line.Run is { } run)
+        {
+            item.Click += (_, _) => _ = RunSourceAsync(run);
+        }
+
+        return item;
+    }
+
+    private static async Task RunSourceAsync(Func<Task> run)
+    {
+        try
+        {
+            await run().ConfigureAwait(true);
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Trace.TraceError("메뉴 줄 실행 중 예외: {0}", ex);
+        }
     }
 
     private static void SetTip(Control control, string? tip)
@@ -306,7 +388,19 @@ public sealed class MenuControls(ICommandRegistry registry, IContextKeys keys, F
                     var sub = new NativeMenuItem(n.Title);
                     var bound = new Bound(n, v => sub.IsVisible = v, _ => { });
                     owner.Children.Add(bound);
-                    sub.Menu = NativeLevel(n.Children, bound);
+                    var menu = NativeLevel(n.Children, bound);
+                    sub.Menu = menu;
+                    if (n.Key is { } key)
+                    {
+                        // 시스템 메뉴는 두 색을 못 쓴다: 이름 — 줄인 경로 한 줄, 전체 경로는 툴팁.
+                        // NeedsUpdate 는 단축키를 찾을 때도 온다: 줄이 그대로면 다시 넣지 않는다(시스템 메뉴 재수출을 줄인다).
+                        var added = 0;
+                        string? shown = null;
+                        void Fill() => added = FillNativeSource(menu, added, key, ref shown);
+                        Fill();
+                        menu.NeedsUpdate += (_, _) => Fill();
+                    }
+
                     return sub;
                 }
 
@@ -348,6 +442,52 @@ public sealed class MenuControls(ICommandRegistry registry, IContextKeys keys, F
                     return item;
                 }
         }
+    }
+
+    /// <summary>시스템 메뉴판 <see cref="FillSource"/>.</summary>
+    private static int FillNativeSource(NativeMenu menu, int added, string key, ref string? shown)
+    {
+        var lines = MenuItemSources.Find(key)?.Items() ?? [];
+        var signature = string.Join('\n', lines.Select(l => $"{l.Title}\t{l.Detail}\t{l.ToolTip}\t{l.Run is not null}"));
+        if (signature == shown)
+        {
+            return added;
+        }
+
+        shown = signature;
+        for (var i = 0; i < added; i++)
+        {
+            menu.Items.RemoveAt(0);
+        }
+
+        if (lines.Count == 0)
+        {
+            return 0;
+        }
+
+        var at = 0;
+        foreach (var line in lines)
+        {
+            var text = line.Detail is { } detail ? $"{line.Title} — {detail}" : line.Title;
+            var item = new NativeMenuItem(text.Replace("_", "__", StringComparison.Ordinal)) // 「_」 는 접근 키 표시라 글자로 두 번 쓴다
+            {
+                IsEnabled = line.Run is not null,
+                ToolTip = line.ToolTip,
+            };
+            if (line.Run is { } run)
+            {
+                item.Click += (_, _) => _ = RunSourceAsync(run);
+            }
+
+            menu.Items.Insert(at++, item);
+        }
+
+        if (menu.Items.Count > at)
+        {
+            menu.Items.Insert(at++, new NativeMenuItemSeparator());
+        }
+
+        return at;
     }
 
     /// <summary>편집기 호스트의 활성 작업 공간을 지금 도킹에서 보이는 SQL 작업 공간에 맞춘다(보이는 문서가 SQL 작업 공간이 아니면 그대로 둔다).</summary>

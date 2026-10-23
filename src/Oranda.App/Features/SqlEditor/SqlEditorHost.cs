@@ -143,6 +143,22 @@ public sealed partial class SqlEditorHost : ObservableObject, IDisposable
 
     public void RequestOutline() => OutlineRequested?.Invoke(this, EventArgs.Empty);
 
+    /// <summary>
+    /// 사용자가 파일을 열거나 저장했다(전체 경로). 최근 파일·최근 작업 공간 목록이 듣는다.
+    /// 시작 때 작업 공간 복원·자동 저장은 알리지 않는다.
+    /// </summary>
+    public event EventHandler<FileUse>? FileUsed;
+
+    /// <summary>
+    /// <see cref="FileUsed"/> 를 알린다(MyBatis 매퍼 열기·저장 훅처럼 이 호스트 밖에서 파일을 다루는 길도 부른다).
+    /// <paramref name="workspace"/> = 작업 공간 파일로 열었거나 저장했다(확장자가 .md 하나뿐이어도 작업 공간이다).
+    /// </summary>
+    public void NoteFileUsed(string path, bool workspace = false)
+    {
+        ArgumentException.ThrowIfNullOrEmpty(path);
+        FileUsed?.Invoke(this, new FileUse(Path.GetFullPath(path), workspace));
+    }
+
     public event EventHandler<SqlEditorViewModel>? TabOpened;
 
     public event EventHandler<SqlEditorViewModel>? TabClosed;
@@ -206,3 +222,6 @@ public sealed partial class SqlEditorHost : ObservableObject, IDisposable
         };
     }
 }
+
+/// <summary>사용자가 열거나 저장한 파일(전체 경로)과, 작업 공간 파일로 다뤘는지(<see cref="SqlEditorHost.FileUsed"/>).</summary>
+public sealed record FileUse(string Path, bool Workspace);

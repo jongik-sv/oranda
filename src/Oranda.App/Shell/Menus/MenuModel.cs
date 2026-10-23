@@ -79,6 +79,9 @@ public sealed record MenuNode(MenuNodeKind Kind, string Title, int Order)
 
     public IReadOnlyList<MenuNode> Children { get; init; } = [];
 
+    /// <summary>하위 메뉴: 제목 키(<c>Menu.file.recentFiles</c> 등). 이 키로 등록된 <see cref="IMenuItemsSource"/> 가 있으면 열 때 앞쪽 줄을 채운다.</summary>
+    public string? Key { get; init; }
+
     /// <summary>명령의 <c>When</c>(주 메뉴 숨김, <see cref="MenuVisibility"/>).</summary>
     public string? When { get; init; }
 
@@ -92,6 +95,43 @@ public sealed record MenuNode(MenuNodeKind Kind, string Title, int Order)
     public Func<string, string?>? ReasonText { get; init; }
 
     public static MenuNode Separator(int order) => new(MenuNodeKind.Separator, string.Empty, order);
+}
+
+/// <summary>
+/// 하위 메뉴를 열 때 채우는 줄 하나(최근 파일 등). <paramref name="Detail"/> 은 이름 뒤 회색 글(줄인 경로), <paramref name="ToolTip"/> 은 전체 글.
+/// <paramref name="Run"/> 이 없으면 회색 안내 줄(「최근 파일이 없습니다」 등)이다.
+/// </summary>
+public sealed record MenuSourceItem(string Title, string? Detail = null, string? ToolTip = null, Func<Task>? Run = null);
+
+/// <summary>하위 메뉴 하나의 바뀌는 줄 공급자. 메뉴를 열 때마다 불러 그 하위 메뉴의 명령 줄 앞에 넣는다(UI 스레드).</summary>
+public interface IMenuItemsSource
+{
+    IReadOnlyList<MenuSourceItem> Items();
+}
+
+/// <summary>
+/// 하위 메뉴 키(<see cref="MenuNode.Key"/>) → 줄 공급자. 메뉴를 열 때 찾으므로 메뉴를 지은 뒤에 등록해도 된다.
+/// 하위 메뉴 자체는 그 안에 놓인 명령(「목록 지우기」 등)의 자리로 생긴다: 공급자는 줄만 더하고 메뉴 짓기 규칙은 그대로다.
+/// </summary>
+public static class MenuItemSources
+{
+    private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, IMenuItemsSource> Sources = new(StringComparer.Ordinal);
+
+    /// <summary>공급자를 건다. 돌려준 것을 Dispose 하면 그 공급자를 뗀다(그사이 다른 공급자로 바뀌었으면 그대로 둔다).</summary>
+    public static IDisposable Register(string key, IMenuItemsSource source)
+    {
+        ArgumentException.ThrowIfNullOrEmpty(key);
+        ArgumentNullException.ThrowIfNull(source);
+        Sources[key] = source;
+        return new Unregister(key, source);
+    }
+
+    public static IMenuItemsSource? Find(string? key) => key is not null && Sources.TryGetValue(key, out var source) ? source : null;
+
+    private sealed class Unregister(string key, IMenuItemsSource source) : IDisposable
+    {
+        public void Dispose() => Sources.TryRemove(new KeyValuePair<string, IMenuItemsSource>(key, source));
+    }
 }
 
 /// <summary>레지스트리의 명령 목록으로 메뉴 막대·툴바 모델을 만든다. 메뉴 항목을 셸 파일에 직접 쓰지 않는다.</summary>
@@ -312,6 +352,7 @@ public static class MenuModelBuilder
             var sub = new MenuNode(MenuNodeKind.Submenu, text.Lookup(subKey), order)
             {
                 Children = BuildLevel([.. group], depth + 1, text, subKey),
+                Key = subKey,
             };
             level.Add((group.First().P with { Order = order }, sub));
         }

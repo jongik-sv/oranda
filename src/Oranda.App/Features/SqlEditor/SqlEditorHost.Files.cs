@@ -35,6 +35,7 @@ public sealed partial class SqlEditorHost
         if (already is not null)
         {
             Active = already;
+            NoteFileUsed(full);
             return already;
         }
 
@@ -62,6 +63,7 @@ public sealed partial class SqlEditorHost
         vm.Binds.Restore(fileBinds);
         vm.IsDirty = false;
         AddTab(EnsureSqlWorkspace(), vm);
+        NoteFileUsed(full);
         return vm;
     }
 
@@ -81,6 +83,7 @@ public sealed partial class SqlEditorHost
         }
 
         await WriteFileAsync(tab, tab.FilePath, ct).ConfigureAwait(true);
+        NoteFileUsed(tab.FilePath);
         return true;
     }
 
@@ -102,6 +105,7 @@ public sealed partial class SqlEditorHost
         await WriteFileAsync(tab, Path.GetFullPath(path), ct).ConfigureAwait(true);
         tab.FilePath = Path.GetFullPath(path);
         tab.Title = Path.GetFileName(path);
+        NoteFileUsed(tab.FilePath);
         return true;
     }
 
@@ -185,6 +189,7 @@ public sealed partial class SqlEditorHost
         await File.WriteAllTextAsync(path, WorkspaceFiles.WriteMarkdown(name, tabs), new UTF8Encoding(false), ct).ConfigureAwait(true);
         ws.SourcePath = Path.GetFullPath(path);
         ws.Name = name;
+        NoteFileUsed(ws.SourcePath, workspace: true);
         OnPropertyChanged(nameof(WorkspaceName));
         foreach (var t in ws.Tabs.Where(t => t.FilePath is null))
         {
@@ -210,6 +215,7 @@ public sealed partial class SqlEditorHost
         if (Workspaces.FirstOrDefault(w => string.Equals(w.SourcePath, full, StringComparison.OrdinalIgnoreCase)) is { } open)
         {
             ActiveWorkspace = open;
+            NoteFileUsed(full, workspace: !WorkspaceFiles.IsMyBatis(full));
             return new WorkspaceFile(open.Name, [], []);
         }
 
@@ -220,6 +226,7 @@ public sealed partial class SqlEditorHost
         }
 
         var file = WorkspaceFiles.Load(full);
+        NoteFileUsed(full, workspace: !WorkspaceFiles.IsMyBatis(full));
 
         // MyBatis 는 namespace(대개 com.example.UserMapper 처럼 길다) 대신 파일 이름을 작업 공간 이름으로 쓴다.
         var name = WorkspaceFiles.IsMyBatis(full) ? Path.GetFileNameWithoutExtension(full) : file.Name;

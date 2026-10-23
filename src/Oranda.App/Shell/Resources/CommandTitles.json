@@ -15,6 +15,8 @@
   "Cmd.oranda.file.saveWorkspaceFile": "작업 공간 저장",
   "Cmd.oranda.file.saveWorkspaceFileAs": "작업 공간 다른 이름으로 저장…",
   "Cmd.oranda.file.openWorkspaceFile": "작업 공간 열기…",
+  "Cmd.oranda.file.clearRecentFiles": "목록 지우기",
+  "Cmd.oranda.file.clearRecentWorkspaces": "목록 지우기",
   "Cmd.oranda.file.newWorkspace": "새 작업 공간",
   "Cmd.oranda.file.renameWorkspace": "작업 공간 이름 바꾸기",
   "Cmd.oranda.file.closeWorkspace": "작업 공간 닫기",

@@ -252,6 +252,7 @@ public sealed class MyBatisSaveHandler : IMyBatisSaveHandler
             }
 
             session.Rebase(newText, [.. chosen.Select(i => i.CurrentId)]);
+            workspace.Host.NoteFileUsed(path); // 최근 파일 맨 위로
             written = true;
             return true;
         }

@@ -41,6 +41,7 @@ public sealed class MyBatisOpenHandler : IMyBatisOpenHandler
             if (same is not null)
             {
                 host.ActiveWorkspace = same;
+                host.NoteFileUsed(fullPath); // 최근 파일 맨 위로
             }
 
             return true; // 이미 열렸거나 같은 경로를 여는 중(끌어 놓기 두 번 등)
@@ -91,6 +92,7 @@ public sealed class MyBatisOpenHandler : IMyBatisOpenHandler
         // design.md 3.4: 숨김에서 돌아온 창은 활성 탭이 되지 않으므로 처음 열 때 앞으로 가져온다.
         _docking?.ActivateTool(StatementsToolId);
         _docking?.ActivateTool(ParametersToolId);
+        host.NoteFileUsed(fullPath); // 최근 파일(파일 열기·작업 공간 열기·매퍼 폴더·로그 붙여넣기 모두 이 길)
         return true;
     }
 

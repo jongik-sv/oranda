@@ -318,6 +318,8 @@
 | `oranda.file.saveWorkspaceFile` | 작업 공간 저장(묶인 파일에 바로 씀, 없으면 다른 이름으로 저장) | - | 전역 | `hasDocument && !mybatisDocActive` | TSK-04-02 |
 | `oranda.file.saveWorkspaceFileAs` | 작업 공간 다른 이름으로 저장… | - | 전역 | `hasDocument && !mybatisDocActive` | TSK-13-19 |
 | `oranda.file.openWorkspaceFile` | 작업 공간 열기…(Markdown·MyBatis) | - | 전역 | 항상 | TSK-04-02 |
+| `oranda.file.clearRecentFiles` | 목록 지우기(파일 > 최근 파일) | - | 전역 | 항상 | mybatis-ui-sync |
+| `oranda.file.clearRecentWorkspaces` | 목록 지우기(파일 > 최근 작업 공간) | - | 전역 | 항상 | mybatis-ui-sync |
 | `oranda.file.newWorkspace` | 새 작업 공간 | - | 전역 | 항상 | TSK-04-02 |
 | `oranda.file.renameWorkspace` | 작업 공간 이름 바꾸기 | - | 전역 | `sqlWorkspaceActive` | TSK-04-02 |
 | `oranda.file.closeWorkspace` | 작업 공간 닫기 | - | 전역 | `sqlWorkspaceActive` | TSK-04-02 |
