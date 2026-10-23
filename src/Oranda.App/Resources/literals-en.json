@@ -722,5 +722,10 @@
   "매퍼 폴더": "Mapper folder",
   "수정": "Edited",
   "조합 오류": "Combo errors",
-  "쓰는 곳": "Used by"
+  "쓰는 곳": "Used by",
+  "상태": "Status",
+  "쿼리 id 검색 (Ctrl+F)": "Search query id (Ctrl+F)",
+  "검색 지우기": "Clear search",
+  "일치하는 쿼리 없음": "No matching query",
+  "● 저장 안 한 고침 · 붉은 숫자 = 조합 오류 수 · 흐린 숫자 = sql 조각을 쓰는 곳 수": "● Unsaved edits · red number = combo error count · dim number = places that use the sql fragment"
 }

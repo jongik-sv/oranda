@@ -10,25 +10,25 @@ using Oranda.Core.Workspaces;
 
 namespace Oranda.App.Features.Binds;
 
-/// <summary>형식 콤보 한 칸. 오렌지 Bind Variable List 의 네 형식(문자열·숫자·날짜·고정 길이 문자)을 맨 위에 둔다.</summary>
+/// <summary>형식 콤보 한 칸. 자료형 이름은 영어(Varchar2·Number·Date·Char …). 오렌지 Bind Variable List 의 네 형식을 맨 위에 둔다.</summary>
 public sealed record BindTypeChoice(BindDataType Type, string Label)
 {
     public static IReadOnlyList<BindTypeChoice> All { get; } =
     [
-        new(BindDataType.Varchar2, "문자열"),
-        new(BindDataType.Number, "숫자"),
-        new(BindDataType.Date, "날짜"),
-        new(BindDataType.FixedChar, "고정 길이 문자"),
-        new(BindDataType.NVarchar2, "NVARCHAR2"),
-        new(BindDataType.Timestamp, "TIMESTAMP"),
-        new(BindDataType.TimestampTz, "TIMESTAMP WITH TIME ZONE"),
-        new(BindDataType.BinaryDouble, "BINARY_DOUBLE"),
-        new(BindDataType.Clob, "CLOB"),
-        new(BindDataType.Blob, "BLOB"),
-        new(BindDataType.Raw, "RAW"),
-        new(BindDataType.Boolean, "BOOLEAN"),
-        new(BindDataType.Json, "JSON"),
-        new(BindDataType.RefCursor, "REF CURSOR"),
+        new(BindDataType.Varchar2, "Varchar2"),
+        new(BindDataType.Number, "Number"),
+        new(BindDataType.Date, "Date"),
+        new(BindDataType.FixedChar, "Char"),
+        new(BindDataType.NVarchar2, "NVarchar2"),
+        new(BindDataType.Timestamp, "Timestamp"),
+        new(BindDataType.TimestampTz, "Timestamp With Time Zone"),
+        new(BindDataType.BinaryDouble, "Binary_Double"),
+        new(BindDataType.Clob, "Clob"),
+        new(BindDataType.Blob, "Blob"),
+        new(BindDataType.Raw, "Raw"),
+        new(BindDataType.Boolean, "Boolean"),
+        new(BindDataType.Json, "Json"),
+        new(BindDataType.RefCursor, "Ref Cursor"),
     ];
 
     public static BindTypeChoice Of(BindDataType type) => All.FirstOrDefault(c => c.Type == type) ?? All[0];

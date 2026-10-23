@@ -94,7 +94,7 @@ public sealed partial class BindGridTests
         b.Type = BindDataType.Date;
         b.Direction = BindDirection.InOut;
         b.Text = "2026-10-23 00:00:00";
-        Assert.Equal("ID\t7\t문자열\tIN\nD\t2026-10-23 00:00:00\t날짜\tIN OUT\n", BindTsv.Format(store.Rows));
+        Assert.Equal("ID\t7\tVarchar2\tIN\nD\t2026-10-23 00:00:00\tDate\tIN OUT\n", BindTsv.Format(store.Rows));
         Assert.StartsWith("변수\t값\t자료형\t방향\nID\t", BindTsv.Format(store.Rows, withHeader: true), StringComparison.Ordinal);
     }
 
@@ -116,6 +116,26 @@ public sealed partial class BindGridTests
         Assert.Equal((2, 0), (applied, skipped));
         Assert.Equal(a.Text, dst.Find("NOTE")!.Text);
         Assert.Equal((BindDataType.Number, "42", BindDirection.InOut), (dst.Find("N")!.Type, dst.Find("N")!.Text, dst.Find("N")!.Direction));
+    }
+
+    [Fact]
+    public void Type_labels_are_english_and_paste_accepts_new_old_and_oracle_names_in_any_case()
+    {
+        Assert.Equal(
+            ["Varchar2", "Number", "Date", "Char", "NVarchar2", "Timestamp", "Timestamp With Time Zone", "Binary_Double", "Clob", "Blob", "Raw", "Boolean", "Json", "Ref Cursor"],
+            BindTypeChoice.All.Select(c => c.Label).ToArray());
+
+        var cases = new (string Cell, BindDataType Type)[]
+        {
+            ("Varchar2", BindDataType.Varchar2), ("VARCHAR2", BindDataType.Varchar2), ("문자열", BindDataType.Varchar2),
+            ("number", BindDataType.Number), ("숫자", BindDataType.Number), ("DATE", BindDataType.Date), ("날짜", BindDataType.Date),
+            ("CHAR", BindDataType.FixedChar), ("char", BindDataType.FixedChar), ("고정 길이 문자", BindDataType.FixedChar),
+            ("Binary_Double", BindDataType.BinaryDouble), ("TIMESTAMP WITH TIME ZONE", BindDataType.TimestampTz), ("Ref Cursor", BindDataType.RefCursor),
+        };
+        foreach (var (cell, type) in cases)
+        {
+            Assert.Equal(type, Assert.Single(BindTsv.Parse("A	1	" + cell)).Type);
+        }
     }
 
     [Fact]
@@ -176,7 +196,7 @@ public sealed partial class BindGridTests
         vm.Store.Find("C")!.Text = "3";
         vm.SelectedRows = [vm.Rows[1], vm.Rows[2]];
         var tsv = vm.CopyText();
-        Assert.Equal("B\t2\t문자열\tIN\nC\t3\t문자열\tIN\n", tsv);
+        Assert.Equal("B\t2\tVarchar2\tIN\nC\t3\tVarchar2\tIN\n", tsv);
         Assert.Contains("2줄", vm.StatusText, StringComparison.Ordinal);
 
         var other = new BindVariablesViewModel(new EventBus());
@@ -280,6 +300,17 @@ public sealed partial class BindGridTests
         {
             Assert.Equal(vm.Rows[i].Text, other.Rows[i].Text);
             Assert.Equal(vm.Rows[i].Type, other.Rows[i].Type);
+        }
+
+        window.UpdateLayout();
+        if (Environment.GetEnvironmentVariable("ORANDA_RENDER_DIR") is { Length: > 0 } dir)
+        {
+            Directory.CreateDirectory(dir);
+            using var bmp = new Avalonia.Media.Imaging.RenderTargetBitmap(new Avalonia.PixelSize(520, 600));
+            bmp.Render(window);
+#pragma warning disable CS0618 // 렌더 확인용: 새 오버로드가 없는 헤드리스 비트맵
+            bmp.Save(Path.Combine(dir, "bind-pane.png"));
+#pragma warning restore CS0618
         }
 
         window.Close();

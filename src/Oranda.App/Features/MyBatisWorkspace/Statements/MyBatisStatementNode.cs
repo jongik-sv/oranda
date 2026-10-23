@@ -13,6 +13,9 @@ public sealed record MyBatisStatementBadgeView(string Text, string? ToolTip, MyB
     public bool IsWarning => Kind == MyBatisBadgeKind.Warning;
 
     public bool IsError => Kind == MyBatisBadgeKind.Error;
+
+    /// <summary>좁은 상태 칸에 그리는 짧은 글(「조합 오류 3」 → 「3」).</summary>
+    public string ShortText => Text[(Text.LastIndexOf(' ') + 1)..];
 }
 
 /// <summary>
@@ -50,6 +53,18 @@ public sealed partial class MyBatisStatementNode : ObservableObject
 
     [ObservableProperty]
     private IReadOnlyList<MyBatisStatementBadgeView> _badges = [];
+
+    /// <summary>상태 칸의 「쓰는 곳」 수(sql 조각만, 값이 있을 때만 그린다).</summary>
+    [ObservableProperty]
+    private string _usageNumber = string.Empty;
+
+    /// <summary>상태 칸 툴팁: 수정·새 쿼리·편집 불가·조합 오류·쓰는 곳의 뜻.</summary>
+    [ObservableProperty]
+    private string? _statusToolTip;
+
+    /// <summary>id 칸에서 강조할 검색어(거르지 않으면 빈 글).</summary>
+    [ObservableProperty]
+    private string _highlight = string.Empty;
 
     internal MyBatisStatementNode(string title, MyBatisStatementKind kind, MyBatisStatementEntry? entry)
     {

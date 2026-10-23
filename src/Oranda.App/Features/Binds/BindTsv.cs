@@ -118,13 +118,15 @@ public static class BindTsv
             return hit.Type;
         }
 
-        return t.ToUpperInvariant() switch
+        return t.ToUpperInvariant().Replace('_', ' ') switch
         {
-            "VARCHAR2" or "VARCHAR" or "STRING" => BindDataType.Varchar2,
-            "NUMBER" or "NUMERIC" or "INTEGER" or "INT" => BindDataType.Number,
-            "DATE" => BindDataType.Date,
-            "CHAR" => BindDataType.FixedChar,
+            "VARCHAR2" or "VARCHAR" or "STRING" or "문자열" => BindDataType.Varchar2,
+            "NUMBER" or "NUMERIC" or "INTEGER" or "INT" or "숫자" => BindDataType.Number,
+            "DATE" or "날짜" => BindDataType.Date,
+            "CHAR" or "고정 길이 문자" => BindDataType.FixedChar,
             "TIMESTAMP" => BindDataType.Timestamp,
+            "BINARY DOUBLE" => BindDataType.BinaryDouble,
+            "TIMESTAMPTZ" => BindDataType.TimestampTz,
             _ => null,
         };
     }

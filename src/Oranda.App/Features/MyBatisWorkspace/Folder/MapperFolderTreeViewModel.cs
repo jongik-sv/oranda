@@ -3,6 +3,8 @@ using System.Globalization;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Oranda.App.Features.Localization;
+using Avalonia.Threading;
+using Oranda.App.Features.MyBatisWorkspace.Statements;
 using Oranda.App.Features.MyBatisWorkspace.Workspace;
 using Oranda.App.Features.SqlEditor;
 using Oranda.App.Shell;
@@ -37,6 +39,9 @@ public sealed partial class MapperFolderTreeNode : ObservableObject
 
     /// <summary>폴더·파일 절대 경로(요소는 그 매퍼 경로).</summary>
     public string FullPath { get; }
+
+    /// <summary>요소 이름에서 강조할 검색어(거르지 않으면 빈 글).</summary>
+    public string Highlight { get; init; } = string.Empty;
 
     /// <summary>이름 오른쪽 흐린 글(파일 = namespace, 요소 = 요소 이름).</summary>
     public string Detail { get; init; } = string.Empty;
@@ -82,6 +87,10 @@ public sealed partial class MapperFolderTreeViewModel : ObservableObject, IDispo
     private IShellText? _languageSource;
     private SqlEditorHost? _host;
     private bool _active;
+    private DispatcherTimer? _searchTimer;
+    private string[] _terms = [];
+    private string _appliedSearch = string.Empty;
+    private bool _builtFiltered;
 
     [ObservableProperty]
     private string _rootPath = string.Empty;
@@ -97,6 +106,14 @@ public sealed partial class MapperFolderTreeViewModel : ObservableObject, IDispo
 
     [ObservableProperty]
     private bool _hasUsages;
+
+    /// <summary>검색 칸의 글(쿼리 id 를 거른다).</summary>
+    [ObservableProperty]
+    private string _searchText = string.Empty;
+
+    /// <summary>거른 결과가 하나도 없다.</summary>
+    [ObservableProperty]
+    private bool _showsNoMatch;
 
     public MapperFolderTreeViewModel(MapperFolderService folder)
     {
@@ -114,6 +131,12 @@ public sealed partial class MapperFolderTreeViewModel : ObservableObject, IDispo
 
     /// <summary>화면 글자 조회. 기본은 셸의 <see cref="UiText.Current"/>, 없으면 한국어 표(시험).</summary>
     internal IShellText? Text { get; init; }
+
+    /// <summary>검색 글을 친 뒤 거르기까지 기다리는 시간(0 이하면 바로. 시험용).</summary>
+    internal int FilterDebounceMilliseconds { get; init; } = 150;
+
+    /// <summary>지금 트리에 적용된 검색 글.</summary>
+    public string AppliedSearch => _appliedSearch;
 
     /// <summary>폴더 바로 아래 노드(하위 폴더 먼저, 그다음 파일).</summary>
     public ObservableCollection<MapperFolderTreeNode> Roots { get; } = [];
@@ -139,6 +162,71 @@ public sealed partial class MapperFolderTreeViewModel : ObservableObject, IDispo
                 await MapperFolderOpener.OpenStatementAsync(Host, node.FullPath, id, CancellationToken.None).ConfigureAwait(true);
                 break;
         }
+    }
+
+    partial void OnSearchTextChanged(string value)
+    {
+        if (string.Equals(value?.Trim() ?? string.Empty, _appliedSearch, StringComparison.Ordinal))
+        {
+            _searchTimer?.Stop();
+            return;
+        }
+
+        if (FilterDebounceMilliseconds <= 0)
+        {
+            ApplySearch();
+            return;
+        }
+
+        if (_searchTimer is null)
+        {
+            var timer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(FilterDebounceMilliseconds) };
+            timer.Tick += (_, _) => ApplySearch();
+            _searchTimer = timer;
+        }
+
+        _searchTimer.Stop();
+        _searchTimer.Start();
+    }
+
+    /// <summary>검색 글을 지우고 전체 트리로 돌아간다.</summary>
+    public void ClearSearch()
+    {
+        _searchTimer?.Stop();
+        SearchText = string.Empty;
+        ApplySearch();
+    }
+
+    /// <summary>기다리는 검색 글이 있으면 지금 적용한다.</summary>
+    public void FlushSearch() => ApplySearch();
+
+    /// <summary>트리의 첫 쿼리(요소) 노드, 없으면 null.</summary>
+    public MapperFolderTreeNode? FirstElement() => Walk(Roots).FirstOrDefault(n => n.Kind == MapperFolderNodeKind.Element);
+
+    private static IEnumerable<MapperFolderTreeNode> Walk(IEnumerable<MapperFolderTreeNode> nodes)
+    {
+        foreach (var node in nodes)
+        {
+            yield return node;
+            foreach (var child in Walk(node.Children))
+            {
+                yield return child;
+            }
+        }
+    }
+
+    private void ApplySearch()
+    {
+        _searchTimer?.Stop();
+        var text = SearchText?.Trim() ?? string.Empty;
+        if (string.Equals(text, _appliedSearch, StringComparison.Ordinal))
+        {
+            return;
+        }
+
+        _appliedSearch = text;
+        _terms = MyBatisQueryFilter.Terms(text);
+        Rebuild();
     }
 
     /// <summary>쓰는 곳 한 줄을 연다.</summary>
@@ -220,7 +308,11 @@ public sealed partial class MapperFolderTreeViewModel : ObservableObject, IDispo
         }
     }
 
-    public void Dispose() => Deactivate();
+    public void Dispose()
+    {
+        _searchTimer?.Stop();
+        Deactivate();
+    }
 
     private void OnFolderChanged(object? sender, EventArgs e) => Rebuild();
 
@@ -228,7 +320,12 @@ public sealed partial class MapperFolderTreeViewModel : ObservableObject, IDispo
 
     private void Rebuild()
     {
-        RememberExpanded(Roots);
+        if (!_builtFiltered)
+        {
+            RememberExpanded(Roots); // 거르느라 억지로 펼친 상태는 기억하지 않는다
+        }
+
+        _builtFiltered = _terms.Length > 0;
         Roots.Clear();
         var index = _folder.Index;
         RootPath = index?.Root ?? string.Empty;
@@ -238,9 +335,14 @@ public sealed partial class MapperFolderTreeViewModel : ObservableObject, IDispo
             foreach (var file in index.Files)
             {
                 var dir = Path.GetDirectoryName(file.Path) ?? index.Root;
-                ChildrenOf(dir, index.Root, folders).Add(FileNode(file));
+                if (FileNode(file) is { } fileNode)
+                {
+                    ChildrenOf(dir, index.Root, folders).Add(fileNode);
+                }
             }
         }
+
+        ShowsNoMatch = _terms.Length > 0 && Roots.Count == 0;
 
         if (HasUsages)
         {
@@ -264,7 +366,7 @@ public sealed partial class MapperFolderTreeViewModel : ObservableObject, IDispo
             node = new MapperFolderTreeNode(MapperFolderNodeKind.Folder, Path.GetFileName(dir), dir)
             {
                 ToolTipText = dir,
-                IsExpanded = _expanded.Contains(dir),
+                IsExpanded = _terms.Length > 0 || _expanded.Contains(dir),
             };
             int at = 0;
             while (at < parent.Count && parent[at].Kind == MapperFolderNodeKind.Folder)
@@ -279,19 +381,26 @@ public sealed partial class MapperFolderTreeViewModel : ObservableObject, IDispo
         return node.Children;
     }
 
-    private MapperFolderTreeNode FileNode(MapperFolderFile file)
+    private MapperFolderTreeNode? FileNode(MapperFolderFile file)
     {
+        var elements = file.Elements.Where(e => MyBatisQueryFilter.Matches(e.Id ?? e.Name, _terms)).ToList();
+        if (_terms.Length > 0 && elements.Count == 0)
+        {
+            return null; // 거르는 중에는 맞은 쿼리가 있는 파일만
+        }
+
         var node = new MapperFolderTreeNode(MapperFolderNodeKind.File, Path.GetFileName(file.Path), file.Path)
         {
-            Detail = file.Namespace ?? string.Empty,
+            Detail = (file.Namespace ?? string.Empty) + (_terms.Length > 0 ? string.Create(CultureInfo.InvariantCulture, $" ({elements.Count})") : string.Empty),
             ToolTipText = file.Path,
-            IsExpanded = _expanded.Contains(file.Path),
+            IsExpanded = _terms.Length > 0 || _expanded.Contains(file.Path),
         };
-        foreach (var e in file.Elements)
+        foreach (var e in elements)
         {
             node.Children.Add(new MapperFolderTreeNode(MapperFolderNodeKind.Element, e.Id ?? e.Name, file.Path)
             {
                 Detail = e.Name,
+                Highlight = _appliedSearch,
                 ToolTipText = file.Namespace is null || e.Id is null ? e.Id ?? e.Name : file.Namespace + "." + e.Id,
                 Namespace = file.Namespace,
                 ElementId = e.Id,

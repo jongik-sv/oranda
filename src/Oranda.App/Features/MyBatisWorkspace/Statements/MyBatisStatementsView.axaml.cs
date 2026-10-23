@@ -2,6 +2,8 @@ using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Interactivity;
+using Avalonia.Media;
+using Avalonia.Threading;
 using Avalonia.VisualTree;
 using Oranda.App.Shell.Menus;
 
@@ -44,7 +46,112 @@ public partial class MyBatisStatementsView : UserControl
                 e.Handled = true;
             }
         };
+        AddHandler(KeyDownEvent, OnViewKeyDown, RoutingStrategies.Tunnel);
+        HeaderBorder.SizeChanged += (_, _) => UpdateDirectoryText();
+        DataContextChanged += (_, _) =>
+        {
+            if (DataContext is MyBatisStatementsViewModel model)
+            {
+                model.PropertyChanged += (_, e) =>
+                {
+                    if (e.PropertyName == nameof(MyBatisStatementsViewModel.MapperDirectory))
+                    {
+                        UpdateDirectoryText();
+                    }
+                };
+                UpdateDirectoryText();
+            }
+        };
         AttachedToVisualTree += (_, _) => (DataContext as MyBatisStatementsViewModel)?.Attach();
+    }
+
+    /// <summary>검색 칸으로 간다(Ctrl+F).</summary>
+    public void FocusSearch()
+    {
+        SearchBox.Focus();
+        SearchBox.SelectAll();
+    }
+
+    private void OnClearSearchClick(object? sender, RoutedEventArgs e)
+    {
+        (DataContext as MyBatisStatementsViewModel)?.ClearSearch();
+        SearchBox.Focus();
+    }
+
+    // 창에 포커스가 있을 때: Ctrl+F = 검색 칸, Esc = 검색 지움, 검색 칸에서 ↓ = 목록 첫 행, Enter = 고른(없으면 첫) 쿼리 열기.
+    private void OnViewKeyDown(object? sender, KeyEventArgs e)
+    {
+        if (DataContext is not MyBatisStatementsViewModel vm || vm.IsModeActive)
+        {
+            return;
+        }
+
+        if (e.Key == Key.F && e.KeyModifiers == KeyModifiers.Control)
+        {
+            FocusSearch();
+            e.Handled = true;
+        }
+        else if (e.Key == Key.Escape && vm.SearchText.Length > 0)
+        {
+            vm.ClearSearch();
+            e.Handled = true;
+        }
+        else if (e.Key == Key.Down && SearchBox.IsFocused)
+        {
+            vm.FlushSearch();
+            if (vm.FirstItem() is { } first)
+            {
+                vm.SelectNode(first);
+                Tree.ScrollIntoView(first);
+                Dispatcher.UIThread.Post(() => Tree.ContainerFromItem(first)?.Focus(), DispatcherPriority.Loaded);
+                e.Handled = true;
+            }
+        }
+        else if (e.Key == Key.Enter && SearchBox.IsFocused)
+        {
+            vm.FlushSearch();
+            vm.OpenNode(vm.SelectedNode is { IsGroup: false } picked ? picked : vm.FirstItem());
+            e.Handled = true;
+        }
+    }
+
+    /// <summary>폴더 경로는 파일 이름 아래 흐린 줄에 보이고, 좁으면 앞을 줄인다(…끝쪽 폴더가 남는다).</summary>
+    private void UpdateDirectoryText()
+    {
+        var full = (DataContext as MyBatisStatementsViewModel)?.MapperDirectory ?? string.Empty;
+        var box = DirectoryText;
+        double width = HeaderBorder.Bounds.Width - HeaderBorder.Padding.Left - HeaderBorder.Padding.Right;
+        if (full.Length == 0 || width <= 0)
+        {
+            box.Text = full;
+            return;
+        }
+
+        var typeface = new Typeface(box.FontFamily, box.FontStyle, box.FontWeight, box.FontStretch);
+        double Measure(string text) => new FormattedText(text, System.Globalization.CultureInfo.CurrentCulture, FlowDirection.LeftToRight,
+            typeface, box.FontSize, null).Width;
+
+        if (Measure(full) <= width)
+        {
+            box.Text = full;
+            return;
+        }
+
+        int lo = 1, hi = full.Length - 1; // 앞에서 lo 글자를 버린 "…" + 나머지
+        while (lo < hi)
+        {
+            int mid = (lo + hi) / 2;
+            if (Measure("…" + full[mid..]) <= width)
+            {
+                hi = mid;
+            }
+            else
+            {
+                lo = mid + 1;
+            }
+        }
+
+        box.Text = "…" + full[lo..];
     }
 
     private void OnTreeContextRequested(object? sender, ContextRequestedEventArgs e)

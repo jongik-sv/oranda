@@ -50,6 +50,9 @@ public sealed partial class MyBatisStatementsViewModel : ToolPanelViewModelBase,
     private List<MyBatisStatementEntry> _shown = [];
     private List<IMyBatisStatementBadgeProvider> _providers = [];
     private DispatcherTimer? _usageTimer;
+    private DispatcherTimer? _searchTimer;
+    private string[] _terms = [];
+    private string _appliedSearch = string.Empty;
     private IShellText? _languageSource;
     private bool _attached;
     private bool _syncing;
@@ -79,6 +82,14 @@ public sealed partial class MyBatisStatementsViewModel : ToolPanelViewModelBase,
     [ObservableProperty]
     private object? _modeContent;
 
+    /// <summary>검색 칸의 글(칠 때마다 바뀐다). 목록은 <see cref="FilterDebounceMilliseconds"/> 뒤에 거른다.</summary>
+    [ObservableProperty]
+    private string _searchText = string.Empty;
+
+    /// <summary>거른 결과가 하나도 없다(「일치하는 쿼리 없음」을 보인다).</summary>
+    [ObservableProperty]
+    private bool _showsNoMatch;
+
     /// <summary>목록·도구 막대를 보인다: 세션이 있거나 쓸 수 있는 보기 모드(예 매퍼 폴더 트리)가 있다. 아니면 안내 한 줄만 보인다.</summary>
     [ObservableProperty]
     private bool _showsBody;
@@ -89,6 +100,12 @@ public sealed partial class MyBatisStatementsViewModel : ToolPanelViewModelBase,
         get => _host ?? SqlEditorHost.Current;
         init => _host = value;
     }
+
+    /// <summary>검색 글을 친 뒤 목록을 거르기까지 기다리는 시간(0 이하면 바로. 시험용).</summary>
+    internal int FilterDebounceMilliseconds { get; init; } = 150;
+
+    /// <summary>지금 목록에 적용된 검색 글(디바운스 뒤).</summary>
+    public string AppliedSearch => _appliedSearch;
 
     /// <summary>화면 글자 조회. 기본은 셸의 <see cref="UiText.Current"/>, 없으면 한국어 표(시험).</summary>
     internal IShellText? Text { get; init; }
@@ -171,6 +188,70 @@ public sealed partial class MyBatisStatementsViewModel : ToolPanelViewModelBase,
         FollowWorkspace();
     }
 
+    partial void OnSearchTextChanged(string value)
+    {
+        if (string.Equals(value?.Trim() ?? string.Empty, _appliedSearch, StringComparison.Ordinal))
+        {
+            _searchTimer?.Stop();
+            return;
+        }
+
+        if (FilterDebounceMilliseconds <= 0)
+        {
+            ApplySearch();
+            return;
+        }
+
+        _searchTimer ??= CreateSearchTimer();
+        _searchTimer.Stop();
+        _searchTimer.Start();
+    }
+
+    private DispatcherTimer CreateSearchTimer()
+    {
+        var timer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(FilterDebounceMilliseconds) };
+        timer.Tick += (_, _) =>
+        {
+            timer.Stop();
+            ApplySearch();
+        };
+        return timer;
+    }
+
+    /// <summary>검색 글을 지우고 전체 목록으로 돌아간다(바로).</summary>
+    public void ClearSearch()
+    {
+        _searchTimer?.Stop();
+        SearchText = string.Empty;
+        ApplySearch();
+    }
+
+    private void ApplySearch()
+    {
+        _searchTimer?.Stop();
+        var text = SearchText?.Trim() ?? string.Empty;
+        if (string.Equals(text, _appliedSearch, StringComparison.Ordinal))
+        {
+            return;
+        }
+
+        _appliedSearch = text;
+        _terms = MyBatisQueryFilter.Terms(text);
+        if (_session is not null)
+        {
+            Rebuild();
+            SyncSelection();
+        }
+    }
+
+    /// <summary>기다리는 검색 글이 있으면 지금 적용한다(↓·Enter 가 바로 첫 결과를 집게).</summary>
+    public void FlushSearch() => ApplySearch();
+
+    /// <summary>목록 첫 항목(묶음 머리 제외), 없으면 null.</summary>
+    public MyBatisStatementNode? FirstItem() => _groups.SelectMany(g => g.IsExpanded ? g.Children : []).FirstOrDefault();
+
+    private bool IsFiltering => _terms.Length > 0;
+
     /// <summary>항목을 고른다: 세션의 고른 문장이 된다(우클릭 메뉴·명령의 대상). 묶음 머리나 id 없는 요소는 세션에 알리지 않는다.</summary>
     public void SelectNode(MyBatisStatementNode? node)
     {
@@ -223,6 +304,7 @@ public sealed partial class MyBatisStatementsViewModel : ToolPanelViewModelBase,
         SetSession(null);
         ClearModes();
         _usageTimer?.Stop();
+        _searchTimer?.Stop();
     }
 
     partial void OnSelectedNodeChanged(MyBatisStatementNode? value)
@@ -387,7 +469,7 @@ public sealed partial class MyBatisStatementsViewModel : ToolPanelViewModelBase,
         var rows = new List<MyBatisStatementNode>(entries.Count + GroupOrder.Length);
         foreach (var kind in GroupOrder)
         {
-            var members = entries.Where(e => e.Kind == kind).ToList();
+            var members = entries.Where(e => e.Kind == kind && MyBatisQueryFilter.Matches(EntryTitle(e), _terms)).ToList();
             if (members.Count == 0)
             {
                 continue;
@@ -395,12 +477,13 @@ public sealed partial class MyBatisStatementsViewModel : ToolPanelViewModelBase,
 
             var group = new MyBatisStatementNode(GroupTitle(kind), kind, entry: null)
             {
-                IsExpanded = !_collapsed.Contains(kind),
+                IsExpanded = IsFiltering || !_collapsed.Contains(kind), // 거르는 동안은 맞은 것이 보이게 모두 펼친다(기억한 접힘은 그대로)
                 ExpandedChangedCallback = OnGroupExpandedChanged,
             };
+            group.Title = GroupTitleFor(kind, members.Count);
             foreach (var entry in members)
             {
-                var node = new MyBatisStatementNode(string.Empty, kind, entry);
+                var node = new MyBatisStatementNode(string.Empty, kind, entry) { Highlight = _appliedSearch };
                 RefreshNode(node);
                 RefreshBadges(node);
                 group.Children.Add(node);
@@ -415,8 +498,57 @@ public sealed partial class MyBatisStatementsViewModel : ToolPanelViewModelBase,
         }
 
         MutateRows(() => _rows.ReplaceAll(rows));
+        ShowsNoMatch = IsFiltering && rows.Count == 0;
         RefreshUsage();
     }
+
+    /// <summary>상태 칸 툴팁: 그 행에 있는 표시마다 한 줄(표시가 없으면 툴팁 없음).</summary>
+    private void UpdateStatusToolTip(MyBatisStatementNode node)
+    {
+        var lines = new List<string>();
+        if (node.NewText.Length > 0)
+        {
+            lines.Add(T("tip.new"));
+        }
+        else if (node.ModifiedText.Length > 0)
+        {
+            lines.Add(T("tip.modified"));
+        }
+
+        if (node.AmbiguousText.Length > 0)
+        {
+            lines.Add(T("tip.ambiguous"));
+        }
+
+        if (node.KeepText.Length > 0)
+        {
+            lines.Add(T("tip.keep"));
+        }
+
+        foreach (var badge in node.Badges)
+        {
+            lines.Add(badge.IsError ? string.Format(CultureInfo.CurrentCulture, T("tip.combo"), badge.ShortText) : badge.ToolTip ?? badge.Text);
+        }
+
+        if (node.UsageNumber.Length > 0)
+        {
+            lines.Add(node.UsageNumber == "0"
+                ? T("tip.unused")
+                : string.Format(CultureInfo.CurrentCulture, T("tip.usage"), node.UsageNumber));
+        }
+
+        var tip = lines.Count == 0 ? null : string.Join(Environment.NewLine, lines);
+        if (!string.Equals(tip, node.StatusToolTip, StringComparison.Ordinal))
+        {
+            node.StatusToolTip = tip;
+        }
+    }
+
+    private static string EntryTitle(MyBatisStatementEntry entry) => entry.Id ?? $"<{entry.Name}>";
+
+    /// <summary>거르는 중이면 묶음 머리에 맞은 수를 붙인다.</summary>
+    private string GroupTitleFor(MyBatisStatementKind kind, int matched) =>
+        IsFiltering ? string.Create(CultureInfo.InvariantCulture, $"{GroupTitle(kind)} ({matched})") : GroupTitle(kind);
 
     private void RefreshNodes()
     {
@@ -444,6 +576,7 @@ public sealed partial class MyBatisStatementsViewModel : ToolPanelViewModelBase,
         node.KeepText = entry.CanOpen ? string.Empty : T("mark.keep");
         node.RowOpacity = entry.CanOpen ? 1 : 0.6;
         node.ToolTipText = entry.IsAmbiguous ? T("tip.ambiguous") : entry.CanOpen ? null : T("tip.keep");
+        UpdateStatusToolTip(node);
     }
 
     private void RefreshBadges(MyBatisStatementNode node)
@@ -466,6 +599,8 @@ public sealed partial class MyBatisStatementsViewModel : ToolPanelViewModelBase,
         {
             node.Badges = badges;
         }
+
+        UpdateStatusToolTip(node);
     }
 
     /// <summary>sql 조각 노드의 「n곳에서 씀」. 매퍼 전체 글을 훑으므로 글자를 칠 때는 잠깐 기다렸다가 한 번만 한다.</summary>
@@ -483,6 +618,8 @@ public sealed partial class MyBatisStatementsViewModel : ToolPanelViewModelBase,
             foreach (var node in group.Children)
             {
                 node.UsageText = node.Entry!.Id is { } id ? UsageText(counts.GetValueOrDefault(id)) : string.Empty;
+                node.UsageNumber = node.Entry!.Id is { } uid ? counts.GetValueOrDefault(uid).ToString(CultureInfo.CurrentCulture) : string.Empty;
+                UpdateStatusToolTip(node);
             }
         }
     }
@@ -572,7 +709,7 @@ public sealed partial class MyBatisStatementsViewModel : ToolPanelViewModelBase,
         if (picked is not null)
         {
             target = _groups.SelectMany(g => g.Children).FirstOrDefault(n => ReferenceEquals(n.Entry, picked));
-            if (target is null || _collapsed.Contains(target.Kind))
+            if (target is null || _groups.FirstOrDefault(g => g.Kind == target.Kind) is not { IsExpanded: true })
             {
                 UpdateCommandStates();
                 return; // 목록에 없거나 접힌 묶음 안인 문장은 목록 선택을 건드리지 않는다
@@ -723,7 +860,7 @@ public sealed partial class MyBatisStatementsViewModel : ToolPanelViewModelBase,
     {
         foreach (var group in _groups)
         {
-            group.Title = GroupTitle(group.Kind);
+            group.Title = GroupTitleFor(group.Kind, group.Children.Count);
             foreach (var node in group.Children)
             {
                 RefreshNode(node);

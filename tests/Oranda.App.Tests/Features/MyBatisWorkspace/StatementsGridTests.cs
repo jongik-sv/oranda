@@ -32,6 +32,8 @@ public sealed class StatementsGridTests : IDisposable
         }
     }
 
+    private static readonly int[] RenderWidths = [340, 480];
+
     private static void Pump()
     {
         for (var i = 0; i < 3; i++)
@@ -43,7 +45,7 @@ public sealed class StatementsGridTests : IDisposable
     private static async Task<(SqlEditorHost Host, MyBatisStatementsViewModel Vm, MyBatisStatementsView View, Window Window)> ShowAsync(string path)
     {
         var host = new SqlEditorHost { MyBatisHooks = new MyBatisHooks(openHandler: new MyBatisOpenHandler()) };
-        var vm = new MyBatisStatementsViewModel { Host = host, Text = new ShellText() };
+        var vm = new MyBatisStatementsViewModel { Host = host, Text = new ShellText(), FilterDebounceMilliseconds = 0 };
         var view = new MyBatisStatementsView { DataContext = vm };
         var window = new Window { Width = 340, Height = 560, Content = view };
         window.Show();
@@ -87,7 +89,7 @@ public sealed class StatementsGridTests : IDisposable
             Assert.Contains("grid-c", list.Classes);
             var headerBorder = view.GetVisualDescendants().OfType<Border>().First(b => b.Classes.Contains("grid-c-header"));
             var headers = headerBorder.GetVisualDescendants().OfType<TextBlock>().Select(t => t.Text).ToList();
-            Assert.Equal(["종류", "id", "수정", "조합 오류", "쓰는 곳"], headers);
+            Assert.Equal(["종류", "id", "상태"], headers);
 
             var items = list.GetVisualDescendants().OfType<ListBoxItem>().ToList();
             Assert.NotEmpty(items);
@@ -158,21 +160,25 @@ public sealed class StatementsGridTests : IDisposable
             Assert.True(vm.Rows.Count > 0);
 
             var dir = Environment.GetEnvironmentVariable("ORANDA_RENDER_DIR");
-            foreach (var (variant, name) in new[] { (ThemeVariant.Light, "light"), (ThemeVariant.Dark, "dark") })
+            foreach (var width in RenderWidths)
             {
-                Application.Current!.RequestedThemeVariant = variant;
-                Pump();
-                window.UpdateLayout();
-                if (!string.IsNullOrEmpty(dir))
+                window.Width = width;
+                foreach (var (variant, name) in new[] { (ThemeVariant.Light, "light"), (ThemeVariant.Dark, "dark") })
                 {
-                    Directory.CreateDirectory(dir);
-                    using var bmp = new RenderTargetBitmap(new PixelSize(340, 560));
-                    bmp.Render(window);
-#pragma warning disable CS0618 // 렌더 확인용: 새 오버로드 가 없는 헤드리스 비트맵
-                    bmp.Save(Path.Combine(dir, $"stmt-grid-{name}.png"));
-#pragma warning restore CS0618
+                    Application.Current!.RequestedThemeVariant = variant;
+                    Pump();
+                    window.UpdateLayout();
+                    Render(window, dir, $"stmt-grid-{width}-{name}.png", width);
                 }
             }
+
+            window.Width = 340;
+            Application.Current!.RequestedThemeVariant = ThemeVariant.Light;
+            vm.SearchText = "exe rst"; // 거른 상태 렌더(낱말 둘 모두 포함)
+            Pump();
+            window.UpdateLayout();
+            Assert.True(vm.Rows.Count > 0);
+            Render(window, dir, "stmt-grid-340-filtered.png", 340);
         }
         finally
         {
@@ -180,4 +186,19 @@ public sealed class StatementsGridTests : IDisposable
             window.Close();
         }
     });
+
+    private static void Render(Window window, string? dir, string file, int width)
+    {
+        if (string.IsNullOrEmpty(dir))
+        {
+            return;
+        }
+
+        Directory.CreateDirectory(dir);
+        using var bmp = new RenderTargetBitmap(new PixelSize(width, 560));
+        bmp.Render(window);
+#pragma warning disable CS0618 // 렌더 확인용: 새 오버로드 가 없는 헤드리스 비트맵
+        bmp.Save(Path.Combine(dir, file));
+#pragma warning restore CS0618
+    }
 }

@@ -1,6 +1,7 @@
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:vm="using:Oranda.App.Features.MyBatisWorkspace.Folder"
+             xmlns:stm="using:Oranda.App.Features.MyBatisWorkspace.Statements"
              xmlns:icons="using:Oranda.App.Shell.Icons"
              x:Class="Oranda.App.Features.MyBatisWorkspace.Folder.MapperFolderTreeView"
              x:DataType="vm:MapperFolderTreeViewModel">
@@ -17,6 +18,13 @@
         <TextBlock Classes="panel-caption" Text="{Binding RootPath}" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
       </DockPanel>
     </Border>
+    <!-- 검색: 쿼리 id 를 거른다(맞은 쿼리가 있는 파일만 남는다). -->
+    <Grid DockPanel.Dock="Top" ColumnDefinitions="*,Auto" Margin="6,2,6,4">
+      <TextBox x:Name="SearchBox" Text="{Binding SearchText, Mode=TwoWay}" PlaceholderText="쿼리 id 검색 (Ctrl+F)" />
+      <Button x:Name="ClearSearchButton" Grid.Column="1" Classes="toolbar" Content="검색 지우기" ToolTip.Tip="검색 지우기"
+              icons:ButtonIcon.Key="clear" icons:ButtonIcon.IconOnly="True" Click="OnClearSearchClick"
+              IsVisible="{Binding SearchText, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+    </Grid>
     <Border DockPanel.Dock="Bottom" Classes="panel-status">
       <TextBlock Text="{Binding StatusText}" TextTrimming="CharacterEllipsis" />
     </Border>
@@ -41,6 +49,8 @@
     <Border DockPanel.Dock="Top" Classes="grid-c-header">
       <Border Classes="grid-c-cell"><TextBlock Text="매퍼 폴더" /></Border>
     </Border>
+    <Panel>
+    <TextBlock Text="일치하는 쿼리 없음" IsVisible="{Binding ShowsNoMatch}" Opacity="0.6" HorizontalAlignment="Center" VerticalAlignment="Top" Margin="0,16,0,0" />
     <TreeView x:Name="Tree" Classes="compact" ItemsSource="{Binding Roots}" SelectedItem="{Binding SelectedNode, Mode=TwoWay}"
               ScrollViewer.HorizontalScrollBarVisibility="Disabled">
       <TreeView.Styles>
@@ -66,11 +76,12 @@
           <StackPanel Orientation="Horizontal" Spacing="5" ToolTip.Tip="{Binding ToolTipText}">
             <ContentControl Content="{Binding IconKey, Converter={x:Static icons:IconKeyConverter.Instance}}" VerticalAlignment="Center"
                             IsVisible="{Binding IconKey, Converter={x:Static ObjectConverters.IsNotNull}}" />
-            <TextBlock Text="{Binding Name}" VerticalAlignment="Center" />
+            <stm:HighlightTextBlock Source="{Binding Name}" Terms="{Binding Highlight}" VerticalAlignment="Center" />
             <TextBlock Text="{Binding Detail}" Opacity="0.6" VerticalAlignment="Center" FontSize="{DynamicResource OrandaFontSizeSmall}" />
           </StackPanel>
         </TreeDataTemplate>
       </TreeView.ItemTemplate>
     </TreeView>
+    </Panel>
   </DockPanel>
 </UserControl>

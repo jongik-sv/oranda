@@ -2,6 +2,7 @@ using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Interactivity;
+using Avalonia.Threading;
 using Avalonia.VisualTree;
 
 namespace Oranda.App.Features.MyBatisWorkspace.Folder;
@@ -37,6 +38,7 @@ public partial class MapperFolderTreeView : UserControl
                 e.Handled = true;
             }
         };
+        AddHandler(KeyDownEvent, OnViewKeyDown, RoutingStrategies.Tunnel);
         // 폴더 상태 구독은 화면에 붙어 있는 동안만(모드를 끄거나 창을 버리면 풀린다).
         AttachedToVisualTree += (_, _) => (DataContext as MapperFolderTreeViewModel)?.Activate();
         DetachedFromVisualTree += (_, _) => (DataContext as MapperFolderTreeViewModel)?.Deactivate();
@@ -48,6 +50,54 @@ public partial class MapperFolderTreeView : UserControl
                 _ = vm.OpenUsageAsync(row);
             }
         };
+    }
+
+    private void OnClearSearchClick(object? sender, RoutedEventArgs e)
+    {
+        (DataContext as MapperFolderTreeViewModel)?.ClearSearch();
+        SearchBox.Focus();
+    }
+
+    // Ctrl+F = 검색 칸, Esc = 지움, 검색 칸에서 ↓ = 첫 쿼리, Enter = 고른(없으면 첫) 쿼리 열기.
+    private void OnViewKeyDown(object? sender, KeyEventArgs e)
+    {
+        if (DataContext is not MapperFolderTreeViewModel vm)
+        {
+            return;
+        }
+
+        if (e.Key == Key.F && e.KeyModifiers == KeyModifiers.Control)
+        {
+            SearchBox.Focus();
+            SearchBox.SelectAll();
+            e.Handled = true;
+        }
+        else if (e.Key == Key.Escape && vm.SearchText.Length > 0)
+        {
+            vm.ClearSearch();
+            e.Handled = true;
+        }
+        else if (e.Key == Key.Down && SearchBox.IsFocused)
+        {
+            vm.FlushSearch();
+            if (vm.FirstElement() is { } first)
+            {
+                vm.SelectedNode = first;
+                Dispatcher.UIThread.Post(() => Tree.TreeContainerFromItem(first)?.Focus(), DispatcherPriority.Loaded);
+                e.Handled = true;
+            }
+        }
+        else if (e.Key == Key.Enter && SearchBox.IsFocused)
+        {
+            vm.FlushSearch();
+            var target = vm.SelectedNode is { Kind: MapperFolderNodeKind.Element } picked ? picked : vm.FirstElement();
+            if (target is not null)
+            {
+                _ = vm.OpenNodeAsync(target);
+            }
+
+            e.Handled = true;
+        }
     }
 
     private static MapperFolderTreeNode? NodeAt(object? source) =>
