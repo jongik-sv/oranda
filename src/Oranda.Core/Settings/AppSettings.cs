@@ -40,6 +40,16 @@ public sealed record AppSettings
 
     /// <summary>테이블 레이아웃 팝업(객체 정보 보기)의 붙여 넣기 옵션(TSK-13-32).</summary>
     public TableLayoutSettings TableLayout { get; init; } = new();
+
+    /// <summary>MyBatis 작업 공간(docs/oranda1, TSK-03-03).</summary>
+    public MyBatisSettings MyBatis { get; init; } = new();
+}
+
+/// <summary>MyBatis 작업 공간 설정. 설정 창에는 없고 「바뀌는 부분」 창의 확인란이 바꾼다.</summary>
+public sealed record MyBatisSettings
+{
+    /// <summary>매퍼에 저장할 때마다 「바뀌는 부분」 창을 먼저 보인다. 끄면 검사가 통과할 때 바로 쓴다.</summary>
+    public bool ShowSaveDiffEveryTime { get; init; } = true;
 }
 
 /// <summary>테이블 레이아웃 팝업의 확인란 4개. 다음에 연 팝업에도 유지한다. 별칭은 표마다 달라 저장하지 않는다.</summary>

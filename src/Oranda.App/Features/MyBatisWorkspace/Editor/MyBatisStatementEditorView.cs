@@ -27,6 +27,7 @@ public sealed class MyBatisStatementEditorView : UserControl, IEditorFocusTarget
     private readonly ContentControl _toolbarHost = new() { IsVisible = false };
     private readonly TextBlock _pathText = new() { VerticalAlignment = VerticalAlignment.Center, TextTrimming = TextTrimming.CharacterEllipsis };
     private readonly TextBlock _dynamicTagsText = new();
+    private readonly ContentControl _bannerSlot = new(); // 03-03 밖에서 바뀜 알림 띠 자리(Save/MapperBannerDecorator 가 채움)
     private readonly StackPanel _headerExtra = new() { Orientation = Orientation.Horizontal, Spacing = 6, HorizontalAlignment = HorizontalAlignment.Right, VerticalAlignment = VerticalAlignment.Center };
     private readonly SqlEditorView _editorView = new();
     private SqlEditorViewModel _tab;
@@ -65,6 +66,9 @@ public sealed class MyBatisStatementEditorView : UserControl, IEditorFocusTarget
 
     /// <summary>머리 줄 오른쪽 빈 자리. 03-02 가 켜진 조건 칩 같은 것을 더한다(꾸밈 문맥에서는 편집기의 조상 View 로 찾는다).</summary>
     public Panel HeaderExtraSlot => _headerExtra;
+
+    /// <summary>머리 줄과 원문 편집기 사이의 알림 띠 자리(03-03). 비어 있으면 자리를 차지하지 않는다.</summary>
+    public ContentControl BannerSlot => _bannerSlot;
 
     /// <summary>머리 줄의 「동적 태그 n」 칩 글(시험·계측용).</summary>
     public string? DynamicTagsChipText => _dynamicTagsText.Text;
@@ -154,7 +158,8 @@ public sealed class MyBatisStatementEditorView : UserControl, IEditorFocusTarget
 
         DockPanel.SetDock(_toolbarHost, Avalonia.Controls.Dock.Top);
         DockPanel.SetDock(headerBar, Avalonia.Controls.Dock.Top);
-        return new DockPanel { Children = { _toolbarHost, headerBar, _editorView } };
+        DockPanel.SetDock(_bannerSlot, Avalonia.Controls.Dock.Top);
+        return new DockPanel { Children = { _toolbarHost, headerBar, _bannerSlot, _editorView } };
     }
 
     private void Subscribe()
