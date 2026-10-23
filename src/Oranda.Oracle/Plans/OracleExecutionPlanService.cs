@@ -74,7 +74,8 @@ internal sealed class OracleExecutionPlanService : IExecutionPlanService
                 });
         }
 
-        try
+        // PLAN_TABLE 행은 지우지 않는다: DB 접근 통제 도구가 DELETE 를 DML 로 보고 결재를 요구한다.
+        // 세션 전용 임시 테이블이라 세션이 끝나면 사라지고, statement_id 가 매번 새 값이라 다음 조회에 섞이지 않는다.
         {
             var names = new List<string>();
             var steps = await QueryAsync(s, "plan.explain_steps", c => AddText(c, "stmt_id", statementId), ct, names);
@@ -91,11 +92,6 @@ internal sealed class OracleExecutionPlanService : IExecutionPlanService
             {
                 PlanHashValue = ExecutionPlanText.ParsePlanHashValue(planText),
             };
-        }
-        finally
-        {
-            // 세션 전용 임시 테이블이라 남아도 다른 사용자에게 보이지 않지만, 쌓이지 않게 지운다.
-            await CleanupAsync(s, statementId);
         }
     }
 
@@ -276,33 +272,6 @@ internal sealed class OracleExecutionPlanService : IExecutionPlanService
         catch (OracleException ex) when (session.ReportFailure(ex))
         {
             throw;
-        }
-        finally
-        {
-            gate.Release();
-        }
-    }
-
-    private static async Task CleanupAsync(ISession s, string statementId)
-    {
-        if (s is not OracleSession session)
-        {
-            return;
-        }
-
-        var gate = Gates.GetValue(session, _ => new SemaphoreSlim(1, 1));
-        await gate.WaitAsync();
-        try
-        {
-            await using var cmd = session.Connection.CreateCommand();
-            cmd.BindByName = true;
-            cmd.CommandText = Catalog.Value.Get("plan.explain_cleanup", s.Server).Sql;
-            AddText(cmd, "stmt_id", statementId);
-            await cmd.ExecuteNonQueryAsync();
-        }
-        catch (OracleException)
-        {
-            // 정리 실패는 계획 표시에 영향이 없다.
         }
         finally
         {

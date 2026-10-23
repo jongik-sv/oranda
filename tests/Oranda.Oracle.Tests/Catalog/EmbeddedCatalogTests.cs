@@ -63,6 +63,16 @@ public class EmbeddedCatalogTests
         Assert.IsAssignableFrom<ISqlCatalog>(catalog);
     }
 
+    [Fact]
+    public void Plan_catalog_sends_no_dml_so_access_control_tools_raise_no_approval()
+    {
+        var dml = new System.Text.RegularExpressions.Regex(@"^\s*(INSERT|UPDATE|DELETE|MERGE)", System.Text.RegularExpressions.RegexOptions.IgnoreCase | System.Text.RegularExpressions.RegexOptions.Multiline);
+        var plan = EmbeddedCatalog.ReadSources(ProductAssembly).Where(s => s.Path.StartsWith("plan/", StringComparison.Ordinal)).ToList();
+
+        Assert.NotEmpty(plan);
+        Assert.DoesNotContain(plan, s => dml.IsMatch(s.Text));
+    }
+
     private static string FindRepositoryRoot()
     {
         var directory = new DirectoryInfo(AppContext.BaseDirectory);
