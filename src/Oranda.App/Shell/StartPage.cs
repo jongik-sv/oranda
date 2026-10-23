@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using Avalonia;
 using Avalonia.Controls;
+using Avalonia.Controls.Templates;
 using Avalonia.Layout;
 using Avalonia.Media;
 using Oranda.App.Shell.Icons;
@@ -104,4 +105,25 @@ public sealed class StartPage : UserControl
                 },
             },
         };
+
+    /// <summary>
+    /// 문서 영역 모델(<see cref="Docking.DockWorkspace.EmptyDocumentContent"/>)에 넣는 표식 <see cref="StartPageContent"/> 을 화면으로 바꾸는 템플릿.
+    /// 호스트(문서 영역 템플릿)마다 시작 화면을 새로 만든다 — 모델에 Control 자체를 두면 템플릿이 다시 만들어질 때 옛 호스트가 붙든 같은 Control 을
+    /// 새 호스트에 붙이려다 「already has a visual parent」 예외가 난다(2026-10-24).
+    /// </summary>
+    public static IDataTemplate HostTemplate(Func<StartPage> create) =>
+        new FuncDataTemplate<StartPageContent>((_, _) => create(), supportsRecycling: false);
+}
+
+/// <summary>문서가 하나도 없을 때 문서 영역에 보일 시작 화면의 표식(데이터). 화면은 <see cref="StartPage.HostTemplate"/> 이 호스트마다 만든다.</summary>
+public sealed class StartPageContent
+{
+    public static StartPageContent Instance { get; } = new();
+
+    private StartPageContent()
+    {
+    }
+
+    /// <summary>템플릿이 없는 곳(메인 창 밖 — 떠 있는 창 등)에 놓여도 클래스 이름 글자가 보이지 않게 빈 글.</summary>
+    public override string ToString() => string.Empty;
 }
