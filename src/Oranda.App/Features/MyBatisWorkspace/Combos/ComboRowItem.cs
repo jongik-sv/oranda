@@ -71,7 +71,7 @@ public sealed class ComboRowItem
     private static string Short(string label)
     {
         var first = label.Split(' ', 2)[0];
-        return first.Length > 0 && first.All(c => char.IsLetterOrDigit(c) || c is '_' or '.') && !string.Equals(first, "foreach", StringComparison.Ordinal)
+        return first.Length > 0 && first.All(c => char.IsLetterOrDigit(c) || c is '_' or '.')
             ? first
             : label;
     }

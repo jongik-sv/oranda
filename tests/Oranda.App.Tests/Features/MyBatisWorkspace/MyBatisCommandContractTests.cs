@@ -8,7 +8,7 @@ namespace Oranda.App.Tests.Features.MyBatisWorkspace;
 /// TSK-01-02 계약: MyBatis 명령이 등록돼 있고(design.md 4.1), MyBatis 문서(<c>mybatisDocActive</c>)에서
 /// 일반 SQL 실행·포맷 명령이 꺼진다(design.md 4.4). 처리기 몸은 단정하지 않는다.
 /// </summary>
-public sealed class MyBatisCommandEnablementTests
+public sealed class MyBatisCommandContractTests
 {
     private static readonly string[] MyBatisCommandIds =
     [
