@@ -5,8 +5,10 @@ using Avalonia.Threading;
 using CommunityToolkit.Mvvm.Input;
 using Oranda.App.Features.Localization;
 using Oranda.App.Features.MyBatisWorkspace.Parameters;
+using Oranda.App.Features.SqlEditor;
 using Oranda.App.Shell;
 using Oranda.App.Shell.Menus;
+using Oranda.App.ViewModels;
 using Oranda.Core.MyBatis;
 using Oranda.Core.Shell;
 
@@ -25,33 +27,33 @@ public sealed class MyBatisExpandedAction(string commandId, string icon, string 
 }
 
 /// <summary>
-/// 「펼친 SQL」 아래 패널(MB-04·05, docs/oranda1/design.md 1장). 활성 문장(<see cref="MyBatisEvalHub.Active"/>)을 지금 값으로 펼친 문장과
-/// 「바인드 · 치환」 표를 보이고, 머리 줄에 시나리오 콤보(고르기·추가·이름 바꾸기·복제·지우기: 이 창의 RelayCommand, 레지스트리 명령이 아니다),
-/// 「켜진 조건 n/m」 칩, 실행·실행 계획·복사 단추를 둔다. 값은 「바인드 변수」 창 행에서 고친다(<see cref="MyBatisBindSync"/>). 단추는 모두 명령 레지스트리의 명령이다
-/// (<see cref="ICommandRegistry.ExecuteAsync"/> 한 경로). 계산 상태가 바뀌면(<see cref="MyBatisStatementEval.Changed"/>) 바로 다시 그린다
-/// (300 ms 디바운스는 계산 상태 안에 있다).
+/// 「펼친 SQL」(MB-04·05, docs/oranda1/design.md 1장). TSK-03-10 부터 아래 도킹 패널이 아니라 MyBatis 문장 탭 안의 분할 영역이다
+/// (<see cref="Editor.MyBatisStatementEditorView"/>). 탭의 문장 계산 상태(<see cref="MyBatisEvalHub.ForTab"/>)를 지금 값으로 펼친 문장을 보이고,
+/// 머리 줄에 시나리오 콤보(고르기·추가·이름 바꾸기·복제·지우기: 이 영역의 RelayCommand, 레지스트리 명령이 아니다), 「켜진 조건 n/m」 칩,
+/// 실행 계획·복사 2종 단추를 둔다. 값은 「바인드 변수」 창 행에서만 고친다(치환 <c>${}</c> 도 그 창의 <c>$이름</c> 행, <see cref="MyBatisBindSync"/>).
+/// 단추는 모두 명령 레지스트리의 명령이다(<see cref="ICommandRegistry.ExecuteAsync"/> 한 경로). 계산 상태가 바뀌면(<see cref="MyBatisStatementEval.Changed"/>)
+/// 바로 다시 그린다(300 ms 디바운스는 계산 상태 안에 있다). 탭 없이 만들면(시험) 허브의 활성 문장(<see cref="MyBatisEvalHub.Active"/>)을 따라간다.
 /// </summary>
 /// <remarks>
-/// 시작 시험 제약(OutlineViewModel 주석): Language 형은 필드로 두지 않고 계산 결과를 읽는 코드는 활성 문장이 있을 때만 도는 메서드에 둔다.
-/// 생성자는 <see cref="IServiceProvider"/> 하나만 둔다(생성자 고르기가 인자 수로 정하므로 허브·레지스트리를 따로 받는 생성자와 동률이 되지 않게).
+/// 시작 시험 제약(OutlineViewModel 주석): Language 형은 필드로 두지 않고 계산 결과를 읽는 코드는 문장이 있을 때만 도는 메서드에 둔다.
+/// 화면에 붙을 때 <see cref="Attach"/>, 떨어질 때 <see cref="Detach"/> 한다(탭 View 는 탭마다 오래 살고 탭을 오가면 다시 붙는다).
 /// </remarks>
-[OrandaToolPanel("oranda.panel.mybatisExpanded", ToolPanelKind.Tool, DockLocation.Bottom, Order = 4)]
-public sealed class MyBatisExpandedViewModel : ToolPanelViewModelBase, IDisposable
+public sealed class MyBatisExpandedViewModel : ViewModelBase, IDisposable
 {
-    /// <summary>머리 줄 단추 4개(오른쪽 끝에서 왼쪽으로 읽는 순서가 아니라 그리는 순서).</summary>
+    /// <summary>머리 줄 단추 3개(그리는 순서). 실행은 문서 도구 막대에 있다.</summary>
     internal static readonly string[] ActionIds =
     [
-        "oranda.mybatis.runScenario",
         "oranda.mybatis.explainScenario",
         "oranda.mybatis.copyExpanded",
         "oranda.mybatis.copyExpandedWithValues",
     ];
 
     private readonly IServiceProvider? _services;
-    private readonly ObservableCollection<MyBatisBindRow> _binds = [];
+    private readonly SqlEditorViewModel? _tab;
     private readonly List<MyBatisExpandedAction> _actions = [];
     private MyBatisEvalHub? _hub;
     private MyBatisStatementEval? _eval;
+    private IDisposable? _track;
     private ContextKeyService? _keys;
     private string _header = string.Empty;
     private string _chip = string.Empty;
@@ -79,6 +81,20 @@ public sealed class MyBatisExpandedViewModel : ToolPanelViewModelBase, IDisposab
         ArgumentNullException.ThrowIfNull(services);
         _services = services;
     }
+
+    /// <summary>문장 탭 하나의 분할 영역용: 그 탭의 문장만 보인다(「매퍼 쿼리」 창에서 고르기만 한 문장은 따라가지 않는다).</summary>
+    public MyBatisExpandedViewModel(IServiceProvider services, SqlEditorViewModel tab)
+        : this(services)
+    {
+        ArgumentNullException.ThrowIfNull(tab);
+        _tab = tab;
+    }
+
+    /// <summary>이 영역이 맡은 문장 탭(없으면 허브의 활성 문장을 따라간다).</summary>
+    public SqlEditorViewModel? Tab => _tab;
+
+    /// <summary>지금 보이는 문장의 계산 상태(시험용).</summary>
+    internal MyBatisStatementEval? Eval => _eval;
 
     public IAsyncRelayCommand AddCommand { get; }
 
@@ -149,16 +165,6 @@ public sealed class MyBatisExpandedViewModel : ToolPanelViewModelBase, IDisposab
     /// <summary>펼친 SQL(바인드는 <c>:이름</c>, 치환은 값 글자). 계산하지 못했으면 빈 글.</summary>
     public string Sql => _sql;
 
-    /// <summary>바인드 · 치환 표.</summary>
-    public ObservableCollection<MyBatisBindRow> Binds
-    {
-        get
-        {
-            Attach();
-            return _binds;
-        }
-    }
-
     /// <summary>머리 줄 아래 한 줄: 계산기 오류나 계산하지 못한 식. 없으면 빈 글.</summary>
     public string Notice => _actionError.Length > 0 ? _actionError : _notice;
 
@@ -175,7 +181,7 @@ public sealed class MyBatisExpandedViewModel : ToolPanelViewModelBase, IDisposab
     }
 
     /// <summary>시험용: 허브·명령 레지스트리·문맥 키를 서비스로 넣어 만든다.</summary>
-    internal static MyBatisExpandedViewModel For(MyBatisEvalHub hub, ICommandRegistry? registry = null, IContextKeys? keys = null)
+    internal static MyBatisExpandedViewModel For(MyBatisEvalHub hub, ICommandRegistry? registry = null, IContextKeys? keys = null, SqlEditorViewModel? tab = null)
     {
         var map = new MyBatisServiceMap().With(hub);
         if (registry is not null)
@@ -188,7 +194,7 @@ public sealed class MyBatisExpandedViewModel : ToolPanelViewModelBase, IDisposab
             map.With(keys);
         }
 
-        return new MyBatisExpandedViewModel(map);
+        return tab is null ? new MyBatisExpandedViewModel(map) : new MyBatisExpandedViewModel(map, tab);
     }
 
     /// <summary>허브에 붙어 활성 문장을 따라가기 시작한다(화면에 붙을 때 한 번. 여러 번 불러도 같다).</summary>
@@ -208,22 +214,49 @@ public sealed class MyBatisExpandedViewModel : ToolPanelViewModelBase, IDisposab
         }
 
         _hub.ActiveChanged += OnActiveChanged;
-        Follow(_hub.Active);
+        Follow(Target());
     }
 
-    public void Dispose()
+    /// <summary>허브·문맥 키 구독을 끊는다(화면에서 떨어질 때). 다시 <see cref="Attach"/> 하면 처음처럼 붙는다.</summary>
+    public void Detach()
     {
+        if (!_attached)
+        {
+            return;
+        }
+
+        _attached = false;
         if (_hub is not null)
         {
             _hub.ActiveChanged -= OnActiveChanged;
+            _hub = null;
         }
 
         if (_keys is not null)
         {
             _keys.Changed -= OnKeysChanged;
+            _keys = null;
         }
 
+        _actions.Clear();
         Unfollow();
+    }
+
+    public void Dispose() => Detach();
+
+    /// <summary>
+    /// 따라갈 계산 상태: 탭이 있으면 그 탭의 문장(MyBatis 문장 탭이 아니면 null), 없으면 허브의 활성 문장.
+    /// 허브의 활성 문장은 늘 먼저 읽는다 — 그래야 허브가 호스트를 따라가며 활성 탭의 「바인드 변수」 행 동기화를 붙인다.
+    /// </summary>
+    private MyBatisStatementEval? Target()
+    {
+        if (_hub is null)
+        {
+            return null;
+        }
+
+        var active = _hub.Active;
+        return _tab is null ? active : _hub.ForTab(_tab);
     }
 
     private void BuildActions()
@@ -262,7 +295,7 @@ public sealed class MyBatisExpandedViewModel : ToolPanelViewModelBase, IDisposab
         }
     });
 
-    private void OnActiveChanged(object? sender, EventArgs e) => Follow(_hub?.Active);
+    private void OnActiveChanged(object? sender, EventArgs e) => Follow(Target());
 
     private void Follow(MyBatisStatementEval? next)
     {
@@ -277,6 +310,13 @@ public sealed class MyBatisExpandedViewModel : ToolPanelViewModelBase, IDisposab
         {
             next.Changed += OnEvalChanged;
             next.ScenariosChanged += OnScenariosChanged;
+            if (_tab is not null)
+            {
+                // 탭 영역은 붙어 있는 동안 자기 탭을 지켜본다: 「매퍼 쿼리」 창에서 다른 문장을 골라 허브의 활성 문장이 바뀌어도
+                // 이 탭의 원문 고침·「바인드 변수」 행 값이 계속 이 문장으로 간다(지켜보기는 탭마다 세므로 허브·편집기 꾸밈과 겹쳐도 된다).
+                _track = next.Track(_tab);
+                _ = next.EnsureLoadedAsync(); // 활성 문장이 아니어도 계산해 둔다(이미 읽었으면 바로 끝난다).
+            }
         }
 
         OnPropertyChanged(nameof(HasStatement));
@@ -289,6 +329,8 @@ public sealed class MyBatisExpandedViewModel : ToolPanelViewModelBase, IDisposab
 
     private void Unfollow()
     {
+        _track?.Dispose();
+        _track = null;
         if (_eval is { } old)
         {
             old.Changed -= OnEvalChanged;
@@ -310,7 +352,7 @@ public sealed class MyBatisExpandedViewModel : ToolPanelViewModelBase, IDisposab
     {
         if (_eval is null)
         {
-            Apply(string.Empty, string.Empty, string.Empty, string.Empty, []);
+            Apply(string.Empty, string.Empty, string.Empty, string.Empty);
             return;
         }
 
@@ -332,7 +374,7 @@ public sealed class MyBatisExpandedViewModel : ToolPanelViewModelBase, IDisposab
             var error = eval.Error is { } message
                 ? MyBatisText.Format("MyBatis.expanded.error", "계산하지 못했습니다: {0}", message)
                 : string.Empty;
-            Apply(header, string.Empty, string.Empty, error, []);
+            Apply(header, string.Empty, string.Empty, error);
             return;
         }
 
@@ -341,30 +383,6 @@ public sealed class MyBatisExpandedViewModel : ToolPanelViewModelBase, IDisposab
             ? string.Empty
             : MyBatisText.Format("MyBatis.expanded.conditions", "켜진 조건 {0}/{1}", eval.ActiveConditionCount, total);
 
-        var rows = new List<MyBatisBindRow>();
-        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        foreach (var bind in result.Binds)
-        {
-            // 같은 파라미터가 여러 번 나오면 바인드 이름이 같아 한 줄이다(마지막 값이 실행에 쓰인다).
-            if (!seen.Add(bind.Name))
-            {
-                continue;
-            }
-
-            rows.Add(new MyBatisBindRow(
-                ":" + bind.Name,
-                bind.JdbcType ?? MyBatisBindRow.KindLabel(bind.Value),
-                MyBatisBindRow.FormatValue(bind.Value),
-                IsSubstitution: false,
-                IsNullValue: bind.Value is null));
-        }
-
-        var substitute = UiText.Get("MyBatis.expanded.substitution", "치환");
-        foreach (var item in result.Substitutions)
-        {
-            rows.Add(new MyBatisBindRow("${" + item.Name + "}", substitute, item.Value ?? "null", IsSubstitution: true, IsNullValue: item.Value is null));
-        }
-
         var notice = string.Empty;
         if (result.Issues.Count > 0)
         {
@@ -372,10 +390,10 @@ public sealed class MyBatisExpandedViewModel : ToolPanelViewModelBase, IDisposab
                 result.Issues[0].Reason);
         }
 
-        Apply(header, chip, result.Sql, notice, rows);
+        Apply(header, chip, result.Sql, notice);
     }
 
-    private void Apply(string header, string chip, string sql, string notice, IReadOnlyList<MyBatisBindRow> rows)
+    private void Apply(string header, string chip, string sql, string notice)
     {
         SetField(ref _header, header, nameof(Header));
         if (SetField(ref _chip, chip, nameof(ConditionChip)))
@@ -388,15 +406,6 @@ public sealed class MyBatisExpandedViewModel : ToolPanelViewModelBase, IDisposab
         {
             _notice = notice;
             OnNoticeChanged();
-        }
-
-        if (!_binds.SequenceEqual(rows))
-        {
-            _binds.Clear();
-            foreach (var row in rows)
-            {
-                _binds.Add(row);
-            }
         }
     }
 

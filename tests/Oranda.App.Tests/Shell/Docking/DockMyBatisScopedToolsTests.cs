@@ -131,7 +131,7 @@ public class DockMyBatisScopedToolsTests
         Assert.Contains(Templates, ws.ScopedHiddenToolIds);
         Assert.Equal(resultsOrder.Where(id => !DockWorkspace.SqlTextOnlyToolIds.Contains(id)).ToList(),
             GroupOrder(ws, Results).Where(id => !DockWorkspace.MyBatisToolIds.Contains(id)).ToList());
-        Assert.Contains("oranda.panel.mybatisExpanded", ws.VisibleToolIds); // MyBatis 문서에서는 아래 묶음에 펼친 SQL 이 보인다
+        Assert.DoesNotContain("oranda.panel.mybatisExpanded", ws.VisibleToolIds); // 펼친 SQL 은 도구 창이 아니라 쿼리 탭 안 분할이다(TSK-03-10) — 결과 묶음을 덮지 않는다
 
         ws.Activate(plain);
         Pump();
@@ -177,7 +177,7 @@ public class DockMyBatisScopedToolsTests
         var plain = ws.OpenDocument(SqlEditor, NewWorkspace("plain"))!;
         var detail = ws.OpenDocument(Detail)!;
 
-        Assert.Equal(3, DockWorkspace.MyBatisToolIds.Count);
+        Assert.Equal(["oranda.panel.mybatisCombos", "oranda.panel.mybatisStatements"], DockWorkspace.MyBatisToolIds.Order(StringComparer.Ordinal)); // 펼친 SQL 패널은 없다(TSK-03-10)
         foreach (var id in DockWorkspace.MyBatisToolIds)
         {
             Assert.False(DockWorkspace.IsToolShownFor(id, (PanelDocument?)null));
@@ -206,7 +206,7 @@ public class DockMyBatisScopedToolsTests
     });
 
     private const string Templates = "oranda.panel.templates";
-    private const string MbExpanded = "oranda.panel.mybatisExpanded";
+    private const string MbCombos = "oranda.panel.mybatisCombos";
     private const string MbStatements = "oranda.panel.mybatisStatements";
 
     /// <summary>등록되지 않은 MyBatis 도구 창을 시험용으로 등록한다(아직 구현 Task 가 등록하기 전이라).</summary>
@@ -263,18 +263,18 @@ public class DockMyBatisScopedToolsTests
                         Kind = DockNodeKind.Split,
                         Orientation = DockOrientation.Vertical,
                         Proportion = 0.3,
-                        Children = [Group(Binds, 0.4), Group(Templates, 0.3), Group(MbExpanded, 0.3)],
+                        Children = [Group(Binds, 0.4), Group(Templates, 0.3), Group(MbCombos, 0.3)],
                     },
                 ],
             },
             Binds,
             Templates,
-            MbExpanded);
+            MbCombos);
         var sql = ws.OpenDocument(SqlEditor, NewWorkspace("plain"))!;
         var detail = ws.OpenDocument(Detail)!;
         ws.Activate(sql);
         Pump();
-        Assert.Equal([MbExpanded], ws.MyBatisScopedHiddenToolIds);
+        Assert.Equal([MbCombos], ws.MyBatisScopedHiddenToolIds);
         var binds = ws.Factory.FindDockable(ws.Layout!, d => d.Id == Binds)!.Owner!;
         var templates = ws.Factory.FindDockable(ws.Layout!, d => d.Id == Templates)!.Owner!;
 

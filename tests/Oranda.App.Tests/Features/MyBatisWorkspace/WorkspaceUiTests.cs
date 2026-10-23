@@ -85,7 +85,7 @@ public sealed class WorkspaceUiTests : IDisposable
         docking.Activate(mapperDoc);
         Pump();
         Assert.Contains(Statements, docking.VisibleToolIds);
-        Assert.Contains(Expanded, docking.VisibleToolIds);
+        Assert.DoesNotContain(Expanded, docking.VisibleToolIds); // 펼친 SQL 은 쿼리 탭 안 분할이다(TSK-03-10)
 
         for (var round = 0; round < 2; round++)
         {
@@ -97,7 +97,7 @@ public sealed class WorkspaceUiTests : IDisposable
             docking.Activate(mapperDoc);
             Pump();
             Assert.Contains(Statements, docking.VisibleToolIds);
-            Assert.Contains(Expanded, docking.VisibleToolIds);
+            Assert.DoesNotContain(Expanded, docking.VisibleToolIds); // 펼친 SQL 은 쿼리 탭 안 분할이다(TSK-03-10)
         }
     });
 

@@ -50,6 +50,15 @@ public sealed record MyBatisSettings
 {
     /// <summary>매퍼에 저장할 때마다 「바뀌는 부분」 창을 먼저 보인다. 끄면 검사가 통과할 때 바로 쓴다.</summary>
     public bool ShowSaveDiffEveryTime { get; init; } = true;
+
+    /// <summary>쿼리 탭 안 「펼친 SQL」 분할 방향(TSK-03-10). false = 세로 분할(편집기 오른쪽, 기본), true = 가로 분할(편집기 아래).</summary>
+    public bool ExpandedHorizontal { get; init; }
+
+    /// <summary>쿼리 탭 안에 「펼친 SQL」 을 보인다(분할 머리 줄의 숨김 토글).</summary>
+    public bool ShowExpanded { get; init; } = true;
+
+    /// <summary>원문 편집기가 차지하는 비율(0.15~0.85, 기본 0.5). 분할선을 끌어 놓으면 바뀐다.</summary>
+    public double ExpandedRatio { get; init; } = 0.5;
 }
 
 /// <summary>테이블 레이아웃 팝업의 확인란 4개. 다음에 연 팝업에도 유지한다. 별칭은 표마다 달라 저장하지 않는다.</summary>

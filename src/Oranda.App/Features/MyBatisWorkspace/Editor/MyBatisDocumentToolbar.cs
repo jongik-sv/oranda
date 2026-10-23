@@ -42,8 +42,7 @@ public sealed class MyBatisDocumentToolbar : Border
         _keys = keys;
         _text = text;
         _keymap = keymap;
-        Classes.Add("panel-toolbar");
-        Child = _panel;
+        Child = _panel; // 띠 모양(panel-toolbar)은 분할 단추와 함께 놓는 탭 머리 줄이 그린다(TSK-03-10).
         Rebuild();
     }
 

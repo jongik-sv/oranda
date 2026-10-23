@@ -22,11 +22,11 @@ using Xunit.Abstractions;
 namespace Oranda.App.Tests.Features.MyBatisWorkspace;
 
 /// <summary>
-/// TSK-03-02 「펼친 SQL」 패널(시나리오 콤보·명령 단추·바인드 · 치환 표)과 문장 파라미터의 「바인드 변수」 행 동기화
+/// TSK-03-02 「펼친 SQL」(시나리오 콤보·명령 단추. TSK-03-10 부터 쿼리 탭 안 분할이고 바인드 · 치환 표는 없다)과 문장 파라미터의 「바인드 변수」 행 동기화
 /// (소유 = TSK-03-02, docs/oranda1/design.md 「기능 Task 편집 지점」). 별도 「파라미터 · 시나리오」 창은 없다(2026-10-23 사용자 결정).
 /// 계산기는 실제 <see cref="MyBatisEvaluator"/>, 저장소·세션·대화상자는 가짜다. 시안 Main 의 시나리오 4개(이름 검색·부서 목록·전체 조건·조건 없음)를 쓴다.
 /// </summary>
-public sealed class ParamsRunTests(ITestOutputHelper output)
+public sealed partial class ParamsRunTests(ITestOutputHelper output)
 {
     private const string StatementId = "selectEmpList";
 
@@ -92,25 +92,25 @@ public sealed class ParamsRunTests(ITestOutputHelper output)
         // '' = 빈 글자: empNo 는 null 이 아니라 test 가 참이고 바인드가 생긴다. ename != '' 는 거짓이라 ename 조건은 꺼진 채다.
         Edit("EMPNO", "''");
         Edit("ENAME", "''");
-        Assert.Contains(expanded.Binds, b => b is { Name: ":empNo", ValueText: "''" });
-        Assert.DoesNotContain(expanded.Binds, b => b.Name == ":ename");
+        Assert.Contains(Shown(expanded), b => b is { Name: ":empNo", ValueText: "''" });
+        Assert.DoesNotContain(Shown(expanded), b => b.Name == ":ename");
 
         // 글자는 따옴표 없이 써도 글자
         Edit("ENAME", "SMITH");
-        Assert.Contains(expanded.Binds, b => b is { Name: ":ename", ValueText: "'SMITH'" });
+        Assert.Contains(Shown(expanded), b => b is { Name: ":ename", ValueText: "'SMITH'" });
 
         // 목록: foreach IN 목록이 항목마다 바인드가 된다
         Edit("DEPTIDS", "['A', 'B']");
         Assert.Contains("IN", expanded.Sql, StringComparison.Ordinal);
-        Assert.Contains(expanded.Binds, b => b is { Name: ":id_1", ValueText: "'A'" });
-        Assert.Contains(expanded.Binds, b => b is { Name: ":id_2", ValueText: "'B'" });
+        Assert.Contains(Shown(expanded), b => b is { Name: ":id_1", ValueText: "'A'" });
+        Assert.Contains(Shown(expanded), b => b is { Name: ":id_2", ValueText: "'B'" });
 
         Edit("DEPTIDS", "10, 20");
-        Assert.Contains(expanded.Binds, b => b is { Name: ":id_2", ValueText: "20" });
+        Assert.Contains(Shown(expanded), b => b is { Name: ":id_2", ValueText: "20" });
 
         // 빈 칸으로 되돌리면 다시 꺼진다
         Edit("DEPTIDS", string.Empty);
-        Assert.DoesNotContain(expanded.Binds, b => b.Name.StartsWith(":id_", StringComparison.Ordinal));
+        Assert.DoesNotContain(Shown(expanded), b => b.Name.StartsWith(":id_", StringComparison.Ordinal));
         return Task.CompletedTask;
     });
 
@@ -130,7 +130,7 @@ public sealed class ParamsRunTests(ITestOutputHelper output)
         foreach (var item in expanded.Scenarios)
         {
             expanded.SelectedScenario = item;
-            var binds = string.Join(", ", expanded.Binds.Select(b => $"{b.Name}[{b.TypeText}]={b.ValueText}"));
+            var binds = string.Join(", ", Shown(expanded).Select(b => $"{b.Name}[{b.TypeText}]={b.ValueText}"));
             seen.Add($"{item.Name} | {expanded.ConditionChip} | where={expanded.Sql.Contains("WHERE", StringComparison.Ordinal)} | {binds}");
             Assert.Contains(item.Name, expanded.Header, StringComparison.Ordinal);
         }
@@ -141,16 +141,16 @@ public sealed class ParamsRunTests(ITestOutputHelper output)
         expanded.SelectedScenario = expanded.Scenarios[0];
         Assert.Equal("KIM", RowOf(tab, "ENAME").Text);
         Assert.Contains("LIKE '%' || :ename || '%'", expanded.Sql, StringComparison.Ordinal);
-        Assert.Contains(expanded.Binds, b => b is { Name: ":ename", ValueText: "'KIM'" });
-        Assert.Contains(expanded.Binds, b => b is { Name: "${orderBy}", IsSubstitution: true, ValueText: "E.ENAME" });
+        Assert.Contains(Shown(expanded), b => b is { Name: ":ename", ValueText: "'KIM'" });
+        Assert.Contains(Shown(expanded), b => b is { Name: "${orderBy}", IsSubstitution: true, ValueText: "E.ENAME" });
         Assert.DoesNotContain("EMPNO = :empNo", expanded.Sql, StringComparison.Ordinal);
         Assert.Equal("켜진 조건 1/3", expanded.ConditionChip);
 
         // 부서 목록: 목록 값이 항목마다 바인드가 된다
         expanded.SelectedScenario = expanded.Scenarios[1];
         Assert.Equal("[10, 20]", RowOf(tab, "DEPTIDS").Text);
-        Assert.Contains(expanded.Binds, b => b is { Name: ":id_1", ValueText: "10" });
-        Assert.Contains(expanded.Binds, b => b is { Name: ":id_2", ValueText: "20" });
+        Assert.Contains(Shown(expanded), b => b is { Name: ":id_1", ValueText: "10" });
+        Assert.Contains(Shown(expanded), b => b is { Name: ":id_2", ValueText: "20" });
 
         // 조건 없음: where 가 사라지고 켜진 조건이 없다
         expanded.SelectedScenario = expanded.Scenarios[3];
@@ -162,7 +162,7 @@ public sealed class ParamsRunTests(ITestOutputHelper output)
         Assert.Equal("켜진 조건 3/3", expanded.ConditionChip);
 
         // 시안: :empNo = NUMBER 7369. 숫자 시나리오 값이 추정 형식(Varchar2)을 이기고 바인드 창 형식 콤보도 따라간다.
-        Assert.Contains(expanded.Binds, b => b is { Name: ":empNo", TypeText: "숫자", ValueText: "7369" });
+        Assert.Contains(Shown(expanded), b => b is { Name: ":empNo", TypeText: "숫자", ValueText: "7369" });
         Assert.Equal(BindDataType.Number, RowOf(tab, "EMPNO").Type);
         return Task.CompletedTask;
     });
@@ -273,13 +273,13 @@ public sealed class ParamsRunTests(ITestOutputHelper output)
 
         // 디바운스 전: 행 값은 이미 바뀌었지만 펼친 SQL·바인드는 그대로
         Assert.Equal(0, changes);
-        Assert.Contains(expanded.Binds, b => b is { Name: ":ename", ValueText: "'KIM'" });
+        Assert.Contains(Shown(expanded), b => b is { Name: ":ename", ValueText: "'KIM'" });
 
         await HeadlessHost.WaitUntil(() => changes > 0);
         await Task.Delay(300);
         Dispatcher.UIThread.RunJobs();
         Assert.Equal(1, changes);
-        Assert.Contains(expanded.Binds, b => b is { Name: ":ename", ValueText: "'SMITHS'" });
+        Assert.Contains(Shown(expanded), b => b is { Name: ":ename", ValueText: "'SMITHS'" });
 
         // 고른 시나리오에도 저장된다
         Assert.Equal("SMITHS", rig.Store.All[0].Values["ename"].Text);
@@ -372,7 +372,7 @@ public sealed class ParamsRunTests(ITestOutputHelper output)
         Assert.Equal(expanded.Sql, sqlView.TextEditorControl.Document.Text);
         Assert.True(sqlView.TextEditorControl.IsReadOnly);
         Assert.NotNull(sqlView.TextEditorControl.ContextMenu);
-        Assert.Equal(expanded.Binds.Count, view.GetVisualDescendants().OfType<ListBoxItem>().Count());
+        Assert.Empty(view.GetVisualDescendants().OfType<ListBox>()); // 바인드 · 치환 입력 목록은 없다(TSK-03-10): 값은 「바인드 변수」 창에서만
         var buttons = actionBar.Children.OfType<Button>().ToList();
         Assert.Equal(MyBatisExpandedViewModel.ActionIds.Length, buttons.Count);
         foreach (var button in buttons)
@@ -401,7 +401,7 @@ public sealed class ParamsRunTests(ITestOutputHelper output)
         Assert.False(expanded.HasStatement);
         Assert.True(expanded.HasNoStatement);
         Assert.Empty(expanded.Sql);
-        Assert.Empty(expanded.Binds);
+        Assert.Empty(Shown(expanded));
         Assert.Empty(expanded.Scenarios);
         Assert.False(expanded.AddCommand.CanExecute(null));
 
@@ -417,12 +417,19 @@ public sealed class ParamsRunTests(ITestOutputHelper output)
     });
 
     [Fact]
-    public Task The_container_builds_the_panel_with_the_registry_and_does_not_wake_the_evaluator_by_itself() => Ui.Run(() =>
+    public Task The_container_builds_the_tab_split_with_the_registry_and_does_not_wake_the_evaluator_by_itself() => Ui.Run(() =>
     {
         var services = AppComposition.Create(new AppCompositionOptions { DevBuild = true });
         try
         {
-            var expanded = (MyBatisExpandedViewModel)services.Create(typeof(MyBatisExpandedViewModel));
+            // 셸은 편집기 View 공장을 컨테이너로 만들고, 공장이 쿼리 탭 안 「펼친 SQL」 에 컨테이너를 넘긴다(TSK-03-10).
+            var factory = (Oranda.App.Features.MyBatisWorkspace.Editor.MyBatisEditorViewFactory)services.Create(typeof(Oranda.App.Features.MyBatisWorkspace.Editor.MyBatisEditorViewFactory));
+            var session = new FakeMyBatisWorkspaceSession();
+            var tab = new SqlEditorViewModel(Guid.NewGuid(), "<select id=\"byId\">select 1 from dual</select>");
+            session.StatementIds[tab] = "byId";
+            var view = (Oranda.App.Features.MyBatisWorkspace.Editor.MyBatisStatementEditorView)factory.CreateEditor(tab, session);
+            var expanded = view.Expanded!;
+            Assert.Same(tab, expanded.Tab);
 
             // 만든 것만으로는 허브도 계산기도 깨우지 않는다(시작 경로 보호)
             Assert.False(services.DeferredScanned, services.DeferredScanTrigger);
@@ -485,7 +492,7 @@ public sealed class ParamsRunTests(ITestOutputHelper output)
                 watch.Stop();
                 best = Math.Min(best, watch.Elapsed.TotalMilliseconds);
                 total += watch.Elapsed.TotalMilliseconds;
-                Assert.Contains(expanded.Binds, b => b.ValueText == "'V" + i + "'");
+                Assert.Contains(Shown(expanded), b => b.ValueText == "'V" + i + "'");
             }
 
             output.WriteLine($"[{name}] 값 고침 뒤 다시 계산(Flush): 최소 {best:F2} ms, 평균 {total / Rounds:F2} ms (한도 50 ms)");
@@ -496,6 +503,48 @@ public sealed class ParamsRunTests(ITestOutputHelper output)
     });
 
     // ---- 시험 도구 --------------------------------------------------------------------------
+
+    /// <summary>
+    /// 펼친 SQL 의 바인드·치환 한 줄(예전 「바인드 · 치환」 표 모양). TSK-03-10 에 표는 화면에서 뺐고 값은 「바인드 변수」 창에서만 넣는다 —
+    /// 시험은 계산 결과에서 같은 모양으로 읽어 펼친 SQL 이 쓰는 값을 단정한다.
+    /// </summary>
+    private sealed record ShownBind(string Name, string TypeText, string ValueText, bool IsSubstitution, bool IsNullValue);
+
+    private static List<ShownBind> Shown(MyBatisExpandedViewModel vm)
+    {
+        vm.Attach(); // 화면에 붙인 것처럼(예전 표 속성은 읽을 때 붙었다)
+        var rows = new List<ShownBind>();
+        if (vm.Eval?.Result is not { } result)
+        {
+            return rows;
+        }
+
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var bind in result.Binds.Where(b => seen.Add(b.Name)))
+        {
+            rows.Add(new ShownBind(":" + bind.Name, bind.JdbcType ?? KindLabel(bind.Value), FormatValue(bind.Value), false, bind.Value is null));
+        }
+
+        rows.AddRange(result.Substitutions.Select(item => new ShownBind("${" + item.Name + "}", "치환", item.Value ?? "null", true, item.Value is null)));
+        return rows;
+    }
+
+    private static string FormatValue(object? value) => value switch
+    {
+        null => "null",
+        string s => "'" + s.Replace("'", "''", StringComparison.Ordinal) + "'",
+        bool b => b ? "true" : "false",
+        IFormattable f => f.ToString(null, System.Globalization.CultureInfo.InvariantCulture),
+        _ => value.ToString() ?? string.Empty,
+    };
+
+    private static string KindLabel(object? value) => value switch
+    {
+        null => "null",
+        bool => "참거짓",
+        sbyte or byte or short or ushort or int or uint or long or ulong or float or double or decimal => "숫자",
+        _ => "글자",
+    };
 
     /// <summary>저장을 붙잡아 둘 수 있는 저장소(백그라운드에서 늦게 끝나는 Sqlite 저장을 흉내 낸다).</summary>
     private sealed class HeldStore(FakeMyBatisScenarioStore inner) : IMyBatisScenarioStore

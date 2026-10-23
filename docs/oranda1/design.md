@@ -13,14 +13,15 @@
 | 영역 (시안 Main) | 구성 | 소유 Task | PRD |
 |------------------|------|-----------|-----|
 | 주 도구 막대 | 지금 그대로(접속 콤보 포함). MyBatis 전용 단추는 넣지 않는다(4.4) | - | - |
-| 문서 도구 막대(문서 탭 아래 한 줄) | 아이콘 단추: 시나리오 값으로 실행(F9) · 실행 계획 · 조합 검사 · xml 에 저장(Ctrl+S) · 펼친 SQL 복사(▾ 값 넣은 글). 툴팁에 단축키. MyBatis 문서에서만 보인다 | 자리 = 03-01, 단추별 명령 = 표 4.1 | MB-05·06·07 |
+| 문서 도구 막대(문서 탭 아래 한 줄) | 아이콘 단추: 시나리오 값으로 실행(F9) · 실행 계획 · 조합 검사 · xml 에 저장(Ctrl+S) · 펼친 SQL 복사(▾ 값 넣은 글). 툴팁에 단축키. MyBatis 문서에서만 보인다. 오른쪽 끝에 「펼친 SQL」 분할 단추(세로 · 가로 | 보이기 토글, 켜진 쪽 표시) | 자리 = 03-01, 단추별 명령 = 표 4.1, 분할 단추 = 03-10 | MB-05·06·07 |
 | 문서 탭 머리 | `EmpMapper` + 「MyBatis」 표시 + 저장 안 함 점. 지금 `DisplayTitle`(「* 이름 (MyBatis)」) 규칙을 그대로 쓴다 | 03-01(표시만) | MB-03 |
 | 왼쪽 「매퍼 쿼리」 도구 창(구 「문장」, 공용 격자 양식 03-08: 종류·id·수정·조합 오류·쓰는 곳 열) | 매퍼 경로·namespace, 묶음(select·insert·update·delete·sql 조각·resultMap), 항목 표시(● 수정·새 문장·조합 오류 n·「n곳에서 씀」·「(그대로 둠)」), 「+ 새 문장」, 우클릭 메뉴, 아래 「로그 붙여 넣기」 안내 띠 | 창 본체 03-01, 조합 오류 배지 03-04, 폴더 트리 모드 03-07 | MB-03·07·09·10 |
 | 가운데 문장 탭 줄 | 안쪽 탭 줄 재사용. 탭 머리 = 종류 표시(SEL·INS·UPD·DEL·SQL) + id + 수정 점 | 03-01 | MB-03 |
 | 문장 머리 줄 | 「EmpMapper.xml › selectEmpList」 · 동적 태그 n · 켜진 조건 n/m · 「흐린 줄 = 이번 값으로 빠지는 부분」 | 머리 줄 03-01, 켜진 조건 수 03-02 | MB-03·05 |
+| 쿼리 탭 안 분할(TSK-03-10) | 원문 편집기 \| 펼친 SQL. 세로 분할(펼친 SQL 이 오른쪽) 기본, 가로 분할(아래)·숨김으로 바꾼다. 방향·보임·편집기 비율(0.15~0.85)은 설정 `MyBatis.ExpandedHorizontal`·`ShowExpanded`·`ExpandedRatio` 에 기억. 펼친 SQL 은 그 탭의 문장만 보인다 — 「매퍼 쿼리」 창에서 고르기만 하고 탭을 열지 않으면 없다. 분할 머리 줄 = 시나리오 콤보(추가·이름 바꾸기·복제·지우기) + 실행 계획·복사(그대로 / 값 넣은 글), 아래 한 줄 = 설명 · 켜진 조건 n/m. 바인드·치환 입력 목록은 없다(값은 「바인드 변수」 창) | 03-10 (`Editor/MyBatisExpandedSplit.cs`, `Expanded/**`) | MB-04·05 |
 | 문장 원문 편집기 | 그 문장 요소의 원문(여는 태그 ~ 닫는 태그). XML·`#{}`·`${}` 강조 + SQL 구간 기존 강조, 흐린 블록·여백 켬/끔 점·물결 밑줄, 빠른 고침 띠 | 강조 03-01, 계산 꾸밈 03-02, 자동 고침 03-04 | MB-03·05·07 |
-| 오른쪽 「바인드 변수」 도구 창(기존) | MyBatis 문서에서는 문장 파라미터 전부가 행(이름·값·형식, 빈 칸 = null, `''` = 빈 글자, 목록 = `['A', 'B']`). 시나리오 고르기·추가·이름 바꾸기·복제·지우기는 「펼친 SQL」 머리 줄(2026-10-23 사용자 결정: 별도 「파라미터 · 시나리오」 창 없앰) | 03-02 | MB-04 |
-| 아래 패널 | 「펼친 SQL」(펼친 문장 + 바인드·치환 목록) · 「결과」(기존) · 「조합 검사」 · 「메시지」(기존) | 펼친 SQL 03-02, 조합 검사 03-04 | MB-05·07 |
+| 오른쪽 「바인드 변수」 도구 창(기존) | MyBatis 문서에서는 문장 파라미터 전부가 행(이름·값·형식, 빈 칸 = null, `''` = 빈 글자, 목록 = `['A', 'B']`). 시나리오 고르기·추가·이름 바꾸기·복제·지우기는 「펼친 SQL」 분할 머리 줄(2026-10-23 사용자 결정: 별도 「파라미터 · 시나리오」 창 없앰). `${}` 치환 값도 이 창의 `$이름` 행에서 넣는다(03-10) | 03-02 | MB-04 |
+| 아래 패널 | 「결과」(기존) · 「조합 검사」 · 「메시지」(기존). 「펼친 SQL」 아래 패널은 없앴다(TSK-03-10, 2026-10-23 사용자 요청 「펼친 SQL 이 조회결과를 덮어서 불편」 → 쿼리 탭 안 분할) | 조합 검사 03-04 | MB-05·07 |
 | 상태 표시줄 | 매퍼 파일 · 저장 안 한 문장 n개 · 파일 감시 중 · 인코딩·줄 끝 | 03-03(구간 1개, `[OrandaStatusBarItem]`) | MB-06 |
 | 흐름 화면 | 바꾸기 대화 상자(Convert) · 저장 확인 「바뀌는 부분」(SaveDiff) · 밖에서 바뀜 알림 띠 | 03-05 · 03-03 · 03-03 | MB-08·06 |
 
@@ -63,11 +64,11 @@ UI 기준: 아이콘 도구 막대(툴팁 필수), 촘촘한 목록, 우클릭 �
 |----|---------------|------|-------|------------|
 | `oranda.panel.mybatisStatements` | 매퍼 쿼리 / Mapper Queries | Left | 30 | 03-01 |
 | ~~`oranda.panel.mybatisParameters`~~ | (없앰, 2026-10-23 사용자 결정 — 「바인드 변수」 창이 대신) | - | - | 03-02 |
-| `oranda.panel.mybatisExpanded` | 펼친 SQL / Expanded SQL | Bottom | 4 | 03-02 |
+| ~~`oranda.panel.mybatisExpanded`~~ | (없앰, TSK-03-10 — 쿼리 탭 안 분할로 옮김. 저장된 배치의 이 ID 는 `LayoutPlanner.Reconcile` 이 버린다) | - | - | 03-10 |
 | `oranda.panel.mybatisCombos` | 조합 검사 / Combinations | Bottom | 7 | 03-04 |
 
 - 등록 = `[OrandaToolPanel]`(자동 수집). TSK-01-02 가 ViewModel·View 자리(빈 화면, 안내 한 줄)를 만들고, 내용은 위 Task 가 같은 파일을 채운다(편집 지점 표 10장).
-- 아래 패널 순서는 시안대로 「펼친 SQL · 결과 · 조합 검사 · 메시지」다. 지금 Order 는 결과 5·메시지 8·출력 10·실행 계획 30 이라 펼친 SQL 4, 조합 검사 7 로 둔다. 왼쪽은 스키마 브라우저 10·스크립트 20 뒤에 문장 30.
+- 아래 패널 순서는 「결과 · 조합 검사 · 메시지」다(펼친 SQL 은 03-10 부터 탭 안). 지금 Order 는 결과 5·메시지 8·출력 10·실행 계획 30 이라 조합 검사 7 로 둔다. 왼쪽은 스키마 브라우저 10·스크립트 20 뒤에 문장 30.
 
 ### 3.2 보임 표
 
@@ -92,7 +93,7 @@ UI 기준: 아이콘 도구 막대(툴팁 필수), 촘촘한 목록, 우클릭 �
 
 ### 3.4 배치(layout.json)
 
-- 레이아웃 이주는 필요 없다. `LayoutPlanner.Reconcile` 이 저장된 배치에 없는 새 도구 창을 기본 위치 묶음에 더한다(문장 → 왼쪽 묶음, 펼친 SQL·조합 검사 → 아래 묶음, 파라미터 → 오른쪽 묶음).
+- 레이아웃 이주는 필요 없다. `LayoutPlanner.Reconcile` 이 저장된 배치에 없는 새 도구 창을 기본 위치 묶음에 더한다(문장 → 왼쪽 묶음, 조합 검사 → 아래 묶음). 등록이 없어진 ID(파라미터·펼친 SQL)는 버린다.
 - 새로 만드는 기본 배치(`CreateDefault`)는 Right 창을 기본으로 숨긴다(바인드 변수·템플릿만 연다). MyBatis 전용 오른쪽 창은 없다(파라미터 창을 없앰, 03-02). 이주 표지(`rightToolsOpen`)는 새로 만들지 않는다.
 - 숨김에서 되돌아올 때 그 창은 묶음의 활성 탭이 되지 않는다(숨기기 직전에 활성이었을 때만). 그래서 03-01 은 매퍼를 처음 열 때 `ActivateTool` 로 「문장」·「바인드 변수」를 앞으로 가져온다.
 
@@ -110,9 +111,9 @@ TRD 6 의 7개에 기능 Task 가 더 필요로 하는 명령을 모두 넣었�
 | `oranda.mybatis.expandToSqlTab` | 펼친 SQL 을 새 SQL 탭으로 | Sql | `mybatisDocActive && mybatisStatementSelected` | `context:mybatisStatements/expand@40` | - | 같음 (03-01) |
 | `oranda.mybatis.expandMapper` | 매퍼 전체를 SQL 탭으로 펼치기 | Sql | `mybatisDocActive` | `context:mybatisStatements/expandAll@50`(매퍼 머리 우클릭) | - | 같음 (03-01) |
 | `oranda.mybatis.runScenario` | 시나리오 값으로 실행 | Sql | `mybatisDocActive && mybatisStatementSelected && (hasSession \|\| dedicatedSession \|\| tabConnectionMissing) && !sessionBusy` | `toolbar:mybatis/run@10`, `menu:sql/mybatisRun@15` | F9 (mac Ctrl+Enter, F9) | `Run/MyBatisRunCommands.cs` (03-02) |
-| `oranda.mybatis.explainScenario` | 펼친 SQL 실행 계획 | Sql | 위와 같음 | `toolbar:mybatis/explain@20`, `menu:sql/mybatisExplain@52` | - | 같음 (03-02) |
-| `oranda.mybatis.copyExpanded` | 펼친 SQL 복사 | Edit | `mybatisDocActive && mybatisStatementSelected` | `toolbar:mybatis/copy@50`, `context:mybatisExpanded/copy@10` | - | 같음 (03-02) |
-| `oranda.mybatis.copyExpandedWithValues` | 펼친 SQL 복사(값 넣은 글) | Edit | 위와 같음 | `toolbar:mybatis/copy@51`, `context:mybatisExpanded/copyValues@20` | - | 같음 (03-02) |
+| `oranda.mybatis.explainScenario` | 펼친 SQL 실행 계획 | Sql | 위와 같음 | `toolbar:mybatis/explain@20`, `menu:sql/mybatisExplain@52` · 분할 머리 줄 단추(03-10) | - | 같음 (03-02) |
+| `oranda.mybatis.copyExpanded` | 펼친 SQL 복사 | Edit | `mybatisDocActive && mybatisStatementSelected` | `toolbar:mybatis/copy@50`, `context:mybatisExpanded/copy@10`(쿼리 탭 안 펼친 SQL 분할 우클릭, 03-10) · 분할 머리 줄 단추 | - | 같음 (03-02) |
+| `oranda.mybatis.copyExpandedWithValues` | 펼친 SQL 복사(값 넣은 글) | Edit | 위와 같음 | `toolbar:mybatis/copy@51`, `context:mybatisExpanded/copyValues@20`(같음) · 분할 머리 줄 단추 | - | 같음 (03-02) |
 | `oranda.mybatis.save` | xml 에 저장 | File | `mybatisDocActive && mybatisDocDirty` | `toolbar:mybatis/save@40`, `menu:file/mybatisSave@32` | (Ctrl+S 는 `file.save` 경유, 4.4) | `Save/MyBatisSaveCommands.cs` (03-03) |
 | `oranda.mybatis.checkCombinations` | 조합 검사 | Sql | `mybatisDocActive && mybatisStatementSelected` | `toolbar:mybatis/combos@30`, `menu:sql/mybatisCombos@25` | - | `Combos/MyBatisComboCommands.cs` (03-04) |
 | `oranda.mybatis.applyAutoFix` | 자동 고침(<set>·<where> 로 감싸기) | Edit | `mybatisDocActive && mybatisStatementSelected && !readOnlyDoc` | `context:mybatisEditor/autoFix@10`(문장 편집기 우클릭, 03-01 이 그림) | - | 같음 (03-04) |
@@ -126,7 +127,7 @@ TRD 6 의 7개에 기능 Task 가 더 필요로 하는 명령을 모두 넣었�
 - 「MyBatis 로그 붙여 넣기」는 새 명령을 만들지 않는다. 기존 `oranda.edit.pasteMyBatisLog`(Features/MyBatisLog, 03-06 소유)의 처리기가 MyBatis 문서일 때 분기한다(MB-09).
 - 자리 이름과 그리는 곳:
   - `menu:*`: 셸 주 메뉴. 번호는 지금 메뉴 번호와 겹치지 않게 골랐다(파일 30 save·40 saveAs·90·92·96, SQL 14·16·50, 탐색 60 사이).
-  - `context:<표면>`: 셸의 `ShellContextMenus.Factory(표면)` 으로 그린다. `mybatisStatements`(문장 창, 03-01)·`mybatisExpanded`(펼친 SQL 패널, 03-02)·`mybatisEditor`(문장 편집기, 03-01)는 그 View 가 Factory 를 부른다. `documentTab` 은 01-02 가 문서 탭 우클릭 메뉴(`DockTabMenu`)에 Factory 항목을 덧붙여 그린다(2026-10-23 조정자 허가).
+  - `context:<표면>`: 셸의 `ShellContextMenus.Factory(표면)` 으로 그린다. `mybatisStatements`(문장 창, 03-01)·`mybatisExpanded`(쿼리 탭 안 펼친 SQL 분할, 03-02 → 03-10)·`mybatisEditor`(문장 편집기, 03-01)는 그 View 가 Factory 를 부른다. `documentTab` 은 01-02 가 문서 탭 우클릭 메뉴(`DockTabMenu`)에 Factory 항목을 덧붙여 그린다(2026-10-23 조정자 허가).
   - `toolbar:mybatis`: 셸 도구 막대는 `main` 만 그리므로, 문서 도구 막대(03-01 의 MyBatis 문서 머리)가 레지스트리에서 `toolbar:mybatis` 자리 명령을 읽어 아이콘 단추를 만든다(실행은 `ICommandRegistry.ExecuteAsync` 한 경로).
   - 모르는 자리 이름은 셸이 무시한다(`Placement.TryParse`, 예외 없음).
 - 패널 안 단추(시나리오 추가·복제·지우기, 알림 띠의 「차이 보고 고르기 / 파일 것으로 / 내 것으로」, 조합 검사 「다시 검사」·「시나리오로 저장」·「편집기에서 보기」)는 그 패널 ViewModel 의 RelayCommand 다. 레지스트리 명령으로 올리지 않는다.
@@ -280,7 +281,7 @@ xml 형식(XmlReader, DTD 무시·resolver null), 문장 id 겹침, 연 때 해�
 | MB-02 동적 SQL 계산 | 편집기 흐림·점·물결(03-02), 펼친 SQL 패널 | - | `IMyBatisEvaluator`·`EvalResult`·`MyBatisParameter`·`ConditionCombination`(Language), `IMyBatisFragmentResolver`·`MyBatisFragment`(Core) | 01-02 계약 · 02-02 |
 | MB-03 작업 공간 화면 | 문서 탭·문장 창·문장 탭·머리 줄·강조, 도구 창 보임 규칙(3장) | newStatement·renameStatement·deleteStatement·expandToSqlTab·expandMapper | 문서 종류 `MyBatis`, `IMyBatisWorkspaceSession`, 열기·복구 훅 | 01-02 자리 · 03-01 |
 | MB-04 파라미터 · 시나리오 | 「바인드 변수」 창(기존, 파라미터 행) + 「펼친 SQL」 머리 줄 시나리오 콤보 | (패널 안 단추) | `IMyBatisScenarioStore`·`MyBatisScenario`(Core), 표 `mybatis_scenario` | 01-02 계약 · 02-03 · 03-02 |
-| MB-05 펼친 SQL · 실행 | 펼친 SQL 패널, 머리 줄 켜진 조건 수, 결과 창 | runScenario(F9)·explainScenario·copyExpanded·copyExpandedWithValues | `EvalResult`, 기존 `IExecutionService`(정책 관문·탭 접속) | 03-02 |
+| MB-05 펼친 SQL · 실행 | 쿼리 탭 안 펼친 SQL 분할(03-10), 켜진 조건 수, 결과 창 | runScenario(F9)·explainScenario·copyExpanded·copyExpandedWithValues | `EvalResult`, 기존 `IExecutionService`(정책 관문·탭 접속) | 03-02 |
 | MB-06 매퍼에 저장 | 바뀌는 부분 창, 알림 띠, 상태 표시줄 구간 | mybatis.save, file.save 경유(Ctrl+S) | `MapperEdit`·`MapperWriteCheck`·`IMapperFileWriter`, 저장·복구 훅 | 03-03 |
 | MB-07 조합 검사 | 조합 검사 패널, 문장 창 오류 배지, 빠른 고침 띠 | checkCombinations·applyAutoFix | `ConditionCombination`, L2 파서(`PlSqlAnalyzer`) | 03-04 |
 | MB-08 일반 → MyBatis | 바꾸기 대화 상자 | convertWorkspace(파일 메뉴·문서 탭 우클릭) | `IMapperFileWriter`, `IMyBatisScenarioStore` | 03-05 |
@@ -384,7 +385,7 @@ xml 형식(XmlReader, DTD 무시·resolver null), 문장 id 겹침, 연 때 해�
 | `Workspace/` | 열기 훅·세션·복구 구현 | 03-01 |
 | `Editor/` | 문장 편집기 View·View 팩토리·머리 줄·탭 머리, `Highlighting/` | 03-01 (단 `Editor/EvalDecorator*` 는 03-02) |
 | `Parameters/` | 바인드 변수 창 동기화·계산 상태·시나리오 콤보 | 03-02 |
-| `Expanded/` | 「펼친 SQL」 패널 VM·View | 03-02 |
+| `Expanded/` | 「펼친 SQL」 분할 영역 VM·View(쿼리 탭 안, 03-10) | 03-02 · 03-10 |
 | `Run/` | 실행·계획·복사 명령 처리기 | 03-02 |
 | `Save/` | 저장 훅·바뀌는 부분 창·병합·감시·닫기 가드·저장 명령·상태 표시줄 구간 | 03-03 |
 | `Combos/` | 조합 검사 패널·실행기·자동 고침·배지·명령 | 03-04 |

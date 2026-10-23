@@ -25,6 +25,7 @@ public sealed class MyBatisEditorViewFactory : IMyBatisEditorViewFactory
     private readonly ContextKeyService? _keys;
     private readonly IShellText? _text;
     private readonly KeymapService? _keymap;
+    private readonly IServiceProvider? _services;
 
     /// <summary>시험용(문서 도구 막대 없음).</summary>
     public MyBatisEditorViewFactory()
@@ -32,11 +33,18 @@ public sealed class MyBatisEditorViewFactory : IMyBatisEditorViewFactory
     }
 
     public MyBatisEditorViewFactory(ICommandRegistry registry, ContextKeyService keys, IShellText text, KeymapService keymap)
+        : this(registry, keys, text, keymap, null)
+    {
+    }
+
+    /// <summary>셸(DI)이 쓰는 생성자. 서비스 공급자는 탭 안 「펼친 SQL」(계산 허브·설정)이 쓴다(TSK-03-10).</summary>
+    public MyBatisEditorViewFactory(ICommandRegistry registry, ContextKeyService keys, IShellText text, KeymapService keymap, IServiceProvider? services)
     {
         _registry = registry;
         _keys = keys;
         _text = text;
         _keymap = keymap;
+        _services = services;
     }
 
     public Control CreateEditor(SqlEditorViewModel tab, IMyBatisWorkspaceSession session)
@@ -46,7 +54,7 @@ public sealed class MyBatisEditorViewFactory : IMyBatisEditorViewFactory
         var toolbar = _registry is not null && _keys is not null && _text is not null && _keymap is not null
             ? new MyBatisDocumentToolbar(_registry, _keys, _text, _keymap)
             : null;
-        return new MyBatisStatementEditorView(tab, session, toolbar);
+        return new MyBatisStatementEditorView(tab, session, toolbar, _services);
     }
 
     public Control? CreateTabBadge(SqlEditorViewModel tab, IMyBatisWorkspaceSession session)
