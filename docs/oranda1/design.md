@@ -19,7 +19,7 @@
 | 가운데 문장 탭 줄 | 안쪽 탭 줄 재사용. 탭 머리 = 종류 표시(SEL·INS·UPD·DEL·SQL) + id + 수정 점 | 03-01 | MB-03 |
 | 문장 머리 줄 | 「EmpMapper.xml › selectEmpList」 · 동적 태그 n · 켜진 조건 n/m · 「흐린 줄 = 이번 값으로 빠지는 부분」 | 머리 줄 03-01, 켜진 조건 수 03-02 | MB-03·05 |
 | 문장 원문 편집기 | 그 문장 요소의 원문(여는 태그 ~ 닫는 태그). XML·`#{}`·`${}` 강조 + SQL 구간 기존 강조, 흐린 블록·여백 켬/끔 점·물결 밑줄, 빠른 고침 띠 | 강조 03-01, 계산 꾸밈 03-02, 자동 고침 03-04 | MB-03·05·07 |
-| 오른쪽 「파라미터 · 시나리오」 도구 창 | 시나리오 목록(추가·로그에서·이름 바꾸기·복제·지우기), 값 표(이름·쓰인 곳·타입·값·null) | 03-02 | MB-04 |
+| 오른쪽 「바인드 변수」 도구 창(기존) | MyBatis 문서에서는 문장 파라미터 전부가 행(이름·값·형식, 빈 칸 = null, `''` = 빈 글자, 목록 = `['A', 'B']`). 시나리오 고르기·추가·이름 바꾸기·복제·지우기는 「펼친 SQL」 머리 줄(2026-10-23 사용자 결정: 별도 「파라미터 · 시나리오」 창 없앰) | 03-02 | MB-04 |
 | 아래 패널 | 「펼친 SQL」(펼친 문장 + 바인드·치환 목록) · 「결과」(기존) · 「조합 검사」 · 「메시지」(기존) | 펼친 SQL 03-02, 조합 검사 03-04 | MB-05·07 |
 | 상태 표시줄 | 매퍼 파일 · 저장 안 한 문장 n개 · 파일 감시 중 · 인코딩·줄 끝 | 03-03(구간 1개, `[OrandaStatusBarItem]`) | MB-06 |
 | 흐름 화면 | 바꾸기 대화 상자(Convert) · 저장 확인 「바뀌는 부분」(SaveDiff) · 밖에서 바뀜 알림 띠 | 03-05 · 03-03 · 03-03 | MB-08·06 |
@@ -62,7 +62,7 @@ UI 기준: 아이콘 도구 막대(툴팁 필수), 촘촘한 목록, 우클릭 �
 | ID | 제목(ko / en) | 위치 | Order | 소유(내용) |
 |----|---------------|------|-------|------------|
 | `oranda.panel.mybatisStatements` | 문장 / Statements | Left | 30 | 03-01 |
-| `oranda.panel.mybatisParameters` | 파라미터 · 시나리오 / Parameters · Scenarios | Right | 5 | 03-02 |
+| ~~`oranda.panel.mybatisParameters`~~ | (없앰, 2026-10-23 사용자 결정 — 「바인드 변수」 창이 대신) | - | - | 03-02 |
 | `oranda.panel.mybatisExpanded` | 펼친 SQL / Expanded SQL | Bottom | 4 | 03-02 |
 | `oranda.panel.mybatisCombos` | 조합 검사 / Combinations | Bottom | 7 | 03-04 |
 
@@ -75,10 +75,10 @@ UI 기준: 아이콘 도구 막대(툴팁 필수), 촘촘한 목록, 우클릭 �
 |---------|---------------------------|---------------|--------------|---------------|-------------------------------|
 | MyBatis 4개 | 숨김 | 숨김 | 보임 | 숨김 | 숨김 |
 | 결과·메시지·출력·실행 계획·행 보기·실행 이력·변경 일지 | 지금 상태 유지 | 보임 | 보임 | 보임 | 숨김 |
-| 바인드 변수·개요·템플릿·컴파일 오류·확장 시험 | 지금 상태 유지 | 보임 | **숨김** | 보임 | 숨김 |
+| 개요·템플릿·컴파일 오류·확장 시험(바인드 변수는 MyBatis 문서에서도 보임, 03-02) | 지금 상태 유지 | 보임 | **숨김** | 보임 | 숨김 |
 | 표에 없는 창(스키마 브라우저·스크립트 등) | 보임 | 보임 | 보임 | 보임 | 보임 |
 
-- MyBatis 문서는 정의 ID 가 `oranda.panel.sqlEditor` 라 지금 규칙으로는 SQL 전용 창이 모두 보인다. 시안 Main 의 아래 패널은 결과·메시지를 쓰므로 그 묶음은 보이고, 바인드 변수(→ 파라미터 창이 대신)·개요(xml 문장에는 맞지 않음)·템플릿·컴파일 오류·확장 시험은 숨긴다.
+- MyBatis 문서는 정의 ID 가 `oranda.panel.sqlEditor` 라 지금 규칙으로는 SQL 전용 창이 모두 보인다. 시안 Main 의 아래 패널은 결과·메시지를 쓰므로 그 묶음은 보이고, 바인드 변수도 보인다(문장 파라미터를 행으로 보임, 03-02). 개요(xml 문장에는 맞지 않음)·템플릿·컴파일 오류·확장 시험은 숨긴다.
 - 「활성 문서 없음」에서 MyBatis 4개는 늘 숨긴다(지금 규칙의 「null 이면 그대로」를 MyBatis 창에는 쓰지 않는다). 시작 화면에 빈 MyBatis 창이 새지 않게 하기 위해서다(위험 R11).
 - 숨김은 지금처럼 배치를 다시 짓지 않고 묶음에서 잠시 빼며, layout.json 에는 원래 자리로 저장한다(`Capture`).
 - 사용자가 보기 메뉴로 직접 연 창(`ShowTool`)과 기능이 직접 앞으로 가져온 창(`ActivateTool`)은 지금 규칙대로 그 문서에 있는 동안 보인다.
@@ -93,8 +93,8 @@ UI 기준: 아이콘 도구 막대(툴팁 필수), 촘촘한 목록, 우클릭 �
 ### 3.4 배치(layout.json)
 
 - 레이아웃 이주는 필요 없다. `LayoutPlanner.Reconcile` 이 저장된 배치에 없는 새 도구 창을 기본 위치 묶음에 더한다(문장 → 왼쪽 묶음, 펼친 SQL·조합 검사 → 아래 묶음, 파라미터 → 오른쪽 묶음).
-- 새로 만드는 기본 배치(`CreateDefault`)는 Right 창을 기본으로 숨긴다(바인드 변수·템플릿만 연다). 그래서 `LayoutPlanner.OpenRightTools` 에 `oranda.panel.mybatisParameters` 를 더한다. 이주 표지(`rightToolsOpen`)는 새로 만들지 않는다.
-- 숨김에서 되돌아올 때 그 창은 묶음의 활성 탭이 되지 않는다(숨기기 직전에 활성이었을 때만). 그래서 03-01 은 매퍼를 처음 열 때 `ActivateTool` 로 「문장」·「파라미터 · 시나리오」를 앞으로 가져온다.
+- 새로 만드는 기본 배치(`CreateDefault`)는 Right 창을 기본으로 숨긴다(바인드 변수·템플릿만 연다). MyBatis 전용 오른쪽 창은 없다(파라미터 창을 없앰, 03-02). 이주 표지(`rightToolsOpen`)는 새로 만들지 않는다.
+- 숨김에서 되돌아올 때 그 창은 묶음의 활성 탭이 되지 않는다(숨기기 직전에 활성이었을 때만). 그래서 03-01 은 매퍼를 처음 열 때 `ActivateTool` 로 「문장」·「바인드 변수」를 앞으로 가져온다.
 
 ## 4. 명령 · 단축키 · 문맥 키
 
@@ -402,7 +402,7 @@ xml 형식(XmlReader, DTD 무시·resolver null), 문장 id 겹침, 연 때 해�
 | 02-02 | `src/Oranda.Language/MyBatis/MyBatisEvaluator*.cs`·`OgnlLite*.cs`·`ParameterExtractor*.cs`·`Combinations*.cs`(새 파일, `IMyBatisEvaluator` 구현), `src/Oranda.App/Features/SqlEditor/WorkspaceFiles.MyBatis.cs`(TSK-01-02 가 나눈 partial) | `tests/Oranda.Language.Tests/MyBatis/MyBatisEvaluatorTests.cs`(틀), `tests/Oranda.Language.Tests/MyBatis/{Ognl,Golden}*`·`MyBatis/Golden/**` 새 파일, `tests/Oranda.App.Tests/Features/SqlEditor/WorkspaceFilesTests.cs` 의 MyBatis 시험 2개만 |
 | 02-03 | `src/Oranda.Platform/Storage/SqliteMyBatisScenarioStore.cs`(새 파일, `IMyBatisScenarioStore` 구현) | `tests/Oranda.Platform.Tests/Storage/MyBatisScenarioStoreTests.cs`(틀) |
 | 03-01 | `src/Oranda.App/Features/MyBatisWorkspace/Statements/**`(TSK-01-02 의 `MyBatisStatementsViewModel`·`View`·`MyBatisStatementCommands.cs` 포함), `src/Oranda.App/Features/MyBatisWorkspace/Workspace/**`(열기 훅·세션·복구 구현), `src/Oranda.App/Features/MyBatisWorkspace/Editor/**`(`EvalDecorator*` 제외: 문장 편집기 View·View 팩토리·머리 줄·탭 배지·문서 도구 막대·`Highlighting/`) | `tests/Oranda.App.Tests/Features/MyBatisWorkspace/WorkspaceUiTests.cs`(틀) |
-| 03-02 | `src/Oranda.App/Features/MyBatisWorkspace/Parameters/**`(`MyBatisParametersViewModel`·`View` 포함), `src/Oranda.App/Features/MyBatisWorkspace/Expanded/**`(`MyBatisExpandedViewModel`·`View` 포함), `src/Oranda.App/Features/MyBatisWorkspace/Run/**`(`MyBatisRunCommands.cs` 포함), `src/Oranda.App/Features/MyBatisWorkspace/Editor/EvalDecorator*.cs`, `tests/Oranda.Oracle.IntegrationTests/MyBatis/MyBatisRun*` | `tests/Oranda.App.Tests/Features/MyBatisWorkspace/ParamsRunTests.cs`(틀) |
+| 03-02 | `src/Oranda.App/Features/MyBatisWorkspace/Parameters/**`(바인드 창 동기화·계산 상태. 「파라미터 · 시나리오」 창 `MyBatisParametersViewModel`·`View` 는 지움), `src/Oranda.App/Features/MyBatisWorkspace/Expanded/**`(`MyBatisExpandedViewModel`·`View` 포함, 머리 줄 시나리오 콤보), `src/Oranda.App/Features/MyBatisWorkspace/Run/**`(`MyBatisRunCommands.cs` 포함), `src/Oranda.App/Features/MyBatisWorkspace/Editor/EvalDecorator*.cs`, `tests/Oranda.Oracle.IntegrationTests/MyBatis/MyBatisRun*`. 2026-10-23 조정자 허가 예외: `ExecutionController.cs`(`RunPreparedAsync` 하나), `ExecutionCommands.cs`(pasteBindValues Enablement), `DockWorkspace.ScopedTools.cs`·`LayoutPlanner.cs`(파라미터 창·바인드 창 목록), `Workspace/MyBatisOpenHandler.cs`(앞으로 가져올 창) | `tests/Oranda.App.Tests/Features/MyBatisWorkspace/ParamsRunTests.cs`(틀)와 `ParamsRun*Tests.cs`, 허가 예외: `DockMyBatisScopedToolsTests.cs`·`WorkspaceUiTests.cs`(기대값) |
 | 03-03 | `src/Oranda.App/Features/MyBatisWorkspace/Save/**`(`MyBatisSaveCommands.cs` 포함: 저장 훅·바뀌는 부분 창·병합·감시·닫기 확인·감시 기준 복구 참여자·상태 표시줄 구간) | `tests/Oranda.App.Tests/Features/MyBatisWorkspace/SaveMergeTests.cs`(틀) |
 | 03-04 | `src/Oranda.App/Features/MyBatisWorkspace/Combos/**`(`MyBatisCombosViewModel`·`View`·`MyBatisComboCommands.cs` 포함: 검사 실행기·자동 고침·`AutoFixDecorator*`·`StatementBadge*`), `tests/Oranda.Oracle.IntegrationTests/MyBatis/MyBatisCombo*` | `tests/Oranda.App.Tests/Features/MyBatisWorkspace/ComboCheckTests.cs`(틀) |
 | 03-05 | `src/Oranda.App/Features/MyBatisWorkspace/Conversion/**`(`MyBatisConvertCommands.cs` 포함), `tests/Oranda.Oracle.IntegrationTests/MyBatis/MyBatisConvert*` | `tests/Oranda.App.Tests/Features/MyBatisWorkspace/ConvertTests.cs`(틀) |

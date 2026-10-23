@@ -21,8 +21,8 @@ namespace Oranda.App.Shell.Docking;
 /// </para>
 /// <para>
 /// TSK-01-02 확장(design.md 3.2): 숨길지는 도구 창마다 따로 판정한다(<see cref="DecideTool"/>). 문서의 Panel 이 <see cref="IToolScopeDocument"/> 이고
-/// 범위 글자가 <see cref="MyBatisToolScope"/> 면 MyBatis 문서다 — MyBatis 도구 창 4개(<see cref="MyBatisToolIds"/>)는 그때만 보이고,
-/// 바인드 변수·개요 같은 SQL 본문 전용 창(<see cref="SqlTextOnlyToolIds"/>)은 MyBatis 문서에서 숨는다. 활성 문서가 없으면(시작 화면)
+/// 범위 글자가 <see cref="MyBatisToolScope"/> 면 MyBatis 문서다 — MyBatis 도구 창 3개(<see cref="MyBatisToolIds"/>)는 그때만 보이고,
+/// 개요·템플릿 같은 SQL 본문 전용 창(<see cref="SqlTextOnlyToolIds"/>)은 MyBatis 문서에서 숨는다. 활성 문서가 없으면(시작 화면)
 /// MyBatis 창만 숨기고 SQL 전용 창은 지금 상태를 둔다. 같은 문서의 종류가 바뀌는 신호(<see cref="IToolScopeDocument.ToolScopeChanged"/>)는
 /// 활성 문서에 한해 구독해 <see cref="RefreshScopedTools"/> 로 다시 판정한다. 갈아탈 때는 「보여야 하는데 숨긴 창은 되보이고, 숨겨야 하는데 보이는 창은 숨긴다」.
 /// </para>
@@ -53,15 +53,16 @@ public sealed partial class DockWorkspace
     internal static readonly IReadOnlySet<string> MyBatisToolIds = new HashSet<string>(StringComparer.Ordinal)
     {
         "oranda.panel.mybatisStatements",
-        "oranda.panel.mybatisParameters",
         "oranda.panel.mybatisExpanded",
         "oranda.panel.mybatisCombos",
     };
 
-    /// <summary><see cref="SqlOnlyToolIds"/> 중 SQL 본문(문장 하나를 통째로 다루는 SQL 편집기)에만 맞아 MyBatis 문서에서는 숨기는 창(design.md 3.2).</summary>
+    /// <summary>
+    /// <see cref="SqlOnlyToolIds"/> 중 SQL 본문(문장 하나를 통째로 다루는 SQL 편집기)에만 맞아 MyBatis 문서에서는 숨기는 창(design.md 3.2).
+    /// 바인드 변수 창은 MyBatis 문서에서 문장 파라미터를 보이므로 넣지 않는다(TSK-03-02, 2026-10-23 사용자 결정).
+    /// </summary>
     internal static readonly IReadOnlySet<string> SqlTextOnlyToolIds = new HashSet<string>(StringComparer.Ordinal)
     {
-        "oranda.panel.binds",
         "oranda.panel.outline",
         "oranda.panel.templates",
         "oranda.panel.compileErrors",

@@ -756,6 +756,48 @@ public sealed class ExecutionController : IDisposable
         return !cancelled;
     }
 
+    /// <summary>
+    /// 이미 만들어 둔 문장과 바인드 값을 그대로 실행한다(MyBatis 「시나리오 값으로 실행」). 탭 글을 나누거나 「바인드 변수」 목록을 거치지 않고,
+    /// 접속 확인·전용 세션·정책 관문·취소·결과 표시는 <see cref="RunAsync"/> 의 한 문장 실행과 같은 경로를 쓴다.
+    /// </summary>
+    public async Task<bool> RunPreparedAsync(SqlEditorViewModel tab, SqlStatement stmt, IReadOnlyDictionary<string, BindValue> binds, CancellationToken ct = default)
+    {
+        ArgumentNullException.ThrowIfNull(tab);
+        ArgumentNullException.ThrowIfNull(stmt);
+        ArgumentNullException.ThrowIfNull(binds);
+        if (!await EnsureConnectionAsync(tab, ct).ConfigureAwait(true) || IsBusy(SessionFor(tab)))
+        {
+            return false;
+        }
+
+        var results = Prepare(tab, out var session);
+        if (session is null)
+        {
+            return false;
+        }
+
+        ExecutionResult? result = null;
+        await GuardedAsync(session, async token =>
+        {
+            var exec = _d.Execution();
+            result = await Task.Run(
+                () => exec.ExecuteAsync(session, stmt, binds, new ExecutionOptions { Source = HistorySource.Editor }, token),
+                CancellationToken.None).ConfigureAwait(true);
+            await AfterStatementAsync(tab, session, stmt, result, token).ConfigureAwait(true);
+        }, ct).ConfigureAwait(true);
+
+        if (result is null)
+        {
+            return false;
+        }
+
+        results.Clear();
+        Present(tab, results, stmt, result, results.NextOrdinal());
+        var cancelled = result.Status == ExecutionStatus.Cancelled;
+        MarkCancelled(session, cancelled);
+        return !cancelled;
+    }
+
     private async Task<bool> RunScriptAsync(SqlEditorViewModel tab, IReadOnlyList<SqlStatement> stmts, bool newResultTab, CancellationToken ct)
     {
         var results = Prepare(tab, out var session);

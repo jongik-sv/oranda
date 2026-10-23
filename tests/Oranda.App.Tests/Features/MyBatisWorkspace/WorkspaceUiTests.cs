@@ -21,7 +21,7 @@ public sealed class WorkspaceUiTests : IDisposable
 {
     private const string SqlEditorDoc = "oranda.panel.sqlEditor";
     private const string Statements = "oranda.panel.mybatisStatements";
-    private const string Parameters = "oranda.panel.mybatisParameters";
+    private const string Expanded = "oranda.panel.mybatisExpanded";
 
     private readonly string _root = Path.Combine(Path.GetTempPath(), "oranda-mbui-" + Guid.NewGuid().ToString("N"));
 
@@ -78,26 +78,26 @@ public sealed class WorkspaceUiTests : IDisposable
         docking.Activate(plainDoc);
         Pump();
         Assert.DoesNotContain(Statements, docking.VisibleToolIds);
-        Assert.DoesNotContain(Parameters, docking.VisibleToolIds);
+        Assert.DoesNotContain(Expanded, docking.VisibleToolIds);
 
         await host.OpenWorkspaceFileAsync(path, default);
         var mapperDoc = docking.OpenDocument(SqlEditorDoc, host.ActiveWorkspace!)!;
         docking.Activate(mapperDoc);
         Pump();
         Assert.Contains(Statements, docking.VisibleToolIds);
-        Assert.Contains(Parameters, docking.VisibleToolIds);
+        Assert.Contains(Expanded, docking.VisibleToolIds);
 
         for (var round = 0; round < 2; round++)
         {
             docking.Activate(plainDoc);
             Pump();
             Assert.DoesNotContain(Statements, docking.VisibleToolIds);
-            Assert.DoesNotContain(Parameters, docking.VisibleToolIds);
+            Assert.DoesNotContain(Expanded, docking.VisibleToolIds);
 
             docking.Activate(mapperDoc);
             Pump();
             Assert.Contains(Statements, docking.VisibleToolIds);
-            Assert.Contains(Parameters, docking.VisibleToolIds);
+            Assert.Contains(Expanded, docking.VisibleToolIds);
         }
     });
 

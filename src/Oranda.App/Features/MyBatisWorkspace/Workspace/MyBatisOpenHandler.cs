@@ -16,7 +16,7 @@ namespace Oranda.App.Features.MyBatisWorkspace.Workspace;
 public sealed class MyBatisOpenHandler : IMyBatisOpenHandler
 {
     private const string StatementsToolId = "oranda.panel.mybatisStatements";
-    private const string ParametersToolId = "oranda.panel.mybatisParameters";
+    private const string ParametersToolId = "oranda.panel.binds";
 
     private readonly DockWorkspace? _docking;
     private readonly HashSet<string> _opening = new(StringComparer.OrdinalIgnoreCase);

@@ -1,13 +1,98 @@
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:icons="using:Oranda.App.Shell.Icons"
+             xmlns:sqled="using:Oranda.App.Features.SqlEditor"
              xmlns:vm="using:Oranda.App.Features.MyBatisWorkspace.Expanded"
              x:Class="Oranda.App.Features.MyBatisWorkspace.Expanded.MyBatisExpandedView"
              x:DataType="vm:MyBatisExpandedViewModel">
-  <TextBlock Text="MyBatis 문서를 열면 펼친 SQL 이 여기에 보입니다."
-             Opacity="0.6"
-             TextWrapping="Wrap"
-             TextAlignment="Center"
-             HorizontalAlignment="Center"
-             VerticalAlignment="Center"
-             Margin="12" />
+  <UserControl.Styles>
+    <Style Selector="TextBlock.bind-name">
+      <Setter Property="Foreground" Value="{DynamicResource OrandaIconTealBrush}" />
+      <Setter Property="TextTrimming" Value="CharacterEllipsis" />
+    </Style>
+    <Style Selector="TextBlock.bind-null">
+      <Setter Property="FontStyle" Value="Italic" />
+      <Setter Property="Opacity" Value="0.5" />
+    </Style>
+  </UserControl.Styles>
+  <Grid>
+    <TextBlock Text="MyBatis 문서를 열면 펼친 SQL 이 여기에 보입니다."
+               IsVisible="{Binding HasNoStatement}"
+               Opacity="0.6"
+               TextWrapping="Wrap"
+               TextAlignment="Center"
+               HorizontalAlignment="Center"
+               VerticalAlignment="Center"
+               Margin="12" />
+    <Grid IsVisible="{Binding HasStatement}" RowDefinitions="Auto,Auto,*">
+      <!-- 머리 줄: [시나리오 콤보 · 추가/이름 바꾸기/복제/지우기] 설명 · 켜진 조건 칩 ........ 명령 단추(실행·실행 계획·복사 2종) -->
+      <Border Grid.Row="0" Classes="panel-toolbar">
+        <DockPanel>
+          <StackPanel x:Name="ActionBar" DockPanel.Dock="Right" Orientation="Horizontal" />
+          <StackPanel DockPanel.Dock="Left" Orientation="Horizontal" VerticalAlignment="Center">
+            <ComboBox x:Name="ScenarioCombo" Classes="compact" MinWidth="150" MaxWidth="260" Margin="2,0,2,0"
+                      ItemsSource="{Binding Scenarios}" SelectedItem="{Binding SelectedScenario, Mode=TwoWay}"
+                      ToolTip.Tip="시나리오는 앱 안에 xml 경로 기준으로 저장합니다. 매퍼 파일은 건드리지 않습니다."
+                      AutomationProperties.Name="시나리오 목록">
+              <ComboBox.ItemTemplate>
+                <DataTemplate x:DataType="vm:MyBatisScenarioItem">
+                  <TextBlock Text="{Binding Name}" ToolTip.Tip="{Binding Note}" TextTrimming="CharacterEllipsis" />
+                </DataTemplate>
+              </ComboBox.ItemTemplate>
+            </ComboBox>
+            <Button Classes="toolbar" Content="시나리오 추가" Command="{Binding AddCommand}"
+                    icons:ButtonIcon.Key="add" icons:ButtonIcon.IconOnly="True" />
+            <Button Classes="toolbar" Content="이름 바꾸기" Command="{Binding RenameCommand}"
+                    icons:ButtonIcon.Key="rename" icons:ButtonIcon.IconOnly="True" />
+            <Button Classes="toolbar" Content="시나리오 복제" Command="{Binding DuplicateCommand}"
+                    icons:ButtonIcon.Key="copy" icons:ButtonIcon.IconOnly="True" />
+            <Button Classes="toolbar" Content="시나리오 지우기" Command="{Binding DeleteCommand}"
+                    icons:ButtonIcon.Key="delete" icons:ButtonIcon.IconOnly="True" />
+            <Separator Classes="toolbar" />
+          </StackPanel>
+          <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+            <TextBlock Classes="panel-caption" Text="{Binding Header}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
+            <Border Classes="chip" IsVisible="{Binding HasChip}">
+              <TextBlock Classes="success-text" Text="{Binding ConditionChip}" />
+            </Border>
+          </StackPanel>
+        </DockPanel>
+      </Border>
+      <TextBlock Grid.Row="1" Classes="warning-text" Text="{Binding Notice}" IsVisible="{Binding HasNotice}"
+                 TextWrapping="Wrap" Margin="8,4" />
+      <Grid Grid.Row="2" ColumnDefinitions="*,320">
+        <!-- 왼쪽: 읽기 전용 펼친 SQL(편집기와 같은 SQL 강조) -->
+        <sqled:SqlCodeView x:Name="SqlView" Grid.Column="0" Text="{Binding Sql}"
+                           Background="{DynamicResource OrandaCodeBackgroundBrush}" AutomationProperties.Name="펼친 SQL" />
+        <!-- 오른쪽: 바인드 · 치환 -->
+        <Border Grid.Column="1" BorderBrush="{DynamicResource OrandaSeparatorBrush}" BorderThickness="1,0,0,0">
+          <DockPanel>
+            <Border DockPanel.Dock="Bottom" Classes="panel-status">
+              <TextBlock Text="#{} 는 바인드로 실행하고, ${} 는 글자 그대로 넣습니다." TextWrapping="Wrap" />
+            </Border>
+            <Border DockPanel.Dock="Top" Classes="grid-header">
+              <Grid ColumnDefinitions="104,64,*">
+                <TextBlock Grid.Column="0" Padding="8,0" Text="바인드 · 치환" />
+                <TextBlock Grid.Column="1" Text="타입" />
+                <TextBlock Grid.Column="2" Padding="6,0" Text="값" />
+              </Grid>
+            </Border>
+            <ListBox Classes="table" ItemsSource="{Binding Binds}" SelectionMode="Single"
+                     ScrollViewer.HorizontalScrollBarVisibility="Disabled" AutomationProperties.Name="바인드 · 치환 표">
+              <ListBox.ItemTemplate>
+                <DataTemplate x:DataType="vm:MyBatisBindRow">
+                  <Grid ColumnDefinitions="104,64,*" Margin="0,2" ToolTip.Tip="{Binding ValueText}">
+                    <TextBlock Grid.Column="0" Classes="mono bind-name" Margin="8,0,4,0" Text="{Binding Name}" VerticalAlignment="Center" />
+                    <TextBlock Grid.Column="1" Classes="dim" Text="{Binding TypeText}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
+                    <TextBlock Grid.Column="2" Classes="mono" Margin="6,0,6,0" Text="{Binding ValueText}" VerticalAlignment="Center"
+                               TextTrimming="CharacterEllipsis" Classes.bind-null="{Binding IsNullValue}" />
+                  </Grid>
+                </DataTemplate>
+              </ListBox.ItemTemplate>
+            </ListBox>
+          </DockPanel>
+        </Border>
+      </Grid>
+    </Grid>
+  </Grid>
 </UserControl>

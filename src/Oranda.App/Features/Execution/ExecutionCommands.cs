@@ -260,7 +260,7 @@ public static class ExecutionCommands
     Icon = "cancel", Placements = ["menu:sql/cancel@50", "toolbar:main/cancel@240"])]
 [OrandaCommand("oranda.exec.bindVariables", CommandCategory.Sql, When = "sqlDocFocus", Enablement = "sqlDocActive",
     Icon = "binds", Placements = ["menu:sql/bindVariables@60"])]
-[OrandaCommand("oranda.exec.pasteBindValues", CommandCategory.Sql, When = "sqlDocFocus", Enablement = "sqlDocActive",
+[OrandaCommand("oranda.exec.pasteBindValues", CommandCategory.Sql, When = "sqlDocFocus", Enablement = "sqlDocActive && !mybatisDocActive",
     Placements = ["menu:sql/pasteBindValues@62"])]
 [OrandaCommand("oranda.exec.toggleDbmsOutput", CommandCategory.Sql, Enablement = "sqlDocActive",
     Placements = ["menu:sql/toggleDbmsOutput@70"])]

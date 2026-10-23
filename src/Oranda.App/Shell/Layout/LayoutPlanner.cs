@@ -27,7 +27,7 @@ public static class LayoutPlanner
     public const string RightToolsOpenMigration = "rightToolsOpen";
 
     /// <summary>기본으로 열어 두는 오른쪽 도구 창(위에서 아래 순서).</summary>
-    private static readonly string[] OpenRightTools = ["oranda.panel.binds", "oranda.panel.templates", "oranda.panel.mybatisParameters"];
+    private static readonly string[] OpenRightTools = ["oranda.panel.binds", "oranda.panel.templates"];
 
     /// <summary>문서 영역 노드는 트리에 정확히 1개이고, 그 노드의 <see cref="DockNode.Tools"/> 는 쓰지 않는다.</summary>
     public static LayoutDocument CreateDefault(IEnumerable<ToolPanelDefinition> panels)
