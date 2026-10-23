@@ -601,14 +601,21 @@ public sealed class MyBatisHookSitesTests : IDisposable
         SqlEditorHost.Current = current;
         try
         {
+            // 만들 때 바로 꽂는다(명령줄 매퍼 열기가 시작 작업보다 먼저 돌 수 있다, MyBatisCommandLineOpenTests).
             var wiring = new MyBatisWorkspaceWiring(new ServiceContainer(), new ContextKeyService(), h.Get<DockWorkspace>());
-            Assert.Same(MyBatisHooks.Empty, current.MyBatisHooks);
+            Assert.NotSame(MyBatisHooks.Empty, current.MyBatisHooks);
+            var installed = current.MyBatisHooks;
 
+            // 같은 호스트면 다시 꽂지 않는다. 그사이 호스트가 바뀌었으면 새 호스트에 꽂는다.
+            Assert.True(wiring.RunAsync(CancellationToken.None).IsCompletedSuccessfully);
+            Assert.Same(installed, current.MyBatisHooks);
+            var replaced = new SqlEditorHost();
+            SqlEditorHost.Current = replaced;
             var run = wiring.RunAsync(CancellationToken.None);
 
             // 작업 공간 복구(Post 된 InitializeAsync)가 훅 자리를 읽기 전에 서 있어야 하므로 Post 없이 끝난다.
             Assert.True(run.IsCompletedSuccessfully);
-            Assert.NotSame(MyBatisHooks.Empty, current.MyBatisHooks);
+            Assert.NotSame(MyBatisHooks.Empty, replaced.MyBatisHooks);
         }
         finally
         {

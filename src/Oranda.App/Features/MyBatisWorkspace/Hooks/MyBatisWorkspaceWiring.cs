@@ -17,19 +17,38 @@ internal readonly record struct MyBatisContextKeys(bool DocActive, bool DocDirty
 /// 문맥 키는 호스트의 활성 작업 공간이 아니라 도킹의 활성 문서로 정한다: PL/SQL·객체 상세 문서가 활성이어도 호스트의 활성 작업 공간은 마지막 SQL 작업 공간에 머문다.
 /// 호스트는 DI 보다 먼저 만들어지므로(<see cref="SqlEditorHost.Current"/>) 시작 작업이 구현들을 모아 훅 자리에 넣는다.
 /// 생성자는 등록된 Shell 서비스만 받는다(시작 시험 제약: 등록되지 않은 형식이 있으면 지연 어셈블리를 훑는다).
+/// 훅은 만들 때 바로 꽂는다: 시작 작업은 목록을 한꺼번에 만든 뒤 차례로 await 되고, 앞쪽 작업(변경 기록·이력)이 IO 를 기다리는 사이에
+/// 명령줄로 받은 매퍼 열기(같은 Background 예약)가 먼저 돈다. 그때 훅이 없으면 매퍼가 MyBatis 가 아닌 일반 작업 공간으로 열린다.
 /// </summary>
 [OrandaService(typeof(IStartupTask))]
-public sealed class MyBatisWorkspaceWiring(IServiceProvider services, ContextKeyService keys, DockWorkspace docking) : IStartupTask
+public sealed class MyBatisWorkspaceWiring : IStartupTask
 {
     internal const string DocActiveKey = "mybatisDocActive";
     internal const string DocDirtyKey = "mybatisDocDirty";
     internal const string StatementSelectedKey = "mybatisStatementSelected";
 
+    private readonly IServiceProvider _services;
+    private readonly ContextKeyService _keys;
+    private readonly DockWorkspace _docking;
+    private SqlEditorHost? _attached;
+
+    public MyBatisWorkspaceWiring(IServiceProvider services, ContextKeyService keys, DockWorkspace docking)
+    {
+        _services = services;
+        _keys = keys;
+        _docking = docking;
+        Attach(SqlEditorHost.Current);
+    }
+
     public StartupPhase Phase => StartupPhase.AfterFirstFrame;
 
     public Task RunAsync(CancellationToken ct)
     {
-        Attach(SqlEditorHost.Current);
+        if (!ReferenceEquals(_attached, SqlEditorHost.Current))
+        {
+            Attach(SqlEditorHost.Current); // 그사이 호스트가 바뀌었으면 새 호스트에 꽂는다(같으면 아무것도 안 한다)
+        }
+
         return Task.CompletedTask;
     }
 
@@ -40,8 +59,9 @@ public sealed class MyBatisWorkspaceWiring(IServiceProvider services, ContextKey
     /// </summary>
     internal void Attach(SqlEditorHost host)
     {
-        host.MyBatisHooks = new MyBatisHooks(services);
-        new KeyFeeder(host, keys, docking).Start();
+        _attached = host;
+        host.MyBatisHooks = new MyBatisHooks(_services);
+        new KeyFeeder(host, _keys, _docking).Start();
     }
 
     /// <summary>
