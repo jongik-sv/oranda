@@ -1,6 +1,5 @@
 using Avalonia;
 using Avalonia.Controls;
-using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Layout;
 using Avalonia.Media;
 using Avalonia.Styling;
@@ -8,6 +7,7 @@ using Avalonia.Threading;
 using Oranda.App.Features.Localization;
 using Oranda.App.Features.SqlEditor;
 using Oranda.App.Shell.Appearance;
+using Oranda.App.Shell.Controls;
 using Oranda.Core.Execution;
 
 namespace Oranda.App.Features.Execution;
@@ -28,7 +28,7 @@ public sealed class AvaloniaExecutionDialogs : IExecutionDialogs
     }
 
     private Window? Owner
-        => _owner?.Invoke() ?? (Application.Current?.ApplicationLifetime as IClassicDesktopStyleApplicationLifetime)?.MainWindow;
+        => _owner?.Invoke() ?? DialogShell.MainWindow;
 
     public Task<bool> ConfirmAsync(ConfirmRequest request, CancellationToken ct)
         => OnUi(() => ConfirmCoreAsync(new ConfirmDialogModel(request)));
@@ -90,14 +90,14 @@ public sealed class AvaloniaExecutionDialogs : IExecutionDialogs
 
         var message = new TextBlock { Text = model.Message, TextWrapping = TextWrapping.Wrap, MaxWidth = 560 };
         var sql = new SqlCodeView { Text = model.Request.Statement.Text, MaxHeight = 160, MinWidth = 420 };
-        AutomationName(sql, "실행할 문장");
+        DialogShell.AutomationName(sql, "실행할 문장");
         var body = new StackPanel { Margin = new Thickness(16), Spacing = 10, Children = { message, sql } };
 
         TextBox? retype = null;
         if (model.RetypeText is { } expected)
         {
             retype = new TextBox { PlaceholderText = expected, MinWidth = 280 };
-            AutomationName(retype, "대상 이름 다시 입력");
+            DialogShell.AutomationName(retype, "대상 이름 다시 입력");
             body.Children.Add(new TextBlock { Text = $"계속하려면 '{expected}' 을(를) 입력하세요." });
             body.Children.Add(retype);
         }
@@ -116,7 +116,7 @@ public sealed class AvaloniaExecutionDialogs : IExecutionDialogs
             retype.TextChanged += (_, _) => run.IsEnabled = model.CanAccept(retype.Text ?? string.Empty);
         }
 
-        body.Children.Add(Buttons(run, cancel));
+        body.Children.Add(DialogShell.Buttons(run, cancel));
         dialog.Content = new StackPanel { Children = { header, body } };
         dialog.Opened += (_, _) => cancel.Focus();
         await ShowAsync(dialog).ConfigureAwait(true);
@@ -136,7 +136,7 @@ public sealed class AvaloniaExecutionDialogs : IExecutionDialogs
             grid.RowDefinitions.Add(new RowDefinition(GridLength.Auto));
             var label = new TextBlock { Text = "&" + names[i], VerticalAlignment = VerticalAlignment.Center };
             var box = new TextBox { MinWidth = 260, Text = last.TryGetValue(names[i], out var v) ? v : string.Empty };
-            AutomationName(box, "치환 변수 " + names[i]);
+            DialogShell.AutomationName(box, "치환 변수 " + names[i]);
             Grid.SetRow(label, i);
             Grid.SetRow(box, i);
             Grid.SetColumn(box, 1);
@@ -154,7 +154,7 @@ public sealed class AvaloniaExecutionDialogs : IExecutionDialogs
             dialog.Close();
         };
         cancel.Click += (_, _) => dialog.Close();
-        dialog.Content = Framed(grid, Buttons(ok, cancel));
+        dialog.Content = DialogShell.Framed(grid, DialogShell.Buttons(ok, cancel));
         await ShowAsync(dialog).ConfigureAwait(true);
         return accepted ? boxes.ToDictionary(p => p.Key, p => p.Value.Text ?? string.Empty, StringComparer.OrdinalIgnoreCase) : null;
     }
@@ -188,7 +188,7 @@ public sealed class AvaloniaExecutionDialogs : IExecutionDialogs
             action = ScriptErrorAction.ContinueAll;
             dialog.Close();
         };
-        dialog.Content = Framed(body, Buttons(stop, next, all));
+        dialog.Content = DialogShell.Framed(body, DialogShell.Buttons(stop, next, all));
         await ShowAsync(dialog).ConfigureAwait(true);
         return action;
     }
@@ -232,9 +232,9 @@ public sealed class AvaloniaExecutionDialogs : IExecutionDialogs
             ? "커밋하지 않은 변경이 있습니다. 어떻게 할까요?"
             : UiText.Get("Execution.uncommitted.dedicated", "「{0}」 탭의 전용 세션에 커밋하지 않은 변경이 있습니다. 어떻게 할까요?")
                 .Replace("{0}", subject, StringComparison.Ordinal);
-        dialog.Content = Framed(
+        dialog.Content = DialogShell.Framed(
             new TextBlock { Text = text, TextWrapping = TextWrapping.Wrap, MaxWidth = 420 },
-            Buttons(commit, rollback, cancel));
+            DialogShell.Buttons(commit, rollback, cancel));
         dialog.Opened += (_, _) => cancel.Focus();
         return dialog;
     }
@@ -280,9 +280,9 @@ public sealed class AvaloniaExecutionDialogs : IExecutionDialogs
         buttons.Add(cancel);
         var text = UiText.Get("Execution.missing.message", "이 탭의 접속 「{0}」 이(가) 열려 있지 않습니다. 어떻게 할까요?")
             .Replace("{0}", profile, StringComparison.Ordinal);
-        dialog.Content = Framed(
+        dialog.Content = DialogShell.Framed(
             new TextBlock { Text = text, TextWrapping = TextWrapping.Wrap, MaxWidth = 420 },
-            Buttons([.. buttons]));
+            DialogShell.Buttons([.. buttons]));
         dialog.Opened += (_, _) => cancel.Focus();
         return dialog;
     }
@@ -304,14 +304,14 @@ public sealed class AvaloniaExecutionDialogs : IExecutionDialogs
         };
         cancel.Click += (_, _) => dialog.Close();
         var box = new SqlCodeView { Text = text, MinWidth = 520, MinHeight = 200, MaxHeight = 420 };
-        AutomationName(box, "DML 미리보기");
+        DialogShell.AutomationName(box, "DML 미리보기");
         var hint = new TextBlock
         {
             Text = commit ? "아래 DML 을 실행한 뒤 바로 커밋합니다." : "아래 DML 만 실행하고 커밋하지 않습니다. 커밋 또는 롤백을 해야 확정됩니다.",
             TextWrapping = TextWrapping.Wrap,
             MaxWidth = 520,
         };
-        dialog.Content = Framed(new StackPanel { Spacing = 8, Children = { hint, box } }, Buttons(ok, cancel));
+        dialog.Content = DialogShell.Framed(new StackPanel { Spacing = 8, Children = { hint, box } }, DialogShell.Buttons(ok, cancel));
         dialog.Opened += (_, _) => cancel.Focus();
         await ShowAsync(dialog).ConfigureAwait(true);
         return accepted;
@@ -329,35 +329,5 @@ public sealed class AvaloniaExecutionDialogs : IExecutionDialogs
         ShowInTaskbar = false,
     };
 
-    private static StackPanel Framed(Control content, Control buttons)
-        => new() { Margin = new Thickness(16), Spacing = 12, Children = { content, buttons } };
-
-    private static StackPanel Buttons(params Button[] buttons)
-    {
-        var panel = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8, HorizontalAlignment = HorizontalAlignment.Right };
-        foreach (var b in buttons)
-        {
-            panel.Children.Add(b);
-        }
-
-        return panel;
-    }
-
-    private static void AutomationName(Control c, string name) => Avalonia.Automation.AutomationProperties.SetName(c, name);
-
-    private async Task ShowAsync(Window dialog)
-    {
-        if (Owner is { IsVisible: true } owner)
-        {
-            await dialog.ShowDialog(owner).ConfigureAwait(true);
-            return;
-        }
-
-        // 주 창이 없으면(시험·시작 직후) 독립 창으로 띄우고 닫힐 때까지 기다린다.
-        var closed = new TaskCompletionSource();
-        dialog.Closed += (_, _) => closed.TrySetResult();
-        dialog.WindowStartupLocation = WindowStartupLocation.CenterScreen;
-        dialog.Show();
-        await closed.Task.ConfigureAwait(true);
-    }
+    private Task ShowAsync(Window dialog) => DialogShell.ShowAsync(dialog, Owner);
 }

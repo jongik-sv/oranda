@@ -1,10 +1,8 @@
-using Avalonia;
 using Avalonia.Controls;
-using Avalonia.Controls.ApplicationLifetimes;
-using Avalonia.Layout;
 using Avalonia.Media;
 using Avalonia.Platform.Storage;
 using Oranda.App.Features.Localization;
+using Oranda.App.Shell.Controls;
 
 namespace Oranda.App.Features.SqlEditor;
 
@@ -30,8 +28,7 @@ public sealed class AvaloniaEditorDialogs : IEditorDialogs
 
     private static FilePickerFileType SqdFiles => new(UiText.Get("Shell.dialog.filter.sqd", "Orange 작업 공간 (*.sqd)")) { Patterns = ["*.sqd"] };
 
-    private static Window? Owner
-        => (Application.Current?.ApplicationLifetime as IClassicDesktopStyleApplicationLifetime)?.MainWindow;
+    private static Window? Owner => DialogShell.MainWindow;
 
     public async Task<string?> PickOpenFileAsync(CancellationToken ct)
     {
@@ -161,24 +158,17 @@ public sealed class AvaloniaEditorDialogs : IEditorDialogs
             onAnswer(SaveChoice.Cancel);
             dialog.Close();
         };
-        dialog.Content = new StackPanel
-        {
-            Margin = new Thickness(16),
-            Spacing = 12,
-            Children =
+        dialog.Content = DialogShell.Framed(
+            new StackPanel
             {
-                new StackPanel
+                Spacing = 4,
+                Children =
                 {
-                    Spacing = 4,
-                    Children =
-                    {
-                        new TextBlock { Text = tabName, FontWeight = FontWeight.SemiBold, TextWrapping = TextWrapping.Wrap, MaxWidth = 420 },
-                        new TextBlock { Text = "변경 내용을 저장할까요?", TextWrapping = TextWrapping.Wrap, MaxWidth = 420 },
-                    },
+                    new TextBlock { Text = tabName, FontWeight = FontWeight.SemiBold, TextWrapping = TextWrapping.Wrap, MaxWidth = 420 },
+                    new TextBlock { Text = "변경 내용을 저장할까요?", TextWrapping = TextWrapping.Wrap, MaxWidth = 420 },
                 },
-                new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8, HorizontalAlignment = HorizontalAlignment.Right, Children = { save, dontSave, cancel } },
             },
-        };
+            DialogShell.Buttons(save, dontSave, cancel));
         dialog.Opened += (_, _) => save.Focus();
         return dialog;
     }
@@ -230,16 +220,7 @@ public sealed class AvaloniaEditorDialogs : IEditorDialogs
             dialog.Close();
         };
         cancel.Click += (_, _) => dialog.Close();
-        dialog.Content = new StackPanel
-        {
-            Margin = new Thickness(16),
-            Spacing = 12,
-            Children =
-            {
-                content,
-                new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8, HorizontalAlignment = HorizontalAlignment.Right, Children = { ok, cancel } },
-            },
-        };
+        dialog.Content = DialogShell.Framed(content, DialogShell.Buttons(ok, cancel));
         dialog.Opened += (_, _) =>
         {
             // 입력 칸이 있으면 바로 칠 수 있게 포커스를 주고 기존 글을 고른다(없으면 확인 단추).
