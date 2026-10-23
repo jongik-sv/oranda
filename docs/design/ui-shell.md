@@ -90,7 +90,7 @@
 | 위치 | 기본 폭/높이 | 들어가는 도구 창(탭 순서) |
 |---|---|---|
 | 왼쪽 | 280 DIP, 창 전체 높이 | 스키마 브라우저(아래에 속성 창), 이름 붙인 스크립트 |
-| 오른쪽 | 300 DIP, 문서 영역 옆(아래 묶음 위). 바인드 변수(위)·템플릿(아래)은 한 열에 쌓아 기본으로 열고, 나머지는 기본 숨김(자동 숨김 막대). 예전 layout.json 은 `migrations` 표지(`rightToolsOpen`)로 한 번만 옮긴다(TSK-13-16) | 문서 개요, 템플릿, 바인드 변수, 행 보기, 확장 시험 패널(개발 빌드) |
+| 오른쪽 | 300 DIP, 문서 영역 옆(아래 묶음 위). 바인드 변수(위)·템플릿(아래)은 한 열에 쌓아 기본으로 열고, 나머지는 기본 숨김(자동 숨김 막대). 예전 layout.json 은 `migrations` 표지(`rightToolsOpen`)로 한 번만 옮긴다(TSK-13-16) | 문서 개요, 템플릿, 바인드 변수, 행 보기, 확장 시험(향후 AI 적용 대비) 패널(개발 빌드) |
 | 아래 | 220 DIP, 문서 영역 밑(왼쪽 묶음 오른쪽 열 안) | 조회 결과, 메시지, DBMS 출력, 실행 계획, 실행 이력, 컴파일 오류(오렌지 Output 창의 Message·Server Output, SQL Developer 의 Query Result·Script Output 순서) |
 | 문서 영역 | 나머지 | 문서 탭(편집기, 객체 상세, 모니터, DB 정보 등) |
 
@@ -131,7 +131,7 @@
 | `oranda.panel.templates` | 템플릿(코드 조각·옵티마이저 힌트·내장 함수·의사 열 목록과 미리보기, 사용자 조각) | tool | 오른쪽 | 아니요 | `oranda.view.templates` | TSK-04-07 |
 | `oranda.panel.binds` | 바인드 변수(오렌지 Bind Variable List) | tool | 오른쪽 | 아니요 | `oranda.exec.bindVariables` | TSK-06-02 (EXEC-03) |
 | `oranda.panel.rowView` | 행 보기 | tool | 오른쪽 | 아니요 | `oranda.view.rowView`, `oranda.grid.rowView` | TSK-06-05 |
-| `oranda.panel.extensionTest` | 확장 시험 패널 | tool | 오른쪽 | 아니요 | `oranda.view.extensionTest` | TSK-10-03 (개발 빌드만) |
+| `oranda.panel.extensionTest` | 확장 시험(향후 AI 적용 대비) 패널 | tool | 오른쪽 | 아니요 | `oranda.view.extensionTest` | TSK-10-03 (개발 빌드만) |
 
 대화상자(도킹 안 함): 접속 관리자·비밀번호 변경(TSK-03-04), 접속 가져오기(TSK-03-05), 치환 변수 입력·운영 실행 확인·위험 명령 이름 재입력·미커밋 종료 확인(TSK-06-02), DML 미리보기(TSK-06-04), 내보내기·가져오기(TSK-06-07), PL/SQL 실행(TSK-08-02), 세션 Kill 확인(TSK-09-01), 설정·단축키 설정(TSK-03-01·TSK-04-07), 명령 팔레트(TSK-03-01).
 

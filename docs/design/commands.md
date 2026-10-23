@@ -498,7 +498,7 @@
 | `oranda.view.templates` | 템플릿 | - | 전역 | 항상 | TSK-04-07 |
 | `oranda.view.changeJournal` | 변경 일지 | - | 전역 | 항상 | TSK-13-07 |
 | `oranda.view.rowView` | 행 보기 창 | - | 전역 | 항상 | TSK-06-05 |
-| `oranda.view.extensionTest` | 확장 시험 패널 | - | 전역 | `devBuild` | TSK-10-03 |
+| `oranda.view.extensionTest` | 확장 시험(향후 AI 적용 대비) 패널 | - | 전역 | `devBuild` | TSK-10-03 |
 | `oranda.view.resetLayout` | 레이아웃 초기화 | - | 전역 | 항상 | TSK-03-01 |
 | `oranda.view.themeLight` | 밝은 테마 | - | 전역 | 항상 | TSK-03-01 |
 | `oranda.view.themeDark` | 어두운 테마 | - | 전역 | 항상 | TSK-03-01 |

@@ -18,7 +18,7 @@ public static class ExtensionTestCommands
 /// 확장 시험 패널 열기(<c>oranda.view.extensionTest</c>, 개발 빌드만 — 활성 조건 <c>devBuild</c>).
 /// 셸의 처리기 팩터리(DI)가 <see cref="IServiceProvider"/> 를 넣어 준다. 인자 없는 생성자는 아무것도 하지 않는다.
 /// </summary>
-[OrandaCommand(ExtensionTestCommands.ViewCommandId, CommandCategory.View, Title = "확장 시험 패널", Enablement = "devBuild")]
+[OrandaCommand(ExtensionTestCommands.ViewCommandId, CommandCategory.View, Title = "확장 시험(향후 AI 적용 대비) 패널", Enablement = "devBuild")]
 public sealed class ExtensionTestCommandHandler : ICommandHandler
 {
     private readonly IServiceProvider? _services;

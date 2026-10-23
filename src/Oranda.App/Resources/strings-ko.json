@@ -346,7 +346,7 @@
   "Panel.oranda.panel.compileErrors": "컴파일 오류",
   "Panel.oranda.panel.dbInfo": "DB 정보",
   "Panel.oranda.panel.ddlExtract": "DDL 일괄 추출",
-  "Panel.oranda.panel.extensionTest": "확장 시험",
+  "Panel.oranda.panel.extensionTest": "확장 시험(향후 AI 적용 대비)",
   "Panel.oranda.panel.formatterProfiles": "포매터 프로필",
   "Panel.oranda.panel.history": "실행 이력",
   "Panel.oranda.panel.lobEditor": "LOB 편집기",

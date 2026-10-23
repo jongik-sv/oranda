@@ -160,7 +160,7 @@
   "Cmd.oranda.view.compileErrors": "컴파일 오류",
   "Cmd.oranda.view.templates": "템플릿",
   "Cmd.oranda.view.rowView": "행 보기 창",
-  "Cmd.oranda.view.extensionTest": "확장 시험 패널",
+  "Cmd.oranda.view.extensionTest": "확장 시험(향후 AI 적용 대비) 패널",
   "Cmd.oranda.view.resetLayout": "레이아웃 초기화",
   "Cmd.oranda.window.saveLayoutAs": "레이아웃 이름 붙여 저장",
   "Cmd.oranda.window.applyLayout": "저장한 레이아웃 적용",

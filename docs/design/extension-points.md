@@ -2,7 +2,7 @@
 
 > 근거: PRD APP-09·9.4, TRD 4.10, [ui-contract.md](ui-contract.md) 2장, [commands.md](commands.md) 7장.
 > 1.0 은 AI 기능을 만들지 않는다(D-04). 나중의 챗봇·플러그인이 **Core 를 고치지 않고** 붙을 자리만 연다.
-> 실제로 붙는지는 개발 빌드의 「확장 시험 패널」(`oranda.panel.extensionTest`)이 보여 준다.
+> 실제로 붙는지는 개발 빌드의 「확장 시험(향후 AI 적용 대비) 패널」(`oranda.panel.extensionTest`)이 보여 준다.
 
 ## 1. 쓸 수 있는 인터페이스
 
