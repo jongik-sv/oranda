@@ -22,6 +22,12 @@ public sealed record PlsqlWorkspaceFile
     /// <summary>보이던 탭의 차례(<see cref="Tabs"/> 안). 없으면 -1.</summary>
     public int ActiveTab { get; init; } = -1;
 
+    /// <summary>이 작업 공간을 읽어 온(또는 쓴) <c>.plsql-workspace.md</c> 경로. 「작업 공간 파일로 저장」이 여기에 덮어쓴다. 없으면 null.</summary>
+    public string? SourcePath { get; init; }
+
+    /// <summary>파일에 적힌 원래 이름(열린 작업 공간과 겹쳐 <see cref="Name"/> 이 바뀐 경우만). 없으면 null.</summary>
+    public string? SourceName { get; init; }
+
     public IReadOnlyList<PlsqlTabFile> Tabs { get; init; } = [];
 }
 
@@ -48,6 +54,9 @@ public sealed record PlsqlTabFile
     public bool IsDirty { get; init; }
 
     public string? FilePath { get; init; }
+
+    /// <summary>파일에 묶인 탭의 인코딩 이름(<c>FileEncoding</c>: utf-8·utf-8-bom·cp949 …). 다시 켠 뒤 저장해도 BOM·코드 페이지를 지키려고 적는다. 없으면 utf-8.</summary>
+    public string? Encoding { get; init; }
 
     public int Caret { get; init; }
 

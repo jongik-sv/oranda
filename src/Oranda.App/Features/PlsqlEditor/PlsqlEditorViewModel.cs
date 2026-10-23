@@ -214,6 +214,28 @@ public sealed partial class PlsqlEditorViewModel : ToolPanelViewModelBase, IComp
         SyncKeys();
     }
 
+    /// <summary>
+    /// 디스크의 PL/SQL 파일(<c>.pkb</c> 등)을 연 탭. 글은 파일 그대로이고 편집기가 파일에 묶인다(Ctrl+S = 그 파일에 저장, 인코딩 유지).
+    /// 서버 객체는 아니므로 대상 없음 — 컴파일 때 머리글로 정한다(새 문서와 같다).
+    /// </summary>
+    public void StartFile(string path, string text, string encoding, ISession? session)
+    {
+        ArgumentException.ThrowIfNullOrEmpty(path);
+        _restoredProfileId = null;
+        Session = session;
+        Target = null;
+        _baseline = null;
+        _line1Shift = 0;
+        ServerSource = null;
+        Title = System.IO.Path.GetFileName(path);
+        Editor.LoadText(text);
+        Editor.FilePath = path;
+        Editor.Encoding = encoding;
+        Editor.ConnectionProfileId = session?.Profile.Id;
+        StatusText = "파일 — 컴파일하면 서버에 만든다";
+        SyncKeys();
+    }
+
     /// <summary>서버에서 소스를 읽어 편집기에 채운다. 못 읽으면 예외 대신 상태 줄에 말하고 false.</summary>
     public async Task<bool> OpenAsync(ISession session, DbObjectRef target, CancellationToken ct = default)
     {
@@ -303,7 +325,12 @@ public sealed partial class PlsqlEditorViewModel : ToolPanelViewModelBase, IComp
             return Report(PlsqlCompileStatus.NoSession, _restoredProfileId is null ? "접속이 없다" : "이 탭을 연 접속이 아직 열리지 않았다 — 그 접속을 열면 컴파일한다");
         }
 
-        var text = PlsqlSourceText.ToCompileText(Editor.Text);
+        var (text, hasMore) = PlsqlSourceText.SplitCompileUnit(Editor.Text);
+        if (hasMore)
+        {
+            return Report(PlsqlCompileStatus.NothingToCompile, "단위가 여러 개인 파일은 컴파일하지 않는다 — SQL 탭에서 스크립트로 실행한다");
+        }
+
         var header = PlsqlSourceText.ParseHeader(text);
         if (string.IsNullOrWhiteSpace(text) || header is null)
         {
@@ -318,7 +345,11 @@ public sealed partial class PlsqlEditorViewModel : ToolPanelViewModelBase, IComp
             Target = effective;
             _baseline = null;
             ServerSource = null;
-            Title = $"{effective.Owner}.{effective.Name}";
+            if (Editor.FilePath is null)
+            {
+                Title = $"{effective.Owner}.{effective.Name}"; // 파일 탭은 파일 이름을 그대로 둔다
+            }
+
             OnPropertyChanged(nameof(IsPackageDoc));
         }
 
@@ -377,7 +408,11 @@ public sealed partial class PlsqlEditorViewModel : ToolPanelViewModelBase, IComp
 
             ServerSource = PlsqlSourceText.ToEditorText(text);
             ServerSourceChanged = false;
-            Editor.MarkSaved();
+            if (Editor.FilePath is null)
+            {
+                Editor.MarkSaved(); // 파일 탭은 컴파일해도 파일에는 쓰지 않았으므로 고침 표시를 지우지 않는다
+            }
+
             var errorCount = errors.Count(x => !x.IsWarning);
             return Report(errorCount > 0 ? PlsqlCompileStatus.CompiledWithErrors : PlsqlCompileStatus.Compiled,
                 errorCount > 0 ? $"컴파일됐지만 오류 {errorCount}건" : errors.Count > 0 ? $"컴파일됨 (경고 {errors.Count}건)" : "컴파일됨", errors);
@@ -471,6 +506,7 @@ public sealed partial class PlsqlEditorViewModel : ToolPanelViewModelBase, IComp
         Text = Editor.Text,
         IsDirty = NeedsSaveConfirm,
         FilePath = Editor.FilePath,
+        Encoding = Editor.FilePath is null ? null : Editor.Encoding,
         Caret = Editor.CaretOffset,
         Line1Shift = _line1Shift,
     };
@@ -498,6 +534,7 @@ public sealed partial class PlsqlEditorViewModel : ToolPanelViewModelBase, IComp
         Title = file.Title ?? (Target is { } t ? TitleOf(t) : "새 PL/SQL");
         Editor.LoadText(file.Text, dirty: file.IsDirty);
         Editor.FilePath = file.FilePath;
+        Editor.Encoding = file.FilePath is not null && file.Encoding is { Length: > 0 } enc ? enc : "utf-8";
         Editor.ConnectionProfileId = file.ConnectionProfileId;
         Editor.CaretOffset = Math.Clamp(file.Caret, 0, Editor.Document.TextLength);
         StatusText = Target is null ? string.Empty : "접속하면 서버 소스와 견준다";

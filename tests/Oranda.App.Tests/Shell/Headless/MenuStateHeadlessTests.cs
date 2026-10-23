@@ -186,7 +186,7 @@ public class MenuStateHeadlessTests
         Assert.DoesNotContain("oranda.edit.find", VisibleCommandIds(Top(h, "edit")));
 
         h.Get<Oranda.App.Shell.Docking.DockWorkspace>().OpenDocument("oranda.panel.plsqlEditor");
-        keys.SetFocusSlot("schema"); // 앱은 plsqlDocActive 를 켜지 않고, 포커스는 스키마 트리로 옮겨 갔다
+        keys.SetFocusSlot("schema"); // 작업 공간 라우터가 아직 없어 실제 plsqlDocActive 는 꺼진 채이고(주 메뉴는 도킹에서 직접 채운다), 포커스는 스키마 트리로 옮겨 갔다
         Settle();
         Top(h, "edit").IsSubMenuOpen = true;
         Settle();

@@ -39,6 +39,12 @@ public sealed partial class PlsqlWorkspaceViewModel : ToolPanelViewModelBase, II
     [ObservableProperty]
     public partial string Name { get; set; } = "PL/SQL";
 
+    /// <summary>이 작업 공간이 온(또는 저장한) <c>.plsql-workspace.md</c> 경로. 없으면 null.</summary>
+    public string? SourcePath { get; set; }
+
+    /// <summary>파일에 적힌 원래 이름. 열린 작업 공간과 이름이 겹쳐 <see cref="Name"/> 이 바뀌었을 때만 있다(파일에 다시 쓸 때 원래 이름으로 쓴다).</summary>
+    public string? SourceName { get; set; }
+
     /// <summary>이 작업 공간의 PL/SQL 탭(열린 순서).</summary>
     public ObservableCollection<PlsqlEditorViewModel> Tabs { get; } = [];
 
@@ -83,6 +89,8 @@ public sealed partial class PlsqlWorkspaceViewModel : ToolPanelViewModelBase, II
         {
             Id = Id,
             Name = Name,
+            SourcePath = SourcePath,
+            SourceName = SourceName,
             ActiveTab = active is null ? -1 : tabs.IndexOf(active),
             Tabs = [.. tabs.Select(t => t.Capture())],
         };

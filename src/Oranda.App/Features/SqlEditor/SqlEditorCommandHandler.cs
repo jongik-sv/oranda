@@ -1,4 +1,5 @@
 using System.Globalization;
+using Oranda.App.Features.PlsqlWorkspace;
 using Oranda.Core.Shell;
 using static Oranda.App.Features.SqlEditor.EditorTextOps;
 
@@ -65,7 +66,14 @@ public sealed class SqlEditorCommandHandler : ICommandHandler
 {
     private SqlEditorHost? _host;
 
-    // 매개변수 없는 생성자만 둔다(이유는 EditorContext 참고). 시험은 Host 를 초기화 구문으로 준다.
+    private readonly IServiceProvider? _services;
+
+    // 시험은 Host 를 초기화 구문으로 준다. 서비스 생성자는 PL/SQL 파일을 작업 공간 탭으로 여는 길(PlsqlFiles)이 셸의 라우터를 찾는 데 쓴다.
+    public SqlEditorCommandHandler()
+    {
+    }
+
+    public SqlEditorCommandHandler(IServiceProvider services) => _services = services;
 
     /// <summary>다루는 호스트. 기본은 <see cref="SqlEditorHost.Current"/>.</summary>
     public SqlEditorHost Host
@@ -102,7 +110,15 @@ public sealed class SqlEditorCommandHandler : ICommandHandler
                         return;
                     }
 
-                    if (WorkspaceFiles.OpensAsWorkspace(path))
+                    if (PlsqlWorkspaceMarkdown.IsWorkspaceFile(path) && await PlsqlWorkspaceFiles.OpenAsync(_services, host, path, cancellationToken).ConfigureAwait(true))
+                    {
+                        // .plsql-workspace.md 는 PL/SQL 작업 공간으로 열었다.
+                    }
+                    else if (PlsqlFiles.IsPlsqlFile(path) && await PlsqlFiles.OpenAsync(_services, host, path, null, cancellationToken).ConfigureAwait(true))
+                    {
+                        // .pks .pkb 등은 PL/SQL 작업 공간 탭으로 열었다.
+                    }
+                    else if (WorkspaceFiles.OpensAsWorkspace(path))
                     {
                         await OpenWorkspaceFileAsync(host, path, cancellationToken).ConfigureAwait(true);
                     }
@@ -145,8 +161,17 @@ public sealed class SqlEditorCommandHandler : ICommandHandler
                 await host.SaveWorkspaceFileAsync(askPath: true, cancellationToken).ConfigureAwait(true);
                 return;
             case "oranda.file.openWorkspaceFile":
-                await OpenWorkspaceFileAsync(host, context.Parameter as string, cancellationToken).ConfigureAwait(true);
-                return;
+                {
+                    var workspacePath = context.Parameter as string ?? await host.Dialogs.PickWorkspaceFileAsync(false, string.Empty, cancellationToken).ConfigureAwait(true);
+                    if (workspacePath is null || (PlsqlWorkspaceMarkdown.IsWorkspaceFile(workspacePath)
+                        && await PlsqlWorkspaceFiles.OpenAsync(_services, host, workspacePath, cancellationToken).ConfigureAwait(true)))
+                    {
+                        return; // 취소했거나 PL/SQL 작업 공간 파일로 열었다
+                    }
+
+                    await OpenWorkspaceFileAsync(host, workspacePath, cancellationToken).ConfigureAwait(true);
+                    return;
+                }
             case "oranda.file.newWorkspace":
                 host.NewWorkspace();
                 return;

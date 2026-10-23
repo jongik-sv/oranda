@@ -116,8 +116,9 @@ public static class MenuVisibility
 }
 
 /// <summary>
-/// 주 메뉴 계산용 문맥 키: 앱이 따로 켜지 않는 <c>plsqlDocActive</c> 를 보이는 문서가 PL/SQL 편집기인지로 채운다
-/// (그 밖의 키는 그대로). 실행 가능 여부(<see cref="ICommandRegistry.CanExecute"/>)에는 쓰지 않는다.
+/// 주 메뉴 계산용 문맥 키: <c>plsqlDocActive</c> 를 보이는 문서가 PL/SQL 편집기(또는 보이는 탭이 있는 PL/SQL 작업 공간)인지로 도킹에서 직접 채운다
+/// (작업 공간 라우터가 켜는 실제 키는 라우터가 만들어진 뒤에야 맞고, 메뉴는 그보다 먼저 그려진다. 그 밖의 키는 그대로).
+/// 실행 가능 여부(<see cref="ICommandRegistry.CanExecute"/>)에는 쓰지 않는다.
 /// </summary>
 internal sealed class MenuScopeKeys(IContextKeys inner, Func<bool> plsqlDocActive) : IContextKeys
 {

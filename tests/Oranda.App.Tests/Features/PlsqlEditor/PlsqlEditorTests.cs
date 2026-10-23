@@ -84,7 +84,7 @@ public class PlsqlEditorTests
     [Fact]
     public void Compile_text_drops_trailing_slash_and_normalizes_line_ends()
     {
-        var text = PlsqlSourceText.ToCompileText("CREATE OR REPLACE PROCEDURE p IS\r\nBEGIN\r\n  NULL;\r\nEND;\r\n/\r\n\r\n");
+        var text = PlsqlSourceText.SplitCompileUnit("CREATE OR REPLACE PROCEDURE p IS\r\nBEGIN\r\n  NULL;\r\nEND;\r\n/\r\n\r\n").Unit;
 
         Assert.Equal("CREATE OR REPLACE PROCEDURE p IS\nBEGIN\n  NULL;\nEND;", text);
     }
@@ -620,7 +620,7 @@ public class PlsqlEditorTests
         }
     }
 
-    private sealed class FakeSession : ISession
+    internal sealed class FakeSession : ISession
     {
         public Guid Id { get; } = Guid.NewGuid();
 
@@ -901,7 +901,7 @@ public class PlsqlEditorTests
         public Task<SaveChoice> AskSaveChangesAsync(string tabName, CancellationToken ct) => Task.FromResult(answer);
     }
 
-    private sealed class FakeMeta : IMetadataProvider
+    internal sealed class FakeMeta : IMetadataProvider
     {
         public string Source { get; set; } = BodySource;
 
@@ -913,8 +913,12 @@ public class PlsqlEditorTests
 
         public IReadOnlyList<CompileError> Errors { get; set; } = [];
 
+        /// <summary>이 유형의 소스는 읽지 못한다(패키지 본문만 없는 경우 등).</summary>
+        public HashSet<string> FailTypes { get; } = [];
+
         public Task<string> GetSourceAsync(ISession s, DbObjectRef obj, CancellationToken ct)
-            => SourceError is not null ? Task.FromException<string>(SourceError)
+            => FailTypes.Contains(obj.ObjectType) ? Task.FromException<string>(new InvalidOperationException("none"))
+                : SourceError is not null ? Task.FromException<string>(SourceError)
                 : SourceFails ? Task.FromException<string>(new InvalidOperationException("none")) : Task.FromResult(Source);
 
         public Task<IReadOnlyList<CompileError>> GetCompileErrorsAsync(ISession s, DbObjectRef obj, CancellationToken ct) => Task.FromResult(Errors);
@@ -933,7 +937,7 @@ public class PlsqlEditorTests
         public Task<IReadOnlyList<ProcedureInfo>> GetProceduresAsync(ISession s, DbObjectRef obj, CancellationToken ct) => throw new NotSupportedException();
     }
 
-    private sealed class FakeExec : IExecutionService
+    internal sealed class FakeExec : IExecutionService
     {
         public List<SqlStatement> Statements { get; } = [];
 

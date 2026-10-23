@@ -104,7 +104,13 @@ public sealed class PlsqlWorkspaceRouter
         }
 
         var name = open.Any(w => w.Name == file.Name) ? NextName() : file.Name;
-        var workspace = new PlsqlWorkspaceViewModel { Id = file.Id, Name = name };
+        var workspace = new PlsqlWorkspaceViewModel
+        {
+            Id = file.Id,
+            Name = name,
+            SourcePath = file.SourcePath,
+            SourceName = file.SourceName ?? (name != file.Name ? file.Name : null), // 이름이 겹쳐 바뀌어도 파일에는 원래 이름으로 다시 쓴다
+        };
         foreach (var saved in file.Tabs)
         {
             var tab = _services is not null ? new PlsqlEditorViewModel(_services) : new PlsqlEditorViewModel();
@@ -190,6 +196,27 @@ public sealed class PlsqlWorkspaceRouter
         }
 
         FollowActiveDocument(); // 이미 활성 문서였으면 활성 문서 이벤트가 오지 않는다
+    }
+
+    /// <summary>작업 공간 문서를 앞으로 낸다(탭을 바꾸지 않는다). <paramref name="focus"/> 면 키보드 포커스도 옮긴다. 비어 있어도 된다.</summary>
+    public void Activate(PlsqlWorkspaceViewModel workspace, bool focus)
+    {
+        ArgumentNullException.ThrowIfNull(workspace);
+        if (DocumentOf(workspace) is not { } doc)
+        {
+            return;
+        }
+
+        if (focus)
+        {
+            _docking.FocusDocument(doc);
+        }
+        else
+        {
+            _docking.Activate(doc);
+        }
+
+        FollowActiveDocument();
     }
 
     /// <summary>
@@ -338,6 +365,11 @@ public sealed class PlsqlWorkspaceRouter
         {
             Select(w.ActiveTab);
         }
+
+        if (e.PropertyName == nameof(PlsqlWorkspaceViewModel.ActiveTab))
+        {
+            RefreshDocKey();
+        }
     }
 
     private void OnTabClosed(object? sender, PlsqlEditorViewModel tab)
@@ -348,6 +380,7 @@ public sealed class PlsqlWorkspaceRouter
         }
 
         CompileErrorsViewModel.Retract(tab);
+        RefreshDocKey();
 
         // 미리보기만 담으려고 만든 작업 공간이 비면(미리보기가 거둬짐·사용자가 닫음) 문서도 닫는다.
         if (sender is PlsqlWorkspaceViewModel { IsTransient: true, IsEmpty: true } w && DocumentOf(w) is { } doc)
@@ -395,7 +428,17 @@ public sealed class PlsqlWorkspaceRouter
             PlsqlEditorViewModel p => p,
             _ => null,
         });
+
+        RefreshDocKey();
     }
+
+    /// <summary>
+    /// 보이는 문서가 PL/SQL 이고 보이는 탭이 있다(「PL/SQL 작업 공간 파일로 저장」의 활성 조건, 주 메뉴의 판정 <c>MenuControls</c> 와 같다).
+    /// 활성 작업 공간의 보이는 탭이 바뀌거나 탭이 비면 다시 맞춘다.
+    /// </summary>
+    private void RefreshDocKey() =>
+        (_services?.GetService(typeof(ContextKeyService)) as ContextKeyService ?? ContextKeyService.Shared)?
+            .Set("plsqlDocActive", _docking.ActiveDocument?.Panel is PlsqlEditorViewModel or PlsqlWorkspaceViewModel { ActiveTab: not null });
 
     private static void Select(PlsqlEditorViewModel? tab)
     {

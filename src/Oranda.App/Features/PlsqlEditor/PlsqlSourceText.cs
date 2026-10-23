@@ -63,17 +63,237 @@ public static class PlsqlSourceText
 
     public static string ToEditorText(string serverSource) => ToEditorText(serverSource, null, out _);
 
-    /// <summary>컴파일에 보낼 글자: 줄끝 LF, 끝의 빈 줄·<c>/</c> 단독 줄 제거. 끝의 <c>;</c> 는 남긴다(PL/SQL 단위가 필요로 한다).</summary>
-    public static string ToCompileText(string editorText)
+    /// <summary>SQL*Plus 의 오류 보기 명령 줄(<c>SHOW ERRORS</c>·<c>SHOW ERR</c>·<c>SHO ERR</c>·<c>SHO ERRO</c>, 뒤에 객체 지정 <c>PACKAGE BODY pk</c> 등과 <c>;</c> 허용). 서버에 보낼 문장이 아니다.</summary>
+    private static readonly Regex ShowErrorsLine = new(@"^SHO(?:W)?\s+ERR(?:ORS|OR|O)?(?:\s+[^;]+?)?\s*;?$", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+
+    /// <summary>
+    /// 편집기 글에서 컴파일할 첫 PL/SQL 단위를 가른다. 단위의 끝은 <c>/</c> 단독 줄(없으면 글 끝까지 한 단위, 본문 안 <c>;</c> 로는 자르지 않는다).
+    /// 단위 뒤의 <c>/</c> 줄·<c>SHOW ERRORS</c> 류·빈 줄·주석은 떼고, 그 밖의 글(GRANT, 두 번째 CREATE …)이 남으면 <c>HasMore</c> 가 참이다.
+    /// <c>Unit</c> 은 컴파일에 보낼 글자(줄끝 LF, 끝의 빈 줄·<c>/</c>·<c>SHOW ERRORS</c> 제외, 끝의 <c>;</c> 는 남긴다: PL/SQL 단위가 필요로 한다).
+    /// </summary>
+    public static (string Unit, bool HasMore) SplitCompileUnit(string editorText)
     {
-        var text = Normalize(editorText).TrimEnd();
-        var lines = text.Split('\n').ToList();
-        while (lines.Count > 0 && lines[^1].Trim() is "" or "/")
+        var lines = Normalize(editorText).Split('\n');
+        var state = default(LexState);
+        var starts = new LexState[lines.Length]; // 줄 머리에서의 글자 상태(주석·문자열 안의 단독 / 는 경계가 아니다)
+        var slash = -1;
+        for (var i = 0; i < lines.Length; i++)
         {
-            lines.RemoveAt(lines.Count - 1);
+            starts[i] = state;
+            if (state.Mode == Lex.Code && lines[i].Trim() == "/" && i > 0 && lines.Take(i).Any(l => l.Trim().Length > 0))
+            {
+                slash = i;
+                break;
+            }
+
+            state = Scan(lines[i], state);
         }
 
-        return string.Join('\n', lines);
+        var unit = (slash < 0 ? lines : lines[..slash]).ToList();
+        while (unit.Count > 0 && (unit[^1].Trim() is "" or "/" || ShowErrorsLine.IsMatch(unit[^1].Trim())))
+        {
+            unit.RemoveAt(unit.Count - 1);
+        }
+
+        var hasMore = slash < 0 && HasOtherStatement(lines, starts);
+        if (slash >= 0)
+        {
+            var inBlock = false;
+            foreach (var line in lines[(slash + 1)..])
+            {
+                var t = line.Trim();
+                if (inBlock)
+                {
+                    inBlock = Scan(line, BlockState).Mode == Lex.Block;
+                    continue;
+                }
+
+                if (t.Length == 0 || t == "/" || t.StartsWith("--", StringComparison.Ordinal) || ShowErrorsLine.IsMatch(t))
+                {
+                    continue;
+                }
+
+                if (t.StartsWith("/*", StringComparison.Ordinal))
+                {
+                    inBlock = Scan(line, default).Mode == Lex.Block;
+                    if (!inBlock && t.IndexOf("*/", StringComparison.Ordinal) is var end and >= 0 && t[(end + 2)..].Trim().Length > 0)
+                    {
+                        hasMore = true;
+                    }
+
+                    continue;
+                }
+
+                hasMore = true;
+                break;
+            }
+        }
+
+        return (string.Join('\n', unit).TrimEnd(), hasMore);
+    }
+
+    private enum Lex
+    {
+        Code,
+        Block,
+        Quote,
+        QQuote,
+    }
+
+    /// <summary>줄 끝에서의 글자 상태. <c>Close</c> = <c>q'[…]'</c> 류 문자열의 닫는 구분자.</summary>
+    private readonly record struct LexState(Lex Mode, char Close);
+
+    private static readonly LexState BlockState = new(Lex.Block, '\0');
+
+    /// <summary>
+    /// 줄 하나를 지나며 글자 상태를 갱신한다: <c>/* … */</c>, <c>'…'</c>(<c>''</c> 는 이스케이프), <c>q'[…]'</c>(구분자 <c>[] {} () &lt;&gt;</c> 와 임의 문자) 는 여러 줄에 걸쳐 이어지고
+    /// <c>--</c> 줄 주석은 줄 끝까지 건너뛴다. 단독 <c>/</c> 줄 판정과 줄 머리 낱말 판정에만 쓴다.
+    /// </summary>
+    private static LexState Scan(string line, LexState s)
+    {
+        var i = 0;
+        while (i < line.Length)
+        {
+            switch (s.Mode)
+            {
+                case Lex.Block:
+                {
+                    var end = line.IndexOf("*/", i, StringComparison.Ordinal);
+                    if (end < 0)
+                    {
+                        return s;
+                    }
+
+                    s = default;
+                    i = end + 2;
+                    break;
+                }
+
+                case Lex.Quote:
+                {
+                    var q = line.IndexOf('\'', i);
+                    if (q < 0)
+                    {
+                        return s;
+                    }
+
+                    if (q + 1 < line.Length && line[q + 1] == '\'')
+                    {
+                        i = q + 2;
+                    }
+                    else
+                    {
+                        s = default;
+                        i = q + 1;
+                    }
+
+                    break;
+                }
+
+                case Lex.QQuote:
+                {
+                    var end = line.IndexOf(s.Close + "'", i, StringComparison.Ordinal);
+                    if (end < 0)
+                    {
+                        return s;
+                    }
+
+                    s = default;
+                    i = end + 2;
+                    break;
+                }
+
+                default:
+                {
+                    var c = line[i];
+                    if (c == '-' && i + 1 < line.Length && line[i + 1] == '-')
+                    {
+                        return s;
+                    }
+
+                    if (c == '/' && i + 1 < line.Length && line[i + 1] == '*')
+                    {
+                        s = BlockState;
+                        i += 2;
+                    }
+                    else if (c is 'q' or 'Q' && i + 2 < line.Length && line[i + 1] == '\'' && !line[i + 2].Equals(' ') && !IsIdentBefore(line, i))
+                    {
+                        var open = line[i + 2];
+                        s = new LexState(Lex.QQuote, open switch { '[' => ']', '{' => '}', '(' => ')', '<' => '>', _ => open });
+                        i += 3;
+                    }
+                    else if (c == '\'')
+                    {
+                        s = new LexState(Lex.Quote, '\0');
+                        i++;
+                    }
+                    else
+                    {
+                        i++;
+                    }
+
+                    break;
+                }
+            }
+        }
+
+        return s;
+    }
+
+    /// <summary><c>q</c> 앞이 식별자 글자(<c>abq'</c>)면 참. 국가 문자 접두 <c>nq'…'</c> 는 접두로 본다.</summary>
+    private static bool IsIdentBefore(string line, int i)
+    {
+        if (i > 0 && line[i - 1] is 'n' or 'N')
+        {
+            i--;
+        }
+
+        return i > 0 && (char.IsLetterOrDigit(line[i - 1]) || line[i - 1] is '_' or '$' or '#');
+    }
+
+    private static readonly Regex LineHead = new(@"^\s*(?:CREATE|GRANT|REVOKE)(?![\w$#])", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+
+    /// <summary>
+    /// 슬래시 없는 글에서 첫 단위의 머리 줄 뒤에 다른 문장(<c>CREATE</c>·<c>GRANT</c>·<c>REVOKE</c> 로 시작하는 줄)이 있는가.
+    /// 주석·문자열 안은 보지 않고, 낱말 다음이 <c>:=</c>·<c>(</c>·<c>.</c>·<c>;</c> 이면 변수·호출 이름이라 문장이 아니다.
+    /// </summary>
+    private static bool HasOtherStatement(string[] lines, LexState[] starts)
+    {
+        var first = -1;
+        for (var i = 0; i < lines.Length && first < 0; i++)
+        {
+            var t = lines[i].TrimStart();
+            if (starts[i].Mode == Lex.Code && t.Length > 0 && !t.StartsWith("--", StringComparison.Ordinal) && !t.StartsWith("/*", StringComparison.Ordinal))
+            {
+                first = i;
+            }
+        }
+
+        if (first < 0)
+        {
+            return false;
+        }
+
+        for (var i = first + 1; i < lines.Length; i++)
+        {
+            if (starts[i].Mode != Lex.Code || LineHead.Match(lines[i]) is not { Success: true } m)
+            {
+                continue;
+            }
+
+            var rest = lines[i][m.Length..].TrimStart();
+            for (var k = i + 1; rest.Length == 0 && k < lines.Length; k++)
+            {
+                rest = lines[k].TrimStart();
+            }
+
+            if (rest.Length > 0 && rest[0] is not ('(' or '.' or ';') && !rest.StartsWith(":=", StringComparison.Ordinal))
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /// <summary>비교용 정규화: 줄끝 LF, 줄 끝 공백·문서 끝 빈 줄 제거, <c>CREATE OR REPLACE</c> 머리 제거.</summary>
