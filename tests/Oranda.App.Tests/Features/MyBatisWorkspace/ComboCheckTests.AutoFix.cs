@@ -195,7 +195,8 @@ public partial class ComboCheckTests
     [Fact]
     public void Crlf_source_keeps_crlf_line_breaks()
     {
-        var text = UpdateEmpSal.Replace("\n", "\r\n", StringComparison.Ordinal);
+        // 원본 줄 끝은 체크아웃마다 다르다(윈도우 = CRLF). 바꾸기 대신 맞춘다.
+        var text = UpdateEmpSal.ReplaceLineEndings("\r\n");
 
         var proposal = Assert.Single(MyBatisAutoFix.Find(text));
         var result = MyBatisAutoFix.Apply(text, proposal);
@@ -209,7 +210,7 @@ public partial class ComboCheckTests
     [Fact]
     public void Angle_bracket_inside_attribute_value_does_not_break_tag_scan()
     {
-        const string text = """
+        var text = """
             <update id="u">
               UPDATE EMP
                  SET
@@ -217,7 +218,7 @@ public partial class ComboCheckTests
               <if test='comm > 1'>COMM = #{comm}</if>
                WHERE EMPNO = #{empNo}
             </update>
-            """;
+            """.ReplaceLineEndings("\n");
 
         var proposal = Assert.Single(MyBatisAutoFix.Find(text));
 
