@@ -101,6 +101,27 @@ public sealed partial class SqlEditorViewModel : ToolPanelViewModelBase, IBindOw
     /// </summary>
     public bool HasUserEdits => IsDirty && !string.IsNullOrWhiteSpace(Text) && !string.Equals(Text, _startText, StringComparison.Ordinal);
 
+    /// <summary>
+    /// 탭을 닫을 때 저장을 물어야 하는가(SQL 탭·PL/SQL 탭이 함께 쓰는 판정). 읽기 전용 탭은 고칠 수 없으니 묻지 않는다.
+    /// 파일에 묶인 탭은 고쳤을 때, 이름 없는 탭은 사용자가 글을 쳤을 때(<see cref="HasUserEdits"/>) 묻는다.
+    /// 복원 때 파일을 못 읽어 비어 있는 탭도 묻지 않는다: 저장하면 빈 내용이 원본을 덮어쓴다.
+    /// <paramref name="serverBound"/> 가 참이면 서버 객체를 열었거나 컴파일한 탭이라 이름 없는 탭으로 보지 않고 고쳤을 때 묻는다.
+    /// </summary>
+    public bool NeedsSaveConfirm(bool serverBound = false)
+    {
+        if (IsReadOnly)
+        {
+            return false;
+        }
+
+        if (FilePath is null && !serverBound)
+        {
+            return HasUserEdits;
+        }
+
+        return IsDirty && !(FileUnreadable && string.IsNullOrWhiteSpace(Text));
+    }
+
     /// <summary>이 탭의 바인드 변수 목록(TSK-04-11). 바인드 변수 창은 활성 탭의 것을 보이고, 작업 공간·.sql·.sqd 도 탭마다 이 목록을 넣고 뺀다.</summary>
     public BindVariableStore Binds { get; } = new();
 

@@ -231,6 +231,33 @@ public sealed partial class SqlEditorTests
     });
 
     [Fact]
+    public Task NeedsSaveConfirm_follows_how_the_tab_is_bound() => Ui.Run(() =>
+    {
+        // 이름 없는 탭: 손대지 않았으면 묻지 않고, 글을 치면 묻고, 읽기 전용이면 묻지 않는다.
+        var untitled = new SqlEditorViewModel(Guid.NewGuid(), "select 1");
+        Assert.False(untitled.NeedsSaveConfirm());
+        untitled.Document.Insert(untitled.Document.TextLength, " from dual");
+        Assert.True(untitled.NeedsSaveConfirm());
+        untitled.IsReadOnly = true;
+        Assert.False(untitled.NeedsSaveConfirm());
+
+        // 서버 객체에 묶인 탭: 이름이 없어도 변경 표시가 있으면 묻는다.
+        var server = new SqlEditorViewModel(Guid.NewGuid(), "create or replace procedure p is begin null; end;");
+        Assert.False(server.NeedsSaveConfirm(serverBound: true));
+        server.LoadText("create or replace procedure p is begin null; end;", dirty: true);
+        Assert.True(server.NeedsSaveConfirm(serverBound: true));
+
+        // 파일에 묶인 탭: 변경됨이면 묻는다. 복원 때 파일을 못 읽어 빈 글이면 묻지 않는다.
+        var file = new SqlEditorViewModel(Guid.NewGuid(), "select 1") { FilePath = Path.Combine(_root, "a.sql") };
+        Assert.False(file.NeedsSaveConfirm());
+        file.Document.Insert(0, "-- ");
+        Assert.True(file.NeedsSaveConfirm());
+        var gone = SqlEditorViewModel.FromWorkspaceTab(new WorkspaceTab { Id = Guid.NewGuid(), Title = "gone.sql", FilePath = Path.Combine(_root, "gone.sql") }, null);
+        Assert.True(gone.IsDirty);
+        Assert.False(gone.NeedsSaveConfirm());
+    });
+
+    [Fact]
     public Task Shell_close_of_a_dirty_tab_that_is_cancelled_keeps_the_tab_and_still_reports_handled() => Ui.Run(async () =>
     {
         var (host, _, tab, _) = await DirtyFileTabAsync(SaveChoice.Cancel);
