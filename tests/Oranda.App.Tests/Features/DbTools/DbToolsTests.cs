@@ -23,6 +23,25 @@ public class DbToolsTests
     }
 
     [Fact]
+    public Task Parameter_ddl_preview_is_a_colored_read_only_code_view() => Oranda.App.Tests.Shell.Headless.HeadlessHost.Run(() =>
+    {
+        var vm = new DbInfoViewModel();
+        vm.PickParameter("processes", "300");
+        vm.ParameterValue = "400";
+        var view = new DbInfoView { DataContext = vm };
+        var window = new Avalonia.Controls.Window { Content = view, Width = 900, Height = 500 };
+        window.Show();
+        Avalonia.Threading.Dispatcher.UIThread.RunJobs();
+
+        var ddl = Avalonia.VisualTree.VisualExtensions.GetVisualDescendants(view).OfType<Oranda.App.Features.SqlEditor.SqlCodeView>().Single(c => c.Name == "DdlPreview");
+        Assert.True(ddl.TextEditorControl.IsReadOnly);
+        Assert.False(ddl.TextEditorControl.ShowLineNumbers);
+        Assert.NotNull(ddl.Colorizer);
+        Assert.StartsWith("ALTER SYSTEM SET processes = 400", ddl.TextEditorControl.Text, StringComparison.Ordinal);
+        window.Close();
+    });
+
+    [Fact]
     public void Panels_and_commands_are_registered()
     {
         foreach (var id in new[] { "oranda.panel.dbInfo", "oranda.panel.objectSearch", "oranda.panel.ddlExtract" })
