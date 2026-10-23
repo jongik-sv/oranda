@@ -1,0 +1,13 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:Oranda.App.Features.MyBatisWorkspace.Parameters"
+             x:Class="Oranda.App.Features.MyBatisWorkspace.Parameters.MyBatisParametersView"
+             x:DataType="vm:MyBatisParametersViewModel">
+  <TextBlock Text="MyBatis 문서를 열면 문장의 파라미터와 시나리오가 여기에 보입니다."
+             Opacity="0.6"
+             TextWrapping="Wrap"
+             TextAlignment="Center"
+             HorizontalAlignment="Center"
+             VerticalAlignment="Center"
+             Margin="12" />
+</UserControl>

@@ -121,7 +121,7 @@ public static class HistoryScriptsCommands
 [OrandaCommand("oranda.view.scripts", CommandCategory.View, Title = "스크립트")]
 [OrandaCommand("oranda.exec.toggleStatistics", CommandCategory.Sql, Title = "실행 통계 수집 켜기/끄기", Enablement = "sqlDocActive",
     Placements = ["menu:sql/statistics@50"])]
-[OrandaCommand("oranda.sqlplus.runFile", CommandCategory.Sql, Title = "@파일 실행", When = "sqlDocFocus", Enablement = "hasSession && !sessionBusy",
+[OrandaCommand("oranda.sqlplus.runFile", CommandCategory.Sql, Title = "@파일 실행", When = "sqlDocFocus", Enablement = "hasSession && !sessionBusy && !mybatisDocActive",
     Placements = ["menu:sql/runFile@60"])]
 public sealed class HistoryScriptsCommandHandler : ICommandHandler
 {

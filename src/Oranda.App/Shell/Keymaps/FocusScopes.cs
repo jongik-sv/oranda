@@ -9,7 +9,7 @@ namespace Oranda.App.Shell.Keymaps;
 /// </summary>
 public static class FocusScopes
 {
-    private static readonly string[] AllSlots = ["sqlText", "sqlGrid", "plsql", "schema", "monitor"];
+    private static readonly string[] AllSlots = ["sqlText", "sqlGrid", "plsql", "mybatisText", "schema", "monitor"];
 
     private static readonly Dictionary<string, string[]> Slots = new(StringComparer.Ordinal)
     {
@@ -17,7 +17,8 @@ public static class FocusScopes
         ["gridFocus"] = ["sqlGrid"],
         ["sqlDocFocus"] = ["sqlText", "sqlGrid"],
         ["plsqlEditorFocus"] = ["plsql"],
-        ["editorFocus"] = ["sqlText", "plsql"],
+        ["mybatisDocFocus"] = ["mybatisText"],
+        ["editorFocus"] = ["sqlText", "plsql", "mybatisText"],
         ["schemaFocus"] = ["schema"],
         ["monitorFocus"] = ["monitor"],
     };

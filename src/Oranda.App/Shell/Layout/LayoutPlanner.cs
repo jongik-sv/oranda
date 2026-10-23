@@ -27,7 +27,7 @@ public static class LayoutPlanner
     public const string RightToolsOpenMigration = "rightToolsOpen";
 
     /// <summary>기본으로 열어 두는 오른쪽 도구 창(위에서 아래 순서).</summary>
-    private static readonly string[] OpenRightTools = ["oranda.panel.binds", "oranda.panel.templates"];
+    private static readonly string[] OpenRightTools = ["oranda.panel.binds", "oranda.panel.templates", "oranda.panel.mybatisParameters"];
 
     /// <summary>문서 영역 노드는 트리에 정확히 1개이고, 그 노드의 <see cref="DockNode.Tools"/> 는 쓰지 않는다.</summary>
     public static LayoutDocument CreateDefault(IEnumerable<ToolPanelDefinition> panels)
@@ -420,7 +420,7 @@ public static class LayoutPlanner
             Kind = DockNodeKind.Split,
             Orientation = DockOrientation.Vertical,
             Proportion = RightProportion,
-            Children = [.. ids.Select(id => Group([id], 1.0 / ids.Count))],
+            Children = [.. ids.Select(id => Group([id], Math.Round(1.0 / ids.Count, 4)))], // Capture 가 4자리로 반올림하므로 같게(3창 이상일 때 1/3 이 어긋난다)
         };
     }
 

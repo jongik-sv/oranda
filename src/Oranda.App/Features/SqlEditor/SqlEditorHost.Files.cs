@@ -38,6 +38,12 @@ public sealed partial class SqlEditorHost
             return already;
         }
 
+        // design.md 9장: .xml 을 MyBatis 열기 훅이 처리하면 끝(훅이 없거나 처리하지 않으면 지금 경로).
+        if (IsMapperXml(full) && MyBatisHooks.OpenHandler is { } opener && await opener.TryOpenAsync(this, full, ct).ConfigureAwait(true))
+        {
+            return Active;
+        }
+
         var bytes = await File.ReadAllBytesAsync(full, ct).ConfigureAwait(true);
         var (text, enc) = FileEncoding.Decode(bytes);
         IReadOnlyList<WorkspaceBind>? fileBinds = null;
@@ -55,7 +61,7 @@ public sealed partial class SqlEditorHost
         };
         vm.Binds.Restore(fileBinds);
         vm.IsDirty = false;
-        AddTab(EnsureWorkspace(), vm);
+        AddTab(EnsureSqlWorkspace(), vm);
         return vm;
     }
 
@@ -63,6 +69,12 @@ public sealed partial class SqlEditorHost
     public async Task<bool> SaveAsync(SqlEditorViewModel tab, CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(tab);
+        if (WorkspaceOf(tab) is { MyBatis: not null } mapper)
+        {
+            // design.md 9장: MyBatis 문장 탭은 파일이 아니라 매퍼에 쓴다(저장 훅이 없으면 저장하지 못한다).
+            return MyBatisHooks.SaveHandler is { } handler && await handler.SaveAsync(mapper, ct).ConfigureAwait(true);
+        }
+
         if (tab.FilePath is null)
         {
             return await SaveAsAsync(tab, ct).ConfigureAwait(true);
@@ -75,6 +87,11 @@ public sealed partial class SqlEditorHost
     public async Task<bool> SaveAsAsync(SqlEditorViewModel tab, CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(tab);
+        if (WorkspaceOf(tab)?.MyBatis is not null)
+        {
+            return false; // design.md 9장: MyBatis 문장 탭은 「다른 이름으로」가 없다
+        }
+
         var suggested = tab.FilePath is null ? SaveFileNames.SuggestSql(tab.Title) : Path.GetFileName(tab.FilePath);
         var path = await Dialogs.PickSaveFileAsync(suggested, ct).ConfigureAwait(true);
         if (path is null)
@@ -90,7 +107,16 @@ public sealed partial class SqlEditorHost
 
     public async Task<bool> SaveAllAsync(CancellationToken ct)
     {
-        foreach (var tab in Tabs.Where(t => t.IsDirty).ToList())
+        // design.md 9장: 저장 안 한 MyBatis 작업 공간은 저장 훅이 작업 공간 단위로 한 번씩 저장하고, 그 탭들은 아래 순회에서 뺀다.
+        foreach (var mapper in Workspaces.Where(w => w.MyBatis is { IsDirty: true }).ToList())
+        {
+            if (MyBatisHooks.SaveHandler is not { } handler || !await handler.SaveAsync(mapper, ct).ConfigureAwait(true))
+            {
+                return false;
+            }
+        }
+
+        foreach (var tab in Tabs.Where(t => t.IsDirty && WorkspaceOf(t)?.MyBatis is null).ToList())
         {
             if (!await SaveAsync(tab, ct).ConfigureAwait(true))
             {
@@ -187,6 +213,12 @@ public sealed partial class SqlEditorHost
             return new WorkspaceFile(open.Name, [], []);
         }
 
+        // design.md 9장: .xml 을 MyBatis 열기 훅이 처리하면 끝(훅이 없거나 처리하지 않으면 지금 경로).
+        if (IsMapperXml(full) && MyBatisHooks.OpenHandler is { } opener && await opener.TryOpenAsync(this, full, ct).ConfigureAwait(true))
+        {
+            return new WorkspaceFile(Path.GetFileNameWithoutExtension(full), [], []);
+        }
+
         var file = WorkspaceFiles.Load(full);
 
         // MyBatis 는 namespace(대개 com.example.UserMapper 처럼 길다) 대신 파일 이름을 작업 공간 이름으로 쓴다.
@@ -215,6 +247,10 @@ public sealed partial class SqlEditorHost
 
         return file;
     }
+
+    /// <summary>.xml 경로인가(MyBatis 훅 분기의 대상).</summary>
+    internal static bool IsMapperXml(string? path) =>
+        path is not null && WorkspaceFiles.IsMyBatis(path);
 
     private string UniqueId(string id)
     {

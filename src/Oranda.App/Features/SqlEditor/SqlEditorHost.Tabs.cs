@@ -9,7 +9,7 @@ public sealed partial class SqlEditorHost
     /// <summary>보고 있는 작업 공간에 빈 SQL 탭을 더한다(없으면 기본 작업 공간을 만든다).</summary>
     public SqlEditorViewModel NewDocument(string? text = null)
     {
-        var ws = EnsureWorkspace();
+        var ws = EnsureSqlWorkspace();
         var vm = new SqlEditorViewModel(Guid.NewGuid(), text ?? string.Empty) { Title = NextUntitledName(ws) };
         vm.IsDirty = false;
         AddTab(ws, vm);
@@ -26,6 +26,37 @@ public sealed partial class SqlEditorHost
                 return name;
             }
         }
+    }
+
+    /// <summary>
+    /// 일반 SQL 탭을 넣을 작업 공간(design.md 2.2). 보고 있는 작업 공간이 MyBatis 면 마지막으로 활성이던 일반 작업 공간으로 보내고,
+    /// 없으면 새 일반 작업 공간을 연다(<see cref="NewWorkspace"/> 와 같은 이름·ID 규칙이지만 빈 탭을 더하지 않는다).
+    /// </summary>
+    private SqlWorkspaceViewModel EnsureSqlWorkspace()
+    {
+        var ws = EnsureWorkspace();
+        if (ws.MyBatis is null)
+        {
+            return ws;
+        }
+
+        // 세션이 나중에 붙는 작업 공간도 있으니 활성이던 순서를 거슬러 지금 일반 SQL 인 것을 고른다.
+        if (_activationOrder.FirstOrDefault(w => w.MyBatis is null && Workspaces.Contains(w)) is { } last)
+        {
+            return last;
+        }
+
+        var created = OpenWorkspace(NewWorkspaceId(), NextWorkspaceName());
+        ActiveWorkspace = created;
+        return created;
+    }
+
+    /// <summary>MyBatis 문장 탭을 MyBatis 작업 공간에 넣는다(분기 없음, design.md 9장). 03-01 의 열기 훅·「+ 새 문장」이 쓴다.</summary>
+    internal void AddMyBatisTab(SqlWorkspaceViewModel ws, SqlEditorViewModel vm)
+    {
+        ArgumentNullException.ThrowIfNull(ws);
+        ArgumentNullException.ThrowIfNull(vm);
+        AddTab(ws, vm);
     }
 
     private void AddTab(SqlWorkspaceViewModel ws, SqlEditorViewModel vm)
@@ -55,7 +86,7 @@ public sealed partial class SqlEditorHost
     public SqlEditorViewModel Duplicate(SqlEditorViewModel source)
     {
         ArgumentNullException.ThrowIfNull(source);
-        var ws = WorkspaceOf(source) ?? EnsureWorkspace();
+        var ws = WorkspaceOf(source) is { MyBatis: null } own ? own : EnsureSqlWorkspace(); // MyBatis 문장은 일반 작업 공간으로 복제된다
         var vm = new SqlEditorViewModel(Guid.NewGuid(), source.Text)
         {
             Title = NextUntitledName(ws),
@@ -76,15 +107,18 @@ public sealed partial class SqlEditorHost
             return;
         }
 
-        _closed.Push(SnapshotForReopen(tab));
-        while (_closed.Count > ClosedHistoryLimit)
+        if (ws.MyBatis is null) // design.md 9장: MyBatis 문장 탭은 닫은 탭 기록에 넣지 않는다(고침은 세션이 들고 있다)
         {
-            // Stack 은 아래를 못 지운다. 한도를 넘으면 다시 쌓는다(드문 경로).
-            var keep = _closed.Take(ClosedHistoryLimit).Reverse().ToList();
-            _closed.Clear();
-            foreach (var t in keep)
+            _closed.Push(SnapshotForReopen(tab));
+            while (_closed.Count > ClosedHistoryLimit)
             {
-                _closed.Push(t);
+                // Stack 은 아래를 못 지운다. 한도를 넘으면 다시 쌓는다(드문 경로).
+                var keep = _closed.Take(ClosedHistoryLimit).Reverse().ToList();
+                _closed.Clear();
+                foreach (var t in keep)
+                {
+                    _closed.Push(t);
+                }
             }
         }
 
@@ -123,7 +157,7 @@ public sealed partial class SqlEditorHost
 
         var tab = _closed.Pop();
         var vm = SqlEditorViewModel.FromWorkspaceTab(tab, null);
-        AddTab(EnsureWorkspace(), vm);
+        AddTab(EnsureSqlWorkspace(), vm);
         return vm;
     }
 

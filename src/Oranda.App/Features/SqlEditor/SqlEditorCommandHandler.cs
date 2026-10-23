@@ -11,19 +11,19 @@ namespace Oranda.App.Features.SqlEditor;
 [OrandaCommand("oranda.file.newSqlEditor", CommandCategory.File, Icon = "newSql", Placements = ["menu:file/newSqlEditor@10", "toolbar:main/newSql@10"])]
 [OrandaCommand("oranda.file.open", CommandCategory.File, Icon = "open", Placements = ["menu:file/open@20", "toolbar:main/open@20"])]
 [OrandaCommand("oranda.file.save", CommandCategory.File, Enablement = "hasDocument", Icon = "save", Placements = ["menu:file/save@30", "toolbar:main/save@30"])]
-[OrandaCommand("oranda.file.saveAs", CommandCategory.File, Enablement = "hasDocument", Placements = ["menu:file/saveAs@40"])]
+[OrandaCommand("oranda.file.saveAs", CommandCategory.File, Enablement = "hasDocument && !mybatisDocActive", Placements = ["menu:file/saveAs@40"])]
 [OrandaCommand("oranda.file.saveAll", CommandCategory.File, Enablement = "hasDocument", Placements = ["menu:file/saveAll@50"])]
 [OrandaCommand("oranda.file.reopenClosed", CommandCategory.File, Placements = ["menu:file/reopenClosed@60"])]
 [OrandaCommand("oranda.file.duplicateTab", CommandCategory.File, Enablement = "sqlDocActive", Placements = ["menu:file/duplicateTab@70"])]
 [OrandaCommand("oranda.file.saveWorkspace", CommandCategory.File, Enablement = "hasDocument")]
 [OrandaCommand("oranda.file.openWorkspace", CommandCategory.File)]
 [OrandaCommand("oranda.file.openWorkspaceFile", CommandCategory.File, Icon = "workspaceOpen", Placements = ["menu:file/openWorkspaceFile@90"])]
-[OrandaCommand("oranda.file.saveWorkspaceFile", CommandCategory.File, Enablement = "hasDocument", Icon = "workspaceSave", Placements = ["menu:file/saveWorkspaceFile@92"])]
-[OrandaCommand("oranda.file.saveWorkspaceFileAs", CommandCategory.File, Enablement = "hasDocument", Placements = ["menu:file/saveWorkspaceFileAs@94"])]
+[OrandaCommand("oranda.file.saveWorkspaceFile", CommandCategory.File, Enablement = "hasDocument && !mybatisDocActive", Icon = "workspaceSave", Placements = ["menu:file/saveWorkspaceFile@92"])]
+[OrandaCommand("oranda.file.saveWorkspaceFileAs", CommandCategory.File, Enablement = "hasDocument && !mybatisDocActive", Placements = ["menu:file/saveWorkspaceFileAs@94"])]
 [OrandaCommand("oranda.file.newWorkspace", CommandCategory.File, Icon = "folderAdd", Placements = ["menu:file/newWorkspace@12", "toolbar:main/newWorkspace@12"])]
 [OrandaCommand("oranda.file.renameWorkspace", CommandCategory.File, Enablement = "sqlWorkspaceActive", Placements = ["menu:file/renameWorkspace@96"])]
 [OrandaCommand("oranda.file.closeWorkspace", CommandCategory.File, Enablement = "sqlWorkspaceActive", Placements = ["menu:file/closeWorkspace@805"])]
-[OrandaCommand("oranda.file.renameTab", CommandCategory.File, Enablement = "sqlDocActive", Icon = "rename", Placements = ["menu:file/renameTab@75", "context:editor/renameTab@900"])]
+[OrandaCommand("oranda.file.renameTab", CommandCategory.File, Enablement = "sqlDocActive && !mybatisDocActive", Icon = "rename", Placements = ["menu:file/renameTab@75", "context:editor/renameTab@900"])]
 [OrandaCommand("oranda.edit.undo", CommandCategory.Edit, When = "editorFocus", Enablement = "canUndo", Placements = ["menu:edit/undo@10", "context:editor/undo@10"])]
 [OrandaCommand("oranda.edit.redo", CommandCategory.Edit, When = "editorFocus", Enablement = "canRedo", Placements = ["menu:edit/redo@20", "context:editor/redo@20"])]
 [OrandaCommand("oranda.edit.cut", CommandCategory.Edit, When = "editorFocus", Enablement = "hasSelection", Placements = ["menu:edit/cut@30", "context:editor/cut@30"])]
@@ -106,6 +106,10 @@ public sealed class SqlEditorCommandHandler : ICommandHandler
 
                 return;
             }
+            case "oranda.file.save" when tab is null && host.ActiveWorkspace is { MyBatis: not null } mapper && host.MyBatisHooks.SaveHandler is { } mapperSave:
+                // MyBatis 작업 공간은 문장 탭을 모두 닫아도 세션 기준으로 저장한다(docs/oranda1/design.md 2.2·4.4, 구현 TSK-03-03).
+                await mapperSave.SaveAsync(mapper, cancellationToken).ConfigureAwait(true);
+                return;
             case "oranda.file.save" when tab is not null:
                 await host.SaveAsync(tab, cancellationToken).ConfigureAwait(true);
                 return;

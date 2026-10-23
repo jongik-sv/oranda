@@ -5,6 +5,7 @@ using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Threading;
 using Avalonia.VisualTree;
+using Oranda.App.Features.MyBatisWorkspace.Hooks;
 
 namespace Oranda.App.Features.SqlEditor;
 
@@ -15,7 +16,7 @@ namespace Oranda.App.Features.SqlEditor;
 /// </summary>
 public partial class SqlWorkspaceView : UserControl
 {
-    private readonly Dictionary<SqlEditorViewModel, SqlEditorView> _views = [];
+    private readonly Dictionary<SqlEditorViewModel, Control> _views = [];
     private SqlWorkspaceViewModel? _vm;
 
     private const double DragThreshold = 6;
@@ -79,6 +80,37 @@ public partial class SqlWorkspaceView : UserControl
         }
     }
 
+    /// <summary>편집기 View 를 가진 쪽으로 키보드 포커스를 옮긴다(일반 SQL 편집기 또는 MyBatis 문장 편집기, design.md 2.3).</summary>
+    private static void FocusEditorOf(Control? view)
+    {
+        switch (view)
+        {
+            case SqlEditorView sql:
+                sql.FocusEditor();
+                break;
+            case IEditorFocusTarget target:
+                target.FocusEditor();
+                break;
+        }
+    }
+
+    /// <summary>탭 하나의 편집기 View: MyBatis 문서이고 팩토리가 있으면 그 View(design.md 9장), 아니면 지금처럼 <see cref="SqlEditorView"/>.</summary>
+    private Control CreateEditorView(SqlEditorViewModel tab)
+    {
+        if (_vm is { MyBatis: { } session } vm && vm.Host.MyBatisHooks.EditorViewFactory is { } factory)
+        {
+            var custom = factory.CreateEditor(tab, session);
+            custom.DataContext ??= tab;
+            return custom;
+        }
+
+        return new SqlEditorView { DataContext = tab };
+    }
+
+    /// <summary>탭 머리 앞에 붙일 내용(MyBatis 문장 종류 표시). MyBatis 문서가 아니거나 팩토리가 없으면 null.</summary>
+    internal Control? CreateTabBadge(SqlEditorViewModel tab) =>
+        _vm is { MyBatis: { } session } vm && vm.Host.MyBatisHooks.EditorViewFactory is { } factory ? factory.CreateTabBadge(tab, session) : null;
+
     private void Bind(SqlWorkspaceViewModel? vm)
     {
         Unsubscribe();
@@ -122,7 +154,7 @@ public partial class SqlWorkspaceView : UserControl
             {
                 if (tab.CommitRename())
                 {
-                    _views.GetValueOrDefault(tab)?.FocusEditor();
+                    FocusEditorOf(_views.GetValueOrDefault(tab));
                 }
 
                 e.Handled = true;
@@ -130,7 +162,7 @@ public partial class SqlWorkspaceView : UserControl
             else if (e.Key == Key.Escape)
             {
                 tab.CancelRename();
-                _views.GetValueOrDefault(tab)?.FocusEditor();
+                FocusEditorOf(_views.GetValueOrDefault(tab));
                 e.Handled = true;
             }
         }
@@ -327,11 +359,27 @@ public partial class SqlWorkspaceView : UserControl
         _dropIndex = -1;
     }
 
+    /// <summary>열린 탭 머리의 배지 자리를 모두 다시 그린다(문서 종류가 바뀌었을 때).</summary>
+    private void RefreshTabBadges()
+    {
+        foreach (var slot in SqlTabs.GetVisualDescendants().OfType<SqlTabBadgeSlot>().ToList())
+        {
+            slot.Refresh();
+        }
+    }
+
     private void OnVmPropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
         if (e.PropertyName == nameof(SqlWorkspaceViewModel.ActiveTab))
         {
             ShowTab(_vm?.ActiveTab);
+        }
+        else if (e.PropertyName == nameof(SqlWorkspaceViewModel.DocumentKind))
+        {
+            // 세션이 붙거나 떨어졌다: 이미 만든 편집기 View 는 옛 종류의 것이니 버리고 다시 만든다(일반 SQL 작업 공간은 이 일이 없다).
+            _views.Clear();
+            ShowTab(_vm?.ActiveTab);
+            RefreshTabBadges(); // 이미 그려진 탭 머리의 배지도 다시 받아 그린다(design.md 9장, TSK-01-02)
         }
     }
 
@@ -354,7 +402,7 @@ public partial class SqlWorkspaceView : UserControl
 
         if (!_views.TryGetValue(tab, out var view))
         {
-            view = new SqlEditorView { DataContext = tab };
+            view = CreateEditorView(tab);
             _views[tab] = view;
         }
 
@@ -379,10 +427,33 @@ public partial class SqlWorkspaceView : UserControl
                 {
                     if (ReferenceEquals(EditorHost.Content, view) && TopLevel.GetTopLevel(view) is not null)
                     {
-                        view.FocusEditor();
+                        FocusEditorOf(view);
                     }
                 },
                 DispatcherPriority.Background);
         }
+    }
+}
+
+/// <summary>
+/// 탭 머리 앞의 내용 없는 자리(design.md 9장). 탭 VM 이 정해지거나 화면에 붙으면 작업 공간 View 에게 MyBatis 배지를 받는다.
+/// 일반 SQL 작업 공간은 내용이 null 이라 아무 모양도 차지하지 않는다.
+/// </summary>
+internal sealed class SqlTabBadgeSlot : ContentControl
+{
+    protected override Type StyleKeyOverride => typeof(ContentControl);
+
+    public SqlTabBadgeSlot()
+    {
+        IsVisible = false;
+        DataContextChanged += (_, _) => Refresh();
+        AttachedToVisualTree += (_, _) => Refresh();
+    }
+
+    internal void Refresh()
+    {
+        var badge = DataContext is SqlEditorViewModel tab ? this.FindAncestorOfType<SqlWorkspaceView>()?.CreateTabBadge(tab) : null;
+        Content = badge;
+        IsVisible = badge is not null;
     }
 }

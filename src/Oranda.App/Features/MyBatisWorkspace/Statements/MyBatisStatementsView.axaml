@@ -1,0 +1,13 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:Oranda.App.Features.MyBatisWorkspace.Statements"
+             x:Class="Oranda.App.Features.MyBatisWorkspace.Statements.MyBatisStatementsView"
+             x:DataType="vm:MyBatisStatementsViewModel">
+  <TextBlock Text="MyBatis 문서를 열면 문장 목록이 여기에 보입니다."
+             Opacity="0.6"
+             TextWrapping="Wrap"
+             TextAlignment="Center"
+             HorizontalAlignment="Center"
+             VerticalAlignment="Center"
+             Margin="12" />
+</UserControl>

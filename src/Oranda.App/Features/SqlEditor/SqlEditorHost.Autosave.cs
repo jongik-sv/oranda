@@ -1,4 +1,5 @@
 using Avalonia.Threading;
+using Oranda.App.Features.MyBatisWorkspace.Hooks;
 using Oranda.Core.Workspaces;
 
 namespace Oranda.App.Features.SqlEditor;
@@ -31,13 +32,14 @@ public sealed partial class SqlEditorHost
                 continue; // 한 파일이 나빠도 나머지 작업 공간은 복구한다
             }
 
-            if (auto is { Tabs.Count: > 0 })
+            // design.md 5.6: 탭이 0개여도 MyBatis 매퍼(.xml)의 자동 저장은 복구 상태(곁 파일)가 남아 있으니 지우지 않는다(복구 참여자가 있을 때만).
+            if (auto is { Tabs.Count: > 0 } || (auto is not null && MyBatisHooks.RecoveryParticipants.Count > 0 && IsMapperXml(auto.SourcePath)))
             {
                 autos.Add(auto);
             }
             else
             {
-                await _store.DeleteAutosaveAsync(id, ct).ConfigureAwait(true); // 빈 자동 저장은 복구할 것이 없다
+                await DeleteAutosaveAsync(id, ct).ConfigureAwait(true); // 빈 자동 저장은 복구할 것이 없다
             }
         }
 
@@ -48,7 +50,7 @@ public sealed partial class SqlEditorHost
             {
                 foreach (var auto in autos.OrderBy(a => OrderOf(a.Id)))
                 {
-                    Restore(auto);
+                    Restore(auto, MyBatisRecoveryTarget.Autosave);
                 }
 
                 ActivateLast();
@@ -57,7 +59,7 @@ public sealed partial class SqlEditorHost
 
             foreach (var auto in autos)
             {
-                await _store.DeleteAutosaveAsync(auto.Id, ct).ConfigureAwait(true);
+                await DeleteAutosaveAsync(auto.Id, ct).ConfigureAwait(true);
             }
         }
 
@@ -123,11 +125,19 @@ public sealed partial class SqlEditorHost
             }
 
             await _store.AutosaveAsync(ws.ToWorkspace(), ct).ConfigureAwait(true);
+            if (ws.MyBatis is not null) // design.md 5.6: 세션 상태는 작업 공간 자동 저장과 같은 때에 곁 파일로
+            {
+                foreach (var participant in MyBatisHooks.RecoveryParticipants)
+                {
+                    await participant.SaveAsync(ws, MyBatisRecoveryTarget.Autosave, ct).ConfigureAwait(true);
+                }
+            }
+
             ws.MarkAutosaved(stamp);
             wrote = true;
             if (!Workspaces.Contains(ws))
             {
-                await _store.DeleteAutosaveAsync(ws.Id, ct).ConfigureAwait(true); // 쓰는 사이 닫혔다: 다음 시작에 복구로 다시 나타나지 않게
+                await DeleteAutosaveAsync(ws.Id, ct).ConfigureAwait(true); // 쓰는 사이 닫혔다: 다음 시작에 복구로 다시 나타나지 않게
             }
         }
 
@@ -192,7 +202,33 @@ public sealed partial class SqlEditorHost
         foreach (var ws in Workspaces.ToList())
         {
             await _store.SaveAsync(ws.ToWorkspace(), ct).ConfigureAwait(true);
-            await _store.DeleteAutosaveAsync(ws.Id, ct).ConfigureAwait(true);
+            if (ws.MyBatis is not null) // design.md 5.6: 종료는 묻지 않고 저장본(복구 상태 포함)에 남긴다
+            {
+                foreach (var participant in MyBatisHooks.RecoveryParticipants)
+                {
+                    await participant.SaveAsync(ws, MyBatisRecoveryTarget.Saved, ct).ConfigureAwait(true);
+                }
+            }
+
+            await DeleteAutosaveAsync(ws.Id, ct).ConfigureAwait(true);
+        }
+    }
+
+    /// <summary>
+    /// 자동 저장본을 지운다(작업 공간 저장소 + MyBatis 복구 참여자의 곁 파일, design.md 5.6). 참여자가 없으면 저장소만 지운다.
+    /// 저장소가 없으면 아무것도 하지 않는다.
+    /// </summary>
+    private async Task DeleteAutosaveAsync(string workspaceId, CancellationToken ct)
+    {
+        if (_store is null)
+        {
+            return;
+        }
+
+        await _store.DeleteAutosaveAsync(workspaceId, ct).ConfigureAwait(true);
+        foreach (var participant in MyBatisHooks.RecoveryParticipants)
+        {
+            await participant.DeleteAsync(workspaceId, MyBatisRecoveryTarget.Autosave, ct).ConfigureAwait(true);
         }
     }
 }

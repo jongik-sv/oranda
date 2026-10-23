@@ -1,4 +1,5 @@
 using System.Globalization;
+using Oranda.App.Features.MyBatisWorkspace.Hooks;
 
 namespace Oranda.App.Features.SqlEditor;
 
@@ -55,12 +56,27 @@ public sealed partial class SqlEditorHost
             return;
         }
 
+        if (_store is not null && workspace.MyBatis is not null)
+        {
+            // design.md 5.6: 복구 상태(곁 파일)는 세션이 붙어 있는 동안 저장본으로 남긴다(RemoveWorkspace 가 세션을 뗀다).
+            foreach (var participant in MyBatisHooks.RecoveryParticipants)
+            {
+                await participant.SaveAsync(workspace, MyBatisRecoveryTarget.Saved, ct).ConfigureAwait(true);
+            }
+
+            index = Workspaces.IndexOf(workspace);
+            if (index < 0)
+            {
+                return; // 저장하는 사이 다른 경로로 이미 닫혔다
+            }
+        }
+
         var snapshot = workspace.ToWorkspace();
         RemoveWorkspace(workspace, index);
         if (_store is not null)
         {
             await _store.SaveAsync(snapshot, ct).ConfigureAwait(true);
-            await _store.DeleteAutosaveAsync(snapshot.Id, ct).ConfigureAwait(true);
+            await DeleteAutosaveAsync(snapshot.Id, ct).ConfigureAwait(true);
         }
     }
 
@@ -81,6 +97,8 @@ public sealed partial class SqlEditorHost
         }
 
         workspace.ActiveTab = null;
+        _activationOrder.Remove(workspace);
+        workspace.MyBatis = null; // design.md 10.1: 세션을 뗀다(문서 종류가 Sql 로 돌아가고 도구 창 규칙·구독이 풀린다)
         Workspaces.RemoveAt(index);
         WorkspaceClosed?.Invoke(this, workspace);
     }

@@ -1,5 +1,6 @@
 using System.Collections.ObjectModel;
 using CommunityToolkit.Mvvm.ComponentModel;
+using Oranda.App.Features.MyBatisWorkspace.Hooks;
 using Oranda.Core.Storage;
 using Oranda.Core.Workspaces;
 
@@ -31,6 +32,7 @@ public sealed partial class SqlEditorHost : ObservableObject, IDisposable
     private CancellationTokenSource? _autosaveCts;
     private SqlEditorViewModel? _active;
     private SqlWorkspaceViewModel? _activeWorkspace;
+    private readonly List<SqlWorkspaceViewModel> _activationOrder = [];
 
     public SqlEditorHost(IWorkspaceStore? store = null, IEditorDialogs? dialogs = null)
     {
@@ -48,6 +50,10 @@ public sealed partial class SqlEditorHost : ObservableObject, IDisposable
     }
 
     public IEditorDialogs Dialogs { get; set; }
+
+    // MyBatis 훅 자리(design.md 9장). 구현이 없으면 Empty 라 모든 분기가 지금 경로로 간다. 셸의 MyBatisWorkspaceWiring 이 시작 작업에서 넣는다.
+    /// <summary>MyBatis 확장 훅 묶음(열기·저장·복구 등). 기본은 비어 있다.</summary>
+    public MyBatisHooks MyBatisHooks { get; set; } = MyBatisHooks.Empty;
 
     /// <summary>작업 공간 저장소. 셸이 시작 작업에서 넣는다(<see cref="Current"/> 는 DI 전에 만들어지므로).</summary>
     public IWorkspaceStore? Store
@@ -143,6 +149,13 @@ public sealed partial class SqlEditorHost : ObservableObject, IDisposable
 
     private void RaiseActiveWorkspaceChanged()
     {
+        if (_activeWorkspace is { } active)
+        {
+            // 활성이 됐던 순서(최근 먼저). MyBatis 가 활성일 때 새 SQL 탭을 보낼 「마지막으로 활성이던 일반 작업 공간」을 찾는 데 쓴다(design.md 2.2).
+            _activationOrder.Remove(active);
+            _activationOrder.Insert(0, active);
+        }
+
         OnPropertyChanged(nameof(ActiveWorkspace));
         OnPropertyChanged(nameof(WorkspaceId));
         OnPropertyChanged(nameof(WorkspaceName));

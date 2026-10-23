@@ -116,16 +116,17 @@ TRD 6 의 7개에 기능 Task 가 더 필요로 하는 명령을 모두 넣었�
 | `oranda.mybatis.save` | xml 에 저장 | File | `mybatisDocActive && mybatisDocDirty` | `toolbar:mybatis/save@40`, `menu:file/mybatisSave@32` | (Ctrl+S 는 `file.save` 경유, 4.4) | `Save/MyBatisSaveCommands.cs` (03-03) |
 | `oranda.mybatis.checkCombinations` | 조합 검사 | Sql | `mybatisDocActive && mybatisStatementSelected` | `toolbar:mybatis/combos@30`, `menu:sql/mybatisCombos@25` | - | `Combos/MyBatisComboCommands.cs` (03-04) |
 | `oranda.mybatis.applyAutoFix` | 자동 고침(<set>·<where> 로 감싸기) | Edit | `mybatisDocActive && mybatisStatementSelected && !readOnlyDoc` | `context:mybatisEditor/autoFix@10`(문장 편집기 우클릭, 03-01 이 그림) | - | 같음 (03-04) |
-| `oranda.mybatis.convertWorkspace` | MyBatis 작업 공간으로 바꾸기… | File | `sqlWorkspaceActive && !mybatisDocActive` | `menu:file/mybatisConvert@97`, `context:documentTab/mybatisConvert@40` | - | `Convert/MyBatisConvertCommands.cs` (03-05) |
-| `oranda.mybatis.openFolder` | 매퍼 폴더 열기… | File | (없음) | `menu:file/mybatisOpenFolder@91` | - | `Folder/MyBatisFolderCommands.cs` (03-07) |
+| `oranda.mybatis.convertWorkspace` | MyBatis 작업 공간으로 바꾸기… | File | `sqlWorkspaceActive && !mybatisDocActive && mybatisConvertReady` | `menu:file/mybatisConvert@97`, `context:documentTab/mybatisConvert@40` | - | `Conversion/MyBatisConvertCommands.cs` (03-05) |
+| `oranda.mybatis.openFolder` | 매퍼 폴더 열기… | File | `mybatisFolderReady` | `menu:file/mybatisOpenFolder@91` | - | `Folder/MyBatisFolderCommands.cs` (03-07) |
 | `oranda.mybatis.findStatement` | MyBatis 문장 찾기… | Navigate | `mybatisDocActive \|\| mybatisFolderOpen` | `menu:navigate/mybatisFind@70` | - | 같음 (03-07) |
 
+- 아이콘(문서 도구 막대·메뉴): run·explainPlan·copy·save·compile(조합 검사)·add·rename·delete·fileSql·docEdit·swap·folder·find(기존 아이콘 키, 특성에 넣어 동결).
 - 처리기의 `When`: 단축키가 있는 `runScenario` 만 `When = "mybatisDocFocus"`(주 메뉴에서는 `mybatisDocActive` 로 봄, 4.3). 나머지는 `When` 없음(주 메뉴에서 숨기지 않고 Enablement 로 회색).
-- 대상 문장: 「문장」 창 우클릭으로 부르면 매개변수(`ICommandRegistry.ExecuteAsync(id, keys, parameter)`)로 문장 id(`string`)를 넘긴다. 매개변수가 없으면 활성 문장 탭의 문장이다. `mybatisStatementSelected` = 「문장」 창에서 고른 문장 **또는** 활성 문장 탭이 있음.
+- 대상 문장: 셸의 우클릭 메뉴 공급(`ShellContextMenus.Factory(표면)`)은 매개변수를 넘기지 못한다. 그래서 「문장」 창은 우클릭 메뉴를 띄우기 전에 `IMyBatisWorkspaceSession.SelectStatement(id)` 를 부르고, 처리기는 `SelectedStatementId` 를 대상으로 쓴다(없으면 활성 문장 탭의 문장). `mybatisStatementSelected` = 고른 문장 **또는** 활성 문장 탭이 있음. 문서 탭 우클릭(`context:documentTab`) 처리기는 우클릭한 문서의 Panel(`DockTabMenu.TargetPanel`)을 대상으로 쓴다.
 - 「MyBatis 로그 붙여 넣기」는 새 명령을 만들지 않는다. 기존 `oranda.edit.pasteMyBatisLog`(Features/MyBatisLog, 03-06 소유)의 처리기가 MyBatis 문서일 때 분기한다(MB-09).
 - 자리 이름과 그리는 곳:
   - `menu:*`: 셸 주 메뉴. 번호는 지금 메뉴 번호와 겹치지 않게 골랐다(파일 30 save·40 saveAs·90·92·96, SQL 14·16·50, 탐색 60 사이).
-  - `context:<표면>`: 셸의 `ShellContextMenus.Factory(표면)` 으로 그린다. `mybatisStatements`(문장 창, 03-01)·`mybatisExpanded`(펼친 SQL 패널, 03-02)·`mybatisEditor`(문장 편집기, 03-01)는 그 View 가 Factory 를 부른다. `documentTab` 은 01-02 가 문서 탭 우클릭 메뉴(`DockTabMenu`)에 Factory 항목을 덧붙여 그린다(2026-10-23 조정자 질문 중).
+  - `context:<표면>`: 셸의 `ShellContextMenus.Factory(표면)` 으로 그린다. `mybatisStatements`(문장 창, 03-01)·`mybatisExpanded`(펼친 SQL 패널, 03-02)·`mybatisEditor`(문장 편집기, 03-01)는 그 View 가 Factory 를 부른다. `documentTab` 은 01-02 가 문서 탭 우클릭 메뉴(`DockTabMenu`)에 Factory 항목을 덧붙여 그린다(2026-10-23 조정자 허가).
   - `toolbar:mybatis`: 셸 도구 막대는 `main` 만 그리므로, 문서 도구 막대(03-01 의 MyBatis 문서 머리)가 레지스트리에서 `toolbar:mybatis` 자리 명령을 읽어 아이콘 단추를 만든다(실행은 `ICommandRegistry.ExecuteAsync` 한 경로).
   - 모르는 자리 이름은 셸이 무시한다(`Placement.TryParse`, 예외 없음).
 - 패널 안 단추(시나리오 추가·복제·지우기, 알림 띠의 「차이 보고 고르기 / 파일 것으로 / 내 것으로」, 조합 검사 「다시 검사」·「시나리오로 저장」·「편집기에서 보기」)는 그 패널 ViewModel 의 RelayCommand 다. 레지스트리 명령으로 올리지 않는다.
@@ -150,9 +151,10 @@ TRD 6 의 7개에 기능 Task 가 더 필요로 하는 명령을 모두 넣었�
 | `mybatisDocDirty` | 상태 키 | 활성 MyBatis 문서의 세션 dirty | 같음 |
 | `mybatisStatementSelected` | 상태 키 | 「문장」 창에서 고른 문장 또는 활성 문장 탭이 있음 | 같음(세션의 `SelectedStatementId`) |
 | `mybatisFolderOpen` | 상태 키 | 매퍼 폴더가 열려 있음 | 03-07(자기 Folder/ 서비스가 `ContextKeyService.Set`) |
+| `mybatisFolderReady` · `mybatisConvertReady` | 상태 키 | 매퍼 폴더 기능 · 바꾸기 기능이 들어왔음(R24: 기능 레인 머지 전까지 빈 처리기 메뉴를 누를 수 없게) | 03-07 · 03-05 가 자기 폴더의 시작 서비스에서 참으로 켬 |
 
 - 갱신 시점: `MyBatisWorkspaceWiring`(시작 작업, 소유 폴더 `Hooks/`)이 `SqlEditorHost.ActiveWorkspaceChanged`·`ActiveChanged`, 활성 작업 공간의 `DocumentKind` 변경, 세션 `StateChanged` 를 받아 `ContextKeyService.Set` 으로 위 세 키를 바로 넣는다. 지금 `SqlEditorDockWiring.PushKeys` 는 탭 사건에만 돌고 작업 공간 전환에는 돌지 않으므로 그것에 기대지 않는다(`SqlEditorDockWiring.cs` 는 고치지 않는다).
-- 주 메뉴 숨김 규칙(`MenuVisibility.TabScopes`): `mybatisDocFocus` → `mybatisDocActive`, `editorFocus` → 지금 식 `|| mybatisDocActive`, `sqlEditorFocus`·`sqlDocFocus` → `sqlDocActive && !mybatisDocActive`. `gridFocus` 는 그대로(MyBatis 문서도 결과 그리드를 쓴다). commands.md 2.4 의 대응 문장도 같이 고친다(조정자 질문 중).
+- 주 메뉴 숨김 규칙(`MenuVisibility.TabScopes`): `mybatisDocFocus` → `mybatisDocActive`, `editorFocus` → 지금 식 `|| mybatisDocActive`, `sqlEditorFocus`·`sqlDocFocus` → `sqlDocActive && !mybatisDocActive`. `gridFocus` 는 그대로(MyBatis 문서도 결과 그리드를 쓴다). commands.md 2.4 의 대응 문장도 같이 고친다(2026-10-23 조정자 허가).
 - `sqlDocActive` 는 MyBatis 문서에서도 참으로 둔다. 탭 접속·결과·메시지·접속 콤보가 그대로 동작해야 하기 때문이다.
 
 ### 4.4 MyBatis 문서에서 기존 명령
@@ -162,12 +164,12 @@ TRD 6 의 7개에 기능 Task 가 더 필요로 하는 명령을 모두 넣었�
 | 기존 명령 묶음 | MyBatis 문서에서 | 손잡이 |
 |----------------|------------------|--------|
 | SQL 실행(`exec.runStatement`·`runSubquery`·`runSelection`·`runScript`·`runFromCursor`·`runStep`·`runToNewResultTab`·`runAllTabs`), `exec.runForEdit` | 주 메뉴 숨김, 도구 막대·팔레트 회색 | `ExecutionCommands.cs`·`GridEditCommands.cs` Enablement(2026-10-23 조정자 허가) |
-| 실행 계획(`plan.explain`·`plan.actual`), 서식(`format.document`·`format.statement`), `sqlplus.runFile` | 회색 | `ExecutionPlanCommands.cs`·`FormatterProfilesCommands.cs` 등 Enablement(조정자 질문 중) |
+| 실행 계획(`plan.explain`·`plan.actual`), 서식(`format.document`·`format.statement`), `sqlplus.runFile` | 회색 | `ExecutionPlanCommands.cs`·`FormatterProfilesCommands.cs` 등 Enablement(2026-10-23 조정자 허가) |
 | 그 밖 SQL 편집 전용(`exec.bindVariables`·`pasteBindValues`·`goToError` 등 `When = sqlDocFocus`) | 주 메뉴에서 숨김, 키는 포커스 자리로 안 잡힘 | `MenuVisibility.TabScopes`, `FocusScopes` |
 | 편집(`edit.*`, `When = editorFocus`) | 그대로 됨 | `editorFocus` 에 mybatisText |
 | `file.save` (Ctrl+S) | 활성 작업 공간이 MyBatis 면 저장 훅(= `oranda.mybatis.save` 처리기). 활성 탭이 없어도 된다 | `SqlEditorHost.SaveAsync`·`SqlEditorCommandHandler` 의 `file.save` 분기(01-02), 구현 03-03 |
 | `file.saveAll` | MyBatis 작업 공간마다 저장 훅을 한 번 부른다(dirty 탭 순회와 따로, 세션 dirty 기준) | `SaveAllAsync` 분기 |
-| `file.saveAs`, `file.renameTab`, `file.saveWorkspaceFile(As)` | 회색. 매퍼 다른 이름 저장은 범위 밖. Markdown 작업 공간 저장은 문장 고침을 「저장됨」으로 지워 버리므로 막는다 | `SqlEditorCommandHandler.cs` Enablement(조정자 질문 중) |
+| `file.saveAs`, `file.renameTab`, `file.saveWorkspaceFile(As)` | 회색. 매퍼 다른 이름 저장은 범위 밖. Markdown 작업 공간 저장은 문장 고침을 「저장됨」으로 지워 버리므로 막는다 | `SqlEditorCommandHandler.cs` Enablement(2026-10-23 조정자 허가) |
 | `file.duplicateTab`, `file.reopenClosed`, `file.newSqlEditor` | 일반 작업 공간으로 간다(2.2) | `SqlEditorHost.Tabs.cs` 분기 |
 | `edit.pasteMyBatisLog` | 03-06 분기 | 03-06 |
 | 결과·그리드·접속·트랜잭션 | 그대로 | - |
@@ -229,7 +231,7 @@ xml 형식(XmlReader, DTD 무시·resolver null), 문장 id 겹침, 연 때 해�
 ### 5.6 닫기 · 종료 · 복구
 
 - 매퍼 작업 공간 닫기: 세션 dirty 면 「저장 / 저장 안 함 / 취소」 한 번. `TryCloseWorkspaceAsync` 의 MyBatis 분기(01-02)가 탭 수와 상관없이 `IMyBatisSaveHandler.ConfirmCloseAsync`(03-03)를 부른다. 기존 가드 `ConfirmSaveAsync` 는 MyBatis 문장 탭을 묻지 않는다(`NeedsSaveConfirm` 분기, 01-02).
-- 앱 종료·비정상 종료: 묻지 않고 복구에 남긴다. 복구 상태 = 작업 공간 저장본(`workspaces/{id}.json`·`autosave/{id}.json`, 문장 탭의 Content)에 더해, 세션 상태를 같은 폴더의 `{id}.mybatis.json` 에 둔다(9장 `IMyBatisRecoveryParticipant`).
+- 앱 종료·비정상 종료: 묻지 않고 복구에 남긴다. 복구 상태 = 작업 공간 저장본(`workspaces/{id}.json`·`autosave/{id}.json`, 문장 탭의 Content)에 더해, 세션 상태를 같은 폴더의 곁 파일 `{id}.mybatis-{Key}.json`(복구 참여자마다 하나, 9장 `IMyBatisRecoveryParticipant`)에 둔다.
   - Core `Workspace` 레코드에는 종류·MyBatis 상태 칸이 없다. 칸을 더하면 Core 계약(`Oranda.Core.Workspaces`, 모든 작업 공간 저장·복원 경로)이 바뀌고 01-02 소유 밖이다. 곁 파일이면 MyBatis 쪽 파일만 늘고 기존 작업 공간 파일 모양은 그대로다.
   - 곁 파일 내용: 매퍼 경로, 연 때 해시·원문(기준), 문장 탭 ↔ 문장 id·종류, 새 문장·지운 문장·id 바꾸기 목록, 고르던 문장.
   - 수명: 저장본(`workspaces/`)과 자동 저장본(`autosave/`)을 따로 둔다. 쓰기·지우기·이름 바꾸기는 작업 공간 저장본과 같은 시점이다. 호스트의 자동 저장 삭제(복구 거절·빈 자동 저장·종료·닫기)와 「작업 공간 저장」의 ID 바꾸기마다 복구 훅의 `Delete`·`Rename` 을 함께 부른다(Autosave·Persistence·Workspaces 훅, 01-02). 경로는 `IAppDataPaths` 의 작업 공간·자동 저장 폴더를 쓴다.
@@ -303,7 +305,7 @@ xml 형식(XmlReader, DTD 무시·resolver null), 문장 id 겹침, 연 때 해�
 
 - 세션 최소 멤버(01-02 가 동결, 03-02·03-03·03-04·03-06 이 03-01 파일을 고치지 않고 쓰게):
   - 읽기: `MapperPath`·`MapperNamespace`·`Document`(지금 기준 `IMyBatisMapperDocument`)·`BaselineHash`·`IsDirty`·`SelectedStatementId`, `StatementIdOf(tab)`·`ElementOf(statementId)`(고친 원문이 반영된 `MyBatisElement`)·`Fragments`(같은 매퍼 조각 해석기)·`PendingEdits()`(→ `MapperEdit` 목록)
-  - 쓰기: `Rebase(newText)`(저장·병합 뒤 기준 바꾸기, 03-03)·`ApplyDiskChanges(...)`(병합 결과 반영, 03-03)·`Select(statementId)`
+  - 쓰기: `Rebase(newText, writtenStatementIds)`(저장 뒤 기준 바꾸기, 03-03)·`ApplyDiskText(diskText, keepMine)`(병합 결과 반영, 03-03)·`SelectStatement(statementId)`
   - 사건: `StateChanged`(dirty·문장 목록·고른 문장)
   - 정확한 시그니처는 B6 이 코드로 정한다.
 - `IStatementLocator` 는 초안(§2.11 K3)에서 03-06 이 만들기로 했던 것을 01-02 로 옮겼다. 그러면 03-07 이 03-06 머지를 기다리지 않고 구현을 꽂을 수 있다(위험 R4 완화. 띄우는 순서는 조정자가 정함).
@@ -311,6 +313,7 @@ xml 형식(XmlReader, DTD 무시·resolver null), 문장 id 겹침, 연 때 해�
   - 훅 자리는 DI 에서 구현을 **처음 쓸 때** 꺼낸다(`Lazy`). 구현이 없으면 비어 있고 지금 경로 그대로 간다(01-02 머지 직후의 상태).
 - 시작 시험(상위 decisions D-006) 제약 — 시작 때 `Oranda.Language` 가 로드되면 안 된다:
   - App 의 형이 Language 인터페이스를 **구현**하면 셸의 어셈블리 훑기(`ShellContributions.Scan`·`ServiceContainer`)가 그 형을 읽을 때 Language 를 로드한다. 그래서 App 이 구현하는 계약은 Core 나 App 에 둔다: 조각 해석기 `IMyBatisFragmentResolver` 는 Core(9.1), 훅은 App.
+  - 셸 훑기(`GetTypes`)는 App 형의 값 형식 필드 형도 읽는다. 그래서 시작 때 훑기는 App 형(특히 `[OrandaToolPanel]` ViewModel)에 Language 의 enum·구조체(`MyBatisElementKind`·`MyBatisParameterUsage`·`TextRange` 는 Core 라 괜찮음) 필드를 두지 않는다. 참조 형식 필드·지역 변수·메서드 시그니처는 괜찮다(B6 확인: 세션 인터페이스를 App 형이 구현해도 시작 때 Language 가 로드되지 않음).
   - `[OrandaToolPanel]` ViewModel, `[OrandaCommand]` 처리기, 훅 구현은 매개변수 없는 생성자 또는 등록된 Shell 서비스·`IServiceProvider` 만 받는 생성자를 둔다. Language 형(계산기·매퍼 파서)은 처음 쓸 때 해석한다(`OutlineViewModel` 주석과 같은 이유).
 - 문장 편집기 View: `SqlWorkspaceView` 는 지금 탭별 View 를 `Dictionary<SqlEditorViewModel, SqlEditorView>` 로 들고 `FocusEditor()` 를 부른다. 01-02 는 이것을 `Control` + 포커스 인터페이스(`IEditorFocusTarget`, `SqlEditorView` 도 구현)로 바꾼다. 03-01 의 강조는 `SqlEditorView` 가 DataContext 마다 거는 `SqlSyntaxColorizer`(문서 전체, 구간 지정 없음)를 Attach 때 떼고(`Detach`) 자기 MyBatis 강조기로 그린다. SQL 구간은 L1 렉서(`Oranda.Language.Lexing`)를 다시 써서 같은 색 키로 칠한다(`SqlSyntaxColorizer.cs` 는 고치지 않는다).
 - 시험 이음새: 실제 MyBatis 문서는 03-01 뒤에 생긴다. 01-02 의 렌더 점검(B10)과 보임 규칙 시험은 가짜 세션(`FakeMyBatisWorkspaceSession`)을 작업 공간에 붙여 MyBatis 문서를 만든다. 세션 인터페이스가 App 형이고 `Oranda.Testing` 은 Core 만 참조하므로, 가짜 세션은 `tests/Oranda.App.Tests/Features/MyBatisWorkspace/Fakes/`(01-02 소유, 동결)에 둔다. 붙이는 자리는 `internal` 이고 App.Tests 는 `InternalsVisibleTo`(Shell/ShellInternals.cs)로 접근한다. `Oranda.Testing/MyBatis/` 에는 Core·문자열만 쓰는 것(표본 매퍼 xml, 가짜 시나리오 저장소)을 둔다.
@@ -325,6 +328,16 @@ xml 형식(XmlReader, DTD 무시·resolver null), 문장 id 겹침, 연 때 해�
 - 문서 계약(TRD 4 의 Parse·Apply·Check)은 `IMyBatisMapperDocument`(인스턴스: 원문·인코딩 정보·namespace·요소 목록·해시, `Apply`·`Check`)와 파서 진입점 `IMyBatisMapperParser.Parse(string)` 로 나눈다(인스턴스 메서드 Parse 는 닭과 달걀이라).
 - 조각 해석기는 Core: `IMyBatisFragmentResolver.Resolve(refid, currentNamespace)` → `MyBatisFragment?`(Core 형: Id·Namespace·Text). 03-07 의 폴더 구현이 App 에 있으므로 Language 에 두면 시작 때 Language 가 로드된다(9장). 계산기는 받은 조각 원문으로 `MyBatisElement` 를 만든다. wbs 01-02 의 「IMyBatisFragmentResolver(Language)」에서 위치만 바꾼다.
 - `IMapperFileWriter` 는 Core(`src/Oranda.Core/MyBatis/`)에 둔다: 경로·새 원문·인코딩 정보(인코딩 이름·BOM 유무)만 받으므로 Language 형이 필요 없고, 03-03·03-05(App)와 구현(02-01, `src/Oranda.Platform/MyBatis/`)이 모두 볼 수 있다.
+- 바인드 이름 규칙(`MyBatisBind`): `#{x}` → `:x`, 점 경로 `#{user.name}` → `:user_name`(Oracle 바인드 이름에 점 불가), foreach 안 `#{item}` → `:item_1`…(반복 순서), 겹치면 `_2`… 를 붙인다.
+- 값 사전은 중첩 사전과 점이 든 평평한 열쇠(`"user.name"`, 시나리오 저장 모양)를 모두 받는다. 둘 다 있으면 평평한 열쇠가 이긴다.
+- 블록은 원문 태그마다 하나다(foreach 반복·바깥 반복 안의 if 도 하나, 한 번이라도 켜졌으면 켬). 덮어쓰기: if·when = 켬·끔, foreach = 끔이면 빈 목록, 켬이면 값 목록 그대로(값 없음·빈 목록이면 항목 하나).
+- include 한 조각 안에서 나온 블록·바인드·치환·문제는 `Range`(또는 `Source`) = 문장 원문의 `<include>` 태그 범위이고 `Fragment`(refid)·`FragmentRange`(조각 원문 안 범위)가 붙는다. 조각 안 블록은 따로 덮어쓸 수 없고 조합 검사 조건이 아니다.
+- `MyBatisEvalOptions(AllOn, LegacyNotation)`: `LegacyNotation` 은 지금 ReadMyBatis 표기(`:a_b`, `${x}` → `&x`, 조건 주석)로 `Sql` 을 만든다. 02-02 의 ReadMyBatis 어댑터가 `AllOn + LegacyNotation` 으로 부른다(7장).
+- 해시: `MapperHash.Compute(text)`(Core) = BOM 없는 글자를 UTF-8 로 SHA-256. 문서 `Hash`·디스크 해시·자기 쓰기 무시가 모두 이 함수다.
+- `MapperEdit.InsertElement(Id, NewText, AfterId)`. 한 요소에는 편집 하나: 원문을 고치고 id 도 바꿨으면 `ReplaceElement` 하나(Id = 옛 id). 세션 `Rebase` 의 저장 문장 목록은 새 id.
+- `IMyBatisScenarioStore.Changed`(문장 경로·id): 03-06·03-04·03-05 가 만든 시나리오가 03-02 창에 바로 보이게 한다(백그라운드 스레드에서 날 수 있음).
+- 세션 추가 멤버: `OpenStatement(id)`(탭 열기·앞으로, 03-04·03-06·03-07), `BeginNewStatementAsync`(안쪽 탭 줄 「+」), `Relocate(newPath)`(03-03 경로 골라 쓰기). `Fragments` = 같은 매퍼 → `MyBatisHooks.FragmentResolvers`(03-07 폴더 등록) 순.
+- 「문장」 창 보임: `DockWorkspace.SetToolAlwaysShown(toolId, bool)` — 03-07 이 매퍼 폴더를 열면 「문장」 창을 문서 종류와 상관없이 보이게 한다(폴더 트리 모드).
 - Core `MyBatisScenario`: Id·MapperPath·Namespace·StatementId·Name·Values(이름 → `MyBatisScenarioValue`)·SortOrder·CreatedAt·UpdatedAt.
 
 ## 10. 공유 지점 목록 (TSK-01-02 편집 지점 표의 입력)
@@ -339,21 +352,21 @@ xml 형식(XmlReader, DTD 무시·resolver null), 문장 id 겹침, 연 때 해�
 | `Features/SqlEditor/SqlEditorHost.Workspaces.cs` | 작업 공간 열기·닫기 | 닫힐 때 세션 정리 | 세션 떼기 자리(`RemoveWorkspace`) | 01-02 전용 |
 | `Features/SqlEditor/SqlEditorHost.cs` | 활성 작업 공간·문맥 키 | 훅 자리 `MyBatisHooks` | 훅 자리만(문맥 키는 `MyBatisWorkspaceWiring` 이 넣으므로 `GetContextKeys` 는 그대로) | 01-02 전용(2026-10-23 조정자 허가) |
 | `Features/SqlEditor/SqlEditorHost.CloseGuard.cs` | 탭·작업 공간 닫기 확인 | MyBatis 문장 탭을 묻지 않음, 작업 공간 닫기는 세션 dirty 기준 | `NeedsSaveConfirm` 분기, `TryCloseWorkspaceAsync` 분기 | 01-02 전용(같은 허가) |
-| `Features/SqlEditor/SqlEditorHost.Tabs.cs` | 탭 넣기·복제·닫은 탭 다시 열기 | 문장이 아닌 탭을 일반 작업 공간으로, 문장 탭은 닫은 탭 기록에서 뺌 | 분기 | 01-02 전용(조정자 질문 중) |
-| `Features/SqlEditor/SqlEditorCommandHandler.cs` | 파일·편집 명령 처리기 | `file.save` 를 활성 작업 공간 기준으로, saveAs·renameTab·saveWorkspaceFile(As) 끔 | `file.save` 분기 1개, Enablement 문자열 | 01-02 전용(조정자 질문 중) |
-| `Features/SqlEditor/DroppedWorkspaceFiles.cs` | 명령줄·끌어 놓기에서 작업 공간 파일 고르기 | .xml 도 고름 | 1줄 | 01-02 전용(조정자 질문 중) |
+| `Features/SqlEditor/SqlEditorHost.Tabs.cs` | 탭 넣기·복제·닫은 탭 다시 열기 | 문장이 아닌 탭을 일반 작업 공간으로, 문장 탭은 닫은 탭 기록에서 뺌 | 분기 | 01-02 전용(2026-10-23 조정자 허가) |
+| `Features/SqlEditor/SqlEditorCommandHandler.cs` | 파일·편집 명령 처리기 | `file.save` 를 활성 작업 공간 기준으로, saveAs·renameTab·saveWorkspaceFile(As) 끔 | `file.save` 분기 1개, Enablement 문자열 | 01-02 전용(2026-10-23 조정자 허가) |
+| `Features/SqlEditor/DroppedWorkspaceFiles.cs` | 명령줄·끌어 놓기에서 작업 공간 파일 고르기 | .xml 도 고름 | 1줄 | 01-02 전용(2026-10-23 조정자 허가) |
 | `Features/SqlEditor/SqlWorkspaceViewModel.cs` | 작업 공간 VM | `DocumentKind`·`MyBatis` 세션·`IToolScopeDocument`, `IsDirty` 에 세션 dirty, 자동 저장 표지, 탭 이름 바꾸기 막음 | 속성·사건·표지 | 01-02 전용 |
 | `Features/SqlEditor/SqlWorkspaceView.axaml(.cs)` | 안쪽 탭 줄·편집기 View 바꿔 끼우기 | 문장 편집기 View, 탭 머리 종류 표시, 「+」 | View 생성 훅(사전 형을 `Control` + `IEditorFocusTarget` 로), 탭 머리 자리(내용 없는 ContentControl), MyBatis 탭 우클릭 「이름 바꾸기」 숨김 | 01-02 전용(같은 허가) |
 | `Shell/Docking/DockWorkspace.ScopedTools.cs`·`DockWorkspace.cs` | SQL 전용 도구 창 숨기기 | 3장 규칙, `IToolScopeDocument`, `RefreshScopedTools` | 규칙 확장 | 01-02 전용 |
 | `Shell/Layout/LayoutPlanner.cs` | 기본 배치·새 창 끼우기 | `OpenRightTools` 에 파라미터 창 | 한 줄 | 01-02 |
 | `Shell/Keymaps/FocusScopes.cs` | 포커스 자리 | `mybatisText`(`AllSlots` 포함), `mybatisDocFocus`, `editorFocus` 확장 | 표 수정 | 01-02 뒤 동결 |
-| `Shell/Docking/DockTabMenu.cs` | 문서 탭 우클릭(고정 메뉴) | `context:documentTab` 레지스트리 항목 덧붙이기 | `ShellContextMenus.Factory("documentTab")` 자리 1개 | 01-02 전용(조정자 질문 중) |
+| `Shell/Docking/DockTabMenu.cs` | 문서 탭 우클릭(고정 메뉴) | `context:documentTab` 레지스트리 항목 덧붙이기 | `ShellContextMenus.Factory("documentTab")` 자리 1개 | 01-02 전용(2026-10-23 조정자 허가) |
 | `Shell/Menus/MenuVisibility.cs` | 주 메뉴 숨김 | 4.3 TabScopes | 표 수정 | 01-02 뒤 동결 |
 | `Shell/Resources/CommandTitles.json`·`-en.json` | 명령 제목 | 4.1 의 15개 | 전부 미리 넣음 | 동결(새 명령은 조정자 승인) |
 | `Resources/strings-ko.json`·`strings-en.json`·`literals-en.json` | 패널 제목·화면 글 | 패널 4개 제목, 자리 화면 글 | 자기 키만 정렬 위치에 | 공유(Q2, 자기 키만) |
-| `docs/design/keymaps/*.json` 4개 · `docs/design/commands.md` | 키맵 프리셋·명령 문서 | 4.2 F9 한 줄, MyBatis 명령·문맥 키·포커스 자리 줄, 2.4 TabScopes 문장 | MyBatis 줄만(Q1) + 2.4 문장 1개(조정자 질문 중) | 동결 |
+| `docs/design/keymaps/*.json` 4개 · `docs/design/commands.md` | 키맵 프리셋·명령 문서 | 4.2 F9 한 줄, MyBatis 명령·문맥 키·포커스 자리 줄, 2.4 TabScopes 문장 | MyBatis 줄만(Q1) + 2.4 문장 1개(2026-10-23 조정자 허가) | 동결 |
 | `Features/Execution/ExecutionCommands.cs`·`Features/GridEdit/GridEditCommands.cs` | SQL 실행 명령 | Enablement 에 `&& !mybatisDocActive` | 특성 문자열만(2026-10-23 조정자 허가) | 금지(기능 레인) |
-| `Features/ExecutionPlan/ExecutionPlanCommands.cs`·`Features/FormatterProfiles/FormatterProfilesCommands.cs`(·`sqlplus.runFile` 처리기) | 실행 계획·서식 명령 | Enablement 에 `&& !mybatisDocActive` | 특성 문자열만(조정자 질문 중) | 금지(기능 레인) |
+| `Features/ExecutionPlan/ExecutionPlanCommands.cs`·`Features/FormatterProfiles/FormatterProfilesCommands.cs`(·`sqlplus.runFile` 처리기) | 실행 계획·서식 명령 | Enablement 에 `&& !mybatisDocActive` | 특성 문자열만(2026-10-23 조정자 허가) | 금지(기능 레인) |
 | `Features/SqlEditor/SqlEditorView.axaml` | 편집기 View, 자리 sqlText | 고치지 않음(03-01 이 인스턴스 속성으로 덮어씀) | - | - |
 | `Features/SqlEditor/SqlSyntaxColorizer.cs` | SQL 강조 | 고치지 않음(03-01 이 떼고 자기 강조기로, 9장) | - | 금지 |
 | `Features/SqlEditor/SqlEditorDockWiring.cs` | 작업 공간 ↔ 도킹, 문맥 키 옮기기 | 고치지 않음(MyBatis 키는 `MyBatisWorkspaceWiring`) | - | - |
@@ -375,28 +388,36 @@ xml 형식(XmlReader, DTD 무시·resolver null), 문장 id 겹침, 연 때 해�
 | `Run/` | 실행·계획·복사 명령 처리기 | 03-02 |
 | `Save/` | 저장 훅·바뀌는 부분 창·병합·감시·닫기 가드·저장 명령·상태 표시줄 구간 | 03-03 |
 | `Combos/` | 조합 검사 패널·실행기·자동 고침·배지·명령 | 03-04 |
-| `Convert/` | 바꾸기 엔진·대화 상자·명령 | 03-05 |
+| `Conversion/` | 바꾸기 엔진·대화 상자·명령 | 03-05 |
 | `LogPaste/` | 로그 붙여 넣기 MyBatis 분기·열린 매퍼 `IStatementLocator` | 03-06 |
 | `Folder/` | 폴더 훑기·폴더 조각 해석기·트리 모드·찾기 명령 | 03-07 |
 
-## 11. 기능 Task 편집 지점 (초안 — TSK-01-02 B9 가 실제 파일로 확정)
+## 기능 Task 편집 지점
+
+11장. TSK-01-02 가 실제 파일로 확정했다(2026-10-23). 기능 Task 는 「소유 파일」 열의 파일·폴더만 고치고, 「시험 파일」 열의 틀(TSK-01-02 가 Skip 시험 하나로 만들어 둠)을 채운다. 두 Task 가 한 파일을 나눠 갖지 않는다(아래 표의 경로는 서로 겹치지 않는다). 등록은 자동 수집(`[OrandaCommand]`·`[OrandaToolPanel]`·`[OrandaService]`)이라 공유 진입점에 줄을 더하지 않는다.
 
 | Task | 소유 파일(쓰기) | 시험 파일 |
 |------|-----------------|-----------|
-| 02-01 | `src/Oranda.Language/MyBatis/MapperDocument*.cs`·`MapperParser*.cs`, `src/Oranda.Platform/MyBatis/MapperFileWriter.cs`(`IMapperFileWriter` 구현) | `tests/Oranda.Language.Tests/MyBatis/MapperDocument*Tests.cs` |
-| 02-02 | `src/Oranda.Language/MyBatis/MyBatisEvaluator*.cs`·`OgnlLite*.cs`·`ParameterExtractor*.cs`·`Combinations*.cs`, `src/Oranda.App/Features/SqlEditor/WorkspaceFiles.MyBatis.cs` | `tests/Oranda.Language.Tests/MyBatis/{Evaluator,Ognl,Golden}*`, `tests/Oranda.App.Tests/Features/SqlEditor/WorkspaceFilesTests.cs`(MyBatis 시험만) |
-| 02-03 | `src/Oranda.Platform/Storage/SqliteMyBatisScenarioStore.cs` | `tests/Oranda.Platform.Tests/Storage/MyBatisScenarioStoreTests.cs` |
-| 03-01 | `Features/MyBatisWorkspace/{Statements,Workspace,Editor}/**`(Editor/EvalDecorator* 제외) | `tests/Oranda.App.Tests/Features/MyBatisWorkspace/WorkspaceUiTests.cs` |
-| 03-02 | `Features/MyBatisWorkspace/{Parameters,Expanded,Run}/**`, `Editor/EvalDecorator*.cs`, `tests/Oranda.Oracle.IntegrationTests/MyBatis/MyBatisRun*` | `tests/Oranda.App.Tests/Features/MyBatisWorkspace/ParamsRunTests.cs` |
-| 03-03 | `Features/MyBatisWorkspace/Save/**` | `tests/Oranda.App.Tests/Features/MyBatisWorkspace/SaveMergeTests.cs` |
-| 03-04 | `Features/MyBatisWorkspace/Combos/**`, `tests/Oranda.Oracle.IntegrationTests/MyBatis/MyBatisCombo*` | `tests/Oranda.App.Tests/Features/MyBatisWorkspace/ComboCheckTests.cs` |
-| 03-05 | `Features/MyBatisWorkspace/Convert/**`, `tests/Oranda.Oracle.IntegrationTests/MyBatis/MyBatisConvert*` | `tests/Oranda.App.Tests/Features/MyBatisWorkspace/ConvertTests.cs` |
-| 03-06 | `Features/MyBatisLog/**`, `Features/MyBatisWorkspace/LogPaste/**` | `tests/Oranda.App.Tests/Features/MyBatisLog/**`, `tests/Oranda.App.Tests/Features/MyBatisWorkspace/LogPasteTests.cs` |
-| 03-07 | `Features/MyBatisWorkspace/Folder/**` | `tests/Oranda.App.Tests/Features/MyBatisWorkspace/MapperFolderTests.cs` |
+| 02-01 | `src/Oranda.Language/MyBatis/MapperDocument*.cs`·`MapperParser*.cs`(새 파일, `IMyBatisMapperParser`·`IMyBatisMapperDocument` 구현), `src/Oranda.Platform/MyBatis/MapperFileWriter.cs`(새 파일, `IMapperFileWriter` 구현) | `tests/Oranda.Language.Tests/MyBatis/MapperDocumentTests.cs`(틀), 그 밖 `tests/Oranda.Language.Tests/MyBatis/MapperDocument*Tests.cs`·`tests/Oranda.Platform.Tests/MyBatis/**` 새 파일 |
+| 02-02 | `src/Oranda.Language/MyBatis/MyBatisEvaluator*.cs`·`OgnlLite*.cs`·`ParameterExtractor*.cs`·`Combinations*.cs`(새 파일, `IMyBatisEvaluator` 구현), `src/Oranda.App/Features/SqlEditor/WorkspaceFiles.MyBatis.cs`(TSK-01-02 가 나눈 partial) | `tests/Oranda.Language.Tests/MyBatis/MyBatisEvaluatorTests.cs`(틀), `tests/Oranda.Language.Tests/MyBatis/{Ognl,Golden}*`·`MyBatis/Golden/**` 새 파일, `tests/Oranda.App.Tests/Features/SqlEditor/WorkspaceFilesTests.cs` 의 MyBatis 시험 2개만 |
+| 02-03 | `src/Oranda.Platform/Storage/SqliteMyBatisScenarioStore.cs`(새 파일, `IMyBatisScenarioStore` 구현) | `tests/Oranda.Platform.Tests/Storage/MyBatisScenarioStoreTests.cs`(틀) |
+| 03-01 | `src/Oranda.App/Features/MyBatisWorkspace/Statements/**`(TSK-01-02 의 `MyBatisStatementsViewModel`·`View`·`MyBatisStatementCommands.cs` 포함), `src/Oranda.App/Features/MyBatisWorkspace/Workspace/**`(열기 훅·세션·복구 구현), `src/Oranda.App/Features/MyBatisWorkspace/Editor/**`(`EvalDecorator*` 제외: 문장 편집기 View·View 팩토리·머리 줄·탭 배지·문서 도구 막대·`Highlighting/`) | `tests/Oranda.App.Tests/Features/MyBatisWorkspace/WorkspaceUiTests.cs`(틀) |
+| 03-02 | `src/Oranda.App/Features/MyBatisWorkspace/Parameters/**`(`MyBatisParametersViewModel`·`View` 포함), `src/Oranda.App/Features/MyBatisWorkspace/Expanded/**`(`MyBatisExpandedViewModel`·`View` 포함), `src/Oranda.App/Features/MyBatisWorkspace/Run/**`(`MyBatisRunCommands.cs` 포함), `src/Oranda.App/Features/MyBatisWorkspace/Editor/EvalDecorator*.cs`, `tests/Oranda.Oracle.IntegrationTests/MyBatis/MyBatisRun*` | `tests/Oranda.App.Tests/Features/MyBatisWorkspace/ParamsRunTests.cs`(틀) |
+| 03-03 | `src/Oranda.App/Features/MyBatisWorkspace/Save/**`(`MyBatisSaveCommands.cs` 포함: 저장 훅·바뀌는 부분 창·병합·감시·닫기 확인·감시 기준 복구 참여자·상태 표시줄 구간) | `tests/Oranda.App.Tests/Features/MyBatisWorkspace/SaveMergeTests.cs`(틀) |
+| 03-04 | `src/Oranda.App/Features/MyBatisWorkspace/Combos/**`(`MyBatisCombosViewModel`·`View`·`MyBatisComboCommands.cs` 포함: 검사 실행기·자동 고침·`AutoFixDecorator*`·`StatementBadge*`), `tests/Oranda.Oracle.IntegrationTests/MyBatis/MyBatisCombo*` | `tests/Oranda.App.Tests/Features/MyBatisWorkspace/ComboCheckTests.cs`(틀) |
+| 03-05 | `src/Oranda.App/Features/MyBatisWorkspace/Conversion/**`(`MyBatisConvertCommands.cs` 포함), `tests/Oranda.Oracle.IntegrationTests/MyBatis/MyBatisConvert*` | `tests/Oranda.App.Tests/Features/MyBatisWorkspace/ConvertTests.cs`(틀) |
+| 03-06 | `src/Oranda.App/Features/MyBatisLog/**`, `src/Oranda.App/Features/MyBatisWorkspace/LogPaste/**`(열린 매퍼 `IStatementLocator` 구현 포함) | `tests/Oranda.App.Tests/Features/MyBatisLog/**`, `tests/Oranda.App.Tests/Features/MyBatisWorkspace/LogPasteTests.cs`(틀) |
+| 03-07 | `src/Oranda.App/Features/MyBatisWorkspace/Folder/**`(`MyBatisFolderCommands.cs` 포함: 폴더 훑기·폴더 `IMyBatisFragmentResolver`·`IMyBatisStatementsViewMode` 트리·폴더 `IStatementLocator`·`mybatisFolderOpen` 키) | `tests/Oranda.App.Tests/Features/MyBatisWorkspace/MapperFolderTests.cs`(틀) |
 | 04-01 | `tests/Oranda.App.Tests/Integration/MyBatisFlow*`, `tests/Oranda.Oracle.IntegrationTests/MyBatis/MyBatisFlow*`, `docs/oranda1/itest/TSK-04-01.md` | 같음 |
 
-- 모든 기능 Task 금지: 9장 `Hooks/`, 10.1 의 「01-02 전용」 파일, 동결 파일(제목·키맵·FocusScopes·MenuVisibility·`tests/Oranda.Testing/MyBatis/**`), 계약 형 파일(시그니처 변경 = 조정자 승인).
-- 도구 창 자리 파일(01-02 가 만든 빈 VM·View)은 위 표의 내용 소유 Task 에게 넘어간다(예 `Statements/MyBatisStatementsViewModel.cs` → 03-01). 01-02 머지 뒤 01-02 는 고치지 않는다.
+- TSK-01-02 전용(기능 Task 금지, 고칠 일이 있으면 조정자 승인):
+  - 계약: `src/Oranda.Language/MyBatis/` 의 `MyBatisElement.cs`·`IMyBatisMapperDocument.cs`·`MapperEdit.cs`·`MapperWriteCheck.cs`·`EvalResult.cs`·`MyBatisParameter.cs`·`ConditionCombination.cs`·`IMyBatisEvaluator.cs`, `src/Oranda.Core/MyBatis/**`, `src/Oranda.App/Features/MyBatisWorkspace/Hooks/**`
+  - 훅 자리: `src/Oranda.App/Features/SqlEditor/` 의 `SqlEditorHost*.cs`·`SqlWorkspaceViewModel.cs`·`SqlWorkspaceKind.cs`·`SqlWorkspaceView.axaml(.cs)`·`WorkspaceFiles.cs`(본체)·`DroppedWorkspaceFiles.cs`·`SqlEditorCommandHandler.cs`(MyBatis 분기·Enablement), `src/Oranda.App/Shell/Docking/DockWorkspace*.cs`·`DockTabMenu.cs`
+  - 동결: `src/Oranda.App/Shell/Resources/CommandTitles*.json`, `src/Oranda.App/Shell/Keymaps/**`, `src/Oranda.App/Shell/Menus/MenuVisibility.cs`, `src/Oranda.App/Shell/Layout/LayoutPlanner.cs`, `docs/design/keymaps/*.json`, `docs/design/commands.md` 의 MyBatis 줄, `src/Oranda.Platform/Migrations/OrandaDb/0003_mybatis_scenario.sql`(열 추가 = 0004, 조정자 승인)
+  - 공용 시험: `tests/Oranda.Testing/MyBatis/**`(표본 `MapperSamples`·`FakeMyBatisScenarioStore`), `tests/Oranda.App.Tests/Features/MyBatisWorkspace/Fakes/**`(`FakeMyBatisWorkspaceSession`·`FakeMapperDocument`), `tests/Oranda.App.Tests/Features/MyBatisWorkspace/MyBatisHookSitesTests.cs`·`MyBatisCommandEnablementTests.cs`, `tests/Oranda.App.Tests/Shell/Docking/DockMyBatisScopedToolsTests.cs`, `tests/Oranda.Platform.Tests/Storage/MyBatisScenarioMigrationTests.cs`
+- 공유(자기 키만 정렬 위치에, 충돌은 합집합): `src/Oranda.App/Resources/literals-en.json`·`strings-ko.json`·`strings-en.json`.
+- 패널 자리·처리기 파일(TSK-01-02 가 빈 몸으로 만든 VM·View·처리기)은 위 표대로 그 Task 소유가 된다. 특성 문자열(ID·Enablement·Placements·When)은 동결이고 몸만 채운다.
+- 시험 틀은 `Placeholder` Skip 시험 하나다. 채울 때 틀 시험을 지우거나 바꿔도 된다.
 
 ## 12. 위험과 남은 판단
 
@@ -421,13 +442,15 @@ xml 형식(XmlReader, DTD 무시·resolver null), 문장 id 겹침, 연 때 해�
 | R21 | 시작 때 `Oranda.Language` 로드(시작 시험 실패) | App 이 구현하는 계약은 Core·App 에, 생성자 제약, `WorkspaceFiles.MyBatis.cs` 에 Language static 금지. 세션처럼 시그니처에 Language 형이 든 App 인터페이스를 App 형이 구현할 때 시작 훑기가 Language 를 로드하는지는 B6 이 시작 시험으로 확인한다(App 에 임시 구현 1개를 넣고 확인 뒤 지움). 로드하면 그 멤버를 Core·App 형으로 바꾸고 design.md 를 고친다 |
 | R22 | 0003 이 oranda.db 를 v3 으로 올리면 0003 이 없는 예전 빌드(다른 브랜치·이전 설치본)는 oranda.db 를 읽기 전용으로 연다(`OrandaDatabase` 미래 버전 규칙) | 개발 PC 에서 브랜치를 오갈 때 알려진 영향. 01-02 머지 요청에 적어 조정자·사용자에게 알림 |
 | R23 | 내 저장이 파일 감시에 걸려 「밖에서 바뀜」이 뜸 | 5.3 디스크 해시 = 기준 해시면 무시 |
+| R24 | 01-02 머지 뒤 기능 레인 머지 전까지 아무것도 하지 않는 메뉴 항목(「매퍼 폴더 열기…」·「MyBatis 작업 공간으로 바꾸기…」·문서 탭 우클릭·팔레트) | 보이되 누를 수 없게 둔다(2026-10-23 조정자 답): Enablement 에 준비 키 `mybatisFolderReady`·`mybatisConvertReady`(4.3), 03-07·03-05 가 켬. 나머지 MyBatis 명령은 `mybatisDocActive` 가 03-01 전까지 거짓이라 이미 꺼짐 |
+| R25 | `Convert` 폴더 이름이 `System.Convert` 를 가림 | 폴더·이름공간을 `Conversion` 으로 |
 
 ## 13. 결정 초안 (decisions.md 에 조정자가 덧붙임)
 
 - D-002 MyBatis 문서 판정 = 세션이 붙은 작업 공간(`DocumentKind`). 지금의 읽기 전용 .xml 펼침은 MyBatis 문서가 아니다(01-02 머지 뒤 동작 불변).
 - D-003 Ctrl+S 는 `file.save` 그대로, 저장 훅이 MyBatis 저장으로 넘긴다. F9 만 `mybatisDocFocus` 로 키맵에 넣는다(키 충돌 규칙 유지, 2026-10-23 조정자 답).
 - D-004 MyBatis 문서에서 일반 SQL 실행 명령은 Enablement `!mybatisDocActive` 로 끈다(01-02 가 특성 문자열만 고침).
-- D-005 MyBatis 복구 상태는 Core `Workspace` 를 바꾸지 않고 곁 파일 `{id}.mybatis.json` 에 둔다.
+- D-005 MyBatis 복구 상태는 Core `Workspace` 를 바꾸지 않고 곁 파일 `{id}.mybatis-{Key}.json`(참여자마다 하나)에 둔다.
 - D-006 `IStatementLocator` 는 01-02 가 정의한다(03-07 이 03-06 을 기다리지 않음).
 - D-007 ReadMyBatis 는 남기고(Q8 (a)) 몸을 계산기로 바꾼다. 표기 변환은 얇은 어댑터.
 - D-008 `IMyBatisFragmentResolver` 는 Core 에 두고 `MyBatisFragment`(Core 형)를 돌려준다(wbs 01-02 의 「Language」에서 위치 변경). App(03-07)이 구현하므로 Language 에 두면 시작 때 Language 가 로드된다.

@@ -1,0 +1,13 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:Oranda.App.Features.MyBatisWorkspace.Combos"
+             x:Class="Oranda.App.Features.MyBatisWorkspace.Combos.MyBatisCombosView"
+             x:DataType="vm:MyBatisCombosViewModel">
+  <TextBlock Text="MyBatis 문서를 열면 조합 검사 결과가 여기에 보입니다."
+             Opacity="0.6"
+             TextWrapping="Wrap"
+             TextAlignment="Center"
+             HorizontalAlignment="Center"
+             VerticalAlignment="Center"
+             Margin="12" />
+</UserControl>

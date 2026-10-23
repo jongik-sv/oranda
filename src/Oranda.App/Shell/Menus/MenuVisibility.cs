@@ -29,10 +29,11 @@ public static class MenuVisibility
     /// </summary>
     public static readonly IReadOnlyDictionary<string, string?> TabScopes = new Dictionary<string, string?>(StringComparer.Ordinal)
     {
-        ["sqlEditorFocus"] = "sqlDocActive",
-        ["sqlDocFocus"] = "sqlDocActive",
+        ["sqlEditorFocus"] = "sqlDocActive && !mybatisDocActive",
+        ["sqlDocFocus"] = "sqlDocActive && !mybatisDocActive",
         ["gridFocus"] = "sqlDocActive",
-        ["editorFocus"] = "sqlDocActive || plsqlDocActive || plsqlEditorFocus",
+        ["mybatisDocFocus"] = "mybatisDocActive",
+        ["editorFocus"] = "sqlDocActive || plsqlDocActive || plsqlEditorFocus || mybatisDocActive",
         ["plsqlEditorFocus"] = "plsqlDocActive || plsqlEditorFocus",
         ["monitorFocus"] = "monitorSessionOpen || monitorSqlOpen",
         ["schemaFocus"] = null,

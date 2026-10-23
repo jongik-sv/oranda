@@ -69,7 +69,8 @@
 | `gridFocus` | SQL 편집기 문서의 결과 그리드 | sqlGrid |
 | `sqlDocFocus` | 위 둘 중 하나 | sqlText, sqlGrid |
 | `plsqlEditorFocus` | PL/SQL 편집기 글자 영역 | plsql |
-| `editorFocus` | SQL 또는 PL/SQL 편집기 글자 영역 | sqlText, plsql |
+| `mybatisDocFocus` | MyBatis 문장 편집기 글자 영역 | mybatisText |
+| `editorFocus` | SQL 또는 PL/SQL 또는 MyBatis 문장 편집기 글자 영역 | sqlText, plsql, mybatisText |
 | `schemaFocus` | 스키마 브라우저 | schema |
 | `monitorFocus` | 세션·SQL 모니터 문서 | monitor |
 
@@ -88,6 +89,7 @@
 | `schemaNodeSelected`, `plsqlNodeSelected`, `recyclebinNodeSelected` | 스키마 트리 선택 |
 | `isPackageDoc`, `serverSourceChanged`, `plsqlRunnable` | PL/SQL 편집기 |
 | `monitorSessionOpen`, `monitorSessionSelected`, `monitorSqlOpen`, `monitorSqlSelected` | 모니터 |
+| `mybatisDocActive`, `mybatisDocDirty`, `mybatisStatementSelected`, `mybatisFolderOpen`, `mybatisFolderReady`, `mybatisConvertReady` | MyBatis 작업 공간: 활성 문서가 MyBatis 종류 / 저장 안 한 문장이 있음 / 고른 문장 또는 활성 문장 탭이 있음 / 매퍼 폴더가 열려 있음 / 매퍼 폴더 기능 준비(TSK-03-07 이 켬) / 바꾸기 기능 준비(TSK-03-05 가 켬)(근거 `docs/oranda1/design.md` 4.3) |
 | `canKillSession`, `canTraceSessions` | 서버 점검 결과(`ServerCapabilities`) |
 | `devBuild` | 개발 빌드 |
 
@@ -112,6 +114,7 @@
 | 둘 다 참 | 보임 |
 
 - `When` 은 키맵 기본 키 범위(포커스 키)라 「마지막 포커스」로 보지 않고 「그 탭·패널이 열려 있음」으로 바꿔 본다(`MenuVisibility.TabScopes`): `sqlEditorFocus`·`sqlDocFocus`·`gridFocus` → `sqlDocActive`, `editorFocus` → `sqlDocActive || plsqlDocActive || plsqlEditorFocus`, `plsqlEditorFocus` → `plsqlDocActive || plsqlEditorFocus`, `monitorFocus` → `monitorSessionOpen || monitorSqlOpen`, `schemaFocus` → 언제나(늘 있는 도구 창).
+- MyBatis 문서의 대응(`docs/oranda1/design.md` 4.3): `mybatisDocFocus` → `mybatisDocActive`, `editorFocus` 는 위 식 뒤에 `|| mybatisDocActive`, `sqlEditorFocus`·`sqlDocFocus` 는 `sqlDocActive && !mybatisDocActive`(`gridFocus` 는 그대로).
 - 숨긴 뒤 구분선이 맨 앞·끝에 남거나 두 줄 겹치지 않게 하고, 항목이 다 숨은 하위 메뉴도 숨긴다. 최상위 메뉴가 통째로 비면 메뉴는 남기고 회색 안내 한 줄(`Menu.<메뉴>.empty`, 없으면 `Menu.empty`)을 보인다.
 - 이유 문구 = `Enablement` 식에서 거짓을 만든 첫 키의 사람 말. `&&` 는 거짓인 항을 앞에서부터, `||` 는 문구가 있는 첫 항, `!x` 가 거짓이면 `not.x`. 문구 표는 `strings-ko/en.json` 의 `Menu.disabled.<키>`·`Menu.disabled.not.<키>` 한 곳이고, 표에 없는 키는 툴팁을 달지 않는다.
 - 문맥 키가 바뀔 때마다(탭 전환·접속·끊기·행 선택) 활성 상태와 함께 다시 계산한다(`MenuControls.RefreshEnablement`).
@@ -302,7 +305,7 @@
 | `oranda.file.newDedicatedSqlEditor` | 새 SQL 탭(전용 세션) | - | 전역 | `hasSession` | TSK-06-02 |
 | `oranda.file.open` | 파일 열기 | `Ctrl+O` | 전역 | 항상 | TSK-04-02 |
 | `oranda.file.save` | 저장 | `Ctrl+S` | 전역 | `hasDocument` | TSK-04-02 |
-| `oranda.file.saveAs` | 다른 이름으로 저장 | - | 전역 | `hasDocument` | TSK-04-02 |
+| `oranda.file.saveAs` | 다른 이름으로 저장 | - | 전역 | `hasDocument && !mybatisDocActive` | TSK-04-02 |
 | `oranda.file.saveAll` | 모두 저장 | `Ctrl+Shift+S` | 전역 | `hasDocument` | TSK-04-02 |
 | `oranda.file.close` | 탭 닫기 | `Ctrl+W` | 전역 | `hasDocument` | TSK-03-01 |
 | `oranda.file.closeAll` | 모든 탭 닫기 | - | 전역 | `hasDocument` | TSK-03-01 |
@@ -310,9 +313,9 @@
 | `oranda.file.duplicateTab` | 탭 복사(새 탭에) | - | 전역 | `sqlDocActive` | TSK-04-02 |
 | `oranda.file.saveWorkspace` | 작업 공간 저장(저장소) | - | 전역 | `hasDocument` | TSK-04-02 |
 | `oranda.file.openWorkspace` | 작업 공간 열기(저장소) | - | 전역 | 항상 | TSK-04-02 |
-| `oranda.file.renameTab` | 탭 이름 바꾸기 | - | 전역 | `sqlDocActive` | TSK-04-02 |
-| `oranda.file.saveWorkspaceFile` | 작업 공간 저장(묶인 파일에 바로 씀, 없으면 다른 이름으로 저장) | - | 전역 | `hasDocument` | TSK-04-02 |
-| `oranda.file.saveWorkspaceFileAs` | 작업 공간 다른 이름으로 저장… | - | 전역 | `hasDocument` | TSK-13-19 |
+| `oranda.file.renameTab` | 탭 이름 바꾸기 | - | 전역 | `sqlDocActive && !mybatisDocActive` | TSK-04-02 |
+| `oranda.file.saveWorkspaceFile` | 작업 공간 저장(묶인 파일에 바로 씀, 없으면 다른 이름으로 저장) | - | 전역 | `hasDocument && !mybatisDocActive` | TSK-04-02 |
+| `oranda.file.saveWorkspaceFileAs` | 작업 공간 다른 이름으로 저장… | - | 전역 | `hasDocument && !mybatisDocActive` | TSK-13-19 |
 | `oranda.file.openWorkspaceFile` | 작업 공간 열기…(Markdown·MyBatis) | - | 전역 | 항상 | TSK-04-02 |
 | `oranda.file.newWorkspace` | 새 작업 공간 | - | 전역 | 항상 | TSK-04-02 |
 | `oranda.file.renameWorkspace` | 작업 공간 이름 바꾸기 | - | 전역 | `sqlWorkspaceActive` | TSK-04-02 |
@@ -392,23 +395,23 @@
 
 | ID | 제목 | 기본 키 | 키 범위(when) | 활성 조건 | 소유 Task |
 |---|---|---|---|---|---|
-| `oranda.format.document` | 포맷(선택 영역 또는 문서) | `Ctrl+Shift+F` | `editorFocus` | `!readOnlyDoc` | TSK-05-03 |
-| `oranda.format.statement` | 현재 문장 포맷 | - | `editorFocus` | `!readOnlyDoc` | TSK-05-03 |
+| `oranda.format.document` | 포맷(선택 영역 또는 문서) | `Ctrl+Shift+F` | `editorFocus` | `!readOnlyDoc && !mybatisDocActive` | TSK-05-03 |
+| `oranda.format.statement` | 현재 문장 포맷 | - | `editorFocus` | `!readOnlyDoc && !mybatisDocActive` | TSK-05-03 |
 | `oranda.format.profiles` | 포매터 프로필 | - | 전역 | 항상 | TSK-05-03 |
 
 ### SQL
 
 | ID | 제목 | 기본 키 | 키 범위(when) | 활성 조건 | 소유 Task |
 |---|---|---|---|---|---|
-| `oranda.exec.runStatement` | 현재 문장 실행(선택 시 선택 영역) | `Ctrl+Enter` | `sqlDocFocus` | `(hasSession \|\| dedicatedSession) && !sessionBusy` | TSK-06-02 |
-| `oranda.exec.runSubquery` | 커서의 하위 쿼리 실행 | `Alt+Shift+Enter` | `sqlDocFocus` | `(hasSession \|\| dedicatedSession) && !sessionBusy` | TSK-06-02 |
-| `oranda.exec.runSelection` | 선택 영역 실행 | - | `sqlDocFocus` | `(hasSession \|\| dedicatedSession) && !sessionBusy && hasSelection` | TSK-06-02 |
-| `oranda.exec.runScript` | 스크립트 전체 실행 | `F5` | `sqlDocFocus` | `(hasSession \|\| dedicatedSession) && !sessionBusy` | TSK-06-02 |
-| `oranda.exec.runFromCursor` | 커서 문장부터 끝까지 실행 | `Alt+F5` | `sqlDocFocus` | `(hasSession \|\| dedicatedSession) && !sessionBusy` | TSK-06-02 |
-| `oranda.exec.runStep` | 순차 실행(실행 후 다음 문장으로) | `Ctrl+Shift+Enter` | `sqlDocFocus` | `(hasSession \|\| dedicatedSession) && !sessionBusy` | TSK-06-02 |
-| `oranda.exec.runToNewResultTab` | 새 결과 탭으로 실행 | `F11` | `sqlDocFocus` | `(hasSession \|\| dedicatedSession) && !sessionBusy` | TSK-06-02 |
-| `oranda.exec.runAllTabs` | 모든 탭 실행 | - | 전역 | `(hasSession \|\| dedicatedSession) && !sessionBusy` | TSK-06-02 |
-| `oranda.exec.runForEdit` | 결과 편집 모드로 실행 | `F9` (macOS `Ctrl+Enter`) | `sqlDocFocus` | `hasSession && !sessionBusy && !readOnlySession` | TSK-06-04 |
+| `oranda.exec.runStatement` | 현재 문장 실행(선택 시 선택 영역) | `Ctrl+Enter` | `sqlDocFocus` | `(hasSession \|\| dedicatedSession) && !sessionBusy && !mybatisDocActive` | TSK-06-02 |
+| `oranda.exec.runSubquery` | 커서의 하위 쿼리 실행 | `Alt+Shift+Enter` | `sqlDocFocus` | `(hasSession \|\| dedicatedSession) && !sessionBusy && !mybatisDocActive` | TSK-06-02 |
+| `oranda.exec.runSelection` | 선택 영역 실행 | - | `sqlDocFocus` | `(hasSession \|\| dedicatedSession) && !sessionBusy && hasSelection && !mybatisDocActive` | TSK-06-02 |
+| `oranda.exec.runScript` | 스크립트 전체 실행 | `F5` | `sqlDocFocus` | `(hasSession \|\| dedicatedSession) && !sessionBusy && !mybatisDocActive` | TSK-06-02 |
+| `oranda.exec.runFromCursor` | 커서 문장부터 끝까지 실행 | `Alt+F5` | `sqlDocFocus` | `(hasSession \|\| dedicatedSession) && !sessionBusy && !mybatisDocActive` | TSK-06-02 |
+| `oranda.exec.runStep` | 순차 실행(실행 후 다음 문장으로) | `Ctrl+Shift+Enter` | `sqlDocFocus` | `(hasSession \|\| dedicatedSession) && !sessionBusy && !mybatisDocActive` | TSK-06-02 |
+| `oranda.exec.runToNewResultTab` | 새 결과 탭으로 실행 | `F11` | `sqlDocFocus` | `(hasSession \|\| dedicatedSession) && !sessionBusy && !mybatisDocActive` | TSK-06-02 |
+| `oranda.exec.runAllTabs` | 모든 탭 실행 | - | 전역 | `(hasSession \|\| dedicatedSession) && !sessionBusy && !mybatisDocActive` | TSK-06-02 |
+| `oranda.exec.runForEdit` | 결과 편집 모드로 실행 | `F9` (macOS `Ctrl+Enter`) | `sqlDocFocus` | `hasSession && !sessionBusy && !readOnlySession && !mybatisDocActive` | TSK-06-04 |
 | `oranda.exec.cancel` | 실행 취소(서버 중단) | `Ctrl+Break` | `sqlDocFocus` | `sessionBusy` | TSK-06-02 |
 | `oranda.exec.bindVariables` | 바인드 변수 창 | - | `sqlDocFocus` | `sqlDocActive` | TSK-06-02 |
 | `oranda.exec.pasteBindValues` | 바인드 값을 편집기에 붙여 넣기 | - | `sqlDocFocus` | `sqlDocActive` | TSK-06-02 |
@@ -422,12 +425,12 @@
 | `oranda.txn.commit` | 커밋 | - | 전역 | `(hasSession \|\| dedicatedSession) && txnPending && !sessionBusy` | TSK-06-02 |
 | `oranda.txn.rollback` | 롤백 | - | 전역 | `(hasSession \|\| dedicatedSession) && txnPending && !sessionBusy` | TSK-06-02 |
 | `oranda.txn.toggleAutoCommit` | 자동 커밋 켜기/끄기 | - | 전역 | `(hasSession \|\| dedicatedSession) && !readOnlySession` | TSK-06-02 |
-| `oranda.plan.explain` | 예상 실행 계획 | `Ctrl+E` | `sqlDocFocus` | `(hasSession \|\| dedicatedSession) && !sessionBusy` | TSK-07-01 |
-| `oranda.plan.actual` | 실제 실행 계획(마지막 실행) | `Ctrl+Shift+E` | `sqlDocFocus` | `(hasSession \|\| dedicatedSession) && hasLastSqlId` | TSK-07-01 |
+| `oranda.plan.explain` | 예상 실행 계획 | `Ctrl+E` | `sqlDocFocus` | `(hasSession \|\| dedicatedSession) && !sessionBusy && !mybatisDocActive` | TSK-07-01 |
+| `oranda.plan.actual` | 실제 실행 계획(마지막 실행) | `Ctrl+Shift+E` | `sqlDocFocus` | `(hasSession \|\| dedicatedSession) && hasLastSqlId && !mybatisDocActive` | TSK-07-01 |
 | `oranda.plan.displayCursorOptions` | DISPLAY_CURSOR 형식 옵션 | - | 전역 | `hasSession` | TSK-07-01 |
 | `oranda.plan.pinForCompare` | 이 계획 고정(비교 기준) | - | 전역 | 항상 | TSK-07-01 |
 | `oranda.plan.compare` | 고정한 계획과 비교 | - | 전역 | 항상 | TSK-07-01 |
-| `oranda.sqlplus.runFile` | @파일 실행 | - | `sqlDocFocus` | `hasSession && !sessionBusy` | TSK-06-06 |
+| `oranda.sqlplus.runFile` | @파일 실행 | - | `sqlDocFocus` | `hasSession && !sessionBusy && !mybatisDocActive` | TSK-06-06 |
 
 ### 결과
 
@@ -581,6 +584,28 @@
 | `oranda.window.deleteLayout` | 저장한 레이아웃 지우기 | - | 전역 | 항상 | TSK-03-01 |
 | `oranda.window.focusDocument` | 문서로 포커스 | - | 전역 | `hasDocument` | TSK-03-01 |
 | `oranda.window.toggleResultPane` | 결과 영역 보이기/숨기기 | `Ctrl+Shift+R` | `sqlDocFocus` | `sqlDocActive` | TSK-06-02 |
+
+### MyBatis
+
+근거 `docs/oranda1/design.md` 4.1. 처리기 몸은 TSK-03-0x 가 채우고 특성 문자열·제목·키는 동결이다. 기본 키는 `runScenario` 하나(`sqldev` 는 `Primary+Enter`, `F9`).
+
+| ID | 제목 | 기본 키 | 키 범위(when) | 활성 조건 | 소유 Task |
+|---|---|---|---|---|---|
+| `oranda.mybatis.newStatement` | 새 문장… | - | 전역 | `mybatisDocActive` | TSK-03-01 |
+| `oranda.mybatis.renameStatement` | 문장 id 바꾸기… | - | 전역 | `mybatisDocActive && mybatisStatementSelected` | TSK-03-01 |
+| `oranda.mybatis.deleteStatement` | 문장 지우기 | - | 전역 | `mybatisDocActive && mybatisStatementSelected` | TSK-03-01 |
+| `oranda.mybatis.expandToSqlTab` | 펼친 SQL 을 새 SQL 탭으로 | - | 전역 | `mybatisDocActive && mybatisStatementSelected` | TSK-03-01 |
+| `oranda.mybatis.expandMapper` | 매퍼 전체를 SQL 탭으로 펼치기 | - | 전역 | `mybatisDocActive` | TSK-03-01 |
+| `oranda.mybatis.runScenario` | 시나리오 값으로 실행 | `F9` | `mybatisDocFocus` | `mybatisDocActive && mybatisStatementSelected && (hasSession \|\| dedicatedSession \|\| tabConnectionMissing) && !sessionBusy` | TSK-03-02 |
+| `oranda.mybatis.explainScenario` | 펼친 SQL 실행 계획 | - | 전역 | `mybatisDocActive && mybatisStatementSelected && (hasSession \|\| dedicatedSession \|\| tabConnectionMissing) && !sessionBusy` | TSK-03-02 |
+| `oranda.mybatis.copyExpanded` | 펼친 SQL 복사 | - | 전역 | `mybatisDocActive && mybatisStatementSelected` | TSK-03-02 |
+| `oranda.mybatis.copyExpandedWithValues` | 펼친 SQL 복사(값 넣은 글) | - | 전역 | `mybatisDocActive && mybatisStatementSelected` | TSK-03-02 |
+| `oranda.mybatis.save` | xml 에 저장 | - (`Ctrl+S` 는 `file.save` 경유) | 전역 | `mybatisDocActive && mybatisDocDirty` | TSK-03-03 |
+| `oranda.mybatis.checkCombinations` | 조합 검사 | - | 전역 | `mybatisDocActive && mybatisStatementSelected` | TSK-03-04 |
+| `oranda.mybatis.applyAutoFix` | 자동 고침(<set>·<where> 로 감싸기) | - | 전역 | `mybatisDocActive && mybatisStatementSelected && !readOnlyDoc` | TSK-03-04 |
+| `oranda.mybatis.convertWorkspace` | MyBatis 작업 공간으로 바꾸기… | - | 전역 | `sqlWorkspaceActive && !mybatisDocActive && mybatisConvertReady` | TSK-03-05 |
+| `oranda.mybatis.openFolder` | 매퍼 폴더 열기… | - | 전역 | `mybatisFolderReady` | TSK-03-07 |
+| `oranda.mybatis.findStatement` | MyBatis 문장 찾기… | - | 전역 | `mybatisDocActive \|\| mybatisFolderOpen` | TSK-03-07 |
 
 ### 도움말
 

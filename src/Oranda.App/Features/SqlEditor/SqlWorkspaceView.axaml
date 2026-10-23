@@ -78,9 +78,10 @@
                 <StackPanel.ContextMenu>
                   <ContextMenu>
                     <MenuItem Header="이름 바꾸기" InputGesture="F2"
+                              IsVisible="{Binding $parent[UserControl].((vm:SqlWorkspaceViewModel)DataContext).IsTabRenameAllowed}"
                               Command="{Binding $parent[UserControl].((vm:SqlWorkspaceViewModel)DataContext).BeginRenameTabCommand}"
                               CommandParameter="{Binding}" />
-                    <Separator />
+                    <Separator IsVisible="{Binding $parent[UserControl].((vm:SqlWorkspaceViewModel)DataContext).IsTabRenameAllowed}" />
                     <MenuItem Header="닫기"
                               Command="{Binding $parent[UserControl].((vm:SqlWorkspaceViewModel)DataContext).CloseTabCommand}"
                               CommandParameter="{Binding}" />
@@ -92,6 +93,8 @@
                               CommandParameter="{Binding}" />
                   </ContextMenu>
                 </StackPanel.ContextMenu>
+                <!-- MyBatis 문서의 문장 종류 표시 자리(비어 있으면 보이지 않는다). -->
+                <vm:SqlTabBadgeSlot VerticalAlignment="Center" Margin="0,0,4,0" />
                 <TextBlock Classes="tab-title" Text="{Binding DisplayTitle}" VerticalAlignment="Center"
                            IsVisible="{Binding !IsRenaming}" />
                 <TextBox Classes="tab-rename" Text="{Binding EditTitle, Mode=TwoWay}" IsVisible="{Binding IsRenaming}"

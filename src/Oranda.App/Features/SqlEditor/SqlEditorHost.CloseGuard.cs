@@ -96,6 +96,14 @@ public sealed partial class SqlEditorHost
     public async Task<bool> TryCloseWorkspaceAsync(SqlWorkspaceViewModel workspace, CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(workspace);
+
+        // design.md 5.6: 저장 안 한 문장이 있는 매퍼는 탭이 몇 개든(0개여도) 저장 훅이 「저장 / 저장 안 함 / 취소」를 먼저 묻는다.
+        if (workspace.MyBatis is { IsDirty: true } && MyBatisHooks.SaveHandler is { } saver
+            && !await saver.ConfirmCloseAsync(workspace, ct).ConfigureAwait(true))
+        {
+            return false;
+        }
+
         if (!await CanCloseAsync(workspace.Tabs.ToList(), SqlCloseReason.Workspace, ct).ConfigureAwait(true))
         {
             return false;
@@ -111,7 +119,7 @@ public sealed partial class SqlEditorHost
     }
 
     /// <summary>
-    /// 작업 공간을 복원한다(<see cref="Restore"/>). 같은 ID 의 작업 공간이 열려 있어 그 탭이 교체되면 가드
+    /// 작업 공간을 복원한다(<see cref="Restore(Workspace)"/>). 같은 ID 의 작업 공간이 열려 있어 그 탭이 교체되면 가드
     /// (<see cref="SqlCloseReason.Replace"/>)에 먼저 묻고, 취소하면 복원하지 않고 null.
     /// </summary>
     public async Task<SqlWorkspaceViewModel?> RestoreAsync(Workspace workspace, CancellationToken ct)
@@ -191,8 +199,13 @@ public sealed partial class SqlEditorHost
     /// 파일에 묶인 탭은 고쳤을 때, 이름 없는 탭은 내용이 있을 때 묻는다. 읽기 전용 탭은 고칠 수 없으니 묻지 않는다.
     /// 복원 때 파일을 못 읽어 비어 있는 탭도 묻지 않는다: 저장하면 빈 내용이 원본을 덮어쓴다.
     /// </summary>
-    private static bool NeedsSaveConfirm(SqlEditorViewModel tab)
+    private bool NeedsSaveConfirm(SqlEditorViewModel tab)
     {
+        if (WorkspaceOf(tab)?.MyBatis is not null)
+        {
+            return false; // design.md 5.6: MyBatis 문장 탭은 탭 닫기에서 묻지 않는다(고침은 세션에 남고, 작업 공간을 닫을 때 훅이 묻는다)
+        }
+
         if (tab.IsReadOnly)
         {
             return false;

@@ -3,7 +3,9 @@ using System.Collections.Specialized;
 using System.ComponentModel;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using Oranda.App.Features.MyBatisWorkspace.Hooks;
 using Oranda.App.Shell;
+using Oranda.App.Shell.Docking;
 using Oranda.Core.Workspaces;
 
 namespace Oranda.App.Features.SqlEditor;
@@ -14,7 +16,7 @@ namespace Oranda.App.Features.SqlEditor;
 /// Markdown 작업 공간 파일이나 MyBatis 매퍼를 열면 작업 공간 하나가 된다(<see cref="SourcePath"/>).
 /// 탭을 더하고 빼는 일과 활성 탭은 <see cref="SqlEditorHost"/> 가 맡는다(호스트의 <c>Active</c> 가 앱 전체의 「활성 SQL 탭」 신호다).
 /// </summary>
-public sealed partial class SqlWorkspaceViewModel : ToolPanelViewModelBase, IInnerTabsDocument, Oranda.App.Shell.Docking.IDockTabActions
+public sealed partial class SqlWorkspaceViewModel : ToolPanelViewModelBase, IInnerTabsDocument, IDockTabActions, IToolScopeDocument
 {
     private string? _autosaveStamp;
 
@@ -54,6 +56,60 @@ public sealed partial class SqlWorkspaceViewModel : ToolPanelViewModelBase, IInn
     /// <summary>문서 탭에 붙는 원본 종류: md·sqd·MyBatis. 파일 없이 앱 안에만 저장되는 작업 공간이면 null.</summary>
     public string? Kind => WorkspaceFiles.KindOf(SourcePath);
 
+    private IMyBatisWorkspaceSession? _myBatis;
+
+    /// <summary>
+    /// 이 작업 공간에 붙은 MyBatis 세션(design.md 2.1). 열기 훅(03-01)만 붙이고 떼며, 지금은 아무도 붙이지 않는다.
+    /// 붙이거나 떼면 <see cref="DocumentKind"/>·<see cref="ToolScope"/> 변경을 알리고 <see cref="ToolScopeChanged"/> 를 낸다 —
+    /// 같은 Dock 문서 안의 변화라 활성 문서 이벤트가 오지 않으므로, 이 신호가 도구 창 보임 규칙의 전환 신호다.
+    /// </summary>
+    public IMyBatisWorkspaceSession? MyBatis
+    {
+        get => _myBatis;
+        internal set
+        {
+            var old = _myBatis;
+            if (SetProperty(ref _myBatis, value))
+            {
+                // 세션이 바뀌면 옛 세션 구독을 풀고 새 세션의 StateChanged 를 받는다(저장 안 한 상태·문장 목록이 문서 탭 머리·dirty 에 반영된다).
+                if (old is not null)
+                {
+                    old.StateChanged -= OnSessionStateChanged;
+                }
+
+                if (value is not null)
+                {
+                    value.StateChanged += OnSessionStateChanged;
+                }
+
+                OnPropertyChanged(nameof(DocumentKind));
+                OnPropertyChanged(nameof(ToolScope));
+                OnPropertyChanged(nameof(IsDirty));
+                OnPropertyChanged(nameof(DisplayTitle));
+                OnPropertyChanged(nameof(IsTabRenameAllowed));
+                ToolScopeChanged?.Invoke(this, EventArgs.Empty);
+            }
+        }
+    }
+
+    private void OnSessionStateChanged(object? sender, EventArgs e)
+    {
+        OnPropertyChanged(nameof(IsDirty));
+        OnPropertyChanged(nameof(DisplayTitle));
+    }
+
+    /// <summary>탭 이름을 바꿀 수 있는가: MyBatis 문서의 문장 탭 이름은 문장 id 라 바꾸지 않는다(문장 이름은 「이름 바꾸기」 명령).</summary>
+    public bool IsTabRenameAllowed => MyBatis is null;
+
+    /// <summary>문서 종류: MyBatis 세션이 붙어 있으면 <see cref="SqlWorkspaceKind.MyBatis"/>, 아니면 <see cref="SqlWorkspaceKind.Sql"/>.</summary>
+    public SqlWorkspaceKind DocumentKind => MyBatis is null ? SqlWorkspaceKind.Sql : SqlWorkspaceKind.MyBatis;
+
+    /// <summary>Shell 도구 창 보임 규칙이 보는 범위 글자(<see cref="IToolScopeDocument"/>). MyBatis 문서면 <c>"mybatis"</c>, 아니면 null.</summary>
+    public string? ToolScope => DocumentKind == SqlWorkspaceKind.MyBatis ? "mybatis" : null;
+
+    /// <summary><see cref="ToolScope"/> 가 바뀌었다(<see cref="MyBatis"/> 를 붙이거나 뗐다).</summary>
+    public event EventHandler? ToolScopeChanged;
+
     /// <summary>이 작업 공간의 SQL 탭(열린 순서).</summary>
     public ObservableCollection<SqlEditorViewModel> Tabs { get; } = [];
 
@@ -66,18 +122,27 @@ public sealed partial class SqlWorkspaceViewModel : ToolPanelViewModelBase, IInn
 
     public bool IsEmpty => Tabs.Count == 0;
 
-    public bool IsDirty => Tabs.Any(t => t.IsDirty);
+    public bool IsDirty => Tabs.Any(t => t.IsDirty) || MyBatis?.IsDirty == true;
 
     /// <summary>문서 탭 머리글: 고친 SQL 탭이 있으면 「* 이름」, 파일에서 연 작업 공간이면 뒤에 종류(「이름 (sqd)」).</summary>
     public string DisplayTitle => (IsDirty ? "* " : string.Empty) + Name + (Kind is { } kind ? $" ({kind})" : string.Empty);
 
     partial void OnActiveTabChanged(SqlEditorViewModel? value) => Host.OnWorkspaceTabSelected(this, value);
 
-    /// <summary>탭 줄의 「+」: 이 작업 공간에 빈 SQL 탭을 더한다.</summary>
+    /// <summary>
+    /// 탭 줄의 「+」: 이 작업 공간에 빈 SQL 탭을 더한다. MyBatis 문서면 빈 탭 대신 「+ 새 문장」(종류·id 묻기, design.md 2.2)으로 간다 —
+    /// 문장 탭은 문장 id 로 만들어지므로 일반 새 문서로 가지 않는다.
+    /// </summary>
     [RelayCommand]
-    private void NewTab()
+    private async Task NewTabAsync()
     {
         Host.ActiveWorkspace = this;
+        if (MyBatis is { } session)
+        {
+            await session.BeginNewStatementAsync(CancellationToken.None).ConfigureAwait(true);
+            return;
+        }
+
         Host.NewDocument();
     }
 
@@ -94,7 +159,7 @@ public sealed partial class SqlWorkspaceViewModel : ToolPanelViewModelBase, IInn
     [RelayCommand]
     private void BeginRenameTab(SqlEditorViewModel? tab)
     {
-        if (tab is not null)
+        if (tab is not null && MyBatis is null) // design.md 2.2: MyBatis 문장 탭 이름은 문장 id 다
         {
             ActiveTab = tab;
             tab.BeginRename();
@@ -183,6 +248,15 @@ public sealed partial class SqlWorkspaceViewModel : ToolPanelViewModelBase, IInn
         {
             sb.Append('\u0002').Append(t.TabId).Append(':').Append(t.Version).Append(':').Append(t.IsDirty).Append(':').Append(t.Title)
                 .Append('\u0001').Append(t.Binds.Fingerprint(t.ReferencedBindNames));
+        }
+
+        if (MyBatis is not null)
+        {
+            // design.md 5.6: MyBatis 쪽(고침·고른 문장·감시 기준)만 바뀌어도 자동 저장이 돌게 복구 참여자의 표지를 더한다.
+            foreach (var participant in Host.MyBatisHooks.RecoveryParticipants)
+            {
+                sb.Append('\u0003').Append(participant.Key).Append(':').Append(participant.Fingerprint(this));
+            }
         }
 
         stamp = sb.ToString();

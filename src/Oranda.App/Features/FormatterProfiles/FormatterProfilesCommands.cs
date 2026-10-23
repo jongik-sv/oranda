@@ -103,9 +103,9 @@ public static class FormatterProfilesCommands
 /// <c>oranda.format.profiles</c>(프로필 화면 열기) 처리기. 포맷에 쓰는 옵션은 설정의 기본 프로필이다.
 /// 생성자는 <see cref="IServiceProvider"/> 하나뿐이고 서비스는 실행할 때 꺼낸다(시작 경로에서 Language 어셈블리를 올리지 않기 위해).
 /// </summary>
-[OrandaCommand(FormatterProfilesCommands.FormatDocument, CommandCategory.Format, Title = "포맷(선택 영역 또는 문서)", When = "editorFocus", Enablement = "!readOnlyDoc",
+[OrandaCommand(FormatterProfilesCommands.FormatDocument, CommandCategory.Format, Title = "포맷(선택 영역 또는 문서)", When = "editorFocus", Enablement = "!readOnlyDoc && !mybatisDocActive",
     Icon = "format", Placements = ["menu:edit/formatDocument@400", "context:editor/formatDocument@400", "toolbar:main/format@410"])]
-[OrandaCommand(FormatterProfilesCommands.FormatStatement, CommandCategory.Format, Title = "현재 문장 포맷", When = "editorFocus", Enablement = "!readOnlyDoc",
+[OrandaCommand(FormatterProfilesCommands.FormatStatement, CommandCategory.Format, Title = "현재 문장 포맷", When = "editorFocus", Enablement = "!readOnlyDoc && !mybatisDocActive",
     Placements = ["menu:edit/formatStatement@410"])]
 [OrandaCommand(FormatterProfilesCommands.ShowProfiles, CommandCategory.Format, Title = "포매터 프로필",
     Placements = ["menu:tools/formatterProfiles@300"])]
