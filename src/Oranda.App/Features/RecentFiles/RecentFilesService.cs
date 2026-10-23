@@ -273,15 +273,27 @@ public sealed class RecentFilesService : IDisposable
     }
 }
 
-/// <summary>앱 시작 뒤 최근 목록을 편집기 호스트에 잇는다(첫 프레임 뒤, D-006).</summary>
+/// <summary>
+/// 최근 목록을 편집기 호스트에 잇는다(D-006). 시작 작업은 목록을 한꺼번에 만든 뒤 차례로 await 되고, 앞쪽 작업(변경 기록·이력)이
+/// IO 를 기다리는 사이에 명령줄로 받은 파일 열기(같은 Background 예약)가 먼저 돈다. 그 열기를 놓치지 않게 만들 때 바로 잇는다.
+/// </summary>
 [OrandaService(typeof(IStartupTask))]
-public sealed class RecentFilesStartup(RecentFilesService service) : IStartupTask
+public sealed class RecentFilesStartup : IStartupTask
 {
+    private readonly RecentFilesService _service;
+
+    public RecentFilesStartup(RecentFilesService service)
+    {
+        ArgumentNullException.ThrowIfNull(service);
+        _service = service;
+        service.Attach(SqlEditorHost.Current);
+    }
+
     public StartupPhase Phase => StartupPhase.AfterFirstFrame;
 
     public Task RunAsync(CancellationToken ct)
     {
-        service.Attach(SqlEditorHost.Current);
+        _service.Attach(SqlEditorHost.Current); // 그사이 호스트가 바뀌었으면 옮긴다(같으면 아무것도 안 한다)
         return Task.CompletedTask;
     }
 }

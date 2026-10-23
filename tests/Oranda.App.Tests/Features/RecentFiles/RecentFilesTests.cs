@@ -7,10 +7,12 @@ using Oranda.App.Features.GridEdit;
 using Oranda.App.Features.RecentFiles;
 using Oranda.App.Features.SqlEditor;
 using Oranda.App.Shell;
+using Oranda.App.Shell.Composition;
 using Oranda.App.Shell.Menus;
 using Oranda.App.Tests.Features.MyBatisWorkspace.Flow;
 using Oranda.App.Tests.Features.SqlEditor;
 using Oranda.App.Tests.Shell.Headless;
+using Oranda.Core.Composition;
 using Oranda.Core.Shell;
 
 namespace Oranda.App.Tests.Features.RecentFiles;
@@ -201,6 +203,31 @@ public sealed class RecentFilesTests : IDisposable
         // 뗀 뒤에는 기록하지 않는다.
         await host.OpenFileAsync(Touch("d.sql"), default);
         Assert.DoesNotContain(Path.Combine(_root, "d.sql"), service.Files);
+    });
+
+    // 명령줄로 받은 파일(App.OpenCommandLineFiles)은 시작 작업과 같은 Background 로 예약된다. 시작 작업은 차례로 await 되고
+    // 앞쪽(ChangeJournalRecorder·HistoryRecorder)이 실제로 IO 를 기다리는 사이에 명령줄 열기가 먼저 돈다.
+    // 그래서 RecentFilesStartup.RunAsync 전, 시작 작업 목록을 만든 직후의 열기도 기록되어야 한다.
+    [Fact]
+    public Task File_opened_after_startup_tasks_are_listed_but_before_they_run_is_recorded() => Ui.Run(async () =>
+    {
+        var previous = SqlEditorHost.Current;
+        var host = new SqlEditorHost();
+        SqlEditorHost.Current = host;
+        try
+        {
+            using var services = AppComposition.Create(new AppCompositionOptions { DataDirectory = Path.Combine(_root, "data"), DevBuild = true });
+            var tasks = services.GetService<IEnumerable<IStartupTask>>()!.ToList(); // App.RunStartupTasksAsync 와 같이 목록부터 만든다
+            Assert.Contains(tasks, t => t is RecentFilesStartup);
+
+            var sql = Touch("cmdline.sql");
+            await host.OpenFileAsync(sql, default); // 시작 작업이 아직 돌기 전
+            Assert.Equal([sql], services.GetRequiredService<RecentFilesService>().Files);
+        }
+        finally
+        {
+            SqlEditorHost.Current = previous;
+        }
     });
 
     [Fact]
