@@ -30,7 +30,8 @@
           <ComboBox x:Name="ScopeBox" Classes="compact" Width="110" Margin="0,0,6,4" AutomationProperties.Name="적용 범위" />
           <Button x:Name="CopyDdlButton" Classes="tool" Margin="0,0,6,4" Content="DDL 복사" icons:ButtonIcon.Key="copy" />
         </WrapPanel>
-        <sqled:SqlCodeView x:Name="DdlPreview" Text="{Binding PreviewDdl}" MinHeight="26" MaxHeight="90" AutomationProperties.Name="파라미터 변경 DDL" />
+        <!-- 한 문장짜리 미리보기라 줄 번호는 두지 않는다 -->
+        <sqled:SqlCodeView x:Name="DdlPreview" Text="{Binding PreviewDdl}" ShowLineNumbers="False" MinHeight="26" MaxHeight="90" AutomationProperties.Name="파라미터 변경 DDL" />
         <TextBlock Text="{Binding PreviewError}" Foreground="{DynamicResource OrandaIconRedBrush}"
                    IsVisible="{Binding PreviewError, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
       </StackPanel>

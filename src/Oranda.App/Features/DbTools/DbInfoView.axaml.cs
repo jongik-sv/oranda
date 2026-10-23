@@ -9,7 +9,6 @@ public partial class DbInfoView : UserControl
     public DbInfoView()
     {
         InitializeComponent();
-        DdlPreview.TextEditorControl.ShowLineNumbers = false; // 한 문장짜리 미리보기라 줄 번호는 두지 않는다
         ScopeBox.ItemsSource = Enum.GetValues<DbParameterScope>();
         ScopeBox.SelectedItem = DbParameterScope.Both;
         ScopeBox.SelectionChanged += (_, _) =>

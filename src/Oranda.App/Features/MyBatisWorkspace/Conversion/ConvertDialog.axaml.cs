@@ -15,7 +15,6 @@ public partial class ConvertDialog : Window
     public ConvertDialog()
     {
         InitializeComponent();
-        PreviewBox.TextEditorControl.ShowLineNumbers = false;
         PreviewBox.TextEditorControl.Background = Avalonia.Media.Brushes.Transparent;
         BrowseButton.Click += OnBrowse;
         CancelButton.Click += (_, _) => Close(null);
@@ -33,9 +32,8 @@ public partial class ConvertDialog : Window
     protected override void OnOpened(EventArgs e)
     {
         base.OnOpened(e);
-        PreviewBox.Colorizer?.Detach();
-        var colorizer = new MyBatisSyntaxColorizer(PreviewBox.TextEditorControl);
-        Closed += (_, _) => colorizer.Dispose();
+        var colors = PreviewBox.UseMyBatisColors();
+        Closed += (_, _) => colors.Dispose();
     }
 
     /// <summary><paramref name="owner"/> 위에 모달로 띄운다. 취소하면 null.</summary>

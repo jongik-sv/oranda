@@ -167,7 +167,7 @@ public sealed class HistoryScriptsTests : IDisposable
             window.Show();
             Dispatcher.UIThread.RunJobs();
 
-            var cell = view.GetVisualDescendants().OfType<TextBlock>().Single(t => Oranda.App.Features.MyBatisWorkspace.Combos.SqlInlineText.GetSql(t) is not null);
+            var cell = view.GetVisualDescendants().OfType<TextBlock>().Single(t => Oranda.App.Features.SqlEditor.SqlInlineText.GetSql(t) is not null);
             var runs = cell.Inlines!.OfType<Avalonia.Controls.Documents.Run>().ToList();
             Assert.Equal("select nvl(e.comm, 0) from emp e where e.sal > 10", string.Concat(runs.Select(r => r.Text)));
             Assert.NotNull(runs.First(r => r.Text == "select").Foreground);

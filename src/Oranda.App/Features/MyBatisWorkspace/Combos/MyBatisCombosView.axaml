@@ -3,7 +3,6 @@
              xmlns:icons="using:Oranda.App.Shell.Icons"
              xmlns:sqled="using:Oranda.App.Features.SqlEditor"
              xmlns:vm="using:Oranda.App.Features.MyBatisWorkspace.Combos"
-             xmlns:local="using:Oranda.App.Features.MyBatisWorkspace.Combos"
              x:Class="Oranda.App.Features.MyBatisWorkspace.Combos.MyBatisCombosView"
              x:DataType="vm:MyBatisCombosViewModel">
   <UserControl.Styles>
@@ -154,7 +153,7 @@
                         </ItemsControl>
                         <TextBlock Classes="c-result" Classes.pass="{Binding IsPass}" Classes.warning="{Binding IsWarning}" Classes.error="{Binding IsError}"
                                    Text="{Binding ResultText}" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding ResultText}" />
-                        <TextBlock Classes="mono" local:SqlInlineText.Sql="{Binding SqlLine}" TextTrimming="CharacterEllipsis" MaxWidth="900" ToolTip.Tip="{Binding SqlLine}" />
+                        <TextBlock Classes="mono" sqled:SqlInlineText.Sql="{Binding SqlLine}" TextTrimming="CharacterEllipsis" MaxWidth="900" ToolTip.Tip="{Binding SqlLine}" />
                       </StackPanel>
                     </Border>
                   </DataTemplate>

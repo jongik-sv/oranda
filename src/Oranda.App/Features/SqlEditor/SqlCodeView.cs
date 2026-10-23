@@ -16,6 +16,10 @@ public sealed class SqlCodeView : UserControl
     public static readonly StyledProperty<string?> TextProperty =
         AvaloniaProperty.Register<SqlCodeView, string?>(nameof(Text));
 
+    /// <summary>줄 번호 칸(기본 켬). 한 문장짜리 미리보기는 axaml 에서 끈다.</summary>
+    public static readonly StyledProperty<bool> ShowLineNumbersProperty =
+        AvaloniaProperty.Register<SqlCodeView, bool>(nameof(ShowLineNumbers), defaultValue: true);
+
     private readonly TextEditor _editor = new()
     {
         IsReadOnly = true,
@@ -44,6 +48,12 @@ public sealed class SqlCodeView : UserControl
         set => SetValue(TextProperty, value);
     }
 
+    public bool ShowLineNumbers
+    {
+        get => GetValue(ShowLineNumbersProperty);
+        set => SetValue(ShowLineNumbersProperty, value);
+    }
+
     /// <summary>안의 편집기(시험·복사용).</summary>
     public TextEditor TextEditorControl => _editor;
 
@@ -70,6 +80,10 @@ public sealed class SqlCodeView : UserControl
         {
             _editor.Document.Text = Text ?? string.Empty;
             _editor.ScrollToHome();
+        }
+        else if (change.Property == ShowLineNumbersProperty)
+        {
+            _editor.ShowLineNumbers = ShowLineNumbers;
         }
     }
 }

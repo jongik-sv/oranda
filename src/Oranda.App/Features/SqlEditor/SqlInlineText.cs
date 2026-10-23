@@ -3,13 +3,12 @@ using Avalonia.Controls;
 using Avalonia.Controls.Documents;
 using Avalonia.Media;
 using Avalonia.Styling;
-using Oranda.App.Features.SqlEditor;
 using Oranda.Language.Lexing;
 
-namespace Oranda.App.Features.MyBatisWorkspace.Combos;
+namespace Oranda.App.Features.SqlEditor;
 
 /// <summary>
-/// 한 줄 SQL 글을 편집기 강조와 같은 렉서·색으로 칠해 <see cref="TextBlock.Inlines"/> 에 넣는 붙임 속성(조합 검사 표의 펼친 SQL 칸).
+/// 한 줄 SQL 글을 편집기 강조와 같은 렉서·색으로 칠해 <see cref="TextBlock.Inlines"/> 에 넣는 붙임 속성(조합 검사 표의 펼친 SQL 칸·실행 이력 목록의 SQL 칸).
 /// 줄마다 편집기를 두지 않고 Run 만 만든다. 같은 글은 토큰화 결과를 모아 두어 목록이 줄을 다시 쓸 때(가상화) 다시 렉싱하지 않는다.
 /// 줄바꿈이 없는 글만 다룬다(여러 줄 주석·문자열이 줄 밖으로 번지는 경우는 한 줄 기준으로만 분류한다).
 /// </summary>

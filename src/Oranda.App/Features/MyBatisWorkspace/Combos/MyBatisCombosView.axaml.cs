@@ -1,15 +1,12 @@
 using System.ComponentModel;
 using Avalonia.Controls;
-using Avalonia.Media;
-using AvaloniaEdit.Document;
-using AvaloniaEdit.Rendering;
 using Oranda.App.Features.MyBatisWorkspace.Editor.Highlighting;
 
 namespace Oranda.App.Features.MyBatisWorkspace.Combos;
 
 public partial class MyBatisCombosView : UserControl
 {
-    private readonly ErrorSpanTransformer _errorSpan = new();
+    private readonly ComboErrorSpanTransformer _errorSpan = new();
     private MyBatisCombosViewModel? _vm;
 
     public MyBatisCombosView()
@@ -38,12 +35,11 @@ public partial class MyBatisCombosView : UserControl
     // 고친 원문은 MyBatis xml 이므로 코드 뷰가 건 SQL 강조를 떼고 MyBatis 강조를 건다. 화면에서 빠지면 정리한다.
     private void AttachFixPreviewColors()
     {
-        FixPreviewView.Colorizer?.Detach();
-        var colorizer = new MyBatisSyntaxColorizer(FixPreviewView.TextEditorControl);
+        var colors = FixPreviewView.UseMyBatisColors();
         void Remove(object? s, Avalonia.Interactivity.RoutedEventArgs e)
         {
             FixPreviewView.Unloaded -= Remove;
-            colorizer.Dispose();
+            colors.Dispose();
         }
 
         FixPreviewView.Unloaded += Remove;
@@ -79,59 +75,5 @@ public partial class MyBatisCombosView : UserControl
         _errorSpan.Set(row?.SqlBefore.Length ?? 0, row?.SqlError.Length ?? 0);
         DetailSqlView.Text = row is null ? string.Empty : row.SqlBefore + row.SqlError + row.SqlAfter;
         DetailSqlView.TextEditorControl.TextArea.TextView.Redraw();
-    }
-
-    /// <summary>오류 자리(글 안의 한 구간)를 위험 색 글자·지움 색 바탕·굵게 칠한다.</summary>
-    private sealed class ErrorSpanTransformer : DocumentColorizingTransformer
-    {
-        private int _start;
-        private int _length;
-
-        public void Set(int start, int length)
-        {
-            _start = start;
-            _length = length;
-        }
-
-        protected override void ColorizeLine(DocumentLine line)
-        {
-            if (_length <= 0)
-            {
-                return;
-            }
-
-            int from = Math.Max(line.Offset, _start);
-            int to = Math.Min(line.EndOffset, _start + _length);
-            if (from >= to)
-            {
-                return;
-            }
-
-            var variant = CurrentContext.TextView.ActualThemeVariant;
-            var app = Avalonia.Application.Current;
-            IBrush? back = null;
-            IBrush? fore = null;
-            if (app is not null)
-            {
-                back = app.TryFindResource("OrandaDiffRemovedBrush", variant, out var b) ? b as IBrush : null;
-                fore = app.TryFindResource("OrandaDangerForegroundBrush", variant, out var f) ? f as IBrush : null;
-            }
-
-            ChangeLinePart(from, to, element =>
-            {
-                var props = element.TextRunProperties;
-                if (back is not null)
-                {
-                    props.SetBackgroundBrush(back);
-                }
-
-                if (fore is not null)
-                {
-                    props.SetForegroundBrush(fore);
-                }
-
-                props.SetTypeface(new Typeface(props.Typeface.FontFamily, props.Typeface.Style, FontWeight.Bold));
-            });
-        }
     }
 }

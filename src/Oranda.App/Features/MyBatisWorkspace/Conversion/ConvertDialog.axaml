@@ -62,7 +62,7 @@
         </DockPanel>
         <Border Grid.Row="1" Background="{DynamicResource OrandaCodeBackgroundBrush}" BorderBrush="{DynamicResource OrandaSeparatorBrush}"
                 BorderThickness="1" CornerRadius="3">
-          <sqled:SqlCodeView x:Name="PreviewBox" Text="{Binding PreviewXml}" AutomationProperties.Name="미리보기" />
+          <sqled:SqlCodeView x:Name="PreviewBox" Text="{Binding PreviewXml}" ShowLineNumbers="False" AutomationProperties.Name="미리보기" />
         </Border>
         <TextBlock Grid.Row="2" Text="시나리오 「바꿀 때 값」" Classes="section" />
         <Border Grid.Row="3" Background="{DynamicResource OrandaCodeBackgroundBrush}" BorderBrush="{DynamicResource OrandaSeparatorBrush}"
