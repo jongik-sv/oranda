@@ -161,6 +161,42 @@ levels:
   - requirements: 「매퍼 폴더 열기」: 폴더(예 src/main/resources/mapper) 아래 루트가 mapper 인 *.xml 을 찾아 「문장」 도구 창에 폴더 > 파일 > 문장 트리로 보인다. 파일·문장을 열면 MyBatis 작업 공간으로 연다. 최근 폴더를 기억한다; 다른 파일의 sql 조각 include(`refid="ns.frag"`)를 펼친다(폴더 안 파일을 찾는 IMyBatisFragmentResolver 를 만든다). sql 조각·resultMap 을 쓰는 곳 찾기; 「MyBatis 문장 찾기」: namespace.id 또는 id 일부로 폴더 안 문장을 찾아 연다. 로그 붙여 넣기(TSK-03-06)도 폴더 안을 찾는다; 계약 Task design.md 「기능 Task 편집 지점」 의 자기 소유 파일만 고친다; 제약: 폴더 훑기는 백그라운드에서 하고, 매퍼 2,000개 폴더에서도 UI 스레드를 100 ms 넘게 막지 않는다; API: TRD 4 IMyBatisFragmentResolver; 비고: 담당 PC: win144(Windows 개발 PC) — 맥북 세션은 이 Task 를 하지 않는다. 파일 하나 단위로 먼저 하고 폴더는 나중(2026-10-23 대화)
   - acceptance: 매퍼 2개 이상인 폴더에서 다른 파일 조각을 include 한 문장의 펼친 SQL 이 맞다 / 폴더 훑기(mapper 아닌 xml 거름), 다른 파일 include·순환, 문장 찾기, 폴더 안 파일 바뀜 감시
 
+- [ ] TSK-03-08: 「문장」 도구 창을 공용 격자 양식으로·이름 「매퍼 쿼리」로 [win144] w:1 2026-10-23~2026-10-24
+  - category: dev
+  - domain: frontend
+  - model: sonnet
+  - priority: high
+  - tags: mybatis, ui, grid, win144
+  - depends: TSK-03-01
+  - prd-ref: MB-02
+  - entry-point: 매퍼를 열면 왼쪽 도구 창
+  - requirements: 「문장」 창 목록을 공용 격자 양식(Styles/GridC, 상세 표와 같은 머리글·행 높이·선택색)으로 보인다(종류·id·수정 표시·조합 오류 수·쓰는 곳 수 열). 묶음(select·insert·update·delete·sql 조각·resultMap)과 폴더 트리 보기를 유지한다; 창 이름 「문장」 → 「매퍼 쿼리」(영문 Mapper Queries), 메뉴·명령 이름의 「문장」도 같은 말로 맞춘다; 비고: 2026-10-23 사용자 수정 요청(「문장이 너무 보기 안 좋다, 기본 그리드 양식, 이름도 적절하게」)
+  - acceptance: 라이트·다크 렌더 PNG 에서 상세 표 격자와 같은 양식이다 / 두 번 누르기·우클릭 메뉴·폴더 트리·수정 표시가 그대로 동작한다
+
+- [ ] TSK-03-09: 바인드 변수 창 — 격자 양식·자료형 서식·블록 복사 붙여 넣기 [win144] w:2 2026-10-23~2026-10-24
+  - category: dev
+  - domain: frontend
+  - model: sonnet
+  - priority: high
+  - tags: bind, ui, grid, win144
+  - depends: TSK-03-02
+  - prd-ref: MB-05
+  - entry-point: 바인드 변수 도구 창(일반 SQL·MyBatis 공용)
+  - requirements: 바인드 변수 창을 공용 격자 양식(Styles/GridC)으로; 값을 넣으면 자료형에 맞게 서식(NUMBER = 숫자만·자리 구분 없음, DATE·TIMESTAMP = 설정의 날짜 서식, VARCHAR2·CHAR = 그대로, 잘못된 값은 칸 표시와 툴팁); 여러 행을 블록으로 잡아 변수·값·자료형·방향 4열을 TSV 로 복사하고, 같은 형식을 붙여 넣으면 이름이 같은 변수에 값·자료형·방향을 채운다(Orange 동작); 비고: 2026-10-23 사용자 수정 요청
+  - acceptance: 일반 SQL·MyBatis 문서 둘 다에서 동작 / 복사 → 다른 탭 붙여 넣기 왕복이 같다 / 잘못된 숫자·날짜 처리
+
+- [ ] TSK-03-10: 펼친 SQL 을 쿼리 편집 탭 안 분할(세로 기본·가로)로 옮기기 [win144] w:2 2026-10-23~2026-10-24
+  - category: dev
+  - domain: frontend
+  - model: opus
+  - priority: high
+  - tags: mybatis, expanded, layout, win144
+  - depends: TSK-03-02
+  - prd-ref: MB-05
+  - entry-point: MyBatis 쿼리 탭
+  - requirements: 「펼친 SQL」 아래 도킹 패널을 없애고 MyBatis 쿼리 탭 안에서 원문 편집기 옆(세로 분할, 기본)·아래(가로 분할)에 보인다. 탭 머리 줄에 분할 아이콘 버튼(세로·가로, 고른 것은 기억); 펼친 SQL 의 바인드·치환 입력 목록을 지운다 — 값은 바인드 변수 창에서만 넣는다(치환 `${}` 도 바인드 변수 창 행); MyBatis 쿼리 탭이 열려 있을 때만 펼친 SQL 이 보인다(「매퍼 쿼리」 창에서 고르기만 하고 탭을 열지 않으면 안 보임). 조회 결과 창을 덮지 않는다; 시나리오 콤보·복사·실행 계획 명령은 분할 머리 줄로 옮긴다; 비고: 2026-10-23 사용자 수정 요청(「펼친 SQL 이 조회결과를 덮어서 불편」)
+  - acceptance: 쿼리 탭을 열면 오른쪽에 펼친 SQL, 아이콘으로 가로 전환·되돌림 / 탭 없이 목록 선택만 하면 펼친 SQL 없음 / 실행 결과 창이 가려지지 않음 / 바인드 값 바꾸면 300 ms 뒤 다시 계산
+
 ## WP-04: 통합테스트
 <!-- TSK-04-01 담당 PC: win144(Windows 개발 PC) — 맥북 세션은 TSK-04-01 을 하지 않는다. 기능 간 흐름 검증(개별 기능 재검증 아님). TSK-04-02 는 기능 레인에서 떼어 낸 성능 측정(2026-10-23 대화) -->
 
@@ -170,7 +206,7 @@ levels:
   - model: sonnet
   - priority: high
   - tags: integration, e2e, mybatis, win144
-  - depends: TSK-03-02, TSK-03-03, TSK-03-04, TSK-03-05, TSK-03-06, TSK-03-07
+  - depends: TSK-03-02, TSK-03-03, TSK-03-04, TSK-03-05, TSK-03-06, TSK-03-07, TSK-03-08, TSK-03-09, TSK-03-10
   - prd-ref: PRD 3, PRD 8
   - requirements: 흐름: 매퍼 열기 → 문장 고치기 → 시나리오 만들기 → 시나리오 값으로 실행 → 조합 검사·자동 고침 → 저장(바뀌는 부분 확인) → IDE 에서 같은 파일 고친 뒤 충돌 처리 → 일반 작업 공간 바꾸기 → 로그 붙여 넣기로 문장 찾기 → 매퍼 폴더 열기; 11g 컨테이너(oranda-ora11g)와 19c 이상에서 실행 결과를 확인한다; 성능 수치(PRD 6)를 시험 PC 에서 잰다; 제약: 실앱 눈 확인 항목은 사용자 몫으로 표시한다; 비고: 담당 PC: win144(Windows 개발 PC) — 맥북 세션은 이 Task 를 하지 않는다. 결과서 docs/oranda1/itest/TSK-04-01.md
   - acceptance: 모든 흐름이 끝까지 가고, 저장한 매퍼를 git diff 로 보면 고친 문장 줄만 바뀌어 있다 / 발견 결함은 해당 기능 WP에 defect Task로 등록됨 / 흐름별 결과표(정상·경계·오류·되돌림)
