@@ -534,7 +534,7 @@ public sealed class SafetyCrossDbTests : IClassFixture<SafetyDbFixture>, IAsyncL
         }
     }
 
-    private sealed record Case(string Text, string Snapshot, bool DevChanges = true, bool Danger = false, bool InnerOnly = false);
+    private sealed record Case(string Text, string Snapshot, bool DevChanges = true, bool Danger = false, bool InnerOnly = false, bool ProdAsks = true);
 
     private Dictionary<string, Case> Cases() => BuildCases(T, _rig.Proc, _file);
 
@@ -563,7 +563,7 @@ public sealed class SafetyCrossDbTests : IClassFixture<SafetyDbFixture>, IAsyncL
         ["rename"] = new($"RENAME {T} TO {T}_R", TableCount(T)),
         ["unclassifiable"] = new($"FOO BAR {T}", RowsOf(T), DevChanges: false),
         ["lock-table"] = new($"LOCK TABLE {T} IN EXCLUSIVE MODE", RowsOf(T), DevChanges: false),
-        ["alter-session"] = new("ALTER SESSION SET NLS_DATE_FORMAT = 'YYYY'", "SELECT 1 FROM dual", DevChanges: false),
+        ["alter-session"] = new("ALTER SESSION SET NLS_DATE_FORMAT = 'YYYY'", "SELECT 1 FROM dual", DevChanges: false, ProdAsks: false),
         ["alter-system"] = new("ALTER SYSTEM FLUSH SHARED_POOL", "SELECT 1 FROM dual", DevChanges: false, Danger: true),
     };
 
@@ -638,6 +638,13 @@ public sealed class SafetyCrossDbTests : IClassFixture<SafetyDbFixture>, IAsyncL
 
         var results = await _rig.RunTextAsync(session, c.Text);
 
+        if (!c.ProdAsks)
+        {
+            // ALTER SESSION 은 운영 라벨이어도 묻지 않고 돈다.
+            Assert.Empty(_rig.Ui.Confirms);
+            return;
+        }
+
         Assert.NotEmpty(_rig.Ui.Confirms);
         Assert.Equal(PolicyRule.ProductionChange, _rig.Ui.Confirms[0].Decision.Rule);
         if (!c.InnerOnly)
@@ -671,7 +678,7 @@ public sealed class SafetyCrossDbTests : IClassFixture<SafetyDbFixture>, IAsyncL
         var results = await _rig.RunTextAsync(session, c.Text);
         await session.CommitAsync(default);
 
-        Assert.NotEmpty(_rig.Ui.Confirms);
+        Assert.Equal(c.ProdAsks, _rig.Ui.Confirms.Count > 0);
         Assert.All(results, r => Assert.NotEqual(ExecutionStatus.Denied, r.Status));
         Assert.All(results, r => Assert.NotEqual(ExecutionStatus.Cancelled, r.Status));
         var after = await _db.ScalarAsync(c.Snapshot);

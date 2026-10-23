@@ -125,6 +125,27 @@ public class ExecutionPolicyTests
         Assert.Null(d.RetypeText);
     }
 
+    [Theory]
+    [InlineData("ALTER SESSION SET STATISTICS_LEVEL = ALL")]
+    [InlineData("ALTER SESSION SET NLS_DATE_FORMAT = 'YYYY-MM-DD'")]
+    public void Production_alter_session_is_allowed(string text) =>
+        Assert.Equal(PolicyDecisionKind.Allow, Eval(Ctx(ConnectionEnvironment.Production), Stmt(text, StatementKind.Ddl, "ALTER SESSION")).Kind);
+
+    [Theory]
+    [InlineData("ALTER INDEX scott.emp_pk MONITORING USAGE")]
+    [InlineData("alter index emp_pk nomonitoring usage")]
+    public void Production_index_monitoring_is_allowed(string text) =>
+        Assert.Equal(PolicyDecisionKind.Allow, Eval(Ctx(ConnectionEnvironment.Production), Stmt(text, StatementKind.Ddl, "ALTER")).Kind);
+
+    [Theory]
+    [InlineData("ALTER TABLE emp ADD (c2 NUMBER)", "ALTER")]
+    [InlineData("ALTER USER scott IDENTIFIED BY x", "ALTER")]
+    [InlineData("ALTER INDEX emp_pk REBUILD", "ALTER")]
+    [InlineData("ALTER PACKAGE pkg COMPILE", "ALTER")]
+    [InlineData("ALTER INDEX emp_pk MONITORING USAGE; DROP TABLE emp", "ALTER")]
+    public void Production_other_alter_still_needs_confirmation(string text, string verb) =>
+        Assert.Equal(PolicyRule.ProductionChange, Eval(Ctx(ConnectionEnvironment.Production), Stmt(text, StatementKind.Ddl, verb)).Rule);
+
     [Fact]
     public void Production_query_is_allowed()
     {

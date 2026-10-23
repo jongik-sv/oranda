@@ -136,6 +136,7 @@ public class StatementSplitterTests
     [InlineData("merge into t using s on (1=1) when matched then update set a=1", StatementKind.Dml, "MERGE")]
     [InlineData("drop table t", StatementKind.Ddl, "DROP")]
     [InlineData("alter system set x=1", StatementKind.Ddl, "ALTER SYSTEM")]
+    [InlineData("alter session set statistics_level = all", StatementKind.Ddl, "ALTER SESSION")]
     [InlineData("grant select on t to u", StatementKind.Ddl, "GRANT")]
     [InlineData("commit", StatementKind.TransactionControl, "COMMIT")]
     [InlineData("rollback to sp1", StatementKind.TransactionControl, "ROLLBACK")]

@@ -51,7 +51,7 @@ internal static class StatementClassifier
         else if (DdlWords.Contains(w0))
         {
             kind = StatementKind.Ddl;
-            if (w0 == "ALTER" && w1 == "SYSTEM") verb = "ALTER SYSTEM";
+            if (w0 == "ALTER" && w1 is "SYSTEM" or "SESSION") verb = "ALTER " + w1;
         }
         else if (w0 is "EXPLAIN" or "SET") kind = StatementKind.Other;
         else uncertain = true;

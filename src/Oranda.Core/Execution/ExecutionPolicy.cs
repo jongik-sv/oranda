@@ -1,3 +1,4 @@
+using System.Text.RegularExpressions;
 using Oranda.Core.Connection;
 
 namespace Oranda.Core.Execution;
@@ -7,7 +8,7 @@ namespace Oranda.Core.Execution;
 /// <list type="number">
 /// <item>읽기 전용 프로필: 질의·트랜잭션 제어·SQL*Plus·EXPLAIN 외 거부</item>
 /// <item>라이선스: 요구 팩이 프로필 선언(서버 <c>control_management_pack_access</c> 를 알면 그것과 둘 중 낮은 값)보다 높으면 거부</item>
-/// <item>운영 라벨: DML·DDL·PL/SQL 확인</item>
+/// <item>운영 라벨: DML·DDL·PL/SQL 확인(데이터·객체·다른 세션에 영향이 없는 ALTER 는 묻지 않는다, <see cref="IsHarmlessAlter"/>)</item>
 /// <item>WHERE 없는 UPDATE/DELETE: 모든 접속에서 확인</item>
 /// <item>위험 명령(DROP·TRUNCATE·ALTER SYSTEM): 대상 이름 재입력 확인(<see cref="RetypeDangerousNames"/>)</item>
 /// </list>
@@ -16,6 +17,11 @@ namespace Oranda.Core.Execution;
 /// </summary>
 public sealed class ExecutionPolicy : IExecutionPolicy
 {
+    /// <summary><see cref="IsHarmlessAlter"/> 의 ALTER INDEX … [NO]MONITORING USAGE.</summary>
+    private static readonly Regex IndexMonitoring = new(
+        @"\A\s*ALTER\s+INDEX\s+[\w$#.""]+\s+(NO)?MONITORING\s+USAGE\s*;?\s*\z",
+        RegexOptions.IgnoreCase | RegexOptions.CultureInvariant, TimeSpan.FromSeconds(1));
+
     /// <summary>SAFE-08 옵션. 끄면 위험 명령 규칙을 건너뛴다(운영 확인 등 다른 규칙은 그대로).</summary>
     public bool RetypeDangerousNames { get; init; } = true;
 
@@ -90,7 +96,8 @@ public sealed class ExecutionPolicy : IExecutionPolicy
 
         // 3. 운영 라벨(SAFE-03)
         if (ctx.Profile.Environment == ConnectionEnvironment.Production
-            && kind is StatementKind.Dml or StatementKind.Ddl or StatementKind.PlSql)
+            && kind is StatementKind.Dml or StatementKind.Ddl or StatementKind.PlSql
+            && !IsHarmlessAlter(stmt))
         {
             rule = PolicyRule.ProductionChange;
             messages.Add($"운영 접속 '{ctx.Profile.Name}' 에서 {Describe(stmt, kind)} 을(를) 실행합니다.");
@@ -130,6 +137,14 @@ public sealed class ExecutionPolicy : IExecutionPolicy
         StatementKind.Other => string.Equals(stmt.Verb, "EXPLAIN", StringComparison.OrdinalIgnoreCase),
         _ => false,
     };
+
+    /// <summary>
+    /// 운영에서도 묻지 않는 ALTER: ALTER SESSION(통계 수준·NLS·현재 스키마 등, 이 세션에만 걸린다),
+    /// ALTER INDEX … [NO]MONITORING USAGE(사용 여부 기록만 켜고 끈다). COMPILE·REBUILD·VISIBLE 등은 다른 세션·실행 계획에 영향이 있어 계속 묻는다.
+    /// </summary>
+    internal static bool IsHarmlessAlter(SqlStatement stmt) =>
+        stmt.Verb == "ALTER SESSION"
+        || (stmt.Verb == "ALTER" && IndexMonitoring.IsMatch(stmt.Text));
 
     private static bool IsDangerous(SqlStatement stmt) =>
         stmt.DangerousTarget is not null
