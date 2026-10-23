@@ -114,7 +114,7 @@ TRD 6 의 7개에 기능 Task 가 더 필요로 하는 명령을 모두 넣었�
 | `oranda.mybatis.explainScenario` | 펼친 SQL 실행 계획 | Sql | 위와 같음 | `toolbar:mybatis/explain@20`, `menu:sql/mybatisExplain@52` · 분할 머리 줄 단추(03-10) | - | 같음 (03-02) |
 | `oranda.mybatis.copyExpanded` | 펼친 SQL 복사 | Edit | `mybatisDocActive && mybatisStatementSelected` | `toolbar:mybatis/copy@50`, `context:mybatisExpanded/copy@10`(쿼리 탭 안 펼친 SQL 분할 우클릭, 03-10) · 분할 머리 줄 단추 | - | 같음 (03-02) |
 | `oranda.mybatis.copyExpandedWithValues` | 펼친 SQL 복사(값 넣은 글) | Edit | 위와 같음 | `toolbar:mybatis/copy@51`, `context:mybatisExpanded/copyValues@20`(같음) · 분할 머리 줄 단추 | - | 같음 (03-02) |
-| `oranda.mybatis.save` | xml 에 저장 | File | `mybatisDocActive && mybatisDocDirty` | `toolbar:mybatis/save@40`, `menu:file/mybatisSave@32` | (Ctrl+S 는 `file.save` 경유, 4.4) | `Save/MyBatisSaveCommands.cs` (03-03) |
+| `oranda.mybatis.save` | xml 에 저장 | File | `mybatisDocActive && mybatisDocDirty && !mybatisFormatAllBusy` | `toolbar:mybatis/save@40`, `menu:file/mybatisSave@32` | (Ctrl+S 는 `file.save` 경유, 4.4) | `Save/MyBatisSaveCommands.cs` (03-03) |
 | `oranda.mybatis.checkCombinations` | 조합 검사 | Sql | `mybatisDocActive && mybatisStatementSelected` | `toolbar:mybatis/combos@30`, `menu:sql/mybatisCombos@25` | - | `Combos/MyBatisComboCommands.cs` (03-04) |
 | `oranda.mybatis.applyAutoFix` | 자동 고침(<set>·<where> 로 감싸기) | Edit | `mybatisDocActive && mybatisStatementSelected && !readOnlyDoc` | `context:mybatisEditor/autoFix@10`(문장 편집기 우클릭, 03-01 이 그림) | - | 같음 (03-04) |
 | `oranda.mybatis.convertWorkspace` | MyBatis 작업 공간으로 바꾸기… | File | `sqlWorkspaceActive && !mybatisDocActive && mybatisConvertReady` | `menu:file/mybatisConvert@97`, `context:documentTab/mybatisConvert@40` | - | `Conversion/MyBatisConvertCommands.cs` (03-05) |

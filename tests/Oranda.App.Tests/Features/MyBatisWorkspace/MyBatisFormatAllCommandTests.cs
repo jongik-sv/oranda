@@ -3,6 +3,7 @@ using System.Text;
 using System.Text.RegularExpressions;
 using Oranda.App.Features.MyBatisWorkspace.Format;
 using Oranda.App.Features.MyBatisWorkspace.Hooks;
+using Oranda.App.Features.MyBatisWorkspace.Save;
 using Oranda.App.Features.MyBatisWorkspace.Workspace;
 using Oranda.App.Features.SqlEditor;
 using Oranda.App.Shell;
@@ -64,6 +65,37 @@ public sealed partial class MyBatisFormatAllCommandTests : IDisposable
         Assert.True(registry.CanExecute("oranda.mybatis.save", Keys("mybatisDocActive", "mybatisDocDirty")));
         Assert.False(registry.CanExecute("oranda.mybatis.save", Keys("mybatisDocActive", "mybatisDocDirty", MyBatisFormatAllCommands.BusyKey)));
     }
+
+    [Fact]
+    public Task Ctrl_S_and_save_all_are_deferred_with_a_notice_while_format_all_runs() => Ui.Run(async () =>
+    {
+        var path = WriteMapper(MapperSamples.EmpMapper, "Mapper.xml");
+        var dialogs = new MessageDialogs();
+        var host = new SqlEditorHost(dialogs: dialogs)
+        {
+            MyBatisHooks = new MyBatisHooks(openHandler: new MyBatisOpenHandler(), saveHandler: new MyBatisSaveHandler(new MapperWatchService())),
+        };
+        await host.OpenWorkspaceFileAsync(path, default);
+        var ws = host.ActiveWorkspace!;
+        var tab = ws.Tabs.Single(t => t.Title == "selectEmpList");
+        tab.Document.Insert(0, "<!-- dirty -->"); // 저장할 고침이 있다
+        var during = new List<bool>();
+
+        // Ctrl+S(file.save → host.SaveAsync)·모두 저장은 「xml 에 저장」 명령의 문맥 키를 거치지 않고 저장 훅을 바로 부른다.
+        await RunAsync(host, new BodyUpper(["deleteEmp"]), async _ =>
+        {
+            Assert.True(MyBatisFormatAllCommands.IsFormatting(ws));
+            during.Add(await host.SaveAsync(tab, default));
+            during.Add(await host.SaveAllAsync(default));
+            return new FormatterOptions();
+        });
+
+        Assert.Equal([false, false], during);
+        Assert.Equal(2, dialogs.Messages.Count(m => m == "매퍼 전체 포맷 중이라 저장을 미뤘습니다. 포맷이 끝난 뒤 다시 저장하십시오."));
+        Assert.Equal(MapperSamples.EmpMapper, await File.ReadAllTextAsync(path));
+        Assert.False(MyBatisFormatAllCommands.IsFormatting(ws));
+        Assert.True(((MyBatisWorkspaceSession)ws.MyBatis!).Find("deleteEmp")!.IsModified);
+    });
 
     [Fact]
     public Task Formats_open_and_closed_elements_and_only_changed_ones_become_pending_edits() => Ui.Run(async () =>
@@ -345,6 +377,29 @@ public sealed partial class MyBatisFormatAllCommandTests : IDisposable
 
     [GeneratedRegex("id=\"(\\w+)\"")]
     private static partial Regex IdAttribute();
+
+    private sealed class MessageDialogs : IEditorDialogs
+    {
+        public List<string> Messages { get; } = [];
+
+        public Task<string?> PickOpenFileAsync(CancellationToken ct) => Task.FromResult<string?>(null);
+
+        public Task<string?> PickSaveFileAsync(string suggestedName, CancellationToken ct) => Task.FromResult<string?>(null);
+
+        public Task<string?> PromptAsync(string title, string initial, CancellationToken ct) => Task.FromResult<string?>(null);
+
+        public Task<string?> ChooseAsync(string title, IReadOnlyList<string> items, CancellationToken ct) => Task.FromResult<string?>(null);
+
+        public Task<bool> ConfirmAsync(string message, CancellationToken ct) => Task.FromResult(false);
+
+        public Task<bool> PreviewEditAsync(string title, string before, string after, CancellationToken ct) => Task.FromResult(false);
+
+        public Task ShowMessageAsync(string title, string message, CancellationToken ct)
+        {
+            Messages.Add(message);
+            return Task.CompletedTask;
+        }
+    }
 
     private sealed class KeySet(IEnumerable<string> on) : IContextKeys
     {

@@ -255,6 +255,7 @@
   "MyBatis.formatAll.nothing": "포맷할 쿼리가 없습니다.",
   "MyBatis.formatAll.nothingToUndo": "되돌릴 전체 포맷이 없습니다.",
   "MyBatis.formatAll.readOnly": "읽기 전용(같은 id 가 여럿)",
+  "MyBatis.formatAll.saveDeferred": "매퍼 전체 포맷 중이라 저장을 미뤘습니다. 포맷이 끝난 뒤 다시 저장하십시오.",
   "MyBatis.formatAll.skippedHeading": "그 사이 고쳐서 건너뛴 쿼리:",
   "MyBatis.formatAll.summary": "매퍼 전체 포맷을 마쳤습니다: {0}개 정리, {1}개는 이미 정리됨, {2}개는 원문 유지.",
   "MyBatis.formatAll.undone": "전체 포맷을 되돌렸습니다: {0}개 되돌림, {1}개는 그 사이 고쳐서 건너뜀.",

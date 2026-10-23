@@ -1,5 +1,6 @@
 using System.Globalization;
 using Oranda.App.Features.Localization;
+using Oranda.App.Features.MyBatisWorkspace.Format;
 using Oranda.App.Features.MyBatisWorkspace.Hooks;
 using Oranda.App.Features.SqlEditor;
 using Oranda.App.Shell.Settings;
@@ -56,6 +57,13 @@ public sealed class MyBatisSaveHandler : IMyBatisSaveHandler
     public async Task<bool> SaveAsync(SqlWorkspaceViewModel workspace, CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(workspace);
+        if (workspace.MyBatis is not null && MyBatisFormatAllCommands.IsFormatting(workspace))
+        {
+            // 매퍼 전체 포맷이 도는 동안 저장하면 저장 끝의 기준 다시 싣기가 막 적용한 포맷 글을 덮는다(Ctrl+S·모두 저장·닫기 확인도 이 길).
+            await TellAsync(workspace, Text("MyBatis.formatAll.saveDeferred", "매퍼 전체 포맷 중이라 저장을 미뤘습니다. 포맷이 끝난 뒤 다시 저장하십시오."), ct).ConfigureAwait(true);
+            return false;
+        }
+
         if (workspace.MyBatis is null || !_saving.Add(workspace))
         {
             return false;

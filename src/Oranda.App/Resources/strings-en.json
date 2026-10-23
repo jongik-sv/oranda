@@ -255,6 +255,7 @@
   "MyBatis.formatAll.nothing": "There are no queries to format.",
   "MyBatis.formatAll.nothingToUndo": "There is no whole-mapper format to undo.",
   "MyBatis.formatAll.readOnly": "Read-only (the same id appears more than once)",
+  "MyBatis.formatAll.saveDeferred": "Saving was postponed because the whole mapper is being formatted. Save again after formatting finishes.",
   "MyBatis.formatAll.skippedHeading": "Queries skipped because they were edited in the meantime:",
   "MyBatis.formatAll.summary": "Finished formatting the whole mapper: {0} formatted, {1} already formatted, {2} kept as they were.",
   "MyBatis.formatAll.undone": "Undid the whole-mapper format: {0} reverted, {1} skipped because they were edited in the meantime.",

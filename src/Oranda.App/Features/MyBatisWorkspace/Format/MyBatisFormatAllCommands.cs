@@ -63,6 +63,16 @@ public sealed class MyBatisFormatAllCommands : ICommandHandler
     /// <summary>실행 중 표시를 걸 문맥 키. 기본은 셸의 <see cref="ContextKeyService"/>.</summary>
     internal ContextKeyService? Keys { get; init; }
 
+    /// <summary>
+    /// 그 작업 공간의 매퍼를 전체 포맷하는 중인가. 저장 훅이 그동안 저장을 미룬다: 저장 끝의 기준 다시 싣기가 막 적용한 포맷 글을 덮기 때문이다
+    /// (「xml 에 저장」 단추는 문맥 키로 꺼지지만 Ctrl+S·모두 저장·닫기 확인 저장은 훅을 바로 부른다).
+    /// </summary>
+    internal static bool IsFormatting(SqlWorkspaceViewModel workspace)
+    {
+        ArgumentNullException.ThrowIfNull(workspace);
+        return States.TryGetValue(workspace.Host, out var state) && ReferenceEquals(state.Running, workspace);
+    }
+
     public Task ExecuteAsync(CommandContext context, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(context);
@@ -86,7 +96,7 @@ public sealed class MyBatisFormatAllCommands : ICommandHandler
 
         var keys = Keys ?? _services?.GetService(typeof(ContextKeyService)) as ContextKeyService;
         string message;
-        state.Busy = true;
+        state.Running = session.Workspace;
         keys?.Set(BusyKey, true);
         try
         {
@@ -94,7 +104,7 @@ public sealed class MyBatisFormatAllCommands : ICommandHandler
         }
         finally
         {
-            state.Busy = false;
+            state.Running = null;
             keys?.Set(BusyKey, false);
         }
 
@@ -280,7 +290,10 @@ public sealed class MyBatisFormatAllCommands : ICommandHandler
     {
         private SqlEditorHost? _host;
 
-        public bool Busy { get; set; }
+        /// <summary>전체 포맷 중인 작업 공간(없으면 null).</summary>
+        public SqlWorkspaceViewModel? Running { get; set; }
+
+        public bool Busy => Running is not null;
 
         public History? Last { get; private set; }
 
