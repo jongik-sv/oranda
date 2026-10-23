@@ -21,6 +21,7 @@ public partial class BindVariablesView : UserControl
             Table.Width = Math.Max(Table.MinWidth, e.NewSize.Width);
             ApplyColumns();
         };
+        RowList.AddHandler(KeyDownEvent, OnRowListKeyDown, Avalonia.Interactivity.RoutingStrategies.Tunnel);
         DataContextChanged += (_, _) =>
         {
             if (_vm is not null)
@@ -33,7 +34,7 @@ public partial class BindVariablesView : UserControl
                 }
             }
 
-            _vm =DataContext as BindVariablesViewModel;
+            _vm = DataContext as BindVariablesViewModel;
             if (_vm is not null)
             {
                 _vm.PropertyChanged += OnVmPropertyChanged;
@@ -143,4 +144,93 @@ public partial class BindVariablesView : UserControl
             box.SelectAll();
         }
     }
+
+    // ---- 블록 선택·복사·붙여 넣기(TSK-03-09) -------------------------------------------------
+
+    private void OnSelectionChanged(object? sender, SelectionChangedEventArgs e)
+    {
+        if (_vm is null)
+        {
+            return;
+        }
+
+        _vm.SelectedRows = RowList.SelectedItems?.OfType<BindVariableRow>().ToList() ?? [];
+        _vm.DeleteCommand.NotifyCanExecuteChanged();
+    }
+
+    /// <summary>값 칸을 떠날 때 자료형에 맞게 글을 정리한다.</summary>
+    private void OnValueLostFocus(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
+    {
+        if (sender is Control { DataContext: BindVariableRow row })
+        {
+            row.Commit();
+        }
+    }
+
+    private void OnRowListKeyDown(object? sender, Avalonia.Input.KeyEventArgs e)
+    {
+        if (e.KeyModifiers != Avalonia.Input.KeyModifiers.Control || (e.Key != Avalonia.Input.Key.C && e.Key != Avalonia.Input.Key.V))
+        {
+            return;
+        }
+
+        var inText = TopLevel.GetTopLevel(this)?.FocusManager?.GetFocusedElement() is TextBox;
+        if (e.Key == Avalonia.Input.Key.C)
+        {
+            // 입력 칸 안에서 글을 골랐으면 글 복사가 먼저다.
+            if (inText && TopLevel.GetTopLevel(this)?.FocusManager?.GetFocusedElement() is TextBox { SelectionStart: var a, SelectionEnd: var b } && a != b)
+            {
+                return;
+            }
+
+            e.Handled = true;
+            _ = CopyAsync(false);
+        }
+        else
+        {
+            e.Handled = true;
+            _ = PasteAsync(inText);
+        }
+    }
+
+    internal async Task CopyAsync(bool withHeader)
+    {
+        if (_vm?.CopyText(withHeader) is { } text && TopLevel.GetTopLevel(this)?.Clipboard is { } clipboard)
+        {
+            await Avalonia.Input.Platform.ClipboardExtensions.SetTextAsync(clipboard, text);
+        }
+    }
+
+    /// <summary>클립보드의 TSV 를 붙여 넣는다. 입력 칸 안에서 탭·줄바꿈이 없는 한 줄 글이면 그냥 칸에 붙인다.</summary>
+    internal async Task PasteAsync(bool fromTextBox = false)
+    {
+        if (_vm is null || TopLevel.GetTopLevel(this)?.Clipboard is not { } clipboard)
+        {
+            return;
+        }
+
+        var text = await Avalonia.Input.Platform.ClipboardExtensions.TryGetTextAsync(clipboard);
+        if (string.IsNullOrEmpty(text))
+        {
+            return;
+        }
+
+        if (fromTextBox && text.IndexOfAny(['\t', '\n', '\r']) < 0)
+        {
+            if (TopLevel.GetTopLevel(this)?.FocusManager?.GetFocusedElement() is TextBox box)
+            {
+                box.Paste();
+            }
+
+            return;
+        }
+
+        _vm.PasteText(text);
+    }
+
+    private void OnCopyClick(object? sender, Avalonia.Interactivity.RoutedEventArgs e) => _ = CopyAsync(false);
+
+    private void OnCopyWithHeaderClick(object? sender, Avalonia.Interactivity.RoutedEventArgs e) => _ = CopyAsync(true);
+
+    private void OnPasteClick(object? sender, Avalonia.Interactivity.RoutedEventArgs e) => _ = PasteAsync();
 }

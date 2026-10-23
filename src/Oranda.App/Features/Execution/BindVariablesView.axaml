@@ -7,16 +7,10 @@
              x:DataType="vm:BindVariablesViewModel">
   <UserControl.Styles>
     <!-- 표 칸: 입력 칸·콤보는 테두리 없이 칸을 채우고, 칸 사이는 가는 선으로 나눈다(오렌지 Bind Variable List 처럼). -->
-    <Style Selector="ListBox#RowList ListBoxItem">
-      <Setter Property="Padding" Value="0" />
-      <Setter Property="MinHeight" Value="0" />
-      <!-- 줄 Grid 를 줄 폭으로 펴야 * 열이 모든 줄에서 같다(왼쪽 맞춤이면 줄마다 글자 폭만큼만 쓴다). -->
-      <Setter Property="HorizontalContentAlignment" Value="Stretch" />
-    </Style>
-    <Style Selector="Border.cell">
-      <Setter Property="BorderBrush" Value="{DynamicResource OrandaSeparatorBrush}" />
-      <Setter Property="BorderThickness" Value="0,0,1,1" />
-      <Setter Property="MinHeight" Value="26" />
+    <!-- 격자 양식은 Styles/GridC(ListBox.grid-c·Border.grid-c-header·Border.grid-c-cell). 여기서는 입력 칸·콤보를 칸에 채우는 것만 더한다. -->
+    <Style Selector="Border.grid-c-cell.invalid">
+      <Setter Property="BorderBrush" Value="{DynamicResource OrandaDangerForegroundBrush}" />
+      <Setter Property="BorderThickness" Value="1" />
     </Style>
     <Style Selector="TextBox.cell">
       <Setter Property="MinWidth" Value="0" />
@@ -57,14 +51,14 @@
       </StackPanel>
     </Border>
     <Border DockPanel.Dock="Bottom" Classes="panel-status">
-      <TextBlock Text="실행하면 문장의 :변수가 여기에 채워집니다. 빈 값은 NULL." TextTrimming="CharacterEllipsis" />
+      <TextBlock Text="{Binding StatusText}" TextTrimming="CharacterEllipsis" />
     </Border>
     <!-- 창이 표의 최소 폭보다 좁으면 방향 열을 자르지 않고 가로로 스크롤한다.
          열 폭은 표 폭(창 폭, 최소 232)에서 픽셀로 계산해 머리글과 모든 줄에 같은 값을 넣는다(코드 숨김 ApplyColumns).
          * 열을 줄마다 두면 처음 무한 폭으로 잰 줄이 글자 폭을 따라가 열이 어긋난다. -->
     <ScrollViewer x:Name="TableScroll" HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled">
     <DockPanel x:Name="Table" MinWidth="232">
-    <Border DockPanel.Dock="Top" Classes="grid-header">
+    <Border DockPanel.Dock="Top" Classes="grid-c-header">
       <Grid x:Name="HeaderGrid" Height="26">
         <Grid.ColumnDefinitions>
           <ColumnDefinition Width="24" />
@@ -73,17 +67,24 @@
           <ColumnDefinition Width="2*" MinWidth="64" />
           <ColumnDefinition Width="52" />
         </Grid.ColumnDefinitions>
-        <TextBlock Grid.Column="0" Classes="head" Text="#" HorizontalAlignment="Center" Margin="0" />
-        <TextBlock Grid.Column="1" Classes="head" Text="변수" />
-        <TextBlock Grid.Column="2" Classes="head" Text="값" />
-        <TextBlock Grid.Column="3" Classes="head" Text="자료형" />
-        <TextBlock Grid.Column="4" Classes="head" Text="방향" />
+        <Border Grid.Column="0" Classes="grid-c-cell" Padding="0"><TextBlock Classes="head" Text="#" HorizontalAlignment="Center" Margin="0" /></Border>
+        <Border Grid.Column="1" Classes="grid-c-cell" Padding="0"><TextBlock Classes="head" Text="변수" /></Border>
+        <Border Grid.Column="2" Classes="grid-c-cell" Padding="0"><TextBlock Classes="head" Text="값" /></Border>
+        <Border Grid.Column="3" Classes="grid-c-cell" Padding="0"><TextBlock Classes="head" Text="자료형" /></Border>
+        <Border Grid.Column="4" Classes="grid-c-cell" Padding="0"><TextBlock Classes="head" Text="방향" /></Border>
       </Grid>
     </Border>
     <!-- 목록 자체의 가로 스크롤을 끈다: 켜 두면 줄을 무한 폭으로 재서 * 열이 줄마다 글자 폭을 따라간다(가로 스크롤은 바깥 TableScroll 이 한다). -->
-    <ListBox x:Name="RowList" ItemsSource="{Binding Rows}" SelectedItem="{Binding Selected, Mode=TwoWay}"
+    <ListBox x:Name="RowList" Classes="grid-c" SelectionMode="Multiple" SelectionChanged="OnSelectionChanged" ItemsSource="{Binding Rows}" SelectedItem="{Binding Selected, Mode=TwoWay}"
              ScrollViewer.HorizontalScrollBarVisibility="Disabled"
              AutomationProperties.Name="바인드 변수 목록">
+      <ListBox.ContextMenu>
+        <ContextMenu>
+          <MenuItem Header="복사" InputGesture="Ctrl+C" Click="OnCopyClick" />
+          <MenuItem Header="머리글 포함 복사" Click="OnCopyWithHeaderClick" />
+          <MenuItem Header="붙여 넣기" InputGesture="Ctrl+V" Click="OnPasteClick" />
+        </ContextMenu>
+      </ListBox.ContextMenu>
       <ListBox.ItemTemplate>
         <DataTemplate x:DataType="binds:BindVariableRow">
           <Grid Classes="row" Loaded="OnRowGridLoaded">
@@ -94,18 +95,19 @@
               <ColumnDefinition Width="2*" MinWidth="64" />
               <ColumnDefinition Width="52" />
             </Grid.ColumnDefinitions>
-            <Border Grid.Column="0" Classes="cell">
+            <Border Grid.Column="0" Classes="grid-c-cell row-head" Padding="0">
               <TextBlock Text="{Binding Number}" HorizontalAlignment="Center" VerticalAlignment="Center" Opacity="0.6" />
             </Border>
-            <Border Grid.Column="1" Classes="cell">
+            <Border Grid.Column="1" Classes="grid-c-cell" Padding="0">
               <TextBox x:Name="NameBox" Classes="cell" Text="{Binding Name, Mode=TwoWay}" PlaceholderText="이름"
                        AutomationProperties.Name="바인드 변수 이름" />
             </Border>
-            <Border Grid.Column="2" Classes="cell">
-              <TextBox x:Name="ValueBox" Classes="cell" Text="{Binding Text, Mode=TwoWay}" PlaceholderText="NULL"
+            <Border Grid.Column="2" Classes="grid-c-cell" Padding="0" Classes.invalid="{Binding HasValueError}"
+                    ToolTip.Tip="{Binding ValueError}">
+              <TextBox x:Name="ValueBox" Classes="cell" LostFocus="OnValueLostFocus" Text="{Binding Text, Mode=TwoWay}" PlaceholderText="NULL"
                        AutomationProperties.Name="바인드 변수 값" />
             </Border>
-            <Border Grid.Column="3" Classes="cell">
+            <Border Grid.Column="3" Classes="grid-c-cell" Padding="0">
               <ComboBox Classes="cell" ItemsSource="{x:Static binds:BindTypeChoice.All}"
                         SelectedItem="{Binding TypeChoice, Mode=TwoWay}" AutomationProperties.Name="바인드 변수 형식">
                 <ComboBox.ItemTemplate>
@@ -115,7 +117,7 @@
                 </ComboBox.ItemTemplate>
               </ComboBox>
             </Border>
-            <Border Grid.Column="4" Classes="cell">
+            <Border Grid.Column="4" Classes="grid-c-cell" Padding="0">
               <ComboBox Classes="cell" ItemsSource="{x:Static binds:BindDirectionChoice.All}"
                         SelectedItem="{Binding DirectionChoice, Mode=TwoWay}" AutomationProperties.Name="바인드 변수 방향">
                 <ComboBox.ItemTemplate>

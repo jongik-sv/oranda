@@ -72,18 +72,73 @@ public sealed partial class BindVariablesViewModel : ToolPanelViewModelBase
         Store.RequestFocus(string.Empty);
     }
 
+    /// <summary>블록으로 고른 줄(클릭·Shift·Ctrl). 뷰가 채운다. 비어 있으면 <see cref="Selected"/> 하나.</summary>
+    public IList<BindVariableRow> SelectedRows { get; set; } = [];
+
+    /// <summary>창 아래 줄 글. 복사·붙여 넣기 결과를 알린다.</summary>
+    [ObservableProperty]
+    private string _statusText = DefaultStatus;
+
+    private const string DefaultStatus = "실행하면 문장의 :변수가 여기에 채워집니다. 빈 값은 NULL.";
+
+    private List<BindVariableRow> Block()
+    {
+        var rows = SelectedRows.Where(Rows.Contains).OrderBy(Rows.IndexOf).ToList();
+        if (rows.Count == 0 && Selected is { } one)
+        {
+            rows.Add(one);
+        }
+
+        return rows;
+    }
+
     [RelayCommand(CanExecute = nameof(CanDelete))]
     private void Delete()
     {
-        if (Selected is { } row)
+        var block = Block();
+        if (block.Count == 0)
         {
-            var index = Rows.IndexOf(row);
-            Store.Remove(row);
-            Selected = Rows.Count == 0 ? null : Rows[Math.Min(index, Rows.Count - 1)];
+            return;
         }
+
+        var index = Rows.IndexOf(block[0]);
+        foreach (var row in block)
+        {
+            Store.Remove(row);
+        }
+
+        Selected = Rows.Count == 0 ? null : Rows[Math.Min(index, Rows.Count - 1)];
     }
 
-    private bool CanDelete() => Selected is not null;
+    /// <summary>고른 줄(없으면 전체)을 TSV 4열로. 복사할 줄이 없으면 null.</summary>
+    public string? CopyText(bool withHeader = false)
+    {
+        var block = Block();
+        if (block.Count == 0)
+        {
+            block = [.. Rows];
+        }
+
+        if (block.Count == 0)
+        {
+            return null;
+        }
+
+        StatusText = $"바인드 변수 {block.Count.ToString(System.Globalization.CultureInfo.InvariantCulture)}줄을 복사했습니다.";
+        return BindTsv.Format(block, withHeader);
+    }
+
+    /// <summary>TSV 를 읽어 이름이 같은 변수에 값·자료형·방향을 채운다. 채운 줄 수를 돌려준다.</summary>
+    public int PasteText(string text)
+    {
+        var (applied, skipped) = BindTsv.Apply(Store, text);
+        StatusText = skipped > 0
+            ? $"바인드 변수 {applied.ToString(System.Globalization.CultureInfo.InvariantCulture)}줄에 붙여 넣었습니다(목록에 없는 이름 {skipped.ToString(System.Globalization.CultureInfo.InvariantCulture)}개는 건너뜀)."
+            : $"바인드 변수 {applied.ToString(System.Globalization.CultureInfo.InvariantCulture)}줄에 붙여 넣었습니다.";
+        return applied;
+    }
+
+    private bool CanDelete() => Selected is not null || SelectedRows.Count > 0;
 
     [RelayCommand]
     private void Clear()

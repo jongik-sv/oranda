@@ -84,6 +84,30 @@ public sealed partial class BindVariableRow : ObservableObject
     [ObservableProperty]
     private BindDirectionChoice _directionChoice = BindDirectionChoice.All[0];
 
+    /// <summary>값 칸이 자료형에 맞지 않을 때의 이유(툴팁·붉은 테두리). 맞으면 null.</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasValueError))]
+    private string? _valueError;
+
+    public bool HasValueError => ValueError is not null;
+
+    partial void OnTextChanged(string value) => ValueError = BindValueFormatter.Validate(Type, Direction, value);
+
+    partial void OnTypeChoiceChanged(BindTypeChoice value)
+    {
+        OnPropertyChanged(nameof(Type));
+        ValueError = BindValueFormatter.Validate(value.Type, Direction, Text);
+    }
+
+    partial void OnDirectionChoiceChanged(BindDirectionChoice value)
+    {
+        OnPropertyChanged(nameof(Direction));
+        ValueError = BindValueFormatter.Validate(Type, value.Direction, Text);
+    }
+
+    /// <summary>값 칸을 떠날 때: 자료형에 맞게 글을 정리한다(NUMBER 쉼표·공백 제거, 날짜 서식 통일).</summary>
+    public void Commit(string? dateFormat = null) => Text = BindValueFormatter.Normalize(Type, Text, dateFormat);
+
     /// <summary>목록 번호(1부터).</summary>
     [ObservableProperty]
     private int _number;

@@ -232,6 +232,7 @@
   "보관된 것만": "Archived only",
   "복사": "Copy",
   "머리글 포함 복사": "Copy with headers",
+  "붙여 넣기": "Paste",
   "복제": "Duplicate",
   "본문": "Body",
   "본문 ($1, ${1:기본값}, $0)": "Body ($1, ${1:default}, $0)",
