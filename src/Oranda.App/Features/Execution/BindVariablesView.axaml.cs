@@ -169,7 +169,8 @@ public partial class BindVariablesView : UserControl
 
     private void OnRowListKeyDown(object? sender, Avalonia.Input.KeyEventArgs e)
     {
-        if (e.KeyModifiers != Avalonia.Input.KeyModifiers.Control || (e.Key != Avalonia.Input.Key.C && e.Key != Avalonia.Input.Key.V))
+        var primary = OperatingSystem.IsMacOS() ? Avalonia.Input.KeyModifiers.Meta : Avalonia.Input.KeyModifiers.Control;
+        if (e.KeyModifiers != primary || (e.Key != Avalonia.Input.Key.C && e.Key != Avalonia.Input.Key.V))
         {
             return;
         }
@@ -195,9 +196,20 @@ public partial class BindVariablesView : UserControl
 
     internal async Task CopyAsync(bool withHeader)
     {
-        if (_vm?.CopyText(withHeader) is { } text && TopLevel.GetTopLevel(this)?.Clipboard is { } clipboard)
+        if (_vm is null || TopLevel.GetTopLevel(this)?.Clipboard is not { } clipboard || _vm.CopyText(withHeader) is not { } text)
+        {
+            return;
+        }
+
+        try
         {
             await Avalonia.Input.Platform.ClipboardExtensions.SetTextAsync(clipboard, text);
+        }
+        catch (Exception ex) when (ex is not OutOfMemoryException)
+        {
+            // 클립보드를 다른 프로그램이 잡고 있으면(Windows OLE) 실패한다: 삼키지 말고 창 아래 줄에 알린다.
+            System.Diagnostics.Trace.TraceWarning("바인드 변수 복사 실패: {0}", ex.Message);
+            _vm.StatusText = "클립보드에 복사하지 못했습니다: " + ex.Message;
         }
     }
 
@@ -209,7 +221,18 @@ public partial class BindVariablesView : UserControl
             return;
         }
 
-        var text = await Avalonia.Input.Platform.ClipboardExtensions.TryGetTextAsync(clipboard);
+        string? text;
+        try
+        {
+            text = await Avalonia.Input.Platform.ClipboardExtensions.TryGetTextAsync(clipboard);
+        }
+        catch (Exception ex) when (ex is not OutOfMemoryException)
+        {
+            System.Diagnostics.Trace.TraceWarning("바인드 변수 붙여 넣기 실패: {0}", ex.Message);
+            _vm.StatusText = "클립보드를 읽지 못했습니다: " + ex.Message;
+            return;
+        }
+
         if (string.IsNullOrEmpty(text))
         {
             return;

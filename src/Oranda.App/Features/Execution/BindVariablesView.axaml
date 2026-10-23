@@ -3,6 +3,7 @@
              xmlns:icons="using:Oranda.App.Shell.Icons"
              xmlns:vm="using:Oranda.App.Features.Execution"
              xmlns:binds="using:Oranda.App.Features.Binds"
+             xmlns:keymaps="using:Oranda.App.Shell.Keymaps"
              x:Class="Oranda.App.Features.Execution.BindVariablesView"
              x:DataType="vm:BindVariablesViewModel">
   <UserControl.Styles>
@@ -77,6 +78,7 @@
     <!-- 목록 자체의 가로 스크롤을 끈다: 켜 두면 줄을 무한 폭으로 재서 * 열이 줄마다 글자 폭을 따라간다(가로 스크롤은 바깥 TableScroll 이 한다). -->
     <ListBox x:Name="RowList" Classes="grid-c" SelectionMode="Multiple" SelectionChanged="OnSelectionChanged" ItemsSource="{Binding Rows}" SelectedItem="{Binding Selected, Mode=TwoWay}"
              ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+             keymaps:EditKeyScope.Owns="True"
              AutomationProperties.Name="바인드 변수 목록">
       <ListBox.ContextMenu>
         <ContextMenu>

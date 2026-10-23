@@ -236,6 +236,19 @@ levels:
   - acceptance: 같은 합성 폴더 2,000개 훑기 전체가 절반 이하 / 폴더 훑기 시험(MapperFolderTests) 통과
   - note: 2026-10-23 저부하 재측정(Release, CPU 17~23 %) 1회: 훑기 전체 8,995 ms — 부하와 무관하게 9 s 대, 병렬화 필요 (win144) — docs/oranda1/itest/TSK-04-02.md; 2026-10-23 고침: 파일 읽기·파싱을 코어 수만큼 병렬(경로순 정렬), 파일은 한 번만 열어 앞부분 판정과 전체 읽기를 이음 — 고친 뒤 1회(CPU 40 % 이하): 8,995 → 2,656 ms (win144)
 
+- [x] TSK-03-14: 실제 앱에서 바인드 변수 창 Ctrl+C/V 가 편집기·결과 그리드로 감 (TSK-03-09 결함) [win144] w:1 2026-10-23~2026-10-23
+  - category: defect
+  - domain: frontend
+  - model: opus
+  - priority: high
+  - tags: bind, ui, keymap, clipboard, win144
+  - depends: TSK-03-09
+  - prd-ref: MB-05
+  - entry-point: 바인드 변수 도구 창(일반 SQL·MyBatis 공용)
+  - requirements: 사용자 보고(2026-10-23 실앱): 바인드 변수 복사·붙여 넣기가 안 된다. 원인: 주 창 Tunnel 키 처리기(MainWindow.OnKeyDownTunnel)가 바인드 창 목록보다 먼저 키를 받아 키맵으로 보낸다. 바인드 창엔 포커스 자리(FocusSlot)가 없어 직전 자리(편집기 sqlText·결과 sqlGrid)가 그대로 남고, Ctrl+C/V 가 oranda.edit.copy/paste(editorFocus)·oranda.grid.copy(gridFocus)로 처리돼 Handled — 목록 처리기(RowList Tunnel)에 닿지 않는다(TSV 가 편집기에 붙음). 값 칸 TextBox 안에서만 주 창이 키를 넘겨 동작했다. Headless 시험(BindGridTests)은 뷰 모델 CopyText/PasteText 를 직접 불러 셸 키 경로를 거치지 않아 통과했다. 우클릭 메뉴(Click)·클립보드 호출 자체는 문제없음
+  - acceptance: 편집기를 쓰다 바인드 창 줄을 클릭하고 Ctrl+C → 바인드 TSV, Ctrl+V → 값 채움(편집기 그대로) / 값 칸 글 선택 Ctrl+C = 글 복사 / 우클릭 「머리글 포함 복사」·「붙여 넣기」 / 편집기 포커스 Ctrl+C = 편집기 복사(회귀)
+  - note: 고침 — 글자 편집 키를 스스로 처리하는 영역 표시 EditKeyScope(Shell/Keymaps) 를 두고 바인드 창 목록에 붙임, 주 창은 그 영역에 포커스가 있으면 글자 편집 키를 키맵으로 보내지 않음(TextBox 와 같은 규칙), macOS 시스템 메뉴(⌘C·⌘V)도 그 영역으로 넘김, 목록 처리기는 플랫폼 기본 수식키(⌘/Ctrl), 클립보드 실패는 창 아래 줄에 알림. 시험 BindPaneShellKeysTests 7개(셸 주 창 + 도킹 바인드 창에 실제 키·마우스 입력, 고치기 전 3개 실패 확인). 실앱 자동 확인은 다른 창이 앞에 있어(포그라운드 잠금) 못 함 (win144)
+
 ## WP-04: 통합테스트
 <!-- TSK-04-01 담당 PC: win144(Windows 개발 PC) — 맥북 세션은 TSK-04-01 을 하지 않는다. 기능 간 흐름 검증(개별 기능 재검증 아님). TSK-04-02 는 기능 레인에서 떼어 낸 성능 측정(2026-10-23 대화) -->
 

@@ -36,6 +36,12 @@ internal sealed class NativeMenuCommand(RegistryCommand inner, KeyGesture? gestu
             return;
         }
 
+        // 글자 편집 키를 스스로 처리하는 영역(바인드 변수 창 등)에 포커스가 있으면 그 영역에 키를 넘긴다(TSK-03-14).
+        if (gesture is { } e && EditKeyScope.TryRoute(focused(), e))
+        {
+            return;
+        }
+
         // 메뉴 막대를 누르면 포커스·키 창이 바뀌어 편집기 호스트의 활성 작업 공간이 옛 값일 수 있다: 지금 보이는 문서로 맞춘 뒤 실행한다.
         alignTarget?.Invoke();
         inner.Execute(parameter);
