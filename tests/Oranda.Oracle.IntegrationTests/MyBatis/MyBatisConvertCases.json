@@ -1,0 +1,100 @@
+[
+  {
+    "tab": "주문 목록",
+    "sql": "SELECT O.ORDER_NO, O.CUST_ID, O.ORDER_DT, O.MEMO\n  FROM MBC_ORDERS O\n WHERE O.CUST_ID = :custId\n   AND O.ORDER_DT >= :fromDt\n   AND O.MEMO <> ':x & y' -- :note\n ORDER BY O.ORDER_NO",
+    "binds": [
+      {
+        "name": "CUSTID",
+        "type": "Varchar2",
+        "value": "C0001"
+      },
+      {
+        "name": "FROMDT",
+        "type": "Date",
+        "value": "2026-10-01"
+      }
+    ],
+    "id": "selectMbcOrders",
+    "kind": "Select",
+    "element": "<select id=\"selectMbcOrders\">\n  <![CDATA[\n    SELECT O.ORDER_NO, O.CUST_ID, O.ORDER_DT, O.MEMO\n      FROM MBC_ORDERS O\n     WHERE O.CUST_ID = #{custId}\n       AND O.ORDER_DT >= #{fromDt,jdbcType=DATE}\n       AND O.MEMO <> ':x & y' -- :note\n     ORDER BY O.ORDER_NO\n  ]]>\n</select>\n",
+    "scenario": {
+      "custId": {
+        "kind": "Text",
+        "text": "C0001"
+      },
+      "fromDt": {
+        "kind": "Text",
+        "text": "2026-10-01"
+      }
+    }
+  },
+  {
+    "tab": "주문 상세",
+    "sql": "SELECT * FROM MBC_ORDERS WHERE ORDER_NO = :orderNo",
+    "binds": [
+      {
+        "name": "ORDERNO",
+        "type": "Number",
+        "value": "5"
+      }
+    ],
+    "id": "selectMbcOrders2",
+    "kind": "Select",
+    "element": "<select id=\"selectMbcOrders2\">\n    SELECT * FROM MBC_ORDERS WHERE ORDER_NO = #{orderNo}\n</select>\n",
+    "scenario": {
+      "orderNo": {
+        "kind": "Number",
+        "text": "5"
+      }
+    }
+  },
+  {
+    "tab": "상태 바꾸기",
+    "sql": "UPDATE MBC_ORDERS\n   SET STATUS = :status\n WHERE CUST_ID = :custId",
+    "binds": [
+      {
+        "name": "STATUS",
+        "type": "Varchar2",
+        "value": "DONE"
+      },
+      {
+        "name": "CUSTID",
+        "type": "Varchar2",
+        "value": "C0002"
+      }
+    ],
+    "id": "updateMbcOrders",
+    "kind": "Update",
+    "element": "<update id=\"updateMbcOrders\">\n    UPDATE MBC_ORDERS\n       SET STATUS = #{status}\n     WHERE CUST_ID = #{custId}\n</update>\n",
+    "scenario": {
+      "status": {
+        "kind": "Text",
+        "text": "DONE"
+      },
+      "custId": {
+        "kind": "Text",
+        "text": "C0002"
+      }
+    }
+  },
+  {
+    "tab": "주문 지우기",
+    "sql": "DELETE FROM MBC_ORDERS WHERE ORDER_NO <= :maxNo",
+    "binds": [
+      {
+        "name": "MAXNO",
+        "type": "Number",
+        "value": "3"
+      }
+    ],
+    "id": "deleteMbcOrders",
+    "kind": "Delete",
+    "element": "<delete id=\"deleteMbcOrders\">\n  <![CDATA[\n    DELETE FROM MBC_ORDERS WHERE ORDER_NO <= #{maxNo}\n  ]]>\n</delete>\n",
+    "scenario": {
+      "maxNo": {
+        "kind": "Number",
+        "text": "3"
+      }
+    }
+  }
+]
