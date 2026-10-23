@@ -6,6 +6,7 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using CommunityToolkit.Mvvm.ComponentModel;
+using Oranda.App.Features.PlsqlRun;
 using Oranda.App.Features.SqlEditor;
 using Oranda.App.Shell;
 using Oranda.Core.Events;
@@ -53,7 +54,7 @@ public sealed record PlsqlCompileOutcome(PlsqlCompileStatus Status, IReadOnlyLis
 /// 서비스는 처음 쓸 때 꺼낸다(시작 경로에서 Oracle 어셈블리를 올리지 않기 위해).
 /// </summary>
 [OrandaToolPanel("oranda.panel.plsqlEditor", ToolPanelKind.Document, DockLocation.Document, AllowMultiple = true)]
-public sealed partial class PlsqlEditorViewModel : ToolPanelViewModelBase, ICompileErrorSource
+public sealed partial class PlsqlEditorViewModel : ToolPanelViewModelBase, ICompileErrorSource, IPlsqlRunSource
 {
     private readonly IServiceProvider? _services;
     private IMetadataProvider? _meta;
@@ -85,13 +86,27 @@ public sealed partial class PlsqlEditorViewModel : ToolPanelViewModelBase, IComp
         _events = events;
     }
 
-    /// <summary>지금 포커스를 가진 PL/SQL 편집 탭(명령 처리기가 쓴다). 보기가 설정한다.</summary>
-    public static PlsqlEditorViewModel? Active { get; set; }
+    /// <summary>지금 포커스를 가진 PL/SQL 편집 탭(명령 처리기가 쓴다). 보기가 설정하며, 바뀌면 그 탭의 문맥 키를 맞춘다.</summary>
+    public static PlsqlEditorViewModel? Active
+    {
+        get;
+        set
+        {
+            field = value;
+            value?.SyncKeys();
+        }
+    }
 
     /// <summary>글자 편집 쪽(구문 강조·찾기·실행 취소는 SQL 편집기 것을 그대로 쓴다).</summary>
     public SqlEditorViewModel Editor { get; }
 
     public DbObjectRef? Target { get; private set; }
+
+    /// <summary>편집기에서 실행(<c>oranda.plsql.run</c>)할 대상: 서버에서 연 프로시저·함수·패키지. 새 문서·실행 못 하는 유형이면 null.</summary>
+    public DbObjectRef? RunTarget => Target is { } t && PlsqlRunCommands.IsRunnableType(t.ObjectType) ? t : null;
+
+    /// <summary>패키지 멤버는 대화상자에서 고른다.</summary>
+    public string? RunMember => null;
 
     public ISession? Session => _session;
 
@@ -535,13 +550,14 @@ public sealed partial class PlsqlEditorViewModel : ToolPanelViewModelBase, IComp
 
     private void SyncKeys()
     {
-        if (_services?.GetService(typeof(ContextKeyService)) is not ContextKeyService keys)
+        if ((_services?.GetService(typeof(ContextKeyService)) as ContextKeyService ?? ContextKeyService.Shared) is not { } keys)
         {
             return;
         }
 
         keys.Set("isPackageDoc", IsPackageDoc);
         keys.Set("serverSourceChanged", ServerSourceChanged);
+        keys.Set("plsqlRunnable", RunTarget is not null);
     }
 
     /// <summary>

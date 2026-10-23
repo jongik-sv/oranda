@@ -80,6 +80,13 @@ public sealed class SqlEditorCommandHandler : ICommandHandler
         var host = Host;
         var tab = host.Active;
 
+        // 저장은 포커스가 PL/SQL 편집기에 있으면 그 편집기를 로컬 파일로 저장한다(숨은 SQL 탭이 아니라). 서버 반영은 컴파일 몫이다.
+        if (context.CommandId is "oranda.file.save" or "oranda.file.saveAs" && context.Keys.Evaluate("plsqlEditorFocus")
+            && PlsqlEditor.PlsqlEditorViewModel.Active is { } focused)
+        {
+            tab = focused.Editor;
+        }
+
         switch (context.CommandId)
         {
             // ---- 파일 ----

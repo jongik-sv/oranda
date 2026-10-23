@@ -115,6 +115,14 @@ public class PlsqlEditorTests
     public void Sibling_type_pairs_spec_and_body(string type, string? sibling)
         => Assert.Equal(sibling, PlsqlSourceText.SiblingType(type));
 
+    /// <summary>서버에서 연 프로시저 SCOTT.P 탭(다른 시험 파일이 쓴다).</summary>
+    internal static async Task<PlsqlEditorViewModel> OpenedProcedure()
+    {
+        var vm = new PlsqlEditorViewModel(new FakeMeta { Source = "PROCEDURE p IS BEGIN\n  NULL;\nEND;\n" }, new FakeExec());
+        Assert.True(await vm.OpenAsync(new FakeSession(), new DbObjectRef("SCOTT", "P", "PROCEDURE")));
+        return vm;
+    }
+
     // ---- ViewModel ----
 
     [Fact]
