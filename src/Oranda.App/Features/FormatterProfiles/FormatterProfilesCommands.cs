@@ -26,13 +26,13 @@ public static class FormatterProfilesCommands
         ArgumentNullException.ThrowIfNull(result);
         var reason = result.Failure switch
         {
-            FormatFailure.TokenMismatch => "포맷 전후 토큰이 달라졌다",
-            FormatFailure.CommentCountMismatch => "포맷 전후 주석 수가 달라졌다",
-            FormatFailure.NotIdempotent => "두 번 포맷한 결과가 달라 안전하지 않다",
-            FormatFailure.InternalError => "포매터 내부 오류",
-            FormatFailure.MarkupUnsupported => "포맷할 수 없는 MyBatis 태그 모양이다",
-            FormatFailure.MarkupMismatch => "포맷 전후 MyBatis 태그가 달라졌다",
-            _ => "알 수 없는 이유",
+            FormatFailure.TokenMismatch => "포맷 전후 토큰이 달라졌습니다",
+            FormatFailure.CommentCountMismatch => "포맷 전후 주석 수가 달라졌습니다",
+            FormatFailure.NotIdempotent => "두 번 포맷한 결과가 달라 안전하지 않습니다",
+            FormatFailure.InternalError => "포매터 내부 오류가 났습니다",
+            FormatFailure.MarkupUnsupported => "포맷할 수 없는 MyBatis 태그 모양입니다",
+            FormatFailure.MarkupMismatch => "포맷 전후 MyBatis 태그가 달라졌습니다",
+            _ => "알 수 없는 이유로 실패했습니다",
         };
         return string.IsNullOrWhiteSpace(result.Message) ? reason : $"{reason} ({result.Message})";
     }
@@ -50,7 +50,7 @@ public static class FormatterProfilesCommands
         message = null;
         if (tab.IsReadOnly)
         {
-            message = "읽기 전용 문서라 포맷하지 않는다.";
+            message = "읽기 전용 문서라 포맷하지 않았습니다.";
             return false;
         }
 
@@ -58,13 +58,13 @@ public static class FormatterProfilesCommands
         var result = formatter.Format(before, options, range);
         if (!result.Succeeded)
         {
-            message = "포맷을 적용하지 않았다(원문 유지): " + Describe(result);
+            message = "포맷을 적용하지 않았습니다(원문 유지): " + Describe(result);
             return false;
         }
 
         if (string.Equals(result.Text, before, StringComparison.Ordinal))
         {
-            message = "이미 포맷되어 있다.";
+            message = "이미 포맷되어 있습니다.";
             return false;
         }
 
@@ -166,7 +166,7 @@ public sealed class FormatterProfilesCommandHandler : ICommandHandler
         {
             if (tab.GetStatementAtCaret() is not { } statement)
             {
-                await NotifyAsync("캐럿 위치에 포맷할 문장이 없다.").ConfigureAwait(true);
+                await NotifyAsync("캐럿 위치에 포맷할 문장이 없습니다.").ConfigureAwait(true);
                 return;
             }
 

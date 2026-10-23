@@ -272,7 +272,7 @@ public sealed partial class FormatterProfilesViewModel : ToolPanelViewModelBase
         var options = all.FirstOrDefault(p => p.Id == FormatterIds.Default)?.Options ?? new FormatterOptions();
         await store.SaveAsync(new FormatterProfile { Id = id, Name = name, Options = options }, ct).ConfigureAwait(true);
         await ReloadListAsync(await store.ListAsync(ct).ConfigureAwait(true), id).ConfigureAwait(true);
-        StatusText = $"'{name}' 을(를) 만들었다(Oranda 기본 값에서).";
+        StatusText = $"'{name}' 을(를) 만들었습니다(Oranda 기본 값에서).";
     }
 
     /// <summary>선택한 프로필을 복사해 새 사용자 프로필로 만든다(기본 제공은 이렇게만 고칠 수 있다).</summary>
@@ -289,7 +289,7 @@ public sealed partial class FormatterProfilesViewModel : ToolPanelViewModelBase
         var copy = new FormatterProfile { Id = id, Name = name, Options = CurrentOptions };
         await store.SaveAsync(copy, ct).ConfigureAwait(true);
         await ReloadListAsync(await store.ListAsync(ct).ConfigureAwait(true), id).ConfigureAwait(true);
-        StatusText = $"'{cur.Profile.Name}' 을(를) 복사해 '{name}' 을(를) 만들었다.";
+        StatusText = $"'{cur.Profile.Name}' 을(를) 복사해 '{name}' 을(를) 만들었습니다.";
     }
 
     public async Task SaveAsync(CancellationToken ct = default)
@@ -302,7 +302,7 @@ public sealed partial class FormatterProfilesViewModel : ToolPanelViewModelBase
         var name = ProfileName.Trim();
         if (name.Length == 0)
         {
-            StatusText = "프로필 이름을 입력한다.";
+            StatusText = "프로필 이름을 입력해 주세요.";
             return;
         }
 
@@ -317,7 +317,7 @@ public sealed partial class FormatterProfilesViewModel : ToolPanelViewModelBase
         }
 
         await ReloadListAsync(await store.ListAsync(ct).ConfigureAwait(true), cur.Profile.Id).ConfigureAwait(true);
-        StatusText = $"'{name}' 을(를) 저장했다.";
+        StatusText = $"'{name}' 을(를) 저장했습니다.";
     }
 
     /// <summary>저장하지 않은 변경(옵션·이름)을 버리고 저장한 값으로 되돌린다.</summary>
@@ -329,7 +329,7 @@ public sealed partial class FormatterProfilesViewModel : ToolPanelViewModelBase
         }
 
         LoadSelected();
-        StatusText = $"'{cur.Profile.Name}' 을(를) 저장한 값으로 되돌렸다.";
+        StatusText = $"'{cur.Profile.Name}' 을(를) 저장한 값으로 되돌렸습니다.";
     }
 
     /// <summary>이름 칸만 저장한 이름으로 되돌린다(이름 고치기 취소).</summary>
@@ -355,7 +355,7 @@ public sealed partial class FormatterProfilesViewModel : ToolPanelViewModelBase
         }
 
         await ReloadListAsync(await store.ListAsync(ct).ConfigureAwait(true), DefaultProfileId).ConfigureAwait(true);
-        StatusText = $"'{cur.Profile.Name}' 을(를) 지웠다.";
+        StatusText = $"'{cur.Profile.Name}' 을(를) 지웠습니다.";
     }
 
     /// <summary>선택한 프로필을 편집기 포맷 명령이 쓰는 기본 프로필로 지정한다.</summary>
@@ -381,7 +381,7 @@ public sealed partial class FormatterProfilesViewModel : ToolPanelViewModelBase
         OnPropertyChanged(nameof(IsDefaultSelected));
         OnPropertyChanged(nameof(CanSetDefault));
         UpdateSummary();
-        StatusText = $"기본 프로필 = '{cur.Profile.Name}'.";
+        StatusText = $"기본 프로필을 '{cur.Profile.Name}'(으)로 정했습니다.";
     }
 
     public async Task ExportAsync(string path, CancellationToken ct = default)
@@ -397,7 +397,7 @@ public sealed partial class FormatterProfilesViewModel : ToolPanelViewModelBase
         }
 
         await store.ExportAsync(cur.Profile.Id, path, ct).ConfigureAwait(true);
-        StatusText = $"'{cur.Profile.Name}' 을(를) {path} 로 내보냈다.";
+        StatusText = $"'{cur.Profile.Name}' 을(를) {path} 로 내보냈습니다.";
     }
 
     /// <summary>
@@ -431,12 +431,12 @@ public sealed partial class FormatterProfilesViewModel : ToolPanelViewModelBase
         }
         catch (InvalidDataException ex)
         {
-            StatusText = "가져오지 못했다: " + ex.Message;
+            StatusText = "가져오지 못했습니다: " + ex.Message;
             return;
         }
 
         await ReloadListAsync(await store.ListAsync(ct).ConfigureAwait(true), imported.Id).ConfigureAwait(true);
-        var message = $"'{imported.Name}' 을(를) 가져왔다.";
+        var message = $"'{imported.Name}' 을(를) 가져왔습니다.";
         if (fileName is not null && !string.Equals(fileName, imported.Name, StringComparison.Ordinal))
         {
             message += $" (같은 이름이 있어 '{fileName}' → '{imported.Name}')";
@@ -444,7 +444,7 @@ public sealed partial class FormatterProfilesViewModel : ToolPanelViewModelBase
 
         if (unknown.Count > 0)
         {
-            message += " 이 버전이 모르는 옵션은 무시했다: " + string.Join(", ", unknown);
+            message += " 이 버전이 모르는 옵션은 무시했습니다: " + string.Join(", ", unknown);
         }
 
         StatusText = message;
@@ -461,7 +461,7 @@ public sealed partial class FormatterProfilesViewModel : ToolPanelViewModelBase
         var result = formatter.Format(SampleSql, CurrentOptions);
         PreviewText = result.Succeeded
             ? result.Text
-            : $"{SampleSql}\n\n-- 포맷하지 못했다(원문 표시): {FormatterProfilesCommands.Describe(result)}";
+            : $"{SampleSql}\n\n-- 포맷하지 못했습니다(원문 표시): {FormatterProfilesCommands.Describe(result)}";
         PreviewInfo = $"예제 SQL {LineCount(SampleSql)}줄 → 결과 {LineCount(PreviewText)}줄 · 옵션을 바꾸면 바로 다시 그립니다";
     }
 

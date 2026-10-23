@@ -180,7 +180,7 @@ public class FormatterProfilesScreenTests
         Assert.False(Row(vm, "case.keyword").IsDirty);
         Assert.True(Row(vm, "case.keyword").ShowsChanged);
         Assert.Equal(LetterCase.Lower, store.Items.Single(p => p.Id == "team").Options.Case.Keyword);
-        Assert.Contains("저장했다", vm.StatusText, StringComparison.Ordinal);
+        Assert.Contains("저장했습니다", vm.StatusText, StringComparison.Ordinal);
     }
 
     [Fact]

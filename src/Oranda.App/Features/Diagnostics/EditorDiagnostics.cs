@@ -30,6 +30,9 @@ public enum DiagnosticSource
 
     /// <summary>SQL 점검(lint, TSK-13-04).</summary>
     Lint,
+
+    /// <summary>다른 기능이 넣은 진단(<see cref="EditorDiagnostics.SetExternalDiagnostics"/>, 예: MyBatis 펼친 SQL 검사를 원문 줄로 옮긴 것).</summary>
+    External,
 }
 
 /// <summary>밑줄 하나. 문서가 바뀌면 AvaloniaEdit 가 위치를 따라 옮긴다.</summary>
@@ -61,7 +64,8 @@ public sealed class DiagnosticSegment : TextSegment
 /// SQL 편집기 1개의 문법 오류 표시(TSK-04-03, EDIT-03). 입력이 <see cref="Debounce"/> 만큼 멈추면 문서를 <see cref="ILanguageService.AnalyzeAsync"/> 로
 /// 백그라운드 분석하고(언어 서비스가 바뀐 문장만 다시 파싱), 결과를 물결 밑줄과 마우스 올림 설명으로 보인다.
 /// 다시 입력하면 진행 중 분석을 취소한다. 서버 컴파일 오류는 <see cref="SetServerDiagnostics"/> 로 같은 밑줄에 얹는다.
-/// UI 스레드에서만 다룬다(파싱은 UI 스레드에서 하지 않는다). 소유: TSK-04-03.
+/// 원문이 SQL 이 아닌 문서(MyBatis 쿼리 탭)는 <see cref="SqlAnalysisOff"/> 로 L2·점검을 끄고, 다른 기능이 계산한 진단을
+/// <see cref="SetExternalDiagnostics"/> 로 얹는다. UI 스레드에서만 다룬다(파싱은 UI 스레드에서 하지 않는다). 소유: TSK-04-03.
 /// </summary>
 public sealed class EditorDiagnostics : IBackgroundRenderer
 {
@@ -84,6 +88,7 @@ public sealed class EditorDiagnostics : IBackgroundRenderer
     private CancellationTokenSource? _running;
     private long _lastChange;
     private bool _toolTipShown;
+    private bool _sqlAnalysisOff;
 
     private EditorDiagnostics(SqlEditorView view, Func<ILanguageService?> language)
     {
@@ -151,6 +156,42 @@ public sealed class EditorDiagnostics : IBackgroundRenderer
     {
         ArgumentNullException.ThrowIfNull(diagnostics);
         Replace(DiagnosticSource.Server, diagnostics);
+    }
+
+    /// <summary>
+    /// 문서 원문에 L2 문법 분석·SQL 점검을 하지 않는다(원문이 SQL 이 아닌 문서, 예: MyBatis 쿼리 탭의 XML). 켜면 진행 중 분석을 취소하고
+    /// 그 두 출처의 밑줄을 지운다. 서버·외부 진단은 그대로 둔다. 끄면 다시 분석을 예약한다.
+    /// </summary>
+    public bool SqlAnalysisOff
+    {
+        get => _sqlAnalysisOff;
+        set
+        {
+            if (_sqlAnalysisOff == value)
+            {
+                return;
+            }
+
+            _sqlAnalysisOff = value;
+            if (value)
+            {
+                Cancel();
+                _timer.Stop();
+                Replace(DiagnosticSource.Analysis, []);
+                Replace(DiagnosticSource.Lint, []);
+            }
+            else
+            {
+                Schedule();
+            }
+        }
+    }
+
+    /// <summary>다른 기능이 계산한 진단(문서 범위)을 밑줄로 보인다. 다시 부르면 바꾸고, 빈 목록이면 지운다.</summary>
+    public void SetExternalDiagnostics(IReadOnlyList<Diagnostic> diagnostics)
+    {
+        ArgumentNullException.ThrowIfNull(diagnostics);
+        Replace(DiagnosticSource.External, diagnostics);
     }
 
     /// <summary>디바운스를 건너뛰고 지금 분석한다(시험·명령용).</summary>
@@ -244,7 +285,10 @@ public sealed class EditorDiagnostics : IBackgroundRenderer
     private void OnTextChanged(object? sender, EventArgs e)
     {
         Cancel();
-        Schedule();
+        if (!_sqlAnalysisOff)
+        {
+            Schedule();
+        }
     }
 
     private void Schedule()
@@ -274,7 +318,7 @@ public sealed class EditorDiagnostics : IBackgroundRenderer
 
     private async Task RunAnalysisAsync()
     {
-        if (_vm is not { } vm)
+        if (_vm is not { } vm || _sqlAnalysisOff)
         {
             return;
         }

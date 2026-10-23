@@ -186,11 +186,11 @@ public partial class FormatterProfilesView : UserControl
             try
             {
                 await clipboard.SetTextAsync(vm.PreviewText).ConfigureAwait(true);
-                vm.StatusText = "미리보기 결과를 클립보드에 복사했다.";
+                vm.StatusText = "미리보기 결과를 클립보드에 복사했습니다.";
             }
             catch (Exception ex) when (ex is InvalidOperationException or System.Runtime.InteropServices.ExternalException)
             {
-                vm.StatusText = "클립보드를 쓸 수 없다: " + ex.Message;
+                vm.StatusText = "클립보드를 쓸 수 없습니다: " + ex.Message;
             }
         }
     }
