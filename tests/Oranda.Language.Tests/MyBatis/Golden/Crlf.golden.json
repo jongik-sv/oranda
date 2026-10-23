@@ -1,0 +1,49 @@
+{
+  "generator": "MyBatis 3.5.19 SqlSource.getBoundSql, no DB (scratch GoldenGen.java, TSK-02-02 P1)",
+  "mybatis": "3.5.19",
+  "jdk": "17.0.20.1",
+  "generated": "2026-10-23",
+  "compare": "replace Oranda :name binds with ?, collapse whitespace runs to one space and trim both sides, then compare normalizedSql; compare params[].value in order",
+  "mapper": "Crlf",
+  "mapperSource": "Oranda.Testing.MyBatis.MapperSamples.Crlf",
+  "mapperSha256": "9b45158dc965f7838b07f11749147ec395cc7b89b3c6d9dfecf2a2ccff59e72c",
+  "strictMapperError": "SAXParseException: Document root element \"mapper\", must match DOCTYPE root \"null\".",
+  "doctypeInjected": true,
+  "mapperError": null,
+  "cases": [
+    {
+      "name": "a",
+      "statement": "a",
+      "values": {
+        "t": "map",
+        "v": {
+          "max": {"t": "int", "v": 100},
+          "lo": {"t": "int", "v": 1},
+          "hi": {"t": "int", "v": 9},
+          "ename": {"t": "string", "v": "KIM"}
+        }
+      },
+      "sql": "SELECT 1\n      FROM DUAL",
+      "normalizedSql": "SELECT 1 FROM DUAL",
+      "params": [],
+      "error": null
+    },
+    {
+      "name": "b",
+      "statement": "b",
+      "values": {
+        "t": "map",
+        "v": {
+          "max": {"t": "int", "v": 100},
+          "lo": {"t": "int", "v": 1},
+          "hi": {"t": "int", "v": 9},
+          "ename": {"t": "string", "v": "KIM"}
+        }
+      },
+      "sql": "SELECT 2\n      FROM DUAL",
+      "normalizedSql": "SELECT 2 FROM DUAL",
+      "params": [],
+      "error": null
+    }
+  ]
+}

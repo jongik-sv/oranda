@@ -1,0 +1,43 @@
+{
+  "generator": "MyBatis 3.5.19 SqlSource.getBoundSql, no DB (scratch GoldenGen.java, TSK-02-02 P1)",
+  "mybatis": "3.5.19",
+  "jdk": "17.0.20.1",
+  "generated": "2026-10-23",
+  "compare": "replace Oranda :name binds with ?, collapse whitespace runs to one space and trim both sides, then compare normalizedSql; compare params[].value in order",
+  "mapper": "WithEntities",
+  "mapperSource": "Oranda.Testing.MyBatis.MapperSamples.WithEntities",
+  "mapperSha256": "95eaf4c6fd35f1f922953f32f4356fc56c8f96531816274021de0472dad727f4",
+  "strictMapperError": "SAXParseException: Document root element \"mapper\", must match DOCTYPE root \"null\".",
+  "doctypeInjected": true,
+  "mapperError": null,
+  "cases": [
+    {
+      "name": "range",
+      "statement": "range",
+      "values": {
+        "t": "map",
+        "v": {
+          "max": {"t": "int", "v": 100},
+          "lo": {"t": "int", "v": 1},
+          "hi": {"t": "int", "v": 9},
+          "ename": {"t": "string", "v": "KIM"}
+        }
+      },
+      "sql": "SELECT EMPNO FROM EMP WHERE SAL > ? AND SAL < ? AND ENAME LIKE 'A&B%'",
+      "normalizedSql": "SELECT EMPNO FROM EMP WHERE SAL > ? AND SAL < ? AND ENAME LIKE 'A&B%'",
+      "params": [
+        {
+          "property": "lo",
+          "jdbcType": null,
+          "value": {"t": "int", "v": 1}
+        },
+        {
+          "property": "hi",
+          "jdbcType": null,
+          "value": {"t": "int", "v": 9}
+        }
+      ],
+      "error": null
+    }
+  ]
+}

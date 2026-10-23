@@ -1,0 +1,1249 @@
+{
+  "generator": "MyBatis 3.5.19 SqlSource.getBoundSql, no DB (scratch GoldenGen.java, TSK-02-02 P1)",
+  "mybatis": "3.5.19",
+  "jdk": "17.0.20.1",
+  "generated": "2026-10-23",
+  "compare": "replace Oranda :name binds with ?, collapse whitespace runs to one space and trim both sides, then compare normalizedSql; compare params[].value in order",
+  "mapper": "TagSamples",
+  "mapperSource": "tests/Oranda.Language.Tests/MyBatis/Golden/TagSamples.xml",
+  "mapperSha256": "8a97c71c31388fc610f6cbfc15df06dd64c5b680a701d051d6f5f7347908a899",
+  "strictMapperError": null,
+  "doctypeInjected": false,
+  "mapperError": null,
+  "cases": [
+    {
+      "name": "whereLower/a",
+      "statement": "whereLower",
+      "values": {
+        "t": "map",
+        "v": {
+          "a": {"t": "int", "v": 1},
+          "b": {"t": "null"}
+        }
+      },
+      "sql": "SELECT * FROM EMP\n     WHERE  A = ?",
+      "normalizedSql": "SELECT * FROM EMP WHERE A = ?",
+      "params": [
+        {
+          "property": "a",
+          "jdbcType": null,
+          "value": {"t": "int", "v": 1}
+        }
+      ],
+      "error": null
+    },
+    {
+      "name": "whereLower/b",
+      "statement": "whereLower",
+      "values": {
+        "t": "map",
+        "v": {
+          "a": {"t": "null"},
+          "b": {"t": "int", "v": 2}
+        }
+      },
+      "sql": "SELECT * FROM EMP\n     WHERE  B = ?",
+      "normalizedSql": "SELECT * FROM EMP WHERE B = ?",
+      "params": [
+        {
+          "property": "b",
+          "jdbcType": null,
+          "value": {"t": "int", "v": 2}
+        }
+      ],
+      "error": null
+    },
+    {
+      "name": "whereLower/ab",
+      "statement": "whereLower",
+      "values": {
+        "t": "map",
+        "v": {
+          "a": {"t": "int", "v": 1},
+          "b": {"t": "int", "v": 2}
+        }
+      },
+      "sql": "SELECT * FROM EMP\n     WHERE  A = ?\n      or B = ?",
+      "normalizedSql": "SELECT * FROM EMP WHERE A = ? or B = ?",
+      "params": [
+        {
+          "property": "a",
+          "jdbcType": null,
+          "value": {"t": "int", "v": 1}
+        },
+        {
+          "property": "b",
+          "jdbcType": null,
+          "value": {"t": "int", "v": 2}
+        }
+      ],
+      "error": null
+    },
+    {
+      "name": "whereLower/없음",
+      "statement": "whereLower",
+      "values": {
+        "t": "map",
+        "v": {
+          "a": {"t": "null"},
+          "b": {"t": "null"}
+        }
+      },
+      "sql": "SELECT * FROM EMP",
+      "normalizedSql": "SELECT * FROM EMP",
+      "params": [],
+      "error": null
+    },
+    {
+      "name": "whereNewline/a",
+      "statement": "whereNewline",
+      "values": {
+        "t": "map",
+        "v": {
+          "a": {"t": "int", "v": 1},
+          "b": {"t": "null"}
+        }
+      },
+      "sql": "SELECT * FROM EMP\n     WHERE \n        A = ?",
+      "normalizedSql": "SELECT * FROM EMP WHERE A = ?",
+      "params": [
+        {
+          "property": "a",
+          "jdbcType": null,
+          "value": {"t": "int", "v": 1}
+        }
+      ],
+      "error": null
+    },
+    {
+      "name": "whereNewline/b",
+      "statement": "whereNewline",
+      "values": {
+        "t": "map",
+        "v": {
+          "a": {"t": "null"},
+          "b": {"t": "int", "v": 2}
+        }
+      },
+      "sql": "SELECT * FROM EMP\n     WHERE \tB = ?",
+      "normalizedSql": "SELECT * FROM EMP WHERE B = ?",
+      "params": [
+        {
+          "property": "b",
+          "jdbcType": null,
+          "value": {"t": "int", "v": 2}
+        }
+      ],
+      "error": null
+    },
+    {
+      "name": "whereAndroid/a",
+      "statement": "whereAndroid",
+      "values": {
+        "t": "map",
+        "v": {
+          "a": {"t": "int", "v": 1}
+        }
+      },
+      "sql": "SELECT * FROM EMP\n     WHERE ANDROID = ?",
+      "normalizedSql": "SELECT * FROM EMP WHERE ANDROID = ?",
+      "params": [
+        {
+          "property": "a",
+          "jdbcType": null,
+          "value": {"t": "int", "v": 1}
+        }
+      ],
+      "error": null
+    },
+    {
+      "name": "setTrailing/sal·comm",
+      "statement": "setTrailing",
+      "values": {
+        "t": "map",
+        "v": {
+          "sal": {"t": "int", "v": 1},
+          "comm": {"t": "int", "v": 2},
+          "empNo": {"t": "int", "v": 3}
+        }
+      },
+      "sql": "UPDATE EMP\n     SET SAL = ?,\n      COMM = ? \n    WHERE EMPNO = ?",
+      "normalizedSql": "UPDATE EMP SET SAL = ?, COMM = ? WHERE EMPNO = ?",
+      "params": [
+        {
+          "property": "sal",
+          "jdbcType": null,
+          "value": {"t": "int", "v": 1}
+        },
+        {
+          "property": "comm",
+          "jdbcType": null,
+          "value": {"t": "int", "v": 2}
+        },
+        {
+          "property": "empNo",
+          "jdbcType": null,
+          "value": {"t": "int", "v": 3}
+        }
+      ],
+      "error": null
+    },
+    {
+      "name": "setTrailing/sal",
+      "statement": "setTrailing",
+      "values": {
+        "t": "map",
+        "v": {
+          "sal": {"t": "int", "v": 1},
+          "comm": {"t": "null"},
+          "empNo": {"t": "int", "v": 3}
+        }
+      },
+      "sql": "UPDATE EMP\n     SET SAL = ? \n    WHERE EMPNO = ?",
+      "normalizedSql": "UPDATE EMP SET SAL = ? WHERE EMPNO = ?",
+      "params": [
+        {
+          "property": "sal",
+          "jdbcType": null,
+          "value": {"t": "int", "v": 1}
+        },
+        {
+          "property": "empNo",
+          "jdbcType": null,
+          "value": {"t": "int", "v": 3}
+        }
+      ],
+      "error": null
+    },
+    {
+      "name": "setTrailing/없음",
+      "statement": "setTrailing",
+      "values": {
+        "t": "map",
+        "v": {
+          "sal": {"t": "null"},
+          "comm": {"t": "null"},
+          "empNo": {"t": "int", "v": 3}
+        }
+      },
+      "sql": "UPDATE EMP\n      \n    WHERE EMPNO = ?",
+      "normalizedSql": "UPDATE EMP WHERE EMPNO = ?",
+      "params": [
+        {
+          "property": "empNo",
+          "jdbcType": null,
+          "value": {"t": "int", "v": 3}
+        }
+      ],
+      "error": null
+    },
+    {
+      "name": "setLeading/sal·comm",
+      "statement": "setLeading",
+      "values": {
+        "t": "map",
+        "v": {
+          "sal": {"t": "int", "v": 1},
+          "comm": {"t": "int", "v": 2},
+          "empNo": {"t": "int", "v": 3}
+        }
+      },
+      "sql": "UPDATE EMP\n     SET  SAL = ?\n      , COMM = ? \n    WHERE EMPNO = ?",
+      "normalizedSql": "UPDATE EMP SET SAL = ? , COMM = ? WHERE EMPNO = ?",
+      "params": [
+        {
+          "property": "sal",
+          "jdbcType": null,
+          "value": {"t": "int", "v": 1}
+        },
+        {
+          "property": "comm",
+          "jdbcType": null,
+          "value": {"t": "int", "v": 2}
+        },
+        {
+          "property": "empNo",
+          "jdbcType": null,
+          "value": {"t": "int", "v": 3}
+        }
+      ],
+      "error": null
+    },
+    {
+      "name": "setLeading/comm",
+      "statement": "setLeading",
+      "values": {
+        "t": "map",
+        "v": {
+          "sal": {"t": "null"},
+          "comm": {"t": "int", "v": 2},
+          "empNo": {"t": "int", "v": 3}
+        }
+      },
+      "sql": "UPDATE EMP\n     SET  COMM = ? \n    WHERE EMPNO = ?",
+      "normalizedSql": "UPDATE EMP SET COMM = ? WHERE EMPNO = ?",
+      "params": [
+        {
+          "property": "comm",
+          "jdbcType": null,
+          "value": {"t": "int", "v": 2}
+        },
+        {
+          "property": "empNo",
+          "jdbcType": null,
+          "value": {"t": "int", "v": 3}
+        }
+      ],
+      "error": null
+    },
+    {
+      "name": "trimPrefix/a",
+      "statement": "trimPrefix",
+      "values": {
+        "t": "map",
+        "v": {
+          "a": {"t": "int", "v": 1},
+          "b": {"t": "null"}
+        }
+      },
+      "sql": "SELECT * FROM EMP\n     WHERE  A = ?",
+      "normalizedSql": "SELECT * FROM EMP WHERE A = ?",
+      "params": [
+        {
+          "property": "a",
+          "jdbcType": null,
+          "value": {"t": "int", "v": 1}
+        }
+      ],
+      "error": null
+    },
+    {
+      "name": "trimPrefix/b",
+      "statement": "trimPrefix",
+      "values": {
+        "t": "map",
+        "v": {
+          "a": {"t": "null"},
+          "b": {"t": "int", "v": 2}
+        }
+      },
+      "sql": "SELECT * FROM EMP\n     WHERE  B = ?",
+      "normalizedSql": "SELECT * FROM EMP WHERE B = ?",
+      "params": [
+        {
+          "property": "b",
+          "jdbcType": null,
+          "value": {"t": "int", "v": 2}
+        }
+      ],
+      "error": null
+    },
+    {
+      "name": "trimPrefix/없음",
+      "statement": "trimPrefix",
+      "values": {
+        "t": "map",
+        "v": {
+          "a": {"t": "null"},
+          "b": {"t": "null"}
+        }
+      },
+      "sql": "SELECT * FROM EMP",
+      "normalizedSql": "SELECT * FROM EMP",
+      "params": [],
+      "error": null
+    },
+    {
+      "name": "trimNoSpace/a",
+      "statement": "trimNoSpace",
+      "values": {
+        "t": "map",
+        "v": {
+          "a": {"t": "int", "v": 1},
+          "b": {"t": "null"}
+        }
+      },
+      "sql": "SELECT * FROM EMP\n     WHERE  A = ?",
+      "normalizedSql": "SELECT * FROM EMP WHERE A = ?",
+      "params": [
+        {
+          "property": "a",
+          "jdbcType": null,
+          "value": {"t": "int", "v": 1}
+        }
+      ],
+      "error": null
+    },
+    {
+      "name": "trimNoSpace/b",
+      "statement": "trimNoSpace",
+      "values": {
+        "t": "map",
+        "v": {
+          "a": {"t": "null"},
+          "b": {"t": "int", "v": 2}
+        }
+      },
+      "sql": "SELECT * FROM EMP\n     WHERE DER_NO = ?",
+      "normalizedSql": "SELECT * FROM EMP WHERE DER_NO = ?",
+      "params": [
+        {
+          "property": "b",
+          "jdbcType": null,
+          "value": {"t": "int", "v": 2}
+        }
+      ],
+      "error": null
+    },
+    {
+      "name": "trimSuffix/ab",
+      "statement": "trimSuffix",
+      "values": {
+        "t": "map",
+        "v": {
+          "a": {"t": "int", "v": 1},
+          "b": {"t": "int", "v": 2}
+        }
+      },
+      "sql": "INSERT INTO EMP\n     ( A,\n      B ) \n    VALUES\n     ( ?,\n      ? )",
+      "normalizedSql": "INSERT INTO EMP ( A, B ) VALUES ( ?, ? )",
+      "params": [
+        {
+          "property": "a",
+          "jdbcType": null,
+          "value": {"t": "int", "v": 1}
+        },
+        {
+          "property": "b",
+          "jdbcType": null,
+          "value": {"t": "int", "v": 2}
+        }
+      ],
+      "error": null
+    },
+    {
+      "name": "trimSuffix/a",
+      "statement": "trimSuffix",
+      "values": {
+        "t": "map",
+        "v": {
+          "a": {"t": "int", "v": 1},
+          "b": {"t": "null"}
+        }
+      },
+      "sql": "INSERT INTO EMP\n     ( A ) \n    VALUES\n     ( ? )",
+      "normalizedSql": "INSERT INTO EMP ( A ) VALUES ( ? )",
+      "params": [
+        {
+          "property": "a",
+          "jdbcType": null,
+          "value": {"t": "int", "v": 1}
+        }
+      ],
+      "error": null
+    },
+    {
+      "name": "trimSuffix/없음",
+      "statement": "trimSuffix",
+      "values": {
+        "t": "map",
+        "v": {
+          "a": {"t": "null"},
+          "b": {"t": "null"}
+        }
+      },
+      "sql": "INSERT INTO EMP\n      \n    VALUES",
+      "normalizedSql": "INSERT INTO EMP VALUES",
+      "params": [],
+      "error": null
+    },
+    {
+      "name": "choose/첫 when",
+      "statement": "choose",
+      "values": {
+        "t": "map",
+        "v": {
+          "empNo": {"t": "int", "v": 1},
+          "ename": {"t": "string", "v": "KIM"}
+        }
+      },
+      "sql": "SELECT * FROM EMP WHERE 1 = 1\n     AND EMPNO = ?",
+      "normalizedSql": "SELECT * FROM EMP WHERE 1 = 1 AND EMPNO = ?",
+      "params": [
+        {
+          "property": "empNo",
+          "jdbcType": null,
+          "value": {"t": "int", "v": 1}
+        }
+      ],
+      "error": null
+    },
+    {
+      "name": "choose/둘째 when",
+      "statement": "choose",
+      "values": {
+        "t": "map",
+        "v": {
+          "empNo": {"t": "null"},
+          "ename": {"t": "string", "v": "KIM"}
+        }
+      },
+      "sql": "SELECT * FROM EMP WHERE 1 = 1\n     AND ENAME = ?",
+      "normalizedSql": "SELECT * FROM EMP WHERE 1 = 1 AND ENAME = ?",
+      "params": [
+        {
+          "property": "ename",
+          "jdbcType": null,
+          "value": {"t": "string", "v": "KIM"}
+        }
+      ],
+      "error": null
+    },
+    {
+      "name": "choose/otherwise",
+      "statement": "choose",
+      "values": {
+        "t": "map",
+        "v": {
+          "empNo": {"t": "null"},
+          "ename": {"t": "null"}
+        }
+      },
+      "sql": "SELECT * FROM EMP WHERE 1 = 1\n     AND ROWNUM <= 10",
+      "normalizedSql": "SELECT * FROM EMP WHERE 1 = 1 AND ROWNUM <= 10",
+      "params": [],
+      "error": null
+    },
+    {
+      "name": "chooseNoOtherwise/없음",
+      "statement": "chooseNoOtherwise",
+      "values": {
+        "t": "map",
+        "v": {
+          "empNo": {"t": "null"},
+          "ename": {"t": "null"}
+        }
+      },
+      "sql": "SELECT * FROM EMP",
+      "normalizedSql": "SELECT * FROM EMP",
+      "params": [],
+      "error": null
+    },
+    {
+      "name": "chooseNoOtherwise/ename",
+      "statement": "chooseNoOtherwise",
+      "values": {
+        "t": "map",
+        "v": {
+          "empNo": {"t": "null"},
+          "ename": {"t": "string", "v": "KIM"}
+        }
+      },
+      "sql": "SELECT * FROM EMP\n     WHERE ENAME = ?",
+      "normalizedSql": "SELECT * FROM EMP WHERE ENAME = ?",
+      "params": [
+        {
+          "property": "ename",
+          "jdbcType": null,
+          "value": {"t": "string", "v": "KIM"}
+        }
+      ],
+      "error": null
+    },
+    {
+      "name": "foreachList/3",
+      "statement": "foreachList",
+      "values": {
+        "t": "map",
+        "v": {
+          "ids": {
+            "t": "list",
+            "v": [
+              {"t": "int", "v": 10},
+              {"t": "int", "v": 20},
+              {"t": "int", "v": 30}
+            ]
+          }
+        }
+      },
+      "sql": "SELECT * FROM EMP WHERE DEPTNO IN\n     (  ? , ? , ? ) \n    AND 1 = 1",
+      "normalizedSql": "SELECT * FROM EMP WHERE DEPTNO IN ( ? , ? , ? ) AND 1 = 1",
+      "params": [
+        {
+          "property": "__frch_id_0",
+          "jdbcType": null,
+          "value": {"t": "int", "v": 10}
+        },
+        {
+          "property": "__frch_id_1",
+          "jdbcType": null,
+          "value": {"t": "int", "v": 20}
+        },
+        {
+          "property": "__frch_id_2",
+          "jdbcType": null,
+          "value": {"t": "int", "v": 30}
+        }
+      ],
+      "error": null
+    },
+    {
+      "name": "foreachList/1",
+      "statement": "foreachList",
+      "values": {
+        "t": "map",
+        "v": {
+          "ids": {
+            "t": "list",
+            "v": [
+              {"t": "int", "v": 10}
+            ]
+          }
+        }
+      },
+      "sql": "SELECT * FROM EMP WHERE DEPTNO IN\n     (  ? ) \n    AND 1 = 1",
+      "normalizedSql": "SELECT * FROM EMP WHERE DEPTNO IN ( ? ) AND 1 = 1",
+      "params": [
+        {
+          "property": "__frch_id_0",
+          "jdbcType": null,
+          "value": {"t": "int", "v": 10}
+        }
+      ],
+      "error": null
+    },
+    {
+      "name": "foreachList/빈 목록",
+      "statement": "foreachList",
+      "values": {
+        "t": "map",
+        "v": {
+          "ids": {
+            "t": "list",
+            "v": []
+          }
+        }
+      },
+      "sql": "SELECT * FROM EMP WHERE DEPTNO IN\n     \n    AND 1 = 1",
+      "normalizedSql": "SELECT * FROM EMP WHERE DEPTNO IN AND 1 = 1",
+      "params": [],
+      "error": null
+    },
+    {
+      "name": "foreachList/null",
+      "statement": "foreachList",
+      "values": {
+        "t": "map",
+        "v": {
+          "ids": {"t": "null"}
+        }
+      },
+      "sql": null,
+      "normalizedSql": null,
+      "params": null,
+      "error": "BuilderException: The expression 'ids' evaluated to a null value."
+    },
+    {
+      "name": "foreachList/없는 열쇠",
+      "statement": "foreachList",
+      "values": {
+        "t": "map",
+        "v": {}
+      },
+      "sql": null,
+      "normalizedSql": null,
+      "params": null,
+      "error": "BuilderException: The expression 'ids' evaluated to a null value."
+    },
+    {
+      "name": "foreachIndex/2",
+      "statement": "foreachIndex",
+      "values": {
+        "t": "map",
+        "v": {
+          "pairs": {
+            "t": "list",
+            "v": [
+              {
+                "t": "map",
+                "v": {
+                  "empNo": {"t": "int", "v": 1},
+                  "ename": {"t": "string", "v": "A"}
+                }
+              },
+              {
+                "t": "map",
+                "v": {
+                  "empNo": {"t": "int", "v": 2},
+                  "ename": {"t": "string", "v": "B"}
+                }
+              }
+            ]
+          }
+        }
+      },
+      "sql": "SELECT * FROM EMP WHERE (SEQ, EMPNO, ENAME) IN\n     (  (?, ?, ?) , (?, ?, ?) )",
+      "normalizedSql": "SELECT * FROM EMP WHERE (SEQ, EMPNO, ENAME) IN ( (?, ?, ?) , (?, ?, ?) )",
+      "params": [
+        {
+          "property": "__frch_i_0",
+          "jdbcType": null,
+          "value": {"t": "int", "v": 0}
+        },
+        {
+          "property": "__frch_p_0.empNo",
+          "jdbcType": null,
+          "value": {"t": "int", "v": 1}
+        },
+        {
+          "property": "__frch_p_0.ename",
+          "jdbcType": null,
+          "value": {"t": "string", "v": "A"}
+        },
+        {
+          "property": "__frch_i_1",
+          "jdbcType": null,
+          "value": {"t": "int", "v": 1}
+        },
+        {
+          "property": "__frch_p_1.empNo",
+          "jdbcType": null,
+          "value": {"t": "int", "v": 2}
+        },
+        {
+          "property": "__frch_p_1.ename",
+          "jdbcType": null,
+          "value": {"t": "string", "v": "B"}
+        }
+      ],
+      "error": null
+    },
+    {
+      "name": "foreachNested/2x2",
+      "statement": "foreachNested",
+      "values": {
+        "t": "map",
+        "v": {
+          "groups": {
+            "t": "list",
+            "v": [
+              {
+                "t": "map",
+                "v": {
+                  "deptNo": {"t": "int", "v": 10},
+                  "ids": {
+                    "t": "list",
+                    "v": [
+                      {"t": "int", "v": 1},
+                      {"t": "int", "v": 2}
+                    ]
+                  }
+                }
+              },
+              {
+                "t": "map",
+                "v": {
+                  "deptNo": {"t": "int", "v": 20},
+                  "ids": {
+                    "t": "list",
+                    "v": [
+                      {"t": "int", "v": 3},
+                      {"t": "int", "v": 4}
+                    ]
+                  }
+                }
+              }
+            ]
+          }
+        }
+      },
+      "sql": "SELECT * FROM EMP WHERE\n      \n      (DEPTNO = ? AND EMPNO IN\n       (  ? , ? ) )\n      OR  \n      (DEPTNO = ? AND EMPNO IN\n       (  ? , ? ) )",
+      "normalizedSql": "SELECT * FROM EMP WHERE (DEPTNO = ? AND EMPNO IN ( ? , ? ) ) OR (DEPTNO = ? AND EMPNO IN ( ? , ? ) )",
+      "params": [
+        {
+          "property": "__frch_g_0.deptNo",
+          "jdbcType": null,
+          "value": {"t": "int", "v": 10}
+        },
+        {
+          "property": "__frch_id_1",
+          "jdbcType": null,
+          "value": {"t": "int", "v": 1}
+        },
+        {
+          "property": "__frch_id_2",
+          "jdbcType": null,
+          "value": {"t": "int", "v": 2}
+        },
+        {
+          "property": "__frch_g_3.deptNo",
+          "jdbcType": null,
+          "value": {"t": "int", "v": 20}
+        },
+        {
+          "property": "__frch_id_4",
+          "jdbcType": null,
+          "value": {"t": "int", "v": 3}
+        },
+        {
+          "property": "__frch_id_5",
+          "jdbcType": null,
+          "value": {"t": "int", "v": 4}
+        }
+      ],
+      "error": null
+    },
+    {
+      "name": "foreachNested/빈 안쪽",
+      "statement": "foreachNested",
+      "values": {
+        "t": "map",
+        "v": {
+          "groups": {
+            "t": "list",
+            "v": [
+              {
+                "t": "map",
+                "v": {
+                  "deptNo": {"t": "int", "v": 10},
+                  "ids": {
+                    "t": "list",
+                    "v": []
+                  }
+                }
+              }
+            ]
+          }
+        }
+      },
+      "sql": "SELECT * FROM EMP WHERE\n      \n      (DEPTNO = ? AND EMPNO IN\n       )",
+      "normalizedSql": "SELECT * FROM EMP WHERE (DEPTNO = ? AND EMPNO IN )",
+      "params": [
+        {
+          "property": "__frch_g_0.deptNo",
+          "jdbcType": null,
+          "value": {"t": "int", "v": 10}
+        }
+      ],
+      "error": null
+    },
+    {
+      "name": "foreachSubst/2",
+      "statement": "foreachSubst",
+      "values": {
+        "t": "map",
+        "v": {
+          "cols": {
+            "t": "list",
+            "v": [
+              {"t": "string", "v": "EMPNO"},
+              {"t": "string", "v": "ENAME"}
+            ]
+          }
+        }
+      },
+      "sql": "SELECT\n      EMPNO ,  ENAME \n    FROM EMP",
+      "normalizedSql": "SELECT EMPNO , ENAME FROM EMP",
+      "params": [],
+      "error": null
+    },
+    {
+      "name": "foreachInIf/2",
+      "statement": "foreachInIf",
+      "values": {
+        "t": "map",
+        "v": {
+          "ids": {
+            "t": "list",
+            "v": [
+              {"t": "int", "v": 10},
+              {"t": "int", "v": 20}
+            ]
+          }
+        }
+      },
+      "sql": "SELECT * FROM EMP\n     WHERE DEPTNO IN\n        (?,?)",
+      "normalizedSql": "SELECT * FROM EMP WHERE DEPTNO IN (?,?)",
+      "params": [
+        {
+          "property": "__frch_id_0",
+          "jdbcType": null,
+          "value": {"t": "int", "v": 10}
+        },
+        {
+          "property": "__frch_id_1",
+          "jdbcType": null,
+          "value": {"t": "int", "v": 20}
+        }
+      ],
+      "error": null
+    },
+    {
+      "name": "foreachInIf/빈 목록",
+      "statement": "foreachInIf",
+      "values": {
+        "t": "map",
+        "v": {
+          "ids": {
+            "t": "list",
+            "v": []
+          }
+        }
+      },
+      "sql": "SELECT * FROM EMP",
+      "normalizedSql": "SELECT * FROM EMP",
+      "params": [],
+      "error": null
+    },
+    {
+      "name": "foreachInIf/null",
+      "statement": "foreachInIf",
+      "values": {
+        "t": "map",
+        "v": {
+          "ids": {"t": "null"}
+        }
+      },
+      "sql": "SELECT * FROM EMP",
+      "normalizedSql": "SELECT * FROM EMP",
+      "params": [],
+      "error": null
+    },
+    {
+      "name": "includeProp",
+      "statement": "includeProp",
+      "values": {
+        "t": "map",
+        "v": {
+          "val": {"t": "string", "v": "KIM"},
+          "prefix": {"t": "string", "v": "IGNORED."}
+        }
+      },
+      "sql": "SELECT  EMPNO, ENAME \n     FROM  SCOTT.EMP \n    WHERE  ENAME = ?",
+      "normalizedSql": "SELECT EMPNO, ENAME FROM SCOTT.EMP WHERE ENAME = ?",
+      "params": [
+        {
+          "property": "val",
+          "jdbcType": null,
+          "value": {"t": "string", "v": "KIM"}
+        }
+      ],
+      "error": null
+    },
+    {
+      "name": "includeRuntime",
+      "statement": "includeRuntime",
+      "values": {
+        "t": "map",
+        "v": {
+          "prefix": {"t": "string", "v": "HR."}
+        }
+      },
+      "sql": "SELECT  EMPNO, ENAME  FROM  HR.EMP",
+      "normalizedSql": "SELECT EMPNO, ENAME FROM HR.EMP",
+      "params": [],
+      "error": null
+    },
+    {
+      "name": "includeRuntime/null",
+      "statement": "includeRuntime",
+      "values": {
+        "t": "map",
+        "v": {
+          "prefix": {"t": "null"}
+        }
+      },
+      "sql": "SELECT  EMPNO, ENAME  FROM  EMP",
+      "normalizedSql": "SELECT EMPNO, ENAME FROM EMP",
+      "params": [],
+      "error": null
+    },
+    {
+      "name": "includeDynamic/job",
+      "statement": "includeDynamic",
+      "values": {
+        "t": "map",
+        "v": {
+          "deptNo": {"t": "int", "v": 10},
+          "job": {"t": "string", "v": "CLERK"}
+        }
+      },
+      "sql": "SELECT * FROM EMP WHERE 1 = 1  AND DEPTNO = ?  AND JOB = ?",
+      "normalizedSql": "SELECT * FROM EMP WHERE 1 = 1 AND DEPTNO = ? AND JOB = ?",
+      "params": [
+        {
+          "property": "deptNo",
+          "jdbcType": null,
+          "value": {"t": "int", "v": 10}
+        },
+        {
+          "property": "job",
+          "jdbcType": null,
+          "value": {"t": "string", "v": "CLERK"}
+        }
+      ],
+      "error": null
+    },
+    {
+      "name": "includeDynamic/없음",
+      "statement": "includeDynamic",
+      "values": {
+        "t": "map",
+        "v": {
+          "deptNo": {"t": "int", "v": 10},
+          "job": {"t": "null"}
+        }
+      },
+      "sql": "SELECT * FROM EMP WHERE 1 = 1  AND DEPTNO = ?",
+      "normalizedSql": "SELECT * FROM EMP WHERE 1 = 1 AND DEPTNO = ?",
+      "params": [
+        {
+          "property": "deptNo",
+          "jdbcType": null,
+          "value": {"t": "int", "v": 10}
+        }
+      ],
+      "error": null
+    },
+    {
+      "name": "bindLike",
+      "statement": "bindLike",
+      "values": {
+        "t": "map",
+        "v": {
+          "ename": {"t": "string", "v": "KIM"}
+        }
+      },
+      "sql": "SELECT * FROM EMP WHERE ENAME LIKE ?",
+      "normalizedSql": "SELECT * FROM EMP WHERE ENAME LIKE ?",
+      "params": [
+        {
+          "property": "pat",
+          "jdbcType": null,
+          "value": {"t": "string", "v": "%KIM%"}
+        }
+      ],
+      "error": null
+    },
+    {
+      "name": "bindLike/null",
+      "statement": "bindLike",
+      "values": {
+        "t": "map",
+        "v": {
+          "ename": {"t": "null"}
+        }
+      },
+      "sql": null,
+      "normalizedSql": null,
+      "params": null,
+      "error": "NullPointerException: Can't add values % , null"
+    },
+    {
+      "name": "bindInForeach",
+      "statement": "bindInForeach",
+      "values": {
+        "t": "map",
+        "v": {
+          "names": {
+            "t": "list",
+            "v": [
+              {"t": "string", "v": "A"},
+              {"t": "string", "v": "B"}
+            ]
+          }
+        }
+      },
+      "sql": "SELECT * FROM EMP WHERE\n     \n        \n      ENAME LIKE ?\n     \n        OR  \n      ENAME LIKE ?",
+      "normalizedSql": "SELECT * FROM EMP WHERE ENAME LIKE ? OR ENAME LIKE ?",
+      "params": [
+        {
+          "property": "np",
+          "jdbcType": null,
+          "value": {"t": "string", "v": "B%"}
+        },
+        {
+          "property": "np",
+          "jdbcType": null,
+          "value": {"t": "string", "v": "B%"}
+        }
+      ],
+      "error": null
+    },
+    {
+      "name": "jdbcType",
+      "statement": "jdbcType",
+      "values": {
+        "t": "map",
+        "v": {
+          "hired": {"t": "string", "v": "2020-01-01"},
+          "ename": {"t": "string", "v": "KIM"}
+        }
+      },
+      "sql": "SELECT * FROM EMP WHERE HIREDATE = ? AND ENAME = ?",
+      "normalizedSql": "SELECT * FROM EMP WHERE HIREDATE = ? AND ENAME = ?",
+      "params": [
+        {
+          "property": "hired",
+          "jdbcType": "DATE",
+          "value": {"t": "string", "v": "2020-01-01"}
+        },
+        {
+          "property": "ename",
+          "jdbcType": "VARCHAR",
+          "value": {"t": "string", "v": "KIM"}
+        }
+      ],
+      "error": null
+    },
+    {
+      "name": "dotPath/dept",
+      "statement": "dotPath",
+      "values": {
+        "t": "map",
+        "v": {
+          "user": {
+            "t": "map",
+            "v": {
+              "name": {"t": "string", "v": "KIM"},
+              "dept": {
+                "t": "map",
+                "v": {
+                  "id": {"t": "int", "v": 10}
+                }
+              }
+            }
+          }
+        }
+      },
+      "sql": "SELECT * FROM EMP WHERE ENAME = ?\n     AND DEPTNO = ?",
+      "normalizedSql": "SELECT * FROM EMP WHERE ENAME = ? AND DEPTNO = ?",
+      "params": [
+        {
+          "property": "user.name",
+          "jdbcType": null,
+          "value": {"t": "string", "v": "KIM"}
+        },
+        {
+          "property": "user.dept.id",
+          "jdbcType": null,
+          "value": {"t": "int", "v": 10}
+        }
+      ],
+      "error": null
+    },
+    {
+      "name": "dotPath/dept 0",
+      "statement": "dotPath",
+      "values": {
+        "t": "map",
+        "v": {
+          "user": {
+            "t": "map",
+            "v": {
+              "name": {"t": "string", "v": "KIM"},
+              "dept": {
+                "t": "map",
+                "v": {
+                  "id": {"t": "int", "v": 0}
+                }
+              }
+            }
+          }
+        }
+      },
+      "sql": "SELECT * FROM EMP WHERE ENAME = ?",
+      "normalizedSql": "SELECT * FROM EMP WHERE ENAME = ?",
+      "params": [
+        {
+          "property": "user.name",
+          "jdbcType": null,
+          "value": {"t": "string", "v": "KIM"}
+        }
+      ],
+      "error": null
+    },
+    {
+      "name": "dotPath/dept null",
+      "statement": "dotPath",
+      "values": {
+        "t": "map",
+        "v": {
+          "user": {
+            "t": "map",
+            "v": {
+              "name": {"t": "string", "v": "KIM"},
+              "dept": {"t": "null"}
+            }
+          }
+        }
+      },
+      "sql": "SELECT * FROM EMP WHERE ENAME = ?",
+      "normalizedSql": "SELECT * FROM EMP WHERE ENAME = ?",
+      "params": [
+        {
+          "property": "user.name",
+          "jdbcType": null,
+          "value": {"t": "string", "v": "KIM"}
+        }
+      ],
+      "error": null
+    },
+    {
+      "name": "substNull",
+      "statement": "substNull",
+      "values": {
+        "t": "map",
+        "v": {
+          "table": {"t": "string", "v": "EMP"},
+          "orderBy": {"t": "null"}
+        }
+      },
+      "sql": "SELECT * FROM EMP ORDER BY",
+      "normalizedSql": "SELECT * FROM EMP ORDER BY",
+      "params": [],
+      "error": null
+    },
+    {
+      "name": "ifNested/ab",
+      "statement": "ifNested",
+      "values": {
+        "t": "map",
+        "v": {
+          "a": {"t": "int", "v": 1},
+          "b": {"t": "int", "v": 2}
+        }
+      },
+      "sql": "SELECT * FROM EMP\n     WHERE A = ?\n        AND B = ?",
+      "normalizedSql": "SELECT * FROM EMP WHERE A = ? AND B = ?",
+      "params": [
+        {
+          "property": "a",
+          "jdbcType": null,
+          "value": {"t": "int", "v": 1}
+        },
+        {
+          "property": "b",
+          "jdbcType": null,
+          "value": {"t": "int", "v": 2}
+        }
+      ],
+      "error": null
+    },
+    {
+      "name": "ifNested/b",
+      "statement": "ifNested",
+      "values": {
+        "t": "map",
+        "v": {
+          "a": {"t": "null"},
+          "b": {"t": "int", "v": 2}
+        }
+      },
+      "sql": "SELECT * FROM EMP",
+      "normalizedSql": "SELECT * FROM EMP",
+      "params": [],
+      "error": null
+    }
+  ]
+}

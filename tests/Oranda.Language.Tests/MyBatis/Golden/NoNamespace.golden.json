@@ -1,0 +1,32 @@
+{
+  "generator": "MyBatis 3.5.19 SqlSource.getBoundSql, no DB (scratch GoldenGen.java, TSK-02-02 P1)",
+  "mybatis": "3.5.19",
+  "jdk": "17.0.20.1",
+  "generated": "2026-10-23",
+  "compare": "replace Oranda :name binds with ?, collapse whitespace runs to one space and trim both sides, then compare normalizedSql; compare params[].value in order",
+  "mapper": "NoNamespace",
+  "mapperSource": "Oranda.Testing.MyBatis.MapperSamples.NoNamespace",
+  "mapperSha256": "b14e6c5be0610dff5fd4df09bf91cb03810366ded18c9f27f4338e9266fc08e4",
+  "strictMapperError": "SAXParseException: Document root element \"mapper\", must match DOCTYPE root \"null\".",
+  "doctypeInjected": true,
+  "mapperError": "BuilderException: Mapper's namespace cannot be empty",
+  "cases": [
+    {
+      "name": "one",
+      "statement": "one",
+      "values": {
+        "t": "map",
+        "v": {
+          "max": {"t": "int", "v": 100},
+          "lo": {"t": "int", "v": 1},
+          "hi": {"t": "int", "v": 9},
+          "ename": {"t": "string", "v": "KIM"}
+        }
+      },
+      "sql": null,
+      "normalizedSql": null,
+      "params": null,
+      "error": "mapper: BuilderException: Mapper's namespace cannot be empty"
+    }
+  ]
+}

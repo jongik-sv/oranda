@@ -1,0 +1,187 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<!-- TSK-02-02 골든 태그 표본. MyBatis 3.5 실제 출력은 TagSamples.golden.json 에 있다. 고치면 골든을 다시 만든다. -->
+<mapper namespace="t.Tags">
+
+  <sql id="cols">EMPNO, ENAME</sql>
+  <sql id="tableRef">${prefix}EMP</sql>
+  <sql id="fromEmp">FROM <include refid="tableRef"/></sql>
+  <sql id="byCol">${col} = #{val}</sql>
+  <sql id="deptFilter">AND DEPTNO = #{deptNo}<if test="job != null"> AND JOB = #{job}</if></sql>
+
+  <select id="whereLower" resultType="map">
+    SELECT * FROM EMP
+    <where>
+      <if test="a != null">and A = #{a}</if>
+      <if test="b != null">or B = #{b}</if>
+    </where>
+  </select>
+
+  <select id="whereNewline" resultType="map">
+    SELECT * FROM EMP
+    <where>
+      <if test="a != null">AND
+        A = #{a}</if>
+      <if test="b != null">OR	B = #{b}</if>
+    </where>
+  </select>
+
+  <select id="whereAndroid" resultType="map">
+    SELECT * FROM EMP
+    <where>
+      <if test="a != null">ANDROID = #{a}</if>
+    </where>
+  </select>
+
+  <update id="setTrailing">
+    UPDATE EMP
+    <set>
+      <if test="sal != null">SAL = #{sal},</if>
+      <if test="comm != null">COMM = #{comm},</if>
+    </set>
+    WHERE EMPNO = #{empNo}
+  </update>
+
+  <update id="setLeading">
+    UPDATE EMP
+    <set>
+      <if test="sal != null">, SAL = #{sal}</if>
+      <if test="comm != null">, COMM = #{comm}</if>
+    </set>
+    WHERE EMPNO = #{empNo}
+  </update>
+
+  <select id="trimPrefix" resultType="map">
+    SELECT * FROM EMP
+    <trim prefix="WHERE" prefixOverrides="AND |OR ">
+      <if test="a != null">AND A = #{a}</if>
+      <if test="b != null">OR B = #{b}</if>
+    </trim>
+  </select>
+
+  <select id="trimNoSpace" resultType="map">
+    SELECT * FROM EMP
+    <trim prefix="WHERE" prefixOverrides="and|or">
+      <if test="a != null">and A = #{a}</if>
+      <if test="b != null">ORDER_NO = #{b}</if>
+    </trim>
+  </select>
+
+  <insert id="trimSuffix">
+    INSERT INTO EMP
+    <trim prefix="(" suffix=")" suffixOverrides=",">
+      <if test="a != null">A,</if>
+      <if test="b != null">B,</if>
+    </trim>
+    VALUES
+    <trim prefix="(" suffix=")" suffixOverrides=",">
+      <if test="a != null">#{a},</if>
+      <if test="b != null">#{b},</if>
+    </trim>
+  </insert>
+
+  <select id="choose" resultType="map">
+    SELECT * FROM EMP WHERE 1 = 1
+    <choose>
+      <when test="empNo != null">AND EMPNO = #{empNo}</when>
+      <when test="ename != null">AND ENAME = #{ename}</when>
+      <otherwise>AND ROWNUM &lt;= 10</otherwise>
+    </choose>
+  </select>
+
+  <select id="chooseNoOtherwise" resultType="map">
+    SELECT * FROM EMP
+    <where>
+      <choose>
+        <when test="empNo != null">EMPNO = #{empNo}</when>
+        <when test="ename != null">ENAME = #{ename}</when>
+      </choose>
+    </where>
+  </select>
+
+  <select id="foreachList" resultType="map">
+    SELECT * FROM EMP WHERE DEPTNO IN
+    <foreach collection="ids" item="id" open="(" separator="," close=")">#{id}</foreach>
+    AND 1 = 1
+  </select>
+
+  <select id="foreachIndex" resultType="map">
+    SELECT * FROM EMP WHERE (SEQ, EMPNO, ENAME) IN
+    <foreach collection="pairs" item="p" index="i" open="(" separator="," close=")">(#{i}, #{p.empNo}, #{p.ename})</foreach>
+  </select>
+
+  <select id="foreachNested" resultType="map">
+    SELECT * FROM EMP WHERE
+    <foreach collection="groups" item="g" separator=" OR ">
+      (DEPTNO = #{g.deptNo} AND EMPNO IN
+      <foreach collection="g.ids" item="id" open="(" separator="," close=")">#{id}</foreach>)
+    </foreach>
+  </select>
+
+  <select id="foreachSubst" resultType="map">
+    SELECT
+    <foreach collection="cols" item="c" separator=", ">${c}</foreach>
+    FROM EMP
+  </select>
+
+  <select id="foreachInIf" resultType="map">
+    SELECT * FROM EMP
+    <where>
+      <if test="ids != null and ids.size() > 0">
+        DEPTNO IN
+        <foreach collection="ids" item="id" open="(" separator="," close=")">#{id}</foreach>
+      </if>
+    </where>
+  </select>
+
+  <select id="includeProp" resultType="map">
+    SELECT <include refid="cols"/>
+    <include refid="fromEmp"><property name="prefix" value="SCOTT."/></include>
+    WHERE <include refid="byCol"><property name="col" value="ENAME"/></include>
+  </select>
+
+  <select id="includeRuntime" resultType="map">
+    SELECT <include refid="cols"/> FROM <include refid="tableRef"/>
+  </select>
+
+  <select id="includeDynamic" resultType="map">
+    SELECT * FROM EMP WHERE 1 = 1 <include refid="deptFilter"/>
+  </select>
+
+  <select id="bindLike" resultType="map">
+    <bind name="pat" value="'%' + ename + '%'"/>
+    SELECT * FROM EMP WHERE ENAME LIKE #{pat}
+  </select>
+
+  <select id="bindInForeach" resultType="map">
+    SELECT * FROM EMP WHERE
+    <foreach collection="names" item="n" separator=" OR ">
+      <bind name="np" value="n + '%'"/>
+      ENAME LIKE #{np}
+    </foreach>
+  </select>
+
+  <select id="jdbcType" resultType="map">
+    SELECT * FROM EMP WHERE HIREDATE = #{hired,jdbcType=DATE} AND ENAME = #{ename, jdbcType=VARCHAR}
+  </select>
+
+  <select id="dotPath" resultType="map">
+    SELECT * FROM EMP WHERE ENAME = #{user.name}
+    <if test="user.dept != null and user.dept.id > 0">AND DEPTNO = #{user.dept.id}</if>
+  </select>
+
+  <select id="substNull" resultType="map">
+    SELECT * FROM ${table} ORDER BY ${orderBy}
+  </select>
+
+  <select id="ifNested" resultType="map">
+    SELECT * FROM EMP
+    <where>
+      <if test="a != null">
+        A = #{a}
+        <if test="b != null">AND B = #{b}</if>
+      </if>
+    </where>
+  </select>
+
+</mapper>

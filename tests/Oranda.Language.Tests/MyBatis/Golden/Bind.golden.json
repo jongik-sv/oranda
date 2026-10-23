@@ -1,0 +1,727 @@
+{
+  "generator": "MyBatis 3.5.19 SqlSource.getBoundSql, no DB (scratch GoldenGen.java, TSK-02-02 P1)",
+  "mybatis": "3.5.19",
+  "jdk": "17.0.20.1",
+  "generated": "2026-10-23",
+  "compare": "replace Oranda :name binds with ?, collapse whitespace runs to one space and trim both sides, then compare normalizedSql; compare params[].value in order",
+  "note": "Each expression is the value of <bind name=\"x\" value=\"…\"/>; result = the bound value with its Java type, read back as #{x}.",
+  "values": {
+    "t": "map",
+    "v": {
+      "nul": {"t": "null"},
+      "ename": {"t": "string", "v": "KIM"},
+      "empty": {"t": "string", "v": ""},
+      "blank": {"t": "string", "v": "  "},
+      "n0": {"t": "int", "v": 0},
+      "n1": {"t": "int", "v": 1},
+      "n7369": {"t": "int", "v": 7369},
+      "lng": {"t": "long", "v": 7369},
+      "dec": {"t": "decimal", "v": "1.5"},
+      "dbl": {"t": "double", "v": 2.5},
+      "s2": {"t": "string", "v": "2"},
+      "flagY": {"t": "string", "v": "Y"},
+      "flagFalse": {"t": "string", "v": "false"},
+      "ch": {"t": "string", "v": "A"},
+      "boolT": {"t": "bool", "v": true},
+      "boolF": {"t": "bool", "v": false},
+      "list0": {
+        "t": "list",
+        "v": []
+      },
+      "list2": {
+        "t": "list",
+        "v": [
+          {"t": "int", "v": 10},
+          {"t": "int", "v": 20}
+        ]
+      },
+      "user": {
+        "t": "map",
+        "v": {
+          "name": {"t": "string", "v": "KIM"},
+          "dept": {
+            "t": "map",
+            "v": {
+              "id": {"t": "int", "v": 10}
+            }
+          }
+        }
+      },
+      "f1": {"t": "float", "v": 1.5},
+      "sh": {"t": "short", "v": 3},
+      "sz": {
+        "t": "map",
+        "v": {
+          "size": {"t": "int", "v": 99},
+          "isEmpty": {"t": "string", "v": "no"}
+        }
+      },
+      "emptyMap": {
+        "t": "map",
+        "v": {}
+      }
+    }
+  },
+  "cases": [
+    {
+      "expression": "'%' + ename + '%'",
+      "result": {"t": "string", "v": "%KIM%"},
+      "javaString": "%KIM%",
+      "error": null
+    },
+    {
+      "expression": "\"%\" + ename + \"%\"",
+      "result": {"t": "string", "v": "%KIM%"},
+      "javaString": "%KIM%",
+      "error": null
+    },
+    {
+      "expression": "\"a\" + nul",
+      "result": {"t": "string", "v": "anull"},
+      "javaString": "anull",
+      "error": null
+    },
+    {
+      "expression": "nul + \"a\"",
+      "result": {"t": "string", "v": "nulla"},
+      "javaString": "nulla",
+      "error": null
+    },
+    {
+      "expression": "nul + nul",
+      "result": {"t": "string", "v": "nullnull"},
+      "javaString": "nullnull",
+      "error": null
+    },
+    {
+      "expression": "'%' + nul",
+      "result": null,
+      "javaString": null,
+      "error": "NullPointerException: Can't add values % , null"
+    },
+    {
+      "expression": "nul + '%'",
+      "result": null,
+      "javaString": null,
+      "error": "NullPointerException: Can't add values null , %"
+    },
+    {
+      "expression": "\"\" + nul",
+      "result": {"t": "string", "v": "null"},
+      "javaString": "null",
+      "error": null
+    },
+    {
+      "expression": "empty + nul",
+      "result": {"t": "string", "v": "null"},
+      "javaString": "null",
+      "error": null
+    },
+    {
+      "expression": "ename + missing",
+      "result": {"t": "string", "v": "KIMnull"},
+      "javaString": "KIMnull",
+      "error": null
+    },
+    {
+      "expression": "ename + nul + ename",
+      "result": {"t": "string", "v": "KIMnullKIM"},
+      "javaString": "KIMnullKIM",
+      "error": null
+    },
+    {
+      "expression": "'%' + n1",
+      "result": {"t": "string", "v": "%1"},
+      "javaString": "%1",
+      "error": null
+    },
+    {
+      "expression": "n1 + '%'",
+      "result": {"t": "string", "v": "1%"},
+      "javaString": "1%",
+      "error": null
+    },
+    {
+      "expression": "'a' + 'b'",
+      "result": {"t": "int", "v": 195},
+      "javaString": "195",
+      "error": null
+    },
+    {
+      "expression": "ch + 'b'",
+      "result": {"t": "string", "v": "Ab"},
+      "javaString": "Ab",
+      "error": null
+    },
+    {
+      "expression": "'a' + 1",
+      "result": {"t": "string", "v": "a1"},
+      "javaString": "a1",
+      "error": null
+    },
+    {
+      "expression": "'%' + ename",
+      "result": {"t": "string", "v": "%KIM"},
+      "javaString": "%KIM",
+      "error": null
+    },
+    {
+      "expression": "ename + '%'",
+      "result": {"t": "string", "v": "KIM%"},
+      "javaString": "KIM%",
+      "error": null
+    },
+    {
+      "expression": "n1 + n1",
+      "result": {"t": "int", "v": 2},
+      "javaString": "2",
+      "error": null
+    },
+    {
+      "expression": "n1 + 2147483647",
+      "result": {"t": "int", "v": -2147483648},
+      "javaString": "-2147483648",
+      "error": null
+    },
+    {
+      "expression": "n1 + lng",
+      "result": {"t": "long", "v": 7370},
+      "javaString": "7370",
+      "error": null
+    },
+    {
+      "expression": "lng + 1",
+      "result": {"t": "long", "v": 7370},
+      "javaString": "7370",
+      "error": null
+    },
+    {
+      "expression": "n1 + dec",
+      "result": {"t": "decimal", "v": "2.5"},
+      "javaString": "2.5",
+      "error": null
+    },
+    {
+      "expression": "dec + dbl",
+      "result": {"t": "decimal", "v": "4.0"},
+      "javaString": "4.0",
+      "error": null
+    },
+    {
+      "expression": "n1 + dbl",
+      "result": {"t": "double", "v": 3.5},
+      "javaString": "3.5",
+      "error": null
+    },
+    {
+      "expression": "dbl + 1",
+      "result": {"t": "double", "v": 3.5},
+      "javaString": "3.5",
+      "error": null
+    },
+    {
+      "expression": "1.5 + 1",
+      "result": {"t": "double", "v": 2.5},
+      "javaString": "2.5",
+      "error": null
+    },
+    {
+      "expression": "f1 + n1",
+      "result": {"t": "double", "v": 2.5},
+      "javaString": "2.5",
+      "error": null
+    },
+    {
+      "expression": "f1 + sh",
+      "result": {"t": "float", "v": 4.5},
+      "javaString": "4.5",
+      "error": null
+    },
+    {
+      "expression": "sh + sh",
+      "result": {"t": "short", "v": 6},
+      "javaString": "6",
+      "error": null
+    },
+    {
+      "expression": "sh + n1",
+      "result": {"t": "int", "v": 4},
+      "javaString": "4",
+      "error": null
+    },
+    {
+      "expression": "n1 + nul",
+      "result": null,
+      "javaString": null,
+      "error": "NullPointerException: Can't add values 1 , null"
+    },
+    {
+      "expression": "nul + n1",
+      "result": null,
+      "javaString": null,
+      "error": "NullPointerException: Can't add values null , 1"
+    },
+    {
+      "expression": "dec + nul",
+      "result": null,
+      "javaString": null,
+      "error": "NullPointerException: Can't add values 1.5 , null"
+    },
+    {
+      "expression": "n1 + -1",
+      "result": {"t": "int", "v": 0},
+      "javaString": "0",
+      "error": null
+    },
+    {
+      "expression": "lng + 9223372036854775807",
+      "result": null,
+      "javaString": null,
+      "error": "NumberFormatException: For input string: \"9223372036854775807\""
+    },
+    {
+      "expression": "boolT + n1",
+      "result": {"t": "int", "v": 2},
+      "javaString": "2",
+      "error": null
+    },
+    {
+      "expression": "boolT + boolT",
+      "result": {"t": "int", "v": 2},
+      "javaString": "2",
+      "error": null
+    },
+    {
+      "expression": "boolT + \"x\"",
+      "result": {"t": "string", "v": "truex"},
+      "javaString": "truex",
+      "error": null
+    },
+    {
+      "expression": "\"x\" + boolF",
+      "result": {"t": "string", "v": "xfalse"},
+      "javaString": "xfalse",
+      "error": null
+    },
+    {
+      "expression": "boolT + nul",
+      "result": null,
+      "javaString": null,
+      "error": "NullPointerException: Can't add values true , null"
+    },
+    {
+      "expression": "boolT + dbl",
+      "result": {"t": "double", "v": 3.5},
+      "javaString": "3.5",
+      "error": null
+    },
+    {
+      "expression": "s2 + 1",
+      "result": {"t": "string", "v": "21"},
+      "javaString": "21",
+      "error": null
+    },
+    {
+      "expression": "1 + s2",
+      "result": {"t": "string", "v": "12"},
+      "javaString": "12",
+      "error": null
+    },
+    {
+      "expression": "ename + n1",
+      "result": {"t": "string", "v": "KIM1"},
+      "javaString": "KIM1",
+      "error": null
+    },
+    {
+      "expression": "\"x\" + dbl",
+      "result": {"t": "string", "v": "x2.5"},
+      "javaString": "x2.5",
+      "error": null
+    },
+    {
+      "expression": "\"x\" + 1.0",
+      "result": {"t": "string", "v": "x1.0"},
+      "javaString": "x1.0",
+      "error": null
+    },
+    {
+      "expression": "\"x\" + dec",
+      "result": {"t": "string", "v": "x1.5"},
+      "javaString": "x1.5",
+      "error": null
+    },
+    {
+      "expression": "\"x\" + lng",
+      "result": {"t": "string", "v": "x7369"},
+      "javaString": "x7369",
+      "error": null
+    },
+    {
+      "expression": "\"x\" + ch",
+      "result": {"t": "string", "v": "xA"},
+      "javaString": "xA",
+      "error": null
+    },
+    {
+      "expression": "\"x\" + f1",
+      "result": {"t": "string", "v": "x1.5"},
+      "javaString": "x1.5",
+      "error": null
+    },
+    {
+      "expression": "\"x\" + 0.0001",
+      "result": {"t": "string", "v": "x1.0E-4"},
+      "javaString": "x1.0E-4",
+      "error": null
+    },
+    {
+      "expression": "\"x\" + 12345678.9",
+      "result": {"t": "string", "v": "x1.23456789E7"},
+      "javaString": "x1.23456789E7",
+      "error": null
+    },
+    {
+      "expression": "\"x\" + 100.0",
+      "result": {"t": "string", "v": "x100.0"},
+      "javaString": "x100.0",
+      "error": null
+    },
+    {
+      "expression": "\"x\" + 1234567.0",
+      "result": {"t": "string", "v": "x1234567.0"},
+      "javaString": "x1234567.0",
+      "error": null
+    },
+    {
+      "expression": "\"x\" + 10000000.0",
+      "result": {"t": "string", "v": "x1.0E7"},
+      "javaString": "x1.0E7",
+      "error": null
+    },
+    {
+      "expression": "\"x\" + -0.5",
+      "result": {"t": "string", "v": "x-0.5"},
+      "javaString": "x-0.5",
+      "error": null
+    },
+    {
+      "expression": "list2 + \"x\"",
+      "result": {"t": "string", "v": "[10, 20]x"},
+      "javaString": "[10, 20]x",
+      "error": null
+    },
+    {
+      "expression": "\"x\" + list2",
+      "result": {"t": "string", "v": "x[10, 20]"},
+      "javaString": "x[10, 20]",
+      "error": null
+    },
+    {
+      "expression": "list0 + \"x\"",
+      "result": {"t": "string", "v": "[]x"},
+      "javaString": "[]x",
+      "error": null
+    },
+    {
+      "expression": "\"x\" + user",
+      "result": {"t": "string", "v": "x{name=KIM, dept={id=10}}"},
+      "javaString": "x{name=KIM, dept={id=10}}",
+      "error": null
+    },
+    {
+      "expression": "list2 + list2",
+      "result": {"t": "string", "v": "[10, 20][10, 20]"},
+      "javaString": "[10, 20][10, 20]",
+      "error": null
+    },
+    {
+      "expression": "list2 + n1",
+      "result": {"t": "string", "v": "[10, 20]1"},
+      "javaString": "[10, 20]1",
+      "error": null
+    },
+    {
+      "expression": "\"x\" + nul + list0",
+      "result": {"t": "string", "v": "xnull[]"},
+      "javaString": "xnull[]",
+      "error": null
+    },
+    {
+      "expression": "ename",
+      "result": {"t": "string", "v": "KIM"},
+      "javaString": "KIM",
+      "error": null
+    },
+    {
+      "expression": "n1",
+      "result": {"t": "int", "v": 1},
+      "javaString": "1",
+      "error": null
+    },
+    {
+      "expression": "dec",
+      "result": {"t": "decimal", "v": "1.5"},
+      "javaString": "1.5",
+      "error": null
+    },
+    {
+      "expression": "nul",
+      "result": {"t": "null"},
+      "javaString": null,
+      "error": null
+    },
+    {
+      "expression": "ename != null",
+      "result": {"t": "bool", "v": true},
+      "javaString": "true",
+      "error": null
+    },
+    {
+      "expression": "list2.size()",
+      "result": {"t": "int", "v": 2},
+      "javaString": "2",
+      "error": null
+    },
+    {
+      "expression": "-n1",
+      "result": {"t": "int", "v": -1},
+      "javaString": "-1",
+      "error": null
+    },
+    {
+      "expression": "-dec",
+      "result": {"t": "decimal", "v": "-1.5"},
+      "javaString": "-1.5",
+      "error": null
+    },
+    {
+      "expression": "-dbl",
+      "result": {"t": "double", "v": -2.5},
+      "javaString": "-2.5",
+      "error": null
+    },
+    {
+      "expression": "n1 + 1 + \"x\"",
+      "result": {"t": "string", "v": "2x"},
+      "javaString": "2x",
+      "error": null
+    },
+    {
+      "expression": "\"x\" + n1 + 1",
+      "result": {"t": "string", "v": "x11"},
+      "javaString": "x11",
+      "error": null
+    },
+    {
+      "expression": "dec + 0.1",
+      "result": {"t": "decimal", "v": "1.6"},
+      "javaString": "1.6",
+      "error": null
+    },
+    {
+      "expression": "dec + dec",
+      "result": {"t": "decimal", "v": "3.0"},
+      "javaString": "3.0",
+      "error": null
+    },
+    {
+      "expression": "ch + boolT",
+      "result": {"t": "string", "v": "Atrue"},
+      "javaString": "Atrue",
+      "error": null
+    },
+    {
+      "expression": "boolT + 'a'",
+      "result": {"t": "string", "v": "truea"},
+      "javaString": "truea",
+      "error": null
+    },
+    {
+      "expression": "\"x\" + sh",
+      "result": {"t": "string", "v": "x3"},
+      "javaString": "x3",
+      "error": null
+    },
+    {
+      "expression": "dbl + f1",
+      "result": {"t": "double", "v": 4.0},
+      "javaString": "4.0",
+      "error": null
+    },
+    {
+      "expression": "dec + f1",
+      "result": {"t": "decimal", "v": "3.0"},
+      "javaString": "3.0",
+      "error": null
+    },
+    {
+      "expression": "-s2",
+      "result": {"t": "other", "class": "java.math.BigInteger", "v": "-2"},
+      "javaString": "-2",
+      "error": null
+    },
+    {
+      "expression": "-boolT",
+      "result": {"t": "int", "v": -1},
+      "javaString": "-1",
+      "error": null
+    },
+    {
+      "expression": "-ch",
+      "result": null,
+      "javaString": null,
+      "error": "NumberFormatException: For input string: \"A\""
+    },
+    {
+      "expression": "-ename",
+      "result": null,
+      "javaString": null,
+      "error": "NumberFormatException: For input string: \"KIM\""
+    },
+    {
+      "expression": "-nul",
+      "result": {"t": "other", "class": "java.math.BigInteger", "v": "0"},
+      "javaString": "0",
+      "error": null
+    },
+    {
+      "expression": "-sh",
+      "result": {"t": "short", "v": -3},
+      "javaString": "-3",
+      "error": null
+    },
+    {
+      "expression": "-f1",
+      "result": {"t": "float", "v": -1.5},
+      "javaString": "-1.5",
+      "error": null
+    },
+    {
+      "expression": "-lng",
+      "result": {"t": "long", "v": -7369},
+      "javaString": "-7369",
+      "error": null
+    },
+    {
+      "expression": "-(-2147483647 - 1)",
+      "result": {"t": "int", "v": -2147483648},
+      "javaString": "-2147483648",
+      "error": null
+    },
+    {
+      "expression": "010",
+      "result": {"t": "int", "v": 8},
+      "javaString": "8",
+      "error": null
+    },
+    {
+      "expression": "0x10",
+      "result": {"t": "int", "v": 16},
+      "javaString": "16",
+      "error": null
+    },
+    {
+      "expression": "1L",
+      "result": {"t": "long", "v": 1},
+      "javaString": "1",
+      "error": null
+    },
+    {
+      "expression": "1l",
+      "result": {"t": "long", "v": 1},
+      "javaString": "1",
+      "error": null
+    },
+    {
+      "expression": "2147483647",
+      "result": {"t": "int", "v": 2147483647},
+      "javaString": "2147483647",
+      "error": null
+    },
+    {
+      "expression": "2147483648",
+      "result": null,
+      "javaString": null,
+      "error": "NumberFormatException: For input string: \"2147483648\""
+    },
+    {
+      "expression": "-2147483648",
+      "result": null,
+      "javaString": null,
+      "error": "NumberFormatException: For input string: \"2147483648\""
+    },
+    {
+      "expression": "1.5f",
+      "result": {"t": "float", "v": 1.5},
+      "javaString": "1.5",
+      "error": null
+    },
+    {
+      "expression": "1.5F",
+      "result": {"t": "float", "v": 1.5},
+      "javaString": "1.5",
+      "error": null
+    },
+    {
+      "expression": "1.5d",
+      "result": {"t": "double", "v": 1.5},
+      "javaString": "1.5",
+      "error": null
+    },
+    {
+      "expression": "1.5B",
+      "result": {"t": "decimal", "v": "1.5"},
+      "javaString": "1.5",
+      "error": null
+    },
+    {
+      "expression": "10H",
+      "result": {"t": "other", "class": "java.math.BigInteger", "v": "10"},
+      "javaString": "10",
+      "error": null
+    },
+    {
+      "expression": "1e3",
+      "result": {"t": "double", "v": 1000.0},
+      "javaString": "1000.0",
+      "error": null
+    },
+    {
+      "expression": "1.5e-5",
+      "result": {"t": "double", "v": 1.5E-5},
+      "javaString": "1.5E-5",
+      "error": null
+    },
+    {
+      "expression": "'ab'",
+      "result": {"t": "string", "v": "ab"},
+      "javaString": "ab",
+      "error": null
+    },
+    {
+      "expression": "\"a\\tb\"",
+      "result": {"t": "string", "v": "a\tb"},
+      "javaString": "a\tb",
+      "error": null
+    },
+    {
+      "expression": "'\\''",
+      "result": {"t": "char", "v": "'"},
+      "javaString": "'",
+      "error": null
+    },
+    {
+      "expression": "\"\\u0041\"",
+      "result": {"t": "string", "v": "A"},
+      "javaString": "A",
+      "error": null
+    },
+    {
+      "expression": "'\\n'",
+      "result": {"t": "char", "v": "\n"},
+      "javaString": "\n",
+      "error": null
+    }
+  ]
+}

@@ -1,0 +1,32 @@
+{
+  "generator": "MyBatis 3.5.19 SqlSource.getBoundSql, no DB (scratch GoldenGen.java, TSK-02-02 P1)",
+  "mybatis": "3.5.19",
+  "jdk": "17.0.20.1",
+  "generated": "2026-10-23",
+  "compare": "replace Oranda :name binds with ?, collapse whitespace runs to one space and trim both sides, then compare normalizedSql; compare params[].value in order",
+  "mapper": "DuplicateIds",
+  "mapperSource": "Oranda.Testing.MyBatis.MapperSamples.DuplicateIds",
+  "mapperSha256": "32dab1c60fedf8a51fc168a0406b1fb9cb23a285343daaeeec91fe5d3dc9e0c7",
+  "strictMapperError": "SAXParseException: Document root element \"mapper\", must match DOCTYPE root \"null\".",
+  "doctypeInjected": true,
+  "mapperError": "IllegalArgumentException: Mapped Statements collection already contains key t.DuplicateIds.dup. please check DuplicateIds.xml and DuplicateIds.xml",
+  "cases": [
+    {
+      "name": "dup",
+      "statement": "dup",
+      "values": {
+        "t": "map",
+        "v": {
+          "max": {"t": "int", "v": 100},
+          "lo": {"t": "int", "v": 1},
+          "hi": {"t": "int", "v": 9},
+          "ename": {"t": "string", "v": "KIM"}
+        }
+      },
+      "sql": null,
+      "normalizedSql": null,
+      "params": null,
+      "error": "mapper: IllegalArgumentException: Mapped Statements collection already contains key t.DuplicateIds.dup. please check DuplicateIds.xml and DuplicateIds.xml"
+    }
+  ]
+}

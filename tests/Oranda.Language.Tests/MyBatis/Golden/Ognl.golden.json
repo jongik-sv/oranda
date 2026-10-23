@@ -1,0 +1,1377 @@
+{
+  "generator": "MyBatis 3.5.19 SqlSource.getBoundSql, no DB (scratch GoldenGen.java, TSK-02-02 P1)",
+  "mybatis": "3.5.19",
+  "jdk": "17.0.20.1",
+  "generated": "2026-10-23",
+  "compare": "replace Oranda :name binds with ?, collapse whitespace runs to one space and trim both sides, then compare normalizedSql; compare params[].value in order",
+  "note": "Each expression is evaluated as <if test=\"…\"> of a select statement; result true = body kept.",
+  "values": {
+    "t": "map",
+    "v": {
+      "nul": {"t": "null"},
+      "ename": {"t": "string", "v": "KIM"},
+      "empty": {"t": "string", "v": ""},
+      "blank": {"t": "string", "v": "  "},
+      "n0": {"t": "int", "v": 0},
+      "n1": {"t": "int", "v": 1},
+      "n7369": {"t": "int", "v": 7369},
+      "lng": {"t": "long", "v": 7369},
+      "dec": {"t": "decimal", "v": "1.5"},
+      "dbl": {"t": "double", "v": 2.5},
+      "s2": {"t": "string", "v": "2"},
+      "flagY": {"t": "string", "v": "Y"},
+      "flagFalse": {"t": "string", "v": "false"},
+      "ch": {"t": "string", "v": "A"},
+      "boolT": {"t": "bool", "v": true},
+      "boolF": {"t": "bool", "v": false},
+      "list0": {
+        "t": "list",
+        "v": []
+      },
+      "list2": {
+        "t": "list",
+        "v": [
+          {"t": "int", "v": 10},
+          {"t": "int", "v": 20}
+        ]
+      },
+      "user": {
+        "t": "map",
+        "v": {
+          "name": {"t": "string", "v": "KIM"},
+          "dept": {
+            "t": "map",
+            "v": {
+              "id": {"t": "int", "v": 10}
+            }
+          }
+        }
+      },
+      "f1": {"t": "float", "v": 1.5},
+      "sh": {"t": "short", "v": 3},
+      "sz": {
+        "t": "map",
+        "v": {
+          "size": {"t": "int", "v": 99},
+          "isEmpty": {"t": "string", "v": "no"}
+        }
+      },
+      "emptyMap": {
+        "t": "map",
+        "v": {}
+      }
+    }
+  },
+  "cases": [
+    {
+      "expression": "nul == null",
+      "result": "true",
+      "error": null
+    },
+    {
+      "expression": "nul != null",
+      "result": "false",
+      "error": null
+    },
+    {
+      "expression": "missing == null",
+      "result": "true",
+      "error": null
+    },
+    {
+      "expression": "ename != null",
+      "result": "true",
+      "error": null
+    },
+    {
+      "expression": "ename == null",
+      "result": "false",
+      "error": null
+    },
+    {
+      "expression": "n0 == null",
+      "result": "false",
+      "error": null
+    },
+    {
+      "expression": "ename == 'KIM'",
+      "result": "true",
+      "error": null
+    },
+    {
+      "expression": "ename == \"KIM\"",
+      "result": "true",
+      "error": null
+    },
+    {
+      "expression": "ename eq 'KIM'",
+      "result": "true",
+      "error": null
+    },
+    {
+      "expression": "ename neq 'LEE'",
+      "result": "true",
+      "error": null
+    },
+    {
+      "expression": "ename != 'KIM'",
+      "result": "false",
+      "error": null
+    },
+    {
+      "expression": "ename != ''",
+      "result": "true",
+      "error": null
+    },
+    {
+      "expression": "empty == ''",
+      "result": "true",
+      "error": null
+    },
+    {
+      "expression": "empty != ''",
+      "result": "false",
+      "error": null
+    },
+    {
+      "expression": "empty == null",
+      "result": "false",
+      "error": null
+    },
+    {
+      "expression": "ename > 'A'",
+      "result": "error",
+      "error": "NumberFormatException: For input string: \"KIM\""
+    },
+    {
+      "expression": "ename < 'Z'",
+      "result": "error",
+      "error": "NumberFormatException: For input string: \"KIM\""
+    },
+    {
+      "expression": "ename gt 'Z'",
+      "result": "error",
+      "error": "NumberFormatException: For input string: \"KIM\""
+    },
+    {
+      "expression": "flagY == 'Y'",
+      "result": "error",
+      "error": "NumberFormatException: For input string: \"Y\""
+    },
+    {
+      "expression": "flagY == \"Y\"",
+      "result": "true",
+      "error": null
+    },
+    {
+      "expression": "flagY eq 'Y'",
+      "result": "error",
+      "error": "NumberFormatException: For input string: \"Y\""
+    },
+    {
+      "expression": "flagY != 'Y'",
+      "result": "error",
+      "error": "NumberFormatException: For input string: \"Y\""
+    },
+    {
+      "expression": "ch == 'A'",
+      "result": "error",
+      "error": "NumberFormatException: For input string: \"A\""
+    },
+    {
+      "expression": "flagY.equals('Y')",
+      "result": "false",
+      "error": null
+    },
+    {
+      "expression": "flagY.equals(\"Y\")",
+      "result": "true",
+      "error": null
+    },
+    {
+      "expression": "n1 == 1",
+      "result": "true",
+      "error": null
+    },
+    {
+      "expression": "n1 != 1",
+      "result": "false",
+      "error": null
+    },
+    {
+      "expression": "n1 > 0",
+      "result": "true",
+      "error": null
+    },
+    {
+      "expression": "n1 gt 0",
+      "result": "true",
+      "error": null
+    },
+    {
+      "expression": "n1 >= 1",
+      "result": "true",
+      "error": null
+    },
+    {
+      "expression": "n1 gte 1",
+      "result": "true",
+      "error": null
+    },
+    {
+      "expression": "n1 < 2",
+      "result": "true",
+      "error": null
+    },
+    {
+      "expression": "n1 lt 2",
+      "result": "true",
+      "error": null
+    },
+    {
+      "expression": "n1 <= 1",
+      "result": "true",
+      "error": null
+    },
+    {
+      "expression": "n1 lte 1",
+      "result": "true",
+      "error": null
+    },
+    {
+      "expression": "n0 == 0",
+      "result": "true",
+      "error": null
+    },
+    {
+      "expression": "n7369 == 7369",
+      "result": "true",
+      "error": null
+    },
+    {
+      "expression": "lng == 7369",
+      "result": "true",
+      "error": null
+    },
+    {
+      "expression": "dec > 1",
+      "result": "true",
+      "error": null
+    },
+    {
+      "expression": "dec == 1.5",
+      "result": "true",
+      "error": null
+    },
+    {
+      "expression": "dbl == 2.5",
+      "result": "true",
+      "error": null
+    },
+    {
+      "expression": "dbl > dec",
+      "result": "true",
+      "error": null
+    },
+    {
+      "expression": "n1 == 1.0",
+      "result": "true",
+      "error": null
+    },
+    {
+      "expression": "s2 > 1",
+      "result": "true",
+      "error": null
+    },
+    {
+      "expression": "s2 == 2",
+      "result": "true",
+      "error": null
+    },
+    {
+      "expression": "n1 == '1'",
+      "result": "false",
+      "error": null
+    },
+    {
+      "expression": "n1 == \"1\"",
+      "result": "true",
+      "error": null
+    },
+    {
+      "expression": "n1.equals(1)",
+      "result": "true",
+      "error": null
+    },
+    {
+      "expression": "lng.equals(7369)",
+      "result": "false",
+      "error": null
+    },
+    {
+      "expression": "n1 == -1",
+      "result": "false",
+      "error": null
+    },
+    {
+      "expression": "n1 > -1",
+      "result": "true",
+      "error": null
+    },
+    {
+      "expression": "nul < 1",
+      "result": "true",
+      "error": null
+    },
+    {
+      "expression": "nul > 1",
+      "result": "false",
+      "error": null
+    },
+    {
+      "expression": "nul == 0",
+      "result": "false",
+      "error": null
+    },
+    {
+      "expression": "nul == ''",
+      "result": "false",
+      "error": null
+    },
+    {
+      "expression": "boolT",
+      "result": "true",
+      "error": null
+    },
+    {
+      "expression": "boolF",
+      "result": "false",
+      "error": null
+    },
+    {
+      "expression": "!boolT",
+      "result": "false",
+      "error": null
+    },
+    {
+      "expression": "not boolT",
+      "result": "false",
+      "error": null
+    },
+    {
+      "expression": "! boolF",
+      "result": "true",
+      "error": null
+    },
+    {
+      "expression": "flagFalse",
+      "result": "true",
+      "error": null
+    },
+    {
+      "expression": "n0",
+      "result": "false",
+      "error": null
+    },
+    {
+      "expression": "n1",
+      "result": "true",
+      "error": null
+    },
+    {
+      "expression": "dec",
+      "result": "true",
+      "error": null
+    },
+    {
+      "expression": "ename",
+      "result": "true",
+      "error": null
+    },
+    {
+      "expression": "empty",
+      "result": "true",
+      "error": null
+    },
+    {
+      "expression": "nul",
+      "result": "false",
+      "error": null
+    },
+    {
+      "expression": "missing",
+      "result": "false",
+      "error": null
+    },
+    {
+      "expression": "list0",
+      "result": "true",
+      "error": null
+    },
+    {
+      "expression": "list2",
+      "result": "true",
+      "error": null
+    },
+    {
+      "expression": "ename != null and ename != ''",
+      "result": "true",
+      "error": null
+    },
+    {
+      "expression": "empty != null and empty != ''",
+      "result": "false",
+      "error": null
+    },
+    {
+      "expression": "nul != null or n1 == 1",
+      "result": "true",
+      "error": null
+    },
+    {
+      "expression": "not (n1 == 1)",
+      "result": "false",
+      "error": null
+    },
+    {
+      "expression": "!(n1 == 1)",
+      "result": "false",
+      "error": null
+    },
+    {
+      "expression": "(n1 == 1 or n0 == 1) and boolT",
+      "result": "true",
+      "error": null
+    },
+    {
+      "expression": "n1 == 1 && n0 == 0",
+      "result": "true",
+      "error": null
+    },
+    {
+      "expression": "n1 == 1 || boolF",
+      "result": "true",
+      "error": null
+    },
+    {
+      "expression": "n1 == 1 and n0 == 0 or boolF",
+      "result": "true",
+      "error": null
+    },
+    {
+      "expression": "boolF or boolT and boolF",
+      "result": "false",
+      "error": null
+    },
+    {
+      "expression": "not boolF and boolT",
+      "result": "true",
+      "error": null
+    },
+    {
+      "expression": "n1 == 1 AND n0 == 0",
+      "result": "error",
+      "error": "ParseException: Encountered \" <IDENT> \"AND \"\" at line 1, column 9. Was expecting one of: <EOF> \",\" ... \"=\" ... \"?\" ... \"||\" ... \"or\" ... \"&&\" ... \"and\" ... \"|\" ... \"bor\" ... \"^\" ... \"xor\" ... \"&\" ... \"band\" ... \"==\" ... \"eq\" ... \"!=\" ... \"neq\" ... \"<\" ... \"lt\" ... \">\" ... \"gt\" ... \"<=\" ... \"lte\" ... \">=\" ... \"gte\" …"
+    },
+    {
+      "expression": "list2.size() > 0",
+      "result": "true",
+      "error": null
+    },
+    {
+      "expression": "list2.size() == 2",
+      "result": "true",
+      "error": null
+    },
+    {
+      "expression": "list0.size() == 0",
+      "result": "true",
+      "error": null
+    },
+    {
+      "expression": "list0.isEmpty()",
+      "result": "true",
+      "error": null
+    },
+    {
+      "expression": "!list2.isEmpty()",
+      "result": "true",
+      "error": null
+    },
+    {
+      "expression": "ename.length() == 3",
+      "result": "true",
+      "error": null
+    },
+    {
+      "expression": "blank.trim() == ''",
+      "result": "true",
+      "error": null
+    },
+    {
+      "expression": "blank.trim().length() == 0",
+      "result": "true",
+      "error": null
+    },
+    {
+      "expression": "ename.trim().equals('KIM')",
+      "result": "true",
+      "error": null
+    },
+    {
+      "expression": "empty.isEmpty()",
+      "result": "true",
+      "error": null
+    },
+    {
+      "expression": "ename.equals(\"KIM\")",
+      "result": "true",
+      "error": null
+    },
+    {
+      "expression": "nul.size() == 0",
+      "result": "error",
+      "error": "NullPointerException: target is null for method size"
+    },
+    {
+      "expression": "list2.size",
+      "result": "true",
+      "error": null
+    },
+    {
+      "expression": "list2.size == 2",
+      "result": "true",
+      "error": null
+    },
+    {
+      "expression": "user.name == 'KIM'",
+      "result": "true",
+      "error": null
+    },
+    {
+      "expression": "user.dept.id == 10",
+      "result": "true",
+      "error": null
+    },
+    {
+      "expression": "user.dept.id > 5",
+      "result": "true",
+      "error": null
+    },
+    {
+      "expression": "user.missing == null",
+      "result": "true",
+      "error": null
+    },
+    {
+      "expression": "user.dept != null",
+      "result": "true",
+      "error": null
+    },
+    {
+      "expression": "nul.name == null",
+      "result": "true",
+      "error": null
+    },
+    {
+      "expression": "missing.name == null",
+      "result": "true",
+      "error": null
+    },
+    {
+      "expression": "user.dept.id.equals(10)",
+      "result": "true",
+      "error": null
+    },
+    {
+      "expression": "_parameter != null",
+      "result": "true",
+      "error": null
+    },
+    {
+      "expression": "_parameter.ename == 'KIM'",
+      "result": "true",
+      "error": null
+    },
+    {
+      "expression": "_databaseId == null",
+      "result": "true",
+      "error": null
+    },
+    {
+      "expression": "n1 + 1 == 2",
+      "result": "true",
+      "error": null
+    },
+    {
+      "expression": "ename + 'X' == 'KIMX'",
+      "result": "true",
+      "error": null
+    },
+    {
+      "expression": "n1 in {1, 2}",
+      "result": "true",
+      "error": null
+    },
+    {
+      "expression": "n1 not in {1, 2}",
+      "result": "false",
+      "error": null
+    },
+    {
+      "expression": "@java.lang.Math@max(1, 2) == 2",
+      "result": "true",
+      "error": null
+    },
+    {
+      "expression": "ename.toUpperCase() == 'KIM'",
+      "result": "true",
+      "error": null
+    },
+    {
+      "expression": "ename.startsWith('K')",
+      "result": "true",
+      "error": null
+    },
+    {
+      "expression": "ename instanceof java.lang.String",
+      "result": "true",
+      "error": null
+    },
+    {
+      "expression": "n1 == 1 ? true : false",
+      "result": "true",
+      "error": null
+    },
+    {
+      "expression": "list2[0] == 10",
+      "result": "true",
+      "error": null
+    },
+    {
+      "expression": "#this != null",
+      "result": "true",
+      "error": null
+    },
+    {
+      "expression": "ename.substring(0, 1) == 'K'",
+      "result": "error",
+      "error": "NumberFormatException: For input string: \"K\""
+    },
+    {
+      "expression": "list2.contains(10)",
+      "result": "true",
+      "error": null
+    },
+    {
+      "expression": "n1 % 2 == 1",
+      "result": "true",
+      "error": null
+    },
+    {
+      "expression": "-n1 < 0",
+      "result": "true",
+      "error": null
+    },
+    {
+      "expression": "ename.equalsIgnoreCase('kim')",
+      "result": "true",
+      "error": null
+    },
+    {
+      "expression": "n1 == 1L",
+      "result": "true",
+      "error": null
+    },
+    {
+      "expression": "n1 == 0x1",
+      "result": "true",
+      "error": null
+    },
+    {
+      "expression": "ename = 'KIM'",
+      "result": "true",
+      "error": null
+    },
+    {
+      "expression": "ename == 'KIM' and",
+      "result": "error",
+      "error": "ParseException: Encountered \"<EOF>\" at line 1, column 18. Was expecting one of: \":\" ... \"not\" ... \"+\" ... \"-\" ... \"~\" ... \"!\" ... \"(\" ... \"true\" ... \"false\" ... \"null\" ... \"#this\" ... \"#root\" ... \"#\" ... \"[\" ... \"{\" ... \"@\" ... \"new\" ... <IDENT> ... <DYNAMIC_SUBSCRIPT> ... \"\\'\" ... \"`\" ... \"\\\"\" ... <INT_LITERAL> ..…"
+    },
+    {
+      "expression": "ename =~ 'K'",
+      "result": "true",
+      "error": null
+    },
+    {
+      "expression": "list2.{? #this > 10}.size() == 1",
+      "result": "true",
+      "error": null
+    },
+    {
+      "expression": "ename > \"A\"",
+      "result": "true",
+      "error": null
+    },
+    {
+      "expression": "ename < \"Z\"",
+      "result": "true",
+      "error": null
+    },
+    {
+      "expression": "ename == 'K'",
+      "result": "error",
+      "error": "NumberFormatException: For input string: \"KIM\""
+    },
+    {
+      "expression": "'KIM' == ename",
+      "result": "true",
+      "error": null
+    },
+    {
+      "expression": "ename eq \"KIM\"",
+      "result": "true",
+      "error": null
+    },
+    {
+      "expression": "nul == 'Y'",
+      "result": "false",
+      "error": null
+    },
+    {
+      "expression": "empty == 'Y'",
+      "result": "false",
+      "error": null
+    },
+    {
+      "expression": "n1 == 'a'",
+      "result": "false",
+      "error": null
+    },
+    {
+      "expression": "dec == 1.50",
+      "result": "true",
+      "error": null
+    },
+    {
+      "expression": "not nul == null",
+      "result": "false",
+      "error": null
+    },
+    {
+      "expression": "!nul == null",
+      "result": "false",
+      "error": null
+    },
+    {
+      "expression": "ename != null && ename.length() > 0",
+      "result": "true",
+      "error": null
+    },
+    {
+      "expression": "user.dept.id gte 10",
+      "result": "true",
+      "error": null
+    },
+    {
+      "expression": "list2.size() gt 1",
+      "result": "true",
+      "error": null
+    },
+    {
+      "expression": "boolT == true",
+      "result": "true",
+      "error": null
+    },
+    {
+      "expression": "flagFalse == false",
+      "result": "error",
+      "error": "NumberFormatException: For input string: \"false\""
+    },
+    {
+      "expression": "n1 == true",
+      "result": "true",
+      "error": null
+    },
+    {
+      "expression": "n1 == 1.0000000000000002",
+      "result": "false",
+      "error": null
+    },
+    {
+      "expression": "n1 < 1.0000000000000002",
+      "result": "true",
+      "error": null
+    },
+    {
+      "expression": "dec == 1.5000000000000002",
+      "result": "false",
+      "error": null
+    },
+    {
+      "expression": "dbl == dec",
+      "result": "false",
+      "error": null
+    },
+    {
+      "expression": "dec == f1",
+      "result": "true",
+      "error": null
+    },
+    {
+      "expression": "f1 == 1.5",
+      "result": "true",
+      "error": null
+    },
+    {
+      "expression": "sh == 3",
+      "result": "true",
+      "error": null
+    },
+    {
+      "expression": "sh == 3.0",
+      "result": "true",
+      "error": null
+    },
+    {
+      "expression": "\"2.5\" == 2.5",
+      "result": "true",
+      "error": null
+    },
+    {
+      "expression": "\"2.5\" > 2",
+      "result": "true",
+      "error": null
+    },
+    {
+      "expression": "\"2.5\" == 2",
+      "result": "false",
+      "error": null
+    },
+    {
+      "expression": "' 2 ' == 2",
+      "result": "true",
+      "error": null
+    },
+    {
+      "expression": "\"1e3\" == 1000",
+      "result": "true",
+      "error": null
+    },
+    {
+      "expression": "\"2d\" == 2",
+      "result": "true",
+      "error": null
+    },
+    {
+      "expression": "\"0x10\" == 16",
+      "result": "error",
+      "error": "NumberFormatException: For input string: \"0x10\""
+    },
+    {
+      "expression": "s2 == '2'",
+      "result": "false",
+      "error": null
+    },
+    {
+      "expression": "boolT == 1",
+      "result": "true",
+      "error": null
+    },
+    {
+      "expression": "boolT == \"true\"",
+      "result": "error",
+      "error": "NumberFormatException: For input string: \"true\""
+    },
+    {
+      "expression": "boolT > boolF",
+      "result": "true",
+      "error": null
+    },
+    {
+      "expression": "boolT == boolT",
+      "result": "true",
+      "error": null
+    },
+    {
+      "expression": "ch == 65",
+      "result": "error",
+      "error": "NumberFormatException: For input string: \"A\""
+    },
+    {
+      "expression": "ch > 'B'",
+      "result": "error",
+      "error": "NumberFormatException: For input string: \"A\""
+    },
+    {
+      "expression": "ch == \"A\"",
+      "result": "true",
+      "error": null
+    },
+    {
+      "expression": "ename > nul",
+      "result": "error",
+      "error": "NullPointerException: Cannot invoke \"Object.getClass()\" because \"v2\" is null"
+    },
+    {
+      "expression": "nul > ename",
+      "result": "error",
+      "error": "NullPointerException: Cannot invoke \"Object.getClass()\" because \"v1\" is null"
+    },
+    {
+      "expression": "nul == nul",
+      "result": "true",
+      "error": null
+    },
+    {
+      "expression": "nul < nul",
+      "result": "false",
+      "error": null
+    },
+    {
+      "expression": "ename == list2",
+      "result": "false",
+      "error": null
+    },
+    {
+      "expression": "list2 == list2",
+      "result": "true",
+      "error": null
+    },
+    {
+      "expression": "list0 == list0",
+      "result": "true",
+      "error": null
+    },
+    {
+      "expression": "list2 < list0",
+      "result": "error",
+      "error": "IllegalArgumentException: invalid comparison: java.util.ArrayList and java.util.ArrayList"
+    },
+    {
+      "expression": "user == user",
+      "result": "true",
+      "error": null
+    },
+    {
+      "expression": "user.dept == user.dept",
+      "result": "true",
+      "error": null
+    },
+    {
+      "expression": "empty < 1",
+      "result": "true",
+      "error": null
+    },
+    {
+      "expression": "empty == 0",
+      "result": "true",
+      "error": null
+    },
+    {
+      "expression": "blank == 0",
+      "result": "true",
+      "error": null
+    },
+    {
+      "expression": "n7369 > 2147483647",
+      "result": "false",
+      "error": null
+    },
+    {
+      "expression": "lng > 2147483647",
+      "result": "false",
+      "error": null
+    },
+    {
+      "expression": "dbl > 2147483647",
+      "result": "false",
+      "error": null
+    },
+    {
+      "expression": "-ename < 0",
+      "result": "error",
+      "error": "NumberFormatException: For input string: \"KIM\""
+    },
+    {
+      "expression": "-nul == 0",
+      "result": "true",
+      "error": null
+    },
+    {
+      "expression": "-boolT == -1",
+      "result": "true",
+      "error": null
+    },
+    {
+      "expression": "list2 == list2.size()",
+      "result": "error",
+      "error": "NumberFormatException: For input string: \"[10, 20]\""
+    },
+    {
+      "expression": "user < user",
+      "result": "false",
+      "error": null
+    },
+    {
+      "expression": "n1 == 1L",
+      "result": "true",
+      "error": null
+    },
+    {
+      "expression": "lng == 7369L",
+      "result": "true",
+      "error": null
+    },
+    {
+      "expression": "n1 == 010",
+      "result": "false",
+      "error": null
+    },
+    {
+      "expression": "n1 == 0x1",
+      "result": "true",
+      "error": null
+    },
+    {
+      "expression": "n1 == 1.0f",
+      "result": "true",
+      "error": null
+    },
+    {
+      "expression": "dec == 1.5B",
+      "result": "true",
+      "error": null
+    },
+    {
+      "expression": "n1 == 1H",
+      "result": "true",
+      "error": null
+    },
+    {
+      "expression": "n1 == 1d",
+      "result": "true",
+      "error": null
+    },
+    {
+      "expression": "n1 == 1.0d",
+      "result": "true",
+      "error": null
+    },
+    {
+      "expression": "n1 == 2147483648",
+      "result": "error",
+      "error": "NumberFormatException: For input string: \"2147483648\""
+    },
+    {
+      "expression": "n1 == 1e0",
+      "result": "true",
+      "error": null
+    },
+    {
+      "expression": "'\\'' == \"'\"",
+      "result": "error",
+      "error": "NumberFormatException: For input string: \"'\""
+    },
+    {
+      "expression": "'ab' == \"ab\"",
+      "result": "true",
+      "error": null
+    },
+    {
+      "expression": "'' == empty",
+      "result": "true",
+      "error": null
+    },
+    {
+      "expression": "!empty",
+      "result": "true",
+      "error": null
+    },
+    {
+      "expression": "not empty",
+      "result": "true",
+      "error": null
+    },
+    {
+      "expression": "empty and boolT",
+      "result": "true",
+      "error": null
+    },
+    {
+      "expression": "empty or boolF",
+      "result": "false",
+      "error": null
+    },
+    {
+      "expression": "!flagFalse",
+      "result": "true",
+      "error": null
+    },
+    {
+      "expression": "!list0",
+      "result": "false",
+      "error": null
+    },
+    {
+      "expression": "!n0",
+      "result": "true",
+      "error": null
+    },
+    {
+      "expression": "!dec",
+      "result": "false",
+      "error": null
+    },
+    {
+      "expression": "!0.0",
+      "result": "true",
+      "error": null
+    },
+    {
+      "expression": "!dbl",
+      "result": "false",
+      "error": null
+    },
+    {
+      "expression": "!nul",
+      "result": "true",
+      "error": null
+    },
+    {
+      "expression": "!'\\u0000'",
+      "result": "true",
+      "error": null
+    },
+    {
+      "expression": "'\\u0000'",
+      "result": "true",
+      "error": null
+    },
+    {
+      "expression": "'a'",
+      "result": "true",
+      "error": null
+    },
+    {
+      "expression": "!'a'",
+      "result": "false",
+      "error": null
+    },
+    {
+      "expression": "0.0",
+      "result": "false",
+      "error": null
+    },
+    {
+      "expression": "dbl",
+      "result": "true",
+      "error": null
+    },
+    {
+      "expression": "f1",
+      "result": "true",
+      "error": null
+    },
+    {
+      "expression": "!f1",
+      "result": "false",
+      "error": null
+    },
+    {
+      "expression": "user",
+      "result": "true",
+      "error": null
+    },
+    {
+      "expression": "!user",
+      "result": "false",
+      "error": null
+    },
+    {
+      "expression": "nul or empty",
+      "result": "true",
+      "error": null
+    },
+    {
+      "expression": "boolF or n0",
+      "result": "false",
+      "error": null
+    },
+    {
+      "expression": "n0 or nul",
+      "result": "false",
+      "error": null
+    },
+    {
+      "expression": "(n1 and ename) == 'KIM'",
+      "result": "true",
+      "error": null
+    },
+    {
+      "expression": "(n0 or ename) == 'KIM'",
+      "result": "true",
+      "error": null
+    },
+    {
+      "expression": "!ename",
+      "result": "true",
+      "error": null
+    },
+    {
+      "expression": "!'true'",
+      "result": "false",
+      "error": null
+    },
+    {
+      "expression": "!\"TRUE\"",
+      "result": "false",
+      "error": null
+    },
+    {
+      "expression": "ename and boolF",
+      "result": "true",
+      "error": null
+    },
+    {
+      "expression": "-0.0",
+      "result": "false",
+      "error": null
+    },
+    {
+      "expression": "!-0.0",
+      "result": "true",
+      "error": null
+    },
+    {
+      "expression": "user.size == 2",
+      "result": "true",
+      "error": null
+    },
+    {
+      "expression": "user.isEmpty",
+      "result": "false",
+      "error": null
+    },
+    {
+      "expression": "user.keys.size() == 2",
+      "result": "true",
+      "error": null
+    },
+    {
+      "expression": "user.keySet.size() == 2",
+      "result": "true",
+      "error": null
+    },
+    {
+      "expression": "user.values.size() == 2",
+      "result": "true",
+      "error": null
+    },
+    {
+      "expression": "user.empty",
+      "result": "false",
+      "error": null
+    },
+    {
+      "expression": "sz.size == 2",
+      "result": "true",
+      "error": null
+    },
+    {
+      "expression": "sz.isEmpty",
+      "result": "false",
+      "error": null
+    },
+    {
+      "expression": "_parameter.size > 5",
+      "result": "true",
+      "error": null
+    },
+    {
+      "expression": "emptyMap.isEmpty",
+      "result": "true",
+      "error": null
+    },
+    {
+      "expression": "emptyMap.size == 0",
+      "result": "true",
+      "error": null
+    },
+    {
+      "expression": "list2.isEmpty",
+      "result": "false",
+      "error": null
+    },
+    {
+      "expression": "list0.isEmpty",
+      "result": "true",
+      "error": null
+    },
+    {
+      "expression": "list0.empty",
+      "result": "true",
+      "error": null
+    },
+    {
+      "expression": "list2.empty",
+      "result": "false",
+      "error": null
+    },
+    {
+      "expression": "list2.length",
+      "result": "error",
+      "error": "NoSuchPropertyException: java.util.ArrayList.length"
+    },
+    {
+      "expression": "list2.iterator != null",
+      "result": "true",
+      "error": null
+    },
+    {
+      "expression": "list2.foo == null",
+      "result": "error",
+      "error": "NoSuchPropertyException: java.util.ArrayList.foo"
+    },
+    {
+      "expression": "ename.empty",
+      "result": "false",
+      "error": null
+    },
+    {
+      "expression": "empty.empty",
+      "result": "true",
+      "error": null
+    },
+    {
+      "expression": "ename.length == 3",
+      "result": "true",
+      "error": null
+    },
+    {
+      "expression": "ename.bytes != null",
+      "result": "true",
+      "error": null
+    },
+    {
+      "expression": "ename.foo == null",
+      "result": "error",
+      "error": "NoSuchPropertyException: java.lang.String.foo"
+    },
+    {
+      "expression": "n1.foo == null",
+      "result": "error",
+      "error": "NoSuchPropertyException: java.lang.Integer.foo"
+    },
+    {
+      "expression": "n1.class != null",
+      "result": "true",
+      "error": null
+    },
+    {
+      "expression": "boolT.foo == null",
+      "result": "error",
+      "error": "NoSuchPropertyException: java.lang.Boolean.foo"
+    }
+  ]
+}

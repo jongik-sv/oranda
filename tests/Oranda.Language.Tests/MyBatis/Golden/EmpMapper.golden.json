@@ -1,0 +1,356 @@
+{
+  "generator": "MyBatis 3.5.19 SqlSource.getBoundSql, no DB (scratch GoldenGen.java, TSK-02-02 P1)",
+  "mybatis": "3.5.19",
+  "jdk": "17.0.20.1",
+  "generated": "2026-10-23",
+  "compare": "replace Oranda :name binds with ?, collapse whitespace runs to one space and trim both sides, then compare normalizedSql; compare params[].value in order",
+  "mapper": "EmpMapper",
+  "mapperSource": "Oranda.Testing.MyBatis.MapperSamples.EmpMapper",
+  "mapperSha256": "1709c1559034cbdb45a13823a63bace134d62c56b4e962f068d9380cc18b31ef",
+  "strictMapperError": null,
+  "doctypeInjected": false,
+  "mapperError": null,
+  "cases": [
+    {
+      "name": "selectEmpList/이름 검색",
+      "statement": "selectEmpList",
+      "values": {
+        "t": "map",
+        "v": {
+          "empNo": {"t": "null"},
+          "ename": {"t": "string", "v": "KIM"},
+          "deptIds": {
+            "t": "list",
+            "v": []
+          },
+          "orderBy": {"t": "string", "v": "E.ENAME"}
+        }
+      },
+      "sql": "SELECT  E.EMPNO, E.ENAME, E.JOB, E.SAL, D.DNAME \n    FROM EMP E\n    JOIN DEPT D ON D.DEPTNO = E.DEPTNO\n   WHERE  E.ENAME LIKE '%' || ? || '%' \n  ORDER BY E.ENAME",
+      "normalizedSql": "SELECT E.EMPNO, E.ENAME, E.JOB, E.SAL, D.DNAME FROM EMP E JOIN DEPT D ON D.DEPTNO = E.DEPTNO WHERE E.ENAME LIKE '%' || ? || '%' ORDER BY E.ENAME",
+      "params": [
+        {
+          "property": "ename",
+          "jdbcType": null,
+          "value": {"t": "string", "v": "KIM"}
+        }
+      ],
+      "error": null
+    },
+    {
+      "name": "selectEmpList/부서 목록",
+      "statement": "selectEmpList",
+      "values": {
+        "t": "map",
+        "v": {
+          "empNo": {"t": "null"},
+          "ename": {"t": "string", "v": ""},
+          "deptIds": {
+            "t": "list",
+            "v": [
+              {"t": "int", "v": 10},
+              {"t": "int", "v": 20}
+            ]
+          },
+          "orderBy": {"t": "string", "v": "E.DEPTNO, E.ENAME"}
+        }
+      },
+      "sql": "SELECT  E.EMPNO, E.ENAME, E.JOB, E.SAL, D.DNAME \n    FROM EMP E\n    JOIN DEPT D ON D.DEPTNO = E.DEPTNO\n   WHERE  E.DEPTNO IN\n      (\n        ?\n      ,\n        ?\n      ) \n  ORDER BY E.DEPTNO, E.ENAME",
+      "normalizedSql": "SELECT E.EMPNO, E.ENAME, E.JOB, E.SAL, D.DNAME FROM EMP E JOIN DEPT D ON D.DEPTNO = E.DEPTNO WHERE E.DEPTNO IN ( ? , ? ) ORDER BY E.DEPTNO, E.ENAME",
+      "params": [
+        {
+          "property": "__frch_id_0",
+          "jdbcType": null,
+          "value": {"t": "int", "v": 10}
+        },
+        {
+          "property": "__frch_id_1",
+          "jdbcType": null,
+          "value": {"t": "int", "v": 20}
+        }
+      ],
+      "error": null
+    },
+    {
+      "name": "selectEmpList/전체 조건",
+      "statement": "selectEmpList",
+      "values": {
+        "t": "map",
+        "v": {
+          "empNo": {"t": "int", "v": 7369},
+          "ename": {"t": "string", "v": "SM"},
+          "deptIds": {
+            "t": "list",
+            "v": [
+              {"t": "int", "v": 20}
+            ]
+          },
+          "orderBy": {"t": "string", "v": "E.EMPNO"}
+        }
+      },
+      "sql": "SELECT  E.EMPNO, E.ENAME, E.JOB, E.SAL, D.DNAME \n    FROM EMP E\n    JOIN DEPT D ON D.DEPTNO = E.DEPTNO\n   WHERE  E.EMPNO = ?\n    \n    \n      AND E.ENAME LIKE '%' || ? || '%'\n    \n    \n      AND E.DEPTNO IN\n      (\n        ?\n      ) \n  ORDER BY E.EMPNO",
+      "normalizedSql": "SELECT E.EMPNO, E.ENAME, E.JOB, E.SAL, D.DNAME FROM EMP E JOIN DEPT D ON D.DEPTNO = E.DEPTNO WHERE E.EMPNO = ? AND E.ENAME LIKE '%' || ? || '%' AND E.DEPTNO IN ( ? ) ORDER BY E.EMPNO",
+      "params": [
+        {
+          "property": "empNo",
+          "jdbcType": null,
+          "value": {"t": "int", "v": 7369}
+        },
+        {
+          "property": "ename",
+          "jdbcType": null,
+          "value": {"t": "string", "v": "SM"}
+        },
+        {
+          "property": "__frch_id_0",
+          "jdbcType": null,
+          "value": {"t": "int", "v": 20}
+        }
+      ],
+      "error": null
+    },
+    {
+      "name": "selectEmpList/조건 없음",
+      "statement": "selectEmpList",
+      "values": {
+        "t": "map",
+        "v": {
+          "empNo": {"t": "null"},
+          "ename": {"t": "null"},
+          "deptIds": {"t": "null"},
+          "orderBy": {"t": "string", "v": "E.EMPNO"}
+        }
+      },
+      "sql": "SELECT  E.EMPNO, E.ENAME, E.JOB, E.SAL, D.DNAME \n    FROM EMP E\n    JOIN DEPT D ON D.DEPTNO = E.DEPTNO\n    \n  ORDER BY E.EMPNO",
+      "normalizedSql": "SELECT E.EMPNO, E.ENAME, E.JOB, E.SAL, D.DNAME FROM EMP E JOIN DEPT D ON D.DEPTNO = E.DEPTNO ORDER BY E.EMPNO",
+      "params": [],
+      "error": null
+    },
+    {
+      "name": "selectEmpList/orderBy 없음",
+      "statement": "selectEmpList",
+      "values": {
+        "t": "map",
+        "v": {
+          "empNo": {"t": "int", "v": 1},
+          "ename": {"t": "null"},
+          "deptIds": {"t": "null"}
+        }
+      },
+      "sql": "SELECT  E.EMPNO, E.ENAME, E.JOB, E.SAL, D.DNAME \n    FROM EMP E\n    JOIN DEPT D ON D.DEPTNO = E.DEPTNO\n   WHERE  E.EMPNO = ? \n  ORDER BY",
+      "normalizedSql": "SELECT E.EMPNO, E.ENAME, E.JOB, E.SAL, D.DNAME FROM EMP E JOIN DEPT D ON D.DEPTNO = E.DEPTNO WHERE E.EMPNO = ? ORDER BY",
+      "params": [
+        {
+          "property": "empNo",
+          "jdbcType": null,
+          "value": {"t": "int", "v": 1}
+        }
+      ],
+      "error": null
+    },
+    {
+      "name": "updateEmpSal/sal·comm",
+      "statement": "updateEmpSal",
+      "values": {
+        "t": "map",
+        "v": {
+          "sal": {"t": "int", "v": 1000},
+          "comm": {"t": "int", "v": 50},
+          "empNo": {"t": "int", "v": 7369}
+        }
+      },
+      "sql": "UPDATE EMP\n     SET\n   \n       SAL = ?,\n   \n   \n       COMM = ?\n   \n   WHERE EMPNO = ?",
+      "normalizedSql": "UPDATE EMP SET SAL = ?, COMM = ? WHERE EMPNO = ?",
+      "params": [
+        {
+          "property": "sal",
+          "jdbcType": null,
+          "value": {"t": "int", "v": 1000}
+        },
+        {
+          "property": "comm",
+          "jdbcType": null,
+          "value": {"t": "int", "v": 50}
+        },
+        {
+          "property": "empNo",
+          "jdbcType": null,
+          "value": {"t": "int", "v": 7369}
+        }
+      ],
+      "error": null
+    },
+    {
+      "name": "updateEmpSal/sal",
+      "statement": "updateEmpSal",
+      "values": {
+        "t": "map",
+        "v": {
+          "sal": {"t": "int", "v": 1000},
+          "comm": {"t": "null"},
+          "empNo": {"t": "int", "v": 7369}
+        }
+      },
+      "sql": "UPDATE EMP\n     SET\n   \n       SAL = ?,\n   \n   \n   WHERE EMPNO = ?",
+      "normalizedSql": "UPDATE EMP SET SAL = ?, WHERE EMPNO = ?",
+      "params": [
+        {
+          "property": "sal",
+          "jdbcType": null,
+          "value": {"t": "int", "v": 1000}
+        },
+        {
+          "property": "empNo",
+          "jdbcType": null,
+          "value": {"t": "int", "v": 7369}
+        }
+      ],
+      "error": null
+    },
+    {
+      "name": "updateEmpSal/comm",
+      "statement": "updateEmpSal",
+      "values": {
+        "t": "map",
+        "v": {
+          "sal": {"t": "null"},
+          "comm": {"t": "int", "v": 50},
+          "empNo": {"t": "int", "v": 7369}
+        }
+      },
+      "sql": "UPDATE EMP\n     SET\n   \n   \n       COMM = ?\n   \n   WHERE EMPNO = ?",
+      "normalizedSql": "UPDATE EMP SET COMM = ? WHERE EMPNO = ?",
+      "params": [
+        {
+          "property": "comm",
+          "jdbcType": null,
+          "value": {"t": "int", "v": 50}
+        },
+        {
+          "property": "empNo",
+          "jdbcType": null,
+          "value": {"t": "int", "v": 7369}
+        }
+      ],
+      "error": null
+    },
+    {
+      "name": "updateEmpSal/없음",
+      "statement": "updateEmpSal",
+      "values": {
+        "t": "map",
+        "v": {
+          "sal": {"t": "null"},
+          "comm": {"t": "null"},
+          "empNo": {"t": "int", "v": 7369}
+        }
+      },
+      "sql": "UPDATE EMP\n     SET\n   \n   \n   WHERE EMPNO = ?",
+      "normalizedSql": "UPDATE EMP SET WHERE EMPNO = ?",
+      "params": [
+        {
+          "property": "empNo",
+          "jdbcType": null,
+          "value": {"t": "int", "v": 7369}
+        }
+      ],
+      "error": null
+    },
+    {
+      "name": "selectEmp",
+      "statement": "selectEmp",
+      "values": {
+        "t": "map",
+        "v": {
+          "empNo": {"t": "int", "v": 7369}
+        }
+      },
+      "sql": "SELECT  E.EMPNO, E.ENAME, E.JOB, E.SAL, D.DNAME \n      FROM EMP E\n      JOIN DEPT D ON D.DEPTNO = E.DEPTNO\n     WHERE E.EMPNO = ?",
+      "normalizedSql": "SELECT E.EMPNO, E.ENAME, E.JOB, E.SAL, D.DNAME FROM EMP E JOIN DEPT D ON D.DEPTNO = E.DEPTNO WHERE E.EMPNO = ?",
+      "params": [
+        {
+          "property": "empNo",
+          "jdbcType": null,
+          "value": {"t": "int", "v": 7369}
+        }
+      ],
+      "error": null
+    },
+    {
+      "name": "countEmp",
+      "statement": "countEmp",
+      "values": {
+        "t": "map",
+        "v": {}
+      },
+      "sql": "SELECT COUNT(*) FROM EMP",
+      "normalizedSql": "SELECT COUNT(*) FROM EMP",
+      "params": [],
+      "error": null
+    },
+    {
+      "name": "insertEmp",
+      "statement": "insertEmp",
+      "values": {
+        "t": "map",
+        "v": {
+          "empNo": {"t": "int", "v": 1},
+          "ename": {"t": "string", "v": "KIM"},
+          "job": {"t": "string", "v": "CLERK"},
+          "sal": {"t": "decimal", "v": "1500.50"},
+          "deptNo": {"t": "int", "v": 10}
+        }
+      },
+      "sql": "INSERT INTO EMP (EMPNO, ENAME, JOB, SAL, DEPTNO)\n    VALUES (?, ?, ?, ?, ?)",
+      "normalizedSql": "INSERT INTO EMP (EMPNO, ENAME, JOB, SAL, DEPTNO) VALUES (?, ?, ?, ?, ?)",
+      "params": [
+        {
+          "property": "empNo",
+          "jdbcType": null,
+          "value": {"t": "int", "v": 1}
+        },
+        {
+          "property": "ename",
+          "jdbcType": null,
+          "value": {"t": "string", "v": "KIM"}
+        },
+        {
+          "property": "job",
+          "jdbcType": null,
+          "value": {"t": "string", "v": "CLERK"}
+        },
+        {
+          "property": "sal",
+          "jdbcType": null,
+          "value": {"t": "decimal", "v": "1500.50"}
+        },
+        {
+          "property": "deptNo",
+          "jdbcType": null,
+          "value": {"t": "int", "v": 10}
+        }
+      ],
+      "error": null
+    },
+    {
+      "name": "deleteEmp",
+      "statement": "deleteEmp",
+      "values": {
+        "t": "map",
+        "v": {
+          "empNo": {"t": "int", "v": 7369}
+        }
+      },
+      "sql": "DELETE FROM EMP WHERE EMPNO = ?",
+      "normalizedSql": "DELETE FROM EMP WHERE EMPNO = ?",
+      "params": [
+        {
+          "property": "empNo",
+          "jdbcType": null,
+          "value": {"t": "int", "v": 7369}
+        }
+      ],
+      "error": null
+    }
+  ]
+}

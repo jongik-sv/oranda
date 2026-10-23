@@ -1,0 +1,32 @@
+{
+  "generator": "MyBatis 3.5.19 SqlSource.getBoundSql, no DB (scratch GoldenGen.java, TSK-02-02 P1)",
+  "mybatis": "3.5.19",
+  "jdk": "17.0.20.1",
+  "generated": "2026-10-23",
+  "compare": "replace Oranda :name binds with ?, collapse whitespace runs to one space and trim both sides, then compare normalizedSql; compare params[].value in order",
+  "mapper": "NoTrailingNewLine",
+  "mapperSource": "Oranda.Testing.MyBatis.MapperSamples.NoTrailingNewLine",
+  "mapperSha256": "da708f8a939aac0d1297dcf0863b97f3d5a2532f9b4f478d3634d30f93c3a402",
+  "strictMapperError": "SAXParseException: Document root element \"mapper\", must match DOCTYPE root \"null\".",
+  "doctypeInjected": true,
+  "mapperError": null,
+  "cases": [
+    {
+      "name": "one",
+      "statement": "one",
+      "values": {
+        "t": "map",
+        "v": {
+          "max": {"t": "int", "v": 100},
+          "lo": {"t": "int", "v": 1},
+          "hi": {"t": "int", "v": 9},
+          "ename": {"t": "string", "v": "KIM"}
+        }
+      },
+      "sql": "SELECT 1 FROM DUAL",
+      "normalizedSql": "SELECT 1 FROM DUAL",
+      "params": [],
+      "error": null
+    }
+  ]
+}
