@@ -68,10 +68,10 @@
     </Style>
   </Window.Styles>
 
-  <!-- 고정 폭·높이를 쓰지 않는다(배율 250% 에서 글자가 잘리지 않게). 단추 줄은 항상 아래에 고정.
+  <!-- 고정 폭·높이를 쓰지 않는다(배율 250% 에서 글자가 잘리지 않게). 열 때 가장 큰 범주에 맞춘 뒤 크기를 고정한다(코드 숨김). 단추 줄은 항상 아래에 고정.
        탭 순서 = 적은 순서(범주 → 입력 칸 → 저장 → 닫기)라서 단추 줄을 맨 뒤에 둔다. -->
   <Grid Margin="12" RowDefinitions="*,Auto,Auto">
-    <TabControl Grid.Row="0" Classes="categories" TabStripPlacement="Left" Padding="16,0,0,0" SelectedIndex="{Binding SelectedTab}">
+    <TabControl Grid.Row="0" x:Name="Categories" Classes="categories" TabStripPlacement="Left" Padding="16,0,0,0" SelectedIndex="{Binding SelectedTab}">
       <TabItem Header="{Binding Strings[tab.general]}">
         <ScrollViewer HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
           <Grid Classes="form" ColumnDefinitions="Auto,*" RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto" ColumnSpacing="12" RowSpacing="10">
@@ -197,7 +197,9 @@
               <TextBlock Classes="fmt-hint" Text="{Binding Strings[fmt.preview]}" />
               <Border Background="{DynamicResource OrandaCodeBackgroundBrush}" BorderBrush="{DynamicResource OrandaSeparatorBrush}"
                       BorderThickness="1" Padding="6,4">
-                <TextBlock x:Name="FmtPreview" Classes="mono" FontSize="{DynamicResource OrandaFontSizeSmall}" Text="{Binding SqlFormat.Preview}" />
+                <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled">
+                  <TextBlock x:Name="FmtPreview" Classes="mono" FontSize="{DynamicResource OrandaFontSizeSmall}" Text="{Binding SqlFormat.Preview}" />
+                </ScrollViewer>
               </Border>
             </StackPanel>
           </StackPanel>
