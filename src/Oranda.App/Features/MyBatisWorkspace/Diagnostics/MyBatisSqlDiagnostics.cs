@@ -26,9 +26,6 @@ public sealed partial class MyBatisSqlDiagnostics : IMyBatisEditorDecorator
     /// <summary>언어 서비스를 아직 못 얻었을 때(시작 직후) 다시 해 보는 간격.</summary>
     internal static readonly TimeSpan LanguageRetry = TimeSpan.FromMilliseconds(500);
 
-    private const string Prefix = "펼친 SQL: ";
-    private const string HolePrefix = "펼친 SQL(값이 빈 자리가 있어 확인하지 못했습니다): ";
-
     private readonly Func<MyBatisEvalHub?> _hub;
     private readonly Func<ILanguageService?> _language;
 
@@ -101,7 +98,9 @@ public sealed partial class MyBatisSqlDiagnostics : IMyBatisEditorDecorator
             {
                 Range = new TextRange(start, end - start),
                 Severity = holes && d.Severity is DiagnosticSeverity.Error or DiagnosticSeverity.Warning ? DiagnosticSeverity.Info : d.Severity,
-                Message = (holes ? HolePrefix : Prefix) + d.Message,
+                Message = holes
+                    ? MyBatisText.Format("MyBatis.expanded.diagnosticUnsure", "펼친 SQL(값이 빈 자리가 있어 확인하지 못했습니다): {0}", d.Message)
+                    : MyBatisText.Format("MyBatis.expanded.diagnostic", "펼친 SQL: {0}", d.Message),
             });
         }
 

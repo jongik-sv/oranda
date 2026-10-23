@@ -237,6 +237,8 @@
   "MyBatis.editor.dynamicTags": "동적 태그 {0}",
   "MyBatis.editor.toolbar": "MyBatis 문서 도구 모음",
   "MyBatis.expanded.conditions": "켜진 조건 {0}/{1}",
+  "MyBatis.expanded.diagnostic": "펼친 SQL: {0}",
+  "MyBatis.expanded.diagnosticUnsure": "펼친 SQL(값이 빈 자리가 있어 확인하지 못했습니다): {0}",
   "MyBatis.expanded.error": "계산하지 못했습니다: {0}",
   "MyBatis.expanded.header": "시나리오 「{0}」 값으로 펼친 문장 · 이대로 실행됩니다",
   "MyBatis.expanded.headerNoScenario": "지금 값으로 펼친 문장 · 이대로 실행됩니다",

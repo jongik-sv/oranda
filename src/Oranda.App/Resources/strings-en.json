@@ -237,6 +237,8 @@
   "MyBatis.editor.dynamicTags": "Dynamic tags {0}",
   "MyBatis.editor.toolbar": "MyBatis document toolbar",
   "MyBatis.expanded.conditions": "Conditions on {0}/{1}",
+  "MyBatis.expanded.diagnostic": "Expanded SQL: {0}",
+  "MyBatis.expanded.diagnosticUnsure": "Expanded SQL (not confirmed: some values are empty): {0}",
   "MyBatis.expanded.error": "Could not evaluate: {0}",
   "MyBatis.expanded.header": "Statement expanded with scenario \"{0}\" values · runs exactly as shown",
   "MyBatis.expanded.headerNoScenario": "Statement expanded with the current values · runs exactly as shown",

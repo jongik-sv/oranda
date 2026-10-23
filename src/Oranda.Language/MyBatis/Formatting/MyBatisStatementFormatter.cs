@@ -41,14 +41,14 @@ internal sealed class MyBatisStatementFormatter : IMyBatisStatementFormatter
                 var next = Pass(cur.Text, o, new TextRange(0, cur.Text.Length));
                 if (!next.Succeeded)
                 {
-                    return new FormatResult(text, whole, FormatFailure.NotIdempotent) { Message = $"다시 포맷하면 실패한다({next.Failure}): {next.Message}" };
+                    return new FormatResult(text, whole, FormatFailure.NotIdempotent) { Message = $"다시 포맷하면 실패합니다({next.Failure}): {next.Message}" };
                 }
 
                 if (next.Text == cur.Text) return new FormatResult(cur.Text, whole);
                 cur = next;
             }
 
-            return new FormatResult(text, whole, FormatFailure.NotIdempotent) { Message = "두 번 포맷한 결과가 달라서 되풀이해도 수렴하지 않는다." };
+            return new FormatResult(text, whole, FormatFailure.NotIdempotent) { Message = "두 번 포맷한 결과가 달라서 되풀이해도 수렴하지 않습니다." };
         }
         catch (Exception ex) when (ex is not OutOfMemoryException and not OperationCanceledException)
         {
@@ -72,15 +72,15 @@ internal sealed class MyBatisStatementFormatter : IMyBatisStatementFormatter
 
         var ph = new MyBatisPlaceholder(outer.Body, scan.Segments);
         if (ph.Sql.Length == 0) return new FormatResult(text, whole);
-        if (ph.HasForeignMarker()) return Fail(FormatFailure.MarkupUnsupported, "엔티티 등을 풀면 /*@ 표식 같은 글이 생긴다.");
+        if (ph.HasForeignMarker()) return Fail(FormatFailure.MarkupUnsupported, "엔티티 등을 풀면 /*@ 표식 같은 글이 생깁니다.");
 
         var read = FormatTokenizer.Read(ph.Sql);
-        if (read.Unterminated) return Fail(FormatFailure.MarkupUnsupported, "엔티티·자리표시를 반영한 본문에 닫히지 않은 문자열·주석이 있다.");
+        if (read.Unterminated) return Fail(FormatFailure.MarkupUnsupported, "엔티티·자리표시를 반영한 본문에 닫히지 않은 문자열·주석이 있습니다.");
         int broken = ph.FirstBrokenMarker(read);
         if (broken > 0)
         {
             var seg = ph.SegmentOfMarker(broken);
-            return Fail(FormatFailure.MarkupUnsupported, $"XML 구간이 문자열·주석 안에 들어 있거나 SQL*Plus 줄로 읽힌다: {outer.Body.Substring(seg.Start, Math.Min(seg.Length, 40))}");
+            return Fail(FormatFailure.MarkupUnsupported, $"XML 구간이 문자열·주석 안에 들어 있거나 SQL*Plus 줄로 읽힙니다: {outer.Body.Substring(seg.Start, Math.Min(seg.Length, 40))}");
         }
 
         string newline = text.Contains("\r\n", StringComparison.Ordinal) ? "\r\n" : "\n";
@@ -89,7 +89,7 @@ internal sealed class MyBatisStatementFormatter : IMyBatisStatementFormatter
         string baseIndent = outer.CloseIndent + unit;
 
         var run = FormatEngine.Run(ph.Sql, o, baseIndent, newline, read);
-        if (run is null) return Fail(FormatFailure.InternalError, "본문을 포맷하지 못했다.");
+        if (run is null) return Fail(FormatFailure.InternalError, "본문을 포맷하지 못했습니다.");
         var failure = FormatEngine.Verify(run.Items, run.Text, out string? message);
         if (failure != FormatFailure.None) return Fail(failure, message);
 
@@ -100,13 +100,13 @@ internal sealed class MyBatisStatementFormatter : IMyBatisStatementFormatter
         if (failure != FormatFailure.None) return Fail(failure, message);
 
         string? restored = ph.Restore(layout);
-        if (restored is null) return Fail(FormatFailure.TokenMismatch, "포맷 결과를 원문 철자로 되돌리지 못했다.");
+        if (restored is null) return Fail(FormatFailure.TokenMismatch, "포맷 결과를 원문 철자로 되돌리지 못했습니다.");
 
         // (b) 공백 아닌 글자 흐름이 원문 본문과 같다.
-        if (!MyBatisPlaceholder.SameFlow(outer.Body, restored)) return Fail(FormatFailure.TokenMismatch, "본문의 글자 흐름이 달라졌다.");
+        if (!MyBatisPlaceholder.SameFlow(outer.Body, restored)) return Fail(FormatFailure.TokenMismatch, "본문의 글자 흐름이 달라졌습니다.");
 
         // 짝 없는 서로게이트: 이웃하던 서로게이트 쌍 사이에 공백이 끼면 렉서가 Error 토큰 둘로 읽는다.
-        if (!HasLoneSurrogate(outer.Body) && HasLoneSurrogate(restored)) return Fail(FormatFailure.TokenMismatch, "서로게이트 쌍 사이에 공백이 생겼다.");
+        if (!HasLoneSurrogate(outer.Body) && HasLoneSurrogate(restored)) return Fail(FormatFailure.TokenMismatch, "서로게이트 쌍 사이에 공백이 생겼습니다.");
 
         string result = outer.Head + newline + restored + newline + outer.CloseIndent + outer.Close + outer.Tail;
 
@@ -123,24 +123,24 @@ internal sealed class MyBatisStatementFormatter : IMyBatisStatementFormatter
     internal static string? CheckMarkup(string before, BodyScan beforeScan, string after)
     {
         var rescan = MyBatisBodyScanner.Scan(after);
-        if (!rescan.Ok) return $"결과 본문을 XML 로 다시 읽지 못했다: {rescan.Error}";
+        if (!rescan.Ok) return $"결과 본문을 XML 로 다시 읽지 못했습니다: {rescan.Error}";
 
         var x = beforeScan.Fine.Where(s => s.IsMarkup).ToList();
         var y = rescan.Fine.Where(s => s.IsMarkup).ToList();
-        if (x.Count != y.Count) return $"XML 구간 수가 달라졌다(원문 {x.Count}, 결과 {y.Count}).";
+        if (x.Count != y.Count) return $"XML 구간 수가 달라졌습니다(원문 {x.Count}, 결과 {y.Count}).";
         for (int i = 0; i < x.Count; i++)
         {
             string a = before.Substring(x[i].Start, x[i].Length);
             string b = after.Substring(y[i].Start, y[i].Length);
-            if (x[i].Kind != y[i].Kind || a != b) return $"XML 구간 {i + 1}번째가 달라졌다: {Brief(a)} ≠ {Brief(b)}.";
+            if (x[i].Kind != y[i].Kind || a != b) return $"XML 구간 {i + 1}번째가 달라졌습니다: {Brief(a)} ≠ {Brief(b)}.";
             if (MyBatisPlaceholder.GluedBefore(before, x[i]) != MyBatisPlaceholder.GluedBefore(after, y[i]))
             {
-                return $"앞 글자와 XML 구간 사이의 붙은 경계가 달라졌다: {Brief(a)}.";
+                return $"앞 글자와 XML 구간 사이의 붙은 경계가 달라졌습니다: {Brief(a)}.";
             }
 
             if (MyBatisPlaceholder.GluedAfter(before, x[i]) != MyBatisPlaceholder.GluedAfter(after, y[i]))
             {
-                return $"뒤 글자와 XML 구간 사이의 붙은 경계가 달라졌다: {Brief(a)}.";
+                return $"뒤 글자와 XML 구간 사이의 붙은 경계가 달라졌습니다: {Brief(a)}.";
             }
         }
 
@@ -173,7 +173,7 @@ internal sealed class MyBatisStatementFormatter : IMyBatisStatementFormatter
             while (i < text.Length && char.IsWhiteSpace(text[i])) i++;
             if (i + 1 >= text.Length || text[i] != '<' || !MyBatisBodyScanner.IsNameStart(text[i + 1]))
             {
-                error = "문장이 여는 태그로 시작하지 않는다.";
+                error = "문장이 여는 태그로 시작하지 않습니다.";
                 return null;
             }
 
@@ -183,7 +183,7 @@ internal sealed class MyBatisStatementFormatter : IMyBatisStatementFormatter
             int end = MyBatisBodyScanner.TagEnd(text, k, out bool openQuote);
             if (end < 0)
             {
-                error = openQuote ? $"<{name}> 태그의 속성 따옴표가 닫히지 않았다." : $"<{name}> 태그가 닫히지 않았다.";
+                error = openQuote ? $"<{name}> 태그의 속성 따옴표가 닫히지 않았습니다." : $"<{name}> 태그가 닫히지 않았습니다.";
                 return null;
             }
 
@@ -194,7 +194,7 @@ internal sealed class MyBatisStatementFormatter : IMyBatisStatementFormatter
             while (ce >= 0 && ce < text.Length && char.IsWhiteSpace(text[ce])) ce++;
             if (cs < end || ce < 0 || ce >= text.Length || text[ce] != '>')
             {
-                error = $"</{name}> 닫는 태그를 찾지 못했다.";
+                error = $"</{name}> 닫는 태그를 찾지 못했습니다.";
                 return null;
             }
 
@@ -202,7 +202,7 @@ internal sealed class MyBatisStatementFormatter : IMyBatisStatementFormatter
             string tail = text[ce..];
             if (!string.IsNullOrWhiteSpace(tail))
             {
-                error = "닫는 태그 뒤에 다른 글이 있다.";
+                error = "닫는 태그 뒤에 다른 글이 있습니다.";
                 return null;
             }
 

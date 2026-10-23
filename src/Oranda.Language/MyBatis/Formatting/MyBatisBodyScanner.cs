@@ -72,7 +72,7 @@ internal static class MyBatisBodyScanner
     public static BodyScan Scan(string body)
     {
         ArgumentNullException.ThrowIfNull(body);
-        if (body.Contains("/*@", StringComparison.Ordinal)) return Fail("본문에 이미 /*@ 표식이 있다.");
+        if (body.Contains("/*@", StringComparison.Ordinal)) return Fail("본문에 이미 /*@ 표식이 있습니다.");
 
         var walker = new Walker(body);
         string? error = walker.Run() ?? CheckBoundaries(body, walker.Segments);
@@ -125,7 +125,7 @@ internal static class MyBatisBodyScanner
             if (!s.IsMarkup) continue;
             if (s.Start > 0 && s.End < body.Length && IsWordChar(body[s.Start - 1]) && IsWordChar(body[s.End]))
             {
-                return $"낱말을 가르는 XML 경계다: '{body[s.Start - 1]}' 와 '{body[s.End]}' 사이의 {Excerpt(body, s)}.";
+                return $"낱말을 가르는 XML 경계입니다: '{body[s.Start - 1]}' 와 '{body[s.End]}' 사이의 {Excerpt(body, s)}.";
             }
         }
 
@@ -227,8 +227,8 @@ internal static class MyBatisBodyScanner
                 if (error is not null) return error;
             }
 
-            if (cdata >= 0) return "닫히지 않은 CDATA 가 있다.";
-            if (open.Count > 0) return $"닫히지 않은 태그 <{Segments[open.Peek()].Name}> 가 있다.";
+            if (cdata >= 0) return "닫히지 않은 CDATA 가 있습니다.";
+            if (open.Count > 0) return $"닫히지 않은 태그 <{Segments[open.Peek()].Name}> 가 있습니다.";
             Flush(n);
             return null;
         }
@@ -264,7 +264,7 @@ internal static class MyBatisBodyScanner
                 int e = body.IndexOf("-->", i + 4, StringComparison.Ordinal);
                 if (e < 0)
                 {
-                    error = "닫히지 않은 XML 주석이 있다.";
+                    error = "닫히지 않은 XML 주석이 있습니다.";
                     return n;
                 }
 
@@ -274,7 +274,7 @@ internal static class MyBatisBodyScanner
 
             if (At(i, "<!") || At(i, "<?"))
             {
-                error = "지원하지 않는 XML 선언·처리 명령이 있다.";
+                error = "지원하지 않는 XML 선언·처리 명령이 있습니다.";
                 return n;
             }
 
@@ -282,7 +282,7 @@ internal static class MyBatisBodyScanner
 
             if (i + 1 < n && IsNameStart(body[i + 1])) return StartTag(i, out error);
 
-            error = "XML 태그로 읽을 수 없는 '<' 가 있다(본문의 < 는 &lt; 나 CDATA 로 써야 한다).";
+            error = "XML 태그로 읽을 수 없는 '<' 가 있습니다(본문의 < 는 &lt; 나 CDATA 로 써야 합니다).";
             return n;
         }
 
@@ -303,14 +303,14 @@ internal static class MyBatisBodyScanner
             while (p < n && char.IsWhiteSpace(body[p])) p++;
             if (k == j || p >= n || body[p] != '>')
             {
-                error = "닫는 태그 모양이 잘못됐다.";
+                error = "닫는 태그 모양이 잘못됐습니다.";
                 return n;
             }
 
             string name = body[j..k];
             if (open.Count == 0 || Segments[open.Peek()].Name != name)
             {
-                error = $"짝이 맞지 않는 닫는 태그 </{name}> 가 있다.";
+                error = $"짝이 맞지 않는 닫는 태그 </{name}> 가 있습니다.";
                 return n;
             }
 
@@ -329,7 +329,7 @@ internal static class MyBatisBodyScanner
             int end = TagEnd(body, k, out bool openQuote);
             if (end < 0)
             {
-                error = openQuote ? $"<{name}> 태그의 속성 따옴표가 닫히지 않았다." : $"<{name}> 태그가 닫히지 않았다.";
+                error = openQuote ? $"<{name}> 태그의 속성 따옴표가 닫히지 않았습니다." : $"<{name}> 태그가 닫히지 않았습니다.";
                 return body.Length;
             }
 
@@ -373,7 +373,7 @@ internal static class MyBatisBodyScanner
             {
                 int stop = i + 1;
                 while (stop < n && stop < i + 12 && !char.IsWhiteSpace(body[stop])) stop++;
-                error = $"알 수 없는 엔티티가 있다: {body[i..stop]}";
+                error = $"알 수 없는 엔티티가 있습니다: {body[i..stop]}";
                 return n;
             }
 
@@ -401,7 +401,7 @@ internal static class MyBatisBodyScanner
             int close = body.IndexOf('}', i + 2);
             if (close < 0 || body.AsSpan(i + 2, close - i - 2).IndexOfAny('\r', '\n') >= 0)
             {
-                error = $"{body.Substring(i, 2)}…}} 가 닫히지 않았거나 여러 줄에 걸쳐 있다.";
+                error = $"{body.Substring(i, 2)}…}} 가 닫히지 않았거나 여러 줄에 걸쳐 있습니다.";
                 return n;
             }
 
