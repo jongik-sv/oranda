@@ -101,18 +101,19 @@ public sealed class SqlSyntaxColorizer : DocumentColorizingTransformer
         }
 
         var palette = _editor.ActualThemeVariant == ThemeVariant.Dark ? Dark : Light;
+        var text = _lines.Lines[idx]; // 렉서가 읽은 줄 복사본(문서 줄과 같은 글, 할당 없음)
         foreach (var t in Lexer.TokensOf(idx))
         {
-            IBrush? brush = t.Kind switch
+            IBrush? brush = SqlTokenColors.Of(t, text) switch
             {
-                TokenKind.Keyword => palette.Keyword,
-                TokenKind.StringLiteral => palette.String,
-                TokenKind.Comment => palette.Comment,
-                TokenKind.Number => palette.Number,
-                TokenKind.Bind or TokenKind.Substitution => palette.Bind,
-                TokenKind.Hint => palette.Hint,
-                TokenKind.QuotedIdent => palette.Quoted,
-                TokenKind.Identifier when IsFunctionCall(line, t) => palette.Function,
+                SqlColorKind.Keyword => palette.Keyword,
+                SqlColorKind.StringLiteral => palette.String,
+                SqlColorKind.Comment => palette.Comment,
+                SqlColorKind.Number => palette.Number,
+                SqlColorKind.Bind => palette.Bind,
+                SqlColorKind.Hint => palette.Hint,
+                SqlColorKind.Quoted => palette.Quoted,
+                SqlColorKind.Function => palette.Function,
                 _ => null,
             };
             if (brush is null)
@@ -127,18 +128,6 @@ public sealed class SqlSyntaxColorizer : DocumentColorizingTransformer
                 ChangeLinePart(start, end, element => element.TextRunProperties.SetForegroundBrush(brush));
             }
         }
-    }
-
-    /// <summary>식별자 바로 뒤(공백 허용)에 여는 괄호가 오면 함수 호출로 본다.</summary>
-    private bool IsFunctionCall(DocumentLine line, Token t)
-    {
-        int pos = line.Offset + t.End;
-        while (pos < line.EndOffset && _doc.GetCharAt(pos) == ' ')
-        {
-            pos++;
-        }
-
-        return pos < line.EndOffset && _doc.GetCharAt(pos) == '(';
     }
 
     private static ImmutableSolidColorBrush Brush(byte r, byte g, byte b) => new(Color.FromRgb(r, g, b));

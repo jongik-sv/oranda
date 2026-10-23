@@ -125,16 +125,16 @@ public static class SqlInlineText
         int pos = 0;
         foreach (var t in SqlLexer.Tokenize(text))
         {
-            var kind = t.Kind switch
+            var kind = SqlTokenColors.Of(t, text) switch
             {
-                TokenKind.Keyword => Kind.Keyword,
-                TokenKind.StringLiteral => Kind.String,
-                TokenKind.Comment => Kind.Comment,
-                TokenKind.Number => Kind.Number,
-                TokenKind.Bind or TokenKind.Substitution => Kind.Bind,
-                TokenKind.Hint => Kind.Hint,
-                TokenKind.QuotedIdent => Kind.Quoted,
-                TokenKind.Identifier when IsFunctionCall(text, t.End) => Kind.Function,
+                SqlColorKind.Keyword => Kind.Keyword,
+                SqlColorKind.StringLiteral => Kind.String,
+                SqlColorKind.Comment => Kind.Comment,
+                SqlColorKind.Number => Kind.Number,
+                SqlColorKind.Bind => Kind.Bind,
+                SqlColorKind.Hint => Kind.Hint,
+                SqlColorKind.Quoted => Kind.Quoted,
+                SqlColorKind.Function => Kind.Function,
                 _ => Kind.Plain,
             };
             int start = Math.Max(t.Start, pos);
@@ -171,16 +171,5 @@ public static class SqlInlineText
         }
 
         list.Add(new Segment(start, length, kind));
-    }
-
-    private static bool IsFunctionCall(string text, int end)
-    {
-        int pos = end;
-        while (pos < text.Length && text[pos] == ' ')
-        {
-            pos++;
-        }
-
-        return pos < text.Length && text[pos] == '(';
     }
 }

@@ -279,16 +279,16 @@ public static class MyBatisXmlClassifier
         int sqlState = SqlLexer.LexLine(sqlLine, state.Sql, tokens);
         foreach (var t in tokens)
         {
-            MyBatisSpanKind? kind = t.Kind switch
+            MyBatisSpanKind? kind = SqlTokenColors.Of(t, sqlLine) switch
             {
-                TokenKind.Keyword => MyBatisSpanKind.SqlKeyword,
-                TokenKind.StringLiteral => MyBatisSpanKind.SqlString,
-                TokenKind.Comment => MyBatisSpanKind.SqlComment,
-                TokenKind.Number => MyBatisSpanKind.SqlNumber,
-                TokenKind.Bind or TokenKind.Substitution => MyBatisSpanKind.SqlBind,
-                TokenKind.Hint => MyBatisSpanKind.SqlHint,
-                TokenKind.QuotedIdent => MyBatisSpanKind.SqlQuoted,
-                TokenKind.Identifier when IsFunctionCall(sqlLine, t.End) => MyBatisSpanKind.SqlFunction,
+                SqlColorKind.Keyword => MyBatisSpanKind.SqlKeyword,
+                SqlColorKind.StringLiteral => MyBatisSpanKind.SqlString,
+                SqlColorKind.Comment => MyBatisSpanKind.SqlComment,
+                SqlColorKind.Number => MyBatisSpanKind.SqlNumber,
+                SqlColorKind.Bind => MyBatisSpanKind.SqlBind,
+                SqlColorKind.Hint => MyBatisSpanKind.SqlHint,
+                SqlColorKind.Quoted => MyBatisSpanKind.SqlQuoted,
+                SqlColorKind.Function => MyBatisSpanKind.SqlFunction,
                 _ => null,
             };
             if (kind is { } k && !AllBlank(sqlLine.Slice(t.Start, t.Length)))
@@ -382,15 +382,4 @@ public static class MyBatisXmlClassifier
     }
 
     private static bool AllBlank(ReadOnlySpan<char> s) => s.IsWhiteSpace();
-
-    /// <summary>식별자 바로 뒤(공백 허용)에 여는 괄호가 오면 함수 호출(SqlSyntaxColorizer 와 같은 규칙).</summary>
-    private static bool IsFunctionCall(ReadOnlySpan<char> line, int pos)
-    {
-        while (pos < line.Length && line[pos] == ' ')
-        {
-            pos++;
-        }
-
-        return pos < line.Length && line[pos] == '(';
-    }
 }
