@@ -255,11 +255,38 @@ public sealed partial class DockWorkspace
     public bool IsToolVisible(string toolId) => VisibleToolIds.Contains(toolId);
 
     /// <summary>도구 창을 보이고 그 탭을 활성으로 한다. 등록되지 않은 ID 면 false.</summary>
-    public bool ShowTool(string toolId)
+    public bool ShowTool(string toolId) => ShowTool(toolId, keepFloating: true);
+
+    /// <summary>
+    /// <paramref name="keepFloating"/> 이 거짓이면 떠 있는 창도 아래 기존 길(배치 재구성)로 보낸다. 보기 메뉴 토글이 쓴다 — 떠 있는 창은
+    /// <see cref="IsToolVisible"/> 가 거짓이라 토글이 「보이기」 로 오는데, 그 동작은 이번 수정 전과 같게 둔다.
+    /// </summary>
+    private bool ShowTool(string toolId, bool keepFloating)
     {
         if (_registry.Find(toolId) is not { Kind: ToolPanelKind.Tool } def)
         {
             return false;
+        }
+
+        // 이미 보이는 창은 배치를 새로 짓지 않고 그 탭만 앞으로 가져온다. 새로 지으면(Apply → LayoutRebuilt) 도킹 화면 전체를 갈아 끼우고
+        // 메뉴를 다시 만들어 메인 창이 깜박였다(조합 검사·실행 계획을 할 때마다, 2026-10-24 사용자 신고).
+        // - 다른 탭 뒤: 그 묶음의 활성 탭만 바꾼다(아래 LayoutPlanner.ShowTool 이 하는 일과 같다).
+        // - 떠 있는 창: 그 창 안에서 앞으로 가져오고 그 창을 맨 앞으로 올린다. 배치를 다시 짓지 않는다(보기 메뉴 토글은 예전 길, ToggleTool).
+        // - 자동 숨김(핀으로 접힘)·범위로 잠시 숨김·닫힘: 메인 배치 트리 밖이라 아래 기존 길(배치 재구성)로 펼치거나 보인다.
+        if (_tools.TryGetValue(toolId, out var shown) && shown.Owner is IDock owner && !IsScopedHidden(toolId))
+        {
+            var floating = keepFloating ? FloatingWindowOf(shown) : null;
+            if (floating is not null || IsToolVisible(toolId))
+            {
+                if (!ReferenceEquals(owner.ActiveDockable, shown))
+                {
+                    owner.ActiveDockable = shown;
+                    LayoutChanged?.Invoke(this, EventArgs.Empty); // 활성 탭도 저장할 배치다
+                }
+
+                (floating?.Host as Avalonia.Controls.Window)?.Activate();
+                return true;
+            }
         }
 
         var current = LayoutPlanner.Reconcile(Capture(), _registry.Panels);
@@ -293,7 +320,7 @@ public sealed partial class DockWorkspace
         return true;
     }
 
-    public bool ToggleTool(string toolId) => IsToolVisible(toolId) ? !HideTool(toolId) : ShowTool(toolId);
+    public bool ToggleTool(string toolId) => IsToolVisible(toolId) ? !HideTool(toolId) : ShowTool(toolId, keepFloating: false);
 
     /// <summary>
     /// 도구 창 탭을 앞으로 가져온다. 이미 보이면 배치를 다시 짓지 않고 그 묶음의 활성 탭만 바꾼다(키보드 포커스는 그대로 —
@@ -484,6 +511,26 @@ public sealed partial class DockWorkspace
             }
         });
         return found;
+    }
+
+    /// <summary>도구 창이 보이는 떠 있는 창(메인 배치 트리 밖이라 <see cref="VisibleToolIds"/> 에는 없다). 메인 배치에 있으면 null.</summary>
+    private IDockWindow? FloatingWindowOf(PanelTool tool)
+    {
+        foreach (var window in (Layout as IRootDock)?.Windows ?? [])
+        {
+            bool found = false;
+            if (window.Layout is { } floating)
+            {
+                Visit(floating, d => found |= ReferenceEquals(d, tool));
+            }
+
+            if (found)
+            {
+                return window;
+            }
+        }
+
+        return null;
     }
 
     /// <summary>떠 있는 창 안의 문서 탭(메인 배치 트리 밖이라 <see cref="Documents"/> 에는 없다).</summary>

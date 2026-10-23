@@ -246,12 +246,15 @@ internal sealed partial class ComboCheckRunner(IMyBatisEvaluator evaluator, ILan
         }
     }
 
-    /// <summary>검사 전에 표의 열을 그릴 조건 목록(<see cref="ComboCheckReport.Conditions"/> 와 같다).</summary>
-    public IReadOnlyList<ComboCondition> ConditionsOf(ComboCheckRequest request)
+    /// <summary>
+    /// 검사 전에 표의 열을 그릴 조건 목록(<see cref="ComboCheckReport.Conditions"/> 와 같다)과 검사할 줄 수(조합 + 시나리오, 머리 줄 진행 막대의 끝 값).
+    /// UI 스레드에서 부르므로 계산은 한 번만 한다.
+    /// </summary>
+    public (IReadOnlyList<ComboCondition> Conditions, int Count) Plan(ComboCheckRequest request)
     {
         ArgumentNullException.ThrowIfNull(request);
         var allOn = evaluator.Evaluate(request.Statement, request.Fragments, NoValues, null, new MyBatisEvalOptions(AllOn: true));
-        return Conditions(allOn, request.Statement.Text);
+        return (Conditions(allOn, request.Statement.Text), evaluator.Combinations(allOn, request.FullLimit).Count + request.Scenarios.Count);
     }
 
     /// <summary>조건(문장 원문의 if·when·foreach) 목록. 열 머리는 test 식, foreach 는 컬렉션 이름.</summary>

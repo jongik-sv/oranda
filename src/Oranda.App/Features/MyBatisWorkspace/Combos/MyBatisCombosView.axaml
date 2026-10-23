@@ -73,7 +73,9 @@
           <Border Classes="count-chip chip" IsVisible="{Binding HasReport}" ToolTip.Tip="오류">
             <TextBlock Classes="error" Text="{Binding ErrorText}" />
           </Border>
-          <ProgressBar IsIndeterminate="True" Width="80" VerticalAlignment="Center" IsVisible="{Binding IsRunning}" />
+          <!-- 결정형 진행(움직이는 막대는 쓰지 않는다). 글 칸은 MinWidth 로 고정해 자릿수가 바뀌어도 머리 줄이 흔들리지 않는다. -->
+          <ProgressBar Width="80" VerticalAlignment="Center" Minimum="0" Maximum="{Binding ProgressTotal}" Value="{Binding ProgressDone}" IsVisible="{Binding IsRunning}" />
+          <TextBlock Classes="dim" MinWidth="110" VerticalAlignment="Center" Text="{Binding ProgressText}" IsVisible="{Binding IsRunning}" />
         </StackPanel>
       </DockPanel>
     </Border>

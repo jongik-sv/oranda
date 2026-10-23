@@ -176,6 +176,7 @@ public partial class ComboCheckTests : IDisposable
     {
         var session = Session(SelectWithIfs(8));
         var vm = Panel();
+        vm.ProgressInterval = TimeSpan.Zero; // 줄마다 넘겨 둘째 줄에서 취소한다
         vm.PostToUi = a =>
         {
             a();
@@ -192,6 +193,36 @@ public partial class ComboCheckTests : IDisposable
         Assert.False(vm.IsRunning);
         Assert.StartsWith("취소했습니다", vm.StatusText, StringComparison.Ordinal);
         Assert.Empty(new ComboStatementBadgeProvider().BadgesFor(session, Id));
+    }
+
+    [Fact]
+    public async Task Result_rows_reach_the_ui_in_batches_and_all_arrive_in_order()
+    {
+        // 줄마다 UI 로 넘기면 그리기가 몰려 창이 깜박였다(2026-10-24): 조합 256개를 50 ms 간격으로 모아 넘긴다.
+        var session = Session(SelectWithIfs(8));
+        var vm = Panel();
+        int posts = 0;
+        var seen = new List<int>();
+        vm.PostToUi = a =>
+        {
+            Interlocked.Increment(ref posts);
+            a();
+            lock (seen)
+            {
+                seen.Add(vm.ProgressDone);
+            }
+        };
+
+        await vm.CheckAsync(session, Id);
+
+        Assert.Equal(256, vm.Rows.Count);
+        Assert.Equal(vm.Report!.Results.Select(r => r.Number), vm.Rows.Select(r => r.Result.Number));
+        Assert.InRange(posts, 0, 256 / 4); // 예전에는 줄마다 256 번(간격 50 ms 라 느린 기계에서도 6 초 넘게 걸려야 넘는다)
+
+        // 머리 줄 진행: 움직이는 막대 대신 끝난 줄 수 / 전체.
+        Assert.Equal((256, 256), (vm.ProgressDone, vm.ProgressTotal));
+        Assert.Equal("검사 중 256/256", vm.ProgressText);
+        Assert.Equal(seen.Order(), seen); // 중간에 넘긴 묶음마다 진행 수가 줄지 않고 따라온다
     }
 
     [Fact]

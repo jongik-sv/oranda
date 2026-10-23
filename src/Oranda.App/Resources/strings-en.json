@@ -220,6 +220,7 @@
   "MyBatis.combos.preview.checking": "Checking the fixed statement…",
   "MyBatis.combos.preview.errorsLeft": "After the fix: {1} of {0} combinations still fail.",
   "MyBatis.combos.preview.title": "Preview: {0}",
+  "MyBatis.combos.progress": "Checking {0}/{1}",
   "MyBatis.combos.rightAfterWhere": "{0} right after WHERE",
   "MyBatis.combos.rightAfterWhereDetail": "{0} comes right after WHERE",
   "MyBatis.combos.saveFailed": "Could not save the scenario: {0}",

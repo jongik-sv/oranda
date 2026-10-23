@@ -37,7 +37,8 @@ public sealed class MyBatisComboCommands : ICommandHandler
             return;
         }
 
-        _container?.GetService<IShellUi>()?.Docking.ShowTool(PanelId);
+        // 이미 보이면 배치를 다시 짓지 않고 탭만 앞으로(ShowTool 은 매번 도킹 배치를 새로 지어 메인 창 전체가 깜박였다, 2026-10-24).
+        _container?.GetService<IShellUi>()?.Docking.ActivateTool(PanelId);
         if (await FindPanelAsync().ConfigureAwait(true) is not { } vm)
         {
             return;

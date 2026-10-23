@@ -50,6 +50,14 @@ public sealed partial class MyBatisCombosViewModel : ToolPanelViewModelBase
     private bool _hasReport;
 
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(ProgressText))]
+    private int _progressDone;
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(ProgressText))]
+    private int _progressTotal;
+
+    [ObservableProperty]
     [NotifyCanExecuteChangedFor(nameof(CancelCommand))]
     [NotifyCanExecuteChangedFor(nameof(RecheckCommand))]
     private bool _isRunning;
@@ -94,6 +102,9 @@ public sealed partial class MyBatisCombosViewModel : ToolPanelViewModelBase
     /// <summary>머리 줄 「오류 n」 칩.</summary>
     public string ErrorText => ComboText.Errors(ErrorCount);
 
+    /// <summary>검사 중 머리 줄 진행 글 「검사 중 n/m」(진행 막대 옆, 검사가 끝나면 숨는다).</summary>
+    public string ProgressText => ComboText.Progress(ProgressDone, ProgressTotal);
+
     /// <summary>조건 열 머리(test 식).</summary>
     public ObservableCollection<string> ConditionLabels { get; } = [];
 
@@ -111,6 +122,12 @@ public sealed partial class MyBatisCombosViewModel : ToolPanelViewModelBase
             Dispatcher.UIThread.Post(a);
         }
     };
+
+    /// <summary>
+    /// 검사 결과 줄을 UI 스레드로 모아 넘기는 간격. 줄마다 넘기면(줄당 약 2 ms) 그리기가 몰려 창이 깜박였다(2026-10-24 사용자 신고).
+    /// 0 이면 줄마다 넘긴다(시험용).
+    /// </summary>
+    public TimeSpan ProgressInterval { get; set; } = TimeSpan.FromMilliseconds(50);
 
     /// <summary>실행 계획에 쓸 접속을 고르는 방법(기본 = 활성 탭의 세션). 시험이 바꾼다.</summary>
     public Func<ISession?> SessionSource { get; set; } = () => null;
@@ -141,12 +158,15 @@ public sealed partial class MyBatisCombosViewModel : ToolPanelViewModelBase
 
         using var run = CancellationTokenSource.CreateLinkedTokenSource(ct);
         _run = run;
+        UiProgress? progress = null;
         RefreshFixes(element.Text);
         Rows.Clear();
         ConditionLabels.Clear();
         SelectedRow = null;
         PassCount = 0;
         ErrorCount = 0;
+        ProgressDone = 0;
+        ProgressTotal = 0;
         HasReport = false;
         IsRunning = true;
         StatusText = ComboText.Checking;
@@ -156,15 +176,17 @@ public sealed partial class MyBatisCombosViewModel : ToolPanelViewModelBase
             var mode = ModeIndex == 1 ? ComboCheckMode.SyntaxAndPlan : ComboCheckMode.Syntax;
             var request = new ComboCheckRequest(statementId, element, session.Fragments, scenarios, mode,
                 mode == ComboCheckMode.SyntaxAndPlan ? SessionSource() : null, StrategyIndex == 1 ? 0 : 8);
-            _conditions = runner.ConditionsOf(request);
+            (_conditions, int total) = runner.Plan(request);
+            ProgressTotal = total;
             foreach (var c in _conditions)
             {
                 ConditionLabels.Add(c.Label);
             }
 
             Title = Heading(statementId, _conditions.Count, null);
-            var progress = new UiProgress(this, run);
+            progress = new UiProgress(this, run, ProgressInterval);
             var report = await runner.RunAsync(request, progress, run.Token).ConfigureAwait(true);
+            progress.Flush(); // 끝·취소 때 아직 모아 둔 줄을 붙인다
             if (ReferenceEquals(_run, run))
             {
                 ApplyReport(session, element.Text, report); // 새 검사가 이 검사를 밀어냈으면 결과를 버린다
@@ -183,6 +205,7 @@ public sealed partial class MyBatisCombosViewModel : ToolPanelViewModelBase
         }
         finally
         {
+            progress?.Flush();
             if (ReferenceEquals(_run, run))
             {
                 _run = null;
@@ -267,6 +290,7 @@ public sealed partial class MyBatisCombosViewModel : ToolPanelViewModelBase
     {
         var row = new ComboRowItem(result, _conditions);
         Rows.Add(row);
+        ProgressDone++;
         if (row.IsError)
         {
             ErrorCount++;
@@ -289,6 +313,7 @@ public sealed partial class MyBatisCombosViewModel : ToolPanelViewModelBase
             Rows.Clear();
             PassCount = 0;
             ErrorCount = 0;
+            ProgressDone = 0;
             foreach (var result in report.Results)
             {
                 Add(result);
@@ -324,15 +349,55 @@ public sealed partial class MyBatisCombosViewModel : ToolPanelViewModelBase
             ? ComboText.Heading(statementId, conditions, n)
             : ComboText.HeadingPending(statementId, conditions);
 
-    // 실행기의 결과를 UI 스레드에서 한 줄씩 붙인다. 이 검사가 이미 바뀌었으면(새 검사) 버린다.
-    private sealed class UiProgress(MyBatisCombosViewModel owner, CancellationTokenSource run) : IProgress<ComboCheckResult>
+    // 실행기의 결과를 모아 간격마다 한 번 UI 스레드에서 붙인다(순서 유지). 이 검사가 이미 바뀌었으면(새 검사) 버린다.
+    // 붙이기는 잠금 안에서 해 늦게 온 예약 붙이기와 끝의 Flush 가 겹쳐도 줄 순서가 섞이지 않는다.
+    private sealed class UiProgress(MyBatisCombosViewModel owner, CancellationTokenSource run, TimeSpan interval) : IProgress<ComboCheckResult>
     {
-        public void Report(ComboCheckResult value) => owner.PostToUi(() =>
+        private readonly Lock _gate = new();
+        private List<ComboCheckResult> _pending = [];
+        private bool _scheduled;
+
+        public void Report(ComboCheckResult value)
         {
-            if (ReferenceEquals(owner._run, run))
+            lock (_gate)
             {
-                owner.Add(value);
+                _pending.Add(value);
+                if (_scheduled)
+                {
+                    return;
+                }
+
+                _scheduled = true;
             }
-        });
+
+            if (interval <= TimeSpan.Zero)
+            {
+                owner.PostToUi(Flush);
+            }
+            else
+            {
+                _ = Task.Delay(interval).ContinueWith(_ => owner.PostToUi(Flush), CancellationToken.None, TaskContinuationOptions.None, TaskScheduler.Default);
+            }
+        }
+
+        /// <summary>모아 둔 줄을 붙인다.</summary>
+        public void Flush()
+        {
+            lock (_gate)
+            {
+                var batch = _pending;
+                _pending = [];
+                _scheduled = false;
+                if (!ReferenceEquals(owner._run, run))
+                {
+                    return;
+                }
+
+                foreach (var result in batch)
+                {
+                    owner.Add(result);
+                }
+            }
+        }
     }
 }

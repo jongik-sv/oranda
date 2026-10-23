@@ -220,6 +220,7 @@
   "MyBatis.combos.preview.checking": "고친 뒤 결과를 검사하는 중…",
   "MyBatis.combos.preview.errorsLeft": "고친 뒤: 조합 {0}개 중 오류 {1}개가 남습니다.",
   "MyBatis.combos.preview.title": "미리보기: {0}",
+  "MyBatis.combos.progress": "검사 중 {0}/{1}",
   "MyBatis.combos.rightAfterWhere": "WHERE 바로 뒤 {0}",
   "MyBatis.combos.rightAfterWhereDetail": "WHERE 바로 뒤에 {0} 가 옵니다",
   "MyBatis.combos.saveFailed": "시나리오를 저장하지 못했습니다: {0}",

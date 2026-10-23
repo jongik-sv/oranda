@@ -48,6 +48,9 @@ internal static class ComboText
 
     public static string Checking => T("checking", "검사하는 중…");
 
+    /// <summary>머리 줄 진행 글(끝난 조합·시나리오 수 / 전체).</summary>
+    public static string Progress(int done, int total) => F("progress", "검사 중 {0}/{1}", done, total);
+
     public static string NoEvaluator => T("noEvaluator", "조합 검사를 할 수 없습니다(MyBatis 계산기가 없습니다).");
 
     public static string CannotSaveScenario => T("cannotSaveScenario", "시나리오를 저장할 수 없습니다.");
