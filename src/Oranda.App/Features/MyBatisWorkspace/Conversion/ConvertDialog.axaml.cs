@@ -2,6 +2,7 @@ using Avalonia.Controls;
 using Avalonia.Interactivity;
 using Avalonia.Platform.Storage;
 using Oranda.App.Features.Localization;
+using Oranda.App.Features.MyBatisWorkspace.Editor.Highlighting;
 
 namespace Oranda.App.Features.MyBatisWorkspace.Conversion;
 
@@ -14,6 +15,8 @@ public partial class ConvertDialog : Window
     public ConvertDialog()
     {
         InitializeComponent();
+        PreviewBox.TextEditorControl.ShowLineNumbers = false;
+        PreviewBox.TextEditorControl.Background = Avalonia.Media.Brushes.Transparent;
         BrowseButton.Click += OnBrowse;
         CancelButton.Click += (_, _) => Close(null);
         ConfirmButton.Click += (_, _) =>
@@ -24,6 +27,15 @@ public partial class ConvertDialog : Window
                 Close(result);
             }
         };
+    }
+
+    /// <summary>미리보기 글은 xml 이므로 코드 뷰가 붙인 SQL 강조를 떼고 MyBatis 강조를 건다. 창이 닫히면 함께 정리한다.</summary>
+    protected override void OnOpened(EventArgs e)
+    {
+        base.OnOpened(e);
+        PreviewBox.Colorizer?.Detach();
+        var colorizer = new MyBatisSyntaxColorizer(PreviewBox.TextEditorControl);
+        Closed += (_, _) => colorizer.Dispose();
     }
 
     /// <summary><paramref name="owner"/> 위에 모달로 띄운다. 취소하면 null.</summary>

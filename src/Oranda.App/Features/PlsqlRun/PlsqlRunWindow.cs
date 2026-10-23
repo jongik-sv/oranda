@@ -6,6 +6,7 @@ using Avalonia.Data;
 using Avalonia.Layout;
 using Avalonia.Media;
 using Oranda.App.Features.Execution;
+using Oranda.App.Features.SqlEditor;
 
 namespace Oranda.App.Features.PlsqlRun;
 
@@ -84,8 +85,8 @@ public sealed class PlsqlRunWindow : Window
 
         // 미리보기 + 결과 탭
         var tabs = new TabControl();
-        var preview = new TextBox { IsReadOnly = true, AcceptsReturn = true, FontFamily = Mono, TextWrapping = TextWrapping.NoWrap };
-        preview.Bind(TextBox.TextProperty, new Binding(nameof(PlsqlRunViewModel.Preview)));
+        var preview = new SqlCodeView();
+        preview.Bind(SqlCodeView.TextProperty, new Binding(nameof(PlsqlRunViewModel.Preview)));
         Avalonia.Automation.AutomationProperties.SetName(preview, "생성한 호출 블록 미리보기");
         var problems = new TextBlock { TextWrapping = TextWrapping.Wrap };
         problems.Bind(TextBlock.TextProperty, new Binding(nameof(PlsqlRunViewModel.ProblemText)));

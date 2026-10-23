@@ -1,7 +1,9 @@
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:icons="using:Oranda.App.Shell.Icons"
+             xmlns:sqled="using:Oranda.App.Features.SqlEditor"
              xmlns:vm="using:Oranda.App.Features.MyBatisWorkspace.Combos"
+             xmlns:local="using:Oranda.App.Features.MyBatisWorkspace.Combos"
              x:Class="Oranda.App.Features.MyBatisWorkspace.Combos.MyBatisCombosView"
              x:DataType="vm:MyBatisCombosViewModel">
   <UserControl.Styles>
@@ -152,7 +154,7 @@
                         </ItemsControl>
                         <TextBlock Classes="c-result" Classes.pass="{Binding IsPass}" Classes.warning="{Binding IsWarning}" Classes.error="{Binding IsError}"
                                    Text="{Binding ResultText}" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding ResultText}" />
-                        <TextBlock Classes="mono" Text="{Binding SqlLine}" TextTrimming="CharacterEllipsis" MaxWidth="900" ToolTip.Tip="{Binding SqlLine}" />
+                        <TextBlock Classes="mono" local:SqlInlineText.Sql="{Binding SqlLine}" TextTrimming="CharacterEllipsis" MaxWidth="900" ToolTip.Tip="{Binding SqlLine}" />
                       </StackPanel>
                     </Border>
                   </DataTemplate>
@@ -177,15 +179,9 @@
                   </StackPanel>
                   <TextBlock FontWeight="SemiBold" VerticalAlignment="Center" TextWrapping="Wrap" Text="{Binding SelectedRow.Heading}" />
                 </DockPanel>
+                <!-- 글은 code-behind 가 SelectedRow 에서 넣고, 오류 자리는 같은 곳에서 건 변환기가 칠한다. -->
                 <Border Classes="code">
-                  <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled">
-                    <SelectableTextBlock FontFamily="{DynamicResource OrandaGridFontFamily}">
-                      <Run Text="{Binding SelectedRow.SqlBefore}" />
-                      <Run Text="{Binding SelectedRow.SqlError}" Background="{DynamicResource OrandaDiffRemovedBrush}"
-                           Foreground="{DynamicResource OrandaDangerForegroundBrush}" FontWeight="Bold" />
-                      <Run Text="{Binding SelectedRow.SqlAfter}" />
-                    </SelectableTextBlock>
-                  </ScrollViewer>
+                  <sqled:SqlCodeView x:Name="DetailSqlView" MaxHeight="360" AutomationProperties.Name="펼친 SQL" />
                 </Border>
                 <TextBlock TextWrapping="Wrap" Text="{Binding SelectedRow.Detail}" IsVisible="{Binding SelectedRow.HasDetail}"
                            Classes.error="{Binding SelectedRow.IsError}" Classes.warning="{Binding SelectedRow.IsWarning}" />
@@ -203,9 +199,7 @@
                 </DockPanel>
                 <TextBlock TextWrapping="Wrap" Text="{Binding PreviewSummary}" />
                 <Border Classes="code">
-                  <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled">
-                    <SelectableTextBlock FontFamily="{DynamicResource OrandaGridFontFamily}" Text="{Binding PreviewText}" />
-                  </ScrollViewer>
+                  <sqled:SqlCodeView x:Name="FixPreviewView" Text="{Binding PreviewText}" MaxHeight="360" AutomationProperties.Name="고친 원문" />
                 </Border>
               </StackPanel>
             </ScrollViewer>

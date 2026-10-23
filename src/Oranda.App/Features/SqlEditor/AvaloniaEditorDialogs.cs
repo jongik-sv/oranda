@@ -184,21 +184,24 @@ public sealed class AvaloniaEditorDialogs : IEditorDialogs
     }
 
     public Task<bool> PreviewEditAsync(string title, string before, string after, CancellationToken ct)
+        => ShowAsync(title, BuildPreviewEditPanel(before, after), false, ok => ok, UiText.Get("Shell.dialog.apply", "적용"), UiText.Get("Shell.dialog.reject", "거절"));
+
+    /// <summary>현재 글과 제안 글을 나란히 보이는 비교 판(시험용으로 분리). 두 칸 모두 SQL 강조가 걸린 읽기 전용 코드 뷰다.</summary>
+    internal static Grid BuildPreviewEditPanel(string before, string after)
     {
         var panel = new Grid { ColumnDefinitions = new ColumnDefinitions("*,*"), RowDefinitions = new RowDefinitions("Auto,*"), MinWidth = 640, MinHeight = 240 };
         panel.Children.Add(new TextBlock { Text = UiText.Get("Shell.dialog.current", "현재"), FontWeight = FontWeight.SemiBold });
         var right = new TextBlock { Text = UiText.Get("Shell.dialog.proposed", "제안"), FontWeight = FontWeight.SemiBold };
         Grid.SetColumn(right, 1);
         panel.Children.Add(right);
-        var mono = new FontFamily("Cascadia Mono,Consolas,Menlo,monospace");
-        var left = new TextBox { Text = before, IsReadOnly = true, AcceptsReturn = true, FontFamily = mono };
+        var left = new SqlCodeView { Text = before };
         Grid.SetRow(left, 1);
-        var proposed = new TextBox { Text = after, IsReadOnly = true, AcceptsReturn = true, FontFamily = mono };
+        var proposed = new SqlCodeView { Text = after };
         Grid.SetRow(proposed, 1);
         Grid.SetColumn(proposed, 1);
         panel.Children.Add(left);
         panel.Children.Add(proposed);
-        return ShowAsync(title, panel, false, ok => ok, UiText.Get("Shell.dialog.apply", "적용"), UiText.Get("Shell.dialog.reject", "거절"));
+        return panel;
     }
 
     private static async Task<T> ShowAsync<T>(string title, Control content, T cancelled, Func<bool, T> result, string? okText = null, string? cancelText = "")

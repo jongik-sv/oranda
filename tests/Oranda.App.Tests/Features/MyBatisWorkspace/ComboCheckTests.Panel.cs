@@ -1,4 +1,9 @@
+using Avalonia.Controls;
+using Avalonia.Threading;
+using Avalonia.VisualTree;
+using AvaloniaEdit.Rendering;
 using Oranda.App.Features.MyBatisWorkspace.Combos;
+using Oranda.App.Features.MyBatisWorkspace.Editor.Highlighting;
 using Oranda.App.Features.SqlEditor;
 using Oranda.App.Tests.Features.MyBatisWorkspace.Fakes;
 using Oranda.App.Tests.Shell.Headless;
@@ -35,6 +40,86 @@ public partial class ComboCheckTests : IDisposable
     }
 
     private static MyBatisCombosViewModel Panel() => new() { PostToUi = a => a() };
+
+    [Fact]
+    public Task Detail_and_fix_preview_use_colored_code_views() => HeadlessHost.Run(async () =>
+    {
+        var vm = Panel();
+        await vm.CheckAsync(Session(MockupUpdateEmpSal), Id);
+        var view = new MyBatisCombosView { DataContext = vm };
+        var window = new Window { Content = view, Width = 1200, Height = 600 };
+        window.Show();
+        Dispatcher.UIThread.RunJobs();
+
+        var detail = view.GetVisualDescendants().OfType<SqlCodeView>().First(c => c.Name == "DetailSqlView");
+        var row = Assert.IsType<ComboRowItem>(vm.SelectedRow);
+        Assert.Equal(row.SqlBefore + row.SqlError + row.SqlAfter, detail.TextEditorControl.Text);
+        Assert.NotNull(detail.Colorizer);
+        Assert.True(detail.TextEditorControl.IsReadOnly);
+        Assert.Contains(detail.TextEditorControl.TextArea.TextView.LineTransformers, t => t is DocumentColorizingTransformer and not SqlSyntaxColorizer);
+
+        await vm.PreviewAsync(vm.Fixes[0]);
+        Dispatcher.UIThread.RunJobs();
+        var fix = view.GetVisualDescendants().OfType<SqlCodeView>().First(c => c.Name == "FixPreviewView");
+        Assert.Contains("<set>", fix.TextEditorControl.Text, StringComparison.Ordinal);
+        Assert.Single(fix.TextEditorControl.TextArea.TextView.LineTransformers.OfType<MyBatisSyntaxColorizer>());
+        Assert.Empty(fix.TextEditorControl.TextArea.TextView.LineTransformers.OfType<SqlSyntaxColorizer>());
+        window.Close();
+    });
+
+    [Fact]
+    public Task Table_sql_cell_is_colored_inline_and_reuses_the_token_cache() => HeadlessHost.Run(() =>
+    {
+        const string Sql = "SELECT /* c */ nvl(sal, 0) AS \"S\", 'x' || :name FROM emp_cache_probe WHERE n > 10";
+        var box = new TextBlock();
+        var window = new Window { Content = box, Width = 800, Height = 100 };
+        window.Show();
+        int before = SqlInlineText.Tokenizations;
+
+        SqlInlineText.SetSql(box, Sql);
+        Assert.Equal(before + 1, SqlInlineText.Tokenizations);
+        var runs = box.Inlines!.OfType<Avalonia.Controls.Documents.Run>().ToList();
+        Assert.Equal(Sql, string.Concat(runs.Select(r => r.Text)));
+        Assert.True(runs.First(r => r.Text == "SELECT").Foreground is not null);
+        Assert.True(runs.First(r => r.Text == "nvl").Foreground is not null);
+        Assert.True(runs.First(r => r.Text == ":name").Foreground is not null);
+        Assert.True(runs.First(r => r.Text == "'x'").Foreground is not null);
+        Assert.NotEqual(runs.First(r => r.Text == "SELECT").Foreground, runs.First(r => r.Text == "'x'").Foreground);
+
+        // 가상화가 다른 글을 썼다가 같은 글로 되돌려도 다시 렉싱하지 않는다.
+        SqlInlineText.SetSql(box, "SELECT 1 FROM dual");
+        int afterOther = SqlInlineText.Tokenizations;
+        SqlInlineText.SetSql(box, Sql);
+        Assert.Equal(afterOther, SqlInlineText.Tokenizations);
+        Assert.Equal(Sql, string.Concat(box.Inlines!.OfType<Avalonia.Controls.Documents.Run>().Select(r => r.Text)));
+
+        // 다크 테마는 다른 팔레트로 다시 칠한다.
+        var lightKeyword = box.Inlines!.OfType<Avalonia.Controls.Documents.Run>().First(r => r.Text == "SELECT").Foreground;
+        window.RequestedThemeVariant = Avalonia.Styling.ThemeVariant.Dark;
+        Dispatcher.UIThread.RunJobs();
+        var darkKeyword = box.Inlines!.OfType<Avalonia.Controls.Documents.Run>().First(r => r.Text == "SELECT").Foreground;
+        Assert.NotEqual(lightKeyword, darkKeyword);
+
+        SqlInlineText.SetSql(box, null);
+        Assert.Empty(box.Inlines!);
+        window.Close();
+    });
+
+    // ORANDA_RENDER_DIR 가 있을 때만 조합 검사 표(한 줄 SQL 색·고른 줄)와 오른쪽 칸을 라이트·다크 PNG 로 뽑는다(렌더 점검용).
+    [Fact]
+    public Task Render_combo_table_colors() => HeadlessHost.Run(async () =>
+    {
+        var vm = Panel();
+        await vm.CheckAsync(Session(MockupUpdateEmpSal), Id);
+        var window = new Window { Content = new MyBatisCombosView { DataContext = vm }, Width = 1300, Height = 420 };
+        window.Show();
+        Dispatcher.UIThread.RunJobs();
+        Flow.MyBatisFlowRig.Render(window, "combos-table", 1300, 420);
+        await vm.PreviewAsync(vm.Fixes[0]);
+        Dispatcher.UIThread.RunJobs();
+        Flow.MyBatisFlowRig.Render(window, "combos-fix-preview", 1300, 420);
+        window.Close();
+    });
 
     [Fact]
     public async Task Panel_shows_the_mockup_table_badge_and_set_quick_fix()

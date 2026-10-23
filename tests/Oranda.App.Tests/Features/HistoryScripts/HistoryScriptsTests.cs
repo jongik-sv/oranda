@@ -129,6 +129,48 @@ public sealed class HistoryScriptsTests : IDisposable
         });
     }
 
+    [Fact]
+    public async Task History_detail_box_is_a_sql_code_view_with_the_sql_colorizer()
+    {
+        var store = new ListStore([Entry(1, "SELECT 1 FROM dual")]);
+        using var vm = new HistoryViewModel(store, () => null);
+        await vm.ReloadAsync();
+        vm.Selected = vm.Items[0];
+
+        await HeadlessHost.Run(() =>
+        {
+            var view = new HistoryView { DataContext = vm };
+            var window = new Window { Content = view, Width = 900, Height = 300 };
+            window.Show();
+            Dispatcher.UIThread.RunJobs();
+
+            var detail = view.FindControl<Oranda.App.Features.SqlEditor.SqlCodeView>("DetailBox")!;
+            Assert.NotNull(detail.Colorizer);
+            Assert.Equal("SELECT 1 FROM dual", detail.TextEditorControl.Text);
+            window.Close();
+        });
+    }
+
+    // ORANDA_RENDER_DIR 가 있을 때만 이력 창 하단 상세(SQL 강조)를 라이트·다크 PNG 로 뽑는다(렌더 점검용).
+    [Fact]
+    public async Task Render_history_detail()
+    {
+        var store = new ListStore([Entry(1, "SELECT e.empno, nvl(e.comm, 0) AS comm\n  FROM emp e\n WHERE e.ename LIKE :name || '%' -- 이름\n   AND e.sal > 1000"), Entry(2, "DELETE FROM t", status: HistoryStatus.Failed)]);
+        using var vm = new HistoryViewModel(store, () => null);
+        vm.CurrentConnectionOnly = false;
+        await vm.ReloadAsync();
+        vm.Selected = vm.Items.First(i => i.SqlPreview.StartsWith("SELECT", StringComparison.Ordinal));
+
+        await HeadlessHost.Run(() =>
+        {
+            var window = new Window { Content = new HistoryView { DataContext = vm }, Width = 900, Height = 360 };
+            window.Show();
+            Dispatcher.UIThread.RunJobs();
+            Oranda.App.Tests.Features.MyBatisWorkspace.Flow.MyBatisFlowRig.Render(window, "history-detail", 900, 360);
+            window.Close();
+        });
+    }
+
     // ---- 스크립트 창 ----
 
     [Fact]

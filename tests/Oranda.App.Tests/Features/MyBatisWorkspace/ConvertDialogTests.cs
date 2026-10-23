@@ -4,6 +4,8 @@ using Avalonia.Threading;
 using Avalonia.VisualTree;
 using Oranda.App.Features.Localization;
 using Oranda.App.Features.MyBatisWorkspace.Conversion;
+using Oranda.App.Features.MyBatisWorkspace.Editor.Highlighting;
+using Oranda.App.Features.SqlEditor;
 using Oranda.App.Shell;
 using Oranda.App.Tests.Shell.Headless;
 using Oranda.Core.Execution;
@@ -401,8 +403,8 @@ public sealed partial class ConvertDialogTests : IDisposable
         var browse = Named<Button>("BrowseButton");
         Assert.IsType<Viewbox>(browse.Content); // 글자 단추가 아니라 아이콘(ShellIcons 가 만든 Viewbox)이다
         Assert.NotNull(ToolTip.GetTip(browse));
-        Assert.True(Named<TextBox>("PreviewBox").IsReadOnly);
-        Assert.Contains("<select", Named<TextBox>("PreviewBox").Text, StringComparison.Ordinal);
+        Assert.True(Named<SqlCodeView>("PreviewBox").TextEditorControl.IsReadOnly);
+        Assert.Contains("<select", Named<SqlCodeView>("PreviewBox").TextEditorControl.Text, StringComparison.Ordinal);
         Assert.True(Named<RadioButton>("NewFileRadio").IsChecked);
         Assert.True(Named<ListBox>("LineList").Bounds.Height > 0);
 
@@ -411,5 +413,31 @@ public sealed partial class ConvertDialogTests : IDisposable
         Assert.True(Named<TextBox>("NamespaceBox").IsReadOnly);
         Assert.Equal(ConvertTargetKind.ExistingMapper, vm.Target);
         window.Close();
+    });
+
+    [Fact]
+    public Task Preview_uses_the_mybatis_colorizer_instead_of_sql_and_follows_the_selected_tab() => HeadlessHost.Run(() =>
+    {
+        var vm = Make([Cand(0, "a"), Cand(1, "b", ConvertStatementKind.Insert)]);
+        var window = new ConvertDialog { DataContext = vm };
+        window.Show();
+        Dispatcher.UIThread.RunJobs();
+        var view = window.GetVisualDescendants().OfType<SqlCodeView>().First(c => c.Name == "PreviewBox");
+        var editor = view.TextEditorControl;
+
+        Assert.False(editor.ShowLineNumbers);
+        Assert.Single(editor.TextArea.TextView.LineTransformers.OfType<MyBatisSyntaxColorizer>());
+        Assert.Empty(editor.TextArea.TextView.LineTransformers.OfType<SqlSyntaxColorizer>());
+        var colorizer = editor.TextArea.TextView.LineTransformers.OfType<MyBatisSyntaxColorizer>().Single();
+        Assert.Equal(editor.Document.LineCount + 1, colorizer.LineStartStates.Count);
+
+        vm.SelectedLine = vm.Lines[1];
+        Dispatcher.UIThread.RunJobs();
+        Assert.Contains("<insert id=\"b\">", editor.Text, StringComparison.Ordinal);
+        Assert.Same(colorizer, editor.TextArea.TextView.LineTransformers.OfType<MyBatisSyntaxColorizer>().Single());
+        Assert.Equal(editor.Document.LineCount + 1, colorizer.LineStartStates.Count);
+
+        window.Close();
+        Assert.Empty(editor.TextArea.TextView.LineTransformers.OfType<MyBatisSyntaxColorizer>());
     });
 }

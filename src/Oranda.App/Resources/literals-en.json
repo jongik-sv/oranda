@@ -62,6 +62,7 @@
   "계산대로": "As evaluated",
   "고른 쿼리 지우기": "Delete the selected query",
   "고른 쿼리의 id 바꾸기": "Rename the id of the selected query",
+  "고친 원문": "Fixed source",
   "고친 원문과 고친 뒤 검사 결과를 먼저 보고 적용": "Preview the fixed source and its check result before applying",
   "기존 매퍼에 문장 추가": "Add statements to an existing mapper",
   "끔으로 고르기": "Force off",

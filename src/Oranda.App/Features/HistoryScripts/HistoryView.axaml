@@ -1,6 +1,7 @@
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:icons="using:Oranda.App.Shell.Icons"
+             xmlns:sqled="using:Oranda.App.Features.SqlEditor"
              xmlns:vm="using:Oranda.App.Features.HistoryScripts"
              x:Class="Oranda.App.Features.HistoryScripts.HistoryView"
              x:DataType="vm:HistoryViewModel">
@@ -47,8 +48,8 @@
     <Border DockPanel.Dock="Bottom" BorderBrush="{DynamicResource OrandaSeparatorBrush}" BorderThickness="0,1,0,0"
             Background="{DynamicResource OrandaCodeBackgroundBrush}"
             IsVisible="{Binding Selected, Converter={x:Static ObjectConverters.IsNotNull}}">
-      <TextBox x:Name="DetailBox" Classes="code-view" IsReadOnly="True" AcceptsReturn="True" MaxHeight="120"
-               Text="{Binding Selected.FullSql, Mode=OneWay}" AutomationProperties.Name="고른 문장" />
+      <sqled:SqlCodeView x:Name="DetailBox" MaxHeight="120"
+                         Text="{Binding Selected.FullSql, Mode=OneWay}" AutomationProperties.Name="고른 문장" />
     </Border>
     <!-- 표: 시간 | 상태 | 접속 | 경과 | 행 | SQL (+ 오류). 머리글과 줄이 같은 열 폭을 쓴다. -->
     <Border DockPanel.Dock="Top" Classes="grid-header">

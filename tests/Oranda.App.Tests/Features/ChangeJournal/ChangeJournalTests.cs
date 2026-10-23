@@ -70,6 +70,28 @@ public sealed class ChangeJournalTests
     }
 
     [Fact]
+    public async Task Detail_box_is_a_sql_code_view_with_the_sql_colorizer()
+    {
+        var store = new ListStore([Entry(1, "CREATE TABLE emp (a NUMBER)")]);
+        using var vm = new ChangeJournalViewModel(store);
+        await vm.ReloadAsync();
+        await vm.SetSelectionAsync([vm.Items[0]]);
+
+        await HeadlessHost.Run(() =>
+        {
+            var view = new ChangeJournalView { DataContext = vm };
+            var window = new Window { Content = view, Width = 1200, Height = 500 };
+            window.Show();
+            Dispatcher.UIThread.RunJobs();
+
+            var detail = view.FindControl<Oranda.App.Features.SqlEditor.SqlCodeView>("DetailBox")!;
+            Assert.NotNull(detail.Colorizer);
+            Assert.Contains("CREATE TABLE emp", detail.TextEditorControl.Text, StringComparison.Ordinal);
+            window.Close();
+        });
+    }
+
+    [Fact]
     public async Task Object_filter_limits_to_that_object_and_clears()
     {
         var store = new ListStore([Entry(1, "a"), Entry(2, "b", name: "DEPT")]);

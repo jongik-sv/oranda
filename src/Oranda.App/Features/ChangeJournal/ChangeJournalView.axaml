@@ -1,6 +1,7 @@
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:icons="using:Oranda.App.Shell.Icons"
+             xmlns:sqled="using:Oranda.App.Features.SqlEditor"
              xmlns:vm="using:Oranda.App.Features.ChangeJournal"
              x:Class="Oranda.App.Features.ChangeJournal.ChangeJournalView"
              x:DataType="vm:ChangeJournalViewModel">
@@ -90,8 +91,8 @@
               <TextBlock Text="{Binding DetailTitle}" TextTrimming="CharacterEllipsis" />
             </DockPanel>
           </Border>
-          <TextBox x:Name="DetailBox" Classes="code-view" IsReadOnly="True" AcceptsReturn="True" Text="{Binding DetailText, Mode=OneWay}"
-                   Background="{DynamicResource OrandaCodeBackgroundBrush}" AutomationProperties.Name="보관된 DDL" />
+          <sqled:SqlCodeView x:Name="DetailBox" Text="{Binding DetailText, Mode=OneWay}"
+                             Background="{DynamicResource OrandaCodeBackgroundBrush}" AutomationProperties.Name="보관된 DDL" />
         </DockPanel>
         <GridSplitter Grid.Column="1" ResizeDirection="Columns" Background="Transparent" />
         <!-- 차이: + 새 쪽에만(초록) · − 옛 쪽에만(빨강) -->

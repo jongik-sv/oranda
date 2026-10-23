@@ -6,6 +6,7 @@ using Avalonia.Media;
 using Avalonia.Styling;
 using Avalonia.Threading;
 using Oranda.App.Features.Localization;
+using Oranda.App.Features.SqlEditor;
 using Oranda.Core.Execution;
 
 namespace Oranda.App.Features.Execution;
@@ -87,15 +88,8 @@ public sealed class AvaloniaExecutionDialogs : IExecutionDialogs
         header.Child = new StackPanel { Children = { title, detail } };
 
         var message = new TextBlock { Text = model.Message, TextWrapping = TextWrapping.Wrap, MaxWidth = 560 };
-        var sql = new TextBox
-        {
-            Text = model.Request.Statement.Text,
-            IsReadOnly = true,
-            AcceptsReturn = true,
-            FontFamily = Mono,
-            MaxHeight = 160,
-            MinWidth = 420,
-        };
+        var sql = new SqlCodeView { Text = model.Request.Statement.Text, MaxHeight = 160, MinWidth = 420 };
+        AutomationName(sql, "실행할 문장");
         var body = new StackPanel { Margin = new Thickness(16), Spacing = 10, Children = { message, sql } };
 
         TextBox? retype = null;
@@ -176,7 +170,7 @@ public sealed class AvaloniaExecutionDialogs : IExecutionDialogs
             Children =
             {
                 new TextBlock { Text = DbErrorText.Format(error), TextWrapping = TextWrapping.Wrap, MaxWidth = 560 },
-                new TextBox { Text = stmt.Text, IsReadOnly = true, AcceptsReturn = true, FontFamily = Mono, MaxHeight = 140, MinWidth = 420 },
+                new SqlCodeView { Text = stmt.Text, MaxHeight = 140, MinWidth = 420 },
             },
         };
         var stop = new Button { Content = "중지", MinWidth = 80, IsDefault = true };
@@ -308,7 +302,8 @@ public sealed class AvaloniaExecutionDialogs : IExecutionDialogs
             dialog.Close();
         };
         cancel.Click += (_, _) => dialog.Close();
-        var box = new TextBox { Text = text, IsReadOnly = true, AcceptsReturn = true, FontFamily = Mono, MinWidth = 520, MinHeight = 200, MaxHeight = 420 };
+        var box = new SqlCodeView { Text = text, MinWidth = 520, MinHeight = 200, MaxHeight = 420 };
+        AutomationName(box, "DML 미리보기");
         var hint = new TextBlock
         {
             Text = commit ? "아래 DML 을 실행한 뒤 바로 커밋합니다." : "아래 DML 만 실행하고 커밋하지 않습니다. 커밋 또는 롤백을 해야 확정됩니다.",
