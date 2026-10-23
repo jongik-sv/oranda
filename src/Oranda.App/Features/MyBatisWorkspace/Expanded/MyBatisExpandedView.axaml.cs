@@ -14,6 +14,9 @@ public partial class MyBatisExpandedView : UserControl
     /// <summary>우클릭 메뉴 표면 이름(레지스트리 <c>context:mybatisExpanded/…</c>).</summary>
     internal const string ContextSurface = "mybatisExpanded";
 
+    /// <summary>분할 두 칸 머리 줄의 높이(DIP): 원문 칸의 문장 머리 줄과 이 영역의 시나리오 바가 같은 높이에서 시작하고 끝난다.</summary>
+    public const double PaneHeaderHeight = 30;
+
     private MyBatisExpandedViewModel? _attached;
 
     public MyBatisExpandedView()
@@ -33,6 +36,9 @@ public partial class MyBatisExpandedView : UserControl
 
     /// <summary>읽기 전용 펼친 SQL 편집기(시험·계측용).</summary>
     internal Oranda.App.Features.SqlEditor.SqlCodeView CodeView => SqlView;
+
+    /// <summary>시나리오 바(분할 머리 줄, 시험·계측용).</summary>
+    internal Border PaneHeader => ScenarioBar;
 
     protected override void OnAttachedToVisualTree(VisualTreeAttachmentEventArgs e)
     {

@@ -16,8 +16,10 @@
                Margin="12" />
     <Grid IsVisible="{Binding HasStatement}" RowDefinitions="Auto,Auto,Auto,*">
       <!-- 분할 머리 줄(TSK-03-10): [시나리오 콤보 · 추가/이름 바꾸기/복제/지우기] ........ 명령 단추(실행 계획·복사 2종).
-           탭 안 분할은 좁을 수 있어 설명 · 켜진 조건 칩은 아래 한 줄로 둔다. -->
-      <Border Grid.Row="0" Classes="panel-toolbar">
+           탭 안 분할은 좁을 수 있어 설명 · 켜진 조건 칩은 아래 한 줄로 둔다.
+           높이는 원문 칸의 문장 머리 줄과 같은 상수(PaneHeaderHeight)라 두 칸 머리 줄이 한 줄로 맞는다. 콤보(26)가 들어가게 위아래 Padding 을 1 로 줄인다. -->
+      <Border x:Name="ScenarioBar" Grid.Row="0" Classes="panel-toolbar" Padding="4,1"
+              Height="{x:Static vm:MyBatisExpandedView.PaneHeaderHeight}">
         <DockPanel>
           <StackPanel x:Name="ActionBar" DockPanel.Dock="Right" Orientation="Horizontal" />
           <StackPanel DockPanel.Dock="Left" Orientation="Horizontal" VerticalAlignment="Center">

@@ -10,13 +10,15 @@ using Oranda.App.Features.Localization;
 using Oranda.App.Features.MyBatisWorkspace.Expanded;
 using Oranda.App.Shell.Icons;
 using Oranda.App.Shell.Settings;
+using Oranda.Core.Settings;
 
 namespace Oranda.App.Features.MyBatisWorkspace.Editor;
 
 /// <summary>
 /// MyBatis 쿼리 탭 안의 「원문 편집기 | 펼친 SQL」 분할(TSK-03-10). 세로 분할(펼친 SQL 이 편집기 오른쪽)이 기본이고 가로 분할(아래)로 바꿀 수 있으며
 /// 펼친 SQL 을 숨길 수도 있다. 방향·보임·비율은 앱 설정(<see cref="Oranda.Core.Settings.MyBatisSettings"/>)에 기억하고, 탭이 화면에 붙을 때마다 다시 읽는다
-/// (다른 탭에서 바꾼 방향을 따라간다). 전환 단추 3개(<see cref="Buttons"/>)는 문서 도구 막대 줄 오른쪽에 놓는다.
+/// (다른 탭에서 바꾼 방향을 따라간다). 전환 단추 4개(<see cref="Buttons"/>: 세로 · 가로 | 보이기 · 스크롤 맞춤)는 문서 도구 막대 줄 오른쪽에 놓는다.
+/// 스크롤 맞춤 자체는 <see cref="MyBatisScrollSync"/> 가 하고, 이 분할은 켬/끔만 기억한다.
 /// 펼친 SQL 이 탭 안에 있으므로 아래 도구 창(조회 결과 등)을 덮지 않는다.
 /// </summary>
 public sealed class MyBatisExpandedSplit : Grid
@@ -36,8 +38,10 @@ public sealed class MyBatisExpandedSplit : Grid
     private readonly ToggleButton _verticalButton;
     private readonly ToggleButton _horizontalButton;
     private readonly ToggleButton _showButton;
+    private readonly ToggleButton _syncButton;
     private bool _horizontal;
     private bool _shown = true;
+    private bool _syncScroll = true;
     private double _ratio = 0.5;
 
     public MyBatisExpandedSplit(Control editor, MyBatisExpandedView expanded, SettingsService? settings)
@@ -57,19 +61,23 @@ public sealed class MyBatisExpandedSplit : Grid
         _verticalButton = Toggle("vertical", SplitIcon(horizontal: false), "MyBatis.split.vertical", "펼친 SQL 을 편집기 오른쪽에(세로 분할)", () => Choose(horizontal: false));
         _horizontalButton = Toggle("horizontal", SplitIcon(horizontal: true), "MyBatis.split.horizontal", "펼친 SQL 을 편집기 아래에(가로 분할)", () => Choose(horizontal: true));
         _showButton = Toggle("show", ShellIcons.Create("objView"), "MyBatis.split.show", "펼친 SQL 보이기 · 숨기기", () => SetShown(!_shown));
+        _syncButton = Toggle("syncScroll", ShellIcons.Create("objSynonym"), "MyBatis.split.syncScroll", "원문 · 펼친 SQL 스크롤 맞춤", () => SetSyncScroll(!_syncScroll));
         Buttons = new StackPanel
         {
             Orientation = Orientation.Horizontal,
             Spacing = 2,
             VerticalAlignment = VerticalAlignment.Center,
-            Children = { _verticalButton, _horizontalButton, new Separator { Classes = { "toolbar" } }, _showButton },
+            Children = { _verticalButton, _horizontalButton, new Separator { Classes = { "toolbar" } }, _showButton, _syncButton },
         };
         AutomationProperties.SetName(Buttons, UiText.Get("MyBatis.split.buttons", "펼친 SQL 분할"));
 
         LoadSettings();
     }
 
-    /// <summary>분할 전환 단추 줄(세로 · 가로 | 보이기). 쿼리 탭 머리 줄에 놓는다.</summary>
+    /// <summary>방향·보임·스크롤 맞춤이 바뀌었다(설정을 다시 읽을 때 포함).</summary>
+    public event EventHandler? Changed;
+
+    /// <summary>분할 전환 단추 줄(세로 · 가로 | 보이기 · 스크롤 맞춤). 쿼리 탭 머리 줄에 놓는다.</summary>
     public StackPanel Buttons { get; }
 
     /// <summary>펼친 SQL 영역.</summary>
@@ -80,6 +88,9 @@ public sealed class MyBatisExpandedSplit : Grid
 
     /// <summary>펼친 SQL 이 보이는가.</summary>
     public bool IsExpandedShown => _shown;
+
+    /// <summary>원문 편집기와 펼친 SQL 의 스크롤을 맞추는가(「스크롤 맞춤」 토글).</summary>
+    public bool IsScrollSynced => _syncScroll;
 
     /// <summary>원문 편집기 비율(<see cref="MinRatio"/>~<see cref="MaxRatio"/>).</summary>
     public double Ratio => _ratio;
@@ -93,6 +104,8 @@ public sealed class MyBatisExpandedSplit : Grid
 
     internal ToggleButton ShowButton => _showButton;
 
+    internal ToggleButton SyncScrollButton => _syncButton;
+
     internal GridSplitter Splitter => _splitter;
 
     /// <summary>비율을 허용 범위로 자른다. 숫자가 아니면 기본 0.5.</summary>
@@ -104,7 +117,7 @@ public sealed class MyBatisExpandedSplit : Grid
         _horizontal = horizontal;
         _shown = true;
         Apply();
-        Save();
+        Save(m => m with { ExpandedHorizontal = horizontal, ShowExpanded = true });
     }
 
     /// <summary>펼친 SQL 을 보이거나 숨긴다. 설정에 기억한다.</summary>
@@ -112,7 +125,15 @@ public sealed class MyBatisExpandedSplit : Grid
     {
         _shown = shown;
         Apply();
-        Save();
+        Save(m => m with { ShowExpanded = shown });
+    }
+
+    /// <summary>스크롤 맞춤을 켜거나 끈다. 설정에 기억한다.</summary>
+    public void SetSyncScroll(bool sync)
+    {
+        _syncScroll = sync;
+        Apply();
+        Save(m => m with { SyncScroll = sync });
     }
 
     /// <summary>편집기 비율을 정한다(분할선 끌기와 같은 길). 설정에 기억한다.</summary>
@@ -120,7 +141,8 @@ public sealed class MyBatisExpandedSplit : Grid
     {
         _ratio = ClampRatio(ratio);
         Apply();
-        Save();
+        var clamped = _ratio;
+        Save(m => m with { ExpandedRatio = clamped });
     }
 
     protected override void OnAttachedToVisualTree(VisualTreeAttachmentEventArgs e)
@@ -136,6 +158,7 @@ public sealed class MyBatisExpandedSplit : Grid
             _horizontal = mybatis.ExpandedHorizontal;
             _shown = mybatis.ShowExpanded;
             _ratio = ClampRatio(mybatis.ExpandedRatio);
+            _syncScroll = mybatis.SyncScroll;
         }
 
         Apply();
@@ -178,6 +201,8 @@ public sealed class MyBatisExpandedSplit : Grid
         _verticalButton.IsChecked = _shown && !_horizontal;
         _horizontalButton.IsChecked = _shown && _horizontal;
         _showButton.IsChecked = _shown;
+        _syncButton.IsChecked = _syncScroll;
+        Changed?.Invoke(this, EventArgs.Empty);
     }
 
     private void SetCell(Control control, int index)
@@ -209,25 +234,22 @@ public sealed class MyBatisExpandedSplit : Grid
         }
     }
 
-    private void Save()
+    /// <summary>바꾼 필드만 저장한다. 나머지는 저장된 값을 그대로 둬서, 화면에 함께 떠 있는 다른 탭이 바꾼 값을 덮지 않는다.</summary>
+    private void Save(Func<MyBatisSettings, MyBatisSettings> change)
     {
         if (_settings is null)
         {
             return;
         }
 
-        var (horizontal, shown, ratio) = (_horizontal, _shown, _ratio);
-        LastSave = SaveAsync(_settings, horizontal, shown, ratio);
+        LastSave = SaveAsync(_settings, change);
     }
 
-    private static async Task SaveAsync(SettingsService settings, bool horizontal, bool shown, double ratio)
+    private static async Task SaveAsync(SettingsService settings, Func<MyBatisSettings, MyBatisSettings> change)
     {
         try
         {
-            await settings.UpdateAsync(s => s with
-            {
-                MyBatis = s.MyBatis with { ExpandedHorizontal = horizontal, ShowExpanded = shown, ExpandedRatio = ratio },
-            }).ConfigureAwait(true);
+            await settings.UpdateAsync(s => s with { MyBatis = change(s.MyBatis) }).ConfigureAwait(true);
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidOperationException)
         {

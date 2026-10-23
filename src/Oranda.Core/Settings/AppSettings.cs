@@ -59,6 +59,9 @@ public sealed record MyBatisSettings
 
     /// <summary>원문 편집기가 차지하는 비율(0.15~0.85, 기본 0.5). 분할선을 끌어 놓으면 바뀐다.</summary>
     public double ExpandedRatio { get; init; } = 0.5;
+
+    /// <summary>원문 편집기와 펼친 SQL 의 세로 스크롤을 서로 맞춘다(분할 단추 줄의 「스크롤 맞춤」 토글, 기본 켬).</summary>
+    public bool SyncScroll { get; init; } = true;
 }
 
 /// <summary>테이블 레이아웃 팝업의 확인란 4개. 다음에 연 팝업에도 유지한다. 별칭은 표마다 달라 저장하지 않는다.</summary>

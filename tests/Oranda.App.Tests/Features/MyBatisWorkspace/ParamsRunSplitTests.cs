@@ -1,5 +1,6 @@
 using Avalonia;
 using Avalonia.Controls;
+using Avalonia.Controls.Primitives;
 using Avalonia.Interactivity;
 using Avalonia.Threading;
 using Avalonia.VisualTree;
@@ -13,6 +14,7 @@ using Oranda.App.Shell;
 using Oranda.App.Shell.Docking;
 using Oranda.App.Shell.Settings;
 using Oranda.App.Tests.Features.MyBatisWorkspace.Fakes;
+using Oranda.App.Tests.Features.MyBatisWorkspace.Flow;
 using Oranda.App.Tests.Features.SqlEditor;
 using Oranda.App.Tests.Shell.Headless;
 using Oranda.Core.Settings;
@@ -77,7 +79,7 @@ public sealed partial class ParamsRunTests
         var split = view.Split;
         var expanded = split.ExpandedView;
 
-        // 기본 = 세로 분할: 편집기 | 분할선 | 펼친 SQL. 펼친 SQL 이 편집기 오른쪽, 같은 높이에서 시작한다.
+        // 기본 = 세로 분할: 원문 칸(머리 줄 · 원문) | 분할선 | 펼친 SQL. 펼친 SQL 이 원문 칸 오른쪽, 같은 높이에서 시작한다.
         Assert.False(split.IsHorizontal);
         Assert.True(split.IsExpandedShown);
         Assert.Equal(3, split.ColumnDefinitions.Count);
@@ -85,10 +87,25 @@ public sealed partial class ParamsRunTests
         Assert.True(split.VerticalButton.IsChecked);
         Assert.False(split.HorizontalButton.IsChecked);
         Assert.True(split.ShowButton.IsChecked);
-        var editorAt = Origin(view.Editor, window);
+        var editorAt = Origin(view.EditorPane, window);
         var expandedAt = Origin(expanded, window);
-        Assert.True(expandedAt.X > editorAt.X + view.Editor.Bounds.Width - 1, $"펼친 SQL x={expandedAt.X}, 편집기 끝={editorAt.X + view.Editor.Bounds.Width}");
+        Assert.True(expandedAt.X > editorAt.X + view.EditorPane.Bounds.Width - 1, $"펼친 SQL x={expandedAt.X}, 원문 칸 끝={editorAt.X + view.EditorPane.Bounds.Width}");
         Assert.Equal(editorAt.Y, expandedAt.Y, 1);
+
+        // 문장 머리 줄과 시나리오 바는 같은 줄: Y·높이가 같고, 원문 편집기는 머리 줄 아래에서 시작한다.
+        var header = view.HeaderBar;
+        var scenarioBar = expanded.PaneHeader;
+        Assert.Equal(Origin(header, window).Y, Origin(scenarioBar, window).Y, 1);
+        Assert.Equal(MyBatisExpandedView.PaneHeaderHeight, header.Bounds.Height, 1);
+        Assert.Equal(header.Bounds.Height, scenarioBar.Bounds.Height, 1);
+        Assert.True(Origin(view.Editor, window).Y >= Origin(header, window).Y + header.Bounds.Height - 1);
+
+        // 시나리오 바 안의 콤보·단추가 잘리지 않는다(아래 테두리 안쪽에 들어간다).
+        var barBottom = Origin(scenarioBar, window).Y + scenarioBar.Bounds.Height - scenarioBar.BorderThickness.Bottom;
+        var barControls = scenarioBar.GetVisualDescendants().OfType<TemplatedControl>().Where(c => c is ComboBox or Button && c.IsEffectivelyVisible).ToList();
+        Assert.NotEmpty(barControls);
+        Assert.All(barControls, c => Assert.True(Origin(c, window).Y + c.Bounds.Height <= barBottom + 0.5, $"{c.GetType().Name} 아래 끝={Origin(c, window).Y + c.Bounds.Height}, 바 안쪽 끝={barBottom}"));
+        MyBatisFlowRig.Render(window, "split-vertical", 1200, 640); // ORANDA_RENDER_DIR 이 있을 때만 PNG
 
         // 이 탭의 문장을 지금 값으로 펼친 글이 읽기 전용 편집기에 있다.
         var vm = Assert.IsType<MyBatisExpandedViewModel>(expanded.DataContext);
@@ -109,11 +126,12 @@ public sealed partial class ParamsRunTests
         Assert.Empty(split.ColumnDefinitions);
         Assert.True(split.HorizontalButton.IsChecked);
         Assert.False(split.VerticalButton.IsChecked);
-        editorAt = Origin(view.Editor, window);
+        editorAt = Origin(view.EditorPane, window);
         expandedAt = Origin(expanded, window);
-        Assert.True(expandedAt.Y > editorAt.Y + view.Editor.Bounds.Height - 1);
+        Assert.True(expandedAt.Y > editorAt.Y + view.EditorPane.Bounds.Height - 1);
         Assert.Equal(editorAt.X, expandedAt.X, 1);
         Assert.True(settings.Current.MyBatis.ExpandedHorizontal);
+        MyBatisFlowRig.Render(window, "split-horizontal", 1200, 640);
 
         // 세로 분할 아이콘으로 되돌림
         Click(split.VerticalButton);
@@ -122,6 +140,46 @@ public sealed partial class ParamsRunTests
         Assert.Equal(3, split.ColumnDefinitions.Count);
         Assert.False(settings.Current.MyBatis.ExpandedHorizontal);
         window.Close();
+    });
+
+    [Fact]
+    public Task A_narrow_source_pane_trims_only_the_header_path_and_keeps_the_chip_and_extra_slot() => Ui.Run(() =>
+    {
+        using var rig = Rig.Create();
+        var view = SplitView(rig, settings: null);
+        view.HeaderExtraSlot.Children.Add(new Button { Classes = { "toolbar" }, Content = "조합 검사" });
+        var window = ShowWindow(view);
+        var header = view.HeaderBar;
+        var path = view.PathBlock;
+        var chip = Assert.IsType<Border>(((Grid)path.Parent!).Children[1]);
+
+        // 넓을 때(비율 상한): 경로는 다 보이고 칩이 경로 바로 옆에 붙는다.
+        view.Split.SetRatio(MyBatisExpandedSplit.MaxRatio);
+        Dispatcher.UIThread.RunJobs();
+        window.UpdateLayout();
+        Assert.DoesNotContain(path.TextLayout.TextLines, l => l.HasCollapsed);
+        var gap = Origin(chip, window).X - (Origin(path, window).X + path.Bounds.Width);
+        Assert.InRange(gap, 0, 15);
+
+        // 원문 칸 비율 하한(0.15): 경로만 말줄임하고, 칩과 오른쪽 빈 자리(조합 검사 단추 등)는 머리 줄 안에 온전히 남는다.
+        // 원문 칸 폭이 「칩 + 오른쪽 빈 자리 + 40」 이 되도록 창 폭을 정한다: 글꼴(헤드리스 기본·PNG 렌더용 Skia)이 달라도 경로만 모자란 폭이다.
+        var needed = chip.Bounds.Width + chip.Margin.Left + view.HeaderExtraSlot.Bounds.Width + header.Padding.Left + header.Padding.Right + 40;
+        window.Width = Math.Ceiling((needed / MyBatisExpandedSplit.MinRatio) + MyBatisExpandedSplit.SplitterSize);
+        view.Split.SetRatio(MyBatisExpandedSplit.MinRatio);
+        Dispatcher.UIThread.RunJobs();
+        window.UpdateLayout();
+        Assert.Contains(path.TextLayout.TextLines, l => l.HasCollapsed);
+        var headerRight = Origin(header, window).X + header.Bounds.Width;
+        foreach (var part in new Control[] { chip, view.HeaderExtraSlot })
+        {
+            Assert.True(part.Bounds.Width > 0, $"{part.GetType().Name} 너비 0");
+            Assert.True(Origin(part, window).X + part.Bounds.Width <= headerRight + 0.5, $"{part.GetType().Name} 이 머리 줄 밖으로 나감");
+        }
+
+        Assert.True(Origin(chip, window).X + chip.Bounds.Width <= Origin(view.HeaderExtraSlot, window).X + 0.5, "칩이 오른쪽 빈 자리와 겹침");
+        MyBatisFlowRig.Render(window, "split-ratio015", (int)window.Width, 640);
+        window.Close();
+        return Task.CompletedTask;
     });
 
     [Fact]
@@ -150,8 +208,9 @@ public sealed partial class ParamsRunTests
         Assert.Empty(split.RowDefinitions);
         Assert.False(split.VerticalButton.IsChecked);
         Assert.False(split.HorizontalButton.IsChecked);
-        Assert.Equal(view.Editor.Bounds.Height, split.Bounds.Height, 1);
+        Assert.Equal(view.EditorPane.Bounds.Height, split.Bounds.Height, 1);
         Assert.False(store.Saved.MyBatis.ShowExpanded);
+        MyBatisFlowRig.Render(window, "split-hidden", 1200, 640);
 
         // 숨긴 채 다른 탭(새 View)을 열어도 숨김. 방향 아이콘을 누르면 그 방향으로 다시 보인다.
         var other = SplitView(rig, settings);

@@ -321,6 +321,7 @@
   "MyBatis.split.buttons": "Expanded SQL split",
   "MyBatis.split.horizontal": "Expanded SQL below the editor (horizontal split)",
   "MyBatis.split.show": "Show or hide the expanded SQL",
+  "MyBatis.split.syncScroll": "Sync scrolling of the source and the expanded SQL",
   "MyBatis.split.vertical": "Expanded SQL beside the editor (vertical split)",
   "MyBatis.statements.group.other": "Other",
   "MyBatis.statements.group.sql": "sql fragments",

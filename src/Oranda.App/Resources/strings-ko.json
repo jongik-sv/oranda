@@ -321,6 +321,7 @@
   "MyBatis.split.buttons": "펼친 SQL 분할",
   "MyBatis.split.horizontal": "펼친 SQL 을 편집기 아래에(가로 분할)",
   "MyBatis.split.show": "펼친 SQL 보이기 · 숨기기",
+  "MyBatis.split.syncScroll": "원문 · 펼친 SQL 스크롤 맞춤",
   "MyBatis.split.vertical": "펼친 SQL 을 편집기 오른쪽에(세로 분할)",
   "MyBatis.statements.group.other": "그 밖",
   "MyBatis.statements.group.sql": "sql 조각",

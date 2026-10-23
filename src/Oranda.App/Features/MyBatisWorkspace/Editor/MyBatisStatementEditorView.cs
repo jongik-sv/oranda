@@ -18,8 +18,8 @@ using TextRun = Avalonia.Controls.Documents.Run; // 이 폴더 위 이름 공간
 namespace Oranda.App.Features.MyBatisWorkspace.Editor;
 
 /// <summary>
-/// MyBatis 문장 탭의 편집기 View(design.md 1장·9장). 위에서 아래로 문서 도구 막대(오른쪽 끝에 분할 단추), 문장 머리 줄, 그리고
-/// 원문 편집기(<see cref="SqlEditorView"/>) | 펼친 SQL(<see cref="MyBatisExpandedView"/>) 분할(<see cref="MyBatisExpandedSplit"/>, TSK-03-10)이다.
+/// MyBatis 문장 탭의 편집기 View(design.md 1장·9장). 위에서 아래로 문서 도구 막대(오른쪽 끝에 분할 단추), 그리고
+/// 원문 칸(문장 머리 줄 · 알림 띠 · 원문 편집기 <see cref="SqlEditorView"/>) | 펼친 SQL(<see cref="MyBatisExpandedView"/>) 분할(<see cref="MyBatisExpandedSplit"/>, TSK-03-10)이다.
 /// 펼친 SQL 은 이 탭의 문장만 보인다 — 「매퍼 쿼리」 창에서 고르기만 하고 탭을 열지 않으면 펼친 SQL 은 어디에도 없다.
 /// 안쪽 편집기의 포커스 자리를 <c>mybatisText</c> 로 덮어쓰고, SQL 강조를 떼고 등록된 <see cref="IMyBatisEditorDecorator"/> 를 Order 순으로 붙인다.
 /// 꾸밈은 화면에서 떨어지거나 탭이 바뀔 때 Dispose 하고, 다시 붙으면 새로 붙인다(탭을 오가도 강조가 사라지지 않는다).
@@ -37,6 +37,9 @@ public sealed class MyBatisStatementEditorView : UserControl, IEditorFocusTarget
     private readonly IServiceProvider? _services;
     private readonly MyBatisExpandedView _expandedView = new();
     private readonly MyBatisExpandedSplit _split;
+    private readonly Border _headerBar = new() { Height = MyBatisExpandedView.PaneHeaderHeight, Classes = { "panel-toolbar" } };
+    private readonly DockPanel _editorPane;
+    private readonly MyBatisScrollSync _scrollSync;
     private SqlEditorViewModel _tab;
     private bool _decorated;
     private bool _subscribed;
@@ -52,8 +55,12 @@ public sealed class MyBatisStatementEditorView : UserControl, IEditorFocusTarget
         _tab = tab;
         _session = session;
         _services = services;
-        _split = new MyBatisExpandedSplit(_editorView, _expandedView, services?.GetService(typeof(SettingsService)) as SettingsService);
+        _editorPane = BuildEditorPane();
+        _split = new MyBatisExpandedSplit(_editorPane, _expandedView, services?.GetService(typeof(SettingsService)) as SettingsService);
         Content = BuildLayout();
+        _scrollSync = new MyBatisScrollSync(_editorView, _editorView.TextEditorControl, _expandedView.CodeView, _expandedView.CodeView.TextEditorControl);
+        _split.Changed += (_, _) => ApplyScrollSync();
+        ApplyScrollSync();
 
         // 안쪽 편집기 View 는 생성자에서 포커스 자리 sqlText 와 「editor」 우클릭 메뉴를 건다. 인스턴스 값으로 덮어쓴다.
         FocusSlot.SetName(_editorView, "mybatisText");
@@ -80,6 +87,9 @@ public sealed class MyBatisStatementEditorView : UserControl, IEditorFocusTarget
     /// <summary>펼친 SQL 영역의 ViewModel(이 탭의 문장).</summary>
     public MyBatisExpandedViewModel? Expanded => _expandedView.DataContext as MyBatisExpandedViewModel;
 
+    /// <summary>원문 ↔ 펼친 SQL 스크롤 맞춤(시험·계측용).</summary>
+    internal MyBatisScrollSync ScrollSync => _scrollSync;
+
     /// <summary>문서 도구 막대(없으면 null: 레지스트리를 얻지 못한 시험 환경).</summary>
     public MyBatisDocumentToolbar? Toolbar => _toolbarHost.Content as MyBatisDocumentToolbar;
 
@@ -97,6 +107,12 @@ public sealed class MyBatisStatementEditorView : UserControl, IEditorFocusTarget
 
     /// <summary>머리 줄 경로 글자 컨트롤(시험·계측용).</summary>
     internal TextBlock PathBlock => _pathText;
+
+    /// <summary>문장 머리 줄(시험·계측용). 원문 칸 맨 위에 있어 펼친 SQL 의 시나리오 바와 같은 높이에서 시작한다.</summary>
+    internal Border HeaderBar => _headerBar;
+
+    /// <summary>원문 칸: 머리 줄 · 알림 띠 · 원문 편집기(시험·계측용). 분할의 왼쪽(가로 분할이면 위) 칸이다.</summary>
+    internal DockPanel EditorPane => _editorPane;
 
     /// <summary>문서 도구 막대를 담는 자리(시험·계측용).</summary>
     internal ContentControl ToolbarHost => _toolbarHost;
@@ -119,6 +135,7 @@ public sealed class MyBatisStatementEditorView : UserControl, IEditorFocusTarget
     {
         base.OnAttachedToVisualTree(e);
         Subscribe();
+        _scrollSync.Attach();
         RefreshHeader();
         if (!_decorated)
         {
@@ -129,6 +146,7 @@ public sealed class MyBatisStatementEditorView : UserControl, IEditorFocusTarget
     protected override void OnDetachedFromVisualTree(VisualTreeAttachmentEventArgs e)
     {
         Unsubscribe();
+        _scrollSync.Detach();
         DisposeDecorations();
         base.OnDetachedFromVisualTree(e);
     }
@@ -138,6 +156,7 @@ public sealed class MyBatisStatementEditorView : UserControl, IEditorFocusTarget
     {
         bool wasSubscribed = _subscribed;
         Unsubscribe();
+        _scrollSync.Detach();
         DisposeDecorations();
         _tab = tab;
         _editorView.DataContext = tab;
@@ -148,11 +167,15 @@ public sealed class MyBatisStatementEditorView : UserControl, IEditorFocusTarget
         if (wasSubscribed)
         {
             Subscribe();
+            _scrollSync.Attach();
         }
     }
 
-    /// <summary>위에서 아래로: 문서 도구 막대(레지스트리 <c>toolbar:mybatis</c> 자리, 오른쪽 끝 분할 단추) / 문장 머리 줄(30 DIP) / 원문 편집기 | 펼친 SQL.</summary>
-    private DockPanel BuildLayout()
+    /// <summary>
+    /// 원문 칸(분할 왼쪽 · 가로 분할이면 위): 문장 머리 줄(<see cref="MyBatisExpandedView.PaneHeaderHeight"/> DIP) / 알림 띠 / 원문 편집기.
+    /// 머리 줄이 칸 안에 있어 오른쪽 펼친 SQL 의 시나리오 바와 같은 높이에서 시작한다.
+    /// </summary>
+    private DockPanel BuildEditorPane()
     {
         // 칩의 바탕과 글자 크기는 테마 리소스를 따라간다(값을 직접 쓰지 않는다).
         var chip = new Border
@@ -166,25 +189,34 @@ public sealed class MyBatisStatementEditorView : UserControl, IEditorFocusTarget
         chip.Bind(Border.BackgroundProperty, chip.GetResourceObservable("OrandaCodeBackgroundBrush"));
         _dynamicTagsText.Bind(TextBlock.FontSizeProperty, _dynamicTagsText.GetResourceObservable("OrandaFontSizeSmall"));
 
-        // 오른쪽 빈 자리(_headerExtra)는 03-02 가 켜진 조건 칩 등을 더하는 곳이다.
-        var header = new Grid { ColumnDefinitions = new ColumnDefinitions("Auto,Auto,*"), VerticalAlignment = VerticalAlignment.Center };
+        // 경로 · 칩은 왼쪽에 붙여 두고, 칸이 좁아지면 경로부터 말줄임한다. 오른쪽 빈 자리(_headerExtra, 03-02 조건 칩·조합 검사 단추 등)는 먼저 자리를 잡아 잘리지 않고,
+        // 그보다 더 좁으면 칩이 그 자리를 덮지 않게 경로 · 칩 묶음을 잘라 그린다.
+        var path = new Grid { ColumnDefinitions = new ColumnDefinitions("*,Auto"), HorizontalAlignment = HorizontalAlignment.Left, VerticalAlignment = VerticalAlignment.Center, ClipToBounds = true };
         Grid.SetColumn(_pathText, 0);
         Grid.SetColumn(chip, 1);
-        Grid.SetColumn(_headerExtra, 2);
-        header.Children.Add(_pathText);
-        header.Children.Add(chip);
-        header.Children.Add(_headerExtra);
-        var headerBar = new Border { Height = 30, Classes = { "panel-toolbar" }, Child = header };
+        path.Children.Add(_pathText);
+        path.Children.Add(chip);
+        DockPanel.SetDock(_headerExtra, Avalonia.Controls.Dock.Right);
+        _headerBar.Child = new DockPanel { Children = { _headerExtra, path } };
 
+        DockPanel.SetDock(_headerBar, Avalonia.Controls.Dock.Top);
+        DockPanel.SetDock(_bannerSlot, Avalonia.Controls.Dock.Top);
+        return new DockPanel { Children = { _headerBar, _bannerSlot, _editorView } };
+    }
+
+    /// <summary>위에서 아래로: 문서 도구 막대(레지스트리 <c>toolbar:mybatis</c> 자리, 오른쪽 끝 분할 단추) / 원문 칸 | 펼친 SQL.</summary>
+    private DockPanel BuildLayout()
+    {
         // 도구 막대 줄: 레지스트리 단추(왼쪽) ........ 분할 단추(오른쪽). 막대가 없어도(시험 환경) 분할 단추는 보인다.
         DockPanel.SetDock(_split.Buttons, Avalonia.Controls.Dock.Right);
         var toolbarRow = new Border { Classes = { "panel-toolbar" }, Child = new DockPanel { Children = { _split.Buttons, _toolbarHost } } };
 
         DockPanel.SetDock(toolbarRow, Avalonia.Controls.Dock.Top);
-        DockPanel.SetDock(headerBar, Avalonia.Controls.Dock.Top);
-        DockPanel.SetDock(_bannerSlot, Avalonia.Controls.Dock.Top);
-        return new DockPanel { Children = { toolbarRow, headerBar, _bannerSlot, _split } };
+        return new DockPanel { Children = { toolbarRow, _split } };
     }
+
+    /// <summary>스크롤 맞춤은 토글이 켜져 있고 펼친 SQL 이 보일 때만 한다.</summary>
+    private void ApplyScrollSync() => _scrollSync.IsEnabled = _split.IsScrollSynced && _split.IsExpandedShown;
 
     private void Subscribe()
     {
