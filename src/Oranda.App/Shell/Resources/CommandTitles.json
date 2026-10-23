@@ -237,6 +237,8 @@
   "Cmd.oranda.mybatis.openFolder": "매퍼 폴더 열기…",
   "Cmd.oranda.mybatis.findStatement": "MyBatis 쿼리 찾기…",
   "Cmd.oranda.mybatis.formatStatement": "쿼리 포맷",
+  "Cmd.oranda.mybatis.formatAll": "매퍼 전체 포맷",
+  "Cmd.oranda.mybatis.undoFormatAll": "매퍼 전체 포맷 되돌리기",
   "Cmd.oranda.window.nextDocument": "다음 탭",
   "Cmd.oranda.window.previousDocument": "이전 탭",
   "Cmd.oranda.window.splitRight": "오른쪽으로 분할",

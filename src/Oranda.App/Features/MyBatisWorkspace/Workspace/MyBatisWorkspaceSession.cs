@@ -23,6 +23,7 @@ public sealed class MyBatisWorkspaceSession : IMyBatisWorkspaceSession
     private MyBatisStatementEntry? _selected;
     private bool _noneSelected;
     private bool _syncingTabs;
+    private bool _batching;
 
     /// <param name="workspace">세션을 붙일 작업 공간(붙이는 일은 부르는 쪽이 한다).</param>
     /// <param name="mapperPath">매퍼 파일 절대 경로.</param>
@@ -288,6 +289,55 @@ public sealed class MyBatisWorkspaceSession : IMyBatisWorkspaceSession
         }
 
         RaiseStateChanged();
+    }
+
+    /// <summary>요소 하나의 원문을 바꾼다(<see cref="SetEntryTexts"/> 와 같다).</summary>
+    public void SetEntryText(MyBatisStatementEntry entry, string text) => SetEntryTexts([(entry, text)]);
+
+    /// <summary>
+    /// 여러 요소의 원문(탭 공간 글)을 한 번에 바꾼다(매퍼 전체 포맷·그 되돌리기). <see cref="RenameEntry"/> 처럼 탭이 열려 있으면 탭 문서를 바꾸고
+    /// (바뀐 가운데만 한 번 교체 — 그 탭의 실행 취소 1단계), 없으면 <see cref="MyBatisStatementEntry.StoredText"/> 를 바꾼다. 상태 알림은 끝에 한 번이다.
+    /// 편집할 수 없거나 지운·이 세션 밖 요소가 하나라도 있으면 아무것도 바꾸지 않고 <see cref="ArgumentException"/>.
+    /// </summary>
+    public void SetEntryTexts(IReadOnlyList<(MyBatisStatementEntry Entry, string Text)> changes)
+    {
+        ArgumentNullException.ThrowIfNull(changes);
+        foreach (var (entry, text) in changes)
+        {
+            ArgumentNullException.ThrowIfNull(entry);
+            ArgumentNullException.ThrowIfNull(text);
+            if (!entry.IsEditable || entry.IsDeleted || !_entries.Contains(entry))
+            {
+                throw new ArgumentException($"바꿀 수 없는 문장입니다: {entry.Id}", nameof(changes));
+            }
+        }
+
+        _batching = true;
+        try
+        {
+            foreach (var (entry, text) in changes)
+            {
+                if (entry.Tab is { } tab)
+                {
+                    ReplaceChanged(tab, text); // 글이 바뀌면 OnTabTextChanged 가 id·dirty 를 맞춘다(알림은 아래에서 한 번)
+                }
+                else
+                {
+                    entry.StoredText = text;
+                    if (MyBatisStatementText.TryFindIdValue(text, out var start, out var length)
+                        && text.Substring(start, length) is var id && !string.Equals(id, entry.Id, StringComparison.Ordinal) && ValidateId(id, entry) is null)
+                    {
+                        entry.Id = id;
+                    }
+                }
+            }
+        }
+        finally
+        {
+            // 중간에 탭 구독자가 던져도 이미 바뀐 요소가 목록·* 에 보이게 알린다.
+            _batching = false;
+            RaiseStateChanged();
+        }
     }
 
     /// <summary>문장을 지운다: 탭을 닫고 지움으로 표시한다(새 문장이면 목록에서 뺀다). 매퍼에는 저장 때 반영된다.</summary>
@@ -696,8 +746,34 @@ public sealed class MyBatisWorkspaceSession : IMyBatisWorkspaceSession
             }
 
             tab.IsDirty = entry.IsModified; // 탭 VM 은 글이 바뀌면 늘 dirty 로 둔다 → 기준과 같아지면 다시 내린다
-            RaiseStateChanged();
+            if (!_batching)
+            {
+                RaiseStateChanged();
+            }
         }
+    }
+
+    /// <summary>탭 글을 <paramref name="text"/> 로: 같은 앞뒤는 두고 바뀐 가운데만 한 번 교체한다(캐럿·접기가 덜 흔들리고 실행 취소 1단계).</summary>
+    private static void ReplaceChanged(SqlEditorViewModel tab, string text)
+    {
+        var before = tab.Text;
+        if (string.Equals(before, text, StringComparison.Ordinal))
+        {
+            return;
+        }
+
+        int max = Math.Min(before.Length, text.Length), prefix = 0, suffix = 0;
+        while (prefix < max && before[prefix] == text[prefix])
+        {
+            prefix++;
+        }
+
+        while (suffix < max - prefix && before[before.Length - 1 - suffix] == text[text.Length - 1 - suffix])
+        {
+            suffix++;
+        }
+
+        tab.Document.Replace(prefix, before.Length - prefix - suffix, text.Substring(prefix, text.Length - prefix - suffix));
     }
 
     private void OnWorkspaceTabsChanged(object? sender, NotifyCollectionChangedEventArgs e)

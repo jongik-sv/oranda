@@ -258,6 +258,58 @@ public sealed class WorkspaceSessionTests : IDisposable
             reparsed.Elements.Select(e => e.Id));
     });
 
+    [Fact]
+    public Task Setting_entry_texts_changes_open_tabs_and_closed_entries_with_one_state_change() => Ui.Run(async () =>
+    {
+        var (_, ws, session) = await OpenAsync();
+        var list = ws.Tabs.Single(t => t.Title == "selectEmpList");
+        var count = session.OpenStatement("countEmp")!;
+        var delete = session.Find("deleteEmp")!;
+        Assert.Null(delete.Tab);
+        var before = (List: list.Text, Count: count.Text, Delete: delete.Text);
+        int changed = 0;
+        session.StateChanged += (_, _) => changed++;
+
+        session.SetEntryTexts(
+        [
+            (session.Find("selectEmpList")!, list.Text.Replace("FROM EMP", "FROM EMP E2", StringComparison.Ordinal)),
+            (session.Find("countEmp")!, count.Text.Replace("COUNT(*)", "COUNT(1)", StringComparison.Ordinal)),
+            (delete, delete.Text.Replace("DELETE FROM EMP", "DELETE\n  FROM EMP", StringComparison.Ordinal)),
+        ]);
+
+        Assert.Equal(1, changed);
+        Assert.True(list.IsDirty);
+        Assert.True(count.IsDirty);
+        Assert.Contains("COUNT(1)", count.Text, StringComparison.Ordinal);
+        Assert.Null(delete.Tab);
+        Assert.Contains("DELETE\n  FROM EMP", delete.Text, StringComparison.Ordinal);
+        Assert.Equal(["selectEmpList", "countEmp", "deleteEmp"], session.PendingEdits().Select(e => Assert.IsType<MapperEdit.ReplaceElement>(e).Id));
+
+        // 열린 탭은 실행 취소 1단계로 돌아오고 * 가 내려간다.
+        count.Document.UndoStack.Undo();
+        Assert.Equal(before.Count, count.Text);
+        Assert.False(count.IsDirty);
+
+        // 원래 글로 다시 넣으면 닫힌 요소도 고침이 없어진다.
+        session.SetEntryText(delete, before.Delete);
+        Assert.False(delete.IsModified);
+    });
+
+    [Fact]
+    public Task Setting_texts_with_a_deleted_entry_changes_nothing() => Ui.Run(async () =>
+    {
+        var (_, _, session) = await OpenAsync();
+        var count = session.Find("countEmp")!;
+        var deleted = session.Find("deleteEmp")!;
+        var before = count.Text;
+        session.DeleteStatement("deleteEmp");
+
+        Assert.Throws<ArgumentException>(() => session.SetEntryTexts([(count, "x"), (deleted, "y")]));
+
+        Assert.Equal(before, count.Text);
+        Assert.Equal(new MapperEdit.DeleteElement("deleteEmp"), Assert.Single(session.PendingEdits()));
+    });
+
     // ---- 저장·병합 뒤 기준 -----------------------------------------------------------------------
 
     [Fact]

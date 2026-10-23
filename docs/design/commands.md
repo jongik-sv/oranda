@@ -601,13 +601,15 @@
 | `oranda.mybatis.explainScenario` | 펼친 SQL 실행 계획 | - | 전역 | `mybatisDocActive && mybatisStatementSelected && (hasSession \|\| dedicatedSession \|\| tabConnectionMissing) && !sessionBusy` | TSK-03-02 |
 | `oranda.mybatis.copyExpanded` | 펼친 SQL 복사 | - | 전역 | `mybatisDocActive && mybatisStatementSelected` | TSK-03-02 |
 | `oranda.mybatis.copyExpandedWithValues` | 펼친 SQL 복사(값 넣은 글) | - | 전역 | `mybatisDocActive && mybatisStatementSelected` | TSK-03-02 |
-| `oranda.mybatis.save` | xml 에 저장 | - (`Ctrl+S` 는 `file.save` 경유) | 전역 | `mybatisDocActive && mybatisDocDirty` | TSK-03-03 |
+| `oranda.mybatis.save` | xml 에 저장 | - (`Ctrl+S` 는 `file.save` 경유) | 전역 | `mybatisDocActive && mybatisDocDirty && !mybatisFormatAllBusy` | TSK-03-03 |
 | `oranda.mybatis.checkCombinations` | 조합 검사 | - | 전역 | `mybatisDocActive && mybatisStatementSelected` | TSK-03-04 |
 | `oranda.mybatis.applyAutoFix` | 자동 고침(<set>·<where> 로 감싸기) | - | 전역 | `mybatisDocActive && mybatisStatementSelected && !readOnlyDoc` | TSK-03-04 |
 | `oranda.mybatis.convertWorkspace` | MyBatis 작업 공간으로 바꾸기… | - | 전역 | `sqlWorkspaceActive && !mybatisDocActive && mybatisConvertReady` | TSK-03-05 |
 | `oranda.mybatis.openFolder` | 매퍼 폴더 열기… | - | 전역 | `mybatisFolderReady` | TSK-03-07 |
 | `oranda.mybatis.findStatement` | MyBatis 문장 찾기… | - | 전역 | `mybatisDocActive \|\| mybatisFolderOpen` | TSK-03-07 |
 | `oranda.mybatis.formatStatement` | 쿼리 포맷 | `Ctrl+Shift+F` | `mybatisDocFocus` | `mybatisDocActive && mybatisStatementSelected && !readOnlyDoc` | mybatis-ui-sync |
+| `oranda.mybatis.formatAll` | 매퍼 전체 포맷 | - | 전역 | `mybatisDocActive && !mybatisFormatAllBusy` | mybatis-ui-sync |
+| `oranda.mybatis.undoFormatAll` | 매퍼 전체 포맷 되돌리기 | - | 전역 | `mybatisDocActive && !mybatisFormatAllBusy` | mybatis-ui-sync |
 
 ### 도움말
 
