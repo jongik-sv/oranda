@@ -57,7 +57,7 @@ UI 기준: 아이콘 도구 막대(툴팁 필수), 촘촘한 목록, 우클릭 �
 
 ## 3. 도구 창 보임 규칙
 
-### 3.1 새 도구 창·패널 4개
+### 3.1 새 도구 창·패널 3개
 
 | ID | 제목(ko / en) | 위치 | Order | 소유(내용) |
 |----|---------------|------|-------|------------|
@@ -73,13 +73,13 @@ UI 기준: 아이콘 도구 막대(툴팁 필수), 촘촘한 목록, 우클릭 �
 
 | 도구 창 | 활성 문서 없음(시작 화면) | 일반 SQL 문서 | MyBatis 문서 | PL/SQL 편집기 | 그 밖 문서(객체 상세·모니터 등) |
 |---------|---------------------------|---------------|--------------|---------------|-------------------------------|
-| MyBatis 4개 | 숨김 | 숨김 | 보임 | 숨김 | 숨김 |
+| MyBatis 3개 | 숨김 | 숨김 | 보임 | 숨김 | 숨김 |
 | 결과·메시지·출력·실행 계획·행 보기·실행 이력·변경 일지 | 지금 상태 유지 | 보임 | 보임 | 보임 | 숨김 |
 | 개요·템플릿·컴파일 오류·확장 시험(바인드 변수는 MyBatis 문서에서도 보임, 03-02) | 지금 상태 유지 | 보임 | **숨김** | 보임 | 숨김 |
 | 표에 없는 창(스키마 브라우저·스크립트 등) | 보임 | 보임 | 보임 | 보임 | 보임 |
 
 - MyBatis 문서는 정의 ID 가 `oranda.panel.sqlEditor` 라 지금 규칙으로는 SQL 전용 창이 모두 보인다. 시안 Main 의 아래 패널은 결과·메시지를 쓰므로 그 묶음은 보이고, 바인드 변수도 보인다(문장 파라미터를 행으로 보임, 03-02). 개요(xml 문장에는 맞지 않음)·템플릿·컴파일 오류·확장 시험은 숨긴다.
-- 「활성 문서 없음」에서 MyBatis 4개는 늘 숨긴다(지금 규칙의 「null 이면 그대로」를 MyBatis 창에는 쓰지 않는다). 시작 화면에 빈 MyBatis 창이 새지 않게 하기 위해서다(위험 R11).
+- 「활성 문서 없음」에서 MyBatis 3개는 늘 숨긴다(지금 규칙의 「null 이면 그대로」를 MyBatis 창에는 쓰지 않는다). 시작 화면에 빈 MyBatis 창이 새지 않게 하기 위해서다(위험 R11).
 - 숨김은 지금처럼 배치를 다시 짓지 않고 묶음에서 잠시 빼며, layout.json 에는 원래 자리로 저장한다(`Capture`).
 - 사용자가 보기 메뉴로 직접 연 창(`ShowTool`)과 기능이 직접 앞으로 가져온 창(`ActivateTool`)은 지금 규칙대로 그 문서에 있는 동안 보인다.
 
@@ -87,7 +87,7 @@ UI 기준: 아이콘 도구 막대(툴팁 필수), 촘촘한 목록, 우클릭 �
 
 - 판정을 문서 ID 하나에서 문서로 넓힌다: 새 `IsToolShownFor(toolId, PanelDocument? doc)`. 문서의 Panel 이 Shell 인터페이스 `IToolScopeDocument`(`ToolScope` 글자 `"mybatis"`, `ToolScopeChanged` 사건)를 구현하면 그 값을 함께 본다. Shell 은 Features 를 모르므로 인터페이스는 `Shell/Docking` 에 둔다. 지금 시험이 쓰는 문자열 판정 `IsToolShownFor(toolId, documentId)` 는 남긴다.
 - 지금은 「SQL 전용 전부 숨김 / 기록 전부 되보임」 두 갈래뿐이다. MyBatis 문서 ↔ 일반 SQL 문서 전환에는 일부만 되넣고 일부만 숨기는 차집합이 필요하므로, 목표 숨김 집합을 계산해 **빠질 창만 숨기고 들어올 창만 되넣는다**. 숨김 기록(`ScopedHide`)·`Capture`(숨긴 창을 원래 자리로 저장)는 그대로 쓰고, 비율 기록은 묶음 단위로 지우고 되돌린다.
-- 활성 문서 null 경로: 갱신을 건너뛰지 않고 MyBatis 4개만 숨긴다(SQL 전용 창은 지금처럼 그대로). 배치 적용 직후(`EndScopedApply`)도 같은 판정으로 다시 숨긴다(시작 화면).
+- 활성 문서 null 경로: 갱신을 건너뛰지 않고 MyBatis 3개만 숨긴다(SQL 전용 창은 지금처럼 그대로). 배치 적용 직후(`EndScopedApply`)도 같은 판정으로 다시 숨긴다(시작 화면).
 - 전환 신호: 활성 문서의 Panel 이 `IToolScopeDocument` 면 `ToolScopeChanged` 를 구독하고(문서가 바뀌면 옛 구독 해제), 신호가 오면 `RefreshScopedTools()`(같은 문서를 다시 판정하도록 `_scopedDocument` 를 비우고 `ScheduleScopedUpdate`). `SqlWorkspaceViewModel` 은 `MyBatis` 세션이 붙거나 떨어질 때 이 사건을 낸다. 작업 공간 사이 전환은 Dock 문서 전환이라 지금 신호(`ActiveDocumentChanged`)로 충분하다(A1 조사 결과: 초안 §2.2 B5 의 「전환 신호 없음」은 같은 문서 안 종류 변화에만 해당).
 
 ### 3.4 배치(layout.json)
@@ -279,7 +279,7 @@ xml 형식(XmlReader, DTD 무시·resolver null), 문장 id 겹침, 연 때 해�
 | MB-01 매퍼 원문 모델 | (화면 없음) 문장 탭 원문 = 요소 범위 | - | `IMyBatisMapperDocument`·`MyBatisElement`·`MapperEdit`·`MapperWriteCheck`(Language), `IMapperFileWriter` | 01-02 계약 · 02-01 |
 | MB-02 동적 SQL 계산 | 편집기 흐림·점·물결(03-02), 펼친 SQL 패널 | - | `IMyBatisEvaluator`·`EvalResult`·`MyBatisParameter`·`ConditionCombination`(Language), `IMyBatisFragmentResolver`·`MyBatisFragment`(Core) | 01-02 계약 · 02-02 |
 | MB-03 작업 공간 화면 | 문서 탭·문장 창·문장 탭·머리 줄·강조, 도구 창 보임 규칙(3장) | newStatement·renameStatement·deleteStatement·expandToSqlTab·expandMapper | 문서 종류 `MyBatis`, `IMyBatisWorkspaceSession`, 열기·복구 훅 | 01-02 자리 · 03-01 |
-| MB-04 파라미터 · 시나리오 | 「파라미터 · 시나리오」 창 | (패널 안 단추) | `IMyBatisScenarioStore`·`MyBatisScenario`(Core), 표 `mybatis_scenario` | 01-02 계약 · 02-03 · 03-02 |
+| MB-04 파라미터 · 시나리오 | 「바인드 변수」 창(기존, 파라미터 행) + 「펼친 SQL」 머리 줄 시나리오 콤보 | (패널 안 단추) | `IMyBatisScenarioStore`·`MyBatisScenario`(Core), 표 `mybatis_scenario` | 01-02 계약 · 02-03 · 03-02 |
 | MB-05 펼친 SQL · 실행 | 펼친 SQL 패널, 머리 줄 켜진 조건 수, 결과 창 | runScenario(F9)·explainScenario·copyExpanded·copyExpandedWithValues | `EvalResult`, 기존 `IExecutionService`(정책 관문·탭 접속) | 03-02 |
 | MB-06 매퍼에 저장 | 바뀌는 부분 창, 알림 띠, 상태 표시줄 구간 | mybatis.save, file.save 경유(Ctrl+S) | `MapperEdit`·`MapperWriteCheck`·`IMapperFileWriter`, 저장·복구 훅 | 03-03 |
 | MB-07 조합 검사 | 조합 검사 패널, 문장 창 오류 배지, 빠른 고침 띠 | checkCombinations·applyAutoFix | `ConditionCombination`, L2 파서(`PlSqlAnalyzer`) | 03-04 |
@@ -363,7 +363,7 @@ xml 형식(XmlReader, DTD 무시·resolver null), 문장 id 겹침, 연 때 해�
 | `Shell/Docking/DockTabMenu.cs` | 문서 탭 우클릭(고정 메뉴) | `context:documentTab` 레지스트리 항목 덧붙이기 | `ShellContextMenus.Factory("documentTab")` 자리 1개 | 01-02 전용(2026-10-23 조정자 허가) |
 | `Shell/Menus/MenuVisibility.cs` | 주 메뉴 숨김 | 4.3 TabScopes | 표 수정 | 01-02 뒤 동결 |
 | `Shell/Resources/CommandTitles.json`·`-en.json` | 명령 제목 | 4.1 의 15개 | 전부 미리 넣음 | 동결(새 명령은 조정자 승인) |
-| `Resources/strings-ko.json`·`strings-en.json`·`literals-en.json` | 패널 제목·화면 글 | 패널 4개 제목, 자리 화면 글 | 자기 키만 정렬 위치에 | 공유(Q2, 자기 키만) |
+| `Resources/strings-ko.json`·`strings-en.json`·`literals-en.json` | 패널 제목·화면 글 | 패널 3개 제목, 자리 화면 글 | 자기 키만 정렬 위치에 | 공유(Q2, 자기 키만) |
 | `docs/design/keymaps/*.json` 4개 · `docs/design/commands.md` | 키맵 프리셋·명령 문서 | 4.2 F9 한 줄, MyBatis 명령·문맥 키·포커스 자리 줄, 2.4 TabScopes 문장 | MyBatis 줄만(Q1) + 2.4 문장 1개(2026-10-23 조정자 허가) | 동결 |
 | `Features/Execution/ExecutionCommands.cs`·`Features/GridEdit/GridEditCommands.cs` | SQL 실행 명령 | Enablement 에 `&& !mybatisDocActive` | 특성 문자열만(2026-10-23 조정자 허가) | 금지(기능 레인) |
 | `Features/ExecutionPlan/ExecutionPlanCommands.cs`·`Features/FormatterProfiles/FormatterProfilesCommands.cs`(·`sqlplus.runFile` 처리기) | 실행 계획·서식 명령 | Enablement 에 `&& !mybatisDocActive` | 특성 문자열만(2026-10-23 조정자 허가) | 금지(기능 레인) |
@@ -383,7 +383,7 @@ xml 형식(XmlReader, DTD 무시·resolver null), 문장 id 겹침, 연 때 해�
 | `Statements/` | 「문장」 창 VM·View, 문장 명령 처리기 | 03-01 |
 | `Workspace/` | 열기 훅·세션·복구 구현 | 03-01 |
 | `Editor/` | 문장 편집기 View·View 팩토리·머리 줄·탭 머리, `Highlighting/` | 03-01 (단 `Editor/EvalDecorator*` 는 03-02) |
-| `Parameters/` | 「파라미터 · 시나리오」 창 VM·View | 03-02 |
+| `Parameters/` | 바인드 변수 창 동기화·계산 상태·시나리오 콤보 | 03-02 |
 | `Expanded/` | 「펼친 SQL」 패널 VM·View | 03-02 |
 | `Run/` | 실행·계획·복사 명령 처리기 | 03-02 |
 | `Save/` | 저장 훅·바뀌는 부분 창·병합·감시·닫기 가드·저장 명령·상태 표시줄 구간 | 03-03 |
