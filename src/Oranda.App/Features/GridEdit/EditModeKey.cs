@@ -35,5 +35,5 @@ public static class EditModeKey
     /// 문구가 키 글을 품고 있어 <see cref="LiteralTranslator"/> 의 통문장 대응표로는 번역할 수 없으므로 한/영을 함께 받는다.
     /// </summary>
     public static string Localize(string ko, string en) =>
-        string.Format(System.Globalization.CultureInfo.InvariantCulture, LiteralTranslator.Language == "en" ? en : ko, Suffix);
+        string.Format(System.Globalization.CultureInfo.InvariantCulture, LiteralTranslator.IsEnglish ? en : ko, Suffix);
 }

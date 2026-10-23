@@ -595,6 +595,9 @@
             <x:Double x:Key="OrandaGridFontSize">13</x:Double>
             <FontFamily x:Key="OrandaGridFontFamily">Cascadia Mono, Consolas, Menlo, monospace</FontFamily>
             <FontFamily x:Key="OrandaEditorFontFamily">Cascadia Mono, Consolas, Malgun Gothic</FontFamily>
+            <!-- 설정과 무관한 고정폭 글꼴(Shell/Appearance/MonoFonts.cs 와 같은 값). 값·DDL 칸 = Fixed, SQL 코드·출력 칸 = Code. -->
+            <FontFamily x:Key="OrandaFixedFontFamily">Consolas,Menlo,monospace</FontFamily>
+            <FontFamily x:Key="OrandaCodeFontFamily">Cascadia Mono,Consolas,Menlo,monospace</FontFamily>
 
             <!-- Fluent 기본 탭 머리글(24 DIP 글자, 48 DIP 높이)은 도구용으로 너무 크다. Orange·SQL Developer 처럼 작게 쓴다. -->
             <x:Double x:Key="TabItemHeaderFontSize">13.5</x:Double>

@@ -64,7 +64,7 @@
             <ContentControl Content="{Binding Pane}" IsVisible="{Binding HasPane}" />
             <TextBox Text="{Binding Message, Mode=OneWay}" IsReadOnly="True" AcceptsReturn="True"
                      TextWrapping="Wrap" IsVisible="{Binding HasMessage}"
-                     FontFamily="Cascadia Mono,Consolas,Menlo,monospace" />
+                     FontFamily="{StaticResource OrandaCodeFontFamily}" />
           </Grid>
         </DataTemplate>
       </TabControl.ContentTemplate>

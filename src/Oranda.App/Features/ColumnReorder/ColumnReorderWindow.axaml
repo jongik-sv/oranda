@@ -80,7 +80,7 @@
           <ItemsControl x:Name="WarningList" ItemsSource="{Binding Warnings}">
             <ItemsControl.ItemTemplate>
               <DataTemplate x:DataType="vm:ColumnReorderWarning">
-                <TextBlock Text="{Binding Text}" TextTrimming="CharacterEllipsis" FontFamily="Cascadia Mono,Consolas,Menlo,monospace" />
+                <TextBlock Text="{Binding Text}" TextTrimming="CharacterEllipsis" FontFamily="{StaticResource OrandaCodeFontFamily}" />
               </DataTemplate>
             </ItemsControl.ItemTemplate>
           </ItemsControl>

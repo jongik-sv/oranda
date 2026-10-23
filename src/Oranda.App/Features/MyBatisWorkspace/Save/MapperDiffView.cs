@@ -8,6 +8,7 @@ using Avalonia.Controls.Templates;
 using Avalonia.Layout;
 using Avalonia.Media;
 using Oranda.App.Features.Localization;
+using Oranda.App.Shell.Appearance;
 using Oranda.App.Shell.Icons;
 
 namespace Oranda.App.Features.MyBatisWorkspace.Save;
@@ -224,7 +225,7 @@ internal sealed class MapperDiffRowControl : Border
 /// <summary>저장 창·고르기 창·알림 띠가 함께 쓰는 작은 도우미(코드로 만든 화면용).</summary>
 internal static class MapperSaveUi
 {
-    public static FontFamily Mono { get; } = new("Cascadia Mono,Consolas,Menlo,monospace");
+    public static FontFamily Mono => MonoFonts.Code;
 
     /// <summary>주 창(대화상자의 주인). 없으면 null(헤드리스 시험).</summary>
     public static Window? MainWindow() => (Application.Current?.ApplicationLifetime as IClassicDesktopStyleApplicationLifetime)?.MainWindow;

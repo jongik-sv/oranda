@@ -13,7 +13,7 @@
       </DockPanel>
     </Border>
     <TextBox x:Name="OutputBox" Text="{Binding Text, Mode=OneWay}" IsReadOnly="True" AcceptsReturn="True"
-             FontFamily="Cascadia Mono,Consolas,Menlo,monospace" TextWrapping="NoWrap"
+             FontFamily="{StaticResource OrandaCodeFontFamily}" TextWrapping="NoWrap"
              AutomationProperties.Name="DBMS 출력" />
   </DockPanel>
 </UserControl>

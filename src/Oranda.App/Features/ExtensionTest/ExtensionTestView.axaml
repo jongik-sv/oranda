@@ -21,10 +21,10 @@
     <Grid RowDefinitions="Auto,*,Auto,*,Auto,*">
       <TextBlock Grid.Row="0" Text="읽은 SQL" Opacity="0.7" />
       <TextBox Grid.Row="1" x:Name="SourceBox" IsReadOnly="True" AcceptsReturn="True" TextWrapping="Wrap"
-               FontFamily="Consolas,Menlo,monospace" Text="{Binding SourceText}" />
+               FontFamily="{StaticResource OrandaFixedFontFamily}" Text="{Binding SourceText}" />
       <TextBlock Grid.Row="2" Margin="0,4,0,0" Text="제안(고칠 수 있음)" Opacity="0.7" />
       <TextBox Grid.Row="3" x:Name="ProposedBox" AcceptsReturn="True" TextWrapping="Wrap"
-               FontFamily="Consolas,Menlo,monospace" Text="{Binding ProposedText, Mode=TwoWay}" />
+               FontFamily="{StaticResource OrandaFixedFontFamily}" Text="{Binding ProposedText, Mode=TwoWay}" />
       <TextBlock Grid.Row="4" Margin="0,4,0,0" Text="기록 · 테이블" Opacity="0.7" />
       <Grid Grid.Row="5" ColumnDefinitions="*,*">
         <ListBox Grid.Column="0" x:Name="LogList" ItemsSource="{Binding Log}" />

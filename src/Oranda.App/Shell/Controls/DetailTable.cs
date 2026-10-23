@@ -58,8 +58,6 @@ public sealed class DetailTable : UserControl
 
     private const string Group = "dt";
 
-    private static bool En => LiteralTranslator.Language == "en";
-
     private readonly ListBox _list = new() { Classes = { "grid-c" }, SelectionMode = SelectionMode.Multiple };
     private readonly ScrollViewer _scroll = new()
     {
@@ -446,15 +444,15 @@ public sealed class DetailTable : UserControl
     {
         var total = Rows?.Count ?? 0;
         var picked = _list.SelectedItems?.Count ?? 0;
-        var parts = new List<string> { En ? $"{total:N0} rows" : $"{total:N0}행" };
+        var parts = new List<string> { LiteralTranslator.IsEnglish ? $"{total:N0} rows" : $"{total:N0}행" };
         if (picked > 0)
         {
-            parts.Add(En ? $"{picked} selected" : $"{picked}개 선택");
+            parts.Add(LiteralTranslator.IsEnglish ? $"{picked} selected" : $"{picked}개 선택");
         }
 
         if (_overflow > 0)
         {
-            parts.Add(En ? $"… {_overflow:N0} more rows — narrow with Find" : $"… {_overflow:N0}행 더 있음 — 찾기로 좁혀 보세요");
+            parts.Add(LiteralTranslator.IsEnglish ? $"… {_overflow:N0} more rows — narrow with Find" : $"… {_overflow:N0}행 더 있음 — 찾기로 좁혀 보세요");
         }
 
         _status.Text = string.Join(" · ", parts);

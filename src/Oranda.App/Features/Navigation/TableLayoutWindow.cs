@@ -264,8 +264,6 @@ public sealed class TableLayoutWindow : Window
         return b;
     }
 
-    private static bool En => LiteralTranslator.Language == "en";
-
     private DockPanel BuildContent()
     {
         _filter.InnerLeftContent = ShellIcons.Create("find", 14);
@@ -290,12 +288,12 @@ public sealed class TableLayoutWindow : Window
 
         var hint = new TextBlock
         {
-            Text = (En ? "Enter · double-click = insert · {0} = copy" : "Enter·두 번 누르기 = 넣기 · {0} = 복사").Replace("{0}", OperatingSystem.IsMacOS() ? "⌘C" : "Ctrl+C", StringComparison.Ordinal),
+            Text = (LiteralTranslator.IsEnglish ? "Enter · double-click = insert · {0} = copy" : "Enter·두 번 누르기 = 넣기 · {0} = 복사").Replace("{0}", OperatingSystem.IsMacOS() ? "⌘C" : "Ctrl+C", StringComparison.Ordinal),
         };
 
         // 격자 표(Styles/GridC): 머리글과 줄이 같은 칸 묶음 이름(tl)을 써서 너비가 맞는다.
         var body = new DockPanel();
-        var header = GridC.Header(En ? HeadersEn : HeadersKo, Group);
+        var header = GridC.Header(LiteralTranslator.IsEnglish ? HeadersEn : HeadersKo, Group);
         DockPanel.SetDock(header, Avalonia.Controls.Dock.Top);
         body.Children.Add(header);
         DockPanel.SetDock(_probeHost, Avalonia.Controls.Dock.Top);
@@ -413,21 +411,21 @@ public sealed class TableLayoutWindow : Window
         var parts = new List<string>
         {
             $"{model.Title} ({model.Kind})",
-            En ? $"{total} columns" : $"{total} 컬럼",
+            LiteralTranslator.IsEnglish ? $"{total} columns" : $"{total} 컬럼",
         };
         if (_hidden > 0)
         {
-            parts.Add(En ? $"{_hidden} hidden" : $"{_hidden}개 숨김");
+            parts.Add(LiteralTranslator.IsEnglish ? $"{_hidden} hidden" : $"{_hidden}개 숨김");
         }
 
         if (shown != visibleTotal)
         {
-            parts.Add(En ? $"{shown} shown" : $"{shown}개 보임");
+            parts.Add(LiteralTranslator.IsEnglish ? $"{shown} shown" : $"{shown}개 보임");
         }
 
         if (picked > 0)
         {
-            parts.Add(En ? $"{picked} selected" : $"{picked}개 선택");
+            parts.Add(LiteralTranslator.IsEnglish ? $"{picked} selected" : $"{picked}개 선택");
         }
 
         var pk = model.Rows.Where(r => r.IsPk).Select(r => r.Name).ToList();

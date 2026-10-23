@@ -55,11 +55,11 @@
       <TabControl x:Name="DetailTabs" Grid.Row="2">
         <TabItem Header="전문·바인드">
           <TextBox Text="{Binding DetailText}" IsReadOnly="True" AcceptsReturn="True" TextWrapping="NoWrap"
-                   FontFamily="Consolas,Menlo,monospace" ScrollViewer.HorizontalScrollBarVisibility="Auto" />
+                   FontFamily="{StaticResource OrandaFixedFontFamily}" ScrollViewer.HorizontalScrollBarVisibility="Auto" />
         </TabItem>
         <TabItem Header="실제 계획">
           <TextBox Text="{Binding PlanText}" IsReadOnly="True" AcceptsReturn="True" TextWrapping="NoWrap"
-                   FontFamily="Consolas,Menlo,monospace" ScrollViewer.HorizontalScrollBarVisibility="Auto" />
+                   FontFamily="{StaticResource OrandaFixedFontFamily}" ScrollViewer.HorizontalScrollBarVisibility="Auto" />
         </TabItem>
       </TabControl>
     </Grid>

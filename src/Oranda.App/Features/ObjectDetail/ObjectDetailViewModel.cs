@@ -7,6 +7,7 @@ using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using CommunityToolkit.Mvvm.ComponentModel;
+using Oranda.App.Features.Localization;
 using Oranda.App.Shell;
 using Oranda.Core.Grid;
 using Oranda.Core.Metadata;
@@ -439,8 +440,6 @@ public sealed partial class ObjectDetailViewModel : ToolPanelViewModelBase
         }
     }
 
-    private static bool En => Oranda.App.Features.Localization.LiteralTranslator.Language == "en";
-
     private ITableKeyDetailProvider? ResolveKeys()
     {
         if (!_keysResolved)
@@ -461,8 +460,8 @@ public sealed partial class ObjectDetailViewModel : ToolPanelViewModelBase
         HasKeyColumns = section is { KeyKind: not DetailKeyKind.None } && ResolveKeys() is not null;
         KeyStatus = !HasKeyColumns ? string.Empty
             : section!.KeyKind == DetailKeyKind.Index
-                ? (En ? "Select an index to see its columns" : "인덱스를 고르면 그 열이 보인다")
-                : (En ? "Select a constraint to see its columns" : "제약을 고르면 그 열이 보인다");
+                ? (LiteralTranslator.IsEnglish ? "Select an index to see its columns" : "인덱스를 고르면 그 열이 보인다")
+                : (LiteralTranslator.IsEnglish ? "Select a constraint to see its columns" : "제약을 고르면 그 열이 보인다");
     }
 
     /// <summary>
@@ -502,7 +501,7 @@ public sealed partial class ObjectDetailViewModel : ToolPanelViewModelBase
         using var cts = new CancellationTokenSource();
         _keyCts = cts;
         KeyColumns = null;
-        KeyStatus = En ? $"Reading columns of {name}…" : $"{name} 의 열을 읽는 중…";
+        KeyStatus = LiteralTranslator.IsEnglish ? $"Reading columns of {name}…" : $"{name} 의 열을 읽는 중…";
         try
         {
             if (KeyReadDelay > TimeSpan.Zero)
@@ -549,8 +548,8 @@ public sealed partial class ObjectDetailViewModel : ToolPanelViewModelBase
             }
 
             var status = denied
-                ? (En ? $"No privilege to read the columns of {name}" : $"권한이 없어 {name} 의 열을 읽지 못했다")
-                : (En ? $"{name} · {table.Rows.Count} columns" : $"{name} · 열 {table.Rows.Count}개");
+                ? (LiteralTranslator.IsEnglish ? $"No privilege to read the columns of {name}" : $"권한이 없어 {name} 의 열을 읽지 못했다")
+                : (LiteralTranslator.IsEnglish ? $"{name} · {table.Rows.Count} columns" : $"{name} · 열 {table.Rows.Count}개");
             if (!denied)
             {
                 _keyCache[(section.KeyKind, name)] = (table, status); // 권한 없음은 권한을 받은 뒤 다시 고르면 다시 읽는다
@@ -566,7 +565,7 @@ public sealed partial class ObjectDetailViewModel : ToolPanelViewModelBase
         {
             if (serial == _keySerial && gen == _generation)
             {
-                KeyStatus = (En ? "Could not read the columns: " : "열을 읽지 못했다: ") + ex.Message;
+                KeyStatus = (LiteralTranslator.IsEnglish ? "Could not read the columns: " : "열을 읽지 못했다: ") + ex.Message;
             }
         }
         finally

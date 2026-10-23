@@ -70,7 +70,7 @@
             </TreeView.Styles>
             <TreeView.ItemTemplate>
               <TreeDataTemplate x:DataType="vm:BlockingItem" ItemsSource="{Binding Children}">
-                <TextBlock Text="{Binding Title}" FontFamily="Consolas,Menlo,monospace" />
+                <TextBlock Text="{Binding Title}" FontFamily="{StaticResource OrandaFixedFontFamily}" />
               </TreeDataTemplate>
             </TreeView.ItemTemplate>
           </TreeView>
@@ -78,7 +78,7 @@
         <TabItem Header="상세">
           <DockPanel>
             <TextBox Text="{Binding DetailText}" IsReadOnly="True" AcceptsReturn="True" TextWrapping="NoWrap"
-                     FontFamily="Consolas,Menlo,monospace" ScrollViewer.HorizontalScrollBarVisibility="Auto" />
+                     FontFamily="{StaticResource OrandaFixedFontFamily}" ScrollViewer.HorizontalScrollBarVisibility="Auto" />
           </DockPanel>
         </TabItem>
       </TabControl>

@@ -24,12 +24,12 @@
     </Border>
     <Grid>
       <TextBox x:Name="TextBox" AcceptsReturn="True" AcceptsTab="True" TextWrapping="NoWrap"
-               FontFamily="Consolas,Menlo,monospace" IsVisible="{Binding IsText}"
+               FontFamily="{StaticResource OrandaFixedFontFamily}" IsVisible="{Binding IsText}"
                IsReadOnly="{Binding !CanEditText}" Text="{Binding Text, Mode=TwoWay}" />
       <Grid IsVisible="{Binding IsBinary}" RowDefinitions="Auto,*">
         <Image x:Name="Preview" MaxHeight="260" Margin="6" Stretch="Uniform" HorizontalAlignment="Left" />
         <ScrollViewer Grid.Row="1" HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto">
-          <SelectableTextBlock Margin="8,4" FontFamily="Consolas,Menlo,monospace" Text="{Binding HexText}" />
+          <SelectableTextBlock Margin="8,4" FontFamily="{StaticResource OrandaFixedFontFamily}" Text="{Binding HexText}" />
         </ScrollViewer>
       </Grid>
     </Grid>

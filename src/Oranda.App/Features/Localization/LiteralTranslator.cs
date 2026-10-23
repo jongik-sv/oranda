@@ -38,6 +38,9 @@ public static class LiteralTranslator
     /// <summary>지금 쓰는 언어(<c>ko</c> | <c>en</c>).</summary>
     public static string Language => _text?.Language ?? "ko";
 
+    /// <summary>영어 화면인가(<see cref="Language"/> 가 <c>en</c>). 화면 코드의 한/영 분기는 이것 하나로 판정한다.</summary>
+    public static bool IsEnglish => Language == "en";
+
     /// <summary>번역 표(한국어 글 → 영어 글). 시험이 검사한다.</summary>
     public static IReadOnlyDictionary<string, string> Table => English.Value;
 
@@ -137,7 +140,7 @@ public static class LiteralTranslator
     public static void Translate(Control c)
     {
         ArgumentNullException.ThrowIfNull(c);
-        var toEnglish = Language == "en";
+        var toEnglish = IsEnglish;
         if (!toEnglish && !Applied.TryGetValue(c, out _))
         {
             return;

@@ -51,7 +51,7 @@
             </DockPanel>
             <GridSplitter Grid.Column="1" ResizeDirection="Columns" />
             <ScrollViewer Grid.Column="2" HorizontalScrollBarVisibility="Auto">
-              <SelectableTextBlock Margin="8,4" Text="{Binding ReferencesText}" FontFamily="Consolas,Menlo,monospace" />
+              <SelectableTextBlock Margin="8,4" Text="{Binding ReferencesText}" FontFamily="{StaticResource OrandaFixedFontFamily}" />
             </ScrollViewer>
           </Grid>
         </DockPanel>
@@ -83,7 +83,7 @@
                   <TextBlock Grid.Column="0" Text="{Binding Title}" TextTrimming="CharacterEllipsis" />
                   <TextBlock Grid.Column="1" Text="{Binding ObjectType}" TextTrimming="CharacterEllipsis" />
                   <TextBlock Grid.Column="2" Margin="0,0,10,0" HorizontalAlignment="Right" Text="{Binding LineText}" />
-                  <TextBlock Grid.Column="3" Text="{Binding Text}" FontFamily="Consolas,Menlo,monospace" TextTrimming="CharacterEllipsis" />
+                  <TextBlock Grid.Column="3" Text="{Binding Text}" FontFamily="{StaticResource OrandaFixedFontFamily}" TextTrimming="CharacterEllipsis" />
                 </Grid>
               </DataTemplate>
             </ListBox.ItemTemplate>
@@ -133,7 +133,7 @@
           <ListBox ItemsSource="{Binding CompileResults}">
             <ListBox.ItemTemplate>
               <DataTemplate x:DataType="vm:CompileResultItem">
-                <TextBlock Text="{Binding Line}" FontFamily="Consolas,Menlo,monospace" TextTrimming="CharacterEllipsis" />
+                <TextBlock Text="{Binding Line}" FontFamily="{StaticResource OrandaFixedFontFamily}" TextTrimming="CharacterEllipsis" />
               </DataTemplate>
             </ListBox.ItemTemplate>
           </ListBox>

@@ -103,7 +103,7 @@
       <!-- 셀 편집기(편집 모드에서 두 번 누르기·F2): 셀 위에 겹쳐 띄운다. Enter 반영·Esc 취소. -->
       <TextBox x:Name="CellEditor" Grid.Row="0" Grid.Column="0" IsVisible="False" MinHeight="0" Padding="4,0"
                HorizontalAlignment="Left" VerticalAlignment="Top" VerticalContentAlignment="Center"
-               FontFamily="Cascadia Mono,Consolas,Menlo,monospace" AutomationProperties.Name="셀 편집" />
+               FontFamily="{StaticResource OrandaCodeFontFamily}" AutomationProperties.Name="셀 편집" />
       <ScrollBar x:Name="VBar" Grid.Row="0" Grid.Column="1" Orientation="Vertical" AllowAutoHide="False" />
       <ScrollBar x:Name="HBar" Grid.Row="1" Grid.Column="0" Orientation="Horizontal" AllowAutoHide="False" />
     </Grid>

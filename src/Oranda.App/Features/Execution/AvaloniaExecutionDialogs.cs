@@ -7,6 +7,7 @@ using Avalonia.Styling;
 using Avalonia.Threading;
 using Oranda.App.Features.Localization;
 using Oranda.App.Features.SqlEditor;
+using Oranda.App.Shell.Appearance;
 using Oranda.Core.Execution;
 
 namespace Oranda.App.Features.Execution;
@@ -17,7 +18,7 @@ namespace Oranda.App.Features.Execution;
 /// </summary>
 public sealed class AvaloniaExecutionDialogs : IExecutionDialogs
 {
-    private static readonly FontFamily Mono = new("Cascadia Mono,Consolas,Menlo,monospace");
+    private static readonly FontFamily Mono = MonoFonts.Code;
 
     private readonly Func<Window?>? _owner;
 

@@ -35,7 +35,7 @@
           <CheckBox Content="종결자(;)" IsChecked="{Binding SqlTerminator, Mode=TwoWay}" />
           <CheckBox Content="종속 객체(인덱스·제약·권한 등)" IsChecked="{Binding IncludeDependentObjects, Mode=TwoWay}" />
           <TextBlock Text="3. 이름 바꾸기 (한 줄에 이전=새)" FontWeight="SemiBold" />
-          <TextBox AcceptsReturn="True" Height="70" FontFamily="Consolas,Menlo,monospace" Text="{Binding RenameText, Mode=TwoWay}" />
+          <TextBox AcceptsReturn="True" Height="70" FontFamily="{StaticResource OrandaFixedFontFamily}" Text="{Binding RenameText, Mode=TwoWay}" />
           <TextBlock Text="4. 출력" FontWeight="SemiBold" />
           <DockPanel>
             <Button Classes="tool" icons:ButtonIcon.Key="open" x:Name="BrowseButton" DockPanel.Dock="Right" Margin="4,0,0,0" Content="찾아보기" />
@@ -49,7 +49,7 @@
       <ListBox Grid.Column="2" ItemsSource="{Binding Results}">
         <ListBox.ItemTemplate>
           <DataTemplate x:DataType="vm:DdlExtractRow">
-            <TextBlock Text="{Binding Line}" FontFamily="Consolas,Menlo,monospace" TextTrimming="CharacterEllipsis" />
+            <TextBlock Text="{Binding Line}" FontFamily="{StaticResource OrandaFixedFontFamily}" TextTrimming="CharacterEllipsis" />
           </DataTemplate>
         </ListBox.ItemTemplate>
       </ListBox>

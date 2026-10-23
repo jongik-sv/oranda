@@ -95,7 +95,7 @@ public static class ObjectInfoPopup
             }
         };
         var toolbar = new StackPanel { Orientation = Orientation.Horizontal, Children = { copy } };
-        var hint = new TextBlock { Text = LiteralTranslator.Language == "en" ? "Esc = close" : "Esc = 닫기" };
+        var hint = new TextBlock { Text = LiteralTranslator.IsEnglish ? "Esc = close" : "Esc = 닫기" };
         var title = new TextBlock { Text = info.Title, TextTrimming = TextTrimming.CharacterEllipsis };
         return GridC.Frame(toolbar, new ScrollViewer
         {

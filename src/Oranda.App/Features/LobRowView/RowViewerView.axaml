@@ -68,10 +68,10 @@
               <TextBlock Grid.Column="2" Text="{Binding TypeName}" MaxWidth="110" TextTrimming="CharacterEllipsis" Opacity="0.6" VerticalAlignment="Top" />
               <TextBlock Grid.Column="3" Classes="rv-value" Classes.null="{Binding IsNull}" Classes.edited="{Binding IsEdited}"
                          Text="{Binding Text}" TextWrapping="Wrap" MaxLines="12" TextTrimming="CharacterEllipsis"
-                         FontFamily="Consolas,Menlo,monospace" ToolTip.Tip="{Binding Text}"
+                         FontFamily="{StaticResource OrandaFixedFontFamily}" ToolTip.Tip="{Binding Text}"
                          IsVisible="{Binding !IsEditing}" />
               <TextBox Grid.Column="3" Classes="compact" Text="{Binding EditText, Mode=TwoWay}" IsVisible="{Binding IsEditing}"
-                       FontFamily="Consolas,Menlo,monospace" />
+                       FontFamily="{StaticResource OrandaFixedFontFamily}" />
             </Grid>
           </Border>
         </DataTemplate>
