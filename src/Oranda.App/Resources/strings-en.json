@@ -342,7 +342,7 @@
   "Panel.oranda.panel.messages": "Messages",
   "Panel.oranda.panel.mybatisCombos": "Combinations",
   "Panel.oranda.panel.mybatisExpanded": "Expanded SQL",
-  "Panel.oranda.panel.mybatisStatements": "Statements",
+  "Panel.oranda.panel.mybatisStatements": "Mapper Queries",
   "Panel.oranda.panel.objectDetail": "Object Detail",
   "Panel.oranda.panel.objectSearch": "Object Search",
   "Panel.oranda.panel.outline": "Document Outline",

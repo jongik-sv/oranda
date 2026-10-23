@@ -15,7 +15,7 @@
 | 주 도구 막대 | 지금 그대로(접속 콤보 포함). MyBatis 전용 단추는 넣지 않는다(4.4) | - | - |
 | 문서 도구 막대(문서 탭 아래 한 줄) | 아이콘 단추: 시나리오 값으로 실행(F9) · 실행 계획 · 조합 검사 · xml 에 저장(Ctrl+S) · 펼친 SQL 복사(▾ 값 넣은 글). 툴팁에 단축키. MyBatis 문서에서만 보인다 | 자리 = 03-01, 단추별 명령 = 표 4.1 | MB-05·06·07 |
 | 문서 탭 머리 | `EmpMapper` + 「MyBatis」 표시 + 저장 안 함 점. 지금 `DisplayTitle`(「* 이름 (MyBatis)」) 규칙을 그대로 쓴다 | 03-01(표시만) | MB-03 |
-| 왼쪽 「문장」 도구 창 | 매퍼 경로·namespace, 묶음(select·insert·update·delete·sql 조각·resultMap), 항목 표시(● 수정·새 문장·조합 오류 n·「n곳에서 씀」·「(그대로 둠)」), 「+ 새 문장」, 우클릭 메뉴, 아래 「로그 붙여 넣기」 안내 띠 | 창 본체 03-01, 조합 오류 배지 03-04, 폴더 트리 모드 03-07 | MB-03·07·09·10 |
+| 왼쪽 「매퍼 쿼리」 도구 창(구 「문장」, 공용 격자 양식 03-08: 종류·id·수정·조합 오류·쓰는 곳 열) | 매퍼 경로·namespace, 묶음(select·insert·update·delete·sql 조각·resultMap), 항목 표시(● 수정·새 문장·조합 오류 n·「n곳에서 씀」·「(그대로 둠)」), 「+ 새 문장」, 우클릭 메뉴, 아래 「로그 붙여 넣기」 안내 띠 | 창 본체 03-01, 조합 오류 배지 03-04, 폴더 트리 모드 03-07 | MB-03·07·09·10 |
 | 가운데 문장 탭 줄 | 안쪽 탭 줄 재사용. 탭 머리 = 종류 표시(SEL·INS·UPD·DEL·SQL) + id + 수정 점 | 03-01 | MB-03 |
 | 문장 머리 줄 | 「EmpMapper.xml › selectEmpList」 · 동적 태그 n · 켜진 조건 n/m · 「흐린 줄 = 이번 값으로 빠지는 부분」 | 머리 줄 03-01, 켜진 조건 수 03-02 | MB-03·05 |
 | 문장 원문 편집기 | 그 문장 요소의 원문(여는 태그 ~ 닫는 태그). XML·`#{}`·`${}` 강조 + SQL 구간 기존 강조, 흐린 블록·여백 켬/끔 점·물결 밑줄, 빠른 고침 띠 | 강조 03-01, 계산 꾸밈 03-02, 자동 고침 03-04 | MB-03·05·07 |
@@ -61,7 +61,7 @@ UI 기준: 아이콘 도구 막대(툴팁 필수), 촘촘한 목록, 우클릭 �
 
 | ID | 제목(ko / en) | 위치 | Order | 소유(내용) |
 |----|---------------|------|-------|------------|
-| `oranda.panel.mybatisStatements` | 문장 / Statements | Left | 30 | 03-01 |
+| `oranda.panel.mybatisStatements` | 매퍼 쿼리 / Mapper Queries | Left | 30 | 03-01 |
 | ~~`oranda.panel.mybatisParameters`~~ | (없앰, 2026-10-23 사용자 결정 — 「바인드 변수」 창이 대신) | - | - | 03-02 |
 | `oranda.panel.mybatisExpanded` | 펼친 SQL / Expanded SQL | Bottom | 4 | 03-02 |
 | `oranda.panel.mybatisCombos` | 조합 검사 / Combinations | Bottom | 7 | 03-04 |
@@ -104,9 +104,9 @@ TRD 6 의 7개에 기능 Task 가 더 필요로 하는 명령을 모두 넣었�
 
 | ID | 제목(ko) | 범주 | Enablement | 자리(Placements) | 키 | 처리기 파일(소유) |
 |----|----------|------|------------|------------------|-----|-------------------|
-| `oranda.mybatis.newStatement` | 새 문장… | Edit | `mybatisDocActive` | `context:mybatisStatements/new@10`, 문장 창 「+」·탭 줄 「+」 | - | `Statements/MyBatisStatementCommands.cs` (03-01) |
-| `oranda.mybatis.renameStatement` | 문장 id 바꾸기… | Edit | `mybatisDocActive && mybatisStatementSelected` | `context:mybatisStatements/rename@20` | - | 같음 (03-01) |
-| `oranda.mybatis.deleteStatement` | 문장 지우기 | Edit | `mybatisDocActive && mybatisStatementSelected` | `context:mybatisStatements/delete@30` | - | 같음 (03-01) |
+| `oranda.mybatis.newStatement` | 새 쿼리… | Edit | `mybatisDocActive` | `context:mybatisStatements/new@10`, 문장 창 「+」·탭 줄 「+」 | - | `Statements/MyBatisStatementCommands.cs` (03-01) |
+| `oranda.mybatis.renameStatement` | 쿼리 id 바꾸기… | Edit | `mybatisDocActive && mybatisStatementSelected` | `context:mybatisStatements/rename@20` | - | 같음 (03-01) |
+| `oranda.mybatis.deleteStatement` | 쿼리 지우기 | Edit | `mybatisDocActive && mybatisStatementSelected` | `context:mybatisStatements/delete@30` | - | 같음 (03-01) |
 | `oranda.mybatis.expandToSqlTab` | 펼친 SQL 을 새 SQL 탭으로 | Sql | `mybatisDocActive && mybatisStatementSelected` | `context:mybatisStatements/expand@40` | - | 같음 (03-01) |
 | `oranda.mybatis.expandMapper` | 매퍼 전체를 SQL 탭으로 펼치기 | Sql | `mybatisDocActive` | `context:mybatisStatements/expandAll@50`(매퍼 머리 우클릭) | - | 같음 (03-01) |
 | `oranda.mybatis.runScenario` | 시나리오 값으로 실행 | Sql | `mybatisDocActive && mybatisStatementSelected && (hasSession \|\| dedicatedSession \|\| tabConnectionMissing) && !sessionBusy` | `toolbar:mybatis/run@10`, `menu:sql/mybatisRun@15` | F9 (mac Ctrl+Enter, F9) | `Run/MyBatisRunCommands.cs` (03-02) |
@@ -118,7 +118,7 @@ TRD 6 의 7개에 기능 Task 가 더 필요로 하는 명령을 모두 넣었�
 | `oranda.mybatis.applyAutoFix` | 자동 고침(<set>·<where> 로 감싸기) | Edit | `mybatisDocActive && mybatisStatementSelected && !readOnlyDoc` | `context:mybatisEditor/autoFix@10`(문장 편집기 우클릭, 03-01 이 그림) | - | 같음 (03-04) |
 | `oranda.mybatis.convertWorkspace` | MyBatis 작업 공간으로 바꾸기… | File | `sqlWorkspaceActive && !mybatisDocActive && mybatisConvertReady` | `menu:file/mybatisConvert@97`, `context:documentTab/mybatisConvert@40` | - | `Conversion/MyBatisConvertCommands.cs` (03-05) |
 | `oranda.mybatis.openFolder` | 매퍼 폴더 열기… | File | `mybatisFolderReady` | `menu:file/mybatisOpenFolder@91` | - | `Folder/MyBatisFolderCommands.cs` (03-07) |
-| `oranda.mybatis.findStatement` | MyBatis 문장 찾기… | Navigate | `mybatisDocActive \|\| mybatisFolderOpen` | `menu:navigate/mybatisFind@70` | - | 같음 (03-07) |
+| `oranda.mybatis.findStatement` | MyBatis 쿼리 찾기… | Navigate | `mybatisDocActive \|\| mybatisFolderOpen` | `menu:navigate/mybatisFind@70` | - | 같음 (03-07) |
 
 - 아이콘(문서 도구 막대·메뉴): run·explainPlan·copy·save·compile(조합 검사)·add·rename·delete·fileSql·docEdit·swap·folder·find(기존 아이콘 키, 특성에 넣어 동결).
 - 처리기의 `When`: 단축키가 있는 `runScenario` 만 `When = "mybatisDocFocus"`(주 메뉴에서는 `mybatisDocActive` 로 봄, 4.3). 나머지는 `When` 없음(주 메뉴에서 숨기지 않고 Enablement 로 회색).

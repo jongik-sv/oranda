@@ -194,7 +194,7 @@ public sealed class WorkspaceStatementsTests : IDisposable
         var select = rig.Vm.Groups[0];
         Assert.Equal(4, select.Children.Count);
         Assert.Equal("selectNew", select.Children[^1].Title); // 같은 종류의 마지막 뒤
-        Assert.Equal("+ 새 문장", select.Children[^1].NewText);
+        Assert.Equal("+ 새 쿼리", select.Children[^1].NewText);
         Assert.Equal(string.Empty, select.Children[^1].ModifiedText);
         Assert.Equal("selectNew", rig.Session.Workspace.ActiveTab!.Title);
         Assert.Equal("selectNew", rig.Vm.SelectedNode?.StatementId);

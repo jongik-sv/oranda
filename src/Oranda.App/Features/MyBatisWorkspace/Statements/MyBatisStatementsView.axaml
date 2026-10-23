@@ -11,7 +11,7 @@
     </Style>
   </UserControl.Styles>
   <Grid>
-    <TextBlock Text="MyBatis 문서를 열면 문장 목록이 여기에 보입니다."
+    <TextBlock Text="MyBatis 문서를 열면 쿼리 목록이 여기에 보입니다."
                IsVisible="{Binding !ShowsBody}"
                Opacity="0.6"
                TextWrapping="Wrap"
@@ -42,11 +42,11 @@
             </ItemsControl.ItemTemplate>
           </ItemsControl>
           <StackPanel Orientation="Horizontal" Spacing="1" IsVisible="{Binding HasSession}">
-            <Button x:Name="NewButton" Classes="toolbar" Content="새 문장" ToolTip.Tip="새 문장 만들기"
+            <Button x:Name="NewButton" Classes="toolbar" Content="새 쿼리" ToolTip.Tip="새 쿼리 만들기"
                     icons:ButtonIcon.Key="add" icons:ButtonIcon.IconOnly="True" Command="{Binding NewStatementCommand}" />
-            <Button x:Name="RenameButton" Classes="toolbar" Content="id 바꾸기" ToolTip.Tip="고른 문장의 id 바꾸기"
+            <Button x:Name="RenameButton" Classes="toolbar" Content="id 바꾸기" ToolTip.Tip="고른 쿼리의 id 바꾸기"
                     icons:ButtonIcon.Key="rename" icons:ButtonIcon.IconOnly="True" Command="{Binding RenameStatementCommand}" />
-            <Button x:Name="DeleteButton" Classes="toolbar" Content="문장 지우기" ToolTip.Tip="고른 문장 지우기"
+            <Button x:Name="DeleteButton" Classes="toolbar" Content="쿼리 지우기" ToolTip.Tip="고른 쿼리 지우기"
                     icons:ButtonIcon.Key="delete" icons:ButtonIcon.IconOnly="True" Command="{Binding DeleteStatementCommand}" />
             <Separator Classes="toolbar" />
             <Button x:Name="ExpandButton" Classes="toolbar" Content="새 SQL 탭으로 펼치기" ToolTip.Tip="펼친 SQL 을 새 SQL 탭으로 열기"
@@ -55,7 +55,7 @@
         </DockPanel>
       </Border>
       <Border DockPanel.Dock="Bottom" Classes="panel-status" IsVisible="{Binding HasSession}">
-        <TextBlock Text="로그를 붙여 넣으면 namespace.id 로 문장을 찾아 엽니다." TextWrapping="Wrap" />
+        <TextBlock Text="로그를 붙여 넣으면 namespace.id 로 쿼리를 찾아 엽니다." TextWrapping="Wrap" />
       </Border>
       <!-- 매퍼 경로(가운데 줄임: 폴더 쪽만 줄이고 파일 이름은 남긴다, 툴팁 = 전체 경로)와 namespace. 우클릭 = 매퍼 전체 펼치기 메뉴. -->
       <Border x:Name="HeaderBorder" DockPanel.Dock="Top" Background="Transparent" Padding="8,6,8,4" ToolTip.Tip="{Binding MapperPath}"
@@ -68,31 +68,54 @@
           <TextBlock Classes="panel-caption" Text="{Binding NamespaceText}" TextTrimming="CharacterEllipsis" />
         </StackPanel>
       </Border>
-      <Grid>
-        <!-- 평평한 줄 목록(묶음 머리 줄 + 항목 줄). 가상화되므로 요소가 수천 개여도 보이는 줄만 만든다. 줄 높이 24 DIP. -->
-        <ListBox x:Name="Tree" Classes="statements" ItemsSource="{Binding Rows}" SelectedItem="{Binding SelectedNode, Mode=TwoWay}"
+      <DockPanel>
+        <!-- 머리글 줄: 공용 격자(Styles/GridC)와 같은 머리글. 칸 너비는 아래 줄 서식과 같은 값을 쓴다(가상화 목록이라 공유 너비 대신 고정). -->
+        <Border DockPanel.Dock="Top" Classes="grid-c-header" IsVisible="{Binding !IsModeActive}">
+          <Grid ColumnDefinitions="40,*,60,78,64">
+            <Border Classes="grid-c-cell"><TextBlock Text="종류" /></Border>
+            <Border Grid.Column="1" Classes="grid-c-cell"><TextBlock Text="id" /></Border>
+            <Border Grid.Column="2" Classes="grid-c-cell"><TextBlock Text="수정" /></Border>
+            <Border Grid.Column="3" Classes="grid-c-cell"><TextBlock Text="조합 오류" TextTrimming="CharacterEllipsis" /></Border>
+            <Border Grid.Column="4" Classes="grid-c-cell"><TextBlock Text="쓰는 곳" TextTrimming="CharacterEllipsis" /></Border>
+          </Grid>
+        </Border>
+        <Grid>
+        <!-- 평평한 줄 목록(묶음 머리 줄 + 항목 줄). 가상화되므로 요소가 수천 개여도 보이는 줄만 만든다. 줄 높이 24 DIP, 공용 격자 양식(grid-c). -->
+        <ListBox x:Name="Tree" Classes="grid-c statements" ItemsSource="{Binding Rows}" SelectedItem="{Binding SelectedNode, Mode=TwoWay}"
                  IsVisible="{Binding !IsModeActive}" ScrollViewer.HorizontalScrollBarVisibility="Disabled">
-          <ListBox.Styles>
-            <Style Selector="ListBox.statements ListBoxItem">
-              <Setter Property="MinHeight" Value="24" />
-              <Setter Property="Padding" Value="0" />
-            </Style>
-          </ListBox.Styles>
           <ListBox.ItemTemplate>
             <DataTemplate x:DataType="vm:MyBatisStatementNode">
               <Panel>
-                <StackPanel IsVisible="{Binding IsGroup}" Orientation="Horizontal" Spacing="4" Margin="6,0" VerticalAlignment="Center">
-                  <TextBlock Text="{Binding ExpandGlyph}" Width="10" Opacity="0.7" VerticalAlignment="Center" />
-                  <TextBlock Text="{Binding Title}" FontWeight="SemiBold" Opacity="0.7" VerticalAlignment="Center" />
-                </StackPanel>
-                <Grid IsVisible="{Binding !IsGroup}" ColumnDefinitions="*,Auto" Margin="20,0,0,0" Opacity="{Binding RowOpacity}" ToolTip.Tip="{Binding ToolTipText}">
-                  <TextBlock Text="{Binding Title}" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
-                  <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="6" Margin="8,0,6,0" VerticalAlignment="Center"
-                              TextElement.FontSize="{DynamicResource OrandaFontSizeSmall}">
-                    <ItemsControl ItemsSource="{Binding Badges}" VerticalAlignment="Center">
+                <Border IsVisible="{Binding IsGroup}" Classes="grid-c-cell row-head" BorderThickness="0,0,0,1">
+                  <StackPanel Orientation="Horizontal" Spacing="4" VerticalAlignment="Center">
+                    <TextBlock Text="{Binding ExpandGlyph}" Width="10" Opacity="0.7" VerticalAlignment="Center" />
+                    <TextBlock Text="{Binding Title}" FontWeight="SemiBold" VerticalAlignment="Center" />
+                  </StackPanel>
+                </Border>
+                <Grid IsVisible="{Binding !IsGroup}" ColumnDefinitions="40,*,60,78,64" Opacity="{Binding RowOpacity}" ToolTip.Tip="{Binding ToolTipText}">
+                  <Border Classes="grid-c-cell row-head" Padding="0">
+                    <TextBlock Text="{Binding KindText}" Opacity="0.75" FontSize="{DynamicResource OrandaFontSizeSmall}" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                  </Border>
+                  <Border Grid.Column="1" Classes="grid-c-cell">
+                    <TextBlock Text="{Binding Title}" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
+                  </Border>
+                  <Border Grid.Column="2" Classes="grid-c-cell" Padding="4,0">
+                    <StackPanel Orientation="Horizontal" Spacing="4" VerticalAlignment="Center" TextElement.FontSize="{DynamicResource OrandaFontSizeSmall}">
+                      <TextBlock Text="{Binding ModifiedText}" Foreground="{DynamicResource OrandaUncommittedBrush}"
+                                 IsVisible="{Binding ModifiedText, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+                      <TextBlock Text="{Binding NewText}" Foreground="{DynamicResource OrandaSuccessForegroundBrush}"
+                                 IsVisible="{Binding NewText, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+                      <TextBlock Text="{Binding AmbiguousText}" Classes="warning-text"
+                                 IsVisible="{Binding AmbiguousText, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+                      <TextBlock Text="{Binding KeepText}" Opacity="0.7"
+                                 IsVisible="{Binding KeepText, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+                    </StackPanel>
+                  </Border>
+                  <Border Grid.Column="3" Classes="grid-c-cell" Padding="4,0">
+                    <ItemsControl ItemsSource="{Binding Badges}" VerticalAlignment="Center" TextElement.FontSize="{DynamicResource OrandaFontSizeSmall}">
                       <ItemsControl.ItemsPanel>
                         <ItemsPanelTemplate>
-                          <StackPanel Orientation="Horizontal" Spacing="6" />
+                          <StackPanel Orientation="Horizontal" Spacing="4" />
                         </ItemsPanelTemplate>
                       </ItemsControl.ItemsPanel>
                       <ItemsControl.ItemTemplate>
@@ -102,24 +125,19 @@
                         </DataTemplate>
                       </ItemsControl.ItemTemplate>
                     </ItemsControl>
-                    <TextBlock Text="{Binding UsageText}" Opacity="0.7"
-                               IsVisible="{Binding UsageText, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
-                    <TextBlock Text="{Binding ModifiedText}" Foreground="{DynamicResource OrandaUncommittedBrush}"
-                               IsVisible="{Binding ModifiedText, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
-                    <TextBlock Text="{Binding NewText}" Foreground="{DynamicResource OrandaSuccessForegroundBrush}"
-                               IsVisible="{Binding NewText, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
-                    <TextBlock Text="{Binding AmbiguousText}" Classes="warning-text"
-                               IsVisible="{Binding AmbiguousText, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
-                    <TextBlock Text="{Binding KeepText}"
-                               IsVisible="{Binding KeepText, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
-                  </StackPanel>
+                  </Border>
+                  <Border Grid.Column="4" Classes="grid-c-cell" Padding="4,0">
+                    <TextBlock Text="{Binding UsageText}" Opacity="0.7" TextTrimming="CharacterEllipsis" VerticalAlignment="Center"
+                               FontSize="{DynamicResource OrandaFontSizeSmall}" ToolTip.Tip="{Binding UsageText}" />
+                  </Border>
                 </Grid>
               </Panel>
             </DataTemplate>
           </ListBox.ItemTemplate>
         </ListBox>
         <ContentControl Content="{Binding ModeContent}" IsVisible="{Binding IsModeActive}" />
-      </Grid>
+        </Grid>
+      </DockPanel>
     </DockPanel>
   </Grid>
 </UserControl>

@@ -100,7 +100,7 @@ public sealed class MyBatisFolderCommands : ICommandHandler
 
     private async Task FindStatementAsync(CancellationToken ct)
     {
-        const string title = "MyBatis 문장 찾기";
+        const string title = "MyBatis 쿼리 찾기";
         var host = Host;
         var query = await host.Dialogs.PromptAsync(title, string.Empty, ct).ConfigureAwait(true);
         if (string.IsNullOrWhiteSpace(query))

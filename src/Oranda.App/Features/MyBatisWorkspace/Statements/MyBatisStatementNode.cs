@@ -65,6 +65,18 @@ public sealed partial class MyBatisStatementNode : ObservableObject
 
     public bool IsGroup => Entry is null;
 
+    /// <summary>격자 「종류」 칸의 짧은 배지 글(SEL·INS·UPD·DEL·SQL·MAP).</summary>
+    public string KindText => Kind switch
+    {
+        MyBatisStatementKind.Select => "SEL",
+        MyBatisStatementKind.Insert => "INS",
+        MyBatisStatementKind.Update => "UPD",
+        MyBatisStatementKind.Delete => "DEL",
+        MyBatisStatementKind.Sql => "SQL",
+        MyBatisStatementKind.ResultMap => "MAP",
+        _ => "···",
+    };
+
     /// <summary>요소 노드의 지금 id(id 바꾸기 뒤의 id). id 가 없는 요소와 묶음 머리는 null.</summary>
     public string? StatementId => Entry?.Id;
 

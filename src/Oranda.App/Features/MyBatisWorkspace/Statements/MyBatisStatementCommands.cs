@@ -66,7 +66,7 @@ public sealed class MyBatisStatementCommands : ICommandHandler
 
     private static async Task RenameAsync(SqlEditorHost host, MyBatisWorkspaceSession session, CancellationToken ct)
     {
-        const string title = "문장 id 바꾸기";
+        const string title = "쿼리 id 바꾸기";
         var entry = await TargetAsync(host, session, title, editableOnly: true, ct).ConfigureAwait(true);
         if (entry?.Id is not { } id)
         {
@@ -91,7 +91,7 @@ public sealed class MyBatisStatementCommands : ICommandHandler
 
     private static async Task DeleteAsync(SqlEditorHost host, MyBatisWorkspaceSession session, CancellationToken ct)
     {
-        var entry = await TargetAsync(host, session, "문장 지우기", editableOnly: true, ct).ConfigureAwait(true);
+        var entry = await TargetAsync(host, session, "쿼리 지우기", editableOnly: true, ct).ConfigureAwait(true);
         if (entry?.Id is not { } id)
         {
             return;

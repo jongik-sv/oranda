@@ -161,7 +161,7 @@ levels:
   - requirements: 「매퍼 폴더 열기」: 폴더(예 src/main/resources/mapper) 아래 루트가 mapper 인 *.xml 을 찾아 「문장」 도구 창에 폴더 > 파일 > 문장 트리로 보인다. 파일·문장을 열면 MyBatis 작업 공간으로 연다. 최근 폴더를 기억한다; 다른 파일의 sql 조각 include(`refid="ns.frag"`)를 펼친다(폴더 안 파일을 찾는 IMyBatisFragmentResolver 를 만든다). sql 조각·resultMap 을 쓰는 곳 찾기; 「MyBatis 문장 찾기」: namespace.id 또는 id 일부로 폴더 안 문장을 찾아 연다. 로그 붙여 넣기(TSK-03-06)도 폴더 안을 찾는다; 계약 Task design.md 「기능 Task 편집 지점」 의 자기 소유 파일만 고친다; 제약: 폴더 훑기는 백그라운드에서 하고, 매퍼 2,000개 폴더에서도 UI 스레드를 100 ms 넘게 막지 않는다; API: TRD 4 IMyBatisFragmentResolver; 비고: 담당 PC: win144(Windows 개발 PC) — 맥북 세션은 이 Task 를 하지 않는다. 파일 하나 단위로 먼저 하고 폴더는 나중(2026-10-23 대화)
   - acceptance: 매퍼 2개 이상인 폴더에서 다른 파일 조각을 include 한 문장의 펼친 SQL 이 맞다 / 폴더 훑기(mapper 아닌 xml 거름), 다른 파일 include·순환, 문장 찾기, 폴더 안 파일 바뀜 감시
 
-- [ ] TSK-03-08: 「문장」 도구 창을 공용 격자 양식으로·이름 「매퍼 쿼리」로 [win144] w:1 2026-10-23~2026-10-24
+- [x] TSK-03-08: 「문장」 도구 창을 공용 격자 양식으로·이름 「매퍼 쿼리」로 [win144] w:1 2026-10-23~2026-10-24
   - category: dev
   - domain: frontend
   - model: sonnet
@@ -172,6 +172,7 @@ levels:
   - entry-point: 매퍼를 열면 왼쪽 도구 창
   - requirements: 「문장」 창 목록을 공용 격자 양식(Styles/GridC, 상세 표와 같은 머리글·행 높이·선택색)으로 보인다(종류·id·수정 표시·조합 오류 수·쓰는 곳 수 열). 묶음(select·insert·update·delete·sql 조각·resultMap)과 폴더 트리 보기를 유지한다; 창 이름 「문장」 → 「매퍼 쿼리」(영문 Mapper Queries), 메뉴·명령 이름의 「문장」도 같은 말로 맞춘다; 비고: 2026-10-23 사용자 수정 요청(「문장이 너무 보기 안 좋다, 기본 그리드 양식, 이름도 적절하게」)
   - acceptance: 라이트·다크 렌더 PNG 에서 상세 표 격자와 같은 양식이다 / 두 번 누르기·우클릭 메뉴·폴더 트리·수정 표시가 그대로 동작한다
+  - note: 「매퍼 쿼리」 창을 공용 격자(GridC) 목록·머리글로, 폴더 트리 머리글·행 높이·선택색 맞춤, 명령·창 이름 문장→쿼리 (win144)
 
 - [ ] TSK-03-09: 바인드 변수 창 — 격자 양식·자료형 서식·블록 복사 붙여 넣기 [win144] w:2 2026-10-23~2026-10-24
   - category: dev

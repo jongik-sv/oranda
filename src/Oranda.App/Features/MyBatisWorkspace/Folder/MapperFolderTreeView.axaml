@@ -37,9 +37,19 @@
         </ListBox.ItemTemplate>
       </ListBox>
     </DockPanel>
+    <!-- 공용 격자(Styles/GridC) 머리글과 같은 머리글 줄. 행 높이·선택색도 격자와 같다. -->
+    <Border DockPanel.Dock="Top" Classes="grid-c-header">
+      <Border Classes="grid-c-cell"><TextBlock Text="매퍼 폴더" /></Border>
+    </Border>
     <TreeView x:Name="Tree" Classes="compact" ItemsSource="{Binding Roots}" SelectedItem="{Binding SelectedNode, Mode=TwoWay}"
               ScrollViewer.HorizontalScrollBarVisibility="Disabled">
       <TreeView.Styles>
+        <Style Selector="TreeViewItem /template/ Border#PART_LayoutRoot">
+          <Setter Property="MinHeight" Value="24" />
+        </Style>
+        <Style Selector="TreeViewItem:selected /template/ Border#PART_LayoutRoot, TreeViewItem:selected:pointerover /template/ Border#PART_LayoutRoot">
+          <Setter Property="Background" Value="{DynamicResource OrandaTableSelectionBrush}" />
+        </Style>
         <Style Selector="TreeViewItem" x:DataType="vm:MapperFolderTreeNode">
           <Setter Property="IsExpanded" Value="{Binding IsExpanded, Mode=TwoWay}" />
         </Style>
