@@ -92,23 +92,45 @@ internal sealed class MyBatisPlaceholder
 
     /// <summary>
     /// 각 표식이 자리표시 SQL 에서 그 글 그대로 독립 주석 토큰으로 읽혔는지 본다(문자열·다른 주석 안에 들어가면 안 된다).
+    /// 예외로 SQL 줄 주석(<c>--</c>) 안의 XML 주석(<c>--&lt;!-- … --&gt;</c>, 주석 처리 관례)은 받는다: 엔진이 줄 주석을 글자 그대로 두므로
+    /// 원문으로 되돌릴 수 있다. 블록 주석 안은 표식의 <c>*/</c> 가 주석을 먼저 닫으므로 받지 않는다.
     /// 어긋난 표식 번호, 모두 맞으면 0.
     /// </summary>
     public int FirstBrokenMarker(FormatTokenizer.Result read)
     {
         var byStart = new Dictionary<int, FormatItem>();
+        var lineComments = new List<FormatItem>();
         foreach (var it in read.Items)
         {
-            if (!it.IsRaw) byStart[it.Start] = it;
+            if (it.IsRaw) continue;
+            byStart[it.Start] = it;
+            if (it.Kind == TokenKind.Comment && it.Text.StartsWith("--", StringComparison.Ordinal)) lineComments.Add(it);
         }
 
         for (int n = 1; n <= MarkerCount; n++)
         {
-            int at = sqlStartOfSegment[markerSegments[n - 1]];
-            if (!byStart.TryGetValue(at, out var item) || item.Kind != TokenKind.Comment || item.Text != MarkerText(n)) return n;
+            int k = markerSegments[n - 1];
+            int at = sqlStartOfSegment[k];
+            if (byStart.TryGetValue(at, out var item) && item.Kind == TokenKind.Comment && item.Text == MarkerText(n)) continue;
+            if (segments[k].Kind == BodySegmentKind.XmlComment && InLineComment(lineComments, at, MarkerText(n))) continue;
+            return n;
         }
 
         return 0;
+    }
+
+    /// <summary><paramref name="at"/> 의 표식 글이 통째로 어느 줄 주석 안에 있는가.</summary>
+    static bool InLineComment(List<FormatItem> lineComments, int at, string marker)
+    {
+        foreach (var c in lineComments)
+        {
+            if (c.Start < at && at + marker.Length <= c.Start + c.Text.Length)
+            {
+                return string.CompareOrdinal(c.Text, at - c.Start, marker, 0, marker.Length) == 0;
+            }
+        }
+
+        return false;
     }
 
     /// <summary>
@@ -141,27 +163,22 @@ internal sealed class MyBatisPlaceholder
     }
 
     /// <summary>
-    /// 구간 원문을 붙인다. 여러 줄 구간(selectKey·여러 줄 태그·XML 주석)이고 첫 줄 들여쓰기가 원문과 달라졌으면
-    /// 이어지는 줄에도 같은 칸 차이를 적용한다(원문 첫 줄 들여쓰기로 시작하는 줄만).
+    /// 구간 원문을 붙인다. 여러 줄 구간(selectKey·여러 줄 태그·XML 주석)은 안쪽 글을 한 글자도 바꾸지 않는다
+    /// (안쪽 줄 들여쓰기를 옮기면 XML 주석·태그 원문이 달라지고, selectKey 안 여러 줄 문자열 내용도 바뀐다).
+    /// 그래서 구간이 줄 처음에 있었고 지금도 줄 처음이면 그 줄 들여쓰기를 원문 칸으로 되돌려 안쪽 줄과 칸을 맞춘다.
     /// </summary>
     void AppendOriginal(StringBuilder sb, BodySegment s)
     {
         string text = body.Substring(s.Start, s.Length);
         string? orig = LinePrefix(body, s.Start);
         string? now = CurrentLinePrefix(sb);
-        if (orig is null || now is null || orig == now || !text.Contains('\n', StringComparison.Ordinal))
+        if (orig is not null && now is not null && orig != now && text.Contains('\n', StringComparison.Ordinal))
         {
-            sb.Append(text);
-            return;
+            sb.Length -= now.Length;
+            sb.Append(orig);
         }
 
-        var lines = text.Split('\n');
-        for (int i = 1; i < lines.Length; i++)
-        {
-            if (lines[i].StartsWith(orig, StringComparison.Ordinal) && lines[i].Trim().Length > 0) lines[i] = now + lines[i][orig.Length..];
-        }
-
-        sb.Append(string.Join('\n', lines));
+        sb.Append(text);
     }
 
     /// <summary><paramref name="at"/> 가 줄의 첫 글자(앞에 공백뿐)이면 그 앞 공백, 아니면 null.</summary>

@@ -812,9 +812,9 @@ public class MyBatisStatementFormatterTests
     }
 
     [Fact]
-    public void Multi_line_select_key_follows_the_indent_change_of_its_first_line()
+    public void Multi_line_select_key_keeps_its_original_text_and_column()
     {
-        // 첫 줄 들여쓰기가 2칸에서 4칸으로 바뀌면 이어지는 줄과 닫는 태그도 2칸씩 따라간다.
+        // 여러 줄 통째 구간은 안쪽 글을 바꾸지 않고, 시작 줄도 원문 칸에 둔다(안쪽 줄과 칸이 맞는다).
         Golden("""
             <insert id="i">
               <selectKey keyProperty="id" resultType="long" order="BEFORE">
@@ -825,33 +825,44 @@ public class MyBatisStatementFormatterTests
             </insert>
             """, """
             <insert id="i">
-                <selectKey keyProperty="id" resultType="long" order="BEFORE">
-                  select seq.nextval
-                    from dual
-                </selectKey>
+              <selectKey keyProperty="id" resultType="long" order="BEFORE">
+                select seq.nextval
+                  from dual
+              </selectKey>
                 INSERT INTO tb (id, a)
                 VALUES (#{id}, #{a})
             </insert>
             """);
-        // 들여쓴 매퍼에서 첫 줄이 10칸에서 6칸으로 바뀌는 경우.
-        Golden("""
-            <insert id="i">
-                      <selectKey keyProperty="id" resultType="long" order="BEFORE">
-                        select seq.nextval
-                          from dual
-                      </selectKey>
-                      insert into tb (id, a) values (#{id}, #{a})
-              </insert>
-            """, """
-            <insert id="i">
-                  <selectKey keyProperty="id" resultType="long" order="BEFORE">
-                    select seq.nextval
-                      from dual
-                  </selectKey>
-                  INSERT INTO tb (id, a)
-                  VALUES (#{id}, #{a})
-              </insert>
-            """);
+    }
+
+    [Fact]
+    public void Multi_line_xml_comment_with_tab_indented_sql_is_kept_verbatim()
+    {
+        // 탭으로 들여쓴 SQL 을 주석 처리한 여러 줄 XML 주석이 SELECT 목록 가운데 있다. 주석 안 글은 한 글자도 바뀌지 않는다.
+        const string comment = "<!--\n\t\t\t   (select min(PROC_CD)\n\t\t\t\t  from TB_A\n\t\t\t\t where A_NO = I.A_NO) AS A_CD1, -->";
+        string input = "<select id=\"a\">\n\tselect (select max(B.PROC_CD)\n\t\t\t  from TB_A B\n\t\t\t where B.A_NO = I.A_NO) AS B_CD,\n\t\t\t"
+            + comment + "\n\t\t\t   NVL(I.C, 'x') AS C\n\t  from TB_I I\n\t</select>";
+
+        string output = Ok(input);
+
+        Assert.NotEqual(input, output);
+        Assert.Contains("\n\t\t\t" + comment + "\n", output, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Xml_comment_inside_a_sql_line_comment_is_kept()
+    {
+        // 「--<!-- … -->」 주석 처리 관례: 줄 주석은 글자 그대로라 안의 XML 주석도 원문 그대로 남는다.
+        string output = Ok("<select id=\"a\">\n  select a from tb\n   where b = 1\n     --<!-- and c is not null -->\n     and d = #{d}\n</select>");
+
+        Assert.Contains("--<!-- and c is not null -->\n", output, StringComparison.Ordinal);
+        Assert.Contains("#{d}", output, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Xml_comment_inside_a_sql_block_comment_is_refused()
+    {
+        Rejected("<select id=\"a\">\n  select a /* x <!-- y --> z */ from tb\n</select>", FormatFailure.MarkupUnsupported);
     }
 
     const string InForeach = """
