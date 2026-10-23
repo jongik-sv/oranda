@@ -10,6 +10,7 @@ namespace Oranda.App.Tests.Integration;
 /// </summary>
 [Trait("Category", "Integration")]
 [Collection("GridEditStatics")]
+[Oranda.App.Tests.TestSupport.ResetUiLanguage]
 public sealed class ObjectDetailKeyColumnsIntegrationTests(ItDb db) : IClassFixture<ItDb>
 {
     [Fact]

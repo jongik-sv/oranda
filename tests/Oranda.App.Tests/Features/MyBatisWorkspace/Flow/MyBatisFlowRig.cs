@@ -21,7 +21,7 @@ namespace Oranda.App.Tests.Features.MyBatisWorkspace.Flow;
 internal sealed class MyBatisFlowRig : IDisposable
 {
     /// <summary>사용자 매퍼(사내 파일, 저장소 밖). 없으면 그 시험은 아무것도 하지 않고 끝난다(공개 저장소라 복사하지 않는다).</summary>
-    internal const string UserMapperPath = @"C:\Users\jongik.jang\project\oranda\docs\oranda1\CrGalExeRstMapper.xml";
+    internal static string? UserMapperPath => Oranda.App.Tests.TestSupport.UserMapper.Path;
 
     private readonly ShellHarness _harness;
 

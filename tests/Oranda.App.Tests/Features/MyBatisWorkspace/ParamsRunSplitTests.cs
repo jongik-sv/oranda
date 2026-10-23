@@ -32,7 +32,7 @@ public sealed partial class ParamsRunTests
     private const string ExpandedPanelId = "oranda.panel.mybatisExpanded";
 
     /// <summary>사용자 매퍼(사내 파일, 저장소 밖). 없으면 그 시험은 아무것도 하지 않고 끝난다(공개 저장소라 복사하지 않는다).</summary>
-    private const string UserMapperPath = @"C:\Users\jongik.jang\project\oranda\docs\oranda1\CrGalExeRstMapper.xml";
+    private static string? UserMapperPath => Oranda.App.Tests.TestSupport.UserMapper.Path;
 
     private static MyBatisStatementEditorView SplitView(Rig rig, SettingsService? settings) =>
         new(rig.Tab, rig.Session, toolbar: null, services: Services(rig.Hub, settings));
@@ -290,14 +290,14 @@ public sealed partial class ParamsRunTests
     [Fact]
     public Task The_users_mapper_opens_a_tab_with_the_split_and_bind_values_recompute() => Ui.Run(async () =>
     {
-        if (!File.Exists(UserMapperPath))
+        if (UserMapperPath is not { } userMapper)
         {
-            output.WriteLine("사용자 매퍼가 없어 건너뜀: " + UserMapperPath);
+            output.WriteLine("사용자 매퍼가 없어 건너뜀(ORANDA_USER_MAPPER)");
             return;
         }
 
         var host = new SqlEditorHost { MyBatisHooks = new MyBatisHooks(openHandler: new MyBatisOpenHandler()) };
-        await host.OpenWorkspaceFileAsync(UserMapperPath, default);
+        await host.OpenWorkspaceFileAsync(userMapper, default);
         var session = (MyBatisWorkspaceSession)host.ActiveWorkspace!.MyBatis!;
         var ids = session.VisibleEntries.Where(e => e.IsStatement && e.CanOpen).Select(e => e.Id!).ToList();
         output.WriteLine($"문장 {ids.Count}개");

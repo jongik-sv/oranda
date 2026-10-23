@@ -16,20 +16,20 @@ public sealed class ChangeJournalTests
 
     private static JournalEntry Entry(long id, string ddl, string name = "EMP", string type = "TABLE", JournalCause cause = JournalCause.Ddl,
                                       string? failure = null) => new()
-    {
-        Id = id,
-        CapturedAt = new DateTimeOffset(2026, 10, 20, 9, 0, (int)id, TimeSpan.Zero),
-        ProfileId = Guid.NewGuid(),
-        ProfileName = "개발",
-        DbKey = Db,
-        Owner = "APP",
-        Name = name,
-        ObjectType = type,
-        Cause = cause,
-        StatementSummary = "ALTER TABLE " + name + " ADD x NUMBER",
-        PreviousDdl = failure is null ? ddl : null,
-        FailureReason = failure,
-    };
+                                      {
+                                          Id = id,
+                                          CapturedAt = new DateTimeOffset(2026, 10, 20, 9, 0, (int)id, TimeSpan.Zero),
+                                          ProfileId = Guid.NewGuid(),
+                                          ProfileName = "개발",
+                                          DbKey = Db,
+                                          Owner = "APP",
+                                          Name = name,
+                                          ObjectType = type,
+                                          Cause = cause,
+                                          StatementSummary = "ALTER TABLE " + name + " ADD x NUMBER",
+                                          PreviousDdl = failure is null ? ddl : null,
+                                          FailureReason = failure,
+                                      };
 
     [Fact]
     public void Panel_and_commands_are_registered()

@@ -8,6 +8,7 @@ namespace Oranda.App.Tests.Features.Flashback;
 
 /// <summary>TSK-13-31 「변경 추적하기」: 새 SQL 탭에 넣는 이력 질의 글과 새 탭 열기·실행.</summary>
 [Collection("GridEditStatics")]
+[Oranda.App.Tests.TestSupport.ResetUiLanguage]
 public sealed class FlashbackTrackTests
 {
     private static readonly DbObjectRef Emp = new("SCOTT", "EMP", "TABLE");

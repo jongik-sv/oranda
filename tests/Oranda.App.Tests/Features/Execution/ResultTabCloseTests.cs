@@ -8,6 +8,7 @@ namespace Oranda.App.Tests.Features.Execution;
 
 /// <summary>TSK-13-30 참조 행(부모/자식)·플래시백 결과 탭의 닫기(×).</summary>
 [Collection("GridEditStatics")]
+[Oranda.App.Tests.TestSupport.ResetUiLanguage]
 public sealed class ResultTabCloseTests
 {
     private static RelatedRowsResult Related(string title)

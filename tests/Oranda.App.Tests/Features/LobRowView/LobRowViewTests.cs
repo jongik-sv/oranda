@@ -15,6 +15,7 @@ namespace Oranda.App.Tests.Features.LobRowView;
 
 /// <summary>TSK-06-05: LOB 편집기(파일 저장·불러오기·읽기 전용 차단), 행 보기, LOB 저장 대상(PK/ROWID) 규칙. DB 없이 도는 시험.</summary>
 [Collection("GridEditStatics")]
+[Oranda.App.Tests.TestSupport.ResetUiLanguage]
 public sealed class LobRowViewTests : IDisposable
 {
     private static readonly DbObjectRef Emp = new("SCOTT", "EMP", "TABLE");

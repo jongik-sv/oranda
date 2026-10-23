@@ -14,6 +14,7 @@ namespace Oranda.App.Tests.Features.ResultGrid;
 /// GRID-06 결과 탭 고정(다음 실행이 지우지 않음, 번호 피하기, 명령 경로).
 /// </summary>
 [Collection("GridEditStatics")]
+[Oranda.App.Tests.TestSupport.ResetUiLanguage]
 public sealed class ResultFilterTests : IDisposable
 {
     private static readonly SqlStatement Query = new("SELECT empno, ename, sal FROM emp WHERE deptno = :d", default, StatementKind.Query)

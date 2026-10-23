@@ -24,6 +24,7 @@ namespace Oranda.App.Tests.Features.MyBatisWorkspace;
 /// 바인드 변환(jdbcType → BindInput), <c>${}</c> 확인, 복사 글을 본다. 실행 엔진·대화상자·세션은 가짜, 계산기·언어 서비스는 실제다.
 /// </summary>
 [Collection("GridEditStatics")]
+[Oranda.App.Tests.TestSupport.ResetUiLanguage]
 public sealed class ParamsRunExecutionTests
 {
     private const string EmpSelect = """

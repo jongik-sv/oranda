@@ -16,6 +16,7 @@ namespace Oranda.App.Tests.Integration;
 /// </summary>
 [Trait("Category", "Integration")]
 [Collection("GridEditStatics")]
+[Oranda.App.Tests.TestSupport.ResetUiLanguage]
 public sealed class ConnectionFlowTests(ItDb db, ITestOutputHelper output) : IClassFixture<ItDb>
 {
     private static string Dir(string tag) => Path.Combine(Path.GetTempPath(), "oranda-itest-" + tag + "-" + Guid.NewGuid().ToString("N")[..8]);

@@ -51,7 +51,7 @@ public partial class MainViewModel : ViewModelBase
         get
         {
             var title = Environment == ConnectionEnvironment.Production || _shell.ProductionOpen
-                ?$"{_shell.Text.Lookup("Shell.window.title")} [운영]"
+                ? $"{_shell.Text.Lookup("Shell.window.title")} [운영]"
                 : _shell.Text.Lookup("Shell.window.title");
             if (_document is not { } doc)
             {

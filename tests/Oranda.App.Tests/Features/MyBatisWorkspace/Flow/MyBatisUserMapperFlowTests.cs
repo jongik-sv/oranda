@@ -28,7 +28,7 @@ namespace Oranda.App.Tests.Features.MyBatisWorkspace.Flow;
 /// </summary>
 public sealed partial class MyBatisUserMapperFlowTests(ITestOutputHelper output)
 {
-    private static readonly bool Present = File.Exists(MyBatisFlowRig.UserMapperPath);
+    private static readonly bool Present = MyBatisFlowRig.UserMapperPath is not null;
 
     [GeneratedRegex(@":[A-Za-z_]\w*")]
     private static partial Regex BindToken();
@@ -67,7 +67,7 @@ public sealed partial class MyBatisUserMapperFlowTests(ITestOutputHelper output)
         }
 
         using var rig = MyBatisFlowRig.Create();
-        var path = rig.CopyIn(MyBatisFlowRig.UserMapperPath, "UserMapper.xml");
+        var path = rig.CopyIn(MyBatisFlowRig.UserMapperPath!, "UserMapper.xml");
         var original = File.ReadAllBytes(path);
         var (ws, session) = await rig.OpenAsync(path);
         var statementCount = session.VisibleEntries.Count(e => e.IsStatement);
@@ -195,8 +195,8 @@ public sealed partial class MyBatisUserMapperFlowTests(ITestOutputHelper output)
         }
 
         using var rig = MyBatisFlowRig.Create();
-        var path = rig.CopyIn(MyBatisFlowRig.UserMapperPath, "UserMapper.xml");
-        var backup = rig.CopyIn(MyBatisFlowRig.UserMapperPath, "UserMapper.orig.xml", "orig");
+        var path = rig.CopyIn(MyBatisFlowRig.UserMapperPath!, "UserMapper.xml");
+        var backup = rig.CopyIn(MyBatisFlowRig.UserMapperPath!, "UserMapper.orig.xml", "orig");
         var originalText = File.ReadAllText(path);
         var (ws, session) = await rig.OpenAsync(path);
         var candidates = Candidates(session);
@@ -290,7 +290,7 @@ public sealed partial class MyBatisUserMapperFlowTests(ITestOutputHelper output)
         }
 
         using var rig = MyBatisFlowRig.Create();
-        var path = rig.CopyIn(MyBatisFlowRig.UserMapperPath, "UserMapper.xml", "mappers");
+        var path = rig.CopyIn(MyBatisFlowRig.UserMapperPath!, "UserMapper.xml", "mappers");
         var (_, session) = await rig.OpenAsync(path);
         var candidates = Candidates(session);
         var chosen = candidates[0];

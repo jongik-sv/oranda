@@ -679,6 +679,7 @@ internal sealed class AppSafetyRig : IDisposable
 /// <summary>앱 기능 경로 교차 시험(실제 Oracle). 모드 4가지(개발·운영·읽기 전용·운영+읽기 전용)를 모든 경로에 같은 기대로 적용한다.</summary>
 [Trait("Category", "Integration")]
 [Collection("GridEditStatics")]
+[Oranda.App.Tests.TestSupport.ResetUiLanguage]
 public sealed class SafetyCrossTests : IClassFixture<SafetyAppDbFixture>, IAsyncLifetime, IDisposable
 {
     private readonly SafetyAppDbFixture _db;

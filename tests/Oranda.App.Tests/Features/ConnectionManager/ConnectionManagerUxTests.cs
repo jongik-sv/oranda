@@ -30,6 +30,10 @@ internal sealed class StubConnectionTester : IConnectionTester
     }
 }
 
+// 폼 높이를 픽셀로 단정하는 시험이 있다. 앱 리소스(글자 크기=UiScale)는 프로세스에 하나라서 병렬로 도는 설정·테마 시험이 그 값을 바꾸면 높이가 달라진다.
+// 병렬 시험이 모두 끝난 뒤 따로 돌게 한다(앱 정적 상태를 쓰는 시험 묶음).
+[Collection("GridEditStatics")]
+[Oranda.App.Tests.TestSupport.ResetUiLanguage]
 public sealed class ConnectionManagerUxTests
 {
     private static readonly DateTimeOffset Yesterday = DateTimeOffset.UtcNow.AddDays(-1);

@@ -1,1 +1,4 @@
+* text=auto eol=lf
 *.sqd -text
+*.ico -text
+*.sln text eol=crlf

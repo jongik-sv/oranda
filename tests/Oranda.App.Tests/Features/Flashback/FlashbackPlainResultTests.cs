@@ -13,6 +13,7 @@ namespace Oranda.App.Tests.Features.Flashback;
 
 /// <summary>TSK-13-33: 일반 실행 결과(편집 모드 아님)의 플래시백 대상 판정과 「변경 추적하기」 명령 합침.</summary>
 [Collection("GridEditStatics")]
+[Oranda.App.Tests.TestSupport.ResetUiLanguage]
 public sealed class FlashbackPlainResultTests
 {
     private static readonly DbObjectRef Emp = new("SCOTT", "EMP", "TABLE");

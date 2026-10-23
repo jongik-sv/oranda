@@ -5,6 +5,7 @@ namespace Oranda.App.Tests.Features.Execution;
 
 /// <summary>GRID-06 결과 탭 고정: 고정한 탭은 다음 실행이 바꾸지 않고 결과는 새 탭(겹치지 않는 번호)에 열린다.</summary>
 [Collection("GridEditStatics")]
+[Oranda.App.Tests.TestSupport.ResetUiLanguage]
 public sealed class ResultTabPinTests
 {
     [Fact]

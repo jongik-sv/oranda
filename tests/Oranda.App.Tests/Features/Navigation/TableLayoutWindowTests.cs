@@ -38,8 +38,22 @@ public class TableLayoutWindowTests
         return (tab, window);
     }
 
+    // 목록 항목은 배치·그리기 패스 뒤에야 만들어진다. 부하로 그 패스가 늦으면 곧바로 찾지 못하므로 패스를 돌려 가며 기다린다.
     private static ListBoxItem Item(TableLayoutWindow w, string name)
-        => w.List.GetVisualDescendants().OfType<ListBoxItem>().First(i => ((TableLayoutRow)i.Tag!).Name == name);
+    {
+        for (var attempt = 0; ; attempt++)
+        {
+            var item = w.List.GetVisualDescendants().OfType<ListBoxItem>().FirstOrDefault(i => i.Tag is TableLayoutRow r && r.Name == name);
+            if (item is not null || attempt >= 50)
+            {
+                return item ?? throw new InvalidOperationException($"목록 항목 '{name}' 이 만들어지지 않았다.");
+            }
+
+            w.UpdateLayout();
+            Dispatcher.UIThread.RunJobs();
+            Thread.Sleep(20);
+        }
+    }
 
     private static Point At(TableLayoutWindow w, Control c, double x) => c.TranslatePoint(new Point(x, c.Bounds.Height / 2), w)!.Value;
 

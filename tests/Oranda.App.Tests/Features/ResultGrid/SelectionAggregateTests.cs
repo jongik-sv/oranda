@@ -9,6 +9,7 @@ namespace Oranda.App.Tests.Features.ResultGrid;
 
 /// <summary>GRID-09 시험: 고른 칸 집계(개수·합계·평균·최소·최대)와 「전체 행 수 세기」의 결과 영역 쪽(상태 줄·취소·명령).</summary>
 [Collection("GridEditStatics")]
+[Oranda.App.Tests.TestSupport.ResetUiLanguage]
 public sealed class SelectionAggregateTests : IDisposable
 {
     private static readonly CultureInfo Inv = CultureInfo.InvariantCulture;

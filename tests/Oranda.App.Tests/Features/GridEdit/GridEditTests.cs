@@ -12,6 +12,7 @@ namespace Oranda.App.Tests.Features.GridEdit;
 
 /// <summary>TSK-06-04 편집 모드 화면 논리: 편집 불가 표시, 변경 추적, 미리보기 확인 후 반영, 실패 행 표시.</summary>
 [Collection("GridEditStatics")]
+[Oranda.App.Tests.TestSupport.ResetUiLanguage]
 public sealed partial class GridEditTests : IDisposable
 {
     private static readonly DbObjectRef Emp = new("SCOTT", "EMP", "TABLE");

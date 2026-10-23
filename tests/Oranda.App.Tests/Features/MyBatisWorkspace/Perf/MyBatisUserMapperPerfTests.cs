@@ -86,7 +86,7 @@ public sealed class MyBatisUserMapperPerfTests(ITestOutputHelper output)
         }
 
         using var rig = MyBatisFlowRig.Create();
-        var path = rig.CopyIn(MyBatisFlowRig.UserMapperPath, "UserMapper.xml");
+        var path = rig.CopyIn(MyBatisFlowRig.UserMapperPath!, "UserMapper.xml");
         var (_, session) = await rig.OpenAsync(path);
         var withParams = session.VisibleEntries
             .Where(e => e.IsStatement && e.CanOpen && e.Text.Contains("#{", StringComparison.Ordinal))
@@ -148,7 +148,7 @@ public sealed class MyBatisUserMapperPerfTests(ITestOutputHelper output)
         }
 
         using var rig = MyBatisFlowRig.Create();
-        var path = rig.CopyIn(MyBatisFlowRig.UserMapperPath, "UserMapper.xml");
+        var path = rig.CopyIn(MyBatisFlowRig.UserMapperPath!, "UserMapper.xml");
         var (_, session) = await rig.OpenAsync(path);
         var conditional = session.VisibleEntries
             .Where(e => e.IsStatement && e.CanOpen && e.Text.Contains("<if", StringComparison.Ordinal))

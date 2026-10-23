@@ -26,7 +26,8 @@ public sealed class ColumnOrderTests
 
         public Task<ResultPage> GetPageAsync(int pageIndex, CancellationToken ct) =>
             Task.FromResult(new ResultPage(pageIndex, 0, 2,
-                [[(object?)1m, 2m], ["x", "y"], [10m, 20m]]) { IsLast = true });
+                [[(object?)1m, 2m], ["x", "y"], [10m, 20m]])
+            { IsLast = true });
 
         public ValueTask DisposeAsync() => ValueTask.CompletedTask;
     }

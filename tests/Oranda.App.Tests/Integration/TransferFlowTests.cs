@@ -16,6 +16,7 @@ namespace Oranda.App.Tests.Integration;
 /// </summary>
 [Trait("Category", "Integration")]
 [Collection("GridEditStatics")]
+[Oranda.App.Tests.TestSupport.ResetUiLanguage]
 public sealed class TransferFlowTests(ItDb db, ITestOutputHelper output) : IClassFixture<ItDb>
 {
     private static string NewTable() => "T_" + Guid.NewGuid().ToString("N")[..8].ToUpperInvariant();

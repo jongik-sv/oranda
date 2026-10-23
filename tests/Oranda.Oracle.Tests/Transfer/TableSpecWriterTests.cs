@@ -13,7 +13,7 @@ public class TableSpecWriterTests
 
     private static readonly TableSpecDocument Doc = new("SCOTT 테이블 정의서", new DateTimeOffset(2026, 10, 20, 9, 30, 0, TimeSpan.Zero),
     [
-        new TableSpecTable("SCOTT", "EMP", "사원 | 급여", 
+        new TableSpecTable("SCOTT", "EMP", "사원 | 급여",
         [
             new TableSpecColumn(1, "EMPNO", "NUMBER(4)", false, true, null, null, "사번"),
             new TableSpecColumn(2, "ENAME", "VARCHAR2(10)", true, false, null, "'NONE'", null),

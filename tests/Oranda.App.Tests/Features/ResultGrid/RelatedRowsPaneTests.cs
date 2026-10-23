@@ -12,6 +12,7 @@ namespace Oranda.App.Tests.Features.ResultGrid;
 /// 실패는 상태 줄에, 늦게 온 결과 버리기, 편집 안내, 명령 선언.
 /// </summary>
 [Collection("GridEditStatics")]
+[Oranda.App.Tests.TestSupport.ResetUiLanguage]
 public sealed class RelatedRowsPaneTests : IDisposable
 {
     private static readonly SqlStatement EmpQuery = new("SELECT empno, ename, deptno FROM emp", default, StatementKind.Query) { Verb = "SELECT" };

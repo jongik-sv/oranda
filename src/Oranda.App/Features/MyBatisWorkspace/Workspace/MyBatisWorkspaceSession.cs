@@ -124,7 +124,8 @@ public sealed class MyBatisWorkspaceSession : IMyBatisWorkspaceSession
             Kind = MyBatisStatementEntry.ElementKindOf(entry.Kind),
             Name = entry.Name,
             Text = text,
-        }) with { Id = entry.Id, Text = text };
+        }) with
+        { Id = entry.Id, Text = text };
     }
 
     public IReadOnlyList<MapperEdit> PendingEdits()

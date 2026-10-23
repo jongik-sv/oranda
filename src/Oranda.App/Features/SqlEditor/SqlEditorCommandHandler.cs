@@ -87,25 +87,25 @@ public sealed class SqlEditorCommandHandler : ICommandHandler
                 host.NewDocument();
                 return;
             case "oranda.file.open":
-            {
-                // 파일 열기로 고른 Orange .sqd·Oranda .workspace.md 는 글자 그대로가 아니라 작업 공간으로 연다.
-                var path = context.Parameter as string ?? await host.Dialogs.PickOpenFileAsync(cancellationToken).ConfigureAwait(true);
-                if (path is null)
                 {
+                    // 파일 열기로 고른 Orange .sqd·Oranda .workspace.md 는 글자 그대로가 아니라 작업 공간으로 연다.
+                    var path = context.Parameter as string ?? await host.Dialogs.PickOpenFileAsync(cancellationToken).ConfigureAwait(true);
+                    if (path is null)
+                    {
+                        return;
+                    }
+
+                    if (WorkspaceFiles.OpensAsWorkspace(path))
+                    {
+                        await OpenWorkspaceFileAsync(host, path, cancellationToken).ConfigureAwait(true);
+                    }
+                    else
+                    {
+                        await host.OpenFileAsync(path, cancellationToken).ConfigureAwait(true);
+                    }
+
                     return;
                 }
-
-                if (WorkspaceFiles.OpensAsWorkspace(path))
-                {
-                    await OpenWorkspaceFileAsync(host, path, cancellationToken).ConfigureAwait(true);
-                }
-                else
-                {
-                    await host.OpenFileAsync(path, cancellationToken).ConfigureAwait(true);
-                }
-
-                return;
-            }
             case "oranda.file.save" when tab is null && host.ActiveWorkspace is { MyBatis: not null } mapper && host.MyBatisHooks.SaveHandler is { } mapperSave:
                 // MyBatis 작업 공간은 문장 탭을 모두 닫아도 세션 기준으로 저장한다(docs/oranda1/design.md 2.2·4.4, 구현 TSK-03-03).
                 await mapperSave.SaveAsync(mapper, cancellationToken).ConfigureAwait(true);

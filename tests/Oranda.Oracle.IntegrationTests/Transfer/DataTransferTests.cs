@@ -453,7 +453,8 @@ public sealed class DataTransferTests : IAsyncLifetime
         csv.Position = 0;
         var opts = new ImportOptions(TransferFormat.Csv, Ref("_DST"),
             [new ColumnMapping("ID", "ID"), new ColumnMapping("NAME", "NAME"), new ColumnMapping("AMT", "AMT"), new ColumnMapping("BORN", "BORN"),
-             new ColumnMapping("TS", "TS"), new ColumnMapping("NOTE", "NOTE")]) { BatchSize = 2 };
+             new ColumnMapping("TS", "TS"), new ColumnMapping("NOTE", "NOTE")])
+        { BatchSize = 2 };
         var imp = await svc.ImportAsync(s, opts, csv, null, default);
 
         Assert.True(imp.Rows == 3, $"rows={imp.Rows} warnings={string.Join('|', imp.Warnings)} csv={Encoding.UTF8.GetString(csv.ToArray())}");

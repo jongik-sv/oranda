@@ -15,6 +15,7 @@ namespace Oranda.App.Tests.Integration;
 /// </summary>
 [Trait("Category", "Integration")]
 [Collection("GridEditStatics")]
+[Oranda.App.Tests.TestSupport.ResetUiLanguage]
 public sealed class MultiConnectionFlowTests(ItDb db, ITestOutputHelper output) : IClassFixture<ItDb>
 {
     private static async Task<ISession> OpenAsync(FlowRig rig, ConnectionProfile profile, string password)

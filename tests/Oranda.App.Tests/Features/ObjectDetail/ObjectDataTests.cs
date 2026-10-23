@@ -27,6 +27,7 @@ namespace Oranda.App.Tests.Features.ObjectDetail;
 /// 닫기·늦은 결과 정리, 화면 바꾸기.
 /// </summary>
 [Collection("GridEditStatics")]
+[Oranda.App.Tests.TestSupport.ResetUiLanguage]
 public sealed class ObjectDataTests : IDisposable
 {
     private static readonly DbObjectRef Emp = new("SCOTT", "EMP", "TABLE");

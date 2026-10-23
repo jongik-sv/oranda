@@ -60,44 +60,44 @@ internal sealed class MapperDocument : IMyBatisMapperDocument
             switch (edit)
             {
                 case MapperEdit.ReplaceElement r:
-                {
-                    var e = Target(r.Id, touched);
-                    changes.Add(new Change(e.ElementRange.Start, e.ElementRange.Length, Normalize(r.NewText), order));
-                    break;
-                }
+                    {
+                        var e = Target(r.Id, touched);
+                        changes.Add(new Change(e.ElementRange.Start, e.ElementRange.Length, Normalize(r.NewText), order));
+                        break;
+                    }
 
                 case MapperEdit.DeleteElement d:
-                {
-                    var e = Target(d.Id, touched);
-                    deleted.Add(e);
-                    var (start, end) = DeleteRange(e);
-                    changes.Add(new Change(start, end - start, string.Empty, order));
-                    break;
-                }
+                    {
+                        var e = Target(d.Id, touched);
+                        deleted.Add(e);
+                        var (start, end) = DeleteRange(e);
+                        changes.Add(new Change(start, end - start, string.Empty, order));
+                        break;
+                    }
 
                 case MapperEdit.RenameElement n:
-                {
-                    var e = Target(n.Id, touched);
-                    changes.Add(RenameChange(e, n.NewId, order));
-                    break;
-                }
+                    {
+                        var e = Target(n.Id, touched);
+                        changes.Add(RenameChange(e, n.NewId, order));
+                        break;
+                    }
 
                 case MapperEdit.InsertElement i:
-                {
-                    if (i.AfterId is null)
                     {
-                        // 같은 자리의 「요소 뒤 넣기」보다 뒤에 온다(마지막 요소 끝 = 「</mapper>」 자리일 때).
-                        changes.Add(InsertBeforeClose(i.NewText, order) with { Rank = 1 });
-                    }
-                    else
-                    {
-                        var after = Resolve(i.AfterId);
-                        insertAfter.Add(after);
-                        changes.Add(new Change(InsertAfterPoint(after), 0, Format.NewLine + IndentOf(after) + Normalize(i.NewText), order));
-                    }
+                        if (i.AfterId is null)
+                        {
+                            // 같은 자리의 「요소 뒤 넣기」보다 뒤에 온다(마지막 요소 끝 = 「</mapper>」 자리일 때).
+                            changes.Add(InsertBeforeClose(i.NewText, order) with { Rank = 1 });
+                        }
+                        else
+                        {
+                            var after = Resolve(i.AfterId);
+                            insertAfter.Add(after);
+                            changes.Add(new Change(InsertAfterPoint(after), 0, Format.NewLine + IndentOf(after) + Normalize(i.NewText), order));
+                        }
 
-                    break;
-                }
+                        break;
+                    }
 
                 default:
                     throw new ArgumentException($"모르는 편집입니다: {edit?.GetType().Name}", nameof(edits));

@@ -258,6 +258,7 @@ internal sealed class Rig : IDisposable
 }
 
 [Collection("GridEditStatics")]
+[Oranda.App.Tests.TestSupport.ResetUiLanguage]
 public sealed class ExecutionTests
 {
     private static readonly string[] StatusIds = ["oranda.status.session", "oranda.status.transaction", "oranda.status.lastRun", "oranda.status.protection"];
@@ -1587,6 +1588,7 @@ public sealed class ExecutionTests
 /// </summary>
 [Trait("Category", "Integration")]
 [Collection("GridEditStatics")]
+[Oranda.App.Tests.TestSupport.ResetUiLanguage]
 public sealed class ExecutionIntegrationTests
 {
     private static string? Env(string name) => Environment.GetEnvironmentVariable("ORANDA_IT_" + name);

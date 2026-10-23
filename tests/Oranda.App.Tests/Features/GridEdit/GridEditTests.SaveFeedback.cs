@@ -175,7 +175,8 @@ public sealed partial class GridEditTests
 
         public Task<Oranda.Core.Grid.ResultPage> GetPageAsync(int pageIndex, CancellationToken ct) =>
             Task.FromResult(new Oranda.Core.Grid.ResultPage(pageIndex, 0, 2,
-                [.. Enumerable.Range(0, 3).Select(c => (IReadOnlyList<object?>)[.. _rows.Select(r => r[c])])]) { IsLast = true });
+                [.. Enumerable.Range(0, 3).Select(c => (IReadOnlyList<object?>)[.. _rows.Select(r => r[c])])])
+            { IsLast = true });
 
         public ValueTask DisposeAsync() => ValueTask.CompletedTask;
     }

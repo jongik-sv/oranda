@@ -6,6 +6,7 @@ namespace Oranda.App.Tests.Features.ResultGrid;
 
 /// <summary>TSK-13-17 서버 ORDER BY 다시 조회: 감싸기 문장, 막는 이유, 묻는 창에서 고른 뒤의 흐름과 해제.</summary>
 [Collection("GridEditStatics")]
+[Oranda.App.Tests.TestSupport.ResetUiLanguage]
 public sealed class ServerSortTests : IDisposable
 {
     private static readonly ResultColumn[] Cols =

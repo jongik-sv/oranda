@@ -12,7 +12,7 @@ namespace Oranda.App.Tests.Features.Execution;
 /// <summary>바인드 변수 창 격자·자료형 서식·블록 복사 붙여 넣기(TSK-03-09).</summary>
 public sealed partial class BindGridTests
 {
-    private const string UserMapper = "C:/Users/jongik.jang/project/oranda/docs/oranda1/CrGalExeRstMapper.xml";
+    private static string? UserMapperPath => Oranda.App.Tests.TestSupport.UserMapper.Path;
 
     [GeneratedRegex(@"#\{\s*(\w+)")]
     private static partial Regex ParamRegex();
@@ -269,12 +269,12 @@ public sealed partial class BindGridTests
     [Fact]
     public Task User_mapper_params_round_trip_through_the_pane() => Ui.Run(() =>
     {
-        if (!File.Exists(UserMapper))
+        if (UserMapperPath is not { } userMapper)
         {
             return Task.CompletedTask; // 건너뜀: 사내 파일
         }
 
-        var names = ParamRegex().Matches(File.ReadAllText(UserMapper)).Select(m => m.Groups[1].Value)
+        var names = ParamRegex().Matches(File.ReadAllText(userMapper)).Select(m => m.Groups[1].Value)
             .Distinct(StringComparer.OrdinalIgnoreCase).Take(30).ToList();
         Assert.NotEmpty(names);
         var vm = new BindVariablesViewModel(new EventBus());

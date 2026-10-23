@@ -13,6 +13,7 @@ namespace Oranda.App.Tests.Features.ResultGrid;
 /// 다 안 가져온 결과, 편집 대기 중 거부, 큰 결과 응답성.
 /// </summary>
 [Collection("GridEditStatics")]
+[Oranda.App.Tests.TestSupport.ResetUiLanguage]
 public sealed class LocalFilterTests
 {
     private static readonly ResultColumn[] Cols =
@@ -457,10 +458,23 @@ public sealed class LocalFilterTests
         public bool NeedsChange(long viewRow, int ordinal) => false;
     }
 
+    /// <summary>조건 안에서 보는 목록(예: 행 보기 필드)이 다른 스레드에서 다시 채워지는 중이면 아직 아닌 것으로 본다.</summary>
+    private static bool Holds(Func<bool> cond)
+    {
+        try
+        {
+            return cond();
+        }
+        catch (InvalidOperationException)
+        {
+            return false;
+        }
+    }
+
     private static async Task WaitAsync(Func<bool> cond)
     {
         var sw = Stopwatch.StartNew();
-        while (!cond())
+        while (!Holds(cond))
         {
             Assert.True(sw.Elapsed < TimeSpan.FromSeconds(10), "시간 초과");
             await Task.Delay(5);

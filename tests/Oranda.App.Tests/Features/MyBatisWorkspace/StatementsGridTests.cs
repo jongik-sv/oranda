@@ -18,7 +18,7 @@ namespace Oranda.App.Tests.Features.MyBatisWorkspace;
 /// <summary>TSK-03-08: 「매퍼 쿼리」 창을 공용 격자 양식(Styles/GridC)으로 보이고 이름을 바꾼 것.</summary>
 public sealed class StatementsGridTests : IDisposable
 {
-    private const string UserMapper = "C:/Users/jongik.jang/project/oranda/docs/oranda1/CrGalExeRstMapper.xml";
+    private static string? UserMapperPath => Oranda.App.Tests.TestSupport.UserMapper.Path;
 
     private readonly string _root = Path.Combine(Path.GetTempPath(), "oranda-mbgrid-" + Guid.NewGuid().ToString("N"));
 
@@ -146,12 +146,12 @@ public sealed class StatementsGridTests : IDisposable
     [Fact]
     public Task The_user_mapper_opens_lists_and_renders_in_both_themes() => Ui.Run(async () =>
     {
-        if (!File.Exists(UserMapper))
+        if (UserMapperPath is not { } userMapper)
         {
             return; // 사내 파일이라 저장소에 없다: 없으면 건너뛴다
         }
 
-        var (host, vm, _, window) = await ShowAsync(UserMapper);
+        var (host, vm, _, window) = await ShowAsync(userMapper);
         try
         {
             var session = (MyBatisWorkspaceSession)host.ActiveWorkspace!.MyBatis!;
