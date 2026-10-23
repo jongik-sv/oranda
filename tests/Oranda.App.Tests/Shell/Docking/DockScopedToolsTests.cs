@@ -356,6 +356,7 @@ public class DockScopedToolsTests
     [Theory]
     [InlineData("oranda.panel.sqlEditor", true)]
     [InlineData("oranda.panel.plsqlEditor", true)]
+    [InlineData("oranda.panel.plsqlWorkspace", true)]
     [InlineData("oranda.panel.objectDetail", false)]
     [InlineData("oranda.panel.dbInfo", false)]
     [InlineData("oranda.panel.ddlExtract", false)]

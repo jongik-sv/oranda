@@ -52,6 +52,19 @@ public sealed partial class CompileErrorsViewModel : ToolPanelViewModelBase
         Current?.Show(source);
     }
 
+    /// <summary>닫힌 탭의 목록을 거둔다: 그 탭이 마지막으로 올린 탭이면 창을 비운다(닫힌 탭으로 줄을 옮기지 않게).</summary>
+    public static void Retract(ICompileErrorSource source)
+    {
+        ArgumentNullException.ThrowIfNull(source);
+        if (!ReferenceEquals(LastSource, source))
+        {
+            return;
+        }
+
+        LastSource = null;
+        Current?.Clear();
+    }
+
     public ICompileErrorSource? Source { get; private set; }
 
     public ObservableCollection<CompileErrorItem> Items { get; } = [];
@@ -92,6 +105,18 @@ public sealed partial class CompileErrorsViewModel : ToolPanelViewModelBase
         Source = source;
         source.Errors.CollectionChanged += OnSourceErrorsChanged;
         Refresh();
+    }
+
+    private void Clear()
+    {
+        if (Source is not null)
+        {
+            Source.Errors.CollectionChanged -= OnSourceErrorsChanged;
+        }
+
+        Source = null;
+        Refresh();
+        Header = "컴파일 오류 없음";
     }
 
     private void OnSourceErrorsChanged(object? sender, NotifyCollectionChangedEventArgs e) => Refresh();

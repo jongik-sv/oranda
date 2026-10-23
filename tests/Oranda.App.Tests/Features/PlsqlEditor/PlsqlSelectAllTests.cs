@@ -9,6 +9,7 @@ using Oranda.Core.Shell;
 namespace Oranda.App.Tests.Features.PlsqlEditor;
 
 /// <summary>TSK-13-22: 포커스가 PL/SQL 편집기에 있으면 모두 선택(⌘A)이 숨은 SQL 탭이 아니라 그 편집기를 선택한다.</summary>
+[Collection(Oranda.App.Tests.Features.PlsqlWorkspace.PlsqlStatics.Name)]
 public class PlsqlSelectAllTests
 {
     [Fact]

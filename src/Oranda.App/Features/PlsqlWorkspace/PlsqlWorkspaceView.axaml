@@ -1,0 +1,103 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:icons="using:Oranda.App.Shell.Icons"
+             xmlns:vm="using:Oranda.App.Features.PlsqlWorkspace"
+             xmlns:pe="using:Oranda.App.Features.PlsqlEditor"
+             x:Class="Oranda.App.Features.PlsqlWorkspace.PlsqlWorkspaceView"
+             x:DataType="vm:PlsqlWorkspaceViewModel">
+  <UserControl.Styles>
+    <!-- 작업 공간 안의 PL/SQL 탭 줄(SQL 작업 공간 탭 줄과 같은 모양). 문서 탭보다 작고 촘촘하게. -->
+    <Style Selector="Border.plsql-tabs">
+      <Setter Property="Background" Value="{DynamicResource OrandaToolbarBackgroundBrush}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource OrandaSeparatorBrush}" />
+      <Setter Property="BorderThickness" Value="0,0,0,1" />
+      <Setter Property="Padding" Value="2,2,2,0" />
+    </Style>
+    <Style Selector="ListBox#PlsqlTabs">
+      <Setter Property="Background" Value="Transparent" />
+      <Setter Property="BorderThickness" Value="0" />
+      <Setter Property="Padding" Value="0" />
+    </Style>
+    <Style Selector="ListBox#PlsqlTabs ListBoxItem">
+      <Setter Property="Padding" Value="8,3,2,3" />
+      <Setter Property="MinHeight" Value="0" />
+      <Setter Property="Margin" Value="0,0,2,0" />
+      <Setter Property="FontSize" Value="{DynamicResource OrandaFontSizeSmall}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource OrandaSeparatorBrush}" />
+      <Setter Property="BorderThickness" Value="1,1,1,0" />
+      <Setter Property="CornerRadius" Value="3,3,0,0" />
+    </Style>
+    <Style Selector="ListBox#PlsqlTabs ListBoxItem:selected /template/ ContentPresenter#PART_ContentPresenter">
+      <Setter Property="Background" Value="{DynamicResource OrandaToolbarPressedBrush}" />
+    </Style>
+    <Style Selector="ListBox#PlsqlTabs ListBoxItem:selected TextBlock.tab-title">
+      <Setter Property="FontWeight" Value="SemiBold" />
+    </Style>
+    <!-- 미리보기 탭(스키마 브라우저 한 번 누르기)은 머리글이 기울임꼴이다. 고치거나 두 번 누르면 고정된다. -->
+    <Style Selector="TextBlock.tab-title.preview">
+      <Setter Property="FontStyle" Value="Italic" />
+    </Style>
+    <Style Selector="TextBlock.tab-conn">
+      <Setter Property="Margin" Value="4,0,0,0" />
+      <Setter Property="Opacity" Value="0.6" />
+    </Style>
+    <Style Selector="Button.tab-close">
+      <Setter Property="Padding" Value="2" />
+      <Setter Property="MinHeight" Value="0" />
+      <Setter Property="MinWidth" Value="0" />
+      <Setter Property="Margin" Value="4,0,0,0" />
+      <Setter Property="Background" Value="Transparent" />
+      <Setter Property="BorderThickness" Value="0" />
+      <Setter Property="Opacity" Value="0.6" />
+    </Style>
+    <Style Selector="Button.tab-close:pointerover">
+      <Setter Property="Opacity" Value="1" />
+    </Style>
+  </UserControl.Styles>
+  <DockPanel>
+    <Border DockPanel.Dock="Top" Classes="plsql-tabs">
+      <DockPanel>
+        <Button DockPanel.Dock="Right" Classes="toolbar" Content="새 PL/SQL 탭" Command="{Binding NewTabCommand}"
+                VerticalAlignment="Center" icons:ButtonIcon.Key="tabAdd" icons:ButtonIcon.IconOnly="True" />
+        <ListBox x:Name="PlsqlTabs" ItemsSource="{Binding Tabs}" SelectedItem="{Binding ActiveTab, Mode=TwoWay}"
+                 ScrollViewer.HorizontalScrollBarVisibility="Hidden" ScrollViewer.VerticalScrollBarVisibility="Disabled"
+                 AutomationProperties.Name="PL/SQL 탭">
+          <ListBox.ItemsPanel>
+            <ItemsPanelTemplate>
+              <StackPanel Orientation="Horizontal" />
+            </ItemsPanelTemplate>
+          </ListBox.ItemsPanel>
+          <ListBox.ItemTemplate>
+            <DataTemplate x:DataType="pe:PlsqlEditorViewModel">
+              <StackPanel Orientation="Horizontal" ToolTip.Tip="{Binding StatusText}">
+                <StackPanel.ContextMenu>
+                  <ContextMenu>
+                    <MenuItem Header="닫기"
+                              Command="{Binding $parent[UserControl].((vm:PlsqlWorkspaceViewModel)DataContext).CloseTabCommand}"
+                              CommandParameter="{Binding}" />
+                    <MenuItem Header="다른 탭 닫기"
+                              Command="{Binding $parent[UserControl].((vm:PlsqlWorkspaceViewModel)DataContext).CloseOtherTabsCommand}"
+                              CommandParameter="{Binding}" />
+                  </ContextMenu>
+                </StackPanel.ContextMenu>
+                <TextBlock Classes="tab-title" Classes.preview="{Binding IsPreviewTab}" Text="{Binding Title}" VerticalAlignment="Center" />
+                <!-- 한 작업 공간에 접속이 섞였을 때만 탭 머리에 접속 이름을 붙인다(결정 59). -->
+                <TextBlock Classes="tab-conn" Text="{Binding ConnectionName, StringFormat='@{0}'}" VerticalAlignment="Center"
+                           IsVisible="{Binding $parent[UserControl].((vm:PlsqlWorkspaceViewModel)DataContext).MixedConnections}" />
+                <Button Classes="tab-close" Content="PL/SQL 탭 닫기" Focusable="False"
+                        Command="{Binding $parent[UserControl].((vm:PlsqlWorkspaceViewModel)DataContext).CloseTabCommand}"
+                        CommandParameter="{Binding}" icons:ButtonIcon.Key="clear" icons:ButtonIcon.IconOnly="True" />
+              </StackPanel>
+            </DataTemplate>
+          </ListBox.ItemTemplate>
+        </ListBox>
+      </DockPanel>
+    </Border>
+    <Grid>
+      <!-- 보이는 탭의 편집기. 탭마다 View 를 하나씩 두고 바꿔 끼운다(되돌리기 기록·스크롤을 잃지 않게). -->
+      <ContentControl x:Name="EditorHost" />
+      <TextBlock x:Name="EmptyHint" Text="PL/SQL 탭이 없습니다. 스키마 브라우저에서 객체를 열거나 탭 줄의 + 로 새 PL/SQL 탭을 엽니다."
+                 IsVisible="{Binding IsEmpty}" HorizontalAlignment="Center" VerticalAlignment="Center" Opacity="0.6" />
+    </Grid>
+  </DockPanel>
+</UserControl>

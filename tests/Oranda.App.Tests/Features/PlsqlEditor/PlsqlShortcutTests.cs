@@ -13,6 +13,7 @@ namespace Oranda.App.Tests.Features.PlsqlEditor;
 /// PL/SQL 편집기에 포커스가 있을 때의 공용 단축키: 저장(Primary+S)은 숨은 SQL 탭이 아니라 그 편집기를 저장하고,
 /// 실행(Primary+Enter, <c>oranda.plsql.run</c>)은 그 편집기의 객체를 대상으로 켜진다.
 /// </summary>
+[Collection(Oranda.App.Tests.Features.PlsqlWorkspace.PlsqlStatics.Name)]
 public class PlsqlShortcutTests
 {
     [Fact]

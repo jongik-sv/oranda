@@ -7,6 +7,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using CommunityToolkit.Mvvm.ComponentModel;
 using Oranda.App.Features.PlsqlRun;
+using Oranda.App.Features.PlsqlWorkspace;
 using Oranda.App.Features.SqlEditor;
 using Oranda.App.Shell;
 using Oranda.Core.Events;
@@ -86,14 +87,25 @@ public sealed partial class PlsqlEditorViewModel : ToolPanelViewModelBase, IComp
         _events = events;
     }
 
-    /// <summary>지금 포커스를 가진 PL/SQL 편집 탭(명령 처리기가 쓴다). 보기가 설정하며, 바뀌면 그 탭의 문맥 키를 맞춘다.</summary>
+    /// <summary>
+    /// 지금 포커스를 가진 PL/SQL 편집 탭(명령 처리기가 쓴다). 보기와 작업 공간 라우터가 설정하며, 바뀌면 그 탭의 문맥 키를 맞춘다.
+    /// null 이 되면(탭을 닫음, PL/SQL 이 아닌 문서로 옮김) <c>isPackageDoc</c>·<c>serverSourceChanged</c>·<c>plsqlRunnable</c> 을 끈다.
+    /// </summary>
     public static PlsqlEditorViewModel? Active
     {
         get;
         set
         {
+            var old = field;
             field = value;
-            value?.SyncKeys();
+            if (value is not null)
+            {
+                value.SyncKeys();
+            }
+            else
+            {
+                ClearKeys(old?.Keys ?? ContextKeyService.Shared);
+            }
         }
     }
 
@@ -108,7 +120,26 @@ public sealed partial class PlsqlEditorViewModel : ToolPanelViewModelBase, IComp
     /// <summary>패키지 멤버는 대화상자에서 고른다.</summary>
     public string? RunMember => null;
 
-    public ISession? Session => _session;
+    public ISession? Session
+    {
+        get => _session;
+        private set
+        {
+            if (!ReferenceEquals(_session, value))
+            {
+                _session = value;
+                OnPropertyChanged(nameof(Session));
+                OnPropertyChanged(nameof(ConnectionName));
+            }
+        }
+    }
+
+    /// <summary>탭 머리에 보일 접속 이름(작업 공간 안에 접속이 섞였을 때). 세션이 없으면 null.</summary>
+    public string? ConnectionName => _session?.Profile.Name;
+
+    /// <summary>PL/SQL 작업 공간의 미리보기 탭(머리글 기울임). 고치거나 고정하면 false.</summary>
+    [ObservableProperty]
+    public partial bool IsPreviewTab { get; set; }
 
     /// <summary>오류·경고(서버 순서).</summary>
     public ObservableCollection<CompileError> Errors { get; } = [];
@@ -158,7 +189,7 @@ public sealed partial class PlsqlEditorViewModel : ToolPanelViewModelBase, IComp
     /// <summary>새 PL/SQL 문서(아직 서버 객체가 아님). 글자만 채운다.</summary>
     public void StartNew(string text, ISession? session)
     {
-        _session = session;
+        Session = session;
         Target = null;
         _baseline = null;
         _line1Shift = 0;
@@ -176,7 +207,7 @@ public sealed partial class PlsqlEditorViewModel : ToolPanelViewModelBase, IComp
         ArgumentNullException.ThrowIfNull(session);
         ArgumentNullException.ThrowIfNull(target);
 
-        _session = session;
+        Session = session;
         Target = target;
         Title = $"{target.Owner}.{target.Name}" + (target.ObjectType.EndsWith("BODY", StringComparison.Ordinal) ? " (본문)" : string.Empty);
         var gen = Interlocked.Increment(ref _generation);
@@ -252,7 +283,7 @@ public sealed partial class PlsqlEditorViewModel : ToolPanelViewModelBase, IComp
     /// <summary>저장(컴파일). <paramref name="force"/> = 충돌·다른 세션 사용 경고를 알고도 진행.</summary>
     public async Task<PlsqlCompileOutcome> CompileAsync(bool force = false, CancellationToken ct = default)
     {
-        _session ??= ResolveSession();
+        Session ??= ResolveSession();
         if (_session is null)
         {
             return Report(PlsqlCompileStatus.NoSession, "접속이 없다");
@@ -326,7 +357,7 @@ public sealed partial class PlsqlEditorViewModel : ToolPanelViewModelBase, IComp
             IReadOnlyList<CompileError> errors = [];
             if (meta is not null)
             {
-                errors = await LoadErrorsAsync(meta, _session, effective, ct).ConfigureAwait(true);
+                errors = await LoadErrorsAsync(meta, _session, effective, ct, publish: true).ConfigureAwait(true);
                 _baseline = await ReadLastDdlAsync(meta, _session, effective, ct).ConfigureAwait(true);
             }
 
@@ -450,7 +481,7 @@ public sealed partial class PlsqlEditorViewModel : ToolPanelViewModelBase, IComp
     internal Func<PlsqlEditorViewModel, string, bool>? OpenDocument { get; set; }
 
     /// <summary>
-    /// 명세 ↔ 본문 전환: 반대쪽 소스를 새 탭으로 연다(편집 중인 글을 잃지 않게 이 탭은 그대로 둔다).
+    /// 명세 ↔ 본문 전환: 반대쪽 소스를 같은 작업 공간의 새 탭으로 연다(편집 중인 글을 잃지 않게 이 탭은 그대로 둔다).
     /// 반대쪽이 서버에 없으면 탭을 만들지 않고 상태 줄에 말한다.
     /// </summary>
     public async Task<PlsqlEditorViewModel?> OpenSiblingAsync(CancellationToken ct = default)
@@ -460,15 +491,25 @@ public sealed partial class PlsqlEditorViewModel : ToolPanelViewModelBase, IComp
             return null;
         }
 
+        // 반대쪽이 어느 PL/SQL 작업 공간에든 이미 열려 있으면 그 탭으로 옮겨 간다.
+        var sibling = t with { ObjectType = siblingType };
+        var router = OpenDocument is null ? PlsqlWorkspaceRouter.Of(_services) : null;
+        if (router?.FindOpen(sibling, _session) is { } open)
+        {
+            router.Show(open.Workspace, open.Tab, focus: true);
+            return open.Tab;
+        }
+
         var vm = _services is not null ? new PlsqlEditorViewModel(_services) : new PlsqlEditorViewModel(_meta!, _exec!);
         vm.OpenDocument = OpenDocument;
-        if (!await vm.OpenAsync(_session, t with { ObjectType = siblingType }, ct).ConfigureAwait(true))
+        if (!await vm.OpenAsync(_session, sibling, ct).ConfigureAwait(true))
         {
             StatusText = $"{siblingType} 소스가 없다: " + vm.StatusText;
             return null;
         }
 
-        return PlsqlEditorCommands.Dock(_services, OpenDocument, vm) ? vm : null;
+        // 없으면 이 탭이 든 작업 공간에 연다.
+        return PlsqlEditorCommands.Dock(_services, OpenDocument, vm, router?.WorkspaceOf(this)) ? vm : null;
     }
 
     private PlsqlCompileOutcome Report(PlsqlCompileStatus status, string message, IReadOnlyList<CompileError>? errors = null)
@@ -477,7 +518,7 @@ public sealed partial class PlsqlEditorViewModel : ToolPanelViewModelBase, IComp
         return new PlsqlCompileOutcome(status, errors ?? [], message);
     }
 
-    private async Task<IReadOnlyList<CompileError>> LoadErrorsAsync(IMetadataProvider meta, ISession session, DbObjectRef target, CancellationToken ct)
+    private async Task<IReadOnlyList<CompileError>> LoadErrorsAsync(IMetadataProvider meta, ISession session, DbObjectRef target, CancellationToken ct, bool publish = false)
     {
         IReadOnlyList<CompileError> errors;
         try
@@ -499,7 +540,12 @@ public sealed partial class PlsqlEditorViewModel : ToolPanelViewModelBase, IComp
             Errors.Add(e);
         }
 
-        CompileErrorsViewModel.Publish(this);
+        // 컴파일 결과는 늘 올린다. 열 때 읽은 목록은 이 탭이 활성일 때만(뒤에서 읽던 탭이 창을 가로채지 않게, 작업 공간 밖에서 쓰면 활성 탭이 없다).
+        if (publish || Active is null || ReferenceEquals(Active, this))
+        {
+            CompileErrorsViewModel.Publish(this);
+        }
+
         return errors;
     }
 
@@ -548,9 +594,12 @@ public sealed partial class PlsqlEditorViewModel : ToolPanelViewModelBase, IComp
         }
     }
 
+    private ContextKeyService? Keys => _services?.GetService(typeof(ContextKeyService)) as ContextKeyService ?? ContextKeyService.Shared;
+
+    /// <summary>이 탭의 문맥 키를 맞춘다. 활성 탭(<see cref="Active"/>)일 때만: 뒤에서 읽는 탭(미리보기·다른 작업 공간)이 키를 바꾸지 않게.</summary>
     private void SyncKeys()
     {
-        if ((_services?.GetService(typeof(ContextKeyService)) as ContextKeyService ?? ContextKeyService.Shared) is not { } keys)
+        if (!ReferenceEquals(Active, this) || Keys is not { } keys)
         {
             return;
         }
@@ -558,6 +607,13 @@ public sealed partial class PlsqlEditorViewModel : ToolPanelViewModelBase, IComp
         keys.Set("isPackageDoc", IsPackageDoc);
         keys.Set("serverSourceChanged", ServerSourceChanged);
         keys.Set("plsqlRunnable", RunTarget is not null);
+    }
+
+    private static void ClearKeys(ContextKeyService? keys)
+    {
+        keys?.Set("isPackageDoc", false);
+        keys?.Set("serverSourceChanged", false);
+        keys?.Set("plsqlRunnable", false);
     }
 
     /// <summary>

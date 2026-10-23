@@ -4,6 +4,7 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Dock.Model.Core;
+using Oranda.App.Features.PlsqlWorkspace;
 using Oranda.App.Features.SchemaBrowser;
 using Oranda.App.Features.SqlEditor;
 using Oranda.App.Shell;
@@ -65,7 +66,7 @@ public sealed class PlsqlEditorCommandHandler : ICommandHandler
                     var vm = NewViewModel();
                     vm.OpenDocument = OpenDocument;
                     vm.StartNew(NewTemplate, ResolveSession());
-                    Dock(_services, OpenDocument, vm);
+                    Dock(_services, OpenDocument, vm, context.Parameter as PlsqlWorkspaceViewModel, focus: true); // 탭 줄의 + 는 그 작업 공간에
                     break;
                 }
 
@@ -128,7 +129,12 @@ public sealed class PlsqlEditorCommandHandler : ICommandHandler
             return;
         }
 
-        if (await vm.OpenAsync(session, target, ct).ConfigureAwait(true) && parameter is PlsqlSourceLocation { Line: > 0 } location)
+        // 작업 공간에 넣었으면 읽는 중에 탭·작업 공간이 닫힐 때 읽기를 멈춘다(시험의 OpenDocument 는 그대로 읽는다).
+        var router = OpenDocument is null ? PlsqlWorkspaceRouter.Of(_services) : null;
+        var loaded = router is not null
+            ? await router.LoadAsync(vm, token => vm.OpenAsync(session, target, token), ct).ConfigureAwait(true)
+            : await vm.OpenAsync(session, target, ct).ConfigureAwait(true);
+        if (loaded && parameter is PlsqlSourceLocation { Line: > 0 } location)
         {
             vm.GoToServerLine(location.Line);
         }
@@ -184,29 +190,25 @@ public sealed class PlsqlEditorCommandHandler : ICommandHandler
         return null;
     }
 
-    internal static bool Dock(IServiceProvider? services, Func<PlsqlEditorViewModel, string, bool>? open, PlsqlEditorViewModel vm)
+    /// <summary>
+    /// 탭을 PL/SQL 작업 공간에 넣는다(<see cref="PlsqlWorkspaceRouter"/>: <paramref name="near"/> → 활성 → 최근 → 새로). 시험이 <paramref name="open"/> 을 주면 그것으로 연다.
+    /// </summary>
+    internal static bool Dock(IServiceProvider? services, Func<PlsqlEditorViewModel, string, bool>? open, PlsqlEditorViewModel vm,
+        PlsqlWorkspaceViewModel? near = null, bool focus = false)
     {
         if (open is not null)
         {
             return open(vm, vm.Title);
         }
 
-        var docking = (services?.GetService(typeof(IShellUi)) as IShellUi)?.Docking;
-        if (docking?.OpenDocument(PlsqlEditorCommands.PanelId, vm, vm.Title) is not { } doc)
-        {
-            return false;
-        }
-
-        InstallCloseConfirm(docking);
-        FollowTitle(doc, vm);
-        return true;
+        return PlsqlWorkspaceRouter.Of(services)?.Place(vm, near, preview: false, focus) is not null;
     }
 
     private static readonly System.Runtime.CompilerServices.ConditionalWeakTable<DockWorkspace, object> CloseConfirmInstalled = new();
 
     /// <summary>
-    /// 고친 PL/SQL 탭을 문서 탭 ×·닫기 명령으로 닫기 전에 저장 확인을 건다(TSK-13-27). 이미 걸려 있던 확인은 PL/SQL 이 아닌 문서에 그대로 넘긴다.
-    /// 앱 종료·작업 공간 닫기는 이 경로를 지나지 않으므로 SQL 탭처럼 묻지 않는다.
+    /// 고친 PL/SQL 탭을 문서 탭 ×·닫기 명령으로 닫기 전에 저장 확인을 건다(TSK-13-27). PL/SQL 작업 공간 문서는 고친 탭마다 차례로 묻는다.
+    /// 이미 걸려 있던 확인은 PL/SQL 이 아닌 문서에 그대로 넘긴다. 앱 종료는 이 경로를 지나지 않으므로 SQL 탭처럼 묻지 않는다.
     /// </summary>
     internal static void InstallCloseConfirm(DockWorkspace docking, Func<SqlEditorHost>? host = null)
     {
@@ -216,22 +218,14 @@ public sealed class PlsqlEditorCommandHandler : ICommandHandler
         }
 
         var previous = docking.CloseConfirm;
-        docking.CloseConfirm = document => document.Panel is PlsqlEditorViewModel vm
-            ? (vm.NeedsSaveConfirm ? ct => vm.ConfirmCloseAsync((host ?? (() => SqlEditorHost.Current))(), ct) : null)
-            : previous?.Invoke(document);
-    }
-
-    /// <summary>소스를 읽은 뒤 정해지는 제목(「FT.EMP_PKG」)도 탭 머리글에 따라간다(처음엔 「PL/SQL」로 열린다).</summary>
-    internal static void FollowTitle(PanelDocument doc, PlsqlEditorViewModel vm)
-    {
-        vm.PropertyChanged += (_, e) =>
+        docking.CloseConfirm = document => document.Panel switch
         {
-            if (e.PropertyName == nameof(PlsqlEditorViewModel.Title))
-            {
-                doc.Title = vm.Title;
-            }
+            PlsqlEditorViewModel vm => vm.NeedsSaveConfirm ? ct => vm.ConfirmCloseAsync((host ?? (() => SqlEditorHost.Current))(), ct) : null,
+            PlsqlWorkspaceViewModel ws => ws.NeedsSaveConfirm ? ct => ws.ConfirmCloseAllAsync(host?.Invoke(), ct) : null,
+            _ => previous?.Invoke(document),
         };
     }
+
 }
 
 /// <summary><c>oranda.plsql.openSource</c> 인자: 객체와 서버 소스 줄 번호(1부터, <c>all_source.line</c>). 열고 나서 그 줄로 커서를 옮긴다.</summary>
@@ -242,6 +236,7 @@ public static class PlsqlEditorCommands
 {
     public const string PanelId = "oranda.panel.plsqlEditor";
 
-    internal static bool Dock(IServiceProvider? services, Func<PlsqlEditorViewModel, string, bool>? open, PlsqlEditorViewModel vm)
-        => PlsqlEditorCommandHandler.Dock(services, open, vm);
+    internal static bool Dock(IServiceProvider? services, Func<PlsqlEditorViewModel, string, bool>? open, PlsqlEditorViewModel vm,
+        PlsqlWorkspaceViewModel? near = null)
+        => PlsqlEditorCommandHandler.Dock(services, open, vm, near);
 }

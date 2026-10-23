@@ -141,11 +141,12 @@ public sealed partial class DockWorkspace
     internal static bool IsToolShownFor(string toolId, string documentId) =>
         !SqlOnlyToolIds.Contains(toolId) || SqlDocumentIds.Contains(documentId);
 
-    /// <summary>위 도구 창을 보이는 문서(SQL·PL/SQL 편집기).</summary>
+    /// <summary>위 도구 창을 보이는 문서(SQL·PL/SQL 편집기, PL/SQL 작업 공간).</summary>
     internal static readonly IReadOnlySet<string> SqlDocumentIds = new HashSet<string>(StringComparer.Ordinal)
     {
         "oranda.panel.sqlEditor",
         "oranda.panel.plsqlEditor",
+        "oranda.panel.plsqlWorkspace",
     };
 
     private readonly List<ScopedHide> _scopedHidden = [];

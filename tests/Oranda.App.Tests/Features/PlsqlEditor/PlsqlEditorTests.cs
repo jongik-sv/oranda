@@ -123,6 +123,14 @@ public class PlsqlEditorTests
         return vm;
     }
 
+    /// <summary>서버에서 연 패키지 본문 탭(다른 시험이 쓴다: 명세/본문 쌍이 있는 문서).</summary>
+    internal static async Task<PlsqlEditorViewModel> OpenedPackageBody()
+    {
+        var vm = new PlsqlEditorViewModel(new FakeMeta { Source = BodySource }, new FakeExec());
+        Assert.True(await vm.OpenAsync(new FakeSession(), Body));
+        return vm;
+    }
+
     // ---- ViewModel ----
 
     [Fact]

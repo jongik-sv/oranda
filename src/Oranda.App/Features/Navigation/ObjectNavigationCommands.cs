@@ -19,7 +19,7 @@ namespace Oranda.App.Features.Navigation;
 /// <list type="bullet">
 /// <item><c>oranda.nav.quickOpenObject</c> — 이름 일부로 객체를 찾아 연다(DataGrip 「Go to Database Object」, SQL Developer 「Find DB Object」).</item>
 /// <item><c>oranda.schema.reveal</c> — 객체를 스키마 브라우저 트리에서 찾아 고른다(DataGrip 「Select in Database Tree」).
-/// 대상은 명령 인자 → 활성 문서(객체 상세·PL/SQL 편집기)의 객체 → SQL 편집기 커서 아래 이름 순으로 정한다.</item>
+/// 대상은 명령 인자 → 활성 문서(객체 상세·PL/SQL 작업 공간의 보이는 탭)의 객체 → SQL 편집기 커서 아래 이름 순으로 정한다.</item>
 /// </list>
 /// 서비스는 실행할 때 꺼낸다(시작 경로에서 Oracle·ANTLR 어셈블리를 올리지 않기 위해). 편집기 파일은 건드리지 않고 <see cref="IEditorContext"/> 로만 읽는다.
 /// </summary>
@@ -304,6 +304,7 @@ public sealed class ObjectNavigationCommandHandler : ICommandHandler
         SchemaNode { Ref: { } r } => r,
         ObjectDetailViewModel { Target: { } t } => t,
         PlsqlEditorViewModel { Target: { } t } => t,
+        Oranda.App.Features.PlsqlWorkspace.PlsqlWorkspaceViewModel { ActiveTab.Target: { } t } => t,
         _ => null,
     };
 
