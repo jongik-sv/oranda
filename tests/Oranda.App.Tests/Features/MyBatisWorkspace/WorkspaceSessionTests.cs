@@ -278,7 +278,7 @@ public sealed class WorkspaceSessionTests : IDisposable
         Assert.True(session.Find("deleteEmp")!.IsModified);
         Assert.True(b.IsDirty);
         Assert.Contains(a, ws.Tabs);
-        Assert.Equal(new MapperEdit.ReplaceElement("deleteEmp", b.Text), Assert.Single(session.PendingEdits()));
+        Assert.Equal(new MapperEdit.ReplaceElement("deleteEmp", session.Find("deleteEmp")!.FileText), Assert.Single(session.PendingEdits()));
     });
 
     [Fact]
@@ -296,7 +296,7 @@ public sealed class WorkspaceSessionTests : IDisposable
         Assert.False(theirs.IsDirty);
         Assert.StartsWith("<!-- mine -->", mine.Text, StringComparison.Ordinal);
         Assert.True(mine.IsDirty);
-        Assert.Equal(new MapperEdit.ReplaceElement("deleteEmp", mine.Text), Assert.Single(session.PendingEdits()));
+        Assert.Equal(new MapperEdit.ReplaceElement("deleteEmp", session.Find("deleteEmp")!.FileText), Assert.Single(session.PendingEdits()));
     });
 
     [Fact]

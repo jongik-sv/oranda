@@ -529,7 +529,7 @@ public sealed class SaveMergeTests : IDisposable
         var countTab = session.OpenStatement("countEmp")!;
         var deleteTab = session.OpenStatement("deleteEmp")!;
         EditTab(countTab, "COUNT(*)", "COUNT(EMPNO)");
-        EditTab(deleteTab, "DELETE FROM EMP", "DELETE\n      FROM EMP");
+        EditTab(deleteTab, "DELETE FROM EMP", "DELETE\n    FROM EMP"); // 탭 글은 파일 들여쓰기(2칸)를 걷어 낸 글: 저장 때 다시 붙는다
 
         Assert.True(await handler.SaveAsync(ws, CancellationToken.None));
 
@@ -748,9 +748,104 @@ public sealed class SaveMergeTests : IDisposable
 
     // ---- 준비 -------------------------------------------------------------------------------
 
-    private async Task<(SqlEditorHost Host, SqlWorkspaceViewModel Ws, MyBatisWorkspaceSession Session, MyBatisSaveHandler Handler)> OpenRealAsync(MyBatisEditorViewFactory? factory = null)
+    // ---- 들여쓰기(지시 mybatis-indent-1): 탭 = 파일 들여쓰기를 걷어 낸 글, 저장 = 다시 붙인 글 ---------------------------
+
+    [Fact]
+    public Task Indented_mapper_opened_in_every_tab_and_saved_keeps_the_file_bytes() => Ui.Run(async () =>
     {
-        var path = Write(MapperSamples.EmpMapper);
+        var (_, ws, session, handler) = await OpenRealAsync(text: MyBatisIndentTests.Indented);
+        var before = File.ReadAllBytes(session.MapperPath);
+        foreach (var id in MyBatisIndentTests.StatementIds)
+        {
+            Assert.False(session.OpenStatement(id)!.IsDirty);
+        }
+
+        Assert.True(await handler.SaveAsync(ws, CancellationToken.None));
+
+        Assert.Equal(before, File.ReadAllBytes(session.MapperPath));
+        Assert.False(session.IsDirty);
+    });
+
+    [Fact]
+    public Task Indented_mapper_saving_one_edited_statement_writes_only_it_with_the_file_indent() => Ui.Run(async () =>
+    {
+        var (_, ws, session, handler) = await OpenRealAsync(text: MyBatisIndentTests.Indented);
+        var original = File.ReadAllText(session.MapperPath);
+        session.OpenStatement("selectMoSpc");
+        var deleteTab = session.OpenStatement("deleteMoSpc")!;
+        EditTab(deleteTab, "</delete>", "   and DEL_YN = 'N'\n</delete>");
+
+        Assert.True(await handler.SaveAsync(ws, CancellationToken.None));
+
+        var expected = original.Replace(
+            "         where SPC_ID = #{spcId}\n    </delete>",
+            "         where SPC_ID = #{spcId}\n       and DEL_YN = 'N'\n    </delete>",
+            StringComparison.Ordinal);
+        Assert.Equal(expected, File.ReadAllText(session.MapperPath));
+        Assert.False(deleteTab.IsDirty);
+        Assert.StartsWith("<delete id=\"deleteMoSpc\">\n    delete from MO_SPC", deleteTab.Text, StringComparison.Ordinal); // 저장 뒤에도 탭은 걷어 낸 글
+        Assert.EndsWith("\n   and DEL_YN = 'N'\n</delete>", deleteTab.Text, StringComparison.Ordinal);
+    });
+
+    [Fact]
+    public Task Indented_crlf_mapper_with_tab_characters_keeps_line_ends_and_tabs_on_save() => Ui.Run(async () =>
+    {
+        var text = "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\r\n<mapper namespace=\"m\">\r\n"
+            + "\t<delete id=\"d\">\r\n\t\tdelete from T\r\n\r\n\t\t where A = 1\r\n\t</delete>\r\n"
+            + "\t<select id=\"s\">\r\n\t\tselect 1 from DUAL\r\n\t</select>\r\n</mapper>\r\n";
+        var (_, ws, session, handler) = await OpenRealAsync(text: text);
+        var tab = session.OpenStatement("d")!;
+        Assert.Equal("<delete id=\"d\">\r\n\tdelete from T\r\n\r\n\t where A = 1\r\n</delete>", tab.Text);
+        EditTab(tab, "A = 1", "A = 2");
+
+        Assert.True(await handler.SaveAsync(ws, CancellationToken.None));
+
+        Assert.Equal(text.Replace("A = 1", "A = 2", StringComparison.Ordinal), File.ReadAllText(session.MapperPath));
+    });
+
+    [Fact]
+    public Task Indented_mapper_merges_an_outside_change_into_dedented_tabs_and_saves_both() => Ui.Run(async () =>
+    {
+        var (_, ws, session, handler) = await OpenRealAsync(text: MyBatisIndentTests.Indented);
+        var selectTab = session.OpenStatement("selectMoSpc")!;
+        var deleteTab = session.OpenStatement("deleteMoSpc")!;
+        EditTab(selectTab, "select *", "select SPC_ID");
+        var disk = Change(MyBatisIndentTests.Indented, "delete from MO_SPC", "delete from MO_SPC_H");
+        File.WriteAllText(session.MapperPath, disk);
+        Watchers[^1].Raise();
+        Time.Fire();
+
+        Assert.Equal(MapperBannerKind.Merged, handler.Watch.StateOf(ws)!.Banner);
+        Assert.Equal("<delete id=\"deleteMoSpc\">\n    delete from MO_SPC_H\n     where SPC_ID = #{spcId}\n</delete>", deleteTab.Text);
+        Assert.False(deleteTab.IsDirty);
+        Assert.True(selectTab.IsDirty);
+
+        Assert.True(await handler.SaveAsync(ws, CancellationToken.None));
+        Assert.Equal(Change(disk, "select *", "select SPC_ID"), File.ReadAllText(session.MapperPath));
+    });
+
+    [Fact]
+    public Task Indented_mapper_formatted_in_the_tab_is_saved_with_the_file_indent() => Ui.Run(async () =>
+    {
+        var (_, ws, session, handler) = await OpenRealAsync(text: MyBatisIndentTests.Indented);
+        var tab = session.OpenStatement("selectMoSpc")!;
+        var formatted = new Oranda.Language.MyBatis.Formatting.MyBatisStatementFormatter().Format(tab.Text, new Oranda.Core.Formatting.FormatterOptions());
+        Assert.True(formatted.Succeeded, formatted.Message);
+        Assert.EndsWith("\n</select>", formatted.Text, StringComparison.Ordinal); // 탭에서는 닫는 태그가 0칸이라 본문은 한 단만 들여 쓴다
+        tab.Document.Replace(0, tab.Document.TextLength, formatted.Text);
+
+        Assert.True(await handler.SaveAsync(ws, CancellationToken.None));
+
+        var reread = Parser.Parse(File.ReadAllBytes(session.MapperPath));
+        Assert.Equal(MyBatisStatementText.Reindent(formatted.Text, "    "), reread.Find("selectMoSpc")!.Text);
+        Assert.Equal(session.Document.Find("deleteMoSpc")!.Text, Parser.Parse(MyBatisIndentTests.Indented).Find("deleteMoSpc")!.Text);
+        Assert.Equal(formatted.Text, tab.Text);
+        Assert.False(tab.IsDirty);
+    });
+
+    private async Task<(SqlEditorHost Host, SqlWorkspaceViewModel Ws, MyBatisWorkspaceSession Session, MyBatisSaveHandler Handler)> OpenRealAsync(MyBatisEditorViewFactory? factory = null, string? text = null)
+    {
+        var path = Write(text ?? MapperSamples.EmpMapper);
         var (host, watch) = NewHost();
         var handler = (MyBatisSaveHandler)host.MyBatisHooks.SaveHandler!;
         host.MyBatisHooks = new MyBatisHooks(

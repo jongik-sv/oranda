@@ -14,6 +14,7 @@ namespace Oranda.App.Features.MyBatisWorkspace.Workspace;
 /// 작업 공간 저장본 곁 파일 <c>{id}.mybatis-statements.json</c> 에 둔다. 문장 탭의 글 자체는 호스트가 작업 공간 저장본(탭 Content)에 남긴다.
 /// 되살릴 때 디스크 매퍼가 기준과 같으면 디스크 문서를 기준으로 쓰고, 다르면 저장해 둔 기준 원문으로 세션을 세운다
 /// (그 뒤 밖에서 바뀜 병합은 03-03 감시가 맡는다, design.md 5.3).
+/// 판 2 = 고친 원문·탭 글이 탭 공간(파일 들여쓰기를 걷어 낸 글)이고 요소마다 접두를 둔다. 판 1(옛 기록) = 둘 다 파일 공간이라 그대로 읽고, 이어지는 탭의 요소는 원문 그대로 보인다.
 /// </summary>
 [OrandaService(typeof(IMyBatisRecoveryParticipant))]
 public sealed class RecoveryStatementsParticipant : IMyBatisRecoveryParticipant
@@ -107,7 +108,7 @@ public sealed class RecoveryStatementsParticipant : IMyBatisRecoveryParticipant
             return; // 곁 파일이 깨졌으면 세션 없이 둔다(문장 탭 글은 작업 공간 저장본에 남아 있다)
         }
 
-        if (state is not { Version: 1 })
+        if (state is not { Version: 1 or 2 })
         {
             existing?.AdoptOrphanTabs();
             return;
@@ -156,6 +157,7 @@ public sealed class RecoveryStatementsParticipant : IMyBatisRecoveryParticipant
                 Id = e.Id,
                 Kind = e.Kind.ToString(),
                 Text = e.IsModified && !e.IsDeleted ? e.Text : null,
+                Indent = e.Indent,
                 IsDeleted = e.IsDeleted ? true : null,
                 TabId = e.Tab?.TabId,
             });
@@ -163,7 +165,7 @@ public sealed class RecoveryStatementsParticipant : IMyBatisRecoveryParticipant
 
         return new StatementsState
         {
-            Version = 1,
+            Version = 2,
             MapperPath = session.MapperPath,
             BaselineHash = session.BaselineHash,
             BaselineText = session.Document.Text,
@@ -237,7 +239,23 @@ public sealed class RecoveryStatementsParticipant : IMyBatisRecoveryParticipant
                 continue; // 기준과 맞지 않는 요소·id 없는 새 문장은 버린다
             }
 
-            var entry = MyBatisWorkspaceSession.NewEntry(baseline, el, el is null ? kind : MyBatisStatementEntry.KindOf(el.Kind), s.Id ?? el?.Id, s.Text ?? el?.Text ?? string.Empty);
+            kind = el is null ? kind : MyBatisStatementEntry.KindOf(el.Kind);
+            MyBatisStatementEntry entry;
+            if (state.Version >= 2 && s.Text is { } text)
+            {
+                entry = MyBatisWorkspaceSession.RestoreEntry(baseline, el, kind, s.Id ?? el?.Id, text, s.Indent);
+            }
+            else if (state.Version >= 2 && el is not null && s.Indent is { } indent
+                && (indent.Length == 0 ? el.Text : MyBatisStatementText.TryDedent(el.Text, indent, out var cut) ? cut : null) is { } view)
+            {
+                // 고치지 않은 요소도 저장해 둔 접두를 따른다: 밖에서 바뀜 병합이 물려준 접두는 기준 원문에서 다시 구한 것과 다를 수 있다.
+                entry = MyBatisWorkspaceSession.RestoreEntry(baseline, el, kind, s.Id ?? el.Id, view, indent);
+            }
+            else
+            {
+                entry = MyBatisWorkspaceSession.NewEntry(baseline, el, kind, s.Id ?? el?.Id, s.Text ?? el?.Text ?? string.Empty);
+            }
+
             entry.IsDeleted = s.IsDeleted == true && entry.IsEditable;
             restored.Add(entry);
             if (s.TabId is { } tabId)
@@ -263,16 +281,16 @@ public sealed class RecoveryStatementsParticipant : IMyBatisRecoveryParticipant
         {
             if (workspace.Tabs.FirstOrDefault(t => t.TabId == tabId) is { } tab)
             {
-                session.AdoptTab(entry, tab);
+                session.AdoptTab(entry, tab, fileSpace: state.Version < 2);
             }
         }
 
-        session.AdoptOrphanTabs();
+        session.AdoptOrphanTabs(fileSpace: state.Version < 2);
         workspace.MyBatis = session;
         return true;
     }
 
-    /// <summary>곁 파일 모양(판 1).</summary>
+    /// <summary>곁 파일 모양(판 2, 판 1 도 읽는다).</summary>
     internal sealed class StatementsState
     {
         public int Version { get; set; }
@@ -300,8 +318,11 @@ public sealed class RecoveryStatementsParticipant : IMyBatisRecoveryParticipant
 
         public string? Kind { get; set; }
 
-        /// <summary>고친 원문(기준과 같으면 null).</summary>
+        /// <summary>고친 원문(기준과 같으면 null). 판 2 = 탭 공간, 판 1 = 파일 공간.</summary>
         public string? Text { get; set; }
+
+        /// <summary>파일 들여쓰기 접두(<see cref="MyBatisStatementEntry.Indent"/>, 판 2). null = 새 문장이 넣을 자리를 따른다.</summary>
+        public string? Indent { get; set; }
 
         public bool? IsDeleted { get; set; }
 

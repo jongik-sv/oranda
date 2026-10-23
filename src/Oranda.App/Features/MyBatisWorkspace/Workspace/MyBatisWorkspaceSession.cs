@@ -95,8 +95,9 @@ public sealed class MyBatisWorkspaceSession : IMyBatisWorkspaceSession
             return null;
         }
 
+        // 탭 공간 원문(파일 들여쓰기를 걷어 낸 글)으로 돌려준다: 계산 결과 범위가 탭 글 오프셋과 맞아야 한다.
         var text = entry.Text;
-        if (entry.Baseline is { } baseline && string.Equals(baseline.Text, text, StringComparison.Ordinal))
+        if (entry.BaselineView is { } baseline && string.Equals(baseline.Text, text, StringComparison.Ordinal))
         {
             return baseline;
         }
@@ -139,22 +140,22 @@ public sealed class MyBatisWorkspaceSession : IMyBatisWorkspaceSession
                 continue;
             }
 
+            // 편집 글은 파일 공간이다: 탭 글에 파일 들여쓰기를 다시 붙인다(Reindent).
             if (e.IsNew)
             {
-                edits.Add(new MapperEdit.InsertElement(e.Id!, e.Text, InsertAnchor(i)));
+                edits.Add(new MapperEdit.InsertElement(e.Id!, e.Indent is null ? MyBatisStatementText.Reindent(e.Text, InsertIndent(i)) : e.FileText, InsertAnchor(i)));
             }
             else if (e.IsDeleted)
             {
                 edits.Add(new MapperEdit.DeleteElement(e.OriginalId!));
             }
-            else if (!string.Equals(e.Id, e.OriginalId, StringComparison.Ordinal)
-                && string.Equals(MyBatisStatementText.RenameId(e.Baseline!.Text, e.Id!), e.Text, StringComparison.Ordinal))
+            else if (!string.Equals(e.Id, e.OriginalId, StringComparison.Ordinal) && IsRenameOnly(e))
             {
                 edits.Add(new MapperEdit.RenameElement(e.OriginalId!, e.Id!));
             }
             else
             {
-                edits.Add(new MapperEdit.ReplaceElement(e.OriginalId!, e.Text));
+                edits.Add(new MapperEdit.ReplaceElement(e.OriginalId!, e.FileText));
             }
         }
 
@@ -240,9 +241,10 @@ public sealed class MyBatisWorkspaceSession : IMyBatisWorkspaceSession
             throw new ArgumentException(problem, nameof(id));
         }
 
+        // 탭 글은 들여쓰기 없는 틀이고, 저장 때 넣을 자리(Apply 의 AfterId 요소)의 들여쓰기를 둘째 줄부터 붙인다(접두 null).
         var at = _entries.FindLastIndex(e => e.Kind == kind);
-        var text = MyBatisStatementText.NewStatement(kind, id, _document.Format.NewLine, IndentOfElements(at >= 0 ? _entries[at].Baseline : null));
-        var entry = new MyBatisStatementEntry(null, kind, id, text, ambiguous: false);
+        var text = MyBatisStatementText.NewStatement(kind, id, _document.Format.NewLine);
+        var entry = new MyBatisStatementEntry(null, kind, id, text, ambiguous: false, indent: null);
         _entries.Insert(at < 0 ? _entries.Count : at + 1, entry);
         RaiseStateChanged();
         return OpenEntry(entry)!;
@@ -388,12 +390,27 @@ public sealed class MyBatisWorkspaceSession : IMyBatisWorkspaceSession
         }
     }
 
-    /// <summary>복구(F5): 이미 열린 탭(작업 공간 저장본에서 되살린 문장 탭)을 요소에 잇는다. 탭 글이 지금 원문이 된다.</summary>
-    internal void AdoptTab(MyBatisStatementEntry entry, SqlEditorViewModel tab)
+    /// <summary>
+    /// 복구(F5): 이미 열린 탭(작업 공간 저장본에서 되살린 문장 탭)을 요소에 잇는다. 탭 글이 지금 원문이 된다.
+    /// <paramref name="fileSpace"/> = 탭 글이 옛 형식(파일 들여쓰기가 남은 원문, 곁 파일 판 1)이다: 그 요소는 원문 그대로 보인다(접두 없음).
+    /// 형식과 상관없이 탭 글이 기준 원문(파일 공간) 그대로면 고치지 않은 탭이므로 탭 공간 기준 글로 다시 싣는다
+    /// (형식을 모르는 입구 — 곁 파일 없음·깨짐 — 에서 접두가 두 번 붙지 않게 하는 안전장치).
+    /// </summary>
+    internal void AdoptTab(MyBatisStatementEntry entry, SqlEditorViewModel tab, bool fileSpace = false)
     {
         if (entry.Tab is not null || EntryOf(tab) is not null)
         {
             return;
+        }
+
+        if (entry.Baseline is { } baseline && entry.BaselineText is { } view && !string.Equals(view, baseline.Text, StringComparison.Ordinal)
+            && string.Equals(tab.Text, baseline.Text, StringComparison.Ordinal))
+        {
+            tab.LoadText(view);
+        }
+        else if (fileSpace && entry.Indent is not { Length: 0 })
+        {
+            entry.SetIndent(string.Empty);
         }
 
         tab.Title = entry.Id ?? tab.Title;
@@ -402,9 +419,9 @@ public sealed class MyBatisWorkspaceSession : IMyBatisWorkspaceSession
 
     /// <summary>
     /// 복구(F5): 어느 요소에도 이어지지 않은 탭(곁 파일과 작업 공간 저장본의 시차, 같은 작업 공간 다시 복원)을 탭 제목 = id 로 잇는다.
-    /// 맞는 요소가 없으면 탭 글을 새 문장으로 되살린다(id 를 읽을 수 있을 때).
+    /// 맞는 요소가 없으면 탭 글을 새 문장으로 되살린다(id 를 읽을 수 있을 때). <paramref name="fileSpace"/> 는 <see cref="AdoptTab"/> 과 같다.
     /// </summary>
-    internal void AdoptOrphanTabs()
+    internal void AdoptOrphanTabs(bool fileSpace = false)
     {
         foreach (var tab in _workspace.Tabs.Where(t => EntryOf(t) is null).ToList())
         {
@@ -415,13 +432,13 @@ public sealed class MyBatisWorkspaceSession : IMyBatisWorkspaceSession
                     entry.StoredText = tab.Text;
                 }
 
-                AdoptTab(entry, tab);
+                AdoptTab(entry, tab, fileSpace);
             }
             else if (MyBatisStatementText.TryFindIdValue(tab.Text, out var start, out var length)
                 && tab.Text.Substring(start, length) is var id && ValidateId(id, null) is null
                 && MyBatisStatementText.KindOfText(tab.Text) is { } kind)
             {
-                var created = new MyBatisStatementEntry(null, kind, id, tab.Text, ambiguous: false);
+                var created = new MyBatisStatementEntry(null, kind, id, tab.Text, ambiguous: false, indent: fileSpace ? string.Empty : null);
                 var at = _entries.FindLastIndex(e => e.Kind == kind);
                 _entries.Insert(at < 0 ? _entries.Count : at + 1, created);
                 AdoptTab(created, tab);
@@ -440,9 +457,27 @@ public sealed class MyBatisWorkspaceSession : IMyBatisWorkspaceSession
         RaiseStateChanged();
     }
 
-    /// <summary>복구(F5): 기준 원문으로 요소를 새로 만든다(복구 참여자가 곁 파일을 맞대기 전 상태).</summary>
-    internal static MyBatisStatementEntry NewEntry(IMyBatisMapperDocument document, MyBatisElement? baseline, MyBatisStatementKind kind, string? id, string text) =>
-        new(baseline, kind, id, text, ambiguous: baseline is not null && IsAmbiguous(document, baseline));
+    /// <summary>
+    /// 복구(F5): 파일 공간 원문으로 요소를 새로 만든다(기준 요소면 그 줄 앞 공백을 걷어 낸다, <see cref="FromFile"/>). 새 문장은 원문 그대로(접두 없음).
+    /// </summary>
+    internal static MyBatisStatementEntry NewEntry(IMyBatisMapperDocument document, MyBatisElement? baseline, MyBatisStatementKind kind, string? id, string fileText) =>
+        FromFile(document, baseline, kind, id, fileText, ambiguous: baseline is not null && IsAmbiguous(document, baseline));
+
+    /// <summary>복구(F5): 탭 공간 원문과 저장해 둔 접두로 요소를 만든다(곁 파일 판 2).</summary>
+    internal static MyBatisStatementEntry RestoreEntry(IMyBatisMapperDocument document, MyBatisElement? baseline, MyBatisStatementKind kind, string? id, string text, string? indent) =>
+        new(baseline, kind, id, text, ambiguous: baseline is not null && IsAmbiguous(document, baseline), indent);
+
+    /// <summary>
+    /// 파일 공간 원문 → 요소. 기준 요소면 여는 태그 줄 앞 공백을 접두로 둘째 줄부터 걷어 내되, 다시 붙여 원문 바이트 그대로 돌아올 때만 그렇게 한다
+    /// (덜 들여 쓴 줄·공백만 있는 줄이 있으면 원문 그대로, 접두 빈 글).
+    /// </summary>
+    private static MyBatisStatementEntry FromFile(IMyBatisMapperDocument document, MyBatisElement? baseline, MyBatisStatementKind kind, string? id, string fileText, bool ambiguous)
+    {
+        var indent = baseline is null ? string.Empty : MyBatisStatementText.IndentBefore(document.Text, baseline.ElementRange.Start);
+        return MyBatisStatementText.TryDedent(fileText, indent, out var text)
+            ? new MyBatisStatementEntry(baseline, kind, id, text, ambiguous, indent)
+            : new MyBatisStatementEntry(baseline, kind, id, fileText, ambiguous, string.Empty);
+    }
 
     /// <summary>
     /// 글 원문으로 새 기준 문서를 읽되 연 때의 BOM 을 지킨다(<c>Parse(string)</c> 은 BOM 을 늘 없음으로 본다, 02-01 후속 메모).
@@ -489,26 +524,21 @@ public sealed class MyBatisWorkspaceSession : IMyBatisWorkspaceSession
 
     private static IMyBatisMapperDocument ParseText(string text) => new MapperParser().Parse(text);
 
-    /// <summary>새 문장 들여쓰기: 바로 앞에 둘 기준 요소(없으면 첫 문장, 그것도 없으면 첫 요소)가 놓인 줄의 앞 공백. Apply 도 앞 요소를 따른다.</summary>
-    private string IndentOfElements(MyBatisElement? anchor)
+    /// <summary>
+    /// 새 문장을 넣을 자리의 들여쓰기: Apply 가 첫 줄에 붙이는 것과 같다(AfterId 요소의 줄 앞 공백, AfterId 가 없으면 마지막 요소, 요소가 없으면 2칸).
+    /// 둘째 줄부터 같은 접두를 붙여야 저장 뒤 다시 읽을 때 같은 탭 글로 돌아온다.
+    /// </summary>
+    private string InsertIndent(int index)
     {
-        var el = anchor ?? _document.Elements.FirstOrDefault(e => e.IsStatement) ?? (_document.Elements.Count > 0 ? _document.Elements[0] : null);
-        if (el is null)
-        {
-            return "  ";
-        }
-
-        var text = _document.Text;
-        int start = Math.Clamp(el.ElementRange.Start, 0, text.Length);
-        int lineStart = start == 0 ? 0 : text.LastIndexOf('\n', start - 1) + 1;
-        int k = lineStart;
-        while (k < start && (text[k] == ' ' || text[k] == '\t'))
-        {
-            k++;
-        }
-
-        return text[lineStart..k];
+        var el = InsertAnchor(index) is { } after ? _document.Find(after) : _document.Elements.Count > 0 ? _document.Elements[^1] : null;
+        return el is null ? "  " : MyBatisStatementText.IndentBefore(_document.Text, el.ElementRange.Start);
     }
+
+    /// <summary>원문은 그대로 두고 id 만 바꾼 고침인가(RenameElement 로 저장한다). 같은 공간끼리 견준다.</summary>
+    private static bool IsRenameOnly(MyBatisStatementEntry e) =>
+        e.BaselineText is { } baseline
+            ? string.Equals(MyBatisStatementText.RenameId(baseline, e.Id!), e.Text, StringComparison.Ordinal)
+            : string.Equals(MyBatisStatementText.RenameId(e.Baseline!.Text, e.Id!), e.FileText, StringComparison.Ordinal);
 
     private static MyBatisStatementKind KindFromName(string name) => name switch
     {
@@ -527,7 +557,7 @@ public sealed class MyBatisWorkspaceSession : IMyBatisWorkspaceSession
         foreach (var el in document.Elements)
         {
             bool ambiguous = el.Id is { } id && counts[id] > 1 && IsAmbiguous(document, el);
-            _entries.Add(new MyBatisStatementEntry(el, MyBatisStatementEntry.KindOf(el.Kind), el.Id, el.Text, ambiguous));
+            _entries.Add(FromFile(document, el, MyBatisStatementEntry.KindOf(el.Kind), el.Id, el.Text, ambiguous));
         }
     }
 
@@ -563,7 +593,7 @@ public sealed class MyBatisWorkspaceSession : IMyBatisWorkspaceSession
                 if (target is null)
                 {
                     // 새 문장(또는 새 기준에서 사라진 문장)은 새 문장으로 남긴다.
-                    target = new MyBatisStatementEntry(null, prev.Kind, prev.Id, prev.Text, ambiguous: false);
+                    target = new MyBatisStatementEntry(null, prev.Kind, prev.Id, prev.Text, ambiguous: false, prev.Indent);
                     var at = _entries.FindLastIndex(e => e.Kind == prev.Kind);
                     _entries.Insert(at < 0 ? _entries.Count : at + 1, target);
                     taken.Add(target);
@@ -573,6 +603,12 @@ public sealed class MyBatisWorkspaceSession : IMyBatisWorkspaceSession
                     target.Id = prev.Id;
                     target.IsDeleted = prev.IsDeleted;
                     target.StoredText = prev.Text;
+
+                    // 내 글은 prev 의 접두로 걷어 낸 글이다: 접두를 물려받아 병합 계획에 쓴 파일 글(FileText) 그대로 쓴다.
+                    if (prev.Indent is { } indent && !string.Equals(target.Indent, indent, StringComparison.Ordinal))
+                    {
+                        target.SetIndent(indent);
+                    }
                 }
             }
 

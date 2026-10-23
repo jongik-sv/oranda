@@ -2,7 +2,10 @@ using System.Text.RegularExpressions;
 
 namespace Oranda.App.Features.MyBatisWorkspace.Workspace;
 
-/// <summary>문장 원문(여는 태그 ~ 닫는 태그) 글자 도우미: id 속성 찾기·바꾸기, 새 문장 틀, 동적 태그 수, include 수.</summary>
+/// <summary>
+/// 문장 원문(여는 태그 ~ 닫는 태그) 글자 도우미: id 속성 찾기·바꾸기, 새 문장 틀, 동적 태그 수, include 수, 탭 ↔ 파일 들여쓰기(Dedent·Reindent).
+/// 탭에서 새로 쓴 줄은 CDATA·여러 줄 문자열 안에 있어도 저장 때 파일 들여쓰기가 붙는다(바이트 왕복 보장이 우선, 지시 mybatis-indent-1).
+/// </summary>
 public static partial class MyBatisStatementText
 {
     private static readonly string[] DynamicTags = ["if", "choose", "when", "otherwise", "foreach", "where", "set", "trim", "bind"];
@@ -129,6 +132,123 @@ public static partial class MyBatisStatementText
     {
         var name = MyBatisStatementEntry.KindName(kind);
         return $"<{name} id=\"{id}\">{newLine}{indent}  {newLine}{indent}</{name}>";
+    }
+
+    /// <summary>
+    /// 매퍼 원문 <paramref name="text"/> 의 <paramref name="start"/>(요소 여는 태그의 <c>&lt;</c>) 앞 같은 줄 공백.
+    /// 줄 시작 ~ <c>&lt;</c> 가 공백·탭뿐일 때 그 원문, 아니면 빈 글(02-01 Apply 의 들여쓰기 규칙과 같다).
+    /// </summary>
+    public static string IndentBefore(string text, int start)
+    {
+        ArgumentNullException.ThrowIfNull(text);
+        start = Math.Clamp(start, 0, text.Length);
+        int lineStart = start == 0 ? 0 : text.AsSpan(0, start).LastIndexOfAny('\r', '\n') + 1;
+        for (int k = lineStart; k < start; k++)
+        {
+            if (text[k] is not (' ' or '\t'))
+            {
+                return string.Empty;
+            }
+        }
+
+        return text[lineStart..start];
+    }
+
+    /// <summary>
+    /// 파일 → 탭: 둘째 줄부터 <paramref name="indent"/> 로 시작하는 줄에서 그 접두를 뗀다. 첫 줄(여는 태그 줄)은 그대로.
+    /// 줄 끝(CRLF·LF·CR, Apply 의 줄 나눔과 같다)과 탭 문자는 원문 그대로 둔다.
+    /// </summary>
+    public static string Dedent(string text, string indent)
+    {
+        ArgumentNullException.ThrowIfNull(text);
+        ArgumentNullException.ThrowIfNull(indent);
+        LineEnd(text, 0, out int i);
+        if (indent.Length == 0 || i >= text.Length)
+        {
+            return text;
+        }
+
+        var sb = new System.Text.StringBuilder(text.Length);
+        sb.Append(text, 0, i);
+        while (i < text.Length)
+        {
+            int content = LineEnd(text, i, out int next);
+            int from = text.AsSpan(i, content - i).StartsWith(indent, StringComparison.Ordinal) ? i + indent.Length : i;
+            sb.Append(text, from, next - from);
+            i = next;
+        }
+
+        return sb.ToString();
+    }
+
+    /// <summary>
+    /// 탭 → 파일: 둘째 줄부터 빈 줄(줄 끝을 뺀 길이 0)을 뺀 모든 줄 앞에 <paramref name="indent"/> 를 붙인다. 첫 줄은 Apply·원래 자리가 들여 쓴다.
+    /// 탭에서 새로 쓴 줄도 이 규칙대로 접두가 붙는다(CDATA·여러 줄 문자열 안 줄 포함).
+    /// </summary>
+    public static string Reindent(string text, string indent)
+    {
+        ArgumentNullException.ThrowIfNull(text);
+        ArgumentNullException.ThrowIfNull(indent);
+        LineEnd(text, 0, out int i);
+        if (indent.Length == 0 || i >= text.Length)
+        {
+            return text;
+        }
+
+        var sb = new System.Text.StringBuilder(text.Length + 64);
+        sb.Append(text, 0, i);
+        while (i < text.Length)
+        {
+            int content = LineEnd(text, i, out int next);
+            if (content > i)
+            {
+                sb.Append(indent);
+            }
+
+            sb.Append(text, i, next - i);
+            i = next;
+        }
+
+        return sb.ToString();
+    }
+
+    /// <summary><paramref name="start"/> 줄의 내용 끝(줄 끝 앞). <paramref name="next"/> = 다음 줄 시작(줄 끝이 없으면 글 끝). CRLF·LF·CR 을 줄 끝으로 본다.</summary>
+    private static int LineEnd(string text, int start, out int next)
+    {
+        int at = text.AsSpan(start).IndexOfAny('\r', '\n');
+        if (at < 0)
+        {
+            next = text.Length;
+            return text.Length;
+        }
+
+        at += start;
+        next = at + (text[at] == '\r' && at + 1 < text.Length && text[at + 1] == '\n' ? 2 : 1);
+        return at;
+    }
+
+    /// <summary>
+    /// <paramref name="indent"/> 로 Dedent 한 글이 Reindent 로 원문 바이트 그대로 돌아오면 true 와 그 글.
+    /// 접두가 없거나 돌아오지 않으면(덜 들여 쓴 줄·공백만 있는 줄 등) false 와 원문 그대로 — 그 요소는 원문 그대로 보인다.
+    /// </summary>
+    public static bool TryDedent(string text, string indent, out string dedented)
+    {
+        ArgumentNullException.ThrowIfNull(text);
+        ArgumentNullException.ThrowIfNull(indent);
+        dedented = text;
+        if (indent.Length == 0)
+        {
+            return false;
+        }
+
+        var cut = Dedent(text, indent);
+        if (!string.Equals(Reindent(cut, indent), text, StringComparison.Ordinal))
+        {
+            return false;
+        }
+
+        dedented = cut;
+        return true;
     }
 
     /// <summary>
