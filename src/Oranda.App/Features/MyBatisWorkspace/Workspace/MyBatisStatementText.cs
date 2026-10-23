@@ -311,7 +311,7 @@ public static partial class MyBatisStatementText
         }
     }
 
-    [GeneratedRegex("^[A-Za-z_][A-Za-z0-9_]*$")]
+    [GeneratedRegex("^[A-Za-z_][A-Za-z0-9_]*\\z")]
     private static partial Regex IdPattern();
 
     [GeneratedRegex("""\sid\s*=\s*(?<q>["'])(?<v>[^"']*)\k<q>""")]

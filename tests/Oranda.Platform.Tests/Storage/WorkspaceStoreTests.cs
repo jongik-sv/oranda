@@ -199,6 +199,7 @@ public sealed class WorkspaceStoreTests : IDisposable
     [InlineData("Default")]
     [InlineData("")]
     [InlineData("a b")]
+    [InlineData("work\n")] // 정규식 끝의 $ 는 끝 줄바꿈을 통과시킨다(\z 로 막는다)
     public async Task Invalid_id_is_rejected(string id)
     {
         var store = NewStore();

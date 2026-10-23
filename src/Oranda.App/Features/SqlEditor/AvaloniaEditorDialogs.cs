@@ -13,12 +13,12 @@ namespace Oranda.App.Features.SqlEditor;
 public sealed class AvaloniaEditorDialogs : IEditorDialogs
 {
     // 이름이 언어를 따라가야 하므로 부를 때마다 만든다(글자는 Shell 리소스 Shell.dialog.*).
-    private static FilePickerFileType SqlFiles => new(UiText.Get("Shell.dialog.filter.sql", "SQL 파일")) { Patterns = ["*.sql", "*.pls", "*.pks", "*.pkb", "*.txt"] };
+    private static FilePickerFileType SqlFiles => new(UiText.Get("Shell.dialog.filter.sql", "SQL 파일")) { Patterns = ["*.sql", "*.pls", "*.pks", "*.pkb", "*.plb", "*.prc", "*.fnc", "*.trg", "*.txt"] };
 
     // Oranda 작업 공간은 이름.workspace.md(D-028). macOS 피커는 확장자 하나만 알아서 UTI 는 Markdown 으로 준다.
     private static FilePickerFileType WorkspaceFiles => new(UiText.Get("Shell.dialog.filter.workspace", "Oranda 작업 공간 (*.workspace.md)"))
     {
-        Patterns = ["*" + SqlEditor.WorkspaceFiles.Extension],
+        Patterns = ["*" + SqlEditor.WorkspaceFiles.Extension, "*.plsql-workspace.md"],
         AppleUniformTypeIdentifiers = ["net.daringfireball.markdown"],
     };
 

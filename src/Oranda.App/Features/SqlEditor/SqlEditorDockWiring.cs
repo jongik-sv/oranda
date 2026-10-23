@@ -23,7 +23,7 @@ public sealed partial class SqlEditorDockWiring(
 
     public StartupPhase Phase => StartupPhase.AfterFirstFrame;
 
-    [GeneratedRegex("^[a-z0-9][a-z0-9-]{0,63}$")]
+    [GeneratedRegex("^[a-z0-9][a-z0-9-]{0,63}\\z")]
     private static partial Regex IdPattern();
 
     public Task RunAsync(CancellationToken ct)
@@ -119,7 +119,7 @@ public sealed partial class SqlEditorDockWiring(
         return Task.CompletedTask;
     }
 
-    private IReadOnlyList<string> ListSavedWorkspaceIds()
+    internal IReadOnlyList<string> ListSavedWorkspaceIds()
     {
         var dir = paths.WorkspacesDirectory;
         return Directory.Exists(dir)

@@ -68,7 +68,7 @@ internal sealed partial class FormatterProfileStore : IFormatterProfileStore
         },
     ];
 
-    [GeneratedRegex("^[a-z0-9][a-z0-9-]{0,63}$")]
+    [GeneratedRegex("^[a-z0-9][a-z0-9-]{0,63}\\z")]
     private static partial Regex IdPattern();
 
     public static bool IsBuiltIn(string id) => BuiltIns.Any(p => p.Id == id);

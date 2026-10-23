@@ -75,6 +75,14 @@ public sealed class FormatterProfileStoreTests : IDisposable
     }
 
     [Fact]
+    public async Task Id_with_a_trailing_newline_is_rejected()
+    {
+        var store = NewStore();
+        await Assert.ThrowsAsync<ArgumentException>(() => store.SaveAsync(Sample("team\n"), default));
+        await Assert.ThrowsAsync<ArgumentException>(() => store.DeleteAsync("team\n", default));
+    }
+
+    [Fact]
     public async Task Duplicate_name_is_rejected_on_save()
     {
         var store = NewStore();

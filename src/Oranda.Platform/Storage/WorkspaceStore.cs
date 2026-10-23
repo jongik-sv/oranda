@@ -22,7 +22,7 @@ internal sealed partial class WorkspaceStore(IAppDataPaths paths) : IWorkspaceSt
 
     private readonly HashSet<string> _readOnlyIds = new(StringComparer.Ordinal);
 
-    [GeneratedRegex("^[a-z0-9][a-z0-9-]{0,63}$")]
+    [GeneratedRegex("^[a-z0-9][a-z0-9-]{0,63}\\z")]
     private static partial Regex IdPattern();
 
     public async Task<StoredDocument<Workspace>?> LoadAsync(string id, CancellationToken ct)
