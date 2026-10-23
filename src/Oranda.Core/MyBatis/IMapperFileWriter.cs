@@ -5,7 +5,7 @@ namespace Oranda.Core.MyBatis;
 /// <see cref="NewLine"/> 은 문서가 주로 쓰는 줄 끝(<c>"\r\n"</c> 또는 <c>"\n"</c>)이고 새 문장·새 파일에 쓴다.
 /// </summary>
 /// <param name="EncodingName">인코딩 웹 이름(<c>utf-8</c>, <c>euc-kr</c> …). xml 선언이 없으면 <c>utf-8</c>.</param>
-/// <param name="HasBom">파일 앞에 BOM 이 있었다.</param>
+/// <param name="HasBom">파일 앞에 UTF-8 BOM(EF BB BF)이 있었다. UTF-16 매퍼는 읽지 않으므로 다른 BOM 은 없다.</param>
 /// <param name="NewLine">문서의 줄 끝.</param>
 /// <param name="EndsWithNewLine">파일이 줄 끝으로 끝났다.</param>
 public sealed record MapperFileFormat(string EncodingName, bool HasBom, string NewLine, bool EndsWithNewLine)
