@@ -1,4 +1,3 @@
-using Avalonia.Controls;
 using CommunityToolkit.Mvvm.ComponentModel;
 using Oranda.App.Features.MyBatisWorkspace.Hooks;
 
@@ -19,8 +18,6 @@ public sealed partial class MyBatisStatementsModeButton : ObservableObject
     [ObservableProperty]
     private bool _isChecked;
 
-    private Control? _view;
-
     internal MyBatisStatementsModeButton(IMyBatisStatementsViewMode mode, string title)
     {
         Mode = mode;
@@ -33,9 +30,6 @@ public sealed partial class MyBatisStatementsModeButton : ObservableObject
     public string Id => Mode.Id;
 
     public string IconKey => Mode.IconKey;
-
-    /// <summary>모드의 View. 처음 필요할 때 한 번 만들어 들고 있는다.</summary>
-    internal Control View => _view ??= Mode.CreateView();
 
     /// <summary>눌림이 바뀌었다(ViewModel 이 다른 단추를 풀고 내용을 바꾼다).</summary>
     internal Action<MyBatisStatementsModeButton>? CheckedChangedCallback { get; set; }

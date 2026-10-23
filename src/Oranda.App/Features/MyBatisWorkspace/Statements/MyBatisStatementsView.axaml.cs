@@ -1,3 +1,4 @@
+using System.ComponentModel;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Input;
@@ -5,6 +6,7 @@ using Avalonia.Interactivity;
 using Avalonia.Media;
 using Avalonia.Threading;
 using Avalonia.VisualTree;
+using Oranda.App.Features.MyBatisWorkspace.Hooks;
 using Oranda.App.Shell.Menus;
 
 namespace Oranda.App.Features.MyBatisWorkspace.Statements;
@@ -12,6 +14,11 @@ namespace Oranda.App.Features.MyBatisWorkspace.Statements;
 public partial class MyBatisStatementsView : UserControl
 {
     private const string ContextSurface = "mybatisStatements";
+
+    // 보기 모드의 View 는 이 화면 몫이다: 같은 ViewModel 을 보는 창이 둘이어도(도킹 재배치·떠 있는 창) 같은 Control 을 두 부모에 붙이지 않는다.
+    private readonly Dictionary<IMyBatisStatementsViewMode, Control> _modeViews = [];
+    private MyBatisStatementsViewModel? _model;
+    private bool _listening;
 
     public MyBatisStatementsView()
     {
@@ -48,21 +55,87 @@ public partial class MyBatisStatementsView : UserControl
         };
         AddHandler(KeyDownEvent, OnViewKeyDown, RoutingStrategies.Tunnel);
         HeaderBorder.SizeChanged += (_, _) => UpdateDirectoryText();
-        DataContextChanged += (_, _) =>
+        DataContextChanged += (_, _) => Follow(DataContext as MyBatisStatementsViewModel);
+        AttachedToVisualTree += (_, _) =>
         {
-            if (DataContext is MyBatisStatementsViewModel model)
-            {
-                model.PropertyChanged += (_, e) =>
-                {
-                    if (e.PropertyName == nameof(MyBatisStatementsViewModel.MapperDirectory))
-                    {
-                        UpdateDirectoryText();
-                    }
-                };
-                UpdateDirectoryText();
-            }
+            (DataContext as MyBatisStatementsViewModel)?.Attach();
+            Listen(true);
+            UpdateDirectoryText();
+            ShowActiveMode();
         };
-        AttachedToVisualTree += (_, _) => (DataContext as MyBatisStatementsViewModel)?.Attach();
+
+        // 도킹 재배치로 버려진 화면을 오래 사는 ViewModel 이 붙잡지 않게 떨어지면 구독을 푼다(모드 View 캐시는 다시 붙을 때 쓴다).
+        DetachedFromVisualTree += (_, _) => Listen(false);
+    }
+
+    private void Follow(MyBatisStatementsViewModel? model)
+    {
+        if (ReferenceEquals(model, _model))
+        {
+            return;
+        }
+
+        Listen(false);
+        _model = model;
+        foreach (var view in _modeViews.Values)
+        {
+            (view.DataContext as IDisposable)?.Dispose();
+        }
+
+        _modeViews.Clear();
+        Listen(true);
+        UpdateDirectoryText();
+        ShowActiveMode();
+    }
+
+    private void Listen(bool on)
+    {
+        if (_listening == on || _model is null)
+        {
+            _listening = on && _model is not null;
+            return;
+        }
+
+        if (on)
+        {
+            _model.PropertyChanged += OnModelPropertyChanged;
+        }
+        else
+        {
+            _model.PropertyChanged -= OnModelPropertyChanged;
+        }
+
+        _listening = on;
+    }
+
+    private void OnModelPropertyChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName == nameof(MyBatisStatementsViewModel.MapperDirectory))
+        {
+            UpdateDirectoryText();
+        }
+        else if (e.PropertyName == nameof(MyBatisStatementsViewModel.ActiveMode))
+        {
+            ShowActiveMode();
+        }
+    }
+
+    /// <summary>눌린 보기 모드의 View 를 붙인다. 모드마다 이 화면에서 한 번 만들고, 껐다 켜면 같은 것을 다시 쓴다.</summary>
+    private void ShowActiveMode()
+    {
+        if (_model?.ActiveMode?.Mode is not { } mode)
+        {
+            ModeHost.Content = null;
+            return;
+        }
+
+        if (!_modeViews.TryGetValue(mode, out var view))
+        {
+            view = mode.CreateView();
+            _modeViews[mode] = view;
+        }
+
+        ModeHost.Content = view;
     }
 
     /// <summary>검색 칸으로 간다(Ctrl+F).</summary>

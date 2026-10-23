@@ -22,6 +22,6 @@ public interface IMyBatisStatementsViewMode
 
     event EventHandler? AvailabilityChanged;
 
-    /// <summary>모드의 View. 「문장」 창이 한 번 만들어 들고 있다.</summary>
+    /// <summary>모드의 View. 「문장」 창 화면마다 한 번 만들어 들고 있다(같은 Control 을 두 화면에 붙이지 않는다).</summary>
     Control CreateView();
 }

@@ -348,6 +348,8 @@ public sealed class WorkspaceStatementsTests : IDisposable
     {
         var mode = new FakeViewMode();
         var rig = await OpenAsync(hooks: new MyBatisHooks(viewModes: [mode]));
+        var view = new MyBatisStatementsView { DataContext = rig.Vm };
+        var host = view.FindControl<ContentControl>("ModeHost")!;
 
         var button = Assert.Single(rig.Vm.ViewModes);
         Assert.Equal("폴더로 보기", button.Title);
@@ -355,17 +357,43 @@ public sealed class WorkspaceStatementsTests : IDisposable
 
         button.IsChecked = true;
         Assert.True(rig.Vm.IsModeActive);
-        Assert.Same(mode.View, rig.Vm.ModeContent);
+        Assert.Same(button, rig.Vm.ActiveMode);
+        Assert.Same(mode.View, host.Content);
 
         button.IsChecked = false;
         button.IsChecked = true;
-        Assert.Equal(1, mode.Created); // View 는 한 번만 만든다
+        Assert.Equal(1, mode.Created); // 한 화면에서 껐다 켜도 View 는 한 번만 만든다
 
         mode.SetAvailable(false);
         Assert.False(button.IsAvailable);
         Assert.False(button.IsChecked);
         Assert.False(rig.Vm.IsModeActive);
-        Assert.Null(rig.Vm.ModeContent);
+        Assert.Null(rig.Vm.ActiveMode);
+        Assert.Null(host.Content);
+    });
+
+    [Fact]
+    public Task A_detached_statements_view_stops_following_the_view_model_and_catches_up_when_attached_again() => Ui.Run(async () =>
+    {
+        var mode = new FakeViewMode();
+        var rig = await OpenAsync(hooks: new MyBatisHooks(viewModes: [mode]));
+        var view = new MyBatisStatementsView { DataContext = rig.Vm };
+        var host = view.FindControl<ContentControl>("ModeHost")!;
+        var button = Assert.Single(rig.Vm.ViewModes);
+        var window = new Window { Width = 320, Height = 480, Content = view };
+        window.Show();
+        button.IsChecked = true;
+        Assert.Same(mode.View, host.Content);
+
+        // 도킹 재배치로 떨어진 화면은 ViewModel 을 따라가지 않는다(오래 사는 ViewModel 이 버려진 화면을 붙잡지 않게).
+        window.Content = null;
+        button.IsChecked = false;
+        Assert.Same(mode.View, host.Content);
+
+        window.Content = view;
+        Dispatcher.UIThread.RunJobs();
+        Assert.Null(host.Content);
+        window.Close();
     });
 
     [Fact]

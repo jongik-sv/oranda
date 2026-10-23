@@ -1,4 +1,7 @@
+using Avalonia;
+using Avalonia.Controls;
 using Avalonia.Threading;
+using Avalonia.VisualTree;
 using Oranda.App.Features.MyBatisWorkspace.Folder;
 using Oranda.App.Features.MyBatisWorkspace.Hooks;
 using Oranda.App.Features.MyBatisWorkspace.LogPaste;
@@ -70,6 +73,16 @@ public sealed class MapperFolderTests : IDisposable
         {
             Dispatcher.UIThread.RunJobs();
         }
+    }
+
+    // 「문장」 창 화면을 창에 띄워 그 화면이 만든 폴더 트리를 꺼낸다(모드 View 는 화면마다 만든다).
+    private static (Window Window, MapperFolderTreeView Tree) ShowTree(MyBatisStatementsViewModel vm)
+    {
+        var window = new Window { Width = 320, Height = 480, Content = new MyBatisStatementsView { DataContext = vm } };
+        window.Show();
+        Pump();
+        window.UpdateLayout();
+        return (window, Assert.Single(((Visual)window.Content!).GetVisualDescendants().OfType<MapperFolderTreeView>()));
     }
 
     private static SqlEditorHost Host(MapperFolderService folder, FakeDialogs? dialogs = null)
@@ -379,13 +392,16 @@ public sealed class MapperFolderTests : IDisposable
         var mode = Assert.Single(vm.ViewModes);
         Assert.True(mode.IsChecked);
         Assert.True(vm.IsModeActive);
-        var tree = Assert.IsType<MapperFolderTreeView>(vm.ModeContent);
+        Assert.Same(mode, vm.ActiveMode);
+        var (window, tree) = ShowTree(vm);
         var treeVm = Assert.IsType<MapperFolderTreeViewModel>(tree.DataContext);
         Assert.Equal(["common", "hr"], treeVm.Roots.Select(n => n.Name));
 
         folder.Close();
         Assert.False(vm.ShowsBody);
         Assert.False(vm.IsModeActive);
+        Assert.Null(window.GetVisualDescendants().OfType<MapperFolderTreeView>().FirstOrDefault());
+        window.Close();
         vm.Dispose();
         treeVm.Dispose();
     });
@@ -403,9 +419,35 @@ public sealed class MapperFolderTests : IDisposable
         Pump();
 
         Assert.True(Assert.Single(vm.ViewModes).IsChecked);
-        Assert.IsType<MapperFolderTreeView>(vm.ModeContent);
-        ((MapperFolderTreeViewModel)((MapperFolderTreeView)vm.ModeContent!).DataContext!).Dispose();
+        var (window, tree) = ShowTree(vm);
+        window.Close();
+        ((MapperFolderTreeViewModel)tree.DataContext!).Dispose();
         vm.Dispose();
+    });
+
+    [Fact]
+    public Task Two_statements_views_on_one_view_model_each_show_their_own_folder_tree() => Ui.Run(async () =>
+    {
+        using var folder = new MapperFolderService(dataDirectory: null);
+        var vm = new MyBatisStatementsViewModel { Host = Host(folder), Text = new ShellText() };
+        await folder.OpenAsync(_root, default);
+
+        // 도킹 재배치·떠 있는 창처럼 같은 ViewModel 을 보는 「문장」 창 화면이 둘이다(2026-10-24 앱 크래시: 트리 화면 하나를 두 부모에 붙임).
+        var (first, a) = ShowTree(vm);
+        var (second, b) = ShowTree(vm);
+        first.UpdateLayout();
+
+        Assert.True(vm.IsModeActive);
+        Assert.NotSame(a, b);
+        Assert.Same(a, Assert.Single(first.GetVisualDescendants().OfType<MapperFolderTreeView>()));
+        Assert.True(a.IsEffectivelyVisible);
+        Assert.True(b.IsEffectivelyVisible);
+
+        first.Close();
+        second.Close();
+        vm.Dispose();
+        ((MapperFolderTreeViewModel)a.DataContext!).Dispose();
+        ((MapperFolderTreeViewModel)b.DataContext!).Dispose();
     });
 
     [Fact]

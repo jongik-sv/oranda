@@ -79,8 +79,9 @@ public sealed partial class MyBatisStatementsViewModel : ToolPanelViewModelBase,
     [ObservableProperty]
     private bool _isModeActive;
 
+    /// <summary>눌려 있는 보기 모드(없으면 null). 모드의 View 는 「문장」 창 화면마다 따로 만든다(<see cref="MyBatisStatementsView"/>) — 같은 Control 을 두 창에 붙이면 Avalonia 가 예외를 던진다.</summary>
     [ObservableProperty]
-    private object? _modeContent;
+    private MyBatisStatementsModeButton? _activeMode;
 
     /// <summary>검색 칸의 글(칠 때마다 바뀐다). 목록은 <see cref="FilterDebounceMilliseconds"/> 뒤에 거른다.</summary>
     [ObservableProperty]
@@ -798,7 +799,7 @@ public sealed partial class MyBatisStatementsViewModel : ToolPanelViewModelBase,
 
         _modes.Clear();
         _modesLoaded = false;
-        ModeContent = null;
+        ActiveMode = null;
         IsModeActive = false;
         UpdateShowsBody();
     }
@@ -844,12 +845,12 @@ public sealed partial class MyBatisStatementsViewModel : ToolPanelViewModelBase,
                 _modeSync = false;
             }
 
-            ModeContent = button.View;
+            ActiveMode = button;
             IsModeActive = true;
         }
         else if (!_modes.Any(m => m.IsChecked))
         {
-            ModeContent = null;
+            ActiveMode = null;
             IsModeActive = false;
         }
     }

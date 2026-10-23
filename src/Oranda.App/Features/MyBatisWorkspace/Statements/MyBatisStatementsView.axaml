@@ -139,7 +139,7 @@
           <TextBlock x:Name="NoMatchText" Text="일치하는 쿼리 없음" IsVisible="{Binding ShowsNoMatch}" Opacity="0.6"
                      HorizontalAlignment="Center" VerticalAlignment="Top" Margin="0,16,0,0" />
         </Panel>
-        <ContentControl Content="{Binding ModeContent}" IsVisible="{Binding IsModeActive}" />
+        <ContentControl x:Name="ModeHost" IsVisible="{Binding IsModeActive}" />
         </Grid>
       </DockPanel>
     </DockPanel>
