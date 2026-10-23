@@ -12,14 +12,15 @@
   </UserControl.Styles>
   <Grid>
     <TextBlock Text="MyBatis 문서를 열면 문장 목록이 여기에 보입니다."
-               IsVisible="{Binding !HasSession}"
+               IsVisible="{Binding !ShowsBody}"
                Opacity="0.6"
                TextWrapping="Wrap"
                TextAlignment="Center"
                HorizontalAlignment="Center"
                VerticalAlignment="Center"
                Margin="12" />
-    <DockPanel IsVisible="{Binding HasSession}">
+    <!-- 세션이 없어도 쓸 수 있는 보기 모드(매퍼 폴더 트리)가 있으면 도구 막대의 모드 단추와 모드 내용은 보인다. 세션 몫(문장 단추·경로·안내 띠)은 세션이 있을 때만. -->
+    <DockPanel IsVisible="{Binding ShowsBody}">
       <!-- 패널 툴바: 새 문장 · id 바꾸기 · 지우기 · 펼친 SQL 을 새 SQL 탭으로 | (오른쪽 끝) 보기 전환. 이름은 툴팁으로 보인다. -->
       <Border DockPanel.Dock="Top" Classes="panel-toolbar">
         <DockPanel>
@@ -40,7 +41,7 @@
               </DataTemplate>
             </ItemsControl.ItemTemplate>
           </ItemsControl>
-          <StackPanel Orientation="Horizontal" Spacing="1">
+          <StackPanel Orientation="Horizontal" Spacing="1" IsVisible="{Binding HasSession}">
             <Button x:Name="NewButton" Classes="toolbar" Content="새 문장" ToolTip.Tip="새 문장 만들기"
                     icons:ButtonIcon.Key="add" icons:ButtonIcon.IconOnly="True" Command="{Binding NewStatementCommand}" />
             <Button x:Name="RenameButton" Classes="toolbar" Content="id 바꾸기" ToolTip.Tip="고른 문장의 id 바꾸기"
@@ -53,11 +54,12 @@
           </StackPanel>
         </DockPanel>
       </Border>
-      <Border DockPanel.Dock="Bottom" Classes="panel-status">
+      <Border DockPanel.Dock="Bottom" Classes="panel-status" IsVisible="{Binding HasSession}">
         <TextBlock Text="로그를 붙여 넣으면 namespace.id 로 문장을 찾아 엽니다." TextWrapping="Wrap" />
       </Border>
       <!-- 매퍼 경로(가운데 줄임: 폴더 쪽만 줄이고 파일 이름은 남긴다, 툴팁 = 전체 경로)와 namespace. 우클릭 = 매퍼 전체 펼치기 메뉴. -->
-      <Border x:Name="HeaderBorder" DockPanel.Dock="Top" Background="Transparent" Padding="8,6,8,4" ToolTip.Tip="{Binding MapperPath}">
+      <Border x:Name="HeaderBorder" DockPanel.Dock="Top" Background="Transparent" Padding="8,6,8,4" ToolTip.Tip="{Binding MapperPath}"
+              IsVisible="{Binding HasSession}">
         <StackPanel Spacing="1">
           <Grid ColumnDefinitions="*,Auto">
             <TextBlock Classes="panel-caption" Text="{Binding MapperDirectory}" TextTrimming="CharacterEllipsis" />

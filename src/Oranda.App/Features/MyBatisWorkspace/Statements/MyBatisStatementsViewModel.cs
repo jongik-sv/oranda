@@ -54,6 +54,8 @@ public sealed partial class MyBatisStatementsViewModel : ToolPanelViewModelBase,
     private bool _attached;
     private bool _syncing;
     private bool _modeSync;
+    private bool _modesLoaded;
+    private bool _disposed;
     private bool _hasSession;
 
     [ObservableProperty]
@@ -77,6 +79,10 @@ public sealed partial class MyBatisStatementsViewModel : ToolPanelViewModelBase,
     [ObservableProperty]
     private object? _modeContent;
 
+    /// <summary>목록·도구 막대를 보인다: 세션이 있거나 쓸 수 있는 보기 모드(예 매퍼 폴더 트리)가 있다. 아니면 안내 한 줄만 보인다.</summary>
+    [ObservableProperty]
+    private bool _showsBody;
+
     /// <summary>다루는 호스트. 기본은 <see cref="SqlEditorHost.Current"/>.</summary>
     public SqlEditorHost Host
     {
@@ -96,7 +102,13 @@ public sealed partial class MyBatisStatementsViewModel : ToolPanelViewModelBase,
             return _hasSession;
         }
 
-        private set => SetProperty(ref _hasSession, value);
+        private set
+        {
+            if (SetProperty(ref _hasSession, value))
+            {
+                UpdateShowsBody();
+            }
+        }
     }
 
     /// <summary>종류별 묶음(빈 묶음은 없다). 각 묶음의 <see cref="MyBatisStatementNode.Children"/> 이 요소 노드.</summary>
@@ -137,6 +149,12 @@ public sealed partial class MyBatisStatementsViewModel : ToolPanelViewModelBase,
     /// <summary>호스트 사건을 받기 시작한다(여러 번 불러도 한 번만). View 가 붙을 때와 처음 목록을 읽을 때 불린다.</summary>
     public void Attach()
     {
+        if (_disposed)
+        {
+            return;
+        }
+
+        EnsureModes(); // 훅은 시작 작업이 늦게 넣을 수 있어 붙어 있어도 다시 본다(창이 다시 보일 때마다 불린다)
         if (_attached)
         {
             return;
@@ -184,6 +202,7 @@ public sealed partial class MyBatisStatementsViewModel : ToolPanelViewModelBase,
 
     public void Dispose()
     {
+        _disposed = true;
         if (_attached)
         {
             Host.ActiveWorkspaceChanged -= OnActiveWorkspaceChanged;
@@ -202,6 +221,7 @@ public sealed partial class MyBatisStatementsViewModel : ToolPanelViewModelBase,
         }
 
         SetSession(null);
+        ClearModes();
         _usageTimer?.Stop();
     }
 
@@ -294,7 +314,6 @@ public sealed partial class MyBatisStatementsViewModel : ToolPanelViewModelBase,
         {
             _session.StateChanged -= OnSessionStateChanged;
             UnhookProviders();
-            ClearModes();
         }
 
         _session = session;
@@ -315,7 +334,7 @@ public sealed partial class MyBatisStatementsViewModel : ToolPanelViewModelBase,
 
         session.StateChanged += OnSessionStateChanged;
         HookProviders();
-        LoadModes();
+        EnsureModes();
         UpdateHeader();
         Rebuild();
         HasSession = true;
@@ -613,14 +632,25 @@ public sealed partial class MyBatisStatementsViewModel : ToolPanelViewModelBase,
         }
     }
 
-    private void LoadModes()
+    // 보기 모드는 세션과 상관없이 한 번 싣고 세션이 바뀌어도 둔다(매퍼 폴더 트리는 MyBatis 문서 없이도 쓴다).
+    private void EnsureModes()
     {
-        foreach (var mode in _session!.Workspace.Host.MyBatisHooks.ViewModes)
+        if (_modesLoaded || Host.MyBatisHooks.ViewModes is not { Count: > 0 } modes)
+        {
+            return;
+        }
+
+        _modesLoaded = true;
+        foreach (var mode in modes)
         {
             mode.AvailabilityChanged += OnModeAvailabilityChanged;
             _modes.Add(new MyBatisStatementsModeButton(mode, TranslateTitle(mode.Title)) { CheckedChangedCallback = OnModeCheckedChanged });
         }
+
+        UpdateShowsBody();
     }
+
+    private void UpdateShowsBody() => ShowsBody = _hasSession || _modes.Any(m => m.IsAvailable);
 
     private void ClearModes()
     {
@@ -630,20 +660,29 @@ public sealed partial class MyBatisStatementsViewModel : ToolPanelViewModelBase,
         }
 
         _modes.Clear();
+        _modesLoaded = false;
         ModeContent = null;
         IsModeActive = false;
+        UpdateShowsBody();
     }
 
     private void OnModeAvailabilityChanged(object? sender, EventArgs e)
     {
-        foreach (var button in _modes.Where(b => ReferenceEquals(b.Mode, sender)))
+        foreach (var button in _modes.Where(b => ReferenceEquals(b.Mode, sender)).ToList())
         {
+            bool was = button.IsAvailable;
             button.IsAvailable = button.Mode.IsAvailable;
             if (!button.IsAvailable && button.IsChecked)
             {
                 button.IsChecked = false;
             }
+            else if (button.IsAvailable && !was)
+            {
+                button.IsChecked = true; // 쓸 수 있게 되면(예 매퍼 폴더를 열면) 그 모드로 간다
+            }
         }
+
+        UpdateShowsBody();
     }
 
     private void OnModeCheckedChanged(MyBatisStatementsModeButton button)

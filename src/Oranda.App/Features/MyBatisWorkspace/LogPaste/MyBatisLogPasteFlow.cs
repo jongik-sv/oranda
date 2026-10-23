@@ -97,7 +97,8 @@ public sealed class MyBatisLogPasteFlow(
             {
                 foreach (var location in await locator.FindAsync(logger, exact: true, ct).ConfigureAwait(true))
                 {
-                    var session = sessions.FirstOrDefault(s => SamePath(s.MapperPath, location.MapperPath));
+                    var session = sessions.FirstOrDefault(s => SamePath(s.MapperPath, location.MapperPath))
+                        ?? (location.Source == "folder" ? await OpenFolderMapperAsync(location.MapperPath, sessions, ct).ConfigureAwait(true) : null);
                     located |= session is not null;
                     if (session is not null && TryMatch(session, location.StatementId, entry) is { } hit && candidates.All(c => !c.Same(hit)))
                     {
@@ -148,6 +149,23 @@ public sealed class MyBatisLogPasteFlow(
 
     private static string Label(Target c) =>
         (c.Session!.MapperNamespace is { } ns ? ns + "." : string.Empty) + c.Id + "  (" + Path.GetFileName(c.Session.MapperPath) + ")";
+
+    // 매퍼 폴더(TSK-03-07)에서 찾은 열리지 않은 매퍼는 열어서 맞춘다. 값이 안 맞아 일반 탭으로 가도 매퍼는 열린 채 둔다.
+    private async Task<IMyBatisWorkspaceSession?> OpenFolderMapperAsync(string path, List<IMyBatisWorkspaceSession> sessions, CancellationToken ct)
+    {
+        if (host.MyBatisHooks.OpenHandler is not { } open || !await open.TryOpenAsync(host, Path.GetFullPath(path), ct).ConfigureAwait(true))
+        {
+            return null;
+        }
+
+        var session = host.Workspaces.Select(w => w.MyBatis).OfType<IMyBatisWorkspaceSession>().FirstOrDefault(s => SamePath(s.MapperPath, path));
+        if (session is not null)
+        {
+            sessions.Add(session);
+        }
+
+        return session;
+    }
 
     private static bool SamePath(string a, string b)
     {

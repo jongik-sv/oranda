@@ -1,0 +1,66 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:Oranda.App.Features.MyBatisWorkspace.Folder"
+             xmlns:icons="using:Oranda.App.Shell.Icons"
+             x:Class="Oranda.App.Features.MyBatisWorkspace.Folder.MapperFolderTreeView"
+             x:DataType="vm:MapperFolderTreeViewModel">
+  <DockPanel>
+    <!-- 폴더 경로(툴팁 = 전체 경로) · 오른쪽 끝 다시 훑기 · 폴더 닫기. 이름은 툴팁으로 보인다. -->
+    <Border DockPanel.Dock="Top" Background="Transparent" Padding="8,6,4,4" ToolTip.Tip="{Binding RootPath}">
+      <DockPanel>
+        <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" Spacing="1" VerticalAlignment="Center">
+          <Button x:Name="RefreshButton" Classes="toolbar" Content="다시 훑기" ToolTip.Tip="매퍼 폴더 다시 훑기"
+                  icons:ButtonIcon.Key="refresh" icons:ButtonIcon.IconOnly="True" Command="{Binding RefreshCommand}" />
+          <Button x:Name="CloseFolderButton" Classes="toolbar" Content="폴더 닫기" ToolTip.Tip="매퍼 폴더 닫기"
+                  icons:ButtonIcon.Key="folderRemove" icons:ButtonIcon.IconOnly="True" Command="{Binding CloseFolderCommand}" />
+        </StackPanel>
+        <TextBlock Classes="panel-caption" Text="{Binding RootPath}" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
+      </DockPanel>
+    </Border>
+    <Border DockPanel.Dock="Bottom" Classes="panel-status">
+      <TextBlock Text="{Binding StatusText}" TextTrimming="CharacterEllipsis" />
+    </Border>
+    <!-- 쓰는 곳 찾기 결과: 우클릭 「쓰는 곳 찾기」로 채운다. 두 번 누르면 그 요소를 연다. -->
+    <DockPanel DockPanel.Dock="Bottom" IsVisible="{Binding HasUsages}" MaxHeight="180">
+      <Border DockPanel.Dock="Top" Classes="panel-toolbar">
+        <DockPanel>
+          <Button DockPanel.Dock="Right" Classes="toolbar" Content="닫기" ToolTip.Tip="쓰는 곳 목록 닫기"
+                  icons:ButtonIcon.Key="clear" icons:ButtonIcon.IconOnly="True" Command="{Binding CloseUsagesCommand}" />
+          <TextBlock Classes="panel-caption" Text="{Binding UsageTitle}" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" Margin="6,0" />
+        </DockPanel>
+      </Border>
+      <ListBox x:Name="UsageList" Classes="compact" ItemsSource="{Binding Usages}" ScrollViewer.HorizontalScrollBarVisibility="Disabled">
+        <ListBox.ItemTemplate>
+          <DataTemplate x:DataType="vm:MapperFolderUsageRow">
+            <TextBlock Text="{Binding Text}" ToolTip.Tip="{Binding MapperPath}" TextTrimming="CharacterEllipsis" Margin="-4,-2" />
+          </DataTemplate>
+        </ListBox.ItemTemplate>
+      </ListBox>
+    </DockPanel>
+    <TreeView x:Name="Tree" Classes="compact" ItemsSource="{Binding Roots}" SelectedItem="{Binding SelectedNode, Mode=TwoWay}"
+              ScrollViewer.HorizontalScrollBarVisibility="Disabled">
+      <TreeView.Styles>
+        <Style Selector="TreeViewItem" x:DataType="vm:MapperFolderTreeNode">
+          <Setter Property="IsExpanded" Value="{Binding IsExpanded, Mode=TwoWay}" />
+        </Style>
+      </TreeView.Styles>
+      <TreeView.ContextMenu>
+        <ContextMenu x:Name="TreeMenu">
+          <MenuItem x:Name="OpenItem" Header="열기" Command="{Binding OpenNodeCommand}" CommandParameter="{Binding SelectedNode}" />
+          <MenuItem x:Name="UsagesItem" Header="쓰는 곳 찾기" Command="{Binding FindUsagesCommand}" CommandParameter="{Binding SelectedNode}"
+                    IsVisible="{Binding SelectedNode.CanFindUsages, FallbackValue=False}" />
+        </ContextMenu>
+      </TreeView.ContextMenu>
+      <TreeView.ItemTemplate>
+        <TreeDataTemplate x:DataType="vm:MapperFolderTreeNode" ItemsSource="{Binding Children}">
+          <StackPanel Orientation="Horizontal" Spacing="5" ToolTip.Tip="{Binding ToolTipText}">
+            <ContentControl Content="{Binding IconKey, Converter={x:Static icons:IconKeyConverter.Instance}}" VerticalAlignment="Center"
+                            IsVisible="{Binding IconKey, Converter={x:Static ObjectConverters.IsNotNull}}" />
+            <TextBlock Text="{Binding Name}" VerticalAlignment="Center" />
+            <TextBlock Text="{Binding Detail}" Opacity="0.6" VerticalAlignment="Center" FontSize="{DynamicResource OrandaFontSizeSmall}" />
+          </StackPanel>
+        </TreeDataTemplate>
+      </TreeView.ItemTemplate>
+    </TreeView>
+  </DockPanel>
+</UserControl>
