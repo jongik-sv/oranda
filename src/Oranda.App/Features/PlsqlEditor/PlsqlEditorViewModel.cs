@@ -445,6 +445,22 @@ public sealed partial class PlsqlEditorViewModel : ToolPanelViewModelBase, IComp
 
     public void CloseDiff() => DiffText = string.Empty;
 
+    /// <summary>작업 공간 저장 형식으로 옮긴다(결정 71). 글은 늘 담는다(앱을 켤 때는 접속이 없어 서버에서 바로 다시 읽지 못한다).</summary>
+    public PlsqlTabFile Capture() => new()
+    {
+        Owner = Target?.Owner,
+        Name = Target?.Name,
+        Type = Target?.ObjectType,
+        ConnectionProfileId = _session?.Profile.Id ?? Editor.ConnectionProfileId,
+        LastDdlTime = _baseline,
+        Title = Title,
+        Text = Editor.Text,
+        IsDirty = NeedsSaveConfirm,
+        FilePath = Editor.FilePath,
+        Caret = Editor.CaretOffset,
+        Line1Shift = _line1Shift,
+    };
+
     /// <summary>
     /// 탭을 닫을 때 저장 여부를 물어야 하는가(TSK-13-27, SQL 탭 규칙과 같다). 읽기 전용은 묻지 않는다.
     /// 파일에 묶인 탭 = 파일과 달라졌을 때, 서버 객체를 열었거나 컴파일한 탭 = 마지막 읽기·컴파일 뒤로 고쳤을 때, 그 밖의 새 탭 = 사용자가 글을 쳤을 때(템플릿 그대로면 묻지 않는다).

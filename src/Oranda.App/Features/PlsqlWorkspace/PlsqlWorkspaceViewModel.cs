@@ -32,6 +32,9 @@ public sealed partial class PlsqlWorkspaceViewModel : ToolPanelViewModelBase, II
         Tabs.CollectionChanged += OnTabsChanged;
     }
 
+    /// <summary>저장 파일 ID(<c>plsql-workspaces/{id}.json</c>, <c>^[a-z0-9][a-z0-9-]{0,63}$</c>).</summary>
+    public string Id { get; internal set; } = Guid.NewGuid().ToString("n");
+
     /// <summary>문서 탭 머리글 이름(「PL/SQL 1」).</summary>
     [ObservableProperty]
     public partial string Name { get; set; } = "PL/SQL";
@@ -68,6 +71,22 @@ public sealed partial class PlsqlWorkspaceViewModel : ToolPanelViewModelBase, II
     internal Func<SqlEditorHost>? Host { get; set; }
 
     public string? ActiveInnerTitle => ActiveTab?.Title;
+
+    /// <summary>저장 형식으로 옮긴다(결정 71). 미리보기 탭은 저장하지 않는다(보이던 탭이 미리보기면 그 자리에 남는 탭을 보이던 탭으로 적는다).</summary>
+    public PlsqlWorkspaceFile Capture()
+    {
+        var tabs = Tabs.Where(t => !ReferenceEquals(t, PreviewTab)).ToList();
+        var active = ActiveTab is { } shown && ReferenceEquals(shown, PreviewTab) && tabs.Count > 0
+            ? tabs[Math.Min(Tabs.IndexOf(shown), tabs.Count - 1)]
+            : ActiveTab;
+        return new PlsqlWorkspaceFile
+        {
+            Id = Id,
+            Name = Name,
+            ActiveTab = active is null ? -1 : tabs.IndexOf(active),
+            Tabs = [.. tabs.Select(t => t.Capture())],
+        };
+    }
 
     /// <summary>편집기에서 실행(<c>oranda.plsql.run</c>): 보이는 탭의 대상.</summary>
     public DbObjectRef? RunTarget => ActiveTab?.RunTarget;

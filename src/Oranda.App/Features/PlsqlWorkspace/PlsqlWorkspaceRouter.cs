@@ -57,6 +57,9 @@ public sealed class PlsqlWorkspaceRouter
     public IReadOnlyList<PlsqlWorkspaceViewModel> Workspaces =>
         _docking.Documents.Select(d => d.Panel).OfType<PlsqlWorkspaceViewModel>().ToList();
 
+    /// <summary>마지막으로 활성이던 열린 작업 공간(저장 때 다음 시작의 활성 작업 공간). 미리보기 전용 작업 공간은 건너뛴다. 없으면 null.</summary>
+    public PlsqlWorkspaceViewModel? LastActive => _recent.FirstOrDefault(w => !w.IsTransient && Workspaces.Contains(w));
+
     public PanelDocument? DocumentOf(PlsqlWorkspaceViewModel workspace) =>
         _docking.Documents.FirstOrDefault(d => ReferenceEquals(d.Panel, workspace));
 
