@@ -136,8 +136,28 @@ public sealed partial class ScriptsViewModel : ToolPanelViewModelBase
     /// <summary>편집기가 새 탭으로 열 수 있게 알린다. 아무도 받지 않으면 활성 편집기에 내용을 넣는다.</summary>
     public event EventHandler<string>? OpenRequested;
 
+    /// <summary>작업 공간 파일 이름 끝(SQL·PL/SQL). <c>.md</c> 전체는 보이지 않는다.</summary>
+    private static readonly string[] WorkspaceSuffixes = [".workspace.md", ".plsql-workspace.md"];
+
+    /// <summary>시험용: 작업 공간·매퍼 파일을 「파일 열기」 명령 대신 이 함수로 연다.</summary>
+    internal Func<string, Task>? OpenWithFileCommand { get; set; }
+
     public static bool IsScriptFile(string path)
-        => Extensions.Contains(Path.GetExtension(path), StringComparer.OrdinalIgnoreCase);
+        => Extensions.Contains(Path.GetExtension(path), StringComparer.OrdinalIgnoreCase) || IsWorkspaceFile(path) || IsMapperCandidate(path);
+
+    /// <summary>SQL·PL/SQL 작업 공간 파일(<c>.workspace.md</c>, <c>.plsql-workspace.md</c>). 글로 넣거나 <c>@파일</c> 로 실행하지 않는다.</summary>
+    public static bool IsWorkspaceFile(string path)
+        => WorkspaceSuffixes.Any(s => path.EndsWith(s, StringComparison.OrdinalIgnoreCase));
+
+    /// <summary>MyBatis 매퍼일 수 있는 <c>.xml</c>. 매퍼인지는 파일 열기 쪽이 판정하고, 아니면 보통 파일로 열린다.</summary>
+    public static bool IsMapperCandidate(string path)
+        => string.Equals(Path.GetExtension(path), ".xml", StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>파일 열기 명령으로 열어야 하는 파일(작업 공간·.xml).</summary>
+    public static bool OpensWithFileCommand(string path) => IsWorkspaceFile(path) || IsMapperCandidate(path);
+
+    /// <summary><c>@파일</c> 로 실행할 수 있는 파일(SQL 류). 작업 공간·.xml 은 아니다.</summary>
+    public static bool IsRunnable(string path) => IsScriptFile(path) && !OpensWithFileCommand(path);
 
     partial void OnSelectedNodeChanged(ScriptNode? value)
         => HistoryScriptsCommands.SelectedScriptPath = SelectedFilePath;
@@ -210,6 +230,12 @@ public sealed partial class ScriptsViewModel : ToolPanelViewModelBase
             return;
         }
 
+        if (OpensWithFileCommand(node.FullPath) && await TryOpenWithFileCommandAsync(node.FullPath).ConfigureAwait(true))
+        {
+            StatusMessage = $"{node.Name} 을(를) 열었다";
+            return;
+        }
+
         if (OpenRequested is { } handler)
         {
             handler(this, node.FullPath);
@@ -226,12 +252,36 @@ public sealed partial class ScriptsViewModel : ToolPanelViewModelBase
         StatusMessage = ok ? $"{node.Name} 을(를) 편집기에 넣었다" : "편집기가 열려 있지 않거나 취소했다";
     }
 
-    /// <summary>파일을 <c>@파일</c> 로 활성 세션에서 실행한다.</summary>
+    /// <summary>「파일 열기」 명령(<c>oranda.file.open</c>)과 같은 경로로 연다: 작업 공간 복원, 매퍼 .xml 은 MyBatis 작업 공간. 보낼 곳이 없으면 false.</summary>
+    private async Task<bool> TryOpenWithFileCommandAsync(string path)
+    {
+        if (OpenWithFileCommand is { } open)
+        {
+            await open(path).ConfigureAwait(true);
+            return true;
+        }
+
+        if (_services?.GetService(typeof(ICommandRegistry)) is ICommandRegistry registry && _services.GetService(typeof(ContextKeyService)) is ContextKeyService keys)
+        {
+            await registry.ExecuteAsync("oranda.file.open", keys, path).ConfigureAwait(true);
+            return true;
+        }
+
+        return false;
+    }
+
+    /// <summary>파일을 <c>@파일</c> 로 활성 세션에서 실행한다. 작업 공간·.xml 파일은 실행하지 않는다.</summary>
     public async Task RunAsync(ScriptNode node, CancellationToken ct = default)
     {
         ArgumentNullException.ThrowIfNull(node);
         if (_services is null || node.IsDirectory)
         {
+            return;
+        }
+
+        if (!IsRunnable(node.FullPath))
+        {
+            StatusMessage = $"{node.Name} 은(는) 실행할 수 없다. 열기로 연다";
             return;
         }
 

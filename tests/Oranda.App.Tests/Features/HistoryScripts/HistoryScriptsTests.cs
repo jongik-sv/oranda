@@ -269,6 +269,57 @@ public sealed class HistoryScriptsTests : IDisposable
     }
 
     [Fact]
+    public void Folder_lists_workspace_files_and_xml_but_not_other_markdown()
+    {
+        foreach (var n in new[] { "a.sql", "w.workspace.md", "p.plsql-workspace.md", "m.xml", "notes.md", "x.bin" })
+        {
+            File.WriteAllText(Path.Combine(_dir, n), "x");
+        }
+
+        var vm = new ScriptsViewModel(new ScriptFolderList());
+        vm.AddFolder(_dir);
+
+        var names = vm.Roots[0].Children.Select(c => c.Name).ToList();
+        Assert.Equal(["a.sql", "m.xml", "p.plsql-workspace.md", "w.workspace.md"], names);
+    }
+
+    [Fact]
+    public async Task Opening_workspace_and_xml_files_goes_through_the_file_open_path_not_open_requested()
+    {
+        var w = Path.Combine(_dir, "w.workspace.md");
+        var p = Path.Combine(_dir, "p.plsql-workspace.md");
+        var m = Path.Combine(_dir, "m.xml");
+        foreach (var f in new[] { w, p, m })
+        {
+            File.WriteAllText(f, "x");
+        }
+
+        var vm = new ScriptsViewModel(new ScriptFolderList());
+        vm.AddFolder(_dir);
+        var viaCommand = new List<string>();
+        var requested = new List<string>();
+        vm.OpenWithFileCommand = path => { viaCommand.Add(path); return Task.CompletedTask; };
+        vm.OpenRequested += (_, path) => requested.Add(path);
+
+        foreach (var name in new[] { "w.workspace.md", "p.plsql-workspace.md", "m.xml" })
+        {
+            await vm.OpenAsync(vm.Roots[0].Children.Single(c => c.Name == name));
+        }
+
+        Assert.Equal([m, p, w], viaCommand.Order(StringComparer.Ordinal).ToList());
+        Assert.Empty(requested);
+    }
+
+    [Fact]
+    public void Workspace_and_xml_files_are_not_runnable_as_at_file()
+    {
+        Assert.True(ScriptsViewModel.IsRunnable("a.sql"));
+        Assert.False(ScriptsViewModel.IsRunnable("w.workspace.md"));
+        Assert.False(ScriptsViewModel.IsRunnable("p.plsql-workspace.md"));
+        Assert.False(ScriptsViewModel.IsRunnable("m.xml"));
+    }
+
+    [Fact]
     public async Task Scripts_window_shows_connected_folder_headless()
     {
         File.WriteAllText(Path.Combine(_dir, "x.sql"), "SELECT 1 FROM dual;");
