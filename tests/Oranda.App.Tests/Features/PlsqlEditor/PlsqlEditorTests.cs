@@ -633,7 +633,13 @@ public class PlsqlEditorTests
     {
         var vm = new PlsqlEditorViewModel();
         vm.StartNew(PlsqlEditorCommandHandler.NewTemplate, null);
+        Assert.False(vm.NeedsSaveConfirm); // 템플릿 그대로면 묻지 않는다
+
+        vm.Editor.Document.Insert(0, "-- mine\n");
         Assert.True(vm.NeedsSaveConfirm);
+
+        vm.Editor.Document.Remove(0, "-- mine\n".Length);
+        Assert.False(vm.NeedsSaveConfirm); // 템플릿으로 되돌리면 다시 묻지 않는다
 
         vm.Editor.LoadText("  \n");
         Assert.False(vm.NeedsSaveConfirm);
@@ -668,6 +674,7 @@ public class PlsqlEditorTests
     {
         var vm = new PlsqlEditorViewModel();
         vm.StartNew(PlsqlEditorCommandHandler.NewTemplate, null);
+        vm.Editor.Document.Insert(0, "-- mine\n");
 
         Assert.True(await vm.ConfirmCloseAsync(new SqlEditorHost(dialogs: new AnswerDialogs(SaveChoice.DontSave)), default));
         Assert.False(await vm.ConfirmCloseAsync(new SqlEditorHost(dialogs: new AnswerDialogs(SaveChoice.Cancel)), default));
@@ -682,6 +689,7 @@ public class PlsqlEditorTests
             var exec = new FakeExec();
             var vm = new PlsqlEditorViewModel(new FakeMeta(), exec);
             vm.StartNew(PlsqlEditorCommandHandler.NewTemplate, null);
+            vm.Editor.Document.Insert(0, "-- mine\n");
             var dialogs = new AnswerDialogs(SaveChoice.Save) { SavePath = path };
 
             Assert.True(await vm.ConfirmCloseAsync(new SqlEditorHost(dialogs: dialogs), default));
@@ -700,6 +708,7 @@ public class PlsqlEditorTests
     {
         var vm = new PlsqlEditorViewModel();
         vm.StartNew(PlsqlEditorCommandHandler.NewTemplate, null);
+        vm.Editor.Document.Insert(0, "-- mine\n");
 
         Assert.False(await vm.ConfirmCloseAsync(new SqlEditorHost(dialogs: new AnswerDialogs(SaveChoice.Save)), default));
     }

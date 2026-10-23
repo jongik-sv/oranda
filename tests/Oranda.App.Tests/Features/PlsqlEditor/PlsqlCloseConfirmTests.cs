@@ -44,6 +44,7 @@ public sealed class PlsqlCloseConfirmTests
 
         var dirtyPlsql = new PlsqlEditorViewModel();
         dirtyPlsql.StartNew(PlsqlEditorCommandHandler.NewTemplate, null);
+        dirtyPlsql.Editor.Document.Insert(0, "-- mine\n");
         var cleanPlsql = new PlsqlEditorViewModel();
         cleanPlsql.StartNew(string.Empty, null);
         var dirtyDoc = dock.OpenDocument(PlsqlEditorCommands.PanelId, dirtyPlsql, dirtyPlsql.Title)!;

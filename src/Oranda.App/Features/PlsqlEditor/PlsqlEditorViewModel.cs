@@ -401,7 +401,7 @@ public sealed partial class PlsqlEditorViewModel : ToolPanelViewModelBase, IComp
 
     /// <summary>
     /// 탭을 닫을 때 저장 여부를 물어야 하는가(TSK-13-27, SQL 탭 규칙과 같다). 읽기 전용은 묻지 않는다.
-    /// 파일에 묶인 탭 = 파일과 달라졌을 때, 서버 객체를 열었거나 컴파일한 탭 = 마지막 읽기·컴파일 뒤로 고쳤을 때, 그 밖의 새 탭 = 내용이 있을 때.
+    /// 파일에 묶인 탭 = 파일과 달라졌을 때, 서버 객체를 열었거나 컴파일한 탭 = 마지막 읽기·컴파일 뒤로 고쳤을 때, 그 밖의 새 탭 = 사용자가 글을 쳤을 때(템플릿 그대로면 묻지 않는다).
     /// </summary>
     public bool NeedsSaveConfirm
     {
@@ -414,7 +414,7 @@ public sealed partial class PlsqlEditorViewModel : ToolPanelViewModelBase, IComp
 
             if (Editor.FilePath is null && Target is null)
             {
-                return !string.IsNullOrWhiteSpace(Editor.Text);
+                return Editor.HasUserEdits;
             }
 
             return Editor.IsDirty;

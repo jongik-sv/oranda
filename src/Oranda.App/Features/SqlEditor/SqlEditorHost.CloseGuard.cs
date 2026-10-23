@@ -196,7 +196,7 @@ public sealed partial class SqlEditorHost
     }
 
     /// <summary>
-    /// 파일에 묶인 탭은 고쳤을 때, 이름 없는 탭은 내용이 있을 때 묻는다. 읽기 전용 탭은 고칠 수 없으니 묻지 않는다.
+    /// 파일에 묶인 탭은 고쳤을 때, 이름 없는 탭은 사용자가 글을 쳤을 때(처음 글 그대로·빈 글이면 묻지 않는다) 묻는다. 읽기 전용 탭은 고칠 수 없으니 묻지 않는다.
     /// 복원 때 파일을 못 읽어 비어 있는 탭도 묻지 않는다: 저장하면 빈 내용이 원본을 덮어쓴다.
     /// </summary>
     private bool NeedsSaveConfirm(SqlEditorViewModel tab)
@@ -213,7 +213,7 @@ public sealed partial class SqlEditorHost
 
         if (tab.FilePath is null)
         {
-            return !string.IsNullOrWhiteSpace(tab.Text);
+            return tab.HasUserEdits;
         }
 
         return tab.IsDirty && !(tab.FileUnreadable && string.IsNullOrWhiteSpace(tab.Text));

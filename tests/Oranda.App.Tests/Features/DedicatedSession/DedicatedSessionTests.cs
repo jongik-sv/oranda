@@ -111,6 +111,7 @@ public sealed class DedicatedSessionTests
     {
         var rig = new DedicatedRig(save);
         var (tab, session) = rig.NewDedicatedTab("update emp set sal = sal");
+        tab.Document.Insert(tab.Document.TextLength, " where 1 = 0");
         rig.MarkPending(session);
         rig.Dialogs.Answers.Enqueue(UncommittedChoice.Rollback);
 

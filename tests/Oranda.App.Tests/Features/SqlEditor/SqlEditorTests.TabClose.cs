@@ -53,13 +53,58 @@ public sealed partial class SqlEditorTests
     });
 
     [Fact]
+    public Task Untitled_tab_with_untouched_generated_text_closes_without_asking() => Ui.Run(async () =>
+    {
+        var dialogs = new FakeDialogs { SaveAnswer = SaveChoice.Cancel };
+        var host = new SqlEditorHost(dialogs: dialogs);
+        var generated = host.NewDocument("select * from emp");
+
+        Assert.True(await host.CloseAsync(generated, default));
+
+        Assert.Empty(dialogs.SaveAsked);
+    });
+
+    [Fact]
+    public Task Untitled_tab_typed_into_asks_but_typing_back_to_the_start_text_does_not() => Ui.Run(async () =>
+    {
+        var dialogs = new FakeDialogs { SaveAnswer = SaveChoice.Cancel };
+        var host = new SqlEditorHost(dialogs: dialogs);
+        var tab = host.NewDocument("select * from emp");
+
+        tab.Document.Insert(tab.Document.TextLength, " where 1 = 1");
+        Assert.False(await host.CloseAsync(tab, default));
+        Assert.Single(dialogs.SaveAsked);
+
+        tab.Document.Remove(tab.Document.TextLength - " where 1 = 1".Length, " where 1 = 1".Length);
+        Assert.True(await host.CloseAsync(tab, default)); // 처음 글과 같아져 묻지 않는다
+        Assert.Single(dialogs.SaveAsked);
+    });
+
+    [Fact]
+    public Task Untitled_tab_typed_from_empty_asks_and_cleared_again_does_not() => Ui.Run(async () =>
+    {
+        var dialogs = new FakeDialogs { SaveAnswer = SaveChoice.Cancel };
+        var host = new SqlEditorHost(dialogs: dialogs);
+        var tab = host.NewDocument();
+
+        tab.Document.Insert(0, "select 1");
+        Assert.False(await host.CloseAsync(tab, default));
+        Assert.Single(dialogs.SaveAsked);
+
+        tab.Document.Remove(0, tab.Document.TextLength);
+        Assert.True(await host.CloseAsync(tab, default));
+        Assert.Single(dialogs.SaveAsked);
+    });
+
+    [Fact]
     public Task Untitled_tab_with_text_saves_through_save_as_and_cancelling_the_picker_cancels_the_close() => Ui.Run(async () =>
     {
         var target = Path.Combine(_root, "named.sql");
         Directory.CreateDirectory(_root);
         var dialogs = new FakeDialogs { SaveAnswer = SaveChoice.Save, SavePath = null };
         var host = new SqlEditorHost(dialogs: dialogs);
-        var tab = host.NewDocument("select 42 from dual");
+        var tab = host.NewDocument("select 42 from");
+        tab.Document.Insert(tab.Document.TextLength, " dual");
 
         Assert.False(await host.CloseAsync(tab, default)); // 파일 고르기 취소 → 닫기도 취소
         Assert.Contains(tab, host.Tabs);
@@ -90,7 +135,8 @@ public sealed partial class SqlEditorTests
     {
         var dialogs = new FakeDialogs { SaveAnswer = SaveChoice.Cancel };
         var host = new SqlEditorHost(dialogs: dialogs);
-        host.NewDocument("select 1");
+        var typed = host.NewDocument("select 1");
+        typed.Document.Insert(typed.Document.TextLength, " from dual");
         var workspace = host.ActiveWorkspace!;
         var incoming = new Workspace { Id = workspace.Id, Name = workspace.Name, SavedAt = DateTimeOffset.UtcNow };
 
@@ -114,6 +160,7 @@ public sealed partial class SqlEditorTests
         var first = (await host.OpenFileAsync(path, default))!;
         first.Document.Insert(0, "kept ");
         var second = host.NewDocument("second");
+        second.Document.Insert(0, "my ");
         var workspace = host.ActiveWorkspace!;
 
         Assert.Null(await host.RestoreAsync(new Workspace { Id = workspace.Id, Name = workspace.Name, SavedAt = DateTimeOffset.UtcNow }, default));
@@ -142,6 +189,7 @@ public sealed partial class SqlEditorTests
     {
         var host = new SqlEditorHost(); // NoDialogs: 묻지 못하면 글을 잃는 쪽으로 가지 않는다
         var tab = host.NewDocument("select 1");
+        tab.Document.Insert(tab.Document.TextLength, " from dual");
 
         Assert.False(await host.CloseAsync(tab, default));
 
@@ -157,6 +205,7 @@ public sealed partial class SqlEditorTests
         var dialogs = new FakeDialogs { SaveAnswer = SaveChoice.Save, SavePath = blocked };
         var host = new SqlEditorHost(dialogs: dialogs);
         var tab = host.NewDocument("select 1");
+        tab.Document.Insert(tab.Document.TextLength, " from dual");
 
         Assert.False(await host.CloseAsync(tab, default));
 

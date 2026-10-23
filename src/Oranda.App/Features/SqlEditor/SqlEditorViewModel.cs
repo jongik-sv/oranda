@@ -73,6 +73,7 @@ public sealed partial class SqlEditorViewModel : ToolPanelViewModelBase, IBindOw
     public SqlEditorViewModel(Guid tabId, string text)
     {
         TabId = tabId;
+        _startText = text ?? string.Empty;
         Document = new TextDocument(text ?? string.Empty);
         Document.UndoStack.ClearAll();
         Document.TextChanged += (_, _) =>
@@ -90,6 +91,15 @@ public sealed partial class SqlEditorViewModel : ToolPanelViewModelBase, IBindOw
     }
 
     public Guid TabId { get; }
+
+    // 탭을 처음 연(또는 마지막으로 LoadText 한) 글. 이름 없는 탭이 손대지 않은 채인지 가를 때 쓴다.
+    private string _startText;
+
+    /// <summary>
+    /// 사용자가 이 글을 직접 바꿨는가: 고친 적이 있고, 글이 공백만이 아니며, 처음 글과 다를 때. 이름 없는 탭을 닫을 때 저장을 물을지 정한다
+    /// (템플릿·만들어 넣은 글을 손대지 않았거나, 쳤다가 처음 글로 되돌렸으면 묻지 않는다).
+    /// </summary>
+    public bool HasUserEdits => IsDirty && !string.IsNullOrWhiteSpace(Text) && !string.Equals(Text, _startText, StringComparison.Ordinal);
 
     /// <summary>이 탭의 바인드 변수 목록(TSK-04-11). 바인드 변수 창은 활성 탭의 것을 보이고, 작업 공간·.sql·.sqd 도 탭마다 이 목록을 넣고 뺀다.</summary>
     public BindVariableStore Binds { get; } = new();
@@ -210,6 +220,7 @@ public sealed partial class SqlEditorViewModel : ToolPanelViewModelBase, IBindOw
 
         Document.UndoStack.ClearAll();
         IsDirty = dirty;
+        _startText = dirty ? string.Empty : text;
         _bookmarks.Clear();
         OnPropertyChanged(nameof(CanUndo));
         OnPropertyChanged(nameof(CanRedo));
