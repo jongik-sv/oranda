@@ -264,6 +264,7 @@
 | `oranda.nav.describeObject` | `F4`, `Alt+C` | `F4`, `Alt+C` | `F4`, `Alt+C` | `F4`, `Shift+F4`, `Alt+C` |
 | `oranda.exec.bindVariables` | - | `Alt+B` | - | - |
 | `oranda.format.document` | `Ctrl+Shift+F` | `Ctrl+Shift+F` | `Ctrl+Shift+F` | `Ctrl+F7` |
+| `oranda.mybatis.formatStatement` | `Ctrl+Shift+F` | `Ctrl+Shift+F` | `Ctrl+Shift+F` | `Ctrl+F7` |
 | `oranda.exec.runStatement` | `Ctrl+Enter` | `Ctrl+Enter`, `Ctrl+K` | `Ctrl+Enter` | `Ctrl+Enter`, `F9` |
 | `oranda.exec.runSelection` | - | `Ctrl+L` | - | - |
 | `oranda.exec.runScript` | `F5` | `F5` | `F8` | `F5` |
@@ -587,7 +588,7 @@
 
 ### MyBatis
 
-근거 `docs/oranda1/design.md` 4.1. 처리기 몸은 TSK-03-0x 가 채우고 특성 문자열·제목·키는 동결이다. 기본 키는 `runScenario` 하나(`sqldev` 는 `Primary+Enter`, `F9`).
+근거 `docs/oranda1/design.md` 4.1. 처리기 몸은 TSK-03-0x 가 채우고 특성 문자열·제목·키는 동결이다. 기본 키는 `runScenario`(`sqldev` 는 `Primary+Enter`, `F9`)와 `formatStatement` 다. `formatStatement` 는 일반 포맷(`format.document`)과 같은 키를 나눠 쓴다: 키맵에서 일반 포맷은 `sqlEditorFocus`·`plsqlEditorFocus` 두 항목으로 두고, MyBatis 쿼리 편집기(`mybatisDocFocus`)에서는 이 명령이 받는다.
 
 | ID | 제목 | 기본 키 | 키 범위(when) | 활성 조건 | 소유 Task |
 |---|---|---|---|---|---|
@@ -606,6 +607,7 @@
 | `oranda.mybatis.convertWorkspace` | MyBatis 작업 공간으로 바꾸기… | - | 전역 | `sqlWorkspaceActive && !mybatisDocActive && mybatisConvertReady` | TSK-03-05 |
 | `oranda.mybatis.openFolder` | 매퍼 폴더 열기… | - | 전역 | `mybatisFolderReady` | TSK-03-07 |
 | `oranda.mybatis.findStatement` | MyBatis 문장 찾기… | - | 전역 | `mybatisDocActive \|\| mybatisFolderOpen` | TSK-03-07 |
+| `oranda.mybatis.formatStatement` | 쿼리 포맷 | `Ctrl+Shift+F` | `mybatisDocFocus` | `mybatisDocActive && mybatisStatementSelected && !readOnlyDoc` | mybatis-ui-sync |
 
 ### 도움말
 

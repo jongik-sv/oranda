@@ -30,6 +30,8 @@ public static class FormatterProfilesCommands
             FormatFailure.CommentCountMismatch => "포맷 전후 주석 수가 달라졌다",
             FormatFailure.NotIdempotent => "두 번 포맷한 결과가 달라 안전하지 않다",
             FormatFailure.InternalError => "포매터 내부 오류",
+            FormatFailure.MarkupUnsupported => "포맷할 수 없는 MyBatis 태그 모양이다",
+            FormatFailure.MarkupMismatch => "포맷 전후 MyBatis 태그가 달라졌다",
             _ => "알 수 없는 이유",
         };
         return string.IsNullOrWhiteSpace(result.Message) ? reason : $"{reason} ({result.Message})";

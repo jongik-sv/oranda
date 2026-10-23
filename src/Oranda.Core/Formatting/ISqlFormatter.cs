@@ -22,6 +22,12 @@ public enum FormatFailure
     CommentCountMismatch,
     NotIdempotent,
     InternalError,
+
+    /// <summary>MyBatis 문장: 포맷할 수 없는 모양(닫히지 않은 태그·속성 따옴표, 낱말에 붙은 태그, 여러 줄 <c>#{…}</c>, 원문에 이미 있는 <c>/*@</c> 표식 등).</summary>
+    MarkupUnsupported,
+
+    /// <summary>MyBatis 문장: 포맷 전후 XML 구간(태그·CDATA·XML 주석의 원문·순서, 낱말에 붙은 경계)이 달라졌다.</summary>
+    MarkupMismatch,
 }
 
 /// <summary>

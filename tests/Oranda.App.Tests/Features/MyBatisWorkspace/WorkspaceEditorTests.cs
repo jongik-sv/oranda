@@ -342,6 +342,7 @@ public sealed class WorkspaceEditorTests : IDisposable
                 "oranda.mybatis.runScenario",
                 "oranda.mybatis.explainScenario",
                 "oranda.mybatis.checkCombinations",
+                "oranda.mybatis.formatStatement",
                 "oranda.mybatis.save",
                 "oranda.mybatis.copyExpanded",
                 "oranda.mybatis.copyExpandedWithValues",
