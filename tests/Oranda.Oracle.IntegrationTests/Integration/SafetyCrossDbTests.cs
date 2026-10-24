@@ -120,9 +120,20 @@ public sealed class SafetyCrossPolicyTests
     [MemberData(nameof(Mutating))]
     public async Task Production_label_never_lets_a_mutating_statement_through_unasked(string text)
     {
+        // ALTER SESSION 은 세션 설정일 뿐이라 운영 라벨이어도 묻지 않는다 (아래 시험).
+        if (text.StartsWith("alter session", StringComparison.OrdinalIgnoreCase))
+            return;
+
         var d = await JudgeAsync(text, ConnectionEnvironment.Production, readOnly: false);
 
         Assert.NotEqual(PolicyDecisionKind.Allow, d.Kind);
+    }
+
+    [Theory]
+    [InlineData("alter session set nls_date_format = 'YYYY'")]
+    public async Task Production_label_does_not_ask_for_session_settings(string text)
+    {
+        Assert.Equal(PolicyDecisionKind.Allow, (await JudgeAsync(text, ConnectionEnvironment.Production, readOnly: false)).Kind);
     }
 
     [Theory]
