@@ -58,6 +58,9 @@ public sealed record LockRow(SessionKey Session, string LockType)
 
     /// <summary>gv$session.blocking_instance + blocking_session + 그 세션의 serial#. 막는 세션이 없으면 null.</summary>
     public SessionKey? BlockingSession { get; init; }
+
+    /// <summary>gv$session.status (ACTIVE·INACTIVE·KILLED …). TSK-05-04 에서 더함.</summary>
+    public string? Status { get; init; }
 }
 
 /// <summary>Lock 목록 거르기(LK-04). 기본값 = 거르지 않음(백그라운드·시스템 잠금은 항상 제외).</summary>
@@ -86,7 +89,11 @@ public sealed record LockFilter
 public sealed record LockSnapshot(IReadOnlyList<LockRow> Rows, BlockingTree WaitTree, DateTimeOffset CollectedAt);
 
 /// <summary>보유자 영향(LK-07). 보유자별 gv$session.blocking_* 로 모은 대기자 집계.</summary>
-public sealed record BlockerImpact(SessionKey Holder, int WaiterCount, long MaxWaitSeconds, long TotalWaitSeconds);
+public sealed record BlockerImpact(SessionKey Holder, int WaiterCount, long MaxWaitSeconds, long TotalWaitSeconds)
+{
+    /// <summary>보유자의 gv$session.status. TSK-05-04 에서 더함.</summary>
+    public string? Status { get; init; }
+}
 
 /// <summary>잠긴 행(LK-06). 대기 세션의 row_wait_obj#·file#·block#·row# → DBMS_ROWID.ROWID_CREATE 로 만든 rowid 와 그 행의 값.</summary>
 public sealed record LockedRowInfo(string RowId, string Owner, string Table)
@@ -96,6 +103,15 @@ public sealed record LockedRowInfo(string RowId, string Owner, string Table)
 
     /// <summary>열 값 문자열(<see cref="ColumnNames"/> 와 같은 순서, NULL 은 null).</summary>
     public IReadOnlyList<string?> Values { get; init; } = [];
+
+    /// <summary>상대 파일 번호(v$datafile.rfile#, 없으면 gv$session.row_wait_file#). TSK-05-04 에서 더함.</summary>
+    public int? FileNumber { get; init; }
+
+    /// <summary>gv$session.row_wait_block#.</summary>
+    public long? BlockNumber { get; init; }
+
+    /// <summary>gv$session.row_wait_row#.</summary>
+    public int? RowNumber { get; init; }
 }
 
 /// <summary>DDL·라이브러리 잠금 한 줄(LK-09). dba_ddl_locks.</summary>
@@ -109,7 +125,11 @@ public sealed record DdlLockRow(SessionKey Session, string Owner, string Name, s
 }
 
 /// <summary>대기 세션 SQL 의 바인드 값(LK-12). gv$sql_bind_capture — 캡처된 값만이라 최신이 아닐 수 있다.</summary>
-public sealed record WaitingBind(string Name, int Position, string? DataType, string? Value);
+public sealed record WaitingBind(string Name, int Position, string? DataType, string? Value)
+{
+    /// <summary>gv$sql_bind_capture.last_captured(서버 시각). TSK-05-04 에서 더함.</summary>
+    public DateTimeOffset? CapturedAt { get; init; }
+}
 
 /// <summary>대기 바인드 조회 대상. <see cref="Cursor"/>(sql_id+child) 또는 <see cref="Session"/> 중 하나를 채운다.</summary>
 public sealed record WaitingBindTarget
@@ -147,6 +167,9 @@ public sealed record IdleTransaction(SessionKey Session)
 
     /// <summary>gv$session.prev_sql_id — 방치 직전 마지막 SQL.</summary>
     public string? PrevSqlId { get; init; }
+
+    /// <summary>이 세션이 잡은 TM·TX 잠금 수(gv$lock). TSK-05-04 에서 더함.</summary>
+    public int LockCount { get; init; }
 }
 
 /// <summary>데드락 한 건(LK-12, TSK-05-04). 알림 로그(v$diag_alert_ext 의 ORA-00060)에서 읽는다.</summary>

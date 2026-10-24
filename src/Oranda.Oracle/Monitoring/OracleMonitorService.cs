@@ -300,6 +300,7 @@ internal sealed partial class OracleMonitorService : IMonitorService
                 SecondsInWait = r.SecondsInWait,
                 SqlId = r.SqlId,
                 LockedObject = r.LockedObject,
+                Status = r.Status,
             };
         }
 
@@ -511,6 +512,7 @@ internal sealed partial class OracleMonitorService : IMonitorService
             SecondsInWait = Long(r[5]),
             SqlId = Str(r[6]),
             LockedObject = Str(r[11]),
+            Status = r.Length > 12 ? Str(r[12]) : null,
         };
     }
 
@@ -541,4 +543,6 @@ internal sealed record BlockingRow(SessionKey Key, SessionKey? Blocker)
     public string? SqlId { get; init; }
 
     public string? LockedObject { get; init; }
+
+    public string? Status { get; init; }
 }

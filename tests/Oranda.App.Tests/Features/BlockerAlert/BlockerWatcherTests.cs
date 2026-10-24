@@ -420,4 +420,50 @@ public class BlockerWatcherTests
         Assert.False(enabled);
         Assert.Equal(BlockerDisabledReason.NoPrivilege, h.Watcher.State.Reason);
     }
+
+    // ---- oranda1 TSK-05-04: Lock 모니터 임계치 알림 ----------------------------------------------
+
+    [Fact]
+    public void Lock_monitor_threshold_shows_a_red_chip_without_any_query_and_clears()
+    {
+        using var h = new Harness();
+        h.Bus.Publish(new Oranda.App.Features.LockMonitor.LockThresholdChanged(true, 5, 312));
+
+        var s = h.Watcher.State;
+        Assert.Equal(BlockerAlertKind.Blocking, s.Kind);
+        Assert.True(s.FromLockMonitor);
+        Assert.Equal(5, s.BlockedCount);
+        Assert.Equal(312, s.MaxWaitSeconds);
+        Assert.Equal(0, h.Queries);
+        Assert.Equal("⚠ 5 세션 막음 · 312 초", new BlockerStatusViewModel(h.Watcher).Text);
+        Assert.Contains("알림 기준을 넘었습니다", new BlockerStatusViewModel(h.Watcher).ToolTip, StringComparison.Ordinal);
+
+        h.Bus.Publish(new Oranda.App.Features.LockMonitor.LockThresholdChanged(false, 0, 0));
+        Assert.Equal(BlockerAlertKind.None, h.Watcher.State.Kind);
+    }
+
+    [Fact]
+    public async Task My_own_blocking_session_wins_over_the_lock_monitor_chip_and_it_returns_after()
+    {
+        using var h = new Harness();
+        h.Next = () => BlockerTestData.Snapshot(2);
+        h.OpenWork();
+        h.Bus.Publish(new Oranda.App.Features.LockMonitor.LockThresholdChanged(true, 9, 500));
+        h.Pending(true);
+        await h.Watcher.WhenIdleAsync();
+        Assert.False(h.Watcher.State.FromLockMonitor);
+        Assert.Equal(2, h.Watcher.State.BlockedCount);
+
+        h.Pending(false); // 내 트랜잭션이 끝나도 Lock 모니터 알림은 남는다
+        Assert.True(h.Watcher.State.FromLockMonitor);
+        Assert.Equal(9, h.Watcher.State.BlockedCount);
+
+        // 미커밋 10 분 칩보다 Lock 모니터 알림이 앞선다.
+        h.Next = () => BlockerTestData.Snapshot(0);
+        h.Pending(true);
+        await h.TickAsync(TimeSpan.FromMinutes(10));
+        Assert.True(h.Watcher.State.FromLockMonitor);
+        h.Bus.Publish(new Oranda.App.Features.LockMonitor.LockThresholdChanged(false, 0, 0));
+        Assert.Equal(BlockerAlertKind.LongTransaction, h.Watcher.State.Kind);
+    }
 }

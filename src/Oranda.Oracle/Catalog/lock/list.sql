@@ -1,6 +1,7 @@
 -- Lock 모니터 잠금 목록(LK-02·04). gv$lock + gv$session, TM 은 id1 = object_id, TX 는 id1·id2 = xidusn·xidslot·xidsqn 로 gv$transaction.
 -- 큐 대기(enq: XX - ...) 세션인데 gv$lock 에 요청 행이 없으면(23ai 의 TM 대기 등) 대기 인자로 요청 행을 채운다: p1 하위 16비트 = 모드, p2·p3 = id1·id2.
 -- 백그라운드 세션·시스템 잠금(MR·AE·TO·RT·XR·CF 등)은 항상 뺀다. 기다림 행(request > 0)만 min_wait 로 거르고 막는 행은 남긴다.
+-- start_date 는 서버 시각(DATE)을 서버 시간대(SYSTIMESTAMP)로 UTC 로 바꿔 돌려준다. 마지막 열 status = gv$session.status(TSK-05-04).
 -- 바인드: types(',TM,TX,UL,' 꼴), username, schema(TM 행에만), inst_id, min_wait, waiting_only(0/1), max_rows. @PFX@ = dba 또는 all.
 -- id: lock.list
 -- min-version: 11
@@ -9,13 +10,13 @@
 -- rac: gv
 SELECT inst_id, sid, serial#, username, machine, program, type, id1, id2, lmode, request, ctime, block,
        object_owner, object_name, start_date, used_ublk, event, seconds_in_wait, sql_id, prev_sql_id,
-       blocking_instance, blocking_session, blocking_serial
+       blocking_instance, blocking_session, blocking_serial, status
   FROM (SELECT x.inst_id, x.sid, s.serial#, s.username, s.machine, s.program, x.type, x.id1, x.id2,
                x.lmode, x.request, x.ctime, x.block,
                o.owner AS object_owner, o.object_name,
-               t.start_date, t.used_ublk, s.event,
+               SYS_EXTRACT_UTC(FROM_TZ(CAST(t.start_date AS TIMESTAMP), TO_CHAR(SYSTIMESTAMP, 'TZH:TZM'))) AS start_date, t.used_ublk, s.event,
                CASE WHEN s.state = 'WAITING' THEN TRUNC(s.wait_time_micro / 1000000) ELSE 0 END AS seconds_in_wait,
-               s.sql_id, s.prev_sql_id, s.blocking_instance, s.blocking_session, b.serial# AS blocking_serial
+               s.sql_id, s.prev_sql_id, s.blocking_instance, s.blocking_session, b.serial# AS blocking_serial, s.status
           FROM (SELECT l.inst_id, l.sid, l.type, l.id1, l.id2, l.lmode, l.request, l.ctime, l.block
                   FROM gv$lock l
                 UNION ALL

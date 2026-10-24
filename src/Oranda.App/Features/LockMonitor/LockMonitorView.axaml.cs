@@ -39,7 +39,10 @@ public partial class LockMonitorView : UserControl
         Setup(DdlTable, DdlLockItem.Columns, right: [], mono: [0, 1],
             (c, r) => c == 4 && r[^1] is DdlLockItem d && d.IsWaiting);
         Setup(LockedRowTable, ["열", "값"], right: [], mono: [1], null);
-        Setup(BindTable, ["이름", "위치", "형", "값"], right: [1], mono: [0, 3], null);
+        Setup(BindTable, ["이름", "위치", "형", "값", "캡처 시각"], right: [1], mono: [0, 3, 4], null);
+        Setup(IdleTable, IdleTransactionItem.Columns, right: IdleTransactionItem.NumberColumns, mono: [0, 5], IdleTransactionItem.IsDanger);
+        Setup(DeadlockTable, DeadlockItem.Columns, right: [1], mono: [0, 3], null);
+        IdleTable.StatusLineVisible = DeadlockTable.StatusLineVisible = false;
         LockedRowTable.KeepScroll = BindTable.KeepScroll = false;
         LockedRowTable.StatusLineVisible = BindTable.StatusLineVisible = false;
         LockTable.StatusLineVisible = ImpactTable.StatusLineVisible = DdlTable.StatusLineVisible = false;
@@ -48,6 +51,8 @@ public partial class LockMonitorView : UserControl
         LockTable.CurrentRowChanged += (_, row) => PickFromRow(row);
         ImpactTable.CurrentRowChanged += (_, row) => PickFromRow(row);
         DdlTable.CurrentRowChanged += (_, row) => PickFromRow(row);
+        IdleTable.CurrentRowChanged += (_, row) => PickFromRow(row);
+        DeadlockTable.RowActivated += (_, row) => OpenDeadlock(row);
         TreeList.SelectionChanged += (_, _) =>
         {
             if (!_syncing && _vm is not null && TreeList.SelectedItem is LockTreeItem t)
@@ -93,6 +98,9 @@ public partial class LockMonitorView : UserControl
         PlanButton.Click += (_, _) => Run(vm => vm.ShowPlanAsync());
         CopyRowSelectButton.Click += (_, _) => Run(vm => CopyAsync(vm.LockedRowSelect));
         CopyDdlGrantButton.Click += (_, _) => Run(vm => CopyAsync(vm.DdlGrantSql));
+        CycleTreeButton.Click += (_, _) => _vm?.ShowCycleInTree();
+        OpenSnapshotFolderButton.Click += (_, _) => _ = OpenSnapshotFolderAsync();
+        DetachedFromVisualTree += (_, _) => _floatingToast?.Invoke();
         UserFilterBox.KeyDown += OnFilterKey;
         SchemaFilterBox.KeyDown += OnFilterKey;
         AddHandler(KeyDownEvent, OnKeyDown, RoutingStrategies.Bubble);
@@ -128,6 +136,9 @@ public partial class LockMonitorView : UserControl
             _vm.Impacts.CollectionChanged -= OnListChanged;
             _vm.DdlLocks.CollectionChanged -= OnListChanged;
             _vm.TreeRows.CollectionChanged -= OnListChanged;
+            _vm.IdleTransactions.CollectionChanged -= OnListChanged;
+            _vm.Deadlocks.CollectionChanged -= OnListChanged;
+            _vm.AlertRaised -= OnAlertRaised;
         }
 
         _vm = vm;
@@ -141,6 +152,9 @@ public partial class LockMonitorView : UserControl
         vm.Impacts.CollectionChanged += OnListChanged;
         vm.DdlLocks.CollectionChanged += OnListChanged;
         vm.TreeRows.CollectionChanged += OnListChanged;
+        vm.IdleTransactions.CollectionChanged += OnListChanged;
+        vm.Deadlocks.CollectionChanged += OnListChanged;
+        vm.AlertRaised += OnAlertRaised;
         LockedRowTable.Rows = vm.LockedRowCells;
         BindTable.Rows = vm.BindCells;
         Rebuild();
@@ -158,6 +172,10 @@ public partial class LockMonitorView : UserControl
                 break;
             case nameof(LockMonitorViewModel.BindCells):
                 BindTable.Rows = _vm!.BindCells;
+                break;
+            case nameof(LockMonitorViewModel.ActiveAlert) when _vm!.ActiveAlert is null:
+                _floatingToast?.Invoke();
+                _floatingToast = null;
                 break;
         }
     }
@@ -189,6 +207,8 @@ public partial class LockMonitorView : UserControl
         LockTable.Rows = [.. vm.Locks.Select(l => (IReadOnlyList<object?>)[.. l.Cells, l])];
         ImpactTable.Rows = [.. vm.Impacts.Select(i => (IReadOnlyList<object?>)[.. i.Cells, i])];
         DdlTable.Rows = [.. vm.DdlLocks.Select(d => (IReadOnlyList<object?>)[.. d.Cells, d])];
+        IdleTable.Rows = [.. vm.IdleTransactions.Select(i => (IReadOnlyList<object?>)[.. i.Cells, i])];
+        DeadlockTable.Rows = [.. vm.Deadlocks.Select(d => (IReadOnlyList<object?>)[.. d.Cells, d])];
         SyncSelection();
     }
 
@@ -208,12 +228,14 @@ public partial class LockMonitorView : UserControl
             {
                 LockTable.ClearSelection();
                 ImpactTable.ClearSelection();
+                IdleTable.ClearSelection();
                 return;
             }
 
             bool Mine(IReadOnlyList<object?> r) => KeyOf(r) == key;
             LockTable.SelectRows(Mine, Mine);
             ImpactTable.SelectRows(Mine, Mine);
+            IdleTable.SelectRows(Mine, Mine);
         }
         finally
         {
@@ -226,6 +248,7 @@ public partial class LockMonitorView : UserControl
         LockItem l => l.Key,
         ImpactItem i => i.Key,
         DdlLockItem d => d.Key,
+        IdleTransactionItem i => i.Key,
         _ => null,
     };
 
@@ -263,6 +286,10 @@ public partial class LockMonitorView : UserControl
 
         switch (e.Key)
         {
+            case Key.Enter when vm.TopTabIndex == LockMonitorViewModel.DeadlockTab && DeadlockTable.CurrentRow is { } dl:
+                OpenDeadlock(dl);
+                e.Handled = true;
+                break;
             case Key.Enter when vm.HasSelection:
                 Run(v => v.ShowDetailAsync(v.DetailTabIndex == LockMonitorViewModel.HintTab ? LockMonitorViewModel.SqlTab : v.DetailTabIndex));
                 e.Handled = true;
@@ -301,6 +328,48 @@ public partial class LockMonitorView : UserControl
         await using var writer = new StreamWriter(stream, new UTF8Encoding(true));
         await writer.WriteAsync(vm.BuildLocksCsv());
         vm.StatusText = "잠금 목록을 CSV 로 저장했습니다: " + file.Name;
+    }
+
+    /// <summary>탭이 뒤에 있으면(이 View 가 창에 없거나 보이지 않으면) 설정에 따라 메인 창 오버레이에 알림을 띄운다.</summary>
+    private void OnAlertRaised(object? sender, LockAlert alert)
+    {
+        if (_vm is not { NotifyWhenHidden: true } vm || (VisualRoot is not null && IsEffectivelyVisible))
+        {
+            return;
+        }
+
+        _floatingToast?.Invoke();
+        _floatingToast = (LockMonitorCommandHandler.MainWindow?.Invoke() ?? TopLevel.GetTopLevel(this)) is { } top
+            ? LockAlertToast.ShowFloating(top, vm)
+            : null;
+    }
+
+    private Action? _floatingToast;
+
+    private void OpenDeadlock(IReadOnlyList<object?> row)
+    {
+        if (row.Count > 0 && row[^1] is DeadlockItem item && _vm is { } vm)
+        {
+            vm.OpenTextInEditor(item.FullText, "데드락 기록");
+        }
+    }
+
+    private async Task OpenSnapshotFolderAsync()
+    {
+        if (_vm?.HistoryFolder is not { } folder || TopLevel.GetTopLevel(this)?.Launcher is not { } launcher)
+        {
+            return;
+        }
+
+        try
+        {
+            Directory.CreateDirectory(folder);
+            await launcher.LaunchDirectoryInfoAsync(new DirectoryInfo(folder));
+        }
+        catch (IOException ex)
+        {
+            _vm.StatusText = "폴더를 열지 못했습니다: " + ex.Message;
+        }
     }
 
     private async Task CopyAsync(string? text)

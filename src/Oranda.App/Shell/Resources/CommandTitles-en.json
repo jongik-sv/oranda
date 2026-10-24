@@ -165,6 +165,7 @@
   "Cmd.oranda.tuning.childCursors": "Child Cursors…",
   "Cmd.oranda.tuning.gatherStatsScript": "Gather Statistics (DBMS_STATS)",
   "Cmd.oranda.schema.tableStats": "Statistics…",
+  "Cmd.oranda.monitor.locks.showHistory": "Toggle Lock History Strip",
   "Cmd.oranda.monitor.sqlShowPlan": "Actual Plan of Selected SQL",
   "Cmd.oranda.tuning.assistant": "Tuning Assistant",
   "Cmd.oranda.tuning.benchmark": "Benchmark SQL Variants",

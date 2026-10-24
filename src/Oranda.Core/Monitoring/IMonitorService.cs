@@ -156,6 +156,9 @@ public sealed record BlockingNode(SessionKey Session, IReadOnlyList<BlockingNode
 
     /// <summary>잠긴 객체(<c>OWNER.NAME</c>).</summary>
     public string? LockedObject { get; init; }
+
+    /// <summary>gv$session.status (ACTIVE·INACTIVE …). Lock 모니터 TSK-05-04 에서 더함.</summary>
+    public string? Status { get; init; }
 }
 
 /// <summary>최종 블로커를 뿌리로 하는 트리 목록.</summary>

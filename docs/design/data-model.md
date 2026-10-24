@@ -88,6 +88,7 @@
 | `history.maxAgeDays` | int | ○ | 180 | 3.4 보존 정책 |
 | `metadataCache.retentionDays` | int | ○ | 30 | 쓰지 않은 접속의 캐시 삭제 |
 | `monitor.refreshSeconds` | int | ○ | 5 | 2~60 |
+| `monitor.lockAlert` | object | ○ | 아래 값 | Lock 모니터 「알림 설정」(oranda1 TSK-05-04): `enabled`(true), `waitSeconds`(120, 1~86400), `waiters`(5, 1~1000) — 「대기 N 초 이상 또는 대기자 M 명 이상」, `saveSnapshot`(true, 그 시점 보유자·대기자 SQL 을 데이터 폴더 `lock-history/` 텍스트로), `notifyWhenHidden`(true), `historyMinutes`(30, 5~720, 이력 띠 메모리 보관), `saveHistoryFile`(false, `lock-history/` CSV). DB 에 쓰지 않는다. 선택 필드 추가라 스키마 버전은 그대로 |
 | `workspace.autosaveSeconds` | int | ○ | 10 | 1~10 (PRD 복구 요구: 10 s 이하) |
 | `workspace.restoreOnStartup` | bool | ○ | true | 마지막 작업 공간 다시 열기 |
 | `workspace.lastWorkspaceId` | string | ○ | `"default"` | 종료 때 보고 있던 작업 공간(다음 시작 때 활성) |

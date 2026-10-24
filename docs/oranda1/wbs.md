@@ -313,7 +313,7 @@ levels:
   - acceptance: 가짜 서비스로 트리·목록·상세·영향 순위·힌트가 보인다 / 세션 종료 확인 창에 대기자 수 / 권한 없을 때 배너 / 전체 시험 통과 / 실앱 눈 확인 항목은 사용자 몫으로 결과에 적는다
   - note: Features/LockMonitor 문서 패널(대기 트리·영향 순위·DDL 잠금 탭, 방치·데드락 탭은 05-04 자리)·잠금 목록·SQL/잠긴 행/바인드/원인 힌트 상세, 상태 5종, 종료 확인 창(대기자 수·목록), 세션 모니터로 이동, 복사·CSV, 막음 칩 → Lock 모니터, F5(lockMonitorFocus), 시험 LockMonitorTests·LockMonitorViewTests (win144)
 
-- [ ] TSK-05-04: Lock 모니터 이력·알림·방치 트랜잭션·데드락 힌트 (P2) [win144] w:2 2026-10-26~2026-10-27
+- [x] TSK-05-04: Lock 모니터 이력·알림·방치 트랜잭션·데드락 힌트 (P2) [win144] w:2 2026-10-26~2026-10-27
   - category: dev
   - domain: fullstack
   - model: opus
@@ -323,7 +323,7 @@ levels:
   - prd-ref: LK-10~LK-12
   - requirements: 이력 타임라인: 새로 고침마다 대기자 수·최대 대기 초를 메모리에 쌓아(최근 N분, 설정) 작은 그래프로 보이고, 원하면 로컬 파일(앱 데이터 폴더, DB 쓰기 아님)로 저장한다. ASH 는 쓰지 않는다(Diagnostics Pack); 임계치 알림: 「N초 이상 또는 대기자 M명 이상」이면 상태 줄·알림을 띄우고 그 시점 보유자·대기자 SQL 스냅샷을 로컬 텍스트로 남긴다(기존 BlockerWatcher 확장, 설정); 방치 트랜잭션 탭: INACTIVE 인데 트랜잭션을 연 세션과 경과 시간·undo 크기; 데드락 힌트: 대기 그래프에 순환이 보이면 표시, 권한이 있으면 alert 로그(12c+ v$diag_alert_ext, 11g 는 끔)에서 ORA-00060 최근 항목을 읽기 전용으로 보인다; 시험: 단위·Headless·통합(가능한 범위); 비고: 담당 PC: win144(Windows 개발 PC) — 맥북 세션은 이 Task 를 하지 않는다
   - acceptance: 이력 그래프·임계치 알림·방치 트랜잭션·데드락 힌트가 동작한다 / DB 에 쓰지 않는다 / 전체 시험 통과
-  - note: 시안 완료(2026-10-24, 시안 https://claude.ai/artifact/J4YBzmpMsbvecm8aSv4rGx 화면 d), 레인 lk-p2 진행 중 (win144)
+  - note: 이력 띠(LockHistoryBuffer 프로필별 메모리·lock-history CSV 선택)·임계치 알림(LockThresholdTracker, 창 알림 8 초·SQL 스냅샷 텍스트, BlockerWatcher 「⚠ N 세션 막음 · M 초」 칩)·방치 트랜잭션 탭·데드락 기록 탭(19c+, 11g·18c 는 이유)·순환 대기 띠(WaitCycles)·알림 설정 플라이아웃(settings monitor.lockAlert), 계약에 Status·파일/블록/행·바인드 캡처 시각·잠금 수 init 추가, 트랜잭션 시작 UTC 보정 (win144)
 
 ## WP-06: 튜닝 메뉴와 쿼리 튜닝 기능
 <!-- 담당 PC: win144(Windows 개발 PC) — 맥북 세션은 이 WP 의 Task 를 하지 않는다. 2026-10-24 사용자 지시 「또 다른 도구와 비교해서 쿼리 튜닝에 대한 기능을 조사해줘」「튜닝 기능도 조사 끝나면 같이 구현하자. 튜닝 메뉴를 따로 만들어서 거기에 넣으면 될것 같다」. 조사 근거 = Toad SQL Optimizer·TKProf, SQL Developer Autotrace·Tune SQL·Monitor SQL, PL/SQL Developer, OEM 어드바이저·SPM. 원칙: 팩 없는 읽기 전용. DB 에 쓰는 기능(Tuning Advisor 태스크·DBMS_STATS·baseline 적용)은 스크립트 문안까지만 만들고 실행은 사용자가 편집기에서 한다. 팩이 필요한 기능은 SAFE-07 라이선스 관문 뒤에서만 -->

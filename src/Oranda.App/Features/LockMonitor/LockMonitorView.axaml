@@ -83,6 +83,39 @@
       <Setter Property="Background" Value="{DynamicResource OrandaDiffRemovedBrush}" />
       <Setter Property="BorderBrush" Value="{DynamicResource OrandaDangerForegroundBrush}" />
     </Style>
+    <!-- 순환 띠: 모서리·바깥 여백 없음, 위아래 선만. -->
+    <Style Selector="Border.band.flat">
+      <Setter Property="Margin" Value="0,4,0,0" />
+      <Setter Property="CornerRadius" Value="0" />
+      <Setter Property="BorderThickness" Value="0,1,0,1" />
+      <Setter Property="Padding" Value="10,6" />
+    </Style>
+    <!-- 이력 띠: 툴바 바탕 + 위아래 구분선(시안 d). -->
+    <Style Selector="Border.history-strip">
+      <Setter Property="Background" Value="{DynamicResource OrandaToolbarBackgroundBrush}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource OrandaSeparatorBrush}" />
+      <Setter Property="BorderThickness" Value="0,1,0,1" />
+      <Setter Property="Padding" Value="8,3" />
+      <Setter Property="Margin" Value="0,2,0,0" />
+    </Style>
+    <Style Selector="Border.history-strip TextBlock">
+      <Setter Property="FontSize" Value="{DynamicResource OrandaFontSizeSmall}" />
+      <Setter Property="VerticalAlignment" Value="Center" />
+    </Style>
+    <Style Selector="Border.legend-bar">
+      <Setter Property="Width" Value="9" />
+      <Setter Property="Height" Value="9" />
+      <Setter Property="CornerRadius" Value="2" />
+      <Setter Property="Opacity" Value="0.7" />
+      <Setter Property="VerticalAlignment" Value="Center" />
+      <Setter Property="Background" Value="{DynamicResource OrandaIconBlueBrush}" />
+    </Style>
+    <Style Selector="Border.legend-line">
+      <Setter Property="Width" Value="10" />
+      <Setter Property="Height" Value="2" />
+      <Setter Property="VerticalAlignment" Value="Center" />
+      <Setter Property="Background" Value="{DynamicResource OrandaIconOrangeBrush}" />
+    </Style>
     <!-- 안내 상자(정보·경고). -->
     <Style Selector="Border.callout">
       <Setter Property="Padding" Value="10,8" />
@@ -145,6 +178,7 @@
     </Style>
   </UserControl.Styles>
 
+  <Panel>
   <DockPanel>
     <!-- 툴바: 새로 고침·자동·간격 | 세션 종료·연결 끊기·세션 모니터로 | 복사·CSV | 다른 접속 -->
     <Border DockPanel.Dock="Top" Classes="panel-toolbar">
@@ -167,6 +201,46 @@
                 ToolTip.Tip="트리·목록 복사 (TSV)" />
         <Button x:Name="CsvButton" Classes="tool" Content="CSV 내보내기" IsEnabled="{Binding ShowData}" icons:ButtonIcon.Key="exportFile"
                 ToolTip.Tip="잠금 목록을 CSV 로 저장" />
+        <Separator Classes="toolbar" />
+        <!-- 알림 설정: 계획 창 「형식」 과 같은 플라이아웃(임계치·스냅샷·이력 보관). 값은 settings.json monitor.lockAlert. -->
+        <Button x:Name="AlertSettingsButton" Classes="tool" AutomationProperties.Name="알림 설정"
+                ToolTip.Tip="임계치 알림·이력 보관 설정(앱 설정 파일에만 저장, DB 에 쓰지 않음)">
+          <StackPanel Orientation="Horizontal" Spacing="5">
+            <ContentControl Content="{Binding Source='warn', Converter={x:Static icons:IconKeyConverter.Instance}, ConverterParameter=14}" VerticalAlignment="Center" />
+            <TextBlock Text="알림 설정" VerticalAlignment="Center" />
+            <PathIcon Width="8" Height="8" Opacity="0.7" Data="{DynamicResource ButtonSpinnerDecreaseButtonIcon}" VerticalAlignment="Center" />
+          </StackPanel>
+          <Button.Flyout>
+            <Flyout Placement="BottomEdgeAlignedLeft">
+              <StackPanel Spacing="6" Width="290">
+                <TextBlock Classes="section-label" Text="임계치 알림" />
+                <CheckBox x:Name="AlertEnabledBox" Content="임계치 알림 켜기" IsChecked="{Binding AlertEnabled, Mode=TwoWay}" />
+                <Grid ColumnDefinitions="Auto,Auto,*" RowDefinitions="Auto,Auto" IsEnabled="{Binding AlertEnabled}">
+                  <TextBlock Grid.Row="0" Grid.Column="0" Text="대기" VerticalAlignment="Center" Margin="0,0,8,0" />
+                  <NumericUpDown Grid.Row="0" Grid.Column="1" Width="110" Minimum="1" Maximum="86400" Increment="10" FormatString="0' 초'"
+                                 Value="{Binding AlertWaitSeconds, Mode=TwoWay}" AutomationProperties.Name="알림 기준 대기 초" />
+                  <TextBlock Grid.Row="0" Grid.Column="2" Classes="dim" Text="이상 또는" VerticalAlignment="Center" Margin="8,0,0,0" />
+                  <TextBlock Grid.Row="1" Grid.Column="0" Text="대기자" VerticalAlignment="Center" Margin="0,4,8,0" />
+                  <NumericUpDown Grid.Row="1" Grid.Column="1" Width="110" Margin="0,4,0,0" Minimum="1" Maximum="1000" Increment="1" FormatString="0' 명'"
+                                 Value="{Binding AlertWaiters, Mode=TwoWay}" AutomationProperties.Name="알림 기준 대기자 수" />
+                  <TextBlock Grid.Row="1" Grid.Column="2" Classes="dim" Text="이상" VerticalAlignment="Center" Margin="8,4,0,0" />
+                </Grid>
+                <CheckBox Content="그 시점 보유자·대기자 SQL 스냅샷 저장" IsChecked="{Binding SaveSnapshot, Mode=TwoWay}" IsEnabled="{Binding AlertEnabled}" />
+                <CheckBox Content="창이 뒤에 있어도 알림 띄우기" IsChecked="{Binding NotifyWhenHidden, Mode=TwoWay}" IsEnabled="{Binding AlertEnabled}" />
+                <TextBlock Classes="section-label" Margin="0,6,0,0" Text="이력" />
+                <StackPanel Orientation="Horizontal" Spacing="8">
+                  <TextBlock Text="보관" VerticalAlignment="Center" />
+                  <NumericUpDown Width="110" Minimum="5" Maximum="720" Increment="5" FormatString="0' 분'"
+                                 Value="{Binding HistoryMinutes, Mode=TwoWay}" AutomationProperties.Name="이력 보관 분" />
+                </StackPanel>
+                <CheckBox Content="로컬 파일로도 저장" IsChecked="{Binding SaveHistoryFile, Mode=TwoWay}" />
+                <TextBlock Classes="panel-caption" TextWrapping="Wrap" Text="저장 위치: 앱 데이터 폴더\lock-history. DB 에 쓰지 않습니다." />
+                <Button x:Name="OpenSnapshotFolderButton" Classes="tool" HorizontalAlignment="Left" Content="스냅샷 폴더 열기" icons:ButtonIcon.Key="folder"
+                        ToolTip.Tip="앱 데이터 폴더의 lock-history 폴더를 엽니다" />
+              </StackPanel>
+            </Flyout>
+          </Button.Flyout>
+        </Button>
         <Separator Classes="toolbar" />
         <Button x:Name="OtherAccountButton" Classes="tool" Content="다른 접속…" icons:ButtonIcon.Key="connect"
                 ToolTip.Tip="저장된 접속 중에서 골라 모니터 전용 세션을 엽니다" />
@@ -201,6 +275,48 @@
                 SelectedIndex="{Binding SelectedInstanceIndex, Mode=TwoWay}" AutomationProperties.Name="인스턴스 거르기" />
       <CheckBox Content="대기·차단만" IsChecked="{Binding WaitingOnly, Mode=TwoWay}" VerticalAlignment="Center" />
     </WrapPanel>
+    <!-- 순환 대기(데드락 힌트): 오류 띠와 같은 모양, 모서리·바깥 여백 없음(flat). 11g 에서도 앱이 대기 그래프로 계산한다. -->
+    <Border x:Name="CycleBand" DockPanel.Dock="Top" Classes="band danger flat" IsVisible="{Binding HasCycle}" AutomationProperties.Name="순환 대기 감지">
+      <DockPanel>
+        <Button x:Name="CycleTreeButton" DockPanel.Dock="Right" Margin="12,0,0,0" VerticalAlignment="Center" Content="트리에서 보기"
+                ToolTip.Tip="대기 트리 탭에서 순환의 첫 세션을 고릅니다" />
+        <ContentControl DockPanel.Dock="Left" Margin="0,0,8,0" VerticalAlignment="Center"
+                        Content="{Binding Source='error', Converter={x:Static icons:IconKeyConverter.Instance}, ConverterParameter=16}" />
+        <TextBlock DockPanel.Dock="Left" FontWeight="SemiBold" Margin="0,0,6,0" VerticalAlignment="Center" Text="순환 대기 감지:" />
+        <TextBlock x:Name="CycleTextLine" Text="{Binding CycleText}" TextWrapping="Wrap" VerticalAlignment="Center" />
+      </DockPanel>
+    </Border>
+    <!-- 이력 띠(LK-10): 최근 N 분 대기자 수 막대·최대 대기 초 선·기준 점선(앱 메모리, ASH 아님). -->
+    <Border x:Name="HistoryStrip" DockPanel.Dock="Top" Classes="history-strip" AutomationProperties.Name="Lock 이력">
+      <Border.IsVisible>
+        <MultiBinding Converter="{x:Static BoolConverters.And}">
+          <Binding Path="ShowHistoryStrip" />
+          <Binding Path="IsOpen" />
+        </MultiBinding>
+      </Border.IsVisible>
+      <DockPanel>
+        <TextBlock DockPanel.Dock="Left" FontWeight="SemiBold" VerticalAlignment="Center" Margin="0,0,10,0" Text="{Binding HistoryLabel}" />
+        <StackPanel DockPanel.Dock="Right" Margin="12,0,0,0" VerticalAlignment="Center" Spacing="1">
+          <StackPanel Orientation="Horizontal" Spacing="4">
+            <Border Classes="legend-bar" />
+            <TextBlock Text="대기자" />
+            <TextBlock Classes="mono" FontWeight="SemiBold" Text="{Binding HistoryWaitersText}" />
+            <TextBlock Classes="dim" Text="{Binding HistoryPeakText}" />
+          </StackPanel>
+          <StackPanel Orientation="Horizontal" Spacing="4">
+            <Border Classes="legend-line" />
+            <TextBlock Text="최대 대기" />
+            <TextBlock Classes="mono" Classes.danger-text="{Binding HistoryOverThreshold}" FontWeight="SemiBold" Text="{Binding HistoryMaxWaitText}" />
+            <TextBlock Classes="dim" Text="{Binding HistoryThresholdText}" />
+          </StackPanel>
+        </StackPanel>
+        <Panel>
+          <vm:LockHistoryChart x:Name="HistoryChart" Height="42" MinWidth="200" Points="{Binding HistoryPoints}" WindowMinutes="{Binding HistoryMinutes}"
+                               ThresholdSeconds="{Binding ChartThreshold}" AutomationProperties.Name="이력: 대기자 수 막대, 최대 대기 초 선" />
+          <TextBlock Classes="dim" Margin="4,0" IsVisible="{Binding HistorySparse}" Text="새로 고침마다 한 점씩 쌓입니다(앱 메모리, DB 에 쓰지 않음)." />
+        </Panel>
+      </DockPanel>
+    </Border>
     <!-- 진행 막대: 자리를 늘 3 DIP 차지해 다시 읽을 때 본문이 흔들리지 않는다. -->
     <Panel DockPanel.Dock="Top" Height="3">
       <ProgressBar IsIndeterminate="True" Height="3" MinHeight="3" IsVisible="{Binding IsBusy}" />
@@ -310,16 +426,31 @@
             <TabItem Header="보유자 영향 순위">
               <ctl:DetailTable x:Name="ImpactTable" />
             </TabItem>
-            <TabItem Header="방치 트랜잭션">
-              <Panel>
-                <ContentControl Content="{Binding IdleTransactionsContent}" IsVisible="{Binding HasIdleContent}" />
-                <StackPanel Classes="empty" IsVisible="{Binding !HasIdleContent}" HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="6" Margin="16">
-                  <ContentControl HorizontalAlignment="Center" Opacity="0.55"
-                                  Content="{Binding Source='history', Converter={x:Static icons:IconKeyConverter.Instance}, ConverterParameter=32}" />
-                  <TextBlock FontWeight="SemiBold" Text="방치 트랜잭션" />
-                  <TextBlock Classes="dim" Text="INACTIVE 인데 트랜잭션을 연 세션 목록은 다음 단계에서 이 탭에 들어옵니다." />
+            <TabItem AutomationProperties.Name="방치 트랜잭션">
+              <TabItem.Header>
+                <StackPanel Orientation="Horizontal">
+                  <TextBlock Text="방치 트랜잭션" VerticalAlignment="Center" />
+                  <TextBlock Classes="count" Text="{Binding IdleCountText}" />
                 </StackPanel>
-              </Panel>
+              </TabItem.Header>
+              <DockPanel>
+                <Border DockPanel.Dock="Top" Classes="caption">
+                  <DockPanel>
+                    <CheckBox DockPanel.Dock="Right" Content="60 초 이상만" IsChecked="{Binding IdleLongOnly, Mode=TwoWay}" MinHeight="0" Padding="4,0,0,0"
+                              FontSize="{DynamicResource OrandaFontSizeSmall}" ToolTip.Tip="마지막 호출 뒤 60 초 이상 쉰 세션만" />
+                    <TextBlock Classes="dim" Text="INACTIVE 인데 트랜잭션을 연 세션 · 경과 순" TextTrimming="CharacterEllipsis" />
+                  </DockPanel>
+                </Border>
+                <Panel>
+                  <StackPanel Classes="empty" IsVisible="{Binding !HasIdleTransactions}" HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="6" Margin="16">
+                    <ContentControl HorizontalAlignment="Center" Opacity="0.55"
+                                    Content="{Binding Source='ok', Converter={x:Static icons:IconKeyConverter.Instance}, ConverterParameter=32}" />
+                    <TextBlock FontWeight="SemiBold" Text="방치 트랜잭션이 없습니다" />
+                    <TextBlock Classes="dim" Text="트랜잭션을 연 채 쉬는(INACTIVE) 세션이 없습니다. 「60 초 이상만」 을 끄면 짧게 쉰 세션도 봅니다." />
+                  </StackPanel>
+                  <ctl:DetailTable x:Name="IdleTable" IsVisible="{Binding HasIdleTransactions}" />
+                </Panel>
+              </DockPanel>
             </TabItem>
             <TabItem AutomationProperties.Name="DDL 잠금">
               <TabItem.Header>
@@ -346,16 +477,38 @@
                 </Panel>
               </DockPanel>
             </TabItem>
-            <TabItem Header="데드락 기록">
-              <Panel>
-                <ContentControl Content="{Binding DeadlocksContent}" IsVisible="{Binding HasDeadlockContent}" />
-                <StackPanel Classes="empty" IsVisible="{Binding !HasDeadlockContent}" HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="6" Margin="16">
-                  <ContentControl HorizontalAlignment="Center" Opacity="0.55"
-                                  Content="{Binding Source='history', Converter={x:Static icons:IconKeyConverter.Instance}, ConverterParameter=32}" />
-                  <TextBlock FontWeight="SemiBold" Text="데드락 기록" />
-                  <TextBlock Classes="dim" Text="alert 로그의 ORA-00060 기록은 다음 단계에서 이 탭에 들어옵니다." />
+            <TabItem AutomationProperties.Name="데드락 기록">
+              <TabItem.Header>
+                <StackPanel Orientation="Horizontal">
+                  <TextBlock Text="데드락 기록" VerticalAlignment="Center" />
+                  <TextBlock Classes="count" Text="{Binding DeadlockCountText}" />
                 </StackPanel>
-              </Panel>
+              </TabItem.Header>
+              <DockPanel>
+                <Border DockPanel.Dock="Bottom" Classes="panel-status">
+                  <DockPanel>
+                    <TextBlock DockPanel.Dock="Right" Margin="12,0,0,0" Text="Enter: 편집기로 열기" IsVisible="{Binding HasDeadlocks}" />
+                    <TextBlock Text="{Binding DeadlockSummary}" TextTrimming="CharacterEllipsis" />
+                  </DockPanel>
+                </Border>
+                <Panel>
+                  <!-- 11g·18c 이하: 이유와 다음 할 일 -->
+                  <StackPanel Classes="empty" IsVisible="{Binding DeadlockUnsupported}" HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="6" Margin="16">
+                    <ContentControl HorizontalAlignment="Center" Opacity="0.55"
+                                    Content="{Binding Source='info', Converter={x:Static icons:IconKeyConverter.Instance}, ConverterParameter=32}" />
+                    <TextBlock FontWeight="SemiBold" Text="이 버전은 데드락 기록을 읽지 않습니다" />
+                    <TextBlock Classes="dim" Text="{Binding DeadlockNotice}" />
+                    <TextBlock Classes="dim" Text="순환 대기 띠는 이 버전에서도 동작합니다(앱이 대기 그래프로 계산)." />
+                  </StackPanel>
+                  <StackPanel Classes="empty" IsVisible="{Binding ShowNoDeadlocks}" HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="6" Margin="16">
+                    <ContentControl HorizontalAlignment="Center" Opacity="0.55"
+                                    Content="{Binding Source='ok', Converter={x:Static icons:IconKeyConverter.Instance}, ConverterParameter=32}" />
+                    <TextBlock FontWeight="SemiBold" Text="최근 24 시간 데드락이 없습니다" />
+                    <TextBlock Classes="dim" Text="alert 로그(v$diag_alert_ext)의 ORA-00060 을 읽기 전용으로 봅니다. 이 뷰를 읽을 권한이 없어도 빈 목록으로 보입니다." />
+                  </StackPanel>
+                  <ctl:DetailTable x:Name="DeadlockTable" IsVisible="{Binding HasDeadlocks}" />
+                </Panel>
+              </DockPanel>
             </TabItem>
           </TabControl>
           <GridSplitter Grid.Row="1" ResizeDirection="Rows" Background="{DynamicResource OrandaSplitterBrush}" />
@@ -381,6 +534,13 @@
               <StackPanel Margin="10,8,10,10" Spacing="6">
                 <TextBlock Classes="dim" Text="{Binding SqlMessage}" TextWrapping="Wrap" IsVisible="{Binding !HasHolderSql}" />
                 <TextBlock Classes="section-label" Text="{Binding HolderCaption}" TextWrapping="Wrap" />
+                <Border Classes="callout warning" IsVisible="{Binding HasIdleCallout}">
+                  <DockPanel>
+                    <ContentControl DockPanel.Dock="Left" Margin="0,1,8,0" VerticalAlignment="Top"
+                                    Content="{Binding Source='warn', Converter={x:Static icons:IconKeyConverter.Instance}, ConverterParameter=16}" />
+                    <TextBlock TextWrapping="Wrap" Text="{Binding IdleCallout}" />
+                  </DockPanel>
+                </Border>
                 <Border Classes="callout" IsVisible="{Binding HolderHasNoCurrentSql}">
                   <DockPanel>
                     <ContentControl DockPanel.Dock="Left" Margin="0,1,8,0" VerticalAlignment="Top"
@@ -484,4 +644,7 @@
       </Grid>
     </Panel>
   </DockPanel>
+  <!-- 임계치 알림(오른쪽 아래, 상태 줄 위). 탭이 뒤에 있으면 View 가 메인 창 오버레이에 같은 카드를 띄운다. -->
+  <vm:LockAlertToast x:Name="InlineToast" Margin="0,0,16,34" IsVisible="{Binding HasActiveAlert}" />
+  </Panel>
 </UserControl>

@@ -64,11 +64,35 @@ public static class LockText
 
     /// <summary>대기 이벤트가 행 잠금 대기인지(잠긴 행 탭을 쓸 수 있는지).</summary>
     public static bool IsRowLockWait(string? ev) => ev?.Contains("row lock contention", StringComparison.OrdinalIgnoreCase) == true;
+
+    /// <summary>경과: 1 분 아래는 「45 초」, 1 시간 아래는 「17 분」, 그 위는 「2 시간 5 분」.</summary>
+    public static string Elapsed(long seconds)
+    {
+        var s = Math.Max(0, seconds);
+        return s < 60 ? string.Create(CultureInfo.InvariantCulture, $"{s} 초")
+            : s < 3600 ? string.Create(CultureInfo.InvariantCulture, $"{s / 60} 분")
+            : string.Create(CultureInfo.InvariantCulture, $"{s / 3600:N0} 시간 {s % 3600 / 60} 분");
+    }
+
+    /// <summary>사람이 손으로 SQL 을 치는 도구 프로그램 이름인지(방치 트랜잭션 안내 문구).</summary>
+    public static bool IsHumanTool(string? program)
+    {
+        if (string.IsNullOrWhiteSpace(program))
+        {
+            return false;
+        }
+
+        string[] tools = ["SQL Developer", "sqldeveloper", "Toad", "PL/SQL Developer", "plsqldev", "sqlplus", "DBeaver", "Orange", "Oranda", "DataGrip", "SQL*Plus", "sqlcl"];
+        return tools.Any(t => program.Contains(t, StringComparison.OrdinalIgnoreCase));
+    }
+
+    /// <summary>gv$session.status 가 INACTIVE 인지.</summary>
+    public static bool IsInactive(string? status) => string.Equals(status, "INACTIVE", StringComparison.OrdinalIgnoreCase);
 }
 
 /// <summary>
 /// 대기 트리 한 줄(보유자 루트 → 대기자). 앞쪽 순회 차례로 펼친 줄이며 안내선은 계획 창의 <see cref="PlanTreeLines"/> 를 그대로 쓴다.
-/// 상태는 계약(<see cref="BlockingNode"/>)에 없어 현재 SQL 이 없으면 INACTIVE 로 본다.
+/// 상태는 gv$session.status(<see cref="BlockingNode.Status"/>, 없으면 잠금 목록의 <see cref="LockRow.Status"/>)를 그대로 보인다.
 /// </summary>
 public sealed class LockTreeItem
 {
@@ -111,10 +135,13 @@ public sealed class LockTreeItem
 
     public string Username => Node.Username ?? Facts.Username ?? "-";
 
-    /// <summary>뿌리는 현재 SQL 이 없으면 INACTIVE(트랜잭션만 열린 채), 기다리는 세션은 ACTIVE.</summary>
-    public bool IsInactive => IsHolder && string.IsNullOrEmpty(Node.SqlId);
+    /// <summary>gv$session.status. 트리·잠금 목록 어디에도 없으면 null.</summary>
+    public string? Status => Node.Status ?? Facts.Status;
 
-    public string StatusText => IsInactive ? "INACTIVE" : "ACTIVE";
+    /// <summary>INACTIVE(트랜잭션만 열린 채 쉬는 세션). 상태 글자를 경고색으로.</summary>
+    public bool IsInactive => LockText.IsInactive(Status);
+
+    public string StatusText => Status ?? LockText.Dash;
 
     public string WaitText => IsHolder ? LockText.Dash : LockText.Seconds(Node.SecondsInWait);
 
@@ -136,8 +163,8 @@ public sealed class LockTreeItem
 
     public string? CurrentOrPreviousSqlId => Node.SqlId is { Length: > 0 } s ? s : Facts.PrevSqlId;
 
-    public string ToolTip => IsInactive
-        ? "현재 SQL 이 없어 INACTIVE 로 봅니다(트랜잭션만 열려 있음)"
+    public string ToolTip => IsInactive && IsHolder
+        ? "INACTIVE — 실행 중인 SQL 없이 트랜잭션만 열려 있습니다(커밋 빠짐 의심)"
         : $"{KeyText} {Username} · {EventText}";
 
     private static int Count(BlockingNode n) => 1 + n.Waiters.Sum(Count);
@@ -145,7 +172,7 @@ public sealed class LockTreeItem
 
 /// <summary>잠금 목록에서 모은 세션별 정보(트리 줄·영향 순위·종료 확인이 쓴다).</summary>
 public sealed record LockSessionFacts(string? Username, string? Machine, string? Program, string? PrevSqlId, string? TmObject,
-    DateTimeOffset? TransactionStart, long? UndoBlocks)
+    DateTimeOffset? TransactionStart, long? UndoBlocks, string? Status = null)
 {
     public static readonly LockSessionFacts Empty = new(null, null, null, null, null, null, null);
 
@@ -162,7 +189,8 @@ public sealed record LockSessionFacts(string? Username, string? Machine, string?
                 g.Select(r => r.PrevSqlId).FirstOrDefault(v => v is not null),
                 g.Where(r => r.LockType == "TM").Select(r => r.ObjectName).FirstOrDefault(v => v is not null),
                 tx?.TransactionStart,
-                tx?.UndoBlocks);
+                tx?.UndoBlocks,
+                g.Select(r => r.Status).FirstOrDefault(v => v is not null));
         }
 
         return map;
@@ -244,7 +272,7 @@ public sealed class ImpactItem(int rank, BlockerImpact impact, LockTreeItem? hol
         rank.ToString(CultureInfo.InvariantCulture),
         LockText.Key(Impact.Holder),
         holder?.Username ?? facts.Username ?? "-",
-        holder?.StatusText ?? string.Empty,
+        Impact.Status ?? holder?.Status ?? facts.Status ?? LockText.Dash,
         Impact.WaiterCount.ToString("N0", CultureInfo.InvariantCulture),
         LockText.Seconds(Impact.MaxWaitSeconds),
         LockText.Seconds(Impact.TotalWaitSeconds),

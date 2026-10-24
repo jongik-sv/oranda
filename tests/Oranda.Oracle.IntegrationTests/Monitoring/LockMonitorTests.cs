@@ -83,6 +83,8 @@ public class LockMonitorLogicTests
         Assert.Null(row.ObjectName);
         Assert.Equal(new DateTimeOffset(start, TimeSpan.Zero), row.TransactionStart);
         Assert.Equal(new SessionKey(1, 10, 100), row.BlockingSession);
+        Assert.Null(row.Status); // 열 24 가 없는 옛 결과
+        Assert.Equal("INACTIVE", OracleMonitorService.ToLockRow([.. r, "INACTIVE"]).Status);
 
         r[6] = "TM";
         r[12] = 2; // RAC 의 전역 막음
@@ -219,6 +221,14 @@ public sealed class LockMonitorTests : IAsyncLifetime
         return snap;
     }
 
+    /// <summary>서버 시각(DATE)을 서버 시간대로 UTC 로 바꾼 값이 지금과 가까운지(서버·PC 시간대가 달라도).</summary>
+    internal static void AssertRecentUtc(DateTimeOffset? at, int minutes = 10)
+    {
+        Assert.NotNull(at);
+        var now = DateTimeOffset.UtcNow;
+        Assert.InRange(at.Value, now.AddMinutes(-minutes), now.AddMinutes(2));
+    }
+
     private static string NewTable(string prefix) => prefix + Guid.NewGuid().ToString("N")[..8].ToUpperInvariant();
 
     [Fact]
@@ -230,6 +240,8 @@ public sealed class LockMonitorTests : IAsyncLifetime
         await ExecAsync(setup, $"INSERT INTO {table} VALUES (1, 0, 'first', 'clob text', DATE '2026-10-24')");
         await ExecAsync(setup, $"INSERT INTO {table} VALUES (2, 0, 'second', NULL, NULL)");
         var rowId = await ScalarAsync(setup, $"SELECT ROWIDTOCHAR(ROWID) FROM {table} WHERE id = 1");
+        var rowAddress = await ScalarAsync(setup,
+            $"SELECT DBMS_ROWID.ROWID_RELATIVE_FNO(ROWID) || ',' || DBMS_ROWID.ROWID_BLOCK_NUMBER(ROWID) || ',' || DBMS_ROWID.ROWID_ROW_NUMBER(ROWID) FROM {table} WHERE id = 1");
 
         var holder = await RawAsync();
         var holderKey = await KeyOfAsync(holder);
@@ -263,6 +275,8 @@ public sealed class LockMonitorTests : IAsyncLifetime
             Assert.NotNull(holderTxRow.TransactionStart);
             Assert.True(holderTxRow.UndoBlocks >= 1);
             Assert.Equal("SYSTEM", holderTxRow.Username);
+            Assert.Equal("INACTIVE", holderTxRow.Status); // TSK-05-04: gv$session.status
+            AssertRecentUtc(holderTxRow.TransactionStart);
             var holderTm = Assert.Single(snap.Rows, r => r.Session == holderKey && r.LockType == "TM");
             Assert.Equal(3, holderTm.HeldMode);
             Assert.Equal("SYSTEM." + table, holderTm.ObjectName);
@@ -278,10 +292,13 @@ public sealed class LockMonitorTests : IAsyncLifetime
             Assert.Equal("enq: TX - row lock contention", waiterRow.Event);
             Assert.NotNull(waiterRow.SqlId);
             Assert.True(waiterRow.SecondsInWait >= 0);
+            Assert.Equal("ACTIVE", waiterRow.Status);
 
             // 대기 트리: 보유자 뿌리 아래 두 대기자.
             var root = Assert.Single(snap.WaitTree.Roots, n => n.Session == holderKey);
             Assert.Equal(new[] { waiterKey, waiter2Key }.OrderBy(k => k.Sid), root.Waiters.Select(w => w.Session).OrderBy(k => k.Sid));
+            Assert.Equal("INACTIVE", root.Status);
+            Assert.All(root.Waiters, w => Assert.Equal("ACTIVE", w.Status));
             Assert.False(waiting.IsCompleted);
 
             // 거르기.
@@ -312,6 +329,7 @@ public sealed class LockMonitorTests : IAsyncLifetime
             var impact = await service.GetBlockerImpactAsync(monitor, default);
             var mine = Assert.Single(impact, i => i.Holder == holderKey);
             Assert.Equal(2, mine.WaiterCount);
+            Assert.Equal("INACTIVE", mine.Status);
             Assert.InRange(mine.MaxWaitSeconds, 0, mine.TotalWaitSeconds);
             Assert.DoesNotContain(impact, i => i.Holder == waiterKey);
             for (var i = 1; i < impact.Count; i++)
@@ -327,6 +345,9 @@ public sealed class LockMonitorTests : IAsyncLifetime
             Assert.Equal(table, locked.Table);
             Assert.Equal(["ID", "V", "NAME", "NOTE", "D"], locked.ColumnNames);
             Assert.Equal(["1", "0", "first", "clob text", "2026-10-24 00:00:00"], locked.Values);
+            // 블록·행은 DBMS_ROWID 와 같다. 파일은 v$datafile.rfile#(bigfile 표 공간이면 1024, DBMS_ROWID 는 0 을 돌려준다).
+            Assert.EndsWith(string.Create(CultureInfo.InvariantCulture, $",{locked.BlockNumber},{locked.RowNumber}"), rowAddress, StringComparison.Ordinal);
+            Assert.True(locked.FileNumber >= 0);
             Assert.Null(await service.GetLockedRowAsync(monitor, holderKey, default)); // 기다리지 않는 세션
             Assert.Null(await service.GetLockedRowAsync(monitor, new SessionKey(1, 999_999, 1), default));
 
@@ -334,6 +355,7 @@ public sealed class LockMonitorTests : IAsyncLifetime
             var bySession = await WaitForBindsAsync(() => service.GetWaitingBindsAsync(monitor, new WaitingBindTarget { Session = waiterKey }, default));
             Assert.Equal(["V", "ID"], bySession.Select(b => b.Name.TrimStart(':').ToUpperInvariant()));
             Assert.Equal("1", Assert.Single(bySession, b => b.Position == 2).Value);
+            Assert.All(bySession.Where(b => b.Value is not null), b => AssertRecentUtc(b.CapturedAt, minutes: 60)); // 캡처된 값만 시각이 있다
             var byCursor = await service.GetWaitingBindsAsync(monitor,
                 new WaitingBindTarget { Cursor = new CursorRef(waiterRow.SqlId!, null, waiterKey.InstanceId) }, default);
             Assert.Equal(bySession.Select(b => b.Name), byCursor.Select(b => b.Name));
@@ -489,6 +511,8 @@ public sealed class LockMonitorTests : IAsyncLifetime
             Assert.Equal("SYSTEM", row.Username);
             Assert.Equal(1, row.BlockedCount);
             Assert.False(string.IsNullOrEmpty(row.PrevSqlId));
+            Assert.True(row.LockCount >= 2, $"locks {row.LockCount}"); // TX + TM
+            AssertRecentUtc(row.TransactionStart);
 
             var list = await service.GetIdleTransactionsAsync(monitor, 0, default);
             for (var i = 1; i < list.Count; i++)
@@ -763,23 +787,31 @@ public sealed class LockMonitor11gTests : IAsyncLifetime
 
             var held = Assert.Single(snap.Rows, r => r.Session == holderKey && r.LockType == "TX");
             Assert.True(held.IsBlocking);
-            Assert.NotNull(held.TransactionStart);
+            LockMonitorTests.AssertRecentUtc(held.TransactionStart);
+            Assert.Equal("INACTIVE", held.Status);
             Assert.Contains(snap.Rows, r => r.Session == holderKey && r.LockType == "TM" && r.ObjectName == "SYSTEM." + table);
             var wait = Assert.Single(snap.Rows, r => r.Session == waiterKey && r.LockType == "TX" && r.RequestedMode == 6);
             Assert.Equal(holderKey, wait.BlockingSession);
-            Assert.Contains(snap.WaitTree.Roots, n => n.Session == holderKey);
+            Assert.Equal("INACTIVE", Assert.Single(snap.WaitTree.Roots, n => n.Session == holderKey).Status);
+            Assert.Equal("ACTIVE", wait.Status);
 
-            Assert.Equal(1, Assert.Single(await service.GetBlockerImpactAsync(monitor, default), i => i.Holder == holderKey).WaiterCount);
+            var impact11 = Assert.Single(await service.GetBlockerImpactAsync(monitor, default), i => i.Holder == holderKey);
+            Assert.Equal(1, impact11.WaiterCount);
+            Assert.Equal("INACTIVE", impact11.Status);
 
             var locked = await service.GetLockedRowAsync(monitor, waiterKey, default);
             Assert.NotNull(locked);
             Assert.Equal(rowId, locked.RowId);
             Assert.Equal(["1", "0", "first"], locked.Values);
+            Assert.True(locked.FileNumber > 0 && locked.BlockNumber > 0 && locked.RowNumber >= 0);
 
             _ = await service.GetWaitingBindsAsync(monitor, new WaitingBindTarget { Session = waiterKey }, default);
             _ = await service.GetDdlLocksAsync(monitor, default);
             Assert.Empty(await service.GetRecentDeadlocksAsync(monitor, 10, default)); // 11.2: v$diag_alert_ext 없음
-            Assert.Contains(await service.GetIdleTransactionsAsync(monitor, 0, default), t => t.Session == holderKey && t.BlockedCount == 1);
+            var idle11 = Assert.Single(await service.GetIdleTransactionsAsync(monitor, 0, default), t => t.Session == holderKey);
+            Assert.Equal(1, idle11.BlockedCount);
+            Assert.True(idle11.LockCount >= 2);
+            LockMonitorTests.AssertRecentUtc(idle11.TransactionStart);
 
             await holderTx.RollbackAsync();
             await waiting.WaitAsync(TimeSpan.FromSeconds(30));

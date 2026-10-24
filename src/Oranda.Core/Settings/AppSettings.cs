@@ -165,6 +165,34 @@ public sealed record MonitorSettings
 {
     /// <summary>2~60.</summary>
     public int RefreshSeconds { get; init; } = 5;
+
+    /// <summary>Lock 모니터 이력·임계치 알림(oranda1 TSK-05-04). 선택 필드라 스키마 버전은 그대로.</summary>
+    public LockAlertSettings LockAlert { get; init; } = new();
+}
+
+/// <summary>Lock 모니터 「알림 설정」 플라이아웃 값. 화면이 범위를 맞춘다(대기 1~86400 초, 대기자 1~1000 명, 보관 5~720 분).</summary>
+public sealed record LockAlertSettings
+{
+    /// <summary>임계치 알림 켜기(기본 켬).</summary>
+    public bool Enabled { get; init; } = true;
+
+    /// <summary>가장 오래 기다린 세션이 이 초 이상이면 알림.</summary>
+    public int WaitSeconds { get; init; } = 120;
+
+    /// <summary>한 보유자 뒤 대기자가 이 수 이상이면 알림.</summary>
+    public int Waiters { get; init; } = 5;
+
+    /// <summary>알림 때 보유자·대기자 SQL 스냅샷을 앱 데이터 폴더 lock-history 에 텍스트로 남긴다.</summary>
+    public bool SaveSnapshot { get; init; } = true;
+
+    /// <summary>Lock 모니터 탭이 뒤에 있어도 창 오른쪽 아래 알림을 띄운다.</summary>
+    public bool NotifyWhenHidden { get; init; } = true;
+
+    /// <summary>이력 띠 보관 분(앱 메모리).</summary>
+    public int HistoryMinutes { get; init; } = 30;
+
+    /// <summary>이력 점을 lock-history 폴더 CSV 로도 남긴다(기본 끔).</summary>
+    public bool SaveHistoryFile { get; init; }
 }
 
 public sealed record WorkspaceSettings

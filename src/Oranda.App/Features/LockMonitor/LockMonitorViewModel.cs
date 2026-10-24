@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Diagnostics;
 using System.Globalization;
+using System.IO;
 using System.Linq;
 using System.Text;
 using System.Threading;
@@ -19,6 +20,7 @@ using Oranda.Core.History;
 using Oranda.Core.Monitoring;
 using Oranda.Core.Plans;
 using Oranda.Core.Sessions;
+using Oranda.Core.Settings;
 using Oranda.Core.Shell;
 
 namespace Oranda.App.Features.LockMonitor;
@@ -68,6 +70,7 @@ public sealed partial class LockMonitorViewModel : ToolPanelViewModelBase, IDisp
     private readonly SemaphoreSlim _gate = new(1, 1);
     private readonly IServiceProvider? _services;
     private readonly HashSet<SessionKey> _collapsed = [];
+    private readonly LockThresholdTracker _tracker = new();
     private IMonitorService? _monitor;
     private CancellationTokenSource? _autoLoop;
     private CancellationTokenSource? _firstRead;
@@ -77,6 +80,14 @@ public sealed partial class LockMonitorViewModel : ToolPanelViewModelBase, IDisp
     private List<LockTreeItem> _allTree = [];
     private (SessionKey? Key, int Tab)? _detailLoaded;
     private bool _ddlLoaded;
+    private bool _idleLoaded;
+    private bool _deadlocksLoaded;
+    private bool _applyingSettings;
+    private bool _thresholdPublished;
+    private string _mainStatus = string.Empty;
+    private LockHistoryBuffer? _history;
+    private LockAlert? _pendingAlert;
+    private CancellationTokenSource? _alertTimer;
     private bool _autoStarted;
     private bool _disposed;
 
@@ -214,13 +225,90 @@ public sealed partial class LockMonitorViewModel : ToolPanelViewModelBase, IDisp
     [ObservableProperty]
     private string _hintCountText = string.Empty;
 
-    /// <summary>방치 트랜잭션 탭 본문(TSK-05-04 가 채운다). null 이면 자리 안내.</summary>
+    // ---- 방치 트랜잭션 탭(LK-12) ----
+    /// <summary>「60 초 이상만」(기본 켬). 끄면 마지막 호출 뒤 0 초부터.</summary>
     [ObservableProperty]
-    private object? _idleTransactionsContent;
+    private bool _idleLongOnly = true;
 
-    /// <summary>데드락 기록 탭 본문(TSK-05-04 가 채운다). null 이면 자리 안내.</summary>
     [ObservableProperty]
-    private object? _deadlocksContent;
+    private string _idleSummary = "방치 트랜잭션 · 이 탭을 볼 때 읽습니다";
+
+    [ObservableProperty]
+    private string _idleCountText = string.Empty;
+
+    /// <summary>SQL 탭 경고 상자(방치 트랜잭션을 골랐을 때). null 이면 숨김.</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasIdleCallout))]
+    private string? _idleCallout;
+
+    // ---- 데드락 기록 탭(LK-12) ----
+    /// <summary>읽지 않는 이유(11g·18c 이하). null 이면 목록.</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(DeadlockUnsupported), nameof(ShowNoDeadlocks))]
+    private string? _deadlockNotice;
+
+    [ObservableProperty]
+    private string _deadlockSummary = "v$diag_alert_ext · 최근 24 시간 · 읽기 전용";
+
+    [ObservableProperty]
+    private string _deadlockCountText = string.Empty;
+
+    /// <summary>대기 그래프 순환 띠 글(「1·0388 → 2·1903 → 1·0388. Oracle 이 …」). null 이면 숨김.</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasCycle))]
+    private string? _cycleText;
+
+    // ---- 이력 띠(LK-10) ----
+    [ObservableProperty]
+    private bool _showHistoryStrip = true;
+
+    [ObservableProperty]
+    private IReadOnlyList<LockHistoryPoint> _historyPoints = [];
+
+    [ObservableProperty]
+    private string _historyLabel = "최근 30 분";
+
+    [ObservableProperty]
+    private string _historyWaitersText = "0 명";
+
+    [ObservableProperty]
+    private string _historyPeakText = string.Empty;
+
+    [ObservableProperty]
+    private string _historyMaxWaitText = "0 초";
+
+    [ObservableProperty]
+    private bool _historyOverThreshold;
+
+    [ObservableProperty]
+    private string _historyThresholdText = string.Empty;
+
+    // ---- 알림 설정(LK-10·11, settings monitor.lockAlert) ----
+    [ObservableProperty]
+    private bool _alertEnabled = true;
+
+    [ObservableProperty]
+    private int _alertWaitSeconds = 120;
+
+    [ObservableProperty]
+    private int _alertWaiters = 5;
+
+    [ObservableProperty]
+    private bool _saveSnapshot = true;
+
+    [ObservableProperty]
+    private bool _notifyWhenHidden = true;
+
+    [ObservableProperty]
+    private int _historyMinutes = 30;
+
+    [ObservableProperty]
+    private bool _saveHistoryFile;
+
+    /// <summary>창 오른쪽 아래 알림(8 초 뒤 사라짐). null 이면 숨김.</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasActiveAlert), nameof(ActiveAlertMessage), nameof(HasAlertSnapshot))]
+    private LockAlert? _activeAlert;
 
     public LockMonitorViewModel()
     {
@@ -331,9 +419,73 @@ public sealed partial class LockMonitorViewModel : ToolPanelViewModelBase, IDisp
 
     public bool DdlDenied => DdlNotice is not null;
 
-    public bool HasIdleContent => IdleTransactionsContent is not null;
+    public ObservableCollection<IdleTransactionItem> IdleTransactions { get; } = [];
 
-    public bool HasDeadlockContent => DeadlocksContent is not null;
+    public ObservableCollection<DeadlockItem> Deadlocks { get; } = [];
+
+    public bool HasIdleTransactions => IdleTransactions.Count > 0;
+
+    public bool HasDeadlocks => Deadlocks.Count > 0;
+
+    public bool DeadlockUnsupported => DeadlockNotice is not null;
+
+    /// <summary>「최근 24 시간 데드락이 없습니다」(읽었고 목록이 비었을 때).</summary>
+    public bool ShowNoDeadlocks => !HasDeadlocks && !DeadlockUnsupported;
+
+    /// <summary>이력 점이 둘보다 적어 그래프 대신 안내를 보인다.</summary>
+    public bool HistorySparse => HistoryPoints.Count < 2;
+
+    /// <summary>이력 그래프 기준선(알림을 끄면 0 = 선 없음).</summary>
+    public long ChartThreshold => AlertEnabled ? AlertWaitSeconds : 0;
+
+    public bool HasIdleCallout => IdleCallout is not null;
+
+    public bool HasCycle => CycleText is not null;
+
+    public bool HasActiveAlert => ActiveAlert is not null;
+
+    public string ActiveAlertMessage => ActiveAlert?.Message ?? string.Empty;
+
+    public bool HasAlertSnapshot => ActiveAlert?.SnapshotPath is not null;
+
+    /// <summary>찾은 순환들(순환 띠·시험용).</summary>
+    public IReadOnlyList<IReadOnlyList<SessionKey>> Cycles { get; private set; } = [];
+
+    /// <summary>이 접속의 이력(창을 닫아도 프로필마다 남는다). 접속 전에는 null.</summary>
+    public LockHistoryBuffer? History => _history;
+
+    /// <summary>임계치 판정 규칙(설정 값).</summary>
+    public LockAlertRule AlertRule => new(AlertWaitSeconds, AlertWaiters);
+
+    /// <summary>스냅샷·이력 파일 폴더(앱 데이터 폴더\lock-history). 없으면 파일을 쓰지 않는다.</summary>
+    public string? HistoryFolder { get; set; }
+
+    /// <summary>알림 설정이 바뀌면 부른다(설정 파일 저장). 시험은 비워 둔다.</summary>
+    public Action<LockAlertSettings>? SaveSettings { get; set; }
+
+    /// <summary>임계치 상태를 상태 줄 막음 칩(BlockerWatcher)에 알린다.</summary>
+    public Action<LockThresholdChanged>? PublishThreshold { get; set; }
+
+    /// <summary>「대기 트리 보기」: Lock 모니터 탭을 앞으로.</summary>
+    public Func<Task>? BringToFront { get; set; }
+
+    /// <summary>창 알림이 떠 있는 시간(시안 8 초).</summary>
+    public TimeSpan AlertDuration { get; set; } = TimeSpan.FromSeconds(8);
+
+    /// <summary>새 알림이 떴다(View 가 탭이 뒤에 있으면 창 오버레이로 띄운다).</summary>
+    public event EventHandler<LockAlert>? AlertRaised;
+
+    /// <summary>지금 화면에 있는 알림 설정 값.</summary>
+    public LockAlertSettings CurrentAlertSettings => new()
+    {
+        Enabled = AlertEnabled,
+        WaitSeconds = AlertWaitSeconds,
+        Waiters = AlertWaiters,
+        SaveSnapshot = SaveSnapshot,
+        NotifyWhenHidden = NotifyWhenHidden,
+        HistoryMinutes = HistoryMinutes,
+        SaveHistoryFile = SaveHistoryFile,
+    };
 
     /// <summary>고른 세션의 트리 줄(접혀 숨은 줄 포함). 트리에 없으면 null.</summary>
     public LockTreeItem? SelectedTreeItem => SelectedKey is { } k ? _allTree.FirstOrDefault(i => i.Key == k) : null;
@@ -473,6 +625,11 @@ public sealed partial class LockMonitorViewModel : ToolPanelViewModelBase, IDisp
         }
 
         _ddlLoaded = false;
+        _idleLoaded = false;
+        _deadlocksLoaded = false;
+        _tracker.Reset();
+        _history = LockHistoryBuffer.For(session.Profile.Id, TimeSpan.FromMinutes(HistoryMinutes));
+        PostToUi(UpdateHistory);
         State = LockViewState.Loading;
         UpdateKeys();
         OnPropertyChanged(nameof(CanKill));
@@ -507,6 +664,7 @@ public sealed partial class LockMonitorViewModel : ToolPanelViewModelBase, IDisp
         State = LockViewState.NoConnection;
         Access.SetAccount(null);
         UpdateKeys();
+        ClearThreshold();
         if (session is not null)
         {
             await CloseSessionAsync(session);
@@ -580,18 +738,464 @@ public sealed partial class LockMonitorViewModel : ToolPanelViewModelBase, IDisp
             return;
         }
 
+        if (Interlocked.Exchange(ref _pendingAlert, null) is { } alert)
+        {
+            await RaiseAlertAsync(alert, ct);
+        }
+
         if (!keepDetail)
         {
             _detailLoaded = null;
             _ddlLoaded = false;
+            _deadlocksLoaded = false;
         }
 
-        if (TopTabIndex == DdlTab)
+        // 방치 트랜잭션은 그 탭을 보는 동안 새로 고침마다 다시 읽는다(경과 시간이 바뀐다).
+        _idleLoaded = false;
+        switch (TopTabIndex)
         {
-            await LoadDdlLocksAsync(ct);
+            case DdlTab:
+                await LoadDdlLocksAsync(ct);
+                break;
+            case IdleTab:
+                await LoadIdleTransactionsAsync(ct);
+                break;
+            case DeadlockTab:
+                await LoadDeadlocksAsync(ct);
+                break;
         }
 
         await LoadDetailAsync(ct);
+    }
+
+    // ---- 방치 트랜잭션·데드락 기록(LK-12) ------------------------------------------------------
+
+    /// <summary>방치 트랜잭션 탭: INACTIVE 인데 트랜잭션을 연 세션(「60 초 이상만」 이면 마지막 호출 뒤 60 초 이상).</summary>
+    public Task LoadIdleTransactionsAsync(CancellationToken ct = default)
+    {
+        if (_idleLoaded)
+        {
+            return Task.CompletedTask;
+        }
+
+        return LoadIdleCoreAsync(IdleLongOnly ? 60 : 0, ct);
+    }
+
+    private async Task LoadIdleCoreAsync(int min, CancellationToken ct)
+    {
+        var ok = await RunAsync(async (monitor, session) =>
+        {
+            IReadOnlyList<IdleTransaction> rows;
+            try
+            {
+                rows = await monitor.GetIdleTransactionsAsync(session, min, ct);
+            }
+            catch (NotSupportedException)
+            {
+                rows = [];
+            }
+
+            _idleLoaded = true;
+            PostToUi(() => ApplyIdle(rows, _snapshot?.CollectedAt ?? DateTimeOffset.UtcNow));
+        }, ct);
+
+        // 방치 트랜잭션에서 고른 세션이면 SQL 탭을 그 세션 내용(prev_sql_id)으로 다시 읽는다.
+        if (ok && TopTabIndex == IdleTab && SelectedKey is { } key && IdleTransactions.Any(i => i.Key == key))
+        {
+            _detailLoaded = null;
+            await LoadDetailAsync(ct);
+        }
+    }
+
+    private void ApplyIdle(IReadOnlyList<IdleTransaction> rows, DateTimeOffset collectedAt)
+    {
+        IdleTransactions.Clear();
+        foreach (var r in rows)
+        {
+            IdleTransactions.Add(new IdleTransactionItem(r, collectedAt));
+        }
+
+        var blocking = IdleTransactions.Count(i => i.Row.BlockedCount > 0);
+        IdleCountText = IdleTransactions.Count > 0 ? IdleTransactions.Count.ToString(CultureInfo.InvariantCulture) : string.Empty;
+        IdleSummary = IdleTransactions.Count == 0
+            ? "방치 트랜잭션 0"
+            : string.Create(CultureInfo.InvariantCulture, $"방치 트랜잭션 {IdleTransactions.Count} · 그중 차단 중 {blocking}");
+        OnPropertyChanged(nameof(HasIdleTransactions));
+        UpdateStatusText();
+    }
+
+    /// <summary>데드락 기록 탭: alert 로그(v$diag_alert_ext, 19c 이상)의 최근 24 시간 ORA-00060. 11g·18c 이하는 이유만.</summary>
+    public Task LoadDeadlocksAsync(CancellationToken ct = default)
+    {
+        if (_deadlocksLoaded || _session is not { } current)
+        {
+            return Task.CompletedTask;
+        }
+
+        if (DeadlockReason(current.Server.Version) is { } reason)
+        {
+            _deadlocksLoaded = true;
+            Deadlocks.Clear();
+            DeadlockNotice = reason;
+            DeadlockCountText = string.Empty;
+            DeadlockSummary = "alert 로그 · 이 버전은 SQL 로 읽지 않음";
+            OnPropertyChanged(nameof(HasDeadlocks));
+            OnPropertyChanged(nameof(ShowNoDeadlocks));
+            return Task.CompletedTask;
+        }
+
+        return RunAsync(async (monitor, session) =>
+        {
+            IReadOnlyList<DeadlockEvent> rows;
+            try
+            {
+                rows = await monitor.GetRecentDeadlocksAsync(session, 50, ct);
+            }
+            catch (NotSupportedException)
+            {
+                rows = [];
+            }
+
+            _deadlocksLoaded = true;
+            PostToUi(() =>
+            {
+                var now = _snapshot?.CollectedAt ?? DateTimeOffset.UtcNow;
+                Deadlocks.Clear();
+                foreach (var r in rows.Where(r => r.At >= now.AddHours(-24)))
+                {
+                    Deadlocks.Add(new DeadlockItem(r, now));
+                }
+
+                DeadlockNotice = null;
+                DeadlockCountText = Deadlocks.Count > 0 ? Deadlocks.Count.ToString(CultureInfo.InvariantCulture) : string.Empty;
+                DeadlockSummary = string.Create(CultureInfo.InvariantCulture, $"v$diag_alert_ext · 최근 24 시간 · 읽기 전용 · {Deadlocks.Count}건");
+                OnPropertyChanged(nameof(HasDeadlocks));
+                OnPropertyChanged(nameof(ShowNoDeadlocks));
+            });
+        }, ct);
+    }
+
+    /// <summary>alert 로그를 SQL 로 읽지 않는 버전이면 그 이유(카탈로그 lock.deadlocks 는 19c 이상).</summary>
+    public static string? DeadlockReason(string? version)
+    {
+        var major = int.TryParse((version ?? string.Empty).Split('.')[0], NumberStyles.Integer, CultureInfo.InvariantCulture, out var m) ? m : 0;
+        return major switch
+        {
+            0 => null,
+            < 12 => "11g 에서는 alert 로그를 SQL 로 읽을 수 없습니다(12c 부터 v$diag_alert_ext). 서버의 alert_<SID>.log(경로: v$diag_info 「Diag Trace」)를 직접 보세요.",
+            < 19 => $"{major}c 에서는 alert 로그를 읽지 않습니다(19c 이상에서 v$diag_alert_ext 로 읽습니다). 서버의 alert_<SID>.log 를 직접 보세요.",
+            _ => null,
+        };
+    }
+
+    // ---- 이력·임계치 알림(LK-10·11) -------------------------------------------------------------
+
+    /// <summary>새로 고침 한 번 = 이력 한 점(대기자 수·최대 대기 초). 켜 두었으면 lock-history CSV 에도 한 줄.</summary>
+    private void RecordHistory(DateTimeOffset at, int waiters, long maxWait)
+    {
+        if (_history is not { } history)
+        {
+            return;
+        }
+
+        var point = new LockHistoryPoint(at, waiters, maxWait);
+        history.Add(point);
+        if (SaveHistoryFile && HistoryFolder is { } folder && _session is { } session)
+        {
+            var account = Access.AccountText;
+            _ = Task.Run(() =>
+            {
+                try
+                {
+                    LockHistoryFiles.AppendHistory(folder, account.Length > 0 ? account : session.Profile.Name, point);
+                }
+                catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+                {
+                    PostToUi(() => StatusText = "이력 파일을 쓰지 못했습니다: " + ex.Message);
+                }
+            });
+        }
+
+        UpdateHistory();
+    }
+
+    private void UpdateHistory()
+    {
+        var points = _history?.Points ?? [];
+        HistoryPoints = points;
+        OnPropertyChanged(nameof(HistorySparse));
+        HistoryLabel = string.Create(CultureInfo.InvariantCulture, $"최근 {HistoryMinutes} 분");
+        var last = points.Count > 0 ? points[^1] : null;
+        HistoryWaitersText = string.Create(CultureInfo.InvariantCulture, $"{last?.Waiters ?? 0:N0} 명");
+        HistoryPeakText = _history?.Peak is { Waiters: > 0 } peak
+            ? string.Create(CultureInfo.InvariantCulture, $"(최고 {peak.Waiters:N0} · {peak.At.ToLocalTime():HH:mm})")
+            : string.Empty;
+        HistoryMaxWaitText = LockText.Seconds(last?.MaxWaitSeconds ?? 0);
+        HistoryOverThreshold = AlertEnabled && last is { } l && l.MaxWaitSeconds >= AlertWaitSeconds;
+        OnPropertyChanged(nameof(ChartThreshold));
+        HistoryThresholdText = AlertEnabled
+            ? string.Create(CultureInfo.InvariantCulture, $"· 기준 {AlertWaitSeconds:N0} 초 ┄")
+            : "· 알림 꺼짐";
+        UpdateStatusRight();
+    }
+
+    /// <summary>임계치 판정: 처음 넘은 보유자가 있으면 알림을 걸어 두고(읽기가 끝난 뒤 스냅샷), 상태 줄 칩에 알린다.</summary>
+    private void EvaluateThreshold(DateTimeOffset at)
+    {
+        if (!AlertEnabled)
+        {
+            ClearThreshold();
+            return;
+        }
+
+        var result = _tracker.Evaluate(LockThresholdTracker.Loads(_allTree), AlertRule, at);
+        if (result.NewAlert is { } alert)
+        {
+            _pendingAlert = alert;
+        }
+
+        if (result.IsExceeded || _thresholdPublished)
+        {
+            _thresholdPublished = result.IsExceeded;
+            PublishThreshold?.Invoke(new LockThresholdChanged(result.IsExceeded, result.Waiters, result.MaxWaitSeconds));
+        }
+    }
+
+    private void ClearThreshold()
+    {
+        _tracker.Reset();
+        _pendingAlert = null;
+        if (_thresholdPublished)
+        {
+            _thresholdPublished = false;
+            PublishThreshold?.Invoke(new LockThresholdChanged(false, 0, 0));
+        }
+    }
+
+    /// <summary>알림: 켜 두었으면 그 시점 보유자·대기자 SQL 스냅샷을 쓰고, 창 알림을 띄운다(8 초 뒤 사라짐).</summary>
+    private async Task RaiseAlertAsync(LockAlert alert, CancellationToken ct)
+    {
+        if (SaveSnapshot && HistoryFolder is { } folder)
+        {
+            var path = await WriteSnapshotAsync(alert, folder, ct);
+            if (path is not null)
+            {
+                alert = alert with { SnapshotPath = path };
+            }
+        }
+
+        PostToUi(() =>
+        {
+            ActiveAlert = alert;
+            AlertRaised?.Invoke(this, alert);
+            StartAlertTimer();
+        });
+    }
+
+    private async Task<string?> WriteSnapshotAsync(LockAlert alert, string folder, CancellationToken ct)
+    {
+        var holder = _allTree.FirstOrDefault(t => t.Key == alert.Holder);
+        if (holder is null)
+        {
+            return null;
+        }
+
+        var entries = new List<LockSnapshotText.Entry>();
+        string? path = null;
+        await RunAsync(async (monitor, session) =>
+        {
+            var holderSql = holder.CurrentOrPreviousSqlId;
+            entries.Add(new("보유자", holder, holderSql, await SqlTextAsync(monitor, session, holderSql, ct)));
+            var texts = new Dictionary<string, string?>(StringComparer.Ordinal);
+            foreach (var w in Descendants(holder).OrderByDescending(w => w.WaitSeconds).Take(20))
+            {
+                var id = w.Node.SqlId;
+                if (id is { Length: > 0 } && !texts.ContainsKey(id))
+                {
+                    texts[id] = await SqlTextAsync(monitor, session, id, ct);
+                }
+
+                entries.Add(new("대기자", w, id, id is null ? null : texts.GetValueOrDefault(id)));
+            }
+
+            var text = LockSnapshotText.Build(alert, Access.AccountText, AlertRule, entries);
+            path = await Task.Run(() =>
+            {
+                try
+                {
+                    return LockHistoryFiles.WriteSnapshot(folder, alert, text);
+                }
+                catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+                {
+                    PostToUi(() => StatusText = "스냅샷을 쓰지 못했습니다: " + ex.Message);
+                    return null;
+                }
+            }, ct);
+        }, ct, reportAsBanner: false);
+        return path;
+    }
+
+    private void StartAlertTimer()
+    {
+        Interlocked.Exchange(ref _alertTimer, null)?.Cancel();
+        if (AlertDuration <= TimeSpan.Zero || AlertDuration == Timeout.InfiniteTimeSpan)
+        {
+            return;
+        }
+
+        var cts = new CancellationTokenSource();
+        _alertTimer = cts;
+        var shown = ActiveAlert;
+        _ = Task.Delay(AlertDuration, cts.Token).ContinueWith(
+            t =>
+            {
+                if (!t.IsCanceled)
+                {
+                    PostToUi(() =>
+                    {
+                        if (ReferenceEquals(ActiveAlert, shown))
+                        {
+                            ActiveAlert = null;
+                        }
+                    });
+                }
+            },
+            CancellationToken.None, TaskContinuationOptions.ExecuteSynchronously, TaskScheduler.Default);
+    }
+
+    /// <summary>창 알림 닫기(✕). 상태 줄 칩은 남는다.</summary>
+    public void DismissAlert()
+    {
+        Interlocked.Exchange(ref _alertTimer, null)?.Cancel();
+        ActiveAlert = null;
+    }
+
+    /// <summary>「대기 트리 보기」: 탭을 앞으로, 대기 트리에서 알린 보유자를 고른다.</summary>
+    public async Task ShowAlertHolderAsync()
+    {
+        var alert = ActiveAlert;
+        DismissAlert();
+        if (BringToFront is { } bring)
+        {
+            await bring();
+        }
+
+        TopTabIndex = TreeTab;
+        if (alert is not null && _allTree.Any(t => t.Key == alert.Holder))
+        {
+            SelectedKey = alert.Holder;
+        }
+    }
+
+    /// <summary>「트리에서 보기」(순환 띠): 대기 트리 탭에서 순환의 첫 세션을 고른다.</summary>
+    public void ShowCycleInTree()
+    {
+        TopTabIndex = TreeTab;
+        if (Cycles.Count > 0 && Cycles[0].Count > 0)
+        {
+            var first = Cycles[0][0];
+            SelectedKey = _allTree.FirstOrDefault(t => t.Key.InstanceId == first.InstanceId && t.Key.Sid == first.Sid)?.Key ?? first;
+        }
+    }
+
+    /// <summary>설정 파일 값을 화면에 넣는다(저장하지 않는다). 범위를 맞춘다.</summary>
+    public void ApplySettings(LockAlertSettings settings)
+    {
+        ArgumentNullException.ThrowIfNull(settings);
+        _applyingSettings = true;
+        try
+        {
+            AlertEnabled = settings.Enabled;
+            AlertWaitSeconds = settings.WaitSeconds;
+            AlertWaiters = settings.Waiters;
+            SaveSnapshot = settings.SaveSnapshot;
+            NotifyWhenHidden = settings.NotifyWhenHidden;
+            HistoryMinutes = settings.HistoryMinutes;
+            SaveHistoryFile = settings.SaveHistoryFile;
+        }
+        finally
+        {
+            _applyingSettings = false;
+        }
+
+        UpdateHistory();
+    }
+
+    partial void OnAlertEnabledChanged(bool value)
+    {
+        if (!value)
+        {
+            ClearThreshold();
+        }
+
+        AlertSettingChanged();
+    }
+
+    partial void OnAlertWaitSecondsChanged(int value)
+    {
+        var clamped = Math.Clamp(value, 1, 86_400);
+        if (clamped != value)
+        {
+            AlertWaitSeconds = clamped;
+            return;
+        }
+
+        AlertSettingChanged();
+    }
+
+    partial void OnAlertWaitersChanged(int value)
+    {
+        var clamped = Math.Clamp(value, 1, 1000);
+        if (clamped != value)
+        {
+            AlertWaiters = clamped;
+            return;
+        }
+
+        AlertSettingChanged();
+    }
+
+    partial void OnSaveSnapshotChanged(bool value) => AlertSettingChanged();
+
+    partial void OnNotifyWhenHiddenChanged(bool value) => AlertSettingChanged();
+
+    partial void OnSaveHistoryFileChanged(bool value) => AlertSettingChanged();
+
+    partial void OnHistoryMinutesChanged(int value)
+    {
+        var clamped = Math.Clamp(value, 5, 720);
+        if (clamped != value)
+        {
+            HistoryMinutes = clamped;
+            return;
+        }
+
+        if (_history is { } h)
+        {
+            h.Retention = TimeSpan.FromMinutes(clamped);
+        }
+
+        AlertSettingChanged();
+    }
+
+    private void AlertSettingChanged()
+    {
+        if (_applyingSettings)
+        {
+            return;
+        }
+
+        UpdateHistory();
+        SaveSettings?.Invoke(CurrentAlertSettings);
+    }
+
+    partial void OnIdleLongOnlyChanged(bool value)
+    {
+        _idleLoaded = false;
+        if (_session is not null && TopTabIndex == IdleTab)
+        {
+            _ = LoadIdleTransactionsAsync();
+        }
     }
 
     /// <summary>오른쪽 상세 탭이 보이는 내용을 읽는다(고른 세션·탭이 바뀌었을 때만).</summary>
@@ -614,9 +1218,19 @@ public sealed partial class LockMonitorViewModel : ToolPanelViewModelBase, IDisp
         };
     }
 
+    /// <summary>방치 트랜잭션 탭에서 고른 세션(그 탭이 앞에 있을 때만).</summary>
+    public IdleTransactionItem? SelectedIdle =>
+        TopTabIndex == IdleTab && SelectedKey is { } k ? IdleTransactions.FirstOrDefault(i => i.Key == k) : null;
+
     private Task LoadSqlAsync(CancellationToken ct)
     {
+        if (SelectedIdle is { } idle)
+        {
+            return LoadIdleSqlAsync(idle, ct);
+        }
+
         var (holder, waiter) = SelectedPair;
+        IdleCallout = null;
         if (holder is null)
         {
             HolderSql = WaiterSql = null;
@@ -636,7 +1250,7 @@ public sealed partial class LockMonitorViewModel : ToolPanelViewModelBase, IDisp
                 HolderCaption = $"보유자 · {holder.KeyText} {holder.Username} · {holder.StatusText}"
                     + (holder.Facts.TransactionStart is { } t && _snapshot is { } s
                         ? " " + LockText.Seconds((long)Math.Max(0, (s.CollectedAt - t).TotalSeconds)) : string.Empty);
-                HolderHasNoCurrentSql = holder.IsInactive;
+                HolderHasNoCurrentSql = string.IsNullOrEmpty(holder.Node.SqlId);
                 HolderSql = holderText is null ? null : Header(holder.CurrentOrPreviousSqlId) + holderText;
                 WaiterCaption = waiter is null ? string.Empty : $"대기자 · {waiter.KeyText} {waiter.Username} · {waiter.WaitText}";
                 WaiterSql = waiterText is null || waiter is null ? null : Header(waiter.Node.SqlId) + waiterText;
@@ -645,6 +1259,23 @@ public sealed partial class LockMonitorViewModel : ToolPanelViewModelBase, IDisp
             });
         }, ct);
     }
+
+    /// <summary>방치 트랜잭션: 「2·0644 SCOTT · INACTIVE 1,018 초 · 트랜잭션 17 분」 + 도구 안내 + 마지막 SQL(prev_sql_id).</summary>
+    private Task<bool> LoadIdleSqlAsync(IdleTransactionItem idle, CancellationToken ct) => RunAsync(async (monitor, session) =>
+    {
+        var text = await SqlTextAsync(monitor, session, idle.Row.PrevSqlId, ct);
+        PostToUi(() =>
+        {
+            HolderCaption = $"{LockText.Key(idle.Key)} {idle.Row.Username ?? "-"} · INACTIVE {LockText.Seconds(idle.Row.IdleSeconds)} · 트랜잭션 {LockText.Elapsed(idle.TransactionSeconds)}";
+            HolderHasNoCurrentSql = false;
+            IdleCallout = idle.Advice;
+            HolderSql = text is null ? null : "-- prev_sql_id " + idle.Row.PrevSqlId + "\n" + text;
+            WaiterCaption = string.Empty;
+            WaiterSql = null;
+            SqlMessage = HolderSql is null ? "마지막 SQL 을 찾지 못했습니다(커서가 공유 풀에서 나갔을 수 있습니다)." : string.Empty;
+            NotifySql();
+        });
+    }, ct);
 
     private static string Header(string? sqlId) => "-- " + sqlId + "\n";
 
@@ -709,13 +1340,36 @@ public sealed partial class LockMonitorViewModel : ToolPanelViewModelBase, IDisp
                 }
 
                 LockedRowId = row.RowId;
-                LockedRowCaption = $"{row.Owner}.{row.Table} · 대기자 {waiter.KeyText}";
+                LockedRowCaption = LockedRowText(row) + $" · 대기자 {waiter.KeyText}";
                 LockedRowCells = [.. row.ColumnNames.Select((c, i) => (IReadOnlyList<object?>)[c, i < row.Values.Count ? row.Values[i] ?? "(null)" : string.Empty])];
                 LockedRowSelect = $"SELECT * FROM \"{row.Owner}\".\"{row.Table}\" WHERE ROWID = '{row.RowId}'";
                 LockedRowMessage = string.Empty;
                 OnPropertyChanged(nameof(HasLockedRow));
             });
         }, ct);
+    }
+
+    /// <summary>「MES.LOT_HIST · 파일 7 · 블록 2495 · 행 2」(파일·블록·행이 없으면 표 이름만).</summary>
+    public static string LockedRowText(LockedRowInfo row)
+    {
+        ArgumentNullException.ThrowIfNull(row);
+        var text = row.Owner + "." + row.Table;
+        if (row.FileNumber is { } f)
+        {
+            text += string.Create(CultureInfo.InvariantCulture, $" · 파일 {f}");
+        }
+
+        if (row.BlockNumber is { } b)
+        {
+            text += string.Create(CultureInfo.InvariantCulture, $" · 블록 {b}");
+        }
+
+        if (row.RowNumber is { } r)
+        {
+            text += string.Create(CultureInfo.InvariantCulture, $" · 행 {r}");
+        }
+
+        return text;
     }
 
     private Task LoadBindsAsync(CancellationToken ct)
@@ -736,7 +1390,8 @@ public sealed partial class LockMonitorViewModel : ToolPanelViewModelBase, IDisp
             PostToUi(() =>
             {
                 BindCaption = $"대기자 {waiter.KeyText} · {waiter.Node.SqlId ?? "-"}";
-                BindCells = [.. binds.Select(b => (IReadOnlyList<object?>)[b.Name, b.Position.ToString(CultureInfo.InvariantCulture), b.DataType ?? string.Empty, b.Value ?? "(null)"])];
+                BindCells = [.. binds.Select(b => (IReadOnlyList<object?>)[b.Name, b.Position.ToString(CultureInfo.InvariantCulture), b.DataType ?? string.Empty, b.Value ?? "(null)",
+                    b.CapturedAt?.ToLocalTime().ToString("HH:mm:ss", CultureInfo.InvariantCulture) ?? string.Empty])];
                 BindMessage = binds.Count == 0 ? "캡처된 바인드가 없습니다." : string.Empty;
                 OnPropertyChanged(nameof(HasBinds));
             });
@@ -871,8 +1526,21 @@ public sealed partial class LockMonitorViewModel : ToolPanelViewModelBase, IDisp
         HasFilters = MinWaitSeconds > 0 || WaitingOnly || Blank(UsernameFilter) is not null || Blank(SchemaFilter) is not null || SelectedInstanceIndex > 0;
         State = _allTree.Count == 0 && Locks.Count == 0 ? LockViewState.Empty : LockViewState.Data;
         EmptyHint = EmptyHintText();
-        StatusText = string.Create(CultureInfo.InvariantCulture,
+        _mainStatus = string.Create(CultureInfo.InvariantCulture,
             $"보유자 {holders} · 대기 {waiters} · 잠금 {Locks.Count}행 · 최대 대기 {LockText.Seconds(maxWait)}");
+        UpdateStatusText();
+
+        // 데드락 힌트: 잠금 목록(대기자 → 막는 세션)과 트리 간선으로 순환을 찾는다(11g 에서도 앱이 계산).
+        Cycles = WaitCycles.Find(snap.Rows.Where(r => r.BlockingSession is not null && r.RequestedMode > 0)
+            .Select(r => (r.Session, r.BlockingSession!.Value))
+            .Concat(_allTree.Where(t => t.Parent is not null).Select(t => (t.Key, t.Parent!.Key))));
+        CycleText = Cycles.Count == 0
+            ? null
+            : string.Join(" · ", Cycles.Select(WaitCycles.Text))
+              + ". Oracle 이 곧 한쪽 문장을 ORA-00060 으로 되돌립니다(세션은 남음). 앱의 갱신 순서가 서로 반대인지 확인하세요.";
+
+        RecordHistory(snap.CollectedAt, waiters, maxWait);
+        EvaluateThreshold(snap.CollectedAt);
         _lastRead = string.Create(CultureInfo.InvariantCulture,
             $"{snap.CollectedAt.ToLocalTime():HH:mm:ss} 읽음 ({elapsed.TotalSeconds:0.00} s)");
         UpdateStatusRight();
@@ -918,7 +1586,19 @@ public sealed partial class LockMonitorViewModel : ToolPanelViewModelBase, IDisp
     private void UpdateStatusRight()
     {
         var next = AutoRefresh && NextRefreshIn > 0 ? $" · 다음 새로 고침 {NextRefreshIn} 초" : string.Empty;
-        StatusRight = _lastRead + next;
+        var points = _history is { Count: > 0 } h ? string.Create(CultureInfo.InvariantCulture, $" · 이력 {h.Count:N0} 점") : string.Empty;
+        StatusRight = _lastRead + points + next;
+    }
+
+    /// <summary>상태 줄 왼쪽: 방치 트랜잭션 탭이면 그 요약, 아니면 잠금 요약.</summary>
+    private void UpdateStatusText()
+    {
+        if (_mainStatus.Length == 0 && TopTabIndex != IdleTab)
+        {
+            return;
+        }
+
+        StatusText = TopTabIndex == IdleTab && _idleLoaded ? IdleSummary : _mainStatus;
     }
 
     partial void OnNextRefreshInChanged(int value)
@@ -1015,6 +1695,13 @@ public sealed partial class LockMonitorViewModel : ToolPanelViewModelBase, IDisp
         Impacts.Clear();
         Hints.Clear();
         DdlLocks.Clear();
+        IdleTransactions.Clear();
+        Deadlocks.Clear();
+        Cycles = [];
+        CycleText = null;
+        OnPropertyChanged(nameof(HasIdleTransactions));
+        OnPropertyChanged(nameof(HasDeadlocks));
+        OnPropertyChanged(nameof(ShowNoDeadlocks));
         SelectedKey = null;
     }
 
@@ -1106,9 +1793,31 @@ public sealed partial class LockMonitorViewModel : ToolPanelViewModelBase, IDisp
 
     partial void OnTopTabIndexChanged(int value)
     {
-        if (value == DdlTab && _session is not null)
+        UpdateStatusText();
+        if (_session is null)
         {
-            _ = LoadDdlLocksAsync();
+            return;
+        }
+
+        switch (value)
+        {
+            case DdlTab:
+                _ = LoadDdlLocksAsync();
+                break;
+            case IdleTab:
+                _idleLoaded = false;
+                _ = LoadIdleTransactionsAsync();
+                break;
+            case DeadlockTab:
+                _ = LoadDeadlocksAsync();
+                break;
+        }
+
+        // SQL 탭 내용이 위쪽 탭(방치 트랜잭션 여부)에 따라 달라진다. 방치 탭은 목록을 읽은 뒤에 다시 읽는다.
+        _detailLoaded = null;
+        if (value != IdleTab)
+        {
+            _ = LoadDetailAsync();
         }
     }
 
@@ -1117,10 +1826,6 @@ public sealed partial class LockMonitorViewModel : ToolPanelViewModelBase, IDisp
     partial void OnHolderSqlChanged(string? value) => OnPropertyChanged(nameof(HasHolderSql));
 
     partial void OnWaiterSqlChanged(string? value) => OnPropertyChanged(nameof(HasWaiterSql));
-
-    partial void OnIdleTransactionsContentChanged(object? value) => OnPropertyChanged(nameof(HasIdleContent));
-
-    partial void OnDeadlocksContentChanged(object? value) => OnPropertyChanged(nameof(HasDeadlockContent));
 
     private void NotifySql()
     {
@@ -1206,6 +1911,7 @@ public sealed partial class LockMonitorViewModel : ToolPanelViewModelBase, IDisp
 
         var item = _allTree.FirstOrDefault(t => t.Key == key);
         var facts = _facts.GetValueOrDefault(key, LockSessionFacts.Empty);
+        var idle = IdleTransactions.FirstOrDefault(i => i.Key == key);
         var profile = session.Profile;
         var rac = session.Server.IsRac;
         var waiters = item is null ? [] : Descendants(item).ToList();
@@ -1217,11 +1923,14 @@ public sealed partial class LockMonitorViewModel : ToolPanelViewModelBase, IDisp
         var facts2 = new List<KeyValuePair<string, string>>
         {
             new("세션", string.Create(CultureInfo.InvariantCulture, $"{key.Sid}, {key.Serial}, @{key.InstanceId}")),
-            new("사용자", string.Join(" · ", new[] { item?.Username ?? facts.Username, facts.Machine, facts.Program }.Where(v => !string.IsNullOrEmpty(v)))),
+            new("사용자", string.Join(" · ", new[]
+            {
+                item?.Username ?? facts.Username ?? idle?.Row.Username, facts.Machine ?? idle?.Row.Machine, facts.Program ?? idle?.Row.Program,
+            }.Where(v => !string.IsNullOrEmpty(v)))),
         };
-        if (facts.TransactionStart is { } t && _snapshot is { } snap)
+        if ((facts.TransactionStart ?? idle?.Row.TransactionStart) is { } t && _snapshot is { } snap)
         {
-            var undo = facts.UndoBlocks is { } u ? $" · undo {u.ToString("N0", CultureInfo.InvariantCulture)} 블록" : string.Empty;
+            var undo = (facts.UndoBlocks ?? idle?.Row.UndoBlocks) is { } u ? $" · undo {u.ToString("N0", CultureInfo.InvariantCulture)} 블록" : string.Empty;
             facts2.Add(new("트랜잭션", LockText.Seconds((long)Math.Max(0, (snap.CollectedAt - t).TotalSeconds)) + undo));
         }
 
@@ -1349,6 +2058,24 @@ public sealed partial class LockMonitorViewModel : ToolPanelViewModelBase, IDisp
         else
         {
             SqlEditor.SqlEditorHost.Current.NewDocument(text).Title = "Lock 모니터 SQL";
+        }
+    }
+
+    /// <summary>글을 새 SQL 탭에 넣는다(실행하지 않는다). 데드락 기록 Enter 가 쓴다.</summary>
+    public void OpenTextInEditor(string text, string title)
+    {
+        if (string.IsNullOrEmpty(text))
+        {
+            return;
+        }
+
+        if (OpenEditor is { } open)
+        {
+            open(text);
+        }
+        else
+        {
+            SqlEditor.SqlEditorHost.Current.NewDocument(text).Title = title;
         }
     }
 
@@ -1551,6 +2278,8 @@ public sealed partial class LockMonitorViewModel : ToolPanelViewModelBase, IDisp
 
         _disposed = true;
         StopLoop();
+        Interlocked.Exchange(ref _alertTimer, null)?.Cancel();
+        ClearThreshold();
         if (Interlocked.Exchange(ref _session, null) is { } s)
         {
             _ = ConnectionService.CloseAsync(s, timeout: CloseTimeout);

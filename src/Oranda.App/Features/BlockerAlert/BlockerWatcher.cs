@@ -44,6 +44,12 @@ public sealed record BlockerAlertState(BlockerAlertKind Kind)
     public int PendingMinutes { get; init; }
 
     public BlockerDisabledReason Reason { get; init; }
+
+    /// <summary>true 면 내 세션이 아니라 Lock 모니터의 임계치 알림(LK-11): <see cref="BlockedCount"/> = 기준을 넘은 보유자 뒤 대기자 수.</summary>
+    public bool FromLockMonitor { get; init; }
+
+    /// <summary>Lock 모니터 임계치 알림일 때 가장 오래 기다린 초.</summary>
+    public long MaxWaitSeconds { get; init; }
 }
 
 /// <summary>
@@ -51,6 +57,8 @@ public sealed record BlockerAlertState(BlockerAlertKind Kind)
 /// 그 프로필의 모니터 세션으로 <see cref="IMonitorService.GetMyBlockingAsync"/> 를 부른다(작업 세션으로는 조회하지 않는다).
 /// 모니터 세션은 처음 필요할 때 열고, 접속이 끊기면 바로, 미커밋이 끝나면 <see cref="MonitorIdleClose"/> 뒤에 닫는다.
 /// V$ 권한 오류는 감시를 끄고 한 번만 알린다(오류 창 없음). 화면 요소를 모르는 일반 클래스라 시험이 시계를 직접 돌린다.
+/// <para>oranda1 TSK-05-04: Lock 모니터가 보내는 <see cref="LockMonitor.LockThresholdChanged"/> 도 받아, 내 세션이 막고 있지 않을 때
+/// 「⚠ N 세션 막음 · M 초」(빨강, <see cref="BlockerAlertState.FromLockMonitor"/>)를 띄운다. 이 경로는 조회를 하지 않는다.</para>
 /// </summary>
 public sealed class BlockerWatcher : IDisposable
 {
@@ -81,6 +89,7 @@ public sealed class BlockerWatcher : IDisposable
     private bool _offVisible;
     private bool _longNoticed;
     private BlockerSnapshot? _snapshot;
+    private LockMonitor.LockThresholdChanged? _lockAlert;
     private BlockerAlertState _state = BlockerAlertState.Hidden;
     private CancellationTokenSource? _pollCts;
     private ITimer? _pollTimer;
@@ -109,6 +118,7 @@ public sealed class BlockerWatcher : IDisposable
         _subscriptions.Add(bus.Subscribe<SessionClosed>(this, e => EndWork(e.SessionId)));
         _subscriptions.Add(bus.Subscribe<SessionBroken>(this, e => EndWork(e.SessionId)));
         _subscriptions.Add(bus.Subscribe<TransactionStateChanged>(this, OnTransaction));
+        _subscriptions.Add(bus.Subscribe<LockMonitor.LockThresholdChanged>(this, OnLockThreshold));
     }
 
     /// <summary>칩 내용이 바뀌었다. 어느 스레드에서든 올 수 있다.</summary>
@@ -153,6 +163,21 @@ public sealed class BlockerWatcher : IDisposable
 
         StopWork();
         Task.Run(CloseMonitorNowAsync).GetAwaiter().GetResult();
+    }
+
+    private void OnLockThreshold(LockMonitor.LockThresholdChanged e)
+    {
+        lock (_gate)
+        {
+            if (_disposed)
+            {
+                return;
+            }
+
+            _lockAlert = e.Exceeded ? e : null;
+        }
+
+        Recompute();
     }
 
     private void OnOpened(SessionOpened e)
@@ -566,6 +591,27 @@ public sealed class BlockerWatcher : IDisposable
     }
 
     private BlockerAlertState Compute()
+    {
+        // 내 세션이 막고 있으면 그것이 먼저, 아니면 Lock 모니터 임계치 알림.
+        if (_pending && _snapshot is { BlockedCount: > 0 })
+        {
+            return ComputeWork();
+        }
+
+        if (_lockAlert is { } lockAlert)
+        {
+            return new BlockerAlertState(BlockerAlertKind.Blocking)
+            {
+                BlockedCount = lockAlert.Waiters,
+                MaxWaitSeconds = lockAlert.MaxWaitSeconds,
+                FromLockMonitor = true,
+            };
+        }
+
+        return ComputeWork();
+    }
+
+    private BlockerAlertState ComputeWork()
     {
         if (!_pending)
         {

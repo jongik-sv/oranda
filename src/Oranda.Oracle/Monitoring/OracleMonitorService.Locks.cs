@@ -71,7 +71,7 @@ internal sealed partial class OracleMonitorService
         var rows = await LockQueryAsync(monitor, "lock.blocker_impact", _ => { }, ct);
         return rows is null
             ? []
-            : [.. rows.Select(r => new BlockerImpact(Key(r, 0), Int(r[3]) ?? 0, Long(r[4]) ?? 0, Long(r[5]) ?? 0))];
+            : [.. rows.Select(r => new BlockerImpact(Key(r, 0), Int(r[3]) ?? 0, Long(r[4]) ?? 0, Long(r[5]) ?? 0) { Status = r.Length > 6 ? Str(r[6]) : null })];
     }
 
     public async Task<LockedRowInfo?> GetLockedRowAsync(ISession monitor, SessionKey waiter, CancellationToken ct)
@@ -88,7 +88,12 @@ internal sealed partial class OracleMonitorService
             return null;
         }
 
-        var info = new LockedRowInfo(rowId, owner, table);
+        var info = new LockedRowInfo(rowId, owner, table)
+        {
+            FileNumber = rows[0].Length > 6 ? Int(rows[0][4]) : null,
+            BlockNumber = rows[0].Length > 6 ? Long(rows[0][5]) : null,
+            RowNumber = rows[0].Length > 6 ? Int(rows[0][6]) : null,
+        };
         var objectType = Str(rows[0][2]) ?? string.Empty;
         if (!RowValueObjectTypes.Contains(objectType, StringComparer.Ordinal))
         {
@@ -164,7 +169,7 @@ internal sealed partial class OracleMonitorService
             c.Parameters.Add(new OracleParameter("serial", OracleDbType.Int64) { Value = (object?)session?.Serial ?? DBNull.Value });
         }, ct);
 
-        return rows is null ? [] : [.. TopSqlBinds(rows).Select(b => new WaitingBind(b.Name, b.Position, b.DataType, b.Value))];
+        return rows is null ? [] : [.. TopSqlBinds(rows).Select(b => new WaitingBind(b.Name, b.Position, b.DataType, b.Value) { CapturedAt = b.CapturedAt })];
     }
 
     public async Task<IReadOnlyList<IdleTransaction>> GetIdleTransactionsAsync(ISession monitor, int minIdleSeconds, CancellationToken ct)
@@ -347,7 +352,7 @@ internal sealed partial class OracleMonitorService
     private static DateTimeOffset? ServerDate(object? v) =>
         v is DateTime dt ? new DateTimeOffset(DateTime.SpecifyKind(dt, DateTimeKind.Unspecified), TimeSpan.Zero) : null;
 
-    /// <summary><c>lock.list</c> 열 0~23.</summary>
+    /// <summary><c>lock.list</c> 열 0~24(24 = status, 없으면 null).</summary>
     internal static LockRow ToLockRow(object?[] r)
     {
         var key = Key(r, 0);
@@ -373,10 +378,11 @@ internal sealed partial class OracleMonitorService
             SqlId = Str(r[19]),
             PrevSqlId = Str(r[20]),
             BlockingSession = blocker,
+            Status = r.Length > 24 ? Str(r[24]) : null,
         };
     }
 
-    /// <summary><c>lock.idle_transactions</c> 열 0~10.</summary>
+    /// <summary><c>lock.idle_transactions</c> 열 0~11(11 = 잠금 수).</summary>
     internal static IdleTransaction ToIdleTransaction(object?[] r) => new(Key(r, 0))
     {
         Username = Str(r[3]),
@@ -387,6 +393,7 @@ internal sealed partial class OracleMonitorService
         UndoBlocks = Long(r[8]),
         BlockedCount = Int(r[9]) ?? 0,
         PrevSqlId = Str(r[10]),
+        LockCount = r.Length > 11 ? Int(r[11]) ?? 0 : 0,
     };
 
     /// <summary><c>lock.deadlocks</c> 열 0~2. 시각은 UTC, 메시지는 빈 줄을 뺀 줄 목록.</summary>

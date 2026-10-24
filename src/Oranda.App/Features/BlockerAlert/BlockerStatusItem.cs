@@ -21,6 +21,7 @@ namespace Oranda.App.Features.BlockerAlert;
 
 /// <summary>
 /// 상태 표시줄 7번 구간(TSK-13-02): 「N 세션 막음」(빨강) / 「미커밋 N분」(주황, 10분 넘음) / 「감시 꺼짐」(회색, 권한 없음).
+/// Lock 모니터 임계치 알림(oranda1 TSK-05-04)은 「⚠ N 세션 막음 · M 초」(빨강).
 /// 누르면 Lock 모니터를 연다(LK-09). 생성자는 이벤트 버스·컨테이너만 받고 모니터 서비스·세션 관리자는 첫 조회 때 꺼낸다
 /// (시작 경로에서 Oracle 어셈블리를 올리지 않는다).
 /// </summary>
@@ -67,6 +68,7 @@ public sealed class BlockerStatusViewModel : ViewModelBase, IStatusBarItem, IDis
             var s = State;
             return s.Kind switch
             {
+                BlockerAlertKind.Blocking when s.FromLockMonitor => Format("Blocker.chip.lockAlert", "⚠ {0} 세션 막음 · {1:N0} 초", s.BlockedCount, s.MaxWaitSeconds),
                 BlockerAlertKind.Blocking => Join(Format("Blocker.chip.blocking", "{0} 세션 막음", s.BlockedCount),
                     s.MinutesUntilKilled is { } m ? Format("Blocker.chip.killIn", "{0}분 뒤 서버가 이 세션을 끊음", m) : null),
                 BlockerAlertKind.LongTransaction => Format("Blocker.chip.longTxn", "미커밋 {0}분", s.PendingMinutes),
@@ -83,6 +85,8 @@ public sealed class BlockerStatusViewModel : ViewModelBase, IStatusBarItem, IDis
             var s = State;
             return s.Kind switch
             {
+                BlockerAlertKind.Blocking when s.FromLockMonitor => Format("Blocker.tip.lockAlert",
+                    "Lock 모니터: 잠금 대기가 알림 기준을 넘었습니다({0} 세션 대기, 가장 오래 {1:N0} 초). 눌러서 Lock 모니터 열기", s.BlockedCount, s.MaxWaitSeconds),
                 BlockerAlertKind.Blocking => Join(Format("Blocker.tip.blocking", "이 세션이 {0}개 세션을 막고 있습니다. 눌러서 Lock 모니터 열기", s.BlockedCount),
                     s.MinutesUntilKilled is { } m ? Format("Blocker.tip.killIn", "서버 설정(MAX_IDLE_BLOCKER_TIME)에 따라 {0}분 뒤 서버가 이 세션을 끊습니다.", m) : null),
                 BlockerAlertKind.LongTransaction => Join(Format("Blocker.tip.longTxn", "미커밋 상태가 {0}분 넘게 이어지고 있습니다. 커밋하거나 롤백하세요.", s.PendingMinutes),
@@ -135,8 +139,8 @@ public sealed class BlockerStatusViewModel : ViewModelBase, IStatusBarItem, IDis
 
     private static string Join(string first, string? second) => second is null ? first : first + " · " + second;
 
-    private static string Format(string key, string fallback, object arg) =>
-        string.Format(CultureInfo.CurrentCulture, UiText.Get(key, fallback), arg);
+    private static string Format(string key, string fallback, params object[] args) =>
+        string.Format(CultureInfo.CurrentCulture, UiText.Get(key, fallback), args);
 
     /// <summary>모니터 세션은 작업 세션의 프로필로 열고, 비밀번호를 묻는 창은 띄우지 않는다(백그라운드 경로).</summary>
     private Task<Oranda.Core.Sessions.ISession?> OpenMonitorAsync(ServiceContainer? container, Oranda.Core.Connection.ConnectionProfile profile, CancellationToken ct)

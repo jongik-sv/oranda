@@ -44,11 +44,17 @@ internal sealed class FakeLockMonitor : IMonitorService
 
     public LockedRowInfo? LockedRow { get; set; } = new("AAAWkqAAHAAAAm/AAC", "MES", "LOT_HIST")
     {
+        FileNumber = 7,
+        BlockNumber = 2495,
+        RowNumber = 2,
         ColumnNames = ["HIST_SEQ", "LOT_ID", "EQP_ID", "EVT_STAT"],
         Values = ["88120931", "L2610240117", "ETCH-07", null],
     };
 
     public TaskCompletionSource? Hold { get; set; }
+
+    /// <summary>있으면 이 결과를 그대로 돌려준다(순환·임계치 시험).</summary>
+    public LockSnapshot? Custom { get; set; }
 
     public async Task<LockSnapshot> GetLocksAsync(ISession monitor, LockFilter filter, CancellationToken ct)
     {
@@ -64,15 +70,20 @@ internal sealed class FakeLockMonitor : IMonitorService
             throw ex;
         }
 
+        if (Custom is { } custom)
+        {
+            return custom;
+        }
+
         return Quiet ? new LockSnapshot([], new BlockingTree([]), Now) : new LockSnapshot(Rows(), Tree(), Now);
     }
 
     public Task<IReadOnlyList<BlockerImpact>> GetBlockerImpactAsync(ISession monitor, CancellationToken ct) =>
         Task.FromResult<IReadOnlyList<BlockerImpact>>(Quiet ? [] :
         [
-            new(H1, 3, 287, 631),
-            new(H2, 1, 46, 46),
-            new(H3, 1, 8, 8),
+            new(H1, 3, 287, 631) { Status = "INACTIVE" },
+            new(H2, 1, 46, 46) { Status = "INACTIVE" },
+            new(H3, 1, 8, 8) { Status = "ACTIVE" },
         ]);
 
     public Task<SqlDetail> GetSqlDetailAsync(ISession monitor, CursorRef cursor, CancellationToken ct)
@@ -96,7 +107,46 @@ internal sealed class FakeLockMonitor : IMonitorService
     public Task<IReadOnlyList<WaitingBind>> GetWaitingBindsAsync(ISession monitor, WaitingBindTarget target, CancellationToken ct)
     {
         BindCalls++;
-        return Task.FromResult<IReadOnlyList<WaitingBind>>([new(":1", 1, "NUMBER", "88120931"), new(":2", 2, "VARCHAR2(32)", "ETCH-09")]);
+        return Task.FromResult<IReadOnlyList<WaitingBind>>(
+        [
+            new(":1", 1, "NUMBER", "88120931") { CapturedAt = Now.AddSeconds(-282) },
+            new(":2", 2, "VARCHAR2(32)", "ETCH-09") { CapturedAt = Now.AddSeconds(-282) },
+        ]);
+    }
+
+    public int IdleCalls { get; private set; }
+
+    public int DeadlockCalls { get; private set; }
+
+    public int? LastMinIdle { get; private set; }
+
+    /// <summary>시안 d 의 방치 트랜잭션 4줄.</summary>
+    public IReadOnlyList<IdleTransaction> Idle { get; set; } =
+    [
+        new(H2) { Username = "SCOTT", Machine = "DESKTOP-K2J9", Program = "SQL Developer", IdleSeconds = 1018, TransactionStart = Now.AddSeconds(-1020), UndoBlocks = 1, LockCount = 2, BlockedCount = 1, PrevSqlId = "1m8c2v0d9s4tq" },
+        new(H1) { Username = "MES_APP", Machine = "was-mes01", Program = "JDBC Thin Client", IdleSeconds = 309, TransactionStart = Now.AddSeconds(-312), UndoBlocks = 48, LockCount = 2, BlockedCount = 3, PrevSqlId = "4w1xq9n2b7c0d" },
+        new(new SessionKey(1, 730, 3301)) { Username = "MES_APP", Machine = "was-mes02", Program = "JDBC Thin Client", IdleSeconds = 212, TransactionStart = Now.AddSeconds(-222), UndoBlocks = 2, LockCount = 1 },
+        new(new SessionKey(2, 1150, 3302)) { Username = "ETL", Machine = "etl01", Program = "python3.11", IdleSeconds = 95, TransactionStart = Now.AddSeconds(-109), UndoBlocks = 270, LockCount = 3 },
+    ];
+
+    public IReadOnlyList<DeadlockEvent> DeadlockEvents { get; set; } =
+    [
+        new(Now.AddMinutes(-1.5), 2, ["ORA-00060: Deadlock detected. See Note 60.1 at My Oracle Support for Troubleshooting ORA-60 Errors. More info in file /u01/app/oracle/diag/rdbms/mesprd/MESPRD2/trace/MESPRD2_ora_88412.trc."]),
+        new(Now.AddHours(-5), 1, ["ORA-00060: Deadlock detected. More info in file /u01/app/oracle/diag/rdbms/mesprd/MESPRD1/trace/MESPRD1_ora_40991.trc."]),
+        new(Now.AddDays(-2), 1, ["ORA-00060: Deadlock detected. (오래된 기록)"]),
+    ];
+
+    public Task<IReadOnlyList<IdleTransaction>> GetIdleTransactionsAsync(ISession monitor, int minIdleSeconds, CancellationToken ct)
+    {
+        IdleCalls++;
+        LastMinIdle = minIdleSeconds;
+        return Task.FromResult<IReadOnlyList<IdleTransaction>>([.. Idle.Where(i => i.IdleSeconds >= minIdleSeconds)]);
+    }
+
+    public Task<IReadOnlyList<DeadlockEvent>> GetRecentDeadlocksAsync(ISession monitor, int max, CancellationToken ct)
+    {
+        DeadlockCalls++;
+        return Task.FromResult<IReadOnlyList<DeadlockEvent>>([.. DeadlockEvents.Take(max)]);
     }
 
     public Task<IReadOnlyList<DdlLockRow>> GetDdlLocksAsync(ISession monitor, CancellationToken ct)
@@ -137,18 +187,18 @@ internal sealed class FakeLockMonitor : IMonitorService
         [
             new BlockingNode(W1,
             [
-                new BlockingNode(W2, []) { Username = "MES_RPT", Event = "enq: TX - row lock contention", SecondsInWait = 141, SqlId = "9zq0m3r1kx2pa", LockedObject = "MES.LOT_HIST" },
-            ]) { Username = "MES_APP", Event = "enq: TX - row lock contention", SecondsInWait = 287, SqlId = "7h35uxf5uhmm1", LockedObject = "MES.LOT_HIST" },
-            new BlockingNode(W3, []) { Username = "MES_BATCH", Event = "enq: TX - row lock contention", SecondsInWait = 203, SqlId = "7h35uxf5uhmm1", LockedObject = "MES.LOT_HIST" },
-        ]) { Username = "MES_APP" },
+                new BlockingNode(W2, []) { Username = "MES_RPT", Event = "enq: TX - row lock contention", SecondsInWait = 141, SqlId = "9zq0m3r1kx2pa", LockedObject = "MES.LOT_HIST", Status = "ACTIVE" },
+            ]) { Username = "MES_APP", Event = "enq: TX - row lock contention", SecondsInWait = 287, SqlId = "7h35uxf5uhmm1", LockedObject = "MES.LOT_HIST", Status = "ACTIVE" },
+            new BlockingNode(W3, []) { Username = "MES_BATCH", Event = "enq: TX - row lock contention", SecondsInWait = 203, SqlId = "7h35uxf5uhmm1", LockedObject = "MES.LOT_HIST", Status = "ACTIVE" },
+        ]) { Username = "MES_APP", Status = "INACTIVE" },
         new BlockingNode(H2,
         [
-            new BlockingNode(W4, []) { Username = "SCOTT", Event = "enq: TM - contention", SecondsInWait = 46, SqlId = "b0x5t2c7f1ywn", LockedObject = "SCOTT.EMP" },
-        ]) { Username = "SCOTT" },
+            new BlockingNode(W4, []) { Username = "SCOTT", Event = "enq: TM - contention", SecondsInWait = 46, SqlId = "b0x5t2c7f1ywn", LockedObject = "SCOTT.EMP", Status = "ACTIVE" },
+        ]) { Username = "SCOTT", Status = "INACTIVE" },
         new BlockingNode(H3,
         [
-            new BlockingNode(W5, []) { Username = "HR", Event = "enq: TX - allocate ITL entry", SecondsInWait = 8, SqlId = "6p2x9w0e1r8tn", LockedObject = "HR.ORDERS" },
-        ]) { Username = "HR", SqlId = "3k1d0a7q2m9vz" },
+            new BlockingNode(W5, []) { Username = "HR", Event = "enq: TX - allocate ITL entry", SecondsInWait = 8, SqlId = "6p2x9w0e1r8tn", LockedObject = "HR.ORDERS", Status = "ACTIVE" },
+        ]) { Username = "HR", SqlId = "3k1d0a7q2m9vz", Status = "ACTIVE" },
     ]);
 
     public static IReadOnlyList<LockRow> Rows()
@@ -159,6 +209,7 @@ internal sealed class FakeLockMonitor : IMonitorService
             Username = user, HeldMode = held, RequestedMode = req, CtimeSeconds = ctime, IsBlocking = block, Id1 = id1, Id2 = id2,
             ObjectName = obj, TransactionStart = txAgo is { } a ? Now.AddSeconds(-a) : null, UndoBlocks = undo, PrevSqlId = prev,
             Program = program, Machine = program is null ? null : "was-mes01",
+            Status = s == H1 || s == H2 ? "INACTIVE" : "ACTIVE",
         };
         return
         [

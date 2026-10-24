@@ -570,7 +570,7 @@
 | `oranda.monitor.locks.showDdlLocks` | DDL 잠금 보기 | - | `lockMonitorFocus` | `lockMonitorOpen && canQueryDdlLocks` | TSK-05-03 |
 | `oranda.monitor.locks.goToSession` | 세션 모니터에서 보기 | - | `lockMonitorFocus` | `lockSessionSelected` | TSK-05-03 |
 | `oranda.monitor.locks.exportCsv` | Lock 목록 CSV 내보내기 | - | `lockMonitorFocus` | `lockMonitorOpen` | TSK-05-03 |
-| `oranda.monitor.locks.showHistory` | Lock 이력 보기 | - | `lockMonitorFocus` | `lockMonitorOpen` | TSK-05-04 |
+| `oranda.monitor.locks.showHistory` | Lock 이력 띠 보이기/감추기(최근 N 분 대기자 수·최대 대기 초, 앱 메모리) | - | `lockMonitorFocus` | `lockMonitorOpen` | TSK-05-04 |
 
 ### 도구
 

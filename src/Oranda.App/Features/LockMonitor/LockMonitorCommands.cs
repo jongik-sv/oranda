@@ -7,12 +7,15 @@ using Oranda.App.Features.ExecutionPlan;
 using Oranda.App.Features.SessionMonitor;
 using Oranda.App.Shell;
 using Oranda.App.Shell.Composition;
+using Oranda.App.Shell.Settings;
+using Oranda.Core.Events;
 using Oranda.Core.Monitoring;
 using Oranda.Core.Shell;
+using Oranda.Core.Storage;
 
 namespace Oranda.App.Features.LockMonitor;
 
-/// <summary>Lock 모니터 패널·명령 ID(TSK-05-01 계약, 처리기 TSK-05-03). <see cref="ShowHistory"/> 는 TSK-05-04 가 등록한다.</summary>
+/// <summary>Lock 모니터 패널·명령 ID(TSK-05-01 계약, 처리기 TSK-05-03). <see cref="ShowHistory"/>(이력 띠 보이기·감추기)는 TSK-05-04.</summary>
 public static class LockMonitorCommands
 {
     public const string PanelId = "oranda.panel.lockMonitor";
@@ -35,8 +38,8 @@ public static class LockMonitorCommands
         ShowDdlLocks, GoToSession, ExportCsv, ShowHistory,
     ];
 
-    /// <summary>이 Task(05-03)가 처리기를 단 명령(<see cref="ShowHistory"/> 는 05-04 몫).</summary>
-    public static readonly string[] HandledIds = [.. Ids.Where(i => i != ShowHistory)];
+    /// <summary>처리기를 단 명령(05-03 + 05-04 의 <see cref="ShowHistory"/>).</summary>
+    public static readonly string[] HandledIds = [.. Ids];
 }
 
 /// <summary>「모니터」 메뉴의 Lock 모니터 명령(LK-01~09). 세션 모니터 다음 자리(@15), 창 명령은 Lock 모니터가 열려 있을 때만 보인다.</summary>
@@ -57,6 +60,8 @@ public static class LockMonitorCommands
     Placements = ["menu:monitor/locks.disconnect@510", "context:lockMonitor/disconnect@31"])]
 [OrandaCommand(LockMonitorCommands.GoToSession, CommandCategory.Monitor, Icon = "sessions", When = "lockMonitorFocus", Enablement = "lockSessionSelected",
     Placements = ["menu:monitor/locks.goToSession@520", "context:lockMonitor/goToSession@40"])]
+[OrandaCommand(LockMonitorCommands.ShowHistory, CommandCategory.Monitor, Icon = "history", When = "lockMonitorFocus", Enablement = "lockMonitorOpen",
+    Placements = ["menu:monitor/locks.showHistory@430"])]
 [OrandaCommand(LockMonitorCommands.ExportCsv, CommandCategory.Monitor, Icon = "exportFile", When = "lockMonitorFocus", Enablement = "lockMonitorOpen",
     Placements = ["menu:monitor/locks.exportCsv@600"])]
 public sealed class LockMonitorCommandHandler : ICommandHandler
@@ -74,6 +79,9 @@ public sealed class LockMonitorCommandHandler : ICommandHandler
 
     /// <summary>CSV 저장(창이 붙어 있을 때 View 가 넣는다). 명령 팔레트·메뉴에서 부른다.</summary>
     internal static Func<LockMonitorViewModel, Task>? SaveCsv { get; set; }
+
+    /// <summary>탭이 뒤에 있을 때 알림을 띄울 메인 창(<see cref="Wire"/> 가 넣는다).</summary>
+    internal static Func<Avalonia.Controls.TopLevel?>? MainWindow { get; set; }
 
     public async Task ExecuteAsync(CommandContext context, CancellationToken cancellationToken)
     {
@@ -121,6 +129,9 @@ public sealed class LockMonitorCommandHandler : ICommandHandler
                 break;
             case LockMonitorCommands.GoToSession:
                 await vm.GoToSessionAsync().ConfigureAwait(true);
+                break;
+            case LockMonitorCommands.ShowHistory:
+                vm.ShowHistoryStrip = !vm.ShowHistoryStrip;
                 break;
             case LockMonitorCommands.ExportCsv:
                 if (SaveCsv is { } save)
@@ -173,6 +184,30 @@ public sealed class LockMonitorCommandHandler : ICommandHandler
             ? LockKillDialog.ShowAsync(owner, request)
             : Task.FromResult(false);
         vm.OpenConnectionManager ??= () => ShellCommandRunner.RunAsync("oranda.conn.manage");
+
+        // TSK-05-04: 알림 설정(settings.json monitor.lockAlert), lock-history 폴더, 상태 줄 칩, 탭 앞으로.
+        if (container.GetService<SettingsService>() is { } settings)
+        {
+            vm.ApplySettings(settings.Current.Monitor.LockAlert);
+            vm.SaveSettings ??= value => _ = settings.UpdateAsync(s => s with { Monitor = s.Monitor with { LockAlert = value } });
+        }
+
+        if (container.GetService<IAppDataPaths>() is { } paths)
+        {
+            vm.HistoryFolder ??= System.IO.Path.Combine(paths.DataDirectory, LockHistoryFiles.FolderName);
+        }
+
+        if (container.GetService<IEventBus>() is { } bus)
+        {
+            vm.PublishThreshold ??= bus.Publish;
+        }
+
+        vm.BringToFront ??= () =>
+        {
+            container.GetService<IShellUi>()?.Docking.OpenDocument(LockMonitorCommands.PanelId);
+            return Task.CompletedTask;
+        };
+        MainWindow ??= () => container.GetService<ShellController>()?.MainWindow;
         vm.GoToSessionMonitor ??= async key =>
         {
             await ShellCommandRunner.RunAsync("oranda.monitor.sessions").ConfigureAwait(true);

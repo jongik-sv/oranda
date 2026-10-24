@@ -1,0 +1,28 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:icons="using:Oranda.App.Shell.Icons"
+             xmlns:vm="using:Oranda.App.Features.LockMonitor"
+             x:Class="Oranda.App.Features.LockMonitor.LockAlertToast"
+             x:DataType="vm:LockMonitorViewModel"
+             Width="360" HorizontalAlignment="Right" VerticalAlignment="Bottom">
+  <!-- 임계치 알림(시안 d 오른쪽 아래). 테두리 = 위험색, 바탕 = 편집기 바탕(OrandaCodeBackgroundBrush). 8 초 뒤 사라지고 상태 줄 칩은 남는다. -->
+  <Border x:Name="Card" Background="{DynamicResource OrandaCodeBackgroundBrush}" BorderBrush="{DynamicResource OrandaDangerForegroundBrush}"
+          BorderThickness="1" CornerRadius="4" Padding="12,10"
+          AutomationProperties.Name="잠금 대기 알림">
+    <StackPanel Spacing="6">
+      <DockPanel>
+        <Button x:Name="CloseButton" DockPanel.Dock="Right" Classes="toolbar" Content="닫기" icons:ButtonIcon.Key="clear"
+                icons:ButtonIcon.IconOnly="True" ToolTip.Tip="알림 닫기 (상태 줄 칩은 남습니다)" VerticalAlignment="Top" />
+        <ContentControl DockPanel.Dock="Left" Margin="0,0,8,0" VerticalAlignment="Center"
+                        Content="{Binding Source='warn', Converter={x:Static icons:IconKeyConverter.Instance}, ConverterParameter=16}" />
+        <TextBlock FontWeight="SemiBold" Text="잠금 대기가 기준을 넘었습니다" VerticalAlignment="Center" />
+      </DockPanel>
+      <TextBlock x:Name="MessageText" Text="{Binding ActiveAlertMessage}" TextWrapping="Wrap" />
+      <StackPanel Orientation="Horizontal" Spacing="6" Margin="0,2,0,0">
+        <Button x:Name="ShowTreeButton" Classes="accent" Content="대기 트리 보기" ToolTip.Tip="Lock 모니터 탭을 앞으로 내고 이 보유자를 고릅니다" />
+        <Button x:Name="OpenSnapshotButton" Content="스냅샷 열기" IsVisible="{Binding HasAlertSnapshot}"
+                ToolTip.Tip="저장한 보유자·대기자 SQL 스냅샷(텍스트 파일)을 엽니다" />
+      </StackPanel>
+    </StackPanel>
+  </Border>
+</UserControl>

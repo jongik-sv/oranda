@@ -1,3 +1,4 @@
+using System.Globalization;
 using Oranda.App.Features.LockMonitor;
 using Oranda.App.Features.SessionMonitor;
 using Oranda.App.Shell;
@@ -37,7 +38,7 @@ public class LockMonitorTests
             Assert.Equal(CommandCategory.Monitor, def!.Category);
         }
 
-        Assert.Null(registry.Find(LockMonitorCommands.ShowHistory)); // TSK-05-04 몫
+        Assert.Contains(LockMonitorCommands.ShowHistory, LockMonitorCommands.HandledIds); // TSK-05-04: 이력 띠 보이기·감추기
         Assert.Contains(App.Panels, p => p.Id == LockMonitorCommands.PanelId && p.Kind == ToolPanelKind.Document);
         var open = registry.Find(LockMonitorCommands.Open)!;
         Assert.Contains("menu:monitor/locks@15", open.Placements);
@@ -261,7 +262,7 @@ public class LockMonitorTests
         h.Vm.SelectedKey = FakeLockMonitor.H1;
         await h.Vm.LoadDetailAsync();
         Assert.True(h.Vm.HasBinds);
-        Assert.Equal([":2", "2", "VARCHAR2(32)", "ETCH-09"], h.Vm.BindCells[1]);
+        Assert.Equal([":2", "2", "VARCHAR2(32)", "ETCH-09", FakeLockMonitor.Now.AddSeconds(-282).ToLocalTime().ToString("HH:mm:ss", CultureInfo.InvariantCulture)], h.Vm.BindCells[1]);
         Assert.Contains("대기자 1·1422", h.Vm.BindCaption, StringComparison.Ordinal);
     }
 
