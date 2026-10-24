@@ -31,10 +31,13 @@ public partial class Oracle11CatalogTests
     /// </summary>
     private static readonly string[] NineteenOnly = ["session.my_blocking", "lock.deadlocks"];
 
+    /// <summary>12.2 이후 뷰만 쓰는 id(TSK-06-02). tuning.trace_lines: v$diag_trace_file_contents. 11.2 에서는 서비스가 이유와 함께 끈다.</summary>
+    private static readonly string[] TwelveOnly = ["tuning.trace_lines"];
+
     [Fact]
     public void Every_catalog_id_has_a_query_for_11_2()
     {
-        foreach (var id in Catalog.Entries.Select(e => e.Id).Distinct(StringComparer.Ordinal).Except(NineteenOnly))
+        foreach (var id in Catalog.Entries.Select(e => e.Id).Distinct(StringComparer.Ordinal).Except(NineteenOnly).Except(TwelveOnly))
         {
             var query = Catalog.Get(id, 11);
             Assert.Equal(11, query.Header.MinVersion);
@@ -48,6 +51,16 @@ public partial class Oracle11CatalogTests
         {
             Assert.Throws<CatalogQueryNotFoundException>(() => Catalog.Get(id, 11));
             Assert.Equal(19, Catalog.Get(id, 19).Header.MinVersion);
+        }
+    }
+
+    [Fact]
+    public void Twelve_only_ids_are_not_found_on_11_2()
+    {
+        foreach (var id in TwelveOnly)
+        {
+            Assert.Throws<CatalogQueryNotFoundException>(() => Catalog.Get(id, 11));
+            Assert.Equal(12, Catalog.Get(id, 19).Header.MinVersion);
         }
     }
 

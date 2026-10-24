@@ -91,6 +91,9 @@ public sealed record TraceFileInfo(string Path, bool Readable, string? Unavailab
 /// <summary>TKPROF 식 요약의 문장 하나(TN-08). 출처: 트레이스 본문의 PARSING IN CURSOR·PARSE·EXEC·FETCH 줄.</summary>
 public sealed record TraceStatement(string SqlText, string? SqlId)
 {
+    /// <summary>재귀 깊이(PARSING IN CURSOR 의 dep=, 0 = 사용자 문장). TSK-06-02 에서 더함.</summary>
+    public int Depth { get; init; }
+
     public long ParseCount { get; init; }
 
     public long ExecuteCount { get; init; }
