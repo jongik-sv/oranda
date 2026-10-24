@@ -49,13 +49,13 @@ public class ShellHeadlessTests
         h.Window.Menus.Items.OfType<MenuItem>().Single(m => m.Header is string s && s.StartsWith(header, StringComparison.Ordinal));
 
     [Fact]
-    public Task Main_window_has_the_ten_top_menus_in_order() => HeadlessHost.Run(() =>
+    public Task Main_window_has_the_eleven_top_menus_in_order() => HeadlessHost.Run(() =>
     {
         using var h = new ShellHarness();
 
         var headers = h.Window.Menus.Items.OfType<MenuItem>().Select(m => (string)m.Header!).ToList();
 
-        Assert.Equal(["파일(_F)", "편집(_E)", "보기(_V)", "_SQL", "결과(_R)", "데이터베이스(_D)", "모니터(_M)", "도구(_T)", "창(_W)", "도움말(_H)"], headers);
+        Assert.Equal(["파일(_F)", "편집(_E)", "보기(_V)", "_SQL", "결과(_R)", "데이터베이스(_D)", "모니터(_M)", "튜닝(_U)", "도구(_T)", "창(_W)", "도움말(_H)"], headers);
     });
 
     [Fact]

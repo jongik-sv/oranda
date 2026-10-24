@@ -633,3 +633,27 @@
 | `oranda.help.crashReport` | 오류 보고서 | - | 전역 | 항상 | TSK-10-01 |
 | `oranda.help.openLogs` | 로그 폴더 열기 | - | 전역 | 항상 | TSK-10-01 |
 | `oranda.help.about` | Oranda 정보 | - | 전역 | 항상 | TSK-03-01 |
+
+### 튜닝
+
+- 메뉴 「튜닝」(id `tuning`)은 「모니터」 다음 최상위 메뉴다. 명령 범주는 옮기지 않는다(`Sql`·`Monitor` 그대로). TSK-06-01.
+- 메뉴 묶음 순서(@숫자): 계획 10~(`explain`@10·`actualPlan`@20·`displayCursorOptions`@30·`pinPlan`@40·`comparePlan`@50) / SQL 모니터 100~(`sql`@100·`sqlSearch`@110·`sqlShowPlan`@120·`sqlShowBinds`@130) / 통계·자식 커서 200~(TSK-06-03) / 계획 보강 300~(TSK-06-04) / 도우미 400~(TSK-06-05) / 대기·이력 500~(TSK-06-05).
+- `oranda.plan.explain`·`oranda.plan.actual` 은 SQL 메뉴에도 남는다(Placements 두 줄). 단축키·툴바·컨텍스트 배치는 그대로.
+- 아래 ID 는 상수(`TuningCommands.Ids`)만 있고 처리기는 해당 Task 가 만든다. 활성 조건·키는 그 Task 가 정한다(키는 4개 프리셋 충돌 검사 후).
+
+| ID | 제목 | 기본 키 | 키 범위(when) | 활성 조건 | 소유 Task |
+|---|---|---|---|---|---|
+| `oranda.tuning.stats` | 통계 보기 | - | 전역 | `hasSession` | TSK-06-03 |
+| `oranda.tuning.gatherStatsScript` | 통계 수집 스크립트 만들기 | - | 전역 | 통계 보기 열림 | TSK-06-03 |
+| `oranda.tuning.childCursors` | 자식 커서 | - | 전역 | `hasSession` | TSK-06-03 |
+| `oranda.tuning.traceViewer` | 트레이스 보기 | - | 전역 | `hasSession` | TSK-06-04 |
+| `oranda.tuning.optimizerTrace` | 옵티마이저 트레이스(10053) | - | `sqlDocFocus` | `hasSession && !sessionBusy` | TSK-06-04 |
+| `oranda.tuning.assistant` | 튜닝 도우미 | - | 전역 | `hasSession` | TSK-06-05 |
+| `oranda.tuning.indexCandidates` | 인덱스 후보 | - | 전역 | 도우미 열림 | TSK-06-05 |
+| `oranda.tuning.rewriteCandidates` | 재작성 후보 | - | 전역 | 도우미 열림 | TSK-06-05 |
+| `oranda.tuning.benchmark` | 변형 SQL 벤치마크 | - | 전역 | 도우미 열림 | TSK-06-05 |
+| `oranda.tuning.awrHistory` | AWR 계획 이력 | - | 전역 | `hasSession` | TSK-06-05 |
+| `oranda.tuning.ashWaits` | ASH 대기 분해 | - | 전역 | `hasSession` | TSK-06-05 |
+| `oranda.tuning.planControls` | SQL Profile·Baseline·Patch 보기 | - | 전역 | `hasSession` | TSK-06-05 |
+
+패널 ID: `oranda.panel.tuningStats`·`oranda.panel.childCursors`·`oranda.panel.traceViewer`·`oranda.panel.tuningAssistant`(모두 문서 패널).

@@ -325,7 +325,7 @@ levels:
 ## WP-06: 튜닝 메뉴와 쿼리 튜닝 기능
 <!-- 담당 PC: win144(Windows 개발 PC) — 맥북 세션은 이 WP 의 Task 를 하지 않는다. 2026-10-24 사용자 지시 「또 다른 도구와 비교해서 쿼리 튜닝에 대한 기능을 조사해줘」「튜닝 기능도 조사 끝나면 같이 구현하자. 튜닝 메뉴를 따로 만들어서 거기에 넣으면 될것 같다」. 조사 근거 = Toad SQL Optimizer·TKProf, SQL Developer Autotrace·Tune SQL·Monitor SQL, PL/SQL Developer, OEM 어드바이저·SPM. 원칙: 팩 없는 읽기 전용. DB 에 쓰는 기능(Tuning Advisor 태스크·DBMS_STATS·baseline 적용)은 스크립트 문안까지만 만들고 실행은 사용자가 편집기에서 한다. 팩이 필요한 기능은 SAFE-07 라이선스 관문 뒤에서만 -->
 
-- [ ] TSK-06-01: 「튜닝」 메뉴와 튜닝 조회 계약 (계약 전용) [win144] w:1 2026-10-24~2026-10-24
+- [x] TSK-06-01: 「튜닝」 메뉴와 튜닝 조회 계약 (계약 전용) [win144] w:1 2026-10-24~2026-10-24
   - category: infra
   - domain: backend
   - model: sonnet
@@ -334,6 +334,7 @@ levels:
   - prd-ref: TN-01~TN-16
   - requirements: 최상위 메뉴 「튜닝」(id tuning)을 「모니터」 다음에 더한다(MenuModel 최상위 순서 배열·메뉴 제목 ko/en); 기존 명령 배치를 옮긴다: 실행 계획 형식 옵션·계획 고정·계획 비교 → menu:tuning, SQL 모니터(oranda.monitor.sql 과 sqlSearch·sqlShowPlan·sqlShowBinds) → menu:tuning. 예상 계획·실제 계획은 SQL 메뉴에 두고 튜닝 메뉴에도 같이 둔다(Placements 여러 줄). 단축키·툴바는 그대로; Core 에 ITuningService 를 기본 구현 NotSupportedException 메서드로 정의: 표·열 통계·히스토그램·stale(TableStatsRow, ColumnStatsRow, HistogramBucket, IndexStatsRow), 자식 커서와 불일치 사유(ChildCursorRow: child·plan_hash·is_bind_sensitive·is_bind_aware·is_shareable·실행 수·gets·elapsed, SharedCursorReason), 자식 커서별 계획(기존 계획 형 재사용), 대기 표본(WaitSample), 트레이스 파일(TraceFileInfo·본문 줄)과 TKPROF 식 요약 형(TraceSummary: 문장별 parse/exec/fetch count·cpu·elapsed·disk·query·current·rows, 대기 합계), 인덱스 후보(IndexCandidate: 표·열·근거 단계·기존 인덱스 겹침·DDL 문안), 벤치마크(BenchmarkCase·BenchmarkResult: 반복·경과·논리 읽기·물리 읽기·행 수·plan_hash), 재작성 후보(RewriteCandidate: 규칙·설명·SQL), AWR 계획 이력(AwrPlanRow, license diagnostics), ASH 대기 분해(AshWaitRow, license diagnostics), SQL Profile·Baseline·Patch 보기(SqlPlanControlRow), 스크립트 만들기(TuningScript: 종류 dbms_stats/tuning_advisor/baseline, 본문); 명령 ID·패널 ID 상수(oranda.tuning.*)만 두고 처리기·특성은 만들지 않는다; docs/design/commands.md 에 「튜닝」 표; 시험: 메뉴 순서·옮긴 배치, 빌드; 비고: 담당 PC: win144(Windows 개발 PC) — 맥북 세션은 이 Task 를 하지 않는다
   - acceptance: 실행 로직 없음 (contract-only) / 「튜닝」 메뉴가 보이고 옮긴 명령이 그 아래에 있다 / 기존 단축키·툴바 유지 / `dotnet build Oranda.sln -warnaserror` 통과
+  - note: 「튜닝」 최상위 메뉴(monitor 다음)·계획/SQL 모니터 명령 옮김, Core/Tuning ITuningService(기본 NotSupported 16개 메서드)·레코드, TuningCommands 상수, commands.md 「튜닝」 절, TuningMenuTests (win144)
 
 - [ ] TSK-06-02: 튜닝 조회 — 카탈로그 SQL·OracleTuningService·TKPROF 파서·벤치마크 실행기 [win144] w:3 2026-10-25~2026-10-27
   - category: dev

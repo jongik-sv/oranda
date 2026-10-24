@@ -56,7 +56,7 @@ public class MenuStateHeadlessTests
         using var h = new ShellHarness();
         var keys = h.Get<ContextKeyService>();
         var monitor = Top(h, "monitor");
-        Assert.Equal(["oranda.monitor.sessions", "oranda.monitor.sql"], VisibleCommandIds(monitor));
+        Assert.Equal(["oranda.monitor.sessions"], VisibleCommandIds(monitor));
         Assert.All(Items(monitor).OfType<Separator>(), s => Assert.False(s.IsVisible));
         Assert.False(EmptyNotice(monitor).IsVisible);
 

@@ -18,7 +18,7 @@ namespace Oranda.App.Tests.Shell.Headless;
 // 플랫폼과 무관하게 돌도록 macOS 분기는 ShellHarness(nativeMenu: true) 로 강제로 켠다.
 public class NativeMenuTests
 {
-    private static readonly string[] TopTitles = ["파일", "편집", "보기", "SQL", "결과", "데이터베이스", "모니터", "도구", "창", "도움말"];
+    private static readonly string[] TopTitles = ["파일", "편집", "보기", "SQL", "결과", "데이터베이스", "모니터", "튜닝", "도구", "창", "도움말"];
 
     private static IReadOnlyList<MenuNode> Model(ShellHarness h) =>
         MenuModelBuilder.BuildMenuBar(
@@ -223,7 +223,7 @@ public class NativeMenuTests
 
         Assert.Null(h.Window.NativeMenuBar);
         Assert.True(h.Window.Menus.IsVisible);
-        Assert.Equal(10, h.Window.Menus.Items.OfType<MenuItem>().Count());
+        Assert.Equal(11, h.Window.Menus.Items.OfType<MenuItem>().Count());
     });
 
     [Fact]

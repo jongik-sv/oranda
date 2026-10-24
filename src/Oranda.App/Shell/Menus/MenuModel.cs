@@ -137,9 +137,9 @@ public static class MenuItemSources
 /// <summary>레지스트리의 명령 목록으로 메뉴 막대·툴바 모델을 만든다. 메뉴 항목을 셸 파일에 직접 쓰지 않는다.</summary>
 public static class MenuModelBuilder
 {
-    /// <summary>최상위 메뉴 10개와 순서(ui-shell.md 1.1).</summary>
+    /// <summary>최상위 메뉴 11개와 순서(ui-shell.md 1.1).</summary>
     public static readonly IReadOnlyList<string> TopMenus =
-        ["file", "edit", "view", "sql", "result", "database", "monitor", "tools", "window", "help"];
+        ["file", "edit", "view", "sql", "result", "database", "monitor", "tuning", "tools", "window", "help"];
 
     public const string PanelsSubmenuId = "view.panels";
 

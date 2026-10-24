@@ -25,14 +25,14 @@ public static class SqlMonitorCommands
     ];
 }
 
-/// <summary>모니터 메뉴의 SQL 모니터 명령(SQLM-01·02).</summary>
-[OrandaCommand("oranda.monitor.sql", CommandCategory.Monitor, Icon = "sqlMonitor", Placements = ["menu:monitor/sql@20", "toolbar:main/sqlMonitor@520"])]
+/// <summary>튜닝 메뉴의 SQL 모니터 명령(SQLM-01·02).</summary>
+[OrandaCommand("oranda.monitor.sql", CommandCategory.Monitor, Icon = "sqlMonitor", Placements = ["menu:tuning/sql@100", "toolbar:main/sqlMonitor@520"])]
 [OrandaCommand("oranda.monitor.sqlSearch", CommandCategory.Monitor, When = "monitorFocus", Enablement = "monitorSqlOpen",
-    Placements = ["menu:monitor/sqlSearch@300"])]
+    Placements = ["menu:tuning/sqlSearch@110"])]
 [OrandaCommand("oranda.monitor.sqlShowPlan", CommandCategory.Monitor, When = "monitorFocus", Enablement = "monitorSqlSelected",
-    Placements = ["menu:monitor/sqlShowPlan@310", "context:monitor/sqlShowPlan@50"])]
+    Placements = ["menu:tuning/sqlShowPlan@120", "context:monitor/sqlShowPlan@50"])]
 [OrandaCommand("oranda.monitor.sqlShowBinds", CommandCategory.Monitor, When = "monitorFocus", Enablement = "monitorSqlSelected",
-    Placements = ["menu:monitor/sqlShowBinds@320", "context:monitor/sqlShowBinds@51"])]
+    Placements = ["menu:tuning/sqlShowBinds@130", "context:monitor/sqlShowBinds@51"])]
 public sealed class SqlMonitorCommandHandler : ICommandHandler
 {
     private readonly ServiceContainer? _container;

@@ -215,7 +215,7 @@ public class PlanCompareTests
         Assert.Null(compare.Enablement);
         Assert.Null(pin.When);
         Assert.Contains("context:plan/pin@10", pin.Placements);
-        Assert.Contains("menu:sql/comparePlan@74", compare.Placements);
+        Assert.Contains("menu:tuning/comparePlan@50", compare.Placements);
 
         var handlers = ShellTestHelpers.AppContributions.Commands
             .Where(c => c.HandlerType == typeof(ExecutionPlanCommandHandler))

@@ -34,15 +34,15 @@ public static class ExecutionPlanCommands
 /// 편집기 현재 문장은 <see cref="IEditorContext"/> 로 얻고(소비만), 마지막 실행의 sql_id 는 <c>StatementExecuted</c> 이벤트의 커서를 기억한다.
 /// </summary>
 [OrandaCommand("oranda.plan.explain", CommandCategory.Sql, When = "sqlDocFocus", Enablement = "(hasSession || dedicatedSession) && !sessionBusy && !mybatisDocActive",
-    Icon = "explainPlan", Placements = ["menu:sql/explain@50", "toolbar:main/explain@230", "context:editor/explain@1020"])]
+    Icon = "explainPlan", Placements = ["menu:sql/explain@50", "menu:tuning/explain@10", "toolbar:main/explain@230", "context:editor/explain@1020"])]
 [OrandaCommand("oranda.plan.actual", CommandCategory.Sql, When = "sqlDocFocus", Enablement = "(hasSession || dedicatedSession) && !mybatisDocActive",
-    Placements = ["menu:sql/actualPlan@60"])]
+    Placements = ["menu:sql/actualPlan@60", "menu:tuning/actualPlan@20"])]
 [OrandaCommand("oranda.plan.displayCursorOptions", CommandCategory.Sql, Enablement = "hasSession",
-    Placements = ["menu:sql/displayCursorOptions@70"])]
+    Placements = ["menu:tuning/displayCursorOptions@30"])]
 [OrandaCommand("oranda.plan.pinForCompare", CommandCategory.Sql, Icon = "lock",
-    Placements = ["menu:sql/pinPlan@72", "context:plan/pin@10"])]
+    Placements = ["menu:tuning/pinPlan@40", "context:plan/pin@10"])]
 [OrandaCommand("oranda.plan.compare", CommandCategory.Sql, Icon = "diff",
-    Placements = ["menu:sql/comparePlan@74", "context:plan/compare@11"])]
+    Placements = ["menu:tuning/comparePlan@50", "context:plan/compare@11"])]
 [OrandaCommand("oranda.view.plan", CommandCategory.View, Placements = ["menu:view/plan@40"])]
 public sealed class ExecutionPlanCommandHandler : ICommandHandler
 {

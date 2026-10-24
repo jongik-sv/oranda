@@ -207,7 +207,7 @@ public class ShellLogicTests
         new() { Id = id, Title = "Cmd." + id, Category = cat, Placements = placements };
 
     [Fact]
-    public void Menu_bar_has_ten_menus_and_orders_items_with_separators_between_groups()
+    public void Menu_bar_has_eleven_menus_and_orders_items_with_separators_between_groups()
     {
         var commands = new[]
         {
@@ -221,7 +221,7 @@ public class ShellLogicTests
 
         var bar = MenuModelBuilder.BuildMenuBar(commands, new ShellText(), _ => null, []);
 
-        Assert.Equal(10, bar.Count);
+        Assert.Equal(11, bar.Count);
         var sql = bar.Single(n => n.Title == "SQL");
         Assert.Equal(["oranda.x.a", "oranda.x.c", null, "oranda.x.b"], sql.Children.Select(n => n.CommandId));
         Assert.Equal(MenuNodeKind.Separator, sql.Children[2].Kind);

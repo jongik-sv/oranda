@@ -73,14 +73,14 @@ public class LocalizationHeadlessTests
         using var h = new ShellHarness();
         var ws = h.Get<DockWorkspace>();
         Assert.True(ws.ShowTool("oranda.panel.output"));
-        Assert.Equal(["파일(_F)", "편집(_E)", "보기(_V)", "_SQL", "결과(_R)", "데이터베이스(_D)", "모니터(_M)", "도구(_T)", "창(_W)", "도움말(_H)"], TopHeaders(h));
+        Assert.Equal(["파일(_F)", "편집(_E)", "보기(_V)", "_SQL", "결과(_R)", "데이터베이스(_D)", "모니터(_M)", "튜닝(_U)", "도구(_T)", "창(_W)", "도움말(_H)"], TopHeaders(h));
         Assert.Equal("DBMS 출력", ToolTitle(ws, "oranda.panel.output"));
         Assert.Equal("명령 검색…", h.Window.FindControl<TextBlock>("PaletteText")!.Text);
 
         await SetLanguageAsync(h, "en");
         await HeadlessHost.WaitUntil(() => TopHeaders(h)[0] == "_File");
 
-        Assert.Equal(["_File", "_Edit", "_View", "_SQL", "_Result", "_Database", "_Monitor", "_Tools", "_Window", "_Help"], TopHeaders(h));
+        Assert.Equal(["_File", "_Edit", "_View", "_SQL", "_Result", "_Database", "_Monitor", "T_uning", "_Tools", "_Window", "_Help"], TopHeaders(h));
         Assert.Equal("DBMS Output", ToolTitle(ws, "oranda.panel.output"));
         var palette = h.Window.FindControl<Button>("PaletteButton")!;
         Assert.Equal("Search commands...", h.Window.FindControl<TextBlock>("PaletteText")!.Text);
@@ -361,7 +361,7 @@ public class LocalizationHeadlessTests
 
         // 접근 키 표시(_)가 가리키는 글자가 최상위 메뉴마다 하나씩이고 서로 다르다.
         var keys = TopHeaders(h).Select(t => char.ToUpperInvariant(t[t.IndexOf('_', StringComparison.Ordinal) + 1])).ToList();
-        Assert.Equal(10, keys.Distinct().Count());
+        Assert.Equal(11, keys.Distinct().Count());
 
         // Alt+글자: 파일 메뉴가 열린다.
         h.Window.KeyPress(Key.F, RawInputModifiers.Alt, PhysicalKey.F, "f");
