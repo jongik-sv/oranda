@@ -74,6 +74,9 @@
             Focusable="False" Tag="oranda.grid.exportExcel" Content="Excel 로 내보내기"
             IsEnabled="{Binding Selected.HasPane, FallbackValue=False}"
             icons:ButtonIcon.Key="excel" icons:ButtonIcon.IconOnly="True" />
+    <!-- 문장을 실행하는 동안(결과가 오기 전까지) 결과 영역 위쪽 가장자리에 겹치는 얇은 막대. 끝·오류·취소에 사라진다. -->
+    <ProgressBar x:Name="RunBar" IsIndeterminate="True" IsVisible="{Binding IsRunBarVisible}" Height="2" MinHeight="2"
+                 VerticalAlignment="Top" IsHitTestVisible="False" AutomationProperties.Name="쿼리를 실행하는 중" />
     </Grid>
   </DockPanel>
 </UserControl>

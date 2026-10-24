@@ -84,6 +84,7 @@ public sealed partial class SqlResultPaneViewModel
 
         _ = _model.DisposeAsync().AsTask();
         _model = null;
+        RefreshBusy();
     }
 
     private void OnModelChanged(object? sender, EventArgs e) => UpdateStatus();

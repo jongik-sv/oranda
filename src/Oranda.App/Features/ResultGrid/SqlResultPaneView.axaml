@@ -117,9 +117,14 @@
         <!-- 전체 행 수를 세는 동안(oranda.grid.countRows)만 보이는 취소 단추. -->
         <Button x:Name="CountCancelButton" DockPanel.Dock="Left" Classes="tool" Padding="4,0" Margin="6,0,0,0" Focusable="False"
                 Content="행 수 세기 취소" IsVisible="{Binding IsCountingRows}" icons:ButtonIcon.Key="cancel" />
-        <!-- 거르고 남은 행이 가져온 일부뿐일 때(TSK-13-26): 상태 줄의 「거름: 보이는 N / 가져온 M행 (전체 아님)」 옆에 보인다. -->
+        <!-- 더 가져올 행이 있을 때만 보이는 「모두 가져오기」(oranda.grid.fetchAll 과 같은 명령, 거른 결과의 「전체 아님」 옆도 같다).
+             가져오는 중에는 같은 자리에 「가져오기 취소」가 보인다(실행 취소 명령으로도 끊긴다). -->
         <Button x:Name="FilterFetchAllButton" DockPanel.Dock="Left" Classes="tool" Padding="4,0" Margin="6,0,0,0" Focusable="False"
-                Content="모두 가져오기" IsVisible="{Binding CanFetchAllForFilter}" icons:ButtonIcon.Key="down" />
+                Content="모두 가져오기" IsVisible="{Binding CanFetchAll}" icons:ButtonIcon.Key="down"
+                ToolTip.Tip="남은 행을 모두 가져옵니다. 행이 많으면 오래 걸리고 메모리를 씁니다" />
+        <Button x:Name="FetchCancelButton" DockPanel.Dock="Left" Classes="tool" Padding="4,0" Margin="6,0,0,0" Focusable="False"
+                Content="가져오기 취소" IsVisible="{Binding IsFetchingAll}" icons:ButtonIcon.Key="cancel"
+                ToolTip.Tip="모두 가져오기를 멈춥니다(이미 가져온 행은 남습니다)" />
         <!-- 머리글 정렬하는 동안(TSK-13-17)만 보이는 진행 글과 취소 단추(Esc 도 같다). -->
         <TextBlock DockPanel.Dock="Left" Margin="12,0,0,0" VerticalAlignment="Center" Text="{Binding SortStatusText}"
                    IsVisible="{Binding IsSorting}" />
@@ -128,5 +133,10 @@
         <Panel />
       </DockPanel>
     </Border>
+    <!-- 서버와 오가는 동안(첫 페치·추가 페치·모두 가져오기·정렬·거르기·서버 정렬) 위쪽 가장자리에 겹쳐 보이는 얇은 막대.
+         자리를 차지하지 않아 그리드가 밀리지 않는다. 150ms 넘게 이어질 때만 보인다. -->
+    <ProgressBar x:Name="BusyBar" Grid.Row="0" Grid.RowSpan="6" IsIndeterminate="True" IsVisible="{Binding IsBusyBarVisible}"
+                 Height="2" MinHeight="2" VerticalAlignment="Top" IsHitTestVisible="False"
+                 AutomationProperties.Name="결과를 가져오는 중" />
   </Grid>
 </UserControl>

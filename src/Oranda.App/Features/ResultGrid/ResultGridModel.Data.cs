@@ -40,27 +40,76 @@ public sealed partial class ResultGridModel
     /// <summary>커서 끝까지 모두 가져온다(PRD 「모두 가져오기」).</summary>
     public async Task FetchAllAsync(CancellationToken ct = default)
     {
-        var p = (int)(_loadedRows / PageSize);
-        while (HasMoreRows)
+        if (IsFetchingAll)
         {
-            var page = await FetchPageAsync(p, ct).ConfigureAwait(true);
-            if (page.IsLast || page.RowCount == 0)
-            {
-                break;
-            }
-
-            p++;
+            return; // 이미 가져오는 중(단추를 두 번 눌러도 한 번만)
         }
 
-        await ExtendLocalFilterAsync(ct).ConfigureAwait(true);
+        using var own = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        _fetchAllCts = own;
+        IsFetchingAll = true;
+        RaiseChanged();
+        try
+        {
+            var p = (int)(_loadedRows / PageSize);
+            while (HasMoreRows)
+            {
+                var page = await FetchPageAsync(p, own.Token).ConfigureAwait(true);
+                if (page.IsLast || page.RowCount == 0)
+                {
+                    break;
+                }
+
+                p++;
+            }
+
+            await ExtendLocalFilterAsync(own.Token).ConfigureAwait(true);
+        }
+        catch (OperationCanceledException) when (!ct.IsCancellationRequested && !_disposed)
+        {
+            // 「취소」 단추(CancelFetchAll)로 멈췄다: 가져온 만큼은 그대로 두고 조용히 끝낸다.
+        }
+        finally
+        {
+            _fetchAllCts = null;
+            IsFetchingAll = false;
+            RaiseChanged();
+        }
     }
+
+    /// <summary>모두 가져오는 중이면 멈춘다(이미 가져온 행은 남는다).</summary>
+    public void CancelFetchAll() => _fetchAllCts?.Cancel();
+
+    /// <summary>「모두 가져오기」가 도는 중(상태 줄 단추가 「취소」로 바뀐다).</summary>
+    public bool IsFetchingAll { get; private set; }
+
+    /// <summary>페이지를 서버에서 받는 중(스크롤 미리 읽기·모두 가져오기·정렬용 읽기). 실행 중 막대의 근거.</summary>
+    public bool IsFetching => _fetching > 0 || IsFetchingAll;
+
+    private CancellationTokenSource? _fetchAllCts;
+    private int _fetching;
 
     private async Task<ResultPage> FetchPageAsync(int pageIndex, CancellationToken ct)
     {
         using var linked = CancellationTokenSource.CreateLinkedTokenSource(ct, _cts.Token);
-        var page = await _cache.GetPageAsync(pageIndex, linked.Token).ConfigureAwait(true);
-        OnPage(page);
-        return page;
+        if (_fetching++ == 0)
+        {
+            RaiseChanged();
+        }
+
+        try
+        {
+            var page = await _cache.GetPageAsync(pageIndex, linked.Token).ConfigureAwait(true);
+            OnPage(page);
+            return page;
+        }
+        finally
+        {
+            if (--_fetching == 0)
+            {
+                RaiseChanged();
+            }
+        }
     }
 
     private void RequestPage(int pageIndex)

@@ -76,11 +76,43 @@ public sealed partial class ResultTabsViewModel : ViewModelBase
     public ResultTabsViewModel(ConnectionProfile? profile = null)
     {
         Profile = profile;
+        _runBar.PropertyChanged += OnRunBarChanged;
     }
 
     public ConnectionProfile? Profile { get; private set; }
 
     public ObservableCollection<ResultTabItem> Tabs { get; } = [];
+
+    private readonly DelayedBusyFlag _runBar = new();
+    private bool _isRunning;
+
+    /// <summary>
+    /// 이 결과 영역의 문장이 실행 중이다(첫 페치 전까지 포함). 컨트롤러가 켜고 끈다 — 끝·오류·취소 모두에서 꺼진다.
+    /// 결과 영역 위쪽 가장자리의 얇은 막대가 이것을 따른다(<see cref="IsRunBarVisible"/>).
+    /// </summary>
+    public bool IsRunning
+    {
+        get => _isRunning;
+        set
+        {
+            if (SetProperty(ref _isRunning, value))
+            {
+                _runBar.Set(value);
+            }
+        }
+    }
+
+    /// <summary>실행 중 막대를 보인다(<see cref="RunBarDelay"/> 넘게 이어질 때만 — 짧은 쿼리는 깜빡이지 않는다).</summary>
+    public bool IsRunBarVisible => _runBar.Visible;
+
+    /// <summary>막대가 보이기까지의 지연(기본 150ms, 시험이 줄인다).</summary>
+    public TimeSpan RunBarDelay
+    {
+        get => _runBar.Delay;
+        set => _runBar.Delay = value;
+    }
+
+    private void OnRunBarChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e) => OnPropertyChanged(nameof(IsRunBarVisible));
 
     [ObservableProperty]
     public partial ResultTabItem? Selected { get; set; }

@@ -45,6 +45,7 @@ public sealed partial class SqlResultPaneViewModel
         OnPropertyChanged(nameof(SortStatusText));
         OnPropertyChanged(nameof(HasLocalFilter));
         OnPropertyChanged(nameof(CanFetchAllForFilter));
+        RefreshBusy();
         if (_model is null)
         {
             StatusText = string.Empty;

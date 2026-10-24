@@ -58,6 +58,7 @@ public partial class SqlResultPaneView : UserControl
         EditHintRowId.Click += async (_, _) => await RunEditHintActionAsync();
         CountCancelButton.Click += (_, _) => Vm?.CancelCountRows();
         SortCancelButton.Click += (_, _) => Vm?.CancelSort();
+        FetchCancelButton.Click += (_, _) => Vm?.CancelFetchAll();
         SelectionSummaryText.Tapped += async (_, _) =>
         {
             if (Vm is { } vm)

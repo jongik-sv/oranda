@@ -43,7 +43,7 @@ public sealed partial class ExecutionController
                 () => exec.ExecuteAsync(session, stmt, binds, new ExecutionOptions { Source = HistorySource.Editor }, token),
                 CancellationToken.None).ConfigureAwait(true);
             await AfterStatementAsync(tab, session, stmt, result, token).ConfigureAwait(true);
-        }, ct).ConfigureAwait(true);
+        }, ct, results).ConfigureAwait(true);
 
         if (result is null)
         {
@@ -89,7 +89,7 @@ public sealed partial class ExecutionController
                 () => exec.ExecuteAsync(session, stmt, binds, new ExecutionOptions { Source = HistorySource.Editor }, token),
                 CancellationToken.None).ConfigureAwait(true);
             await AfterStatementAsync(tab, session, stmt, result, token).ConfigureAwait(true);
-        }, ct).ConfigureAwait(true);
+        }, ct, results).ConfigureAwait(true);
 
         if (result is null)
         {
@@ -159,7 +159,7 @@ public sealed partial class ExecutionController
             {
                 await en.DisposeAsync().ConfigureAwait(true);
             }
-        }, ct).ConfigureAwait(true);
+        }, ct, results).ConfigureAwait(true);
 
         var line = $"스크립트: {stmts.Count.ToString(CultureInfo.InvariantCulture)}개 중 {done.ToString(CultureInfo.InvariantCulture)}개 실행, 성공 {ok.ToString(CultureInfo.InvariantCulture)}, 실패 {failed.ToString(CultureInfo.InvariantCulture)}" + (cancelled ? ", 취소됨" : string.Empty);
         Log.AddMessage(failed > 0 ? MessageKind.Warning : MessageKind.Info, line);
@@ -238,12 +238,17 @@ public sealed partial class ExecutionController
     }
 
     /// <summary>실행 상태 표시·취소 토큰을 묶어 본문을 돌린다. 끝나면 상태를 되돌린다.</summary>
-    private async Task GuardedAsync(ISession session, Func<CancellationToken, Task> body, CancellationToken outer)
+    private async Task GuardedAsync(ISession session, Func<CancellationToken, Task> body, CancellationToken outer, ResultTabsViewModel? results = null)
     {
         using var cts = CancellationTokenSource.CreateLinkedTokenSource(outer);
         _runs[session.Id] = cts;
         s_runningProfile.Value = session.Profile;
         State.BeginRun(session.Id);
+        if (results is not null)
+        {
+            results.IsRunning = true; // 결과 영역 위쪽의 얇은 진행 막대
+        }
+
         try
         {
             await body(cts.Token).ConfigureAwait(true);
@@ -260,6 +265,11 @@ public sealed partial class ExecutionController
         finally
         {
             _runs.Remove(session.Id);
+            if (results is not null)
+            {
+                results.IsRunning = false; // 끝·오류·취소 모두에서 끈다
+            }
+
             State.ApplyTransaction(session.Id, session.HasPendingTransaction);
             State.EndRun(session.Id);
         }

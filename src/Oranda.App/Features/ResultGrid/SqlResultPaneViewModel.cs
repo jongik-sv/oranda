@@ -152,6 +152,7 @@ public sealed partial class SqlResultPaneViewModel : ToolPanelViewModelBase
             {
                 OnPropertyChanged(nameof(CanCountRows));
                 OnPropertyChanged(nameof(CanApplyFilter));
+                RefreshBusy();
             }
         }
     }

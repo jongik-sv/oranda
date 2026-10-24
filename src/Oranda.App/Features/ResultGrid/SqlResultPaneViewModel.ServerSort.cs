@@ -81,6 +81,7 @@ public sealed partial class SqlResultPaneViewModel
         ShowFilterMessage(null);
 
         IResultSet? result = null;
+        BeginServerSort();
         try
         {
             result = await run(request, ct).ConfigureAwait(true);
@@ -94,6 +95,10 @@ public sealed partial class SqlResultPaneViewModel
         {
             ShowFilterMessage("서버에서 다시 조회하지 못했습니다: " + e.Message.ReplaceLineEndings(" "));
             return;
+        }
+        finally
+        {
+            EndServerSort();
         }
 
         if (generation != _resultGeneration || _model is null)
