@@ -110,3 +110,24 @@
 | 펼친 SQL | 시나리오 값으로 동적 태그를 계산한 뒤의 SQL |
 | 조합 검사 | 조건 켬·끔 조합마다 펼친 SQL 의 문법을 검사하기 |
 | MyBatis 작업 공간 | 매퍼 하나를 연 Oranda 문서(문서 탭 하나) |
+
+## 10. Lock 모니터 (2026-10-24 추가)
+
+배경: 지금 세션 모니터는 세션 관점의 블로킹 트리만 보인다. 잠금 자원 관점(누가 무엇을 쥐고 누가 기다리는지)과 조치 판단을 돕는 정보가 없다. 다른 도구(Toad Session Browser Locks 탭, DBeaver Lock Manager, OEM Blocking Sessions, Quest Spotlight Locks Tree)를 조사해 범위를 정했다. 모든 조회는 SELECT 전용이다(업무 PC 의 DB 접근 결재 도구가 INSERT·UPDATE·DELETE 를 결재 대상으로 잡는다).
+
+| ID | 요구사항 | 우선순위 |
+|---|---|---|
+| LK-01 | 잠금 대기 트리: 보유자 루트 → 대기자. 대기 초·이벤트·객체·sql_id. RAC 는 gv$·INST_ID | P0 |
+| LK-02 | 잠금 목록(gv$lock): 유형·id1·id2·보유 모드·요청 모드·ctime·block. TM 은 객체 이름, TX 는 트랜잭션 시작 시각·undo 크기 | P0 |
+| LK-03 | 보유자·대기자 SQL 전문 보기(클릭 때만 gv$sql) | P0 |
+| LK-04 | 거르기: 최소 대기 초, 사용자·스키마·인스턴스, 대기·차단만 | P0 |
+| LK-05 | 자동 새로 고침, 세션 종료·연결 끊기(확인 창에 대기자 수), 복사·CSV 내보내기 | P0 |
+| LK-06 | 잠긴 행 보기: row_wait_* → DBMS_ROWID 로 rowid, 그 행 값 | P1 |
+| LK-07 | 보유자 영향 순위: 대기자 수·최대·합계 대기 초 | P1 |
+| LK-08 | 대기 이벤트별 원인 힌트(TX 행 잠금, TM 경합 = FK 인덱스 누락 의심, ITL, library cache) | P1 |
+| LK-09 | DDL·라이브러리 잠금 탭(dba_ddl_locks), 세션 모니터로 이동, 상태 줄 차단 알림 → Lock 모니터 | P1 |
+| LK-10 | 이력 타임라인(앱 메모리·로컬 파일, ASH 미사용) | P2 |
+| LK-11 | 임계치 알림(N초·M명)과 그 시점 SQL 스냅샷 로컬 저장 | P2 |
+| LK-12 | 방치 트랜잭션(INACTIVE + 열린 트랜잭션), 대기 바인드 값, 데드락 힌트(순환 감지·ORA-00060) | P2 |
+
+제약: dba_waiters·dba_blockers(catblock.sql 필요)는 쓰지 않는다. 11.2 이상에서 동작(FETCH FIRST 금지). 권한이 모자라면 그 기능만 끄고 이유를 보인다.
