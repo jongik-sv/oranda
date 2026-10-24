@@ -37,6 +37,7 @@ levels:
   - prd-ref: MB-01, MB-02, MB-04, TRD 3, TRD 4, TRD 2, TRD 3.1·3.2·3.3
   - requirements: 인터페이스·모델 형만 정의한다: IMyBatisMapperDocument·MyBatisElement·MapperEdit·MapperWriteCheck(Language), EvalResult·MyBatisParameter·ConditionCombination·IMyBatisEvaluator·IMyBatisFragmentResolver(Language), IMyBatisScenarioStore·MyBatisScenario(Core); 시나리오 표 `mybatis_scenario` 의 마이그레이션(빈 표)을 로컬 데이터 모델에 더한다; 문서 종류 `MyBatis` 와 도구 창 2개(「문장」·「파라미터 · 시나리오」), 아래 패널 쪽 2개(「펼친 SQL」·「조합 검사」)의 등록 자리를 만든다(빈 화면). 도구 창 보임 규칙에 MyBatis 문서 조건을 더한다; design.md 에 `## 기능 Task 편집 지점` 표(기능 Task → 소유 파일·시험 파일)를 쓰고, 기능 Task 마다 빈 시험 파일(Skip 시험 틀)을 만든다; 공용 시험 헬퍼: 표본 매퍼 xml 모음(BOM·CRLF·CDATA·주석·엔티티·한글·DOCTYPE·시안 EmpMapper), 가짜 시나리오 저장소; 제약: Core·Language 는 Avalonia·ODP.NET 을 참조하지 않는다. 명령은 [OrandaCommand] 특성 자동 수집을 쓴다; API: TRD 4 인터페이스(계약); 비고: 담당 PC: win144(Windows 개발 PC) — 맥북 세션은 이 Task 를 하지 않는다. 기능 Task 9개가 같은 인터페이스·문서 종류·도구 창 자리를 쓰므로 먼저 동결한다
   - acceptance: 실행 로직 없음 (contract-only) / `dotnet build Oranda.sln -warnaserror` 통과 / 공유 시험은 틀의 존재·탑재 순서만 단정한다. 빈 라우터·스텁 목록(`STUBS` 등)을 단정하지 않는다 / 기능 Task 마다 자기 시험 파일과 소유 파일을 design.md `## 기능 Task 편집 지점` 에 적고, 두 Task 가 한 파일을 나눠 갖지 않는다 / 등록(라우트·핸들러 목록)은 자동 수집이며 기능 Task 가 공유 진입점에 줄을 더하지 않아도 된다 / 계약 문서가 지정한 파일(공용 시험 헬퍼 포함)이 모두 있다 / 인터페이스·형 존재, 도구 창 등록 자리 존재, 마이그레이션 적용 후 빈 표 존재
+  - note: Core LockMonitorModels.cs 형 11개·IMonitorService 기본 NotSupported 메서드 8개(GetRecentDeadlocksAsync 포함)·App LockMonitorCommands 패널/명령 ID 상수·commands.md 모니터 행 10개 (win144)
 
 ## WP-02: 매퍼 모델·계산기·시나리오 저장 (UI 없음)
 <!-- 담당 PC: win144(Windows 개발 PC) — 맥북 세션은 이 WP 의 Task 를 하지 않는다. 화면 Task 들이 실제로 쓰는 Language·Core 구현 -->
@@ -278,7 +279,7 @@ levels:
 ## WP-05: Lock 모니터
 <!-- 담당 PC: win144(Windows 개발 PC) — 맥북 세션은 이 WP 의 Task 를 하지 않는다. 2026-10-24 사용자 지시 「다른 DB도구의 Lock 모니터 기능들을 조사해서 구현하자」「P2 까지 모두 구현하자」. 조사 근거 = Toad Session Browser Locks 탭, DBeaver Lock Manager, OEM Blocking Sessions, Quest Spotlight Locks Tree. 모든 조회는 SELECT 전용(Chakra Max 결재 회피). dba_waiters·dba_blockers(catblock.sql 필요)는 쓰지 않는다 -->
 
-- [ ] TSK-05-01: Lock 모니터 조회 계약 — 레코드·IMonitorService 메서드·명령 ID (계약 전용) [win144] w:1 2026-10-24~2026-10-24
+- [x] TSK-05-01: Lock 모니터 조회 계약 — 레코드·IMonitorService 메서드·명령 ID (계약 전용) [win144] w:1 2026-10-24~2026-10-24
   - category: infra
   - domain: backend
   - model: sonnet

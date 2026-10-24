@@ -557,6 +557,16 @@
 | `oranda.monitor.sqlSearch` | Top SQL 검색 | - | `monitorFocus` | `monitorSqlOpen` | TSK-09-02 |
 | `oranda.monitor.sqlShowPlan` | 선택 SQL 실제 계획 | - | `monitorFocus` | `monitorSqlSelected` | TSK-09-02 |
 | `oranda.monitor.sqlShowBinds` | 선택 SQL 바인드 캡처 | - | `monitorFocus` | `monitorSqlSelected` | TSK-09-02 |
+| `oranda.monitor.locks` | Lock 모니터 | - | 전역 | `hasSession` | TSK-05-03 |
+| `oranda.monitor.locks.refresh` | Lock 새로 고침 | `F5` | `lockMonitorFocus` | `lockMonitorOpen` | TSK-05-03 |
+| `oranda.monitor.locks.toggleAutoRefresh` | Lock 자동 새로 고침 켜기/끄기 | - | `lockMonitorFocus` | `lockMonitorOpen` | TSK-05-03 |
+| `oranda.monitor.locks.killHolder` | 보유자 세션 종료 | - | `lockMonitorFocus` | `lockSessionSelected && canKillSession` | TSK-05-03 |
+| `oranda.monitor.locks.showSql` | 보유자·대기자 SQL 보기 | - | `lockMonitorFocus` | `lockSessionSelected` | TSK-05-03 |
+| `oranda.monitor.locks.showLockedRow` | 잠긴 행 보기 | - | `lockMonitorFocus` | `lockWaiterSelected` | TSK-05-03 |
+| `oranda.monitor.locks.showDdlLocks` | DDL 잠금 보기 | - | `lockMonitorFocus` | `lockMonitorOpen && canQueryDdlLocks` | TSK-05-03 |
+| `oranda.monitor.locks.goToSession` | 세션 모니터에서 보기 | - | `lockMonitorFocus` | `lockSessionSelected` | TSK-05-03 |
+| `oranda.monitor.locks.exportCsv` | Lock 목록 CSV 내보내기 | - | `lockMonitorFocus` | `lockMonitorOpen` | TSK-05-03 |
+| `oranda.monitor.locks.showHistory` | Lock 이력 보기 | - | `lockMonitorFocus` | `lockMonitorOpen` | TSK-05-04 |
 
 ### 도구
 

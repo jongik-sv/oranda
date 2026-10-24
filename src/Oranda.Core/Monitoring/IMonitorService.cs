@@ -38,6 +38,40 @@ public interface IMonitorService
     /// </summary>
     Task<BlockerSnapshot> GetMyBlockingAsync(ISession monitor, long workSid, CancellationToken ct) =>
         throw new NotSupportedException();
+
+    // Lock 모니터(TSK-05-01 계약, 조회 TSK-05-02). 아래는 모두 기본 구현이 지원하지 않음 — 가짜가 구현하지 않아도 된다.
+    // 권한이 모자라면 구현은 예외 대신 빈 결과를 돌려주고 이유는 화면 쪽 MonitorAccess 가 보인다.
+
+    /// <summary>잠금 목록 + 대기 트리(LK-01·02·04). gv$lock + gv$session.</summary>
+    Task<LockSnapshot> GetLocksAsync(ISession monitor, LockFilter filter, CancellationToken ct) =>
+        throw new NotSupportedException();
+
+    /// <summary>보유자 영향 순위(LK-07). 합계 대기 초 내림차순.</summary>
+    Task<IReadOnlyList<BlockerImpact>> GetBlockerImpactAsync(ISession monitor, CancellationToken ct) =>
+        throw new NotSupportedException();
+
+    /// <summary>
+    /// 대기 세션(<paramref name="waiter"/>)이 기다리는 잠긴 행(LK-06). 행 잠금 대기(enq: TX - row lock contention)가 아니거나
+    /// row_wait_obj# 가 -1 이면 null.
+    /// </summary>
+    Task<LockedRowInfo?> GetLockedRowAsync(ISession monitor, SessionKey waiter, CancellationToken ct) =>
+        throw new NotSupportedException();
+
+    /// <summary>DDL·라이브러리 잠금(LK-09). dba_ddl_locks 권한이 없으면 빈 목록.</summary>
+    Task<IReadOnlyList<DdlLockRow>> GetDdlLocksAsync(ISession monitor, CancellationToken ct) =>
+        throw new NotSupportedException();
+
+    /// <summary>대기 세션 SQL 의 캡처된 바인드(LK-12).</summary>
+    Task<IReadOnlyList<WaitingBind>> GetWaitingBindsAsync(ISession monitor, WaitingBindTarget target, CancellationToken ct) =>
+        throw new NotSupportedException();
+
+    /// <summary>방치 트랜잭션(LK-12). 마지막 호출 뒤 <paramref name="minIdleSeconds"/> 초 이상 지난 INACTIVE 세션, 오래된 순.</summary>
+    Task<IReadOnlyList<IdleTransaction>> GetIdleTransactionsAsync(ISession monitor, int minIdleSeconds, CancellationToken ct) =>
+        throw new NotSupportedException();
+
+    /// <summary>최근 데드락(ORA-00060) 기록(LK-12, TSK-05-04). 최신순, 최대 <paramref name="max"/> 건.</summary>
+    Task<IReadOnlyList<DeadlockEvent>> GetRecentDeadlocksAsync(ISession monitor, int max, CancellationToken ct) =>
+        throw new NotSupportedException();
 }
 
 /// <summary>
