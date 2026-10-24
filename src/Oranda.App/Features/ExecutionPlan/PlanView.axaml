@@ -168,8 +168,21 @@
                 <TextBlock Text="비교" VerticalAlignment="Center" />
               </StackPanel>
             </ListBoxItem>
+            <ListBoxItem ToolTip.Tip="단계 트리 그래프: 너비 = 비용 비중, 색 진하기 = 시간 비중">
+              <StackPanel Orientation="Horizontal" Spacing="5">
+                <ContentControl Content="{Binding Source='join', Converter={x:Static icons:IconKeyConverter.Instance}, ConverterParameter=14}" VerticalAlignment="Center" />
+                <TextBlock Text="그래프" VerticalAlignment="Center" />
+              </StackPanel>
+            </ListBoxItem>
+            <ListBoxItem ToolTip.Tip="SQL 모니터 보고서(Tuning Pack)">
+              <StackPanel Orientation="Horizontal" Spacing="5">
+                <ContentControl Content="{Binding Source='sqlMonitor', Converter={x:Static icons:IconKeyConverter.Instance}, ConverterParameter=14}" VerticalAlignment="Center" />
+                <TextBlock Text="보고서" VerticalAlignment="Center" />
+              </StackPanel>
+            </ListBoxItem>
           </ListBox>
           <Separator Classes="toolbar" />
+          <StackPanel Orientation="Horizontal" Spacing="2" IsVisible="{Binding IsTreeToolbar}">
           <Button x:Name="FormatButton" Classes="tool" ToolTip.Tip="실제 계획(DISPLAY_CURSOR) 형식" AutomationProperties.Name="실제 계획 형식">
             <StackPanel Orientation="Horizontal" Spacing="5">
               <ContentControl Content="{Binding Source='settings', Converter={x:Static icons:IconKeyConverter.Instance}, ConverterParameter=14}" VerticalAlignment="Center" />
@@ -202,6 +215,42 @@
                   ToolTip.Tip="고정한 계획과 지금 계획 비교" />
           <Button x:Name="UnpinButton" Classes="toolbar" Content="고정 해제" icons:ButtonIcon.Key="clear" icons:ButtonIcon.IconOnly="True" IsEnabled="{Binding HasPinned}"
                   ToolTip.Tip="비교 기준 고정 풀기" />
+          </StackPanel>
+          <!-- 그래프 탭: 색 기준 | 맞춤 · 확대 · 축소 · 모두 펼치기 -->
+          <StackPanel x:Name="GraphTools" Orientation="Horizontal" Spacing="2" IsVisible="{Binding IsGraphToolbar}">
+            <TextBlock Classes="dim" Text="색 기준" VerticalAlignment="Center" Margin="2,0,4,0" FontSize="{DynamicResource OrandaFontSizeSmall}" />
+            <ListBox x:Name="GraphColorSwitch" Classes="segmented" SelectedIndex="{Binding GraphColorIndex, Mode=TwoWay}" AutomationProperties.Name="색 기준">
+              <ListBoxItem IsEnabled="{Binding HasTimeBasis}" ToolTip.Tip="자체 A-Time 비중(실제 계획)">
+                <TextBlock Text="시간" />
+              </ListBoxItem>
+              <ListBoxItem ToolTip.Tip="자체 비용 비중">
+                <TextBlock Text="비용" />
+              </ListBoxItem>
+            </ListBox>
+            <Separator Classes="toolbar" />
+            <Button x:Name="FitButton" Classes="tool" Content="맞춤" ToolTip.Tip="그래프 전체가 보이게 맞춤" />
+            <Button x:Name="ZoomInButton" Classes="toolbar" Content="＋" AutomationProperties.Name="확대" ToolTip.Tip="확대(휠 위)" />
+            <Button x:Name="ZoomOutButton" Classes="toolbar" Content="－" AutomationProperties.Name="축소" ToolTip.Tip="축소(휠 아래)" />
+            <Button x:Name="ExpandAllButton" Classes="tool" Content="모두 펼치기" IsVisible="{Binding !!GraphCollapsedCount}"
+                    ToolTip.Tip="단계가 많아 접어 둔 하위 트리를 모두 펼칩니다" />
+          </StackPanel>
+          <!-- 보고서 탭: 새로 고침 · 브라우저로 열기 · 복사 -->
+          <StackPanel x:Name="ReportTools" Orientation="Horizontal" Spacing="2" IsVisible="{Binding IsReportToolbar}">
+            <Button x:Name="ReportRefreshButton" Classes="toolbar" Content="보고서 새로 고침" icons:ButtonIcon.Key="refresh" icons:ButtonIcon.IconOnly="True"
+                    IsEnabled="{Binding CanUseReport}" ToolTip.Tip="DBMS_SQLTUNE.REPORT_SQL_MONITOR 를 다시 읽습니다(SELECT, DB 에 쓰지 않음)" />
+            <Button x:Name="BrowserButton" Classes="tool" Content="브라우저로 열기" icons:ButtonIcon.Key="exportFile" IsEnabled="{Binding CanUseReport}"
+                    ToolTip.Tip="HTML 보고서를 임시 파일로 만들어 기본 브라우저로 엽니다" />
+            <Button x:Name="ReportCopyButton" Classes="tool" Content="복사" icons:ButtonIcon.Key="copy" IsEnabled="{Binding IsReportReady}"
+                    ToolTip.Tip="보고서 글을 클립보드에 복사" />
+          </StackPanel>
+          <!-- 「통계 보기」「자식 커서」: 다른 기능이 등록한 명령을 부른다(없으면 숨김). -->
+          <StackPanel Orientation="Horizontal" Spacing="2" IsVisible="{Binding ShowTuningButtons}">
+            <Separator Classes="toolbar" />
+            <Button x:Name="StatsButton" Classes="tool" Content="통계 보기" icons:ButtonIcon.Key="table" IsVisible="{Binding HasStatsCommand}"
+                    ToolTip.Tip="이 계획의 표·인덱스·열 통계(SELECT 만)" />
+            <Button x:Name="ChildCursorsButton" Classes="tool" Content="자식 커서" icons:ButtonIcon.Key="diff" IsVisible="{Binding HasChildCursorsCommand}"
+                    ToolTip.Tip="이 sql_id 의 자식 커서와 따로 생긴 사유" />
+          </StackPanel>
         </StackPanel>
         <Border Classes="chip" Margin="6,0,0,0" HorizontalAlignment="Left" IsVisible="{Binding HasPinned}" ToolTip.Tip="{Binding PinnedText}">
           <DockPanel>
@@ -212,8 +261,13 @@
         </Border>
       </DockPanel>
     </Border>
+    <vm:PlanStatisticsBand x:Name="StatisticsBand" DockPanel.Dock="Top" />
     <Border DockPanel.Dock="Bottom" Classes="panel-status">
-      <TextBlock Text="{Binding StatusText}" TextTrimming="CharacterEllipsis" />
+      <Panel>
+        <TextBlock x:Name="StatusLine" Text="{Binding StatusText}" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding StatusText}"
+                   IsVisible="{Binding !IsReportToolbar}" />
+        <TextBlock Text="{Binding ReportStatusText}" TextTrimming="CharacterEllipsis" IsVisible="{Binding IsReportToolbar}" />
+      </Panel>
     </Border>
 
     <TabControl Classes="bare" Padding="0" SelectedIndex="{Binding SelectedTabIndex, Mode=TwoWay}">
@@ -452,6 +506,133 @@
             </DockPanel>
           </ScrollViewer>
         </DockPanel>
+      </TabItem>
+
+      <TabItem Header="그래프">
+        <Panel>
+          <StackPanel x:Name="GraphEmptyHint" IsVisible="{Binding !HasGraph}" HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="6">
+            <ContentControl HorizontalAlignment="Center" Opacity="0.55"
+                            Content="{Binding Source='join', Converter={x:Static icons:IconKeyConverter.Instance}, ConverterParameter=32}" />
+            <TextBlock HorizontalAlignment="Center" FontWeight="SemiBold" Text="실행 계획이 없습니다" />
+            <TextBlock HorizontalAlignment="Center" Classes="dim" Text="SQL 편집기에서 Ctrl+E 는 예상 계획, Ctrl+Shift+E 는 실제 계획" />
+          </StackPanel>
+          <Grid ColumnDefinitions="*,5,290" IsVisible="{Binding HasGraph}">
+            <Panel Grid.Column="0">
+              <vm:PlanGraphView x:Name="GraphCanvas" Graph="{Binding Graph}" SelectedStepId="{Binding GraphSelectedId}"
+                                Background="{DynamicResource OrandaCodeBackgroundBrush}" NodeBackground="{DynamicResource OrandaToolbarBackgroundBrush}"
+                                NodeBorder="{DynamicResource OrandaSeparatorBrush}" EdgeBrush="{DynamicResource OrandaTreeGuideBrush}"
+                                AccentBrush="{DynamicResource OrandaIconTealBrush}" HotBrush="{DynamicResource OrandaIconOrangeBrush}"
+                                HotForeground="{DynamicResource OrandaEnvChipForegroundBrush}" FocusBrush="{DynamicResource OrandaFocusBrush}"
+                                AutomationProperties.Name="계획 그래프" />
+              <!-- 범례: 너비 = 비용 비중, 진하기 = 시간 비중, 주황 = 가장 비싼 단계, ⚠ = 위험 -->
+              <Border x:Name="GraphLegend" Classes="chip" CornerRadius="4" Margin="8,0,0,6" Padding="8,3" HorizontalAlignment="Left" VerticalAlignment="Bottom"
+                      IsHitTestVisible="False">
+                <StackPanel Orientation="Horizontal" Spacing="12">
+                  <TextBlock Classes="dim" Text="너비 = 비용 비중" />
+                  <StackPanel Orientation="Horizontal" Spacing="4">
+                    <Border Width="22" Height="8" CornerRadius="2" VerticalAlignment="Center" Background="{DynamicResource OrandaIconTealBrush}" Opacity="0.6" />
+                    <TextBlock Classes="dim" Text="{Binding GraphColorLegend}" />
+                  </StackPanel>
+                  <StackPanel Orientation="Horizontal" Spacing="4">
+                    <Border Width="10" Height="8" CornerRadius="2" VerticalAlignment="Center" Background="{DynamicResource OrandaIconOrangeBrush}" />
+                    <TextBlock Classes="dim" Text="가장 비싼 단계" />
+                  </StackPanel>
+                  <TextBlock Classes="dim" Text="⚠ 위험" />
+                  <TextBlock Classes="dim" Text="{Binding GraphCollapsedText}" IsVisible="{Binding !!GraphCollapsedCount}" />
+                </StackPanel>
+              </Border>
+            </Panel>
+            <GridSplitter Grid.Column="1" ResizeDirection="Columns" Background="Transparent" />
+            <!-- 고른 단계(트리와 같이 골라짐): 연산·객체, 수치, 위험, 조건절, 이 표 통계·튜닝 도우미 -->
+            <Border x:Name="GraphDetailsPane" Grid.Column="2" BorderBrush="{DynamicResource OrandaSeparatorBrush}" BorderThickness="1,0,0,0">
+              <Panel>
+                <TextBlock Margin="12" Classes="dim" TextWrapping="Wrap" Text="노드를 누르면 트리 탭의 같은 단계가 골라집니다."
+                           IsVisible="{Binding SelectedRow, Converter={x:Static ObjectConverters.IsNull}}" />
+                <ScrollViewer HorizontalScrollBarVisibility="Disabled" IsVisible="{Binding SelectedRow, Converter={x:Static ObjectConverters.IsNotNull}}">
+                  <StackPanel Margin="12,8,12,10" Spacing="8">
+                    <TextBlock Classes="section-label" Text="고른 단계 · 트리와 같이 골라짐" />
+                    <StackPanel Spacing="1">
+                      <TextBlock FontWeight="SemiBold" TextWrapping="Wrap" FontFamily="{DynamicResource OrandaGridFontFamily}"
+                                 Text="{Binding SelectedRow.GraphTitle}" />
+                      <TextBlock Classes="dim" TextWrapping="Wrap" Text="{Binding SelectedRow.ObjectText}" IsVisible="{Binding !!SelectedRow.ObjectText.Length}" />
+                    </StackPanel>
+                    <Grid ColumnDefinitions="Auto,*" RowDefinitions="Auto,Auto,Auto,Auto">
+                      <TextBlock Grid.Row="0" Classes="dim" Text="비용" Margin="0,0,12,2" />
+                      <TextBlock Grid.Row="0" Grid.Column="1" Text="{Binding SelectedRow.CostDetailText}" />
+                      <TextBlock Grid.Row="1" Classes="dim" Text="E-Rows" Margin="0,0,12,2" />
+                      <TextBlock Grid.Row="1" Grid.Column="1" Text="{Binding SelectedRow.EstimatedText}" />
+                      <TextBlock Grid.Row="2" Classes="dim" Text="A-Rows" Margin="0,0,12,2" IsVisible="{Binding HasActuals}" />
+                      <TextBlock Grid.Row="2" Grid.Column="1" Text="{Binding SelectedRow.ActualText}" IsVisible="{Binding HasActuals}" />
+                      <TextBlock Grid.Row="3" Classes="dim" Text="시간" Margin="0,0,12,2" IsVisible="{Binding HasActuals}" />
+                      <TextBlock Grid.Row="3" Grid.Column="1" Text="{Binding SelectedRow.TimeDetailText}" IsVisible="{Binding HasActuals}" />
+                    </Grid>
+                    <Border Padding="8,5" CornerRadius="3" BorderThickness="1" IsVisible="{Binding SelectedRow.IsRisky}"
+                            Background="{DynamicResource OrandaGridNeedsChangeBrush}" BorderBrush="{DynamicResource OrandaUncommittedBrush}">
+                      <DockPanel>
+                        <ContentControl DockPanel.Dock="Left" Margin="0,0,6,0" VerticalAlignment="Center"
+                                        Content="{Binding Source='warn', Converter={x:Static icons:IconKeyConverter.Instance}, ConverterParameter=14}" />
+                        <TextBlock TextWrapping="Wrap" Text="{Binding SelectedRow.RiskText}" />
+                      </DockPanel>
+                    </Border>
+                    <StackPanel Spacing="3" IsVisible="{Binding SelectedRow.HasPredicates}">
+                      <TextBlock Classes="section-label" Text="조건절 (predicate)" />
+                      <Border Classes="code">
+                        <SelectableTextBlock Classes="mono" TextWrapping="Wrap" Text="{Binding SelectedRow.Predicates}" />
+                      </Border>
+                    </StackPanel>
+                    <WrapPanel>
+                      <Button x:Name="GraphStatsButton" Classes="tool" Content="이 표 통계" icons:ButtonIcon.Key="table" IsVisible="{Binding HasStatsCommand}"
+                              ToolTip.Tip="이 계획의 표 통계 보기(SELECT 만)" />
+                      <Button x:Name="GraphAssistantButton" Classes="tool" Content="튜닝 도우미" icons:ButtonIcon.Key="star" IsVisible="{Binding HasAssistantCommand}"
+                              ToolTip.Tip="이 문장의 인덱스·재작성·힌트 후보" />
+                    </WrapPanel>
+                  </StackPanel>
+                </ScrollViewer>
+              </Panel>
+            </Border>
+          </Grid>
+        </Panel>
+      </TabItem>
+
+      <TabItem Header="보고서">
+        <Panel>
+          <!-- 커서 없음 / 라이선스 없음 / 읽는 중 / 기록 없음 / 오류 / 보고서 -->
+          <StackPanel x:Name="ReportNoLicense" IsVisible="{Binding IsReportNoLicense}" HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="6" MaxWidth="560">
+            <ContentControl HorizontalAlignment="Center" Opacity="0.55"
+                            Content="{Binding Source='lock', Converter={x:Static icons:IconKeyConverter.Instance}, ConverterParameter=32}" />
+            <TextBlock HorizontalAlignment="Center" FontWeight="SemiBold" Text="SQL 모니터 보고서는 Tuning Pack 이 필요합니다" />
+            <TextBlock HorizontalAlignment="Center" Classes="dim" TextAlignment="Center" TextWrapping="Wrap" Text="{Binding ReportMessage}" />
+            <StackPanel HorizontalAlignment="Center" Orientation="Horizontal" Spacing="6" Margin="0,4,0,0">
+              <Button x:Name="ConnectionManagerButton" Content="접속 관리자 열기" IsVisible="{Binding HasConnectionManagerCommand}" />
+              <Button x:Name="ShowTreeButton" Content="실제 계획 보기 (팩 없음)" />
+            </StackPanel>
+          </StackPanel>
+          <StackPanel x:Name="ReportNoCursor" IsVisible="{Binding IsReportNoCursor}" HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="6" MaxWidth="560">
+            <ContentControl HorizontalAlignment="Center" Opacity="0.55"
+                            Content="{Binding Source='sqlMonitor', Converter={x:Static icons:IconKeyConverter.Instance}, ConverterParameter=32}" />
+            <TextBlock HorizontalAlignment="Center" FontWeight="SemiBold" Text="SQL 모니터 보고서" />
+            <TextBlock HorizontalAlignment="Center" Classes="dim" TextAlignment="Center" TextWrapping="Wrap" Text="{Binding ReportMessage}" />
+          </StackPanel>
+          <StackPanel x:Name="ReportLoading" IsVisible="{Binding IsReportLoading}" HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="8" Width="260">
+            <ProgressBar IsIndeterminate="True" />
+            <TextBlock HorizontalAlignment="Center" Classes="dim" Text="{Binding ReportMessage}" />
+          </StackPanel>
+          <StackPanel x:Name="ReportEmpty" IsVisible="{Binding IsReportEmpty}" HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="6" MaxWidth="560">
+            <ContentControl HorizontalAlignment="Center" Opacity="0.55"
+                            Content="{Binding Source='info', Converter={x:Static icons:IconKeyConverter.Instance}, ConverterParameter=32}" />
+            <TextBlock HorizontalAlignment="Center" FontWeight="SemiBold" Text="모니터 기록 없음" />
+            <TextBlock HorizontalAlignment="Center" Classes="dim" TextAlignment="Center" TextWrapping="Wrap" Text="{Binding ReportMessage}" />
+          </StackPanel>
+          <StackPanel x:Name="ReportError" IsVisible="{Binding IsReportError}" HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="6" MaxWidth="560">
+            <ContentControl HorizontalAlignment="Center" Opacity="0.75"
+                            Content="{Binding Source='warn', Converter={x:Static icons:IconKeyConverter.Instance}, ConverterParameter=32}" />
+            <TextBlock HorizontalAlignment="Center" FontWeight="SemiBold" Text="보고서를 읽지 못했습니다" />
+            <TextBlock HorizontalAlignment="Center" Classes="dim" TextAlignment="Center" TextWrapping="Wrap" Text="{Binding ReportMessage}" />
+            <Button x:Name="ReportRetryButton" HorizontalAlignment="Center" Content="다시 시도" />
+          </StackPanel>
+          <TextBox x:Name="ReportBox" Classes="code-view" IsVisible="{Binding IsReportReady}" Text="{Binding ReportText}" IsReadOnly="True" AcceptsReturn="True"
+                   TextWrapping="NoWrap" ScrollViewer.HorizontalScrollBarVisibility="Auto" AutomationProperties.Name="SQL 모니터 보고서" />
+        </Panel>
       </TabItem>
     </TabControl>
   </DockPanel>

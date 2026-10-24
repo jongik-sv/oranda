@@ -136,12 +136,15 @@ internal sealed partial class OracleTuningService : ITuningService
 
     public async Task<TraceFileInfo> GetTraceFileAsync(ISession s, SessionKey target, CancellationToken ct)
     {
-        var rows = (await QueryAsync(s, "tuning.trace_file", c =>
-        {
-            AddInt(c, "inst_id", target.InstanceId);
-            AddLong(c, "sid", target.Sid);
-            AddLong(c, "serial", target.Serial);
-        }, ct)).Rows;
+        // default(SessionKey) = 이 세션(TSK-06-04): v$diag_info 의 Default Trace File(gv$process 권한 없이도 읽힌다).
+        var rows = target == default
+            ? (await QueryAsync(s, "tuning.trace_file_self", _ => { }, ct)).Rows
+            : (await QueryAsync(s, "tuning.trace_file", c =>
+            {
+                AddInt(c, "inst_id", target.InstanceId);
+                AddLong(c, "sid", target.Sid);
+                AddLong(c, "serial", target.Serial);
+            }, ct)).Rows;
         var path = rows.Count == 0 ? null : Str(rows[0][0]);
         if (string.IsNullOrEmpty(path))
         {

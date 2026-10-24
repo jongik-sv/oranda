@@ -134,13 +134,28 @@ internal sealed class OracleExecutionPlanService : IExecutionPlanService
     }
 
     /// <summary>SQL 모니터 보고서(Tuning Pack). 보유 선언·서버 설정이 모자라면 드라이버로 보내지 않고 <see cref="UnauthorizedAccessException"/>.</summary>
-    internal static async Task<string> GetSqlMonitorReportAsync(ISession s, CursorRef cursor, CancellationToken ct)
+    internal static Task<string> GetSqlMonitorReportAsync(ISession s, CursorRef cursor, CancellationToken ct) =>
+        GetSqlMonitorReportAsync(s, cursor, html: false, ct);
+
+    /// <summary>SQL 모니터 보고서 TEXT·HTML(계획 창 「보고서」 탭, TSK-06-04). 관문은 위와 같다.</summary>
+    internal static async Task<string> GetSqlMonitorReportAsync(ISession s, CursorRef cursor, bool html, CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(s);
         ArgumentNullException.ThrowIfNull(cursor);
 
-        var rows = await QueryAsync(s, "plan.monitor_report", c => AddText(c, "sql_id", cursor.SqlId), ct);
+        var rows = await QueryAsync(s, html ? "plan.monitor_report_html" : "plan.monitor_report", c => AddText(c, "sql_id", cursor.SqlId), ct);
         return rows.Count > 0 ? Str(rows[0][0]) ?? string.Empty : string.Empty;
+    }
+
+    Task<string> IExecutionPlanService.GetSqlMonitorReportAsync(ISession s, CursorRef cursor, bool html, CancellationToken ct) =>
+        GetSqlMonitorReportAsync(s, cursor, html, ct);
+
+    /// <summary>직전 문장의 커서. 앞 문장 뒤에 다른 문장을 보내지 않은 채 불러야 한다(DISPLAY_CURSOR(NULL) 은 세션의 prev_sql_id 를 본다).</summary>
+    public async Task<CursorRef?> GetLastCursorAsync(ISession s, CancellationToken ct)
+    {
+        ArgumentNullException.ThrowIfNull(s);
+        var rows = await QueryAsync(s, "plan.last_cursor_text", _ => { }, ct);
+        return ExecutionPlanText.ParseCursor(JoinLines(rows));
     }
 
     /// <summary>원자료 → 계획 단계(Id 순). 깊이는 부모 사슬로 구하고 위험 표시를 붙인다.</summary>

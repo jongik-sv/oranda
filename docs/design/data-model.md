@@ -77,6 +77,7 @@
 | `execution.dbmsOutput` | bool | ○ | true | 세션 시작 시 `DBMS_OUTPUT.ENABLE` |
 | `execution.scriptErrorMode` | `ScriptErrorMode` = `Ask`\|`Stop`\|`Continue` | ○ | `Ask` | EXEC-10 |
 | `execution.splitOnBlankLine` | bool | ○ | false | 빈 줄을 문장 끝으로 볼지 |
+| `execution.gatherPlanStatisticsHint` | bool | ○ | false | 실제 계획에 A-Rows 가 없으면 묻지 않고 `GATHER_PLAN_STATISTICS` 힌트 사본으로 다시 실행(질의만, TSK-06-04) |
 | `grid.pageSize` | int | ○ | 500 | 행/페이지 |
 | `grid.memoryLimitMb` | int | ○ | 200 | 페이지 캐시 상한 |
 | `grid.initialLobFetchSize` | int | ○ | 4000 | 문자 |

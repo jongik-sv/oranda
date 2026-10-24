@@ -2,7 +2,11 @@ using System;
 using System.Threading;
 using System.Threading.Tasks;
 using Avalonia.Threading;
+using Oranda.App.Features.Binds;
 using Oranda.App.Features.Execution;
+using Oranda.App.Features.SqlEditor;
+using Oranda.App.Shell.Settings;
+using Oranda.Core.Execution;
 using Oranda.App.Shell;
 using Oranda.App.Shell.Composition;
 using Oranda.Core.Events;
@@ -26,7 +30,15 @@ public static class ExecutionPlanCommands
         "oranda.plan.pinForCompare",
         "oranda.plan.compare",
         "oranda.view.plan",
+        RerunWithHintId,
+        RerunWithStatisticsLevelId,
     ];
+
+    /// <summary>「실제 행 수 받으며 다시 실행 › 힌트 넣은 사본」(TSK-06-04).</summary>
+    public const string RerunWithHintId = "oranda.tuning.rerunWithHint";
+
+    /// <summary>「실제 행 수 받으며 다시 실행 › STATISTICS_LEVEL=ALL」(TSK-06-04).</summary>
+    public const string RerunWithStatisticsLevelId = "oranda.tuning.rerunWithStatisticsLevel";
 }
 
 /// <summary>
@@ -44,10 +56,16 @@ public static class ExecutionPlanCommands
 [OrandaCommand("oranda.plan.compare", CommandCategory.Sql, Icon = "diff",
     Placements = ["menu:tuning/comparePlan@50", "context:plan/compare@11"])]
 [OrandaCommand("oranda.view.plan", CommandCategory.View, Placements = ["menu:view/plan@40"])]
+[OrandaCommand(ExecutionPlanCommands.RerunWithHintId, CommandCategory.Sql, Enablement = "(hasSession || dedicatedSession) && !sessionBusy && !mybatisDocActive",
+    Icon = "run", Placements = ["menu:tuning/rerunStats/hint@300"])]
+[OrandaCommand(ExecutionPlanCommands.RerunWithStatisticsLevelId, CommandCategory.Sql, Enablement = "(hasSession || dedicatedSession) && !sessionBusy && !mybatisDocActive",
+    Placements = ["menu:tuning/rerunStats/statisticsLevel@301"])]
 public sealed class ExecutionPlanCommandHandler : ICommandHandler
 {
     private readonly ServiceContainer? _container;
     private CursorRef? _lastCursor;
+    private SqlStatement? _lastStatement;
+    private PlanViewModel? _wired;
 
     public ExecutionPlanCommandHandler()
     {
@@ -61,6 +79,19 @@ public sealed class ExecutionPlanCommandHandler : ICommandHandler
             if (e.Result.Cursor is { } cursor)
             {
                 _lastCursor = cursor;
+            }
+
+            // 편집기에서 직접 실행한 문장만 「다시 실행」 대상으로 기억한다(앱이 대신 보낸 도우미 문장은 이력을 건너뛴다).
+            if (!e.Options.SkipHistory && e.Statement.Kind is StatementKind.Query or StatementKind.Dml)
+            {
+                _lastStatement = e.Statement;
+                Dispatcher.UIThread.Post(() =>
+                {
+                    if (PlanViewModel.Current is { } vm)
+                    {
+                        vm.LastStatement = e.Statement;
+                    }
+                });
             }
         });
     }
@@ -80,6 +111,21 @@ public sealed class ExecutionPlanCommandHandler : ICommandHandler
         }
 
         var vm = await FindPanelAsync().ConfigureAwait(true);
+        if (vm is not null)
+        {
+            Wire(vm);
+        }
+
+        if (context.CommandId is ExecutionPlanCommands.RerunWithHintId or ExecutionPlanCommands.RerunWithStatisticsLevelId)
+        {
+            if (vm is not null)
+            {
+                await vm.RerunAsync(context.CommandId == ExecutionPlanCommands.RerunWithHintId ? PlanRerunMode.Hint : PlanRerunMode.StatisticsLevel, cancellationToken).ConfigureAwait(true);
+            }
+
+            return;
+        }
+
         // 고정·비교는 접속 없이 창 안의 계획만 쓴다.
         if (context.CommandId == "oranda.plan.pinForCompare")
         {
@@ -117,9 +163,62 @@ public sealed class ExecutionPlanCommandHandler : ICommandHandler
         {
             await vm.ShowCursorAsync(session, cursor, cancellationToken).ConfigureAwait(true);
         }
+        else if (await LastCursorAsync(session, cancellationToken).ConfigureAwait(true) is { } last)
+        {
+            // 실행 엔진이 커서를 알려 주지 않으면 세션의 직전 문장(DISPLAY_CURSOR(NULL))으로 찾는다.
+            await vm.ShowCursorAsync(session, last, cancellationToken).ConfigureAwait(true);
+        }
         else
         {
             vm.StatusText = "마지막 실행의 sql_id 를 알 수 없습니다. 창의 sql_id 칸에 직접 넣으세요.";
+        }
+    }
+
+    private async Task<CursorRef?> LastCursorAsync(Oranda.Core.Sessions.ISession session, CancellationToken ct)
+    {
+        if (_container?.GetService<IExecutionPlanService>() is not { } plans)
+        {
+            return null;
+        }
+
+        try
+        {
+            return await Task.Run(() => plans.GetLastCursorAsync(session, ct), CancellationToken.None).ConfigureAwait(true);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            return null;
+        }
+    }
+
+    /// <summary>계획 창에 다시 실행·설정·문장 얻기를 한 번 잇는다.</summary>
+    private void Wire(PlanViewModel vm)
+    {
+        if (ReferenceEquals(_wired, vm) || _container is not { } container)
+        {
+            return;
+        }
+
+        _wired = vm;
+        vm.LastStatement ??= _lastStatement;
+        vm.CurrentStatement = () => container.GetService<IEditorContext>()?.GetCurrentStatement();
+        var bus = container.GetService<IEventBus>();
+        var state = ExecutionState.For(bus);
+        var rerunner = new PlanStatsRerunner(
+            state,
+            () => BindVariableStore.ForTab(SqlEditorHost.Current.Active, bus),
+            () => ExecutionCommands.ActiveTabSession(container),
+            () =>
+            {
+                ExecutionCommands.EnsureEngineServices(container, state);
+                return container.GetRequiredService<IExecutionService>();
+            },
+            () => container.GetRequiredService<IExecutionPlanService>());
+        vm.Rerunner = (mode, stmt, ct) => rerunner.RunAsync(stmt, mode, ct);
+        if (container.GetService<SettingsService>() is { } settings)
+        {
+            vm.AlwaysHint = settings.Current.Execution.GatherPlanStatisticsHint;
+            vm.SaveAlwaysHint = on => _ = settings.UpdateAsync(s => s with { Execution = s.Execution with { GatherPlanStatisticsHint = on } });
         }
     }
 

@@ -42,7 +42,7 @@ public interface ITuningService
     Task<IReadOnlyList<WaitSample>> SampleWaitsAsync(ISession s, string? sqlId, CancellationToken ct) =>
         throw new NotSupportedException();
 
-    /// <summary>세션의 트레이스 파일 경로와 읽기 가능 여부. TN-07.</summary>
+    /// <summary>세션의 트레이스 파일 경로와 읽기 가능 여부. <paramref name="target"/> 가 <c>default</c> 면 이 세션(v$diag_info). TN-07.</summary>
     Task<TraceFileInfo> GetTraceFileAsync(ISession s, SessionKey target, CancellationToken ct) =>
         throw new NotSupportedException();
 

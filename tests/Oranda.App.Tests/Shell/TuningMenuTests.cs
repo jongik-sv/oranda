@@ -55,6 +55,20 @@ public class TuningMenuTests
     }
 
     [Fact]
+    public void Plan_boost_commands_sit_in_the_300_group_with_the_rerun_submenu()
+    {
+        // TSK-06-04: 계획 보강 300~ — 「실제 행 수 받으며 다시 실행 ▶」(힌트·STATISTICS_LEVEL) · 10053 · 트레이스 보기.
+        var ids = CommandIds(TuningMenu());
+        string[] boost = ["oranda.tuning.rerunWithHint", "oranda.tuning.rerunWithStatisticsLevel", "oranda.tuning.optimizerTrace", "oranda.tuning.traceViewer"];
+        var at = ids.IndexOf(boost[0]);
+        Assert.True(at > ids.IndexOf("oranda.monitor.sqlShowBinds"));
+        Assert.Equal(boost, ids.Skip(at).Take(boost.Length));
+        var submenu = TuningMenu().Children.Single(c => c.Children.Any(x => x.CommandId == "oranda.tuning.rerunWithHint"));
+        Assert.Equal("실제 행 수 받으며 다시 실행", submenu.Title);
+        Assert.Equal(2, submenu.Children.Count(c => c.Kind == MenuNodeKind.Command));
+    }
+
+    [Fact]
     public void Explain_and_actual_stay_in_the_sql_menu_but_the_rest_left_it()
     {
         var sql = MenuModelBuilder.BuildMenuBar(AppCommands, new ShellText(language: "ko"), _ => null, [])
@@ -88,8 +102,11 @@ public class TuningMenuTests
         Assert.All(
             [TuningCommands.StatsPanelId, TuningCommands.ChildCursorsPanelId, TuningCommands.TraceViewerPanelId, TuningCommands.AssistantPanelId],
             id => Assert.StartsWith("oranda.panel.", id, StringComparison.Ordinal));
-        // 처리기를 단 oranda.tuning.* 명령은 모두 계약 상수에 있다(TSK-06-03 부터 차례로 등록).
-        Assert.All(AppCommands.Where(c => c.Id.StartsWith("oranda.tuning.", StringComparison.Ordinal)), c => Assert.Contains(c.Id, TuningCommands.Ids));
+        // 처리기를 단 oranda.tuning.* 명령은 계약 상수(TuningCommands.Ids)에 있거나 TSK-06-04 의 계획 보강 명령이다.
+        string[] planBoost = ["oranda.tuning.traceViewer", "oranda.tuning.optimizerTrace", "oranda.tuning.rerunWithHint", "oranda.tuning.rerunWithStatisticsLevel"];
+        Assert.All(AppCommands.Where(c => c.Id.StartsWith("oranda.tuning.", StringComparison.Ordinal)).Select(c => c.Id),
+            id => Assert.True(planBoost.Contains(id) || TuningCommands.Ids.Contains(id), id));
+        Assert.All(planBoost, id => Assert.Contains(AppCommands, c => c.Id == id));
     }
 
     private sealed class EmptyTuningService : ITuningService;

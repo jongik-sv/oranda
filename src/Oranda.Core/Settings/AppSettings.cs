@@ -118,6 +118,9 @@ public sealed record ExecutionSettings
     public ScriptErrorMode ScriptErrorMode { get; init; } = ScriptErrorMode.Ask;
 
     public bool SplitOnBlankLine { get; init; }
+
+    /// <summary>실제 계획(Ctrl+Shift+E)에 A-Rows 가 없으면 묻지 않고 <c>GATHER_PLAN_STATISTICS</c> 힌트 사본으로 다시 실행한다(TSK-06-04).</summary>
+    public bool GatherPlanStatisticsHint { get; init; }
 }
 
 public sealed record GridSettings

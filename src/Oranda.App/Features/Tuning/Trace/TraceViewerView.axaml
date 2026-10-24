@@ -1,0 +1,338 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:icons="using:Oranda.App.Shell.Icons"
+             xmlns:ctl="using:Oranda.App.Shell.Controls"
+             xmlns:vm="using:Oranda.App.Features.Tuning.Trace"
+             x:Class="Oranda.App.Features.Tuning.Trace.TraceViewerView"
+             x:DataType="vm:TraceViewerViewModel">
+  <UserControl.Styles>
+    <!-- 문장 요약 표 칸 폭(머리글과 줄이 같은 클래스). -->
+    <Style Selector=":is(Control).s-n"><Setter Property="Width" Value="34" /></Style>
+    <Style Selector=":is(Control).s-id"><Setter Property="Width" Value="122" /></Style>
+    <Style Selector=":is(Control).s-sql"><Setter Property="Width" Value="280" /></Style>
+    <Style Selector=":is(Control).s-exec"><Setter Property="Width" Value="70" /></Style>
+    <Style Selector=":is(Control).s-sec"><Setter Property="Width" Value="80" /></Style>
+    <Style Selector=":is(Control).s-share"><Setter Property="Width" Value="104" /></Style>
+    <Style Selector=":is(Control).s-blk"><Setter Property="Width" Value="92" /></Style>
+    <!-- 대기 표 칸 폭. -->
+    <Style Selector=":is(Control).w-n"><Setter Property="Width" Value="30" /></Style>
+    <Style Selector=":is(Control).w-ev"><Setter Property="Width" Value="230" /></Style>
+    <Style Selector=":is(Control).w-num"><Setter Property="Width" Value="76" /></Style>
+
+    <!-- 비중 막대: 가장 큰 문장 = 주황, 나머지 = 파랑, 재귀(dep>0) = 회색(계획 창과 같은 모양). -->
+    <Style Selector="Border.bar-track">
+      <Setter Property="Width" Value="60" />
+      <Setter Property="Height" Value="6" />
+      <Setter Property="CornerRadius" Value="3" />
+      <Setter Property="HorizontalAlignment" Value="Left" />
+      <Setter Property="VerticalAlignment" Value="Center" />
+      <Setter Property="Background" Value="{DynamicResource OrandaBarTrackBrush}" />
+    </Style>
+    <Style Selector="Border.bar">
+      <Setter Property="Height" Value="6" />
+      <Setter Property="CornerRadius" Value="3" />
+      <Setter Property="HorizontalAlignment" Value="Left" />
+      <Setter Property="VerticalAlignment" Value="Center" />
+      <Setter Property="Background" Value="{DynamicResource OrandaIconBlueBrush}" />
+    </Style>
+    <Style Selector="Border.bar.top">
+      <Setter Property="Background" Value="{DynamicResource OrandaIconOrangeBrush}" />
+    </Style>
+    <Style Selector="Border.bar.recursive">
+      <Setter Property="Background" Value="{DynamicResource OrandaIconNeutralBrush}" />
+    </Style>
+    <Style Selector="TextBlock.pct">
+      <Setter Property="FontSize" Value="{DynamicResource OrandaFontSizeSmall}" />
+      <Setter Property="Opacity" Value="0.75" />
+    </Style>
+    <Style Selector="StackPanel.idle > TextBlock">
+      <Setter Property="Opacity" Value="0.5" />
+    </Style>
+
+    <!-- 본문 줄: PARSING IN CURSOR 굵게, WAIT 주황, idle WAIT 흐리게. -->
+    <Style Selector="ListBox.trace-lines ListBoxItem">
+      <Setter Property="Padding" Value="0" />
+      <Setter Property="MinHeight" Value="0" />
+    </Style>
+    <Style Selector="TextBlock.line">
+      <Setter Property="FontFamily" Value="{DynamicResource OrandaGridFontFamily}" />
+      <Setter Property="Padding" Value="6,1" />
+    </Style>
+    <Style Selector="TextBlock.line.parsing">
+      <Setter Property="FontWeight" Value="SemiBold" />
+    </Style>
+    <Style Selector="TextBlock.line.wait">
+      <Setter Property="Foreground" Value="{DynamicResource OrandaWarningForegroundBrush}" />
+    </Style>
+    <Style Selector="TextBlock.line.idle">
+      <Setter Property="Opacity" Value="0.5" />
+    </Style>
+
+    <Style Selector="ListBox.segmented">
+      <Setter Property="Background" Value="Transparent" />
+      <Setter Property="BorderBrush" Value="{DynamicResource OrandaSeparatorBrush}" />
+      <Setter Property="BorderThickness" Value="1" />
+      <Setter Property="CornerRadius" Value="5" />
+      <Setter Property="Padding" Value="1" />
+      <Setter Property="VerticalAlignment" Value="Center" />
+      <Setter Property="ItemsPanel">
+        <ItemsPanelTemplate>
+          <StackPanel Orientation="Horizontal" Spacing="1" />
+        </ItemsPanelTemplate>
+      </Setter>
+    </Style>
+    <Style Selector="ListBox.segmented ListBoxItem">
+      <Setter Property="Padding" Value="10,2" />
+      <Setter Property="MinHeight" Value="0" />
+      <Setter Property="CornerRadius" Value="4" />
+      <Setter Property="FontSize" Value="{DynamicResource OrandaFontSizeSmall}" />
+    </Style>
+    <Style Selector="ListBox.segmented ListBoxItem:selected /template/ ContentPresenter#PART_ContentPresenter">
+      <Setter Property="Background" Value="{DynamicResource OrandaToolbarPressedBrush}" />
+    </Style>
+    <Style Selector="ListBox.segmented ListBoxItem:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+      <Setter Property="Background" Value="{DynamicResource OrandaToolbarHoverBrush}" />
+    </Style>
+    <Style Selector="ListBox.segmented ListBoxItem:selected TextBlock">
+      <Setter Property="FontWeight" Value="SemiBold" />
+    </Style>
+    <Style Selector="TextBlock.caption-title">
+      <Setter Property="FontWeight" Value="SemiBold" />
+      <Setter Property="FontSize" Value="{DynamicResource OrandaFontSizeSmall}" />
+    </Style>
+  </UserControl.Styles>
+
+  <DockPanel>
+    <!-- 툴바: 세션 · 새로 고침 | 요약/본문 · 정렬 | 복사 · 저장 | 10053 -->
+    <Border DockPanel.Dock="Top" Classes="panel-toolbar">
+      <StackPanel Orientation="Horizontal" Spacing="2">
+        <Border Classes="chip" VerticalAlignment="Center" Margin="2,0,4,0" ToolTip.Tip="트레이스를 읽는 세션(세션 모니터에서 열면 그 세션)">
+          <StackPanel Orientation="Horizontal" Spacing="4">
+            <TextBlock Classes="dim" Text="세션" />
+            <TextBlock Text="{Binding TargetText}" FontWeight="SemiBold" />
+          </StackPanel>
+        </Border>
+        <Button x:Name="RefreshButton" Classes="toolbar" Content="새로 고침" icons:ButtonIcon.Key="refresh" icons:ButtonIcon.IconOnly="True"
+                ToolTip.Tip="트레이스 파일을 다시 읽습니다(F5, SELECT 만)" />
+        <Separator Classes="toolbar" />
+        <ListBox x:Name="ViewSwitch" Classes="segmented" SelectedIndex="{Binding ViewIndex, Mode=TwoWay}" AutomationProperties.Name="트레이스 보기 방식">
+          <ListBoxItem ToolTip.Tip="TKPROF 식 문장별 요약">
+            <TextBlock Text="요약" />
+          </ListBoxItem>
+          <ListBoxItem ToolTip.Tip="트레이스 본문(읽기 전용)">
+            <TextBlock Text="본문" />
+          </ListBoxItem>
+        </ListBox>
+        <TextBlock Classes="dim" Text="정렬" VerticalAlignment="Center" Margin="8,0,4,0" FontSize="{DynamicResource OrandaFontSizeSmall}" />
+        <ComboBox x:Name="SortBox" Classes="compact" Width="110" ItemsSource="{x:Static vm:TraceViewerViewModel.SortNames}"
+                  SelectedIndex="{Binding SortIndex, Mode=TwoWay}" IsEnabled="{Binding IsSummaryView}" AutomationProperties.Name="정렬" />
+        <Separator Classes="toolbar" />
+        <Button x:Name="CopyButton" Classes="tool" Content="복사" icons:ButtonIcon.Key="copy" IsEnabled="{Binding IsReady}"
+                ToolTip.Tip="요약 표 또는 보이는 본문 줄을 클립보드에 복사" />
+        <Button x:Name="SaveButton" Classes="tool" Content="저장" icons:ButtonIcon.Key="exportFile" IsEnabled="{Binding IsReady}"
+                ToolTip.Tip="요약 또는 보이는 본문 줄을 파일로 저장" />
+        <Separator Classes="toolbar" />
+        <Button x:Name="OptimizerTraceButton" Classes="tool" Content="옵티마이저 트레이스(10053)" icons:ButtonIcon.Key="bug" IsEnabled="{Binding CanRunOptimizerTrace}"
+                ToolTip.Tip="10053 이벤트를 켜고(ALTER SESSION) 편집기 지금 문장의 사본을 DBMS_SQL.PARSE 로 하드 파스만 한 뒤 끕니다. 문장은 실행하지 않고 DB 에 쓰지 않습니다." />
+        <ProgressBar Width="80" IsIndeterminate="True" VerticalAlignment="Center" Margin="4,0" IsVisible="{Binding IsTracing}" />
+      </StackPanel>
+    </Border>
+    <Border DockPanel.Dock="Bottom" Classes="panel-status">
+      <DockPanel>
+        <TextBlock DockPanel.Dock="Right" Text="{Binding SourceText}" Margin="12,0,0,0" />
+        <TextBlock Text="{Binding StatusText}" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding StatusText}" />
+      </DockPanel>
+    </Border>
+
+    <Grid ColumnDefinitions="300,5,*">
+      <!-- 파일 목록(이 화면에서 읽은 파일) -->
+      <DockPanel Grid.Column="0">
+        <Border DockPanel.Dock="Top" Padding="8,5" BorderBrush="{DynamicResource OrandaSeparatorBrush}" BorderThickness="0,0,0,1">
+          <StackPanel Orientation="Horizontal" Spacing="6">
+            <TextBlock Classes="caption-title" Text="파일" />
+            <TextBlock Classes="dim" Text="{Binding Files.Count}" FontSize="{DynamicResource OrandaFontSizeSmall}" />
+          </StackPanel>
+        </Border>
+        <ctl:DetailTable x:Name="FileList" Columns="{x:Static vm:TraceViewerViewModel.FileColumns}" Rows="{Binding FileRows}" StatusLineVisible="False" />
+      </DockPanel>
+      <GridSplitter Grid.Column="1" ResizeDirection="Columns" Background="{DynamicResource OrandaSplitterBrush}" />
+
+      <Panel Grid.Column="2">
+        <!-- 상태 화면 -->
+        <StackPanel x:Name="NoSessionState" IsVisible="{Binding IsNoSession}" HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="6" MaxWidth="560">
+          <ContentControl HorizontalAlignment="Center" Opacity="0.55" Content="{Binding Source='console', Converter={x:Static icons:IconKeyConverter.Instance}, ConverterParameter=32}" />
+          <TextBlock HorizontalAlignment="Center" FontWeight="SemiBold" Text="트레이스 보기" />
+          <TextBlock HorizontalAlignment="Center" Classes="dim" TextAlignment="Center" TextWrapping="Wrap" Text="{Binding Message}" />
+        </StackPanel>
+        <StackPanel x:Name="LoadingState" IsVisible="{Binding IsLoading}" HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="8" Width="260">
+          <ProgressBar IsIndeterminate="True" />
+          <TextBlock HorizontalAlignment="Center" Classes="dim" Text="{Binding Message}" />
+        </StackPanel>
+        <StackPanel x:Name="NoTraceState" IsVisible="{Binding IsNoTrace}" HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="6" MaxWidth="560">
+          <ContentControl HorizontalAlignment="Center" Opacity="0.55" Content="{Binding Source='info', Converter={x:Static icons:IconKeyConverter.Instance}, ConverterParameter=32}" />
+          <TextBlock HorizontalAlignment="Center" FontWeight="SemiBold" Text="트레이스가 비어 있습니다" />
+          <TextBlock HorizontalAlignment="Center" Classes="dim" TextAlignment="Center" TextWrapping="Wrap" Text="{Binding Message}" />
+        </StackPanel>
+        <StackPanel x:Name="UnreadableState" IsVisible="{Binding IsUnreadable}" HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="6" MaxWidth="620">
+          <ContentControl HorizontalAlignment="Center" Opacity="0.55" Content="{Binding Source='info', Converter={x:Static icons:IconKeyConverter.Instance}, ConverterParameter=32}" />
+          <TextBlock HorizontalAlignment="Center" FontWeight="SemiBold" Text="이 DB 에서는 트레이스 파일을 SQL 로 읽을 수 없습니다" />
+          <TextBlock HorizontalAlignment="Center" Classes="dim" TextAlignment="Center" TextWrapping="Wrap" Text="{Binding Message}" />
+          <TextBlock HorizontalAlignment="Center" Classes="dim" Text="파일은 서버의 아래 경로에 있습니다." />
+          <Border Classes="code" HorizontalAlignment="Center" Padding="8,4">
+            <SelectableTextBlock Classes="mono" TextWrapping="Wrap" Text="{Binding ServerPath}" />
+          </Border>
+          <Button x:Name="CopyPathButton" HorizontalAlignment="Center" Content="경로 복사" />
+        </StackPanel>
+        <StackPanel x:Name="NoPrivilegeState" IsVisible="{Binding IsNoPrivilege}" HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="6" MaxWidth="620">
+          <ContentControl HorizontalAlignment="Center" Opacity="0.55" Content="{Binding Source='lock', Converter={x:Static icons:IconKeyConverter.Instance}, ConverterParameter=32}" />
+          <TextBlock HorizontalAlignment="Center" FontWeight="SemiBold" Text="트레이스를 읽을 권한이 없습니다" />
+          <TextBlock HorizontalAlignment="Center" Classes="dim" TextAlignment="Center" TextWrapping="Wrap" Text="{Binding Message}" />
+          <Border Classes="code" HorizontalAlignment="Center" Padding="8,4">
+            <SelectableTextBlock Classes="mono" Text="{x:Static vm:TraceViewerViewModel.GrantSql}" />
+          </Border>
+          <Button x:Name="CopyGrantButton" HorizontalAlignment="Center" Content="SQL 복사" />
+        </StackPanel>
+        <StackPanel x:Name="ErrorState" IsVisible="{Binding IsError}" HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="6" MaxWidth="560">
+          <ContentControl HorizontalAlignment="Center" Opacity="0.75" Content="{Binding Source='warn', Converter={x:Static icons:IconKeyConverter.Instance}, ConverterParameter=32}" />
+          <TextBlock HorizontalAlignment="Center" FontWeight="SemiBold" Text="트레이스를 읽지 못했습니다" />
+          <TextBlock HorizontalAlignment="Center" Classes="dim" TextAlignment="Center" TextWrapping="Wrap" Text="{Binding Message}" />
+          <Button x:Name="RetryButton" HorizontalAlignment="Center" Content="다시 시도" />
+        </StackPanel>
+
+        <!-- 요약: 문장 표 / 호출 · 대기 합계 -->
+        <Grid x:Name="SummaryPane" RowDefinitions="1.1*,5,*" IsVisible="{Binding ShowSummary}">
+          <Panel Grid.Row="0">
+            <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled">
+              <DockPanel>
+                <Border DockPanel.Dock="Top" Classes="grid-header">
+                  <StackPanel Orientation="Horizontal" Classes="cells">
+                    <TextBlock Classes="s-n num" Text="#" />
+                    <TextBlock Classes="s-id" Text="sql_id" />
+                    <TextBlock Classes="s-sql" Text="문장" />
+                    <TextBlock Classes="s-exec num" Text="실행" />
+                    <TextBlock Classes="s-sec num" Text="cpu(s)" />
+                    <TextBlock Classes="s-sec num" Text="elapsed(s)" />
+                    <TextBlock Classes="s-share" Text="비중" ToolTip.Tip="파일 전체 경과 대비 이 문장의 경과" />
+                    <TextBlock Classes="s-blk num" Text="disk" ToolTip.Tip="물리 읽기 블록(p=)" />
+                    <TextBlock Classes="s-blk num" Text="query" ToolTip.Tip="일관 읽기 블록(cr=)" />
+                    <TextBlock Classes="s-blk num" Text="current" ToolTip.Tip="현재 읽기 블록(cu=)" />
+                    <TextBlock Classes="s-blk num" Text="rows" />
+                  </StackPanel>
+                </Border>
+                <ListBox x:Name="StatementList" Classes="table" ItemsSource="{Binding Statements}" SelectedItem="{Binding SelectedStatement, Mode=TwoWay}"
+                         ScrollViewer.HorizontalScrollBarVisibility="Disabled" AutomationProperties.Name="문장 요약">
+                  <ListBox.ItemTemplate>
+                    <DataTemplate x:DataType="vm:TraceStatementItem">
+                      <StackPanel Orientation="Horizontal" Classes="cells">
+                        <TextBlock Classes="s-n num dim" Text="{Binding Number}" />
+                        <TextBlock Classes="s-id mono" Text="{Binding SqlIdText}" />
+                        <TextBlock Classes="s-sql mono" Text="{Binding ShortText}" ToolTip.Tip="{Binding FullText}" />
+                        <TextBlock Classes="s-exec num" Text="{Binding ExecutionsText}" />
+                        <TextBlock Classes="s-sec num" Text="{Binding CpuText}" />
+                        <TextBlock Classes="s-sec num" Text="{Binding ElapsedText}" />
+                        <Grid Classes="s-share" ColumnDefinitions="66,*">
+                          <Panel Margin="6,0,0,0">
+                            <Border Classes="bar-track" />
+                            <Border Classes="bar" Classes.top="{Binding IsTop}" Classes.recursive="{Binding IsRecursive}" Width="{Binding BarLength}" />
+                          </Panel>
+                          <TextBlock Grid.Column="1" Classes="num pct" Margin="0,0,6,0" VerticalAlignment="Center" Text="{Binding ShareText}" />
+                        </Grid>
+                        <TextBlock Classes="s-blk num" Text="{Binding DiskText}" />
+                        <TextBlock Classes="s-blk num" Text="{Binding QueryText}" />
+                        <TextBlock Classes="s-blk num" Text="{Binding CurrentText}" />
+                        <TextBlock Classes="s-blk num" Text="{Binding RowsText}" />
+                      </StackPanel>
+                    </DataTemplate>
+                  </ListBox.ItemTemplate>
+                </ListBox>
+              </DockPanel>
+            </ScrollViewer>
+            <TextBlock x:Name="NoStatementsHint" Classes="dim" HorizontalAlignment="Center" VerticalAlignment="Center" IsVisible="{Binding !HasStatements}"
+                       Text="요약할 문장이 없습니다 — 「본문」에서 보세요" />
+          </Panel>
+          <GridSplitter Grid.Row="1" ResizeDirection="Rows" Background="{DynamicResource OrandaSplitterBrush}" />
+          <Grid Grid.Row="2" ColumnDefinitions="*,5,*">
+            <DockPanel Grid.Column="0">
+              <Border DockPanel.Dock="Top" Padding="8,5" BorderBrush="{DynamicResource OrandaSeparatorBrush}" BorderThickness="0,0,0,1">
+                <StackPanel Orientation="Horizontal" Spacing="6">
+                  <TextBlock Classes="caption-title" Text="호출" />
+                  <TextBlock Classes="dim mono" Text="{Binding CallCaption}" FontSize="{DynamicResource OrandaFontSizeSmall}" />
+                </StackPanel>
+              </Border>
+              <Border DockPanel.Dock="Bottom" Classes="panel-status">
+                <TextBlock Text="호출별로는 횟수만 기록됩니다 · cpu·elapsed·블록·행은 문장 합계" TextTrimming="CharacterEllipsis" />
+              </Border>
+              <ctl:DetailTable x:Name="CallTable" Columns="{x:Static vm:TraceViewerViewModel.CallColumns}" Rows="{Binding CallRows}" StatusLineVisible="False" />
+            </DockPanel>
+            <GridSplitter Grid.Column="1" ResizeDirection="Columns" Background="{DynamicResource OrandaSplitterBrush}" />
+            <DockPanel Grid.Column="2">
+              <Border DockPanel.Dock="Top" Padding="8,5" BorderBrush="{DynamicResource OrandaSeparatorBrush}" BorderThickness="0,0,0,1">
+                <StackPanel Orientation="Horizontal" Spacing="6">
+                  <TextBlock Classes="caption-title" Text="대기 합계" />
+                  <TextBlock Classes="dim" Text="파일 전체" FontSize="{DynamicResource OrandaFontSizeSmall}" />
+                </StackPanel>
+              </Border>
+              <Border DockPanel.Dock="Bottom" Classes="panel-status">
+                <TextBlock Text="idle 대기(SQL*Net message from client 등)는 흐리게, 합계에서 뺌" TextTrimming="CharacterEllipsis" />
+              </Border>
+              <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled">
+                <DockPanel>
+                  <Border DockPanel.Dock="Top" Classes="grid-header">
+                    <StackPanel Orientation="Horizontal" Classes="cells">
+                      <TextBlock Classes="w-n num" Text="#" />
+                      <TextBlock Classes="w-ev" Text="이벤트" />
+                      <TextBlock Classes="w-num num" Text="횟수" />
+                      <TextBlock Classes="w-num num" Text="평균(ms)" />
+                      <TextBlock Classes="w-num num" Text="합계(s)" />
+                    </StackPanel>
+                  </Border>
+                  <ListBox x:Name="WaitList" Classes="table" ItemsSource="{Binding Waits}" ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                           AutomationProperties.Name="대기 합계">
+                    <ListBox.ItemTemplate>
+                      <DataTemplate x:DataType="vm:TraceWaitItem">
+                        <StackPanel Orientation="Horizontal" Classes="cells" Classes.idle="{Binding IsIdle}">
+                          <TextBlock Classes="w-n num dim" Text="{Binding Number}" />
+                          <TextBlock Classes="w-ev" Text="{Binding Event}" ToolTip.Tip="{Binding Event}" />
+                          <TextBlock Classes="w-num num" Text="{Binding CountText}" />
+                          <TextBlock Classes="w-num num" Text="{Binding AverageText}" />
+                          <TextBlock Classes="w-num num" Text="{Binding TotalText}" />
+                        </StackPanel>
+                      </DataTemplate>
+                    </ListBox.ItemTemplate>
+                  </ListBox>
+                </DockPanel>
+              </ScrollViewer>
+            </DockPanel>
+          </Grid>
+        </Grid>
+
+        <!-- 본문: 찾기 · WAIT/STAT 줄 · 크기 · 모두 읽기 / 가상화된 읽기 전용 줄 -->
+        <DockPanel x:Name="BodyPane" IsVisible="{Binding ShowBody}">
+          <Border DockPanel.Dock="Top" Padding="4,4" BorderBrush="{DynamicResource OrandaSeparatorBrush}" BorderThickness="0,0,0,1">
+            <WrapPanel>
+              <TextBox Classes="compact search" Width="240" Margin="0,0,8,0" PlaceholderText="찾기 (sql_id·이벤트)" Text="{Binding FindText, Mode=TwoWay}"
+                       AutomationProperties.Name="본문 찾기" />
+              <CheckBox Content="WAIT 줄" IsChecked="{Binding ShowWaitLines, Mode=TwoWay}" Margin="0,0,8,0" />
+              <CheckBox Content="STAT 줄" IsChecked="{Binding ShowStatLines, Mode=TwoWay}" Margin="0,0,12,0" />
+              <TextBlock Classes="dim" VerticalAlignment="Center" Text="{Binding BodyInfoText}" FontSize="{DynamicResource OrandaFontSizeSmall}" />
+              <Button x:Name="ReadAllButton" Classes="tool" Content="모두 읽기" Margin="8,0,0,0" IsVisible="{Binding IsTruncated}"
+                      ToolTip.Tip="앞 5 MB 만 보이는 중입니다. 받은 줄 전부를 보입니다(큰 파일은 느릴 수 있습니다)" />
+            </WrapPanel>
+          </Border>
+          <ListBox x:Name="LineList" Classes="trace-lines" ItemsSource="{Binding VisibleLines}" Background="{DynamicResource OrandaCodeBackgroundBrush}"
+                   ScrollViewer.HorizontalScrollBarVisibility="Auto" AutomationProperties.Name="트레이스 본문">
+            <ListBox.ItemTemplate>
+              <DataTemplate x:DataType="vm:TraceLineItem">
+                <DockPanel>
+                  <TextBlock DockPanel.Dock="Left" Classes="line dim" Width="64" TextAlignment="Right" Text="{Binding NumberText}" />
+                  <TextBlock Classes="line" Classes.parsing="{Binding IsParsing}" Classes.wait="{Binding IsWait}" Classes.idle="{Binding IsIdleWait}"
+                             Text="{Binding Text}" />
+                </DockPanel>
+              </DataTemplate>
+            </ListBox.ItemTemplate>
+          </ListBox>
+        </DockPanel>
+      </Panel>
+    </Grid>
+  </DockPanel>
+</UserControl>

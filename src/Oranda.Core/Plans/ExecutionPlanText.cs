@@ -33,4 +33,58 @@ public static class ExecutionPlanText
 
         return end > 0 && long.TryParse(span[..end], NumberStyles.None, CultureInfo.InvariantCulture, out var value) ? value : null;
     }
+
+    /// <summary>
+    /// DISPLAY_CURSOR 머리 줄 <c>SQL_ID  7h35uxf5uhmm1, child number 0</c> 의 커서. 없으면 null.
+    /// </summary>
+    public static CursorRef? ParseCursor(string? text)
+    {
+        if (string.IsNullOrEmpty(text))
+        {
+            return null;
+        }
+
+        foreach (var raw in text.Split('\n'))
+        {
+            var line = raw.Trim();
+            if (!line.StartsWith("SQL_ID", StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+
+            var rest = line.AsSpan(6).TrimStart(" \t");
+            var end = 0;
+            while (end < rest.Length && char.IsAsciiLetterOrDigit(rest[end]))
+            {
+                end++;
+            }
+
+            if (end != 13)
+            {
+                continue;
+            }
+
+            var sqlId = rest[..end].ToString();
+            int? child = null;
+            var at = line.IndexOf("child number", StringComparison.OrdinalIgnoreCase);
+            if (at >= 0)
+            {
+                var num = line.AsSpan(at + "child number".Length).TrimStart(" \t");
+                var n = 0;
+                while (n < num.Length && char.IsAsciiDigit(num[n]))
+                {
+                    n++;
+                }
+
+                if (n > 0 && int.TryParse(num[..n], NumberStyles.None, CultureInfo.InvariantCulture, out var c))
+                {
+                    child = c;
+                }
+            }
+
+            return new CursorRef(sqlId, child);
+        }
+
+        return null;
+    }
 }

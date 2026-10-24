@@ -13,6 +13,18 @@ public interface IExecutionPlanService
 
     /// <param name="format">DBMS_XPLAN 형식 문자열(예: <c>ALLSTATS LAST</c>)</param>
     Task<ExecutionPlan> GetCursorPlanAsync(ISession s, CursorRef cursor, string format, CancellationToken ct);
+
+    /// <summary>
+    /// 이 세션이 바로 앞에 실행한 문장의 커서(<c>DBMS_XPLAN.DISPLAY_CURSOR(NULL, NULL)</c> 머리의 SQL_ID·child). 모르면 null.
+    /// 앞 문장과 이 호출 사이에 다른 문장을 보내지 않아야 한다(TSK-06-04 「힌트 넣은 사본 실행」).
+    /// </summary>
+    Task<CursorRef?> GetLastCursorAsync(ISession s, CancellationToken ct) => throw new NotSupportedException();
+
+    /// <summary>
+    /// SQL 모니터 보고서(<c>DBMS_SQLTUNE.REPORT_SQL_MONITOR</c>, Tuning Pack). <paramref name="html"/> 이면 HTML, 아니면 TEXT.
+    /// 보유 선언·서버 설정이 모자라면 보내지 않고 <see cref="UnauthorizedAccessException"/>. 기록이 없으면 빈 문자열.
+    /// </summary>
+    Task<string> GetSqlMonitorReportAsync(ISession s, CursorRef cursor, bool html, CancellationToken ct) => throw new NotSupportedException();
 }
 
 /// <summary>서버 커서 식별(sql_id + child). <see cref="InstanceId"/> 는 RAC 일 때.</summary>

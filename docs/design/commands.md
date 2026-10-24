@@ -653,6 +653,8 @@
 | `oranda.schema.tableStats` | 통계 보기… | - | `schemaFocus` | `tableNodeSelected && hasSession` | TSK-06-03 (`context:schema/tableStats@72`) |
 | `oranda.tuning.traceViewer` | 트레이스 보기 | - | 전역 | `hasSession` | TSK-06-04 |
 | `oranda.tuning.optimizerTrace` | 옵티마이저 트레이스(10053) | - | `sqlDocFocus` | `hasSession && !sessionBusy` | TSK-06-04 |
+| `oranda.tuning.rerunWithHint` | 힌트 넣은 사본으로 다시 실행 | - | 전역 | `(hasSession \|\| dedicatedSession) && !sessionBusy && !mybatisDocActive` | TSK-06-04 |
+| `oranda.tuning.rerunWithStatisticsLevel` | STATISTICS_LEVEL=ALL 로 다시 실행 | - | 전역 | `(hasSession \|\| dedicatedSession) && !sessionBusy && !mybatisDocActive` | TSK-06-04 |
 | `oranda.tuning.assistant` | 튜닝 도우미 | - | 전역 | `hasSession || dedicatedSession` | TSK-06-05 |
 | `oranda.tuning.indexCandidates` | 인덱스 후보 | - | 전역 | `tuningAssistantOpen` | TSK-06-05 |
 | `oranda.tuning.rewriteCandidates` | 재작성 후보 | - | 전역 | `tuningAssistantOpen` | TSK-06-05 |
@@ -666,3 +668,9 @@
 패널 ID: `oranda.panel.tuningStats`·`oranda.panel.childCursors`·`oranda.panel.traceViewer`·`oranda.panel.tuningAssistant`(모두 문서 패널).
 
 - 통계 보기·자식 커서에 대상 넘기기(TSK-06-03): 다른 창은 `TuningNavigation.OpenStatsAsync(owner, table)`·`TuningNavigation.OpenChildCursorsAsync(sqlId, instanceId?)` 를 부른다(대상을 맡기고 `ShellCommandRunner.RunAsync(id)`). 레지스트리로 직접 부르면 매개변수 `TableStatsTarget`·`"OWNER.TABLE"`·`CursorRef`·sql_id 글도 받는다. 대상이 없으면 통계 보기 = 편집기 커서 아래 표, 자식 커서 = 앞의 SQL 모니터 고른 SQL → 계획 창 마지막 커서. 두 명령 모두 기본 키 없음(시안의 Ctrl+Alt+S 는 프리셋 충돌 검사 뒤로 미룸).
+
+TSK-06-04 계획 보강 배치: `menu:tuning/rerunStats/hint@300`·`menu:tuning/rerunStats/statisticsLevel@301`(하위 메뉴 「실제 행 수 받으며 다시 실행」, 제목 키 `Menu.tuning.rerunStats`)·`optimizerTrace@310`·`traceViewer@320`.
+- 다시 실행 두 명령은 질의(SELECT)만 다시 실행한다(DML 사본은 데이터를 또 바꾸므로 거부). 계획 창 A-Rows 없음 띠의 두 단추와 같은 동작.
+- `oranda.tuning.traceViewer` 매개변수: `SessionKey`(세션 모니터에서 고른 세션). 없으면 내 세션(`default(SessionKey)` = 이 세션, `ITuningService.GetTraceFileAsync` 의 약속).
+- `oranda.tuning.optimizerTrace`: 10053 켜기 → 표시 주석을 붙인 사본을 `DBMS_SQL.PARSE` 로 파싱만(실행·PLAN_TABLE 쓰기 없음) → 끄기 → 트레이스 보기로 연다. PL/SQL 블록이라 운영 접속에서는 정책 관문이 확인을 묻는다.
+- 계획 창 툴바의 「통계 보기」「자식 커서」, 그래프 상세의 「이 표 통계」「튜닝 도우미」 는 `oranda.tuning.stats`·`childCursors`·`assistant` 를 ID 로 부르고, 명령이 등록되지 않았으면 숨는다.

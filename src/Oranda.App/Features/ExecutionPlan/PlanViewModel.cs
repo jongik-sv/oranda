@@ -79,6 +79,9 @@ public sealed class PlanRowItem
                 break;
         }
 
+        GraphTitle = step.Id.ToString(CultureInfo.InvariantCulture) + " " + OperationText;
+        CostDetailText = CostText.Length == 0 ? string.Empty : CostShareText.Length == 0 ? CostText : $"{CostText} ({CostShareText})";
+        TimeDetailText = TimeText.Length == 0 ? string.Empty : ActualShareText.Length == 0 ? TimeText + " s" : $"{TimeText} s ({ActualShareText})";
         IsHottest = hottest;
         if (hottest)
         {
@@ -87,6 +90,15 @@ public sealed class PlanRowItem
     }
 
     public PlanStep Step { get; }
+
+    /// <summary>그래프 상세 머리(「4 TABLE ACCESS FULL」).</summary>
+    public string GraphTitle { get; }
+
+    /// <summary>「8,380 (99%)」 — 누적 비용과 비중.</summary>
+    public string CostDetailText { get; }
+
+    /// <summary>「1.600 s (87%)」 — 누적 A-Time 과 비중.</summary>
+    public string TimeDetailText { get; }
 
     public int Id => Step.Id;
 
@@ -247,7 +259,7 @@ public sealed partial class PlanViewModel : ToolPanelViewModelBase
     private string _planText = string.Empty;
 
     [ObservableProperty]
-    private string _statusText = "실행 계획: SQL 편집기에서 Ctrl+E(예상), Ctrl+Shift+E(실제).";
+    private string _statusText = "실행 계획: SQL 편집기에서 Ctrl+E(예상), Ctrl+Shift+E(실제). " + ExplainNotice;
 
     [ObservableProperty]
     private string? _sqlIdText;
@@ -273,7 +285,7 @@ public sealed partial class PlanViewModel : ToolPanelViewModelBase
     [ObservableProperty]
     private bool _compareHashDiffers;
 
-    /// <summary>보이는 탭(0 트리, 1 텍스트, 2 비교).</summary>
+    /// <summary>보이는 탭(0 트리, 1 텍스트, 2 비교, 3 그래프, 4 보고서).</summary>
     [ObservableProperty]
     private int _selectedTabIndex;
 
@@ -289,6 +301,11 @@ public sealed partial class PlanViewModel : ToolPanelViewModelBase
         ArgumentNullException.ThrowIfNull(services);
         _services = services;
         Current = this;
+        if (services.GetService(typeof(ICommandRegistry)) is ICommandRegistry registry)
+        {
+            // 「통계 보기」「자식 커서」 명령은 다른 기능이 등록한다 — 등록되면 단추가 나타난다.
+            registry.CommandsChanged += (_, _) => PostToUi(RefreshCommandButtons);
+        }
     }
 
     /// <summary>시험용: 서비스를 직접 준다.</summary>
@@ -385,6 +402,7 @@ public sealed partial class PlanViewModel : ToolPanelViewModelBase
         ArgumentNullException.ThrowIfNull(cursor);
         var format = BuildFormat();
         LastCursor = cursor;
+        LastSession = session;
         await RunAsync("실제 계획", async plans => (await plans.GetCursorPlanAsync(session, cursor, format, ct).ConfigureAwait(false), $"실제({format})"));
     }
 
@@ -440,6 +458,8 @@ public sealed partial class PlanViewModel : ToolPanelViewModelBase
                 StatusText += " · " + CompareStatus(cmp);
             }
         }
+
+        AfterApply(plan);
     }
 
     /// <summary>지금 계획을 비교 기준으로 고정한다(<c>oranda.plan.pinForCompare</c>). 계획이 없으면 false.</summary>

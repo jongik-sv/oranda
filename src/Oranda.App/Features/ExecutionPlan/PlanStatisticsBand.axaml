@@ -1,0 +1,49 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:icons="using:Oranda.App.Shell.Icons"
+             xmlns:vm="using:Oranda.App.Features.ExecutionPlan"
+             x:Class="Oranda.App.Features.ExecutionPlan.PlanStatisticsBand"
+             x:DataType="vm:PlanViewModel"
+             IsVisible="{Binding IsBandVisible}">
+  <!-- A-Rows 없음 띠(TSK-06-04): 모니터 권한 띠(MonitorAccessBanner)와 같은 모양·브러시. 실제 계획인데 A-Rows 가 모두 빌 때만 보인다. -->
+  <UserControl.Styles>
+    <Style Selector="Button">
+      <Setter Property="MinHeight" Value="26" />
+      <Setter Property="Padding" Value="10,2" />
+      <Setter Property="VerticalContentAlignment" Value="Center" />
+    </Style>
+    <Style Selector="Button.tool">
+      <Setter Property="Padding" Value="6,2" />
+      <Setter Property="FontSize" Value="{DynamicResource OrandaFontSizeSmall}" />
+    </Style>
+  </UserControl.Styles>
+  <Border x:Name="Strip" Margin="4,4,4,0" Padding="10,8" CornerRadius="3" BorderThickness="1"
+          Background="{DynamicResource OrandaGridNeedsChangeBrush}" BorderBrush="{DynamicResource OrandaUncommittedBrush}"
+          AutomationProperties.Name="실제 행 수 없음 안내">
+    <DockPanel>
+      <ContentControl DockPanel.Dock="Left" Margin="0,0,8,0" VerticalAlignment="Center"
+                      Content="{Binding Source='warn', Converter={x:Static icons:IconKeyConverter.Instance}, ConverterParameter=16}" />
+      <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" Spacing="6" Margin="12,0,0,0" VerticalAlignment="Center">
+        <Button x:Name="HintCopyButton" Classes="accent" Content="힌트 넣은 사본 실행" IsEnabled="{Binding CanRerun}"
+                ToolTip.Tip="/*+ GATHER_PLAN_STATISTICS */ 를 넣은 사본을 실행합니다. 편집기 글은 바꾸지 않습니다. 모든 행을 끝까지 읽습니다." />
+        <Button x:Name="StatisticsLevelButton" Content="STATISTICS__LEVEL=ALL 로 다시 실행" IsEnabled="{Binding CanRerun}"
+                ToolTip.Tip="ALTER SESSION SET STATISTICS_LEVEL = ALL — 이 세션에만 적용, DB 에 쓰지 않음. 운영에서도 묻지 않습니다. 그 뒤 같은 문장을 다시 실행합니다." />
+        <Button x:Name="AlwaysHintButton" Classes="tool" Content="늘 힌트 넣기…" ToolTip.Tip="실제 계획을 열 때 A-Rows 가 없으면 묻지 않고 힌트 사본으로 다시 실행">
+          <Button.Flyout>
+            <Flyout Placement="BottomEdgeAlignedRight">
+              <StackPanel Spacing="6" MaxWidth="300">
+                <CheckBox x:Name="AlwaysHintBox" Content="실제 계획 때 늘 힌트 넣은 사본으로 다시 실행" IsChecked="{Binding AlwaysHint, Mode=TwoWay}" />
+                <TextBlock Classes="panel-caption" TextWrapping="Wrap"
+                           Text="설정 execution.gatherPlanStatisticsHint 에 저장됩니다. 질의(SELECT)만 다시 실행하고 DML 은 하지 않습니다." />
+              </StackPanel>
+            </Flyout>
+          </Button.Flyout>
+        </Button>
+      </StackPanel>
+      <StackPanel VerticalAlignment="Center" Spacing="1">
+        <TextBlock FontWeight="SemiBold" TextWrapping="Wrap" Text="통계 수집이 꺼져 있어 실제 행 수(A-Rows)가 없습니다." />
+        <TextBlock TextWrapping="Wrap" Text="아래 하나로 다시 실행하면 단계별 실제 행 수·시간이 채워집니다." />
+      </StackPanel>
+    </DockPanel>
+  </Border>
+</UserControl>
