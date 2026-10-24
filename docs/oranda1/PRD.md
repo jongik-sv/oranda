@@ -131,3 +131,26 @@
 | LK-12 | 방치 트랜잭션(INACTIVE + 열린 트랜잭션), 대기 바인드 값, 데드락 힌트(순환 감지·ORA-00060) | P2 |
 
 제약: dba_waiters·dba_blockers(catblock.sql 필요)는 쓰지 않는다. 11.2 이상에서 동작(FETCH FIRST 금지). 권한이 모자라면 그 기능만 끄고 이유를 보인다.
+
+## 11. 튜닝 메뉴와 쿼리 튜닝 (2026-10-24 추가)
+
+배경: Oranda 는 예상·실제 계획, 계획 비교, Top SQL, 바인드 캡처, 문장별 세션 통계, 세션 트레이스 켜기를 이미 갖췄다. 다른 도구(Toad SQL Optimizer·TKProf, SQL Developer Autotrace·Tune SQL·Monitor SQL, PL/SQL Developer, OEM 어드바이저·SPM)와 비교해 빈 곳을 채운다. 원칙: 팩 없는 읽기 전용. DB 에 쓰는 일은 스크립트 문안까지만 만들고 실행은 사용자 몫. 팩이 필요한 기능은 라이선스 관문(SAFE-07) 뒤.
+
+| ID | 요구사항 | 우선순위 |
+|---|---|---|
+| TN-01 | 최상위 「튜닝」 메뉴. 계획 옵션·고정·비교·SQL 모니터를 옮기고, 예상·실제 계획은 SQL 메뉴와 함께 둔다 | P0 |
+| TN-02 | 실제 계획 전제 보정: A-Rows 가 비면 안내, GATHER_PLAN_STATISTICS 힌트 사본 실행 또는 STATISTICS_LEVEL=ALL | P0 |
+| TN-03 | 표·열 통계, 히스토그램, stale 통계, 인덱스 통계 보기 | P0 |
+| TN-04 | 자식 커서 목록(바인드 민감·인식·공유 가능)과 불일치 사유(gv$sql_shared_cursor) | P0 |
+| TN-05 | 자식 커서끼리 계획 비교 | P1 |
+| TN-06 | 계획 그래프(노드·간선, 비용·시간 비중) | P1 |
+| TN-07 | SQL 모니터 보고서 화면 연결(Tuning 팩) | P1 |
+| TN-08 | 트레이스 파일 보기와 TKPROF 식 요약(12.2+ v$diag_trace_file_contents) | P1 |
+| TN-09 | 규칙 기반 인덱스 후보와 CREATE INDEX 문안 | P1 |
+| TN-10 | 변형 SQL 벤치마크(SELECT 만, 경과·논리/물리 읽기·plan_hash) | P1 |
+| TN-11 | 규칙 기반 재작성 후보·힌트 대안 | P2 |
+| TN-12 | SQL 별 대기 분해(팩 없는 gv$session 표본, Diagnostics 있으면 ASH) | P1 |
+| TN-13 | AWR 계획 이력(Diagnostics) | P2 |
+| TN-14 | SQL Profile·Baseline·Patch 보기 | P2 |
+| TN-15 | 옵티마이저 트레이스(10053) | P2 |
+| TN-16 | 스크립트 만들기: DBMS_STATS 수집, Tuning Advisor, baseline 고정(실행 안 함) | P2 |
