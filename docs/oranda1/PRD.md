@@ -154,3 +154,4 @@
 | TN-14 | SQL Profile·Baseline·Patch 보기 | P2 |
 | TN-15 | 옵티마이저 트레이스(10053) | P2 |
 | TN-16 | 스크립트 만들기: DBMS_STATS 수집, Tuning Advisor, baseline 고정(실행 안 함) | P2 |
+| TN-17 | SQL 튜닝 HTML 보고서: 한 문장의 계획·통계·커서·대기·후보를 자기 완결 HTML 파일 하나로(SQLHC 식, 읽기 전용) | P1 |

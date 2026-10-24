@@ -389,6 +389,17 @@ levels:
   - requirements: SQL 모니터 창(SqlMonitor 기능 파일의 소유자)에 탭을 더한다: 대기 분해(팩 없음: N 초 동안 gv$session 표본을 모아 sql_id 별 event·wait_class 비율, 진행·취소; Diagnostics 선언 있으면 ASH 로 과거 구간), AWR 계획 이력(snap 구간별 plan_hash·실행 수·elapsed/exec 그래프·두 plan_hash 계획 비교, Diagnostics), 계획 관리 보기(이 sql_id·signature 의 SQL Profile·Baseline·Patch, 보기만); SQL 모니터 도구 모음에 「자식 커서」 열기 단추(TSK-06-03 명령 호출); 「Tuning Advisor 스크립트 만들기」·「baseline 고정 스크립트 만들기」: DBMS_SQLTUNE.CREATE_TUNING_TASK·EXECUTE_TUNING_TASK·REPORT_TUNING_TASK 와 DBMS_SPM.LOAD_PLANS_FROM_CURSOR_CACHE 문안을 새 편집기 탭에 넣기만(실행 안 함, 머리 주석에 「DB 에 씁니다·Tuning Pack 필요」); 「튜닝」 메뉴 배치; 시험: 가짜 서비스 ViewModel·Headless·라이선스 꺼짐 표시; 비고: 담당 PC: win144(Windows 개발 PC) — 맥북 세션은 이 Task 를 하지 않는다
   - acceptance: 팩 없는 대기 분해가 동작 / 팩 기능은 선언 없으면 이유 / 스크립트는 DB 로 보내지 않는다 / 전체 시험 통과
 
+- [ ] TSK-06-07: SQL 튜닝 HTML 보고서 — 한 문장의 진단 자료를 HTML 파일 하나로 [win144] w:2 2026-10-28~2026-10-29
+  - category: dev
+  - domain: fullstack
+  - model: opus
+  - priority: medium
+  - tags: tuning, report, html, win144
+  - depends: TSK-06-02, TSK-06-03, TSK-06-05
+  - prd-ref: TN-17
+  - requirements: 2026-10-24 사용자 질문 「튜닝을 위한 HTML 보고서를 만들어주던데 그것도 가능하나?」. 참고 = Oracle SQLHC(sqlhc.sql, 읽기 전용 HTML)·SQLT XTRACT(서버에 스키마를 설치하므로 쓰지 않음)·SQL Monitor active report; 「튜닝」 메뉴·SQL 모니터·계획 창·튜닝 도우미에서 「튜닝 보고서 만들기」(sql_id 또는 편집기 문장); 담는 것: 요약(진단 결과 상위 항목·가장 비싼 단계·stale 통계·자식 커서 수), SQL 전문·바인드(캡처 값), 자식 커서별 실제 계획(ALLSTATS LAST 단계 표·비용·시간 비중 막대·predicate), 계획 그래프(인라인 SVG), 실행 통계(gv$sql 누적·실행당), 관련 표·인덱스·열 통계·히스토그램, 불일치 사유, 대기 분해(있으면), AWR 이력(Diagnostics 선언 때만), 인덱스 후보·재작성 후보(TSK-06-05 규칙 재사용), 환경(DB 버전·optimizer 매개변수 v$parameter 일부·NLS); 형식: 자기 완결 HTML 파일 하나(CSS·SVG 인라인, 외부 자원·스크립트 없음, 인쇄용 스타일, 라이트·다크), 접을 수 있는 절, 목차; 저장 = 사용자가 고른 경로, 저장 뒤 기본 브라우저로 열기; 모든 수집은 SELECT 전용(DB 에 쓰지 않음), 팩 항목은 선언 없으면 「포함 안 함: 이유」; 민감 정보: 바인드 값 포함 여부를 만들기 전에 고르게 한다(기본 포함 안 함); 시험: 보고서 생성기 단위 시험(가짜 서비스 → HTML 구조·이스케이프·팩 제외), Headless 대화 상자 시험; 비고: 담당 PC: win144(Windows 개발 PC) — 맥북 세션은 이 Task 를 하지 않는다
+  - acceptance: 외부 자원 없는 HTML 하나가 만들어지고 브라우저에서 열린다 / SQL·값은 HTML 이스케이프 / 바인드 값은 고른 경우에만 / 팩 항목은 선언 없으면 빠지고 이유가 적힌다 / DB 에 쓰지 않는다 / 전체 시험 통과
+
 ## 의존 그래프
 
 ### 그래프 (Mermaid)
@@ -432,6 +443,9 @@ graph LR
   TSK-06-01 --> TSK-06-04
   TSK-06-01 --> TSK-06-05
   TSK-06-01 --> TSK-06-06
+  TSK-06-02 --> TSK-06-07
+  TSK-06-03 --> TSK-06-07
+  TSK-06-05 --> TSK-06-07
   style TSK-01-02 fill:#e8f5e9,stroke:#2e7d32
   style TSK-03-01 stroke:#c62828,stroke-width:2px
   style TSK-02-02 stroke:#c62828,stroke-width:2px
