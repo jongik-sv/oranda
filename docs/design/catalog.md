@@ -123,6 +123,7 @@ TRD 4.2 의 "19 미만 대상에 `FETCH FIRST` 금지" 는 `pre12c-feature` 가 
 | `sql/` | `sql.` | TSK-09-02 SQL 모니터(Top SQL) | `gv$sql`, `v$sql_bind_capture` |
 | `meta/` | `meta.` | TSK-04-04 메타데이터 제공자·캐시 | 딕셔너리 조회, 23 전용 객체는 `min-version: 23` |
 | `plan/` | `plan.` | TSK-07-01 실행 계획 | `DISPLAY_CURSOR` 등(라이선스 대상은 쓰지 않음) |
+| `lock/` | `lock.` | TSK-05-02 Lock 모니터 | `gv$lock`·`gv$transaction`·`DBMS_ROWID.ROWID_CREATE`·`dba_ddl_locks`·`v$diag_alert_ext`(19 이상 전용 `lock.deadlocks`) |
 
 새 기능이 카탈로그가 필요하면 새 폴더를 만들고(id 접두어 = 폴더 이름) 아래 표에 한 줄 더한다. 한 폴더는 한 Task 만 소유한다.
 
@@ -134,6 +135,7 @@ TRD 4.2 의 "19 미만 대상에 `FETCH FIRST` 금지" 는 `pre12c-feature` 가 
 | TSK-09-02 | `src/Oranda.Oracle/Catalog/sql/` | `tests/Oranda.Oracle.Tests/Catalog/SqlMonitorCatalogTests.cs` |
 | TSK-04-04 | `src/Oranda.Oracle/Catalog/meta/` | `tests/Oranda.Oracle.Tests/Catalog/MetaCatalogTests.cs` |
 | TSK-07-01 | `src/Oranda.Oracle/Catalog/plan/` | `tests/Oranda.Oracle.Tests/Catalog/PlanCatalogTests.cs` |
+| TSK-05-02 | `src/Oranda.Oracle/Catalog/lock/` | `tests/Oranda.Oracle.Tests/Catalog/LockCatalogTests.cs` |
 
 - 기능 Task 는 자기 폴더의 `.sql` 과 자기 시험 파일만 고친다. 로더(`EmbeddedCatalog`, `SqlCatalog`, `CatalogParser`), csproj 의 수집 줄, 공유 시험(`EmbeddedCatalogTests`·`CatalogParserTests`·`SqlCatalogTests`)은 고치지 않는다.
 - 기능 Task 시험은 `[Trait("Category", "Catalog")]` 를 붙이고 자기 id 가 있는지(`EmbeddedCatalog.Load().Get("session.list", 19)`)·라이선스 태그가 맞는지를 단정한다. 실제 DB 실행 시험은 `Oranda.Oracle.IntegrationTests` 에 `Category=Integration` 으로 둔다.

@@ -27,8 +27,9 @@ public partial class Oracle11CatalogTests
     /// <summary>
     /// 일부러 19 이상에서만 쓰는 id. 11.2 에서는 기능을 숨긴다(로더가 <see cref="CatalogQueryNotFoundException"/> 로 알린다).
     /// session.my_blocking: MAX_IDLE_BLOCKER_TIME 은 19c 이후 파라미터라 11.2 에서 뜻이 없다(TSK-13-02).
+    /// lock.deadlocks: 알림 로그 뷰 v$diag_alert_ext 는 12.2 이후(TSK-05-02, 11.2 는 빈 목록).
     /// </summary>
-    private static readonly string[] NineteenOnly = ["session.my_blocking"];
+    private static readonly string[] NineteenOnly = ["session.my_blocking", "lock.deadlocks"];
 
     [Fact]
     public void Every_catalog_id_has_a_query_for_11_2()

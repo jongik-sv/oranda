@@ -289,7 +289,7 @@ levels:
   - requirements: Core(src/Oranda.Core/Monitoring)에 Lock 모니터 형을 정의한다: LockRow(인스턴스·SID·SERIAL#·사용자·머신·프로그램·잠금 유형 TM/TX/UL 등·id1·id2·보유 모드·요청 모드·ctime 초·block 여부·대상 객체 owner.name·트랜잭션 시작 시각·undo 블록·대기 이벤트·대기 초·sql_id·prev_sql_id·blocking 인스턴스/세션), LockFilter(최소 대기 초 기본 0, 사용자, 스키마, 인스턴스, 대기·차단만, 유형 목록), LockSnapshot(행 목록 + 대기 트리 BlockingTree 재사용 + 수집 시각), BlockerImpact(보유자 SessionKey·대기자 수·최대 대기 초·합계 대기 초), LockedRowInfo(rowid 문자열·owner·table·열 이름·값), DdlLockRow(세션·owner·name·type·보유/요청 모드), WaitingBind(이름·위치·값 문자열·형); IMonitorService 에 GetLocksAsync·GetBlockerImpactAsync·GetLockedRowAsync·GetDdlLocksAsync·GetWaitingBindsAsync·GetIdleTransactionsAsync 를 기본 구현 NotSupportedException 으로 더한다(GetMyBlockingAsync 패턴); 명령 ID 상수(oranda.monitor.locks 등)와 패널 ID oranda.panel.lockMonitor 를 정하고 docs/design/commands.md 모니터 표에 행을 더한다; 제약: 실행 로직 없음; 비고: 담당 PC: win144(Windows 개발 PC) — 맥북 세션은 이 Task 를 하지 않는다
   - acceptance: 실행 로직 없음 (contract-only) / `dotnet build Oranda.sln -warnaserror` 통과 / 기존 가짜 IMonitorService 구현체가 고치지 않고 빌드된다 / 형·메서드·ID 존재
 
-- [ ] TSK-05-02: Lock 모니터 조회 — 카탈로그 SQL·Oracle 구현 (11g·RAC) [win144] w:2 2026-10-24~2026-10-25
+- [x] TSK-05-02: Lock 모니터 조회 — 카탈로그 SQL·Oracle 구현 (11g·RAC) [win144] w:2 2026-10-24~2026-10-25
   - category: dev
   - domain: backend
   - model: opus
@@ -299,7 +299,7 @@ levels:
   - prd-ref: LK-01~LK-12
   - requirements: Catalog/session(또는 Catalog/lock)에 SELECT 전용 SQL 을 더한다: lock.list(gv$lock + gv$session, TM 은 id1=object_id → @PFX@_objects, TX 는 gv$transaction(xidusn·xidslot·xidsqn) 조인으로 start_date·used_ublk, 백그라운드·시스템 잠금(MR·AE·TO 등)은 기본 제외, ROWNUM 상한), lock.blocker_impact(보유자별 대기자 수·최대·합계 대기 초), lock.locked_row(row_wait_obj#·file#·block#·row# → DBMS_ROWID.ROWID_CREATE 로 rowid, enq: TX - row lock contention 일 때만; 행 값은 SELECT * FROM owner.table WHERE ROWID = :r 를 따옴표 식별자로), lock.ddl_locks(dba_ddl_locks, 권한 없으면 기능 끔), lock.waiting_binds(gv$sql_bind_capture, 대기 세션 sql_id·child), lock.idle_transactions(gv$transaction + gv$session status INACTIVE 와 경과 초); 11g 변형이 필요한 파일은 같은 id 의 min-version 11 파일로 둔다(FETCH FIRST·con_id 금지); IN 목록 1000개 제한을 피해 조인으로 쓴다; OracleMonitorService.Locks.cs partial 로 TSK-05-01 메서드를 구현한다; 시험: SessionCatalogTests·Oracle11CatalogTests 항목, 카탈로그에 DML 이 없음을 단정, 통합 시험은 Lock_contention_shows_holder_and_waiter_and_kill_releases_it 구성을 재사용해 TX 행 잠금·TM 잠금·잠긴 행 rowid·보유자 영향·idle 트랜잭션을 확인한다(23ai 컨테이너, 가능하면 oranda-ora11g); 비고: 담당 PC: win144(Windows 개발 PC) — 맥북 세션은 이 Task 를 하지 않는다
   - acceptance: 모든 쿼리가 SELECT 이고 결재 대상 DML·임시 표·쓰기 패키지를 쓰지 않는다 / 11g·19c 이상에서 카탈로그 선택이 된다 / 통합 시험에서 보유자·대기자·잠긴 행이 맞게 나온다 / 권한 부족(all_* 만)에서 오류 대신 빈 결과·이유
-  - note: 진행 중(2026-10-24) — 레인 lk-data(opus)가 구현·시험 중 (win144)
+  - note: Catalog/lock 7개(lock.deadlocks 만 19+, 나머지 11 공용)·OracleMonitorService.Locks.cs 로 8개 메서드 구현, gv$lock 에 요청 행이 없는 큐 대기(23ai TM)는 대기 인자로 채움, 잠긴 행 값 못 읽으면 열 ["오류"]+이유; 23ai 통합 6건·11.2(oranda-ora11g) 2건 통과 (win144)
 
 - [ ] TSK-05-03: Lock 모니터 화면 — 대기 트리·잠금 목록·SQL·잠긴 행·영향 순위·원인 힌트·세션 종료 [win144] w:3 2026-10-24~2026-10-26
   - category: dev
