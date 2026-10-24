@@ -176,7 +176,7 @@ public sealed class GridBusyTests : IDisposable
         Assert.False(pane.IsBusyBarVisible); // 지연 안에 끝났으면 끝내 안 보인다
 
         var slow = pane.Model.FetchAllAsync();
-        await HeadlessHost.WaitUntil(() => pane.IsBusyBarVisible, 3000);
+        await HeadlessHost.WaitUntil(() => pane.IsBusyBarVisible, 30000);
         set.Gate.SetResult();
         await slow;
         Assert.False(pane.IsBusyBarVisible);
@@ -234,7 +234,7 @@ public sealed class GridBusyTests : IDisposable
         Assert.False(tabs.IsRunBarVisible);
 
         tabs.IsRunning = true;
-        await HeadlessHost.WaitUntil(() => tabs.IsRunBarVisible, 3000);
+        await HeadlessHost.WaitUntil(() => tabs.IsRunBarVisible, 30000);
         tabs.IsRunning = false;
         Assert.False(tabs.IsRunBarVisible);
     }

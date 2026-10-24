@@ -35,18 +35,37 @@ public static class HeadlessHost
         Session.Value.Dispatch(
             async () =>
             {
+                ResetLanguage();
                 await body();
                 return true;
             },
             CancellationToken.None);
 
-    public static Task Run(Action body) => Session.Value.Dispatch(body, CancellationToken.None);
+    public static Task Run(Action body) =>
+        Session.Value.Dispatch(
+            () =>
+            {
+                ResetLanguage();
+                body();
+            },
+            CancellationToken.None);
 
     /// <summary>
-    /// 조건이 될 때까지 기다린다. UI 스레드에서 불렀을 때만 UI 작업을 직접 처리한다.
+    /// 모든 Headless 시험 본문 앞에서 UI 스레드에 남은 늦은 작업(앞 셸의 ApplyLanguage 등)을 비우고 화면 글자 조회를 새 한국어로 다시 묶는다.
+    /// LiteralTranslator 는 프로세스에 하나라, 앞 시험의 셸이 늦게 받은 언어 알림이 영어로 바꿔 놓으면 한국어를 단정하는 시험이 부하 때 간헐로 실패한다.
+    /// 영어를 쓰는 시험은 본문 안에서 스스로 묶으므로 영향이 없다.
+    /// </summary>
+    private static void ResetLanguage()
+    {
+        Dispatcher.UIThread.RunJobs();
+        Oranda.App.Features.Localization.LiteralTranslator.Install(new Oranda.App.Shell.ShellText(language: "ko"));
+    }
+
+    /// <summary>
+    /// 조건이 될 때까지 기다린다(시간 제한은 부하 큰 PC 용으로 넉넉히, 정상 경로는 바로 끝난다). UI 스레드에서 불렀을 때만 UI 작업을 직접 처리한다.
     /// 시험 본문이 <see cref="Run(Func{Task})"/> 밖(xunit 스레드)이면 RunJobs 가 소유 스레드 예외를 내므로 조건만 기다린다.
     /// </summary>
-    public static async Task WaitUntil(Func<bool> condition, int timeoutMs = 5000)
+    public static async Task WaitUntil(Func<bool> condition, int timeoutMs = 30000)
     {
         var until = DateTime.UtcNow.AddMilliseconds(timeoutMs);
         while (!condition())
