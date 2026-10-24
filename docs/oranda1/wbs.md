@@ -299,6 +299,7 @@ levels:
   - prd-ref: LK-01~LK-12
   - requirements: Catalog/session(또는 Catalog/lock)에 SELECT 전용 SQL 을 더한다: lock.list(gv$lock + gv$session, TM 은 id1=object_id → @PFX@_objects, TX 는 gv$transaction(xidusn·xidslot·xidsqn) 조인으로 start_date·used_ublk, 백그라운드·시스템 잠금(MR·AE·TO 등)은 기본 제외, ROWNUM 상한), lock.blocker_impact(보유자별 대기자 수·최대·합계 대기 초), lock.locked_row(row_wait_obj#·file#·block#·row# → DBMS_ROWID.ROWID_CREATE 로 rowid, enq: TX - row lock contention 일 때만; 행 값은 SELECT * FROM owner.table WHERE ROWID = :r 를 따옴표 식별자로), lock.ddl_locks(dba_ddl_locks, 권한 없으면 기능 끔), lock.waiting_binds(gv$sql_bind_capture, 대기 세션 sql_id·child), lock.idle_transactions(gv$transaction + gv$session status INACTIVE 와 경과 초); 11g 변형이 필요한 파일은 같은 id 의 min-version 11 파일로 둔다(FETCH FIRST·con_id 금지); IN 목록 1000개 제한을 피해 조인으로 쓴다; OracleMonitorService.Locks.cs partial 로 TSK-05-01 메서드를 구현한다; 시험: SessionCatalogTests·Oracle11CatalogTests 항목, 카탈로그에 DML 이 없음을 단정, 통합 시험은 Lock_contention_shows_holder_and_waiter_and_kill_releases_it 구성을 재사용해 TX 행 잠금·TM 잠금·잠긴 행 rowid·보유자 영향·idle 트랜잭션을 확인한다(23ai 컨테이너, 가능하면 oranda-ora11g); 비고: 담당 PC: win144(Windows 개발 PC) — 맥북 세션은 이 Task 를 하지 않는다
   - acceptance: 모든 쿼리가 SELECT 이고 결재 대상 DML·임시 표·쓰기 패키지를 쓰지 않는다 / 11g·19c 이상에서 카탈로그 선택이 된다 / 통합 시험에서 보유자·대기자·잠긴 행이 맞게 나온다 / 권한 부족(all_* 만)에서 오류 대신 빈 결과·이유
+  - note: 진행 중(2026-10-24) — 레인 lk-data(opus)가 구현·시험 중 (win144)
 
 - [ ] TSK-05-03: Lock 모니터 화면 — 대기 트리·잠금 목록·SQL·잠긴 행·영향 순위·원인 힌트·세션 종료 [win144] w:3 2026-10-24~2026-10-26
   - category: dev
@@ -310,6 +311,7 @@ levels:
   - prd-ref: LK-01~LK-09
   - requirements: Features/LockMonitor 에 문서 패널 oranda.panel.lockMonitor(「Lock 모니터」)를 만든다. 「모니터」 메뉴에 「Lock 모니터」를 더하고 세션 모니터와 같은 모니터 전용 세션·MonitorAccess(권한 배너·다른 접속)를 쓴다; 화면: 위쪽 대기 트리(보유자 루트 → 대기자, 대기 초·이벤트·객체), 아래 잠금 목록(DetailTable: 유형·모드·요청·ctime·객체·트랜잭션 시작·block 강조), 오른쪽 상세 탭(보유자·대기자 SQL 전문 gv$sql 클릭 때만, 잠긴 행 rowid·열 값, 대기 바인드, DDL 잠금 탭, 원인 힌트: enq: TX row lock / enq: TM contention(FK 인덱스 누락 의심) / enq: TX allocate ITL / library cache lock·pin); 보유자 영향 순위 표(대기자 수·최대·합계 대기 초 순); 거르기: 최소 대기 초(기본 0, 3초 단추), 사용자·스키마·인스턴스, 대기·차단만; 자동 새로 고침(간격); 세션 종료·연결 끊기는 세션 모니터 흐름 재사용, 확인 창에 「이 세션 때문에 N개 세션이 기다립니다」; 세션 모니터로 이동(SID·INST_ID); 트리·목록 복사·CSV 내보내기; BlockerAlert 상태 줄 클릭은 Lock 모니터를 연다; 한글 리터럴은 literals-en.json·CommandTitles·strings 에 영어 짝; 시험: ViewModel(가짜 서비스)·Headless 렌더·명령 등록·LocalizationTests; 비고: 담당 PC: win144(Windows 개발 PC) — 맥북 세션은 이 Task 를 하지 않는다
   - acceptance: 가짜 서비스로 트리·목록·상세·영향 순위·힌트가 보인다 / 세션 종료 확인 창에 대기자 수 / 권한 없을 때 배너 / 전체 시험 통과 / 실앱 눈 확인 항목은 사용자 몫으로 결과에 적는다
+  - note: 시안 완료(2026-10-24, 시안 https://claude.ai/artifact/J4YBzmpMsbvecm8aSv4rGx 화면 b·c), 화면 레인 착수 대기 (win144)
 
 - [ ] TSK-05-04: Lock 모니터 이력·알림·방치 트랜잭션·데드락 힌트 (P2) [win144] w:2 2026-10-26~2026-10-27
   - category: dev
@@ -321,6 +323,7 @@ levels:
   - prd-ref: LK-10~LK-12
   - requirements: 이력 타임라인: 새로 고침마다 대기자 수·최대 대기 초를 메모리에 쌓아(최근 N분, 설정) 작은 그래프로 보이고, 원하면 로컬 파일(앱 데이터 폴더, DB 쓰기 아님)로 저장한다. ASH 는 쓰지 않는다(Diagnostics Pack); 임계치 알림: 「N초 이상 또는 대기자 M명 이상」이면 상태 줄·알림을 띄우고 그 시점 보유자·대기자 SQL 스냅샷을 로컬 텍스트로 남긴다(기존 BlockerWatcher 확장, 설정); 방치 트랜잭션 탭: INACTIVE 인데 트랜잭션을 연 세션과 경과 시간·undo 크기; 데드락 힌트: 대기 그래프에 순환이 보이면 표시, 권한이 있으면 alert 로그(12c+ v$diag_alert_ext, 11g 는 끔)에서 ORA-00060 최근 항목을 읽기 전용으로 보인다; 시험: 단위·Headless·통합(가능한 범위); 비고: 담당 PC: win144(Windows 개발 PC) — 맥북 세션은 이 Task 를 하지 않는다
   - acceptance: 이력 그래프·임계치 알림·방치 트랜잭션·데드락 힌트가 동작한다 / DB 에 쓰지 않는다 / 전체 시험 통과
+  - note: 시안 완료(2026-10-24, 시안 https://claude.ai/artifact/J4YBzmpMsbvecm8aSv4rGx 화면 d), 05-02·05-03 뒤 착수 (win144)
 
 ## WP-06: 튜닝 메뉴와 쿼리 튜닝 기능
 <!-- 담당 PC: win144(Windows 개발 PC) — 맥북 세션은 이 WP 의 Task 를 하지 않는다. 2026-10-24 사용자 지시 「또 다른 도구와 비교해서 쿼리 튜닝에 대한 기능을 조사해줘」「튜닝 기능도 조사 끝나면 같이 구현하자. 튜닝 메뉴를 따로 만들어서 거기에 넣으면 될것 같다」. 조사 근거 = Toad SQL Optimizer·TKProf, SQL Developer Autotrace·Tune SQL·Monitor SQL, PL/SQL Developer, OEM 어드바이저·SPM. 원칙: 팩 없는 읽기 전용. DB 에 쓰는 기능(Tuning Advisor 태스크·DBMS_STATS·baseline 적용)은 스크립트 문안까지만 만들고 실행은 사용자가 편집기에서 한다. 팩이 필요한 기능은 SAFE-07 라이선스 관문 뒤에서만 -->
@@ -346,6 +349,7 @@ levels:
   - prd-ref: TN-02~TN-16
   - requirements: Catalog/tuning 에 SELECT 전용 SQL: 표·열 통계(@PFX@_tab_statistics.stale_stats·@PFX@_tab_col_statistics·@PFX@_tab_histograms·@PFX@_ind_statistics), 자식 커서(gv$sql is_bind_sensitive·is_bind_aware·is_shareable), 불일치 사유(gv$sql_shared_cursor 의 'Y' 열을 행으로 펼침, 버전별 열 차이는 11g 변형), 자식별 계획(gv$sql_plan_statistics_all child 지정), 대기 표본(gv$session 의 sql_id·event·wait_class, 팩 없음), 트레이스(v$diag_info 경로, 12.2+ v$diag_trace_file_contents 본문, 11g 는 끔과 이유), AWR 계획 이력(dba_hist_sql_plan·dba_hist_sqlstat·dba_hist_snapshot, license: diagnostics), ASH 대기(gv$active_session_history, license: diagnostics), 프로필·baseline·패치 보기(dba_sql_profiles·dba_sql_plan_baselines·dba_sql_patches, 권한 없으면 끔), 인덱스 겹침 확인(@PFX@_ind_columns); OracleTuningService 구현(OracleMonitorService.SessionQueryAsync 와 같은 카탈로그·@PFX@·게이트·라이선스 경로); TKPROF 식 요약 파서는 Core(단위 시험: PARSING IN CURSOR·PARSE·EXEC·FETCH·WAIT·STAT 줄); 벤치마크 실행기: SELECT 만 허용(StatementClassifier 로 거부), 문장마다 v$mystat 전후 차이(SessionStatistics 재사용)·경과·plan_hash 를 N 회; 시험: 카탈로그 시험(DML 없음·11g 선택·license 머리)·통합 시험(23ai 컨테이너: 통계 수집된 표·자식 커서 두 개·벤치마크)·파서 단위 시험; 비고: 담당 PC: win144(Windows 개발 PC) — 맥북 세션은 이 Task 를 하지 않는다
   - acceptance: 모든 조회가 SELECT 다 / 팩 쿼리는 보유 선언 없으면 보내지 않는다 / 11g 에서 없는 기능은 이유와 함께 꺼진다 / 통합 시험 통과
+  - note: 진행 중(2026-10-24) — 레인 tn-data(opus)가 구현·시험 중 (win144)
 
 - [ ] TSK-06-03: 통계·자식 커서 화면 — 표·열 통계·히스토그램·stale·자식 커서 비교·불일치 사유 [win144] w:2 2026-10-25~2026-10-26
   - category: dev
@@ -357,6 +361,7 @@ levels:
   - prd-ref: TN-03, TN-04, TN-05, TN-16
   - requirements: Features/Tuning/Stats 에 문서 패널 「통계 보기」: 표 고르기(편집기 커서 아래 표·계획 단계에서 열기·스키마 브라우저 컨텍스트 메뉴), 표 통계(행 수·블록·마지막 수집·stale 강조), 열 통계(고유 값·null·밀도·히스토그램 종류·버킷 수), 히스토그램 막대 그래프, 인덱스 통계(clustering factor·leaf blocks·distinct keys), 「통계 수집 스크립트 만들기」(DBMS_STATS.GATHER_TABLE_STATS 문안을 새 편집기 탭에 넣기만, 실행 안 함); Features/Tuning/Cursors 에 문서 패널 「자식 커서」: sql_id 로 자식 커서 목록(바인드 민감·인식·공유 가능·plan_hash·실행 수·gets/exec·elapsed/exec), 불일치 사유 표, 두 자식 골라 계획 비교(PlanComparer 재사용, ExecutionPlan 파일은 고치지 않고 호출만); SQL 모니터·계획 창에서 열 수 있게 명령만 등록(그 창의 단추는 각 소유 레인이 단다); 「튜닝」 메뉴 배치; 가짜 ITuningService 로 ViewModel·Headless 시험; 리터럴 ko/en; 비고: 담당 PC: win144(Windows 개발 PC) — 맥북 세션은 이 Task 를 하지 않는다
   - acceptance: 가짜 서비스로 통계·히스토그램·자식 커서·사유·비교가 보인다 / 스크립트 만들기는 DB 에 보내지 않는다 / 전체 시험 통과
+  - note: 시안 완료(2026-10-24, 시안 https://claude.ai/artifact/J4YBzmpMsbvecm8aSv4rGx 화면 e·f), 화면 레인 착수 대기 (win144)
 
 - [ ] TSK-06-04: 계획 화면 보강 — 실제 계획 전제 보정·계획 그래프·SQL 모니터 보고서·트레이스 보기·TKPROF 요약·10053 [win144] w:3 2026-10-25~2026-10-27
   - category: dev
@@ -368,6 +373,7 @@ levels:
   - prd-ref: TN-02, TN-06, TN-07, TN-08, TN-15
   - requirements: ExecutionPlan 기능 파일의 소유자다(다른 레인은 PlanView 를 고치지 않는다); 실제 계획: A-Rows 가 비면 「통계 수집이 꺼져 있어 실제 행 수가 없습니다」 배너와 두 해결 단추(① 이 문장에 /*+ GATHER_PLAN_STATISTICS */ 를 넣은 사본 실행 ② ALTER SESSION SET STATISTICS_LEVEL = ALL 뒤 다시 실행 — 운영에서도 묻지 않는 ALTER SESSION), 설정으로 실제 계획 실행 때 힌트 자동 주입; 예상 계획 툴팁에 「EXPLAIN PLAN 은 PLAN_TABLE 에 행을 씁니다」 안내, 실행한 문장이면 실제 계획 권장; 계획 그래프 탭: 단계 트리를 노드·간선으로 그리고 노드 크기·색 = 비용·시간 비중, 위험 단계 강조, 클릭하면 트리 선택 동기화; 계획 창 도구 모음에 「통계 보기」「자식 커서」 열기 단추(TSK-06-03 명령 호출); SQL 모니터 보고서: 기존 GetSqlMonitorReportAsync(Tuning 팩 관문)를 계획 창에 탭으로 연결(텍스트, HTML 은 외부 브라우저); 트레이스 보기 패널(Features/Tuning/Trace): 세션 모니터·내 세션의 트레이스 파일을 12.2+ 에서 읽어 본문·TKPROF 식 요약(문장별 정렬: elapsed·cpu·disk·query, 대기 합계), 11g 는 서버 경로와 이유만; 10053: 「옵티마이저 트레이스(10053)」 명령 = ALTER SESSION SET EVENTS '10053 trace name context forever, level 1' → 주석을 붙여 하드 파스시킨 사본 실행 → 끄기 → 트레이스 보기로 열기; 「튜닝」 메뉴 배치; 시험: ViewModel·Headless·파서 연결; 비고: 담당 PC: win144(Windows 개발 PC) — 맥북 세션은 이 Task 를 하지 않는다
   - acceptance: A-Rows 없음 배너와 두 해결 경로 / 그래프 탭 / 보고서는 팩 선언 없으면 이유 / 트레이스 요약 / 전체 시험 통과
+  - note: 시안 완료(2026-10-24, 시안 https://claude.ai/artifact/J4YBzmpMsbvecm8aSv4rGx 화면 g·h), 화면 레인 착수 대기 (win144)
 
 - [ ] TSK-06-05: 튜닝 도우미 — 인덱스 후보·재작성 후보·힌트 대안·변형 SQL 벤치마크 [win144] w:3 2026-10-26~2026-10-28
   - category: dev
@@ -379,6 +385,7 @@ levels:
   - prd-ref: TN-09, TN-10, TN-11
   - requirements: Features/Tuning/Assistant 에 문서 패널 「튜닝 도우미」: 입력 = 편집기 문장 + 그 계획; 인덱스 후보(규칙 기반): TABLE ACCESS FULL·INDEX FULL SCAN 단계의 access/filter predicate 열과 조인 열을 뽑아 기존 인덱스와 겹침을 보고 후보·근거·CREATE INDEX 문안(실행 안 함)을 보인다; 재작성 후보(규칙 기반, Language 계층에 규칙 모음): NOT IN → NOT EXISTS, OR → UNION ALL, 열에 함수 씌운 조건 경고, 암시적 형 변환 의심(predicate 의 INTERNAL_FUNCTION·TO_NUMBER), 스칼라 하위 질의 → 조인, SELECT * 경고; 힌트 대안: LEADING·USE_NL·USE_HASH·INDEX·FULL·PARALLEL(설정) 조합을 계획의 표 이름·별칭으로 만든다; 벤치마크: 원문 + 고른 후보를 SELECT 일 때만 N 회(기본 3) 실행해 경과·논리 읽기·물리 읽기·행 수·plan_hash 표, 결과 행 수가 원문과 다르면 경고, 가장 나은 것 강조, 운영 접속에서는 실행 전 확인; 「튜닝」 메뉴·편집기 컨텍스트 메뉴 배치; 시험: 규칙 단위 시험(정상·경계·오류)·ViewModel·Headless; 비고: 담당 PC: win144(Windows 개발 PC) — 맥북 세션은 이 Task 를 하지 않는다
   - acceptance: 후보·문안·벤치마크 표가 나온다 / SELECT 가 아닌 문장은 벤치마크 거부 / 만든 DDL 은 실행하지 않는다 / 전체 시험 통과
+  - note: 시안 완료(2026-10-24, 시안 https://claude.ai/artifact/J4YBzmpMsbvecm8aSv4rGx 화면 i), 화면 레인 착수 대기 (win144)
 
 - [ ] TSK-06-06: 대기·이력·계획 관리 보기 — SQL 별 대기 분해·AWR 계획 이력·ASH·Profile·Baseline·Patch·Advisor 스크립트 [win144] w:2 2026-10-26~2026-10-28
   - category: dev
@@ -390,6 +397,7 @@ levels:
   - prd-ref: TN-12, TN-13, TN-14, TN-16
   - requirements: SQL 모니터 창(SqlMonitor 기능 파일의 소유자)에 탭을 더한다: 대기 분해(팩 없음: N 초 동안 gv$session 표본을 모아 sql_id 별 event·wait_class 비율, 진행·취소; Diagnostics 선언 있으면 ASH 로 과거 구간), AWR 계획 이력(snap 구간별 plan_hash·실행 수·elapsed/exec 그래프·두 plan_hash 계획 비교, Diagnostics), 계획 관리 보기(이 sql_id·signature 의 SQL Profile·Baseline·Patch, 보기만); SQL 모니터 도구 모음에 「자식 커서」 열기 단추(TSK-06-03 명령 호출); 「Tuning Advisor 스크립트 만들기」·「baseline 고정 스크립트 만들기」: DBMS_SQLTUNE.CREATE_TUNING_TASK·EXECUTE_TUNING_TASK·REPORT_TUNING_TASK 와 DBMS_SPM.LOAD_PLANS_FROM_CURSOR_CACHE 문안을 새 편집기 탭에 넣기만(실행 안 함, 머리 주석에 「DB 에 씁니다·Tuning Pack 필요」); 「튜닝」 메뉴 배치; 시험: 가짜 서비스 ViewModel·Headless·라이선스 꺼짐 표시; 비고: 담당 PC: win144(Windows 개발 PC) — 맥북 세션은 이 Task 를 하지 않는다
   - acceptance: 팩 없는 대기 분해가 동작 / 팩 기능은 선언 없으면 이유 / 스크립트는 DB 로 보내지 않는다 / 전체 시험 통과
+  - note: 시안 완료(2026-10-24, 시안 https://claude.ai/artifact/J4YBzmpMsbvecm8aSv4rGx 화면 j), 화면 레인 착수 대기 (win144)
 
 - [ ] TSK-06-07: SQL 튜닝 HTML 보고서 — 한 문장의 진단 자료를 HTML 파일 하나로 [win144] w:2 2026-10-28~2026-10-29
   - category: dev
@@ -401,6 +409,7 @@ levels:
   - prd-ref: TN-17
   - requirements: 2026-10-24 사용자 질문 「튜닝을 위한 HTML 보고서를 만들어주던데 그것도 가능하나?」. 참고 = Oracle SQLHC(sqlhc.sql, 읽기 전용 HTML)·SQLT XTRACT(서버에 스키마를 설치하므로 쓰지 않음)·SQL Monitor active report; 「튜닝」 메뉴·SQL 모니터·계획 창·튜닝 도우미에서 「튜닝 보고서 만들기」(sql_id 또는 편집기 문장); 담는 것: 요약(진단 결과 상위 항목·가장 비싼 단계·stale 통계·자식 커서 수), SQL 전문·바인드(캡처 값), 자식 커서별 실제 계획(ALLSTATS LAST 단계 표·비용·시간 비중 막대·predicate), 계획 그래프(인라인 SVG), 실행 통계(gv$sql 누적·실행당), 관련 표·인덱스·열 통계·히스토그램, 불일치 사유, 대기 분해(있으면), AWR 이력(Diagnostics 선언 때만), 인덱스 후보·재작성 후보(TSK-06-05 규칙 재사용), 환경(DB 버전·optimizer 매개변수 v$parameter 일부·NLS); 형식: 자기 완결 HTML 파일 하나(CSS·SVG 인라인, 외부 자원·스크립트 없음, 인쇄용 스타일, 라이트·다크), 접을 수 있는 절, 목차; 저장 = 사용자가 고른 경로, 저장 뒤 기본 브라우저로 열기; 모든 수집은 SELECT 전용(DB 에 쓰지 않음), 팩 항목은 선언 없으면 「포함 안 함: 이유」; 민감 정보: 바인드 값 포함 여부를 만들기 전에 고르게 한다(기본 포함 안 함); 시험: 보고서 생성기 단위 시험(가짜 서비스 → HTML 구조·이스케이프·팩 제외), Headless 대화 상자 시험; 비고: 담당 PC: win144(Windows 개발 PC) — 맥북 세션은 이 Task 를 하지 않는다
   - acceptance: 외부 자원 없는 HTML 하나가 만들어지고 브라우저에서 열린다 / SQL·값은 HTML 이스케이프 / 바인드 값은 고른 경우에만 / 팩 항목은 선언 없으면 빠지고 이유가 적힌다 / DB 에 쓰지 않는다 / 전체 시험 통과
+  - note: 시안 완료(2026-10-24, 시안 https://claude.ai/artifact/J4YBzmpMsbvecm8aSv4rGx 화면 k), 06-02·06-03·06-05 뒤 착수 (win144)
 
 ## 의존 그래프
 
