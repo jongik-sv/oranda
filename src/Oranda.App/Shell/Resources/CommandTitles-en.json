@@ -169,6 +169,7 @@
   "Cmd.oranda.monitor.sqlShowPlan": "Actual Plan of Selected SQL",
   "Cmd.oranda.tuning.assistant": "Tuning Assistant",
   "Cmd.oranda.tuning.benchmark": "Benchmark SQL Variants",
+  "Cmd.oranda.tuning.report": "Create Tuning Report…",
   "Cmd.oranda.tuning.indexCandidates": "Index Candidates",
   "Cmd.oranda.tuning.rewriteCandidates": "Rewrite Candidates",
   "Cmd.oranda.monitor.toggleAutoRefresh": "Toggle Auto Refresh",

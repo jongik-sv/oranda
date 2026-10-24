@@ -664,8 +664,10 @@
 | `oranda.tuning.planControls` | 계획 관리 보기 (Profile·Baseline·Patch) (`@520`, 「계획 관리」 탭) | - | 전역 | 항상 | TSK-06-06 |
 | `oranda.tuning.tuningAdvisorScript` | Tuning Advisor 스크립트 (하위 메뉴 `menu:tuning/scripts/tuningAdvisor@540`, 새 편집기 탭에 글만) | - | 전역 | `monitorSqlSelected` | TSK-06-06 |
 | `oranda.tuning.baselineScript` | baseline 고정 스크립트 (DBMS_SPM) (`menu:tuning/scripts/baseline@550`, 새 편집기 탭에 글만) | - | 전역 | `monitorSqlSelected` | TSK-06-06 |
+| `oranda.tuning.report` | 튜닝 보고서 만들기… (`menu:tuning/report@490`, 도우미 묶음 끝) | - | 전역 | `hasSession || dedicatedSession` | TSK-06-07 |
 
 - TSK-06-05 배치: `oranda.tuning.assistant` = `menu:tuning/assistant@400`·`context:editor/tuningAssistant@1030`(편집기 오른쪽 클릭, 예상 계획 옆), `oranda.tuning.benchmark` = `menu:tuning/benchmark@410`. `indexCandidates`·`rewriteCandidates` 는 명령 팔레트 전용(도우미 탭 전환).
+- TSK-06-07 튜닝 보고서: 대상은 `TuningReportNavigation.OpenAsync(CursorRef, ISession?)` 로 맡긴 것 → 매개변수(`CursorRef`·sql_id 글) → 앞의 SQL 모니터 고른 SQL(그 모니터 세션) → 앞의 튜닝 도우미 문장 → 편집기 현재 문장(같은 세션의 마지막 실행 커서, 없으면 글로 셈한 sql_id) → 계획 창 마지막 커서 순. 「튜닝 보고서…」 단추 = 튜닝 도우미·계획 창(튜닝 단추 묶음)·SQL 모니터 툴바. 대화 상자만 띄우고 결과는 자기 완결 HTML 파일(저장 뒤 저장 알림·기본 브라우저).
 
 패널 ID: `oranda.panel.tuningStats`·`oranda.panel.childCursors`·`oranda.panel.traceViewer`·`oranda.panel.tuningAssistant`(모두 문서 패널).
 

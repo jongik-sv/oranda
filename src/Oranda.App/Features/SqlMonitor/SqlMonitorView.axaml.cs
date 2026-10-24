@@ -94,6 +94,9 @@ public partial class SqlMonitorView : UserControl
 
         // 튜닝 도구 모음·탭 단추.
         ChildCursorsButton.Click += (_, _) => Run(vm => vm.OpenChildCursorsAsync());
+        TuningReportButton.Click += (_, _) => Run(vm => vm.SelectedSql is { } item
+            ? Tuning.Report.TuningReportNavigation.OpenAsync(item.Row.Cursor, vm.MonitorSession)
+            : Task.CompletedTask);
         AdvisorScriptButton.Click += (_, _) => Run(vm =>
         {
             vm.CreateTuningAdvisorScript();

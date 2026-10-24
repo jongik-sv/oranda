@@ -250,6 +250,8 @@
                     ToolTip.Tip="이 계획의 표·인덱스·열 통계(SELECT 만)" />
             <Button x:Name="ChildCursorsButton" Classes="tool" Content="자식 커서" icons:ButtonIcon.Key="diff" IsVisible="{Binding HasChildCursorsCommand}"
                     ToolTip.Tip="이 sql_id 의 자식 커서와 따로 생긴 사유" />
+            <Button x:Name="TuningReportButton" Classes="tool" Content="튜닝 보고서…" icons:ButtonIcon.Key="exportFile"
+                    ToolTip.Tip="이 sql_id 의 계획·통계·커서·후보를 HTML 파일 하나로 만듭니다(SELECT 만, DB 에 쓰지 않습니다)" />
           </StackPanel>
         </StackPanel>
         <Border Classes="chip" Margin="6,0,0,0" HorizontalAlignment="Left" IsVisible="{Binding HasPinned}" ToolTip.Tip="{Binding PinnedText}">

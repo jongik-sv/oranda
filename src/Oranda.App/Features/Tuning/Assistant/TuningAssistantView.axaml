@@ -108,6 +108,9 @@
         <ProgressBar IsIndeterminate="True" Width="80" MinWidth="0" Height="3" Margin="10,0,6,0" VerticalAlignment="Center"
                      IsVisible="{Binding IsBenchmarking}" />
         <TextBlock Text="{Binding BenchmarkProgress}" VerticalAlignment="Center" Classes="panel-caption" />
+        <Separator Classes="toolbar" />
+        <Button x:Name="ReportButton" Classes="tool" Content="튜닝 보고서…" icons:ButtonIcon.Key="exportFile" IsEnabled="{Binding HasSession}"
+                ToolTip.Tip="이 문장의 계획·통계·커서·후보를 HTML 파일 하나로 만듭니다(SELECT 만, DB 에 쓰지 않습니다)" ToolTip.ShowOnDisabled="True" />
       </WrapPanel>
     </Border>
     <Border DockPanel.Dock="Bottom" Classes="panel-status">

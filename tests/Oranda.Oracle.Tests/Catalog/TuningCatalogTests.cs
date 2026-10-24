@@ -62,7 +62,7 @@ public partial class TuningCatalogTests
     public void Every_tuning_query_is_a_select_and_writes_nothing()
     {
         var headers = Catalog.Entries.Where(h => h.Id.StartsWith("tuning.", StringComparison.Ordinal)).ToList();
-        Assert.Equal(16, headers.Select(h => h.Id).Distinct(StringComparer.Ordinal).Count()); // TSK-06-04: trace_file_self
+        Assert.Equal(18, headers.Select(h => h.Id).Distinct(StringComparer.Ordinal).Count()); // TSK-06-04: trace_file_self, TSK-06-07: sql_stats·report_env
         foreach (var header in headers)
         {
             var sql = Catalog.Get(header.Id, Math.Max(header.MinVersion, 11)).Sql.TrimStart();

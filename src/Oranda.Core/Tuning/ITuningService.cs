@@ -76,4 +76,12 @@ public interface ITuningService
     /// <summary>SQL Profile·Baseline·Patch 보기(<paramref name="sqlId"/> 의 것). 권한이 없으면 빈 목록. TN-15.</summary>
     Task<IReadOnlyList<SqlPlanControlRow>> GetSqlPlanControlsAsync(ISession s, string sqlId, CancellationToken ct) =>
         throw new NotSupportedException();
+
+    /// <summary>sql_id 의 누적 실행 통계(gv$sql 합). 공유 풀에 없으면 null. TN-17(TSK-06-07).</summary>
+    Task<SqlStatsRow?> GetSqlStatsAsync(ISession s, string sqlId, CancellationToken ct) =>
+        throw new NotSupportedException();
+
+    /// <summary>보고서 환경 절: 버전 배너·optimizer 매개변수 일부·NLS 일부. TN-17(TSK-06-07).</summary>
+    Task<IReadOnlyList<TuningEnvRow>> GetTuningEnvironmentAsync(ISession s, CancellationToken ct) =>
+        throw new NotSupportedException();
 }

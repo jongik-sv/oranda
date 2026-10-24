@@ -21,6 +21,7 @@ public partial class TuningAssistantView : UserControl
         InsertRewriteButton.Click += (_, _) => Vm?.InsertRewrite();
         CopyDdlButton.Click += (_, _) => _ = CopyAsync(Vm?.IndexDdl);
         CopyRewriteButton.Click += (_, _) => _ = CopyAsync(Vm?.RewriteSql);
+        ReportButton.Click += (_, _) => _ = Oranda.App.Shell.ShellCommandRunner.RunAsync(Report.TuningReportNavigation.CommandId);
         KeyDown += (_, e) =>
         {
             if (e.Key == Key.F5 && e.KeyModifiers == KeyModifiers.None)

@@ -238,6 +238,7 @@
   "Cmd.oranda.tuning.rewriteCandidates": "재작성 후보",
   "Cmd.oranda.tuning.benchmark": "변형 SQL 벤치마크",
   "Cmd.oranda.monitor.locks.showHistory": "Lock 이력 띠 보이기/감추기",
+  "Cmd.oranda.tuning.report": "튜닝 보고서 만들기…",
   "Cmd.oranda.tools.settings": "설정",
   "Cmd.oranda.tools.keymap": "단축키 설정",
   "Cmd.oranda.tools.keymapPreset.default": "단축키 프리셋: 기본",

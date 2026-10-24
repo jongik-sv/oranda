@@ -32,6 +32,9 @@ public partial class PlanView : UserControl
 
         StatsButton.Click += async (_, _) => await RunAsync(vm => vm.ShowTableStatsAsync());
         ChildCursorsButton.Click += async (_, _) => await RunAsync(vm => vm.ShowChildCursorsAsync());
+        TuningReportButton.Click += (_, _) => _ = _vm?.LastCursor is { } cursor
+            ? Tuning.Report.TuningReportNavigation.OpenAsync(cursor, _vm.LastSession)
+            : Shell.ShellCommandRunner.RunAsync(Tuning.Report.TuningReportNavigation.CommandId);
         GraphStatsButton.Click += async (_, _) => await RunAsync(vm => vm.ShowTableStatsAsync());
         GraphAssistantButton.Click += (_, _) => RunCommand(PlanViewModel.AssistantCommandId);
         ConnectionManagerButton.Click += (_, _) => RunCommand(PlanViewModel.ConnectionManagerCommandId);

@@ -1,0 +1,180 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:icons="using:Oranda.App.Shell.Icons"
+        xmlns:vm="using:Oranda.App.Features.Tuning.Report"
+        x:Class="Oranda.App.Features.Tuning.Report.TuningReportDialog"
+        x:DataType="vm:TuningReportDialogViewModel"
+        Title="튜닝 보고서 만들기"
+        Width="680" SizeToContent="Height" MinWidth="560" MaxHeight="860"
+        WindowStartupLocation="CenterOwner"
+        CanResize="False"
+        ShowInTaskbar="False"
+        FontSize="{DynamicResource OrandaFontSizeBase}"
+        AutomationProperties.Name="튜닝 보고서 만들기">
+  <Window.Styles>
+    <!-- 정보·경고 띠(튜닝 도우미 callout 과 같은 브러시). -->
+    <Style Selector="Border.callout">
+      <Setter Property="CornerRadius" Value="3" />
+      <Setter Property="BorderThickness" Value="1" />
+      <Setter Property="Padding" Value="8,6" />
+    </Style>
+    <Style Selector="Border.callout.info">
+      <Setter Property="Background" Value="{DynamicResource OrandaToolbarBackgroundBrush}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource OrandaSeparatorBrush}" />
+    </Style>
+    <Style Selector="Border.callout.warn">
+      <Setter Property="Background" Value="{DynamicResource OrandaGridNeedsChangeBrush}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource OrandaUncommittedBrush}" />
+    </Style>
+    <Style Selector="Border.env">
+      <Setter Property="CornerRadius" Value="3" />
+      <Setter Property="Padding" Value="6,1" />
+      <Setter Property="VerticalAlignment" Value="Center" />
+    </Style>
+    <Style Selector="Border.env TextBlock">
+      <Setter Property="Foreground" Value="{DynamicResource OrandaEnvChipForegroundBrush}" />
+      <Setter Property="FontWeight" Value="SemiBold" />
+      <Setter Property="FontSize" Value="{DynamicResource OrandaFontSizeSmall}" />
+    </Style>
+    <!-- 담을 절: 두 칸, 항목 아래에 이유 한 줄(panel-caption). -->
+    <Style Selector="StackPanel.item">
+      <Setter Property="Margin" Value="0,0,12,4" />
+    </Style>
+    <Style Selector="StackPanel.item > TextBlock.panel-caption">
+      <Setter Property="Margin" Value="28,-4,0,0" />
+      <Setter Property="TextWrapping" Value="Wrap" />
+    </Style>
+    <Style Selector="Border.footer">
+      <Setter Property="Background" Value="{DynamicResource OrandaToolbarBackgroundBrush}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource OrandaSeparatorBrush}" />
+      <Setter Property="BorderThickness" Value="0,1,0,0" />
+      <Setter Property="Padding" Value="16,10" />
+    </Style>
+  </Window.Styles>
+
+  <DockPanel>
+    <!-- 단추 줄: 왼쪽 예상, 오른쪽 취소(기본)·만들기(accent). -->
+    <Border DockPanel.Dock="Bottom" Classes="footer">
+      <DockPanel>
+        <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" Spacing="8">
+          <Button x:Name="CancelButton" Content="취소" IsDefault="True" IsCancel="True"
+                  ToolTip.Tip="만들기 전이면 창을 닫고, 만드는 중이면 멈춥니다(파일은 만들지 않습니다)" />
+          <Button x:Name="CreateButton" Content="만들기" Classes="accent" IsVisible="{Binding ShowForm}"
+                  IsEnabled="{Binding CanCreate}" ToolTip.Tip="{Binding EstimateText}" ToolTip.ShowOnDisabled="True"
+                  AutomationProperties.Name="보고서 만들기" />
+        </StackPanel>
+        <TextBlock x:Name="EstimateLine" Text="{Binding EstimateText}" IsVisible="{Binding ShowForm}" Classes="dim" FontSize="{DynamicResource OrandaFontSizeSmall}"
+                   Classes.warning-text="{Binding EstimateIsWarning}" VerticalAlignment="Center" TextWrapping="Wrap" Margin="0,0,12,0" />
+      </DockPanel>
+    </Border>
+
+    <Panel>
+      <!-- 만드는 중 -->
+      <StackPanel x:Name="ProgressPanel" Margin="16,18" Spacing="8" IsVisible="{Binding IsRunning}">
+        <DockPanel>
+          <TextBlock DockPanel.Dock="Right" Text="{Binding ProgressCount}" Classes="mono dim" VerticalAlignment="Center" />
+          <TextBlock Text="{Binding ProgressText}" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
+        </DockPanel>
+        <ProgressBar Minimum="0" Maximum="100" Value="{Binding ProgressValue}" Height="4" MinHeight="4" AutomationProperties.Name="진행" />
+        <TextBlock Text="{Binding FinishedText}" Classes="dim" FontSize="{DynamicResource OrandaFontSizeSmall}" TextWrapping="Wrap" />
+      </StackPanel>
+
+      <ScrollViewer IsVisible="{Binding ShowForm}" HorizontalScrollBarVisibility="Disabled">
+        <StackPanel Margin="16,14" Spacing="10">
+          <!-- 접속 없음 -->
+          <Border Classes="callout warn" IsVisible="{Binding ShowNoSession}">
+            <DockPanel>
+              <ContentControl DockPanel.Dock="Left" Margin="0,0,6,0" VerticalAlignment="Center"
+                              Content="{Binding Source='warn', Converter={x:Static icons:IconKeyConverter.Instance}, ConverterParameter=14}" />
+              <TextBlock Text="접속이 없습니다. SQL 편집기나 SQL 모니터에서 접속한 뒤 다시 여세요." TextWrapping="Wrap" VerticalAlignment="Center" />
+            </DockPanel>
+          </Border>
+
+          <Grid ColumnDefinitions="Auto,*" RowDefinitions="Auto,Auto,Auto,Auto" RowSpacing="8" ColumnSpacing="12">
+            <TextBlock Grid.Row="0" Text="대상 sql_id" VerticalAlignment="Center" />
+            <TextBox x:Name="SqlIdBox" Grid.Row="0" Grid.Column="1" Text="{Binding SqlId}" Classes="mono" MaxLength="13" Width="200" HorizontalAlignment="Left"
+                     AutomationProperties.Name="대상 sql_id" ToolTip.Tip="13 글자 sql_id. 바꾸면 자식 커서 목록을 다시 읽습니다(SELECT)" />
+            <TextBlock Grid.Row="1" Text="자식 커서" VerticalAlignment="Center" />
+            <StackPanel Grid.Row="1" Grid.Column="1" Orientation="Horizontal" Spacing="8">
+              <ComboBox x:Name="ChildBox" ItemsSource="{Binding ChildChoices}" SelectedItem="{Binding SelectedChild}" MinWidth="280"
+                        AutomationProperties.Name="자식 커서" ToolTip.Tip="전체 = 실행 수 상위 4 개의 계획을 담습니다" />
+              <ProgressBar IsIndeterminate="True" Width="60" MinWidth="0" Height="3" VerticalAlignment="Center" IsVisible="{Binding IsLoadingChildren}" />
+            </StackPanel>
+            <TextBlock Grid.Row="2" Text="접속" VerticalAlignment="Center" />
+            <StackPanel Grid.Row="2" Grid.Column="1" Orientation="Horizontal" Spacing="6">
+              <Border x:Name="EnvChip" Classes="env" IsVisible="{Binding HasSession}">
+                <TextBlock Text="{Binding EnvironmentLabel}" />
+              </Border>
+              <TextBlock Text="{Binding ConnectionText}" VerticalAlignment="Center" />
+              <TextBlock Text="{Binding ConnectionDetail}" Classes="dim" FontSize="{DynamicResource OrandaFontSizeSmall}" VerticalAlignment="Center" />
+            </StackPanel>
+            <TextBlock Grid.Row="3" Grid.Column="1" Text="{Binding SourceText}" Classes="dim" FontSize="{DynamicResource OrandaFontSizeSmall}"
+                       IsVisible="{Binding HasSourceText}" TextWrapping="Wrap" />
+          </Grid>
+
+          <TextBlock Classes="warning-text" Text="{Binding ChildNotice}" IsVisible="{Binding HasChildNotice}" TextWrapping="Wrap" FontSize="{DynamicResource OrandaFontSizeSmall}" />
+
+          <TextBlock Classes="section-label" Text="담을 절" Margin="0,4,0,0" />
+          <Grid ColumnDefinitions="*,*">
+            <StackPanel Grid.Column="0">
+              <StackPanel Classes="item"><CheckBox Content="요약 진단" IsChecked="{Binding IncludeSummary}" /></StackPanel>
+              <StackPanel Classes="item">
+                <CheckBox x:Name="BindValuesBox" Content="바인드 값 (캡처)" IsChecked="{Binding IncludeBindValues}" IsEnabled="{Binding IncludeSqlText}" />
+                <TextBlock Classes="panel-caption warning-text" Text="{x:Static vm:TuningReportDialogViewModel.BindWarning}" />
+              </StackPanel>
+              <StackPanel Classes="item"><CheckBox Content="계획 그래프 (SVG)" IsChecked="{Binding IncludeGraph}" /></StackPanel>
+              <StackPanel Classes="item"><CheckBox Content="표·인덱스·열 통계·히스토그램" IsChecked="{Binding IncludeObjectStats}" /></StackPanel>
+              <StackPanel Classes="item">
+                <CheckBox x:Name="WaitsBox" Content="대기 분해" IsChecked="{Binding IncludeWaits}" />
+                <TextBlock Classes="panel-caption" Text="{Binding WaitNote}" />
+              </StackPanel>
+              <StackPanel Classes="item"><CheckBox Content="인덱스·재작성 후보" IsChecked="{Binding IncludeCandidates}" /></StackPanel>
+            </StackPanel>
+            <StackPanel Grid.Column="1">
+              <StackPanel Classes="item"><CheckBox Content="SQL 전문" IsChecked="{Binding IncludeSqlText}" /></StackPanel>
+              <StackPanel Classes="item"><CheckBox Content="자식 커서별 실제 계획" IsChecked="{Binding IncludePlans}" /></StackPanel>
+              <StackPanel Classes="item"><CheckBox Content="실행 통계" IsChecked="{Binding IncludeExecStats}" /></StackPanel>
+              <StackPanel Classes="item"><CheckBox Content="불일치 사유" IsChecked="{Binding IncludeChildCursors}" /></StackPanel>
+              <StackPanel Classes="item">
+                <CheckBox x:Name="AwrBox" Content="AWR 계획 이력" IsChecked="{Binding IncludeAwr}" IsEnabled="{Binding AwrAvailable}" />
+                <TextBlock Classes="panel-caption" Text="{Binding AwrNote}" />
+              </StackPanel>
+              <StackPanel Classes="item"><CheckBox Content="환경 (버전·optimizer·NLS)" IsChecked="{Binding IncludeEnvironment}" /></StackPanel>
+            </StackPanel>
+          </Grid>
+
+          <Grid ColumnDefinitions="Auto,*" RowDefinitions="Auto,Auto" RowSpacing="6" ColumnSpacing="12">
+            <TextBlock Grid.Row="0" Text="저장 위치" VerticalAlignment="Center" />
+            <Grid Grid.Row="0" Grid.Column="1" ColumnDefinitions="*,Auto" ColumnSpacing="6">
+              <TextBox x:Name="PathBox" Text="{Binding FilePath}" Classes="mono" AutomationProperties.Name="저장 파일 경로" />
+              <Button x:Name="BrowseButton" Grid.Column="1" Content="찾아보기…" ToolTip.Tip="저장할 HTML 파일을 고릅니다" />
+            </Grid>
+            <CheckBox Grid.Row="1" Grid.Column="1" Content="만든 뒤 브라우저로 열기" IsChecked="{Binding OpenAfter}" />
+          </Grid>
+
+          <Border Classes="callout info">
+            <DockPanel>
+              <ContentControl DockPanel.Dock="Left" Margin="0,0,6,0" VerticalAlignment="Center"
+                              Content="{Binding Source='info', Converter={x:Static icons:IconKeyConverter.Instance}, ConverterParameter=14}" />
+              <TextBlock Text="{x:Static vm:TuningReportDialogViewModel.ReadOnlyNote}" TextWrapping="Wrap" VerticalAlignment="Center" />
+            </DockPanel>
+          </Border>
+          <Border Classes="callout warn" IsVisible="{Binding IsProduction}">
+            <DockPanel>
+              <ContentControl DockPanel.Dock="Left" Margin="0,0,6,0" VerticalAlignment="Center"
+                              Content="{Binding Source='warn', Converter={x:Static icons:IconKeyConverter.Instance}, ConverterParameter=14}" />
+              <TextBlock Text="{x:Static vm:TuningReportDialogViewModel.ProductionNotice}" TextWrapping="Wrap" VerticalAlignment="Center" />
+            </DockPanel>
+          </Border>
+          <Border Classes="callout warn" IsVisible="{Binding HasError}">
+            <DockPanel>
+              <ContentControl DockPanel.Dock="Left" Margin="0,0,6,0" VerticalAlignment="Center"
+                              Content="{Binding Source='error', Converter={x:Static icons:IconKeyConverter.Instance}, ConverterParameter=14}" />
+              <TextBlock Classes="danger-text" Text="{Binding ErrorText}" TextWrapping="Wrap" VerticalAlignment="Center" />
+            </DockPanel>
+          </Border>
+        </StackPanel>
+      </ScrollViewer>
+    </Panel>
+  </DockPanel>
+</Window>
