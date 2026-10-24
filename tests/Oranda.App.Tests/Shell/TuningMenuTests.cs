@@ -50,7 +50,7 @@ public class TuningMenuTests
             "oranda.plan.explain", "oranda.plan.actual", "oranda.plan.displayCursorOptions", "oranda.plan.pinForCompare", "oranda.plan.compare",
             "oranda.monitor.sql", "oranda.monitor.sqlSearch", "oranda.monitor.sqlShowPlan", "oranda.monitor.sqlShowBinds",
         ];
-        Assert.Equal(expected, ids);
+        Assert.Equal(expected, ids.Where(id => !id.StartsWith("oranda.tuning.", StringComparison.Ordinal))); // oranda.tuning.* 은 각 Task 가 더한다
     }
 
     [Fact]
@@ -80,14 +80,15 @@ public class TuningMenuTests
     }
 
     [Fact]
-    public void Tuning_command_constants_are_unique_and_unregistered_yet()
+    public void Tuning_command_constants_are_unique_and_registered_ones_are_listed()
     {
         Assert.Equal(TuningCommands.Ids.Length, TuningCommands.Ids.Distinct().Count());
         Assert.All(TuningCommands.Ids, id => Assert.StartsWith("oranda.tuning.", id, StringComparison.Ordinal));
         Assert.All(
             [TuningCommands.StatsPanelId, TuningCommands.ChildCursorsPanelId, TuningCommands.TraceViewerPanelId, TuningCommands.AssistantPanelId],
             id => Assert.StartsWith("oranda.panel.", id, StringComparison.Ordinal));
-        Assert.DoesNotContain(AppCommands, c => c.Id.StartsWith("oranda.tuning.", StringComparison.Ordinal));
+        // 처리기를 단 oranda.tuning.* 명령은 모두 계약 상수에 있다(TSK-06-03 부터 차례로 등록).
+        Assert.All(AppCommands.Where(c => c.Id.StartsWith("oranda.tuning.", StringComparison.Ordinal)), c => Assert.Contains(c.Id, TuningCommands.Ids));
     }
 
     private sealed class EmptyTuningService : ITuningService;

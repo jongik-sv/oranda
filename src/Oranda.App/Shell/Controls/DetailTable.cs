@@ -152,6 +152,15 @@ public sealed class DetailTable : UserControl
     /// </summary>
     public Func<int, IReadOnlyList<object?>, bool>? CellEmphasis { get; set; }
 
+    /// <summary>(열 번호, 행)을 받아 참이면 그 칸을 경고색(OrandaWarningForegroundBrush) 글자로 그린다. <see cref="CellEmphasis"/> 가 먼저다. 행을 채우기 전에 정한다.</summary>
+    public Func<int, IReadOnlyList<object?>, bool>? CellWarning { get; set; }
+
+    /// <summary>
+    /// (열 번호, 행)을 받아 글 칸 대신 그릴 컨트롤(막대·체크 상자 등)을 돌려준다. null 이면 기본 글 칸. 칸 너비는 값의 글 길이로 잰다.
+    /// 행을 채우기 전에 정한다. 너비 재기용 숨은 줄에도 한 번 더 불린다.
+    /// </summary>
+    public Func<int, IReadOnlyList<object?>, Control?>? CellFactory { get; set; }
+
     /// <summary>오른쪽 클릭 메뉴에 「복사」 아래로 덧붙일 항목을 메뉴가 열릴 때마다 돌려주는 함수(모니터의 context:monitor/* 명령 등). 없으면 복사 둘뿐.</summary>
     public Func<IReadOnlyList<object>>? ExtraMenuItems { get; set; }
 
@@ -418,6 +427,12 @@ public sealed class DetailTable : UserControl
         for (var c = 0; c < columnCount; c++)
         {
             var value = c < row.Count ? row[c] : null;
+            if (CellFactory?.Invoke(c, row) is { } custom)
+            {
+                cells.Add(custom);
+                continue;
+            }
+
             var cell = new TextBlock
             {
                 Text = Format(value),
@@ -432,6 +447,10 @@ public sealed class DetailTable : UserControl
             if (cell.Text.Length > 0 && CellEmphasis?.Invoke(c, row) == true)
             {
                 cell.Bind(TextBlock.ForegroundProperty, cell.GetResourceObservable("OrandaDangerForegroundBrush"));
+            }
+            else if (cell.Text.Length > 0 && CellWarning?.Invoke(c, row) == true)
+            {
+                cell.Bind(TextBlock.ForegroundProperty, cell.GetResourceObservable("OrandaWarningForegroundBrush"));
             }
 
             cells.Add(cell);

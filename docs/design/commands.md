@@ -646,9 +646,10 @@
 
 | ID | 제목 | 기본 키 | 키 범위(when) | 활성 조건 | 소유 Task |
 |---|---|---|---|---|---|
-| `oranda.tuning.stats` | 통계 보기 | - | 전역 | `hasSession` | TSK-06-03 |
-| `oranda.tuning.gatherStatsScript` | 통계 수집 스크립트 만들기 | - | 전역 | 통계 보기 열림 | TSK-06-03 |
-| `oranda.tuning.childCursors` | 자식 커서 | - | 전역 | `hasSession` | TSK-06-03 |
+| `oranda.tuning.stats` | 통계 보기… | - | 전역 | `hasSession` | TSK-06-03 (`menu:tuning/stats@200`·`context:editor/tableStats@1030`) |
+| `oranda.tuning.gatherStatsScript` | 통계 수집 (DBMS_STATS) | - | 전역 | `tuningStatsActive`(통계 보기 탭이 앞에 있고 표가 정해짐) | TSK-06-03 (`menu:tuning/scripts/gatherStats@590`, 하위 메뉴 `Menu.tuning.scripts`) |
+| `oranda.tuning.childCursors` | 자식 커서… | - | 전역 | `hasSession` | TSK-06-03 (`menu:tuning/childCursors@210`) |
+| `oranda.schema.tableStats` | 통계 보기… | - | `schemaFocus` | `tableNodeSelected && hasSession` | TSK-06-03 (`context:schema/tableStats@72`) |
 | `oranda.tuning.traceViewer` | 트레이스 보기 | - | 전역 | `hasSession` | TSK-06-04 |
 | `oranda.tuning.optimizerTrace` | 옵티마이저 트레이스(10053) | - | `sqlDocFocus` | `hasSession && !sessionBusy` | TSK-06-04 |
 | `oranda.tuning.assistant` | 튜닝 도우미 | - | 전역 | `hasSession` | TSK-06-05 |
@@ -660,3 +661,5 @@
 | `oranda.tuning.planControls` | SQL Profile·Baseline·Patch 보기 | - | 전역 | `hasSession` | TSK-06-05 |
 
 패널 ID: `oranda.panel.tuningStats`·`oranda.panel.childCursors`·`oranda.panel.traceViewer`·`oranda.panel.tuningAssistant`(모두 문서 패널).
+
+- 통계 보기·자식 커서에 대상 넘기기(TSK-06-03): 다른 창은 `TuningNavigation.OpenStatsAsync(owner, table)`·`TuningNavigation.OpenChildCursorsAsync(sqlId, instanceId?)` 를 부른다(대상을 맡기고 `ShellCommandRunner.RunAsync(id)`). 레지스트리로 직접 부르면 매개변수 `TableStatsTarget`·`"OWNER.TABLE"`·`CursorRef`·sql_id 글도 받는다. 대상이 없으면 통계 보기 = 편집기 커서 아래 표, 자식 커서 = 앞의 SQL 모니터 고른 SQL → 계획 창 마지막 커서. 두 명령 모두 기본 키 없음(시안의 Ctrl+Alt+S 는 프리셋 충돌 검사 뒤로 미룸).
