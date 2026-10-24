@@ -3,10 +3,12 @@
 ## 기능 아이디어 (2026-10-20 수집)
 
 - mybatis 파일을 그대로 읽고 태그를 실시간 해석해서 실제 수행된 쿼리를 생성하는 일련의 과정을 모두 구현
-- mcp, cli 를 통해 LLM에서 오란다 제어
+- mcp, cli 를 통해 LLM에서 쿼리 작성 및 튜닝 수행
 - 이 맥북을 밖에서 회사안의 win30, win144를 제어해야 하는데 제어가능한 방법이 win144 만 크롬 엑세스로 접속이  가능해.
 - 업데이트 , 커밋 후 데이터 원복 기능
 - 데이터 변경 추적 기능
+- 테이블 파티셔닝에 대한 지원
+
 - 한번에 하나의 DB가 아니라 여러 세션을 가지게 하자.
   - 워크스페이스 별로도 세션을 할당 가능하도록 하자.
 - 튜닝을 위한 기능 여러 튜닝 방법을 사용한다. 
@@ -526,3 +528,10 @@ CI(run 39276301319)의 Windows 러너에서 `Incremental_lex_of_10k_lines_meets_
 - `tests/Oranda.App.Tests/Features/SqlEditor/`: 1만 줄에서 키 입력 p95를 재는 시험 (04-02)
 - `tests/Oranda.App.Tests`의 자동완성 헤드리스 시간 시험 (04-05)
 - 그 밖에 이름에 `fast`, `budget`, `ms`가 들어간 시험을 찾아 함께 옮긴다.
+## 다른 도구와 비교한 빈칸 (2026-10-24 조사)
+
+다음에 추가할 기능을 고를 때 본다. 공유 문서: https://claude.ai/artifact/4ujyiiW1vMrAWGefmVuaDW
+
+- [전체 기능 비교](oranda1/research/feature-gap-2026-10-24.md) — Toad·SQL Developer·PL/SQL Developer·DBeaver·DataGrip·Orange 대비 영역별 표와 P0~P2 제안. P0 = 객체 생성·변경 대화상자, 스키마 비교·동기화 스크립트, PL/SQL 디버거 재검토, `PLSQL_WARNINGS` 켜기
+- [쿼리 튜닝 비교](oranda1/research/tuning-gap-2026-10-24.md) — 이번 회차 WP-06(튜닝 메뉴)의 근거
+- Lock 모니터(WP-05)·튜닝(WP-06)으로 채우는 빈칸은 `docs/oranda1/wbs.md` 에 있다. 나머지는 아직 작업으로 올리지 않았다
