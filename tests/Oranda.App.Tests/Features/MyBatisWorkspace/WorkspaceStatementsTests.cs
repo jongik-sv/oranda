@@ -22,7 +22,7 @@ namespace Oranda.App.Tests.Features.MyBatisWorkspace;
 public sealed class WorkspaceStatementsTests : IDisposable
 {
     private static readonly string[] BadIds = ["1bad", "countEmp"];
-    private static readonly string[] ToolbarButtons = ["NewButton", "RenameButton", "DeleteButton", "ExpandButton"];
+    private static readonly string[] ToolbarButtons = ["NewButton", "RenameButton", "DeleteButton", "ExpandButton", "FormatAllButton"];
 
     private readonly string _root = Path.Combine(Path.GetTempPath(), "oranda-mbstatements-" + Guid.NewGuid().ToString("N"));
 

@@ -25,6 +25,8 @@ public sealed partial class MyBatisStatementsViewModel : ToolPanelViewModelBase,
     private const string DeleteCommandId = "oranda.mybatis.deleteStatement";
     private const string ExpandCommandId = "oranda.mybatis.expandToSqlTab";
 
+    private const string FormatAllCommandId = "oranda.mybatis.formatAll";
+
     private static readonly MyBatisStatementKind[] GroupOrder =
     [
         MyBatisStatementKind.Select,
@@ -332,6 +334,9 @@ public sealed partial class MyBatisStatementsViewModel : ToolPanelViewModelBase,
     [RelayCommand(CanExecute = nameof(CanExpandSelected))]
     private Task ExpandToSqlTabAsync() => ShellCommandRunner.RunAsync(ExpandCommandId);
 
+    [RelayCommand(CanExecute = nameof(CanNew))]
+    private Task FormatAllAsync() => ShellCommandRunner.RunAsync(FormatAllCommandId);
+
     private bool CanNew() => _session is not null;
 
     private bool CanEditSelected() => TargetEntry() is { IsEditable: true };
@@ -346,5 +351,6 @@ public sealed partial class MyBatisStatementsViewModel : ToolPanelViewModelBase,
         RenameStatementCommand.NotifyCanExecuteChanged();
         DeleteStatementCommand.NotifyCanExecuteChanged();
         ExpandToSqlTabCommand.NotifyCanExecuteChanged();
+        FormatAllCommand.NotifyCanExecuteChanged();
     }
 }

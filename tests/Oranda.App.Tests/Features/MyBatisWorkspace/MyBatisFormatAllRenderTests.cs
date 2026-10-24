@@ -41,7 +41,7 @@ public sealed class MyBatisFormatAllRenderTests : IDisposable
     }
 
     [Fact]
-    public Task Format_all_button_follows_format_query_and_its_result_reads_in_the_message_box() => Ui.Run(async () =>
+    public Task Format_all_is_not_in_the_document_toolbar_and_its_result_reads_in_the_message_box() => Ui.Run(async () =>
     {
         using var harness = new ShellHarness();
         var hooks = new MyBatisHooks(harness.Services);
@@ -60,13 +60,10 @@ public sealed class MyBatisFormatAllRenderTests : IDisposable
             window.Show();
             Dispatcher.UIThread.RunJobs();
 
-            var buttons = view.Toolbar!.Buttons.Select(b => (string)b.Tag!).ToList();
-            Assert.Equal(buttons.IndexOf(MyBatisFormatCommands.FormatStatement) + 1, buttons.IndexOf(MyBatisFormatAllCommands.FormatAll));
-            var button = view.Toolbar.Buttons.Single(b => (string)b.Tag! == MyBatisFormatAllCommands.FormatAll);
-            Assert.IsType<Viewbox>(button.Content); // 글자 단추가 아니라 아이콘
+            // 단추는 「매퍼 쿼리」 패널 툴바(WorkspaceStatementsTests)에 있고 문서 도구 막대에는 없다.
+            Assert.DoesNotContain(view.Toolbar!.Buttons, b => (string)b.Tag! == MyBatisFormatAllCommands.FormatAll);
             var title = harness.Get<IShellText>().Title(harness.Get<ICommandRegistry>().Find(MyBatisFormatAllCommands.FormatAll)!);
             Assert.Equal("매퍼 전체 포맷", title);
-            Assert.Equal(title, ToolTip.GetTip(button));
             Render(window, dir, "mybatis-formatall-before", 900, 620);
 
             var before = tab.Text;

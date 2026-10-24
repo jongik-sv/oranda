@@ -38,14 +38,14 @@ public sealed partial class MyBatisFormatAllCommandTests : IDisposable
     }
 
     [Fact]
-    public void Both_commands_sit_in_the_mybatis_toolbar_and_edit_menu_and_ignore_a_read_only_active_tab()
+    public void Both_commands_sit_in_the_edit_menu_and_ignore_a_read_only_active_tab()
     {
         var registry = ShellTestHelpers.CreateCommandRegistry();
         var format = registry.Find(MyBatisFormatAllCommands.FormatAll)!;
         var undo = registry.Find(MyBatisFormatAllCommands.UndoFormatAll)!;
 
         Assert.Equal("formatAll", format.Icon);
-        Assert.Equal(["toolbar:mybatis/formatAll@36", "menu:edit/mybatisFormatAll@406"], format.Placements);
+        Assert.Equal(["menu:edit/mybatisFormatAll@406"], format.Placements);
         Assert.Equal(["menu:edit/mybatisUndoFormatAll@407"], undo.Placements);
         foreach (var id in new[] { MyBatisFormatAllCommands.FormatAll, MyBatisFormatAllCommands.UndoFormatAll })
         {

@@ -20,10 +20,11 @@ namespace Oranda.App.Features.MyBatisWorkspace.Format;
 /// 끝에 「N개 정리, K개는 이미 정리됨, M개는 원문 유지」 와 원문 유지 사유를 메시지 상자로 한 번 알린다.
 /// 「매퍼 전체 포맷 되돌리기」 는 직전 전체 포맷 한 번분을 되돌린다: 지금 글이 포맷 글 그대로인 요소만 이전 글로 돌리고, 그 사이 고친 요소는 건너뛴다.
 /// 저장·밖에서 바뀐 디스크 병합(세션 기준 문서가 바뀜)이나 다른 작업 공간(다른 매퍼 등)을 활성으로 하면 되돌릴 목록을 버린다.
+/// 단추는 문서 도구 막대가 아니라 「매퍼 쿼리」 패널 툴바에 있다(매퍼 단위 명령이라 문장 목록 곁에 둔다).
 /// 처리기는 실행마다 새로 만들어지므로 실행 중 표시·되돌릴 목록은 호스트마다 따로 둔다.
 /// </summary>
 [OrandaCommand(MyBatisFormatAllCommands.FormatAll, CommandCategory.Format, Icon = "formatAll", Enablement = "mybatisDocActive && !" + MyBatisFormatAllCommands.BusyKey,
-    Placements = ["toolbar:mybatis/formatAll@36", "menu:edit/mybatisFormatAll@406"])]
+    Placements = ["menu:edit/mybatisFormatAll@406"])]
 [OrandaCommand(MyBatisFormatAllCommands.UndoFormatAll, CommandCategory.Format, Enablement = "mybatisDocActive && !" + MyBatisFormatAllCommands.BusyKey,
     Placements = ["menu:edit/mybatisUndoFormatAll@407"])]
 public sealed class MyBatisFormatAllCommands : ICommandHandler

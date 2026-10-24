@@ -21,7 +21,7 @@
                Margin="12" />
     <!-- 세션이 없어도 쓸 수 있는 보기 모드(매퍼 폴더 트리)가 있으면 도구 막대의 모드 단추와 모드 내용은 보인다. 세션 몫(문장 단추·경로·안내 띠)은 세션이 있을 때만. -->
     <DockPanel IsVisible="{Binding ShowsBody}">
-      <!-- 패널 툴바: 새 문장 · id 바꾸기 · 지우기 · 펼친 SQL 을 새 SQL 탭으로 | (오른쪽 끝) 보기 전환. 이름은 툴팁으로 보인다. -->
+      <!-- 패널 툴바: 새 문장 · id 바꾸기 · 지우기 · 펼친 SQL 을 새 SQL 탭으로 · 매퍼 전체 포맷 | (오른쪽 끝) 보기 전환. 이름은 툴팁으로 보인다. -->
       <Border DockPanel.Dock="Top" Classes="panel-toolbar">
         <DockPanel>
           <ItemsControl DockPanel.Dock="Right" ItemsSource="{Binding ViewModes}">
@@ -51,6 +51,8 @@
             <Separator Classes="toolbar" />
             <Button x:Name="ExpandButton" Classes="toolbar" Content="새 SQL 탭으로 펼치기" ToolTip.Tip="펼친 SQL 을 새 SQL 탭으로 열기"
                     icons:ButtonIcon.Key="fileSql" icons:ButtonIcon.IconOnly="True" Command="{Binding ExpandToSqlTabCommand}" />
+            <Button x:Name="FormatAllButton" Classes="toolbar" Content="매퍼 전체 포맷" ToolTip.Tip="매퍼의 쿼리 전부를 포맷"
+                    icons:ButtonIcon.Key="formatAll" icons:ButtonIcon.IconOnly="True" Command="{Binding FormatAllCommand}" />
           </StackPanel>
         </DockPanel>
       </Border>
