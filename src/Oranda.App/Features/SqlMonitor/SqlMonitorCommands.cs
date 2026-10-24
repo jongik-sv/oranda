@@ -23,6 +23,16 @@ public static class SqlMonitorCommands
         "oranda.monitor.sqlShowPlan",
         "oranda.monitor.sqlShowBinds",
     ];
+
+    /// <summary>TSK-06-06 이 등록하는 튜닝 메뉴 「대기·이력」 명령(<c>TuningCommands.Ids</c> 에도 있다).</summary>
+    public static readonly string[] TuningIds =
+    [
+        "oranda.tuning.ashWaits",
+        "oranda.tuning.awrHistory",
+        "oranda.tuning.planControls",
+        "oranda.tuning.tuningAdvisorScript",
+        "oranda.tuning.baselineScript",
+    ];
 }
 
 /// <summary>튜닝 메뉴의 SQL 모니터 명령(SQLM-01·02).</summary>
@@ -33,6 +43,14 @@ public static class SqlMonitorCommands
     Placements = ["menu:tuning/sqlShowPlan@120", "context:monitor/sqlShowPlan@50"])]
 [OrandaCommand("oranda.monitor.sqlShowBinds", CommandCategory.Monitor, When = "monitorFocus", Enablement = "monitorSqlSelected",
     Placements = ["menu:tuning/sqlShowBinds@130", "context:monitor/sqlShowBinds@51"])]
+// TSK-06-06 튜닝 메뉴 「대기·이력」(500~): SQL 모니터를 열고 그 탭으로 / 스크립트 만들기 하위 메뉴(새 편집기 탭에 글만, 실행 안 함).
+[OrandaCommand("oranda.tuning.ashWaits", CommandCategory.Monitor, Icon = "aggregate", Placements = ["menu:tuning/sqlWaits@500"])]
+[OrandaCommand("oranda.tuning.awrHistory", CommandCategory.Monitor, Icon = "history", Placements = ["menu:tuning/awrHistory@510"])]
+[OrandaCommand("oranda.tuning.planControls", CommandCategory.Monitor, Icon = "key", Placements = ["menu:tuning/planControls@520"])]
+[OrandaCommand("oranda.tuning.tuningAdvisorScript", CommandCategory.Monitor, Icon = "docEdit", Enablement = "monitorSqlSelected",
+    Placements = ["menu:tuning/scripts/tuningAdvisor@540"])]
+[OrandaCommand("oranda.tuning.baselineScript", CommandCategory.Monitor, Icon = "docEdit", Enablement = "monitorSqlSelected",
+    Placements = ["menu:tuning/scripts/baseline@550"])]
 public sealed class SqlMonitorCommandHandler : ICommandHandler
 {
     private readonly ServiceContainer? _container;
@@ -60,7 +78,26 @@ public sealed class SqlMonitorCommandHandler : ICommandHandler
             return;
         }
 
-        if ((context.Parameter as SqlMonitorViewModel ?? shell.Docking.ActiveDocument?.Panel as SqlMonitorViewModel) is not { } vm)
+        if (TabFor(context.CommandId) is { } tab)
+        {
+            // 열린 SQL 모니터가 있으면 그 탭으로, 없으면 연다.
+            if (FindOpen(shell.Docking) is { } open)
+            {
+                shell.Docking.Activate(open.Document);
+                open.Vm.DetailTabIndex = tab;
+                return;
+            }
+
+            await OpenAsync(shell.Docking, cancellationToken).ConfigureAwait(true);
+            if (FindOpen(shell.Docking) is { } opened)
+            {
+                opened.Vm.DetailTabIndex = tab;
+            }
+
+            return;
+        }
+
+        if ((context.Parameter as SqlMonitorViewModel ?? shell.Docking.ActiveDocument?.Panel as SqlMonitorViewModel ?? FindOpen(shell.Docking)?.Vm) is not { } vm)
         {
             return;
         }
@@ -76,7 +113,40 @@ public sealed class SqlMonitorCommandHandler : ICommandHandler
             case "oranda.monitor.sqlShowBinds":
                 await vm.ShowBindsAsync(cancellationToken).ConfigureAwait(true);
                 break;
+            case "oranda.tuning.tuningAdvisorScript":
+                vm.CreateTuningAdvisorScript();
+                break;
+            case "oranda.tuning.baselineScript":
+                await vm.CreateBaselineScriptAsync(cancellationToken).ConfigureAwait(true);
+                break;
         }
+    }
+
+    /// <summary>튜닝 메뉴 명령이 여는 아래 탭(해당 없으면 null).</summary>
+    public static int? TabFor(string commandId) => commandId switch
+    {
+        "oranda.tuning.ashWaits" => SqlMonitorViewModel.WaitsTab,
+        "oranda.tuning.awrHistory" => SqlMonitorViewModel.AwrTab,
+        "oranda.tuning.planControls" => SqlMonitorViewModel.ControlsTab,
+        _ => null,
+    };
+
+    private static (Shell.Docking.PanelDocument Document, SqlMonitorViewModel Vm)? FindOpen(Shell.Docking.DockWorkspace docking)
+    {
+        if (docking.ActiveDocument is { Panel: SqlMonitorViewModel active } current)
+        {
+            return (current, active);
+        }
+
+        foreach (var d in docking.Documents)
+        {
+            if (d.Panel is SqlMonitorViewModel vm)
+            {
+                return (d, vm);
+            }
+        }
+
+        return null;
     }
 
     private async Task OpenAsync(Shell.Docking.DockWorkspace docking, CancellationToken ct)

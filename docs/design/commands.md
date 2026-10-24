@@ -659,9 +659,11 @@
 | `oranda.tuning.indexCandidates` | 인덱스 후보 | - | 전역 | `tuningAssistantOpen` | TSK-06-05 |
 | `oranda.tuning.rewriteCandidates` | 재작성 후보 | - | 전역 | `tuningAssistantOpen` | TSK-06-05 |
 | `oranda.tuning.benchmark` | 변형 SQL 벤치마크 | - | 전역 | `tuningAssistantOpen` | TSK-06-05 |
-| `oranda.tuning.awrHistory` | AWR 계획 이력 | - | 전역 | `hasSession` | TSK-06-05 |
-| `oranda.tuning.ashWaits` | ASH 대기 분해 | - | 전역 | `hasSession` | TSK-06-05 |
-| `oranda.tuning.planControls` | SQL Profile·Baseline·Patch 보기 | - | 전역 | `hasSession` | TSK-06-05 |
+| `oranda.tuning.ashWaits` | SQL 대기 분해 (`menu:tuning/sqlWaits@500`, SQL 모니터를 열고 「대기 분해」 탭) | - | 전역 | 항상 | TSK-06-06 |
+| `oranda.tuning.awrHistory` | AWR 계획 이력 (`@510`, 「AWR 계획 이력」 탭 — 팩 관문은 탭 안: 선언 없으면 이유·켜는 방법) | - | 전역 | 항상 | TSK-06-06 |
+| `oranda.tuning.planControls` | 계획 관리 보기 (Profile·Baseline·Patch) (`@520`, 「계획 관리」 탭) | - | 전역 | 항상 | TSK-06-06 |
+| `oranda.tuning.tuningAdvisorScript` | Tuning Advisor 스크립트 (하위 메뉴 `menu:tuning/scripts/tuningAdvisor@540`, 새 편집기 탭에 글만) | - | 전역 | `monitorSqlSelected` | TSK-06-06 |
+| `oranda.tuning.baselineScript` | baseline 고정 스크립트 (DBMS_SPM) (`menu:tuning/scripts/baseline@550`, 새 편집기 탭에 글만) | - | 전역 | `monitorSqlSelected` | TSK-06-06 |
 
 - TSK-06-05 배치: `oranda.tuning.assistant` = `menu:tuning/assistant@400`·`context:editor/tuningAssistant@1030`(편집기 오른쪽 클릭, 예상 계획 옆), `oranda.tuning.benchmark` = `menu:tuning/benchmark@410`. `indexCandidates`·`rewriteCandidates` 는 명령 팔레트 전용(도우미 탭 전환).
 
@@ -674,3 +676,4 @@ TSK-06-04 계획 보강 배치: `menu:tuning/rerunStats/hint@300`·`menu:tuning/
 - `oranda.tuning.traceViewer` 매개변수: `SessionKey`(세션 모니터에서 고른 세션). 없으면 내 세션(`default(SessionKey)` = 이 세션, `ITuningService.GetTraceFileAsync` 의 약속).
 - `oranda.tuning.optimizerTrace`: 10053 켜기 → 표시 주석을 붙인 사본을 `DBMS_SQL.PARSE` 로 파싱만(실행·PLAN_TABLE 쓰기 없음) → 끄기 → 트레이스 보기로 연다. PL/SQL 블록이라 운영 접속에서는 정책 관문이 확인을 묻는다.
 - 계획 창 툴바의 「통계 보기」「자식 커서」, 그래프 상세의 「이 표 통계」「튜닝 도우미」 는 `oranda.tuning.stats`·`childCursors`·`assistant` 를 ID 로 부르고, 명령이 등록되지 않았으면 숨는다.
+- 대기·이력 묶음(TSK-06-06)은 새 패널 없이 SQL 모니터(`oranda.panel.sqlMonitor`) 아래 탭(대기 분해·AWR 계획 이력·계획 관리)을 연다. 하위 메뉴 「스크립트 만들기」(`Menu.tuning.scripts`, `menu:tuning/scripts/…`)에는 통계 수집 스크립트(`gatherStatsScript`, TSK-06-03)도 `@530` 으로 둘 수 있다.

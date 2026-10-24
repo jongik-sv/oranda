@@ -276,5 +276,10 @@
   "Cmd.oranda.help.checkUpdate": "업데이트 확인…",
   "Cmd.oranda.help.crashReport": "오류 보고서",
   "Cmd.oranda.help.openLogs": "로그 폴더 열기",
-  "Cmd.oranda.help.about": "Oranda 정보"
+  "Cmd.oranda.help.about": "Oranda 정보",
+  "Cmd.oranda.tuning.ashWaits": "SQL 대기 분해",
+  "Cmd.oranda.tuning.awrHistory": "AWR 계획 이력",
+  "Cmd.oranda.tuning.planControls": "계획 관리 보기 (Profile·Baseline·Patch)",
+  "Cmd.oranda.tuning.tuningAdvisorScript": "Tuning Advisor 스크립트",
+  "Cmd.oranda.tuning.baselineScript": "baseline 고정 스크립트 (DBMS_SPM)"
 }

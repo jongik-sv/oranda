@@ -387,7 +387,7 @@ levels:
   - acceptance: 후보·문안·벤치마크 표가 나온다 / SELECT 가 아닌 문장은 벤치마크 거부 / 만든 DDL 은 실행하지 않는다 / 전체 시험 통과
   - note: 완료(2026-10-24) — 규칙 API Oranda.Language.Tuning(IndexAdvisor·RewriteAdvisor·HintAdvisor·BenchmarkRules·PlanPredicates, 06-07 재사용), 문서 패널 Features/Tuning/Assistant(후보 3탭·벤치마크 표·상태 화면·운영 확인), 튜닝 메뉴 도우미 400~·편집기 오른쪽 클릭, 가짜 서비스로 시험(Oracle RunBenchmarkAsync 는 tn-data) (win144)
 
-- [ ] TSK-06-06: 대기·이력·계획 관리 보기 — SQL 별 대기 분해·AWR 계획 이력·ASH·Profile·Baseline·Patch·Advisor 스크립트 [win144] w:2 2026-10-26~2026-10-28
+- [x] TSK-06-06: 대기·이력·계획 관리 보기 — SQL 별 대기 분해·AWR 계획 이력·ASH·Profile·Baseline·Patch·Advisor 스크립트 [win144] w:2 2026-10-26~2026-10-28
   - category: dev
   - domain: frontend
   - model: opus
@@ -397,7 +397,7 @@ levels:
   - prd-ref: TN-12, TN-13, TN-14, TN-16
   - requirements: SQL 모니터 창(SqlMonitor 기능 파일의 소유자)에 탭을 더한다: 대기 분해(팩 없음: N 초 동안 gv$session 표본을 모아 sql_id 별 event·wait_class 비율, 진행·취소; Diagnostics 선언 있으면 ASH 로 과거 구간), AWR 계획 이력(snap 구간별 plan_hash·실행 수·elapsed/exec 그래프·두 plan_hash 계획 비교, Diagnostics), 계획 관리 보기(이 sql_id·signature 의 SQL Profile·Baseline·Patch, 보기만); SQL 모니터 도구 모음에 「자식 커서」 열기 단추(TSK-06-03 명령 호출); 「Tuning Advisor 스크립트 만들기」·「baseline 고정 스크립트 만들기」: DBMS_SQLTUNE.CREATE_TUNING_TASK·EXECUTE_TUNING_TASK·REPORT_TUNING_TASK 와 DBMS_SPM.LOAD_PLANS_FROM_CURSOR_CACHE 문안을 새 편집기 탭에 넣기만(실행 안 함, 머리 주석에 「DB 에 씁니다·Tuning Pack 필요」); 「튜닝」 메뉴 배치; 시험: 가짜 서비스 ViewModel·Headless·라이선스 꺼짐 표시; 비고: 담당 PC: win144(Windows 개발 PC) — 맥북 세션은 이 Task 를 하지 않는다
   - acceptance: 팩 없는 대기 분해가 동작 / 팩 기능은 선언 없으면 이유 / 스크립트는 DB 로 보내지 않는다 / 전체 시험 통과
-  - note: 시안 완료(2026-10-24, 시안 https://claude.ai/artifact/J4YBzmpMsbvecm8aSv4rGx 화면 j), 화면 레인 착수 대기 (win144)
+  - note: 완료(2026-10-24): SQL 모니터에 대기 분해(gv$session 표본·진행·취소, Diagnostics 선언 시 ASH)·AWR 계획 이력(그래프·두 plan_hash 비교)·계획 관리 탭, 자식 커서·Tuning Advisor·baseline 스크립트 단추, 튜닝 메뉴 대기·이력 500~ (win144)
 
 - [ ] TSK-06-07: SQL 튜닝 HTML 보고서 — 한 문장의 진단 자료를 HTML 파일 하나로 [win144] w:2 2026-10-28~2026-10-29
   - category: dev

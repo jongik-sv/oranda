@@ -30,5 +30,7 @@ public static class TuningCommands
         "oranda.tuning.awrHistory",
         "oranda.tuning.ashWaits",
         "oranda.tuning.planControls",
+        "oranda.tuning.tuningAdvisorScript",
+        "oranda.tuning.baselineScript",
     ];
 }

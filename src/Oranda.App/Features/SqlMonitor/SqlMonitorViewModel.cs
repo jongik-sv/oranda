@@ -51,7 +51,7 @@ public sealed class TopSqlItem(TopSqlRow row)
 
 /// <summary>
 /// <c>oranda.panel.sqlMonitor</c> — Top SQL 조건 검색(소요 시간·읽은 블록·실행 횟수·텍스트, 사전 정의 구간)과 선택 SQL 의 전문·실제 계획·바인드 캡처 (TSK-09-02, SQLM-01·02).
-/// <para>전용 모니터 세션(CONN-07)에서만 조회한다. 팩이 필요한 ASH·AWR 는 쓰지 않는다. 서비스는 처음 쓸 때 꺼낸다(D-006).</para>
+/// <para>전용 모니터 세션(CONN-07)에서만 조회한다. 팩이 필요한 ASH·AWR 는 튜닝 탭(TSK-06-06, 같은 클래스의 .Tuning.cs)이 팩 선언을 확인한 뒤에만 쓴다. 서비스는 처음 쓸 때 꺼낸다(D-006).</para>
 /// </summary>
 [OrandaToolPanel("oranda.panel.sqlMonitor", ToolPanelKind.Document, DockLocation.Document)]
 public sealed partial class SqlMonitorViewModel : ToolPanelViewModelBase, IDisposable
@@ -292,6 +292,7 @@ public sealed partial class SqlMonitorViewModel : ToolPanelViewModelBase, IDispo
         Access.ClearNotice();
         Access.SetAccount(session.Profile);
         UpdateKeys();
+        OnTuningSessionChanged();
         if (chosen)
         {
             Remember?.Invoke(session.Profile);
@@ -331,6 +332,7 @@ public sealed partial class SqlMonitorViewModel : ToolPanelViewModelBase, IDispo
         IsOpen = false;
         UpdateKeys();
         Access.SetAccount(null);
+        OnTuningSessionChanged();
         if (session is not null)
         {
             await CloseSessionAsync(session);
@@ -430,6 +432,7 @@ public sealed partial class SqlMonitorViewModel : ToolPanelViewModelBase, IDispo
         }
 
         _disposed = true;
+        _waits?.Cancel();
         if (Interlocked.Exchange(ref _session, null) is { } s)
         {
             _ = ConnectionService.CloseAsync(s, timeout: CloseTimeout);
@@ -474,6 +477,8 @@ public sealed partial class SqlMonitorViewModel : ToolPanelViewModelBase, IDispo
             DetailText = string.Empty;
             PlanText = string.Empty;
         }
+
+        OnTuningTargetChanged();
     }
 
     private void MarkCustom()

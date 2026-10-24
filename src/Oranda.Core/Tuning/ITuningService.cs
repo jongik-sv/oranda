@@ -62,6 +62,13 @@ public interface ITuningService
     Task<IReadOnlyList<AwrPlanRow>> GetAwrPlanHistoryAsync(ISession s, string sqlId, CancellationToken ct) =>
         throw new NotSupportedException();
 
+    /// <summary>
+    /// AWR 에 남은 한 plan_hash 의 계획 단계(license diagnostics, 카탈로그 <c>tuning.awr_plan_steps</c>). 두 plan_hash 비교용(TSK-06-06).
+    /// <see cref="ExecutionPlan.Text"/> 는 단계를 들여쓴 글, <see cref="ExecutionPlan.PlanHashValue"/> 는 <paramref name="planHashValue"/>. 단계가 없으면 빈 계획.
+    /// </summary>
+    Task<ExecutionPlan> GetAwrPlanAsync(ISession s, string sqlId, long planHashValue, CancellationToken ct) =>
+        throw new NotSupportedException();
+
     /// <summary>ASH 대기 분해(license diagnostics). <paramref name="since"/> 이후. TN-14.</summary>
     Task<IReadOnlyList<AshWaitRow>> GetAshWaitsAsync(ISession s, string sqlId, DateTime since, CancellationToken ct) =>
         throw new NotSupportedException();

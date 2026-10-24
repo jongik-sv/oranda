@@ -276,5 +276,10 @@
   "Cmd.oranda.window.saveLayoutAs": "Save Layout As",
   "Cmd.oranda.window.splitDown": "Split Down",
   "Cmd.oranda.window.splitRight": "Split Right",
-  "Cmd.oranda.window.toggleResultPane": "Show/Hide Result Pane"
+  "Cmd.oranda.window.toggleResultPane": "Show/Hide Result Pane",
+  "Cmd.oranda.tuning.ashWaits": "SQL Wait Breakdown",
+  "Cmd.oranda.tuning.awrHistory": "AWR Plan History",
+  "Cmd.oranda.tuning.planControls": "Plan Management (Profiles, Baselines, Patches)",
+  "Cmd.oranda.tuning.tuningAdvisorScript": "Tuning Advisor Script",
+  "Cmd.oranda.tuning.baselineScript": "Baseline Fix Script (DBMS_SPM)"
 }
