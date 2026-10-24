@@ -1,0 +1,487 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:keymaps="using:Oranda.App.Shell.Keymaps"
+             xmlns:icons="using:Oranda.App.Shell.Icons"
+             xmlns:vm="using:Oranda.App.Features.LockMonitor"
+             xmlns:sm="using:Oranda.App.Features.SessionMonitor"
+             xmlns:plan="using:Oranda.App.Features.ExecutionPlan"
+             xmlns:se="using:Oranda.App.Features.SqlEditor"
+             xmlns:ctl="using:Oranda.App.Shell.Controls"
+             x:Class="Oranda.App.Features.LockMonitor.LockMonitorView"
+             keymaps:FocusSlot.Name="lockMonitor"
+             x:DataType="vm:LockMonitorViewModel">
+  <UserControl.Styles>
+    <Style Selector="TextBlock.account.production">
+      <Setter Property="Foreground" Value="{DynamicResource OrandaEnvProductionBrush}" />
+    </Style>
+    <!-- 대기 트리 칸 폭(머리글과 줄이 같은 클래스). -->
+    <Style Selector=":is(Control).lk-sess"><Setter Property="Width" Value="168" /></Style>
+    <Style Selector=":is(Control).lk-user"><Setter Property="Width" Value="98" /></Style>
+    <Style Selector=":is(Control).lk-state"><Setter Property="Width" Value="80" /></Style>
+    <Style Selector=":is(Control).lk-wait"><Setter Property="Width" Value="66" /></Style>
+    <Style Selector=":is(Control).lk-event"><Setter Property="Width" Value="206" /></Style>
+    <Style Selector=":is(Control).lk-obj"><Setter Property="Width" Value="116" /></Style>
+    <Style Selector=":is(Control).lk-sql"><Setter Property="Width" Value="140" /></Style>
+    <!-- 보유자 줄: 계획 창 「가장 비싼 단계」 와 같은 왼쪽 3 DIP 주황 띠 + 옅은 주황 바탕(OrandaHotRowBrush). -->
+    <Style Selector="Border.plan-row">
+      <Setter Property="BorderThickness" Value="3,0,0,0" />
+      <Setter Property="BorderBrush" Value="Transparent" />
+    </Style>
+    <Style Selector="Border.plan-row.hot">
+      <Setter Property="Background" Value="{DynamicResource OrandaHotRowBrush}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource OrandaIconOrangeBrush}" />
+    </Style>
+    <Style Selector="ListBoxItem:selected Border.plan-row.hot">
+      <Setter Property="Background" Value="Transparent" />
+    </Style>
+    <Style Selector="Border.plan-row.hot TextBlock.key">
+      <Setter Property="FontWeight" Value="SemiBold" />
+    </Style>
+    <!-- 트리 접기 단추: 글리프만. -->
+    <Style Selector="Button.expander">
+      <Setter Property="Width" Value="16" />
+      <Setter Property="MinWidth" Value="0" />
+      <Setter Property="MinHeight" Value="0" />
+      <Setter Property="Padding" Value="0" />
+      <Setter Property="Background" Value="Transparent" />
+      <Setter Property="BorderThickness" Value="0" />
+      <Setter Property="VerticalAlignment" Value="Center" />
+      <Setter Property="FontSize" Value="{DynamicResource OrandaFontSizeSmall}" />
+    </Style>
+    <!-- 잎 줄(펼칠 것 없음)·눌림·올림 때도 바탕·테두리를 그리지 않는다(공통 단추 모양이 칸을 가리지 않게). -->
+    <Style Selector="Button.expander /template/ ContentPresenter#PART_ContentPresenter, Button.expander:pointerover /template/ ContentPresenter#PART_ContentPresenter, Button.expander:pressed /template/ ContentPresenter#PART_ContentPresenter, Button.expander:disabled /template/ ContentPresenter#PART_ContentPresenter">
+      <Setter Property="Background" Value="Transparent" />
+      <Setter Property="BorderThickness" Value="0" />
+    </Style>
+    <!-- 목록 이름 띠(잠금 목록). -->
+    <Style Selector="Border.caption">
+      <Setter Property="Background" Value="{DynamicResource OrandaToolbarBackgroundBrush}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource OrandaSeparatorBrush}" />
+      <Setter Property="BorderThickness" Value="0,1,0,1" />
+      <Setter Property="Padding" Value="6,3" />
+    </Style>
+    <Style Selector="Border.caption TextBlock">
+      <Setter Property="FontSize" Value="{DynamicResource OrandaFontSizeSmall}" />
+      <Setter Property="VerticalAlignment" Value="Center" />
+    </Style>
+    <!-- 탭 머리 옆 개수. -->
+    <Style Selector="TextBlock.count">
+      <Setter Property="FontSize" Value="{DynamicResource OrandaFontSizeSmall}" />
+      <Setter Property="FontFamily" Value="{DynamicResource OrandaGridFontFamily}" />
+      <Setter Property="Opacity" Value="0.65" />
+      <Setter Property="Margin" Value="4,0,0,0" />
+      <Setter Property="VerticalAlignment" Value="Center" />
+    </Style>
+    <!-- 띠: 권한 띠(MonitorAccessBanner)와 같은 모양에 위험 색(오류·끊김). -->
+    <Style Selector="Border.band">
+      <Setter Property="Margin" Value="4,4,4,0" />
+      <Setter Property="Padding" Value="10,8" />
+      <Setter Property="CornerRadius" Value="3" />
+      <Setter Property="BorderThickness" Value="1" />
+    </Style>
+    <Style Selector="Border.band.danger">
+      <Setter Property="Background" Value="{DynamicResource OrandaDiffRemovedBrush}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource OrandaDangerForegroundBrush}" />
+    </Style>
+    <!-- 안내 상자(정보·경고). -->
+    <Style Selector="Border.callout">
+      <Setter Property="Padding" Value="10,8" />
+      <Setter Property="CornerRadius" Value="4" />
+      <Setter Property="BorderThickness" Value="1" />
+      <Setter Property="BorderBrush" Value="{DynamicResource OrandaSeparatorBrush}" />
+      <Setter Property="Background" Value="{DynamicResource OrandaToolbarBackgroundBrush}" />
+    </Style>
+    <Style Selector="Border.callout.warning">
+      <Setter Property="Background" Value="{DynamicResource OrandaDiffChangedBrush}" />
+    </Style>
+    <!-- 원인 힌트 카드: 테두리 + 왼쪽 3 DIP 띠(위험·경고·정보). 해당 없음은 흐리게. -->
+    <Style Selector="Border.hint">
+      <Setter Property="BorderBrush" Value="{DynamicResource OrandaSeparatorBrush}" />
+      <Setter Property="BorderThickness" Value="1" />
+      <Setter Property="CornerRadius" Value="4" />
+      <Setter Property="Margin" Value="0,0,0,8" />
+      <Setter Property="ClipToBounds" Value="True" />
+    </Style>
+    <Style Selector="Border.hint.muted">
+      <Setter Property="Opacity" Value="0.6" />
+    </Style>
+    <Style Selector="Border.hint-band">
+      <Setter Property="Width" Value="3" />
+      <Setter Property="Background" Value="{DynamicResource OrandaIconAmberBrush}" />
+    </Style>
+    <Style Selector="Border.hint-band.danger">
+      <Setter Property="Background" Value="{DynamicResource OrandaDangerForegroundBrush}" />
+    </Style>
+    <Style Selector="Border.hint-band.info">
+      <Setter Property="Background" Value="{DynamicResource OrandaIconBlueBrush}" />
+    </Style>
+    <Style Selector="Border.hint-band.muted">
+      <Setter Property="Background" Value="{DynamicResource OrandaSeparatorBrush}" />
+    </Style>
+    <Style Selector="Border.todo">
+      <Setter Property="BorderBrush" Value="{DynamicResource OrandaSeparatorBrush}" />
+      <Setter Property="BorderThickness" Value="1" />
+      <Setter Property="CornerRadius" Value="8" />
+      <Setter Property="Padding" Value="6,0" />
+      <Setter Property="VerticalAlignment" Value="Top" />
+      <Setter Property="Margin" Value="0,1,6,0" />
+    </Style>
+    <Style Selector="Border.todo TextBlock">
+      <Setter Property="FontSize" Value="11" />
+      <Setter Property="FontWeight" Value="SemiBold" />
+      <Setter Property="Opacity" Value="0.7" />
+    </Style>
+    <Style Selector="Grid.stale">
+      <Setter Property="Opacity" Value="0.5" />
+    </Style>
+    <Style Selector="StackPanel.empty > TextBlock">
+      <Setter Property="HorizontalAlignment" Value="Center" />
+      <Setter Property="TextAlignment" Value="Center" />
+      <Setter Property="TextWrapping" Value="Wrap" />
+      <Setter Property="MaxWidth" Value="460" />
+    </Style>
+    <Style Selector="TabControl.compact TabItem">
+      <Setter Property="Padding" Value="10,0" />
+    </Style>
+  </UserControl.Styles>
+
+  <DockPanel>
+    <!-- 툴바: 새로 고침·자동·간격 | 세션 종료·연결 끊기·세션 모니터로 | 복사·CSV | 다른 접속 -->
+    <Border DockPanel.Dock="Top" Classes="panel-toolbar">
+      <WrapPanel>
+        <Button x:Name="RefreshButton" Classes="toolbar" Content="새로 고침 (F5)" IsEnabled="{Binding IsOpen}"
+                icons:ButtonIcon.Key="refresh" icons:ButtonIcon.IconOnly="True" />
+        <ToggleButton Classes="tool" Content="자동" IsEnabled="{Binding IsOpen}" IsChecked="{Binding AutoRefresh, Mode=TwoWay}"
+                      icons:ButtonIcon.Key="timer" ToolTip.Tip="자동 새로 고침" />
+        <NumericUpDown Width="96" Minimum="2" Maximum="60" Increment="1" FormatString="0' 초'" VerticalAlignment="Center"
+                       IsEnabled="{Binding IsOpen}" Value="{Binding RefreshSeconds, Mode=TwoWay}" AutomationProperties.Name="새로 고침 간격" />
+        <Separator Classes="toolbar" />
+        <Button x:Name="KillButton" Classes="tool" Content="세션 종료" IsEnabled="{Binding CanKill}" icons:ButtonIcon.Key="kill"
+                ToolTip.Tip="ALTER SYSTEM KILL SESSION … IMMEDIATE — DB 에 씁니다(확인 창, Delete)" />
+        <Button x:Name="DisconnectButton" Classes="tool" Content="연결 끊기" IsEnabled="{Binding CanKill}" icons:ButtonIcon.Key="disconnect"
+                ToolTip.Tip="ALTER SYSTEM DISCONNECT SESSION … IMMEDIATE — DB 에 씁니다(확인 창)" />
+        <Button x:Name="GoToSessionButton" Classes="tool" Content="세션 모니터로" IsEnabled="{Binding HasSelection}" icons:ButtonIcon.Key="sessions"
+                ToolTip.Tip="이 세션을 세션 모니터에서 고르기 (SID·INST_ID)" />
+        <Separator Classes="toolbar" />
+        <Button x:Name="CopyButton" Classes="tool" Content="복사" IsEnabled="{Binding ShowData}" icons:ButtonIcon.Key="copy"
+                ToolTip.Tip="트리·목록 복사 (TSV)" />
+        <Button x:Name="CsvButton" Classes="tool" Content="CSV 내보내기" IsEnabled="{Binding ShowData}" icons:ButtonIcon.Key="exportFile"
+                ToolTip.Tip="잠금 목록을 CSV 로 저장" />
+        <Separator Classes="toolbar" />
+        <Button x:Name="OtherAccountButton" Classes="tool" Content="다른 접속…" icons:ButtonIcon.Key="connect"
+                ToolTip.Tip="저장된 접속 중에서 골라 모니터 전용 세션을 엽니다" />
+        <TextBlock Classes="account" Classes.production="{Binding Access.IsProduction}" Text="{Binding Access.AccountText}"
+                   IsVisible="{Binding Access.HasAccount}" VerticalAlignment="Center" Margin="6,0" FontWeight="SemiBold" />
+      </WrapPanel>
+    </Border>
+    <sm:MonitorAccessBanner x:Name="AccessBanner" DockPanel.Dock="Top" DataContext="{Binding Access}" />
+    <!-- 오류·끊김 띠 -->
+    <Border DockPanel.Dock="Top" Classes="band danger" IsVisible="{Binding HasError}" AutomationProperties.Name="Lock 모니터 오류">
+      <DockPanel>
+        <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" Spacing="6" Margin="12,0,0,0" VerticalAlignment="Center">
+          <Button x:Name="ReconnectButton" Classes="accent" Content="다시 접속" IsVisible="{Binding ErrorIsDisconnect}" />
+          <Button x:Name="RetryButton" Classes="accent" Content="다시 읽기" IsVisible="{Binding !ErrorIsDisconnect}" />
+        </StackPanel>
+        <ContentControl DockPanel.Dock="Left" Margin="0,0,8,0" VerticalAlignment="Center"
+                        Content="{Binding Source='error', Converter={x:Static icons:IconKeyConverter.Instance}, ConverterParameter=16}" />
+        <TextBlock Text="{Binding ErrorText}" TextWrapping="Wrap" VerticalAlignment="Center" />
+      </DockPanel>
+    </Border>
+    <!-- 거르기 줄 -->
+    <WrapPanel DockPanel.Dock="Top" Margin="4,4,4,2" IsVisible="{Binding IsOpen}">
+      <TextBlock Text="최소 대기" VerticalAlignment="Center" Margin="2,0,6,0" />
+      <NumericUpDown Width="96" Minimum="0" Maximum="3600" Increment="1" FormatString="0' 초'" VerticalAlignment="Center"
+                     Value="{Binding MinWaitSeconds, Mode=TwoWay}" AutomationProperties.Name="최소 대기 초" />
+      <Button x:Name="ThreeSecondsButton" Margin="6,0" Content="3 초 이상" ToolTip.Tip="최소 대기를 3 초로" VerticalAlignment="Center" />
+      <TextBox x:Name="UserFilterBox" Classes="compact search" Width="130" Margin="0,0,6,0" PlaceholderText="사용자"
+               Text="{Binding UsernameFilter, Mode=TwoWay}" AutomationProperties.Name="사용자 거르기" />
+      <TextBox x:Name="SchemaFilterBox" Classes="compact search" Width="120" Margin="0,0,6,0" PlaceholderText="스키마"
+               Text="{Binding SchemaFilter, Mode=TwoWay}" AutomationProperties.Name="스키마 거르기" />
+      <ComboBox Classes="compact" MinWidth="130" Margin="0,0,10,0" VerticalAlignment="Center" ItemsSource="{Binding InstanceChoices}"
+                SelectedIndex="{Binding SelectedInstanceIndex, Mode=TwoWay}" AutomationProperties.Name="인스턴스 거르기" />
+      <CheckBox Content="대기·차단만" IsChecked="{Binding WaitingOnly, Mode=TwoWay}" VerticalAlignment="Center" />
+    </WrapPanel>
+    <!-- 진행 막대: 자리를 늘 3 DIP 차지해 다시 읽을 때 본문이 흔들리지 않는다. -->
+    <Panel DockPanel.Dock="Top" Height="3">
+      <ProgressBar IsIndeterminate="True" Height="3" MinHeight="3" IsVisible="{Binding IsBusy}" />
+    </Panel>
+    <Border DockPanel.Dock="Bottom" Classes="panel-status">
+      <DockPanel>
+        <TextBlock x:Name="StatusRightLine" DockPanel.Dock="Right" Margin="12,0,0,0" Text="{Binding StatusRight}" />
+        <TextBlock x:Name="StatusLine" Text="{Binding StatusText}" TextTrimming="CharacterEllipsis" />
+      </DockPanel>
+    </Border>
+
+    <Panel>
+      <!-- 접속 없음 -->
+      <StackPanel Classes="empty" IsVisible="{Binding ShowNoConnection}" HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="6" Margin="16">
+        <ContentControl HorizontalAlignment="Center" Opacity="0.55"
+                        Content="{Binding Source='connect', Converter={x:Static icons:IconKeyConverter.Instance}, ConverterParameter=32}" />
+        <TextBlock FontWeight="SemiBold" Text="접속이 없습니다" />
+        <TextBlock Classes="dim" Text="Lock 모니터는 지금 접속으로 모니터 전용 세션을 따로 엽니다. 먼저 접속하세요." />
+        <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" Spacing="6" Margin="0,6,0,0">
+          <Button x:Name="ConnectionManagerButton" Classes="accent" Content="접속 관리자 열기" />
+          <Button x:Name="EmptyOtherAccountButton" Content="다른 접속…" />
+        </StackPanel>
+      </StackPanel>
+      <!-- 첫 읽기 -->
+      <StackPanel Classes="empty" IsVisible="{Binding ShowLoading}" HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="6" Margin="16">
+        <TextBlock Text="잠금 정보를 읽는 중…" />
+        <TextBlock Classes="dim" Text="gv$lock · gv$session · gv$transaction" />
+        <Button x:Name="CancelLoadButton" HorizontalAlignment="Center" Margin="0,6,0,0" Content="취소 (Esc)" />
+      </StackPanel>
+      <!-- 빈 결과 -->
+      <StackPanel Classes="empty" IsVisible="{Binding ShowEmpty}" HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="6" Margin="16">
+        <ContentControl HorizontalAlignment="Center" Opacity="0.55"
+                        Content="{Binding Source='ok', Converter={x:Static icons:IconKeyConverter.Instance}, ConverterParameter=32}" />
+        <TextBlock FontWeight="SemiBold" Text="대기 중인 잠금이 없습니다" />
+        <TextBlock Classes="dim" Text="{Binding EmptyHint}" />
+        <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" Spacing="6" Margin="0,6,0,0">
+          <Button x:Name="ClearFiltersButton" Content="거르기 풀기" IsVisible="{Binding HasFilters}" />
+          <Button x:Name="ShowAllButton" Content="모든 잠금 보기" IsVisible="{Binding WaitingOnly}" />
+        </StackPanel>
+      </StackPanel>
+      <!-- 권한 없음(띠는 위 MonitorAccessBanner) -->
+      <StackPanel Classes="empty" IsVisible="{Binding ShowDenied}" HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="6" Margin="16">
+        <ContentControl HorizontalAlignment="Center" Opacity="0.55"
+                        Content="{Binding Source='lock', Converter={x:Static icons:IconKeyConverter.Instance}, ConverterParameter=32}" />
+        <TextBlock Classes="dim" Text="권한이 생기면 F5 로 다시 읽습니다." />
+      </StackPanel>
+
+      <!-- 자료: 왼쪽 위 = 세션 목록 탭, 왼쪽 아래 = 잠금 목록, 오른쪽 = 고른 세션 상세 -->
+      <Grid x:Name="DataGrid" ColumnDefinitions="1.6*,4,*" IsVisible="{Binding ShowData}" Classes.stale="{Binding IsStale}"
+            IsHitTestVisible="{Binding !IsStale}">
+        <Grid Grid.Column="0" RowDefinitions="1.05*,4,*">
+          <TabControl x:Name="TopTabs" Grid.Row="0" Classes="compact" Padding="0" SelectedIndex="{Binding TopTabIndex, Mode=TwoWay}">
+            <TabItem AutomationProperties.Name="대기 트리">
+              <TabItem.Header>
+                <StackPanel Orientation="Horizontal">
+                  <TextBlock Text="대기 트리" VerticalAlignment="Center" />
+                  <TextBlock Classes="count" Text="{Binding TreeCountText}" />
+                </StackPanel>
+              </TabItem.Header>
+              <Panel>
+                <TextBlock Classes="dim" Margin="12" Text="기다리는 세션이 없습니다. 아래 잠금 목록은 거른 조건의 잠금입니다."
+                           IsVisible="{Binding !TreeRows.Count}" TextWrapping="Wrap" />
+                <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled" IsVisible="{Binding !!TreeRows.Count}">
+                  <DockPanel>
+                    <Border DockPanel.Dock="Top" Classes="grid-header">
+                      <StackPanel Orientation="Horizontal" Classes="cells" Margin="3,0,0,0">
+                        <TextBlock Classes="lk-sess" Text="세션 (인스턴스·SID)" />
+                        <TextBlock Classes="lk-user" Text="사용자" />
+                        <TextBlock Classes="lk-state" Text="상태" />
+                        <TextBlock Classes="lk-wait num" Text="대기" />
+                        <TextBlock Classes="lk-event" Text="이벤트" />
+                        <TextBlock Classes="lk-obj" Text="객체" />
+                        <TextBlock Classes="lk-sql" Text="sql_id" />
+                      </StackPanel>
+                    </Border>
+                    <ListBox x:Name="TreeList" Classes="table" ItemsSource="{Binding TreeRows}"
+                             ScrollViewer.HorizontalScrollBarVisibility="Disabled" AutomationProperties.Name="대기 트리">
+                      <ListBox.ItemTemplate>
+                        <DataTemplate x:DataType="vm:LockTreeItem">
+                          <Border Classes="plan-row" Classes.hot="{Binding IsHolder}" ToolTip.Tip="{Binding ToolTip}">
+                            <StackPanel Orientation="Horizontal" Classes="cells">
+                              <Border Classes="lk-sess" Padding="6,0,0,0">
+                                <DockPanel>
+                                  <plan:PlanTreeGuides DockPanel.Dock="Left" Lines="{Binding TreeLines}" Stroke="{DynamicResource OrandaTreeGuideBrush}" />
+                                  <Button DockPanel.Dock="Left" Classes="expander" Content="{Binding ExpanderGlyph}" IsEnabled="{Binding HasChildren}"
+                                          Focusable="False" AutomationProperties.Name="접기·펴기" />
+                                  <ContentControl DockPanel.Dock="Left" Width="14" Height="14" Margin="0,0,5,0" VerticalAlignment="Center"
+                                                  Content="{Binding IconKey, Converter={x:Static icons:IconKeyConverter.Instance}, ConverterParameter=14}" />
+                                  <TextBlock Classes="key mono" Text="{Binding KeyText}" VerticalAlignment="Center" />
+                                </DockPanel>
+                              </Border>
+                              <TextBlock Classes="lk-user" Text="{Binding Username}" />
+                              <TextBlock Classes="lk-state" Classes.warning-text="{Binding IsInactive}" Text="{Binding StatusText}" />
+                              <TextBlock Classes="lk-wait num" Text="{Binding WaitText}" />
+                              <TextBlock Classes="lk-event" Classes.dim="{Binding IsHolder}" Text="{Binding EventText}" ToolTip.Tip="{Binding EventText}" />
+                              <TextBlock Classes="lk-obj mono" Text="{Binding ObjectText}" ToolTip.Tip="{Binding ObjectText}" />
+                              <TextBlock Classes="lk-sql mono" Classes.dim="{Binding SqlIsPrevious}" Text="{Binding SqlText}" />
+                            </StackPanel>
+                          </Border>
+                        </DataTemplate>
+                      </ListBox.ItemTemplate>
+                    </ListBox>
+                  </DockPanel>
+                </ScrollViewer>
+              </Panel>
+            </TabItem>
+            <TabItem Header="보유자 영향 순위">
+              <ctl:DetailTable x:Name="ImpactTable" />
+            </TabItem>
+            <TabItem Header="방치 트랜잭션">
+              <Panel>
+                <ContentControl Content="{Binding IdleTransactionsContent}" IsVisible="{Binding HasIdleContent}" />
+                <StackPanel Classes="empty" IsVisible="{Binding !HasIdleContent}" HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="6" Margin="16">
+                  <ContentControl HorizontalAlignment="Center" Opacity="0.55"
+                                  Content="{Binding Source='history', Converter={x:Static icons:IconKeyConverter.Instance}, ConverterParameter=32}" />
+                  <TextBlock FontWeight="SemiBold" Text="방치 트랜잭션" />
+                  <TextBlock Classes="dim" Text="INACTIVE 인데 트랜잭션을 연 세션 목록은 다음 단계에서 이 탭에 들어옵니다." />
+                </StackPanel>
+              </Panel>
+            </TabItem>
+            <TabItem AutomationProperties.Name="DDL 잠금">
+              <TabItem.Header>
+                <StackPanel Orientation="Horizontal">
+                  <ContentControl Margin="0,0,4,0" VerticalAlignment="Center" IsVisible="{Binding DdlDenied}"
+                                  Content="{Binding Source='lock', Converter={x:Static icons:IconKeyConverter.Instance}, ConverterParameter=12}" />
+                  <TextBlock Text="DDL 잠금" VerticalAlignment="Center" />
+                  <TextBlock Classes="count" Text="{Binding DdlLocks.Count}" IsVisible="{Binding HasDdlLocks}" />
+                </StackPanel>
+              </TabItem.Header>
+              <DockPanel>
+                <Border DockPanel.Dock="Bottom" Classes="panel-status">
+                  <TextBlock Text="{Binding DdlSummary}" TextTrimming="CharacterEllipsis" />
+                </Border>
+                <Panel>
+                  <StackPanel Classes="empty" IsVisible="{Binding DdlDenied}" HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="6" Margin="16">
+                    <ContentControl HorizontalAlignment="Center" Opacity="0.55"
+                                    Content="{Binding Source='lock', Converter={x:Static icons:IconKeyConverter.Instance}, ConverterParameter=32}" />
+                    <TextBlock FontWeight="SemiBold" Text="{Binding DdlNotice}" />
+                    <TextBlock Classes="dim" Text="나머지 탭은 그대로 동작합니다. DBA 에게 아래 GRANT 를 요청하세요." />
+                    <Button x:Name="CopyDdlGrantButton" HorizontalAlignment="Center" Margin="0,6,0,0" Content="SQL 복사" ToolTip.Tip="{Binding DdlGrantSql}" />
+                  </StackPanel>
+                  <ctl:DetailTable x:Name="DdlTable" IsVisible="{Binding !DdlDenied}" />
+                </Panel>
+              </DockPanel>
+            </TabItem>
+            <TabItem Header="데드락 기록">
+              <Panel>
+                <ContentControl Content="{Binding DeadlocksContent}" IsVisible="{Binding HasDeadlockContent}" />
+                <StackPanel Classes="empty" IsVisible="{Binding !HasDeadlockContent}" HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="6" Margin="16">
+                  <ContentControl HorizontalAlignment="Center" Opacity="0.55"
+                                  Content="{Binding Source='history', Converter={x:Static icons:IconKeyConverter.Instance}, ConverterParameter=32}" />
+                  <TextBlock FontWeight="SemiBold" Text="데드락 기록" />
+                  <TextBlock Classes="dim" Text="alert 로그의 ORA-00060 기록은 다음 단계에서 이 탭에 들어옵니다." />
+                </StackPanel>
+              </Panel>
+            </TabItem>
+          </TabControl>
+          <GridSplitter Grid.Row="1" ResizeDirection="Rows" Background="{DynamicResource OrandaSplitterBrush}" />
+          <DockPanel Grid.Row="2">
+            <Border DockPanel.Dock="Top" Classes="caption">
+              <DockPanel>
+                <TextBlock DockPanel.Dock="Right" Classes="dim" Margin="12,0,0,0" Text="TM 은 객체, TX 는 트랜잭션 시작·undo" />
+                <StackPanel Orientation="Horizontal" Spacing="8">
+                  <TextBlock FontWeight="SemiBold" Text="잠금 목록" />
+                  <TextBlock Classes="dim" Text="{Binding LockCaption}" TextTrimming="CharacterEllipsis" />
+                </StackPanel>
+              </DockPanel>
+            </Border>
+            <ctl:DetailTable x:Name="LockTable" />
+          </DockPanel>
+        </Grid>
+        <GridSplitter Grid.Column="1" ResizeDirection="Columns" Background="{DynamicResource OrandaSplitterBrush}" />
+
+        <!-- 오른쪽 상세: 고른 세션의 SQL·잠긴 행·바인드·원인 힌트 -->
+        <TabControl x:Name="DetailTabs" Grid.Column="2" Classes="compact" Padding="0" MinWidth="300" SelectedIndex="{Binding DetailTabIndex, Mode=TwoWay}">
+          <TabItem Header="SQL 전문">
+            <ScrollViewer HorizontalScrollBarVisibility="Disabled">
+              <StackPanel Margin="10,8,10,10" Spacing="6">
+                <TextBlock Classes="dim" Text="{Binding SqlMessage}" TextWrapping="Wrap" IsVisible="{Binding !HasHolderSql}" />
+                <TextBlock Classes="section-label" Text="{Binding HolderCaption}" TextWrapping="Wrap" />
+                <Border Classes="callout" IsVisible="{Binding HolderHasNoCurrentSql}">
+                  <DockPanel>
+                    <ContentControl DockPanel.Dock="Left" Margin="0,1,8,0" VerticalAlignment="Top"
+                                    Content="{Binding Source='info', Converter={x:Static icons:IconKeyConverter.Instance}, ConverterParameter=16}" />
+                    <TextBlock TextWrapping="Wrap" Text="지금 실행 중인 SQL 이 없습니다. 트랜잭션만 열려 있습니다(커밋 빠짐 의심). 아래는 마지막 SQL(prev_sql_id)." />
+                  </DockPanel>
+                </Border>
+                <Border Classes="code" Padding="2" IsVisible="{Binding HasHolderSql}">
+                  <se:SqlCodeView x:Name="HolderSqlView" Text="{Binding HolderSql}" ShowLineNumbers="False" MinHeight="60" MaxHeight="180" />
+                </Border>
+                <TextBlock Classes="section-label" Margin="0,6,0,0" Text="{Binding WaiterCaption}" TextWrapping="Wrap" IsVisible="{Binding HasWaiterSql}" />
+                <Border Classes="code" Padding="2" IsVisible="{Binding HasWaiterSql}">
+                  <se:SqlCodeView x:Name="WaiterSqlView" Text="{Binding WaiterSql}" ShowLineNumbers="False" MinHeight="60" MaxHeight="180" />
+                </Border>
+                <WrapPanel Margin="0,2,0,0" IsVisible="{Binding HasHolderSql}">
+                  <Button x:Name="OpenEditorButton" Classes="tool" Content="편집기로 열기" icons:ButtonIcon.Key="newSql"
+                          ToolTip.Tip="새 SQL 탭에 넣습니다(실행하지 않음)" />
+                  <Button x:Name="CopySqlButton" Classes="tool" Content="복사" icons:ButtonIcon.Key="copy" ToolTip.Tip="보유자·대기자 SQL 복사" />
+                  <Button x:Name="PlanButton" Classes="tool" Content="실제 계획" icons:ButtonIcon.Key="plan"
+                          ToolTip.Tip="대기자 SQL 의 실제 계획(DBMS_XPLAN.DISPLAY_CURSOR, 읽기 전용)을 계획 창에" />
+                </WrapPanel>
+                <TextBlock Classes="dim" FontSize="{DynamicResource OrandaFontSizeSmall}" Text="gv$sql 은 이 탭을 볼 때만 읽습니다." />
+              </StackPanel>
+            </ScrollViewer>
+          </TabItem>
+          <TabItem Header="잠긴 행">
+            <DockPanel Margin="10,8,10,10">
+              <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Spacing="6" Margin="0,0,0,6" IsVisible="{Binding HasLockedRow}">
+                <Border Classes="chip">
+                  <TextBlock Classes="mono" Text="{Binding LockedRowId}" />
+                </Border>
+                <TextBlock Classes="dim" VerticalAlignment="Center" Text="{Binding LockedRowCaption}" TextTrimming="CharacterEllipsis" />
+              </StackPanel>
+              <StackPanel DockPanel.Dock="Bottom" Spacing="4" Margin="0,8,0,0">
+                <Button x:Name="CopyRowSelectButton" Classes="tool" HorizontalAlignment="Left" Content="SELECT 문 복사" icons:ButtonIcon.Key="copy"
+                        IsVisible="{Binding HasLockedRow}" ToolTip.Tip="{Binding LockedRowSelect}" />
+                <TextBlock Classes="dim" FontSize="{DynamicResource OrandaFontSizeSmall}" TextWrapping="Wrap"
+                           Text="대기 이벤트가 enq: TX - row lock contention 일 때만 보입니다. 값은 SELECT 로만 읽습니다." />
+              </StackPanel>
+              <Panel>
+                <TextBlock Classes="dim" Text="{Binding LockedRowMessage}" TextWrapping="Wrap" IsVisible="{Binding !HasLockedRow}" />
+                <ctl:DetailTable x:Name="LockedRowTable" IsVisible="{Binding HasLockedRow}" />
+              </Panel>
+            </DockPanel>
+          </TabItem>
+          <TabItem Header="바인드">
+            <DockPanel Margin="10,8,10,10">
+              <TextBlock DockPanel.Dock="Top" Classes="section-label" Margin="0,0,0,6" Text="{Binding BindCaption}" />
+              <Border DockPanel.Dock="Bottom" Classes="callout warning" Margin="0,8,0,0">
+                <DockPanel>
+                  <ContentControl DockPanel.Dock="Left" Margin="0,1,8,0" VerticalAlignment="Top"
+                                  Content="{Binding Source='warn', Converter={x:Static icons:IconKeyConverter.Instance}, ConverterParameter=16}" />
+                  <TextBlock TextWrapping="Wrap" Text="gv$sql_bind_capture 는 일정 간격(기본 15 분)으로만 값을 남깁니다. 지금 대기 중인 실행의 값과 다를 수 있습니다." />
+                </DockPanel>
+              </Border>
+              <Panel>
+                <TextBlock Classes="dim" Text="{Binding BindMessage}" TextWrapping="Wrap" IsVisible="{Binding !HasBinds}" />
+                <ctl:DetailTable x:Name="BindTable" IsVisible="{Binding HasBinds}" />
+              </Panel>
+            </DockPanel>
+          </TabItem>
+          <TabItem AutomationProperties.Name="원인 힌트">
+            <TabItem.Header>
+              <StackPanel Orientation="Horizontal">
+                <TextBlock Text="원인 힌트" VerticalAlignment="Center" />
+                <TextBlock Classes="count" Text="{Binding HintCountText}" />
+              </StackPanel>
+            </TabItem.Header>
+            <ScrollViewer HorizontalScrollBarVisibility="Disabled">
+              <ItemsControl x:Name="HintList" Margin="10,8,10,10" ItemsSource="{Binding Hints}">
+                <ItemsControl.ItemTemplate>
+                  <DataTemplate x:DataType="vm:LockHint">
+                    <Border Classes="hint" Classes.muted="{Binding IsMuted}">
+                      <DockPanel>
+                        <Border DockPanel.Dock="Left" Classes="hint-band" Classes.danger="{Binding IsDanger}" Classes.info="{Binding IsInfo}"
+                                Classes.muted="{Binding IsMuted}" />
+                        <StackPanel Margin="10,8" Spacing="4">
+                          <StackPanel Orientation="Horizontal" Spacing="6">
+                            <ContentControl VerticalAlignment="Center" IsVisible="{Binding !IsMuted}"
+                                            Content="{Binding IconKey, Converter={x:Static icons:IconKeyConverter.Instance}, ConverterParameter=16}" />
+                            <TextBlock FontWeight="SemiBold" Text="{Binding Title}" TextWrapping="Wrap" VerticalAlignment="Center" />
+                          </StackPanel>
+                          <TextBlock Text="{Binding Body}" TextWrapping="Wrap" />
+                          <DockPanel IsVisible="{Binding HasTodo}" Margin="0,2,0,0">
+                            <Border DockPanel.Dock="Left" Classes="todo">
+                              <TextBlock Text="할 일" />
+                            </Border>
+                            <Button DockPanel.Dock="Right" Classes="tool hint-copy" Content="확인 SELECT 복사" icons:ButtonIcon.Key="copy"
+                                    IsVisible="{Binding HasCopy}" ToolTip.Tip="{Binding CopySql}" />
+                            <TextBlock Text="{Binding Todo}" TextWrapping="Wrap" VerticalAlignment="Center" />
+                          </DockPanel>
+                        </StackPanel>
+                      </DockPanel>
+                    </Border>
+                  </DataTemplate>
+                </ItemsControl.ItemTemplate>
+              </ItemsControl>
+            </ScrollViewer>
+          </TabItem>
+        </TabControl>
+      </Grid>
+    </Panel>
+  </DockPanel>
+</UserControl>

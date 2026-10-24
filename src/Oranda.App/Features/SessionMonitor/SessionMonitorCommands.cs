@@ -120,7 +120,12 @@ public static class SessionMonitorCommands
         return opener;
     }
 
-    private static string MonitorName(string monitorId) => monitorId == "sqlMonitor" ? "SQL 모니터" : "세션 모니터";
+    private static string MonitorName(string monitorId) => monitorId switch
+    {
+        "sqlMonitor" => "SQL 모니터",
+        "lockMonitor" => "Lock 모니터",
+        _ => "세션 모니터",
+    };
 }
 
 /// <summary>모니터 메뉴·명령 팔레트의 세션 모니터 명령(SESS-01~05).</summary>

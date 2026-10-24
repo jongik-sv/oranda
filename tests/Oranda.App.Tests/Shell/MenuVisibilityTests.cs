@@ -266,11 +266,11 @@ public class MenuVisibilityTests
     // ── 실제 명령으로 만든 메뉴 막대 ──
 
     [Fact]
-    public void Without_a_connection_or_monitor_tab_the_monitor_menu_shows_only_the_session_opener()
+    public void Without_a_connection_or_monitor_tab_the_monitor_menu_shows_only_the_monitor_openers()
     {
         var monitor = TopOf(Bar(), "monitor");
         var state = MenuVisibility.Evaluate(monitor, Keys());
-        Assert.Equal(["oranda.monitor.sessions"], VisibleCommands(monitor, state));
+        Assert.Equal(["oranda.monitor.sessions", "oranda.monitor.locks"], VisibleCommands(monitor, state));
         Assert.False(state.ShowEmpty);
     }
 

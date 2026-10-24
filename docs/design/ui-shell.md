@@ -115,6 +115,7 @@
 | `oranda.panel.lobEditor` | LOB 편집기 | document | 문서 | 예 | `oranda.grid.viewValue` | TSK-06-05 |
 | `oranda.panel.sessionMonitor` | 세션 모니터 | document | 문서 | 아니요(접속당 1) | `oranda.monitor.sessions` | TSK-09-01 |
 | `oranda.panel.sqlMonitor` | SQL 모니터 | document | 문서 | 아니요(접속당 1) | `oranda.monitor.sql` | TSK-09-02 |
+| `oranda.panel.lockMonitor` | Lock 모니터(대기 트리·잠금 목록·상세) | document | 문서 | 아니요 | `oranda.monitor.locks`, 상태 표시줄 막음 칩 | oranda1 TSK-05-03 |
 | `oranda.panel.dbInfo` | DB 정보 | document | 문서 | 아니요(접속당 1) | `oranda.db.info` | TSK-07-04 |
 | `oranda.panel.objectSearch` | 객체 검색 | document | 문서 | 아니요 | `oranda.schema.objectSearch` | TSK-07-04 |
 | `oranda.panel.ddlExtract` | DDL 일괄 추출 | document | 문서 | 아니요 | `oranda.db.ddlExtract` | TSK-07-04 |

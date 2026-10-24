@@ -68,7 +68,7 @@ public class BlockerStatusItemTests
         Assert.Equal(BlockerAlertKind.Blocking, vm.Kind);
         Assert.Contains("3 세션 막음", vm.Text, StringComparison.Ordinal);
         Assert.Contains("5분 뒤 서버가 이 세션을 끊음", vm.Text, StringComparison.Ordinal);
-        Assert.Contains("블로킹 트리", vm.ToolTip, StringComparison.Ordinal);
+        Assert.Contains("Lock 모니터", vm.ToolTip, StringComparison.Ordinal);
         Assert.Contains("MAX_IDLE_BLOCKER_TIME", vm.ToolTip, StringComparison.Ordinal);
     }
 

@@ -36,6 +36,7 @@ public static class MenuVisibility
         ["editorFocus"] = "sqlDocActive || plsqlDocActive || plsqlEditorFocus || mybatisDocActive",
         ["plsqlEditorFocus"] = "plsqlDocActive || plsqlEditorFocus",
         ["monitorFocus"] = "monitorSessionOpen || monitorSqlOpen",
+        ["lockMonitorFocus"] = "lockMonitorOpen",
         ["schemaFocus"] = null,
     };
 

@@ -21,7 +21,7 @@ namespace Oranda.App.Features.BlockerAlert;
 
 /// <summary>
 /// 상태 표시줄 7번 구간(TSK-13-02): 「N 세션 막음」(빨강) / 「미커밋 N분」(주황, 10분 넘음) / 「감시 꺼짐」(회색, 권한 없음).
-/// 누르면 세션 모니터의 블로킹 트리를 연다. 생성자는 이벤트 버스·컨테이너만 받고 모니터 서비스·세션 관리자는 첫 조회 때 꺼낸다
+/// 누르면 Lock 모니터를 연다(LK-09). 생성자는 이벤트 버스·컨테이너만 받고 모니터 서비스·세션 관리자는 첫 조회 때 꺼낸다
 /// (시작 경로에서 Oracle 어셈블리를 올리지 않는다).
 /// </summary>
 [OrandaStatusBarItem("oranda.status.blocker", 7, CollapseRank = 0)]
@@ -83,7 +83,7 @@ public sealed class BlockerStatusViewModel : ViewModelBase, IStatusBarItem, IDis
             var s = State;
             return s.Kind switch
             {
-                BlockerAlertKind.Blocking => Join(Format("Blocker.tip.blocking", "이 세션이 {0}개 세션을 막고 있습니다. 눌러서 세션 모니터의 블로킹 트리 열기", s.BlockedCount),
+                BlockerAlertKind.Blocking => Join(Format("Blocker.tip.blocking", "이 세션이 {0}개 세션을 막고 있습니다. 눌러서 Lock 모니터 열기", s.BlockedCount),
                     s.MinutesUntilKilled is { } m ? Format("Blocker.tip.killIn", "서버 설정(MAX_IDLE_BLOCKER_TIME)에 따라 {0}분 뒤 서버가 이 세션을 끊습니다.", m) : null),
                 BlockerAlertKind.LongTransaction => Join(Format("Blocker.tip.longTxn", "미커밋 상태가 {0}분 넘게 이어지고 있습니다. 커밋하거나 롤백하세요.", s.PendingMinutes),
                     DisabledReason(s.Reason)),
@@ -96,7 +96,7 @@ public sealed class BlockerStatusViewModel : ViewModelBase, IStatusBarItem, IDis
     /// <summary>칩 색 계열. View 가 리소스 키로 바꾼다.</summary>
     public BlockerAlertKind Kind => State.Kind;
 
-    /// <summary>눌렀을 때: 세션 모니터를 열고 블로킹 트리를 보인다(기존 명령).</summary>
+    /// <summary>눌렀을 때: Lock 모니터를 연다(대기 트리·보유자 영향 순위).</summary>
     public async Task OnClickAsync()
     {
         if (_watcher is { } w && State is { Kind: BlockerAlertKind.Disabled, Reason: BlockerDisabledReason.NoCredential })
@@ -111,14 +111,11 @@ public sealed class BlockerStatusViewModel : ViewModelBase, IStatusBarItem, IDis
             return;
         }
 
-        await OpenBlockingTreeAsync();
+        await OpenLockMonitorAsync();
     }
 
-    public static async Task OpenBlockingTreeAsync()
-    {
-        await ShellCommandRunner.RunAsync("oranda.monitor.sessions");
-        await ShellCommandRunner.RunAsync("oranda.monitor.blockingTree");
-    }
+    /// <summary>Lock 모니터를 연다(이미 열려 있으면 앞으로 내고 다시 읽는다).</summary>
+    public static Task OpenLockMonitorAsync() => ShellCommandRunner.RunAsync(LockMonitor.LockMonitorCommands.Open);
 
     private void Attach()
     {

@@ -73,6 +73,7 @@
 | `editorFocus` | SQL 또는 PL/SQL 또는 MyBatis 문장 편집기 글자 영역 | sqlText, plsql, mybatisText |
 | `schemaFocus` | 스키마 브라우저 | schema |
 | `monitorFocus` | 세션·SQL 모니터 문서 | monitor |
+| `lockMonitorFocus` | Lock 모니터 문서 | lockMonitor |
 
 **상태 키** — `Enablement` 에 쓴다.
 
@@ -89,6 +90,7 @@
 | `schemaNodeSelected`, `plsqlNodeSelected`, `recyclebinNodeSelected` | 스키마 트리 선택 |
 | `isPackageDoc`, `serverSourceChanged`, `plsqlRunnable` | PL/SQL 편집기 |
 | `monitorSessionOpen`, `monitorSessionSelected`, `monitorSqlOpen`, `monitorSqlSelected` | 모니터 |
+| `lockMonitorOpen`, `lockSessionSelected`, `lockWaiterSelected`, `lockCanKillSession`, `canQueryDdlLocks` | Lock 모니터: 모니터 세션 열림 / 고른 세션 있음 / 고른 쌍에 대기자 있음 / 모니터 계정이 ALTER SYSTEM 가능 / dba_ddl_locks 읽기 가능(TSK-05-03) |
 | `mybatisDocActive`, `mybatisDocDirty`, `mybatisStatementSelected`, `mybatisFolderOpen`, `mybatisFolderReady`, `mybatisConvertReady` | MyBatis 작업 공간: 활성 문서가 MyBatis 종류 / 저장 안 한 문장이 있음 / 고른 문장 또는 활성 문장 탭이 있음 / 매퍼 폴더가 열려 있음 / 매퍼 폴더 기능 준비(TSK-03-07 이 켬) / 바꾸기 기능 준비(TSK-03-05 가 켬)(근거 `docs/oranda1/design.md` 4.3) |
 | `canKillSession`, `canTraceSessions` | 서버 점검 결과(`ServerCapabilities`) |
 | `devBuild` | 개발 빌드 |
@@ -113,7 +115,7 @@
 | `When` 은 맞고 `Enablement` 가 거짓 | 회색. 마우스를 올리면 이유 툴팁 |
 | 둘 다 참 | 보임 |
 
-- `When` 은 키맵 기본 키 범위(포커스 키)라 「마지막 포커스」로 보지 않고 「그 탭·패널이 열려 있음」으로 바꿔 본다(`MenuVisibility.TabScopes`): `sqlEditorFocus`·`sqlDocFocus`·`gridFocus` → `sqlDocActive`, `editorFocus` → `sqlDocActive || plsqlDocActive || plsqlEditorFocus`, `plsqlEditorFocus` → `plsqlDocActive || plsqlEditorFocus`, `monitorFocus` → `monitorSessionOpen || monitorSqlOpen`, `schemaFocus` → 언제나(늘 있는 도구 창).
+- `When` 은 키맵 기본 키 범위(포커스 키)라 「마지막 포커스」로 보지 않고 「그 탭·패널이 열려 있음」으로 바꿔 본다(`MenuVisibility.TabScopes`): `sqlEditorFocus`·`sqlDocFocus`·`gridFocus` → `sqlDocActive`, `editorFocus` → `sqlDocActive || plsqlDocActive || plsqlEditorFocus`, `plsqlEditorFocus` → `plsqlDocActive || plsqlEditorFocus`, `monitorFocus` → `monitorSessionOpen || monitorSqlOpen`, `lockMonitorFocus` → `lockMonitorOpen`, `schemaFocus` → 언제나(늘 있는 도구 창).
 - MyBatis 문서의 대응(`docs/oranda1/design.md` 4.3): `mybatisDocFocus` → `mybatisDocActive`, `editorFocus` 는 위 식 뒤에 `|| mybatisDocActive`, `sqlEditorFocus`·`sqlDocFocus` 는 `sqlDocActive && !mybatisDocActive`(`gridFocus` 는 그대로).
 - 숨긴 뒤 구분선이 맨 앞·끝에 남거나 두 줄 겹치지 않게 하고, 항목이 다 숨은 하위 메뉴도 숨긴다. 최상위 메뉴가 통째로 비면 메뉴는 남기고 회색 안내 한 줄(`Menu.<메뉴>.empty`, 없으면 `Menu.empty`)을 보인다.
 - 이유 문구 = `Enablement` 식에서 거짓을 만든 첫 키의 사람 말. `&&` 는 거짓인 항을 앞에서부터, `||` 는 문구가 있는 첫 항, `!x` 가 거짓이면 `not.x`. 문구 표는 `strings-ko/en.json` 의 `Menu.disabled.<키>`·`Menu.disabled.not.<키>` 한 곳이고, 표에 없는 키는 툴팁을 달지 않는다.
@@ -560,7 +562,8 @@
 | `oranda.monitor.locks` | Lock 모니터 | - | 전역 | `hasSession` | TSK-05-03 |
 | `oranda.monitor.locks.refresh` | Lock 새로 고침 | `F5` | `lockMonitorFocus` | `lockMonitorOpen` | TSK-05-03 |
 | `oranda.monitor.locks.toggleAutoRefresh` | Lock 자동 새로 고침 켜기/끄기 | - | `lockMonitorFocus` | `lockMonitorOpen` | TSK-05-03 |
-| `oranda.monitor.locks.killHolder` | 보유자 세션 종료 | - | `lockMonitorFocus` | `lockSessionSelected && canKillSession` | TSK-05-03 |
+| `oranda.monitor.locks.killHolder` | 고른 세션 종료(확인 창에 대기자 수·목록) | - | `lockMonitorFocus` | `lockSessionSelected && lockCanKillSession` | TSK-05-03 |
+| `oranda.monitor.locks.disconnectHolder` | 고른 세션 연결 끊기(실행 엔진 위험 명령 확인) | - | `lockMonitorFocus` | `lockSessionSelected && lockCanKillSession` | TSK-05-03 |
 | `oranda.monitor.locks.showSql` | 보유자·대기자 SQL 보기 | - | `lockMonitorFocus` | `lockSessionSelected` | TSK-05-03 |
 | `oranda.monitor.locks.showLockedRow` | 잠긴 행 보기 | - | `lockMonitorFocus` | `lockWaiterSelected` | TSK-05-03 |
 | `oranda.monitor.locks.showDdlLocks` | DDL 잠금 보기 | - | `lockMonitorFocus` | `lockMonitorOpen && canQueryDdlLocks` | TSK-05-03 |

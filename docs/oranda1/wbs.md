@@ -301,7 +301,7 @@ levels:
   - acceptance: 모든 쿼리가 SELECT 이고 결재 대상 DML·임시 표·쓰기 패키지를 쓰지 않는다 / 11g·19c 이상에서 카탈로그 선택이 된다 / 통합 시험에서 보유자·대기자·잠긴 행이 맞게 나온다 / 권한 부족(all_* 만)에서 오류 대신 빈 결과·이유
   - note: Catalog/lock 7개(lock.deadlocks 만 19+, 나머지 11 공용)·OracleMonitorService.Locks.cs 로 8개 메서드 구현, gv$lock 에 요청 행이 없는 큐 대기(23ai TM)는 대기 인자로 채움, 잠긴 행 값 못 읽으면 열 ["오류"]+이유; 23ai 통합 6건·11.2(oranda-ora11g) 2건 통과 (win144)
 
-- [ ] TSK-05-03: Lock 모니터 화면 — 대기 트리·잠금 목록·SQL·잠긴 행·영향 순위·원인 힌트·세션 종료 [win144] w:3 2026-10-24~2026-10-26
+- [x] TSK-05-03: Lock 모니터 화면 — 대기 트리·잠금 목록·SQL·잠긴 행·영향 순위·원인 힌트·세션 종료 [win144] w:3 2026-10-24~2026-10-26
   - category: dev
   - domain: frontend
   - model: opus
@@ -311,7 +311,7 @@ levels:
   - prd-ref: LK-01~LK-09
   - requirements: Features/LockMonitor 에 문서 패널 oranda.panel.lockMonitor(「Lock 모니터」)를 만든다. 「모니터」 메뉴에 「Lock 모니터」를 더하고 세션 모니터와 같은 모니터 전용 세션·MonitorAccess(권한 배너·다른 접속)를 쓴다; 화면: 위쪽 대기 트리(보유자 루트 → 대기자, 대기 초·이벤트·객체), 아래 잠금 목록(DetailTable: 유형·모드·요청·ctime·객체·트랜잭션 시작·block 강조), 오른쪽 상세 탭(보유자·대기자 SQL 전문 gv$sql 클릭 때만, 잠긴 행 rowid·열 값, 대기 바인드, DDL 잠금 탭, 원인 힌트: enq: TX row lock / enq: TM contention(FK 인덱스 누락 의심) / enq: TX allocate ITL / library cache lock·pin); 보유자 영향 순위 표(대기자 수·최대·합계 대기 초 순); 거르기: 최소 대기 초(기본 0, 3초 단추), 사용자·스키마·인스턴스, 대기·차단만; 자동 새로 고침(간격); 세션 종료·연결 끊기는 세션 모니터 흐름 재사용, 확인 창에 「이 세션 때문에 N개 세션이 기다립니다」; 세션 모니터로 이동(SID·INST_ID); 트리·목록 복사·CSV 내보내기; BlockerAlert 상태 줄 클릭은 Lock 모니터를 연다; 한글 리터럴은 literals-en.json·CommandTitles·strings 에 영어 짝; 시험: ViewModel(가짜 서비스)·Headless 렌더·명령 등록·LocalizationTests; 비고: 담당 PC: win144(Windows 개발 PC) — 맥북 세션은 이 Task 를 하지 않는다
   - acceptance: 가짜 서비스로 트리·목록·상세·영향 순위·힌트가 보인다 / 세션 종료 확인 창에 대기자 수 / 권한 없을 때 배너 / 전체 시험 통과 / 실앱 눈 확인 항목은 사용자 몫으로 결과에 적는다
-  - note: 시안 완료(2026-10-24, 시안 https://claude.ai/artifact/J4YBzmpMsbvecm8aSv4rGx 화면 b·c), 화면 레인 착수 대기 (win144)
+  - note: Features/LockMonitor 문서 패널(대기 트리·영향 순위·DDL 잠금 탭, 방치·데드락 탭은 05-04 자리)·잠금 목록·SQL/잠긴 행/바인드/원인 힌트 상세, 상태 5종, 종료 확인 창(대기자 수·목록), 세션 모니터로 이동, 복사·CSV, 막음 칩 → Lock 모니터, F5(lockMonitorFocus), 시험 LockMonitorTests·LockMonitorViewTests (win144)
 
 - [ ] TSK-05-04: Lock 모니터 이력·알림·방치 트랜잭션·데드락 힌트 (P2) [win144] w:2 2026-10-26~2026-10-27
   - category: dev

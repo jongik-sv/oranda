@@ -42,6 +42,7 @@ public sealed partial class SessionMonitorViewModel : ToolPanelViewModelBase, ID
     private IMonitorService? _monitor;
     private CancellationTokenSource? _autoLoop;
     private ISession? _session;
+    private SessionKey? _pendingSelect;
     private bool _disposed;
 
     [ObservableProperty]
@@ -399,6 +400,25 @@ public sealed partial class SessionMonitorViewModel : ToolPanelViewModelBase, ID
         return sb.ToString();
     }
 
+    /// <summary>
+    /// 다른 창(Lock 모니터 「세션 모니터로」)이 세션 하나를 고르게 한다. 목록에 있으면 바로, 없으면 다음 새로 고침에 나타날 때 고른다.
+    /// SERIAL# 이 0 이면 인스턴스·SID 만 본다.
+    /// </summary>
+    public void SelectWhenListed(SessionKey key)
+    {
+        if (FindSession(key) is { } item)
+        {
+            _pendingSelect = null;
+            SelectedSession = item;
+            return;
+        }
+
+        _pendingSelect = key;
+    }
+
+    private SessionItem? FindSession(SessionKey key) => Sessions.FirstOrDefault(s =>
+        s.Row.Key.InstanceId == key.InstanceId && s.Row.Key.Sid == key.Sid && (key.Serial == 0 || s.Row.Key.Serial == key.Serial));
+
     public void Dispose()
     {
         if (_disposed)
@@ -553,6 +573,11 @@ public sealed partial class SessionMonitorViewModel : ToolPanelViewModelBase, ID
         }
 
         SelectedSession = selected is { } k ? Sessions.FirstOrDefault(s => s.Row.Key == k) : null;
+        if (_pendingSelect is { } want && FindSession(want) is { } found)
+        {
+            _pendingSelect = null;
+            SelectedSession = found;
+        }
         ApplyTree(tree);
         var blocked = rows.Count(r => r.BlockingSession is not null);
         StatusText = string.Create(CultureInfo.InvariantCulture,

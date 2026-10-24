@@ -89,6 +89,7 @@
     { "command": "oranda.plsql.toggleSpecBody", "keys": ["Primary+Shift+B"], "when": "plsqlEditorFocus" },
     { "command": "oranda.plsql.run", "keys": ["Primary+Enter"], "when": "plsqlEditorFocus" },
     { "command": "oranda.monitor.refresh", "keys": ["F5"], "when": "monitorFocus" },
+    { "command": "oranda.monitor.locks.refresh", "keys": ["F5"], "when": "lockMonitorFocus" },
     { "command": "oranda.tools.settings", "keys": ["Primary+OemComma"] },
     { "command": "oranda.window.nextDocument", "keys": ["Primary+Tab"], "mac": ["Ctrl+Tab"] },
     { "command": "oranda.window.previousDocument", "keys": ["Primary+Shift+Tab"], "mac": ["Ctrl+Shift+Tab"] },
