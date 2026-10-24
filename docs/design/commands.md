@@ -91,6 +91,7 @@
 | `isPackageDoc`, `serverSourceChanged`, `plsqlRunnable` | PL/SQL 편집기 |
 | `monitorSessionOpen`, `monitorSessionSelected`, `monitorSqlOpen`, `monitorSqlSelected` | 모니터 |
 | `lockMonitorOpen`, `lockSessionSelected`, `lockWaiterSelected`, `lockCanKillSession`, `canQueryDdlLocks` | Lock 모니터: 모니터 세션 열림 / 고른 세션 있음 / 고른 쌍에 대기자 있음 / 모니터 계정이 ALTER SYSTEM 가능 / dba_ddl_locks 읽기 가능(TSK-05-03) |
+| `tuningAssistantOpen` | 튜닝 도우미 탭이 열려 있음(TSK-06-05) |
 | `mybatisDocActive`, `mybatisDocDirty`, `mybatisStatementSelected`, `mybatisFolderOpen`, `mybatisFolderReady`, `mybatisConvertReady` | MyBatis 작업 공간: 활성 문서가 MyBatis 종류 / 저장 안 한 문장이 있음 / 고른 문장 또는 활성 문장 탭이 있음 / 매퍼 폴더가 열려 있음 / 매퍼 폴더 기능 준비(TSK-03-07 이 켬) / 바꾸기 기능 준비(TSK-03-05 가 켬)(근거 `docs/oranda1/design.md` 4.3) |
 | `canKillSession`, `canTraceSessions` | 서버 점검 결과(`ServerCapabilities`) |
 | `devBuild` | 개발 빌드 |
@@ -652,13 +653,15 @@
 | `oranda.schema.tableStats` | 통계 보기… | - | `schemaFocus` | `tableNodeSelected && hasSession` | TSK-06-03 (`context:schema/tableStats@72`) |
 | `oranda.tuning.traceViewer` | 트레이스 보기 | - | 전역 | `hasSession` | TSK-06-04 |
 | `oranda.tuning.optimizerTrace` | 옵티마이저 트레이스(10053) | - | `sqlDocFocus` | `hasSession && !sessionBusy` | TSK-06-04 |
-| `oranda.tuning.assistant` | 튜닝 도우미 | - | 전역 | `hasSession` | TSK-06-05 |
-| `oranda.tuning.indexCandidates` | 인덱스 후보 | - | 전역 | 도우미 열림 | TSK-06-05 |
-| `oranda.tuning.rewriteCandidates` | 재작성 후보 | - | 전역 | 도우미 열림 | TSK-06-05 |
-| `oranda.tuning.benchmark` | 변형 SQL 벤치마크 | - | 전역 | 도우미 열림 | TSK-06-05 |
+| `oranda.tuning.assistant` | 튜닝 도우미 | - | 전역 | `hasSession || dedicatedSession` | TSK-06-05 |
+| `oranda.tuning.indexCandidates` | 인덱스 후보 | - | 전역 | `tuningAssistantOpen` | TSK-06-05 |
+| `oranda.tuning.rewriteCandidates` | 재작성 후보 | - | 전역 | `tuningAssistantOpen` | TSK-06-05 |
+| `oranda.tuning.benchmark` | 변형 SQL 벤치마크 | - | 전역 | `tuningAssistantOpen` | TSK-06-05 |
 | `oranda.tuning.awrHistory` | AWR 계획 이력 | - | 전역 | `hasSession` | TSK-06-05 |
 | `oranda.tuning.ashWaits` | ASH 대기 분해 | - | 전역 | `hasSession` | TSK-06-05 |
 | `oranda.tuning.planControls` | SQL Profile·Baseline·Patch 보기 | - | 전역 | `hasSession` | TSK-06-05 |
+
+- TSK-06-05 배치: `oranda.tuning.assistant` = `menu:tuning/assistant@400`·`context:editor/tuningAssistant@1030`(편집기 오른쪽 클릭, 예상 계획 옆), `oranda.tuning.benchmark` = `menu:tuning/benchmark@410`. `indexCandidates`·`rewriteCandidates` 는 명령 팔레트 전용(도우미 탭 전환).
 
 패널 ID: `oranda.panel.tuningStats`·`oranda.panel.childCursors`·`oranda.panel.traceViewer`·`oranda.panel.tuningAssistant`(모두 문서 패널).
 

@@ -1,0 +1,457 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:icons="using:Oranda.App.Shell.Icons"
+             xmlns:sqled="using:Oranda.App.Features.SqlEditor"
+             xmlns:vm="using:Oranda.App.Features.Tuning.Assistant"
+             x:Class="Oranda.App.Features.Tuning.Assistant.TuningAssistantView"
+             x:DataType="vm:TuningAssistantViewModel">
+  <UserControl.Styles>
+    <!-- 후보 표 칸 폭(머리글과 줄이 같은 클래스를 써서 세로로 맞는다). -->
+    <Style Selector=":is(Control).i-ico"><Setter Property="Width" Value="28" /></Style>
+    <Style Selector=":is(Control).i-tbl"><Setter Property="Width" Value="230" /></Style>
+    <Style Selector=":is(Control).i-basis"><Setter Property="Width" Value="118" /></Style>
+    <Style Selector=":is(Control).i-ovl"><Setter Property="Width" Value="180" /></Style>
+    <Style Selector=":is(Control).r-chk"><Setter Property="Width" Value="44" /></Style>
+    <Style Selector=":is(Control).r-rule"><Setter Property="Width" Value="320" /></Style>
+    <Style Selector=":is(Control).r-loc"><Setter Property="Width" Value="70" /></Style>
+    <Style Selector=":is(Control).h-hint"><Setter Property="Width" Value="360" /></Style>
+    <Style Selector=":is(Control).h-mean"><Setter Property="Width" Value="380" /></Style>
+    <!-- 벤치마크 표 칸 폭. -->
+    <Style Selector=":is(Control).b-no"><Setter Property="Width" Value="32" /></Style>
+    <Style Selector=":is(Control).b-label"><Setter Property="Width" Value="230" /></Style>
+    <Style Selector=":is(Control).b-elapsed"><Setter Property="Width" Value="92" /></Style>
+    <Style Selector=":is(Control).b-bar"><Setter Property="Width" Value="136" /></Style>
+    <Style Selector=":is(Control).b-minmax"><Setter Property="Width" Value="118" /></Style>
+    <Style Selector=":is(Control).b-lr"><Setter Property="Width" Value="92" /></Style>
+    <Style Selector=":is(Control).b-pr"><Setter Property="Width" Value="92" /></Style>
+    <Style Selector=":is(Control).b-rows"><Setter Property="Width" Value="84" /></Style>
+    <Style Selector=":is(Control).b-hash"><Setter Property="Width" Value="104" /></Style>
+    <Style Selector=":is(Control).b-verdict"><Setter Property="Width" Value="210" /></Style>
+
+    <!-- 「상대」 막대: 원문 = 중립, 가장 나음 = 초록, 행 수 다름 = 호박, 나머지 = 파랑(계획 창 막대와 같은 모양). -->
+    <Style Selector="Border.bar-track">
+      <Setter Property="Width" Value="120" />
+      <Setter Property="Height" Value="6" />
+      <Setter Property="CornerRadius" Value="3" />
+      <Setter Property="HorizontalAlignment" Value="Left" />
+      <Setter Property="VerticalAlignment" Value="Center" />
+      <Setter Property="Background" Value="{DynamicResource OrandaBarTrackBrush}" />
+    </Style>
+    <Style Selector="Border.bar">
+      <Setter Property="Height" Value="6" />
+      <Setter Property="CornerRadius" Value="3" />
+      <Setter Property="HorizontalAlignment" Value="Left" />
+      <Setter Property="VerticalAlignment" Value="Center" />
+      <Setter Property="Background" Value="{DynamicResource OrandaIconBlueBrush}" />
+    </Style>
+    <Style Selector="Border.bar.neutral"><Setter Property="Background" Value="{DynamicResource OrandaIconNeutralBrush}" /></Style>
+    <Style Selector="Border.bar.good"><Setter Property="Background" Value="{DynamicResource OrandaIconGreenBrush}" /></Style>
+    <Style Selector="Border.bar.warn"><Setter Property="Background" Value="{DynamicResource OrandaIconAmberBrush}" /></Style>
+
+    <!-- 탭 머리 개수 칩. -->
+    <Style Selector="Border.count">
+      <Setter Property="Background" Value="{DynamicResource OrandaBarTrackBrush}" />
+      <Setter Property="CornerRadius" Value="8" />
+      <Setter Property="Padding" Value="6,0" />
+      <Setter Property="MinWidth" Value="18" />
+      <Setter Property="VerticalAlignment" Value="Center" />
+    </Style>
+    <Style Selector="Border.count TextBlock">
+      <Setter Property="FontSize" Value="{DynamicResource OrandaFontSizeSmall}" />
+      <Setter Property="HorizontalAlignment" Value="Center" />
+    </Style>
+    <!-- 경고 상자(모니터 권한 띠와 같은 색): NULL 의미가 바뀔 수 있는 재작성·접속 없음. -->
+    <Style Selector="Border.callout">
+      <Setter Property="Background" Value="{DynamicResource OrandaGridNeedsChangeBrush}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource OrandaUncommittedBrush}" />
+      <Setter Property="BorderThickness" Value="1" />
+      <Setter Property="CornerRadius" Value="3" />
+      <Setter Property="Padding" Value="8,6" />
+    </Style>
+    <Style Selector="Border.detail-pane">
+      <Setter Property="BorderBrush" Value="{DynamicResource OrandaSeparatorBrush}" />
+      <Setter Property="BorderThickness" Value="1,0,0,0" />
+    </Style>
+    <Style Selector="Border.bench-caption">
+      <Setter Property="Background" Value="{DynamicResource OrandaToolbarBackgroundBrush}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource OrandaSeparatorBrush}" />
+      <Setter Property="BorderThickness" Value="0,1,0,1" />
+      <Setter Property="Padding" Value="8,4" />
+    </Style>
+    <Style Selector="TextBlock.best">
+      <Setter Property="FontWeight" Value="SemiBold" />
+    </Style>
+  </UserControl.Styles>
+
+  <DockPanel>
+    <!-- 툴바: 분석 대상 칩 · 다시 분석 | 벤치마크 실행 · 취소 · 반복 | 진행 -->
+    <Border DockPanel.Dock="Top" Classes="panel-toolbar">
+      <WrapPanel>
+        <Border Classes="chip" Margin="0,0,4,0" MaxWidth="460" ToolTip.Tip="{Binding SourceText}">
+          <DockPanel>
+            <ContentControl DockPanel.Dock="Left" Margin="0,0,5,0" VerticalAlignment="Center"
+                            Content="{Binding Source='newSql', Converter={x:Static icons:IconKeyConverter.Instance}, ConverterParameter=12}" />
+            <TextBlock Text="{Binding SourceText}" TextTrimming="CharacterEllipsis" />
+          </DockPanel>
+        </Border>
+        <Button x:Name="ReanalyzeButton" Classes="toolbar" Content="다시 분석" icons:ButtonIcon.Key="refresh" icons:ButtonIcon.IconOnly="True"
+                IsEnabled="{Binding HasStatement}" ToolTip.Tip="같은 문장·계획으로 후보를 다시 만듭니다(기존 인덱스를 다시 읽습니다, F5)" />
+        <Separator Classes="toolbar" />
+        <Button x:Name="RunButton" Classes="tool" Content="벤치마크 실행" icons:ButtonIcon.Key="run" IsEnabled="{Binding CanRunBenchmark}"
+                ToolTip.Tip="{Binding BenchmarkTip}" ToolTip.ShowOnDisabled="True" />
+        <Button x:Name="CancelButton" Classes="tool" Content="취소" icons:ButtonIcon.Key="cancel" IsVisible="{Binding IsBenchmarking}"
+                ToolTip.Tip="벤치마크를 멈춥니다(지금 실행 중인 문장은 취소합니다)" />
+        <TextBlock Text="반복" VerticalAlignment="Center" Margin="6,0,4,0" Classes="panel-caption" />
+        <NumericUpDown Width="104" Minimum="1" Maximum="20" Increment="1" FormatString="0" VerticalAlignment="Center"
+                       Value="{Binding Iterations, Mode=TwoWay}" IsEnabled="{Binding !IsBenchmarking}" AutomationProperties.Name="반복 횟수"
+                       ToolTip.Tip="변형마다 몇 번씩 실행해 평균을 낼지(1~20)" />
+        <ProgressBar IsIndeterminate="True" Width="80" MinWidth="0" Height="3" Margin="10,0,6,0" VerticalAlignment="Center"
+                     IsVisible="{Binding IsBenchmarking}" />
+        <TextBlock Text="{Binding BenchmarkProgress}" VerticalAlignment="Center" Classes="panel-caption" />
+      </WrapPanel>
+    </Border>
+    <Border DockPanel.Dock="Bottom" Classes="panel-status">
+      <TextBlock x:Name="StatusLine" Text="{Binding StatusText}" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding StatusText}" />
+    </Border>
+    <!-- 접속 없음·오류 띠 -->
+    <Border DockPanel.Dock="Top" Classes="callout" Margin="6,6,6,0" IsVisible="{Binding HasNotice}">
+      <DockPanel>
+        <ContentControl DockPanel.Dock="Left" Margin="0,0,6,0" VerticalAlignment="Center"
+                        Content="{Binding Source='warn', Converter={x:Static icons:IconKeyConverter.Instance}, ConverterParameter=14}" />
+        <TextBlock Text="{Binding NoticeText}" TextWrapping="Wrap" VerticalAlignment="Center" />
+      </DockPanel>
+    </Border>
+    <Border DockPanel.Dock="Top" Classes="callout" Margin="6,6,6,0" IsVisible="{Binding HasError}">
+      <DockPanel>
+        <ContentControl DockPanel.Dock="Left" Margin="0,0,6,0" VerticalAlignment="Center"
+                        Content="{Binding Source='error', Converter={x:Static icons:IconKeyConverter.Instance}, ConverterParameter=14}" />
+        <TextBlock Classes="danger-text" Text="{Binding ErrorText}" TextWrapping="Wrap" VerticalAlignment="Center" />
+      </DockPanel>
+    </Border>
+
+    <Panel>
+      <!-- 문장 없음 -->
+      <StackPanel IsVisible="{Binding ShowNoStatement}" HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="6" MaxWidth="520">
+        <ContentControl HorizontalAlignment="Center" Opacity="0.55"
+                        Content="{Binding Source='star', Converter={x:Static icons:IconKeyConverter.Instance}, ConverterParameter=32}" />
+        <TextBlock HorizontalAlignment="Center" FontWeight="SemiBold" Text="분석할 문장이 없습니다" />
+        <TextBlock HorizontalAlignment="Center" Classes="dim" TextWrapping="Wrap" TextAlignment="Center"
+                   Text="SQL 편집기에서 커서를 문장 안에 두고 튜닝 › 튜닝 도우미(또는 오른쪽 클릭 메뉴)를 고르세요" />
+      </StackPanel>
+
+      <Grid RowDefinitions="*,4,0.85*" IsVisible="{Binding ShowCandidates}">
+        <TabControl x:Name="CandidateTabs" Grid.Row="0" Padding="0" SelectedIndex="{Binding CandidateTab, Mode=TwoWay}">
+          <!-- 인덱스 후보 -->
+          <TabItem>
+            <TabItem.Header>
+              <StackPanel Orientation="Horizontal" Spacing="6">
+                <TextBlock Text="인덱스 후보" VerticalAlignment="Center" />
+                <Border Classes="count"><TextBlock Text="{Binding IndexCount}" /></Border>
+              </StackPanel>
+            </TabItem.Header>
+            <Panel>
+              <StackPanel IsVisible="{Binding IndexEmpty}" HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="8">
+                <ContentControl HorizontalAlignment="Center" Opacity="0.55"
+                                Content="{Binding Source='objIndex', Converter={x:Static icons:IconKeyConverter.Instance}, ConverterParameter=28}" />
+                <TextBlock HorizontalAlignment="Center" Classes="dim" Text="{Binding IndexEmptyText}" />
+                <StackPanel Orientation="Horizontal" Spacing="6" HorizontalAlignment="Center" IsVisible="{Binding ShowPlanButtons}">
+                  <Button x:Name="ActualPlanButton" Classes="accent" Content="실제 계획 받기" IsEnabled="{Binding CanFetchActualPlan}"
+                          ToolTip.Tip="이 문장을 마지막으로 실행한 커서의 실제 계획(ALLSTATS LAST)을 읽습니다. 먼저 문장을 실행하세요" />
+                  <Button x:Name="EstimatedPlanButton" Content="예상 계획으로 분석" IsEnabled="{Binding CanFetchEstimatedPlan}"
+                          ToolTip.Tip="EXPLAIN PLAN 으로 예상 계획을 받아 분석합니다(실행 시간 비중은 비용으로 대신합니다)" />
+                </StackPanel>
+              </StackPanel>
+              <Grid ColumnDefinitions="1.05*,4,1.15*" IsVisible="{Binding !IndexEmpty}">
+                <ScrollViewer Grid.Column="0" HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled">
+                  <DockPanel>
+                    <Border DockPanel.Dock="Top" Classes="grid-header">
+                      <StackPanel Orientation="Horizontal" Classes="cells">
+                        <TextBlock Classes="i-ico" Text="" />
+                        <TextBlock Classes="i-tbl" Text="표 (열)" />
+                        <TextBlock Classes="i-basis" Text="근거" />
+                        <TextBlock Classes="i-ovl" Text="겹침" ToolTip.Tip="기존 인덱스와 앞 열이 겹치는지(이미 있음·넓히기·첫 열만)" />
+                      </StackPanel>
+                    </Border>
+                    <ListBox x:Name="IndexList" Classes="table" ItemsSource="{Binding IndexItems}" SelectedItem="{Binding SelectedIndex, Mode=TwoWay}"
+                             ScrollViewer.HorizontalScrollBarVisibility="Disabled" AutomationProperties.Name="인덱스 후보">
+                      <ListBox.ItemTemplate>
+                        <DataTemplate x:DataType="vm:IndexCandidateItem">
+                          <StackPanel Orientation="Horizontal" Classes="cells" Background="Transparent" ToolTip.Tip="{Binding Tip}">
+                            <ContentControl Classes="i-ico" Margin="6,0,0,0" VerticalAlignment="Center" HorizontalAlignment="Left"
+                                            Content="{Binding Source='objIndex', Converter={x:Static icons:IconKeyConverter.Instance}, ConverterParameter=14}" />
+                            <TextBlock Classes="i-tbl mono" Classes.dim="{Binding IsCovered}" Text="{Binding TableText}" />
+                            <TextBlock Classes="i-basis" Classes.dim="{Binding IsCovered}" Text="{Binding BasisText}" />
+                            <TextBlock Classes="i-ovl" Classes.warning-text="{Binding IsOverlapWarning}" Classes.success-text="{Binding IsCovered}"
+                                       Classes.dim="{Binding IsUnknown}" Text="{Binding OverlapText}" />
+                          </StackPanel>
+                        </DataTemplate>
+                      </ListBox.ItemTemplate>
+                    </ListBox>
+                  </DockPanel>
+                </ScrollViewer>
+                <GridSplitter Grid.Column="1" ResizeDirection="Columns" Background="Transparent" />
+                <Border Grid.Column="2" Classes="detail-pane">
+                  <ScrollViewer HorizontalScrollBarVisibility="Disabled">
+                    <StackPanel Margin="12,8,12,10" Spacing="4">
+                      <TextBlock Classes="section-label" Text="근거" />
+                      <TextBlock Text="{Binding IndexReason}" TextWrapping="Wrap" />
+                      <TextBlock Classes="section-label" Margin="0,6,0,0" Text="문안 · 실행하지 않음" />
+                      <Border Classes="code" Padding="0" MaxHeight="220">
+                        <sqled:SqlCodeView x:Name="DdlView" Text="{Binding IndexDdl, Mode=OneWay}" ShowLineNumbers="False" MinHeight="60"
+                                           Background="{DynamicResource OrandaCodeBackgroundBrush}" AutomationProperties.Name="CREATE INDEX 문안" />
+                      </Border>
+                      <WrapPanel Margin="0,2,0,0">
+                        <Button x:Name="InsertDdlButton" Classes="tool" Content="새 편집기 탭에 넣기" icons:ButtonIcon.Key="newSql"
+                                IsEnabled="{Binding CanInsertIndexDdl}" ToolTip.ShowOnDisabled="True"
+                                ToolTip.Tip="새 SQL 탭에 글만 넣습니다(실행하지 않음). 그 탭에서 실행하면 DB 에 씁니다" />
+                        <Button x:Name="CopyDdlButton" Classes="tool" Content="복사" icons:ButtonIcon.Key="copy" ToolTip.Tip="문안을 클립보드로" />
+                      </WrapPanel>
+                    </StackPanel>
+                  </ScrollViewer>
+                </Border>
+              </Grid>
+            </Panel>
+          </TabItem>
+
+          <!-- 재작성 후보 -->
+          <TabItem>
+            <TabItem.Header>
+              <StackPanel Orientation="Horizontal" Spacing="6">
+                <TextBlock Text="재작성 후보" VerticalAlignment="Center" />
+                <Border Classes="count"><TextBlock Text="{Binding RewriteCount}" /></Border>
+              </StackPanel>
+            </TabItem.Header>
+            <Panel>
+              <StackPanel IsVisible="{Binding RewriteEmpty}" HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="6">
+                <ContentControl HorizontalAlignment="Center" Opacity="0.55"
+                                Content="{Binding Source='docEdit', Converter={x:Static icons:IconKeyConverter.Instance}, ConverterParameter=28}" />
+                <TextBlock HorizontalAlignment="Center" Classes="dim" Text="{Binding RewriteEmptyText}" />
+              </StackPanel>
+              <Grid ColumnDefinitions="0.9*,4,1.3*" IsVisible="{Binding !RewriteEmpty}">
+                <ScrollViewer Grid.Column="0" HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled">
+                  <DockPanel>
+                    <Border DockPanel.Dock="Top" Classes="grid-header">
+                      <StackPanel Orientation="Horizontal" Classes="cells">
+                        <TextBlock Classes="r-chk" Text="벤치" TextAlignment="Center" ToolTip.Tip="체크한 재작성은 벤치마크에 든다" />
+                        <TextBlock Classes="r-rule" Text="규칙" />
+                        <TextBlock Classes="r-loc" Text="위치" />
+                      </StackPanel>
+                    </Border>
+                    <ListBox x:Name="RewriteList" Classes="table" ItemsSource="{Binding RewriteItems}" SelectedItem="{Binding SelectedRewrite, Mode=TwoWay}"
+                             ScrollViewer.HorizontalScrollBarVisibility="Disabled" AutomationProperties.Name="재작성 후보">
+                      <ListBox.ItemTemplate>
+                        <DataTemplate x:DataType="vm:RewriteCandidateItem">
+                          <StackPanel Orientation="Horizontal" Classes="cells">
+                            <CheckBox Classes="r-chk" HorizontalAlignment="Center" MinHeight="0" Padding="0" Margin="14,0,0,0"
+                                      IsChecked="{Binding IsChecked, Mode=TwoWay}" IsEnabled="{Binding CanCheck}"
+                                      ToolTip.Tip="{Binding CheckTip}" ToolTip.ShowOnDisabled="True" AutomationProperties.Name="벤치마크에 넣기" />
+                            <DockPanel Classes="r-rule">
+                              <ContentControl DockPanel.Dock="Left" Margin="6,0,4,0" VerticalAlignment="Center" IsVisible="{Binding IsWarning}"
+                                              Content="{Binding Source='warn', Converter={x:Static icons:IconKeyConverter.Instance}, ConverterParameter=12}" />
+                              <TextBlock Classes.dim="{Binding IsWarningOnly}" Text="{Binding Title}" Padding="6,0" VerticalAlignment="Center"
+                                         TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding Title}" />
+                            </DockPanel>
+                            <TextBlock Classes="r-loc mono" Text="{Binding LocationText}" />
+                          </StackPanel>
+                        </DataTemplate>
+                      </ListBox.ItemTemplate>
+                    </ListBox>
+                  </DockPanel>
+                </ScrollViewer>
+                <GridSplitter Grid.Column="1" ResizeDirection="Columns" Background="Transparent" />
+                <Border Grid.Column="2" Classes="detail-pane">
+                  <DockPanel Margin="12,8,12,10">
+                    <StackPanel DockPanel.Dock="Top" Spacing="6">
+                      <TextBlock Classes="section-label" Text="{Binding RewriteTitle}" />
+                      <Border Classes="callout" IsVisible="{Binding HasRewriteCaution}">
+                        <DockPanel>
+                          <ContentControl DockPanel.Dock="Left" Margin="0,1,6,0" VerticalAlignment="Top"
+                                          Content="{Binding Source='warn', Converter={x:Static icons:IconKeyConverter.Instance}, ConverterParameter=14}" />
+                          <TextBlock Text="{Binding RewriteCaution}" TextWrapping="Wrap" />
+                        </DockPanel>
+                      </Border>
+                      <TextBlock Text="{Binding RewriteDetail}" TextWrapping="Wrap" />
+                    </StackPanel>
+                    <WrapPanel DockPanel.Dock="Bottom" Margin="0,6,0,0">
+                      <ToggleButton x:Name="DiffToggle" Classes="tool" IsChecked="{Binding ShowRewriteDiff, Mode=TwoWay}" IsEnabled="{Binding HasRewriteSql}"
+                                    ToolTip.Tip="원문과 바꾼 SQL 의 줄 차이(− 원문 · + 바꾼 것)">
+                        <StackPanel Orientation="Horizontal" Spacing="5">
+                          <ContentControl VerticalAlignment="Center"
+                                          Content="{Binding Source='diff', Converter={x:Static icons:IconKeyConverter.Instance}, ConverterParameter=14}" />
+                          <TextBlock Text="원문과 차이" VerticalAlignment="Center" />
+                        </StackPanel>
+                      </ToggleButton>
+                      <Button x:Name="InsertRewriteButton" Classes="tool" Content="새 편집기 탭에 넣기" icons:ButtonIcon.Key="newSql"
+                              IsEnabled="{Binding CanInsertRewrite}" ToolTip.ShowOnDisabled="True" ToolTip.Tip="바꾼 SQL 을 새 SQL 탭에 글만 넣습니다(실행하지 않음)" />
+                      <Button x:Name="CopyRewriteButton" Classes="tool" Content="복사" icons:ButtonIcon.Key="copy" IsEnabled="{Binding HasRewriteSql}"
+                              ToolTip.Tip="바꾼 SQL 을 클립보드로" />
+                    </WrapPanel>
+                    <Panel>
+                      <TextBlock Classes="dim" TextWrapping="Wrap" IsVisible="{Binding !HasRewriteSql}"
+                                 Text="바꾼 SQL 이 없습니다 — 위 설명을 보고 직접 고치세요" />
+                      <Border Classes="code" Padding="0" IsVisible="{Binding ShowRewriteCode}">
+                        <sqled:SqlCodeView x:Name="RewriteView" Text="{Binding RewriteSql, Mode=OneWay}" ShowLineNumbers="False" MinHeight="60"
+                                           Background="{DynamicResource OrandaCodeBackgroundBrush}" AutomationProperties.Name="바꾼 SQL" />
+                      </Border>
+                      <Border Classes="code" Padding="0" IsVisible="{Binding ShowRewriteDiffList}">
+                        <ScrollViewer HorizontalScrollBarVisibility="Auto">
+                          <ItemsControl ItemsSource="{Binding RewriteDiff}" Margin="0,4">
+                            <ItemsControl.ItemTemplate>
+                              <DataTemplate x:DataType="vm:RewriteDiffRow">
+                                <Border Classes="diff" Padding="6,0" Classes.added="{Binding IsAdded}" Classes.removed="{Binding IsRemoved}">
+                                  <Grid ColumnDefinitions="18,*">
+                                    <TextBlock Grid.Column="0" Classes="mono" Opacity="0.7" Text="{Binding Mark}"
+                                               Classes.success-text="{Binding IsAdded}" Classes.danger-text="{Binding IsRemoved}" />
+                                    <TextBlock Grid.Column="1" Classes="mono" Text="{Binding Text}" />
+                                  </Grid>
+                                </Border>
+                              </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                          </ItemsControl>
+                        </ScrollViewer>
+                      </Border>
+                    </Panel>
+                  </DockPanel>
+                </Border>
+              </Grid>
+            </Panel>
+          </TabItem>
+
+          <!-- 힌트 대안 -->
+          <TabItem>
+            <TabItem.Header>
+              <StackPanel Orientation="Horizontal" Spacing="6">
+                <TextBlock Text="힌트 대안" VerticalAlignment="Center" />
+                <Border Classes="count"><TextBlock Text="{Binding HintCount}" /></Border>
+              </StackPanel>
+            </TabItem.Header>
+            <DockPanel>
+              <Border DockPanel.Dock="Bottom" Classes="panel-status">
+                <DockPanel>
+                  <CheckBox DockPanel.Dock="Right" Content="병렬 힌트 쓰기" MinHeight="0" IsChecked="{Binding AllowParallelHints, Mode=TwoWay}"
+                            ToolTip.Tip="PARALLEL 힌트를 벤치마크에 넣을 수 있게 합니다(서버 자원을 많이 씁니다)" />
+                  <TextBlock VerticalAlignment="Center" Text="별칭은 계획의 Query Block·별칭(+ALIAS)에서, 없으면 SQL 의 FROM 절에서 가져옵니다" TextTrimming="CharacterEllipsis" />
+                </DockPanel>
+              </Border>
+              <Panel>
+                <StackPanel IsVisible="{Binding HintEmpty}" HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="8">
+                  <ContentControl HorizontalAlignment="Center" Opacity="0.55"
+                                  Content="{Binding Source='plan', Converter={x:Static icons:IconKeyConverter.Instance}, ConverterParameter=28}" />
+                  <TextBlock HorizontalAlignment="Center" Classes="dim" Text="{Binding HintEmptyText}" />
+                </StackPanel>
+                <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled" IsVisible="{Binding !HintEmpty}">
+                  <DockPanel>
+                    <Border DockPanel.Dock="Top" Classes="grid-header">
+                      <StackPanel Orientation="Horizontal" Classes="cells">
+                        <TextBlock Classes="r-chk" Text="벤치" TextAlignment="Center" ToolTip.Tip="체크한 힌트는 원문에 넣어 벤치마크한다" />
+                        <TextBlock Classes="h-hint" Text="힌트" />
+                        <TextBlock Classes="h-mean" Text="뜻" />
+                      </StackPanel>
+                    </Border>
+                    <ListBox x:Name="HintList" Classes="table" ItemsSource="{Binding HintItems}" SelectedItem="{Binding SelectedHint, Mode=TwoWay}"
+                             ScrollViewer.HorizontalScrollBarVisibility="Disabled" AutomationProperties.Name="힌트 대안">
+                      <ListBox.ItemTemplate>
+                        <DataTemplate x:DataType="vm:HintCandidateItem">
+                          <StackPanel Orientation="Horizontal" Classes="cells">
+                            <CheckBox Classes="r-chk" HorizontalAlignment="Center" MinHeight="0" Padding="0" Margin="14,0,0,0"
+                                      IsChecked="{Binding IsChecked, Mode=TwoWay}" IsEnabled="{Binding CanCheck}" AutomationProperties.Name="벤치마크에 넣기" />
+                            <TextBlock Classes="h-hint mono" Classes.dim="{Binding IsDisabled}" Text="{Binding HintText}" ToolTip.Tip="{Binding HintText}" />
+                            <TextBlock Classes="h-mean" Classes.dim="{Binding IsDisabled}" Text="{Binding MeaningText}" ToolTip.Tip="{Binding MeaningText}" />
+                          </StackPanel>
+                        </DataTemplate>
+                      </ListBox.ItemTemplate>
+                    </ListBox>
+                  </DockPanel>
+                </ScrollViewer>
+              </Panel>
+            </DockPanel>
+          </TabItem>
+        </TabControl>
+
+        <GridSplitter Grid.Row="1" ResizeDirection="Rows" Background="{DynamicResource OrandaSplitterBrush}" />
+
+        <!-- 벤치마크 표 -->
+        <DockPanel Grid.Row="2">
+          <Border DockPanel.Dock="Top" Classes="bench-caption">
+            <DockPanel>
+              <TextBlock DockPanel.Dock="Right" Classes="panel-caption" Text="{Binding BenchmarkFinishedText}" VerticalAlignment="Center" />
+              <StackPanel Orientation="Horizontal" Spacing="10">
+                <TextBlock FontWeight="SemiBold" Text="벤치마크" VerticalAlignment="Center" />
+                <TextBlock Classes="panel-caption" Text="{Binding BenchmarkCaption}" VerticalAlignment="Center" />
+              </StackPanel>
+            </DockPanel>
+          </Border>
+          <Panel>
+            <TextBlock IsVisible="{Binding BenchmarkEmpty}" Classes="dim" Margin="16" TextWrapping="Wrap" HorizontalAlignment="Center" VerticalAlignment="Center"
+                       Text="{Binding BenchmarkEmptyText}" />
+            <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled" IsVisible="{Binding !BenchmarkEmpty}">
+              <DockPanel>
+                <Border DockPanel.Dock="Top" Classes="grid-header">
+                  <StackPanel Orientation="Horizontal" Classes="cells">
+                    <TextBlock Classes="b-no num" Text="#" />
+                    <TextBlock Classes="b-label" Text="변형" />
+                    <TextBlock Classes="b-elapsed num" Text="경과 평균" />
+                    <TextBlock Classes="b-bar" Text="상대" ToolTip.Tip="가장 느린 변형 대비 경과" />
+                    <TextBlock Classes="b-minmax num" Text="최소 / 최대" ToolTip.Tip="반복 중 가장 짧은·긴 경과(ms)" />
+                    <TextBlock Classes="b-lr num" Text="논리 읽기" ToolTip.Tip="반복 평균 session logical reads" />
+                    <TextBlock Classes="b-pr num" Text="물리 읽기" ToolTip.Tip="반복 평균 physical reads" />
+                    <TextBlock Classes="b-rows num" Text="행 수" />
+                    <TextBlock Classes="b-hash num" Text="plan_hash" />
+                    <TextBlock Classes="b-verdict" Text="판정" ToolTip.Tip="가장 나음 = 행 수가 원문과 같은 변형 중 경과 평균 최소(같으면 논리 읽기 적은 쪽)" />
+                  </StackPanel>
+                </Border>
+                <ListBox x:Name="BenchmarkList" Classes="table" ItemsSource="{Binding BenchmarkRows}"
+                         ScrollViewer.HorizontalScrollBarVisibility="Disabled" AutomationProperties.Name="벤치마크 결과">
+                  <ListBox.ItemTemplate>
+                    <DataTemplate x:DataType="vm:BenchmarkRowItem">
+                      <StackPanel Orientation="Horizontal" Classes="cells" Background="Transparent" ToolTip.Tip="{Binding SqlTip}">
+                        <TextBlock Classes="b-no num dim" Text="{Binding Number}" />
+                        <TextBlock Classes="b-label" Classes.best="{Binding IsBest}" Text="{Binding Label}" />
+                        <TextBlock Classes="b-elapsed num" Classes.best="{Binding IsBest}" Classes.success-text="{Binding IsBest}" Text="{Binding ElapsedText}" />
+                        <Panel Classes="b-bar" Margin="6,0,0,0">
+                          <Border Classes="bar-track" />
+                          <Border Classes="bar" Classes.neutral="{Binding IsBarNeutral}" Classes.good="{Binding IsBarGood}" Classes.warn="{Binding IsBarWarn}"
+                                  Width="{Binding BarWidth}" />
+                        </Panel>
+                        <TextBlock Classes="b-minmax num" Text="{Binding MinMaxText}" />
+                        <TextBlock Classes="b-lr num" Text="{Binding LogicalText}" />
+                        <TextBlock Classes="b-pr num" Text="{Binding PhysicalText}" />
+                        <TextBlock Classes="b-rows num" Classes.danger-text="{Binding IsRowsMismatch}" Text="{Binding RowsText}" />
+                        <TextBlock Classes="b-hash num" Text="{Binding PlanHashText}" />
+                        <Panel Classes="b-verdict" Margin="6,0,0,0">
+                          <Border Classes="chip" HorizontalAlignment="Left" IsVisible="{Binding IsBest}">
+                            <StackPanel Orientation="Horizontal" Spacing="4">
+                              <ContentControl VerticalAlignment="Center"
+                                              Content="{Binding Source='ok', Converter={x:Static icons:IconKeyConverter.Instance}, ConverterParameter=12}" />
+                              <TextBlock Classes="success-text" Text="{Binding VerdictText}" />
+                            </StackPanel>
+                          </Border>
+                          <Border Classes="chip" HorizontalAlignment="Left" IsVisible="{Binding IsRowsMismatch}">
+                            <StackPanel Orientation="Horizontal" Spacing="4">
+                              <ContentControl VerticalAlignment="Center"
+                                              Content="{Binding Source='warn', Converter={x:Static icons:IconKeyConverter.Instance}, ConverterParameter=12}" />
+                              <TextBlock Classes="danger-text" Text="{Binding VerdictText}" />
+                            </StackPanel>
+                          </Border>
+                          <TextBlock VerticalAlignment="Center" TextTrimming="CharacterEllipsis" Text="{Binding VerdictText}" ToolTip.Tip="{Binding VerdictText}"
+                                     Classes.dim="{Binding IsBaseline}" Classes.danger-text="{Binding IsFailed}">
+                            <TextBlock.IsVisible>
+                              <MultiBinding Converter="{x:Static BoolConverters.And}">
+                                <Binding Path="!IsBest" />
+                                <Binding Path="!IsRowsMismatch" />
+                              </MultiBinding>
+                            </TextBlock.IsVisible>
+                          </TextBlock>
+                        </Panel>
+                      </StackPanel>
+                    </DataTemplate>
+                  </ListBox.ItemTemplate>
+                </ListBox>
+              </DockPanel>
+            </ScrollViewer>
+          </Panel>
+        </DockPanel>
+      </Grid>
+    </Panel>
+  </DockPanel>
+</UserControl>

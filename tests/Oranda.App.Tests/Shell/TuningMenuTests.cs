@@ -44,7 +44,8 @@ public class TuningMenuTests
     [Fact]
     public void Moved_commands_sit_under_tuning_in_group_order()
     {
-        var ids = CommandIds(TuningMenu());
+        // 도우미(400~) 등 각 Task 가 더한 oranda.tuning.* 는 자기 시험이 본다.
+        var ids = CommandIds(TuningMenu()).Where(id => !id.StartsWith("oranda.tuning.", StringComparison.Ordinal)).ToList();
         string[] expected =
         [
             "oranda.plan.explain", "oranda.plan.actual", "oranda.plan.displayCursorOptions", "oranda.plan.pinForCompare", "oranda.plan.compare",

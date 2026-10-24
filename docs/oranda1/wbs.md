@@ -375,7 +375,7 @@ levels:
   - acceptance: A-Rows 없음 배너와 두 해결 경로 / 그래프 탭 / 보고서는 팩 선언 없으면 이유 / 트레이스 요약 / 전체 시험 통과
   - note: 시안 완료(2026-10-24, 시안 https://claude.ai/artifact/J4YBzmpMsbvecm8aSv4rGx 화면 g·h), 화면 레인 착수 대기 (win144)
 
-- [ ] TSK-06-05: 튜닝 도우미 — 인덱스 후보·재작성 후보·힌트 대안·변형 SQL 벤치마크 [win144] w:3 2026-10-26~2026-10-28
+- [x] TSK-06-05: 튜닝 도우미 — 인덱스 후보·재작성 후보·힌트 대안·변형 SQL 벤치마크 [win144] w:3 2026-10-26~2026-10-28
   - category: dev
   - domain: fullstack
   - model: opus
@@ -385,7 +385,7 @@ levels:
   - prd-ref: TN-09, TN-10, TN-11
   - requirements: Features/Tuning/Assistant 에 문서 패널 「튜닝 도우미」: 입력 = 편집기 문장 + 그 계획; 인덱스 후보(규칙 기반): TABLE ACCESS FULL·INDEX FULL SCAN 단계의 access/filter predicate 열과 조인 열을 뽑아 기존 인덱스와 겹침을 보고 후보·근거·CREATE INDEX 문안(실행 안 함)을 보인다; 재작성 후보(규칙 기반, Language 계층에 규칙 모음): NOT IN → NOT EXISTS, OR → UNION ALL, 열에 함수 씌운 조건 경고, 암시적 형 변환 의심(predicate 의 INTERNAL_FUNCTION·TO_NUMBER), 스칼라 하위 질의 → 조인, SELECT * 경고; 힌트 대안: LEADING·USE_NL·USE_HASH·INDEX·FULL·PARALLEL(설정) 조합을 계획의 표 이름·별칭으로 만든다; 벤치마크: 원문 + 고른 후보를 SELECT 일 때만 N 회(기본 3) 실행해 경과·논리 읽기·물리 읽기·행 수·plan_hash 표, 결과 행 수가 원문과 다르면 경고, 가장 나은 것 강조, 운영 접속에서는 실행 전 확인; 「튜닝」 메뉴·편집기 컨텍스트 메뉴 배치; 시험: 규칙 단위 시험(정상·경계·오류)·ViewModel·Headless; 비고: 담당 PC: win144(Windows 개발 PC) — 맥북 세션은 이 Task 를 하지 않는다
   - acceptance: 후보·문안·벤치마크 표가 나온다 / SELECT 가 아닌 문장은 벤치마크 거부 / 만든 DDL 은 실행하지 않는다 / 전체 시험 통과
-  - note: 시안 완료(2026-10-24, 시안 https://claude.ai/artifact/J4YBzmpMsbvecm8aSv4rGx 화면 i), 화면 레인 착수 대기 (win144)
+  - note: 완료(2026-10-24) — 규칙 API Oranda.Language.Tuning(IndexAdvisor·RewriteAdvisor·HintAdvisor·BenchmarkRules·PlanPredicates, 06-07 재사용), 문서 패널 Features/Tuning/Assistant(후보 3탭·벤치마크 표·상태 화면·운영 확인), 튜닝 메뉴 도우미 400~·편집기 오른쪽 클릭, 가짜 서비스로 시험(Oracle RunBenchmarkAsync 는 tn-data) (win144)
 
 - [ ] TSK-06-06: 대기·이력·계획 관리 보기 — SQL 별 대기 분해·AWR 계획 이력·ASH·Profile·Baseline·Patch·Advisor 스크립트 [win144] w:2 2026-10-26~2026-10-28
   - category: dev
