@@ -652,7 +652,7 @@ levels:
   - acceptance: R6 만 고르고 미커밋이 없으면 툴바 단추가 12개(조사 14개에서 커밋·롤백 2개 숨김)이고 미커밋이 생기면 14개 / R1 툴바는 그대로 / 전체 시험 통과
   - note: 담당 PC: win144(Windows 개발 PC) — 맥북 세션은 이 Task 를 하지 않는다. 크기 S. 레인 ux-shell(두 번째). ExecutionCommands.cs 는 09-02 가 먼저 고치므로 그 머지 뒤, Roles 시험은 TSK-07-11 머지 뒤 (win144)
 
-- [ ] TSK-09-05: 기본 레이아웃 덜어내기 — 아래 탭 3개·오른쪽 창 닫힘·필요할 때 자동 열림 [win144] w:2 2026-11-09~2026-11-10
+- [x] TSK-09-05: 기본 레이아웃 덜어내기 — 아래 탭 3개·오른쪽 창 닫힘·필요할 때 자동 열림 [win144] w:2 2026-11-09~2026-11-10
   - category: dev
   - domain: frontend
   - model: opus
@@ -661,7 +661,7 @@ levels:
   - prd-ref: UX-14, TRD 11.6, D-019
   - requirements: `src/Oranda.App/Shell/Layout/LayoutPlanner.cs` 의 `CreateDefault` 를 바꾼다: 아래 묶음 = `oranda.panel.results`·`oranda.panel.messages`·`oranda.panel.output`(목록 상수), 나머지 아래 도구 창(plan·history·changeJournal·compileErrors)과 오른쪽 도구 창 전부(binds·templates 포함)는 `HiddenTools`, `Migrations` 에 `rightToolsOpen` 유지(`OpenRightTools` 상수와 옛 배치 이주 코드 `:104-112` 는 저장된 옛 배치를 위해 그대로); `Reconcile` 는 바꾸지 않는다(저장된 배치 유지); 자동 열기 확인: 예상·실제 계획(`ExecutionPlanCommands.cs:107` ShowTool), 컴파일 오류(`PlsqlEditorCommands.cs:253`, `ExecutionController.Body.cs:289` ActivatePanel), 바인드 변수(`ExecutionController.Binds.cs:33,79` ActivatePanel)가 숨은 창을 기본 위치에 열어 보이는지 시험하고, `DockWorkspace.ActivateTool`(`Shell/Docking/DockWorkspace.cs:329`)이 숨은 창을 열지 않으면 Docking 쪽에서 고친다; 시험: `LayoutPlannerTests.cs`(기본 배치 보이는 집합·숨은 집합·이주 표지), 저장된 배치 왕복 불변(`rightToolsOpen` 있음/없음), 새 `tests/Oranda.App.Tests/Shell/Headless/DefaultLayoutAutoOpenTests.cs`(레이아웃 초기화 → 아래 3·오른쪽 0, 예상 계획 → 계획 창 열림, 바인드 있는 문장 실행 → 바인드 창 열림, 컴파일 오류 → 오류 창 열림), `NamedLayoutTests.cs` 필요 시 갱신; 제약: `*Commands.cs`·`[OrandaToolPanel]` 특성·`Features/Execution/**` 는 고치지 않는다(필요하면 결과에 적고 조정자에게); 비고: 담당 PC: win144(Windows 개발 PC) — 맥북 세션은 이 Task 를 하지 않는다. TSK-13-16 결정 되돌림(D-019)
   - acceptance: 레이아웃 초기화 뒤 SQL 탭과 함께 보이는 도구 창이 조사 11개에서 6개 이하(왼쪽 + 아래 3) / 실행 계획·컴파일 오류·바인드 변수 창이 필요할 때 자동으로 열린다 / 기존 저장 배치를 읽으면 지금과 같다 / 화면 PNG(라이트·다크) 확인 / 전체 시험 통과
-  - note: 담당 PC: win144(Windows 개발 PC) — 맥북 세션은 이 Task 를 하지 않는다. 크기 M. 레인 ux-layout(첫 Task, 바로 착수 가능) (win144)
+  - note: 담당 PC: win144(Windows 개발 PC) — 맥북 세션은 이 Task 를 하지 않는다. 크기 M. 레인 ux-layout(첫 Task, 바로 착수 가능) / 결과: LayoutPlanner.CreateDefault 아래 = 조회 결과·메시지·DBMS 출력(+ MyBatis 조합 검사, MyBatis 문서에서만), 오른쪽·나머지 아래 창은 hiddenTools, rightToolsOpen 표지 유지·Reconcile 그대로; 계획·컴파일 오류·바인드 자동 열기는 지금 ShowTool·ActivateTool 경로로 숨은 창도 기본 위치에 열려 Docking 수정 없음; SQL 탭과 함께 보이는 도구 창 11 → 5; LayoutPlannerTests·새 DefaultLayoutAutoOpenTests(Headless, PNG 라이트·다크)·ShellHeadlessTests 갱신 (win144)
 
 - [ ] TSK-09-06: Windows MyBatis 탭 Ctrl+Enter 로 시나리오 실행 [win144] w:1 2026-11-11~2026-11-11
   - category: dev

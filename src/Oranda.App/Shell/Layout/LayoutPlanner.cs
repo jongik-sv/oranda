@@ -26,20 +26,34 @@ public static class LayoutPlanner
     /// <summary>바인드 변수·템플릿 창을 기본으로 여는 이주(TSK-13-16)의 표지 이름.</summary>
     public const string RightToolsOpenMigration = "rightToolsOpen";
 
-    /// <summary>기본으로 열어 두는 오른쪽 도구 창(위에서 아래 순서).</summary>
+    /// <summary>
+    /// 표지 없는 옛 배치에 한 번 여는 오른쪽 도구 창(위에서 아래 순서, TSK-13-16 이주). 새 기본 배치는 이 창들도 닫아 둔다(D-019).
+    /// </summary>
     private static readonly string[] OpenRightTools = ["oranda.panel.binds", "oranda.panel.templates"];
+
+    /// <summary>
+    /// 기본 배치의 아래 묶음에 넣는 도구 창(D-019, TSK-09-05): 조회 결과·메시지·DBMS 출력. 실행 계획·컴파일 오류·바인드 변수는
+    /// 필요할 때 기능이 <c>ActivateTool</c> 로 자기 기본 위치에 열고, 실행 이력·변경 일지는 보기 > 도구 창에서 연다.
+    /// </summary>
+    public static readonly IReadOnlyList<string> DefaultBottomTools = ["oranda.panel.results", "oranda.panel.messages", "oranda.panel.output"];
+
+    /// <summary>
+    /// 아래 묶음에 함께 두는 MyBatis 조합 검사 창: MyBatis 문서에서만 보이는 문서 범위 창이라(DockWorkspace.ScopedTools) SQL 탭에서는
+    /// 보이지 않는다. 기본에서 빼면 MyBatis 문서를 열어도 나타나지 않아 그대로 둔다.
+    /// </summary>
+    private const string MyBatisCombosTool = "oranda.panel.mybatisCombos";
 
     /// <summary>문서 영역 노드는 트리에 정확히 1개이고, 그 노드의 <see cref="DockNode.Tools"/> 는 쓰지 않는다.</summary>
     public static LayoutDocument CreateDefault(IEnumerable<ToolPanelDefinition> panels)
     {
         var tools = panels.Where(p => p.Kind == ToolPanelKind.Tool).ToList();
         var left = IdsAt(tools, DockLocation.Left);
-        var bottom = IdsAt(tools, DockLocation.Bottom);
+        var allBottom = IdsAt(tools, DockLocation.Bottom);
+        var bottom = allBottom.Where(id => DefaultBottomTools.Contains(id) || id == MyBatisCombosTool).ToList();
 
-        // 오른쪽 도구 창은 바인드 변수·템플릿만 열어 두고(아래에서 문서 영역 옆에 끼운다) 나머지는 기본 숨김
-        // (자동 숨김 막대 자리): 트리에 넣지 않고 hiddenTools 에 둔다.
-        var open = OpenRightTools.Where(id => tools.Any(t => t.Id == id && t.DefaultLocation == DockLocation.Right)).ToList();
-        var hidden = IdsAt(tools, DockLocation.Right).Where(id => !open.Contains(id)).ToList();
+        // 아래는 조회 결과·메시지·DBMS 출력만 열고, 나머지 아래 창과 오른쪽 창 전부(바인드 변수·템플릿 포함)는 기본 닫힘(D-019):
+        // 트리에 넣지 않고 hiddenTools 에 둔다. 처음 열 때는 자기 기본 위치로 간다(LayoutPlanner.ShowTool).
+        var hidden = allBottom.Where(id => !bottom.Contains(id)).Concat(IdsAt(tools, DockLocation.Right)).ToList();
         var documents = new DockNode { Kind = DockNodeKind.Documents };
 
         // 가로: [왼쪽 묶음(창 전체 높이), 세로: [문서, 아래 묶음]] — 오렌지처럼 스키마 브라우저가 왼쪽을 위아래로 다 쓰고,
@@ -66,11 +80,7 @@ public static class LayoutPlanner
             };
         }
 
-        if (open.Count > 0)
-        {
-            root = InsertRight(root, StackedGroups(open));
-        }
-
+        // 이주 표지는 남긴다: 새 기본 배치에 옛 이주(바인드 변수·템플릿 한 번 열기)가 다시 돌지 않게.
         return new LayoutDocument { Root = root, HiddenTools = hidden, Migrations = [RightToolsOpenMigration] };
     }
 

@@ -39,6 +39,27 @@ public class LayoutPlannerTests
         Doc("sqlEditor"),
     ];
 
+    /// <summary>실제 등록과 같은 도구 창 구성(TSK-09-05 기본 배치 시험용, 순서 = 각 [OrandaToolPanel] 의 Order).</summary>
+    public static readonly ToolPanelDefinition[] Real =
+    [
+        Tool("schemaBrowser", DockLocation.Left, 10),
+        Tool("scripts", DockLocation.Left, 20),
+        Tool("mybatisStatements", DockLocation.Left, 30),
+        Tool("results", DockLocation.Bottom, 5),
+        Tool("mybatisCombos", DockLocation.Bottom, 7),
+        Tool("messages", DockLocation.Bottom, 8),
+        Tool("output", DockLocation.Bottom, 10),
+        Tool("plan", DockLocation.Bottom, 30),
+        Tool("history", DockLocation.Bottom, 40),
+        Tool("changeJournal", DockLocation.Bottom, 45),
+        Tool("compileErrors", DockLocation.Bottom, 50),
+        Tool("outline", DockLocation.Right, 10),
+        Tool("binds", DockLocation.Right, 20),
+        Tool("templates", DockLocation.Right, 20),
+        Tool("rowView", DockLocation.Right, 30),
+        Doc("sqlEditor"),
+    ];
+
     private static string Id(string name) => "oranda.panel." + name;
 
     [Fact]
@@ -57,16 +78,11 @@ public class LayoutPlannerTests
         Assert.Equal(1, CountDocuments(column.Children[0])); // 문서 영역은 오른쪽 열과 가로로 나란히 놓인다.
         Assert.Equal([Id("output"), Id("messages")], column.Children[1].Tools);
 
-        // 오른쪽 도구 창은 바인드 변수·템플릿만 열려 있고(TSK-13-16) 나머지는 기본 숨김(트리에 없고 hiddenTools 에 있다). 문서 종류는 트리에 넣지 않는다.
-        Assert.Equal([Id("outline")], layout.HiddenTools);
-        Assert.Contains(Id("binds"), LayoutPlanner.ToolIds(root));
-        Assert.Contains(Id("templates"), LayoutPlanner.ToolIds(root));
+        // 오른쪽 도구 창은 바인드 변수·템플릿까지 모두 기본 닫힘(D-019, TSK-13-16 되돌림): 트리에 없고 hiddenTools 에 있다.
+        // 이주 표지는 남아 옛 이주가 다시 돌지 않는다. 문서 종류는 트리에 넣지 않는다.
+        Assert.Equal([Id("outline"), Id("binds"), Id("templates")], layout.HiddenTools);
+        Assert.Equal([Id("schemaBrowser"), Id("scripts"), Id("output"), Id("messages")], LayoutPlanner.ToolIds(root));
         Assert.Contains(LayoutPlanner.RightToolsOpenMigration, layout.Migrations!);
-        var binds = FindGroup(root, Id("binds"));
-        var templates = FindGroup(root, Id("templates"));
-        Assert.Equal(DockLocation.Right, LayoutPlanner.LocationOf(root, binds));
-        Assert.Equal(DockLocation.Right, LayoutPlanner.LocationOf(root, templates));
-        Assert.NotSame(binds, templates); // 한 열에 위아래로 쌓는다(탭이 아니다).
         Assert.DoesNotContain(Id("sqlEditor"), LayoutPlanner.ToolIds(root));
         Assert.Equal(1, CountDocuments(root));
     }
@@ -79,6 +95,131 @@ public class LayoutPlannerTests
         Assert.Equal(DockNodeKind.Documents, layout.Root!.Kind);
         Assert.Empty(layout.HiddenTools);
     }
+
+    // TSK-09-05(D-019): 기본 배치 덜어내기 — 아래 3개(+ MyBatis 문서 범위 창), 오른쪽 0개, 나머지는 필요할 때 기본 위치에.
+    [Fact]
+    public void Default_layout_opens_only_results_messages_and_output_below_and_nothing_on_the_right()
+    {
+        var layout = LayoutPlanner.CreateDefault(Real);
+        var root = layout.Root!;
+
+        var bottom = FindGroup(root, Id("results"));
+        Assert.Equal([Id("results"), Id("mybatisCombos"), Id("messages"), Id("output")], bottom.Tools); // 조합 검사는 MyBatis 문서에서만 보인다
+        Assert.Equal(Id("results"), bottom.ActiveTool);
+        Assert.Equal(DockLocation.Bottom, LayoutPlanner.LocationOf(root, bottom));
+        Assert.DoesNotContain(FindGroupsOf(root), g => LayoutPlanner.LocationOf(root, g) == DockLocation.Right);
+        Assert.Equal(
+            [Id("plan"), Id("history"), Id("changeJournal"), Id("compileErrors"), Id("outline"), Id("binds"), Id("templates"), Id("rowView")],
+            layout.HiddenTools);
+        Assert.Contains(LayoutPlanner.RightToolsOpenMigration, layout.Migrations!);
+
+        // SQL 탭과 함께 보이는 창(MyBatis 범위 창 2개 제외): 조사 11개 → 왼쪽 2 + 아래 3 = 5.
+        var onSqlTab = LayoutPlanner.ToolIds(root).Where(id => id is not ("oranda.panel.mybatisStatements" or "oranda.panel.mybatisCombos")).ToList();
+        Assert.Equal([Id("schemaBrowser"), Id("scripts"), Id("results"), Id("messages"), Id("output")], onSqlTab);
+        Assert.Equal(["oranda.panel.results", "oranda.panel.messages", "oranda.panel.output"], LayoutPlanner.DefaultBottomTools);
+    }
+
+    [Fact]
+    public void Default_layout_without_the_three_bottom_tools_has_no_bottom_group()
+    {
+        // 경계: 아래 기본 3개가 하나도 등록되지 않으면(기능 꺼짐 등) 아래 묶음이 없고 나머지 아래 창은 닫혀 있다.
+        var panels = new[] { Tool("schemaBrowser", DockLocation.Left, 10), Tool("plan", DockLocation.Bottom, 30), Tool("binds", DockLocation.Right, 20), Doc("sqlEditor") };
+
+        var layout = LayoutPlanner.CreateDefault(panels);
+
+        Assert.Equal([Id("schemaBrowser")], LayoutPlanner.ToolIds(layout.Root));
+        Assert.Equal([Id("plan"), Id("binds")], layout.HiddenTools);
+        Assert.Equal(1, CountDocuments(layout.Root!));
+    }
+
+    [Theory]
+    [InlineData("plan", DockLocation.Bottom)]
+    [InlineData("compileErrors", DockLocation.Bottom)]
+    [InlineData("history", DockLocation.Bottom)]
+    [InlineData("binds", DockLocation.Right)]
+    [InlineData("templates", DockLocation.Right)]
+    public void A_closed_default_tool_opens_at_its_default_location(string name, DockLocation expected)
+    {
+        var layout = LayoutPlanner.Reconcile(LayoutPlanner.CreateDefault(Real), Real);
+
+        var shown = LayoutPlanner.ShowTool(layout, Real.First(p => p.Id == Id(name)));
+
+        var group = FindGroup(shown.Root!, Id(name));
+        Assert.Equal(Id(name), group.ActiveTool);
+        Assert.Equal(expected, LayoutPlanner.LocationOf(shown.Root!, group));
+        Assert.DoesNotContain(Id(name), shown.HiddenTools);
+        Assert.Equal(1, CountDocuments(shown.Root!));
+        if (expected == DockLocation.Bottom)
+        {
+            Assert.Contains(Id("results"), group.Tools); // 새 묶음이 아니라 아래 묶음의 탭으로 붙는다
+        }
+
+        // 되돌림: 다시 닫으면 기본 배치와 같은 모양이다.
+        var closed = LayoutPlanner.HideTool(shown, Id(name));
+        Assert.Equal(LayoutPlanner.ToolIds(layout.Root), LayoutPlanner.ToolIds(closed.Root));
+        Assert.Contains(Id(name), closed.HiddenTools);
+    }
+
+    [Fact]
+    public void A_saved_layout_with_the_marker_is_read_as_before()
+    {
+        // TSK-13-16 시절 기본 배치(아래 7개 + 오른쪽 바인드·템플릿, 표지 있음)를 저장한 사용자: 그대로 읽힌다(D-019 저장 배치 유지).
+        var saved = OldDefault(Real) with { Migrations = [LayoutPlanner.RightToolsOpenMigration] };
+
+        var r = LayoutPlanner.Reconcile(saved, Real);
+
+        Assert.True(LayoutPlanner.SameShape(saved.Root, r.Root));
+        Assert.Equal(saved.HiddenTools, r.HiddenTools);
+        Assert.Contains(Id("plan"), LayoutPlanner.ToolIds(r.Root));
+        Assert.Contains(Id("binds"), LayoutPlanner.ToolIds(r.Root));
+        Assert.Equal([LayoutPlanner.RightToolsOpenMigration], r.Migrations);
+    }
+
+    [Fact]
+    public void A_saved_layout_without_the_marker_still_gets_the_old_one_time_migration()
+    {
+        // 표지 없는 옛 배치에서 바인드·템플릿을 닫아 둔 사용자: 예전처럼 한 번 열리고 표지가 붙는다(새 이주 표지를 만들지 않는다).
+        var saved = LayoutPlanner.HideTool(LayoutPlanner.HideTool(OldDefault(Real), Id("binds")), Id("templates")) with { Migrations = null };
+
+        var r = LayoutPlanner.Reconcile(saved, Real);
+
+        Assert.Contains(Id("binds"), LayoutPlanner.ToolIds(r.Root));
+        Assert.Contains(Id("templates"), LayoutPlanner.ToolIds(r.Root));
+        Assert.Contains(Id("plan"), LayoutPlanner.ToolIds(r.Root)); // 아래 7개는 그대로
+        Assert.Equal([LayoutPlanner.RightToolsOpenMigration], r.Migrations);
+
+        var again = LayoutPlanner.Reconcile(r, Real);
+        Assert.True(LayoutPlanner.SameShape(r.Root, again.Root));
+    }
+
+    [Fact]
+    public void Default_layout_reset_after_a_customized_layout_drops_the_extra_tools()
+    {
+        // 레이아웃 초기화 = CreateDefault: 사용자가 열어 둔 계획·바인드 창은 닫히고 아래 3개로 돌아간다.
+        var customized = LayoutPlanner.ShowTool(LayoutPlanner.ShowTool(LayoutPlanner.CreateDefault(Real), Real.First(p => p.Id == Id("plan"))), Real.First(p => p.Id == Id("binds")));
+
+        var reset = LayoutPlanner.Reconcile(LayoutPlanner.CreateDefault(Real), Real);
+
+        Assert.Contains(Id("binds"), LayoutPlanner.ToolIds(customized.Root));
+        Assert.DoesNotContain(Id("binds"), LayoutPlanner.ToolIds(reset.Root));
+        Assert.DoesNotContain(Id("plan"), LayoutPlanner.ToolIds(reset.Root));
+        Assert.True(LayoutPlanner.SameShape(LayoutPlanner.CreateDefault(Real).Root, reset.Root));
+    }
+
+    /// <summary>TSK-13-16 의 기본 배치 모양: 왼쪽 전부, 아래 전부, 오른쪽 바인드·템플릿 한 열.</summary>
+    private static LayoutDocument OldDefault(ToolPanelDefinition[] panels)
+    {
+        var layout = LayoutPlanner.CreateDefault(panels);
+        foreach (var name in new[] { "plan", "history", "changeJournal", "compileErrors", "binds", "templates" })
+        {
+            layout = LayoutPlanner.ShowTool(layout, panels.First(p => p.Id == Id(name)));
+        }
+
+        return layout with { Root = LayoutPlanner.Rebalance(layout.Root!) };
+    }
+
+    private static List<DockNode> FindGroupsOf(DockNode n) =>
+        [.. (n.Kind == DockNodeKind.ToolGroup ? [n] : Array.Empty<DockNode>()), .. (n.Children ?? []).SelectMany(FindGroupsOf)];
 
     [Fact]
     public void Reconcile_of_a_default_layout_is_a_no_op()
@@ -100,10 +241,10 @@ public class LayoutPlannerTests
         var r = LayoutPlanner.Reconcile(layout, remaining);
 
         var ids = LayoutPlanner.ToolIds(r.Root);
-        Assert.Equal([Id("schemaBrowser"), Id("binds"), Id("templates")], ids);
-        // 아래 묶음이 사라지면 문서 쪽 세로 분할도 없어진다: 가로 [왼쪽, 가로 [문서, 오른쪽 열]].
+        Assert.Equal([Id("schemaBrowser")], ids);
+        // 아래 묶음이 사라지면 문서 쪽 세로 분할도 없어진다: 가로 [왼쪽, 문서].
         Assert.Equal(DockOrientation.Horizontal, r.Root!.Orientation);
-        Assert.Equal(DockNodeKind.Documents, r.Root.Children[1].Children[0].Kind);
+        Assert.Equal(DockNodeKind.Documents, r.Root.Children[1].Kind);
         Assert.Equal(1, CountDocuments(r.Root));
     }
 
@@ -165,13 +306,8 @@ public class LayoutPlannerTests
     [Fact]
     public void Reconcile_opens_binds_and_templates_once_for_a_layout_without_the_marker()
     {
-        var old = LayoutPlanner.CreateDefault(Standard) with
-        {
-            Migrations = null,
-            HiddenTools = [Id("outline"), Id("binds"), Id("templates")],
-        };
-        old = old with { Root = LayoutPlanner.Normalize(LayoutPlanner.HideTool(old, Id("binds")).Root!, Standard) };
-        old = LayoutPlanner.HideTool(old, Id("templates"));
+        // 표지 없는 옛 배치(TSK-13-16 전)는 지금도 한 번 연다: 저장된 배치를 읽는 규칙은 D-019 에서 바꾸지 않는다.
+        var old = LayoutPlanner.CreateDefault(Standard) with { Migrations = null };
 
         var migrated = LayoutPlanner.Reconcile(old, Standard);
 
@@ -203,7 +339,8 @@ public class LayoutPlannerTests
         var broken = new LayoutDocument { Root = new DockNode { Kind = DockNodeKind.ToolGroup, Tools = [Id("output")] } };
         var fixedUp = LayoutPlanner.Reconcile(broken, Standard);
         Assert.Contains(LayoutPlanner.RightToolsOpenMigration, fixedUp.Migrations!);
-        Assert.Contains(Id("binds"), LayoutPlanner.ToolIds(fixedUp.Root));
+        Assert.DoesNotContain(Id("binds"), LayoutPlanner.ToolIds(fixedUp.Root)); // 깨진 배치는 새 기본 배치(바인드 닫힘)로
+        Assert.Contains(Id("binds"), fixedUp.HiddenTools);
 
         var noRoot = LayoutPlanner.Reconcile(new LayoutDocument(), Standard);
         Assert.Contains(LayoutPlanner.RightToolsOpenMigration, noRoot.Migrations!);

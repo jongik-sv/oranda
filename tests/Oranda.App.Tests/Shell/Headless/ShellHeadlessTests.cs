@@ -92,8 +92,8 @@ public class ShellHeadlessTests
         Assert.Contains("oranda.panel.schemaBrowser", ws.VisibleToolIds);
         Assert.Contains("oranda.panel.output", ws.VisibleToolIds);
         Assert.DoesNotContain("oranda.panel.outline", ws.VisibleToolIds);
-        Assert.Contains("oranda.panel.binds", ws.VisibleToolIds);
-        Assert.Contains("oranda.panel.templates", ws.VisibleToolIds);
+        Assert.DoesNotContain("oranda.panel.binds", ws.VisibleToolIds); // 오른쪽 창은 기본 닫힘(D-019)
+        Assert.DoesNotContain("oranda.panel.templates", ws.VisibleToolIds);
         Assert.NotNull(h.Window.Dock.DockControl.Layout);
     });
 
