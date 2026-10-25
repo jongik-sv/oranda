@@ -42,8 +42,8 @@ public static class TemplatesCommands
 /// 셸의 처리기 팩터리(DI)가 <see cref="IServiceProvider"/> 를 넣어 준다. 인자 없는 생성자는 편집기 쪽 명령만 처리한다.
 /// 내보내기·가져오기는 <see cref="CommandContext.Parameter"/> 가 문자열 경로면 그 파일을 쓴다(없으면 파일 선택).
 /// </summary>
-[OrandaCommand("oranda.edit.insertSnippet", CommandCategory.Edit, Title = "코드 조각 삽입", When = "editorFocus", Enablement = "!readOnlyDoc", Placements = ["menu:edit/insertSnippet@360"])]
-[OrandaCommand("oranda.view.templates", CommandCategory.View, Title = "템플릿", Placements = ["menu:view/templates@60", "menu:tools/templates@20"])]
+[OrandaCommand("oranda.edit.insertSnippet", CommandCategory.Edit, Title = "코드 조각 삽입", When = "editorFocus", Enablement = "!readOnlyDoc", Placements = ["menu:edit/assist/insertSnippet@242"])]
+[OrandaCommand("oranda.view.templates", CommandCategory.View, Title = "템플릿")]
 [OrandaCommand("oranda.tools.keymap", CommandCategory.Tools, Title = "단축키 설정", Placements = ["menu:tools/keymap@30"])]
 [OrandaCommand("oranda.tools.keymapPreset.default", CommandCategory.Tools, Title = "단축키 프리셋: 기본", Placements = ["menu:tools/keymapPreset/default@40"])]
 [OrandaCommand("oranda.tools.keymapPreset.orange5", CommandCategory.Tools, Title = "단축키 프리셋: Orange 5", Placements = ["menu:tools/keymapPreset/orange5@41"])]

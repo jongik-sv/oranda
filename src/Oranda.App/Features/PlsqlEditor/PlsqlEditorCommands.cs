@@ -20,16 +20,19 @@ namespace Oranda.App.Features.PlsqlEditor;
 /// 셸의 처리기 팩터리(DI)가 <see cref="IServiceProvider"/> 를 넣어 준다. 인자 없는 생성자는 아무것도 하지 않는다.
 /// </summary>
 [OrandaCommand("oranda.file.newPlsqlEditor", CommandCategory.File, Title = "새 PL/SQL 편집기", Icon = "newPlsql", Placements = ["menu:file/newPlsqlEditor@15", "toolbar:main/newPlsql@15"])]
-[OrandaCommand("oranda.view.compileErrors", CommandCategory.View, Title = "컴파일 오류", Placements = ["menu:view/compileErrors@50"])]
+[OrandaCommand("oranda.view.compileErrors", CommandCategory.View, Title = "컴파일 오류")]
 [OrandaCommand("oranda.plsql.openSource", CommandCategory.Database, Title = "PL/SQL 소스 열기", When = "schemaFocus", Enablement = "plsqlNodeSelected",
     Placements = ["context:schema/plsql@50"])]
 [OrandaCommand("oranda.plsql.addToWorkspace", CommandCategory.Database, Title = "PL/SQL 작업 공간에 추가", When = "schemaFocus", Enablement = "plsqlNodeSelected",
     Placements = ["context:schema/plsql@51"])]
 [OrandaCommand("oranda.plsql.saveWorkspaceFile", CommandCategory.File, Title = "PL/SQL 작업 공간 파일로 저장", Enablement = "plsqlDocActive",
-    Placements = ["menu:file/savePlsqlWorkspace@95"])]
-[OrandaCommand("oranda.plsql.compile", CommandCategory.Database, Title = "컴파일(저장)", When = "plsqlEditorFocus", Enablement = "hasSession && !sessionBusy && !readOnlySession")]
-[OrandaCommand("oranda.plsql.toggleSpecBody", CommandCategory.Database, Title = "명세/본문 전환", When = "plsqlEditorFocus", Enablement = "isPackageDoc")]
-[OrandaCommand("oranda.plsql.showServerDiff", CommandCategory.Database, Title = "서버 소스와 차이 보기", When = "plsqlEditorFocus", Enablement = "serverSourceChanged")]
+    Placements = ["menu:file/workspace/savePlsqlWorkspace@500"])]
+[OrandaCommand("oranda.plsql.compile", CommandCategory.Database, Title = "컴파일(저장)", When = "plsqlEditorFocus", Enablement = "hasSession && !sessionBusy && !readOnlySession",
+    Placements = ["menu:sql/plsql/compile@30"])]
+[OrandaCommand("oranda.plsql.toggleSpecBody", CommandCategory.Database, Title = "명세/본문 전환", When = "plsqlEditorFocus", Enablement = "isPackageDoc",
+    Placements = ["menu:sql/plsql/toggleSpecBody@130"])]
+[OrandaCommand("oranda.plsql.showServerDiff", CommandCategory.Database, Title = "서버 소스와 차이 보기", When = "plsqlEditorFocus", Enablement = "serverSourceChanged",
+    Placements = ["menu:sql/plsql/showServerDiff@131"])]
 public sealed class PlsqlEditorCommandHandler : ICommandHandler
 {
     private readonly IServiceProvider? _services;

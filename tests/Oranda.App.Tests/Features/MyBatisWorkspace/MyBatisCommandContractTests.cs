@@ -49,13 +49,15 @@ public sealed class MyBatisCommandContractTests
     }
 
     [Fact]
-    public void Only_run_scenario_is_bound_to_the_mybatis_focus()
+    public void Run_scenario_and_the_mapper_only_menu_commands_are_bound_to_the_mybatis_focus()
     {
         var registry = ShellTestHelpers.CreateCommandRegistry();
 
-        Assert.Equal("mybatisDocFocus", registry.Find("oranda.mybatis.runScenario")!.When);
+        // TSK-09-02(UX-07): 매퍼 문서에서만 뜻이 있는 명령은 MyBatis 문서가 활성일 때만 주 메뉴에 보인다.
+        string[] bound = ["oranda.mybatis.runScenario", "oranda.mybatis.explainScenario", "oranda.mybatis.save", "oranda.mybatis.checkCombinations"];
+        Assert.All(bound, id => Assert.Equal("mybatisDocFocus", registry.Find(id)!.When));
         Assert.All(
-            MyBatisCommandIds.Where(id => id != "oranda.mybatis.runScenario"),
+            MyBatisCommandIds.Where(id => !bound.Contains(id)),
             id => Assert.Null(registry.Find(id)!.When));
     }
 

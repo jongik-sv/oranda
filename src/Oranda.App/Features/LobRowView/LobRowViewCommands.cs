@@ -76,7 +76,7 @@ public static class LobRowViewCommands
     Placements = ["context:grid/view@10"])]
 [OrandaCommand("oranda.grid.viewValue", CommandCategory.Result, Title = "값 보기", When = "gridFocus", Enablement = "gridHasSelection",
     Placements = ["context:grid/view@20"])]
-[OrandaCommand("oranda.view.rowView", CommandCategory.View, Title = "행 보기 창", Placements = ["menu:view/rowView@50"])]
+[OrandaCommand("oranda.view.rowView", CommandCategory.View, Title = "행 보기 창")]
 public sealed class LobRowViewCommandHandler : ICommandHandler
 {
     private readonly ServiceContainer? _container;

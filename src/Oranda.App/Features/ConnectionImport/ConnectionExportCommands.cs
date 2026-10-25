@@ -82,7 +82,7 @@ public static class ConnectionTransfer
 }
 
 /// <summary>「파일 &gt; 접속 내보내기」: 접속 체크 목록 → 저장 대화상자 → 쓰기 → 결과 알림. 접속 관리자 「내보내기」 단추도 같은 흐름.</summary>
-[OrandaCommand("oranda.conn.export", CommandCategory.Connection, Placements = ["menu:file/connExport@460"])]
+[OrandaCommand("oranda.conn.export", CommandCategory.Connection, Placements = ["menu:file/connection/connExport@511"])]
 public sealed class ConnectionExportHandler(ServiceContainer container) : ICommandHandler
 {
     public async Task ExecuteAsync(CommandContext context, CancellationToken cancellationToken)

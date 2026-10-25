@@ -14,15 +14,15 @@ namespace Oranda.App.Features.Navigation;
 /// 서비스는 실행할 때 꺼낸다(시작 경로에서 Oracle·ANTLR 어셈블리를 올리지 않기 위해). 편집기 생성자는 건드리지 않는다.
 /// </summary>
 [OrandaCommand("oranda.nav.goToDefinition", CommandCategory.Navigate, When = "editorFocus", Enablement = "hasSession",
-    Placements = ["menu:navigate/goToDefinition@20", "context:editor/goToDefinition@300"])]
+    Placements = ["menu:edit/go/goToDefinition@310", "context:editor/goToDefinition@300"])]
 [OrandaCommand("oranda.nav.describeObject", CommandCategory.Navigate, When = "editorFocus", Enablement = "hasSession",
-    Placements = ["menu:navigate/describeObject@30", "context:editor/describeObject@310"])]
+    Placements = ["menu:edit/go/describeObject@320", "context:editor/describeObject@310"])]
 [OrandaCommand("oranda.nav.findReferences", CommandCategory.Navigate, When = "editorFocus",
-    Placements = ["menu:navigate/findReferences@40", "context:editor/findReferences@320"])]
+    Placements = ["menu:edit/go/findReferences@330", "context:editor/findReferences@320"])]
 [OrandaCommand("oranda.nav.back", CommandCategory.Navigate, When = "editorFocus", Enablement = "canNavigateBack",
-    Placements = ["menu:navigate/back@50"])]
+    Placements = ["menu:edit/go/back@400"])]
 [OrandaCommand("oranda.nav.forward", CommandCategory.Navigate, When = "editorFocus", Enablement = "canNavigateForward",
-    Placements = ["menu:navigate/forward@60"])]
+    Placements = ["menu:edit/go/forward@410"])]
 public sealed class NavigationCommandHandler : ICommandHandler
 {
     private readonly IServiceProvider? _services;

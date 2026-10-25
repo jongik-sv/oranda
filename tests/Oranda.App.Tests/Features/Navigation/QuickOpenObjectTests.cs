@@ -34,7 +34,7 @@ public class QuickOpenObjectTests
         Assert.Equal("hasSession", reveal.Enablement);
         Assert.Equal(CommandCategory.Navigate, quick.Category);
         Assert.Contains("context:editor/revealInSchema@330", reveal.Placements);
-        Assert.Contains("menu:navigate/quickOpenObject@100", quick.Placements);
+        Assert.Contains("menu:edit/go/quickOpenObject@500", quick.Placements); // 편집 > 이동 ▸ (TSK-09-02)
         var handlers = ShellTestHelpers.AppContributions.Commands
             .Where(c => c.Definition.Id is "oranda.nav.quickOpenObject" or "oranda.schema.reveal")
             .Select(c => c.HandlerType).Distinct();

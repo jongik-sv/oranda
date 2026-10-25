@@ -16,7 +16,7 @@ namespace Oranda.App.Features.MyBatisWorkspace.Conversion;
 /// 특성 문자열·제목 파일·키맵은 고치지 않고 몸만 TSK-03-05(design.md 11장)가 채운다.
 /// 대상 = 문서 탭 우클릭이면 그 문서(<see cref="DockTabMenu.TargetPanel"/>), 메뉴면 활성 작업 공간. 원래 작업 공간·파일은 바꾸지 않는다.
 /// </summary>
-[OrandaCommand("oranda.mybatis.convertWorkspace", CommandCategory.File, Icon = "swap", Enablement = "sqlWorkspaceActive && !mybatisDocActive && mybatisConvertReady", Placements = ["menu:file/mybatisConvert@97", "context:documentTab/mybatisConvert@40"])]
+[OrandaCommand("oranda.mybatis.convertWorkspace", CommandCategory.File, Icon = "swap", Enablement = "sqlWorkspaceActive && !mybatisDocActive && mybatisConvertReady", Placements = ["menu:file/workspace/mybatisConvert@510", "context:documentTab/mybatisConvert@40"])]
 public sealed class MyBatisConvertCommands : ICommandHandler
 {
     // 시작 시험 제약(OutlineViewModel 주석 참고): 생성자는 매개변수 없음 또는 IServiceProvider 만, Language 형 필드 없음.

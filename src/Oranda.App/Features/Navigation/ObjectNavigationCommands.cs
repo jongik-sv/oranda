@@ -24,9 +24,9 @@ namespace Oranda.App.Features.Navigation;
 /// 서비스는 실행할 때 꺼낸다(시작 경로에서 Oracle·ANTLR 어셈블리를 올리지 않기 위해). 편집기 파일은 건드리지 않고 <see cref="IEditorContext"/> 로만 읽는다.
 /// </summary>
 [OrandaCommand(QuickOpenId, CommandCategory.Navigate, Enablement = "hasSession",
-    Placements = ["menu:navigate/quickOpenObject@100"])]
+    Placements = ["menu:edit/go/quickOpenObject@500"])]
 [OrandaCommand(RevealId, CommandCategory.Navigate, Enablement = "hasSession",
-    Placements = ["menu:navigate/revealInSchema@110", "context:editor/revealInSchema@330"])]
+    Placements = ["menu:edit/go/revealInSchema@510", "context:editor/revealInSchema@330"])]
 public sealed class ObjectNavigationCommandHandler : ICommandHandler
 {
     public const string QuickOpenId = "oranda.nav.quickOpenObject";

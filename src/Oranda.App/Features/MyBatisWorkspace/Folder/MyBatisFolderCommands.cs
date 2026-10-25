@@ -11,8 +11,8 @@ namespace Oranda.App.Features.MyBatisWorkspace.Folder;
 /// 폴더 열기 = 최근 폴더가 있으면 그 목록과 「다른 폴더…」 중에서 고르고, 없으면 바로 폴더 고르기 창.
 /// 문장 찾기 = namespace.id 또는 id 일부를 받아 등록된 찾기(열린 매퍼·매퍼 폴더)를 모두 묻고, 하나면 바로 열고 여럿이면 고르게 한다.
 /// </summary>
-[OrandaCommand("oranda.mybatis.openFolder", CommandCategory.File, Icon = "folder", Enablement = "mybatisFolderReady", Placements = ["menu:file/mybatisOpenFolder@91"])]
-[OrandaCommand("oranda.mybatis.findStatement", CommandCategory.Navigate, Icon = "find", Enablement = "mybatisDocActive || mybatisFolderOpen", Placements = ["menu:navigate/mybatisFind@70"])]
+[OrandaCommand("oranda.mybatis.openFolder", CommandCategory.File, Icon = "folder", Enablement = "mybatisFolderReady", Placements = ["menu:file/mybatis/mybatisOpenFolder@330"])]
+[OrandaCommand("oranda.mybatis.findStatement", CommandCategory.Navigate, Icon = "find", Enablement = "mybatisDocActive || mybatisFolderOpen", Placements = ["menu:edit/go/mybatisFind@520"])]
 public sealed class MyBatisFolderCommands : ICommandHandler
 {
     internal const string OtherFolderItem = "다른 폴더…";

@@ -626,7 +626,7 @@ levels:
   - acceptance: 실행 로직 없음 (contract-only) / 메뉴·툴바·팔레트에 「실행 취소」 와 「실행 중지」 가 따로 보이고 두 모니터의 세션 끊기 이름이 같다 / 예약한 하위 메뉴 키가 ko·en 짝으로 있고 LocalizationTests 통과 / design.md 「기능 Task 편집 지점 (WP-09)」 에 레인마다 소유 파일·시험 파일·고치지 않는 것이 있고 두 레인이 한 파일을 나눠 갖지 않는다 / `dotnet build Oranda.sln -warnaserror` 통과, 전체 시험 통과
   - note: 담당 PC: win144(Windows 개발 PC) — 맥북 세션은 이 Task 를 하지 않는다. 크기 S. 레인 ux-menu(첫 Task, 단독 먼저 머지). 머지 뒤 ux-shell 레인 착수 가능. 결과: 명령 이름 14개 ko·en 정리(실행 중지·세션 종료(KILL)…·세션 연결 끊기(DISCONNECT)…·표 통계·파일로 내보내기…·「(이번 실행)」 3개), 하위 메뉴 키 16개 예약 + 스크립트 오류 시 (이번 실행), 설정 실행 탭 「(기본값)」·안내 줄, 세션 모니터 확인 문구, design.md 「기능 Task 편집 지점 (WP-09)」. 스크립트 오류 명령 3개 제목은 팔레트 때문에 앞말을 남김 (win144)
 
-- [ ] TSK-09-02: 파일·편집·보기·SQL 메뉴 하위 메뉴 묶기·중복 자리 정리·PL/SQL 주 메뉴·MyBatis 명령 문맥 [win144] w:2 2026-11-10~2026-11-11
+- [x] TSK-09-02: 파일·편집·보기·SQL 메뉴 하위 메뉴 묶기·중복 자리 정리·PL/SQL 주 메뉴·MyBatis 명령 문맥 [win144] w:2 2026-11-10~2026-11-11
   - category: dev
   - domain: frontend
   - model: sonnet
@@ -636,7 +636,7 @@ levels:
   - prd-ref: UX-01, UX-02, UX-05, UX-06, UX-07, PRD 13.3, TRD 11.2, TRD 11.10
   - requirements: `[OrandaCommand]` 의 `menu:` 배치를 PRD 13.3 표대로 바꾼다: 편집 = 대소문자 6·줄·주석 8(주석 4·들여쓰기·내어쓰기·줄 복제·줄 삭제)·포맷 6·북마크·접기 9(북마크 3·접기 4·다중 커서 2)·입력 도우미 3(자동 완성 2·스니펫)을 하위 메뉴로(`menu:edit/case/upper@10` 꼴), 탐색 명령은 `menu:navigate/…` 를 `menu:edit/go/<키>@n` 으로 바꾸고 다음/이전 찾기·줄로 이동·짝 괄호로 이동도 「이동 ▸」 에; 파일 = 접속 7개 「접속 ▸」, 새 작업 공간과 SQL·PL/SQL·MyBatis 작업 공간 명령 「작업 공간 ▸」(최근 작업 공간 하위 메뉴를 옮기면 `RecentFilesService.WorkspacesMenuKey` 도 바꿈), 닫은 탭 다시 열기·탭 복사·탭 이름 바꾸기 「탭 ▸」, 매퍼 폴더 열기·xml 에 저장 「MyBatis ▸」(툴바 자리는 그대로); 보기 = 「도구 창 ▸」 토글과 겹치는 명령 7개(oranda.view.outline·output·messages·plan·rowView·compileErrors·templates)의 `menu:view/*` 배치를 빼고, 템플릿의 `menu:tools/templates` 와 레이아웃 초기화의 `menu:view/resetLayout` 도 뺀다(명령·단축키·팔레트는 남음); SQL = PL/SQL 컴파일·명세/본문 전환·서버와 차이(`PlsqlEditorCommands.cs:30-32`)와 실행 대화상자(`PlsqlRunCommands.cs:35`)를 `menu:sql/plsql/<키>@n`, `When = plsqlEditorFocus`; MyBatis 명령 5개(xml 에 저장·매퍼 전체 포맷·되돌리기·조합 검사·펼친 SQL 실행 계획)에 `When = mybatisDocFocus`(매퍼 폴더 열기·MyBatis 쿼리 찾기·MyBatis 작업 공간으로 바꾸기는 그대로); `oranda.file.saveWorkspace`·`openWorkspace`(저장소)는 `ShowInPalette = false`; 시험: 새 `tests/Oranda.App.Tests/Shell/MenuGroupingTests.cs`(모델 단계에서 편집 한 단계 줄 수 ≤ 15·파일 ≤ 15·보기 ≤ 7, 모든 명령 id 가 메뉴·팔레트·단축키 중 하나에 남음, 하위 메뉴 키가 문구에 있음), `SqlEditorWorkspaceMenuTests.cs` 갱신; 제약: `Shell/Menus/**`·그리드 3파일(`ResultGridCommands.cs`·`GridEditCommands.cs`·`FlashbackCommands.cs`)·`Features/DataTransfer/**` 는 고치지 않는다. 기존 메뉴 Headless 시험(ux-shell 소유)이 깨지면 고치지 말고 결과에 적고 조정자에게 알린다; 비고: 담당 PC: win144(Windows 개발 PC) — 맥북 세션은 이 Task 를 하지 않는다
   - acceptance: 「모든 기능」 에서 편집·파일 메뉴 한 단계 줄 수 각각 15 이하, 보기 7 이하 / 보기 메뉴에 「도구 창 ▸」 토글과 같은 창을 여는 줄이 없다 / PL/SQL 편집기에 포커스가 있으면 SQL > PL/SQL ▸ 에 4개가 보인다 / SQL 탭에서 MyBatis 전용 5개가 메뉴에 없다 / 명령 id 집합·키맵이 그대로 / 전체 시험 통과
-  - note: 담당 PC: win144(Windows 개발 PC) — 맥북 세션은 이 Task 를 하지 않는다. 크기 M. 레인 ux-menu(두 번째). 머지 순서: TSK-09-03 보다 먼저 머지한다(겹치는 시험이 생기면 나중 쪽이 맞춤) (win144)
+  - note: 담당 PC: win144(Windows 개발 PC) — 맥북 세션은 이 Task 를 하지 않는다. 크기 M. 레인 ux-menu(두 번째). 머지 순서: TSK-09-03 보다 먼저 머지한다(겹치는 시험이 생기면 나중 쪽이 맞춤). 결과: 「모든 기능」 한 단계 줄 수 편집 53→15·파일 32→15·보기 14→6, 탐색 9개를 편집 > 이동 ▸ 로, 보기 중복 7·템플릿 도구 메뉴·보기 레이아웃 초기화 자리 뺌, SQL > PL/SQL ▸ 4개, MyBatis 5개 When=mybatisDocFocus, 저장소 작업 공간 2개 팔레트 숨김, 최근 작업 공간 키 Menu.file.workspace.recentWorkspaces, 새 MenuGroupingTests 15건 (win144)
 
 - [ ] TSK-09-03: 오른쪽 클릭 하위 메뉴 허용·결과 메뉴 옮겨 싣기 하위 메뉴·그리드 메뉴 묶기 [win144] w:3 2026-11-10~2026-11-12
   - category: dev

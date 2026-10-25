@@ -79,7 +79,7 @@ public sealed class FileShellCommandHandler(IShellUi ui) : ICommandHandler
 [OrandaCommand("oranda.view.zoomIn", CommandCategory.View, Placements = ["menu:view/zoomIn@210"])]
 [OrandaCommand("oranda.view.zoomOut", CommandCategory.View, Placements = ["menu:view/zoomOut@220"])]
 [OrandaCommand("oranda.view.zoomReset", CommandCategory.View, Placements = ["menu:view/zoomReset@230"])]
-[OrandaCommand("oranda.view.resetLayout", CommandCategory.View, Placements = ["menu:view/resetLayout@310", "menu:window/resetLayout@310"])]
+[OrandaCommand("oranda.view.resetLayout", CommandCategory.View, Placements = ["menu:window/resetLayout@310"])]
 public sealed class ViewShellCommandHandler(IShellUi ui) : ICommandHandler
 {
     public async Task ExecuteAsync(CommandContext context, CancellationToken cancellationToken)

@@ -131,7 +131,7 @@ public sealed record ImportSummary(int Added, IReadOnlyList<string> Warnings)
 }
 
 /// <summary>「파일 &gt; 접속 가져오기」: 원본 형식별 파일 선택 → 가져오기 → 결과 알림. 접속 관리자의 「가져오기」 단추도 같은 흐름을 쓴다.</summary>
-[OrandaCommand("oranda.conn.import", CommandCategory.Connection, Placements = ["menu:file/connImport@450"])]
+[OrandaCommand("oranda.conn.import", CommandCategory.Connection, Placements = ["menu:file/connection/connImport@510"])]
 public sealed class ConnectionImportHandler(ServiceContainer container) : ICommandHandler
 {
     public async Task ExecuteAsync(CommandContext context, CancellationToken cancellationToken)

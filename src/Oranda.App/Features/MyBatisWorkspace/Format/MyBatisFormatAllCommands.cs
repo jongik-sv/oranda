@@ -23,10 +23,10 @@ namespace Oranda.App.Features.MyBatisWorkspace.Format;
 /// 단추는 문서 도구 막대가 아니라 「매퍼 쿼리」 패널 툴바에 있다(매퍼 단위 명령이라 문장 목록 곁에 둔다).
 /// 처리기는 실행마다 새로 만들어지므로 실행 중 표시·되돌릴 목록은 호스트마다 따로 둔다.
 /// </summary>
-[OrandaCommand(MyBatisFormatAllCommands.FormatAll, CommandCategory.Format, Icon = "formatAll", Enablement = "mybatisDocActive && !" + MyBatisFormatAllCommands.BusyKey,
-    Placements = ["menu:edit/mybatisFormatAll@406"])]
-[OrandaCommand(MyBatisFormatAllCommands.UndoFormatAll, CommandCategory.Format, Enablement = "mybatisDocActive && !" + MyBatisFormatAllCommands.BusyKey,
-    Placements = ["menu:edit/mybatisUndoFormatAll@407"])]
+[OrandaCommand(MyBatisFormatAllCommands.FormatAll, CommandCategory.Format, Icon = "formatAll", When = "mybatisDocFocus", Enablement = "mybatisDocActive && !" + MyBatisFormatAllCommands.BusyKey,
+    Placements = ["menu:edit/format/mybatisFormatAll@321"])]
+[OrandaCommand(MyBatisFormatAllCommands.UndoFormatAll, CommandCategory.Format, When = "mybatisDocFocus", Enablement = "mybatisDocActive && !" + MyBatisFormatAllCommands.BusyKey,
+    Placements = ["menu:edit/format/mybatisUndoFormatAll@322"])]
 public sealed class MyBatisFormatAllCommands : ICommandHandler
 {
     public const string FormatAll = "oranda.mybatis.formatAll";

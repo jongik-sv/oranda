@@ -11,7 +11,7 @@ namespace Oranda.App.Features.MyBatisWorkspace.Combos;
 /// 「조합 검사」 = 검사 시작. 「자동 고침」 = 검사 뒤 첫 고침을 미리보기로 연다(적용은 창의 「고치기」 단추, 미리보기 뒤 적용).
 /// 실행 계획에 쓸 접속은 활성 탭의 세션(<see cref="ExecutionCommands.ActiveTabSession"/>)이다.
 /// </summary>
-[OrandaCommand("oranda.mybatis.checkCombinations", CommandCategory.Sql, Icon = "compile", Enablement = "mybatisDocActive && mybatisStatementSelected", Placements = ["toolbar:mybatis/combos@30", "menu:sql/mybatisCombos@25"])]
+[OrandaCommand("oranda.mybatis.checkCombinations", CommandCategory.Sql, Icon = "compile", When = "mybatisDocFocus", Enablement = "mybatisDocActive && mybatisStatementSelected", Placements = ["toolbar:mybatis/combos@30", "menu:sql/mybatisCombos@25"])]
 [OrandaCommand("oranda.mybatis.applyAutoFix", CommandCategory.Edit, Icon = "docEdit", Enablement = "mybatisDocActive && mybatisStatementSelected && !readOnlyDoc", Placements = ["context:mybatisEditor/autoFix@10"])]
 public sealed class MyBatisComboCommands : ICommandHandler
 {

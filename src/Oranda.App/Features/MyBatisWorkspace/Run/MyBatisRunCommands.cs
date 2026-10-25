@@ -19,7 +19,7 @@ namespace Oranda.App.Features.MyBatisWorkspace.Run;
 /// 계산 못 한 식이 남아 있어도 실행은 한다(덮어쓰기는 사용자 몫). 실행은 <see cref="MyBatisRunner"/> 가 기존 실행 경로(정책 관문 포함)로 넘긴다.
 /// </summary>
 [OrandaCommand("oranda.mybatis.runScenario", CommandCategory.Sql, Icon = "run", When = "mybatisDocFocus", Enablement = "mybatisDocActive && mybatisStatementSelected && (hasSession || dedicatedSession || tabConnectionMissing) && !sessionBusy", Placements = ["toolbar:mybatis/run@10", "menu:sql/mybatisRun@15"])]
-[OrandaCommand("oranda.mybatis.explainScenario", CommandCategory.Sql, Icon = "explainPlan", Enablement = "mybatisDocActive && mybatisStatementSelected && (hasSession || dedicatedSession || tabConnectionMissing) && !sessionBusy", Placements = ["toolbar:mybatis/explain@20", "menu:sql/mybatisExplain@52"])]
+[OrandaCommand("oranda.mybatis.explainScenario", CommandCategory.Sql, Icon = "explainPlan", When = "mybatisDocFocus", Enablement = "mybatisDocActive && mybatisStatementSelected && (hasSession || dedicatedSession || tabConnectionMissing) && !sessionBusy", Placements = ["toolbar:mybatis/explain@20", "menu:sql/mybatisExplain@52"])]
 [OrandaCommand("oranda.mybatis.copyExpanded", CommandCategory.Edit, Icon = "copy", Enablement = "mybatisDocActive && mybatisStatementSelected", Placements = ["toolbar:mybatis/copy@50", "context:mybatisExpanded/copy@10"])]
 [OrandaCommand("oranda.mybatis.copyExpandedWithValues", CommandCategory.Edit, Icon = "copy", Enablement = "mybatisDocActive && mybatisStatementSelected", Placements = ["toolbar:mybatis/copy@51", "context:mybatisExpanded/copyValues@20"])]
 public sealed class MyBatisRunCommands : ICommandHandler

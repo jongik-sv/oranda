@@ -30,7 +30,7 @@ public sealed class RecentFilesService : IDisposable
     /// <summary>하위 메뉴 키(그 안 「목록 지우기」 명령의 자리 <c>menu:file/recentFiles/…</c> 로 생긴다).</summary>
     internal const string FilesMenuKey = "Menu.file.recentFiles";
 
-    internal const string WorkspacesMenuKey = "Menu.file.recentWorkspaces";
+    internal const string WorkspacesMenuKey = "Menu.file.workspace.recentWorkspaces";
 
     /// <summary>메뉴 줄 회색 경로의 최대 글자 수(넘으면 가운데를 줄인다).</summary>
     internal const int DetailLength = 56;

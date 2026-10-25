@@ -33,7 +33,7 @@ public sealed record PlsqlRunRequest(DbObjectRef Target, string? Member = null);
 /// (시작 경로에서 Oracle·Language 어셈블리를 올리지 않기 위해).
 /// </summary>
 [OrandaCommand("oranda.plsql.run", CommandCategory.Database, Title = "PL/SQL 실행", When = "plsqlEditorFocus",
-    Enablement = "hasSession && !sessionBusy && plsqlRunnable")]
+    Enablement = "hasSession && !sessionBusy && plsqlRunnable", Placements = ["menu:sql/plsql/run@31"])]
 [OrandaCommand("oranda.plsql.runFromBrowser", CommandCategory.Database, Title = "프로시저·함수 실행", When = "schemaFocus",
     Enablement = "plsqlNodeSelected && hasSession", Placements = ["context:schema/plsqlRun@45"])]
 public sealed class PlsqlRunCommandHandler : ICommandHandler

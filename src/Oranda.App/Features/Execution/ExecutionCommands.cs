@@ -283,8 +283,8 @@ public static class ExecutionCommands
     Icon = "rollback", Placements = ["menu:sql/rollback@110", "toolbar:main/rollback@320"])]
 [OrandaCommand("oranda.txn.toggleAutoCommit", CommandCategory.Sql, Enablement = "(hasSession || dedicatedSession) && !readOnlySession",
     Placements = ["menu:sql/toggleAutoCommit@120"])]
-[OrandaCommand("oranda.view.output", CommandCategory.View, Placements = ["menu:view/output@20"])]
-[OrandaCommand("oranda.view.messages", CommandCategory.View, Placements = ["menu:view/messages@30"])]
+[OrandaCommand("oranda.view.output", CommandCategory.View)]
+[OrandaCommand("oranda.view.messages", CommandCategory.View)]
 [OrandaCommand("oranda.window.toggleResultPane", CommandCategory.Window, When = "sqlDocFocus", Enablement = "sqlDocActive",
     Placements = ["menu:window/toggleResultPane@40"])]
 public sealed class ExecutionCommandHandler(ServiceContainer container) : ICommandHandler

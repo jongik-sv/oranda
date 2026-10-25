@@ -16,7 +16,7 @@ namespace Oranda.App.Features.MyBatisWorkspace.Format;
 /// 옵션은 설정의 기본 프로필이다. 서비스는 실행할 때 꺼낸다(시작 경로에서 Language 어셈블리를 올리지 않기 위해).
 /// </summary>
 [OrandaCommand(MyBatisFormatCommands.FormatStatement, CommandCategory.Format, Icon = "format", When = "mybatisDocFocus", Enablement = "mybatisDocActive && mybatisStatementSelected && !readOnlyDoc",
-    Placements = ["toolbar:mybatis/format@35", "context:mybatisEditor/format@20", "menu:edit/mybatisFormat@405"])]
+    Placements = ["toolbar:mybatis/format@35", "context:mybatisEditor/format@20", "menu:edit/format/mybatisFormat@320"])]
 public sealed class MyBatisFormatCommands : ICommandHandler
 {
     public const string FormatStatement = "oranda.mybatis.formatStatement";

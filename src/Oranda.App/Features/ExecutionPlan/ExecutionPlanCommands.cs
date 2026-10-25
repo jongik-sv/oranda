@@ -55,7 +55,7 @@ public static class ExecutionPlanCommands
     Placements = ["menu:tuning/pinPlan@40", "context:plan/pin@10"])]
 [OrandaCommand("oranda.plan.compare", CommandCategory.Sql, Icon = "diff",
     Placements = ["menu:tuning/comparePlan@50", "context:plan/compare@11"])]
-[OrandaCommand("oranda.view.plan", CommandCategory.View, Placements = ["menu:view/plan@40"])]
+[OrandaCommand("oranda.view.plan", CommandCategory.View)]
 [OrandaCommand(ExecutionPlanCommands.RerunWithHintId, CommandCategory.Sql, Enablement = "(hasSession || dedicatedSession) && !sessionBusy && !mybatisDocActive",
     Icon = "run", Placements = ["menu:tuning/rerunStats/hint@300"])]
 [OrandaCommand(ExecutionPlanCommands.RerunWithStatisticsLevelId, CommandCategory.Sql, Enablement = "(hasSession || dedicatedSession) && !sessionBusy && !mybatisDocActive",

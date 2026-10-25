@@ -65,9 +65,9 @@ public static class CompletionCommands
 /// 활성 SQL 편집기 탭(<see cref="SqlEditorHost.Active"/>)의 편집 영역에 창을 연다.
 /// </summary>
 [OrandaCommand(CompletionCommands.TriggerCompletion, CommandCategory.Edit, Title = "자동완성 열기", When = "editorFocus",
-    Placements = ["menu:edit/triggerCompletion@360"])]
+    Placements = ["menu:edit/assist/triggerCompletion@240"])]
 [OrandaCommand(CompletionCommands.ParameterHints, CommandCategory.Edit, Title = "인자 도움말", When = "editorFocus", Enablement = "hasSession",
-    Placements = ["menu:edit/parameterHints@370"])]
+    Placements = ["menu:edit/assist/parameterHints@241"])]
 public sealed class CompletionCommandHandler : ICommandHandler
 {
     private SqlEditorHost? _host;

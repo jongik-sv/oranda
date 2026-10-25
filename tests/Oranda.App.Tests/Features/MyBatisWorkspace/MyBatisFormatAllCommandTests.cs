@@ -45,8 +45,10 @@ public sealed partial class MyBatisFormatAllCommandTests : IDisposable
         var undo = registry.Find(MyBatisFormatAllCommands.UndoFormatAll)!;
 
         Assert.Equal("formatAll", format.Icon);
-        Assert.Equal(["menu:edit/mybatisFormatAll@406"], format.Placements);
-        Assert.Equal(["menu:edit/mybatisUndoFormatAll@407"], undo.Placements);
+        Assert.Equal(["menu:edit/format/mybatisFormatAll@321"], format.Placements); // 편집 > 포맷 ▸ (TSK-09-02)
+        Assert.Equal(["menu:edit/format/mybatisUndoFormatAll@322"], undo.Placements);
+        Assert.Equal("mybatisDocFocus", format.When); // 매퍼 문서에서만 메뉴에 보인다
+        Assert.Equal("mybatisDocFocus", undo.When);
         foreach (var id in new[] { MyBatisFormatAllCommands.FormatAll, MyBatisFormatAllCommands.UndoFormatAll })
         {
             Assert.True(registry.CanExecute(id, Keys("mybatisDocActive")));
