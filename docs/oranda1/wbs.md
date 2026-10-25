@@ -719,7 +719,7 @@ levels:
   - acceptance: settings.json 없이 시작하면 카드가 있고 단추 하나로 Role 이 저장·반영된다 / 「나중에」 뒤 다시 시작하면 카드 대신 D-013 한 줄 카드 / 기존 사용자 화면은 그대로 / 처음 쓰는 사람의 접속 → SQL 탭 클릭 수가 조사보다 2 준다 / 실앱 눈 확인 항목은 사람 몫으로 결과에 적는다 / 전체 시험 통과
   - note: 담당 PC: win144(Windows 개발 PC) — 맥북 세션은 이 Task 를 하지 않는다. 크기 M. 레인 ux-role(두 번째). StartPage.cs 의 D-013 한 줄 카드(`_roleCard`, TSK-07-11)는 새 설치가 아닐 때 그대로 쓴다 / 결과: `SettingsService.IsFirstRun`(첫 LoadAsync 때 settings.json 없음, 실행 동안 고정, DI 는 IAppDataPaths 생성자) + `FirstRunCardDismissed`, 시작 화면 맨 위 「주로 하는 일은?」 카드(새 설치·고른 적 없음일 때만 지음, 단추 5 = 이름 + 두 줄 설명·툴팁, 덧붙임 2, 「나중에」) → `PrimaryWork.Apply` 저장·즉시 반영, 「나중에」 = 그대로 저장(파일 생김) → D-013 한 줄 카드, 재시작 대기 기능은 시작 화면에 「재시작하면 적용됩니다: …」 줄. 접속 프로필 0개면 첫 줄 = 강조(accent) 「접속 추가…」(접속 관리자 줄 숨김, 프로필은 IConnectionStore 로만 읽어 Oracle 어셈블리를 깨우지 않음), 접속 관리자는 프로필 0개면 「새 접속」 상태로 열림(ConnectionManagerViewModel.Profiles.cs LoadAsync 몇 줄, 그래서 보이게 된 새 접속 폼의 영어 placeholder 잘림 3개는 literals-en 영어를 줄여 고침), 새 `Shell/FirstConnectEditor.cs` = Work 세션 SessionOpened + 열린 문서 0개일 때만 새 SQL 편집기(전용·모니터·복원 탭이면 안 엶). 처음 쓰는 사람 접속 → SQL 탭: 접속 관리자 「새 접속」 클릭·접속 뒤 「새 SQL 편집기」 클릭 2번이 준다. 실앱 눈 확인(사람 몫): 새 데이터 폴더로 첫 실행 카드·「조회만」 즉시 메뉴 변화·「나중에」 뒤 재시작·접속 0개 첫 접속 흐름. PNG ko/en·라이트/다크·좁은 창 520 (win144)
 
-- [ ] TSK-09-10: 사용 복잡도 통합테스트 — Role 별 메뉴 너비 다시 세기·주 흐름 확인 [win144] w:2 2026-11-16~2026-11-17
+- [x] TSK-09-10: 사용 복잡도 통합테스트 — Role 별 메뉴 너비 다시 세기·주 흐름 확인 [win144] w:2 2026-11-16~2026-11-17
   - category: itest
   - domain: test
   - model: sonnet
@@ -729,7 +729,31 @@ levels:
   - prd-ref: PRD 13.5, TRD 11.11, TRD 11.12
   - requirements: 실제 `FeatureGate` 로 앱을 조립하는 도우미(`Integration/Roles/RoleApp.cs` 방식, 새 파일은 `tests/Oranda.App.Tests/Integration/Ux/`)로 구성(모든 기능·아무것도 고르지 않음(D-013 = R1)·R1~R6·R1+R4·Role 0개)마다 TRD 11.11 의 7개 숫자를 센다: 메뉴 항목 총수(조사 1.1 주1 규칙), 최상위 메뉴 수, 한 단계 줄 수가 15를 넘는 메뉴 수(최상위·하위 메뉴 모두, When 숨김 미적용), 최상위 메뉴별 한 단계 줄 수, 그리드 오른쪽 클릭 한 단계 줄 수, 툴바 단추 수(미커밋 없음/있음), 기본 배치에서 SQL 탭과 함께 보이는 도구 창 수. 보조 열 = SQL 탭 활성 상태 보이는 항목 수; 흐름: settings.json 없음 → 시작 화면 카드 → 「조회만」 → 모니터·튜닝 메뉴 없음·커밋·롤백 없음 → SELECT 뒤 「Excel 로 내보내기…」 → 하나로 합친 대화상자 → 저장 알림 → 설정 기능 탭 「SQL 개발」 + MyBatis → MyBatis 문서 Ctrl+Enter 시나리오 실행 → 레이아웃 초기화 → 아래 3탭 → 예상 계획 → 계획 창 자동 열림 → 「모든 기능」 → 원래 명령 집합; 각 레인 결과에 적힌 빠진 문구를 문구 파일에 넣는다; 제약: 실앱 SendKeys 금지(Headless 까지), 실앱 눈 확인 항목은 사용자 몫으로 표시; 비고: 담당 PC: win144(Windows 개발 PC) — 맥북 세션은 이 Task 를 하지 않는다. 결과서 docs/oranda1/itest/TSK-09-10.md
   - acceptance: 결과서에 구성 × 7개 숫자 표가 있고 각 칸에 「조사(413a33d)」·「지금」·「목표」·「차이 이유」가 있다 / 한 단계 줄 수가 15를 넘는 메뉴가 「모든 기능」 4개 이하(조사 표기 8, 같은 기준 재계산 값도 결과서에 적음), R1 2개 이하(조사 5), R6 1개 이하(조사 5)이고, 편집·파일·결과·그리드 오른쪽 클릭이 각각 15 이하 / 최상위 메뉴 수가 조사 표(모든 기능 11·R1 10·R6 9)와 같거나 작다 / 메뉴 항목 총수 차이가 뺀 중복(보기 7·템플릿 1·레이아웃 초기화 1)과 더한 PL/SQL 4 로 설명된다 / 모든 흐름이 끝까지 간다 / 발견 결함은 WP-09 에 defect Task 로 등록됨 / 전체 시험 통과
-  - note: 담당 PC: win144(Windows 개발 PC) — 맥북 세션은 이 Task 를 하지 않는다. 크기 M. 레인 ux-itest(마지막) (win144)
+  - note: 담당 PC: win144(Windows 개발 PC) — 맥북 세션은 이 Task 를 하지 않는다. 크기 M. 레인 ux-itest(마지막) / 결과: 실제 FeatureGate 로 10구성의 메뉴 너비를 다시 세어 413a33d(같은 도우미로 재계산 = 조사 1.1 숫자)와 비교 — 모든 기능 메뉴 항목 274→269(= −중복 9 +PL/SQL 4)·15줄 넘는 메뉴 8(재계산 7)→4·R1 5(4)→1·R6 5(4)→1, 편집 53→15·파일 32→15·결과 37→15·그리드 오른쪽 클릭 37→15·보기 14→6, 최상위 11·10·9 그대로, R6 툴바 14→12(미커밋이면 14), SQL 탭과 보이는 도구 창 11→5, 기능 탭 첫 화면 입력 33→8~10. 새 Integration/Ux 43건(숫자 고정·목표·차이 설명·주 흐름: 새 설치 카드→조회만→Excel 하나의 창→SQL 개발+MyBatis→재시작→Ctrl+Enter→레이아웃 초기화→계획 창→모든 기능→재시작 뒤 같은 면, 나중에→접속 추가→첫 접속 SQL 탭, R6 툴바 실제 미커밋 이벤트, 묶인 명령 단축키·팔레트). Oracle: App Roles+Ux+Transfer 26ai 107/107, Oracle Roles 53/53, 11.2 TransferFlowTests S6_2 약한 단정 실패(→TSK-09-12). 빠진 문구 1(commands.md runScenario 키), BottomPanelTableTests 흔들림 = 공유 Headless 대기열 시간(본문 로그 격리 1줄). 결함 2건 TSK-09-11·12, 사용자 결정 U-1~U-8, 결과서 docs/oranda1/itest/TSK-09-10.md (win144)
+
+- [ ] TSK-09-11: 영어 화면 상태 줄·접속 콤보에 한국어 「접속 안 됨」·「줄 1, 열 1」 이 나옴 [win144] w:1 2026-11-18~2026-11-18
+  - category: defect
+  - domain: frontend
+  - model: sonnet
+  - priority: low
+  - tags: localization, status-bar, win144
+  - depends: TSK-09-10
+  - prd-ref: PRD 13.2, TRD 11.9
+  - requirements: TSK-09-10 결과서 D-1(09-03 보고, 07-10 과 같은 뿌리). 글자가 코드에 박혀 있어 en 에서도 한국어다: `Features/ConnectionManager/ConnectionStatusItem.cs:50`(「접속 안 됨」·「접속 안 됨({0})」), `Features/ConnectionManager/ConnectionCombo.cs:50`(「접속 안 됨」), `Features/SqlEditor/EditorStatusViewModel.cs:45`·`Features/SqlEditor/SqlEditorViewModel.cs:314`(「줄 {0}, 열 {1}」). strings-ko/en 에 키를 만들어 `ShellText`/`UiText` 로 읽고 언어가 바뀌면 다시 그린다. 상태 줄의 다른 칸도 같은 방식인지 훑는다
+  - acceptance: en 으로 바꾸면 상태 줄·접속 콤보가 「Not connected」·「Ln 1, Col 1」 류 영어 / ko 는 지금 글자 그대로 / LocalizationTests 가 하드코딩을 잡는 시험 추가 / 전체 시험 통과
+  - note: TSK-09-10 에서 발견(D-1). 담당 PC: win144(Windows 개발 PC) — 맥북 세션은 이 Task 를 하지 않는다
+
+- [ ] TSK-09-12: 가져오기 오류 행 문구에 오류 코드가 두 번(ORA-00001: ORA-00001:) + TransferFlowTests S6_2 행 번호 약한 단정 [win144] w:1 2026-11-18~2026-11-18
+  - category: defect
+  - domain: backend
+  - model: sonnet
+  - priority: low
+  - tags: data-transfer, import, test, win144
+  - depends: TSK-09-10
+  - prd-ref: PRD 6(가져오기), TRD 11.12
+  - requirements: TSK-09-10 결과서 D-2. `src/Oranda.Oracle/Transfer/OracleDataTransferService.cs` 의 `ErrorText` 가 `{Code}: {Message}` 로 잇는데 드라이버 메시지에 이미 「ORA-00001: …」 이 들어 있어 「행 4: ORA-00001: ORA-00001: unique constraint (…) violated」 가 된다(모든 버전). 코드가 메시지 앞에 이미 있으면 한 번만 쓴다. 함께: `tests/Oranda.App.Tests/Integration/TransferFlowTests.cs` S6_2 가 `Assert.Contains("3", 오류 줄)` 로 「행 3」 을 보려 하지만 제품은 머리글 포함 파일 줄 번호 「행 4」 를 낸다 — 26ai 는 제약·사용자 이름의 무작위 숫자에 3 이 있어 우연히 통과, 11.2 XE 에서 실패했다. 행 번호 규칙(파일 줄 번호 vs 데이터 행 번호)을 정해 단정을 `StartsWith("행 N:")` 로 고친다
+  - acceptance: 오류 줄에 오류 코드가 한 번 / S6_2 가 26ai·11.2 모두에서 결정적으로 통과 / 가져오기 대화상자 오류 목록 문구 확인 / 전체 시험 통과
+  - note: TSK-09-10 에서 발견(D-2). 담당 PC: win144(Windows 개발 PC) — 맥북 세션은 이 Task 를 하지 않는다
 
 ## 의존 그래프
 
@@ -809,6 +833,8 @@ graph LR
   TSK-09-07 --> TSK-09-10
   TSK-09-08 --> TSK-09-10
   TSK-09-09 --> TSK-09-10
+  TSK-09-10 --> TSK-09-11
+  TSK-09-10 --> TSK-09-12
   style TSK-01-02 fill:#e8f5e9,stroke:#2e7d32
   style TSK-03-01 stroke:#c62828,stroke-width:2px
   style TSK-02-02 stroke:#c62828,stroke-width:2px
@@ -828,7 +854,7 @@ graph LR
 - FS 겹침 검증: depends 가 있는 모든 쌍에서 후행 시작일 > 선행 종료일.
 - WP-08(2026-10-25 추가, Task 6개 이상): 서로 depends 가 없다(라이선스·노출 점검·CI·설치 안내·정리가 각자 다른 파일). 그래프에 넣지 않는다.
 - WP-07(2026-10-25 추가, Task 8개): 최장 경로 TSK-07-01 → TSK-07-02 → TSK-07-07 → TSK-07-08(깊이 4 = 계약 1 + 기능 1 + 측정 1 + 통합테스트 1). Fan-in: TSK-07-01 이 5(계약 전용, 구조적 예외), TSK-07-08 이 depends 6(통합테스트, 구조적 예외). 계약 뒤 07-02~07-06 은 서로 depends 가 없고 소유 파일이 겹치지 않는다(TRD 10.9). TSK-07-08 이 발견한 결함 2건을 TSK-07-09·TSK-07-10(각각 TSK-07-08 에만 depends, 서로 독립)으로 더했다(WP-07 Task 10개, 최장 경로는 깊이 5). 사용자 결정 D-013(기본 Role = SQL 개발자)을 TSK-07-11(TSK-07-08 에만 depends)로 더했다(WP-07 Task 11개).
-- WP-09(2026-10-25 추가, Task 10개): 최장 경로 TSK-09-01 → TSK-09-02 → TSK-09-04 → TSK-09-10(깊이 4 = 계약 1 + 기능 2 + 통합테스트 1). TSK-09-04 는 ExecutionCommands.cs 를 09-02 가 먼저 고치고 Shell/Menus 를 09-03 이 먼저 고쳐서 둘 다에 depends, Roles 시험 때문에 TSK-07-11 에도 depends. TSK-09-08·09-09 는 FeatureSettings*·StartPage.cs·FeatureTexts 를 고친 TSK-07-11(완료)에 depends. TSK-09-05·09-06(ux-layout)과 TSK-09-07(ux-export)은 depends 가 없다(09-06 은 같은 레인 차례만). Fan-in: TSK-09-10 이 depends 8(통합테스트, 구조적 예외), TSK-09-04 가 3. 머지 순서: 09-01 → 09-02 → 09-03 (→ 09-04), 09-05 → 09-06, 09-07 은 아무 때나, TSK-07-11 → 09-08 → 09-09, 마지막 09-10. 파일 소유 = TRD 11.10.
+- WP-09(2026-10-25 추가, Task 10개): 최장 경로 TSK-09-01 → TSK-09-02 → TSK-09-04 → TSK-09-10(깊이 4 = 계약 1 + 기능 2 + 통합테스트 1). TSK-09-04 는 ExecutionCommands.cs 를 09-02 가 먼저 고치고 Shell/Menus 를 09-03 이 먼저 고쳐서 둘 다에 depends, Roles 시험 때문에 TSK-07-11 에도 depends. TSK-09-08·09-09 는 FeatureSettings*·StartPage.cs·FeatureTexts 를 고친 TSK-07-11(완료)에 depends. TSK-09-05·09-06(ux-layout)과 TSK-09-07(ux-export)은 depends 가 없다(09-06 은 같은 레인 차례만). Fan-in: TSK-09-10 이 depends 8(통합테스트, 구조적 예외), TSK-09-04 가 3. 머지 순서: 09-01 → 09-02 → 09-03 (→ 09-04), 09-05 → 09-06, 09-07 은 아무 때나, TSK-07-11 → 09-08 → 09-09, 마지막 09-10. 파일 소유 = TRD 11.10. TSK-09-10 이 발견한 결함 2건을 TSK-09-11·TSK-09-12(각각 TSK-09-10 에만 depends, 서로 독립)로 더했다(WP-09 Task 12개, 최장 경로 깊이 5).
 
 **Fan-in Top 5**
 

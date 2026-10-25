@@ -605,7 +605,7 @@
 
 ### MyBatis
 
-근거 `docs/oranda1/design.md` 4.1. 처리기 몸은 TSK-03-0x 가 채우고 특성 문자열·제목·키는 동결이다. 기본 키는 `runScenario`(`sqldev` 는 `Primary+Enter`, `F9`)와 `formatStatement` 다. `formatStatement` 는 일반 포맷(`format.document`)과 같은 키를 나눠 쓴다: 키맵에서 일반 포맷은 `sqlEditorFocus`·`plsqlEditorFocus` 두 항목으로 두고, MyBatis 쿼리 편집기(`mybatisDocFocus`)에서는 이 명령이 받는다.
+근거 `docs/oranda1/design.md` 4.1. 처리기 몸은 TSK-03-0x 가 채우고 특성 문자열·제목·키는 동결이다. 기본 키는 `runScenario`(모든 프리셋 Windows·Linux `Primary+Enter`, `F9` — D-021·TSK-09-06, macOS 는 프리셋 그대로)와 `formatStatement` 다. `formatStatement` 는 일반 포맷(`format.document`)과 같은 키를 나눠 쓴다: 키맵에서 일반 포맷은 `sqlEditorFocus`·`plsqlEditorFocus` 두 항목으로 두고, MyBatis 쿼리 편집기(`mybatisDocFocus`)에서는 이 명령이 받는다.
 
 | ID | 제목 | 기본 키 | 키 범위(when) | 활성 조건 | 소유 Task |
 |---|---|---|---|---|---|
@@ -614,7 +614,7 @@
 | `oranda.mybatis.deleteStatement` | 문장 지우기 | - | 전역 | `mybatisDocActive && mybatisStatementSelected` | TSK-03-01 |
 | `oranda.mybatis.expandToSqlTab` | 펼친 SQL 을 새 SQL 탭으로 | - | 전역 | `mybatisDocActive && mybatisStatementSelected` | TSK-03-01 |
 | `oranda.mybatis.expandMapper` | 매퍼 전체를 SQL 탭으로 펼치기 | - | 전역 | `mybatisDocActive` | TSK-03-01 |
-| `oranda.mybatis.runScenario` | 시나리오 값으로 실행 | `F9` | `mybatisDocFocus` | `mybatisDocActive && mybatisStatementSelected && (hasSession \|\| dedicatedSession \|\| tabConnectionMissing) && !sessionBusy` | TSK-03-02 |
+| `oranda.mybatis.runScenario` | 시나리오 값으로 실행 | `Ctrl+Enter`, `F9` | `mybatisDocFocus` | `mybatisDocActive && mybatisStatementSelected && (hasSession \|\| dedicatedSession \|\| tabConnectionMissing) && !sessionBusy` | TSK-03-02 |
 | `oranda.mybatis.explainScenario` | 펼친 SQL 실행 계획 | - | 전역 | `mybatisDocActive && mybatisStatementSelected && (hasSession \|\| dedicatedSession \|\| tabConnectionMissing) && !sessionBusy` | TSK-03-02 |
 | `oranda.mybatis.copyExpanded` | 펼친 SQL 복사 | - | 전역 | `mybatisDocActive && mybatisStatementSelected` | TSK-03-02 |
 | `oranda.mybatis.copyExpandedWithValues` | 펼친 SQL 복사(값 넣은 글) | - | 전역 | `mybatisDocActive && mybatisStatementSelected` | TSK-03-02 |

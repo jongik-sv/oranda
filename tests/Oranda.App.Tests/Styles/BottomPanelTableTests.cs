@@ -56,7 +56,8 @@ public class BottomPanelTableTests
     [Fact]
     public Task Messages_show_a_severity_icon_per_line_and_color_errors() => HeadlessHost.Run(() =>
     {
-        var vm = new MessagesViewModel();
+        // 버스를 따로 주어 프로세스 공용 대체 로그(ExecutionLog.For(null))를 쓰지 않는다: 다른 시험이 그 로그에 남긴 줄이 섞이지 않게(TSK-09-10).
+        var vm = new MessagesViewModel(new Oranda.Testing.FakeEventBus());
         vm.Log.ClearMessages();
         vm.Log.AddMessage(MessageKind.Info, "SELECT 실행: 3행");
         vm.Log.AddMessage(MessageKind.Error, "ORA-00942: table or view does not exist");
