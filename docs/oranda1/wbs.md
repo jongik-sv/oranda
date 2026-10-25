@@ -684,7 +684,7 @@ levels:
   - acceptance: Windows 에서 MyBatis 문서 Ctrl+Enter 가 시나리오를 실행하고 SQL 문서 Ctrl+Enter 는 현재 문장 실행 그대로 / 메뉴 단축키 표시가 새 키를 보인다 / 전체 시험 통과
   - note: 담당 PC: win144(Windows 개발 PC) — 맥북 세션은 이 Task 를 하지 않는다. 크기 S. 레인 ux-layout(두 번째) / 결과: default·orange5·plsqldev 의 runScenario keys = Primary+Enter, F9(mac 그대로, sqldev 는 이미 같음). 포커스 자리가 한 순간에 하나라(mybatisText ↔ sqlText·sqlGrid) runStatement 가 키를 먼저 가져가지 않아 when·디스패처 수정 없음. 다른 프리셋이 MyBatis 문서 Ctrl+Enter 를 다른 명령에 쓰는 곳 없음. 새 MyBatisRunKeyTests(프리셋 4종 Windows 해석·F9·메뉴 단축키 글·mac 불변·기능 꺼짐·디스패처) 통과. commands.md 617줄 기본 키 열(F9)은 ux-menu 소유라 남김 (win144)
 
-- [ ] TSK-09-07: 내보내기 대화상자 하나로 합치기 — 「Excel 로 내보내기」 는 빠른 길 [win144] w:2 2026-11-09~2026-11-10
+- [x] TSK-09-07: 내보내기 대화상자 하나로 합치기 — 「Excel 로 내보내기」 는 빠른 길 [win144] w:2 2026-11-09~2026-11-10
   - category: dev
   - domain: frontend
   - model: opus
@@ -693,7 +693,7 @@ levels:
   - prd-ref: UX-15, TRD 11.7, D-020
   - requirements: `src/Oranda.App/Features/DataTransfer/ExportDialogViewModel.cs`·`ExportDialogWindow.axaml*` 를 기준으로 `ExcelExportDialogViewModel.cs`·`ExcelExportDialogWindow.axaml*`(`:14-22` 범위 4종·내보낸 뒤 열기)를 합친다: 형식(CSV·TSV·Excel·JSON·INSERT) + 범위(불러온 행·전체·고른 셀/행) + 저장 위치 칸과 「찾아보기…」 + 「내보낸 뒤 열기」, Excel 을 고르면 Excel 전용 선택이 같은 창에 나타남; `oranda.grid.export`(`DataTransferCommands.cs:94`) = 마지막에 쓴 형식(앱 실행 동안 기억, 처음 CSV)으로, Excel 내보내기 명령(`ExcelExportCommands.cs:169`) = Excel 골라진 상태로 같은 창을 연다. 명령 id·배치·단축키·끝난 뒤 `SaveFeedback`(열기·폴더 열기)은 그대로; 형식별 쓰기 코드는 바꾸지 않는다. 다른 호출자가 없으면 `ExcelExportDialogWindow` 를 지운다; 새 문구는 `Export.*` 접두로 strings-ko/en, 리터럴은 literals-en 의 기존 내보내기 문구 바로 뒤(파일 끝 금지); 화면 품질: ko/en·라이트/다크·키보드만으로 모든 칸·최소 크기에서 잘림 없음; 시험: `tests/Oranda.App.Tests/Features/DataTransfer/**`(ViewModel: 여는 길별 기본 형식·범위, Excel 선택 칸 보이기, 경로 검증, 기존 `ExcelExportTests.cs` 결과 파일 단정 유지, Headless 렌더 ko/en·다크); 제약: `CommandTitles*.json`(이름은 TSK-09-01)·`Shell/Menus/**`·가져오기(`Import*`)는 고치지 않는다; 비고: 담당 PC: win144(Windows 개발 PC) — 맥북 세션은 이 Task 를 하지 않는다
   - acceptance: 그리드 「파일로 내보내기…」·「Excel 로 내보내기…」 가 같은 대화상자를 연다(Excel 은 Excel 골라짐) / R1 조회 → Excel 내보내기 클릭 수가 조사 4클릭(대화상자 2)에서 3클릭(대화상자 1)으로 준다 / CSV·Excel·JSON·INSERT 결과 파일이 지금과 같다 / R6 에서 끝난 뒤 저장 알림이 보인다 / 전체 시험 통과
-  - note: 담당 PC: win144(Windows 개발 PC) — 맥북 세션은 이 Task 를 하지 않는다. 크기 M. 레인 ux-export(의존 없음 — 동시 레인 슬롯이 나면 바로) (win144)
+  - note: 담당 PC: win144(Windows 개발 PC) — 맥북 세션은 이 Task 를 하지 않는다. 크기 M. 레인 ux-export(의존 없음 — 동시 레인 슬롯이 나면 바로). 결과: ExportDialogWindow 하나(형식·범위 4종·저장 위치 미리 채움·내보낸 뒤 열기·고급 접기, 내보내는 동안 입력 잠금), Excel 빠른 길 = Excel 골라진 같은 창(R1 3클릭), 파일로 내보내기 = 마지막 형식(처음 CSV), ExcelExportDialog* 삭제, 쓰기는 ExportRunner 공통; 바뀐 점: 그리드 경로 xlsx 시트 이름 = 표 이름(옛 Sheet1), 거르기 중 기본 범위 = 보이는 행 (win144)
 
 - [x] TSK-09-08: 설정 「기능」 탭 — 주 업무 하나 + PL/SQL·MyBatis 덧붙임, 기능 25개 「고급」 접기, 팩 선언 바로 가기 [win144] w:2 2026-11-10~2026-11-11
   - category: dev

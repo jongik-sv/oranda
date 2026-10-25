@@ -11,6 +11,7 @@ using Oranda.Core.Transfer;
 namespace Oranda.App.Tests.Features.DataTransfer;
 
 // 소유: TSK-06-07. 내보내기·가져오기 대화상자 모델과 명령 등록.
+[Collection("ExcelExportStatics")]
 public sealed class DataTransferTests : IDisposable
 {
     private readonly string _dir = Path.Combine(Path.GetTempPath(), "oranda-transfer-" + Guid.NewGuid().ToString("N"));

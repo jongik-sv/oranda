@@ -8,10 +8,11 @@ using System.Threading;
 using System.Threading.Tasks;
 using Oranda.App.Features.ResultGrid;
 using Oranda.Core.Grid;
+using Oranda.Core.Transfer;
 
 namespace Oranda.App.Features.DataTransfer;
 
-/// <summary>「Excel 로 내보내기」가 쓸 행의 범위.</summary>
+/// <summary>내보내기 대화상자가 쓸 행의 범위(모든 형식에 같다. 이름은 처음 쓴 「Excel 로 내보내기」에서 왔다).</summary>
 public enum ExcelExportScope
 {
     /// <summary>질의를 서버에서 다시 실행해 처음부터 끝까지 흘려 저장한다.</summary>
@@ -31,7 +32,7 @@ public enum ExcelExportScope
 public sealed record ExcelExportData(IReadOnlyList<ResultColumn> Columns, IAsyncEnumerable<IReadOnlyList<object?>> Rows, long RowCount);
 
 /// <summary>
-/// 「Excel 로 내보내기」의 순수 계산: 기본 파일 이름·폴더 규칙과 범위별 열·행 만들기.
+/// 내보내기의 순수 계산: 기본 파일 이름·폴더 규칙, 앱 실행 동안 기억하는 값(폴더·형식·내보낸 뒤 열기)과 범위별 열·행 만들기.
 /// 화면(대화상자·파일 선택)과 분리해 시험한다.
 /// </summary>
 public static class ExcelExportPlan
@@ -45,8 +46,35 @@ public static class ExcelExportPlan
     /// <summary>이번 실행 중 마지막으로 내보낸 폴더. 없으면 문서 폴더.</summary>
     public static string? LastFolder { get; set; }
 
+    /// <summary>이번 실행 중 마지막으로 내보낸 형식. 없으면 「파일로 내보내기」는 CSV 로 연다(D-020).</summary>
+    public static TransferFormat? LastFormat { get; set; }
+
+    /// <summary>이번 실행 중 마지막 「내보낸 뒤 열기」 값. 없으면 Excel 일 때만 켠다.</summary>
+    public static bool? LastOpenAfter { get; set; }
+
+    /// <summary>
+    /// 대화상자를 처음 보일 형식: 「Excel 로 내보내기」 빠른 길은 늘 Excel, 「파일로 내보내기」는 마지막에 쓴 형식(처음 CSV).
+    /// </summary>
+    public static TransferFormat StartFormat(bool excel, TransferFormat? last = null) =>
+        excel ? TransferFormat.Xlsx : last ?? LastFormat ?? TransferFormat.Csv;
+
+    /// <summary>「내보낸 뒤 열기」 처음 값: 마지막 값, 없으면 Excel 이면 켬.</summary>
+    public static bool StartOpenAfter(TransferFormat format, bool? last = null) =>
+        last ?? LastOpenAfter ?? format == TransferFormat.Xlsx;
+
+    /// <summary>성공한 내보내기의 폴더·형식·열기 값을 이번 실행 동안 기억한다.</summary>
+    public static void Remember(string path, TransferFormat format, bool openAfter)
+    {
+        LastFolder = Path.GetDirectoryName(Path.GetFullPath(path));
+        LastFormat = format;
+        LastOpenAfter = openAfter;
+    }
+
     /// <summary><c>{표 이름 또는 조회결과}_yyyyMMdd_HHmmss.xlsx</c>. 파일 이름에 못 쓰는 글자는 <c>_</c> 로 바꾼다.</summary>
-    public static string DefaultFileName(string? name, DateTime now)
+    public static string DefaultFileName(string? name, DateTime now) => DefaultFileName(name, now, ".xlsx");
+
+    /// <summary><c>{표 이름 또는 조회결과}_yyyyMMdd_HHmmss{확장자}</c>. 파일 이름에 못 쓰는 글자는 <c>_</c> 로 바꾼다.</summary>
+    public static string DefaultFileName(string? name, DateTime now, string extension)
     {
         // 다른 운영체제(Windows)에서 열 파일일 수 있으므로 어디서나 못 쓰는 글자를 모두 바꾼다.
         var invalid = Path.GetInvalidFileNameChars().Concat("<>:\"/\\|?*").ToArray();
@@ -56,7 +84,7 @@ public static class ExcelExportPlan
             clean = DefaultBaseName;
         }
 
-        return $"{clean}_{now.ToString("yyyyMMdd_HHmmss", CultureInfo.InvariantCulture)}.xlsx";
+        return $"{clean}_{now.ToString("yyyyMMdd_HHmmss", CultureInfo.InvariantCulture)}{extension}";
     }
 
     /// <summary>저장 위치를 고를 때 처음 보여 줄 폴더: 마지막으로 내보낸 폴더(아직 있으면), 없으면 문서 폴더.</summary>

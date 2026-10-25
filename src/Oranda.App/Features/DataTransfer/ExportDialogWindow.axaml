@@ -4,39 +4,116 @@
         x:Class="Oranda.App.Features.DataTransfer.ExportDialogWindow"
         x:DataType="dt:ExportDialogViewModel"
         Title="내보내기"
-        Width="560" SizeToContent="Height" MinWidth="460"
+        Width="600" SizeToContent="Height" MinWidth="480"
         WindowStartupLocation="CenterOwner"
         ShowInTaskbar="False"
         FontSize="{DynamicResource OrandaFontSizeBase}">
-  <StackPanel Margin="16" Spacing="10">
-    <Grid ColumnDefinitions="Auto,*" RowDefinitions="Auto,Auto,Auto,Auto,Auto" RowSpacing="8" ColumnSpacing="12">
-      <TextBlock Grid.Row="0" Text="형식" VerticalAlignment="Center" />
-      <ComboBox x:Name="FormatBox" Grid.Row="0" Grid.Column="1" HorizontalAlignment="Stretch" AutomationProperties.Name="내보내기 형식" />
-
-      <TextBlock Grid.Row="1" Text="저장 위치" VerticalAlignment="Center" />
-      <Grid Grid.Row="1" Grid.Column="1" ColumnDefinitions="*,Auto" ColumnSpacing="8">
-        <TextBox x:Name="PathBox" Text="{Binding FilePath}" AutomationProperties.Name="저장 파일 경로" />
-        <Button x:Name="BrowseButton" Grid.Column="1" Content="찾아보기…" />
-      </Grid>
-
-      <CheckBox Grid.Row="2" Grid.Column="1" Content="첫 줄에 열 이름 넣기" IsChecked="{Binding IncludeHeader}" IsVisible="{Binding HasHeaderOption}" />
-
-      <TextBlock Grid.Row="3" Text="표 이름" VerticalAlignment="Center" IsVisible="{Binding IsInsert}" />
-      <TextBox Grid.Row="3" Grid.Column="1" Text="{Binding InsertTableName}" IsVisible="{Binding IsInsert}" AutomationProperties.Name="INSERT 대상 표 이름" />
-
-      <TextBlock Grid.Row="4" Text="시트당 최대 행" VerticalAlignment="Center" IsVisible="{Binding IsXlsx}" />
-      <NumericUpDown Grid.Row="4" Grid.Column="1" Minimum="1" Maximum="1048575" Increment="10000" FormatString="0"
-                     Value="{Binding MaxRowsPerSheet}" IsVisible="{Binding IsXlsx}" AutomationProperties.Name="시트당 최대 행" />
-    </Grid>
-
-    <TextBlock Text="질의를 서버에서 다시 실행해 처음부터 끝까지 흘려 저장한다(그리드에 불러온 행만이 아니다)." TextWrapping="Wrap" Opacity="0.7" />
-    <ProgressBar IsIndeterminate="{Binding IsRunning}" IsVisible="{Binding IsRunning}" />
-    <TextBlock Text="{Binding Status}" TextWrapping="Wrap" Classes.error="{Binding StatusIsError}" AutomationProperties.Name="상태" />
-
-    <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8">
-      <Button x:Name="StartButton" Content="내보내기" Command="{Binding StartCommand}" IsDefault="True" />
-      <Button x:Name="CancelButton" Content="중단" Command="{Binding CancelCommand}" />
+  <!-- 형식·범위·저장 위치·열기를 한 화면에(D-020). 형식별 세부(열 이름·시트)는 「고급 설정」 에 접어 둔다. -->
+  <DockPanel Margin="16">
+    <StackPanel DockPanel.Dock="Bottom" Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8" Margin="0,16,0,0">
+      <Button x:Name="StartButton" Classes="accent" Content="내보내기" Command="{Binding StartCommand}" IsDefault="True"
+              ToolTip.Tip="고른 형식으로 파일에 저장합니다. 전체 행은 질의(SELECT)를 서버에서 다시 실행하며 DB 에는 쓰지 않습니다."
+              AutomationProperties.Name="내보내기" />
+      <Button x:Name="CancelButton" Content="중단" Command="{Binding CancelCommand}" IsVisible="{Binding IsRunning}"
+              ToolTip.Tip="내보내기를 멈추고 저장 중이던 파일을 지웁니다." />
       <Button x:Name="CloseButton" Content="닫기" IsCancel="True" />
     </StackPanel>
-  </StackPanel>
+
+    <StackPanel Spacing="12" Grid.IsSharedSizeScope="True">
+      <!-- 내보내는 동안에는 고른 값을 바꿀 수 없다(중단·닫기만). -->
+      <StackPanel x:Name="FormPanel" Spacing="12" IsEnabled="{Binding !IsRunning}">
+        <Grid>
+          <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="Auto" SharedSizeGroup="Label" />
+            <ColumnDefinition Width="*" />
+          </Grid.ColumnDefinitions>
+          <TextBlock Text="형식" VerticalAlignment="Center" Margin="0,0,12,0" />
+          <ComboBox x:Name="FormatBox" Grid.Column="1" HorizontalAlignment="Stretch"
+                    ItemsSource="{Binding FormatOptions}" SelectedItem="{Binding SelectedFormatOption}"
+                    AutomationProperties.Name="내보내기 형식" />
+        </Grid>
+
+        <Grid>
+          <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="Auto" SharedSizeGroup="Label" />
+            <ColumnDefinition Width="*" />
+          </Grid.ColumnDefinitions>
+          <TextBlock Text="범위" VerticalAlignment="Top" Margin="0,6,12,0" />
+          <StackPanel Grid.Column="1" Spacing="2">
+            <RadioButton x:Name="AllRowsRadio" GroupName="ExportScope" IsChecked="{Binding IsAllRows}" IsEnabled="{Binding CanAllRows}"
+                         ToolTip.Tip="{Binding AllRowsTip}" AutomationProperties.Name="전체 행">
+              <TextBlock Text="전체 행(서버에서 다시 실행)" TextWrapping="Wrap" />
+            </RadioButton>
+            <RadioButton x:Name="LoadedRadio" GroupName="ExportScope" IsChecked="{Binding IsLoadedRows}" IsVisible="{Binding HasGrid}"
+                         AutomationProperties.Name="그리드에 불러온 행">
+              <TextBlock Text="{Binding LoadedLabel}" TextWrapping="Wrap" />
+            </RadioButton>
+            <RadioButton x:Name="FetchedRadio" GroupName="ExportScope" IsChecked="{Binding IsFetchedAll}" IsVisible="{Binding HasFetchedAll}"
+                         AutomationProperties.Name="가져온 전체">
+              <TextBlock Text="{Binding FetchedLabel}" TextWrapping="Wrap" />
+            </RadioButton>
+            <RadioButton x:Name="SelectionRadio" GroupName="ExportScope" IsChecked="{Binding IsSelection}" IsVisible="{Binding HasGrid}"
+                         IsEnabled="{Binding CanSelection}" AutomationProperties.Name="선택한 셀">
+              <TextBlock Text="{Binding SelectionLabel}" TextWrapping="Wrap" />
+            </RadioButton>
+            <TextBlock x:Name="ScopeHintText" Classes="dim" Text="{Binding ScopeHint}" TextWrapping="Wrap" Margin="0,2,0,0" />
+          </StackPanel>
+        </Grid>
+
+        <Grid>
+          <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="Auto" SharedSizeGroup="Label" />
+            <ColumnDefinition Width="*" />
+          </Grid.ColumnDefinitions>
+          <TextBlock Text="저장 위치" VerticalAlignment="Top" Margin="0,6,12,0" />
+          <StackPanel Grid.Column="1" Spacing="4">
+            <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+              <TextBox x:Name="PathBox" Text="{Binding FilePath}" ToolTip.Tip="{Binding FilePath}" AutomationProperties.Name="저장 파일 경로" />
+              <Button x:Name="BrowseButton" Grid.Column="1" Content="찾아보기…" ToolTip.Tip="저장할 폴더와 파일 이름을 고릅니다." />
+            </Grid>
+            <TextBlock x:Name="PathErrorText" Classes="danger-text" Text="{Binding PathError}" IsVisible="{Binding HasPathError}" TextWrapping="Wrap" />
+            <TextBlock x:Name="PathWarningText" Classes="warning-text" Text="{Binding PathWarning}" IsVisible="{Binding HasPathWarning}" TextWrapping="Wrap" />
+          </StackPanel>
+        </Grid>
+
+        <Grid IsVisible="{Binding IsInsert}">
+          <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="Auto" SharedSizeGroup="Label" />
+            <ColumnDefinition Width="*" />
+          </Grid.ColumnDefinitions>
+          <TextBlock Text="표 이름" VerticalAlignment="Center" Margin="0,0,12,0" />
+          <TextBox x:Name="InsertTableBox" Grid.Column="1" Text="{Binding InsertTableName}" AutomationProperties.Name="INSERT 대상 표 이름" />
+        </Grid>
+
+        <Grid>
+          <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="Auto" SharedSizeGroup="Label" />
+            <ColumnDefinition Width="*" />
+          </Grid.ColumnDefinitions>
+          <StackPanel Grid.Column="1" Spacing="6">
+            <CheckBox x:Name="OpenAfterBox" Content="내보낸 뒤 열기" IsChecked="{Binding OpenAfter}"
+                      ToolTip.Tip="저장이 끝나면 운영체제 기본 앱(Excel 등)으로 엽니다." />
+            <Expander x:Name="AdvancedExpander" Header="고급 설정" IsExpanded="False" IsVisible="{Binding HasHeaderOption}" HorizontalAlignment="Stretch">
+              <StackPanel Spacing="8" Margin="0,4,0,0">
+                <CheckBox x:Name="HeaderBox" Content="첫 줄에 열 이름 넣기" IsChecked="{Binding IncludeHeader}" />
+                <Grid ColumnDefinitions="2*,3*" RowDefinitions="Auto,Auto" ColumnSpacing="12" RowSpacing="8" IsVisible="{Binding IsXlsx}">
+                  <TextBlock Text="시트 이름" VerticalAlignment="Center" TextWrapping="Wrap" />
+                  <TextBox x:Name="SheetNameBox" Grid.Column="1" Text="{Binding SheetName}" AutomationProperties.Name="시트 이름" />
+                  <TextBlock Grid.Row="1" Text="시트당 최대 행" VerticalAlignment="Center" TextWrapping="Wrap" />
+                  <NumericUpDown x:Name="MaxRowsBox" Grid.Row="1" Grid.Column="1" HorizontalAlignment="Stretch"
+                                 Minimum="1" Maximum="1048575" Increment="10000" FormatString="0"
+                                 Value="{Binding MaxRowsPerSheet}" AutomationProperties.Name="시트당 최대 행" />
+                </Grid>
+              </StackPanel>
+            </Expander>
+          </StackPanel>
+        </Grid>
+
+      </StackPanel>
+
+      <ProgressBar IsIndeterminate="{Binding IsRunning}" IsVisible="{Binding IsRunning}" />
+      <TextBlock x:Name="StatusText" Text="{Binding Status}" TextWrapping="Wrap" Classes.danger-text="{Binding StatusIsError}"
+                 IsVisible="{Binding Status, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" AutomationProperties.Name="상태" />
+    </StackPanel>
+  </DockPanel>
 </Window>

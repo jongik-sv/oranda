@@ -49,7 +49,7 @@ public sealed record ExportSource(ISession Session, SqlStatement Query, IReadOnl
 public static class DataTransferCommands
 {
     /// <summary>
-    /// 결과 그리드 「내보내기」가 다시 실행할 질의를 알려 주는 연결 지점. 결과 영역(TSK-06-02·06-03)이 채운다.
+    /// 결과 그리드 내보내기가 다시 실행할 질의를 알려 주는 연결 지점. 결과 영역(TSK-06-02·06-03)이 채운다.
     /// 비어 있거나 null 을 돌려주면 편집기에서 커서가 놓인 문장을 쓴다.
     /// </summary>
     public static Func<ExportSource?>? ActiveExportSource { get; set; }
@@ -57,17 +57,41 @@ public static class DataTransferCommands
     /// <summary>작업이 끝났을 때 알림을 보낼 곳(상태 줄 등). 비어 있으면 무시한다.</summary>
     public static Action<string>? Notify { get; set; }
 
-    /// <summary>스키마 브라우저 등이 표·뷰 내보내기를 열 때 쓴다.</summary>
-    public static async Task ShowExportAsync(IServiceProvider services, ExportSource source, CancellationToken ct)
+    /// <summary>스키마 브라우저 등이 표·뷰 내보내기를 열 때 쓴다(질의만, 마지막에 쓴 형식).</summary>
+    public static Task ShowExportAsync(IServiceProvider services, ExportSource source, CancellationToken ct)
+    {
+        ArgumentNullException.ThrowIfNull(source);
+        return ShowExportAsync(services, source, null, ExcelExportPlan.StartFormat(excel: false), ct);
+    }
+
+    /// <summary>
+    /// 결과 내보내기 대화상자 하나(D-020)를 연다. <paramref name="excel"/> 이면 「Excel 로 내보내기」 빠른 길(Excel 골라짐),
+    /// 아니면 「파일로 내보내기」(마지막에 쓴 형식, 처음 CSV). 질의도 결과 그리드도 없으면 상태 줄에 알리고 끝난다.
+    /// </summary>
+    internal static Task ShowResultExportAsync(IServiceProvider services, bool excel, CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(services);
-        ArgumentNullException.ThrowIfNull(source);
+        var source = ActiveExportSource?.Invoke() ?? DataTransferCommandHandler.FromEditor(services);
+        var grid = ResultGrid.ResultGridCommands.Active is { HasResult: true } g ? g : null;
+        if (source is null && grid is null)
+        {
+            Notify?.Invoke(ExportText.NoResult);
+            return Task.CompletedTask;
+        }
+
+        return ShowExportAsync(services, source, grid, ExcelExportPlan.StartFormat(excel), ct);
+    }
+
+    private static async Task ShowExportAsync(IServiceProvider services, ExportSource? source, ResultGrid.ResultGridModel? grid, Oranda.Core.Transfer.TransferFormat format, CancellationToken ct)
+    {
+        ArgumentNullException.ThrowIfNull(services);
         if (TransferServices.Resolve(services) is not { } transfer)
         {
             return;
         }
 
-        var vm = new ExportDialogViewModel(transfer, source);
+        ct.ThrowIfCancellationRequested();
+        var vm = new ExportDialogViewModel(transfer, source, grid, format);
         var window = new ExportDialogWindow { DataContext = vm };
         await TransferServices.ShowAsync(services, window).ConfigureAwait(true);
     }
@@ -88,7 +112,7 @@ public static class DataTransferCommands
 }
 
 /// <summary>
-/// 결과 그리드 「내보내기」(<c>oranda.grid.export</c>)와 도구 「데이터 가져오기」(<c>oranda.tools.import</c>).
+/// 결과 그리드 「내보내기」(<c>oranda.grid.export</c>, 하나로 합친 내보내기 대화상자를 마지막에 쓴 형식으로 연다)와 도구 「데이터 가져오기」(<c>oranda.tools.import</c>).
 /// 셸의 처리기 팩터리(DI)가 <see cref="IServiceProvider"/> 를 넣어 준다. 인자 없는 생성자는 아무것도 하지 않는다.
 /// </summary>
 [OrandaCommand("oranda.grid.export", CommandCategory.Result, Title = "파일로 내보내기…", When = "gridFocus", Enablement = "gridHasResult",
@@ -116,12 +140,7 @@ public sealed class DataTransferCommandHandler : ICommandHandler
         switch (context.CommandId)
         {
             case "oranda.grid.export":
-                var source = DataTransferCommands.ActiveExportSource?.Invoke() ?? FromEditor(_services);
-                if (source is not null)
-                {
-                    await DataTransferCommands.ShowExportAsync(_services, source, cancellationToken).ConfigureAwait(true);
-                }
-
+                await DataTransferCommands.ShowResultExportAsync(_services, excel: false, cancellationToken).ConfigureAwait(true);
                 break;
             case "oranda.tools.import":
                 if (DataTransferCommands.ResolveSession(_services) is { } session && TransferServices.Resolve(_services) is { } transfer)

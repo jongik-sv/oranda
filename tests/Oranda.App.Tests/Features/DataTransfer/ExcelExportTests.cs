@@ -14,7 +14,7 @@ using Oranda.Core.Transfer;
 
 namespace Oranda.App.Tests.Features.DataTransfer;
 
-/// <summary>「Excel 로 내보내기」(<c>oranda.grid.exportExcel</c>): 명령 등록·단축키, 범위별 행·열, 기본 파일 이름, 파일 쓰기와 열기 흐름.</summary>
+/// <summary>「Excel 로 내보내기」(<c>oranda.grid.exportExcel</c>): 명령 등록·단축키, 범위별 행·열, 기본 파일 이름, 파일 쓰기와 열기 흐름(합친 대화상자의 쓰기 경로 <see cref="ExportRunner"/>).</summary>
 [Collection("ExcelExportStatics")]
 public sealed class ExcelExportTests : IDisposable
 {
@@ -28,8 +28,10 @@ public sealed class ExcelExportTests : IDisposable
     private readonly string _dir = Path.Combine(Path.GetTempPath(), "oranda-excel-" + Guid.NewGuid().ToString("N"));
     private readonly List<string> _notes = [];
     private readonly Action<string>? _oldNotify = DataTransferCommands.Notify;
-    private readonly Func<string, bool> _oldOpen = ExcelExportRunner.OpenFile;
+    private readonly Func<string, bool> _oldOpen = ExportRunner.OpenFile;
     private readonly string? _oldFolder = ExcelExportPlan.LastFolder;
+    private readonly TransferFormat? _oldFormat = ExcelExportPlan.LastFormat;
+    private readonly bool? _oldOpenAfter = ExcelExportPlan.LastOpenAfter;
 
     public ExcelExportTests()
     {
@@ -40,8 +42,10 @@ public sealed class ExcelExportTests : IDisposable
     public void Dispose()
     {
         DataTransferCommands.Notify = _oldNotify;
-        ExcelExportRunner.OpenFile = _oldOpen;
+        ExportRunner.OpenFile = _oldOpen;
         ExcelExportPlan.LastFolder = _oldFolder;
+        ExcelExportPlan.LastFormat = _oldFormat;
+        ExcelExportPlan.LastOpenAfter = _oldOpenAfter;
         try
         {
             Directory.Delete(_dir, recursive: true);
@@ -59,6 +63,9 @@ public sealed class ExcelExportTests : IDisposable
         await m.LoadFirstPageAsync();
         return m;
     }
+
+    private static ExportJob Xlsx(ExcelExportScope scope, ExportSource? source, ResultGridModel? grid, string title) =>
+        new(scope, source, grid, new ExportOptions(TransferFormat.Xlsx) { IncludeHeader = true, SheetName = title });
 
     private static async Task<List<IReadOnlyList<object?>>> DrainAsync(IAsyncEnumerable<IReadOnlyList<object?>> rows)
     {
@@ -203,33 +210,6 @@ public sealed class ExcelExportTests : IDisposable
         Assert.Equal(500, rows.Count);
     }
 
-    // ---- 대화상자 모델 ----
-
-    [Fact]
-    public void Dialog_defaults_to_all_rows_and_opens_after_export()
-    {
-        var vm = new ExcelExportDialogViewModel(canAllRows: true, loadedRows: 500, selectionRows: 0, selectionColumns: 0);
-        Assert.True(vm.IsAllRows);
-        Assert.True(vm.OpenAfter);
-        Assert.False(vm.CanSelection);
-        Assert.False(vm.Accepted);
-        vm.SaveCommand.Execute(null);
-        Assert.True(vm.Accepted);
-    }
-
-    [Fact]
-    public void Dialog_falls_back_to_loaded_rows_without_a_query_and_radios_switch_scope()
-    {
-        var vm = new ExcelExportDialogViewModel(canAllRows: false, loadedRows: 5, selectionRows: 3, selectionColumns: 2);
-        Assert.False(vm.CanAllRows);
-        Assert.True(vm.IsLoadedRows);
-        Assert.True(vm.CanSelection);
-        Assert.Contains("3행 × 2열", vm.SelectionLabel, StringComparison.Ordinal);
-        vm.IsSelection = true;
-        Assert.Equal(ExcelExportScope.Selection, vm.Scope);
-        Assert.False(vm.IsLoadedRows);
-    }
-
     // ---- 파일 쓰기와 열기 ----
 
     [Fact]
@@ -238,12 +218,13 @@ public sealed class ExcelExportTests : IDisposable
         await using var grid = await GridAsync(4);
         var service = new FakeTransfer();
         var opened = new List<string>();
-        ExcelExportRunner.OpenFile = p => { opened.Add(p); return true; };
+        ExportRunner.OpenFile = p => { opened.Add(p); return true; };
         var path = Path.Combine(_dir, "out.xlsx");
 
-        var summary = await ExcelExportRunner.ExportToFileAsync(service, new ExcelExportJob(ExcelExportScope.LoadedRows, null, grid, "EMP"), path, openAfter: true, default);
+        var outcome = await ExportRunner.ExportToFileAsync(service, Xlsx(ExcelExportScope.LoadedRows, null, grid, "EMP"), path, openAfter: true, null, default);
 
-        Assert.Equal(4, summary!.Rows);
+        Assert.Equal(4, outcome.Summary!.Rows);
+        Assert.False(outcome.IsError);
         Assert.Equal(0, service.ServerExports);
         Assert.Equal(TransferFormat.Xlsx, service.RowsOptions!.Format);
         Assert.Equal("EMP", service.RowsOptions.SheetName);
@@ -252,7 +233,9 @@ public sealed class ExcelExportTests : IDisposable
         Assert.True(File.Exists(path));
         Assert.Equal([path], opened);
         Assert.Equal(_dir, ExcelExportPlan.LastFolder);
-        Assert.Contains(_notes, n => n.Contains("4 행을 Excel 로 내보냄", StringComparison.Ordinal));
+        Assert.Contains(_notes, n => n.Contains("4행을 내보냈습니다", StringComparison.Ordinal) && n.Contains(path, StringComparison.Ordinal));
+        Assert.Equal(TransferFormat.Xlsx, ExcelExportPlan.LastFormat); // 다음 「파일로 내보내기」 는 Excel 로 열린다
+        Assert.True(ExcelExportPlan.LastOpenAfter);
     }
 
     [Fact]
@@ -260,13 +243,13 @@ public sealed class ExcelExportTests : IDisposable
     {
         await using var grid = await GridAsync(2);
         var opened = 0;
-        ExcelExportRunner.OpenFile = _ => { opened++; return false; };
-        var job = new ExcelExportJob(ExcelExportScope.LoadedRows, null, grid, "EMP");
+        ExportRunner.OpenFile = _ => { opened++; return false; };
+        var job = Xlsx(ExcelExportScope.LoadedRows, null, grid, "EMP");
 
-        await ExcelExportRunner.ExportToFileAsync(new FakeTransfer(), job, Path.Combine(_dir, "a.xlsx"), openAfter: false, default);
+        await ExportRunner.ExportToFileAsync(new FakeTransfer(), job, Path.Combine(_dir, "a.xlsx"), openAfter: false, null, default);
         Assert.Equal(0, opened);
 
-        await ExcelExportRunner.ExportToFileAsync(new FakeTransfer(), job, Path.Combine(_dir, "b.xlsx"), openAfter: true, default);
+        await ExportRunner.ExportToFileAsync(new FakeTransfer(), job, Path.Combine(_dir, "b.xlsx"), openAfter: true, null, default);
         Assert.Equal(1, opened);
         Assert.Contains(_notes, n => n.Contains("열지 못했습니다", StringComparison.Ordinal));
     }
@@ -279,9 +262,9 @@ public sealed class ExcelExportTests : IDisposable
         var source = new ExportSource(new StubSession(), new SqlStatement("SELECT * FROM emp", default, StatementKind.Query), new Dictionary<string, BindValue>());
         var path = Path.Combine(_dir, "all.xlsx");
 
-        var summary = await ExcelExportRunner.ExportToFileAsync(service, new ExcelExportJob(ExcelExportScope.AllRows, source, grid, "EMP"), path, openAfter: false, default);
+        var outcome = await ExportRunner.ExportToFileAsync(service, Xlsx(ExcelExportScope.AllRows, source, grid, "EMP"), path, openAfter: false, null, default);
 
-        Assert.Equal(7, summary!.Rows);
+        Assert.Equal(7, outcome.Summary!.Rows);
         Assert.Equal(1, service.ServerExports);
         Assert.Equal("EMP", service.ServerOptions!.SheetName);
         Assert.Null(service.RowsOptions);
@@ -293,9 +276,10 @@ public sealed class ExcelExportTests : IDisposable
         await using var grid = await GridAsync(2);
         var path = Path.Combine(_dir, "none.xlsx");
 
-        var summary = await ExcelExportRunner.ExportToFileAsync(new FakeTransfer(), new ExcelExportJob(ExcelExportScope.AllRows, null, grid, "EMP"), path, openAfter: true, default);
+        var outcome = await ExportRunner.ExportToFileAsync(new FakeTransfer(), Xlsx(ExcelExportScope.AllRows, null, grid, "EMP"), path, openAfter: true, null, default);
 
-        Assert.Null(summary);
+        Assert.Null(outcome.Summary);
+        Assert.True(outcome.IsError);
         Assert.False(File.Exists(path));
         Assert.Contains(_notes, n => n.Contains("실패", StringComparison.Ordinal));
     }
@@ -308,9 +292,10 @@ public sealed class ExcelExportTests : IDisposable
         using var cts = new CancellationTokenSource();
         await cts.CancelAsync();
 
-        var summary = await ExcelExportRunner.ExportToFileAsync(new FakeTransfer(), new ExcelExportJob(ExcelExportScope.LoadedRows, null, grid, "EMP"), path, openAfter: true, cts.Token);
+        var outcome = await ExportRunner.ExportToFileAsync(new FakeTransfer(), Xlsx(ExcelExportScope.LoadedRows, null, grid, "EMP"), path, openAfter: true, null, cts.Token);
 
-        Assert.Null(summary);
+        Assert.Null(outcome.Summary);
+        Assert.False(outcome.IsError);
         Assert.False(File.Exists(path));
         Assert.Contains(_notes, n => n.Contains("취소", StringComparison.Ordinal));
     }

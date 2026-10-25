@@ -340,10 +340,13 @@ public sealed class LocalFilterTests
     [Fact]
     public async Task Export_dialog_offers_fetched_all_only_while_a_filter_is_active()
     {
-        var plain = new ExcelExportDialogViewModel(canAllRows: true, loadedRows: 30, selectionRows: 0, selectionColumns: 0);
+        // 합친 내보내기 대화상자(TSK-09-07): 거르기가 없으면 「가져온 전체」 가 없고, 걸리면 기본이 「보이는 행만」 이다.
+        await using var m = await OpenAsync(30);
+        var plain = new ExportDialogViewModel(new NoTransfer(), null, m, Oranda.Core.Transfer.TransferFormat.Xlsx, openAfter: false);
         Assert.False(plain.HasFetchedAll);
 
-        var filtered = new ExcelExportDialogViewModel(canAllRows: false, loadedRows: 4, selectionRows: 0, selectionColumns: 0, fetchedRows: 30);
+        await m.SetLocalFilterAsync(new LocalFilterSpec { QuickText = "g2" });
+        var filtered = new ExportDialogViewModel(new NoTransfer(), null, m, Oranda.Core.Transfer.TransferFormat.Xlsx, openAfter: false);
         Assert.True(filtered.HasFetchedAll);
         Assert.True(filtered.IsLoadedRows); // 기본 = 보이는 행만
         Assert.Contains("보이는 행만(4행", filtered.LoadedLabel, StringComparison.Ordinal);
@@ -351,7 +354,18 @@ public sealed class LocalFilterTests
         filtered.IsFetchedAll = true;
         Assert.Equal(ExcelExportScope.FetchedAll, filtered.Scope);
         Assert.False(filtered.IsLoadedRows);
-        await Task.CompletedTask;
+    }
+
+    private sealed class NoTransfer : Oranda.Core.Transfer.IDataTransferService
+    {
+        public Task<Oranda.Core.Transfer.TransferSummary> ExportAsync(Oranda.Core.Sessions.ISession s, SqlStatement query, IReadOnlyDictionary<string, BindValue> binds, Oranda.Core.Transfer.ExportOptions options, Stream destination, IProgress<long>? progress, CancellationToken ct) =>
+            throw new NotSupportedException();
+
+        public Task<Oranda.Core.Transfer.TransferSummary> ExportRowsAsync(IReadOnlyList<ResultColumn> columns, IAsyncEnumerable<IReadOnlyList<object?>> rows, Oranda.Core.Transfer.ExportOptions options, Stream destination, IProgress<long>? progress, CancellationToken ct) =>
+            throw new NotSupportedException();
+
+        public Task<Oranda.Core.Transfer.TransferSummary> ImportAsync(Oranda.Core.Sessions.ISession s, Oranda.Core.Transfer.ImportOptions options, Stream source, IProgress<long>? progress, CancellationToken ct) =>
+            throw new NotSupportedException();
     }
 
     [Fact]
