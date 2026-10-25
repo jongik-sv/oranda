@@ -11,7 +11,7 @@ levels:
 # WBS - Oranda MyBatis 작업 공간
 
 > depth: 3
-> start-date: 2026-10-23 / target-date: 2026-11-09 / updated: 2026-10-24
+> start-date: 2026-10-23 / target-date: 2026-11-09 / updated: 2026-10-25
 > source: docs/oranda1/PRD.md, docs/oranda1/TRD.md
 
 ## WP-01: 기본 설계·공유 계약
@@ -411,6 +411,104 @@ levels:
   - acceptance: 외부 자원 없는 HTML 하나가 만들어지고 브라우저에서 열린다 / SQL·값은 HTML 이스케이프 / 바인드 값은 고른 경우에만 / 팩 항목은 선언 없으면 빠지고 이유가 적힌다 / DB 에 쓰지 않는다 / 전체 시험 통과
   - note: 완료(2026-10-24) — 「튜닝 보고서 만들기…」(튜닝 메뉴 @490·도우미·계획 창·SQL 모니터 단추) 대화 상자 → 수집기(SELECT 만, 절별 실패·취소, 팩 없으면 AWR 안 보냄) → 순수 HTML 생성기(시안 11절·인라인 CSS/SVG·스크립트 없음·이스케이프·바인드 기본 뺌), 카탈로그 tuning.sql_stats·report_env, 26ai·11g 통합 보고서 생성 확인 (win144)
 
+## WP-07: Role 기반 메뉴·기능 구성
+<!-- 담당 PC: win144(Windows 개발 PC) — 맥북 세션은 이 WP 의 Task 를 하지 않는다. 2026-10-25 사용자 확정(조사 docs/oranda1/research/role-features.md 권장안 승인): Role 6개 겹쳐 고르기 + 기능별 덮어쓰기, 1단계 = 메뉴 단순화 + 시작 초기화 빼기(어셈블리 분리 없음, 성능 비교 결과서만), 조회 전용 실제 차단. 설계 = PRD 12, TRD 10, decisions D-002~D-012. 계약(TSK-07-01)을 단독으로 먼저 머지하고 07-02~07-06 을 레인 5개로 병렬, 07-07 은 07-02·03 머지 뒤, 07-08 이 마지막. 파일 소유 = TRD 10.9 -->
+
+- [ ] TSK-07-01: 기능 카탈로그·Role 프리셋·IFeatureGate·설정 스키마·문구 예약 (계약 전용) [win144] w:1 2026-10-26~2026-10-26
+  - category: infra
+  - domain: backend
+  - model: opus
+  - priority: critical
+  - tags: role, feature, contract, win144
+  - prd-ref: RL-01~RL-13, TRD 10.2~10.4, TRD 10.8~10.9
+  - requirements: Core `src/Oranda.Core/Features/` 에 기능 id 상수 25개(PRD 12.2)·Role id 상수 6개(PRD 12.1)·`FeatureCatalog` 데이터(기능별 묶음·이름 문구 키·StartupBound·WritesOnly·Requires, Role 별 기본 켬 목록, TRD 10.2 의 네임스페이스 접두 표·id 덮어쓰기 표·형 이름 덮어쓰기 표)와 `IFeatureGate`(TRD 10.4 그대로)를 둔다; `src/Oranda.Core/Settings/FeaturesSettings.cs`(Roles null 가능·Enabled·Disabled, 목록 순서 무시 값 같음 Equals/GetHashCode)와 `AppSettings.Features` 섹션을 더하고, `SettingsStore.ChangedSections` 에 "features"·`Normalize` 에 중복 제거·enabled/disabled 겹침 정리(모르는 id 는 남김)를 더한다. SchemaVersion 은 올리지 않는다; `src/Oranda.App/Shell/Features/FeatureGate.cs` 에 IFeatureGate 의 틀 구현(모든 기능 켬, ReadOnlyRole=false, PendingRestart 빈 목록, Changed 안 냄)과 `FeatureCommandIds.cs`(oranda.tools.roles 상수)를 만들고 `AppComposition` 에 `IFeatureGate → FeatureGate` 싱글턴 등록 한 줄을 더한다(레지스트리·ExecutionPolicy 배선은 하지 않는다); TRD 10.8 의 모든 문구를 strings-ko/en·literals-en·CommandTitles(ko/en)에 넣는다; `tests/Oranda.Testing/FakeFeatureGate.cs`(켬 집합·ReadOnlyRole·PendingRestart 를 시험이 정하고 Changed 를 낼 수 있음); TRD 10.9 의 시험 파일을 모두 Skip 틀로 만든다; `docs/oranda1/design.md` 에 `## 기능 Task 편집 지점 (WP-07)` 표(TRD 10.9 를 실제 코드에 맞춰 옮김), `docs/design/commands.md` 에 oranda.tools.roles 행; 제약: 실행 로직 없음, Core 는 App 형을 참조하지 않는다(네임스페이스는 문자열); 비고: 담당 PC: win144(Windows 개발 PC) — 맥북 세션은 이 Task 를 하지 않는다. 여러 레인(07-02~07-07)이 같은 id·인터페이스·설정 키·문구를 쓰므로 먼저 동결한다
+  - acceptance: 실행 로직 없음 (contract-only) / `dotnet build Oranda.sln -warnaserror` 통과, 기존 시험이 고치지 않고 통과(게이트 틀이 전부 켬이라 동작 불변) / FeatureCatalogTests: 기능 id 25개·Role 6개 존재, Role 기본 켬 표가 PRD 12.2 와 같음, 카탈로그가 모르는 id 를 참조하지 않음, features 섹션 JSON 왕복과 키 없는 옛 settings.json 읽기 / LocalizationTests 통과(예약 문구 ko/en 짝) / 공유 시험은 틀의 존재·탑재 순서만 단정한다. 빈 라우터·스텁 목록(`STUBS` 등)을 단정하지 않는다 / 기능 Task 마다 자기 시험 파일과 소유 파일을 design.md `## 기능 Task 편집 지점` 에 적고, 두 Task 가 한 파일을 나눠 갖지 않는다 / 등록(라우트·핸들러 목록)은 자동 수집이며 기능 Task 가 공유 진입점에 줄을 더하지 않아도 된다 / 계약 문서가 지정한 파일(공용 시험 헬퍼 포함)이 모두 있다
+  - note: 담당 PC: win144(Windows 개발 PC) — 맥북 세션은 이 Task 를 하지 않는다. 크기 M. 단독 레인 rl-contract, 머지 후 07-02~07-06 레인 시작
+
+- [ ] TSK-07-02: 기능 게이트 해석·명령·도구 창 레지스트리 거르기·즉시 재계산·feature 문맥 키 [win144] w:3 2026-10-27~2026-10-29
+  - category: dev
+  - domain: frontend
+  - model: opus
+  - priority: critical
+  - tags: role, feature, registry, shell, win144
+  - depends: TSK-07-01
+  - prd-ref: RL-02, RL-03, RL-06, TRD 10.2, TRD 10.5, TRD 10.6, TRD 10.7.1
+  - requirements: `Shell/Features/FeatureGate.cs` 를 실제 구현으로 바꾼다: TRD 10.5 해석(바탕 → +Enabled −Disabled → ReadOnlyRole 이면 WritesOnly 끔 → Requires → StartupBound 는 시작 때 값과 AND·PendingRestart), TRD 10.2 꼬리표 찾기(id 덮어쓰기 → 형 이름 덮어쓰기 → 네임스페이스 가장 긴 접두, 결과 캐시), SettingsChanged("features") 구독 → 다시 해석 → Changed, 문맥 키 `feature.<id>` 를 ContextKeyService 에 반영; 레지스트리가 설정보다 먼저 생기는 문제(App.axaml.cs:64-65): `CommandRegistry`·`ToolPanelRegistry` 가 전체 항목을 들고 게이트로 거른 스냅숏을 낸다(`Commands`·`Panels`·`Find`·`ExecuteAsync`·실행 중 `Register` 모두), 게이트 Changed 에 다시 계산해 CommandsChanged/PanelsChanged 를 낸다. 개발 빌드 전용 거르기(ToolPanelRegistry.cs:20)는 그대로; `ShellController.LoadAsync` 에서 설정을 읽은 직후·레이아웃 짓기 전에 게이트를 처음 해석시킨다(이 값이 시작 때 값). 이 해석은 스레드 풀에서 일어나므로 UI 구독자는 Dispatcher 로 넘긴다; 주 메뉴에서 자식이 모두 걸러진 최상위 메뉴(R6 의 monitor·tuning)는 그리지 않는다(Menus); 키맵 파일의 꺼진 명령 묶음은 지우지 않는다; 실행 중 끈 기능의 열린 도구 창·문서는 닫지 않는다(D-010); 시험: 해석 규칙 표 시험(Role 조합·덮어쓰기·겹침·조회 전용·Requires·StartupBound·모르는 id), 꼬리표 전수 시험(실제 스캔 결과의 모든 명령·도구 창·상태 칸·시작 작업이 기능 하나 또는 공통에 매핑, 모든 기능 id 에 항목 1개 이상), features 없음 = 거르기 전과 같은 집합(명령·도구 창 수 단정), 꺼진 명령은 Find null·ExecuteAsync false·단축키 무반응, 설정 바꿈 → CommandsChanged 한 번·메뉴 다시 짓기(Headless), 시작 순서 시험(Initialize·Attach 전에 해석됨); 계약 Task design.md 「기능 Task 편집 지점」 의 자기 소유 파일만 고친다; 비고: 담당 PC: win144(Windows 개발 PC) — 맥북 세션은 이 Task 를 하지 않는다
+  - acceptance: R6 만 고르면 주 메뉴에 「모니터」「튜닝」 이 없고 팔레트·툴바·우클릭에도 그 명령이 없다 / 설정을 바꾸면 재시작 없이 메뉴·툴바·팔레트·단축키가 바뀐다 / features 섹션이 없으면 명령·도구 창 집합이 a507d81 과 같다 / 실행 중 MyBatis 를 켜도 MyBatis 명령은 재시작 전까지 나타나지 않고 PendingRestart 에 myBatis 가 있다 / 전체 시험 통과
+  - note: 담당 PC: win144(Windows 개발 PC) — 맥북 세션은 이 Task 를 하지 않는다. 크기 L. 레인 rl-registry. 다른 레인은 FakeFeatureGate 로 시험하므로 이 Task 머지 전에도 진행할 수 있다
+
+- [ ] TSK-07-03: 시작 작업·상태 칸 거르기·PL/SQL 작업 공간 나누기·블로커 칸 대체 클릭 [win144] w:2 2026-10-27~2026-10-28
+  - category: dev
+  - domain: frontend
+  - model: opus
+  - priority: high
+  - tags: role, feature, startup, statusbar, win144
+  - depends: TSK-07-01
+  - prd-ref: RL-04, RL-06, RL-11, TRD 10.7.2, TRD 10.7.3
+  - requirements: 시작 작업을 형 단계에서 거른다: `App.axaml.cs:148` 의 `GetService<IEnumerable<IStartupTask>>()` 는 모든 작업을 만들어 버리므로(MapperWatchStartup → MapperWatchService 등 생성자 부작용), `ServiceContainer` 에 구현 형 조건(`IFeatureGate.IsTypeEnabled`)으로 거른 IEnumerable 을 만드는 길을 두고 첫 프레임 뒤·지연 어셈블리 훑기 뒤(`App.axaml.cs:135-142`) 모두 그것을 쓴다. 건너뛴 작업은 Trace 에 「시작 작업 건너뜀: <형>」, 끝에 돈/건너뛴 수를 남긴다(TSK-07-07 이 센다); 상태 칸: `ViewModels/MainViewModel.cs:27` 에서 IsTypeEnabled 가 거짓인 칸은 만들지 않는다(블로커 칸을 안 만들면 BlockerWatcher·15초 폴링·모니터 세션도 없음, MyBatis 칸 없음); PL/SQL 작업 공간 나누기(TRD 10.7.3): `PlsqlWorkspacePersistence` 는 plsqlEditor 에 매달려 돌고, 안에서 plsqlWorkspace 가 꺼져 있으면 라우터만 만들고 복원·자동 저장 타이머·종료 저장을 하지 않는다; 블로커 칸 클릭(`BlockerStatusItem.cs:122`): lockMonitor 가 꺼져 있으면 Lock 모니터 대신 예약 문구 안내 플라이아웃과 「설정 열기」(oranda.tools.roles 실행), 툴팁 「눌러서 Lock 모니터 열기」 도 바꾼다. Lock 모니터 임계치 이벤트 구독은 그대로 둔다; Platform(ChangeJournalRecorder)·Language(PlSqlWarmUpTask) 시작 작업도 같은 규칙을 탄다(PlSqlWarmUpTask 는 공통이라 돈다); 시험: FakeFeatureGate 로 MyBatis 끔 → MyBatis 시작 작업 4개를 만들지도 부르지도 않음(생성자 호출 0회), 블로커 끔 → 칸·감시기 없음, plsqlWorkspace 끔 → 라우터는 있고 복원·타이머 없음, 지연 어셈블리 훑기 뒤에도 거름, lockMonitor 끔 → 클릭 안내; 계약 Task design.md 「기능 Task 편집 지점」 의 자기 소유 파일만 고친다; 비고: 담당 PC: win144(Windows 개발 PC) — 맥북 세션은 이 Task 를 하지 않는다
+  - acceptance: R1 만 고르면 MyBatis 시작 작업 4개·MyBatis 상태 칸·PL/SQL 작업 공간 복원이 돌지 않고 블로커 칸은 남는다 / R6 만 고르면 블로커 칸·변경 일지 기록기가 없다 / features 없음 = 시작 작업 14개·상태 칸 10개 그대로 / 블로커 칸 클릭 대체가 동작 / 전체 시험 통과
+  - note: 담당 PC: win144(Windows 개발 PC) — 맥북 세션은 이 Task 를 하지 않는다. 크기 M. 레인 rl-startup
+
+- [ ] TSK-07-04: 설정 창 「기능」 탭 — Role 선택·기능 세부·재시작 안내·oranda.tools.roles [win144] w:2 2026-10-27~2026-10-28
+  - category: dev
+  - domain: frontend
+  - model: sonnet
+  - priority: high
+  - tags: role, feature, settings, ui, win144
+  - depends: TSK-07-01
+  - prd-ref: RL-05, RL-06, RL-08, RL-12, TRD 10.7.6
+  - requirements: `SettingsWindow.axaml` 의 「일반」 다음에 「기능」 탭(D-011): 「모든 기능 쓰기(Role 고르지 않음)」/「Role 로 고르기」 라디오, Role 확인란 6개(이름·한 줄 설명), 「기능 세부」 묶음 5개·확인란 25개(FeatureCatalog 에서 만든다, 하드코딩 금지), 기본값과 다르면 「직접 켬」·「직접 끔」 표시, 「Role 기본값으로 되돌리기」, Requires 못 채움 흐림·이유, 조회 전용만이면 WritesOnly 흐림·이유와 탭 위 안내, 튜너를 고르면 팩 선언 안내(D-012); 확인란을 바꾸면 Enabled/Disabled 를 Role 기본값과 비교해 최소로 적는다(기본값과 같아지면 목록에서 뺀다); 저장 = 기존 설정 창 저장 흐름(SettingsService.UpdateAsync), 저장 뒤 IFeatureGate.PendingRestart 가 있으면 「재시작하면 적용됩니다: {0}」 띠; 명령 oranda.tools.roles(도구 메뉴 「Role·기능 고르기…」)를 새 파일(`Shell/Settings/FeatureSettingsCommands.cs`)에 [OrandaCommand] 로 등록하고 설정 창을 「기능」 탭으로 연다; 화면 품질: ko/en 전환·라이트/다크·키보드만으로 모든 조작(탭 순서·접근 이름)·설정 창 최소 크기에서 잘림 없음(스크롤)·문구는 계약이 예약한 것만 쓴다; 시험: ViewModel(Role 조합 → 확인란 상태, 직접 켬/끔 최소 기록, 되돌리기, 조회 전용만 흐림, Requires), Headless 렌더(ko/en·다크), 명령 등록, FakeFeatureGate 의 PendingRestart → 띠; 계약 Task design.md 「기능 Task 편집 지점」 의 자기 소유 파일만 고친다; 비고: 담당 PC: win144(Windows 개발 PC) — 맥북 세션은 이 Task 를 하지 않는다
+  - acceptance: 탭에서 R4 를 더하고 저장하면 settings.json features.roles 에 tuner 가 들어간다 / 기능 하나를 Role 기본과 다르게 바꾸면 그 id 만 enabled 또는 disabled 에 남는다 / 조회 전용만이면 쓰기 전용 기능을 켤 수 없다 / ko/en·다크 Headless 렌더 통과 / 실앱 눈 확인 항목은 사람 몫으로 결과에 적는다 / 전체 시험 통과
+  - note: 담당 PC: win144(Windows 개발 PC) — 맥북 세션은 이 Task 를 하지 않는다. 크기 M. 레인 rl-settings
+
+- [ ] TSK-07-05: 조회 전용 Role 실행 차단 — 정책 관문 ReadOnlyRole 규칙·readOnlySession 키 [win144] w:2 2026-10-27~2026-10-28
+  - category: dev
+  - domain: backend
+  - model: opus
+  - priority: high
+  - tags: role, feature, policy, readonly, win144
+  - depends: TSK-07-01
+  - prd-ref: RL-07, RL-08, TRD 10.7.4
+  - requirements: `ExecutionPolicy` 에 `PolicyRule.ReadOnlyRole` 을 더한다(IExecutionPolicy.cs enum): 자리 = 1번 읽기 전용 프로필 바로 뒤·라이선스 앞, 허용 = 기존 IsReadOnlySafe(질의·트랜잭션 제어·SQL*Plus·EXPLAIN), 분류 불확실은 DML 로 본다, 거부 문구 = TRD 10.7.4 예약 문구; 게이트는 생성자 인자 `IFeatureGate?`(null 이면 규칙 끔, 기존 `new ExecutionPolicy()` 호출이 고치지 않고 빌드). 앱 조립의 AddType 은 등록된 게이트를 받고, `ExecutionCommands.cs:117-119` 의 대체 등록도 게이트를 넘긴다; `ExecutionState` 의 readOnlySession 키 = 프로필 읽기 전용 또는 게이트 ReadOnlyRole, 게이트 Changed 에 다시 계산(UI 스레드로); 실행 엔진을 거치지 않는 쓰기 경로를 찾는다(그리드 편집 적용·가져오기·LOB 저장·플래시백 복원 등): 엔진을 거치면 시험으로 확인만, 거치지 않으면 그 경로 소유 파일이 이 Task 소유가 아니므로 결과에 적고 통합테스트에 넘긴다; 시험: 정책 단위 시험(R6 만 → SELECT·WITH·COMMIT·EXPLAIN 허용, UPDATE·MERGE·CREATE·ALTER SYSTEM·익명 블록·CALL·분류 불확실 거부, 다른 Role 과 함께 → 거부 없음, 프로필 읽기 전용과 겹치면 기존 규칙이 먼저), 실행 컨트롤러 시험(가짜 엔진 호출 0회·메시지 창에 이유), readOnlySession 키와 쓰기 명령 흐림; 계약 Task design.md 「기능 Task 편집 지점」 의 자기 소유 파일만 고친다; 비고: 담당 PC: win144(Windows 개발 PC) — 맥북 세션은 이 Task 를 하지 않는다
+  - acceptance: R6 만 고르면 SQL 편집기·스크립트(F5)·전용 세션에서 DML·DDL·PL/SQL 이 거부되고 이유가 보이며 SELECT 는 실행된다 / R6 + R1 이면 거부 없음 / 거부는 드라이버 호출 전 / 엔진 밖 쓰기 경로 목록이 결과에 있다 / 전체 시험 통과
+  - note: 담당 PC: win144(Windows 개발 PC) — 맥북 세션은 이 Task 를 하지 않는다. 크기 M. 레인 rl-guard
+
+- [ ] TSK-07-06: 꺼진 기능 대체 경로 — PL/SQL 읽기 전용 소스·MyBatis 끔 매퍼 열기·계획 고급 탭·시작 화면 [win144] w:3 2026-10-27~2026-10-29
+  - category: dev
+  - domain: frontend
+  - model: opus
+  - priority: high
+  - tags: role, feature, fallback, plsql, mybatis, win144
+  - depends: TSK-07-01
+  - prd-ref: RL-09, RL-10, RL-11, RL-12, TRD 10.7.5
+  - requirements: PL/SQL 끔 소스 열기(D-007): `SchemaObjectOpener` 에서 PanelFor 가 PL/SQL 작업 공간인데 plsqlEditor 가 꺼져 있으면 서버 소스를 기존 메타데이터 공급자로 읽어 새 SQL 편집기 탭에 넣고 읽기 전용·제목 「[읽기 전용] OWNER.NAME」·상태 줄 안내, 같은 객체 탭이 있으면 앞으로 낸다; 정의로 이동·Quick Open 객체 열기(`Navigation/ObjectNavigationCommands.cs`)·객체 검색(`DbTools/ObjectSearchViewModel.cs`)·변경 일지(`ChangeJournal/ChangeJournalViewModel.cs`)·`oranda.plsql.openSource` 처리기(`PlsqlEditor/PlsqlEditorCommands.cs`, 꼬리표는 공통으로 덮어써져 있음)가 이 분기를 부르게 한다; MyBatis 끔 매퍼 열기(D-008): 훅이 MyBatisHooks.Empty 인 상태에서 파일 열기·끌어 놓기(DroppedWorkspaceFiles.Pick)·최근 파일·명령줄 열기가 `WorkspaceFiles.ReadMyBatis` 펼침으로 일반 SQL 탭을 만들고 매퍼 파일에 쓰지 않는지 시험으로 확인하고 다르게 가는 곳만 고친다. 처음 한 번 상태 줄 안내. 루트가 mapper 가 아닌 xml 은 지금과 같다; 계획 창(`Features/ExecutionPlan/`): planAdvanced 가 꺼지면 그래프 탭·SQL Monitor 보고서 탭·비교 영역을 숨긴다(feature.planAdvanced 키 또는 게이트 Changed). 표 통계·자식 커서·보고서 단추(`PlanViewModel.Boost.cs:513-518`)와 SQL 모니터 단추(`SqlMonitorViewModel.Tuning.cs:283`)가 레지스트리 거르기와 CommandsChanged 로 바로 숨는지 시험하고 안 되는 곳을 고친다; 시작 화면(`Shell/StartPage.cs:210`): myBatis 끔이면 MyBatis 문구를 예약 문구로, Role 을 고른 적 없으면 「Role 고르기…」 링크(oranda.tools.roles); 시험: FakeFeatureGate 로 각 경로(정상·경계: 이미 열린 탭·소스 읽기 실패·비-mapper xml); 계약 Task design.md 「기능 Task 편집 지점」 의 자기 소유 파일만 고친다; 비고: 담당 PC: win144(Windows 개발 PC) — 맥북 세션은 이 Task 를 하지 않는다
+  - acceptance: PL/SQL 끔에서 스키마 브라우저·정의로 이동·객체 검색·변경 일지로 패키지를 열면 읽기 전용 SQL 탭이 열린다 / MyBatis 끔에서 매퍼를 열면 문장마다 SQL 탭이 생기고 매퍼 파일의 해시가 그대로다 / planAdvanced 끔에서 계획 창 고급 탭이 없고 튜닝 끔에서 계획 창 통계·자식 커서 단추가 없다 / 전체 시험 통과
+  - note: 담당 PC: win144(Windows 개발 PC) — 맥북 세션은 이 Task 를 하지 않는다. 크기 L. 레인 rl-fallback
+
+- [ ] TSK-07-07: Role 구성별 성능 비교 — 시작·유휴 메모리·스레드·시작 작업·추가 세션 결과서 [win144] w:2 2026-10-30~2026-10-31
+  - category: research
+  - domain: test
+  - model: sonnet
+  - priority: medium
+  - tags: role, feature, perf, win144
+  - depends: TSK-07-02, TSK-07-03
+  - prd-ref: RL-13, TRD 10.10
+  - requirements: `tests/Oranda.Perf` 에 실행 전 데이터 폴더 `settings.json` 에 features 구성을 쓰는 선택지(예: `--features all|sqlDev|myBatisDev|tuner,dba|viewer`)를 더하고 옵션 해석 시험을 둔다; 구성 V0 설정 없음·V1 R1·V2 R3·V3 R4+R5·V4 R6 을 같은 PC·같은 Release 게시본·docs/perf/README.md 측정 조건으로 잰다: 시작 표식(app-init·composed·settings-loaded·shell-attached·첫 프레임), 접속 0·탭 0 유휴 30초 전용 메모리, 스레드·핸들 수, 돈/건너뛴 시작 작업 수(TSK-07-03 Trace), 상태 칸 수; 접속 시나리오(`tests/Oranda.Perf.Ui` DB 시나리오, 26ai 상주 컨테이너, ORANDA_IT_* 환경 변수, 비밀번호 출력 금지): 미커밋 DML 뒤 1분 동안 앱이 연 DB 세션 수(V0·V1·V4); 구성마다 12회·앞 2회 버림·중앙값; 결과서 `docs/oranda1/itest/TSK-07-07.md`: 수치표(항목·구성·중앙값·p95·PC·빌드)와 D-003 기준에 따른 어셈블리 분리 결론(분리 검토면 후보 어셈블리와 예상 이득); 화면 잠김 등으로 못 잰 항목은 「참고」로 표시; 비고: 담당 PC: win144(Windows 개발 PC) — 맥북 세션은 이 Task 를 하지 않는다
+  - acceptance: 5개 구성의 수치표가 있다 / V4 에서 블로커 모니터 세션이 열리지 않음이 수치로 보인다 / D-003 기준에 따른 결론 한 줄이 있다 / Perf 도구 시험 통과
+  - note: 담당 PC: win144(Windows 개발 PC) — 맥북 세션은 이 Task 를 하지 않는다. 크기 M. 레인 rl-perf(07-02·07-03 머지 뒤 시작, 다른 레인이 끝나 자리가 나면)
+
+- [ ] TSK-07-08: Role 기반 메뉴·기능 통합테스트 — 기본값→Role 고르기→즉시 반영→조회 전용→대체 경로→재시작 [win144] w:2 2026-11-02~2026-11-03
+  - category: itest
+  - domain: test
+  - model: sonnet
+  - priority: high
+  - tags: integration, e2e, role, feature, win144
+  - depends: TSK-07-02, TSK-07-03, TSK-07-04, TSK-07-05, TSK-07-06, TSK-07-07
+  - prd-ref: PRD 12.4, TRD 10.11
+  - requirements: 흐름: settings.json 없음으로 시작 → 명령·도구 창·상태 칸·시작 작업 수가 a507d81 과 같음 → 설정 「기능」 탭에서 R1 고르기 → 재시작 없이 메뉴 바뀜·MyBatis 재시작 안내 → 재시작 → MyBatis 시작 작업·상태 칸 없음·블로커 칸 있음 → R6 만 고르기 → 「모니터」「튜닝」 메뉴 없음·23ai 와 oranda-ora11g 에서 UPDATE·CREATE·익명 블록 거부·SELECT 실행 → R6 + R1 → 거부 없음 → PL/SQL 끔에서 스키마 브라우저로 패키지 열기 = 읽기 전용 SQL 탭 → MyBatis 끔에서 매퍼 열기 = SQL 탭·파일 불변 → Lock 모니터 끔에서 블로커 칸 클릭 안내 → R4 더하기 → 튜닝 메뉴 즉시 나타남 → 「모든 기능 쓰기」 로 되돌리기 → 원래 집합; 각 레인 결과에 적힌 빠진 문구를 문구 파일 4종에 넣는다; 07-05 가 넘긴 엔진 밖 쓰기 경로를 확인한다; 제약: 실앱 눈 확인 항목은 사용자 몫으로 표시한다(실앱 SendKeys 금지, Headless 까지); 비고: 담당 PC: win144(Windows 개발 PC) — 맥북 세션은 이 Task 를 하지 않는다. 결과서 docs/oranda1/itest/TSK-07-08.md
+  - acceptance: 모든 흐름이 끝까지 간다 / 발견 결함은 WP-07 에 defect Task 로 등록됨 / 흐름별 결과표(정상·경계·오류·되돌림) / 전체 시험 통과
+  - note: 담당 PC: win144(Windows 개발 PC) — 맥북 세션은 이 Task 를 하지 않는다. 크기 M. 레인 rl-itest(마지막)
+
 ## 의존 그래프
 
 ### 그래프 (Mermaid)
@@ -457,6 +555,19 @@ graph LR
   TSK-06-02 --> TSK-06-07
   TSK-06-03 --> TSK-06-07
   TSK-06-05 --> TSK-06-07
+  TSK-07-01 --> TSK-07-02
+  TSK-07-01 --> TSK-07-03
+  TSK-07-01 --> TSK-07-04
+  TSK-07-01 --> TSK-07-05
+  TSK-07-01 --> TSK-07-06
+  TSK-07-02 --> TSK-07-07
+  TSK-07-03 --> TSK-07-07
+  TSK-07-02 --> TSK-07-08
+  TSK-07-03 --> TSK-07-08
+  TSK-07-04 --> TSK-07-08
+  TSK-07-05 --> TSK-07-08
+  TSK-07-06 --> TSK-07-08
+  TSK-07-07 --> TSK-07-08
   style TSK-01-02 fill:#e8f5e9,stroke:#2e7d32
   style TSK-03-01 stroke:#c62828,stroke-width:2px
   style TSK-02-02 stroke:#c62828,stroke-width:2px
@@ -474,6 +585,7 @@ graph LR
 - 최장 경로: TSK-01-01 → TSK-01-02 → TSK-02-01 → TSK-03-01 → TSK-03-02 → TSK-04-01
 - 기능 구간 내부 깊이는 3 이다(TSK-02-01 → TSK-03-01 → TSK-03-02).
 - FS 겹침 검증: depends 가 있는 모든 쌍에서 후행 시작일 > 선행 종료일.
+- WP-07(2026-10-25 추가, Task 8개): 최장 경로 TSK-07-01 → TSK-07-02 → TSK-07-07 → TSK-07-08(깊이 4 = 계약 1 + 기능 1 + 측정 1 + 통합테스트 1). Fan-in: TSK-07-01 이 5(계약 전용, 구조적 예외), TSK-07-08 이 depends 6(통합테스트, 구조적 예외). 계약 뒤 07-02~07-06 은 서로 depends 가 없고 소유 파일이 겹치지 않는다(TRD 10.9).
 
 **Fan-in Top 5**
 
