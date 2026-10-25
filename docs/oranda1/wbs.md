@@ -731,7 +731,7 @@ levels:
   - acceptance: 결과서에 구성 × 7개 숫자 표가 있고 각 칸에 「조사(413a33d)」·「지금」·「목표」·「차이 이유」가 있다 / 한 단계 줄 수가 15를 넘는 메뉴가 「모든 기능」 4개 이하(조사 표기 8, 같은 기준 재계산 값도 결과서에 적음), R1 2개 이하(조사 5), R6 1개 이하(조사 5)이고, 편집·파일·결과·그리드 오른쪽 클릭이 각각 15 이하 / 최상위 메뉴 수가 조사 표(모든 기능 11·R1 10·R6 9)와 같거나 작다 / 메뉴 항목 총수 차이가 뺀 중복(보기 7·템플릿 1·레이아웃 초기화 1)과 더한 PL/SQL 4 로 설명된다 / 모든 흐름이 끝까지 간다 / 발견 결함은 WP-09 에 defect Task 로 등록됨 / 전체 시험 통과
   - note: 담당 PC: win144(Windows 개발 PC) — 맥북 세션은 이 Task 를 하지 않는다. 크기 M. 레인 ux-itest(마지막) / 결과: 실제 FeatureGate 로 10구성의 메뉴 너비를 다시 세어 413a33d(같은 도우미로 재계산 = 조사 1.1 숫자)와 비교 — 모든 기능 메뉴 항목 274→269(= −중복 9 +PL/SQL 4)·15줄 넘는 메뉴 8(재계산 7)→4·R1 5(4)→1·R6 5(4)→1, 편집 53→15·파일 32→15·결과 37→15·그리드 오른쪽 클릭 37→15·보기 14→6, 최상위 11·10·9 그대로, R6 툴바 14→12(미커밋이면 14), SQL 탭과 보이는 도구 창 11→5, 기능 탭 첫 화면 입력 33→8~10. 새 Integration/Ux 43건(숫자 고정·목표·차이 설명·주 흐름: 새 설치 카드→조회만→Excel 하나의 창→SQL 개발+MyBatis→재시작→Ctrl+Enter→레이아웃 초기화→계획 창→모든 기능→재시작 뒤 같은 면, 나중에→접속 추가→첫 접속 SQL 탭, R6 툴바 실제 미커밋 이벤트, 묶인 명령 단축키·팔레트). Oracle: App Roles+Ux+Transfer 26ai 107/107, Oracle Roles 53/53, 11.2 TransferFlowTests S6_2 약한 단정 실패(→TSK-09-12). 빠진 문구 1(commands.md runScenario 키), BottomPanelTableTests 흔들림 = 공유 Headless 대기열 시간(본문 로그 격리 1줄). 결함 2건 TSK-09-11·12, 사용자 결정 U-1~U-8, 결과서 docs/oranda1/itest/TSK-09-10.md (win144)
 
-- [ ] TSK-09-11: 영어 화면 상태 줄·접속 콤보에 한국어 「접속 안 됨」·「줄 1, 열 1」 이 나옴 [win144] w:1 2026-11-18~2026-11-18
+- [x] TSK-09-11: 영어 화면 상태 줄·접속 콤보에 한국어 「접속 안 됨」·「줄 1, 열 1」 이 나옴 [win144] w:1 2026-11-18~2026-11-18
   - category: defect
   - domain: frontend
   - model: sonnet
@@ -741,9 +741,9 @@ levels:
   - prd-ref: PRD 13.2, TRD 11.9
   - requirements: TSK-09-10 결과서 D-1(09-03 보고, 07-10 과 같은 뿌리). 글자가 코드에 박혀 있어 en 에서도 한국어다: `Features/ConnectionManager/ConnectionStatusItem.cs:50`(「접속 안 됨」·「접속 안 됨({0})」), `Features/ConnectionManager/ConnectionCombo.cs:50`(「접속 안 됨」), `Features/SqlEditor/EditorStatusViewModel.cs:45`·`Features/SqlEditor/SqlEditorViewModel.cs:314`(「줄 {0}, 열 {1}」). strings-ko/en 에 키를 만들어 `ShellText`/`UiText` 로 읽고 언어가 바뀌면 다시 그린다. 상태 줄의 다른 칸도 같은 방식인지 훑는다
   - acceptance: en 으로 바꾸면 상태 줄·접속 콤보가 「Not connected」·「Ln 1, Col 1」 류 영어 / ko 는 지금 글자 그대로 / LocalizationTests 가 하드코딩을 잡는 시험 추가 / 전체 시험 통과
-  - note: TSK-09-10 에서 발견(D-1). 담당 PC: win144(Windows 개발 PC) — 맥북 세션은 이 Task 를 하지 않는다
+  - note: TSK-09-10 에서 발견(D-1). 담당 PC: win144(Windows 개발 PC) — 맥북 세션은 이 Task 를 하지 않는다 / 결과: 상태 줄·접속 콤보·편집기 줄 열·실행 상태·마지막 실행·미커밋·읽기 전용·환경 칩의 박힌 한글을 strings-ko/en 의 Execution.status.*·Execution.combo.*·Editor.status.* 25키로 옮기고(UiText.Format·WatchLanguage 추가) 언어를 바꾸면 다시 그린다(마지막 실행은 글이 아니라 요약을 담아 바뀐 언어로 만든다). 영어 Headless 시험 3건(상태 줄·콤보에 한글 없음·ko 복귀·박힌 한글 소스 검사)과 en 라이트·다크 PNG 확인. 남은 한글(시작 화면·스키마 브라우저 안내문·MyBatis 안내문)은 이 Task 밖 (win144)
 
-- [ ] TSK-09-12: 가져오기 오류 행 문구에 오류 코드가 두 번(ORA-00001: ORA-00001:) + TransferFlowTests S6_2 행 번호 약한 단정 [win144] w:1 2026-11-18~2026-11-18
+- [x] TSK-09-12: 가져오기 오류 행 문구에 오류 코드가 두 번(ORA-00001: ORA-00001:) + TransferFlowTests S6_2 행 번호 약한 단정 [win144] w:1 2026-11-18~2026-11-18
   - category: defect
   - domain: backend
   - model: sonnet
@@ -753,7 +753,7 @@ levels:
   - prd-ref: PRD 6(가져오기), TRD 11.12
   - requirements: TSK-09-10 결과서 D-2. `src/Oranda.Oracle/Transfer/OracleDataTransferService.cs` 의 `ErrorText` 가 `{Code}: {Message}` 로 잇는데 드라이버 메시지에 이미 「ORA-00001: …」 이 들어 있어 「행 4: ORA-00001: ORA-00001: unique constraint (…) violated」 가 된다(모든 버전). 코드가 메시지 앞에 이미 있으면 한 번만 쓴다. 함께: `tests/Oranda.App.Tests/Integration/TransferFlowTests.cs` S6_2 가 `Assert.Contains("3", 오류 줄)` 로 「행 3」 을 보려 하지만 제품은 머리글 포함 파일 줄 번호 「행 4」 를 낸다 — 26ai 는 제약·사용자 이름의 무작위 숫자에 3 이 있어 우연히 통과, 11.2 XE 에서 실패했다. 행 번호 규칙(파일 줄 번호 vs 데이터 행 번호)을 정해 단정을 `StartsWith("행 N:")` 로 고친다
   - acceptance: 오류 줄에 오류 코드가 한 번 / S6_2 가 26ai·11.2 모두에서 결정적으로 통과 / 가져오기 대화상자 오류 목록 문구 확인 / 전체 시험 통과
-  - note: TSK-09-10 에서 발견(D-2). 담당 PC: win144(Windows 개발 PC) — 맥북 세션은 이 Task 를 하지 않는다
+  - note: TSK-09-10 에서 발견(D-2). 담당 PC: win144(Windows 개발 PC) — 맥북 세션은 이 Task 를 하지 않는다 / 결과: ErrorText 가 메시지가 이미 같은 코드로 시작하면 코드를 다시 붙이지 않음(단위 시험 11건). 행 번호 규칙 = 머리글을 센 파일 줄 번호(문서화), S6_2 단정을 StartsWith(「행 4: ORA-00001: 」)+「ORA-00001: ORA-00001」 없음으로 고침. TransferFlowTests 3건 26ai 3/3·11.2 XE 3/3 통과 (win144)
 
 ## 의존 그래프
 

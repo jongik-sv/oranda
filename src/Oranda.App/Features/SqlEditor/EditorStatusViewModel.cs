@@ -1,5 +1,6 @@
 using System.ComponentModel;
 using System.Globalization;
+using Oranda.App.Features.Localization;
 using Oranda.App.ViewModels;
 using Oranda.Core.Shell;
 
@@ -12,6 +13,7 @@ public sealed class EditorStatusViewModel : ViewModelBase, IStatusBarItem, IDisp
     private SqlEditorHost? _host;
     private SqlEditorViewModel? _watched;
     private bool _attached;
+    private EventHandler? _languageHandler;
 
     // 매개변수 없는 생성자만 둔다(이유는 OutlineViewModel 참고). 호스트에는 처음 읽을 때 붙는다.
 
@@ -42,15 +44,15 @@ public sealed class EditorStatusViewModel : ViewModelBase, IStatusBarItem, IDisp
             }
 
             var p = tab.CaretPosition;
-            var text = $"줄 {p.Line.ToString(CultureInfo.InvariantCulture)}, 열 {p.Column.ToString(CultureInfo.InvariantCulture)}";
+            var text = UiText.Format("Editor.status.position", "줄 {0}, 열 {1}", p.Line, p.Column);
             if (tab.SelectionLength > 0)
             {
-                text += $" (선택 {tab.SelectionLength.ToString(CultureInfo.InvariantCulture)}자)";
+                text += UiText.Format("Editor.status.selection", " (선택 {0}자)", tab.SelectionLength);
             }
 
             if (tab.CursorCount > 1)
             {
-                text += $" · 커서 {tab.CursorCount.ToString(CultureInfo.InvariantCulture)}개";
+                text += UiText.Format("Editor.status.cursors", " · 커서 {0}개", tab.CursorCount);
             }
 
             return text;
@@ -65,6 +67,8 @@ public sealed class EditorStatusViewModel : ViewModelBase, IStatusBarItem, IDisp
         }
 
         _attached = true;
+        _languageHandler = (_, _) => OnPropertyChanged(nameof(Text)); // 언어가 바뀌면 글자를 다시 만든다
+        UiText.WatchLanguage(_languageHandler);
         Host.ActiveChanged += OnActiveChanged;
         Watch(Host.Active);
     }
@@ -74,6 +78,10 @@ public sealed class EditorStatusViewModel : ViewModelBase, IStatusBarItem, IDisp
         if (_attached)
         {
             Host.ActiveChanged -= OnActiveChanged;
+            if (_languageHandler is not null)
+            {
+                UiText.UnwatchLanguage(_languageHandler);
+            }
         }
 
         Watch(null);

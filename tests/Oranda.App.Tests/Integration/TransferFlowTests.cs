@@ -127,9 +127,12 @@ public sealed class TransferFlowTests(ItDb db, ITestOutputHelper output) : IClas
             var vm = new ImportDialogViewModel(service, meta, rig.Session) { FilePath = dup, TargetTable = dst };
             await vm.LoadAsync();
             await vm.StartAsync();
-            // 설계: 오류 행은 건너뛰고 따로 보고하며 나머지는 넣는다(행 3 = 중복 키). 서버에는 정상 2행만 있다.
+            // 설계: 오류 행은 건너뛰고 따로 보고하며 나머지는 넣는다. 행 번호는 머리글을 센 파일 줄 번호라
+            // 머리글 + 데이터 3행째(중복 키)는 「행 4」. 오류 코드는 앞에 한 번만 붙는다. 서버에는 정상 2행만 있다.
             Assert.True(vm.HasErrors, vm.Status);
-            Assert.Contains("3", Assert.Single(vm.ErrorRows), StringComparison.Ordinal);
+            var errorLine = Assert.Single(vm.ErrorRows);
+            Assert.StartsWith("행 4: ORA-00001: ", errorLine, StringComparison.Ordinal);
+            Assert.DoesNotContain("ORA-00001: ORA-00001", errorLine, StringComparison.Ordinal); // 26ai 는 뒤 줄에 세부 정보로 코드를 다시 적는다(ORA-03301)
             Assert.Equal("2", db.Text($"select count(*) from {dst}"));
             Assert.Equal("two", db.Text($"select name from {dst} where id = 2")); // 중복 행이 기존 값을 덮지 않았다
             await rig.RunSqlAsync($"delete from {dst}");

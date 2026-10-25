@@ -25,6 +25,7 @@ public abstract class ExecutionStatusItemViewModel : ViewModelBase, IStatusBarIt
         State.UseKeys(keys);
         ExecutionCommands.Install(container);
         State.PropertyChanged += OnStateChanged;
+        UiText.WatchLanguage((_, _) => OnStateChanged(this, new PropertyChangedEventArgs(null))); // 언어가 바뀌면 글자를 다시 만든다
     }
 
     public ExecutionState State { get; }
@@ -101,7 +102,7 @@ public sealed class ProtectionStatusViewModel : ExecutionStatusItemViewModel
 
     public override string Text =>
         !State.ShownHasSession ? string.Empty
-        : State.ShownReadOnly ? "읽기 전용"
+        : State.ShownReadOnly ? UiText.Get("Execution.status.readOnly", "읽기 전용")
         : State.ReadOnlyRole ? UiText.Get(FeatureTexts.StatusViewerRole, "조회 전용 Role")
         : string.Empty;
 

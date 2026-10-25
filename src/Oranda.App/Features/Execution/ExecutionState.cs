@@ -80,7 +80,10 @@ public sealed class ExecutionState : ObservableObject
 
         public TimeSpan Elapsed { get; set; }
 
-        public string LastRunText { get; set; } = string.Empty;
+        /// <summary>마지막 실행의 요약. 글은 보일 때 지금 언어로 만든다.</summary>
+        public RunSummary? LastRun { get; set; }
+
+        public string LastRunText => LastRun is { } run ? DescribeRun(run) : string.Empty;
 
         public bool Busy => Run is SessionRunState.Running or SessionRunState.Cancelling;
 
@@ -301,16 +304,18 @@ public sealed class ExecutionState : ObservableObject
 
     private static string DescribeSession(SessionRunState state, TimeSpan elapsed) => state switch
     {
-        SessionRunState.Idle => "연결됨",
-        SessionRunState.Running => "실행 중 " + FormatElapsed(elapsed),
-        SessionRunState.Cancelling => "취소 중",
-        SessionRunState.Broken => "끊김",
+        SessionRunState.Idle => UiText.Get("Execution.status.connected", "연결됨"),
+        SessionRunState.Running => UiText.Format("Execution.status.running", "실행 중 {0}", FormatElapsed(elapsed)),
+        SessionRunState.Cancelling => UiText.Get("Execution.status.cancelling", "취소 중"),
+        SessionRunState.Broken => UiText.Get("Execution.status.broken", "끊김"),
         _ => string.Empty,
     };
 
     private string DescribeTransaction(bool hasSession, bool pending) => !hasSession
         ? string.Empty
-        : pending ? "미커밋" : _autoCommit ? "자동 커밋" : string.Empty;
+        : pending ? UiText.Get("Execution.status.uncommitted", "미커밋")
+        : _autoCommit ? UiText.Get("Execution.status.autoCommit", "자동 커밋")
+        : string.Empty;
 
     // ---- 지금 접속(매개변수 없는 멤버) -------------------------------------------------------------
 
@@ -596,22 +601,29 @@ public sealed class ExecutionState : ObservableObject
 
         if (_tracks.TryGetValue(e.SessionId, out var t))
         {
-            t.LastRunText = DescribeRun(e.Result);
+            t.LastRun = new RunSummary(e.Result.Status, e.Result.RowsAffected, e.Result.Elapsed, e.Result.Error?.Number);
             RaiseAll();
         }
     }
 
+    /// <summary>「마지막 실행」 요약(결과 전체를 붙잡지 않는다): 상태·영향 행 수·소요 시간·오류 번호.</summary>
+    public sealed record RunSummary(ExecutionStatus Status, long? RowsAffected, TimeSpan Elapsed, int? ErrorNumber);
+
     /// <summary>「마지막 실행」 글: 행 수·소요 시간·오류 번호.</summary>
-    public static string DescribeRun(ExecutionResult r)
+    public static string DescribeRun(ExecutionResult r) =>
+        DescribeRun(new RunSummary(r.Status, r.RowsAffected, r.Elapsed, r.Error?.Number));
+
+    private static string DescribeRun(RunSummary r)
     {
-        var time = r.Elapsed.TotalSeconds.ToString("0.###", CultureInfo.InvariantCulture) + "초";
+        var time = UiText.Format("Execution.status.run.seconds", "{0}초", r.Elapsed.TotalSeconds.ToString("0.###", CultureInfo.InvariantCulture));
         return r.Status switch
         {
-            ExecutionStatus.Succeeded when r.RowsAffected is { } n => $"{n.ToString("N0", CultureInfo.InvariantCulture)}행 · {time}",
-            ExecutionStatus.Succeeded => "완료 · " + time,
-            ExecutionStatus.Failed => (r.Error is { Number: > 0 } err ? $"ORA-{err.Number:00000}" : "오류") + " · " + time,
-            ExecutionStatus.Cancelled => "취소됨",
-            _ => "거부됨",
+            ExecutionStatus.Succeeded when r.RowsAffected is { } n =>
+                UiText.Format("Execution.status.run.rows", "{0}행 · {1}", n.ToString("N0", CultureInfo.InvariantCulture), time),
+            ExecutionStatus.Succeeded => UiText.Format("Execution.status.run.done", "완료 · {0}", time),
+            ExecutionStatus.Failed => (r.ErrorNumber is > 0 ? $"ORA-{r.ErrorNumber:00000}" : UiText.Get("Execution.status.run.error", "오류")) + " · " + time,
+            ExecutionStatus.Cancelled => UiText.Get("Execution.status.run.cancelled", "취소됨"),
+            _ => UiText.Get("Execution.status.run.denied", "거부됨"),
         };
     }
 

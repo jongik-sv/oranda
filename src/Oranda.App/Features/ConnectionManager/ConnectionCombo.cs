@@ -10,6 +10,7 @@ using Avalonia.Layout;
 using Avalonia.Media;
 using Avalonia.Threading;
 using Oranda.App.Features.Execution;
+using Oranda.App.Features.Localization;
 using Oranda.App.Shell.Composition;
 using Oranda.App.ViewModels;
 using Oranda.Core.Connection;
@@ -23,7 +24,7 @@ namespace Oranda.App.Features.ConnectionManager;
 public sealed record ConnectionComboItem(int Number, ISession Session, bool Broken)
 {
     public string Label => string.Create(CultureInfo.InvariantCulture, $"{Number} - {Session.Profile.User}@{Session.Profile.Name}")
-        + (Broken ? " (끊김)" : string.Empty);
+        + (Broken ? UiText.Get("Execution.status.brokenSuffix", " (끊김)") : string.Empty);
 
     public string EnvironmentText => ConnectionStatusViewModel.EnvironmentTextOf(Session.Profile.Environment);
 
@@ -47,7 +48,7 @@ public sealed class ConnectionComboViewModel : ViewModelBase
     private bool _dropDownOpen;
     private string _placeholder = NotConnected;
 
-    private const string NotConnected = "접속 안 됨";
+    private static string NotConnected => UiText.Get("Execution.status.notConnected", "접속 안 됨");
 
     public ConnectionComboViewModel(IEventBus? events = null, ServiceContainer? container = null, Func<SessionRouter?>? router = null)
     {
@@ -61,6 +62,7 @@ public sealed class ConnectionComboViewModel : ViewModelBase
             PerContainer.AddOrUpdate(container, this);
         }
 
+        UiText.WatchLanguage((_, _) => Post(() => Refresh(rebuild: true))); // 항목 글(끊김·환경 칩)도 다시 만든다
         Refresh();
     }
 
@@ -119,7 +121,9 @@ public sealed class ConnectionComboViewModel : ViewModelBase
     }
 
     /// <summary>목록·고른 것·빈 글을 라우터에 맞춘다.</summary>
-    public void Refresh()
+    public void Refresh() => Refresh(rebuild: false);
+
+    private void Refresh(bool rebuild)
     {
         var router = Hook();
         var sessions = router?.Sessions ?? [];
@@ -127,7 +131,7 @@ public sealed class ConnectionComboViewModel : ViewModelBase
         _syncing = true;
         try
         {
-            if (!items.SequenceEqual(Items))
+            if (rebuild || !items.SequenceEqual(Items))
             {
                 Items.Clear();
                 foreach (var item in items)
@@ -139,9 +143,9 @@ public sealed class ConnectionComboViewModel : ViewModelBase
             var shown = router?.ShownSession;
             Selected = shown is null ? null : Items.FirstOrDefault(i => ReferenceEquals(i.Session, shown));
             PlaceholderText = router?.ShownMissing is { } missing
-                ? $"{NotConnected}({router.ProfileName(missing) ?? "?"})"
+                ? UiText.Format("Execution.status.notConnectedNamed", "접속 안 됨({0})", router.ProfileName(missing) ?? "?")
                 : shown is { } dedicated && Selected is null
-                    ? $"{UiTextOr("Execution.status.dedicated", "전용 세션")} · {dedicated.Profile.User}@{dedicated.Profile.Name}"
+                    ? $"{UiText.Get("Execution.status.dedicated", "전용 세션")} · {dedicated.Profile.User}@{dedicated.Profile.Name}"
                     : NotConnected;
         }
         finally
@@ -184,8 +188,6 @@ public sealed class ConnectionComboViewModel : ViewModelBase
 
     private void OnRouterChanged(object? sender, EventArgs e) => Refresh();
 
-    private static string UiTextOr(string key, string fallback) => Localization.UiText.Get(key, fallback);
-
     private static void Post(Action action)
     {
         if (Application.Current is null || Dispatcher.UIThread.CheckAccess())
@@ -212,13 +214,21 @@ public sealed class ConnectionComboView : UserControl
             Margin = new Thickness(0, 0, 6, 0),
             ItemTemplate = new FuncDataTemplate<ConnectionComboItem>((item, _) => ItemView(item), supportsRecycling: false),
         };
-        Avalonia.Automation.AutomationProperties.SetName(combo, "접속");
-        ToolTip.SetTip(combo, "지금 접속 (활성 SQL 탭의 접속)");
+        ApplyTexts(combo);
         combo.Bind(ItemsControl.ItemsSourceProperty, new Binding(nameof(ConnectionComboViewModel.Items)));
         combo.Bind(SelectingItemsControl.SelectedItemProperty, new Binding(nameof(ConnectionComboViewModel.Selected)) { Mode = BindingMode.TwoWay });
         combo.Bind(ComboBox.PlaceholderTextProperty, new Binding(nameof(ConnectionComboViewModel.PlaceholderText)));
         combo.Bind(ComboBox.IsDropDownOpenProperty, new Binding(nameof(ConnectionComboViewModel.IsDropDownOpen)) { Mode = BindingMode.TwoWay });
         Content = combo;
+        EventHandler onLanguage = (_, _) => Avalonia.Threading.Dispatcher.UIThread.Post(() => ApplyTexts(combo));
+        AttachedToVisualTree += (_, _) => UiText.WatchLanguage(onLanguage);
+        DetachedFromVisualTree += (_, _) => UiText.UnwatchLanguage(onLanguage);
+    }
+
+    private static void ApplyTexts(ComboBox combo)
+    {
+        Avalonia.Automation.AutomationProperties.SetName(combo, UiText.Get("Execution.combo.name", "접속"));
+        ToolTip.SetTip(combo, UiText.Get("Execution.combo.tip", "지금 접속 (활성 SQL 탭의 접속)"));
     }
 
     /// <summary>콤보 상자(시험이 고른다).</summary>

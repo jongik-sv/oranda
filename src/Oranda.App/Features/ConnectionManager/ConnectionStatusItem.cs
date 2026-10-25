@@ -5,6 +5,7 @@ using Avalonia.Input;
 using Avalonia.Layout;
 using Avalonia.Media;
 using Avalonia.Threading;
+using Oranda.App.Features.Localization;
 using Oranda.App.Shell.Composition;
 using Oranda.App.ViewModels;
 using Oranda.Core.Connection;
@@ -34,6 +35,7 @@ public sealed class ConnectionStatusViewModel : ViewModelBase, IStatusBarItem
         _router = router ?? (() => SessionRouter.Find(container));
         events?.Subscribe<SessionOpened>(this, e => Post(() => Opened(e)));
         events?.Subscribe<SessionClosed>(this, e => Post(() => Closed(e.SessionId)));
+        UiText.WatchLanguage((_, _) => Post(Changed)); // 언어가 바뀌면 글자를 다시 만든다
     }
 
     public bool IsVisible => true;
@@ -46,8 +48,10 @@ public sealed class ConnectionStatusViewModel : ViewModelBase, IStatusBarItem
         : _open.Count == 0 ? null : _open[^1];
 
     public string Text => Current is { } s
-        ? $"{s.Profile.User}@{s.Profile.Name}  {ShortVersion(s.Server.Version)}".TrimEnd() + (ShownBroken ? " (끊김)" : string.Empty)
-        : _hooked?.ShownMissing is { } missing ? $"접속 안 됨({_hooked.ProfileName(missing) ?? "?"})" : "접속 안 됨";
+        ? $"{s.Profile.User}@{s.Profile.Name}  {ShortVersion(s.Server.Version)}".TrimEnd() + (ShownBroken ? UiText.Get("Execution.status.brokenSuffix", " (끊김)") : string.Empty)
+        : _hooked?.ShownMissing is { } missing
+            ? UiText.Format("Execution.status.notConnectedNamed", "접속 안 됨({0})", _hooked.ProfileName(missing) ?? "?")
+            : UiText.Get("Execution.status.notConnected", "접속 안 됨");
 
     /// <summary>보이는 접속이 끊겼다(콤보의 「(끊김)」 과 같다).</summary>
     private bool ShownBroken => _hooked?.ShownSession is { } shown && _hooked.IsBroken(shown);
@@ -60,9 +64,9 @@ public sealed class ConnectionStatusViewModel : ViewModelBase, IStatusBarItem
     /// <summary>환경 칩 글(개발·테스트·운영). 환경이 없으면 빈 글.</summary>
     public static string EnvironmentTextOf(ConnectionEnvironment? environment) => environment switch
     {
-        ConnectionEnvironment.Production => "운영",
-        ConnectionEnvironment.Test => "테스트",
-        ConnectionEnvironment.Development => "개발",
+        ConnectionEnvironment.Production => UiText.Get("Execution.status.env.production", "운영"),
+        ConnectionEnvironment.Test => UiText.Get("Execution.status.env.test", "테스트"),
+        ConnectionEnvironment.Development => UiText.Get("Execution.status.env.development", "개발"),
         _ => string.Empty,
     };
 
@@ -76,8 +80,9 @@ public sealed class ConnectionStatusViewModel : ViewModelBase, IStatusBarItem
     };
 
     public string ToolTip => Current is { } s
-        ? $"{s.Profile.User}@{s.Profile.DataSource} · Oracle {s.Server.Version} · SID {s.Server.SessionId.ToString(CultureInfo.InvariantCulture)} — 눌러서 접속 관리자 열기"
-        : "접속 관리자 열기";
+        ? UiText.Format("Execution.status.connTip", "{0}@{1} · Oracle {2} · SID {3} — 눌러서 접속 관리자 열기",
+            s.Profile.User, s.Profile.DataSource, s.Server.Version, s.Server.SessionId.ToString(CultureInfo.InvariantCulture))
+        : UiText.Get("Execution.status.connTipNone", "접속 관리자 열기");
 
     /// <summary><c>23.26.0.0.0</c> → <c>26ai</c>, <c>19.3.0.0.0</c> → <c>19c</c>. 모르면 빈 글.</summary>
     public static string ShortVersion(string? version)

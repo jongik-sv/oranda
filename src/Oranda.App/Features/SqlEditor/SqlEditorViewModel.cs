@@ -311,7 +311,7 @@ public sealed partial class SqlEditorViewModel : ToolPanelViewModelBase, IBindOw
         get
         {
             var p = CaretPosition;
-            return $"줄 {p.Line}, 열 {p.Column}";
+            return Localization.UiText.Format("Editor.status.position", "줄 {0}, 열 {1}", p.Line, p.Column);
         }
     }
 

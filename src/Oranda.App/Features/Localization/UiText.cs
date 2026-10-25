@@ -1,4 +1,5 @@
 using System;
+using System.Globalization;
 
 namespace Oranda.App.Features.Localization;
 
@@ -15,5 +16,32 @@ public static class UiText
     {
         ArgumentNullException.ThrowIfNull(key);
         return Current?.TryLookup(key) ?? fallback;
+    }
+
+    /// <summary>키의 글자(없으면 <paramref name="fallback"/>)에 인수를 끼운다(문화권 무관).</summary>
+    public static string Format(string key, string fallback, params object[] args) =>
+        string.Format(CultureInfo.InvariantCulture, Get(key, fallback), args);
+
+    /// <summary>
+    /// 지금 언어가 바뀔 때 <paramref name="handler"/> 를 부른다(상태 표시줄처럼 글자를 미리 만들어 두는 곳이 다시 그리는 데 쓴다).
+    /// 아직 글자 입구가 안 채워졌으면 아무 일도 하지 않고 false.
+    /// </summary>
+    public static bool WatchLanguage(EventHandler handler)
+    {
+        if (Current is not { } text)
+        {
+            return false;
+        }
+
+        text.LanguageChanged += handler;
+        return true;
+    }
+
+    public static void UnwatchLanguage(EventHandler handler)
+    {
+        if (Current is { } text)
+        {
+            text.LanguageChanged -= handler;
+        }
     }
 }

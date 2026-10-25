@@ -25,7 +25,10 @@ namespace Oranda.Oracle.Transfer;
 [OrandaService(typeof(IDataTransferService))]
 internal sealed class OracleDataTransferService : IDataTransferService
 {
-    /// <summary>가져오기 오류 행 경고 접두어. 뒤에 <c>행 번호: 이유</c> 가 온다.</summary>
+    /// <summary>
+    /// 가져오기 오류 행 경고 접두어. 뒤에 <c>행 번호: 이유</c> 가 온다. 행 번호는 파일 줄 번호다(머리글 줄도 센다):
+    /// 머리글 다음 첫 데이터 행이 「행 2」 라서 편집기·Excel 에서 파일을 열어 같은 번호의 줄을 바로 찾는다.
+    /// </summary>
     internal const string ErrorRowPrefix = "행 ";
 
     private const int MaxReportedErrors = 1000;
@@ -334,7 +337,27 @@ internal sealed class OracleDataTransferService : IDataTransferService
         return sb.ToString();
     }
 
-    private static string ErrorText(ExecutionResult r) => r.Error is { } e ? $"{e.Code}: {e.Message}".Trim() : "알 수 없는 오류";
+    private static string ErrorText(ExecutionResult r) => r.Error is { } e ? ErrorText(e.Code, e.Message) : "알 수 없는 오류";
+
+    /// <summary>
+    /// 「코드: 메시지」. 드라이버 메시지가 이미 같은 코드로 시작하면(<c>ORA-00001: unique constraint …</c>) 코드를 또 붙이지 않는다.
+    /// </summary>
+    internal static string ErrorText(string? code, string? message)
+    {
+        var c = (code ?? string.Empty).Trim();
+        var m = (message ?? string.Empty).Trim();
+        if (c.Length == 0)
+        {
+            return m.Length == 0 ? "알 수 없는 오류" : m;
+        }
+
+        if (m.Length == 0)
+        {
+            return c;
+        }
+
+        return m.StartsWith(c, StringComparison.OrdinalIgnoreCase) ? m : $"{c}: {m}";
+    }
 
     private static InvalidOperationException Failure(ExecutionResult r, string prefix)
     {
