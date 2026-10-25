@@ -4,7 +4,7 @@ using Oranda.Core.History;
 namespace Oranda.Core.Execution;
 
 /// <summary>
-/// 정책 관문(TRD 4.9, SAFE). 규칙 순서: 읽기 전용 → 라이선스 → 운영 DML/DDL 확인 → WHERE 없는 DML → 위험 명령.
+/// 정책 관문(TRD 4.9, SAFE). 규칙 순서: 읽기 전용 → 조회 전용 Role(TRD 10.7.4) → 라이선스 → 운영 DML/DDL 확인 → WHERE 없는 DML → 위험 명령.
 /// 구현: Oranda.Core <c>ExecutionPolicy</c>(TSK-06-01).
 /// </summary>
 public interface IExecutionPolicy
@@ -30,6 +30,9 @@ public enum PolicyRule
 {
     None,
     ReadOnlyProfile,
+
+    /// <summary>조회 전용 Role 하나만 고름(D-006, TSK-07-05). 읽기 전용 프로필과 같은 기준으로 쓰기 문장을 거부한다.</summary>
+    ReadOnlyRole,
     License,
     ProductionChange,
     UnfilteredDml,

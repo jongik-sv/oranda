@@ -8,6 +8,7 @@ using Oranda.App.Shell;
 using Oranda.App.Shell.Composition;
 using Oranda.Core.Events;
 using Oranda.Core.Execution;
+using Oranda.Core.Features;
 using Oranda.Core.Grid;
 using Oranda.Core.Language;
 using Oranda.Core.Metadata;
@@ -72,6 +73,7 @@ public static class ExecutionCommands
             var bus = container.GetService<IEventBus>();
             var state = ExecutionState.For(bus);
             state.UseKeys(container.GetService<ContextKeyService>());
+            state.UseFeatures(container.GetService<IFeatureGate>()); // readOnlySession = 프로필 읽기 전용 또는 조회 전용 Role(TSK-07-05)
             var shell = container.GetService<ShellController>();
             ExecutionDialogs.UseOwner(() => shell?.MainWindow);
 
@@ -105,7 +107,7 @@ public static class ExecutionCommands
     }
 
     /// <summary>
-    /// 실행 엔진이 생성자에서 요구하는 정책 관문·대화 창구를 컨테이너에 등록한다(없을 때만).
+    /// 실행 엔진이 생성자에서 요구하는 정책 관문·대화 창구를 컨테이너에 등록한다(없을 때만). 정책 관문에는 등록된 기능 게이트를 넘긴다(조회 전용 Role, TSK-07-05).
     /// 앱 조립이 먼저 등록했으면(<c>AppExecutionInteraction</c> 의 <c>[OrandaService]</c>) 그대로 쓰고 접속 표시만 이어 준다.
     /// </summary>
     public static void EnsureEngineServices(ServiceContainer container, ExecutionState state)
@@ -116,7 +118,7 @@ public static class ExecutionCommands
         {
             if (container.GetService<IExecutionPolicy>() is null)
             {
-                container.AddInstance<IExecutionPolicy>(new ExecutionPolicy());
+                container.AddInstance<IExecutionPolicy>(new ExecutionPolicy(container.GetService<IFeatureGate>()));
             }
 
             var interaction = container.GetService<IExecutionInteraction>();
@@ -220,6 +222,7 @@ public static class ExecutionCommands
             Installed.Add(container, new object());
         }
 
+        ExecutionState.For(container.GetService<IEventBus>()).UseFeatures(container.GetService<IFeatureGate>()); // 시작 때부터 readOnlySession 이 Role 을 따른다
         GridEditCommands.Rerun ??= (stmt, ct) => Resolve(container).RerunForEditAsync(stmt, ct);
         GridEditCommands.ConfirmPreview ??= (text, commit, ct) => Resolve(container).ConfirmPreviewAsync(text, commit, ct);
         GridEditCommands.Report ??= notice => Resolve(container).ReportGridApply(notice);

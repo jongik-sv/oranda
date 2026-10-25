@@ -8,6 +8,7 @@ using Oranda.App.Shell;
 using Oranda.Core.Connection;
 using Oranda.Core.Events;
 using Oranda.Core.Execution;
+using Oranda.Core.Features;
 using Oranda.Core.History;
 using Oranda.Core.Sessions;
 
@@ -61,6 +62,7 @@ public sealed class ExecutionState : ObservableObject
     private bool _blankLineDelimiter;
     private DispatcherTimer? _timer;
     private ContextKeyService? _keys;
+    private IFeatureGate? _features;
 
     /// <summary>세션 하나의 실행 상태.</summary>
     private sealed class Track(ConnectionProfile? profile, bool dedicated)
@@ -241,6 +243,12 @@ public sealed class ExecutionState : ObservableObject
 
     public bool ShownReadOnly => ShownProfile?.ReadOnly ?? false;
 
+    /// <summary>조회 전용 Role 하나만 골랐다(D-006, <see cref="IFeatureGate.ReadOnlyRole"/>). 게이트가 없으면 false.</summary>
+    public bool ReadOnlyRole => _features?.ReadOnlyRole ?? false;
+
+    /// <summary>문맥 키 <c>readOnlySession</c>: 보이는 세션의 프로필이 읽기 전용이거나 조회 전용 Role(TRD 10.7.4). 세션이 없어도 Role 이면 참.</summary>
+    public bool ReadOnlySessionKey => ShownReadOnly || ReadOnlyRole;
+
     public string ShownLastRunText => Shown?.LastRunText ?? string.Empty;
 
     /// <summary>상태 표시줄 2번 구간 글. 전용 세션 탭이면 앞에 「전용 세션」을 붙인다.</summary>
@@ -252,6 +260,27 @@ public sealed class ExecutionState : ObservableObject
 
     /// <summary>상태 표시줄 3번 구간 글. 비어 있으면 구간을 접는다.</summary>
     public string ShownTransactionText => Shown is { } t ? DescribeTransaction(t.Run != SessionRunState.NoSession, t.TxnPending) : string.Empty;
+
+    /// <summary>
+    /// 조회 전용 Role 을 읽을 기능 게이트(TSK-07-05). 게이트 <see cref="IFeatureGate.Changed"/> 는 아무 스레드에서나 오므로 UI 스레드로 옮겨
+    /// <c>readOnlySession</c> 키를 다시 맞춘다. null 이거나 같은 게이트면 그대로(게이트를 떼지 않는다).
+    /// </summary>
+    public void UseFeatures(IFeatureGate? features)
+    {
+        if (features is null || ReferenceEquals(_features, features))
+        {
+            return;
+        }
+
+        if (_features is { } old)
+        {
+            old.Changed -= OnFeaturesChanged;
+        }
+
+        _features = features;
+        features.Changed += OnFeaturesChanged;
+        RaiseFeatures(); // 처음 맞춤은 부른 자리에서(UseKeys 와 같다)
+    }
 
     /// <summary>문맥 키를 이 값들로 맞출 대상(셸의 <see cref="ContextKeyService"/>).</summary>
     public void UseKeys(ContextKeyService? keys)
@@ -617,10 +646,19 @@ public sealed class ExecutionState : ObservableObject
 
         keys.Set("sessionBusy", ShownBusy);
         keys.Set("txnPending", ShownTxnPending);
-        keys.Set("readOnlySession", ShownReadOnly);
+        keys.Set("readOnlySession", ReadOnlySessionKey);
         keys.Set("hasExecError", _hasExecError);
         keys.Set("dedicatedSession", Shown is { Dedicated: true, Run: not SessionRunState.Broken });
         keys.Set("tabConnectionMissing", _focusNone); // 접속 안 됨 탭도 실행을 눌러 「다시 접속」 을 고를 수 있게(CONN-06)
+    }
+
+    private void OnFeaturesChanged(object? sender, EventArgs e) => Post(RaiseFeatures);
+
+    private void RaiseFeatures()
+    {
+        OnPropertyChanged(nameof(ReadOnlyRole));
+        OnPropertyChanged(nameof(ReadOnlySessionKey));
+        SyncKeys();
     }
 
     private void StartTimer()

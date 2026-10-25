@@ -1,5 +1,8 @@
+using System.Globalization;
+using System.Text;
 using System.Text.RegularExpressions;
 using Oranda.Core.Connection;
+using Oranda.Core.Features;
 
 namespace Oranda.Core.Execution;
 
@@ -7,6 +10,7 @@ namespace Oranda.Core.Execution;
 /// 정책 관문 규칙(TRD 4.9, SAFE-02·03·07·08). 앱 조립이 등록한다(Core 는 스캔 대상이 아니다). 소유: TSK-06-01.
 /// <list type="number">
 /// <item>읽기 전용 프로필: 질의·트랜잭션 제어·SQL*Plus·EXPLAIN 외 거부</item>
+/// <item>조회 전용 Role(D-006, TSK-07-05): 게이트의 <see cref="IFeatureGate.ReadOnlyRole"/> 가 참이면 1번과 같은 기준으로 거부</item>
 /// <item>라이선스: 요구 팩이 프로필 선언(서버 <c>control_management_pack_access</c> 를 알면 그것과 둘 중 낮은 값)보다 높으면 거부</item>
 /// <item>운영 라벨: DML·DDL·PL/SQL 확인(데이터·객체·다른 세션에 영향이 없는 ALTER 는 묻지 않는다, <see cref="IsHarmlessAlter"/>)</item>
 /// <item>WHERE 없는 UPDATE/DELETE: 모든 접속에서 확인</item>
@@ -21,6 +25,17 @@ public sealed class ExecutionPolicy : IExecutionPolicy
     private static readonly Regex IndexMonitoring = new(
         @"\A\s*ALTER\s+INDEX\s+[\w$#.""]+\s+(NO)?MONITORING\s+USAGE\s*;?\s*\z",
         RegexOptions.IgnoreCase | RegexOptions.CultureInvariant, TimeSpan.FromSeconds(1));
+
+    /// <summary>조회 전용 Role 거부 문구(TRD 10.7.4). <c>{0}</c> = 문장 종류.</summary>
+    private static readonly CompositeFormat ReadOnlyRoleDenied = CompositeFormat.Parse(FeatureTexts.ReadOnlyRoleDeniedMessage);
+
+    private readonly IFeatureGate? _features;
+
+    /// <param name="features">기능 게이트(TRD 10.7.4). null 이면 조회 전용 Role 규칙을 끈다. 앱 조립은 등록된 게이트를 넘긴다.</param>
+    public ExecutionPolicy(IFeatureGate? features = null)
+    {
+        _features = features;
+    }
 
     /// <summary>SAFE-08 옵션. 끄면 위험 명령 규칙을 건너뛴다(운영 확인 등 다른 규칙은 그대로).</summary>
     public bool RetypeDangerousNames { get; init; } = true;
@@ -71,6 +86,13 @@ public sealed class ExecutionPolicy : IExecutionPolicy
         {
             return new PolicyDecision(PolicyDecisionKind.Deny, PolicyRule.ReadOnlyProfile,
                 $"읽기 전용 접속 '{ctx.Profile.Name}' 에서는 {Describe(stmt, kind)} 을(를) 실행할 수 없습니다.");
+        }
+
+        // 1-2. 조회 전용 Role(D-006). 게이트 값은 문장마다 다시 읽는다(Role 을 바꾸면 다음 문장부터).
+        if (_features?.ReadOnlyRole == true && !IsReadOnlySafe(stmt, kind))
+        {
+            return new PolicyDecision(PolicyDecisionKind.Deny, PolicyRule.ReadOnlyRole,
+                string.Format(CultureInfo.InvariantCulture, ReadOnlyRoleDenied, Describe(stmt, kind)));
         }
 
         // 2. 라이선스 태그(SAFE-07)

@@ -461,7 +461,7 @@ levels:
   - acceptance: 탭에서 R4 를 더하고 저장하면 settings.json features.roles 에 tuner 가 들어간다 / 기능 하나를 Role 기본과 다르게 바꾸면 그 id 만 enabled 또는 disabled 에 남는다 / 조회 전용만이면 쓰기 전용 기능을 켤 수 없다 / ko/en·다크 Headless 렌더 통과 / 실앱 눈 확인 항목은 사람 몫으로 결과에 적는다 / 전체 시험 통과
   - note: 담당 PC: win144(Windows 개발 PC) — 맥북 세션은 이 Task 를 하지 않는다. 크기 M. 레인 rl-settings
 
-- [ ] TSK-07-05: 조회 전용 Role 실행 차단 — 정책 관문 ReadOnlyRole 규칙·readOnlySession 키 [win144] w:2 2026-10-27~2026-10-28
+- [x] TSK-07-05: 조회 전용 Role 실행 차단 — 정책 관문 ReadOnlyRole 규칙·readOnlySession 키 [win144] w:2 2026-10-27~2026-10-28
   - category: dev
   - domain: backend
   - model: opus
@@ -471,7 +471,7 @@ levels:
   - prd-ref: RL-07, RL-08, TRD 10.7.4
   - requirements: `ExecutionPolicy` 에 `PolicyRule.ReadOnlyRole` 을 더한다(IExecutionPolicy.cs enum): 자리 = 1번 읽기 전용 프로필 바로 뒤·라이선스 앞, 허용 = 기존 IsReadOnlySafe(질의·트랜잭션 제어·SQL*Plus·EXPLAIN), 분류 불확실은 DML 로 본다, 거부 문구 = TRD 10.7.4 예약 문구; 게이트는 생성자 인자 `IFeatureGate?`(null 이면 규칙 끔, 기존 `new ExecutionPolicy()` 호출이 고치지 않고 빌드). 앱 조립의 AddType 은 등록된 게이트를 받고, `ExecutionCommands.cs:117-119` 의 대체 등록도 게이트를 넘긴다; `ExecutionState` 의 readOnlySession 키 = 프로필 읽기 전용 또는 게이트 ReadOnlyRole, 게이트 Changed 에 다시 계산(UI 스레드로); 실행 엔진을 거치지 않는 쓰기 경로를 찾는다(그리드 편집 적용·가져오기·LOB 저장·플래시백 복원 등): 엔진을 거치면 시험으로 확인만, 거치지 않으면 그 경로 소유 파일이 이 Task 소유가 아니므로 결과에 적고 통합테스트에 넘긴다; 시험: 정책 단위 시험(R6 만 → SELECT·WITH·COMMIT·EXPLAIN 허용, UPDATE·MERGE·CREATE·ALTER SYSTEM·익명 블록·CALL·분류 불확실 거부, 다른 Role 과 함께 → 거부 없음, 프로필 읽기 전용과 겹치면 기존 규칙이 먼저), 실행 컨트롤러 시험(가짜 엔진 호출 0회·메시지 창에 이유), readOnlySession 키와 쓰기 명령 흐림; 계약 Task design.md 「기능 Task 편집 지점」 의 자기 소유 파일만 고친다; 비고: 담당 PC: win144(Windows 개발 PC) — 맥북 세션은 이 Task 를 하지 않는다
   - acceptance: R6 만 고르면 SQL 편집기·스크립트(F5)·전용 세션에서 DML·DDL·PL/SQL 이 거부되고 이유가 보이며 SELECT 는 실행된다 / R6 + R1 이면 거부 없음 / 거부는 드라이버 호출 전 / 엔진 밖 쓰기 경로 목록이 결과에 있다 / 전체 시험 통과
-  - note: 담당 PC: win144(Windows 개발 PC) — 맥북 세션은 이 Task 를 하지 않는다. 크기 M. 레인 rl-guard
+  - note: 담당 PC: win144(Windows 개발 PC) — 맥북 세션은 이 Task 를 하지 않는다. 크기 M. 레인 rl-guard. 결과 — ExecutionPolicy 에 ReadOnlyRole 규칙(읽기 전용 프로필 뒤·라이선스 앞, IsReadOnlySafe 기준, 게이트 생성자 인자), 대체 등록·Install·Resolve 가 게이트를 넘김, readOnlySession = 프로필 읽기 전용 또는 Role(게이트 Changed 를 UI 스레드로). 엔진 밖 쓰기 경로 = COMMIT/ROLLBACK 직접 호출뿐(툴바 커밋·롤백·자동 커밋·RowEditor·LobWriter·가져오기 커밋, WHENEVER SQLERROR EXIT COMMIT) — 문장 쓰기는 모두 엔진을 거쳐 거부됨, 07-08 이 확인 (win144)
 
 - [ ] TSK-07-06: 꺼진 기능 대체 경로 — PL/SQL 읽기 전용 소스·MyBatis 끔 매퍼 열기·계획 고급 탭·시작 화면 [win144] w:3 2026-10-27~2026-10-29
   - category: dev
