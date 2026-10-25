@@ -98,7 +98,7 @@ public sealed class FeatureCatalogTests
 
         Assert.All(FeatureCatalog.NamespaceTags, t => Assert.True(FeatureCatalog.IsKnownFeature(t.FeatureId), t.Prefix));
         Assert.All(FeatureCatalog.IdOverrides.Values.OfType<string>(), id => Assert.True(FeatureCatalog.IsKnownFeature(id), id));
-        Assert.All(FeatureCatalog.TypeOverrides.Values, id => Assert.True(FeatureCatalog.IsKnownFeature(id), id));
+        Assert.All(FeatureCatalog.TypeOverrides.Values.OfType<string>(), id => Assert.True(FeatureCatalog.IsKnownFeature(id), id));
         Assert.Equal(FeatureCatalog.NamespaceTags.Count, FeatureCatalog.NamespaceTags.Select(t => t.Prefix).Distinct(StringComparer.Ordinal).Count());
     }
 
@@ -173,6 +173,15 @@ public sealed class FeatureCatalogTests
         Assert.Equal(FeatureIds.ChangeJournal, FeatureCatalog.FeatureFor(null, "Oranda.Platform.Journal.ChangeJournalRecorder", "Oranda.Platform.Journal"));
         Assert.Null(FeatureCatalog.FeatureFor(null, "Oranda.Platform.History.HistoryRecorder", "Oranda.Platform.History"));
         Assert.Null(FeatureCatalog.FeatureFor(null, "Oranda.Language.Parsing.PlSqlWarmUpTask", "Oranda.Language.Parsing"));
+    }
+
+    [Fact]
+    public void Type_override_with_null_makes_the_save_notice_item_common_although_it_lives_in_the_grid_edit_namespace()
+    {
+        // 저장 알림 칸은 내보내기·튜닝 보고서·대체 열기 안내까지 실어 gridEdit 가 꺼져도 필요하다(TSK-07-09).
+        const string type = "Oranda.App.Features.GridEdit.SaveStatusViewModel";
+        Assert.Null(FeatureCatalog.FeatureFor(null, type, "Oranda.App.Features.GridEdit"));
+        Assert.Equal(FeatureIds.GridEdit, FeatureCatalog.FeatureFor(null, "Oranda.App.Features.GridEdit.GridEditCommands", "Oranda.App.Features.GridEdit")); // 같은 폴더의 다른 형은 그대로
     }
 
     [Fact]

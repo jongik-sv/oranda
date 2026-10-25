@@ -3,10 +3,12 @@ using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Layout;
 using Avalonia.Media;
+using Oranda.App.Features.Localization;
 using Oranda.App.Shell;
 using Oranda.App.Shell.Composition;
 using Oranda.App.ViewModels;
 using Oranda.Core.Events;
+using Oranda.Core.Features;
 using Oranda.Core.Shell;
 
 namespace Oranda.App.Features.Execution;
@@ -34,7 +36,7 @@ public abstract class ExecutionStatusItemViewModel : ViewModelBase, IStatusBarIt
 
     public virtual bool IsVisible => Text.Length > 0;
 
-    public string ToolTip => Text;
+    public virtual string ToolTip => Text;
 
     private void OnStateChanged(object? sender, PropertyChangedEventArgs e)
     {
@@ -85,7 +87,10 @@ public sealed class LastRunStatusViewModel : ExecutionStatusItemViewModel
     public override string Text => State.ShownHasSession ? State.ShownLastRunText : string.Empty;
 }
 
-/// <summary>6번 구간: 「읽기 전용」(읽기 전용 프로필).</summary>
+/// <summary>
+/// 6번 구간: 쓰기가 막힌 이유. 읽기 전용 프로필이면 「읽기 전용」, 조회 전용 Role 때문이면 「조회 전용 Role」(도움말에 풀 방법).
+/// 둘 다면 프로필 쪽(정책 관문과 같은 순서).
+/// </summary>
 [OrandaStatusBarItem("oranda.status.protection", 6, CollapseRank = 0)]
 public sealed class ProtectionStatusViewModel : ExecutionStatusItemViewModel
 {
@@ -94,7 +99,16 @@ public sealed class ProtectionStatusViewModel : ExecutionStatusItemViewModel
     {
     }
 
-    public override string Text => State.ShownHasSession && State.ShownReadOnly ? "읽기 전용" : string.Empty;
+    public override string Text =>
+        !State.ShownHasSession ? string.Empty
+        : State.ShownReadOnly ? "읽기 전용"
+        : State.ReadOnlyRole ? UiText.Get(FeatureTexts.StatusViewerRole, "조회 전용 Role")
+        : string.Empty;
+
+    public override string ToolTip =>
+        !State.ShownReadOnly && State.ShownHasSession && State.ReadOnlyRole
+            ? UiText.Get(FeatureTexts.StatusViewerRoleTip, "조회 전용 Role 이라 쓰기 문장이 막혀 있습니다. 설정 > 기능에서 다른 Role 을 함께 고르면 풀립니다.")
+            : Text;
 
     public override string? DotBrushKey => Text.Length > 0 ? "OrandaEnvTestBrush" : null;
 }

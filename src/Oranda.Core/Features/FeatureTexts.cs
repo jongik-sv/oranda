@@ -100,4 +100,15 @@ public static class FeatureTexts
 
     /// <summary>Role 고르기…</summary>
     public const string StartChooseRole = "Features.start.chooseRole";
+
+    // ---- 조회 전용 안내 보강 (TSK-07-10) ----
+
+    /// <summary>상태 표시줄 칸: 조회 전용 Role 때문에 쓰기가 막혔다(프로필 읽기 전용은 「읽기 전용」)</summary>
+    public const string StatusViewerRole = "Features.status.viewerRole";
+
+    /// <summary>위 칸의 도움말: 무엇 때문이고 풀려면 무엇을 하면 되는지</summary>
+    public const string StatusViewerRoleTip = "Features.status.viewerRoleTip";
+
+    /// <summary>Role 로 고르기인데 Role 을 하나도 안 골랐다: 무엇이 켜지고 무엇을 하면 되는지 한 줄</summary>
+    public const string NoRoleNotice = "Features.noRoleNotice";
 }

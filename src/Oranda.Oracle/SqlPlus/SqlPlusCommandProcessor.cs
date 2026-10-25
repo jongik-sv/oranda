@@ -248,14 +248,12 @@ internal sealed class SqlPlusCommandProcessor : ISqlPlusCommandProcessor
                         size = Math.Clamp(n, 2000, 1_000_000).ToString(CultureInfo.InvariantCulture);
                     }
 
-                    state.ServerOutput = true;
-                    return await RunInternalAsync(s, stmt, $"BEGIN DBMS_OUTPUT.ENABLE({size}); END;", ct).ConfigureAwait(false);
+                    return await SetServerOutputAsync(s, state, stmt, true, $"BEGIN DBMS_OUTPUT.ENABLE({size}); END;", ct).ConfigureAwait(false);
                 }
 
                 if (value is "OFF")
                 {
-                    state.ServerOutput = false;
-                    return await RunInternalAsync(s, stmt, "BEGIN DBMS_OUTPUT.DISABLE; END;", ct).ConfigureAwait(false);
+                    return await SetServerOutputAsync(s, state, stmt, false, "BEGIN DBMS_OUTPUT.DISABLE; END;", ct).ConfigureAwait(false);
                 }
 
                 return Fail(stmt, "SP2-0158", "SET SERVEROUTPUT 는 ON 또는 OFF 입니다.");
@@ -337,13 +335,34 @@ internal sealed class SqlPlusCommandProcessor : ISqlPlusCommandProcessor
         var call = rest.TrimEnd().TrimEnd(';');
         return call.Length == 0
             ? Fail(stmt, "SP2-0158", "EXEC 다음에 PL/SQL 문이 필요합니다.")
-            : await RunInternalAsync(s, stmt, $"BEGIN {call}; END;", ct).ConfigureAwait(false);
+            : await RunInternalAsync(s, stmt, $"BEGIN {call}; END;", ct, "EXEC").ConfigureAwait(false);
+    }
+
+    /// <summary>세션의 SET SERVEROUTPUT 상태(시험이 거부 때 상태가 안 바뀌는지 본다).</summary>
+    internal bool IsServerOutputOn(ISession s) => _states.TryGetValue(s, out var st) && st.ServerOutput;
+
+    /// <summary>
+    /// SET SERVEROUTPUT: 안쪽 블록이 정책 관문에서 거부되면(읽기 전용 프로필·조회 전용 Role) 상태를 바꾸지 않는다.
+    /// 거부 문구는 사용자가 친 명령(SET SERVEROUTPUT)을 말한다(RunInternalAsync 의 label).
+    /// </summary>
+    private async Task<ExecutionResult> SetServerOutputAsync(ISession s, SessionState state, SqlStatement stmt, bool on, string plsql, CancellationToken ct)
+    {
+        var before = state.ServerOutput;
+        state.ServerOutput = on;
+        var r = await RunInternalAsync(s, stmt, plsql, ct, "SET SERVEROUTPUT").ConfigureAwait(false);
+        if (r.Status == ExecutionStatus.Denied)
+        {
+            state.ServerOutput = before;
+        }
+
+        return r;
     }
 
     /// <summary>서버에 보내는 내부 PL/SQL(이력에 남기지 않는다 — SQL*Plus 문장 자신이 이력에 남는다).</summary>
-    private async Task<ExecutionResult> RunInternalAsync(ISession s, SqlStatement owner, string plsql, CancellationToken ct)
+    /// <param name="label">정책 관문이 거부·확인 문구에 쓰는 이름. 사용자가 친 명령(내부 블록의 BEGIN 이 아니라)을 말하게 한다.</param>
+    private async Task<ExecutionResult> RunInternalAsync(ISession s, SqlStatement owner, string plsql, CancellationToken ct, string label = "BEGIN")
     {
-        var inner = new SqlStatement(plsql, default, StatementKind.PlSql) { Verb = "BEGIN" };
+        var inner = new SqlStatement(plsql, default, StatementKind.PlSql) { Verb = label };
         var r = await _execution().ExecuteAsync(s, inner, new Dictionary<string, BindValue>(), InternalOptions, ct).ConfigureAwait(false);
         return r with { Statement = owner };
     }

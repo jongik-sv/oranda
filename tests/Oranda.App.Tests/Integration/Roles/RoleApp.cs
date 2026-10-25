@@ -168,12 +168,11 @@ internal static class PrdMatrix
         }),
     ];
 
-    /// <summary>a507d81 의 상태 칸 10개 중 기능에 매인 것: 저장 알림(gridEdit)·블로커(blockerAlert)·MyBatis 저장(myBatis).</summary>
+    /// <summary>a507d81 의 상태 칸 10개 중 기능에 매인 것: 블로커(blockerAlert)·MyBatis 저장(myBatis). 저장 알림은 공통이다(TSK-07-09).</summary>
     public static string[] ExpectedStatusTypes(HashSet<string> on, IEnumerable<string> allTypes) =>
     [
         .. allTypes.Where(t => t switch
         {
-            "SaveStatusViewModel" => on.Contains("gridEdit"),
             "BlockerStatusViewModel" => on.Contains("blockerAlert"),
             "MapperSaveStatusViewModel" => on.Contains("myBatis"),
             _ => true,

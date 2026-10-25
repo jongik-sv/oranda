@@ -118,6 +118,7 @@
                 </DataTemplate>
               </ItemsControl.ItemTemplate>
             </ItemsControl>
+            <TextBlock x:Name="NoRoleNotice" Classes="feat-desc" Margin="4,4,0,0" TextWrapping="Wrap" Text="{Binding NoRoleNoticeText}" IsVisible="{Binding ShowNoRoleNotice}" />
             <TextBlock x:Name="PackNotice" Classes="feat-desc" Margin="4,4,0,0" Text="{Binding PackNoticeText}" IsVisible="{Binding ShowPackNotice}" />
           </StackPanel>
         </Border>

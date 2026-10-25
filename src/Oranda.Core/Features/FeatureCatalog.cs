@@ -127,10 +127,14 @@ public static class FeatureCatalog
         ["oranda.plsql.openSource"] = null,
     };
 
-    /// <summary>형 전체 이름 덮어쓰기(TRD 10.2 둘째 표). App 밖 어셈블리의 시작 작업처럼 네임스페이스로 못 잡는 항목.</summary>
-    public static IReadOnlyDictionary<string, string> TypeOverrides { get; } = new Dictionary<string, string>(StringComparer.Ordinal)
+    /// <summary>
+    /// 형 전체 이름 덮어쓰기(TRD 10.2 둘째 표). App 밖 어셈블리의 시작 작업처럼 네임스페이스로 못 잡는 항목.
+    /// 값이 null 이면 공통(늘 켬) — 저장 알림 칸은 내보내기·튜닝 보고서·대체 열기 안내까지 실어 gridEdit 없이도 필요하다(TSK-07-09).
+    /// </summary>
+    public static IReadOnlyDictionary<string, string?> TypeOverrides { get; } = new Dictionary<string, string?>(StringComparer.Ordinal)
     {
         ["Oranda.Platform.Journal.ChangeJournalRecorder"] = FeatureIds.ChangeJournal,
+        ["Oranda.App.Features.GridEdit.SaveStatusViewModel"] = null,
     };
 
     private static readonly Dictionary<string, FeatureDefinition> ById = Features.ToDictionary(f => f.Id, StringComparer.Ordinal);

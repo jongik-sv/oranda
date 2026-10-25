@@ -75,7 +75,7 @@ public sealed partial class FeatureContractTests
         var platform = Assembly.Load("Oranda.Platform");
         foreach (var name in FeatureCatalog.TypeOverrides.Keys)
         {
-            Assert.NotNull(platform.GetType(name));
+            Assert.NotNull(platform.GetType(name) ?? typeof(AppComposition).Assembly.GetType(name));
         }
     }
 
@@ -97,7 +97,7 @@ public sealed partial class FeatureContractTests
                 .Where(f => f.IsLiteral && f.Name != nameof(FeatureTexts.ReadOnlyRoleDeniedMessage) && !f.Name.EndsWith("Prefix", StringComparison.Ordinal))
                 .Select(f => (string)f.GetRawConstantValue()!))
             .ToList();
-        Assert.Equal(25 + 12 + 5 + 23, keys.Count);
+        Assert.Equal(25 + 12 + 5 + 26, keys.Count);
 
         foreach (var key in keys)
         {

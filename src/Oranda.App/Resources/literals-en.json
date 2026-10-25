@@ -1152,5 +1152,8 @@
   "느린 SQL 찾기·계획·통계·트레이스·보고서": "Find slow SQL; plans, statistics, traces, reports",
   "조회 전용": "Read-only",
   "운영 DB 조회, Excel·CSV 내보내기": "Query production databases, export to Excel and CSV",
-  "Role·기능 고르기…": "Choose Roles and Features…"
+  "Role·기능 고르기…": "Choose Roles and Features…",
+  "조회 전용 Role": "Read-only role",
+  "조회 전용 Role 이라 쓰기 문장이 막혀 있습니다. 설정 > 기능에서 다른 Role 을 함께 고르면 풀립니다.": "Writes are blocked by the Read-only role. Choose another role as well in Settings > Features to allow them.",
+  "Role 을 하나도 고르지 않으면 공통 기능만 켜집니다. 위 목록에서 쓸 Role 을 고르세요.": "With no role chosen, only the common features are on. Choose the roles you need from the list above."
 }

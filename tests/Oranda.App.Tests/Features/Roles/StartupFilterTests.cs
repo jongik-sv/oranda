@@ -274,7 +274,7 @@ namespace Oranda.App.Tests.Features.Roles
             var types = StatusTypes(shell);
             Assert.DoesNotContain("BlockerStatusViewModel", types);
             Assert.DoesNotContain("MapperSaveStatusViewModel", types);
-            Assert.DoesNotContain("SaveStatusViewModel", types); // 그리드 편집 저장 알림(조회 전용은 gridEdit 없음)
+            Assert.Contains("SaveStatusViewModel", types); // 저장 알림은 공통: 조회 전용도 내보내기 완료 알림이 보인다
             Assert.Contains("ConnectionStatusViewModel", types);
             Assert.DoesNotContain(shell.Window.GetVisualDescendants(), v => v is BlockerStatusView);
         });

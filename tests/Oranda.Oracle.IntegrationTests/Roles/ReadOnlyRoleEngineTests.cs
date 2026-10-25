@@ -564,13 +564,15 @@ public abstract class ReadOnlyRoleEngineTestsBase(RoleDbFixtureBase db, ITestOut
             Assert.Equal(0, await CountAsync($"SELECT COUNT(*) FROM {t} WHERE id IN (7, 8)"));
 
             // SET SERVEROUTPUT ON|OFF [SIZE n]: 처리기가 안쪽에서 DBMS_OUTPUT.ENABLE/DISABLE 블록을 보내므로 그 블록이 관문에서 거부된다 —
-            // 읽기 전용 프로필도 같다(followups 07-05). 거부 문구는 사용자가 친 명령이 아니라 내부 블록을 말한다(결함 D-3).
+            // 읽기 전용 프로필도 같다(followups 07-05). 거부 문구는 사용자가 친 명령을 말한다(TSK-07-10, 결함 D-3 수정).
             foreach (var sql in new[] { "SET SERVEROUTPUT ON", "SET SERVEROUTPUT ON SIZE 100000", "SET SERVEROUTPUT OFF" })
             {
                 var set = Assert.Single(await rig.RunTextAsync(session, sql));
                 output.WriteLine($"{sql} => {set.Status} / {set.Policy?.Message}");
                 Assert.Equal(ExecutionStatus.Denied, set.Status);
                 Assert.Equal(PolicyRule.ReadOnlyRole, set.Policy?.Rule);
+                Assert.Contains("SET SERVEROUTPUT", set.Policy?.Message, StringComparison.Ordinal);
+                Assert.DoesNotContain("BEGIN", set.Policy?.Message, StringComparison.Ordinal);
             }
 
             // R6 + 다른 Role: 같은 EXEC 가 돈다.

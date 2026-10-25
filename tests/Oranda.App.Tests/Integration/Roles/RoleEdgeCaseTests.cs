@@ -22,7 +22,7 @@ namespace Oranda.App.Tests.Integration.Roles;
 
 /// <summary>
 /// TSK-07-08 통합 4: 경계·오류·되돌림과 앞 레인이 넘긴 확인 거리(followups.md). 결함으로 판정한 것은 「현재 동작」을 단정해 두고
-/// (고치면 이 시험이 먼저 알려 준다) 결과서 docs/oranda1/itest/TSK-07-08.md 의 표에 번호로 올린다. 이름이 <c>Defect_</c> 로 시작하는 시험이 그것이다.
+/// (고치면 이 시험이 먼저 알려 준다) 결과서 docs/oranda1/itest/TSK-07-08.md 의 표에 번호로 올린다. D-1~D-4 는 TSK-07-09·10 에서 고쳐 단정을 뒤집었다.
 /// </summary>
 [Trait("Category", "Integration")]
 [Collection("RoleItestUi")]
@@ -160,7 +160,7 @@ public sealed class RoleEdgeCaseTests(ITestOutputHelper output)
             Assert.DoesNotContain("oranda.grid.edit.addRow", s.RegistryCommands);
             Assert.DoesNotContain("oranda.tools.import", s.RegistryCommands);
             Assert.DoesNotContain("oranda.file.newPlsqlEditor", s.RegistryCommands);
-            Assert.DoesNotContain("SaveStatusViewModel", s.StatusTypes);
+            Assert.Contains("SaveStatusViewModel", s.StatusTypes); // 저장 알림 칸은 공통(내보내기 완료 알림, TSK-07-09)
 
             // 설정 창도 같은 말을 한다: 쓰기 전용 기능은 막힘 표시 + 꺼짐.
             var vm = new SettingsViewModel(app.Get<SettingsService>(), app.Get<ShellController>().Text, featureGate: app.Gate);
@@ -176,9 +176,9 @@ public sealed class RoleEdgeCaseTests(ITestOutputHelper output)
     // ── Role 0개 ───────────────────────────────────────────────────
 
     [Fact]
-    public Task Defect_choose_by_role_with_no_role_ticked_turns_every_feature_off_without_telling_the_user_why() => HeadlessHost.Run(async () =>
+    public Task Choose_by_role_with_no_role_ticked_explains_that_only_the_common_features_stay_on() => HeadlessHost.Run(async () =>
     {
-        // followups(07-04): 「Role 로 고르기」 + 확인란 0개 = 공통 기능만. 화면에는 기능이 모두 꺼져 보일 뿐 설명이 없다.
+        // followups(07-04, TSK-07-10 D-4 수정): 「Role 로 고르기」 + 확인란 0개 = 공통 기능만. 켜지는 것·할 일을 한 줄로 알린다.
         var dir = RoleApp.NewDir();
         try
         {
@@ -191,10 +191,21 @@ public sealed class RoleEdgeCaseTests(ITestOutputHelper output)
             }
 
             Assert.All(vm.Features.Items, i => Assert.False(i.IsChecked, i.Id)); // 25개 모두 꺼짐
+            Assert.True(vm.Features.ShowNoRoleNotice);
+            Assert.Equal("Role 을 하나도 고르지 않으면 공통 기능만 켜집니다. 위 목록에서 쓸 Role 을 고르세요.", vm.Features.NoRoleNoticeText);
             Assert.False(vm.Features.HasRestartBanner);
             Assert.False(vm.Features.IsViewerOnly);
             Assert.False(vm.Features.ShowPackNotice);
-            Assert.DoesNotContain(typeof(Oranda.App.Shell.Settings.FeatureSettingsPage).GetProperties(), p => p.Name.Contains("NoRole", StringComparison.OrdinalIgnoreCase) || p.Name.Contains("EmptyRole", StringComparison.OrdinalIgnoreCase));
+
+            // Role 을 하나 고르면 안내가 사라지고, 「모든 기능 쓰기」로 돌아가도 안 보인다(되돌림).
+            vm.Features.Roles.First(r => r.Id == RoleIds.SqlDev).IsChecked = true;
+            Assert.False(vm.Features.ShowNoRoleNotice);
+            vm.Features.Roles.First(r => r.Id == RoleIds.SqlDev).IsChecked = false;
+            Assert.True(vm.Features.ShowNoRoleNotice);
+            vm.Features.UseAllFeatures = true;
+            Assert.False(vm.Features.ShowNoRoleNotice);
+            vm.Features.UseRoles = true;
+            Assert.True(vm.Features.ShowNoRoleNotice);
 
             // 저장하면 roles = [] → 공통 기능만 있는 앱이 된다(시작은 한다).
             await vm.SaveAsync();
@@ -285,57 +296,83 @@ public sealed class RoleEdgeCaseTests(ITestOutputHelper output)
     }
 
     [Fact]
-    public Task Defect_status_bar_read_only_mark_ignores_the_viewer_role_while_the_profile_flag_still_shows() => HeadlessHost.Run(async () =>
+    public Task Status_bar_read_only_mark_shows_the_viewer_role_and_tells_the_profile_flag_apart() => HeadlessHost.Run(async () =>
     {
-        // followups(07-05): 상태 표시줄 「읽기 전용」 칸(ProtectionStatusViewModel)이 Role 을 반영하는가.
+        // TSK-07-10(결함 D-2 수정): 상태 표시줄 「읽기 전용」 칸이 조회 전용 Role 도 반영한다. 프로필이면 「읽기 전용」, Role 이면 「조회 전용 Role」.
         var dir = RoleApp.NewDir();
         try
         {
             using var app = new RoleApp(dir, Features(["viewer"]));
             var bus = app.Get<IEventBus>();
             var chip = app.Window.ViewModel!.StatusItems.Select(e => e.Item).OfType<ProtectionStatusViewModel>().Single();
+            Assert.Equal(string.Empty, chip.Text); // 접속 전에는 비어 있다
 
             var id = Guid.NewGuid();
             bus.Publish(new SessionOpened(id, TestData.Profile(readOnly: false), TestData.Server(), SessionPurpose.Work));
             await RoleApp.SettleAsync();
-            Assert.True(app.Get<ContextKeyService>().Get("readOnlySession")); // 키와 정책은 Role 을 따른다
-            Assert.Equal(string.Empty, chip.Text); // 그러나 상태 칸은 비어 있다 → 사용자는 왜 쓰기가 막히는지 상태 줄에서 알 수 없다
+            Assert.True(app.Get<ContextKeyService>().Get("readOnlySession"));
+            Assert.Equal("조회 전용 Role", chip.Text); // 쓰기 가능 프로필이어도 Role 때문에 막혔음을 말한다
+            Assert.True(chip.IsVisible);
+            Assert.Contains("설정 > 기능", chip.ToolTip, StringComparison.Ordinal); // 풀 방법
 
             var other = Guid.NewGuid();
             bus.Publish(new SessionOpened(other, TestData.Profile(readOnly: true), TestData.Server(), SessionPurpose.Work));
             await RoleApp.SettleAsync();
-            output.WriteLine("읽기 전용 프로필 칸 글자: [" + chip.Text + "]");
+            Assert.Equal("읽기 전용", chip.Text); // 프로필 읽기 전용이 우선(정책 관문과 같은 순서)
+            Assert.Equal("읽기 전용", chip.ToolTip);
         }
         finally
         {
             RoleApp.DeleteDir(dir);
         }
+
+        // Role 을 더한 구성(R6 + R1)은 조회 전용이 아니므로 쓰기 가능 프로필에서 칸이 비어 있다.
+        var dir2 = RoleApp.NewDir();
+        try
+        {
+            using var app = new RoleApp(dir2, Features(["viewer", "sqlDev"]));
+            var chip = app.Window.ViewModel!.StatusItems.Select(e => e.Item).OfType<ProtectionStatusViewModel>().Single();
+            app.Get<IEventBus>().Publish(new SessionOpened(Guid.NewGuid(), TestData.Profile(readOnly: false), TestData.Server(), SessionPurpose.Work));
+            await RoleApp.SettleAsync();
+            Assert.Equal(string.Empty, chip.Text);
+        }
+        finally
+        {
+            RoleApp.DeleteDir(dir2);
+        }
     });
 
     [Fact]
-    public Task Defect_save_feedback_notices_have_no_status_item_when_grid_edit_is_off() => HeadlessHost.Run(async () =>
+    public Task Save_feedback_notices_have_a_status_item_in_every_role_configuration() => HeadlessHost.Run(async () =>
     {
-        // followups(07-03·07-06): 「저장 알림」 칸은 GridEdit 네임스페이스라 gridEdit 와 같이 꺼진다. 그런데 SaveFeedback 은 Excel 내보내기 결과·
-        // 튜닝 보고서 저장·최근 파일 없음·MyBatis/PL/SQL 끔 대체 열기 안내까지 실어 나른다. 조회 전용(R6)과 튜너(R4)는 gridEdit 가 꺼진다.
-        foreach (var (name, roles, mustShow) in new[] { ("R6 조회 전용", "viewer", true), ("R4 튜너", "tuner", true), ("R1 SQL 개발자", "sqlDev", false) })
+        // TSK-07-09(결함 D-1 수정): 「저장 알림」 칸은 gridEdit 와 무관한 공통이다. SaveFeedback 은 Excel 내보내기 결과·튜닝 보고서 저장·
+        // 최근 파일 없음·MyBatis/PL/SQL 끔 대체 열기 안내까지 싣기 때문에 조회 전용(R6)·튜너(R4)에서도 보여야 한다.
+        foreach (var (name, roles) in new[] { ("R6 조회 전용", "viewer"), ("R4 튜너", "tuner"), ("R1 SQL 개발자", "sqlDev") })
         {
             var dir = RoleApp.NewDir();
             try
             {
                 using var app = new RoleApp(dir, Features([roles]));
-                var types = app.Window.ViewModel!.StatusItems.Select(e => e.Item.GetType().Name).ToList();
-                var hasChip = types.Contains("SaveStatusViewModel");
-                SaveFeedback.ShowExported(120, Path.Combine(dir, "result.xlsx"));
+                var chip = app.Window.ViewModel!.StatusItems.Select(e => e.Item).OfType<SaveStatusViewModel>().SingleOrDefault();
+                Assert.NotNull(chip); // 칸이 있다
+                Assert.False(chip.IsVisible); // 알림이 없으면 접혀 있다
+
+                var file = Path.Combine(dir, "result.xlsx");
+                SaveFeedback.ShowExported(120, file);
                 try
                 {
-                    Assert.NotNull(SaveFeedback.Current); // 알림은 생겼다
-                    output.WriteLine($"{name}: 알림 칸 {(hasChip ? "있음" : "없음 → 내보내기 완료 알림이 보이지 않는다")}");
-                    Assert.Equal(!mustShow, hasChip);
+                    await RoleApp.SettleAsync(() => chip.IsVisible);
+                    Assert.True(chip.IsVisible, name);
+                    Assert.Equal(file, chip.FilePath); // 「열기」「폴더 열기」 링크가 쓸 경로
+                    output.WriteLine($"{name}: 알림 칸 글자 [{chip.Text}]");
                 }
                 finally
                 {
                     SaveFeedback.Clear();
                 }
+
+                await RoleApp.SettleAsync(() => !chip.IsVisible);
+                Assert.False(chip.IsVisible); // 알림을 지우면 다시 접힌다
             }
             finally
             {

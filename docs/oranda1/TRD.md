@@ -135,6 +135,7 @@
 | 명령 `oranda.plsql.saveWorkspaceFile`·`oranda.plsql.addToWorkspace` | `plsqlWorkspace` | 작업 공간 파일 저장 |
 | 명령 `oranda.plsql.openSource` | 공통 | PL/SQL 을 꺼도 「소스 열기」는 남고 읽기 전용 SQL 탭으로 연다(D-007) |
 | 형 `Oranda.Platform.Journal.ChangeJournalRecorder` | `changeJournal` | Platform 어셈블리의 시작 작업 |
+| 형 `Oranda.App.Features.GridEdit.SaveStatusViewModel` | 공통 | 저장 알림 칸 — 내보내기·튜닝 보고서·대체 열기 안내도 실어 gridEdit 와 무관(TSK-07-09) |
 
 공용 형은 거르지 않는다: 꼬리표는 등록 항목(명령·패널·상태 칸·시작 작업)에만 붙는다. 그래서 세션 모니터를 꺼도 `MonitorAccessState`·`MonitorTableBinder`·`MonitorProfileDialog`(조사 4.1 「다」 A1)를 Lock·SQL 모니터·튜닝·블로커·접속 후 권한 키(`ConnectionManager/ConnectionManagerCommands.cs:69`)가 그대로 쓰고, 계획 모델·뷰(조사 4.1 「다」 T1)도 Lock 모니터·SQL 모니터·튜닝·MyBatis 가 그대로 쓴다. 실행 컨트롤러가 쓰는 컴파일 오류 형(`Features/Execution/ExecutionController*.cs`)도 그대로다.
 

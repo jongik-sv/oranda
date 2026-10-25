@@ -509,7 +509,7 @@ levels:
   - acceptance: 모든 흐름이 끝까지 간다 / 발견 결함은 WP-07 에 defect Task 로 등록됨 / 흐름별 결과표(정상·경계·오류·되돌림) / 전체 시험 통과
   - note: 담당 PC: win144(Windows 개발 PC) — 맥북 세션은 이 Task 를 하지 않는다. 크기 M. 레인 rl-itest(마지막) 결과 — 실제 FeatureGate 로 앱을 조립해 Role 16구성의 메뉴·툴바·우클릭·팔레트·단축키·도구 창·상태 칸·시작 작업을 PRD 12.2 독립 정답표와 대조(App.Tests Integration/Roles 49건, 26ai), 처음→R1→재시작→R6→R6+R1→+R4→모든 기능 쓰기 흐름, 대체 경로 실게이트 재확인, 조회 전용 실제 Oracle 차단(26ai 23.26·11.2.0.2 각각: 거부 문장은 서버 user calls 증가 0, DB 무변경) 53건. 문구 1건(흐린 쓰기 명령 툴팁) 수정. 결함 4건(D-1~D-4)은 TSK-07-09·10 으로 등록, 사용자 결정 3건(U-1~U-3)은 결과서 docs/oranda1/itest/TSK-07-08.md (win144)
 
-- [ ] TSK-07-09: 저장 알림 칸이 gridEdit 와 함께 꺼져 조회 전용·튜너에서 내보내기 완료·대체 열기 안내가 보이지 않음 [win144] w:1 2026-11-04~2026-11-04
+- [x] TSK-07-09: 저장 알림 칸이 gridEdit 와 함께 꺼져 조회 전용·튜너에서 내보내기 완료·대체 열기 안내가 보이지 않음 [win144] w:1 2026-11-04~2026-11-04
   - category: defect
   - domain: frontend
   - model: sonnet
@@ -519,9 +519,9 @@ levels:
   - prd-ref: PRD 12.3 RL-03·RL-04·RL-11, TRD 10.2·10.7.2
   - requirements: 상태 칸 「저장 알림」(`Features/GridEdit/SaveStatusItem.cs` 의 `SaveStatusViewModel`)이 `GridEdit` 네임스페이스라 gridEdit 가 꺼지면(R4 튜너·R6 조회 전용) 만들어지지 않는다. 그런데 `SaveFeedback` 은 Excel·CSV 내보내기 결과(`DataTransfer`, 「열기」「폴더 열기」 링크), 튜닝 보고서 저장(`Tuning/Report`), 최근 파일 없음(`RecentFilesService`), MyBatis 끔·PL/SQL 끔 대체 열기 안내(`SqlEditorHost.Files`·`SchemaObjectOpener`)까지 싣는다. 내보내기가 핵심 기능인 R6 에서 완료 알림이 보이지 않는다. 고칠 길(후보): 꼬리표 형 이름 덮어쓰기 표(TRD 10.2, `FeatureCatalog`)에 `Oranda.App.Features.GridEdit.SaveStatusViewModel` → 공통을 더한다(칸은 알림이 없으면 보이지 않으므로 늘 만들어도 비용이 없다). 다른 알림 전용 칸(블로커·MyBatis 저장)은 그대로. 근거 = 결과서 D-1, 현재 동작을 단정한 시험 `RoleEdgeCaseTests.Defect_save_feedback_notices_have_no_status_item_when_grid_edit_is_off`(고치면 이 단정을 뒤집는다)
   - acceptance: R6·R4 로 시작해도 Excel 내보내기·튜닝 보고서 저장·대체 열기 안내 뒤 상태 줄에 알림이 보인다 / R1 등 gridEdit 켬 구성의 동작은 그대로 / 상태 칸 수 정답표(RoleSurfaceMatrixTests)와 시작 작업 시험 갱신 / 전체 시험 통과
-  - note: TSK-07-08 에서 발견(D-1). 담당 PC: win144(Windows 개발 PC) — 맥북 세션은 이 Task 를 하지 않는다
+  - note: TSK-07-08 에서 발견(D-1). 담당 PC: win144(Windows 개발 PC) — 맥북 세션은 이 Task 를 하지 않는다 / 결과: 저장 알림 칸을 형 이름 덮어쓰기(TypeOverrides, null = 공통)로 늘 만든다 — R4·R6 에서도 내보내기 완료·튜닝 보고서·대체 열기 안내가 상태 줄에 보임(알림이 없으면 접힘). RoleEdgeCase·RoleSurfaceMatrix 정답표·시작 작업 시험 갱신, 화면 PNG 라이트·다크 확인 (win144)
 
-- [ ] TSK-07-10: 조회 전용 안내 보강 — 상태 표시줄 읽기 전용 칸의 Role 반영·SET SERVEROUTPUT 거부 문구·Role 0개 설명 [win144] w:1 2026-11-04~2026-11-05
+- [x] TSK-07-10: 조회 전용 안내 보강 — 상태 표시줄 읽기 전용 칸의 Role 반영·SET SERVEROUTPUT 거부 문구·Role 0개 설명 [win144] w:1 2026-11-04~2026-11-05
   - category: defect
   - domain: frontend
   - model: sonnet
@@ -531,7 +531,7 @@ levels:
   - prd-ref: PRD 12.3 RL-05·RL-07, TRD 10.7.4·10.7.6
   - requirements: (1) 상태 표시줄 「읽기 전용」 칸(`ProtectionStatusViewModel`)이 프로필 읽기 전용(`ShownReadOnly`)만 보고 조회 전용 Role 은 보지 않아, R6 단독 + 쓰기 가능 프로필이면 칸이 비어 쓰기가 왜 막히는지 상태 줄에서 알 수 없다 — Role 때문일 때 「조회 전용 Role」 같은 짧은 글을 보인다(새 문구 ko/en). (2) R6 에서 `SET SERVEROUTPUT ON|OFF [SIZE n]` 을 치면 SQL*Plus 처리기가 안쪽에서 보낸 `BEGIN DBMS_OUTPUT.ENABLE … END;` 가 거부되어 「조회 전용 Role 에서는 BEGIN 을(를) 실행할 수 없습니다」 로 나오고, 처리기는 거부 전에 `ServerOutput` 상태를 먼저 바꿔 둔다 — 안쪽 블록이 거부되면 사용자가 친 명령 이름으로 말하고 상태를 바꾸지 않는다(읽기 전용 프로필도 같은 길). (3) 설정 「기능」 탭에서 「Role 로 고르기」 + Role 확인란 0개면 25개 기능이 모두 꺼져 보일 뿐 설명이 없다 — 「Role 을 하나도 고르지 않으면 공통 기능만 켜집니다」 한 줄(새 문구). 근거 = 결과서 D-2~D-4, 현재 동작을 단정한 시험 `Defect_status_bar_read_only_mark_ignores_the_viewer_role…`·`Defect_choose_by_role_with_no_role_ticked…`·`ReadOnlyRoleEngineTests`(SET SERVEROUTPUT 거부 문구)
   - acceptance: 세 현상이 고쳐지고 해당 `Defect_` 시험의 단정이 새 동작으로 바뀐다 / 새 문구가 ko·en 문구 파일에 있고 LocalizationTests 통과 / 전체 시험 통과
-  - note: TSK-07-08 에서 발견(D-2~D-4). 사용자 결정 U-1~U-3(미커밋 전환·R6 DB 이중 방어·깨진 features 처리)은 결과서 참조 — 결정이 나면 이 Task 에 합치거나 새 Task 로. 담당 PC: win144(Windows 개발 PC) — 맥북 세션은 이 Task 를 하지 않는다
+  - note: TSK-07-08 에서 발견(D-2~D-4). 사용자 결정 U-1~U-3(미커밋 전환·R6 DB 이중 방어·깨진 features 처리)은 결과서 참조 — 결정이 나면 이 Task 에 합치거나 새 Task 로. 담당 PC: win144(Windows 개발 PC) — 맥북 세션은 이 Task 를 하지 않는다 / 결과: 상태 줄 칸이 조회 전용 Role 도 반영(「조회 전용 Role」 + 풀 방법 도움말, 프로필이면 「읽기 전용」), SET SERVEROUTPUT·EXEC 거부 문구가 친 명령 기준이고 거부되면 상태 불변(26ai·11.2 실DB 통과), 「Role 로 고르기」 + Role 0개면 한 줄 안내. 새 문구 3개 ko·en·literals (win144)
 
 ## 의존 그래프
 

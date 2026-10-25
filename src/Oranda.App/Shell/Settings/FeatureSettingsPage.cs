@@ -90,6 +90,8 @@ public sealed partial class FeatureSettingsPage : ObservableObject, IDisposable
 
     public string PackNoticeText => _text.Lookup(FeatureTexts.PackNotice);
 
+    public string NoRoleNoticeText => _text.Lookup(FeatureTexts.NoRoleNotice);
+
     // ---- 상태 ----
 
     /// <summary>Role 확인란 6개(<see cref="FeatureCatalog.Roles"/> 순서).</summary>
@@ -125,6 +127,10 @@ public sealed partial class FeatureSettingsPage : ObservableObject, IDisposable
     /// <summary>조회 전용 Role 하나만 골랐다: 탭 위 안내와 쓰기 전용 기능 흐림.</summary>
     [ObservableProperty]
     private bool _isViewerOnly;
+
+    /// <summary>「Role 로 고르기」인데 Role 을 하나도 안 골랐다: 공통 기능만 켜진다는 한 줄(D-4).</summary>
+    [ObservableProperty]
+    private bool _showNoRoleNotice;
 
     /// <summary>튜너 Role 을 골랐다: 라이선스 팩 선언 안내 한 줄(D-012).</summary>
     [ObservableProperty]
@@ -203,6 +209,7 @@ public sealed partial class FeatureSettingsPage : ObservableObject, IDisposable
             var viewerOnly = FeatureCatalog.IsReadOnlyRole(roles);
 
             IsViewerOnly = viewerOnly;
+            ShowNoRoleNotice = roles is { Count: 0 };
             ShowPackNotice = UseRoles && Roles.Any(r => r.Id == RoleIds.Tuner && r.IsChecked);
 
             foreach (var role in Roles)
