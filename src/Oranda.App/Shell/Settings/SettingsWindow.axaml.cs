@@ -18,6 +18,7 @@ public partial class SettingsWindow : Window
             }
         };
         Opened += (_, _) => FitLargestCategory();
+        Closed += (_, _) => (DataContext as SettingsViewModel)?.Features.Dispose();
     }
 
     /// <summary>본문 폭 상한(DIP). 헤드리스 측정에서 범주별 내용 폭은 428~886 이었고, 대부분 600 안쪽이며 넘는 쪽은 편집기(감사 열 칸)·업데이트(피드 주소 칸)처럼

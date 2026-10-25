@@ -1,0 +1,165 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:icons="using:Oranda.App.Shell.Icons"
+             xmlns:settings="using:Oranda.App.Shell.Settings"
+             x:Class="Oranda.App.Shell.Settings.FeatureSettingsView"
+             x:DataType="settings:FeatureSettingsPage"
+             HorizontalAlignment="Left" MaxWidth="640">
+  <!-- 설정 창 「기능」 탭(TSK-07-04). 위 = 안내 띠·모드 라디오(고정), 가운데 = Role 목록과 기능 세부(스크롤), 아래 = 되돌리기(고정).
+       문구는 모두 모델이 IShellText 로 만들어 준다. 색은 테마 브러시만 쓴다. -->
+  <UserControl.Styles>
+    <Style Selector="Border.feat-banner">
+      <Setter Property="Background" Value="{DynamicResource OrandaToolbarBackgroundBrush}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource OrandaSeparatorBrush}" />
+      <Setter Property="BorderThickness" Value="1" />
+      <Setter Property="CornerRadius" Value="3" />
+      <Setter Property="Padding" Value="10,6" />
+    </Style>
+    <Style Selector="Border.feat-banner.restart">
+      <Setter Property="Background" Value="{DynamicResource OrandaGridNeedsChangeBrush}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource OrandaUncommittedBrush}" />
+    </Style>
+    <Style Selector="Border.feat-group">
+      <Setter Property="BorderBrush" Value="{DynamicResource OrandaSeparatorBrush}" />
+      <Setter Property="BorderThickness" Value="1" />
+      <Setter Property="CornerRadius" Value="2" />
+      <Setter Property="Padding" Value="8,4,8,6" />
+    </Style>
+    <Style Selector="TextBlock.feat-title">
+      <Setter Property="FontWeight" Value="SemiBold" />
+      <Setter Property="Margin" Value="0,0,0,2" />
+    </Style>
+    <Style Selector="TextBlock.feat-sub">
+      <Setter Property="FontWeight" Value="SemiBold" />
+      <Setter Property="Opacity" Value="0.75" />
+      <Setter Property="FontSize" Value="{DynamicResource OrandaFontSizeSmall}" />
+      <Setter Property="Margin" Value="0,6,0,0" />
+    </Style>
+    <Style Selector="TextBlock.feat-desc">
+      <Setter Property="Opacity" Value="0.65" />
+      <Setter Property="FontSize" Value="{DynamicResource OrandaFontSizeSmall}" />
+      <Setter Property="TextWrapping" Value="Wrap" />
+    </Style>
+    <Style Selector="TextBlock.feat-role-name">
+      <Setter Property="FontWeight" Value="SemiBold" />
+      <Setter Property="MinWidth" Value="120" />
+      <Setter Property="VerticalAlignment" Value="Center" />
+    </Style>
+    <Style Selector="CheckBox.feat">
+      <Setter Property="MinHeight" Value="0" />
+      <Setter Property="Padding" Value="6,2,0,2" />
+    </Style>
+    <Style Selector="Border.feat-badge">
+      <Setter Property="BorderThickness" Value="1" />
+      <Setter Property="CornerRadius" Value="8" />
+      <Setter Property="Padding" Value="7,0" />
+      <Setter Property="Margin" Value="8,0,0,0" />
+      <Setter Property="VerticalAlignment" Value="Center" />
+      <Setter Property="BorderBrush" Value="{DynamicResource OrandaSeparatorBrush}" />
+    </Style>
+    <Style Selector="Border.feat-badge > TextBlock">
+      <Setter Property="FontSize" Value="{DynamicResource OrandaFontSizeSmall}" />
+    </Style>
+    <Style Selector="Border.feat-badge.on">
+      <Setter Property="BorderBrush" Value="{DynamicResource OrandaSuccessForegroundBrush}" />
+    </Style>
+    <Style Selector="Border.feat-badge.on > TextBlock">
+      <Setter Property="Foreground" Value="{DynamicResource OrandaSuccessForegroundBrush}" />
+    </Style>
+    <Style Selector="Border.feat-badge.off">
+      <Setter Property="BorderBrush" Value="{DynamicResource OrandaWarningForegroundBrush}" />
+    </Style>
+    <Style Selector="Border.feat-badge.off > TextBlock">
+      <Setter Property="Foreground" Value="{DynamicResource OrandaWarningForegroundBrush}" />
+    </Style>
+  </UserControl.Styles>
+
+  <Grid RowDefinitions="Auto,*,Auto">
+    <StackPanel Grid.Row="0" Spacing="6" Margin="0,0,0,8">
+      <Border x:Name="RestartBanner" Classes="feat-banner restart" IsVisible="{Binding HasRestartBanner}"
+              AutomationProperties.Name="{Binding RestartBannerText}">
+        <DockPanel>
+          <ContentControl DockPanel.Dock="Left" Margin="0,0,8,0" VerticalAlignment="Center"
+                          Content="{Binding Source='warn', Converter={x:Static icons:IconKeyConverter.Instance}, ConverterParameter=16}" />
+          <TextBlock x:Name="RestartText" Text="{Binding RestartBannerText}" TextWrapping="Wrap" VerticalAlignment="Center" />
+        </DockPanel>
+      </Border>
+      <Border x:Name="ViewerBanner" Classes="feat-banner" IsVisible="{Binding IsViewerOnly}"
+              AutomationProperties.Name="{Binding ViewerNoticeText}">
+        <DockPanel>
+          <ContentControl DockPanel.Dock="Left" Margin="0,0,8,0" VerticalAlignment="Center"
+                          Content="{Binding Source='info', Converter={x:Static icons:IconKeyConverter.Instance}, ConverterParameter=16}" />
+          <TextBlock x:Name="ViewerText" Text="{Binding ViewerNoticeText}" TextWrapping="Wrap" VerticalAlignment="Center" />
+        </DockPanel>
+      </Border>
+      <StackPanel Orientation="Horizontal" Spacing="20">
+        <RadioButton x:Name="ModeAllRadio" GroupName="featureMode" Content="{Binding ModeAllText}" IsChecked="{Binding UseAllFeatures}"
+                     AutomationProperties.Name="{Binding ModeAllText}" />
+        <RadioButton x:Name="ModeRolesRadio" GroupName="featureMode" Content="{Binding ModeRolesText}" IsChecked="{Binding UseRoles}"
+                     AutomationProperties.Name="{Binding ModeRolesText}" />
+      </StackPanel>
+    </StackPanel>
+
+    <ScrollViewer Grid.Row="1" x:Name="Body" MaxHeight="440" HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
+      <StackPanel Spacing="8" Margin="0,0,12,0">
+        <Border Classes="feat-group">
+          <StackPanel Spacing="2">
+            <TextBlock Classes="feat-title" Text="{Binding RolesTitle}" />
+            <ItemsControl x:Name="RoleList" ItemsSource="{Binding Roles}">
+              <ItemsControl.ItemTemplate>
+                <DataTemplate x:DataType="settings:FeatureRoleItem">
+                  <CheckBox Classes="feat" IsChecked="{Binding IsChecked}" IsEnabled="{Binding CanEdit}"
+                            AutomationProperties.Name="{Binding Name}" ToolTip.Tip="{Binding Description}">
+                    <StackPanel Orientation="Horizontal" Spacing="12">
+                      <TextBlock Classes="feat-role-name" Text="{Binding Name}" />
+                      <TextBlock Classes="feat-desc" VerticalAlignment="Center" Text="{Binding Description}" />
+                    </StackPanel>
+                  </CheckBox>
+                </DataTemplate>
+              </ItemsControl.ItemTemplate>
+            </ItemsControl>
+            <TextBlock x:Name="PackNotice" Classes="feat-desc" Margin="4,4,0,0" Text="{Binding PackNoticeText}" IsVisible="{Binding ShowPackNotice}" />
+          </StackPanel>
+        </Border>
+
+        <Border Classes="feat-group">
+          <StackPanel>
+            <TextBlock Classes="feat-title" Text="{Binding DetailsTitle}" />
+            <ItemsControl x:Name="GroupList" ItemsSource="{Binding Groups}">
+              <ItemsControl.ItemTemplate>
+                <DataTemplate x:DataType="settings:FeatureGroupItem">
+                  <StackPanel>
+                    <TextBlock Classes="feat-sub" Text="{Binding Name}" />
+                    <ItemsControl ItemsSource="{Binding Items}">
+                      <ItemsControl.ItemTemplate>
+                        <DataTemplate x:DataType="settings:FeatureItem">
+                          <Grid ColumnDefinitions="*,Auto">
+                            <CheckBox Classes="feat" IsChecked="{Binding IsChecked}" IsEnabled="{Binding CanEdit}"
+                                      AutomationProperties.Name="{Binding Description}" ToolTip.Tip="{Binding Description}">
+                              <StackPanel>
+                                <TextBlock Text="{Binding Name}" TextWrapping="Wrap" />
+                                <TextBlock Classes="feat-desc" Text="{Binding BlockedReason}" IsVisible="{Binding IsBlocked}" />
+                              </StackPanel>
+                            </CheckBox>
+                            <Border Grid.Column="1" Classes="feat-badge" Classes.on="{Binding IsStateEnabled}" Classes.off="{Binding IsStateDisabled}"
+                                    IsVisible="{Binding HasStateText}">
+                              <TextBlock Text="{Binding StateText}" />
+                            </Border>
+                          </Grid>
+                        </DataTemplate>
+                      </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                  </StackPanel>
+                </DataTemplate>
+              </ItemsControl.ItemTemplate>
+            </ItemsControl>
+          </StackPanel>
+        </Border>
+      </StackPanel>
+    </ScrollViewer>
+
+    <Button Grid.Row="2" x:Name="ResetButton" Margin="0,8,0,0" HorizontalAlignment="Left"
+            icons:ButtonIcon.Key="reset" Content="{Binding ResetText}" Command="{Binding ResetCommand}"
+            AutomationProperties.Name="{Binding ResetText}" />
+  </Grid>
+</UserControl>

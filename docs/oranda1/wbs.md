@@ -449,7 +449,7 @@ levels:
   - acceptance: R1 만 고르면 MyBatis 시작 작업 4개·MyBatis 상태 칸·PL/SQL 작업 공간 복원이 돌지 않고 블로커 칸은 남는다 / R6 만 고르면 블로커 칸·변경 일지 기록기가 없다 / features 없음 = 시작 작업 14개·상태 칸 10개 그대로 / 블로커 칸 클릭 대체가 동작 / 전체 시험 통과
   - note: 담당 PC: win144(Windows 개발 PC) — 맥북 세션은 이 Task 를 하지 않는다. 크기 M. 레인 rl-startup. 결과: ServiceContainer.GetStartupTasks(형 단계 거름, IEnumerable<IStartupTask> 해석도 거름)·건너뜀/돈 수 Trace, 상태 칸 거름, PL/SQL 작업 공간 끔 = 라우터만, Lock 모니터 끔 블로커 칸 클릭 = 안내 플라이아웃 + 「설정 열기」, StartupFilterTests 22건 (win144)
 
-- [ ] TSK-07-04: 설정 창 「기능」 탭 — Role 선택·기능 세부·재시작 안내·oranda.tools.roles [win144] w:2 2026-10-27~2026-10-28
+- [x] TSK-07-04: 설정 창 「기능」 탭 — Role 선택·기능 세부·재시작 안내·oranda.tools.roles [win144] w:2 2026-10-27~2026-10-28
   - category: dev
   - domain: frontend
   - model: sonnet
@@ -459,7 +459,7 @@ levels:
   - prd-ref: RL-05, RL-06, RL-08, RL-12, TRD 10.7.6
   - requirements: `SettingsWindow.axaml` 의 「일반」 다음에 「기능」 탭(D-011): 「모든 기능 쓰기(Role 고르지 않음)」/「Role 로 고르기」 라디오, Role 확인란 6개(이름·한 줄 설명), 「기능 세부」 묶음 5개·확인란 25개(FeatureCatalog 에서 만든다, 하드코딩 금지), 기본값과 다르면 「직접 켬」·「직접 끔」 표시, 「Role 기본값으로 되돌리기」, Requires 못 채움 흐림·이유, 조회 전용만이면 WritesOnly 흐림·이유와 탭 위 안내, 튜너를 고르면 팩 선언 안내(D-012); 확인란을 바꾸면 Enabled/Disabled 를 Role 기본값과 비교해 최소로 적는다(기본값과 같아지면 목록에서 뺀다); 저장 = 기존 설정 창 저장 흐름(SettingsService.UpdateAsync), 저장 뒤 IFeatureGate.PendingRestart 가 있으면 「재시작하면 적용됩니다: {0}」 띠; 명령 oranda.tools.roles(도구 메뉴 「Role·기능 고르기…」)를 새 파일(`Shell/Settings/FeatureSettingsCommands.cs`)에 [OrandaCommand] 로 등록하고 설정 창을 「기능」 탭으로 연다; 화면 품질: ko/en 전환·라이트/다크·키보드만으로 모든 조작(탭 순서·접근 이름)·설정 창 최소 크기에서 잘림 없음(스크롤)·문구는 계약이 예약한 것만 쓴다; 시험: ViewModel(Role 조합 → 확인란 상태, 직접 켬/끔 최소 기록, 되돌리기, 조회 전용만 흐림, Requires), Headless 렌더(ko/en·다크), 명령 등록, FakeFeatureGate 의 PendingRestart → 띠; 계약 Task design.md 「기능 Task 편집 지점」 의 자기 소유 파일만 고친다; 비고: 담당 PC: win144(Windows 개발 PC) — 맥북 세션은 이 Task 를 하지 않는다
   - acceptance: 탭에서 R4 를 더하고 저장하면 settings.json features.roles 에 tuner 가 들어간다 / 기능 하나를 Role 기본과 다르게 바꾸면 그 id 만 enabled 또는 disabled 에 남는다 / 조회 전용만이면 쓰기 전용 기능을 켤 수 없다 / ko/en·다크 Headless 렌더 통과 / 실앱 눈 확인 항목은 사람 몫으로 결과에 적는다 / 전체 시험 통과
-  - note: 담당 PC: win144(Windows 개발 PC) — 맥북 세션은 이 Task 를 하지 않는다. 크기 M. 레인 rl-settings
+  - note: 담당 PC: win144(Windows 개발 PC) — 맥북 세션은 이 Task 를 하지 않는다. 크기 M. 레인 rl-settings. 결과: 설정 창 일반 다음 「기능」 탭(FeatureSettingsPage·View), Role 여러 개 선택·기능 25개 묶음별 직접 켬/끔(Role 기본과 다른 것만 기록)·되돌리기·조회 전용/Requires 흐림·튜너 팩 안내·재시작 띠(저장 뒤 창 유지), oranda.tools.roles 처리기 (win144)
 
 - [x] TSK-07-05: 조회 전용 Role 실행 차단 — 정책 관문 ReadOnlyRole 규칙·readOnlySession 키 [win144] w:2 2026-10-27~2026-10-28
   - category: dev

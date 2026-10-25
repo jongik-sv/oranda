@@ -115,6 +115,10 @@
         </ScrollViewer>
       </TabItem>
 
+      <TabItem x:Name="FeaturesTab" Header="{Binding Features.TabTitle}">
+        <settings:FeatureSettingsView DataContext="{Binding Features}" />
+      </TabItem>
+
       <TabItem Header="{Binding Strings[tab.editor]}">
         <ScrollViewer HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
           <Grid Classes="form" ColumnDefinitions="Auto,*" RowDefinitions="Auto,Auto,Auto,Auto,Auto" ColumnSpacing="12" RowSpacing="10">

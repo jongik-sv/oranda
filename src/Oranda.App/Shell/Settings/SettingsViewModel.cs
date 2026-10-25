@@ -10,6 +10,7 @@ using Oranda.App.Features.Update;
 using Oranda.App.Shell.Appearance;
 using Oranda.App.ViewModels;
 using Oranda.Core.Execution;
+using Oranda.Core.Features;
 using Oranda.Core.Formatting;
 using Oranda.Core.Settings;
 using Oranda.Core.Shell;
@@ -133,11 +134,14 @@ public sealed partial class SettingsViewModel : ViewModelBase
     [ObservableProperty]
     private int _selectedTab;
 
+    /// <summary>「기능」 탭의 순서(일반 다음, TSK-07-04). <c>oranda.tools.roles</c> 가 이 탭으로 연다.</summary>
+    public const int FeaturesTabIndex = 1;
+
     /// <summary>「SQL 포맷」 탭의 순서(편집기 다음).</summary>
-    public const int FormatTabIndex = 2;
+    public const int FormatTabIndex = 3;
 
     /// <summary>업데이트 탭의 순서(<c>SettingsWindow.axaml</c> 의 마지막 탭).</summary>
-    public const int UpdateTabIndex = 7;
+    public const int UpdateTabIndex = 8;
 
     [ObservableProperty]
     private bool _updateCheckOnStartup;
@@ -162,11 +166,16 @@ public sealed partial class SettingsViewModel : ViewModelBase
     private string? _pendingProfileId;
 
     /// <param name="sqlFormat">「SQL 포맷」 쪽. null 이면 앱 서비스(프로필 저장소·포매터)로 만든다(앱 밖이면 저장하지 않는 기본값 쪽).</param>
-    public SettingsViewModel(SettingsService settings, IShellText text, IEnumerable<string>? installedFonts = null, SqlFormatPage? sqlFormat = null)
+    /// <param name="featureGate">「기능」 탭의 재시작 안내를 읽을 게이트. null 이면 앱 서비스에서 찾는다(앱 밖이면 안내 없음).</param>
+    public SettingsViewModel(SettingsService settings, IShellText text, IEnumerable<string>? installedFonts = null, SqlFormatPage? sqlFormat = null, IFeatureGate? featureGate = null)
     {
         _settings = settings;
         _text = text;
         SqlFormat = sqlFormat ?? CreateSqlFormatPage(settings, text);
+        Features = new FeatureSettingsPage(
+            settings.Current.Features,
+            text,
+            featureGate ?? (Avalonia.Application.Current as App)?.Services?.GetService<IFeatureGate>());
         Themes =
         [
             new ThemeChoice(Theme.System, text.Lookup("Shell.settings.theme.system")),
@@ -226,6 +235,9 @@ public sealed partial class SettingsViewModel : ViewModelBase
 
     /// <summary>「SQL 포맷」 쪽(Orange SQL Formatter 대응, TSK-13-38).</summary>
     public SqlFormatPage SqlFormat { get; }
+
+    /// <summary>「기능」 탭(Role 선택·기능 세부·재시작 안내, TSK-07-04).</summary>
+    public FeatureSettingsPage Features { get; }
 
     /// <summary>시험용: 「자세히…」가 포매터 프로필 화면을 여는 길(기본 = <c>oranda.format.profiles</c> 명령).</summary>
     internal Func<Task>? OpenProfiles { get; init; }
@@ -373,10 +385,13 @@ public sealed partial class SettingsViewModel : ViewModelBase
 
     /// <summary>화면에서 고른 값으로 설정을 저장한다.</summary>
     [RelayCommand]
-    public Task SaveAsync() => SaveCoreAsync();
+    public Task SaveAsync() => SaveCoreAsync(allowStayOpen: true);
 
-    /// <summary>저장하고 창을 닫는다. 저장을 막는 값이 있으면 그 탭으로 옮기고 false.</summary>
-    private async Task<bool> SaveCoreAsync()
+    /// <summary>
+    /// 저장하고 창을 닫는다. 저장을 막는 값이 있으면 그 탭으로 옮기고 false.
+    /// <paramref name="allowStayOpen"/> 이고 기능을 바꿔 재시작해야 적용되는 기능이 생겼으면 창을 닫지 않고 「기능」 탭의 안내 띠를 보인다.
+    /// </summary>
+    private async Task<bool> SaveCoreAsync(bool allowStayOpen = false)
     {
         if (FeedMessageIsError)
         {
@@ -401,10 +416,14 @@ public sealed partial class SettingsViewModel : ViewModelBase
 
         var family = string.IsNullOrWhiteSpace(FontFamily) || FontFamily == FontChoices[0] ? null : FontFamily.Trim();
         var gridFamily = string.IsNullOrWhiteSpace(GridFontFamily) || GridFontFamily == FontChoices[0] ? null : GridFontFamily.Trim();
+        var featuresChanged = Features.IsDirty;
+        var features = Features.ToSettings();
         try
         {
             await _settings.UpdateAsync(s => s with
             {
+                // 「기능」 탭을 건드리지 않았으면 설정을 그대로 둔다(알 수 없는 id·다른 곳에서 바뀐 값을 덮지 않는다).
+                Features = featuresChanged ? features : s.Features,
                 FormatterProfileId = profileId ?? s.FormatterProfileId,
                 Ui = s.Ui with
                 {
@@ -471,6 +490,14 @@ public sealed partial class SettingsViewModel : ViewModelBase
 
         _pendingProfileId = null;
         UpdateService.Current?.RefreshSettings(); // 건너뛴 버전을 지웠으면 상태 표시줄 표시도 바로 맞춘다
+        Features.AcceptSaved();
+        if (allowStayOpen && featuresChanged && Features.HasPendingRestart)
+        {
+            // 재시작해야 적용되는 기능이 있으면 안내 띠가 보이게 창을 둔다(닫기를 누르면 닫힌다).
+            SelectedTab = FeaturesTabIndex;
+            return true;
+        }
+
         CloseRequested?.Invoke(this, EventArgs.Empty);
         return true;
     }
