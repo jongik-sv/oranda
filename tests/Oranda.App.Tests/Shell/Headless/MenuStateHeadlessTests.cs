@@ -100,7 +100,7 @@ public class MenuStateHeadlessTests
         keys.Set("readOnlySession", true);
         Settle();
         Assert.Null(ToolTip.GetTip(Command(h, "database", "oranda.db.info")));
-        Assert.Equal("읽기 전용 접속에서는 쓸 수 없습니다", ToolTip.GetTip(Command(h, "database", "oranda.schema.compileInvalid")));
+        Assert.Equal("읽기 전용 접속이나 조회 전용 Role 에서는 쓸 수 없습니다", ToolTip.GetTip(Command(h, "database", "oranda.schema.compileInvalid")));
     });
 
     [Fact]

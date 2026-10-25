@@ -186,7 +186,7 @@
   "Menu.disabled.lockCanKillSession": "The monitor account needs the ALTER SYSTEM privilege",
   "Menu.disabled.canQueryDdlLocks": "Requires the privilege to read dba_ddl_locks",
   "Menu.disabled.not.readOnlyDoc": "Not available in a read-only document",
-  "Menu.disabled.not.readOnlySession": "Not available on a read-only connection",
+  "Menu.disabled.not.readOnlySession": "Not available on a read-only connection or with the viewer-only role",
   "Menu.disabled.not.sessionBusy": "Wait until the running statement finishes",
   "Menu.disabled.plsqlDocActive": "Available in a PL/SQL editor tab",
   "Menu.disabled.plsqlNodeSelected": "Select a PL/SQL object in the schema browser",

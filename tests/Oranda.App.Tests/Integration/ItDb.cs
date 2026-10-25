@@ -28,7 +28,7 @@ public sealed class ItDb : IDisposable
         User = "ORA_IT_" + suffix;
         Password = "It#" + Guid.NewGuid().ToString("N")[..12] + "a1";
         AdminConnectionString = $"User Id={Env("ADMIN_USER") ?? "SYSTEM"};Password={adminPassword};Data Source={DataSource};Pooling=false";
-        Admin($"create user {User} identified by \"{Password}\" quota unlimited on users");
+        Admin($"create user {User} identified by \"{Password}\" default tablespace users quota unlimited on users"); // 11.2 XE 는 기본 표 공간이 SYSTEM 이라 users 를 정해 준다 (TSK-07-08)
         Admin($"grant create session, create table, create procedure, create sequence, create view to {User}");
     }
 
