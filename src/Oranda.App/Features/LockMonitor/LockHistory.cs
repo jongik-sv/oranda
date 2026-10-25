@@ -161,11 +161,15 @@ public static class LockHistoryFiles
 {
     public const string FolderName = "lock-history";
 
-    /// <summary>파일 이름에 쓸 수 없는 글자를 밑줄로.</summary>
+    // Windows 가 못 쓰는 글자. macOS·Linux 의 GetInvalidFileNameChars 는 '/' 와 NUL 뿐이라, 같은 접속이 OS 마다 다른 파일 이름이 되지 않게 함께 막는다.
+    private static readonly char[] PortableInvalid = ['<', '>', ':', '"', '/', '\\', '|', '?', '*'];
+
+    /// <summary>파일 이름에 쓸 수 없는 글자(어느 OS 에서든)를 밑줄로.</summary>
     public static string SafeName(string? name)
     {
         var invalid = Path.GetInvalidFileNameChars();
-        var text = new string([.. (string.IsNullOrWhiteSpace(name) ? "lock" : name.Trim()).Select(c => invalid.Contains(c) || c is '@' or ' ' ? '_' : c)]);
+        var text = new string([.. (string.IsNullOrWhiteSpace(name) ? "lock" : name.Trim())
+            .Select(c => invalid.Contains(c) || PortableInvalid.Contains(c) || char.IsControl(c) || c is '@' or ' ' ? '_' : c)]);
         return text.Length > 60 ? text[..60] : text;
     }
 

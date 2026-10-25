@@ -592,6 +592,16 @@ levels:
   - acceptance: 설치 안내 2종에 설치·막힐 때·업데이트·제거가 있다 / README 에 「Code signing policy」 절과 SignPath 고지 문구·역할·개인정보 절 / 신청서 초안이 저장소 밖에 있다
   - note: 담당 PC: win144(Windows 개발 PC) — 맥북 세션은 이 Task 를 하지 않는다. 결과 — install.md 를 공개 배포용으로 다시 씀(GitHub Releases, SmartScreen·브라우저 차단·스마트 앱 컨트롤, macOS 14/15 열기·xattr, 업데이트 끄기, 제거·남는 폴더) + install.en.md; README Code signing policy(고지 문구·역할·승인 전 무서명)·Privacy(업데이트 확인 기본 켬을 사실대로); 신청서 초안에 거절 위험(Oracle 드라이버 비 OSI·평판·릴리스 없음·업데이트 확인 개인정보 문구) 정리 (win144)
 
+- [x] TSK-08-05: GitHub Actions ci 전 작업 통과 [win144] w:1 2026-10-25~2026-10-25
+  - category: infra
+  - domain: test
+  - model: opus
+  - priority: high
+  - tags: ci, github-actions, test, win144
+  - requirements: `.github/workflows/ci.yml` 의 windows-x64·macos-arm64·integration(ubuntu, Testcontainers) 작업이 모두 통과한다(release 는 태그 때만). 제품 결함은 제품을, OS·CI 환경을 잘못 가정한 시험은 시험을 고친다. 흔들림은 조건 기다림으로 고치고 시간만 늘리지 않는다. Skip·삭제 없음. 패키지·release 단계는 건드리지 않는다; 비고: 담당 PC: win144(Windows 개발 PC) — 맥북 세션은 이 Task 를 하지 않는다
+  - acceptance: 실제 GitHub Actions 실행에서 세 작업 모두 success / 로컬 `dotnet build Oranda.sln -warnaserror` 와 단위·UI 시험 통과
+  - note: 담당 PC: win144(Windows 개발 PC) — 맥북 세션은 이 Task 를 하지 않는다. 완료(2026-10-25) — 세 작업 첫 통과 run 40184318617(ci-green). 11g 통합 ORA-00604/01882 = 러너 시간대 Etc/UTC 를 11.2 XE 가 몰라 접속 거부(제품 결함: 모든 연결을 `CreateConnection` 으로 만들어 UseHourOffsetForUnsupportedTimezone 켬), 이력 파일 이름이 macOS 에서 ':'·'*'·'?' 를 남김(제품: OS 무관 금지 글자), macOS 헤드리스 TextBox 복사 키·C:\ 경로 가정(시험), 상태 줄·세션 등록·닫기 시작·차단 칸 알림의 비동기 Post 를 바로 단정(시험: 조건 기다림·UI 스레드 실행), 글자 배율 시험이 1.5 배를 되돌리지 않아 뒤 시험의 행 높이가 커짐(시험: 설정 복원) (win144)
+
 ## WP-09: 사용 복잡도 줄이기
 <!-- 담당 PC: win144(Windows 개발 PC) — 맥북 세션은 이 WP 의 Task 를 하지 않는다. 2026-10-25 사용자 결정 「기본안으로 해」(조사 docs/oranda1/research/usage-complexity.md 6장 Q1~Q12 권장안 전부, Q6 = D-013 기본 Role SQL 개발자). 설계 = PRD 13, TRD 11, decisions D-015~D-023. 레인 5개: ux-menu(09-01 계약 → 09-02)·ux-layout(09-05 → 09-06)는 바로, ux-export(09-07)는 의존 없음(슬롯이 나면), ux-role(09-08 → 09-09)도 TSK-07-11(fx-default)이 52601b9 에 머지되어 바로 착수 가능, ux-shell(09-03 → 09-04)은 09-01 머지 뒤, 09-10 통합테스트가 마지막. 동시 레인 5개 제한 때문에 처음에는 ux-menu·ux-layout·ux-role 셋부터. 파일 소유 = TRD 11.10, 문구 파일 소유 = TRD 11.9. 후보(이 WP 밖) = PRD 13.1 -->
 

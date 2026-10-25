@@ -183,6 +183,13 @@ public sealed class RelatedRowsRunnerTests
             if (Session is not null)
             {
                 Bus.Publish(new SessionOpened(Session.Id, profile, Session.Server, SessionPurpose.Work));
+
+                // 같은 프로세스에서 Headless 시험이 앱을 띄웠으면 ExecutionState 는 버스 알림을 UI 스레드로 Post 한다.
+                // 접속이 상태에 올라오기 전에 실행하면 BeginRun 이 세션을 못 찾는다: 올라올 때까지 기다린다.
+                if (!SpinWait.SpinUntil(() => State.SessionId == Session.Id, TimeSpan.FromSeconds(10)))
+                {
+                    throw new TimeoutException("SessionOpened 가 실행 상태에 반영되지 않았다.");
+                }
             }
 
             Runner = new RelatedRowsRunner(State, () => Session, () => Engine, () => Meta, (title, items, _) =>

@@ -26,26 +26,35 @@ public class UiFontSizeTests
         using var h = new ShellHarness();
         h.Get<DockWorkspace>().OpenDocument("oranda.panel.sqlEditor");
         var settings = h.Get<SettingsService>();
-
-        foreach (var (scale, expectBase, expectTab) in new[] { (1.0, 14.0, 13.5), (1.5, 21.0, 20.25) })
+        var original = settings.Current;
+        try
         {
-            await settings.UpdateAsync(s => s with { Ui = s.Ui with { UiScale = scale } });
-            Dispatcher.UIThread.RunJobs();
-            h.Window.UpdateLayout();
+            foreach (var (scale, expectBase, expectTab) in new[] { (1.0, 14.0, 13.5), (1.5, 21.0, 20.25) })
+            {
+                await settings.UpdateAsync(s => s with { Ui = s.Ui with { UiScale = scale } });
+                Dispatcher.UIThread.RunJobs();
+                h.Window.UpdateLayout();
 
-            var menu = h.Window.GetVisualDescendants().OfType<Menu>().First();
-            Assert.Equal(expectBase, menu.FontSize);
-            var item = h.Window.GetVisualDescendants().OfType<MenuItem>().First();
-            item.Open();
-            Dispatcher.UIThread.RunJobs();
-            Assert.Equal(expectBase, item.FontSize);
-            Assert.All(item.GetVisualDescendants().OfType<MenuItem>(), sub => Assert.Equal(expectBase, sub.FontSize));
-            item.Close();
+                var menu = h.Window.GetVisualDescendants().OfType<Menu>().First();
+                Assert.Equal(expectBase, menu.FontSize);
+                var item = h.Window.GetVisualDescendants().OfType<MenuItem>().First();
+                item.Open();
+                Dispatcher.UIThread.RunJobs();
+                Assert.Equal(expectBase, item.FontSize);
+                Assert.All(item.GetVisualDescendants().OfType<MenuItem>(), sub => Assert.Equal(expectBase, sub.FontSize));
+                item.Close();
 
-            var tabs = h.Window.GetVisualDescendants().OfType<Control>()
-                .Where(c => c is DocumentTabStripItem or ToolTabStripItem).Cast<TemplatedControl>().ToList();
-            Assert.NotEmpty(tabs);
-            Assert.All(tabs, t => Assert.Equal(expectTab, t.FontSize));
+                var tabs = h.Window.GetVisualDescendants().OfType<Control>()
+                    .Where(c => c is DocumentTabStripItem or ToolTabStripItem).Cast<TemplatedControl>().ToList();
+                Assert.NotEmpty(tabs);
+                Assert.All(tabs, t => Assert.Equal(expectTab, t.FontSize));
+            }
+        }
+        finally
+        {
+            // 앱 리소스는 시험 사이에 남는다: 1.5 배로 끝내면 뒤 시험의 행 높이·글자 크기가 1.5 배가 된다(목록 행이 창 밖으로 밀림).
+            await settings.UpdateAsync(_ => original);
+            Dispatcher.UIThread.RunJobs();
         }
     });
 }

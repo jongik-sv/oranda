@@ -26,7 +26,7 @@ public sealed class OdpConnectionTester : IConnectionTester
 
         // 접속 제한 시간은 연결 문자열(Connection Timeout)에 들어간다. 취소 단추는 기다림만 끊고,
         // 이미 시작한 연결 시도는 끝난 뒤에 닫는다(열리는 중인 연결을 다른 스레드에서 닫지 않는다).
-        var connection = new OracleConnection(driverProfile.BuildConnectionString(password));
+        var connection = driverProfile.CreateConnection(password);
         var open = connection.OpenAsync(ct);
         try
         {
@@ -77,7 +77,7 @@ public sealed class OdpPasswordChanger : IPasswordChanger
 
         // 프록시 접속이어도 바꾸는 비밀번호는 프록시 사용자의 것이다(data-model 2.2 proxyUser).
         var own = profile with { User = string.IsNullOrWhiteSpace(profile.ProxyUser) ? profile.User : profile.ProxyUser, ProxyUser = null };
-        await using var connection = new OracleConnection(own.BuildConnectionString(oldPassword));
+        await using var connection = own.CreateConnection(oldPassword);
         connection.OpenWithNewPassword(newPassword);
         await connection.CloseAsync().ConfigureAwait(false);
     }

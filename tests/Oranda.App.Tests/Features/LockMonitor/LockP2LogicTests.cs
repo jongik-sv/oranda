@@ -233,6 +233,9 @@ public class LockP2LogicTests
 
     [Theory]
     [InlineData("A/B:C*?", "A_B_C__")]
+    [InlineData("a<b>c\"d\\e|f", "a_b_c_d_e_f")]
+    [InlineData("scott@db:1521/XE", "scott_db_1521_XE")]
+    [InlineData("tab\there", "tab_here")]
     [InlineData("  ", "lock")]
     [InlineData(null, "lock")]
     public void Safe_name_replaces_characters_files_cannot_have(string? name, string expected) =>

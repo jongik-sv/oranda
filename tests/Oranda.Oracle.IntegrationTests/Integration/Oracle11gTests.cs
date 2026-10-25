@@ -79,7 +79,7 @@ public sealed class Oracle11gFixture : IAsyncLifetime
             DataSource = $"{_container.Hostname}:{_container.GetMappedPublicPort(1521)}/XE";
         }
 
-        await using var conn = new OracleConnection(new ConnectionProfile("ora11-system", "system", DataSource).BuildConnectionString(SystemPassword));
+        await using var conn = new ConnectionProfile("ora11-system", "system", DataSource).CreateConnection(SystemPassword);
         await OpenWhenReadyAsync(conn, TimeSpan.FromMinutes(5));
         await EnsureMetadataStylesheetsAsync(conn);
         foreach (var sql in new[]
@@ -112,14 +112,14 @@ public sealed class Oracle11gFixture : IAsyncLifetime
 
     public async Task<OracleConnection> SystemAsync()
     {
-        var conn = new OracleConnection(new ConnectionProfile("ora11-system", "system", DataSource).BuildConnectionString(SystemPassword));
+        var conn = new ConnectionProfile("ora11-system", "system", DataSource).CreateConnection(SystemPassword);
         await conn.OpenAsync();
         return conn;
     }
 
     public async Task<OracleConnection> OwnerAsync()
     {
-        var conn = new OracleConnection(new ConnectionProfile("ora11-owner", Owner, DataSource).BuildConnectionString(OwnerPassword));
+        var conn = new ConnectionProfile("ora11-owner", Owner, DataSource).CreateConnection(OwnerPassword);
         await conn.OpenAsync();
         return conn;
     }
@@ -149,7 +149,7 @@ public sealed class Oracle11gFixture : IAsyncLifetime
             {
                 DBAPrivilege = "SYSDBA",
             };
-            await using var conn = new OracleConnection(sys.ConnectionString);
+            await using var conn = ConnectionProfileExtensions.CreateConnection(sys.ConnectionString);
             await conn.OpenAsync();
             try
             {

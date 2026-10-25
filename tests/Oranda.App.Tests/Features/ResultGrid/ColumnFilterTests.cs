@@ -218,7 +218,8 @@ public sealed class ColumnFilterTests
         await vm.SetColumnFilterAsync(0, new ColumnFilter { Condition = new ColumnCondition(ConditionKind.Between, "10", "20") });
 
         Assert.Equal(["11", "14", "17"], await IdsAsync(vm.Model));
-        Assert.Contains("거름: 보이는 3 / 가져온 30행", vm.StatusText, StringComparison.Ordinal);
+        // 모델의 바뀜 알림은 모델을 만든 동기화 문맥으로 Post 되어 상태 줄이 늦게 바뀔 수 있다: 그 글이 될 때까지 기다린다.
+        await HeadlessHost.WaitUntil(() => vm.StatusText.Contains("거름: 보이는 3 / 가져온 30행", StringComparison.Ordinal), 10000);
         await vm.ClearLocalFiltersAsync();
         Assert.Equal(30, vm.Model.RowCount);
     }

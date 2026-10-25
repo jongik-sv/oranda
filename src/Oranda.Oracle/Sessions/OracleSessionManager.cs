@@ -31,7 +31,7 @@ internal sealed class OracleSessionManager : ISessionManager
         ArgumentNullException.ThrowIfNull(credential);
 
         profile.ApplyProcessSettings();
-        var connection = new OracleConnection(profile.BuildConnectionString(credential.Secret.ToString()));
+        var connection = profile.CreateConnection(credential.Secret.ToString());
         try
         {
             await connection.OpenAsync(ct);

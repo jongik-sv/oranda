@@ -360,7 +360,8 @@ public class MonitorAccessTests
         var finished = await Task.WhenAny(stop, Task.Delay(TimeSpan.FromSeconds(5)));
 
         Assert.Same(stop, finished);
-        Assert.True(session.Disposed);
+        // 닫기는 스레드 풀에서 시작한다: 기다림을 그만둔 뒤라도(부하 큰 러너는 100 ms 안에 시작 못 할 수 있다) 곧 시작돼야 한다.
+        await Oranda.App.Tests.Shell.Headless.HeadlessHost.WaitUntil(() => session.Disposed, 10000);
         Assert.False(vm.IsOpen);
         Assert.False(vm.Access.HasAccount);
         hang.SetResult();

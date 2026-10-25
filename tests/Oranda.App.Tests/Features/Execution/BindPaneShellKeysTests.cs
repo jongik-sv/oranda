@@ -26,6 +26,10 @@ public sealed class BindPaneShellKeysTests
 {
     private static readonly RawInputModifiers Ctrl = OperatingSystem.IsMacOS() ? RawInputModifiers.Meta : RawInputModifiers.Control;
 
+    // 입력 칸(TextBox) 자체의 복사 키는 플랫폼 HotkeyConfiguration 을 따른다. 실제 macOS 는 ⌘ 이지만 macOS 의 헤드리스 플랫폼은 Ctrl 이다.
+    private static RawInputModifiers TextBoxCtrl =>
+        Application.Current!.PlatformSettings!.HotkeyConfiguration.CommandModifiers.HasFlag(KeyModifiers.Meta) ? RawInputModifiers.Meta : RawInputModifiers.Control;
+
     private sealed class Rig : IDisposable
     {
         private Rig(ShellHarness shell, BindVariablesView view, BindVariablesViewModel vm, AvaloniaEdit.TextEditor editor)
@@ -102,10 +106,10 @@ public sealed class BindPaneShellKeysTests
             Dispatcher.UIThread.RunJobs();
         }
 
-        public async Task PressAsync(Key key, PhysicalKey physical, string symbol)
+        public async Task PressAsync(Key key, PhysicalKey physical, string symbol, RawInputModifiers? modifiers = null)
         {
-            Window.KeyPress(key, Ctrl, physical, symbol);
-            Window.KeyRelease(key, Ctrl, physical, symbol);
+            Window.KeyPress(key, modifiers ?? Ctrl, physical, symbol);
+            Window.KeyRelease(key, modifiers ?? Ctrl, physical, symbol);
             await HeadlessHost.WaitUntil(() => true);
             Dispatcher.UIThread.RunJobs();
         }
@@ -187,8 +191,8 @@ public sealed class BindPaneShellKeysTests
 
         box.SelectionStart = 0;
         box.SelectionEnd = 3;
-        await rig.PressAsync(Key.C, PhysicalKey.C, "c");
-        Assert.Equal("SMI", await rig.Clipboard.TryGetTextAsync());
+        await rig.PressAsync(Key.C, PhysicalKey.C, "c", TextBoxCtrl); // 글을 골랐으면 창은 비켜 주고 입력 칸이 제 복사 키로 복사한다
+        Assert.Equal("SMI", await rig.ClipboardAfterAsync(Expected(rig.Vm)));
     });
 
     [Fact]

@@ -37,6 +37,17 @@ public static class ConnectionProfileExtensions
         return builder.ConnectionString;
     }
 
+    /// <summary>비밀번호를 넣은 연결(열지 않음). 제품의 모든 접속은 이 길로 만든다.</summary>
+    public static OracleConnection CreateConnection(this ConnectionProfile profile, string password) =>
+        CreateConnection(profile.BuildConnectionString(password));
+
+    /// <summary>
+    /// 연결 문자열로 연결을 만든다(열지 않음). ODP.NET 은 접속 때 PC 시간대 지역 이름(예 Etc/UTC)을 세션 시간대로 보내는데,
+    /// 시간대 파일이 오래된 서버(11.2 XE 등)는 그 이름을 몰라 ORA-00604·ORA-01882 로 접속 자체를 거부한다. 그때만 시차(+00:00)로 대신 보낸다.
+    /// </summary>
+    public static OracleConnection CreateConnection(string connectionString) =>
+        new(connectionString) { UseHourOffsetForUnsupportedTimezone = true };
+
     /// <summary>
     /// TNS_ADMIN 과 지갑 위치는 ODP.NET 이 프로세스 전체 설정으로만 받는다.
     /// 프로필마다 다르면 연결을 열기 직전에 한 번 적용한다.

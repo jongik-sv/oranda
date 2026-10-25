@@ -370,8 +370,10 @@ namespace Oranda.App.Tests.Features.Roles
             }
         });
 
+        // UI 스레드에서 돈다: 밖에서 돌면 칸은 감시 알림을 UI 스레드로 Post 해, 앞서 쌓인 알림이 구독 뒤에 와서 셈에 섞인다.
+        // Dispose 가 감시를 끄며 내는 마지막 알림도 셈에서 빼려고, Dispose 뒤에 구독하고 게이트 사건만 본다.
         [Fact]
-        public async Task Without_a_gate_the_click_still_opens_the_lock_monitor_and_dispose_unsubscribes()
+        public Task Without_a_gate_the_click_still_opens_the_lock_monitor_and_dispose_unsubscribes() => HeadlessHost.Run(async () =>
         {
             var gate = new FakeFeatureGate();
             var (vm, watcher) = await BlockingAsync(null);
@@ -380,13 +382,15 @@ namespace Oranda.App.Tests.Features.Roles
 
             // 게이트를 쥔 칸은 Dispose 뒤 사건을 받지 않는다
             var (gated, watcher2) = await BlockingAsync(gate);
+            gated.Dispose();
+            Pump();
             var raised = 0;
             gated.PropertyChanged += (_, _) => raised++;
-            gated.Dispose();
             gate.RaiseChanged();
+            Pump();
             Assert.Equal(0, raised);
             watcher2.Dispose();
-        }
+        });
 
         [Fact]
         public Task Notice_flyout_shows_the_reserved_text_and_open_settings_runs_the_roles_command() => HeadlessHost.Run(async () =>
