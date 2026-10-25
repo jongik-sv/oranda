@@ -23,13 +23,43 @@ public class FeaturePresetTests
     // ---- 해석 ----
 
     [Fact]
-    public void All_means_no_features_section()
+    public void Default_means_no_features_section_and_all_means_use_all_features()
     {
-        var p = FeaturePreset.Parse("all");
-        Assert.Null(p.Roles);
-        Assert.True(p.IsDefault);
-        Assert.Null(p.ToSettingsJson());
-        Assert.True(FeaturePreset.Parse("ALL").IsDefault);
+        // D-013: 설정 없음 = 기본 Role(SQL 개발자). V0(모든 기능)은 이제 allFeatures 를 쓴다.
+        var d = FeaturePreset.Parse("default");
+        Assert.Null(d.Roles);
+        Assert.False(d.AllFeatures);
+        Assert.True(d.IsDefault);
+        Assert.Null(d.ToSettingsJson());
+        Assert.True(FeaturePreset.Parse(" DEFAULT ").IsDefault);
+
+        var all = FeaturePreset.Parse("all");
+        Assert.Null(all.Roles);
+        Assert.True(all.AllFeatures);
+        Assert.False(all.IsDefault);
+        Assert.Contains("\"allFeatures\":true", all.ToSettingsJson(), StringComparison.Ordinal);
+        Assert.True(FeaturePreset.Parse("ALL").AllFeatures);
+    }
+
+    [Fact]
+    public void All_and_default_resolve_in_the_app_to_every_feature_and_to_the_sql_developer_role()
+    {
+        var dir = TempDir();
+        try
+        {
+            FeaturePreset.Parse("all").WriteSettings(dir);
+            var all = JsonSerializer.Deserialize(File.ReadAllText(Path.Combine(dir, "settings.json")), OrandaJsonContext.Default.AppSettings)!;
+            Assert.True(all.Features.AllFeatures);
+            Assert.Equal(FeatureIds.All.Count, FeatureCatalog.Resolve(all.Features).Count);
+
+            FeaturePreset.Parse("default").WriteSettings(dir);
+            Assert.False(File.Exists(Path.Combine(dir, "settings.json")));
+            Assert.True(FeatureCatalog.Resolve(new FeaturesSettings { Roles = [RoleIds.SqlDev] }).SetEquals(FeatureCatalog.Resolve(new AppSettings().Features)));
+        }
+        finally
+        {
+            Directory.Delete(dir, recursive: true);
+        }
     }
 
     [Theory]
@@ -76,6 +106,9 @@ public class FeaturePresetTests
     [InlineData("sqlDev,nope")]
     [InlineData("all,sqlDev")]
     [InlineData("all,none")]
+    [InlineData("default,sqlDev")]
+    [InlineData("default,-blockerAlert")]
+    [InlineData("all,default")]
     [InlineData("none,viewer")]
     [InlineData("+trace")]
     [InlineData("-blockerAlert")]
@@ -148,6 +181,7 @@ public class FeaturePresetTests
             FeaturePreset.Parse("all,-blockerAlert").WriteSettings(dir);
             var settings = JsonSerializer.Deserialize(File.ReadAllText(Path.Combine(dir, "settings.json")), OrandaJsonContext.Default.AppSettings)!;
             Assert.Null(settings.Features.Roles);
+            Assert.True(settings.Features.AllFeatures);
             var on = FeatureCatalog.Resolve(settings.Features);
             Assert.Equal(FeatureIds.All.Count - 1, on.Count);
             Assert.DoesNotContain(FeatureIds.BlockerAlert, on);
@@ -166,10 +200,10 @@ public class FeaturePresetTests
         {
             FeaturePreset.Parse("viewer").WriteSettings(dir);
             Assert.True(File.Exists(Path.Combine(dir, "settings.json")));
-            FeaturePreset.Parse("all").WriteSettings(dir);
+            FeaturePreset.Parse("default").WriteSettings(dir);
             Assert.False(File.Exists(Path.Combine(dir, "settings.json")));
             var fresh = Path.Combine(dir, "new", "sub");
-            FeaturePreset.Parse("all").WriteSettings(fresh);
+            FeaturePreset.Parse("default").WriteSettings(fresh);
             Assert.True(Directory.Exists(fresh));
         }
         finally

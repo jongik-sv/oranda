@@ -46,11 +46,11 @@ public sealed class StartPage : UserControl
     private readonly SettingsService? _settings;
     private readonly IEventBus? _events;
     private readonly TextBlock _openHint;
-    private readonly StackPanel _roleRow;
+    private readonly Border _roleCard;
     private IDisposable? _settingsSubscription;
 
     /// <summary>
-    /// <paramref name="services"/> 를 주면 기능 상태를 따른다(TSK-07-06, D-011): Role 을 고른 적 없으면 「Role 고르기…」 줄을 보이고,
+    /// <paramref name="services"/> 를 주면 기능 상태를 따른다(TSK-07-06, D-011·D-013): 아무것도 고른 적 없으면 「지금 SQL 개발자 메뉴입니다 — 바꾸기…」 카드를 보이고,
     /// MyBatis 기능이 꺼졌으면 아래 안내에서 매퍼를 뺀다. 주지 않으면 지금 화면 그대로(모든 기능 켬).
     /// </summary>
     public StartPage(ICommandRegistry registry, IContextKeys keys, IShellText text, Func<string, string?> shortcut, RecentFilesService? recent = null,
@@ -64,7 +64,7 @@ public sealed class StartPage : UserControl
         _settings = services?.GetService(typeof(SettingsService)) as SettingsService;
         _events = services?.GetService(typeof(IEventBus)) as IEventBus;
         _openHint = OpenHint();
-        _roleRow = RoleRow(text);
+        _roleCard = RoleCard(text);
         var list = new StackPanel { Spacing = 2, Width = 340 };
         var byId = new Dictionary<string, CommandDefinition>(StringComparer.Ordinal);
         foreach (var c in registry.Commands)
@@ -130,7 +130,7 @@ public sealed class StartPage : UserControl
         {
             HorizontalScrollBarVisibility = Avalonia.Controls.Primitives.ScrollBarVisibility.Disabled,
             VerticalScrollBarVisibility = Avalonia.Controls.Primitives.ScrollBarVisibility.Auto,
-            Content = Body(columns, _roleRow, _openHint),
+            Content = Body(columns, _roleCard, _openHint),
         };
         ApplyFeatures();
     }
@@ -177,8 +177,8 @@ public sealed class StartPage : UserControl
         _settingsSubscription = null;
     }
 
-    /// <summary>「Role 고르기…」 줄이 보이는가(시험용).</summary>
-    internal bool ShowsRoleLink => _roleRow.IsVisible;
+    /// <summary>「지금 SQL 개발자 메뉴입니다 — 바꾸기…」 카드가 보이는가(시험용, D-013).</summary>
+    internal bool ShowsRoleLink => _roleCard.IsVisible;
 
     /// <summary>아래 안내 글(시험용).</summary>
     internal string OpenHintText => _openHint.Text ?? string.Empty;
@@ -197,49 +197,89 @@ public sealed class StartPage : UserControl
     }
 
     /// <summary>
-    /// 기능 상태를 화면에 옮긴다(D-011): Role 을 고른 적 없을 때(<c>features.roles</c> = null)만 「Role 고르기…」 줄, MyBatis 기능 끔이면 매퍼를 뺀 안내.
-    /// 서비스 없이 만들었으면 줄을 숨기고 지금 안내 그대로.
+    /// 기능 상태를 화면에 옮긴다(D-011·D-013): Role·「모든 기능 쓰기」를 고른 적 없을 때(<see cref="FeatureCatalog.IsUnchosen"/>)만
+    /// 「지금 SQL 개발자 메뉴입니다 — 바꾸기…」 카드, MyBatis 기능 끔이면 매퍼를 뺀 안내. 서비스 없이 만들었으면 카드를 숨기고 지금 안내 그대로.
     /// </summary>
     private void ApplyFeatures()
     {
-        _roleRow.IsVisible = _settings is not null && _settings.Current.Features.Roles is null;
+        _roleCard.IsVisible = _settings is not null && FeatureCatalog.IsUnchosen(_settings.Current.Features);
         _openHint.Text = _features is not null && !_features.IsEnabled(FeatureIds.MyBatis)
             ? _text.Lookup(FeatureTexts.StartMyBatisOff)
             : "MyBatis 매퍼(.xml)나 작업 공간(.md)을 열면 문장마다 탭이 생깁니다.";
     }
 
     /// <summary>
-    /// 「Role 을 고르면 메뉴가 단순해집니다 — Role 고르기…」 한 줄. 링크는 <c>oranda.tools.roles</c>(설정 창 「기능」 탭)를 실행한다.
-    /// 명령이 아직 없으면(TSK-07-04 전) 조용히 아무 일도 안 한다(<see cref="ShellCommandRunner"/>).
+    /// 「지금 SQL 개발자 메뉴입니다 — 바꾸기…」 카드(D-013). 아래 흐린 줄은 빠진 메뉴를 어디서 켜는지 알린다. 모달이 아니라 시작 화면 안의 카드다.
+    /// 링크는 <c>oranda.tools.roles</c>(설정 창 「기능」 탭)를 실행한다. 명령이 없으면 조용히 아무 일도 안 한다(<see cref="ShellCommandRunner"/>).
+    /// 모양은 설정 「기능」 탭의 안내 띠(<c>feat-banner</c>)와 같다(테마 브러시만).
     /// </summary>
-    private static StackPanel RoleRow(IShellText text)
+    private static Border RoleCard(IShellText text)
     {
+        var role = FeatureSettingsPage.DefaultRoleName(text);
+        var headline = string.Format(System.Globalization.CultureInfo.CurrentCulture, text.Lookup(FeatureTexts.StartDefaultRole), role);
+        var linkText = text.Lookup(FeatureTexts.StartChangeRole);
         var link = new Button
         {
-            Content = text.Lookup(FeatureTexts.StartChooseRole),
+            Content = linkText,
             Classes = { "tool" },
             Padding = new Thickness(4, 1),
             VerticalAlignment = VerticalAlignment.Center,
         };
         link.Bind(ForegroundProperty, link.GetResourceObservable("OrandaFocusBrush"));
-        Avalonia.Automation.AutomationProperties.SetName(link, text.Lookup(FeatureTexts.StartChooseRole));
+        // 「바꾸기…」 만으로는 무엇을 바꾸는지 모른다: 화면 읽기 이름에는 앞 글을 붙인다.
+        Avalonia.Automation.AutomationProperties.SetName(link, headline + " — " + linkText);
         link.Click += (_, _) => _ = ShellCommandRunner.RunAsync(FeatureCommandIds.Roles);
-        var icon = ShellIcons.Create("settings", 14) ?? new Control();
-        icon.Opacity = 0.6;
-        icon.VerticalAlignment = VerticalAlignment.Center;
-        return new StackPanel
+        var icon = ShellIcons.Create("info", 16) ?? new Control();
+        icon.VerticalAlignment = VerticalAlignment.Top;
+        icon.Margin = new Thickness(0, 3, 8, 0);
+        DockPanel.SetDock(icon, Avalonia.Controls.Dock.Left);
+        var detail = new TextBlock
         {
-            Orientation = Orientation.Horizontal,
-            Spacing = 6,
-            Margin = new Thickness(10, 14, 0, 0), // 위 명령 줄의 아이콘과 같은 들여쓰기
-            Children =
+            Text = text.Lookup(FeatureTexts.StartDefaultRoleDetail),
+            Opacity = 0.65,
+            TextWrapping = TextWrapping.Wrap,
+        };
+        detail.Bind(TextBlock.FontSizeProperty, detail.GetResourceObservable("OrandaFontSizeSmall"));
+        var card = new Border
+        {
+            BorderThickness = new Thickness(1),
+            CornerRadius = new CornerRadius(3),
+            Padding = new Thickness(10, 6),
+            Margin = new Thickness(0, 16, 0, 0),
+            MaxWidth = 712, // 두 열(340 + 32 + 340)과 같은 폭
+            HorizontalAlignment = HorizontalAlignment.Left,
+            Child = new DockPanel
             {
-                icon,
-                new TextBlock { Text = text.Lookup(FeatureTexts.StartChooseRoleHint), Opacity = 0.6, VerticalAlignment = VerticalAlignment.Center, TextTrimming = TextTrimming.CharacterEllipsis },
-                new TextBlock { Text = "—", Opacity = 0.4, VerticalAlignment = VerticalAlignment.Center },
-                link,
+                LastChildFill = true,
+                Children =
+                {
+                    icon,
+                    new StackPanel
+                    {
+                        Spacing = 2,
+                        Children =
+                        {
+                            new StackPanel
+                            {
+                                Orientation = Orientation.Horizontal,
+                                Spacing = 6,
+                                Children =
+                                {
+                                    new TextBlock { Text = headline, FontWeight = FontWeight.SemiBold, VerticalAlignment = VerticalAlignment.Center, TextTrimming = TextTrimming.CharacterEllipsis },
+                                    new TextBlock { Text = "—", Opacity = 0.4, VerticalAlignment = VerticalAlignment.Center },
+                                    link,
+                                },
+                            },
+                            detail,
+                        },
+                    },
+                },
             },
         };
+        card.Bind(Border.BackgroundProperty, card.GetResourceObservable("OrandaToolbarBackgroundBrush"));
+        card.Bind(Border.BorderBrushProperty, card.GetResourceObservable("OrandaSeparatorBrush"));
+        Avalonia.Automation.AutomationProperties.SetName(card, headline);
+        return card;
     }
 
     private static TextBlock OpenHint() =>

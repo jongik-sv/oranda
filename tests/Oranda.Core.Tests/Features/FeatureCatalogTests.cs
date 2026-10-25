@@ -197,11 +197,61 @@ public sealed class FeatureCatalogTests
     // ---- 해석 1~4 (TRD 10.5) ----
 
     [Fact]
-    public void No_section_or_null_roles_means_every_feature()
+    public void No_section_or_nothing_chosen_means_the_sql_developer_role()
     {
-        Assert.Equal(FeatureIds.All.Order(), FeatureCatalog.Resolve(null).Order());
-        Assert.Equal(FeatureIds.All.Order(), FeatureCatalog.Resolve(new FeaturesSettings()).Order());
+        // D-013: 아무것도 고른 적 없으면 기본 Role = SQL 개발자(D-011 의 「모든 기능」을 뒤집음).
+        var r1 = FeatureCatalog.Resolve(new FeaturesSettings { Roles = [RoleIds.SqlDev] });
+        Assert.Equal(r1.Order(), FeatureCatalog.Resolve(null).Order());
+        Assert.Equal(r1.Order(), FeatureCatalog.Resolve(new FeaturesSettings()).Order());
+        Assert.Equal(10, r1.Count);
+        Assert.DoesNotContain(FeatureIds.SqlMonitor, r1);
+        Assert.DoesNotContain(FeatureIds.MyBatis, r1);
+        Assert.DoesNotContain(FeatureIds.PlsqlEditor, r1);
+        Assert.Contains(FeatureIds.BlockerAlert, r1);
+        Assert.True(FeatureCatalog.IsUnchosen(null));
+        Assert.True(FeatureCatalog.IsUnchosen(new FeaturesSettings()));
+        Assert.Equal([RoleIds.SqlDev], FeatureCatalog.EffectiveRoles(new FeaturesSettings()));
+        Assert.False(FeatureCatalog.IsReadOnly(new FeaturesSettings()));
+
+        // RoleDefaults(null) 는 그대로 「모든 기능 바탕」이다(EffectiveRoles 가 null 을 낼 때).
         Assert.Equal(FeatureIds.All.Order(), FeatureCatalog.RoleDefaults(null).Order());
+    }
+
+    [Fact]
+    public void Use_all_features_is_stored_apart_and_wins_over_roles()
+    {
+        var all = new FeaturesSettings { AllFeatures = true };
+        Assert.False(FeatureCatalog.IsUnchosen(all));
+        Assert.Null(FeatureCatalog.EffectiveRoles(all));
+        Assert.Equal(FeatureIds.All.Order(), FeatureCatalog.Resolve(all).Order());
+
+        // 손으로 roles 를 같이 적어도 allFeatures 가 이긴다(조회 전용도 아니다).
+        var withViewer = new FeaturesSettings { AllFeatures = true, Roles = [RoleIds.Viewer] };
+        Assert.Equal(FeatureIds.All.Order(), FeatureCatalog.Resolve(withViewer).Order());
+        Assert.False(FeatureCatalog.IsReadOnly(withViewer));
+
+        // 직접 끔은 그대로 적용된다.
+        var minus = FeatureCatalog.Resolve(all with { Disabled = [FeatureIds.BlockerAlert] });
+        Assert.Equal(FeatureIds.All.Count - 1, minus.Count);
+        Assert.DoesNotContain(FeatureIds.BlockerAlert, minus);
+    }
+
+    [Fact]
+    public void Legacy_use_all_features_with_overrides_and_no_roles_keeps_every_feature_as_the_base()
+    {
+        // D-013 전 「모든 기능 쓰기」 + 직접 끔·켬은 roles 없이 저장됐다: 고른 것으로 보고 모든 기능 바탕을 지킨다.
+        var off = new FeaturesSettings { Disabled = [FeatureIds.Trace] };
+        Assert.False(FeatureCatalog.IsUnchosen(off));
+        Assert.Null(FeatureCatalog.EffectiveRoles(off));
+        Assert.Equal(FeatureIds.All.Count - 1, FeatureCatalog.Resolve(off).Count);
+
+        var on = new FeaturesSettings { Enabled = ["futureFeature"] };
+        Assert.False(FeatureCatalog.IsUnchosen(on));
+        Assert.Equal(FeatureIds.All.Count, FeatureCatalog.Resolve(on).Count);
+
+        // 고른 Role 은 기본값과 무관하다(빈 목록 = 공통만, 조회 전용 = 조회 전용).
+        Assert.False(FeatureCatalog.IsUnchosen(new FeaturesSettings { Roles = [] }));
+        Assert.True(FeatureCatalog.IsReadOnly(new FeaturesSettings { Roles = [RoleIds.Viewer] }));
     }
 
     [Fact]
@@ -328,7 +378,7 @@ public sealed class FeatureCatalogTests
     [InlineData("""{ "schemaVersion": 1, "features": null }""")]
     [InlineData("""{ "schemaVersion": 1, "features": {} }""")]
     [InlineData("""{ "schemaVersion": 1, "features": { "roles": null, "enabled": null, "disabled": null } }""")]
-    public void Old_settings_without_features_read_as_every_feature_on(string json)
+    public void Old_settings_without_features_read_as_the_default_sql_developer_role(string json)
     {
         var value = JsonSerializer.Deserialize(json, OrandaJsonContext.Default.AppSettings)!;
 
@@ -337,7 +387,22 @@ public sealed class FeatureCatalogTests
         Assert.Empty(value.Features.Enabled);
         Assert.Empty(value.Features.Disabled);
         Assert.Equal(new FeaturesSettings(), value.Features);
-        Assert.Equal(FeatureIds.All.Order(), FeatureCatalog.Resolve(value.Features).Order());
+        Assert.False(value.Features.AllFeatures);
+        Assert.True(FeatureCatalog.IsUnchosen(value.Features));
+        Assert.Equal(FeatureCatalog.RoleDefaults([RoleIds.SqlDev]).Order(), FeatureCatalog.Resolve(value.Features).Order());
+    }
+
+    [Fact]
+    public void All_features_flag_round_trips_through_json_and_takes_part_in_equality()
+    {
+        var all = new FeaturesSettings { AllFeatures = true, Disabled = [FeatureIds.Trace] };
+        var json = JsonSerializer.Serialize(new AppSettings { Features = all }, OrandaJsonContext.Default.AppSettings);
+        Assert.Equal("true", JsonNode.Parse(json)!["features"]!["allFeatures"]!.ToJsonString());
+        Assert.Equal(all, JsonSerializer.Deserialize(json, OrandaJsonContext.Default.AppSettings)!.Features);
+
+        Assert.NotEqual(new FeaturesSettings(), new FeaturesSettings { AllFeatures = true });
+        Assert.NotEqual(new FeaturesSettings().GetHashCode(), new FeaturesSettings { AllFeatures = true }.GetHashCode());
+        Assert.False(JsonSerializer.Deserialize("""{ "features": { "allFeatures": false } }""", OrandaJsonContext.Default.AppSettings)!.Features.AllFeatures);
     }
 
     [Fact]

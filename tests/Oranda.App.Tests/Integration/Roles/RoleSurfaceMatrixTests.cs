@@ -1,4 +1,5 @@
 using Avalonia.Input;
+using Avalonia.VisualTree;
 using Oranda.App.Shell;
 using Oranda.App.Shell.Keymaps;
 using Oranda.App.Shell.Menus;
@@ -18,11 +19,23 @@ namespace Oranda.App.Tests.Integration.Roles;
 [Collection("RoleItestUi")]
 public sealed class RoleSurfaceMatrixTests
 {
-    private sealed record Case(string[]? Roles, string[]? Enabled = null, string[]? Disabled = null);
+    private sealed record Case(string[]? Roles, string[]? Enabled = null, string[]? Disabled = null, bool AllFeatures = false)
+    {
+        /// <summary>settings.json 에 쓸 features 글. 아무것도 없으면 null(파일을 쓰지 않음 = 설정 없음).</summary>
+        public string? Json => Roles is null && Enabled is null && Disabled is null && !AllFeatures ? null : PrdMatrix.FeaturesJson(Roles, Enabled, Disabled, AllFeatures);
+
+        public HashSet<string> Expected => PrdMatrix.Enabled(Roles, Enabled, Disabled, AllFeatures);
+    }
+
+    /// <summary>「모든 기능 쓰기」(D-013 전의 「설정 없음」 = a507d81 기준선).</summary>
+    private static readonly Case AllCase = new(null, AllFeatures: true);
 
     private static readonly Dictionary<string, Case> Cases = new(StringComparer.Ordinal)
     {
-        ["none"] = new(null),
+        ["none(default-R1)"] = new(null),
+        ["all-features"] = AllCase,
+        ["all-features+disabled-lockMonitor"] = new(null, null, ["lockMonitor"], AllFeatures: true),
+        ["all-features+roles-ignored"] = new(["viewer"], AllFeatures: true),
         ["R1-sqlDev"] = new(["sqlDev"]),
         ["R2-plsqlDev"] = new(["plsqlDev"]),
         ["R3-myBatisDev"] = new(["myBatisDev"]),
@@ -68,9 +81,9 @@ public sealed class RoleSurfaceMatrixTests
         var dir = RoleApp.NewDir();
         try
         {
-            using var app = new RoleApp(dir, c.Roles is null && c.Enabled is null && c.Disabled is null ? null : PrdMatrix.FeaturesJson(c.Roles, c.Enabled, c.Disabled));
+            using var app = new RoleApp(dir, c.Json);
             await RoleApp.SettleAsync();
-            var expected = PrdMatrix.Enabled(c.Roles, c.Enabled, c.Disabled);
+            var expected = c.Expected;
             var s = app.Capture();
             var gate = app.Gate;
             var text = app.Get<ShellController>().Text;
@@ -78,7 +91,7 @@ public sealed class RoleSurfaceMatrixTests
 
             // ---- 게이트: 켜진 기능 집합·조회 전용·재시작 대기 ----
             Assert.True(expected.SetEquals(s.GateEnabled), $"{name}: 게이트 켠 기능 차이 = {string.Join(",", expected.Except(s.GateEnabled))} / {string.Join(",", s.GateEnabled.Except(expected))}");
-            Assert.Equal(c.Roles is { Length: 1 } && c.Roles[0] == "viewer", s.GateReadOnlyRole);
+            Assert.Equal(!c.AllFeatures && c.Roles is { Length: 1 } && c.Roles[0] == "viewer", s.GateReadOnlyRole);
             Assert.Empty(s.PendingRestart); // 시작 때 값이 곧 지금 값
 
             // ---- 명령 레지스트리: 모든 명령이 (공통 또는 켜진 기능)일 때만 있다 ----
@@ -152,7 +165,7 @@ public sealed class RoleSurfaceMatrixTests
 
             // 켜진 명령은 단축키가 그대로다(꺼진 쪽에서 키맵을 지우지 않았다).
             Assert.Equal(keymap.Table.ShortcutText("oranda.view.commandPalette"), keymap.ShortcutText("oranda.view.commandPalette"));
-            if (c.Roles is { Length: 1 } && c.Roles[0] == "viewer")
+            if (!c.AllFeatures && c.Roles is { Length: 1 } && c.Roles[0] == "viewer")
             {
                 Assert.True(checkedKeys > 0, "조회 전용에서는 단축키가 있는 꺼진 명령이 있어야 이 확인이 의미가 있다");
             }
@@ -203,7 +216,50 @@ public sealed class RoleSurfaceMatrixTests
     });
 
     [Fact]
-    public Task Without_a_features_section_every_count_equals_the_a507d81_baseline() => HeadlessHost.Run(async () =>
+    public Task Without_a_features_section_the_surfaces_equal_an_explicit_sql_developer_choice() => HeadlessHost.Run(async () =>
+    {
+        // D-013: 설정 없음 = 기본 Role(SQL 개발자). 직접 R1 을 고른 것과 보이는 면이 모두 같다(시작 화면 카드만 다르다).
+        var none = RoleApp.NewDir();
+        var r1 = RoleApp.NewDir();
+        try
+        {
+            RoleSurface a, b;
+            using (var app = new RoleApp(none, null))
+            {
+                await RoleApp.SettleAsync();
+                a = app.Capture();
+                Assert.True(app.Window.GetVisualDescendants().OfType<StartPage>().First().ShowsRoleLink);
+            }
+
+            using (var app = new RoleApp(r1, PrdMatrix.FeaturesJson(["sqlDev"])))
+            {
+                await RoleApp.SettleAsync();
+                b = app.Capture();
+                Assert.False(app.Window.GetVisualDescendants().OfType<StartPage>().First().ShowsRoleLink);
+            }
+
+            Assert.True(a.GateEnabled.SetEquals(b.GateEnabled));
+            Assert.True(a.RegistryCommands.SetEquals(b.RegistryCommands));
+            Assert.True(a.RegistryPanels.SetEquals(b.RegistryPanels));
+            Assert.True(a.MenuCommands.SetEquals(b.MenuCommands));
+            Assert.True(a.ToolbarCommands.SetEquals(b.ToolbarCommands));
+            Assert.True(a.PaletteCommands.SetEquals(b.PaletteCommands));
+            Assert.Equal(a.TopMenus, b.TopMenus);
+            Assert.Equal(a.StatusTypes.Order(), b.StatusTypes.Order());
+            Assert.Equal(a.StartupTasks.Order(), b.StartupTasks.Order());
+            Assert.Equal(9, a.StartupTasks.Count);
+            Assert.Equal(10, a.TopMenus.Count); // 「모니터」 가 없다
+            Assert.True(a.RegistryCommands.Count < ShellTestHelpers.AppContributions.Commands.Count);
+        }
+        finally
+        {
+            RoleApp.DeleteDir(none);
+            RoleApp.DeleteDir(r1);
+        }
+    });
+
+    [Fact]
+    public Task Use_all_features_every_count_equals_the_a507d81_baseline() => HeadlessHost.Run(async () =>
     {
         var s = await BaselineAsync();
         var all = ShellTestHelpers.AppContributions;
@@ -224,7 +280,7 @@ public sealed class RoleSurfaceMatrixTests
 
     private static RoleSurface? _baseline;
 
-    /// <summary>features 없음 한 벌(다른 구성과 견줄 기준). 한 번만 짓는다.</summary>
+    /// <summary>「모든 기능 쓰기」 한 벌(다른 구성과 견줄 기준 = D-013 전의 features 없음). 한 번만 짓는다.</summary>
     private static async Task<RoleSurface> BaselineAsync()
     {
         if (_baseline is not null)
@@ -235,7 +291,7 @@ public sealed class RoleSurfaceMatrixTests
         var dir = RoleApp.NewDir();
         try
         {
-            using var app = new RoleApp(dir, null);
+            using var app = new RoleApp(dir, AllCase.Json);
             await RoleApp.SettleAsync();
             return _baseline = app.Capture();
         }

@@ -202,8 +202,33 @@ public static class FeatureCatalog
         return null;
     }
 
+    /// <summary>아무것도 고른 적 없을 때의 Role(D-013): SQL 개발자.</summary>
+    public static IReadOnlyList<string> DefaultRoles { get; } = [RoleIds.SqlDev];
+
     /// <summary>
-    /// 고른 Role 들의 기본 켬 합집합(TRD 10.5-1). <paramref name="roles"/> 가 null(Role 을 고른 적 없음)이면 모든 기능,
+    /// Role·「모든 기능 쓰기」를 고른 적이 없고 직접 켬·끔도 없다(D-013) — 새 설치와 Role 을 고르지 않은 기존 사용자.
+    /// 이때 기본 Role(<see cref="DefaultRoles"/>)을 쓰고 시작 화면에 「바꾸기…」 줄이 보인다. null(섹션 없음)도 그렇다.
+    /// </summary>
+    public static bool IsUnchosen(FeaturesSettings? settings) =>
+        settings is null
+        || (!settings.AllFeatures && settings.Roles is null && settings.Enabled.Count == 0 && settings.Disabled.Count == 0);
+
+    /// <summary>
+    /// 해석에 쓸 Role 목록(D-013). null = 모든 기능 바탕. 「모든 기능 쓰기」 → null, 고른 Role 이 있으면 그것,
+    /// 아무것도 고른 적 없으면 <see cref="DefaultRoles"/>, roles 없이 직접 켬·끔만 있으면 옛 「모든 기능 쓰기」 저장이라 null.
+    /// </summary>
+    public static IReadOnlyList<string>? EffectiveRoles(FeaturesSettings? settings)
+    {
+        if (IsUnchosen(settings))
+        {
+            return DefaultRoles;
+        }
+
+        return settings!.AllFeatures ? null : settings.Roles;
+    }
+
+    /// <summary>
+    /// 고른 Role 들의 기본 켬 합집합(TRD 10.5-1). <paramref name="roles"/> 가 null(모든 기능 바탕, <see cref="EffectiveRoles"/>)이면 모든 기능,
     /// 빈 목록이면 빈 집합(공통만). 모르는 Role id 는 건너뛴다.
     /// </summary>
     public static IReadOnlySet<string> RoleDefaults(IEnumerable<string>? roles)
@@ -237,20 +262,23 @@ public static class FeatureCatalog
         return distinct.Count == 1 && distinct[0] == RoleIds.Viewer;
     }
 
+    /// <summary>설정이 조회 전용 Role 하나만 고른 상태인가(<see cref="EffectiveRoles"/> 위의 <see cref="IsReadOnlyRole"/>).</summary>
+    public static bool IsReadOnly(FeaturesSettings? settings) => IsReadOnlyRole(EffectiveRoles(settings));
+
     /// <summary>
-    /// 설정의 켜진 기능(TRD 10.5 의 1~4): 바탕(<see cref="RoleDefaults"/>) + Enabled − Disabled(같은 id 가 둘 다면 끔이 이김) →
+    /// 설정의 켜진 기능(TRD 10.5 의 1~4): 바탕(<see cref="EffectiveRoles"/> 의 <see cref="RoleDefaults"/>) + Enabled − Disabled(같은 id 가 둘 다면 끔이 이김) →
     /// 조회 전용만이면 WritesOnly 끔 → Requires 못 채움 끔. 결과는 카탈로그가 아는 id 만 담는다(모르는 id 는 무시).
     /// 5단계(StartupBound 는 시작 때 값과 AND·PendingRestart)는 시작 때 값을 아는 게이트가 이 결과 위에서 한다.
     /// </summary>
-    /// <param name="settings">null 이면 섹션 없음 = 모든 기능.</param>
+    /// <param name="settings">null 이면 섹션 없음 = 기본 Role(SQL 개발자, D-013).</param>
     public static IReadOnlySet<string> Resolve(FeaturesSettings? settings)
     {
         settings ??= new FeaturesSettings();
-        var on = new HashSet<string>(RoleDefaults(settings.Roles), StringComparer.Ordinal);
+        var on = new HashSet<string>(RoleDefaults(EffectiveRoles(settings)), StringComparer.Ordinal);
         on.UnionWith(settings.Enabled.Where(IsKnownFeature));
         on.ExceptWith(settings.Disabled);
 
-        if (IsReadOnlyRole(settings.Roles))
+        if (IsReadOnly(settings))
         {
             on.ExceptWith(Features.Where(f => f.WritesOnly).Select(f => f.Id));
         }

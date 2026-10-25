@@ -18,6 +18,9 @@ public sealed class FeatureGateTests
 {
     private static FeaturesSettings Roles(params string[] roles) => new() { Roles = roles };
 
+    /// <summary>「모든 기능 쓰기」(D-013 뒤에는 설정 없음이 아니라 이 값이 모든 기능이다).</summary>
+    private static readonly FeaturesSettings All = new() { AllFeatures = true };
+
     private static FeatureGate Resolved(FeaturesSettings? settings)
     {
         var gate = new FeatureGate();
@@ -46,18 +49,38 @@ public sealed class FeatureGateTests
     }
 
     [Fact]
-    public void Without_a_features_section_resolving_changes_nothing_and_raises_no_event()
+    public void Without_a_features_section_the_first_resolution_is_the_sql_developer_role_and_raises_one_event()
+    {
+        // D-013: 설정 없음 = 기본 Role(SQL 개발자). 「설정 읽기 전 = 모두 켬」에서 R1 로 줄어드니 사건이 한 번 난다.
+        var gate = new FeatureGate();
+        var raised = 0;
+        gate.Changed += (_, _) => raised++;
+
+        Assert.True(gate.Resolve(null));
+        Assert.False(gate.Resolve(new FeaturesSettings())); // null 과 빈 섹션은 같은 결과
+        Assert.False(gate.Resolve(Roles(RoleIds.SqlDev))); // 직접 고른 R1 과도 같은 결과
+
+        Assert.True(gate.IsResolved);
+        Assert.Equal(1, raised);
+        Assert.Equal(FeatureCatalog.Resolve(Roles(RoleIds.SqlDev)).ToHashSet(), gate.EnabledFeatures);
+        Assert.False(gate.IsEnabled(FeatureIds.SessionMonitor));
+        Assert.False(gate.ReadOnlyRole);
+        Assert.Empty(gate.PendingRestart);
+    }
+
+    [Fact]
+    public void Use_all_features_resolves_like_before_settings_are_read_and_raises_no_event()
     {
         var gate = new FeatureGate();
         var raised = 0;
         gate.Changed += (_, _) => raised++;
 
-        Assert.False(gate.Resolve(null));
-        Assert.False(gate.Resolve(new FeaturesSettings()));
+        Assert.False(gate.Resolve(All));
+        Assert.False(gate.Resolve(new FeaturesSettings { Disabled = [] , AllFeatures = true, Roles = [RoleIds.Viewer] })); // allFeatures 가 이긴다
 
-        Assert.True(gate.IsResolved);
         Assert.Equal(0, raised);
         Assert.Equal(FeatureIds.All.ToHashSet(), gate.EnabledFeatures);
+        Assert.False(gate.ReadOnlyRole);
     }
 
     // ── 해석 규칙 표(첫 해석 = 시작 때 값이라 StartupBound 도 그대로 따른다) ──
@@ -128,7 +151,7 @@ public sealed class FeatureGateTests
     [Fact]
     public void Turning_a_startup_bound_feature_off_hides_it_now_and_lists_it_as_pending()
     {
-        var gate = Resolved(null);
+        var gate = Resolved(All);
 
         gate.Resolve(Roles(RoleIds.Viewer));
 
@@ -224,27 +247,28 @@ public sealed class FeatureGateTests
         var settings = services.GetRequiredService<SettingsService>();
         var keys = services.GetRequiredService<ContextKeyService>();
         await settings.LoadAsync();
-        gate.Resolve(settings.Current.Features);
+        gate.Resolve(settings.Current.Features); // 설정 없음 = 기본 Role(SQL 개발자, D-013)
         var raised = 0;
         gate.Changed += (_, _) => Interlocked.Increment(ref raised);
-        Assert.True(keys.Get(FeatureIds.ContextKey(FeatureIds.SessionMonitor)));
+        Assert.False(keys.Get(FeatureIds.ContextKey(FeatureIds.SessionMonitor)));
+        Assert.True(keys.Evaluate("feature.gridEdit && !feature.sessionMonitor")); // 점이 든 이름도 식에서 읽는다
 
-        await settings.UpdateAsync(s => s with { Features = Roles(RoleIds.SqlDev) });
+        await settings.UpdateAsync(s => s with { Features = All });
 
         Assert.Equal(1, raised);
-        Assert.False(gate.IsEnabled(FeatureIds.SessionMonitor));
-        Assert.False(keys.Get("feature.sessionMonitor"));
+        Assert.True(gate.IsEnabled(FeatureIds.SessionMonitor));
+        Assert.True(keys.Get("feature.sessionMonitor"));
         Assert.True(keys.Get("feature.gridEdit"));
-        Assert.True(keys.Evaluate("feature.gridEdit && !feature.sessionMonitor")); // 점이 든 이름도 식에서 읽는다
 
         // 다른 섹션 저장은 게이트를 건드리지 않는다.
         await settings.UpdateAsync(s => s with { Ui = s.Ui with { Theme = Theme.Dark } });
         Assert.Equal(1, raised);
 
-        // 되돌리면 다시 켜진다.
+        // 설정 없음으로 되돌리면 다시 기본 Role 이다.
         await settings.UpdateAsync(s => s with { Features = new FeaturesSettings() });
         Assert.Equal(2, raised);
-        Assert.True(keys.Get("feature.sessionMonitor"));
+        Assert.False(keys.Get("feature.sessionMonitor"));
+        Assert.True(keys.Get("feature.gridEdit"));
     }
 
     [Fact]
@@ -255,12 +279,12 @@ public sealed class FeatureGateTests
         var gate = (FeatureGate)services.GetRequiredService<IFeatureGate>();
         var settings = services.GetRequiredService<SettingsService>();
         await settings.LoadAsync();
-        gate.Resolve(settings.Current.Features); // 시작 때 = 모두 켬
+        gate.Resolve(settings.Current.Features); // 시작 때 = 설정 없음 = R1(MyBatis·PL/SQL 작업 공간 꺼짐)
 
-        await settings.UpdateAsync(s => s with { Features = Roles(RoleIds.SqlDev) });
+        await settings.UpdateAsync(s => s with { Features = All });
         Assert.Equal(new[] { FeatureIds.PlsqlWorkspace, FeatureIds.MyBatis }.ToHashSet(), gate.PendingRestart.ToHashSet());
 
-        await settings.UpdateAsync(s => s with { Features = new FeaturesSettings() });
+        await settings.UpdateAsync(s => s with { Features = Roles(RoleIds.SqlDev) }); // 직접 고른 R1 = 시작 때와 같음
         Assert.Empty(gate.PendingRestart);
     }
 
@@ -287,7 +311,7 @@ public sealed class FeatureGateTests
     {
         // 정책 관문(TSK-07-05)은 실행 스레드에서 ReadOnlyRole·IsEnabled 를 읽는다. 해석은 불변 스냅숏을 통째로 갈아 끼우므로
         // 읽는 쪽은 잠그지 않고도 깨진 값(반쯤 바뀐 집합·열거 중 바뀜 예외)을 보지 않는다.
-        var gate = Resolved(null); // 시작 때 모두 켬 → 켜진 집합 = 카탈로그 해석 그대로(StartupBound AND 가 아무것도 빼지 않는다)
+        var gate = Resolved(All); // 시작 때 모두 켬 → 켜진 집합 = 카탈로그 해석 그대로(StartupBound AND 가 아무것도 빼지 않는다)
         var viewer = Roles(RoleIds.Viewer);
         var dev = Roles(RoleIds.SqlDev);
         gate.Resolve(viewer);
@@ -331,7 +355,7 @@ public sealed class FeatureGateTests
     [Fact]
     public async Task Concurrent_resolutions_settle_on_a_consistent_state()
     {
-        var gate = Resolved(null);
+        var gate = Resolved(All);
         var a = Roles(RoleIds.Viewer);
         var b = Roles(RoleIds.Tuner);
 

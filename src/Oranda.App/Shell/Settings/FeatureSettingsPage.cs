@@ -35,9 +35,14 @@ public sealed partial class FeatureSettingsPage : ObservableObject, IDisposable
         _text = text;
         _gate = gate;
         _initial = initial ?? new FeaturesSettings();
-        _useRoles = _initial.Roles is not null;
 
-        var roles = _initial.Roles ?? [];
+        // 아무것도 고른 적 없으면 기본 Role(SQL 개발자)이 골라진 「Role 로 고르기」로 보인다(D-013). 손대지 않고 저장하면 설정은 그대로다.
+        var effective = FeatureCatalog.EffectiveRoles(_initial);
+        _useRoles = effective is not null;
+        IsDefaultRole = FeatureCatalog.IsUnchosen(_initial);
+        _showDefaultRoleNotice = IsDefaultRole;
+
+        var roles = effective ?? _initial.Roles ?? [];
         _unknownRoles = [.. roles.Where(r => !FeatureCatalog.IsKnownRole(r)).Distinct(StringComparer.Ordinal)];
         _unknownEnabled = [.. _initial.Enabled.Where(id => !FeatureCatalog.IsKnownFeature(id)).Distinct(StringComparer.Ordinal)];
         _unknownDisabled = [.. _initial.Disabled.Where(id => !FeatureCatalog.IsKnownFeature(id)).Distinct(StringComparer.Ordinal)];
@@ -92,6 +97,13 @@ public sealed partial class FeatureSettingsPage : ObservableObject, IDisposable
 
     public string NoRoleNoticeText => _text.Lookup(FeatureTexts.NoRoleNotice);
 
+    public string DefaultRoleNoticeText =>
+        string.Format(CultureInfo.CurrentCulture, _text.Lookup(FeatureTexts.DefaultRoleNotice), DefaultRoleName(_text));
+
+    /// <summary>기본 Role(D-013) 의 화면 이름. 시작 화면 「지금 … 메뉴입니다」 줄도 쓴다.</summary>
+    internal static string DefaultRoleName(IShellText text) =>
+        string.Join(", ", FeatureCatalog.DefaultRoles.Select(id => FeatureCatalog.FindRole(id) is { } r ? text.Lookup(r.NameKey) : id));
+
     // ---- 상태 ----
 
     /// <summary>Role 확인란 6개(<see cref="FeatureCatalog.Roles"/> 순서).</summary>
@@ -103,7 +115,7 @@ public sealed partial class FeatureSettingsPage : ObservableObject, IDisposable
     /// <summary>기능 25개(묶음 순서로 펼친 목록).</summary>
     public IReadOnlyList<FeatureItem> Items { get; }
 
-    /// <summary>true = 「Role 로 고르기」, false = 「모든 기능 쓰기」(저장하면 <c>roles</c> 가 null).</summary>
+    /// <summary>true = 「Role 로 고르기」, false = 「모든 기능 쓰기」(저장하면 <c>allFeatures</c> = true, <c>roles</c> = null).</summary>
     [NotifyPropertyChangedFor(nameof(UseAllFeatures), nameof(RolesEditable))]
     [ObservableProperty]
     private bool _useRoles;
@@ -120,6 +132,13 @@ public sealed partial class FeatureSettingsPage : ObservableObject, IDisposable
             }
         }
     }
+
+    /// <summary>창을 열 때 아무것도 고른 적 없어 기본 Role(SQL 개발자)을 보이는 중이었다(D-013, 시험·화면용).</summary>
+    public bool IsDefaultRole { get; }
+
+    /// <summary>기본 Role 을 보이는 중이라는 안내 띠(D-013). 무엇이든 바꾸면 사라진다(저장하면 직접 고른 것이 된다).</summary>
+    [ObservableProperty]
+    private bool _showDefaultRoleNotice;
 
     /// <summary>Role 확인란을 고칠 수 있나(Role 로 고르기일 때).</summary>
     public bool RolesEditable => UseRoles;
@@ -191,6 +210,7 @@ public sealed partial class FeatureSettingsPage : ObservableObject, IDisposable
         if (!_recomputing)
         {
             IsDirty = true;
+            ShowDefaultRoleNotice = false;
         }
     }
 
@@ -245,7 +265,7 @@ public sealed partial class FeatureSettingsPage : ObservableObject, IDisposable
         UseRoles ? [.. Roles.Where(r => r.IsChecked).Select(r => r.Id), .. _unknownRoles] : null;
 
     /// <summary>
-    /// 화면에서 고른 값을 저장 형태로 옮긴다. 「모든 기능 쓰기」면 roles 는 null, 아니면 고른 Role(카탈로그 순서).
+    /// 화면에서 고른 값을 저장 형태로 옮긴다. 「모든 기능 쓰기」면 allFeatures = true·roles = null(D-013), 아니면 고른 Role(카탈로그 순서).
     /// Enabled = Role 기본에서 꺼져 있는데 직접 켠 것, Disabled = 기본에서 켜져 있는데 직접 끈 것.
     /// </summary>
     public FeaturesSettings ToSettings()
@@ -254,7 +274,7 @@ public sealed partial class FeatureSettingsPage : ObservableObject, IDisposable
         var defaults = FeatureCatalog.RoleDefaults(roles);
         var enabled = Items.Where(i => i.Desired == true && !defaults.Contains(i.Id)).Select(i => i.Id).Concat(_unknownEnabled);
         var disabled = Items.Where(i => i.Desired == false && defaults.Contains(i.Id)).Select(i => i.Id).Concat(_unknownDisabled);
-        return new FeaturesSettings { Roles = roles, Enabled = [.. enabled], Disabled = [.. disabled] };
+        return new FeaturesSettings { AllFeatures = roles is null, Roles = roles, Enabled = [.. enabled], Disabled = [.. disabled] };
     }
 
     // ---- 재시작 안내 ----

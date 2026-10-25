@@ -76,9 +76,9 @@ public sealed class FeatureGate : IFeatureGate
 
     /// <summary>
     /// 설정 섹션을 해석한다(TRD 10.5). 처음 부르면 그 1~4단계 결과가 「앱 시작 때 켬」이 된다. 결과가 앞과 다르면 문맥 키를 고치고
-    /// <see cref="Changed"/> 를 낸다. 같으면 아무 일도 하지 않는다(그래서 features 없음 = 사건 없음).
+    /// <see cref="Changed"/> 를 낸다. 같으면 아무 일도 하지 않는다(features 없음 = 기본 Role SQL 개발자라 처음 해석은 사건을 낸다, D-013).
     /// </summary>
-    /// <param name="settings">null 이면 섹션 없음 = 모든 기능.</param>
+    /// <param name="settings">null 이면 섹션 없음 = 기본 Role(SQL 개발자, D-013).</param>
     /// <returns>결과가 바뀌어 사건을 냈으면 true.</returns>
     public bool Resolve(FeaturesSettings? settings)
     {
@@ -115,7 +115,7 @@ public sealed class FeatureGate : IFeatureGate
                 }
             }
 
-            next = new State(enabled, FeatureCatalog.IsReadOnlyRole(settings.Roles), pending.ToArray());
+            next = new State(enabled, FeatureCatalog.IsReadOnly(settings), pending.ToArray());
             if (next.SameAs(_state))
             {
                 return false;

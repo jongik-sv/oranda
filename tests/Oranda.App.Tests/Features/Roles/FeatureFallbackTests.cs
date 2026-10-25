@@ -21,7 +21,7 @@ namespace Oranda.App.Tests.Features.Roles;
 
 /// <summary>
 /// TSK-07-06 꺼진 기능 대체 경로: PL/SQL 끔 읽기 전용 소스 열기(D-007)·MyBatis 끔 매퍼 펼쳐 열기(파일 불변, D-008)·
-/// 계획 창 고급 탭 숨김·화면 안 튜닝 단추·SQL 모니터 바로 가기·시작 화면 「Role 고르기…」(D-011).
+/// 계획 창 고급 탭 숨김·화면 안 튜닝 단추·SQL 모니터 바로 가기·시작 화면 「지금 SQL 개발자 메뉴입니다 — 바꾸기…」 카드(D-011·D-013).
 /// 게이트는 <see cref="FakeFeatureGate"/> 로 넣는다(실제 게이트는 TSK-07-02).
 /// </summary>
 [Collection(Oranda.App.Tests.Features.PlsqlWorkspace.PlsqlStatics.Name)]

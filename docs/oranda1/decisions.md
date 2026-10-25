@@ -84,6 +84,7 @@
 - **Source**: 사용자 확정 2026-10-25, 조사 4.1 「가」·6.10·6.11, LayoutPlanner.cs:81-90
 
 ## D-011 (2026-10-25T02:55:41Z)
+- **Superseded**: 기본값 부분(「features 없음 = 모든 기능 켬」, 「Role 고르기…」 줄)은 D-013 으로 대체됨. 첫 실행 모달 없음·「기능」 탭 자리는 그대로
 - **Phase**: design
 - **Decision needed**: 기본값·첫 실행 안내·설정 창 자리
 - **Decision made**: features 섹션이 없거나 roles 가 null 이면 모든 기능 켬(지금과 같음). 첫 실행에 창을 띄워 묻지 않는다. Role 을 고르지 않은 동안 시작 화면에 「Role 고르기…」 한 줄 링크를 보이고 도구 메뉴에 「Role·기능 고르기…」(oranda.tools.roles)를 둔다. Role 선택 UI 는 일반 탭이 아니라 새 「기능」 탭(일반 다음)
@@ -98,6 +99,14 @@
 - **Rationale**: 팩 보유는 라이선스 사실이라 Role 로 자동 선언하면 안 된다(조사 6.12). 문구 파일은 LocalizationTests 때문에 모든 레인이 건드리게 되어 병렬 머지 충돌의 주원인이 된다(dflow-wbs 공유 파일 규칙 C1·C7)
 - **Reversible**: yes
 - **Source**: 조사 6.12, src/Oranda.Core/Connection/ConnectionProfile.cs:26,65, TRD 10.8·10.9
+
+## D-013 (2026-10-25T09:00:00Z)
+- **Phase**: design
+- **Decision needed**: features 설정이 없을 때(새 설치·Role 을 고르지 않은 기존 사용자)의 기본 Role — D-011 의 「모든 기능 켬」을 유지할지
+- **Decision made**: 기본 Role = R1 SQL 개발자. 해석: `allFeatures` = true → 모든 기능, `roles` 가 있으면 그 Role 들, 아무것도 고른 적 없으면(`roles` 없음·`enabled`/`disabled` 빔·`allFeatures` 아님) R1, `roles` 없이 직접 켬·끔만 있으면 옛 「모든 기능 쓰기」 저장으로 보고 모든 기능. 「모든 기능 쓰기」는 설정 「기능」 탭에서 계속 고를 수 있고 이제 `allFeatures: true` 로 따로 저장한다(스키마 버전은 그대로). 시작 화면에는 아무것도 고르지 않은 동안 「지금 SQL 개발자 메뉴입니다 — 바꾸기…」 카드(모달 아님, `oranda.tools.roles`)가 보이고 직접 고르면 사라진다. 「기능」 탭은 그 상태에서 「Role 로 고르기」 + SQL 개발자가 골라진 채 열리고, 손대지 않고 저장하면 설정은 그대로다(D-011 부분 대체)
+- **Rationale**: 사용 복잡도 줄이기 — 처음 쓰는 사람에게 튜닝·모니터·MyBatis·PL/SQL 메뉴까지 다 보이면 메뉴가 길고 어디서 시작할지 모른다. SQL 개발자가 가장 넓은 사용자층이다. 옛 형식에서 직접 켬·끔 없이 「모든 기능 쓰기」만 저장한 사용자는 「고른 적 없음」과 파일이 같아 구별할 수 없어 R1 이 된다(시작 화면 카드로 바로 되돌릴 수 있다)
+- **Reversible**: yes
+- **Source**: 사용자 결정 2026-10-25(회차 simplify, 「features 설정이 없으면 기본 Role = SQL 개발자」), TSK-07-11
 
 ## D-014 (2026-10-25T10:30:00Z)
 - **Phase**: release

@@ -37,7 +37,7 @@ public sealed class FakeFeatureGate : IFeatureGate
     public static FakeFeatureGate For(FeaturesSettings settings)
     {
         ArgumentNullException.ThrowIfNull(settings);
-        return new FakeFeatureGate(FeatureCatalog.Resolve(settings)) { ReadOnlyRole = FeatureCatalog.IsReadOnlyRole(settings.Roles) };
+        return new FakeFeatureGate(FeatureCatalog.Resolve(settings)) { ReadOnlyRole = FeatureCatalog.IsReadOnly(settings) };
     }
 
     /// <summary>Role 만 고른 설정(<c>roles</c> = 인자, 덮어쓰기 없음)의 게이트.</summary>

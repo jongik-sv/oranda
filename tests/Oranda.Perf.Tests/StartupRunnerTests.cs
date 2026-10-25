@@ -184,9 +184,13 @@ public class StartupRunnerTests
             var seen = File.ReadAllText(Path.Combine(data, "settings-seen.txt"));
             Assert.Contains("\"roles\":[\"viewer\"]", seen, StringComparison.Ordinal);
 
-            // 같은 폴더로 V0 를 띄우면 앞 구성이 남지 않는다.
-            File.Delete(Path.Combine(data, "settings-seen.txt"));
+            // V0(모든 기능 쓰기)는 allFeatures 를 쓴다(D-013).
             Assert.True(RunFake("ok", Options(dataDir: data) with { Features = "all" }).Ok);
+            Assert.Contains("\"allFeatures\":true", File.ReadAllText(Path.Combine(data, "settings-seen.txt")), StringComparison.Ordinal);
+
+            // 같은 폴더로 default(설정 없음)를 띄우면 앞 구성이 남지 않는다.
+            File.Delete(Path.Combine(data, "settings-seen.txt"));
+            Assert.True(RunFake("ok", Options(dataDir: data) with { Features = "default" }).Ok);
             Assert.False(File.Exists(Path.Combine(data, "settings-seen.txt")));
         }
         finally

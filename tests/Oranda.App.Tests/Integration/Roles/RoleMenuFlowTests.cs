@@ -8,6 +8,7 @@ using Oranda.App.Shell;
 using Oranda.App.Shell.Composition;
 using Oranda.App.Shell.Features;
 using Oranda.App.Shell.Settings;
+using Oranda.App.Tests.Shell;
 using Oranda.App.Tests.Shell.Headless;
 using Oranda.App.Views;
 using Oranda.Core.Execution;
@@ -20,8 +21,9 @@ using Oranda.Testing;
 namespace Oranda.App.Tests.Integration.Roles;
 
 /// <summary>
-/// TSK-07-08 통합 2: 흐름. 설정 파일 없음으로 시작 → 설정 「기능」 탭(<c>oranda.tools.roles</c> 로 연 실제 설정 창)에서 Role 고르기 → 즉시 반영(메뉴) /
-/// 재시작 안내(시작 작업) → 저장 → 재시작 → 조회 전용 → Role 더하기 → 「모든 기능 쓰기」 로 되돌리기. 모두 실제 FeatureGate·설정 저장소·레지스트리·메인 창.
+/// TSK-07-08 통합 2: 흐름. 설정 파일 없음(= 기본 Role SQL 개발자, D-013)으로 시작 → 설정 「기능」 탭(<c>oranda.tools.roles</c> 로 연 실제 설정 창)에서
+/// 「모든 기능 쓰기」 → 즉시 반영(메뉴) / 재시작 안내(시작 작업) → 저장 → 재시작 → 조회 전용 → Role 더하기 → 「모든 기능 쓰기」 로 되돌리기.
+/// 모두 실제 FeatureGate·설정 저장소·레지스트리·메인 창.
 /// </summary>
 [Trait("Category", "Integration")]
 [Collection("RoleItestUi")]
@@ -100,34 +102,63 @@ public sealed class RoleMenuFlowTests
     private static PolicyDecision Judge(RoleApp app, string sql) =>
         app.Get<IExecutionPolicy>().EvaluateAsync(new PolicyContext(TestData.Profile(), TestData.Server(), HistorySource.Editor), Assert.Single(Split(app, sql)), default).AsTask().GetAwaiter().GetResult();
 
+    private static bool AllFeaturesSaved(string dir)
+    {
+        using var doc = JsonDocument.Parse(File.ReadAllText(Path.Combine(dir, "settings.json")));
+        return doc.RootElement.TryGetProperty("features", out var f) && f.TryGetProperty("allFeatures", out var a) && a.ValueKind == JsonValueKind.True;
+    }
+
     [Fact]
-    public Task Full_flow_default_to_R1_restart_R6_R6R1_add_R4_and_back_to_all_features() => HeadlessHost.Run(async () =>
+    public Task Full_flow_default_R1_to_all_features_restart_R6_R6R1_add_R4_and_back_to_all_features() => HeadlessHost.Run(async () =>
     {
         var dir = RoleApp.NewDir();
         try
         {
-            RoleSurface first;
-            string[] mybatisCommands;
+            RoleSurface allAtStart;
+            var mybatisCommands = ShellTestHelpers.AppContributions.Commands.Select(c => c.Definition.Id)
+                .Where(id => id.StartsWith("oranda.mybatis.", StringComparison.Ordinal)).ToArray();
+            Assert.NotEmpty(mybatisCommands);
 
-            // ── 1. settings.json 없음 ──
+            // ── 1. settings.json 없음 = 기본 Role SQL 개발자(D-013): MyBatis 시작 작업·상태 칸 없음·블로커 칸 있음 ──
             using (var app = new RoleApp(dir, null))
             {
                 await RoleApp.SettleAsync();
-                first = app.Capture();
+                var first = app.Capture();
                 Assert.False(File.Exists(Path.Combine(dir, "settings.json")));
-                Assert.Equal(11, first.TopMenus.Count);
-                Assert.Equal(14, first.StartupTasks.Count);
-                Assert.Equal(10, first.StatusTypes.Count);
-                Assert.Equal(PrdMatrix.AllFeatures.Order(), first.GateEnabled.Order());
-                mybatisCommands = [.. first.RegistryCommands.Where(id => id.StartsWith("oranda.mybatis.", StringComparison.Ordinal))];
-                Assert.NotEmpty(mybatisCommands);
+                Assert.True(PrdMatrix.Enabled(["sqlDev"]).SetEquals(first.GateEnabled));
+                Assert.False(HasTop(first, app, "monitor"));
+                Assert.True(HasTop(first, app, "tuning")); // planAdvanced 가 튜닝 묶음에 있어 R1 에도 튜닝 메뉴가 남는다
+                Assert.Equal(10, first.TopMenus.Count);
+                Assert.Empty(first.RegistryCommands.Intersect(mybatisCommands));
+                Assert.Empty(first.PendingRestart);
+                Assert.Equal(PrdMatrix.ExpectedTasks(PrdMatrix.Enabled(["sqlDev"])).Order(), first.StartupTasks.Order());
+                Assert.Equal(9, first.StartupTasks.Count);
+                Assert.DoesNotContain(first.StartupTasks, t => PrdMatrix.MyBatisTasks.Contains(t));
+                Assert.DoesNotContain("MapperSaveStatusViewModel", first.StatusTypes);
+                Assert.Contains("BlockerStatusViewModel", first.StatusTypes);
+                Assert.NotNull(app.BlockerChip());
                 var startPage = app.Window.GetVisualDescendants().OfType<StartPage>().First();
-                Assert.True(startPage.ShowsRoleLink); // 「Role 고르기…」 줄(Role 을 고른 적 없음)
+                Assert.True(startPage.ShowsRoleLink); // 「지금 SQL 개발자 메뉴입니다 — 바꾸기…」 카드(고른 적 없음)
 
-                // ── 2. 설정 「기능」 탭에서 R1 고르기 ──
+                // 앱이 실제로 시작 작업을 돌리는 길(첫 프레임 뒤 + 유휴 뒤): 건너뛴 작업 수가 Trace 에 남는다(TSK-07-07 이 센다).
+                var run = new Oranda.App.App.StartupRun();
+                using (var trace = new TraceCapture())
+                {
+                    await Oranda.App.App.RunStartupTasksAsync(app.Services, run, Oranda.Core.Composition.StartupPhase.AfterFirstFrame);
+                    await Oranda.App.App.RunStartupTasksAsync(app.Services, run, null);
+                    Assert.Equal(9, run.Ran.Count);
+                    Assert.Equal(5, run.Skipped.Count);
+                    Assert.Contains(trace.Lines, l => l.Contains("시작 작업: 돈 9개, 건너뜀 5개", StringComparison.Ordinal));
+                }
+
+                Assert.Same(MyBatisHooks.Empty, Oranda.App.Features.SqlEditor.SqlEditorHost.Current.MyBatisHooks); // MyBatis 배선이 돌지 않았다
+
+                // ── 2. 설정 「기능」 탭: SQL 개발자가 골라진 채 열리고, 「모든 기능 쓰기」 를 고른다 ──
                 var (window, vm) = await OpenFeaturesTabAsync(app);
-                Assert.True(vm.Features.UseAllFeatures);
-                Choose(vm, RoleIds.SqlDev);
+                Assert.True(vm.Features.UseRoles);
+                Assert.Equal([RoleIds.SqlDev], vm.Features.Roles.Where(r => r.IsChecked).Select(r => r.Id).ToArray());
+                Assert.True(vm.Features.ShowDefaultRoleNotice);
+                vm.Features.UseAllFeatures = true;
                 var closed = false;
                 vm.CloseRequested += (_, _) => closed = true;
                 await vm.SaveAsync();
@@ -138,50 +169,38 @@ public sealed class RoleMenuFlowTests
                 Assert.StartsWith("재시작하면 적용됩니다: ", vm.Features.RestartBannerText, StringComparison.Ordinal);
                 Assert.Contains("MyBatis", vm.Features.RestartBannerText, StringComparison.Ordinal);
                 Assert.Equal(SettingsViewModel.FeaturesTabIndex, vm.SelectedTab);
-                Assert.Equal(["changeJournal"], app.Gate.EnabledFeatures.Intersect(["changeJournal", "myBatis"]).ToArray()); // myBatis 는 곧바로 꺼진 것으로 본다
 
-                // 재시작 없이 메뉴가 바뀐다.
-                await RoleApp.SettleAsync(() => !HasTop(app.Capture(), app, "monitor"));
-                var afterR1 = app.Capture();
-                Assert.False(HasTop(afterR1, app, "monitor"));
-                Assert.True(HasTop(afterR1, app, "tuning")); // planAdvanced 가 튜닝 묶음에 있어 R1 에도 튜닝 메뉴가 남는다
-                Assert.Empty(afterR1.RegistryCommands.Intersect(mybatisCommands));
-                Assert.DoesNotContain(afterR1.MenuCommands, id => id.StartsWith("oranda.mybatis.", StringComparison.Ordinal));
-                Assert.Equal(["myBatis", "plsqlWorkspace"], afterR1.PendingRestart.Order().ToArray());
-                // 시작 때 만든 상태 칸은 이 실행 동안 그대로다(재시작 뒤에 반영).
-                Assert.Equal(first.StatusTypes.Order(), afterR1.StatusTypes.Order());
-                Assert.Equal(["sqlDev"], SavedRoles(dir)); // 저장 파일에 Role 이 적혔다
+                // 재시작 없이 메뉴가 바뀐다(시작 때 도는 MyBatis 명령은 재시작 전까지 나타나지 않는다).
+                await RoleApp.SettleAsync(() => HasTop(app.Capture(), app, "monitor"));
+                var afterAll = app.Capture();
+                Assert.Equal(11, afterAll.TopMenus.Count);
+                Assert.Empty(afterAll.RegistryCommands.Intersect(mybatisCommands));
+                Assert.Equal(["myBatis", "plsqlWorkspace"], afterAll.PendingRestart.Order().ToArray());
+                Assert.Equal(first.StatusTypes.Order(), afterAll.StatusTypes.Order()); // 상태 칸은 재시작 뒤에 반영
+                Assert.Null(SavedRoles(dir));
+                Assert.True(AllFeaturesSaved(dir)); // 「모든 기능 쓰기」 는 따로 적힌다
+                await RoleApp.SettleAsync(() => !startPage.ShowsRoleLink); // 직접 골랐으니 카드가 사라진다
                 window.Close();
             }
 
-            // ── 3. 재시작: MyBatis 시작 작업·상태 칸 없음·블로커 칸 있음 ──
+            // ── 3. 재시작: 모든 기능 = a507d81 과 같은 수 ──
             using (var app = new RoleApp(dir, null))
             {
                 await RoleApp.SettleAsync();
-                var s = app.Capture();
+                var s = allAtStart = app.Capture();
                 Assert.Empty(s.PendingRestart);
-                Assert.Equal(PrdMatrix.ExpectedTasks(PrdMatrix.Enabled(["sqlDev"])).Order(), s.StartupTasks.Order());
-                Assert.Equal(9, s.StartupTasks.Count);
-                Assert.DoesNotContain(s.StartupTasks, t => PrdMatrix.MyBatisTasks.Contains(t));
-                Assert.DoesNotContain("MapperSaveStatusViewModel", s.StatusTypes);
-                Assert.Contains("BlockerStatusViewModel", s.StatusTypes);
-                Assert.NotNull(app.BlockerChip());
+                Assert.Equal(PrdMatrix.AllFeatures.Order(), s.GateEnabled.Order());
+                Assert.Equal(11, s.TopMenus.Count);
+                Assert.Equal(14, s.StartupTasks.Count);
+                Assert.Equal(10, s.StatusTypes.Count);
+                Assert.Subset(s.RegistryCommands, mybatisCommands.ToHashSet(StringComparer.Ordinal));
+                Assert.Contains("MapperSaveStatusViewModel", s.StatusTypes);
                 Assert.False(app.Window.GetVisualDescendants().OfType<StartPage>().First().ShowsRoleLink);
 
-                // 앱이 실제로 시작 작업을 돌리는 길(첫 프레임 뒤 + 유휴 뒤): 건너뛴 작업 수가 Trace 에 남는다(TSK-07-07 이 센다).
-                var run = new Oranda.App.App.StartupRun();
-                using var trace = new TraceCapture();
-                await Oranda.App.App.RunStartupTasksAsync(app.Services, run, Oranda.Core.Composition.StartupPhase.AfterFirstFrame);
-                await Oranda.App.App.RunStartupTasksAsync(app.Services, run, null);
-                Assert.Equal(9, run.Ran.Count);
-                Assert.Equal(5, run.Skipped.Count);
-                Assert.Contains(trace.Lines, l => l.Contains("시작 작업: 돈 9개, 건너뜀 5개", StringComparison.Ordinal));
-                Assert.Same(MyBatisHooks.Empty, Oranda.App.Features.SqlEditor.SqlEditorHost.Current.MyBatisHooks); // MyBatis 배선이 돌지 않았다
-
-                // 설정 창은 저장한 Role 을 그대로 보여 준다(저장 → 다시 읽기 왕복).
+                // 설정 창은 저장한 「모든 기능 쓰기」 를 그대로 보여 준다(저장 → 다시 읽기 왕복).
                 var (window, vm) = await OpenFeaturesTabAsync(app);
-                Assert.True(vm.Features.UseRoles);
-                Assert.Equal([RoleIds.SqlDev], vm.Features.Roles.Where(r => r.IsChecked).Select(r => r.Id).ToArray());
+                Assert.True(vm.Features.UseAllFeatures);
+                Assert.False(vm.Features.ShowDefaultRoleNotice);
                 Assert.False(vm.Features.HasRestartBanner);
 
                 // ── 4. R6 만 고르기 ──
@@ -235,25 +254,29 @@ public sealed class RoleMenuFlowTests
                 Assert.Contains("oranda.monitor.locks", tuner.MenuCommands);
                 Assert.Contains("oranda.tuning.report", tuner.MenuCommands);
 
-                // ── 10. 「모든 기능 쓰기」 로 되돌리기 ──
+                // ── 10. 「모든 기능 쓰기」 로 되돌리기: 시작 때가 모든 기능이었으니 재시작 대기 없이 원래 집합 ──
                 vm.Features.UseAllFeatures = true;
                 await vm.SaveAsync();
                 await RoleApp.SettleAsync(() => HasTop(app.Capture(), app, "monitor") && app.Capture().RegistryCommands.Contains("oranda.tools.import"));
                 var all = app.Capture();
                 Assert.Equal(11, all.TopMenus.Count);
-                // 시작 때 꺼져 있던 기능(MyBatis·PL/SQL 작업 공간)은 재시작 전까지 돌아오지 않는다 — 안내가 이를 알린다.
-                Assert.Contains("myBatis", all.PendingRestart);
-                Assert.Empty(all.RegistryCommands.Intersect(mybatisCommands));
-                Assert.True(vm.Features.HasRestartBanner);
-                window.Close();
+                Assert.Empty(all.PendingRestart);
+                Assert.True(allAtStart.RegistryCommands.SetEquals(all.RegistryCommands));
+                Assert.False(vm.Features.HasRestartBanner);
+                if (window.IsVisible)
+                {
+                    window.Close(); // 재시작 대기가 없으면 저장이 창을 닫는다
+                }
             }
 
-            // ── 원래 집합: 한 번 더 재시작하면 처음(설정 없음)과 같다 ──
+            // ── 원래 집합: 한 번 더 재시작하면 3 의 「모든 기능」 과 같다 ──
             using (var app = new RoleApp(dir, null))
             {
                 await RoleApp.SettleAsync();
                 var back = app.Capture();
-                Assert.Null(SavedRoles(dir)); // 「모든 기능 쓰기」 = roles 없음
+                var first = allAtStart;
+                Assert.Null(SavedRoles(dir)); // 「모든 기능 쓰기」 = roles 없음 + allFeatures
+                Assert.True(AllFeaturesSaved(dir));
                 Assert.True(first.RegistryCommands.SetEquals(back.RegistryCommands));
                 Assert.True(first.RegistryPanels.SetEquals(back.RegistryPanels));
                 Assert.True(first.MenuCommands.SetEquals(back.MenuCommands));

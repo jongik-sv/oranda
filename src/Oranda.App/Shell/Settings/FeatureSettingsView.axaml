@@ -84,6 +84,14 @@
           <TextBlock x:Name="RestartText" Text="{Binding RestartBannerText}" TextWrapping="Wrap" VerticalAlignment="Center" />
         </DockPanel>
       </Border>
+      <Border x:Name="DefaultRoleBanner" Classes="feat-banner" IsVisible="{Binding ShowDefaultRoleNotice}"
+              AutomationProperties.Name="{Binding DefaultRoleNoticeText}">
+        <DockPanel>
+          <ContentControl DockPanel.Dock="Left" Margin="0,0,8,0" VerticalAlignment="Center"
+                          Content="{Binding Source='info', Converter={x:Static icons:IconKeyConverter.Instance}, ConverterParameter=16}" />
+          <TextBlock x:Name="DefaultRoleText" Text="{Binding DefaultRoleNoticeText}" TextWrapping="Wrap" VerticalAlignment="Center" />
+        </DockPanel>
+      </Border>
       <Border x:Name="ViewerBanner" Classes="feat-banner" IsVisible="{Binding IsViewerOnly}"
               AutomationProperties.Name="{Binding ViewerNoticeText}">
         <DockPanel>

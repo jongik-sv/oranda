@@ -64,11 +64,19 @@ internal static class PrdMatrix
 
     public static IReadOnlyList<string> AllFeatures => [.. Rows.Select(r => r.Feature)];
 
-    /// <summary>켜진 기능 집합. roles == null 이면 모든 기능(RL-01·RL-02).</summary>
-    public static HashSet<string> Enabled(string[]? roles, string[]? enabled = null, string[]? disabled = null)
+    /// <summary>
+    /// 켜진 기능 집합(RL-01·RL-02, D-013). <paramref name="allFeatures"/> = 「모든 기능 쓰기」 → 모든 기능. roles == null 이면
+    /// 직접 켬·끔도 없을 때 기본 Role(SQL 개발자), 직접 켬·끔이 있으면 옛 「모든 기능 쓰기」 저장이라 모든 기능.
+    /// </summary>
+    public static HashSet<string> Enabled(string[]? roles, string[]? enabled = null, string[]? disabled = null, bool allFeatures = false)
     {
         var on = new HashSet<string>(StringComparer.Ordinal);
-        if (roles is null)
+        if (!allFeatures && roles is null && enabled is not { Length: > 0 } && disabled is not { Length: > 0 })
+        {
+            roles = ["sqlDev"]; // D-013: 아무것도 고른 적 없음 = SQL 개발자
+        }
+
+        if (allFeatures || roles is null)
         {
             on.UnionWith(AllFeatures);
         }
@@ -88,7 +96,7 @@ internal static class PrdMatrix
 
         on.UnionWith(enabled ?? []);
         on.ExceptWith(disabled ?? []);
-        if (roles is { Length: 1 } && roles[0] == "viewer")
+        if (!allFeatures && roles is { Length: 1 } && roles[0] == "viewer")
         {
             on.ExceptWith(WritesOnly);
         }
@@ -179,10 +187,15 @@ internal static class PrdMatrix
         }),
     ];
 
-    /// <summary>settings.json 의 features 섹션 글(JSON).</summary>
-    public static string FeaturesJson(string[]? roles, string[]? enabled = null, string[]? disabled = null)
+    /// <summary>settings.json 의 features 섹션 글(JSON). <paramref name="allFeatures"/> = 「모든 기능 쓰기」(D-013).</summary>
+    public static string FeaturesJson(string[]? roles, string[]? enabled = null, string[]? disabled = null, bool allFeatures = false)
     {
         var map = new Dictionary<string, object?>();
+        if (allFeatures)
+        {
+            map["allFeatures"] = true;
+        }
+
         if (roles is not null)
         {
             map["roles"] = roles;
@@ -236,7 +249,7 @@ internal sealed class RoleApp : IDisposable
             File.WriteAllText(Path.Combine(dataDirectory, "settings.json"), "{\"schemaVersion\":1,\"features\":" + featuresJson + "}");
         }
 
-        _harness = new ShellHarness(dataDirectory);
+        _harness = new ShellHarness(dataDirectory, allFeatures: false); // 설정은 이 시험이 정한다(null = 설정 없음 = 기본 Role)
     }
 
     public ShellHarness Harness => _harness;

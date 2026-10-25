@@ -16,7 +16,7 @@ public static class FeatureSettingsCommands
 }
 
 /// <summary>
-/// 도구 &gt; Role·기능 고르기…: 설정 창을 「기능」 탭으로 연다(RL-12). 블로커 칸·시작 화면의 「설정 열기」·「Role 고르기…」 도 이 명령을 실행한다.
+/// 도구 &gt; Role·기능 고르기…: 설정 창을 「기능」 탭으로 연다(RL-12). 블로커 칸의 「설정 열기」·시작 화면 기본 Role 카드의 「바꾸기…」(D-013) 도 이 명령을 실행한다.
 /// 창은 <see cref="IShellUi.ShowSettings"/> 가 만들고, 탭 고르기는 그 창의 모델에 맡긴다(진입점 파일을 건드리지 않는다).
 /// </summary>
 [OrandaCommand(FeatureCommandIds.Roles, CommandCategory.Tools, Placements = ["menu:tools/roles@11"])]

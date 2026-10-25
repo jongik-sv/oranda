@@ -29,6 +29,9 @@ public sealed class FeatureSettingsViewTests
 {
     private static readonly ShellText Ko = new ShellText(language: "ko");
 
+    /// <summary>「모든 기능 쓰기」로 저장된 설정(D-013: 설정 없음은 이제 기본 Role SQL 개발자다).</summary>
+    private static readonly FeaturesSettings All = new() { AllFeatures = true };
+
     private static async Task<(SettingsService Settings, MemorySettingsStore Store, SettingsViewModel Vm)> Create(
         FeaturesSettings? features = null, IFeatureGate? gate = null, IShellText? text = null)
     {
@@ -54,24 +57,104 @@ public sealed class FeatureSettingsViewTests
     // ---- 처음 상태 ----
 
     [Fact]
-    public async Task Without_a_features_section_the_tab_shows_every_feature_on_and_no_role_chosen()
+    public async Task Without_a_features_section_the_tab_shows_the_sql_developer_role_chosen()
     {
+        // D-013: 설정 없음 = 기본 Role(SQL 개발자). 「Role 로 고르기」 + SQL 개발자 확인란이 켜진 채 열린다.
         var (_, _, vm) = await Create();
+        var page = vm.Features;
+
+        Assert.True(page.UseRoles);
+        Assert.False(page.UseAllFeatures);
+        Assert.True(page.RolesEditable);
+        Assert.True(page.IsDefaultRole);
+        Assert.True(page.ShowDefaultRoleNotice);
+        Assert.Equal("아직 Role 을 고르지 않아 SQL 개발자 메뉴로 쓰는 중입니다. 다른 Role 이나 「모든 기능 쓰기」를 고를 수 있습니다.", page.DefaultRoleNoticeText);
+        Assert.Equal([RoleIds.SqlDev], page.Roles.Where(r => r.IsChecked).Select(r => r.Id));
+        Assert.All(page.Roles, r => Assert.True(r.CanEdit));
+        Assert.Equal(25, page.Items.Count);
+        AssertSet(FeatureCatalog.RoleDefaults([RoleIds.SqlDev]), Checked(page));
+        Assert.All(page.Items, i => Assert.Equal(FeatureState.RoleDefault, i.State));
+        Assert.False(page.HasOverrides);
+        Assert.False(page.IsViewerOnly);
+        Assert.False(page.ShowNoRoleNotice);
+        Assert.False(page.HasRestartBanner);
+        Assert.False(page.IsDirty);
+        Assert.Equal("모든 기능 쓰기", page.ModeAllText);
+    }
+
+    [Fact]
+    public async Task In_the_default_state_saving_without_touching_keeps_nothing_chosen_and_any_change_is_a_choice()
+    {
+        // 손대지 않고 저장 = 설정 그대로(여전히 고른 적 없음 → 시작 화면 카드가 남는다).
+        var (settings, store, vm) = await Create();
+        vm.TabSize = 3;
+        await vm.SaveAsync();
+        Assert.Equal(new FeaturesSettings(), store.Saved.Features);
+        Assert.True(FeatureCatalog.IsUnchosen(settings.Current.Features));
+
+        // 기능 하나를 켜면 R1 을 고른 것으로 저장된다.
+        (settings, store, vm) = await Create();
+        Item(vm.Features, FeatureIds.Trace).IsChecked = true;
+        Assert.False(vm.Features.ShowDefaultRoleNotice); // 바꾸면 안내 띠가 사라진다
+        await vm.SaveAsync();
+        Assert.Equal([RoleIds.SqlDev], store.Saved.Features.Roles);
+        Assert.Equal([FeatureIds.Trace], store.Saved.Features.Enabled);
+        Assert.False(store.Saved.Features.AllFeatures);
+        Assert.False(FeatureCatalog.IsUnchosen(settings.Current.Features));
+
+        // SQL 개발자를 끄면 빈 Role 목록(공통만)이다 — 기본값으로 돌아가지 않는다.
+        (_, store, vm) = await Create();
+        Role(vm.Features, RoleIds.SqlDev).IsChecked = false;
+        Assert.True(vm.Features.ShowNoRoleNotice);
+        await vm.SaveAsync();
+        Assert.NotNull(store.Saved.Features.Roles);
+        Assert.Empty(store.Saved.Features.Roles!);
+
+        // 「모든 기능 쓰기」 는 allFeatures 로 따로 저장된다.
+        (_, store, vm) = await Create();
+        vm.Features.UseAllFeatures = true;
+        Assert.All(vm.Features.Items, i => Assert.True(i.IsChecked, i.Id));
+        await vm.SaveAsync();
+        Assert.True(store.Saved.Features.AllFeatures);
+        Assert.Null(store.Saved.Features.Roles);
+        Assert.Equal(FeatureIds.All.Count, FeatureCatalog.Resolve(store.Saved.Features).Count);
+    }
+
+    [Fact]
+    public async Task A_saved_use_all_features_opens_in_all_features_mode_without_the_default_notice()
+    {
+        var (_, _, vm) = await Create(All);
         var page = vm.Features;
 
         Assert.False(page.UseRoles);
         Assert.True(page.UseAllFeatures);
         Assert.False(page.RolesEditable);
-        Assert.Equal(6, page.Roles.Count);
+        Assert.False(page.IsDefaultRole);
+        Assert.False(page.ShowDefaultRoleNotice);
         Assert.All(page.Roles, r => Assert.False(r.IsChecked));
         Assert.All(page.Roles, r => Assert.False(r.CanEdit)); // 모든 기능 쓰기에서는 Role 확인란을 못 고친다
-        Assert.Equal(25, page.Items.Count);
         Assert.All(page.Items, i => Assert.True(i.IsChecked, i.Id));
         Assert.All(page.Items, i => Assert.Equal(FeatureState.RoleDefault, i.State));
         Assert.False(page.HasOverrides);
-        Assert.False(page.IsViewerOnly);
-        Assert.False(page.HasRestartBanner);
         Assert.False(page.IsDirty);
+    }
+
+    [Fact]
+    public async Task A_legacy_all_features_file_with_a_disabled_feature_opens_in_all_features_mode_and_saves_the_flag()
+    {
+        // D-013 전 「모든 기능 쓰기」 + 직접 끔(roles 없음).
+        var (_, store, vm) = await Create(new FeaturesSettings { Disabled = [FeatureIds.Trace] });
+        var page = vm.Features;
+
+        Assert.True(page.UseAllFeatures);
+        Assert.False(page.ShowDefaultRoleNotice);
+        Assert.False(Item(page, FeatureIds.Trace).IsChecked);
+        Assert.Equal(FeatureState.Disabled, Item(page, FeatureIds.Trace).State);
+
+        Item(page, FeatureIds.DbTools).IsChecked = false;
+        await vm.SaveAsync();
+        Assert.True(store.Saved.Features.AllFeatures);
+        AssertSet([FeatureIds.Trace, FeatureIds.DbTools], store.Saved.Features.Disabled);
     }
 
     [Fact]
@@ -136,7 +219,7 @@ public sealed class FeatureSettingsViewTests
     [Fact]
     public async Task Choosing_roles_turns_on_the_union_of_their_defaults()
     {
-        var (_, _, vm) = await Create();
+        var (_, _, vm) = await Create(All);
         var page = vm.Features;
 
         page.UseRoles = true;
@@ -181,12 +264,13 @@ public sealed class FeatureSettingsViewTests
         await vm.SaveAsync();
 
         Assert.Null(store.Saved.Features.Roles);
+        Assert.True(store.Saved.Features.AllFeatures); // D-013: 설정 없음(기본 Role)과 구별해 저장
     }
 
     [Fact]
     public async Task Choosing_roles_but_none_saves_an_empty_roles_list()
     {
-        var (_, store, vm) = await Create();
+        var (_, store, vm) = await Create(All);
 
         vm.Features.UseRoles = true;
         await vm.SaveAsync();
@@ -198,7 +282,7 @@ public sealed class FeatureSettingsViewTests
     [Fact]
     public async Task The_tuner_role_shows_the_license_pack_notice_only_while_it_is_chosen_in_role_mode()
     {
-        var (_, _, vm) = await Create();
+        var (_, _, vm) = await Create(All);
         var page = vm.Features;
 
         Assert.False(page.ShowPackNotice);
@@ -253,12 +337,13 @@ public sealed class FeatureSettingsViewTests
     [Fact]
     public async Task In_all_features_mode_turning_a_feature_off_is_recorded_as_disabled_only()
     {
-        var (_, store, vm) = await Create();
+        var (_, store, vm) = await Create(All);
 
         Item(vm.Features, FeatureIds.Trace).IsChecked = false;
         await vm.SaveAsync();
 
         Assert.Null(store.Saved.Features.Roles);
+        Assert.True(store.Saved.Features.AllFeatures);
         AssertSet([FeatureIds.Trace], store.Saved.Features.Disabled);
         Assert.Empty(store.Saved.Features.Enabled);
     }
@@ -387,7 +472,7 @@ public sealed class FeatureSettingsViewTests
     [Fact]
     public async Task Requires_applies_in_all_features_mode_too()
     {
-        var (_, store, vm) = await Create();
+        var (_, store, vm) = await Create(All);
 
         Item(vm.Features, FeatureIds.PlsqlEditor).IsChecked = false;
         Assert.True(Item(vm.Features, FeatureIds.PlsqlWorkspace).IsBlocked);
@@ -432,7 +517,7 @@ public sealed class FeatureSettingsViewTests
     [Fact]
     public async Task Other_settings_in_the_window_are_saved_together_with_the_features()
     {
-        var (_, store, vm) = await Create();
+        var (_, store, vm) = await Create(All);
         vm.TabSize = 7;
         Role(vm.Features, RoleIds.Dba).IsChecked = true;
         vm.Features.UseRoles = true;
@@ -513,7 +598,7 @@ public sealed class FeatureSettingsViewTests
     [Fact]
     public async Task Saving_a_change_that_applies_immediately_closes_the_window()
     {
-        var (_, _, vm) = await Create();
+        var (_, _, vm) = await Create(All);
         var closed = 0;
         vm.CloseRequested += (_, _) => closed++;
 
@@ -717,6 +802,47 @@ public sealed class FeatureSettingsViewTests
             vm.Features.ResetCommand.Execute(null);
             Pump();
             Render(window, "viewer-reset");
+        }
+        finally
+        {
+            window.Close();
+        }
+    });
+
+    [Theory]
+    [InlineData("ko")]
+    [InlineData("en")]
+    public Task The_default_state_renders_the_sql_developer_role_chosen_with_the_notice_banner(string language) => HeadlessHost.Run(async () =>
+    {
+        var vm = await OpenVm(null, null, language);
+        var (window, view) = Open(vm);
+        try
+        {
+            var banner = view.FindControl<Border>("DefaultRoleBanner")!;
+            Assert.True(banner.IsEffectivelyVisible);
+            Assert.Equal(vm.Features.DefaultRoleNoticeText, Avalonia.Automation.AutomationProperties.GetName(banner));
+            Assert.Equal(vm.Features.DefaultRoleNoticeText, view.FindControl<TextBlock>("DefaultRoleText")!.Text);
+            Assert.True(view.FindControl<RadioButton>("ModeRolesRadio")!.IsChecked);
+            Assert.False(view.FindControl<RadioButton>("ModeAllRadio")!.IsChecked);
+            var roleChecks = view.FindControl<ItemsControl>("RoleList")!.GetVisualDescendants().OfType<CheckBox>().ToList();
+            Assert.Equal(6, roleChecks.Count);
+            Assert.Single(roleChecks, c => c.IsChecked == true);
+            Assert.All(roleChecks, c => Assert.True(c.IsEnabled));
+            Assert.False(view.FindControl<Border>("ViewerBanner")!.IsEffectivelyVisible);
+            Assert.False(view.FindControl<Border>("RestartBanner")!.IsEffectivelyVisible);
+            Assert.False(view.FindControl<Button>("ResetButton")!.IsEffectivelyEnabled);
+            if (language == "en")
+            {
+                Assert.DoesNotContain(vm.Features.DefaultRoleNoticeText, c => c is >= '가' and <= '힣');
+                Assert.Contains("SQL Developer", vm.Features.DefaultRoleNoticeText);
+            }
+
+            Render(window, $"default-{language}");
+
+            // 무엇이든 바꾸면 안내 띠가 사라진다.
+            Role(vm.Features, RoleIds.Tuner).IsChecked = true;
+            Pump();
+            Assert.False(banner.IsEffectivelyVisible);
         }
         finally
         {

@@ -18,7 +18,7 @@ using Oranda.Testing;
 
 namespace Oranda.App.Tests.Features.Roles;
 
-// 화면 안 요소: 계획 창 고급 보기(planAdvanced)·튜닝 단추·SQL 모니터 바로 가기(레지스트리 거르기 + CommandsChanged)·시작 화면 「Role 고르기…」.
+// 화면 안 요소: 계획 창 고급 보기(planAdvanced)·튜닝 단추·SQL 모니터 바로 가기(레지스트리 거르기 + CommandsChanged)·시작 화면 기본 Role 카드(D-013).
 // ORANDA_RENDER_DIR 가 있으면 라이트·다크 PNG 를 남긴다.
 public sealed partial class FeatureFallbackTests
 {
@@ -171,7 +171,7 @@ public sealed partial class FeatureFallbackTests
     [Fact]
     public Task Start_page_shows_choose_role_until_roles_are_picked_and_drops_mappers_when_mybatis_is_off() => HeadlessHost.Run(async () =>
     {
-        using var h = new ShellHarness();
+        using var h = new ShellHarness(allFeatures: false); // 설정 없음 = 기본 Role(D-013)
         var gate = new FakeFeatureGate();
         h.Services.AddInstance<IFeatureGate>(gate);
         var previous = ShellCommandRunner.Runner;
@@ -189,9 +189,14 @@ public sealed partial class FeatureFallbackTests
         {
             Assert.True(page.ShowsRoleLink);
             Assert.Equal("MyBatis 매퍼(.xml)나 작업 공간(.md)을 열면 문장마다 탭이 생깁니다.", page.OpenHintText);
-            var link = page.GetVisualDescendants().OfType<Button>().Single(b => AutomationProperties.GetName(b) == "Role 고르기…");
+            // D-013 카드: 「지금 SQL 개발자 메뉴입니다 — 바꾸기…」 + 빠진 메뉴를 어디서 켜는지 한 줄. 모달이 아니다(창 안 카드).
+            var link = page.GetVisualDescendants().OfType<Button>().Single(b => AutomationProperties.GetName(b) == "지금 SQL 개발자 메뉴입니다 — 바꾸기…");
             Assert.True(link.IsEffectivelyVisible);
-            Assert.Contains(page.GetVisualDescendants().OfType<TextBlock>(), t => t.Text == "Role 을 고르면 메뉴가 단순해집니다" && t.IsEffectivelyVisible);
+            Assert.Equal("바꾸기…", link.Content);
+            Assert.Contains(page.GetVisualDescendants().OfType<TextBlock>(), t => t.Text == "지금 SQL 개발자 메뉴입니다" && t.IsEffectivelyVisible);
+            Assert.Contains(page.GetVisualDescendants().OfType<TextBlock>(), t => t.Text == "튜닝·모니터·MyBatis·PL/SQL 메뉴는 다른 Role 이나 「모든 기능 쓰기」로 켭니다." && t.IsEffectivelyVisible);
+            Assert.Contains(page.GetVisualDescendants().OfType<Border>(), b => AutomationProperties.GetName(b) == "지금 SQL 개발자 메뉴입니다" && b.IsEffectivelyVisible);
+            Assert.Empty(window.OwnedWindows); // 첫 실행에 창을 띄우지 않는다
             MyBatisFlowRig.Render(window, "rl-fallback-start-choose-role", 900, 640);
 
             link.RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent));
@@ -207,6 +212,12 @@ public sealed partial class FeatureFallbackTests
             await settings.UpdateAsync(s => s with { Features = new FeaturesSettings { Roles = [RoleIds.SqlDev] } });
             await HeadlessHost.WaitUntil(() => !page.ShowsRoleLink);
             MyBatisFlowRig.Render(window, "rl-fallback-start-role-chosen-mybatis-off", 900, 640);
+            await settings.UpdateAsync(s => s with { Features = new FeaturesSettings() });
+            await HeadlessHost.WaitUntil(() => page.ShowsRoleLink);
+
+            // 「모든 기능 쓰기」 도 직접 고른 것이라 카드가 사라진다.
+            await settings.UpdateAsync(s => s with { Features = new FeaturesSettings { AllFeatures = true } });
+            await HeadlessHost.WaitUntil(() => !page.ShowsRoleLink);
             await settings.UpdateAsync(s => s with { Features = new FeaturesSettings() });
             await HeadlessHost.WaitUntil(() => page.ShowsRoleLink);
 

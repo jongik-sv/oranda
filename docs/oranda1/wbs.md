@@ -533,6 +533,18 @@ levels:
   - acceptance: 세 현상이 고쳐지고 해당 `Defect_` 시험의 단정이 새 동작으로 바뀐다 / 새 문구가 ko·en 문구 파일에 있고 LocalizationTests 통과 / 전체 시험 통과
   - note: TSK-07-08 에서 발견(D-2~D-4). 사용자 결정 U-1~U-3(미커밋 전환·R6 DB 이중 방어·깨진 features 처리)은 결과서 참조 — 결정이 나면 이 Task 에 합치거나 새 Task 로. 담당 PC: win144(Windows 개발 PC) — 맥북 세션은 이 Task 를 하지 않는다 / 결과: 상태 줄 칸이 조회 전용 Role 도 반영(「조회 전용 Role」 + 풀 방법 도움말, 프로필이면 「읽기 전용」), SET SERVEROUTPUT·EXEC 거부 문구가 친 명령 기준이고 거부되면 상태 불변(26ai·11.2 실DB 통과), 「Role 로 고르기」 + Role 0개면 한 줄 안내. 새 문구 3개 ko·en·literals (win144)
 
+- [x] TSK-07-11: Role 기본값을 SQL 개발자로 [win144] w:1 2026-11-05~2026-11-05
+  - category: feat
+  - domain: fullstack
+  - model: opus
+  - priority: high
+  - tags: role, feature, settings, start-page, simplify, win144
+  - depends: TSK-07-08
+  - prd-ref: PRD 12.3 RL-01·RL-02·RL-05·RL-12·12.4, TRD 10.3·10.5·10.7.5·10.7.6, D-013
+  - requirements: 사용자 결정(2026-10-25, 회차 simplify, 사용 복잡도 줄이기): features 설정이 없으면(새 설치·Role 을 고르지 않은 기존 사용자) 기본 Role = R1 SQL 개발자 — D-011 의 「기본 = 모든 기능 켬」을 뒤집는다(D-013). 해석: `FeaturesSettings.AllFeatures`(새 키 `allFeatures`) = 「모든 기능 쓰기」, roles 있으면 그 Role, 아무것도 없으면 R1, roles 없이 직접 켬·끔만 있으면 옛 「모든 기능 쓰기」 저장이라 모든 기능(기존 파일 호환, 스키마 버전 그대로); 정규화·직렬화 왕복 시험; 시작 화면: 고른 적 없으면 「지금 SQL 개발자 메뉴입니다 — 바꾸기…」 카드(모달 아님, oranda.tools.roles), 직접 고르면 사라짐; 설정 「기능」 탭: 설정 없음이면 「Role 로 고르기」 + SQL 개발자가 골라진 채 열리고 안내 띠, 손대지 않고 저장하면 설정 그대로; 「설정 없음 = 모든 기능」을 가정한 시험(헤드리스 셸 하네스·Integration/Roles 정답표 V0·성능 하네스 --features all)을 의도에 맞게 「모든 기능」을 명시하거나 기대값을 R1 로 바꾼다(시험을 끄지 않는다); Headless PNG 라이트·다크; 비고: 담당 PC: win144(Windows 개발 PC) — 맥북 세션은 이 Task 를 하지 않는다
+  - acceptance: 설정 없음 = R1 과 보이는 면(메뉴·도구 창·상태 칸·시작 작업)이 같고 시작 화면 카드만 다르다 / 「모든 기능 쓰기」 를 고르면 a507d81 과 같은 수 / 기존 roles·「모든 기능」+직접 끔 저장 파일은 그대로 읽힌다 / 전체 시험 통과
+  - note: 담당 PC: win144(Windows 개발 PC) — 맥북 세션은 이 Task 를 하지 않는다. 레인 fx-default(회차 simplify) / 결과: 설정 없음(roles·enabled·disabled 없음) = R1 SQL 개발자, 「모든 기능 쓰기」는 새 키 allFeatures 로 따로 저장(옛 roles·「모든 기능」+직접 끔 파일은 그대로 읽힘, 스키마 버전 그대로), 시작 화면 「지금 SQL 개발자 메뉴입니다 — 바꾸기…」 카드·설정 「기능」 탭 기본 R1 + 안내 띠, 셸 시험 하네스는 기본 「모든 기능 쓰기」로 띄우고 Roles 정답표·흐름·Perf --features(all=allFeatures, default=설정 없음)를 새 뜻에 맞춤. 단위 5,692·Roles 통합 56 통과, PNG 라이트·다크 (win144)
+
 ## WP-08: 공개 배포 준비
 <!-- 담당 PC: win144(Windows 개발 PC) — 맥북 세션은 이 WP 의 Task 를 하지 않는다. 2026-10-25 사용자 결정(D-014): 무료 공개 소프트웨어, MIT, Windows 서명은 SignPath Foundation 신청 전제·승인 전 무서명 배포, macOS 는 기존 Apple 서명·공증(비밀값 있을 때만). 회차 simplify 레인 pub. src/** 는 고치지 않는다(필요한 것은 후보로 보고) -->
 
@@ -641,6 +653,7 @@ graph LR
   TSK-07-07 --> TSK-07-08
   TSK-07-08 --> TSK-07-09
   TSK-07-08 --> TSK-07-10
+  TSK-07-08 --> TSK-07-11
   style TSK-01-02 fill:#e8f5e9,stroke:#2e7d32
   style TSK-03-01 stroke:#c62828,stroke-width:2px
   style TSK-02-02 stroke:#c62828,stroke-width:2px
@@ -659,7 +672,7 @@ graph LR
 - 기능 구간 내부 깊이는 3 이다(TSK-02-01 → TSK-03-01 → TSK-03-02).
 - FS 겹침 검증: depends 가 있는 모든 쌍에서 후행 시작일 > 선행 종료일.
 - WP-08(2026-10-25 추가, Task 4개): 서로 depends 가 없다(라이선스·노출 점검·CI·설치 안내가 각자 다른 파일). 그래프에 넣지 않는다.
-- WP-07(2026-10-25 추가, Task 8개): 최장 경로 TSK-07-01 → TSK-07-02 → TSK-07-07 → TSK-07-08(깊이 4 = 계약 1 + 기능 1 + 측정 1 + 통합테스트 1). Fan-in: TSK-07-01 이 5(계약 전용, 구조적 예외), TSK-07-08 이 depends 6(통합테스트, 구조적 예외). 계약 뒤 07-02~07-06 은 서로 depends 가 없고 소유 파일이 겹치지 않는다(TRD 10.9). TSK-07-08 이 발견한 결함 2건을 TSK-07-09·TSK-07-10(각각 TSK-07-08 에만 depends, 서로 독립)으로 더했다(WP-07 Task 10개, 최장 경로는 깊이 5).
+- WP-07(2026-10-25 추가, Task 8개): 최장 경로 TSK-07-01 → TSK-07-02 → TSK-07-07 → TSK-07-08(깊이 4 = 계약 1 + 기능 1 + 측정 1 + 통합테스트 1). Fan-in: TSK-07-01 이 5(계약 전용, 구조적 예외), TSK-07-08 이 depends 6(통합테스트, 구조적 예외). 계약 뒤 07-02~07-06 은 서로 depends 가 없고 소유 파일이 겹치지 않는다(TRD 10.9). TSK-07-08 이 발견한 결함 2건을 TSK-07-09·TSK-07-10(각각 TSK-07-08 에만 depends, 서로 독립)으로 더했다(WP-07 Task 10개, 최장 경로는 깊이 5). 사용자 결정 D-013(기본 Role = SQL 개발자)을 TSK-07-11(TSK-07-08 에만 depends)로 더했다(WP-07 Task 11개).
 
 **Fan-in Top 5**
 

@@ -1,6 +1,6 @@
 # Role 구성별 성능 비교 (TSK-07-07, TRD 10.10). 사용: scripts/perf/run-roles.ps1 [-Out artifacts/perf-roles] [-SkipPublish] [-Runs 12] [-Discard 2] [-IdleS 30]
 # 구성은 데이터 폴더 settings.json 의 features 로만 바꾼다(Oranda.Perf --features). 구성끼리 번갈아 가며(라운드 로빈) 재서 PC 부하 흔들림이 한 구성에 몰리지 않게 한다.
-#   V0 = all (설정 없음)   V1 = sqlDev (R1)   V2 = myBatisDev (R3)   V3 = tuner,dba (R4+R5)   V4 = viewer (R6)
+#   V0 = all (「모든 기능 쓰기」 — D-013 전의 설정 없음과 같다. 지금 설정 없음 = default = R1)   V1 = sqlDev (R1)   V2 = myBatisDev (R3)   V3 = tuner,dba (R4+R5)   V4 = viewer (R6)
 # 결과: <Out>/summary.md, summary.json (구성별 중앙값·p95), <Out>/load.csv (측정 직전 CPU 사용률), <Out>/<구성>/r<N>/perf-startup*.md|json (원자료).
 # DB 세션 수(ORANDA_IT_ADMIN_PASSWORD 가 있을 때만): <Out>/ui-sessions/*. 비밀번호는 출력하지 않는다.
 # 준비: 조용한 PC(다른 빌드 없음), 로컬 콘솔 세션, 화면 잠금 없음. 사용자의 실제 설정 폴더(%APPDATA% 등)는 건드리지 않는다 — 데이터 폴더는 <Out>/data/<구성> 이다.

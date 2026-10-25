@@ -115,6 +115,7 @@ internal sealed class SettingsStore : ISettingsStore, IDisposable
     /// <summary>
     /// <c>features</c> 섹션(TRD 10.3): 빈 값·중복 제거, 같은 id 가 enabled·disabled 둘 다면 enabled 에서 뺀다(끔이 이김).
     /// 모르는 id 는 남긴다(다음 버전 기능 id 를 이전 버전이 지우지 않게). roles 의 null(고른 적 없음)과 빈 목록은 구별해 둔다.
+    /// allFeatures(「모든 기능 쓰기」, D-013)면 roles 는 뜻이 없어 null 로 둔다.
     /// </summary>
     internal static FeaturesSettings NormalizeFeatures(FeaturesSettings f)
     {
@@ -125,7 +126,8 @@ internal sealed class SettingsStore : ISettingsStore, IDisposable
         var enabled = Clean(f.Enabled).Where(id => !disabled.Contains(id, StringComparer.Ordinal)).ToList();
         return new FeaturesSettings
         {
-            Roles = f.Roles is null ? null : Clean(f.Roles),
+            AllFeatures = f.AllFeatures,
+            Roles = f.Roles is null || f.AllFeatures ? null : Clean(f.Roles),
             Enabled = enabled,
             Disabled = disabled,
         };

@@ -4,11 +4,13 @@ namespace Oranda.Perf.Common;
 
 /// <summary>
 /// 측정용 기능 구성(TSK-07-07, TRD 10.10). <c>--features</c> 값을 읽어 데이터 폴더 <c>settings.json</c> 의 <c>features</c> 섹션을 쓴다.
-/// 값 형식: <c>all</c>(설정 없음 = 모든 기능, V0) · Role 쉼표 목록(<c>sqlDev</c>, <c>tuner,dba</c>, <c>viewer</c>, 별칭 r1~r6) ·
-/// <c>none</c>(Role 을 비움 = 공통만) · 뒤에 <c>+기능</c>(직접 켬)·<c>-기능</c>(직접 끔)을 덧붙일 수 있다(<c>sqlDev,-blockerAlert</c>, <c>all,-blockerAlert</c>).
+/// 값 형식: <c>all</c>(「모든 기능 쓰기」 = <c>allFeatures: true</c>, V0 — D-013 전의 설정 없음과 같다) · <c>default</c>(설정 없음 = 기본 Role SQL 개발자, D-013) ·
+/// Role 쉼표 목록(<c>sqlDev</c>, <c>tuner,dba</c>, <c>viewer</c>, 별칭 r1~r6) · <c>none</c>(Role 을 비움 = 공통만) ·
+/// 뒤에 <c>+기능</c>(직접 켬)·<c>-기능</c>(직접 끔)을 덧붙일 수 있다(<c>sqlDev,-blockerAlert</c>, <c>all,-blockerAlert</c>). <c>default</c> 는 혼자만 쓴다.
 /// Oranda.Core 를 참조하지 않으려고 id 표를 여기에 복사해 둔다(카탈로그가 바뀌면 FeaturePresetTests 의 표 비교 시험이 알려 준다).
 /// </summary>
-public sealed record FeaturePreset(string Label, IReadOnlyList<string>? Roles, IReadOnlyList<string> Enabled, IReadOnlyList<string> Disabled)
+/// <param name="AllFeatures">「모든 기능 쓰기」(<c>all</c>). 이때 <paramref name="Roles"/> 는 null.</param>
+public sealed record FeaturePreset(string Label, IReadOnlyList<string>? Roles, IReadOnlyList<string> Enabled, IReadOnlyList<string> Disabled, bool AllFeatures = false)
 {
     /// <summary>Role id 6개(RoleIds, PRD 12.1).</summary>
     public static readonly string[] RoleIdList = ["sqlDev", "plsqlDev", "myBatisDev", "tuner", "dba", "viewer"];
@@ -25,14 +27,19 @@ public sealed record FeaturePreset(string Label, IReadOnlyList<string>? Roles, I
 
     private static readonly Dictionary<string, string> Aliases = BuildAliases();
 
-    /// <summary>features 섹션을 쓰지 않는 구성(V0: 설정 없음 = 모든 기능).</summary>
-    public bool IsDefault => Roles is null && Enabled.Count == 0 && Disabled.Count == 0;
+    /// <summary>features 섹션을 쓰지 않는 구성(<c>default</c>: 설정 없음 = 기본 Role SQL 개발자, D-013).</summary>
+    public bool IsDefault => !AllFeatures && Roles is null && Enabled.Count == 0 && Disabled.Count == 0;
 
     public static FeaturePreset Parse(string? text)
     {
         if (string.IsNullOrWhiteSpace(text))
         {
-            throw new ArgumentException("--features 값이 비었다. all, Role 쉼표 목록, none 중 하나여야 한다.");
+            throw new ArgumentException("--features 값이 비었다. all, default, Role 쉼표 목록, none 중 하나여야 한다.");
+        }
+
+        if (text.Trim().Equals("default", StringComparison.OrdinalIgnoreCase))
+        {
+            return new FeaturePreset(text.Trim(), null, [], []);
         }
 
         var roles = new List<string>();
@@ -66,7 +73,7 @@ public sealed record FeaturePreset(string Label, IReadOnlyList<string>? Roles, I
             }
             else
             {
-                throw new ArgumentException($"모르는 Role id: {raw}. 쓸 수 있는 것: all, none, {string.Join(", ", RoleIdList)} (또는 r1~r6)");
+                throw new ArgumentException($"모르는 Role id: {raw}. 쓸 수 있는 것: all, default(혼자), none, {string.Join(", ", RoleIdList)} (또는 r1~r6)");
             }
         }
 
@@ -81,7 +88,7 @@ public sealed record FeaturePreset(string Label, IReadOnlyList<string>? Roles, I
         }
 
         IReadOnlyList<string>? resolved = sawAll ? null : roles;
-        return new FeaturePreset(text.Trim(), resolved, enabled, disabled);
+        return new FeaturePreset(text.Trim(), resolved, enabled, disabled, AllFeatures: sawAll);
     }
 
     /// <summary>settings.json 전체 글. features 섹션이 필요 없으면(<see cref="IsDefault"/>) null.</summary>
@@ -98,6 +105,7 @@ public sealed record FeaturePreset(string Label, IReadOnlyList<string>? Roles, I
             w.WriteStartObject();
             w.WriteNumber("schemaVersion", 1);
             w.WriteStartObject("features");
+            w.WriteBoolean("allFeatures", AllFeatures);
             if (Roles is null)
             {
                 w.WriteNull("roles");
@@ -117,7 +125,7 @@ public sealed record FeaturePreset(string Label, IReadOnlyList<string>? Roles, I
     }
 
     /// <summary>
-    /// 데이터 폴더에 구성을 쓴다. V0 이면 기존 settings.json 을 지운다(앱이 이전 실행에서 쓴 features 가 남지 않게).
+    /// 데이터 폴더에 구성을 쓴다. <c>default</c> 면 기존 settings.json 을 지운다(앱이 이전 실행에서 쓴 features 가 남지 않게).
     /// 폴더가 없으면 만든다. 사용자의 실제 설정 폴더가 아니라 측정용 임시 폴더만 넘길 것.
     /// </summary>
     public void WriteSettings(string dataDir)

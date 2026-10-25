@@ -144,13 +144,14 @@
 ```jsonc
 // settings.json
 "features": {
-  "roles": ["sqlDev", "tuner"],   // null 또는 키 없음 = Role 을 고른 적 없음 → 모든 기능
+  "allFeatures": false,           // true = 「모든 기능 쓰기」(D-013, roles 는 보지 않음)
+  "roles": ["sqlDev", "tuner"],   // null 또는 키 없음 = Role 을 고른 적 없음 → enabled/disabled 도 비면 R1(D-013), 아니면 옛 「모든 기능 쓰기」
   "enabled": ["trace"],           // 직접 켬
   "disabled": ["flashback"]       // 직접 끔
 }
 ```
 
-- `FeaturesSettings { IReadOnlyList<string>? Roles; IReadOnlyList<string> Enabled = []; IReadOnlyList<string> Disabled = []; }`. 목록 비교는 순서 무시 값 비교로 `Equals`/`GetHashCode` 를 직접 쓴다(`SettingsStore.ChangedSections` 가 레코드 `!=` 로 섹션 바뀜을 보기 때문, `src/Oranda.Platform/Storage/SettingsStore.cs:115`).
+- `FeaturesSettings { bool AllFeatures; IReadOnlyList<string>? Roles; IReadOnlyList<string> Enabled = []; IReadOnlyList<string> Disabled = []; }`(`AllFeatures` 는 D-013 에서 더함, 정규화가 `AllFeatures` 면 `Roles` 를 null 로 둔다). 목록 비교는 순서 무시 값 비교로 `Equals`/`GetHashCode` 를 직접 쓴다(`SettingsStore.ChangedSections` 가 레코드 `!=` 로 섹션 바뀜을 보기 때문, `src/Oranda.Platform/Storage/SettingsStore.cs:115`).
 - 정규화(`SettingsStore.Normalize`): 중복 제거, 같은 id 가 `enabled`·`disabled` 둘 다면 `enabled` 에서 뺀다. 모르는 id 는 지우지 않는다(다음 버전 기능 id 를 이전 버전이 지우지 않게). `SchemaVersion` 은 올리지 않는다(새 섹션은 키가 없으면 기본값, 선례 `AppSettings.cs:233`).
 - 섹션 이름 `features` = `SettingsChanged.Section`.
 
@@ -173,9 +174,9 @@ public interface IFeatureGate
 
 ### 10.5 해석 규칙
 
-1. 바탕: `Roles == null` 이면 모든 기능, 아니면 고른 Role 들의 기본 켬 합집합(`Roles == []` 이면 빈 집합 = 공통만).
+1. 바탕(`FeatureCatalog.EffectiveRoles`, D-013): `AllFeatures` 면 모든 기능, `Roles` 가 있으면 고른 Role 들의 기본 켬 합집합(`Roles == []` 이면 빈 집합 = 공통만), 아무것도 고른 적 없으면(`Roles == null`·`Enabled`/`Disabled` 빔) R1 SQL 개발자, `Roles == null` 인데 직접 켬·끔이 있으면 옛 「모든 기능 쓰기」 저장이라 모든 기능.
 2. `+ Enabled − Disabled`.
-3. `ReadOnlyRole = Roles` 가 정확히 `["viewer"]`. 참이면 `WritesOnly` 기능을 끈다(손으로 고친 설정 파일도 같다).
+3. `ReadOnlyRole = ` 1단계의 Role 목록이 정확히 `["viewer"]`. 참이면 `WritesOnly` 기능을 끈다(손으로 고친 설정 파일도 같다).
 4. `Requires` 를 못 채운 기능을 끈다.
 5. `StartupBound` 기능: 실제 켬 = 「앱 시작 때 켬」 그리고 「지금 켬」. 둘이 다르면 `PendingRestart` 에 넣는다. 그래서 실행 중에 MyBatis 를 켜도 배선이 없는 MyBatis 명령이 나타나지 않고, 끄면 메뉴는 바로 사라지되 감시·타이머는 다음 실행에 멈춘다.
 
@@ -223,11 +224,11 @@ public interface IFeatureGate
 - PL/SQL 을 끈 상태의 소스 열기(D-007): 분기는 `SchemaObjectOpener`(`Features/SchemaBrowser/SchemaObjectOpener.cs:44-60`) 한 곳. `PanelFor` 가 PL/SQL 작업 공간을 고르는 경우 `plsqlEditor` 가 꺼져 있으면 서버 소스(기존 메타데이터 공급자)를 새 SQL 편집기 탭에 넣고 탭을 읽기 전용(`tab.IsReadOnly`, `Features/SqlEditor/EditorContext.cs:51`)으로, 제목 「[읽기 전용] OWNER.NAME」. 같은 객체 탭이 이미 있으면 앞으로 낸다. 다른 진입점(`Navigation/ObjectNavigationCommands.cs`, `DbTools/ObjectSearchViewModel.cs`, `ChangeJournal/ChangeJournalViewModel.cs`, `oranda.plsql.openSource` 처리기 `PlsqlEditor/PlsqlEditorCommands.cs:24`)은 이 분기를 부른다.
 - MyBatis 를 끈 상태의 매퍼 열기(D-008): 훅이 `Empty` 면 기존 `WorkspaceFiles.ReadMyBatis`(`Features/SqlEditor/WorkspaceFiles.MyBatis.cs:16-40`) 펼침으로 일반 SQL 작업 공간 탭을 만든다. 저장은 작업 공간(.md)으로만 하고 매퍼 파일에는 쓰지 않는다. 조사가 「추측」으로 남긴 경로이므로 훅 없음 상태에서 열기·끌어 놓기(`DroppedWorkspaceFiles.Pick`)·최근 파일·명령줄 열기를 시험으로 확인하고, 다르게 가는 곳만 고친다. 처음 한 번 상태 줄에 「MyBatis 기능이 꺼져 있어 매퍼를 일반 SQL 탭으로 펼쳐 열었습니다(매퍼 파일에는 저장하지 않습니다)」.
 - 계획 창(`Features/ExecutionPlan/`): 그래프 탭·SQL Monitor 보고서 탭·비교 영역은 `planAdvanced` 가 꺼지면 숨는다. 표 통계·자식 커서·보고서 단추는 이미 「명령 있을 때만」 보인다(`PlanViewModel.Boost.cs:128,513-518`) — 레지스트리 거르기로 따라오는지, `CommandsChanged` 로 바로 바뀌는지 시험한다. SQL 모니터의 같은 단추(`SqlMonitor/SqlMonitorViewModel.Tuning.cs:283`)도 같다.
-- 시작 화면(`Shell/StartPage.cs:210`): `myBatis` 가 꺼지면 「작업 공간(.md)이나 SQL 파일을 열면 문장마다 탭이 생깁니다.」 Role 을 고른 적 없으면 「Role 을 고르면 메뉴가 단순해집니다 — Role 고르기…」 링크(`oranda.tools.roles`).
+- 시작 화면(`Shell/StartPage.cs`): `myBatis` 가 꺼지면 「작업 공간(.md)이나 SQL 파일을 열면 문장마다 탭이 생깁니다.」 아무것도 고른 적 없으면(D-013) 「지금 SQL 개발자 메뉴입니다 — 바꾸기…」 카드(`oranda.tools.roles`)와 흐린 한 줄 「튜닝·모니터·MyBatis·PL/SQL 메뉴는 다른 Role 이나 「모든 기능 쓰기」로 켭니다.」.
 
 #### 10.7.6 설정 창 「기능」 탭 (TSK-07-04, D-011)
 
-- `Shell/Settings/SettingsWindow.axaml` 의 「일반」(`:75`) 다음에 「기능」 탭. 위: 「모든 기능 쓰기(Role 고르지 않음)」/「Role 로 고르기」 라디오, Role 확인란 6개(이름 + 한 줄 설명). 아래: 「기능 세부」 묶음별 확인란 25개, 상태 표시(「Role 기본」 「직접 켬」 「직접 끔」), `Requires` 못 채움은 흐림 + 「{0} 이(가) 켜져 있어야 합니다」, 조회 전용만이면 `WritesOnly` 흐림 + 「조회 전용만 고른 상태에서는 켤 수 없습니다. 다른 Role 을 함께 고르세요.」, 「Role 기본값으로 되돌리기」.
+- `Shell/Settings/SettingsWindow.axaml` 의 「일반」(`:75`) 다음에 「기능」 탭. 위: 「모든 기능 쓰기」/「Role 로 고르기」 라디오(설정 없음이면 「Role 로 고르기」 + SQL 개발자 골라짐과 안내 띠, D-013), Role 확인란 6개(이름 + 한 줄 설명). 아래: 「기능 세부」 묶음별 확인란 25개, 상태 표시(「Role 기본」 「직접 켬」 「직접 끔」), `Requires` 못 채움은 흐림 + 「{0} 이(가) 켜져 있어야 합니다」, 조회 전용만이면 `WritesOnly` 흐림 + 「조회 전용만 고른 상태에서는 켤 수 없습니다. 다른 Role 을 함께 고르세요.」, 「Role 기본값으로 되돌리기」.
 - 조회 전용만 고르면 탭 위에 「조회 전용만 고르면 DML·DDL·PL/SQL 실행을 막습니다」. 튜너를 고르면 「Diagnostics·Tuning Pack 보유 선언은 접속 프로필에서 합니다」(D-012).
 - 저장 = 다른 탭과 같은 `SettingsService.UpdateAsync`. 저장 뒤 `PendingRestart` 가 비어 있지 않으면 「재시작하면 적용됩니다: {0}」 띠.
 - 명령 `oranda.tools.roles`(도구 메뉴 「Role·기능 고르기…」)는 설정 창을 「기능」 탭으로 연다.
@@ -241,12 +242,12 @@ public interface IFeatureGate
 |---|---|
 | Role 이름·설명 | PRD 12.1 표 6개 + 각 한 줄 설명 |
 | 기능 이름 | PRD 12.2 표 25개, 묶음 이름 5개(개발 보조·PL/SQL·MyBatis·튜닝·운영) |
-| 설정 탭 | 기능, Role, 기능 세부, 모든 기능 쓰기(Role 고르지 않음), Role 로 고르기, Role 기본, 직접 켬, 직접 끔, Role 기본값으로 되돌리기, 재시작하면 적용됩니다: {0}, {0} 이(가) 켜져 있어야 합니다, 조회 전용만 고르면 DML·DDL·PL/SQL 실행을 막습니다, 조회 전용만 고른 상태에서는 켤 수 없습니다. 다른 Role 을 함께 고르세요., Diagnostics·Tuning Pack 보유 선언은 접속 프로필에서 합니다 |
+| 설정 탭 | 기능, Role, 기능 세부, 모든 기능 쓰기, 기본 Role 안내 띠(D-013), Role 로 고르기, Role 기본, 직접 켬, 직접 끔, Role 기본값으로 되돌리기, 재시작하면 적용됩니다: {0}, {0} 이(가) 켜져 있어야 합니다, 조회 전용만 고르면 DML·DDL·PL/SQL 실행을 막습니다, 조회 전용만 고른 상태에서는 켤 수 없습니다. 다른 Role 을 함께 고르세요., Diagnostics·Tuning Pack 보유 선언은 접속 프로필에서 합니다 |
 | 명령 | `Cmd.oranda.tools.roles` = Role·기능 고르기… |
 | 실행 거부 | 10.7.4 문구 |
 | 블로커 칸 | Lock 모니터 기능이 꺼져 있습니다. 설정 > 기능에서 켤 수 있습니다., 설정 열기 |
 | 대체 경로 | [읽기 전용] {0}, PL/SQL 편집기 기능이 꺼져 있어 읽기 전용으로 열었습니다, 10.7.5 의 MyBatis 안내 |
-| 시작 화면 | 10.7.5 의 두 문구, Role 고르기… |
+| 시작 화면 | 10.7.5 의 문구(지금 {0} 메뉴입니다, 바꾸기…, 빠진 메뉴 안내) |
 
 ### 10.9 기능 Task 편집 지점 (WP-07)
 

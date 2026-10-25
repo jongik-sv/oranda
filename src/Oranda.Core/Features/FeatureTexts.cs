@@ -27,7 +27,7 @@ public static class FeatureTexts
     /// <summary>기능 세부</summary>
     public const string SettingsDetails = "Features.details";
 
-    /// <summary>모든 기능 쓰기(Role 고르지 않음)</summary>
+    /// <summary>모든 기능 쓰기</summary>
     public const string ModeAll = "Features.mode.all";
 
     /// <summary>Role 로 고르기</summary>
@@ -95,11 +95,14 @@ public static class FeatureTexts
     /// <summary>작업 공간(.md)이나 SQL 파일을 열면 문장마다 탭이 생깁니다.</summary>
     public const string StartMyBatisOff = "Features.start.myBatisOff";
 
-    /// <summary>Role 을 고르면 메뉴가 단순해집니다</summary>
-    public const string StartChooseRoleHint = "Features.start.chooseRoleHint";
+    /// <summary>지금 {0} 메뉴입니다  ({0} = 기본 Role 이름, D-013)</summary>
+    public const string StartDefaultRole = "Features.start.defaultRole";
 
-    /// <summary>Role 고르기…</summary>
-    public const string StartChooseRole = "Features.start.chooseRole";
+    /// <summary>바꾸기…  (위 줄의 링크, oranda.tools.roles)</summary>
+    public const string StartChangeRole = "Features.start.changeRole";
+
+    /// <summary>위 줄 아래 흐린 설명: 빠진 메뉴를 어디서 켜는지</summary>
+    public const string StartDefaultRoleDetail = "Features.start.defaultRoleDetail";
 
     // ---- 조회 전용 안내 보강 (TSK-07-10) ----
 
@@ -111,4 +114,7 @@ public static class FeatureTexts
 
     /// <summary>Role 로 고르기인데 Role 을 하나도 안 골랐다: 무엇이 켜지고 무엇을 하면 되는지 한 줄</summary>
     public const string NoRoleNotice = "Features.noRoleNotice";
+
+    /// <summary>아무것도 고른 적 없어 기본 Role(SQL 개발자)로 쓰는 중이다(D-013): 무엇을 고를 수 있는지 한 줄</summary>
+    public const string DefaultRoleNotice = "Features.defaultRoleNotice";
 }

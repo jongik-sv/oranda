@@ -87,18 +87,28 @@ public static class HeadlessHost
 
 /// <summary>
 /// 임시 데이터 폴더로 앱 전체(조립·메인 창)를 띄우는 도구. 같은 폴더로 다시 만들면 「재시작」이다.
+/// 기본은 「모든 기능 쓰기」로 띄운다(D-013 뒤 설정 없음 = SQL 개발자라 튜닝·모니터·MyBatis·PL/SQL 명령이 빠진다):
+/// 폴더에 settings.json 이 없을 때만 <c>features.allFeatures = true</c> 한 줄을 써 둔다. 설정 없음(기본 Role)을 시험하려면 <c>allFeatures: false</c>.
 /// </summary>
 public sealed class ShellHarness : IDisposable
 {
+    /// <summary>「모든 기능 쓰기」만 적은 settings.json 글.</summary>
+    public const string AllFeaturesSettingsJson = "{\"schemaVersion\":1,\"features\":{\"allFeatures\":true}}";
+
     private readonly bool _ownsDirectory;
 
     private readonly Oranda.App.Features.SqlEditor.SqlEditorHost _previousHost;
 
-    public ShellHarness(string? dataDirectory = null, bool show = true, bool nativeMenu = false)
+    public ShellHarness(string? dataDirectory = null, bool show = true, bool nativeMenu = false, bool allFeatures = true)
     {
         _ownsDirectory = dataDirectory is null;
         DataDirectory = dataDirectory ?? Path.Combine(Path.GetTempPath(), "oranda-shell-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(DataDirectory);
+        var settingsFile = Path.Combine(DataDirectory, "settings.json");
+        if (allFeatures && !File.Exists(settingsFile))
+        {
+            File.WriteAllText(settingsFile, AllFeaturesSettingsJson);
+        }
         Services = AppComposition.Create(new AppCompositionOptions { DataDirectory = DataDirectory, DevBuild = true });
 
         // 편집기 호스트는 프로세스 정적이다. 앞 시험이 남긴 탭·결과가 새 셸(조회 결과 창)에 보이지 않게 셸마다 새로 둔다.

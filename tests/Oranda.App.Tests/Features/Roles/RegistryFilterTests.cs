@@ -40,6 +40,9 @@ public sealed class RegistryFilterTests
 
     private static FeaturesSettings Roles(params string[] roles) => new() { Roles = roles };
 
+    /// <summary>「모든 기능 쓰기」(D-013: 설정 없음은 이제 SQL 개발자다).</summary>
+    private static readonly FeaturesSettings All = new() { AllFeatures = true };
+
     private static (CommandRegistry Commands, ToolPanelRegistry Panels) Registries(IFeatureGate gate) =>
         (new CommandRegistry(Contributions.Commands, _ => new NoopHandler(), gate), new ToolPanelRegistry(Contributions.Panels, includeDevBuildOnly: true, gate));
 
@@ -60,10 +63,10 @@ public sealed class RegistryFilterTests
         return dir;
     }
 
-    // ── features 없음 = 거르기 전과 같음 ─────────────────────────────
+    // ── 「모든 기능 쓰기」 = 거르기 전과 같음, features 없음 = SQL 개발자(D-013) ─────
 
     [Fact]
-    public void Without_a_features_section_the_filtered_sets_equal_the_unfiltered_sets()
+    public void Use_all_features_leaves_the_filtered_sets_equal_to_the_unfiltered_sets()
     {
         var gate = new FeatureGate();
         var (commands, panels) = Registries(gate);
@@ -73,12 +76,35 @@ public sealed class RegistryFilterTests
         commands.CommandsChanged += (_, _) => raised++;
         panels.PanelsChanged += (_, _) => raised++;
 
-        gate.Resolve(null);
+        gate.Resolve(All);
 
         Assert.Equal(Contributions.Commands.Count, commands.Commands.Count);
         Assert.Equal(plainCommands.Commands, commands.Commands);
         Assert.Equal(plainPanels.Panels, panels.Panels);
         Assert.Equal(0, raised);
+    }
+
+    [Fact]
+    public void Without_a_features_section_the_filtered_sets_are_the_sql_developer_sets()
+    {
+        var gate = new FeatureGate();
+        var (commands, panels) = Registries(gate);
+        var r1Gate = new FeatureGate();
+        r1Gate.Resolve(Roles(RoleIds.SqlDev));
+        var (r1Commands, r1Panels) = Registries(r1Gate);
+        var raised = 0;
+        commands.CommandsChanged += (_, _) => raised++;
+        panels.PanelsChanged += (_, _) => raised++;
+
+        gate.Resolve(null);
+
+        Assert.Equal(r1Commands.Commands, commands.Commands);
+        Assert.Equal(r1Panels.Panels, panels.Panels);
+        Assert.True(commands.Commands.Count < Contributions.Commands.Count);
+        Assert.Null(commands.Find(LockMonitor));
+        Assert.Null(panels.Find("oranda.panel.mybatisStatements"));
+        Assert.NotNull(commands.Find("oranda.tools.roles")); // 「바꾸기…」 가 여는 명령은 공통
+        Assert.Equal(2, raised); // 설정 읽기 전(모두 켬)에서 줄어드니 한 번씩
     }
 
     [Fact]
@@ -150,7 +176,7 @@ public sealed class RegistryFilterTests
     public void Gate_change_raises_commands_and_panels_changed_once_each()
     {
         var gate = new FeatureGate();
-        gate.Resolve(null);
+        gate.Resolve(All);
         var (commands, panels) = Registries(gate);
         int c = 0, p = 0;
         commands.CommandsChanged += (_, _) => c++;
@@ -365,9 +391,15 @@ public sealed class RegistryFilterTests
         Assert.Equal(2, raised);
 
         // 「모든 기능 쓰기」 로 되돌리면 원래 집합.
-        await settings.UpdateAsync(s => s with { Features = new FeaturesSettings() });
+        await settings.UpdateAsync(s => s with { Features = All });
         await HeadlessHost.WaitUntil(() => commands.Commands.Count == Contributions.Commands.Count);
         Assert.Equal(MenuModelBuilder.TopMenus.Count, TopItems(h).Length);
+
+        // 설정을 비우면(아무것도 고르지 않음) 기본 Role(SQL 개발자)이라 Lock 모니터·튜닝 명령이 다시 빠진다(D-013).
+        await settings.UpdateAsync(s => s with { Features = new FeaturesSettings() });
+        await HeadlessHost.WaitUntil(() => commands.Find(LockMonitor) is null);
+        Assert.Null(commands.Find("oranda.tuning.assistant"));
+        Assert.True(commands.Commands.Count < Contributions.Commands.Count);
     });
 
     [Fact]
@@ -379,7 +411,7 @@ public sealed class RegistryFilterTests
         var panels = h.Get<IToolPanelRegistry>();
         Assert.True(docking.ShowTool(CompileErrors));
 
-        await settings.UpdateAsync(s => s with { Features = new FeaturesSettings { Disabled = [FeatureIds.PlsqlEditor] } });
+        await settings.UpdateAsync(s => s with { Features = All with { Disabled = [FeatureIds.PlsqlEditor] } });
         await HeadlessHost.WaitUntil(() => panels.Find(CompileErrors) is null);
         Dispatcher.UIThread.RunJobs();
 
@@ -394,7 +426,7 @@ public sealed class RegistryFilterTests
         Assert.DoesNotContain(CompileErrors, docking.Capture().HiddenTools ?? []);
 
         // 다시 켜면 기본 위치(아래)로 돌아온다.
-        await settings.UpdateAsync(s => s with { Features = new FeaturesSettings() });
+        await settings.UpdateAsync(s => s with { Features = All });
         await HeadlessHost.WaitUntil(() => panels.Find(CompileErrors) is not null);
         Assert.True(docking.ShowTool(CompileErrors));
         var root = docking.Capture().Root!;
@@ -408,14 +440,25 @@ public sealed class RegistryFilterTests
     [Fact]
     public Task Main_window_start_page_gets_services_so_the_choose_role_row_follows_the_settings() => HeadlessHost.Run(async () =>
     {
-        using var h = new ShellHarness();
+        using var h = new ShellHarness(allFeatures: false); // 설정 없음 = 기본 Role(D-013)
         await HeadlessHost.WaitUntil(() => h.Window.GetVisualDescendants().OfType<StartPage>().Any());
         var page = h.Window.GetVisualDescendants().OfType<StartPage>().First();
 
-        Assert.True(page.ShowsRoleLink); // Role 을 고른 적 없음 → 「Role 고르기…」 줄(services 를 받아야 보인다)
+        Assert.True(page.ShowsRoleLink); // 아무것도 고른 적 없음 → 「지금 SQL 개발자 메뉴입니다 — 바꾸기…」 카드(services 를 받아야 보인다)
+        Assert.Null(h.Get<ICommandRegistry>().Find(LockMonitor));
+        h.Get<Oranda.App.Features.RecentFiles.RecentFilesService>().Add(Path.Combine(h.DataDirectory, "findEmp.sql"));
+        Dispatcher.UIThread.RunJobs();
+        Oranda.App.Tests.Features.MyBatisWorkspace.Flow.MyBatisFlowRig.Render(h.Window, "start-default-role-main", 1100, 720);
 
+        // 같은 R1 이라도 직접 고르면 카드가 사라진다.
         await h.Get<SettingsService>().UpdateAsync(s => s with { Features = Roles(RoleIds.SqlDev) });
         await HeadlessHost.WaitUntil(() => !page.ShowsRoleLink);
+
+        // 「모든 기능 쓰기」 도 직접 고른 것이다.
+        await h.Get<SettingsService>().UpdateAsync(s => s with { Features = new FeaturesSettings() });
+        await HeadlessHost.WaitUntil(() => page.ShowsRoleLink);
+        await h.Get<SettingsService>().UpdateAsync(s => s with { Features = All });
+        await HeadlessHost.WaitUntil(() => !page.ShowsRoleLink && HasTop(h, "monitor"));
     });
 
     [Fact]

@@ -9,7 +9,7 @@ using Oranda.Perf.Common;
 // 기본: 실행마다 빈 임시 데이터 폴더(ORANDA_DATA_DIR). --data-dir 이면 같은 폴더를 계속 쓴다(레이아웃 복원이 있는 「두 번째 실행」).
 // --cold-copy: 실행마다 게시 폴더를 새 임시 폴더에 복사해 띄운다(「최초 실행」 근사. macOS 는 대신 실행 직전 sudo purge).
 // --idle-s: 입력 가능 뒤 메모리를 읽기까지 기다리는 시간(유휴 메모리는 10 이상으로).
-// --features: 실행 전에 데이터 폴더 settings.json 에 features 구성을 쓴다(TSK-07-07). all(설정 없음) | Role 쉼표 목록(sqlDev, tuner,dba, viewer, r1~r6) | none, 뒤에 +기능/-기능.
+// --features: 실행 전에 데이터 폴더 settings.json 에 features 구성을 쓴다(TSK-07-07). all(모든 기능 쓰기) | default(설정 없음 = SQL 개발자, D-013) | Role 쉼표 목록(sqlDev, tuner,dba, viewer, r1~r6) | none, 뒤에 +기능/-기능.
 //             예: --features viewer, --features "tuner,dba", --features "sqlDev,-blockerAlert". 사용자의 실제 설정 폴더가 아니라 이 도구가 쓰는 데이터 폴더(--data-dir 또는 임시)에만 쓴다.
 StartupOptions opt;
 try
