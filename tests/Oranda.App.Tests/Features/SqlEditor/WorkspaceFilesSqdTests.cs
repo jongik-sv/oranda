@@ -2,7 +2,7 @@ using Oranda.App.Features.SqlEditor;
 
 namespace Oranda.App.Tests.Features.SqlEditor;
 
-/// <summary>Orange 작업 공간(.sqd) 읽기. 가짜 SQL 은 시험에서 CP949 바이트로 만들고, 실제 표본은 TestData 에서 읽는다.</summary>
+/// <summary>Orange 작업 공간(.sqd) 읽기. 가짜 SQL 은 시험에서 CP949 바이트로 만들고, 가짜 표본 파일은 TestData 에서 읽는다.</summary>
 public sealed class WorkspaceFilesSqdTests
 {
     internal static string SamplePath => Path.Combine(AppContext.BaseDirectory, "TestData", "orange-workspace-sample.sqd");
@@ -162,36 +162,36 @@ public sealed class WorkspaceFilesSqdTests
     }
 
     [Fact]
-    public void Real_orange_sample_has_19_tabs_with_matching_names_line_counts_and_binds()
+    public void Fake_orange_sample_has_8_tabs_with_matching_names_line_counts_and_binds()
     {
         var bytes = File.ReadAllBytes(SamplePath);
         var read = WorkspaceFiles.ReadSqd(bytes, "표본");
 
-        string[] names =
-        [
-            "라인길이 계산 공정.sql", "작업시간(휴지).sql", "코일이력", "3004", "30042", "코일삭제", "SQL2", "SQL3", "전수검사 미완료", "M20",
-            "전문Invoke", "SQL4", "SQL6", "SQL7", "SQL8", "SQL9", "SQL5", "생산일보", "SQL10",
-        ];
-        int[] statementLines = [35, 84, 60, 218, 34, 20, 52, 63, 16, 8, 6, 18, 162, 6, 33, 20, 33, 588, 96];
-        int[] bindCounts = [3, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 1, 2];
+        string[] names = ["주문 집계.sql", "재고 현황(요약).sql", "주문이력", "1001", "고객 정리", "SQL2", "일일 보고", "SQL3"];
+        int[] statementLines = [19, 9, 4, 45, 4, 4, 4, 3];
+        int[] bindCounts = [3, 0, 0, 0, 0, 1, 1, 2];
 
         Assert.Equal(names, read.Tabs.Select(t => t.Title));
         Assert.Equal(statementLines, read.Tabs.Select(t => t.Text.Split('\n').Length));
         Assert.Equal(bindCounts, read.Tabs.Select(t => t.Binds?.Count ?? 0));
         Assert.Empty(read.Notes);
 
-        // 독립 확인: 파일의 STMT 숫자 19개가 읽은 줄 수와 같다(줄 수로 자르는 규칙).
+        // 독립 확인: 파일의 STMT 숫자 8개가 읽은 줄 수와 같다(줄 수로 자르는 규칙).
         var lines = FileEncoding.Decode(bytes).Text.Split("\r\n");
         var stmt = lines.Where(l => l.StartsWith("STMT=", StringComparison.Ordinal)).Select(l => int.Parse(l[5..], System.Globalization.CultureInfo.InvariantCulture)).ToList();
         Assert.Equal(statementLines, stmt);
 
-        var sql8 = read.Tabs[14].Binds!.Single();
-        Assert.Equal(("ObjectId", string.Empty), (sql8.Name, sql8.Value));
-        var daily = read.Tabs[17].Binds!.Single();
-        Assert.Equal(("WORD_DH", "2022-07-12"), (daily.Name, daily.Value));
-        var sql10 = read.Tabs[18].Binds!;
-        Assert.Equal([("XFR_DATE", "20220701"), ("XTO_DATE", "20220701")], sql10.Select(b => (b.Name, b.Value)));
-        Assert.Equal(["작업시간", "하영재", "문종배"], read.Tabs[0].Binds!.Select(b => b.Name));
+        // 본문 줄머리의 탭이 그대로 남고, 한글 주석·별칭도 CP949 에서 깨지지 않는다.
+        Assert.Contains('\t', read.Tabs[0].Text);
+        Assert.StartsWith("-- 기준일 이후 주문을 고객별로 집계한다\nSELECT CUST_ID 고객", read.Tabs[0].Text, StringComparison.Ordinal);
+
+        var sql2 = read.Tabs[5].Binds!.Single();
+        Assert.Equal(("ObjectId", string.Empty), (sql2.Name, sql2.Value));
+        var daily = read.Tabs[6].Binds!.Single();
+        Assert.Equal(("REPORT_DT", "2024-01-15"), (daily.Name, daily.Value));
+        var sql3 = read.Tabs[7].Binds!;
+        Assert.Equal([("FROM_DT", "20240101"), ("TO_DT", "20240131")], sql3.Select(b => (b.Name, b.Value)));
+        Assert.Equal(["기준일", "담당자", "부서"], read.Tabs[0].Binds!.Select(b => b.Name));
         Assert.All(read.Tabs[0].Binds!, b => Assert.True(b.IsNull));
     }
 }

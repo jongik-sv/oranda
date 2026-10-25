@@ -1,4 +1,4 @@
-# .dflow.local.example — dmes-standard 용 D'Flow 개인 설정 샘플.
+# .dflow.local.example — D'Flow 개인 설정 샘플.
 # 사용법: cp .dflow.local.example .dflow.local 한 뒤 pats= 에 내 토큰을 넣는다.
 # .dflow.local 은 git 에 올리지 않는다(.gitignore). 토큰 값은 어디에도 출력·붙여넣지 않는다.
 # 항목 설명 정본: .claude/skills/dflow-work/dflow.local.example · 확인: .claude/skills/dflow-work/scripts/dflow.sh doctor
@@ -17,8 +17,8 @@ dev_branch=dev1
 # 1 이면 팀장이 완료 보고된 작업을 승인 전에 개발 브랜치로 머지한다. 기본 0.
 automerge=0
 
-# 내가 맡은 서브시스템의 DOCS_DIR=프로젝트 UUID(쉼표 구분). 이 리포의 MDM 은 docs/mdm 이 MDM PoC 프로젝트다.
-project_map=docs/mdm=1bf6ce9e-128b-435f-b33e-22b03239590f
+# 내가 맡은 서브시스템의 DOCS_DIR=프로젝트 UUID(쉼표 구분). 예: docs/sub=00000000-0000-0000-0000-000000000000
+# project_map=
 
 # 1 이면 이 PC 에서 docker 태그 Task 의 워커와 수동 /dflow-dev 도 도커를 쓰지 않는다. 워커는 이 값과 무관하게 기본이 금지다.
 # no_docker=1

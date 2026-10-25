@@ -25,7 +25,7 @@ public class FormatterProfilesScreenTests
     private static readonly string[] EnumNames =
         ["Upper", "Lower", "AsIs", "Leading", "Trailing", "OnePerLine", "FillToWidth", "Left", "Right", "SingleLine", "MultiLine", "Before", "After", "None", "Keep", "Add", "Remove", "Indent", "Column", "FollowGroupBy"];
 
-    private static readonly string[] KoreanValues = ["대문자", "소문자", "그대로", "뒤에", "앞에", "한 줄에 하나", "너비까지 채움", "앞에서", "안 함", "붙임", "= GROUP BY", "들여쓰기", "열 맞춤(사내)"];
+    private static readonly string[] KoreanValues = ["대문자", "소문자", "그대로", "뒤에", "앞에", "한 줄에 하나", "너비까지 채움", "앞에서", "안 함", "붙임", "= GROUP BY", "들여쓰기", "열 맞춤(하우스)"];
 
     private static readonly string[][][] Plans =
     [
@@ -208,8 +208,8 @@ public class FormatterProfilesScreenTests
     [Fact]
     public async Task Changed_marks_use_the_stored_oranda_default_as_the_baseline()
     {
-        // 기본 제공 「Oranda 기본」이 사내 서식(OrandaDefault)이면 그 값과 같은 프로필은 「기본과 다름」 0개다.
-        var house = new FormatterProfile { Id = "house", Name = "사내 복사본", Options = FormatterOptions.OrandaDefault };
+        // 기본 제공 「Oranda 기본」이 하우스 서식(OrandaDefault)이면 그 값과 같은 프로필은 「기본과 다름」 0개다.
+        var house = new FormatterProfile { Id = "house", Name = "하우스 복사본", Options = FormatterOptions.OrandaDefault };
         var old = new FormatterProfile { Id = "old", Name = "옛 기본", Options = new FormatterOptions() };
         var store = new MemoryStore([house, old], FormatterOptions.OrandaDefault);
         var vm = new FormatterProfilesViewModel(store, RealFormatter(), new MemorySettings());

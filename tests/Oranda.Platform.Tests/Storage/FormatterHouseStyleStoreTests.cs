@@ -3,7 +3,7 @@ using Oranda.Platform.Storage;
 
 namespace Oranda.Platform.Tests.Storage;
 
-// 소유: TSK-13-43. 기본 제공 「Oranda 기본」 = 사내 서식, 새 옵션(clauseLayout·lineBreaks.orderBy·align.comparison) 저장·옛 파일 읽기.
+// 소유: TSK-13-43. 기본 제공 「Oranda 기본」 = 하우스 서식, 새 옵션(clauseLayout·lineBreaks.orderBy·align.comparison) 저장·옛 파일 읽기.
 public sealed class FormatterHouseStyleStoreTests : IDisposable
 {
     private readonly string _root = Path.Combine(Path.GetTempPath(), "oranda-fhs-" + Guid.NewGuid().ToString("N"));
@@ -36,7 +36,7 @@ public sealed class FormatterHouseStyleStoreTests : IDisposable
     public async Task New_options_round_trip_as_named_json_fields()
     {
         var store = NewStore();
-        await store.SaveAsync(new FormatterProfile { Id = "house-copy", Name = "사내 복사본", Options = FormatterOptions.OrandaDefault }, default);
+        await store.SaveAsync(new FormatterProfile { Id = "house-copy", Name = "하우스 복사본", Options = FormatterOptions.OrandaDefault }, default);
 
         var loaded = (await store.ListAsync(default)).Single(p => p.Id == "house-copy");
         Assert.Equal(FormatterOptions.OrandaDefault, loaded.Options);

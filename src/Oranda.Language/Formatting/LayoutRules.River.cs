@@ -47,7 +47,7 @@ internal static partial class FormatEngine
 
                 if (it.Piece >= 0 && it.Piece < _column.Length && _column[it.Piece])
                 {
-                    // 사내 서식 배치(ColumnLayout)가 열을 정한 문장.
+                    // 하우스 서식 배치(ColumnLayout)가 열을 정한 문장.
                     pending.Clear();
                     continue;
                 }

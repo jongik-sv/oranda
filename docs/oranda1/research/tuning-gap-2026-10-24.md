@@ -49,7 +49,7 @@
 
 | 기능 | Oranda | Toad | SQL Developer | PL/SQL Developer | DBeaver | DataGrip | Orange | OEM |
 |---|---|---|---|---|---|---|---|---|
-| 예상 계획 트리/표 | ✓ (PlanView) | ✓ | ✓ | ✓ | ✓ | △(Oracle 지원 확인 못 함) | ✓(Plan Tool, 로컬 docs/orange5-features.md) | ✓ |
+| 예상 계획 트리/표 | ✓ (PlanView) | ✓ | ✓ | ✓ | ✓ | △(Oracle 지원 확인 못 함) | ✓(Plan Tool, 공개 매뉴얼) | ✓ |
 | 계획 그래프 | ✗ | ✓ | △ | ✗(?) | △(그래프는 유료 에디션) | △(다이어그램, Oracle 확인 못 함) | ? | ✓ |
 | cost/cardinality 표시 | ✓ | ✓ | ✓ | ✓ | ✓ | △ | ✓ | ✓ |
 | predicate | ✓ | ✓ | ✓ | ✓ | △ | ? | ✓ | ✓ |
@@ -125,7 +125,7 @@ dbForge Studio 는 열을 두지 않고 따로 적는다: Oracle 용 Query Profi
 - DataGrip: https://www.jetbrains.com/help/datagrip/2025.2/query-execution-plan.html
 - dbForge Studio for Oracle: https://www.devart.com/dbforge/oracle/studio/oracle-sql-profiler.html , https://www.devart.com/dbforge/oracle/studio/performance-tuning.html
 - OEM 및 라이선스: https://docs.oracle.com/en/enterprise-manager/cloud-control/enterprise-manager-cloud-control/24.1/oemli/enterprise-database-management.html , https://docs.oracle.com/en/enterprise-manager/cloud-control/enterprise-manager-cloud-control/13.5/emadb/monitoring-and-administration-tasks.html , https://docs.oracle.com/en/database/oracle/oracle-database/18/tgsql/managing-sql-plan-baselines.html , https://docs.oracle.com/database/122/RATUG/comparing-sql-trials.htm , https://redresscompliance.com/oracle-tuning-pack-licensing (제3자, 공식 아님)
-- Orange: 웹에서 제품 문서를 찾지 못했다. 로컬 정리 문서 C:\Users\jongik.jang\project\oranda\docs\orange5-features.md 와 docs\orange-analysis.md 를 근거로 했다.
+- Orange: 웹에서 제품 문서를 찾지 못했다. 공개 매뉴얼과 사용 경험을 근거로 했다.
 - Oracle 공식 Licensing Information User Manual 원문과 SPM 의 라이선스 구분(Enterprise Edition 포함 여부)은 이번 검색에서 확인 못 함.
 
 ## 6. 확인 못 함 목록

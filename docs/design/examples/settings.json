@@ -46,9 +46,9 @@
         "id": "6f1c2a0e9b8d4c3f8e7a5b4c3d2e1f00",
         "name": "APUser",
         "scope": "Selected",
-        "schemas": ["EAIAPUSER", "M90APUSER", "MESAPUSER"],
+        "schemas": ["EAI_USER", "RPT_USER", "APP_USER"],
         "hiddenTypes": ["JOB", "DIRECTORY"],
-        "namePatterns": { "TABLE": "TB_M30*" },
+        "namePatterns": { "TABLE": "TB_ORD*" },
         "underscoreIsWildcard": false,
         "wrapWithPercent": true
       }

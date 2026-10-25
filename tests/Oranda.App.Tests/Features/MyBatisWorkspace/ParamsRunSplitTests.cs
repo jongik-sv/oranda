@@ -33,7 +33,7 @@ public sealed partial class ParamsRunTests
 {
     private const string ExpandedPanelId = "oranda.panel.mybatisExpanded";
 
-    /// <summary>사용자 매퍼(사내 파일, 저장소 밖). 없으면 그 시험은 아무것도 하지 않고 끝난다(공개 저장소라 복사하지 않는다).</summary>
+    /// <summary>사용자 매퍼(저장소 밖 파일, 저장소 밖). 없으면 그 시험은 아무것도 하지 않고 끝난다(공개 저장소라 복사하지 않는다).</summary>
     private static string? UserMapperPath => Oranda.App.Tests.TestSupport.UserMapper.Path;
 
     private static MyBatisStatementEditorView SplitView(Rig rig, SettingsService? settings) =>

@@ -6,7 +6,7 @@ namespace Oranda.Language.Formatting;
 internal static partial class FormatEngine
 {
     /// <summary>
-    /// 사내 쿼리 서식 배치(<see cref="ClauseLayout.Column"/>, TSK-13-43). 확장 규칙(<see cref="LayoutRules"/>)의 줄바꿈 뒤에 SELECT·WITH·INSERT·
+    /// 쿼리 서식 배치(<see cref="ClauseLayout.Column"/>, TSK-13-43). 확장 규칙(<see cref="LayoutRules"/>)의 줄바꿈 뒤에 SELECT·WITH·INSERT·
     /// UPDATE·DELETE 문의 줄과 열을 다시 정한다.
     /// <list type="bullet">
     /// <item>절 키워드는 기준 열, 본문은 기준 열 + 7(키워드가 6자를 넘으면 한 칸 뒤). 앞 쉼표는 기준 열 + 5, 항목은 + 7.</item>

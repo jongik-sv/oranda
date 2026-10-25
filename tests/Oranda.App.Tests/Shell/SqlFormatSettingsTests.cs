@@ -198,7 +198,7 @@ public sealed class SqlFormatSettingsTests
         }, default);
         var (_, _, _, vm) = await Open(profiles, profileId: "team");
 
-        // TSK-13-42: 「기본값」 = 기본 제공 「Oranda 기본」(FormatterOptions.OrandaDefault, 사내 서식)의 4항목.
+        // TSK-13-42: 「기본값」 = 기본 제공 「Oranda 기본」(FormatterOptions.OrandaDefault, 하우스 서식)의 4항목.
         vm.SqlFormat.ResetDefaultsCommand.Execute(null);
         Assert.Equal(FormatterOptions.OrandaDefault.KeywordAlign == KeywordAlign.Left, vm.SqlFormat.AlignLeft);
         Assert.True(vm.SqlFormat.CommaLeading);
@@ -275,8 +275,8 @@ public sealed class SqlFormatSettingsTests
         Assert.False(page.CanSave);
         Assert.False(page.HasPreview);
         Assert.Equal(string.Empty, page.Preview);
-        Assert.True(page.CommaLeading); // 프로필이 없으면 「Oranda 기본」(사내 서식) 값을 보인다
-        Assert.False(page.KeywordAlignApplies); // 사내 서식 = 열 맞춤
+        Assert.True(page.CommaLeading); // 프로필이 없으면 「Oranda 기본」(하우스 서식) 값을 보인다
+        Assert.False(page.KeywordAlignApplies); // 하우스 서식 = 열 맞춤
         page.CommaTrailing = true;
         Assert.Null(await page.SaveAsync());
     }
@@ -361,10 +361,10 @@ public sealed class SqlFormatSettingsTests
     public Task Keyword_align_is_greyed_with_a_reason_when_the_profile_uses_the_column_layout() => HeadlessHost.Run(async () =>
     {
         var profiles = new ProfileStore();
-        await profiles.SaveAsync(new FormatterProfile { Id = "house", Name = "사내", Options = FormatterOptions.OrandaDefault }, default);
+        await profiles.SaveAsync(new FormatterProfile { Id = "house", Name = "하우스", Options = FormatterOptions.OrandaDefault }, default);
         var (_, _, _, vm) = await Open(profiles, profileId: "house");
         Assert.False(vm.SqlFormat.KeywordAlignApplies);
-        Assert.Equal("사내 서식(열 맞춤)에서는 쓰지 않습니다", vm.SqlFormat.KeywordAlignTip);
+        Assert.Equal("하우스 서식(열 맞춤)에서는 쓰지 않습니다", vm.SqlFormat.KeywordAlignTip);
 
         var window = new SettingsWindow { DataContext = vm };
         window.Show();
@@ -375,7 +375,7 @@ public sealed class SqlFormatSettingsTests
         var group = window.GetVisualDescendants().OfType<Border>().First(b => b.Name == "FmtAlignGroup");
         Assert.False(group.IsEnabled);
         Assert.False(window.GetVisualDescendants().OfType<RadioButton>().First(r => r.Name == "FmtAlignRight").IsEffectivelyEnabled);
-        Assert.Equal("사내 서식(열 맞춤)에서는 쓰지 않습니다", ToolTip.GetTip(group));
+        Assert.Equal("하우스 서식(열 맞춤)에서는 쓰지 않습니다", ToolTip.GetTip(group));
         Assert.Contains(window.GetVisualDescendants().OfType<TextBlock>(), t => t.Text == "GROUP BY 열 목록");
         window.Close();
 

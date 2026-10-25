@@ -6,7 +6,7 @@ using Oranda.Core.Text;
 namespace Oranda.Language.Tests.Formatting;
 
 /// <summary>
-/// 기본 제공 프로필 「Oranda 기본」(oranda-default = <see cref="FormatterOptions.OrandaDefault"/>)이 사내 쿼리 서식 샘플 4개와 글자 하나까지 같은지 본다(TSK-13-43).
+/// 기본 제공 프로필 「Oranda 기본」(oranda-default = <see cref="FormatterOptions.OrandaDefault"/>)이 쿼리 서식 샘플 4개와 글자 하나까지 같은지 본다(TSK-13-43).
 /// 자료: Formatting/HouseStyle/*(샘플 사본. 표·칼럼은 예시 이름). 문장마다 (가) 그대로 (나) 한 줄로 뭉갬 (다) 소문자·들여쓰기 흐트림 을
 /// 포맷해 샘플과 비교한다.
 /// <para>주석 규칙: ① 문장 앞 설명 주석(자기 줄)은 그대로 자기 줄에 두고 다음 문장 첫 줄 열에 맞춘다. ② 줄 끝 주석은 앞 코드 뒤에
@@ -198,8 +198,8 @@ public class HouseStyleGoldenTests
         if (file == "query-format-with.sql" && index == 1)
         {
             return golden.Replace(
-                "AND    EXISTS\n       (\n           SELECT 1\n           FROM   TB_M47_LINE C\n           WHERE  C.PROC_CD = A.PROC_CD\n       );",
-                "AND    EXISTS (SELECT 1 FROM TB_M47_LINE C WHERE C.PROC_CD = A.PROC_CD);",
+                "AND    EXISTS\n       (\n           SELECT 1\n           FROM   TB_ORD_LINE C\n           WHERE  C.PROC_CD = A.PROC_CD\n       );",
+                "AND    EXISTS (SELECT 1 FROM TB_ORD_LINE C WHERE C.PROC_CD = A.PROC_CD);",
                 StringComparison.Ordinal);
         }
 
@@ -291,14 +291,14 @@ public class HouseStyleGoldenTests
         const string original = """
             SELECT A.PROC_CD
                  , SUBSTR(A.PDN_PST_DD, 1, 6) "년월", A.PRD_NM_CD 품명
-                 , SUBSTR(MTL_CD, 7,1) SPANGLE
+                 , SUBSTR(MTL_CD, 7,1) SURFACE
                  , SUBSTR(MTL_CD, 9,2) 후처리
-                 , SUM(COIL_WGT) / 1000 "중량(T)"
-                 , SUM(COIL_WTH * COIL_LTH) / 1000 "면적(M2)"
-                 , SUM(COIL_WK_TIM) "작업시간(분)"
-            FROM   TB_M47_PRD_ACT_CMN A
+                 , SUM(UNIT_WGT) / 1000 "중량(T)"
+                 , SUM(UNIT_WTH * UNIT_LTH) / 1000 "면적(M2)"
+                 , SUM(UNIT_WK_TIM) "작업시간(분)"
+            FROM   TB_ORD_PRD_ACT_CMN A
             WHERE  A.PDN_PST_DD BETWEEN '20250101' AND '20250102'
-            AND    A.PROC_CD IN ('1P', '33', '51', '82', '83', '84', '85')
+            AND    A.PROC_CD IN ('A1', 'B2', 'C3', 'D1', 'D2', 'D3', 'D4')
             GROUP BY A.PROC_CD
                  , SUBSTR(A.PDN_PST_DD, 1, 6)
                  , A.PRD_NM_CD

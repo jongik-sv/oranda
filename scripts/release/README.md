@@ -5,7 +5,7 @@
 | `pack-windows.ps1` | Velopack 으로 Windows 설치 파일·델타 생성, 크기 검사 | Authenticode 인증서(`ORANDA_SIGN_PARAMS`) |
 | `check-installer-size.ps1` | 설치 파일 80 MB 이하 검사 | 없음 |
 | macOS | `.github/workflows/ci.yml` macos 작업(서명·공증·pkg) | Apple 비밀값 |
-| 피드 게시 | `artifacts/release/` 를 사내 정적 파일 서버에 복사 | 서버 주소·권한 |
+| 피드 게시 | `artifacts/release/` 를 정적 파일 서버에 복사 | 서버 주소·권한 |
 | 업데이트 확인 | 앱이 피드(설정 > 업데이트의 주소, 비면 빌드 기본값)에서 `releases.*.json`·`.nupkg` 를 읽는다 | 피드 위치 결정 |
 
 폐쇄망용 오프라인 설치 파일은 `Setup.exe`·`.pkg` 자체다(설치 중 네트워크 불필요).
@@ -31,11 +31,11 @@ Velopack 은 릴리스 메타데이터의 해시로 패키지 무결성을 확�
 - 스마트 앱 컨트롤·WDAC 가 켜진 PC 는 무서명 Oranda.App.exe·Setup.exe 를 막는다. 빌드로 피할 수 없으며, 공인 인증서로 서명하거나 그 PC 의 정책이 허용해야 한다.
 - 설치·실행이 안 될 때 확인할 곳: Windows 보안 > 앱 및 브라우저 컨트롤 > 스마트 앱 컨트롤 상태, 이벤트 뷰어 > 응용 프로그램 및 서비스 로그 > Microsoft > Windows > CodeIntegrity > Operational 의 차단 이벤트, `%LocalAppData%\velopack\velopack.log`.
 
-- 인증서: 공인 CA 의 Authenticode 코드 서명 인증서(OV·EV, 하드웨어 토큰 포함) 또는 Azure Trusted Signing. 사내 CA 인증서는 대상 PC 에 GPO 로 루트를 배포할 때만 쓸 수 있다.
+- 인증서: 공인 CA 의 Authenticode 코드 서명 인증서(OV·EV, 하드웨어 토큰 포함) 또는 Azure Trusted Signing. 조직 CA 인증서는 대상 PC 에 GPO 로 루트를 배포할 때만 쓸 수 있다.
 - signtool 은 vpk 에 딸려 온다(`vendor/signing/signtool.exe`). 따로 설치하지 않는다.
 - 매개변수는 `ORANDA_SIGN_PARAMS` 또는 `-SignParams` 로 준다. 타임스탬프를 꼭 넣는다(인증서 만료 뒤에도 서명이 유효).
   - 인증서 저장소·USB 토큰(공인 인증서, 2023-06 부터 키는 하드웨어에만 둔다): `/fd sha256 /tr http://timestamp.digicert.com /td sha256 /sha1 <인증서 지문>`
-  - pfx 파일(사내 CA 인증서만): `/fd sha256 /tr <사내 또는 공인 타임스탬프 주소> /td sha256 /f C:\secure\oranda.pfx /p <암호>`
+  - pfx 파일(조직 CA 인증서만): `/fd sha256 /tr <조직 또는 공인 타임스탬프 주소> /td sha256 /f C:\secure\oranda.pfx /p <암호>`
   - 클라우드 서명(DigiCert KeyLocker·SSL.com eSigner 등)은 업체 도구 명령을 vpk `--signTemplate "<명령> {{file}}"` 로 넘겨야 한다 — 아직 pack-windows.ps1 매개변수 없음
   - Azure Artifact Signing(구 Trusted Signing): `ORANDA_AZURE_SIGN_FILE` 또는 `-AzureSignFile metadata.json`. 2026-01 기준 미국·캐나다·EU·영국 조직만 가입 가능
 - `pack-windows.ps1` 은 패키징 뒤 `check-signatures.ps1` 로 Setup.exe 와 Portable zip 안의 exe·dll 을 모두 검사한다. 서명을 요청했는데 무서명 파일이 있으면 실패하고, 서명 없이 돌리면 무서명 개수를 경고한다. 공인 인증서 서명본은 `check-signatures.ps1 -RequireTrusted` 로 이 PC 가 신뢰하는지까지 본다.

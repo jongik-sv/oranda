@@ -4,7 +4,7 @@
 |---|---|
 | 문서 상태 | 초안 v0.1 (2026-10-19) |
 | 상위 문서 | `docs/PRD.md` (요구사항 ID는 PRD 기준: CONN, EDIT, FMT, EXEC, GRID, PLAN, SCH, PLSQL, SESS, SQLM, SAFE, EXP, APP) |
-| 참고 | `docs/orange-analysis.md`(Orange 구조·SQL 현대화표), 컴포넌트 조사(2026-10, NuGet·GitHub 직접 조회) |
+| 참고 | Orange 5.0 공개 매뉴얼, 컴포넌트 조사(2026-10, NuGet·GitHub 직접 조회) |
 | 대상 | Windows 10/11 x64, macOS 14.7+ ARM64 / Oracle 19c, 23ai·26ai, ADB |
 
 ---
@@ -28,7 +28,7 @@
 |---|---|---|---|
 | **A (권장)** | **.NET 10 SDK·런타임(LTS, 2028-11까지) + Avalonia 12** | 지원 기간 확보, 최신 라이브러리 사용. 지금은 코드가 거의 없어 전환 비용이 가장 작다 | .NET 10 SDK 설치 필요. 아래 표의 버전을 12 계열로 다시 고정해야 한다 |
 | B | .NET 10 런타임 + Avalonia 11.3 유지 | UI 라이브러리 변경 없음 | 11.3 계열 라이브러리는 유지보수만 받는다 |
-| C | .NET 8 유지 | 변경 없음 | 3주 뒤 지원 종료. 사내 보안 기준에 걸릴 수 있다 |
+| C | .NET 8 유지 | 변경 없음 | 3주 뒤 지원 종료. 보안 기준에 걸릴 수 있다 |
 
 **A안으로 결정했다(2026-10-19).** .NET 10 SDK 10.0.402를 설치하고 .NET 8 SDK는 삭제했다. 프로젝트 대상은 `net10.0`, Avalonia는 12.1.4다. 아래 2.2 표는 이 기준이다.
 
@@ -94,7 +94,7 @@
 | `src/Oranda.App` | Avalonia UI, ViewModel, 그리드 컨트롤, 에디터 통합, 조립(DI 구성) | 전부 |
 | `tests/Oranda.Core.Tests` | 정책·파이프라인·모델 단위 테스트 | Core |
 | `tests/Oranda.Language.Tests` | 렉서·파서·포매터 회귀(예제 1,000개 이상) | Language |
-| `tests/Oranda.Oracle.IntegrationTests` | 실제 DB 시험(컨테이너 26ai, 사내 19c) — `Category=Integration` | Oracle |
+| `tests/Oranda.Oracle.IntegrationTests` | 실제 DB 시험(컨테이너 26ai, 별도 19c) — `Category=Integration` | Oracle |
 | `tests/Oranda.App.Tests` | Avalonia Headless UI 테스트 | App |
 | `tests/Oranda.Perf` | 시작 시간·메모리·그리드·파서 측정(BenchmarkDotNet + 시작 측정 도구) | 전부 |
 
@@ -392,8 +392,8 @@ PRD 7.2 성능 예산을 아래처럼 나눈다.
 - 자격 증명: 4.12. 메모리에는 필요한 순간만 두고, ODP.NET 23.7 이상의 `OracleOpaqueString` 사용 가능성을 M1에서 확인한다.
 - 전송: TCPS는 TLS 1.2 이상, `SSL_SERVER_DN_MATCH=true` 기본. 네이티브 암호화(NNE) 설정은 프로필 고급 항목.
 - 로그 마스킹: 연결 문자열의 `Password=` 값, 바인드 값(기본), 지갑 경로 외 비밀값은 로그에 쓰기 전에 지운다(Serilog 필터 + 단위 테스트).
-- 외부 전송: 업데이트 확인(사내 업데이트 서버)만 기본 허용. 충돌 보고 전송은 동의 후(`IOutboundConsent`).
-- 서명: Windows Authenticode(사내 코드 서명 인증서), macOS Developer ID + 공증. 업데이트 패키지는 Velopack 서명 검증.
+- 외부 전송: 업데이트 확인(업데이트 서버)만 기본 허용. 충돌 보고 전송은 동의 후(`IOutboundConsent`).
+- 서명: Windows Authenticode(코드 서명 인증서), macOS Developer ID + 공증. 업데이트 패키지는 Velopack 서명 검증.
 
 ---
 
@@ -404,7 +404,7 @@ PRD 7.2 성능 예산을 아래처럼 나눈다.
 | 게시(Windows) | `dotnet publish src/Oranda.App -c Release -r win-x64 --self-contained -p:PublishReadyToRun=true` |
 | 게시(macOS) | `dotnet publish src/Oranda.App -c Release -r osx-arm64 --self-contained -p:PublishReadyToRun=true` (Windows에서도 생성 가능) |
 | 패키징 | `vpk pack` — Windows는 Windows 러너에서 Setup.exe·델타, macOS는 **Mac 러너에서** .app/.pkg + 서명(`--signAppIdentity`) + 공증(`--notaryProfile`) |
-| 배포 | 사내 업데이트 서버(정적 파일 서버)에 Velopack 피드 게시. 폐쇄망용 오프라인 설치 파일 별도 |
+| 배포 | 업데이트 서버(정적 파일 서버)에 Velopack 피드 게시. 폐쇄망용 오프라인 설치 파일 별도 |
 | CI | Windows x64 러너(빌드·단위·UI·성능·패키징), macOS ARM 러너(빌드·단위·UI·패키징·공증), 통합 테스트는 Docker가 있는 러너에서 `Category=Integration` |
 | 버전 | `MAJOR.MINOR.PATCH` + 빌드 번호, `Directory.Build.props`에서 일괄 관리 |
 | 공통 빌드 설정 | `Directory.Build.props`: `Nullable=enable`, `TreatWarningsAsErrors=true`, `AnalysisLevel=latest-recommended`, 컴파일 바인딩 기본. `Directory.Packages.props`로 패키지 버전 중앙 관리 |
@@ -417,14 +417,14 @@ macOS 서명 시 필요한 권한(entitlement)은 CoreCLR 기준 `com.apple.secu
 | 종류 | 대상 | 도구 | 실행 시점 |
 |---|---|---|---|
 | 단위 | Core 정책·파이프라인·모델, Oracle 카탈로그 선택 규칙, 연결 문자열 | xunit | 매 빌드 |
-| 언어 회귀 | 렉서·문장 분리·파서·포매터: 예제 1,000개 이상(Oracle 문서 예제, 사내 SQL 익명화본), 토큰 동일성·멱등성 | xunit + 스냅숏 파일 | 매 빌드 |
+| 언어 회귀 | 렉서·문장 분리·파서·포매터: 예제 1,000개 이상(Oracle 문서 예제, 익명화한 SQL), 토큰 동일성·멱등성 | xunit + 스냅숏 파일 | 매 빌드 |
 | UI | 접속 대화상자, 실행·취소, 그리드 편집 불가 표시, 운영 확인 대화상자 | Avalonia.Headless.XUnit | 매 빌드 |
 | 통합(컨테이너) | 26ai: 접속·점검·실행·취소·DBMS_OUTPUT·LOB·BOOLEAN·VECTOR·그리드 편집(영향 행 수 검증)·세션 모니터·블로킹 트리 | Testcontainers.Oracle + `gvenzl/oracle-free:23-slim` (amd64·arm64 모두 제공) | 매 PR |
-| 통합(19c) | 같은 시나리오를 사내 19c 공유 DB에서 | xunit, 접속 정보는 CI 비밀값 | 매일 |
-| 통합(ADB) | 지갑 있음·없음 TLS 접속, ADB 감지·기능 숨김 | 사내 ADB 시험 인스턴스(있으면) | 주 1회 |
+| 통합(19c) | 같은 시나리오를 공유 19c DB에서 | xunit, 접속 정보는 CI 비밀값 | 매일 |
+| 통합(ADB) | 지갑 있음·없음 TLS 접속, ADB 감지·기능 숨김 | ADB 시험 인스턴스(있으면) | 주 1회 |
 | 라이선스 보호 | 팩 "없음" 접속에서 전체 화면을 순회하는 동안 서버 SQL 트레이스에 C-06 객체 호출 0건 | 통합 + 트레이스 분석 스크립트 | 릴리스 전 |
 | 성능 | 시작·메모리·키 입력·그리드·포맷 예산(8장) | BenchmarkDotNet + 시작 측정 도구 | 매 빌드(Windows), 주 1회(macOS) |
-- 19c 공개 컨테이너 이미지는 없다(Oracle 레지스트리 로그인·라이선스 동의 필요, amd64만). 그래서 19c는 사내 DB로 시험한다.
+- 19c 공개 컨테이너 이미지는 없다(Oracle 레지스트리 로그인·라이선스 동의 필요, amd64만). 그래서 19c는 별도 DB로 시험한다.
 - Podman도 쓸 수 있다(`DOCKER_HOST`를 Podman 소켓으로, rootless면 `TESTCONTAINERS_RYUK_DISABLED=true`). CI 표준은 Docker.
 
 ---
@@ -468,7 +468,7 @@ macOS 서명 시 필요한 권한(entitlement)은 CoreCLR 기준 `com.apple.secu
 | T-D03 | 다중 커서 | 포크 없는 AvaloniaEdit 확장(앵커+배경 렌더러+터널 입력). 1.0 범위는 D-007 | 결정 |
 | T-D04 | 파서 | L1 자체 렉서·경량 파서 + L2 ANTLR(grammars-v4 PL/SQL) | 제안 |
 | T-D05 | macOS 자격 증명 | 키체인 P/Invoke 직접 구현(150줄 안팎) | 제안 |
-| T-D06 | 업데이트 | Velopack + 사내 정적 파일 서버 | 제안 |
+| T-D06 | 업데이트 | Velopack + 정적 파일 서버 | 제안 |
 | T-D07 | NativeAOT | 1.0은 ReadyToRun. M0에서 AOT 경고 수 측정 후 재판단 | 제안 |
 
 ---

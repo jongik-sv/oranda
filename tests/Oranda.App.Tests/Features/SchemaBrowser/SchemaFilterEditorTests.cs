@@ -6,14 +6,14 @@ namespace Oranda.App.Tests.Features.SchemaBrowser;
 /// <summary>저장 필터 편집 대화상자 모델(TSK-13-10, 오렌지 Schema Browser Filter): 새로 만들기·저장·삭제, 스키마·객체·옵션 탭.</summary>
 public sealed class SchemaFilterEditorTests
 {
-    private static readonly string[] AllSchemas = ["EAIAPUSER", "HR", "MESAPUSER", "SCOTT"];
+    private static readonly string[] AllSchemas = ["EAI_USER", "HR", "APP_USER", "SCOTT"];
 
     private static readonly SchemaBrowserFilter ApUser = new()
     {
         Id = "f1",
         Name = "APUser",
         Scope = SchemaFilterScope.Selected,
-        Schemas = ["MESAPUSER"],
+        Schemas = ["APP_USER"],
         HiddenTypes = ["JOB"],
         NamePatterns = new Dictionary<string, string> { ["TABLE"] = "TB*" },
         UnderscoreIsWildcard = true,
@@ -33,7 +33,7 @@ public sealed class SchemaFilterEditorTests
         Assert.Equal("APUser", d.Name);
         Assert.True(d.IsSelectedScope);
         Assert.False(d.IsAllScope);
-        Assert.Equal(["MESAPUSER"], d.Schemas);
+        Assert.Equal(["APP_USER"], d.Schemas);
         Assert.False(Row(vm, "JOB").IsShown);
         Assert.True(Row(vm, "VIEW").IsShown);
         Assert.Equal("TB*", Row(vm, "TABLE").Pattern);
@@ -111,7 +111,7 @@ public sealed class SchemaFilterEditorTests
         Assert.Equal("f1", f.Id);
         Assert.Equal("AP 계정", f.Name);
         Assert.Equal(SchemaFilterScope.Selected, f.Scope);
-        Assert.Equal(["MESAPUSER"], f.Schemas);
+        Assert.Equal(["APP_USER"], f.Schemas);
         Assert.Equal(["VIEW", "JOB"], f.HiddenTypes);
         Assert.Equal(new Dictionary<string, string> { ["TABLE"] = "TB*" }, f.NamePatterns);
         Assert.True(f.UnderscoreIsWildcard);
@@ -177,10 +177,10 @@ public sealed class SchemaFilterEditorTests
         var vm = Make(null);
         vm.New();
         vm.Selected!.IsPatternScope = true;
-        vm.Selected.SchemaPattern = "APUSER$";
+        vm.Selected.SchemaPattern = "_USER$";
 
         Assert.Equal(SchemaFilterScope.Pattern, vm.Selected.Scope);
-        Assert.Equal(["EAIAPUSER", "MESAPUSER"], vm.Selected.PatternMatches);
+        Assert.Equal(["EAI_USER", "APP_USER"], vm.Selected.PatternMatches);
         Assert.Equal("맞는 스키마 2/4개", vm.Selected.PatternMatchCountText);
         Assert.True(vm.CanConfirm);
 
@@ -204,7 +204,7 @@ public sealed class SchemaFilterEditorTests
         });
         vm.New();
         vm.Selected!.IsPatternScope = true;
-        vm.Selected.SchemaPattern = "(APUSER";
+        vm.Selected.SchemaPattern = "(_USER";
 
         Assert.True(vm.Selected.HasPatternError);
         Assert.NotNull(vm.Selected.PatternError);
@@ -215,7 +215,7 @@ public sealed class SchemaFilterEditorTests
         Assert.False(await vm.SaveAsync());
         Assert.Equal(0, saved);
 
-        vm.Selected.SchemaPattern = "APUSER$";
+        vm.Selected.SchemaPattern = "_USER$";
         Assert.True(vm.CanConfirm);
         Assert.True(await vm.SaveAsync());
         Assert.Equal(1, saved);

@@ -4,7 +4,7 @@ using Oranda.Language.Lexing;
 
 namespace Oranda.Language.Tests.Formatting;
 
-// 소유: TSK-13-43. 사내 서식 배치(clauseLayout Column)·비교 맞춤(align.comparison)·ORDER BY 따로(lineBreaks.orderBy) 규칙과 경계.
+// 소유: TSK-13-43. 하우스 서식 배치(clauseLayout Column)·비교 맞춤(align.comparison)·ORDER BY 따로(lineBreaks.orderBy) 규칙과 경계.
 public class HouseStyleRulesTests
 {
     static readonly FormatterOptions House = FormatterOptions.OrandaDefault;

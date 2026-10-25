@@ -265,13 +265,13 @@ public sealed partial class BindGridTests
 
     // ---- 사용자 매퍼(있을 때만) ---------------------------------------------------------------
 
-    /// <summary>사내 매퍼의 #{…} 이름으로 창을 채워 복사 → 다른 목록에 붙여 넣기 왕복. 파일이 없으면 건너뛴다(공개 저장소엔 없음).</summary>
+    /// <summary>대형 매퍼의 #{…} 이름으로 창을 채워 복사 → 다른 목록에 붙여 넣기 왕복. 파일이 없으면 건너뛴다(공개 저장소엔 없음).</summary>
     [Fact]
     public Task User_mapper_params_round_trip_through_the_pane() => Ui.Run(() =>
     {
         if (UserMapperPath is not { } userMapper)
         {
-            return Task.CompletedTask; // 건너뜀: 사내 파일
+            return Task.CompletedTask; // 건너뜀: 저장소 밖 파일
         }
 
         var names = ParamRegex().Matches(File.ReadAllText(userMapper)).Select(m => m.Groups[1].Value)

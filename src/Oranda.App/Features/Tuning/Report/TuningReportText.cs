@@ -31,6 +31,6 @@ public static class TuningReportText
 
     /// <summary>팩 절이 빠졌을 때 무엇을 하면 켜지는지.</summary>
     public static string NoDiagnosticsHint(bool en) => L(en,
-        "이 접속 프로필의 라이선스가 「없음」이라 dba_hist_* 를 읽지 않았습니다. 회사가 Diagnostics Pack 을 갖고 있으면 접속 관리자에서 라이선스를 고친 뒤 다시 만드세요.",
+        "이 접속 프로필의 라이선스가 「없음」이라 dba_hist_* 를 읽지 않았습니다. 조직이 Diagnostics Pack 을 갖고 있으면 접속 관리자에서 라이선스를 고친 뒤 다시 만드세요.",
         "The connection profile declares no license, so dba_hist_* was not read. If your company owns the Diagnostics Pack, change the license in the connection manager and make the report again.");
 }

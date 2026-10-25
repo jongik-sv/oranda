@@ -5,7 +5,7 @@
 - `OracleFreeProbeTests` (4개 중 2개): Testcontainers.Oracle 4.16.0 로 `gvenzl/oracle-free:23-slim` 기동 → ODP.NET(Oracle.ManagedDataAccess.Core 23.26.301) 접속 → `ServerProbe.ProbeAsync` 결과를 별도 SQL(`product_component_version`, `v$pdbs`, `v$instance`, `v$mystat`, `session_roles`)로 읽은 값과 비교.
   - SYSTEM(DBA) 계정, 시험 안에서 만든 `CREATE SESSION` 만 가진 일반 계정 두 가지.
 - `ExternalDbProbeTests` (2개): 환경 변수가 있을 때만 실제로 접속한다. 없으면 즉시 반환(통과 처리, xunit 2.5 에 동적 Skip 이 없음).
-  - `ORANDA_IT_19C_CONNSTR` — 사내 19c, ODP.NET 연결 문자열 전체. 버전 19 단정 + 실제값 비교.
+  - `ORANDA_IT_19C_CONNSTR` — 별도 19c, ODP.NET 연결 문자열 전체. 버전 19 단정 + 실제값 비교.
   - `ORANDA_IT_ADB_CONNSTR` — ADB 연결 문자열 전체. `ORANDA_IT_ADB_WALLET` 이 있으면 지갑 폴더로 TNS_ADMIN/WalletLocation 설정, 없으면 지갑 없는 TLS.
 - 기본 `dotnet test Oranda.sln` 은 csproj 의 `VSTestTestCaseFilter=Category!=Integration` 으로 Integration 을 뺀다. 명령줄 `--filter Category=Integration` 이 이 값을 덮어쓴다(확인함).
 
@@ -27,9 +27,9 @@
 ## 보류 항목과 필요한 사람 자원
 | 항목 | 필요한 것 |
 |---|---|
-| 사내 19c 공유 DB | 접속 정보(호스트·서비스·계정). 가능하면 DBA 계정과 일반 계정 각 1개. `ORANDA_IT_19C_CONNSTR` 로 시험 실행 |
+| 공유 19c DB | 접속 정보(호스트·서비스·계정). 가능하면 DBA 계정과 일반 계정 각 1개. `ORANDA_IT_19C_CONNSTR` 로 시험 실행 |
 | ADB (지갑 있음/없음 TLS) | ADB 인스턴스와 지갑 zip, 지갑 없는 TLS 허용 설정. `ORANDA_IT_ADB_CONNSTR`, `ORANDA_IT_ADB_WALLET` |
-| macOS ARM | Apple Silicon Mac 한 대. 이미지가 arm64 를 지원하는 `gvenzl/oracle-free:23-slim` 은 컨테이너(podman/Docker Desktop)로, 또는 사내 DB 로 같은 시험 실행 |
+| macOS ARM | Apple Silicon Mac 한 대. 이미지가 arm64 를 지원하는 `gvenzl/oracle-free:23-slim` 은 컨테이너(podman/Docker Desktop)로, 또는 별도 DB 로 같은 시험 실행 |
 
 ## decisions 후보
 - Testcontainers 로 podman 을 쓸 때는 로그 대기 전략 대신 접속 재시도로 준비 여부를 판정한다(로그 API 비호환).

@@ -1,6 +1,6 @@
 # 측정 잠금을 잡고(mkdir) measure.ps1 을 돌린 뒤 푼다. 1분 간격 최대 30회 재시도, 넘으면 잠금 없이 측정.
 param([string[]]$Cases, [int]$Runs = 5, [int]$Warmup = 1)
-$lock = 'C:/Users/jongik.jang/.coord/oranda-wp01/locks/measure'
+$lock = "$env:USERPROFILE/.coord/oranda-wp01/locks/measure"
 $got = $false
 for ($i = 0; $i -lt 30; $i++) {
     try { New-Item -ItemType Directory $lock -ErrorAction Stop | Out-Null; $got = $true; break } catch { Start-Sleep 60 }

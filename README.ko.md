@@ -21,7 +21,7 @@ Oranda 는 Windows·macOS 용 무료 오픈 소스 Oracle 데이터베이스 클
 - **모니터링** — 세션 모니터, SQL 모니터(Top SQL·대기·AWR 계획 이력), 대기 트리와 블로커 알림이 있는 Lock 모니터.
 - **튜닝** — 표·열 통계, 자식 커서, 트레이스 뷰어·TKPROF 요약, 변형 SQL 벤치마크가 있는 튜닝 도우미, HTML 파일 하나로 만드는 튜닝 보고서.
 - **MyBatis 작업 공간** — 매퍼 XML 을 열어 파라미터를 넣고, 펼친 SQL 을 보고, 태그 조합을 검사하고, 바꾼 문장만 저장한다.
-- **Role 별 메뉴** — **설정 > 기능** 에서 Role(SQL 개발자·PL/SQL 개발자·MyBatis 개발자·DB 튜너·운영 DBA·조회 전용)을 하나 이상 고르면 그 Role 의 메뉴·기능만 보인다. 「조회 전용」 Role 은 DML·DDL·PL/SQL 실행을 막는다. Role 을 고르지 않으면 모든 기능이 켜져 있다.
+- **Role 별 메뉴** — **설정 > 기능** 에서 Role(SQL 개발자·PL/SQL 개발자·MyBatis 개발자·DB 튜너·운영 DBA·조회 전용)을 하나 이상 고르면 그 Role 의 메뉴·기능만 보인다. 「조회 전용」 Role 은 DML·DDL·PL/SQL 실행을 막는다. Role 을 고르지 않으면 SQL 개발자 Role 로 동작하고, 같은 곳의 「모든 기능 쓰기」를 고르면 모든 기능이 켜진다.
 - **안전장치** — 읽기 전용 접속, 운영 DB 색 표시, 위험한 문장 실행 전 확인, 팩 보유를 선언하지 않으면 Diagnostics·Tuning Pack 뷰를 쓰지 않음.
 - **단축키** — 기본·Orange 5·PL/SQL Developer·SQL Developer 프리셋.
 - **언어** — 한국어·영어 화면.

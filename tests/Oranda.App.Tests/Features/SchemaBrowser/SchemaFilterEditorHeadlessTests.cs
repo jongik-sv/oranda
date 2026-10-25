@@ -55,7 +55,7 @@ public sealed class SchemaFilterEditorHeadlessTests
     [Fact]
     public Task Pattern_scope_previews_schemas_and_disables_ok_for_an_invalid_pattern() => HeadlessHost.Run(async () =>
     {
-        var vm = new SchemaFilterEditorViewModel([], null, ["HR", "MESAPUSER", "SCOTT"]);
+        var vm = new SchemaFilterEditorViewModel([], null, ["HR", "APP_USER", "SCOTT"]);
         var (owner, dialog, result) = Open(vm);
         Click(dialog, "NewButton");
         Named<RadioButton>(dialog, "PatternScopeRadio").IsChecked = true;
@@ -63,14 +63,14 @@ public sealed class SchemaFilterEditorHeadlessTests
         Assert.True(Named<Grid>(dialog, "PatternPanel").IsVisible);
 
         var box = Named<TextBox>(dialog, "SchemaPatternBox");
-        box.Text = "APUSER$";
+        box.Text = "_USER$";
         Dispatcher.UIThread.RunJobs();
-        Assert.Equal(["MESAPUSER"], Named<ListBox>(dialog, "PatternMatchList").Items.Cast<string>());
+        Assert.Equal(["APP_USER"], Named<ListBox>(dialog, "PatternMatchList").Items.Cast<string>());
         Assert.Equal("맞는 스키마 1/3개", Named<TextBlock>(dialog, "PatternCountText").Text);
         Assert.True(Named<Button>(dialog, "OkButton").IsEnabled);
         Assert.False(Named<TextBlock>(dialog, "PatternErrorText").IsVisible);
 
-        box.Text = "(APUSER";
+        box.Text = "(_USER";
         Dispatcher.UIThread.RunJobs();
         Assert.True(Named<TextBlock>(dialog, "PatternErrorText").IsVisible);
         Assert.False(string.IsNullOrWhiteSpace(Named<TextBlock>(dialog, "PatternErrorText").Text));

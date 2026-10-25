@@ -140,7 +140,7 @@ public sealed partial class SqlFormatPage : ObservableObject
     public bool HasPreview => _formatter is not null;
 
     /// <summary>
-    /// 「키워드 맞춤」이 출력에 효과가 있다. 프로필의 절 배치가 열 맞춤(<see cref="ClauseLayout.Column"/>, 사내 서식)이면 쓰지 않으므로 false
+    /// 「키워드 맞춤」이 출력에 효과가 있다. 프로필의 절 배치가 열 맞춤(<see cref="ClauseLayout.Column"/>, 하우스 서식)이면 쓰지 않으므로 false
     /// (설정 창은 그 묶음을 회색으로 두고 <see cref="KeywordAlignTip"/> 를 보인다).
     /// </summary>
     public bool KeywordAlignApplies => Compose().ClauseLayout != ClauseLayout.Column;
@@ -176,7 +176,7 @@ public sealed partial class SqlFormatPage : ObservableObject
         };
     }
 
-    /// <summary>Orange 「Default」: 4항목만 기본 제공 「Oranda 기본」 값(<see cref="FormatterOptions.OrandaDefault"/>, 사내 서식)으로. 저장은 설정 창 「저장」.</summary>
+    /// <summary>Orange 「Default」: 4항목만 기본 제공 「Oranda 기본」 값(<see cref="FormatterOptions.OrandaDefault"/>, 하우스 서식)으로. 저장은 설정 창 「저장」.</summary>
     [RelayCommand]
     public void ResetDefaults()
     {

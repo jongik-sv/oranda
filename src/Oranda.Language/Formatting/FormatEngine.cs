@@ -352,7 +352,7 @@ internal static partial class FormatEngine
 
     /// <summary>
     /// 코드 위치 <paramref name="k"/> 토큰이 바로 앞 코드 토큰과 같은 줄에 올 때의 간격(<see cref="GapKind.None"/>·<see cref="GapKind.Space"/>).
-    /// 앞 항목이 주석이면 Space. 기본 공백 규칙(<see cref="ApplySpacing"/>)과 사내 서식 배치(ColumnLayout)가 같이 쓴다.
+    /// 앞 항목이 주석이면 Space. 기본 공백 규칙(<see cref="ApplySpacing"/>)과 하우스 서식 배치(ColumnLayout)가 같이 쓴다.
     /// </summary>
     static GapKind PairGap(List<FormatItem> items, List<int> code, int k, List<Token> line)
     {

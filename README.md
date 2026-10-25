@@ -21,7 +21,7 @@ Oranda is a free, open source Oracle Database client for Windows and macOS. It i
 - **Monitoring** — session monitor, SQL monitor (Top SQL, waits, AWR plan history), lock monitor with blocking tree and blocker alert.
 - **Tuning** — table and column statistics, child cursors, trace viewer and TKPROF summary, tuning assistant with SQL variant benchmark, single-file HTML tuning report.
 - **MyBatis workspace** — open mapper XML files, fill parameters, see the expanded SQL, check tag combinations, and save only the statements you changed.
-- **Role-based menus** — pick one or more roles in *Settings > Features* (SQL developer, PL/SQL developer, MyBatis developer, DB tuner, DBA, viewer) and Oranda shows only those menus and features. The *viewer* role blocks DML, DDL and PL/SQL execution. With no role selected, every feature is on.
+- **Role-based menus** — pick one or more roles in *Settings > Features* (SQL developer, PL/SQL developer, MyBatis developer, DB tuner, DBA, viewer) and Oranda shows only those menus and features. The *viewer* role blocks DML, DDL and PL/SQL execution. With no role selected, Oranda uses the SQL developer role; choose *Use all features* in the same place to turn everything on.
 - **Safety** — read-only connections, production colour labels, confirmation before risky statements, and no use of Diagnostics/Tuning Pack views unless you declare that you own the pack.
 - **Keyboard** — keymap presets for Default, Orange 5, PL/SQL Developer and SQL Developer.
 - **Languages** — Korean and English user interface.

@@ -4,7 +4,7 @@ param([string]$OutDir = "results")
 $ErrorActionPreference = 'Stop'
 $here = Split-Path -Parent $MyInvocation.MyCommand.Path
 $exe = Join-Path $here 'out/rel/EditorSpike.exe'
-$lock = 'C:/Users/jongik.jang/.coord/oranda-wp01/locks/measure'
+$lock = "$env:USERPROFILE/.coord/oranda-wp01/locks/measure"
 $out = Join-Path $here $OutDir
 New-Item -ItemType Directory -Force $out | Out-Null
 $log = Join-Path $out 'measure-log.txt'

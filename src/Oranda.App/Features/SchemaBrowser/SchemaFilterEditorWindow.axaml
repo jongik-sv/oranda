@@ -73,7 +73,7 @@
                 IsVisible="{Binding Selected.IsPatternScope, FallbackValue=False}">
             <TextBox x:Name="SchemaPatternBox" Classes="compact" Text="{Binding Selected.SchemaPattern, Mode=TwoWay, FallbackValue=''}"
                      Classes.pattern-invalid="{Binding Selected.HasPatternError, FallbackValue=False}"
-                     PlaceholderText="예: APUSER$" AutomationProperties.Name="스키마 정규식 패턴" />
+                     PlaceholderText="예: _USER$" AutomationProperties.Name="스키마 정규식 패턴" />
             <TextBlock x:Name="PatternErrorText" Grid.Row="1" Classes="invalid" TextWrapping="Wrap"
                        Text="{Binding Selected.PatternError, FallbackValue=''}" IsVisible="{Binding Selected.HasPatternError, FallbackValue=False}" />
             <TextBlock Grid.Row="2" Classes="panel-caption" TextWrapping="Wrap"
@@ -108,7 +108,7 @@
           <Grid DockPanel.Dock="Bottom" Margin="0,6,0,0" ColumnDefinitions="Auto,*,Auto,Auto" ColumnSpacing="6">
             <TextBlock Text="패턴" VerticalAlignment="Center" />
             <TextBox x:Name="GlobalPatternBox" Grid.Column="1" Classes="compact" Text="{Binding GlobalPattern, Mode=TwoWay}"
-                     PlaceholderText="예: TB_M30*" AutomationProperties.Name="모든 유형에 넣을 패턴" />
+                     PlaceholderText="예: TB_ORD*" AutomationProperties.Name="모든 유형에 넣을 패턴" />
             <Button x:Name="AssignButton" Grid.Column="2" Classes="compact" Content="모든 유형에 적용" />
             <Button x:Name="ResetButton" Grid.Column="3" Classes="compact" Content="초기화" />
           </Grid>
@@ -150,7 +150,7 @@
             <TextBlock Text="_ 를 한 글자 와일드카드로 본다" />
           </CheckBox>
           <TextBlock Classes="panel-caption" Margin="28,0,0,8" TextWrapping="Wrap"
-                     Text="끄면 _ 는 글자 그대로입니다(TB_M30 의 밑줄처럼 이름에 흔한 글자)." />
+                     Text="끄면 _ 는 글자 그대로입니다(TB_ORD 의 밑줄처럼 이름에 흔한 글자)." />
           <CheckBox IsChecked="{Binding Selected.WrapWithPercent, Mode=TwoWay, FallbackValue=False}"
                     AutomationProperties.Name="앞뒤에 퍼센트 붙이기">
             <TextBlock Text="와일드카드가 없으면 앞뒤에 % 를 붙인다 (포함 검색)" />

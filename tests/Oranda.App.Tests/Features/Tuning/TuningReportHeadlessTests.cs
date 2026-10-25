@@ -76,8 +76,8 @@ public sealed class TuningReportHeadlessTests
 
     // 저장 경로는 이 OS 에서 완전한 경로여야 「만들기」가 켜진다(macOS·Linux 에서 C:\ 는 상대 경로).
     private static readonly string SamplePath = OperatingSystem.IsWindows()
-        ? @"C:\Users\jongik.jang\Documents\Oranda\tuning_7h35uxf5uhmm1_20261024_1412.html"
-        : "/Users/jongik.jang/Documents/Oranda/tuning_7h35uxf5uhmm1_20261024_1412.html";
+        ? @"C:\Users\tester\Documents\Oranda\tuning_7h35uxf5uhmm1_20261024_1412.html"
+        : "/Users/tester/Documents/Oranda/tuning_7h35uxf5uhmm1_20261024_1412.html";
 
     private static TuningReportDialogViewModel Vm(ConnectionEnvironment env = ConnectionEnvironment.Production, LicensePack pack = LicensePack.None) =>
         new(ReportFixtures.Session(env, pack), new FakeReportTuning(), new FakeReportMonitor(), ReportFixtures.SqlId)

@@ -20,12 +20,12 @@ Thumbs.db
 # Claude Code 개인 설정
 .claude/settings.local.json
 
-# dmes-standard 스킬 링크(정션) — 원본은 dmes-standard 저장소가 관리하므로 커밋하지 않는다
+# 외부 스킬 링크(정션) — 원본은 다른 저장소가 관리하므로 커밋하지 않는다
 .claude/skills/coordinator
 .claude/skills/dflow-*
 .claude/skills/_shared
 
-# Orange 역분석·도움말 요약 — 공개 저장소에 올리지 않는다 (로컬 보관)
+# 로컬 참고 문서 — 공개 저장소에 올리지 않는다 (로컬 보관)
 /docs/orange-analysis.md
 /docs/orange5-features.md
 /.dflow

@@ -17,7 +17,7 @@
 | APPLE_ID | 공증용 Apple ID |
 | APPLE_TEAM_ID | 팀 ID |
 | APPLE_APP_PASSWORD | 앱 전용 암호(notarytool) |
-Windows Authenticode 는 이번 골격 범위 밖(사내 인증서 확정 후 추가).
+Windows Authenticode 는 이번 골격 범위 밖(코드 서명 인증서 확정 후 추가).
 
 ## App 계측 훅 규약 (제안)
 환경 변수 `ORANDA_PERF=1` 일 때 App 이 stdout 에 한 줄씩 출력:

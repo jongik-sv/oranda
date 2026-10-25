@@ -68,19 +68,19 @@ public sealed class SchemaBrowserSavedFilterTests
     public async Task Pattern_schema_filter_keeps_only_matching_schemas_and_survives_reconnect()
     {
         var h = NewHarness();
-        h.Meta.Schemas.Add("MESAPUSER");
-        h.Meta.Schemas.Add("EAIAPUSER");
+        h.Meta.Schemas.Add("APP_USER");
+        h.Meta.Schemas.Add("EAI_USER");
         await h.Vm.SetSessionAsync(h.Session);
 
-        var filter = await SaveAndSelectAsync(h, new SchemaBrowserFilter { Name = "AP", Scope = SchemaFilterScope.Pattern, SchemaPattern = "apuser$" });
+        var filter = await SaveAndSelectAsync(h, new SchemaBrowserFilter { Name = "AP", Scope = SchemaFilterScope.Pattern, SchemaPattern = "_user$" });
 
-        Assert.Equal(["MESAPUSER", "EAIAPUSER"], SchemaTitles(h));
+        Assert.Equal(["APP_USER", "EAI_USER"], SchemaTitles(h));
         Assert.Contains("필터 「AP」 · 스키마 2/5개", h.Vm.StatusText, StringComparison.Ordinal);
-        Assert.Equal("apuser$", h.Settings.Current.SchemaBrowser.Filters.Single().SchemaPattern);
+        Assert.Equal("_user$", h.Settings.Current.SchemaBrowser.Filters.Single().SchemaPattern);
 
         await h.Vm.SetSessionAsync(h.Session); // 다시 접속해도 설정에서 같은 필터를 골라 그대로 거른다
         Assert.Equal(filter.Id, h.Vm.ActiveSavedFilter?.Id);
-        Assert.Equal(["MESAPUSER", "EAIAPUSER"], SchemaTitles(h));
+        Assert.Equal(["APP_USER", "EAI_USER"], SchemaTitles(h));
     }
 
     [Fact]

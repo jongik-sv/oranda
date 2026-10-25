@@ -258,8 +258,8 @@ public sealed partial class SettingsStoreTests : IDisposable
         {
             Name = "APUser",
             Scope = SchemaFilterScope.Selected,
-            Schemas = ["EAIAPUSER", "MESAPUSER"],
-            NamePatterns = new Dictionary<string, string> { ["TABLE"] = "TB_M30*" },
+            Schemas = ["EAI_USER", "APP_USER"],
+            NamePatterns = new Dictionary<string, string> { ["TABLE"] = "TB_ORD*" },
         };
         var settings = new AppSettings
         {

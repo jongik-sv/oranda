@@ -277,7 +277,7 @@ levels:
   - acceptance: PRD 6 수치 4개가 모두 Perf 시험으로 있고 상한 안에 든다 / 수치표(항목·상한·측정값·PC·빌드 구성) / 넘은 항목은 고침 커밋 또는 defect Task 로 남음
 
 ## WP-05: Lock 모니터
-<!-- 담당 PC: win144(Windows 개발 PC) — 맥북 세션은 이 WP 의 Task 를 하지 않는다. 2026-10-24 사용자 지시 「다른 DB도구의 Lock 모니터 기능들을 조사해서 구현하자」「P2 까지 모두 구현하자」. 조사 근거 = Toad Session Browser Locks 탭, DBeaver Lock Manager, OEM Blocking Sessions, Quest Spotlight Locks Tree. 모든 조회는 SELECT 전용(Chakra Max 결재 회피). dba_waiters·dba_blockers(catblock.sql 필요)는 쓰지 않는다 -->
+<!-- 담당 PC: win144(Windows 개발 PC) — 맥북 세션은 이 WP 의 Task 를 하지 않는다. 2026-10-24 사용자 지시 「다른 DB도구의 Lock 모니터 기능들을 조사해서 구현하자」「P2 까지 모두 구현하자」. 조사 근거 = Toad Session Browser Locks 탭, DBeaver Lock Manager, OEM Blocking Sessions, Quest Spotlight Locks Tree. 모든 조회는 SELECT 전용(DB 접근 통제 도구의 결재 회피). dba_waiters·dba_blockers(catblock.sql 필요)는 쓰지 않는다 -->
 
 - [x] TSK-05-01: Lock 모니터 조회 계약 — 레코드·IMonitorService 메서드·명령 ID (계약 전용) [win144] w:1 2026-10-24~2026-10-24
   - category: infra
@@ -559,16 +559,16 @@ levels:
   - acceptance: LICENSE·README 2종·THIRD-PARTY-NOTICES.md 가 있다 / 고지표가 `dotnet list package --include-transitive` 의 출하 패키지를 빠짐없이 덮는다 / Oracle 라이선스 원문이 고지에 그대로 들어 있다 / `dotnet build Oranda.sln -warnaserror` 통과
   - note: 담당 PC: win144(Windows 개발 PC) — 맥북 세션은 이 Task 를 하지 않는다. 결과 — LICENSE(MIT, jongik-sv), README.md·README.ko.md(기능·Role·지원 버전·설치·빌드·Code signing policy·개인정보·상표 고지), THIRD-PARTY-NOTICES.md(출하 패키지(전이 포함) 표, Oracle Free Use Terms 원문·info.txt 고지·ANGLE·Apache-2.0·MIT·BSD-3 원문, PL/SQL 문법 Apache-2.0, 미확인: Inter 글꼴 OFL·AvaloniaUI.DiagnosticsSupport(Debug 전용)), Directory.Build.props 공개 메타, scripts/release/copy-notices.ps1(설치 폴더 licenses/ 에 고지 동봉) (win144)
 
-- [x] TSK-08-02: 사내 정보 노출 점검 (보고만, 고치지 않음) [win144] w:1 2026-10-25~2026-10-25
+- [x] TSK-08-02: 조직 내부 정보 노출 점검 (보고만, 고치지 않음) [win144] w:1 2026-10-25~2026-10-25
   - category: research
   - domain: infra
   - model: opus
   - priority: critical
   - tags: release, security, audit, win144
   - prd-ref: D-014
-  - requirements: git 추적 파일 전체에서 회사 이름·사내 서버/호스트·IP·TNS 별칭·계정·내부 URL·사내 시스템 이름·개인 이름·이메일·토큰을 찾는다(예: UBMADQ); .gitignore 로 뺀 docs/orange-analysis.md·docs/orange5-features.md·.dflow 가 추적되지 않는지 확인; 과거 커밋은 `git log -p -S<문자열>` 로 표본 확인; 결과는 저장소 밖 ~/.coord/simplify/pub-exposure.md 에 표(파일:줄, 무엇, 위험 상·중·하, 권장 조치); 제약: 저장소 파일을 고치지 않는다; 비고: 담당 PC: win144(Windows 개발 PC) — 맥북 세션은 이 Task 를 하지 않는다
+  - requirements: git 추적 파일 전체에서 조직 이름·내부 서버/호스트·IP·TNS 별칭·계정·내부 URL·내부 시스템 이름·개인 이름·이메일·토큰을 찾는다(예: TESTDB); .gitignore 로 뺀 docs/orange-analysis.md·docs/orange5-features.md·.dflow 가 추적되지 않는지 확인; 과거 커밋은 `git log -p -S<문자열>` 로 표본 확인; 결과는 저장소 밖 ~/.coord/simplify/pub-exposure.md 에 표(파일:줄, 무엇, 위험 상·중·하, 권장 조치); 제약: 저장소 파일을 고치지 않는다; 비고: 담당 PC: win144(Windows 개발 PC) — 맥북 세션은 이 Task 를 하지 않는다
   - acceptance: 추적 파일 전부를 훑은 표가 있다 / 위험 「상」 항목과 이력 재작성 필요 여부가 보고 첫머리에 있다 / 저장소에 변경이 없다
-  - note: 담당 PC: win144(Windows 개발 PC) — 맥북 세션은 이 Task 를 하지 않는다. 결과 — 추적 파일 1,694개 점검, 상 4·중 11·하 9(보고서 ~/.coord/simplify/pub-exposure.md, 커밋 안 함). 저장소가 이미 PUBLIC 이고 상 항목(사내 운영 SQL 이 든 .sqd 시험 표본, 회사 이름, 사내 DB 이름·계정, 실제 스키마 이름)이 과거 커밋에도 있어 이력 재작성 필요 — 사용자 결정 (win144)
+  - note: 담당 PC: win144(Windows 개발 PC) — 맥북 세션은 이 Task 를 하지 않는다. 결과 — 추적 파일 1,694개 점검, 상 4·중 11·하 9(보고서 ~/.coord/simplify/pub-exposure.md, 커밋 안 함). 저장소가 이미 PUBLIC 이고 상 항목(운영 SQL 이 든 .sqd 시험 표본, 조직 이름, DB 별칭·계정, 실제 스키마 이름)이 과거 커밋에도 있어 이력 재작성 필요 — 사용자 결정 (win144)
 
 - [x] TSK-08-03: CI Windows 설치 패키지·GitHub Release 두 채널·SignPath 조건부 서명 [win144] w:2 2026-10-25~2026-10-25
   - category: infra
@@ -601,6 +601,16 @@ levels:
   - requirements: `.github/workflows/ci.yml` 의 windows-x64·macos-arm64·integration(ubuntu, Testcontainers) 작업이 모두 통과한다(release 는 태그 때만). 제품 결함은 제품을, OS·CI 환경을 잘못 가정한 시험은 시험을 고친다. 흔들림은 조건 기다림으로 고치고 시간만 늘리지 않는다. Skip·삭제 없음. 패키지·release 단계는 건드리지 않는다; 비고: 담당 PC: win144(Windows 개발 PC) — 맥북 세션은 이 Task 를 하지 않는다
   - acceptance: 실제 GitHub Actions 실행에서 세 작업 모두 success / 로컬 `dotnet build Oranda.sln -warnaserror` 와 단위·UI 시험 통과
   - note: 담당 PC: win144(Windows 개발 PC) — 맥북 세션은 이 Task 를 하지 않는다. 완료(2026-10-25) — 세 작업 첫 통과 run 40184318617(ci-green). 11g 통합 ORA-00604/01882 = 러너 시간대 Etc/UTC 를 11.2 XE 가 몰라 접속 거부(제품 결함: 모든 연결을 `CreateConnection` 으로 만들어 UseHourOffsetForUnsupportedTimezone 켬), 이력 파일 이름이 macOS 에서 ':'·'*'·'?' 를 남김(제품: OS 무관 금지 글자), macOS 헤드리스 TextBox 복사 키·C:\ 경로 가정(시험), 상태 줄·세션 등록·닫기 시작·차단 칸 알림의 비동기 Post 를 바로 단정(시험: 조건 기다림·UI 스레드 실행), 글자 배율 시험이 1.5 배를 되돌리지 않아 뒤 시험의 행 높이가 커짐(시험: 설정 복원) (win144)
+- [x] TSK-08-06: 공개 저장소 사내 정보 정리 [win144] w:1 2026-10-25~2026-10-25
+  - category: infra
+  - domain: infra
+  - model: opus
+  - priority: critical
+  - tags: release, security, scrub, win144
+  - prd-ref: D-014
+  - requirements: 노출 점검 보고(TSK-08-02)의 상·중 항목과 쉬운 하 항목을 지금부터의 파일에서 정리한다(이력 재작성·force push 는 하지 않음 — 사용자 결정 2026-10-25); 실제 운영 SQL 이 든 orange-workspace-sample.sqd 를 같은 구조(HEADER·WORKSPACE·NAME·STMT·VAR, CP949, 탭, 한글 바인드 이름)의 가짜 SQL 로 다시 만들고 시험 기대값을 맞춘다; 조직 이름·시스템 코드·DB 별칭·실제 스키마/표 이름을 일반 이름(APP_USER·EAI_USER·TESTDB·TB_ORD_*)으로; 접근 통제 도구 이름·도메인 지식 저장소 이름·다른 저장소 훅·D'Flow 프로젝트 UUID·로컬 경로·「내부 전용」 표현 일반화; README 의 Role 기본 동작 문장을 D-013 에 맞춤
+  - acceptance: 보고서 패턴을 git grep 하면 0건(남긴 것은 이유를 적음) / 빌드 -warnaserror 통과 / 고친 시험 통과 / Category!=Integration&Category!=Perf 전체 통과
+  - note: 담당 PC: win144(Windows 개발 PC) — 맥북 세션은 이 Task 를 하지 않는다. 결과 — 가짜 .sqd 표본(8탭·바인드 4종)으로 교체하고 WorkspaceFilesSqdTests·SqlEditorSqdTests 기대값 갱신; 스키마·표 이름·DB 별칭 치환(시험·예제·문서·axaml·literals-en); 포매터 골든 샘플의 출처 표지·공정 코드·COIL_ 칼럼 일반화; llm-editor-integration 문서·PRD D-01(공개 MIT)·TRD·itest·spikes 의 내부 전용 표현 정리; 다른 저장소용 .claude 훅 설정 파일·docs/idea.md 의 원격 접속 줄 삭제, .dflow.local.example UUID 제거; 로컬 경로 일반화; README 영/한 Role 문장 고침. 이력은 그대로(과거 커밋에는 옛 값이 남음). 남긴 것: 가짜 MES 냄새 자료(시험용 가짜 값), win144 표시, Orange 호환 자료, ANTLR 문법 머리말 (win144)
 
 ## WP-09: 사용 복잡도 줄이기
 <!-- 담당 PC: win144(Windows 개발 PC) — 맥북 세션은 이 WP 의 Task 를 하지 않는다. 2026-10-25 사용자 결정 「기본안으로 해」(조사 docs/oranda1/research/usage-complexity.md 6장 Q1~Q12 권장안 전부, Q6 = D-013 기본 Role SQL 개발자). 설계 = PRD 13, TRD 11, decisions D-015~D-023. 레인 5개: ux-menu(09-01 계약 → 09-02)·ux-layout(09-05 → 09-06)는 바로, ux-export(09-07)는 의존 없음(슬롯이 나면), ux-role(09-08 → 09-09)도 TSK-07-11(fx-default)이 52601b9 에 머지되어 바로 착수 가능, ux-shell(09-03 → 09-04)은 09-01 머지 뒤, 09-10 통합테스트가 마지막. 동시 레인 5개 제한 때문에 처음에는 ux-menu·ux-layout·ux-role 셋부터. 파일 소유 = TRD 11.10, 문구 파일 소유 = TRD 11.9. 후보(이 WP 밖) = PRD 13.1 -->
@@ -816,7 +826,7 @@ graph LR
 - 최장 경로: TSK-01-01 → TSK-01-02 → TSK-02-01 → TSK-03-01 → TSK-03-02 → TSK-04-01
 - 기능 구간 내부 깊이는 3 이다(TSK-02-01 → TSK-03-01 → TSK-03-02).
 - FS 겹침 검증: depends 가 있는 모든 쌍에서 후행 시작일 > 선행 종료일.
-- WP-08(2026-10-25 추가, Task 4개): 서로 depends 가 없다(라이선스·노출 점검·CI·설치 안내가 각자 다른 파일). 그래프에 넣지 않는다.
+- WP-08(2026-10-25 추가, Task 6개 이상): 서로 depends 가 없다(라이선스·노출 점검·CI·설치 안내·정리가 각자 다른 파일). 그래프에 넣지 않는다.
 - WP-07(2026-10-25 추가, Task 8개): 최장 경로 TSK-07-01 → TSK-07-02 → TSK-07-07 → TSK-07-08(깊이 4 = 계약 1 + 기능 1 + 측정 1 + 통합테스트 1). Fan-in: TSK-07-01 이 5(계약 전용, 구조적 예외), TSK-07-08 이 depends 6(통합테스트, 구조적 예외). 계약 뒤 07-02~07-06 은 서로 depends 가 없고 소유 파일이 겹치지 않는다(TRD 10.9). TSK-07-08 이 발견한 결함 2건을 TSK-07-09·TSK-07-10(각각 TSK-07-08 에만 depends, 서로 독립)으로 더했다(WP-07 Task 10개, 최장 경로는 깊이 5). 사용자 결정 D-013(기본 Role = SQL 개발자)을 TSK-07-11(TSK-07-08 에만 depends)로 더했다(WP-07 Task 11개).
 - WP-09(2026-10-25 추가, Task 10개): 최장 경로 TSK-09-01 → TSK-09-02 → TSK-09-04 → TSK-09-10(깊이 4 = 계약 1 + 기능 2 + 통합테스트 1). TSK-09-04 는 ExecutionCommands.cs 를 09-02 가 먼저 고치고 Shell/Menus 를 09-03 이 먼저 고쳐서 둘 다에 depends, Roles 시험 때문에 TSK-07-11 에도 depends. TSK-09-08·09-09 는 FeatureSettings*·StartPage.cs·FeatureTexts 를 고친 TSK-07-11(완료)에 depends. TSK-09-05·09-06(ux-layout)과 TSK-09-07(ux-export)은 depends 가 없다(09-06 은 같은 레인 차례만). Fan-in: TSK-09-10 이 depends 8(통합테스트, 구조적 예외), TSK-09-04 가 3. 머지 순서: 09-01 → 09-02 → 09-03 (→ 09-04), 09-05 → 09-06, 09-07 은 아무 때나, TSK-07-11 → 09-08 → 09-09, 마지막 09-10. 파일 소유 = TRD 11.10.
 

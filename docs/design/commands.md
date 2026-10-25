@@ -239,7 +239,7 @@
 | 파일 | 프리셋 | 키 수 | 기준 |
 |---|---|---|---|
 | [keymaps/default.json](keymaps/default.json) | 기본 | 88 | Orange 5 사용자에게 익숙한 실행 키(F5·Ctrl+Enter·F9·F8·Ctrl+E·F11) + 일반 편집기 관례(Ctrl+F/H/G, Ctrl+/) |
-| [keymaps/orange5.json](keymaps/orange5.json) | Orange 5 | 95 | `docs/orange5-features.md` 29장 통합 단축키 표 |
+| [keymaps/orange5.json](keymaps/orange5.json) | Orange 5 | 95 | Orange 5 공개 매뉴얼의 단축키 표 |
 | [keymaps/plsqldev.json](keymaps/plsqldev.json) | PL/SQL Developer | 91 | PL/SQL Developer 기본 키(F8 실행, F5 계획, Shift+Esc 중단, F10/Shift+F10 커밋/롤백, Ctrl+E 이전 문장 불러오기) |
 | [keymaps/sqldev.json](keymaps/sqldev.json) | SQL Developer | 90 | SQL Developer 기본 키(Ctrl+Enter/F9 문장, F5 스크립트, F10 계획, F6 Autotrace, F11/F12 커밋/롤백, Ctrl+F7 포맷, F8 이력, Shift+F4 설명, Ctrl+' 대소문자) |
 
@@ -289,7 +289,7 @@
 
 | 프리셋 | 항목 |
 |---|---|
-| Orange 5 | 도움말 문서 불일치: Named Script 가 `F9`(결과 수정 모드와 충돌)로도 적혀 있음 → `Ctrl+R` 만 채택. 탭 닫기·전체 탭 실행 키는 문서에 없어 기본값 유지 |
+| Orange 5 | 매뉴얼 안의 불일치: Named Script 가 `F9`(결과 수정 모드와 충돌)로도 적혀 있음 → `Ctrl+R` 만 채택. 탭 닫기·전체 탭 실행 키는 매뉴얼에 없어 기본값 유지 |
 | PL/SQL Developer | 편집기 「현재 문장 실행」 키, 대소문자 변환·주석 키, 찾기/바꾸기 키(`Ctrl+R` 여부) |
 | SQL Developer | 실행 취소 키, PL/SQL 실행 키, `Ctrl+D`(편집기 지우기) — 지금은 줄 복제 바인딩만 빼 두었다 |
 

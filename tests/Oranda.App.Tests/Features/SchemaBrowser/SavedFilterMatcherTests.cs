@@ -11,8 +11,8 @@ public sealed class SavedFilterMatcherTests
     [InlineData("emp", true, false, "TB_EMP_X", true)]
     [InlineData("emp", false, false, "TB_EMP_X", false)]
     [InlineData("emp", false, false, "EMP", true)]
-    [InlineData("TB_M30*", true, false, "TB_M30_A", true)]
-    [InlineData("TB_M30*", true, false, "XTB_M30_A", false)]
+    [InlineData("TB_ORD*", true, false, "TB_ORD_A", true)]
+    [InlineData("TB_ORD*", true, false, "XTB_ORD_A", false)]
     [InlineData("%LOG", true, false, "ERR_LOG", true)]
     [InlineData("%LOG", true, false, "LOG_ERR", false)]
     [InlineData("TB_A", false, false, "TBXA", false)]
@@ -61,10 +61,10 @@ public sealed class SavedFilterMatcherTests
     [Fact]
     public void Selected_scope_shows_the_listed_schemas()
     {
-        var m = new SavedFilterMatcher(new SchemaBrowserFilter { Scope = SchemaFilterScope.Selected, Schemas = ["MESAPUSER", "eaiapuser"] }, "SCOTT");
+        var m = new SavedFilterMatcher(new SchemaBrowserFilter { Scope = SchemaFilterScope.Selected, Schemas = ["APP_USER", "eai_user"] }, "SCOTT");
 
-        Assert.True(m.ShowsSchema("MESAPUSER"));
-        Assert.True(m.ShowsSchema("EAIAPUSER"));
+        Assert.True(m.ShowsSchema("APP_USER"));
+        Assert.True(m.ShowsSchema("EAI_USER"));
         Assert.False(m.ShowsSchema("SCOTT"));
         Assert.False(m.NeedsSchemasWithObjects);
     }
@@ -76,13 +76,13 @@ public sealed class SavedFilterMatcherTests
             new SchemaBrowserFilter
             {
                 HiddenTypes = ["JOB"],
-                NamePatterns = new Dictionary<string, string> { ["TABLE"] = "TB_M30*" },
+                NamePatterns = new Dictionary<string, string> { ["TABLE"] = "TB_ORD*" },
             },
             "SCOTT");
 
         Assert.False(m.ShowsType("JOB"));
         Assert.True(m.ShowsType("VIEW"));
-        Assert.True(m.Shows(new DbObjectRef("S", "TB_M30_A", "TABLE")));
+        Assert.True(m.Shows(new DbObjectRef("S", "TB_ORD_A", "TABLE")));
         Assert.False(m.Shows(new DbObjectRef("S", "TB_M10_A", "TABLE")));
         Assert.True(m.Shows(new DbObjectRef("S", "V_ANY", "VIEW")));
         Assert.False(m.Shows(new DbObjectRef("S", "SYNC", "JOB")));
@@ -92,13 +92,13 @@ public sealed class SavedFilterMatcherTests
         new(new SchemaBrowserFilter { Scope = SchemaFilterScope.Pattern, SchemaPattern = pattern }, "SCOTT");
 
     [Theory]
-    [InlineData("APUSER$", "MESAPUSER", true)]
-    [InlineData("APUSER$", "APUSER_OLD", false)]
-    [InlineData("apuser", "MESAPUSER", true)] // 대소문자 무시, 일부 일치
+    [InlineData("_USER$", "APP_USER", true)]
+    [InlineData("_USER$", "APP_USER_OLD", false)]
+    [InlineData("_user", "APP_USER", true)] // 대소문자 무시, 일부 일치
     [InlineData("^HR$", "HR", true)]
     [InlineData("^HR$", "HR2", false)]
-    [InlineData("^(MES|EAI)", "EAIAPUSER", true)]
-    [InlineData("^(MES|EAI)", "SCOTT", false)]
+    [InlineData("^(APP|EAI)", "EAI_USER", true)]
+    [InlineData("^(APP|EAI)", "SCOTT", false)]
     [InlineData("  ", "ANY", true)] // 비면 모두
     [InlineData(null, "ANY", true)]
     public void Schema_pattern_is_a_case_insensitive_partial_regex(string? pattern, string schema, bool expected)
@@ -112,13 +112,13 @@ public sealed class SavedFilterMatcherTests
     [Fact]
     public void Invalid_schema_pattern_shows_no_schema_and_warns()
     {
-        var m = PatternMatcher("(APUSER");
+        var m = PatternMatcher("(_USER");
 
-        Assert.False(m.ShowsSchema("MESAPUSER"));
+        Assert.False(m.ShowsSchema("APP_USER"));
         Assert.NotNull(m.SchemaPatternWarning);
         Assert.Null(SavedFilterMatcher.TryParseSchemaPattern("[", out var error));
         Assert.False(string.IsNullOrWhiteSpace(error));
-        Assert.NotNull(SavedFilterMatcher.TryParseSchemaPattern("APUSER$", out error));
+        Assert.NotNull(SavedFilterMatcher.TryParseSchemaPattern("_USER$", out error));
         Assert.Null(error);
     }
 

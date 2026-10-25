@@ -148,7 +148,7 @@ public sealed class StatementsGridTests : IDisposable
     {
         if (UserMapperPath is not { } userMapper)
         {
-            return; // 사내 파일이라 저장소에 없다: 없으면 건너뛴다
+            return; // 저장소 밖 파일이라 저장소에 없다: 없으면 건너뛴다
         }
 
         var (host, vm, _, window) = await ShowAsync(userMapper);

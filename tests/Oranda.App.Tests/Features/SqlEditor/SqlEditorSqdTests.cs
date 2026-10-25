@@ -124,16 +124,16 @@ public sealed partial class SqlEditorTests
     });
 
     [Fact]
-    public Task The_real_orange_sample_opens_as_19_sql_tabs() => Ui.Run(async () =>
+    public Task The_fake_orange_sample_opens_as_8_sql_tabs() => Ui.Run(async () =>
     {
         var host = new SqlEditorHost();
 
         var file = await host.OpenWorkspaceFileAsync(WorkspaceFilesSqdTests.SamplePath, default);
 
-        Assert.Equal(19, host.ActiveWorkspace!.Tabs.Count);
-        Assert.Equal("라인길이 계산 공정.sql", host.ActiveWorkspace.Tabs[0].Title);
+        Assert.Equal(8, host.ActiveWorkspace!.Tabs.Count);
+        Assert.Equal("주문 집계.sql", host.ActiveWorkspace.Tabs[0].Title);
         Assert.Empty(file!.Notes);
-        Assert.Contains(host.ActiveWorkspace.Tabs.SelectMany(t => t.Binds.Rows), r => r.Name.Trim() == "WORD_DH" && r.Text == "2022-07-12");
+        Assert.Contains(host.ActiveWorkspace.Tabs.SelectMany(t => t.Binds.Rows), r => r.Name.Trim() == "REPORT_DT" && r.Text == "2024-01-15");
     });
 
     [Fact]

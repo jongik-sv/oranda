@@ -178,7 +178,7 @@ public sealed class OracleFreeProbeTests
 }
 
 /// <summary>
-/// 사내 19c / ADB. 환경 변수가 없으면 시험이 아무것도 하지 않고 반환한다(xunit 2.5 에는 동적 Skip 이 없다).
+/// 별도 19c / ADB. 환경 변수가 없으면 시험이 아무것도 하지 않고 반환한다(xunit 2.5 에는 동적 Skip 이 없다).
 /// ORANDA_IT_19C_CONNSTR, ORANDA_IT_ADB_CONNSTR = ODP.NET 연결 문자열 전체.
 /// ORANDA_IT_ADB_WALLET = 지갑 폴더(생략하면 지갑 없는 TLS).
 /// </summary>
@@ -190,7 +190,7 @@ public sealed class ExternalDbProbeTests
     {
         if (Environment.GetEnvironmentVariable("ORANDA_IT_19C_CONNSTR") is not { Length: > 0 } cs)
         {
-            return; // 보류: 사내 19c 접속 정보 필요
+            return; // 보류: 별도 19c 접속 정보 필요
         }
 
         await using var conn = new OracleConnection(cs);

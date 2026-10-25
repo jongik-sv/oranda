@@ -35,7 +35,7 @@ public static class FormatterOptionSchema
         ["indent.plsqlBlock"] = "PL/SQL 블록 들여쓰기 단계",
         ["commaPosition"] = "쉼표 위치",
         ["keywordAlign"] = "절 키워드 맞춤(Left/Right)",
-        ["clauseLayout"] = "절 배치(Indent/Column = 사내 서식 7열)",
+        ["clauseLayout"] = "절 배치(Indent/Column = 하우스 서식 7열)",
         ["operatorSpacing"] = "연산자 앞뒤 공백",
         ["parenInnerSpace"] = "괄호 안쪽 공백",
         ["lineBreaks.selectList"] = "SELECT 목록 배치",
@@ -151,7 +151,7 @@ public static class FormatterOptionSchema
         ["lineBreaks.selectList"] = [("OnePerLine", "한 줄에 하나"), ("FillToWidth", "너비까지 채움")],
         ["lineBreaks.groupOrderBy"] = [("SingleLine", "한 줄"), ("MultiLine", "여러 줄")],
         ["lineBreaks.orderBy"] = [("FollowGroupBy", "= GROUP BY"), ("SingleLine", "한 줄"), ("MultiLine", "여러 줄")],
-        ["clauseLayout"] = [("Indent", "들여쓰기"), ("Column", "열 맞춤(사내)")],
+        ["clauseLayout"] = [("Indent", "들여쓰기"), ("Column", "열 맞춤(하우스)")],
         ["lineBreaks.andOr"] = [("Before", "앞에서"), ("After", "뒤에서"), ("None", "안 함")],
         ["statementTerminator"] = [("Keep", "그대로"), ("Add", "붙임"), ("Remove", "뺌")],
     };
@@ -201,7 +201,7 @@ public static class FormatterOptionSchema
     }
 
     /// <summary>
-    /// 지금 값들로 보아 이 옵션이 출력에 효과가 없으면 그 이유(효과가 있으면 null). 절 배치가 열 맞춤(사내 서식)이면 「키워드 맞춤」은 쓰지 않고,
+    /// 지금 값들로 보아 이 옵션이 출력에 효과가 없으면 그 이유(효과가 있으면 null). 절 배치가 열 맞춤(하우스 서식)이면 「키워드 맞춤」은 쓰지 않고,
     /// 「비교 맞춤」은 열 맞춤에서만 쓴다(TSK-13-43).
     /// </summary>
     public static string? InapplicableReason(string path, Func<string, string?> choiceOf)
@@ -210,8 +210,8 @@ public static class FormatterOptionSchema
         var column = choiceOf("clauseLayout") == nameof(ClauseLayout.Column);
         return path switch
         {
-            "keywordAlign" when column => "절 배치가 열 맞춤(사내 서식)이면 쓰지 않습니다",
-            "align.comparison" when !column => "절 배치가 열 맞춤(사내 서식)일 때만 씁니다",
+            "keywordAlign" when column => "절 배치가 열 맞춤(하우스 서식)이면 쓰지 않습니다",
+            "align.comparison" when !column => "절 배치가 열 맞춤(하우스 서식)일 때만 씁니다",
             _ => null,
         };
     }

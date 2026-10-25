@@ -1,7 +1,7 @@
 # TSK-01-04 시작 시간·메모리 측정과 단축 방안 — 결과
 
 - 측정일 2026-10-19, Windows 11 Pro 10.0.26300(Insider 빌드), .NET SDK 10.0.402 / 런타임 10.0.13, Avalonia 12.1.4.
-- 이 PC 에는 사내 백신(AhnLab V3: `ASDSvc`, `V3UI`)이 돈다. macOS 는 장비가 없어 **보류**.
+- 이 PC 에는 백신이 돈다. macOS 는 장비가 없어 **보류**.
 - 대상: `StartupProbe/` = `src/Oranda.App`(2eaf738) 복제본에 단계 표식만 더한 측정 전용 진입점. 같은 src 프로젝트(Core·Language·Oracle·Platform)를 참조해 게시 폴더 구성이 실제 App 과 같다. 실제 App 은 수정하지 않았다.
 - 게시: Release, self-contained, win-x64(`publish.ps1`). 측정: `measure.ps1`(실행 전 워밍업 1회 버림 → N회, 중앙값). 최종 표는 모두 측정 잠금을 잡고 돌렸다(`run-locked.ps1`). 원자료 = `results/round*/runs.csv`.
 - **N = 9 회 중앙값**(시험 기준은 5회). 첫 프레임 구간이 60 ms / 500 ms 두 갈래로 갈리는(bimodal) 현상이 있어 5회 중앙값이 흔들렸다(1차 5회 결과는 `results/round1`). 같은 사례의 회차 간 차이는 ±80 ms 안팎.
@@ -129,7 +129,7 @@
 - **이 PC 에서 입력 가능 1.5 s 이하를 달성한 설정은 없다.** 최선은 R2R composite 1.67~1.83 s(회차별 중앙값)다.
 - 이 중 약 0.43 s 는 App 과 무관한 이 PC 의 첫 STA/첫 창 비용이다(Avalonia 없는 hello 도 같은 비용을 낸다). 이를 빼면 composite 는 약 1.24~1.40 s 다. 깨끗한 PC 에서는 1.5 s 달성 가능성이 높지만 **미확인**이다.
 - 대안 목표(제안):
-  1. 시작 예산을 둘로 나눈다. ⓐ **프로세스 내부 구간(main → input-ready) 1.3 s 이하**(App 이 책임질 몫, 이 PC 의 composite 실측 1.17~1.32 s), ⓑ 전체(프로세스 시작 → input-ready)는 기준 PC 에서 1.5 s 이하. 백신·IME 가 있는 사내 PC 는 1.9 s 이하를 허용한다.
+  1. 시작 예산을 둘로 나눈다. ⓐ **프로세스 내부 구간(main → input-ready) 1.3 s 이하**(App 이 책임질 몫, 이 PC 의 composite 실측 1.17~1.32 s), ⓑ 전체(프로세스 시작 → input-ready)는 기준 PC 에서 1.5 s 이하. 백신·IME 가 있는 PC 는 1.9 s 이하를 허용한다.
   2. 기준 PC(보안 SW 가 없는 Windows 10/11, 같은 사양)를 정해 1.5 s 를 다시 잰다. 거기서도 미달이면 ②(Win32 플랫폼 1.0 s)를 Avalonia 이슈로 올리고 PRD 목표를 재협의한다.
 - 측정 지표: CI·성능 시험은 `first-render`(첫 rAF)가 아니라 **실제 첫 프레임(두 번째 rAF) 또는 input-ready** 로 판정한다.
 
@@ -171,7 +171,7 @@
 ## decisions 후보
 
 1. 게시본은 ReadyToRun **composite**(self-contained, win-x64)로 낸다. 트리밍·Inter 글꼴 제거·TieredPGO 끄기는 시작 시간 효과가 없어 쓰지 않는다. ODP.NET 은 시작 경로 밖에서 지연 로딩한다.
-2. 1.5 s 목표는 「기준 PC 전체 1.5 s + 프로세스 내부(main → input-ready) 1.3 s」로 나눈다. 사내 보안 SW PC 는 1.9 s 까지 허용한다. 판정 지표는 실제 첫 프레임(두 번째 rAF) 또는 input-ready, 9회 중앙값이다.
+2. 1.5 s 목표는 「기준 PC 전체 1.5 s + 프로세스 내부(main → input-ready) 1.3 s」로 나눈다. 백신이 도는 PC 는 1.9 s 까지 허용한다. 판정 지표는 실제 첫 프레임(두 번째 rAF) 또는 input-ready, 9회 중앙값이다.
 3. T-D07: 1.0 은 ReadyToRun composite 를 유지한다. NativeAOT 는 UI 스택 경고 0, ODP.NET 경고 53 이다. ODP.NET 이 AOT 호환을 내기 전에는 보류한다.
 
 ## 재현

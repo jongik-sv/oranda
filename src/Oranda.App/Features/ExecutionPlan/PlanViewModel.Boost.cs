@@ -357,7 +357,7 @@ public sealed partial class PlanViewModel
         if (!HasTuningPack(session))
         {
             SetReport(PlanReportState.NoLicense, "이 접속 프로필에 Tuning Pack 보유가 선언되어 있지 않아 DBMS_SQLTUNE.REPORT_SQL_MONITOR 를 보내지 않았습니다.\n"
-                + "회사가 이 팩을 갖고 있다면 접속 관리자 › 이 접속 › 라이선스 에서 「Diagnostics + Tuning」 을 고르세요.");
+                + "조직이 이 팩을 갖고 있다면 접속 관리자 › 이 접속 › 라이선스 에서 「Diagnostics + Tuning」 을 고르세요.");
             return;
         }
 

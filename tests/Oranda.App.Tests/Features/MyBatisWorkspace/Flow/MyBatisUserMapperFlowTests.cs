@@ -22,8 +22,8 @@ using Xunit.Abstractions;
 namespace Oranda.App.Tests.Features.MyBatisWorkspace.Flow;
 
 /// <summary>
-/// TSK-04-01 I1(사용자 매퍼): 사용자가 가진 큰 매퍼(사내 파일, 쿼리 153개 안팎)로 UI 흐름을 잇는다. DB 는 쓰지 않는다 — 쿼리가 DB 에서 도는지는 사용자 확인 몫.
-/// 파일이 없으면 아무것도 하지 않고 끝난다. 사내 파일은 읽기만 하고 임시 폴더에 복사본을 만들어 쓴다(공개 저장소에 쿼리 본문·이름을 옮기지 않으므로
+/// TSK-04-01 I1(사용자 매퍼): 사용자가 가진 큰 매퍼(저장소 밖 파일, 쿼리 153개 안팎)로 UI 흐름을 잇는다. DB 는 쓰지 않는다 — 쿼리가 DB 에서 도는지는 사용자 확인 몫.
+/// 파일이 없으면 아무것도 하지 않고 끝난다. 저장소 밖 파일은 읽기만 하고 임시 폴더에 복사본을 만들어 쓴다(공개 저장소에 쿼리 본문·이름을 옮기지 않으므로
 /// 시험 출력에는 개수와 id 자리 번호만 적는다).
 /// </summary>
 public sealed partial class MyBatisUserMapperFlowTests(ITestOutputHelper output)

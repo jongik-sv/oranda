@@ -171,7 +171,7 @@
 | `name` | string | ● | | 표시 이름 |
 | `options` | `FormatterOptions` | ○ | 아래 기본값 전부 | `ISqlFormatter.Format` 에 그대로 넘긴다 |
 
-`options` (`FormatterOptions`) — 기본값 = 옛 「Oranda 기본」 출력(파일에 없는 필드도 이 값으로 읽는다). 기본 제공 「Oranda 기본」(`oranda-default`)은 사내 쿼리 서식 값(`FormatterOptions.OrandaDefault`, TSK-13-43: `case.identifier` `Upper`·`commaPosition` `Leading`·`clauseLayout` `Column`·`lineBreaks.groupOrderBy` `MultiLine`·`lineBreaks.orderBy` `SingleLine`·`lineBreaks.inListThreshold` 0·`align.alias` false·`align.comparison` true):
+`options` (`FormatterOptions`) — 기본값 = 옛 「Oranda 기본」 출력(파일에 없는 필드도 이 값으로 읽는다). 기본 제공 「Oranda 기본」(`oranda-default`)은 쿼리 서식 값(`FormatterOptions.OrandaDefault`, TSK-13-43: `case.identifier` `Upper`·`commaPosition` `Leading`·`clauseLayout` `Column`·`lineBreaks.groupOrderBy` `MultiLine`·`lineBreaks.orderBy` `SingleLine`·`lineBreaks.inListThreshold` 0·`align.alias` false·`align.comparison` true):
 
 | 필드 | 형식 | 기본값 | PRD |
 |---|---|---|---|

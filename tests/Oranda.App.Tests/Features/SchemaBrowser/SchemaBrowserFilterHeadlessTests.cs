@@ -43,8 +43,8 @@ public sealed class SchemaBrowserFilterHeadlessTests
     public Task Typing_slowly_with_an_open_category_and_a_selected_object_filters_the_tree() => HeadlessHost.Run(async () =>
     {
         var h = new SchemaBrowserTests.Harness();
-        h.Meta.Objects.AddRange(Enumerable.Range(0, 1200).Select(i => new Oranda.Core.Metadata.DbObjectRef("HR", $"TB_M30_T{i:D4}", "TABLE")));
-        h.Meta.Objects.Add(new Oranda.Core.Metadata.DbObjectRef("HR", "TB_M30_SMTL_MASTER_DTL", "TABLE"));
+        h.Meta.Objects.AddRange(Enumerable.Range(0, 1200).Select(i => new Oranda.Core.Metadata.DbObjectRef("HR", $"TB_ORD_T{i:D4}", "TABLE")));
+        h.Meta.Objects.Add(new Oranda.Core.Metadata.DbObjectRef("HR", "TB_ORD_MASTER_DTL", "TABLE"));
         h.Vm.DebounceMilliseconds = 300;
         await h.Vm.SetSessionAsync(h.Session);
         var view = new SchemaBrowserView { DataContext = h.Vm };
@@ -58,14 +58,14 @@ public sealed class SchemaBrowserFilterHeadlessTests
         var tables = hr.Children.Single(c => c.CategoryType == "TABLE");
         tables.IsExpanded = true;
         await Pump(() => tables.Loaded);
-        var picked = tables.Children.First(c => c.Title == "TB_M30_T0003");
+        var picked = tables.Children.First(c => c.Title == "TB_ORD_T0003");
         picked.IsExpanded = true;
         h.Vm.SelectedNode = picked;
         await Pump(() => picked.Loaded);
 
         var box = view.GetVisualDescendants().OfType<TextBox>().Single(t => t.Name == "FilterBox");
         box.Focus();
-        foreach (var ch in "SMTL_MAS")
+        foreach (var ch in "MASTER_D")
         {
             window.KeyTextInput(ch.ToString());
             await Task.Delay(120);
@@ -73,9 +73,9 @@ public sealed class SchemaBrowserFilterHeadlessTests
         }
 
         await Pump(() => hr.Children.SingleOrDefault(c => c.CategoryType == "TABLE")?.Children.Count == 1, 3000);
-        Assert.Equal("SMTL_MAS", h.Vm.FilterText);
+        Assert.Equal("MASTER_D", h.Vm.FilterText);
         var after = hr.Children.Single(c => c.CategoryType == "TABLE");
-        Assert.Equal(["TB_M30_SMTL_MASTER_DTL"], after.Children.Select(c => c.Title));
+        Assert.Equal(["TB_ORD_MASTER_DTL"], after.Children.Select(c => c.Title));
         window.Close();
     });
 

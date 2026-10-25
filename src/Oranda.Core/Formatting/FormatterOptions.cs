@@ -40,7 +40,7 @@ public enum ByListLayout
 }
 
 /// <summary>
-/// 질의 절 배치(TSK-13-43). <see cref="Indent"/> = 절 본문을 들여 쓰는 옛 출력. <see cref="Column"/> = 사내 쿼리 서식:
+/// 질의 절 배치(TSK-13-43). <see cref="Indent"/> = 절 본문을 들여 쓰는 옛 출력. <see cref="Column"/> = 쿼리 서식:
 /// 절 키워드 맨 앞 열·본문 7번째 열·앞 쉼표 5번째 열·여러 줄 괄호 묶음(여는·닫는 괄호 혼자 한 줄, 안쪽 +들여쓰기)·짧은 서브쿼리와 CASE 는 한 줄.
 /// Column 은 SELECT·WITH·INSERT·UPDATE·DELETE 문에만 쓰고 나머지(MERGE·DDL·PL/SQL)는 Indent 로 둔다.
 /// </summary>
@@ -86,12 +86,12 @@ public sealed record FormatterProfile
 
 /// <summary>
 /// 서식 옵션. 속성 기본값 = 옛 「Oranda 기본」(TSK-13-43 전) 출력이며 저장된 프로필 파일에 없는 새 속성도 이 값으로 읽힌다(사용자 프로필 출력 불변).
-/// 기본 제공 「Oranda 기본」 프로필(oranda-default)의 옵션은 <see cref="OrandaDefault"/>(사내 쿼리 서식, TSK-13-43).
+/// 기본 제공 「Oranda 기본」 프로필(oranda-default)의 옵션은 <see cref="OrandaDefault"/>(쿼리 서식, TSK-13-43).
 /// </summary>
 public sealed record FormatterOptions
 {
     /// <summary>
-    /// 기본 제공 「Oranda 기본」 프로필 옵션 = 사내 쿼리 서식(키워드·이름 대문자, 절 키워드 맨 앞 열·본문 7번째 열, 앞 쉼표,
+    /// 기본 제공 「Oranda 기본」 프로필 옵션 = 쿼리 서식(키워드·이름 대문자, 절 키워드 맨 앞 열·본문 7번째 열, 앞 쉼표,
     /// GROUP BY 여러 줄·ORDER BY 한 줄, 외부 조인·같은 칼럼 범위 비교 맞춤, 120자). TSK-13-43.
     /// </summary>
     public static FormatterOptions OrandaDefault { get; } = new()

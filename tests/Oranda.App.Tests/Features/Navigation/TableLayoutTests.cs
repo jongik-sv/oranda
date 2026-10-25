@@ -18,7 +18,7 @@ public class TableLayoutTests
     [Fact]
     public void Model_reads_columns_in_position_order_with_pk_default_and_comment()
     {
-        var obj = new DbObjectRef("MESAPUSER", "TB_M47_COIL_CMN", "TABLE");
+        var obj = new DbObjectRef("APP_USER", "TB_ORD_CMN", "TABLE");
         var table = new TableInfo(obj,
         [
             new ColumnInfo("COIL_THK", 7, "NUMBER") { Precision = 5, Scale = 3 },
@@ -30,7 +30,7 @@ public class TableLayoutTests
         };
 
         var m = TableLayoutModel.From(obj, table);
-        Assert.Equal("MESAPUSER.TB_M47_COIL_CMN", m.Title);
+        Assert.Equal("APP_USER.TB_ORD_CMN", m.Title);
         Assert.Equal(["COIL_ID", "STS", "COIL_THK"], m.Rows.Select(r => r.Name).ToArray());
         Assert.Equal(["VARCHAR2(7)", "VARCHAR2(1)", "NUMBER(5,3)"], m.Rows.Select(r => r.TypeText).ToArray());
         Assert.Equal([true, false, false], m.Rows.Select(r => r.NotNull).ToArray());

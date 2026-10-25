@@ -112,7 +112,7 @@ dotnet, testhost, Oranda.App
 - data-model: -
 - ui-spec: -
 
-### TSK-01-03: 실제 DB 접속 시험 (26ai 컨테이너·사내 19c·ADB)
+### TSK-01-03: 실제 DB 접속 시험 (26ai 컨테이너·별도 19c·ADB)
 - category: research
 - domain: infra
 - model: sonnet
@@ -130,14 +130,14 @@ dotnet, testhost, Oranda.App
 - prd-ref: PRD 9.1, TRD 11
 - requirements:
   - gvenzl/oracle-free:23-slim 컨테이너로 접속·ServerProbe 결과를 확인한다
-  - 사내 19c 공유 DB 접속 정보를 받아 같은 시험을 한다
+  - 공유 19c DB 접속 정보를 받아 같은 시험을 한다
   - ADB 지갑 있음·없음 TLS 접속을 시험한다(인스턴스가 있으면)
   - Windows와 macOS ARM에서 각각 확인한다
 - acceptance:
   - 세 대상의 버전·PDB·권한 점검 결과가 실제와 같다
   - 실패 항목은 원인과 대안이 decisions.md 에 있다
 - constraints:
-  - 19c 공개 컨테이너 이미지는 없으므로 사내 DB를 쓴다
+  - 19c 공개 컨테이너 이미지는 없으므로 별도 DB를 쓴다
   - 접속 비밀번호를 저장소·로그에 남기지 않는다
 - test-criteria:
   - Category=Integration 시험 초안
@@ -318,7 +318,7 @@ dotnet, testhost, Oranda.App
 - requirements:
   - 게시본(Release·ReadyToRun composite) 시작 → 입력 가능 중앙값이 Windows 개발 PC 에서 2.6 s (p95 3.1 s) 다. 구간: Main 전 약 0.6 s, Avalonia Win32 플랫폼 초기화 약 1.0 s(첫 창/STA 1회성 약 0.4 s 포함), 셸 조립·창 생성 약 0.2 s, 첫 프레임 약 0.45 s, 시작 작업 약 0.2 s
   - 시간을 줄일 후보를 시도해 효과를 측정한다: ① 첫 프레임 레이아웃 줄이기(Dock 도구 창을 처음 보일 때까지 미루기) ② 시작 때 JIT 되는 약 3,400 메서드(제네릭 값 형식 인스턴스·람다·컴파일된 XAML) 줄이기 또는 R2R 로 미리 만들기 ③ 플랫폼 초기화(렌더러 후보 ANGLE/소프트웨어 선택, 글꼴 열거)와 첫 창 비용 비교 ④ 설치 파일에서 PDB 제외로 디스크 읽기 줄이기
-  - 최초 실행(새로 풀린 파일, 백신 검사)이 중앙값 11 s (7~33 s) 다. 설치 파일 크기를 줄이고(TSK-10-06) 실행 파일 수·크기를 줄이는 방안을 본다. 사내 백신 예외 등록 안내는 사용자 문서에 적는다
+  - 최초 실행(새로 풀린 파일, 백신 검사)이 중앙값 11 s (7~33 s) 다. 설치 파일 크기를 줄이고(TSK-10-06) 실행 파일 수·크기를 줄이는 방안을 본다. 백신 예외 등록 안내는 사용자 문서에 적는다
   - 목표(1.5 s)가 이 PC 환경에서 도달 가능한지 판단한다: 같은 PC 의 빈 Avalonia 창(spikes/TSK-01-04 HelloFloor)이 1.8 s 였다. 도달 불가이면 PRD 7.2 의 기준 장비·목표를 사람이 다시 정한다
 - acceptance:
   - Oranda.Perf --discard 2 --runs 12 (고정 데이터 폴더) 입력 가능 중앙값 1.5 s 이하, 또는 도달 불가 근거와 새 목표가 PRD 7.2 에 반영됨
@@ -708,7 +708,7 @@ dotnet, testhost, Oranda.App
   - Keep Alive, 끊김 감지(ORA-03113 등)와 미커밋 손실 알림
   - 계약 Task design.md 「기능 Task 편집 지점」 의 자기 소유 파일만 고친다
 - acceptance:
-  - 26ai 컨테이너·사내 19c 에 접속하고 점검 결과가 맞다
+  - 26ai 컨테이너·별도 19c 에 접속하고 점검 결과가 맞다
   - 버전 문자열 18.x·21.x·12.x 를 넣은 단위 시험에서 접속이 거부된다
   - 서버 v$session 에서 module=Oranda 가 보인다
 - constraints:
@@ -852,7 +852,7 @@ dotnet, testhost, Oranda.App
 - depends: TSK-03-03
 - blocked-by: -
 - entry-point: 접속 관리자에서 11.2 서버로 접속 → SQL 실행·스키마 브라우저·실행 계획·세션 모니터
-- note: 담당 PC: win144(Windows 개발 PC) — 맥북 세션은 이 Task 를 하지 않는다. 2026-10-20 사용자 결정(D-026)으로 D-06 의 11.2 「나중 검토」 를 지금 한다. 사전 점검(개발 PC, 사내 시험 DB 11.2.0.3 AL32UTF8): ODP.NET Core 23.26.301 과 19.x 둘 다 접속·조회됨 → 구버전 드라이버 불필요. 카탈로그 57개 중 15개가 11g 에서 실패: FETCH FIRST 8개(meta/objects, dbinfo/object_search·source_search·column_search(하위질의 안), session/open_cursors·sql_text, sql/full_text·top), 12c+ 열 7개 파일(dbinfo/database v$database.cdb, dbinfo/instance v$instance.edition·version_full, dbinfo/version v$version.banner_full, meta/columns·columns.23 all_tab_cols.identity_column·user_generated, meta/constraints search_condition_vc, meta/detail_general all_objects.editionable). 그 시험 DB 의 사용자 스키마에 plan_id 없는 옛 PLAN_TABLE 이 있어 plan/explain_steps 도 실패(버전 무관). 나머지 41개는 통과. 결과(2026-10-20): SupportedServerPolicy 가 11.2 만 더 허용(11.1 이하·12·18·21 거부). 카탈로그 하한 11, 깨지는 14개 id 에 .11.sql 변형 15개(columns.23 은 23 그대로), 나머지 41개는 min-version 11 로 내림, explain_steps 는 p.* 를 열 이름으로 읽음(옛 PLAN_TABLE 허용), 11g 제약은 LONG 조건을 읽어 NOT NULL 을 코드에서 거름. 빌드 검사 규칙 pre12c-feature 추가. ServerInfo.Features(ServerFeatures) 로 12c+ 항목을 끄고 상세의 editionable 은 「이 서버 버전에서는 쓸 수 없음」, 열 구역의 Identity·보이지 않음·도메인 칸은 숨김. 상태 표시줄 11.2 표시. 통합 시험 Oracle11gTests 12개(gvenzl/oracle-xe:11 풀 이미지, slim 은 DBMS_METADATA 스타일시트가 없어 DDL 불가) 통과. 개발 PC podman 포트 중계에서는 OOB 가 사라져 11g 실행 중 취소가 끝나지 않는다(드라이버가 브레이크 응답을 기다림) — 시험 프로세스만 OracleConfiguration.DisableOOB=true 로 돌려 통과(취소 2 s 안). 앱 기본값 변경 여부는 결정 필요
+- note: 담당 PC: win144(Windows 개발 PC) — 맥북 세션은 이 Task 를 하지 않는다. 2026-10-20 사용자 결정(D-026)으로 D-06 의 11.2 「나중 검토」 를 지금 한다. 사전 점검(개발 PC, 시험 DB 11.2.0.3 AL32UTF8): ODP.NET Core 23.26.301 과 19.x 둘 다 접속·조회됨 → 구버전 드라이버 불필요. 카탈로그 57개 중 15개가 11g 에서 실패: FETCH FIRST 8개(meta/objects, dbinfo/object_search·source_search·column_search(하위질의 안), session/open_cursors·sql_text, sql/full_text·top), 12c+ 열 7개 파일(dbinfo/database v$database.cdb, dbinfo/instance v$instance.edition·version_full, dbinfo/version v$version.banner_full, meta/columns·columns.23 all_tab_cols.identity_column·user_generated, meta/constraints search_condition_vc, meta/detail_general all_objects.editionable). 그 시험 DB 의 사용자 스키마에 plan_id 없는 옛 PLAN_TABLE 이 있어 plan/explain_steps 도 실패(버전 무관). 나머지 41개는 통과. 결과(2026-10-20): SupportedServerPolicy 가 11.2 만 더 허용(11.1 이하·12·18·21 거부). 카탈로그 하한 11, 깨지는 14개 id 에 .11.sql 변형 15개(columns.23 은 23 그대로), 나머지 41개는 min-version 11 로 내림, explain_steps 는 p.* 를 열 이름으로 읽음(옛 PLAN_TABLE 허용), 11g 제약은 LONG 조건을 읽어 NOT NULL 을 코드에서 거름. 빌드 검사 규칙 pre12c-feature 추가. ServerInfo.Features(ServerFeatures) 로 12c+ 항목을 끄고 상세의 editionable 은 「이 서버 버전에서는 쓸 수 없음」, 열 구역의 Identity·보이지 않음·도메인 칸은 숨김. 상태 표시줄 11.2 표시. 통합 시험 Oracle11gTests 12개(gvenzl/oracle-xe:11 풀 이미지, slim 은 DBMS_METADATA 스타일시트가 없어 DDL 불가) 통과. 개발 PC podman 포트 중계에서는 OOB 가 사라져 11g 실행 중 취소가 끝나지 않는다(드라이버가 브레이크 응답을 기다림) — 시험 프로세스만 OracleConfiguration.DisableOOB=true 로 돌려 통과(취소 2 s 안). 앱 기본값 변경 여부는 결정 필요
 
 #### PRD 요구사항
 - prd-ref: PRD 6.x 지원 서버·C-03·D-06·11.3
@@ -870,11 +870,11 @@ dotnet, testhost, Oranda.App
   - 19c·23ai/26ai 의 동작과 시험 결과는 바뀌지 않는다
 - constraints:
   - 드라이버는 지금 것(ODP.NET Core 23.26.301) 하나만 쓴다. 구버전 드라이버를 싣지 않는다
-  - 사내 시험 DB 계정·TNS 주소를 저장소에 넣지 않는다(공개 저장소)
+  - 시험 DB 계정·TNS 주소를 저장소에 넣지 않는다(공개 저장소)
 - test-criteria:
   - 11g 컨테이너(gvenzl/oracle-xe:11-slim, 11.2.0.2 XE)로 카탈로그 전 항목·핵심 흐름 통합 시험(Category=Integration, 기존 공유 컨테이너 방식과 같게 시작). 컨테이너를 받을 수 없으면 그 사실을 결과에 남긴다
   - 정책·카탈로그 선택 단위 시험(11.2 허용, 11.1·12·18·21 거부, 11 변형 선택)
-  - 사내 시험 DB(11.2.0.3) 수동 확인은 조정 세션이 따로 한다
+  - 시험 DB(11.2.0.3) 수동 확인은 조정 세션이 따로 한다
 
 #### 기술 스펙 (TRD)
 - tech-spec: -
@@ -893,7 +893,7 @@ dotnet, testhost, Oranda.App
 - tags: defect, connection, multi-session, orange-parity, win144
 - depends: TSK-03-03, TSK-03-04
 - blocked-by: -
-- entry-point: 툴바 접속 콤보(1 - MESAPUSER@UBMADQ, 2 - …), 접속 관리자 「접속」, 작업 공간·SQL 탭
+- entry-point: 툴바 접속 콤보(1 - APP_USER@TESTDB, 2 - …), 접속 관리자 「접속」, 작업 공간·SQL 탭
 - note: 담당 PC: win144(Windows 개발 PC) — 맥북 세션은 이 Task 를 하지 않는다. 2026-10-20 사용자 요청(오렌지처럼 여러 세션 연결). PRD CONN-06(P0, M1)·ui-shell.md 34·140·200·202행에 이미 정해진 요구인데 구현이 빠졌다. 2026-10-20 구현: ConnectionService 가 작업 세션을 여러 개(연 순서, 상한 10, 프로필당 1개) 들고 「지금 접속」(ActiveSession)을 따로 둔다 — 새 접속은 기존 세션을 닫지 않고, 이미 열린 프로필이면 그 접속으로 바꾸며, 끊긴 것은 같은 번호 자리에 다시 연다. ExecutionState 는 세션마다 상태(실행·미커밋·경과)를 든다. 세션 고르기는 SessionRouter(Features/ConnectionManager) 한 곳: 탭 → 전용 세션 → ConnectionProfileId 의 열린 세션(없으면 접속 안 됨) → 지금 접속, Sessions.LastOrDefault(Work)·ActiveSession 추측을 걷어냈다. 툴바 맨 왼쪽 접속 콤보(「번호 - 사용자@이름」+환경 칩, 접속 안 됨(이름)), switchSession = 콤보 펼치기, 탭 전환·콤보 선택 → 상태 표시줄·창 테두리·스키마 브라우저가 따른다, 창 제목 [운영] = 운영 접속이 하나라도 열려 있으면. 실행·트랜잭션·전용 세션·PL/SQL 실행·그리드 편집·데이터 이동·이력은 탭 접속 세션으로, 접속 안 됨 탭 실행은 「다시 접속 / 지금 접속으로 / 취소」 묻기, 접속 끊기는 보이는 접속 하나, 앱 종료 미커밋 확인은 접속마다(끊긴 접속은 서버가 되돌렸다고 알림). 작업 공간 복원은 탭 접속 프로필을 기억하고 자동 접속하지 않는다. 시험: 단위·Headless(콤보·탭 동기화·복원) + 26ai 통합 MultiConnectionFlowTests(사용자 2명, 탭별 USER·트랜잭션 분리·끊기 영향 범위). 남김(낮음): 같은 프로필 다시 접속 두 번이면 비밀번호 창 두 번, 대화상자 제목·단추 글 한국어 고정, 객체 탐색이 닫힌 프로필이면 지금 접속으로 메타데이터 조회
 
 #### PRD 요구사항
@@ -1363,7 +1363,7 @@ dotnet, testhost, Oranda.App
   - 깨진 .sqd(줄 수 모자람, COUNT 불일치)를 열어도 앱이 죽지 않고 알림이 보인다
   - .sqd 로 연 작업 공간에서 저장하면 .sqd 가 바뀌지 않고 다른 이름으로 저장을 묻는다
 - constraints:
-  - 실제 표본은 사용자가 허가한 1개(tests/Oranda.App.Tests/Features/SqlEditor/TestData/orange-workspace-sample.sqd)만 둔다. 깨진 파일 등 나머지 시험 자료는 가짜 SQL 을 CP949 로 만들어 쓴다
+  - 가짜 표본 1개(tests/Oranda.App.Tests/Features/SqlEditor/TestData/orange-workspace-sample.sqd, 같은 구조의 가짜 SQL 을 CP949 로 만듦)만 둔다. 깨진 파일 등 나머지 시험 자료도 가짜 SQL 을 CP949 로 만들어 쓴다
 - test-criteria:
   - ReadSqd 단위 시험: CP949 한글, 본문에 NAME=/STMT= 로 시작하는 줄, 빈 바인드 값, 쉼표가 든 바인드 값, 깨진 파일
   - Headless 시험: .sqd 를 열면 작업 공간 문서 탭과 SQL 탭이 생기고 바인드 창이 채워진다
@@ -2099,7 +2099,7 @@ dotnet, testhost, Oranda.App
   - 질의(SELECT·WITH, FOR UPDATE 아님) 실행 뒤에는 같은 세션에 숨은 문장을 보내지 않는다. 그래서 다음 문장의 display_cursor(null) 가 사용자 질의를 가리킨다
   - 질의 안 함수가 낸 DBMS_OUTPUT 은 다음 질의 아닌 문장 실행 뒤 함께 거둔다(유실 없음)
 - acceptance:
-  - 위 사용자 스크립트를 실행하면 마지막 결과가 tb_m47_coil_cmn 질의의 계획(ALLSTATS)이다
+  - 위 사용자 스크립트를 실행하면 마지막 결과가 tb_ord_cmn 질의의 계획(ALLSTATS)이다
   - PL/SQL 블록의 DBMS_OUTPUT 은 지금처럼 그 실행 뒤 바로 보인다
 - constraints:
   - DML 뒤 트랜잭션 표시(커밋 대기)는 지금처럼 유지한다
@@ -2306,7 +2306,7 @@ dotnet, testhost, Oranda.App
 - data-model: -
 - ui-spec: -
 
-### TSK-07-06: 객체 검색: 크기 계산 때문에 사내 DB 에서 한 스키마 검색이 약 45 초 [win144]
+### TSK-07-06: 객체 검색: 크기 계산 때문에 큰 DB 에서 한 스키마 검색이 약 45 초 [win144]
 - category: defect
 - domain: backend
 - model: sonnet
@@ -2318,7 +2318,7 @@ dotnet, testhost, Oranda.App
 - depends: TSK-07-04
 - blocked-by: -
 - entry-point: 스키마 브라우저 > 객체 검색
-- note: 담당 PC: win144(Windows 개발 PC) — 맥북 세션은 이 Task 를 하지 않는다. 2026-10-20 사내 시험 DB(11.2.0.3, 객체가 많은 운영 복제 스키마)에서 dbinfo.object_search(11 변형)를 owner 1개·max_rows 5 로 돌려 all·dba 각각 약 45 초 걸림(30 초 제한이면 ORA-01013). 원인 후보: 모든 객체마다 @SIZE@ 상관 하위질의(user_segments/dba_segments SUM)를 계산한 뒤에 ROWNUM·FETCH FIRST 로 자른다. 19c 문장도 구조가 같아 버전과 무관할 가능성이 큼 고침(2026-10-20, e4c6014): @SIZE@ 상관 하위질의 → 세그먼트를 (owner, 이름, TABLE·INDEX 계열 유형)으로 한 번 GROUP BY 한 seg 와 LEFT JOIN(@SEGMENTS@ = dba_segments 또는 USER 를 붙인 user_segments). 사내 시험 DB: 한 스키마 45 s → 0.56 s, 전체 DB 1.8~3.6 s, 크기 조건 0.6~3.1 s. 26ai·11g 통합 시험 통과
+- note: 담당 PC: win144(Windows 개발 PC) — 맥북 세션은 이 Task 를 하지 않는다. 2026-10-20 시험 DB(11.2.0.3, 객체가 많은 스키마)에서 dbinfo.object_search(11 변형)를 owner 1개·max_rows 5 로 돌려 all·dba 각각 약 45 초 걸림(30 초 제한이면 ORA-01013). 원인 후보: 모든 객체마다 @SIZE@ 상관 하위질의(user_segments/dba_segments SUM)를 계산한 뒤에 ROWNUM·FETCH FIRST 로 자른다. 19c 문장도 구조가 같아 버전과 무관할 가능성이 큼 고침(2026-10-20, e4c6014): @SIZE@ 상관 하위질의 → 세그먼트를 (owner, 이름, TABLE·INDEX 계열 유형)으로 한 번 GROUP BY 한 seg 와 LEFT JOIN(@SEGMENTS@ = dba_segments 또는 USER 를 붙인 user_segments). 시험 DB: 한 스키마 45 s → 0.56 s, 전체 DB 1.8~3.6 s, 크기 조건 0.6~3.1 s. 26ai·11g 통합 시험 통과
 
 #### PRD 요구사항
 - prd-ref: PRD SCH 객체 검색
@@ -2327,7 +2327,7 @@ dotnet, testhost, Oranda.App
   - 크기 조건이 있으면 세그먼트를 먼저 모아(GROUP BY) 붙이는 방식으로 바꿔 객체마다 하위질의를 돌리지 않는다
   - 19 문장과 11 변형을 함께 고친다
 - acceptance:
-  - 같은 사내 시험 DB 에서 한 스키마 객체 검색(크기 조건 없음)이 5 초 안에 첫 결과를 보인다
+  - 같은 시험 DB 에서 한 스키마 객체 검색(크기 조건 없음)이 5 초 안에 첫 결과를 보인다
   - 크기 조건 검색 결과가 고치기 전과 같다
 - constraints:
   - 결함을 재현하는 시험(세그먼트가 많은 스키마)이 먼저 느리고, 고친 뒤 빨라져야 한다
@@ -2550,12 +2550,12 @@ dotnet, testhost, Oranda.App
 - depends: TSK-01-07, TSK-02-05
 - blocked-by: -
 - entry-point: 메뉴 > 도움말 > 업데이트 확인, 도움말 > 오류 보고서
-- note: 자동 업데이트 부분 구현(2026-10-20, lane/auto-update): Velopack UpdateManager 를 IAppUpdater 로 감싸고(Features/Update), 도움말 > 업데이트 확인…·명령 팔레트·macOS 앱 메뉴 항목, 업데이트 창(확인/다운로드/적용), 상태 표시줄 「업데이트 x.y.z 준비됨/있음」, 설정 > 업데이트(시작 확인·자동 다운로드·피드 주소·건너뛴 버전), 시작 20초 뒤 24시간에 한 번 백그라운드 확인. 적용은 종료할 때(기본) 또는 「지금 다시 시작해 적용」이며 둘 다 메인 창의 기존 닫기 흐름(저장 안 한 탭·미커밋 확인·작업 공간 저장)을 모두 통과한 뒤에만 Velopack 갱신기를 예약한다(ApplyUpdatesAndRestart 직접 호출 없음). 무결성 = 릴리스 메타데이터 해시(서명 확인 아님, 서명 빌드는 사람 자원). 피드 주소는 http(s)·폴더(UNC 포함)·GitHub 저장소 주소를 받고 기본값은 빌드 속성 OrandaUpdateFeed(지금 비어 있음). 남은 일: 피드 게시(GitHub Releases 또는 사내 서버)·릴리스 워크플로, 충돌 보고, 사용자 문서, 서명 확인.
+- note: 자동 업데이트 부분 구현(2026-10-20, lane/auto-update): Velopack UpdateManager 를 IAppUpdater 로 감싸고(Features/Update), 도움말 > 업데이트 확인…·명령 팔레트·macOS 앱 메뉴 항목, 업데이트 창(확인/다운로드/적용), 상태 표시줄 「업데이트 x.y.z 준비됨/있음」, 설정 > 업데이트(시작 확인·자동 다운로드·피드 주소·건너뛴 버전), 시작 20초 뒤 24시간에 한 번 백그라운드 확인. 적용은 종료할 때(기본) 또는 「지금 다시 시작해 적용」이며 둘 다 메인 창의 기존 닫기 흐름(저장 안 한 탭·미커밋 확인·작업 공간 저장)을 모두 통과한 뒤에만 Velopack 갱신기를 예약한다(ApplyUpdatesAndRestart 직접 호출 없음). 무결성 = 릴리스 메타데이터 해시(서명 확인 아님, 서명 빌드는 사람 자원). 피드 주소는 http(s)·폴더(UNC 포함)·GitHub 저장소 주소를 받고 기본값은 빌드 속성 OrandaUpdateFeed(지금 비어 있음). 남은 일: 피드 게시(GitHub Releases 또는 내부 서버)·릴리스 워크플로, 충돌 보고, 사용자 문서, 서명 확인.
 
 #### PRD 요구사항
 - prd-ref: PRD APP-05, APP-06, 7.4
 - requirements:
-  - Velopack 설치 파일(Windows)·pkg(macOS), 사내 업데이트 서버 피드
+  - Velopack 설치 파일(Windows)·pkg(macOS), 업데이트 서버 피드
   - 업데이트 패키지 서명 확인, 오프라인 설치 파일
   - 충돌 시 로컬 덤프·로그 저장, 동의 후 전송(IOutboundConsent)
   - 사용자 문서(설치, 접속, 단축키)
@@ -2920,7 +2920,7 @@ dotnet, testhost, Oranda.App
 - data-model: -
 - ui-spec: -
 
-### TSK-11-04: 보안·안전장치 교차·사내 사용자 수용 시험
+### TSK-11-04: 보안·안전장치 교차·사용자 수용 시험
 - category: itest
 - domain: test
 - model: sonnet
@@ -2966,7 +2966,7 @@ dotnet, testhost, Oranda.App
 - depends: TSK-10-07
 - blocked-by: -
 - entry-point: 실제 앱(Windows) 전체 메뉴·명령·도구 창
-- note: Headless·통합 1차 끝(2026-10-21), 실제 앱 눈 확인 6항목 남음(결과서 5장) — 사용자 확인 뒤 [xx]. 담당 PC: win144(Windows 개발 PC) — 맥북 세션은 이 Task 를 하지 않는다. 2026-10-20 사용자 지시: 리팩터링(TSK-10-07)이 끝나면 화면에서 기능을 모두 시험한다. 대상 DB = 26ai 컨테이너·11g 컨테이너·사내 테스트 DB UBMADQ(SELECT 위주, 테스트계) 결과: docs/itest/TSK-11-05.md — 기능 ID 119개 결과표(통과 78·부분 25·눈 확인 대기 6·해당 없음 7·시험 없음 1·결함 2). 시험 PC 화면이 잠겨 실제 앱 손 조작은 못 했고 Headless·Oracle 통합(26ai·11g, UBMADQ 미사용)으로 대체, 눈 확인 목록은 결과서 5장. 결함 TSK-03-09·TSK-06-13 등록, 취소 시험 버그(시간대) 수정.
+- note: Headless·통합 1차 끝(2026-10-21), 실제 앱 눈 확인 6항목 남음(결과서 5장) — 사용자 확인 뒤 [xx]. 담당 PC: win144(Windows 개발 PC) — 맥북 세션은 이 Task 를 하지 않는다. 2026-10-20 사용자 지시: 리팩터링(TSK-10-07)이 끝나면 화면에서 기능을 모두 시험한다. 대상 DB = 26ai 컨테이너·11g 컨테이너·시험 DB TESTDB(SELECT 위주, 테스트계) 결과: docs/itest/TSK-11-05.md — 기능 ID 119개 결과표(통과 78·부분 25·눈 확인 대기 6·해당 없음 7·시험 없음 1·결함 2). 시험 PC 화면이 잠겨 실제 앱 손 조작은 못 했고 Headless·Oracle 통합(26ai·11g, TESTDB 미사용)으로 대체, 눈 확인 목록은 결과서 5장. 결함 TSK-03-09·TSK-06-13 등록, 취소 시험 버그(시간대) 수정.
 
 #### PRD 요구사항
 - prd-ref: PRD 전체 기능 목록
@@ -2978,7 +2978,7 @@ dotnet, testhost, Oranda.App
   - 모든 기능 ID 에 결과(통과·결함·해당 없음)가 있다
   - 발견 결함은 해당 기능 WP 에 defect Task 로 등록됨
 - constraints:
-  - UBMADQ 는 테스트계라도 쓰기·DDL·Kill 은 하지 않는다(쓰기 시험은 컨테이너에서)
+  - TESTDB 는 테스트계라도 쓰기·DDL·Kill 은 하지 않는다(쓰기 시험은 컨테이너에서)
 - test-criteria: -
 
 #### 기술 스펙 (TRD)
@@ -3431,7 +3431,7 @@ dotnet, testhost, Oranda.App
 - depends: TSK-07-02
 - blocked-by: -
 - entry-point: 스키마 브라우저 툴바 > 필터 단추(▾ 메뉴) · 「필터 편집…」 대화상자
-- note: 담당 PC: mac(맥북) — win144 세션은 이 Task 를 하지 않는다. 2026-10-22 사용자 요청: 오렌지 Schema Browser Filter(docs/orange5-features.md 2.3 Filter, 사용자 화면 캡처 2장)처럼 이름 붙인 필터를 여러 개 저장해 골라 쓰고, 계정(스키마)도 거른다. 필터 목록은 모든 접속 공용, 접속마다 마지막으로 고른 필터를 기억한다. 같은 날 보고 「이름 필터를 쳐도 트리가 그대로」는 다시 해 보니 걸려 재현되지 않았다. 코드에서 찾은 겹친 읽기 경합(노드가 「…」 로 남음, 접속 직후 필터가 오면 트리가 비고 IsBusy 가 풀리지 않음)을 이 Task 에서 함께 고친다. 「데이터 페치 중 표시가 안 난다」 → 스키마 브라우저가 읽는 동안 진행 표시
+- note: 담당 PC: mac(맥북) — win144 세션은 이 Task 를 하지 않는다. 2026-10-22 사용자 요청: 오렌지 Schema Browser Filter(사용자 화면 캡처 2장)처럼 이름 붙인 필터를 여러 개 저장해 골라 쓰고, 계정(스키마)도 거른다. 필터 목록은 모든 접속 공용, 접속마다 마지막으로 고른 필터를 기억한다. 같은 날 보고 「이름 필터를 쳐도 트리가 그대로」는 다시 해 보니 걸려 재현되지 않았다. 코드에서 찾은 겹친 읽기 경합(노드가 「…」 로 남음, 접속 직후 필터가 오면 트리가 비고 IsBusy 가 풀리지 않음)을 이 Task 에서 함께 고친다. 「데이터 페치 중 표시가 안 난다」 → 스키마 브라우저가 읽는 동안 진행 표시
 
 #### PRD 요구사항
 - prd-ref: PRD SCH-01 (객체 트리·필터)
@@ -3975,7 +3975,7 @@ dotnet, testhost, Oranda.App
   - 대소문자 무시, 일부 일치(전체 일치는 `^…$`). 패턴을 바꾸면 대화상자에 맞는 스키마 목록을 바로 보인다
   - 잘못된 정규식은 칸을 오류로 표시하고 이유를 보이며 저장을 막는다. 정규식 평가에는 시간 제한을 둔다
 - acceptance:
-  - `APUSER$` 패턴 저장 필터를 고르면 그 패턴에 맞는 스키마만 트리에 남고, 다시 접속해도 유지된다
+  - `_USER$` 패턴 저장 필터를 고르면 그 패턴에 맞는 스키마만 트리에 남고, 다시 접속해도 유지된다
 - constraints:
   - 서버 SQL 은 바꾸지 않는다(가져온 스키마 목록을 앱에서 거른다). 옛 settings.json 은 그대로 읽힌다
 - test-criteria:
@@ -4522,7 +4522,7 @@ dotnet, testhost, Oranda.App
 - data-model: docs/design/data-model.md 2.3 (keywordAlign·lineBreaks.groupOrderBy)
 - ui-spec: -
 
-### TSK-13-43: Oranda 기본 포매터 설정을 사내 쿼리 서식 정본(샘플 4개)과 같게 [win144]
+### TSK-13-43: Oranda 기본 포매터 설정을 쿼리 서식 정본(샘플 4개)과 같게 [win144]
 - category: feat
 - domain: backend
 - model: opus
@@ -4534,7 +4534,7 @@ dotnet, testhost, Oranda.App
 - depends: TSK-05-02, TSK-13-38
 - blocked-by: -
 - entry-point: 편집기 포맷(Ctrl+Shift+F)·기본 제공 프로필 「Oranda 기본」
-- note: 담당 PC: win144. 2026-10-22 사용자 요청(「…/docs/guide/Database/samples 이것이 oranda의 기본 포매터 설정이면 좋겠어」 「안에 쿼리를 보고 다시 설정해줘」). 정본 = 사내 표준 저장소의 쿼리 서식 샘플 4개(basic·with·analysis·mybatis)와 규칙 글 4장. 크기 L. 결과: oranda-default = FormatterOptions.OrandaDefault(사내 서식), 엔진 clauseLayout Column·lineBreaks.orderBy·align.comparison 추가(속성 기본값은 옛 출력 = 사용자 프로필·Orange 5·간결 불변), 샘플 4개 전체 포맷 차이 0(analysis 1번 사용자 원문 2곳 정규화·with 2번 (나) 한 줄 EXISTS 예외는 시험에 적음), 골든·규칙 시험 94개 통과
+- note: 담당 PC: win144. 2026-10-22 사용자 요청(「(경로 생략) 이것이 oranda의 기본 포매터 설정이면 좋겠어」 「안에 쿼리를 보고 다시 설정해줘」). 정본 = 외부 쿼리 서식 샘플 4개(basic·with·analysis·mybatis)와 규칙 글 4장. 크기 L. 결과: oranda-default = FormatterOptions.OrandaDefault(하우스 서식), 엔진 clauseLayout Column·lineBreaks.orderBy·align.comparison 추가(속성 기본값은 옛 출력 = 사용자 프로필·Orange 5·간결 불변), 샘플 4개 전체 포맷 차이 0(analysis 1번 사용자 원문 2곳 정규화·with 2번 (나) 한 줄 EXISTS 예외는 시험에 적음), 골든·규칙 시험 94개 통과
 
 #### PRD 요구사항
 - prd-ref: PRD FMT-02, FMT-04, FMT-05
@@ -4567,7 +4567,7 @@ dotnet, testhost, Oranda.App
 - depends: TSK-05-03, TSK-13-38, TSK-13-43
 - blocked-by: -
 - entry-point: 도구 > 포매터 프로필 / 설정 창 「SQL 포맷」 쪽 「자세히…」
-- note: 담당 PC: win144. 2026-10-22 사용자 요청(「화면 디자인이 너무 안좋아. Opus xhigh로 시안을 뽑아봐」). 시안 3개(A Orange 설정 창형 · B 속성 격자형 · C 미리보기 중심) 중 사용자가 A 를 고름(「A시안이 좋아보인다.」). 크기 M. 결과: 왼쪽 「기본 제공 / 내 프로필」 두 묶음 목록(자물쇠·★ 아이콘, 오른쪽 클릭 메뉴), 위 아이콘 도구 막대(새로·복사·이름 바꾸기·삭제·기본 지정·가져오기·내보내기·저장·되돌리기, 툴팁), 기본 제공이면 안내 띠 「기본 제공 프로필은 고칠 수 없습니다 — 복사해서 고치세요」+「복사해서 고치기」(값은 흐리지 않고, 누르면 상태 줄에 안내), 옵션은 테두리 묶음 6개(대소문자 표형 라디오·들여쓰기·줄바꿈·쉼표·맞춤·정렬·공백·주석·기타)를 창 폭에 따라 3·2·1단으로, 기본과 다른 옵션 파란 점·저장 안 한 변경 주황 점(라벨 굵게), 값은 한국어, 아래 미리보기(실제 엔진, 예제 SQL 고치기·결과 복사), 상태 줄 「옵션 N개 중 M개가 기본과 다름」(기준 = 저장소의 oranda-default). TSK-13-43 뒤 후속: 새 옵션 3개(절 배치·ORDER BY·비교 맞춤)를 쉼표·맞춤·줄바꿈·정렬·공백 묶음에 넣고, 다른 옵션 때문에 효과가 없는 옵션(열 맞춤일 때 키워드 맞춤, 들여쓰기 배치일 때 비교 맞춤)은 흐리게 + 이유 툴팁. 설정 창 「SQL 포맷」 쪽: 「기본값」·처음 값 = FormatterOptions.OrandaDefault, 절 배치가 열 맞춤이면 키워드 맞춤 묶음 회색 + 툴팁 「사내 서식(열 맞춤)에서는 쓰지 않습니다」, 라벨 「GROUP BY 열 목록」(ORDER BY 는 프로필 화면에서)
+- note: 담당 PC: win144. 2026-10-22 사용자 요청(「화면 디자인이 너무 안좋아. Opus xhigh로 시안을 뽑아봐」). 시안 3개(A Orange 설정 창형 · B 속성 격자형 · C 미리보기 중심) 중 사용자가 A 를 고름(「A시안이 좋아보인다.」). 크기 M. 결과: 왼쪽 「기본 제공 / 내 프로필」 두 묶음 목록(자물쇠·★ 아이콘, 오른쪽 클릭 메뉴), 위 아이콘 도구 막대(새로·복사·이름 바꾸기·삭제·기본 지정·가져오기·내보내기·저장·되돌리기, 툴팁), 기본 제공이면 안내 띠 「기본 제공 프로필은 고칠 수 없습니다 — 복사해서 고치세요」+「복사해서 고치기」(값은 흐리지 않고, 누르면 상태 줄에 안내), 옵션은 테두리 묶음 6개(대소문자 표형 라디오·들여쓰기·줄바꿈·쉼표·맞춤·정렬·공백·주석·기타)를 창 폭에 따라 3·2·1단으로, 기본과 다른 옵션 파란 점·저장 안 한 변경 주황 점(라벨 굵게), 값은 한국어, 아래 미리보기(실제 엔진, 예제 SQL 고치기·결과 복사), 상태 줄 「옵션 N개 중 M개가 기본과 다름」(기준 = 저장소의 oranda-default). TSK-13-43 뒤 후속: 새 옵션 3개(절 배치·ORDER BY·비교 맞춤)를 쉼표·맞춤·줄바꿈·정렬·공백 묶음에 넣고, 다른 옵션 때문에 효과가 없는 옵션(열 맞춤일 때 키워드 맞춤, 들여쓰기 배치일 때 비교 맞춤)은 흐리게 + 이유 툴팁. 설정 창 「SQL 포맷」 쪽: 「기본값」·처음 값 = FormatterOptions.OrandaDefault, 절 배치가 열 맞춤이면 키워드 맞춤 묶음 회색 + 툴팁 「하우스 서식(열 맞춤)에서는 쓰지 않습니다」, 라벨 「GROUP BY 열 목록」(ORDER BY 는 프로필 화면에서)
 
 #### PRD 요구사항
 - prd-ref: PRD FMT-02~FMT-09, PRD UI

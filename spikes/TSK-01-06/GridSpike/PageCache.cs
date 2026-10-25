@@ -20,7 +20,7 @@ public sealed class SyntheticResultSet
     public readonly int RowCount;
     public readonly ColKind[] Kinds;
     public readonly string[] Names;
-    static readonly string[] Words = ["ORDER", "LINE", "STEEL", "COIL", "PLATE", "HEAT", "SLAB", "GRADE", "MILL", "YARD", "SHIP", "LOT", "QA", "PASS", "HOLD"];
+    static readonly string[] Words = ["ORDER", "LINE", "ITEM", "UNIT", "PLATE", "BATCH", "STOCK", "GRADE", "STORE", "YARD", "SHIP", "LOT", "QA", "PASS", "HOLD"];
 
     public SyntheticResultSet(int rows, int cols)
     {

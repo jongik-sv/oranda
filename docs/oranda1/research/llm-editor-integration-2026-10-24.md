@@ -2,7 +2,7 @@
 
 - 작성일: 2026-10-24
 - 질문: 「LLM 에서 쿼리 작성 및 튜닝을 수행한 뒤, 그 결과가 Oranda 편집기에 추가·수정되게 하려면 어떻게 해야 하나」 (docs/idea.md 6행)
-- 대상: Oranda (사내 Oracle SQL 클라이언트, .NET 10 + Avalonia 12, Windows·macOS), 도메인 지식 프로젝트 llm-wiki(nl2sql·graphify)
+- 대상: Oranda (Oracle SQL 클라이언트, .NET 10 + Avalonia 12, Windows·macOS), 도메인 지식 프로젝트 domain-wiki(nl2sql·graphify)
 - 범위: 저장소 코드는 읽기만 했다. 이 문서는 조사와 설계안이고 구현은 하지 않았다.
 - 표기: 출처나 코드로 확인하지 못한 내용은 「확인 못 함」으로 적는다.
 
@@ -20,15 +20,15 @@
    - 지금 있는 `IEditorContext.ProposeEditAsync` 가 이 규칙의 출발점이다. 다만 활성 탭만 대상으로 삼고, 모달 창이며, 일부 받아들이기와 상태 반환이 없어서 넓혀야 한다.
 3. **에이전트가 직접 실행할 수 있는 것은 SELECT 와 계획·통계 조회뿐이다.**
    - DML·DDL·PL/SQL 은 MCP 로 절대 실행하지 않는다. 편집기에 제안으로 넣고 사람이 평소 실행 경로로 돌린다.
-   - 그러면 SAFE-03 확인 대화상자와 업무 PC 의 DB 접근 결재 도구(Chakra Max)를 그대로 거친다.
+   - 그러면 SAFE-03 확인 대화상자와 업무 환경의 DB 접근 통제 도구를 그대로 거친다.
    - 지금 `ExecutionPolicy` 는 실행 출처(`HistorySource.Extension`)를 이력에만 남기고 판단에는 쓰지 않는다. 그래서 「에이전트 출처면 조회 외 거부」 규칙을 새로 넣어야 한다.
-4. **도메인 지식(llm-wiki)은 Claude Code 세션에서 nl2sql 스킬이 맡고, Oranda 는 그 흐름의 「살아 있는 DB 근거」와 「편집기 출구」를 맡는다.**
+4. **도메인 지식(domain-wiki)은 Claude Code 세션에서 nl2sql 스킬이 맡고, Oranda 는 그 흐름의 「살아 있는 DB 근거」와 「편집기 출구」를 맡는다.**
    - nl2sql 의 검증기는 오프라인(sqlglot + dbschema SQLite)이다.
    - Oranda MCP 는 실제 사전과 비교(드리프트 확인), 개발 DB 계획 확인, 결과를 편집기 탭으로 보내기를 더한다.
 5. **단계는 셋으로 나눈다.**
    - 단계 1: 다리·읽기 도구·편집기 제안 (약 8 w)
    - 단계 2: SELECT 실행·계획·튜닝 루프 (약 8 w, WP-06 뒤)
-   - 단계 3: llm-wiki 연결 정식화와 내장 기능 (약 10 w)
+   - 단계 3: domain-wiki 연결 정식화와 내장 기능 (약 10 w)
    - D-04(1.0 은 AI 를 구현하지 않음) 결정을 언제 풀지 사용자가 정해야 한다.
 
 ---
@@ -78,15 +78,15 @@
   - 일반 `.sql`·Markdown 작업 공간 파일에는 감시가 없다(SqlEditor 폴더에서 검색 결과 없음).
 - macOS 의 「이 앱으로 열기」 이벤트 처리 코드는 찾지 못했다(확인 못 함).
 
-### 1.5 llm-wiki 의 도메인 지식 흐름
+### 1.5 domain-wiki 의 도메인 지식 흐름
 
 | 요소 | 내용(파일 기준) |
 |---|---|
-| nl2sql 스킬 | `llm-wiki/.claude/skills/nl2sql/SKILL.md`. 동국제강 MES m26 질문을 Oracle SQL 로 만든다. Claude Code 세션의 Claude 가 곧 LLM 이다(SDK·API 안 씀) |
+| nl2sql 스킬 | `domain-wiki/.claude/skills/nl2sql/SKILL.md`. 업무 도메인 질문을 Oracle SQL 로 만든다. Claude Code 세션의 Claude 가 곧 LLM 이다(SDK·API 안 씀) |
 | 7단계 | ⓪ `mktemp` workdir → ①ᴬ `graphify query "<질문>" --budget 1500` → ①ᴮ `curate.py`(graphify 결과 + dbschema SQLite 로 PK·컬럼·조인·코드값·인덱스·전기일 보강 → `curate.md`, `ctx.json`) → ② 큐레이터 JSON(`final_tables`·`concept_mappings`·`open_ambiguities`) → `finalize.py`(후보 밖 테이블·없는 컬럼 거부) → ③ SQL JSON → ④ `validate.py`(sqlglot 구문·컬럼·함수·조인 검사) → ⑤ `repair.py`(최대 3회) → 보고 |
 | 규칙 | Oracle `(+)` 외부 조인만 쓰고 ANSI JOIN 은 금지한다. 전기일(07:00~익일 06:59)은 7/24 보정한다. 환각을 금지한다. 모호하면 묻는다 |
-| graphify | `llm-wiki/global/graphify-out/graph.json`(64 MB, 노드 53,264·간선 89,819, `TB_` 테이블 노드 1,158개, 노드 속성 `label·source_file·source_location·community`). `graphify query`(BFS/DFS, LLM 호출 없음), `path`, `explain`, `--mcp`(stdio 서버: `query_graph`·`get_node`·`get_neighbors`·`get_community`·`god_nodes`·`graph_stats`·`shortest_path`) |
-| 한계 | 검증이 오프라인이다. 실제 DB 의 컬럼 변경·권한·동의어·통계·계획을 모른다. 결과는 대화창의 코드 블록이라 편집기로 옮기려면 복사·붙여 넣기를 해야 한다. 스킬 안의 경로가 macOS(`/Users/jji/...`)라 win144 에서는 바꿔 읽어야 한다 |
+| graphify | `domain-wiki/global/graphify-out/graph.json`(64 MB, 노드 5만여·간선 9만여, `TB_` 접두 테이블 노드 다수, 노드 속성 `label·source_file·source_location·community`). `graphify query`(BFS/DFS, LLM 호출 없음), `path`, `explain`, `--mcp`(stdio 서버: `query_graph`·`get_node`·`get_neighbors`·`get_community`·`god_nodes`·`graph_stats`·`shortest_path`) |
+| 한계 | 검증이 오프라인이다. 실제 DB 의 컬럼 변경·권한·동의어·통계·계획을 모른다. 결과는 대화창의 코드 블록이라 편집기로 옮기려면 복사·붙여 넣기를 해야 한다. 스킬 안의 경로가 macOS(`/Users/<user>/...`)라 win144 에서는 바꿔 읽어야 한다 |
 
 ---
 
@@ -94,7 +94,7 @@
 
 | 도구 | 연결 방식 | 편집기 반영 | 실행 통제 | Oranda 에 주는 교훈 |
 |---|---|---|---|---|
-| Oracle SQLcl MCP (25.2+) | `sql -mcp` stdio. 도구: `list-connections`, `connect`, `disconnect`, `run-sql`, `run-sqlcl`. 이 PC 의 SQLcl 25.4.1 `dbtools-mcp.jar` 에는 `run-sql-async`, `schema-information` 도 있다(클래스 문자열로 확인) | 없음(결과 CSV 를 돌려줌) | `-R` RESTRICT 수준(기본 4 = 호스트 명령·스크립트 금지). DML 은 DB 권한이 막는다. 서버 테이블 `DBTOOLS$MCP_LOG` 에 모든 요청을 기록한다(jar 안 `insert.dbtools.mcp.log` 쿼리). v$session MODULE=클라이언트, ACTION=모델 이름 | **이 환경에는 그대로 맞지 않는다.** 서버 테이블 생성·INSERT 는 C-05 위반이고 Chakra Max 결재 대상이다. 로그를 끄는 선택지는 문서에서 찾지 못했다(확인 못 함). MODULE/ACTION 표시는 따라 한다 |
+| Oracle SQLcl MCP (25.2+) | `sql -mcp` stdio. 도구: `list-connections`, `connect`, `disconnect`, `run-sql`, `run-sqlcl`. 이 PC 의 SQLcl 25.4.1 `dbtools-mcp.jar` 에는 `run-sql-async`, `schema-information` 도 있다(클래스 문자열로 확인) | 없음(결과 CSV 를 돌려줌) | `-R` RESTRICT 수준(기본 4 = 호스트 명령·스크립트 금지). DML 은 DB 권한이 막는다. 서버 테이블 `DBTOOLS$MCP_LOG` 에 모든 요청을 기록한다(jar 안 `insert.dbtools.mcp.log` 쿼리). v$session MODULE=클라이언트, ACTION=모델 이름 | **이 환경에는 그대로 맞지 않는다.** 서버 테이블 생성·INSERT 는 C-05 위반이고 DB 접근 통제 도구 결재 대상이다. 로그를 끄는 선택지는 문서에서 찾지 못했다(확인 못 함). MODULE/ACTION 표시는 따라 한다 |
 | SQL Developer for VS Code | SQLcl MCP 를 Copilot 에 자동 등록 | Copilot Agent 모드가 파일을 고친다 | Copilot 이 도구마다 사용 확인을 묻고, 도구를 하나씩 끌 수 있다 | 클라이언트 쪽 확인에만 기대지 않고 서버(Oranda) 쪽에서 막는다 |
 | DataGrip 2026.1~2026.2 | IDE 내장 MCP 서버(SSE·stdio·HTTP Stream). Claude Code·Codex·VS Code 자동 설정 | 에이전트가 IDE 파일을 고친다 | `execute_sql_query` 는 확인 여부가 문서에 없다. 읽기 전용은 「권한이 좁은 DB 사용자」로 하라고 안내한다 | 도구 이름 구성(`list_database_connections`, `list_schema_objects`, `get_database_object_description`, `introspect_schema`, `execute_sql_query`, `fetch_query_result`, `cancel_sql_query`, `list_recent_sql_queries`)이 참고가 된다 |
 | DBeaver 26.1~26.2 | 내장 AI Chat + 외부 MCP 도구 허용 목록 | 제안을 스크립트 알맞은 자리에 넣고, 새 SQL 콘솔로 열 수도 있다 | 접속마다 처음 한 번 메타데이터 전송 동의. 기본은 테이블·컬럼 이름만 보낸다. Scope 칸으로 범위를 정한다. 읽기 전용 접속이면 AI 에 알린다 | 접속별 첫 동의·범위 지정·「보낸 요청 로그」를 그대로 쓴다 |
@@ -113,7 +113,7 @@
 | **B. stdio 중계 실행 파일 + 앱 IPC** | 클라이언트가 `orandactl mcp` 를 띄운다. 중계 파일이 명명 파이프·UDS 로 앱에 붙는다 | 앱이 실행 중일 때만 가능. 앱이 없으면 「Oranda 를 여세요」를 돌려주거나 앱을 띄운다 | TCP 포트가 없다. `PipeOptions.CurrentUserOnly` 로 다른 사용자를 막는다 | 중 | **권장.** 모든 클라이언트가 stdio 를 지원하고, 같은 파이프로 단일 실행·CLI 도 해결한다 |
 | C. CLI + IPC 만 | LLM 이 셸에서 `orandactl propose --file out.sql` 을 부른다 | 가능 | 위와 같다 | 소 | B 의 일부로 같이 만든다. nl2sql 처럼 셸을 쓰는 스킬에 바로 붙는다 |
 | D. 파일 기반 | LLM 이 `.sql`·`.workspace.md` 를 디스크에 쓰고 Oranda 가 감시한다 | 일반 SQL 파일에는 감시·병합이 없다. MyBatis 매퍼에만 3방향 병합이 있다 | 사용자 편집과 경합하고, 「제안」 단계가 없다 | 중(감시·병합을 일반 파일로 넓힘) | 보조 경로로만. MyBatis 매퍼는 지금도 이 경로가 동작한다(밖 변경 → 알림 띠) |
-| E. 내장 채팅 패널(LLM API 직접 호출) | Oranda 가 제공자 API(사용자 키·사내 게이트웨이·로컬 모델)를 부른다 | `IEditorContext` 로 바로 | 전송 동의·비용 한도·키 저장을 Oranda 가 모두 진다 | 대 | 단계 3. llm-wiki 의 지식·스킬을 쓰지 못하므로 지금 쓰는 흐름(Claude Code + 스킬)을 대신하지 못한다 |
+| E. 내장 채팅 패널(LLM API 직접 호출) | Oranda 가 제공자 API(사용자 키·조직 내부 게이트웨이·로컬 모델)를 부른다 | `IEditorContext` 로 바로 | 전송 동의·비용 한도·키 저장을 Oranda 가 모두 진다 | 대 | 단계 3. domain-wiki 의 지식·스킬을 쓰지 못하므로 지금 쓰는 흐름(Claude Code + 스킬)을 대신하지 못한다 |
 | F. 클립보드 | 사람이 복사·붙여 넣기 | 수동 | — | 0 | 지금 상태 |
 
 ---
@@ -125,7 +125,7 @@
 ```mermaid
 flowchart LR
   subgraph Client["LLM 클라이언트 (사용자 PC)"]
-    CC["Claude Code 세션<br/>(llm-wiki 폴더)"]
+    CC["Claude Code 세션<br/>(domain-wiki 폴더)"]
     SK["nl2sql 스킬<br/>curate · finalize · validate · repair"]
     GQ["graphify CLI / graphify MCP<br/>graph.json"]
     CC --- SK
@@ -147,7 +147,7 @@ flowchart LR
     MON["IMonitorService<br/>Top SQL · 세션 · 잠금"]
   end
 
-  DB[("Oracle DB<br/>(Chakra Max 경유)")]
+  DB[("Oracle DB<br/>(DB 접근 통제 도구 경유)")]
 
   CC -- "stdio JSON-RPC" --> MCP
   SK -- "셸 호출" --> CLI
@@ -178,7 +178,7 @@ flowchart LR
 - **앱이 꺼져 있을 때**: `orandactl mcp` 는 읽기 도구에 `oranda_not_running` 오류와 안내를 돌려준다. 설정이 켜져 있으면 앱을 띄우고 기다린다.
 - **SDK**: 공식 C# SDK `ModelContextProtocol` 2.3.0(2026-10-20, net8·net9·net10, 안정판)을 쓴다. stdio 는 `WithStdioServerTransport()`, 도구는 특성(`[McpServerTool]`)으로 등록한다. 버전마다 기본값(HTTP Stateless 등)이 달라 고정 버전을 쓴다.
 
-### 4.2 Claude Code 세션 구성 예 (llm-wiki 폴더 `.mcp.json`)
+### 4.2 Claude Code 세션 구성 예 (domain-wiki 폴더 `.mcp.json`)
 
 ```json
 {
@@ -312,21 +312,21 @@ flowchart TD
   B --> C["탭 위 띠: AI 가 만든 변경문"]
   C --> D["사용자가 읽고 고친 뒤 F5/F9"]
   D --> E["ExecutionPolicy: 운영 확인 · WHERE 없는 DML · 위험 명령 다시 입력"]
-  E --> F["Chakra Max 결재 (업무 PC)"]
+  E --> F["DB 접근 통제 도구 결재"]
   F --> G["실행 · 이력(source=Editor, ai_origin=proposal_id)"]
 ```
 
 - 사람이 실행한 AI 변경문은 이력에 `source=Editor` 로 남기고, 따로 `ai_origin` 열에 proposal_id 를 남긴다. 「AI 가 쓴 문장」 표시가 이력 화면에 보인다.
-- 「DML 시험 실행」(개발 접속에서 실행 → 영향 행 수 → 롤백)은 Chakra Max 가 INSERT·UPDATE·DELETE 를 결재 대상으로 잡으므로 이 업무 환경에서는 쓰지 않는다. 트리거·자율 트랜잭션·시퀀스 증가는 롤백되지 않는다는 문제도 그대로다.
+- 「DML 시험 실행」(개발 접속에서 실행 → 영향 행 수 → 롤백)은 DB 접근 통제 도구 가 INSERT·UPDATE·DELETE 를 결재 대상으로 잡으므로 이 업무 환경에서는 쓰지 않는다. 트리거·자율 트랜잭션·시퀀스 증가는 롤백되지 않는다는 문제도 그대로다.
 
-### 6.3 Chakra Max 와 SELECT 전용 원칙
+### 6.3 DB 접근 통제 도구와 SELECT 전용 원칙
 
-이 PC 의 결재 도구(웨어밸리 Chakra Max, DB 접근통제·작업결재 제품)는 INSERT·UPDATE·DELETE 를 결재 대상으로 잡는다. 에이전트 경로가 보낼 수 있는 문장 중 경계에 있는 것은 다음과 같다.
+업무 환경의 DB 접근 통제·결재 도구는 INSERT·UPDATE·DELETE 를 결재 대상으로 잡는다. 에이전트 경로가 보낼 수 있는 문장 중 경계에 있는 것은 다음과 같다.
 
 | 문장 | 왜 경계인가 | 안 |
 |---|---|---|
-| `EXPLAIN PLAN FOR …` | PLAN_TABLE 에 INSERT 한다. Chakra Max 가 이것을 DML 로 잡는지 확인 못 함 | 접속 설정 `allowExplainPlan`(개발 기본 켬, 운영 기본 끔). 끄면 `/*+ GATHER_PLAN_STATISTICS */` 사본 실행 + `DISPLAY_CURSOR` 로 대신한다(실제로 실행하므로 비용 확인 필요) |
-| `SET TRANSACTION READ ONLY`, `ALTER SESSION SET STATISTICS_LEVEL=ALL` | DML 은 아니다. 결재 도구 분류는 확인 못 함 | 업무 PC 에서 한 번 시험한다 |
+| `EXPLAIN PLAN FOR …` | PLAN_TABLE 에 INSERT 한다. DB 접근 통제 도구 가 이것을 DML 로 잡는지 확인 못 함 | 접속 설정 `allowExplainPlan`(개발 기본 켬, 운영 기본 끔). 끄면 `/*+ GATHER_PLAN_STATISTICS */` 사본 실행 + `DISPLAY_CURSOR` 로 대신한다(실제로 실행하므로 비용 확인 필요) |
+| `SET TRANSACTION READ ONLY`, `ALTER SESSION SET STATISTICS_LEVEL=ALL` | DML 은 아니다. 결재 도구 분류는 확인 못 함 | 통제 환경 PC 에서 한 번 시험한다 |
 | `BEGIN DBMS_APPLICATION_INFO.SET_MODULE… END;` | 지금도 세션을 열 때 보낸다(기존 동작) | 변화 없음 |
 | `compare_results` 의 `MINUS` | SELECT 다 | 그대로 |
 | 인덱스 후보 시험 | `CREATE INDEX … INVISIBLE` 은 DDL 이다 | 에이전트는 문안만 편집기에 넣는다. idea.md 5절 「새 인덱스 시험」은 사람 경로에서만 한다 |
@@ -465,13 +465,13 @@ sequenceDiagram
 
 ---
 
-## 10. 도메인 지식(llm-wiki)과 Oranda 잇기
+## 10. 도메인 지식(domain-wiki)과 Oranda 잇기
 
 ### 10.1 흐름
 
 ```mermaid
 flowchart TD
-  Q["사용자 질문 (Claude Code, llm-wiki)"] --> W0["⓪ workdir"]
+  Q["사용자 질문 (Claude Code, domain-wiki)"] --> W0["⓪ workdir"]
   W0 --> G1["①ᴬ graphify query → 후보 테이블·쿼리·PL/SQL"]
   G1 --> R1["oranda.resolve_objects / check_schema_drift<br/>(실제 owner·동의어·컬럼 차이)"]
   R1 --> C1["①ᴮ curate.py (dbschema SQLite 보강)<br/>+ Oranda describe_object 로 바뀐 컬럼 반영"]
@@ -499,7 +499,7 @@ flowchart TD
 | 결과가 대화창 코드 블록 | `open_tab`, `propose_edit` | 복사·붙여 넣기가 없어지고, 질문·의도·사용 자산·가정이 탭 머리 주석으로 남는다 |
 | MyBatis 매퍼로 옮기기 | `propose_edit`(MyBatis 문장 탭) | 매퍼 저장 흐름(바뀐 문장만·3방향 병합)을 그대로 쓴다 |
 
-- nl2sql 스킬 수정은 llm-wiki 쪽 일이다. 이 문서는 고칠 곳만 제안한다.
+- nl2sql 스킬 수정은 domain-wiki 쪽 일이다. 이 문서는 고칠 곳만 제안한다.
   - SKILL.md 의 Step 5 뒤에 「Oranda MCP 가 연결돼 있으면 ④ᴮ 와 편집기 보내기를 한다」는 절을 더한다.
   - Oranda 가 없으면 지금처럼 끝낸다.
 
@@ -508,7 +508,7 @@ flowchart TD
 - 그래프의 테이블 노드는 `label=TB_…`, `source_file=TB_….md`, `community` 를 가진다.
   - owner 가 없으므로 Oranda `resolve_objects` 가 실제 owner·동의어를 붙인다.
 - Oranda 쪽(단계 3)에서는 다음을 한다.
-  - 스키마 브라우저의 객체 상세에 「위키」 링크를 둔다(같은 이름의 `source_file` 이 llm-wiki 에 있으면 연다). llm-wiki 경로는 설정으로 받는다.
+  - 스키마 브라우저의 객체 상세에 「위키」 링크를 둔다(같은 이름의 `source_file` 이 domain-wiki 에 있으면 연다). domain-wiki 경로는 설정으로 받는다.
   - 「이 테이블과 연결된 쿼리·PL/SQL」(graphify 이웃 노드)을 보이는 패널은 graphify MCP 를 Oranda 가 클라이언트로 부르는 방식으로 한다. graph.json 은 64 MB 라 Oranda 가 직접 읽지 않는다.
 - graphify 에 Oranda 실제 사전을 넣는 방향(라이브 컬럼을 노드로)은 그래프를 다시 만들어야 한다. 비용이 커서 하지 않는다. 드리프트 검사로 대신한다.
 
@@ -577,7 +577,7 @@ flowchart TD
 | 기능 | 내용 | 사례 | 경로·단계 |
 |---|---|---|---|
 | 테스트 데이터 규칙 만들기 | 테이블 정의와 제약만 보내고 행은 보내지 않는다. LLM 은 컬럼마다 현실적인 한국어 값 규칙을 만들고, 값은 도구가 만든다(2절 「테스트 데이터 생성」) | Select AI synthetic data | 3 |
-| 데이터 정제 SQL | 「전화번호를 010-0000-0000 형식으로」 같은 지시로 `REGEXP_REPLACE` UPDATE 와 바뀔 행 미리보기(SELECT)를 만든다. 실행은 2절 「대량 DML 나눠 실행」으로 넘긴다(사람 경로, Chakra Max 결재) | — | MCP 제안 2 |
+| 데이터 정제 SQL | 「전화번호를 010-0000-0000 형식으로」 같은 지시로 `REGEXP_REPLACE` UPDATE 와 바뀔 행 미리보기(SELECT)를 만든다. 실행은 2절 「대량 DML 나눠 실행」으로 넘긴다(사람 경로, DB 접근 통제 도구 결재) | — | MCP 제안 2 |
 
 ### 11.7 PL/SQL
 
@@ -601,7 +601,7 @@ flowchart TD
 |---|---|---|---|
 | Oranda MCP 서버 | Claude Code·Copilot 같은 코딩 에이전트가 Oranda 접속으로 스키마를 조회하고 SQL 을 실행한다. 비밀번호는 넘기지 않고, 모든 실행은 정책 관문을 지난다. 운영 라벨 접속은 기본으로 빼고, 접속마다 허용 도구(조회만·실행 포함)를 고른다 | DataGrip 2026.1~2026.2 MCP tools, Toad 내장 MCP, Oracle SQLcl MCP(`run-sql`, RESTRICT 수준), Flyway Enterprise MCP | §4~§6 |
 | 에이전트 실행 기록 | 에이전트가 실행한 SQL 을 실행 이력(EXEC-07)에 「AI」 표시와 요청 원문과 함께 남긴다. Oranda 는 서버 객체를 만들지 않으므로 로컬에 남긴다 | DataGrip 은 에이전트 질의를 질의 이력에 남기고, SQLcl MCP 는 서버 표 `DBTOOLS$MCP_LOG` 에 남긴다 | §6.1, §7.3 |
-| Select AI 연결 [ADB][확인] | 26ai(23.26.x) Autonomous 의 `DBMS_CLOUD_AI` 프로필(`DBA_CLOUD_AI_PROFILES`)을 쓰면 서버가 자연어를 SQL 로 바꾼다. 도구가 API 키를 들지 않아도 되므로 APP-07 을 시작할 때 첫 단계로 알맞다. 서버가 만든 SQL 도 SAFE-02·03 을 똑같이 거친다(idea.md 7절에서 옮김) | Select AI | 내장 경로의 대안(사내 DB 가 ADB 가 아니면 해당 없음 — 확인 못 함) |
+| Select AI 연결 [ADB][확인] | 26ai(23.26.x) Autonomous 의 `DBMS_CLOUD_AI` 프로필(`DBA_CLOUD_AI_PROFILES`)을 쓰면 서버가 자연어를 SQL 로 바꾼다. 도구가 API 키를 들지 않아도 되므로 APP-07 을 시작할 때 첫 단계로 알맞다. 서버가 만든 SQL 도 SAFE-02·03 을 똑같이 거친다(idea.md 7절에서 옮김) | Select AI | 내장 경로의 대안(별도 DB 가 ADB 가 아니면 해당 없음 — 확인 못 함) |
 
 ### 11.10 안전·거버넌스 (전제 포함)
 
@@ -612,9 +612,9 @@ flowchart TD
 | 데이터는 데이터로만 | 행 값·주석·PL/SQL 소스·alert log 의 글은 데이터로만 다룬다(프롬프트 인젝션 대비). 구분된 데이터 블록으로 넣고, 비공개 데이터를 읽는 에이전트가 밖으로 쓰는 도구를 함께 갖지 않게 한다 | — | §7.4 |
 | AI 실행 관문 | AI SQL 은 키워드가 아니라 파서로 분류한다. DDL, `TRUNCATE`, WHERE 없는 UPDATE·DELETE, 익명 블록, `EXECUTE IMMEDIATE`, `DBMS_SCHEDULER`, DB 링크, 커밋하는 프로시저 호출을 따로 잡는다. 운영은 기본 차단하고 쓰기는 사람이 확인하는 경로로만 연다 | SSMS Agent mode 질의별 승인, Beekeeper Studio 「읽기 전용 SELECT 만 자동 실행」 | §6.1(에이전트 경로는 Query 외 전부 거부로 더 좁힘) |
 | 에이전트 세션 읽기 전용 | SAFE-02 와 같이 `SET TRANSACTION READ ONLY` 로 연다. 권한이 좁은 계정을 쓰도록 안내한다 | SSMS 문서 「DB 권한이 실제 보안 경계」 | §6.1 |
-| DML 시험 실행 | 개발 접속에서 DML 을 실행해 영향 행 수만 보이고 롤백한 뒤 확인받는다. **트리거·자율 트랜잭션·시퀀스 증가는 롤백되지 않으므로 운영에서는 쓰지 않는다** | — | §6.2: Chakra Max 환경에서는 쓰지 않음 |
+| DML 시험 실행 | 개발 접속에서 DML 을 실행해 영향 행 수만 보이고 롤백한 뒤 확인받는다. **트리거·자율 트랜잭션·시퀀스 증가는 롤백되지 않으므로 운영에서는 쓰지 않는다** | — | §6.2: DB 접근 통제 도구 환경에서는 쓰지 않음 |
 | 전송 통제 | 접속마다 처음 한 번 동의, 보낼 객체 범위 지정, 보낸 요청 원문 보기·로그(`IOutboundConsent`), 민감 컬럼은 2절 「민감 컬럼 가림」 규칙 | DBeaver AI 데이터 보호 설정, Redgate trust and transparency 페이지 | §7.2 |
-| 제공자 선택 | 사용자 키(OpenAI·Anthropic·Azure OpenAI·Gemini), 사내 게이트웨이(OpenAI 호환 URL, LiteLLM), 로컬 모델(Ollama·LM Studio). APP-07 대로 로컬 모델 우선 | DBeaver(Ollama), pgAdmin 9.14 사용자 지정 제공자 URL | 내장 경로(단계 3). MCP 경로는 클라이언트가 제공자를 정한다. llm-wiki 정책은 Claude 백엔드다 |
+| 제공자 선택 | 사용자 키(OpenAI·Anthropic·Azure OpenAI·Gemini), 조직 내부 게이트웨이(OpenAI 호환 URL, LiteLLM), 로컬 모델(Ollama·LM Studio). APP-07 대로 로컬 모델 우선 | DBeaver(Ollama), pgAdmin 9.14 사용자 지정 제공자 URL | 내장 경로(단계 3). MCP 경로는 클라이언트가 제공자를 정한다. domain-wiki 정책은 Claude 백엔드다 |
 | 비용 한도 | 하루·한 달 토큰 한도, 요청마다 예상 토큰, 같은 일을 되풀이하면 멈춤 | Snowflake AI 예산 | 내장 3. MCP 경로는 도구 호출 횟수·되풀이 감지(§6.1) |
 
 ### 11.11 참고한 사고 사례
@@ -657,13 +657,13 @@ flowchart TD
 | 계획·통계·튜닝 도구(`explain_plan`·`get_cursor_plan`·`get_table_stats`·`get_child_cursors`·`suggest_tuning`·`benchmark_queries`·`compare_results`) | `ITuningService` 구현(TSK-06-02·05) 위에 얇게 | 2 |
 | 모니터 도구(`get_top_sql`·`get_sql_detail`·`get_sessions`·`get_locks`) | `IMonitorService` 위에 | 1 |
 | 제안 막대에 벤치마크 표·PLAN-04 비교 열기, 리소스(튜닝 보고서 텍스트판)·프롬프트(`tune-statement`·`fix-error`) | `Features/Agent/*`, `Features/ExecutionPlan`(소유 레인과 조율) | 1.5 |
-| 업무 PC 시험: Chakra Max 가 EXPLAIN PLAN·SET TRANSACTION·ALTER SESSION 을 어떻게 잡는지 | 문서(`docs/oranda1/itest`) | 0.5 |
+| 통제 환경 PC 시험: DB 접근 통제 도구 가 EXPLAIN PLAN·SET TRANSACTION·ALTER SESSION 을 어떻게 잡는지 | 문서(`docs/oranda1/itest`) | 0.5 |
 
 ### 단계 3 — 도메인 지식 연결 정식화·내장 기능 (약 10 w)
 
 | 일 | 크기 |
 |---|---|
-| llm-wiki nl2sql 스킬에 Oranda 절 추가 제안(④ᴮ 실제 DB 검증·드리프트·편집기 보내기), Windows 경로 정리 — llm-wiki 쪽 작업 | 1 |
+| domain-wiki nl2sql 스킬에 Oranda 절 추가 제안(④ᴮ 실제 DB 검증·드리프트·편집기 보내기), Windows 경로 정리 — domain-wiki 쪽 작업 | 1 |
 | `check_schema_drift`·`get_dependencies`, 스키마 브라우저 「위키」 링크·graphify 이웃 패널(graphify MCP 클라이언트) | 2 |
 | 내장 채팅 패널(제공자 선택·로컬 우선·비용 한도·전송 미리보기) — 11절의 내장 기능(인라인 완성·그리드 자연어 필터·주석 초안 등) | 5 |
 | 파일 기반 보조 경로: 일반 `.sql`·`.workspace.md` 밖 변경 감지(MyBatis `MapperWatchService` 일반화) | 1.5 |
@@ -677,7 +677,7 @@ flowchart TD
 
 | 위험 | 영향 | 대응 |
 |---|---|---|
-| 결재 도구가 EXPLAIN PLAN(PLAN_TABLE INSERT)·읽기 전용 트랜잭션 문장을 결재 대상으로 잡음(확인 못 함) | 에이전트 계획 도구가 결재 요청을 쏟아냄 | 단계 2 첫 일로 업무 PC 에서 시험한다. 기본은 DISPLAY_CURSOR 경로 |
+| 결재 도구가 EXPLAIN PLAN(PLAN_TABLE INSERT)·읽기 전용 트랜잭션 문장을 결재 대상으로 잡음(확인 못 함) | 에이전트 계획 도구가 결재 요청을 쏟아냄 | 단계 2 첫 일로 통제 환경 PC 에서 시험한다. 기본은 DISPLAY_CURSOR 경로 |
 | 사용자 함수·자율 트랜잭션이 SELECT 안에서 쓰기를 함 | 파서 분류로 못 막음 | 읽기 전용 트랜잭션 + 권한 좁은 계정 안내 |
 | 프롬프트 인젝션(주석·원문·행 값) | 에이전트가 엉뚱한 도구를 부름 | 쓰기 도구가 없고, 편집기 반영은 사람 승인이다. 행 값은 기본으로 보내지 않는다 |
 | 단일 실행 전환 | 「창 두 개로 다른 접속」 습관이 깨짐 | 설정으로 끌 수 있게 하고, 전달만 하고 창은 새로 열 수 있게 |
@@ -689,12 +689,12 @@ flowchart TD
 ### 13.2 사용자가 정할 것
 
 1. D-04(「1.0 은 AI 를 구현하지 않는다」)를 언제 풀 것인가. 단계 1을 개발 빌드(`devBuild`) 전용으로 먼저 낼 것인가.
-2. 회사 DB 메타데이터(테이블·컬럼 이름·한글 주석)를 클라우드 LLM(Claude)에 보내는 것이 허용되는가. llm-wiki 는 이미 그렇게 쓰고 있지만 **행 값**은 별도 결정이 필요하다.
+2. 조직 DB 메타데이터(테이블·컬럼 이름·한글 주석)를 클라우드 LLM(Claude)에 보내는 것이 허용되는가. domain-wiki 는 이미 그렇게 쓰고 있지만 **행 값**은 별도 결정이 필요하다.
 3. 운영 접속에 에이전트 `계획` 수준을 허용할 것인가, 아니면 아예 막을 것인가.
 4. 개발 접속에서 EXPLAIN PLAN 을 에이전트가 자동으로 보내도 되는가(결재 도구 시험 결과에 따라).
 5. 단일 실행을 기본으로 켤 것인가.
 6. LLM 이 만든 SQL 을 받아들일 때 Oranda 포매터를 적용할 것인가. nl2sql 은 Oracle `(+)` 와 앞 쉼표 정렬을 쓰므로 기본은 「그대로」를 권한다.
-7. nl2sql 스킬(llm-wiki)에 Oranda 절을 더하는 일을 누가 언제 할 것인가. 스킬 경로가 macOS 기준이다.
+7. nl2sql 스킬(domain-wiki)에 Oranda 절을 더하는 일을 누가 언제 할 것인가. 스킬 경로가 macOS 기준이다.
 8. 내장 채팅(단계 3)이 필요한가, 아니면 Claude Code + MCP 로 충분한가.
 
 ---
@@ -728,9 +728,9 @@ flowchart TD
 - `docs/idea.md`(6행, 7절 Select AI, 8절), `docs/PRD.md`(APP-07, APP-09, D-04, SAFE-01~08, C-05, C-06), `docs/TRD.md` 4.10·4.12, `docs/design/extension-points.md`, `docs/design/commands.md`, `docs/oranda1/wbs.md`(WP-05, WP-06), `docs/oranda1/PRD.md`(TN-01~16)
 - `src/Oranda.Core/Extensibility/IEditorContext.cs`, `IOutboundConsent.cs`, `src/Oranda.Core/Shell/Commands.cs`, `src/Oranda.Core/Execution/IExecutionService.cs`, `IExecutionPolicy.cs`, `ExecutionPolicy.cs`, `src/Oranda.Core/History/HistoryEntry.cs`, `src/Oranda.Core/Plans/IExecutionPlanService.cs`, `src/Oranda.Core/Monitoring/IMonitorService.cs`, `src/Oranda.Core/Metadata/IMetadataProvider.cs`, `src/Oranda.Core/Sessions/*`
 - `src/Oranda.App/Program.cs`, `App.axaml.cs`, `Shell/ShellCommandRunner.cs`, `Features/SqlEditor/EditorContext.cs`, `AvaloniaEditorDialogs.cs`, `SqlEditorHost*.cs`, `SqlEditorViewModel.cs`, `DroppedWorkspaceFiles.cs`, `WorkspaceFiles.cs`, `Features/MyBatisWorkspace/Save/*`, `Features/ExtensionTest/*`, `src/Oranda.Oracle/Sessions/OracleSessionManager.cs`, `Plans/OracleExecutionPlanService.cs`
-- `C:\Users\jongik.jang\project\llm-wiki\.claude\skills\nl2sql\SKILL.md`, `llm-wiki/nl2sql/README.md`, `nl2sql/validator/*`, `llm-wiki/global/graphify-out/graph.json`(통계만 읽음)
-- `C:\Users\jongik.jang\.claude\skills\graphify\SKILL.md`
-- `C:\Users\jongik.jang\project\sqlcl\lib\dbtools-mcp.jar`(SQLcl 25.4.1, 목록·문자열만 확인)
+- `C:\Users\<user>\project\domain-wiki\.claude\skills\nl2sql\SKILL.md`, `domain-wiki/nl2sql/README.md`, `nl2sql/validator/*`, `domain-wiki/global/graphify-out/graph.json`(통계만 읽음)
+- `C:\Users\<user>\.claude\skills\graphify\SKILL.md`
+- `C:\Users\<user>\project\sqlcl\lib\dbtools-mcp.jar`(SQLcl 25.4.1, 목록·문자열만 확인)
 
 ### 15.2 이번에 조사한 웹 자료
 
@@ -758,7 +758,7 @@ flowchart TD
 - JetBrains AI in editor(Diff·Accept): https://jetbrains.com/help/datagrip/2024.2/use-ai-in-editor.html , https://jetbrains.com/help/idea/2024.1/use-ai-in-editor.html
 - .NET 단일 실행(명명 파이프): https://medo64.com/posts/single-instance-application-for-net-6-or-7
 - 인자 전달 단일 실행 라이브러리 예: https://www.nuget.org/packages/CommandLineSwitchPipe/2.2.0
-- Chakra Max(웨어밸리): https://www.warevalley.com/en/product/chakra-max , https://m.boannews.com/html/detail.html?idx=136588
+- DB 접근 통제·결재 도구(제품 이름은 적지 않는다)
 
 ### 15.3 idea.md 8절에서 옮긴 출처
 

@@ -87,8 +87,8 @@ public sealed class ProfileEditorTnsTests : IDisposable
         Assert.NotEmpty(vm.TnsAliasDetail);
         Assert.DoesNotContain("→", vm.TnsAliasDetail, StringComparison.Ordinal);
 
-        var loaded = ProfileEditorViewModel.From(new ConnectionProfile("사내 테스트", "scott", "TESTB", TnsAdmin: Path.Combine(_dir, "two")));
-        Assert.Equal("사내 테스트", loaded.Name);
+        var loaded = ProfileEditorViewModel.From(new ConnectionProfile("시험 접속", "scott", "TESTB", TnsAdmin: Path.Combine(_dir, "two")));
+        Assert.Equal("시험 접속", loaded.Name);
         Assert.Equal(["testa", "TESTB"], loaded.TnsAliases);
         Assert.Equal("→ hostb:1522/svcb", loaded.TnsAliasDetail);
         Assert.False(loaded.IsDirty);

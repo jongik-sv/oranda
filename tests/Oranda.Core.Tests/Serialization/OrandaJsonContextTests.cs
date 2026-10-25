@@ -23,8 +23,8 @@ public class OrandaJsonContextTests
         Assert.Equal(Theme.System, value.Ui.Theme);
         var filter = Assert.Single(value.SchemaBrowser.Filters);
         Assert.Equal(SchemaFilterScope.Selected, filter.Scope);
-        Assert.Equal(["EAIAPUSER", "M90APUSER", "MESAPUSER"], filter.Schemas);
-        Assert.Equal("TB_M30*", filter.NamePatterns["TABLE"]);
+        Assert.Equal(["EAI_USER", "RPT_USER", "APP_USER"], filter.Schemas);
+        Assert.Equal("TB_ORD*", filter.NamePatterns["TABLE"]);
         Assert.Equal(filter.Id, value.SchemaBrowser.ActiveFilters["7d0c3f6e-2b1a-4c5d-9e8f-0a1b2c3d4e5f"]);
     }
 
@@ -47,7 +47,7 @@ public class OrandaJsonContextTests
             OrandaJsonContext.Default.AppSettings)!;
         Assert.Null(Assert.Single(old.SchemaBrowser.Filters).SchemaPattern);
 
-        var pattern = new SchemaBrowserFilter { Id = "f2", Name = "AP", Scope = SchemaFilterScope.Pattern, SchemaPattern = "APUSER$" };
+        var pattern = new SchemaBrowserFilter { Id = "f2", Name = "AP", Scope = SchemaFilterScope.Pattern, SchemaPattern = "_USER$" };
         var json = JsonSerializer.Serialize(old with { SchemaBrowser = old.SchemaBrowser with { Filters = [pattern] } }, OrandaJsonContext.Default.AppSettings);
         var back = JsonSerializer.Deserialize(json, OrandaJsonContext.Default.AppSettings)!;
 

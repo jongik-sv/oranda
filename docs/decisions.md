@@ -41,7 +41,7 @@
 - **Decision made**: Integration 시험은 test csproj 기본 필터(`VSTestTestCaseFilter=Category!=Integration`)로 빼고, 명령줄 `--filter Category=Integration` 으로만 돌린다. podman 에서는 Testcontainers 로그 대기 대신 접속 재시도로 준비 여부를 판정한다(`DOCKER_HOST=npipe://./pipe/docker_engine`, `TESTCONTAINERS_RYUK_DISABLED=true`). 19c·ADB 시험은 `ORANDA_IT_19C_CONNSTR`·`ORANDA_IT_ADB_CONNSTR`·`ORANDA_IT_ADB_WALLET` 이 없으면 아무것도 하지 않는다. `CanTraceSessions` 는 DBMS_MONITOR EXECUTE 행 존재 또는 EXECUTE ANY PROCEDURE 로 판정한다
 - **Rationale**: 26ai(gvenzl/oracle-free:23-slim)에서 버전 23·FREEPDB1·권한 점검이 실제 값과 일치. 기존 `CanRunAsync` 판정은 권한 없는 계정도 true 로 냈다
 - **Reversible**: yes
-- **Source**: 커밋 a727e94, e736a79, spikes/TSK-01-03/RESULT.md. 보류: 사내 19c, ADB, macOS ARM
+- **Source**: 커밋 a727e94, e736a79, spikes/TSK-01-03/RESULT.md. 보류: 별도 19c, ADB, macOS ARM
 
 ## D-006 (2026-10-19T08:00:00Z)
 - **Phase**: TSK-01-04 시작 시간 측정 (T-D07)
@@ -207,7 +207,7 @@
 - **Phase**: 지원 서버 범위 변경(D-06 일부 변경)
 - **Decision needed**: D-06 에서 「나중 검토」 로 둔 Oracle 11.2 접속을 1.0 에 넣을지
 - **Decision made**: 넣는다. 11.2 만 허용하고 12c·18c·21c·11.1 이하는 계속 막는다. 드라이버는 ODP.NET Core 23.26.301 하나만 쓰고, 11g 차이는 SQL 카탈로그 min-version: 11 변형과 기능 끄기로 흡수한다(TSK-03-07)
-- **Rationale**: 사내 시험 DB(11.2.0.3)에서 ODP.NET 23 접속·조회가 확인됐고(구버전 드라이버 불필요), 카탈로그 57개 중 깨지는 것은 FETCH FIRST·12c+ 열을 쓰는 15개뿐이라 PRD 11.3 의 「적은 비용」 경우에 해당한다. 사내에 11.2 DB 가 남아 있음
+- **Rationale**: 시험 DB(11.2.0.3)에서 ODP.NET 23 접속·조회가 확인됐고(구버전 드라이버 불필요), 카탈로그 57개 중 깨지는 것은 FETCH FIRST·12c+ 열을 쓰는 15개뿐이라 PRD 11.3 의 「적은 비용」 경우에 해당한다. 현장에 11.2 DB 가 남아 있음
 - **Reversible**: yes
 - **Source**: 사용자 결정(2026-10-20, 「11g 만들고 진행하자」)
 
@@ -247,7 +247,7 @@
 - **Phase**: TSK-03-07 후속, 11g 실행 중 취소(OOB)
 - **Decision needed**: 개발 PC 의 11g 컨테이너에서 실행 중 취소가 끝나지 않아 `OracleConfiguration.DisableOOB` 를 앱 기본으로 켤지
 - **Decision made**: 켜지 않는다(드라이버 기본값 유지). `DisableOOB` 는 컨테이너 통합 시험(`ORANDA_IT_11G_DISABLE_OOB=1`)에서만 쓴다
-- **Rationale**: 사내 시험 DB(11.2.0.3)에 실제 망으로 붙어 60 초 넘게 도는 SELECT 를 3 초 뒤 취소하니 OOB 켜짐·꺼짐 모두 ORA-01013 이 5~22 ms 안에 오고 세션도 다시 쓸 수 있었다. 끝나지 않던 것은 podman 포트 중계가 긴급(OOB) 데이터를 버리는 개발 PC 환경 문제다. PL/SQL 대기(DBMS_LOCK)는 그 계정에 권한이 없어 확인하지 못했다
+- **Rationale**: 시험 DB(11.2.0.3)에 실제 망으로 붙어 60 초 넘게 도는 SELECT 를 3 초 뒤 취소하니 OOB 켜짐·꺼짐 모두 ORA-01013 이 5~22 ms 안에 오고 세션도 다시 쓸 수 있었다. 끝나지 않던 것은 podman 포트 중계가 긴급(OOB) 데이터를 버리는 개발 PC 환경 문제다. PL/SQL 대기(DBMS_LOCK)는 그 계정에 권한이 없어 확인하지 못했다
 - **Reversible**: yes
 - **Source**: 사용자 결정(2026-10-20, 「OOB도 추천대로 할께」 = 실망에서 먼저 확인), 조정 세션 측정
 
