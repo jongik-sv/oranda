@@ -612,6 +612,17 @@ levels:
   - acceptance: 보고서 패턴을 git grep 하면 0건(남긴 것은 이유를 적음) / 빌드 -warnaserror 통과 / 고친 시험 통과 / Category!=Integration&Category!=Perf 전체 통과
   - note: 담당 PC: win144(Windows 개발 PC) — 맥북 세션은 이 Task 를 하지 않는다. 결과 — 가짜 .sqd 표본(8탭·바인드 4종)으로 교체하고 WorkspaceFilesSqdTests·SqlEditorSqdTests 기대값 갱신; 스키마·표 이름·DB 별칭 치환(시험·예제·문서·axaml·literals-en); 포매터 골든 샘플의 출처 표지·공정 코드·COIL_ 칼럼 일반화; llm-editor-integration 문서·PRD D-01(공개 MIT)·TRD·itest·spikes 의 내부 전용 표현 정리; 다른 저장소용 .claude 훅 설정 파일·docs/idea.md 의 원격 접속 줄 삭제, .dflow.local.example UUID 제거; 로컬 경로 일반화; README 영/한 Role 문장 고침. 이력은 그대로(과거 커밋에는 옛 값이 남음). 남긴 것: 가짜 MES 냄새 자료(시험용 가짜 값), win144 표시, Orange 호환 자료, ANTLR 문법 머리말 (win144)
 
+- [x] TSK-08-07: CI 다시 통과(설치 파일 크기·Linux 통합) [win144] w:1 2026-10-25~2026-10-25
+  - category: infra
+  - domain: infra
+  - model: opus
+  - priority: high
+  - tags: ci, github-actions, release, win144
+  - prd-ref: PRD 7.2(설치 파일 80 MB 이하, DEF-07)
+  - requirements: run 40200535112(a5080f1)의 실패 두 가지를 고친다 — windows-x64 「Installer size check (80 MB)」(Oranda-win-Setup.exe 83,927,190 > 83,886,080 bytes)는 상한을 올리지 않고 게시본에서 쓰지 않는 파일을 빼 줄인다(언어·Oracle 드라이버·글꼴은 그대로); integration(ubuntu) UxFlowTests 2건(ICredentialStore 미등록, 접속 관리자 창 기다림 시간 초과)은 원인을 고친다(시간만 늘리지 않음); 비고: 담당 PC: win144(Windows 개발 PC) — 맥북 세션은 이 Task 를 하지 않는다
+  - acceptance: 실제 GitHub Actions 실행(ci-green)에서 windows·macos·integration 세 작업 모두 success / 로컬 `dotnet build Oranda.sln -warnaserror` 와 바뀐 시험 통과
+  - note: 담당 PC: win144(Windows 개발 PC) — 맥북 세션은 이 Task 를 하지 않는다. 결과 — 세 작업 통과 run 40204749210(ci-green). 설치 파일 83,927,190 → 80,387,765 bytes(CI, 상한까지 3,498,315): Windows 게시본에서 디버거·덤프 전용 런타임 파일(mscordaccore·mscordbi·DiaSymReader·createdump)과 독립 GC(clrgc·clrgcexp)를 런타임 팩 자산 단계에서 빼고(deps.json 도 같이), 위성 리소스를 ko;en 으로(AvaloniaEdit zh-Hans 빠짐). 언어 리소스·Oracle 드라이버·Inter 글꼴 그대로, CI 시작 측정 5회 모두 ok. 상한은 그대로. Linux 2건은 원인 하나 — ICredentialStore 가 Windows(DPAPI)·macOS(키체인)에만 등록되어 Linux 에서 접속 서비스를 만드는 명령(계획·접속 관리자)이 죽었다(제품 결함): ServicePlatform.Other + 메모리 전용 VolatileCredentialStore(디스크에 안 씀, 재시작하면 다시 물음). 「나중에」 시험의 창 기다림 시간 초과도 접속 관리자 명령이 같은 예외로 창을 못 연 것. 확인 중 macOS 에서 LocalFilterTests 상태 줄 단정이 모델 Changed 이벤트보다 먼저 읽는 흔들림이 나와 상태 줄까지 조건 기다림으로 고침. 대가: 설치본 앱에는 디버거를 붙일 수 없음 (win144)
+
 ## WP-09: 사용 복잡도 줄이기
 <!-- 담당 PC: win144(Windows 개발 PC) — 맥북 세션은 이 WP 의 Task 를 하지 않는다. 2026-10-25 사용자 결정 「기본안으로 해」(조사 docs/oranda1/research/usage-complexity.md 6장 Q1~Q12 권장안 전부, Q6 = D-013 기본 Role SQL 개발자). 설계 = PRD 13, TRD 11, decisions D-015~D-023. 레인 5개: ux-menu(09-01 계약 → 09-02)·ux-layout(09-05 → 09-06)는 바로, ux-export(09-07)는 의존 없음(슬롯이 나면), ux-role(09-08 → 09-09)도 TSK-07-11(fx-default)이 52601b9 에 머지되어 바로 착수 가능, ux-shell(09-03 → 09-04)은 09-01 머지 뒤, 09-10 통합테스트가 마지막. 동시 레인 5개 제한 때문에 처음에는 ux-menu·ux-layout·ux-role 셋부터. 파일 소유 = TRD 11.10, 문구 파일 소유 = TRD 11.9. 후보(이 WP 밖) = PRD 13.1 -->
 

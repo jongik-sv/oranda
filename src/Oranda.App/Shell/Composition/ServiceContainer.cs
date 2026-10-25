@@ -205,6 +205,7 @@ public sealed partial class ServiceContainer : IServiceProvider, IDisposable
     {
         ServicePlatform.Windows => OperatingSystem.IsWindows(),
         ServicePlatform.MacOS => OperatingSystem.IsMacOS(),
+        ServicePlatform.Other => !OperatingSystem.IsWindows() && !OperatingSystem.IsMacOS(),
         _ => true,
     };
 

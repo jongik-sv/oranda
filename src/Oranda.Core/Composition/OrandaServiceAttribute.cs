@@ -29,6 +29,9 @@ public enum ServicePlatform
     Any,
     Windows,
     MacOS,
+
+    /// <summary>Windows·macOS 가 아닌 OS(Linux 등, 빌드만 되고 정식 지원하지 않음 — PRD 2). 플랫폼 서비스의 안전한 대체를 단다.</summary>
+    Other,
 }
 
 /// <summary>

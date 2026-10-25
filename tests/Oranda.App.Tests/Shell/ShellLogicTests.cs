@@ -177,6 +177,19 @@ public class ShellLogicTests
         Assert.NotNull(c.GetRequiredService<Oranda.Core.Storage.ISettingsStore>());
     }
 
+    [Fact]
+    public void Composition_registers_exactly_one_credential_store_for_this_os()
+    {
+        // OS 비밀 저장소가 없는 OS(Linux)도 대체 저장소가 있어야 접속 명령이 죽지 않는다(CI integration 은 Linux 에서 돈다).
+        var dir = Path.Combine(Path.GetTempPath(), "oranda-comp-" + Guid.NewGuid().ToString("N"));
+        using var c = AppComposition.Create(new AppCompositionOptions { DataDirectory = dir });
+
+        var store = Assert.Single(c.GetRequiredService<IEnumerable<Oranda.Core.Security.ICredentialStore>>());
+        var expected = OperatingSystem.IsWindows() ? "DpapiCredentialStore" : OperatingSystem.IsMacOS() ? "KeychainCredentialStore" : "VolatileCredentialStore";
+        Assert.Equal(expected, store.GetType().Name);
+        Assert.Same(store, c.GetRequiredService<Oranda.Core.Security.ICredentialStore>());
+    }
+
     // ---- 메뉴 모델 ----
 
     [Theory]

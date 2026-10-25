@@ -155,11 +155,52 @@ public sealed class CredentialStoreTests : IDisposable
     {
         OrandaServiceAttribute dpapi = Attribute(typeof(DpapiCredentialStore));
         OrandaServiceAttribute keychain = Attribute(typeof(KeychainCredentialStore));
+        OrandaServiceAttribute volatileStore = Attribute(typeof(VolatileCredentialStore));
 
         Assert.Equal(typeof(ICredentialStore), dpapi.ServiceType);
         Assert.Equal(ServicePlatform.Windows, dpapi.Platform);
         Assert.Equal(typeof(ICredentialStore), keychain.ServiceType);
         Assert.Equal(ServicePlatform.MacOS, keychain.Platform);
+        Assert.Equal(typeof(ICredentialStore), volatileStore.ServiceType);
+        Assert.Equal(ServicePlatform.Other, volatileStore.Platform);
+    }
+
+    // 대체 저장소(Linux 등): 메모리에만, 앱이 도는 동안만.
+    [Fact]
+    public async Task Volatile_store_round_trips_overwrites_and_deletes()
+    {
+        var store = new VolatileCredentialStore();
+        byte[] secret = Encoding.UTF8.GetBytes(Password);
+
+        Assert.Null(await store.LoadAsync(Key));
+        await store.SaveAsync(Key, secret);
+        Assert.Equal(secret, await store.LoadAsync(Key));
+
+        await store.SaveAsync(Key, new byte[] { 9, 8 });
+        await store.SaveAsync(Key + "2", ReadOnlyMemory<byte>.Empty);
+        Assert.Equal(new byte[] { 9, 8 }, await store.LoadAsync(Key));
+        Assert.Empty((await store.LoadAsync(Key + "2"))!);
+
+        await store.DeleteAsync(Key);
+        Assert.Null(await store.LoadAsync(Key));
+        await store.DeleteAsync(Key); // 없는 키 지우기는 오류가 아니다
+        Assert.NotNull(await store.LoadAsync(Key + "2"));
+    }
+
+    [Fact]
+    public async Task Volatile_store_hands_out_copies_and_rejects_blank_keys()
+    {
+        var store = new VolatileCredentialStore();
+        byte[] secret = [1, 2, 3];
+        await store.SaveAsync(Key, secret);
+        secret[0] = 7; // 넘긴 배열을 바꿔도 저장값은 그대로
+        byte[] loaded = (await store.LoadAsync(Key))!;
+        loaded[1] = 7; // 꺼낸 배열을 바꿔도 저장값은 그대로
+
+        Assert.Equal(new byte[] { 1, 2, 3 }, await store.LoadAsync(Key));
+        await Assert.ThrowsAnyAsync<ArgumentException>(() => store.SaveAsync(" ", new byte[] { 1 }));
+        await Assert.ThrowsAnyAsync<ArgumentException>(() => store.LoadAsync(""));
+        await Assert.ThrowsAnyAsync<ArgumentException>(() => store.DeleteAsync(" "));
     }
 
     private static OrandaServiceAttribute Attribute(Type type)

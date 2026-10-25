@@ -2,6 +2,8 @@
   <PropertyGroup>
     <OutputType>WinExe</OutputType>
     <ApplicationManifest>app.manifest</ApplicationManifest>
+    <!-- 화면 언어는 한/영뿐이다. 패키지 위성 리소스(AvaloniaEdit zh-Hans 등)는 넣지 않는다(TSK-08-07). -->
+    <SatelliteResourceLanguages>ko;en</SatelliteResourceLanguages>
   </PropertyGroup>
 
   <!-- Windows self-contained 게시는 일반 ReadyToRun (D-034, TSK-10-08). composite 는 Microsoft·Oracle 이 서명한 dll 까지 다시 컴파일해
@@ -37,6 +39,21 @@
   <Target Name="ExcludePdbFromPublish" AfterTargets="ComputeResolvedFilesToPublishList">
     <ItemGroup>
       <ResolvedFileToPublish Remove="@(ResolvedFileToPublish)" Condition="'%(Extension)' == '.pdb'" />
+    </ItemGroup>
+  </Target>
+
+  <!-- Windows 설치본에서 실행에 쓰지 않는 런타임 파일을 뺀다(TSK-08-07, 설치 파일 80 MB 이하 = PRD 7.2, 줄이기 전 83,939,374 bytes).
+       디버거·덤프 전용: mscordaccore·mscordbi(디버거 연결), DiaSymReader(Windows PDB 읽기), createdump(DOTNET_DbgEnableMiniDump 때만).
+       충돌 보고는 예외 글로 남기므로(CrashReportWriter) 덤프 도구가 필요 없다. 독립 GC clrgc·clrgcexp 는 GCName 설정 때만 읽는다.
+       런타임 팩 자산을 푼 바로 뒤에 빼야 빌드 출력·게시 목록·deps.json 에서 함께 빠진다. -->
+  <Target Name="ExcludeDebugOnlyRuntimeFiles" AfterTargets="ResolveRuntimePackAssets"
+          Condition="$(RuntimeIdentifier.StartsWith('win-')) And '$(SelfContained)' == 'true'">
+    <PropertyGroup>
+      <_OrandaDebugOnlyPattern>^(mscordaccore.*\.dll|mscordbi\.dll|Microsoft\.DiaSymReader\.Native\..*\.dll|createdump\.exe|clrgc(exp)?\.dll)$</_OrandaDebugOnlyPattern>
+    </PropertyGroup>
+    <ItemGroup>
+      <RuntimePackAsset Remove="@(RuntimePackAsset)" Condition="$([System.Text.RegularExpressions.Regex]::IsMatch('%(Filename)%(Extension)', '$(_OrandaDebugOnlyPattern)'))" />
+      <ReferenceCopyLocalPaths Remove="@(ReferenceCopyLocalPaths)" Condition="$([System.Text.RegularExpressions.Regex]::IsMatch('%(Filename)%(Extension)', '$(_OrandaDebugOnlyPattern)'))" />
     </ItemGroup>
   </Target>
 

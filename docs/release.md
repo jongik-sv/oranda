@@ -60,5 +60,5 @@ Actions > ci > Run workflow(`workflow_dispatch`). 태그가 아니므로 버전�
 
 - 저장소 Settings > Actions > General 의 Workflow permissions 가 읽기 전용이어도 된다(`release` 작업이 자기 권한을 올린다).
 - 첫 릴리스에는 받을 이전 릴리스가 없어 `Download previous release` 단계가 「no previous release to download」 를 찍고 넘어간다.
-- Windows 설치 파일 크기: 2026-10-25 로컬 무서명 측정 `Oranda-win-Setup.exe` 83,864,323 bytes(licenses 포함). 크기 검사 상한 83,886,080 bytes 까지 21,757 bytes 만 남았다. 패키지를 더하거나 올리면 크기 검사가 실패할 수 있다.
+- Windows 설치 파일 크기: 2026-10-25 로컬 무서명 측정 `Oranda-win-Setup.exe` 80,388,692 bytes(licenses 포함, 상한 83,886,080 bytes 까지 약 3.3 MB). 디버거·덤프 전용 런타임 파일(mscordaccore·mscordbi·DiaSymReader·createdump)·독립 GC(clrgc·clrgcexp)·한/영 밖 위성 리소스를 게시본에서 빼 83,939,374 bytes 에서 줄였다(TSK-08-07, `src/Oranda.App/Oranda.App.csproj`). 그래서 설치본 앱에는 디버거를 붙일 수 없다(충돌 보고는 예외 글). 패키지를 더하거나 올리면 크기를 다시 잰다.
 - 공개 배포 전에 노출 점검 결과(조직 내부 정보)를 정리해야 한다(TSK-08-02, 결과는 저장소 밖에 둠).

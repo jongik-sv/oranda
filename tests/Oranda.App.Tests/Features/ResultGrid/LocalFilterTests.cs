@@ -260,8 +260,8 @@ public sealed class LocalFilterTests
 
         vm.QuickFilterText = "g";
         vm.QuickFilterText = "g2"; // 입력이 이어지면 앞 거르기는 버려진다
-        await WaitAsync(() => vm.Model.IsLocalFiltered && vm.Model.RowCount == 4);
-        Assert.Contains("거름: 보이는 4 / 가져온 30행", vm.StatusText, StringComparison.Ordinal);
+        // 상태 줄은 모델이 거르기를 끝낸 뒤 Changed 이벤트로 다시 쓴다. 이 시험은 UI 스레드 없이 돌아 그 사이를 볼 수 있으므로 상태 줄까지 기다린다.
+        await WaitAsync(() => vm.Model.IsLocalFiltered && vm.Model.RowCount == 4 && vm.StatusText.Contains("거름: 보이는 4 / 가져온 30행", StringComparison.Ordinal));
 
         vm.IsQuickFilterVisible = true;
         Assert.True(vm.ClearOrCloseQuickFilter()); // 첫 Esc: 글만 지운다
