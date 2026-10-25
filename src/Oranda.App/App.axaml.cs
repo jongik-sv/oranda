@@ -127,27 +127,37 @@ public partial class App : Application
     /// <summary>
     /// 시작 작업(<see cref="IStartupTask"/>)을 예약한다(D-006, 시작 경로에서는 돌지 않는다).
     /// 첫 프레임 직후 <see cref="StartupPhase.AfterFirstFrame"/> 작업을 부르고, 잠시 뒤 유휴 때 지연 어셈블리(Oracle·Language)를 훑어
-    /// 아직 돌지 않은 작업(<see cref="StartupPhase.Idle"/> 과 지연 어셈블리의 작업)을 부른다.
+    /// 아직 돌지 않은 작업(<see cref="StartupPhase.Idle"/> 과 지연 어셈블리의 작업)을 부른다. 두 번 다 기능 게이트로 형 단계에서 거른다(TSK-07-03).
     /// </summary>
     private static void ScheduleStartupTasks(ServiceContainer services)
     {
-        var ran = new HashSet<IStartupTask>(ReferenceEqualityComparer.Instance);
-        Dispatcher.UIThread.Post(() => _ = RunStartupTasksAsync(services, ran, StartupPhase.AfterFirstFrame), DispatcherPriority.Background);
+        var run = new StartupRun();
+        Dispatcher.UIThread.Post(() => _ = RunStartupTasksAsync(services, run, StartupPhase.AfterFirstFrame), DispatcherPriority.Background);
         DispatcherTimer.RunOnce(
             () =>
             {
                 services.ScanDeferred();
-                _ = RunStartupTasksAsync(services, ran, null);
+                _ = RunStartupTasksAsync(services, run, null);
             },
             StartupIdleDelay);
     }
 
-    /// <summary>등록된 시작 작업 중 아직 돌지 않은 것을 부른다. 작업 하나가 실패해도 나머지는 계속한다.</summary>
-    private static async Task RunStartupTasksAsync(ServiceContainer services, HashSet<IStartupTask> ran, StartupPhase? only)
+    /// <summary>
+    /// 등록된 시작 작업 중 켜진 기능의 것이고 아직 돌지 않은 것을 부른다. 작업 하나가 실패해도 나머지는 계속한다.
+    /// 꺼진 기능의 작업은 만들지도 않고 Trace 에 「시작 작업 건너뜀: 형」을 한 번 남긴다. 마지막 차례(<paramref name="only"/> 가 null)는 돈/건너뛴 수를 남긴다(TSK-07-07).
+    /// </summary>
+    internal static async Task RunStartupTasksAsync(ServiceContainer services, StartupRun run, StartupPhase? only)
     {
-        foreach (var task in services.GetService<IEnumerable<IStartupTask>>() ?? [])
+        var tasks = services.GetStartupTasks(type =>
         {
-            if ((only is { } phase && task.Phase != phase) || !ran.Add(task))
+            if (run.Skipped.Add(type))
+            {
+                Trace.TraceInformation("시작 작업 건너뜀: {0}", type.FullName);
+            }
+        });
+        foreach (var task in tasks)
+        {
+            if ((only is { } phase && task.Phase != phase) || !run.Ran.Add(task))
             {
                 continue;
             }
@@ -161,5 +171,18 @@ public partial class App : Application
                 Trace.TraceError("시작 작업 '{0}' 실행 중 예외: {1}", task.GetType().FullName, ex);
             }
         }
+
+        if (only is null)
+        {
+            Trace.TraceInformation("시작 작업: 돈 {0}개, 건너뜀 {1}개", run.Ran.Count, run.Skipped.Count);
+        }
+    }
+
+    /// <summary>한 실행의 시작 작업 기록: 부른 작업(같은 작업을 두 번 부르지 않게)과 기능 게이트로 건너뛴 형.</summary>
+    internal sealed class StartupRun
+    {
+        public HashSet<IStartupTask> Ran { get; } = new(ReferenceEqualityComparer.Instance);
+
+        public HashSet<Type> Skipped { get; } = [];
     }
 }

@@ -1,11 +1,13 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Linq;
 using CommunityToolkit.Mvvm.ComponentModel;
 using Oranda.App.Shell;
 using Oranda.App.Shell.Composition;
 using Oranda.App.Shell.Docking;
 using Oranda.Core.Connection;
+using Oranda.Core.Features;
 using Oranda.Core.Shell;
 
 namespace Oranda.App.ViewModels;
@@ -24,7 +26,7 @@ public partial class MainViewModel : ViewModelBase
     {
         _shell = shell;
         Docking = shell.Docking;
-        StatusItems = [.. statusBar.Items.Select(i => new StatusBarEntry(i, (IStatusBarItem)services.Create(i.ItemType)))];
+        StatusItems = CreateStatusItems(statusBar, services);
         _environment = shell.ActiveEnvironment;
         shell.EnvironmentChanged += (_, _) =>
         {
@@ -33,6 +35,35 @@ public partial class MainViewModel : ViewModelBase
         };
         Docking.ActiveDocumentChanged += (_, _) => FollowActiveDocument();
         FollowActiveDocument();
+    }
+
+    /// <summary>
+    /// 상태 칸을 만든다. 기능 게이트가 끈 형(<see cref="IFeatureGate.IsTypeEnabled"/>)은 만들지 않는다(TSK-07-03): 블로커 칸이 없으면 감시기·15초 폴링·
+    /// 모니터 세션도 없고, MyBatis 칸이 없으면 저장 알림 구독도 없다. 실행 중 바뀐 기능은 다음 실행에 반영된다(D-010).
+    /// </summary>
+    internal static IReadOnlyList<StatusBarEntry> CreateStatusItems(IStatusBarRegistry statusBar, ServiceContainer services)
+    {
+        var gate = services.GetRegistered<IFeatureGate>();
+        var entries = new List<StatusBarEntry>();
+        var skipped = 0;
+        foreach (var item in statusBar.Items)
+        {
+            if (gate is not null && !gate.IsTypeEnabled(item.ItemType))
+            {
+                skipped++;
+                Trace.TraceInformation("상태 칸 건너뜀: {0}", item.ItemType.FullName);
+                continue;
+            }
+
+            entries.Add(new StatusBarEntry(item, (IStatusBarItem)services.Create(item.ItemType)));
+        }
+
+        if (skipped > 0)
+        {
+            Trace.TraceInformation("상태 칸: {0}개, 건너뜀 {1}개", entries.Count, skipped);
+        }
+
+        return entries;
     }
 
     private PanelDocument? _document;

@@ -437,7 +437,7 @@ levels:
   - acceptance: R6 만 고르면 주 메뉴에 「모니터」「튜닝」 이 없고 팔레트·툴바·우클릭에도 그 명령이 없다 / 설정을 바꾸면 재시작 없이 메뉴·툴바·팔레트·단축키가 바뀐다 / features 섹션이 없으면 명령·도구 창 집합이 a507d81 과 같다 / 실행 중 MyBatis 를 켜도 MyBatis 명령은 재시작 전까지 나타나지 않고 PendingRestart 에 myBatis 가 있다 / 전체 시험 통과
   - note: 담당 PC: win144(Windows 개발 PC) — 맥북 세션은 이 Task 를 하지 않는다. 크기 L. 레인 rl-registry. 다른 레인은 FakeFeatureGate 로 시험하므로 이 Task 머지 전에도 진행할 수 있다
 
-- [ ] TSK-07-03: 시작 작업·상태 칸 거르기·PL/SQL 작업 공간 나누기·블로커 칸 대체 클릭 [win144] w:2 2026-10-27~2026-10-28
+- [x] TSK-07-03: 시작 작업·상태 칸 거르기·PL/SQL 작업 공간 나누기·블로커 칸 대체 클릭 [win144] w:2 2026-10-27~2026-10-28
   - category: dev
   - domain: frontend
   - model: opus
@@ -447,7 +447,7 @@ levels:
   - prd-ref: RL-04, RL-06, RL-11, TRD 10.7.2, TRD 10.7.3
   - requirements: 시작 작업을 형 단계에서 거른다: `App.axaml.cs:148` 의 `GetService<IEnumerable<IStartupTask>>()` 는 모든 작업을 만들어 버리므로(MapperWatchStartup → MapperWatchService 등 생성자 부작용), `ServiceContainer` 에 구현 형 조건(`IFeatureGate.IsTypeEnabled`)으로 거른 IEnumerable 을 만드는 길을 두고 첫 프레임 뒤·지연 어셈블리 훑기 뒤(`App.axaml.cs:135-142`) 모두 그것을 쓴다. 건너뛴 작업은 Trace 에 「시작 작업 건너뜀: <형>」, 끝에 돈/건너뛴 수를 남긴다(TSK-07-07 이 센다); 상태 칸: `ViewModels/MainViewModel.cs:27` 에서 IsTypeEnabled 가 거짓인 칸은 만들지 않는다(블로커 칸을 안 만들면 BlockerWatcher·15초 폴링·모니터 세션도 없음, MyBatis 칸 없음); PL/SQL 작업 공간 나누기(TRD 10.7.3): `PlsqlWorkspacePersistence` 는 plsqlEditor 에 매달려 돌고, 안에서 plsqlWorkspace 가 꺼져 있으면 라우터만 만들고 복원·자동 저장 타이머·종료 저장을 하지 않는다; 블로커 칸 클릭(`BlockerStatusItem.cs:122`): lockMonitor 가 꺼져 있으면 Lock 모니터 대신 예약 문구 안내 플라이아웃과 「설정 열기」(oranda.tools.roles 실행), 툴팁 「눌러서 Lock 모니터 열기」 도 바꾼다. Lock 모니터 임계치 이벤트 구독은 그대로 둔다; Platform(ChangeJournalRecorder)·Language(PlSqlWarmUpTask) 시작 작업도 같은 규칙을 탄다(PlSqlWarmUpTask 는 공통이라 돈다); 시험: FakeFeatureGate 로 MyBatis 끔 → MyBatis 시작 작업 4개를 만들지도 부르지도 않음(생성자 호출 0회), 블로커 끔 → 칸·감시기 없음, plsqlWorkspace 끔 → 라우터는 있고 복원·타이머 없음, 지연 어셈블리 훑기 뒤에도 거름, lockMonitor 끔 → 클릭 안내; 계약 Task design.md 「기능 Task 편집 지점」 의 자기 소유 파일만 고친다; 비고: 담당 PC: win144(Windows 개발 PC) — 맥북 세션은 이 Task 를 하지 않는다
   - acceptance: R1 만 고르면 MyBatis 시작 작업 4개·MyBatis 상태 칸·PL/SQL 작업 공간 복원이 돌지 않고 블로커 칸은 남는다 / R6 만 고르면 블로커 칸·변경 일지 기록기가 없다 / features 없음 = 시작 작업 14개·상태 칸 10개 그대로 / 블로커 칸 클릭 대체가 동작 / 전체 시험 통과
-  - note: 담당 PC: win144(Windows 개발 PC) — 맥북 세션은 이 Task 를 하지 않는다. 크기 M. 레인 rl-startup
+  - note: 담당 PC: win144(Windows 개발 PC) — 맥북 세션은 이 Task 를 하지 않는다. 크기 M. 레인 rl-startup. 결과: ServiceContainer.GetStartupTasks(형 단계 거름, IEnumerable<IStartupTask> 해석도 거름)·건너뜀/돈 수 Trace, 상태 칸 거름, PL/SQL 작업 공간 끔 = 라우터만, Lock 모니터 끔 블로커 칸 클릭 = 안내 플라이아웃 + 「설정 열기」, StartupFilterTests 22건 (win144)
 
 - [ ] TSK-07-04: 설정 창 「기능」 탭 — Role 선택·기능 세부·재시작 안내·oranda.tools.roles [win144] w:2 2026-10-27~2026-10-28
   - category: dev

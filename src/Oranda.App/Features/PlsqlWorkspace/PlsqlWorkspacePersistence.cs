@@ -12,6 +12,7 @@ using Oranda.App.Shell.Docking;
 using Oranda.App.Shell.Settings;
 using Oranda.Core.Composition;
 using Oranda.Core.Events;
+using Oranda.Core.Features;
 using Oranda.Core.Sessions;
 using Oranda.Core.Storage;
 
@@ -23,10 +24,12 @@ namespace Oranda.App.Features.PlsqlWorkspace;
 /// 미리보기만 담은 작업 공간·미리보기 탭은 쓰지 않는다. 글과 상태는 UI 스레드에서만 읽는다.
 /// 시작 때는 열린 목록 앞 <see cref="RestoreLimit"/> 개를 되살리고(설정 <c>workspace.restoreOnStartup</c> 을 SQL 작업 공간과 같이 따른다), 저장한 접속의 세션이 열리면 탭에 붙인다.
 /// 사용자가 닫은 작업 공간 파일은 backup 으로 옮긴다.
+/// 기능 나누기(TRD 10.7.3): 이 작업은 plsqlEditor 에 매달려 돌고(라우터 = PL/SQL 편집 탭이 열리는 문서 자리), plsqlWorkspace 가 꺼져 있으면
+/// 라우터만 만들고 복원·자동 저장 타이머·종료 저장·닫은 파일 옮기기를 하지 않는다. 판단은 시작 때 한 번(실행 중 바뀜은 다음 실행, D-010).
 /// </summary>
 [OrandaService(typeof(IStartupTask))]
 public sealed class PlsqlWorkspacePersistence(
-    DockWorkspace docking, SettingsService settings, ShellController shell, IAppDataPaths paths, IServiceProvider services) : IStartupTask
+    DockWorkspace docking, SettingsService settings, ShellController shell, IAppDataPaths paths, IServiceProvider services, IFeatureGate? gate = null) : IStartupTask
 {
     /// <summary>시작 때 되살리는 작업 공간 수(결정 71 덧붙임: 열린 목록 앞에서부터). 넘는 것은 열지 않고 열린 목록에 남긴다.</summary>
     public const int RestoreLimit = 10;
@@ -57,6 +60,15 @@ public sealed class PlsqlWorkspacePersistence(
 
     public StartupPhase Phase => StartupPhase.AfterFirstFrame;
 
+    /// <summary>
+    /// 이번 실행에서 작업 공간 저장·복원을 하는지(<see cref="RunAsync"/> 가 정한다, 그 전에는 null). 거짓이면 라우터만 있다.
+    /// 시험·진단용.
+    /// </summary>
+    internal bool? Persisting { get; private set; }
+
+    /// <summary>자동 저장 타이머가 돌고 있는지(시험·진단용).</summary>
+    internal bool AutosaveRunning => _timer?.IsEnabled == true;
+
     /// <summary>파일 저장소(<c>{data}/plsql-workspaces</c>, 손상·닫힌 파일은 <c>{data}/backup/plsql-workspaces</c>: 닫힌 파일 개수 제한이 다른 백업을 지우지 않게 따로 둔다).</summary>
     public PlsqlWorkspaceStore Store { get; } = new(
         Path.Combine(paths.DataDirectory, "plsql-workspaces"), Path.Combine(paths.BackupDirectory, "plsql-workspaces"));
@@ -68,6 +80,12 @@ public sealed class PlsqlWorkspacePersistence(
         Dispatcher.UIThread.Post(() =>
         {
             _ = Router; // 셸 서비스로 라우터를 먼저 만들어 둔다(탭 줄 「+」가 명령을 부를 수 있게)
+            Persisting = gate?.IsEnabled(FeatureIds.PlsqlWorkspace) ?? true;
+            if (Persisting != true)
+            {
+                return; // 작업 공간 저장 꺼짐: 탭은 열리되 파일에 쓰지도 되살리지도 않는다
+            }
+
             shell.RegisterShutdown(ShutdownAsync);
             Wire();
             if (settings.Current.Workspace.RestoreOnStartup)

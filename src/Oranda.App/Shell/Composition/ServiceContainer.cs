@@ -11,7 +11,7 @@ namespace Oranda.App.Shell.Composition;
 /// 외부 DI 패키지 없이 두 가지만 더 한다: <see cref="AddDeferredAssembly"/>(처음 모르는 형식을 물을 때 비로소 훑는다 —
 /// 시작 경로에서 Oracle·ANTLR 어셈블리를 로드하지 않기 위함, TRD 8)와 <c>IEnumerable&lt;T&gt;</c> 해석.
 /// </summary>
-public sealed class ServiceContainer : IServiceProvider, IDisposable
+public sealed partial class ServiceContainer : IServiceProvider, IDisposable
 {
     private readonly object _gate = new();
     private readonly Dictionary<Type, List<Registration>> _registrations = [];
@@ -111,7 +111,9 @@ public sealed class ServiceContainer : IServiceProvider, IDisposable
 
         if (serviceType.IsGenericType && serviceType.GetGenericTypeDefinition() == typeof(IEnumerable<>))
         {
-            return ResolveAll(serviceType.GetGenericArguments()[0]);
+            // 시작 작업 목록은 누가 꺼내도 기능 게이트로 거른 것이다(꺼진 기능의 작업을 만들지 않는다, TSK-07-03)
+            var element = serviceType.GetGenericArguments()[0];
+            return element == typeof(IStartupTask) ? GetStartupTasks().ToArray() : ResolveAll(element);
         }
 
         if (TryGetRegistrations(serviceType, out var list))
