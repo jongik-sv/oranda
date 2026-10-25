@@ -592,6 +592,125 @@ levels:
   - acceptance: 설치 안내 2종에 설치·막힐 때·업데이트·제거가 있다 / README 에 「Code signing policy」 절과 SignPath 고지 문구·역할·개인정보 절 / 신청서 초안이 저장소 밖에 있다
   - note: 담당 PC: win144(Windows 개발 PC) — 맥북 세션은 이 Task 를 하지 않는다. 결과 — install.md 를 공개 배포용으로 다시 씀(GitHub Releases, SmartScreen·브라우저 차단·스마트 앱 컨트롤, macOS 14/15 열기·xattr, 업데이트 끄기, 제거·남는 폴더) + install.en.md; README Code signing policy(고지 문구·역할·승인 전 무서명)·Privacy(업데이트 확인 기본 켬을 사실대로); 신청서 초안에 거절 위험(Oracle 드라이버 비 OSI·평판·릴리스 없음·업데이트 확인 개인정보 문구) 정리 (win144)
 
+## WP-09: 사용 복잡도 줄이기
+<!-- 담당 PC: win144(Windows 개발 PC) — 맥북 세션은 이 WP 의 Task 를 하지 않는다. 2026-10-25 사용자 결정 「기본안으로 해」(조사 docs/oranda1/research/usage-complexity.md 6장 Q1~Q12 권장안 전부, Q6 = D-013 기본 Role SQL 개발자). 설계 = PRD 13, TRD 11, decisions D-015~D-023. 레인 5개: ux-menu(09-01 계약 → 09-02)·ux-layout(09-05 → 09-06)는 바로, ux-export(09-07)는 의존 없음(슬롯이 나면), ux-role(09-08 → 09-09)도 TSK-07-11(fx-default)이 52601b9 에 머지되어 바로 착수 가능, ux-shell(09-03 → 09-04)은 09-01 머지 뒤, 09-10 통합테스트가 마지막. 동시 레인 5개 제한 때문에 처음에는 ux-menu·ux-layout·ux-role 셋부터. 파일 소유 = TRD 11.10, 문구 파일 소유 = TRD 11.9. 후보(이 WP 밖) = PRD 13.1 -->
+
+- [ ] TSK-09-01: 명령 이름 정리·「(이번 실행)」/「기본값」 표기·하위 메뉴 이름 예약 (계약) [win144] w:1 2026-11-09~2026-11-09
+  - category: infra
+  - domain: frontend
+  - model: opus
+  - priority: critical
+  - tags: ux, menu, naming, contract, win144
+  - prd-ref: UX-04, UX-08, PRD 13.4, TRD 11.2, TRD 11.9, TRD 11.10
+  - requirements: PRD 13.4 표대로 `src/Oranda.App/Shell/Resources/CommandTitles.json`·`CommandTitles-en.json` 의 이름을 바꾼다(실행 취소(서버 중단) → 실행 중지, 힌트 넣은 사본으로 실행, 세션 종료(KILL)…·세션 연결 끊기(DISCONNECT)… 를 세션 모니터·Lock 모니터 둘 다, Lock 자동 새로 고침 → 자동 새로 고침, 표 통계 보기… 2개, 표 통계 수집 스크립트 (DBMS_STATS), 내보내기 → 파일로 내보내기…, 실행 상태 토글 4종 「(이번 실행)」). 특성에 `Title =` 으로 이름을 박은 명령은 그 줄도 바꾸고, 세션 종료 확인 창 문구도 같은 낱말로; 하위 메뉴 제목 키를 TRD 11.2 표대로 strings-ko/en 에 예약한다(`Menu.edit.case`·`lines`·`format`·`marks`·`go`·`assist`, `Menu.file.workspace`·`connection`·`tabs`·`mybatis`, `Menu.sql.plsql`, `Menu.context.grid.copyAs`·`filter`·`edit`·`flashback`·`columns`, 스크립트 오류 시 하위 메뉴 제목에 「(이번 실행)」). 실제 키가 표와 다르면 실제 키로; 설정 「실행」 탭 칸 이름에 「(기본값)」(`Shell.settings.*`)과 탭 위 안내 한 줄 「새 탭·다음 실행의 기본값입니다. 지금 탭은 SQL 메뉴에서 바꿉니다.」(`SettingsWindow.axaml` 실행 탭에 TextBlock 하나); 영어 짝은 같은 원칙(Stop Execution, Kill Session (KILL)…, Disconnect Session (DISCONNECT)…, Table Statistics…, Export to File…, … (this run), … (default)); `docs/oranda1/design.md` 에 `## 기능 Task 편집 지점 (WP-09)` 표(TRD 11.10 을 실제 코드에 맞춰 옮김, 하위 메뉴 키 표 포함), `docs/design/commands.md` 제목 열; 옛 제목을 단정한 시험을 새 이름으로 고친다; 제약: 배치(`Placements`)·`When`·로직은 고치지 않는다. 문구 파일은 이 Task 뒤로 ux-menu 레인만 고친다(D-023); 비고: 담당 PC: win144(Windows 개발 PC) — 맥북 세션은 이 Task 를 하지 않는다
+  - acceptance: 실행 로직 없음 (contract-only) / 메뉴·툴바·팔레트에 「실행 취소」 와 「실행 중지」 가 따로 보이고 두 모니터의 세션 끊기 이름이 같다 / 예약한 하위 메뉴 키가 ko·en 짝으로 있고 LocalizationTests 통과 / design.md 「기능 Task 편집 지점 (WP-09)」 에 레인마다 소유 파일·시험 파일·고치지 않는 것이 있고 두 레인이 한 파일을 나눠 갖지 않는다 / `dotnet build Oranda.sln -warnaserror` 통과, 전체 시험 통과
+  - note: 담당 PC: win144(Windows 개발 PC) — 맥북 세션은 이 Task 를 하지 않는다. 크기 S. 레인 ux-menu(첫 Task, 단독 먼저 머지). 머지 뒤 ux-shell 레인 착수 가능 (win144)
+
+- [ ] TSK-09-02: 파일·편집·보기·SQL 메뉴 하위 메뉴 묶기·중복 자리 정리·PL/SQL 주 메뉴·MyBatis 명령 문맥 [win144] w:2 2026-11-10~2026-11-11
+  - category: dev
+  - domain: frontend
+  - model: sonnet
+  - priority: high
+  - tags: ux, menu, placement, win144
+  - depends: TSK-09-01
+  - prd-ref: UX-01, UX-02, UX-05, UX-06, UX-07, PRD 13.3, TRD 11.2, TRD 11.10
+  - requirements: `[OrandaCommand]` 의 `menu:` 배치를 PRD 13.3 표대로 바꾼다: 편집 = 대소문자 6·줄·주석 8(주석 4·들여쓰기·내어쓰기·줄 복제·줄 삭제)·포맷 6·북마크·접기 9(북마크 3·접기 4·다중 커서 2)·입력 도우미 3(자동 완성 2·스니펫)을 하위 메뉴로(`menu:edit/case/upper@10` 꼴), 탐색 명령은 `menu:navigate/…` 를 `menu:edit/go/<키>@n` 으로 바꾸고 다음/이전 찾기·줄로 이동·짝 괄호로 이동도 「이동 ▸」 에; 파일 = 접속 7개 「접속 ▸」, 새 작업 공간과 SQL·PL/SQL·MyBatis 작업 공간 명령 「작업 공간 ▸」(최근 작업 공간 하위 메뉴를 옮기면 `RecentFilesService.WorkspacesMenuKey` 도 바꿈), 닫은 탭 다시 열기·탭 복사·탭 이름 바꾸기 「탭 ▸」, 매퍼 폴더 열기·xml 에 저장 「MyBatis ▸」(툴바 자리는 그대로); 보기 = 「도구 창 ▸」 토글과 겹치는 명령 7개(oranda.view.outline·output·messages·plan·rowView·compileErrors·templates)의 `menu:view/*` 배치를 빼고, 템플릿의 `menu:tools/templates` 와 레이아웃 초기화의 `menu:view/resetLayout` 도 뺀다(명령·단축키·팔레트는 남음); SQL = PL/SQL 컴파일·명세/본문 전환·서버와 차이(`PlsqlEditorCommands.cs:30-32`)와 실행 대화상자(`PlsqlRunCommands.cs:35`)를 `menu:sql/plsql/<키>@n`, `When = plsqlEditorFocus`; MyBatis 명령 5개(xml 에 저장·매퍼 전체 포맷·되돌리기·조합 검사·펼친 SQL 실행 계획)에 `When = mybatisDocFocus`(매퍼 폴더 열기·MyBatis 쿼리 찾기·MyBatis 작업 공간으로 바꾸기는 그대로); `oranda.file.saveWorkspace`·`openWorkspace`(저장소)는 `ShowInPalette = false`; 시험: 새 `tests/Oranda.App.Tests/Shell/MenuGroupingTests.cs`(모델 단계에서 편집 한 단계 줄 수 ≤ 15·파일 ≤ 15·보기 ≤ 7, 모든 명령 id 가 메뉴·팔레트·단축키 중 하나에 남음, 하위 메뉴 키가 문구에 있음), `SqlEditorWorkspaceMenuTests.cs` 갱신; 제약: `Shell/Menus/**`·그리드 3파일(`ResultGridCommands.cs`·`GridEditCommands.cs`·`FlashbackCommands.cs`)·`Features/DataTransfer/**` 는 고치지 않는다. 기존 메뉴 Headless 시험(ux-shell 소유)이 깨지면 고치지 말고 결과에 적고 조정자에게 알린다; 비고: 담당 PC: win144(Windows 개발 PC) — 맥북 세션은 이 Task 를 하지 않는다
+  - acceptance: 「모든 기능」 에서 편집·파일 메뉴 한 단계 줄 수 각각 15 이하, 보기 7 이하 / 보기 메뉴에 「도구 창 ▸」 토글과 같은 창을 여는 줄이 없다 / PL/SQL 편집기에 포커스가 있으면 SQL > PL/SQL ▸ 에 4개가 보인다 / SQL 탭에서 MyBatis 전용 5개가 메뉴에 없다 / 명령 id 집합·키맵이 그대로 / 전체 시험 통과
+  - note: 담당 PC: win144(Windows 개발 PC) — 맥북 세션은 이 Task 를 하지 않는다. 크기 M. 레인 ux-menu(두 번째). 머지 순서: TSK-09-03 보다 먼저 머지한다(겹치는 시험이 생기면 나중 쪽이 맞춤) (win144)
+
+- [ ] TSK-09-03: 오른쪽 클릭 하위 메뉴 허용·결과 메뉴 옮겨 싣기 하위 메뉴·그리드 메뉴 묶기 [win144] w:3 2026-11-10~2026-11-12
+  - category: dev
+  - domain: frontend
+  - model: opus
+  - priority: high
+  - tags: ux, menu, context-menu, grid, win144
+  - depends: TSK-09-01
+  - prd-ref: UX-03, PRD 13.3, TRD 11.2, TRD 11.10
+  - requirements: `MenuModelBuilder.BuildContext`·`ContextSections`(`src/Oranda.App/Shell/Menus/MenuModel.cs:278-332`)에 TRD 11.2 의 새 규칙을 더한다: `context:<표면>/<묶음>/<하위 메뉴>@n` → 그 묶음 안의 하위 메뉴(제목 키 `Menu.context.<표면>.<하위 메뉴>`), 편집기처럼 순서 번호로 묶는 관례는 그대로; 결과·데이터베이스 메뉴 옮겨 싣기(`MenuModel.cs:203-221`)가 하위 메뉴를 그대로 하위 메뉴로 싣는다; `MenuControls.cs` 의 Avalonia 오른쪽 클릭·주 메뉴와 macOS 네이티브 그리기가 하위 메뉴를 그리고, 안 항목이 모두 숨으면 하위 메뉴 머리도 숨긴다; 남는 `navigate` 배치가 없으면 `NavigateOffset` 옮기기 코드를 지운다(있으면 그대로); 그리드 배치(`ResultGridCommands.cs:53-87`, `GridEditCommands.cs:44-60`, `FlashbackCommands.cs:28-32`)를 묶는다: 복사(TSV)는 최상위, 나머지 복사 6개 「복사 형식 ▸」(`context:grid/copy/copyAs@n`), 거르기 6개 「거르기 ▸」, 그리드 편집 9개 「행 편집 ▸」, 플래시백 3개 「플래시백 ▸」, 열 3개 「열 ▸」. 행 보기(`LobRowViewCommands`)·내보내기 2개(`DataTransfer`)는 파일을 고치지 않고 최상위에 남는다; 시험: 새 `tests/Oranda.App.Tests/Shell/ContextSubmenuTests.cs`(규칙 표 시험: 묶음·하위 메뉴·순서·구분선·편집기 관례 불변·옮겨 싣기), 기존 메뉴 Headless 시험(MenuStateHeadlessTests·MenuBarTargetTests·NativeMenuTests·MenuVisibilityTests·TuningMenuTests)을 하위 메뉴에 맞춰 고침, 그리드 오른쪽 클릭 Headless 렌더(ko/en·다크); 제약: 다른 `*Commands.cs` 와 문구 파일은 고치지 않는다(빠진 문구는 결과에 적음); 비고: 담당 PC: win144(Windows 개발 PC) — 맥북 세션은 이 Task 를 하지 않는다
+  - acceptance: 「모든 기능」 에서 그리드 오른쪽 클릭·결과 메뉴 한 단계 줄 수 각각 15 이하(넘으면 탐색 2개를 하위 메뉴로) / 복사(TSV)·행 보기·파일로 내보내기·Excel 로 내보내기가 최상위에 있다 / 편집기·스키마·모니터 오른쪽 클릭 모양이 그대로 / macOS 네이티브 메뉴 모델 시험 통과 / 전체 시험 통과
+  - note: 담당 PC: win144(Windows 개발 PC) — 맥북 세션은 이 Task 를 하지 않는다. 크기 L. 레인 ux-shell(첫 Task). TSK-09-02 와 소유 파일이 겹치지 않아 동시에 진행하되 머지는 09-02 뒤 (win144)
+
+- [ ] TSK-09-04: 툴바가 명령 When 을 따름·조회 전용에서 커밋·롤백 숨김(미커밋 있으면 보임) [win144] w:1 2026-11-13~2026-11-13
+  - category: dev
+  - domain: frontend
+  - model: sonnet
+  - priority: medium
+  - tags: ux, toolbar, readonly, role, win144
+  - depends: TSK-09-02, TSK-09-03, TSK-07-11
+  - prd-ref: UX-17, TRD 11.3, D-022
+  - requirements: `MenuModelBuilder.BuildToolbar`(`MenuModel.cs:252-272`)가 명령의 `When` 을 노드에 싣고, 툴바 단추·넘침 메뉴(`ToolbarOverflow.cs`)가 주 메뉴와 같은 `MenuVisibility` 평가로 문맥 키가 바뀔 때 보이고 숨는다. 양옆 단추가 모두 숨으면 구분선도 숨김; 지금 `When` 이 있으면서 툴바에 놓인 명령을 모두 찾아 결과에 적고 숨는 것이 의도와 다르면 시험으로 막는다; `Features/Execution/ExecutionCommands.cs:280-282` 의 `oranda.txn.commit`·`oranda.txn.rollback` 에 `When = "!readOnlySession || txnPending"`(Enablement 그대로); 시험: 새 `tests/Oranda.App.Tests/Shell/ToolbarWhenTests.cs`(가짜 문맥 키로 숨김·보임·구분선), Headless(R6 만 + 미커밋 없음 → 툴바·SQL 메뉴에 커밋·롤백 없음, txnPending 참 → 나타남, R1 → 늘 보임, 프로필 읽기 전용도 같은 규칙), `Integration/Roles/RoleSurfaceMatrixTests.cs` 툴바 정답표 갱신; 제약: 문구 파일·FeatureGate 는 고치지 않는다; 비고: 담당 PC: win144(Windows 개발 PC) — 맥북 세션은 이 Task 를 하지 않는다. TSK-07-08 U-1 해결
+  - acceptance: R6 만 고르고 미커밋이 없으면 툴바 단추가 12개(조사 14개에서 커밋·롤백 2개 숨김)이고 미커밋이 생기면 14개 / R1 툴바는 그대로 / 전체 시험 통과
+  - note: 담당 PC: win144(Windows 개발 PC) — 맥북 세션은 이 Task 를 하지 않는다. 크기 S. 레인 ux-shell(두 번째). ExecutionCommands.cs 는 09-02 가 먼저 고치므로 그 머지 뒤, Roles 시험은 TSK-07-11 머지 뒤 (win144)
+
+- [ ] TSK-09-05: 기본 레이아웃 덜어내기 — 아래 탭 3개·오른쪽 창 닫힘·필요할 때 자동 열림 [win144] w:2 2026-11-09~2026-11-10
+  - category: dev
+  - domain: frontend
+  - model: opus
+  - priority: high
+  - tags: ux, layout, docking, win144
+  - prd-ref: UX-14, TRD 11.6, D-019
+  - requirements: `src/Oranda.App/Shell/Layout/LayoutPlanner.cs` 의 `CreateDefault` 를 바꾼다: 아래 묶음 = `oranda.panel.results`·`oranda.panel.messages`·`oranda.panel.output`(목록 상수), 나머지 아래 도구 창(plan·history·changeJournal·compileErrors)과 오른쪽 도구 창 전부(binds·templates 포함)는 `HiddenTools`, `Migrations` 에 `rightToolsOpen` 유지(`OpenRightTools` 상수와 옛 배치 이주 코드 `:104-112` 는 저장된 옛 배치를 위해 그대로); `Reconcile` 는 바꾸지 않는다(저장된 배치 유지); 자동 열기 확인: 예상·실제 계획(`ExecutionPlanCommands.cs:107` ShowTool), 컴파일 오류(`PlsqlEditorCommands.cs:253`, `ExecutionController.Body.cs:289` ActivatePanel), 바인드 변수(`ExecutionController.Binds.cs:33,79` ActivatePanel)가 숨은 창을 기본 위치에 열어 보이는지 시험하고, `DockWorkspace.ActivateTool`(`Shell/Docking/DockWorkspace.cs:329`)이 숨은 창을 열지 않으면 Docking 쪽에서 고친다; 시험: `LayoutPlannerTests.cs`(기본 배치 보이는 집합·숨은 집합·이주 표지), 저장된 배치 왕복 불변(`rightToolsOpen` 있음/없음), 새 `tests/Oranda.App.Tests/Shell/Headless/DefaultLayoutAutoOpenTests.cs`(레이아웃 초기화 → 아래 3·오른쪽 0, 예상 계획 → 계획 창 열림, 바인드 있는 문장 실행 → 바인드 창 열림, 컴파일 오류 → 오류 창 열림), `NamedLayoutTests.cs` 필요 시 갱신; 제약: `*Commands.cs`·`[OrandaToolPanel]` 특성·`Features/Execution/**` 는 고치지 않는다(필요하면 결과에 적고 조정자에게); 비고: 담당 PC: win144(Windows 개발 PC) — 맥북 세션은 이 Task 를 하지 않는다. TSK-13-16 결정 되돌림(D-019)
+  - acceptance: 레이아웃 초기화 뒤 SQL 탭과 함께 보이는 도구 창이 조사 11개에서 6개 이하(왼쪽 + 아래 3) / 실행 계획·컴파일 오류·바인드 변수 창이 필요할 때 자동으로 열린다 / 기존 저장 배치를 읽으면 지금과 같다 / 화면 PNG(라이트·다크) 확인 / 전체 시험 통과
+  - note: 담당 PC: win144(Windows 개발 PC) — 맥북 세션은 이 Task 를 하지 않는다. 크기 M. 레인 ux-layout(첫 Task, 바로 착수 가능) (win144)
+
+- [ ] TSK-09-06: Windows MyBatis 탭 Ctrl+Enter 로 시나리오 실행 [win144] w:1 2026-11-11~2026-11-11
+  - category: dev
+  - domain: frontend
+  - model: sonnet
+  - priority: medium
+  - tags: ux, keymap, mybatis, win144
+  - prd-ref: UX-16, TRD 11.8, D-021
+  - requirements: `docs/design/keymaps/default.json:59` 의 `oranda.mybatis.runScenario` keys 를 `["Primary+Enter", "F9"]` 로(mac 은 그대로); MyBatis 문서에서 `oranda.exec.runStatement`(`default.json:52`, when `sqlDocFocus`)가 키를 먼저 가져가는지 `KeyDispatcher`·`KeyBindingTable` 규칙을 시험으로 확인하고, 가져가면 그 바인딩 when 에 `&& !mybatisDocFocus` 를 더한다(디스패처 규칙은 바꾸지 않는 것이 먼저); orange5·plsqldev·sqldev 프리셋에도 같은 규칙(그 프리셋이 MyBatis 문서의 Ctrl+Enter 를 다른 명령에 쓰면 그대로 두고 결과에 적음); 시험: `KeymapLoaderTests.cs`(프리셋 4종 로드·충돌 없음), 새 `tests/Oranda.App.Tests/Shell/MyBatisRunKeyTests.cs`(Windows 키 해석: MyBatis 문서 Ctrl+Enter → runScenario, SQL 문서 Ctrl+Enter → runStatement, F9 그대로); 제약: `*Commands.cs` 는 고치지 않는다. 사용자 키맵 파일은 건드리지 않는다; 비고: 담당 PC: win144(Windows 개발 PC) — 맥북 세션은 이 Task 를 하지 않는다
+  - acceptance: Windows 에서 MyBatis 문서 Ctrl+Enter 가 시나리오를 실행하고 SQL 문서 Ctrl+Enter 는 현재 문장 실행 그대로 / 메뉴 단축키 표시가 새 키를 보인다 / 전체 시험 통과
+  - note: 담당 PC: win144(Windows 개발 PC) — 맥북 세션은 이 Task 를 하지 않는다. 크기 S. 레인 ux-layout(두 번째) (win144)
+
+- [ ] TSK-09-07: 내보내기 대화상자 하나로 합치기 — 「Excel 로 내보내기」 는 빠른 길 [win144] w:2 2026-11-09~2026-11-10
+  - category: dev
+  - domain: frontend
+  - model: opus
+  - priority: high
+  - tags: ux, export, dialog, win144
+  - prd-ref: UX-15, TRD 11.7, D-020
+  - requirements: `src/Oranda.App/Features/DataTransfer/ExportDialogViewModel.cs`·`ExportDialogWindow.axaml*` 를 기준으로 `ExcelExportDialogViewModel.cs`·`ExcelExportDialogWindow.axaml*`(`:14-22` 범위 4종·내보낸 뒤 열기)를 합친다: 형식(CSV·TSV·Excel·JSON·INSERT) + 범위(불러온 행·전체·고른 셀/행) + 저장 위치 칸과 「찾아보기…」 + 「내보낸 뒤 열기」, Excel 을 고르면 Excel 전용 선택이 같은 창에 나타남; `oranda.grid.export`(`DataTransferCommands.cs:94`) = 마지막에 쓴 형식(앱 실행 동안 기억, 처음 CSV)으로, Excel 내보내기 명령(`ExcelExportCommands.cs:169`) = Excel 골라진 상태로 같은 창을 연다. 명령 id·배치·단축키·끝난 뒤 `SaveFeedback`(열기·폴더 열기)은 그대로; 형식별 쓰기 코드는 바꾸지 않는다. 다른 호출자가 없으면 `ExcelExportDialogWindow` 를 지운다; 새 문구는 `Export.*` 접두로 strings-ko/en, 리터럴은 literals-en 의 기존 내보내기 문구 바로 뒤(파일 끝 금지); 화면 품질: ko/en·라이트/다크·키보드만으로 모든 칸·최소 크기에서 잘림 없음; 시험: `tests/Oranda.App.Tests/Features/DataTransfer/**`(ViewModel: 여는 길별 기본 형식·범위, Excel 선택 칸 보이기, 경로 검증, 기존 `ExcelExportTests.cs` 결과 파일 단정 유지, Headless 렌더 ko/en·다크); 제약: `CommandTitles*.json`(이름은 TSK-09-01)·`Shell/Menus/**`·가져오기(`Import*`)는 고치지 않는다; 비고: 담당 PC: win144(Windows 개발 PC) — 맥북 세션은 이 Task 를 하지 않는다
+  - acceptance: 그리드 「파일로 내보내기…」·「Excel 로 내보내기…」 가 같은 대화상자를 연다(Excel 은 Excel 골라짐) / R1 조회 → Excel 내보내기 클릭 수가 조사 4클릭(대화상자 2)에서 3클릭(대화상자 1)으로 준다 / CSV·Excel·JSON·INSERT 결과 파일이 지금과 같다 / R6 에서 끝난 뒤 저장 알림이 보인다 / 전체 시험 통과
+  - note: 담당 PC: win144(Windows 개발 PC) — 맥북 세션은 이 Task 를 하지 않는다. 크기 M. 레인 ux-export(의존 없음 — 동시 레인 슬롯이 나면 바로) (win144)
+
+- [ ] TSK-09-08: 설정 「기능」 탭 — 주 업무 하나 + PL/SQL·MyBatis 덧붙임, 기능 25개 「고급」 접기, 팩 선언 바로 가기 [win144] w:2 2026-11-10~2026-11-11
+  - category: dev
+  - domain: frontend
+  - model: opus
+  - priority: high
+  - tags: ux, role, feature, settings, win144
+  - depends: TSK-07-11
+  - prd-ref: UX-09, UX-10, UX-11, TRD 11.4, D-017
+  - requirements: 새 `src/Oranda.Core/Features/PrimaryWork.cs`(순수 로직): `FromSettings(FeaturesSettings?)` → 주 업무(All·SqlDev·Tuner·Dba·Viewer·Custom)·덧붙임 2개·Custom Role 목록, `Apply(현재 설정, 고른 값)` → FeaturesSettings. TRD 11.4 표 그대로(allFeatures → 모든 기능, IsUnchosen → SQL 개발 표시, 주 업무 정확히 1개 + 덧붙임 부분집합 → 그 값, viewer + 덧붙임·주 업무 0/2개 이상·`[]`·모르는 id → Custom), 건드리지 않으면 roles·allFeatures 보존, enabled/disabled 는 새 Role 기본값과 비교해 최소로; `Shell/Settings/FeatureSettingsView.axaml*`·`FeatureSettingsPage.cs`: 모드 라디오(모든 기능 쓰기/Role 로 고르기)와 Role 확인란 6개를 「주 업무」 라디오 5개 + 덧붙임 확인란 2개(「PL/SQL 패키지·프로시저도 고친다」·「MyBatis 매퍼를 쓴다」) + Custom 줄 「지금 조합: {0}(그대로 두기)」(Custom 일 때만)로 바꾼다. 모든 기능·조회만이면 덧붙임 흐림 + 이유; 기능 25개 묶음은 `Expander`(기본 접힘, 머리 「기능 하나씩 켜고 끄기(고급) — 켜진 기능 {0}/{1} · 직접 바꾼 것 {2}개」) 안으로, 안쪽 동작은 지금 그대로; TSK-07-10 의 Role 0개 안내는 Custom `[]` 일 때만; 팩 선언 안내 줄 끝에 「접속 관리자 열기」 링크(`oranda.conn.manage`); 새 문구는 `FeatureTexts`·strings `Features.*`·`Role.*`; 화면 품질: ko/en·라이트/다크·키보드만으로 조작·최소 크기 잘림 없음; 시험: 새 `tests/Oranda.Core.Tests/Features/PrimaryWorkTests.cs`(모든 기존 features 모양 왕복 불변, 고른 값 → 저장 형식 표), `Features/Roles/FeatureSettingsViewTests.cs`(라디오·덧붙임·흐림·Custom 보존·접힘 요약 숫자, Headless ko/en·다크), `Integration/Roles/RoleMenuFlowTests.cs`·`RoleEdgeCaseTests.cs`·`RoleRenderTests.cs` 를 새 화면 조작으로 고침; 제약: `FeatureCatalog.cs`(해석 규칙)·`FeaturesSettings.cs`·`SettingsStore.cs`·`FeatureGate.cs` 는 고치지 않는다(TSK-07-11 소유 결과를 쓴다); 비고: 담당 PC: win144(Windows 개발 PC) — 맥북 세션은 이 Task 를 하지 않는다
+  - acceptance: 기능 탭을 처음 열면 보이는 입력 칸이 10개 이하(조사 33개) / 「SQL 개발」 + PL/SQL 저장 → settings.json `features.roles` = ["sqlDev","plsqlDev"], 「모든 기능」 → `allFeatures: true` / `["tuner","dba"]` 설정을 열어 저장만 하면 roles 그대로 / 조회만이면 덧붙임을 켤 수 없다 / ko/en·다크 Headless 렌더 통과 / 전체 시험 통과
+  - note: 담당 PC: win144(Windows 개발 PC) — 맥북 세션은 이 Task 를 하지 않는다. 크기 M. 레인 ux-role(첫 Task). FeatureSettings*·FeatureTexts 는 TSK-07-11(fx-default, 머지됨)의 결과(`allFeatures`·`IsUnchosen`·`EffectiveRoles`·`DefaultRoleNotice`) 위에서 고친다 (win144)
+
+- [ ] TSK-09-09: 새 설치 시작 화면 「주로 하는 일은?」 카드·첫 접속 흐름(접속 추가 강조·접속 뒤 SQL 탭) [win144] w:2 2026-11-12~2026-11-13
+  - category: dev
+  - domain: frontend
+  - model: sonnet
+  - priority: high
+  - tags: ux, role, start-page, onboarding, win144
+  - depends: TSK-09-08, TSK-07-11
+  - prd-ref: UX-12, UX-13, TRD 11.5, D-018
+  - requirements: `src/Oranda.App/Shell/Settings/SettingsService.cs` 에 `IsFirstRun`(LoadAsync 때 settings.json 이 없었음, 실행 동안 고정); `Shell/StartPage.cs`: `IsFirstRun && FeatureCatalog.IsUnchosen(features)` 이면 맨 위에 카드(모달 아님): 제목 「주로 하는 일은?」, 주 업무 단추 5개(TSK-09-08 의 이름·한 줄 설명, `PrimaryWork` 재사용), 덧붙임 확인란 2개, 「나중에」. 단추 → `PrimaryWork.Apply` → `SettingsService.UpdateAsync` → 카드 닫힘(메뉴 즉시 반영, 재시작 필요 기능은 기존 안내). 「나중에」 → 설정을 그대로 저장(파일 생김) → 카드 닫힘 → D-013 한 줄 카드. 새 설치가 아니면 TSK-07-11 의 한 줄 카드 그대로; 첫 접속 흐름: 접속 프로필이 0개면 시작 화면 첫 줄을 「접속 추가…」(접속 관리자를 새 접속 상태로 여는 기존 명령)로 바꾸고 강조, 접속 성공 이벤트(지금 있는 SessionOpened 등)를 구독하는 새 `Shell/FirstConnectEditor.cs` 가 열린 문서 0개일 때만 그 세션으로 새 SQL 편집기를 연다(복원 탭·전용 세션·모니터 접속이면 열지 않음); 새 문구는 `FeatureTexts`·strings 시작 화면 키; 화면 품질: ko/en·라이트/다크·키보드 조작·좁은 창에서 줄바꿈; 시험: `Shell/Headless/StartPageHostTests.cs`, 새 `tests/Oranda.App.Tests/Shell/Headless/FirstRunCardTests.cs`(새 설치 → 카드, 조회만 → 재시작 없이 모니터·튜닝 메뉴 사라짐, 나중에 → 파일 생김·다음 시작 한 줄 카드, 새 설치 아님 → 카드 없음, 프로필 0개 → 접속 추가 강조, 접속 → SQL 탭 1개, 복원 탭 있으면 안 엶); 제약: `ConnectionManager/ConnectionManagerCommands.cs`(ux-menu)·FeatureCatalog 해석은 고치지 않는다; 비고: 담당 PC: win144(Windows 개발 PC) — 맥북 세션은 이 Task 를 하지 않는다. D-011 일부 변경(D-018)
+  - acceptance: settings.json 없이 시작하면 카드가 있고 단추 하나로 Role 이 저장·반영된다 / 「나중에」 뒤 다시 시작하면 카드 대신 D-013 한 줄 카드 / 기존 사용자 화면은 그대로 / 처음 쓰는 사람의 접속 → SQL 탭 클릭 수가 조사보다 2 준다 / 실앱 눈 확인 항목은 사람 몫으로 결과에 적는다 / 전체 시험 통과
+  - note: 담당 PC: win144(Windows 개발 PC) — 맥북 세션은 이 Task 를 하지 않는다. 크기 M. 레인 ux-role(두 번째). StartPage.cs 의 D-013 한 줄 카드(`_roleCard`, TSK-07-11)는 새 설치가 아닐 때 그대로 쓴다 (win144)
+
+- [ ] TSK-09-10: 사용 복잡도 통합테스트 — Role 별 메뉴 너비 다시 세기·주 흐름 확인 [win144] w:2 2026-11-16~2026-11-17
+  - category: itest
+  - domain: test
+  - model: sonnet
+  - priority: high
+  - tags: integration, e2e, ux, menu, role, win144
+  - depends: TSK-09-02, TSK-09-03, TSK-09-04, TSK-09-05, TSK-09-06, TSK-09-07, TSK-09-08, TSK-09-09
+  - prd-ref: PRD 13.5, TRD 11.11, TRD 11.12
+  - requirements: 실제 `FeatureGate` 로 앱을 조립하는 도우미(`Integration/Roles/RoleApp.cs` 방식, 새 파일은 `tests/Oranda.App.Tests/Integration/Ux/`)로 구성(모든 기능·아무것도 고르지 않음(D-013 = R1)·R1~R6·R1+R4·Role 0개)마다 TRD 11.11 의 7개 숫자를 센다: 메뉴 항목 총수(조사 1.1 주1 규칙), 최상위 메뉴 수, 한 단계 줄 수가 15를 넘는 메뉴 수(최상위·하위 메뉴 모두, When 숨김 미적용), 최상위 메뉴별 한 단계 줄 수, 그리드 오른쪽 클릭 한 단계 줄 수, 툴바 단추 수(미커밋 없음/있음), 기본 배치에서 SQL 탭과 함께 보이는 도구 창 수. 보조 열 = SQL 탭 활성 상태 보이는 항목 수; 흐름: settings.json 없음 → 시작 화면 카드 → 「조회만」 → 모니터·튜닝 메뉴 없음·커밋·롤백 없음 → SELECT 뒤 「Excel 로 내보내기…」 → 하나로 합친 대화상자 → 저장 알림 → 설정 기능 탭 「SQL 개발」 + MyBatis → MyBatis 문서 Ctrl+Enter 시나리오 실행 → 레이아웃 초기화 → 아래 3탭 → 예상 계획 → 계획 창 자동 열림 → 「모든 기능」 → 원래 명령 집합; 각 레인 결과에 적힌 빠진 문구를 문구 파일에 넣는다; 제약: 실앱 SendKeys 금지(Headless 까지), 실앱 눈 확인 항목은 사용자 몫으로 표시; 비고: 담당 PC: win144(Windows 개발 PC) — 맥북 세션은 이 Task 를 하지 않는다. 결과서 docs/oranda1/itest/TSK-09-10.md
+  - acceptance: 결과서에 구성 × 7개 숫자 표가 있고 각 칸에 「조사(413a33d)」·「지금」·「목표」·「차이 이유」가 있다 / 한 단계 줄 수가 15를 넘는 메뉴가 「모든 기능」 4개 이하(조사 표기 8, 같은 기준 재계산 값도 결과서에 적음), R1 2개 이하(조사 5), R6 1개 이하(조사 5)이고, 편집·파일·결과·그리드 오른쪽 클릭이 각각 15 이하 / 최상위 메뉴 수가 조사 표(모든 기능 11·R1 10·R6 9)와 같거나 작다 / 메뉴 항목 총수 차이가 뺀 중복(보기 7·템플릿 1·레이아웃 초기화 1)과 더한 PL/SQL 4 로 설명된다 / 모든 흐름이 끝까지 간다 / 발견 결함은 WP-09 에 defect Task 로 등록됨 / 전체 시험 통과
+  - note: 담당 PC: win144(Windows 개발 PC) — 맥북 세션은 이 Task 를 하지 않는다. 크기 M. 레인 ux-itest(마지막) (win144)
+
 ## 의존 그래프
 
 ### 그래프 (Mermaid)
@@ -654,6 +773,22 @@ graph LR
   TSK-07-08 --> TSK-07-09
   TSK-07-08 --> TSK-07-10
   TSK-07-08 --> TSK-07-11
+  TSK-09-01 --> TSK-09-02
+  TSK-09-01 --> TSK-09-03
+  TSK-09-02 --> TSK-09-04
+  TSK-09-03 --> TSK-09-04
+  TSK-07-11 --> TSK-09-04
+  TSK-07-11 --> TSK-09-08
+  TSK-07-11 --> TSK-09-09
+  TSK-09-08 --> TSK-09-09
+  TSK-09-02 --> TSK-09-10
+  TSK-09-03 --> TSK-09-10
+  TSK-09-04 --> TSK-09-10
+  TSK-09-05 --> TSK-09-10
+  TSK-09-06 --> TSK-09-10
+  TSK-09-07 --> TSK-09-10
+  TSK-09-08 --> TSK-09-10
+  TSK-09-09 --> TSK-09-10
   style TSK-01-02 fill:#e8f5e9,stroke:#2e7d32
   style TSK-03-01 stroke:#c62828,stroke-width:2px
   style TSK-02-02 stroke:#c62828,stroke-width:2px
@@ -673,6 +808,7 @@ graph LR
 - FS 겹침 검증: depends 가 있는 모든 쌍에서 후행 시작일 > 선행 종료일.
 - WP-08(2026-10-25 추가, Task 4개): 서로 depends 가 없다(라이선스·노출 점검·CI·설치 안내가 각자 다른 파일). 그래프에 넣지 않는다.
 - WP-07(2026-10-25 추가, Task 8개): 최장 경로 TSK-07-01 → TSK-07-02 → TSK-07-07 → TSK-07-08(깊이 4 = 계약 1 + 기능 1 + 측정 1 + 통합테스트 1). Fan-in: TSK-07-01 이 5(계약 전용, 구조적 예외), TSK-07-08 이 depends 6(통합테스트, 구조적 예외). 계약 뒤 07-02~07-06 은 서로 depends 가 없고 소유 파일이 겹치지 않는다(TRD 10.9). TSK-07-08 이 발견한 결함 2건을 TSK-07-09·TSK-07-10(각각 TSK-07-08 에만 depends, 서로 독립)으로 더했다(WP-07 Task 10개, 최장 경로는 깊이 5). 사용자 결정 D-013(기본 Role = SQL 개발자)을 TSK-07-11(TSK-07-08 에만 depends)로 더했다(WP-07 Task 11개).
+- WP-09(2026-10-25 추가, Task 10개): 최장 경로 TSK-09-01 → TSK-09-02 → TSK-09-04 → TSK-09-10(깊이 4 = 계약 1 + 기능 2 + 통합테스트 1). TSK-09-04 는 ExecutionCommands.cs 를 09-02 가 먼저 고치고 Shell/Menus 를 09-03 이 먼저 고쳐서 둘 다에 depends, Roles 시험 때문에 TSK-07-11 에도 depends. TSK-09-08·09-09 는 FeatureSettings*·StartPage.cs·FeatureTexts 를 고친 TSK-07-11(완료)에 depends. TSK-09-05·09-06(ux-layout)과 TSK-09-07(ux-export)은 depends 가 없다(09-06 은 같은 레인 차례만). Fan-in: TSK-09-10 이 depends 8(통합테스트, 구조적 예외), TSK-09-04 가 3. 머지 순서: 09-01 → 09-02 → 09-03 (→ 09-04), 09-05 → 09-06, 09-07 은 아무 때나, TSK-07-11 → 09-08 → 09-09, 마지막 09-10. 파일 소유 = TRD 11.10.
 
 **Fan-in Top 5**
 

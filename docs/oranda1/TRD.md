@@ -279,3 +279,150 @@ public interface IFeatureGate
 - 설정 읽기 전에 만든 레지스트리가 `Initialize`·`Attach` 전에 해석된 값으로 다시 계산된다(시작 순서 시험).
 - 조회 전용 거부는 드라이버 호출 전에 끝난다(가짜 드라이버 호출 0회).
 - `dotnet build Oranda.sln -warnaserror` 와 `dotnet test` 가 통과한다.
+
+## 11. 사용 복잡도 줄이기 (2026-10-25 추가, PRD 13, WP-09)
+
+설계 근거 = `docs/oranda1/research/usage-complexity.md`(기준 413a33d), 결정 D-015~D-023. 경로의 `Shell/`·`Features/`·`Views/` 는 `src/Oranda.App/` 아래다. 기본 Role 해석(`FeatureCatalog.EffectiveRoles`·`IsUnchosen`·`allFeatures`)은 TSK-07-11(D-013)이 만든 것을 쓰고 고치지 않는다.
+
+### 11.1 바뀌는 곳
+
+| 층 | 바뀌는 것 | Task |
+|---|---|---|
+| 명령 제목 | `Shell/Resources/CommandTitles.json`·`CommandTitles-en.json` 이름 바꾸기(PRD 13.4) | TSK-09-01 |
+| 문구 | `Resources/strings-ko/en.json` 의 `Menu.*`(하위 메뉴 제목 예약)·`Shell.settings.*`(「기본값」) | TSK-09-01 |
+| 명령 배치 | `[OrandaCommand(Placements = …)]` 의 `menu:` 경로(파일·편집·보기·SQL), `When`(MyBatis 5개), `ShowInPalette`(작업 공간 저장소 2개) | TSK-09-02 |
+| 메뉴 모델 | `Shell/Menus/MenuModel.cs` 오른쪽 클릭 하위 메뉴·결과 메뉴 옮겨 싣기 하위 메뉴, `MenuControls.cs`(그리기·macOS 네이티브), 그리드 명령 배치 | TSK-09-03 |
+| 툴바 | `MenuModelBuilder.BuildToolbar` 가 `When` 을 싣고 툴바 단추가 `MenuVisibility` 를 따름, 커밋·롤백 `When` | TSK-09-04 |
+| 레이아웃 | `Shell/Layout/LayoutPlanner.cs` 기본 배치, `Shell/Docking/DockWorkspace*.cs` 자동 열기 | TSK-09-05 |
+| 키맵 | `docs/design/keymaps/*.json`(임베디드 리소스로 링크됨) | TSK-09-06 |
+| 내보내기 | `Features/DataTransfer/ExportDialog*`·`ExcelExportDialog*`·`*Commands.cs` | TSK-09-07 |
+| 기능 탭 | `Shell/Settings/FeatureSettingsPage.cs`·`FeatureSettingsView.axaml*`, `src/Oranda.Core/Features/FeatureTexts.cs`, 새 `src/Oranda.Core/Features/PrimaryWork.cs` | TSK-09-08 |
+| 시작 화면 | `Shell/StartPage.cs`, `Shell/Settings/SettingsService.cs`(새 설치 판정), 첫 접속 SQL 탭 | TSK-09-09 |
+
+### 11.2 메뉴 배치 경로 규칙
+
+- 주 메뉴(지금 규칙 그대로, `MenuModel.cs:355-381`): `menu:<최상위>/<하위 메뉴…>/<항목 키>@n`. 마지막 마디는 항목 키, 그 앞 마디는 하위 메뉴 이름이고 제목 키는 `Menu.<최상위>.<하위 메뉴>`(깊으면 점으로 잇는다). 하위 메뉴 순서 = 안에 든 항목의 가장 작은 `@n`. 구분선 = `@n / 100` 이 바뀔 때.
+- 탐색: 지금은 `menu:navigate/…` 를 편집 메뉴 아래쪽으로 옮긴다(`MenuModel.cs:182-185`). TSK-09-02 는 탐색 명령의 배치를 `menu:edit/go/<키>@n` 으로 직접 바꾼다. 옮기는 코드(`NavigateOffset`)는 남는 `navigate` 배치가 없으면 TSK-09-03 이 지운다.
+- 오른쪽 클릭(새 규칙, TSK-09-03): `context:<표면>/<묶음>@n` 은 지금처럼 묶음(구분선 단위). `context:<표면>/<묶음>/<하위 메뉴>@n` 이면 그 묶음 안의 하위 메뉴 하나로 모은다. 하위 메뉴 제목 키 = `Menu.context.<표면>.<하위 메뉴>`. 하위 메뉴 순서 = 안에 든 항목의 가장 작은 `@n`, 안쪽 순서·구분선 규칙은 주 메뉴와 같다. 둘째 마디가 묶음 이름이 아니라 순서 번호로 묶는 편집기 관례(`MenuModel.cs:305-319`)는 그대로 둔다.
+- 결과·데이터베이스 메뉴 옮겨 싣기(`MenuModel.cs:203-221`): 오른쪽 클릭의 하위 메뉴를 그대로 하위 메뉴로 옮긴다(제목 키는 같은 `Menu.context.<표면>.<하위 메뉴>`). 묶음 사이 구분선은 지금처럼.
+- macOS 네이티브 메뉴(`MenuControls.cs:340-450`)와 Avalonia 메뉴가 같은 모델을 그린다. 오른쪽 클릭 하위 메뉴도 두 곳 다 그린다. 하위 메뉴 안 항목이 `When` 으로 모두 숨으면 하위 메뉴 머리도 숨긴다(지금 주 메뉴 하위 메뉴 규칙과 같다).
+- 하위 메뉴 이름(TSK-09-01 이 ko·en 으로 예약, 키 = 경로):
+
+| 키 | ko | 쓰는 Task |
+|---|---|---|
+| `Menu.edit.case` | 대소문자 | 09-02 |
+| `Menu.edit.lines` | 줄·주석 | 09-02 |
+| `Menu.edit.format` | 포맷 | 09-02 |
+| `Menu.edit.marks` | 북마크·접기 | 09-02 |
+| `Menu.edit.go` | 이동 | 09-02 |
+| `Menu.edit.assist` | 입력 도우미 | 09-02 |
+| `Menu.file.workspace` | 작업 공간 | 09-02 |
+| `Menu.file.connection` | 접속 | 09-02 |
+| `Menu.file.tabs` | 탭 | 09-02 |
+| `Menu.file.mybatis` | MyBatis | 09-02 |
+| `Menu.sql.plsql` | PL/SQL | 09-02 |
+| `Menu.sql.errorMode` | 스크립트 오류 시 (이번 실행) | 09-01 이 제목만 바꿈(지금 키 그대로) |
+| `Menu.context.grid.copyAs` | 복사 형식 | 09-03 |
+| `Menu.context.grid.filter` | 거르기 | 09-03 |
+| `Menu.context.grid.edit` | 행 편집 | 09-03 |
+| `Menu.context.grid.flashback` | 플래시백 | 09-03 |
+| `Menu.context.grid.columns` | 열 | 09-03 |
+
+  지금 키 이름이 다르면(예: 스크립트 오류 시 하위 메뉴의 실제 키) TSK-09-01 이 실제 키를 찾아 이 표를 `docs/oranda1/design.md` 에 고쳐 옮긴다. 최근 작업 공간 하위 메뉴(`Menu.file.recentWorkspaces`, `RecentFilesService.cs:33`)를 「작업 공간 ▸」 안으로 옮기면 키가 `Menu.file.workspace.recentWorkspaces` 로 바뀌므로 공급자 상수도 같이 바꾼다(09-02).
+
+### 11.3 툴바 `When` (TSK-09-04, D-022)
+
+- `MenuModelBuilder.BuildToolbar`(`MenuModel.cs:252-272`)가 명령의 `When` 을 노드에 싣는다. 툴바를 그리는 곳은 주 메뉴와 같은 `MenuVisibility` 평가로 단추의 `IsVisible` 을 문맥 키가 바뀔 때마다 고친다. 단추 사이 구분선은 양옆 단추가 모두 숨으면 숨는다. 넘침 메뉴(`ToolbarOverflow.cs`)도 같은 규칙.
+- `When` 이 없는 명령(툴바의 거의 모두)은 지금과 같다. 지금 `When` 이 있으면서 툴바에 놓인 명령이 있으면 이 변경으로 숨게 되므로, TSK-09-04 는 그런 명령을 모두 찾아 결과에 적고 의도와 다르면 시험으로 막는다.
+- `oranda.txn.commit`·`oranda.txn.rollback` 에 `When = "!readOnlySession || txnPending"`. Enablement 는 그대로.
+
+### 11.4 Role 고르기 화면 (TSK-09-08, D-017)
+
+- 새 Core 형 `PrimaryWork`(순수 로직, 시험 쉬움): `FromSettings(FeaturesSettings) → (Primary: All|SqlDev|Tuner|Dba|Viewer|Custom, PlsqlAddon, MyBatisAddon, CustomRoles)` 와 `Apply(현재 설정, 고른 값) → FeaturesSettings`.
+
+| 설정 | 화면 |
+|---|---|
+| `allFeatures: true` | 모든 기능, 덧붙임 흐림 |
+| roles 없음 + 직접 켬·끔 있음(옛 「모든 기능 쓰기」 저장, `EffectiveRoles` = null) | 모든 기능, 덧붙임 흐림. 저장하면 `allFeatures: true` 로 옮겨 적어도 해석은 같다 |
+| 아무것도 고른 적 없음(`IsUnchosen`, D-013) | SQL 개발(기본 Role 표시) + TSK-07-11 의 기본 Role 안내 띠(`FeatureTexts.DefaultRoleNotice`), 덧붙임 끔. 건드리지 않고 저장하면 설정 그대로(D-013) |
+| roles = {sqlDev·tuner·dba·viewer 중 정확히 1개} ∪ ({plsqlDev, myBatisDev} 의 부분집합) | 그 주 업무 + 덧붙임 |
+| roles = ["viewer"] 에 덧붙임이 섞임 | Custom(그대로 두기) |
+| 그 밖(주 업무 0개 또는 2개 이상, `[]`, 모르는 id) | Custom 줄 「지금 조합: {Role 이름 목록}(그대로 두기)」 |
+
+- 저장: 라디오·덧붙임을 건드리지 않았으면 `roles`·`allFeatures` 를 그대로 둔다(Custom·고른 적 없음 보존). 「모든 기능」 = `allFeatures: true`, roles 는 null(지금 `FeatureSettingsPage` 의 저장 규칙 `AllFeatures = roles is null` 과 같다). 그 밖 = `allFeatures: false`, roles = [주 업무 id] + 덧붙임 id. `enabled`·`disabled` 는 지금처럼 새 Role 기본값과 비교해 최소로 다시 적는다(TSK-07-04 규칙).
+- 「조회만」 이면 덧붙임 흐림 + 이유 「덧붙이면 조회 전용 차단이 풀립니다」. 「모든 기능」 이면 덧붙임 흐림 + 「모든 기능에 이미 들어 있습니다」.
+- 고급 접힘(`Expander`, 기본 접힘, `ProfileEditorView.axaml:214` 와 같은 모양): 머리 「기능 하나씩 켜고 끄기(고급) — 켜진 기능 {0}/{1} · 직접 바꾼 것 {2}개」. 안쪽은 TSK-07-04 의 묶음별 확인란·배지·되돌리기 그대로.
+- TSK-07-10 의 「Role 0개」 안내 줄은 화면에서 Role 0개 상태가 새로 생기지 않으므로 Custom(`[]`) 일 때만 보인다.
+- 팩 선언 안내 줄(D-012) 끝에 「접속 관리자 열기」 링크(`oranda.conn.manage` 실행).
+
+### 11.5 새 설치 판정·시작 화면 카드 (TSK-09-09, D-018)
+
+- `SettingsService.LoadAsync` 가 읽을 때 settings.json 이 없었는지를 `IsFirstRun`(앱 실행 동안 고정)으로 둔다. 다른 프로세스가 뒤에 파일을 만들어도 바뀌지 않는다.
+- 시작 화면 카드 표시 = `IsFirstRun && IsUnchosen(features)`. 카드: 제목 「주로 하는 일은?」, 단추 5개(주 업무, 11.4 와 같은 이름·한 줄 설명), 덧붙임 확인란 2개, 「나중에」. 단추 → `PrimaryWork.Apply` → `SettingsService.UpdateAsync` → 카드 닫힘(게이트가 즉시 반영, 재시작 필요 기능은 기존 띠). 「나중에」 → 설정을 그대로 저장(파일이 생김) → 카드 닫힘 → D-013 한 줄 카드.
+- `IsFirstRun` 이 아니고 `IsUnchosen` 이면 D-013 한 줄 카드(TSK-07-11 이 만든 것)를 그대로 쓴다.
+- 첫 접속 흐름: 접속 프로필 0개이면 시작 화면 첫 줄을 「접속 추가…」(접속 관리자를 새 접속 상태로 여는 기존 명령)로 바꾸고 강조한다. 접속 성공 이벤트(`SessionOpened` 등 지금 있는 것)를 구독해 열린 문서가 0개이면 그 세션으로 새 SQL 편집기를 연다. 복원된 탭이 있거나 전용 세션·모니터 접속이면 열지 않는다.
+
+### 11.6 기본 레이아웃 (TSK-09-05, D-019)
+
+- `LayoutPlanner.CreateDefault`: 아래 묶음에 넣는 도구 창 = `oranda.panel.results`·`oranda.panel.messages`·`oranda.panel.output`(목록 상수). 나머지 아래 도구 창(plan·history·changeJournal·compileErrors, MyBatis 조합은 문서 범위 규칙 그대로)과 오른쪽 도구 창 전부는 `HiddenTools` 에 둔다. `Migrations` 에 `rightToolsOpen` 을 남긴다.
+- `Reconcile` 는 바꾸지 않는다(저장된 배치 유지). 새로 등록된 도구 창의 기본 자리 규칙도 그대로.
+- 자동 열기: 지금 경로를 그대로 쓰되 숨은 창에서도 통하는지 시험한다 — 실행 계획(`ExecutionPlanCommands.cs:107` ShowTool), 컴파일 오류(`PlsqlEditorCommands.cs:253`, `ExecutionController.Body.cs:289` ActivatePanel), 바인드 변수(`ExecutionController.Binds.cs:33,79` ActivatePanel). `DockWorkspace.ActivateTool` 이 숨은 창을 보이지 않으면 `DockWorkspace` 쪽에서 고친다(명령 파일은 고치지 않는다). 숨은 창이 처음 열릴 때 자리 = 그 창의 기본 위치(D-010 과 같은 규칙).
+
+### 11.7 내보내기 대화상자 (TSK-09-07, D-020)
+
+- `ExportDialogViewModel` 을 기준으로 합치고 `ExcelExportDialogViewModel` 의 범위·내보낸 뒤 열기·Excel 전용 선택을 옮긴다. 창은 하나(`ExportDialogWindow`), `ExcelExportDialogWindow` 는 지운다(시험·다른 호출자가 없을 때).
+- 여는 길: `oranda.grid.export` = 마지막에 쓴 형식(앱 실행 동안 기억, 처음은 CSV), Excel 내보내기 명령 = Excel 골라진 상태. 저장 위치는 칸 + 「찾아보기…」(저장 대화상자 따로 띄우지 않음). 끝난 뒤 알림은 지금처럼 `SaveFeedback`(열기·폴더 열기).
+- 형식별 쓰기 코드(CSV·TSV·Excel·JSON·INSERT)는 바꾸지 않는다. 기존 Excel 내보내기 시험(`tests/Oranda.App.Tests/Features/DataTransfer/ExcelExportTests.cs`)이 같은 결과 파일을 단정하게 유지한다.
+
+### 11.8 키맵 (TSK-09-06, D-021)
+
+- `default.json:59` `oranda.mybatis.runScenario` 의 `keys` 를 `["Primary+Enter", "F9"]` 로(mac 은 지금 그대로).
+- 같은 키 `Primary+Enter` 가 `oranda.exec.runStatement`(when `sqlDocFocus`)에도 있다. MyBatis 문서에서 어느 쪽이 이기는지 `KeyDispatcher`·`KeyBindingTable` 규칙을 시험으로 확인한다. 현재 문장 실행이 이기면 그 바인딩의 when 에 `&& !mybatisDocFocus` 를 더한다(키맵 파일에서). 디스패처 규칙은 바꾸지 않는 것이 먼저다.
+- orange5·plsqldev·sqldev 도 같은 규칙. 프리셋이 그 키를 다른 명령에 쓰면 그대로 두고 결과에 적는다.
+
+### 11.9 문구 파일 소유 (D-023)
+
+| 파일 | 소유 |
+|---|---|
+| `Shell/Resources/CommandTitles.json`·`CommandTitles-en.json` | TSK-09-01, 그 뒤 ux-menu 레인(09-02)만 |
+| `Resources/strings-ko/en.json` 의 `Menu.*`·`Shell.settings.*` | TSK-09-01, 그 뒤 ux-menu 레인만 |
+| `Resources/strings-ko/en.json` 의 `Export.*`(새 접두) | TSK-09-07 |
+| `Resources/strings-ko/en.json` 의 `Features.*`·`Role.*`(`FeatureTexts` 키) | TSK-09-08, 09-09 (같은 레인 차례로) |
+| `Resources/strings-ko/en.json` 의 `Layout.*`(필요할 때만) | TSK-09-05 |
+| `Resources/literals-en.json` | 계약 Task 만 파일 끝에 붙인다. 다른 Task 는 자기 화면의 기존 문구 바로 뒤에 넣는다(끝에 붙이면 병렬 머지 충돌) |
+| 빠진 문구 | 레인 결과에 적고 TSK-09-10 이 넣는다 |
+
+strings 파일은 키 이름 순으로 놓여 있으므로 자기 접두 자리에 넣으면 다른 레인과 줄이 붙지 않는다. TSK-07-11(fx-default, 52601b9 에 머지됨)이 고친 `Features.*` 자리(strings-ko 83~100줄 부근)는 이제 ux-role 만 고친다.
+
+### 11.10 기능 Task 편집 지점 (WP-09)
+
+한 파일은 한 레인만 고친다. 같은 레인 안 Task 는 차례로 한다. 계약 Task 가 실제 코드에 맞춰 이 표를 `docs/oranda1/design.md` `## 기능 Task 편집 지점 (WP-09)` 에 옮긴다. 시험 경로의 뿌리는 `tests/Oranda.App.Tests/`.
+
+| 레인 / Task | 소유 파일 | 시험 파일 | 고치지 않는 것 |
+|---|---|---|---|
+| ux-menu / TSK-09-01 계약 | 11.9 의 ux-menu 문구, `Shell/Settings/SettingsWindow.axaml`(실행 탭 안내 한 줄), 이름을 특성 `Title =` 으로 박은 명령 파일의 그 줄(`Features/SessionMonitor/**`, `Features/LockMonitor/**`, `Features/Tuning/Stats/TableStatsCommands.cs` 등), 세션 종료 확인 창 문구, `docs/design/commands.md`(제목 열), `docs/oranda1/design.md` | `Features/Localization/LocalizationTests.cs`, 옛 제목을 단정한 시험 | 배치·When·로직 |
+| ux-menu / TSK-09-02 | 아래 「ux-shell」·「ux-export」·「ux-role」 소유를 뺀 모든 `Features/**/*Commands.cs`·`*CommandHandler.cs` 의 `[OrandaCommand]` 특성(특히 `SqlEditor/SqlEditorCommandHandler.cs`, `Navigation/*Commands.cs`, `ConnectionManager/ConnectionManagerCommands.cs`, `ConnectionImport/*Commands.cs`, `PlsqlEditor/PlsqlEditorCommands.cs`, `PlsqlRun/PlsqlRunCommands.cs`, `MyBatisWorkspace/**/*Commands.cs`, `Templates/TemplatesCommands.cs`, `LobRowView/LobRowViewCommands.cs`, `Execution/ExecutionCommands.cs`, `ExecutionPlan/ExecutionPlanCommands.cs`, `Completion/*`, `FormatterProfiles/*`, `MyBatisLog/*`, `DedicatedSession/*Commands.cs`, `RecentFiles/**`), `Shell/ShellCommands.cs` | `Features/SqlEditor/SqlEditorWorkspaceMenuTests.cs`, 새 `Shell/MenuGroupingTests.cs` | `Shell/Menus/**`, 그리드 3파일, `DataTransfer/**`, 기존 메뉴 Headless 시험(ux-shell 소유 — 깨지면 고치지 말고 결과에 적고 조정자에게 알린다) |
+| ux-shell / TSK-09-03 | `Shell/Menus/**`, `Features/ResultGrid/ResultGridCommands.cs`, `Features/GridEdit/GridEditCommands.cs`, `Features/Flashback/FlashbackCommands.cs` | `Shell/Headless/MenuStateHeadlessTests.cs`, `MenuBarTargetTests.cs`, `NativeMenuTests.cs`, `Shell/MenuVisibilityTests.cs`, `Shell/TuningMenuTests.cs`, 새 `Shell/ContextSubmenuTests.cs` | 다른 `*Commands.cs`, 문구 파일 |
+| ux-shell / TSK-09-04 | `Shell/Menus/**`, `Features/Execution/ExecutionCommands.cs` 의 커밋·롤백 두 줄(TSK-09-02 머지 뒤) | 새 `Shell/ToolbarWhenTests.cs`, `Integration/Roles/RoleSurfaceMatrixTests.cs`(툴바 정답표, TSK-07-11 머지 뒤) | 문구 파일 |
+| ux-layout / TSK-09-05 | `Shell/Layout/**`, `Shell/Docking/**`, 문구 `Layout.*` | `Shell/LayoutPlannerTests.cs`, `Shell/Headless/NamedLayoutTests.cs`, 새 `Shell/Headless/DefaultLayoutAutoOpenTests.cs` | `*Commands.cs`, `[OrandaToolPanel]` 특성, `Features/Execution/**` |
+| ux-layout / TSK-09-06 | `docs/design/keymaps/*.json`, (꼭 필요할 때만) `Shell/Keymaps/**` | `Shell/Contract/KeymapLoaderTests.cs`, 새 `Shell/MyBatisRunKeyTests.cs` | `*Commands.cs` |
+| ux-export / TSK-09-07 | `Features/DataTransfer/**`(가져오기 `Import*` 제외), 문구 `Export.*` | `Features/DataTransfer/**` | `CommandTitles*.json`, `Shell/Menus/**` |
+| ux-role / TSK-09-08 | `Shell/Settings/FeatureSettingsPage.cs`, `Shell/Settings/FeatureSettingsView.axaml*`, `src/Oranda.Core/Features/FeatureTexts.cs`, 새 `src/Oranda.Core/Features/PrimaryWork.cs`, 문구 `Features.*`·`Role.*` | `Features/Roles/FeatureSettingsViewTests.cs`, `Integration/Roles/RoleMenuFlowTests.cs`, `RoleEdgeCaseTests.cs`, `RoleRenderTests.cs`, 새 `tests/Oranda.Core.Tests/Features/PrimaryWorkTests.cs` | `FeatureCatalog.cs`(해석 규칙)·`FeaturesSettings.cs`·`SettingsStore.cs`·`FeatureGate.cs` |
+| ux-role / TSK-09-09 | `Shell/StartPage.cs`, `Shell/Settings/SettingsService.cs`, 첫 접속 SQL 탭 구독(새 파일 `Shell/FirstConnectEditor.cs` 권장), `FeatureTexts.cs`·문구(시작 화면 키) | `Shell/Headless/StartPageHostTests.cs`, 새 `Shell/Headless/FirstRunCardTests.cs` | `ConnectionManager/ConnectionManagerCommands.cs`(ux-menu) |
+| ux-itest / TSK-09-10 | `tests/Oranda.App.Tests/Integration/Ux/**`(새), 빠진 문구(문구 파일 전부), `docs/oranda1/itest/TSK-09-10.md` | 같은 폴더 | 제품 코드(결함은 defect Task 로) |
+
+### 11.11 메뉴 너비 재는 법 (TSK-09-10)
+
+- 앱을 실제 `FeatureGate` 로 조립하는 시험 도우미(`Integration/Roles/RoleApp.cs` 를 그대로 쓰거나 `Integration/Ux/` 에 같은 방식의 도우미)로 Role 구성마다 주 메뉴·그리드 오른쪽 클릭 모델을 읽는다.
+- 센다: (1) 메뉴 항목 총수 — 조사 1.1 주1 규칙(명령이 놓인 메뉴 자리 수 + 오른쪽 클릭에서 옮겨 실은 명령 + 보기 > 도구 창 토글, 구분선·열 때 채우는 줄 제외, 한 명령이 두 메뉴면 2), (2) 최상위 메뉴 수, (3) 한 단계 줄 수가 15를 넘는 메뉴 수(최상위·하위 메뉴 모두, PRD 13.3 정의, `When` 숨김 미적용), (4) 최상위 메뉴별 한 단계 줄 수, (5) 그리드 오른쪽 클릭 한 단계 줄 수, (6) 툴바 단추 수(미커밋 없음/있음), (7) 기본 배치에서 SQL 탭과 함께 보이는 도구 창 수. 보조 열로 SQL 탭 활성 상태의 보이는 항목 수.
+- 구성: 모든 기능(`allFeatures: true`)·아무것도 고르지 않음(D-013 = R1)·R1~R6·R1+R4·Role 0개(`roles: []`).
+- 결과서 표: 구성 × 항목, 「조사(413a33d)」·「지금」·「목표(PRD 13.3·13.5)」·「차이 이유」. 목표를 못 채운 칸은 이유와 후속 후보를 적는다.
+
+### 11.12 수락 기준 (기술)
+
+- 명령 id 집합·키맵 바인딩(09-06 추가 제외)·팔레트 결과(숨긴 2줄 제외)가 WP-09 전과 같다(시험으로 단정).
+- 오른쪽 클릭 하위 메뉴가 Avalonia·macOS 네이티브 두 그리기에서 같은 모양이다(모델 시험 + Headless).
+- 툴바 `When` 이 문맥 키 변화에 따라 단추를 숨기고 보인다(Headless).
+- `PrimaryWork` 왕복: 모든 기존 `features` 모양(`null`·`allFeatures`·Role 1~6개 조합·`[]`·모르는 id)을 화면 상태로 읽고 건드리지 않고 저장하면 같은 `features` 가 나온다.
+- 기본 배치·레이아웃 초기화 결과의 보이는 도구 창 집합을 단정하고, 저장된 배치(`rightToolsOpen` 있음·없음)를 읽으면 지금과 같다.
+- `dotnet build Oranda.sln -warnaserror` 와 `dotnet test` 가 통과한다.
