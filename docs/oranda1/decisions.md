@@ -98,3 +98,11 @@
 - **Rationale**: 팩 보유는 라이선스 사실이라 Role 로 자동 선언하면 안 된다(조사 6.12). 문구 파일은 LocalizationTests 때문에 모든 레인이 건드리게 되어 병렬 머지 충돌의 주원인이 된다(dflow-wbs 공유 파일 규칙 C1·C7)
 - **Reversible**: yes
 - **Source**: 조사 6.12, src/Oranda.Core/Connection/ConnectionProfile.cs:26,65, TRD 10.8·10.9
+
+## D-014 (2026-10-25T10:30:00Z)
+- **Phase**: release
+- **Decision needed**: Oranda 를 공개 소프트웨어로 낼 때의 라이선스와 Windows·macOS 코드 서명 방식
+- **Decision made**: 무료 공개 소프트웨어, 라이선스 MIT(저작권자 표기 `jongik-sv`, 바꿀 수 있음). Windows 는 SignPath Foundation 오픈 소스 무료 서명을 신청하고, 승인 전에는 서명 없이 배포한다(CI 는 SignPath 비밀값이 있을 때만 서명 단계를 탄다). macOS 는 기존 CI 의 Apple 서명·공증을 비밀값이 있을 때만 하고, 없으면 서명 없이 낸다. 받는 사람 안내(SmartScreen 「추가 정보 → 실행」, macOS 「우클릭 → 열기」)는 docs/user/install.md 에 둔다
+- **Rationale**: 유료 OV·EV 인증서는 해마다 비용이 들고 1인 프로젝트에 부담이다. Azure Artifact Signing 은 미국·캐나다·EU·영국 조직만 가입할 수 있다(scripts/release/README.md). SignPath Foundation 은 OSI 라이선스 프로젝트에 무료로 인증서를 주지만 심사·평판 조건이 있어 승인까지 시간이 걸리므로, 서명을 기다리지 않고 먼저 낸다. 위험: Oracle 드라이버(Oracle Free Use Terms, 비 OSI)가 설치본에 들어가 SignPath 의 「독점 구성 요소 금지」 조건에 걸릴 수 있다 — 신청서에 밝히고 판단을 받는다
+- **Reversible**: yes
+- **Source**: 사용자 결정 2026-10-25(조정자 전달), https://signpath.org/terms, TSK-08-01~04

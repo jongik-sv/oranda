@@ -11,5 +11,13 @@
     <!-- 버전 일괄 관리: MAJOR.MINOR.PATCH (+ CI 빌드 번호는 -p:Version 으로 덮어쓴다) -->
     <VersionPrefix>0.1.0</VersionPrefix>
     <Product>Oranda</Product>
+
+    <!-- 공개 배포 메타(D-014, TSK-08-01). 저작권자 표기는 LICENSE 와 같게 둔다. -->
+    <Authors>jongik-sv</Authors>
+    <Copyright>Copyright (c) 2026 jongik-sv</Copyright>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <PackageProjectUrl>https://github.com/jongik-sv/oranda</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/jongik-sv/oranda</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
   </PropertyGroup>
 </Project>

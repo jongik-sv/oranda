@@ -533,6 +533,53 @@ levels:
   - acceptance: 세 현상이 고쳐지고 해당 `Defect_` 시험의 단정이 새 동작으로 바뀐다 / 새 문구가 ko·en 문구 파일에 있고 LocalizationTests 통과 / 전체 시험 통과
   - note: TSK-07-08 에서 발견(D-2~D-4). 사용자 결정 U-1~U-3(미커밋 전환·R6 DB 이중 방어·깨진 features 처리)은 결과서 참조 — 결정이 나면 이 Task 에 합치거나 새 Task 로. 담당 PC: win144(Windows 개발 PC) — 맥북 세션은 이 Task 를 하지 않는다 / 결과: 상태 줄 칸이 조회 전용 Role 도 반영(「조회 전용 Role」 + 풀 방법 도움말, 프로필이면 「읽기 전용」), SET SERVEROUTPUT·EXEC 거부 문구가 친 명령 기준이고 거부되면 상태 불변(26ai·11.2 실DB 통과), 「Role 로 고르기」 + Role 0개면 한 줄 안내. 새 문구 3개 ko·en·literals (win144)
 
+## WP-08: 공개 배포 준비
+<!-- 담당 PC: win144(Windows 개발 PC) — 맥북 세션은 이 WP 의 Task 를 하지 않는다. 2026-10-25 사용자 결정(D-014): 무료 공개 소프트웨어, MIT, Windows 서명은 SignPath Foundation 신청 전제·승인 전 무서명 배포, macOS 는 기존 Apple 서명·공증(비밀값 있을 때만). 회차 simplify 레인 pub. src/** 는 고치지 않는다(필요한 것은 후보로 보고) -->
+
+- [x] TSK-08-01: 라이선스·README·외부 고지 (MIT·README 영/한·THIRD-PARTY-NOTICES) [win144] w:1 2026-10-25~2026-10-25
+  - category: infra
+  - domain: infra
+  - model: opus
+  - priority: high
+  - tags: release, license, docs, win144
+  - prd-ref: D-014
+  - requirements: 루트 LICENSE(MIT, `Copyright (c) 2026 jongik-sv`); README.md(영어 기본)·README.ko.md — 무엇인지(Orange for ORACLE 대체 무료 Oracle 클라이언트), 주요 기능(Role 별 메뉴 포함), 지원 Oracle 버전(11.2 이상, PRD 7.1·D-026·D-030 근거), 지원 OS, 설치·첫 실행, 빌드(.NET 10 SDK), 라이선스, 스크린샷 자리; THIRD-PARTY-NOTICES.md — Directory.Packages.props 런타임 패키지 전부(시험 전용 제외)의 라이선스를 NuGet 캐시 nuspec·LICENSE 로 확인, Oracle.ManagedDataAccess.Core 라이선스 원문과 재배포 조건, 확인 못 한 것은 「미확인」; Directory.Build.props 에 Authors·Copyright·PackageLicenseExpression·RepositoryUrl 메타; 제약: src 는 고치지 않는다(정보 창 라이선스 표시는 후보로 보고); 비고: 담당 PC: win144(Windows 개발 PC) — 맥북 세션은 이 Task 를 하지 않는다
+  - acceptance: LICENSE·README 2종·THIRD-PARTY-NOTICES.md 가 있다 / 고지표가 `dotnet list package --include-transitive` 의 출하 패키지를 빠짐없이 덮는다 / Oracle 라이선스 원문이 고지에 그대로 들어 있다 / `dotnet build Oranda.sln -warnaserror` 통과
+  - note: 담당 PC: win144(Windows 개발 PC) — 맥북 세션은 이 Task 를 하지 않는다. 결과 — LICENSE(MIT, jongik-sv), README.md·README.ko.md(기능·Role·지원 버전·설치·빌드·Code signing policy·개인정보·상표 고지), THIRD-PARTY-NOTICES.md(출하 패키지(전이 포함) 표, Oracle Free Use Terms 원문·info.txt 고지·ANGLE·Apache-2.0·MIT·BSD-3 원문, PL/SQL 문법 Apache-2.0, 미확인: Inter 글꼴 OFL·AvaloniaUI.DiagnosticsSupport(Debug 전용)), Directory.Build.props 공개 메타, scripts/release/copy-notices.ps1(설치 폴더 licenses/ 에 고지 동봉) (win144)
+
+- [x] TSK-08-02: 사내 정보 노출 점검 (보고만, 고치지 않음) [win144] w:1 2026-10-25~2026-10-25
+  - category: research
+  - domain: infra
+  - model: opus
+  - priority: critical
+  - tags: release, security, audit, win144
+  - prd-ref: D-014
+  - requirements: git 추적 파일 전체에서 회사 이름·사내 서버/호스트·IP·TNS 별칭·계정·내부 URL·사내 시스템 이름·개인 이름·이메일·토큰을 찾는다(예: UBMADQ); .gitignore 로 뺀 docs/orange-analysis.md·docs/orange5-features.md·.dflow 가 추적되지 않는지 확인; 과거 커밋은 `git log -p -S<문자열>` 로 표본 확인; 결과는 저장소 밖 ~/.coord/simplify/pub-exposure.md 에 표(파일:줄, 무엇, 위험 상·중·하, 권장 조치); 제약: 저장소 파일을 고치지 않는다; 비고: 담당 PC: win144(Windows 개발 PC) — 맥북 세션은 이 Task 를 하지 않는다
+  - acceptance: 추적 파일 전부를 훑은 표가 있다 / 위험 「상」 항목과 이력 재작성 필요 여부가 보고 첫머리에 있다 / 저장소에 변경이 없다
+  - note: 담당 PC: win144(Windows 개발 PC) — 맥북 세션은 이 Task 를 하지 않는다. 결과 — 추적 파일 1,694개 점검, 상 4·중 11·하 9(보고서 ~/.coord/simplify/pub-exposure.md, 커밋 안 함). 저장소가 이미 PUBLIC 이고 상 항목(사내 운영 SQL 이 든 .sqd 시험 표본, 회사 이름, 사내 DB 이름·계정, 실제 스키마 이름)이 과거 커밋에도 있어 이력 재작성 필요 — 사용자 결정 (win144)
+
+- [x] TSK-08-03: CI Windows 설치 패키지·GitHub Release 두 채널·SignPath 조건부 서명 [win144] w:2 2026-10-25~2026-10-25
+  - category: infra
+  - domain: infra
+  - model: opus
+  - priority: high
+  - tags: release, ci, velopack, signpath, win144
+  - prd-ref: D-014
+  - requirements: ci.yml windows 작업에 Velopack 패키지(vpk pack: Setup.exe·Portable zip·nupkg)를 macOS 와 같은 방식(버전 규칙·이전 릴리스 델타·산출물)으로 넣고 release 작업이 두 채널을 GitHub Release 에 올리게; 비밀값 없으면 무서명; SignPath 비밀값(SIGNPATH_API_TOKEN·SIGNPATH_ORGANIZATION_ID)이 있을 때만 `signpath/github-action-submit-signing-request` 고정 태그로 서명; 로컬 검증(dotnet publish + vpk pack 또는 YAML 문법); docs/release.md 갱신(Windows 포함, 서명 상태별 동작); 제약: push·실제 GitHub 실행 금지; 비고: 담당 PC: win144(Windows 개발 PC) — 맥북 세션은 이 Task 를 하지 않는다
+  - acceptance: ci.yml 이 YAML 로 읽히고 release 가 windows·macos 둘 다에 depends / 비밀값 없는 경로가 서명 단계를 모두 건너뛴다 / 로컬 vpk pack 이 Setup.exe·Portable·nupkg·releases.win.json 을 만든다 / docs/release.md 에 서명 상태별 동작 표
+  - note: 담당 PC: win144(Windows 개발 PC) — 맥북 세션은 이 Task 를 하지 않는다. 결과 — windows 작업: 버전 규칙·고지 동봉·vpk download/pack `--channel win`·SignPath v3.0 두 단계(Oranda.* 먼저, Setup.exe 나중, 릴리스+비밀값 있을 때만)·서명 보고·크기 검사·release-windows-x64 산출물; release 작업: windows·macos 버전 일치 확인 후 `--channel win`/`osx` `--publish --merge`(이전엔 채널을 안 적어 Linux 러너 기본 linux 채널이 됐을 것); 로컬 publish+vpk pack 무서명 Setup 83,864,323 bytes(상한까지 21,757 bytes), YAML 파싱 확인, docs/release.md 갱신 (win144)
+
+- [x] TSK-08-04: 설치 안내(한/영)·SignPath 신청서 초안·README 서명 고지 [win144] w:1 2026-10-25~2026-10-25
+  - category: infra
+  - domain: infra
+  - model: opus
+  - priority: medium
+  - tags: release, docs, signpath, win144
+  - prd-ref: D-014
+  - requirements: docs/user/install.md + install.en.md — Windows SmartScreen 「추가 정보 → 실행」, macOS 「우클릭 → 열기」·격리 해제, 자동 업데이트, 제거; SignPath Foundation 신청서 초안(프로젝트 설명·저장소·라이선스·빌드 방식·릴리스 주기 등)을 저장소 밖 ~/.coord/simplify/signpath-application.md 에; SignPath OSS 조건(Code signing policy·고지 문구·역할·개인정보)을 웹에서 확인해 README 에 넣는다; 비고: 담당 PC: win144(Windows 개발 PC) — 맥북 세션은 이 Task 를 하지 않는다
+  - acceptance: 설치 안내 2종에 설치·막힐 때·업데이트·제거가 있다 / README 에 「Code signing policy」 절과 SignPath 고지 문구·역할·개인정보 절 / 신청서 초안이 저장소 밖에 있다
+  - note: 담당 PC: win144(Windows 개발 PC) — 맥북 세션은 이 Task 를 하지 않는다. 결과 — install.md 를 공개 배포용으로 다시 씀(GitHub Releases, SmartScreen·브라우저 차단·스마트 앱 컨트롤, macOS 14/15 열기·xattr, 업데이트 끄기, 제거·남는 폴더) + install.en.md; README Code signing policy(고지 문구·역할·승인 전 무서명)·Privacy(업데이트 확인 기본 켬을 사실대로); 신청서 초안에 거절 위험(Oracle 드라이버 비 OSI·평판·릴리스 없음·업데이트 확인 개인정보 문구) 정리 (win144)
+
 ## 의존 그래프
 
 ### 그래프 (Mermaid)
@@ -611,6 +658,7 @@ graph LR
 - 최장 경로: TSK-01-01 → TSK-01-02 → TSK-02-01 → TSK-03-01 → TSK-03-02 → TSK-04-01
 - 기능 구간 내부 깊이는 3 이다(TSK-02-01 → TSK-03-01 → TSK-03-02).
 - FS 겹침 검증: depends 가 있는 모든 쌍에서 후행 시작일 > 선행 종료일.
+- WP-08(2026-10-25 추가, Task 4개): 서로 depends 가 없다(라이선스·노출 점검·CI·설치 안내가 각자 다른 파일). 그래프에 넣지 않는다.
 - WP-07(2026-10-25 추가, Task 8개): 최장 경로 TSK-07-01 → TSK-07-02 → TSK-07-07 → TSK-07-08(깊이 4 = 계약 1 + 기능 1 + 측정 1 + 통합테스트 1). Fan-in: TSK-07-01 이 5(계약 전용, 구조적 예외), TSK-07-08 이 depends 6(통합테스트, 구조적 예외). 계약 뒤 07-02~07-06 은 서로 depends 가 없고 소유 파일이 겹치지 않는다(TRD 10.9). TSK-07-08 이 발견한 결함 2건을 TSK-07-09·TSK-07-10(각각 TSK-07-08 에만 depends, 서로 독립)으로 더했다(WP-07 Task 10개, 최장 경로는 깊이 5).
 
 **Fan-in Top 5**

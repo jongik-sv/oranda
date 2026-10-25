@@ -22,18 +22,37 @@ env:
 
 jobs:
   windows:
-    name: windows-x64 (build, unit, ui, perf)
+    name: windows-x64 (build, unit, ui, perf, package)
     runs-on: windows-latest
+    env:
+      IS_RELEASE: ${{ startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch' }}
+      # SignPath Foundation 오픈 소스 서명(D-014). 비밀값이 없으면(승인 전·포크 PR) 서명 없이 패키지한다.
+      # 서명 요청은 사람이 SignPath 에서 승인해야 끝나므로 릴리스 때만 보낸다.
+      HAS_SIGNPATH: ${{ secrets.SIGNPATH_API_TOKEN != '' && secrets.SIGNPATH_ORGANIZATION_ID != '' }}
+    outputs:
+      version: ${{ steps.ver.outputs.version }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-dotnet@v4
         with:
           dotnet-version: 10.0.x
+      # 패키지 버전: macOS 작업과 같은 규칙(태그 vX.Y.Z 면 X.Y.Z, 그 밖에는 0.1.<실행 번호>).
+      - name: Resolve package version
+        id: ver
+        shell: bash
+        run: |
+          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
+            VER="${GITHUB_REF_NAME#v}"
+            [[ "$VER" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]] || { echo "tag $GITHUB_REF_NAME is not vX.Y.Z"; exit 1; }
+          else
+            VER="0.1.${{ github.run_number }}"
+          fi
+          echo "version=$VER" >> "$GITHUB_OUTPUT"
       - run: dotnet build Oranda.sln -c Release
       - name: Unit and UI tests
         run: dotnet test Oranda.sln -c Release --no-build --filter "Category!=Integration&Category!=Perf"
       - name: Publish app
-        run: dotnet publish src/Oranda.App -c Release -r win-x64 --self-contained -p:PublishReadyToRun=true -p:Version=0.1.${{ github.run_number }} -p:OrandaUpdateFeed=${{ env.ORANDA_UPDATE_FEED }} -o artifacts/publish/win-x64
+        run: dotnet publish src/Oranda.App -c Release -r win-x64 --self-contained -p:PublishReadyToRun=true -p:Version=${{ steps.ver.outputs.version }} -p:OrandaUpdateFeed=${{ env.ORANDA_UPDATE_FEED }} -o artifacts/publish/win-x64
       - name: Startup perf (5 runs)
         # 예산 초과 시 실패시키려면 --enforce 를 붙인다(예산 확정 전까지 보고만).
         run: dotnet run --project tests/Oranda.Perf -c Release -- --exe artifacts/publish/win-x64/Oranda.App.exe --runs 5 --out artifacts/perf
@@ -43,6 +62,93 @@ jobs:
           name: perf-windows-x64
           path: artifacts/perf/
           if-no-files-found: warn
+      # LICENSE·THIRD-PARTY-NOTICES·네이티브 고지를 설치 폴더 licenses/ 에 넣는다(Oracle 라이선스가 배포본마다 사본을 요구).
+      - name: Bundle license notices
+        shell: pwsh
+        run: scripts/release/copy-notices.ps1 -PublishDir artifacts/publish/win-x64 -Os win
+      - name: Install vpk
+        shell: pwsh
+        run: dotnet tool install -g vpk --version "$env:VPK_VERSION"
+      # 릴리스 때만: 이전 릴리스를 받아 두면 vpk pack 이 델타 패키지를 만든다. 첫 릴리스는 받을 것이 없으므로 실패를 넘긴다.
+      - name: Download previous release (for deltas)
+        if: env.IS_RELEASE == 'true'
+        shell: bash
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: vpk download github --channel win --repoUrl "https://github.com/${{ github.repository }}" --token "$GITHUB_TOKEN" --outputDir artifacts/release/win || echo "no previous release to download"
+      # 서명 1단계: Oranda 자신의 exe·dll 만 SignPath 에 보낸다(외부 라이브러리는 원래 서명을 두거나 무서명 — SignPath OSS 조건).
+      # Velopack 의 Update.exe 는 외부 바이너리라 서명하지 않는다. SignPath 프로젝트의 artifact configuration `app-files` 가 zip 안의 Oranda*.exe·Oranda*.dll 을 서명한다.
+      - name: Upload app files for signing
+        id: unsigned-app
+        if: env.HAS_SIGNPATH == 'true' && env.IS_RELEASE == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: signing-input-app
+          path: artifacts/publish/win-x64/Oranda.*
+          if-no-files-found: error
+          retention-days: 1
+      - name: Sign app files (SignPath)
+        if: env.HAS_SIGNPATH == 'true' && env.IS_RELEASE == 'true'
+        uses: signpath/github-action-submit-signing-request@v3.0
+        with:
+          api-token: ${{ secrets.SIGNPATH_API_TOKEN }}
+          organization-id: ${{ secrets.SIGNPATH_ORGANIZATION_ID }}
+          project-slug: ${{ vars.SIGNPATH_PROJECT_SLUG || 'oranda' }}
+          signing-policy-slug: ${{ vars.SIGNPATH_SIGNING_POLICY_SLUG || 'release-signing' }}
+          artifact-configuration-slug: app-files
+          github-artifact-id: ${{ steps.unsigned-app.outputs.artifact-id }}
+          wait-for-completion: true
+          # 승인자가 손으로 승인할 때까지 기다린다.
+          wait-for-completion-timeout-in-seconds: 3600
+          output-artifact-directory: artifacts/signed/app
+      - name: Use signed app files
+        if: env.HAS_SIGNPATH == 'true' && env.IS_RELEASE == 'true'
+        shell: pwsh
+        run: Copy-Item artifacts/signed/app/* artifacts/publish/win-x64 -Force
+      # 서명 매개변수 없이 묶는다(서명은 SignPath 가 앞뒤 단계에서 한다). Setup.exe·Portable zip·full/delta nupkg·releases.win.json.
+      - name: Package
+        run: >
+          vpk pack --packId Oranda --packVersion "${{ steps.ver.outputs.version }}" --packTitle Oranda --packAuthors jongik-sv
+          --channel win --runtime win-x64 --packDir artifacts/publish/win-x64 --mainExe Oranda.App.exe --outputDir artifacts/release/win
+      # 서명 2단계: Setup.exe(내려받을 때 SmartScreen 이 보는 파일). artifact configuration `installer`.
+      - name: Upload installer for signing
+        id: unsigned-setup
+        if: env.HAS_SIGNPATH == 'true' && env.IS_RELEASE == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: signing-input-setup
+          path: artifacts/release/win/Oranda-win-Setup.exe
+          if-no-files-found: error
+          retention-days: 1
+      - name: Sign installer (SignPath)
+        if: env.HAS_SIGNPATH == 'true' && env.IS_RELEASE == 'true'
+        uses: signpath/github-action-submit-signing-request@v3.0
+        with:
+          api-token: ${{ secrets.SIGNPATH_API_TOKEN }}
+          organization-id: ${{ secrets.SIGNPATH_ORGANIZATION_ID }}
+          project-slug: ${{ vars.SIGNPATH_PROJECT_SLUG || 'oranda' }}
+          signing-policy-slug: ${{ vars.SIGNPATH_SIGNING_POLICY_SLUG || 'release-signing' }}
+          artifact-configuration-slug: installer
+          github-artifact-id: ${{ steps.unsigned-setup.outputs.artifact-id }}
+          wait-for-completion: true
+          wait-for-completion-timeout-in-seconds: 3600
+          output-artifact-directory: artifacts/signed/setup
+      - name: Use signed installer
+        if: env.HAS_SIGNPATH == 'true' && env.IS_RELEASE == 'true'
+        shell: pwsh
+        run: Copy-Item artifacts/signed/setup/Oranda-win-Setup.exe artifacts/release/win/Oranda-win-Setup.exe -Force
+      # 무서명 개수만 알린다(외부 dll 은 무서명이 정상이라 -RequireSigned 를 쓰지 않는다).
+      - name: Signature report
+        shell: pwsh
+        run: scripts/release/check-signatures.ps1 -Dir artifacts/release/win
+      - name: Installer size check (80 MB)
+        shell: pwsh
+        run: scripts/release/check-installer-size.ps1 -Dir artifacts/release/win
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-windows-x64
+          path: artifacts/release/win/
+          if-no-files-found: error
 
   macos:
     name: macos-arm64 (build, unit, ui, package)
@@ -73,6 +179,9 @@ jobs:
         run: dotnet test Oranda.sln -c Release --no-build --filter "Category!=Integration&Category!=Perf"
       - name: Publish app
         run: dotnet publish src/Oranda.App -c Release -r osx-arm64 --self-contained -p:PublishReadyToRun=true -p:Version=${{ steps.ver.outputs.version }} -p:OrandaUpdateFeed=${{ env.ORANDA_UPDATE_FEED }} -o artifacts/publish/osx-arm64
+      - name: Bundle license notices
+        shell: pwsh
+        run: scripts/release/copy-notices.ps1 -PublishDir artifacts/publish/osx-arm64 -Os osx
       - name: Install vpk
         run: dotnet tool install -g vpk --version "$VPK_VERSION"
       # 릴리스 때만: 이전 릴리스를 받아 두면 vpk pack 이 델타 패키지를 만든다. 첫 릴리스는 받을 것이 없으므로 실패를 넘긴다.
@@ -80,7 +189,7 @@ jobs:
         if: env.IS_RELEASE == 'true'
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: vpk download github --repoUrl "https://github.com/${{ github.repository }}" --token "$GITHUB_TOKEN" --outputDir artifacts/release || echo "no previous release to download"
+        run: vpk download github --channel osx --repoUrl "https://github.com/${{ github.repository }}" --token "$GITHUB_TOKEN" --outputDir artifacts/release || echo "no previous release to download"
       - name: Import signing certificate
         if: env.HAS_APPLE_SECRETS == 'true'
         env:
@@ -140,31 +249,42 @@ jobs:
           if-no-files-found: warn
 
   # GitHub Release 올리기: v* 태그 푸시 또는 수동 실행 때만. 쓰기 권한은 이 작업에만 준다(토큰은 GITHUB_TOKEN 뿐).
+  # Windows(win)·macOS(osx) 두 채널을 한 릴리스에 올린다. 러너가 Linux 라 vpk 기본 채널(linux)이 되지 않도록 채널을 꼭 적는다.
   release:
     name: publish GitHub Release
-    needs: macos
+    needs: [windows, macos]
     if: startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     permissions:
       contents: write
     steps:
+      - name: Check versions match
+        run: |
+          [ "${{ needs.windows.outputs.version }}" = "${{ needs.macos.outputs.version }}" ] || { echo "version mismatch: win ${{ needs.windows.outputs.version }} / osx ${{ needs.macos.outputs.version }}"; exit 1; }
       - uses: actions/setup-dotnet@v4
         with:
           dotnet-version: 10.0.x
       - uses: actions/download-artifact@v4
         with:
+          name: release-windows-x64
+          path: artifacts/release/win
+      - uses: actions/download-artifact@v4
+        with:
           name: release-macos-arm64
-          path: artifacts/release
+          path: artifacts/release/osx
       - name: Install vpk
         run: dotnet tool install -g vpk --version "$VPK_VERSION"
+      # --merge: 두 번째 채널을 같은 태그의 릴리스에 더한다(다시 실행해도 같은 릴리스에 붙는다).
       - name: Upload to GitHub Releases
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           VERSION: ${{ needs.macos.outputs.version }}
-        run: >
-          vpk upload github --outputDir artifacts/release
-          --repoUrl "https://github.com/${{ github.repository }}" --token "$GITHUB_TOKEN"
-          --publish --releaseName "Oranda $VERSION" --tag "v$VERSION" --targetCommitish "$GITHUB_SHA"
+        run: |
+          for CH in win osx; do
+            vpk upload github --channel "$CH" --outputDir "artifacts/release/$CH" \
+              --repoUrl "https://github.com/${{ github.repository }}" --token "$GITHUB_TOKEN" \
+              --publish --merge --releaseName "Oranda $VERSION" --tag "v$VERSION" --targetCommitish "$GITHUB_SHA"
+          done
 
   integration:
     name: integration (ubuntu, Testcontainers)
