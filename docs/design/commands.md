@@ -428,8 +428,8 @@
 | `oranda.exec.goToError` | 오류 문장으로 이동 | - | `sqlDocFocus` | `hasExecError` | TSK-06-02 |
 | `oranda.exec.toggleBlankLineDelimiter` | 빈 줄로 문장 나누기 켜기/끄기 (이번 실행) | - | 전역 | `sqlDocActive` | TSK-06-02 |
 | `oranda.exec.toggleStatistics` | 실행 통계 수집 켜기/끄기 | - | 전역 | `sqlDocActive` | TSK-06-06 |
-| `oranda.txn.commit` | 커밋 | - | 전역 | `(hasSession \|\| dedicatedSession) && txnPending && !sessionBusy` | TSK-06-02 |
-| `oranda.txn.rollback` | 롤백 | - | 전역 | `(hasSession \|\| dedicatedSession) && txnPending && !sessionBusy` | TSK-06-02 |
+| `oranda.txn.commit` | 커밋 | - | `!readOnlySession \|\| txnPending`(조회 전용·읽기 전용 접속에서는 미커밋이 있을 때만 메뉴·툴바에 보임, D-022) | `(hasSession \|\| dedicatedSession) && txnPending && !sessionBusy` | TSK-06-02, TSK-09-04 |
+| `oranda.txn.rollback` | 롤백 | - | `!readOnlySession \|\| txnPending`(조회 전용·읽기 전용 접속에서는 미커밋이 있을 때만 메뉴·툴바에 보임, D-022) | `(hasSession \|\| dedicatedSession) && txnPending && !sessionBusy` | TSK-06-02, TSK-09-04 |
 | `oranda.txn.toggleAutoCommit` | 자동 커밋 켜기/끄기 (이번 실행) | - | 전역 | `(hasSession \|\| dedicatedSession) && !readOnlySession` | TSK-06-02 |
 | `oranda.plan.explain` | 예상 실행 계획 | `Ctrl+E` | `sqlDocFocus` | `(hasSession \|\| dedicatedSession) && !sessionBusy && !mybatisDocActive` | TSK-07-01 |
 | `oranda.plan.actual` | 실제 실행 계획(마지막 실행) | `Ctrl+Shift+E` | `sqlDocFocus` | `(hasSession \|\| dedicatedSession) && hasLastSqlId && !mybatisDocActive` | TSK-07-01 |

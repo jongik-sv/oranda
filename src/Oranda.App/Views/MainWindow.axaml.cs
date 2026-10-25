@@ -137,6 +137,7 @@ public partial class MainWindow : Window
                 return match.Kind == KeyMatchKind.Match ? match.CommandId : null;
             },
             _dispatcher);
+        _controls.ToolbarScopeChanged += (_, _) => UpdateToolbarOverflow(); // 커밋·롤백 등 When 으로 숨고 보이는 단추(TSK-09-04)
         AddHandler(KeyDownEvent, OnKeyDownTunnel, RoutingStrategies.Tunnel);
         AddHandler(TextInputEvent, OnTextInputTunnel, RoutingStrategies.Tunnel);
         if (KeyTrace.Enabled)
@@ -306,10 +307,16 @@ public partial class MainWindow : Window
             return;
         }
 
-        var children = ToolbarPanel.Children.ToList();
+        // 명령 When 으로 숨은 단추·구분선(MenuControls)은 막대에도 「…」 메뉴에도 넣지 않는다.
+        var all = ToolbarPanel.Children.ToList();
+        var children = all.Where(c => !c.Classes.Contains(MenuControls.ToolbarOutOfScopeClass)).ToList();
+        foreach (var c in all)
+        {
+            c.IsVisible = children.Contains(c);
+        }
+
         foreach (var c in children)
         {
-            c.IsVisible = true;
             c.Measure(Size.Infinity);
         }
 

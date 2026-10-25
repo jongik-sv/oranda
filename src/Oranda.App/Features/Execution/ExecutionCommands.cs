@@ -277,9 +277,9 @@ public static class ExecutionCommands
     Placements = ["menu:sql/goToError@90"])]
 [OrandaCommand("oranda.exec.toggleBlankLineDelimiter", CommandCategory.Sql, Enablement = "sqlDocActive",
     Placements = ["menu:sql/toggleBlankLineDelimiter@95"])]
-[OrandaCommand("oranda.txn.commit", CommandCategory.Sql, Enablement = "(hasSession || dedicatedSession) && txnPending && !sessionBusy",
+[OrandaCommand("oranda.txn.commit", CommandCategory.Sql, When = "!readOnlySession || txnPending", Enablement = "(hasSession || dedicatedSession) && txnPending && !sessionBusy",
     Icon = "commit", Placements = ["menu:sql/commit@100", "toolbar:main/commit@310"])]
-[OrandaCommand("oranda.txn.rollback", CommandCategory.Sql, Enablement = "(hasSession || dedicatedSession) && txnPending && !sessionBusy",
+[OrandaCommand("oranda.txn.rollback", CommandCategory.Sql, When = "!readOnlySession || txnPending", Enablement = "(hasSession || dedicatedSession) && txnPending && !sessionBusy",
     Icon = "rollback", Placements = ["menu:sql/rollback@110", "toolbar:main/rollback@320"])]
 [OrandaCommand("oranda.txn.toggleAutoCommit", CommandCategory.Sql, Enablement = "(hasSession || dedicatedSession) && !readOnlySession",
     Placements = ["menu:sql/toggleAutoCommit@120"])]

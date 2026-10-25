@@ -255,6 +255,8 @@ public static class MenuModelBuilder
                         CommandId = c.Id,
                         Shortcut = shortcut(c.Id),
                         Icon = c.Icon,
+                        When = c.When, // 툴바도 명령의 When 을 따른다(TRD 11.3, MenuVisibility.Toolbar)
+                        Enablement = c.Enablement,
                     }));
                 }
             }

@@ -30,6 +30,15 @@ public sealed class MenuControls(ICommandRegistry registry, IContextKeys keys, F
 
     private NativeSet? _building;
 
+    /// <summary>툴바 모델 한 마디와 그것을 그린 단추·구분선(<see cref="BuildToolbarItems"/>).</summary>
+    private readonly List<(MenuNode Node, Control Control)> _toolbar = [];
+
+    /// <summary>명령 <c>When</c> 으로 숨은 툴바 단추·구분선에 다는 클래스. 넘침 계산은 이 컨트롤을 세지 않는다.</summary>
+    public const string ToolbarOutOfScopeClass = "toolbar-out-of-scope";
+
+    /// <summary>툴바 단추·구분선의 <c>When</c> 숨김이 바뀌었다(주 창이 넘침 「…」 을 다시 계산한다).</summary>
+    public event EventHandler? ToolbarScopeChanged;
+
     /// <summary>
     /// 메뉴 모델 한 마디와 그것을 그린 컨트롤. <see cref="Children"/> 은 <see cref="MenuNode.Children"/> 과 같은 차례다.
     /// 상태는 <see cref="MenuVisibility.Evaluate"/> 로 계산해 그대로 옮긴다.
@@ -83,6 +92,8 @@ public sealed class MenuControls(ICommandRegistry registry, IContextKeys keys, F
         {
             ApplyState(top);
         }
+
+        ApplyToolbarState();
 
         foreach (var set in _natives.Values)
         {
@@ -501,15 +512,21 @@ public sealed class MenuControls(ICommandRegistry registry, IContextKeys keys, F
         }
     }
 
-    /// <summary>툴바 단추와 구분선. 단추는 <see cref="Button"/>, 구분선은 <see cref="Separator"/>.</summary>
+    /// <summary>
+    /// 툴바 단추와 구분선. 단추는 <see cref="Button"/>, 구분선은 <see cref="Separator"/>.
+    /// 명령의 <c>When</c> 이 지금 맞지 않는 단추와 양옆이 모두 숨은 구분선은 숨기고 <see cref="ToolbarOutOfScopeClass"/> 를 단다(<see cref="RefreshEnablement"/> 때마다 다시 계산).
+    /// </summary>
     public IReadOnlyList<Control> BuildToolbarItems(IReadOnlyList<MenuNode> nodes)
     {
+        _toolbar.Clear();
         var items = new List<Control>();
         foreach (var n in nodes)
         {
             if (n.Kind == MenuNodeKind.Separator)
             {
-                items.Add(new Separator { Classes = { "toolbar" } });
+                var separator = new Separator { Classes = { "toolbar" } };
+                _toolbar.Add((n, separator));
+                items.Add(separator);
                 continue;
             }
 
@@ -526,10 +543,43 @@ public sealed class MenuControls(ICommandRegistry registry, IContextKeys keys, F
             };
             AutomationProperties.SetName(button, n.Title);
             ToolTip.SetTip(button, n.Shortcut is null ? n.Title : $"{n.Title} ({Keymaps.KeyBindingTable.ForScreen(n.Shortcut)})");
+            _toolbar.Add((n, button));
             items.Add(button);
         }
 
+        ApplyToolbarState(notify: false);
         return items;
+    }
+
+    /// <summary>툴바의 <c>When</c> 숨김을 컨트롤에 옮긴다. 바뀐 것이 있으면 <see cref="ToolbarScopeChanged"/>.</summary>
+    private void ApplyToolbarState(bool notify = true)
+    {
+        if (_toolbar.Count == 0)
+        {
+            return;
+        }
+
+        var visible = MenuVisibility.Toolbar([.. _toolbar.Select(t => t.Node)], _menuKeys);
+        var changed = false;
+        for (var i = 0; i < _toolbar.Count; i++)
+        {
+            var control = _toolbar[i].Control;
+            var hidden = !visible[i];
+            if (control.Classes.Contains(ToolbarOutOfScopeClass) == hidden)
+            {
+                continue;
+            }
+
+            control.Classes.Set(ToolbarOutOfScopeClass, hidden);
+            control.IsVisible = !hidden; // 다시 보일 때는 주 창의 넘침 계산이 폭에 맞춰 다시 접는다
+
+            changed = true;
+        }
+
+        if (changed && notify)
+        {
+            ToolbarScopeChanged?.Invoke(this, EventArgs.Empty);
+        }
     }
 
     /// <summary>

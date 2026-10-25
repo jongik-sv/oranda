@@ -17,7 +17,8 @@ public sealed record MenuState(bool Visible, string? Reason, IReadOnlyList<MenuS
 /// <item>명령의 <c>When</c>(특정 탭·패널에서만 쓰는 명령)이 지금 맞지 않으면 숨긴다. 겹치거나 맨 앞·끝에 남는 구분선, 빈 하위 메뉴도 숨긴다.</item>
 /// <item><c>When</c> 은 맞지만 <c>Enablement</c> 가 거짓이면 회색으로 두고 이유를 툴팁으로(<see cref="ContextKeyReasons"/>).</item>
 /// </list>
-/// 오른쪽 클릭 메뉴·툴바·명령 팔레트는 이 규칙을 쓰지 않는다.
+/// 툴바는 같은 <c>When</c> 숨김과 구분선 정리를 쓰되 탭 범위(포커스 키)로는 숨기지 않는다(<see cref="Toolbar"/>, TSK-09-04).
+/// 오른쪽 클릭 메뉴·명령 팔레트는 이 규칙을 쓰지 않는다.
 /// </summary>
 public static class MenuVisibility
 {
@@ -47,6 +48,27 @@ public static class MenuVisibility
         return ContextKeyReasons.Evaluate(when, name => TabScopes.TryGetValue(name, out var scope)
             ? scope is null || ContextKeyReasons.Evaluate(scope, keys.Evaluate)
             : keys.Evaluate(name));
+    }
+
+    /// <summary>
+    /// 툴바에서 이 <c>When</c> 의 단추를 보일지(TRD 11.3, D-022). 주 메뉴와 같은 식 평가이되, 탭 범위 키(<see cref="TabScopes"/> 의 포커스 키)는 참으로 본다:
+    /// 툴바는 늘 같은 자리에 있는 전역 막대라 탭을 바꿀 때마다 실행·포맷 단추가 사라졌다 나타나면 자리가 흔들린다(그런 단추는 회색으로 둔다).
+    /// 상태 키(<c>!readOnlySession || txnPending</c> 등)로만 숨는다. 빈 식·읽을 수 없는 식은 보인다.
+    /// </summary>
+    public static bool InToolbarScope(string? when, IContextKeys keys)
+    {
+        ArgumentNullException.ThrowIfNull(keys);
+        return ContextKeyReasons.Evaluate(when, name => TabScopes.ContainsKey(name) || keys.Evaluate(name));
+    }
+
+    /// <summary>툴바 한 줄(<see cref="MenuModelBuilder.BuildToolbar"/>)의 보임. 양옆에 보이는 단추가 없는 구분선은 숨는다(주 메뉴와 같은 정리).</summary>
+    public static IReadOnlyList<bool> Toolbar(IReadOnlyList<MenuNode> nodes, IContextKeys keys)
+    {
+        ArgumentNullException.ThrowIfNull(nodes);
+        ArgumentNullException.ThrowIfNull(keys);
+        var visible = nodes.Select(n => n.Kind != MenuNodeKind.Separator && InToolbarScope(n.When, keys)).ToArray();
+        SettleSeparators(nodes, i => visible[i], i => visible[i] = true);
+        return visible;
     }
 
     /// <summary>회색 명령의 이유 툴팁. 활성이면 null.</summary>
@@ -81,7 +103,13 @@ public static class MenuVisibility
             });
         }
 
-        // 구분선은 앞뒤에 보이는 항목이 있고, 바로 앞에 보이는 구분선이 없을 때만 보인다.
+        SettleSeparators(nodes, i => states[i].Visible, i => states[i] = states[i] with { Visible = true });
+        return states;
+    }
+
+    /// <summary>구분선(처음엔 숨김)은 앞뒤에 보이는 항목이 있고, 바로 앞에 보이는 구분선이 없을 때만 보인다.</summary>
+    private static void SettleSeparators(IReadOnlyList<MenuNode> nodes, Func<int, bool> isVisible, Action<int> showSeparator)
+    {
         var seenItem = false;
         int? pending = null;
         for (var i = 0; i < nodes.Count; i++)
@@ -96,21 +124,19 @@ public static class MenuVisibility
                 continue;
             }
 
-            if (!states[i].Visible)
+            if (!isVisible(i))
             {
                 continue;
             }
 
             if (pending is { } p)
             {
-                states[p] = states[p] with { Visible = true };
+                showSeparator(p);
                 pending = null;
             }
 
             seenItem = true;
         }
-
-        return states;
     }
 
     private static MenuState Sub(List<MenuState> children) => new(children.Any(c => c.Visible), null, children);

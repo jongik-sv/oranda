@@ -650,7 +650,7 @@ levels:
   - acceptance: 「모든 기능」 에서 그리드 오른쪽 클릭·결과 메뉴 한 단계 줄 수 각각 15 이하(넘으면 탐색 2개를 하위 메뉴로) / 복사(TSV)·행 보기·파일로 내보내기·Excel 로 내보내기가 최상위에 있다 / 편집기·스키마·모니터 오른쪽 클릭 모양이 그대로 / macOS 네이티브 메뉴 모델 시험 통과 / 전체 시험 통과
   - note: 담당 PC: win144(Windows 개발 PC) — 맥북 세션은 이 Task 를 하지 않는다. 크기 L. 레인 ux-shell(첫 Task). TSK-09-02 와 소유 파일이 겹치지 않아 동시에 진행하되 머지는 09-02 뒤 / 결과: BuildContext 가 `context:<표면>/<묶음>/<하위 메뉴>@n` 을 하위 메뉴(제목 키 Menu.context.<표면>.<이름>, 안쪽 구분선 @n/100)로 묶고 결과 메뉴 옮겨 싣기도 하위 메뉴 그대로; 그리드 묶음 = 복사(TSV)·복사 형식▸ / 행 보기·값 보기 / 거르기▸·열▸ / 행 수·모두 가져오기·결과 탭 고정 / 부모·자식 행 / 행 편집▸·플래시백▸ / Excel·파일로 내보내기 — 그리드 오른쪽 클릭 37 → 한 단계 15, 결과 메뉴 37 → 15; 편집기·스키마·모니터 등 다른 표면과 다른 주 메뉴는 바뀌기 전과 같은 모양(덤프 비교); navigate 배치가 남지 않아 NavigateOffset 옮기기 코드 지움; 새 ContextSubmenuTests(규칙 표·옮겨 싣기·숨김·Headless ko/en 렌더), MenuStateHeadless·NativeMenu 시험 추가, ResultFilterTests 배치 단정 갱신; 빠진 문구 없음 (win144)
 
-- [ ] TSK-09-04: 툴바가 명령 When 을 따름·조회 전용에서 커밋·롤백 숨김(미커밋 있으면 보임) [win144] w:1 2026-11-13~2026-11-13
+- [x] TSK-09-04: 툴바가 명령 When 을 따름·조회 전용에서 커밋·롤백 숨김(미커밋 있으면 보임) [win144] w:1 2026-11-13~2026-11-13
   - category: dev
   - domain: frontend
   - model: sonnet
@@ -660,7 +660,7 @@ levels:
   - prd-ref: UX-17, TRD 11.3, D-022
   - requirements: `MenuModelBuilder.BuildToolbar`(`MenuModel.cs:252-272`)가 명령의 `When` 을 노드에 싣고, 툴바 단추·넘침 메뉴(`ToolbarOverflow.cs`)가 주 메뉴와 같은 `MenuVisibility` 평가로 문맥 키가 바뀔 때 보이고 숨는다. 양옆 단추가 모두 숨으면 구분선도 숨김; 지금 `When` 이 있으면서 툴바에 놓인 명령을 모두 찾아 결과에 적고 숨는 것이 의도와 다르면 시험으로 막는다; `Features/Execution/ExecutionCommands.cs:280-282` 의 `oranda.txn.commit`·`oranda.txn.rollback` 에 `When = "!readOnlySession || txnPending"`(Enablement 그대로); 시험: 새 `tests/Oranda.App.Tests/Shell/ToolbarWhenTests.cs`(가짜 문맥 키로 숨김·보임·구분선), Headless(R6 만 + 미커밋 없음 → 툴바·SQL 메뉴에 커밋·롤백 없음, txnPending 참 → 나타남, R1 → 늘 보임, 프로필 읽기 전용도 같은 규칙), `Integration/Roles/RoleSurfaceMatrixTests.cs` 툴바 정답표 갱신; 제약: 문구 파일·FeatureGate 는 고치지 않는다; 비고: 담당 PC: win144(Windows 개발 PC) — 맥북 세션은 이 Task 를 하지 않는다. TSK-07-08 U-1 해결
   - acceptance: R6 만 고르고 미커밋이 없으면 툴바 단추가 12개(조사 14개에서 커밋·롤백 2개 숨김)이고 미커밋이 생기면 14개 / R1 툴바는 그대로 / 전체 시험 통과
-  - note: 담당 PC: win144(Windows 개발 PC) — 맥북 세션은 이 Task 를 하지 않는다. 크기 S. 레인 ux-shell(두 번째). ExecutionCommands.cs 는 09-02 가 먼저 고치므로 그 머지 뒤, Roles 시험은 TSK-07-11 머지 뒤 (win144)
+  - note: 담당 PC: win144(Windows 개발 PC) — 맥북 세션은 이 Task 를 하지 않는다. 크기 S. 레인 ux-shell(두 번째). ExecutionCommands.cs 는 09-02 가 먼저 고치므로 그 머지 뒤, Roles 시험은 TSK-07-11 머지 뒤 / 결과: BuildToolbar 가 When·Enablement 를 싣고 MenuControls 가 키 바뀔 때마다 MenuVisibility.Toolbar 로 단추·구분선을 숨김(toolbar-out-of-scope 클래스, 주 창 넘침 「…」 도 숨은 단추를 세지 않음); 커밋·롤백 When = `!readOnlySession || txnPending`(툴바·SQL 메뉴); When 이 있는 주 툴바 명령 = 실행·스크립트 실행·실행 중지·예상 계획(sqlDocFocus)·포맷(editorFocus)·커밋·롤백 — 탭 범위 키는 툴바에서 참으로 보아 실행·포맷 단추는 탭에 따라 사라지지 않음(시험으로 막음), MyBatis 문서 도구 막대(toolbar:mybatis)는 따로 그려 영향 없음; R6 툴바 14 → 12(미커밋 있으면 14), R1·모든 기능 그대로; 새 ToolbarWhenTests·RoleSurfaceMatrixTests 툴바 정답표, commands.md 커밋·롤백 when 열 갱신 (win144)
 
 - [x] TSK-09-05: 기본 레이아웃 덜어내기 — 아래 탭 3개·오른쪽 창 닫힘·필요할 때 자동 열림 [win144] w:2 2026-11-09~2026-11-10
   - category: dev

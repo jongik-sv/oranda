@@ -130,7 +130,7 @@ public sealed class RoleSurfaceMatrixTests
             {
                 var def = commandsAll.Single(x => x.Definition.Id == id).Definition;
                 var placedInVisibleTop = def.Placements.Select(p => Placement.TryParse(p, out var pl) ? pl : null)
-                    .Any(pl => pl is { Surface: "menu" } && visibleTops.Contains(pl.Path[0] == "navigate" ? "edit" : pl.Path[0]));
+                    .Any(pl => pl is { Surface: "menu" } && visibleTops.Contains(pl.Path[0]));
                 if (placedInVisibleTop)
                 {
                     Assert.True(s.MenuCommands.Contains(id), $"{name}: {id} 는 보이는 메뉴에 놓였는데 메뉴에 없다");
@@ -208,6 +208,52 @@ public sealed class RoleSurfaceMatrixTests
             Assert.Equal(PrdMatrix.AllTasks.Except(PrdMatrix.ExpectedTasks(expected)).Order(), s.SkippedTasks.Order());
             Assert.Contains("PlSqlWarmUpTask", s.StartupTasks); // Language 의 공통 작업은 늘 돈다
             Assert.Equal(expected.Contains("blockerAlert"), app.BlockerChip() is not null);
+        }
+        finally
+        {
+            RoleApp.DeleteDir(dir);
+        }
+    });
+
+    /// <summary>
+    /// TSK-09-04 툴바 정답표(D-022): 조회 전용(R6)만 고르고 미커밋이 없으면 커밋·롤백 2개가 숨어 조사 14개에서 12개, 미커밋이 생기면 14개.
+    /// 조회 전용이 아닌 구성은 툴바가 그대로(놓인 단추 = 보이는 단추).
+    /// </summary>
+    [Theory]
+    [InlineData("R6-viewer", 14, 12)]
+    [InlineData("R1-sqlDev", 14, 14)]
+    [InlineData("none(default-R1)", 14, 14)]
+    [InlineData("R6+R1", 14, 14)]
+    [InlineData("all-features", 18, 18)]
+    public Task Toolbar_hides_commit_and_rollback_only_for_read_only_without_a_pending_transaction(string name, int placed, int shownWithoutTxn) => HeadlessHost.Run(async () =>
+    {
+        var c = Cases[name];
+        var dir = RoleApp.NewDir();
+        try
+        {
+            using var app = new RoleApp(dir, c.Json);
+            await RoleApp.SettleAsync();
+            var keys = app.Get<ContextKeyService>();
+            List<string> Shown() =>
+            [
+                .. app.Window.Toolbar.Children.OfType<Avalonia.Controls.Button>()
+                    .Where(b => !b.Classes.Contains(MenuControls.ToolbarOutOfScopeClass))
+                    .Select(b => ((RegistryCommand)b.Command!).CommandId),
+            ];
+
+            var buttons = app.Window.Toolbar.Children.OfType<Avalonia.Controls.Button>().Count();
+            Assert.Equal(placed, buttons);
+            Assert.Equal(shownWithoutTxn, Shown().Count);
+            Assert.Equal(shownWithoutTxn != placed, keys.Evaluate("readOnlySession"));
+            Assert.Equal(shownWithoutTxn == placed, Shown().Contains("oranda.txn.commit") && Shown().Contains("oranda.txn.rollback"));
+
+            // 미커밋이 생기면(Role 을 바꾸기 전 DML 등) 끝낼 길이 보인다.
+            keys.Set("txnPending", true);
+            await RoleApp.SettleAsync();
+            Assert.Equal(placed, Shown().Count);
+            keys.Set("txnPending", false);
+            await RoleApp.SettleAsync();
+            Assert.Equal(shownWithoutTxn, Shown().Count);
         }
         finally
         {
