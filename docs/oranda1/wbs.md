@@ -638,7 +638,7 @@ levels:
   - acceptance: 「모든 기능」 에서 편집·파일 메뉴 한 단계 줄 수 각각 15 이하, 보기 7 이하 / 보기 메뉴에 「도구 창 ▸」 토글과 같은 창을 여는 줄이 없다 / PL/SQL 편집기에 포커스가 있으면 SQL > PL/SQL ▸ 에 4개가 보인다 / SQL 탭에서 MyBatis 전용 5개가 메뉴에 없다 / 명령 id 집합·키맵이 그대로 / 전체 시험 통과
   - note: 담당 PC: win144(Windows 개발 PC) — 맥북 세션은 이 Task 를 하지 않는다. 크기 M. 레인 ux-menu(두 번째). 머지 순서: TSK-09-03 보다 먼저 머지한다(겹치는 시험이 생기면 나중 쪽이 맞춤). 결과: 「모든 기능」 한 단계 줄 수 편집 53→15·파일 32→15·보기 14→6, 탐색 9개를 편집 > 이동 ▸ 로, 보기 중복 7·템플릿 도구 메뉴·보기 레이아웃 초기화 자리 뺌, SQL > PL/SQL ▸ 4개, MyBatis 5개 When=mybatisDocFocus, 저장소 작업 공간 2개 팔레트 숨김, 최근 작업 공간 키 Menu.file.workspace.recentWorkspaces, 새 MenuGroupingTests 15건 (win144)
 
-- [ ] TSK-09-03: 오른쪽 클릭 하위 메뉴 허용·결과 메뉴 옮겨 싣기 하위 메뉴·그리드 메뉴 묶기 [win144] w:3 2026-11-10~2026-11-12
+- [x] TSK-09-03: 오른쪽 클릭 하위 메뉴 허용·결과 메뉴 옮겨 싣기 하위 메뉴·그리드 메뉴 묶기 [win144] w:3 2026-11-10~2026-11-12
   - category: dev
   - domain: frontend
   - model: opus
@@ -648,7 +648,7 @@ levels:
   - prd-ref: UX-03, PRD 13.3, TRD 11.2, TRD 11.10
   - requirements: `MenuModelBuilder.BuildContext`·`ContextSections`(`src/Oranda.App/Shell/Menus/MenuModel.cs:278-332`)에 TRD 11.2 의 새 규칙을 더한다: `context:<표면>/<묶음>/<하위 메뉴>@n` → 그 묶음 안의 하위 메뉴(제목 키 `Menu.context.<표면>.<하위 메뉴>`), 편집기처럼 순서 번호로 묶는 관례는 그대로; 결과·데이터베이스 메뉴 옮겨 싣기(`MenuModel.cs:203-221`)가 하위 메뉴를 그대로 하위 메뉴로 싣는다; `MenuControls.cs` 의 Avalonia 오른쪽 클릭·주 메뉴와 macOS 네이티브 그리기가 하위 메뉴를 그리고, 안 항목이 모두 숨으면 하위 메뉴 머리도 숨긴다; 남는 `navigate` 배치가 없으면 `NavigateOffset` 옮기기 코드를 지운다(있으면 그대로); 그리드 배치(`ResultGridCommands.cs:53-87`, `GridEditCommands.cs:44-60`, `FlashbackCommands.cs:28-32`)를 묶는다: 복사(TSV)는 최상위, 나머지 복사 6개 「복사 형식 ▸」(`context:grid/copy/copyAs@n`), 거르기 6개 「거르기 ▸」, 그리드 편집 9개 「행 편집 ▸」, 플래시백 3개 「플래시백 ▸」, 열 3개 「열 ▸」. 행 보기(`LobRowViewCommands`)·내보내기 2개(`DataTransfer`)는 파일을 고치지 않고 최상위에 남는다; 시험: 새 `tests/Oranda.App.Tests/Shell/ContextSubmenuTests.cs`(규칙 표 시험: 묶음·하위 메뉴·순서·구분선·편집기 관례 불변·옮겨 싣기), 기존 메뉴 Headless 시험(MenuStateHeadlessTests·MenuBarTargetTests·NativeMenuTests·MenuVisibilityTests·TuningMenuTests)을 하위 메뉴에 맞춰 고침, 그리드 오른쪽 클릭 Headless 렌더(ko/en·다크); 제약: 다른 `*Commands.cs` 와 문구 파일은 고치지 않는다(빠진 문구는 결과에 적음); 비고: 담당 PC: win144(Windows 개발 PC) — 맥북 세션은 이 Task 를 하지 않는다
   - acceptance: 「모든 기능」 에서 그리드 오른쪽 클릭·결과 메뉴 한 단계 줄 수 각각 15 이하(넘으면 탐색 2개를 하위 메뉴로) / 복사(TSV)·행 보기·파일로 내보내기·Excel 로 내보내기가 최상위에 있다 / 편집기·스키마·모니터 오른쪽 클릭 모양이 그대로 / macOS 네이티브 메뉴 모델 시험 통과 / 전체 시험 통과
-  - note: 담당 PC: win144(Windows 개발 PC) — 맥북 세션은 이 Task 를 하지 않는다. 크기 L. 레인 ux-shell(첫 Task). TSK-09-02 와 소유 파일이 겹치지 않아 동시에 진행하되 머지는 09-02 뒤 (win144)
+  - note: 담당 PC: win144(Windows 개발 PC) — 맥북 세션은 이 Task 를 하지 않는다. 크기 L. 레인 ux-shell(첫 Task). TSK-09-02 와 소유 파일이 겹치지 않아 동시에 진행하되 머지는 09-02 뒤 / 결과: BuildContext 가 `context:<표면>/<묶음>/<하위 메뉴>@n` 을 하위 메뉴(제목 키 Menu.context.<표면>.<이름>, 안쪽 구분선 @n/100)로 묶고 결과 메뉴 옮겨 싣기도 하위 메뉴 그대로; 그리드 묶음 = 복사(TSV)·복사 형식▸ / 행 보기·값 보기 / 거르기▸·열▸ / 행 수·모두 가져오기·결과 탭 고정 / 부모·자식 행 / 행 편집▸·플래시백▸ / Excel·파일로 내보내기 — 그리드 오른쪽 클릭 37 → 한 단계 15, 결과 메뉴 37 → 15; 편집기·스키마·모니터 등 다른 표면과 다른 주 메뉴는 바뀌기 전과 같은 모양(덤프 비교); navigate 배치가 남지 않아 NavigateOffset 옮기기 코드 지움; 새 ContextSubmenuTests(규칙 표·옮겨 싣기·숨김·Headless ko/en 렌더), MenuStateHeadless·NativeMenu 시험 추가, ResultFilterTests 배치 단정 갱신; 빠진 문구 없음 (win144)
 
 - [ ] TSK-09-04: 툴바가 명령 When 을 따름·조회 전용에서 커밋·롤백 숨김(미커밋 있으면 보임) [win144] w:1 2026-11-13~2026-11-13
   - category: dev

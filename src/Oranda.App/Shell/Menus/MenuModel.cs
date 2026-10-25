@@ -154,9 +154,6 @@ public static class MenuModelBuilder
         ["tuning"] = [.. FeatureCatalog.Features.Where(f => f.Group == FeatureGroup.Tuning).Select(f => f.Id)],
     };
 
-    /// <summary>편집 메뉴 안에서 탐색 명령 묶음이 시작하는 순서(편집 명령은 이보다 작다).</summary>
-    private const int NavigateOffset = 10000;
-
     /// <summary>오른쪽 클릭 표면 → 그 명령을 함께 보일 최상위 메뉴.</summary>
     private static readonly (string Surface, string Top)[] ContextMenuMirrors = [("grid", "result"), ("schema", "database")];
 
@@ -178,12 +175,6 @@ public static class MenuModelBuilder
                     continue;
                 }
 
-                // 「탐색」 범주는 따로 최상위 메뉴가 없다(ui-shell 1.1: 편집 메뉴에 탐색 포함). 편집 메뉴 아래쪽 묶음으로 보낸다.
-                if (p.Path[0] == "navigate")
-                {
-                    p = p with { Path = ["edit", .. p.Path.Skip(1)], Order = NavigateOffset + p.Order % NavigateOffset };
-                }
-
                 if (!roots.TryGetValue(p.Path[0], out var list))
                 {
                     continue;
@@ -201,6 +192,7 @@ public static class MenuModelBuilder
         }
 
         // 오른쪽 클릭에만 놓인 명령도 메뉴 막대에서 찾을 수 있게 한다(ui-shell 1.1 의 결과·데이터베이스 메뉴).
+        // 오른쪽 클릭의 하위 메뉴는 그대로 하위 메뉴로 싣는다(제목 키 Menu.context.<표면>.<하위 메뉴>, TRD 11.2).
         foreach (var (surface, top) in ContextMenuMirrors)
         {
             var context = BuildContext(commandList.Where(c => !c.Placements.Any(r => r.StartsWith("menu:", StringComparison.Ordinal))), text, shortcut, surface);
@@ -215,7 +207,7 @@ public static class MenuModelBuilder
                     continue;
                 }
 
-                var p = new Placement("menu", [top, node.CommandId ?? "item"], (group * Placement.GroupSize) + (++order));
+                var p = new Placement("menu", [top, node.CommandId ?? node.Key ?? "item"], (group * Placement.GroupSize) + (++order));
                 roots[top].Add((p, node with { Order = p.Order }));
             }
         }
@@ -273,7 +265,8 @@ public static class MenuModelBuilder
 
     /// <summary>
     /// 오른쪽 클릭 메뉴(<c>context:&lt;surface&gt;/…</c> 배치). 표면은 <c>editor</c>·<c>grid</c>·<c>schema</c>·<c>monitor</c> 등.
-    /// 하위 메뉴·구분선 규칙은 메뉴 막대와 같다.
+    /// <c>context:&lt;표면&gt;/&lt;묶음&gt;@n</c> 은 묶음(구분선 단위), <c>context:&lt;표면&gt;/&lt;묶음&gt;/&lt;하위 메뉴&gt;@n</c> 은 그 묶음 안의 하위 메뉴(TRD 11.2).
+    /// 하위 메뉴 제목 키는 <c>Menu.context.&lt;표면&gt;.&lt;하위 메뉴&gt;</c>, 안쪽 순서·구분선 규칙은 메뉴 막대와 같다.
     /// </summary>
     public static IReadOnlyList<MenuNode> BuildContext(IEnumerable<CommandDefinition> commands, IShellText text, Func<string, string?> shortcut, string surface)
     {
@@ -296,20 +289,20 @@ public static class MenuModelBuilder
             }
         }
 
-        return ContextSections(items);
+        return ContextSections(items, text, $"Menu.context.{surface}");
     }
 
     /// <summary>오른쪽 클릭 메뉴에서 묶음 이름의 순서가 같을 때(그리드처럼 묶음마다 10 부터 센다) 쓰는 차례.</summary>
-    private static readonly string[] ContextSectionOrder = ["run", "refresh", "copy", "view", "columns", "edit", "insert", "favorite", "detail", "export"];
+    private static readonly string[] ContextSectionOrder = ["run", "refresh", "copy", "view", "filter", "columns", "rows", "navigate", "edit", "insert", "favorite", "detail", "export"];
 
     /// <summary>
-    /// 오른쪽 클릭 배치는 두 관례가 섞여 있다. <c>context:grid/copy@10</c> 처럼 둘째 마디를 여러 명령이 같이 쓰면 그것이 묶음 이름이고,
+    /// 오른쪽 클릭 배치는 두 관례가 섞여 있다. <c>context:grid/copy@10</c> 처럼 둘째 마디를 여러 명령이 같이 쓰거나 셋째 마디(하위 메뉴)가 있으면 그것이 묶음 이름이고,
     /// 편집기처럼 명령마다 다르면 순서 번호로 묶는다(100 단위, 순서가 모두 100 미만이면 10 단위).
     /// </summary>
-    private static List<MenuNode> ContextSections(List<(Placement P, MenuNode N)> items)
+    private static List<MenuNode> ContextSections(List<(Placement P, MenuNode N)> items, IShellText text, string key)
     {
         var keyOf = items.Select(i => i.P.Path.Count >= 2 ? i.P.Path[1] : string.Empty).ToList();
-        var named = keyOf.GroupBy(k => k, StringComparer.Ordinal).Any(g => g.Count() > 1);
+        var named = items.Any(i => i.P.Path.Count >= 3) || keyOf.GroupBy(k => k, StringComparer.Ordinal).Any(g => g.Count() > 1);
         var step = items.All(i => i.P.Order < Placement.GroupSize) ? 10 : Placement.GroupSize;
         var sections = items
             .Select((item, i) => (Item: item, Section: named ? keyOf[i] : (item.P.Order / step).ToString("D6", System.Globalization.CultureInfo.InvariantCulture)))
@@ -325,7 +318,26 @@ public static class MenuModelBuilder
                 result.Add(MenuNode.Separator(0));
             }
 
-            result.AddRange(section.OrderBy(x => x.Item.P.Order).ThenBy(x => x.Item.N.Title, StringComparer.Ordinal).Select(x => x.Item.N));
+            // 셋째 마디가 같은 항목은 하위 메뉴 하나로 모은다. 하위 메뉴 자리 = 안에 든 항목의 가장 작은 순서.
+            var level = new List<(int Order, MenuNode N)>();
+            foreach (var group in section.Select(x => x.Item).GroupBy(i => named && i.P.Path.Count >= 3 ? i.P.Path[2] : null))
+            {
+                if (group.Key is null)
+                {
+                    level.AddRange(group.Select(i => (i.P.Order, i.N)));
+                    continue;
+                }
+
+                var subKey = key + "." + group.Key;
+                var order = group.Min(i => i.P.Order);
+                level.Add((order, new MenuNode(MenuNodeKind.Submenu, text.Lookup(subKey), order)
+                {
+                    Children = WithSeparators([.. group]),
+                    Key = subKey,
+                }));
+            }
+
+            result.AddRange(level.OrderBy(x => x.Order).ThenBy(x => x.N.Title, StringComparer.Ordinal).Select(x => x.N));
         }
 
         return result;

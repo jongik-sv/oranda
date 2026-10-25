@@ -18,6 +18,9 @@ namespace Oranda.App.Tests.Shell.Headless;
 // 플랫폼과 무관하게 돌도록 macOS 분기는 ShellHarness(nativeMenu: true) 로 강제로 켠다.
 public class NativeMenuTests
 {
+    /// <summary>그리드 오른쪽 클릭에서 결과 메뉴로 옮겨 싣는 하위 메뉴(TSK-09-03).</summary>
+    private static readonly string[] GridSubmenus = ["복사 형식", "거르기", "열", "행 편집", "플래시백"];
+
     private static readonly string[] TopTitles = ["파일", "편집", "보기", "SQL", "결과", "데이터베이스", "모니터", "튜닝", "도구", "창", "도움말"];
 
     private static IReadOnlyList<MenuNode> Model(ShellHarness h) =>
@@ -363,5 +366,35 @@ public class NativeMenuTests
 
         // 편집 키가 아닌 단축키(⇧⌘P)는 입력 칸이 가져가지 않는다.
         Assert.False(NativeMenuCommand.TryEdit(box, new KeyGesture(Key.P, KeyModifiers.Meta | KeyModifiers.Shift)));
+    });
+
+    [Fact]
+    public Task Native_result_menu_draws_grid_submenus_and_hides_their_headers_without_a_sql_tab() => HeadlessHost.Run(async () =>
+    {
+        // TSK-09-03: 그리드 오른쪽 클릭의 하위 메뉴가 시스템 메뉴의 「결과」 에도 하위 메뉴로 실린다. 안 항목이 모두 숨으면 머리도 숨는다.
+        using var h = new ShellHarness(nativeMenu: true);
+        var wiring = h.Services.GetService<IEnumerable<Oranda.Core.Composition.IStartupTask>>()!.OfType<Oranda.App.Features.SqlEditor.SqlEditorDockWiring>().Single();
+        await wiring.RunAsync(default);
+        Dispatcher.UIThread.RunJobs();
+        var result = h.Window.NativeMenuBar!.Items.OfType<NativeMenuItem>().Single(i => i.Header == "결과").Menu!;
+        NativeMenuItem Sub(string title) => result.Items.OfType<NativeMenuItem>().Single(i => i.Header == title && i.Menu is not null);
+        foreach (var title in GridSubmenus)
+        {
+            Assert.NotEmpty(Sub(title).Menu!.Items.OfType<NativeMenuItem>());
+        }
+
+        var copyAs = Sub("복사 형식");
+        Assert.Same(copyAs, result.Items.OfType<NativeMenuItem>().Single(i => i.Menu is { } m && TryFind(m, "oranda.grid.copyAsCsv") is not null));
+        if (h.Get<IContextKeys>().Evaluate("sqlDocActive"))
+        {
+            await h.Get<ICommandRegistry>().ExecuteAsync("oranda.file.closeAll", h.Get<IContextKeys>());
+            Dispatcher.UIThread.RunJobs();
+        }
+
+        Assert.False(copyAs.IsVisible);
+        await h.Get<ICommandRegistry>().ExecuteAsync("oranda.file.newSqlEditor", h.Get<IContextKeys>());
+        Dispatcher.UIThread.RunJobs();
+        Assert.True(copyAs.IsVisible);
+        Assert.True(FindCommandItem(copyAs.Menu!, "oranda.grid.copyAsCsv").IsVisible);
     });
 }

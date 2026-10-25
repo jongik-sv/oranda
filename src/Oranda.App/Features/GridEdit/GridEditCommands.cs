@@ -41,23 +41,23 @@ public static class GridEditCommands
 [OrandaCommand("oranda.exec.runForEdit", CommandCategory.Sql, When = "sqlDocFocus",
     Enablement = "(hasSession || tabConnectionMissing) && !sessionBusy && !readOnlySession && !mybatisDocActive", Placements = ["menu:sql/runForEdit@40"])]
 [OrandaCommand("oranda.grid.edit.addRow", CommandCategory.Result, When = "gridFocus", Enablement = "gridEditing",
-    Placements = ["context:grid/edit@10"])]
+    Placements = ["context:grid/edit/edit@10"])]
 [OrandaCommand("oranda.grid.edit.duplicateRow", CommandCategory.Result, When = "gridFocus", Enablement = "gridHasSelection",
-    Placements = ["context:grid/edit@12"])]
+    Placements = ["context:grid/edit/edit@12"])]
 [OrandaCommand("oranda.grid.edit.pasteRows", CommandCategory.Result, When = "gridFocus", Enablement = "gridHasResult",
-    Placements = ["context:grid/edit@14"])]
+    Placements = ["context:grid/edit/edit@14"])]
 [OrandaCommand("oranda.grid.edit.deleteRow", CommandCategory.Result, When = "gridFocus", Enablement = "gridEditing",
-    Placements = ["context:grid/edit@20"])]
+    Placements = ["context:grid/edit/edit@20"])]
 [OrandaCommand("oranda.grid.edit.previewDml", CommandCategory.Result, When = "gridFocus", Enablement = "gridDirty",
-    Placements = ["context:grid/edit@30"])]
+    Placements = ["context:grid/edit/edit@110"])]
 [OrandaCommand("oranda.grid.edit.applyAndCommit", CommandCategory.Result, When = "gridFocus", Enablement = "gridDirty && !sessionBusy",
-    Placements = ["context:grid/edit@40"])]
+    Placements = ["context:grid/edit/edit@120"])]
 [OrandaCommand("oranda.grid.edit.apply", CommandCategory.Result, When = "gridFocus", Enablement = "gridDirty && !sessionBusy",
-    Placements = ["context:grid/edit@50"])]
+    Placements = ["context:grid/edit/edit@130"])]
 [OrandaCommand("oranda.grid.edit.resetRow", CommandCategory.Result, When = "gridFocus", Enablement = "gridDirty",
-    Placements = ["context:grid/edit@60"])]
+    Placements = ["context:grid/edit/edit@210"])]
 [OrandaCommand("oranda.grid.edit.resetAll", CommandCategory.Result, When = "gridFocus", Enablement = "gridDirty",
-    Placements = ["context:grid/edit@70"])]
+    Placements = ["context:grid/edit/edit@220"])]
 [OrandaCommand("oranda.grid.edit.addRowidAndRerun", CommandCategory.Result, When = "gridFocus", Enablement = "gridNotEditable && singleTable")]
 [OrandaCommand("oranda.grid.edit.chooseTargetTable", CommandCategory.Result, When = "gridFocus", Enablement = "gridEditing && joinResult")]
 [OrandaCommand("oranda.grid.edit.toggleOptimisticLock", CommandCategory.Result, When = "gridFocus", Enablement = "gridEditing")]

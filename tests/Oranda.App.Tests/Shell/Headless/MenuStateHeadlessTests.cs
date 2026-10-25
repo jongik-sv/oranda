@@ -17,6 +17,9 @@ public class MenuStateHeadlessTests
 
     private static readonly string[] ContextSurfaces = ["monitor", "grid", "schema"];
 
+    /// <summary>그리드 오른쪽 클릭 최상위에 남는 자주 쓰는 명령(TSK-09-03).</summary>
+    private static readonly string[] GridTopCommands = ["oranda.grid.copy", "oranda.grid.rowView", "oranda.grid.export", "oranda.grid.exportExcel"];
+
     private static MenuItem Top(ShellHarness h, string id)
     {
         var index = MenuModelBuilder.TopMenus.ToList().IndexOf(id);
@@ -173,9 +176,74 @@ public class MenuStateHeadlessTests
         {
             var items = ShellContextMenus.Factory!(surface);
             Assert.NotEmpty(items);
-            Assert.All(items.OfType<Control>(), c => Assert.True(c.IsVisible));
-            Assert.All(items.OfType<MenuItem>(), m => Assert.Null(ToolTip.GetTip(m)));
+            var all = Deep(items).ToList(); // 하위 메뉴 안 항목도(TSK-09-03)
+            Assert.All(all.OfType<Control>(), c => Assert.True(c.IsVisible));
+            Assert.All(all.OfType<MenuItem>(), m => Assert.Null(ToolTip.GetTip(m)));
         }
+
+        static IEnumerable<object> Deep(IEnumerable<object> items)
+        {
+            foreach (var item in items)
+            {
+                yield return item;
+                if (item is MenuItem { ItemsSource: { } children })
+                {
+                    foreach (var child in Deep(children.Cast<object>()))
+                    {
+                        yield return child;
+                    }
+                }
+            }
+        }
+    });
+
+    [Fact]
+    public Task Grid_context_menu_draws_submenus_with_at_most_fifteen_lines() => HeadlessHost.Run(() =>
+    {
+        // TSK-09-03: 그리드 오른쪽 클릭 37개 → 한 단계 15줄 이하. 복사(TSV)·행 보기·내보내기 2개는 최상위, 나머지는 하위 메뉴 5개.
+        using var h = new ShellHarness();
+        var items = ShellContextMenus.Factory!("grid");
+        var lines = items.OfType<MenuItem>().ToList();
+        Assert.True(lines.Count <= 15, $"한 단계 {lines.Count}줄");
+        Assert.Equal(["복사 형식", "거르기", "열", "행 편집", "플래시백"], lines.Where(m => m.ItemsSource is not null).Select(m => (string)m.Header!));
+        string?[] top = [.. lines.Select(m => (m.Command as RegistryCommand)?.CommandId)];
+        foreach (var id in GridTopCommands)
+        {
+            Assert.Contains(id, top);
+        }
+
+        // 하위 메뉴 안 명령도 단축키 표시·명령이 그대로다.
+        var copyAs = lines.Single(m => (string)m.Header! == "복사 형식");
+        var csv = copyAs.ItemsSource!.OfType<MenuItem>().Single(m => m.Command is RegistryCommand { CommandId: "oranda.grid.copyAsCsv" });
+        Assert.Equal("CSV 로 복사", csv.Header);
+        Assert.Single(copyAs.ItemsSource!.OfType<Separator>());
+        var copy = lines.Single(m => m.Command is RegistryCommand { CommandId: "oranda.grid.copy" });
+        Assert.NotNull(copy.InputGesture);
+    });
+
+    [Fact]
+    public Task Result_menu_submenu_headers_hide_until_a_sql_tab_opens() => HeadlessHost.Run(async () =>
+    {
+        using var h = new ShellHarness();
+        var wiring = h.Services.GetService<IEnumerable<Oranda.Core.Composition.IStartupTask>>()!.OfType<SqlEditorDockWiring>().Single();
+        await wiring.RunAsync(default);
+        Settle();
+        if (h.Get<IContextKeys>().Evaluate("sqlDocActive"))
+        {
+            await h.Get<ICommandRegistry>().ExecuteAsync("oranda.file.closeAll", h.Get<IContextKeys>());
+            Settle();
+        }
+
+        var subs = Items(Top(h, "result")).OfType<MenuItem>().Where(m => m.ItemsSource is not null && !m.Classes.Contains("menu-empty")).ToList();
+        Assert.Equal(["복사 형식", "거르기", "열", "행 편집", "플래시백"], subs.Select(m => (string)m.Header!));
+        Assert.All(subs, m => Assert.False(m.IsVisible));
+        Assert.All(Items(Top(h, "result")).OfType<Separator>(), s => Assert.False(s.IsVisible));
+
+        await h.Get<ICommandRegistry>().ExecuteAsync("oranda.file.newSqlEditor", h.Get<IContextKeys>());
+        Settle();
+        Assert.All(subs, m => Assert.True(m.IsVisible));
+        Assert.True(Command(h, "result", "oranda.grid.edit.addRow").IsVisible);
+        Assert.NotNull(ToolTip.GetTip(Command(h, "result", "oranda.grid.edit.addRow"))); // 하위 메뉴 안 회색 명령도 이유 툴팁
     });
 
     [Fact]

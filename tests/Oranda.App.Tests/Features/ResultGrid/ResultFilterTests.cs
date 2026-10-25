@@ -482,7 +482,7 @@ public sealed class ResultFilterTests : IDisposable
         {
             Assert.Equal("gridQueryResult && gridHasSelection && hasSession && !sessionBusy", defs[id].Enablement);
             Assert.Equal("gridFocus", defs[id].When);
-            Assert.StartsWith("context:grid/filter@", Assert.Single(defs[id].Placements!), StringComparison.Ordinal);
+            Assert.StartsWith("context:grid/filter/filter@", Assert.Single(defs[id].Placements!), StringComparison.Ordinal); // 「거르기 ▸」 하위 메뉴(TSK-09-03)
         }
 
         Assert.Equal("gridHasResult", defs["oranda.grid.pinResultTab"].Enablement);

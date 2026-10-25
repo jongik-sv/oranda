@@ -51,36 +51,36 @@ public static class ResultGridCommands
 /// 활성 그리드가 없으면 아무것도 하지 않는다.
 /// </summary>
 [OrandaCommand("oranda.grid.copy", CommandCategory.Result, When = "gridFocus", Enablement = "gridHasSelection", Placements = ["context:grid/copy@10"])]
-[OrandaCommand("oranda.grid.copyWithHeaders", CommandCategory.Result, When = "gridFocus", Enablement = "gridHasSelection", Placements = ["context:grid/copy@20"])]
-[OrandaCommand("oranda.grid.copyRows", CommandCategory.Result, When = "gridFocus", Enablement = "gridHasSelection", Placements = ["context:grid/copy@22"])]
-[OrandaCommand("oranda.grid.copyRowsWithHeaders", CommandCategory.Result, When = "gridFocus", Enablement = "gridHasSelection", Placements = ["context:grid/copy@24"])]
-[OrandaCommand("oranda.grid.copyAsCsv", CommandCategory.Result, When = "gridFocus", Enablement = "gridHasSelection", Placements = ["context:grid/copy@30"])]
-[OrandaCommand("oranda.grid.copyAsInsert", CommandCategory.Result, When = "gridFocus", Enablement = "gridHasSelection", Placements = ["context:grid/copy@40"])]
-[OrandaCommand("oranda.grid.copyAsInList", CommandCategory.Result, When = "gridFocus", Enablement = "gridHasSelection", Placements = ["context:grid/copy@50"])]
+[OrandaCommand("oranda.grid.copyWithHeaders", CommandCategory.Result, When = "gridFocus", Enablement = "gridHasSelection", Placements = ["context:grid/copy/copyAs@20"])]
+[OrandaCommand("oranda.grid.copyRows", CommandCategory.Result, When = "gridFocus", Enablement = "gridHasSelection", Placements = ["context:grid/copy/copyAs@22"])]
+[OrandaCommand("oranda.grid.copyRowsWithHeaders", CommandCategory.Result, When = "gridFocus", Enablement = "gridHasSelection", Placements = ["context:grid/copy/copyAs@24"])]
+[OrandaCommand("oranda.grid.copyAsCsv", CommandCategory.Result, When = "gridFocus", Enablement = "gridHasSelection", Placements = ["context:grid/copy/copyAs@130"])]
+[OrandaCommand("oranda.grid.copyAsInsert", CommandCategory.Result, When = "gridFocus", Enablement = "gridHasSelection", Placements = ["context:grid/copy/copyAs@140"])]
+[OrandaCommand("oranda.grid.copyAsInList", CommandCategory.Result, When = "gridFocus", Enablement = "gridHasSelection", Placements = ["context:grid/copy/copyAs@150"])]
 [OrandaCommand("oranda.grid.find", CommandCategory.Result, When = "gridFocus", Enablement = "gridHasResult")]
 [OrandaCommand("oranda.grid.fetchAll", CommandCategory.Result, When = "gridFocus", Enablement = "gridHasMoreRows", Placements = ["context:grid/rows@20"])]
 [OrandaCommand("oranda.grid.toggleTextMode", CommandCategory.Result, When = "gridFocus", Enablement = "gridHasResult")]
-[OrandaCommand("oranda.grid.freezeColumns", CommandCategory.Result, When = "gridFocus", Enablement = "gridHasResult", Placements = ["context:grid/columns@10"])]
-[OrandaCommand("oranda.grid.hideColumn", CommandCategory.Result, When = "gridFocus", Enablement = "gridHasResult", Placements = ["context:grid/columns@20"])]
-[OrandaCommand("oranda.grid.showAllColumns", CommandCategory.Result, When = "gridFocus", Enablement = "gridHasResult", Placements = ["context:grid/columns@30"])]
+[OrandaCommand("oranda.grid.freezeColumns", CommandCategory.Result, When = "gridFocus", Enablement = "gridHasResult", Placements = ["context:grid/filter/columns@20"])]
+[OrandaCommand("oranda.grid.hideColumn", CommandCategory.Result, When = "gridFocus", Enablement = "gridHasResult", Placements = ["context:grid/filter/columns@30"])]
+[OrandaCommand("oranda.grid.showAllColumns", CommandCategory.Result, When = "gridFocus", Enablement = "gridHasResult", Placements = ["context:grid/filter/columns@40"])]
 [OrandaCommand("oranda.grid.toggleRepeatHide", CommandCategory.Result, When = "gridFocus", Enablement = "gridHasResult")]
 [OrandaCommand("oranda.grid.closeResultTab", CommandCategory.Result, When = "gridFocus", Enablement = "gridHasResult")]
 [OrandaCommand("oranda.grid.countRows", CommandCategory.Result, When = "gridFocus", Enablement = "gridQueryResult && hasSession && !sessionBusy",
     Placements = ["context:grid/rows@10"])]
 [OrandaCommand("oranda.grid.toggleFilterBar", CommandCategory.Result, When = "gridFocus", Enablement = "gridQueryResult",
-    Icon = "filter", Placements = ["context:grid/filter@10"])]
+    Icon = "filter", Placements = ["context:grid/filter/filter@14"])]
 [OrandaCommand("oranda.grid.toggleQuickFilter", CommandCategory.Result, When = "gridFocus", Enablement = "gridHasResult",
-    Icon = "filter", Placements = ["context:grid/filter@5"])]
+    Icon = "filter", Placements = ["context:grid/filter/filter@10"])]
 [OrandaCommand("oranda.grid.clearLocalFilters", CommandCategory.Result, When = "gridFocus", Enablement = "gridHasResult",
-    Icon = "filterClear", Placements = ["context:grid/filter@6"])]
+    Icon = "filterClear", Placements = ["context:grid/filter/filter@12"])]
 [OrandaCommand("oranda.grid.filterByValue", CommandCategory.Result, When = "gridFocus",
-    Enablement = "gridQueryResult && gridHasSelection && hasSession && !sessionBusy", Placements = ["context:grid/filter@20"])]
+    Enablement = "gridQueryResult && gridHasSelection && hasSession && !sessionBusy", Placements = ["context:grid/filter/filter@110"])]
 [OrandaCommand("oranda.grid.filterExcludeValue", CommandCategory.Result, When = "gridFocus",
-    Enablement = "gridQueryResult && gridHasSelection && hasSession && !sessionBusy", Placements = ["context:grid/filter@30"])]
+    Enablement = "gridQueryResult && gridHasSelection && hasSession && !sessionBusy", Placements = ["context:grid/filter/filter@120"])]
 [OrandaCommand("oranda.grid.filterNullRows", CommandCategory.Result, When = "gridFocus",
-    Enablement = "gridQueryResult && gridHasSelection && hasSession && !sessionBusy", Placements = ["context:grid/filter@40"])]
+    Enablement = "gridQueryResult && gridHasSelection && hasSession && !sessionBusy", Placements = ["context:grid/filter/filter@130"])]
 [OrandaCommand("oranda.grid.pinResultTab", CommandCategory.Result, When = "gridFocus", Enablement = "gridHasResult",
-    Icon = "pin", Placements = ["context:grid/tab@10"])]
+    Icon = "pin", Placements = ["context:grid/rows@30"])]
 [OrandaCommand("oranda.grid.followForeignKey", CommandCategory.Result, When = "gridFocus",
     Enablement = "gridQueryResult && gridHasSelection && hasSession && !sessionBusy", Placements = ["context:grid/navigate@10"])]
 [OrandaCommand("oranda.grid.showReferencingRows", CommandCategory.Result, When = "gridFocus",
