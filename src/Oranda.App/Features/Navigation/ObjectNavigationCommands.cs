@@ -185,6 +185,12 @@ public sealed class ObjectNavigationCommandHandler : ICommandHandler
 
         // 두 명령의 활성 조건(트리 노드 선택)은 여기서 뜻이 없으므로 레지스트리를 거치지 않고 처리기를 바로 부른다.
         var command = OpenCommandFor(target);
+        if (command == OpenSourceId && SchemaObjectOpener.IsPlsqlEditorOff(_services))
+        {
+            // D-007: PL/SQL 편집기 기능이 꺼져 있으면 읽기 전용 SQL 탭(분기는 SchemaObjectOpener 한 곳).
+            return SchemaObjectOpener.OpenReadOnlySourceAsync(_services, target, session, 0, preview: false, Notify, ct);
+        }
+
         var context = new CommandContext(command, AlwaysKeys.Instance, target);
         return command == OpenSourceId
             ? new PlsqlEditorCommandHandler(_services) { SessionProvider = () => session }.ExecuteAsync(context, ct)

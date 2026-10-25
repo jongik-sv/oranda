@@ -67,6 +67,29 @@ public static partial class WorkspaceFiles
     public static bool IsMyBatis(string path) =>
         string.Equals(Path.GetExtension(path), ".xml", StringComparison.OrdinalIgnoreCase);
 
+    /// <summary>
+    /// 파일이 MyBatis 매퍼인가: .xml 이고 루트 요소가 <c>mapper</c>. 루트만 읽는다(DTD 를 읽지 않고 외부 요청 없음). 못 읽거나 깨졌으면 false.
+    /// MyBatis 기능이 꺼졌을 때(훅 없음) 매퍼만 펼침 경로로 보내고 그 밖의 .xml 은 지금처럼 두는 데 쓴다(D-008).
+    /// </summary>
+    public static bool IsMapperFile(string? path)
+    {
+        if (path is null || !IsMyBatis(path) || !File.Exists(path))
+        {
+            return false;
+        }
+
+        try
+        {
+            var settings = new System.Xml.XmlReaderSettings { DtdProcessing = System.Xml.DtdProcessing.Ignore, XmlResolver = null };
+            using var reader = System.Xml.XmlReader.Create(path, settings);
+            return reader.MoveToContent() == System.Xml.XmlNodeType.Element && reader.LocalName == "mapper";
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or System.Xml.XmlException)
+        {
+            return false;
+        }
+    }
+
     public static bool IsSqd(string path) =>
         string.Equals(Path.GetExtension(path), ".sqd", StringComparison.OrdinalIgnoreCase);
 

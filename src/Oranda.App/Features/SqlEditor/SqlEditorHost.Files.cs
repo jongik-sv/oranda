@@ -45,6 +45,14 @@ public sealed partial class SqlEditorHost
             return Active;
         }
 
+        // D-008: 훅이 없으면(MyBatis 기능 끔) 매퍼는 글자 그대로 열지 않고 문장마다 일반 SQL 탭으로 펼친다 — 글자 탭으로 열면 저장이 매퍼 파일을 덮어쓴다.
+        // 루트가 mapper 가 아닌 .xml 은 지금처럼 글자 탭이다.
+        if (IsMapperXml(full) && MyBatisHooks.OpenHandler is null && WorkspaceFiles.IsMapperFile(full))
+        {
+            await SqlEditorCommandHandler.OpenWorkspaceFileAsync(this, full, ct).ConfigureAwait(true);
+            return Active;
+        }
+
         var bytes = await File.ReadAllBytesAsync(full, ct).ConfigureAwait(true);
         var (text, enc) = FileEncoding.Decode(bytes);
         IReadOnlyList<WorkspaceBind>? fileBinds = null;
@@ -227,6 +235,12 @@ public sealed partial class SqlEditorHost
 
         var file = WorkspaceFiles.Load(full);
         NoteFileUsed(full, workspace: !WorkspaceFiles.IsMyBatis(full));
+        if (IsMapperXml(full) && MyBatisHooks.OpenHandler is null && !_myBatisOffNoticeShown)
+        {
+            // D-008: 훅이 없는 상태의 매퍼 펼침이면 처음 한 번 상태 표시줄에 알린다(매퍼 파일에는 저장하지 않는다는 것까지).
+            _myBatisOffNoticeShown = true;
+            Oranda.App.Features.GridEdit.SaveFeedback.Show(new Oranda.App.Features.GridEdit.SaveNotice(MyBatisOffNotice, Oranda.App.Features.GridEdit.SaveFeedbackKind.Success));
+        }
 
         // MyBatis 는 namespace(대개 com.example.UserMapper 처럼 길다) 대신 파일 이름을 작업 공간 이름으로 쓴다.
         var name = WorkspaceFiles.IsMyBatis(full) ? Path.GetFileNameWithoutExtension(full) : file.Name;
@@ -254,6 +268,13 @@ public sealed partial class SqlEditorHost
 
         return file;
     }
+
+    // MyBatis 끔 매퍼 펼침 안내를 이미 보였나(호스트마다 처음 한 번).
+    private bool _myBatisOffNoticeShown;
+
+    /// <summary>MyBatis 기능이 꺼져 매퍼를 일반 SQL 탭으로 펼쳤다는 안내(지금 언어).</summary>
+    internal static string MyBatisOffNotice =>
+        Oranda.App.Features.Localization.UiText.Get(Oranda.Core.Features.FeatureTexts.MyBatisOffExpanded, "MyBatis 기능이 꺼져 있어 매퍼를 일반 SQL 탭으로 펼쳐 열었습니다(매퍼 파일에는 저장하지 않습니다)");
 
     /// <summary>.xml 경로인가(MyBatis 훅 분기의 대상).</summary>
     internal static bool IsMapperXml(string? path) =>

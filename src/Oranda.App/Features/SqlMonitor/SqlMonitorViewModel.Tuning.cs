@@ -84,6 +84,9 @@ public sealed partial class SqlMonitorViewModel
     /// <summary>Lock 모니터 바로 가기를 보일지.</summary>
     public bool CanOpenLockMonitor => IsCommandAvailable(LockMonitorCommand);
 
+    /// <summary>「튜닝 보고서…」 단추를 보일지(<c>oranda.tuning.report</c> 가 등록돼 있을 때만, 튜닝 보고서 기능 끔이면 숨김).</summary>
+    public bool CanOpenTuningReport => IsCommandAvailable(Oranda.App.Features.Tuning.Report.TuningReportNavigation.CommandId);
+
     /// <summary>스크립트 단추·자식 커서 단추를 누를 수 있는가(SQL 을 골랐을 때).</summary>
     public bool HasSelectedSql => SelectedSql is not null;
 
@@ -277,10 +280,58 @@ public sealed partial class SqlMonitorViewModel
         }
     }
 
-    private bool IsCommandAvailable(string id) =>
-        CommandAvailable is { } available
-            ? available(id)
-            : _services?.GetService(typeof(ICommandRegistry)) is ICommandRegistry registry && registry.Find(id) is not null;
+    private bool IsCommandAvailable(string id)
+    {
+        if (CommandAvailable is { } available)
+        {
+            return available(id);
+        }
+
+        if (_services?.GetService(typeof(ICommandRegistry)) is not ICommandRegistry registry)
+        {
+            return false;
+        }
+
+        WatchCommands(registry);
+        return registry.Find(id) is not null;
+    }
+
+    private bool _watchingCommands;
+
+    /// <summary>
+    /// 명령 목록이 바뀌면(Role·기능을 바꿔 레지스트리가 다시 거름, TSK-07-06) 바로 가기 단추 보이기를 다시 알린다. 처음 물을 때 한 번 붙는다.
+    /// 레지스트리는 앱과 함께 살고 이 창은 문서라 닫히면 사라지므로 약한 참조로 듣고, 창이 사라졌으면 구독을 푼다.
+    /// </summary>
+    private void WatchCommands(ICommandRegistry registry)
+    {
+        if (_watchingCommands)
+        {
+            return;
+        }
+
+        _watchingCommands = true;
+        var self = new WeakReference<SqlMonitorViewModel>(this);
+        EventHandler? handler = null;
+        handler = (_, _) =>
+        {
+            if (!self.TryGetTarget(out var vm))
+            {
+                registry.CommandsChanged -= handler;
+                return;
+            }
+
+            vm.PostToUi(vm.RefreshCommandLinks);
+        };
+        registry.CommandsChanged += handler;
+    }
+
+    /// <summary>명령이 생기거나 빠졌을 때 바로 가기 단추(자식 커서·튜닝 보고서·Lock 모니터) 보이기를 다시 계산한다.</summary>
+    public void RefreshCommandLinks()
+    {
+        OnPropertyChanged(nameof(CanOpenChildCursors));
+        OnPropertyChanged(nameof(CanOpenTuningReport));
+        OnPropertyChanged(nameof(CanOpenLockMonitor));
+    }
 
     private Task Run(string id, object? parameter)
     {

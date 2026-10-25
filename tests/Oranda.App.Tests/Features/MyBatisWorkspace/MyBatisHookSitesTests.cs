@@ -59,11 +59,15 @@ public sealed class MyBatisHookSitesTests : IDisposable
     public Task Dropped_xml_goes_to_the_open_handler_only_when_one_is_registered() => Ui.Run(async () =>
     {
         var path = WriteMapper();
-        Assert.Empty(DroppedWorkspaceFiles.Pick([path])); // 훅이 없으면 지금처럼 .sqd 만
-        Assert.Equal([Path.GetFullPath(path)], DroppedWorkspaceFiles.Pick([path], includeMyBatis: true));
+        // TSK-07-06(D-008): 훅이 없어도 루트가 mapper 인 .xml 은 고른다(펼침으로 연다). 그 밖의 .xml 은 훅이 있을 때만.
+        var other = Path.Combine(_root, "pom.xml");
+        File.WriteAllText(other, "<project />");
+        Assert.Equal([Path.GetFullPath(path)], DroppedWorkspaceFiles.Pick([path, other]));
+        Assert.Equal([Path.GetFullPath(path), Path.GetFullPath(other)], DroppedWorkspaceFiles.Pick([path, other], includeMyBatis: true));
 
         var bare = new SqlEditorHost();
-        Assert.False(await DroppedWorkspaceFiles.OpenAsync(bare, [path], default));
+        Assert.True(await DroppedWorkspaceFiles.OpenAsync(bare, [path], default));
+        Assert.NotEmpty(Assert.Single(bare.Workspaces).Tabs);
 
         var handler = new FakeOpenHandler(handled: true);
         var host = new SqlEditorHost { MyBatisHooks = new MyBatisHooks(openHandler: handler) };
@@ -115,7 +119,16 @@ public sealed class MyBatisHookSitesTests : IDisposable
 
             var text = await host.OpenFileAsync(path, default);
             Assert.NotNull(text);
-            Assert.Equal(Path.GetFullPath(path), text.FilePath); // 일반 글자 탭
+            if (hooks.OpenHandler is null)
+            {
+                // TSK-07-06(D-008): 훅이 없으면(MyBatis 끔) 파일 열기도 매퍼를 글자 탭으로 열지 않고 이미 연 펼침 작업 공간으로 간다.
+                Assert.Null(text.FilePath);
+                Assert.Same(ws, host.WorkspaceOf(text));
+            }
+            else
+            {
+                Assert.Equal(Path.GetFullPath(path), text.FilePath); // 일반 글자 탭
+            }
         }
     });
 

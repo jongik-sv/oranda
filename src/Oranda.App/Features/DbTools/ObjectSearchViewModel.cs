@@ -573,10 +573,11 @@ public sealed partial class ObjectSearchViewModel : ToolPanelViewModelBase
     }
 
     // 스키마 브라우저 선택과 상관없이 연다(두 명령의 사용 조건은 스키마 브라우저 노드 선택이라 명령 등록부를 거치지 않는다). 세션은 이 검색의 세션.
+    // PL/SQL 편집기 기능이 꺼져 있으면 처리기가 읽기 전용 SQL 탭으로 열고(D-007) 안내는 이 창 상태 줄에 쓴다.
     private Task OpenSourceWithCommand(ISession session, DbObjectRef target, int line, CancellationToken ct)
         => _services is null
             ? Task.CompletedTask
-            : new PlsqlEditorCommandHandler(_services) { SessionProvider = () => session }
+            : new PlsqlEditorCommandHandler(_services) { SessionProvider = () => session, Notify = message => StatusText = message }
                 .ExecuteAsync(new CommandContext("oranda.plsql.openSource", AnyKeys.Instance, new PlsqlSourceLocation(target, line)), ct);
 
     private Task OpenDetailWithCommand(ISession session, DbObjectRef target, CancellationToken ct)

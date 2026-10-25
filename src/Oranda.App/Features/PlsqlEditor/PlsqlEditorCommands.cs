@@ -55,6 +55,9 @@ public sealed class PlsqlEditorCommandHandler : ICommandHandler
     /// <summary>시험용: 서비스 없이 쓸 제공자·실행 서비스(새 탭에 넣는다).</summary>
     internal Func<PlsqlEditorViewModel>? ViewModelFactory { get; set; }
 
+    /// <summary>PL/SQL 편집기 끔 읽기 전용 열기의 안내 받는 곳(기본 = 상태 표시줄 알림·스키마 브라우저 상태 줄). 객체 검색은 자기 상태 줄을 넣는다.</summary>
+    internal Action<string>? Notify { get; set; }
+
     public async Task ExecuteAsync(CommandContext context, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(context);
@@ -137,6 +140,13 @@ public sealed class PlsqlEditorCommandHandler : ICommandHandler
     {
         var target = TargetOf(parameter);
         var session = ResolveSession();
+        if (target is not null && session is not null && PlsqlSourceText.SourceTypes.Contains(target.ObjectType) && SchemaObjectOpener.IsPlsqlEditorOff(_services))
+        {
+            // 메뉴에서는 숨지만(plsqlWorkspace 는 plsqlEditor 가 있어야 켜진다) 직접 불러도 PL/SQL 탭을 만들지 않는다(D-007).
+            await SchemaObjectOpener.OpenReadOnlySourceAsync(_services, target, session, 0, preview: false, Notify, ct).ConfigureAwait(true);
+            return;
+        }
+
         if (target is null || session is null || !PlsqlSourceText.SourceTypes.Contains(target.ObjectType) || PlsqlWorkspaceRouter.Of(_services) is not { } router)
         {
             return;
@@ -203,6 +213,14 @@ public sealed class PlsqlEditorCommandHandler : ICommandHandler
         var session = ResolveSession();
         if (target is null || session is null || !PlsqlSourceText.SourceTypes.Contains(target.ObjectType))
         {
+            return;
+        }
+
+        // D-007: PL/SQL 편집기 기능이 꺼져 있으면 서버 소스를 읽기 전용 SQL 탭으로 연다(분기는 SchemaObjectOpener 한 곳).
+        if (SchemaObjectOpener.IsPlsqlEditorOff(_services))
+        {
+            var line = parameter is PlsqlSourceLocation { Line: > 0 } at ? at.Line : 0;
+            await SchemaObjectOpener.OpenReadOnlySourceAsync(_services, target, session, line, preview: false, Notify, ct).ConfigureAwait(true);
             return;
         }
 

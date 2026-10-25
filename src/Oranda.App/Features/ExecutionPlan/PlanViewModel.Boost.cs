@@ -155,8 +155,8 @@ public sealed partial class PlanViewModel
 
     public bool HasConnectionManagerCommand => Has(ConnectionManagerCommandId);
 
-    /// <summary>「통계 보기」 「자식 커서」 중 하나라도 있으면 구분선을 보인다.</summary>
-    public bool HasTuningCommands => HasStatsCommand || HasChildCursorsCommand;
+    /// <summary>「통계 보기」 「자식 커서」 「튜닝 보고서…」 중 하나라도 있으면 구분선과 단추 줄을 보인다.</summary>
+    public bool HasTuningCommands => HasStatsCommand || HasChildCursorsCommand || HasTuningReportCommand;
 
     /// <summary>그래프 색 기준 「시간」을 쓸 수 있는가(실제 시간이 있는 계획).</summary>
     public bool HasTimeBasis => Metrics?.Actual == PlanActualMetric.Time;
@@ -230,6 +230,7 @@ public sealed partial class PlanViewModel
         OnPropertyChanged(nameof(HasChildCursorsCommand));
         OnPropertyChanged(nameof(HasAssistantCommand));
         OnPropertyChanged(nameof(HasConnectionManagerCommand));
+        OnPropertyChanged(nameof(HasTuningReportCommand));
         OnPropertyChanged(nameof(HasTuningCommands));
         OnPropertyChanged(nameof(ShowTuningButtons));
     }

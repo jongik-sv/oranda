@@ -162,19 +162,19 @@
                 <TextBlock Text="텍스트" VerticalAlignment="Center" />
               </StackPanel>
             </ListBoxItem>
-            <ListBoxItem ToolTip.Tip="고정한 계획과 비교">
+            <ListBoxItem ToolTip.Tip="고정한 계획과 비교" IsVisible="{Binding IsAdvancedEnabled}">
               <StackPanel Orientation="Horizontal" Spacing="5">
                 <ContentControl Content="{Binding Source='diff', Converter={x:Static icons:IconKeyConverter.Instance}, ConverterParameter=14}" VerticalAlignment="Center" />
                 <TextBlock Text="비교" VerticalAlignment="Center" />
               </StackPanel>
             </ListBoxItem>
-            <ListBoxItem ToolTip.Tip="단계 트리 그래프: 너비 = 비용 비중, 색 진하기 = 시간 비중">
+            <ListBoxItem ToolTip.Tip="단계 트리 그래프: 너비 = 비용 비중, 색 진하기 = 시간 비중" IsVisible="{Binding IsAdvancedEnabled}">
               <StackPanel Orientation="Horizontal" Spacing="5">
                 <ContentControl Content="{Binding Source='join', Converter={x:Static icons:IconKeyConverter.Instance}, ConverterParameter=14}" VerticalAlignment="Center" />
                 <TextBlock Text="그래프" VerticalAlignment="Center" />
               </StackPanel>
             </ListBoxItem>
-            <ListBoxItem ToolTip.Tip="SQL 모니터 보고서(Tuning Pack)">
+            <ListBoxItem ToolTip.Tip="SQL 모니터 보고서(Tuning Pack)" IsVisible="{Binding IsAdvancedEnabled}">
               <StackPanel Orientation="Horizontal" Spacing="5">
                 <ContentControl Content="{Binding Source='sqlMonitor', Converter={x:Static icons:IconKeyConverter.Instance}, ConverterParameter=14}" VerticalAlignment="Center" />
                 <TextBlock Text="보고서" VerticalAlignment="Center" />
@@ -183,7 +183,7 @@
           </ListBox>
           <Separator Classes="toolbar" />
           <StackPanel Orientation="Horizontal" Spacing="2" IsVisible="{Binding IsTreeToolbar}">
-          <Button x:Name="FormatButton" Classes="tool" ToolTip.Tip="실제 계획(DISPLAY_CURSOR) 형식" AutomationProperties.Name="실제 계획 형식">
+          <Button x:Name="FormatButton" Classes="tool" IsVisible="{Binding IsAdvancedEnabled}" ToolTip.Tip="실제 계획(DISPLAY_CURSOR) 형식" AutomationProperties.Name="실제 계획 형식">
             <StackPanel Orientation="Horizontal" Spacing="5">
               <ContentControl Content="{Binding Source='settings', Converter={x:Static icons:IconKeyConverter.Instance}, ConverterParameter=14}" VerticalAlignment="Center" />
               <TextBlock Text="{Binding FormatText}" FontFamily="{DynamicResource OrandaGridFontFamily}" VerticalAlignment="Center" />
@@ -208,6 +208,7 @@
           <TextBox Classes="compact search" Width="130" VerticalAlignment="Center" PlaceholderText="sql_id" Text="{Binding SqlIdText, Mode=TwoWay}"
                    FontFamily="{DynamicResource OrandaGridFontFamily}" AutomationProperties.Name="sql_id"
                    ToolTip.Tip="실제 계획(Ctrl+Shift+E)을 읽을 sql_id. 비우면 마지막으로 실행한 문장" />
+          <StackPanel Orientation="Horizontal" Spacing="2" IsVisible="{Binding IsAdvancedEnabled}">
           <Separator Classes="toolbar" />
           <Button x:Name="PinButton" Classes="toolbar" Content="이 계획 고정" icons:ButtonIcon.Key="lock" icons:ButtonIcon.IconOnly="True"
                   ToolTip.Tip="지금 계획을 비교 기준으로 고정" />
@@ -215,6 +216,7 @@
                   ToolTip.Tip="고정한 계획과 지금 계획 비교" />
           <Button x:Name="UnpinButton" Classes="toolbar" Content="고정 해제" icons:ButtonIcon.Key="clear" icons:ButtonIcon.IconOnly="True" IsEnabled="{Binding HasPinned}"
                   ToolTip.Tip="비교 기준 고정 풀기" />
+          </StackPanel>
           </StackPanel>
           <!-- 그래프 탭: 색 기준 | 맞춤 · 확대 · 축소 · 모두 펼치기 -->
           <StackPanel x:Name="GraphTools" Orientation="Horizontal" Spacing="2" IsVisible="{Binding IsGraphToolbar}">
@@ -250,11 +252,11 @@
                     ToolTip.Tip="이 계획의 표·인덱스·열 통계(SELECT 만)" />
             <Button x:Name="ChildCursorsButton" Classes="tool" Content="자식 커서" icons:ButtonIcon.Key="diff" IsVisible="{Binding HasChildCursorsCommand}"
                     ToolTip.Tip="이 sql_id 의 자식 커서와 따로 생긴 사유" />
-            <Button x:Name="TuningReportButton" Classes="tool" Content="튜닝 보고서…" icons:ButtonIcon.Key="exportFile"
+            <Button x:Name="TuningReportButton" Classes="tool" Content="튜닝 보고서…" icons:ButtonIcon.Key="exportFile" IsVisible="{Binding HasTuningReportCommand}"
                     ToolTip.Tip="이 sql_id 의 계획·통계·커서·후보를 HTML 파일 하나로 만듭니다(SELECT 만, DB 에 쓰지 않습니다)" />
           </StackPanel>
         </StackPanel>
-        <Border Classes="chip" Margin="6,0,0,0" HorizontalAlignment="Left" IsVisible="{Binding HasPinned}" ToolTip.Tip="{Binding PinnedText}">
+        <Border Classes="chip" Margin="6,0,0,0" HorizontalAlignment="Left" IsVisible="{Binding ShowPinnedChip}" ToolTip.Tip="{Binding PinnedText}">
           <DockPanel>
             <ContentControl DockPanel.Dock="Left" Margin="0,0,4,0" VerticalAlignment="Center"
                             Content="{Binding Source='lock', Converter={x:Static icons:IconKeyConverter.Instance}, ConverterParameter=12}" />

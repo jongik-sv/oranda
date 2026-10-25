@@ -1,14 +1,20 @@
 using System;
+using System.Collections.Generic;
 using System.ComponentModel;
 using System.Linq;
+using System.Runtime.CompilerServices;
 using System.Threading;
 using System.Threading.Tasks;
+using Dock.Model.Core;
+using Oranda.App.Features.Localization;
 using Oranda.App.Features.Navigation;
 using Oranda.App.Features.ObjectDetail;
 using Oranda.App.Features.PlsqlEditor;
 using Oranda.App.Features.PlsqlWorkspace;
+using Oranda.App.Features.SqlEditor;
 using Oranda.App.Shell;
 using Oranda.App.Shell.Docking;
+using Oranda.Core.Features;
 using Oranda.Core.Metadata;
 using Oranda.Core.Sessions;
 
@@ -23,6 +29,8 @@ namespace Oranda.App.Features.SchemaBrowser;
 /// PL/SQL 미리보기는 작업 공간 안 탭이고, 미리보기는 둘을 합쳐 하나다: PL/SQL 미리보기를 열면 고치지 않은 객체 상세 미리보기 문서를 닫고, 반대도 같다.</item>
 /// <item>미리보기를 고치기 시작하면(PL/SQL 글 고침, 데이터 탭 편집 켬) 고정 탭이 된다. 고친 내용이 남은 미리보기는 바꿔 끼우지 않는다.</item>
 /// <item>같은 접속의 같은 객체(소유자·이름·유형)가 이미 열려 있으면 새로 열지 않고 그 탭을 앞으로 낸다.</item>
+/// <item>PL/SQL 편집기 기능이 꺼져 있으면(D-007) PL/SQL 단위는 서버 소스를 일반 SQL 탭에 읽기 전용으로 연다(<see cref="OpenReadOnlySourceAsync"/>).
+/// DB 객체로 이동·객체 검색·<c>oranda.plsql.openSource</c> 처리기도 이 분기를 부른다(정의로 이동은 원래 읽기 전용 SQL 탭이다).</item>
 /// </list>
 /// </summary>
 public sealed class SchemaObjectOpener
@@ -39,6 +47,12 @@ public sealed class SchemaObjectOpener
     }
 
     private DockWorkspace? _docking;
+
+    /// <summary>시험용: SQL 편집기 호스트(기본 = <see cref="SqlEditorHost.Current"/>).</summary>
+    internal SqlEditorHost? Host { get; set; }
+
+    /// <summary>시험용: 안내 받는 곳(기본 = 스키마 브라우저 상태 줄).</summary>
+    internal Action<string>? Notify { get; set; }
 
     /// <summary>객체를 여는 문서 종류: PL/SQL 단위는 PL/SQL 작업 공간, 그 밖은 객체 상세.</summary>
     public static string PanelFor(DbObjectRef target) =>
@@ -59,6 +73,18 @@ public sealed class SchemaObjectOpener
         }
 
         var panelId = PanelFor(target);
+        if (panelId == PlsqlWorkspaceRouter.PanelId && IsPlsqlEditorOff(_services))
+        {
+            var tab = await OpenReadOnlySourceAsync(_services, target, session, line: 0, preview, Notify, ct, Host).ConfigureAwait(true);
+            if (tab is null || DocumentOf(docking, tab) is not { } sqlDoc)
+            {
+                return null;
+            }
+
+            Show(docking, sqlDoc, focus);
+            return sqlDoc;
+        }
+
         if (panelId == PlsqlWorkspaceRouter.PanelId)
         {
             return await OpenPlsqlAsync(docking, target, session, preview, focus, ct).ConfigureAwait(true);
@@ -210,6 +236,159 @@ public sealed class SchemaObjectOpener
         ObjectDetailViewModel d => d.Data.IsEditing || d.Data.Pane.IsEditDirty,
         _ => false,
     };
+
+    // ---- PL/SQL 편집기 끔: 읽기 전용 소스 (D-007) --------------------------------------------
+
+    // 읽기 전용 소스 탭 표식: 어느 접속의 어느 객체인지, 아직 미리보기(다음 미리보기가 바꿔 쓴다)인지.
+    private static readonly ConditionalWeakTable<SqlEditorViewModel, ReadOnlySourceMark> ReadOnlyTabs = new();
+
+    /// <summary>PL/SQL 편집기 기능이 꺼졌나(게이트가 없으면 켬 = 지금 동작).</summary>
+    public static bool IsPlsqlEditorOff(IServiceProvider? services) =>
+        services?.GetService(typeof(IFeatureGate)) is IFeatureGate gate && !gate.IsEnabled(FeatureIds.PlsqlEditor);
+
+    /// <summary>읽기 전용 소스 탭 제목: 「[읽기 전용] OWNER.NAME」(본문은 뒤에 BODY — 명세와 본문은 다른 탭이다).</summary>
+    public static string ReadOnlyTitle(DbObjectRef target)
+    {
+        ArgumentNullException.ThrowIfNull(target);
+        var name = $"{target.Owner}.{target.Name}" + (target.ObjectType.EndsWith(" BODY", StringComparison.Ordinal) ? " BODY" : string.Empty);
+        return UiText.Get(FeatureTexts.ReadOnlyTabTitle, "[읽기 전용] {0}").Replace("{0}", name, StringComparison.Ordinal);
+    }
+
+    /// <summary>탭이 PL/SQL 끔 읽기 전용 소스 탭이면 그 객체(아니면 null).</summary>
+    internal static DbObjectRef? ReadOnlySourceOf(SqlEditorViewModel tab) =>
+        ReadOnlyTabs.TryGetValue(tab, out var mark) ? mark.Target : null;
+
+    /// <summary>
+    /// PL/SQL 편집기가 꺼졌을 때의 「소스 열기」(D-007): 서버 소스(메타데이터 공급자)를 일반 SQL 탭에 넣고 읽기 전용으로 둔다(제목 <see cref="ReadOnlyTitle"/>).
+    /// 같은 접속의 같은 객체 탭이 있으면 새로 읽지 않고 그 탭을 앞으로 낸다(고정 열기면 미리보기 표식을 뗀다). 미리보기면 지난 읽기 전용 미리보기 탭을 그 자리에서 바꿔 쓴다.
+    /// <paramref name="line"/> 이 1 이상이면 그 서버 줄(<c>all_source.line</c>)로 커서를 옮긴다. 소스를 읽지 못하면 탭을 열지 않고 이유를 알린 뒤 null.
+    /// 안내는 <paramref name="notify"/>(없으면 상태 표시줄 알림과 스키마 브라우저 상태 줄)로 보낸다.
+    /// </summary>
+    internal static async Task<SqlEditorViewModel?> OpenReadOnlySourceAsync(IServiceProvider? services, DbObjectRef target, ISession session, int line, bool preview,
+        Action<string>? notify, CancellationToken ct, SqlEditorHost? host = null)
+    {
+        ArgumentNullException.ThrowIfNull(target);
+        ArgumentNullException.ThrowIfNull(session);
+        host ??= SqlEditorHost.Current;
+        var tab = host.Tabs.FirstOrDefault(t => ReadOnlyTabs.TryGetValue(t, out var mark) && mark.Is(target, session));
+        if (tab is null)
+        {
+            if (services?.GetService(typeof(IMetadataProvider)) is not IMetadataProvider meta)
+            {
+                return null;
+            }
+
+            string source;
+            try
+            {
+                source = await meta.GetSourceAsync(session, target, ct).ConfigureAwait(true);
+            }
+            catch (OperationCanceledException)
+            {
+                throw;
+            }
+            catch (Exception ex)
+            {
+                Tell(services, notify, "소스를 열지 못했다: " + ex.Message.ReplaceLineEndings(" "), failure: true);
+                return null;
+            }
+
+            tab = Place(host, target, session, source, preview);
+        }
+        else if (!preview && ReadOnlyTabs.TryGetValue(tab, out var shown))
+        {
+            shown.Preview = false;
+        }
+
+        host.Active = tab;
+        if (line > 0)
+        {
+            tab.GoToLine(line);
+        }
+
+        Tell(services, notify, UiText.Get(FeatureTexts.PlsqlOffOpenedReadOnly, "PL/SQL 편집기 기능이 꺼져 있어 읽기 전용으로 열었습니다"), failure: false);
+        return tab;
+    }
+
+    /// <summary>새 읽기 전용 탭을 열거나, 미리보기면 지난 읽기 전용 미리보기 탭을 그 자리에서 바꿔 쓴다.</summary>
+    private static SqlEditorViewModel Place(SqlEditorHost host, DbObjectRef target, ISession session, string source, bool preview)
+    {
+        var mark = new ReadOnlySourceMark(target, session.DbKey) { Preview = preview };
+        var tab = preview ? host.Tabs.FirstOrDefault(t => ReadOnlyTabs.TryGetValue(t, out var m) && m.Preview) : null;
+        if (tab is not null)
+        {
+            tab.LoadText(source);
+            tab.Select(0, 0);
+        }
+        else
+        {
+            tab = host.NewDocument(source);
+        }
+
+        ReadOnlyTabs.AddOrUpdate(tab, mark);
+        tab.Title = ReadOnlyTitle(target);
+        tab.IsReadOnly = true;
+        tab.ConnectionProfileId = session.Profile.Id;
+        tab.IsDirty = false;
+        return tab;
+    }
+
+    /// <summary>탭이 든 SQL 작업 공간 문서(도킹에 아직 없으면 null).</summary>
+    private static PanelDocument? DocumentOf(DockWorkspace docking, SqlEditorViewModel tab) =>
+        docking.Documents.FirstOrDefault(d => d.Panel is SqlWorkspaceViewModel ws && ws.Tabs.Contains(tab));
+
+    /// <summary>안내를 보낸다: 받는 곳을 주었으면 거기로, 아니면 상태 표시줄 알림(잠깐 보임)과 스키마 브라우저 상태 줄.</summary>
+    private static void Tell(IServiceProvider? services, Action<string>? notify, string message, bool failure)
+    {
+        if (notify is not null)
+        {
+            notify(message);
+            return;
+        }
+
+        GridEdit.SaveFeedback.Show(new GridEdit.SaveNotice(message, failure ? GridEdit.SaveFeedbackKind.Failure : GridEdit.SaveFeedbackKind.Success));
+        NotifySchemaBrowser(services, message);
+    }
+
+    /// <summary>스키마 브라우저 상태 줄에 안내를 쓴다(도구 창이 아직 없으면 아무것도 안 한다).</summary>
+    internal static void NotifySchemaBrowser(IServiceProvider? services, string message)
+    {
+        if (services?.GetService(typeof(IShellUi)) is not IShellUi { Docking.Layout: { } root })
+        {
+            return;
+        }
+
+        var stack = new Stack<IDockable>();
+        stack.Push(root);
+        while (stack.Count > 0)
+        {
+            var d = stack.Pop();
+            if (d is PanelTool { Definition.Id: "oranda.panel.schemaBrowser", IsPanelCreated: true, Panel: SchemaBrowserViewModel vm })
+            {
+                vm.StatusText = message;
+                return;
+            }
+
+            if (d is IDock dock && dock.VisibleDockables is { } kids)
+            {
+                foreach (var k in kids)
+                {
+                    stack.Push(k);
+                }
+            }
+        }
+    }
+
+    /// <summary>읽기 전용 소스 탭 표식.</summary>
+    private sealed class ReadOnlySourceMark(DbObjectRef target, string dbKey)
+    {
+        public DbObjectRef Target { get; } = target;
+
+        public bool Preview { get; set; }
+
+        public bool Is(DbObjectRef other, ISession session) =>
+            Same(Target, null, other, session) && string.Equals(dbKey, session.DbKey, StringComparison.Ordinal);
+    }
 
     /// <summary>같은 접속(DbKey)의 같은 객체를 보이는 문서. PACKAGE 와 PACKAGE BODY 는 다른 객체다.</summary>
     private static PanelDocument? FindOpen(DockWorkspace docking, string panelId, DbObjectRef target, ISession session) =>

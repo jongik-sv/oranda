@@ -473,7 +473,7 @@ levels:
   - acceptance: R6 만 고르면 SQL 편집기·스크립트(F5)·전용 세션에서 DML·DDL·PL/SQL 이 거부되고 이유가 보이며 SELECT 는 실행된다 / R6 + R1 이면 거부 없음 / 거부는 드라이버 호출 전 / 엔진 밖 쓰기 경로 목록이 결과에 있다 / 전체 시험 통과
   - note: 담당 PC: win144(Windows 개발 PC) — 맥북 세션은 이 Task 를 하지 않는다. 크기 M. 레인 rl-guard. 결과 — ExecutionPolicy 에 ReadOnlyRole 규칙(읽기 전용 프로필 뒤·라이선스 앞, IsReadOnlySafe 기준, 게이트 생성자 인자), 대체 등록·Install·Resolve 가 게이트를 넘김, readOnlySession = 프로필 읽기 전용 또는 Role(게이트 Changed 를 UI 스레드로). 엔진 밖 쓰기 경로 = COMMIT/ROLLBACK 직접 호출뿐(툴바 커밋·롤백·자동 커밋·RowEditor·LobWriter·가져오기 커밋, WHENEVER SQLERROR EXIT COMMIT) — 문장 쓰기는 모두 엔진을 거쳐 거부됨, 07-08 이 확인 (win144)
 
-- [ ] TSK-07-06: 꺼진 기능 대체 경로 — PL/SQL 읽기 전용 소스·MyBatis 끔 매퍼 열기·계획 고급 탭·시작 화면 [win144] w:3 2026-10-27~2026-10-29
+- [x] TSK-07-06: 꺼진 기능 대체 경로 — PL/SQL 읽기 전용 소스·MyBatis 끔 매퍼 열기·계획 고급 탭·시작 화면 [win144] w:3 2026-10-27~2026-10-29
   - category: dev
   - domain: frontend
   - model: opus
@@ -483,7 +483,7 @@ levels:
   - prd-ref: RL-09, RL-10, RL-11, RL-12, TRD 10.7.5
   - requirements: PL/SQL 끔 소스 열기(D-007): `SchemaObjectOpener` 에서 PanelFor 가 PL/SQL 작업 공간인데 plsqlEditor 가 꺼져 있으면 서버 소스를 기존 메타데이터 공급자로 읽어 새 SQL 편집기 탭에 넣고 읽기 전용·제목 「[읽기 전용] OWNER.NAME」·상태 줄 안내, 같은 객체 탭이 있으면 앞으로 낸다; 정의로 이동·Quick Open 객체 열기(`Navigation/ObjectNavigationCommands.cs`)·객체 검색(`DbTools/ObjectSearchViewModel.cs`)·변경 일지(`ChangeJournal/ChangeJournalViewModel.cs`)·`oranda.plsql.openSource` 처리기(`PlsqlEditor/PlsqlEditorCommands.cs`, 꼬리표는 공통으로 덮어써져 있음)가 이 분기를 부르게 한다; MyBatis 끔 매퍼 열기(D-008): 훅이 MyBatisHooks.Empty 인 상태에서 파일 열기·끌어 놓기(DroppedWorkspaceFiles.Pick)·최근 파일·명령줄 열기가 `WorkspaceFiles.ReadMyBatis` 펼침으로 일반 SQL 탭을 만들고 매퍼 파일에 쓰지 않는지 시험으로 확인하고 다르게 가는 곳만 고친다. 처음 한 번 상태 줄 안내. 루트가 mapper 가 아닌 xml 은 지금과 같다; 계획 창(`Features/ExecutionPlan/`): planAdvanced 가 꺼지면 그래프 탭·SQL Monitor 보고서 탭·비교 영역을 숨긴다(feature.planAdvanced 키 또는 게이트 Changed). 표 통계·자식 커서·보고서 단추(`PlanViewModel.Boost.cs:513-518`)와 SQL 모니터 단추(`SqlMonitorViewModel.Tuning.cs:283`)가 레지스트리 거르기와 CommandsChanged 로 바로 숨는지 시험하고 안 되는 곳을 고친다; 시작 화면(`Shell/StartPage.cs:210`): myBatis 끔이면 MyBatis 문구를 예약 문구로, Role 을 고른 적 없으면 「Role 고르기…」 링크(oranda.tools.roles); 시험: FakeFeatureGate 로 각 경로(정상·경계: 이미 열린 탭·소스 읽기 실패·비-mapper xml); 계약 Task design.md 「기능 Task 편집 지점」 의 자기 소유 파일만 고친다; 비고: 담당 PC: win144(Windows 개발 PC) — 맥북 세션은 이 Task 를 하지 않는다
   - acceptance: PL/SQL 끔에서 스키마 브라우저·정의로 이동·객체 검색·변경 일지로 패키지를 열면 읽기 전용 SQL 탭이 열린다 / MyBatis 끔에서 매퍼를 열면 문장마다 SQL 탭이 생기고 매퍼 파일의 해시가 그대로다 / planAdvanced 끔에서 계획 창 고급 탭이 없고 튜닝 끔에서 계획 창 통계·자식 커서 단추가 없다 / 전체 시험 통과
-  - note: 담당 PC: win144(Windows 개발 PC) — 맥북 세션은 이 Task 를 하지 않는다. 크기 L. 레인 rl-fallback
+  - note: 담당 PC: win144(Windows 개발 PC) — 맥북 세션은 이 Task 를 하지 않는다. 크기 L. 레인 rl-fallback. 결과: PL/SQL 끔 소스 열기를 SchemaObjectOpener 한 곳에서 읽기 전용 SQL 탭(「[읽기 전용] OWNER.NAME」, 미리보기 재사용·같은 객체 앞으로)으로, MyBatis 끔 매퍼는 파일 열기·최근 파일·끌어 놓기·명령줄 모두 ReadMyBatis 펼침(매퍼 해시 불변, 첫 회 상태 표시줄 안내), 계획 창 planAdvanced 끔이면 비교·그래프·보고서·고정·형식 숨김과 튜닝 단추·SQL 모니터 바로 가기 CommandsChanged 즉시 반영, 시작 화면 「Role 고르기…」 줄(StartPage 에 services 인자, MainWindow 전달은 07-02 몫) (win144)
 
 - [ ] TSK-07-07: Role 구성별 성능 비교 — 시작·유휴 메모리·스레드·시작 작업·추가 세션 결과서 [win144] w:2 2026-10-30~2026-10-31
   - category: research

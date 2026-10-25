@@ -306,6 +306,13 @@ public sealed partial class PlanViewModel : ToolPanelViewModelBase
             // 「통계 보기」「자식 커서」 명령은 다른 기능이 등록한다 — 등록되면 단추가 나타난다.
             registry.CommandsChanged += (_, _) => PostToUi(RefreshCommandButtons);
         }
+
+        // planAdvanced 끔이면 고급 보기·단추를 숨긴다(TSK-07-06). 게이트 Changed 로 바로 다시 본다.
+        _features = services.GetService(typeof(Oranda.Core.Features.IFeatureGate)) as Oranda.Core.Features.IFeatureGate;
+        if (_features is not null)
+        {
+            _features.Changed += OnFeaturesChanged;
+        }
     }
 
     /// <summary>시험용: 서비스를 직접 준다.</summary>
@@ -465,6 +472,11 @@ public sealed partial class PlanViewModel : ToolPanelViewModelBase
     /// <summary>지금 계획을 비교 기준으로 고정한다(<c>oranda.plan.pinForCompare</c>). 계획이 없으면 false.</summary>
     public bool PinCurrent()
     {
+        if (!IsAdvancedEnabled)
+        {
+            return false; // 계획 고급 끔(TSK-07-06): 명령·단추가 숨지만 직접 불러도 고정하지 않는다
+        }
+
         if (CurrentPlan is not { } plan)
         {
             StatusText = "고정할 계획이 없습니다. 먼저 예상(Ctrl+E) 또는 실제(Ctrl+Shift+E) 계획을 만드세요.";
@@ -496,6 +508,11 @@ public sealed partial class PlanViewModel : ToolPanelViewModelBase
     /// <summary>고정한 계획과 지금 계획을 비교하고 비교 탭을 보인다(<c>oranda.plan.compare</c>). 비교하지 못하면 false.</summary>
     public bool CompareWithPinned()
     {
+        if (!IsAdvancedEnabled)
+        {
+            return false;
+        }
+
         if (PinnedPlan is null)
         {
             StatusText = "먼저 「이 계획 고정」으로 비교 기준 계획을 고정하세요.";

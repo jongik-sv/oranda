@@ -6,8 +6,13 @@ using Avalonia.Controls.Templates;
 using Avalonia.Layout;
 using Avalonia.Media;
 using Oranda.App.Features.RecentFiles;
+using Oranda.App.Shell.Features;
 using Oranda.App.Shell.Icons;
 using Oranda.App.Shell.Menus;
+using Oranda.App.Shell.Settings;
+using Oranda.Core.Events;
+using Oranda.Core.Features;
+using Oranda.Core.Settings;
 using Oranda.Core.Shell;
 
 namespace Oranda.App.Shell;
@@ -36,12 +41,30 @@ public sealed class StartPage : UserControl
     private readonly StackPanel _recentWorkspaces = new() { Spacing = 2 };
     private readonly string? _fileIcon;
     private readonly string? _workspaceIcon;
+    private readonly IShellText _text;
+    private readonly IFeatureGate? _features;
+    private readonly SettingsService? _settings;
+    private readonly IEventBus? _events;
+    private readonly TextBlock _openHint;
+    private readonly StackPanel _roleRow;
+    private IDisposable? _settingsSubscription;
 
-    public StartPage(ICommandRegistry registry, IContextKeys keys, IShellText text, Func<string, string?> shortcut, RecentFilesService? recent = null)
+    /// <summary>
+    /// <paramref name="services"/> 를 주면 기능 상태를 따른다(TSK-07-06, D-011): Role 을 고른 적 없으면 「Role 고르기…」 줄을 보이고,
+    /// MyBatis 기능이 꺼졌으면 아래 안내에서 매퍼를 뺀다. 주지 않으면 지금 화면 그대로(모든 기능 켬).
+    /// </summary>
+    public StartPage(ICommandRegistry registry, IContextKeys keys, IShellText text, Func<string, string?> shortcut, RecentFilesService? recent = null,
+        IServiceProvider? services = null)
     {
         ArgumentNullException.ThrowIfNull(registry);
         ArgumentNullException.ThrowIfNull(text);
         _recent = recent;
+        _text = text;
+        _features = services?.GetService(typeof(IFeatureGate)) as IFeatureGate;
+        _settings = services?.GetService(typeof(SettingsService)) as SettingsService;
+        _events = services?.GetService(typeof(IEventBus)) as IEventBus;
+        _openHint = OpenHint();
+        _roleRow = RoleRow(text);
         var list = new StackPanel { Spacing = 2, Width = 340 };
         var byId = new Dictionary<string, CommandDefinition>(StringComparer.Ordinal);
         foreach (var c in registry.Commands)
@@ -107,11 +130,12 @@ public sealed class StartPage : UserControl
         {
             HorizontalScrollBarVisibility = Avalonia.Controls.Primitives.ScrollBarVisibility.Disabled,
             VerticalScrollBarVisibility = Avalonia.Controls.Primitives.ScrollBarVisibility.Auto,
-            Content = Body(columns),
+            Content = Body(columns, _roleRow, _openHint),
         };
+        ApplyFeatures();
     }
 
-    /// <summary>목록이 바뀌면 다시 채운다. 시작 화면은 문서 영역 호스트마다 새로 생기므로 붙어 있는 동안만 듣는다.</summary>
+    /// <summary>목록·기능 상태가 바뀌면 다시 채운다. 시작 화면은 문서 영역 호스트마다 새로 생기므로 붙어 있는 동안만 듣는다.</summary>
     protected override void OnAttachedToVisualTree(VisualTreeAttachmentEventArgs e)
     {
         base.OnAttachedToVisualTree(e);
@@ -120,6 +144,20 @@ public sealed class StartPage : UserControl
             _recent.Changed += OnRecentChanged;
             FillRecent();
         }
+
+        if (_features is not null)
+        {
+            _features.Changed += OnFeaturesChanged;
+        }
+
+        _settingsSubscription ??= _events?.Subscribe<SettingsChanged>(this, s =>
+        {
+            if (s.Section == FeaturesSettings.SectionName)
+            {
+                OnFeaturesChanged(this, EventArgs.Empty);
+            }
+        });
+        ApplyFeatures();
     }
 
     protected override void OnDetachedFromVisualTree(VisualTreeAttachmentEventArgs e)
@@ -129,7 +167,91 @@ public sealed class StartPage : UserControl
         {
             _recent.Changed -= OnRecentChanged;
         }
+
+        if (_features is not null)
+        {
+            _features.Changed -= OnFeaturesChanged;
+        }
+
+        _settingsSubscription?.Dispose();
+        _settingsSubscription = null;
     }
+
+    /// <summary>「Role 고르기…」 줄이 보이는가(시험용).</summary>
+    internal bool ShowsRoleLink => _roleRow.IsVisible;
+
+    /// <summary>아래 안내 글(시험용).</summary>
+    internal string OpenHintText => _openHint.Text ?? string.Empty;
+
+    // 게이트·설정 알림은 스레드 보장이 없다: UI 스레드로 넘긴다.
+    private void OnFeaturesChanged(object? sender, EventArgs e)
+    {
+        if (Avalonia.Threading.Dispatcher.UIThread.CheckAccess())
+        {
+            ApplyFeatures();
+        }
+        else
+        {
+            Avalonia.Threading.Dispatcher.UIThread.Post(ApplyFeatures);
+        }
+    }
+
+    /// <summary>
+    /// 기능 상태를 화면에 옮긴다(D-011): Role 을 고른 적 없을 때(<c>features.roles</c> = null)만 「Role 고르기…」 줄, MyBatis 기능 끔이면 매퍼를 뺀 안내.
+    /// 서비스 없이 만들었으면 줄을 숨기고 지금 안내 그대로.
+    /// </summary>
+    private void ApplyFeatures()
+    {
+        _roleRow.IsVisible = _settings is not null && _settings.Current.Features.Roles is null;
+        _openHint.Text = _features is not null && !_features.IsEnabled(FeatureIds.MyBatis)
+            ? _text.Lookup(FeatureTexts.StartMyBatisOff)
+            : "MyBatis 매퍼(.xml)나 작업 공간(.md)을 열면 문장마다 탭이 생깁니다.";
+    }
+
+    /// <summary>
+    /// 「Role 을 고르면 메뉴가 단순해집니다 — Role 고르기…」 한 줄. 링크는 <c>oranda.tools.roles</c>(설정 창 「기능」 탭)를 실행한다.
+    /// 명령이 아직 없으면(TSK-07-04 전) 조용히 아무 일도 안 한다(<see cref="ShellCommandRunner"/>).
+    /// </summary>
+    private static StackPanel RoleRow(IShellText text)
+    {
+        var link = new Button
+        {
+            Content = text.Lookup(FeatureTexts.StartChooseRole),
+            Classes = { "tool" },
+            Padding = new Thickness(4, 1),
+            VerticalAlignment = VerticalAlignment.Center,
+        };
+        link.Bind(ForegroundProperty, link.GetResourceObservable("OrandaFocusBrush"));
+        Avalonia.Automation.AutomationProperties.SetName(link, text.Lookup(FeatureTexts.StartChooseRole));
+        link.Click += (_, _) => _ = ShellCommandRunner.RunAsync(FeatureCommandIds.Roles);
+        var icon = ShellIcons.Create("settings", 14) ?? new Control();
+        icon.Opacity = 0.6;
+        icon.VerticalAlignment = VerticalAlignment.Center;
+        return new StackPanel
+        {
+            Orientation = Orientation.Horizontal,
+            Spacing = 6,
+            Margin = new Thickness(10, 14, 0, 0), // 위 명령 줄의 아이콘과 같은 들여쓰기
+            Children =
+            {
+                icon,
+                new TextBlock { Text = text.Lookup(FeatureTexts.StartChooseRoleHint), Opacity = 0.6, VerticalAlignment = VerticalAlignment.Center, TextTrimming = TextTrimming.CharacterEllipsis },
+                new TextBlock { Text = "—", Opacity = 0.4, VerticalAlignment = VerticalAlignment.Center },
+                link,
+            },
+        };
+    }
+
+    private static TextBlock OpenHint() =>
+        new()
+        {
+            Opacity = 0.5,
+            FontSize = 11,
+            Margin = new Thickness(0, 16, 0, 0),
+            TextWrapping = TextWrapping.Wrap,
+            TextTrimming = TextTrimming.CharacterEllipsis, // 작은 창에서는 스크롤로 본다
+            MaxWidth = 340,
+        };
 
     private void OnRecentChanged(object? sender, EventArgs e) => FillRecent();
 
@@ -193,7 +315,7 @@ public sealed class StartPage : UserControl
     private static TextBlock Heading(string title, double top = 0) =>
         new() { Text = title, FontWeight = FontWeight.SemiBold, Opacity = 0.75, Margin = new Thickness(6, top, 0, 2), TextTrimming = TextTrimming.CharacterEllipsis };
 
-    private static StackPanel Body(Panel columns) =>
+    private static StackPanel Body(Panel columns, Control roleRow, TextBlock openHint) =>
         new()
         {
             HorizontalAlignment = HorizontalAlignment.Center,
@@ -205,16 +327,8 @@ public sealed class StartPage : UserControl
                 new TextBlock { Text = "Oranda", FontSize = 28, FontWeight = FontWeight.SemiBold, TextTrimming = TextTrimming.CharacterEllipsis },
                 new TextBlock { Text = "Oracle 개발·운영 도구", Opacity = 0.6, Margin = new Thickness(0, 0, 0, 18), TextTrimming = TextTrimming.CharacterEllipsis },
                 columns,
-                new TextBlock
-                {
-                    Text = "MyBatis 매퍼(.xml)나 작업 공간(.md)을 열면 문장마다 탭이 생깁니다.",
-                    Opacity = 0.5,
-                    FontSize = 11,
-                    Margin = new Thickness(0, 16, 0, 0),
-                    TextWrapping = TextWrapping.Wrap,
-                    TextTrimming = TextTrimming.CharacterEllipsis, // 작은 창에서는 스크롤로 본다
-                    MaxWidth = 340,
-                },
+                roleRow,
+                openHint,
             },
         };
 
