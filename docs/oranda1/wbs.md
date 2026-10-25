@@ -414,7 +414,7 @@ levels:
 ## WP-07: Role 기반 메뉴·기능 구성
 <!-- 담당 PC: win144(Windows 개발 PC) — 맥북 세션은 이 WP 의 Task 를 하지 않는다. 2026-10-25 사용자 확정(조사 docs/oranda1/research/role-features.md 권장안 승인): Role 6개 겹쳐 고르기 + 기능별 덮어쓰기, 1단계 = 메뉴 단순화 + 시작 초기화 빼기(어셈블리 분리 없음, 성능 비교 결과서만), 조회 전용 실제 차단. 설계 = PRD 12, TRD 10, decisions D-002~D-012. 계약(TSK-07-01)을 단독으로 먼저 머지하고 07-02~07-06 을 레인 5개로 병렬, 07-07 은 07-02·03 머지 뒤, 07-08 이 마지막. 파일 소유 = TRD 10.9 -->
 
-- [ ] TSK-07-01: 기능 카탈로그·Role 프리셋·IFeatureGate·설정 스키마·문구 예약 (계약 전용) [win144] w:1 2026-10-26~2026-10-26
+- [x] TSK-07-01: 기능 카탈로그·Role 프리셋·IFeatureGate·설정 스키마·문구 예약 (계약 전용) [win144] w:1 2026-10-26~2026-10-26
   - category: infra
   - domain: backend
   - model: opus
@@ -423,7 +423,7 @@ levels:
   - prd-ref: RL-01~RL-13, TRD 10.2~10.4, TRD 10.8~10.9
   - requirements: Core `src/Oranda.Core/Features/` 에 기능 id 상수 25개(PRD 12.2)·Role id 상수 6개(PRD 12.1)·`FeatureCatalog` 데이터(기능별 묶음·이름 문구 키·StartupBound·WritesOnly·Requires, Role 별 기본 켬 목록, TRD 10.2 의 네임스페이스 접두 표·id 덮어쓰기 표·형 이름 덮어쓰기 표)와 `IFeatureGate`(TRD 10.4 그대로)를 둔다; `src/Oranda.Core/Settings/FeaturesSettings.cs`(Roles null 가능·Enabled·Disabled, 목록 순서 무시 값 같음 Equals/GetHashCode)와 `AppSettings.Features` 섹션을 더하고, `SettingsStore.ChangedSections` 에 "features"·`Normalize` 에 중복 제거·enabled/disabled 겹침 정리(모르는 id 는 남김)를 더한다. SchemaVersion 은 올리지 않는다; `src/Oranda.App/Shell/Features/FeatureGate.cs` 에 IFeatureGate 의 틀 구현(모든 기능 켬, ReadOnlyRole=false, PendingRestart 빈 목록, Changed 안 냄)과 `FeatureCommandIds.cs`(oranda.tools.roles 상수)를 만들고 `AppComposition` 에 `IFeatureGate → FeatureGate` 싱글턴 등록 한 줄을 더한다(레지스트리·ExecutionPolicy 배선은 하지 않는다); TRD 10.8 의 모든 문구를 strings-ko/en·literals-en·CommandTitles(ko/en)에 넣는다; `tests/Oranda.Testing/FakeFeatureGate.cs`(켬 집합·ReadOnlyRole·PendingRestart 를 시험이 정하고 Changed 를 낼 수 있음); TRD 10.9 의 시험 파일을 모두 Skip 틀로 만든다; `docs/oranda1/design.md` 에 `## 기능 Task 편집 지점 (WP-07)` 표(TRD 10.9 를 실제 코드에 맞춰 옮김), `docs/design/commands.md` 에 oranda.tools.roles 행; 제약: 실행 로직 없음, Core 는 App 형을 참조하지 않는다(네임스페이스는 문자열); 비고: 담당 PC: win144(Windows 개발 PC) — 맥북 세션은 이 Task 를 하지 않는다. 여러 레인(07-02~07-07)이 같은 id·인터페이스·설정 키·문구를 쓰므로 먼저 동결한다
   - acceptance: 실행 로직 없음 (contract-only) / `dotnet build Oranda.sln -warnaserror` 통과, 기존 시험이 고치지 않고 통과(게이트 틀이 전부 켬이라 동작 불변) / FeatureCatalogTests: 기능 id 25개·Role 6개 존재, Role 기본 켬 표가 PRD 12.2 와 같음, 카탈로그가 모르는 id 를 참조하지 않음, features 섹션 JSON 왕복과 키 없는 옛 settings.json 읽기 / LocalizationTests 통과(예약 문구 ko/en 짝) / 공유 시험은 틀의 존재·탑재 순서만 단정한다. 빈 라우터·스텁 목록(`STUBS` 등)을 단정하지 않는다 / 기능 Task 마다 자기 시험 파일과 소유 파일을 design.md `## 기능 Task 편집 지점` 에 적고, 두 Task 가 한 파일을 나눠 갖지 않는다 / 등록(라우트·핸들러 목록)은 자동 수집이며 기능 Task 가 공유 진입점에 줄을 더하지 않아도 된다 / 계약 문서가 지정한 파일(공용 시험 헬퍼 포함)이 모두 있다
-  - note: 담당 PC: win144(Windows 개발 PC) — 맥북 세션은 이 Task 를 하지 않는다. 크기 M. 단독 레인 rl-contract, 머지 후 07-02~07-06 레인 시작
+  - note: 완료(2026-10-25) — Core Features(id 25·Role 6·FeatureCatalog 꼬리표 표·RoleDefaults/Resolve 1~4단계·IFeatureGate·FeatureTexts 키), FeaturesSettings(순서 무시 Equals)·AppSettings.Features·SettingsStore 정규화/features 알림(스키마 버전 그대로), App FeatureGate 모두 켬 틀·FeatureCommandIds·AppComposition 등록 한 줄, 문구 65키+명령 제목 예약(ko/en·literals), FakeFeatureGate, 시험 틀 9개, design.md 「기능 Task 편집 지점 (WP-07)」·commands.md 행. 단독 레인 rl-contract, 머지 후 07-02~07-06 레인 시작 (win144)
 
 - [ ] TSK-07-02: 기능 게이트 해석·명령·도구 창 레지스트리 거르기·즉시 재계산·feature 문맥 키 [win144] w:3 2026-10-27~2026-10-29
   - category: dev

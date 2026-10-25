@@ -245,6 +245,7 @@
   "Cmd.oranda.tools.keymapPreset.plsqldev": "Shortcut Preset: PL/SQL Developer",
   "Cmd.oranda.tools.keymapPreset.sqldev": "Shortcut Preset: SQL Developer",
   "Cmd.oranda.tools.language": "UI Language",
+  "Cmd.oranda.tools.roles": "Choose Roles and Features…",
   "Cmd.oranda.tools.settings": "Settings",
   "Cmd.oranda.tools.tableSpec": "Table Specification…",
   "Cmd.oranda.txn.commit": "Commit",

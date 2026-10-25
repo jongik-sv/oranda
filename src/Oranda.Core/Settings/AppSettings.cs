@@ -43,6 +43,12 @@ public sealed record AppSettings
 
     /// <summary>MyBatis 작업 공간(docs/oranda1, TSK-03-03).</summary>
     public MyBatisSettings MyBatis { get; init; } = new();
+
+    /// <summary>Role·기능 구성(PRD 12, TSK-07-01). 키가 없는 옛 파일 = 모든 기능 켬. 새 섹션이라 스키마 버전은 그대로.</summary>
+    public FeaturesSettings Features { get => _features; init => _features = value ?? new(); }
+
+    // "features": null 인 손으로 고친 파일도 기본값으로 받는다.
+    private readonly FeaturesSettings _features = new();
 }
 
 /// <summary>MyBatis 작업 공간 설정. 설정 창에는 없고 「바뀌는 부분」 창의 확인란이 바꾼다.</summary>

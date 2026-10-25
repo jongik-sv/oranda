@@ -456,3 +456,51 @@ xml 형식(XmlReader, DTD 무시·resolver null), 문장 id 겹침, 연 때 해�
 - D-007 ReadMyBatis 는 남기고(Q8 (a)) 몸을 계산기로 바꾼다. 표기 변환은 얇은 어댑터.
 - D-008 `IMyBatisFragmentResolver` 는 Core 에 두고 `MyBatisFragment`(Core 형)를 돌려준다(wbs 01-02 의 「Language」에서 위치 변경). App(03-07)이 구현하므로 Language 에 두면 시작 때 Language 가 로드된다.
 - D-009 MyBatis 작업 공간에는 문장 탭만 둔다. 저장 안 함 판정·닫기 확인·Ctrl+S·자동 저장은 탭이 아니라 작업 공간 세션 기준이다.
+
+## 기능 Task 편집 지점 (WP-07)
+
+TRD 10.9 를 실제 코드(기준 8d84622)에 맞춰 옮겼다. TSK-07-01(계약)이 확정. 기능 Task 는 「소유 파일」 열의 파일·폴더만 고치고 「시험 파일」 열의 틀(`Placeholder` Skip 시험 하나)을 채운다. 채울 때 틀 시험을 지우거나 바꿔도 된다. 두 Task 가 한 파일을 나눠 갖지 않는다. 등록은 자동 수집(`[OrandaCommand]`·`[OrandaToolPanel]`·`[OrandaStatusBarItem]`·`[OrandaService]`)이라 공유 진입점에 줄을 더하지 않는다. 경로의 `Shell/`·`Features/`·`Views/`·`ViewModels/` 는 `src/Oranda.App/` 아래다.
+
+| Task | 소유 파일(쓰기) | 시험 파일 |
+|------|-----------------|-----------|
+| 07-01 계약 | `src/Oranda.Core/Features/**`, `src/Oranda.Core/Settings/AppSettings.cs`·`FeaturesSettings.cs`, `src/Oranda.Platform/Storage/SettingsStore.cs`, `Shell/Features/FeatureGate.cs`(모두 켬 틀)·`FeatureCommandIds.cs`, `Shell/Composition/AppComposition.cs`(게이트 등록 한 줄), 문구 파일 4종, `tests/Oranda.Testing/FakeFeatureGate.cs`, `docs/design/commands.md`(행 하나), 이 표 | `tests/Oranda.Core.Tests/Features/FeatureCatalogTests.cs`·`FeatureTagSamples.cs`, `tests/Oranda.Platform.Tests/Storage/SettingsStoreTests.Features.cs`, `tests/Oranda.App.Tests/Features/Roles/FeatureContractTests.cs`, 아래 시험 틀 전부 |
+| 07-02 레지스트리 | `Shell/Features/**`(계약이 만든 `FeatureGate.cs` 를 실제 구현으로, `FeatureMap` 등 새 파일), `Shell/CommandRegistry.cs`, `Shell/ToolPanelRegistry.cs`(`StatusBarRegistry` 포함), `Shell/ShellContributions.cs`, `Shell/ShellController.cs`, `Shell/ContextKeyService.cs`, `Shell/Composition/AppComposition.cs`, `Shell/Docking/**`, `Shell/Layout/**`, `Shell/Menus/**`, `Shell/Palette/**`, `Shell/Keymaps/**`, `Views/MainWindow.axaml`·`MainWindow.axaml.cs` | `tests/Oranda.App.Tests/Features/Roles/FeatureGateTests.cs`, `RegistryFilterTests.cs` |
+| 07-03 시작 | `App.axaml.cs`, `Shell/Composition/ServiceContainer.cs`(새 partial `ServiceContainer.*.cs` 포함), `ViewModels/MainViewModel.cs`, `Features/BlockerAlert/**`, `Features/PlsqlWorkspace/PlsqlWorkspacePersistence.cs` | `tests/Oranda.App.Tests/Features/Roles/StartupFilterTests.cs` |
+| 07-04 설정 창 | `Shell/Settings/SettingsWindow.axaml`·`SettingsWindow.axaml.cs`, `Shell/Settings/SettingsViewModel.cs`, `Shell/Settings/Feature*.cs`·`Feature*.axaml(.cs)`(새 파일, `FeatureSettingsCommands.cs` 포함) | `tests/Oranda.App.Tests/Features/Roles/FeatureSettingsViewTests.cs` |
+| 07-05 조회 전용 | `src/Oranda.Core/Execution/ExecutionPolicy.cs`, `src/Oranda.Core/Execution/IExecutionPolicy.cs`, `Features/Execution/ExecutionState.cs`, `Features/Execution/ExecutionCommands.cs` | `tests/Oranda.Core.Tests/Execution/ReadOnlyRolePolicyTests.cs`, `tests/Oranda.App.Tests/Features/Roles/ReadOnlyRoleExecutionTests.cs` |
+| 07-06 대체 경로 | `Features/SchemaBrowser/SchemaObjectOpener.cs`, `Features/Navigation/ObjectNavigationCommands.cs`, `Features/DbTools/ObjectSearchViewModel.cs`, `Features/ChangeJournal/ChangeJournalViewModel.cs`, `Features/PlsqlEditor/PlsqlEditorCommands.cs`, `Features/SqlEditor/WorkspaceFiles.cs`·`WorkspaceFiles.MyBatis.cs`, `Features/SqlEditor/SqlEditorHost.Files.cs`, `Features/SqlEditor/DroppedWorkspaceFiles.cs`, `Features/ExecutionPlan/**`, `Features/SqlMonitor/SqlMonitorViewModel.Tuning.cs`, `Shell/StartPage.cs` | `tests/Oranda.App.Tests/Features/Roles/FeatureFallbackTests.cs` |
+| 07-07 성능 비교 | `tests/Oranda.Perf/**`, `tests/Oranda.Perf.Common/**`, `tests/Oranda.Perf.Ui/**`, `tests/Oranda.Perf.Tests/**`, `scripts/perf/**`, `docs/oranda1/itest/TSK-07-07.md` | `tests/Oranda.Perf.Tests/FeaturePresetTests.cs` |
+| 07-08 통합테스트 | `tests/Oranda.App.Tests/Integration/Roles/**`, `tests/Oranda.Oracle.IntegrationTests/Roles/**`, 빠진 문구(문구 파일 4종), `docs/oranda1/itest/TSK-07-08.md` | `tests/Oranda.App.Tests/Integration/Roles/RoleMenuFlowTests.cs`(틀)와 같은 폴더 |
+
+### 계약 공개 API (TSK-07-01 동결, 바꿀 일이 있으면 조정자 승인)
+
+| 형 | 위치 | 멤버 | 쓰는 Task |
+|---|---|---|---|
+| `FeatureIds` | `Oranda.Core.Features` | 기능 id 상수 25개, `All`(PRD 12.2 순서), `ContextKeyPrefix`(`feature.`), `ContextKey(id)` | 전부 |
+| `RoleIds` | 〃 | `SqlDev`·`PlsqlDev`·`MyBatisDev`·`Tuner`·`Dba`·`Viewer`, `All` | 07-04·07-07·07-08 |
+| `FeatureGroup` | 〃 | `DevAssist`·`Plsql`·`MyBatis`·`Tuning`·`Operations` | 07-04 |
+| `FeatureDefinition` | 〃 | `Id`·`Group`·`StartupBound`·`WritesOnly`·`Requires`·`NameKey` | 07-02·07-04 |
+| `RoleDefinition` | 〃 | `Id`·`DefaultFeatures`·`NameKey`·`DescriptionKey` | 07-04 |
+| `FeatureCatalog` | 〃 | `Features`·`Roles`·`NamespaceTags`·`IdOverrides`(값 null = 공통)·`TypeOverrides`·`AppFeaturesNamespace`, `Find`·`FindRole`·`IsKnownFeature`·`IsKnownRole`·`GroupNameKey`, `FeatureFor(id, Type)`·`FeatureFor(id, fullName, ns)`(꼬리표, null = 공통), `RoleDefaults(roles)`(null = 모두), `IsReadOnlyRole(roles)`, `Resolve(FeaturesSettings?)`(TRD 10.5 의 1~4단계, 아는 id 만) | 07-02(게이트 = `Resolve` + 5단계 StartupBound·PendingRestart·캐시·사건), 07-04(확인란 상태·최소 기록 계산) |
+| `IFeatureGate` | 〃 | TRD 10.4 그대로: `IsEnabled`(모르는 id = 켬)·`IsCommandEnabled`·`IsPanelEnabled`·`IsTypeEnabled`·`ReadOnlyRole`·`PendingRestart`·`Changed`(스레드 보장 없음) | 07-02~07-06 |
+| `FeatureTexts` | 〃 | 문구 키 상수 23개와 머리 3개(`Feature.`·`Role.`·`FeatureGroup.`), Core 정책 관문용 한국어 `ReadOnlyRoleDeniedMessage` | 07-03~07-06 |
+| `FeaturesSettings` | `Oranda.Core.Settings` | `Roles`(null = 고른 적 없음)·`Enabled`·`Disabled`(null → 빈 목록), 순서 무시 `Equals`, `SectionName = "features"` | 07-02(구독)·07-04(저장)·07-07(파일 쓰기) |
+| `AppSettings.Features` | 〃 | 키 없는 옛 파일·`null` = `new FeaturesSettings()` = 모두 켬. `SchemaVersion` 그대로 | 〃 |
+| `SettingsStore` | `Oranda.Platform.Storage` | `Normalize` → `NormalizeFeatures`(빈 값·중복 제거, enabled∩disabled 는 enabled 에서 뺌, 모르는 id 남김), `ChangedSections` 에 `features` | 07-02 |
+| `FeatureGate` | `Oranda.App.Shell.Features` | 틀: 모두 켬, `ReadOnlyRole` false, `PendingRestart` 빈 목록, `Changed` 안 냄. `AppComposition` 에 `IFeatureGate → FeatureGate` 싱글턴 | 07-02 가 바꿈 |
+| `FeatureCommandIds` | 〃 | `Roles = "oranda.tools.roles"` | 07-03·07-04·07-06 |
+| `FakeFeatureGate` | `Oranda.Testing` | `new()`(모두 켬)·`new(ids)`·`For(settings)`·`ForRoles(...)`, `Enable`·`Disable`·`SetEnabled(ids, raiseChanged)`·`RaiseChanged`, 설정 가능한 `ReadOnlyRole`·`PendingRestart`, `EnabledFeatures`·`TypeQueries`. 명령·패널·형 질문은 실제 꼬리표 규칙으로 답한다 | 07-02~07-06 시험 |
+
+### 문구 (D-012, TRD 10.8)
+
+- 키는 `Shell.` 머리를 쓰지 않는다(LocalizationTests 가 코드에서 안 쓰는 `Shell.*` 를 실패로 본다). 기능 이름 `Feature.<id>`, Role 이름·설명 `Role.<id>`·`Role.<id>.desc`, 묶음 `FeatureGroup.<Group>`, 화면 문구 `Features.*`(키 상수 = `FeatureTexts`). 명령 제목 `Cmd.oranda.tools.roles` 는 `CommandTitles*.json`.
+- 같은 한국어 글자를 `literals-en.json` 에도 넣었다(XAML·코드 리터럴로 써도 영어로 바뀐다). `FeatureContractTests` 가 키 65개의 ko/en·literals 짝을 단정한다.
+- 바꾼 점: 한국어 문구는 한글이 있어야 해서(LocalizationTests) 묶음 이름 PL/SQL·MyBatis 를 「PL/SQL 개발」·「MyBatis 개발」, 설정 탭의 「Role」 머리를 「Role 목록」으로 적었다. 시작 화면 링크 줄은 「Role 을 고르면 메뉴가 단순해집니다」 + 링크 「Role 고르기…」 두 키로 나눴다. 화면 이름에는 PRD 의 R1·D1 같은 부호를 붙이지 않는다.
+- 기능 Task 는 이 파일들을 고치지 않는다. 빠진 문구는 레인 결과에 적고 07-08 이 넣는다.
+
+### 기능 Task 가 알아 둘 것
+
+- 네임스페이스: App 의 `Shell/Features/` 가 `Oranda.App.Shell.Features` 라서 `Oranda.App.Shell.*` 안에서 `Features.SqlEditor.X` 처럼 상대 이름으로 앱 기능을 부르면 이 네임스페이스로 잡힌다. 계약이 `Shell/Layout/NamedLayoutStore.cs`·`Shell/Menus/MenuControls.cs` 두 줄을 `Oranda.App.Features.…` 로 고쳤다. 새 코드도 전체 이름이나 `using` 을 쓴다.
+- 게이트를 등록해 두어서 `ExecutionPolicy` 에 `IFeatureGate?` 생성자 인자를 더하면(07-05) 컨테이너가 가장 긴 생성자로 넣어 준다 — `AppComposition` 을 고치지 않아도 된다. 등록되지 않은 형을 물으면 컨테이너가 지연 어셈블리를 훑으므로 게이트 등록 줄은 빼지 않는다.
+- 설정 창은 `ShellController.ShowSettings` 가 만든다(07-02 소유). 07-04 는 그 파일을 고치지 않는다 — 「기능」 탭으로 열기·게이트 전달은 자기 파일(`SettingsViewModel` 의 선택 속성, 또는 `FeatureSettingsCommands` 처리기가 창을 직접 띄움)로 푼다.
+- 「설정 열기」·「Role 고르기…」는 `ShellCommandRunner.RunAsync(FeatureCommandIds.Roles)` 를 부른다. 명령 처리기는 07-04 가 만들기 전까지 레지스트리에 없어 조용히 아무 일도 안 한다.

@@ -49,6 +49,7 @@ public static class AppComposition
         // 실행 정책(Core 구현, 스캔 대상 아님). 첫 SQL 실행 때만 등록하면 그 전에 실행 엔진이 필요한 기능
         // (세션 모니터·실행 계획·DB 정보 등)이 「생성자 인자를 해석할 수 없다」로 실패한다.
         container.AddType(typeof(Oranda.Core.Execution.IExecutionPolicy), typeof(Oranda.Core.Execution.ExecutionPolicy));
+        container.AddType(typeof(Oranda.Core.Features.IFeatureGate), typeof(Features.FeatureGate)); // 기능 게이트(WP-07). 틀은 모두 켬
         container.AddAssembly(typeof(PlatformAssembly).Assembly);
         container.AddAssembly(typeof(AppComposition).Assembly); // 앱 어셈블리의 [OrandaService](편집기 문맥·시작 작업 등)
         foreach (var name in DeferredAssemblies)

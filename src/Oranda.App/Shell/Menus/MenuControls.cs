@@ -20,7 +20,7 @@ public sealed class MenuControls(ICommandRegistry registry, IContextKeys keys, F
 
     /// <summary>숨김·이유 계산에 쓰는 문맥 키(PL/SQL 탭 여부를 도킹에서 채운다, <see cref="MenuScopeKeys"/>).</summary>
     private readonly IContextKeys _menuKeys = new MenuScopeKeys(keys, () => workspace.ActiveDocument?.Panel
-        is Features.PlsqlEditor.PlsqlEditorViewModel or Features.PlsqlWorkspace.PlsqlWorkspaceViewModel { ActiveTab: not null });
+        is Oranda.App.Features.PlsqlEditor.PlsqlEditorViewModel or Oranda.App.Features.PlsqlWorkspace.PlsqlWorkspaceViewModel { ActiveTab: not null });
 
     /// <summary>시스템 메뉴 뿌리(창)마다 따로 갖는 추적 목록. 창이 여럿(메인 창·떠 있는 도킹 창)이어도 각자 자기 메뉴 인스턴스를 갖는다.</summary>
     private readonly Dictionary<NativeMenu, NativeSet> _natives = [];

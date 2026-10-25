@@ -249,6 +249,7 @@
   "Cmd.oranda.tools.importSettings": "설정 가져오기",
   "Cmd.oranda.tools.import": "데이터 가져오기(CSV·xlsx)",
   "Cmd.oranda.tools.language": "UI 언어",
+  "Cmd.oranda.tools.roles": "Role·기능 고르기…",
   "Cmd.oranda.mybatis.newStatement": "새 쿼리…",
   "Cmd.oranda.mybatis.renameStatement": "쿼리 id 바꾸기…",
   "Cmd.oranda.mybatis.deleteStatement": "쿼리 지우기",

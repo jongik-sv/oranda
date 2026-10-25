@@ -115,7 +115,7 @@ public sealed class NamedLayoutStore(IAppDataPaths paths, IEnumerable<ISettingsM
 
     private string NewPath(string name)
     {
-        var id = Features.SqlEditor.SqlEditorHost.SlugOf(name);
+        var id = Oranda.App.Features.SqlEditor.SqlEditorHost.SlugOf(name);
         var path = Path.Combine(Directory, id + ".json");
         for (int n = 2; File.Exists(path); n++)
         {

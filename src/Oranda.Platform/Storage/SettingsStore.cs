@@ -109,7 +109,27 @@ internal sealed class SettingsStore : ISettingsStore, IDisposable
         },
         Monitor = s.Monitor with { RefreshSeconds = Math.Clamp(s.Monitor.RefreshSeconds, 2, 60) },
         Workspace = s.Workspace with { AutosaveSeconds = Math.Clamp(s.Workspace.AutosaveSeconds, 1, 10) },
+        Features = NormalizeFeatures(s.Features),
     };
+
+    /// <summary>
+    /// <c>features</c> 섹션(TRD 10.3): 빈 값·중복 제거, 같은 id 가 enabled·disabled 둘 다면 enabled 에서 뺀다(끔이 이김).
+    /// 모르는 id 는 남긴다(다음 버전 기능 id 를 이전 버전이 지우지 않게). roles 의 null(고른 적 없음)과 빈 목록은 구별해 둔다.
+    /// </summary>
+    internal static FeaturesSettings NormalizeFeatures(FeaturesSettings f)
+    {
+        static List<string> Clean(IEnumerable<string> ids) =>
+            [.. ids.Where(id => !string.IsNullOrWhiteSpace(id)).Select(id => id.Trim()).Distinct(StringComparer.Ordinal)];
+
+        var disabled = Clean(f.Disabled);
+        var enabled = Clean(f.Enabled).Where(id => !disabled.Contains(id, StringComparer.Ordinal)).ToList();
+        return new FeaturesSettings
+        {
+            Roles = f.Roles is null ? null : Clean(f.Roles),
+            Enabled = enabled,
+            Disabled = disabled,
+        };
+    }
 
     /// <summary>값이 달라진 섹션의 JSON 이름(<c>SettingsChanged.Section</c>).</summary>
     internal static IReadOnlyList<string> ChangedSections(AppSettings before, AppSettings after)
@@ -134,6 +154,7 @@ internal sealed class SettingsStore : ISettingsStore, IDisposable
         Add(before.Monitor != after.Monitor, "monitor");
         Add(before.Workspace != after.Workspace, "workspace");
         Add(before.SchemaBrowser != after.SchemaBrowser, "schemaBrowser");
+        Add(before.Features != after.Features, FeaturesSettings.SectionName);
         return list;
     }
 }

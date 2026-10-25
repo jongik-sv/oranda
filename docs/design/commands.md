@@ -587,6 +587,7 @@
 | `oranda.tools.import` | 데이터 가져오기(CSV·xlsx) | - | 전역 | `hasSession && !readOnlySession` | TSK-06-07 |
 | `oranda.tools.tableSpec` | 테이블 정의서… | - | 전역 | `hasSession` | TSK-13-06 |
 | `oranda.tools.language` | UI 언어 | - | 전역 | 항상 | TSK-10-02 |
+| `oranda.tools.roles` | Role·기능 고르기…(설정 창 「기능」 탭) | - | 전역 | 항상 | TSK-07-04 (ID·제목 TSK-07-01) |
 
 ### 창
 
