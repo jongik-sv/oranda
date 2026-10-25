@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
+using Oranda.Core.Features;
 using Oranda.Core.Shell;
 
 namespace Oranda.App.Shell.Menus;
@@ -143,6 +144,16 @@ public static class MenuModelBuilder
 
     public const string PanelsSubmenuId = "view.panels";
 
+    /// <summary>
+    /// 기능에 매인 최상위 메뉴(TRD 10.7.1): 이 기능이 하나도 켜져 있지 않으면 공통 명령이 남아 있어도 메뉴를 그리지 않는다.
+    /// 튜닝 메뉴에는 공통인 예상·실제 계획(D-004)이 같이 놓여 있어(SQL 메뉴에도 있다) 비지 않으므로, 조회 전용만 고르면 「튜닝」 이 남는 것을 막는다.
+    /// </summary>
+    public static readonly IReadOnlyDictionary<string, IReadOnlyList<string>> TopMenuFeatures = new Dictionary<string, IReadOnlyList<string>>(StringComparer.Ordinal)
+    {
+        ["monitor"] = [FeatureIds.SessionMonitor, FeatureIds.LockMonitor, FeatureIds.SqlMonitor],
+        ["tuning"] = [.. FeatureCatalog.Features.Where(f => f.Group == FeatureGroup.Tuning).Select(f => f.Id)],
+    };
+
     /// <summary>편집 메뉴 안에서 탐색 명령 묶음이 시작하는 순서(편집 명령은 이보다 작다).</summary>
     private const int NavigateOffset = 10000;
 
@@ -153,7 +164,8 @@ public static class MenuModelBuilder
         IEnumerable<CommandDefinition> commands,
         IShellText text,
         Func<string, string?> shortcut,
-        IEnumerable<ToolPanelDefinition> panels)
+        IEnumerable<ToolPanelDefinition> panels,
+        Func<string, bool>? isFeatureEnabled = null)
     {
         var roots = TopMenus.ToDictionary(id => id, id => new List<(Placement P, MenuNode N)>(), StringComparer.Ordinal);
         var commandList = commands as IReadOnlyList<CommandDefinition> ?? [.. commands];
@@ -215,6 +227,14 @@ public static class MenuModelBuilder
             if (id == "view")
             {
                 children = [.. children, .. PanelToggles(panels, text)];
+            }
+
+            // 기능 게이트를 받으면(주 창) 놓인 명령이 하나도 없는 최상위 메뉴, 매인 기능이 모두 꺼진 최상위 메뉴는 그리지 않는다(TRD 10.7.1).
+            // When 으로 잠시 숨는 항목만 있는 메뉴는 남기고 EmptyText 를 보인다. 게이트가 없으면 11개를 늘 그린다(기존 동작).
+            if (isFeatureEnabled is not null
+                && (children.Count == 0 || (TopMenuFeatures.TryGetValue(id, out var features) && !features.Any(isFeatureEnabled))))
+            {
+                continue;
             }
 
             bar.Add(new MenuNode(MenuNodeKind.Submenu, text.Lookup($"Menu.{id}"), 0)

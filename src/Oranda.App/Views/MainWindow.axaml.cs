@@ -38,6 +38,7 @@ public partial class MainWindow : Window
     private IToolPanelRegistry? _panels;
     private ContextKeyService? _keys;
     private KeymapService? _keymap;
+    private Oranda.Core.Features.IFeatureGate? _features;
     private MenuControls? _controls;
     private KeyDispatcher? _dispatcher;
     private OptionTextGuard? _optionText;
@@ -111,6 +112,7 @@ public partial class MainWindow : Window
         _panels = services.GetRequiredService<IToolPanelRegistry>();
         _keys = services.GetRequiredService<ContextKeyService>();
         _keymap = services.GetRequiredService<KeymapService>();
+        _features = services.GetService<Oranda.Core.Features.IFeatureGate>();
         Features.GridEdit.EditModeKey.Install(() => _keymap?.ShortcutText(Features.GridEdit.EditModeKey.CommandId));
 
         _viewModel = (MainViewModel)services.Create(typeof(MainViewModel));
@@ -201,7 +203,7 @@ public partial class MainWindow : Window
         ApplyStaticText();
         RebuildMenus();
         ShellCommandRunner.Runner = id => _registry is null || _keys is null ? Task.CompletedTask : _registry.ExecuteAsync(id, _keys);
-        DataTemplates.Add(StartPage.HostTemplate(() => new StartPage(_registry, _keys, _shell.Text, _keymap.ShortcutText, services.GetService<Features.RecentFiles.RecentFilesService>())));
+        DataTemplates.Add(StartPage.HostTemplate(() => new StartPage(_registry, _keys, _shell.Text, _keymap.ShortcutText, services.GetService<Features.RecentFiles.RecentFilesService>(), services)));
         _shell.Docking.EmptyDocumentContent = () => StartPageContent.Instance; // 화면은 위 템플릿이 문서 영역 호스트마다 새로 만든다
         ShellContextMenus.Factory = surface =>
             _controls is null || _registry is null || _keymap is null || _shell is null
@@ -230,6 +232,9 @@ public partial class MainWindow : Window
         AutomationProperties.SetName(DockHost, text.Lookup("Shell.main.documents"));
     }
 
+    // 기능에 매인 최상위 메뉴(튜닝·모니터)를 그릴지 게이트에 묻는다. 게이트가 없으면 모두 켬.
+    private bool IsFeatureEnabled(string featureId) => _features?.IsEnabled(featureId) ?? true;
+
     /// <summary>레지스트리·키맵으로 메뉴 막대와 툴바를 다시 만든다.</summary>
     internal void RebuildMenus()
     {
@@ -239,7 +244,7 @@ public partial class MainWindow : Window
         }
 
         var text = _shell.Text;
-        var bar = MenuModelBuilder.BuildMenuBar(_registry.Commands, text, _keymap.ShortcutText, _panels.Panels);
+        var bar = MenuModelBuilder.BuildMenuBar(_registry.Commands, text, _keymap.ShortcutText, _panels.Panels, IsFeatureEnabled);
         if (UseNativeMenu)
         {
             // 시스템 메뉴 막대가 메뉴를 맡는다. 창 안 메뉴는 숨기고 키보드 이동(Tab·Alt)에서도 뺀다.
@@ -284,7 +289,7 @@ public partial class MainWindow : Window
         var root = _controls.CreateNativeRoot(() => host.FocusManager?.GetFocusedElement());
         NativeMenu.SetMenu(host, root);
         _floatMenus.Add((host, root));
-        _controls.FillNativeMenu(root, MenuModelBuilder.BuildMenuBar(_registry.Commands, _shell.Text, _keymap.ShortcutText, _panels.Panels));
+        _controls.FillNativeMenu(root, MenuModelBuilder.BuildMenuBar(_registry.Commands, _shell.Text, _keymap.ShortcutText, _panels.Panels, IsFeatureEnabled));
         _controls.RefreshEnablement();
         host.Closed += (_, _) =>
         {

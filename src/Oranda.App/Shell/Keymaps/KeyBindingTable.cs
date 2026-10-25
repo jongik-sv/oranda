@@ -46,8 +46,11 @@ public sealed class KeyBindingTable
         return new KeyBindingTable(entries);
     }
 
-    /// <summary>입력한 제스처들(최대 2단)과 맞는 바인딩을 찾는다.</summary>
-    public KeyMatch Find(IReadOnlyList<(Key Key, KeyModifiers Modifiers)> typed, IContextKeys keys)
+    /// <summary>
+    /// 입력한 제스처들(최대 2단)과 맞는 바인딩을 찾는다. <paramref name="available"/> 이 거짓인 명령(기능 게이트가 끈 명령, TRD 10.7.1)의
+    /// 바인딩은 없는 것으로 본다 — 키는 그대로 흘려보내고 같은 키의 다른 바인딩이 이긴다. 키맵 파일의 묶음은 지우지 않는다.
+    /// </summary>
+    public KeyMatch Find(IReadOnlyList<(Key Key, KeyModifiers Modifiers)> typed, IContextKeys keys, Func<string, bool>? available = null)
     {
         ArgumentNullException.ThrowIfNull(keys);
         Entry? exact = null;
@@ -55,6 +58,11 @@ public sealed class KeyBindingTable
         foreach (var e in _entries)
         {
             if (e.Chord.Count < typed.Count || !Same(e.Chord, typed))
+            {
+                continue;
+            }
+
+            if (available is not null && !available(e.Command))
             {
                 continue;
             }

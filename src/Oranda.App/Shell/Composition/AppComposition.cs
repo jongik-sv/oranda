@@ -49,7 +49,7 @@ public static class AppComposition
         // 실행 정책(Core 구현, 스캔 대상 아님). 첫 SQL 실행 때만 등록하면 그 전에 실행 엔진이 필요한 기능
         // (세션 모니터·실행 계획·DB 정보 등)이 「생성자 인자를 해석할 수 없다」로 실패한다.
         container.AddType(typeof(Oranda.Core.Execution.IExecutionPolicy), typeof(Oranda.Core.Execution.ExecutionPolicy));
-        container.AddType(typeof(Oranda.Core.Features.IFeatureGate), typeof(Features.FeatureGate)); // 기능 게이트(WP-07). 틀은 모두 켬
+        container.AddType(typeof(Oranda.Core.Features.IFeatureGate), typeof(Features.FeatureGate)); // 기능 게이트(WP-07). 설정 읽기 전에는 모두 켬
         container.AddAssembly(typeof(PlatformAssembly).Assembly);
         container.AddAssembly(typeof(AppComposition).Assembly); // 앱 어셈블리의 [OrandaService](편집기 문맥·시작 작업 등)
         foreach (var name in DeferredAssemblies)
@@ -65,8 +65,9 @@ public static class AppComposition
         // 2) 셸 기여(명령·도구 창·상태 표시줄 구간) 수집과 레지스트리.
         var contributions = ShellContributions.Scan(typeof(AppComposition).Assembly);
         container.AddInstance(contributions);
-        container.AddFactory(typeof(ICommandRegistry), c => new CommandRegistry(contributions.Commands, c.Create));
-        container.AddFactory(typeof(IToolPanelRegistry), _ => new ToolPanelRegistry(contributions.Panels, options.DevBuild));
+        // 레지스트리는 설정보다 먼저 생긴다(게이트는 그때 모두 켬). 설정을 읽은 뒤 게이트가 해석하면 거른 스냅숏을 다시 계산한다(TRD 10.6).
+        container.AddFactory(typeof(ICommandRegistry), c => new CommandRegistry(contributions.Commands, c.Create, c.GetService<Oranda.Core.Features.IFeatureGate>()));
+        container.AddFactory(typeof(IToolPanelRegistry), c => new ToolPanelRegistry(contributions.Panels, options.DevBuild, c.GetService<Oranda.Core.Features.IFeatureGate>()));
         container.AddFactory(typeof(IStatusBarRegistry), _ => new StatusBarRegistry(contributions.StatusBarItems));
 
         // 3) 셸 서비스.

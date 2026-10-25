@@ -7,7 +7,7 @@ using Oranda.Core.Shell;
 namespace Oranda.App.Shell;
 
 /// <summary>
-/// 문맥 키 저장소와 식 계산기(commands.md 2.2). 식 문법: 이름, <c>!</c>, <c>&amp;&amp;</c>, <c>||</c>, 괄호.
+/// 문맥 키 저장소와 식 계산기(commands.md 2.2). 식 문법: 이름(글자·숫자·<c>_</c>·<c>.</c>), <c>!</c>, <c>&amp;&amp;</c>, <c>||</c>, 괄호.
 /// 모르는 이름은 거짓. 상태 키는 <see cref="Set"/>, 포커스 키는 <see cref="SetFocusSlot"/> 으로 바꾼다
 /// (포커스 자리는 한 순간에 하나만 참, <see cref="FocusScopes"/>).
 /// </summary>
@@ -64,6 +64,26 @@ public sealed class ContextKeyService : IContextKeys
         lock (_gate)
         {
             changed = value ? _keys.Add(key) : _keys.Remove(key);
+        }
+
+        if (changed)
+        {
+            Changed?.Invoke(this, EventArgs.Empty);
+        }
+    }
+
+    /// <summary>여러 상태 키를 한 번에 바꾼다. 하나라도 바뀌었으면 <see cref="Changed"/> 를 한 번만 낸다(기능 게이트의 <c>feature.*</c> 키).</summary>
+    public void SetMany(IEnumerable<(string Key, bool Value)> values)
+    {
+        ArgumentNullException.ThrowIfNull(values);
+        var changed = false;
+        lock (_gate)
+        {
+            foreach (var (key, value) in values)
+            {
+                ArgumentException.ThrowIfNullOrWhiteSpace(key);
+                changed |= value ? _keys.Add(key) : _keys.Remove(key);
+            }
         }
 
         if (changed)
@@ -177,7 +197,8 @@ public sealed class ContextKeyService : IContextKeys
 
             SkipSpace();
             var start = _pos;
-            while (_pos < text.Length && (char.IsLetterOrDigit(text[_pos]) || text[_pos] == '_'))
+            // 점은 이름의 일부다(기능 키 feature.<id>, TRD 10.6).
+            while (_pos < text.Length && (char.IsLetterOrDigit(text[_pos]) || text[_pos] is '_' or '.'))
             {
                 _pos++;
             }

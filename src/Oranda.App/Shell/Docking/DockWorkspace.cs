@@ -203,7 +203,7 @@ public sealed partial class DockWorkspace
 
     private void ApplyCore(LayoutDocument layout)
     {
-        var planned = LayoutPlanner.Reconcile(layout, _registry.Panels);
+        var planned = LayoutPlanner.Reconcile(layout, PlanningPanels());
         _migrations = planned.Migrations;
         var keepDocuments = Layout is null ? [] : Documents.Concat(FloatingDocuments()).ToList(); // 떠 있던 문서도 메인 문서 영역으로 들인다
         var active = ActiveDocument; // 옛 영역에서 문서를 빼기 전에 읽는다(뺀 뒤에는 탭 줄이 남은 탭을 활성으로 써 넣어 다른 문서가 된다)
@@ -289,7 +289,7 @@ public sealed partial class DockWorkspace
             }
         }
 
-        var current = LayoutPlanner.Reconcile(Capture(), _registry.Panels);
+        var current = LayoutPlanner.Reconcile(Capture(), PlanningPanels());
         _showingTool = toolId;
         try
         {
@@ -315,7 +315,7 @@ public sealed partial class DockWorkspace
             return false;
         }
 
-        var current = LayoutPlanner.Reconcile(Capture(), _registry.Panels);
+        var current = LayoutPlanner.Reconcile(Capture(), PlanningPanels());
         Apply(LayoutPlanner.HideTool(current, toolId));
         return true;
     }
@@ -652,6 +652,38 @@ public sealed partial class DockWorkspace
         }
     }
 
+    /// <summary>
+    /// 배치를 짓고 읽을 때 쓰는 도구 창 목록 = 레지스트리(기능 게이트로 거른 것) + 지금 배치에 떠 있는데 레지스트리에서 빠진 도구 창.
+    /// 실행 중 기능을 꺼도 이미 열린 도구 창은 닫지 않는다(D-010, TRD 10.6). 사용자가 닫거나 다음 실행이면 빠진다.
+    /// 다시 켠 도구 창은 레지스트리로 돌아와 기본 위치 규칙(<see cref="LayoutPlanner.ShowTool"/>)을 탄다.
+    /// </summary>
+    private IReadOnlyList<ToolPanelDefinition> PlanningPanels()
+    {
+        var panels = _registry.Panels;
+        if (Layout is null)
+        {
+            return panels;
+        }
+
+        List<ToolPanelDefinition>? kept = null;
+        foreach (var tool in ToolsInTree(Layout))
+        {
+            if (_registry.Find(tool.Definition.Id) is null && (kept is null || !kept.Contains(tool.Definition)))
+            {
+                (kept ??= []).Add(tool.Definition);
+            }
+        }
+
+        return kept is null ? panels : [.. panels, .. kept];
+    }
+
+    private static IEnumerable<PanelTool> ToolsInTree(IDockable dockable) => dockable switch
+    {
+        PanelTool tool => [tool],
+        IDock dock => (dock.VisibleDockables ?? []).SelectMany(ToolsInTree),
+        _ => [],
+    };
+
     private PanelTool GetTool(string id)
     {
         if (!_tools.TryGetValue(id, out var tool))
@@ -669,7 +701,7 @@ public sealed partial class DockWorkspace
         _documentsCaptured = false;
         var content = Layout?.VisibleDockables?.FirstOrDefault();
         var node = content is null ? null : CaptureNode(content);
-        return (node is null ? null : LayoutPlanner.Normalize(node, _registry.Panels))
+        return (node is null ? null : LayoutPlanner.Normalize(node, PlanningPanels()))
             ?? new DockNode { Kind = DockNodeKind.Documents };
     }
 

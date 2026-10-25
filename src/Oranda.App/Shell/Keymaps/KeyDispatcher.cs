@@ -83,13 +83,13 @@ public sealed class KeyDispatcher(Func<KeyBindingTable> table, ICommandRegistry 
         }
 
         _pending.Add((key, modifiers));
-        var match = table().Find(_pending, keys);
+        var match = table().Find(_pending, keys, IsAvailable);
         if (match.Kind == KeyMatchKind.None && _pending.Count > 1)
         {
             // 연속 키가 어긋났다. 이 키를 새 첫 단으로 다시 본다.
             _pending.Clear();
             _pending.Add((key, modifiers));
-            match = table().Find(_pending, keys);
+            match = table().Find(_pending, keys, IsAvailable);
         }
 
         if (KeyTrace.Enabled)
@@ -113,6 +113,9 @@ public sealed class KeyDispatcher(Func<KeyBindingTable> table, ICommandRegistry 
                 return false;
         }
     }
+
+    // 기능 게이트가 끈 명령의 키는 삼키지 않는다(같은 키의 다른 바인딩이 이긴다). 미등록 명령은 지금처럼 삼키고 기록만 남긴다.
+    private bool IsAvailable(string commandId) => registry is not CommandRegistry r || !r.IsFeatureDisabled(commandId);
 
     /// <summary>키 입력으로 실행한 명령이 끝날 때까지 기다리고 싶은 시험이 쓴다.</summary>
     public Task? LastRun { get; private set; }

@@ -10,12 +10,14 @@ using Avalonia.Threading;
 using Oranda.App.Features.Localization;
 using Oranda.App.Shell.Appearance;
 using Oranda.App.Shell.Docking;
+using Oranda.App.Shell.Features;
 using Oranda.App.Shell.Keymaps;
 using Oranda.App.Shell.Layout;
 using Oranda.App.Shell.Palette;
 using Oranda.App.Shell.Settings;
 using Oranda.Core.Connection;
 using Oranda.Core.Events;
+using Oranda.Core.Features;
 using Oranda.Core.Shell;
 
 namespace Oranda.App.Shell;
@@ -32,6 +34,12 @@ public interface IShellUi
     void ShowCommandPalette();
 
     void ShowSettings();
+
+    /// <summary>
+    /// 설정 창을 열기 전에 <paramref name="prepare"/> 로 ViewModel 을 손본다(예: 「기능」 탭 고르기 — <c>oranda.tools.roles</c>, TSK-07-04).
+    /// 기본 구현은 그냥 연다(시험용 가짜가 고치지 않아도 되게).
+    /// </summary>
+    void ShowSettings(Action<SettingsViewModel>? prepare) => ShowSettings();
 
     void ShowAbout();
 
@@ -63,6 +71,7 @@ public sealed class ShellController : IShellUi
     private readonly ILayoutStore _layoutStore;
     private readonly KeymapService _keymap;
     private readonly ThemeService _theme;
+    private readonly IFeatureGate? _features;
     private readonly List<string> _recent = [];
     private readonly List<Func<CancellationToken, Task>> _shutdownHooks = [];
     private CommandPaletteWindow? _palette;
@@ -78,7 +87,8 @@ public sealed class ShellController : IShellUi
         DockWorkspace docking,
         KeymapService keymap,
         ThemeService theme,
-        IEventBus events)
+        IEventBus events,
+        IFeatureGate? features = null)
     {
         _registry = registry;
         _keys = keys;
@@ -90,6 +100,7 @@ public sealed class ShellController : IShellUi
         Docking = docking;
         _keymap = keymap;
         _theme = theme;
+        _features = features;
         docking.ActiveDocumentChanged += (_, _) => UpdateDocumentKeys();
         docking.LayoutRebuilt += (_, _) => UpdateDocumentKeys();
         events.Subscribe<SettingsChanged>(this, e =>
@@ -172,10 +183,13 @@ public sealed class ShellController : IShellUi
     /// <summary>
     /// 설정·레이아웃 파일을 읽는다(디스크 읽기만, 화면을 건드리지 않는다). 첫 프레임 전에 부를 때는
     /// UI 스레드가 막혀 있어도 되도록 <see cref="Task.Run(Func{Task})"/> 안에서 기다린다.
+    /// 설정을 읽은 직후 기능 게이트를 처음 해석시킨다(= 앱 시작 때 값, D-005): 레지스트리가 거른 스냅숏을 다시 계산하므로
+    /// 뒤따르는 <see cref="Initialize"/>(도킹)·주 창 Attach(메뉴)·시작 작업이 해석된 값을 본다. 이 해석은 부른 스레드(스레드 풀)에서 난다.
     /// </summary>
     public async Task<ShellLoadResult> LoadAsync(CancellationToken ct = default)
     {
         await Settings.LoadAsync(ct).ConfigureAwait(false);
+        (_features as FeatureGate)?.Resolve(Settings.Current.Features);
         var stored = await _layoutStore.LoadAsync(ct).ConfigureAwait(false);
         return new ShellLoadResult(stored.Value, stored.Notice);
     }
@@ -251,10 +265,14 @@ public sealed class ShellController : IShellUi
         Present(window, modal: false);
     }
 
-    public void ShowSettings()
+    public void ShowSettings() => ShowSettings(prepare: null);
+
+    public void ShowSettings(Action<SettingsViewModel>? prepare)
     {
         var fonts = FontManager.Current.SystemFonts.Select(f => f.Name);
-        var window = new SettingsWindow { DataContext = new SettingsViewModel(Settings, _text, fonts) };
+        var vm = new SettingsViewModel(Settings, _text, fonts, featureGate: _features); // 「기능」 탭의 재시작 안내는 이 셸의 게이트를 본다
+        prepare?.Invoke(vm);
+        var window = new SettingsWindow { DataContext = vm };
         Present(window, modal: true);
     }
 

@@ -154,7 +154,7 @@
                 IsVisible="{Binding CanOpenChildCursors}" IsEnabled="{Binding HasSelectedSql}" ToolTip.ShowOnDisabled="True"
                 ToolTip.Tip="고른 sql_id 의 자식 커서와 따로 생긴 사유를 문서 탭으로 엽니다(gv$sql, 읽기만)" />
         <Button x:Name="TuningReportButton" Classes="tool" Content="튜닝 보고서…" icons:ButtonIcon.Key="exportFile"
-                IsEnabled="{Binding HasSelectedSql}" ToolTip.ShowOnDisabled="True"
+                IsVisible="{Binding CanOpenTuningReport}" IsEnabled="{Binding HasSelectedSql}" ToolTip.ShowOnDisabled="True"
                 ToolTip.Tip="고른 sql_id 의 계획·통계·커서·후보를 HTML 파일 하나로 만듭니다(SELECT 만, DB 에 쓰지 않습니다)" />
         <Separator Classes="toolbar" />
         <Button x:Name="AdvisorScriptButton" Classes="tool" Content="Tuning Advisor 스크립트" icons:ButtonIcon.Key="docEdit"
