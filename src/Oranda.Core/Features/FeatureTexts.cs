@@ -16,24 +16,63 @@ public static class FeatureTexts
     /// <summary>묶음 이름 키 머리(<c>FeatureGroup.DevAssist</c>). <see cref="FeatureCatalog.GroupNameKey"/>.</summary>
     public const string GroupNamePrefix = "FeatureGroup.";
 
-    // ---- 설정 창 「기능」 탭 (TSK-07-04) ----
+    // ---- 설정 창 「기능」 탭 (TSK-07-04, TSK-09-08) ----
 
     /// <summary>기능</summary>
     public const string SettingsTab = "Features.tab";
 
-    /// <summary>Role 목록</summary>
-    public const string SettingsRoles = "Features.roles";
+    /// <summary>주 업무  (라디오 묶음 제목, D-017)</summary>
+    public const string PrimaryTitle = "Features.primary";
 
-    /// <summary>기능 세부</summary>
-    public const string SettingsDetails = "Features.details";
+    /// <summary>모든 기능</summary>
+    public const string PrimaryAll = "Features.primary.all";
 
-    /// <summary>모든 기능 쓰기</summary>
-    public const string ModeAll = "Features.mode.all";
+    /// <summary>모든 기능의 한 줄 설명(다른 주 업무는 Role 설명을 쓴다)</summary>
+    public const string PrimaryAllDesc = "Features.primary.all.desc";
 
-    /// <summary>Role 로 고르기</summary>
-    public const string ModeRoles = "Features.mode.roles";
+    /// <summary>SQL 개발</summary>
+    public const string PrimarySqlDev = "Features.primary.sqlDev";
 
-    /// <summary>Role 기본</summary>
+    /// <summary>튜닝</summary>
+    public const string PrimaryTuner = "Features.primary.tuner";
+
+    /// <summary>운영 DBA</summary>
+    public const string PrimaryDba = "Features.primary.dba";
+
+    /// <summary>조회만</summary>
+    public const string PrimaryViewer = "Features.primary.viewer";
+
+    /// <summary>지금 조합: {0}(그대로 두기)  ({0} = Role 이름 목록)</summary>
+    public const string PrimaryCustom = "Features.primary.custom";
+
+    /// <summary>Role 없음  (위 줄의 {0}, roles = [] 일 때)</summary>
+    public const string PrimaryCustomNone = "Features.primary.customNone";
+
+    /// <summary>함께 하는 일  (덧붙임 확인란 묶음 제목)</summary>
+    public const string AddonTitle = "Features.addon";
+
+    /// <summary>PL/SQL 패키지·프로시저도 고친다  (= plsqlDev)</summary>
+    public const string AddonPlsql = "Features.addon.plsql";
+
+    /// <summary>MyBatis 매퍼를 쓴다  (= myBatisDev)</summary>
+    public const string AddonMyBatis = "Features.addon.myBatis";
+
+    /// <summary>모든 기능이라 덧붙임이 흐린 이유</summary>
+    public const string AddonAllIncluded = "Features.addon.allIncluded";
+
+    /// <summary>조회만이라 덧붙임이 흐린 이유</summary>
+    public const string AddonViewerBlocked = "Features.addon.viewerBlocked";
+
+    /// <summary>지금 조합(Custom)이라 덧붙임이 흐린 이유</summary>
+    public const string AddonCustomBlocked = "Features.addon.customBlocked";
+
+    /// <summary>기능 하나씩 켜고 끄기(고급) — 켜진 기능 {0}/{1} · 직접 바꾼 것 {2}개</summary>
+    public const string AdvancedHeader = "Features.advanced";
+
+    /// <summary>접속 관리자 열기  (팩 선언 안내 줄 끝 링크, oranda.conn.manage)</summary>
+    public const string PackLink = "Features.packLink";
+
+    /// <summary>기본값  (주 업무 기본과 같음)</summary>
     public const string StateRoleDefault = "Features.state.roleDefault";
 
     /// <summary>직접 켬</summary>
@@ -42,7 +81,7 @@ public static class FeatureTexts
     /// <summary>직접 끔</summary>
     public const string StateDisabled = "Features.state.disabled";
 
-    /// <summary>Role 기본값으로 되돌리기</summary>
+    /// <summary>기본값으로 되돌리기</summary>
     public const string ResetToRoleDefaults = "Features.reset";
 
     /// <summary>재시작하면 적용됩니다: {0}  ({0} = 기능 이름 목록)</summary>
@@ -51,13 +90,13 @@ public static class FeatureTexts
     /// <summary>{0} 이(가) 켜져 있어야 합니다  ({0} = 기능 이름)</summary>
     public const string RequiresFeature = "Features.requires";
 
-    /// <summary>조회 전용만 고르면 DML·DDL·PL/SQL 실행을 막습니다</summary>
+    /// <summary>조회만이면 DML·DDL·PL/SQL 실행을 막습니다</summary>
     public const string ViewerNotice = "Features.viewerNotice";
 
-    /// <summary>조회 전용만 고른 상태에서는 켤 수 없습니다. 다른 Role 을 함께 고르세요.</summary>
+    /// <summary>조회만에서는 켤 수 없습니다. 다른 주 업무를 고르세요.</summary>
     public const string WritesOnlyBlocked = "Features.writesOnlyBlocked";
 
-    /// <summary>Diagnostics·Tuning Pack 보유 선언은 접속 프로필에서 합니다(D-012)</summary>
+    /// <summary>Diagnostics·Tuning Pack 보유 선언은 접속 프로필에서 합니다(D-012). 끝에 <see cref="PackLink"/> 가 붙는다</summary>
     public const string PackNotice = "Features.packNotice";
 
     // ---- 실행 거부 (TSK-07-05) ----
@@ -112,7 +151,7 @@ public static class FeatureTexts
     /// <summary>위 칸의 도움말: 무엇 때문이고 풀려면 무엇을 하면 되는지</summary>
     public const string StatusViewerRoleTip = "Features.status.viewerRoleTip";
 
-    /// <summary>Role 로 고르기인데 Role 을 하나도 안 골랐다: 무엇이 켜지고 무엇을 하면 되는지 한 줄</summary>
+    /// <summary>지금 조합이 <c>roles: []</c>(Role 0개)다: 무엇이 켜지고 무엇을 하면 되는지 한 줄</summary>
     public const string NoRoleNotice = "Features.noRoleNotice";
 
     /// <summary>아무것도 고른 적 없어 기본 Role(SQL 개발자)로 쓰는 중이다(D-013): 무엇을 고를 수 있는지 한 줄</summary>

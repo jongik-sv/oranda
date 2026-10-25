@@ -355,12 +355,8 @@ public sealed class RoleFallbackFlowTests
             var vm = Assert.IsType<SettingsViewModel>(window.DataContext);
             Assert.Equal(SettingsViewModel.FeaturesTabIndex, vm.SelectedTab);
 
-            // R4 를 더하면 칸 클릭이 Lock 모니터를 연다(메뉴처럼 즉시, 칸은 그대로 — 블로커 알림은 시작 때 켜져 있었다).
-            vm.Features.UseRoles = true;
-            foreach (var r in vm.Features.Roles)
-            {
-                r.IsChecked = r.Id is RoleIds.SqlDev or RoleIds.Tuner;
-            }
+            // 주 업무를 튜닝(R4)으로 바꾸면 칸 클릭이 Lock 모니터를 연다(메뉴처럼 즉시, 칸은 그대로 — 블로커 알림은 시작 때 켜져 있었다).
+            vm.Features.Primary = PrimaryWorkKind.Tuner;
 
             await vm.SaveAsync();
             await HeadlessHost.WaitUntil(() => chip.LockMonitorEnabled);

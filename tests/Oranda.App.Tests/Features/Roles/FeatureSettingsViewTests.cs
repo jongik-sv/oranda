@@ -1,5 +1,6 @@
 using Avalonia;
 using Avalonia.Controls;
+using Avalonia.Controls.Primitives;
 using Avalonia.Media.Imaging;
 using Avalonia.Styling;
 using Avalonia.Threading;
@@ -20,8 +21,9 @@ using Oranda.Testing;
 namespace Oranda.App.Tests.Features.Roles;
 
 /// <summary>
-/// TSK-07-04 설정 창 「기능」 탭: ViewModel(Role 조합 → 확인란, 직접 켬/끔 최소 기록, 되돌리기, 조회 전용 흐림, Requires, 알 수 없는 id 보존)·
-/// 저장 흐름(SettingsService.UpdateAsync)·재시작 띠·oranda.tools.roles 등록·Headless 렌더(ko/en·라이트/다크).
+/// 설정 창 「기능」 탭(TSK-07-04 → TSK-09-08, D-017): 주 업무 라디오 5개·덧붙임 2개·지금 조합 보존·덧붙임 흐림과 이유, 접힌 「고급」 묶음(요약 숫자),
+/// 직접 켬/끔 최소 기록·되돌리기·조회 전용 흐림·Requires·알 수 없는 id 보존, 팩 선언 바로 가기, 저장 흐름(SettingsService.UpdateAsync)·재시작 띠·
+/// oranda.tools.roles 등록, Headless 렌더(ko/en·라이트/다크, 처음 보이는 입력 칸 10개 이하).
 /// <c>ORANDA_RENDER_DIR</c> 가 있으면 상태별 PNG 를 그 폴더에 쓴다.
 /// </summary>
 [Collection("UiLanguage")]
@@ -29,7 +31,7 @@ public sealed class FeatureSettingsViewTests
 {
     private static readonly ShellText Ko = new ShellText(language: "ko");
 
-    /// <summary>「모든 기능 쓰기」로 저장된 설정(D-013: 설정 없음은 이제 기본 Role SQL 개발자다).</summary>
+    /// <summary>「모든 기능」 으로 저장된 설정(D-013: 설정 없음은 기본 Role SQL 개발자다).</summary>
     private static readonly FeaturesSettings All = new() { AllFeatures = true };
 
     private static async Task<(SettingsService Settings, MemorySettingsStore Store, SettingsViewModel Vm)> Create(
@@ -47,9 +49,9 @@ public sealed class FeatureSettingsViewTests
 
     private static FeatureItem Item(FeatureSettingsPage page, string id) => page.Items.Single(i => i.Id == id);
 
-    private static FeatureRoleItem Role(FeatureSettingsPage page, string id) => page.Roles.Single(r => r.Id == id);
-
     private static IEnumerable<string> Checked(FeatureSettingsPage page) => page.Items.Where(i => i.IsChecked).Select(i => i.Id);
+
+    private static PrimaryWorkKind[] CheckedOptions(FeatureSettingsPage page) => [.. page.PrimaryOptions.Where(o => o.IsChecked).Select(o => o.Kind)];
 
     private static void AssertSet(IEnumerable<string> expected, IEnumerable<string>? actual) =>
         Assert.True(new HashSet<string>(expected).SetEquals(actual ?? []), $"expected [{string.Join(",", expected)}] actual [{string.Join(",", actual ?? [])}]");
@@ -57,29 +59,33 @@ public sealed class FeatureSettingsViewTests
     // ---- 처음 상태 ----
 
     [Fact]
-    public async Task Without_a_features_section_the_tab_shows_the_sql_developer_role_chosen()
+    public async Task Without_a_features_section_the_tab_shows_sql_development_chosen_with_the_default_notice()
     {
-        // D-013: 설정 없음 = 기본 Role(SQL 개발자). 「Role 로 고르기」 + SQL 개발자 확인란이 켜진 채 열린다.
+        // D-013: 설정 없음 = 기본 Role(SQL 개발자). 주 업무 「SQL 개발」 이 골라지고 덧붙임은 꺼진 채 열린다.
         var (_, _, vm) = await Create();
         var page = vm.Features;
 
-        Assert.True(page.UseRoles);
-        Assert.False(page.UseAllFeatures);
-        Assert.True(page.RolesEditable);
+        Assert.Equal(PrimaryWorkKind.SqlDev, page.Primary);
+        Assert.Equal([PrimaryWorkKind.SqlDev], CheckedOptions(page));
+        Assert.Equal(5, page.PrimaryOptions.Count); // 지금 조합 줄은 맞지 않는 조합일 때만
+        Assert.True(page.AddonsEnabled);
+        Assert.False(page.PlsqlAddon);
+        Assert.False(page.MyBatisAddon);
+        Assert.False(page.HasAddonReason);
         Assert.True(page.IsDefaultRole);
         Assert.True(page.ShowDefaultRoleNotice);
-        Assert.Equal("아직 Role 을 고르지 않아 SQL 개발자 메뉴로 쓰는 중입니다. 다른 Role 이나 「모든 기능 쓰기」를 고를 수 있습니다.", page.DefaultRoleNoticeText);
-        Assert.Equal([RoleIds.SqlDev], page.Roles.Where(r => r.IsChecked).Select(r => r.Id));
-        Assert.All(page.Roles, r => Assert.True(r.CanEdit));
+        Assert.Equal("아직 주 업무를 고르지 않아 SQL 개발자 메뉴로 쓰는 중입니다. 아래에서 다른 주 업무를 고를 수 있습니다.", page.DefaultRoleNoticeText);
         Assert.Equal(25, page.Items.Count);
         AssertSet(FeatureCatalog.RoleDefaults([RoleIds.SqlDev]), Checked(page));
         Assert.All(page.Items, i => Assert.Equal(FeatureState.RoleDefault, i.State));
         Assert.False(page.HasOverrides);
         Assert.False(page.IsViewerOnly);
         Assert.False(page.ShowNoRoleNotice);
+        Assert.False(page.ShowPackNotice);
         Assert.False(page.HasRestartBanner);
         Assert.False(page.IsDirty);
-        Assert.Equal("모든 기능 쓰기", page.ModeAllText);
+        Assert.False(page.IsAdvancedExpanded); // 고급은 접혀 있다(UX-10)
+        Assert.Equal("기능 하나씩 켜고 끄기(고급) — 켜진 기능 10/25 · 직접 바꾼 것 0개", page.AdvancedHeader);
     }
 
     [Fact]
@@ -88,6 +94,7 @@ public sealed class FeatureSettingsViewTests
         // 손대지 않고 저장 = 설정 그대로(여전히 고른 적 없음 → 시작 화면 카드가 남는다).
         var (settings, store, vm) = await Create();
         vm.TabSize = 3;
+        vm.Features.Primary = PrimaryWorkKind.SqlDev; // 이미 골라진 라디오를 다시 눌러도 바뀐 것이 아니다
         await vm.SaveAsync();
         Assert.Equal(new FeaturesSettings(), store.Saved.Features);
         Assert.True(FeatureCatalog.IsUnchosen(settings.Current.Features));
@@ -102,17 +109,16 @@ public sealed class FeatureSettingsViewTests
         Assert.False(store.Saved.Features.AllFeatures);
         Assert.False(FeatureCatalog.IsUnchosen(settings.Current.Features));
 
-        // SQL 개발자를 끄면 빈 Role 목록(공통만)이다 — 기본값으로 돌아가지 않는다.
+        // 덧붙임을 켜면 [주 업무, 덧붙임].
         (_, store, vm) = await Create();
-        Role(vm.Features, RoleIds.SqlDev).IsChecked = false;
-        Assert.True(vm.Features.ShowNoRoleNotice);
+        vm.Features.PlsqlAddon = true;
+        Assert.False(vm.Features.ShowDefaultRoleNotice);
         await vm.SaveAsync();
-        Assert.NotNull(store.Saved.Features.Roles);
-        Assert.Empty(store.Saved.Features.Roles!);
+        Assert.Equal([RoleIds.SqlDev, RoleIds.PlsqlDev], store.Saved.Features.Roles);
 
-        // 「모든 기능 쓰기」 는 allFeatures 로 따로 저장된다.
+        // 「모든 기능」 은 allFeatures 로 따로 저장된다.
         (_, store, vm) = await Create();
-        vm.Features.UseAllFeatures = true;
+        vm.Features.Primary = PrimaryWorkKind.All;
         Assert.All(vm.Features.Items, i => Assert.True(i.IsChecked, i.Id));
         await vm.SaveAsync();
         Assert.True(store.Saved.Features.AllFeatures);
@@ -121,35 +127,43 @@ public sealed class FeatureSettingsViewTests
     }
 
     [Fact]
-    public async Task A_saved_use_all_features_opens_in_all_features_mode_without_the_default_notice()
+    public async Task A_saved_use_all_features_opens_on_all_with_the_addons_dimmed_as_included()
     {
         var (_, _, vm) = await Create(All);
         var page = vm.Features;
 
-        Assert.False(page.UseRoles);
-        Assert.True(page.UseAllFeatures);
-        Assert.False(page.RolesEditable);
+        Assert.Equal(PrimaryWorkKind.All, page.Primary);
+        Assert.Equal([PrimaryWorkKind.All], CheckedOptions(page));
         Assert.False(page.IsDefaultRole);
         Assert.False(page.ShowDefaultRoleNotice);
-        Assert.All(page.Roles, r => Assert.False(r.IsChecked));
-        Assert.All(page.Roles, r => Assert.False(r.CanEdit)); // 모든 기능 쓰기에서는 Role 확인란을 못 고친다
+        Assert.False(page.AddonsEnabled);
+        Assert.True(page.PlsqlAddon); // 이미 들어 있어 켜져 보인다
+        Assert.True(page.MyBatisAddon);
+        Assert.Equal("모든 기능에 이미 들어 있습니다", page.AddonReason);
         Assert.All(page.Items, i => Assert.True(i.IsChecked, i.Id));
         Assert.All(page.Items, i => Assert.Equal(FeatureState.RoleDefault, i.State));
         Assert.False(page.HasOverrides);
         Assert.False(page.IsDirty);
+        Assert.Equal("기능 하나씩 켜고 끄기(고급) — 켜진 기능 25/25 · 직접 바꾼 것 0개", page.AdvancedHeader);
+
+        // 흐린 덧붙임을 눌러도 바뀌지 않는다.
+        page.PlsqlAddon = false;
+        Assert.True(page.PlsqlAddon);
+        Assert.False(page.IsDirty);
     }
 
     [Fact]
-    public async Task A_legacy_all_features_file_with_a_disabled_feature_opens_in_all_features_mode_and_saves_the_flag()
+    public async Task A_legacy_all_features_file_with_a_disabled_feature_opens_on_all_and_saves_the_flag()
     {
         // D-013 전 「모든 기능 쓰기」 + 직접 끔(roles 없음).
         var (_, store, vm) = await Create(new FeaturesSettings { Disabled = [FeatureIds.Trace] });
         var page = vm.Features;
 
-        Assert.True(page.UseAllFeatures);
+        Assert.Equal(PrimaryWorkKind.All, page.Primary);
         Assert.False(page.ShowDefaultRoleNotice);
         Assert.False(Item(page, FeatureIds.Trace).IsChecked);
         Assert.Equal(FeatureState.Disabled, Item(page, FeatureIds.Trace).State);
+        Assert.Equal(1, page.OverrideCount);
 
         Item(page, FeatureIds.DbTools).IsChecked = false;
         await vm.SaveAsync();
@@ -158,44 +172,58 @@ public sealed class FeatureSettingsViewTests
     }
 
     [Fact]
-    public async Task Groups_and_items_come_from_the_catalog_in_group_order_with_localized_names()
+    public async Task Choices_groups_and_items_come_from_the_catalog_with_localized_names()
     {
         var (_, _, vm) = await Create();
         var page = vm.Features;
+
+        Assert.Equal(["모든 기능", "SQL 개발", "튜닝", "운영 DBA", "조회만"], page.PrimaryOptions.Select(o => o.Name));
+        Assert.Equal(PrimaryWork.Choices, page.PrimaryOptions.Select(o => o.Kind));
+        Assert.All(page.PrimaryOptions, o => Assert.True(o.HasDescription, o.Name));
+        Assert.Equal("느린 SQL 찾기·계획·통계·트레이스·보고서", page.PrimaryOptions[2].Description); // 튜닝 = DB 튜너 Role 설명
+        Assert.Equal("튜닝 - 느린 SQL 찾기·계획·통계·트레이스·보고서", page.PrimaryOptions[2].AccessibleName);
+        Assert.Equal("주 업무", page.PrimaryTitle);
+        Assert.Equal("함께 하는 일", page.AddonTitle);
+        Assert.Equal("PL/SQL 패키지·프로시저도 고친다", page.PlsqlAddonText);
+        Assert.Equal("MyBatis 매퍼를 쓴다", page.MyBatisAddonText);
+        Assert.Equal("패키지·프로시저 편집·컴파일·실행", page.PlsqlAddonTip);
 
         Assert.Equal(Enum.GetValues<FeatureGroup>().Length, page.Groups.Count);
         Assert.Equal(["개발 보조", "PL/SQL 개발", "MyBatis 개발", "튜닝", "운영"], page.Groups.Select(g => g.Name));
         Assert.Equal(FeatureCatalog.Features.Count(f => f.Group == FeatureGroup.Tuning), page.Groups[3].Items.Count);
         Assert.Equal(FeatureIds.All.Order(), page.Items.Select(i => i.Id).Order());
         Assert.All(page.Items, i => Assert.DoesNotContain("Feature.", i.Name)); // 문구 키가 그대로 보이지 않는다
-        Assert.All(page.Roles, r => Assert.DoesNotContain("Role.", r.Name));
-        Assert.All(page.Roles, r => Assert.False(string.IsNullOrWhiteSpace(r.Description)));
+        Assert.All(page.PrimaryOptions, o => Assert.DoesNotContain("Features.", o.Name + o.Description));
         Assert.Equal("그리드 편집", Item(page, FeatureIds.GridEdit).Name);
-        Assert.Equal("DB 튜너", Role(page, RoleIds.Tuner).Name);
+        Assert.Equal("기본값으로 되돌리기", page.ResetText);
     }
 
     [Fact]
     public async Task English_text_is_used_when_the_language_is_english()
     {
-        var (_, _, vm) = await Create(text: new ShellText(language: "en"));
+        var (_, _, vm) = await Create(new FeaturesSettings { Roles = [RoleIds.Tuner, RoleIds.Dba] }, text: new ShellText(language: "en"));
         var page = vm.Features;
 
+        static bool Hangul(string s) => s.Any(c => c is >= '가' and <= '힣');
         Assert.NotEqual("기능", page.TabTitle);
-        Assert.DoesNotContain(page.Items, i => i.Name.Any(c => c is >= '가' and <= '힣'));
-        Assert.DoesNotContain(page.Roles, r => (r.Name + r.Description).Any(c => c is >= '가' and <= '힣'));
-        Assert.DoesNotContain(page.Groups, g => g.Name.Any(c => c is >= '가' and <= '힣'));
-        Assert.DoesNotContain(page.ResetText, c => c is >= '가' and <= '힣');
+        Assert.DoesNotContain(page.Items, i => Hangul(i.Name));
+        Assert.DoesNotContain(page.PrimaryOptions, o => Hangul(o.Name + o.Description));
+        Assert.DoesNotContain(page.Groups, g => Hangul(g.Name));
+        Assert.False(Hangul(page.ResetText + page.AdvancedHeader + page.PrimaryTitle + page.AddonTitle + page.PlsqlAddonText + page.MyBatisAddonText
+            + page.AddonReason + page.PackNoticeText + page.PackLinkText + page.DefaultRoleNoticeText + page.NoRoleNoticeText));
+        Assert.Equal("Current combination: DB Tuner, Operations DBA (keep as is)", page.PrimaryOptions[^1].Name);
     }
 
     [Fact]
     public async Task Initial_state_follows_a_saved_features_section()
     {
-        var (_, _, vm) = await Create(new FeaturesSettings { Roles = [RoleIds.SqlDev], Enabled = [FeatureIds.Trace], Disabled = [FeatureIds.GridEdit] });
+        var (_, _, vm) = await Create(new FeaturesSettings { Roles = [RoleIds.SqlDev, RoleIds.MyBatisDev], Enabled = [FeatureIds.Trace], Disabled = [FeatureIds.GridEdit] });
         var page = vm.Features;
 
-        Assert.True(page.UseRoles);
-        Assert.True(Role(page, RoleIds.SqlDev).IsChecked);
-        Assert.False(Role(page, RoleIds.Dba).IsChecked);
+        Assert.Equal(PrimaryWorkKind.SqlDev, page.Primary);
+        Assert.False(page.PlsqlAddon);
+        Assert.True(page.MyBatisAddon);
+        Assert.False(page.ShowDefaultRoleNotice);
         Assert.True(Item(page, FeatureIds.Trace).IsChecked);
         Assert.Equal(FeatureState.Enabled, Item(page, FeatureIds.Trace).State);
         Assert.Equal("직접 켬", Item(page, FeatureIds.Trace).StateText);
@@ -204,6 +232,12 @@ public sealed class FeatureSettingsViewTests
         Assert.Equal("직접 끔", Item(page, FeatureIds.GridEdit).StateText);
         Assert.True(page.HasOverrides);
         AssertSet(FeatureCatalog.Resolve(vm.Features.ToSettings()), Checked(page));
+
+        // 접힌 머리의 숫자 = 켜진 기능 수 / 25 · 배지 수.
+        var on = FeatureCatalog.Resolve(vm.Features.ToSettings()).Count;
+        Assert.Equal(on, page.EnabledCount);
+        Assert.Equal(2, page.OverrideCount);
+        Assert.Equal($"기능 하나씩 켜고 끄기(고급) — 켜진 기능 {on}/25 · 직접 바꾼 것 2개", page.AdvancedHeader);
     }
 
     [Fact]
@@ -214,85 +248,244 @@ public sealed class FeatureSettingsViewTests
         Assert.False(Item(vm.Features, FeatureIds.Trace).IsChecked);
     }
 
-    // ---- Role 조합 → 확인란 ----
+    // ---- 주 업무·덧붙임 → 확인란 ----
 
     [Fact]
-    public async Task Choosing_roles_turns_on_the_union_of_their_defaults()
+    public async Task Choosing_a_primary_work_and_addons_turns_on_the_union_of_their_defaults_and_the_header_follows()
     {
         var (_, _, vm) = await Create(All);
         var page = vm.Features;
 
-        page.UseRoles = true;
-        Assert.Empty(Checked(page)); // Role 을 하나도 안 고르면 공통만
-        Assert.True(page.RolesEditable);
-        Assert.All(page.Roles, r => Assert.True(r.CanEdit));
-
-        Role(page, RoleIds.SqlDev).IsChecked = true;
+        page.Primary = PrimaryWorkKind.SqlDev;
+        Assert.True(page.AddonsEnabled);
+        Assert.False(page.PlsqlAddon); // 모든 기능에서 보이던 「포함」 표시는 고른 값이 아니다
         AssertSet(FeatureCatalog.RoleDefaults([RoleIds.SqlDev]), Checked(page));
+        Assert.Equal("기능 하나씩 켜고 끄기(고급) — 켜진 기능 10/25 · 직접 바꾼 것 0개", page.AdvancedHeader);
 
-        Role(page, RoleIds.MyBatisDev).IsChecked = true;
+        page.MyBatisAddon = true;
         AssertSet(FeatureCatalog.RoleDefaults([RoleIds.SqlDev, RoleIds.MyBatisDev]), Checked(page));
         Assert.True(Item(page, FeatureIds.MyBatis).IsChecked);
         Assert.False(Item(page, FeatureIds.Trace).IsChecked);
+        Assert.Equal(FeatureCatalog.RoleDefaults([RoleIds.SqlDev, RoleIds.MyBatisDev]).Count, page.EnabledCount);
 
-        page.UseAllFeatures = true; // 다시 모든 기능
+        page.Primary = PrimaryWorkKind.Tuner; // 덧붙임은 주 업무를 바꿔도 남는다
+        AssertSet(FeatureCatalog.RoleDefaults([RoleIds.Tuner, RoleIds.MyBatisDev]), Checked(page));
+
+        page.Primary = PrimaryWorkKind.All; // 다시 모든 기능
         Assert.All(page.Items, i => Assert.True(i.IsChecked, i.Id));
     }
 
     [Fact]
-    public async Task Adding_the_tuner_role_and_saving_writes_it_to_features_roles()
+    public async Task Sql_development_with_plsql_saves_exactly_those_two_roles_and_all_features_saves_the_flag()
     {
-        var (_, store, vm) = await Create(new FeaturesSettings { Roles = [RoleIds.SqlDev] });
+        // 인수조건: 「SQL 개발」 + PL/SQL 저장 → features.roles = ["sqlDev","plsqlDev"], 「모든 기능」 → allFeatures: true.
+        var (_, store, vm) = await Create(new FeaturesSettings { Roles = [RoleIds.Dba] });
         var closed = false;
         vm.CloseRequested += (_, _) => closed = true;
 
-        Role(vm.Features, RoleIds.Tuner).IsChecked = true;
+        vm.Features.Primary = PrimaryWorkKind.SqlDev;
+        vm.Features.PlsqlAddon = true;
         await vm.SaveAsync();
 
-        Assert.Equal([RoleIds.SqlDev, RoleIds.Tuner], store.Saved.Features.Roles); // 카탈로그 순서
+        Assert.Equal([RoleIds.SqlDev, RoleIds.PlsqlDev], store.Saved.Features.Roles);
+        Assert.False(store.Saved.Features.AllFeatures);
         Assert.Empty(store.Saved.Features.Enabled);
         Assert.Empty(store.Saved.Features.Disabled);
         Assert.True(closed);
-    }
 
-    [Fact]
-    public async Task Choosing_all_features_saves_roles_as_null()
-    {
-        var (_, store, vm) = await Create(new FeaturesSettings { Roles = [RoleIds.Dba] });
-
-        vm.Features.UseAllFeatures = true;
+        (_, store, vm) = await Create(new FeaturesSettings { Roles = [RoleIds.Dba] });
+        vm.Features.Primary = PrimaryWorkKind.All;
         await vm.SaveAsync();
-
         Assert.Null(store.Saved.Features.Roles);
         Assert.True(store.Saved.Features.AllFeatures); // D-013: 설정 없음(기본 Role)과 구별해 저장
     }
 
     [Fact]
-    public async Task Choosing_roles_but_none_saves_an_empty_roles_list()
+    public async Task Addon_choices_are_remembered_while_they_are_dimmed()
     {
-        var (_, store, vm) = await Create(All);
+        var (_, store, vm) = await Create(new FeaturesSettings { Roles = [RoleIds.Dba, RoleIds.PlsqlDev] });
+        var page = vm.Features;
+        Assert.True(page.PlsqlAddon);
 
-        vm.Features.UseRoles = true;
+        page.Primary = PrimaryWorkKind.Viewer;
+        Assert.False(page.PlsqlAddon); // 조회만에서는 꺼져 보인다
+        page.Primary = PrimaryWorkKind.All;
+        Assert.True(page.PlsqlAddon); // 모든 기능에서는 포함으로 보인다
+        page.Primary = PrimaryWorkKind.Dba;
+        Assert.True(page.PlsqlAddon); // 고른 값이 돌아온다
+
         await vm.SaveAsync();
+        Assert.Equal([RoleIds.Dba, RoleIds.PlsqlDev], store.Saved.Features.Roles);
+    }
 
+    [Fact]
+    public async Task Viewer_dims_the_addons_with_the_reason_and_never_saves_them()
+    {
+        // 인수조건: 조회만이면 덧붙임을 켤 수 없다(덧붙이면 조회 전용 차단이 풀린다, D-006).
+        var (_, store, vm) = await Create(new FeaturesSettings { Roles = [RoleIds.SqlDev, RoleIds.MyBatisDev] });
+        var page = vm.Features;
+
+        page.Primary = PrimaryWorkKind.Viewer;
+        Assert.False(page.AddonsEnabled);
+        Assert.Equal("덧붙이면 조회 전용 차단이 풀립니다", page.AddonReason);
+        page.PlsqlAddon = true;
+        page.MyBatisAddon = true;
+        Assert.False(page.PlsqlAddon);
+        Assert.False(page.MyBatisAddon);
+        Assert.True(page.IsViewerOnly);
+
+        await vm.SaveAsync();
+        Assert.Equal([RoleIds.Viewer], store.Saved.Features.Roles);
+        Assert.True(FeatureCatalog.IsReadOnly(store.Saved.Features));
+    }
+
+    // ---- 지금 조합(맞지 않는 기존 조합, D-017) ----
+
+    [Fact]
+    public async Task An_existing_combination_shows_as_the_current_combination_row_and_saving_keeps_the_roles()
+    {
+        // 인수조건: ["tuner","dba"] 설정을 열어 저장만 하면 roles 그대로.
+        var original = new FeaturesSettings { Roles = [RoleIds.Tuner, RoleIds.Dba] };
+        var (_, store, vm) = await Create(original);
+        var page = vm.Features;
+
+        Assert.Equal(PrimaryWorkKind.Custom, page.Primary);
+        Assert.Equal(6, page.PrimaryOptions.Count);
+        var custom = page.PrimaryOptions[^1];
+        Assert.True(custom.IsCustom);
+        Assert.True(custom.IsChecked);
+        Assert.Equal("지금 조합: DB 튜너, 운영 DBA(그대로 두기)", custom.Name);
+        Assert.False(custom.HasDescription);
+        Assert.False(page.AddonsEnabled);
+        Assert.Equal("위에서 주 업무를 고르면 덧붙일 수 있습니다", page.AddonReason);
+        Assert.True(page.ShowPackNotice); // 튜너가 들어 있다
+        AssertSet(FeatureCatalog.RoleDefaults([RoleIds.Tuner, RoleIds.Dba]), Checked(page));
+
+        vm.TabSize = 5;
+        await vm.SaveAsync();
+        Assert.Equal(original, store.Saved.Features);
+
+        // 고급에서 기능 하나를 바꿔 저장해도 roles 는 그대로다.
+        (_, store, vm) = await Create(original);
+        Item(vm.Features, FeatureIds.MyBatisLog).IsChecked = true;
+        await vm.SaveAsync();
+        Assert.Equal([RoleIds.Tuner, RoleIds.Dba], store.Saved.Features.Roles);
+        Assert.Equal([FeatureIds.MyBatisLog], store.Saved.Features.Enabled);
+
+        // 다른 주 업무를 골랐다가 「지금 조합」 으로 돌아오면 그 조합이 다시 저장된다(되돌림).
+        (_, store, vm) = await Create(original);
+        vm.Features.Primary = PrimaryWorkKind.Dba;
+        Assert.False(vm.Features.ShowPackNotice);
+        vm.Features.Primary = PrimaryWorkKind.Custom;
+        Assert.True(vm.Features.ShowPackNotice);
+        await vm.SaveAsync();
+        Assert.Equal([RoleIds.Tuner, RoleIds.Dba], store.Saved.Features.Roles);
+
+        // 주 업무를 고르면 그 값이 된다.
+        (_, store, vm) = await Create(original);
+        vm.Features.Primary = PrimaryWorkKind.Tuner;
+        vm.Features.PlsqlAddon = true;
+        await vm.SaveAsync();
+        Assert.Equal([RoleIds.Tuner, RoleIds.PlsqlDev], store.Saved.Features.Roles);
+    }
+
+    [Fact]
+    public async Task The_current_combination_cannot_be_chosen_when_the_settings_fit_a_primary_work()
+    {
+        var (_, _, vm) = await Create(new FeaturesSettings { Roles = [RoleIds.Tuner] });
+
+        vm.Features.Primary = PrimaryWorkKind.Custom;
+        Assert.Equal(PrimaryWorkKind.Tuner, vm.Features.Primary);
+        Assert.False(vm.Features.IsDirty);
+    }
+
+    [Fact]
+    public async Task Viewer_mixed_with_addons_is_a_combination_and_shows_the_addons_it_holds()
+    {
+        var (_, _, vm) = await Create(new FeaturesSettings { Roles = [RoleIds.Viewer, RoleIds.PlsqlDev] });
+
+        Assert.Equal(PrimaryWorkKind.Custom, vm.Features.Primary);
+        Assert.True(vm.Features.PlsqlAddon);
+        Assert.False(vm.Features.MyBatisAddon);
+        Assert.False(vm.Features.AddonsEnabled);
+        Assert.False(vm.Features.IsViewerOnly); // 덧붙임이 섞여 조회 전용 차단이 풀린 조합
+    }
+
+    [Fact]
+    public async Task An_empty_role_list_shows_the_no_role_notice_only_while_the_combination_is_kept()
+    {
+        var (_, store, vm) = await Create(new FeaturesSettings { Roles = [] });
+        var page = vm.Features;
+
+        Assert.Equal("지금 조합: Role 없음(그대로 두기)", page.PrimaryOptions[^1].Name);
+        Assert.True(page.ShowNoRoleNotice);
+        Assert.Empty(Checked(page));
+        Assert.Equal("기능 하나씩 켜고 끄기(고급) — 켜진 기능 0/25 · 직접 바꾼 것 0개", page.AdvancedHeader);
+
+        page.Primary = PrimaryWorkKind.SqlDev;
+        Assert.False(page.ShowNoRoleNotice);
+        page.Primary = PrimaryWorkKind.Custom;
+        Assert.True(page.ShowNoRoleNotice);
+        await vm.SaveAsync();
         Assert.NotNull(store.Saved.Features.Roles);
         Assert.Empty(store.Saved.Features.Roles!);
     }
 
+    // ---- 팩 선언 바로 가기 ----
+
     [Fact]
-    public async Task The_tuner_role_shows_the_license_pack_notice_only_while_it_is_chosen_in_role_mode()
+    public async Task The_tuner_shows_the_license_pack_notice_with_a_link_that_opens_the_connection_manager()
     {
         var (_, _, vm) = await Create(All);
         var page = vm.Features;
+        var opened = 0;
+        page.OpenConnectionManager = () =>
+        {
+            opened++;
+            return Task.CompletedTask;
+        };
 
         Assert.False(page.ShowPackNotice);
-        page.UseRoles = true;
-        Assert.False(page.ShowPackNotice);
-        Role(page, RoleIds.Tuner).IsChecked = true;
+        page.Primary = PrimaryWorkKind.Tuner;
         Assert.True(page.ShowPackNotice);
         Assert.Contains("Diagnostics", page.PackNoticeText);
-        page.UseAllFeatures = true;
+        Assert.Equal("접속 관리자 열기", page.PackLinkText);
+        Assert.Equal(page.PackNoticeText + " — 접속 관리자 열기", page.PackLinkName);
+
+        var dirty = page.IsDirty;
+        await page.OpenConnectionManagerLinkCommand.ExecuteAsync(null);
+        Assert.Equal(1, opened);
+        Assert.Equal(dirty, page.IsDirty); // 링크는 설정을 바꾸지 않는다
+
+        page.Primary = PrimaryWorkKind.All;
         Assert.False(page.ShowPackNotice);
+        page.Primary = PrimaryWorkKind.SqlDev;
+        Assert.False(page.ShowPackNotice);
+    }
+
+    [Fact]
+    public async Task Without_a_delegate_the_link_runs_the_connection_manager_command_through_the_shell_runner()
+    {
+        Assert.Equal("oranda.conn.manage", FeatureSettingsPage.ConnectionManagerCommandId);
+        var (_, _, vm) = await Create(new FeaturesSettings { Roles = [RoleIds.Tuner] });
+        var old = ShellCommandRunner.Runner;
+        var runs = new List<string>();
+        try
+        {
+            ShellCommandRunner.Runner = id =>
+            {
+                runs.Add(id);
+                return Task.CompletedTask;
+            };
+            await vm.Features.OpenConnectionManagerLinkCommand.ExecuteAsync(null);
+        }
+        finally
+        {
+            ShellCommandRunner.Runner = old;
+        }
+
+        Assert.Equal(["oranda.conn.manage"], runs);
+        Assert.False(vm.Features.IsDirty);
     }
 
     // ---- 직접 켬/끔 최소 기록 ----
@@ -312,6 +505,7 @@ public sealed class FeatureSettingsViewTests
         Assert.Equal(FeatureState.Disabled, Item(page, FeatureIds.GridEdit).State);
         Assert.Equal(FeatureState.RoleDefault, Item(page, FeatureIds.LobRowView).State);
         Assert.True(page.HasOverrides);
+        Assert.Equal(2, page.OverrideCount);
 
         await vm.SaveAsync();
 
@@ -321,25 +515,29 @@ public sealed class FeatureSettingsViewTests
     }
 
     [Fact]
-    public async Task An_override_that_becomes_the_role_default_after_changing_roles_is_dropped_on_save()
+    public async Task An_override_that_becomes_the_default_after_changing_the_primary_work_is_dropped_on_save()
     {
         var (_, store, vm) = await Create(new FeaturesSettings { Roles = [RoleIds.SqlDev], Enabled = [FeatureIds.Trace], Disabled = [FeatureIds.GridEdit] });
         var page = vm.Features;
 
-        Role(page, RoleIds.Tuner).IsChecked = true; // 튜너는 trace 가 기본 켜짐
+        page.Primary = PrimaryWorkKind.Tuner; // 튜너는 trace 가 기본 켜짐, gridEdit 가 기본 꺼짐
         Assert.Equal(FeatureState.RoleDefault, Item(page, FeatureIds.Trace).State);
+        Assert.Equal(FeatureState.RoleDefault, Item(page, FeatureIds.GridEdit).State);
+        Assert.Equal(0, page.OverrideCount);
         await vm.SaveAsync();
 
-        Assert.DoesNotContain(FeatureIds.Trace, store.Saved.Features.Enabled);
-        AssertSet([FeatureIds.GridEdit], store.Saved.Features.Disabled);
+        Assert.Equal([RoleIds.Tuner], store.Saved.Features.Roles);
+        Assert.Empty(store.Saved.Features.Enabled);
+        Assert.Empty(store.Saved.Features.Disabled);
     }
 
     [Fact]
-    public async Task In_all_features_mode_turning_a_feature_off_is_recorded_as_disabled_only()
+    public async Task In_all_features_turning_a_feature_off_is_recorded_as_disabled_only()
     {
         var (_, store, vm) = await Create(All);
 
         Item(vm.Features, FeatureIds.Trace).IsChecked = false;
+        Assert.Equal("기능 하나씩 켜고 끄기(고급) — 켜진 기능 24/25 · 직접 바꾼 것 1개", vm.Features.AdvancedHeader);
         await vm.SaveAsync();
 
         Assert.Null(store.Saved.Features.Roles);
@@ -351,7 +549,7 @@ public sealed class FeatureSettingsViewTests
     [Fact]
     public async Task Saved_overrides_resolve_to_exactly_the_checked_boxes()
     {
-        var (_, store, vm) = await Create(new FeaturesSettings { Roles = [RoleIds.PlsqlDev, RoleIds.Tuner] });
+        var (_, store, vm) = await Create(new FeaturesSettings { Roles = [RoleIds.Tuner, RoleIds.PlsqlDev] });
         var page = vm.Features;
         Item(page, FeatureIds.Flashback).IsChecked = false;
         Item(page, FeatureIds.TableSpec).IsChecked = true;
@@ -366,7 +564,7 @@ public sealed class FeatureSettingsViewTests
     // ---- 되돌리기 ----
 
     [Fact]
-    public async Task Reset_clears_the_overrides_and_keeps_the_chosen_roles()
+    public async Task Reset_clears_the_overrides_and_keeps_the_chosen_primary_work()
     {
         var (_, store, vm) = await Create(new FeaturesSettings { Roles = [RoleIds.SqlDev], Enabled = [FeatureIds.Trace], Disabled = [FeatureIds.GridEdit] });
         var page = vm.Features;
@@ -378,7 +576,8 @@ public sealed class FeatureSettingsViewTests
         Assert.False(page.ResetCommand.CanExecute(null));
         Assert.All(page.Items, i => Assert.Equal(FeatureState.RoleDefault, i.State));
         AssertSet(FeatureCatalog.RoleDefaults([RoleIds.SqlDev]), Checked(page));
-        Assert.True(Role(page, RoleIds.SqlDev).IsChecked);
+        Assert.Equal(PrimaryWorkKind.SqlDev, page.Primary);
+        Assert.Equal(0, page.OverrideCount);
 
         await vm.SaveAsync();
         Assert.Empty(store.Saved.Features.Enabled);
@@ -404,41 +603,44 @@ public sealed class FeatureSettingsViewTests
         var (_, store, vm) = await Create(new FeaturesSettings { Roles = [RoleIds.Viewer], Enabled = [FeatureIds.GridEdit] });
         var page = vm.Features;
 
+        Assert.Equal(PrimaryWorkKind.Viewer, page.Primary);
         Assert.True(page.IsViewerOnly);
-        Assert.Contains("DML", page.ViewerNoticeText);
+        Assert.Equal("조회만이면 DML·DDL·PL/SQL 실행을 막습니다", page.ViewerNoticeText);
         foreach (var def in FeatureCatalog.Features.Where(f => f.WritesOnly))
         {
             var item = Item(page, def.Id);
             Assert.False(item.IsChecked, def.Id);
             Assert.True(item.IsBlocked, def.Id);
             Assert.False(item.CanEdit, def.Id);
-            Assert.Contains("조회 전용만 고른 상태", item.BlockedReason);
+            Assert.Equal("조회만에서는 켤 수 없습니다. 다른 주 업무를 고르세요.", item.BlockedReason);
             Assert.Equal(string.Empty, item.StateText); // 못 켜는 기능에는 「직접 켬」을 붙이지 않는다
         }
 
         Assert.True(Item(page, FeatureIds.DataExport).IsChecked);
         Assert.False(Item(page, FeatureIds.DataExport).IsBlocked);
+        Assert.Equal(0, page.OverrideCount); // 막힌 직접 켬은 배지로 세지 않는다
 
         // 설정 쪽 해석과 같다: Enabled 에 gridEdit 가 있어도 조회 전용만이면 꺼진다.
         AssertSet(FeatureCatalog.Resolve(page.ToSettings()), Checked(page));
 
-        // 다른 Role 을 함께 고르면 풀린다.
-        Role(page, RoleIds.SqlDev).IsChecked = true;
+        // 다른 주 업무를 고르면 풀린다.
+        page.Primary = PrimaryWorkKind.SqlDev;
         Assert.False(page.IsViewerOnly);
         // plsqlWorkspace 는 PL/SQL 편집기가 꺼져 있어(SQL 개발자 기본에 없음) Requires 로 아직 못 켠다.
         Assert.All(FeatureCatalog.Features.Where(f => f.WritesOnly && f.Id != FeatureIds.PlsqlWorkspace), f => Assert.False(Item(page, f.Id).IsBlocked, f.Id));
         Assert.True(Item(page, FeatureIds.GridEdit).IsChecked);
         Assert.Contains("PL/SQL 편집기", Item(page, FeatureIds.PlsqlWorkspace).BlockedReason);
         await vm.SaveAsync();
-        AssertSet([RoleIds.Viewer, RoleIds.SqlDev], store.Saved.Features.Roles);
+        AssertSet([RoleIds.SqlDev], store.Saved.Features.Roles);
     }
 
     [Fact]
-    public async Task Viewer_notice_is_not_shown_in_all_features_mode_or_with_other_roles()
+    public async Task Viewer_notice_is_not_shown_in_all_features_or_in_a_combination_with_other_roles()
     {
         var (_, _, vm) = await Create(new FeaturesSettings { Roles = [RoleIds.Viewer, RoleIds.Tuner] });
+        Assert.Equal(PrimaryWorkKind.Custom, vm.Features.Primary);
         Assert.False(vm.Features.IsViewerOnly);
-        vm.Features.UseAllFeatures = true;
+        vm.Features.Primary = PrimaryWorkKind.All;
         Assert.False(vm.Features.IsViewerOnly);
         Assert.All(vm.Features.Items, i => Assert.False(i.IsBlocked, i.Id));
     }
@@ -448,7 +650,7 @@ public sealed class FeatureSettingsViewTests
     [Fact]
     public async Task A_feature_whose_required_feature_is_off_is_dimmed_with_the_reason_and_comes_back_when_it_is_on()
     {
-        var (_, _, vm) = await Create(new FeaturesSettings { Roles = [RoleIds.PlsqlDev] });
+        var (_, _, vm) = await Create(new FeaturesSettings { Roles = [RoleIds.SqlDev, RoleIds.PlsqlDev] });
         var page = vm.Features;
         var workspace = Item(page, FeatureIds.PlsqlWorkspace);
         Assert.True(workspace.IsChecked);
@@ -470,7 +672,7 @@ public sealed class FeatureSettingsViewTests
     }
 
     [Fact]
-    public async Task Requires_applies_in_all_features_mode_too()
+    public async Task Requires_applies_in_all_features_too()
     {
         var (_, store, vm) = await Create(All);
 
@@ -484,13 +686,30 @@ public sealed class FeatureSettingsViewTests
 
     // ---- 저장 흐름 ----
 
-    [Fact]
-    public async Task Saving_without_touching_the_tab_leaves_the_features_section_as_it_was()
+    public static TheoryData<FeaturesSettings> ExistingShapes() => new()
     {
-        // 최소 형태가 아닌 값(기본과 같은 Enabled)·이 버전이 모르는 id 도 건드리지 않는다.
-        var original = new FeaturesSettings { Roles = [RoleIds.Dba], Enabled = [FeatureIds.GridEdit, "futureFeature"], Disabled = ["otherFuture"] };
+        new FeaturesSettings(),
+        new FeaturesSettings { AllFeatures = true },
+        new FeaturesSettings { Disabled = [FeatureIds.Trace] },
+        new FeaturesSettings { Roles = [] },
+        new FeaturesSettings { Roles = [RoleIds.Viewer] },
+        new FeaturesSettings { Roles = [RoleIds.SqlDev, RoleIds.PlsqlDev, RoleIds.MyBatisDev] },
+        new FeaturesSettings { Roles = [RoleIds.Tuner, RoleIds.Dba] },
+        new FeaturesSettings { Roles = [RoleIds.PlsqlDev] },
+        new FeaturesSettings { Roles = [RoleIds.Viewer, RoleIds.MyBatisDev] },
+        new FeaturesSettings { Roles = [.. RoleIds.All] },
+        new FeaturesSettings { Roles = [RoleIds.Dba], Enabled = [FeatureIds.GridEdit, "futureFeature"], Disabled = ["otherFuture"] },
+        new FeaturesSettings { Roles = ["futureRole"] },
+    };
+
+    [Theory]
+    [MemberData(nameof(ExistingShapes))]
+    public async Task Saving_without_touching_the_tab_leaves_any_existing_features_section_as_it_was(FeaturesSettings original)
+    {
+        // 최소 형태가 아닌 값(기본과 같은 Enabled)·이 버전이 모르는 id·지금 조합도 건드리지 않는다(TRD 11.12 왕복).
         var (settings, store, vm) = await Create(original);
         vm.AutoCommit = !vm.AutoCommit;
+        _ = vm.Features.PrimaryOptions.Single(o => o.IsChecked); // 어느 모양이든 라디오 하나가 골라져 있다
 
         await vm.SaveAsync();
 
@@ -502,6 +721,7 @@ public sealed class FeatureSettingsViewTests
     public async Task Unknown_role_and_feature_ids_are_kept_when_the_tab_is_edited()
     {
         var (_, store, vm) = await Create(new FeaturesSettings { Roles = [RoleIds.SqlDev, "futureRole"], Enabled = ["futureOn"], Disabled = ["futureOff"] });
+        Assert.Equal(PrimaryWorkKind.Custom, vm.Features.Primary); // 모르는 Role id 는 지금 조합으로 보존된다
 
         Item(vm.Features, FeatureIds.Trace).IsChecked = true;
         vm.Features.ResetCommand.Execute(null);
@@ -515,12 +735,24 @@ public sealed class FeatureSettingsViewTests
     }
 
     [Fact]
+    public async Task Choosing_a_primary_work_replaces_unknown_role_ids_but_keeps_unknown_feature_ids()
+    {
+        var (_, store, vm) = await Create(new FeaturesSettings { Roles = [RoleIds.SqlDev, "futureRole"], Enabled = ["futureOn"], Disabled = ["futureOff"] });
+
+        vm.Features.Primary = PrimaryWorkKind.SqlDev;
+        await vm.SaveAsync();
+
+        Assert.Equal([RoleIds.SqlDev], store.Saved.Features.Roles);
+        Assert.Equal(["futureOn"], store.Saved.Features.Enabled);
+        Assert.Equal(["futureOff"], store.Saved.Features.Disabled);
+    }
+
+    [Fact]
     public async Task Other_settings_in_the_window_are_saved_together_with_the_features()
     {
         var (_, store, vm) = await Create(All);
         vm.TabSize = 7;
-        Role(vm.Features, RoleIds.Dba).IsChecked = true;
-        vm.Features.UseRoles = true;
+        vm.Features.Primary = PrimaryWorkKind.Dba;
 
         await vm.SaveAsync();
 
@@ -574,7 +806,7 @@ public sealed class FeatureSettingsViewTests
     });
 
     [Fact]
-    public async Task Saving_a_change_that_needs_a_restart_keeps_the_window_open_on_the_features_tab_with_the_banner()
+    public async Task Saving_an_addon_that_needs_a_restart_keeps_the_window_open_on_the_features_tab_with_the_banner()
     {
         var gate = new FakeFeatureGate();
         var (_, _, vm) = await Create(new FeaturesSettings { Roles = [RoleIds.SqlDev] }, gate);
@@ -582,7 +814,7 @@ public sealed class FeatureSettingsViewTests
         vm.CloseRequested += (_, _) => closed++;
         vm.SelectedTab = 4;
 
-        Item(vm.Features, FeatureIds.MyBatis).IsChecked = true;
+        vm.Features.MyBatisAddon = true;
         gate.PendingRestart = [FeatureIds.MyBatis]; // 저장하면 게이트가 다시 해석해 이렇게 알린다
         await vm.SaveAsync();
 
@@ -622,6 +854,7 @@ public sealed class FeatureSettingsViewTests
             Assert.Contains("menu:tools/roles@11", def.Placements);
             Assert.Equal("Role·기능 고르기…", Ko.Lookup("Cmd." + FeatureCommandIds.Roles));
             Assert.Equal([FeatureCommandIds.Roles], FeatureSettingsCommands.Ids);
+            Assert.Contains(registry.Commands, c => c.Id == FeatureSettingsPage.ConnectionManagerCommandId); // 팩 링크가 부르는 명령이 있다
 
             var ui = new RecordingUi();
             await new FeatureRolesCommandHandler(ui).ExecuteAsync(new CommandContext(FeatureCommandIds.Roles, services.GetRequiredService<IContextKeys>()), CancellationToken.None);
@@ -670,6 +903,19 @@ public sealed class FeatureSettingsViewTests
         return (window, view);
     }
 
+    private static void Relayout(Window window)
+    {
+        Pump();
+        window.UpdateLayout();
+        Pump();
+    }
+
+    /// <summary>보이는 입력 칸(라디오·확인란·단추·고급 머리 토글). 인수조건 「처음 열면 10개 이하」 를 센다.</summary>
+    private static List<Control> VisibleInputs(Control view) =>
+        [.. view.GetVisualDescendants().OfType<Control>()
+            .Where(c => c is RadioButton or CheckBox or Button or ToggleButton && c.IsEffectivelyVisible && !c.GetVisualAncestors().OfType<ScrollBar>().Any())
+            .Distinct()];
+
     private static void Render(Window window, string name)
     {
         var dir = Environment.GetEnvironmentVariable("ORANDA_RENDER_DIR");
@@ -705,9 +951,9 @@ public sealed class FeatureSettingsViewTests
     [Theory]
     [InlineData("ko")]
     [InlineData("en")]
-    public Task The_tab_renders_in_both_languages_with_every_role_and_feature_and_named_controls(string language) => HeadlessHost.Run(async () =>
+    public Task The_tab_opens_with_ten_or_fewer_inputs_and_the_advanced_group_lists_every_feature(string language) => HeadlessHost.Run(async () =>
     {
-        var vm = await OpenVm(new FeaturesSettings { Roles = [RoleIds.SqlDev, RoleIds.Tuner], Enabled = [FeatureIds.MyBatis], Disabled = [FeatureIds.GridEdit] }, null, language);
+        var vm = await OpenVm(new FeaturesSettings { Roles = [RoleIds.Tuner, RoleIds.MyBatisDev], Enabled = [FeatureIds.Flashback], Disabled = [FeatureIds.Trace] }, null, language);
         var (window, view) = Open(vm);
         try
         {
@@ -715,25 +961,46 @@ public sealed class FeatureSettingsViewTests
             Assert.Equal(SettingsViewModel.FeaturesTabIndex, tabs.SelectedIndex);
             Assert.Equal(vm.Features.TabTitle, ((TabItem)tabs.Items[1]!).Header);
 
-            var checks = view.GetVisualDescendants().OfType<CheckBox>().ToList();
-            Assert.Equal(6 + 25, checks.Count);
-            Assert.All(checks, c => Assert.False(string.IsNullOrWhiteSpace(Avalonia.Automation.AutomationProperties.GetName(c))));
-            Assert.All(checks, c => Assert.True(c.Focusable));
-            Assert.Equal(2, view.GetVisualDescendants().OfType<RadioButton>().Count());
+            // 처음: 라디오 5 + 덧붙임 2 + 고급 머리 1 + 팩 링크 1(튜닝) = 9 ≤ 10(조사 33).
+            var inputs = VisibleInputs(view);
+            Assert.True(inputs.Count <= 10, $"보이는 입력 칸 {inputs.Count}개");
+            Assert.Equal(9, inputs.Count);
+            var radios = view.GetVisualDescendants().OfType<RadioButton>().Where(r => r.IsEffectivelyVisible).ToList();
+            Assert.Equal(5, radios.Count);
+            Assert.Single(radios, r => r.IsChecked == true);
+            Assert.All(inputs, c => Assert.True(c.Focusable, c.GetType().Name)); // 키보드만으로 닿는다
+            // 화면 읽기 이름: 라디오·확인란·팩 링크(고급 머리 토글은 Expander 자신의 이름을 읽는다, 아래).
+            Assert.All(inputs.Where(c => c is RadioButton or CheckBox || c.Name == "PackLink"),
+                c => Assert.False(string.IsNullOrWhiteSpace(Avalonia.Automation.AutomationProperties.GetName(c)), c.GetType().Name));
+            Assert.True(view.FindControl<CheckBox>("MyBatisAddonBox")!.IsChecked);
+            Assert.False(view.FindControl<CheckBox>("PlsqlAddonBox")!.IsChecked);
+            Assert.True(view.FindControl<Button>("PackLink")!.IsEffectivelyVisible);
+            var expander = view.FindControl<Expander>("AdvancedExpander")!;
+            Assert.False(expander.IsExpanded);
+            Assert.Equal(vm.Features.AdvancedHeader, view.FindControl<TextBlock>("AdvancedHeaderText")!.Text);
+            Assert.Equal(vm.Features.AdvancedHeader, Avalonia.Automation.AutomationProperties.GetName(expander));
+            Assert.DoesNotContain(inputs, c => c.Name == "ResetButton"); // 되돌리기는 고급 안에 있다
+
+            // 모든 글자가 해당 언어
+            bool HangulShown() => view.GetVisualDescendants().OfType<TextBlock>().Where(t => t.IsEffectivelyVisible).Select(t => t.Text ?? string.Empty)
+                .Any(t => t.Any(c => c is >= '가' and <= '힣'));
+            Assert.Equal(language == "ko", HangulShown());
+            Render(window, $"tuner-{language}");
+
+            // 고급 펼침: 25개 확인란과 배지 2개(직접 켬·끔), 되돌리기.
+            vm.Features.IsAdvancedExpanded = true;
+            Relayout(window);
+            Assert.True(expander.IsExpanded);
+            var featureChecks = view.FindControl<ItemsControl>("GroupList")!.GetVisualDescendants().OfType<CheckBox>().ToList();
+            Assert.Equal(25, featureChecks.Count);
+            Assert.All(featureChecks, c => Assert.False(string.IsNullOrWhiteSpace(Avalonia.Automation.AutomationProperties.GetName(c))));
+            var badges = view.GetVisualDescendants().OfType<Border>().Where(b => b.Classes.Contains("feat-badge") && b.IsVisible).ToList();
+            Assert.Equal(2, badges.Count);
             var reset = view.FindControl<Button>("ResetButton")!;
             Assert.Equal(vm.Features.ResetText, Avalonia.Automation.AutomationProperties.GetName(reset));
             Assert.True(reset.IsEffectivelyEnabled);
-
-            // 직접 끔/켬 표시 두 개
-            var badges = view.GetVisualDescendants().OfType<Border>().Where(b => b.Classes.Contains("feat-badge") && b.IsVisible).ToList();
-            Assert.Equal(2, badges.Count);
-
-            // 모든 글자가 해당 언어
-            var hangul = view.GetVisualDescendants().OfType<TextBlock>().Where(t => t.IsEffectivelyVisible).Select(t => t.Text ?? string.Empty)
-                .Any(t => t.Any(c => c is >= '가' and <= '힣'));
-            Assert.Equal(language == "ko", hangul);
-
-            Render(window, $"tuner-{language}");
+            Assert.Equal(language == "ko", HangulShown());
+            Render(window, $"tuner-advanced-{language}");
         }
         finally
         {
@@ -742,7 +1009,7 @@ public sealed class FeatureSettingsViewTests
     });
 
     [Fact]
-    public Task The_tab_does_not_resize_the_window_beyond_the_cap_and_scrolls_its_body() => HeadlessHost.Run(async () =>
+    public Task The_tab_does_not_resize_the_window_beyond_the_cap_and_scrolls_its_body_when_expanded() => HeadlessHost.Run(async () =>
     {
         var vm = await OpenVm(null, null, "ko");
         var (window, view) = Open(vm);
@@ -752,8 +1019,16 @@ public sealed class FeatureSettingsViewTests
             Assert.True(window.Bounds.Width <= SettingsWindow.MaxBodyWidth + 24 + 0.5, $"{window.Bounds.Width}");
 
             var body = view.FindControl<ScrollViewer>("Body")!;
-            Assert.True(body.Extent.Height > body.Viewport.Height, "25개 기능은 한 화면보다 길어 스크롤된다");
             Assert.True(body.Viewport.Width + 0.5 >= body.Extent.Width, "가로로 넘치지 않는다");
+
+            vm.Features.IsAdvancedExpanded = true;
+            Relayout(window);
+            Assert.True(body.Extent.Height > body.Viewport.Height, "고급을 펼치면 25개 기능이 한 화면보다 길어 스크롤된다");
+            var expander = view.FindControl<Expander>("AdvancedExpander")!;
+            Assert.True(body.Offset.Y > 0, "펼치면 고급 머리가 본문 맨 위로 올라온다");
+            Assert.Equal(0, expander.TranslatePoint(default, body)!.Value.Y, 1);
+            Assert.True(body.Viewport.Width + 0.5 >= body.Extent.Width, "펼쳐도 가로로 넘치지 않는다");
+            Assert.Equal(size, window.Bounds.Size); // 펼쳐도 창 크기는 그대로
 
             var tabs = window.GetVisualDescendants().OfType<TabControl>().First();
             for (var i = 0; i < tabs.ItemCount; i++)
@@ -781,27 +1056,30 @@ public sealed class FeatureSettingsViewTests
             Assert.True(view.FindControl<Border>("RestartBanner")!.IsEffectivelyVisible);
             Assert.True(view.FindControl<Border>("ViewerBanner")!.IsEffectivelyVisible);
             Assert.Equal(vm.Features.RestartBannerText, view.FindControl<TextBlock>("RestartText")!.Text);
-            Assert.False(view.FindControl<TextBlock>("PackNotice")!.IsEffectivelyVisible);
+            Assert.False(view.FindControl<WrapPanel>("PackRow")!.IsEffectivelyVisible);
 
-            var dimmed = view.GetVisualDescendants().OfType<CheckBox>().Where(c => !c.IsEnabled).ToList();
-            // 쓰기 전용 기능이 못 고치게 흐리다. Role 확인란은 Role 로 고르기라 켜져 있다.
-            Assert.Equal(FeatureCatalog.Features.Count(f => f.WritesOnly), dimmed.Count);
-
+            // 접힌 상태: 흐린 것은 덧붙임 2개뿐, 이유 줄이 보인다.
+            Assert.False(view.FindControl<CheckBox>("PlsqlAddonBox")!.IsEnabled);
+            Assert.False(view.FindControl<CheckBox>("MyBatisAddonBox")!.IsEnabled);
+            var reason = view.FindControl<TextBlock>("AddonReason")!;
+            Assert.True(reason.IsEffectivelyVisible);
+            Assert.Equal("덧붙이면 조회 전용 차단이 풀립니다", reason.Text);
             Render(window, "viewer-restart");
 
-            vm.Features.UseAllFeatures = true;
-            Item(vm.Features, FeatureIds.PlsqlEditor).IsChecked = false;
-            Pump();
-            window.UpdateLayout();
-            Assert.False(view.FindControl<Border>("ViewerBanner")!.IsEffectivelyVisible);
+            // 펼치면 쓰기 전용 기능이 못 고치게 흐리다.
+            vm.Features.IsAdvancedExpanded = true;
+            Relayout(window);
             var groups = view.FindControl<ItemsControl>("GroupList")!;
-            Assert.Single(groups.GetVisualDescendants().OfType<CheckBox>().Where(c => !c.IsEnabled)); // plsqlWorkspace 만
-            Render(window, "all-requires");
+            Assert.Equal(FeatureCatalog.Features.Count(f => f.WritesOnly), groups.GetVisualDescendants().OfType<CheckBox>().Count(c => !c.IsEnabled));
+            Render(window, "viewer-restart-advanced");
 
-            vm.Features.UseRoles = true;
-            vm.Features.ResetCommand.Execute(null);
-            Pump();
-            Render(window, "viewer-reset");
+            vm.Features.Primary = PrimaryWorkKind.All;
+            Item(vm.Features, FeatureIds.PlsqlEditor).IsChecked = false;
+            Relayout(window);
+            Assert.False(view.FindControl<Border>("ViewerBanner")!.IsEffectivelyVisible);
+            Assert.Single(groups.GetVisualDescendants().OfType<CheckBox>().Where(c => !c.IsEnabled)); // plsqlWorkspace 만
+            Assert.Equal("모든 기능에 이미 들어 있습니다", reason.Text);
+            Render(window, "all-requires");
         }
         finally
         {
@@ -812,7 +1090,7 @@ public sealed class FeatureSettingsViewTests
     [Theory]
     [InlineData("ko")]
     [InlineData("en")]
-    public Task The_default_state_renders_the_sql_developer_role_chosen_with_the_notice_banner(string language) => HeadlessHost.Run(async () =>
+    public Task The_default_state_renders_sql_development_chosen_with_the_notice_banner(string language) => HeadlessHost.Run(async () =>
     {
         var vm = await OpenVm(null, null, language);
         var (window, view) = Open(vm);
@@ -822,15 +1100,16 @@ public sealed class FeatureSettingsViewTests
             Assert.True(banner.IsEffectivelyVisible);
             Assert.Equal(vm.Features.DefaultRoleNoticeText, Avalonia.Automation.AutomationProperties.GetName(banner));
             Assert.Equal(vm.Features.DefaultRoleNoticeText, view.FindControl<TextBlock>("DefaultRoleText")!.Text);
-            Assert.True(view.FindControl<RadioButton>("ModeRolesRadio")!.IsChecked);
-            Assert.False(view.FindControl<RadioButton>("ModeAllRadio")!.IsChecked);
-            var roleChecks = view.FindControl<ItemsControl>("RoleList")!.GetVisualDescendants().OfType<CheckBox>().ToList();
-            Assert.Equal(6, roleChecks.Count);
-            Assert.Single(roleChecks, c => c.IsChecked == true);
-            Assert.All(roleChecks, c => Assert.True(c.IsEnabled));
+            var radios = view.FindControl<ItemsControl>("PrimaryList")!.GetVisualDescendants().OfType<RadioButton>().ToList();
+            Assert.Equal(5, radios.Count);
+            Assert.Equal(1, radios.FindIndex(r => r.IsChecked == true)); // SQL 개발
+            Assert.All(radios, r => Assert.True(r.IsEnabled));
+            Assert.True(view.FindControl<CheckBox>("PlsqlAddonBox")!.IsEnabled);
+            Assert.False(view.FindControl<TextBlock>("AddonReason")!.IsEffectivelyVisible);
             Assert.False(view.FindControl<Border>("ViewerBanner")!.IsEffectivelyVisible);
             Assert.False(view.FindControl<Border>("RestartBanner")!.IsEffectivelyVisible);
-            Assert.False(view.FindControl<Button>("ResetButton")!.IsEffectivelyEnabled);
+            Assert.False(view.FindControl<TextBlock>("NoRoleNotice")!.IsEffectivelyVisible);
+            Assert.Equal(8, VisibleInputs(view).Count); // 라디오 5 + 덧붙임 2 + 고급 1
             if (language == "en")
             {
                 Assert.DoesNotContain(vm.Features.DefaultRoleNoticeText, c => c is >= '가' and <= '힣');
@@ -839,10 +1118,48 @@ public sealed class FeatureSettingsViewTests
 
             Render(window, $"default-{language}");
 
-            // 무엇이든 바꾸면 안내 띠가 사라진다.
-            Role(vm.Features, RoleIds.Tuner).IsChecked = true;
-            Pump();
+            // 화면 단추로 주 업무를 바꾸면(라디오 클릭과 같은 길) 안내 띠가 사라지고 덧붙임이 흐려진다.
+            radios[4].IsChecked = true; // 조회만
+            Relayout(window);
+            Assert.Equal(PrimaryWorkKind.Viewer, vm.Features.Primary);
+            Assert.Single(radios, r => r.IsChecked == true);
             Assert.False(banner.IsEffectivelyVisible);
+            Assert.True(view.FindControl<Border>("ViewerBanner")!.IsEffectivelyVisible);
+            Assert.False(view.FindControl<CheckBox>("PlsqlAddonBox")!.IsEnabled);
+            Assert.True(view.FindControl<TextBlock>("AddonReason")!.IsEffectivelyVisible);
+            Render(window, $"primary-viewer-{language}");
+
+            // 확인란 클릭으로 덧붙임: 튜닝 + PL/SQL.
+            radios[2].IsChecked = true;
+            view.FindControl<CheckBox>("PlsqlAddonBox")!.IsChecked = true;
+            Relayout(window);
+            Assert.Equal(new PrimaryWorkChoice(PrimaryWorkKind.Tuner, Plsql: true), vm.Features.Choice);
+            Assert.True(view.FindControl<WrapPanel>("PackRow")!.IsEffectivelyVisible);
+            Assert.Equal(9, VisibleInputs(view).Count); // + 팩 링크
+            Render(window, $"primary-tuner-{language}");
+        }
+        finally
+        {
+            window.Close();
+        }
+    });
+
+    [Theory]
+    [InlineData("ko")]
+    [InlineData("en")]
+    public Task An_existing_combination_renders_the_current_combination_row(string language) => HeadlessHost.Run(async () =>
+    {
+        var vm = await OpenVm(new FeaturesSettings { Roles = [RoleIds.Tuner, RoleIds.Dba] }, null, language);
+        var (window, view) = Open(vm);
+        try
+        {
+            var radios = view.FindControl<ItemsControl>("PrimaryList")!.GetVisualDescendants().OfType<RadioButton>().ToList();
+            Assert.Equal(6, radios.Count);
+            Assert.True(radios[^1].IsChecked);
+            Assert.Equal(vm.Features.PrimaryOptions[^1].Name, Avalonia.Automation.AutomationProperties.GetName(radios[^1]));
+            Assert.True(VisibleInputs(view).Count <= 10, $"{VisibleInputs(view).Count}"); // 라디오 6 + 덧붙임 2 + 고급 1 + 팩 링크 1
+            Assert.False(view.FindControl<CheckBox>("PlsqlAddonBox")!.IsEnabled);
+            Render(window, $"custom-{language}");
         }
         finally
         {

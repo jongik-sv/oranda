@@ -48,13 +48,12 @@ public sealed class RoleMenuFlowTests
         return (window, vm);
     }
 
-    private static void Choose(SettingsViewModel vm, params string[] roles)
+    /// <summary>설정 「기능」 탭에서 주 업무 하나와 덧붙임을 고른다(TSK-09-08, D-017).</summary>
+    private static void Choose(SettingsViewModel vm, PrimaryWorkKind primary, bool plsql = false, bool myBatis = false)
     {
-        vm.Features.UseRoles = true;
-        foreach (var r in vm.Features.Roles)
-        {
-            r.IsChecked = roles.Contains(r.Id);
-        }
+        vm.Features.Primary = primary;
+        vm.Features.PlsqlAddon = plsql;
+        vm.Features.MyBatisAddon = myBatis;
     }
 
     private static string[]? SavedRoles(string dir)
@@ -153,12 +152,12 @@ public sealed class RoleMenuFlowTests
 
                 Assert.Same(MyBatisHooks.Empty, Oranda.App.Features.SqlEditor.SqlEditorHost.Current.MyBatisHooks); // MyBatis 배선이 돌지 않았다
 
-                // ── 2. 설정 「기능」 탭: SQL 개발자가 골라진 채 열리고, 「모든 기능 쓰기」 를 고른다 ──
+                // ── 2. 설정 「기능」 탭: 주 업무 「SQL 개발」 이 골라진 채 열리고, 「모든 기능」 을 고른다 ──
                 var (window, vm) = await OpenFeaturesTabAsync(app);
-                Assert.True(vm.Features.UseRoles);
-                Assert.Equal([RoleIds.SqlDev], vm.Features.Roles.Where(r => r.IsChecked).Select(r => r.Id).ToArray());
+                Assert.Equal(PrimaryWorkKind.SqlDev, vm.Features.Primary);
+                Assert.False(vm.Features.PlsqlAddon || vm.Features.MyBatisAddon);
                 Assert.True(vm.Features.ShowDefaultRoleNotice);
-                vm.Features.UseAllFeatures = true;
+                Choose(vm, PrimaryWorkKind.All);
                 var closed = false;
                 vm.CloseRequested += (_, _) => closed = true;
                 await vm.SaveAsync();
@@ -199,12 +198,12 @@ public sealed class RoleMenuFlowTests
 
                 // 설정 창은 저장한 「모든 기능 쓰기」 를 그대로 보여 준다(저장 → 다시 읽기 왕복).
                 var (window, vm) = await OpenFeaturesTabAsync(app);
-                Assert.True(vm.Features.UseAllFeatures);
+                Assert.Equal(PrimaryWorkKind.All, vm.Features.Primary);
                 Assert.False(vm.Features.ShowDefaultRoleNotice);
                 Assert.False(vm.Features.HasRestartBanner);
 
                 // ── 4. R6 만 고르기 ──
-                Choose(vm, RoleIds.Viewer);
+                Choose(vm, PrimaryWorkKind.Viewer);
                 Assert.True(vm.Features.IsViewerOnly);
                 Assert.All(vm.Features.Items.Where(i => PrdMatrix.WritesOnly.Contains(i.Id)), i => Assert.True(i.IsBlocked && !i.IsChecked));
                 await vm.SaveAsync();
@@ -230,8 +229,8 @@ public sealed class RoleMenuFlowTests
                     Assert.Contains("조회 전용 Role 에서는", d.Message, StringComparison.Ordinal);
                 }
 
-                // ── 5. R6 + R1: 거부 없음 ──
-                Choose(vm, RoleIds.Viewer, RoleIds.SqlDev);
+                // ── 5. 조회만 → SQL 개발: 거부 없음(R6 + R1 조합은 화면에서 만들 수 없다 — 그 설정 파일은 RoleEdgeCaseTests·정책 시험) ──
+                Choose(vm, PrimaryWorkKind.SqlDev);
                 Assert.False(vm.Features.IsViewerOnly);
                 await vm.SaveAsync();
                 await RoleApp.SettleAsync(() => !app.Gate.ReadOnlyRole);
@@ -244,8 +243,8 @@ public sealed class RoleMenuFlowTests
 
                 await RoleApp.SettleAsync(() => app.Capture().RegistryCommands.Contains("oranda.grid.edit.addRow"));
 
-                // ── 9. R4 더하기: 튜닝·모니터 메뉴가 닫는 즉시 나타난다 ──
-                Choose(vm, RoleIds.Viewer, RoleIds.SqlDev, RoleIds.Tuner);
+                // ── 9. 튜닝(R4)으로 바꾸기: 튜닝·모니터 메뉴가 닫는 즉시 나타난다 ──
+                Choose(vm, PrimaryWorkKind.Tuner);
                 await vm.SaveAsync();
                 await RoleApp.SettleAsync(() => HasTop(app.Capture(), app, "monitor"));
                 var tuner = app.Capture();
@@ -255,7 +254,7 @@ public sealed class RoleMenuFlowTests
                 Assert.Contains("oranda.tuning.report", tuner.MenuCommands);
 
                 // ── 10. 「모든 기능 쓰기」 로 되돌리기: 시작 때가 모든 기능이었으니 재시작 대기 없이 원래 집합 ──
-                vm.Features.UseAllFeatures = true;
+                Choose(vm, PrimaryWorkKind.All);
                 await vm.SaveAsync();
                 await RoleApp.SettleAsync(() => HasTop(app.Capture(), app, "monitor") && app.Capture().RegistryCommands.Contains("oranda.tools.import"));
                 var all = app.Capture();

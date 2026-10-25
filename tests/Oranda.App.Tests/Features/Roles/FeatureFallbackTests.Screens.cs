@@ -194,7 +194,7 @@ public sealed partial class FeatureFallbackTests
             Assert.True(link.IsEffectivelyVisible);
             Assert.Equal("바꾸기…", link.Content);
             Assert.Contains(page.GetVisualDescendants().OfType<TextBlock>(), t => t.Text == "지금 SQL 개발자 메뉴입니다" && t.IsEffectivelyVisible);
-            Assert.Contains(page.GetVisualDescendants().OfType<TextBlock>(), t => t.Text == "튜닝·모니터·MyBatis·PL/SQL 메뉴는 다른 Role 이나 「모든 기능 쓰기」로 켭니다." && t.IsEffectivelyVisible);
+            Assert.Contains(page.GetVisualDescendants().OfType<TextBlock>(), t => t.Text == "튜닝·모니터·MyBatis·PL/SQL 메뉴는 주 업무를 바꾸거나 덧붙여 켭니다." && t.IsEffectivelyVisible);
             Assert.Contains(page.GetVisualDescendants().OfType<Border>(), b => AutomationProperties.GetName(b) == "지금 SQL 개발자 메뉴입니다" && b.IsEffectivelyVisible);
             Assert.Empty(window.OwnedWindows); // 첫 실행에 창을 띄우지 않는다
             MyBatisFlowRig.Render(window, "rl-fallback-start-choose-role", 900, 640);

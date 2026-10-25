@@ -97,7 +97,7 @@ public sealed partial class FeatureContractTests
                 .Where(f => f.IsLiteral && f.Name != nameof(FeatureTexts.ReadOnlyRoleDeniedMessage) && !f.Name.EndsWith("Prefix", StringComparison.Ordinal))
                 .Select(f => (string)f.GetRawConstantValue()!))
             .ToList();
-        Assert.Equal(25 + 12 + 5 + 28, keys.Count);
+        Assert.Equal(25 + 12 + 5 + 41, keys.Count); // FeatureTexts 41 = WP-07 28 − 기능 탭 모드·제목 4 + 주 업무·덧붙임·고급·팩 링크 17(TSK-09-08)
 
         foreach (var key in keys)
         {

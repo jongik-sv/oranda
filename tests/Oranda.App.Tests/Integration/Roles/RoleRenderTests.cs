@@ -68,13 +68,11 @@ public sealed class RoleRenderTests
         var dir = RoleApp.NewDir();
         try
         {
-            using var app = new RoleApp(dir, null);
+            // Role 0개(roles: []) 설정 파일: 「지금 조합: Role 없음(그대로 두기)」 + 안내 줄, 고급을 펼치면 25개 모두 꺼짐(TSK-09-08).
+            using var app = new RoleApp(dir, PrdMatrix.FeaturesJson([]));
             var vm = new SettingsViewModel(app.Get<SettingsService>(), app.Get<ShellController>().Text, featureGate: app.Gate) { SelectedTab = SettingsViewModel.FeaturesTabIndex };
-            vm.Features.UseRoles = true;
-            foreach (var r in vm.Features.Roles)
-            {
-                r.IsChecked = false;
-            }
+            Assert.True(vm.Features.ShowNoRoleNotice);
+            vm.Features.IsAdvancedExpanded = true;
 
             var window = new SettingsWindow { DataContext = vm };
             window.Show();

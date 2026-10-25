@@ -42,37 +42,35 @@ public sealed class RoleEdgeCaseTests(ITestOutputHelper output)
             {
                 var settings = app.Get<SettingsService>();
                 var vm = new SettingsViewModel(settings, app.Get<ShellController>().Text, featureGate: app.Gate);
-                vm.Features.UseRoles = true;
-                foreach (var r in vm.Features.Roles)
-                {
-                    r.IsChecked = r.Id is RoleIds.Tuner or RoleIds.Dba;
-                }
-
-                vm.Features.Items.Single(i => i.Id == FeatureIds.MyBatisLog).IsChecked = true; // R4·R5 기본 꺼짐 → 직접 켬
-                vm.Features.Items.Single(i => i.Id == FeatureIds.ColumnReorder).IsChecked = false; // R5 기본 켬 → 직접 끔
+                vm.Features.Primary = PrimaryWorkKind.Tuner; // 주 업무 「튜닝」 + 「PL/SQL 패키지·프로시저도 고친다」(TSK-09-08)
+                vm.Features.PlsqlAddon = true;
+                vm.Features.Items.Single(i => i.Id == FeatureIds.MyBatisLog).IsChecked = true; // R4·R2 기본 꺼짐 → 직접 켬
+                vm.Features.Items.Single(i => i.Id == FeatureIds.DbTools).IsChecked = false; // R4·R2 기본 켬 → 직접 끔
                 await vm.SaveAsync();
 
-                Assert.Equal([RoleIds.Tuner, RoleIds.Dba], settings.Current.Features.Roles);
+                Assert.Equal([RoleIds.Tuner, RoleIds.PlsqlDev], settings.Current.Features.Roles);
                 Assert.Equal([FeatureIds.MyBatisLog], settings.Current.Features.Enabled);
-                Assert.Equal([FeatureIds.ColumnReorder], settings.Current.Features.Disabled);
+                Assert.Equal([FeatureIds.DbTools], settings.Current.Features.Disabled);
             }
 
             // 파일을 날것으로 읽어 본다.
             using var doc = JsonDocument.Parse(File.ReadAllText(Path.Combine(dir, "settings.json")));
             var f = doc.RootElement.GetProperty("features");
-            Assert.Equal(["tuner", "dba"], f.GetProperty("roles").EnumerateArray().Select(e => e.GetString()).ToArray());
+            Assert.Equal(["tuner", "plsqlDev"], f.GetProperty("roles").EnumerateArray().Select(e => e.GetString()).ToArray());
             Assert.Equal(["myBatisLog"], f.GetProperty("enabled").EnumerateArray().Select(e => e.GetString()).ToArray());
-            Assert.Equal(["columnReorder"], f.GetProperty("disabled").EnumerateArray().Select(e => e.GetString()).ToArray());
+            Assert.Equal(["dbTools"], f.GetProperty("disabled").EnumerateArray().Select(e => e.GetString()).ToArray());
 
             // 재시작해서 다시 읽는다: 같은 값, 같은 켜진 집합.
             using var app2 = new RoleApp(dir, null);
-            Assert.Equal([RoleIds.Tuner, RoleIds.Dba], app2.Get<SettingsService>().Current.Features.Roles);
-            var expected = PrdMatrix.Enabled(["tuner", "dba"], ["myBatisLog"], ["columnReorder"]);
+            Assert.Equal([RoleIds.Tuner, RoleIds.PlsqlDev], app2.Get<SettingsService>().Current.Features.Roles);
+            var expected = PrdMatrix.Enabled(["tuner", "plsqlDev"], ["myBatisLog"], ["dbTools"]);
             Assert.True(expected.SetEquals(app2.Gate.EnabledFeatures));
             var vm2 = new SettingsViewModel(app2.Get<SettingsService>(), app2.Get<ShellController>().Text, featureGate: app2.Gate);
-            Assert.True(vm2.Features.UseRoles);
+            Assert.Equal(PrimaryWorkKind.Tuner, vm2.Features.Primary);
+            Assert.True(vm2.Features.PlsqlAddon);
+            Assert.False(vm2.Features.MyBatisAddon);
             Assert.True(vm2.Features.Items.Single(i => i.Id == FeatureIds.MyBatisLog).IsChecked);
-            Assert.False(vm2.Features.Items.Single(i => i.Id == FeatureIds.ColumnReorder).IsChecked);
+            Assert.False(vm2.Features.Items.Single(i => i.Id == FeatureIds.DbTools).IsChecked);
             Assert.True(expected.SetEquals(vm2.Features.Items.Where(i => i.IsChecked).Select(i => i.Id)));
         }
         finally
@@ -178,36 +176,32 @@ public sealed class RoleEdgeCaseTests(ITestOutputHelper output)
     [Fact]
     public Task Choose_by_role_with_no_role_ticked_explains_that_only_the_common_features_stay_on() => HeadlessHost.Run(async () =>
     {
-        // followups(07-04, TSK-07-10 D-4 수정): 「Role 로 고르기」 + 확인란 0개 = 공통 기능만. 켜지는 것·할 일을 한 줄로 알린다.
+        // followups(07-04, TSK-07-10 D-4 수정): Role 0개(roles: []) = 공통 기능만. 켜지는 것·할 일을 한 줄로 알린다.
+        // TSK-09-08 뒤로는 화면에서 새로 만들 수 없고(D-017), 그런 설정 파일을 열면 「지금 조합: Role 없음(그대로 두기)」 으로 보인다.
         var dir = RoleApp.NewDir();
         try
         {
-            using var app = new RoleApp(dir, null);
+            using var app = new RoleApp(dir, Features([]));
             var vm = new SettingsViewModel(app.Get<SettingsService>(), app.Get<ShellController>().Text, featureGate: app.Gate);
-            vm.Features.UseRoles = true;
-            foreach (var r in vm.Features.Roles)
-            {
-                r.IsChecked = false;
-            }
+            Assert.Equal(PrimaryWorkKind.Custom, vm.Features.Primary);
+            Assert.Equal("지금 조합: Role 없음(그대로 두기)", vm.Features.PrimaryOptions[^1].Name);
 
             Assert.All(vm.Features.Items, i => Assert.False(i.IsChecked, i.Id)); // 25개 모두 꺼짐
             Assert.True(vm.Features.ShowNoRoleNotice);
-            Assert.Equal("Role 을 하나도 고르지 않으면 공통 기능만 켜집니다. 위 목록에서 쓸 Role 을 고르세요.", vm.Features.NoRoleNoticeText);
+            Assert.Equal("Role 이 하나도 없어 공통 기능만 켜집니다. 위에서 주 업무를 고르세요.", vm.Features.NoRoleNoticeText);
             Assert.False(vm.Features.HasRestartBanner);
             Assert.False(vm.Features.IsViewerOnly);
             Assert.False(vm.Features.ShowPackNotice);
 
-            // Role 을 하나 고르면 안내가 사라지고, 「모든 기능 쓰기」로 돌아가도 안 보인다(되돌림).
-            vm.Features.Roles.First(r => r.Id == RoleIds.SqlDev).IsChecked = true;
+            // 주 업무를 고르면 안내가 사라지고, 「모든 기능」 에서도 안 보이며, 「지금 조합」 으로 돌아오면 다시 보인다(되돌림).
+            vm.Features.Primary = PrimaryWorkKind.SqlDev;
             Assert.False(vm.Features.ShowNoRoleNotice);
-            vm.Features.Roles.First(r => r.Id == RoleIds.SqlDev).IsChecked = false;
-            Assert.True(vm.Features.ShowNoRoleNotice);
-            vm.Features.UseAllFeatures = true;
+            vm.Features.Primary = PrimaryWorkKind.All;
             Assert.False(vm.Features.ShowNoRoleNotice);
-            vm.Features.UseRoles = true;
+            vm.Features.Primary = PrimaryWorkKind.Custom;
             Assert.True(vm.Features.ShowNoRoleNotice);
 
-            // 저장하면 roles = [] → 공통 기능만 있는 앱이 된다(시작은 한다).
+            // 저장해도 roles = [] 그대로 → 공통 기능만 있는 앱이다(시작은 한다).
             await vm.SaveAsync();
             Assert.Empty(app.Get<SettingsService>().Current.Features.Roles!);
             await RoleApp.SettleAsync(() => !app.Gate.IsEnabled(FeatureIds.GridEdit));
