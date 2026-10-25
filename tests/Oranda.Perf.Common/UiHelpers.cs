@@ -12,9 +12,10 @@ namespace Oranda.Perf.Common;
 /// <param name="Rows">결과 행 수(grid, memory, firstrow).</param>
 /// <param name="Seconds">시나리오 한 구간의 길이(초).</param>
 /// <param name="Label">결과 파일 이름에 붙일 꼬리표(여러 번 돌릴 때).</param>
-public sealed record UiOptions(string Scenario, string Out, int Samples, int Warmup, int Lines, int Rows, int Seconds, string Label)
+/// <param name="Features">기능 구성(<see cref="FeaturePreset"/> 글). 있으면 앱을 띄우기 전에 임시 데이터 폴더 settings.json 에 쓴다(TSK-07-07).</param>
+public sealed record UiOptions(string Scenario, string Out, int Samples, int Warmup, int Lines, int Rows, int Seconds, string Label, string? Features = null)
 {
-    public static readonly string[] Scenarios = ["format", "typing", "diagnostics", "completion", "firstrow", "cancel", "memory", "grid"];
+    public static readonly string[] Scenarios = ["format", "typing", "diagnostics", "completion", "firstrow", "cancel", "memory", "grid", "roles", "sessions"];
 
     public static UiOptions Parse(string[] args)
     {
@@ -31,6 +32,7 @@ public sealed record UiOptions(string Scenario, string Out, int Samples, int War
         }
 
         string outDir = "perf-results", label = string.Empty;
+        string? features = null;
         int samples = 0, warmup = -1, lines = 0, rows = 0, seconds = 0;
         for (var i = 1; i < args.Length; i++)
         {
@@ -65,15 +67,19 @@ public sealed record UiOptions(string Scenario, string Out, int Samples, int War
                 case "--lines": lines = NextInt(1); break;
                 case "--rows": rows = NextInt(1); break;
                 case "--seconds": seconds = NextInt(1); break;
+                case "--features":
+                    features = Next();
+                    _ = FeaturePreset.Parse(features);
+                    break;
                 default: throw new ArgumentException($"모르는 옵션: {args[i]}");
             }
         }
 
-        return new UiOptions(scenario, outDir, samples, warmup, lines, rows, seconds, label);
+        return new UiOptions(scenario, outDir, samples, warmup, lines, rows, seconds, label, features);
     }
 
     /// <summary>화면이 실제로 그려져야 값이 맞는 시나리오(잠금·가림 점검 대상). 포맷·문법 검사·취소는 렌더와 무관하다.</summary>
-    public bool NeedsDisplay => Scenario is not ("format" or "diagnostics" or "cancel");
+    public bool NeedsDisplay => Scenario is not ("format" or "diagnostics" or "cancel" or "roles" or "sessions");
 
     public int SamplesOr(int fallback) => Samples > 0 ? Samples : fallback;
 

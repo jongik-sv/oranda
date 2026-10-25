@@ -171,6 +171,116 @@ public class StartupRunnerTests
         Assert.Empty(Process.GetProcessesByName("Oranda.Perf.FakeApp"));
     }
 
+    // ---- 기능 구성(TSK-07-07) ----
+
+    [Fact]
+    public void Features_option_writes_the_configuration_before_launch()
+    {
+        var data = Path.Combine(Path.GetTempPath(), "oranda-perf-test-" + Guid.NewGuid().ToString("N"));
+        try
+        {
+            var opt = Options(dataDir: data) with { Features = "viewer" };
+            Assert.True(RunFake("ok", opt).Ok);
+            var seen = File.ReadAllText(Path.Combine(data, "settings-seen.txt"));
+            Assert.Contains("\"roles\":[\"viewer\"]", seen, StringComparison.Ordinal);
+
+            // 같은 폴더로 V0 를 띄우면 앞 구성이 남지 않는다.
+            File.Delete(Path.Combine(data, "settings-seen.txt"));
+            Assert.True(RunFake("ok", Options(dataDir: data) with { Features = "all" }).Ok);
+            Assert.False(File.Exists(Path.Combine(data, "settings-seen.txt")));
+        }
+        finally
+        {
+            Directory.Delete(data, recursive: true);
+        }
+    }
+
+    [Fact]
+    public void Without_features_option_existing_settings_are_left_alone()
+    {
+        var data = Path.Combine(Path.GetTempPath(), "oranda-perf-test-" + Guid.NewGuid().ToString("N"));
+        try
+        {
+            Directory.CreateDirectory(data);
+            File.WriteAllText(Path.Combine(data, "settings.json"), "{\"schemaVersion\":1}");
+            Assert.True(RunFake("ok", Options(dataDir: data)).Ok);
+            Assert.Equal("{\"schemaVersion\":1}", File.ReadAllText(Path.Combine(data, "settings-seen.txt")));
+        }
+        finally
+        {
+            Directory.Delete(data, recursive: true);
+        }
+    }
+
+    [Fact]
+    public void Run_reports_threads_handles_and_only_this_runs_log_lines()
+    {
+        var data = Path.Combine(Path.GetTempPath(), "oranda-perf-test-" + Guid.NewGuid().ToString("N"));
+        try
+        {
+            // 앞 실행이 남긴 줄은 이번 값에 섞이지 않는다.
+            var logs = Path.Combine(data, "logs");
+            Directory.CreateDirectory(logs);
+            File.WriteAllText(Path.Combine(logs, "oranda-20260101.log"), "시작 작업: 돈 99개, 건너뜀 99개\r\n");
+            Environment.SetEnvironmentVariable("FAKE_LOG", "상태 칸 건너뜀: X.BlockerStatusItem|상태 칸: 4개, 건너뜀 1개|시작 작업: 돈 3개, 건너뜀 6개");
+            StartupRun run;
+            try
+            {
+                run = RunFake("ok", Options(dataDir: data));
+            }
+            finally
+            {
+                Environment.SetEnvironmentVariable("FAKE_LOG", null);
+            }
+
+            Assert.True(run.Ok);
+            Assert.Equal(3, run.TasksRan);
+            Assert.Equal(6, run.TasksSkipped);
+            Assert.Equal(4, run.StatusShown);
+            Assert.Equal(1, run.StatusSkipped);
+            if (OperatingSystem.IsWindows())
+            {
+                Assert.True(run.Threads > 0);
+                Assert.True(run.Handles > 0);
+            }
+        }
+        finally
+        {
+            Directory.Delete(data, recursive: true);
+        }
+    }
+
+    [Fact]
+    public void Run_without_log_leaves_counts_empty()
+    {
+        var run = RunFake("ok", Options());
+        Assert.Null(run.TasksRan);
+        Assert.Null(run.StatusShown);
+        Assert.Equal(0, run.StatusSkipped);
+    }
+
+    [Fact]
+    public void ReadLogSince_returns_only_text_after_the_offset_and_survives_missing_dirs()
+    {
+        var data = Path.Combine(Path.GetTempPath(), "oranda-perf-test-" + Guid.NewGuid().ToString("N"));
+        try
+        {
+            Assert.Null(StartupRunner.ReadLogSince(data, 0));
+            var logs = Path.Combine(data, "logs");
+            Directory.CreateDirectory(logs);
+            File.WriteAllText(Path.Combine(logs, "oranda-20260101.log"), "abc");
+            File.WriteAllText(Path.Combine(logs, "oranda-20260102.log"), "def");
+            Assert.Equal("abcdef", StartupRunner.ReadLogSince(data, 0));
+            Assert.Equal("bcdef", StartupRunner.ReadLogSince(data, 1));
+            Assert.Equal("ef", StartupRunner.ReadLogSince(data, 4));
+            Assert.Equal(string.Empty, StartupRunner.ReadLogSince(data, 6));
+        }
+        finally
+        {
+            Directory.Delete(data, recursive: true);
+        }
+    }
+
     [Fact]
     public void Missing_exe_throws_file_not_found()
     {

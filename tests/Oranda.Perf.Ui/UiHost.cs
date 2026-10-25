@@ -76,6 +76,11 @@ internal static class UiHost
         KeepAwake.Enable();
         var dataDir = Path.Combine(Path.GetTempPath(), "oranda-perfui-" + Guid.NewGuid().ToString("N"));
         Environment.SetEnvironmentVariable("ORANDA_DATA_DIR", dataDir);
+        if (options.Features is not null)
+        {
+            FeaturePreset.Parse(options.Features).WriteSettings(dataDir); // 임시 데이터 폴더에만 쓴다(사용자 설정은 건드리지 않는다)
+        }
+
         var exit = 0;
         try
         {

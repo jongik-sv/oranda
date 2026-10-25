@@ -59,6 +59,17 @@ internal sealed class PerfDb : IDisposable
         cmd.ExecuteNonQuery();
     }
 
+    /// <summary>이 레인 사용자의 지금 DB 세션 수(V$SESSION, 관리 계정으로 센다). 앱이 연 작업·모니터 세션이 모두 여기 든다.</summary>
+    public int CountSessions()
+    {
+        using var c = new OracleConnection(_adminConnection);
+        c.Open();
+        using var cmd = c.CreateCommand();
+        cmd.CommandText = "select count(*) from v$session where username = :u";
+        cmd.Parameters.Add(new OracleParameter("u", User));
+        return Convert.ToInt32(cmd.ExecuteScalar(), System.Globalization.CultureInfo.InvariantCulture);
+    }
+
     private void Admin(string sql)
     {
         using var c = new OracleConnection(_adminConnection);

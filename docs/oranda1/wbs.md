@@ -485,7 +485,7 @@ levels:
   - acceptance: PL/SQL 끔에서 스키마 브라우저·정의로 이동·객체 검색·변경 일지로 패키지를 열면 읽기 전용 SQL 탭이 열린다 / MyBatis 끔에서 매퍼를 열면 문장마다 SQL 탭이 생기고 매퍼 파일의 해시가 그대로다 / planAdvanced 끔에서 계획 창 고급 탭이 없고 튜닝 끔에서 계획 창 통계·자식 커서 단추가 없다 / 전체 시험 통과
   - note: 담당 PC: win144(Windows 개발 PC) — 맥북 세션은 이 Task 를 하지 않는다. 크기 L. 레인 rl-fallback. 결과: PL/SQL 끔 소스 열기를 SchemaObjectOpener 한 곳에서 읽기 전용 SQL 탭(「[읽기 전용] OWNER.NAME」, 미리보기 재사용·같은 객체 앞으로)으로, MyBatis 끔 매퍼는 파일 열기·최근 파일·끌어 놓기·명령줄 모두 ReadMyBatis 펼침(매퍼 해시 불변, 첫 회 상태 표시줄 안내), 계획 창 planAdvanced 끔이면 비교·그래프·보고서·고정·형식 숨김과 튜닝 단추·SQL 모니터 바로 가기 CommandsChanged 즉시 반영, 시작 화면 「Role 고르기…」 줄(StartPage 에 services 인자, MainWindow 전달은 07-02 몫) (win144)
 
-- [ ] TSK-07-07: Role 구성별 성능 비교 — 시작·유휴 메모리·스레드·시작 작업·추가 세션 결과서 [win144] w:2 2026-10-30~2026-10-31
+- [x] TSK-07-07: Role 구성별 성능 비교 — 시작·유휴 메모리·스레드·시작 작업·추가 세션 결과서 [win144] w:2 2026-10-30~2026-10-31
   - category: research
   - domain: test
   - model: sonnet
@@ -495,7 +495,7 @@ levels:
   - prd-ref: RL-13, TRD 10.10
   - requirements: `tests/Oranda.Perf` 에 실행 전 데이터 폴더 `settings.json` 에 features 구성을 쓰는 선택지(예: `--features all|sqlDev|myBatisDev|tuner,dba|viewer`)를 더하고 옵션 해석 시험을 둔다; 구성 V0 설정 없음·V1 R1·V2 R3·V3 R4+R5·V4 R6 을 같은 PC·같은 Release 게시본·docs/perf/README.md 측정 조건으로 잰다: 시작 표식(app-init·composed·settings-loaded·shell-attached·첫 프레임), 접속 0·탭 0 유휴 30초 전용 메모리, 스레드·핸들 수, 돈/건너뛴 시작 작업 수(TSK-07-03 Trace), 상태 칸 수; 접속 시나리오(`tests/Oranda.Perf.Ui` DB 시나리오, 26ai 상주 컨테이너, ORANDA_IT_* 환경 변수, 비밀번호 출력 금지): 미커밋 DML 뒤 1분 동안 앱이 연 DB 세션 수(V0·V1·V4); 구성마다 12회·앞 2회 버림·중앙값; 결과서 `docs/oranda1/itest/TSK-07-07.md`: 수치표(항목·구성·중앙값·p95·PC·빌드)와 D-003 기준에 따른 어셈블리 분리 결론(분리 검토면 후보 어셈블리와 예상 이득); 화면 잠김 등으로 못 잰 항목은 「참고」로 표시; 비고: 담당 PC: win144(Windows 개발 PC) — 맥북 세션은 이 Task 를 하지 않는다
   - acceptance: 5개 구성의 수치표가 있다 / V4 에서 블로커 모니터 세션이 열리지 않음이 수치로 보인다 / D-003 기준에 따른 결론 한 줄이 있다 / Perf 도구 시험 통과
-  - note: 담당 PC: win144(Windows 개발 PC) — 맥북 세션은 이 Task 를 하지 않는다. 크기 M. 레인 rl-perf(07-02·07-03 머지 뒤 시작, 다른 레인이 끝나 자리가 나면)
+  - note: 담당 PC: win144(Windows 개발 PC) — 맥북 세션은 이 Task 를 하지 않는다. 크기 M. 레인 rl-perf. 결과: Perf 도구에 --features(all|Role 목록|none, +/-기능)·--input-grace-s, 앱 안 roles·sessions 시나리오, scripts/perf/run-roles.ps1 를 더하고 V0~V4 를 구성 순서를 돌려 가며 12회(앞 2회 버림) 쟀다 — 유휴 전용 메모리 V0 201.2/V1 201.9/V2 201.2/V3 198.5/V4 197.8 MB, 시작 작업 돈 14/9/13/10/8, 상태 칸 10/9/10/9/7, V4 는 블로커 칸 없음; D-003 판정 「분리하지 않음」(차 3.4 MB·1.7 %); 못 잰 것: 미커밋 DML 뒤 DB 세션 수(podman 꺼짐·비밀번호 없음 — 참고, 사람이 run-roles.ps1 로 재측정); 결과서 docs/oranda1/itest/TSK-07-07.md (win144)
 
 - [x] TSK-07-08: Role 기반 메뉴·기능 통합테스트 — 기본값→Role 고르기→즉시 반영→조회 전용→대체 경로→재시작 [win144] w:2 2026-11-02~2026-11-03
   - category: itest

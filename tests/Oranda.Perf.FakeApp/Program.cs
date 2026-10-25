@@ -6,6 +6,8 @@ using System.Globalization;
 //   crash   : 표식 하나 쓰고 종료 코드 3 으로 끝난다.
 //   old     : first-render 까지만 쓴다(input-ready 없는 옛 App).
 // 데이터 폴더(ORANDA_DATA_DIR)에 data.txt 를 만들어 도구가 폴더를 넘겼는지 시험이 확인하게 한다.
+// FAKE_LOG 가 있으면 그 글(| 는 줄바꿈)을 데이터 폴더 logs/oranda-20260101.log 에 덧붙인다(앱 Trace 로그 흉내, TSK-07-07).
+// 데이터 폴더에 settings.json 이 있으면 그 글을 settings-seen.txt 로 복사해 도구가 features 를 써 두었는지 시험이 확인하게 한다.
 var mode = Environment.GetEnvironmentVariable("FAKE_MODE") ?? "ok";
 var file = Environment.GetEnvironmentVariable("ORANDA_PERF_FILE");
 var data = Environment.GetEnvironmentVariable("ORANDA_DATA_DIR");
@@ -13,6 +15,23 @@ if (!string.IsNullOrEmpty(data))
 {
     Directory.CreateDirectory(data);
     File.WriteAllText(Path.Combine(data, "data.txt"), AppContext.BaseDirectory);
+}
+
+if (!string.IsNullOrEmpty(data))
+{
+    var settings = Path.Combine(data, "settings.json");
+    if (File.Exists(settings))
+    {
+        File.WriteAllText(Path.Combine(data, "settings-seen.txt"), File.ReadAllText(settings));
+    }
+
+    var log = Environment.GetEnvironmentVariable("FAKE_LOG");
+    if (!string.IsNullOrEmpty(log))
+    {
+        var dir = Path.Combine(data, "logs");
+        Directory.CreateDirectory(dir);
+        File.AppendAllText(Path.Combine(dir, "oranda-20260101.log"), log.Replace("|", Environment.NewLine) + Environment.NewLine);
+    }
 }
 
 void Mark(string stage, double ms)
