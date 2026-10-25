@@ -143,6 +143,29 @@ public static class FeatureTexts
     /// <summary>위 줄 아래 흐린 설명: 빠진 메뉴를 어디서 켜는지</summary>
     public const string StartDefaultRoleDetail = "Features.start.defaultRoleDetail";
 
+    // ---- 시작 화면: 새 설치 카드·첫 접속 (TSK-09-09, D-018) ----
+
+    /// <summary>주로 하는 일은?  (새 설치에서만 보이는 카드 제목)</summary>
+    public const string StartFirstRunTitle = "Features.start.firstRunTitle";
+
+    /// <summary>카드 제목 아래 흐린 설명: 고르면 무엇이 되고 어디서 바꾸는지</summary>
+    public const string StartFirstRunDetail = "Features.start.firstRunDetail";
+
+    /// <summary>덧붙임 확인란 아래 흐린 설명: 어느 주 업무에 붙는지</summary>
+    public const string StartAddonHint = "Features.start.addonHint";
+
+    /// <summary>나중에</summary>
+    public const string StartLater = "Features.start.later";
+
+    /// <summary>「나중에」 툴팁: 기본 Role 로 시작하고 카드가 다시 나오지 않는다</summary>
+    public const string StartLaterTip = "Features.start.laterTip";
+
+    /// <summary>접속 추가…  (접속 프로필이 0개일 때 시작 화면 첫 줄, oranda.conn.manage)</summary>
+    public const string StartAddConnection = "Features.start.addConnection";
+
+    /// <summary>위 줄의 흐린 둘째 줄: 접속하면 SQL 탭이 바로 열린다</summary>
+    public const string StartAddConnectionDetail = "Features.start.addConnectionDetail";
+
     // ---- 조회 전용 안내 보강 (TSK-07-10) ----
 
     /// <summary>상태 표시줄 칸: 조회 전용 Role 때문에 쓰기가 막혔다(프로필 읽기 전용은 「읽기 전용」)</summary>

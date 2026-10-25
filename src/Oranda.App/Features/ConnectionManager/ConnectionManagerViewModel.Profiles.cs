@@ -21,6 +21,13 @@ public sealed partial class ConnectionManagerViewModel
         var doc = await _service.LoadAsync(ct).ConfigureAwait(true);
         FileNotice = doc.Notice;
         Rebuild(doc.Value, null);
+
+        // 접속이 하나도 없으면 「새 접속」 을 누른 상태로 연다(첫 접속 흐름, TSK-09-09·D-018).
+        if (_profiles.Count == 0 && Editor is null)
+        {
+            Editor = ProfileEditorViewModel.ForNew();
+            SetStatus(StatusKind.Info, "새 접속을 입력하세요.");
+        }
     }
 
     [RelayCommand]

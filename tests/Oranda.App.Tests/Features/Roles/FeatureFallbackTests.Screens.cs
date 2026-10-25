@@ -172,6 +172,7 @@ public sealed partial class FeatureFallbackTests
     public Task Start_page_shows_choose_role_until_roles_are_picked_and_drops_mappers_when_mybatis_is_off() => HeadlessHost.Run(async () =>
     {
         using var h = new ShellHarness(allFeatures: false); // 설정 없음 = 기본 Role(D-013)
+        h.Get<SettingsService>().FirstRunCardDismissed = true; // 새 설치 카드(TSK-09-09)를 닫은 화면 = D-013 한 줄 카드
         var gate = new FakeFeatureGate();
         h.Services.AddInstance<IFeatureGate>(gate);
         var previous = ShellCommandRunner.Runner;

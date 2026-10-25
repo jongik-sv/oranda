@@ -411,8 +411,15 @@ public sealed partial class FeatureSettingsPage : ObservableObject, IDisposable
             return;
         }
 
-        var names = FeatureIds.All.Where(pending.Contains).Concat(pending.Where(p => !FeatureIds.All.Contains(p))).Select(NameOf);
-        RestartBannerText = string.Format(CultureInfo.CurrentCulture, _text.Lookup(FeatureTexts.RestartBanner), string.Join(", ", names));
+        RestartBannerText = RestartText(_text, pending);
+    }
+
+    /// <summary>「재시작하면 적용됩니다: MyBatis 작업 공간, …」(카탈로그 순서, 모르는 id 는 그대로 뒤에). 시작 화면도 쓴다.</summary>
+    internal static string RestartText(IShellText text, IReadOnlyCollection<string> pending)
+    {
+        var names = FeatureIds.All.Where(pending.Contains).Concat(pending.Where(p => !FeatureIds.All.Contains(p)))
+            .Select(id => FeatureCatalog.Find(id) is { } f ? text.Lookup(f.NameKey) : id);
+        return string.Format(CultureInfo.CurrentCulture, text.Lookup(FeatureTexts.RestartBanner), string.Join(", ", names));
     }
 
     /// <summary>재시작 대기 기능이 있나(저장 뒤에 창을 열어 둬 안내를 보일지 정한다).</summary>

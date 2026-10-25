@@ -1,4 +1,5 @@
 using System;
+using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
 using Oranda.Core.Settings;
@@ -9,9 +10,10 @@ namespace Oranda.App.Shell.Settings;
 /// <summary>
 /// 실행 중 앱이 쓰는 설정 한 벌(<see cref="Current"/>)과 바꾸고 저장하는 길(<see cref="UpdateAsync"/>).
 /// 저장하면 <see cref="ISettingsStore"/> 가 바뀐 섹션마다 <c>SettingsChanged</c> 를 발행한다.
+/// 처음 읽을 때 settings.json 이 없었으면 새 설치(<see cref="IsFirstRun"/>, TSK-09-09·D-018)로 본다.
 /// </summary>
 [System.Diagnostics.CodeAnalysis.SuppressMessage("Design", "CA1001", Justification = "SemaphoreSlim 은 대기 핸들을 만들지 않으면 정리할 자원이 없고, 종료 중 늦은 저장이 정리된 세마포어를 만나지 않게 둔다.")]
-public sealed class SettingsService(ISettingsStore store)
+public sealed class SettingsService
 {
     /// <summary>글자 크게/작게 한 단계(pt).</summary>
     public const double ZoomStep = 1;
@@ -24,8 +26,32 @@ public sealed class SettingsService(ISettingsStore store)
 
     public const double DefaultGridFontSize = 13;
 
+    private readonly ISettingsStore _store;
+    private readonly Func<bool>? _settingsFileExists;
     private readonly SemaphoreSlim _updateGate = new(1, 1);
     private AppSettings _current = new();
+    private int _loaded;
+
+    /// <summary>파일 위치를 모르는 설정(시험의 메모리 저장소). 새 설치로 보지 않는다.</summary>
+    public SettingsService(ISettingsStore store)
+        : this(store, settingsFileExists: null)
+    {
+    }
+
+    /// <summary>앱 조립이 쓰는 생성자: <see cref="IAppDataPaths.SettingsFile"/> 가 없으면 새 설치다.</summary>
+    public SettingsService(ISettingsStore store, IAppDataPaths paths)
+        : this(store, () => File.Exists(paths.SettingsFile))
+    {
+    }
+
+    /// <param name="store">설정 저장소.</param>
+    /// <param name="settingsFileExists">처음 읽기 직전에 settings.json 이 있는지 묻는다. null 이면 새 설치로 보지 않는다.</param>
+    public SettingsService(ISettingsStore store, Func<bool>? settingsFileExists)
+    {
+        ArgumentNullException.ThrowIfNull(store);
+        _store = store;
+        _settingsFileExists = settingsFileExists;
+    }
 
     public AppSettings Current => Volatile.Read(ref _current);
 
@@ -35,9 +61,23 @@ public sealed class SettingsService(ISettingsStore store)
     /// <summary>파일을 읽을 때 알린 말(손상 백업 등). 없으면 null.</summary>
     public string? Notice { get; private set; }
 
+    /// <summary>
+    /// 새 설치: 처음 <see cref="LoadAsync"/> 할 때 settings.json 이 없었다. 앱이 도는 동안 바뀌지 않는다(뒤에 파일이 생겨도, 다른 프로세스가 만들어도).
+    /// 시작 화면 「주로 하는 일은?」 카드의 조건이다(D-018).
+    /// </summary>
+    public bool IsFirstRun { get; private set; }
+
+    /// <summary>이번 실행에서 「주로 하는 일은?」 카드를 「나중에」 로 닫았다(다음 실행은 파일이 있어 새 설치가 아니다).</summary>
+    public bool FirstRunCardDismissed { get; set; }
+
     public async Task<AppSettings> LoadAsync(CancellationToken ct = default)
     {
-        var doc = await store.LoadAsync(ct).ConfigureAwait(false);
+        if (Interlocked.Exchange(ref _loaded, 1) == 0)
+        {
+            IsFirstRun = _settingsFileExists is { } exists && !exists();
+        }
+
+        var doc = await _store.LoadAsync(ct).ConfigureAwait(false);
         Volatile.Write(ref _current, doc.Value);
         IsReadOnly = doc.IsReadOnly;
         Notice = doc.Notice;
@@ -54,7 +94,7 @@ public sealed class SettingsService(ISettingsStore store)
         {
             var next = change(Current);
             Volatile.Write(ref _current, next);
-            await store.SaveAsync(next, ct).ConfigureAwait(false);
+            await _store.SaveAsync(next, ct).ConfigureAwait(false);
         }
         finally
         {
