@@ -504,3 +504,55 @@ TRD 10.9 를 실제 코드(기준 8d84622)에 맞춰 옮겼다. TSK-07-01(계약
 - 게이트를 등록해 두어서 `ExecutionPolicy` 에 `IFeatureGate?` 생성자 인자를 더하면(07-05) 컨테이너가 가장 긴 생성자로 넣어 준다 — `AppComposition` 을 고치지 않아도 된다. 등록되지 않은 형을 물으면 컨테이너가 지연 어셈블리를 훑으므로 게이트 등록 줄은 빼지 않는다.
 - 설정 창은 `ShellController.ShowSettings` 가 만든다(07-02 소유). 07-04 는 그 파일을 고치지 않는다 — 「기능」 탭으로 열기·게이트 전달은 자기 파일(`SettingsViewModel` 의 선택 속성, 또는 `FeatureSettingsCommands` 처리기가 창을 직접 띄움)로 푼다.
 - 「설정 열기」·「Role 고르기…」는 `ShellCommandRunner.RunAsync(FeatureCommandIds.Roles)` 를 부른다. 명령 처리기는 07-04 가 만들기 전까지 레지스트리에 없어 조용히 아무 일도 안 한다.
+
+## 기능 Task 편집 지점 (WP-09)
+
+TRD 11.10 을 실제 코드(기준 df8a4cc)에 맞춰 옮겼다. TSK-09-01(계약)이 확정. 한 파일은 한 레인만 고치고, 같은 레인 안 Task 는 차례로 한다. 경로의 `Shell/`·`Features/` 는 `src/Oranda.App/` 아래, 시험 경로의 뿌리는 `tests/Oranda.App.Tests/` 다. 표의 경로는 모두 지금 있는 파일이다(새 파일은 「새」 로 적음).
+
+| 레인 / Task | 소유 파일(쓰기) | 시험 파일 | 고치지 않는 것 |
+|---|---|---|---|
+| ux-menu / 09-01 계약 | `Shell/Resources/CommandTitles.json`·`CommandTitles-en.json`, `Resources/strings-ko/en.json` 의 `Menu.*`·`Shell.settings.*`, `Shell/Settings/SettingsWindow.axaml`(실행 탭 안내 한 줄), `Features/SessionMonitor/SessionMonitorViewModel.cs`(종료·연결 끊기 확인 문구), `Features/DataTransfer/DataTransferCommands.cs` 의 `oranda.grid.export` `Title =` 한 줄(09-07 보다 먼저), `docs/design/commands.md`(제목 열), 이 표 | `Features/Localization/LocalizationTests.cs` | 배치(`Placements`)·`When`·로직 |
+| ux-menu / 09-02 | 아래 ux-shell·ux-export·ux-role 소유를 뺀 `Features/**/*Commands.cs`·`*CommandHandler.cs` 의 `[OrandaCommand]` 특성 — 특히 `SqlEditor/SqlEditorCommandHandler.cs`, `Navigation/NavigationCommands.cs`·`ObjectNavigationCommands.cs`, `ConnectionManager/ConnectionManagerCommands.cs`, `ConnectionImport/ConnectionImportCommands.cs`·`ConnectionExportCommands.cs`, `PlsqlEditor/PlsqlEditorCommands.cs`, `PlsqlRun/PlsqlRunCommands.cs`, `MyBatisWorkspace/{Combos,Conversion,Folder,Format,Run,Save,Statements}/*Commands.cs`, `Templates/TemplatesCommands.cs`, `LobRowView/LobRowViewCommands.cs`, `Execution/ExecutionCommands.cs`, `ExecutionPlan/ExecutionPlanCommands.cs`, `Completion/CompletionCommands.cs`, `FormatterProfiles/FormatterProfilesCommands.cs`, `MyBatisLog/MyBatisLogCommands.cs`, `DedicatedSession/DedicatedSessionCommands.cs`, `RecentFiles/**`; `Shell/ShellCommands.cs`; 문구 파일(09-01 과 같은 범위) | `Features/SqlEditor/SqlEditorWorkspaceMenuTests.cs`, 새 `Shell/MenuGroupingTests.cs` | `Shell/Menus/**`, 그리드 3파일, `Features/DataTransfer/**`, 기존 메뉴 Headless 시험(깨지면 고치지 말고 결과에 적고 조정자에게 알린다) |
+| ux-shell / 09-03 | `Shell/Menus/**`(`MenuModel.cs`·`MenuControls.cs`·`ShellContextMenus.cs`·`ToolbarOverflow.cs` 등), 그리드 3파일 `Features/ResultGrid/ResultGridCommands.cs`·`Features/GridEdit/GridEditCommands.cs`·`Features/Flashback/FlashbackCommands.cs` | `Shell/Headless/MenuStateHeadlessTests.cs`·`MenuBarTargetTests.cs`·`NativeMenuTests.cs`, `Shell/MenuVisibilityTests.cs`, `Shell/TuningMenuTests.cs`, 새 `Shell/ContextSubmenuTests.cs` | 다른 `*Commands.cs`, 문구 파일 |
+| ux-shell / 09-04 | `Shell/Menus/**`, `Features/Execution/ExecutionCommands.cs` 의 커밋·롤백 두 줄(09-02 머지 뒤, 그 두 줄만) | 새 `Shell/ToolbarWhenTests.cs`, `Integration/Roles/RoleSurfaceMatrixTests.cs`(툴바 정답표) | 문구 파일 |
+| ux-layout / 09-05 | `Shell/Layout/**`, `Shell/Docking/**`, 문구 `Layout.*` | `Shell/LayoutPlannerTests.cs`, `Shell/Headless/NamedLayoutTests.cs`, 새 `Shell/Headless/DefaultLayoutAutoOpenTests.cs` | `*Commands.cs`, `[OrandaToolPanel]` 특성, `Features/Execution/**` |
+| ux-layout / 09-06 | `docs/design/keymaps/*.json`, (꼭 필요할 때만) `Shell/Keymaps/**` | `Shell/Contract/KeymapLoaderTests.cs`, 새 `Shell/MyBatisRunKeyTests.cs` | `*Commands.cs` |
+| ux-export / 09-07 | `Features/DataTransfer/**`(가져오기 `Import*` 제외), 문구 `Export.*` | `Features/DataTransfer/**` | `CommandTitles*.json`, `Shell/Menus/**` |
+| ux-role / 09-08 | `Shell/Settings/FeatureSettingsPage.cs`·`FeatureSettingsView.axaml(.cs)`, `src/Oranda.Core/Features/FeatureTexts.cs`, 새 `src/Oranda.Core/Features/PrimaryWork.cs`, 문구 `Features.*`·`Role.*` | `Features/Roles/FeatureSettingsViewTests.cs`, `Integration/Roles/RoleMenuFlowTests.cs`·`RoleEdgeCaseTests.cs`·`RoleRenderTests.cs`, 새 `tests/Oranda.Core.Tests/Features/PrimaryWorkTests.cs` | `FeatureCatalog.cs`·`FeaturesSettings.cs`·`SettingsStore.cs`·`FeatureGate.cs` |
+| ux-role / 09-09 | `Shell/StartPage.cs`, `Shell/Settings/SettingsService.cs`, 새 `Shell/FirstConnectEditor.cs`, `FeatureTexts.cs`·문구(시작 화면 키 `Start.*`) | `Shell/Headless/StartPageHostTests.cs`, 새 `Shell/Headless/FirstRunCardTests.cs` | `ConnectionManager/ConnectionManagerCommands.cs`(ux-menu) |
+| ux-itest / 09-10 | 새 `Integration/Ux/**`, 빠진 문구(문구 파일 전부), `docs/oranda1/itest/TSK-09-10.md` | 같은 폴더 | 제품 코드(결함은 defect Task 로) |
+
+겹침 정리: `ExecutionCommands.cs` 는 09-02(ux-menu) → 09-04(ux-shell, 커밋·롤백 두 줄) 차례이고 머지 순서로 갈린다. `SettingsWindow.axaml` 은 09-01 만 고친다(09-08 은 `FeatureSettingsView` 쪽). `DataTransferCommands.cs` 의 `Title =` 한 줄은 09-01 이 먼저 고치고 그 뒤로는 09-07 소유다.
+
+### 하위 메뉴 제목 키 (TRD 11.2, 09-01 이 ko·en 으로 예약)
+
+| 키 | ko | en | 쓰는 Task |
+|---|---|---|---|
+| `Menu.edit.case` | 대소문자 | Case | 09-02 |
+| `Menu.edit.lines` | 줄·주석 | Lines and Comments | 09-02 |
+| `Menu.edit.format` | 포맷 | Format | 09-02 |
+| `Menu.edit.marks` | 북마크·접기 | Bookmarks and Folding | 09-02 |
+| `Menu.edit.go` | 이동 | Go To | 09-02 |
+| `Menu.edit.assist` | 입력 도우미 | Input Assist | 09-02 |
+| `Menu.file.workspace` | 작업 공간 | Workspace | 09-02 |
+| `Menu.file.connection` | 접속 | Connection | 09-02 |
+| `Menu.file.tabs` | 탭 | Tabs | 09-02 |
+| `Menu.file.mybatis` | MyBatis | MyBatis | 09-02 |
+| `Menu.sql.plsql` | PL/SQL | PL/SQL | 09-02 |
+| `Menu.sql.errorMode` (지금 키 그대로) | 스크립트 오류 시 (이번 실행) | On Script Error (this run) | 09-01 이 제목만 바꿈 |
+| `Menu.context.grid.copyAs` | 복사 형식 | Copy As | 09-03 |
+| `Menu.context.grid.filter` | 거르기 | Filter | 09-03 |
+| `Menu.context.grid.edit` | 행 편집 | Edit Rows | 09-03 |
+| `Menu.context.grid.flashback` | 플래시백 | Flashback | 09-03 |
+| `Menu.context.grid.columns` | 열 | Columns | 09-03 |
+
+- 최근 작업 공간 하위 메뉴(`Menu.file.recentWorkspaces`, 공급자 상수 `RecentFilesService.WorkspacesMenuKey`)를 「작업 공간 ▸」 안으로 옮기면 키가 `Menu.file.workspace.recentWorkspaces` 가 된다. 09-02 가 상수와 문구를 같이 바꾼다. 최근 파일(`Menu.file.recentFiles`)은 최상위에 남는다.
+- 결과 메뉴 옮겨 싣기의 하위 메뉴는 오른쪽 클릭과 같은 `Menu.context.grid.*` 키를 쓴다(09-03).
+- `Menu.*` 는 코드에서 안 써도 LocalizationTests 가 실패로 보지 않는다(안 쓰는 키 검사는 `Shell.*` 만). 그래서 09-03 이 쓰기 전까지 예약 키가 남아 있어도 된다.
+
+### 이름 바꾸기에서 정한 것 (PRD 13.4)
+
+- 스크립트 오류 시 3개(`oranda.exec.errorModeAsk`·`Stop`·`Continue`)는 하위 메뉴 제목에만 「(이번 실행)」 을 붙이고 명령 제목 「스크립트 오류 시: 묻기」 등은 그대로 둔다. 명령 제목은 팔레트에도 그대로 보이므로(「SQL: 묻기」 는 뜻이 없다) 앞말을 남긴다.
+- 두 모니터의 자동 새로 고침(`oranda.monitor.toggleAutoRefresh`·`oranda.monitor.locks.toggleAutoRefresh`)은 같은 이름이 되었다. 각자 자기 탭에 포커스가 있을 때만 메뉴에 보인다(`When`).
+- 세션 모니터 확인 창은 「다음 세션에 세션 종료(KILL IMMEDIATE) 을(를) 보냅니다.」 처럼 메뉴 이름과 같은 낱말을 쓴다. Lock 모니터 확인 창(`LockKillRequest.ActionText` 「세션 종료」·「연결 끊기」)과 두 모니터 툴바 단추는 이미 같은 낱말이라 그대로 둔다.
+- 설정 「실행」 탭: 네 칸 이름 끝에 「(기본값)」, 탭 위 안내 `Shell.settings.execNotice`. 자동 커밋 칸의 옛 「(새 세션 기본값)」 은 「(기본값)」 으로 합쳤다.

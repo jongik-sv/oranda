@@ -212,23 +212,27 @@
 
       <TabItem Header="{Binding Strings[tab.execution]}">
         <ScrollViewer HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
-          <Grid Classes="form" ColumnDefinitions="Auto,*" RowDefinitions="Auto,Auto,Auto,Auto" ColumnSpacing="12" RowSpacing="10">
-            <TextBlock Grid.Row="0" Text="{Binding Strings[tx]}" />
-            <CheckBox Grid.Row="0" Grid.Column="1" Content="{Binding Strings[autoCommit]}" IsChecked="{Binding AutoCommit}" />
-            <TextBlock Grid.Row="1" Text="{Binding Strings[dbmsOutput]}" />
-            <CheckBox Grid.Row="1" Grid.Column="1" Content="{Binding Strings[dbmsOutputCollect]}" IsChecked="{Binding DbmsOutput}" />
-            <TextBlock Grid.Row="2" Text="{Binding Strings[errorLabel]}" />
-            <ComboBox Grid.Row="2" Grid.Column="1" MinWidth="160" ItemsSource="{Binding ErrorModes}"
-                      SelectedItem="{Binding SelectedErrorMode}" AutomationProperties.Name="{Binding Strings[errorName]}">
-              <ComboBox.ItemTemplate>
-                <DataTemplate x:DataType="settings:ErrorModeChoice">
-                  <TextBlock Text="{Binding Label}" />
-                </DataTemplate>
-              </ComboBox.ItemTemplate>
-            </ComboBox>
-            <TextBlock Grid.Row="3" Text="{Binding Strings[splitLabel]}" />
-            <CheckBox Grid.Row="3" Grid.Column="1" Content="{Binding Strings[split]}" IsChecked="{Binding SplitOnBlankLine}" />
-          </Grid>
+          <!-- 여기 값은 새 탭·다음 실행의 기본값이다. 지금 탭은 SQL 메뉴의 「(이번 실행)」 토글로 바꾼다(D-016). -->
+          <StackPanel Spacing="10">
+            <TextBlock x:Name="ExecNotice" Classes="hint" HorizontalAlignment="Left" Text="{Binding Strings[execNotice]}" />
+            <Grid Classes="form" ColumnDefinitions="Auto,*" RowDefinitions="Auto,Auto,Auto,Auto" ColumnSpacing="12" RowSpacing="10">
+              <TextBlock Grid.Row="0" Text="{Binding Strings[tx]}" />
+              <CheckBox Grid.Row="0" Grid.Column="1" Content="{Binding Strings[autoCommit]}" IsChecked="{Binding AutoCommit}" />
+              <TextBlock Grid.Row="1" Text="{Binding Strings[dbmsOutput]}" />
+              <CheckBox Grid.Row="1" Grid.Column="1" Content="{Binding Strings[dbmsOutputCollect]}" IsChecked="{Binding DbmsOutput}" />
+              <TextBlock Grid.Row="2" Text="{Binding Strings[errorLabel]}" />
+              <ComboBox Grid.Row="2" Grid.Column="1" MinWidth="160" ItemsSource="{Binding ErrorModes}"
+                        SelectedItem="{Binding SelectedErrorMode}" AutomationProperties.Name="{Binding Strings[errorName]}">
+                <ComboBox.ItemTemplate>
+                  <DataTemplate x:DataType="settings:ErrorModeChoice">
+                    <TextBlock Text="{Binding Label}" />
+                  </DataTemplate>
+                </ComboBox.ItemTemplate>
+              </ComboBox>
+              <TextBlock Grid.Row="3" Text="{Binding Strings[splitLabel]}" />
+              <CheckBox Grid.Row="3" Grid.Column="1" Content="{Binding Strings[split]}" IsChecked="{Binding SplitOnBlankLine}" />
+            </Grid>
+          </StackPanel>
         </ScrollViewer>
       </TabItem>
 

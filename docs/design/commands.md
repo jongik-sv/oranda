@@ -418,19 +418,19 @@
 | `oranda.exec.runToNewResultTab` | 새 결과 탭으로 실행 | `F11` | `sqlDocFocus` | `(hasSession \|\| dedicatedSession) && !sessionBusy && !mybatisDocActive` | TSK-06-02 |
 | `oranda.exec.runAllTabs` | 모든 탭 실행 | - | 전역 | `(hasSession \|\| dedicatedSession) && !sessionBusy && !mybatisDocActive` | TSK-06-02 |
 | `oranda.exec.runForEdit` | 결과 편집 모드로 실행 | `F9` (macOS `Ctrl+Enter`) | `sqlDocFocus` | `hasSession && !sessionBusy && !readOnlySession && !mybatisDocActive` | TSK-06-04 |
-| `oranda.exec.cancel` | 실행 취소(서버 중단) | `Ctrl+Break` | `sqlDocFocus` | `sessionBusy` | TSK-06-02 |
+| `oranda.exec.cancel` | 실행 중지 | `Ctrl+Break` | `sqlDocFocus` | `sessionBusy` | TSK-06-02 |
 | `oranda.exec.bindVariables` | 바인드 변수 창 | - | `sqlDocFocus` | `sqlDocActive` | TSK-06-02 |
 | `oranda.exec.pasteBindValues` | 바인드 값을 편집기에 붙여 넣기 | - | `sqlDocFocus` | `sqlDocActive` | TSK-06-02 |
-| `oranda.exec.toggleDbmsOutput` | DBMS_OUTPUT 수집 켜기/끄기 | - | 전역 | `sqlDocActive` | TSK-06-02 |
+| `oranda.exec.toggleDbmsOutput` | DBMS_OUTPUT 수집 켜기/끄기 (이번 실행) | - | 전역 | `sqlDocActive` | TSK-06-02 |
 | `oranda.exec.errorModeAsk` | 스크립트 오류 시: 묻기 | - | 전역 | `sqlDocActive` | TSK-06-02 |
 | `oranda.exec.errorModeStop` | 스크립트 오류 시: 중지 | - | 전역 | `sqlDocActive` | TSK-06-02 |
 | `oranda.exec.errorModeContinue` | 스크립트 오류 시: 계속 | - | 전역 | `sqlDocActive` | TSK-06-02 |
 | `oranda.exec.goToError` | 오류 문장으로 이동 | - | `sqlDocFocus` | `hasExecError` | TSK-06-02 |
-| `oranda.exec.toggleBlankLineDelimiter` | 빈 줄로 문장 나누기 켜기/끄기 | - | 전역 | `sqlDocActive` | TSK-06-02 |
+| `oranda.exec.toggleBlankLineDelimiter` | 빈 줄로 문장 나누기 켜기/끄기 (이번 실행) | - | 전역 | `sqlDocActive` | TSK-06-02 |
 | `oranda.exec.toggleStatistics` | 실행 통계 수집 켜기/끄기 | - | 전역 | `sqlDocActive` | TSK-06-06 |
 | `oranda.txn.commit` | 커밋 | - | 전역 | `(hasSession \|\| dedicatedSession) && txnPending && !sessionBusy` | TSK-06-02 |
 | `oranda.txn.rollback` | 롤백 | - | 전역 | `(hasSession \|\| dedicatedSession) && txnPending && !sessionBusy` | TSK-06-02 |
-| `oranda.txn.toggleAutoCommit` | 자동 커밋 켜기/끄기 | - | 전역 | `(hasSession \|\| dedicatedSession) && !readOnlySession` | TSK-06-02 |
+| `oranda.txn.toggleAutoCommit` | 자동 커밋 켜기/끄기 (이번 실행) | - | 전역 | `(hasSession \|\| dedicatedSession) && !readOnlySession` | TSK-06-02 |
 | `oranda.plan.explain` | 예상 실행 계획 | `Ctrl+E` | `sqlDocFocus` | `(hasSession \|\| dedicatedSession) && !sessionBusy && !mybatisDocActive` | TSK-07-01 |
 | `oranda.plan.actual` | 실제 실행 계획(마지막 실행) | `Ctrl+Shift+E` | `sqlDocFocus` | `(hasSession \|\| dedicatedSession) && hasLastSqlId && !mybatisDocActive` | TSK-07-01 |
 | `oranda.plan.displayCursorOptions` | DISPLAY_CURSOR 형식 옵션 | - | 전역 | `hasSession` | TSK-07-01 |
@@ -469,7 +469,7 @@
 | `oranda.grid.showReferencingRows` | 이 행을 참조하는 행 열기(자식) | `Shift+F4` | `gridFocus` | `gridQueryResult && gridHasSelection && hasSession && !sessionBusy` | TSK-06-03 |
 | `oranda.grid.rowView` | 행 보기 | `Alt+Enter` | `gridFocus` | `gridHasSelection` | TSK-06-05 |
 | `oranda.grid.viewValue` | 값 보기(LOB 편집기) | - | `gridFocus` | `gridHasSelection` | TSK-06-05 |
-| `oranda.grid.export` | 내보내기 | - | `gridFocus` | `gridHasResult` | TSK-06-07 |
+| `oranda.grid.export` | 파일로 내보내기… | - | `gridFocus` | `gridHasResult` | TSK-06-07 |
 | `oranda.grid.exportExcel` | Excel 로 내보내기… | `Ctrl+Alt+E` | `gridFocus` | `gridHasResult` | TSK-06-07 |
 | `oranda.grid.flashback.asOf` | N분 전 값 보기… | - | `gridFocus` | `gridHasSelection` | TSK-13-05 |
 | `oranda.grid.flashback.history` | 이 행 변경 이력 (활성 행의 전체 변경 이력 질의를 새 SQL 탭에 넣고 실행. 일반 실행 결과도 단일 표·PK 가 있으면 동작) | - | `gridFocus` | `gridHasSelection` | TSK-13-05, TSK-13-31, TSK-13-33 |
@@ -552,8 +552,8 @@
 | `oranda.monitor.toggleDelta` | 델타 모드 | - | `monitorFocus` | `monitorSessionOpen` | TSK-09-01 |
 | `oranda.monitor.blockingTree` | 블로킹 트리 | - | `monitorFocus` | `monitorSessionOpen` | TSK-09-01 |
 | `oranda.monitor.sessionDetail` | 세션 상세 | - | `monitorFocus` | `monitorSessionSelected` | TSK-09-01 |
-| `oranda.monitor.killSession` | 세션 Kill | - | `monitorFocus` | `monitorSessionSelected && canKillSession` | TSK-09-01 |
-| `oranda.monitor.disconnectSession` | 세션 Disconnect | - | `monitorFocus` | `monitorSessionSelected && canKillSession` | TSK-09-01 |
+| `oranda.monitor.killSession` | 세션 종료(KILL)… | - | `monitorFocus` | `monitorSessionSelected && canKillSession` | TSK-09-01 |
+| `oranda.monitor.disconnectSession` | 세션 연결 끊기(DISCONNECT)… | - | `monitorFocus` | `monitorSessionSelected && canKillSession` | TSK-09-01 |
 | `oranda.monitor.traceOn` | SQL 트레이스 켜기 | - | `monitorFocus` | `monitorSessionSelected && canTraceSessions` | TSK-09-01 |
 | `oranda.monitor.traceOff` | SQL 트레이스 끄기 | - | `monitorFocus` | `monitorSessionSelected && canTraceSessions` | TSK-09-01 |
 | `oranda.monitor.sql` | SQL 모니터(Top SQL) | - | 전역 | `hasSession` | TSK-09-02 |
@@ -562,9 +562,9 @@
 | `oranda.monitor.sqlShowBinds` | 선택 SQL 바인드 캡처 | - | `monitorFocus` | `monitorSqlSelected` | TSK-09-02 |
 | `oranda.monitor.locks` | Lock 모니터 | - | 전역 | `hasSession` | TSK-05-03 |
 | `oranda.monitor.locks.refresh` | Lock 새로 고침 | `F5` | `lockMonitorFocus` | `lockMonitorOpen` | TSK-05-03 |
-| `oranda.monitor.locks.toggleAutoRefresh` | Lock 자동 새로 고침 켜기/끄기 | - | `lockMonitorFocus` | `lockMonitorOpen` | TSK-05-03 |
-| `oranda.monitor.locks.killHolder` | 고른 세션 종료(확인 창에 대기자 수·목록) | - | `lockMonitorFocus` | `lockSessionSelected && lockCanKillSession` | TSK-05-03 |
-| `oranda.monitor.locks.disconnectHolder` | 고른 세션 연결 끊기(실행 엔진 위험 명령 확인) | - | `lockMonitorFocus` | `lockSessionSelected && lockCanKillSession` | TSK-05-03 |
+| `oranda.monitor.locks.toggleAutoRefresh` | 자동 새로 고침 켜기/끄기 | - | `lockMonitorFocus` | `lockMonitorOpen` | TSK-05-03 |
+| `oranda.monitor.locks.killHolder` | 세션 종료(KILL)…(확인 창에 대기자 수·목록) | - | `lockMonitorFocus` | `lockSessionSelected && lockCanKillSession` | TSK-05-03 |
+| `oranda.monitor.locks.disconnectHolder` | 세션 연결 끊기(DISCONNECT)…(실행 엔진 위험 명령 확인) | - | `lockMonitorFocus` | `lockSessionSelected && lockCanKillSession` | TSK-05-03 |
 | `oranda.monitor.locks.showSql` | 보유자·대기자 SQL 보기 | - | `lockMonitorFocus` | `lockSessionSelected` | TSK-05-03 |
 | `oranda.monitor.locks.showLockedRow` | 잠긴 행 보기 | - | `lockMonitorFocus` | `lockWaiterSelected` | TSK-05-03 |
 | `oranda.monitor.locks.showDdlLocks` | DDL 잠금 보기 | - | `lockMonitorFocus` | `lockMonitorOpen && canQueryDdlLocks` | TSK-05-03 |
@@ -648,13 +648,13 @@
 
 | ID | 제목 | 기본 키 | 키 범위(when) | 활성 조건 | 소유 Task |
 |---|---|---|---|---|---|
-| `oranda.tuning.stats` | 통계 보기… | - | 전역 | `hasSession` | TSK-06-03 (`menu:tuning/stats@200`·`context:editor/tableStats@1030`) |
-| `oranda.tuning.gatherStatsScript` | 통계 수집 (DBMS_STATS) | - | 전역 | `tuningStatsActive`(통계 보기 탭이 앞에 있고 표가 정해짐) | TSK-06-03 (`menu:tuning/scripts/gatherStats@590`, 하위 메뉴 `Menu.tuning.scripts`) |
+| `oranda.tuning.stats` | 표 통계 보기… | - | 전역 | `hasSession` | TSK-06-03 (`menu:tuning/stats@200`·`context:editor/tableStats@1030`) |
+| `oranda.tuning.gatherStatsScript` | 표 통계 수집 스크립트 (DBMS_STATS) | - | 전역 | `tuningStatsActive`(통계 보기 탭이 앞에 있고 표가 정해짐) | TSK-06-03 (`menu:tuning/scripts/gatherStats@590`, 하위 메뉴 `Menu.tuning.scripts`) |
 | `oranda.tuning.childCursors` | 자식 커서… | - | 전역 | `hasSession` | TSK-06-03 (`menu:tuning/childCursors@210`) |
-| `oranda.schema.tableStats` | 통계 보기… | - | `schemaFocus` | `tableNodeSelected && hasSession` | TSK-06-03 (`context:schema/tableStats@72`) |
+| `oranda.schema.tableStats` | 표 통계 보기… | - | `schemaFocus` | `tableNodeSelected && hasSession` | TSK-06-03 (`context:schema/tableStats@72`) |
 | `oranda.tuning.traceViewer` | 트레이스 보기 | - | 전역 | `hasSession` | TSK-06-04 |
 | `oranda.tuning.optimizerTrace` | 옵티마이저 트레이스(10053) | - | `sqlDocFocus` | `hasSession && !sessionBusy` | TSK-06-04 |
-| `oranda.tuning.rerunWithHint` | 힌트 넣은 사본으로 다시 실행 | - | 전역 | `(hasSession \|\| dedicatedSession) && !sessionBusy && !mybatisDocActive` | TSK-06-04 |
+| `oranda.tuning.rerunWithHint` | 힌트 넣은 사본으로 실행 | - | 전역 | `(hasSession \|\| dedicatedSession) && !sessionBusy && !mybatisDocActive` | TSK-06-04 |
 | `oranda.tuning.rerunWithStatisticsLevel` | STATISTICS_LEVEL=ALL 로 다시 실행 | - | 전역 | `(hasSession \|\| dedicatedSession) && !sessionBusy && !mybatisDocActive` | TSK-06-04 |
 | `oranda.tuning.assistant` | 튜닝 도우미 | - | 전역 | `hasSession || dedicatedSession` | TSK-06-05 |
 | `oranda.tuning.indexCandidates` | 인덱스 후보 | - | 전역 | `tuningAssistantOpen` | TSK-06-05 |

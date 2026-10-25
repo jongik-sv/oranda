@@ -73,7 +73,8 @@ public partial class LocalizationTests
     public void Korean_names_contain_korean_except_proper_names()
     {
         // 영어 그대로 두어도 되는 이름(제품·약어)만 예외다.
-        string[] same = ["Menu.sql", "Menu.sql.access", "Cat.Sql", "Shell.window.title", "Shell.toolbar.more", "Shell.settings.language.en", "Shell.settings.dbmsOutput"];
+        string[] same = ["Menu.sql", "Menu.sql.access", "Cat.Sql", "Shell.window.title", "Shell.toolbar.more", "Shell.settings.language.en", "Shell.settings.dbmsOutput",
+            "Menu.file.mybatis", "Menu.sql.plsql"]; // 하위 메뉴 「MyBatis ▸」·「PL/SQL ▸」(TSK-09-01)
         var offenders = Ko.Where(kv => !Hangul().IsMatch(kv.Value) && !same.Contains(kv.Key))
             .Select(kv => kv.Key + "=" + kv.Value)
             .ToList();
@@ -180,6 +181,84 @@ public partial class LocalizationTests
 
             Assert.Equal(letters.Count, letters.Distinct().Count());
         }
+    }
+
+    // ---- TSK-09-01 이름 정리 계약(PRD 13.4, TRD 11.2) -------------------------------------------------
+
+    private static readonly string[] ReservedSubmenuKeys =
+    [
+        "Menu.edit.case", "Menu.edit.lines", "Menu.edit.format", "Menu.edit.marks", "Menu.edit.go", "Menu.edit.assist",
+        "Menu.file.workspace", "Menu.file.connection", "Menu.file.tabs", "Menu.file.mybatis", "Menu.sql.plsql", "Menu.sql.errorMode",
+        "Menu.context.grid.copyAs", "Menu.context.grid.filter", "Menu.context.grid.edit", "Menu.context.grid.flashback", "Menu.context.grid.columns",
+    ];
+
+    [Fact]
+    public void Reserved_submenu_titles_exist_in_both_languages_and_differ_per_menu()
+    {
+        foreach (var key in ReservedSubmenuKeys)
+        {
+            Assert.True(Ko.ContainsKey(key), "ko " + key);
+            Assert.True(En.ContainsKey(key), "en " + key);
+        }
+
+        // 한 최상위 메뉴 안의 하위 메뉴 이름은 겹치지 않는다.
+        foreach (var table in new[] { Ko, En })
+        {
+            foreach (var top in ReservedSubmenuKeys.GroupBy(k => string.Join('.', k.Split('.').SkipLast(1))))
+            {
+                var titles = top.Select(k => table[k]).ToList();
+                Assert.Equal(titles.Count, titles.Distinct(StringComparer.Ordinal).Count());
+            }
+        }
+    }
+
+    [Fact]
+    public void Undo_and_stop_execution_have_different_names_in_both_languages()
+    {
+        Assert.Equal("실행 취소", Ko["Cmd.oranda.edit.undo"]);
+        Assert.Equal("실행 중지", Ko["Cmd.oranda.exec.cancel"]);
+        Assert.Equal("Undo", En["Cmd.oranda.edit.undo"]);
+        Assert.Equal("Stop Execution", En["Cmd.oranda.exec.cancel"]);
+
+        // 「실행 취소」 라는 말이 다른 명령 이름에 끼어 있지 않다(Undo 하나만).
+        Assert.Equal(["Cmd.oranda.edit.undo"], Ko.Where(kv => kv.Key.StartsWith("Cmd.", StringComparison.Ordinal) && kv.Value.Contains("실행 취소", StringComparison.Ordinal)).Select(kv => kv.Key));
+    }
+
+    [Theory]
+    [InlineData("ko", "세션 종료(KILL)…", "세션 연결 끊기(DISCONNECT)…", "자동 새로 고침 켜기/끄기")]
+    [InlineData("en", "Kill Session (KILL)…", "Disconnect Session (DISCONNECT)…", "Toggle Auto Refresh")]
+    public void Session_and_lock_monitors_use_the_same_names_for_kill_disconnect_and_auto_refresh(string lang, string kill, string disconnect, string autoRefresh)
+    {
+        var t = lang == "ko" ? Ko : En;
+        Assert.Equal(kill, t["Cmd.oranda.monitor.killSession"]);
+        Assert.Equal(kill, t["Cmd.oranda.monitor.locks.killHolder"]);
+        Assert.Equal(disconnect, t["Cmd.oranda.monitor.disconnectSession"]);
+        Assert.Equal(disconnect, t["Cmd.oranda.monitor.locks.disconnectHolder"]);
+        Assert.Equal(autoRefresh, t["Cmd.oranda.monitor.toggleAutoRefresh"]);
+        Assert.Equal(autoRefresh, t["Cmd.oranda.monitor.locks.toggleAutoRefresh"]);
+    }
+
+    [Theory]
+    [InlineData("ko", " (이번 실행)", " (기본값)", "표 통계 보기…", "파일로 내보내기…")]
+    [InlineData("en", " (this run)", " (default)", "Table Statistics…", "Export to File…")]
+    public void Run_state_toggles_say_this_run_and_settings_fields_say_default(string lang, string thisRun, string byDefault, string stats, string export)
+    {
+        var t = lang == "ko" ? Ko : En;
+        foreach (var id in new[] { "oranda.txn.toggleAutoCommit", "oranda.exec.toggleDbmsOutput", "oranda.exec.toggleBlankLineDelimiter" })
+        {
+            Assert.EndsWith(thisRun, t["Cmd." + id], StringComparison.Ordinal);
+        }
+
+        Assert.EndsWith(thisRun, t["Menu.sql.errorMode"], StringComparison.Ordinal);
+        foreach (var key in new[] { "autoCommit", "dbmsOutputCollect", "errorLabel", "errorName", "split" })
+        {
+            Assert.EndsWith(byDefault, t["Shell.settings." + key], StringComparison.Ordinal);
+        }
+
+        Assert.False(string.IsNullOrWhiteSpace(t["Shell.settings.execNotice"]));
+        Assert.Equal(stats, t["Cmd.oranda.tuning.stats"]);
+        Assert.Equal(stats, t["Cmd.oranda.schema.tableStats"]);
+        Assert.Equal(export, t["Cmd.oranda.grid.export"]);
     }
 
     [Fact]
@@ -350,11 +429,11 @@ public partial class LocalizationTests
     public void Commands_whose_attribute_carries_a_literal_korean_title_still_change_language()
     {
         // oranda.grid.export 는 특성에 「내보내기」를 직접 적었다(다른 Task 파일). ID 로 만든 키가 먼저 쓰인다.
-        var export = new CommandDefinition { Id = "oranda.grid.export", Title = "내보내기", Category = CommandCategory.Result };
+        var export = new CommandDefinition { Id = "oranda.grid.export", Title = "파일로 내보내기…", Category = CommandCategory.Result };
         var text = new ShellText(language: "en");
-        Assert.Equal("Export", text.Title(export));
+        Assert.Equal("Export to File…", text.Title(export));
         text.SetLanguage("ko");
-        Assert.Equal("내보내기", text.Title(export));
+        Assert.Equal("파일로 내보내기…", text.Title(export));
     }
 
     [Fact]

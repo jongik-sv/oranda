@@ -605,7 +605,7 @@ levels:
 ## WP-09: 사용 복잡도 줄이기
 <!-- 담당 PC: win144(Windows 개발 PC) — 맥북 세션은 이 WP 의 Task 를 하지 않는다. 2026-10-25 사용자 결정 「기본안으로 해」(조사 docs/oranda1/research/usage-complexity.md 6장 Q1~Q12 권장안 전부, Q6 = D-013 기본 Role SQL 개발자). 설계 = PRD 13, TRD 11, decisions D-015~D-023. 레인 5개: ux-menu(09-01 계약 → 09-02)·ux-layout(09-05 → 09-06)는 바로, ux-export(09-07)는 의존 없음(슬롯이 나면), ux-role(09-08 → 09-09)도 TSK-07-11(fx-default)이 52601b9 에 머지되어 바로 착수 가능, ux-shell(09-03 → 09-04)은 09-01 머지 뒤, 09-10 통합테스트가 마지막. 동시 레인 5개 제한 때문에 처음에는 ux-menu·ux-layout·ux-role 셋부터. 파일 소유 = TRD 11.10, 문구 파일 소유 = TRD 11.9. 후보(이 WP 밖) = PRD 13.1 -->
 
-- [ ] TSK-09-01: 명령 이름 정리·「(이번 실행)」/「기본값」 표기·하위 메뉴 이름 예약 (계약) [win144] w:1 2026-11-09~2026-11-09
+- [x] TSK-09-01: 명령 이름 정리·「(이번 실행)」/「기본값」 표기·하위 메뉴 이름 예약 (계약) [win144] w:1 2026-11-09~2026-11-09
   - category: infra
   - domain: frontend
   - model: opus
@@ -614,7 +614,7 @@ levels:
   - prd-ref: UX-04, UX-08, PRD 13.4, TRD 11.2, TRD 11.9, TRD 11.10
   - requirements: PRD 13.4 표대로 `src/Oranda.App/Shell/Resources/CommandTitles.json`·`CommandTitles-en.json` 의 이름을 바꾼다(실행 취소(서버 중단) → 실행 중지, 힌트 넣은 사본으로 실행, 세션 종료(KILL)…·세션 연결 끊기(DISCONNECT)… 를 세션 모니터·Lock 모니터 둘 다, Lock 자동 새로 고침 → 자동 새로 고침, 표 통계 보기… 2개, 표 통계 수집 스크립트 (DBMS_STATS), 내보내기 → 파일로 내보내기…, 실행 상태 토글 4종 「(이번 실행)」). 특성에 `Title =` 으로 이름을 박은 명령은 그 줄도 바꾸고, 세션 종료 확인 창 문구도 같은 낱말로; 하위 메뉴 제목 키를 TRD 11.2 표대로 strings-ko/en 에 예약한다(`Menu.edit.case`·`lines`·`format`·`marks`·`go`·`assist`, `Menu.file.workspace`·`connection`·`tabs`·`mybatis`, `Menu.sql.plsql`, `Menu.context.grid.copyAs`·`filter`·`edit`·`flashback`·`columns`, 스크립트 오류 시 하위 메뉴 제목에 「(이번 실행)」). 실제 키가 표와 다르면 실제 키로; 설정 「실행」 탭 칸 이름에 「(기본값)」(`Shell.settings.*`)과 탭 위 안내 한 줄 「새 탭·다음 실행의 기본값입니다. 지금 탭은 SQL 메뉴에서 바꿉니다.」(`SettingsWindow.axaml` 실행 탭에 TextBlock 하나); 영어 짝은 같은 원칙(Stop Execution, Kill Session (KILL)…, Disconnect Session (DISCONNECT)…, Table Statistics…, Export to File…, … (this run), … (default)); `docs/oranda1/design.md` 에 `## 기능 Task 편집 지점 (WP-09)` 표(TRD 11.10 을 실제 코드에 맞춰 옮김, 하위 메뉴 키 표 포함), `docs/design/commands.md` 제목 열; 옛 제목을 단정한 시험을 새 이름으로 고친다; 제약: 배치(`Placements`)·`When`·로직은 고치지 않는다. 문구 파일은 이 Task 뒤로 ux-menu 레인만 고친다(D-023); 비고: 담당 PC: win144(Windows 개발 PC) — 맥북 세션은 이 Task 를 하지 않는다
   - acceptance: 실행 로직 없음 (contract-only) / 메뉴·툴바·팔레트에 「실행 취소」 와 「실행 중지」 가 따로 보이고 두 모니터의 세션 끊기 이름이 같다 / 예약한 하위 메뉴 키가 ko·en 짝으로 있고 LocalizationTests 통과 / design.md 「기능 Task 편집 지점 (WP-09)」 에 레인마다 소유 파일·시험 파일·고치지 않는 것이 있고 두 레인이 한 파일을 나눠 갖지 않는다 / `dotnet build Oranda.sln -warnaserror` 통과, 전체 시험 통과
-  - note: 담당 PC: win144(Windows 개발 PC) — 맥북 세션은 이 Task 를 하지 않는다. 크기 S. 레인 ux-menu(첫 Task, 단독 먼저 머지). 머지 뒤 ux-shell 레인 착수 가능 (win144)
+  - note: 담당 PC: win144(Windows 개발 PC) — 맥북 세션은 이 Task 를 하지 않는다. 크기 S. 레인 ux-menu(첫 Task, 단독 먼저 머지). 머지 뒤 ux-shell 레인 착수 가능. 결과: 명령 이름 14개 ko·en 정리(실행 중지·세션 종료(KILL)…·세션 연결 끊기(DISCONNECT)…·표 통계·파일로 내보내기…·「(이번 실행)」 3개), 하위 메뉴 키 16개 예약 + 스크립트 오류 시 (이번 실행), 설정 실행 탭 「(기본값)」·안내 줄, 세션 모니터 확인 문구, design.md 「기능 Task 편집 지점 (WP-09)」. 스크립트 오류 명령 3개 제목은 팔레트 때문에 앞말을 남김 (win144)
 
 - [ ] TSK-09-02: 파일·편집·보기·SQL 메뉴 하위 메뉴 묶기·중복 자리 정리·PL/SQL 주 메뉴·MyBatis 명령 문맥 [win144] w:2 2026-11-10~2026-11-11
   - category: dev

@@ -131,13 +131,14 @@ public class SessionMonitorTests
         Assert.Empty(h.Monitor.Killed);
         Assert.Contains("SID 10, SERIAL# 100", asked, StringComparison.Ordinal);
         Assert.Contains("SQLPLUS", asked, StringComparison.Ordinal);
+        Assert.Contains("세션 종료(KILL IMMEDIATE)", asked, StringComparison.Ordinal);
 
         h.Vm.Confirm = _ => Task.FromResult(true);
         var before = h.Monitor.ListCalls;
         await h.Vm.KillAsync(immediate: true);
         Assert.Equal((new SessionKey(1, 10, 100), true), Assert.Single(h.Monitor.Killed));
         Assert.True(h.Monitor.ListCalls > before);
-        Assert.Contains("Kill", h.Vm.StatusText, StringComparison.Ordinal);
+        Assert.Contains("세션 종료(KILL", h.Vm.StatusText, StringComparison.Ordinal); // 메뉴 이름과 같은 낱말(TSK-09-01)
     }
 
     [Fact]

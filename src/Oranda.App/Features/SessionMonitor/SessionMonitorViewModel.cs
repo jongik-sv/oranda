@@ -339,14 +339,14 @@ public sealed partial class SessionMonitorViewModel : ToolPanelViewModelBase, ID
         }, ct);
     }
 
-    /// <summary>선택한 세션을 Kill 한다. 대상 정보를 보여 주는 확인 뒤, 실행 엔진의 위험 명령 확인을 거친다.</summary>
+    /// <summary>선택한 세션을 종료(KILL)한다. 대상 정보를 보여 주는 확인 뒤, 실행 엔진의 위험 명령 확인을 거친다.</summary>
     public Task KillAsync(bool immediate, CancellationToken ct = default) =>
-        ChangeSessionAsync(immediate ? "Kill(IMMEDIATE)" : "Kill", async (monitor, session, row) =>
+        ChangeSessionAsync(immediate ? "세션 종료(KILL IMMEDIATE)" : "세션 종료(KILL)", async (monitor, session, row) =>
             await monitor.KillAsync(session, row.Key, immediate, ct), ct);
 
-    /// <summary>선택한 세션을 Disconnect 한다(<c>POST_TRANSACTION</c> 또는 <c>IMMEDIATE</c>).</summary>
+    /// <summary>선택한 세션의 연결을 끊는다(DISCONNECT, <c>POST_TRANSACTION</c> 또는 <c>IMMEDIATE</c>).</summary>
     public Task DisconnectAsync(bool immediate, CancellationToken ct = default) =>
-        ChangeSessionAsync(immediate ? "Disconnect(IMMEDIATE)" : "Disconnect", async (_, session, row) =>
+        ChangeSessionAsync(immediate ? "세션 연결 끊기(DISCONNECT IMMEDIATE)" : "세션 연결 끊기(DISCONNECT POST_TRANSACTION)", async (_, session, row) =>
         {
             var exec = Execution ?? _services?.GetService(typeof(IExecutionService)) as IExecutionService
                 ?? throw new InvalidOperationException("실행 엔진이 없습니다.");
@@ -391,7 +391,7 @@ public sealed partial class SessionMonitorViewModel : ToolPanelViewModelBase, ID
     {
         ArgumentNullException.ThrowIfNull(row);
         var sb = new StringBuilder();
-        sb.Append("세션을 ").Append(action).AppendLine(" 합니다.");
+        sb.Append("다음 세션에 ").Append(action).AppendLine(" 을(를) 보냅니다.");
         sb.Append(CultureInfo.InvariantCulture, $"SID {row.Key.Sid}, SERIAL# {row.Key.Serial}, 인스턴스 {row.Key.InstanceId}").AppendLine();
         sb.Append("사용자: ").Append(row.Username ?? "-").Append(" / OS: ").Append(row.OsUser ?? "-").AppendLine();
         sb.Append("머신: ").Append(row.Machine ?? "-").AppendLine();
@@ -496,7 +496,7 @@ public sealed partial class SessionMonitorViewModel : ToolPanelViewModelBase, ID
         if (done)
         {
             await RefreshAsync(ct);
-            PostToUi(() => StatusText = $"SID {item.Row.Key.Sid} 세션을 {action} 했습니다.");
+            PostToUi(() => StatusText = $"SID {item.Row.Key.Sid}: {action} 을(를) 마쳤습니다.");
         }
     }
 
