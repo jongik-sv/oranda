@@ -673,7 +673,7 @@ levels:
   - acceptance: 레이아웃 초기화 뒤 SQL 탭과 함께 보이는 도구 창이 조사 11개에서 6개 이하(왼쪽 + 아래 3) / 실행 계획·컴파일 오류·바인드 변수 창이 필요할 때 자동으로 열린다 / 기존 저장 배치를 읽으면 지금과 같다 / 화면 PNG(라이트·다크) 확인 / 전체 시험 통과
   - note: 담당 PC: win144(Windows 개발 PC) — 맥북 세션은 이 Task 를 하지 않는다. 크기 M. 레인 ux-layout(첫 Task, 바로 착수 가능) / 결과: LayoutPlanner.CreateDefault 아래 = 조회 결과·메시지·DBMS 출력(+ MyBatis 조합 검사, MyBatis 문서에서만), 오른쪽·나머지 아래 창은 hiddenTools, rightToolsOpen 표지 유지·Reconcile 그대로; 계획·컴파일 오류·바인드 자동 열기는 지금 ShowTool·ActivateTool 경로로 숨은 창도 기본 위치에 열려 Docking 수정 없음; SQL 탭과 함께 보이는 도구 창 11 → 5; LayoutPlannerTests·새 DefaultLayoutAutoOpenTests(Headless, PNG 라이트·다크)·ShellHeadlessTests 갱신 (win144)
 
-- [ ] TSK-09-06: Windows MyBatis 탭 Ctrl+Enter 로 시나리오 실행 [win144] w:1 2026-11-11~2026-11-11
+- [x] TSK-09-06: Windows MyBatis 탭 Ctrl+Enter 로 시나리오 실행 [win144] w:1 2026-11-11~2026-11-11
   - category: dev
   - domain: frontend
   - model: sonnet
@@ -682,7 +682,7 @@ levels:
   - prd-ref: UX-16, TRD 11.8, D-021
   - requirements: `docs/design/keymaps/default.json:59` 의 `oranda.mybatis.runScenario` keys 를 `["Primary+Enter", "F9"]` 로(mac 은 그대로); MyBatis 문서에서 `oranda.exec.runStatement`(`default.json:52`, when `sqlDocFocus`)가 키를 먼저 가져가는지 `KeyDispatcher`·`KeyBindingTable` 규칙을 시험으로 확인하고, 가져가면 그 바인딩 when 에 `&& !mybatisDocFocus` 를 더한다(디스패처 규칙은 바꾸지 않는 것이 먼저); orange5·plsqldev·sqldev 프리셋에도 같은 규칙(그 프리셋이 MyBatis 문서의 Ctrl+Enter 를 다른 명령에 쓰면 그대로 두고 결과에 적음); 시험: `KeymapLoaderTests.cs`(프리셋 4종 로드·충돌 없음), 새 `tests/Oranda.App.Tests/Shell/MyBatisRunKeyTests.cs`(Windows 키 해석: MyBatis 문서 Ctrl+Enter → runScenario, SQL 문서 Ctrl+Enter → runStatement, F9 그대로); 제약: `*Commands.cs` 는 고치지 않는다. 사용자 키맵 파일은 건드리지 않는다; 비고: 담당 PC: win144(Windows 개발 PC) — 맥북 세션은 이 Task 를 하지 않는다
   - acceptance: Windows 에서 MyBatis 문서 Ctrl+Enter 가 시나리오를 실행하고 SQL 문서 Ctrl+Enter 는 현재 문장 실행 그대로 / 메뉴 단축키 표시가 새 키를 보인다 / 전체 시험 통과
-  - note: 담당 PC: win144(Windows 개발 PC) — 맥북 세션은 이 Task 를 하지 않는다. 크기 S. 레인 ux-layout(두 번째) (win144)
+  - note: 담당 PC: win144(Windows 개발 PC) — 맥북 세션은 이 Task 를 하지 않는다. 크기 S. 레인 ux-layout(두 번째) / 결과: default·orange5·plsqldev 의 runScenario keys = Primary+Enter, F9(mac 그대로, sqldev 는 이미 같음). 포커스 자리가 한 순간에 하나라(mybatisText ↔ sqlText·sqlGrid) runStatement 가 키를 먼저 가져가지 않아 when·디스패처 수정 없음. 다른 프리셋이 MyBatis 문서 Ctrl+Enter 를 다른 명령에 쓰는 곳 없음. 새 MyBatisRunKeyTests(프리셋 4종 Windows 해석·F9·메뉴 단축키 글·mac 불변·기능 꺼짐·디스패처) 통과. commands.md 617줄 기본 키 열(F9)은 ux-menu 소유라 남김 (win144)
 
 - [ ] TSK-09-07: 내보내기 대화상자 하나로 합치기 — 「Excel 로 내보내기」 는 빠른 길 [win144] w:2 2026-11-09~2026-11-10
   - category: dev

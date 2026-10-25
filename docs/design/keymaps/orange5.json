@@ -59,7 +59,7 @@
     { "command": "oranda.exec.runStep", "keys": ["Primary+J"], "when": "sqlDocFocus" },
     { "command": "oranda.exec.runToNewResultTab", "keys": ["F11"], "when": "sqlDocFocus", "mac": ["Primary+Alt+Enter"] },
     { "command": "oranda.exec.runForEdit", "keys": ["F9"], "when": "sqlDocFocus", "mac": ["Ctrl+Enter", "F9"] },
-    { "command": "oranda.mybatis.runScenario", "keys": ["F9"], "when": "mybatisDocFocus", "mac": ["Ctrl+Enter", "F9"] },
+    { "command": "oranda.mybatis.runScenario", "keys": ["Primary+Enter", "F9"], "when": "mybatisDocFocus", "mac": ["Ctrl+Enter", "F9"] },
     { "command": "oranda.mybatis.formatStatement", "keys": ["Primary+Shift+F"], "when": "mybatisDocFocus" },
     { "command": "oranda.exec.bindVariables", "keys": ["Alt+B"], "when": "sqlDocFocus", "mac": ["Ctrl+Alt+B"] },
     { "command": "oranda.exec.cancel", "keys": ["Primary+Cancel"], "when": "sqlDocFocus", "mac": ["Primary+OemPeriod"] },
