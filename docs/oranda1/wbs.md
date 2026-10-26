@@ -962,6 +962,18 @@ levels:
   - acceptance: 위 항목이 26ai·11.2 둘 다 통과하고 수치가 결과서에 있다 / `dotnet build Oranda.sln -warnaserror`·`dotnet test`(Integration·Perf 제외) 통과
   - note: 담당 PC: 맥북 — win144 세션은 이 Task 를 하지 않는다. 사용자 원문(2026-10-26): 「동일한 DB에 대해 여러개의 접속을 지원하게 해줘. 다른 워크스페이스에서 쿼리가 진행되는 동안 다른 워크스페이스에서 다른 쿼리를 실행할 수 있도록 해줘.」 「여러 워크스페이스에서 하나의 세션을 사용할 수도 있지?」 크기 S. wip-multisess 브랜치에 초안 있음(TRD 14.3). 진행(2026-10-26): 통합 시험 4개 추가·결과서 뼈대(itest/TSK-14-05.md) 작성까지. Oracle 실행 수치는 미측정 — 맥의 oracle-26ai-free 는 DMES 공유 DB 라 시험 픽스처(CREATE USER·GRANT)를 돌리지 않음, 26ai(시험 전용 컨테이너 결정 대기)·11.2 수치는 win144 확인 몫. (macbook) win144 확인(2026-10-26, bbdf6ea): 통합 WorkspaceSessionFlowTests 26ai 6/6·11.2 6/6 통과, A 5초 실행 중 B 51 ms(26ai)·38 ms(11.2), 결과서 「win144 확인 결과」 절. (win144)
 
+- [x] TSK-14-06: 세션을 바꾸면 툴바 콤보가 빈 「접속 안 됨」 으로 보임·「세션」 창 두 번 누르기·Enter [win144] w:1 2026-10-26~2026-10-26
+  - category: defect
+  - domain: frontend
+  - model: opus
+  - priority: high
+  - tags: connection-combo, sessions, multi-session, mybatis, win144
+  - prd-ref: PRD 16, MS-05, MS-10, D-034
+  - depends: TSK-14-03, TSK-14-04
+  - requirements: 같은 프로필 세션 넷(1·2·3 미사용, 4 = 활성 MyBatis 작업 공간 전용)에서 툴바 콤보로 다른 세션을 고르면 라우터는 고른 세션에 묶는데 콤보 상자는 빈 「접속 안 됨」 을 보이고, 그 뒤에는 「세션」 창 「이 세션 쓰기」 로 바꿔도 그대로였다. 원인: 콤보 VM 이 상자의 선택 변경 안에서(재진입) 라우터를 바꾸고 목록(Entries)을 비웠다 다시 채워, ComboBox 는 고른 줄(SelectedItem)을 들고도 보이는 칸(SelectionBoxItem)이 null 로 남았다(쓰는 워크스페이스가 바뀌면 줄 툴팁이 바뀌어 매번 목록을 다시 만든다). 고침: 콤보에서 고른 것은 한 박자 뒤(UI 대기열)에 묶고, 목록을 다시 만들기 전에 선택을 먼저 푼다. 「세션」 창 줄 두 번 누르기·Enter = 「이 세션 쓰기」(활성 SQL·MyBatis 작업 공간에 그 세션을 묶음, 이미 쓰는 세션·PL/SQL 문서 활성이면 아무것도 안 함); 제약: 쓰지 않게 된 추가 세션은 닫지 않는다(a0cbe71 동작 유지), 실앱 SendKeys 금지(Headless 까지); 비고: 맥 넘김(mac-handoff request-3) 결함이라 win144 가 고친다
+  - acceptance: 콤보·「세션」 창(이 세션 쓰기·두 번 누르기·Enter)으로 세션 넷을 오갈 때마다 라우터·콤보 VM·상자의 SelectedItem·SelectionBoxItem 이 고른 세션 / 앱 셸(도킹·MyBatis 작업 공간 + 「기본」 SQL 작업 공간)에서도 같다 / 세션 4개가 그대로 열려 있다 / SessionSwitchTests 4개, 기존 ConnectionCombo·MultiSession·MultiConnection·WorkspaceSession·Sessions 시험 통과 / `dotnet build Oranda.sln -warnaserror`
+  - note: 사용자 원문(2026-10-26, 맥 실앱): 「세션 창에서 아무리 다른 세션을 선택해도 안 바뀌고 세션 선택 콤보도 선택을 해도 접속 없음으로 나와」, 「세션창(더블클릭) 또는 콤보에서 세션을 선택하면 지금 작업중인 워크 스페이스에 해당 세션이 선택되도록 해줘.」, 「세션창에서 선택이 되도 세션 콤보에 접속 안됨 으로 나오는 문제도 해결해」. 결과: Headless 재현(고치기 전 SessionSwitchTests 2개 실패 — selected=「1 - scott@a (2)」 box=null), 고친 뒤 통과. 원인 파일 Features/ConnectionManager/ConnectionCombo.cs(Selected 세터의 ChooseAsync 재진입·Refresh 의 Entries.Clear) (win144)
+
 ## 의존 그래프
 
 ### 그래프 (Mermaid)
@@ -1055,6 +1067,8 @@ graph LR
   TSK-14-02 --> TSK-14-04
   TSK-14-03 --> TSK-14-05
   TSK-14-04 --> TSK-14-05
+  TSK-14-03 --> TSK-14-06
+  TSK-14-04 --> TSK-14-06
   style TSK-01-02 fill:#e8f5e9,stroke:#2e7d32
   style TSK-03-01 stroke:#c62828,stroke-width:2px
   style TSK-02-02 stroke:#c62828,stroke-width:2px

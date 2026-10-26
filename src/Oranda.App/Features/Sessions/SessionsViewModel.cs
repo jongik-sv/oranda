@@ -15,7 +15,7 @@ namespace Oranda.App.Features.Sessions;
 /// <summary>
 /// <c>oranda.panel.sessions</c> — 「세션」 도구 창(TSK-14-04, D-034): 열린 작업 세션 모두(접속마다 그 접속과 같은 DB 에 더 연 세션)를 한 줄씩 보인다.
 /// 줄 = 「번호 - 사용자@이름 (순번)」, SID, 쓰는 방식·연결된 워크스페이스 수·상태(대기·실행 중·끊김·미커밋).
-/// 우클릭 = 이 세션 쓰기(활성 SQL 작업 공간을 이 세션에 연결)·커밋·롤백·세션 닫기. 기본 배치에서는 숨겨 두고 세션이 둘 이상이 되면
+/// 우클릭 = 이 세션 쓰기(활성 SQL 작업 공간을 이 세션에 연결)·커밋·롤백·세션 닫기, 줄 두 번 누르기·Enter = 이 세션 쓰기(TSK-14-06). 기본 배치에서는 숨겨 두고 세션이 둘 이상이 되면
 /// <see cref="SessionsAutoShow"/> 가 보인다. 조회만 한다(SID 는 접속 때 읽어 둔 값, 쓰기 SQL 없음).
 /// 라우터·실행 상태는 이 창이 처음 쓰일 때 가져온다(시작 때 접속 서비스를 만들면 Oracle 어셈블리를 깨운다, D-006).
 /// </summary>
@@ -259,6 +259,11 @@ public sealed partial class SessionsViewModel : ToolPanelViewModelBase, IDisposa
 
         Refresh();
     }
+
+    /// <summary>
+    /// 줄 두 번 누르기·Enter: 「이 세션 쓰기」 를 쓸 수 있으면(SQL·MyBatis 작업 공간이 활성이고 아직 이 세션을 쓰지 않으면) 그것을 한다. 아니면 아무것도 안 한다.
+    /// </summary>
+    public Task ActivateAsync(SessionRow? row, CancellationToken ct = default) => Hook() && CanUse(row) ? UseAsync(row, ct) : Task.CompletedTask;
 
     public async Task CommitAsync(SessionRow? row, CancellationToken ct = default)
     {

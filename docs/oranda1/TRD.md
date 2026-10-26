@@ -530,6 +530,7 @@ TSK-10-01 과 TSK-10-02 는 같은 파일(`ScriptsView.axaml`·`ScriptsView.axam
 8. **공유 세션이 실행 중일 때 막힌 워크스페이스**: 실행을 누르면 안내 막대 「이 세션은 다른 워크스페이스에서 실행 중 — [새 세션에서 실행] [기다리기]」(D-036). 새 세션에서 실행 = 「새 세션」 과 같은 경로 후 그 실행을 다시 보낸다.
 9. **상태 줄**: 「워크스페이스 세션 · 연결됨」, 「공유 세션 · 다른 워크스페이스 1개와 함께 · 연결됨」, 「새 세션 · 첫 실행 때 연결」. 세션 모니터 구분용으로 콤보 툴팁·세션 도구 창에 SID.
 10. **PL/SQL 작업 공간**은 자동 자기 세션 대상에서 뺀다(탭마다 접속을 이미 고름, `IConnectionDocument`). MyBatis 작업 공간은 SQL 작업 공간과 같은 규칙(`SqlWorkspaceViewModel`). 조회 전용 Role·`readOnlySession`·ExecutionPolicy 는 세션 프로필 기준이라 세션마다 그대로 적용.
+11. **「세션」 창에서 고르기·콤보 표시**(TSK-14-06): 줄 두 번 누르기·Enter = 우클릭 「이 세션 쓰기」(활성 SQL·MyBatis 작업 공간을 그 세션에 묶는다, `SessionsViewModel.ActivateAsync`). 이미 쓰는 세션이거나 PL/SQL 문서가 활성이면 아무것도 안 한다. 툴바 콤보는 고른 줄을 UI 대기열 한 박자 뒤에 묶고(`ConnectionComboViewModel.Selected` → `ChooseAsync`), 목록을 다시 만들 때는 먼저 선택을 푼다: 상자의 선택 변경 안에서 `Entries` 를 비웠다 채우면 Avalonia ComboBox 가 고른 줄(SelectedItem)을 들고도 보이는 칸(SelectionBoxItem)이 비어 빈 「접속 안 됨」 을 보였다(줄 툴팁에 쓰는 워크스페이스가 있어 세션을 옮길 때마다 목록이 다시 만들어진다).
 
 ### 14.2 바뀌는 곳
 
@@ -562,7 +563,7 @@ TSK-10-01 과 TSK-10-02 는 같은 파일(`ScriptsView.axaml`·`ScriptsView.axam
 
 ### 14.4 시험 방침
 
-- 단위·Headless: 워크스페이스 둘 = 세션 둘, 같은 워크스페이스 탭 = 같은 세션, 워크스페이스 하나 = DB 세션 1개, 실행 중 다른 워크스페이스 실행 가능(`sessionBusy` 세션 기준·`FocusPending`), 설정 끄면 지금 동작, 워크스페이스 선택이 설정보다 먼저, 함께 쓰기·새 세션 옮기기, 아무도 안 쓰게 된 추가 세션은 남고 다시 고를 수 있음, 닫힌 세션 → 접속 안 됨 → 다시 고르기, 워크스페이스 닫기 미커밋 확인(세션 단위 한 번·공유 세션은 안 물음), 복원 때 세션 안 엶·파일 왕복, 종료 확인 라벨, 상한 8, 비밀번호 다시 안 물음.
+- 단위·Headless: 워크스페이스 둘 = 세션 둘, 같은 워크스페이스 탭 = 같은 세션, 워크스페이스 하나 = DB 세션 1개, 실행 중 다른 워크스페이스 실행 가능(`sessionBusy` 세션 기준·`FocusPending`), 설정 끄면 지금 동작, 워크스페이스 선택이 설정보다 먼저, 함께 쓰기·새 세션 옮기기, 아무도 안 쓰게 된 추가 세션은 남고 다시 고를 수 있음, 닫힌 세션 → 접속 안 됨 → 다시 고르기, 세션 넷을 콤보·「세션」 창(두 번 누르기·Enter)으로 오갈 때 콤보 상자(SelectedItem·SelectionBoxItem)가 고른 세션(앱 셸·MyBatis 작업 공간 포함, `SessionSwitchTests`), 워크스페이스 닫기 미커밋 확인(세션 단위 한 번·공유 세션은 안 물음), 복원 때 세션 안 엶·파일 왕복, 종료 확인 라벨, 상한 8, 비밀번호 다시 안 물음.
 - Oracle 통합(podman 26ai·11.2): 같은 프로필 두 세션 SID 다름, A 5초 실행 중 B 1초 안, A 미커밋 INSERT 가 B 에 안 보임, 함께 쓰기 SID 같음·트랜잭션 공유, 새 세션으로 옮기면 SID 다름, 공유 세션 실행 중 다른 워크스페이스 `sessionBusy`. 11.2 는 `dbms_session.sleep` 이 없고 `dbms_lock` 권한을 SYSTEM 이 줄 수 없어 `dbms_utility.get_time` 바쁜 반복으로 5초를 만든다.
 - 시작 경로에서 Oracle 어셈블리를 깨우지 않는다(`Startup_does_not_load_oracle_or_antlr_assemblies`): 연결표·설정 읽기는 라우터가 생길 때(접속 서비스와 함께)만.
 

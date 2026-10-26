@@ -1,6 +1,7 @@
 using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Interactivity;
+using Avalonia.VisualTree;
 
 namespace Oranda.App.Features.Sessions;
 
@@ -12,6 +13,8 @@ public partial class SessionsView : UserControl
     {
         InitializeComponent();
         SessionList.AddHandler(PointerPressedEvent, OnPressed, RoutingStrategies.Tunnel, handledEventsToo: true);
+        SessionList.DoubleTapped += async (_, e) => await OnDoubleTappedAsync(e);
+        SessionList.AddHandler(KeyDownEvent, async (_, e) => await OnKeyDownAsync(e), RoutingStrategies.Tunnel);
         SessionMenu.Opening += (_, _) => SyncMenu();
         SessionMenu.Opened += (_, _) => SyncMenu();
         DataContextChanged += (_, _) =>
@@ -43,6 +46,27 @@ public partial class SessionsView : UserControl
             && (e.Source as Control)?.DataContext is SessionRow row)
         {
             vm.Selected = row;
+        }
+    }
+
+    /// <summary>줄을 두 번 누르면 그 줄의 세션을 활성 작업 공간에 묶는다(「이 세션 쓰기」 와 같다).</summary>
+    private async System.Threading.Tasks.Task OnDoubleTappedAsync(TappedEventArgs e)
+    {
+        if (DataContext is SessionsViewModel vm && (e.Source as Control)?.FindAncestorOfType<ListBoxItem>(includeSelf: true)?.DataContext is SessionRow row)
+        {
+            e.Handled = true;
+            vm.Selected = row;
+            await vm.ActivateAsync(row);
+        }
+    }
+
+    /// <summary>Enter = 고른 줄의 세션을 활성 작업 공간에 묶는다(두 번 누르기와 같다).</summary>
+    private async System.Threading.Tasks.Task OnKeyDownAsync(KeyEventArgs e)
+    {
+        if (e.Key == Key.Enter && e.KeyModifiers == KeyModifiers.None && DataContext is SessionsViewModel { Selected: { } row } vm)
+        {
+            e.Handled = true;
+            await vm.ActivateAsync(row);
         }
     }
 

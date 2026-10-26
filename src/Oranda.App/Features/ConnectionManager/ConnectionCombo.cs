@@ -104,7 +104,9 @@ public sealed class ConnectionComboViewModel : ViewModelBase
             }
             else if (!_syncing && value is not null)
             {
-                _ = ChooseAsync(value);
+                // 상자가 자기 선택을 바꾸는 중에 목록을 다시 만들지 않게 한 박자 뒤에 묶는다(그 안에서 Entries 를 비우면 상자는 고른 줄을 들고도
+                // 보이는 칸(SelectionBoxItem)이 비어 빈 「접속 안 됨」 을 보였다, TSK-14-06).
+                Defer(() => _ = ChooseAsync(value));
             }
         }
     }
@@ -153,6 +155,12 @@ public sealed class ConnectionComboViewModel : ViewModelBase
         _syncing = true;
         try
         {
+            var rebuildEntries = rebuild || !entries.SequenceEqual(Entries);
+            if (rebuildEntries)
+            {
+                Selected = null; // 목록을 비우기 전에 상자의 선택을 먼저 푼다: 옛 줄을 고른 채 비우면 새 줄을 골라도 보이는 칸이 빈 채로 남는다(TSK-14-06)
+            }
+
             if (rebuild || !items.SequenceEqual(Items))
             {
                 Items.Clear();
@@ -162,7 +170,7 @@ public sealed class ConnectionComboViewModel : ViewModelBase
                 }
             }
 
-            if (rebuild || !entries.SequenceEqual(Entries))
+            if (rebuildEntries)
             {
                 Entries.Clear();
                 foreach (var item in entries)
@@ -282,6 +290,19 @@ public sealed class ConnectionComboViewModel : ViewModelBase
     }
 
     private void OnRouterChanged(object? sender, EventArgs e) => Refresh();
+
+    /// <summary>UI 스레드 대기열 끝에서 한다(앱이 없으면 바로).</summary>
+    private static void Defer(Action action)
+    {
+        if (Application.Current is null)
+        {
+            action();
+        }
+        else
+        {
+            Dispatcher.UIThread.Post(action);
+        }
+    }
 
     private static void Post(Action action)
     {
