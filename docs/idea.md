@@ -9,6 +9,8 @@
 - 데이터 변경 추적 기능
 - 테이블 파티셔닝에 대한 지원
 
+- 조회 결과에서 여러줄 삭제/행 복사
+- 명령 팔레트 기능 이상
 - 한번에 하나의 DB가 아니라 여러 세션을 가지게 하자.
   - 워크스페이스 별로도 세션을 할당 가능하도록 하자.
 - 튜닝을 위한 기능 여러 튜닝 방법을 사용한다. 
@@ -341,4 +343,5 @@ CI(run 39276301319)의 Windows 러너에서 `Incremental_lex_of_10k_lines_meets_
 
 - [전체 기능 비교](oranda1/research/feature-gap-2026-10-24.md) — Toad·SQL Developer·PL/SQL Developer·DBeaver·DataGrip·Orange 대비 영역별 표와 P0\~P2 제안. P0 = 객체 생성·변경 대화상자, 스키마 비교·동기화 스크립트, PL/SQL 디버거 재검토, `PLSQL_WARNINGS` 켜기
 - [쿼리 튜닝 비교](oranda1/research/tuning-gap-2026-10-24.md) — 이번 회차 WP-06(튜닝 메뉴)의 근거
+- [DataGrip 코드 지원·AI 비교](oranda1/research/datagrip-assist-ai-2026-10-25.md) — 결정적 코드 지원(미해결 이름 검사·한글 주석 완성·조인 추론) 먼저, 그다음 LLM 연구서 단계 1 + 번들 스킬 + 편집기 AI 입구
 - Lock 모니터(WP-05)·튜닝(WP-06)으로 채우는 빈칸은 `docs/oranda1/wbs.md` 에 있다. 나머지는 아직 작업으로 올리지 않았다
