@@ -10,7 +10,7 @@ namespace Oranda.Oracle.Execution;
 /// <summary>ODP.NET 값 → 그리드 원시 값(TRD 4.4 「타입 표시」). NUMBER 는 정밀도를 지키고(decimal 또는 문자열), LOB 은 미리보기.</summary>
 internal static class OracleValues
 {
-    /// <summary>LOB 미리보기 길이(문자·바이트, <c>grid.initialLobFetchSize</c> 기본값).</summary>
+    /// <summary>LOB 미리보기 길이(문자·바이트)의 기본값. 실제 값은 설정 <c>grid.initialLobFetchSize</c>(<see cref="IGridFetchSettings"/>).</summary>
     public const int LobPreviewSize = 4000;
 
     /// <summary>OracleDbType → (서버 타입 이름, 표시 분류).</summary>
@@ -94,7 +94,7 @@ internal static class OracleValues
     }
 
     /// <summary>셀 값 1개. null 은 SQL NULL.</summary>
-    public static object? ReadCell(OracleDataReader reader, int i, ColumnDataKind kind)
+    public static object? ReadCell(OracleDataReader reader, int i, ColumnDataKind kind, int lobPreviewSize = LobPreviewSize)
     {
         if (reader.IsDBNull(i))
         {
@@ -122,11 +122,11 @@ internal static class OracleValues
             case ColumnDataKind.IntervalDaySecond:
                 return reader.GetTimeSpan(i);
             case ColumnDataKind.Clob:
-                return ClobValue(reader.GetOracleClob(i));
+                return ClobValue(reader.GetOracleClob(i), lobPreviewSize);
             case ColumnDataKind.Blob when string.Equals(reader.GetDataTypeName(i), "BFile", StringComparison.OrdinalIgnoreCase):
                 return new LobValue(LobKind.BFile, -1) { Locator = reader.GetOracleBFile(i) };
             case ColumnDataKind.Blob:
-                return BlobValue(reader.GetOracleBlob(i));
+                return BlobValue(reader.GetOracleBlob(i), lobPreviewSize);
             case ColumnDataKind.Raw:
                 return (byte[])reader.GetValue(i);
             case ColumnDataKind.Boolean:
@@ -142,13 +142,14 @@ internal static class OracleValues
 
     /// <summary>OUT 매개변수 값. REF CURSOR 는 결과 집합(호출자가 Dispose).</summary>
     public static Dictionary<string, object?> ReadOutValues(OracleSession session, SemaphoreSlim gate,
-                                                            IReadOnlyList<(string Name, OracleParameter Parameter)> outs, int pageSize)
+                                                            IReadOnlyList<(string Name, OracleParameter Parameter)> outs, int pageSize,
+                                                            int lobPreviewSize = LobPreviewSize)
     {
         var values = new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase);
         foreach (var (name, p) in outs)
         {
             values[name] = p.Value is OracleRefCursor rc
-                ? (rc.IsNull ? null : new OracleResultSet(session, gate, null, rc.GetDataReader(), pageSize))
+                ? (rc.IsNull ? null : new OracleResultSet(session, gate, null, rc.GetDataReader(), pageSize, lobPreviewSize))
                 : Normalize(p.Value);
         }
 
@@ -212,10 +213,10 @@ internal static class OracleValues
         return digits <= 28 && decimal.TryParse(text, NumberStyles.Float, CultureInfo.InvariantCulture, out var v) ? v : text;
     }
 
-    private static LobValue ClobValue(OracleClob clob)
+    private static LobValue ClobValue(OracleClob clob, int lobPreviewSize)
     {
         var length = clob.Length / 2; // 바이트 → 문자(UCS-2)
-        var preview = new char[(int)Math.Min(length, LobPreviewSize)];
+        var preview = new char[(int)Math.Min(length, lobPreviewSize)];
         var read = preview.Length == 0 ? 0 : clob.Read(preview, 0, preview.Length);
         return new LobValue(clob.IsNClob ? LobKind.NClob : LobKind.Clob, length)
         {
@@ -225,10 +226,10 @@ internal static class OracleValues
         };
     }
 
-    private static LobValue BlobValue(OracleBlob blob)
+    private static LobValue BlobValue(OracleBlob blob, int lobPreviewSize)
     {
         var length = blob.Length;
-        var preview = new byte[(int)Math.Min(length, LobPreviewSize)];
+        var preview = new byte[(int)Math.Min(length, lobPreviewSize)];
         var read = preview.Length == 0 ? 0 : blob.Read(preview, 0, preview.Length);
         return new LobValue(LobKind.Blob, length)
         {

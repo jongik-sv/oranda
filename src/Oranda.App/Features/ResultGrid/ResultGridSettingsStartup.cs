@@ -1,5 +1,6 @@
 using Oranda.App.Shell.Settings;
 using Oranda.Core.Composition;
+using Oranda.Core.Grid;
 
 namespace Oranda.App.Features.ResultGrid;
 
@@ -14,6 +15,7 @@ public sealed class ResultGridSettingsStartup(SettingsService settings) : IStart
     public Task RunAsync(CancellationToken ct)
     {
         ResultGridModel.LocalSortMaxRowsProvider = () => settings.Current.Grid.LocalSortMaxRows;
+        ResultGridModel.CacheOptionsProvider = () => new ResultPageCacheOptions { MaxMemoryBytes = Math.Max(1, settings.Current.Grid.MemoryLimitMb) * 1024L * 1024 };
         Oranda.App.Shell.ShellText.TitleOverride ??= GridRowTitles.For; // 행 명령 이름에 고른 행 수(TSK-11-01)
         return Task.CompletedTask;
     }

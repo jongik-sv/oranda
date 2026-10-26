@@ -76,6 +76,7 @@ public static class AppComposition
         container.AddInstance(keys);
         container.AddInstance<IContextKeys>(keys);
         container.AddType(typeof(SettingsService), typeof(SettingsService));
+        container.AddType(typeof(Oranda.Core.Grid.IGridFetchSettings), typeof(Oranda.App.Features.ResultGrid.GridFetchSettings));
         container.AddType(typeof(ThemeService), typeof(ThemeService));
         container.AddType(typeof(KeymapService), typeof(KeymapService));
         container.AddType(typeof(ILayoutStore), typeof(LayoutStore));

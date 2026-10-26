@@ -14,6 +14,12 @@ public sealed partial class ResultGridModel : IAsyncDisposable
 {
     public const int DefaultPageSize = 500;
 
+    /// <summary>
+    /// 새 결과 모델이 쓸 페이지 캐시 설정(설정 <c>grid.memoryLimitMb</c>). 앱이 시작 뒤 설정 서비스에서 읽도록 연결한다(<see cref="ResultGridSettingsStartup"/>).
+    /// 모델을 만들 때 읽으므로 설정을 바꾸면 다음 결과부터 따라간다. 연결하지 않으면 캐시 기본값(200 MB).
+    /// </summary>
+    public static Func<ResultPageCacheOptions>? CacheOptionsProvider { get; set; }
+
     private readonly ResultPageCache _cache;
     private readonly SynchronizationContext? _ui = SynchronizationContext.Current;
     private readonly HashSet<int> _pending = [];
@@ -38,7 +44,7 @@ public sealed partial class ResultGridModel : IAsyncDisposable
         ArgumentOutOfRangeException.ThrowIfLessThan(pageSize, 1);
         Source = source;
         PageSize = pageSize;
-        _cache = new ResultPageCache(source, cacheOptions);
+        _cache = new ResultPageCache(source, cacheOptions ?? CacheOptionsProvider?.Invoke());
         Columns = source.Columns;
         _visible = [.. Enumerable.Range(0, Columns.Count)];
         _widths = new double[Columns.Count];

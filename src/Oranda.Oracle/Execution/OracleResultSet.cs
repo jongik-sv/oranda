@@ -17,6 +17,7 @@ internal sealed class OracleResultSet : IResultSet
     private readonly OracleCommand? _command;
     private readonly OracleDataReader _reader;
     private readonly int _pageSize;
+    private readonly int _lobPreviewSize;
     private ResultPage? _last;
     private List<object?>[]? _partial; // 취소로 끊긴 페이지에 이미 읽은 행. 다음 요청이 이어서 채운다
     private int _nextPage;
@@ -26,7 +27,9 @@ internal sealed class OracleResultSet : IResultSet
     private int _disposed;
 
     /// <param name="command">리더를 만든 명령(REF CURSOR 면 null). 이 객체가 Dispose 한다.</param>
-    public OracleResultSet(OracleSession session, SemaphoreSlim gate, OracleCommand? command, OracleDataReader reader, int pageSize)
+    /// <param name="lobPreviewSize">LOB 셀의 미리보기 길이(설정 <c>grid.initialLobFetchSize</c>).</param>
+    public OracleResultSet(OracleSession session, SemaphoreSlim gate, OracleCommand? command, OracleDataReader reader, int pageSize,
+                           int lobPreviewSize = OracleValues.LobPreviewSize)
     {
         ArgumentOutOfRangeException.ThrowIfLessThan(pageSize, 1);
         _session = session;
@@ -34,6 +37,7 @@ internal sealed class OracleResultSet : IResultSet
         _command = command;
         _reader = reader;
         _pageSize = pageSize;
+        _lobPreviewSize = lobPreviewSize;
         Columns = OracleValues.ReadColumns(reader);
         if (reader.RowSize > 0)
         {
@@ -42,6 +46,8 @@ internal sealed class OracleResultSet : IResultSet
     }
 
     public IReadOnlyList<ResultColumn> Columns { get; }
+
+    public int? PageSize => _pageSize;
 
     public bool IsComplete => Volatile.Read(ref _complete);
 
@@ -144,7 +150,7 @@ internal sealed class OracleResultSet : IResultSet
 
                 for (var c = 0; c < buffers.Length; c++)
                 {
-                    buffers[c].Add(sharer.Share(c, OracleValues.ReadCell(_reader, c, Columns[c].Kind)));
+                    buffers[c].Add(sharer.Share(c, OracleValues.ReadCell(_reader, c, Columns[c].Kind, _lobPreviewSize)));
                 }
 
                 count++;

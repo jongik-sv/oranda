@@ -34,6 +34,9 @@ public sealed class ResultPageCache : IAsyncDisposable
     private long _residentBytes;
     private bool _disposed;
 
+    /// <summary>메모리에 두는 페이지 추정 크기 합의 상한(바이트).</summary>
+    public long MaxMemoryBytes => _options.MaxMemoryBytes;
+
     public ResultPageCache(IResultSet source, ResultPageCacheOptions? options = null)
     {
         ArgumentNullException.ThrowIfNull(source);

@@ -33,7 +33,7 @@ public sealed partial class SqlResultPaneViewModel
 
         _quickCts?.Cancel();
         Detach();
-        var m = new ResultGridModel(result);
+        var m = new ResultGridModel(result, pageSize: result.PageSize ?? ResultGridModel.DefaultPageSize); // 결과 집합이 만들 때 정한 페이지 크기(설정 grid.pageSize)와 같아야 한다
         if (display is not null)
         {
             m.Display = display;

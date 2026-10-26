@@ -30,6 +30,8 @@ public sealed class FakeResultSet : IResultSet
 
     public long? KnownRowCount => IsComplete ? _rows.Count : null;
 
+    public int? PageSize => _pageSize;
+
     public int PageRequests { get; private set; }
 
     public bool IsDisposed { get; private set; }

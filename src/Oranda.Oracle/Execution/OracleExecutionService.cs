@@ -30,6 +30,7 @@ internal sealed partial class OracleExecutionService : IExecutionService
     private readonly IExecutionInteraction _interaction;
     private readonly IEventBus _events;
     private readonly ISqlPlusCommandProcessor? _sqlPlus;
+    private readonly IGridFetchSettings? _grid;
     private readonly ConditionalWeakTable<OracleSession, SessionRuntime> _runtimes = new();
 
     public OracleExecutionService(IExecutionPolicy policy, IExecutionInteraction interaction, IEventBus events,
@@ -39,7 +40,8 @@ internal sealed partial class OracleExecutionService : IExecutionService
     }
 
     internal OracleExecutionService(IExecutionPolicy policy, IExecutionInteraction interaction, IEventBus events,
-                                    ISqlPlusCommandProcessor? sqlPlus, int pageSize = 500, bool dbmsOutput = true)
+                                    ISqlPlusCommandProcessor? sqlPlus, int pageSize = 500, bool dbmsOutput = true,
+                                    IGridFetchSettings? grid = null)
     {
         _policy = policy;
         _interaction = interaction;
@@ -47,10 +49,17 @@ internal sealed partial class OracleExecutionService : IExecutionService
         _sqlPlus = sqlPlus;
         PageSize = pageSize;
         DbmsOutputEnabled = dbmsOutput;
+        _grid = grid;
     }
 
-    /// <summary>결과 페이지 크기(<c>grid.pageSize</c>). FetchSize = RowSize × 이 값.</summary>
+    /// <summary>생성할 때 받은 결과 페이지 크기(설정 서비스가 없을 때의 값). 실행할 때는 <see cref="CurrentPageSize"/>.</summary>
     internal int PageSize { get; }
+
+    /// <summary>결과 페이지 크기(<c>grid.pageSize</c>). FetchSize = RowSize × 이 값. 설정을 바꾸면 다음 실행부터 따라간다.</summary>
+    internal int CurrentPageSize => _grid is { PageSize: >= 1 } g ? g.PageSize : PageSize;
+
+    /// <summary>LOB 미리 읽기 크기(<c>grid.initialLobFetchSize</c>). 설정이 없으면 기본 4000.</summary>
+    internal int CurrentLobFetchSize => _grid is { InitialLobFetchSize: >= 0 } g ? g.InitialLobFetchSize : OracleValues.LobPreviewSize;
 
     /// <summary><c>execution.dbmsOutput</c>. 켜면 세션 첫 실행 때 <c>DBMS_OUTPUT.ENABLE(NULL)</c>.</summary>
     internal bool DbmsOutputEnabled { get; }
@@ -223,6 +232,8 @@ internal sealed partial class OracleExecutionService : IExecutionService
             cmd.BindByName = true;
             cmd.CommandText = stmt.Text;
             var parameters = BindBuilder.Build(cmd, stmt, binds);
+            var pageSize = CurrentPageSize; // 실행마다 한 번 읽는다: 한 결과 안에서 페이지 크기가 바뀌지 않게
+            var lobFetchSize = CurrentLobFetchSize;
 
             IResultSet? resultSet = null;
             long? rows = null;
@@ -231,10 +242,11 @@ internal sealed partial class OracleExecutionService : IExecutionService
                 // 질의와 분류가 불확실한 문장은 리더로 받는다(결과가 있으면 결과 집합).
                 if (stmt.Kind == StatementKind.Query || stmt.IsClassificationUncertain)
                 {
+                    cmd.InitialLOBFetchSize = lobFetchSize; // 이 크기까지의 LOB 은 행과 함께 와서 미리보기에 왕복이 더 들지 않는다
                     reader = (OracleDataReader)await cmd.ExecuteReaderAsync(ct);
                     if (reader.FieldCount > 0)
                     {
-                        resultSet = new OracleResultSet(session, runtime.Gate, cmd, reader, PageSize);
+                        resultSet = new OracleResultSet(session, runtime.Gate, cmd, reader, pageSize, lobFetchSize);
                         reader = null;
                         cmd = null; // 결과 집합이 소유한다.
                     }
@@ -254,7 +266,7 @@ internal sealed partial class OracleExecutionService : IExecutionService
 
             var outValues = parameters.Count == 0
                 ? new Dictionary<string, object?>()
-                : OracleValues.ReadOutValues(session, runtime.Gate, parameters, PageSize);
+                : OracleValues.ReadOutValues(session, runtime.Gate, parameters, pageSize, lobFetchSize);
 
             sw.Stop();
             var pending = await TrackTransactionAsync(session, stmt, kind, ct);
