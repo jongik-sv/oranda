@@ -997,6 +997,18 @@ levels:
   - acceptance: 고치기 전 실패하는 시험(세션 이동 뒤 반영 거절·실행 표시·PL/SQL 창 세션·이력 다시 실행 세션·겹친 실행·닫기 롤백·가져오기 SAVEPOINT) 통과 / 통합 WritePathSessionFlowTests 26ai·11.2 통과 / `dotnet build Oranda.sln -warnaserror`·`dotnet test`(Integration·Perf 제외) 통과
   - note: 결과: 고치기 전 가져오기 취소 시 앞의 미커밋 행까지 사라짐(26ai·11.2 둘 다, 앞 미커밋 0행), 고친 뒤 1행 유지. 닫기 롤백은 고치기 전에도 26ai·11.2 에서 드라이버가 되돌려 암묵 커밋은 재현되지 않음(예방으로 명시 ROLLBACK). 원인 파일 GridEdit/GridEditSession.cs·GridEditCommands.cs, Oracle/Transfer/OracleDataTransferService.cs, HistoryScripts/HistoryScriptsCommands.cs, Execution/ExecutionState.cs, PlsqlRun/PlsqlRunViewModel.cs, ConnectionManager/ConnectionService.cs (win144)
 
+- [x] TSK-14-10: 첫 실행 때 새 세션 워크스페이스가 콤보·상태 줄에 실행하지 않을 기본 세션을 보임 외 세션 표시 결함 [win144] w:1 2026-10-26~2026-10-26
+  - category: defect
+  - domain: frontend
+  - model: opus
+  - priority: high
+  - tags: session-router, connection-combo, sessions-panel, docking, multi-session, win144
+  - prd-ref: PRD 16, MS-09, D-033, D-034, D-042
+  - depends: TSK-14-07
+  - requirements: 세션 관리 검토(2026-10-26) 7·17·19·21~26. 「첫 실행 때 새 세션」 워크스페이스에서 콤보·상태 줄·SID 툴팁은 기본 세션 P 를 보이는데 실행(COMMIT 포함)은 새 세션 Q 에서 되고, P 를 다시 골라도 같은 줄이라 아무 일도 없었다(MS-09). 대기 중엔 「새 세션(첫 실행 때)」 을 보이고 P 를 고르면 명시적 공유로 묶기, 「세션」 창의 「미사용」 이 곧 쓸 세션에도 붙던 것 → 「사용 예정」, 지금 워크스페이스가 쓰는 세션 표지, 효과 없을 때 「이 세션 쓰기」 끄기, 순번 고정, 닫힌 콤보 화살표·휠로 지나는 세션마다 묶던 것, 설정 바꿈 재동기화, 공유 세션 커밋·롤백 경고, 나눈 문서 영역·도구 창 포커스 때 활성 문서 판정; 제약: 실앱 SendKeys 금지(Headless 까지), 통합 시험은 조정자가 머지 때; 비고: 레인 sr-ui
+  - acceptance: SessionDisplayTests 11개(대기 표시·P 고르기 콤보/세션 창·사용 예정·대기 워크스페이스는 사용 예정 아님·이 워크스페이스 표지·이 세션 쓰기 꺼짐·고정 순번·설정 재동기화·닫힌 콤보 화살표/휠·공유 커밋 경고) / ActiveDocumentFocusTests 2개(도구 창 포커스·다른 영역 포커스) / 기존 SessionSwitch·Sessions·MultiSession·WorkspaceSession·SessionLifecycle·MenuBarTarget 시험 통과 / `dotnet build Oranda.sln -warnaserror`
+  - note: 결과: 고치기 전 새 시험 실패 확인(Dock 은 도구 창을 누르면 CurrentDockable 이 도구 창이 되어 첫 문서 영역의 탭으로 되돌아가고, 다른 영역의 이미 보이는 탭을 누르면 ActiveDockableChanged 가 없어 알리지 않았다 — review 19 사실; Avalonia ComboBox 는 닫힌 채 화살표·휠로 지나는 줄마다 SelectedItem 을 바꿨다 — review 21 사실). 원인 Features/ConnectionManager/SessionRouter.cs(Select·SelectAsync 의 changed=false, LabelOf 위치 순번, 설정 구독 없음)·SessionRouter.Workspaces.cs(ChoosesSession 이 대기 중 접속 세션을 고름으로 안 봄)·ConnectionCombo.cs(Refresh 가 ShownSession 줄을 고름, 닫힌 콤보 키·휠)·ConnectionStatusItem.cs·Sessions/SessionRow.cs·SessionsViewModel.cs(CanUse 가 ShownSession 비교)·Shell/Docking/DockWorkspace.cs(FocusedDockableChanged 미구독)·Execution/ExecutionController.Transaction.cs(공유 커밋 경고 없음). SessionsViewModelTests 의 「이 세션 쓰기」 시험에 탭을 더함(탭 없으면 이제 꺼짐) (win144)
+
 ## 의존 그래프
 
 ### 그래프 (Mermaid)
@@ -1094,6 +1106,7 @@ graph LR
   TSK-14-04 --> TSK-14-06
   TSK-14-06 --> TSK-14-07
   TSK-14-02 --> TSK-14-08
+  TSK-14-07 --> TSK-14-10
   style TSK-01-02 fill:#e8f5e9,stroke:#2e7d32
   style TSK-03-01 stroke:#c62828,stroke-width:2px
   style TSK-02-02 stroke:#c62828,stroke-width:2px

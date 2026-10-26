@@ -30,6 +30,8 @@ public sealed partial class DockWorkspace
     private readonly Dictionary<string, PanelTool> _tools = new(StringComparer.Ordinal);
     private int _documentSerial;
     private bool _documentsCaptured;
+    private PanelDocument? _lastFocused; // 마지막으로 포커스를 가진 문서(도구 창을 눌러도 남는다)
+    private PanelDocument? _reported; // 마지막으로 알린 활성 문서
 
     public DockWorkspace(IToolPanelRegistry registry, Func<ToolPanelDefinition, object> createViewModel, IShellText text)
     {
@@ -43,7 +45,9 @@ public sealed partial class DockWorkspace
             HideDocumentsOnClose = false,
             DefaultHostWindowLocator = () => new FloatHostWindow(),
         };
+        ActiveDocumentChanged += (_, _) => _reported = ActiveDocument; // 맨 먼저 듣는다: 포커스만 옮겼을 때 바뀌었는지 견줄 값
         Factory.ActiveDockableChanged += (_, _) => ActiveDocumentChanged?.Invoke(this, EventArgs.Empty);
+        Factory.FocusedDockableChanged += (_, e) => OnFocusedDockableChanged(e.Dockable);
         ActiveDocumentChanged += (_, _) => ScheduleScopedUpdate(); // SQL 창 도구 창 숨기기(.ScopedTools.cs)
         Factory.DockableClosing += OnDockableClosing;
         Factory.DockableClosed += (_, e) =>
@@ -168,14 +172,37 @@ public sealed partial class DockWorkspace
     /// <summary>
     /// 지금 보이는 활성 문서. 포커스를 가졌던 문서(<c>Factory.CurrentDockable</c>)가 속한 영역의 보이는 탭을 돌려준다:
     /// 탭 줄에서 다른 탭을 골라도 포커스 기록은 옛 문서에 남을 수 있어, 그대로 쓰면 창이 다시 활성화될 때 엉뚱한 문서가 활성이 된다.
+    /// 도구 창으로 포커스가 옮겨 가면(<c>CurrentDockable</c> 이 도구 창) 마지막으로 포커스를 가졌던 문서의 영역을 본다: 문서 영역을 나눈 화면에서
+    /// 첫 영역의 탭으로 되돌아가 SQL 작업 공간인지 판정(전용 세션·툴바 콤보)이 활성 탭과 갈리지 않게(TSK-14-10).
     /// </summary>
     public PanelDocument? ActiveDocument =>
         Layout is null ? null
-        : ShownIn(Factory.CurrentDockable as PanelDocument)
+        : ShownIn(Factory.CurrentDockable as PanelDocument ?? Live(_lastFocused))
             ?? DocumentDocks().Select(d => d.ActiveDockable).OfType<PanelDocument>().FirstOrDefault();
 
     private static PanelDocument? ShownIn(PanelDocument? focused) =>
         focused?.Owner is IDock { ActiveDockable: PanelDocument shown } ? shown : focused;
+
+    /// <summary>아직 문서 영역(떠 있는 창 포함)에 있는 문서면 그것, 닫혔거나 영역 밖이면 null.</summary>
+    private static PanelDocument? Live(PanelDocument? document) =>
+        document?.Owner is IDock { VisibleDockables: { } owned } && owned.Contains(document) ? document : null;
+
+    /// <summary>
+    /// 포커스가 옮겨 갔다(Dock 은 문서·도구 창을 누르면 <c>SetFocusedDockable</c> 로 알린다). 문서면 기억하고, 나눈 화면에서 이미 보이는 탭인 다른 영역의
+    /// 문서를 눌러 활성 탭은 그대로인 채 포커스만 옮겼어도(영역의 <c>ActiveDockableChanged</c> 가 없다) 활성 문서가 바뀌었으면 알린다.
+    /// </summary>
+    private void OnFocusedDockableChanged(IDockable? dockable)
+    {
+        if (dockable is PanelDocument document)
+        {
+            _lastFocused = document;
+        }
+
+        if (!ReferenceEquals(ActiveDocument, _reported))
+        {
+            ActiveDocumentChanged?.Invoke(this, EventArgs.Empty);
+        }
+    }
 
     /// <summary>보이는 도구 창 ID(트리에 있는 것).</summary>
     public IReadOnlyList<string> VisibleToolIds =>

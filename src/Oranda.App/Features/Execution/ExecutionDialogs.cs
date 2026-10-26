@@ -62,6 +62,13 @@ public interface IExecutionDialogs
     Task<UncommittedChoice> AskSwitchUncommittedAsync(string connection, CancellationToken ct) => AskConnectionUncommittedAsync(connection, ct);
 
     /// <summary>
+    /// 여러 작업 공간이 함께 쓰는 세션(<paramref name="connection"/> = 「번호 - 사용자@이름 (n)」)을 손으로 커밋·롤백하기 전(TSK-14-10, D-042):
+    /// 그 트랜잭션은 <paramref name="workspaces"/> 모두의 변경이라 함께 확정·취소된다고 밝히고 한 번 묻는다. true = 진행. 기본은 묻지 않고 진행.
+    /// </summary>
+    Task<bool> ConfirmSharedTransactionAsync(string connection, IReadOnlyList<string> workspaces, bool commit, CancellationToken ct) =>
+        Task.FromResult(true);
+
+    /// <summary>
     /// 탭에 묶인 접속이 열려 있지 않은데 실행하려 한다(CONN-06): 다시 접속 / 지금 접속(<paramref name="current"/>)으로 바꾸기 / 취소.
     /// <paramref name="profile"/> = 탭에 묶인 접속 이름, <paramref name="current"/> = 지금 접속 이름(없으면 null, 그 단추를 감춘다).
     /// 기본은 취소(실행하지 않는다).

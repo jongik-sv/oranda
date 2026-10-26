@@ -6,6 +6,8 @@ using Avalonia.Controls;
 using Avalonia.Controls.Primitives;
 using Avalonia.Controls.Templates;
 using Avalonia.Data;
+using Avalonia.Input;
+using Avalonia.Interactivity;
 using Avalonia.Layout;
 using Avalonia.Media;
 using Avalonia.Threading;
@@ -180,9 +182,12 @@ public sealed class ConnectionComboViewModel : ViewModelBase
             }
 
             var shown = router?.ShownSession;
-            Selected = shown is null ? null : Items.FirstOrDefault(i => ReferenceEquals(i.Session, shown));
+            var pending = router?.ShownPendingNew == true; // 첫 실행 때 새 세션: 접속의 세션 줄을 고른 채 보이면 실행 세션과 갈린다(TSK-14-10)
+            Selected = shown is null || pending ? null : Items.FirstOrDefault(i => ReferenceEquals(i.Session, shown));
             PlaceholderText = router?.ShownMissing is { } missing
                 ? UiText.Format("Execution.status.notConnectedNamed", "접속 안 됨({0})", router.ProfileName(missing) ?? "?")
+                : pending && shown is { } connection
+                    ? UiText.Format("Execution.combo.pendingNew", "새 세션(첫 실행 때) — {0}", $"{connection.Profile.User}@{connection.Profile.Name}")
                 : shown is { } dedicated && Selected is null
                     ? $"{UiText.Get("Execution.status.dedicated", "전용 세션")} · {dedicated.Profile.User}@{dedicated.Profile.Name}"
                     : NotConnected;
@@ -227,7 +232,7 @@ public sealed class ConnectionComboViewModel : ViewModelBase
         var count = router.SessionsOf(profile.Id).Count;
         var full = count >= ConnectionService.MaxSessionsPerProfile;
         var name = UiText.Format("Execution.combo.newSession", "새 세션 — {0}",
-            string.Create(CultureInfo.InvariantCulture, $"{profile.User}@{profile.Name} ({count + 1})"));
+            string.Create(CultureInfo.InvariantCulture, $"{profile.User}@{profile.Name} ({router.NextNumberOf(profile.Id)})")); // 열면 받을 고정 순번
         var tip = full
             ? UiText.Format("Execution.combo.newSessionFull", "같은 DB 세션 상한({0}개)에 닿았습니다. 쓰지 않는 세션을 닫으세요.",
                 ConnectionService.MaxSessionsPerProfile.ToString(CultureInfo.InvariantCulture))
@@ -335,6 +340,28 @@ public sealed class ConnectionComboView : UserControl
         combo.Bind(SelectingItemsControl.SelectedItemProperty, new Binding(nameof(ConnectionComboViewModel.Selected)) { Mode = BindingMode.TwoWay });
         combo.Bind(ComboBox.PlaceholderTextProperty, new Binding(nameof(ConnectionComboViewModel.PlaceholderText)));
         combo.Bind(ComboBox.IsDropDownOpenProperty, new Binding(nameof(ConnectionComboViewModel.IsDropDownOpen)) { Mode = BindingMode.TwoWay });
+
+        // 닫힌 콤보에서 화살표·휠로 줄을 넘기면 ComboBox 는 지나는 줄마다 고른다: 고를 때마다 세션을 묶고 미커밋을 물으므로(TSK-14-10) 닫혀 있으면
+        // 넘기지 않는다. 화살표는 대신 목록을 펼친다(펼친 목록에서 고르면 묶는다). Alt+↓ 는 그대로 펼친다.
+        combo.AddHandler(InputElement.KeyDownEvent, (_, e) =>
+        {
+            if (!combo.IsDropDownOpen && e.KeyModifiers == KeyModifiers.None
+                && e.Key is Key.Up or Key.Down or Key.Home or Key.End or Key.PageUp or Key.PageDown)
+            {
+                e.Handled = true;
+                if (e.Key is Key.Up or Key.Down)
+                {
+                    combo.IsDropDownOpen = true;
+                }
+            }
+        }, RoutingStrategies.Tunnel);
+        combo.AddHandler(InputElement.PointerWheelChangedEvent, (_, e) =>
+        {
+            if (!combo.IsDropDownOpen)
+            {
+                e.Handled = true;
+            }
+        }, RoutingStrategies.Tunnel);
         Content = combo;
         EventHandler onLanguage = (_, _) => Avalonia.Threading.Dispatcher.UIThread.Post(() => ApplyTexts(combo));
         AttachedToVisualTree += (_, _) => UiText.WatchLanguage(onLanguage);

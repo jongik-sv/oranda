@@ -24,9 +24,10 @@ internal interface ISessionOps
 /// <summary>컨테이너의 실행 컨트롤러·접속 서비스로 하는 실제 동작.</summary>
 internal sealed class ContainerSessionOps(ServiceContainer container) : ISessionOps
 {
-    public Task CommitAsync(ISession session, CancellationToken ct) => ExecutionCommands.Resolve(container).CommitAsync(session, ct);
+    // 여러 작업 공간이 함께 쓰는 세션이면 함께 확정되는 작업 공간을 밝혀 먼저 묻는다(TSK-14-10).
+    public Task CommitAsync(ISession session, CancellationToken ct) => ExecutionCommands.Resolve(container).ConfirmedCommitAsync(session, ct);
 
-    public Task RollbackAsync(ISession session, CancellationToken ct) => ExecutionCommands.Resolve(container).RollbackAsync(session, ct);
+    public Task RollbackAsync(ISession session, CancellationToken ct) => ExecutionCommands.Resolve(container).ConfirmedRollbackAsync(session, ct);
 
     public Task<bool> ConfirmUncommittedAsync(ISession session, CancellationToken ct) =>
         ExecutionCommands.Resolve(container).ConfirmConnectionUncommittedAsync(session, ct);

@@ -45,6 +45,9 @@
                 <Ellipse Classes="dot" Classes.running="{Binding IsRunning}" Classes.broken="{Binding IsBroken}" Width="8" Height="8" VerticalAlignment="Center" />
                 <TextBlock Text="{Binding Label}" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
                 <TextBlock Classes="dim" Text="{Binding SidText}" VerticalAlignment="Center" />
+                <!-- 지금 활성 작업 공간이 쓰는 세션(고른 줄과 따로, TSK-14-10). -->
+                <TextBlock Text="{Binding ShownText}" IsVisible="{Binding IsShown}" FontWeight="SemiBold" VerticalAlignment="Center"
+                           Foreground="{DynamicResource OrandaIconBlueBrush}" />
               </StackPanel>
               <TextBlock Classes="dim" Margin="14,0,0,0" Text="{Binding Detail}" TextTrimming="CharacterEllipsis" />
             </StackPanel>

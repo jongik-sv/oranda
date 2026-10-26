@@ -48,10 +48,18 @@ public sealed class ConnectionStatusViewModel : ViewModelBase, IStatusBarItem
         : _open.Count == 0 ? null : _open[^1];
 
     public string Text => Current is { } s
-        ? $"{s.Profile.User}@{s.Profile.Name}  {ShortVersion(s.Server.Version)}".TrimEnd() + (ShownBroken ? UiText.Get("Execution.status.brokenSuffix", " (끊김)") : string.Empty)
+        ? ShownPendingNew
+            ? UiText.Format("Execution.status.pendingNew", "{0} · 새 세션(첫 실행 때)", $"{s.Profile.User}@{s.Profile.Name}  {ShortVersion(s.Server.Version)}".TrimEnd())
+            : $"{s.Profile.User}@{s.Profile.Name}  {ShortVersion(s.Server.Version)}".TrimEnd() + (ShownBroken ? UiText.Get("Execution.status.brokenSuffix", " (끊김)") : string.Empty)
         : _hooked?.ShownMissing is { } missing
             ? UiText.Format("Execution.status.notConnectedNamed", "접속 안 됨({0})", _hooked.ProfileName(missing) ?? "?")
             : UiText.Get("Execution.status.notConnected", "접속 안 됨");
+
+    /// <summary>
+    /// 활성 작업 공간이 첫 실행 때 자기 세션을 연다(<see cref="SessionRouter.ShownPendingNew"/>, TSK-14-10): 보이는 접속 세션의 SID 는 실행 세션이 아니므로
+    /// 글은 「새 세션(첫 실행 때)」, 툴팁은 SID 없이 보인다. 환경 칩은 같은 DB 라 그대로.
+    /// </summary>
+    private bool ShownPendingNew => _hooked?.ShownPendingNew == true;
 
     /// <summary>보이는 접속이 끊겼다(콤보의 「(끊김)」 과 같다).</summary>
     private bool ShownBroken => _hooked?.ShownSession is { } shown && _hooked.IsBroken(shown);
@@ -80,8 +88,11 @@ public sealed class ConnectionStatusViewModel : ViewModelBase, IStatusBarItem
     };
 
     public string ToolTip => Current is { } s
-        ? UiText.Format("Execution.status.connTip", "{0}@{1} · Oracle {2} · SID {3} — 눌러서 접속 관리자 열기",
-            s.Profile.User, s.Profile.DataSource, s.Server.Version, s.Server.SessionId.ToString(CultureInfo.InvariantCulture))
+        ? ShownPendingNew
+            ? UiText.Format("Execution.status.pendingNewTip", "{0}@{1} · Oracle {2} · 첫 실행 때 이 워크스페이스 전용 세션을 엽니다 — 눌러서 접속 관리자 열기",
+                s.Profile.User, s.Profile.DataSource, s.Server.Version)
+            : UiText.Format("Execution.status.connTip", "{0}@{1} · Oracle {2} · SID {3} — 눌러서 접속 관리자 열기",
+                s.Profile.User, s.Profile.DataSource, s.Server.Version, s.Server.SessionId.ToString(CultureInfo.InvariantCulture))
         : UiText.Get("Execution.status.connTipNone", "접속 관리자 열기");
 
     /// <summary><c>23.26.0.0.0</c> → <c>26ai</c>, <c>19.3.0.0.0</c> → <c>19c</c>. 모르면 빈 글.</summary>

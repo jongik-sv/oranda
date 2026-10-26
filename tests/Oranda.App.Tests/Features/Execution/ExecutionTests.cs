@@ -163,6 +163,18 @@ internal sealed class FakeDialogs : IExecutionDialogs
         return Task.FromResult(UncommittedAnswer);
     }
 
+    /// <summary>공유 세션 커밋·롤백 확인의 답(TSK-14-10).</summary>
+    public bool SharedAnswer { get; set; } = true;
+
+    /// <summary>공유 세션 커밋·롤백 확인: (접속 이름, 함께 확정되는 작업 공간, 커밋인지).</summary>
+    public List<(string Connection, IReadOnlyList<string> Workspaces, bool Commit)> SharedAsked { get; } = [];
+
+    public Task<bool> ConfirmSharedTransactionAsync(string connection, IReadOnlyList<string> workspaces, bool commit, CancellationToken ct)
+    {
+        SharedAsked.Add((connection, workspaces, commit));
+        return Task.FromResult(SharedAnswer);
+    }
+
     public MissingConnectionChoice MissingAnswer { get; set; } = MissingConnectionChoice.Cancel;
 
     /// <summary>접속 안 됨 탭 묻기: (탭 접속 이름, 지금 접속 이름).</summary>

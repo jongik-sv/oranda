@@ -239,6 +239,8 @@ public sealed class SessionsViewModelTests
         using var rig = new Rig();
         var a = await rig.ConnectAsync();
         await rig.OpenExtraAsync(a);
+        rig.Host.EnsureWorkspace();
+        rig.Host.NewDocument(); // 쓸 탭이 있어야 켜진다(탭 없는 작업 공간이면 효과가 없어 꺼진다, TSK-14-10)
         rig.Vm.Refresh();
         Assert.True(rig.Vm.CanUse(rig.Vm.Rows[1]));
 

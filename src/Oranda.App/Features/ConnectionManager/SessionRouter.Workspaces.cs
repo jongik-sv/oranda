@@ -195,6 +195,51 @@ public sealed partial class SessionRouter
         && _connections.SessionOf(profileId) is { } primary && UsedByOther(primary, ws);
 
     /// <summary>
+    /// 활성 SQL 탭이 첫 실행 때 자기 세션을 새로 연다(<see cref="IsPendingOwn"/>, TSK-14-10·D-042): 보이는 세션(<see cref="ShownSession"/>)은 같은 DB 의
+    /// 접속 세션이지만 실행은 새 세션에서 되므로 툴바 콤보·상태 표시줄은 그 세션이 아니라 「새 세션(첫 실행 때)」 을 보인다.
+    /// </summary>
+    public bool ShownPendingNew => SqlDocumentActive && IsPendingOwn(_host.Active);
+
+    /// <summary>
+    /// 활성 SQL 작업 공간이 지금 쓰는(다음 실행이 갈) 세션: 「세션」 창의 「이 워크스페이스」 표지(TSK-14-10). 첫 실행 때 새 세션을 열 차례거나
+    /// SQL 작업 공간이 활성이 아니거나 전용 세션 탭이면 null.
+    /// </summary>
+    public ISession? InUseSession =>
+        SqlDocumentActive && _host.Active is { } tab && _dedicated?.SessionOf(tab) is null && _host.WorkspaceOf(tab) is not null && !IsPendingOwn(tab)
+            ? SessionFor(tab)
+            : null;
+
+    /// <summary>
+    /// 「세션」 창의 「이 세션 쓰기」(더블클릭·Enter 도)가 효과가 있는지(TSK-14-10): SQL 작업 공간의 탭(전용 세션 탭 제외)이 활성이고, 그 작업 공간이
+    /// 아직 이 세션을 쓰지 않는다(첫 실행 때 새 세션을 열 차례면 보이는 접속의 세션을 골라도 묶인다). 탭 없는 작업 공간이면 false.
+    /// </summary>
+    public bool CanUseSession(ISession session)
+    {
+        ArgumentNullException.ThrowIfNull(session);
+        return _connections.IsOpen(session) && SqlDocumentActive && _host.Active is { } tab && _dedicated?.SessionOf(tab) is null
+            && _host.WorkspaceOf(tab) is not null && (IsPendingOwn(tab) || !ReferenceEquals(SessionFor(tab), session));
+    }
+
+    /// <summary>
+    /// 아직 실행하지 않아 묶이지 않았지만 첫 실행 때 이 접속 세션을 쓸 열린 작업 공간들(TSK-14-10): 그 프로필의 탭이 있고, 함께 쓰기이거나
+    /// 자기 세션인데 이 세션을 다른 작업 공간이 쓰지 않는다. 접속의 세션(기본 세션)이 아니면 빈 목록(더 연 세션은 고를 때만 묶인다).
+    /// </summary>
+    public IReadOnlyList<SqlWorkspaceViewModel> PlannedWorkspacesOn(ISession session)
+    {
+        ArgumentNullException.ThrowIfNull(session);
+        var profileId = session.Profile.Id;
+        if (!ReferenceEquals(_connections.SessionOf(profileId), session))
+        {
+            return [];
+        }
+
+        return [.. _host.Workspaces.Where(w =>
+            w.Tabs.Any(t => t.ConnectionProfileId == profileId && _dedicated?.SessionOf(t) is null)
+            && BoundSession(w, profileId) is null && !IsLost(w, profileId)
+            && (ModeOf(w) == WorkspaceSessionMode.Shared || !UsedByOther(session, w)))];
+    }
+
+    /// <summary>
     /// 실행하기 전 탭의 작업 공간을 세션에 묶는다(<see cref="ExecutionController.EnsureConnectionAsync"/> 끝에서). 이미 묶였거나 작업 공간 밖 탭·전용 세션 탭이면 그대로 true.
     /// 함께 쓰기면 접속의 세션에, 자기 세션이면 접속의 세션을 아무도 안 쓸 때 그것에, 다른 작업 공간이 쓰면 같은 DB 에 새 세션을 열어 묶는다.
     /// 새 세션을 못 열면 메시지 창에 남기고 false(다른 세션으로 대신 실행하지 않는다).
@@ -376,9 +421,10 @@ public sealed partial class SessionRouter
     /// 「함께 쓰기」, 아니면 「자기 세션」 으로 기억한다. 세션을 고른 것이 아니라 다른 DB(접속)로 바꾸기만 했으면 묶지 않고 모드도 그대로 둔다
     /// (<see cref="ChoosesSession"/>, 세션은 첫 실행 때 고른다).
     /// </summary>
-    private void BindChoice(SqlEditorViewModel tab, ISession session)
+    private void BindChoice(SqlEditorViewModel tab, ISession session, bool pickedWhilePending = false)
     {
-        if (_host.WorkspaceOf(tab) is not { } ws || !ChoosesSession(ws, session))
+        // 첫 실행 때 새 세션을 열 차례인 작업 공간이 보이는 접속의 세션을 골랐으면 그 세션을 명시적으로 함께 쓴다(TSK-14-10: 보이는 세션 = 실행 세션).
+        if (_host.WorkspaceOf(tab) is not { } ws || (!pickedWhilePending && !ChoosesSession(ws, session)))
         {
             return;
         }

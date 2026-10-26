@@ -64,6 +64,12 @@ public sealed class ExecutionDeps
     /// <summary>대화상자에 보일 접속 이름(「번호 - 사용자@이름」).</summary>
     public Func<ISession, string> ConnectionLabel { get; init; } = s => $"{s.Profile.User}@{s.Profile.Name}";
 
+    /// <summary>
+    /// 세션을 쓰는 작업 공간 이름들(TSK-14-10, <c>SessionRouter.WorkspacesOn</c>). 둘 이상이면 손으로 커밋·롤백하기 전에 함께 확정된다고 묻는다.
+    /// 기본은 없다(묻지 않는다).
+    /// </summary>
+    public Func<ISession, IReadOnlyList<string>> SharedWith { get; init; } = _ => [];
+
     /// <summary>프로필 이름(접속 안 됨 탭 묻기, 저장된 프로필을 아직 안 읽었으면 읽는다). 모르면 null.</summary>
     public Func<Guid, Task<string?>> ProfileName { get; init; } = _ => Task.FromResult<string?>(null);
 

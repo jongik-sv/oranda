@@ -230,9 +230,12 @@ public sealed partial class SessionsViewModel : ToolPanelViewModelBase, IDisposa
 
     // ---- 우클릭 명령 -------------------------------------------------------------------------
 
-    /// <summary>「이 세션 쓰기」: 활성 SQL 작업 공간이 열려 있고 이미 이 세션을 쓰고 있지 않으면 쓸 수 있다.</summary>
+    /// <summary>
+    /// 「이 세션 쓰기」: 활성 SQL 작업 공간의 탭(전용 세션 탭 제외)이 있고 그 작업 공간이 아직 이 세션을 쓰지 않으면 쓸 수 있다
+    /// (<see cref="SessionRouter.CanUseSession"/>, TSK-14-10: 효과 없을 때 켜지지 않는다. 첫 실행 때 새 세션을 열 차례면 보이는 접속 세션도 고를 수 있다).
+    /// </summary>
     public bool CanUse(SessionRow? row) =>
-        row is not null && !row.IsBroken && _router is { SqlDocumentActive: true } router && !ReferenceEquals(router.ShownSession, row.Session);
+        row is not null && !row.IsBroken && _router is { } router && router.CanUseSession(row.Session);
 
     public bool CanCommit(SessionRow? row) => _ops is not null && row is { IsPending: true, IsRunning: false, IsBroken: false };
 

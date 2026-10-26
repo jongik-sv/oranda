@@ -55,6 +55,9 @@ public sealed class AvaloniaExecutionDialogs : IExecutionDialogs
     public Task<MissingConnectionChoice> AskMissingConnectionAsync(string profile, string? current, CancellationToken ct)
         => OnUi(() => MissingConnectionCoreAsync(profile, current));
 
+    public Task<bool> ConfirmSharedTransactionAsync(string connection, IReadOnlyList<string> workspaces, bool commit, CancellationToken ct)
+        => OnUi(() => SharedTransactionCoreAsync(connection, workspaces, commit));
+
     public Task<bool> PreviewDmlAsync(string text, CancellationToken ct)
         => OnUi(() => PreviewCoreAsync(text, commit: false));
 
@@ -248,6 +251,43 @@ public sealed class AvaloniaExecutionDialogs : IExecutionDialogs
         dialog.Content = DialogShell.Framed(
             new TextBlock { Text = text, TextWrapping = TextWrapping.Wrap, MaxWidth = 420 },
             keep ? DialogShell.Buttons(commit, rollback, leave, cancel) : DialogShell.Buttons(commit, rollback, cancel));
+        dialog.Opened += (_, _) => cancel.Focus();
+        return dialog;
+    }
+
+    // ---- 공유 세션 커밋·롤백 -------------------------------------------------------------------
+
+    private async Task<bool> SharedTransactionCoreAsync(string connection, IReadOnlyList<string> workspaces, bool commit)
+    {
+        var accepted = false;
+        var dialog = CreateSharedTransactionDialog(connection, workspaces, commit, () => accepted = true);
+        await ShowAsync(dialog).ConfigureAwait(true);
+        return accepted;
+    }
+
+    /// <summary>
+    /// 여러 작업 공간이 함께 쓰는 세션의 커밋·롤백 확인 창을 만든다(띄우지는 않는다, TSK-14-10): 함께 확정(되돌림)되는 작업 공간 이름을 보이고
+    /// 커밋(롤백) / 취소. 주 단추를 누르면 <paramref name="accepted"/> 를 부르고 닫는다. 기본 단추는 「취소」.
+    /// </summary>
+    internal static Window CreateSharedTransactionDialog(string connection, IReadOnlyList<string> workspaces, bool commit, Action accepted)
+    {
+        var dialog = NewWindow(UiText.Get("Execution.shared.title", "공유 세션"));
+        var ok = new Button { Content = commit ? "커밋" : "롤백", MinWidth = 80 };
+        var cancel = new Button { Content = "취소", MinWidth = 80, IsDefault = true, IsCancel = true };
+        ok.Click += (_, _) =>
+        {
+            accepted();
+            dialog.Close();
+        };
+        cancel.Click += (_, _) => dialog.Close();
+        var text = (commit
+                ? UiText.Get("Execution.shared.commit", "「{0}」 은(는) 워크스페이스 {1} 이(가) 함께 쓰는 세션입니다. 커밋하면 이 워크스페이스들의 변경이 모두 확정됩니다. 커밋할까요?")
+                : UiText.Get("Execution.shared.rollback", "「{0}」 은(는) 워크스페이스 {1} 이(가) 함께 쓰는 세션입니다. 롤백하면 이 워크스페이스들의 변경이 모두 되돌려집니다. 롤백할까요?"))
+            .Replace("{0}", connection, StringComparison.Ordinal)
+            .Replace("{1}", string.Join(", ", workspaces.Select(w => $"「{w}」")), StringComparison.Ordinal);
+        dialog.Content = DialogShell.Framed(
+            new TextBlock { Text = text, TextWrapping = TextWrapping.Wrap, MaxWidth = 420 },
+            DialogShell.Buttons(ok, cancel));
         dialog.Opened += (_, _) => cancel.Focus();
         return dialog;
     }

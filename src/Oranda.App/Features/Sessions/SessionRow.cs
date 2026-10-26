@@ -49,6 +49,21 @@ public sealed partial class SessionRow(ISession session) : ObservableObject
     [ObservableProperty]
     public partial bool IsPrimary { get; private set; }
 
+    /// <summary>
+    /// 아직 실행하지 않아 묶이지 않았지만 첫 실행 때 이 세션을 쓸 작업 공간 수(TSK-14-10, <see cref="SessionRouter.PlannedWorkspacesOn"/>).
+    /// 묶인 작업 공간이 없고 이것이 있으면 「미사용」 이 아니라 「사용 예정」 이다(곧 쓸 세션을 닫지 않게).
+    /// </summary>
+    [ObservableProperty]
+    public partial int PlannedCount { get; private set; }
+
+    /// <summary>지금 활성 작업 공간이 쓰는 세션(<see cref="SessionRouter.InUseSession"/>). 고른 줄(선택)과 따로 보인다(TSK-14-10).</summary>
+    [ObservableProperty]
+    public partial bool IsShown { get; private set; }
+
+    /// <summary><see cref="IsShown"/> 표지 글(「이 워크스페이스」).</summary>
+    [ObservableProperty]
+    public partial string ShownText { get; private set; } = string.Empty;
+
     partial void OnSidChanged(long value) => OnPropertyChanged(nameof(SidText));
 
     public void Update(SessionRouter router, ExecutionState state)
@@ -63,10 +78,17 @@ public sealed partial class SessionRow(ISession session) : ObservableObject
         Sid = s.Server.SessionId;
         Label = router.LabelOf(s);
         IsPrimary = router.SessionsOf(s.Profile.Id) is [var first, ..] && ReferenceEquals(first, s);
+        var planned = router.PlannedWorkspacesOn(s);
+        PlannedCount = planned.Count;
+        IsShown = ReferenceEquals(router.InUseSession, s);
+        ShownText = "◀ " + UiText.Get("Sessions.shown", "이 워크스페이스");
 
-        var mode = workspaces.Count == 0
-            ? UiText.Get("Sessions.mode.unused", "미사용")
-            : shared ? UiText.Get("Sessions.mode.shared", "공유") : UiText.Get("Sessions.mode.own", "전용");
+        var mode = workspaces.Count > 0
+            ? shared ? UiText.Get("Sessions.mode.shared", "공유") : UiText.Get("Sessions.mode.own", "전용")
+            : planned.Count > 0 ? UiText.Get("Sessions.mode.planned", "사용 예정") : UiText.Get("Sessions.mode.unused", "미사용");
+        var count = workspaces.Count == 0 && planned.Count > 0
+            ? UiText.Format("Sessions.plannedWorkspaces", "워크스페이스 {0}개(첫 실행 때)", planned.Count)
+            : UiText.Format("Sessions.workspaces", "워크스페이스 {0}개", workspaces.Count);
         var status = IsBroken ? UiText.Get("Sessions.status.broken", "끊김")
             : IsRunning ? UiText.Get("Sessions.status.running", "실행 중")
             : UiText.Get("Sessions.status.idle", "대기");
@@ -75,9 +97,9 @@ public sealed partial class SessionRow(ISession session) : ObservableObject
             status += " · " + UiText.Get("Sessions.status.pending", "미커밋");
         }
 
-        Detail = $"{mode} · {UiText.Format("Sessions.workspaces", "워크스페이스 {0}개", workspaces.Count)} · {status}";
+        Detail = $"{mode} · {count} · {status}";
         ToolTip = SidText + " · " + UiText.Get("Sessions.sidHint", "세션 모니터와 같은 번호") + Environment.NewLine
-            + string.Join(", ", workspaces.Select(w => w.Name));
+            + string.Join(", ", workspaces.Concat(planned).Select(w => w.Name));
     }
 
     /// <summary>「SID 241」. 모르면 「SID ?」(식별자라 번역하지 않는다).</summary>

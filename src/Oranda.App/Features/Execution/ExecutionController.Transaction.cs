@@ -20,11 +20,40 @@ public sealed partial class ExecutionController
 {
     // ---- 트랜잭션 ---------------------------------------------------------------------------
 
-    /// <summary>활성 탭 세션을 커밋한다(<c>oranda.txn.commit</c>).</summary>
-    public Task CommitAsync(CancellationToken ct = default) => CommitAsync(FocusedSession(), ct);
+    /// <summary>활성 탭 세션을 커밋한다(<c>oranda.txn.commit</c>). 여러 작업 공간이 함께 쓰는 세션이면 먼저 묻는다(<see cref="ConfirmedCommitAsync"/>).</summary>
+    public Task CommitAsync(CancellationToken ct = default) => ConfirmedCommitAsync(FocusedSession(), ct);
 
-    /// <summary>활성 탭 세션을 롤백한다(<c>oranda.txn.rollback</c>).</summary>
-    public Task RollbackAsync(CancellationToken ct = default) => RollbackAsync(FocusedSession(), ct);
+    /// <summary>활성 탭 세션을 롤백한다(<c>oranda.txn.rollback</c>). 여러 작업 공간이 함께 쓰는 세션이면 먼저 묻는다.</summary>
+    public Task RollbackAsync(CancellationToken ct = default) => ConfirmedRollbackAsync(FocusedSession(), ct);
+
+    /// <summary>
+    /// 사용자가 고른 커밋(툴바·메뉴·「세션」 창, TSK-14-10·D-042): 그 세션을 작업 공간 둘 이상이 함께 쓰면 함께 확정되는 작업 공간 이름을 보이고 한 번 묻는다.
+    /// 취소하면 커밋하지 않는다. 자동 커밋·미커밋 확인 창의 커밋은 이미 그 세션을 밝혀 물었으므로 묻지 않는다(<see cref="CommitAsync(ISession?, CancellationToken)"/>).
+    /// </summary>
+    public async Task ConfirmedCommitAsync(ISession? s, CancellationToken ct = default)
+    {
+        if (s is not null && await ConfirmSharedAsync(s, commit: true, ct).ConfigureAwait(true))
+        {
+            await CommitAsync(s, ct).ConfigureAwait(true);
+        }
+    }
+
+    /// <summary>사용자가 고른 롤백. 함께 쓰는 세션이면 <see cref="ConfirmedCommitAsync"/> 처럼 먼저 묻는다(남의 변경도 함께 되돌린다).</summary>
+    public async Task ConfirmedRollbackAsync(ISession? s, CancellationToken ct = default)
+    {
+        if (s is not null && await ConfirmSharedAsync(s, commit: false, ct).ConfigureAwait(true))
+        {
+            await RollbackAsync(s, ct).ConfigureAwait(true);
+        }
+    }
+
+    private Task<bool> ConfirmSharedAsync(ISession s, bool commit, CancellationToken ct)
+    {
+        var workspaces = _d.SharedWith(s);
+        return workspaces.Count < 2 || (!State.IsTxnPending(s.Id) && !s.HasPendingTransaction)
+            ? Task.FromResult(true) // 함께 쓰지 않거나 확정할 것이 없다
+            : _d.Dialogs.ConfirmSharedTransactionAsync(_d.ConnectionLabel(s), workspaces, commit, ct);
+    }
 
     public async Task CommitAsync(ISession? s, CancellationToken ct = default)
     {

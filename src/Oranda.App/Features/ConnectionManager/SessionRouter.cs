@@ -55,9 +55,12 @@ public sealed partial class SessionRouter
     private readonly IEventBus? _bus;
     private readonly Dictionary<Guid, string> _names = []; // 프로필 ID → 이름(「접속 안 됨(이름)」)
     private readonly HashSet<Guid> _quietConnects = []; // 접속 안 됨 탭의 「다시 접속」: 새 접속이 활성 탭을 옮기지 않는다
+    private readonly Dictionary<Guid, (Guid ProfileId, int Number)> _numbers = []; // 세션 ID → 그 접속 안 고정 순번(TSK-14-10)
+    private readonly Dictionary<Guid, int> _nextNumber = []; // 프로필 ID → 다음에 열 세션의 순번
     private SqlEditorViewModel? _watched;
     private IConnectionDocument? _watchedDocument;
     private bool _namesLoading;
+    private bool? _seenPerWorkspace; // 마지막으로 맞춘 「워크스페이스마다 새 세션」 값(처음엔 모른다)
 
     public SessionRouter(IConnectionService connections, SqlEditorHost host, ExecutionState state, DedicatedSessionRegistry? dedicated = null, IEventBus? bus = null)
     {
@@ -90,6 +93,15 @@ public sealed partial class SessionRouter
         {
             dedicated.FocusSync = OnActiveTabChanged; // 문서 전환(SQL 작업 공간 ↔ 다른 문서)·전용 세션 붙임/뗌도 같이 맞춘다
         }
+
+        // 설정 「워크스페이스마다 새 세션」 을 바꾸면 고른 값이 없는 작업 공간의 방식이 바뀐다(첫 실행 때 새 세션인지): 표시를 다시 맞춘다(TSK-14-10).
+        bus?.Subscribe<SettingsChanged>(this, e =>
+        {
+            if (e.Section == "workspace")
+            {
+                Post(OnSessionSettingChanged);
+            }
+        });
 
         if (connections.ActiveSession is { } active)
         {
@@ -255,21 +267,67 @@ public sealed partial class SessionRouter
 
     /// <summary>
     /// 접속 이름 「번호 - 사용자@이름」(툴바 콤보와 같다). 같은 DB 에 더 연 세션이면 뒤에 「 (2)」 처럼 그 접속 안의 순번을 붙인다(TSK-14-01).
-    /// 열린 접속이 아니면 번호 없이.
+    /// 순번은 세션을 열 때 정해져 앞 세션을 닫아도 밀리지 않는다(TSK-14-10, <see cref="NumberOf"/>). 열린 접속이 아니면 번호 없이.
     /// </summary>
     public string LabelOf(ISession session)
     {
         ArgumentNullException.ThrowIfNull(session);
         var name = $"{session.Profile.User}@{session.Profile.Name}";
         var index = _connections.SessionOf(session.Profile.Id) is { } primary ? _connections.Sessions.ToList().IndexOf(primary) : -1;
-        var nth = _connections.SessionsOf(session.Profile.Id).ToList().IndexOf(session);
-        if (index < 0 || nth < 0)
+        var nth = NumberOf(session);
+        if (index < 0 || nth <= 0)
         {
             return name;
         }
 
         var label = string.Create(System.Globalization.CultureInfo.InvariantCulture, $"{index + 1} - {name}");
-        return nth == 0 ? label : string.Create(System.Globalization.CultureInfo.InvariantCulture, $"{label} ({nth + 1})");
+        return nth == 1 ? label : string.Create(System.Globalization.CultureInfo.InvariantCulture, $"{label} ({nth})");
+    }
+
+    /// <summary>
+    /// 세션의 그 접속 안 고정 순번(1 = 처음 연 접속, 더 연 세션은 열 때마다 2, 3, …). 열린 세션이 아니면 0.
+    /// 닫힌 세션의 번호는 다시 쓰지 않는다(그 접속 세션이 모두 닫히면 다시 1부터). 끊긴 접속을 같은 자리에 다시 열면 그 자리의 번호(1)를 잇는다.
+    /// </summary>
+    public int NumberOf(ISession session)
+    {
+        ArgumentNullException.ThrowIfNull(session);
+        Renumber(session.Profile.Id);
+        return _numbers.TryGetValue(session.Id, out var n) ? n.Number : 0;
+    }
+
+    /// <summary>그 프로필에 다음에 열 세션이 받을 순번(툴바 콤보 「새 세션 — … (n)」).</summary>
+    public int NextNumberOf(Guid profileId)
+    {
+        Renumber(profileId);
+        return _nextNumber.GetValueOrDefault(profileId, 1);
+    }
+
+    /// <summary>닫힌 세션의 번호를 버리고, 번호가 없는 열린 세션에 연 순서대로 번호를 준다.</summary>
+    private void Renumber(Guid profileId)
+    {
+        var open = _connections.SessionsOf(profileId);
+        var ids = open.Select(s => s.Id).ToHashSet();
+        foreach (var stale in _numbers.Where(kv => kv.Value.ProfileId == profileId && !ids.Contains(kv.Key)).Select(kv => kv.Key).ToList())
+        {
+            _numbers.Remove(stale);
+        }
+
+        var held = _numbers.Values.Where(v => v.ProfileId == profileId).Select(v => v.Number).ToHashSet();
+        var next = held.Count == 0 ? 1 : Math.Max(_nextNumber.GetValueOrDefault(profileId, 1), held.Max() + 1);
+        for (var i = 0; i < open.Count; i++)
+        {
+            if (_numbers.ContainsKey(open[i].Id))
+            {
+                continue;
+            }
+
+            var number = i == 0 && !held.Contains(1) ? 1 : next; // 접속 자리(다시 연 접속 포함)는 1 을 잇는다
+            _numbers[open[i].Id] = (profileId, number);
+            held.Add(number);
+            next = Math.Max(next, number + 1);
+        }
+
+        _nextNumber[profileId] = next;
     }
 
     /// <summary>열린 접속이 끊겼는지.</summary>
@@ -439,11 +497,12 @@ public sealed partial class SessionRouter
                 return SessionSelect.Held;
             }
 
-            var changed = !ReferenceEquals(SessionFor(tab), session);
+            var pending = PicksWhilePending(tab, session);
+            var changed = pending || !ReferenceEquals(SessionFor(tab), session);
             tab.ConnectionProfileId = session.Profile.Id;
             if (changed)
             {
-                BindChoice(tab, session);
+                BindChoice(tab, session, pending);
             }
         }
 
@@ -500,11 +559,12 @@ public sealed partial class SessionRouter
                 }
             }
 
-            var changed = !ReferenceEquals(SessionFor(tab), session);
+            var pending = PicksWhilePending(tab, session);
+            var changed = pending || !ReferenceEquals(SessionFor(tab), session);
             tab.ConnectionProfileId = session.Profile.Id; // 묻는 사이 다른 탭으로 갔어도 고를 때의 탭을 바꾼다
             if (changed)
             {
-                BindChoice(tab, session);
+                BindChoice(tab, session, pending);
             }
         }
         else if (ConnectionDocument is { } doc && !ReferenceEquals(doc.Session, session))
@@ -525,6 +585,13 @@ public sealed partial class SessionRouter
         RaiseChanged();
         return SessionSelect.Selected;
     }
+
+    /// <summary>
+    /// 첫 실행 때 새 세션을 열 차례인 탭(<see cref="IsPendingOwn"/>)에서 지금 보이는 접속의 세션을 골랐다(TSK-14-10): 같은 줄이라 바뀐 것이 없어 보여도
+    /// 그 세션에 명시적으로 묶는다(고르지 않으면 실행은 새 세션에서 된다).
+    /// </summary>
+    private bool PicksWhilePending(SqlEditorViewModel tab, ISession session) =>
+        IsPendingOwn(tab) && ReferenceEquals(SessionFor(tab), session);
 
     /// <summary><see cref="Select"/>·<see cref="SelectAsync"/> 의 거절 이유 글(메시지 창). 고른 대로 됐거나 사용자가 취소했으면 null.</summary>
     public static string? RefusalText(SessionSelect result) => result switch
@@ -559,6 +626,19 @@ public sealed partial class SessionRouter
         {
             _state.Focus(null);
         }
+    }
+
+    private void OnSessionSettingChanged()
+    {
+        var now = SessionPerWorkspace();
+        if (_seenPerWorkspace == now)
+        {
+            return; // 같은 구역의 다른 값(마지막 작업 공간·자동 저장 간격)만 바뀌었다
+        }
+
+        _seenPerWorkspace = now;
+        Refocus();
+        RaiseChanged();
     }
 
     private void OnActiveSessionChanged()

@@ -90,6 +90,7 @@ public static class ExecutionCommands
                 UseConnection = (tab, session) => SessionRouter.Resolve(container).UseConnection(tab, session),
                 SharedBusy = (tab, rerun) => SessionRouter.Resolve(container).OfferNewSession(tab, rerun),
                 ConnectionLabel = s => SessionRouter.Resolve(container).LabelOf(s),
+                SharedWith = s => [.. SessionRouter.Resolve(container).WorkspacesOn(s).Select(w => w.Name)], // 공유 세션 커밋 경고(TSK-14-10)
                 ProfileName = id => SessionRouter.Resolve(container).ProfileNameAsync(id),
                 Reconnect = (id, _) => SessionRouter.Resolve(container).ReconnectAsync(id, () => ConnectionManagerCommands.ConnectProfileAsync(container, id)),
                 Execution = () =>
