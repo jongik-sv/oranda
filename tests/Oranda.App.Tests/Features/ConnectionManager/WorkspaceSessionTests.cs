@@ -318,6 +318,35 @@ public sealed class WorkspaceSessionTests
     });
 
     [Fact]
+    public Task Switching_among_several_open_sessions_binds_the_picked_one_each_time() => Ui.Run(async () =>
+    {
+        using var rig = new Rig();
+        var a = await rig.ConnectAsync();
+        var (_, tabA, _, tabB) = rig.TwoWorkspaces();
+        await rig.Router.PrepareAsync(tabA);
+        rig.Host.Active = tabB;
+        Pump();
+        await rig.Router.PrepareAsync(tabB);
+        var s2 = rig.Router.SessionFor(tabB)!;
+        var s3 = await rig.Router.NewSessionAsync();
+        var s4 = await rig.Router.NewSessionAsync();
+        Pump();
+        Assert.Equal(4, rig.Service.SessionsOf(a.Profile.Id).Count);
+        Assert.Same(s4, rig.Router.SessionFor(tabB));
+
+        foreach (var pick in new[] { s2, a, s3!, s4!, a })
+        {
+            Assert.Equal(SessionSelect.Selected, await rig.Router.SelectAsync(pick));
+            Pump();
+            Assert.Same(pick, rig.Router.SessionFor(tabB));
+            Assert.Null(rig.Router.MissingProfileOf(tabB));
+            Assert.Same(pick, rig.Router.ShownSession);
+        }
+
+        Assert.Equal(4, rig.Service.SessionsOf(a.Profile.Id).Count);
+    });
+
+    [Fact]
     public Task A_closed_session_turns_its_workspaces_into_not_connected_and_reconnect_picks_a_session_again() => Ui.Run(async () =>
     {
         using var rig = new Rig();
