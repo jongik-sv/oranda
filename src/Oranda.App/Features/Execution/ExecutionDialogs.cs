@@ -9,6 +9,9 @@ public enum UncommittedChoice
     Commit,
     Rollback,
     Cancel,
+
+    /// <summary>트랜잭션을 이전 접속에 그대로 두고 탭의 접속만 바꾼다(접속 콤보, TSK-12-04). 그 묻기에서만 나온다.</summary>
+    Keep,
 }
 
 /// <summary>접속 안 됨 탭을 실행할 때의 선택(CONN-06).</summary>
@@ -51,6 +54,12 @@ public interface IExecutionDialogs
     /// 기본은 접속 이름 없이 묻는다.
     /// </summary>
     Task<UncommittedChoice> AskConnectionUncommittedAsync(string connection, CancellationToken ct) => AskUncommittedAsync(ct);
+
+    /// <summary>
+    /// 접속 콤보로 탭의 접속을 바꾸기 전, 이전 접속(<paramref name="connection"/> = 「번호 - 사용자@이름」)의 미커밋 확인(TSK-12-04):
+    /// 커밋 / 롤백 / 그대로 두고 바꾸기(<see cref="UncommittedChoice.Keep"/>) / 취소. 기본은 「그대로 두고 바꾸기」 없이 접속 이름으로 묻는다.
+    /// </summary>
+    Task<UncommittedChoice> AskSwitchUncommittedAsync(string connection, CancellationToken ct) => AskConnectionUncommittedAsync(connection, ct);
 
     /// <summary>
     /// 탭에 묶인 접속이 열려 있지 않은데 실행하려 한다(CONN-06): 다시 접속 / 지금 접속(<paramref name="current"/>)으로 바꾸기 / 취소.

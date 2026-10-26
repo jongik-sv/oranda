@@ -113,6 +113,16 @@ public sealed partial class ExecutionController
             ct);
     }
 
+    /// <summary>
+    /// 접속 콤보로 탭의 접속을 바꾸기 전(TSK-12-04): 이전 접속 <paramref name="session"/> 에 미커밋이 있으면 커밋 / 롤백 / 그대로 두고 바꾸기 / 취소를 묻는다.
+    /// true = 바꿔도 된다(미커밋이 없거나, 커밋·롤백했거나, 그대로 두기로 했다). 그대로 둔 트랜잭션은 그 접속에 남아 앱 종료·접속 끊기 때 다시 묻는다.
+    /// </summary>
+    public Task<bool> ConfirmSwitchAsync(ISession session, CancellationToken ct = default)
+    {
+        ArgumentNullException.ThrowIfNull(session);
+        return ConfirmUncommittedCoreAsync(session, () => _d.Dialogs.AskSwitchUncommittedAsync(_d.ConnectionLabel(session), ct), ct);
+    }
+
     private async Task<bool> ConfirmUncommittedCoreAsync(ISession session, Func<Task<UncommittedChoice>> ask, CancellationToken ct)
     {
         if (!State.IsTxnPending(session.Id) && !session.HasPendingTransaction)
@@ -137,6 +147,8 @@ public sealed partial class ExecutionController
             case UncommittedChoice.Rollback:
                 await RollbackAsync(session, ct).ConfigureAwait(true);
                 return !State.IsTxnPending(session.Id) && !session.HasPendingTransaction;
+            case UncommittedChoice.Keep: // 접속 콤보 묻기에서만 나온다: 트랜잭션은 그 접속에 남긴다
+                return true;
             default:
                 return false;
         }

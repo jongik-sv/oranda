@@ -49,6 +49,9 @@ public sealed class AvaloniaExecutionDialogs : IExecutionDialogs
     public Task<UncommittedChoice> AskConnectionUncommittedAsync(string connection, CancellationToken ct)
         => OnUi(() => UncommittedCoreAsync(null, connection));
 
+    public Task<UncommittedChoice> AskSwitchUncommittedAsync(string connection, CancellationToken ct)
+        => OnUi(() => UncommittedCoreAsync(null, connection, keep: true));
+
     public Task<MissingConnectionChoice> AskMissingConnectionAsync(string profile, string? current, CancellationToken ct)
         => OnUi(() => MissingConnectionCoreAsync(profile, current));
 
@@ -195,10 +198,10 @@ public sealed class AvaloniaExecutionDialogs : IExecutionDialogs
 
     // ---- 미커밋 종료 -----------------------------------------------------------------------
 
-    private async Task<UncommittedChoice> UncommittedCoreAsync(string? subject, string? connection = null)
+    private async Task<UncommittedChoice> UncommittedCoreAsync(string? subject, string? connection = null, bool keep = false)
     {
         var choice = UncommittedChoice.Cancel;
-        var dialog = CreateUncommittedDialog(subject, c => choice = c, connection);
+        var dialog = CreateUncommittedDialog(subject, c => choice = c, connection, keep);
         await ShowAsync(dialog).ConfigureAwait(true);
         return choice;
     }
@@ -206,14 +209,21 @@ public sealed class AvaloniaExecutionDialogs : IExecutionDialogs
     /// <summary>
     /// 미커밋 확인 창을 만든다(띄우지는 않는다). <paramref name="subject"/> 가 있으면 어느 탭의 세션인지 글에 넣는다(전용 세션 탭, D-017).
     /// <paramref name="connection"/> 이 있으면 어느 접속인지 글에 넣는다(접속 끊기·앱 종료 때 접속마다, CONN-06).
+    /// <paramref name="keep"/> 이면 접속 콤보로 탭의 접속을 바꾸기 전 확인이다(TSK-12-04): 글이 「이전 접속」 을 밝히고 「그대로 두고 바꾸기」 단추가 더 있다.
     /// 단추를 누르면 <paramref name="chosen"/> 을 부르고 창을 닫는다. 「취소」·창 닫기는 부르지 않는다.
     /// </summary>
-    internal static Window CreateUncommittedDialog(string? subject, Action<UncommittedChoice> chosen, string? connection = null)
+    internal static Window CreateUncommittedDialog(string? subject, Action<UncommittedChoice> chosen, string? connection = null, bool keep = false)
     {
         var dialog = NewWindow("미커밋 트랜잭션");
         var commit = new Button { Content = "커밋", MinWidth = 80 };
         var rollback = new Button { Content = "롤백", MinWidth = 80 };
+        var leave = new Button { Content = "그대로 두고 바꾸기", MinWidth = 80 };
         var cancel = new Button { Content = "취소", MinWidth = 80, IsDefault = true, IsCancel = true };
+        leave.Click += (_, _) =>
+        {
+            chosen(UncommittedChoice.Keep);
+            dialog.Close();
+        };
         commit.Click += (_, _) =>
         {
             chosen(UncommittedChoice.Commit);
@@ -225,7 +235,10 @@ public sealed class AvaloniaExecutionDialogs : IExecutionDialogs
             dialog.Close();
         };
         cancel.Click += (_, _) => dialog.Close();
-        var text = connection is not null
+        var text = keep && connection is not null
+            ? UiText.Get("Execution.uncommitted.switch", "이전 접속 「{0}」 에 커밋하지 않은 변경이 있습니다. 접속을 바꾸기 전에 어떻게 할까요?")
+                .Replace("{0}", connection, StringComparison.Ordinal)
+            : connection is not null
             ? UiText.Get("Execution.uncommitted.connection", "접속 「{0}」 에 커밋하지 않은 변경이 있습니다. 어떻게 할까요?")
                 .Replace("{0}", connection, StringComparison.Ordinal)
             : subject is null
@@ -234,7 +247,7 @@ public sealed class AvaloniaExecutionDialogs : IExecutionDialogs
                 .Replace("{0}", subject, StringComparison.Ordinal);
         dialog.Content = DialogShell.Framed(
             new TextBlock { Text = text, TextWrapping = TextWrapping.Wrap, MaxWidth = 420 },
-            DialogShell.Buttons(commit, rollback, cancel));
+            keep ? DialogShell.Buttons(commit, rollback, leave, cancel) : DialogShell.Buttons(commit, rollback, cancel));
         dialog.Opened += (_, _) => cancel.Focus();
         return dialog;
     }

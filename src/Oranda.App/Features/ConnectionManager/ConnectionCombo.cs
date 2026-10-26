@@ -11,6 +11,7 @@ using Avalonia.Media;
 using Avalonia.Threading;
 using Oranda.App.Features.Execution;
 using Oranda.App.Features.Localization;
+using Oranda.App.Shell;
 using Oranda.App.Shell.Composition;
 using Oranda.App.ViewModels;
 using Oranda.Core.Connection;
@@ -33,7 +34,8 @@ public sealed record ConnectionComboItem(int Number, ISession Session, bool Brok
 
 /// <summary>
 /// 툴바 접속 콤보(CONN-06, TSK-03-08). 열린 접속을 연 순서로 보이고, 활성 문서의 접속(<see cref="SessionRouter.ShownSession"/>)을 고른 채로 둔다.
-/// 고르면 활성 SQL 탭이 그 접속을 쓰고 지금 접속이 바뀐다(<see cref="SessionRouter.Select"/>). 활성 SQL 탭의 접속이 열려 있지 않으면
+/// 고르면 활성 SQL 탭(PL/SQL 문서면 그 문서)이 그 접속을 쓰고 지금 접속이 바뀐다(<see cref="SessionRouter.SelectAsync"/>, TSK-12-04).
+/// 이전 접속에 미커밋이 있으면 묻고, 실행 중이면 바꾸지 않고 메시지 창을 띄워 이유를 알린다. 활성 SQL 탭의 접속이 열려 있지 않으면
 /// 「접속 안 됨(이름)」 을 보인다. 라우터는 접속 서비스와 함께 생기므로 그 전에는 세션 이벤트만 듣는다(시작 때 Oracle 어셈블리를 깨우지 않는다).
 /// </summary>
 public sealed class ConnectionComboViewModel : ViewModelBase
@@ -87,7 +89,7 @@ public sealed class ConnectionComboViewModel : ViewModelBase
             OnPropertyChanged();
             if (!_syncing && value is not null)
             {
-                Choose(value);
+                _ = ChooseAsync(value);
             }
         }
     }
@@ -154,19 +156,23 @@ public sealed class ConnectionComboViewModel : ViewModelBase
         }
     }
 
-    private void Choose(ConnectionComboItem item)
+    /// <summary>고른 접속을 활성 문서에 묶는다. 끝나면(거절·취소 포함) 목록을 라우터에 다시 맞춘다. 시험이 기다릴 수 있게 돌려준다.</summary>
+    internal async Task<SessionSelect?> ChooseAsync(ConnectionComboItem item)
     {
         if (_router() is not { } router)
         {
-            return;
+            return null;
         }
 
-        if (SessionRouter.RefusalText(router.Select(item.Session)) is { } refusal)
+        var result = await router.SelectAsync(item.Session).ConfigureAwait(true);
+        if (SessionRouter.RefusalText(result) is { } refusal)
         {
-            ExecutionLog.For(_container?.GetService<IEventBus>()).AddMessage(MessageKind.Info, refusal);
+            ExecutionLog.For(_container?.GetService<IEventBus>()).AddMessage(MessageKind.Warning, refusal);
+            _container?.GetService<IShellUi>()?.Docking.ShowTool("oranda.panel.messages"); // 콤보가 되돌아가는 이유를 바로 보이게
         }
 
-        Refresh(); // 거절됐으면 원래 접속으로 되돌린다
+        Refresh(); // 거절·취소됐으면 원래 접속으로 되돌린다
+        return result;
     }
 
     private SessionRouter? Hook()
@@ -228,7 +234,7 @@ public sealed class ConnectionComboView : UserControl
     private static void ApplyTexts(ComboBox combo)
     {
         Avalonia.Automation.AutomationProperties.SetName(combo, UiText.Get("Execution.combo.name", "접속"));
-        ToolTip.SetTip(combo, UiText.Get("Execution.combo.tip", "지금 접속 (활성 SQL 탭의 접속)"));
+        ToolTip.SetTip(combo, UiText.Get("Execution.combo.tip", "지금 접속 (활성 SQL·PL/SQL 문서의 접속). 바꾸면 그 문서의 다음 실행부터 고른 DB 로 갑니다."));
     }
 
     /// <summary>콤보 상자(시험이 고른다).</summary>

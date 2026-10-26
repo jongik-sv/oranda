@@ -56,7 +56,7 @@ public sealed record PlsqlCompileOutcome(PlsqlCompileStatus Status, IReadOnlyLis
 /// 서비스는 처음 쓸 때 꺼낸다(시작 경로에서 Oracle 어셈블리를 올리지 않기 위해).
 /// </summary>
 [OrandaToolPanel("oranda.panel.plsqlEditor", ToolPanelKind.Document, DockLocation.Document, AllowMultiple = true)]
-public sealed partial class PlsqlEditorViewModel : ToolPanelViewModelBase, ICompileErrorSource, IPlsqlRunSource
+public sealed partial class PlsqlEditorViewModel : ToolPanelViewModelBase, ICompileErrorSource, IPlsqlRunSource, ConnectionManager.IConnectionDocument
 {
     private readonly IServiceProvider? _services;
     private IMetadataProvider? _meta;
@@ -143,8 +143,43 @@ public sealed partial class PlsqlEditorViewModel : ToolPanelViewModelBase, IComp
                 OnPropertyChanged(nameof(AwaitingSession));
                 OnPropertyChanged(nameof(IsPackageDoc));
                 SyncKeys(); // 복원 탭이 접속을 기다리다 세션을 얻으면(붙이기·컴파일) 실행·명세/본문 키가 켜진다
+                SessionChanged?.Invoke(this, EventArgs.Empty);
             }
         }
+    }
+
+    /// <summary><see cref="Session"/> 이 바뀌었다(툴바 접속 콤보가 따른다).</summary>
+    public event EventHandler? SessionChanged;
+
+    /// <summary>컴파일 중이면 툴바 접속 콤보로 접속을 바꾸지 않는다.</summary>
+    public bool IsSessionBusy => IsBusy;
+
+    /// <summary>
+    /// 툴바 접속 콤보로 이 탭의 접속을 바꾼다(TSK-12-04): 다음 컴파일·실행부터 <paramref name="session"/> 의 DB 로 간다.
+    /// 컴파일 중이면 바꾸지 않는다(false). 복원한 탭이 기다리던 접속은 잊고, 이전 접속에서 읽은 서버 기준(마지막 DDL 시각·서버 소스·차이)은 버린다.
+    /// </summary>
+    public bool UseSession(ISession session)
+    {
+        ArgumentNullException.ThrowIfNull(session);
+        if (ReferenceEquals(_session, session))
+        {
+            return true;
+        }
+
+        if (IsBusy)
+        {
+            return false;
+        }
+
+        Interlocked.Increment(ref _generation); // 이전 접속에서 읽던 소스가 뒤늦게 덮지 않게
+        _restoredProfileId = null;
+        _baseline = null;
+        ServerSource = null;
+        ServerSourceChanged = false;
+        DiffText = string.Empty;
+        Editor.ConnectionProfileId = session.Profile.Id; // 자동 완성도 같은 접속을 본다
+        Session = session;
+        return true;
     }
 
     /// <summary>탭 머리에 보일 접속 이름(작업 공간 안에 접속이 섞였을 때). 세션이 없으면 null.</summary>

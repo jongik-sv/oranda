@@ -21,11 +21,17 @@ public enum SessionSelect
     /// <summary>전용 세션 탭은 자기 세션을 쓴다.</summary>
     Dedicated,
 
-    /// <summary>탭의 접속이 실행 중이거나 미커밋이다.</summary>
+    /// <summary>탭의 접속이 실행 중이거나 미커밋이다(묻지 않는 <see cref="SessionRouter.Select"/>).</summary>
     Held,
 
     /// <summary>고른 접속이 닫혔다.</summary>
     Closed,
+
+    /// <summary>탭·문서의 접속이 실행(컴파일) 중이라 바꾸지 않았다.</summary>
+    Busy,
+
+    /// <summary>이전 접속의 미커밋 확인에서 취소했다.</summary>
+    Cancelled,
 }
 
 /// <summary>
@@ -33,6 +39,7 @@ public enum SessionSelect
 /// 여기에 묻는다: SQL 탭은 전용 세션(D-017) → 탭에 묶인 접속(<see cref="SqlEditorViewModel.ConnectionProfileId"/>) → 지금 접속 순이다.
 /// 탭에 묶인 접속이 열려 있지 않으면 null(「접속 안 됨」, <see cref="MissingProfileOf"/>)이고 지금 접속으로 대신하지 않는다.
 /// 활성 탭을 바꾸면 그 탭의 접속이 지금 접속이 되고(<see cref="IConnectionService.Switch"/>), 새로 접속하면 활성 SQL 탭이 그 접속을 따른다.
+/// PL/SQL 편집기처럼 자기 접속을 가진 문서(<see cref="IConnectionDocument"/>)가 활성이면 툴바 콤보는 그 문서의 접속을 보이고 바꾼다(TSK-12-04).
 /// 컨테이너마다 하나(<see cref="Resolve"/>). UI 스레드에서만 쓴다(접속 서비스 이벤트는 UI 스레드로 옮겨 받는다).
 /// </summary>
 public sealed class SessionRouter
@@ -48,6 +55,7 @@ public sealed class SessionRouter
     private readonly Dictionary<Guid, string> _names = []; // 프로필 ID → 이름(「접속 안 됨(이름)」)
     private readonly HashSet<Guid> _quietConnects = []; // 접속 안 됨 탭의 「다시 접속」: 새 접속이 활성 탭을 옮기지 않는다
     private SqlEditorViewModel? _watched;
+    private IConnectionDocument? _watchedDocument;
     private bool _namesLoading;
 
     public SessionRouter(IConnectionService connections, SqlEditorHost host, ExecutionState state, DedicatedSessionRegistry? dedicated = null, IEventBus? bus = null)
@@ -101,7 +109,15 @@ public sealed class SessionRouter
             }
 
             var bus = container.GetService<IEventBus>();
-            var router = new SessionRouter(connections, SqlEditorHost.Current, ExecutionState.For(bus), dedicated, bus);
+            var router = new SessionRouter(connections, SqlEditorHost.Current, ExecutionState.For(bus), dedicated, bus)
+            {
+                ConfirmSwitch = (session, ct) => ExecutionCommands.Resolve(container).ConfirmSwitchAsync(session, ct),
+            };
+            if (container.GetService<Shell.Docking.DockWorkspace>() is { } docking)
+            {
+                router.ActiveDocument = () => docking.ActiveDocument?.Panel; // 문서를 바꾸면 전용 세션 등록부(FocusSync)가 다시 맞춘다
+            }
+
             Routers.Add(container, router);
             if (container.GetService<ShellController>() is { } shell)
             {
@@ -128,16 +144,17 @@ public sealed class SessionRouter
 
     /// <summary>
     /// 서비스 공급자의 지금 접속(<see cref="IConnectionService.ActiveSession"/>). 탭을 따르지 않는 도구 창·명령이 쓴다.
-    /// 접속 서비스가 없는 컨테이너(시험)면 세션 관리자의 마지막 작업 세션.
+    /// 접속 서비스가 없는 컨테이너(시험)면 세션 관리자의 마지막 작업 세션. 등록된 서비스만 본다(아직 접속 서비스가 없으면 접속도 없다 —
+    /// 모르는 형을 찾느라 지연 어셈블리를 훑어 시작 때 Oracle 을 깨우지 않게, TSK-12-05).
     /// </summary>
     public static ISession? CurrentOf(IServiceProvider? services)
     {
-        if (services?.GetService(typeof(IConnectionService)) is IConnectionService connections)
+        if (services?.GetRegisteredOrDefault<IConnectionService>() is { } connections)
         {
             return connections.ActiveSession;
         }
 
-        return (services?.GetService(typeof(ISessionManager)) as ISessionManager)?.Sessions
+        return services?.GetRegisteredOrDefault<ISessionManager>()?.Sessions
             .LastOrDefault(s => s.Purpose == SessionPurpose.Work && s.State != SessionState.Closed);
     }
 
@@ -168,9 +185,9 @@ public sealed class SessionRouter
             return CurrentOf(services);
         }
 
-        return services?.GetService(typeof(IConnectionService)) is IConnectionService connections
+        return services?.GetRegisteredOrDefault<IConnectionService>() is { } connections
             ? connections.SessionOf(profileId)
-            : (services?.GetService(typeof(ISessionManager)) as ISessionManager)?.Sessions
+            : services?.GetRegisteredOrDefault<ISessionManager>()?.Sessions
                 .LastOrDefault(s => s.Purpose == SessionPurpose.Work && s.State != SessionState.Closed && s.Profile.Id == profileId);
     }
 
@@ -272,8 +289,31 @@ public sealed class SessionRouter
     /// <summary>SQL 작업 공간 문서가 활성인지(아니면 PL/SQL 편집기·객체 상세처럼 지금 접속을 쓰는 문서다).</summary>
     public bool SqlDocumentActive => _dedicated?.SqlDocumentActive?.Invoke() is not false;
 
-    /// <summary>활성 문서의 접속(툴바 콤보·상태 표시줄·창 테두리): SQL 작업 공간이 활성이면 활성 탭의 세션, 아니면 지금 접속.</summary>
-    public ISession? ShownSession => SqlDocumentActive && _host.Active is { } tab ? SessionFor(tab) : Current;
+    /// <summary>활성 문서의 내용(조립이 도킹의 활성 문서를 넣는다). 없으면 SQL 작업 공간만 안다.</summary>
+    public Func<object?>? ActiveDocument
+    {
+        get;
+        set
+        {
+            field = value;
+            WatchDocument(ConnectionDocument);
+        }
+    }
+
+    /// <summary>
+    /// 접속 콤보로 SQL 탭의 접속을 바꾸기 전, 이전 접속의 미커밋 확인(true = 바꿔도 된다). 조립이 <see cref="ExecutionController.ConfirmSwitchAsync"/> 를 넣는다.
+    /// 없으면 묻지 않고 거절한다(<see cref="SessionSelect.Held"/>).
+    /// </summary>
+    public Func<ISession, CancellationToken, Task<bool>>? ConfirmSwitch { get; set; }
+
+    /// <summary>활성 문서가 자기 접속을 가진 문서(PL/SQL 편집기·작업 공간)면 그것. SQL 작업 공간이 활성이거나 그런 문서가 아니면 null.</summary>
+    public IConnectionDocument? ConnectionDocument => SqlDocumentActive ? null : ActiveDocument?.Invoke() as IConnectionDocument;
+
+    /// <summary>
+    /// 활성 문서의 접속(툴바 콤보·상태 표시줄·창 테두리): SQL 작업 공간이 활성이면 활성 탭의 세션, 자기 접속을 가진 문서(PL/SQL)면 그 세션,
+    /// 아니면(세션이 아직 없는 문서 포함) 지금 접속.
+    /// </summary>
+    public ISession? ShownSession => SqlDocumentActive && _host.Active is { } tab ? SessionFor(tab) : ConnectionDocument?.Session ?? Current;
 
     /// <summary>활성 SQL 탭의 묶인 접속이 열려 있지 않으면 그 프로필 ID(<see cref="ShownSession"/> 은 null).</summary>
     public Guid? ShownMissing => SqlDocumentActive ? MissingProfileOf(_host.Active) : null;
@@ -315,11 +355,76 @@ public sealed class SessionRouter
         return SessionSelect.Selected;
     }
 
-    /// <summary><see cref="Select"/> 의 거절 이유 글(메시지 창). 고른 대로 됐으면 null.</summary>
+    /// <summary>
+    /// 툴바 접속 콤보에서 고른 접속을 활성 문서에 묶는다(TSK-12-04). <see cref="Select"/> 와 같되, SQL 탭의 이전 접속에 미커밋이 있으면
+    /// 거절하지 않고 묻는다(<see cref="ConfirmSwitch"/>: 커밋 / 롤백 / 그대로 두고 바꾸기 / 취소). 실행 중이면 <see cref="SessionSelect.Busy"/>.
+    /// PL/SQL 편집기처럼 자기 접속을 가진 문서가 활성이면 그 문서의 접속을 바꾼다(다음 컴파일·실행부터 고른 DB). 고른 대로 되면 지금 접속도 바뀐다.
+    /// </summary>
+    public async Task<SessionSelect> SelectAsync(ISession session, CancellationToken ct = default)
+    {
+        ArgumentNullException.ThrowIfNull(session);
+        if (!ReferenceEquals(_connections.SessionOf(session.Profile.Id), session))
+        {
+            return SessionSelect.Closed;
+        }
+
+        if (SqlDocumentActive && _host.Active is { } tab)
+        {
+            if (_dedicated?.SessionOf(tab) is not null)
+            {
+                return SessionSelect.Dedicated;
+            }
+
+            if (SessionFor(tab) is { } old && !ReferenceEquals(old, session) && IsHeld(tab))
+            {
+                if (_state.IsBusy(old.Id))
+                {
+                    return SessionSelect.Busy;
+                }
+
+                if (ConfirmSwitch is not { } confirm)
+                {
+                    return SessionSelect.Held;
+                }
+
+                if (!await confirm(old, ct).ConfigureAwait(true))
+                {
+                    return SessionSelect.Cancelled;
+                }
+
+                if (!ReferenceEquals(_connections.SessionOf(session.Profile.Id), session))
+                {
+                    return SessionSelect.Closed; // 묻는 사이에 닫혔다
+                }
+            }
+
+            tab.ConnectionProfileId = session.Profile.Id; // 묻는 사이 다른 탭으로 갔어도 고를 때의 탭을 바꾼다
+        }
+        else if (ConnectionDocument is { } doc && !ReferenceEquals(doc.Session, session))
+        {
+            if (doc.IsSessionBusy || !doc.UseSession(session))
+            {
+                return SessionSelect.Busy;
+            }
+        }
+
+        if (!_connections.Switch(session))
+        {
+            return SessionSelect.Closed;
+        }
+
+        SwitchToActiveTab(); // 묻는 사이 다른 탭으로 갔으면 지금 접속은 보이는 탭의 접속으로 둔다
+        Refocus();
+        RaiseChanged();
+        return SessionSelect.Selected;
+    }
+
+    /// <summary><see cref="Select"/>·<see cref="SelectAsync"/> 의 거절 이유 글(메시지 창). 고른 대로 됐거나 사용자가 취소했으면 null.</summary>
     public static string? RefusalText(SessionSelect result) => result switch
     {
         SessionSelect.Dedicated => "전용 세션 탭은 자기 세션을 쓰므로 접속을 바꾸지 않습니다. 다른 접속은 새 SQL 탭에서 고르세요.",
         SessionSelect.Held => "이 탭은 실행 중이거나 커밋하지 않은 변경이 있어 접속을 바꾸지 않습니다. 커밋·롤백하거나 실행이 끝난 뒤 고르세요.",
+        SessionSelect.Busy => "실행(컴파일) 중이라 접속을 바꾸지 않습니다. 끝나거나 취소한 뒤 고르세요.",
         SessionSelect.Closed => "고른 접속이 닫혔습니다.",
         _ => null,
     };
@@ -390,6 +495,7 @@ public sealed class SessionRouter
     private void OnActiveTabChanged()
     {
         Watch(_host.Active);
+        WatchDocument(ConnectionDocument);
         SwitchToActiveTab();
         Refocus();
         RaiseChanged();
@@ -434,11 +540,49 @@ public sealed class SessionRouter
         }
     }
 
-    /// <summary>SQL 작업 공간이 활성이고 활성 탭이 열린 접속에 묶였으면 그 접속을 지금 접속으로 한다. 바꿨으면 true.</summary>
-    private bool SwitchToActiveTab() =>
-        SqlDocumentActive && _host.Active is { } tab && _dedicated?.SessionOf(tab) is null && tab.ConnectionProfileId is { } profileId
-        && _connections.SessionOf(profileId) is { } bound && !ReferenceEquals(bound, Current)
-        && _connections.Switch(bound); // ActiveSessionChanged 가 상태·표시를 맞춘다
+    /// <summary>
+    /// SQL 작업 공간이 활성이고 활성 탭이 열린 접속에 묶였으면 그 접속을, 자기 접속을 가진 문서(PL/SQL)가 활성이면 그 문서의 열린 접속을
+    /// 지금 접속으로 한다(스키마 브라우저 등이 보이는 문서와 다른 접속을 보이지 않게). 바꿨으면 true.
+    /// </summary>
+    private bool SwitchToActiveTab()
+    {
+        var bound = SqlDocumentActive
+            ? _host.Active is { } tab && _dedicated?.SessionOf(tab) is null && tab.ConnectionProfileId is { } profileId ? _connections.SessionOf(profileId) : null
+            : ConnectionDocument?.Session is { } own && ReferenceEquals(_connections.SessionOf(own.Profile.Id), own) ? own : null;
+        return bound is not null && !ReferenceEquals(bound, Current) && _connections.Switch(bound); // ActiveSessionChanged 가 상태·표시를 맞춘다
+    }
+
+    /// <summary>활성 문서(PL/SQL)의 접속이 바뀌면(콤보·복원 탭 붙이기·보이는 탭 바꿈) 표시와 지금 접속을 맞춘다.</summary>
+    private void WatchDocument(IConnectionDocument? doc)
+    {
+        if (ReferenceEquals(_watchedDocument, doc))
+        {
+            return;
+        }
+
+        if (_watchedDocument is not null)
+        {
+            _watchedDocument.SessionChanged -= OnDocumentSessionChanged;
+        }
+
+        _watchedDocument = doc;
+        if (doc is not null)
+        {
+            doc.SessionChanged += OnDocumentSessionChanged;
+        }
+    }
+
+    private void OnDocumentSessionChanged(object? sender, EventArgs e)
+    {
+        if (!ReferenceEquals(sender, ConnectionDocument))
+        {
+            return;
+        }
+
+        SwitchToActiveTab();
+        Refocus();
+        RaiseChanged();
+    }
 
     private async Task LoadNamesAsync()
     {

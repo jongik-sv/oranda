@@ -153,6 +153,16 @@ internal sealed class FakeDialogs : IExecutionDialogs
         return Task.FromResult(UncommittedAnswer);
     }
 
+    /// <summary>접속 콤보로 바꾸기 전 미커밋 확인에서 물은 이전 접속 이름(차례대로, TSK-12-04).</summary>
+    public List<string> SwitchAsked { get; } = [];
+
+    public Task<UncommittedChoice> AskSwitchUncommittedAsync(string connection, CancellationToken ct)
+    {
+        SwitchAsked.Add(connection);
+        UncommittedAsked++;
+        return Task.FromResult(UncommittedAnswer);
+    }
+
     public MissingConnectionChoice MissingAnswer { get; set; } = MissingConnectionChoice.Cancel;
 
     /// <summary>접속 안 됨 탭 묻기: (탭 접속 이름, 지금 접속 이름).</summary>

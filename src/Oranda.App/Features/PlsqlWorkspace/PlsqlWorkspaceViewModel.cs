@@ -23,7 +23,7 @@ namespace Oranda.App.Features.PlsqlWorkspace;
 /// 미리보기 탭은 하나뿐이고(머리글 기울임) 고치거나 고정하면 보통 탭이 된다. 마지막 탭을 닫아도 작업 공간은 빈 채로 남는다.
 /// </summary>
 [OrandaToolPanel("oranda.panel.plsqlWorkspace", ToolPanelKind.Document, DockLocation.Document, AllowMultiple = true)]
-public sealed partial class PlsqlWorkspaceViewModel : ToolPanelViewModelBase, IInnerTabsDocument, IPlsqlRunSource
+public sealed partial class PlsqlWorkspaceViewModel : ToolPanelViewModelBase, IInnerTabsDocument, IPlsqlRunSource, ConnectionManager.IConnectionDocument
 {
     private PlsqlEditorViewModel? _titleSource;
 
@@ -101,8 +101,17 @@ public sealed partial class PlsqlWorkspaceViewModel : ToolPanelViewModelBase, II
 
     public string? RunMember => ActiveTab?.RunMember;
 
-    /// <summary>보이는 탭의 세션(실행 대화상자가 쓴다).</summary>
+    /// <summary>보이는 탭의 세션(실행 대화상자·툴바 접속 콤보가 쓴다).</summary>
     public ISession? Session => ActiveTab?.Session;
+
+    /// <summary>보이는 탭의 세션이 바뀌었다(보이는 탭이 바뀐 것도 포함, 툴바 접속 콤보가 따른다).</summary>
+    public event EventHandler? SessionChanged;
+
+    /// <summary>보이는 탭이 컴파일 중이다.</summary>
+    public bool IsSessionBusy => ActiveTab?.IsBusy == true;
+
+    /// <summary>툴바 접속 콤보로 보이는 탭의 접속을 바꾼다(<see cref="PlsqlEditorViewModel.UseSession"/>). 탭이 없으면 false.</summary>
+    public bool UseSession(ISession session) => ActiveTab?.UseSession(session) ?? false;
 
     partial void OnActiveTabChanged(PlsqlEditorViewModel? value)
     {
@@ -118,6 +127,7 @@ public sealed partial class PlsqlWorkspaceViewModel : ToolPanelViewModelBase, II
         }
 
         OnPropertyChanged(nameof(ActiveInnerTitle));
+        SessionChanged?.Invoke(this, EventArgs.Empty);
     }
 
     private void OnActiveTabPropertyChanged(object? sender, PropertyChangedEventArgs e)
@@ -125,6 +135,10 @@ public sealed partial class PlsqlWorkspaceViewModel : ToolPanelViewModelBase, II
         if (e.PropertyName == nameof(PlsqlEditorViewModel.Title))
         {
             OnPropertyChanged(nameof(ActiveInnerTitle));
+        }
+        else if (e.PropertyName == nameof(PlsqlEditorViewModel.Session))
+        {
+            SessionChanged?.Invoke(this, EventArgs.Empty);
         }
     }
 
