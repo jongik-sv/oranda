@@ -6,6 +6,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using CommunityToolkit.Mvvm.ComponentModel;
 using Oranda.App.Shell;
+using Oranda.App.Shell.Composition;
 using Oranda.App.Shell.Settings;
 using Avalonia.Threading;
 using Oranda.Core.Events;
@@ -103,8 +104,8 @@ public sealed partial class SchemaBrowserViewModel : ToolPanelViewModelBase, IDi
         }
 
         // 패널은 처음 보일 때 만들어진다(같은 자리의 스크립트 창 등 다른 탭 뒤에 있었으면 접속한 뒤). 그 전에 연 접속은 SessionOpened 를
-        // 놓쳤으므로 지금 접속을 바로 따른다. 접속 서비스가 이미 있을 때만 본다(없으면 아직 접속 전이고, 만들면 Oracle 어셈블리를 깨운다).
-        if (services.GetService(typeof(ConnectionManager.IConnectionService)) is ConnectionManager.IConnectionService { ActiveSession: { } open })
+        // 놓쳤으므로 지금 접속을 바로 따른다. 접속 서비스가 이미 등록돼 있을 때만 본다(GetService 는 모르는 형이면 지연 어셈블리를 훑어 Oracle 을 깨우므로 GetRegisteredOrDefault 로 본다).
+        if (services.GetRegisteredOrDefault<ConnectionManager.IConnectionService>() is { ActiveSession: { } open })
         {
             ResolveServices();
             FollowConnections();

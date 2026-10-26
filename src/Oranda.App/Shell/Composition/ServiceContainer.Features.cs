@@ -84,3 +84,18 @@ public sealed partial class ServiceContainer
         return GetServices<IStartupTask>(gate is null ? static _ => true : gate.IsTypeEnabled, skipped);
     }
 }
+
+/// <summary>서비스 공급자 확장(시작 경로 보호).</summary>
+public static class ServiceProviderStartupExtensions
+{
+    /// <summary>
+    /// 이미 등록된 서비스만 꺼낸다. 컨테이너면 <see cref="ServiceContainer.GetRegistered{T}"/> 로 지연 어셈블리를 깨우지 않고,
+    /// 다른 공급자(시험용)면 <c>GetService</c> 와 같다. 생성자·시작 경로에서 「있으면 따르고 없으면 말고」 할 때 쓴다.
+    /// </summary>
+    public static T? GetRegisteredOrDefault<T>(this IServiceProvider services)
+        where T : class
+    {
+        ArgumentNullException.ThrowIfNull(services);
+        return services is ServiceContainer container ? container.GetRegistered<T>() : services.GetService(typeof(T)) as T;
+    }
+}

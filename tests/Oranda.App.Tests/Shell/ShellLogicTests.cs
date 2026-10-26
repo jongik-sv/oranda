@@ -141,6 +141,23 @@ public class ShellLogicTests
     }
 
     [Fact]
+    public void GetRegisteredOrDefault_does_not_scan_deferred_assemblies_and_sees_late_registrations()
+    {
+        var c = new ServiceContainer();
+        c.AddDeferredAssembly("Oranda.Language");
+
+        // 등록 안 된 형식은 null 이고 지연 어셈블리를 깨우지 않는다(GetService 는 깨운다).
+        Assert.Null(c.GetRegisteredOrDefault<IThing>());
+        Assert.False(c.DeferredScanned, c.DeferredScanTrigger);
+
+        // 나중에 등록되면 바로 보인다(패널이 접속 뒤 처음 만들어져도 지금 접속을 따르는 길).
+        var thing = new Thing();
+        c.AddInstance<IThing>(thing);
+        Assert.Same(thing, c.GetRegisteredOrDefault<IThing>());
+        Assert.False(c.DeferredScanned);
+    }
+
+    [Fact]
     public void Container_does_not_scan_deferred_assemblies_for_framework_types()
     {
         var c = new ServiceContainer();

@@ -853,6 +853,17 @@ levels:
   - acceptance: 바인드 변수가 있는 결과의 서버 재조회 내보내기(CSV·xlsx)가 같은 행을 쓴다 / 값이 없으면 서버 오류 대신 이유가 보인다 / 행 수 세기·서버 거르기도 같은 값으로 돈다 / 단위 + Oracle 통합 시험(26ai·11.2) / `dotnet build Oranda.sln -warnaserror`·전체 시험 통과
   - note: 담당 PC: win144(Windows 개발 PC) — 맥북 세션은 이 Task 를 하지 않는다. 사용자 원문(2026-10-26): 「Excel 내보내기 할때 서버에서 다시 조회해서 내보내면 바인드 변수가 없다는 에러가 발생한다. 수정해줘」. 크기 M. 레인 sc-export. 결과: 서버 재조회 내보내기가 결과를 만들 때 쓴 바인드 값을 그대로 넘기고(없으면 바인드 변수 창 값, 둘 다 없으면 이유 안내) 행 수 세기·서버 거르기도 같은 값을 쓰도록 고쳤다; 단위 11개 + 26ai·11.2 통합 시험 1개 통과 (win144)
 
+- [x] TSK-12-05: 시작 때 Oracle 어셈블리를 깨우는 회귀 [win144] w:1 2026-10-27~2026-10-27
+  - category: defect
+  - domain: frontend
+  - model: opus
+  - priority: high
+  - tags: startup, schema-browser, service-container, regression, win144
+  - prd-ref: 결함 보고 2026-10-26
+  - requirements: dev 에서 `ShellHeadlessTests.Startup_does_not_load_oracle_or_antlr_assemblies` 가 실패한다(DeferredScanTrigger = `Oranda.App.Features.ConnectionManager.IConnectionService`). 원인 커밋 4c287d4 가 `SchemaBrowserViewModel` 생성자에서 `services.GetService(typeof(IConnectionService))` 로 접속 서비스를 찾았는데, GetService 는 등록 안 된 형식이면 지연 어셈블리(Oracle·Language)를 훑는다. 이미 등록된 것만 꺼내는 길로 바꾸고 4c287d4 의 의도(패널이 접속 뒤 처음 만들어져도 지금 접속을 따름)는 살린다; 제약: 범위를 넓히지 않는다
+  - acceptance: Startup_does_not_load_oracle_or_antlr_assemblies 통과 / 스키마 브라우저 시험 통과(접속 뒤 만든 패널이 지금 접속을 따름) / `dotnet build Oranda.sln -warnaserror`
+  - note: 담당 PC: win144(Windows 개발 PC) — 맥북 세션은 이 Task 를 하지 않는다. 원인 커밋 4c287d4. 레인 sc-startfix. 결과: `IServiceProvider.GetRegisteredOrDefault<T>()`(컨테이너면 지연 어셈블리를 깨우지 않는 GetRegistered, 시험용 공급자면 GetService)를 더해 SchemaBrowserViewModel 생성자와 같은 패턴인 PlsqlWorkspacePersistence.AttachOpened 에 썼다; ShellHeadless·SchemaBrowser·ServiceContainer·PlsqlWorkspace 관련 274개 + 새 단위 시험 통과 (win144)
+
 ## 의존 그래프
 
 ### 그래프 (Mermaid)

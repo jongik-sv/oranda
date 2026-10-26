@@ -8,6 +8,7 @@ using Avalonia.Threading;
 using Oranda.App.Features.ConnectionManager;
 using Oranda.App.Features.PlsqlEditor;
 using Oranda.App.Shell;
+using Oranda.App.Shell.Composition;
 using Oranda.App.Shell.Docking;
 using Oranda.App.Shell.Settings;
 using Oranda.Core.Composition;
@@ -247,7 +248,7 @@ public sealed class PlsqlWorkspacePersistence(
         {
             var session = opened is not null
                 ? opened.Profile.Id == group.Key ? opened : null
-                : (services.GetService(typeof(IConnectionService)) as IConnectionService)?.SessionOf(group.Key);
+                : services.GetRegisteredOrDefault<IConnectionService>()?.SessionOf(group.Key);
             if (Usable(session) && session!.Profile.Id == group.Key)
             {
                 var tabs = group.ToList();
