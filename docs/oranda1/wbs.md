@@ -974,6 +974,18 @@ levels:
   - acceptance: 콤보·「세션」 창(이 세션 쓰기·두 번 누르기·Enter)으로 세션 넷을 오갈 때마다 라우터·콤보 VM·상자의 SelectedItem·SelectionBoxItem 이 고른 세션 / 앱 셸(도킹·MyBatis 작업 공간 + 「기본」 SQL 작업 공간)에서도 같다 / 세션 4개가 그대로 열려 있다 / SessionSwitchTests 4개, 기존 ConnectionCombo·MultiSession·MultiConnection·WorkspaceSession·Sessions 시험 통과 / `dotnet build Oranda.sln -warnaserror`
   - note: 사용자 원문(2026-10-26, 맥 실앱): 「세션 창에서 아무리 다른 세션을 선택해도 안 바뀌고 세션 선택 콤보도 선택을 해도 접속 없음으로 나와」, 「세션창(더블클릭) 또는 콤보에서 세션을 선택하면 지금 작업중인 워크 스페이스에 해당 세션이 선택되도록 해줘.」, 「세션창에서 선택이 되도 세션 콤보에 접속 안됨 으로 나오는 문제도 해결해」. 결과: Headless 재현(고치기 전 SessionSwitchTests 2개 실패 — selected=「1 - scott@a (2)」 box=null), 고친 뒤 통과. 원인 파일 Features/ConnectionManager/ConnectionCombo.cs(Selected 세터의 ChooseAsync 재진입·Refresh 의 Entries.Clear) (win144)
 
+- [x] TSK-14-07: 기본 세션을 닫으면 올라온 추가 세션으로 워크스페이스가 몰래 옮겨 감 외 세션 수명 결함 [win144] w:1 2026-10-26~2026-10-26
+  - category: defect
+  - domain: backend
+  - model: opus
+  - priority: critical
+  - tags: session-router, session-lifecycle, transaction, multi-session, win144
+  - prd-ref: PRD 16, MS-09, D-033, D-038, D-039
+  - depends: TSK-14-06
+  - requirements: 세션 관리 검토(2026-10-26) 1·6·9·11~16. 기본 세션을 닫거나 끊으면 처음 연 추가 세션이 그 자리로 올라오고 기본 세션을 쓰던 워크스페이스가 묻지 않고 그 세션(다른 워크스페이스의 미커밋이 있을 수 있음)으로 옮겨 갔다(MS-09 위반). 따라가기는 끊긴 접속을 같은 자리에 다시 연 경우(`IConnectionService.ReopenedAs`)만, 그 밖은 「접속 안 됨」. 함께 쓰던 워크스페이스는 한꺼번에 같은 결과. 끊긴 추가 세션은 정리해 다시 고르게, 접속의 세션을 혼자 쓰던 워크스페이스를 미커밋인 채 닫으면 묻기, 툴바 「접속 끊기」 는 그 DB 세션 모두(미커밋마다 확인), 「새 세션」·「새 세션에서 실행」 중복 막기·여는 사이 고른 세션 존중, 자기 실행 중인 공유 세션 옮기기 거절, 접속이 비어 있는 탭에 워크스페이스의 프로필 채우기; 제약: 실앱 SendKeys 금지(Headless 까지), 통합 시험은 조정자가 머지 때; 비고: 레인 sr-life
+  - acceptance: SessionLifecycleTests 15개(기본 세션 닫기 → 접속 안 됨, 공유 둘 같은 결과, 다시 연 접속은 모두 따름, 끊긴 추가 세션 닫힘·다시 고르기, 닫기 미커밋 확인, 두 번 눌러도 세션 하나·실행 한 번·단추 꺼짐, 여는 사이 고른 세션 유지, 자기 실행 중 옮기기 거절, 접속 끊기 모두·취소·실행 중 거절, 빈 접속 탭) / 기존 WorkspaceSession·MultiSession·Sessions·SessionSwitch 시험 통과 / `dotnet build Oranda.sln -warnaserror`
+  - note: 결과: 원인 Features/ConnectionManager/ConnectionService.cs(Remove 의 승격을 라우터가 대체로 따름)·SessionRouter.Workspaces.cs(BoundSession 의 대체 따르기, IsWorkspaceHeld 공유면 false, OwnedExtras 가 기본 세션 제외, NewSessionAsync 가 OpenOnceAsync 를 안 거침)·SessionBusyBar.cs(단추 재진입)·ConnectionManagerCommands.cs(보이는 세션 하나만 끊음)·SessionRouter.cs(ConnectionProfileId null 탭은 묶기 건너뜀). 끊긴 추가 세션은 끊김 알림이 실패한 호출 안에서 오므로 목록에서 바로 빼고 1초 뒤 닫는다. SessionsViewModelTests 의 끊긴 추가 세션 시험 기대값을 「저절로 닫힘」 으로 바꿈 (win144)
+
 ## 의존 그래프
 
 ### 그래프 (Mermaid)
@@ -1069,6 +1081,7 @@ graph LR
   TSK-14-04 --> TSK-14-05
   TSK-14-03 --> TSK-14-06
   TSK-14-04 --> TSK-14-06
+  TSK-14-06 --> TSK-14-07
   style TSK-01-02 fill:#e8f5e9,stroke:#2e7d32
   style TSK-03-01 stroke:#c62828,stroke-width:2px
   style TSK-02-02 stroke:#c62828,stroke-width:2px

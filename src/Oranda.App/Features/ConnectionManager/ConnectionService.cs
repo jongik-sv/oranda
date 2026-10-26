@@ -109,6 +109,12 @@ public interface IConnectionService
     Task<ConnectOutcome> OpenSessionAsync(Guid profileId, CancellationToken ct) =>
         Task.FromResult(new ConnectOutcome(ConnectStatus.Failed, "같은 DB 에 세션을 더 열 수 없습니다."));
 
+    /// <summary>
+    /// 끊긴 접속을 같은 자리에 다시 열어(<see cref="ConnectAsync"/>) <paramref name="closed"/> 를 대신한 세션(여러 번 다시 열었으면 마지막 것, TSK-14-07).
+    /// 접속을 끊어 이미 있던 추가 세션이 그 자리로 올라온 것은 대체가 아니다(null): 그 세션을 쓰던 워크스페이스가 남의 트랜잭션으로 몰래 옮기지 않게.
+    /// </summary>
+    ISession? ReopenedAs(ISession closed) => null;
+
     /// <summary>열린 작업 세션 하나를 지금 접속으로 바꾼다. 목록에 없으면 false.</summary>
     bool Switch(ISession session);
 
@@ -199,6 +205,7 @@ public sealed class ConnectionService : IConnectionService, IDisposable
     private readonly List<ISession> _extra = []; // 같은 DB 에 더 연 작업 세션(TSK-14-01, 연 순서)
     private readonly Dictionary<Guid, SecureCredential> _secrets = []; // 열린 접속의 비밀번호(메모리에만, 프로필의 세션이 모두 닫히면 지운다)
     private readonly HashSet<Guid> _brokenIds = [];
+    private readonly Dictionary<Guid, ISession> _reopened = []; // 끊긴 접속 ID → 같은 자리에 다시 연 세션(TSK-14-07)
     private ISession? _active;
     private ConnectionProfile? _lastProfile;
 
@@ -345,6 +352,21 @@ public sealed class ConnectionService : IConnectionService, IDisposable
         lock (_sync)
         {
             return _open.Contains(session) || _extra.Contains(session);
+        }
+    }
+
+    public ISession? ReopenedAs(ISession closed)
+    {
+        ArgumentNullException.ThrowIfNull(closed);
+        lock (_sync)
+        {
+            var current = closed;
+            while (_reopened.TryGetValue(current.Id, out var next))
+            {
+                current = next;
+            }
+
+            return ReferenceEquals(current, closed) ? null : current;
         }
     }
 
@@ -551,6 +573,7 @@ public sealed class ConnectionService : IConnectionService, IDisposable
                     replaced = same;
                     _open[_open.IndexOf(same)] = session;
                     _brokenIds.Remove(same.Id);
+                    _reopened[same.Id] = session;
                 }
             }
             else
@@ -1125,15 +1148,32 @@ public sealed class ConnectionService : IConnectionService, IDisposable
 
     private void OnBroken(SessionBroken e)
     {
+        ISession? extra;
         lock (_sync)
         {
             if (!_open.Concat(_extra).Any(s => s.Id == e.SessionId) || !_brokenIds.Add(e.SessionId))
             {
                 return;
             }
+
+            extra = _extra.FirstOrDefault(s => s.Id == e.SessionId);
         }
 
+        // 끊긴 추가 세션은 「다시 접속」 할 자리가 없다(다시 접속은 접속 자리만 다시 연다, TSK-14-07): 목록에서 빼 상한을 비우고 닫는다.
+        // 그 세션을 쓰던 워크스페이스는 「접속 안 됨」 이 되어 다시 고르거나 새 세션을 연다. 서버는 미커밋을 이미 롤백했다.
+        var removed = extra is not null && Remove(extra);
         RaiseChanged();
+        if (removed)
+        {
+            _ = CloseBrokenLaterAsync(extra!);
+        }
+    }
+
+    /// <summary>끊긴 추가 세션을 조금 뒤에 닫는다: 끊김 알림은 실패한 호출 안(예외 필터)에서 오므로 그 호출이 세션 잠금을 놓은 뒤에 닫는다.</summary>
+    private static async Task CloseBrokenLaterAsync(ISession session)
+    {
+        await Task.Delay(TimeSpan.FromSeconds(1)).ConfigureAwait(false);
+        await CloseAsync(session).ConfigureAwait(false);
     }
 
     private void OnClosed(SessionClosed e)

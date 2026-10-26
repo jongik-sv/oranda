@@ -154,34 +154,22 @@ public sealed class ConnectionCommandHandler(ServiceContainer container) : IComm
 
     /// <summary>
     /// 보이는 접속(활성 SQL 탭의 접속, 그 밖의 문서·전용 세션 탭이면 지금 접속)을 끊는다. 미커밋이면 접속 이름을 밝혀 먼저 묻고,
-    /// 취소하면 끊지 않는다(CONN-06). 활성 탭의 접속이 이미 닫혔으면 할 일이 없다.
+    /// 취소하면 끊지 않는다(CONN-06). 접속(기본 세션)이면 같은 DB 에 더 연 세션도 모두 끊고(미커밋인 세션마다 묻는다, TSK-14-07),
+    /// 작업 공간이 쓰는 추가 세션이면 그것만 끊는다(<see cref="SessionRouter.DisconnectAsync"/>). 활성 탭의 접속이 이미 닫혔으면 할 일이 없다.
     /// </summary>
     private async Task DisconnectAsync(IConnectionService service, CancellationToken ct)
     {
         var router = SessionRouter.Resolve(container);
-        var target = router.ShownSession is { } shown && service.IsOpen(shown) // 작업 공간이 같은 DB 에 더 연 세션이면 그 세션만 끊는다(TSK-14-01)
+        var target = router.ShownSession is { } shown && service.IsOpen(shown)
             ? shown
             : router.ShownMissing is null ? service.ActiveSession : null;
-        var log = ExecutionLog.For(container.GetService<IEventBus>());
         if (target is null)
         {
-            log.AddMessage(MessageKind.Info, "이 탭의 접속은 이미 닫혀 있습니다.");
+            ExecutionLog.For(container.GetService<IEventBus>()).AddMessage(MessageKind.Info, "이 탭의 접속은 이미 닫혀 있습니다.");
             return;
         }
 
-        var execution = ExecutionCommands.Resolve(container);
-        if (execution.State.IsRunning(target.Id))
-        {
-            log.AddMessage(MessageKind.Warning, $"「{router.LabelOf(target)}」 에서 실행 중입니다. 실행을 취소하거나 끝난 뒤 접속을 끊으세요.");
-            return;
-        }
-
-        if (!await execution.ConfirmConnectionUncommittedAsync(target, ct).ConfigureAwait(true))
-        {
-            return;
-        }
-
-        await service.DisconnectAsync(target, ct).ConfigureAwait(true);
+        await router.DisconnectAsync(target, ct).ConfigureAwait(true);
     }
 
     private Task<string?> Prompt(Oranda.Core.Connection.ConnectionProfile profile) =>

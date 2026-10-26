@@ -586,6 +586,11 @@ public sealed partial class SessionRouter
 
     private void OnActiveTabChanged()
     {
+        if (SqlDocumentActive && _host.Active is { } active)
+        {
+            FillProfile(active);
+        }
+
         Watch(_host.Active);
         WatchDocument(ConnectionDocument);
         SwitchToActiveTab();
@@ -599,6 +604,30 @@ public sealed partial class SessionRouter
         if (tab.ConnectionProfileId is null && Current is { } current)
         {
             tab.ConnectionProfileId = current.Profile.Id;
+        }
+    }
+
+    /// <summary>
+    /// 작업 공간 안 탭의 접속이 비어 있으면(접속 전에 만든 탭) 작업 공간이 쓰는 프로필로 채운다(TSK-14-07): 묶인 세션의 프로필(지금 접속의 것을 먼저),
+    /// 없으면 같은 작업 공간의 다른 탭의 접속, 그것도 없으면 지금 접속. 비어 있으면 작업 공간 묶기를 건너뛰어 같은 작업 공간 안에서 다른 세션으로 실행했다.
+    /// </summary>
+    private void FillProfile(SqlEditorViewModel tab)
+    {
+        if (tab.ConnectionProfileId is not null || _dedicated?.SessionOf(tab) is not null || _host.WorkspaceOf(tab) is not { } ws)
+        {
+            return;
+        }
+
+        var current = Current?.Profile.Id;
+        var bound = _bound.TryGetValue(ws, out var map) ? map.Where(kv => _connections.IsOpen(kv.Value)).Select(kv => kv.Key).ToList() : [];
+        var sibling = ws.Tabs.Where(t => !ReferenceEquals(t, tab) && _dedicated?.SessionOf(t) is null).Select(t => t.ConnectionProfileId).OfType<Guid>().FirstOrDefault();
+        Guid? profile = current is { } c && bound.Contains(c) ? c
+            : bound.Count > 0 ? bound[0]
+            : sibling != Guid.Empty ? sibling
+            : current;
+        if (profile is not null)
+        {
+            tab.ConnectionProfileId = profile;
         }
     }
 

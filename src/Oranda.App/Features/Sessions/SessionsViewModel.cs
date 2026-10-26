@@ -285,8 +285,9 @@ public sealed partial class SessionsViewModel : ToolPanelViewModelBase, IDisposa
 
     /// <summary>
     /// 세션 닫기: 실행 중이면 알리고 닫지 않는다. 미커밋이면 이 세션에 대해 한 번 묻고(커밋/롤백/취소) 취소하면 닫지 않는다.
-    /// 접속(기본 세션)도 같은 규칙으로 닫을 수 있고, 더 연 세션이 남아 있으면 처음 연 것이 그 자리의 접속이 된다(접속 끊기와 같다).
-    /// 닫으면 그 세션을 쓰던 워크스페이스는 「접속 안 됨」 이 되어 다음 실행 때 기존 창이 다시 고르게 한다.
+    /// 접속(기본 세션)도 같은 규칙으로 닫을 수 있고, 더 연 세션이 남아 있으면 처음 연 것이 그 자리의 접속이 된다(툴바 「접속 끊기」 는 그 DB 세션을 모두 끊는다).
+    /// 닫으면 그 세션을 쓰던 워크스페이스는 「접속 안 됨」 이 되어 다음 실행 때 기존 창이 다시 고르게 한다: 그 자리로 올라온 세션으로 몰래 옮기지 않는다
+    /// (<see cref="SessionRouter.BoundSession"/>, D-039).
     /// </summary>
     public async Task CloseAsync(SessionRow? row, CancellationToken ct = default)
     {

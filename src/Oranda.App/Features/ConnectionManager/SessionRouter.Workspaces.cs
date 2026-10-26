@@ -8,13 +8,14 @@ namespace Oranda.App.Features.ConnectionManager;
 // SessionRouter 의 일부: 작업 공간 → 세션 연결표(TSK-14-01, 같은 DB 여러 세션·워크스페이스별 실행).
 // 작업 공간(그 안의 탭)은 프로필마다 세션 하나에 묶인다. 여러 작업 공간이 같은 세션에 묶일 수 있고(다 대 일, 트랜잭션도 함께),
 // 「자기 세션」 작업 공간은 첫 실행 때 접속의 세션을 아무도 쓰지 않으면 그것을, 다른 작업 공간이 쓰면 같은 DB 에 세션을 하나 더 연다.
-// 묶인 세션이 닫히면 그 작업 공간은 「접속 안 됨」 이 되어 다른 세션으로 몰래 실행하지 않는다.
+// 묶인 세션이 닫히면 그 작업 공간은 「접속 안 됨」 이 되어 다른 세션으로 몰래 실행하지 않는다(접속 자리로 올라온 추가 세션도 따르지 않는다, D-039).
 public sealed partial class SessionRouter
 {
     private readonly Dictionary<SqlWorkspaceViewModel, Dictionary<Guid, ISession>> _bound = new(ReferenceEqualityComparer.Instance);
     private readonly Dictionary<SqlWorkspaceViewModel, HashSet<Guid>> _lost = new(ReferenceEqualityComparer.Instance);
-    private readonly Dictionary<SqlWorkspaceViewModel, HashSet<Guid>> _onPrimary = new(ReferenceEqualityComparer.Instance);
     private readonly Dictionary<(SqlWorkspaceViewModel Workspace, Guid ProfileId), Task<ISession?>> _opening = [];
+    private readonly Dictionary<(SqlWorkspaceViewModel Workspace, Guid ProfileId), int> _bindStamps = []; // 묶을 때마다 +1(여는 사이 사용자가 고른 것을 덮지 않게)
+    private readonly HashSet<SqlWorkspaceViewModel> _movingToNew = new(ReferenceEqualityComparer.Instance); // 「새 세션에서 실행」 하는 중인 작업 공간
 
     /// <summary>설정 「워크스페이스마다 새 세션」(작업 공간이 고른 값이 없을 때의 기본값). 조립이 설정을 넣는다. 기본 켬.</summary>
     public Func<bool> SessionPerWorkspace { get; set; } = () => true;
@@ -89,19 +90,32 @@ public sealed partial class SessionRouter
             return;
         }
 
-        if (!ReferenceEquals(_host.Active, tab))
+        if (!_movingToNew.Add(ws))
         {
-            _host.Active = tab; // 「새 세션」 은 활성 탭의 작업 공간을 옮긴다
+            return; // 여는 사이 또 눌렀다: 세션을 하나 더 열거나 같은 SQL 을 두 번 보내지 않는다
         }
 
-        if (await NewSessionAsync().ConfigureAwait(true) is null)
+        try
         {
-            // 못 열었으면(이유는 메시지 창) 막대를 남긴다: 기다리거나 다시 고를 수 있게.
-            ExecutionLog.For(_bus).AddMessage(MessageKind.Warning, UiText.Format("Execution.busyBar.failed", "「{0}」 을(를) 새 세션으로 옮기지 못했습니다.", ws.Name));
-            return;
+            if (!ReferenceEquals(_host.Active, tab))
+            {
+                _host.Active = tab; // 「새 세션」 은 활성 탭의 작업 공간을 옮긴다
+            }
+
+            if (await NewSessionAsync().ConfigureAwait(true) is null)
+            {
+                // 못 열었으면(이유는 메시지 창) 막대를 남긴다: 기다리거나 다시 고를 수 있게.
+                ExecutionLog.For(_bus).AddMessage(MessageKind.Warning, UiText.Format("Execution.busyBar.failed", "「{0}」 을(를) 새 세션으로 옮기지 못했습니다.", ws.Name));
+                return;
+            }
+
+            ws.BusyNotice = null;
+        }
+        finally
+        {
+            _movingToNew.Remove(ws);
         }
 
-        ws.BusyNotice = null;
         await rerun().ConfigureAwait(true);
     }
 
@@ -134,7 +148,9 @@ public sealed partial class SessionRouter
 
     /// <summary>
     /// 작업 공간이 그 프로필에 묶인 세션(아직 실행하지 않았으면 null). 닫힌 세션이면 연결을 풀고 「접속 안 됨」 으로 표시한다.
-    /// 다만 접속의 세션에 묶였는데 끊긴 접속을 다시 열어 같은 자리에 새 세션이 왔고 그 세션을 다른 작업 공간이 쓰지 않으면, WP-14 전처럼 새 세션을 따른다.
+    /// 다만 끊긴 접속을 다시 열어 같은 자리에 새 세션이 왔으면(<see cref="IConnectionService.ReopenedAs"/>) WP-14 전처럼 새 세션을 따르고,
+    /// 그 세션을 함께 쓰던 작업 공간도 모두 같이 따른다. 접속을 끊어 이미 있던 추가 세션이 그 자리로 올라온 것은 따르지 않는다(MS-09, D-039):
+    /// 그 세션에는 다른 작업 공간이 남긴 미커밋이 있을 수 있다.
     /// </summary>
     public ISession? BoundSession(SqlWorkspaceViewModel workspace, Guid profileId)
     {
@@ -150,12 +166,11 @@ public sealed partial class SessionRouter
         }
 
         map.Remove(profileId);
-        if (_onPrimary.TryGetValue(workspace, out var primaries) && primaries.Remove(profileId)
-            && _connections.SessionOf(profileId) is { } replacement && !UsedByOther(replacement, workspace))
+        if (_connections.ReopenedAs(session) is { } reopened && _connections.IsOpen(reopened)
+            && ReferenceEquals(_connections.SessionOf(profileId), reopened))
         {
-            map[profileId] = replacement; // 다시 연 접속(같은 자리의 새 세션)을 따른다. 처음 연 추가 세션이 올라온 자리면 다른 작업 공간이 쓰므로 따르지 않는다
-            primaries.Add(profileId);
-            return replacement;
+            map[profileId] = reopened; // 같은 자리에 다시 연 접속을 따른다(다른 작업 공간이 이미 따랐어도: 함께 쓰던 세션의 대체다)
+            return reopened;
         }
 
         MarkLost(workspace, profileId);
@@ -187,6 +202,16 @@ public sealed partial class SessionRouter
     public async Task<bool> PrepareAsync(SqlEditorViewModel tab, CancellationToken ct = default)
     {
         ArgumentNullException.ThrowIfNull(tab);
+        FillProfile(tab);
+        if (_dedicated?.SessionOf(tab) is null && tab.ConnectionProfileId is { } openingProfile && _host.WorkspaceOf(tab) is { } owner
+            && _opening.TryGetValue((owner, openingProfile), out var running))
+        {
+            // 「새 세션」·첫 실행이 여는 중이면 그 세션을 기다린다(여는 사이 옛 세션으로 실행하지 않게). 못 열었으면 묶인 세션(있으면 그것)만 쓴다:
+            // 다른 작업 공간이 쓰는 접속의 세션으로 대신하지 않는다.
+            await running.ConfigureAwait(true);
+            return _host.WorkspaceOf(tab) is not null && BoundSession(owner, openingProfile) is not null;
+        }
+
         if (_dedicated?.SessionOf(tab) is not null || tab.ConnectionProfileId is not { } profileId || _host.WorkspaceOf(tab) is not { } ws
             || BoundSession(ws, profileId) is not null || IsLost(ws, profileId) || _connections.SessionOf(profileId) is not { } primary)
         {
@@ -199,23 +224,30 @@ public sealed partial class SessionRouter
             return true;
         }
 
-        var opened = await OpenOnceAsync(ws, profileId, ct).ConfigureAwait(true);
-        return opened is not null && _host.WorkspaceOf(tab) is not null && BoundSession(ws, profileId) is not null;
+        await OpenOnceAsync(ws, profileId, ct).ConfigureAwait(true);
+
+        // 여는 사이 사용자가 콤보로 고른 세션이 있으면 그것으로 실행한다(콤보가 보이는 세션 = 실행 대상). 못 열었으면 묶인 세션이 없어 false.
+        return _host.WorkspaceOf(tab) is not null && BoundSession(ws, profileId) is not null;
     }
 
     /// <summary>
     /// 작업 공간의 그 프로필 세션을 한 번만 연다: 여는 사이 같은 작업 공간에서 또 실행하면 같은 열기를 기다린다(세션 둘을 열어 하나가 실행 중인 채
     /// 떨어져 남지 않게).
     /// </summary>
-    private Task<ISession?> OpenOnceAsync(SqlWorkspaceViewModel ws, Guid profileId, CancellationToken ct)
+    private Task<ISession?> OpenOnceAsync(SqlWorkspaceViewModel ws, Guid profileId, CancellationToken ct) =>
+        Once((ws, profileId), () => OpenFor(ws, profileId, ct));
+
+    /// <summary>
+    /// 작업 공간의 그 프로필 세션 열기(첫 실행·「새 세션」)를 한 번만 돌린다: 여는 중이면(작업 공간별 「여는 중」 표지) 같은 열기를 돌려준다.
+    /// </summary>
+    private Task<ISession?> Once((SqlWorkspaceViewModel Workspace, Guid ProfileId) key, Func<Task<ISession?>> open)
     {
-        var key = (ws, profileId);
         if (_opening.TryGetValue(key, out var running))
         {
             return running;
         }
 
-        var task = OpenAndForgetAsync(key, ct);
+        var task = OpenAndForgetAsync(key, open);
         if (!task.IsCompleted)
         {
             _opening[key] = task; // 바로 끝났으면 넣지 않는다(지우는 쪽이 이미 지나갔다)
@@ -224,11 +256,11 @@ public sealed partial class SessionRouter
         return task;
     }
 
-    private async Task<ISession?> OpenAndForgetAsync((SqlWorkspaceViewModel Workspace, Guid ProfileId) key, CancellationToken ct)
+    private async Task<ISession?> OpenAndForgetAsync((SqlWorkspaceViewModel Workspace, Guid ProfileId) key, Func<Task<ISession?>> open)
     {
         try
         {
-            return await OpenFor(key.Workspace, key.ProfileId, ct).ConfigureAwait(true);
+            return await open().ConfigureAwait(true);
         }
         finally
         {
@@ -238,16 +270,22 @@ public sealed partial class SessionRouter
 
     /// <summary>
     /// 툴바 콤보의 「새 세션」: 활성 SQL 탭의 작업 공간에 같은 DB 의 새 세션을 열어 묶고 「자기 세션」 으로 둔다. 이전 세션에 미커밋이 있으면
-    /// <see cref="ConfirmSwitch"/> 로 묻는다. 연 세션, 못 열었거나 취소했으면 null.
+    /// <see cref="ConfirmSwitch"/> 로 묻는다. 연 세션, 못 열었거나 취소했으면 null. 그 작업 공간이 이미 세션을 여는 중이면(두 번 누름·첫 실행 중)
+    /// 새로 열지 않고 그 열기를 돌려준다.
     /// </summary>
-    public async Task<ISession?> NewSessionAsync(CancellationToken ct = default)
+    public Task<ISession?> NewSessionAsync(CancellationToken ct = default)
     {
         if (!SqlDocumentActive || _host.Active is not { } tab || _dedicated?.SessionOf(tab) is not null
             || _host.WorkspaceOf(tab) is not { } ws || (tab.ConnectionProfileId ?? Current?.Profile.Id) is not { } profileId)
         {
-            return null;
+            return Task.FromResult<ISession?>(null);
         }
 
+        return Once((ws, profileId), () => NewSessionCoreAsync(tab, ws, profileId, ct));
+    }
+
+    private async Task<ISession?> NewSessionCoreAsync(SqlEditorViewModel tab, SqlWorkspaceViewModel ws, Guid profileId, CancellationToken ct)
+    {
         if (SessionFor(tab) is { } old && old.Profile.Id == profileId && !await ReleaseForSwitchAsync(tab, old, ct).ConfigureAwait(true))
         {
             return null;
@@ -263,9 +301,13 @@ public sealed partial class SessionRouter
         return opened;
     }
 
-    /// <summary>같은 DB 에 세션을 하나 더 열어 작업 공간에 묶는다. 못 열면 메시지 창에 이유를 남기고 null.</summary>
+    /// <summary>
+    /// 같은 DB 에 세션을 하나 더 열어 작업 공간에 묶는다. 못 열면 메시지 창에 이유를 남기고 null. 여는 사이 작업 공간을 닫았거나 사용자가 콤보·「세션」 창으로
+    /// 그 프로필의 세션을 골랐으면 고른 것을 덮지 않고 막 연 세션을 닫는다(아무도 안 쓰는 세션을 남기지 않게, null).
+    /// </summary>
     private async Task<ISession?> OpenFor(SqlWorkspaceViewModel ws, Guid profileId, CancellationToken ct)
     {
+        var stamp = _bindStamps.GetValueOrDefault((ws, profileId));
         var outcome = await _connections.OpenSessionAsync(profileId, ct).ConfigureAwait(true);
         if (outcome is not { IsConnected: true, Session: { } session })
         {
@@ -273,9 +315,9 @@ public sealed partial class SessionRouter
             return null;
         }
 
-        if (!_host.Workspaces.Contains(ws))
+        if (!_host.Workspaces.Contains(ws) || _bindStamps.GetValueOrDefault((ws, profileId)) != stamp)
         {
-            await _connections.DisconnectAsync(session, CancellationToken.None).ConfigureAwait(true); // 여는 사이에 작업 공간을 닫았다
+            await _connections.DisconnectAsync(session, CancellationToken.None).ConfigureAwait(true); // 여는 사이에 작업 공간을 닫았거나 다른 세션을 골랐다
             return null;
         }
 
@@ -284,7 +326,7 @@ public sealed partial class SessionRouter
         return session;
     }
 
-    /// <summary>콤보에서 이전 세션을 떠나기 전: 실행 중이면 거절, 미커밋이면 묻는다(그 세션을 이 작업 공간만 쓸 때).</summary>
+    /// <summary>콤보에서 이전 세션을 떠나기 전: 실행 중이면 거절, 미커밋이면 묻는다(그 세션을 이 작업 공간만 쓸 때, 실행은 이 작업 공간이 시작했으면 늘).</summary>
     private async Task<bool> ReleaseForSwitchAsync(SqlEditorViewModel tab, ISession old, CancellationToken ct)
     {
         if (!IsWorkspaceHeld(tab))
@@ -313,18 +355,11 @@ public sealed partial class SessionRouter
         }
 
         map[session.Profile.Id] = session;
-        if (!_onPrimary.TryGetValue(ws, out var primaries))
+        var key = (ws, session.Profile.Id);
+        _bindStamps[key] = _bindStamps.GetValueOrDefault(key) + 1;
+        foreach (var tab in ws.Tabs.Where(t => t.ConnectionProfileId is null && _dedicated?.SessionOf(t) is null))
         {
-            _onPrimary[ws] = primaries = [];
-        }
-
-        if (ReferenceEquals(_connections.SessionOf(session.Profile.Id), session))
-        {
-            primaries.Add(session.Profile.Id);
-        }
-        else
-        {
-            primaries.Remove(session.Profile.Id);
+            tab.ConnectionProfileId = session.Profile.Id; // 접속 없이 만든 탭도 작업 공간의 세션을 쓴다(지금 접속으로 따로 실행하지 않게)
         }
 
         if (_lost.TryGetValue(ws, out var lost))
@@ -364,12 +399,15 @@ public sealed partial class SessionRouter
     /// <summary>
     /// 콤보로 바꾸면 작업 공간째 다른 세션으로 옮기는 탭이 지금 세션을 놓으면 안 되는지(실행 중이거나 미커밋인 세션을 이 작업 공간 밖의 탭이 쓰지 않는다).
     /// 같은 작업 공간의 다른 탭도 함께 옮기므로 「남는 탭」 으로 세지 않는다. 작업 공간 밖 탭이면 <see cref="IsHeld"/>.
+    /// 그 세션의 지금 실행을 이 작업 공간이 시작했으면 함께 쓰는 세션이어도 놓지 않는다(옮기면 그 실행을 취소할 수 없다, D-033·D-039).
     /// </summary>
     private bool IsWorkspaceHeld(SqlEditorViewModel tab) =>
         _host.WorkspaceOf(tab) is not { } ws
             ? IsHeld(tab)
-            : SessionFor(tab) is { } s && (_state.IsBusy(s.Id) || _state.IsTxnPending(s.Id) || s.HasPendingTransaction)
-              && !_host.Tabs.Any(t => !ReferenceEquals(_host.WorkspaceOf(t), ws) && _dedicated?.SessionOf(t) is null && ReferenceEquals(SessionFor(t), s));
+            : SessionFor(tab) is { } s
+              && (ReferenceEquals(_state.RunOwnerOf(s.Id), ws)
+                  || ((_state.IsBusy(s.Id) || _state.IsTxnPending(s.Id) || s.HasPendingTransaction)
+                      && !_host.Tabs.Any(t => !ReferenceEquals(_host.WorkspaceOf(t), ws) && _dedicated?.SessionOf(t) is null && ReferenceEquals(SessionFor(t), s))));
 
     /// <summary>콤보에서 <paramref name="session"/> 을 고르면 활성 탭이 지금 세션을 놓으면 안 되는지(작업 공간째 옮기면 <see cref="IsWorkspaceHeld"/>).</summary>
     private bool IsHeldFor(SqlEditorViewModel tab, ISession session) =>
@@ -439,7 +477,8 @@ public sealed partial class SessionRouter
 
     /// <summary>
     /// 닫기 가드(<see cref="SqlEditorHost.RegisterCloseGuard"/>): 작업 공간을 닫으면 그 작업 공간만 쓰던 더 연 세션도 닫으므로, 실행 중이면 알리고 취소,
-    /// 미커밋이면 세션마다 한 번 묻는다. 접속의 세션·다른 작업 공간과 함께 쓰는 세션은 닫지 않으므로 묻지 않는다.
+    /// 미커밋이면 세션마다 한 번 묻는다. 접속의 세션은 닫지 않지만 그것을 이 작업 공간만 쓰고 미커밋이면 묻는다(다음 작업 공간이 그 트랜잭션을 몰래
+    /// 물려받지 않게, D-039). 다른 작업 공간과 함께 쓰는 세션은 묻지 않는다.
     /// </summary>
     private async Task<bool> GuardAsync(IReadOnlyList<SqlEditorViewModel> tabs, SqlCloseReason reason, CancellationToken ct)
     {
@@ -475,8 +514,15 @@ public sealed partial class SessionRouter
                 return false;
             }
 
-            if ((_state.IsTxnPending(session.Id) || session.HasPendingTransaction)
-                && (ConfirmUncommitted is not { } confirm || !await confirm(session, ct).ConfigureAwait(true)))
+            if (IsUncommitted(session) && (ConfirmUncommitted is not { } confirm || !await confirm(session, ct).ConfigureAwait(true)))
+            {
+                return false;
+            }
+        }
+
+        foreach (var session in SolePrimaries(ws).Where(IsUncommitted))
+        {
+            if (ConfirmUncommitted is not { } confirm || !await confirm(session, ct).ConfigureAwait(true))
             {
                 return false;
             }
@@ -484,6 +530,14 @@ public sealed partial class SessionRouter
 
         return true;
     }
+
+    private bool IsUncommitted(ISession session) => _state.IsTxnPending(session.Id) || session.HasPendingTransaction;
+
+    /// <summary>작업 공간이 묶인 접속의 세션 중 다른 열린 작업 공간이 쓰지 않는 것(닫아도 세션은 남는다, 미커밋만 묻는다).</summary>
+    private List<ISession> SolePrimaries(SqlWorkspaceViewModel ws) =>
+        _bound.TryGetValue(ws, out var map)
+            ? [.. map.Values.Distinct().Where(s => _connections.IsOpen(s) && ReferenceEquals(_connections.SessionOf(s.Profile.Id), s) && !UsedByOther(s, ws))]
+            : [];
 
     /// <summary>
     /// 문서 탭 × 로 SQL 작업 공간을 닫기 전 확인(<see cref="Shell.Docking.DockWorkspace.CloseConfirm"/>): 함께 닫을 세션이 실행 중이거나 미커밋이면
@@ -493,7 +547,7 @@ public sealed partial class SessionRouter
     {
         ArgumentNullException.ThrowIfNull(document);
         if (document.Panel is not SqlWorkspaceViewModel ws || !_host.Workspaces.Contains(ws)
-            || !OwnedExtras(ws).Any(s => _state.IsRunning(s.Id) || _state.IsTxnPending(s.Id) || s.HasPendingTransaction))
+            || (!OwnedExtras(ws).Any(s => _state.IsRunning(s.Id) || IsUncommitted(s)) && !SolePrimaries(ws).Any(IsUncommitted)))
         {
             return null;
         }
@@ -502,6 +556,45 @@ public sealed partial class SessionRouter
         return ws.Tabs.Count == 0
             ? ct => _host.CanCloseEmptyAsync(ws, ct)
             : ct => _host.CanCloseAsync(ws.Tabs.ToList(), SqlCloseReason.Workspace, ct);
+    }
+
+    /// <summary>
+    /// 툴바·메뉴 「접속 끊기」(TSK-14-07): 접속(기본 세션)을 끊으면 같은 DB 에 더 연 세션도 모두 끊는다(남은 추가 세션이 접속 자리로 올라와
+    /// 작업 공간이 따라가지 않게). 하나라도 실행 중이면 알리고 끊지 않는다. 미커밋인 세션마다 기존 확인 창(<see cref="ConfirmUncommitted"/>)으로 묻고
+    /// 취소하면 끊지 않는다. 추가 세션 하나면 그것만 끊는다. 끊었으면 true. 그 세션들을 쓰던 작업 공간은 「접속 안 됨」 이 된다.
+    /// </summary>
+    public async Task<bool> DisconnectAsync(ISession target, CancellationToken ct = default)
+    {
+        ArgumentNullException.ThrowIfNull(target);
+        IReadOnlyList<ISession> targets = ReferenceEquals(_connections.SessionOf(target.Profile.Id), target)
+            ? [.. _connections.SessionsOf(target.Profile.Id).Reverse()] // 추가 세션부터 끊는다(접속을 먼저 끊으면 추가 세션이 그 자리로 올라온다)
+            : [target];
+        var log = ExecutionLog.For(_bus);
+        if (targets.FirstOrDefault(s => _state.IsRunning(s.Id)) is { } running)
+        {
+            log.AddMessage(MessageKind.Warning, $"「{LabelOf(running)}」 에서 실행 중입니다. 실행을 취소하거나 끝난 뒤 접속을 끊으세요.");
+            return false;
+        }
+
+        foreach (var session in targets.Where(IsUncommitted))
+        {
+            if (ConfirmUncommitted is not { } confirm || !await confirm(session, ct).ConfigureAwait(true))
+            {
+                return false;
+            }
+        }
+
+        foreach (var session in targets)
+        {
+            await _connections.DisconnectAsync(session, CancellationToken.None).ConfigureAwait(true); // 묻기를 마쳤으면 반쯤 끊고 멈추지 않는다
+        }
+
+        if (targets.Count > 1)
+        {
+            log.AddMessage(MessageKind.Info, $"「{target.Profile.User}@{target.Profile.Name}」 의 세션 {targets.Count}개를 모두 끊었습니다.");
+        }
+
+        return true;
     }
 
     /// <summary>작업 공간을 닫으면 함께 닫을 세션: 이 작업 공간만 쓰는, 접속이 아닌 열린 세션.</summary>
@@ -516,7 +609,11 @@ public sealed partial class SessionRouter
         var owned = OwnedExtras(ws);
         _bound.Remove(ws);
         _lost.Remove(ws);
-        _onPrimary.Remove(ws);
+        foreach (var key in _bindStamps.Keys.Where(k => ReferenceEquals(k.Workspace, ws)).ToList())
+        {
+            _bindStamps.Remove(key);
+        }
+
         foreach (var session in owned)
         {
             _ = _connections.DisconnectAsync(session, CancellationToken.None);

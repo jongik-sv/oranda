@@ -29,9 +29,19 @@ public sealed class SessionBusyBar : Border
         _wait = Make("clear", "Execution.busyBar.wait", "기다리기", "안내를 닫습니다. 앞 실행이 끝나면 다시 실행하세요.");
         _runInNew.Click += async (_, _) =>
         {
-            if (_workspace?.BusyNotice is { } notice)
+            if (!_runInNew.IsEnabled || _workspace?.BusyNotice is not { } notice)
+            {
+                return;
+            }
+
+            _runInNew.IsEnabled = false; // 누르는 즉시 끈다: 여는 사이 또 눌러 세션 둘·같은 SQL 두 번이 되지 않게(TSK-14-07)
+            try
             {
                 await notice.RunInNewSession().ConfigureAwait(true);
+            }
+            finally
+            {
+                _runInNew.IsEnabled = true; // 못 열었으면 막대가 남아 다시 누를 수 있다(옮겼으면 막대가 닫힌다)
             }
         };
         _wait.Click += (_, _) => _workspace?.BusyNotice?.Wait();

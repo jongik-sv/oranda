@@ -354,7 +354,7 @@ public sealed class SessionsViewModelTests
     });
 
     [Fact]
-    public Task A_broken_extra_session_is_closed_without_a_question_and_frees_a_slot_under_the_limit() => Ui.Run(async () =>
+    public Task A_broken_extra_session_closes_by_itself_and_frees_a_slot_under_the_limit() => Ui.Run(async () =>
     {
         using var rig = new Rig();
         rig.Ops.Service = rig.Service;
@@ -368,14 +368,10 @@ public sealed class SessionsViewModelTests
         var broken = rig.Service.SessionsOf(a.Profile.Id)[3];
         rig.Fx.Events.Publish(new Oranda.Core.Events.SessionBroken(broken.Id, false, null));
         Pump();
+
+        // 끊긴 추가 세션은 다시 열 자리가 없어 접속 서비스가 닫는다(TSK-14-07): 쓰던 워크스페이스는 「접속 안 됨」 이 되어 다시 고른다.
+        Assert.False(rig.Service.IsOpen(broken));
         rig.Vm.Refresh();
-        var row = rig.Vm.Rows.Single(r => ReferenceEquals(r.Session, broken));
-        Assert.True(row.IsBroken);
-        Assert.Contains("끊김", row.Detail, StringComparison.Ordinal);
-        Assert.False((await rig.Service.OpenSessionAsync(a.Profile.Id, default)).IsConnected); // 끊겨도 자리는 차지한다
-
-        await rig.Vm.CloseAsync(row);
-
         Assert.Equal(8 - 1, rig.Service.SessionsOf(a.Profile.Id).Count);
         Assert.DoesNotContain(rig.Vm.Rows, r => ReferenceEquals(r.Session, broken));
         Assert.True((await rig.Service.OpenSessionAsync(a.Profile.Id, default)).IsConnected); // 자리가 났다
