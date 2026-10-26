@@ -238,6 +238,7 @@ public sealed partial class ResultGridModel
     /// <summary>정렬 순열(<c>_order</c>)과 거르기 통과 표를 합쳐 화면 순서(<c>_view</c>)를 만든다. 정렬·거르기가 바뀔 때마다 이 한 곳을 거친다.</summary>
     private void RebuildView()
     {
+        _extraRows.Clear(); // 정렬·거르기로 화면 행이 달라지면 Ctrl 로 더한 행 번호는 뜻이 없다
         if (_match is not { } match)
         {
             _view = _order;

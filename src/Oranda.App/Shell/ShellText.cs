@@ -53,6 +53,12 @@ public sealed class ShellText : IShellText
 
     public event EventHandler? LanguageChanged;
 
+    /// <summary>
+    /// 명령 제목을 지금 상태에 맞게 바꾸는 곳(예: 고른 행이 3개면 「행 3개 삭제」). 메뉴를 만들 때마다 불리며, null 이면 기본 제목을 쓴다.
+    /// 기능 쪽이 시작할 때 채운다(셸은 기능을 모른다).
+    /// </summary>
+    public static Func<string, IShellText, string?>? TitleOverride { get; set; }
+
     public string Language => _language;
 
     public void SetLanguage(string language)
@@ -93,6 +99,11 @@ public sealed class ShellText : IShellText
     public string Title(CommandDefinition command)
     {
         ArgumentNullException.ThrowIfNull(command);
+        if (TitleOverride?.Invoke(command.Id, this) is { } custom)
+        {
+            return custom;
+        }
+
         return TryLookup("Cmd." + command.Id) ?? Lookup(command.Title);
     }
 

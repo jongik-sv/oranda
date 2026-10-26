@@ -35,18 +35,22 @@ public static class GridEditCommands
 
 /// <summary>
 /// 편집 모드 명령 처리기. 편집 모드가 아니면(활성 세션 없음) 아무것도 하지 않는다.
-/// 행 붙여넣기·행 복제는 읽기 전용 결과에서도 불러 「편집 모드로 다시 실행」 안내 막대를 띄운다(활성 조건이 <c>gridEditing</c> 이 아니다).
+/// 행 붙여넣기는 읽기 전용 결과에서도 불러 「편집 모드로 다시 실행」 안내 막대를 띄운다(활성 조건이 <c>gridEditing</c> 이 아니다).
+/// 행 삭제·행 복제는 편집 모드가 꺼진 결과에서 누르면 편집 모드를 먼저 켠 뒤 실행하고(D-031, 조회 전용·편집 불가 결과는 꺼짐),
+/// 고른 모든 행(칸 범위가 걸친 행 + Ctrl 로 더한 행)에 한다(TSK-11-01).
 /// 두 명령의 대상은 Parameter 가 결과 그리드면 그 그리드, 아니면 활성(포커스) 그리드다.
 /// </summary>
 [OrandaCommand("oranda.exec.runForEdit", CommandCategory.Sql, When = "sqlDocFocus",
     Enablement = "(hasSession || tabConnectionMissing) && !sessionBusy && !readOnlySession && !mybatisDocActive", Placements = ["menu:sql/runForEdit@40"])]
 [OrandaCommand("oranda.grid.edit.addRow", CommandCategory.Result, When = "gridFocus", Enablement = "gridEditing",
     Placements = ["context:grid/edit/edit@10"])]
-[OrandaCommand("oranda.grid.edit.duplicateRow", CommandCategory.Result, When = "gridFocus", Enablement = "gridHasSelection",
+[OrandaCommand("oranda.grid.edit.duplicateRow", CommandCategory.Result, When = "gridFocus",
+    Enablement = "gridHasSelection && !readOnlySession && gridRowsEditable",
     Placements = ["context:grid/edit/edit@12"])]
 [OrandaCommand("oranda.grid.edit.pasteRows", CommandCategory.Result, When = "gridFocus", Enablement = "gridHasResult",
     Placements = ["context:grid/edit/edit@14"])]
-[OrandaCommand("oranda.grid.edit.deleteRow", CommandCategory.Result, When = "gridFocus", Enablement = "gridEditing",
+[OrandaCommand("oranda.grid.edit.deleteRow", CommandCategory.Result, When = "gridFocus",
+    Enablement = "gridHasSelection && !readOnlySession && gridRowsEditable",
     Placements = ["context:grid/edit/edit@20"])]
 [OrandaCommand("oranda.grid.edit.previewDml", CommandCategory.Result, When = "gridFocus", Enablement = "gridDirty",
     Placements = ["context:grid/edit/edit@110"])]
@@ -83,6 +87,24 @@ public sealed class GridEditCommandHandler : ICommandHandler
                 await (context.CommandId == "oranda.grid.edit.pasteRows"
                     ? GridRowTransfer.PasteRowsAsync(focused, cancellationToken)
                     : GridRowTransfer.DuplicateRowsAsync(focused, cancellationToken)).ConfigureAwait(true);
+            }
+
+            return;
+        }
+
+        // 행 삭제·되돌리기: 행 번호(long)를 주면 그 행 하나, 아니면 고른 모든 행.
+        if (context.Parameter is not long && context.CommandId is "oranda.grid.edit.deleteRow" or "oranda.grid.edit.resetRow")
+        {
+            if ((context.Parameter as ResultGrid.ResultGridModel ?? ResultGrid.ResultGridCommands.Active) is { } target)
+            {
+                if (context.CommandId == "oranda.grid.edit.deleteRow")
+                {
+                    await GridRowOps.DeleteSelectedAsync(target, cancellationToken).ConfigureAwait(true);
+                }
+                else
+                {
+                    GridRowOps.ResetSelected(target);
+                }
             }
 
             return;

@@ -358,17 +358,17 @@ public sealed partial class GridEditTests
         foreach (var id in KeymapLoader.PresetIds)
         {
             var bindings = KeymapLoader.LoadPreset(id).Bindings;
-            foreach (var (command, key) in new[]
+            foreach (var (command, keys) in new[]
                      {
-                         ("oranda.grid.copyRows", "Primary+Alt+C"),
-                         ("oranda.grid.edit.duplicateRow", "Primary+Shift+D"),
-                         ("oranda.grid.edit.pasteRows", "Primary+Shift+V"),
+                         ("oranda.grid.copyRows", new[] { "Primary+Alt+C" }),
+                         ("oranda.grid.edit.duplicateRow", ["Primary+Shift+D", "Primary+D"]), // Primary+D 는 TSK-11-01(gridFocus 일 때만, 편집기 줄 복제는 editorFocus)
+                         ("oranda.grid.edit.pasteRows", ["Primary+Shift+V"]),
                      })
             {
                 var b = Assert.Single(bindings, x => x.Command == command);
                 Assert.Equal("gridFocus", b.When);
-                Assert.Equal([key], b.KeysFor(macOS: false));
-                Assert.Equal([key], b.KeysFor(macOS: true));
+                Assert.Equal(keys, b.KeysFor(macOS: false));
+                Assert.Equal(keys, b.KeysFor(macOS: true));
             }
         }
     }

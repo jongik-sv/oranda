@@ -115,6 +115,13 @@ public sealed partial class ResultGridControl
         else if (p.X < RowHeaderWidth)
         {
             // 행 머리: 그 행 전체를 고르고, 끌면 행 단위로 넓힌다. 고른 행 안에서 오른쪽 클릭은 선택을 유지한다.
+            if (props.IsLeftButtonPressed && (e.KeyModifiers.HasFlag(KeyModifiers.Control) || e.KeyModifiers.HasFlag(KeyModifiers.Meta)))
+            {
+                _model.ToggleRowInSelection(row); // Ctrl+클릭: 떨어진 행을 더하거나 뺀다(행 삭제·복사·복제가 고른 모든 행에)
+                e.Handled = true;
+                return;
+            }
+
             if (!(props.IsRightButtonPressed && _model.IsSelected(row, 0)))
             {
                 _model.SelectRow(row, e.KeyModifiers.HasFlag(KeyModifiers.Shift));

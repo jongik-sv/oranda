@@ -390,6 +390,7 @@ public partial class SqlResultPaneView : UserControl
         }
 
         keys.Set("gridEditing", es is { CanEdit: true });
+        keys.Set("gridRowsEditable", es is { CanEdit: true } || (es is null && (Vm?.CanStartEditMode ?? false))); // 행 삭제·복제: 편집 모드이거나 켤 수 있는 결과
         keys.Set("gridDirty", es is { IsDirty: true });
         keys.Set("gridNotEditable", es is { CanEdit: false });
         keys.Set("singleTable", es?.Capability.CanAddRowId ?? false);

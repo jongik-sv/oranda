@@ -252,6 +252,7 @@
   "Menu.disabled.gridHasResult": "Run a query first",
   "Menu.disabled.gridHasSelection": "Select cells in the result grid",
   "Menu.disabled.gridQueryResult": "Available only for query results",
+  "Menu.disabled.gridRowsEditable": "Available when the result can be edited",
   "Menu.disabled.hasBookmark": "There are no bookmarks",
   "Menu.disabled.hasDocument": "Open a document first",
   "Menu.disabled.hasExecError": "Available after an execution error",

@@ -51,6 +51,7 @@ public sealed partial class SqlResultPaneViewModel
         m.RelatedRowsRequested += OnRelatedRowsRequested;
         m.EditHintRequested += OnEditHintRequested;
         m.NoticeRequested += OnNoticeRequested;
+        m.EditModeStarter = StartEditModeAsync;
         m.ServerSort = ServerSortAsync;
         m.ServerSortBlockedReason = ServerSortBlockedReason;
         if (oldModel is not null)
@@ -136,6 +137,29 @@ public sealed partial class SqlResultPaneViewModel
     }
 
     public void HideEditHint() => EditHint = null;
+
+    /// <summary>편집 모드가 아닌 이 결과를 편집 모드로 다시 실행할 수 있는지(거른 결과·외래키로 연 결과가 아니고, 다시 실행할 문장과 방법이 있다).</summary>
+    public bool CanStartEditMode =>
+        _editSession is null && _activeFilter is null && !_hasStatementBinds && Statement is not null
+        && (Runner?.RerunForEdit ?? GridEditCommands.Rerun) is not null;
+
+    /// <summary>
+    /// 행 삭제·행 복제가 편집 모드가 아닌 결과에서 불렸을 때 편집 모드를 켠다(F9 와 같은 경로: 같은 문장을 편집 모드로 다시 실행, D-031).
+    /// 거른 결과·외래키로 연 결과·조회 전용(R6, <c>readOnlySession</c>)이면 켜지 않고 false — 부른 쪽이 안내 막대를 띄운다.
+    /// </summary>
+    private async Task<bool> StartEditModeAsync(CancellationToken ct)
+    {
+        var keys = Oranda.App.Shell.ContextKeyService.Shared;
+        if (!CanStartEditMode || (keys?.Get("readOnlySession") ?? false) || (keys?.Get("sessionBusy") ?? false)
+            || Statement is not { } stmt || (Runner?.RerunForEdit ?? GridEditCommands.Rerun) is not { } rerun)
+        {
+            return false;
+        }
+
+        HideEditHint();
+        await rerun(stmt, ct).ConfigureAwait(true);
+        return true;
+    }
 
     /// <summary>안내 막대 단추: 같은 문장을 편집 모드로 다시 실행한다(키가 없으면 ROWID 를 더해서).</summary>
     public Task RunEditHintActionAsync()

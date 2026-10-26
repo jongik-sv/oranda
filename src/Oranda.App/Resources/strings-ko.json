@@ -252,6 +252,7 @@
   "Menu.disabled.gridHasResult": "쿼리 결과가 있어야 쓸 수 있습니다",
   "Menu.disabled.gridHasSelection": "결과 그리드에서 셀을 고르세요",
   "Menu.disabled.gridQueryResult": "질의 결과에서만 쓸 수 있습니다",
+  "Menu.disabled.gridRowsEditable": "편집할 수 있는 결과에서 쓸 수 있습니다",
   "Menu.disabled.hasBookmark": "책갈피가 없습니다",
   "Menu.disabled.hasDocument": "열린 문서가 있어야 쓸 수 있습니다",
   "Menu.disabled.hasExecError": "실행 오류가 있을 때 쓸 수 있습니다",

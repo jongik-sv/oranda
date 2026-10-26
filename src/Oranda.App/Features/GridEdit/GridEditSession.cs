@@ -6,6 +6,12 @@ using Oranda.Language.Editing;
 
 namespace Oranda.App.Features.GridEdit;
 
+/// <summary><see cref="GridEditSession.DeleteRows"/> 결과: 삭제 표시한 기존 행, 바로 없앤 새 행, 이미 지웠거나 지울 수 없어 건너뛴 행.</summary>
+public readonly record struct RowsDeleted(int Marked, int Removed, int Skipped)
+{
+    public int Total => Marked + Removed;
+}
+
 /// <summary>편집 중인 행의 상태(그리드 행 머리 표시용).</summary>
 public enum GridEditRowState
 {
@@ -267,6 +273,63 @@ public sealed class GridEditSession
         OnChanged();
     }
 
+    /// <summary>
+    /// 여러 행을 한 번에 지운다(TSK-11-01). 행마다 <see cref="DeleteRow"/> 와 같은 규칙이고 <see cref="Changed"/> 는 마지막에 한 번만 낸다
+    /// (1만 행에서 격자 갱신 1회). 새 행은 바로 없어지고 기존 행은 삭제 표시가 된다. 편집할 수 없으면 아무것도 하지 않는다.
+    /// </summary>
+    public RowsDeleted DeleteRows(IReadOnlyList<long> rows)
+    {
+        ArgumentNullException.ThrowIfNull(rows);
+        if (!CanEdit)
+        {
+            return new RowsDeleted(0, 0, rows.Count);
+        }
+
+        int marked = 0, removed = 0, already = 0;
+        using (Batch())
+        {
+            foreach (var row in rows)
+            {
+                if (row >= 0 && _deletes.Contains(row))
+                {
+                    already++;
+                    continue;
+                }
+
+                if (row < 0 && !_inserts.ContainsKey(row))
+                {
+                    already++;
+                    continue;
+                }
+
+                DeleteRow(row);
+                if (row < 0)
+                {
+                    removed++;
+                }
+                else
+                {
+                    marked++;
+                }
+            }
+        }
+
+        return new RowsDeleted(marked, removed, already);
+    }
+
+    /// <summary>여러 행의 바꾼 값·삭제 표시·새 행을 한 번에 되돌린다. <see cref="Changed"/> 는 마지막에 한 번.</summary>
+    public void ResetRows(IReadOnlyList<long> rows)
+    {
+        ArgumentNullException.ThrowIfNull(rows);
+        using (Batch())
+        {
+            foreach (var row in rows)
+            {
+                ResetRow(row);
+            }
+        }
+    }
+
     public void ResetRow(long row)
     {
         _originals.Remove(row);
@@ -276,6 +339,39 @@ public sealed class GridEditSession
         _deletes.Remove(row);
         _failures.Remove(row);
         OnChanged();
+    }
+
+    private int _batchDepth;
+    private bool _batchChanged;
+
+    /// <summary>
+    /// 여러 변경을 묶는다: 닫을 때까지 <see cref="Changed"/> 를 미루고 닫을 때 한 번만 낸다(바뀐 게 있을 때).
+    /// 큰 선택을 행마다 갱신하지 않게 하려는 것이다.
+    /// </summary>
+    public IDisposable Batch()
+    {
+        _batchDepth++;
+        return new BatchScope(this);
+    }
+
+    private sealed class BatchScope(GridEditSession owner) : IDisposable
+    {
+        private bool _done;
+
+        public void Dispose()
+        {
+            if (_done)
+            {
+                return;
+            }
+
+            _done = true;
+            if (--owner._batchDepth == 0 && owner._batchChanged)
+            {
+                owner._batchChanged = false;
+                owner.Changed?.Invoke(owner, EventArgs.Empty);
+            }
+        }
     }
 
     public void ResetAll()
@@ -488,5 +584,14 @@ public sealed class GridEditSession
         OnChanged();
     }
 
-    private void OnChanged() => Changed?.Invoke(this, EventArgs.Empty);
+    private void OnChanged()
+    {
+        if (_batchDepth > 0)
+        {
+            _batchChanged = true;
+            return;
+        }
+
+        Changed?.Invoke(this, EventArgs.Empty);
+    }
 }

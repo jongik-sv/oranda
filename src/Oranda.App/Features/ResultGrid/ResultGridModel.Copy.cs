@@ -85,8 +85,14 @@ public sealed partial class ResultGridModel
             return [];
         }
 
-        var (from, to) = SelectionRect();
-        return await ReadRowsAsync(from.Row, to.Row, ordinals, ct).ConfigureAwait(true);
+        // 고른 행 구간을 화면 순서로 이어 읽는다(칸 범위가 걸친 행 + Ctrl 로 더한 떨어진 행).
+        var rows = new List<IReadOnlyList<object?>>();
+        foreach (var (first, last) in SelectedRowRanges())
+        {
+            rows.AddRange(await ReadRowsAsync(first, last, ordinals, ct).ConfigureAwait(true));
+        }
+
+        return rows;
     }
 
     /// <summary>
@@ -98,6 +104,7 @@ public sealed partial class ResultGridModel
         ArgumentNullException.ThrowIfNull(ordinals);
         var rows = new List<IReadOnlyList<object?>>();
         rows.Capacity = (int)Math.Clamp(lastRow - firstRow + 1, 0, 100_000);
+        ResultPage? page = null; // 같은 페이지의 행은 한 번만 가져오고 알린다(행마다 Changed 를 내면 큰 선택에서 선택 집계가 행 수만큼 다시 돈다)
         for (var r = firstRow; r <= lastRow; r++)
         {
             var values = new object?[ordinals.Count];
@@ -109,8 +116,12 @@ public sealed partial class ResultGridModel
                     break;
                 }
 
-                var page = await _cache.GetPageAsync((int)(src / PageSize), ct).ConfigureAwait(true);
-                OnPage(page);
+                if (page is null || page.PageIndex != (int)(src / PageSize))
+                {
+                    page = await _cache.GetPageAsync((int)(src / PageSize), ct).ConfigureAwait(true);
+                    OnPage(page);
+                }
+
                 var i = (int)(src - page.FirstRowIndex);
                 if (i < 0 || i >= page.RowCount)
                 {

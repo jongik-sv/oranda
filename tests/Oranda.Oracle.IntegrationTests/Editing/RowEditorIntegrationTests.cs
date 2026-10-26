@@ -167,6 +167,33 @@ public sealed class RowEditorIntegrationTests : IAsyncLifetime
         Assert.Equal("200", await ScalarFromOtherSessionAsync($"SELECT sal FROM {_pkTable} WHERE id = 2"));
     }
 
+    // TSK-11-01: 결과 격자에서 떨어진 여러 행을 지운 변경(GridEditSession.BuildChanges 가 만드는 Delete 목록과 같은 모양)을 반영하면
+    // DB 의 행 수가 고른 개수만큼 줄고, 되돌린(목록에서 뺀) 행은 남는다.
+    [Fact]
+    public async Task Multi_row_delete_applies_one_delete_per_chosen_row_and_leaves_the_reverted_row()
+    {
+        await using var s = await OpenAsync();
+        var (plan, page) = await QueryForEditAsync(s, Q($"SELECT t.id, t.name, t.sal FROM {_pkTable} t ORDER BY id"), _pkTable);
+        Assert.True(plan.Capability.CanEdit);
+        var key = plan.Capability.KeyColumnOrdinals;
+
+        RowChange Del(int row) => new(RowChangeKind.Delete, row, plan.Capability.Target!) { Key = Row(plan, page, row, key) };
+
+        // 1·3·4번째 행(떨어진 행 + 이어진 행)을 골랐다가 3번째 행은 되돌렸다 → 반영 대상은 1·4번째.
+        RowChange[] changes = [Del(0), Del(3)];
+        var dml = _editor.BuildDml(changes);
+        Assert.Equal(2, dml.Count);
+        Assert.All(dml, d => Assert.Equal($"DELETE FROM SYSTEM.{_pkTable} WHERE ID = :k1", d.Text));
+
+        var result = await _editor.ApplyAsync(s, changes, commit: true, default);
+
+        Assert.Equal(2, result.AppliedCount);
+        Assert.True(result.Committed);
+        Assert.Empty(result.Failures);
+        Assert.Equal("3", await ScalarFromOtherSessionAsync($"SELECT COUNT(*) FROM {_pkTable}"));
+        Assert.Equal("2,3,5", await ScalarFromOtherSessionAsync($"SELECT LISTAGG(id, ',') WITHIN GROUP (ORDER BY id) FROM {_pkTable}"));
+    }
+
     [Fact]
     public async Task Duplicate_key_insert_is_rolled_back_and_reported()
     {

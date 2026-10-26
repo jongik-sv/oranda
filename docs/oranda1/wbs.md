@@ -806,7 +806,7 @@ levels:
 ## WP-11: 결과 격자 여러 행 삭제·행 복사
 <!-- 담당 PC: win144(Windows 개발 PC) — 맥북 세션은 이 WP 의 Task 를 하지 않는다. 2026-10-26 사용자 요청 「조회 결과에서 여러줄 삭제/행 복사」, 조정자 기본안. 설계 = PRD 15, TRD 13, decisions D-029~D-031. 레인 sc-rows 하나. 통합 확인은 TSK-10-03 이 맡는다 -->
 
-- [ ] TSK-11-01: 결과 격자 여러 행 삭제·행 복사 [win144] w:2 2026-10-27~2026-10-28
+- [x] TSK-11-01: 결과 격자 여러 행 삭제·행 복사 [win144] w:2 2026-10-27~2026-10-28
   - category: dev
   - domain: frontend
   - model: opus
@@ -815,7 +815,7 @@ levels:
   - prd-ref: PRD 15 RW-01~RW-09, TRD 13, D-029, D-030, D-031
   - requirements: 먼저 지금 동작을 시험으로 재서(여러 행을 고르는 방법 — 행 머리 클릭·Shift·Ctrl·셀 범위 — 별로 삭제·되돌리기·복사·복제가 활성 행 하나만 쓰는지, 복사가 화면 순서인지) 무엇이 안 되는지 결과에 적는다. 그다음 `oranda.grid.edit.deleteRow`·행 되돌리기·`duplicateRow`·`oranda.grid.copyRows` 계열이 고른 모든 행을 화면 순서로 다루게 한다. 새로 더한 행은 바로 없어지고 기존 행은 삭제 표시 → 반영 때 DELETE. 메뉴 이름에 개수(「행 3개 삭제」, 하나면 「행 삭제」, 영어 Delete {0} Rows). 단축키 행 삭제 Ctrl+Delete·행 복제 Ctrl+D(`gridFocus` 일 때만; 프리셋 4개에서 겹치면 그 프리셋은 두고 보고), Delete 키 단독 동작은 바꾸지 않는다. 편집 모드가 아닐 때 편집 가능한 단일 표면이면 편집 모드를 켜고(F9 와 같은 경로) 실행, 편집할 수 없으면 꺼짐 + 이유 툴팁, 조회 전용(R6)·`readOnlySession` 막힘 그대로. 1만 행 선택 삭제에서도 화면이 멈추지 않게 이벤트·갱신을 한 번만 낸다. 위치: `GridEditCommands.cs`·`GridEditSession`(`DeleteRow`·`ResetRow` 여러 행 짝)·`GridEditBinding.ToEditRow`·`ResultGridModel` 선택 API·`docs/design/keymaps/*.json`·`Shell/Resources/CommandTitles*.json`; 제약: 단일 행 삭제의 미리보기 DML 모양·반영 경로(`ApplyAsync`)·`Shell/Menus/**` 를 고치지 않는다. 제품 조회 경로에 쓰기 SQL 을 더하지 않는다(반영은 기존 편집 모드 경로); 기술: TRD 13.2; 비고: 담당 PC: win144(Windows 개발 PC) — 맥북 세션은 이 Task 를 하지 않는다
   - acceptance: 셀 범위 3행·Ctrl 로 떨어진 행·새 행 + 기존 행 섞은 선택이 한 번에 삭제 표시되고 미리보기에 DELETE n개가 나온다 / 「행 되돌리기」 가 고른 모든 행에 적용된다 / 「행 복사」 가 고른 행을 화면 순서(정렬·거르기 반영)로 복사하고 머리글 포함 짝은 첫 줄이 열 이름이다 / 「행 복제」 가 고른 행 수만큼 복제한다 / 오른쪽 클릭 메뉴에 「행 3개 삭제」 처럼 개수가 보인다(라이트·다크 PNG) / 편집 모드가 꺼진 편집 가능한 표면에서 행 삭제를 누르면 편집 모드가 켜진다 / R6·`readOnlySession`·편집 불가 결과는 막힘 + 이유가 지금과 같다 / 1만 행 삭제 시간 측정값이 결과에 있다 / Oracle 통합(가능하면): 여러 행 삭제 반영 후 행 수 확인, 안 되면 이유 보고 / 단일 행 동작 회귀 없음 / `dotnet build Oranda.sln -warnaserror`·전체 시험 통과
-  - note: 담당 PC: win144(Windows 개발 PC) — 맥북 세션은 이 Task 를 하지 않는다. 크기 M. 레인 sc-rows. 2026-10-26 사용자 요청 「조회 결과에서 여러줄 삭제/행 복사」
+  - note: 담당 PC: win144(Windows 개발 PC) — 맥북 세션은 이 Task 를 하지 않는다. 크기 M. 레인 sc-rows. 2026-10-26 사용자 요청 「조회 결과에서 여러줄 삭제/행 복사」. 결과: 행 삭제·되돌리기·복사·복제가 고른 모든 행(칸 범위·Shift·행 머리 Ctrl+클릭)에 적용되고 메뉴 이름에 개수(행 3개 삭제), 편집 모드가 꺼진 편집 가능한 결과는 자동으로 켠 뒤 실행, Ctrl+Delete·Ctrl+D 추가, 1만 행 삭제 1.1초·복사 0.2초·복제 0.3초 (win144)
 
 ## WP-12: 결함 수정
 <!-- 담당 PC: win144(Windows 개발 PC) — 맥북 세션은 이 WP 의 Task 를 하지 않는다. 2026-10-26 사용자 결함 보고. PRD·TRD·decisions 는 결함에 대해 쓰지 않는다(원인·수정은 레인 결과에 적는다). 레인 sc-invalid·sc-plsqlrun·sc-export. 통합 확인은 TSK-10-03 이 맡는다 -->

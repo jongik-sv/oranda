@@ -115,7 +115,11 @@ public sealed partial class ResultGridModel : IAsyncDisposable
     public bool NeedsChange(long viewRow, int ordinal) => EditOverlay?.NeedsChange(viewRow, ordinal) ?? false;
 
     /// <summary>편집 상태가 바뀌었으니 다시 그린다.</summary>
-    public void NotifyEditChanged() => RaiseChanged();
+    public void NotifyEditChanged()
+    {
+        ClampSelection(); // 새 행을 지우면 행 수가 줄어 고른 행이 끝을 넘을 수 있다
+        RaiseChanged();
+    }
 
     private HashSet<long>? _flashRows;
 
@@ -341,6 +345,12 @@ public sealed partial class ResultGridModel : IAsyncDisposable
 
     /// <summary>이 칸이 보이게 스크롤해 달라는 요청(새로 더한 행으로 옮길 때). 그리드 컨트롤이 받는다.</summary>
     public event EventHandler<GridCell>? RevealRequested;
+
+    /// <summary>
+    /// 편집 모드가 아닌 결과를 편집 모드로 다시 실행한다(행 삭제·행 복제 명령이 부른다). 결과 영역이 채운다.
+    /// 켤 수 없으면(거른 결과·조회 전용 등) false 를 돌려 안내 막대를 띄우게 한다. 비어 있으면 켤 수 없다.
+    /// </summary>
+    public Func<CancellationToken, Task<bool>>? EditModeStarter { get; set; }
 
     public void RequestEditHint() => EditHintRequested?.Invoke(this, EventArgs.Empty);
 

@@ -14,6 +14,7 @@ public sealed class ResultGridSettingsStartup(SettingsService settings) : IStart
     public Task RunAsync(CancellationToken ct)
     {
         ResultGridModel.LocalSortMaxRowsProvider = () => settings.Current.Grid.LocalSortMaxRows;
+        Oranda.App.Shell.ShellText.TitleOverride ??= GridRowTitles.For; // 행 명령 이름에 고른 행 수(TSK-11-01)
         return Task.CompletedTask;
     }
 }

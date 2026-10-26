@@ -86,7 +86,7 @@
 | `dedicatedSession` | 활성 SQL 탭이 전용 세션 탭이고 그 세션이 끊기지 않음(D-017). 공유 접속이 없어도 실행 명령을 켠다 |
 | `hasSelection`, `canUndo`, `canRedo`, `hasFindText`, `hasBookmark`, `readOnlyDoc`, `canNavigateBack`, `canNavigateForward` | 편집기 상태 |
 | `hasExecError`, `hasLastSqlId` | 마지막 실행 결과 |
-| `gridHasResult`, `gridHasSelection`, `gridHasMoreRows`, `gridQueryResult`, `gridEditing`, `gridDirty`, `gridNotEditable`, `singleTable`, `joinResult` | 그리드 상태(`gridQueryResult` = 질의 문장이 만든 결과, PL/SQL REF CURSOR 결과 제외 — 전체 행 수 세기·결과 거르기가 쓴다) |
+| `gridHasResult`, `gridHasSelection`, `gridHasMoreRows`, `gridQueryResult`, `gridEditing`, `gridRowsEditable`, `gridDirty`, `gridNotEditable`, `singleTable`, `joinResult` | 그리드 상태(`gridRowsEditable` = 편집 모드이거나 편집 모드로 바로 켤 수 있는 결과(거른 결과·외래키로 연 결과 제외) — 행 삭제·행 복제, `gridQueryResult` = 질의 문장이 만든 결과, PL/SQL REF CURSOR 결과 제외 — 전체 행 수 세기·결과 거르기가 쓴다) |
 | `schemaNodeSelected`, `plsqlNodeSelected`, `recyclebinNodeSelected` | 스키마 트리 선택 |
 | `isPackageDoc`, `serverSourceChanged`, `plsqlRunnable` | PL/SQL 편집기 |
 | `monitorSessionOpen`, `monitorSessionSelected`, `monitorSqlOpen`, `monitorSqlSelected` | 모니터 |
@@ -230,7 +230,7 @@
 
 `grid.followForeignKey`(`F4`)·`grid.showReferencingRows`(`Shift+F4`)는 `gridFocus` 에서만 쓴다 — `F4`·`Shift+F4` 의 다른 바인딩(`nav.describeObject`)은 `editorFocus` 라 포커스 자리가 겹치지 않는다. DataGrip 「Related Rows」(F4)를 따랐고, 4개 프리셋 모두 두 열(Windows·mac)이 같다.
 
-`grid.copyRows`(`Ctrl+Alt+C`)·`grid.edit.duplicateRow`(`Ctrl+Shift+D`)·`grid.edit.pasteRows`(`Ctrl+Shift+V`)는 `gridFocus` 에서만 쓴다. 4개 프리셋 모두 그리드와 겹치는 자리(전역·`sqlDocFocus`·`gridFocus`)에서 비어 있던 키이고, 맥에서는 `mac` 없이 `Cmd+Option+C`·`Cmd+Shift+D`·`Cmd+Shift+V` 다(5.2 예약 키가 아니다). 「행 복제」·「행 붙여넣기」는 편집 모드가 아닐 때도 불러 「편집 모드로 다시 실행」 안내 막대를 띄우므로 활성 조건이 `gridEditing` 이 아니다.
+`grid.copyRows`(`Ctrl+Alt+C`)·`grid.edit.duplicateRow`(`Ctrl+Shift+D`)·`grid.edit.pasteRows`(`Ctrl+Shift+V`)는 `gridFocus` 에서만 쓴다. 4개 프리셋 모두 그리드와 겹치는 자리(전역·`sqlDocFocus`·`gridFocus`)에서 비어 있던 키이고, 맥에서는 `mac` 없이 `Cmd+Option+C`·`Cmd+Shift+D`·`Cmd+Shift+V` 다(5.2 예약 키가 아니다). 「행 붙여넣기」는 편집 모드가 아닐 때도 불러 「편집 모드로 다시 실행」 안내 막대를 띄우므로 활성 조건이 `gridEditing` 이 아니다. 「행 삭제」·「행 복제」(TSK-11-01, D-029~D-031)는 고른 모든 행(칸 범위가 걸친 행 + 행 머리 `Ctrl`+클릭으로 더한 행)에 하고, 편집 모드가 꺼진 편집 가능한 결과에서는 편집 모드로 다시 실행한 뒤 실행하며(다시 읽은 행이 처음 고른 행과 같을 때만), 고른 행이 둘 이상이면 메뉴 이름에 개수가 붙는다(`행 3개 삭제`). `Ctrl+D`·`Ctrl+Delete` 는 `gridFocus` 에서만 쓴다(편집기 줄 복제 `Ctrl+D` 는 `editorFocus`). 맥은 `Cmd+Backspace`·`Cmd+Delete`.
 
 `nav.quickOpenObject`(`Ctrl+P`)·`schema.reveal`(`Alt+F1`)은 `mac` 없이 맥에서 `Cmd+P`·`Option+F1` 이다. `Cmd+P` 는 관례상 인쇄지만 Oranda 에는 인쇄 명령이 없고 5.2 예약 키도 아니다(VS Code 「Quick Open」도 맥에서 `Cmd+P`). `Alt+F1` 은 DataGrip 「Select In」 키를 따랐다. 4개 프리셋 모두 두 열에서 비어 있던 키다.
 
@@ -475,9 +475,9 @@
 | `oranda.grid.flashback.history` | 이 행 변경 이력 (활성 행의 전체 변경 이력 질의를 새 SQL 탭에 넣고 실행. 일반 실행 결과도 단일 표·PK 가 있으면 동작) | - | `gridFocus` | `gridHasSelection` | TSK-13-05, TSK-13-31, TSK-13-33 |
 | `oranda.grid.flashback.restore` | 이전 값으로 되돌리기… | - | `gridFocus` | `gridHasSelection && !sessionBusy` | TSK-13-05 |
 | `oranda.grid.edit.addRow` | 행 추가 | `Alt+Insert` | `gridFocus` | `gridEditing` | TSK-06-04 |
-| `oranda.grid.edit.duplicateRow` | 행 복제 | `Ctrl+Shift+D` | `gridFocus` | `gridHasSelection` | TSK-06-04 |
+| `oranda.grid.edit.duplicateRow` | 행 복제 | `Ctrl+Shift+D`, `Ctrl+D` | `gridFocus` | `gridHasSelection && !readOnlySession && gridRowsEditable` | TSK-06-04, TSK-11-01 |
 | `oranda.grid.edit.pasteRows` | 행 붙여넣기 | `Ctrl+Shift+V` | `gridFocus` | `gridHasResult` | TSK-06-04 |
-| `oranda.grid.edit.deleteRow` | 행 삭제 | `Alt+Delete` | `gridFocus` | `gridEditing` | TSK-06-04 |
+| `oranda.grid.edit.deleteRow` | 행 삭제 | `Alt+Delete`, `Ctrl+Delete` | `gridFocus` | `gridHasSelection && !readOnlySession && gridRowsEditable` | TSK-06-04, TSK-11-01 |
 | `oranda.grid.edit.previewDml` | 반영할 DML 미리보기 | - | `gridFocus` | `gridDirty` | TSK-06-04 |
 | `oranda.grid.edit.applyAndCommit` | 반영 후 커밋 | - | `gridFocus` | `gridDirty && !sessionBusy` | TSK-06-04 |
 | `oranda.grid.edit.apply` | 반영(커밋 안 함) | - | `gridFocus` | `gridDirty && !sessionBusy` | TSK-06-04 |

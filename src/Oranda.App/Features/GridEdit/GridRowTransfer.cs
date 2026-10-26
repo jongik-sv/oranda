@@ -96,12 +96,14 @@ public static class GridRowTransfer
     public static async Task<int> DuplicateRowsAsync(ResultGridModel grid, CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(grid);
-        if (GridEditBinding.Of(grid) is not { CanEdit: true } s)
+
+        // 편집 모드가 꺼진 편집 가능한 결과면 먼저 켠다(D-031). 켤 수 없으면 안내 막대가 이유를 보인다.
+        if (await GridRowOps.EnsureEditModeAsync(grid, ct).ConfigureAwait(true) is not { } ready)
         {
-            grid.RequestEditHint();
             return 0;
         }
 
+        (grid, var s) = ready;
         if (!grid.HasSelection)
         {
             return 0;
@@ -111,9 +113,12 @@ public static class GridRowTransfer
         var rows = await grid.ReadSelectedRowsAsync(ordinals, ct).ConfigureAwait(true);
         var firstNew = grid.RowCount;
         var col = grid.Active.Col;
-        foreach (var row in rows)
+        using (s.Batch()) // 여러 행을 더해도 격자는 한 번만 갱신한다
         {
-            s.AddRowWith(ordinals.Select(o => KeyValuePair.Create(o, row[o])), flagKeys: true);
+            foreach (var row in rows)
+            {
+                s.AddRowWith(ordinals.Select(o => KeyValuePair.Create(o, row[o])), flagKeys: true);
+            }
         }
 
         if (rows.Count == 0)

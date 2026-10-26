@@ -83,6 +83,33 @@ public static class GridEditBinding
     }
 
     /// <summary>
+    /// 화면 행 여러 개 → 편집 행 번호(같은 순서). 새 행 순서표를 한 번만 만들어 행마다 다시 정렬하지 않는다(1만 행 선택 삭제).
+    /// 행을 지우거나 더하기 <b>전에</b> 한꺼번에 바꿔 둬야 한다 — 새 행을 지우면 뒤 화면 행의 번호가 당겨진다.
+    /// </summary>
+    public static List<long> ToEditRows(ResultGridModel model, GridEditSession session, IEnumerable<long> viewRows)
+    {
+        ArgumentNullException.ThrowIfNull(model);
+        ArgumentNullException.ThrowIfNull(session);
+        ArgumentNullException.ThrowIfNull(viewRows);
+        var inserted = Inserted(session);
+        var baseCount = model.BaseRowCount;
+        var result = new List<long>();
+        foreach (var viewRow in viewRows)
+        {
+            if (viewRow < baseCount)
+            {
+                result.Add(viewRow);
+                continue;
+            }
+
+            var i = (int)(viewRow - baseCount);
+            result.Add(i >= 0 && i < inserted.Count ? inserted[i] : viewRow);
+        }
+
+        return result;
+    }
+
+    /// <summary>
     /// 셀 편집기가 넣은 글자를 열 종류에 맞는 값으로 바꾼다. 빈 글자는 NULL. 숫자·날짜를 읽지 못하면 글자 그대로 넘겨
     /// 반영할 때 서버가 판단하게 한다(바로 거절하지 않는다).
     /// </summary>
