@@ -4,6 +4,7 @@ using Avalonia.Headless;
 using Avalonia.Input;
 using Avalonia.Styling;
 using Avalonia.Threading;
+using Avalonia.VisualTree;
 using Dock.Model.Controls;
 using Dock.Model.Core;
 using Oranda.App.Shell;
@@ -459,6 +460,35 @@ public class ShellHeadlessTests
         Assert.Equal("oranda.help.about", vm.Selected!.Id);
 
         await vm.ExecuteSelectedAsync();
+        await HeadlessHost.WaitUntil(() => !shell.IsPaletteOpen);
+        Assert.Equal("Oranda 정보", shell.LastWindow!.Title);
+        shell.LastWindow.Close();
+    });
+
+    [Fact]
+    public Task Command_palette_runs_the_command_clicked_with_the_mouse() => HeadlessHost.Run(async () =>
+    {
+        using var h = new ShellHarness();
+        var shell = h.Get<ShellController>();
+        h.Window.Activate();
+
+        var primary = OperatingSystem.IsMacOS() ? RawInputModifiers.Meta : RawInputModifiers.Control;
+        h.Window.KeyPress(Key.P, primary | RawInputModifiers.Shift, PhysicalKey.P, "P");
+        await HeadlessHost.WaitUntil(() => shell.IsPaletteOpen);
+
+        var window = shell.Palette!;
+        var vm = Assert.IsType<CommandPaletteViewModel>(window.DataContext);
+        vm.Query = "정보";
+        var about = vm.Results.First(r => r.Id == "oranda.help.about");
+        // 선택이 다른 줄에 있어도 클릭한 줄이 실행돼야 한다.
+        vm.Selected = vm.Results.FirstOrDefault(r => r != about);
+        Dispatcher.UIThread.RunJobs();
+
+        var row = window.GetVisualDescendants().OfType<ListBoxItem>().First(i => ReferenceEquals(i.DataContext, about));
+        var center = row.TranslatePoint(new Point(row.Bounds.Width / 2, row.Bounds.Height / 2), window)!.Value;
+        window.MouseDown(center, MouseButton.Left);
+        window.MouseUp(center, MouseButton.Left);
+
         await HeadlessHost.WaitUntil(() => !shell.IsPaletteOpen);
         Assert.Equal("Oranda 정보", shell.LastWindow!.Title);
         shell.LastWindow.Close();
