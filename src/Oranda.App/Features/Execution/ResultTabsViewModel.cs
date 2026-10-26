@@ -178,6 +178,24 @@ public sealed partial class ResultTabsViewModel : ViewModelBase
     }
 
     /// <summary>
+    /// 고정하지 않은 오류 탭(실패·거부·접속 없음 안내 등)만 닫는다. 새 문장을 실행하기 시작할 때 부른다 —
+    /// 실행 중에 지난 실행의 오류가 그대로 보여 계속 오류가 나는 것처럼 보이지 않게. 정상 결과·고정한 탭은 건드리지 않는다.
+    /// </summary>
+    public void ClearErrors()
+    {
+        var errors = Tabs.Where(t => t.IsError && !t.IsPinned).ToList();
+        if (errors.Count == 0)
+        {
+            return;
+        }
+
+        foreach (var t in errors)
+        {
+            Close(t);
+        }
+    }
+
+    /// <summary>
     /// 새 결과 탭 번호: 남은 탭 수 + 1. 고정한 탭이 이미 그 번호(「결과 N」)를 쓰고 있으면 쓰지 않은 다음 번호.
     /// </summary>
     public int NextOrdinal()

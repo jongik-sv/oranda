@@ -246,6 +246,7 @@ public sealed partial class ExecutionController
         State.BeginRun(session.Id);
         if (results is not null)
         {
+            results.ClearErrors(); // 지난 실행의 오류 탭은 실행을 시작하는 순간 지운다(오류 상태는 State.BeginRun 이 지웠다)
             results.IsRunning = true; // 결과 영역 위쪽의 얇은 진행 막대
         }
 

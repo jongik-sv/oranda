@@ -875,6 +875,17 @@ levels:
   - acceptance: Startup_does_not_load_oracle_or_antlr_assemblies 통과 / 스키마 브라우저 시험 통과(접속 뒤 만든 패널이 지금 접속을 따름) / `dotnet build Oranda.sln -warnaserror`
   - note: 담당 PC: win144(Windows 개발 PC) — 맥북 세션은 이 Task 를 하지 않는다. 원인 커밋 4c287d4. 레인 sc-startfix. 결과: `IServiceProvider.GetRegisteredOrDefault<T>()`(컨테이너면 지연 어셈블리를 깨우지 않는 GetRegistered, 시험용 공급자면 GetService)를 더해 SchemaBrowserViewModel 생성자와 같은 패턴인 PlsqlWorkspacePersistence.AttachOpened 에 썼다; ShellHeadless·SchemaBrowser·ServiceContainer·PlsqlWorkspace 관련 274개 + 새 단위 시험 통과 (win144)
 
+- [x] TSK-12-06: 새 쿼리 실행 중 이전 쿼리 오류가 그대로 보임 [win144] w:1 2026-10-26~2026-10-27
+  - category: defect
+  - domain: frontend
+  - model: opus
+  - priority: high
+  - tags: execution, result-tabs, error-state, win144
+  - prd-ref: 결함 보고 2026-10-26
+  - requirements: 사용자 보고 「앞선 스텝에서 오류가 발생한 조회 결과가 새로운 쿼리를 실행 중일때도 보여서 마치 계속 에러가 난것 처럼 보인다. 새로운 쿼리가 시작되면 이전 쿼리의 오류 메시지는 지워지는게 맞겠다.」 새 실행이 시작되는 순간(실행 중 표시가 뜰 때) 그 탭의 이전 오류 결과 탭·오류 상태를 지운다. 정상 결과는 기존 규칙(결과 고정 핀·여러 결과 탭)을 따르고 고정한 탭은 건드리지 않는다. 메시지 창(로그)의 과거 오류 줄은 기록이라 남긴다. 다른 편집기 탭의 결과 영역은 그대로. 스크립트(F5)·한 문장(Ctrl+Enter)·MyBatis 값 실행 모두 같은 규칙; 제약: 범위를 넓히지 않는다
+  - acceptance: 오류 결과 뒤 새 실행을 시작한 직후(완료 전) 오류 탭·오류 상태가 없다 / 완료 뒤 새 결과만 보인다 / 고정 탭 유지 / 한 문장·스크립트·새 결과 탭·MyBatis 경로 / 취소·실패한 새 실행은 새 결과만 / `dotnet build Oranda.sln -warnaserror`
+  - note: 담당 PC: win144(Windows 개발 PC) — 맥북 세션은 이 Task 를 하지 않는다. 사용자 원문(2026-10-26): 「앞선 스텝에서 오류가 발생한 조회 결과가 새로운 쿼리를 실행 중일때도 보여서 마치 계속 에러가 난것 처럼 보인다.」 크기 S. 레인 sc-errclear / 결과: 잰 결과 오류 상태(State)는 BeginRun 이 이미 지웠지만 결과 영역의 오류 탭은 실행이 끝나 Clear 가 불릴 때까지 한 문장·MyBatis 실행 내내 남았다(스크립트는 시작 때 Clear). ResultTabsViewModel.ClearErrors(고정 안 한 오류 탭만 닫음)를 더해 실행 시작 지점 GuardedAsync 에서 부르게 고쳤다; 새 시험 9개 통과, 실행·편집기·결과 탭 관련 697개 통과, PNG 는 ~/.coord/scripts-find/shots/sc-errclear (win144)
+
 ## WP-13: 작은 개선
 <!-- 담당 PC: win144(Windows 개발 PC) — 맥북 세션은 이 WP 의 Task 를 하지 않는다. 2026-10-26 사용자 요청, 조정자 기본안(사용자 「묻지 말고 진행」). 설계 = decisions D-032, PRD·TRD 는 따로 쓰지 않는다(작은 화면 개선). 레인 sc-ddl. 통합 확인은 TSK-10-03 이 맡는다 -->
 
