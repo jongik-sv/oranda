@@ -106,7 +106,7 @@ public class SqlWorkspaceShellTests
 
         Dispatcher.UIThread.RunJobs();
         Assert.Equal(25, ws.Tabs.Count);
-        Assert.Equal(oneRow, strip.Bounds.Height); // 줄을 바꾸지 않는다
+        Assert.True(strip.Bounds.Height - oneRow <= 10); // 줄을 바꾸지 않는다(가로 스크롤 막대 두께만 더해진다)
         Assert.True(list.IsVisible);
 
         bool Visible(SqlEditorViewModel tab)
