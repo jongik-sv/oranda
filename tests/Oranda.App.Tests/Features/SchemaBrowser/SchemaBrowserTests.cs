@@ -150,6 +150,72 @@ public class SchemaBrowserTests
     }
 
     [Fact]
+    public async Task Typing_a_name_filter_reuses_the_invalid_list_but_toggling_invalid_reads_it_again()
+    {
+        var h = new Harness();
+        h.Vm.DebounceMilliseconds = 0;
+        await h.Vm.SetSessionAsync(h.Session);
+        var calls = h.Meta.ListObjectsCalls; // 내 스키마: INVALID 목록 + 전체 목록
+
+        h.Vm.FilterText = "emp";
+        await Shell.Headless.HeadlessHost.WaitUntil(() => !h.Vm.IsLoading);
+        Assert.Equal(calls + 1, h.Meta.ListObjectsCalls); // 이름만 바뀌면 전체 목록만 다시 읽는다
+
+        h.Vm.InvalidOnly = true;
+        await Shell.Headless.HeadlessHost.WaitUntil(() => !h.Vm.IsLoading);
+        Assert.Equal(calls + 2, h.Meta.ListObjectsCalls); // 켜면 한 번(INVALID 목록 = 결과)
+        Assert.True(h.Meta.LastQuery!.InvalidOnly);
+
+        h.Vm.InvalidOnly = false;
+        await Shell.Headless.HeadlessHost.WaitUntil(() => !h.Vm.IsLoading);
+        Assert.Equal(calls + 4, h.Meta.ListObjectsCalls); // 끄면 INVALID 목록을 서버에서 새로 읽는다(옛 목록을 쓰지 않는다)
+    }
+
+    [Fact]
+    public async Task Rapid_typing_and_toggling_read_the_server_once()
+    {
+        var h = new Harness();
+        await h.Vm.SetSessionAsync(h.Session);
+        var calls = h.Meta.ListObjectsCalls;
+        h.Vm.DebounceMilliseconds = 80;
+
+        foreach (var text in new[] { "e", "em", "emp", "emp*", "emp_" })
+        {
+            h.Vm.FilterText = text; // 입력마다 앞 대기를 취소하고 다시 센다
+        }
+
+        h.Vm.InvalidOnly = true; // 토글도 같은 대기에 합쳐진다
+        await Shell.Headless.HeadlessHost.WaitUntil(() => h.Meta.ListObjectsCalls > calls);
+        await Task.Delay(300);
+        Assert.Equal(calls + 1, h.Meta.ListObjectsCalls); // 마지막 값(INVALID 만 + emp_) 한 번만 읽는다
+        Assert.True(h.Meta.LastQuery!.InvalidOnly);
+        Assert.Contains("EMP", h.Meta.LastQuery!.NamePattern, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task Old_tree_stays_while_the_filter_is_read_and_is_swapped_in_one_piece()
+    {
+        var h = new Harness();
+        await h.Vm.SetSessionAsync(h.Session);
+        var scott = h.Vm.Roots[1];
+        Assert.Equal(["테이블 (2)", "뷰 (1)", "프로시저 (1)"], scott.Children.Select(c => c.Title));
+
+        h.Meta.ObjectsGate = new TaskCompletionSource();
+        h.Vm.TypeFilter = "TABLE";
+        var applying = h.Vm.ApplyFilterAsync();
+        Assert.Equal(["테이블 (2)", "뷰 (1)", "프로시저 (1)"], scott.Children.Select(c => c.Title)); // 읽는 동안 「…」 로 비우지 않는다
+        Assert.True(scott.IsExpanded);
+
+        var changes = 0;
+        scott.Children.CollectionChanged += (_, _) => changes++;
+        h.Meta.ObjectsGate.SetResult();
+        await applying;
+        Assert.Equal(["테이블 (2)"], scott.Children.Select(c => c.Title));
+        Assert.True(scott.IsExpanded);
+        Assert.True(changes <= 3, $"트리 변경 알림이 너무 많다: {changes}"); // 비우기 + 범주 몇 개
+    }
+
+    [Fact]
     public async Task Favorites_are_kept_per_connection_and_listed_first()
     {
         var h = new Harness();

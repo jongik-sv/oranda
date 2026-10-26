@@ -68,6 +68,7 @@ public sealed partial class SchemaBrowserViewModel : ToolPanelViewModelBase, IDi
     private SchemaNode? _favoritesNode;
     private SchemaFilter _filter = new();
     private readonly Dictionary<string, HashSet<string>> _invalidByOwner = new(StringComparer.Ordinal);
+    private bool _reuseInvalid;
     private int _generation;
     private int _buildGeneration;
     private int _loadsInFlight;

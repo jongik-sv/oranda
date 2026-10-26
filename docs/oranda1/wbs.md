@@ -820,7 +820,7 @@ levels:
 ## WP-12: 결함 수정
 <!-- 담당 PC: win144(Windows 개발 PC) — 맥북 세션은 이 WP 의 Task 를 하지 않는다. 2026-10-26 사용자 결함 보고. PRD·TRD·decisions 는 결함에 대해 쓰지 않는다(원인·수정은 레인 결과에 적는다). 레인 sc-invalid·sc-plsqlrun·sc-export. 통합 확인은 TSK-10-03 이 맡는다 -->
 
-- [ ] TSK-12-01: INVALID 객체 검색 결함 — 「Invalid 객체 검색 안됨」 [win144] w:2 2026-10-27~2026-10-28
+- [x] TSK-12-01: INVALID 객체 검색 결함 — 「Invalid 객체 검색 안됨」 [win144] w:2 2026-10-27~2026-10-28
   - category: defect
   - domain: fullstack
   - model: opus
@@ -829,7 +829,7 @@ levels:
   - prd-ref: 결함 보고 2026-10-26
   - requirements: 사용자 보고 「Invalid 객체 검색 안됨」(어느 화면인지 말하지 않음). INVALID 로 거르는 곳을 모두 확인한다: 스키마 브라우저 툴바 INVALID 토글(`SchemaBrowserView.axaml`·`SchemaBrowserViewModel.Tree.cs`), 객체 검색 창 「INVALID 만」(`ObjectSearchView.axaml`·`ObjectSearchViewModel.cs`·`Catalog/dbinfo/object_search.sql`·`object_search.11.sql`), DB 도구 「INVALID 컴파일」(`oranda.schema.compileInvalid`) 대상 찾기, DDL 추출 「INVALID 객체만」, 메타 경로(`OracleMetadataProvider.FetchObjectsAsync` 와 캐시 경로 `FilterCached`). 먼저 어느 화면이 왜 안 되는지 재서 적는다(의심: 캐시된 `Status` 가 비었거나 오래됨, 바인드 반복·11g 변형 SQL 차이, 이름·유형 거르기와의 조합·소유자 범위·결과 0 일 때 문구). podman Oracle 컨테이너가 있으면 표 + 그 표를 쓰는 뷰·프로시저를 만들고 표를 DROP(또는 열 변경)해 INVALID 를 만든 뒤 각 화면 경로가 그 객체를 찾는지(캐시 있음·없음 모두) 통합 시험으로 잰다. 두 번째 보고(2026-10-26) = 느린 컴퓨터에서 INVALID 검색이 엄청 느리고 UI 가 이리저리 흔들린다: 질의 시간(실행 계획·불필요한 전체 훑기·딕셔너리 뷰 선택, 11g 변형 포함)과 UI 스레드 점유·결과를 한꺼번에 바꾸는 갱신·거르기 지연(ScheduleFilter)·연속 검색 취소를 재서 고친다(느린 DB·느린 PC 를 가짜 공급자의 지연으로 흉내내고 UI 스레드 막힘 시간·목록 갱신 횟수를 단정). 원인을 고치고 같은 결함이 다시 생기지 않게 단위 + 통합 시험을 남긴다. 컨테이너가 없으면 단위·가짜 공급자 시험으로 좁히고 「통합 미확인」 을 보고한다; 제약: 제품 조회 경로에 쓰기 SQL 을 넣지 않는다(시험 준비용 DDL 은 통합 시험 안에서만); 비고: 담당 PC: win144(Windows 개발 PC) — 맥북 세션은 이 Task 를 하지 않는다
   - acceptance: 어느 화면이 왜 안 됐는지와 원인이 결과에 적혀 있다 / 느린 공급자(지연 주입)에서도 UI 스레드가 막히지 않고 목록이 흔들리지 않는다(갱신 횟수·막힘 시간 측정값이 결과에 있다) / INVALID 객체를 만든 뒤 스키마 브라우저 필터·객체 검색·INVALID 컴파일 대상·DDL 추출이 그 객체를 찾는다(캐시 있음·없음) / 재발 방지 단위 시험 + Oracle 통합 시험(가능하면 26ai·11.2 둘 다, 안 되면 이유) / 정상(VALID) 객체는 INVALID 거르기에 섞이지 않는다 / `dotnet build Oranda.sln -warnaserror`·전체 시험 통과
-  - note: 담당 PC: win144(Windows 개발 PC) — 맥북 세션은 이 Task 를 하지 않는다. 사용자 원문(2026-10-26): 「Invalid 객체 검색 안됨」 / 「Invalid 객체 검색 하는 것이 느린 컴퓨터에서는 엄청 느리고 UI를 막 이리저리 왔다갔다 하게 만들어」. 범위 = 결과 정확성 + 속도 + UI 흔들림. 크기 M. 레인 sc-invalid
+  - note: 담당 PC: win144(Windows 개발 PC) — 맥북 세션은 이 Task 를 하지 않는다. 사용자 원문(2026-10-26): 「Invalid 객체 검색 안됨」 / 「Invalid 객체 검색 하는 것이 느린 컴퓨터에서는 엄청 느리고 UI를 막 이리저리 왔다갔다 하게 만들어」. 범위 = 결과 정확성 + 속도 + UI 흔들림. 크기 M. 레인 sc-invalid / 결과: 원인 = 메타 캐시가 INVALID 거르기에 옛 상태를 써 표를 지운 뒤 새로 INVALID 가 된 객체를 놓침(스키마 브라우저 토글·DDL 추출), 11g 비 DBA 전체 목록 읽기 128초가 같은 접속의 INVALID 질의를 막음. 고침 = INVALID 는 서버에 직접 묻고, 느린 서버는 백그라운드 갱신을 드물게, 필터 때 트리를 비우지 않고 한 번에 바꿔 끼움, 객체 검색 앞 검색 취소·결과 목록째 교체. 26ai·11.2 통합 통과. (win144)
 
 - [ ] TSK-12-02: Windows 에서 프로시저·함수 실행 창이 빈 화면 [win144] w:2 2026-10-27~2026-10-28
   - category: defect

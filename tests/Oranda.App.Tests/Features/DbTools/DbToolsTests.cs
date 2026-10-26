@@ -153,6 +153,41 @@ public class DbToolsTests
     }
 
     [Fact]
+    public async Task Newer_search_cancels_the_older_one_and_results_are_swapped_in_one_piece()
+    {
+        var admin = new FakeAdmin { Rows = [new ObjectSearchRow(new DbObjectRef("SCOTT", "OLD", "TABLE"), "VALID", null, null, null)], SearchGate = new TaskCompletionSource() };
+        var vm = new ObjectSearchViewModel(admin, new FakeExec());
+        vm.Attach(new FakeSession());
+        var swaps = 0;
+        vm.PropertyChanged += (_, e) => swaps += e.PropertyName == nameof(vm.Results) ? 1 : 0;
+
+        var first = vm.SearchAsync(); // 앞 검색: 서버에서 도는 중
+        admin.SearchGate = null;
+        admin.Rows = [new ObjectSearchRow(new DbObjectRef("SCOTT", "NEW1", "VIEW"), "INVALID", null, null, null), new ObjectSearchRow(new DbObjectRef("SCOTT", "NEW2", "VIEW"), "INVALID", null, null, null)];
+        await vm.SearchAsync(); // 뒤 검색
+        await first; // 앞 검색은 취소로 끝난다
+
+        Assert.Equal(["SCOTT.NEW1", "SCOTT.NEW2"], vm.Results.Select(r => r.Title));
+        Assert.Equal(1, swaps); // 결과는 한 번에 바꿔 끼운다(줄마다 알리지 않는다)
+        Assert.Equal("2개 찾음", vm.StatusText);
+        Assert.False(vm.IsBusy);
+    }
+
+    [Fact]
+    public async Task Invalid_search_lists_the_invalid_objects_of_the_owner()
+    {
+        var admin = new FakeAdmin { Invalid = [BadProc, BadView] };
+        var vm = new ObjectSearchViewModel(admin, new FakeExec()) { InvalidOnly = true };
+        vm.Attach(new FakeSession());
+
+        await vm.SearchAsync();
+
+        Assert.True(admin.LastQuery!.InvalidOnly);
+        Assert.Equal(["SCOTT.BAD_P", "SCOTT.BAD_V"], vm.Results.Select(r => r.Title));
+        Assert.All(vm.Results, r => Assert.Equal("INVALID", r.Status));
+    }
+
+    [Fact]
     public async Task Search_fills_results_and_selection_loads_references()
     {
         var admin = new FakeAdmin { Rows = [new ObjectSearchRow(new DbObjectRef("SCOTT", "EMP", "TABLE"), "VALID", new DateTime(2026, 1, 2), null, 8192)] };
@@ -729,13 +764,21 @@ public class DbToolsTests
 
         public ColumnSearchQuery? LastColumnQuery { get; private set; }
 
-        public Task<IReadOnlyList<ObjectSearchRow>> SearchObjectsAsync(ISession s, ObjectSearchQuery q, CancellationToken ct)
+        /// <summary>닫아 두면 객체 검색이 열릴 때까지(또는 취소될 때까지) 끝나지 않는다.</summary>
+        public TaskCompletionSource? SearchGate { get; set; }
+
+        public async Task<IReadOnlyList<ObjectSearchRow>> SearchObjectsAsync(ISession s, ObjectSearchQuery q, CancellationToken ct)
         {
             LastQuery = q;
             IReadOnlyList<ObjectSearchRow> rows = q.InvalidOnly
                 ? [.. Invalid.Select(o => new ObjectSearchRow(o, "INVALID", null, null, null))]
                 : Rows;
-            return Task.FromResult(rows);
+            if (SearchGate is { } gate)
+            {
+                await gate.Task.WaitAsync(ct);
+            }
+
+            return rows;
         }
 
         public Task<IReadOnlyList<ObjectReference>> GetReferencesAsync(ISession s, DbObjectRef obj, CancellationToken ct)

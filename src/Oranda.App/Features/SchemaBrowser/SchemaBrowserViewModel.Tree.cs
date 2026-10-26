@@ -10,7 +10,11 @@ public sealed partial class SchemaBrowserViewModel
 
     partial void OnTypeFilterChanged(string? value) => ScheduleFilter();
 
-    partial void OnInvalidOnlyChanged(bool value) => ScheduleFilter();
+    partial void OnInvalidOnlyChanged(bool value)
+    {
+        _invalidByOwner.Clear(); // 켜고 끌 때는 INVALID 목록을 서버에서 새로 읽는다
+        ScheduleFilter();
+    }
 
     partial void OnFavoritesOnlyChanged(bool value) => ScheduleFilter();
 
@@ -24,7 +28,7 @@ public sealed partial class SchemaBrowserViewModel
         _debounce?.Cancel();
         if (DebounceMilliseconds <= 0)
         {
-            _ = ApplyFilterAsync();
+            _ = ApplyFilterCoreAsync(_filter.InvalidOnly == InvalidOnly, default);
             return;
         }
 
@@ -37,7 +41,7 @@ public sealed partial class SchemaBrowserViewModel
         try
         {
             await Task.Delay(DebounceMilliseconds, ct);
-            await ApplyFilterAsync(ct);
+            await ApplyFilterCoreAsync(_filter.InvalidOnly == InvalidOnly, ct);
         }
         catch (OperationCanceledException)
         {
@@ -118,9 +122,13 @@ public sealed partial class SchemaBrowserViewModel
     private SchemaFilter BuildFilter() => new(FilterText, TypeFilter, InvalidOnly, FavoritesOnly);
 
     /// <summary>필터를 적용한다: 이미 불러온 스키마 노드를 비우고 펼쳐 있던 것만 다시 읽는다.</summary>
-    public async Task ApplyFilterAsync(CancellationToken ct = default)
+    public Task ApplyFilterAsync(CancellationToken ct = default) => ApplyFilterCoreAsync(reuseInvalid: false, ct);
+
+    /// <param name="reuseInvalid">참이면 앞서 읽은 INVALID 목록을 다시 쓴다(이름·유형 거르기만 바뀐 때: 서버를 한 번 덜 부른다).</param>
+    private async Task ApplyFilterCoreAsync(bool reuseInvalid, CancellationToken ct)
     {
         _filter = BuildFilter();
+        _reuseInvalid = reuseInvalid;
         var gen = Interlocked.Increment(ref _generation);
         var reload = new List<SchemaNode>();
 
@@ -136,6 +144,10 @@ public sealed partial class SchemaBrowserViewModel
                     .Where(c => c.Kind == SchemaNodeKind.Category && c.IsExpanded && c.CategoryType is not null)
                     .Select(c => c.CategoryType!)
                     .ToHashSet(StringComparer.Ordinal);
+                // 읽는 동안 옛 트리를 그대로 둔다: 지우고 「…」 를 보였다가 다시 짓는 깜박임·접힘·스크롤 튐을 없앤다.
+                // 새 결과는 LoadSchemaAsync 가 한 번에 바꿔 끼운다.
+                root.Loaded = false;
+                continue;
             }
 
             root.ResetChildren();
@@ -262,10 +274,15 @@ public sealed partial class SchemaBrowserViewModel
         var gen = _generation;
 
         // 목록 조회 결과에는 상태가 없으므로 INVALID 객체만 먼저 따로 읽어 트리에서 빨갛게 보인다(Orange 처럼 깨진 객체가 바로 보이게).
-        var invalid = f.InvalidOnly
-            ? null
-            : (await _meta!.ListObjectsAsync(session, query with { InvalidOnly = true, ObjectTypes = [], NamePattern = null }, ct))
-                .Select(SchemaSql.FavoriteKey).ToHashSet(StringComparer.Ordinal);
+        HashSet<string>? invalid = null;
+        if (!f.InvalidOnly)
+        {
+            invalid = _reuseInvalid && node.Owner is { } ownerKey && _invalidByOwner.TryGetValue(ownerKey, out var kept)
+                ? kept
+                : (await _meta!.ListObjectsAsync(session, query with { InvalidOnly = true, ObjectTypes = [], NamePattern = null }, ct))
+                    .Select(SchemaSql.FavoriteKey).ToHashSet(StringComparer.Ordinal);
+        }
+
         if (node.Owner is { } owner && invalid is not null)
         {
             _invalidByOwner[owner] = invalid;

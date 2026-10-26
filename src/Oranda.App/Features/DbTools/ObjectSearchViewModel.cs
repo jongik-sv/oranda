@@ -163,6 +163,7 @@ public sealed partial class ObjectSearchViewModel : ToolPanelViewModelBase
     private ISchemaAdminProvider? _admin;
     private IExecutionService? _exec;
     private int _generation;
+    private CancellationTokenSource? _searchCts;
     private int _sourceGeneration;
     private int _columnGeneration;
 
@@ -185,7 +186,8 @@ public sealed partial class ObjectSearchViewModel : ToolPanelViewModelBase
 
     public ISession? Session { get; set; }
 
-    public ObservableCollection<ObjectSearchItem> Results { get; } = [];
+    /// <summary>검색 결과. 새 결과는 목록째 바꿔 끼운다(한 줄씩 넣으면 줄마다 목록이 다시 그려져 느린 PC 에서 화면이 출렁인다).</summary>
+    public ObservableCollection<ObjectSearchItem> Results { get; private set; } = [];
 
     public ObservableCollection<CompileResultItem> CompileResults { get; } = [];
 
@@ -318,20 +320,21 @@ public sealed partial class ObjectSearchViewModel : ToolPanelViewModelBase
         }
 
         var gen = Interlocked.Increment(ref _generation);
+        // 앞 검색이 아직 서버에서 도는 중이면 취소하고 이 검색만 남긴다(느린 서버에서 검색이 겹쳐 쌓이지 않게).
+        _searchCts?.Cancel();
+        var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        _searchCts = cts;
         IsBusy = true;
         try
         {
-            var rows = await admin.SearchObjectsAsync(session, BuildQuery(), ct);
+            var rows = await admin.SearchObjectsAsync(session, BuildQuery(), cts.Token);
             if (gen != _generation)
             {
                 return;
             }
 
-            Results.Clear();
-            foreach (var r in rows)
-            {
-                Results.Add(new ObjectSearchItem(r));
-            }
+            Results = [.. rows.Select(r => new ObjectSearchItem(r))];
+            OnPropertyChanged(nameof(Results));
 
             StatusText = rows.Count == 0 ? "조건에 맞는 객체가 없다" : $"{rows.Count}개 찾음";
         }
@@ -344,6 +347,12 @@ public sealed partial class ObjectSearchViewModel : ToolPanelViewModelBase
         }
         finally
         {
+            if (ReferenceEquals(_searchCts, cts))
+            {
+                _searchCts = null;
+                cts.Dispose(); // 뒤 검색에 밀려난 것은 건드리지 않는다(뒤 검색이 취소를 부를 수 있다)
+            }
+
             if (gen == _generation)
             {
                 IsBusy = false;

@@ -51,6 +51,7 @@ internal sealed partial class OracleMetadataProvider : IMetadataProvider
     private readonly TimeSpan _backgroundRefreshInterval;
     private readonly ConcurrentDictionary<string, DateTimeOffset> _lastRefresh = new(StringComparer.Ordinal);
     private readonly ConcurrentDictionary<string, SemaphoreSlim> _refreshGates = new(StringComparer.Ordinal);
+    private readonly ConcurrentDictionary<string, TimeSpan> _refreshCost = new(StringComparer.Ordinal);
 
     public OracleMetadataProvider(IMetadataCache cache, IEventBus events)
         : this(cache, events, TimeSpan.FromSeconds(60))
@@ -77,7 +78,9 @@ internal sealed partial class OracleMetadataProvider : IMetadataProvider
         ArgumentNullException.ThrowIfNull(q);
 
         // 생성 시각은 캐시에 없다. 이 조건만 서버에 직접 묻는다.
-        if (q.CreatedAfter is not null)
+        // INVALID 상태도 서버에 묻는다: 캐시의 상태는 마지막 갱신 때 값이라, 표를 지우거나 열을 바꿔 새로 INVALID 가 된 객체를 놓친다
+        // (캐시로 답하면 「INVALID 만」 거르기가 비어 나온다). 서버 질의는 소유자·유형으로 좁혀 보내므로 작다.
+        if (q.CreatedAfter is not null || q.InvalidOnly)
         {
             return ToRefs(await FetchObjectsAsync(s, q, ct));
         }
@@ -111,7 +114,9 @@ internal sealed partial class OracleMetadataProvider : IMetadataProvider
         try
         {
             var fetchedAt = DateTimeOffset.UtcNow;
+            var timer = System.Diagnostics.Stopwatch.StartNew();
             var rows = await FetchObjectsAsync(s, new ObjectQuery(), ct);
+            _refreshCost[dbKey] = timer.Elapsed;
             var fresh = rows.Select(r => ToMeta(dbKey, r, fetchedAt)).ToList();
 
             var previousSource = await TryCacheAsync(() => _cache.GetSourceAsync(dbKey, ct));
@@ -154,7 +159,7 @@ internal sealed partial class OracleMetadataProvider : IMetadataProvider
                 return true;
             });
 
-            _lastRefresh[dbKey] = fetchedAt;
+            _lastRefresh[dbKey] = DateTimeOffset.UtcNow; // 읽기를 마친 때부터 간격을 센다
 
             if (previousSource?.RefreshedAt is not null && (vanished.Count + changed.Count + added.Count) > 0)
             {
@@ -339,7 +344,10 @@ internal sealed partial class OracleMetadataProvider : IMetadataProvider
         }
 
         var now = DateTimeOffset.UtcNow;
-        if (_lastRefresh.TryGetValue(s.DbKey, out var last) && now - last < _backgroundRefreshInterval)
+        // 전체 목록 읽기가 오래 걸리는 서버(11g 비 DBA 의 all_objects 는 분 단위)는 그만큼 드물게 갱신한다:
+        // 읽는 동안 같은 접속의 다른 질의(INVALID 거르기 포함)가 그 뒤에 줄을 선다. 읽는 데 걸린 시간의 30 배 간격, 최소는 기본 간격.
+        var interval = _refreshCost.TryGetValue(s.DbKey, out var cost) && cost * 30 > _backgroundRefreshInterval ? cost * 30 : _backgroundRefreshInterval;
+        if (_lastRefresh.TryGetValue(s.DbKey, out var last) && now - last < interval)
         {
             return;
         }
@@ -417,7 +425,6 @@ internal sealed partial class OracleMetadataProvider : IMetadataProvider
             (q.Owner is null || string.Equals(o.Owner, q.Owner, StringComparison.Ordinal))
             && (types is null || types.Contains(o.Type))
             && (pattern is null || pattern.IsMatch(o.Name))
-            && (!q.InvalidOnly || !string.Equals(o.Status, "VALID", StringComparison.Ordinal))
             && (q.ModifiedAfter is null || o.LastDdlTime > q.ModifiedAfter))
             .OrderBy(o => o.Owner, StringComparer.Ordinal)
             .ThenBy(o => o.Type, StringComparer.Ordinal)
