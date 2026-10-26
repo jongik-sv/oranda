@@ -149,7 +149,11 @@ public sealed class DataTransferCommandHandler : ICommandHandler
                 await DataTransferCommands.ShowResultExportAsync(_services, excel: false, cancellationToken).ConfigureAwait(true);
                 break;
             case "oranda.tools.import":
-                if (DataTransferCommands.ResolveSession(_services) is { } session && TransferServices.Resolve(_services) is { } transfer)
+                // 가져오기는 쓰고 커밋하므로 SQL 탭이면 실행처럼 작업 공간의 세션을 먼저 고른다(TSK-14-02, 다른 작업 공간의 트랜잭션에 섞이지 않게).
+                var session = SessionRouter.Find(_services) is { SqlDocumentActive: true }
+                    ? await SessionRouter.ForWriteAsync(_services, SqlEditorHost.Current.Active, cancellationToken).ConfigureAwait(true)
+                    : DataTransferCommands.ResolveSession(_services);
+                if (session is not null && TransferServices.Resolve(_services) is { } transfer)
                 {
                     var vm = new ImportDialogViewModel(transfer, TransferServices.ResolveMetadata(_services), session);
                     await TransferServices.ShowAsync(_services, new ImportDialogWindow { DataContext = vm }).ConfigureAwait(true);

@@ -159,7 +159,7 @@ public sealed class ConnectionCommandHandler(ServiceContainer container) : IComm
     private async Task DisconnectAsync(IConnectionService service, CancellationToken ct)
     {
         var router = SessionRouter.Resolve(container);
-        var target = router.ShownSession is { } shown && service.Sessions.Contains(shown)
+        var target = router.ShownSession is { } shown && service.IsOpen(shown) // 작업 공간이 같은 DB 에 더 연 세션이면 그 세션만 끊는다(TSK-14-01)
             ? shown
             : router.ShownMissing is null ? service.ActiveSession : null;
         var log = ExecutionLog.For(container.GetService<IEventBus>());

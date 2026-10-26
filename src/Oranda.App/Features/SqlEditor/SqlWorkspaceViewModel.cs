@@ -110,6 +110,13 @@ public sealed partial class SqlWorkspaceViewModel : ToolPanelViewModelBase, IInn
     /// <summary><see cref="ToolScope"/> 가 바뀌었다(<see cref="MyBatis"/> 를 붙이거나 뗐다).</summary>
     public event EventHandler? ToolScopeChanged;
 
+    /// <summary>
+    /// 이 작업 공간이 쓸 세션(TSK-14-01, <c>SessionRouter</c> 가 고른다): 자기 세션 / 접속의 세션을 함께 씀. null = 설정을 따른다.
+    /// 작업 공간 파일에 남는다(세션 번호가 아니라 이 선택만).
+    /// </summary>
+    [ObservableProperty]
+    private WorkspaceSessionMode? _sessionMode;
+
     /// <summary>이 작업 공간의 SQL 탭(열린 순서).</summary>
     public ObservableCollection<SqlEditorViewModel> Tabs { get; } = [];
 
@@ -234,16 +241,18 @@ public sealed partial class SqlWorkspaceViewModel : ToolPanelViewModelBase, IInn
         ActiveTabId = ActiveTab?.TabId,
         Tabs = [.. Tabs.Select(t => t.ToWorkspaceTab())],
         SourcePath = SourcePath,
+        Session = WorkspaceSessionModes.Format(SessionMode),
     };
 
     /// <summary>
     /// 지난 자동 저장 뒤로 바뀐 것이 있으면 true 와 새 표지를 돌려준다. 내용(판·변경 표시)뿐 아니라 작업 공간 이름·원본 파일·
-    /// 활성 탭·탭 이름, 탭이 참조하는 바인드 값도 넣는다(이름이나 바인드 값만 바꾸고 죽어도 복구가 옛 값으로 돌아가지 않게).
+    /// 활성 탭·탭 이름, 탭이 참조하는 바인드 값, 세션 방식(<see cref="SessionMode"/>, TSK-14-02)도 넣는다(이름이나 바인드 값만 바꾸고 죽어도 복구가 옛 값으로 돌아가지 않게).
     /// </summary>
     internal bool ChangedSinceAutosave(out string stamp)
     {
         var sb = new System.Text.StringBuilder()
-            .Append(Name).Append('\u0001').Append(SourcePath).Append('\u0001').Append(ActiveTab?.TabId);
+            .Append(Name).Append('\u0001').Append(SourcePath).Append('\u0001').Append(ActiveTab?.TabId)
+            .Append('\u0001').Append(WorkspaceSessionModes.Format(SessionMode));
         foreach (var t in Tabs)
         {
             sb.Append('\u0002').Append(t.TabId).Append(':').Append(t.Version).Append(':').Append(t.IsDirty).Append(':').Append(t.Title)

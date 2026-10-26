@@ -23,6 +23,47 @@ public sealed partial class SqlEditorHost
         return new CloseGuardRegistration(this, entry);
     }
 
+    /// <summary>
+    /// 탭이 없는 작업 공간을 닫기 전 확인(<see cref="TryCloseWorkspaceAsync"/>). 탭 가드는 닫을 탭이 없으면 불리지 않으므로 따로 둔다.
+    /// false 면 닫지 않는다. 세션 라우터가 넣는다(TSK-14-02, 그 작업 공간만 쓰던 세션의 미커밋 확인).
+    /// </summary>
+    public Func<SqlWorkspaceViewModel, CancellationToken, Task<bool>>? EmptyWorkspaceCloseGuard { get; set; }
+
+    /// <summary>
+    /// 탭이 없는 작업 공간을 닫아도 되는지 <see cref="EmptyWorkspaceCloseGuard"/> 에 묻는다(TSK-14-02). 탭이 있거나 가드가 없으면 true.
+    /// <see cref="CanCloseAsync"/> 와 같이 가드가 이미 도는 중이면 false, 가드가 예외를 던지면 false.
+    /// </summary>
+    public async Task<bool> CanCloseEmptyAsync(SqlWorkspaceViewModel workspace, CancellationToken ct)
+    {
+        ArgumentNullException.ThrowIfNull(workspace);
+        if (workspace.Tabs.Count > 0 || EmptyWorkspaceCloseGuard is not { } guard)
+        {
+            return true;
+        }
+
+        if (_guardsRunning)
+        {
+            return false;
+        }
+
+        _guardsRunning = true;
+        try
+        {
+            return await guard(workspace, ct).ConfigureAwait(true);
+        }
+#pragma warning disable CA1031 // 가드가 실패하면 미커밋을 잃지 않도록 닫기를 취소한다.
+        catch (Exception ex)
+#pragma warning restore CA1031
+        {
+            System.Diagnostics.Trace.TraceError("빈 작업 공간 닫기 가드 실패(닫기 취소): {0}", ex);
+            return false;
+        }
+        finally
+        {
+            _guardsRunning = false;
+        }
+    }
+
     /// <summary>가드가 확인을 하는 중이면 true. 이때 들어온 닫기 요청은 취소로 처리된다(false).</summary>
     public bool IsCloseGuardRunning => _guardsRunning;
 
@@ -105,6 +146,11 @@ public sealed partial class SqlEditorHost
         }
 
         if (!await CanCloseAsync(workspace.Tabs.ToList(), SqlCloseReason.Workspace, ct).ConfigureAwait(true))
+        {
+            return false;
+        }
+
+        if (!await CanCloseEmptyAsync(workspace, ct).ConfigureAwait(true))
         {
             return false;
         }

@@ -36,13 +36,14 @@ public enum SessionSelect
 
 /// <summary>
 /// 탭·문서가 쓸 세션을 고르는 한 곳(CONN-06, TSK-03-08). 접속은 여러 개를 동시에 열 수 있으므로 기능마다 「마지막 작업 세션」을 짐작하지 않고
-/// 여기에 묻는다: SQL 탭은 전용 세션(D-017) → 탭에 묶인 접속(<see cref="SqlEditorViewModel.ConnectionProfileId"/>) → 지금 접속 순이다.
+/// 여기에 묻는다: SQL 탭은 전용 세션(D-017) → 탭의 작업 공간이 그 접속에서 쓰는 세션(TSK-14-01, SessionRouter.Workspaces.cs) →
+/// 탭에 묶인 접속(<see cref="SqlEditorViewModel.ConnectionProfileId"/>) → 지금 접속 순이다.
 /// 탭에 묶인 접속이 열려 있지 않으면 null(「접속 안 됨」, <see cref="MissingProfileOf"/>)이고 지금 접속으로 대신하지 않는다.
 /// 활성 탭을 바꾸면 그 탭의 접속이 지금 접속이 되고(<see cref="IConnectionService.Switch"/>), 새로 접속하면 활성 SQL 탭이 그 접속을 따른다.
 /// PL/SQL 편집기처럼 자기 접속을 가진 문서(<see cref="IConnectionDocument"/>)가 활성이면 툴바 콤보는 그 문서의 접속을 보이고 바꾼다(TSK-12-04).
 /// 컨테이너마다 하나(<see cref="Resolve"/>). UI 스레드에서만 쓴다(접속 서비스 이벤트는 UI 스레드로 옮겨 받는다).
 /// </summary>
-public sealed class SessionRouter
+public sealed partial class SessionRouter
 {
     private static readonly ConditionalWeakTable<ServiceContainer, SessionRouter> Routers = [];
     private static readonly Lock Gate = new();
@@ -72,6 +73,9 @@ public sealed class SessionRouter
         connections.Connected += (_, session) => Post(() => OnConnected(session));
         host.ActiveChanged += (_, _) => OnActiveTabChanged();
         host.TabOpened += (_, tab) => OnTabOpened(tab);
+        host.WorkspaceClosed += (_, ws) => OnWorkspaceClosed(ws);
+        host.RegisterCloseGuard(GuardAsync); // 저장 확인·전용 세션 확인 다음 차례(작업 공간만 쓰던 세션의 미커밋)
+        host.EmptyWorkspaceCloseGuard = ConfirmWorkspaceCloseAsync; // 탭이 없는 작업 공간을 닫을 때도 같은 확인
         if (dedicated is not null)
         {
             dedicated.FocusSync = OnActiveTabChanged; // 문서 전환(SQL 작업 공간 ↔ 다른 문서)·전용 세션 붙임/뗌도 같이 맞춘다
@@ -109,13 +113,20 @@ public sealed class SessionRouter
             }
 
             var bus = container.GetService<IEventBus>();
+            var settings = container.GetService<Shell.Settings.SettingsService>();
             var router = new SessionRouter(connections, SqlEditorHost.Current, ExecutionState.For(bus), dedicated, bus)
             {
                 ConfirmSwitch = (session, ct) => ExecutionCommands.Resolve(container).ConfirmSwitchAsync(session, ct),
+                ConfirmUncommitted = (session, ct) => ExecutionCommands.Resolve(container).ConfirmConnectionUncommittedAsync(session, ct),
+                SessionPerWorkspace = () => settings?.Current.Workspace.SessionPerWorkspace ?? true,
             };
             if (container.GetService<Shell.Docking.DockWorkspace>() is { } docking)
             {
                 router.ActiveDocument = () => docking.ActiveDocument?.Panel; // 문서를 바꾸면 전용 세션 등록부(FocusSync)가 다시 맞춘다
+
+                // 문서 탭 × 로 닫을 때도 작업 공간만 쓰던 세션의 미커밋을 묻는다(전용 세션 확인이 이미 가드를 돌리면 그것으로 충분하다).
+                var previous = docking.CloseConfirm;
+                docking.CloseConfirm = document => previous?.Invoke(document) ?? router.CloseConfirmFor(document);
             }
 
             Routers.Add(container, router);
@@ -177,6 +188,25 @@ public sealed class SessionRouter
         return ForProfile(services, tab?.ConnectionProfileId);
     }
 
+    /// <summary>
+    /// 쓰기·커밋하는 기능(데이터 가져오기)이 쓸 탭의 세션(TSK-14-02). 라우터가 있으면 실행처럼 먼저 작업 공간의 세션을 고르고(<see cref="PrepareAsync"/>,
+    /// 첫 실행 전인 자기 세션 작업 공간이면 새 세션을 연다) 못 고르면 null 이다(다른 작업 공간이 쓰는 접속의 세션으로 대신하지 않는다).
+    /// 라우터가 아직 없는 컨테이너면 <see cref="ForTab"/>.
+    /// </summary>
+    public static Task<ISession?> ForWriteAsync(IServiceProvider? services, SqlEditorViewModel? tab, CancellationToken ct) =>
+        Find(services) is { } router ? router.ForWriteAsync(tab, ct) : Task.FromResult(ForTab(services, tab));
+
+    /// <summary><see cref="ForWriteAsync(IServiceProvider?, SqlEditorViewModel?, CancellationToken)"/> 의 라우터 쪽.</summary>
+    public async Task<ISession?> ForWriteAsync(SqlEditorViewModel? tab, CancellationToken ct = default)
+    {
+        if (tab is not null && !await PrepareAsync(tab, ct).ConfigureAwait(true))
+        {
+            return null;
+        }
+
+        return SessionFor(tab);
+    }
+
     /// <summary>프로필의 열린 작업 세션(없으면 null). 프로필이 null 이면 <see cref="CurrentOf"/>. PL/SQL 편집기처럼 SQL 탭이 아닌 문서가 쓴다.</summary>
     public static ISession? ForProfile(IServiceProvider? services, Guid? profile)
     {
@@ -191,16 +221,26 @@ public sealed class SessionRouter
                 .LastOrDefault(s => s.Purpose == SessionPurpose.Work && s.State != SessionState.Closed && s.Profile.Id == profileId);
     }
 
-    /// <summary>열린 접속(연 순서, 툴바 콤보 번호 = 위치 + 1).</summary>
+    /// <summary>열린 접속(연 순서, 툴바 콤보 번호 = 위치 + 1). 같은 DB 에 더 연 세션은 <see cref="SessionsOf"/>·<see cref="AllSessions"/>.</summary>
     public IReadOnlyList<ISession> Sessions => _connections.Sessions;
 
-    /// <summary>접속 이름 「번호 - 사용자@이름」(툴바 콤보와 같다). 열린 접속이 아니면 번호 없이.</summary>
+    /// <summary>
+    /// 접속 이름 「번호 - 사용자@이름」(툴바 콤보와 같다). 같은 DB 에 더 연 세션이면 뒤에 「 (2)」 처럼 그 접속 안의 순번을 붙인다(TSK-14-01).
+    /// 열린 접속이 아니면 번호 없이.
+    /// </summary>
     public string LabelOf(ISession session)
     {
         ArgumentNullException.ThrowIfNull(session);
-        var index = _connections.Sessions.ToList().IndexOf(session);
         var name = $"{session.Profile.User}@{session.Profile.Name}";
-        return index < 0 ? name : string.Create(System.Globalization.CultureInfo.InvariantCulture, $"{index + 1} - {name}");
+        var index = _connections.SessionOf(session.Profile.Id) is { } primary ? _connections.Sessions.ToList().IndexOf(primary) : -1;
+        var nth = _connections.SessionsOf(session.Profile.Id).ToList().IndexOf(session);
+        if (index < 0 || nth < 0)
+        {
+            return name;
+        }
+
+        var label = string.Create(System.Globalization.CultureInfo.InvariantCulture, $"{index + 1} - {name}");
+        return nth == 0 ? label : string.Create(System.Globalization.CultureInfo.InvariantCulture, $"{label} ({nth + 1})");
     }
 
     /// <summary>열린 접속이 끊겼는지.</summary>
@@ -210,7 +250,9 @@ public sealed class SessionRouter
     public ISession? Current => _connections.ActiveSession;
 
     /// <summary>
-    /// 탭이 쓸 세션: 전용 세션 → 탭에 묶인 접속 → (묶이지 않았으면) 지금 접속. 묶인 접속이 열려 있지 않으면 null. 탭이 null 이면 지금 접속.
+    /// 탭이 쓸 세션: 전용 세션 → 작업 공간이 그 접속에서 쓰는 세션(TSK-14-01) → 탭에 묶인 접속 → (묶이지 않았으면) 지금 접속.
+    /// 묶인 접속이 열려 있지 않거나 작업 공간이 쓰던 세션이 닫혔으면 null. 탭이 null 이면 지금 접속.
+    /// 자기 세션 작업 공간이 아직 실행하지 않았으면 접속의 세션이다(첫 실행 때 <see cref="PrepareAsync"/> 가 고른다).
     /// </summary>
     public ISession? SessionFor(SqlEditorViewModel? tab)
     {
@@ -224,12 +266,33 @@ public sealed class SessionRouter
             return own;
         }
 
-        return tab.ConnectionProfileId is { } profileId ? _connections.SessionOf(profileId) : Current;
+        if (tab.ConnectionProfileId is not { } profileId)
+        {
+            return Current;
+        }
+
+        if (_host.WorkspaceOf(tab) is { } ws)
+        {
+            if (BoundSession(ws, profileId) is { } bound)
+            {
+                return bound;
+            }
+
+            if (IsLost(ws, profileId))
+            {
+                return null;
+            }
+        }
+
+        return _connections.SessionOf(profileId);
     }
 
-    /// <summary>탭에 묶인 접속이 열려 있지 않으면 그 프로필 ID(「접속 안 됨(이름)」). 열려 있거나 묶이지 않았거나 전용 세션 탭이면 null.</summary>
+    /// <summary>
+    /// 탭에 묶인 접속이 열려 있지 않거나 작업 공간이 쓰던 세션이 닫혔으면 그 프로필 ID(「접속 안 됨(이름)」). 열려 있거나 묶이지 않았거나 전용 세션 탭이면 null.
+    /// </summary>
     public Guid? MissingProfileOf(SqlEditorViewModel? tab) =>
-        tab?.ConnectionProfileId is { } profileId && _dedicated?.SessionOf(tab) is null && _connections.SessionOf(profileId) is null
+        tab?.ConnectionProfileId is { } profileId && _dedicated?.SessionOf(tab) is null
+        && (_connections.SessionOf(profileId) is null || (_host.WorkspaceOf(tab) is { } ws && IsLost(ws, profileId)))
             ? profileId
             : null;
 
@@ -270,6 +333,11 @@ public sealed class SessionRouter
     public async Task<ISession?> ReconnectAsync(Guid profileId, Func<Task<ISession?>> connect)
     {
         ArgumentNullException.ThrowIfNull(connect);
+        if (_connections.SessionOf(profileId) is { } live && ClearLost(_host.Active, profileId))
+        {
+            return live; // 작업 공간의 세션만 닫혔고 접속은 열려 있다: 다음 실행이 세션을 다시 고른다(자기 세션이면 새로 연다)
+        }
+
         _quietConnects.Add(profileId);
         ISession? session = null;
         try
@@ -325,7 +393,7 @@ public sealed class SessionRouter
     public SessionSelect Select(ISession session)
     {
         ArgumentNullException.ThrowIfNull(session);
-        if (!ReferenceEquals(_connections.SessionOf(session.Profile.Id), session))
+        if (!_connections.IsOpen(session))
         {
             return SessionSelect.Closed; // 고르는 사이에 닫혔다: 탭을 닫힌 접속에 묶지 않는다
         }
@@ -337,12 +405,17 @@ public sealed class SessionRouter
                 return SessionSelect.Dedicated;
             }
 
-            if (IsHeld(tab) && !ReferenceEquals(SessionFor(tab), session))
+            if (IsHeldFor(tab, session) && !ReferenceEquals(SessionFor(tab), session))
             {
                 return SessionSelect.Held;
             }
 
+            var changed = !ReferenceEquals(SessionFor(tab), session);
             tab.ConnectionProfileId = session.Profile.Id;
+            if (changed)
+            {
+                BindChoice(tab, session);
+            }
         }
 
         if (!_connections.Switch(session))
@@ -363,7 +436,7 @@ public sealed class SessionRouter
     public async Task<SessionSelect> SelectAsync(ISession session, CancellationToken ct = default)
     {
         ArgumentNullException.ThrowIfNull(session);
-        if (!ReferenceEquals(_connections.SessionOf(session.Profile.Id), session))
+        if (!_connections.IsOpen(session))
         {
             return SessionSelect.Closed;
         }
@@ -375,7 +448,7 @@ public sealed class SessionRouter
                 return SessionSelect.Dedicated;
             }
 
-            if (SessionFor(tab) is { } old && !ReferenceEquals(old, session) && IsHeld(tab))
+            if (SessionFor(tab) is { } old && !ReferenceEquals(old, session) && IsHeldFor(tab, session))
             {
                 if (_state.IsBusy(old.Id))
                 {
@@ -392,13 +465,18 @@ public sealed class SessionRouter
                     return SessionSelect.Cancelled;
                 }
 
-                if (!ReferenceEquals(_connections.SessionOf(session.Profile.Id), session))
+                if (!_connections.IsOpen(session))
                 {
                     return SessionSelect.Closed; // 묻는 사이에 닫혔다
                 }
             }
 
+            var changed = !ReferenceEquals(SessionFor(tab), session);
             tab.ConnectionProfileId = session.Profile.Id; // 묻는 사이 다른 탭으로 갔어도 고를 때의 탭을 바꾼다
+            if (changed)
+            {
+                BindChoice(tab, session);
+            }
         }
         else if (ConnectionDocument is { } doc && !ReferenceEquals(doc.Session, session))
         {
@@ -436,6 +514,10 @@ public sealed class SessionRouter
         {
             _state.Focus(null);
         }
+        else if (IsPendingOwn(tab) && SessionFor(tab) is { } connection)
+        {
+            _state.FocusPending(connection.Profile); // 첫 실행 때 자기 세션을 연다: 같은 DB 의 다른 세션 실행에 막히지 않는다
+        }
         else if (SessionFor(tab) is { } session)
         {
             _state.Focus(session.Id);
@@ -452,7 +534,7 @@ public sealed class SessionRouter
 
     private void OnActiveSessionChanged()
     {
-        _state.UsePrimary(Current?.Id);
+        _state.UsePrimary(Current?.Id); // 같은 DB 에 세션을 더 열면 실행 상태가 그 세션을 지금 접속으로 잡는다: 지금 접속으로 되돌린다
         Refocus();
         RaiseChanged();
     }

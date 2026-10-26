@@ -67,6 +67,15 @@ public sealed class ExecutionDeps
     /// <summary>프로필 이름(접속 안 됨 탭 묻기, 저장된 프로필을 아직 안 읽었으면 읽는다). 모르면 null.</summary>
     public Func<Guid, Task<string?>> ProfileName { get; init; } = _ => Task.FromResult<string?>(null);
 
+    /// <summary>
+    /// 실행하기 전 탭의 작업 공간을 세션에 묶는다(TSK-14-01, <c>SessionRouter.PrepareAsync</c>: 자기 세션이면 첫 실행 때 새 세션을 연다).
+    /// false 면 실행하지 않는다(이유는 메시지 창에). 기본은 묶을 것이 없다(true).
+    /// </summary>
+    public Func<SqlEditorViewModel, CancellationToken, Task<bool>> PrepareSession { get; init; } = (_, _) => Task.FromResult(true);
+
+    /// <summary>접속 안 됨 탭에서 「지금 접속으로 바꾸기」 를 골랐다: 탭을 그 접속에 둔다. 기본은 탭의 접속 프로필만 바꾼다.</summary>
+    public Action<SqlEditorViewModel, ISession> UseConnection { get; init; } = (tab, session) => tab.ConnectionProfileId = session.Profile.Id;
+
     /// <summary>프로필로 다시 접속한다(비밀번호를 물을 수 있다). 연 세션, 못 열었거나 사용자가 취소하면 null.</summary>
     public Func<Guid, CancellationToken, Task<ISession?>> Reconnect { get; init; } = (_, _) => Task.FromResult<ISession?>(null);
 
@@ -143,9 +152,9 @@ public sealed partial class ExecutionController : IDisposable
     /// </summary>
     private ISession? FocusedSession()
     {
-        if (State.FocusedNothing)
+        if (State.FocusedNothing || State.FocusedPending)
         {
-            return null; // 활성 SQL 탭의 접속이 닫혔다: 다른 접속을 커밋하지 않는다
+            return null; // 활성 SQL 탭의 접속이 닫혔거나 아직 자기 세션이 없다: 다른 세션을 커밋·취소하지 않는다
         }
 
         // 보이는 세션이 활성 탭의 세션일 때만 그것(SQL 작업 공간이 아닌 문서가 활성이면 보이는 세션은 지금 접속이다).

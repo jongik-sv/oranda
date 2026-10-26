@@ -48,6 +48,7 @@ public sealed partial class SqlEditorHost
         }
 
         ws.SourcePath = workspace.SourcePath;
+        ws.SessionMode = WorkspaceSessionModes.Parse(workspace.Session);
         foreach (var t in workspace.Tabs)
         {
             string? fileText = null;

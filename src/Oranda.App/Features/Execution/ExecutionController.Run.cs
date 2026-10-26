@@ -110,6 +110,7 @@ public sealed partial class ExecutionController
 
     /// <summary>
     /// 탭에 묶인 접속이 열려 있지 않으면 묻는다(CONN-06): 다시 접속 / 지금 접속으로 바꾸기 / 취소. 다른 접속으로 몰래 실행하지 않는다.
+    /// 그다음 탭의 작업 공간을 세션에 묶는다(<see cref="ExecutionDeps.PrepareSession"/>, TSK-14-01: 자기 세션이면 첫 실행 때 연다).
     /// true = 이제 탭에 접속이 있다(묶인 접속이 열려 있거나 묶이지 않았다).
     /// </summary>
     public async Task<bool> EnsureConnectionAsync(SqlEditorViewModel tab, CancellationToken ct = default)
@@ -117,7 +118,7 @@ public sealed partial class ExecutionController
         ArgumentNullException.ThrowIfNull(tab);
         if (_d.MissingConnection(tab) is not { } profileId)
         {
-            return true;
+            return await _d.PrepareSession(tab, ct).ConfigureAwait(true);
         }
 
         var name = await _d.ProfileName(profileId).ConfigureAwait(true) ?? "?";
@@ -140,15 +141,15 @@ public sealed partial class ExecutionController
                     return false;
                 }
 
-                tab.ConnectionProfileId = current.Profile.Id;
+                _d.UseConnection(tab, current);
                 break;
             default:
                 return false;
         }
 
-        if (Host.WorkspaceOf(tab) is null || _d.MissingConnection(tab) is not null)
+        if (Host.WorkspaceOf(tab) is null || _d.MissingConnection(tab) is not null || !await _d.PrepareSession(tab, ct).ConfigureAwait(true))
         {
-            return false; // 접속하는 사이에 탭을 닫았거나 다른 접속으로 옮겼다
+            return false; // 접속하는 사이에 탭을 닫았거나 다른 접속으로 옮겼다(또는 작업 공간의 세션을 열지 못했다)
         }
 
         if (IsBusy(SessionFor(tab)))

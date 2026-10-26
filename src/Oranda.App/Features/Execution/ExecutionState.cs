@@ -52,6 +52,7 @@ public sealed class ExecutionState : ObservableObject
     private Guid? _sessionId;
     private Guid? _focus;
     private bool _focusNone;
+    private Track? _pending; // 첫 실행 때 자기 세션을 열 워크스페이스(TSK-14-01): 아직 세션이 없어 남의 실행에 막히지 않는다
     private bool _autoCommit;
     private bool _hasExecError;
     private DbError? _lastError;
@@ -220,8 +221,11 @@ public sealed class ExecutionState : ObservableObject
     /// <summary>보이는 세션이 없다(<see cref="FocusNothing"/>: 활성 SQL 탭에 묶인 접속이 열려 있지 않다).</summary>
     public bool FocusedNothing => _focusNone;
 
-    /// <summary>보이는 세션 ID(<see cref="Focus"/> 로 고른 것, 없으면 지금 접속). <see cref="FocusNothing"/> 이면 null.</summary>
-    public Guid? FocusedSessionId => _focusNone ? null : _focus ?? _sessionId;
+    /// <summary>보이는 세션 ID(<see cref="Focus"/> 로 고른 것, 없으면 지금 접속). <see cref="FocusNothing"/>·<see cref="FocusPending"/> 이면 null.</summary>
+    public Guid? FocusedSessionId => _focusNone || _pending is not null ? null : _focus ?? _sessionId;
+
+    /// <summary>보이는 문서가 첫 실행 때 자기 세션을 연다(<see cref="FocusPending"/>, TSK-14-01).</summary>
+    public bool FocusedPending => _pending is not null;
 
     /// <summary>보이는 세션이 전용 세션이다(상태 표시줄 「전용 세션」, 문맥 키 <c>dedicatedSession</c>).</summary>
     public bool IsDedicatedShown => Shown is { Dedicated: true };
@@ -229,7 +233,7 @@ public sealed class ExecutionState : ObservableObject
     /// <summary>
     /// 보이는 세션: <see cref="FocusNothing"/> 이면 없음(접속이 닫힌 탭), <see cref="Focus"/> 로 고른 세션이 있으면 그것, 아니면 지금 접속.
     /// </summary>
-    private Track? Shown => _focusNone ? null : _focus is { } id && _tracks.TryGetValue(id, out var t) ? t : P;
+    private Track? Shown => _focusNone ? null : _pending ?? (_focus is { } id && _tracks.TryGetValue(id, out var t) ? t : P);
 
     public SessionRunState ShownRunState => Shown?.Run ?? SessionRunState.NoSession;
 
@@ -407,12 +411,31 @@ public sealed class ExecutionState : ObservableObject
     /// </summary>
     public void Focus(Guid? sessionId)
     {
-        if (_focus == sessionId && !_focusNone)
+        if (_focus == sessionId && !_focusNone && _pending is null)
         {
             return;
         }
 
         _focus = sessionId;
+        _focusNone = false;
+        _pending = null;
+        RaiseShown();
+    }
+
+    /// <summary>
+    /// 활성 문서(워크스페이스)가 첫 실행 때 <paramref name="profile"/> 의 새 세션을 연다(TSK-14-01): 상태 표시줄은 「연결됨」, 문맥 키
+    /// <c>sessionBusy</c>·<c>txnPending</c> 은 꺼진다(같은 DB 의 다른 세션이 실행 중이어도 이 문서는 실행할 수 있다).
+    /// </summary>
+    public void FocusPending(ConnectionProfile profile)
+    {
+        ArgumentNullException.ThrowIfNull(profile);
+        if (_pending?.Profile == profile && !_focusNone)
+        {
+            return;
+        }
+
+        _pending = new Track(profile, dedicated: false);
+        _focus = null;
         _focusNone = false;
         RaiseShown();
     }
@@ -427,6 +450,7 @@ public sealed class ExecutionState : ObservableObject
 
         _focusNone = true;
         _focus = null;
+        _pending = null;
         RaiseShown();
     }
 

@@ -93,6 +93,9 @@ internal sealed class StubSessionManager(IEventBus events) : ISessionManager
     /// <summary>설정하면 이후 열리는 세션의 DisposeAsync 가 이 신호를 기다린다.</summary>
     public ManualResetEventSlim? DisposeGate { get; set; }
 
+    /// <summary>설정하면 이후 세션 열기가 이 신호가 올 때까지 끝나지 않는다(열리는 사이 두 번 실행, TSK-14-02 시험).</summary>
+    public TaskCompletionSource? OpenGate { get; set; }
+
     public Task<ISession> OpenAsync(ConnectionProfile profile, SecureCredential credential, SessionPurpose purpose, CancellationToken ct)
     {
         var password = credential.Secret.ToString();
@@ -102,6 +105,17 @@ internal sealed class StubSessionManager(IEventBus events) : ISessionManager
             return Task.FromException<ISession>(failure);
         }
 
+        return OpenGate is { } gate ? OpenAfterAsync(gate.Task, profile, purpose) : Task.FromResult<ISession>(Open(profile, purpose));
+    }
+
+    private async Task<ISession> OpenAfterAsync(Task gate, ConnectionProfile profile, SessionPurpose purpose)
+    {
+        await gate.ConfigureAwait(true);
+        return Open(profile, purpose);
+    }
+
+    private StubSession Open(ConnectionProfile profile, SessionPurpose purpose)
+    {
         var info = new ServerInfo("23.26.0.0.0", "FREE", "localhost", "FREEPDB1", "FREE", "FREEPDB1", true, 1,
             new ServerCapabilities(false, true, true, false, false), DbUniqueName: "FREE", SessionUser: profile.User.ToUpperInvariant());
         var session = new StubSession(profile, info, events) { DisposeGate = DisposeGate };
@@ -110,7 +124,7 @@ internal sealed class StubSessionManager(IEventBus events) : ISessionManager
         {
             events.Publish(new SessionOpened(session.Id, profile, info, purpose)); // 실제 세션 관리자처럼 열 때 알린다
         }
-        return Task.FromResult<ISession>(session);
+        return session;
     }
 }
 
