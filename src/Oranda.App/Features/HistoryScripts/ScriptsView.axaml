@@ -14,7 +14,7 @@
     </Style>
   </UserControl.Styles>
   <DockPanel>
-    <!-- 패널 툴바: 폴더 연결 · 연결 끊기 · 새로 고침 | 실행(@파일). 이름은 툴팁으로 보인다. -->
+    <!-- 패널 툴바: 폴더 연결 · 연결 끊기 · 새로 고침 | 실행(@파일) · 새 스크립트. 이름은 툴팁으로 보인다. -->
     <Border DockPanel.Dock="Top" Classes="panel-toolbar">
       <StackPanel Orientation="Horizontal" Spacing="1">
         <Button x:Name="AddButton" Classes="toolbar" ToolTip.Tip="스크립트 폴더 연결" AutomationProperties.Name="폴더 연결" />
@@ -22,6 +22,8 @@
         <Button x:Name="RefreshButton" Classes="toolbar" ToolTip.Tip="새로 고침" AutomationProperties.Name="새로 고침" />
         <Separator Classes="toolbar" />
         <Button x:Name="RunButton" Classes="toolbar" ToolTip.Tip="선택한 파일 실행 (@파일)" AutomationProperties.Name="실행(@)" />
+        <Button x:Name="NewScriptButton" Classes="toolbar" ToolTip.Tip="{Binding NewScriptTip}" ToolTip.ShowOnDisabled="True" IsEnabled="{Binding CanNewScript}"
+                AutomationProperties.Name="새 스크립트" />
       </StackPanel>
     </Border>
     <!-- 거르기 줄: 이름(또는 「내용」을 켜면 파일 안의 글)으로 찾는다. 입력하면 트리 대신 결과 목록, Esc 로 지우면 트리로 돌아간다. -->
@@ -69,7 +71,13 @@
     </ListBox>
     <TextBlock x:Name="EmptyHintText" Text="{Binding EmptyHint}" IsVisible="{Binding HasEmptyHint}" TextWrapping="Wrap" TextAlignment="Center"
                Opacity="0.6" HorizontalAlignment="Center" VerticalAlignment="Top" Margin="16,24,16,0" />
+    <!-- 오른쪽 단추는 누른 줄을 먼저 고른다(창 코드). 폴더·파일 어디서든 「새 스크립트…」 = 그 폴더에 만들기. -->
     <TreeView x:Name="Tree" Classes="compact" IsVisible="{Binding !IsSearchActive}" ItemsSource="{Binding Roots}" SelectedItem="{Binding SelectedNode, Mode=TwoWay}">
+      <TreeView.ContextMenu>
+        <ContextMenu>
+          <MenuItem x:Name="NewScriptMenu" Header="새 스크립트…" />
+        </ContextMenu>
+      </TreeView.ContextMenu>
       <TreeView.Styles>
         <Style Selector="TreeViewItem" x:DataType="vm:ScriptNode">
           <Setter Property="IsExpanded" Value="{Binding IsExpanded, Mode=TwoWay}" />

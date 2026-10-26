@@ -160,7 +160,10 @@ public sealed partial class ScriptsViewModel : ToolPanelViewModelBase
     public static bool IsRunnable(string path) => IsScriptFile(path) && !OpensWithFileCommand(path);
 
     partial void OnSelectedNodeChanged(ScriptNode? value)
-        => HistoryScriptsCommands.SelectedScriptPath = SelectedFilePath;
+    {
+        HistoryScriptsCommands.SelectedScriptPath = SelectedFilePath;
+        NotifyNewScriptState();
+    }
 
     /// <summary>연결 폴더 목록을 읽어 트리 루트를 다시 만든다.</summary>
     public void Reload()
@@ -175,6 +178,7 @@ public sealed partial class ScriptsViewModel : ToolPanelViewModelBase
 
         StatusMessage = Roots.Count == 0 ? "폴더를 연결하세요" : $"폴더 {Roots.Count}개 연결됨";
         RefreshSearch(); // 검색 중이면 새 폴더 목록으로 다시 찾는다
+        NotifyNewScriptState();
     }
 
     /// <summary>폴더를 연결한다. 없는 폴더면 false.</summary>

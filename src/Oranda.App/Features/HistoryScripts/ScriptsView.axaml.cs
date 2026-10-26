@@ -1,5 +1,7 @@
 using Avalonia.Controls;
 using Avalonia.Input;
+using Avalonia.Interactivity;
+using Avalonia.Threading;
 using Avalonia.Platform.Storage;
 using Oranda.App.Shell.Icons;
 
@@ -17,6 +19,7 @@ public partial class ScriptsView : UserControl
         RefreshButton.Content = ShellIcons.Create("refresh");
         RunButton.Content = ShellIcons.Create("run");
         WireSearch();
+        NewScriptButton.Content = ShellIcons.Create("newSql");
         AddButton.Click += async (_, _) => await AddFolderAsync();
         RemoveButton.Click += (_, _) =>
         {
@@ -40,6 +43,9 @@ public partial class ScriptsView : UserControl
                 await vm.RunAsync(node);
             }
         };
+        NewScriptButton.Click += async (_, _) => await NewScriptAsync();
+        NewScriptMenu.Click += async (_, _) => await NewScriptAsync();
+        Tree.AddHandler(PointerPressedEvent, OnTreePressed, RoutingStrategies.Tunnel, handledEventsToo: true);
         Tree.DoubleTapped += async (_, _) =>
         {
             if (DataContext is ScriptsViewModel { SelectedNode: { } node } vm && !node.IsDirectory)
@@ -61,6 +67,17 @@ public partial class ScriptsView : UserControl
             if (DataContext is ScriptsViewModel vm && !ReferenceEquals(_wired, vm))
             {
                 _wired = vm;
+                // 메뉴는 열리기 전에는 데이터 문맥을 받지 못해 바인딩 대신 코드로 맞춘다.
+                void SyncMenu() => NewScriptMenu.IsEnabled = vm.CanNewScript;
+                vm.PropertyChanged += (_, e) =>
+                {
+                    if (e.PropertyName == nameof(ScriptsViewModel.CanNewScript))
+                    {
+                        SyncMenu();
+                    }
+                };
+                SyncMenu();
+                vm.NewScriptPrompt ??= request => NewScriptDialog.ShowAsync(request, TopLevel.GetTopLevel(this) as Window);
                 vm.OpenRequested += async (_, path) => await SqlEditor.SqlEditorHost.Current.OpenFileAsync(path, default);
             }
         };
@@ -71,6 +88,30 @@ public partial class ScriptsView : UserControl
                 vm.Reload();
             }
         };
+    }
+
+    private async System.Threading.Tasks.Task NewScriptAsync()
+    {
+        if (DataContext is ScriptsViewModel vm)
+        {
+            await vm.NewScriptAsync();
+            // 새 파일이 길어서 보이는 영역 밖이면 보이는 곳으로 가져온다.
+            if (vm.SelectedNode is { } node)
+            {
+                Dispatcher.UIThread.Post(() => Tree.TreeContainerFromItem(node)?.BringIntoView(), DispatcherPriority.Loaded);
+            }
+        }
+    }
+
+    /// <summary>오른쪽 단추는 누른 줄을 먼저 고른다(오른쪽 클릭 메뉴가 그 줄의 폴더에 대해 열린다).</summary>
+    private void OnTreePressed(object? sender, PointerPressedEventArgs e)
+    {
+        if (DataContext is ScriptsViewModel vm
+            && e.GetCurrentPoint(Tree).Properties.IsRightButtonPressed
+            && (e.Source as Control)?.DataContext is ScriptNode { FullPath.Length: > 0 } node)
+        {
+            vm.SelectedNode = node;
+        }
     }
 
     private async System.Threading.Tasks.Task AddFolderAsync()

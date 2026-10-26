@@ -780,7 +780,7 @@ levels:
   - acceptance: 낱말 둘이 든 이름만 나오고 대소문자를 가리지 않는다 / 「내용」 을 켜면 일치 줄이 파일별로 묶여 줄 번호·미리보기·강조와 함께 나오고 정규식 문자(`.*`, `[`)는 글자로 찾는다 / 칸을 지우거나 Esc 면 트리로 돌아가고 펼침·선택이 보존된다 / 연속 입력에서 앞 검색이 취소되고 마지막 결과만 남는다 / 1,000곳·2 MB 한도와 상태 줄 문구 / UTF-8(BOM 유무)·UTF-16·CP949 한글이 찾아진다 / 두 번 누름·Enter 로 열리고 내용 결과는 그 줄로 이동 / 숨김 폴더·스크립트 확장자 아닌 파일은 결과에 없다 / 라이트·다크 PNG 로 상태 화면 확인 / 명령 id·키맵 불변 / `dotnet build Oranda.sln -warnaserror`·전체 시험 통과
   - note: 담당 PC: win144(Windows 개발 PC) — 맥북 세션은 이 Task 를 하지 않는다. 크기 M. 레인 sc-search. TSK-10-02 와 같은 파일을 만지므로 고친 범위를 결과에 적는다. 결과: ScriptSearch 검색기·ScriptsViewModel.Search·거르기 줄과 결과 목록(250ms·취소·1,000곳·2 MB) 구현, 시험 ScriptSearchTests·ScriptsSearchViewTests (win144)
 
-- [ ] TSK-10-02: 스크립트 창 새 스크립트 추가 (툴바 단추·우클릭·이름 입력 창) [win144] w:2 2026-10-27~2026-10-28
+- [x] TSK-10-02: 스크립트 창 새 스크립트 추가 (툴바 단추·우클릭·이름 입력 창) [win144] w:2 2026-10-27~2026-10-28
   - category: dev
   - domain: frontend
   - model: opus
@@ -789,7 +789,7 @@ levels:
   - prd-ref: PRD 14 SC-09~SC-14, TRD 12.3, D-026, D-027, D-028
   - requirements: 스크립트 창 툴바에 「새 스크립트」 단추 하나와 트리 오른쪽 클릭 「새 스크립트…」 를 더한다. 만드는 곳 = 선택한 폴더, 파일을 골랐으면 그 파일의 폴더, 선택이 없으면 연결 폴더가 하나일 때 그 폴더(여럿이면 단추 비활성 + 툴팁 「폴더를 먼저 고르세요」). 이름 입력 창: 기본값 「새 스크립트.sql」(겹치면 「새 스크립트 2.sql」…), 확장자가 없으면 `.sql` 을 붙임, 쓸 수 없는 글자·예약 이름·이미 있는 이름은 창 안 오류 줄 + 확인 꺼짐, 체크 「활성 편집기 내용으로 채우기」(편집기에 글이 있을 때만 켤 수 있고 기본 꺼짐). 만든 뒤 그 폴더를 다시 읽고 새 파일을 고르고 편집기에서 연다. 기존 파일은 절대 덮어쓰지 않는다(`FileMode.CreateNew`). 순수 클래스 `NewScriptCreator`(폴더 결정·기본 이름·이름 검사·쓰기)와 `NewScriptDialog` 를 `Features/HistoryScripts/` 에 새로 만든다. 새 파일 인코딩 UTF-8(BOM 없음). 상태 화면(폴더 미선택 비활성·오류·성공)을 만든다; 제약: 주 메뉴·팔레트·키맵·`CommandTitles*.json` 에 명령을 더하지 않는다(D-028). 검색 부분을 고치지 않는다. 툴바 단추 모양은 기존 `ButtonIcon`, 툴팁에 DB 에 쓰지 않는다고 적는다. 문구 → literals-en.json(기존 문구 바로 뒤)·strings-ko/en `Scripts.new.*`; 기술: TRD 12.3; 화면: 툴바 단추 + 이름 입력 창; 비고: 담당 PC: win144(Windows 개발 PC) — 맥북 세션은 이 Task 를 하지 않는다
   - acceptance: 선택 폴더·고른 파일의 폴더·연결 폴더 하나일 때 그 폴더에 파일이 만들어진다 / 폴더가 여럿이고 선택이 없으면 단추 꺼짐 + 「폴더를 먼저 고르세요」 툴팁 / 이름 창이 기본 이름(겹치면 번호)을 보이고 확장자 없는 이름에 .sql 을 붙인다 / 빈 이름·잘못된 글자·예약 이름·이미 있는 이름에서 오류 줄 + 확인 꺼짐 / 같은 이름 파일이 있을 때(만드는 순간 경쟁 포함) 기존 내용이 그대로다 / 채우기는 편집기가 비면 꺼져 있고 켜면 내용이 편집기 글과 같다 / 만든 뒤 트리가 새 파일을 고르고 편집기에 열린다 / 주 메뉴·팔레트 명령 수 불변 / 라이트·다크 PNG 확인 / `dotnet build Oranda.sln -warnaserror`·전체 시험 통과
-  - note: 담당 PC: win144(Windows 개발 PC) — 맥북 세션은 이 Task 를 하지 않는다. 크기 M. 레인 sc-add. TSK-10-01 과 같은 파일을 만지므로 고친 범위를 결과에 적는다
+  - note: 담당 PC: win144(Windows 개발 PC) — 맥북 세션은 이 Task 를 하지 않는다. 크기 M. 레인 sc-add. TSK-10-01 과 같은 파일을 만지므로 고친 범위를 결과에 적는다 / 결과: 툴바 「새 스크립트」 단추·트리 우클릭 「새 스크립트…」·이름 입력 창(NewScriptDialog)·NewScriptFile(이름 검사·고유 이름·CreateNew 쓰기)을 더함. 고친 공유 파일 범위 = ScriptsView.axaml 툴바 단추 1개+ContextMenu, ScriptsView.axaml.cs 단추·메뉴·우클릭 선택 배선, ScriptsViewModel.cs 두 곳에 NotifyNewScriptState() 호출만(나머지는 ScriptsViewModel.NewScript.cs), literals-en.json 2줄. 시험 84개(NewScriptFileTests·NewScriptViewTests) 통과, 검색 결과 목록 중 만들기(결과 줄의 폴더·검색 지우고 트리로) 이어 붙임, 라이트·다크 PNG 확인. (win144)
 
 - [ ] TSK-10-03: 스크립트 검색·추가·결과 격자 여러 행·INVALID 검색·프로시저 실행 창 통합 확인 (Headless 화면·시험 수치) [win144] w:1 2026-10-29~2026-10-29
   - category: itest
