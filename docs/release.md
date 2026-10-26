@@ -23,6 +23,13 @@ Windows 줄은 2026-10-25 로컬 `vpk pack --channel win` 결과다. macOS 줄�
 2. `ci` 워크플로의 `windows`·`macos` 작업이 각자 패키지를 만든다(아래 「서명 상태별 동작」). 두 작업이 같은 규칙으로 버전을 정하고, `release` 작업이 두 버전이 같은지 확인한 뒤 `vpk upload github --channel win` → `--channel osx` 순서로 GitHub Release `Oranda 0.2.0` 에 올린다(`--publish --merge`: 두 번째 채널은 같은 릴리스에 더해진다). 이전 릴리스가 있으면 각 작업이 먼저 받아 델타 패키지도 만든다.
 3. 설치본은 시작 20초 뒤(24시간마다) 또는 도움말 > 업데이트 확인에서 새 버전을 찾아 내려받고, 종료할 때 적용한다.
 
+## 릴리스 노트
+
+- 태그를 붙이기 전에 `docs/release-notes/<버전>.md`(예: `0.1.2.md`)를 커밋한다. 사용자가 읽는 말로 「새 기능」·「고친 것」을 적는다.
+- CI 가 그 파일을 `vpk pack --releaseNotes` 로 패키지에 넣는다. 설치본의 업데이트 창(도움말 > 업데이트 확인)이 이 노트를 보여 준다(`ReleaseNotesFormatter`: `#` 머리글, `-` 목록).
+- `release` 작업이 같은 파일로 GitHub Release 본문을 채운다(`gh release edit --notes-file`).
+- 파일이 없으면 노트 없이 묶고 태그 빌드에 경고를 남긴다.
+
 `release` 작업은 Linux 러너라 vpk 의 기본 채널이 `linux` 다. 그래서 업로드·다운로드마다 `--channel` 을 꼭 적는다(2026-10-25 이전 워크플로는 채널을 적지 않아 macOS 패키지를 찾지 못했을 것으로 보인다 — 실제 실행 기록은 없음).
 
 ## 서명 상태별 동작

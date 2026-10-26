@@ -48,6 +48,13 @@ jobs:
             VER="0.1.${{ github.run_number }}"
           fi
           echo "version=$VER" >> "$GITHUB_OUTPUT"
+          # 릴리스 노트: docs/release-notes/<버전>.md 가 있으면 패키지에 넣는다(앱 업데이트 창·GitHub Release 본문에 보인다).
+          NOTES="docs/release-notes/$VER.md"
+          if [[ -f "$NOTES" ]]; then
+            echo "notes=--releaseNotes $NOTES" >> "$GITHUB_OUTPUT"
+          elif [[ "$GITHUB_REF" == refs/tags/v* ]]; then
+            echo "::warning::$NOTES 가 없어 릴리스 노트 없이 묶는다"
+          fi
       - run: dotnet build Oranda.sln -c Release
       - name: Unit and UI tests
         run: dotnet test Oranda.sln -c Release --no-build --filter "Category!=Integration&Category!=Perf"
@@ -109,7 +116,7 @@ jobs:
       - name: Package
         run: >
           vpk pack --packId Oranda --packVersion "${{ steps.ver.outputs.version }}" --packTitle Oranda --packAuthors jongik-sv
-          --channel win --runtime win-x64 --packDir artifacts/publish/win-x64 --mainExe Oranda.App.exe --outputDir artifacts/release/win
+          --channel win --runtime win-x64 --packDir artifacts/publish/win-x64 --mainExe Oranda.App.exe --outputDir artifacts/release/win ${{ steps.ver.outputs.notes }}
       # 서명 2단계: Setup.exe(내려받을 때 SmartScreen 이 보는 파일). artifact configuration `installer`.
       - name: Upload installer for signing
         id: unsigned-setup
@@ -174,6 +181,13 @@ jobs:
             VER="0.1.${{ github.run_number }}"
           fi
           echo "version=$VER" >> "$GITHUB_OUTPUT"
+          # 릴리스 노트: docs/release-notes/<버전>.md 가 있으면 패키지에 넣는다(앱 업데이트 창·GitHub Release 본문에 보인다).
+          NOTES="docs/release-notes/$VER.md"
+          if [[ -f "$NOTES" ]]; then
+            echo "notes=--releaseNotes $NOTES" >> "$GITHUB_OUTPUT"
+          elif [[ "$GITHUB_REF" == refs/tags/v* ]]; then
+            echo "::warning::$NOTES 가 없어 릴리스 노트 없이 묶는다"
+          fi
       - run: dotnet build Oranda.sln -c Release
       - name: Unit and UI tests
         run: dotnet test Oranda.sln -c Release --no-build --filter "Category!=Integration&Category!=Perf"
@@ -221,12 +235,12 @@ jobs:
           vpk pack --packId Oranda --packVersion "${{ steps.ver.outputs.version }}"
           --packDir artifacts/publish/osx-arm64 --mainExe Oranda.App
           --signAppIdentity "$APPLE_SIGN_APP_IDENTITY" --signInstallIdentity "$APPLE_SIGN_INSTALL_IDENTITY"
-          --notaryProfile oranda-notary --outputDir artifacts/release
+          --notaryProfile oranda-notary --outputDir artifacts/release ${{ steps.ver.outputs.notes }}
       - name: Package (unsigned, no secrets)
         if: env.HAS_APPLE_SECRETS != 'true'
         run: >
           vpk pack --packId Oranda --packVersion "${{ steps.ver.outputs.version }}"
-          --packDir artifacts/publish/osx-arm64 --mainExe Oranda.App --outputDir artifacts/release
+          --packDir artifacts/publish/osx-arm64 --mainExe Oranda.App --outputDir artifacts/release ${{ steps.ver.outputs.notes }}
       - name: Verify signature and Gatekeeper
         if: env.HAS_APPLE_SECRETS == 'true'
         run: |
@@ -285,6 +299,21 @@ jobs:
               --repoUrl "https://github.com/${{ github.repository }}" --token "$GITHUB_TOKEN" \
               --publish --merge --releaseName "Oranda $VERSION" --tag "v$VERSION" --targetCommitish "$GITHUB_SHA"
           done
+      # 릴리스 페이지 본문도 같은 노트로 채운다(vpk 가 비워 두거나 버전 문구만 넣는 경우 대비).
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: docs/release-notes
+      - name: Release notes on the release page
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERSION: ${{ needs.macos.outputs.version }}
+        run: |
+          NOTES="docs/release-notes/$VERSION.md"
+          if [[ -f "$NOTES" ]]; then
+            gh release edit "v$VERSION" --repo "${{ github.repository }}" --notes-file "$NOTES"
+          else
+            echo "no release notes for $VERSION"
+          fi
 
   integration:
     name: integration (ubuntu, Testcontainers)
