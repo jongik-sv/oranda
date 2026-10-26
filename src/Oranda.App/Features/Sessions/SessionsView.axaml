@@ -1,0 +1,56 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:Oranda.App.Features.Sessions"
+             x:Class="Oranda.App.Features.Sessions.SessionsView"
+             x:DataType="vm:SessionsViewModel">
+  <UserControl.Styles>
+    <!-- 점 색: 대기 = 초록, 실행 중 = 주황, 끊김 = 빨강. 미커밋은 둘째 줄 글에도 적힌다. -->
+    <Style Selector="Ellipse.dot">
+      <Setter Property="Fill" Value="{DynamicResource OrandaIconGreenBrush}" />
+    </Style>
+    <Style Selector="Ellipse.dot.running">
+      <Setter Property="Fill" Value="{DynamicResource OrandaIconOrangeBrush}" />
+    </Style>
+    <Style Selector="Ellipse.dot.broken">
+      <Setter Property="Fill" Value="{DynamicResource OrandaIconRedBrush}" />
+    </Style>
+    <Style Selector="ListBox.sessions ListBoxItem">
+      <Setter Property="Padding" Value="8,6" />
+    </Style>
+  </UserControl.Styles>
+  <DockPanel>
+    <Border DockPanel.Dock="Bottom" Classes="panel-status">
+      <TextBlock Text="{Binding StatusMessage}" TextTrimming="CharacterEllipsis" />
+    </Border>
+    <Panel>
+      <TextBlock x:Name="EmptyHintText" Text="{Binding EmptyHint}" IsVisible="{Binding IsEmpty}" TextWrapping="Wrap" TextAlignment="Center"
+                 Opacity="0.6" HorizontalAlignment="Center" VerticalAlignment="Top" Margin="16,24,16,0" />
+      <!-- 오른쪽 단추는 누른 줄을 먼저 고른다(창 코드). 메뉴 항목의 사용 가능 여부는 열릴 때 코드가 맞춘다. -->
+      <ListBox x:Name="SessionList" Classes="sessions" ItemsSource="{Binding Rows}" SelectedItem="{Binding Selected, Mode=TwoWay}"
+               IsVisible="{Binding !IsEmpty}" ScrollViewer.HorizontalScrollBarVisibility="Disabled" AutomationProperties.Name="열린 세션">
+        <ListBox.ContextMenu>
+          <ContextMenu x:Name="SessionMenu">
+            <MenuItem x:Name="UseMenu" Header="이 세션 쓰기" />
+            <Separator />
+            <MenuItem x:Name="CommitMenu" Header="커밋" />
+            <MenuItem x:Name="RollbackMenu" Header="롤백" />
+            <Separator />
+            <MenuItem x:Name="CloseMenu" Header="세션 닫기" />
+          </ContextMenu>
+        </ListBox.ContextMenu>
+        <ListBox.ItemTemplate>
+          <DataTemplate x:DataType="vm:SessionRow">
+            <StackPanel Spacing="2" ToolTip.Tip="{Binding ToolTip}">
+              <StackPanel Orientation="Horizontal" Spacing="6">
+                <Ellipse Classes="dot" Classes.running="{Binding IsRunning}" Classes.broken="{Binding IsBroken}" Width="8" Height="8" VerticalAlignment="Center" />
+                <TextBlock Text="{Binding Label}" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
+                <TextBlock Classes="dim" Text="{Binding SidText}" VerticalAlignment="Center" />
+              </StackPanel>
+              <TextBlock Classes="dim" Margin="14,0,0,0" Text="{Binding Detail}" TextTrimming="CharacterEllipsis" />
+            </StackPanel>
+          </DataTemplate>
+        </ListBox.ItemTemplate>
+      </ListBox>
+    </Panel>
+  </DockPanel>
+</UserControl>

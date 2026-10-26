@@ -36,12 +36,12 @@ namespace Oranda.App.Tests.Features.Roles
     /// </summary>
     public sealed class StartupFilterTests
     {
-        /// <summary>features 없음 = 지금과 같은 시작 작업 14개(조사 1.8).</summary>
+        /// <summary>features 없음 = 지금과 같은 시작 작업 15개(조사 1.8, TSK-14-04 가 SessionsAutoShow 를 더함).</summary>
         private static readonly string[] AllStartupTasks =
         [
             "EditorDiagnosticsStartup", "MyBatisConvertReady", "MyBatisFolderReadyTask", "MyBatisWorkspaceWiring", "MapperWatchStartup",
             "NavigationWiring", "PlsqlWorkspacePersistence", "RecentFilesStartup", "ResultGridSettingsStartup", "SqlEditorDockWiring",
-            "UpdateStartup", "HistoryRecorder", "ChangeJournalRecorder", "PlSqlWarmUpTask",
+            "UpdateStartup", "HistoryRecorder", "ChangeJournalRecorder", "PlSqlWarmUpTask", "SessionsAutoShow",
         ];
 
         private static readonly string[] MyBatisStartupTasks = ["MyBatisConvertReady", "MyBatisFolderReadyTask", "MyBatisWorkspaceWiring", "MapperWatchStartup"];

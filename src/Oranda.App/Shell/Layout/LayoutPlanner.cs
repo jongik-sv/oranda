@@ -43,17 +43,25 @@ public static class LayoutPlanner
     /// </summary>
     private const string MyBatisCombosTool = "oranda.panel.mybatisCombos";
 
+    /// <summary>
+    /// 기본 배치에서 닫아 두는 도구 창(위치와 상관없이 hiddenTools 로 간다). 「세션」 창(TSK-14-04, D-034)은 작업 세션이 2개 이상일 때
+    /// 기능이 보이므로 처음부터 열어 두지 않는다. 저장된 배치에 없는 창이 새로 등록돼도 열지 않고 닫힌 창으로 둔다.
+    /// </summary>
+    private static readonly string[] DefaultHiddenTools = ["oranda.panel.sessions"];
+
     /// <summary>문서 영역 노드는 트리에 정확히 1개이고, 그 노드의 <see cref="DockNode.Tools"/> 는 쓰지 않는다.</summary>
     public static LayoutDocument CreateDefault(IEnumerable<ToolPanelDefinition> panels)
     {
         var tools = panels.Where(p => p.Kind == ToolPanelKind.Tool).ToList();
-        var left = IdsAt(tools, DockLocation.Left);
+        var left = IdsAt(tools, DockLocation.Left).Where(id => !DefaultHiddenTools.Contains(id)).ToList();
         var allBottom = IdsAt(tools, DockLocation.Bottom);
         var bottom = allBottom.Where(id => DefaultBottomTools.Contains(id) || id == MyBatisCombosTool).ToList();
 
         // 아래는 조회 결과·메시지·DBMS 출력만 열고, 나머지 아래 창과 오른쪽 창 전부(바인드 변수·템플릿 포함)는 기본 닫힘(D-019):
         // 트리에 넣지 않고 hiddenTools 에 둔다. 처음 열 때는 자기 기본 위치로 간다(LayoutPlanner.ShowTool).
-        var hidden = allBottom.Where(id => !bottom.Contains(id)).Concat(IdsAt(tools, DockLocation.Right)).ToList();
+        // 닫힌 창 순서는 등록 순서(왼쪽 → 아래 → 오른쪽)를 따른다(DockWorkspace.Capture 와 같게).
+        var hidden = IdsAt(tools, DockLocation.Left).Where(DefaultHiddenTools.Contains)
+            .Concat(allBottom.Where(id => !bottom.Contains(id))).Concat(IdsAt(tools, DockLocation.Right)).ToList();
         var documents = new DockNode { Kind = DockNodeKind.Documents };
 
         // 가로: [왼쪽 묶음(창 전체 높이), 세로: [문서, 아래 묶음]] — 오렌지처럼 스키마 브라우저가 왼쪽을 위아래로 다 쓰고,
@@ -135,6 +143,12 @@ public static class LayoutPlanner
         {
             if (!seen.Contains(def.Id) && !hiddenSet.Contains(def.Id))
             {
+                if (DefaultHiddenTools.Contains(def.Id))
+                {
+                    hidden.Add(def.Id);
+                    continue;
+                }
+
                 root = AddTool(root, def.Id, def.DefaultLocation, order);
                 seen.Add(def.Id);
             }
