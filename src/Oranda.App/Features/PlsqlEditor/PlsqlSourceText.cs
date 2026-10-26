@@ -313,6 +313,15 @@ public static class PlsqlSourceText
             joined = joined[typeStart..];
         }
 
+        // 서버는 소유자(SCOTT.)를 공백으로 바꿔 저장하고 편집기는 첫 줄에 소유자를 다시 적는다(ToEditorText). 머리는 「유형 이름」으로 맞춰 비교한다.
+        var h = Header.Match(joined);
+        if (h.Success)
+        {
+            var type = Regex.Replace(h.Groups["type"].Value, @"\s+", " ");
+            var name = h.Groups["b"].Success ? h.Groups["b"].Value : h.Groups["a"].Value;
+            joined = type + " " + name + joined[(h.Index + h.Length)..];
+        }
+
         return joined;
     }
 

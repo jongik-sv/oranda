@@ -108,6 +108,18 @@ public class PlsqlEditorTests
         Assert.Contains("  PACKAGE p AS", diff);
     }
 
+    [Fact]
+    public void Diff_ignores_the_owner_written_back_into_the_first_line()
+    {
+        // 서버는 소유자 자리를 공백으로 저장하고, 편집기는 그 자리에 소유자를 다시 적는다.
+        var server = "FUNCTION           FC_CURRENT_DH(VDATE IN VARCHAR2 default '1')\n  RETURN date\nis\nbegin\n  return null;\nend;";
+        var editor = PlsqlSourceText.ToEditorText(server, "MESAPUSER", out _);
+
+        Assert.StartsWith("CREATE OR REPLACE FUNCTION \"MESAPUSER\".FC_CURRENT_DH(", editor);
+        Assert.Equal(string.Empty, PlsqlSourceText.BuildDiff(editor, server));
+        Assert.NotEmpty(PlsqlSourceText.BuildDiff(editor.Replace("return null", "return sysdate"), server));
+    }
+
     [Theory]
     [InlineData("PACKAGE", "PACKAGE BODY")]
     [InlineData("PACKAGE BODY", "PACKAGE")]
@@ -296,6 +308,24 @@ public class PlsqlEditorTests
         Assert.Contains("theirs;", vm.DiffText);
         Assert.DoesNotContain(exec.Statements, s => s.Verb == "CREATE");
         Assert.True(vm.Editor.IsDirty);
+
+        // 나란히 보기: 왼쪽 = 서버, 오른쪽 = 내 소스. 닫으면 행도 비운다.
+        Assert.Contains(vm.DiffRows, r => r.Pair is { Left.Text: var l, Right.Text: var m } && l.Contains("theirs;", StringComparison.Ordinal) && m.Contains("mine;", StringComparison.Ordinal));
+        vm.CloseDiff();
+        Assert.Empty(vm.DiffRows);
+    }
+
+    [Fact]
+    public async Task Server_diff_right_after_open_shows_no_difference()
+    {
+        var meta = new FakeMeta { Source = BodySource };
+        var vm = new PlsqlEditorViewModel(meta, new FakeExec());
+        await vm.OpenAsync(new FakeSession(), Body);
+
+        await vm.ShowServerDiffAsync();
+
+        Assert.Equal("(차이 없음)", vm.DiffText);
+        Assert.Empty(vm.DiffRows);
     }
 
     [Fact]

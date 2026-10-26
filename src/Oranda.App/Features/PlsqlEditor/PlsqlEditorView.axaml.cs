@@ -61,6 +61,8 @@ public partial class PlsqlEditorView : UserControl, Oranda.App.Shell.Docking.IFo
             _vm.PropertyChanged += OnVmChanged;
             UpdateBanner();
         }
+
+        UpdateDiff();
     }
 
     private void Activate()
@@ -76,6 +78,30 @@ public partial class PlsqlEditorView : UserControl, Oranda.App.Shell.Docking.IFo
         if (e.PropertyName is nameof(PlsqlEditorViewModel.ServerSourceChanged) or nameof(PlsqlEditorViewModel.WarningText))
         {
             UpdateBanner();
+        }
+        else if (e.PropertyName is nameof(PlsqlEditorViewModel.DiffText) or nameof(PlsqlEditorViewModel.DiffRows))
+        {
+            UpdateDiff();
+        }
+    }
+
+    /// <summary>차이 보기를 열고 닫는다. 나란히 보기 행이 있으면 그것을, 없으면(「차이 없음」 등) 글자를 보인다.</summary>
+    private void UpdateDiff()
+    {
+        var open = !string.IsNullOrEmpty(_vm?.DiffText);
+        var rows = _vm?.DiffRows ?? [];
+        var wasOpen = DiffPanel.IsVisible;
+        DiffPanel.IsVisible = open;
+        DiffSplitter.IsVisible = open;
+        DiffView.Rows = rows;
+        DiffView.IsVisible = rows.Count > 0;
+        DiffHeads.IsVisible = rows.Count > 0;
+        DiffTextScroll.IsVisible = rows.Count == 0;
+        if (open != wasOpen)
+        {
+            // 열 때 편집기 3 : 차이 2. 닫으면 차이 줄을 0 으로(끌어 바꾼 높이는 다음에 열 때 처음 비율로 돌아간다).
+            BodyGrid.RowDefinitions[0].Height = open ? new GridLength(3, GridUnitType.Star) : new GridLength(1, GridUnitType.Star);
+            BodyGrid.RowDefinitions[2].Height = open ? new GridLength(2, GridUnitType.Star) : new GridLength(0);
         }
     }
 

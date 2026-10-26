@@ -6,6 +6,7 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using CommunityToolkit.Mvvm.ComponentModel;
+using Oranda.App.Features.MyBatisWorkspace.Save;
 using Oranda.App.Features.PlsqlRun;
 using Oranda.App.Features.PlsqlWorkspace;
 using Oranda.App.Features.SqlEditor;
@@ -179,6 +180,27 @@ public sealed partial class PlsqlEditorViewModel : ToolPanelViewModelBase, IComp
     [ObservableProperty]
     public partial string DiffText { get; set; } = string.Empty;
 
+    /// <summary>나란히 보기 행(왼쪽 = 서버, 오른쪽 = 내 소스). 차이가 없거나 닫혀 있으면 빈 목록.</summary>
+    [ObservableProperty]
+    public partial IReadOnlyList<MapperDiffRow> DiffRows { get; set; } = [];
+
+    partial void OnDiffTextChanged(string value)
+    {
+        if (value.Length == 0)
+        {
+            DiffRows = [];
+        }
+    }
+
+    /// <summary>내 소스와 서버 소스의 차이를 글자·나란히 보기 행으로 채운다. 차이가 없으면 둘 다 비운다.</summary>
+    private void FillDiff(string server)
+    {
+        DiffText = PlsqlSourceText.BuildDiff(Editor.Text, server);
+        DiffRows = DiffText.Length == 0
+            ? []
+            : MapperDiffRow.Section(null, MapperLineDiff.Build(PlsqlSourceText.ForCompare(server), PlsqlSourceText.ForCompare(Editor.Text), 1, 1), sideBySide: true);
+    }
+
     /// <summary>다른 세션 사용 경고 등 저장 전 확인이 필요한 말.</summary>
     [ObservableProperty]
     public partial string WarningText { get; set; } = string.Empty;
@@ -309,7 +331,7 @@ public sealed partial class PlsqlEditorViewModel : ToolPanelViewModelBase, IComp
         if (changed)
         {
             ServerSource = await meta.GetSourceAsync(_session, Target, ct).ConfigureAwait(true);
-            DiffText = PlsqlSourceText.BuildDiff(Editor.Text, ServerSource);
+            FillDiff(ServerSource);
         }
 
         ServerSourceChanged = changed;
@@ -479,8 +501,11 @@ public sealed partial class PlsqlEditorViewModel : ToolPanelViewModelBase, IComp
         try
         {
             ServerSource = await meta.GetSourceAsync(_session, Target, ct).ConfigureAwait(true);
-            var diff = PlsqlSourceText.BuildDiff(Editor.Text, ServerSource);
-            DiffText = diff.Length == 0 ? "(차이 없음)" : diff;
+            FillDiff(ServerSource);
+            if (DiffText.Length == 0)
+            {
+                DiffText = "(차이 없음)";
+            }
         }
         catch (OperationCanceledException)
         {

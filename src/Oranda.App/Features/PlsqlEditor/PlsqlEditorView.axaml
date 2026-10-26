@@ -4,9 +4,10 @@
              xmlns:icons="using:Oranda.App.Shell.Icons"
              xmlns:vm="using:Oranda.App.Features.PlsqlEditor"
              xmlns:se="using:Oranda.App.Features.SqlEditor"
+             xmlns:diff="using:Oranda.App.Features.MyBatisWorkspace.Save"
              x:Class="Oranda.App.Features.PlsqlEditor.PlsqlEditorView"
              x:DataType="vm:PlsqlEditorViewModel">
-  <!-- 위: 저장 도구줄·충돌 알림 / 가운데: 차이 보기(열렸을 때) / 아래 본문: SQL 편집기 / 맨 아래: 상태 -->
+  <!-- 위: 저장 도구줄·충돌 알림 / 본문: SQL 편집기 + 아래 차이 보기(열렸을 때) / 맨 아래: 상태 -->
   <DockPanel>
     <Border DockPanel.Dock="Top" Classes="panel-toolbar">
       <StackPanel Orientation="Horizontal" Spacing="2">
@@ -28,15 +29,27 @@
     <Border DockPanel.Dock="Bottom" Classes="panel-status">
       <TextBlock Text="{Binding StatusText}" TextTrimming="CharacterEllipsis" />
     </Border>
-    <Border DockPanel.Dock="Bottom" MaxHeight="220" IsVisible="{Binding DiffText, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"
-            BorderThickness="0,1,0,0" BorderBrush="{DynamicResource SystemControlForegroundBaseLowBrush}">
-      <DockPanel>
-        <Button x:Name="CloseDiffButton" DockPanel.Dock="Top" Classes="tool" Content="차이 닫기" HorizontalAlignment="Left" Margin="4,2" icons:ButtonIcon.Key="clear" />
-        <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto">
-          <SelectableTextBlock Text="{Binding DiffText}" Margin="8,2" FontFamily="Consolas,Menlo,monospace" />
-        </ScrollViewer>
+    <!-- 편집기 / 끌어 옮기는 경계 / 차이 보기(열렸을 때만, 왼쪽 = 서버·오른쪽 = 내 소스 나란히). 줄 높이는 코드에서 연다·닫는다. -->
+    <Grid x:Name="BodyGrid" RowDefinitions="*,Auto,0">
+      <se:SqlEditorView x:Name="EditorView" keymaps:FocusSlot.Name="plsql" />
+      <GridSplitter x:Name="DiffSplitter" Grid.Row="1" Height="4" ResizeDirection="Rows" IsVisible="False"
+                    Background="{DynamicResource SystemControlForegroundBaseLowBrush}" />
+      <DockPanel x:Name="DiffPanel" Grid.Row="2" IsVisible="False">
+        <!-- 머리 글자는 나란히 보기 두 반쪽 위에(MyBatis 「차이 보고 고르기」 창과 같은 들여쓰기) -->
+        <Panel DockPanel.Dock="Top">
+          <Grid x:Name="DiffHeads" ColumnDefinitions="*,*" Margin="46,0,0,0">
+            <TextBlock Text="서버" FontWeight="SemiBold" VerticalAlignment="Center" />
+            <TextBlock Grid.Column="1" Text="내 소스" FontWeight="SemiBold" VerticalAlignment="Center" />
+          </Grid>
+          <Button x:Name="CloseDiffButton" Classes="tool" Content="차이 닫기" HorizontalAlignment="Right" Margin="4,2" icons:ButtonIcon.Key="clear" />
+        </Panel>
+        <Panel>
+          <diff:MapperDiffView x:Name="DiffView" />
+          <ScrollViewer x:Name="DiffTextScroll" HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto">
+            <SelectableTextBlock Text="{Binding DiffText}" Margin="8,2" FontFamily="Consolas,Menlo,monospace" />
+          </ScrollViewer>
+        </Panel>
       </DockPanel>
-    </Border>
-    <se:SqlEditorView x:Name="EditorView" keymaps:FocusSlot.Name="plsql" />
+    </Grid>
   </DockPanel>
 </UserControl>

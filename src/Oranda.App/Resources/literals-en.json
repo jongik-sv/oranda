@@ -541,6 +541,8 @@
   "직전 새로 고침과의 차이(델타)로 보기": "Show difference from the previous refresh (delta)",
   "질의를 서버에서 다시 실행해 처음부터 끝까지 흘려 저장한다(그리드에 불러온 행만이 아니다).": "Re-runs the query on the server and streams every row to the file (not only the rows loaded in the grid).",
   "차이 닫기": "Close diff",
+  "서버": "Server",
+  "내 소스": "My source",
   "참조 열": "Referenced column",
   "참조 표": "Referenced table",
   "찾기": "Find",
