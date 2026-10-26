@@ -301,7 +301,10 @@ public sealed partial class SessionRouter
         return ConfirmSwitch is { } confirm && await confirm(old, ct).ConfigureAwait(true);
     }
 
-    /// <summary>작업 공간을 세션에 묶는다(그 프로필의 「접속 안 됨」 도 푼다). 이전에 묶였던 세션이 아무도 안 쓰는 더 연 세션이 되면 닫는다.</summary>
+    /// <summary>
+    /// 작업 공간을 세션에 묶는다(그 프로필의 「접속 안 됨」 도 푼다). 이전에 묶였던 더 연 세션은 아무도 안 쓰게 되어도 닫지 않는다:
+    /// 콤보로 다시 오갈 수 있게 사용자가 「세션 닫기」·접속 끊기로 닫을 때까지 남긴다(상한 8 이 쌓임을 막는다).
+    /// </summary>
     private void Bind(SqlWorkspaceViewModel ws, ISession session)
     {
         if (!_bound.TryGetValue(ws, out var map))
@@ -309,7 +312,6 @@ public sealed partial class SessionRouter
             _bound[ws] = map = [];
         }
 
-        map.TryGetValue(session.Profile.Id, out var previous);
         map[session.Profile.Id] = session;
         if (!_onPrimary.TryGetValue(ws, out var primaries))
         {
@@ -328,11 +330,6 @@ public sealed partial class SessionRouter
         if (_lost.TryGetValue(ws, out var lost))
         {
             lost.Remove(session.Profile.Id);
-        }
-
-        if (previous is not null && !ReferenceEquals(previous, session))
-        {
-            _ = CloseIfOrphanAsync(previous);
         }
 
         Refocus();
@@ -438,18 +435,6 @@ public sealed partial class SessionRouter
         ArgumentNullException.ThrowIfNull(session);
         tab.ConnectionProfileId = session.Profile.Id;
         ClearLost(tab, session.Profile.Id);
-    }
-
-    /// <summary>아무 작업 공간도 안 쓰는 더 연 세션(접속이 아니다)을 미커밋·실행이 없을 때 닫는다(남겨 둔 트랜잭션은 앱 종료 때 묻는다).</summary>
-    private async Task CloseIfOrphanAsync(ISession session)
-    {
-        if (ReferenceEquals(_connections.SessionOf(session.Profile.Id), session) || !_connections.IsOpen(session)
-            || WorkspacesOn(session).Count > 0 || _state.IsBusy(session.Id) || _state.IsTxnPending(session.Id) || session.HasPendingTransaction)
-        {
-            return;
-        }
-
-        await _connections.DisconnectAsync(session, CancellationToken.None).ConfigureAwait(true);
     }
 
     /// <summary>

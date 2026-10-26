@@ -291,7 +291,7 @@ public sealed class WorkspaceSessionTests
     });
 
     [Fact]
-    public Task Leaving_a_second_session_nobody_uses_closes_it_unless_it_has_uncommitted_changes() => Ui.Run(async () =>
+    public Task Leaving_a_second_session_nobody_uses_keeps_it_open_so_the_combo_can_switch_back() => Ui.Run(async () =>
     {
         using var rig = new Rig();
         var a = await rig.ConnectAsync();
@@ -304,17 +304,17 @@ public sealed class WorkspaceSessionTests
         Pump();
         Assert.Equal(SessionSelect.Selected, await rig.Router.SelectAsync(a)); // B 가 접속의 세션으로 옮긴다
         Pump();
-        await WaitAsync(() => !rig.Service.IsOpen(sessionB));
-        Assert.Equal([a], rig.Service.SessionsOf(a.Profile.Id));
-
-        // 미커밋을 「그대로 두고 바꾸기」 로 남긴 세션은 닫지 않는다.
-        var kept = await rig.Router.NewSessionAsync();
-        Assert.NotNull(kept);
-        rig.State.ApplyTransaction(kept!.Id, true);
-        rig.Router.ConfirmSwitch = (_, _) => Task.FromResult(true);
-        Assert.Equal(SessionSelect.Selected, await rig.Router.SelectAsync(a));
+        await Task.Delay(50);
         Pump();
-        Assert.True(rig.Service.IsOpen(kept));
+
+        // 아무도 안 쓰게 된 추가 세션도 사용자가 닫을 때까지 남는다(콤보로 다시 오갈 수 있게).
+        Assert.True(rig.Service.IsOpen(sessionB));
+        Assert.Equal(2, rig.Service.SessionsOf(a.Profile.Id).Count);
+        Assert.Empty(rig.Router.WorkspacesOn(sessionB));
+
+        Assert.Equal(SessionSelect.Selected, await rig.Router.SelectAsync(sessionB));
+        Pump();
+        Assert.Same(sessionB, rig.Router.SessionFor(tabB));
     });
 
     [Fact]
