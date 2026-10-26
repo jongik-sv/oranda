@@ -35,7 +35,7 @@ public sealed class PlsqlRunWindow : Window
     }
 
     /// <summary>주 창 위에 연다. 주 창이 없으면(시험·시작 직후) 독립 창으로 띄운다.</summary>
-    public static void ShowFor(PlsqlRunViewModel vm, Window? owner)
+    public static PlsqlRunWindow ShowFor(PlsqlRunViewModel vm, Window? owner)
     {
         var window = new PlsqlRunWindow(vm);
         owner ??= (Application.Current?.ApplicationLifetime as IClassicDesktopStyleApplicationLifetime)?.MainWindow;
@@ -48,6 +48,8 @@ public sealed class PlsqlRunWindow : Window
             window.WindowStartupLocation = WindowStartupLocation.CenterScreen;
             window.Show();
         }
+
+        return window;
     }
 
     private Grid Build()
@@ -91,7 +93,7 @@ public sealed class PlsqlRunWindow : Window
         var problems = new TextBlock { TextWrapping = TextWrapping.Wrap };
         problems.Bind(TextBlock.TextProperty, new Binding(nameof(PlsqlRunViewModel.ProblemText)));
         problems.Bind(IsVisibleProperty, new Binding(nameof(PlsqlRunViewModel.ProblemText)) { Converter = Avalonia.Data.Converters.StringConverters.IsNotNullOrEmpty });
-        problems.Bind(TextBlock.ForegroundProperty, problems.GetResourceObservable("OrandaErrorBrush"));
+        problems.Bind(TextBlock.ForegroundProperty, problems.GetResourceObservable("OrandaDangerForegroundBrush"));
         var previewPanel = new DockPanel { LastChildFill = true };
         DockPanel.SetDock(problems, Avalonia.Controls.Dock.Bottom);
         previewPanel.Children.Add(problems);
@@ -117,7 +119,7 @@ public sealed class PlsqlRunWindow : Window
         var errText = new TextBlock { TextWrapping = TextWrapping.Wrap };
         errText.Bind(TextBlock.TextProperty, new Binding(nameof(PlsqlRunViewModel.StatusText)));
         errText.Bind(IsVisibleProperty, new Binding(nameof(PlsqlRunViewModel.StatusIsError)));
-        errText.Bind(TextBlock.ForegroundProperty, errText.GetResourceObservable("OrandaErrorBrush"));
+        errText.Bind(TextBlock.ForegroundProperty, errText.GetResourceObservable("OrandaDangerForegroundBrush"));
         Avalonia.Automation.AutomationProperties.SetName(errText, "실행 오류");
         status.Children.Add(okText);
         status.Children.Add(errText);

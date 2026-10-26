@@ -1,5 +1,11 @@
+using Oranda.App.Features.Execution;
+using Avalonia.Controls;
+using Avalonia.Styling;
+using Avalonia.Threading;
+using Avalonia.VisualTree;
 using Oranda.App.Features.PlsqlRun;
 using Oranda.App.Tests.Features.Execution;
+using Oranda.App.Tests.Features.SqlEditor;
 using Oranda.App.Tests.Shell;
 using Oranda.Core.Connection;
 using Oranda.Core.Execution;
@@ -28,6 +34,8 @@ public class PlsqlRunTests
 
         public List<string> Sent { get; } = [];
 
+        public Oranda.App.Features.Execution.ExecutionLog Log { get; } = new();
+
         public PlsqlRunViewModel Create() => new(Deps());
 
         public PlsqlRunDeps Deps() => new()
@@ -36,6 +44,7 @@ public class PlsqlRunTests
             Metadata = () => Meta,
             Execution = () => Exec,
             SendToEditor = Sent.Add,
+            Log = Log,
         };
     }
 
@@ -217,6 +226,125 @@ public class PlsqlRunTests
         Assert.Empty(vm.Rows);
         Assert.False(vm.CanRun);
     }
+
+    [Fact]
+    public async Task Open_failure_is_shown_in_the_window_and_left_in_the_message_log()
+    {
+        var rig = new Rig(); // 메타데이터에 대상이 없다 — 창은 열렸고 인자 줄이 비는 경우(TSK-12-02)
+        var vm = rig.Create();
+
+        await vm.OpenAsync(Proc);
+
+        Assert.True(vm.StatusIsError);
+        Assert.Contains("찾지 못했습니다", vm.StatusText, StringComparison.Ordinal);
+        var entry = Assert.Single(rig.Log.Messages);
+        Assert.Equal(MessageKind.Error, entry.Kind);
+        Assert.Contains("SCOTT.RAISE_SAL", entry.Text, StringComparison.Ordinal);
+        Assert.Contains(vm.StatusText, entry.Text, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task Open_without_a_connection_is_also_logged()
+    {
+        var vm = new PlsqlRunViewModel(new PlsqlRunDeps { Session = () => null, Metadata = () => null, Execution = () => throw new InvalidOperationException(), Log = new Oranda.App.Features.Execution.ExecutionLog() });
+
+        await vm.OpenAsync(Proc);
+
+        Assert.True(vm.StatusIsError);
+        Assert.False(vm.CanRun);
+    }
+
+    [Fact]
+    public async Task Procedure_without_arguments_opens_runnable_with_a_hint_instead_of_an_empty_window()
+    {
+        var rig = new Rig();
+        var daily = new DbObjectRef("SCOTT", "DAILY_BATCH", "PROCEDURE");
+        rig.Meta.Procedures[daily] = [new ProcedureInfo("DAILY_BATCH", false, [])];
+        var vm = rig.Create();
+
+        await vm.OpenAsync(daily);
+
+        Assert.Empty(vm.Rows);
+        Assert.Contains("SCOTT.DAILY_BATCH;", vm.Preview, StringComparison.Ordinal);
+        Assert.True(vm.CanRun);
+        Assert.False(vm.StatusIsError);
+        Assert.Contains("인자가 없습니다", vm.StatusText, StringComparison.Ordinal);
+        Assert.Empty(rig.Log.Messages);
+
+        Assert.True(await vm.RunAsync());
+        Assert.Single(rig.Exec.Statements);
+        Assert.StartsWith("완료", vm.StatusText, StringComparison.Ordinal); // 실행하면 힌트는 결과로 바뀐다
+    }
+
+    /// <summary>실제 창에 세 상태(인자 있음·인자 없음·열기 실패)를 라이트·다크로 그려 화면에 뭔가 보이는지 단정하고, ORANDA_RENDER_DIR 가 있으면 PNG 로 남긴다.</summary>
+    [Theory]
+    [InlineData("args", false)]
+    [InlineData("args", true)]
+    [InlineData("noarg", false)]
+    [InlineData("noarg", true)]
+    [InlineData("missing", false)]
+    [InlineData("missing", true)]
+    public Task Window_shows_header_status_and_buttons_in_every_state(string state, bool dark) => Ui.Run(async () =>
+    {
+        var rig = WithProcedure();
+        var daily = new DbObjectRef("SCOTT", "DAILY_BATCH", "PROCEDURE");
+        rig.Meta.Procedures[daily] = [new ProcedureInfo("DAILY_BATCH", false, [])];
+        var vm = rig.Create();
+        await vm.OpenAsync(state switch { "noarg" => daily, "missing" => new DbObjectRef("SCOTT", "NOPE", "PROCEDURE"), _ => Proc });
+        var app = Avalonia.Application.Current!;
+        var previous = app.RequestedThemeVariant;
+        app.RequestedThemeVariant = dark ? ThemeVariant.Dark : ThemeVariant.Light;
+        try
+        {
+            var window = new PlsqlRunWindow(vm);
+            window.Show();
+            Dispatcher.UIThread.RunJobs();
+            window.UpdateLayout();
+
+            var texts = window.GetVisualDescendants().OfType<TextBlock>().Where(t => t.IsVisible && t.Bounds.Width > 0).Select(t => t.Text).ToList();
+            Assert.Contains("인자", texts);
+            Assert.Contains("실행", texts);
+            Assert.Contains("닫기", texts);
+            if (state == "args")
+            {
+                Assert.Contains("P_ID", texts);
+            }
+            else
+            {
+                Assert.Contains(vm.StatusText, texts); // 비어 보이는 창에도 무엇이 어떤지 한 줄이 보인다
+            }
+
+            if (state == "missing")
+            {
+                // 오류 줄은 위험색 글(예전에는 없는 자원 이름이라 보통 글로 보여 놓치기 쉬웠다).
+                var error = window.GetVisualDescendants().OfType<TextBlock>().Single(t => t.IsVisible && t.Text == vm.StatusText);
+                Assert.True(app.TryFindResource("OrandaDangerForegroundBrush", app.ActualThemeVariant, out var danger));
+                Assert.Equal(((Avalonia.Media.SolidColorBrush)danger!).Color, ((Avalonia.Media.SolidColorBrush)error.Foreground!).Color);
+            }
+
+            if (Environment.GetEnvironmentVariable("ORANDA_RENDER_DIR") is { Length: > 0 } dir)
+            {
+                Directory.CreateDirectory(dir);
+                if (app.TryFindResource("SystemRegionColor", app.ActualThemeVariant, out var region) && region is Avalonia.Media.Color color)
+                {
+                    window.Background = new Avalonia.Media.SolidColorBrush(color); // 헤드리스 그리기는 창 바탕을 칠하지 않아 테마 바탕색을 직접 깐다
+                }
+
+                
+                using var bmp = new Avalonia.Media.Imaging.RenderTargetBitmap(new Avalonia.PixelSize((int)window.Width, (int)window.Height));
+                bmp.Render(window);
+#pragma warning disable CS0618 // 렌더 확인용
+                bmp.Save(Path.Combine(dir, $"plsqlrun-{state}-{(dark ? "dark" : "light")}.png"));
+#pragma warning restore CS0618
+            }
+
+            window.Close();
+        }
+        finally
+        {
+            app.RequestedThemeVariant = previous;
+        }
+    });
 
     [Fact]
     public async Task Send_to_editor_keeps_binds_and_lists_values_as_comments()

@@ -1,4 +1,5 @@
 using System.Collections.ObjectModel;
+using System.Diagnostics;
 using System.Globalization;
 using System.Text;
 using CommunityToolkit.Mvvm.ComponentModel;
@@ -156,7 +157,7 @@ public sealed partial class PlsqlRunViewModel : ObservableObject
         var meta = _deps.Metadata();
         if (session is null || meta is null)
         {
-            SetStatus("접속이 없습니다. 접속한 뒤 실행하세요.", error: true);
+            FailOpen("접속이 없습니다. 접속한 뒤 실행하세요.", target);
             return;
         }
 
@@ -167,7 +168,7 @@ public sealed partial class PlsqlRunViewModel : ObservableObject
         }
         catch (Exception e) when (e is not OperationCanceledException)
         {
-            SetStatus("인자 정보를 읽지 못했습니다: " + e.Message, error: true);
+            FailOpen("인자 정보를 읽지 못했습니다: " + e.Message, target);
             return;
         }
 
@@ -186,7 +187,7 @@ public sealed partial class PlsqlRunViewModel : ObservableObject
         {
             Rows.Clear();
             Preview = string.Empty;
-            SetStatus(isPackage ? "실행할 수 있는 프로시저·함수가 없습니다." : "프로시저·함수 정보를 찾지 못했습니다.", error: true);
+            FailOpen(isPackage ? "실행할 수 있는 프로시저·함수가 없습니다." : "프로시저·함수 정보를 찾지 못했습니다.", target);
             return;
         }
 
@@ -195,6 +196,20 @@ public sealed partial class PlsqlRunViewModel : ObservableObject
         {
             Rebuild(SelectedCandidate);
         }
+
+        // 인자 줄이 하나도 없으면 빈 칸으로 보이므로 무엇을 하면 되는지 적는다.
+        if (Rows.Count == 0)
+        {
+            SetStatus("인자가 없습니다. 「실행」 을 누르면 바로 호출합니다.", error: false);
+        }
+    }
+
+    /// <summary>열기 실패를 창 상태 줄에 보이고 메시지 창·앱 로그에도 남긴다(창만 비어 보이고 흔적이 없던 결함, TSK-12-02).</summary>
+    private void FailOpen(string text, DbObjectRef target)
+    {
+        SetStatus(text, error: true);
+        _deps.Log?.AddMessage(MessageKind.Error, $"PL/SQL 실행 창 — {target.Owner}.{target.Name}: {text}");
+        Trace.TraceWarning("PL/SQL 실행 창을 열지 못했다 ({0}.{1}, {2}): {3}", target.Owner, target.Name, target.ObjectType, text);
     }
 
     /// <summary>후보 표시 글: <c>NAME(A IN NUMBER, B OUT VARCHAR2) RETURN NUMBER</c>.</summary>

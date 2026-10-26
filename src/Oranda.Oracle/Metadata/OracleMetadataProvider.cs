@@ -233,7 +233,8 @@ internal sealed partial class OracleMetadataProvider : IMetadataProvider
             : obj;
 
         var cachedRow = await FindCachedAsync(s, normalized, ct);
-        if (cachedRow?.PayloadJson is { } json && TryReadPayload(json, "procs", out List<ProcedureInfo>? hit))
+        // 빈 목록은 믿지 않고 다시 읽는다: 인자 없는 단독 프로시저를 빈 목록으로 저장한 예전 캐시가 남아 있을 수 있다(TSK-12-02).
+        if (cachedRow?.PayloadJson is { } json && TryReadPayload(json, "procs", out List<ProcedureInfo>? hit) && hit!.Count > 0)
         {
             return hit!;
         }
@@ -550,7 +551,7 @@ internal sealed partial class OracleMetadataProvider : IMetadataProvider
             IndexType = Str(g.First()[2]),
         })];
 
-    private static List<ProcedureInfo> BuildProcedures(DbObjectRef obj, List<object?[]> members, List<object?[]> args)
+    internal static List<ProcedureInfo> BuildProcedures(DbObjectRef obj, List<object?[]> members, List<object?[]> args)
     {
         // 인자를 (프로시저 이름, 오버로드) 로 묶는다.
         var argGroups = args
@@ -564,11 +565,13 @@ internal sealed partial class OracleMetadataProvider : IMetadataProvider
             var name = Str(m[0]) ?? obj.Name;
             var overload = Str(m[1]);
             argGroups.TryGetValue((name, overload), out var rows);
+
+            // 인자 행이 하나도 없는 프로시저(인자 없는 단독 프로시저 포함)도 호출할 수 있는 대상이다.
             var info = BuildProcedure(name, overload, rows ?? []);
-            if (isPackage || info is not null)
+            result.Add(info ?? new ProcedureInfo(name, false, [])
             {
-                result.Add(info ?? new ProcedureInfo(name, false, []));
-            }
+                Overload = int.TryParse(overload, NumberStyles.None, CultureInfo.InvariantCulture, out var n) ? n : null,
+            });
         }
 
         if (members.Count == 0 && !isPackage)

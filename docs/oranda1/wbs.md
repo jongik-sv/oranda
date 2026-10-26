@@ -831,7 +831,7 @@ levels:
   - acceptance: 어느 화면이 왜 안 됐는지와 원인이 결과에 적혀 있다 / 느린 공급자(지연 주입)에서도 UI 스레드가 막히지 않고 목록이 흔들리지 않는다(갱신 횟수·막힘 시간 측정값이 결과에 있다) / INVALID 객체를 만든 뒤 스키마 브라우저 필터·객체 검색·INVALID 컴파일 대상·DDL 추출이 그 객체를 찾는다(캐시 있음·없음) / 재발 방지 단위 시험 + Oracle 통합 시험(가능하면 26ai·11.2 둘 다, 안 되면 이유) / 정상(VALID) 객체는 INVALID 거르기에 섞이지 않는다 / `dotnet build Oranda.sln -warnaserror`·전체 시험 통과
   - note: 담당 PC: win144(Windows 개발 PC) — 맥북 세션은 이 Task 를 하지 않는다. 사용자 원문(2026-10-26): 「Invalid 객체 검색 안됨」 / 「Invalid 객체 검색 하는 것이 느린 컴퓨터에서는 엄청 느리고 UI를 막 이리저리 왔다갔다 하게 만들어」. 범위 = 결과 정확성 + 속도 + UI 흔들림. 크기 M. 레인 sc-invalid / 결과: 원인 = 메타 캐시가 INVALID 거르기에 옛 상태를 써 표를 지운 뒤 새로 INVALID 가 된 객체를 놓침(스키마 브라우저 토글·DDL 추출), 11g 비 DBA 전체 목록 읽기 128초가 같은 접속의 INVALID 질의를 막음. 고침 = INVALID 는 서버에 직접 묻고, 느린 서버는 백그라운드 갱신을 드물게, 필터 때 트리를 비우지 않고 한 번에 바꿔 끼움, 객체 검색 앞 검색 취소·결과 목록째 교체. 26ai·11.2 통합 통과. (win144)
 
-- [ ] TSK-12-02: Windows 에서 프로시저·함수 실행 창이 빈 화면 [win144] w:2 2026-10-27~2026-10-28
+- [x] TSK-12-02: Windows 에서 프로시저·함수 실행 창이 빈 화면 [win144] w:2 2026-10-27~2026-10-28
   - category: defect
   - domain: frontend
   - model: opus
@@ -840,7 +840,7 @@ levels:
   - prd-ref: 결함 보고 2026-10-26
   - requirements: 사용자 보고 「윈도우에서 프로시저/함수 실행 메뉴 실행 시 처리가 안됨」 → 「화면 자체가 빈화면으로 되어 잇음」(v0.1.0 설치본, Release·self-contained·ReadyToRun 게시본). 명령 `oranda.plsql.runFromBrowser`(스키마 우클릭)·`oranda.plsql.run`(PL/SQL 편집기, `PlsqlRunCommands.cs`)이 창을 먼저 띄우고(`PlsqlRunWindow.ShowFor`) 그 뒤 `PlsqlRunViewModel.OpenAsync` 를 부른다. 창은 XAML 없이 코드로 만든다(Binding 문자열 경로·`FuncDataTemplate`·`SqlCodeView`·`ResultTabsView`·`GetResourceObservable`). 앱 로그(%APPDATA%\Oranda\logs)에는 이 창 예외 줄이 없다고 조정자가 확인했으니 로그를 직접 다시 읽는다(비밀번호 줄은 옮기지 않는다). 가설을 재서 정한다: (a) `OpenAsync` 가 예외를 삼키거나 끝나지 않아 인자 행·미리보기가 빈다(세션 경로, 11g 변형 메타 조회), (b) 창 자체가 그려지지 않는다(테마·배경, Show(owner) 순서, Release 게시본에서만 다른 점 — ReadyToRun·빠진 리소스·TSK-08-07 에서 뺀 파일), (c) 대상 해석 실패. Headless 로 실제 의존(가짜 아님) + podman Oracle(26ai·11.2)에 프로시저·함수·패키지를 만들고 스키마 브라우저 경로와 편집기 경로로 창을 열어 라이트·다크 PNG 를 `~/.coord/scripts-find/shots/sc-plsqlrun/` 에 떠서 직접 본다. Release 게시본 차이가 의심되면 `dotnet publish -c Release -r win-x64 --self-contained` 결과로 같은 Headless 시험을 돌릴 수 있는지 본다. 원인을 고치고 다시 생기지 않게 시험을 남긴다. 창이 열린 뒤 `OpenAsync` 오류는 창 안 상태 줄에 보이고 로그에 남게 한다; 제약: 실앱 실행·SendKeys 금지, 제품 조회 경로에 쓰기 SQL 을 넣지 않는다(시험 준비용 DDL 은 통합 시험 안에서만). Headless 에서 재현이 안 되면 그 사실과 남은 가설, 사람이 실앱에서 확인할 순서(로그 위치 포함)를 결과에 적는다; 비고: 담당 PC: win144(Windows 개발 PC) — 맥북 세션은 이 Task 를 하지 않는다
   - acceptance: 원인(또는 재현 안 됨 + 남은 가설 + 사람 확인 순서)이 결과에 적혀 있다 / 스키마 브라우저 경로와 편집기 경로에서 창이 인자 행·미리보기와 함께 그려진다(프로시저·함수·패키지, 26ai·11.2, 라이트·다크 PNG) / 창이 열린 뒤 `OpenAsync` 오류가 창 안 상태 줄과 로그에 남는다 / 재발 방지 시험 / `dotnet build Oranda.sln -warnaserror`·전체 시험 통과
-  - note: 담당 PC: win144(Windows 개발 PC) — 맥북 세션은 이 Task 를 하지 않는다. 사용자 원문(2026-10-26): 「윈도우에서 프로시저/함수 실행 메뉴 실행 시 처리가 안됨 / 화면 자체가 빈화면으로 되어 잇음」. 크기 M. 레인 sc-plsqlrun
+  - note: 담당 PC: win144(Windows 개발 PC) — 맥북 세션은 이 Task 를 하지 않는다. 사용자 원문(2026-10-26): 「윈도우에서 프로시저/함수 실행 메뉴 실행 시 처리가 안됨 / 화면 자체가 빈화면으로 되어 잇음」. 크기 M. 레인 sc-plsqlrun. 결과: 원인 = 인자 없는 단독 프로시저를 메타 조회가 빈 목록으로 돌려(OracleMetadataProvider.BuildProcedures) 창이 인자 줄·미리보기 없이 열림 + 열기 오류가 로그에 안 남음 + 오류 줄 색 자원 이름이 없어 보통 글로 보임; 26ai·11.2 에서 재현·수정·재발 방지 시험, PNG 6장 (win144)
 
 - [x] TSK-12-03: 서버 재조회 내보내기 바인드 변수 누락 [win144] w:1 2026-10-27~2026-10-27
   - category: defect
