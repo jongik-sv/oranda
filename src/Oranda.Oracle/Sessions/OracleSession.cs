@@ -19,7 +19,6 @@ internal sealed class OracleSession : ISession
     private readonly Action<Guid>? _onDisposed;
     private readonly Func<ValueTask> _closeConnection;
     private readonly Timer? _keepAlive;
-    private readonly SemaphoreSlim _gate = new(1, 1);
     private int _state = (int)SessionState.Idle;
     private volatile bool _pending;
     private int _disposed;
@@ -59,8 +58,11 @@ internal sealed class OracleSession : ISession
 
     public bool HasPendingTransaction => _pending;
 
-    /// <summary>실행 서비스가 쓰는 실제 연결. 같은 어셈블리 안에서만 본다.</summary>
+    /// <summary>실행 서비스가 쓰는 실제 연결. 같은 어셈블리 안에서만 본다. 명령은 <see cref="CommandGate"/> 를 쥔 동안에만 보낸다.</summary>
     internal OracleConnection Connection { get; }
+
+    /// <summary>이 연결에 한 번에 한 명령만 보내게 하는 잠금(D-041). 연결을 쓰는 모든 기능이 함께 쓴다.</summary>
+    internal SessionCommandGate CommandGate { get; } = new();
 
     /// <summary>끊김 오류 번호인지(ORA-03113 등).</summary>
     public static bool IsBrokenError(int oraNumber) => BrokenCodes.Contains(oraNumber);
@@ -123,23 +125,13 @@ internal sealed class OracleSession : ISession
         // 상태·목록·이벤트를 먼저 반영한다. 연결 닫기는 서버가 응답하지 않으면 끝나지 않으므로(UI 스레드 정지 원인) 그 뒤에 떼어 낸다.
         _onDisposed?.Invoke(Id);
         _events.Publish(new SessionClosed(Id));
-        var closed = true;
-        try
-        {
-            closed = await SessionCloser.RunAsync(_closeConnection, "세션 " + Id.ToString("N")[..8]).ConfigureAwait(false);
-        }
-        finally
-        {
-            if (closed)
-            {
-                _gate.Dispose(); // 닫기가 아직 도는 중이면 진행 중인 작업이 _gate 를 놓을 수 있으므로 그대로 둔다
-            }
-        }
+        // 명령 잠금은 Dispose 하지 않는다(SessionCommandGate): 닫는 중에도 진행 중인 작업·결과 집합 정리가 놓을 수 있어야 한다.
+        await SessionCloser.RunAsync(_closeConnection, "세션 " + Id.ToString("N")[..8]).ConfigureAwait(false);
     }
 
     private async Task ExecAsync(string sql, CancellationToken ct)
     {
-        await _gate.WaitAsync(ct);
+        await CommandGate.EnterAsync(ct);
         try
         {
             await using var cmd = Connection.CreateCommand();
@@ -152,15 +144,15 @@ internal sealed class OracleSession : ISession
         }
         finally
         {
-            _gate.Release();
+            CommandGate.Release();
         }
     }
 
     private async Task KeepAliveTickAsync()
     {
-        if (State != SessionState.Idle || !await _gate.WaitAsync(0))
+        if (State != SessionState.Idle || !CommandGate.TryEnter())
         {
-            return; // 작업 중이면 그 자체가 활동이다.
+            return; // 작업 중(실행·메타데이터·모니터 등 어느 명령이든)이면 그 자체가 활동이다. 기다리지 않고 건너뛴다.
         }
 
         try
@@ -179,7 +171,7 @@ internal sealed class OracleSession : ISession
         }
         finally
         {
-            _gate.Release();
+            CommandGate.Release();
         }
     }
 

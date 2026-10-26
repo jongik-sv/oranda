@@ -2,6 +2,7 @@ using Oracle.ManagedDataAccess.Types;
 using Oranda.Core.Composition;
 using Oranda.Core.Grid;
 using Oranda.Core.Sessions;
+using Oranda.Oracle.Sessions;
 
 namespace Oranda.Oracle.Grid;
 
@@ -13,12 +14,27 @@ namespace Oranda.Oracle.Grid;
 [OrandaService(typeof(ILobAccessor))]
 internal sealed class OracleLobAccessor : ILobAccessor
 {
-    public Task<Stream> OpenReadAsync(ISession s, LobValue lob, CancellationToken ct)
+    public async Task<Stream> OpenReadAsync(ISession s, LobValue lob, CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(s);
         ArgumentNullException.ThrowIfNull(lob);
         ct.ThrowIfCancellationRequested();
-        return Task.FromResult(Open(lob));
+        if (s is not OracleSession session)
+        {
+            return Open(lob);
+        }
+
+        // 로케이터 복제·BFILE 열기·조각 읽기는 같은 연결로 서버에 간다: 세션 명령 잠금(D-041) 안에서만 한다.
+        var gate = session.CommandGate;
+        await gate.EnterAsync(ct);
+        try
+        {
+            return new SessionGatedStream(Open(lob), gate);
+        }
+        finally
+        {
+            gate.Release();
+        }
     }
 
     internal static Stream Open(LobValue lob)

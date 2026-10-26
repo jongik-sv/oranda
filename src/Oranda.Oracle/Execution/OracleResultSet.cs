@@ -6,14 +6,15 @@ namespace Oranda.Oracle.Execution;
 
 /// <summary>
 /// 질의 결과(TRD 4.4). 커서는 앞으로만 간다: 이미 지나간 페이지는 다시 줄 수 없고(그리드 캐시가 보관), 마지막으로 준 페이지만 다시 준다.
-/// FetchSize = RowSize × 페이지 크기. 페이지 가져오기는 그 세션의 실행 줄을 함께 쓴다(같은 연결을 동시에 쓰지 않게).
+/// FetchSize = RowSize × 페이지 크기. 페이지 가져오기는 세션의 명령 잠금(<see cref="OracleSession.CommandGate"/>, D-041)을 페이지마다 잡는다:
+/// 결과 창이 열린 동안 잠금을 쥐고 있지 않으므로 페이지 사이에 다른 명령(메타데이터 등)이 같은 연결에서 돈다.
 /// 페이지 가져오기 취소는 행 사이에서 받아 다음 페이지를 이어 가져올 수 있게 한다. 서버 왕복이 늦으면 드라이버를 취소하고(하드 취소),
 /// 그 결과는 더 가져올 수 없다(<see cref="FetchCancellation"/>).
 /// </summary>
 internal sealed class OracleResultSet : IResultSet
 {
     private readonly OracleSession _session;
-    private readonly SemaphoreSlim _gate;
+    private readonly SessionCommandGate _gate;
     private readonly OracleCommand? _command;
     private readonly OracleDataReader _reader;
     private readonly int _pageSize;
@@ -28,12 +29,12 @@ internal sealed class OracleResultSet : IResultSet
 
     /// <param name="command">리더를 만든 명령(REF CURSOR 면 null). 이 객체가 Dispose 한다.</param>
     /// <param name="lobPreviewSize">LOB 셀의 미리보기 길이(설정 <c>grid.initialLobFetchSize</c>).</param>
-    public OracleResultSet(OracleSession session, SemaphoreSlim gate, OracleCommand? command, OracleDataReader reader, int pageSize,
+    public OracleResultSet(OracleSession session, OracleCommand? command, OracleDataReader reader, int pageSize,
                            int lobPreviewSize = OracleValues.LobPreviewSize)
     {
         ArgumentOutOfRangeException.ThrowIfLessThan(pageSize, 1);
         _session = session;
-        _gate = gate;
+        _gate = session.CommandGate;
         _command = command;
         _reader = reader;
         _pageSize = pageSize;
@@ -67,7 +68,7 @@ internal sealed class OracleResultSet : IResultSet
         ArgumentOutOfRangeException.ThrowIfNegative(pageIndex);
         ObjectDisposedException.ThrowIf(Volatile.Read(ref _disposed) == 1, this);
 
-        await _gate.WaitAsync(ct);
+        await _gate.EnterAsync(ct);
         _session.SetBusy(true);
         try
         {
@@ -177,7 +178,7 @@ internal sealed class OracleResultSet : IResultSet
 
     /// <summary>
     /// 하드 취소의 브레이크가 왕복이 막 끝난 뒤 나갔으면(ODP 는 m_bFetching 확인과 Break 사이에 잠금이 없다) 서버가 그 브레이크를
-    /// 같은 연결의 다음 호출에 ORA-01013 으로 돌려준다. 실행 줄을 쥔 채 가벼운 왕복으로 먼저 받아 다음 문장으로 새지 않게 한다.
+    /// 같은 연결의 다음 호출에 ORA-01013 으로 돌려준다. 명령 잠금을 쥔 채 가벼운 왕복으로 먼저 받아 다음 명령(다른 기능의 메타데이터 조회 포함)으로 새지 않게 한다.
     /// </summary>
     private async Task AbsorbLateBreakAsync()
     {
@@ -221,7 +222,7 @@ internal sealed class OracleResultSet : IResultSet
             return;
         }
 
-        await _gate.WaitAsync();
+        await _gate.EnterForCleanupAsync();
         try
         {
             await _reader.DisposeAsync();

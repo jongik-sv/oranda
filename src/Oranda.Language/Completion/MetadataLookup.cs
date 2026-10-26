@@ -8,6 +8,8 @@ namespace Oranda.Language.Completion;
 /// 자동완성용 메모리 캐시(TRD 4.5 「메모리 + SQLite 캐시」 의 메모리 층). <see cref="IMetadataProvider"/> 만 부른다(SQLite 캐시는 제공자 안쪽).
 /// 조회는 진행 중인 <see cref="Task"/> 를 키별로 한 번만 만든다. <see cref="TryPeek{T}"/> 는 끝난 결과만 돌려줘 시간 예산을 넘긴 응답이 기다리지 않게 한다.
 /// 실패한 조회는 다음에 다시 시도하도록 지운다.
+/// <para>조회는 <see cref="SessionWait.Brief"/> 범위에서 시작한다(D-041): 그 세션이 긴 실행 등으로 바쁘면 서버에 보내지 않고 실패로 끝나
+/// (SQLite 캐시로 답할 수 있는 것은 캐시로 답한다) 실행 뒤에 줄을 서지 않는다. 다음 입력 때 다시 시도한다.</para>
 /// </summary>
 internal sealed class MetadataLookup(IMetadataProvider metadata)
 {
@@ -99,6 +101,7 @@ internal sealed class MetadataLookup(IMetadataProvider metadata)
     {
         try
         {
+            using var brief = SessionWait.Brief();
             return fetch();
         }
         catch (Exception e) when (e is not OutOfMemoryException)

@@ -262,13 +262,13 @@ internal sealed partial class OracleMonitorService
         }
     }
 
-    /// <summary>잠긴 행 값을 모니터 세션 연결로 읽는다(세션 문 게이트 공유). 행이 없으면 값 null.</summary>
+    /// <summary>잠긴 행 값을 모니터 세션 연결로 읽는다(세션 명령 잠금 공유, D-041). 행이 없으면 값 null.</summary>
     private static async Task<(IReadOnlyList<string> Names, IReadOnlyList<string?>? Values)> LockedRowValuesAsync(
         ISession s, string sql, string rowId, CancellationToken ct)
     {
         var session = s as OracleSession ?? throw new ArgumentException("OracleSession 이 아닌 세션은 쓸 수 없습니다.", nameof(s));
-        var gate = SessionGates.GetValue(session, _ => new SemaphoreSlim(1, 1));
-        await gate.WaitAsync(ct);
+        var gate = session.CommandGate; // 세션 연결의 명령 잠금(D-041): 실행·결과 페이지·다른 도구와 한 줄로 선다
+        await gate.EnterAsync(ct);
         try
         {
             await using var cmd = session.Connection.CreateCommand();

@@ -1,5 +1,4 @@
 using System.Globalization;
-using System.Runtime.CompilerServices;
 using Oracle.ManagedDataAccess.Client;
 using Oranda.Core.Catalog;
 using Oranda.Core.Sessions;
@@ -12,8 +11,6 @@ namespace Oranda.Oracle.Schema;
 internal static class SchemaQuery
 {
     private static readonly Lazy<SqlCatalog> Catalog = new(EmbeddedCatalog.Load);
-
-    private static readonly ConditionalWeakTable<OracleSession, SemaphoreSlim> Gates = new();
 
     internal sealed record Table(IReadOnlyList<string> Columns, IReadOnlyList<object?[]> Rows);
 
@@ -33,8 +30,8 @@ internal static class SchemaQuery
             }
         }
 
-        var gate = Gates.GetValue(session, _ => new SemaphoreSlim(1, 1));
-        await gate.WaitAsync(ct);
+        var gate = session.CommandGate; // 세션 연결의 명령 잠금(D-041): 실행·결과 페이지·다른 도구와 한 줄로 선다
+        await gate.EnterAsync(ct);
         try
         {
             await using var cmd = session.Connection.CreateCommand();

@@ -140,8 +140,8 @@ internal static class OracleValues
         }
     }
 
-    /// <summary>OUT 매개변수 값. REF CURSOR 는 결과 집합(호출자가 Dispose).</summary>
-    public static Dictionary<string, object?> ReadOutValues(OracleSession session, SemaphoreSlim gate,
+    /// <summary>OUT 매개변수 값. REF CURSOR 는 결과 집합(호출자가 Dispose). 실행이 세션 명령 잠금을 쥔 채 부른다(여기서 다시 잡지 않는다).</summary>
+    public static Dictionary<string, object?> ReadOutValues(OracleSession session,
                                                             IReadOnlyList<(string Name, OracleParameter Parameter)> outs, int pageSize,
                                                             int lobPreviewSize = LobPreviewSize)
     {
@@ -149,7 +149,7 @@ internal static class OracleValues
         foreach (var (name, p) in outs)
         {
             values[name] = p.Value is OracleRefCursor rc
-                ? (rc.IsNull ? null : new OracleResultSet(session, gate, null, rc.GetDataReader(), pageSize, lobPreviewSize))
+                ? (rc.IsNull ? null : new OracleResultSet(session, null, rc.GetDataReader(), pageSize, lobPreviewSize))
                 : Normalize(p.Value);
         }
 

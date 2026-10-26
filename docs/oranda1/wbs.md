@@ -1009,6 +1009,18 @@ levels:
   - acceptance: SessionDisplayTests 11개(대기 표시·P 고르기 콤보/세션 창·사용 예정·대기 워크스페이스는 사용 예정 아님·이 워크스페이스 표지·이 세션 쓰기 꺼짐·고정 순번·설정 재동기화·닫힌 콤보 화살표/휠·공유 커밋 경고) / ActiveDocumentFocusTests 2개(도구 창 포커스·다른 영역 포커스) / 기존 SessionSwitch·Sessions·MultiSession·WorkspaceSession·SessionLifecycle·MenuBarTarget 시험 통과 / `dotnet build Oranda.sln -warnaserror`
   - note: 결과: 고치기 전 새 시험 실패 확인(Dock 은 도구 창을 누르면 CurrentDockable 이 도구 창이 되어 첫 문서 영역의 탭으로 되돌아가고, 다른 영역의 이미 보이는 탭을 누르면 ActiveDockableChanged 가 없어 알리지 않았다 — review 19 사실; Avalonia ComboBox 는 닫힌 채 화살표·휠로 지나는 줄마다 SelectedItem 을 바꿨다 — review 21 사실). 원인 Features/ConnectionManager/SessionRouter.cs(Select·SelectAsync 의 changed=false, LabelOf 위치 순번, 설정 구독 없음)·SessionRouter.Workspaces.cs(ChoosesSession 이 대기 중 접속 세션을 고름으로 안 봄)·ConnectionCombo.cs(Refresh 가 ShownSession 줄을 고름, 닫힌 콤보 키·휠)·ConnectionStatusItem.cs·Sessions/SessionRow.cs·SessionsViewModel.cs(CanUse 가 ShownSession 비교)·Shell/Docking/DockWorkspace.cs(FocusedDockableChanged 미구독)·Execution/ExecutionController.Transaction.cs(공유 커밋 경고 없음). SessionsViewModelTests 의 「이 세션 쓰기」 시험에 탭을 더함(탭 없으면 이제 꺼짐) (win144)
 
+- [x] TSK-14-09: 한 세션 연결을 기능마다 다른 잠금이 지킴 → 연결 하나에 명령 잠금 하나 [win144] w:1 2026-10-26~2026-10-26
+  - category: defect
+  - domain: backend
+  - model: opus
+  - priority: high
+  - tags: sessions, oracle, concurrency, cancel, completion, win144
+  - prd-ref: PRD 16, TRD 14.1-12, D-041
+  - depends: TSK-14-05
+  - requirements: 세션 검토 2번. 한 OracleSession 의 OracleConnection 을 실행(SessionRuntime.Gate)·결과 페이지·OUT 커서, 커밋·롤백·Keep Alive(OracleSession._gate), 메타데이터·DDL·스키마·계획·튜닝·모니터(각자 ConditionalWeakTable 잠금)가 따로 지켜, 긴 실행 중 스키마 브라우저·DDL·자동 완성·계획·모니터가 다른 스레드로 같은 연결에 명령을 보냈다(LOB 읽기는 잠금 없음). 고침: OracleSession.CommandGate(SessionCommandGate) 하나로 모든 명령을 한 번에 하나로 세운다(결과 페이지는 지금처럼 페이지마다, 메타데이터 목록은 커서를 연 뒤 행마다, LOB 스트림은 조각마다). 모니터 「세션 끊기」 가 모니터 잠금을 쥔 채 실행을 부르던 길(잠금 하나면 교착)을 없앴다. 사용자가 연 도구 창은 기다리되 취소 가능, 자동 완성·매개변수 힌트는 SessionWait.Brief(100 ms) 안에 못 잡으면 서버에 보내지 않음(SessionBusyException, 다음 입력 때 다시), 메타데이터 백그라운드 갱신은 바쁘면 건너뛰고 읽는 중 실행이 끼면 양보, Keep Alive 는 바쁘면 건너뜀; 제약: 실행 엔진의 결과 집합 모델(페이지마다 잠금) 유지, App 쪽은 API 바뀐 만큼만, 실앱 SendKeys 금지
+  - acceptance: SessionCommandGateTests 6(모든 기능이 같은 잠금 뒤에 줄 섬·즉시성 범위 바쁨·재진입 없음·닫힌 뒤 놓기·다른 세션 잠금 없음) / BusySessionLookupTests 2 / 통합 SessionCommandGateFlowTests 2 가 26ai·11.2 에서 통과(긴 실행 중 같은 세션 메타데이터는 기다리거나 바쁨으로 건너뜀, Broken 아님, 취소는 실행만 멈추고 기다리던 조회는 ORA-01013 없이 돎) / 기존 통합 묶음이 멈추지 않음 / `dotnet build Oranda.sln -warnaserror`
+  - note: 세션 관리 적대적 검토(2026-10-26) 2번. 확인: 같은 통합 시험을 고치기 전 코드(3b189b9)에서 돌리면 기다림·취소 경우가 통과한다 — ODP.NET 관리 드라이버가 서버 왕복 하나는 안에서 직렬화한다. 그래서 「프로토콜 오류로 Broken」 은 재현하지 못했고, 남은 실제 문제는 브레이크·늦은 브레이크 흡수가 기능별 잠금 안에서만 지켜지는 것, 연결 단위 직렬화를 드라이버 내부 구현에 기대던 것, 즉시성 기능이 긴 실행 뒤에 줄을 서던 것, 모니터 잠금 중첩, LOB 읽기 무잠금이다. 결과: 단위 Oracle.Tests 373·Language 992·App 3,781 등 전체 통과, 통합 SessionCommandGateFlowTests 26ai 2/2·11.2 2/2(긴 실행 중 같은 세션 GetTable 은 실행이 끝날 때까지 기다림 2.8~3.6 s, 즉시성 범위는 111~114 ms 에 바쁨, 취소 반영 26ai 596 ms·11.2 15 ms, 기다리던 조회는 ORA-01013 없이 끝남), Oranda.Oracle.IntegrationTests 347/347(26ai Testcontainers + 11.2 상주), App 통합 26ai 200 중 154 통과·46 실패는 고치기 전 코드에서도 같은 46(MenuWidth·RoleSurface·RoleMenu 개수 단정, DeveloperFlow S3_1·S3_4), 11.2 묶음 WorkspaceSession 6·Plsql·InvalidSearch·ConnectionCombo·ObjectDetailKeyColumns 통과. 11.2 의 PlsqlRunWindowFlowTests.Full_shell_command_registry_opens_window_over_main_window 가 같은 클래스 시험 뒤에 돌면 멈추는 것(TSK-10-03 남은 문제)은 고치기 전 코드도 같다: 멈춤 덤프에서 스키마 속성 창의 GetObjectDetailAsync 가 meta.detail_dependencies(all_dependencies USED_BY) 를 10분 넘게 서버에서 기다리고 같은 세션의 GetProceduresAsync 가 그 뒤에 줄을 서 있다(혼자 돌리면 73 s 에 통과)
+
 ## 의존 그래프
 
 ### 그래프 (Mermaid)
@@ -1107,6 +1119,7 @@ graph LR
   TSK-14-06 --> TSK-14-07
   TSK-14-02 --> TSK-14-08
   TSK-14-07 --> TSK-14-10
+  TSK-14-05 --> TSK-14-09
   style TSK-01-02 fill:#e8f5e9,stroke:#2e7d32
   style TSK-03-01 stroke:#c62828,stroke-width:2px
   style TSK-02-02 stroke:#c62828,stroke-width:2px

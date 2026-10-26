@@ -1,5 +1,4 @@
 using System.Globalization;
-using System.Runtime.CompilerServices;
 using Oracle.ManagedDataAccess.Client;
 using Oranda.Core.Catalog;
 using Oranda.Core.Composition;
@@ -29,8 +28,6 @@ internal sealed class OracleExecutionPlanService : IExecutionPlanService
     internal const long MisestimateMinRows = 10;
 
     private static readonly Lazy<SqlCatalog> Catalog = new(EmbeddedCatalog.Load);
-
-    private static readonly ConditionalWeakTable<OracleSession, SemaphoreSlim> Gates = new();
 
     private readonly IExecutionService _execution;
 
@@ -250,8 +247,8 @@ internal sealed class OracleExecutionPlanService : IExecutionPlanService
         var query = Catalog.Value.Get(id, s.Server);
         OracleMonitorService.EnsureLicense(s, query.Header.License);
 
-        var gate = Gates.GetValue(session, _ => new SemaphoreSlim(1, 1));
-        await gate.WaitAsync(ct);
+        var gate = session.CommandGate; // 세션 연결의 명령 잠금(D-041): 실행·결과 페이지·다른 도구와 한 줄로 선다
+        await gate.EnterAsync(ct);
         try
         {
             await using var cmd = session.Connection.CreateCommand();

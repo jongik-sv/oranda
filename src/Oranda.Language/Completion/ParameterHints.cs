@@ -89,6 +89,7 @@ public static class ParameterHints
         ArgumentNullException.ThrowIfNull(metadata);
         ArgumentNullException.ThrowIfNull(session);
         ArgumentNullException.ThrowIfNull(call);
+        using var brief = SessionWait.Brief(); // 바쁜 세션이면 기다리지 않는다(D-041). 못 찾은 것으로 보고 다음 입력 때 다시 시도한다
         var me = (session.Server.SessionUser ?? session.Profile.User).ToUpperInvariant();
         IReadOnlyList<ProcedureInfo> found;
         if (call.Package is null)

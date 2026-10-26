@@ -1,6 +1,5 @@
 using System.Collections.Concurrent;
 using System.Globalization;
-using System.Runtime.CompilerServices;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using Oracle.ManagedDataAccess.Client;
@@ -43,8 +42,6 @@ internal sealed partial class OracleMetadataProvider : IMetadataProvider
         Converters = { new JsonStringEnumConverter() },
         DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
     };
-
-    private static readonly ConditionalWeakTable<OracleSession, SemaphoreSlim> Gates = new();
 
     private readonly IMetadataCache _cache;
     private readonly IEventBus _events;
@@ -266,30 +263,21 @@ internal sealed partial class OracleMetadataProvider : IMetadataProvider
         var query = Catalog.Value.Get(id, s.Server);
         var sql = query.Sql.Replace("@PFX@", ViewPrefix(s), StringComparison.Ordinal);
 
-        var gate = Gates.GetValue(session, _ => new SemaphoreSlim(1, 1));
-        await gate.WaitAsync(ct);
+        // 세션 연결의 명령 잠금(D-041): 실행·결과 페이지·다른 도구와 한 줄로 선다. 결과 집합처럼 커서를 연 뒤에는 행 하나 읽는 동안만 쥔다:
+        // 전체 목록 읽기(11g 비 DBA 의 all_objects 는 분 단위)가 그 사이 사용자의 실행을 끝까지 막지 않는다(서버 왕복 사이에 실행이 돈다).
+        // 즉시성 범위(백그라운드 갱신·자동 완성)에서는 읽는 사이에 실행이 잠금을 잡으면 다음 행에서 바쁨으로 그만두고 실행에 양보한다.
+        var gate = session.CommandGate;
+        OracleCommand? cmd = null;
+        OracleDataReader? reader = null;
+        await gate.EnterAsync(ct);
         try
         {
-            await using var cmd = session.Connection.CreateCommand();
+            cmd = session.Connection.CreateCommand();
             cmd.BindByName = true;
             cmd.InitialLONGFetchSize = -1;
             cmd.CommandText = sql;
             bind(cmd);
-
-            var rows = new List<object?[]>();
-            await using var reader = await cmd.ExecuteReaderAsync(ct);
-            while (await reader.ReadAsync(ct))
-            {
-                var row = new object?[reader.FieldCount];
-                for (var i = 0; i < row.Length; i++)
-                {
-                    row[i] = await reader.IsDBNullAsync(i, ct) ? null : reader.GetValue(i);
-                }
-
-                rows.Add(row);
-            }
-
-            return rows;
+            reader = (OracleDataReader)await cmd.ExecuteReaderAsync(ct);
         }
         catch (OracleException ex) when (session.ReportFailure(ex))
         {
@@ -297,7 +285,57 @@ internal sealed partial class OracleMetadataProvider : IMetadataProvider
         }
         finally
         {
+            if (reader is null && cmd is not null)
+            {
+                await cmd.DisposeAsync();
+            }
+
             gate.Release();
+        }
+
+        try
+        {
+            var rows = new List<object?[]>();
+            while (true)
+            {
+                await gate.EnterAsync(ct);
+                try
+                {
+                    if (!await reader.ReadAsync(ct))
+                    {
+                        return rows;
+                    }
+
+                    var row = new object?[reader.FieldCount];
+                    for (var i = 0; i < row.Length; i++)
+                    {
+                        row[i] = await reader.IsDBNullAsync(i, ct) ? null : reader.GetValue(i);
+                    }
+
+                    rows.Add(row);
+                }
+                catch (OracleException ex) when (session.ReportFailure(ex))
+                {
+                    throw;
+                }
+                finally
+                {
+                    gate.Release();
+                }
+            }
+        }
+        finally
+        {
+            await gate.EnterForCleanupAsync(); // 커서 닫기도 같은 연결로 간다
+            try
+            {
+                await reader.DisposeAsync();
+                await cmd!.DisposeAsync();
+            }
+            finally
+            {
+                gate.Release();
+            }
         }
     }
 
@@ -356,13 +394,15 @@ internal sealed partial class OracleMetadataProvider : IMetadataProvider
         _lastRefresh[s.DbKey] = now;
         _ = Task.Run(async () =>
         {
+            // 세션이 다른 명령(긴 실행 등)을 처리 중이면 기다리지 않고 건너뛴다(D-041): 끝난 뒤 그 실행 뒤에 줄을 서 사용자의 다음 실행을 막지 않게.
+            using var _ = SessionWait.Brief(TimeSpan.Zero);
             try
             {
                 await RefreshAsync(s, CancellationToken.None);
             }
             catch (Exception ex) when (ex is OracleException or InvalidOperationException or ObjectDisposedException)
             {
-                // 세션이 닫혔거나 끊겼다. 다음 조회 때 다시 시도한다.
+                // 세션이 닫혔거나 끊겼거나 바쁘다(SessionBusyException). 다음 조회 때 다시 시도한다.
             }
         });
     }

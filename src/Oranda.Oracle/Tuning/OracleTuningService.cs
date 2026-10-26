@@ -1,6 +1,5 @@
 using System.Diagnostics;
 using System.Globalization;
-using System.Runtime.CompilerServices;
 using System.Text.RegularExpressions;
 using Oracle.ManagedDataAccess.Client;
 using Oranda.Core.Catalog;
@@ -35,8 +34,6 @@ internal sealed partial class OracleTuningService : ITuningService
     internal const int MaxIterations = 100;
 
     private static readonly Lazy<SqlCatalog> Catalog = new(EmbeddedCatalog.Load);
-
-    private static readonly ConditionalWeakTable<OracleSession, SemaphoreSlim> Gates = new();
 
     /// <summary>gv$sql_shared_cursor 에서 사유가 아닌 열.</summary>
     private static readonly HashSet<string> SharedCursorKeyColumns = new(StringComparer.OrdinalIgnoreCase)
@@ -446,8 +443,8 @@ internal sealed partial class OracleTuningService : ITuningService
         OracleMonitorService.EnsureLicense(s, query.Header.License);
         var sql = query.Sql.Replace("@PFX@", s.Server.Capabilities.CanQueryDictionary ? "dba" : "all", StringComparison.Ordinal);
 
-        var gate = Gates.GetValue(session, _ => new SemaphoreSlim(1, 1));
-        await gate.WaitAsync(ct);
+        var gate = session.CommandGate; // 세션 연결의 명령 잠금(D-041): 실행·결과 페이지·다른 도구와 한 줄로 선다
+        await gate.EnterAsync(ct);
         try
         {
             await using var cmd = session.Connection.CreateCommand();

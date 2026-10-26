@@ -1,6 +1,5 @@
 using System.Collections.Concurrent;
 using System.Globalization;
-using System.Runtime.CompilerServices;
 using Oracle.ManagedDataAccess.Client;
 using Oranda.Core.Catalog;
 using Oranda.Core.Composition;
@@ -38,8 +37,6 @@ internal sealed partial class OracleMonitorService : IMonitorService
     ];
 
     private static readonly Lazy<SqlCatalog> SessionCatalog = new(EmbeddedCatalog.Load);
-
-    private static readonly ConditionalWeakTable<OracleSession, SemaphoreSlim> SessionGates = new();
 
     private readonly IExecutionService _execution;
 
@@ -325,22 +322,9 @@ internal sealed partial class OracleMonitorService : IMonitorService
 
     private async Task ExecuteChangeAsync(ISession monitor, SqlStatement stmt, CancellationToken ct)
     {
-        var gate = monitor is OracleSession os ? SessionGates.GetValue(os, _ => new SemaphoreSlim(1, 1)) : null;
-        if (gate is not null)
-        {
-            await gate.WaitAsync(ct);
-        }
-
-        ExecutionResult result;
-        try
-        {
-            result = await _execution.ExecuteAsync(monitor, stmt, new Dictionary<string, BindValue>(),
-                new ExecutionOptions { Source = HistorySource.Monitor }, ct);
-        }
-        finally
-        {
-            gate?.Release();
-        }
+        // 실행 엔진이 세션 명령 잠금(D-041)을 잡는다. 여기서 먼저 잡으면 같은 잠금을 두 번 잡아 교착이다.
+        var result = await _execution.ExecuteAsync(monitor, stmt, new Dictionary<string, BindValue>(),
+            new ExecutionOptions { Source = HistorySource.Monitor }, ct);
 
         switch (result.Status)
         {
@@ -385,7 +369,7 @@ internal sealed partial class OracleMonitorService : IMonitorService
         }
     }
 
-    /// <summary>카탈로그 <c>session.*</c> 쿼리를 모니터 세션 연결로 읽는다. 세션별 문으로 한 번에 하나만 보낸다.</summary>
+    /// <summary>카탈로그 <c>session.*</c> 쿼리를 모니터 세션 연결로 읽는다. 세션 명령 잠금(D-041)으로 한 번에 하나만 보낸다.</summary>
     private static async Task<List<object?[]>> SessionQueryAsync(ISession s, string id, Action<OracleCommand> bind, CancellationToken ct)
     {
         var session = s as OracleSession ?? throw new ArgumentException("OracleSession 이 아닌 세션은 쓸 수 없습니다.", nameof(s));
@@ -393,8 +377,8 @@ internal sealed partial class OracleMonitorService : IMonitorService
         EnsureLicense(s, query.Header.License);
         var sql = query.Sql.Replace("@PFX@", s.Server.Capabilities.CanQueryDictionary ? "dba" : "all", StringComparison.Ordinal);
 
-        var gate = SessionGates.GetValue(session, _ => new SemaphoreSlim(1, 1));
-        await gate.WaitAsync(ct);
+        var gate = session.CommandGate; // 세션 연결의 명령 잠금(D-041): 실행·결과 페이지·다른 도구와 한 줄로 선다
+        await gate.EnterAsync(ct);
         try
         {
             await using var cmd = session.Connection.CreateCommand();

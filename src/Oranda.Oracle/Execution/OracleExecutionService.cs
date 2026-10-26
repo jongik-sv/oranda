@@ -17,7 +17,8 @@ namespace Oranda.Oracle.Execution;
 /// 실행 엔진(TRD 4.3, 4.9). 파이프라인: 치환 변수 → 정책 관문 → (SQL*Plus 명령이면 처리기) → 바인드 → 드라이버 실행
 /// → 트랜잭션 추적(<c>LOCAL_TRANSACTION_ID</c>) → DBMS_OUTPUT 수거 → 이벤트. internal(TC-05). 소유: TSK-06-01.
 /// <para>
-/// 세션마다 실행을 한 줄로 세운다(결과 집합의 페이지 가져오기도 같은 줄). 연결은 자동 커밋·파이프라이닝을 끈다.
+/// 세션마다 실행을 한 줄로 세운다: 세션의 명령 잠금(<see cref="OracleSession.CommandGate"/>, D-041) 하나를 결과 집합의 페이지 가져오기·
+/// 커밋·메타데이터·모니터 등 같은 연결을 쓰는 모든 기능이 함께 쓴다. 연결은 자동 커밋·파이프라이닝을 끈다.
 /// </para>
 /// </summary>
 [OrandaService(typeof(IExecutionService))]
@@ -193,9 +194,11 @@ internal sealed partial class OracleExecutionService : IExecutionService
             return Failed(stmt, "ORANDA-SESSION", $"세션이 {session.State} 상태입니다. 다시 접속하세요.", applied);
         }
 
+        // 세션 연결의 명령 잠금(D-041): 메타데이터·모니터·커밋 등 같은 연결을 쓰는 다른 기능과 한 줄로 선다.
+        // 실행 안에서는 연결에 직접 보낸다(서비스 API 를 다시 부르면 같은 잠금을 다시 잡아 교착이다).
         try
         {
-            await runtime.Gate.WaitAsync(ct);
+            await session.CommandGate.EnterAsync(ct);
         }
         catch (OperationCanceledException)
         {
@@ -210,7 +213,7 @@ internal sealed partial class OracleExecutionService : IExecutionService
         finally
         {
             session.SetBusy(false);
-            runtime.Gate.Release();
+            session.CommandGate.Release();
         }
     }
 
@@ -246,7 +249,7 @@ internal sealed partial class OracleExecutionService : IExecutionService
                     reader = (OracleDataReader)await cmd.ExecuteReaderAsync(ct);
                     if (reader.FieldCount > 0)
                     {
-                        resultSet = new OracleResultSet(session, runtime.Gate, cmd, reader, pageSize, lobFetchSize);
+                        resultSet = new OracleResultSet(session, cmd, reader, pageSize, lobFetchSize);
                         reader = null;
                         cmd = null; // 결과 집합이 소유한다.
                     }
@@ -266,7 +269,7 @@ internal sealed partial class OracleExecutionService : IExecutionService
 
             var outValues = parameters.Count == 0
                 ? new Dictionary<string, object?>()
-                : OracleValues.ReadOutValues(session, runtime.Gate, parameters, pageSize, lobFetchSize);
+                : OracleValues.ReadOutValues(session, parameters, pageSize, lobFetchSize);
 
             sw.Stop();
             var pending = await TrackTransactionAsync(session, stmt, kind, ct);
@@ -567,11 +570,9 @@ internal sealed partial class OracleExecutionService : IExecutionService
     [GeneratedRegex(@"\bFOR\s+UPDATE\b", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
     private static partial Regex ForUpdateRegex();
 
-    /// <summary>세션별 실행 상태(실행 줄, 준비 여부, && 치환 값).</summary>
+    /// <summary>세션별 실행 상태(준비 여부, && 치환 값). 실행 줄은 세션의 명령 잠금(<see cref="OracleSession.CommandGate"/>)이다.</summary>
     internal sealed class SessionRuntime
     {
-        public SemaphoreSlim Gate { get; } = new(1, 1);
-
         public bool Prepared { get; set; }
 
         public Dictionary<string, string> Defines { get; } = new(StringComparer.OrdinalIgnoreCase);

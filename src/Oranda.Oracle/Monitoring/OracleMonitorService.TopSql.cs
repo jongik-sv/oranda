@@ -115,15 +115,15 @@ internal sealed partial class OracleMonitorService
     private static void TopSqlNumber(OracleCommand c, string name, int? value) =>
         c.Parameters.Add(new OracleParameter(name, OracleDbType.Int32) { Value = value is { } v ? v : DBNull.Value });
 
-    /// <summary>카탈로그 <c>sql.*</c> 쿼리를 모니터 세션 연결로 읽는다. 라이선스 대조 뒤에만 보낸다. 세션 문 게이트를 공유해 한 번에 하나만 보낸다.</summary>
+    /// <summary>카탈로그 <c>sql.*</c> 쿼리를 모니터 세션 연결로 읽는다. 라이선스 대조 뒤에만 보낸다. 세션 명령 잠금(D-041)을 공유해 한 번에 하나만 보낸다.</summary>
     private static async Task<List<object?[]>> TopSqlQueryAsync(ISession s, string id, Action<OracleCommand> bind, CancellationToken ct)
     {
         var session = s as OracleSession ?? throw new ArgumentException("OracleSession 이 아닌 세션은 쓸 수 없습니다.", nameof(s));
         var query = TopSqlCatalog.Value.Get(id, s.Server);
         EnsureLicense(s, query.Header.License);
 
-        var gate = SessionGates.GetValue(session, _ => new SemaphoreSlim(1, 1));
-        await gate.WaitAsync(ct);
+        var gate = session.CommandGate; // 세션 연결의 명령 잠금(D-041): 실행·결과 페이지·다른 도구와 한 줄로 선다
+        await gate.EnterAsync(ct);
         try
         {
             await using var cmd = session.Connection.CreateCommand();
