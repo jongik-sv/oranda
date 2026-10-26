@@ -87,6 +87,9 @@ internal sealed class StubSessionManager(IEventBus events) : ISessionManager
 
     public List<(ConnectionProfile Profile, string Password)> Calls { get; } = [];
 
+    /// <summary>켜면 세션을 열 때 <c>SessionOpened</c> 를 낸다(실제 세션 관리자와 같은 순서, TSK-14-01 시험).</summary>
+    public bool PublishOpened { get; set; }
+
     /// <summary>설정하면 이후 열리는 세션의 DisposeAsync 가 이 신호를 기다린다.</summary>
     public ManualResetEventSlim? DisposeGate { get; set; }
 
@@ -103,6 +106,10 @@ internal sealed class StubSessionManager(IEventBus events) : ISessionManager
             new ServerCapabilities(false, true, true, false, false), DbUniqueName: "FREE", SessionUser: profile.User.ToUpperInvariant());
         var session = new StubSession(profile, info, events) { DisposeGate = DisposeGate };
         _sessions.Add(session);
+        if (PublishOpened)
+        {
+            events.Publish(new SessionOpened(session.Id, profile, info, purpose)); // 실제 세션 관리자처럼 열 때 알린다
+        }
         return Task.FromResult<ISession>(session);
     }
 }

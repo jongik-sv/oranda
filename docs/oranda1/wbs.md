@@ -903,7 +903,7 @@ levels:
 ## WP-14: 같은 DB 여러 세션
 <!-- 담당 PC: 맥북 — win144 세션은 이 WP 의 Task 를 하지 않는다. 2026-10-26 사용자 요청(PRD 16 원문), 사용자 승인 「권장안대로」(맥북에서 진행). 설계 = PRD 16, TRD 14, decisions D-034~D-038, 시안 docs/oranda1/mockups/multisession(원본 https://claude.ai/artifact/Xb4mBy56WPrRFcgxf1q4uf). win144 레인 sc-multisess 가 측정(PRD 16.1)과 세션 계층 초안(원격 브랜치 wip-multisess, TRD 14.3)을 남겼다: 14-01·14-02 는 초안을 이어받아 다듬고, 14-03·14-04 는 화면, 14-05 는 통합 확인 -->
 
-- [ ] TSK-14-01: 같은 DB 에 세션 더 열기 — ConnectionService 추가 세션·상한·자격 증명 메모리 [macbook] w:1 2026-10-28~2026-10-28
+- [x] TSK-14-01: 같은 DB 에 세션 더 열기 — ConnectionService 추가 세션·상한·자격 증명 메모리 [macbook] w:1 2026-10-28~2026-10-28
   - category: feat
   - domain: backend
   - model: opus
@@ -912,7 +912,7 @@ levels:
   - prd-ref: PRD 16, MS-01, MS-11, D-037, D-038
   - requirements: `IConnectionService` 에 `SessionsOf(profileId)`·`AllSessions`·`IsOpen(session)`·`OpenSessionAsync(profileId, ct)` 를 더한다(인터페이스 기본 구현으로 시험 가짜를 고치지 않는다). 접속 = 프로필의 기본 작업 세션(`Sessions`·콤보 번호 그대로), 추가 세션 = `SessionPurpose.Work` 로 같은 프로필에 더 연 세션. 이미 연 접속의 비밀번호를 메모리(`SecureCredential`)에만 두고 추가 세션을 열 때 다시 쓴다(저장소에 쓰지 않고, 그 프로필의 세션이 모두 닫히면 지운다). 프로필당 8개 상한(넘으면 이유 글). 기본 세션을 끊었는데 추가 세션이 남으면 처음 연 추가 세션이 같은 자리의 접속이 된다. 추가 세션을 열어도 지금 접속·실행 상태의 지금 접속은 바뀌지 않는다. 끊김·닫힘 이벤트가 추가 세션도 본다; 제약: 비밀번호 저장 안 함 규칙 유지, 제품 경로에 쓰기 SQL 없음; 비고: 담당 PC: 맥북 — win144 세션은 이 Task 를 하지 않는다. wip-multisess 브랜치에 초안 있음(TRD 14.3).
   - acceptance: 저장 안 한 프로필로 접속한 뒤 추가 세션이 비밀번호를 다시 묻지 않고 열린다 / 접속 목록(콤보 번호)은 그대로, `SessionsOf` 는 [기본, 추가…] / 9개째는 거절 / 기본 세션을 끊으면 추가 세션이 같은 자리로 올라오고 마지막 세션이 닫히면 메모리의 비밀번호가 지워진다 / 단위 시험(WorkspaceSessionTests 앞부분) / `dotnet build Oranda.sln -warnaserror`
-  - note: 담당 PC: 맥북 — win144 세션은 이 Task 를 하지 않는다. 사용자 원문(2026-10-26): 「동일한 DB에 대해 여러개의 접속을 지원하게 해줘. 다른 워크스페이스에서 쿼리가 진행되는 동안 다른 워크스페이스에서 다른 쿼리를 실행할 수 있도록 해줘.」 「여러 워크스페이스에서 하나의 세션을 사용할 수도 있지?」 크기 S. wip-multisess 브랜치에 초안 있음(TRD 14.3).
+  - note: 담당 PC: 맥북 — win144 세션은 이 Task 를 하지 않는다. 사용자 원문(2026-10-26): 「동일한 DB에 대해 여러개의 접속을 지원하게 해줘. 다른 워크스페이스에서 쿼리가 진행되는 동안 다른 워크스페이스에서 다른 쿼리를 실행할 수 있도록 해줘.」 「여러 워크스페이스에서 하나의 세션을 사용할 수도 있지?」 크기 S. wip-multisess 브랜치에 초안 있음(TRD 14.3). 결과: wip-multisess 초안의 ConnectionService 추가 세션·상한 8·메모리 자격 증명을 이어 받음, WorkspaceSessionTests 앞부분 4개 통과 (macbook)
 
 - [ ] TSK-14-02: 워크스페이스 → 세션 연결·모드 기억·첫 실행 때 열기·닫기 확인 [macbook] w:2 2026-10-29~2026-10-30
   - category: feat

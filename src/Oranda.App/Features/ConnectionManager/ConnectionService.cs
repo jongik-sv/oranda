@@ -70,7 +70,7 @@ public interface IConnectionService
     /// <summary>지금 접속(활성 문서의 접속). 없으면 null.</summary>
     ISession? ActiveSession { get; }
 
-    /// <summary>열린 작업 세션(접속). 연 순서이고 툴바 콤보 번호는 위치 + 1 이다. 프로필마다 하나뿐이다.</summary>
+    /// <summary>열린 접속(프로필마다 첫 작업 세션). 연 순서이고 툴바 콤보 번호는 위치 + 1 이다. 같은 DB 에 더 연 세션은 <see cref="SessionsOf"/>.</summary>
     IReadOnlyList<ISession> Sessions { get; }
 
     /// <summary>지금 접속의 프로필, 지금 접속이 없으면 마지막으로 접속한 프로필(끊겨도 남는다. 「다시 접속」용).</summary>
@@ -90,6 +90,24 @@ public interface IConnectionService
 
     /// <summary>열린 작업 세션 중 끊긴 것인지.</summary>
     bool IsSessionBroken(Guid sessionId);
+
+    /// <summary>
+    /// 프로필의 열린 작업 세션 모두(TSK-14-01): 첫째가 접속(<see cref="SessionOf"/>), 그 뒤가 같은 DB 에 더 연 세션(연 순서). 없으면 빈 목록.
+    /// </summary>
+    IReadOnlyList<ISession> SessionsOf(Guid profileId) => SessionOf(profileId) is { } s ? [s] : [];
+
+    /// <summary>열린 작업 세션 모두: 접속 순서대로, 접속마다 그 접속과 더 연 세션(<see cref="SessionsOf"/>). 앱 종료 미커밋 확인이 쓴다.</summary>
+    IReadOnlyList<ISession> AllSessions => Sessions;
+
+    /// <summary>열린 작업 세션(접속이든 더 연 세션이든)인지.</summary>
+    bool IsOpen(ISession session) => Sessions.Contains(session);
+
+    /// <summary>
+    /// 이미 연 접속과 같은 DB 에 작업 세션을 하나 더 연다(TSK-14-01, 워크스페이스 세션). 비밀번호는 그 접속을 열 때 쓴 것(메모리에만 있다)으로 다시 묻지 않는다.
+    /// 지금 접속은 바꾸지 않는다. 접속이 열려 있지 않거나 프로필당 상한(<see cref="ConnectionService.MaxSessionsPerProfile"/>)이면 실패.
+    /// </summary>
+    Task<ConnectOutcome> OpenSessionAsync(Guid profileId, CancellationToken ct) =>
+        Task.FromResult(new ConnectOutcome(ConnectStatus.Failed, "같은 DB 에 세션을 더 열 수 없습니다."));
 
     /// <summary>열린 작업 세션 하나를 지금 접속으로 바꾼다. 목록에 없으면 false.</summary>
     bool Switch(ISession session);
@@ -115,7 +133,10 @@ public interface IConnectionService
     /// <summary>지금 접속을 끊는다. 다른 접속은 그대로이고 마지막에 연 접속이 지금 접속이 된다.</summary>
     Task DisconnectAsync(CancellationToken ct);
 
-    /// <summary>열린 작업 세션 하나를 끊는다(목록에 없으면 아무것도 안 한다).</summary>
+    /// <summary>
+    /// 열린 작업 세션 하나를 끊는다(목록에 없으면 아무것도 안 한다). 접속(프로필의 첫 세션)을 끊었는데 같은 DB 에 더 연 세션이 있으면
+    /// 그중 처음 연 것이 같은 자리(콤보 번호)의 접속이 된다(TSK-14-01).
+    /// </summary>
     Task DisconnectAsync(ISession session, CancellationToken ct);
 
     /// <summary>마지막 프로필로 다시 접속한다(저장된 비밀번호가 있을 때).</summary>
@@ -175,12 +196,17 @@ public sealed class ConnectionService : IConnectionService, IDisposable
     // 열린 작업 세션(연 순서)·끊긴 세션·지금 접속. 세션 이벤트는 아무 스레드에서나 오므로 _sync 안에서만 바꾼다.
     private readonly Lock _sync = new();
     private readonly List<ISession> _open = [];
+    private readonly List<ISession> _extra = []; // 같은 DB 에 더 연 작업 세션(TSK-14-01, 연 순서)
+    private readonly Dictionary<Guid, SecureCredential> _secrets = []; // 열린 접속의 비밀번호(메모리에만, 프로필의 세션이 모두 닫히면 지운다)
     private readonly HashSet<Guid> _brokenIds = [];
     private ISession? _active;
     private ConnectionProfile? _lastProfile;
 
     /// <summary>동시에 열 수 있는 접속(공유 작업 세션) 수. 전용 세션(D-017)·도구 세션(CONN-07)은 세지 않는다.</summary>
     public const int MaxSessions = 10;
+
+    /// <summary>프로필 하나에 열 수 있는 작업 세션 수(접속 + 더 연 세션, TSK-14-01).</summary>
+    public const int MaxSessionsPerProfile = 8;
 
     public ConnectionService(
         IConnectionStore store,
@@ -213,6 +239,16 @@ public sealed class ConnectionService : IConnectionService, IDisposable
         foreach (var s in _subscriptions)
         {
             s.Dispose();
+        }
+
+        lock (_sync)
+        {
+            foreach (var secret in _secrets.Values)
+            {
+                secret.Dispose();
+            }
+
+            _secrets.Clear();
         }
 
         _gate.Dispose();
@@ -283,12 +319,49 @@ public sealed class ConnectionService : IConnectionService, IDisposable
         }
     }
 
+    public IReadOnlyList<ISession> SessionsOf(Guid profileId)
+    {
+        lock (_sync)
+        {
+            return profileId == Guid.Empty || _open.FirstOrDefault(s => s.Profile.Id == profileId) is not { } first
+                ? []
+                : [first, .. _extra.Where(s => s.Profile.Id == profileId)];
+        }
+    }
+
+    public IReadOnlyList<ISession> AllSessions
+    {
+        get
+        {
+            lock (_sync)
+            {
+                return [.. _open.SelectMany(p => _extra.Where(s => s.Profile.Id == p.Profile.Id).Prepend(p))];
+            }
+        }
+    }
+
+    public bool IsOpen(ISession session)
+    {
+        lock (_sync)
+        {
+            return _open.Contains(session) || _extra.Contains(session);
+        }
+    }
+
+    /// <summary>
+    /// 열린 작업 세션 하나를 지금 접속으로 바꾼다. 같은 DB 에 더 연 세션이면 그 접속(프로필의 첫 세션)이 지금 접속이 된다
+    /// (지금 접속은 탭을 따르지 않는 도구 창이 쓰는 접속이다). 목록에 없으면 false.
+    /// </summary>
     public bool Switch(ISession session)
     {
         ArgumentNullException.ThrowIfNull(session);
         lock (_sync)
         {
-            if (!_open.Contains(session))
+            if (_extra.Contains(session))
+            {
+                session = _open.First(s => s.Profile.Id == session.Profile.Id);
+            }
+            else if (!_open.Contains(session))
             {
                 return false;
             }
@@ -492,6 +565,11 @@ public sealed class ConnectionService : IConnectionService, IDisposable
             }
         }
 
+        if (!full)
+        {
+            Remember(profile.Id, secret);
+        }
+
         if (full)
         {
             await CloseAsync(session).ConfigureAwait(false);
@@ -533,24 +611,147 @@ public sealed class ConnectionService : IConnectionService, IDisposable
         await CloseAsync(session).ConfigureAwait(false);
     }
 
+    public async Task<ConnectOutcome> OpenSessionAsync(Guid profileId, CancellationToken ct)
+    {
+        ConnectionProfile? profile;
+        string? secret;
+        lock (_sync)
+        {
+            profile = profileId == Guid.Empty ? null : _open.FirstOrDefault(s => s.Profile.Id == profileId)?.Profile;
+            if (profile is not null && CountOf(profileId) >= MaxSessionsPerProfile)
+            {
+                return new ConnectOutcome(ConnectStatus.Failed, FullText);
+            }
+
+            secret = _secrets.TryGetValue(profileId, out var remembered) ? remembered.Secret.ToString() : null;
+        }
+
+        if (profile is null)
+        {
+            return new ConnectOutcome(ConnectStatus.Failed, "그 DB 의 접속이 열려 있지 않습니다. 먼저 접속하세요.");
+        }
+
+        if (string.IsNullOrEmpty(secret))
+        {
+            (secret, _) = await TryLoadStoredAsync(profile).ConfigureAwait(false);
+        }
+
+        if (string.IsNullOrEmpty(secret))
+        {
+            return new ConnectOutcome(ConnectStatus.PasswordRequired, $"'{profile.Name}' 의 비밀번호를 입력하세요.");
+        }
+
+        ISession session;
+        try
+        {
+            using var credential = new SecureCredential(secret);
+            session = await _sessions.OpenAsync(ToDriverProfile(profile), credential, SessionPurpose.Work, ct).ConfigureAwait(false);
+        }
+        catch (OracleException ex)
+        {
+            return new ConnectOutcome(ConnectStatus.Failed, FirstLine(ex.Message));
+        }
+        catch (Exception ex) when (ex is UnsupportedServerException or InvalidOperationException or ArgumentException or IOException or TimeoutException)
+        {
+            return new ConnectOutcome(ConnectStatus.Failed, FirstLine(ex.Message));
+        }
+
+        string? refused = null;
+        lock (_sync)
+        {
+            if (!_open.Any(s => s.Profile.Id == profileId))
+            {
+                refused = "여는 사이에 그 DB 의 접속이 끊겼습니다.";
+            }
+            else if (CountOf(profileId) >= MaxSessionsPerProfile)
+            {
+                refused = FullText; // 여는 동안 다른 쪽이 자리를 채웠다
+            }
+            else
+            {
+                _extra.Add(session);
+            }
+        }
+
+        // 실행 상태는 새 작업 세션을 지금 접속으로 잡는다(SessionOpened): 목록이 바뀐 것을 알려 지금 접속으로 되돌리게 한다.
+        if (refused is not null)
+        {
+            await CloseAsync(session).ConfigureAwait(false);
+            RaiseChanged();
+            return new ConnectOutcome(ConnectStatus.Failed, refused);
+        }
+
+        RaiseChanged();
+        return new ConnectOutcome(ConnectStatus.Connected, $"{profile.Name} 에 세션을 하나 더 열었습니다.", session, session.Server.Version);
+    }
+
+    private static string FullText => $"같은 DB 에는 세션을 {MaxSessionsPerProfile}개까지 열 수 있습니다. 쓰지 않는 워크스페이스를 닫거나 세션을 함께 쓰세요.";
+
+    /// <summary>프로필의 열린 작업 세션 수(접속 + 더 연 세션). _sync 안에서 부른다.</summary>
+    private int CountOf(Guid profileId) =>
+        _open.Count(s => s.Profile.Id == profileId) + _extra.Count(s => s.Profile.Id == profileId);
+
+    /// <summary>열린 접속의 비밀번호를 메모리에 둔다(같은 DB 에 세션을 더 열 때 다시 묻지 않게). 저장소에는 쓰지 않는다.</summary>
+    private void Remember(Guid profileId, string secret)
+    {
+        if (profileId == Guid.Empty)
+        {
+            return;
+        }
+
+        lock (_sync)
+        {
+            if (_secrets.Remove(profileId, out var old))
+            {
+                old.Dispose();
+            }
+
+            _secrets[profileId] = new SecureCredential(secret);
+        }
+    }
+
     /// <summary>
-    /// 목록에서 뺀다. 지금 접속이었으면 남은 것 중 마지막에 연 접속이 지금 접속이 된다(없으면 null, 프로필은 「다시 접속」용으로 남긴다).
-    /// 빼지 않았으면(목록에 없음) false.
+    /// 목록에서 뺀다. 접속이었고 같은 DB 에 더 연 세션이 있으면 그중 처음 연 것이 같은 자리의 접속이 된다(지금 접속이었으면 그것이 지금 접속).
+    /// 아니면 지금 접속이었을 때 남은 것 중 마지막에 연 접속이 지금 접속이 된다(없으면 null, 프로필은 「다시 접속」용으로 남긴다).
+    /// 프로필의 세션이 모두 닫히면 메모리의 비밀번호도 지운다. 빼지 않았으면(목록에 없음) false.
     /// </summary>
     private bool Remove(ISession session)
     {
         lock (_sync)
         {
-            if (!_open.Remove(session))
+            if (_extra.Remove(session))
+            {
+                _brokenIds.Remove(session.Id);
+                return true;
+            }
+
+            var index = _open.IndexOf(session);
+            if (index < 0)
             {
                 return false;
             }
 
             _brokenIds.Remove(session.Id);
+            ISession? promoted = null;
+            if (_extra.FirstOrDefault(s => s.Profile.Id == session.Profile.Id) is { } next)
+            {
+                _extra.Remove(next);
+                _open[index] = next;
+                promoted = next;
+            }
+            else
+            {
+                _open.RemoveAt(index);
+                if (_secrets.Remove(session.Profile.Id, out var secret))
+                {
+                    secret.Dispose();
+                }
+            }
+
             if (ReferenceEquals(_active, session))
             {
                 _lastProfile = session.Profile;
-                _active = _open.Count == 0 ? null : _open[^1];
+                _active = promoted ?? (_open.Count == 0 ? null : _open[^1]);
             }
 
             return true;
@@ -926,7 +1127,7 @@ public sealed class ConnectionService : IConnectionService, IDisposable
     {
         lock (_sync)
         {
-            if (!_open.Any(s => s.Id == e.SessionId) || !_brokenIds.Add(e.SessionId))
+            if (!_open.Concat(_extra).Any(s => s.Id == e.SessionId) || !_brokenIds.Add(e.SessionId))
             {
                 return;
             }
@@ -941,7 +1142,7 @@ public sealed class ConnectionService : IConnectionService, IDisposable
         ISession? closed;
         lock (_sync)
         {
-            closed = _open.FirstOrDefault(s => s.Id == e.SessionId);
+            closed = _open.Concat(_extra).FirstOrDefault(s => s.Id == e.SessionId);
         }
 
         if (closed is not null && Remove(closed))
