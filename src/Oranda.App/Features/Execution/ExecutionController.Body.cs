@@ -36,7 +36,7 @@ public sealed partial class ExecutionController
 
         Flash(tab, stmt.Range.Start, stmt.Range.End);
         ExecutionResult? result = null;
-        await GuardedAsync(session, async token =>
+        await GuardedAsync(session, tab, async token =>
         {
             var exec = _d.Execution();
             result = await Task.Run(
@@ -82,7 +82,7 @@ public sealed partial class ExecutionController
         }
 
         ExecutionResult? result = null;
-        await GuardedAsync(session, async token =>
+        await GuardedAsync(session, tab, async token =>
         {
             var exec = _d.Execution();
             result = await Task.Run(
@@ -126,7 +126,7 @@ public sealed partial class ExecutionController
         int ok = 0, failed = 0, done = 0;
         bool cancelled = false;
         var summary = new StringBuilder();
-        await GuardedAsync(session, async token =>
+        await GuardedAsync(session, tab, async token =>
         {
             var exec = _d.Execution();
             var options = new ExecutionOptions { Source = HistorySource.Script, Binds = binds };
@@ -238,12 +238,12 @@ public sealed partial class ExecutionController
     }
 
     /// <summary>실행 상태 표시·취소 토큰을 묶어 본문을 돌린다. 끝나면 상태를 되돌린다.</summary>
-    private async Task GuardedAsync(ISession session, Func<CancellationToken, Task> body, CancellationToken outer, ResultTabsViewModel? results = null)
+    private async Task GuardedAsync(ISession session, SqlEditorViewModel? tab, Func<CancellationToken, Task> body, CancellationToken outer, ResultTabsViewModel? results = null)
     {
         using var cts = CancellationTokenSource.CreateLinkedTokenSource(outer);
         _runs[session.Id] = cts;
         s_runningProfile.Value = session.Profile;
-        State.BeginRun(session.Id);
+        State.BeginRun(session.Id, tab is null ? null : Host.WorkspaceOf(tab)); // 시작한 작업 공간(함께 쓰는 세션의 안내 막대, TSK-14-03)
         if (results is not null)
         {
             results.ClearErrors(); // 지난 실행의 오류 탭은 실행을 시작하는 순간 지운다(오류 상태는 State.BeginRun 이 지웠다)

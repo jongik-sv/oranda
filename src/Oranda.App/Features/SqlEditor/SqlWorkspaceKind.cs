@@ -40,3 +40,13 @@ public static class WorkspaceSessionModes
         _ => null,
     };
 }
+
+/// <summary>
+/// 함께 쓰는 세션이 다른 작업 공간의 실행으로 바쁠 때 실행을 누르면 작업 공간 위에 보이는 안내 막대의 내용(TSK-14-03, D-036).
+/// 「새 세션에서 실행」 은 이 작업 공간을 새 세션으로 옮긴 뒤 누른 실행을 다시 보낸다. 「기다리기」 는 막대를 닫는다.
+/// </summary>
+/// <param name="SessionId">바쁜(함께 쓰는) 세션. 그 실행이 끝나면 막대를 닫는다.</param>
+/// <param name="Text">막대 글(실행 중인 작업 공간 이름, 트랜잭션은 옮기지 않는다는 안내).</param>
+/// <param name="RunInNewSession">「새 세션에서 실행」.</param>
+/// <param name="Wait">「기다리기」.</param>
+public sealed record SessionBusyNotice(Guid SessionId, string Text, Func<Task> RunInNewSession, Action Wait);

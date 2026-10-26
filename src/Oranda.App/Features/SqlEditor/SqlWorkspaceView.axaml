@@ -2,6 +2,7 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:icons="using:Oranda.App.Shell.Icons"
              xmlns:vm="using:Oranda.App.Features.SqlEditor"
+             xmlns:cm="using:Oranda.App.Features.ConnectionManager"
              x:Class="Oranda.App.Features.SqlEditor.SqlWorkspaceView"
              x:DataType="vm:SqlWorkspaceViewModel">
   <UserControl.Styles>
@@ -109,6 +110,8 @@
         </ListBox>
       </DockPanel>
     </Border>
+    <!-- 함께 쓰는 세션이 다른 워크스페이스에서 실행 중일 때 실행을 누르면 보이는 안내 막대(TSK-14-03). 평소에는 숨는다. -->
+    <cm:SessionBusyBar DockPanel.Dock="Top" />
     <Grid>
       <!-- 보이는 SQL 탭의 편집기. 탭마다 View 를 하나씩 두고 바꿔 끼운다(되돌리기 기록·접기·스크롤을 잃지 않게). -->
       <ContentControl x:Name="EditorHost" />

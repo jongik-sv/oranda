@@ -104,7 +104,12 @@
                       Content="{Binding HighContrastLabel}" IsChecked="{Binding HighContrast}"
                       AutomationProperties.Name="{Binding HighContrastLabel}" />
             <TextBlock Grid.Row="4" Text="{Binding Strings[workspace]}" />
-            <CheckBox Grid.Row="4" Grid.Column="1" Content="{Binding Strings[restore]}" IsChecked="{Binding RestoreOnStartup}" />
+            <StackPanel Grid.Row="4" Grid.Column="1" Spacing="4">
+              <CheckBox Content="{Binding Strings[restore]}" IsChecked="{Binding RestoreOnStartup}" />
+              <!-- TSK-14-03: 새 워크스페이스가 처음 실행할 때 자기 세션을 연다(끄면 지금 접속의 세션을 함께 쓴다). -->
+              <CheckBox x:Name="SessionPerWorkspaceBox" Content="{Binding Strings[sessionPerWorkspace]}" IsChecked="{Binding SessionPerWorkspace}"
+                        ToolTip.Tip="{Binding Strings[sessionPerWorkspaceTip]}" />
+            </StackPanel>
             <TextBlock Grid.Row="5" Text="{Binding Strings[autosave]}" />
             <NumericUpDown Grid.Row="5" Grid.Column="1" Minimum="1" Maximum="10" Increment="1" FormatString="0"
                            Value="{Binding AutosaveSeconds}" AutomationProperties.Name="{Binding Strings[autosaveName]}" />

@@ -73,6 +73,12 @@ public sealed class ExecutionDeps
     /// </summary>
     public Func<SqlEditorViewModel, CancellationToken, Task<bool>> PrepareSession { get; init; } = (_, _) => Task.FromResult(true);
 
+    /// <summary>
+    /// 실행을 눌렀는데 탭의 세션이 다른 작업 공간의 실행으로 바쁘다(TSK-14-03, <c>SessionRouter.OfferNewSession</c>): 「새 세션에서 실행」 안내 막대를 띄우면 true.
+    /// 두 번째 인자 = 그 실행을 다시 보내는 함수. 기본은 아무것도 하지 않는다(false, 지금처럼 실행하지 않는다).
+    /// </summary>
+    public Func<SqlEditorViewModel, Func<Task>, bool> SharedBusy { get; init; } = (_, _) => false;
+
     /// <summary>접속 안 됨 탭에서 「지금 접속으로 바꾸기」 를 골랐다: 탭을 그 접속에 둔다. 기본은 탭의 접속 프로필만 바꾼다.</summary>
     public Action<SqlEditorViewModel, ISession> UseConnection { get; init; } = (tab, session) => tab.ConnectionProfileId = session.Profile.Id;
 

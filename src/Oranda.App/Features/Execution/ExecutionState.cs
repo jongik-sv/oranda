@@ -90,6 +90,9 @@ public sealed class ExecutionState : ObservableObject
 
         /// <summary>탭 닫기 확인 중(D-017). 실행 중은 아니지만 새 실행·커밋을 받지 않는다(확인한 뒤 닫힐 세션이다).</summary>
         public bool Closing { get; set; }
+
+        /// <summary>지금 실행을 시작한 작업 공간(<see cref="ActiveWorkspace"/>, TSK-14-03). 모르면 null.</summary>
+        public object? Owner { get; set; }
     }
 
     public ExecutionState(IEventBus? bus = null)
@@ -242,6 +245,31 @@ public sealed class ExecutionState : ObservableObject
     /// <summary>보이는 세션이 실행 중이거나 취소 중(문맥 키 <c>sessionBusy</c>).</summary>
     public bool ShownBusy => Shown is { } t && (t.Busy || t.Closing);
 
+    /// <summary>
+    /// 보이는 세션이 다른 작업 공간이 시작한 실행으로 바쁘다(문맥 키 <c>sessionBusyElsewhere</c>, TSK-14-03): 함께 쓰는 세션이라 이 작업 공간의
+    /// 실행은 막히지만, 실행 명령은 켜 두고 누르면 「새 세션에서 실행」 안내 막대를 보인다. 시작한 작업 공간을 모르면 false(지금처럼 꺼짐).
+    /// </summary>
+    public bool ShownBusyElsewhere => Shown is { Busy: true, Owner: { } owner } && ActiveWorkspace?.Invoke() is { } active && !ReferenceEquals(owner, active)
+        && (OffersNewSession?.Invoke() ?? true);
+
+    /// <summary>
+    /// 함께 쓰는 세션이 바쁠 때 「새 세션에서 실행」 을 권할지(세션 라우터가 넣는다: 설정 「워크스페이스마다 새 세션」). 끄면 WP-14 전처럼 실행이 꺼지고
+    /// 취소가 켜진다(TRD 14.5). null 이면 권한다.
+    /// </summary>
+    public Func<bool>? OffersNewSession { get; set; }
+
+    /// <summary>실행을 시작하는 작업 공간(조립·세션 라우터가 넣는다: 활성 SQL 작업 공간, 아니면 null). 실행을 시작할 때 기억한다.</summary>
+    public Func<object?>? ActiveWorkspace { get; set; }
+
+    /// <summary>세션의 지금 실행을 시작한 작업 공간(<see cref="ActiveWorkspace"/>). 실행 중이 아니거나 모르면 null.</summary>
+    public object? RunOwnerOf(Guid sessionId) => TrackOf(sessionId) is { Busy: true } t ? t.Owner : null;
+
+    /// <summary>
+    /// 상태 표시줄 2번 구간 앞에 붙일 세션 범위 글(TSK-14-03, 세션 라우터가 넣는다: 「워크스페이스 세션」·「공유 세션 · 다른 워크스페이스 1개와 함께」).
+    /// 인자 = 보이는 작업 세션 ID. null 이면 붙이지 않는다(작업 공간 하나·세션 하나면 WP-14 전과 같다).
+    /// </summary>
+    public Func<Guid, string?>? ScopeOf { get; set; }
+
     /// <summary>보이는 세션에 미커밋 트랜잭션이 있다(문맥 키 <c>txnPending</c>).</summary>
     public bool ShownTxnPending => Shown?.TxnPending ?? false;
 
@@ -258,12 +286,24 @@ public sealed class ExecutionState : ObservableObject
 
     public string ShownLastRunText => Shown?.LastRunText ?? string.Empty;
 
-    /// <summary>상태 표시줄 2번 구간 글. 전용 세션 탭이면 앞에 「전용 세션」을 붙인다.</summary>
+    /// <summary>
+    /// 상태 표시줄 2번 구간 글. 전용 세션 탭이면 앞에 「전용 세션」을 붙인다. 첫 실행 때 자기 세션을 열 작업 공간이면 「새 세션 · 첫 실행 때 연결」,
+    /// 같은 DB 여러 세션이면 앞에 세션 범위(<see cref="ScopeOf"/>, TSK-14-03).
+    /// </summary>
     public string ShownSessionText => Shown is not { } t
         ? string.Empty
         : t.Dedicated
             ? UiText.Get("Execution.status.dedicated", "전용 세션") + " · " + DescribeSession(t.Run, t.Elapsed)
-            : DescribeSession(t.Run, t.Elapsed);
+            : ReferenceEquals(t, _pending)
+                ? UiText.Get("Execution.status.pendingOwn", "새 세션 · 첫 실행 때 연결")
+                : FocusedSessionId is { } id && ScopeOf?.Invoke(id) is { Length: > 0 } scope
+                    ? scope + " · " + DescribeSession(t.Run, t.Elapsed)
+                    : DescribeSession(t.Run, t.Elapsed);
+
+    /// <summary>
+    /// 보이는 세션 값을 다시 알리고 문맥 키를 맞춘다(TSK-14-03): 세션은 그대로인데 함께 쓰는 작업 공간·활성 작업 공간이 바뀌었을 때 세션 라우터가 부른다.
+    /// </summary>
+    public void RefreshShown() => RaiseShown();
 
     /// <summary>상태 표시줄 3번 구간 글. 비어 있으면 구간을 접는다.</summary>
     public string ShownTransactionText => Shown is { } t ? DescribeTransaction(t.Run != SessionRunState.NoSession, t.TxnPending) : string.Empty;
@@ -324,7 +364,7 @@ public sealed class ExecutionState : ObservableObject
     // ---- 지금 접속(매개변수 없는 멤버) -------------------------------------------------------------
 
     /// <summary>실행을 시작했다. 경과 시간을 세기 시작한다.</summary>
-    public void BeginRun() => Begin(P);
+    public void BeginRun() => Begin(P, null); // PL/SQL 실행 창 등 작업 공간 밖의 실행
 
     public void MarkCancelling() => Cancelling(P);
 
@@ -423,7 +463,7 @@ public sealed class ExecutionState : ObservableObject
     }
 
     /// <summary>
-    /// 활성 문서(워크스페이스)가 첫 실행 때 <paramref name="profile"/> 의 새 세션을 연다(TSK-14-01): 상태 표시줄은 「연결됨」, 문맥 키
+    /// 활성 문서(워크스페이스)가 첫 실행 때 <paramref name="profile"/> 의 새 세션을 연다(TSK-14-01): 상태 표시줄은 「새 세션 · 첫 실행 때 연결」(TSK-14-03), 문맥 키
     /// <c>sessionBusy</c>·<c>txnPending</c> 은 꺼진다(같은 DB 의 다른 세션이 실행 중이어도 이 문서는 실행할 수 있다).
     /// </summary>
     public void FocusPending(ConnectionProfile profile)
@@ -484,7 +524,19 @@ public sealed class ExecutionState : ObservableObject
     {
         if (TrackOf(sessionId) is { } t)
         {
-            Begin(t);
+            Begin(t, ActiveWorkspace?.Invoke()); // 결과 그리드 등에서 바로 시작하는 실행: 지금 활성 작업 공간이 시작했다
+        }
+    }
+
+    /// <summary>
+    /// 실행을 시작한다. <paramref name="owner"/> = 실행을 시작한 작업 공간(실행한 탭의 작업 공간, TSK-14-03). 세션을 여는 사이 다른 작업 공간으로
+    /// 옮겨 가도 시작한 쪽을 기억한다(<see cref="ShownBusyElsewhere"/>). 모르면 null.
+    /// </summary>
+    public void BeginRun(Guid sessionId, object? owner)
+    {
+        if (TrackOf(sessionId) is { } t)
+        {
+            Begin(t, owner);
         }
     }
 
@@ -517,11 +569,12 @@ public sealed class ExecutionState : ObservableObject
     private Track? TrackOf(Guid sessionId) =>
         _tracks.TryGetValue(sessionId, out var t) ? t : _released.Contains(sessionId) ? null : P;
 
-    private void Begin(Track t)
+    private void Begin(Track t, object? owner)
     {
         t.StartedUtc = DateTime.UtcNow;
         t.Elapsed = TimeSpan.Zero;
         t.Run = SessionRunState.Running;
+        t.Owner = owner;
         ClearError();
         StartTimer();
         RaiseAll();
@@ -543,6 +596,8 @@ public sealed class ExecutionState : ObservableObject
             // 세션 없이 시작한 실행(지금 접속이 없을 때)은 「세션 없음」 으로 돌아간다.
             t.Run = ReferenceEquals(t, _none) ? SessionRunState.NoSession : SessionRunState.Idle;
         }
+
+        t.Owner = null;
 
         StopTimerIfIdle();
         RaiseAll();
@@ -681,6 +736,7 @@ public sealed class ExecutionState : ObservableObject
         }
 
         keys.Set("sessionBusy", ShownBusy);
+        keys.Set("sessionBusyElsewhere", ShownBusyElsewhere);
         keys.Set("txnPending", ShownTxnPending);
         keys.Set("readOnlySession", ReadOnlySessionKey);
         keys.Set("hasExecError", _hasExecError);

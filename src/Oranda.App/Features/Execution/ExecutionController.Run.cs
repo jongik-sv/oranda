@@ -24,8 +24,16 @@ public sealed partial class ExecutionController
     public async Task<bool> RunAsync(RunMode mode, bool newResultTab = false, SqlEditorViewModel? tab = null, CancellationToken ct = default)
     {
         tab ??= Host.Active;
-        if (tab is null || !await EnsureConnectionAsync(tab, ct).ConfigureAwait(true) || IsBusy(SessionFor(tab)))
+        if (tab is null || !await EnsureConnectionAsync(tab, ct).ConfigureAwait(true))
         {
+            return false;
+        }
+
+        if (IsBusy(SessionFor(tab)))
+        {
+            // 함께 쓰는 세션이 다른 작업 공간에서 실행 중이면 「새 세션에서 실행 / 기다리기」 안내 막대(TSK-14-03, D-036). 새 세션으로 옮기면 같은 실행을 다시 보낸다.
+            var busyTab = tab;
+            _d.SharedBusy(busyTab, () => RunAsync(mode, newResultTab, busyTab, CancellationToken.None));
             return false;
         }
 
@@ -174,7 +182,7 @@ public sealed partial class ExecutionController
             return;
         }
 
-        await GuardedAsync(session, fetch, ct).ConfigureAwait(true);
+        await GuardedAsync(session, Host.Active, fetch, ct).ConfigureAwait(true);
     }
 
     /// <summary>F9 · 「ROWID 추가 후 다시 실행」: 한 문장을 실행하고 결과를 편집 모드로 연다. <paramref name="query"/> 가 null 이면 커서 문장.</summary>

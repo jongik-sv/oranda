@@ -121,6 +121,10 @@ public sealed partial class SettingsViewModel : ViewModelBase
     [ObservableProperty]
     private bool _restoreOnStartup;
 
+    /// <summary>「워크스페이스마다 새 세션」(TSK-14-03, <c>workspace.sessionPerWorkspace</c>): 새 워크스페이스가 처음 실행할 때 자기 세션을 연다.</summary>
+    [ObservableProperty]
+    private bool _sessionPerWorkspace;
+
     [ObservableProperty]
     private decimal _cacheRetentionDays;
 
@@ -225,6 +229,7 @@ public sealed partial class SettingsViewModel : ViewModelBase
         _monitorRefreshSeconds = s.Monitor.RefreshSeconds;
         _autosaveSeconds = s.Workspace.AutosaveSeconds;
         _restoreOnStartup = s.Workspace.RestoreOnStartup;
+        _sessionPerWorkspace = s.Workspace.SessionPerWorkspace;
         _cacheRetentionDays = s.MetadataCache.RetentionDays;
         _schemaSingleClickPreview = s.SchemaBrowser.SingleClickPreview;
         _updateCheckOnStartup = s.Update.CheckOnStartup;
@@ -467,6 +472,7 @@ public sealed partial class SettingsViewModel : ViewModelBase
                 {
                     AutosaveSeconds = Math.Clamp((int)AutosaveSeconds, 1, 10),
                     RestoreOnStartup = RestoreOnStartup,
+                    SessionPerWorkspace = SessionPerWorkspace,
                 },
                 MetadataCache = s.MetadataCache with { RetentionDays = (int)CacheRetentionDays },
                 SchemaBrowser = s.SchemaBrowser with { SingleClickPreview = SchemaSingleClickPreview },

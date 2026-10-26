@@ -292,12 +292,12 @@ public sealed class ExecutionTests
         }
 
         Assert.Equal(23, ExecutionCommands.Ids.Length);
-        Assert.Equal("(hasSession || dedicatedSession || tabConnectionMissing) && !sessionBusy && !mybatisDocActive", registry.Find("oranda.exec.runStatement")!.Enablement);
-        Assert.Equal("(hasSession || dedicatedSession || tabConnectionMissing) && !sessionBusy && !mybatisDocActive", registry.Find("oranda.exec.runSubquery")!.Enablement);
+        Assert.Equal("(hasSession || dedicatedSession || tabConnectionMissing) && (!sessionBusy || sessionBusyElsewhere) && !mybatisDocActive", registry.Find("oranda.exec.runStatement")!.Enablement);
+        Assert.Equal("(hasSession || dedicatedSession || tabConnectionMissing) && (!sessionBusy || sessionBusyElsewhere) && !mybatisDocActive", registry.Find("oranda.exec.runSubquery")!.Enablement);
         Assert.Equal("sqlDocFocus", registry.Find("oranda.exec.runSubquery")!.When);
         Assert.Contains("context:editor/runSubquery@1005", registry.Find("oranda.exec.runSubquery")!.Placements);
-        Assert.Equal("(hasSession || dedicatedSession || tabConnectionMissing) && !sessionBusy && hasSelection && !mybatisDocActive", registry.Find("oranda.exec.runSelection")!.Enablement);
-        Assert.Equal("sessionBusy", registry.Find("oranda.exec.cancel")!.Enablement);
+        Assert.Equal("(hasSession || dedicatedSession || tabConnectionMissing) && (!sessionBusy || sessionBusyElsewhere) && hasSelection && !mybatisDocActive", registry.Find("oranda.exec.runSelection")!.Enablement);
+        Assert.Equal("sessionBusy && !sessionBusyElsewhere", registry.Find("oranda.exec.cancel")!.Enablement);
         Assert.Equal("hasExecError", registry.Find("oranda.exec.goToError")!.Enablement);
         Assert.Equal("(hasSession || dedicatedSession) && txnPending && !sessionBusy", registry.Find("oranda.txn.commit")!.Enablement);
         Assert.Equal("(hasSession || dedicatedSession) && txnPending && !sessionBusy", registry.Find("oranda.txn.rollback")!.Enablement);

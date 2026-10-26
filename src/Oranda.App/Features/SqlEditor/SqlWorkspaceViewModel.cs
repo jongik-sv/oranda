@@ -117,6 +117,10 @@ public sealed partial class SqlWorkspaceViewModel : ToolPanelViewModelBase, IInn
     [ObservableProperty]
     private WorkspaceSessionMode? _sessionMode;
 
+    /// <summary>함께 쓰는 세션이 다른 작업 공간에서 실행 중이라 보이는 안내 막대(TSK-14-03, <c>SessionRouter</c> 가 넣고 지운다). 없으면 null.</summary>
+    [ObservableProperty]
+    private SessionBusyNotice? _busyNotice;
+
     /// <summary>이 작업 공간의 SQL 탭(열린 순서).</summary>
     public ObservableCollection<SqlEditorViewModel> Tabs { get; } = [];
 

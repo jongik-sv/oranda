@@ -1,4 +1,5 @@
 using Oranda.App.Features.Execution;
+using Oranda.App.Features.Localization;
 using Oranda.App.Features.SqlEditor;
 using Oranda.Core.Sessions;
 
@@ -23,6 +24,100 @@ public sealed partial class SessionRouter
     /// 없으면 미커밋 세션을 쓰는 작업 공간은 닫지 않는다.
     /// </summary>
     public Func<ISession, CancellationToken, Task<bool>>? ConfirmUncommitted { get; set; }
+
+    /// <summary>
+    /// 툴바 콤보의 「새 세션」 줄이 열 DB(TSK-14-03): SQL 작업 공간의 탭(전용 세션 탭 제외)이 활성이고 그 탭의 접속(없으면 지금 접속)이 열려 있으면
+    /// 그 접속(기본 세션), 아니면 null(PL/SQL 문서 등은 지금처럼 접속만 고른다).
+    /// </summary>
+    public ISession? NewSessionTarget =>
+        SqlDocumentActive && _host.Active is { } tab && _dedicated?.SessionOf(tab) is null && _host.WorkspaceOf(tab) is not null
+        && (tab.ConnectionProfileId ?? Current?.Profile.Id) is { } profileId
+            ? _connections.SessionOf(profileId)
+            : null;
+
+    /// <summary>활성 SQL 작업 공간(SQL 작업 공간 문서가 활성이 아니면 null).</summary>
+    public SqlWorkspaceViewModel? ActiveWorkspace => SqlDocumentActive && _host.Active is { } tab ? _host.WorkspaceOf(tab) : null;
+
+    /// <summary>
+    /// 상태 표시줄 2번 구간 앞 세션 범위 글(TSK-14-03, <see cref="ExecutionState.ScopeOf"/>): 같은 DB 에 세션이 여럿일 때, 활성 작업 공간이 쓰는 세션을
+    /// 다른 작업 공간도 쓰면 「공유 세션 · 다른 워크스페이스 N개와 함께」, 아니면 「워크스페이스 세션」. 그 DB 의 세션이 하나면 null
+    /// (작업 공간이 몇 개든 모두 접속의 세션을 쓰는 WP-14 전과 같다, 설정을 꺼도 같다).
+    /// </summary>
+    public string? ScopeTextOf(Guid sessionId)
+    {
+        if (ActiveWorkspace is not { } ws || _connections.AllSessions.FirstOrDefault(s => s.Id == sessionId) is not { } session
+            || _connections.SessionsOf(session.Profile.Id).Count < 2)
+        {
+            return null;
+        }
+
+        var others = WorkspacesOn(session).Count(w => !ReferenceEquals(w, ws));
+        if (others > 0)
+        {
+            return UiText.Format("Execution.status.sharedSession", "공유 세션 · 다른 워크스페이스 {0}개와 함께", others);
+        }
+
+        return UiText.Get("Execution.status.workspaceSession", "워크스페이스 세션");
+    }
+
+    /// <summary>
+    /// 실행을 눌렀는데 탭의 세션이 다른 작업 공간의 실행으로 바쁘다(<see cref="ExecutionDeps.SharedBusy"/>): 작업 공간 위에 안내 막대를 띄우고 true.
+    /// 「새 세션에서 실행」 = <see cref="NewSessionAsync"/> 뒤 <paramref name="rerun"/>. 바쁜 까닭이 이 작업 공간 자신이거나 모르면 false(지금처럼 조용히 꺼짐).
+    /// </summary>
+    public bool OfferNewSession(SqlEditorViewModel tab, Func<Task> rerun)
+    {
+        ArgumentNullException.ThrowIfNull(tab);
+        ArgumentNullException.ThrowIfNull(rerun);
+        if (!SessionPerWorkspace() || _dedicated?.SessionOf(tab) is not null || _host.WorkspaceOf(tab) is not { } ws || SessionFor(tab) is not { } session
+            || _state.RunOwnerOf(session.Id) is not SqlWorkspaceViewModel owner || ReferenceEquals(owner, ws))
+        {
+            return false;
+        }
+
+        var text = UiText.Format("Execution.busyBar.text",
+            "이 세션은 「{0}」 워크스페이스에서 실행 중입니다. 같은 세션이라 끝날 때까지 기다립니다. 바로 실행하려면 새 세션으로 옮기세요. 트랜잭션은 옮겨지지 않습니다.",
+            owner.Name);
+        ws.BusyNotice = new SessionBusyNotice(session.Id, text, () => RunInNewSessionAsync(ws, tab, rerun), () => ws.BusyNotice = null);
+        return true;
+    }
+
+    private async Task RunInNewSessionAsync(SqlWorkspaceViewModel ws, SqlEditorViewModel tab, Func<Task> rerun)
+    {
+        if (!ReferenceEquals(_host.WorkspaceOf(tab), ws))
+        {
+            ws.BusyNotice = null; // 막대가 떠 있는 사이 그 탭을 닫았다: 다른 탭의 작업 공간을 옮기거나 닫은 탭의 글을 실행하지 않는다
+            return;
+        }
+
+        if (!ReferenceEquals(_host.Active, tab))
+        {
+            _host.Active = tab; // 「새 세션」 은 활성 탭의 작업 공간을 옮긴다
+        }
+
+        if (await NewSessionAsync().ConfigureAwait(true) is null)
+        {
+            // 못 열었으면(이유는 메시지 창) 막대를 남긴다: 기다리거나 다시 고를 수 있게.
+            ExecutionLog.For(_bus).AddMessage(MessageKind.Warning, UiText.Format("Execution.busyBar.failed", "「{0}」 을(를) 새 세션으로 옮기지 못했습니다.", ws.Name));
+            return;
+        }
+
+        ws.BusyNotice = null;
+        await rerun().ConfigureAwait(true);
+    }
+
+    /// <summary>
+    /// 함께 쓰는 세션의 실행이 끝났거나 작업 공간이 다른 세션으로 옮겨 갔으면 안내 막대를 닫는다(「기다리기」 를 누르지 않아도).
+    /// </summary>
+    private void ClearFinishedNotices()
+    {
+        foreach (var ws in _host.Workspaces)
+        {
+            if (ws.BusyNotice is { } notice && (!_state.IsBusy(notice.SessionId) || SessionFor(ws.ActiveTab)?.Id != notice.SessionId))
+            {
+                ws.BusyNotice = null;
+            }
+        }
+    }
 
     /// <summary>열린 작업 세션 모두(접속마다 그 접속과 같은 DB 에 더 연 세션). 앱 종료 미커밋 확인이 쓴다.</summary>
     public IReadOnlyList<ISession> AllSessions => _connections.AllSessions;

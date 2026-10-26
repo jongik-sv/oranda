@@ -88,6 +88,7 @@ public static class ExecutionCommands
                 WorkSessions = () => SessionRouter.Resolve(container).AllSessions, // 같은 DB 에 더 연 세션도 미커밋을 묻는다(TSK-14-01)
                 PrepareSession = (tab, ct) => SessionRouter.Resolve(container).PrepareAsync(tab, ct),
                 UseConnection = (tab, session) => SessionRouter.Resolve(container).UseConnection(tab, session),
+                SharedBusy = (tab, rerun) => SessionRouter.Resolve(container).OfferNewSession(tab, rerun),
                 ConnectionLabel = s => SessionRouter.Resolve(container).LabelOf(s),
                 ProfileName = id => SessionRouter.Resolve(container).ProfileNameAsync(id),
                 Reconnect = (id, _) => SessionRouter.Resolve(container).ReconnectAsync(id, () => ConnectionManagerCommands.ConnectProfileAsync(container, id)),
@@ -245,23 +246,23 @@ public static class ExecutionCommands
 }
 
 /// <summary>실행·취소·커밋·롤백 등 TSK-06-02 소유 명령의 처리기. 한 클래스가 명령 ID 로 나눠 처리한다.</summary>
-[OrandaCommand("oranda.exec.runStatement", CommandCategory.Sql, When = "sqlDocFocus", Enablement = "(hasSession || dedicatedSession || tabConnectionMissing) && !sessionBusy && !mybatisDocActive",
+[OrandaCommand("oranda.exec.runStatement", CommandCategory.Sql, When = "sqlDocFocus", Enablement = "(hasSession || dedicatedSession || tabConnectionMissing) && (!sessionBusy || sessionBusyElsewhere) && !mybatisDocActive",
     Icon = "run", Placements = ["menu:sql/runStatement@10", "toolbar:main/run@210", "context:editor/runStatement@1000"])]
-[OrandaCommand("oranda.exec.runSubquery", CommandCategory.Sql, When = "sqlDocFocus", Enablement = "(hasSession || dedicatedSession || tabConnectionMissing) && !sessionBusy && !mybatisDocActive",
+[OrandaCommand("oranda.exec.runSubquery", CommandCategory.Sql, When = "sqlDocFocus", Enablement = "(hasSession || dedicatedSession || tabConnectionMissing) && (!sessionBusy || sessionBusyElsewhere) && !mybatisDocActive",
     Placements = ["menu:sql/runSubquery@11", "context:editor/runSubquery@1005"])]
-[OrandaCommand("oranda.exec.runSelection", CommandCategory.Sql, When = "sqlDocFocus", Enablement = "(hasSession || dedicatedSession || tabConnectionMissing) && !sessionBusy && hasSelection && !mybatisDocActive",
+[OrandaCommand("oranda.exec.runSelection", CommandCategory.Sql, When = "sqlDocFocus", Enablement = "(hasSession || dedicatedSession || tabConnectionMissing) && (!sessionBusy || sessionBusyElsewhere) && hasSelection && !mybatisDocActive",
     Placements = ["menu:sql/runSelection@12"])]
-[OrandaCommand("oranda.exec.runScript", CommandCategory.Sql, When = "sqlDocFocus", Enablement = "(hasSession || dedicatedSession || tabConnectionMissing) && !sessionBusy && !mybatisDocActive",
+[OrandaCommand("oranda.exec.runScript", CommandCategory.Sql, When = "sqlDocFocus", Enablement = "(hasSession || dedicatedSession || tabConnectionMissing) && (!sessionBusy || sessionBusyElsewhere) && !mybatisDocActive",
     Icon = "runScript", Placements = ["menu:sql/runScript@14", "toolbar:main/runScript@220", "context:editor/runScript@1010"])]
-[OrandaCommand("oranda.exec.runFromCursor", CommandCategory.Sql, When = "sqlDocFocus", Enablement = "(hasSession || dedicatedSession || tabConnectionMissing) && !sessionBusy && !mybatisDocActive",
+[OrandaCommand("oranda.exec.runFromCursor", CommandCategory.Sql, When = "sqlDocFocus", Enablement = "(hasSession || dedicatedSession || tabConnectionMissing) && (!sessionBusy || sessionBusyElsewhere) && !mybatisDocActive",
     Placements = ["menu:sql/runFromCursor@16"])]
-[OrandaCommand("oranda.exec.runStep", CommandCategory.Sql, When = "sqlDocFocus", Enablement = "(hasSession || dedicatedSession || tabConnectionMissing) && !sessionBusy && !mybatisDocActive",
+[OrandaCommand("oranda.exec.runStep", CommandCategory.Sql, When = "sqlDocFocus", Enablement = "(hasSession || dedicatedSession || tabConnectionMissing) && (!sessionBusy || sessionBusyElsewhere) && !mybatisDocActive",
     Placements = ["menu:sql/runStep@18"])]
-[OrandaCommand("oranda.exec.runToNewResultTab", CommandCategory.Sql, When = "sqlDocFocus", Enablement = "(hasSession || dedicatedSession || tabConnectionMissing) && !sessionBusy && !mybatisDocActive",
+[OrandaCommand("oranda.exec.runToNewResultTab", CommandCategory.Sql, When = "sqlDocFocus", Enablement = "(hasSession || dedicatedSession || tabConnectionMissing) && (!sessionBusy || sessionBusyElsewhere) && !mybatisDocActive",
     Placements = ["menu:sql/runToNewResultTab@20"])]
 [OrandaCommand("oranda.exec.runAllTabs", CommandCategory.Sql, Enablement = "(hasSession || dedicatedSession || tabConnectionMissing) && !sessionBusy && !mybatisDocActive",
     Placements = ["menu:sql/runAllTabs@22"])]
-[OrandaCommand("oranda.exec.cancel", CommandCategory.Sql, When = "sqlDocFocus", Enablement = "sessionBusy",
+[OrandaCommand("oranda.exec.cancel", CommandCategory.Sql, When = "sqlDocFocus", Enablement = "sessionBusy && !sessionBusyElsewhere",
     Icon = "cancel", Placements = ["menu:sql/cancel@50", "toolbar:main/cancel@240"])]
 [OrandaCommand("oranda.exec.bindVariables", CommandCategory.Sql, When = "sqlDocFocus", Enablement = "sqlDocActive",
     Icon = "binds", Placements = ["menu:sql/bindVariables@60"])]

@@ -76,6 +76,16 @@ public sealed partial class SessionRouter
         host.WorkspaceClosed += (_, ws) => OnWorkspaceClosed(ws);
         host.RegisterCloseGuard(GuardAsync); // 저장 확인·전용 세션 확인 다음 차례(작업 공간만 쓰던 세션의 미커밋)
         host.EmptyWorkspaceCloseGuard = ConfirmWorkspaceCloseAsync; // 탭이 없는 작업 공간을 닫을 때도 같은 확인
+        state.ActiveWorkspace = () => ActiveWorkspace; // 실행을 시작한 작업 공간(함께 쓰는 세션의 안내 막대, TSK-14-03)
+        state.ScopeOf = ScopeTextOf; // 상태 표시줄 「워크스페이스 세션」·「공유 세션 · …」
+        state.OffersNewSession = () => SessionPerWorkspace(); // 설정을 끄면 함께 쓰는 세션이 바쁠 때 WP-14 전처럼(실행 꺼짐·취소 켜짐)
+        state.PropertyChanged += (_, e) =>
+        {
+            if (e.PropertyName == nameof(ExecutionState.ShownSessionText))
+            {
+                ClearFinishedNotices(); // 함께 쓰는 세션의 실행이 끝나면 안내 막대를 닫는다
+            }
+        };
         if (dedicated is not null)
         {
             dedicated.FocusSync = OnActiveTabChanged; // 문서 전환(SQL 작업 공간 ↔ 다른 문서)·전용 세션 붙임/뗌도 같이 맞춘다
@@ -696,7 +706,11 @@ public sealed partial class SessionRouter
         }
     }
 
-    private void RaiseChanged() => Changed?.Invoke(this, EventArgs.Empty);
+    private void RaiseChanged()
+    {
+        _state.RefreshShown(); // 세션은 그대로여도 함께 쓰는 작업 공간 수·활성 작업 공간이 바뀌었을 수 있다(상태 표시줄 글·sessionBusyElsewhere)
+        Changed?.Invoke(this, EventArgs.Empty);
+    }
 
     private static void Post(Action action)
     {
