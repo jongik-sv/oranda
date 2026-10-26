@@ -160,4 +160,143 @@ public sealed class WorkspaceSessionFlowTests(ItDb db, ITestOutputHelper output)
             db.Exec($"drop table {t} purge");
         }
     });
+
+    // ---- TSK-14-05: PRD 16.3 수락 기준 중 앞 시험이 재지 않은 것 ----
+
+    [Fact]
+    public Task A_shared_session_that_is_really_running_blocks_the_other_workspace_until_it_ends() => Ui.Run(async () =>
+    {
+        if (!db.Enabled)
+        {
+            return;
+        }
+
+        using var rig = new FlowRig(db);
+        try
+        {
+            await rig.ConnectAsync();
+            var a = rig.Host.NewDocument();
+            var wsB = rig.Host.NewWorkspace();
+            var b = wsB.Tabs[0];
+            var router = SessionRouter.Resolve(rig.Container);
+            await RunAsync(rig, a, SidSql);
+            await RunAsync(rig, b, SidSql);
+
+            // B 가 A 의 세션을 함께 쓴다. A 가 실제로 5초 도는 동안 B 의 실행은 막힌다(sessionBusy 는 세션 기준).
+            rig.Host.Active = b;
+            Assert.Equal(SessionSelect.Selected, await router.SelectAsync(router.SessionFor(a)!));
+            rig.Host.Active = a;
+            a.LoadText(SleepSql(5), false);
+            a.Select(0, 0);
+            var running = rig.Controller.RunAsync(RunMode.Statement, tab: a);
+            await HeadlessHost.WaitUntil(() => rig.State.IsRunning(router.SessionFor(a)!.Id));
+            rig.Host.Active = b;
+            Assert.True(rig.State.ShownBusy);
+            output.WriteLine("공유 세션 실행 중 B: sessionBusy = true");
+            Assert.True(await running);
+            Assert.False(rig.State.ShownBusy);
+        }
+        finally
+        {
+            await CloseAllAsync(rig);
+        }
+    });
+
+    [Fact]
+    public Task With_the_setting_off_both_workspaces_use_one_server_session() => Ui.Run(async () =>
+    {
+        if (!db.Enabled)
+        {
+            return;
+        }
+
+        using var rig = new FlowRig(db);
+        try
+        {
+            await rig.ConnectAsync();
+            var router = SessionRouter.Resolve(rig.Container);
+            router.SessionPerWorkspace = () => false;
+            var a = rig.Host.NewDocument();
+            var b = rig.Host.NewWorkspace().Tabs[0];
+
+            var sidA = await RunAsync(rig, a, SidSql);
+            var sidB = await RunAsync(rig, b, SidSql);
+            output.WriteLine($"설정 끔 SID A={sidA} B={sidB}");
+            Assert.Equal(sidA, sidB);
+            Assert.Single(rig.Service.SessionsOf(rig.Session.Profile.Id)); // WP-14 전과 같다: DB 세션 하나
+        }
+        finally
+        {
+            await CloseAllAsync(rig);
+        }
+    });
+
+    [Fact]
+    public Task Closing_a_workspace_asks_once_for_its_uncommitted_session_and_then_closes_that_session() => Ui.Run(async () =>
+    {
+        if (!db.Enabled)
+        {
+            return;
+        }
+
+        using var rig = new FlowRig(db);
+        var t = "WS_" + Guid.NewGuid().ToString("N")[..8].ToUpperInvariant();
+        db.Exec($"create table {t} (id number)");
+        try
+        {
+            await rig.ConnectAsync();
+            var a = rig.Host.NewDocument();
+            var wsB = rig.Host.NewWorkspace();
+            var b = wsB.Tabs[0];
+            var router = SessionRouter.Resolve(rig.Container);
+            await RunAsync(rig, a, SidSql);
+            await RunAsync(rig, b, SidSql);
+            await RunAsync(rig, b, $"insert into {t} values (1)"); // B 만의 세션에 미커밋
+            Assert.Equal(2, rig.Service.SessionsOf(rig.Session.Profile.Id).Count);
+
+            rig.Dialogs.UncommittedAnswer = UncommittedChoice.Rollback;
+            Assert.True(await rig.Host.TryCloseWorkspaceAsync(wsB, default));
+
+            Assert.Equal(1, rig.Dialogs.UncommittedAsked); // 세션 단위 한 번
+            await HeadlessHost.WaitUntil(() => rig.Service.SessionsOf(rig.Session.Profile.Id).Count == 1);
+            Assert.Equal("0", db.Text($"select count(*) from {t}")); // 롤백했다
+            Assert.Same(rig.Service.ActiveSession, router.SessionFor(a)); // A 의 세션(접속)은 그대로
+            output.WriteLine("작업 공간 닫기: 미커밋 확인 1회, 추가 세션 닫힘");
+        }
+        finally
+        {
+            await CloseAllAsync(rig);
+            db.Exec($"drop table {t} purge");
+        }
+    });
+
+    [Fact]
+    public Task A_profile_opens_at_most_eight_sessions_and_the_ninth_is_refused_with_a_reason() => Ui.Run(async () =>
+    {
+        if (!db.Enabled)
+        {
+            return;
+        }
+
+        using var rig = new FlowRig(db);
+        try
+        {
+            await rig.ConnectAsync();
+            var profile = rig.Session.Profile.Id;
+            for (var i = 1; i < ConnectionService.MaxSessionsPerProfile; i++)
+            {
+                var opened = await rig.Service.OpenSessionAsync(profile, default);
+                Assert.True(opened.IsConnected, opened.Message);
+            }
+
+            var over = await rig.Service.OpenSessionAsync(profile, default);
+            output.WriteLine("9번째: " + over.Message);
+            Assert.False(over.IsConnected);
+            Assert.Equal(ConnectionService.MaxSessionsPerProfile, rig.Service.SessionsOf(profile).Count);
+        }
+        finally
+        {
+            await CloseAllAsync(rig);
+        }
+    });
 }

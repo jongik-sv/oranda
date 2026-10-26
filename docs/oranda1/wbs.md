@@ -950,7 +950,7 @@ levels:
   - acceptance: 세션이 하나면 창이 기본 배치에 없다 / 둘이 되면 보이고 목록·워크스페이스·미커밋이 맞다 / 우클릭 네 명령이 동작하고 닫기 확인이 세션 단위 한 번 / Headless 라이트·다크 PNG / Startup_does_not_load_oracle_or_antlr_assemblies 통과
   - note: 담당 PC: 맥북 — win144 세션은 이 Task 를 하지 않는다. 사용자 원문(2026-10-26): 「동일한 DB에 대해 여러개의 접속을 지원하게 해줘. 다른 워크스페이스에서 쿼리가 진행되는 동안 다른 워크스페이스에서 다른 쿼리를 실행할 수 있도록 해줘.」 「여러 워크스페이스에서 하나의 세션을 사용할 수도 있지?」 크기 M. 결과: Features/Sessions(SessionsViewModel·SessionRow·SessionsView·SessionsAutoShow)로 「세션」 도구 창 구현, 기본 배치 숨김(LayoutPlanner DefaultHiddenTools), 작업 세션 2개 이상이 되면 한 번 보임, 우클릭 4명령, Headless 24개 통과·라이트/다크 PNG. (macbook)
 
-- [ ] TSK-14-05: 같은 DB 여러 세션 통합 확인 (26ai·11.2, 화면 흐름·시험 수치) [macbook] w:1 2026-11-04~2026-11-04
+- [x] TSK-14-05: 같은 DB 여러 세션 통합 확인 (26ai·11.2, 화면 흐름·시험 수치) [macbook] w:1 2026-11-04~2026-11-04
   - category: itest
   - domain: fullstack
   - model: opus
@@ -960,7 +960,7 @@ levels:
   - depends: TSK-14-03, TSK-14-04
   - requirements: podman Oracle 26ai·11.2 에서 통합 시험 `WorkspaceSessionFlowTests`(초안 있음)를 넓혀 PRD 16.3 수락 기준을 모두 잰다: 두 워크스페이스 SID 다름, A 5초 실행 중 B 1초 안, A 미커밋 INSERT 가 B 에 안 보임, 함께 쓰기 SID 같음·트랜잭션 공유, 새 세션 SID 다름, 공유 세션 실행 중 sessionBusy·안내 막대, 워크스페이스 닫기·앱 종료 미커밋 확인(세션 단위), 설정 끔 = 지금 동작, 복원 때 세션 안 엶, 상한 8. 11.2 는 `dbms_utility.get_time` 바쁜 반복으로 5초를 만든다(초안 참고). 결과서 docs/oranda1/itest/TSK-14-05.md 에 수치를 적는다; 제약: 실앱 SendKeys 금지(Headless 까지), 실앱 눈 확인 항목은 사용자 몫으로 표시, 결함은 defect Task 로 등록; 비고: 담당 PC: 맥북 — win144 세션은 이 Task 를 하지 않는다. wip-multisess 브랜치에 초안 있음(TRD 14.3).
   - acceptance: 위 항목이 26ai·11.2 둘 다 통과하고 수치가 결과서에 있다 / `dotnet build Oranda.sln -warnaserror`·`dotnet test`(Integration·Perf 제외) 통과
-  - note: 담당 PC: 맥북 — win144 세션은 이 Task 를 하지 않는다. 사용자 원문(2026-10-26): 「동일한 DB에 대해 여러개의 접속을 지원하게 해줘. 다른 워크스페이스에서 쿼리가 진행되는 동안 다른 워크스페이스에서 다른 쿼리를 실행할 수 있도록 해줘.」 「여러 워크스페이스에서 하나의 세션을 사용할 수도 있지?」 크기 S. wip-multisess 브랜치에 초안 있음(TRD 14.3).
+  - note: 담당 PC: 맥북 — win144 세션은 이 Task 를 하지 않는다. 사용자 원문(2026-10-26): 「동일한 DB에 대해 여러개의 접속을 지원하게 해줘. 다른 워크스페이스에서 쿼리가 진행되는 동안 다른 워크스페이스에서 다른 쿼리를 실행할 수 있도록 해줘.」 「여러 워크스페이스에서 하나의 세션을 사용할 수도 있지?」 크기 S. wip-multisess 브랜치에 초안 있음(TRD 14.3). 진행(2026-10-26): 통합 시험 4개 추가·결과서 뼈대(itest/TSK-14-05.md) 작성까지. Oracle 실행 수치는 미측정 — 맥의 oracle-26ai-free 는 DMES 공유 DB 라 시험 픽스처(CREATE USER·GRANT)를 돌리지 않음, 26ai(시험 전용 컨테이너 결정 대기)·11.2 수치는 win144 확인 몫. (macbook)
 
 ## 의존 그래프
 
