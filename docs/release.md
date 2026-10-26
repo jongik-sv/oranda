@@ -27,6 +27,7 @@ Windows 줄은 2026-10-25 로컬 `vpk pack --channel win` 결과다. macOS 줄�
 
 - 태그를 붙이기 전에 `docs/release-notes/<버전>.md`(예: `0.1.2.md`)를 커밋한다. 사용자가 읽는 말로 「새 기능」·「고친 것」을 적는다.
 - CI 가 그 파일을 `vpk pack --releaseNotes` 로 패키지에 넣는다. 설치본의 업데이트 창(도움말 > 업데이트 확인)이 이 노트를 보여 준다(`ReleaseNotesFormatter`: `#` 머리글, `-` 목록).
+- 같은 파일이 앱에도 포함되어(`docs/release-notes/*.md` 가 임베디드 리소스) 업데이트 뒤에도 도움말 > 새 기능(릴리스 노트)에서 오프라인으로 볼 수 있다. 파일을 더하면 빌드만으로 따라 들어간다.
 - `release` 작업이 같은 파일로 GitHub Release 본문을 채운다(`gh release edit --notes-file`).
 - 파일이 없으면 노트 없이 묶고 태그 빌드에 경고를 남긴다.
 

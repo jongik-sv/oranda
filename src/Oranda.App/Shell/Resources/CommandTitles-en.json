@@ -145,6 +145,7 @@
   "Cmd.oranda.help.crashReport": "Error Report",
   "Cmd.oranda.help.docs": "User Guide",
   "Cmd.oranda.help.openLogs": "Open Log Folder",
+  "Cmd.oranda.help.releaseNotes": "What's New (Release Notes)",
   "Cmd.oranda.help.shortcuts": "Shortcut List",
   "Cmd.oranda.journal.showForObject": "Show Change Journal",
   "Cmd.oranda.monitor.blockingTree": "Blocking Tree",

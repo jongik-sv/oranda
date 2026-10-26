@@ -1,0 +1,29 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:update="using:Oranda.App.Features.Update"
+        x:Class="Oranda.App.Features.Update.ReleaseNotesWindow"
+        x:DataType="update:ReleaseNotesViewModel"
+        Title="{Binding TitleText}"
+        Width="520" MinWidth="420"
+        SizeToContent="Height"
+        CanResize="False"
+        WindowStartupLocation="CenterOwner"
+        ShowInTaskbar="False"
+        FontSize="{DynamicResource OrandaFontSizeBase}">
+  <!-- 노트 본문은 코드(SectionsPanel)에서 UpdateWindow 와 같은 방식으로 그린다: 머리글은 굵게, 목록은 「• 」. -->
+  <StackPanel Margin="16" Spacing="12">
+    <TextBlock x:Name="MessageText" Text="{Binding Message}" IsVisible="{Binding HasMessage}" TextWrapping="Wrap" />
+
+    <Border BorderThickness="1" BorderBrush="{DynamicResource OrandaSeparatorBrush}" CornerRadius="4" Padding="8,6" MaxHeight="420" MinHeight="120">
+      <ScrollViewer VerticalScrollBarVisibility="Auto">
+        <StackPanel x:Name="SectionsPanel" Spacing="12" />
+      </ScrollViewer>
+    </Border>
+
+    <Grid ColumnDefinitions="*,Auto">
+      <HyperlinkButton x:Name="AllReleasesLink" Content="{Binding AllReleasesText}" Command="{Binding OpenReleasesCommand}"
+                       HorizontalAlignment="Left" Padding="0" />
+      <Button x:Name="CloseButton" Grid.Column="1" Content="{Binding CloseText}" Command="{Binding CloseCommand}" IsCancel="True" IsDefault="True" />
+    </Grid>
+  </StackPanel>
+</Window>

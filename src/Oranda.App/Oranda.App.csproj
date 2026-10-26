@@ -75,6 +75,13 @@
                       LogicalName="Oranda.App.Keymaps.%(Filename)%(Extension)" />
   </ItemGroup>
 
+  <!-- 릴리스 노트(도움말 > 새 기능): 정본 docs/release-notes/<버전>.md 를 복사하지 않고 링크해 임베디드 리소스로 넣는다. 파일이 늘면 빌드만으로 따라 들어간다. -->
+  <ItemGroup>
+    <EmbeddedResource Include="..\..\docs\release-notes\*.md"
+                      Link="Features\Update\ReleaseNotes\%(Filename)%(Extension)"
+                      LogicalName="Oranda.App.ReleaseNotes.%(Filename)%(Extension)" />
+  </ItemGroup>
+
   <!-- 화면 글자 한/영 리소스(TSK-10-02). 키 집합이 같아야 한다(LocalizationTests). 파일 이름에 점+언어(Strings.ko.json)를 쓰면 SDK 가 위성 어셈블리로 만들어 버려서 strings-ko.json 으로 둔다. -->
   <ItemGroup>
     <EmbeddedResource Include="Resources\strings-*.json" LogicalName="Oranda.App.%(Filename)%(Extension)" />
