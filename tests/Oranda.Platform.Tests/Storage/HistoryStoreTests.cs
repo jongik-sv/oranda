@@ -303,6 +303,39 @@ public sealed class HistoryStoreTests : IDisposable
         }
     }
 
+    [Fact]
+    public async Task Recorder_saves_the_bind_values_a_run_used_from_its_options_when_the_setting_is_on()
+    {
+        var stmt = new SqlStatement("SELECT :id, :password FROM dual", default, StatementKind.Query) { BindNames = ["id", "password", "result"] };
+        var binds = new Dictionary<string, BindValue>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["ID"] = new(BindDataType.Number, 7.5m),
+            ["password"] = new(BindDataType.Varchar2, "Pw!"),
+            ["result"] = new(BindDataType.Varchar2, null, BindDirection.Out),
+            ["other"] = new(BindDataType.Varchar2, "used by another statement of the script"),
+        };
+        var options = new ExecutionOptions { Source = HistorySource.Editor, Binds = binds }; // 실행 화면이 넘기는 바인드(연결 지점 없이)
+
+        using var store = Store();
+        var (offRecorder, offBus, offSession) = await StartRecorderAsync(store, new HistorySettings { SaveBindValues = false });
+        offBus.Publish(new StatementExecuted(offSession.Id, stmt, new ExecutionResult(stmt, ExecutionStatus.Succeeded), options));
+        await offRecorder.DrainAsync();
+        Assert.Null((await store.SearchAsync(new HistoryQuery(), default))[0].BindsJson); // 끄면 비운다
+
+        await store.ClearAsync(null, default);
+        var (onRecorder, onBus, onSession) = await StartRecorderAsync(store, new HistorySettings { SaveBindValues = true });
+        onBus.Publish(new StatementExecuted(onSession.Id, stmt, new ExecutionResult(stmt, ExecutionStatus.Succeeded), options));
+        await onRecorder.DrainAsync();
+
+        var json = (await store.SearchAsync(new HistoryQuery(), default))[0].BindsJson;
+        Assert.NotNull(json);
+        Assert.Contains("\"id\":\"7.5\"", json, StringComparison.Ordinal); // 문장의 이름으로, 문화권 없이
+        Assert.Contains("\"password\":\"***\"", json, StringComparison.Ordinal);
+        Assert.DoesNotContain("Pw!", json, StringComparison.Ordinal);
+        Assert.DoesNotContain("result", json, StringComparison.Ordinal); // OUT 바인드는 값이 아니다
+        Assert.DoesNotContain("another statement", json, StringComparison.Ordinal); // 이 문장이 쓰지 않는 바인드는 뺀다
+    }
+
     private static async Task<(HistoryRecorder Recorder, FakeEventBus Bus, FakeSession Session)> StartRecorderAsync(IHistoryStore store, HistorySettings settings)
     {
         var bus = new FakeEventBus();

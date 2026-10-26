@@ -42,6 +42,7 @@ public sealed record ExecutionOptions
     /// <summary>
     /// 스크립트 실행(<see cref="IExecutionService.ExecuteScriptAsync"/>)의 바인드 값(이름 → 값, 대소문자 무시).
     /// 문장마다 그 문장의 바인드 이름에 해당하는 값만 쓴다. null 이면 바인드 없이 실행한다.
+    /// 한 문장 실행은 인자로 받은 바인드를 쓰고 이것은 실행 이력(<c>history.saveBindValues</c>)이 값을 남길 때만 읽는다.
     /// </summary>
     public IReadOnlyDictionary<string, BindValue>? Binds { get; init; }
 }

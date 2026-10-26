@@ -13,8 +13,8 @@ namespace Oranda.Platform.History;
 /// <summary>
 /// <c>StatementExecuted</c> 를 구독해 이력에 남긴다(EXEC-07). 시작 직후 설정을 읽어 보존 정책을 한 번 적용하고,
 /// 이후 기록 1,000건마다 다시 적용한다(data-model 3.4). <c>history.enabled=false</c> 나 <c>SkipHistory</c> 는 기록하지 않는다.
-/// 바인드 값은 <c>history.saveBindValues</c> 가 켜져 있고 호출 쪽이 <see cref="BindValuesProvider"/> 로 알려 준 경우에만 저장한다
-/// (이름이 pass·pwd·secret·token 인 바인드는 <c>***</c>). 소유: TSK-06-06.
+/// 바인드 값은 <c>history.saveBindValues</c> 가 켜져 있을 때만 저장한다: 실행이 넘긴 바인드(<see cref="ExecutionOptions.Binds"/>) 중 그 문장이
+/// 쓰는 이름의 입력 값, 또는 <see cref="BindValuesProvider"/> 가 알려 준 값(이름이 pass·pwd·secret·token 인 바인드는 <c>***</c>). 소유: TSK-06-06.
 /// </summary>
 [OrandaService(typeof(IStartupTask))]
 internal sealed class HistoryRecorder : IStartupTask
@@ -43,8 +43,8 @@ internal sealed class HistoryRecorder : IStartupTask
     public StartupPhase Phase => StartupPhase.AfterFirstFrame;
 
     /// <summary>
-    /// 사용자가 값을 정한 바인드(이름 → 값 JSON 조각)를 돌려주는 연결 지점. 실행 화면(TSK-06-02)이 채운다.
-    /// 반환이 null 이면 binds_json 은 비운다.
+    /// 사용자가 값을 정한 바인드(이름 → 값 글)를 돌려주는 연결 지점(시험·다른 실행 경로용). 없으면 실행이 넘긴 바인드
+    /// (<see cref="ExecutionOptions.Binds"/>)에서 만든다. 둘 다 없으면 binds_json 은 비운다.
     /// </summary>
     public static Func<StatementExecuted, IReadOnlyDictionary<string, string?>?>? BindValuesProvider { get; set; }
 
@@ -170,7 +170,7 @@ internal sealed class HistoryRecorder : IStartupTask
 
     private string? BuildBindsJson(StatementExecuted e)
     {
-        if (!_settings.SaveBindValues || BindValuesProvider?.Invoke(e) is not { Count: > 0 } values)
+        if (!_settings.SaveBindValues || (BindValuesProvider?.Invoke(e) ?? FromOptions(e)) is not { Count: > 0 } values)
         {
             return null;
         }
@@ -182,6 +182,39 @@ internal sealed class HistoryRecorder : IStartupTask
             StringComparer.Ordinal);
         return System.Text.Json.JsonSerializer.Serialize(masked);
     }
+
+    /// <summary>
+    /// 실행이 넘긴 바인드 중 그 문장이 쓰는 이름의 입력 값(스크립트는 모든 문장에 같은 사전을 넘기므로 문장의 이름으로 거른다). OUT·RETURN 바인드는 뺀다.
+    /// </summary>
+    private static Dictionary<string, string?>? FromOptions(StatementExecuted e)
+    {
+        if (e.Options.Binds is not { Count: > 0 } binds || e.Statement.BindNames.Count == 0)
+        {
+            return null;
+        }
+
+        var values = new Dictionary<string, string?>(StringComparer.Ordinal);
+        foreach (var name in e.Statement.BindNames)
+        {
+            if (!values.ContainsKey(name) && binds.TryGetValue(name, out var bind) && bind.Direction is BindDirection.In or BindDirection.InOut)
+            {
+                values[name] = Text(bind.Value);
+            }
+        }
+
+        return values;
+    }
+
+    private static string? Text(object? value) => value switch
+    {
+        null or DBNull => null,
+        string s => s,
+        byte[] bytes => Convert.ToHexString(bytes),
+        DateTime d => d.ToString("yyyy-MM-dd HH:mm:ss.FFFFFFF", System.Globalization.CultureInfo.InvariantCulture),
+        DateTimeOffset d => d.ToString("yyyy-MM-dd HH:mm:ss.FFFFFFF zzz", System.Globalization.CultureInfo.InvariantCulture),
+        IFormattable f => f.ToString(null, System.Globalization.CultureInfo.InvariantCulture),
+        _ => value.ToString(),
+    };
 
     private (ConnectionProfile? Profile, string? DbKey) Resolve(Guid sessionId)
     {

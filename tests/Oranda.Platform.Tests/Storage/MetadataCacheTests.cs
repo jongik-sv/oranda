@@ -135,6 +135,44 @@ public sealed class MetadataCacheTests : IDisposable
     }
 
     [Fact]
+    public async Task Pruner_applies_the_retention_days_after_start_and_again_when_the_setting_changes()
+    {
+        using var cache = SqliteMetadataCache.InMemory();
+        await cache.UpsertAsync(Source(used: DateTimeOffset.UtcNow.AddDays(-40)), [Obj("APP", "EMP", "TABLE")], default);
+        var recent = new MetaSource { DbKey = "OTHER/-/X", LastUsedAt = DateTimeOffset.UtcNow.AddDays(-10) };
+        await cache.UpsertAsync(recent, [new MetaObject { DbKey = "OTHER/-/X", Owner = "X", Name = "T", Type = "TABLE" }], default);
+        var settings = new RetentionSettings { Days = 30 };
+        var bus = new Oranda.Testing.FakeEventBus();
+        var pruner = new MetadataCachePruner(bus, cache, settings);
+
+        await pruner.RunAsync(default); // 시작 뒤(첫 화면 다음) 한 번
+
+        Assert.Null(await cache.GetSourceAsync(Key, default));
+        Assert.Empty(await cache.GetObjectsAsync(Key, null, null, default));
+        Assert.NotNull(await cache.GetSourceAsync("OTHER/-/X", default));
+
+        settings.Days = 5;
+        bus.Publish(new Oranda.Core.Events.SettingsChanged("history")); // 다른 구역은 무시
+        await pruner.DrainAsync();
+        Assert.NotNull(await cache.GetSourceAsync("OTHER/-/X", default));
+
+        bus.Publish(new Oranda.Core.Events.SettingsChanged("metadataCache")); // 설정 창에서 보관 일수를 바꿨다
+        await pruner.DrainAsync();
+        Assert.Null(await cache.GetSourceAsync("OTHER/-/X", default));
+        Assert.Empty(await cache.GetObjectsAsync("OTHER/-/X", null, null, default));
+    }
+
+    private sealed class RetentionSettings : Oranda.Core.Storage.ISettingsStore
+    {
+        public int Days { get; set; }
+
+        public Task<Oranda.Core.Storage.StoredDocument<AppSettings>> LoadAsync(CancellationToken ct)
+            => Task.FromResult(new Oranda.Core.Storage.StoredDocument<AppSettings>(new AppSettings { MetadataCache = new MetadataCacheSettings { RetentionDays = Days } }));
+
+        public Task SaveAsync(AppSettings settings, CancellationToken ct) => Task.CompletedTask;
+    }
+
+    [Fact]
     public async Task Future_version_database_falls_back_to_memory_without_touching_file()
     {
         using (var seed = SqliteMetadataCache.ForFile(DbFile))

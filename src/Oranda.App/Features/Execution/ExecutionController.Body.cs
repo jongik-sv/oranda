@@ -40,7 +40,7 @@ public sealed partial class ExecutionController
         {
             var exec = _d.Execution();
             result = await Task.Run(
-                () => exec.ExecuteAsync(session, stmt, binds, new ExecutionOptions { Source = HistorySource.Editor }, token),
+                () => exec.ExecuteAsync(session, stmt, binds, new ExecutionOptions { Source = HistorySource.Editor, Binds = binds }, token), // Binds = 이력의 바인드 값
                 CancellationToken.None).ConfigureAwait(true);
             await AfterStatementAsync(tab, session, stmt, result, token).ConfigureAwait(true);
         }, ct, results).ConfigureAwait(true);
@@ -86,7 +86,7 @@ public sealed partial class ExecutionController
         {
             var exec = _d.Execution();
             result = await Task.Run(
-                () => exec.ExecuteAsync(session, stmt, binds, new ExecutionOptions { Source = HistorySource.Editor }, token),
+                () => exec.ExecuteAsync(session, stmt, binds, new ExecutionOptions { Source = HistorySource.Editor, Binds = binds }, token), // Binds = 이력의 바인드 값
                 CancellationToken.None).ConfigureAwait(true);
             await AfterStatementAsync(tab, session, stmt, result, token).ConfigureAwait(true);
         }, ct, results).ConfigureAwait(true);
