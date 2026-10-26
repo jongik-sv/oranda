@@ -4,6 +4,15 @@
              xmlns:vm="using:Oranda.App.Features.DbTools"
              x:Class="Oranda.App.Features.DbTools.DdlExtractView"
              x:DataType="vm:DdlExtractViewModel">
+  <UserControl.Styles>
+    <Style Selector="TextBlock.invalid">
+      <Setter Property="Foreground" Value="{DynamicResource OrandaDangerForegroundBrush}" />
+      <Setter Property="FontWeight" Value="SemiBold" />
+    </Style>
+    <Style Selector="TextBlock.failed">
+      <Setter Property="Foreground" Value="{DynamicResource OrandaDangerForegroundBrush}" />
+    </Style>
+  </UserControl.Styles>
   <DockPanel>
     <Border DockPanel.Dock="Bottom" Classes="panel-status">
       <TextBlock Text="{Binding StatusText}" TextTrimming="CharacterEllipsis" />
@@ -42,17 +51,87 @@
             <TextBox PlaceholderText="출력 폴더" Text="{Binding OutputDirectory, Mode=TwoWay}" />
           </DockPanel>
           <CheckBox Content="객체마다 파일 하나(유형/이름.sql)" IsChecked="{Binding FilePerObject, Mode=TwoWay}" />
-          <Button Classes="tool" icons:ButtonIcon.Key="exportFile" x:Name="RunButton" Content="추출" HorizontalAlignment="Left" IsEnabled="{Binding CanRun}" />
+          <Button Classes="tool" icons:ButtonIcon.Key="exportFile" x:Name="RunButton" Content="추출" HorizontalAlignment="Left" IsEnabled="{Binding CanRun}"
+                  ToolTip.Tip="오른쪽 「대상」에서 체크한 객체의 DDL 을 파일로 씁니다. DB 에는 쓰지 않습니다." />
         </StackPanel>
       </ScrollViewer>
       <GridSplitter Grid.Column="1" ResizeDirection="Columns" />
-      <ListBox Grid.Column="2" ItemsSource="{Binding Results}">
-        <ListBox.ItemTemplate>
-          <DataTemplate x:DataType="vm:DdlExtractRow">
-            <TextBlock Text="{Binding Line}" FontFamily="{StaticResource OrandaFixedFontFamily}" TextTrimming="CharacterEllipsis" />
-          </DataTemplate>
-        </ListBox.ItemTemplate>
-      </ListBox>
+      <TabControl Grid.Column="2" x:Name="RightTabs" SelectedIndex="{Binding SelectedTab, Mode=TwoWay}">
+        <!-- 대상 미리보기: 왼쪽 조건에 맞는 객체를 바로 보여 주고, 체크한 것만 추출한다. 표는 격자 양식(grid-c)을 따른다. -->
+        <TabItem Header="{Binding TargetsHeader}" x:Name="TargetsTab" AutomationProperties.Name="추출 대상">
+          <DockPanel>
+            <Border DockPanel.Dock="Top" Classes="panel-toolbar">
+              <DockPanel>
+                <Button x:Name="RefreshTargetsButton" DockPanel.Dock="Left" Classes="toolbar" Content="대상 다시 조회 (F5)"
+                        icons:ButtonIcon.Key="refresh" icons:ButtonIcon.IconOnly="True" />
+                <TextBlock DockPanel.Dock="Right" Margin="8,0,0,0" VerticalAlignment="Center" Opacity="0.7" Text="불러오는 중…"
+                           IsVisible="{Binding IsLoadingTargets}" />
+                <TextBlock Margin="8,0,0,0" VerticalAlignment="Center" Text="{Binding TargetSummary}" TextTrimming="CharacterEllipsis" />
+              </DockPanel>
+            </Border>
+            <Border DockPanel.Dock="Top" Padding="8,4" BorderThickness="0,0,0,1" BorderBrush="{DynamicResource OrandaSeparatorBrush}"
+                    IsVisible="{Binding TargetsTruncated}">
+              <TextBlock TextWrapping="Wrap" Foreground="{DynamicResource OrandaWarningForegroundBrush}"
+                         Text="조건에 맞는 객체가 5,000개를 넘어 앞쪽만 보입니다 — 스키마·이름·유형을 좁히세요. 「추출」은 체크한 객체만 추출합니다." />
+            </Border>
+            <Border DockPanel.Dock="Top" Classes="grid-c-header" IsVisible="{Binding ShowTargetRows}">
+              <Grid ColumnDefinitions="30,130,*,86,140">
+                <Border Grid.Column="0" Classes="grid-c-cell" Padding="0">
+                  <CheckBox x:Name="AllBox" HorizontalAlignment="Center" MinWidth="0" Padding="0" IsChecked="{Binding AllChecked, Mode=TwoWay}"
+                            AutomationProperties.Name="전체 선택 또는 해제" ToolTip.Tip="전체 선택·해제" />
+                </Border>
+                <Border Grid.Column="1" Classes="grid-c-cell"><TextBlock Text="유형" VerticalAlignment="Center" /></Border>
+                <Border Grid.Column="2" Classes="grid-c-cell"><TextBlock Text="이름" VerticalAlignment="Center" /></Border>
+                <Border Grid.Column="3" Classes="grid-c-cell"><TextBlock Text="상태" VerticalAlignment="Center" /></Border>
+                <Border Grid.Column="4" Classes="grid-c-cell"><TextBlock Text="마지막 DDL" VerticalAlignment="Center" /></Border>
+              </Grid>
+            </Border>
+            <Grid>
+              <ListBox x:Name="TargetList" Classes="grid-c" ItemsSource="{Binding Targets}" IsVisible="{Binding ShowTargetRows}"
+                       AutomationProperties.Name="추출 대상 목록" ToolTip.Tip="Space 로 체크를 바꿉니다">
+                <ListBox.ItemTemplate>
+                  <DataTemplate x:DataType="vm:DdlTargetItem">
+                    <Grid ColumnDefinitions="30,130,*,86,140">
+                      <Border Grid.Column="0" Classes="grid-c-cell row-head" Padding="0">
+                        <CheckBox HorizontalAlignment="Center" MinWidth="0" Padding="0" IsChecked="{Binding IsChecked, Mode=TwoWay}"
+                                  AutomationProperties.Name="추출 대상 선택" />
+                      </Border>
+                      <Border Grid.Column="1" Classes="grid-c-cell"><TextBlock Text="{Binding ObjectType}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" /></Border>
+                      <Border Grid.Column="2" Classes="grid-c-cell">
+                        <TextBlock Text="{Binding Name}" VerticalAlignment="Center" FontFamily="{StaticResource OrandaFixedFontFamily}" TextTrimming="CharacterEllipsis"
+                                   ToolTip.Tip="{Binding Name}" />
+                      </Border>
+                      <Border Grid.Column="3" Classes="grid-c-cell">
+                        <TextBlock Text="{Binding Status}" VerticalAlignment="Center" Classes.invalid="{Binding IsInvalid}" />
+                      </Border>
+                      <Border Grid.Column="4" Classes="grid-c-cell"><TextBlock Text="{Binding LastDdl}" VerticalAlignment="Center" /></Border>
+                    </Grid>
+                  </DataTemplate>
+                </ListBox.ItemTemplate>
+              </ListBox>
+              <StackPanel IsVisible="{Binding ShowTargetPlaceholder}" HorizontalAlignment="Center" VerticalAlignment="Top" Margin="16,32,16,0" Spacing="6" MaxWidth="520">
+                <TextBlock Text="{Binding TargetMessage}" FontWeight="SemiBold" TextAlignment="Center" TextWrapping="Wrap" />
+                <TextBlock Text="{Binding TargetHint}" Opacity="0.65" TextAlignment="Center" TextWrapping="Wrap" />
+              </StackPanel>
+            </Grid>
+          </DockPanel>
+        </TabItem>
+        <TabItem Header="{Binding ResultsHeader}" x:Name="ResultsTab" AutomationProperties.Name="추출 결과">
+          <Grid>
+            <ListBox ItemsSource="{Binding Results}" AutomationProperties.Name="추출 결과 목록">
+              <ListBox.ItemTemplate>
+                <DataTemplate x:DataType="vm:DdlExtractRow">
+                  <TextBlock Text="{Binding Line}" FontFamily="{StaticResource OrandaFixedFontFamily}" TextTrimming="CharacterEllipsis"
+                             Classes.failed="{Binding !Succeeded}" />
+                </DataTemplate>
+              </ListBox.ItemTemplate>
+            </ListBox>
+            <TextBlock IsVisible="{Binding !HasResults}" HorizontalAlignment="Center" VerticalAlignment="Top" Margin="16,32,16,0" MaxWidth="520"
+                       TextAlignment="Center" TextWrapping="Wrap" Opacity="0.65"
+                       Text="아직 추출한 결과가 없습니다. 출력 폴더를 확인하고 「추출」을 누르세요." />
+          </Grid>
+        </TabItem>
+      </TabControl>
     </Grid>
   </DockPanel>
 </UserControl>

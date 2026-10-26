@@ -44,7 +44,11 @@ public sealed record DdlExtractPlan(
     DdlOptions Ddl,
     IReadOnlyList<(string From, string To)> Renames,
     string OutputDirectory,
-    bool FilePerObject);
+    bool FilePerObject)
+{
+    /// <summary>대상 표에서 체크한 객체. null = 조건(스키마·유형·이름·INVALID)에 맞는 객체 전부.</summary>
+    public IReadOnlyList<DbObjectRef>? Objects { get; init; }
+}
 
 public sealed record DdlExtractOutcome(IReadOnlyList<DdlExtractRow> Rows, IReadOnlyList<string> Files);
 
@@ -52,6 +56,7 @@ public sealed record DdlExtractOutcome(IReadOnlyList<DdlExtractRow> Rows, IReadO
 /// <c>oranda.panel.ddlExtract</c> — DDL 일괄 추출 마법사(필터·이름 바꾸기·저장 속성·출력 방식, TSK-07-04).
 /// 객체마다 <see cref="IMetadataProvider.GetDdlAsync"/> 를 불러 파일로 쓴다. 상태를 바꾸지 않는 읽기 작업이다.
 /// </summary>
+[System.Diagnostics.CodeAnalysis.SuppressMessage("Design", "CA1001", Justification = "대상 조회 취소 토큰은 타이머가 없어 정리할 핸들이 없고, 새 입력 때 취소만 한다.")]
 [OrandaToolPanel("oranda.panel.ddlExtract", ToolPanelKind.Document, DockLocation.Document)]
 public sealed partial class DdlExtractViewModel : ToolPanelViewModelBase
 {
@@ -64,6 +69,8 @@ public sealed partial class DdlExtractViewModel : ToolPanelViewModelBase
         {
             TypeChoices.Add(new DdlTypeChoice(t, true));
         }
+
+        HookTypeChoices();
     }
 
     public DdlExtractViewModel(IServiceProvider services)
@@ -74,10 +81,11 @@ public sealed partial class DdlExtractViewModel : ToolPanelViewModelBase
     }
 
     /// <summary>시험용: 제공자와 실행기를 직접 넣는다.</summary>
-    internal DdlExtractViewModel(IMetadataProvider meta)
+    internal DdlExtractViewModel(IMetadataProvider meta, ISchemaAdminProvider? admin = null)
         : this()
     {
         _meta = meta;
+        Admin = admin;
     }
 
     /// <summary>의존 순서(Oracle 쪽 <c>DdlBulkExporter.DefaultTypes</c> 와 같다 — 시험이 맞는지 본다).</summary>
@@ -164,6 +172,7 @@ public sealed partial class DdlExtractViewModel : ToolPanelViewModelBase
         }
 
         OnPropertyChanged(nameof(CanRun));
+        StartRefresh(0);
     }
 
     public DdlOptions CurrentOptions => new()
@@ -199,6 +208,9 @@ public sealed partial class DdlExtractViewModel : ToolPanelViewModelBase
         return list;
     }
 
+    /// <summary>
+    /// 추출 계획. 대상 목록이 떠 있으면 체크한 객체만(<see cref="DdlExtractPlan.Objects"/>), 미리 볼 수 없는 경우(검색 제공자 없음)에는 조건 전체.
+    /// </summary>
     public DdlExtractPlan BuildPlan() => new(
         Owner.Trim().ToUpperInvariant(),
         [.. TypeChoices.Where(t => t.IsSelected).Select(t => t.Name)],
@@ -207,7 +219,10 @@ public sealed partial class DdlExtractViewModel : ToolPanelViewModelBase
         CurrentOptions,
         ParseRenames(RenameText),
         OutputDirectory.Trim(),
-        FilePerObject);
+        FilePerObject)
+    {
+        Objects = TargetState == DdlTargetState.Ready ? CheckedObjects : null,
+    };
 
     public async Task RunAsync(CancellationToken ct = default)
     {
@@ -229,12 +244,28 @@ public sealed partial class DdlExtractViewModel : ToolPanelViewModelBase
             return;
         }
 
-        var plan = BuildPlan();
-        if (plan.ObjectTypes.Count == 0)
+        if (TypeChoices.All(t => !t.IsSelected))
         {
             StatusText = "유형을 하나 이상 고르세요";
             return;
         }
+
+        // 대상 조회가 진행 중이면 끝나기를 기다린다(옛 목록으로 추출하지 않는다).
+        await PendingRefresh.ConfigureAwait(true);
+        switch (TargetState)
+        {
+            case DdlTargetState.Error:
+                StatusText = "대상을 불러오지 못했다 — 새로 고침(F5) 뒤 다시 추출하세요";
+                return;
+            case DdlTargetState.Empty:
+                StatusText = "조건에 맞는 객체가 없다";
+                return;
+            case DdlTargetState.Ready when CheckedCount == 0:
+                StatusText = "체크한 객체가 없다";
+                return;
+        }
+
+        var plan = BuildPlan();
 
         var meta = _meta ??= (IMetadataProvider?)_services?.GetService(typeof(IMetadataProvider));
         if (meta is null)
@@ -245,6 +276,7 @@ public sealed partial class DdlExtractViewModel : ToolPanelViewModelBase
 
         IsBusy = true;
         Progress = 0;
+        SelectedTab = 1; // 추출을 시작하면 「추출 결과」 탭으로 넘어간다.
         Results.Clear();
         Files = [];
         try
@@ -290,6 +322,7 @@ public sealed partial class DdlExtractViewModel : ToolPanelViewModelBase
             Ddl = plan.Ddl,
             Renames = [.. plan.Renames.Select(r => new Oranda.Oracle.Schema.DdlRename(r.From, r.To))],
             OutputDirectory = plan.OutputDirectory,
+            Objects = plan.Objects,
             Layout = plan.FilePerObject ? Oranda.Oracle.Schema.DdlExtractLayout.FilePerObject : Oranda.Oracle.Schema.DdlExtractLayout.SingleFile,
         };
         var result = await Oranda.Oracle.Schema.DdlBulkExporter.ExtractAsync(meta, session, request, progress, ct);

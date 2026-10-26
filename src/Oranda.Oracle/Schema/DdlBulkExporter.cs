@@ -29,6 +29,12 @@ public sealed record DdlExtractRequest
 
     public bool InvalidOnly { get; init; }
 
+    /// <summary>
+    /// 추출할 객체를 화면이 직접 정한 목록(대상 미리보기에서 체크한 것). null 이면 위 조건(스키마·유형·이름·INVALID)으로 목록을 조회하고,
+    /// 값이 있으면 조회하지 않고 이 목록만 추출한다(빈 목록 = 추출할 것 없음).
+    /// </summary>
+    public IReadOnlyList<DbObjectRef>? Objects { get; init; }
+
     public DdlOptions Ddl { get; init; } = new();
 
     public IReadOnlyList<DdlRename> Renames { get; init; } = [];
@@ -68,7 +74,7 @@ public static class DdlBulkExporter
         ArgumentNullException.ThrowIfNull(request);
 
         var types = request.ObjectTypes.Count == 0 ? DefaultTypes : request.ObjectTypes;
-        var listed = await meta.ListObjectsAsync(session, new ObjectQuery
+        var listed = request.Objects ?? await meta.ListObjectsAsync(session, new ObjectQuery
         {
             Owner = request.Owner,
             ObjectTypes = [.. types],

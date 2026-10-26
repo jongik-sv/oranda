@@ -797,9 +797,9 @@ levels:
   - model: sonnet
   - priority: high
   - tags: integration, e2e, scripts, grid, win144
-  - depends: TSK-10-01, TSK-10-02, TSK-11-01, TSK-12-01, TSK-12-02, TSK-12-03
+  - depends: TSK-10-01, TSK-10-02, TSK-11-01, TSK-12-01, TSK-12-02, TSK-12-03, TSK-13-01
   - prd-ref: PRD 14.3, PRD 15.2, TRD 12.4, TRD 12.5, TRD 13.3, TRD 13.4
-  - requirements: 여섯 Task 가 dev 에 들어온 뒤 한 흐름으로 확인한다. (1) 스크립트: 폴더 둘(하위 포함, 숨김 폴더·비스크립트 파일 섞음)을 연결 → 이름 낱말 검색 → 「내용」 검색(대소문자·한글·정규식 문자·여러 인코딩) → 두 번 누름 열기·줄 이동 → Esc 트리 복귀 → 새 스크립트(선택 폴더·고른 파일의 폴더·폴더 하나·폴더 여럿 비활성) → 이름 오류·겹침·채우기 → 만든 뒤 선택·열림 → 만든 파일이 검색에 잡힘; 한도(1,000곳·2 MB)·취소·5,000개 파일 시간을 재서 적는다. (2) 결과 격자: 셀 범위·Ctrl 로 고른 여러 행 삭제(새 행 + 기존 행 섞음)·미리보기 DELETE n개·되돌리기·행 복사 클립보드 글·행 복제·편집 모드 자동 켜기·R6 막힘·1만 행 시간·단축키 Ctrl+Delete/Ctrl+D 충돌 없음; Oracle 통합 시험이 가능하면 여러 행 삭제 반영 후 행 수 확인. (3) INVALID 객체 검색(TSK-12-01 이 고친 모든 화면 경로)이 INVALID 객체를 찾고 느린 공급자에서도 UI 가 흔들리지 않는다. (4) 프로시저·함수 실행 창(TSK-12-02)이 스키마 브라우저·편집기 두 경로에서 인자 행·미리보기와 함께 그려진다. (5) 서버 재조회 내보내기(TSK-12-03): 바인드 변수 질의의 결과를 CSV·xlsx 전체 행으로 내보내 행 수·값을 원본과 비교하고, 전체 행 수 세기·서버 거르기가 같은 값으로 도는지, 값이 없을 때 이유 안내가 뜨는지 본다. 주 메뉴·팔레트 명령 수가 WP-10 전과 같음을 단정한다. 라이트·다크 PNG 를 `~/.coord/scripts-find/shots/` 에 두고 직접 본다. 각 레인 결과에 적힌 빠진 문구를 문구 파일에 넣는다; 제약: 실앱 SendKeys 금지(Headless 까지), 실앱 눈 확인 항목은 사용자 몫으로 표시, 제품 코드는 고치지 않고 결함은 defect Task 로 등록; 비고: 담당 PC: win144(Windows 개발 PC) — 맥북 세션은 이 Task 를 하지 않는다. 결과서 docs/oranda1/itest/TSK-10-03.md
+  - requirements: 일곱 Task 가 dev 에 들어온 뒤 한 흐름으로 확인한다. (1) 스크립트: 폴더 둘(하위 포함, 숨김 폴더·비스크립트 파일 섞음)을 연결 → 이름 낱말 검색 → 「내용」 검색(대소문자·한글·정규식 문자·여러 인코딩) → 두 번 누름 열기·줄 이동 → Esc 트리 복귀 → 새 스크립트(선택 폴더·고른 파일의 폴더·폴더 하나·폴더 여럿 비활성) → 이름 오류·겹침·채우기 → 만든 뒤 선택·열림 → 만든 파일이 검색에 잡힘; 한도(1,000곳·2 MB)·취소·5,000개 파일 시간을 재서 적는다. (2) 결과 격자: 셀 범위·Ctrl 로 고른 여러 행 삭제(새 행 + 기존 행 섞음)·미리보기 DELETE n개·되돌리기·행 복사 클립보드 글·행 복제·편집 모드 자동 켜기·R6 막힘·1만 행 시간·단축키 Ctrl+Delete/Ctrl+D 충돌 없음; Oracle 통합 시험이 가능하면 여러 행 삭제 반영 후 행 수 확인. (3) INVALID 객체 검색(TSK-12-01 이 고친 모든 화면 경로)이 INVALID 객체를 찾고 느린 공급자에서도 UI 가 흔들리지 않는다. (4) 프로시저·함수 실행 창(TSK-12-02)이 스키마 브라우저·편집기 두 경로에서 인자 행·미리보기와 함께 그려진다. (5) 서버 재조회 내보내기(TSK-12-03): 바인드 변수 질의의 결과를 CSV·xlsx 전체 행으로 내보내 행 수·값을 원본과 비교하고, 전체 행 수 세기·서버 거르기가 같은 값으로 도는지, 값이 없을 때 이유 안내가 뜨는지 본다. (6) DDL 일괄 추출 대상 미리보기(TSK-13-01): 스키마·이름·유형·INVALID 입력 → 대상 탭 목록 → 일부만 체크 → 추출하면 체크한 객체의 파일만 생기고 「추출 결과」 탭으로 넘어간다; 5,000개 초과·오류·빈 결과 화면. 주 메뉴·팔레트 명령 수가 WP-10 전과 같음을 단정한다. 라이트·다크 PNG 를 `~/.coord/scripts-find/shots/` 에 두고 직접 본다. 각 레인 결과에 적힌 빠진 문구를 문구 파일에 넣는다; 제약: 실앱 SendKeys 금지(Headless 까지), 실앱 눈 확인 항목은 사용자 몫으로 표시, 제품 코드는 고치지 않고 결함은 defect Task 로 등록; 비고: 담당 PC: win144(Windows 개발 PC) — 맥북 세션은 이 Task 를 하지 않는다. 결과서 docs/oranda1/itest/TSK-10-03.md
   - acceptance: 결과서에 흐름별 통과 표와 시험 수치(검색 시간·한도 동작·1만 행 삭제 시간·시험 개수)가 있다 / 위 (1)~(4) 흐름이 끝까지 간다 / 명령 id 집합·키맵(단축키 둘 추가 제외)·팔레트 결과가 불변 / 발견 결함은 defect Task 로 등록됨 / 사용자 눈 확인 항목이 따로 적혀 있다 / `dotnet build Oranda.sln -warnaserror`·전체 시험 통과
   - note: 담당 PC: win144(Windows 개발 PC) — 맥북 세션은 이 Task 를 하지 않는다. 크기 M. 레인 sc-itest(마지막)
 
@@ -863,6 +863,20 @@ levels:
   - requirements: dev 에서 `ShellHeadlessTests.Startup_does_not_load_oracle_or_antlr_assemblies` 가 실패한다(DeferredScanTrigger = `Oranda.App.Features.ConnectionManager.IConnectionService`). 원인 커밋 4c287d4 가 `SchemaBrowserViewModel` 생성자에서 `services.GetService(typeof(IConnectionService))` 로 접속 서비스를 찾았는데, GetService 는 등록 안 된 형식이면 지연 어셈블리(Oracle·Language)를 훑는다. 이미 등록된 것만 꺼내는 길로 바꾸고 4c287d4 의 의도(패널이 접속 뒤 처음 만들어져도 지금 접속을 따름)는 살린다; 제약: 범위를 넓히지 않는다
   - acceptance: Startup_does_not_load_oracle_or_antlr_assemblies 통과 / 스키마 브라우저 시험 통과(접속 뒤 만든 패널이 지금 접속을 따름) / `dotnet build Oranda.sln -warnaserror`
   - note: 담당 PC: win144(Windows 개발 PC) — 맥북 세션은 이 Task 를 하지 않는다. 원인 커밋 4c287d4. 레인 sc-startfix. 결과: `IServiceProvider.GetRegisteredOrDefault<T>()`(컨테이너면 지연 어셈블리를 깨우지 않는 GetRegistered, 시험용 공급자면 GetService)를 더해 SchemaBrowserViewModel 생성자와 같은 패턴인 PlsqlWorkspacePersistence.AttachOpened 에 썼다; ShellHeadless·SchemaBrowser·ServiceContainer·PlsqlWorkspace 관련 274개 + 새 단위 시험 통과 (win144)
+
+## WP-13: 작은 개선
+<!-- 담당 PC: win144(Windows 개발 PC) — 맥북 세션은 이 WP 의 Task 를 하지 않는다. 2026-10-26 사용자 요청, 조정자 기본안(사용자 「묻지 말고 진행」). 설계 = decisions D-032, PRD·TRD 는 따로 쓰지 않는다(작은 화면 개선). 레인 sc-ddl. 통합 확인은 TSK-10-03 이 맡는다 -->
+
+- [x] TSK-13-01: DDL 일괄 추출 대상 미리보기 [win144] w:2 2026-10-27~2026-10-28
+  - category: feat
+  - domain: frontend
+  - model: opus
+  - priority: medium
+  - tags: ddl, extract, preview, ux, win144
+  - prd-ref: 사용자 요청 2026-10-26, D-032
+  - requirements: DDL 일괄 추출 창(`Features/DbTools/DdlExtractView.axaml`·`DdlExtractViewModel.cs`) 오른쪽 빈 칸을 두 탭 「대상 (n)」 | 「추출 결과」 로 나누고 처음엔 대상 탭을 보인다. 스키마·이름 필터·유형 체크·「INVALID 객체만」 이 바뀌면 300ms 뒤 대상 목록을 다시 조회한다(앞 조회 취소, UI 스레드 밖, 결과는 목록째 한 번에 바꿔 화면이 튀지 않고 조회 중에도 앞 목록을 둔다). 조회는 기존 `ISchemaAdminProvider.SearchObjectsAsync` 를 부르며 SQL 은 바꾸지 않는다(sc-invalid 가 고치는 중). 대상 표(격자 양식 grid-c): 체크 | 유형 | 이름 | 상태(INVALID 강조) | 마지막 DDL, 머리글 체크 = 전체 선택·해제(일부 선택 상태에서 누르면 모두 선택), 기본 전부 체크, 줄 클릭·Space 로 체크 바꾸기, F5·새로 고침 단추로 다시 조회. 「추출」 은 체크한 객체만 추출한다(`DdlExtractRequest.Objects`, null 이면 지금처럼 조건 전체). 상태 줄 「대상 n개 중 m개 선택」. 5,000개를 넘으면 앞쪽 5,000개만 보이고 「필터를 좁히세요 · 추출은 체크한 객체만」 안내. 접속 없음·스키마 없음·유형 없음·불러오는 중·빈 결과·오류·미리 볼 수 없음 상태 화면, 추출을 시작하면 「추출 결과」 탭으로 넘어간다. 읽기 전용 조회만 한다; 제약: INVALID 거르기·객체 조회 SQL(`dbinfo/object_search`·`Catalog meta/objects`·`OracleSchemaAdminProvider`)은 바꾸지 않는다, 새 명령·메뉴 줄을 더하지 않는다; 시험: `DdlExtractTargetsTests`(입력 변경 → 목록, 디바운스·취소, 체크한 것만 계획에 들어감, 상태별 Headless 화면 라이트·다크 PNG), Oracle 통합 `DdlExtractPickedObjectsTests`(표 3개 중 2개 체크 → 파일 2개)
+  - acceptance: 입력(스키마·이름·유형·INVALID)이 바뀌면 300ms 뒤 오른쪽 대상 탭에 맞는 객체가 나오고 연속 입력은 마지막 값으로 한 번만 조회한다 / 앞 조회는 취소되고 늦게 온 옛 결과가 새 결과를 덮지 않는다 / 표 3개 중 2개를 체크하고 추출하면 파일 2개가 생긴다(조건 전체를 다시 조회하지 않는다) / 아무것도 체크하지 않고 추출하면 「체크한 객체가 없다」 로 멈춘다 / 접속 없음·빈 결과·오류·불러오는 중·5,000개 초과 화면이 라이트·다크에서 읽힌다 / 기존 DbToolsTests 가 그대로 통과한다
+  - note: 담당 PC: win144(Windows 개발 PC) — 맥북 세션은 이 Task 를 하지 않는다. 사용자 원문(2026-10-26): 「DDL 일괄 추출 시 테이블에 입력값에 대한 검색된 테이블들이 우측 빈 칸에 나오면 좋겠다」. 크기 M. 레인 sc-ddl. 결과: 오른쪽 칸을 「대상 (n)」·「추출 결과」 탭으로 나누고 입력 300ms 뒤 `SearchObjectsAsync` 로 대상 표(체크·유형·이름·상태·마지막 DDL, 5,000개 한도, 취소·목록째 교체)를 보이며 「추출」 은 체크한 객체만(`DdlExtractRequest.Objects`) 추출, 시험 DdlExtractTargetsTests 18개(상태별 Headless 라이트·다크 PNG)·Oracle 통합 DdlExtractPickedObjectsTests 3개(26ai, 표 3개 중 2개 체크 → 파일 2개) (win144)
 
 ## 의존 그래프
 
@@ -950,6 +964,7 @@ graph LR
   TSK-12-01 --> TSK-10-03
   TSK-12-02 --> TSK-10-03
   TSK-12-03 --> TSK-10-03
+  TSK-13-01 --> TSK-10-03
   style TSK-01-02 fill:#e8f5e9,stroke:#2e7d32
   style TSK-03-01 stroke:#c62828,stroke-width:2px
   style TSK-02-02 stroke:#c62828,stroke-width:2px
@@ -971,6 +986,8 @@ graph LR
 - WP-07(2026-10-25 추가, Task 8개): 최장 경로 TSK-07-01 → TSK-07-02 → TSK-07-07 → TSK-07-08(깊이 4 = 계약 1 + 기능 1 + 측정 1 + 통합테스트 1). Fan-in: TSK-07-01 이 5(계약 전용, 구조적 예외), TSK-07-08 이 depends 6(통합테스트, 구조적 예외). 계약 뒤 07-02~07-06 은 서로 depends 가 없고 소유 파일이 겹치지 않는다(TRD 10.9). TSK-07-08 이 발견한 결함 2건을 TSK-07-09·TSK-07-10(각각 TSK-07-08 에만 depends, 서로 독립)으로 더했다(WP-07 Task 10개, 최장 경로는 깊이 5). 사용자 결정 D-013(기본 Role = SQL 개발자)을 TSK-07-11(TSK-07-08 에만 depends)로 더했다(WP-07 Task 11개).
 - WP-09(2026-10-25 추가, Task 10개): 최장 경로 TSK-09-01 → TSK-09-02 → TSK-09-04 → TSK-09-10(깊이 4 = 계약 1 + 기능 2 + 통합테스트 1). TSK-09-04 는 ExecutionCommands.cs 를 09-02 가 먼저 고치고 Shell/Menus 를 09-03 이 먼저 고쳐서 둘 다에 depends, Roles 시험 때문에 TSK-07-11 에도 depends. TSK-09-08·09-09 는 FeatureSettings*·StartPage.cs·FeatureTexts 를 고친 TSK-07-11(완료)에 depends. TSK-09-05·09-06(ux-layout)과 TSK-09-07(ux-export)은 depends 가 없다(09-06 은 같은 레인 차례만). Fan-in: TSK-09-10 이 depends 8(통합테스트, 구조적 예외), TSK-09-04 가 3. 머지 순서: 09-01 → 09-02 → 09-03 (→ 09-04), 09-05 → 09-06, 09-07 은 아무 때나, TSK-07-11 → 09-08 → 09-09, 마지막 09-10. 파일 소유 = TRD 11.10. TSK-09-10 이 발견한 결함 2건을 TSK-09-11·TSK-09-12(각각 TSK-09-10 에만 depends, 서로 독립)로 더했다(WP-09 Task 12개, 최장 경로 깊이 5).
 - WP-10·WP-11·WP-12(2026-10-26 추가, Task 7개): 최장 경로 TSK-10-01(또는 10-02, 11-01, 12-01, 12-02) → TSK-10-03(깊이 2 = 기능 1 + 통합확인 1). 여섯 기능·결함 Task 는 서로 depends 가 없는 병렬 레인(sc-search·sc-add·sc-rows·sc-invalid·sc-plsqlrun·sc-export)이다. TSK-10-01·TSK-10-02 는 ScriptsView.axaml·ScriptsView.axaml.cs·ScriptsViewModel.cs·literals-en.json 을 함께 만지므로 자기 몫만 바꾸고 나중에 머지하는 쪽이 rebase 충돌을 푼다(TRD 12.1). Fan-in: TSK-10-03 이 depends 6(통합확인, 구조적 예외). 파일 소유 = TRD 12.1·13.1, WP-12 는 결함이라 PRD·TRD 에 쓰지 않는다.
+
+- WP-13(2026-10-26 추가, Task 1개): TSK-13-01 → TSK-10-03(깊이 2). TSK-10-03 의 depends 가 7 이 된다(통합확인, 구조적 예외). TSK-13-01 은 `Features/DbTools/DdlExtract*`·`DdlBulkExporter.cs`·문구 파일만 만지며 sc-invalid 의 조회 SQL 은 건드리지 않는다.
 
 **Fan-in Top 5**
 
