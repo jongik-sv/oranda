@@ -26,6 +26,10 @@ namespace Oranda.App.Shell.Docking;
 /// MyBatis 창만 숨기고 SQL 전용 창은 지금 상태를 둔다. 같은 문서의 종류가 바뀌는 신호(<see cref="IToolScopeDocument.ToolScopeChanged"/>)는
 /// 활성 문서에 한해 구독해 <see cref="RefreshScopedTools"/> 로 다시 판정한다. 갈아탈 때는 「보여야 하는데 숨긴 창은 되보이고, 숨겨야 하는데 보이는 창은 숨긴다」.
 /// </para>
+/// <para>
+/// PL/SQL 문서(<see cref="PlsqlDocumentIds"/>)에서는 질의 결과용 창(<see cref="QueryOnlyToolIds"/>: 조회 결과·실행 계획·행 보기)도 숨기고,
+/// 숨긴 창이 묶음의 활성 탭이었으면 DBMS 출력을 앞에 둔다(2026-10-26 사용자 요청).
+/// </para>
 /// </summary>
 public sealed partial class DockWorkspace
 {
@@ -68,6 +72,24 @@ public sealed partial class DockWorkspace
         "oranda.panel.extensionTest",
     };
 
+    /// <summary>PL/SQL 문서(편집기·작업 공간). 소스를 고치고 컴파일·실행하는 문서라 <see cref="QueryOnlyToolIds"/> 를 숨기고 DBMS 출력(<see cref="PlsqlFrontToolId"/>)을 앞에 둔다.</summary>
+    internal static readonly IReadOnlySet<string> PlsqlDocumentIds = new HashSet<string>(StringComparer.Ordinal)
+    {
+        "oranda.panel.plsqlEditor",
+        "oranda.panel.plsqlWorkspace",
+    };
+
+    /// <summary><see cref="SqlOnlyToolIds"/> 중 질의 결과에만 쓰여 PL/SQL 문서에서는 숨기는 창(조회 결과·실행 계획·행 보기). 실행이 결과를 내면 그 기능이 창을 직접 앞으로 가져온다.</summary>
+    internal static readonly IReadOnlySet<string> QueryOnlyToolIds = new HashSet<string>(StringComparer.Ordinal)
+    {
+        "oranda.panel.results",
+        "oranda.panel.plan",
+        "oranda.panel.rowView",
+    };
+
+    /// <summary>PL/SQL 문서로 오면서 묶음의 활성 탭(조회 결과 등)을 숨겼을 때 대신 앞에 둘 창.</summary>
+    internal const string PlsqlFrontToolId = "oranda.panel.output";
+
     /// <summary>도구 창 하나를 어떤 활성 문서에서 어떻게 할지: 보임 · 숨김 · 지금 상태 유지(활성 문서 없음 + SQL 전용 창).</summary>
     private enum ToolScopeDecision
     {
@@ -96,6 +118,11 @@ public sealed partial class DockWorkspace
         }
 
         if (!SqlDocumentIds.Contains(doc.Definition.Id))
+        {
+            return ToolScopeDecision.Hide;
+        }
+
+        if (QueryOnlyToolIds.Contains(toolId) && PlsqlDocumentIds.Contains(doc.Definition.Id))
         {
             return ToolScopeDecision.Hide;
         }
@@ -139,7 +166,7 @@ public sealed partial class DockWorkspace
     /// 정의 ID 만 보는 판정이라 MyBatis 문서 여부는 모른다 — 그것까지 보려면 <see cref="IsToolShownFor(string, PanelDocument?)"/>. 조사 표는 TSK-13-41 참고.
     /// </summary>
     internal static bool IsToolShownFor(string toolId, string documentId) =>
-        !SqlOnlyToolIds.Contains(toolId) || SqlDocumentIds.Contains(documentId);
+        !SqlOnlyToolIds.Contains(toolId) || (SqlDocumentIds.Contains(documentId) && !(QueryOnlyToolIds.Contains(toolId) && PlsqlDocumentIds.Contains(documentId)));
 
     /// <summary>위 도구 창을 보이는 문서(SQL·PL/SQL 편집기, PL/SQL 작업 공간).</summary>
     internal static readonly IReadOnlySet<string> SqlDocumentIds = new HashSet<string>(StringComparer.Ordinal)
@@ -299,6 +326,18 @@ public sealed partial class DockWorkspace
             {
                 _scopedHidden.Add(new ScopedHide(tool, dock, index, active));
                 Factory.RemoveDockable(tool, collapse: false);
+            }
+
+            if (doc is not null && PlsqlDocumentIds.Contains(doc.Definition.Id))
+            {
+                // 앞에 있던 조회 결과 등을 숨긴 묶음은 Dock 이 고른 옆 탭 대신 DBMS 출력을 앞에 둔다.
+                foreach (var dock in targets.Where(t => t.Active).Select(t => t.Dock).Distinct())
+                {
+                    if (dock.VisibleDockables?.OfType<PanelTool>().FirstOrDefault(t => string.Equals(t.Id, PlsqlFrontToolId, StringComparison.Ordinal)) is { } front)
+                    {
+                        dock.ActiveDockable = front;
+                    }
+                }
             }
 
             // 빈 묶음은 Dock 이 접고 옆 칸 비율을 늘린다(다음 배치 계산 때). 그 영향을 받는 칸(빈 묶음과 그 위로 함께 빈 칸들의 형제)만

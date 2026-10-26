@@ -38,6 +38,36 @@ public class DockScopedToolsTests
         return (sql, detail);
     }
 
+    [Fact]
+    public Task Plsql_document_hides_query_tools_and_brings_dbms_output_forward() => HeadlessHost.Run(() =>
+    {
+        using var h = new ShellHarness();
+        var ws = h.Get<DockWorkspace>();
+        const string Output = "oranda.panel.output";
+        const string Plan = "oranda.panel.plan";
+        ws.ShowTool(Plan);
+        ws.ShowTool(Output);
+        var (sql, _) = Setup(ws);
+        var plsql = ws.OpenDocument("oranda.panel.plsqlEditor")!;
+        var results = ws.Factory.FindDockable(ws.Layout!, d => d.Id == Results)!;
+        var group = (IDock)results.Owner!;
+
+        ws.Activate(plsql);
+        Pump();
+        Assert.DoesNotContain(Results, ws.VisibleToolIds);
+        Assert.DoesNotContain(Plan, ws.VisibleToolIds);
+        Assert.Contains(Messages, ws.VisibleToolIds);
+        Assert.Contains(Output, ws.VisibleToolIds);
+        Assert.Contains(History, ws.VisibleToolIds); // 실행 이력·변경 일지는 PL/SQL 실행·컴파일도 남긴다
+        Assert.Equal(Output, group.ActiveDockable?.Id);
+
+        ws.Activate(sql);
+        Pump();
+        Assert.Contains(Results, ws.VisibleToolIds);
+        Assert.Contains(Plan, ws.VisibleToolIds);
+        Assert.Same(results, group.ActiveDockable); // SQL 문서로 돌아오면 조회 결과가 다시 앞
+    });
+
     private static Control? ViewOf(Window window, object dock) =>
         window.GetVisualDescendants().OfType<Control>().FirstOrDefault(c => ReferenceEquals(c.DataContext, dock) && c.GetType().Name == "ToolDockControl");
 
@@ -370,7 +400,9 @@ public class DockScopedToolsTests
     {
         foreach (var tool in SqlOnlyTools)
         {
-            Assert.Equal(sqlFamily, DockWorkspace.IsToolShownFor(tool, documentId));
+            // PL/SQL 문서는 질의 결과용 창(조회 결과·실행 계획·행 보기)만 뺀다.
+            var shown = sqlFamily && !(DockWorkspace.PlsqlDocumentIds.Contains(documentId) && DockWorkspace.QueryOnlyToolIds.Contains(tool));
+            Assert.Equal(shown, DockWorkspace.IsToolShownFor(tool, documentId));
         }
 
         Assert.True(DockWorkspace.IsToolShownFor("oranda.panel.schemaBrowser", documentId));
