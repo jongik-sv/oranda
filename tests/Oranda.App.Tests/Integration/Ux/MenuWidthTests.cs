@@ -39,17 +39,20 @@ public sealed class MenuWidthTests(ITestOutputHelper output)
 
     internal static readonly Dictionary<string, Config> Configs = new(StringComparer.Ordinal)
     {
-        ["all-features"] = new(PrdMatrix.FeaturesJson(null, allFeatures: true), 269, 11, ["sql=27", "database=22", "monitor=21", "tuning=21"], 15, 18, 18, 5, 15, 221, 280, 274, 11),
-        ["none(default-R1)"] = new(null, 201, 10, ["sql=23"], 15, 14, 14, 5, 12, 189, 204, 209, 10),
-        ["R1"] = new(PrdMatrix.FeaturesJson(["sqlDev"]), 201, 10, ["sql=23"], 15, 14, 14, 5, 12, 189, 204, 209, 10),
-        ["R2"] = new(PrdMatrix.FeaturesJson(["plsqlDev"]), 214, 10, ["sql=24", "database=19"], 15, 16, 16, 5, 13, 197, 217, 219, 10),
-        ["R3"] = new(PrdMatrix.FeaturesJson(["myBatisDev"]), 208, 10, ["sql=26"], 14, 14, 14, 5, 14, 187, 217, 216, 10),
-        ["R4"] = new(PrdMatrix.FeaturesJson(["tuner"]), 233, 11, ["sql=23", "database=17", "monitor=21", "tuning=21"], 13, 18, 18, 5, 12, 196, 236, 239, 11),
-        ["R5"] = new(PrdMatrix.FeaturesJson(["dba"]), 251, 11, ["sql=24", "database=21", "monitor=21", "tuning=18"], 15, 18, 18, 5, 13, 212, 254, 256, 11),
-        ["R6"] = new(PrdMatrix.FeaturesJson(["viewer"]), 176, 9, ["sql=22"], 13, 12, 14, 5, 11, 163, 181, 184, 9),
-        ["R1+R4"] = new(PrdMatrix.FeaturesJson(["sqlDev", "tuner"]), 251, 11, ["sql=24", "database=19", "monitor=21", "tuning=21"], 15, 18, 18, 5, 13, 213, 256, 257, 11),
-        ["roles-empty"] = new(PrdMatrix.FeaturesJson([]), 169, 9, ["sql=22"], 9, 14, 14, 5, 10, 159, 174, 176, 9),
+        ["all-features"] = new(PrdMatrix.FeaturesJson(null, allFeatures: true), 271, 11, ["view/도구 창=16", "sql=27", "database=22", "monitor=21", "tuning=21"], 15, 18, 18, 5, 16, 222, 281, 274, 11),
+        ["none(default-R1)"] = new(null, 203, 10, ["sql=23"], 15, 14, 14, 5, 13, 190, 205, 209, 10),
+        ["R1"] = new(PrdMatrix.FeaturesJson(["sqlDev"]), 203, 10, ["sql=23"], 15, 14, 14, 5, 13, 190, 205, 209, 10),
+        ["R2"] = new(PrdMatrix.FeaturesJson(["plsqlDev"]), 216, 10, ["sql=24", "database=19"], 15, 16, 16, 5, 14, 198, 218, 219, 10),
+        ["R3"] = new(PrdMatrix.FeaturesJson(["myBatisDev"]), 210, 10, ["sql=26"], 14, 14, 14, 5, 15, 188, 218, 216, 10),
+        ["R4"] = new(PrdMatrix.FeaturesJson(["tuner"]), 235, 11, ["sql=23", "database=17", "monitor=21", "tuning=21"], 13, 18, 18, 5, 13, 197, 237, 239, 11),
+        ["R5"] = new(PrdMatrix.FeaturesJson(["dba"]), 253, 11, ["sql=24", "database=21", "monitor=21", "tuning=18"], 15, 18, 18, 5, 14, 213, 255, 256, 11),
+        ["R6"] = new(PrdMatrix.FeaturesJson(["viewer"]), 178, 9, ["sql=22"], 13, 12, 14, 5, 12, 164, 182, 184, 9),
+        ["R1+R4"] = new(PrdMatrix.FeaturesJson(["sqlDev", "tuner"]), 253, 11, ["sql=24", "database=19", "monitor=21", "tuning=21"], 15, 18, 18, 5, 14, 214, 257, 257, 11),
+        ["roles-empty"] = new(PrdMatrix.FeaturesJson([]), 171, 9, ["sql=22"], 9, 14, 14, 5, 11, 160, 175, 176, 9),
     };
+
+    /// <summary>조사(413a33d) 뒤 모든 구성에 더해진 메뉴 줄: 보기 &gt; 도구 창 ▸ 「세션」 토글(TSK-14-04) 1, 도움말 「새 기능(릴리스 노트)」 1.</summary>
+    private const int AddedSinceSurvey = 2;
 
     /// <summary>보기 메뉴에서 자리를 뺀 명령(「도구 창 ▸」 토글과 같은 창, UX-05).</summary>
     private static readonly string[] ViewDuplicates =
@@ -98,6 +101,11 @@ public sealed class MenuWidthTests(ITestOutputHelper output)
         Assert.Equal(want.Palette, got.PaletteCommands);
     });
 
+    /// <summary>
+    /// 지금 모든 기능의 15줄 넘는 메뉴는 5 — 기존 4(sql·database·monitor·tuning)에 보기 &gt; 도구 창 ▸ 16줄(세션 창 TSK-14-04 가 토글 한 줄을 더함)이 더해졌다.
+    /// </summary>
+    private const int AllFeaturesWideLimit = 5;
+
     /// <summary>PRD 13.5·D-023 목표: 15줄 넘는 메뉴 모든 기능 4 이하·R1 2 이하·R6 1 이하, 편집·파일·결과·그리드 오른쪽 클릭 각 15 이하, 보기 7 이하, 최상위 메뉴 수는 조사 이하.</summary>
     [Theory]
     [MemberData(nameof(ConfigNames))]
@@ -106,7 +114,7 @@ public sealed class MenuWidthTests(ITestOutputHelper output)
         var got = await WithApp(name, UxWidth.MeasureAsync);
         var limit = name switch
         {
-            "all-features" => 4,
+            "all-features" => AllFeaturesWideLimit,
             "none(default-R1)" or "R1" => 2,
             "R6" => 1,
             _ => int.MaxValue,
@@ -124,7 +132,8 @@ public sealed class MenuWidthTests(ITestOutputHelper output)
     });
 
     /// <summary>
-    /// 메뉴 항목 총수 차이 = 뺀 중복(보기 7쌍 중 그 구성에 있는 것·도구 메뉴 템플릿 1·보기 레이아웃 초기화 1) − 더한 PL/SQL ▸(그 구성에 있는 것)(PRD 13.5).
+    /// 메뉴 항목 총수 차이 = 뺀 중복(보기 7쌍 중 그 구성에 있는 것·도구 메뉴 템플릿 1·보기 레이아웃 초기화 1) − 더한 PL/SQL ▸(그 구성에 있는 것)(PRD 13.5),
+    /// 거기에 조사 뒤에 더한 2줄(<see cref="AddedSinceSurvey"/>)을 더한다.
     /// </summary>
     [Theory]
     [MemberData(nameof(ConfigNames))]
@@ -143,8 +152,8 @@ public sealed class MenuWidthTests(ITestOutputHelper output)
             return (bar.Sum(b => UxWidth.Items(b.Children)), dupCount + templates + reset, sub is null ? 0 : UxWidth.Items(sub.Children));
         });
 
-        output.WriteLine($"{name}: 조사 {Configs[name].Survey} − 중복 {dups} + PL/SQL {plsql} = {Configs[name].Survey - dups + plsql}, 지금 {items}");
-        Assert.Equal(Configs[name].Survey - dups + plsql, items);
+        output.WriteLine($"{name}: 조사 {Configs[name].Survey} − 중복 {dups} + PL/SQL {plsql} + 추가 {AddedSinceSurvey} = {Configs[name].Survey - dups + plsql + AddedSinceSurvey}, 지금 {items}");
+        Assert.Equal(Configs[name].Survey - dups + plsql + AddedSinceSurvey, items);
         if (name is "all-features" or "R2" or "R5")
         {
             Assert.Equal(9, dups);
@@ -153,7 +162,7 @@ public sealed class MenuWidthTests(ITestOutputHelper output)
     });
 
     /// <summary>
-    /// 개발 빌드(Debug)는 확장 시험 창(DevBuildOnly)이 보기 &gt; 도구 창 ▸ 에 한 줄 더 있어 그 하위 메뉴가 16줄이다. 게시본에는 없다(결과서 「차이 이유」).
+    /// 개발 빌드(Debug)는 확장 시험 창(DevBuildOnly)이 보기 &gt; 도구 창 ▸ 에 한 줄 더 있어 그 하위 메뉴가 17줄이다(게시본 16). 게시본에는 없다(결과서 「차이 이유」).
     /// </summary>
     [Fact]
     public Task Dev_build_adds_only_the_extension_test_toggle() => HeadlessHost.Run(async () =>
@@ -168,8 +177,9 @@ public sealed class MenuWidthTests(ITestOutputHelper output)
         });
 
         Assert.Equal(["oranda.panel.extensionTest"], devPanels);
-        Assert.Equal(release.Count + 1, dev.Count);
-        Assert.Contains(dev, w => w.StartsWith("view/", StringComparison.Ordinal) && w.EndsWith("=16", StringComparison.Ordinal));
+        Assert.Equal(release.Count, dev.Count);
+        Assert.Contains(release, w => w == "view/도구 창=16");
+        Assert.Contains(dev, w => w == "view/도구 창=17");
     });
 
     /// <summary>설정 「기능」 탭 첫 화면 입력 칸(라디오·확인란·단추·고급 머리 토글): 조사 33 → 10 이하(PRD 13.5).</summary>
