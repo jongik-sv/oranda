@@ -24,6 +24,10 @@ public class ObjectDetailLogicTests
     [InlineData("TYPE", "TYPE_SPEC")]
     [InlineData("TYPE BODY", "TYPE_BODY")]
     [InlineData("DATABASE LINK", "DB_LINK")]
+    [InlineData("JOB", "PROCOBJ")]
+    [InlineData("PROGRAM", "PROCOBJ")]
+    [InlineData("SCHEDULE", "PROCOBJ")]
+    [InlineData("CHAIN", "PROCOBJ")]
     public void Object_type_maps_to_dbms_metadata_name(string objectType, string expected)
         => Assert.Equal(expected, OracleMetadataProvider.ToMetadataType(objectType));
 }

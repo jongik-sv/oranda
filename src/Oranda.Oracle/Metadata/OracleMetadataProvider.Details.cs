@@ -251,7 +251,8 @@ internal sealed partial class OracleMetadataProvider
         "PACKAGE" => "PACKAGE_SPEC",
         "TYPE" => "TYPE_SPEC",
         "DATABASE LINK" => "DB_LINK",
-        "JOB" => "PROCOBJ",
+        // 스케줄러 객체는 모두 PROCOBJ 다('SCHEDULE' 그대로 넘기면 ORA-31600).
+        "JOB" or "PROGRAM" or "SCHEDULE" or "CHAIN" => "PROCOBJ",
         var t => t.Replace(' ', '_'),
     };
 }
