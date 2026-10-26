@@ -38,8 +38,9 @@ public class PlsqlRunTests
 
         public PlsqlRunViewModel Create() => new(Deps());
 
-        public PlsqlRunDeps Deps() => new()
+        public PlsqlRunDeps Deps(ExecutionState? state = null) => new()
         {
+            State = state,
             Session = () => Session,
             Metadata = () => Meta,
             Execution = () => Exec,
@@ -275,6 +276,42 @@ public class PlsqlRunTests
         Assert.Single(rig.Exec.Statements);
         Assert.StartsWith("완료", vm.StatusText, StringComparison.Ordinal); // 실행하면 힌트는 결과로 바뀐다
     }
+
+    /// <summary>
+    /// TSK-14-08: 실행 창은 실제로 쓴 세션의 실행·트랜잭션 표시를 바꾼다. 실행하는 사이 지금 접속이 다른 세션이어도 그 세션의 표시는 건드리지 않는다.
+    /// </summary>
+    [Fact]
+    public Task Run_marks_the_session_it_ran_on_not_the_current_connection() => Ui.Run(async () =>
+    {
+        var rig = new Rig();
+        var daily = new DbObjectRef("SCOTT", "DAILY_BATCH", "PROCEDURE");
+        rig.Meta.Procedures[daily] = [new ProcedureInfo("DAILY_BATCH", false, [])];
+        var bus = new Oranda.Core.Events.EventBus();
+        var state = new ExecutionState(bus);
+        var current = new FakeSession(new ConnectionProfile("other", "SCOTT", "localhost/FREEPDB1"));
+        bus.Publish(new Oranda.Core.Events.SessionOpened(rig.Session.Id, rig.Session.Profile, rig.Session.Server, SessionPurpose.Work));
+        bus.Publish(new Oranda.Core.Events.SessionOpened(current.Id, current.Profile, current.Server, SessionPurpose.Work)); // 지금 접속 = 다른 세션
+        Assert.Equal(current.Id, state.SessionId);
+        bool? ranBusy = null, currentBusy = null;
+        rig.Exec.Handler = (stmt, _) =>
+        {
+            ranBusy = state.IsRunning(rig.Session.Id);
+            currentBusy = state.IsRunning(current.Id);
+            rig.Session.HasPendingTransaction = true; // 블록이 행을 바꿨다
+            return Task.FromResult(new ExecutionResult(stmt, ExecutionStatus.Succeeded));
+        };
+        var vm = new PlsqlRunViewModel(rig.Deps(state));
+        await vm.OpenAsync(daily);
+
+        Assert.True(await vm.RunAsync());
+
+        Assert.True(ranBusy);
+        Assert.False(currentBusy);
+        Assert.False(state.IsRunning(rig.Session.Id));
+        Assert.True(state.IsTxnPending(rig.Session.Id)); // 미커밋 표시는 실행한 세션에
+        Assert.False(state.IsTxnPending(current.Id));
+        Assert.False(state.TxnPending);
+    });
 
     /// <summary>실제 창에 세 상태(인자 있음·인자 없음·열기 실패)를 라이트·다크로 그려 화면에 뭔가 보이는지 단정하고, ORANDA_RENDER_DIR 가 있으면 PNG 로 남긴다.</summary>
     [Theory]

@@ -3,7 +3,10 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Oranda.App.Features.ConnectionManager;
+using Oranda.App.Features.Execution;
+using Oranda.App.Features.SqlEditor;
 using Oranda.App.Shell;
+using Oranda.Core.Events;
 using Oranda.Core.Execution;
 using Oranda.Core.Extensibility;
 using Oranda.Core.History;
@@ -46,12 +49,29 @@ public static class HistoryScriptsCommands
     }
 
     /// <summary>
-    /// 이력 항목의 SQL 을 다시 실행한다(실행 엔진 경유 — 정책 관문·이력 기록이 그대로 적용된다).
-    /// 문장마다 결과는 닫는다(결과 창에 올리는 것은 실행 화면 Task 의 몫). 세션이 없으면 false.
+    /// 다시 실행할 세션과 그 실행을 시작한 작업 공간(TSK-14-08). 활성 SQL 탭의 접속이 이력 항목의 접속이면(항목에 접속이 없어도) 그 탭의 작업 공간 세션
+    /// (<see cref="SessionRouter.ForWriteAsync(IServiceProvider?, SqlEditorViewModel?, CancellationToken)"/>: 실행처럼 먼저 고르고, 첫 실행 전인 자기 세션 작업 공간이면 연다),
+    /// 아니면 <see cref="ResolveSession"/>(항목의 접속의 세션 — 사용자가 고른 접속).
+    /// </summary>
+    private static async Task<(ISession? Session, object? Owner)> RerunSessionAsync(IServiceProvider services, Guid? profileId, CancellationToken ct)
+    {
+        if (SessionRouter.Find(services) is { SqlDocumentActive: true } router && SqlEditorHost.Current.Active is { } tab
+            && (profileId is null || tab.ConnectionProfileId == profileId))
+        {
+            return (await SessionRouter.ForWriteAsync(services, tab, ct).ConfigureAwait(true), router.ActiveWorkspace);
+        }
+
+        return (ResolveSession(services, profileId), null);
+    }
+
+    /// <summary>
+    /// 이력 항목의 SQL 을 다시 실행한다(실행 엔진 경유 — 정책 관문·이력 기록이 그대로 적용된다). 활성 탭과 같은 접속이면 그 작업 공간의 세션으로 하고,
+    /// 도는 동안 그 세션을 실행 중으로 둔다(TSK-14-08: 세션 창 커밋·닫기가 꺼지고 같은 세션을 쓰는 다른 작업 공간은 바쁨 막대를 본다). 그 세션이 이미 실행 중이면
+    /// 섞어 보내지 않고 false. 문장마다 결과는 닫는다(결과 창에 올리는 것은 실행 화면 Task 의 몫). 세션이 없으면 false.
     /// </summary>
     internal static async Task<bool> RerunAsync(IServiceProvider services, string sql, Guid? profileId, CancellationToken ct)
     {
-        var session = ResolveSession(services, profileId);
+        var (session, owner) = await RerunSessionAsync(services, profileId, ct).ConfigureAwait(true);
         if (session is null
             || services.GetService(typeof(IExecutionService)) is not IExecutionService exec
             || services.GetService(typeof(ILanguageService)) is not ILanguageService language)
@@ -59,20 +79,36 @@ public static class HistoryScriptsCommands
             return false;
         }
 
+        var state = ExecutionState.For(services.GetService(typeof(IEventBus)) as IEventBus);
+        if (state.IsBusy(session.Id))
+        {
+            Notify?.Invoke("그 세션은 지금 실행 중입니다. 실행이 끝난 뒤 다시 실행하세요.");
+            return false;
+        }
+
         var statements = language.Split(sql, SplitOptions.Default);
         var failed = 0;
-        await foreach (var result in exec.ExecuteScriptAsync(session, statements, ScriptErrorMode.Stop,
-                           new ExecutionOptions { Source = HistorySource.Editor }, ct).ConfigureAwait(true))
+        state.BeginRun(session.Id, owner);
+        try
         {
-            if (result.Status != ExecutionStatus.Succeeded)
+            await foreach (var result in exec.ExecuteScriptAsync(session, statements, ScriptErrorMode.Stop,
+                               new ExecutionOptions { Source = HistorySource.Editor }, ct).ConfigureAwait(true))
             {
-                failed++;
-            }
+                if (result.Status != ExecutionStatus.Succeeded)
+                {
+                    failed++;
+                }
 
-            if (result.ResultSet is not null)
-            {
-                await result.ResultSet.DisposeAsync().ConfigureAwait(true);
+                if (result.ResultSet is not null)
+                {
+                    await result.ResultSet.DisposeAsync().ConfigureAwait(true);
+                }
             }
+        }
+        finally
+        {
+            state.ApplyTransaction(session.Id, session.HasPendingTransaction);
+            state.EndRun(session.Id);
         }
 
         Notify?.Invoke(failed == 0 ? $"다시 실행 완료({statements.Count}문장)" : $"다시 실행 중 오류 {failed}건");

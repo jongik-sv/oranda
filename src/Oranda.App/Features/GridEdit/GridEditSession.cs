@@ -57,7 +57,20 @@ public sealed class GridEditSession
         Capability = plan.Capability;
     }
 
+    /// <summary>결과를 만든 세션. 반영은 이 세션으로 간다.</summary>
     public ISession Session { get; }
+
+    /// <summary>
+    /// 이 결과의 탭이 지금 쓰는 세션(TSK-14-08, 실행 화면이 채운다: <c>SessionFor(tab)</c>). 결과를 만든 뒤 작업 공간이 다른 세션으로 옮겼거나
+    /// 세션을 잃었으면 반영을 거절한다(<see cref="SessionMoved"/>: 다른 작업 공간의 트랜잭션에 섞지 않게). null 이면 묻지 않는다(객체 상세의 자기 세션).
+    /// </summary>
+    public Func<ISession?>? CurrentSession { get; set; }
+
+    /// <summary>반영을 시작한 작업 공간(실행 중 표시의 주인, TSK-14-08). 모르면 null.</summary>
+    public object? Owner { get; set; }
+
+    /// <summary>탭이 지금 다른 세션을 쓰거나 세션이 없다(<see cref="CurrentSession"/>). 그러면 반영하지 않는다.</summary>
+    public bool SessionMoved => CurrentSession is { } current && current() is var now && (now is null || now.Id != Session.Id);
 
     public SqlStatement Query { get; }
 

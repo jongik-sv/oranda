@@ -38,6 +38,18 @@ public sealed partial class LobEditorViewModel : ToolPanelViewModelBase
         _services = services;
     }
 
+    /// <summary>
+    /// DB 에 저장하는 동안 세션을 「실행 중」 으로 둘 실행 상태(TSK-14-08). 비우면 서비스의 이벤트 버스 상태(서비스가 없으면 표시 없이 저장한다).
+    /// </summary>
+    internal Oranda.App.Features.Execution.ExecutionState? RunState
+    {
+        get => _runState ?? (_services is null ? null
+            : Oranda.App.Features.Execution.ExecutionState.For(_services.GetService(typeof(Oranda.Core.Events.IEventBus)) as Oranda.Core.Events.IEventBus));
+        init => _runState = value;
+    }
+
+    private readonly Oranda.App.Features.Execution.ExecutionState? _runState;
+
     /// <summary>시험용: 서비스를 직접 준다.</summary>
     internal LobEditorViewModel(ILobAccessor accessor, LobWriter writer)
     {
@@ -337,7 +349,15 @@ public sealed partial class LobEditorViewModel : ToolPanelViewModelBase
             return Report(new LobWriteResult(false, "실행 엔진을 찾을 수 없습니다."));
         }
 
+        // 그 세션이 다른 실행으로 바쁘면 섞어 보내지 않는다. 저장하는 동안은 그 세션을 실행 중으로 둔다(세션 창 커밋·닫기 꺼짐, TSK-14-08).
+        var state = RunState;
+        if (state?.IsBusy(session.Id) == true)
+        {
+            return Report(new LobWriteResult(false, "그 세션은 지금 실행 중입니다. 실행이 끝난 뒤 다시 저장하세요."));
+        }
+
         IsBusy = true;
+        state?.BeginRun(session.Id, null); // 작업 공간 밖(LOB 편집기 문서)의 실행
         try
         {
             var result = await writer.WriteAsync(session, target, value, commit, ct).ConfigureAwait(true);
@@ -351,6 +371,8 @@ public sealed partial class LobEditorViewModel : ToolPanelViewModelBase
         }
         finally
         {
+            state?.ApplyTransaction(session.Id, session.HasPendingTransaction);
+            state?.EndRun(session.Id);
             IsBusy = false;
         }
     }

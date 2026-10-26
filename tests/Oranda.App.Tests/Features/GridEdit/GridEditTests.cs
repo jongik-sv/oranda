@@ -26,6 +26,7 @@ public sealed partial class GridEditTests : IDisposable
         GridEditCommands.ConfirmPreview = null;
         GridEditCommands.Rerun = null;
         GridEditCommands.Report = null;
+        GridEditCommands.State = null;
         Oranda.App.Features.ResultGrid.ResultGridCommands.Active = null;
         Oranda.App.Features.ResultGrid.ResultGridCommands.CopiedRows = null;
     }

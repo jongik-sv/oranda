@@ -89,6 +89,7 @@ public sealed partial class PlsqlRunViewModel : ObservableObject
 {
     private readonly PlsqlRunDeps _deps;
     private CancellationTokenSource? _cts;
+    private Guid? _runningSession; // 지금 실행 중인 세션(취소 표시도 그 세션에, TSK-14-08)
     private CallBlock? _block;
 
     public PlsqlRunViewModel(PlsqlRunDeps deps)
@@ -293,9 +294,18 @@ public sealed partial class PlsqlRunViewModel : ObservableObject
             return false;
         }
 
+        if (_deps.State?.IsBusy(session.Id) == true)
+        {
+            SetStatus("그 접속은 지금 실행 중입니다. 끝난 뒤 다시 실행하세요.", error: true);
+            return false;
+        }
+
         ClearResults();
         IsRunning = true;
-        _deps.State?.BeginRun();
+
+        // 실행·트랜잭션 표시는 실제로 쓴 세션에 단다(지금 접속은 실행하는 사이 바뀔 수 있다, TSK-14-08). 작업 공간 밖의 실행이라 시작한 쪽은 모른다.
+        _deps.State?.BeginRun(session.Id, null);
+        _runningSession = session.Id;
         using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
         _cts = cts;
         ExecutionResult? result = null;
@@ -305,7 +315,7 @@ public sealed partial class PlsqlRunViewModel : ObservableObject
             var options = new ExecutionOptions { Source = HistorySource.Editor };
             result = await Task.Run(() => exec.ExecuteAsync(session, block.Statement, block.Binds, options, cts.Token), CancellationToken.None)
                 .ConfigureAwait(true);
-            if (_deps.State is { AutoCommit: true, ReadOnly: false } && result.Status == ExecutionStatus.Succeeded && result.TransactionPending)
+            if (_deps.State is { AutoCommit: true } && !session.Profile.ReadOnly && result.Status == ExecutionStatus.Succeeded && result.TransactionPending)
             {
                 await Task.Run(() => session.CommitAsync(cts.Token), CancellationToken.None).ConfigureAwait(true);
             }
@@ -324,8 +334,9 @@ public sealed partial class PlsqlRunViewModel : ObservableObject
         finally
         {
             _cts = null;
-            _deps.State?.ApplyTransaction(session.HasPendingTransaction);
-            _deps.State?.EndRun();
+            _runningSession = null;
+            _deps.State?.ApplyTransaction(session.Id, session.HasPendingTransaction);
+            _deps.State?.EndRun(session.Id);
             IsRunning = false;
         }
 
@@ -335,7 +346,11 @@ public sealed partial class PlsqlRunViewModel : ObservableObject
     /// <summary>실행을 취소한다(서버에서 중단은 엔진이 맡는다).</summary>
     public void Cancel()
     {
-        _deps.State?.MarkCancelling();
+        if (_runningSession is { } id)
+        {
+            _deps.State?.MarkCancelling(id);
+        }
+
         _cts?.Cancel();
     }
 

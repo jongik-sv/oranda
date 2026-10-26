@@ -51,8 +51,8 @@ public sealed class ColumnReorderCommandHandler : ICommandHandler
             DbObjectRef r => r,
             _ => schemaVm?.SelectedNode?.Ref,
         };
-        var session = SessionProvider?.Invoke() ?? schemaVm?.CurrentSession
-            ?? ConnectionManager.SessionRouter.CurrentOf(_services);
+        // 열 순서 바꾸기는 DDL(암묵 커밋)이라 활성 SQL 작업 공간이 같은 접속을 쓰면 그 세션으로 보낸다(다른 작업 공간의 미커밋을 확정하지 않게, TSK-14-08).
+        var session = SessionProvider?.Invoke() ?? ConnectionManager.SessionRouter.ForTool(_services, schemaVm?.CurrentSession);
         if (target is null || session is null || !string.Equals(target.ObjectType, "TABLE", StringComparison.Ordinal))
         {
             return;

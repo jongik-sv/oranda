@@ -186,6 +186,25 @@ public sealed partial class SessionRouter
     public static ISession? ShownOf(IServiceProvider? services) => Find(services) is { } router ? router.ShownSession : CurrentOf(services);
 
     /// <summary>
+    /// 탭을 따르지 않는 도구(열 순서 바꾸기·무효 객체 컴파일·휴지통·PL/SQL 실행 창)가 DDL·블록을 보낼 세션(TSK-14-08). 고른 세션(<paramref name="picked"/>:
+    /// 스키마 브라우저의 세션, 없으면 <see cref="CurrentOf"/>)과 같은 접속을 활성 SQL 작업 공간이 쓰고 있으면 그 작업 공간의 세션(<see cref="ShownSession"/>,
+    /// 같은 DB 에 더 연 세션일 수 있다) — 지금 접속(프로필의 첫 세션)은 다른 작업 공간의 트랜잭션이라 DDL 의 암묵 커밋이 남의 변경을 확정할 수 있다.
+    /// SQL 작업 공간이 활성이 아니거나 다른 접속이면 고른 세션 그대로.
+    /// </summary>
+    public static ISession? ForTool(IServiceProvider? services, ISession? picked = null)
+    {
+        var basis = picked ?? CurrentOf(services);
+        if (basis is null || Find(services) is not { ActiveWorkspace: not null } router)
+        {
+            return basis;
+        }
+
+        return router.ShownSession is { State: not (SessionState.Closed or SessionState.Broken) } shown && shown.Profile.Id == basis.Profile.Id
+            ? shown
+            : basis;
+    }
+
+    /// <summary>
     /// 탭이 쓸 세션(<see cref="SessionFor"/>). 라우터가 아직 없는 컨테이너면 탭에 묶인 프로필의 작업 세션, 묶이지 않았으면 <see cref="CurrentOf"/>.
     /// </summary>
     public static ISession? ForTab(IServiceProvider? services, SqlEditorViewModel? tab)

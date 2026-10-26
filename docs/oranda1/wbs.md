@@ -985,6 +985,17 @@ levels:
   - requirements: 세션 관리 검토(2026-10-26) 1·6·9·11~16. 기본 세션을 닫거나 끊으면 처음 연 추가 세션이 그 자리로 올라오고 기본 세션을 쓰던 워크스페이스가 묻지 않고 그 세션(다른 워크스페이스의 미커밋이 있을 수 있음)으로 옮겨 갔다(MS-09 위반). 따라가기는 끊긴 접속을 같은 자리에 다시 연 경우(`IConnectionService.ReopenedAs`)만, 그 밖은 「접속 안 됨」. 함께 쓰던 워크스페이스는 한꺼번에 같은 결과. 끊긴 추가 세션은 정리해 다시 고르게, 접속의 세션을 혼자 쓰던 워크스페이스를 미커밋인 채 닫으면 묻기, 툴바 「접속 끊기」 는 그 DB 세션 모두(미커밋마다 확인), 「새 세션」·「새 세션에서 실행」 중복 막기·여는 사이 고른 세션 존중, 자기 실행 중인 공유 세션 옮기기 거절, 접속이 비어 있는 탭에 워크스페이스의 프로필 채우기; 제약: 실앱 SendKeys 금지(Headless 까지), 통합 시험은 조정자가 머지 때; 비고: 레인 sr-life
   - acceptance: SessionLifecycleTests 15개(기본 세션 닫기 → 접속 안 됨, 공유 둘 같은 결과, 다시 연 접속은 모두 따름, 끊긴 추가 세션 닫힘·다시 고르기, 닫기 미커밋 확인, 두 번 눌러도 세션 하나·실행 한 번·단추 꺼짐, 여는 사이 고른 세션 유지, 자기 실행 중 옮기기 거절, 접속 끊기 모두·취소·실행 중 거절, 빈 접속 탭) / 기존 WorkspaceSession·MultiSession·Sessions·SessionSwitch 시험 통과 / `dotnet build Oranda.sln -warnaserror`
   - note: 결과: 원인 Features/ConnectionManager/ConnectionService.cs(Remove 의 승격을 라우터가 대체로 따름)·SessionRouter.Workspaces.cs(BoundSession 의 대체 따르기, IsWorkspaceHeld 공유면 false, OwnedExtras 가 기본 세션 제외, NewSessionAsync 가 OpenOnceAsync 를 안 거침)·SessionBusyBar.cs(단추 재진입)·ConnectionManagerCommands.cs(보이는 세션 하나만 끊음)·SessionRouter.cs(ConnectionProfileId null 탭은 묶기 건너뜀). 끊긴 추가 세션은 끊김 알림이 실패한 호출 안에서 오므로 목록에서 바로 빼고 1초 뒤 닫는다. SessionsViewModelTests 의 끊긴 추가 세션 시험 기대값을 「저절로 닫힘」 으로 바꿈 (win144)
+- [x] TSK-14-08: 쓰기 경로를 지금 작업 공간 세션과 맞추기·실행 중 표시(격자 반영·가져오기·LOB·이력 다시 실행·도구 DDL·닫기 롤백) [win144] w:1 2026-10-26~2026-10-26
+  - category: defect
+  - domain: fullstack
+  - model: opus
+  - priority: high
+  - tags: multi-session, grid-edit, import, history, transaction, win144
+  - prd-ref: PRD 16, TRD 14.1-12, D-036, D-040
+  - depends: TSK-14-02, TSK-14-03
+  - requirements: 세션 관리 검토(2026-10-26) 3·4·5·8·10·18·20. 격자 반영은 결과를 만든 세션이 지금 탭의 세션일 때만(다르면 「다시 조회」 안내로 거절), 이력 다시 실행은 활성 탭과 같은 접속이면 그 작업 공간의 세션, 가져오기는 미커밋이 있으면 먼저 묻고 「마지막에 커밋」 실패·취소는 시작 SAVEPOINT 까지만 되돌림, 격자 반영·가져오기·LOB 저장·이력 다시 실행·PL/SQL 실행 창은 실제로 쓴 세션 ID 로 실행 중 표시(세션별 실행 수), 열 순서·무효 객체 컴파일·휴지통·PL/SQL 실행 창은 활성 SQL 작업 공간이 같은 접속이면 그 세션(`SessionRouter.ForTool`), 세션 닫기 전 시간 제한 ROLLBACK; 제약: OracleSession 잠금 구조는 건드리지 않는다(sr-lock 몫), 실앱 SendKeys 금지(Headless 까지)
+  - acceptance: 고치기 전 실패하는 시험(세션 이동 뒤 반영 거절·실행 표시·PL/SQL 창 세션·이력 다시 실행 세션·겹친 실행·닫기 롤백·가져오기 SAVEPOINT) 통과 / 통합 WritePathSessionFlowTests 26ai·11.2 통과 / `dotnet build Oranda.sln -warnaserror`·`dotnet test`(Integration·Perf 제외) 통과
+  - note: 결과: 고치기 전 가져오기 취소 시 앞의 미커밋 행까지 사라짐(26ai·11.2 둘 다, 앞 미커밋 0행), 고친 뒤 1행 유지. 닫기 롤백은 고치기 전에도 26ai·11.2 에서 드라이버가 되돌려 암묵 커밋은 재현되지 않음(예방으로 명시 ROLLBACK). 원인 파일 GridEdit/GridEditSession.cs·GridEditCommands.cs, Oracle/Transfer/OracleDataTransferService.cs, HistoryScripts/HistoryScriptsCommands.cs, Execution/ExecutionState.cs, PlsqlRun/PlsqlRunViewModel.cs, ConnectionManager/ConnectionService.cs (win144)
 
 ## 의존 그래프
 
@@ -1082,6 +1093,7 @@ graph LR
   TSK-14-03 --> TSK-14-06
   TSK-14-04 --> TSK-14-06
   TSK-14-06 --> TSK-14-07
+  TSK-14-02 --> TSK-14-08
   style TSK-01-02 fill:#e8f5e9,stroke:#2e7d32
   style TSK-03-01 stroke:#c62828,stroke-width:2px
   style TSK-02-02 stroke:#c62828,stroke-width:2px

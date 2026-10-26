@@ -186,6 +186,45 @@ public sealed class DataTransferTests : IDisposable
         Assert.False(File.Exists(vm.FilePath));
     }
 
+    /// <summary>TSK-14-08: 가져오는 동안 그 세션은 실행 중(세션 창 커밋·닫기 꺼짐, 같은 세션을 쓰는 다른 작업 공간은 바쁨 막대), 끝나면 풀린다.</summary>
+    [Fact]
+    public Task Import_marks_its_session_running_for_the_workspace_that_started_it() => Oranda.App.Tests.Features.SqlEditor.Ui.Run(async () =>
+    {
+        var path = Path.Combine(_dir, "emp.csv");
+        await File.WriteAllTextAsync(path, "id,name\n1,Kim\n");
+        var bus = new Oranda.Core.Events.EventBus();
+        var state = new Oranda.App.Features.Execution.ExecutionState(bus);
+        var session = new StubSession();
+        bus.Publish(new Oranda.Core.Events.SessionOpened(session.Id, session.Profile, session.Server, SessionPurpose.Work));
+        var workspace = new object();
+        bool? running = null;
+        object? owner = null;
+        var service = new RecordingService
+        {
+            OnImport = s =>
+            {
+                running = state.IsRunning(s.Id);
+                owner = state.RunOwnerOf(s.Id);
+            },
+        };
+        using var vm = new ImportDialogViewModel(service, new OneTable(EmpTable()), session) { State = state, Owner = workspace };
+        vm.FilePath = path;
+        vm.TargetOwner = "scott";
+        vm.TargetTable = "emp";
+        await vm.LoadAsync();
+
+        await vm.StartAsync();
+
+        Assert.True(running);
+        Assert.Same(workspace, owner);
+        Assert.False(state.IsRunning(session.Id));
+
+        // 실패해도 풀린다.
+        service.Throw = new InvalidOperationException("boom");
+        await vm.StartAsync();
+        Assert.False(state.IsRunning(session.Id));
+    });
+
     private sealed class RecordingService : IDataTransferService
     {
         public Exception? Throw { get; set; }
@@ -227,9 +266,13 @@ public sealed class DataTransferTests : IDisposable
             return new TransferSummary(LastRows.Count, TimeSpan.FromSeconds(1));
         }
 
+        /// <summary>가져오는 동안 부른다(TSK-14-08: 그때의 실행 표시를 본다).</summary>
+        public Action<ISession>? OnImport { get; set; }
+
         public Task<TransferSummary> ImportAsync(ISession s, ImportOptions options, Stream source, IProgress<long>? progress, CancellationToken ct)
         {
             LastImport = options;
+            OnImport?.Invoke(s);
             if (Throw is not null)
             {
                 throw Throw;

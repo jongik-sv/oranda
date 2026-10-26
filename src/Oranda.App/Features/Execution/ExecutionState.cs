@@ -93,6 +93,11 @@ public sealed class ExecutionState : ObservableObject
 
         /// <summary>지금 실행을 시작한 작업 공간(<see cref="ActiveWorkspace"/>, TSK-14-03). 모르면 null.</summary>
         public object? Owner { get; set; }
+
+        /// <summary>
+        /// 겹쳐 도는 실행 수(TSK-14-08): 같은 세션에서 격자 반영·가져오기·PL/SQL 실행 창 등이 겹치면 하나가 끝나도 남은 실행이 있는 동안 바쁨을 유지한다.
+        /// </summary>
+        public int Runs { get; set; }
     }
 
     public ExecutionState(IEventBus? bus = null)
@@ -363,8 +368,11 @@ public sealed class ExecutionState : ObservableObject
 
     // ---- 지금 접속(매개변수 없는 멤버) -------------------------------------------------------------
 
-    /// <summary>실행을 시작했다. 경과 시간을 세기 시작한다.</summary>
-    public void BeginRun() => Begin(P, null); // PL/SQL 실행 창 등 작업 공간 밖의 실행
+    /// <summary>
+    /// 실행을 시작했다. 경과 시간을 세기 시작한다. 지금 접속의 상태다 — 실제로 쓴 세션을 아는 쪽은 <see cref="BeginRun(Guid, object?)"/> 를 쓴다
+    /// (지금 접속은 실행 중에 바뀔 수 있다, TSK-14-08).
+    /// </summary>
+    public void BeginRun() => Begin(P, null);
 
     public void MarkCancelling() => Cancelling(P);
 
@@ -571,6 +579,16 @@ public sealed class ExecutionState : ObservableObject
 
     private void Begin(Track t, object? owner)
     {
+        if (t.Runs > 0 && t.Busy)
+        {
+            // 이미 도는 실행이 있다(겹친 실행): 시작 시각·처음 시작한 쪽은 그대로 두고 수만 센다.
+            t.Runs++;
+            t.Owner ??= owner;
+            RaiseAll();
+            return;
+        }
+
+        t.Runs = 1;
         t.StartedUtc = DateTime.UtcNow;
         t.Elapsed = TimeSpan.Zero;
         t.Run = SessionRunState.Running;
@@ -591,6 +609,14 @@ public sealed class ExecutionState : ObservableObject
 
     private void End(Track t)
     {
+        if (t.Runs > 1 && t.Busy)
+        {
+            t.Runs--; // 겹친 실행이 남았다: 바쁨 유지
+            RaiseAll();
+            return;
+        }
+
+        t.Runs = 0;
         if (t.Busy)
         {
             // 세션 없이 시작한 실행(지금 접속이 없을 때)은 「세션 없음」 으로 돌아간다.

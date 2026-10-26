@@ -108,6 +108,15 @@ public sealed partial class ImportDialogViewModel : ViewModelBase, IDisposable
         _targetOwner = session.Profile.User.ToUpperInvariant();
     }
 
+    /// <summary>
+    /// 가져오는 동안 세션을 「실행 중」 으로 둘 실행 상태(TSK-14-08: 세션 창의 커밋·롤백·닫기가 꺼지고, 같은 세션을 쓰는 다른 작업 공간은 바쁨 막대를 본다).
+    /// null 이면 표시 없이 가져온다.
+    /// </summary>
+    public Oranda.App.Features.Execution.ExecutionState? State { get; init; }
+
+    /// <summary>가져오기를 시작한 작업 공간(실행 중 표시의 주인). 모르면 null.</summary>
+    public object? Owner { get; init; }
+
     public ObservableCollection<ImportMappingRow> Mappings { get; } = [];
 
     /// <summary>대상 열 이름 목록(「건너뛰기」는 목록에 없고 빈 값으로 둔다).</summary>
@@ -280,6 +289,7 @@ public sealed partial class ImportDialogViewModel : ViewModelBase, IDisposable
         InsertedRows = 0;
         Status = "가져오는 중…";
         _cts = new CancellationTokenSource();
+        State?.BeginRun(_session.Id, Owner);
         try
         {
             var mappings = Mappings.Select(m => new ColumnMapping(m.Source, m.IsSkipped ? null : m.Target)).ToList();
@@ -316,6 +326,8 @@ public sealed partial class ImportDialogViewModel : ViewModelBase, IDisposable
         {
             _cts?.Dispose();
             _cts = null;
+            State?.ApplyTransaction(_session.Id, _session.HasPendingTransaction);
+            State?.EndRun(_session.Id);
             IsRunning = false;
         }
     }

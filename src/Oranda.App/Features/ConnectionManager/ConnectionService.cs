@@ -801,14 +801,39 @@ public sealed class ConnectionService : IConnectionService, IDisposable
         }
     }
 
+    /// <summary>닫기 전 ROLLBACK 을 기다리는 최대 시간(<see cref="CloseAsync"/>). 넘기면 버리고 닫는다.</summary>
+    internal static readonly TimeSpan RollbackBeforeCloseTimeout = TimeSpan.FromSeconds(2);
+
     /// <summary>
     /// 세션 닫기를 호출한 스레드(UI)에서 떼어 내고 <see cref="SessionCloser.Timeout"/> 까지만 기다린다.
     /// ODP.NET 의 Dispose 는 서버가 응답하지 않으면 끝나지 않으므로 UI 스레드에서 직접 기다리지 않는다.
+    /// 닫기 전에 시간 제한(<see cref="RollbackBeforeCloseTimeout"/>)을 둔 ROLLBACK 을 보낸다(TSK-14-08): 닫는 경로는 모두 미커밋을 묻고 커밋·롤백했거나
+    /// 미커밋이 없다고 본 뒤이므로, 남은 변경이 있더라도 정상 로그오프가 그것을 확정하지 않게 한다. 끊긴 세션에는 보내지 않는다.
     /// </summary>
     internal static Task CloseAsync(ISession session, Action<string>? warn = null, TimeSpan? timeout = null)
     {
         ArgumentNullException.ThrowIfNull(session);
-        return SessionCloser.RunAsync(session.DisposeAsync, "세션 " + session.Id.ToString("N")[..8], warn, timeout);
+        return SessionCloser.RunAsync(() => RollbackThenDisposeAsync(session), "세션 " + session.Id.ToString("N")[..8], warn, timeout);
+    }
+
+    private static async ValueTask RollbackThenDisposeAsync(ISession session)
+    {
+        if (session.State is SessionState.Idle or SessionState.Busy)
+        {
+            using var cts = new CancellationTokenSource(RollbackBeforeCloseTimeout);
+            var rollback = Task.Run(() => session.RollbackAsync(cts.Token), CancellationToken.None);
+            try
+            {
+                await rollback.WaitAsync(RollbackBeforeCloseTimeout).ConfigureAwait(false);
+            }
+            catch (Exception ex) when (ex is not OutOfMemoryException)
+            {
+                // 응답이 없거나 실패해도 닫기는 계속한다(멈춘 서버 때문에 닫기가 막히지 않게). 늦게 끝난 롤백의 예외는 관찰만 한다.
+                _ = rollback.ContinueWith(static t => _ = t.Exception, CancellationToken.None, TaskContinuationOptions.OnlyOnFaulted, TaskScheduler.Default);
+            }
+        }
+
+        await session.DisposeAsync().ConfigureAwait(false);
     }
 
     public async Task<ConnectOutcome> ReconnectAsync(string? password, CancellationToken ct)

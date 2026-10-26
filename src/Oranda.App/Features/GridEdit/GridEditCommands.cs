@@ -1,3 +1,4 @@
+using Oranda.App.Features.Execution;
 using Oranda.Core.Execution;
 using Oranda.Core.Grid;
 using Oranda.Core.Metadata;
@@ -31,6 +32,18 @@ public static class GridEditCommands
     /// 실행 화면(TSK-06-02)이 채운다.
     /// </summary>
     public static Func<SqlStatement?, CancellationToken, Task>? Rerun { get; set; }
+
+    /// <summary>
+    /// 반영하는 동안 세션을 「실행 중」 으로 둘 실행 상태(TSK-14-08, 실행 화면이 채운다). 세션 창의 커밋·롤백·닫기가 꺼지고, 같은 세션을 쓰는
+    /// 다른 작업 공간은 바쁨 막대를 본다. null 이면 표시 없이 반영한다.
+    /// </summary>
+    public static ExecutionState? State { get; set; }
+
+    /// <summary>결과를 만든 세션과 탭의 지금 세션이 다를 때의 안내.</summary>
+    internal const string SessionMovedNotice = "이 결과를 만든 세션과 지금 탭의 세션이 다릅니다. 다른 세션의 트랜잭션에 반영하지 않도록 멈췄습니다 — 다시 조회한 뒤 편집하세요.";
+
+    /// <summary>그 세션이 다른 실행으로 바쁠 때의 안내.</summary>
+    internal const string SessionBusyNotice = "이 결과의 세션은 지금 실행 중입니다. 실행이 끝난 뒤 다시 반영하세요.";
 }
 
 /// <summary>
@@ -142,7 +155,7 @@ public sealed class GridEditCommandHandler : ICommandHandler
                 break;
             case "oranda.grid.edit.previewDml":
                 // 미리보기 창의 「반영」은 커밋 없이 반영한다(취소면 아무것도 하지 않는다).
-                if (GridEditCommands.ConfirmPreview is { } show && await show(s.BuildPreview(), false, cancellationToken).ConfigureAwait(true))
+                if (!Refused(s) && GridEditCommands.ConfirmPreview is { } show && await show(s.BuildPreview(), false, cancellationToken).ConfigureAwait(true))
                 {
                     await ApplyConfirmedAsync(s, commit: false, cancellationToken).ConfigureAwait(true);
                 }
@@ -173,7 +186,7 @@ public sealed class GridEditCommandHandler : ICommandHandler
     /// <summary>미리보기 확인을 받은 뒤에만 반영한다(GRID-05).</summary>
     internal static async Task<bool> ApplyAsync(GridEditSession s, bool commit, CancellationToken ct)
     {
-        if (!s.IsDirty || GridEditCommands.ConfirmPreview is not { } confirm)
+        if (!s.IsDirty || GridEditCommands.ConfirmPreview is not { } confirm || Refused(s))
         {
             return false;
         }
@@ -202,12 +215,38 @@ public sealed class GridEditCommandHandler : ICommandHandler
         return key;
     }
 
-    /// <summary>확인을 받은 변경을 반영한다.</summary>
+    /// <summary>
+    /// 반영하면 안 되면 안내하고 true(TSK-14-08): 결과를 만든 세션이 지금 탭의 세션이 아니거나(작업 공간이 세션을 옮겼다) 그 세션이 다른 실행으로 바쁘다.
+    /// </summary>
+    private static bool Refused(GridEditSession s)
+    {
+        var notice = s.SessionMoved ? GridEditCommands.SessionMovedNotice
+            : GridEditCommands.State?.IsBusy(s.Session.Id) == true ? GridEditCommands.SessionBusyNotice
+            : null;
+        if (notice is null)
+        {
+            return false;
+        }
+
+        s.Announce(notice);
+        GridEditCommands.Report?.Invoke(notice);
+        return true;
+    }
+
+    /// <summary>확인을 받은 변경을 반영한다. 확인 창이 떠 있는 사이 세션이 바뀌었으면 반영하지 않는다.</summary>
     private static async Task ApplyConfirmedAsync(GridEditSession s, bool commit, CancellationToken ct)
     {
+        if (Refused(s))
+        {
+            return;
+        }
+
         var updatedChanges = s.BuildChanges().Where(c => c.Kind == RowChangeKind.Update).ToList();
         var updated = updatedChanges.Select(c => c.RowIndex).ToList();
+        var state = GridEditCommands.State;
+        var session = s.Session;
         ApplyResult result;
+        state?.BeginRun(session.Id, s.Owner); // 반영하는 동안 그 세션은 실행 중(TSK-14-08)
         try
         {
             result = await s.ApplyAsync(commit, ct).ConfigureAwait(true);
@@ -216,6 +255,11 @@ public sealed class GridEditCommandHandler : ICommandHandler
         {
             SaveFeedback.ShowApplyFailed();
             throw;
+        }
+        finally
+        {
+            state?.ApplyTransaction(session.Id, session.HasPendingTransaction);
+            state?.EndRun(session.Id);
         }
 
         // 저장 효과(TSK-13-18): 상태 표시줄 알림 + 반영된 행 잠깐 강조(다시 읽으면 새 그리드에서).

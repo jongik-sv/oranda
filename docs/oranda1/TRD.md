@@ -531,6 +531,7 @@ TSK-10-01 과 TSK-10-02 는 같은 파일(`ScriptsView.axaml`·`ScriptsView.axam
 9. **상태 줄**: 「워크스페이스 세션 · 연결됨」, 「공유 세션 · 다른 워크스페이스 1개와 함께 · 연결됨」, 「새 세션 · 첫 실행 때 연결」. 세션 모니터 구분용으로 콤보 툴팁·세션 도구 창에 SID.
 10. **PL/SQL 작업 공간**은 자동 자기 세션 대상에서 뺀다(탭마다 접속을 이미 고름, `IConnectionDocument`). MyBatis 작업 공간은 SQL 작업 공간과 같은 규칙(`SqlWorkspaceViewModel`). 조회 전용 Role·`readOnlySession`·ExecutionPolicy 는 세션 프로필 기준이라 세션마다 그대로 적용.
 11. **「세션」 창에서 고르기·콤보 표시**(TSK-14-06): 줄 두 번 누르기·Enter = 우클릭 「이 세션 쓰기」(활성 SQL·MyBatis 작업 공간을 그 세션에 묶는다, `SessionsViewModel.ActivateAsync`). 이미 쓰는 세션이거나 PL/SQL 문서가 활성이면 아무것도 안 한다. 툴바 콤보는 고른 줄을 UI 대기열 한 박자 뒤에 묶고(`ConnectionComboViewModel.Selected` → `ChooseAsync`), 목록을 다시 만들 때는 먼저 선택을 푼다: 상자의 선택 변경 안에서 `Entries` 를 비웠다 채우면 Avalonia ComboBox 가 고른 줄(SelectedItem)을 들고도 보이는 칸(SelectionBoxItem)이 비어 빈 「접속 안 됨」 을 보였다(줄 툴팁에 쓰는 워크스페이스가 있어 세션을 옮길 때마다 목록이 다시 만들어진다).
+12. **쓰기 경로의 세션·실행 표시**(TSK-14-08, D-040): 격자 반영은 결과를 만든 세션이 지금 그 탭의 세션(`SessionFor(tab)`)일 때만 하고 다르면 「다시 조회」 안내로 거절한다(`GridEditSession.CurrentSession`). 이력 「다시 실행」 은 활성 탭과 같은 접속이면 그 작업 공간의 세션(`ForWriteAsync`), 다른 접속이면 그 접속의 기본 세션이다. 가져오기는 세션에 미커밋이 있으면 먼저 묻고(커밋/롤백/취소), 「마지막에 커밋」 실패·취소는 시작 SAVEPOINT(`ORANDA_IMPORT`)까지만 되돌린다. 격자 반영·가져오기·LOB 저장·이력 다시 실행·PL/SQL 실행 창은 실제로 쓴 세션 ID 로 `BeginRun(sessionId, owner)`/`EndRun` 하고, 실행 표시는 세션별 실행 수라 겹친 실행 하나가 끝나도 바쁨이 남는다. 열 순서·무효 객체 컴파일·휴지통·PL/SQL 실행 창(스키마 브라우저에서)은 `SessionRouter.ForTool`: 활성 SQL 작업 공간이 같은 접속이면 그 세션. 세션 닫기(`ConnectionService.CloseAsync`)는 Dispose 전에 2초 제한 ROLLBACK 을 보낸다(끊긴 세션 제외).
 
 ### 14.2 바뀌는 곳
 

@@ -219,6 +219,10 @@ public sealed partial class ExecutionController
             editor, metadata, session, stmt, model.Columns,
             GridEditBinding.OriginalValues(model), // 원래 값(WHERE 키·낙관적 잠금): 그리드에 보이는 바꾼 값이 아니다
             () => model.LoadedRowCount, null, ct).ConfigureAwait(true);
+        // 반영은 결과를 만든 세션이 지금 그 탭의 세션일 때만(작업 공간이 세션을 옮기면 다른 작업 공간의 트랜잭션이 된다, TSK-14-08).
+        var editTab = tab;
+        es.CurrentSession = () => SessionFor(editTab);
+        es.Owner = Host.WorkspaceOf(tab);
         item.EditSession = es;
         item.Title += " (편집)";
         GridEditCommands.Active = es;

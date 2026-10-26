@@ -62,13 +62,30 @@ internal sealed class StubSession(ConnectionProfile profile, ServerInfo server, 
 
     public Task CommitAsync(CancellationToken ct) => Task.CompletedTask;
 
-    public Task RollbackAsync(CancellationToken ct) => Task.CompletedTask;
+    /// <summary>받은 롤백 수.</summary>
+    public int Rollbacks { get; private set; }
+
+    /// <summary>닫힐 때까지 받은 롤백 수(TSK-14-08: 닫기 전에 롤백을 보낸다). 닫히지 않았으면 -1.</summary>
+    public int RollbacksBeforeDispose { get; private set; } = -1;
+
+    /// <summary>설정하면 롤백이 이 신호를 기다린다(응답 없는 서버).</summary>
+    public TaskCompletionSource? RollbackGate { get; set; }
+
+    public Task RollbackAsync(CancellationToken ct)
+    {
+        Rollbacks++;
+        return RollbackGate is { } gate ? gate.Task.WaitAsync(ct) : Task.CompletedTask;
+    }
+
+    /// <summary>연결이 끊긴 세션으로 만든다.</summary>
+    public void MarkBroken() => State = SessionState.Broken;
 
     /// <summary>설정하면 DisposeAsync 가 이 신호를 받을 때까지 호출 스레드를 막는다(응답 없는 서버의 ODP Dispose 흉내). 안전장치로 10초 뒤엔 풀린다.</summary>
     public ManualResetEventSlim? DisposeGate { get; set; }
 
     public ValueTask DisposeAsync()
     {
+        RollbacksBeforeDispose = Rollbacks;
         DisposeGate?.Wait(TimeSpan.FromSeconds(10));
         State = SessionState.Closed;
         events.Publish(new SessionClosed(Id));

@@ -33,6 +33,9 @@ internal sealed class OracleDataTransferService : IDataTransferService
 
     private const int MaxReportedErrors = 1000;
 
+    /// <summary>「마지막에 커밋」 가져오기의 시작 지점. 실패·취소하면 여기까지만 되돌린다(세션의 다른 미커밋 변경은 남긴다, TSK-14-08).</summary>
+    internal const string Savepoint = "ORANDA_IMPORT";
+
     private readonly IExecutionService _execution;
     private readonly IMetadataProvider _metadata;
 
@@ -158,6 +161,21 @@ internal sealed class OracleDataTransferService : IDataTransferService
         long rowNo = 0;
         var committedAny = false;
 
+        // 마지막에 한 번 커밋하기로 했으면 시작 지점을 둔다: 실패·취소 때 세션 전체가 아니라 이 가져오기 몫만 되돌린다(TSK-14-08).
+        // 읽기 전용 접속은 INSERT 가 정책 관문에서 막히므로 두지 않는다.
+        var hadPending = s.HasPendingTransaction;
+        var savepoint = false;
+        if (options.CommitAtEnd && !s.Profile.ReadOnly)
+        {
+            var sp = await ControlAsync(s, "SAVEPOINT " + Savepoint, ct).ConfigureAwait(false);
+            if (sp.Status != ExecutionStatus.Succeeded)
+            {
+                throw Failure(sp, "가져오기 시작 지점(SAVEPOINT)을 만들지 못했다");
+            }
+
+            savepoint = true;
+        }
+
         void RecordError(long row, string message)
         {
             errorCount++;
@@ -246,12 +264,24 @@ internal sealed class OracleDataTransferService : IDataTransferService
         }
         catch
         {
-            // 마지막에 한 번 커밋하기로 했으면 중간 실패는 아무것도 남기지 않는다.
+            // 마지막에 한 번 커밋하기로 했으면 중간 실패는 이 가져오기가 넣은 것을 남기지 않는다. 시작 지점까지만 되돌려 그 전의 미커밋 변경은 남기고,
+            // 시작할 때 미커밋이 없었으면 빈 트랜잭션도 끝낸다(미커밋 표시가 남지 않게).
             if (options.CommitAtEnd && !committedAny && s.HasPendingTransaction)
             {
                 try
                 {
-                    await s.RollbackAsync(CancellationToken.None).ConfigureAwait(false);
+                    if (savepoint)
+                    {
+                        var back = await ControlAsync(s, "ROLLBACK TO SAVEPOINT " + Savepoint, CancellationToken.None).ConfigureAwait(false);
+                        if (back.Status == ExecutionStatus.Succeeded && !hadPending)
+                        {
+                            await s.RollbackAsync(CancellationToken.None).ConfigureAwait(false);
+                        }
+                    }
+                    else if (!hadPending)
+                    {
+                        await s.RollbackAsync(CancellationToken.None).ConfigureAwait(false);
+                    }
                 }
                 catch (Exception ex) when (ex is not OutOfMemoryException)
                 {
@@ -310,6 +340,15 @@ internal sealed class OracleDataTransferService : IDataTransferService
         }
 
         return ok;
+    }
+
+    /// <summary>트랜잭션 제어 문장(SAVEPOINT·ROLLBACK TO). 정책 관문을 지나고 이력에는 남기지 않는다.</summary>
+    private Task<ExecutionResult> ControlAsync(ISession s, string text, CancellationToken ct)
+    {
+        var verb = text.StartsWith("SAVEPOINT", StringComparison.Ordinal) ? "SAVEPOINT" : "ROLLBACK";
+        var stmt = new SqlStatement(text, default, StatementKind.TransactionControl) { Verb = verb };
+        return _execution.ExecuteAsync(s, stmt, new Dictionary<string, BindValue>(),
+            new ExecutionOptions { Source = HistorySource.Editor, SkipHistory = true }, ct);
     }
 
     private Task<ExecutionResult> RunInsertAsync(ISession s, string sql, CancellationToken ct)

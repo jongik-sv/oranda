@@ -102,6 +102,30 @@ public static class DataTransferCommands
         await TransferServices.ShowAsync(services, window).ConfigureAwait(true);
     }
 
+    /// <summary>
+    /// 가져오기를 시작해도 되는지(TSK-14-08). 그 세션이 실행 중이면 섞지 않고 false. 세션에 미커밋 변경이 있으면 접속 이름을 밝혀 묻는다:
+    /// 「마지막에 커밋」 은 그 변경까지 확정하고 「배치마다 커밋」 은 첫 배치에서 확정하므로, 커밋(또는 롤백)한 뒤에만 진행한다. 취소면 false.
+    /// </summary>
+    internal static async Task<bool> ReadyForImportAsync(IServiceProvider services, ISession session, CancellationToken ct)
+    {
+        ArgumentNullException.ThrowIfNull(services);
+        ArgumentNullException.ThrowIfNull(session);
+        var state = Oranda.App.Features.Execution.ExecutionState.For(services.GetService(typeof(Oranda.Core.Events.IEventBus)) as Oranda.Core.Events.IEventBus);
+        if (state.IsBusy(session.Id))
+        {
+            Notify?.Invoke("그 세션은 지금 실행 중입니다. 실행이 끝난 뒤 가져오세요.");
+            return false;
+        }
+
+        if (!state.IsTxnPending(session.Id) && !session.HasPendingTransaction)
+        {
+            return true;
+        }
+
+        return services is Oranda.App.Shell.Composition.ServiceContainer container
+            && await Oranda.App.Features.Execution.ExecutionCommands.Resolve(container).ConfirmConnectionUncommittedAsync(session, ct).ConfigureAwait(true);
+    }
+
     internal static ISession? ResolveSession(IServiceProvider services)
     {
         var manager = services.GetService(typeof(ISessionManager)) as ISessionManager;
@@ -150,12 +174,20 @@ public sealed class DataTransferCommandHandler : ICommandHandler
                 break;
             case "oranda.tools.import":
                 // 가져오기는 쓰고 커밋하므로 SQL 탭이면 실행처럼 작업 공간의 세션을 먼저 고른다(TSK-14-02, 다른 작업 공간의 트랜잭션에 섞이지 않게).
-                var session = SessionRouter.Find(_services) is { SqlDocumentActive: true }
+                var router = SessionRouter.Find(_services);
+                var session = router is { SqlDocumentActive: true }
                     ? await SessionRouter.ForWriteAsync(_services, SqlEditorHost.Current.Active, cancellationToken).ConfigureAwait(true)
                     : DataTransferCommands.ResolveSession(_services);
-                if (session is not null && TransferServices.Resolve(_services) is { } transfer)
+
+                // 그 세션에 미커밋 변경이 있으면 먼저 묻는다(가져오기의 커밋이 그 변경까지 확정하지 않게, TSK-14-08).
+                if (session is not null && TransferServices.Resolve(_services) is { } transfer
+                    && await DataTransferCommands.ReadyForImportAsync(_services, session, cancellationToken).ConfigureAwait(true))
                 {
-                    var vm = new ImportDialogViewModel(transfer, TransferServices.ResolveMetadata(_services), session);
+                    var vm = new ImportDialogViewModel(transfer, TransferServices.ResolveMetadata(_services), session)
+                    {
+                        State = Oranda.App.Features.Execution.ExecutionState.For(_services.GetService(typeof(Oranda.Core.Events.IEventBus)) as Oranda.Core.Events.IEventBus),
+                        Owner = router?.ActiveWorkspace,
+                    };
                     await TransferServices.ShowAsync(_services, new ImportDialogWindow { DataContext = vm }).ConfigureAwait(true);
                 }
 

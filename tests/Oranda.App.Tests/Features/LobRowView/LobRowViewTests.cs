@@ -249,6 +249,40 @@ public sealed class LobRowViewTests : IDisposable
         Assert.Equal("바뀐 글", exec.LastBinds["v1"].Value);
     }
 
+    /// <summary>TSK-14-08: DB 저장(SAVEPOINT·UPDATE·커밋)하는 동안 그 세션은 실행 중이고, 이미 바쁜 세션이면 저장하지 않는다.</summary>
+    [Fact]
+    public Task Save_to_database_marks_the_session_running_and_waits_for_a_busy_session() => Oranda.App.Tests.Features.SqlEditor.Ui.Run(async () =>
+    {
+        var bus = new Oranda.Core.Events.EventBus();
+        var state = new Oranda.App.Features.Execution.ExecutionState(bus);
+        var session = Session();
+        bus.Publish(new Oranda.Core.Events.SessionOpened(session.Id, session.Profile, session.Server, SessionPurpose.Work));
+        var exec = new FakeExecution();
+        var seen = new List<bool>();
+        exec.Handler = (stmt, _) =>
+        {
+            seen.Add(state.IsRunning(session.Id));
+            return Task.FromResult(new ExecutionResult(stmt, ExecutionStatus.Succeeded) { RowsAffected = 1 });
+        };
+        var vm = new LobEditorViewModel(new FakeAccessor(), new LobWriter(exec)) { RunState = state };
+        await vm.AttachAsync(new LobEditorSource("C", session, new LobValue(LobKind.Clob, 1) { TextPreview = "x" }, null, Target(), null));
+        vm.Text = "바뀐 글";
+
+        Assert.True((await vm.SaveToDatabaseAsync(commit: false)).Success);
+        Assert.NotEmpty(seen);
+        Assert.All(seen, Assert.True);
+        Assert.False(state.IsRunning(session.Id));
+
+        state.BeginRun(session.Id, new object()); // 그 세션에서 다른 실행이 도는 중
+        vm.Text = "또 바뀐 글";
+        var count = exec.Statements.Count;
+        var busy = await vm.SaveToDatabaseAsync(commit: false);
+        Assert.False(busy.Success);
+        Assert.Contains("실행 중", busy.Message, StringComparison.Ordinal);
+        Assert.Equal(count, exec.Statements.Count);
+        state.EndRun(session.Id);
+    });
+
     [Fact]
     public async Task Read_only_profile_blocks_editing_and_saving_but_allows_view_and_file_save()
     {

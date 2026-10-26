@@ -130,6 +130,7 @@ public sealed partial class ExecutionController : IDisposable
         GridEditCommands.Rerun = RerunForEditAsync;
         GridEditCommands.ConfirmPreview = (text, commit, ct) => _d.Dialogs.PreviewDmlAsync(text, commit, ct);
         GridEditCommands.Report = ReportGridApply;
+        GridEditCommands.State = deps.State; // 반영하는 동안 그 세션을 실행 중으로 둔다(TSK-14-08)
     }
 
     public ExecutionState State => _d.State;

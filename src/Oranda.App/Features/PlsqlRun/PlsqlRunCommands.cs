@@ -126,12 +126,13 @@ public static class PlsqlRunCommands
         state.UseKeys(container.GetService<ContextKeyService>());
         return new PlsqlRunDeps
         {
-            // 활성 문서가 PL/SQL 편집기(작업 공간이면 보이는 탭)면 그 편집기의 세션(연 접속), 아니면(스키마 브라우저에서 실행) 지금 접속.
+            // 활성 문서가 PL/SQL 편집기(작업 공간이면 보이는 탭)면 그 편집기의 세션(연 접속), 아니면(스키마 브라우저에서 실행) 지금 접속 —
+            // 활성 SQL 작업 공간이 같은 접속을 쓰면 그 작업 공간의 세션(블록의 변경·커밋이 다른 작업 공간의 트랜잭션에 섞이지 않게, TSK-14-08).
             Session = () => (container.GetService<IShellUi>() as ShellController)?.Docking.ActiveDocument?.Panel switch
             {
                 PlsqlEditor.PlsqlEditorViewModel { Session: { } own } => own,
                 PlsqlWorkspace.PlsqlWorkspaceViewModel { Session: { } tab } => tab,
-                _ => SessionRouter.CurrentOf(container),
+                _ => SessionRouter.ForTool(container),
             },
             Metadata = () => container.GetService<IMetadataProvider>(),
             Execution = () =>

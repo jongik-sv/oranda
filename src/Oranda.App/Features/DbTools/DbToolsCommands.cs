@@ -73,17 +73,24 @@ public sealed class DbToolsCommandHandler : ICommandHandler
                 (Open(ObjectSearchPanelId, NewObjectSearch(), "객체 검색") as ObjectSearchViewModel)?.Attach(session);
                 break;
             case "oranda.schema.compileInvalid":
-                await CompileInvalidAsync(session, context.Parameter as string, cancellationToken).ConfigureAwait(true);
+                await CompileInvalidAsync(WriteSession(session), context.Parameter as string, cancellationToken).ConfigureAwait(true);
                 break;
             case "oranda.schema.recyclebinPurge":
             case "oranda.schema.recyclebinFlashback":
-                await ChangeRecycleBinAsync(session, context, cancellationToken).ConfigureAwait(true);
+                await ChangeRecycleBinAsync(WriteSession(session), context, cancellationToken).ConfigureAwait(true);
                 break;
             case "oranda.db.ddlExtract":
                 (Open(DdlExtractPanelId, NewDdlExtract(), "DDL 일괄 추출") as DdlExtractViewModel)?.Attach(session);
                 break;
         }
     }
+
+    /// <summary>
+    /// DDL(ALTER … COMPILE·PURGE·FLASHBACK — 암묵 커밋)을 보내는 명령의 세션: 활성 SQL 작업 공간이 같은 접속을 쓰면 그 작업 공간의 세션(TSK-14-08).
+    /// 지금 접속(프로필의 첫 세션)이 다른 작업 공간의 미커밋을 들고 있어도 확정하지 않는다. 시험이 세션을 정했으면 그대로.
+    /// </summary>
+    private ISession WriteSession(ISession session) =>
+        SessionProvider is null ? ConnectionManager.SessionRouter.ForTool(_services, session) ?? session : session;
 
     private async Task ShowDbInfoAsync(ISession session, CancellationToken ct)
     {

@@ -67,10 +67,10 @@ public sealed class DedicatedSessionTests
 
         Assert.Equal([tab.Title], rig.Dialogs.Asked);
         Assert.Equal(answer == UncommittedChoice.Commit ? 1 : 0, session.Commits);
-        Assert.Equal(answer == UncommittedChoice.Rollback ? 1 : 0, session.Rollbacks);
         Assert.Equal(closed, !rig.Host.Tabs.Contains(tab));
         await rig.Registry.WhenReleasedAsync();
         Assert.Equal(closed, session.Disposed); // 닫힌 탭의 세션은 닫힌다(누수 없음)
+        Assert.Equal((answer == UncommittedChoice.Rollback ? 1 : 0) + (closed ? 1 : 0), session.Rollbacks); // 고른 롤백 + 닫기 전 ROLLBACK(TSK-14-08)
         Assert.Equal(closed ? 0 : 1, rig.Registry.Count);
     });
 
