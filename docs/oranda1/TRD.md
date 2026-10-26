@@ -426,3 +426,90 @@ strings 파일은 키 이름 순으로 놓여 있으므로 자기 접두 자리�
 - `PrimaryWork` 왕복: 모든 기존 `features` 모양(`null`·`allFeatures`·Role 1~6개 조합·`[]`·모르는 id)을 화면 상태로 읽고 건드리지 않고 저장하면 같은 `features` 가 나온다.
 - 기본 배치·레이아웃 초기화 결과의 보이는 도구 창 집합을 단정하고, 저장된 배치(`rightToolsOpen` 있음·없음)를 읽으면 지금과 같다.
 - `dotnet build Oranda.sln -warnaserror` 와 `dotnet test` 가 통과한다.
+
+## 12. 스크립트 창 검색·스크립트 추가 (2026-10-26 추가, PRD 14, WP-10)
+
+설계 근거 = PRD 14, 결정 D-024~D-028. 경로의 `Features/`·`Shell/`·`Resources/` 는 `src/Oranda.App/` 아래다. 검색기와 생성기는 Avalonia 를 참조하지 않는 순수 클래스로 두어 화면 없이 시험한다(`Features/HistoryScripts/` 안 새 파일).
+
+### 12.1 바뀌는 곳
+
+| Task | 소유 파일 | 시험 파일 | 고치지 않는 것 |
+|---|---|---|---|
+| TSK-10-01 검색 | 새 `Features/HistoryScripts/ScriptSearch.cs`(검색기)·`ScriptSearchModels.cs`(질의·결과 모델), `ScriptsView.axaml` 의 거르기 줄·결과 목록 자리, `ScriptsView.axaml.cs`·`ScriptsViewModel.cs` 의 검색 부분, 문구 `Scripts.search.*`(strings-ko/en)·literals-en.json | 새 `tests/Oranda.App.Tests/Features/HistoryScripts/ScriptSearchTests.cs`, `ScriptsSearchViewTests.cs`(Headless) | 새 스크립트 부분, 주 메뉴·키맵·`CommandTitles*.json` |
+| TSK-10-02 추가 | 새 `Features/HistoryScripts/NewScriptCreator.cs`(생성기·이름 검사), 새 `NewScriptDialog.axaml*`, `ScriptsView.axaml` 의 툴바 단추·트리 오른쪽 클릭 줄, `ScriptsView.axaml.cs`·`ScriptsViewModel.cs` 의 추가 부분, 문구 `Scripts.new.*`·literals-en.json | 새 `NewScriptCreatorTests.cs`, `ScriptsNewScriptViewTests.cs`(Headless) | 검색 부분, 주 메뉴 |
+| TSK-10-03 통합 확인 (WP-10·WP-11·WP-12 범위) | `tests/Oranda.App.Tests/Integration/Scripts/**`, `Integration/GridRows/**`(새), 빠진 문구, `docs/oranda1/itest/TSK-10-03.md` | 같은 폴더 | 제품 코드(결함은 defect Task 로) |
+
+TSK-10-01 과 TSK-10-02 는 같은 파일(`ScriptsView.axaml`·`ScriptsView.axaml.cs`·`ScriptsViewModel.cs`·literals-en.json)을 만진다. 서로 자기 몫(위 표의 자리)만 바꾸고, 고친 범위를 결과에 적는다. 나중에 머지하는 쪽이 rebase 충돌을 푼다. 문구 키는 접두로 나눈다(`Scripts.search.*`, `Scripts.new.*`). literals-en.json 은 자기 화면의 기존 문구 바로 뒤에 넣는다(파일 끝에 붙이지 않는다, D-023).
+
+### 12.2 검색기 (TSK-10-01, D-024·D-025)
+
+- 호출: `ScriptSearch.RunAsync(ScriptSearchQuery query, IReadOnlyList<string> roots, IProgress<ScriptSearchProgress>? progress, CancellationToken ct)` → `ScriptSearchResult`. `ScriptSearchQuery` = 입력 글(`Text`)과 `IncludeContent`. `roots` 는 `ScriptFolderList` 의 연결 폴더.
+- 결과 모델: `ScriptSearchResult` = 파일 목록(`ScriptSearchFile`: 경로·이름 일치 여부·`ScriptSearchLine` 목록), `FileCount`·`MatchCount`, `LimitReached`, `SkippedLarge`, `SkippedUnreadable`. `ScriptSearchLine` = 줄 번호(1부터)·미리보기 글·일치 구간 목록(강조용 시작·길이).
+- 열거: 연결 폴더를 하위까지 훑는다. 숨김 폴더(`FileAttributes.Hidden`, 트리가 쓰는 것과 같은 판정)는 들어가지 않는다. 파일 판정은 트리와 같은 함수(`ScriptsViewModel` 의 스크립트 파일 판정)를 한 곳에서 공유해 트리와 결과가 어긋나지 않게 한다. 링크 순환을 막는다(이미 본 실제 경로는 건너뜀).
+- 이름 검색: 입력을 공백으로 나눈 낱말 모두가 파일 이름(확장자 포함)에 대소문자 무시(`OrdinalIgnoreCase`)로 들어 있으면 일치. 낱말이 없으면(공백만) 검색하지 않는다. 한 파일은 일치 1곳으로 센다.
+- 내용 검색(`IncludeContent`): 입력 전체(앞뒤 공백 제거)를 하나의 글자로, `OrdinalIgnoreCase` 로 줄마다 찾는다. 정규식을 쓰지 않는다. 한 줄에 여러 번 있으면 그 줄을 1곳으로 세고 강조 구간은 모두 담는다. 내용을 켜면 이름이 맞는 파일(줄 없음)도 함께 결과에 든다.
+- 파일 읽기: 편집기와 같은 방법 — `Features/SqlEditor/FileEncoding.Decode`(BOM 판별, UTF-8 엄격 → 안 되면 CP949)로 바이트를 글로 바꾼다. 앞 8 KB 에 NUL 바이트가 있으면 이진 파일로 보고 내용 검색에서 조용히 뺀다. 읽기 오류(권한·잠김)는 `SkippedUnreadable` 로 센다.
+- 한도(D-025): `MatchCount` 가 1,000 에 닿으면 즉시 멈추고 `LimitReached`. 2 MB(2×1024×1024 바이트)를 넘는 파일은 내용을 읽지 않고 `SkippedLarge` 로 센다(이름 검색은 한다). 한도 값은 상수(`ScriptSearch.MaxMatches`·`MaxFileBytes`)로 두어 시험이 줄여 쓸 수 있게 한다.
+- 미리보기: 일치한 줄을 앞뒤 공백을 줄이고 200자 안으로 자른다. 일치가 잘린 쪽 밖이면 일치 둘레가 보이게 잘라 「…」 를 붙인다. 강조 구간은 잘린 글 기준으로 다시 잰다.
+- 취소·입력 지연: `ScriptsViewModel` 이 입력이 바뀔 때마다 이전 `CancellationTokenSource` 를 취소하고 250 ms 뒤에 `Task.Run` 으로 검색한다. 입력이 비면 검색을 취소하고 트리로 돌아간다. 취소는 파일 사이와 큰 파일의 줄 루프 안(일정 줄마다)에서 확인한다. 진행은 `IProgress` 로 파일 20개마다 UI 스레드에 알려 상태 줄 「검색 중… n개 파일」 과 목록을 갱신한다(컬렉션을 통째로 바꾸지 않고 묶음 단위로 더한다).
+- 화면: 거르기 줄은 기존 거르기 줄 모양(`Classes` 는 세션 모니터·SQL 모니터와 같은 것)에 칸 + 「내용」 토글. 결과 목록은 트리 자리를 대신하는 묶음 리스트(파일 행 + 줄 행, 줄 번호 열 오른쪽 정렬, 미리보기 고정폭 글꼴, 일치 부분은 기존 강조 브러시). 상태 줄(`panel-status`)에 「n개 파일에서 m곳」, 한도면 「(한도 도달)」, 건너뜀이 있으면 그 수. 처음·검색 중·결과 없음·오류 상태는 PRD 14 SC-08.
+- 키: Ctrl+F 는 스크립트 창이 포커스일 때만 거르기 칸으로(창 안 `KeyDown`, 키맵 파일·명령 추가 없음). Esc 는 검색을 지우고 트리로. Enter·두 번 누름은 기존 파일 열기 경로를 부른다. 내용 결과면 열린 편집기에서 그 줄로 이동한다(편집기 호스트의 줄 이동 API 를 쓰고, 없으면 열기 직후 캐럿 이동; 구현 레인이 지금 경로를 확인해 결과에 적는다).
+- 접근성: `AutomationProperties.Name` 을 거르기 칸·내용 토글·결과 목록에 단다. 탭 순서 = 칸 → 토글 → 결과 목록.
+
+### 12.3 새 스크립트 생성기 (TSK-10-02, D-026·D-027)
+
+- 폴더 결정: `NewScriptCreator.ResolveFolder(ScriptNode? selected, IReadOnlyList<string> roots)` → 폴더 경로 또는 이유. 선택이 폴더면 그 폴더, 파일이면 `Path.GetDirectoryName`, 선택이 없으면 `roots.Count == 1` 일 때 그 폴더, 아니면 「폴더를 먼저 고르세요」(단추 `IsEnabled=false` + 툴팁).
+- 기본 이름: `SuggestName(folder)` = 「새 스크립트.sql」, 폴더에 같은 이름(대소문자 무시)이 있으면 「새 스크립트 2.sql」, 「새 스크립트 3.sql」…
+- 이름 검사: `Validate(folder, input)` → 최종 파일 이름 또는 오류 글. 앞뒤 공백을 자르고, 비었거나 `Path.GetInvalidFileNameChars()` 와 `\`·`/` 를 포함하거나 끝이 점·공백이거나 Windows 예약 이름(`CON`·`PRN`·`AUX`·`NUL`·`COM1`~`COM9`·`LPT1`~`LPT9`, 확장자 앞 부분 기준)이면 오류. 경로 구분자가 든 이름은 하위 폴더를 만들지 않고 오류. 확장자가 없으면 `.sql` 을 붙인다. 같은 폴더에 같은 이름(대소문자 무시)이 이미 있으면 오류 「이미 있는 이름입니다」. 오류는 대화상자 안 오류 줄(위험 브러시)에 보이고 확인 단추는 꺼진다.
+- 쓰기: `Create(folder, fileName, content)` 는 `FileMode.CreateNew`(`FileShare.None`)로 연다. 이미 있으면 `IOException` 을 「이미 있는 이름입니다」 오류로 바꿔 돌려주고 기존 파일은 건드리지 않는다(검사와 쓰기 사이 경쟁 포함). 인코딩은 UTF-8(BOM 없음, `FileEncoding.Encode(text, "utf-8")`), 내용이 없으면 빈 파일. 채우기를 켜면 활성 편집기의 글을 그대로(줄 끝 변환 없이) 쓴다.
+- 채우기 가능 여부: 활성 편집기가 있고 글이 비어 있지 않을 때만 체크를 켤 수 있다. 활성 편집기 글은 기존 `SqlEditorHost` 의 활성 문서 접근을 쓰고 새 공개 API 를 만들지 않는다(없으면 구현 레인이 가장 작은 접근자를 추가하고 결과에 적는다).
+- 만든 뒤: 그 폴더 노드만 다시 읽는다(전체 트리를 다시 읽지 않고 폴더 노드의 기존 새로 고침 경로를 쓴다). 새 파일 노드를 선택하고 상위를 펼친 뒤 기존 파일 열기 경로로 편집기에서 연다. 검색 결과 목록이 보이는 중에 만들면 검색을 지우고 트리로 돌아간 뒤 같은 동작을 한다.
+- 화면: 툴바 단추(`ButtonIcon` 아이콘, 동사 이름 「새 스크립트」, 툴팁에 「선택한 폴더에 새 .sql 파일을 만들고 편집기에서 엽니다 (DB 에 쓰지 않음)」), 트리 `ContextMenu` 의 「새 스크립트…」. 이름 입력 창은 기존 입력 대화상자 패턴을 재사용하되 체크박스 한 줄이 들어갈 수 없으면 작은 `Window` 를 새로 만든다. 주 메뉴·팔레트·키맵에 명령을 더하지 않는다(D-028). 따라서 `CommandTitles*.json` 은 고치지 않고, 문구는 `Scripts.new.*`(strings-ko/en)·literals-en.json 에 둔다.
+
+### 12.4 시험 방침
+
+- 검색기 단위(`ScriptSearchTests`, 임시 폴더): 이름 낱말 AND·대소문자 무시, 내용 일반 글자(정규식 문자 포함)·대소문자 무시·한 줄 여러 일치, 파일별 묶음·줄 번호·미리보기 자르기·강조 구간, 숨김 폴더·확장자 필터, 인코딩(UTF-8·BOM·UTF-16·CP949 한글), 이진 파일 제외, 한도(`MaxMatches`·`MaxFileBytes` 를 줄여 도달·건너뜀), 빈 입력, 폴더 없음·권한 오류, 취소(긴 검색 도중 취소 시 부분 결과를 쓰지 않음), 링크 순환.
+- 생성기 단위(`NewScriptCreatorTests`): 폴더 결정 4경우, 기본 이름 번호 매기기, 이름 검사 표(빈·잘못된 글자·예약 이름·구분자·확장자 보태기·대소문자 다른 겹침), `CreateNew` 경쟁(이미 있는 파일 내용 보존), 채우기 내용 일치, 인코딩.
+- Headless(`ScriptsSearchViewTests`·`ScriptsNewScriptViewTests`): 입력 → 250 ms 뒤 결과, 연속 입력 취소, Esc 로 트리 복귀(펼침·선택 보존), Ctrl+F 포커스, 두 번 누름 열기·줄 이동, 단추 꺼짐 + 툴팁, 이름 창 오류 줄·확인 꺼짐, 만든 뒤 선택·열림. 상태 화면(처음·검색 중·결과 없음·오류·한도)을 라이트·다크 PNG 로 떠서 직접 본다(`~/.coord/scripts-find/shots/<레인>/`, 커밋하지 않는다).
+- 성능: 파일 5,000개(각 수 KB) 폴더에서 입력 멈춤 → 첫 결과, 한도 도달 시간을 재서 결과에 적는다. 검색이 입력·스크롤을 막지 않음을 Headless 로 확인한다.
+- 문구: LocalizationTests 가 하드코딩을 잡는다(XAML → literals-en.json, 패널 문구 → strings-ko/en).
+
+### 12.5 수락 기준 (기술)
+
+- 명령 id 집합·키맵·팔레트 결과가 WP-10 전과 같다(새 명령이 없음을 시험으로 단정).
+- 검색기가 UI 스레드 밖에서 돌고, 앞 검색 취소 뒤 오래된 결과가 화면에 반영되지 않는다.
+- 새 스크립트가 어떤 경우에도 기존 파일을 덮어쓰지 않는다(`CreateNew` 경쟁 시험).
+- `dotnet build Oranda.sln -warnaserror` 와 `dotnet test`(Integration·Perf 제외)가 통과한다.
+
+## 13. 결과 격자 여러 행 삭제·행 복사 (2026-10-26 추가, PRD 15, WP-11)
+
+설계 근거 = PRD 15, 결정 D-029~D-031. 경로의 `Features/`·`Shell/` 은 `src/Oranda.App/` 아래다.
+
+### 13.1 바뀌는 곳
+
+| Task | 소유 파일 | 시험 파일 | 고치지 않는 것 |
+|---|---|---|---|
+| TSK-11-01 | `Features/GridEdit/GridEditCommands.cs`(삭제·되돌리기·복제 명령), `Features/GridEdit/GridEditSession.cs`(`DeleteRow`·`ResetRow` 여러 행 짝), `Features/GridEdit/GridEditBinding.cs`(`ToEditRow`), `Features/GridEdit/GridRowTransfer.cs`, `Features/ResultGrid/ResultGridModel.Selection.cs`·`ResultGridModel.Copy.cs`(선택 행 목록 API), `Features/ResultGrid/ResultGridCommands.cs`(`copyRows` 계열 확인), `docs/design/keymaps/*.json`(단축키), `Shell/Resources/CommandTitles*.json`(이름에 개수) | 새 `tests/Oranda.App.Tests/Features/GridEdit/MultiRowDeleteTests.cs`, `MultiRowCopyTests.cs`, Headless 메뉴 이름 시험, Oracle 통합 시험(가능하면) | 단일 행 삭제의 의미(미리보기 DML 모양), 반영 경로(`ApplyAsync`), `Delete` 키 단독 동작, `Shell/Menus/**` |
+
+### 13.2 설계
+
+- 선택 행 목록: `ResultGridModel` 에 「고른 행 번호」를 화면 순서로 돌려주는 API 하나를 둔다(셀 범위가 걸친 행, 행 머리·Shift·Ctrl 로 고른 행의 합집합, 중복 제거). 정렬·거르기가 걸려 있으면 화면 순서의 원래 행 번호다. 행 복사·삭제·되돌리기·복제가 같은 API 를 쓴다. 구현 레인이 먼저 지금 동작을 시험으로 재서(여러 행을 고르는 방법별로 활성 행만 쓰이는지, 복사가 화면 순서인지) 안 되는 것을 결과에 적는다.
+- 삭제: `GridEditSession.DeleteRows(IReadOnlyList<long> rows)` 가 행마다 지우되 `Changed` 이벤트는 마지막에 한 번만 낸다(1만 행에서 격자 갱신 1회). 새 행(`_inserts`)은 목록에서 바로 지우고 뒤 행 번호 이동을 한 번에 처리한다(행마다 당기는 O(n²) 를 피하려고 큰 번호부터 모아 한 번에 정리). 기존 행은 삭제 표시(`_deletes`)만 하고 반영 때 `RowDmlBuilder` 가 DELETE 를 만든다. 되돌리기 `ResetRows` 도 같다. 지금 `DeleteRow` 가 거부하는 행은 같은 규칙으로 거부하고 거부된 수를 `Notice` 로 알린다(일부만 거부돼도 나머지는 표시한다).
+- 명령 이름: 이름에 개수를 넣는 방법은 명령의 동적 제목 경로가 있으면 그것을, 없으면 메뉴를 열 때 갱신하는 제목 필드를 쓴다. 하나면 「행 삭제」, 둘 이상이면 「행 {0}개 삭제」. 영어 「Delete Row」·「Delete {0} Rows」. 문구는 `CommandTitles*.json`(TSK-11-01 하나가 고친다).
+- 행 복사: `copyRows`·`copyRowsWithHeaders`·`copyAsInsert` 가 선택 행 목록 API 의 화면 순서를 쓴다. 이미 그렇다면 시험만 더한다.
+- 복제: `duplicateRow` 가 선택 행 전체를 `GridRowTransfer.DuplicateRowsAsync` 로 복제하는지 확인한다. 복제된 행의 위치는 지금 규칙을 따른다.
+- 편집 모드 자동 켜기(D-031): 삭제·복제 명령의 `Enablement` 를 「편집 모드」 에서 「편집 가능한 표면」 으로 넓히고, 실행 때 편집 모드가 꺼져 있으면 F9 와 같은 경로를 먼저 거친 뒤 실행한다. 편집할 수 없는 결과(`Capability.CanEdit == false`)·`readOnlySession`(R6)이면 지금처럼 꺼짐 + 이유 툴팁을 유지한다.
+- 단축키(D-030): 지금 `default.json` 에 `oranda.grid.edit.deleteRow` = Alt+Delete(mac `Primary+Alt+Back`), `oranda.grid.edit.duplicateRow` = Primary+Shift+D(모두 `gridFocus`)이다. 여기에 행 삭제 `Primary+Delete`, 행 복제 `Primary+D`(둘 다 `when: gridFocus`)를 더한다. `Primary+D` 는 `oranda.edit.duplicateLine`(`editorFocus`)과 문맥이 달라 겹치지 않지만, 4개 프리셋(default·orange5·plsqldev·sqldev)에서 `gridFocus` 의 `Primary+D`·`Primary+Delete` 사용 여부를 먼저 확인하고 겹치면 그 프리셋은 두고 결과에 적는다. `Delete` 키 단독 처리(`ResultGridControl.Keyboard.cs`)는 지금 그대로다. 사용자 키맵 파일은 건드리지 않는다.
+- 성능: 1만 행 선택·삭제·되돌리기·복사에서 UI 스레드가 오래 막히지 않게 한다(위 `Changed` 1회, 선택 행 목록은 구간 합치기). 큰 복사는 글 만들기를 `Task.Run` 으로 하고 클립보드는 UI 스레드에서 쓴다. 측정값을 결과에 적는다.
+
+### 13.3 시험 방침
+
+- 단위·Headless: 셀 범위 3행 삭제, Ctrl 로 떨어진 행, 새 행 + 기존 행 섞어 삭제, 되돌리기(고른 모든 행), 미리보기 DML 에 DELETE n개, 행 복사 클립보드 글(머리글 유무·화면 순서·정렬·거르기 반영), 복제 n개, 편집 모드 자동 켜기, 편집 불가·R6·`readOnlySession` 막힘과 이유 툴팁, 메뉴 이름의 개수(1개·n개, ko·en), 1만 행 시간.
+- Oracle 통합(가능하면, 자기 클래스만): 여러 행 삭제 반영 → 행 수 확인, 일부 행을 되돌린 뒤 반영 → 남은 행 수. 시험 준비용 DML 은 통합 시험 안에서만 둔다(제품 경로에 쓰기 SQL 을 더하지 않는다. 이 기능의 DELETE 는 사용자가 편집 모드에서 반영을 누를 때 기존 경로로 나간다).
+- 라이트·다크 PNG(오른쪽 클릭 메뉴에 개수 표시)를 떠서 직접 본다(`~/.coord/scripts-find/shots/<레인>/`, 커밋하지 않는다).
+
+### 13.4 수락 기준 (기술)
+
+- 단일 행 삭제·되돌리기·복제·복사의 결과(미리보기 DML·클립보드 글)가 이 Task 전과 같다(회귀 시험).
+- 명령 id 집합이 같다(새 id 없음). 키맵은 위 단축키 둘만 늘어난다.
+- `dotnet build Oranda.sln -warnaserror` 와 `dotnet test`(Integration·Perf 제외)가 통과한다.

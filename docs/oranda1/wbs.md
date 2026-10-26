@@ -11,7 +11,7 @@ levels:
 # WBS - Oranda MyBatis 작업 공간
 
 > depth: 3
-> start-date: 2026-10-23 / target-date: 2026-11-09 / updated: 2026-10-25
+> start-date: 2026-10-23 / target-date: 2026-11-09 / updated: 2026-10-26
 > source: docs/oranda1/PRD.md, docs/oranda1/TRD.md
 
 ## WP-01: 기본 설계·공유 계약
@@ -766,6 +766,82 @@ levels:
   - acceptance: 오류 줄에 오류 코드가 한 번 / S6_2 가 26ai·11.2 모두에서 결정적으로 통과 / 가져오기 대화상자 오류 목록 문구 확인 / 전체 시험 통과
   - note: TSK-09-10 에서 발견(D-2). 담당 PC: win144(Windows 개발 PC) — 맥북 세션은 이 Task 를 하지 않는다 / 결과: ErrorText 가 메시지가 이미 같은 코드로 시작하면 코드를 다시 붙이지 않음(단위 시험 11건). 행 번호 규칙 = 머리글을 센 파일 줄 번호(문서화), S6_2 단정을 StartsWith(「행 4: ORA-00001: 」)+「ORA-00001: ORA-00001」 없음으로 고침. TransferFlowTests 3건 26ai 3/3·11.2 XE 3/3 통과 (win144)
 
+## WP-10: 스크립트 창 검색·스크립트 추가
+<!-- 담당 PC: win144(Windows 개발 PC) — 맥북 세션은 이 WP 의 Task 를 하지 않는다. 2026-10-26 사용자 요청 「스크립트 창에서 검색하고 스크립트를 추가」, 조정자 기본안(사용자 「묻지 말고 진행」). 설계 = PRD 14, TRD 12, decisions D-024~D-028. 레인: sc-search(10-01)·sc-add(10-02)는 서로 depends 없이 병렬(둘 다 ScriptsView.axaml·.axaml.cs·ScriptsViewModel.cs·literals-en.json 을 만지므로 자기 몫만 바꾸고 나중에 머지하는 쪽이 rebase 충돌을 푼다, TRD 12.1), 통합 확인 10-03(WP-11·WP-12 범위 포함)이 마지막. 문구 키 접두: Scripts.search.*·Scripts.new.* -->
+
+- [ ] TSK-10-01: 스크립트 창 이름·내용 검색 (거르기 줄·결과 목록) [win144] w:2 2026-10-27~2026-10-28
+  - category: dev
+  - domain: frontend
+  - model: opus
+  - priority: high
+  - tags: scripts, search, ux, win144
+  - prd-ref: PRD 14 SC-01~SC-08, SC-14, TRD 12.2, D-024, D-025
+  - requirements: 스크립트 창 툴바 아래에 기존 거르기 줄 모양의 거르기 줄 하나(칸 + 오른쪽 「내용」 토글)를 더한다. 입력이 비면 지금 트리 그대로, 입력하면 트리 대신 결과 목록(연결한 모든 폴더 하위, 숨김 폴더 제외, 트리와 같은 스크립트 파일 판정). 이름 검색 = 대소문자 무시 부분 일치(공백으로 나눈 낱말 모두 포함), 내용 검색 = 대소문자 무시 일반 글자(정규식 아님), 결과 = 파일별 묶음 + 줄 번호 + 그 줄 미리보기(일치 부분 강조), 내용을 켜면 이름 일치 파일도 함께. Enter·두 번 누름 = 파일 열기(내용 결과는 그 줄로 이동), Esc = 검색 지우고 트리로, 창 안 Ctrl+F = 거르기 칸으로. 입력 멈춘 뒤 250 ms 에 `Task.Run` 으로 검색, 새 입력이 오면 앞 검색 취소, 한도 일치 1,000곳·2 MB 넘는 파일은 내용 검색에서 건너뜀, 상태 줄 「n개 파일에서 m곳 (한도 도달)」. 순수 클래스 `ScriptSearch`(검색기)·`ScriptSearchModels`(결과 모델)를 `Features/HistoryScripts/` 에 새로 만든다. 파일 읽기는 `FileEncoding.Decode`(편집기와 같은 방법). 상태 화면(처음·검색 중·결과 없음·오류·한도)을 만든다; 제약: 새 스크립트 부분·주 메뉴·키맵·`CommandTitles*.json` 을 고치지 않는다. 한글 리터럴은 XAML → literals-en.json(자기 화면 기존 문구 바로 뒤), 패널 문구 → strings-ko/en `Scripts.search.*`. 색·여백·글꼴을 새로 박지 않는다(기존 브러시·`panel-status`); 기술: TRD 12.2; 화면: 거르기 줄 + 트리/결과 목록 + 상태 줄; 비고: 담당 PC: win144(Windows 개발 PC) — 맥북 세션은 이 Task 를 하지 않는다
+  - acceptance: 낱말 둘이 든 이름만 나오고 대소문자를 가리지 않는다 / 「내용」 을 켜면 일치 줄이 파일별로 묶여 줄 번호·미리보기·강조와 함께 나오고 정규식 문자(`.*`, `[`)는 글자로 찾는다 / 칸을 지우거나 Esc 면 트리로 돌아가고 펼침·선택이 보존된다 / 연속 입력에서 앞 검색이 취소되고 마지막 결과만 남는다 / 1,000곳·2 MB 한도와 상태 줄 문구 / UTF-8(BOM 유무)·UTF-16·CP949 한글이 찾아진다 / 두 번 누름·Enter 로 열리고 내용 결과는 그 줄로 이동 / 숨김 폴더·스크립트 확장자 아닌 파일은 결과에 없다 / 라이트·다크 PNG 로 상태 화면 확인 / 명령 id·키맵 불변 / `dotnet build Oranda.sln -warnaserror`·전체 시험 통과
+  - note: 담당 PC: win144(Windows 개발 PC) — 맥북 세션은 이 Task 를 하지 않는다. 크기 M. 레인 sc-search. TSK-10-02 와 같은 파일을 만지므로 고친 범위를 결과에 적는다
+
+- [ ] TSK-10-02: 스크립트 창 새 스크립트 추가 (툴바 단추·우클릭·이름 입력 창) [win144] w:2 2026-10-27~2026-10-28
+  - category: dev
+  - domain: frontend
+  - model: opus
+  - priority: high
+  - tags: scripts, new-file, ux, win144
+  - prd-ref: PRD 14 SC-09~SC-14, TRD 12.3, D-026, D-027, D-028
+  - requirements: 스크립트 창 툴바에 「새 스크립트」 단추 하나와 트리 오른쪽 클릭 「새 스크립트…」 를 더한다. 만드는 곳 = 선택한 폴더, 파일을 골랐으면 그 파일의 폴더, 선택이 없으면 연결 폴더가 하나일 때 그 폴더(여럿이면 단추 비활성 + 툴팁 「폴더를 먼저 고르세요」). 이름 입력 창: 기본값 「새 스크립트.sql」(겹치면 「새 스크립트 2.sql」…), 확장자가 없으면 `.sql` 을 붙임, 쓸 수 없는 글자·예약 이름·이미 있는 이름은 창 안 오류 줄 + 확인 꺼짐, 체크 「활성 편집기 내용으로 채우기」(편집기에 글이 있을 때만 켤 수 있고 기본 꺼짐). 만든 뒤 그 폴더를 다시 읽고 새 파일을 고르고 편집기에서 연다. 기존 파일은 절대 덮어쓰지 않는다(`FileMode.CreateNew`). 순수 클래스 `NewScriptCreator`(폴더 결정·기본 이름·이름 검사·쓰기)와 `NewScriptDialog` 를 `Features/HistoryScripts/` 에 새로 만든다. 새 파일 인코딩 UTF-8(BOM 없음). 상태 화면(폴더 미선택 비활성·오류·성공)을 만든다; 제약: 주 메뉴·팔레트·키맵·`CommandTitles*.json` 에 명령을 더하지 않는다(D-028). 검색 부분을 고치지 않는다. 툴바 단추 모양은 기존 `ButtonIcon`, 툴팁에 DB 에 쓰지 않는다고 적는다. 문구 → literals-en.json(기존 문구 바로 뒤)·strings-ko/en `Scripts.new.*`; 기술: TRD 12.3; 화면: 툴바 단추 + 이름 입력 창; 비고: 담당 PC: win144(Windows 개발 PC) — 맥북 세션은 이 Task 를 하지 않는다
+  - acceptance: 선택 폴더·고른 파일의 폴더·연결 폴더 하나일 때 그 폴더에 파일이 만들어진다 / 폴더가 여럿이고 선택이 없으면 단추 꺼짐 + 「폴더를 먼저 고르세요」 툴팁 / 이름 창이 기본 이름(겹치면 번호)을 보이고 확장자 없는 이름에 .sql 을 붙인다 / 빈 이름·잘못된 글자·예약 이름·이미 있는 이름에서 오류 줄 + 확인 꺼짐 / 같은 이름 파일이 있을 때(만드는 순간 경쟁 포함) 기존 내용이 그대로다 / 채우기는 편집기가 비면 꺼져 있고 켜면 내용이 편집기 글과 같다 / 만든 뒤 트리가 새 파일을 고르고 편집기에 열린다 / 주 메뉴·팔레트 명령 수 불변 / 라이트·다크 PNG 확인 / `dotnet build Oranda.sln -warnaserror`·전체 시험 통과
+  - note: 담당 PC: win144(Windows 개발 PC) — 맥북 세션은 이 Task 를 하지 않는다. 크기 M. 레인 sc-add. TSK-10-01 과 같은 파일을 만지므로 고친 범위를 결과에 적는다
+
+- [ ] TSK-10-03: 스크립트 검색·추가·결과 격자 여러 행·INVALID 검색·프로시저 실행 창 통합 확인 (Headless 화면·시험 수치) [win144] w:1 2026-10-29~2026-10-29
+  - category: itest
+  - domain: test
+  - model: sonnet
+  - priority: high
+  - tags: integration, e2e, scripts, grid, win144
+  - depends: TSK-10-01, TSK-10-02, TSK-11-01, TSK-12-01, TSK-12-02
+  - prd-ref: PRD 14.3, PRD 15.2, TRD 12.4, TRD 12.5, TRD 13.3, TRD 13.4
+  - requirements: 다섯 Task 가 dev 에 들어온 뒤 한 흐름으로 확인한다. (1) 스크립트: 폴더 둘(하위 포함, 숨김 폴더·비스크립트 파일 섞음)을 연결 → 이름 낱말 검색 → 「내용」 검색(대소문자·한글·정규식 문자·여러 인코딩) → 두 번 누름 열기·줄 이동 → Esc 트리 복귀 → 새 스크립트(선택 폴더·고른 파일의 폴더·폴더 하나·폴더 여럿 비활성) → 이름 오류·겹침·채우기 → 만든 뒤 선택·열림 → 만든 파일이 검색에 잡힘; 한도(1,000곳·2 MB)·취소·5,000개 파일 시간을 재서 적는다. (2) 결과 격자: 셀 범위·Ctrl 로 고른 여러 행 삭제(새 행 + 기존 행 섞음)·미리보기 DELETE n개·되돌리기·행 복사 클립보드 글·행 복제·편집 모드 자동 켜기·R6 막힘·1만 행 시간·단축키 Ctrl+Delete/Ctrl+D 충돌 없음; Oracle 통합 시험이 가능하면 여러 행 삭제 반영 후 행 수 확인. (3) INVALID 객체 검색(TSK-12-01 이 고친 모든 화면 경로)이 INVALID 객체를 찾고 느린 공급자에서도 UI 가 흔들리지 않는다. (4) 프로시저·함수 실행 창(TSK-12-02)이 스키마 브라우저·편집기 두 경로에서 인자 행·미리보기와 함께 그려진다. 주 메뉴·팔레트 명령 수가 WP-10 전과 같음을 단정한다. 라이트·다크 PNG 를 `~/.coord/scripts-find/shots/` 에 두고 직접 본다. 각 레인 결과에 적힌 빠진 문구를 문구 파일에 넣는다; 제약: 실앱 SendKeys 금지(Headless 까지), 실앱 눈 확인 항목은 사용자 몫으로 표시, 제품 코드는 고치지 않고 결함은 defect Task 로 등록; 비고: 담당 PC: win144(Windows 개발 PC) — 맥북 세션은 이 Task 를 하지 않는다. 결과서 docs/oranda1/itest/TSK-10-03.md
+  - acceptance: 결과서에 흐름별 통과 표와 시험 수치(검색 시간·한도 동작·1만 행 삭제 시간·시험 개수)가 있다 / 위 (1)~(4) 흐름이 끝까지 간다 / 명령 id 집합·키맵(단축키 둘 추가 제외)·팔레트 결과가 불변 / 발견 결함은 defect Task 로 등록됨 / 사용자 눈 확인 항목이 따로 적혀 있다 / `dotnet build Oranda.sln -warnaserror`·전체 시험 통과
+  - note: 담당 PC: win144(Windows 개발 PC) — 맥북 세션은 이 Task 를 하지 않는다. 크기 M. 레인 sc-itest(마지막)
+
+## WP-11: 결과 격자 여러 행 삭제·행 복사
+<!-- 담당 PC: win144(Windows 개발 PC) — 맥북 세션은 이 WP 의 Task 를 하지 않는다. 2026-10-26 사용자 요청 「조회 결과에서 여러줄 삭제/행 복사」, 조정자 기본안. 설계 = PRD 15, TRD 13, decisions D-029~D-031. 레인 sc-rows 하나. 통합 확인은 TSK-10-03 이 맡는다 -->
+
+- [ ] TSK-11-01: 결과 격자 여러 행 삭제·행 복사 [win144] w:2 2026-10-27~2026-10-28
+  - category: dev
+  - domain: frontend
+  - model: opus
+  - priority: high
+  - tags: grid, edit, copy, ux, win144
+  - prd-ref: PRD 15 RW-01~RW-09, TRD 13, D-029, D-030, D-031
+  - requirements: 먼저 지금 동작을 시험으로 재서(여러 행을 고르는 방법 — 행 머리 클릭·Shift·Ctrl·셀 범위 — 별로 삭제·되돌리기·복사·복제가 활성 행 하나만 쓰는지, 복사가 화면 순서인지) 무엇이 안 되는지 결과에 적는다. 그다음 `oranda.grid.edit.deleteRow`·행 되돌리기·`duplicateRow`·`oranda.grid.copyRows` 계열이 고른 모든 행을 화면 순서로 다루게 한다. 새로 더한 행은 바로 없어지고 기존 행은 삭제 표시 → 반영 때 DELETE. 메뉴 이름에 개수(「행 3개 삭제」, 하나면 「행 삭제」, 영어 Delete {0} Rows). 단축키 행 삭제 Ctrl+Delete·행 복제 Ctrl+D(`gridFocus` 일 때만; 프리셋 4개에서 겹치면 그 프리셋은 두고 보고), Delete 키 단독 동작은 바꾸지 않는다. 편집 모드가 아닐 때 편집 가능한 단일 표면이면 편집 모드를 켜고(F9 와 같은 경로) 실행, 편집할 수 없으면 꺼짐 + 이유 툴팁, 조회 전용(R6)·`readOnlySession` 막힘 그대로. 1만 행 선택 삭제에서도 화면이 멈추지 않게 이벤트·갱신을 한 번만 낸다. 위치: `GridEditCommands.cs`·`GridEditSession`(`DeleteRow`·`ResetRow` 여러 행 짝)·`GridEditBinding.ToEditRow`·`ResultGridModel` 선택 API·`docs/design/keymaps/*.json`·`Shell/Resources/CommandTitles*.json`; 제약: 단일 행 삭제의 미리보기 DML 모양·반영 경로(`ApplyAsync`)·`Shell/Menus/**` 를 고치지 않는다. 제품 조회 경로에 쓰기 SQL 을 더하지 않는다(반영은 기존 편집 모드 경로); 기술: TRD 13.2; 비고: 담당 PC: win144(Windows 개발 PC) — 맥북 세션은 이 Task 를 하지 않는다
+  - acceptance: 셀 범위 3행·Ctrl 로 떨어진 행·새 행 + 기존 행 섞은 선택이 한 번에 삭제 표시되고 미리보기에 DELETE n개가 나온다 / 「행 되돌리기」 가 고른 모든 행에 적용된다 / 「행 복사」 가 고른 행을 화면 순서(정렬·거르기 반영)로 복사하고 머리글 포함 짝은 첫 줄이 열 이름이다 / 「행 복제」 가 고른 행 수만큼 복제한다 / 오른쪽 클릭 메뉴에 「행 3개 삭제」 처럼 개수가 보인다(라이트·다크 PNG) / 편집 모드가 꺼진 편집 가능한 표면에서 행 삭제를 누르면 편집 모드가 켜진다 / R6·`readOnlySession`·편집 불가 결과는 막힘 + 이유가 지금과 같다 / 1만 행 삭제 시간 측정값이 결과에 있다 / Oracle 통합(가능하면): 여러 행 삭제 반영 후 행 수 확인, 안 되면 이유 보고 / 단일 행 동작 회귀 없음 / `dotnet build Oranda.sln -warnaserror`·전체 시험 통과
+  - note: 담당 PC: win144(Windows 개발 PC) — 맥북 세션은 이 Task 를 하지 않는다. 크기 M. 레인 sc-rows. 2026-10-26 사용자 요청 「조회 결과에서 여러줄 삭제/행 복사」
+
+## WP-12: 결함 수정
+<!-- 담당 PC: win144(Windows 개발 PC) — 맥북 세션은 이 WP 의 Task 를 하지 않는다. 2026-10-26 사용자 결함 보고. PRD·TRD·decisions 는 결함에 대해 쓰지 않는다(원인·수정은 레인 결과에 적는다). 레인 sc-invalid·sc-plsqlrun. 통합 확인은 TSK-10-03 이 맡는다 -->
+
+- [ ] TSK-12-01: INVALID 객체 검색 결함 — 「Invalid 객체 검색 안됨」 [win144] w:2 2026-10-27~2026-10-28
+  - category: defect
+  - domain: fullstack
+  - model: opus
+  - priority: high
+  - tags: invalid, object-search, schema-browser, metadata, win144
+  - prd-ref: 결함 보고 2026-10-26
+  - requirements: 사용자 보고 「Invalid 객체 검색 안됨」(어느 화면인지 말하지 않음). INVALID 로 거르는 곳을 모두 확인한다: 스키마 브라우저 툴바 INVALID 토글(`SchemaBrowserView.axaml`·`SchemaBrowserViewModel.Tree.cs`), 객체 검색 창 「INVALID 만」(`ObjectSearchView.axaml`·`ObjectSearchViewModel.cs`·`Catalog/dbinfo/object_search.sql`·`object_search.11.sql`), DB 도구 「INVALID 컴파일」(`oranda.schema.compileInvalid`) 대상 찾기, DDL 추출 「INVALID 객체만」, 메타 경로(`OracleMetadataProvider.FetchObjectsAsync` 와 캐시 경로 `FilterCached`). 먼저 어느 화면이 왜 안 되는지 재서 적는다(의심: 캐시된 `Status` 가 비었거나 오래됨, 바인드 반복·11g 변형 SQL 차이, 이름·유형 거르기와의 조합·소유자 범위·결과 0 일 때 문구). podman Oracle 컨테이너가 있으면 표 + 그 표를 쓰는 뷰·프로시저를 만들고 표를 DROP(또는 열 변경)해 INVALID 를 만든 뒤 각 화면 경로가 그 객체를 찾는지(캐시 있음·없음 모두) 통합 시험으로 잰다. 두 번째 보고(2026-10-26) = 느린 컴퓨터에서 INVALID 검색이 엄청 느리고 UI 가 이리저리 흔들린다: 질의 시간(실행 계획·불필요한 전체 훑기·딕셔너리 뷰 선택, 11g 변형 포함)과 UI 스레드 점유·결과를 한꺼번에 바꾸는 갱신·거르기 지연(ScheduleFilter)·연속 검색 취소를 재서 고친다(느린 DB·느린 PC 를 가짜 공급자의 지연으로 흉내내고 UI 스레드 막힘 시간·목록 갱신 횟수를 단정). 원인을 고치고 같은 결함이 다시 생기지 않게 단위 + 통합 시험을 남긴다. 컨테이너가 없으면 단위·가짜 공급자 시험으로 좁히고 「통합 미확인」 을 보고한다; 제약: 제품 조회 경로에 쓰기 SQL 을 넣지 않는다(시험 준비용 DDL 은 통합 시험 안에서만); 비고: 담당 PC: win144(Windows 개발 PC) — 맥북 세션은 이 Task 를 하지 않는다
+  - acceptance: 어느 화면이 왜 안 됐는지와 원인이 결과에 적혀 있다 / 느린 공급자(지연 주입)에서도 UI 스레드가 막히지 않고 목록이 흔들리지 않는다(갱신 횟수·막힘 시간 측정값이 결과에 있다) / INVALID 객체를 만든 뒤 스키마 브라우저 필터·객체 검색·INVALID 컴파일 대상·DDL 추출이 그 객체를 찾는다(캐시 있음·없음) / 재발 방지 단위 시험 + Oracle 통합 시험(가능하면 26ai·11.2 둘 다, 안 되면 이유) / 정상(VALID) 객체는 INVALID 거르기에 섞이지 않는다 / `dotnet build Oranda.sln -warnaserror`·전체 시험 통과
+  - note: 담당 PC: win144(Windows 개발 PC) — 맥북 세션은 이 Task 를 하지 않는다. 사용자 원문(2026-10-26): 「Invalid 객체 검색 안됨」 / 「Invalid 객체 검색 하는 것이 느린 컴퓨터에서는 엄청 느리고 UI를 막 이리저리 왔다갔다 하게 만들어」. 범위 = 결과 정확성 + 속도 + UI 흔들림. 크기 M. 레인 sc-invalid
+
+- [ ] TSK-12-02: Windows 에서 프로시저·함수 실행 창이 빈 화면 [win144] w:2 2026-10-27~2026-10-28
+  - category: defect
+  - domain: frontend
+  - model: opus
+  - priority: high
+  - tags: plsql-run, window, windows, win144
+  - prd-ref: 결함 보고 2026-10-26
+  - requirements: 사용자 보고 「윈도우에서 프로시저/함수 실행 메뉴 실행 시 처리가 안됨」 → 「화면 자체가 빈화면으로 되어 잇음」(v0.1.0 설치본, Release·self-contained·ReadyToRun 게시본). 명령 `oranda.plsql.runFromBrowser`(스키마 우클릭)·`oranda.plsql.run`(PL/SQL 편집기, `PlsqlRunCommands.cs`)이 창을 먼저 띄우고(`PlsqlRunWindow.ShowFor`) 그 뒤 `PlsqlRunViewModel.OpenAsync` 를 부른다. 창은 XAML 없이 코드로 만든다(Binding 문자열 경로·`FuncDataTemplate`·`SqlCodeView`·`ResultTabsView`·`GetResourceObservable`). 앱 로그(%APPDATA%\Oranda\logs)에는 이 창 예외 줄이 없다고 조정자가 확인했으니 로그를 직접 다시 읽는다(비밀번호 줄은 옮기지 않는다). 가설을 재서 정한다: (a) `OpenAsync` 가 예외를 삼키거나 끝나지 않아 인자 행·미리보기가 빈다(세션 경로, 11g 변형 메타 조회), (b) 창 자체가 그려지지 않는다(테마·배경, Show(owner) 순서, Release 게시본에서만 다른 점 — ReadyToRun·빠진 리소스·TSK-08-07 에서 뺀 파일), (c) 대상 해석 실패. Headless 로 실제 의존(가짜 아님) + podman Oracle(26ai·11.2)에 프로시저·함수·패키지를 만들고 스키마 브라우저 경로와 편집기 경로로 창을 열어 라이트·다크 PNG 를 `~/.coord/scripts-find/shots/sc-plsqlrun/` 에 떠서 직접 본다. Release 게시본 차이가 의심되면 `dotnet publish -c Release -r win-x64 --self-contained` 결과로 같은 Headless 시험을 돌릴 수 있는지 본다. 원인을 고치고 다시 생기지 않게 시험을 남긴다. 창이 열린 뒤 `OpenAsync` 오류는 창 안 상태 줄에 보이고 로그에 남게 한다; 제약: 실앱 실행·SendKeys 금지, 제품 조회 경로에 쓰기 SQL 을 넣지 않는다(시험 준비용 DDL 은 통합 시험 안에서만). Headless 에서 재현이 안 되면 그 사실과 남은 가설, 사람이 실앱에서 확인할 순서(로그 위치 포함)를 결과에 적는다; 비고: 담당 PC: win144(Windows 개발 PC) — 맥북 세션은 이 Task 를 하지 않는다
+  - acceptance: 원인(또는 재현 안 됨 + 남은 가설 + 사람 확인 순서)이 결과에 적혀 있다 / 스키마 브라우저 경로와 편집기 경로에서 창이 인자 행·미리보기와 함께 그려진다(프로시저·함수·패키지, 26ai·11.2, 라이트·다크 PNG) / 창이 열린 뒤 `OpenAsync` 오류가 창 안 상태 줄과 로그에 남는다 / 재발 방지 시험 / `dotnet build Oranda.sln -warnaserror`·전체 시험 통과
+  - note: 담당 PC: win144(Windows 개발 PC) — 맥북 세션은 이 Task 를 하지 않는다. 사용자 원문(2026-10-26): 「윈도우에서 프로시저/함수 실행 메뉴 실행 시 처리가 안됨 / 화면 자체가 빈화면으로 되어 잇음」. 크기 M. 레인 sc-plsqlrun
+
 ## 의존 그래프
 
 ### 그래프 (Mermaid)
@@ -846,6 +922,11 @@ graph LR
   TSK-09-09 --> TSK-09-10
   TSK-09-10 --> TSK-09-11
   TSK-09-10 --> TSK-09-12
+  TSK-10-01 --> TSK-10-03
+  TSK-10-02 --> TSK-10-03
+  TSK-11-01 --> TSK-10-03
+  TSK-12-01 --> TSK-10-03
+  TSK-12-02 --> TSK-10-03
   style TSK-01-02 fill:#e8f5e9,stroke:#2e7d32
   style TSK-03-01 stroke:#c62828,stroke-width:2px
   style TSK-02-02 stroke:#c62828,stroke-width:2px
@@ -866,6 +947,7 @@ graph LR
 - WP-08(2026-10-25 추가, Task 6개 이상): 서로 depends 가 없다(라이선스·노출 점검·CI·설치 안내·정리가 각자 다른 파일). 그래프에 넣지 않는다.
 - WP-07(2026-10-25 추가, Task 8개): 최장 경로 TSK-07-01 → TSK-07-02 → TSK-07-07 → TSK-07-08(깊이 4 = 계약 1 + 기능 1 + 측정 1 + 통합테스트 1). Fan-in: TSK-07-01 이 5(계약 전용, 구조적 예외), TSK-07-08 이 depends 6(통합테스트, 구조적 예외). 계약 뒤 07-02~07-06 은 서로 depends 가 없고 소유 파일이 겹치지 않는다(TRD 10.9). TSK-07-08 이 발견한 결함 2건을 TSK-07-09·TSK-07-10(각각 TSK-07-08 에만 depends, 서로 독립)으로 더했다(WP-07 Task 10개, 최장 경로는 깊이 5). 사용자 결정 D-013(기본 Role = SQL 개발자)을 TSK-07-11(TSK-07-08 에만 depends)로 더했다(WP-07 Task 11개).
 - WP-09(2026-10-25 추가, Task 10개): 최장 경로 TSK-09-01 → TSK-09-02 → TSK-09-04 → TSK-09-10(깊이 4 = 계약 1 + 기능 2 + 통합테스트 1). TSK-09-04 는 ExecutionCommands.cs 를 09-02 가 먼저 고치고 Shell/Menus 를 09-03 이 먼저 고쳐서 둘 다에 depends, Roles 시험 때문에 TSK-07-11 에도 depends. TSK-09-08·09-09 는 FeatureSettings*·StartPage.cs·FeatureTexts 를 고친 TSK-07-11(완료)에 depends. TSK-09-05·09-06(ux-layout)과 TSK-09-07(ux-export)은 depends 가 없다(09-06 은 같은 레인 차례만). Fan-in: TSK-09-10 이 depends 8(통합테스트, 구조적 예외), TSK-09-04 가 3. 머지 순서: 09-01 → 09-02 → 09-03 (→ 09-04), 09-05 → 09-06, 09-07 은 아무 때나, TSK-07-11 → 09-08 → 09-09, 마지막 09-10. 파일 소유 = TRD 11.10. TSK-09-10 이 발견한 결함 2건을 TSK-09-11·TSK-09-12(각각 TSK-09-10 에만 depends, 서로 독립)로 더했다(WP-09 Task 12개, 최장 경로 깊이 5).
+- WP-10·WP-11·WP-12(2026-10-26 추가, Task 6개): 최장 경로 TSK-10-01(또는 10-02, 11-01, 12-01, 12-02) → TSK-10-03(깊이 2 = 기능 1 + 통합확인 1). 다섯 기능·결함 Task 는 서로 depends 가 없는 병렬 레인(sc-search·sc-add·sc-rows·sc-invalid·sc-plsqlrun)이다. TSK-10-01·TSK-10-02 는 ScriptsView.axaml·ScriptsView.axaml.cs·ScriptsViewModel.cs·literals-en.json 을 함께 만지므로 자기 몫만 바꾸고 나중에 머지하는 쪽이 rebase 충돌을 푼다(TRD 12.1). Fan-in: TSK-10-03 이 depends 5(통합확인, 구조적 예외). 파일 소유 = TRD 12.1·13.1, WP-12 는 결함이라 PRD·TRD 에 쓰지 않는다.
 
 **Fan-in Top 5**
 
