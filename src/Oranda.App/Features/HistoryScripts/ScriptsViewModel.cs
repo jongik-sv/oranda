@@ -174,6 +174,7 @@ public sealed partial class ScriptsViewModel : ToolPanelViewModelBase
         }
 
         StatusMessage = Roots.Count == 0 ? "폴더를 연결하세요" : $"폴더 {Roots.Count}개 연결됨";
+        RefreshSearch(); // 검색 중이면 새 폴더 목록으로 다시 찾는다
     }
 
     /// <summary>폴더를 연결한다. 없는 폴더면 false.</summary>

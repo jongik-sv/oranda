@@ -769,7 +769,7 @@ levels:
 ## WP-10: 스크립트 창 검색·스크립트 추가
 <!-- 담당 PC: win144(Windows 개발 PC) — 맥북 세션은 이 WP 의 Task 를 하지 않는다. 2026-10-26 사용자 요청 「스크립트 창에서 검색하고 스크립트를 추가」, 조정자 기본안(사용자 「묻지 말고 진행」). 설계 = PRD 14, TRD 12, decisions D-024~D-028. 레인: sc-search(10-01)·sc-add(10-02)는 서로 depends 없이 병렬(둘 다 ScriptsView.axaml·.axaml.cs·ScriptsViewModel.cs·literals-en.json 을 만지므로 자기 몫만 바꾸고 나중에 머지하는 쪽이 rebase 충돌을 푼다, TRD 12.1), 통합 확인 10-03(WP-11·WP-12 범위 포함)이 마지막. 문구 키 접두: Scripts.search.*·Scripts.new.* -->
 
-- [ ] TSK-10-01: 스크립트 창 이름·내용 검색 (거르기 줄·결과 목록) [win144] w:2 2026-10-27~2026-10-28
+- [x] TSK-10-01: 스크립트 창 이름·내용 검색 (거르기 줄·결과 목록) [win144] w:2 2026-10-27~2026-10-28
   - category: dev
   - domain: frontend
   - model: opus
@@ -778,7 +778,7 @@ levels:
   - prd-ref: PRD 14 SC-01~SC-08, SC-14, TRD 12.2, D-024, D-025
   - requirements: 스크립트 창 툴바 아래에 기존 거르기 줄 모양의 거르기 줄 하나(칸 + 오른쪽 「내용」 토글)를 더한다. 입력이 비면 지금 트리 그대로, 입력하면 트리 대신 결과 목록(연결한 모든 폴더 하위, 숨김 폴더 제외, 트리와 같은 스크립트 파일 판정). 이름 검색 = 대소문자 무시 부분 일치(공백으로 나눈 낱말 모두 포함), 내용 검색 = 대소문자 무시 일반 글자(정규식 아님), 결과 = 파일별 묶음 + 줄 번호 + 그 줄 미리보기(일치 부분 강조), 내용을 켜면 이름 일치 파일도 함께. Enter·두 번 누름 = 파일 열기(내용 결과는 그 줄로 이동), Esc = 검색 지우고 트리로, 창 안 Ctrl+F = 거르기 칸으로. 입력 멈춘 뒤 250 ms 에 `Task.Run` 으로 검색, 새 입력이 오면 앞 검색 취소, 한도 일치 1,000곳·2 MB 넘는 파일은 내용 검색에서 건너뜀, 상태 줄 「n개 파일에서 m곳 (한도 도달)」. 순수 클래스 `ScriptSearch`(검색기)·`ScriptSearchModels`(결과 모델)를 `Features/HistoryScripts/` 에 새로 만든다. 파일 읽기는 `FileEncoding.Decode`(편집기와 같은 방법). 상태 화면(처음·검색 중·결과 없음·오류·한도)을 만든다; 제약: 새 스크립트 부분·주 메뉴·키맵·`CommandTitles*.json` 을 고치지 않는다. 한글 리터럴은 XAML → literals-en.json(자기 화면 기존 문구 바로 뒤), 패널 문구 → strings-ko/en `Scripts.search.*`. 색·여백·글꼴을 새로 박지 않는다(기존 브러시·`panel-status`); 기술: TRD 12.2; 화면: 거르기 줄 + 트리/결과 목록 + 상태 줄; 비고: 담당 PC: win144(Windows 개발 PC) — 맥북 세션은 이 Task 를 하지 않는다
   - acceptance: 낱말 둘이 든 이름만 나오고 대소문자를 가리지 않는다 / 「내용」 을 켜면 일치 줄이 파일별로 묶여 줄 번호·미리보기·강조와 함께 나오고 정규식 문자(`.*`, `[`)는 글자로 찾는다 / 칸을 지우거나 Esc 면 트리로 돌아가고 펼침·선택이 보존된다 / 연속 입력에서 앞 검색이 취소되고 마지막 결과만 남는다 / 1,000곳·2 MB 한도와 상태 줄 문구 / UTF-8(BOM 유무)·UTF-16·CP949 한글이 찾아진다 / 두 번 누름·Enter 로 열리고 내용 결과는 그 줄로 이동 / 숨김 폴더·스크립트 확장자 아닌 파일은 결과에 없다 / 라이트·다크 PNG 로 상태 화면 확인 / 명령 id·키맵 불변 / `dotnet build Oranda.sln -warnaserror`·전체 시험 통과
-  - note: 담당 PC: win144(Windows 개발 PC) — 맥북 세션은 이 Task 를 하지 않는다. 크기 M. 레인 sc-search. TSK-10-02 와 같은 파일을 만지므로 고친 범위를 결과에 적는다
+  - note: 담당 PC: win144(Windows 개발 PC) — 맥북 세션은 이 Task 를 하지 않는다. 크기 M. 레인 sc-search. TSK-10-02 와 같은 파일을 만지므로 고친 범위를 결과에 적는다. 결과: ScriptSearch 검색기·ScriptsViewModel.Search·거르기 줄과 결과 목록(250ms·취소·1,000곳·2 MB) 구현, 시험 ScriptSearchTests·ScriptsSearchViewTests (win144)
 
 - [ ] TSK-10-02: 스크립트 창 새 스크립트 추가 (툴바 단추·우클릭·이름 입력 창) [win144] w:2 2026-10-27~2026-10-28
   - category: dev

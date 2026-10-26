@@ -16,6 +16,7 @@ public partial class ScriptsView : UserControl
         RemoveButton.Content = ShellIcons.Create("folderRemove");
         RefreshButton.Content = ShellIcons.Create("refresh");
         RunButton.Content = ShellIcons.Create("run");
+        WireSearch();
         AddButton.Click += async (_, _) => await AddFolderAsync();
         RemoveButton.Click += (_, _) =>
         {
@@ -29,6 +30,7 @@ public partial class ScriptsView : UserControl
             if (DataContext is ScriptsViewModel vm)
             {
                 vm.Refresh(vm.SelectedNode);
+                vm.RefreshSearch();
             }
         };
         RunButton.Click += async (_, _) =>

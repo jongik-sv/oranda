@@ -4,6 +4,15 @@
              xmlns:icons="using:Oranda.App.Shell.Icons"
              x:Class="Oranda.App.Features.HistoryScripts.ScriptsView"
              x:DataType="vm:ScriptsViewModel">
+  <UserControl.Styles>
+    <!-- 「내용」 토글: 켜면 툴바 토글(ToggleButton.toolbar:checked)과 같은 눌린 배경·파란 테두리. 글자는 Fluent 의 흰 글자 대신 보통 글자색(라이트에서 묻히지 않게). -->
+    <Style Selector="ToggleButton.content-toggle:checked /template/ ContentPresenter#PART_ContentPresenter">
+      <Setter Property="Background" Value="{DynamicResource OrandaToolbarPressedBrush}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource OrandaIconBlueBrush}" />
+      <Setter Property="BorderThickness" Value="1" />
+      <Setter Property="Foreground" Value="{DynamicResource TextControlForeground}" />
+    </Style>
+  </UserControl.Styles>
   <DockPanel>
     <!-- 패널 툴바: 폴더 연결 · 연결 끊기 · 새로 고침 | 실행(@파일). 이름은 툴팁으로 보인다. -->
     <Border DockPanel.Dock="Top" Classes="panel-toolbar">
@@ -15,10 +24,52 @@
         <Button x:Name="RunButton" Classes="toolbar" ToolTip.Tip="선택한 파일 실행 (@파일)" AutomationProperties.Name="실행(@)" />
       </StackPanel>
     </Border>
+    <!-- 거르기 줄: 이름(또는 「내용」을 켜면 파일 안의 글)으로 찾는다. 입력하면 트리 대신 결과 목록, Esc 로 지우면 트리로 돌아간다. -->
+    <Panel DockPanel.Dock="Top" Margin="4,4,4,0">
+      <DockPanel Margin="0,0,0,3">
+        <ToggleButton x:Name="ContentToggle" DockPanel.Dock="Right" Classes="tool content-toggle" Margin="4,0,0,0" Content="내용"
+                      IsChecked="{Binding SearchContent, Mode=TwoWay}"
+                      ToolTip.Tip="켜면 파일 이름뿐 아니라 파일 안의 글도 찾는다 (대소문자 무시, 정규식 아님)" AutomationProperties.Name="내용까지 검색" />
+        <TextBox x:Name="SearchBox" Classes="compact search" PlaceholderText="이름 또는 내용 검색 (Ctrl+F)"
+                 Text="{Binding SearchText, Mode=TwoWay}" AutomationProperties.Name="스크립트 검색" />
+      </DockPanel>
+      <ProgressBar x:Name="SearchBar" IsIndeterminate="True" IsVisible="{Binding IsSearchRunning}" Height="2" MinHeight="2"
+                   VerticalAlignment="Bottom" AutomationProperties.Name="스크립트를 찾는 중" />
+    </Panel>
     <Border DockPanel.Dock="Bottom" Classes="panel-status">
       <TextBlock Text="{Binding StatusMessage}" TextTrimming="CharacterEllipsis" />
     </Border>
-    <TreeView x:Name="Tree" Classes="compact" ItemsSource="{Binding Roots}" SelectedItem="{Binding SelectedNode, Mode=TwoWay}">
+    <Panel>
+    <!-- 검색 결과: 파일 줄(이름 + 흐린 폴더) 아래에 내용 줄(줄 번호 + 미리보기). Enter·두 번 누름 = 열기. -->
+    <ListBox x:Name="ResultList" Classes="table scripts-result" IsVisible="{Binding IsSearchActive}" ItemsSource="{Binding Results}"
+             SelectedItem="{Binding SelectedResult, Mode=TwoWay}" ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+             AutomationProperties.Name="검색 결과">
+      <ListBox.Styles>
+        <Style Selector="ListBox.scripts-result ListBoxItem:nth-child(2n)">
+          <Setter Property="Background" Value="Transparent" />
+        </Style>
+      </ListBox.Styles>
+      <ListBox.DataTemplates>
+        <DataTemplate DataType="vm:ScriptSearchFileRow" x:DataType="vm:ScriptSearchFileRow">
+          <Grid ColumnDefinitions="Auto,Auto,*,Auto" Margin="6,0" ToolTip.Tip="{Binding FullPath}">
+            <ContentControl Content="{Binding Source='fileSql', Converter={x:Static icons:IconKeyConverter.Instance}}" VerticalAlignment="Center" />
+            <TextBlock Grid.Column="1" Text="{Binding Name}" FontWeight="SemiBold" Margin="5,0,0,0" VerticalAlignment="Center" />
+            <TextBlock Grid.Column="2" Classes="dim" Text="{Binding Folder}" TextTrimming="CharacterEllipsis" Margin="10,0,6,0" VerticalAlignment="Center" />
+            <TextBlock Grid.Column="3" Classes="num dim" Text="{Binding MatchCount}" IsVisible="{Binding HasCount}" MinWidth="28" VerticalAlignment="Center" />
+          </Grid>
+        </DataTemplate>
+        <DataTemplate DataType="vm:ScriptSearchLineRow" x:DataType="vm:ScriptSearchLineRow">
+          <Grid ColumnDefinitions="Auto,*" Margin="22,0,6,0" ToolTip.Tip="{Binding Preview}">
+            <TextBlock Classes="num dim" Text="{Binding Line}" Width="40" Margin="0,0,10,0" VerticalAlignment="Center" />
+            <vm:ScriptHitText Grid.Column="1" Classes="mono" Source="{Binding Preview}" Ranges="{Binding Ranges}"
+                              TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
+          </Grid>
+        </DataTemplate>
+      </ListBox.DataTemplates>
+    </ListBox>
+    <TextBlock x:Name="EmptyHintText" Text="{Binding EmptyHint}" IsVisible="{Binding HasEmptyHint}" TextWrapping="Wrap" TextAlignment="Center"
+               Opacity="0.6" HorizontalAlignment="Center" VerticalAlignment="Top" Margin="16,24,16,0" />
+    <TreeView x:Name="Tree" Classes="compact" IsVisible="{Binding !IsSearchActive}" ItemsSource="{Binding Roots}" SelectedItem="{Binding SelectedNode, Mode=TwoWay}">
       <TreeView.Styles>
         <Style Selector="TreeViewItem" x:DataType="vm:ScriptNode">
           <Setter Property="IsExpanded" Value="{Binding IsExpanded, Mode=TwoWay}" />
@@ -33,5 +84,6 @@
         </TreeDataTemplate>
       </TreeView.ItemTemplate>
     </TreeView>
+    </Panel>
   </DockPanel>
 </UserControl>
