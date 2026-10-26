@@ -1,0 +1,105 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<title>전체 화면 — 여러 세션</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+body{margin:0}
+a{color:#7FB0FF}a:hover{color:#A9CAFF}
+</style>
+</helmet>
+<div style="width: 1280px; height: 760px; box-sizing: border-box; display: flex; flex-direction: column; background: #1E1E1E; color: #E4E4E4; font-family: 'Segoe UI', 'Malgun Gothic', system-ui, sans-serif; font-size: 13px">
+  <div style="height: 30px; display: flex; align-items: center; gap: 18px; padding: 0 12px; background: #252526; color: #CFCFCF; font-size: 12px">
+    <span style="font-weight: 600; color: #F2A65A">Oranda</span>
+    <span>파일</span><span>편집</span><span>SQL</span><span>데이터베이스</span><span>도구</span><span>창</span><span>도움말</span>
+  </div>
+  <div style="height: 40px; display: flex; align-items: center; gap: 8px; padding: 0 10px; background: #2B2B2B; border-bottom: 1px solid #3A3A3A">
+    <div style="display: flex; align-items: center; gap: 8px; height: 28px; padding: 0 10px; border: 1px solid #4C8DF6; border-radius: 4px; background: #1F2733; min-width: 330px">
+      <span style="padding: 1px 6px; border-radius: 3px; background: #6CCB5F; color: #0B1A0B; font-size: 11px; font-weight: 600">개발</span>
+      <span>1 - APP_USER@TESTDB</span>
+      <span style="color: #9FB7D9">(2)</span>
+      <span style="margin-left: auto; color: #9A9A9A; font-size: 11px">전용</span>
+      <svg width="10" height="10" viewBox="0 0 10 10" aria-hidden="true"><path d="M1 3l4 4 4-4" stroke="#BBBBBB" fill="none" stroke-width="1.4"></path></svg>
+    </div>
+    <div style="width: 1px; height: 22px; background: #444"></div>
+    <button type="button" style="height: 28px; padding: 0 10px; border: 0; border-radius: 4px; background: transparent; color: #E4E4E4; font: inherit">▶ 실행</button>
+    <button type="button" style="height: 28px; padding: 0 10px; border: 0; border-radius: 4px; background: transparent; color: #8A8A8A; font: inherit">커밋</button>
+    <button type="button" style="height: 28px; padding: 0 10px; border: 0; border-radius: 4px; background: transparent; color: #8A8A8A; font: inherit">롤백</button>
+    <span style="margin-left: auto; height: 26px; display: flex; align-items: center; padding: 0 10px; border: 1px solid #3F3F3F; border-radius: 4px; color: #8C8C8C; width: 220px">명령 검색…</span>
+  </div>
+  <div style="flex: 1; display: flex; min-height: 0">
+    <div style="width: 230px; background: #252526; border-right: 1px solid #3A3A3A; box-sizing: border-box; display: flex; flex-direction: column">
+      <div style="height: 30px; display: flex; align-items: flex-end; gap: 2px; padding: 0 4px; background: #2B2B2B; font-size: 12px">
+        <span style="height: 26px; display: flex; align-items: center; padding: 0 10px; color: #A8A8A8">스키마 브라우저</span>
+        <span style="height: 26px; display: flex; align-items: center; padding: 0 10px; color: #A8A8A8">스크립트</span>
+        <span style="height: 26px; display: flex; align-items: center; padding: 0 10px; color: #FFFFFF; background: #252526; border-top: 2px solid #4C8DF6">세션</span>
+      </div>
+      <div style="padding: 10px; display: flex; flex-direction: column; gap: 6px">
+      <div style="font-size: 11px; color: #9A9A9A; letter-spacing: .5px">열린 세션 3</div>
+      <div style="display: flex; flex-direction: column; gap: 2px; padding: 8px; border-radius: 4px; background: #2D2D30">
+        <div style="display: flex; gap: 6px; align-items: center"><span style="width: 8px; height: 8px; border-radius: 4px; background: #F0A04B"></span><span>1 - APP_USER@TESTDB</span></div>
+        <div style="color: #9A9A9A; font-size: 11px; padding-left: 14px">공유 · 월말 정산, 조회 탭 2 · <span style="color: #F0A04B">실행 중 0:42</span></div>
+      </div>
+      <div style="display: flex; flex-direction: column; gap: 2px; padding: 8px; border-radius: 4px; background: #253045; outline: 1px solid #4C8DF6">
+        <div style="display: flex; gap: 6px; align-items: center"><span style="width: 8px; height: 8px; border-radius: 4px; background: #6CCB5F"></span><span>1 - APP_USER@TESTDB <span style="color: #9FB7D9">(2)</span></span></div>
+        <div style="color: #9A9A9A; font-size: 11px; padding-left: 14px">전용 · 재고 점검 · 대기</div>
+      </div>
+      <div style="display: flex; flex-direction: column; gap: 2px; padding: 8px; border-radius: 4px; background: #2D2D30">
+        <div style="display: flex; gap: 6px; align-items: center"><span style="width: 8px; height: 8px; border-radius: 4px; background: #6CCB5F"></span><span>2 - SCOTT@ORA11G</span></div>
+        <div style="color: #9A9A9A; font-size: 11px; padding-left: 14px">공유 · PL/SQL 패키지 · 대기</div>
+      </div>
+      <div style="margin-top: 6px; font-size: 11px; color: #8C8C8C; line-height: 1.5">점 색: 주황 = 실행 중, 초록 = 대기. 세션 모니터와 같은 SID 를 툴팁에 보인다. 우클릭: 이 세션 쓰기 · 커밋 · 롤백 · 세션 닫기.</div>
+      </div>
+    </div>
+    <div style="flex: 1; display: flex; flex-direction: column; min-width: 0">
+      <div style="height: 32px; display: flex; align-items: flex-end; gap: 2px; padding: 0 6px; background: #2B2B2B">
+        <div style="height: 28px; display: flex; align-items: center; gap: 8px; padding: 0 12px; background: #2D2D30; color: #BDBDBD; border-radius: 4px 4px 0 0">
+          <span style="width: 7px; height: 7px; border-radius: 4px; background: #F0A04B"></span>월말 정산.workspace
+        </div>
+        <div style="height: 28px; display: flex; align-items: center; gap: 8px; padding: 0 12px; background: #1E1E1E; color: #FFFFFF; border-radius: 4px 4px 0 0; border-top: 2px solid #4C8DF6">
+          <span style="width: 7px; height: 7px; border-radius: 4px; background: #6CCB5F"></span>재고 점검.workspace
+        </div>
+        <div style="height: 28px; display: flex; align-items: center; gap: 8px; padding: 0 12px; background: #2D2D30; color: #BDBDBD; border-radius: 4px 4px 0 0">PL/SQL 패키지</div>
+      </div>
+      <div style="flex: 1; padding: 14px 18px; font-family: 'Cascadia Mono', Consolas, monospace; font-size: 13px; line-height: 1.7; color: #D4D4D4; background: #1E1E1E">
+        <div><span style="color: #569CD6">select</span> item_cd, wh_cd, <span style="color: #DCDCAA">sum</span>(qty) qty</div>
+        <div>&#160;&#160;<span style="color: #569CD6">from</span> stock_ledger</div>
+        <div>&#160;<span style="color: #569CD6">where</span> close_ym = :ym</div>
+        <div>&#160;<span style="color: #569CD6">group by</span> item_cd, wh_cd;</div>
+      </div>
+      <div style="height: 210px; border-top: 1px solid #3A3A3A; display: flex; flex-direction: column; background: #1E1E1E">
+        <div style="height: 28px; display: flex; align-items: center; gap: 16px; padding: 0 12px; background: #252526; font-size: 12px; color: #BDBDBD">
+          <span style="color: #FFFFFF; border-bottom: 2px solid #4C8DF6; padding-bottom: 4px">결과 1</span><span>메시지</span><span>DBMS 출력</span>
+          <span style="margin-left: auto; color: #8C8C8C">0.8초 · 128행</span>
+        </div>
+        <div style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); font-size: 12px">
+          <div style="padding: 4px 10px; background: #2A2D33; color: #BBBBBB">ITEM_CD</div><div style="padding: 4px 10px; background: #2A2D33; color: #BBBBBB">WH_CD</div><div style="padding: 4px 10px; background: #2A2D33; color: #BBBBBB; text-align: right">QTY</div>
+          <div style="padding: 4px 10px">A-1001</div><div style="padding: 4px 10px">W01</div><div style="padding: 4px 10px; text-align: right">1,240</div>
+          <div style="padding: 4px 10px; background: #232323">A-1002</div><div style="padding: 4px 10px; background: #232323">W01</div><div style="padding: 4px 10px; background: #232323; text-align: right">380</div>
+          <div style="padding: 4px 10px">B-2001</div><div style="padding: 4px 10px">W02</div><div style="padding: 4px 10px; text-align: right">75</div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div style="height: 24px; display: flex; align-items: center; gap: 0; background: #2B2B2B; border-top: 1px solid #3A3A3A; font-size: 12px; color: #CFCFCF">
+    <span style="padding: 0 10px; display: flex; gap: 6px; align-items: center"><span style="padding: 0 5px; border-radius: 3px; background: #6CCB5F; color: #0B1A0B; font-size: 11px; font-weight: 600">개발</span>APP_USER@TESTDB (2)</span>
+    <span style="padding: 0 10px; border-left: 1px solid #3F3F3F">전용 세션 · 연결됨 · SID 241</span>
+    <span style="padding: 0 10px; border-left: 1px solid #3F3F3F; color: #F0A04B">다른 세션 1개 실행 중 (월말 정산)</span>
+    <span style="padding: 0 10px; border-left: 1px solid #3F3F3F; margin-left: auto">트랜잭션 없음</span>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1280,"height":760}}'>
+class Component extends DCLogic {
+renderVals() {
+return {};
+}
+}
+</script>
+</body>
+</html>

@@ -513,3 +513,60 @@ TSK-10-01 과 TSK-10-02 는 같은 파일(`ScriptsView.axaml`·`ScriptsView.axam
 - 단일 행 삭제·되돌리기·복제·복사의 결과(미리보기 DML·클립보드 글)가 이 Task 전과 같다(회귀 시험).
 - 명령 id 집합이 같다(새 id 없음). 키맵은 위 단축키 둘만 늘어난다.
 - `dotnet build Oranda.sln -warnaserror` 와 `dotnet test`(Integration·Perf 제외)가 통과한다.
+
+## 14. 같은 DB 여러 세션·워크스페이스별 세션 (2026-10-26 추가, PRD 16, WP-14)
+
+설계 근거 = PRD 16, 결정 D-034~D-038. 경로의 `Features/` 는 `src/Oranda.App/Features/` 아래다. 구현 = 맥북 세션(WP-14). win144 레인 sc-multisess 가 세션 계층 초안을 원격 브랜치 `wip-multisess` 에 남겼다(14.3).
+
+### 14.1 설계 (sc-multisess 초안 1~10, 사용자 승인 「권장안대로」)
+
+1. **ConnectionService**: 「접속」(콤보 번호 1,2…) = 프로필의 기본 작업 세션(`Sessions`, 지금 그대로). 같은 프로필에 「추가 세션」 을 더 열 수 있다(`OpenSessionAsync(profileId)`). 이미 연 접속의 자격 증명(메모리에만, 프로필의 세션이 모두 닫히면 지움)으로 열어 비밀번호를 다시 묻지 않는다. 추가 세션도 `SessionPurpose.Work` 라 실행 상태(`ExecutionState` 의 세션별 상태)·앱 종료 미커밋 확인을 그대로 탄다. 프로필당 8개(기본 + 추가 7) 상한, 넘으면 안내. `SessionsOf(profileId)` = 순서 목록(첫째가 기본). 접속(기본 세션)을 끊었는데 추가 세션이 남아 있으면 처음 연 추가 세션이 같은 자리(콤보 번호)의 접속이 된다(세션은 하나씩 닫는다).
+2. **워크스페이스 → 세션**: `SessionRouter` 안에 (워크스페이스, 프로필) → 세션 연결표. 같은 워크스페이스의 탭은 같은 세션. 여러 워크스페이스가 같은 세션에 연결될 수 있다(다 대 일, 트랜잭션도 공유).
+3. **모드 2가지만 파일에 기억**: 공유(`shared`, 접속의 기본 세션) / 자기 세션(`own`). 값이 없으면 설정 「워크스페이스마다 새 세션」(`WorkspaceSettings.SessionPerWorkspace`, 기본 켬)을 따른다. 세션 번호는 남기지 않는다.
+4. **자기 세션 모드의 첫 실행**: 기본 세션을 아직 아무 워크스페이스도 쓰지 않으면 그것을 차지하고(워크스페이스 하나만 쓰는 사람은 지금과 똑같이 DB 세션 1개, 스키마 브라우저 등 도구 창과 트랜잭션도 지금처럼 같음), 다른 워크스페이스가 쓰고 있으면 추가 세션을 연다. 복원·탭 전환 때는 열지 않는다(첫 실행 때만). 아직 세션이 없는 자기 세션 워크스페이스는 상태가 「첫 실행 때 새 세션」(`ExecutionState.FocusPending`)이라 남의 실행 때문에 `sessionBusy` 로 막히지 않는다. 그동안 읽기용 기능(완성·계획 등)은 접속의 세션을 쓴다.
+5. **콤보**(SQL·MyBatis 워크스페이스가 활성일 때): 프로필의 세션들 「1 - user@db」·「1 - user@db (2)」… + 「새 세션」. 기존 세션을 고르면 공유 모드로 그 세션에 연결, 「새 세션」 은 즉시 열어 자기 세션 연결. 바꿀 때 이전 세션 미커밋이면 TSK-12-04 확인 창을 그대로. PL/SQL 문서가 활성이면 지금처럼 접속(기본 세션)만 보인다.
+6. **세션이 닫히면**(끊김·접속 끊기) 그 세션을 쓰던 워크스페이스는 「접속 안 됨」 → 실행 때 기존 「다시 접속 / 지금 접속으로 / 취소」 창. 접속이 열려 있으면 「다시 접속」 은 새로 접속하지 않고 표시만 지우고 다음 실행이 세션을 다시 고른다(자기 세션이면 새로 연다). 그 프로필의 세션이 하나도 없으면 지금의 「접속 안 됨」 과 같다.
+7. **워크스페이스를 닫을 때**: 그 워크스페이스만 쓰던 추가 세션은 미커밋 확인(세션 단위 한 번, 기존 창 재사용) 뒤 닫는다. 실행 중이면 알리고 닫지 않는다. 기본 세션·다른 워크스페이스와 공유하는 세션은 닫지 않고 묻지도 않는다. 콤보로 다른 세션으로 옮겨 아무도 안 쓰게 된 추가 세션은 미커밋·실행이 없을 때 닫는다(그대로 두고 바꾼 트랜잭션이 있으면 남긴다).
+8. **공유 세션이 실행 중일 때 막힌 워크스페이스**: 실행을 누르면 안내 막대 「이 세션은 다른 워크스페이스에서 실행 중 — [새 세션에서 실행] [기다리기]」(D-036). 새 세션에서 실행 = 「새 세션」 과 같은 경로 후 그 실행을 다시 보낸다.
+9. **상태 줄**: 「워크스페이스 세션 · 연결됨」, 「공유 세션 · 다른 워크스페이스 1개와 함께 · 연결됨」, 「새 세션 · 첫 실행 때 연결」. 세션 모니터 구분용으로 콤보 툴팁·세션 도구 창에 SID.
+10. **PL/SQL 작업 공간**은 자동 자기 세션 대상에서 뺀다(탭마다 접속을 이미 고름, `IConnectionDocument`). MyBatis 작업 공간은 SQL 작업 공간과 같은 규칙(`SqlWorkspaceViewModel`). 조회 전용 Role·`readOnlySession`·ExecutionPolicy 는 세션 프로필 기준이라 세션마다 그대로 적용.
+
+### 14.2 바뀌는 곳
+
+| Task | 소유 파일 | 시험 |
+|---|---|---|
+| TSK-14-01 | `Features/ConnectionManager/ConnectionService.cs`(`IConnectionService` 기본 구현 멤버로 넓혀 시험 가짜 2개를 고치지 않는다) | `tests/Oranda.App.Tests/Features/ConnectionManager/WorkspaceSessionTests.cs` 앞부분 |
+| TSK-14-02 | `Features/ConnectionManager/SessionRouter.cs`·새 `SessionRouter.Workspaces.cs`, `Features/Execution/ExecutionState.cs`(`FocusPending`), `ExecutionController.cs`·`ExecutionController.Run.cs`(`PrepareSession`·`UseConnection` 의존), `ExecutionCommands.cs`(배선), `ConnectionManagerCommands.cs`(끊기 대상), `Features/SqlEditor/SqlWorkspaceViewModel.cs`·`SqlWorkspaceKind.cs`·`SqlEditorHost.Persistence.cs`, `src/Oranda.Core/Workspaces/Workspace.cs`(`Session`), `src/Oranda.Core/Settings/AppSettings.cs`(`SessionPerWorkspace`) | `WorkspaceSessionTests.cs` 뒷부분 |
+| TSK-14-03 | `Features/ConnectionManager/ConnectionCombo.cs`(항목 = 세션, 「새 세션」), `Features/Execution/ExecutionState.cs`·`ExecutionStatusItems.cs`(상태 줄 글), 안내 막대(결과 영역 또는 편집기 위, 기존 안내 막대 모양), 설정 창 「워크스페이스」 쪽 확인란, 문구 파일 | Headless 콤보·상태 줄·안내 막대·설정, 라이트·다크 PNG |
+| TSK-14-04 | 새 `Features/Sessions/`(도구 창 ViewModel·View·명령), 도킹 기본 배치(숨김) | Headless 도구 창·우클릭 명령 |
+| TSK-14-05 | (제품 코드 없음) | `tests/Oranda.App.Tests/Integration/WorkspaceSessionFlowTests.cs` + 결과서 |
+
+### 14.3 wip-multisess 초안 (win144 sc-multisess, 2026-10-26)
+
+들어 있는 것(빌드 `-warnaserror` 통과, 단위 16개·관련 클래스 143개·통합 2개(26ai·11.2) 통과):
+- `IConnectionService`: `SessionsOf(Guid)`, `AllSessions`, `IsOpen(ISession)`, `OpenSessionAsync(Guid, CancellationToken)`(인터페이스 기본 구현 = 하나뿐/실패). `ConnectionService.MaxSessionsPerProfile = 8`, `_extra` 목록, `_secrets`(프로필별 `SecureCredential`, 접속 성공 때 기억·마지막 세션 닫힐 때 지움), `Switch(extra)` = 그 접속으로, `Remove` 의 승격, 끊김·닫힘 이벤트가 추가 세션도 본다.
+- `SessionRouter`(partial): `SessionFor`(전용 → 연결표 → 접속), `MissingProfileOf`(닫힌 연결 = 접속 안 됨), `LabelOf`(「(2)」), `AllSessions`·`SessionsOf`, `ModeOf`, `BoundSession`, `WorkspacesOn`, `IsPendingOwn`, `PrepareAsync`(첫 실행 묶기), `NewSessionAsync`(「새 세션」), `UseConnection`, `ReconnectAsync`(접속이 열려 있으면 표시만 지움), `Select`·`SelectAsync`(고른 세션에 묶고 모드 기억, 추가 세션도 받음), `Refocus`(→ `FocusPending`), 닫기 가드(`SqlCloseReason.Workspace`)·`CloseConfirmFor`(문서 탭 ×)·`WorkspaceClosed` 처리, `SessionPerWorkspace`·`ConfirmUncommitted` 속성(조립이 설정·`ConfirmConnectionUncommittedAsync` 를 넣음).
+- `ExecutionState.FocusPending(profile)`·`FocusedPending`, `ExecutionController.FocusedSession` 이 그때 null(남의 세션을 커밋·취소하지 않음).
+- `ExecutionDeps.PrepareSession`·`UseConnection`, `EnsureConnectionAsync` 가 끝에서 `PrepareSession` 을 부른다. `WorkSessions` = `AllSessions`(종료 확인이 추가 세션도 묻는다).
+- `Workspace.Session`(`own`/`shared`/null), `WorkspaceSessionMode`·`WorkspaceSessionModes`, `SqlWorkspaceViewModel.SessionMode`, `WorkspaceSettings.SessionPerWorkspace`(기본 true).
+- 시험: `WorkspaceSessionTests`(16), `WorkspaceSessionFlowTests`(통합 2: SID 다름·A 5초 중 B 58ms(26ai)/112ms(11.2)·트랜잭션 격리·함께 쓰기 SID 같음·새 세션 SID 다름), `StubSessionManager.PublishOpened`.
+
+남은 것(맥북):
+- 화면 전부: 콤보 항목(추가 세션·「새 세션」, 지금은 추가 세션을 쓰는 탭이면 콤보가 「전용 세션 · …」 빈 글로 보인다), 상태 줄 글(지금 `FocusPending` 은 「연결됨」), 안내 막대(D-036, 지금은 막힌 쪽 실행이 지금처럼 조용히 꺼짐), 설정 확인란, 세션 도구 창(D-034), 문구 파일(ko·en).
+- 접속 관리자 「같은 DB 에 세션 하나 더」 진입점은 시안대로 콤보·세션 도구 창으로 대신할지 확정.
+- 자동 저장 표지(`SqlWorkspaceViewModel` 의 변경 감지)에 `SessionMode` 를 넣을지(지금은 모드만 바꾸면 자동 저장이 돌지 않을 수 있다).
+- 탭이 0개인 작업 공간을 닫으면 가드가 돌지 않아 미커밋 확인 없이 추가 세션을 닫는다(드라이버가 롤백) — 드문 경우, 막을지 결정.
+- PL/SQL 문서가 콤보로 추가 세션을 고르지 못하게(목록에서 빼기) — 콤보 작업 때.
+- 전체 시험(`dotnet test Oranda.sln`)은 초안 단계에서 돌리지 않았다(관련 클래스만).
+
+### 14.4 시험 방침
+
+- 단위·Headless: 워크스페이스 둘 = 세션 둘, 같은 워크스페이스 탭 = 같은 세션, 워크스페이스 하나 = DB 세션 1개, 실행 중 다른 워크스페이스 실행 가능(`sessionBusy` 세션 기준·`FocusPending`), 설정 끄면 지금 동작, 워크스페이스 선택이 설정보다 먼저, 함께 쓰기·새 세션 옮기기, 아무도 안 쓰는 추가 세션 닫기(미커밋이면 남김), 닫힌 세션 → 접속 안 됨 → 다시 고르기, 워크스페이스 닫기 미커밋 확인(세션 단위 한 번·공유 세션은 안 물음), 복원 때 세션 안 엶·파일 왕복, 종료 확인 라벨, 상한 8, 비밀번호 다시 안 물음.
+- Oracle 통합(podman 26ai·11.2): 같은 프로필 두 세션 SID 다름, A 5초 실행 중 B 1초 안, A 미커밋 INSERT 가 B 에 안 보임, 함께 쓰기 SID 같음·트랜잭션 공유, 새 세션으로 옮기면 SID 다름, 공유 세션 실행 중 다른 워크스페이스 `sessionBusy`. 11.2 는 `dbms_session.sleep` 이 없고 `dbms_lock` 권한을 SYSTEM 이 줄 수 없어 `dbms_utility.get_time` 바쁜 반복으로 5초를 만든다.
+- 시작 경로에서 Oracle 어셈블리를 깨우지 않는다(`Startup_does_not_load_oracle_or_antlr_assemblies`): 연결표·설정 읽기는 라우터가 생길 때(접속 서비스와 함께)만.
+
+### 14.5 수락 기준 (기술)
+
+- 설정 기본값에서 워크스페이스 하나만 쓰면 DB 세션 수·동작이 이 Task 전과 같다(회귀 시험).
+- 설정을 끄면 이 Task 전과 같다.
+- `dotnet build Oranda.sln -warnaserror` 와 `dotnet test`(Integration·Perf 제외)가 통과한다.

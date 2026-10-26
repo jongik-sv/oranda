@@ -900,6 +900,68 @@ levels:
   - acceptance: 입력(스키마·이름·유형·INVALID)이 바뀌면 300ms 뒤 오른쪽 대상 탭에 맞는 객체가 나오고 연속 입력은 마지막 값으로 한 번만 조회한다 / 앞 조회는 취소되고 늦게 온 옛 결과가 새 결과를 덮지 않는다 / 표 3개 중 2개를 체크하고 추출하면 파일 2개가 생긴다(조건 전체를 다시 조회하지 않는다) / 아무것도 체크하지 않고 추출하면 「체크한 객체가 없다」 로 멈춘다 / 접속 없음·빈 결과·오류·불러오는 중·5,000개 초과 화면이 라이트·다크에서 읽힌다 / 기존 DbToolsTests 가 그대로 통과한다
   - note: 담당 PC: win144(Windows 개발 PC) — 맥북 세션은 이 Task 를 하지 않는다. 사용자 원문(2026-10-26): 「DDL 일괄 추출 시 테이블에 입력값에 대한 검색된 테이블들이 우측 빈 칸에 나오면 좋겠다」. 크기 M. 레인 sc-ddl. 결과: 오른쪽 칸을 「대상 (n)」·「추출 결과」 탭으로 나누고 입력 300ms 뒤 `SearchObjectsAsync` 로 대상 표(체크·유형·이름·상태·마지막 DDL, 5,000개 한도, 취소·목록째 교체)를 보이며 「추출」 은 체크한 객체만(`DdlExtractRequest.Objects`) 추출, 시험 DdlExtractTargetsTests 18개(상태별 Headless 라이트·다크 PNG)·Oracle 통합 DdlExtractPickedObjectsTests 3개(26ai, 표 3개 중 2개 체크 → 파일 2개) (win144)
 
+## WP-14: 같은 DB 여러 세션
+<!-- 담당 PC: 맥북 — win144 세션은 이 WP 의 Task 를 하지 않는다. 2026-10-26 사용자 요청(PRD 16 원문), 사용자 승인 「권장안대로」(맥북에서 진행). 설계 = PRD 16, TRD 14, decisions D-034~D-038, 시안 docs/oranda1/mockups/multisession(원본 https://claude.ai/artifact/Xb4mBy56WPrRFcgxf1q4uf). win144 레인 sc-multisess 가 측정(PRD 16.1)과 세션 계층 초안(원격 브랜치 wip-multisess, TRD 14.3)을 남겼다: 14-01·14-02 는 초안을 이어받아 다듬고, 14-03·14-04 는 화면, 14-05 는 통합 확인 -->
+
+- [ ] TSK-14-01: 같은 DB 에 세션 더 열기 — ConnectionService 추가 세션·상한·자격 증명 메모리 [macbook] w:1 2026-10-28~2026-10-28
+  - category: feat
+  - domain: backend
+  - model: opus
+  - priority: high
+  - tags: connection, session, multi-session, macbook
+  - prd-ref: PRD 16, MS-01, MS-11, D-037, D-038
+  - requirements: `IConnectionService` 에 `SessionsOf(profileId)`·`AllSessions`·`IsOpen(session)`·`OpenSessionAsync(profileId, ct)` 를 더한다(인터페이스 기본 구현으로 시험 가짜를 고치지 않는다). 접속 = 프로필의 기본 작업 세션(`Sessions`·콤보 번호 그대로), 추가 세션 = `SessionPurpose.Work` 로 같은 프로필에 더 연 세션. 이미 연 접속의 비밀번호를 메모리(`SecureCredential`)에만 두고 추가 세션을 열 때 다시 쓴다(저장소에 쓰지 않고, 그 프로필의 세션이 모두 닫히면 지운다). 프로필당 8개 상한(넘으면 이유 글). 기본 세션을 끊었는데 추가 세션이 남으면 처음 연 추가 세션이 같은 자리의 접속이 된다. 추가 세션을 열어도 지금 접속·실행 상태의 지금 접속은 바뀌지 않는다. 끊김·닫힘 이벤트가 추가 세션도 본다; 제약: 비밀번호 저장 안 함 규칙 유지, 제품 경로에 쓰기 SQL 없음; 비고: 담당 PC: 맥북 — win144 세션은 이 Task 를 하지 않는다. wip-multisess 브랜치에 초안 있음(TRD 14.3).
+  - acceptance: 저장 안 한 프로필로 접속한 뒤 추가 세션이 비밀번호를 다시 묻지 않고 열린다 / 접속 목록(콤보 번호)은 그대로, `SessionsOf` 는 [기본, 추가…] / 9개째는 거절 / 기본 세션을 끊으면 추가 세션이 같은 자리로 올라오고 마지막 세션이 닫히면 메모리의 비밀번호가 지워진다 / 단위 시험(WorkspaceSessionTests 앞부분) / `dotnet build Oranda.sln -warnaserror`
+  - note: 담당 PC: 맥북 — win144 세션은 이 Task 를 하지 않는다. 사용자 원문(2026-10-26): 「동일한 DB에 대해 여러개의 접속을 지원하게 해줘. 다른 워크스페이스에서 쿼리가 진행되는 동안 다른 워크스페이스에서 다른 쿼리를 실행할 수 있도록 해줘.」 「여러 워크스페이스에서 하나의 세션을 사용할 수도 있지?」 크기 S. wip-multisess 브랜치에 초안 있음(TRD 14.3).
+
+- [ ] TSK-14-02: 워크스페이스 → 세션 연결·모드 기억·첫 실행 때 열기·닫기 확인 [macbook] w:2 2026-10-29~2026-10-30
+  - category: feat
+  - domain: fullstack
+  - model: opus
+  - priority: high
+  - tags: session-router, workspace, transaction, multi-session, macbook
+  - prd-ref: PRD 16, MS-02~MS-04, MS-08, MS-09, MS-12~MS-14, D-035, D-038
+  - depends: TSK-14-01
+  - requirements: `SessionRouter` 에 (워크스페이스, 프로필) → 세션 연결표를 둔다(다 대 일 허용, 같은 워크스페이스의 탭은 같은 세션). 모드 = 공유(접속의 기본 세션) / 자기 세션, 워크스페이스 파일 `session: own|shared`(세션 번호 없음), 값이 없으면 설정 `workspace.sessionPerWorkspace`(기본 true). 자기 세션의 첫 실행(`EnsureConnectionAsync` 끝의 `PrepareSession`): 기본 세션을 아무 워크스페이스도 안 쓰면 차지, 쓰고 있으면 추가 세션을 연다. 첫 실행 전에는 `ExecutionState.FocusPending` 으로 남의 실행에 `sessionBusy` 로 막히지 않는다. 콤보 `Select`·`SelectAsync` 가 추가 세션을 받고 고른 세션에 묶으며 모드를 기억, 「새 세션」 API(`NewSessionAsync`). 세션이 닫히면 그 세션을 쓰던 워크스페이스는 「접속 안 됨」(다시 접속 = 접속이 열려 있으면 표시만 지움). 워크스페이스 닫기: 그것만 쓰던 추가 세션은 실행 중이면 거절, 미커밋이면 세션마다 한 번 묻고 닫는다(닫기 가드 + 문서 탭 × 확인). 아무도 안 쓰게 된 추가 세션은 미커밋이 없으면 닫는다. 종료 확인이 추가 세션도 묻는다(`WorkSessions = AllSessions`). PL/SQL 작업 공간은 대상에서 뺀다. 초안의 남은 문제(TRD 14.3: 자동 저장 표지에 모드, 탭 0개 작업 공간 닫기)를 정리한다; 제약: 시작 경로에서 Oracle 어셈블리를 깨우지 않는다, 전용 세션 탭(D-017) 동작 그대로; 비고: 담당 PC: 맥북 — win144 세션은 이 Task 를 하지 않는다. wip-multisess 브랜치에 초안 있음(TRD 14.3).
+  - acceptance: 워크스페이스 둘 = 세션 둘, 하나 = DB 세션 1개 / 실행 중 다른 워크스페이스 실행 가능(`sessionBusy` 세션 기준) / 설정 끄면 지금 동작 / 함께 쓰기·새 세션 옮기기 / 닫힌 세션 → 접속 안 됨 / 닫기 미커밋 확인이 세션 단위 한 번, 공유 세션은 안 물음 / 복원 때 세션 안 엶 / 단위 시험(WorkspaceSessionTests) / 기존 MultiConnection·DedicatedSession·ConnectionCombo 시험 통과
+  - note: 담당 PC: 맥북 — win144 세션은 이 Task 를 하지 않는다. 사용자 원문(2026-10-26): 「동일한 DB에 대해 여러개의 접속을 지원하게 해줘. 다른 워크스페이스에서 쿼리가 진행되는 동안 다른 워크스페이스에서 다른 쿼리를 실행할 수 있도록 해줘.」 「여러 워크스페이스에서 하나의 세션을 사용할 수도 있지?」 크기 M. wip-multisess 브랜치에 초안 있음(TRD 14.3).
+
+- [ ] TSK-14-03: 콤보 세션 목록·「새 세션」·상태 줄·공유 세션 실행 중 안내 막대·설정 [macbook] w:2 2026-10-31~2026-11-03
+  - category: feat
+  - domain: frontend
+  - model: opus
+  - priority: high
+  - tags: connection-combo, status-bar, info-bar, settings, multi-session, macbook
+  - prd-ref: PRD 16, MS-05~MS-07, D-035, D-036
+  - depends: TSK-14-02
+  - requirements: 시안 화면 2·3·5 를 따른다. 툴바 접속 콤보: SQL·MyBatis 워크스페이스가 활성이면 프로필별 세션 「1 - 사용자@이름」·「1 - 사용자@이름 (2)」 + 「새 세션」(그 세션을 쓰는 워크스페이스 수·미커밋 표시는 시안대로), PL/SQL 문서면 지금처럼 접속만. 상태 줄 2번 구간: 「워크스페이스 세션 · 연결됨」, 「공유 세션 · 다른 워크스페이스 n개와 함께 · 연결됨」, 「새 세션 · 첫 실행 때 연결」, SID 툴팁. 공유 세션이 실행 중인데 실행을 누르면(또는 그 워크스페이스로 오면) 안내 막대 [새 세션에서 실행] [기다리기] — 자동으로 옮기지 않고 트랜잭션이 옮겨지지 않음을 적는다. 설정 창에 「워크스페이스마다 새 세션」 확인란(기본 켬). 문구 = literals-en.json·strings-ko/en.json; 제약: 기존 툴바·안내 막대·설정 모양 재사용, 새 메뉴 줄 없음, 테마 브러시만; 비고: 담당 PC: 맥북 — win144 세션은 이 Task 를 하지 않는다. 라우터 API(`SessionsOf`·`LabelOf`·`NewSessionAsync`·`WorkspacesOn`·`IsPendingOwn`)는 초안에 있다
+  - acceptance: 콤보로 다른 워크스페이스 세션을 고르면 함께 쓰고 「새 세션」 이면 SID 가 갈린다 / 상태 줄 세 글이 상태마다 맞다 / 공유 세션 실행 중 안내 막대가 뜨고 [새 세션에서 실행] 이 그 실행을 새 세션에서 보낸다 / 설정 끄면 새 워크스페이스가 접속의 세션을 쓴다 / Headless 라이트·다크 PNG(빈·연결됨·실행 중·공유·안내 막대) / LocalizationTests 통과
+  - note: 담당 PC: 맥북 — win144 세션은 이 Task 를 하지 않는다. 사용자 원문(2026-10-26): 「동일한 DB에 대해 여러개의 접속을 지원하게 해줘. 다른 워크스페이스에서 쿼리가 진행되는 동안 다른 워크스페이스에서 다른 쿼리를 실행할 수 있도록 해줘.」 「여러 워크스페이스에서 하나의 세션을 사용할 수도 있지?」 크기 M.
+
+- [ ] TSK-14-04: 「세션」 도구 창 — 왼쪽 도킹 탭, 세션 2개 이상일 때 보임, 우클릭 명령 [macbook] w:2 2026-10-31~2026-11-03
+  - category: feat
+  - domain: frontend
+  - model: opus
+  - priority: medium
+  - tags: tool-window, docking, session, multi-session, macbook
+  - prd-ref: PRD 16, MS-10, D-034
+  - depends: TSK-14-02
+  - requirements: 시안 화면 1·4 를 따른다. 왼쪽 도킹(스키마 브라우저·스크립트와 같은 자리)에 「세션」 탭: 프로필별 세션 목록(번호·SID·상태(연결됨·실행 중·끊김)·쓰는 워크스페이스·미커밋). 기본 배치에서는 숨기고 열린 작업 세션이 2개 이상이 되면 보인다(사용자가 닫으면 다시 몰래 열지 않는다). 우클릭 = 이 세션 쓰기(활성 워크스페이스를 그 세션에 묶음)·커밋·롤백·세션 닫기(미커밋이면 세션 단위 한 번 확인, 쓰던 워크스페이스는 접속 안 됨). 처음·빈·끊김 상태 화면. SID 는 세션 모니터와 같은 값; 제약: 세션 모니터·SQL 모니터 툴바·DetailTable 격자·panel-status 를 재사용, 조회만(쓰기 SQL 없음), 시작 때 Oracle 어셈블리를 깨우지 않는다; 비고: 담당 PC: 맥북 — win144 세션은 이 Task 를 하지 않는다.
+  - acceptance: 세션이 하나면 창이 기본 배치에 없다 / 둘이 되면 보이고 목록·워크스페이스·미커밋이 맞다 / 우클릭 네 명령이 동작하고 닫기 확인이 세션 단위 한 번 / Headless 라이트·다크 PNG / Startup_does_not_load_oracle_or_antlr_assemblies 통과
+  - note: 담당 PC: 맥북 — win144 세션은 이 Task 를 하지 않는다. 사용자 원문(2026-10-26): 「동일한 DB에 대해 여러개의 접속을 지원하게 해줘. 다른 워크스페이스에서 쿼리가 진행되는 동안 다른 워크스페이스에서 다른 쿼리를 실행할 수 있도록 해줘.」 「여러 워크스페이스에서 하나의 세션을 사용할 수도 있지?」 크기 M.
+
+- [ ] TSK-14-05: 같은 DB 여러 세션 통합 확인 (26ai·11.2, 화면 흐름·시험 수치) [macbook] w:1 2026-11-04~2026-11-04
+  - category: itest
+  - domain: fullstack
+  - model: opus
+  - priority: high
+  - tags: itest, multi-session, oracle, macbook
+  - prd-ref: PRD 16.3, TRD 14.4
+  - depends: TSK-14-03, TSK-14-04
+  - requirements: podman Oracle 26ai·11.2 에서 통합 시험 `WorkspaceSessionFlowTests`(초안 있음)를 넓혀 PRD 16.3 수락 기준을 모두 잰다: 두 워크스페이스 SID 다름, A 5초 실행 중 B 1초 안, A 미커밋 INSERT 가 B 에 안 보임, 함께 쓰기 SID 같음·트랜잭션 공유, 새 세션 SID 다름, 공유 세션 실행 중 sessionBusy·안내 막대, 워크스페이스 닫기·앱 종료 미커밋 확인(세션 단위), 설정 끔 = 지금 동작, 복원 때 세션 안 엶, 상한 8. 11.2 는 `dbms_utility.get_time` 바쁜 반복으로 5초를 만든다(초안 참고). 결과서 docs/oranda1/itest/TSK-14-05.md 에 수치를 적는다; 제약: 실앱 SendKeys 금지(Headless 까지), 실앱 눈 확인 항목은 사용자 몫으로 표시, 결함은 defect Task 로 등록; 비고: 담당 PC: 맥북 — win144 세션은 이 Task 를 하지 않는다. wip-multisess 브랜치에 초안 있음(TRD 14.3).
+  - acceptance: 위 항목이 26ai·11.2 둘 다 통과하고 수치가 결과서에 있다 / `dotnet build Oranda.sln -warnaserror`·`dotnet test`(Integration·Perf 제외) 통과
+  - note: 담당 PC: 맥북 — win144 세션은 이 Task 를 하지 않는다. 사용자 원문(2026-10-26): 「동일한 DB에 대해 여러개의 접속을 지원하게 해줘. 다른 워크스페이스에서 쿼리가 진행되는 동안 다른 워크스페이스에서 다른 쿼리를 실행할 수 있도록 해줘.」 「여러 워크스페이스에서 하나의 세션을 사용할 수도 있지?」 크기 S. wip-multisess 브랜치에 초안 있음(TRD 14.3).
+
 ## 의존 그래프
 
 ### 그래프 (Mermaid)
@@ -988,6 +1050,11 @@ graph LR
   TSK-12-03 --> TSK-10-03
   TSK-12-04 --> TSK-10-03
   TSK-13-01 --> TSK-10-03
+  TSK-14-01 --> TSK-14-02
+  TSK-14-02 --> TSK-14-03
+  TSK-14-02 --> TSK-14-04
+  TSK-14-03 --> TSK-14-05
+  TSK-14-04 --> TSK-14-05
   style TSK-01-02 fill:#e8f5e9,stroke:#2e7d32
   style TSK-03-01 stroke:#c62828,stroke-width:2px
   style TSK-02-02 stroke:#c62828,stroke-width:2px
@@ -1011,6 +1078,8 @@ graph LR
 - WP-10·WP-11·WP-12(2026-10-26 추가, Task 9개, TSK-12-04·TSK-12-05 는 같은 날 더함): 최장 경로 TSK-10-01(또는 10-02, 11-01, 12-01, 12-02) → TSK-10-03(깊이 2 = 기능 1 + 통합확인 1). 여섯 기능·결함 Task 는 서로 depends 가 없는 병렬 레인(sc-search·sc-add·sc-rows·sc-invalid·sc-plsqlrun·sc-export)이다. TSK-10-01·TSK-10-02 는 ScriptsView.axaml·ScriptsView.axaml.cs·ScriptsViewModel.cs·literals-en.json 을 함께 만지므로 자기 몫만 바꾸고 나중에 머지하는 쪽이 rebase 충돌을 푼다(TRD 12.1). Fan-in: TSK-10-03 이 depends 6(통합확인, 구조적 예외). 파일 소유 = TRD 12.1·13.1, WP-12 는 결함이라 PRD·TRD 에 쓰지 않는다.
 
 - WP-13(2026-10-26 추가, Task 1개): TSK-13-01 → TSK-10-03(깊이 2). TSK-10-03 의 depends 가 7 이 된다(통합확인, 구조적 예외). TSK-13-01 은 `Features/DbTools/DdlExtract*`·`DdlBulkExporter.cs`·문구 파일만 만지며 sc-invalid 의 조회 SQL 은 건드리지 않는다.
+
+- WP-14(2026-10-26 추가, Task 5개, 담당 맥북): 최장 경로 TSK-14-01 → TSK-14-02 → TSK-14-03(또는 14-04) → TSK-14-05(깊이 4 = 서비스 1 + 연결 1 + 화면 1 + 통합확인 1). TSK-14-03(콤보·상태 줄·안내 막대·설정)과 TSK-14-04(세션 도구 창)는 서로 depends 가 없다(소유 파일이 다르다, TRD 14.2). 14-01·14-02·14-05 는 원격 브랜치 wip-multisess 의 초안(TRD 14.3)을 이어받는다.
 
 **Fan-in Top 5**
 
