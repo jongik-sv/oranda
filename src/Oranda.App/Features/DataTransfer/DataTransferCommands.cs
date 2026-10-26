@@ -32,6 +32,12 @@ public sealed record ExportSource(ISession Session, SqlStatement Query, IReadOnl
     public IReadOnlyList<int>? ColumnOrder { get; init; }
 
     /// <summary>
+    /// 바인드 값을 정하지 못한 이유(값이 없거나 형식이 틀림). 있으면 서버에서 다시 읽는 내보내기(전체 행)는 서버를 부르기 전에
+    /// 이 이유로 멈춘다 — 서버의 「바인드 안 됨」 오류 대신 무엇을 하면 되는지 보인다.
+    /// </summary>
+    public string? BindProblem { get; init; }
+
+    /// <summary>
     /// 서버에서 읽을 질의. 열 순서를 옮겼고 감쌀 수 있으면 원래 문장을 인라인 뷰로 감싸 그 순서로 고른 문장, 아니면 원래 문장이다
     /// (열 이름이 겹치거나 FOR UPDATE 가 있으면 원래 순서로 저장한다).
     /// </summary>
@@ -157,22 +163,33 @@ public sealed class DataTransferCommandHandler : ICommandHandler
 
     internal static ExportSource? FromEditor(IServiceProvider services)
     {
-        // 결과를 내보낼 때는 지금 보고 있는 결과 탭의 문장을 쓴다(커서가 문장 밖에 있어도 된다). 없으면 커서 위치 문장.
-        var shown = Oranda.App.Features.SqlEditor.SqlEditorHost.Current.Active?.ResultPane is Oranda.App.Features.Execution.ResultTabsViewModel { Selected.Statement: { } st }
-            ? st
-            : null;
         var editor = services.GetService(typeof(IEditorContext)) as IEditorContext;
-        var statement = shown ?? editor?.GetCurrentStatement();
         var session = DataTransferCommands.ResolveSession(services);
+        return Build(Oranda.App.Features.SqlEditor.SqlEditorHost.Current.Active, editor?.GetCurrentStatement(), session);
+    }
+
+    /// <summary>
+    /// 활성 SQL 탭에서 내보내기 대상을 만든다. 결과를 내보낼 때는 지금 보고 있는 결과 탭의 문장을 쓰고(커서가 문장 밖에 있어도 된다),
+    /// 없으면 <paramref name="caretStatement"/>(커서 위치 문장)를 쓴다. 문장이나 세션을 모르면 null.
+    /// </summary>
+    internal static ExportSource? Build(SqlEditorViewModel? tab, SqlStatement? caretStatement, ISession? session)
+    {
+        var shown = tab?.ResultPane is Oranda.App.Features.Execution.ResultTabsViewModel { Selected.Statement: { } st } ? st : null;
+        var statement = shown ?? caretStatement;
         if (statement is null || session is null)
         {
             return null;
         }
 
+        // 바인드: 보고 있는 결과 탭이 실행 때 쓴 값(+셀 값 바인드·따라가기 값) → 탭의 바인드 목록. 둘 다 없으면 이유를 남긴다.
+        var pane = shown is not null && tab?.ResultPane is Oranda.App.Features.Execution.ResultTabsViewModel { Selected.Pane: { } p } ? p : null;
+        var bound = ExportBinds.Resolve(statement, pane?.RerunBinds(), tab?.Binds);
+
         // 포커스 있는 결과 그리드가 있으면 그 화면 열 순서를 따른다(열 이름이 겹치는 결과는 감싸지 못해 원래 순서로 저장).
         var grid = ResultGrid.ResultGridCommands.Active;
-        return new ExportSource(session, statement, new Dictionary<string, BindValue>())
+        return new ExportSource(session, statement, bound.Binds)
         {
+            BindProblem = bound.Problem,
             Columns = grid is { HasResult: true } ? grid.Columns : null,
             ColumnOrder = grid is { HasResult: true } ? grid.ColumnsInDisplayOrder() : null,
         };

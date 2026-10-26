@@ -125,6 +125,7 @@ public sealed partial class SqlResultPaneViewModel
     private ResultFilterRequest OwnBindsRequest(SqlStatement query) => new(query, string.Empty, string.Empty)
     {
         Binds = new Dictionary<string, BindValue>(_filterBinds, StringComparer.OrdinalIgnoreCase),
+        RunBinds = RunBinds,
     };
 
     private void ShowRelatedMessage(string? message)

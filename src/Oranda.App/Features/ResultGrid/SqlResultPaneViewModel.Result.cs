@@ -175,7 +175,9 @@ public sealed partial class SqlResultPaneViewModel
             ? (Runner?.CountFiltered ?? ResultGridCommands.CountFiltered) is { } countFiltered ? (_, token) => countFiltered(filter with { OrderBy = string.Empty }, token) : null
             : _hasStatementBinds
                 ? (Runner?.CountFiltered ?? ResultGridCommands.CountFiltered) is { } countOwn ? (q, token) => countOwn(OwnBindsRequest(q), token) : null
-                : Runner?.CountRows ?? ResultGridCommands.CountRows;
+                : RunBinds is not null && (Runner?.CountFiltered ?? ResultGridCommands.CountFiltered) is { } countRan
+                    ? (q, token) => countRan(OwnBindsRequest(q), token) // 실행 때 쓴 값이 있으면 목록에 없는 변수도 센다
+                    : Runner?.CountRows ?? ResultGridCommands.CountRows;
         if (count is null)
         {
             _countMessage = "전체 행 수를 셀 수 없습니다(실행 엔진이 연결되지 않았습니다).";

@@ -66,7 +66,7 @@ public sealed class GridFilterRunner(ExecutionState state, BindVariableStore bin
         var stmt = BuildStatement(request);
 
         // 목록에 없는 이름은 더하지 않는다(거르기는 목록·포커스를 건드리지 않는다). 원래 실행 뒤 값을 바꿨으면 지금 값으로 거른다.
-        var values = GridRowCounter.BuildBinds(binds, stmt.BindNames, request.Binds);
+        var values = GridRowCounter.BuildBinds(binds, stmt.BindNames, request.Binds, request.RunBinds);
         state.BeginRun(s.Id);
         try
         {
@@ -85,7 +85,7 @@ public sealed class GridFilterRunner(ExecutionState state, BindVariableStore bin
     {
         ArgumentNullException.ThrowIfNull(request);
         var stmt = BuildStatement(request with { OrderBy = string.Empty });
-        return new GridRowCounter(state, binds, session, execution).CountAsync(stmt, request.Binds, ct);
+        return new GridRowCounter(state, binds, session, execution).CountAsync(stmt, request.Binds, request.RunBinds, ct);
     }
 
     private ISession Check(ResultFilterRequest request)

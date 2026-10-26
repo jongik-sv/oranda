@@ -193,10 +193,11 @@ public sealed partial class ResultTabsViewModel : ViewModelBase
 
 
     /// <summary>질의 결과 탭을 더한다. 결과 집합의 수명은 탭(결과 영역)이 가진다.</summary>
-    public ResultTabItem AddQuery(IResultSet result, string title, SqlStatement? statement, GridDisplayOptions? display = null, bool closable = false)
+    public ResultTabItem AddQuery(IResultSet result, string title, SqlStatement? statement, GridDisplayOptions? display = null, bool closable = false,
+                                  IReadOnlyDictionary<string, BindValue>? runBinds = null)
     {
         ArgumentNullException.ThrowIfNull(result);
-        var pane = new SqlResultPaneViewModel { Statement = statement };
+        var pane = new SqlResultPaneViewModel { Statement = statement, RunBinds = runBinds };
         pane.SetResult(result, display);
         var tab = new ResultTabItem { Title = title, Pane = pane, Statement = statement, IsClosable = closable };
         tab.CloseHandler = CloseToLeft;

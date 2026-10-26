@@ -29,6 +29,12 @@ public sealed record ResultFilterRequest(SqlStatement Query, string Where, strin
 
     public IReadOnlyDictionary<string, BindValue> Binds { get; init; } = NoBinds;
 
+    /// <summary>
+    /// 이 결과를 만들 때 쓴 바인드 값. 「바인드 변수」 목록에 그 이름이 없을 때(MyBatis 시나리오 값·지운 변수)만 쓴다 —
+    /// 목록에 있으면 지금 값이 이긴다(<see cref="Binds"/> 의 셀 값은 둘보다 먼저).
+    /// </summary>
+    public IReadOnlyDictionary<string, BindValue>? RunBinds { get; init; }
+
     /// <summary>조건도 정렬도 없다(원래 질의 그대로).</summary>
     public bool IsEmpty => Where.Length == 0 && OrderBy.Length == 0;
 }

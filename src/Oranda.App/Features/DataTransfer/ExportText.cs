@@ -1,4 +1,6 @@
+using System.Collections.Generic;
 using System.Globalization;
+using System.Linq;
 using Oranda.App.Features.Localization;
 
 namespace Oranda.App.Features.DataTransfer;
@@ -52,6 +54,12 @@ internal static class ExportText
     public static string NoResult => T("noResult", "내보낼 결과가 없습니다.");
 
     public static string NoQuery => T("noQuery", "다시 실행할 질의를 알 수 없습니다.");
+
+    public static string BindMissing(IReadOnlyList<string> names) =>
+        F("bindMissing", "바인드 변수 {0} 값이 없습니다 — 바인드 변수 창에서 값을 넣고 다시 실행하세요.", string.Join(", ", names.Select(n => ":" + n)));
+
+    public static string BindInvalid(string name, string? reason) =>
+        F("bindInvalid", "바인드 변수 :{0} 값을 읽을 수 없습니다 — 바인드 변수 창에서 고치고 다시 실행하세요. ({1})", name, reason ?? "형식이 맞지 않음");
 
     public static string NoGrid => T("noGrid", "내보낼 결과 그리드가 없습니다.");
 

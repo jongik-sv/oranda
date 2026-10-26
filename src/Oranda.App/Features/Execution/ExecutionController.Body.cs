@@ -55,7 +55,7 @@ public sealed partial class ExecutionController
             results.Clear();
         }
 
-        Present(tab, results, stmt, result, results.NextOrdinal()); // 고정한 탭(GRID-06)이 남아 있으면 그 번호를 피한다
+        Present(tab, results, stmt, result, results.NextOrdinal(), binds); // 고정한 탭(GRID-06)이 남아 있으면 그 번호를 피한다
         var cancelled = result.Status == ExecutionStatus.Cancelled;
         MarkCancelled(session, cancelled);
         return !cancelled;
@@ -97,7 +97,7 @@ public sealed partial class ExecutionController
         }
 
         results.Clear();
-        Present(tab, results, stmt, result, results.NextOrdinal());
+        Present(tab, results, stmt, result, results.NextOrdinal(), binds);
         var cancelled = result.Status == ExecutionStatus.Cancelled;
         MarkCancelled(session, cancelled);
         return !cancelled;
@@ -152,7 +152,7 @@ public sealed partial class ExecutionController
 
                     await AfterStatementAsync(tab, session, r.Statement, r, token).ConfigureAwait(true);
                     summary.AppendLine(CultureInfo.InvariantCulture, $"{StatusMark(r.Status)} {Brief(r.Statement)} — {Describe(r)}");
-                    Present(tab, results, r.Statement, r, results.NextOrdinal(), scriptMode: true);
+                    Present(tab, results, r.Statement, r, results.NextOrdinal(), binds, scriptMode: true);
                 }
             }
             finally

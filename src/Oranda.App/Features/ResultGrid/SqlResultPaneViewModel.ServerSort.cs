@@ -76,6 +76,7 @@ public sealed partial class SqlResultPaneViewModel
             ordinal >= 0 ? ResultQueryWrapper.OrderByClause(ordinal + 1, desc) : _activeFilter is null ? string.Empty : OrderByText.Trim())
         {
             Binds = new Dictionary<string, BindValue>(_filterBinds, StringComparer.OrdinalIgnoreCase),
+            RunBinds = RunBinds,
         };
         var generation = _resultGeneration;
         ShowFilterMessage(null);

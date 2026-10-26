@@ -75,6 +75,8 @@
   "Execution.uncommitted.dedicated": "The dedicated session of tab “{0}” has uncommitted changes. What do you want to do?",
   "Execution.uncommitted.connection": "Connection “{0}” has uncommitted changes. What do you want to do?",
   "Execution.missing.message": "The connection “{0}” of this tab is not open. What do you want to do?",
+  "Export.bindInvalid": "Cannot read the value of bind variable :{0} - fix it in the Bind Variables window and run again. ({1})",
+  "Export.bindMissing": "Bind variable {0} has no value - enter a value in the Bind Variables window and run again.",
   "Export.canceled": "Export canceled. The partly written file was deleted.",
   "Export.defaultName": "QueryResult",
   "Export.done": "Exported {0} rows ({1} s): {2}",

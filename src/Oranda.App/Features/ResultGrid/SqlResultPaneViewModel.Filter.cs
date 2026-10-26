@@ -44,6 +44,7 @@ public sealed partial class SqlResultPaneViewModel
         var request = new ResultFilterRequest(query, WhereText.Trim(), OrderByText.Trim())
         {
             Binds = new Dictionary<string, BindValue>(_filterBinds, StringComparer.OrdinalIgnoreCase),
+            RunBinds = RunBinds,
         };
         if (request.IsEmpty && _activeFilter is null)
         {

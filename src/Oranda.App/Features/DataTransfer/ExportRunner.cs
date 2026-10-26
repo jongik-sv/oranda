@@ -76,6 +76,11 @@ internal static class ExportRunner
         if (job.Scope == ExcelExportScope.AllRows)
         {
             var source = job.Source ?? throw new InvalidOperationException(ExportText.NoQuery);
+            if (source.BindProblem is { } problem)
+            {
+                throw new InvalidOperationException(problem); // 서버에 묻기 전에 막는다(서버 오류 대신 이유)
+            }
+
             return transfer.ExportAsync(source.Session, source.QueryInColumnOrder(), source.Binds, job.Options, destination, progress, ct);
         }
 

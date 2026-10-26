@@ -166,6 +166,26 @@ public sealed class DataTransferTests : IDisposable
         Assert.False(File.Exists(vm.FilePath));
     }
 
+    [Fact]
+    public async Task Export_dialog_stops_a_server_export_that_has_no_bind_value_and_does_not_ask_the_server()
+    {
+        var query = new SqlStatement("SELECT * FROM emp WHERE id = :id", default, StatementKind.Query) { BindNames = ["id"] };
+        var source = new ExportSource(new StubSession(), query, new Dictionary<string, BindValue>())
+        {
+            BindProblem = ExportText.BindMissing(["id"]),
+        };
+        var service = new RecordingService();
+        using var vm = new ExportDialogViewModel(service, source) { FilePath = Path.Combine(_dir, "nobind.csv"), Format = TransferFormat.Csv };
+
+        await vm.StartAsync();
+
+        Assert.True(vm.StatusIsError);
+        Assert.Contains(":id", vm.Status, StringComparison.Ordinal);
+        Assert.Contains("바인드 변수 창", vm.Status, StringComparison.Ordinal);
+        Assert.Null(service.LastExport); // 서버에 묻지 않았다
+        Assert.False(File.Exists(vm.FilePath));
+    }
+
     private sealed class RecordingService : IDataTransferService
     {
         public Exception? Throw { get; set; }

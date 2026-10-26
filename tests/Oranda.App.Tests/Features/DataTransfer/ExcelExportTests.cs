@@ -271,6 +271,30 @@ public sealed class ExcelExportTests : IDisposable
     }
 
     [Fact]
+    public async Task All_rows_scope_hands_the_binds_to_the_server_and_stops_with_a_reason_when_a_value_is_missing()
+    {
+        await using var grid = await GridAsync(2);
+        var service = new FakeTransfer();
+        var query = new SqlStatement("SELECT * FROM emp WHERE id = :id", default, StatementKind.Query) { BindNames = ["id"] };
+        var ok = new ExportSource(new StubSession(), query, new Dictionary<string, BindValue> { ["id"] = new(BindDataType.Number, 7m) });
+
+        var done = await ExportRunner.ExportToFileAsync(service, Xlsx(ExcelExportScope.AllRows, ok, grid, "EMP"), Path.Combine(_dir, "ok.xlsx"), openAfter: false, null, default);
+        Assert.False(done.IsError);
+        Assert.Equal(7m, service.ServerBinds!["id"].Value);
+
+        // 값을 못 정했으면 서버에 묻기 전에 멈추고 이유를 보인다(서버의 「바인드 안 됨」 오류가 아니라).
+        var missing = new ExportSource(ok.Session, ok.Query, new Dictionary<string, BindValue>()) { BindProblem = ExportText.BindMissing(["id"]) };
+        var path = Path.Combine(_dir, "bad.xlsx");
+        var failed = await ExportRunner.ExportToFileAsync(service, Xlsx(ExcelExportScope.AllRows, missing, grid, "EMP"), path, openAfter: false, null, default);
+
+        Assert.True(failed.IsError);
+        Assert.Equal(1, service.ServerExports); // 두 번째는 서버에 가지 않았다
+        Assert.Contains(":id", failed.Message, StringComparison.Ordinal);
+        Assert.Contains("바인드 변수 창", failed.Message, StringComparison.Ordinal);
+        Assert.False(File.Exists(path));
+    }
+
+    [Fact]
     public async Task All_rows_scope_without_a_query_fails_cleanly_and_leaves_no_file()
     {
         await using var grid = await GridAsync(2);
@@ -320,6 +344,8 @@ public sealed class ExcelExportTests : IDisposable
 
         public ExportOptions? ServerOptions { get; private set; }
 
+        public IReadOnlyDictionary<string, BindValue>? ServerBinds { get; private set; }
+
         public ExportOptions? RowsOptions { get; private set; }
 
         public int RowCount { get; private set; }
@@ -328,6 +354,7 @@ public sealed class ExcelExportTests : IDisposable
         {
             ServerExports++;
             ServerOptions = options;
+            ServerBinds = binds;
             await destination.WriteAsync("x"u8.ToArray(), ct);
             return new TransferSummary(7, TimeSpan.Zero);
         }

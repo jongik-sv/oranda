@@ -797,9 +797,9 @@ levels:
   - model: sonnet
   - priority: high
   - tags: integration, e2e, scripts, grid, win144
-  - depends: TSK-10-01, TSK-10-02, TSK-11-01, TSK-12-01, TSK-12-02
+  - depends: TSK-10-01, TSK-10-02, TSK-11-01, TSK-12-01, TSK-12-02, TSK-12-03
   - prd-ref: PRD 14.3, PRD 15.2, TRD 12.4, TRD 12.5, TRD 13.3, TRD 13.4
-  - requirements: 다섯 Task 가 dev 에 들어온 뒤 한 흐름으로 확인한다. (1) 스크립트: 폴더 둘(하위 포함, 숨김 폴더·비스크립트 파일 섞음)을 연결 → 이름 낱말 검색 → 「내용」 검색(대소문자·한글·정규식 문자·여러 인코딩) → 두 번 누름 열기·줄 이동 → Esc 트리 복귀 → 새 스크립트(선택 폴더·고른 파일의 폴더·폴더 하나·폴더 여럿 비활성) → 이름 오류·겹침·채우기 → 만든 뒤 선택·열림 → 만든 파일이 검색에 잡힘; 한도(1,000곳·2 MB)·취소·5,000개 파일 시간을 재서 적는다. (2) 결과 격자: 셀 범위·Ctrl 로 고른 여러 행 삭제(새 행 + 기존 행 섞음)·미리보기 DELETE n개·되돌리기·행 복사 클립보드 글·행 복제·편집 모드 자동 켜기·R6 막힘·1만 행 시간·단축키 Ctrl+Delete/Ctrl+D 충돌 없음; Oracle 통합 시험이 가능하면 여러 행 삭제 반영 후 행 수 확인. (3) INVALID 객체 검색(TSK-12-01 이 고친 모든 화면 경로)이 INVALID 객체를 찾고 느린 공급자에서도 UI 가 흔들리지 않는다. (4) 프로시저·함수 실행 창(TSK-12-02)이 스키마 브라우저·편집기 두 경로에서 인자 행·미리보기와 함께 그려진다. 주 메뉴·팔레트 명령 수가 WP-10 전과 같음을 단정한다. 라이트·다크 PNG 를 `~/.coord/scripts-find/shots/` 에 두고 직접 본다. 각 레인 결과에 적힌 빠진 문구를 문구 파일에 넣는다; 제약: 실앱 SendKeys 금지(Headless 까지), 실앱 눈 확인 항목은 사용자 몫으로 표시, 제품 코드는 고치지 않고 결함은 defect Task 로 등록; 비고: 담당 PC: win144(Windows 개발 PC) — 맥북 세션은 이 Task 를 하지 않는다. 결과서 docs/oranda1/itest/TSK-10-03.md
+  - requirements: 여섯 Task 가 dev 에 들어온 뒤 한 흐름으로 확인한다. (1) 스크립트: 폴더 둘(하위 포함, 숨김 폴더·비스크립트 파일 섞음)을 연결 → 이름 낱말 검색 → 「내용」 검색(대소문자·한글·정규식 문자·여러 인코딩) → 두 번 누름 열기·줄 이동 → Esc 트리 복귀 → 새 스크립트(선택 폴더·고른 파일의 폴더·폴더 하나·폴더 여럿 비활성) → 이름 오류·겹침·채우기 → 만든 뒤 선택·열림 → 만든 파일이 검색에 잡힘; 한도(1,000곳·2 MB)·취소·5,000개 파일 시간을 재서 적는다. (2) 결과 격자: 셀 범위·Ctrl 로 고른 여러 행 삭제(새 행 + 기존 행 섞음)·미리보기 DELETE n개·되돌리기·행 복사 클립보드 글·행 복제·편집 모드 자동 켜기·R6 막힘·1만 행 시간·단축키 Ctrl+Delete/Ctrl+D 충돌 없음; Oracle 통합 시험이 가능하면 여러 행 삭제 반영 후 행 수 확인. (3) INVALID 객체 검색(TSK-12-01 이 고친 모든 화면 경로)이 INVALID 객체를 찾고 느린 공급자에서도 UI 가 흔들리지 않는다. (4) 프로시저·함수 실행 창(TSK-12-02)이 스키마 브라우저·편집기 두 경로에서 인자 행·미리보기와 함께 그려진다. (5) 서버 재조회 내보내기(TSK-12-03): 바인드 변수 질의의 결과를 CSV·xlsx 전체 행으로 내보내 행 수·값을 원본과 비교하고, 전체 행 수 세기·서버 거르기가 같은 값으로 도는지, 값이 없을 때 이유 안내가 뜨는지 본다. 주 메뉴·팔레트 명령 수가 WP-10 전과 같음을 단정한다. 라이트·다크 PNG 를 `~/.coord/scripts-find/shots/` 에 두고 직접 본다. 각 레인 결과에 적힌 빠진 문구를 문구 파일에 넣는다; 제약: 실앱 SendKeys 금지(Headless 까지), 실앱 눈 확인 항목은 사용자 몫으로 표시, 제품 코드는 고치지 않고 결함은 defect Task 로 등록; 비고: 담당 PC: win144(Windows 개발 PC) — 맥북 세션은 이 Task 를 하지 않는다. 결과서 docs/oranda1/itest/TSK-10-03.md
   - acceptance: 결과서에 흐름별 통과 표와 시험 수치(검색 시간·한도 동작·1만 행 삭제 시간·시험 개수)가 있다 / 위 (1)~(4) 흐름이 끝까지 간다 / 명령 id 집합·키맵(단축키 둘 추가 제외)·팔레트 결과가 불변 / 발견 결함은 defect Task 로 등록됨 / 사용자 눈 확인 항목이 따로 적혀 있다 / `dotnet build Oranda.sln -warnaserror`·전체 시험 통과
   - note: 담당 PC: win144(Windows 개발 PC) — 맥북 세션은 이 Task 를 하지 않는다. 크기 M. 레인 sc-itest(마지막)
 
@@ -818,7 +818,7 @@ levels:
   - note: 담당 PC: win144(Windows 개발 PC) — 맥북 세션은 이 Task 를 하지 않는다. 크기 M. 레인 sc-rows. 2026-10-26 사용자 요청 「조회 결과에서 여러줄 삭제/행 복사」
 
 ## WP-12: 결함 수정
-<!-- 담당 PC: win144(Windows 개발 PC) — 맥북 세션은 이 WP 의 Task 를 하지 않는다. 2026-10-26 사용자 결함 보고. PRD·TRD·decisions 는 결함에 대해 쓰지 않는다(원인·수정은 레인 결과에 적는다). 레인 sc-invalid·sc-plsqlrun. 통합 확인은 TSK-10-03 이 맡는다 -->
+<!-- 담당 PC: win144(Windows 개발 PC) — 맥북 세션은 이 WP 의 Task 를 하지 않는다. 2026-10-26 사용자 결함 보고. PRD·TRD·decisions 는 결함에 대해 쓰지 않는다(원인·수정은 레인 결과에 적는다). 레인 sc-invalid·sc-plsqlrun·sc-export. 통합 확인은 TSK-10-03 이 맡는다 -->
 
 - [ ] TSK-12-01: INVALID 객체 검색 결함 — 「Invalid 객체 검색 안됨」 [win144] w:2 2026-10-27~2026-10-28
   - category: defect
@@ -841,6 +841,17 @@ levels:
   - requirements: 사용자 보고 「윈도우에서 프로시저/함수 실행 메뉴 실행 시 처리가 안됨」 → 「화면 자체가 빈화면으로 되어 잇음」(v0.1.0 설치본, Release·self-contained·ReadyToRun 게시본). 명령 `oranda.plsql.runFromBrowser`(스키마 우클릭)·`oranda.plsql.run`(PL/SQL 편집기, `PlsqlRunCommands.cs`)이 창을 먼저 띄우고(`PlsqlRunWindow.ShowFor`) 그 뒤 `PlsqlRunViewModel.OpenAsync` 를 부른다. 창은 XAML 없이 코드로 만든다(Binding 문자열 경로·`FuncDataTemplate`·`SqlCodeView`·`ResultTabsView`·`GetResourceObservable`). 앱 로그(%APPDATA%\Oranda\logs)에는 이 창 예외 줄이 없다고 조정자가 확인했으니 로그를 직접 다시 읽는다(비밀번호 줄은 옮기지 않는다). 가설을 재서 정한다: (a) `OpenAsync` 가 예외를 삼키거나 끝나지 않아 인자 행·미리보기가 빈다(세션 경로, 11g 변형 메타 조회), (b) 창 자체가 그려지지 않는다(테마·배경, Show(owner) 순서, Release 게시본에서만 다른 점 — ReadyToRun·빠진 리소스·TSK-08-07 에서 뺀 파일), (c) 대상 해석 실패. Headless 로 실제 의존(가짜 아님) + podman Oracle(26ai·11.2)에 프로시저·함수·패키지를 만들고 스키마 브라우저 경로와 편집기 경로로 창을 열어 라이트·다크 PNG 를 `~/.coord/scripts-find/shots/sc-plsqlrun/` 에 떠서 직접 본다. Release 게시본 차이가 의심되면 `dotnet publish -c Release -r win-x64 --self-contained` 결과로 같은 Headless 시험을 돌릴 수 있는지 본다. 원인을 고치고 다시 생기지 않게 시험을 남긴다. 창이 열린 뒤 `OpenAsync` 오류는 창 안 상태 줄에 보이고 로그에 남게 한다; 제약: 실앱 실행·SendKeys 금지, 제품 조회 경로에 쓰기 SQL 을 넣지 않는다(시험 준비용 DDL 은 통합 시험 안에서만). Headless 에서 재현이 안 되면 그 사실과 남은 가설, 사람이 실앱에서 확인할 순서(로그 위치 포함)를 결과에 적는다; 비고: 담당 PC: win144(Windows 개발 PC) — 맥북 세션은 이 Task 를 하지 않는다
   - acceptance: 원인(또는 재현 안 됨 + 남은 가설 + 사람 확인 순서)이 결과에 적혀 있다 / 스키마 브라우저 경로와 편집기 경로에서 창이 인자 행·미리보기와 함께 그려진다(프로시저·함수·패키지, 26ai·11.2, 라이트·다크 PNG) / 창이 열린 뒤 `OpenAsync` 오류가 창 안 상태 줄과 로그에 남는다 / 재발 방지 시험 / `dotnet build Oranda.sln -warnaserror`·전체 시험 통과
   - note: 담당 PC: win144(Windows 개발 PC) — 맥북 세션은 이 Task 를 하지 않는다. 사용자 원문(2026-10-26): 「윈도우에서 프로시저/함수 실행 메뉴 실행 시 처리가 안됨 / 화면 자체가 빈화면으로 되어 잇음」. 크기 M. 레인 sc-plsqlrun
+
+- [x] TSK-12-03: 서버 재조회 내보내기 바인드 변수 누락 [win144] w:1 2026-10-27~2026-10-27
+  - category: defect
+  - domain: fullstack
+  - model: opus
+  - priority: high
+  - tags: export, bind, excel, grid, win144
+  - prd-ref: 결함 보고 2026-10-26
+  - requirements: 사용자 보고 「Excel 내보내기 할때 서버에서 다시 조회해서 내보내면 바인드 변수가 없다는 에러가 발생한다」. 원인 = `DataTransferCommandHandler.FromEditor` 가 내보내기 원본(`ExportSource`)을 만들 때 바인드를 언제나 빈 목록으로 넘겨, 바인드 변수가 있는 질의를 서버에서 다시 실행하면 「바인드 변수 :ID 의 값이 없습니다」 로 실패한다(「전체 행」 이 기본 범위라 Excel·CSV·JSON·INSERT 모두). 고친 방향 = 실행이 쓴 바인드 값을 결과 탭(`SqlResultPaneViewModel.RunBinds`)에 남기고(`ExecutionController.Present`) 내보내기가 그 값을, 없으면 탭의 「바인드 변수」 목록 값을 쓴다. 둘 다 없으면 서버에 묻기 전에 「바인드 변수 :X 값이 없습니다 — 바인드 변수 창에서 값을 넣고 다시 실행하세요」 로 멈춘다. 같은 종류 경로 점검: 전체 행 수 세기·서버 거르기·서버 정렬(`GridRowCounter`·`GridFilterRunner`)은 「바인드 변수」 목록에 그 이름이 없을 때(MyBatis 시나리오 값 실행·글에서 지운 변수) 실행 때 값을 쓰게 했다. 위치 바인드(:1)·같은 이름 반복·NULL·날짜·숫자·문자 종류 보존. 대체 변수(&x)는 엔진이 실행마다 다시 묻는다(마지막 답이 채워짐). 제약: 제품 조회 경로에 쓰기 SQL 을 넣지 않는다(시험 준비용 DDL 은 통합 시험 안에서만)
+  - acceptance: 바인드 변수가 있는 결과의 서버 재조회 내보내기(CSV·xlsx)가 같은 행을 쓴다 / 값이 없으면 서버 오류 대신 이유가 보인다 / 행 수 세기·서버 거르기도 같은 값으로 돈다 / 단위 + Oracle 통합 시험(26ai·11.2) / `dotnet build Oranda.sln -warnaserror`·전체 시험 통과
+  - note: 담당 PC: win144(Windows 개발 PC) — 맥북 세션은 이 Task 를 하지 않는다. 사용자 원문(2026-10-26): 「Excel 내보내기 할때 서버에서 다시 조회해서 내보내면 바인드 변수가 없다는 에러가 발생한다. 수정해줘」. 크기 M. 레인 sc-export. 결과: 서버 재조회 내보내기가 결과를 만들 때 쓴 바인드 값을 그대로 넘기고(없으면 바인드 변수 창 값, 둘 다 없으면 이유 안내) 행 수 세기·서버 거르기도 같은 값을 쓰도록 고쳤다; 단위 11개 + 26ai·11.2 통합 시험 1개 통과 (win144)
 
 ## 의존 그래프
 
@@ -927,6 +938,7 @@ graph LR
   TSK-11-01 --> TSK-10-03
   TSK-12-01 --> TSK-10-03
   TSK-12-02 --> TSK-10-03
+  TSK-12-03 --> TSK-10-03
   style TSK-01-02 fill:#e8f5e9,stroke:#2e7d32
   style TSK-03-01 stroke:#c62828,stroke-width:2px
   style TSK-02-02 stroke:#c62828,stroke-width:2px
@@ -947,7 +959,7 @@ graph LR
 - WP-08(2026-10-25 추가, Task 6개 이상): 서로 depends 가 없다(라이선스·노출 점검·CI·설치 안내·정리가 각자 다른 파일). 그래프에 넣지 않는다.
 - WP-07(2026-10-25 추가, Task 8개): 최장 경로 TSK-07-01 → TSK-07-02 → TSK-07-07 → TSK-07-08(깊이 4 = 계약 1 + 기능 1 + 측정 1 + 통합테스트 1). Fan-in: TSK-07-01 이 5(계약 전용, 구조적 예외), TSK-07-08 이 depends 6(통합테스트, 구조적 예외). 계약 뒤 07-02~07-06 은 서로 depends 가 없고 소유 파일이 겹치지 않는다(TRD 10.9). TSK-07-08 이 발견한 결함 2건을 TSK-07-09·TSK-07-10(각각 TSK-07-08 에만 depends, 서로 독립)으로 더했다(WP-07 Task 10개, 최장 경로는 깊이 5). 사용자 결정 D-013(기본 Role = SQL 개발자)을 TSK-07-11(TSK-07-08 에만 depends)로 더했다(WP-07 Task 11개).
 - WP-09(2026-10-25 추가, Task 10개): 최장 경로 TSK-09-01 → TSK-09-02 → TSK-09-04 → TSK-09-10(깊이 4 = 계약 1 + 기능 2 + 통합테스트 1). TSK-09-04 는 ExecutionCommands.cs 를 09-02 가 먼저 고치고 Shell/Menus 를 09-03 이 먼저 고쳐서 둘 다에 depends, Roles 시험 때문에 TSK-07-11 에도 depends. TSK-09-08·09-09 는 FeatureSettings*·StartPage.cs·FeatureTexts 를 고친 TSK-07-11(완료)에 depends. TSK-09-05·09-06(ux-layout)과 TSK-09-07(ux-export)은 depends 가 없다(09-06 은 같은 레인 차례만). Fan-in: TSK-09-10 이 depends 8(통합테스트, 구조적 예외), TSK-09-04 가 3. 머지 순서: 09-01 → 09-02 → 09-03 (→ 09-04), 09-05 → 09-06, 09-07 은 아무 때나, TSK-07-11 → 09-08 → 09-09, 마지막 09-10. 파일 소유 = TRD 11.10. TSK-09-10 이 발견한 결함 2건을 TSK-09-11·TSK-09-12(각각 TSK-09-10 에만 depends, 서로 독립)로 더했다(WP-09 Task 12개, 최장 경로 깊이 5).
-- WP-10·WP-11·WP-12(2026-10-26 추가, Task 6개): 최장 경로 TSK-10-01(또는 10-02, 11-01, 12-01, 12-02) → TSK-10-03(깊이 2 = 기능 1 + 통합확인 1). 다섯 기능·결함 Task 는 서로 depends 가 없는 병렬 레인(sc-search·sc-add·sc-rows·sc-invalid·sc-plsqlrun)이다. TSK-10-01·TSK-10-02 는 ScriptsView.axaml·ScriptsView.axaml.cs·ScriptsViewModel.cs·literals-en.json 을 함께 만지므로 자기 몫만 바꾸고 나중에 머지하는 쪽이 rebase 충돌을 푼다(TRD 12.1). Fan-in: TSK-10-03 이 depends 5(통합확인, 구조적 예외). 파일 소유 = TRD 12.1·13.1, WP-12 는 결함이라 PRD·TRD 에 쓰지 않는다.
+- WP-10·WP-11·WP-12(2026-10-26 추가, Task 7개): 최장 경로 TSK-10-01(또는 10-02, 11-01, 12-01, 12-02) → TSK-10-03(깊이 2 = 기능 1 + 통합확인 1). 여섯 기능·결함 Task 는 서로 depends 가 없는 병렬 레인(sc-search·sc-add·sc-rows·sc-invalid·sc-plsqlrun·sc-export)이다. TSK-10-01·TSK-10-02 는 ScriptsView.axaml·ScriptsView.axaml.cs·ScriptsViewModel.cs·literals-en.json 을 함께 만지므로 자기 몫만 바꾸고 나중에 머지하는 쪽이 rebase 충돌을 푼다(TRD 12.1). Fan-in: TSK-10-03 이 depends 6(통합확인, 구조적 예외). 파일 소유 = TRD 12.1·13.1, WP-12 는 결함이라 PRD·TRD 에 쓰지 않는다.
 
 **Fan-in Top 5**
 

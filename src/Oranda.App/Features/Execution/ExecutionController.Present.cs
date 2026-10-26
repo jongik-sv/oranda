@@ -20,8 +20,11 @@ public sealed partial class ExecutionController
 {
     // ---- 결과 반영 ---------------------------------------------------------------------------
 
-    private void Present(SqlEditorViewModel tab, ResultTabsViewModel results, SqlStatement stmt, ExecutionResult r, int ordinal, bool scriptMode = false)
+    /// <param name="binds">이 실행이 쓴 바인드 값. 결과 탭이 문장에 나온 이름의 값만 남겨 두었다가 서버 재조회(내보내기 등)에 그대로 쓴다.</param>
+    private void Present(SqlEditorViewModel tab, ResultTabsViewModel results, SqlStatement stmt, ExecutionResult r, int ordinal,
+                         IReadOnlyDictionary<string, BindValue>? binds = null, bool scriptMode = false)
     {
+        var runBinds = SnapshotBinds(stmt, binds);
         var title = "결과 " + ordinal.ToString(CultureInfo.InvariantCulture);
         var text = Describe(r);
         switch (r.Status)
@@ -39,7 +42,7 @@ public sealed partial class ExecutionController
                 }
                 if (r.ResultSet is { } rs)
                 {
-                    results.AddQuery(rs, title, stmt);
+                    results.AddQuery(rs, title, stmt, runBinds: runBinds);
                 }
                 else if (!scriptMode)
                 {
@@ -50,7 +53,7 @@ public sealed partial class ExecutionController
                 {
                     if (value is IResultSet cursor)
                     {
-                        results.AddQuery(cursor, ":" + name, stmt);
+                        results.AddQuery(cursor, ":" + name, stmt, runBinds: runBinds);
                     }
                     else
                     {
@@ -88,6 +91,26 @@ public sealed partial class ExecutionController
 
                 break;
         }
+    }
+
+    /// <summary>실행에 쓴 값 가운데 문장에 나온 이름의 것만(스크립트는 문장마다 이름이 다르다). 없으면 null.</summary>
+    internal static IReadOnlyDictionary<string, BindValue>? SnapshotBinds(SqlStatement stmt, IReadOnlyDictionary<string, BindValue>? binds)
+    {
+        if (binds is not { Count: > 0 } || stmt.BindNames.Count == 0)
+        {
+            return null;
+        }
+
+        var snapshot = new Dictionary<string, BindValue>(StringComparer.OrdinalIgnoreCase);
+        foreach (var name in stmt.BindNames)
+        {
+            if (binds.TryGetValue(name, out var value))
+            {
+                snapshot[name] = value;
+            }
+        }
+
+        return snapshot.Count == 0 ? null : snapshot;
     }
 
     private static string StatusMark(ExecutionStatus s) => s switch
