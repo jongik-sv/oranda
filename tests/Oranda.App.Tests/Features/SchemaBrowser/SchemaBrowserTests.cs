@@ -290,6 +290,16 @@ public class SchemaBrowserTests
     }
 
     [Fact]
+    public async Task Panel_created_after_connecting_shows_the_current_connection()
+    {
+        // 스크립트 창 뒤에 있어 접속한 뒤에야 만들어진 패널: SessionOpened 를 놓쳤어도 지금 접속을 보여 준다.
+        var h = new Harness(connectedBefore: true);
+        await WaitForAsync(() => h.Vm.Roots.Count > 0);
+        Assert.Same(h.Session, h.Vm.CurrentSession);
+        Assert.Equal("SCOTT", h.Vm.Roots[1].Title);
+    }
+
+    [Fact]
     public async Task Monitor_sessions_are_ignored()
     {
         var h = new Harness();
@@ -329,9 +339,11 @@ public class SchemaBrowserTests
 
     internal sealed class Harness
     {
-        public Harness()
+        /// <param name="connectedBefore">패널을 만들기 전에 이미 접속해 둔다(지금 접속 = <see cref="Session"/>).</param>
+        public Harness(bool connectedBefore = false)
         {
             Session = new TestSession();
+            Connections = connectedBefore ? new Oranda.App.Tests.Features.PlsqlWorkspace.PlsqlWorkspaceMarkdownTests.OpenConnections(Session) : null;
             Meta.Schemas.AddRange(["HR", "SCOTT"]);
             Meta.Objects.AddRange(
             [
@@ -352,6 +364,8 @@ public class SchemaBrowserTests
         }
 
         public TestSession Session { get; }
+
+        public Oranda.App.Features.ConnectionManager.IConnectionService? Connections { get; }
 
         public EventBus Bus { get; } = new();
 
@@ -384,6 +398,7 @@ public class SchemaBrowserTests
             : serviceType == typeof(ISchemaTreeProvider) ? h.Tree
             : serviceType == typeof(ISchemaAdminProvider) ? h.Admin
             : serviceType == typeof(Oranda.App.Shell.Settings.SettingsService) ? h.Settings
+            : serviceType == typeof(Oranda.App.Features.ConnectionManager.IConnectionService) ? h.Connections
             : null;
     }
 

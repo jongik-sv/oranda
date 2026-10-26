@@ -562,7 +562,7 @@ public sealed class PlsqlWorkspaceMarkdownTests : IDisposable
         }
     }
 
-    private sealed class OpenConnections(ISession? open) : IConnectionService
+    internal sealed class OpenConnections(ISession? open) : IConnectionService
     {
         public ISession? ActiveSession => open;
 

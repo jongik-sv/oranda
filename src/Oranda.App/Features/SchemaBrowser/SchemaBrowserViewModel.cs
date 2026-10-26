@@ -100,6 +100,15 @@ public sealed partial class SchemaBrowserViewModel : ToolPanelViewModelBase, IDi
             _subscriptions.Add(bus.Subscribe<SessionClosed>(this, e => PostToUi(() => _ = OnSessionClosedAsync(e))));
             _subscriptions.Add(bus.Subscribe<MetadataInvalidated>(this, e => PostToUi(() => _ = OnMetadataInvalidatedAsync(e))));
         }
+
+        // 패널은 처음 보일 때 만들어진다(같은 자리의 스크립트 창 등 다른 탭 뒤에 있었으면 접속한 뒤). 그 전에 연 접속은 SessionOpened 를
+        // 놓쳤으므로 지금 접속을 바로 따른다. 접속 서비스가 이미 있을 때만 본다(없으면 아직 접속 전이고, 만들면 Oracle 어셈블리를 깨운다).
+        if (services.GetService(typeof(ConnectionManager.IConnectionService)) is ConnectionManager.IConnectionService { ActiveSession: { } open })
+        {
+            ResolveServices();
+            FollowConnections();
+            _ = SetSessionAsync(open);
+        }
     }
 
     /// <summary>이벤트를 UI 스레드로 넘기는 방법. 시험은 바로 실행하도록 바꾼다.</summary>
