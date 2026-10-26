@@ -110,6 +110,13 @@ public sealed partial class SqlWorkspaceViewModel : ToolPanelViewModelBase, IInn
     /// <summary><see cref="ToolScope"/> 가 바뀌었다(<see cref="MyBatis"/> 를 붙이거나 뗐다).</summary>
     public event EventHandler? ToolScopeChanged;
 
+    /// <summary>
+    /// 이 작업 공간이 쓸 세션(TSK-14-01, <c>SessionRouter</c> 가 고른다): 자기 세션 / 접속의 세션을 함께 씀. null = 설정을 따른다.
+    /// 작업 공간 파일에 남는다(세션 번호가 아니라 이 선택만).
+    /// </summary>
+    [ObservableProperty]
+    private WorkspaceSessionMode? _sessionMode;
+
     /// <summary>이 작업 공간의 SQL 탭(열린 순서).</summary>
     public ObservableCollection<SqlEditorViewModel> Tabs { get; } = [];
 
@@ -234,6 +241,7 @@ public sealed partial class SqlWorkspaceViewModel : ToolPanelViewModelBase, IInn
         ActiveTabId = ActiveTab?.TabId,
         Tabs = [.. Tabs.Select(t => t.ToWorkspaceTab())],
         SourcePath = SourcePath,
+        Session = WorkspaceSessionModes.Format(SessionMode),
     };
 
     /// <summary>

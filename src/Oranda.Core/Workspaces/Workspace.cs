@@ -24,6 +24,12 @@ public sealed record Workspace
     /// <summary>이 작업 공간을 연 Markdown 작업 공간 파일(.md) 또는 MyBatis 매퍼(.xml)의 절대 경로. 파일에서 열지 않았으면 null.</summary>
     public string? SourcePath { get; init; }
 
+    /// <summary>
+    /// 이 작업 공간이 쓸 세션(TSK-14-01): <c>own</c> = 자기 세션(첫 실행 때 연다), <c>shared</c> = 접속의 세션을 함께 쓴다,
+    /// null = 설정 「워크스페이스마다 새 세션」 을 따른다. 세션 번호는 남기지 않는다(복원 때 세션을 미리 열지 않는다).
+    /// </summary>
+    public string? Session { get; init; }
+
     public string Layout { get; init; } = "layout.json";
 }
 

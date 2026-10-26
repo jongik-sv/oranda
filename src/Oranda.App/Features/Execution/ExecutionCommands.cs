@@ -85,7 +85,9 @@ public static class ExecutionCommands
                 Session = () => SessionRouter.Resolve(container).Current,
                 TabSession = tab => SessionRouter.Resolve(container).SessionFor(tab),
                 MissingConnection = tab => SessionRouter.Resolve(container).MissingProfileOf(tab),
-                WorkSessions = () => SessionRouter.Resolve(container).Sessions,
+                WorkSessions = () => SessionRouter.Resolve(container).AllSessions, // 같은 DB 에 더 연 세션도 미커밋을 묻는다(TSK-14-01)
+                PrepareSession = (tab, ct) => SessionRouter.Resolve(container).PrepareAsync(tab, ct),
+                UseConnection = (tab, session) => SessionRouter.Resolve(container).UseConnection(tab, session),
                 ConnectionLabel = s => SessionRouter.Resolve(container).LabelOf(s),
                 ProfileName = id => SessionRouter.Resolve(container).ProfileNameAsync(id),
                 Reconnect = (id, _) => SessionRouter.Resolve(container).ReconnectAsync(id, () => ConnectionManagerCommands.ConnectProfileAsync(container, id)),

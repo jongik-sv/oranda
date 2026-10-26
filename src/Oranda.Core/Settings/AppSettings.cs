@@ -214,11 +214,18 @@ public sealed record WorkspaceSettings
     /// <summary>종료할 때 열려 있던 작업 공간들(열린 순서). 다음 시작 때 모두 다시 연다.</summary>
     public IReadOnlyList<string> OpenWorkspaceIds { get; init; } = ["default"];
 
+    /// <summary>
+    /// 워크스페이스마다 새 세션(TSK-14-01, 기본 켬): 같은 DB 를 쓰는 작업 공간이 여럿이면 첫 실행 때 각자 세션을 열어 서로 기다리지 않는다.
+    /// 끄면 지금처럼 접속의 세션 하나를 함께 쓴다. 작업 공간마다 고른 값(작업 공간 파일)이 있으면 그것이 먼저다.
+    /// </summary>
+    public bool SessionPerWorkspace { get; init; } = true;
+
     // 목록은 참조가 아니라 내용으로 비교한다(설정 구역별 변경 알림이 같은 값을 「바뀜」으로 보지 않게).
     public bool Equals(WorkspaceSettings? other) =>
         other is not null
         && AutosaveSeconds == other.AutosaveSeconds
         && RestoreOnStartup == other.RestoreOnStartup
+        && SessionPerWorkspace == other.SessionPerWorkspace
         && LastWorkspaceId == other.LastWorkspaceId
         && OpenWorkspaceIds.SequenceEqual(other.OpenWorkspaceIds);
 

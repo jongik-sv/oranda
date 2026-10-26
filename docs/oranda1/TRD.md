@@ -557,7 +557,7 @@ TSK-10-01 과 TSK-10-02 는 같은 파일(`ScriptsView.axaml`·`ScriptsView.axam
 - 자동 저장 표지(`SqlWorkspaceViewModel` 의 변경 감지)에 `SessionMode` 를 넣을지(지금은 모드만 바꾸면 자동 저장이 돌지 않을 수 있다).
 - 탭이 0개인 작업 공간을 닫으면 가드가 돌지 않아 미커밋 확인 없이 추가 세션을 닫는다(드라이버가 롤백) — 드문 경우, 막을지 결정.
 - PL/SQL 문서가 콤보로 추가 세션을 고르지 못하게(목록에서 빼기) — 콤보 작업 때.
-- 전체 시험(`dotnet test Oranda.sln`)은 초안 단계에서 돌리지 않았다(관련 클래스만).
+- 초안 상태에서 App 단위 시험 전체(Integration·Perf 제외) 3,703개 중 3,702개 통과 — 실패 1개(`ExecutionTests.Bind_panel_focuses_the_value_of_a_requested_variable_and_the_name_of_a_new_row`)는 따로 돌리면 통과하는 포커스 시험(부하 때 흔들림, sc-itest 정리 대상)이다. 다른 시험 프로젝트는 빌드만 확인했다.
 
 ### 14.4 시험 방침
 
