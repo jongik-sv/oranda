@@ -3,13 +3,18 @@ using Avalonia.Controls;
 using Avalonia.VisualTree;
 using Oranda.App.Features.Binds;
 using Oranda.App.Features.Execution;
+using Oranda.App.Features.SqlEditor;
 using Oranda.App.Tests.Features.SqlEditor;
 using Oranda.Core.Events;
 using Oranda.Core.Execution;
 
 namespace Oranda.App.Tests.Features.Execution;
 
-/// <summary>바인드 변수 창 격자·자료형 서식·블록 복사 붙여 넣기(TSK-03-09).</summary>
+/// <summary>
+/// 바인드 변수 창 격자·자료형 서식·블록 복사 붙여 넣기(TSK-03-09).
+/// 창 VM 은 시험마다 새 호스트로 만든다(<c>ForHost</c>): 기본 생성자는 프로세스 공용 <c>SqlEditorHost.Current</c> 의 활성 탭 목록을 쓰는데,
+/// 병렬로 도는 셸 시험이 await 사이에 Current 를 자기 호스트(활성 탭 있음)로 바꿔 두면 두 VM 이 한 목록을 나눠 써 줄이 섞인다.
+/// </summary>
 public sealed partial class BindGridTests
 {
     private static string? UserMapperPath => Oranda.App.Tests.TestSupport.UserMapper.Path;
@@ -189,7 +194,7 @@ public sealed partial class BindGridTests
     [Fact]
     public void Copy_and_paste_between_two_stores_with_block_selection_in_the_view_model()
     {
-        var vm = new BindVariablesViewModel(new EventBus());
+        var vm = BindVariablesViewModel.ForHost(new EventBus(), new SqlEditorHost());
         vm.Store.Ensure(["A", "B", "C"]);
         vm.Store.Find("A")!.Text = "1";
         vm.Store.Find("B")!.Text = "2";
@@ -199,7 +204,7 @@ public sealed partial class BindGridTests
         Assert.Equal("B\t2\tVarchar2\tIN\nC\t3\tVarchar2\tIN\n", tsv);
         Assert.Contains("2줄", vm.StatusText, StringComparison.Ordinal);
 
-        var other = new BindVariablesViewModel(new EventBus());
+        var other = BindVariablesViewModel.ForHost(new EventBus(), new SqlEditorHost());
         other.Store.Ensure(["B", "X"]);
         Assert.Equal(1, other.PasteText(tsv!));
         Assert.Equal("2", other.Store.Find("B")!.Text);
@@ -209,7 +214,7 @@ public sealed partial class BindGridTests
     [Fact]
     public void Delete_removes_the_whole_block()
     {
-        var vm = new BindVariablesViewModel(new EventBus());
+        var vm = BindVariablesViewModel.ForHost(new EventBus(), new SqlEditorHost());
         vm.Store.Ensure(["A", "B", "C", "D"]);
         vm.Selected = vm.Rows[1];
         vm.SelectedRows = [vm.Rows[1], vm.Rows[2]];
@@ -221,7 +226,7 @@ public sealed partial class BindGridTests
     [Fact]
     public Task View_uses_the_grid_style_multi_select_and_value_cell_shows_error_and_formats_on_leave() => Ui.Run(() =>
     {
-        var vm = new BindVariablesViewModel(new EventBus());
+        var vm = BindVariablesViewModel.ForHost(new EventBus(), new SqlEditorHost());
         vm.Store.Ensure(["N", "D"]);
         vm.Rows[0].Type = BindDataType.Number;
         vm.Rows[1].Type = BindDataType.Date;
@@ -277,7 +282,7 @@ public sealed partial class BindGridTests
         var names = ParamRegex().Matches(File.ReadAllText(userMapper)).Select(m => m.Groups[1].Value)
             .Distinct(StringComparer.OrdinalIgnoreCase).Take(30).ToList();
         Assert.NotEmpty(names);
-        var vm = new BindVariablesViewModel(new EventBus());
+        var vm = BindVariablesViewModel.ForHost(new EventBus(), new SqlEditorHost());
         vm.Store.Ensure(names);
         var view = new BindVariablesView { DataContext = vm };
         var window = new Window { Width = 520, Height = 600, Content = view };
@@ -293,7 +298,7 @@ public sealed partial class BindGridTests
         vm.SelectedRows = [.. vm.Rows];
         var tsv = vm.CopyText()!;
 
-        var other = new BindVariablesViewModel(new EventBus());
+        var other = BindVariablesViewModel.ForHost(new EventBus(), new SqlEditorHost());
         other.Store.Ensure(names);
         Assert.Equal(names.Count, other.PasteText(tsv));
         for (var i = 0; i < names.Count; i++)

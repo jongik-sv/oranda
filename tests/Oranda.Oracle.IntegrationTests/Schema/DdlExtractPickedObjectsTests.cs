@@ -14,24 +14,39 @@ using Oranda.Oracle.Sessions;
 namespace Oranda.Oracle.IntegrationTests.Schema;
 
 // 소유: TSK-13-01. DDL 일괄 추출 대상 미리보기 — 미리보기 목록(객체 검색)에서 체크한 객체만 추출한다.
+// 26ai(OracleFree)와 11.2(Oracle11g) 두 서버에서 같은 시험을 돈다(TSK-10-03).
 
 [Trait("Category", "Integration")]
 [Collection(OracleFreeShared.Name)]
-public sealed class DdlExtractPickedObjectsTests : IAsyncLifetime
+public sealed class DdlExtractPickedObjectsTests(OracleFreeFixture db) : DdlExtractPickedObjectsCases(db.DataSource, db.SystemPassword)
 {
-    private readonly OracleFreeFixture _db;
+}
+
+/// <summary>11.2 서버: 객체 검색 11g 변형 SQL·DBMS_METADATA 경로(TSK-10-03 이 더함).</summary>
+[Trait("Category", "Integration")]
+[Collection(Oracle11gShared.Name)]
+public sealed class DdlExtractPickedObjects11gTests(Oracle11gFixture db) : DdlExtractPickedObjectsCases(db.DataSource, db.SystemPassword)
+{
+    // 11.2 에는 NO AUTHENTICATION 이 없다(18c+). 이 계정으로는 접속하지 않는다(일회용 비밀번호, 출력하지 않는다). XE 기본 표 공간은 SYSTEM 이라 USERS 를 정한다.
+    private readonly string _ownerPassword = "Pk" + Guid.NewGuid().ToString("N")[..16];
+
+    protected override string CreateOwnerSql(string owner) => $"CREATE USER {owner} IDENTIFIED BY \"{_ownerPassword}\" DEFAULT TABLESPACE USERS QUOTA UNLIMITED ON USERS";
+}
+
+public abstract class DdlExtractPickedObjectsCases(string dataSource, string systemPassword) : IAsyncLifetime
+{
     private readonly string _owner = "PCK_" + Guid.NewGuid().ToString("N")[..8].ToUpperInvariant();
     private readonly List<ISession> _sessions = [];
     private readonly string _outDir = Path.Combine(Path.GetTempPath(), "oranda-ddl-pick-" + Guid.NewGuid().ToString("N")[..8]);
 
-    public DdlExtractPickedObjectsTests(OracleFreeFixture db) => _db = db;
+    protected virtual string CreateOwnerSql(string owner) => $"CREATE USER {owner} NO AUTHENTICATION QUOTA UNLIMITED ON USERS";
 
     public async Task InitializeAsync()
     {
         await using var conn = await OpenSystemAsync();
         string[] ddl =
         [
-            $"CREATE USER {_owner} NO AUTHENTICATION QUOTA UNLIMITED ON USERS",
+            CreateOwnerSql(_owner),
             $"CREATE TABLE {_owner}.t_a (id NUMBER)",
             $"CREATE TABLE {_owner}.t_b (id NUMBER)",
             $"CREATE TABLE {_owner}.t_c (id NUMBER)",
@@ -128,16 +143,16 @@ public sealed class DdlExtractPickedObjectsTests : IAsyncLifetime
     private async Task<ISession> OpenAsync()
     {
         var manager = new OracleSessionManager(new RecordingBus());
-        using var cred = new SecureCredential(_db.SystemPassword);
-        var session = await manager.OpenAsync(new ConnectionProfile("t-pick", "system", _db.DataSource), cred, SessionPurpose.Work, default);
+        using var cred = new SecureCredential(systemPassword);
+        var session = await manager.OpenAsync(new ConnectionProfile("t-pick", "system", dataSource), cred, SessionPurpose.Work, default);
         _sessions.Add(session);
         return session;
     }
 
     private async Task<OracleConnection> OpenSystemAsync()
     {
-        var profile = new ConnectionProfile("free-system", "system", _db.DataSource);
-        var conn = new OracleConnection(profile.BuildConnectionString(_db.SystemPassword));
+        var profile = new ConnectionProfile("pick-system", "system", dataSource);
+        var conn = new OracleConnection(profile.BuildConnectionString(systemPassword));
         await conn.OpenAsync();
         return conn;
     }

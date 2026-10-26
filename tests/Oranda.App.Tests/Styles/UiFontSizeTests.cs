@@ -11,6 +11,8 @@ using Oranda.App.Tests.Shell.Headless;
 namespace Oranda.App.Tests.Styles;
 
 /// <summary>기본 화면 글자: 메뉴 막대·메뉴 항목·탭 머리글이 새 기본값(14/12/13.5)과 화면 글자 배율을 따른다.</summary>
+// 화면 글자 배율·글꼴은 앱 리소스(프로세스에 하나)를 바꾼다. await 사이에 병렬 시험이 커진 글자로 행 높이·보이는 줄 수를 재지 않게 따로 돈다.
+[Collection("EditorAppearance")]
 public class UiFontSizeTests
 {
     [Fact]

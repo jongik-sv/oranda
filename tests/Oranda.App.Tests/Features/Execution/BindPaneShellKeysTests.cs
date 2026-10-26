@@ -163,7 +163,7 @@ public sealed class BindPaneShellKeysTests
         rig.FocusEditor("select :emp_id, :ename from dual");
         rig.ClickRowHead(0);
 
-        var other = new BindVariablesViewModel(new EventBus());
+        var other = BindVariablesViewModel.ForHost(new EventBus(), new SqlEditorHost());
         other.Store.Ensure(["EMP_ID", "ENAME"]);
         other.Rows[0].Type = BindDataType.Number;
         other.Rows[0].Text = "7499";

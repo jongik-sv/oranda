@@ -1226,7 +1226,7 @@ public sealed class ExecutionTests
     public Task Bind_panel_focuses_the_value_of_a_requested_variable_and_the_name_of_a_new_row() => Ui.Run(() =>
     {
         var bus = new EventBus();
-        var vm = new BindVariablesViewModel(bus);
+        var vm = BindVariablesViewModel.ForHost(bus, new SqlEditorHost());
         vm.Store.Ensure(["A", "ID"]);
         var view = new BindVariablesView { DataContext = vm };
         var window = new Avalonia.Controls.Window { Width = 500, Height = 300, Content = view };
@@ -1256,7 +1256,7 @@ public sealed class ExecutionTests
     [InlineData(200)] // 최소 폭보다 좁으면 가로 스크롤(열은 그래도 맞다)
     public Task Bind_panel_columns_line_up_across_rows_whatever_the_name_length(double width) => Ui.Run(() =>
     {
-        var vm = new BindVariablesViewModel(new EventBus());
+        var vm = BindVariablesViewModel.ForHost(new EventBus(), new SqlEditorHost());
         vm.Store.Ensure(["PROC_CD", "PDN_PST_DD_FR", "TRST_PROC_CMP_CD", "OP_GRD"]);
         var view = new BindVariablesView { DataContext = vm };
         var window = new Avalonia.Controls.Window { Width = width, Height = 400, Content = view };
@@ -1285,7 +1285,7 @@ public sealed class ExecutionTests
     [InlineData(390)]
     public Task Bind_panel_has_no_horizontal_scroll_at_default_right_pane_widths(double width) => Ui.Run(() =>
     {
-        var vm = new BindVariablesViewModel(new EventBus());
+        var vm = BindVariablesViewModel.ForHost(new EventBus(), new SqlEditorHost());
         vm.Store.Ensure(["PROC_CD", "OP_GRD"]);
         var view = new BindVariablesView { DataContext = vm };
         var window = new Avalonia.Controls.Window { Width = width, Height = 400, Content = view };

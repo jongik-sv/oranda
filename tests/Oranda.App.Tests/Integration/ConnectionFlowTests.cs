@@ -68,12 +68,13 @@ public sealed class ConnectionFlowTests(ItDb db, ITestOutputHelper output) : ICl
             Assert.Null(rig.Service.ActiveSession);
             Assert.False(rig.State.HasSession);
 
-            // 정상: 입력한 비밀번호로 접속 → 시험 사용자, 서버 버전 26ai(23.x).
+            // 정상: 입력한 비밀번호로 접속 → 시험 사용자, 서버 버전은 그 DB 의 주 버전(26ai = 23.x, 11.2 = 11.x, TSK-10-03 이 두 DB 에서 돌린다).
             var ok = await rig.TryConnectAsync(saved, db.Password);
             Assert.True(ok.IsConnected, ok.Message);
             await HeadlessHost.WaitUntil(() => rig.State.HasSession);
             Assert.Equal(db.User, ok.Session!.Server.SessionUser);
-            Assert.StartsWith("23.", ok.ServerVersion, StringComparison.Ordinal);
+            var major = db.Text("select version from product_component_version where product like 'Oracle%' and rownum = 1").Split('.')[0];
+            Assert.StartsWith(major + ".", ok.ServerVersion, StringComparison.Ordinal);
             output.WriteLine("S1-1 OK: 가져오기→저장→오류 접속→정상 접속, 서버 " + ok.ServerVersion);
         }
         finally

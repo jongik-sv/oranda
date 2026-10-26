@@ -9,11 +9,12 @@ using Oranda.App.Tests.Shell.Headless;
 using Oranda.Core.Metadata;
 using Oranda.Core.Sessions;
 using Oranda.Testing;
+using Xunit.Abstractions;
 
 namespace Oranda.App.Tests.Features.DbTools;
 
 /// <summary>TSK-13-01 DDL 일괄 추출 대상 미리보기 시험. <c>ORANDA_RENDER_DIR</c> 가 있으면 상태별 라이트·다크 PNG 를 남긴다.</summary>
-public class DdlExtractTargetsTests
+public class DdlExtractTargetsTests(ITestOutputHelper output)
 {
     private static readonly DateTime Ddl = new(2026, 10, 20, 14, 5, 0);
 
@@ -439,6 +440,55 @@ public class DdlExtractTargetsTests
         await exact.PendingRefresh;
         Assert.False(exact.TargetsTruncated);
     }
+
+    /// <summary>
+    /// TSK-10-03 측정: 대상 5,000개(한도 + 1)가 목록에 들어와 화면에 그려지는 시간과 머리글 체크(모두 끔·모두 켬) 시간.
+    /// 기본 실행에서 빠지는 Perf 묶음이다(숫자는 결과서 docs/oranda1/itest/TSK-10-03.md 에 적는다). 한도는 멈춤만 잡는 넉넉한 값.
+    /// </summary>
+    [Fact]
+    [Trait("Category", "Perf")]
+    public Task Five_thousand_targets_fill_the_tab_draw_and_toggle_in_time() => HeadlessHost.Run(async () =>
+    {
+        var rows = Enumerable.Range(0, DdlExtractViewModel.MaxTargets + 1)
+            .Select(i => Row(i % 3 == 0 ? "VIEW" : "TABLE", "T" + i.ToString("D5", System.Globalization.CultureInfo.InvariantCulture), i % 50 == 0 ? "INVALID" : "VALID"))
+            .ToArray();
+        var vm = NewVm(new FakeAdmin { Rows = rows }, attach: false);
+        vm.TargetDebounceMilliseconds = 0;
+        var (window, _) = Show(vm, 1100, 640);
+        try
+        {
+            var sw = System.Diagnostics.Stopwatch.StartNew();
+            vm.Attach(new FakeSession());
+            await vm.PendingRefresh;
+            Pump();
+            window.UpdateLayout();
+            var fill = sw.Elapsed;
+
+            sw.Restart();
+            vm.AllChecked = false;
+            Pump();
+            window.UpdateLayout();
+            var uncheck = sw.Elapsed;
+            Assert.Equal(0, vm.CheckedCount);
+
+            sw.Restart();
+            vm.AllChecked = true;
+            Pump();
+            window.UpdateLayout();
+            var check = sw.Elapsed;
+
+            Assert.Equal(DdlExtractViewModel.MaxTargets, vm.TargetCount);
+            Assert.Equal(DdlExtractViewModel.MaxTargets, vm.CheckedCount);
+            Assert.True(vm.TargetsTruncated);
+            output.WriteLine($"TSK-10-03 DDL 대상 5,000개: 목록+그리기 {fill.TotalMilliseconds:N0} ms, 모두 끔 {uncheck.TotalMilliseconds:N0} ms, 모두 켬 {check.TotalMilliseconds:N0} ms");
+            Assert.True(fill < TimeSpan.FromSeconds(30), $"목록+그리기 {fill}");
+            Assert.True(uncheck < TimeSpan.FromSeconds(30) && check < TimeSpan.FromSeconds(30), $"체크 {uncheck} / {check}");
+        }
+        finally
+        {
+            window.Close();
+        }
+    });
 
     // ---- 화면 ----
 

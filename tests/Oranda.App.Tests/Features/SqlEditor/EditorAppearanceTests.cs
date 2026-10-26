@@ -48,7 +48,10 @@ public class EditorAppearanceTests
     });
 }
 
-/// <summary>편집기 글꼴 리소스는 프로세스에 하나라, 다른 시험이 병렬로 셸을 만들면 기본값으로 되돌린다. 병렬 시험이 끝난 뒤 따로 돈다.</summary>
+/// <summary>
+/// 편집기 글꼴·화면 글자 배율 리소스는 프로세스에 하나라, 다른 시험이 병렬로 셸을 만들면 기본값으로 되돌리고,
+/// 거꾸로 이 묶음이 바꾼 배율(150 %·200 %)을 병렬 시험이 보면 행 높이가 1.5·2배가 된다. 병렬 시험이 끝난 뒤 따로 돈다.
+/// </summary>
 [CollectionDefinition("EditorAppearance", DisableParallelization = true)]
 public sealed class EditorAppearanceGroup
 {

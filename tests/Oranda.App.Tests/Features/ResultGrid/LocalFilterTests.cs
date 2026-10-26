@@ -279,9 +279,8 @@ public sealed class LocalFilterTests
         await vm.Model!.LoadFirstPageAsync();
 
         vm.QuickFilterText = "g2";
-        await WaitAsync(() => vm.Model.IsLocalFiltered);
-
-        Assert.Contains("(전체 아님)", vm.StatusText, StringComparison.Ordinal);
+        // 상태 줄은 거르기가 끝난 뒤 Changed 이벤트로 다시 쓴다(UI 스레드 없이 돌아 그 사이가 보인다). 상태 줄까지 기다린다.
+        await WaitAsync(() => vm.Model.IsLocalFiltered && vm.StatusText.Contains("(전체 아님)", StringComparison.Ordinal));
         Assert.True(vm.CanFetchAllForFilter);
     }
 

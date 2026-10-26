@@ -640,8 +640,17 @@ public class ShellHeadlessTests
     [Fact]
     public Task Startup_does_not_load_oracle_or_antlr_assemblies() => HeadlessHost.Run(() =>
     {
-        var loaded = new List<string>();
-        void OnLoad(object? s, AssemblyLoadEventArgs e) => loaded.Add(e.LoadedAssembly.GetName().Name ?? string.Empty);
+        // 어셈블리 로드 알림은 프로세스 전체에서 온다. 병렬로 도는 다른 시험(지연 어셈블리를 일부러 훑는 ShellLogicTests 등)이 다른 스레드에서
+        // Oranda.Language·Oracle 을 올리면 여기 섞이므로, 시작 경로가 도는 UI 스레드에서 올린 것만 센다.
+        var loaded = new System.Collections.Concurrent.ConcurrentQueue<string>();
+        void OnLoad(object? s, AssemblyLoadEventArgs e)
+        {
+            if (Dispatcher.UIThread.CheckAccess())
+            {
+                loaded.Enqueue(e.LoadedAssembly.GetName().Name ?? string.Empty);
+            }
+        }
+
         AppDomain.CurrentDomain.AssemblyLoad += OnLoad;
         try
         {
