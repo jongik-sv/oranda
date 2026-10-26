@@ -99,9 +99,9 @@ public partial class PlsqlEditorView : UserControl, Oranda.App.Shell.Docking.IFo
         DiffTextScroll.IsVisible = rows.Count == 0;
         if (open != wasOpen)
         {
-            // 열 때 편집기 3 : 차이 2. 닫으면 차이 줄을 0 으로(끌어 바꾼 높이는 다음에 열 때 처음 비율로 돌아간다).
-            BodyGrid.RowDefinitions[0].Height = open ? new GridLength(3, GridUnitType.Star) : new GridLength(1, GridUnitType.Star);
-            BodyGrid.RowDefinitions[2].Height = open ? new GridLength(2, GridUnitType.Star) : new GridLength(0);
+            // 열 때 편집기 1 : 차이 1(차이는 다시 두 반쪽으로 나뉘어 넓게 준다). 닫으면 차이 칸을 0 으로(끌어 바꾼 너비는 다음에 열 때 처음 비율로 돌아간다).
+            BodyGrid.ColumnDefinitions[0].Width = new GridLength(1, GridUnitType.Star);
+            BodyGrid.ColumnDefinitions[2].Width = open ? new GridLength(1, GridUnitType.Star) : new GridLength(0);
         }
     }
 

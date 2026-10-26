@@ -7,7 +7,7 @@
              xmlns:diff="using:Oranda.App.Features.MyBatisWorkspace.Save"
              x:Class="Oranda.App.Features.PlsqlEditor.PlsqlEditorView"
              x:DataType="vm:PlsqlEditorViewModel">
-  <!-- 위: 저장 도구줄·충돌 알림 / 본문: SQL 편집기 + 아래 차이 보기(열렸을 때) / 맨 아래: 상태 -->
+  <!-- 위: 저장 도구줄·충돌 알림 / 본문: SQL 편집기 + 오른쪽 차이 보기(열렸을 때) / 맨 아래: 상태 -->
   <DockPanel>
     <Border DockPanel.Dock="Top" Classes="panel-toolbar">
       <StackPanel Orientation="Horizontal" Spacing="2">
@@ -29,12 +29,12 @@
     <Border DockPanel.Dock="Bottom" Classes="panel-status">
       <TextBlock Text="{Binding StatusText}" TextTrimming="CharacterEllipsis" />
     </Border>
-    <!-- 편집기 / 끌어 옮기는 경계 / 차이 보기(열렸을 때만, 왼쪽 = 서버·오른쪽 = 내 소스 나란히). 줄 높이는 코드에서 연다·닫는다. -->
-    <Grid x:Name="BodyGrid" RowDefinitions="*,Auto,0">
+    <!-- 편집기 | 끌어 옮기는 세로 경계 | 차이 보기(열렸을 때만, 왼쪽 = 서버·오른쪽 = 내 소스 나란히). 칸 너비는 코드에서 연다·닫는다. -->
+    <Grid x:Name="BodyGrid" ColumnDefinitions="*,Auto,0">
       <se:SqlEditorView x:Name="EditorView" keymaps:FocusSlot.Name="plsql" />
-      <GridSplitter x:Name="DiffSplitter" Grid.Row="1" Height="4" ResizeDirection="Rows" IsVisible="False"
+      <GridSplitter x:Name="DiffSplitter" Grid.Column="1" Width="4" ResizeDirection="Columns" IsVisible="False"
                     Background="{DynamicResource SystemControlForegroundBaseLowBrush}" />
-      <DockPanel x:Name="DiffPanel" Grid.Row="2" IsVisible="False">
+      <DockPanel x:Name="DiffPanel" Grid.Column="2" IsVisible="False">
         <!-- 머리 글자는 나란히 보기 두 반쪽 위에(MyBatis 「차이 보고 고르기」 창과 같은 들여쓰기) -->
         <Panel DockPanel.Dock="Top">
           <Grid x:Name="DiffHeads" ColumnDefinitions="*,*" Margin="46,0,0,0">
