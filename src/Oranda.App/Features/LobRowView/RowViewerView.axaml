@@ -2,23 +2,10 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:vm="using:Oranda.App.Features.LobRowView"
              xmlns:icons="using:Oranda.App.Shell.Icons"
+             xmlns:mon="using:Oranda.App.Features.SessionMonitor"
              x:Class="Oranda.App.Features.LobRowView.RowViewerView"
              x:DataType="vm:RowViewerViewModel">
-  <UserControl.Styles>
-    <!-- NULL 값은 흐리게, 편집 모드에서 바꾼 값은 강조한다. -->
-    <Style Selector="ListBox.rv ListBoxItem">
-      <Setter Property="Padding" Value="0" />
-      <Setter Property="MinHeight" Value="0" />
-    </Style>
-    <Style Selector="TextBlock.rv-value.null">
-      <Setter Property="Opacity" Value="0.5" />
-    </Style>
-    <Style Selector="TextBlock.rv-value.edited">
-      <Setter Property="FontWeight" Value="SemiBold" />
-      <Setter Property="Foreground" Value="{DynamicResource OrandaIconRedBrush}" />
-    </Style>
-  </UserControl.Styles>
-  <DockPanel Grid.IsSharedSizeScope="True">
+  <DockPanel>
     <!-- 툴바: 처음·이전·다음·마지막 · n / 전체 -->
     <Border DockPanel.Dock="Top" Classes="panel-toolbar">
       <DockPanel>
@@ -31,51 +18,16 @@
     </Border>
     <TextBox DockPanel.Dock="Top" Classes="compact search" Margin="4" PlaceholderText="열 이름·값 찾기" Text="{Binding FilterText, Mode=TwoWay}"
              AutomationProperties.Name="열 이름·값 찾기" />
-    <!-- 머리글: 번호 · 열 이름 · 타입 · 값 (칸 폭은 목록과 SharedSizeGroup 으로 맞춘다) -->
-    <Border DockPanel.Dock="Top" Classes="grid-header">
-      <Grid Margin="6,0" ColumnSpacing="8">
-        <Grid.ColumnDefinitions>
-          <ColumnDefinition Width="Auto" SharedSizeGroup="RvNo" />
-          <ColumnDefinition Width="Auto" SharedSizeGroup="RvName" />
-          <ColumnDefinition Width="Auto" SharedSizeGroup="RvType" />
-          <ColumnDefinition Width="*" />
-        </Grid.ColumnDefinitions>
-        <TextBlock Grid.Column="0" Text="#" MinWidth="18" TextAlignment="Right" />
-        <TextBlock Grid.Column="1" Text="열 이름" />
-        <TextBlock Grid.Column="2" Text="타입" />
-        <TextBlock Grid.Column="3" Text="값" />
-      </Grid>
+    <!-- 값 고치기(편집 모드 결과): 표는 읽기 전용이라 고를 칸의 값을 여기서 고친다. 두 번 누르기·F2·Enter 로 연다. -->
+    <Border x:Name="EditPanel" DockPanel.Dock="Bottom" Classes="panel-toolbar" IsVisible="{Binding SelectedField.IsEditing, FallbackValue=False}">
+      <DockPanel Margin="4">
+        <TextBlock DockPanel.Dock="Top" Text="{Binding SelectedField.Name, FallbackValue=''}" FontWeight="SemiBold" Margin="0,0,0,2" />
+        <TextBlock DockPanel.Dock="Bottom" Text="Enter 반영 · Esc 취소" Opacity="0.6" Margin="0,2,0,0" />
+        <TextBox x:Name="EditBox" Classes="compact" Text="{Binding SelectedField.EditText, Mode=TwoWay, FallbackValue=''}" TextWrapping="Wrap" MaxHeight="160"
+                 FontFamily="{StaticResource OrandaFixedFontFamily}" AutomationProperties.Name="값 고치기" />
+      </DockPanel>
     </Border>
-    <ListBox x:Name="FieldList" Classes="log rv" ItemsSource="{Binding Fields}" SelectedItem="{Binding SelectedField, Mode=TwoWay}">
-      <ListBox.ContextMenu>
-        <ContextMenu>
-          <MenuItem x:Name="CopyValueItem" Header="값 복사" />
-          <MenuItem x:Name="CopyAllItem" Header="이름 = 값 전체 복사" />
-        </ContextMenu>
-      </ListBox.ContextMenu>
-      <ListBox.ItemTemplate>
-        <DataTemplate x:DataType="vm:RowField">
-          <Border Classes="detail-row" Classes.detail-row-alt="{Binding IsAlt}" ToolTip.Tip="{Binding TypeName}">
-            <Grid Margin="6,1" ColumnSpacing="8">
-              <Grid.ColumnDefinitions>
-          <ColumnDefinition Width="Auto" SharedSizeGroup="RvNo" />
-          <ColumnDefinition Width="Auto" SharedSizeGroup="RvName" />
-          <ColumnDefinition Width="Auto" SharedSizeGroup="RvType" />
-          <ColumnDefinition Width="*" />
-        </Grid.ColumnDefinitions>
-              <TextBlock Grid.Column="0" Text="{Binding Number}" MinWidth="18" TextAlignment="Right" Opacity="0.6" VerticalAlignment="Top" />
-              <TextBlock Grid.Column="1" Text="{Binding Name}" FontWeight="SemiBold" MaxWidth="200" TextTrimming="CharacterEllipsis" VerticalAlignment="Top" />
-              <TextBlock Grid.Column="2" Text="{Binding TypeName}" MaxWidth="110" TextTrimming="CharacterEllipsis" Opacity="0.6" VerticalAlignment="Top" />
-              <TextBlock Grid.Column="3" Classes="rv-value" Classes.null="{Binding IsNull}" Classes.edited="{Binding IsEdited}"
-                         Text="{Binding Text}" TextWrapping="Wrap" MaxLines="12" TextTrimming="CharacterEllipsis"
-                         FontFamily="{StaticResource OrandaFixedFontFamily}" ToolTip.Tip="{Binding Text}"
-                         IsVisible="{Binding !IsEditing}" />
-              <TextBox Grid.Column="3" Classes="compact" Text="{Binding EditText, Mode=TwoWay}" IsVisible="{Binding IsEditing}"
-                       FontFamily="{StaticResource OrandaFixedFontFamily}" />
-            </Grid>
-          </Border>
-        </DataTemplate>
-      </ListBox.ItemTemplate>
-    </ListBox>
+    <!-- 조회 결과와 같은 그리드(MonitorGrid): 번호·열 이름·타입·값. 머리글 정렬·열 끌기·너비·열 필터·현재 행 ▶. 행은 코드(MonitorGridBinder)가 Fields 에서 채운다. -->
+    <mon:MonitorGrid x:Name="FieldGrid" />
   </DockPanel>
 </UserControl>

@@ -3,6 +3,7 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using Oranda.App.Features.GridEdit;
 using Oranda.App.Features.ResultGrid;
 using Oranda.App.Shell;
+using Oranda.App.Shell.Composition;
 using Oranda.Core.Grid;
 using Oranda.Core.Shell;
 
@@ -49,12 +50,17 @@ public sealed partial class RowField(int ordinal, string name, string typeName, 
 /// <summary>
 /// <c>oranda.panel.rowView</c> — 행 보기(GRID-07, TSK-06-05). 결과 그리드에서 고른 행 하나를 세로 필드 목록(열 이름 | 값)으로 보인다.
 /// 그리드의 선택 행을 따라간다(그리드 <c>Changed</c> 이벤트). 값은 그리드 캐시에서 읽기만 한다.
+/// 화면은 조회 결과와 같은 그리드(번호·열 이름·타입·값 세로 표, TSK-14-16)이고, 값 고치기는 표 아래 입력칸, 긴 값·LOB 는 값 보기 문서로 연다.
 /// </summary>
 [OrandaToolPanel("oranda.panel.rowView", ToolPanelKind.Tool, DockLocation.Right, Order = 30)]
 public sealed partial class RowViewerViewModel : ToolPanelViewModelBase, IDisposable
 {
     private ResultGridModel? _model;
     private long _row = -1;
+
+    /// <summary>앱이 도구 창을 만들 때 쓰는 생성자: 값 보기(LOB 편집기) 문서를 여는 처리기를 잇는다.</summary>
+    public RowViewerViewModel(ServiceContainer container)
+        : this() => ValueHandler = new LobRowViewCommandHandler(container);
 
     public RowViewerViewModel()
     {
@@ -68,6 +74,9 @@ public sealed partial class RowViewerViewModel : ToolPanelViewModelBase, IDispos
     }
 
     private static ResultGridModel? s_pending;
+
+    /// <summary>값 보기 문서를 여는 처리기(앱은 생성자가, 시험은 직접 넣는다). 없으면 값 보기는 아무것도 하지 않는다.</summary>
+    internal LobRowViewCommandHandler? ValueHandler { get; set; }
 
     /// <summary>가장 최근에 만든 행 보기 창(명령 처리기가 그리드를 붙이는 곳).</summary>
     public static RowViewerViewModel? Current { get; private set; }
@@ -191,6 +200,7 @@ public sealed partial class RowViewerViewModel : ToolPanelViewModelBase, IDispos
 
     private void Rebuild()
     {
+        var selected = SelectedField;
         Fields.Clear();
         if (_model is not { } m || _row < 0)
         {
@@ -233,6 +243,12 @@ public sealed partial class RowViewerViewModel : ToolPanelViewModelBase, IDispos
             }
         }
 
+        // 다시 채워도 같은 열(원래 열 번호·이름)을 계속 고른다: 행을 옮겨도 표의 현재 칸이 그 열에 머문다.
+        if (selected is not null)
+        {
+            SelectedField = Fields.FirstOrDefault(f => f.Ordinal == selected.Ordinal && f.Name == selected.Name);
+        }
+
         // 전체 수를 모르면 지금까지 가져온 수 뒤에 「+」.
         var total = m.RowCount.ToString("N0", System.Globalization.CultureInfo.CurrentCulture) + (m.TotalRowCount is null ? "+" : string.Empty);
         HeaderText = $"{_row + 1:N0} / {total}" + (loaded ? string.Empty : " (불러오는 중…)");
@@ -269,6 +285,18 @@ public sealed partial class RowViewerViewModel : ToolPanelViewModelBase, IDispos
         {
             GridEditBinding.TrySetCell(m, _row, field.Ordinal, field.EditText);
         }
+    }
+
+    /// <summary>필드 값을 값 보기(LOB 편집기) 문서로 연다: LOB 는 내용 전체, 긴 글자는 읽기 전용 글로. 처리기가 없으면 false.</summary>
+    public async Task<bool> OpenValueAsync(RowField? field, CancellationToken ct = default)
+    {
+        if (field is null || _model is not { } m || _row < 0 || ValueHandler is not { } handler)
+        {
+            return false;
+        }
+
+        await handler.ViewValueAsync(m, _row, field.Ordinal, ct).ConfigureAwait(true);
+        return true;
     }
 
     public static void CancelEdit(RowField? field)

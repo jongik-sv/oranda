@@ -48,6 +48,9 @@ public sealed class MonitorGridBinder<T> where T : class
         _resultColumns = [.. columns.Select((c, i) => new ResultColumn(i, c.Name, c.Kind == ColumnDataKind.Number ? "NUMBER" : "VARCHAR2", c.Kind))];
     }
 
+    /// <summary>새 결과를 만들 때마다 부르는 표시 설정(NULL 글자·천 단위). 기본 <see cref="Display"/>. 행 보기는 원래 결과의 NULL 표시를 따른다.</summary>
+    public Func<GridDisplayOptions> DisplayOptions { get; set; } = () => Display;
+
     /// <summary>(항목, 열 번호)를 받아 참이면 그 칸을 위험색 글자로 그린다(블로커 칸). 행을 채우기 전에 정한다.</summary>
     public Func<T, int, bool>? CellEmphasis { get; set; }
 
@@ -136,7 +139,7 @@ public sealed class MonitorGridBinder<T> where T : class
         var generation = ++_generation;
         var items = _items.ToList();
         var rows = items.Select(i => (IReadOnlyList<object?>)[.. _columns.Select(c => c.Value(i))]).ToList();
-        var m = new ResultGridModel(new MemoryResultSet(_resultColumns, rows), pageSize: Math.Max(1, rows.Count)) { Display = Display };
+        var m = new ResultGridModel(new MemoryResultSet(_resultColumns, rows), pageSize: Math.Max(1, rows.Count)) { Display = DisplayOptions() };
         if (CellEmphasis is { } emphasis)
         {
             m.CellEmphasis = (viewRow, ordinal) => m.SourceRowOf(viewRow) is var src && src >= 0 && src < items.Count && emphasis(items[(int)src], ordinal);

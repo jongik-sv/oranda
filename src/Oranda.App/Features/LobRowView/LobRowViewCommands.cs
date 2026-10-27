@@ -128,10 +128,16 @@ public sealed class LobRowViewCommandHandler : ICommandHandler
             return;
         }
 
-        var ordinal = grid.VisibleColumns[cell.Col];
+        await ViewValueAsync(grid, cell.Row, grid.VisibleColumns[cell.Col], ct).ConfigureAwait(true);
+    }
+
+    /// <summary>결과 그리드의 (행, 열 ordinal) 값을 값 보기(LOB 편집기) 문서로 연다. 행 보기의 두 번 누르기·「값 보기」도 이 길로 연다.</summary>
+    public async Task ViewValueAsync(ResultGridModel grid, long row, int ordinal, CancellationToken ct)
+    {
+        ArgumentNullException.ThrowIfNull(grid);
         var edit = EditSessionProvider is not null ? EditSessionProvider() : GridEditCommands.Active;
         var session = SessionProvider is not null ? SessionProvider() : ActiveSession();
-        if (LobRowViewCommands.BuildSource(grid, cell.Row, ordinal, edit, session) is not { } source)
+        if (LobRowViewCommands.BuildSource(grid, row, ordinal, edit, session) is not { } source)
         {
             return;
         }

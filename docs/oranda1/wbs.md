@@ -1129,6 +1129,18 @@ levels:
   - acceptance: MonitorGridTests 11개(결과 그리드·숫자 열, 칸 클릭 ↔ 선택 항목, 붙기 전 선택, 숫자 정렬과 새로 고침 뒤 정렬·선택 키 따라감·내림차순 유지, 열 끌기·너비·숨김·열 필터 유지, 200행 스크롤·떨어진 행 선택 유지, Ctrl+C·메뉴 항목·오른쪽 클릭 선택, 블로커 강조, SQL 모니터 소요(s) 정렬·다시 검색 뒤 커서 키 유지, 상태 줄) / ResultGrid·SessionMonitor·SqlMonitor·LockMonitor·GridEdit 시험 통과 / `dotnet build Oranda.sln -warnaserror`
   - note: 결과: 새 MonitorGrid(결과 그리드 + 스크롤바 + 열 필터 팝업 + 읽기 전용 메뉴)·MonitorGridBinder(목록 → MemoryResultSet → 새 ResultGridModel, 정렬·거르기를 마친 뒤 바꿔 끼움). ResultGridModel 에 CarryViewStateFrom·CarrySortAndFilterFromAsync·SourceRowOf·CellEmphasis 추가, ResultGridControl.IsCommandTarget(모니터 표는 편집기 결과 명령의 대상이 아님)·SyncScrollBars(결과 영역과 같이 씀). 경과는 「경과(초)」 숫자 열로 바뀜. Lock 모니터 표 7개와 SQL 모니터 튜닝 탭 작은 표 3개는 DetailTable 그대로(남김) (win144)
 
+- [x] TSK-14-16: 행 보기 필드 목록을 조회 결과와 같은 그리드로(번호·열 이름·타입·값, 행을 옮겨도 정렬·열 순서·너비·필터·고른 칸·스크롤 유지) [win144] w:1 2026-10-28~2026-10-28
+  - category: feat
+  - domain: frontend
+  - model: opus
+  - priority: medium
+  - tags: row-view, result-grid, lob, grid-edit, win144
+  - prd-ref: PRD 16, D-050
+  - depends: TSK-14-15
+  - requirements: 사용자 요구(2026-10-28) 「행 보기도 그리드 형태로 만들어줘」. 행 보기(오른쪽 도구 창)의 ListBox 목록을 모니터와 같은 MonitorGrid(결과 그리드 재사용) 세로 표로 바꾼다: 열 = #(숫자)·열 이름·타입·값, 머리글 정렬·열 끌기·너비·▾ 열 필터·칸/범위 선택·Ctrl+C(머리글 포함 Ctrl+Shift+C)·Ctrl+휠·현재 행 ▶. NULL 은 결과 그리드의 NULL 표시(흐린 글자), 편집 모드에서 바꾼 값은 강조색. 결과 그리드의 현재 행이 바뀌어 다시 채워도 MonitorGridBinder 가 정렬·열 순서·너비·필터·고른 칸(원래 열 번호+이름 키)·스크롤을 넘긴다. 그대로 둘 것: 처음·이전·다음·마지막 단추와 「n / 전체(+)」, 열 이름·값 찾기 칸, 그리드 열 순서 따르기, 값 복사·「이름 = 값」 전체 복사(오른쪽 클릭), 편집 모드 값 고치기(그리드가 읽기 전용이라 표 아래 입력칸: 두 번 누르기·F2·Enter 로 열고 Enter 반영·Esc 취소·포커스 잃으면 반영). 고칠 수 없는 칸(LOB·읽기 전용)은 두 번 누르기·Enter·「값 보기」 메뉴로 값 보기(LOB 편집기) 문서를 연다; 제약: 실앱 SendKeys 금지(Headless 까지); 비고: 레인 sr-row
+  - acceptance: RowViewerGridTests 6(네 열·숫자 번호·NULL 표시, 정렬·열 끌기·너비·열 필터·고른 칸이 다음 행으로 옮긴 뒤 남음, 80열 스크롤 유지, Ctrl+C 값·Ctrl+Shift+C 머리글 포함·메뉴 항목, LOB 두 번 누르기·Enter 로 값 보기, F2 → 아래 입력칸 → Enter 로 결과에 반영·강조색) / 기존 LobRowViewTests·LocalFilterTests 행 보기 시험 그대로 통과 / `dotnet build -warnaserror`
+  - note: 바꾼 곳 = RowViewerView.axaml(.cs)(MonitorGrid + 아래 값 고치기 칸), RowViewerViewModel(ServiceContainer 생성자로 값 보기 처리기 잇기, OpenValueAsync, 다시 채워도 같은 열 계속 고름), LobRowViewCommandHandler.ViewValueAsync(그리드, 행, 열) 공개, MonitorGridBinder.DisplayOptions(행 보기는 결과의 NULL 글자). 그리드 열 머리글은 창을 만들 때의 언어로 정해진다(언어를 바꾸면 창을 다시 열 때 바뀜). 값 칸은 한 줄로 보이므로 긴 값은 값 보기·고치기 칸에서 본다 (win144)
+
 ## 의존 그래프
 
 ### 그래프 (Mermaid)
@@ -1237,6 +1249,7 @@ graph LR
   TSK-14-13 --> TSK-14-14
 
   TSK-13-37 --> TSK-14-15
+  TSK-14-15 --> TSK-14-16
   style TSK-01-02 fill:#e8f5e9,stroke:#2e7d32
   style TSK-03-01 stroke:#c62828,stroke-width:2px
   style TSK-02-02 stroke:#c62828,stroke-width:2px
