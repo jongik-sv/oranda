@@ -223,6 +223,20 @@ public sealed partial class TuningAssistantViewModel : ToolPanelViewModelBase
 
     public bool HintEmpty => HintItems.Count == 0;
 
+    /// <summary>바꾼 SQL 없이 경고만인 규칙이 있다(목록 위 안내 한 줄).</summary>
+    public bool HasWarningOnlyRewrite => RewriteItems.Any(r => r.IsWarningOnly);
+
+    /// <summary>쓸 수 없는 힌트가 있다(목록 위 안내 한 줄).</summary>
+    public bool HasDisabledHint => HintItems.Any(h => h.IsDisabled);
+
+    public static string RewriteCheckNote => L(
+        "체크할 수 있는 것은 바꾼 SQL 이 있는 규칙뿐입니다 — 「경고만」 규칙은 오른쪽 설명을 보고 직접 고치세요",
+        "Only rules with rewritten SQL can be checked — for \"Warn\" rules, read the note on the right and fix the SQL yourself");
+
+    public static string HintCheckNote => L(
+        "체크할 수 있는 것은 적용 가능한 힌트뿐입니다 — 「—」 줄은 「뜻」 칸에 이유가 있습니다",
+        "Only applicable hints can be checked — rows marked \"—\" give the reason in the Meaning column");
+
     // ---- 인덱스 상세 ----
 
     public string IndexReason => SelectedIndex?.Advice.Reason ?? string.Empty;
@@ -848,7 +862,7 @@ public sealed partial class TuningAssistantViewModel : ToolPanelViewModelBase
         {
             nameof(IndexCount), nameof(RewriteCount), nameof(HintCount), nameof(NoticeText), nameof(HasNotice), nameof(ShowNoStatement), nameof(ShowCandidates),
             nameof(CanFetchActualPlan), nameof(CanFetchEstimatedPlan), nameof(ShowPlanButtons), nameof(IndexEmptyText), nameof(HintEmptyText),
-            nameof(IndexEmpty), nameof(RewriteEmpty), nameof(HintEmpty), nameof(BenchmarkBlockedReason), nameof(CanRunBenchmark), nameof(BenchmarkTip),
+            nameof(IndexEmpty), nameof(RewriteEmpty), nameof(HintEmpty), nameof(HasWarningOnlyRewrite), nameof(HasDisabledHint), nameof(BenchmarkBlockedReason), nameof(CanRunBenchmark), nameof(BenchmarkTip),
             nameof(BenchmarkEmpty), nameof(CanInsertIndexDdl), nameof(CanInsertRewrite),
         })
         {

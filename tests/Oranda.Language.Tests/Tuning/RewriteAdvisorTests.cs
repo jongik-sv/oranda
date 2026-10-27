@@ -207,7 +207,108 @@ public class RewriteAdvisorTests
         Assert.False(a.HasRewrite);
     }
 
+    // ---- 열에 씌운 함수: 넓힌 모양 ----
+
+    [Theory]
+    [InlineData("SELECT * FROM t WHERE TO_CHAR(t.d, 'YYYYMMDD') = '20261001'",
+        "SELECT * FROM t WHERE (t.d >= TO_DATE('20261001', 'YYYYMMDD') AND t.d < TO_DATE('20261001', 'YYYYMMDD') + 1)")]
+    [InlineData("SELECT * FROM t WHERE TO_CHAR(t.d, 'YYYY-MM') = :m AND t.k = 1",
+        "SELECT * FROM t WHERE (t.d >= TO_DATE(:m, 'YYYY-MM') AND t.d < ADD_MONTHS(TO_DATE(:m, 'YYYY-MM'), 1)) AND t.k = 1")]
+    [InlineData("SELECT * FROM t WHERE TO_CHAR(t.d, 'YYYY') = '2026'",
+        "SELECT * FROM t WHERE (t.d >= TRUNC(TO_DATE('2026', 'YYYY'), 'YYYY') AND t.d < ADD_MONTHS(TRUNC(TO_DATE('2026', 'YYYY'), 'YYYY'), 12))")]
+    public void To_char_date_equality_becomes_a_date_range_on_the_bare_column(string sql, string expected)
+    {
+        var a = One(sql, RewriteRule.FunctionOnColumn);
+        Assert.True(a.HasRewrite);
+        Assert.Equal("TO_CHAR 제거", a.ShortLabel);
+        Assert.Equal(expected, Flat(a.Candidate.Sql));
+        Assert.False(a.SemanticsMayChange);
+        Assert.NotNull(a.Caution);
+        Assert.Null(a.NoRewriteReason);
+    }
+
+    [Theory]
+    [InlineData("SELECT * FROM t WHERE SUBSTR(t.c, 1, 3) = 'ABC'", "SELECT * FROM t WHERE t.c LIKE 'ABC%'")]
+    [InlineData("SELECT * FROM t WHERE SUBSTR(c, 1, 2) = '가나' AND x = 1", "SELECT * FROM t WHERE c LIKE '가나%' AND x = 1")]
+    public void Substr_prefix_equality_becomes_a_like_prefix(string sql, string expected)
+    {
+        var a = One(sql, RewriteRule.FunctionOnColumn);
+        Assert.True(a.HasRewrite);
+        Assert.Equal(expected, Flat(a.Candidate.Sql));
+    }
+
+    [Theory]
+    [InlineData("SELECT * FROM t WHERE TO_CHAR(t.d, 'YYYYMMDDHH24') = '2026100112'")] // 시각이 든 형식
+    [InlineData("SELECT * FROM t WHERE TO_CHAR(t.d, 'YYYYMMDD') = '2026-10-01'")] // 값이 형식과 다름
+    [InlineData("SELECT * FROM t WHERE TO_CHAR(t.d, 'YYYYMMDD') >= '20261001'")] // 크기 비교
+    [InlineData("SELECT * FROM t WHERE SUBSTR(t.c, 1, 2) = 'ABC'")] // 길이 다름(원문은 0 행)
+    [InlineData("SELECT * FROM t WHERE SUBSTR(t.c, 2, 3) = 'ABC'")] // 앞부분이 아님
+    [InlineData("SELECT * FROM t WHERE SUBSTR(t.c, 1, 3) = 'A_C'")] // LIKE 와일드카드
+    [InlineData("SELECT * FROM t WHERE UPPER(t.c) = 'ABC'")]
+    [InlineData("SELECT * FROM t WHERE NVL(t.n, 0) = 1")]
+    public void Function_shapes_without_a_sure_rewrite_stay_warnings_with_a_reason(string sql)
+    {
+        var a = One(sql, RewriteRule.FunctionOnColumn);
+        Assert.False(a.HasRewrite);
+        Assert.Equal("같은 결과로 못 바꿈 — 함수 기반 인덱스 검토", a.NoRewriteReason);
+        Assert.Contains("함수 기반 인덱스", a.Candidate.Description, StringComparison.Ordinal);
+    }
+
+    // ---- 암시적 형 변환: 숫자 값을 문자 열 형으로 맞춤 ----
+
+    private static ExecutionPlan ToNumberPlan(string predicate = "TO_NUMBER(\"LH\".\"LOT_NO\")=123") => new(
+        [
+            new PlanStep(0, null, 0, "SELECT STATEMENT"),
+            new PlanStep(1, 0, 1, "TABLE ACCESS") { Options = "FULL", ObjectName = "LOT_HIST", FilterPredicates = predicate },
+        ], string.Empty);
+
+    [Theory]
+    [InlineData("SELECT lh.lot_id FROM lot_hist lh WHERE lh.lot_no = 123 AND lh.eqp_id = :e",
+        "SELECT lh.lot_id FROM lot_hist lh WHERE lh.lot_no = '123' AND lh.eqp_id = :e")]
+    [InlineData("SELECT lh.lot_id FROM lot_hist lh WHERE 123 = lh.lot_no", "SELECT lh.lot_id FROM lot_hist lh WHERE '123' = lh.lot_no")]
+    [InlineData("SELECT lh.lot_id FROM lot_hist lh WHERE lh.lot_no = :n", "SELECT lh.lot_id FROM lot_hist lh WHERE lh.lot_no = TO_CHAR(:n)")]
+    [InlineData("SELECT lh.lot_id FROM lot_hist lh WHERE lh.lot_no IN (1, 22, :n)", "SELECT lh.lot_id FROM lot_hist lh WHERE lh.lot_no IN ('1', '22', TO_CHAR(:n))")]
+    [InlineData("SELECT lot_no FROM lot_hist lh WHERE lot_no = 7", "SELECT lot_no FROM lot_hist lh WHERE lot_no = '7'")]
+    public void To_number_on_a_column_quotes_the_number_values_and_is_flagged_as_meaning_sensitive(string sql, string expected)
+    {
+        var a = One(sql, RewriteRule.ImplicitConversion, ToNumberPlan());
+        Assert.True(a.HasRewrite);
+        Assert.Equal(expected, Flat(a.Candidate.Sql));
+        Assert.True(a.SemanticsMayChange); // '0123' 같은 값에서 행이 달라질 수 있어 체크는 꺼 둔다
+        Assert.Contains("'0123'", a.Caution, StringComparison.Ordinal);
+        Assert.Equal("형 맞춤", a.ShortLabel);
+    }
+
+    [Theory]
+    [InlineData("SELECT * FROM lot_hist lh WHERE lh.lot_no > 100")] // 문자 순서는 숫자 순서와 다르다
+    [InlineData("SELECT * FROM lot_hist lh WHERE lh.lot_no = 1.5")] // 소수는 글 모양이 여럿
+    [InlineData("SELECT * FROM lot_hist lh WHERE lh.lot_no + 0 = 123")]
+    [InlineData("SELECT * FROM lot_hist lh WHERE lh.lot_no = 1 OR lh.lot_no BETWEEN 5 AND 9")] // 하나라도 확실하지 않으면 반쯤 바꾸지 않는다
+    [InlineData("SELECT * FROM lot_hist lh WHERE lh.eqp_id = 'E01'")] // 문장에 그 열 비교가 없다
+    public void To_number_comparisons_that_are_not_sure_stay_warnings(string sql)
+    {
+        var a = One(sql, RewriteRule.ImplicitConversion, ToNumberPlan());
+        Assert.False(a.HasRewrite);
+        Assert.Equal("같은 결과로 바꿀 비교가 아님", a.NoRewriteReason);
+    }
+
+    [Fact]
+    public void Other_conversions_keep_the_warning_because_the_column_type_is_unknown()
+    {
+        var a = One("SELECT * FROM lot_hist lh WHERE lh.lot_no = 123", RewriteRule.ImplicitConversion, ToNumberPlan("INTERNAL_FUNCTION(\"LH\".\"LOT_NO\")=123"));
+        Assert.False(a.HasRewrite);
+        Assert.Equal("열 형을 몰라 못 바꿈", a.NoRewriteReason);
+    }
+
     // ---- SELECT * ----
+
+    [Fact]
+    public void Select_star_stays_a_warning_with_the_reason_that_expanding_it_changes_nothing()
+    {
+        var a = One("SELECT * FROM t WHERE t.k = 1", RewriteRule.SelectStar);
+        Assert.False(a.HasRewrite);
+        Assert.Equal("바꿔도 성능 같음 — 필요한 열만 고르세요", a.NoRewriteReason);
+    }
 
     [Fact]
     public void Select_star_is_warned_once_per_block_but_not_inside_exists_or_count()

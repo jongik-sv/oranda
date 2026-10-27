@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text.RegularExpressions;
 using Oranda.Core.Plans;
 using Oranda.Core.Tuning;
@@ -38,6 +39,9 @@ public sealed record RewriteAdvice(RewriteCandidate Candidate, RewriteRule Rule)
 
     /// <summary>경고 상자 글. 없으면 null.</summary>
     public string? Caution { get; init; }
+
+    /// <summary>바꾼 SQL 이 없는 까닭 한 마디(목록 줄에 보인다). 없으면 화면이 일반 문구를 쓴다.</summary>
+    public string? NoRewriteReason { get; init; }
 
     /// <summary>고친 SQL 이 있다.</summary>
     public bool HasRewrite => Candidate.Sql.Length > 0;
@@ -368,32 +372,66 @@ public static partial class RewriteAdvisor
             string? rewritten = null;
             var label = string.Empty;
             string? caution = null;
-            if (fn == "TRUNC" && t.IsPunct(end + 1, ')') && t.Is(close + 1, "=") && t.Balanced)
+            string? done = null;
+            var rhsEnd = t.Is(close + 1, "=") && t.Balanced ? ConditionEnd(t, close + 2, t.Depth[i]) : -1;
+            if (fn == "TRUNC" && t.IsPunct(end + 1, ')') && rhsEnd >= close + 2)
             {
-                var rhsEnd = ConditionEnd(t, close + 2, t.Depth[i]);
-                if (rhsEnd >= close + 2)
-                {
-                    var rhs = t.Slice(close + 2, rhsEnd).Trim();
-                    rewritten = Replace(t.Text, t.Tokens[i].Start, t.Tokens[rhsEnd].End, $"({column} >= TRUNC({rhs}) AND {column} < TRUNC({rhs}) + 1)");
-                    label = en ? "TRUNC removed" : "TRUNC 제거";
-                    caution = en
-                        ? "Same result when the column is DATE or TIMESTAMP (for a NUMBER column negative values can differ)."
-                        : "열이 DATE·TIMESTAMP 이면 같은 결과입니다(숫자 열이면 음수에서 달라질 수 있습니다).";
-                }
+                var rhs = t.Slice(close + 2, rhsEnd).Trim();
+                rewritten = Replace(t.Text, t.Tokens[i].Start, t.Tokens[rhsEnd].End, $"({column} >= TRUNC({rhs}) AND {column} < TRUNC({rhs}) + 1)");
+                label = en ? "TRUNC removed" : "TRUNC 제거";
+                caution = en
+                    ? "Same result when the column is DATE or TIMESTAMP (for a NUMBER column negative values can differ)."
+                    : "열이 DATE·TIMESTAMP 이면 같은 결과입니다(숫자 열이면 음수에서 달라질 수 있습니다).";
+                done = en ? " TRUNC(column) = value was turned into a one-day range." : " TRUNC(열) = 값 을 하루 범위 조건으로 바꿨습니다.";
+            }
+            else if (fn == "TO_CHAR" && rhsEnd == close + 2 && t.IsPunct(end + 1, ',') && end + 3 == close && t.Kind(end + 2) == TokenKind.StringLiteral
+                     && DateFormatStep(t.Word(end + 2)) is { } step
+                     && (t.Kind(close + 2) == TokenKind.Bind || (t.Kind(close + 2) == TokenKind.StringLiteral && LiteralFits(t.Word(close + 2), t.Word(end + 2)))))
+            {
+                // TO_CHAR(날짜 열, 'YYYYMMDD') = '20261001' → 그날(그달·그해) 범위.
+                var fmt = t.Word(end + 2);
+                var value = t.Word(close + 2);
+                var low = step.TruncUnit is null ? $"TO_DATE({value}, {fmt})" : $"TRUNC(TO_DATE({value}, {fmt}), {step.TruncUnit})";
+                var high = step.High.Replace("{0}", low, StringComparison.Ordinal);
+                rewritten = Replace(t.Text, t.Tokens[i].Start, t.Tokens[rhsEnd].End, $"({column} >= {low} AND {column} < {high})");
+                label = en ? "TO_CHAR removed" : "TO_CHAR 제거";
+                caution = en
+                    ? "Same result when the column is DATE or TIMESTAMP and the value is a valid date in that format (a bad value now raises an error instead of matching nothing)."
+                    : "열이 DATE·TIMESTAMP 이고 값이 그 형식의 올바른 날짜면 같은 결과입니다(틀린 값은 0 행 대신 오류가 납니다).";
+                done = en ? " TO_CHAR(column, format) = value was turned into a date range on the bare column." : " TO_CHAR(열, 형식) = 값 을 맨 열의 날짜 범위로 바꿨습니다.";
+            }
+            else if (fn == "SUBSTR" && rhsEnd == close + 2 && t.IsPunct(end + 1, ',') && t.Word(end + 2) == "1" && t.IsPunct(end + 3, ',')
+                     && t.Kind(end + 4) == TokenKind.Number && end + 5 == close && t.Kind(close + 2) == TokenKind.StringLiteral
+                     && PlainLiteral(t.Word(close + 2)) is { Length: > 0 } prefix && prefix.IndexOfAny(['%', '_']) < 0
+                     && int.TryParse(t.Word(end + 4), NumberStyles.None, CultureInfo.InvariantCulture, out var n) && n == prefix.Length)
+            {
+                // SUBSTR(열, 1, n) = 'n 글자' → 열 LIKE '글자%'(앞부분이라 인덱스 범위 읽기가 된다).
+                rewritten = Replace(t.Text, t.Tokens[i].Start, t.Tokens[rhsEnd].End, $"{column} LIKE '{prefix}%'");
+                label = "LIKE";
+                done = en ? " SUBSTR(column, 1, n) = 'n chars' was turned into a LIKE prefix match." : " SUBSTR(열, 1, n) = 'n 글자' 를 LIKE 앞부분 비교로 바꿨습니다.";
             }
 
             var shortCall = call.Length > 40 ? call[..37] + "…" : call;
             var detail = en
                 ? $"Wrapping a column in a function ({shortCall}) keeps the optimizer from using a normal index on {column}. Leave the column bare and transform the value side, or consider a function-based index."
                 : $"{shortCall} 처럼 열에 함수를 씌우면 {column} 의 일반 인덱스를 쓰지 못합니다. 열은 그대로 두고 비교 값 쪽을 바꾸거나 함수 기반 인덱스를 검토하세요.";
-            if (rewritten is not null)
+            string? reason = null;
+            if (done is not null)
             {
-                detail += en ? " TRUNC(column) = value was turned into a one-day range." : " TRUNC(열) = 값 을 하루 범위 조건으로 바꿨습니다.";
+                detail += done;
+            }
+            else
+            {
+                reason = en ? "Can't rewrite safely — consider a function-based index" : "같은 결과로 못 바꿈 — 함수 기반 인덱스 검토";
+                detail += en
+                    ? $" This shape cannot be turned into a condition on the bare column with a surely equal result. If the condition is frequent, a function-based index on ({call}) lets the optimizer use an index."
+                    : $" 이 모양은 결과가 확실히 같은 맨 열 조건으로 바꿀 수 없습니다. 자주 쓰는 조건이면 ({call}) 로 만든 함수 기반 인덱스로 인덱스를 쓸 수 있습니다.";
             }
 
             list.Add(Advice(RewriteRule.FunctionOnColumn, "function-on-column", (en ? "Function on a column · " : "열에 씌운 함수 · ") + shortCall, label, detail, rewritten, t.LineOf(i)) with
             {
                 Caution = caution,
+                NoRewriteReason = reason,
             });
         }
     }
@@ -433,8 +471,38 @@ public static partial class RewriteAdvisor
                     detail += en ? " INTERNAL_FUNCTION also appears for IN lists, so read it with the condition." : " INTERNAL_FUNCTION 은 IN 목록 등에서도 보이니 조건 원문과 함께 보세요.";
                 }
 
+                // TO_NUMBER(열) 이 보이면 열은 문자형이고 비교 값이 숫자다 → 문장의 정수 리터럴은 따옴표로, 바인드는 TO_CHAR 로 맞춘다.
+                // 다른 변환(INTERNAL_FUNCTION·TO_CHAR·TO_DATE…)은 계획만으로 열 형을 알 수 없어 경고만 둔다.
+                string? rewritten = null;
+                string? reason;
+                if (fn.Equals("TO_NUMBER", StringComparison.OrdinalIgnoreCase))
+                {
+                    var edits = CharColumnEdits(t, term.Alias, term.Column);
+                    rewritten = edits.Count > 0 ? Apply(t.Text, edits) : null;
+                    reason = rewritten is null ? en ? "No comparison that can be changed safely" : "같은 결과로 바꿀 비교가 아님" : null;
+                }
+                else
+                {
+                    reason = en ? "Column type unknown — can't rewrite" : "열 형을 몰라 못 바꿈";
+                }
+
+                if (rewritten is not null)
+                {
+                    detail += en
+                        ? $" The plan converts the column with TO_NUMBER, so it holds text: number literals compared with {target} were quoted and binds wrapped in TO_CHAR."
+                        : $" 계획이 열을 TO_NUMBER 로 바꾸므로 열은 문자형입니다. {target} 와 비교하는 숫자 리터럴은 따옴표로, 바인드는 TO_CHAR 로 감쌌습니다.";
+                }
+
                 list.Add(Advice(RewriteRule.ImplicitConversion, "implicit-conversion", (en ? "Suspected implicit conversion · " : "암시적 형 변환 의심 · ") + term.Column,
-                    string.Empty, detail, null, null) with { StepId = step.Id });
+                    rewritten is null ? string.Empty : en ? "types matched" : "형 맞춤", detail, rewritten, null) with
+                {
+                    StepId = step.Id,
+                    NoRewriteReason = reason,
+                    SemanticsMayChange = rewritten is not null,
+                    Caution = rewritten is null ? null : en
+                        ? $"A number comparison also matches '0123' or ' 123'; a text comparison matches only '123'. Check that {term.Column} holds plain digits."
+                        : $"숫자 비교는 '0123'·' 123' 도 맞지만 문자 비교는 '123' 만 맞습니다. {term.Column} 값이 앞 0·공백 없는 숫자 글인지 확인하세요.",
+                });
             }
         }
     }
@@ -593,7 +661,13 @@ public static partial class RewriteAdvisor
                     var detail = en
                         ? "Selecting only the needed columns reads and sends less, and may let an index answer alone. The result shape also changes when the table gains columns."
                         : "필요한 열만 고르면 읽는 양·전송량이 줄고 인덱스만으로 답할 수도 있습니다. 표에 열이 늘면 결과 모양도 바뀝니다.";
-                    list.Add(Advice(RewriteRule.SelectStar, "select-star", en ? "SELECT * warning" : "SELECT * 경고", string.Empty, detail, null, t.LineOf(k)));
+                    detail += en
+                        ? " Only listing the columns runs the same plan, so there is nothing to benchmark — pick just the columns you need."
+                        : " 열 목록을 펼치기만 해서는 같은 계획이라 벤치마크할 것이 없습니다 — 필요한 열만 고르세요.";
+                    list.Add(Advice(RewriteRule.SelectStar, "select-star", en ? "SELECT * warning" : "SELECT * 경고", string.Empty, detail, null, t.LineOf(k)) with
+                    {
+                        NoRewriteReason = en ? "Same speed if expanded — pick needed columns" : "바꿔도 성능 같음 — 필요한 열만 고르세요",
+                    });
                     break;
                 }
             }
@@ -759,6 +833,90 @@ public static partial class RewriteAdvisor
         }
 
         return k - 1;
+    }
+
+    /// <summary>TO_CHAR 날짜 형식이 하루·한 달·한 해를 뜻하면 다음 경계 식(<c>{0}</c> = 아래 경계)과 필요한 TRUNC 단위. 시각이 든 형식·모르는 형식이면 null.</summary>
+    private static (string High, string? TruncUnit)? DateFormatStep(string formatLiteral) => PlainLiteral(formatLiteral)?.ToUpperInvariant() switch
+    {
+        "YYYYMMDD" or "YYYY-MM-DD" or "YYYY/MM/DD" or "YYYY.MM.DD" => ("{0} + 1", null),
+        "YYYYMM" or "YYYY-MM" or "YYYY/MM" or "YYYY.MM" => ("ADD_MONTHS({0}, 1)", null),
+        // TO_DATE('2026', 'YYYY') 는 그해 「이번 달」 1 일이라 해 첫날로 자른다.
+        "YYYY" => ("ADD_MONTHS({0}, 12)", "'YYYY'"),
+        _ => null,
+    };
+
+    /// <summary>리터럴 값이 형식과 같은 길이의 숫자·구분자 글인가(그래야 TO_DATE 가 같은 날을 만든다).</summary>
+    private static bool LiteralFits(string literal, string formatLiteral) =>
+        PlainLiteral(literal) is { } v && PlainLiteral(formatLiteral) is { } f && v.Length == f.Length
+        && v.Zip(f).All(p => char.IsAsciiLetter(p.Second) ? char.IsAsciiDigit(p.First) : p.First == p.Second);
+
+    /// <summary><c>'abc'</c> 의 안쪽. 따옴표가 겹친 글·q''·N'' 이면 null.</summary>
+    private static string? PlainLiteral(string literal) =>
+        literal.Length >= 2 && literal[0] == '\'' && literal[^1] == '\'' && literal.IndexOf('\'', 1, literal.Length - 2) < 0 ? literal[1..^1] : null;
+
+    /// <summary>
+    /// 문자형 열 <paramref name="column"/>(별칭 <paramref name="alias"/>)을 숫자와 비교하는 조건의 값 쪽 고침:
+    /// <c>열 = 123</c>·<c>123 = 열</c>·<c>열 IN (1, 2)</c> 의 정수 리터럴은 <c>'123'</c>, 바인드는 <c>TO_CHAR(:b)</c>.
+    /// 크기 비교(&lt; &gt;)·식 안의 열처럼 확실하지 않은 쓰임이 하나라도 있으면 빈 목록(반쯤 바꾸지 않는다).
+    /// </summary>
+    private static List<(int Start, int End, string With)> CharColumnEdits(TuningSql t, string? alias, string column)
+    {
+        var edits = new List<(int Start, int End, string With)>();
+        if (!t.Balanced)
+        {
+            return edits;
+        }
+
+        string? Fix(int k) => k < 0 || k >= t.Count ? null : t.Kind(k) switch
+        {
+            TokenKind.Number when t.Word(k).All(char.IsAsciiDigit) => "'" + t.Word(k) + "'",
+            TokenKind.Bind => "TO_CHAR(" + t.Word(k) + ")",
+            _ => null,
+        };
+
+        for (var k = 0; k < t.Count; k++)
+        {
+            var end = t.ColumnRefEnd(k);
+            if (end < 0 || t.IsPunct(k - 1, '.') || TuningSql.Normalize(t.Word(end)) != column || !InPredicate(t, k))
+            {
+                continue;
+            }
+
+            if (end > k && alias is not null && TuningSql.Normalize(t.Word(end - 2)) != alias)
+            {
+                continue;
+            }
+
+            if (t.Is(end + 1, "=") && ConditionEnd(t, end + 2, t.Depth[k]) == end + 2 && Fix(end + 2) is { } right)
+            {
+                edits.Add((t.Tokens[end + 2].Start, t.Tokens[end + 2].End, right));
+            }
+            else if (t.Is(k - 1, "=") && IsConditionStart(t, k - 3) && ConditionEnd(t, k, t.Depth[k]) == end && Fix(k - 2) is { } left)
+            {
+                edits.Add((t.Tokens[k - 2].Start, t.Tokens[k - 2].End, left));
+            }
+            else if (t.Is(end + 1, "IN") && t.IsPunct(end + 2, '(') && t.Partner[end + 2] > end + 3)
+            {
+                var close = t.Partner[end + 2];
+                for (var v = end + 3; v < close; v += 2)
+                {
+                    if (Fix(v) is not { } item || !(t.IsPunct(v + 1, ',') || v + 1 == close))
+                    {
+                        return [];
+                    }
+
+                    edits.Add((t.Tokens[v].Start, t.Tokens[v].End, item));
+                }
+
+                k = close;
+            }
+            else
+            {
+                return []; // 크기 비교·식 안의 열·하위 질의: 문자 비교로 바꾸면 뜻이 달라질 수 있다
+            }
+        }
+
+        return edits;
     }
 
     private static string Replace(string text, int start, int end, string with) => text[..start] + with + text[end..];

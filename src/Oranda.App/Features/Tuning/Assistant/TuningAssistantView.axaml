@@ -12,6 +12,35 @@
     <Style Selector=":is(Control).i-basis"><Setter Property="Width" Value="118" /></Style>
     <Style Selector=":is(Control).i-ovl"><Setter Property="Width" Value="180" /></Style>
     <Style Selector=":is(Control).r-chk"><Setter Property="Width" Value="44" /></Style>
+    <!-- 「벤치」 칸: 칸 전체가 눌리는 자리(투명 배경), 체크 상자는 가운데. 체크할 수 없는 줄은 흐린 글(경고만·—). -->
+    <Style Selector="Panel.bench-cell"><Setter Property="Background" Value="Transparent" /><Setter Property="Cursor" Value="Hand" /></Style>
+    <Style Selector="CheckBox.bench">
+      <Setter Property="HorizontalAlignment" Value="Center" />
+      <Setter Property="VerticalAlignment" Value="Center" />
+      <Setter Property="MinHeight" Value="0" />
+      <Setter Property="MinWidth" Value="0" />
+      <Setter Property="Padding" Value="0" />
+    </Style>
+    <Style Selector="TextBlock.no-check">
+      <Setter Property="HorizontalAlignment" Value="Center" />
+      <Setter Property="VerticalAlignment" Value="Center" />
+      <Setter Property="FontSize" Value="{DynamicResource OrandaFontSizeSmall}" />
+      <Setter Property="Opacity" Value="0.65" />
+    </Style>
+    <Style Selector="TextBlock.no-rewrite-reason">
+      <Setter Property="MaxWidth" Value="170" />
+      <Setter Property="Padding" Value="4,0,6,0" />
+      <Setter Property="VerticalAlignment" Value="Center" />
+      <Setter Property="TextTrimming" Value="CharacterEllipsis" />
+      <Setter Property="FontSize" Value="{DynamicResource OrandaFontSizeSmall}" />
+      <Setter Property="Opacity" Value="0.65" />
+    </Style>
+    <Style Selector="TextBlock.check-note">
+      <Setter Property="Margin" Value="8,4,8,4" />
+      <Setter Property="TextWrapping" Value="Wrap" />
+      <Setter Property="FontSize" Value="{DynamicResource OrandaFontSizeSmall}" />
+      <Setter Property="Opacity" Value="0.75" />
+    </Style>
     <Style Selector=":is(Control).r-rule"><Setter Property="Width" Value="320" /></Style>
     <Style Selector=":is(Control).r-loc"><Setter Property="Width" Value="70" /></Style>
     <Style Selector=":is(Control).h-hint"><Setter Property="Width" Value="360" /></Style>
@@ -231,7 +260,9 @@
                 <TextBlock HorizontalAlignment="Center" Classes="dim" Text="{Binding RewriteEmptyText}" />
               </StackPanel>
               <Grid ColumnDefinitions="0.9*,4,1.3*" IsVisible="{Binding !RewriteEmpty}">
-                <ScrollViewer Grid.Column="0" HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled">
+                <DockPanel Grid.Column="0">
+                <TextBlock DockPanel.Dock="Top" Classes="check-note" IsVisible="{Binding HasWarningOnlyRewrite}" Text="{Binding RewriteCheckNote}" />
+                <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled">
                   <DockPanel>
                     <Border DockPanel.Dock="Top" Classes="grid-header">
                       <StackPanel Orientation="Horizontal" Classes="cells">
@@ -245,12 +276,16 @@
                       <ListBox.ItemTemplate>
                         <DataTemplate x:DataType="vm:RewriteCandidateItem">
                           <StackPanel Orientation="Horizontal" Classes="cells">
-                            <CheckBox Classes="r-chk" HorizontalAlignment="Center" MinHeight="0" Padding="0" Margin="14,0,0,0"
-                                      IsChecked="{Binding IsChecked, Mode=TwoWay}" IsEnabled="{Binding CanCheck}"
-                                      ToolTip.Tip="{Binding CheckTip}" ToolTip.ShowOnDisabled="True" AutomationProperties.Name="벤치마크에 넣기" />
+                            <!-- 「벤치」 칸: 칸 어디를 눌러도 체크가 바뀐다(코드 뒤). 체크할 수 없으면 흐린 상자 대신 「경고만」. -->
+                            <Panel Classes="r-chk bench-cell" ToolTip.Tip="{Binding CheckTip}">
+                              <CheckBox Classes="bench" IsVisible="{Binding CanCheck}" IsChecked="{Binding IsChecked, Mode=TwoWay}" AutomationProperties.Name="벤치마크에 넣기" />
+                              <TextBlock Classes="no-check" IsVisible="{Binding !CanCheck}" Text="{Binding NoCheckText}" />
+                            </Panel>
                             <DockPanel Classes="r-rule">
                               <ContentControl DockPanel.Dock="Left" Margin="6,0,4,0" VerticalAlignment="Center" IsVisible="{Binding IsWarning}"
                                               Content="{Binding Source='warn', Converter={x:Static icons:IconKeyConverter.Instance}, ConverterParameter=12}" />
+                              <TextBlock DockPanel.Dock="Right" Classes="no-rewrite-reason" IsVisible="{Binding IsWarningOnly}" Text="{Binding NoRewriteReason}"
+                                         ToolTip.Tip="{Binding NoRewriteReason}" />
                               <TextBlock Classes.dim="{Binding IsWarningOnly}" Text="{Binding Title}" Padding="6,0" VerticalAlignment="Center"
                                          TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding Title}" />
                             </DockPanel>
@@ -261,6 +296,7 @@
                     </ListBox>
                   </DockPanel>
                 </ScrollViewer>
+                </DockPanel>
                 <GridSplitter Grid.Column="1" ResizeDirection="Columns" Background="Transparent" />
                 <Border Grid.Column="2" Classes="detail-pane">
                   <DockPanel Margin="12,8,12,10">
@@ -342,7 +378,9 @@
                                   Content="{Binding Source='plan', Converter={x:Static icons:IconKeyConverter.Instance}, ConverterParameter=28}" />
                   <TextBlock HorizontalAlignment="Center" Classes="dim" Text="{Binding HintEmptyText}" />
                 </StackPanel>
-                <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled" IsVisible="{Binding !HintEmpty}">
+                <DockPanel IsVisible="{Binding !HintEmpty}">
+                <TextBlock DockPanel.Dock="Top" Classes="check-note" IsVisible="{Binding HasDisabledHint}" Text="{Binding HintCheckNote}" />
+                <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled">
                   <DockPanel>
                     <Border DockPanel.Dock="Top" Classes="grid-header">
                       <StackPanel Orientation="Horizontal" Classes="cells">
@@ -356,8 +394,10 @@
                       <ListBox.ItemTemplate>
                         <DataTemplate x:DataType="vm:HintCandidateItem">
                           <StackPanel Orientation="Horizontal" Classes="cells">
-                            <CheckBox Classes="r-chk" HorizontalAlignment="Center" MinHeight="0" Padding="0" Margin="14,0,0,0"
-                                      IsChecked="{Binding IsChecked, Mode=TwoWay}" IsEnabled="{Binding CanCheck}" AutomationProperties.Name="벤치마크에 넣기" />
+                            <Panel Classes="r-chk bench-cell" ToolTip.Tip="{Binding CheckTip}">
+                              <CheckBox Classes="bench" IsVisible="{Binding CanCheck}" IsChecked="{Binding IsChecked, Mode=TwoWay}" AutomationProperties.Name="벤치마크에 넣기" />
+                              <TextBlock Classes="no-check" IsVisible="{Binding !CanCheck}" Text="—" />
+                            </Panel>
                             <TextBlock Classes="h-hint mono" Classes.dim="{Binding IsDisabled}" Text="{Binding HintText}" ToolTip.Tip="{Binding HintText}" />
                             <TextBlock Classes="h-mean" Classes.dim="{Binding IsDisabled}" Text="{Binding MeaningText}" ToolTip.Tip="{Binding MeaningText}" />
                           </StackPanel>
@@ -366,6 +406,7 @@
                     </ListBox>
                   </DockPanel>
                 </ScrollViewer>
+                </DockPanel>
               </Panel>
             </DockPanel>
           </TabItem>

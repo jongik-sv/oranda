@@ -74,7 +74,14 @@ public sealed partial class RewriteCandidateItem : ObservableObject
 
     public string CheckTip => CanCheck
         ? LiteralTranslator.IsEnglish ? "Include in the benchmark" : "벤치마크에 넣기"
-        : LiteralTranslator.IsEnglish ? "Warning only — no rewritten SQL" : "경고만 있습니다 — 바꾼 SQL 이 없습니다";
+        : (LiteralTranslator.IsEnglish ? "Warning only — no rewritten SQL: " : "경고만 있습니다 — 바꾼 SQL 이 없습니다: ") + NoRewriteReason;
+
+    /// <summary>경고만인 줄에 보일 까닭(규칙이 준 것, 없으면 일반 문구). 바꾼 SQL 이 있으면 빈 글.</summary>
+    public string NoRewriteReason => CanCheck ? string.Empty
+        : Advice.NoRewriteReason ?? (LiteralTranslator.IsEnglish ? "Not rewritten automatically — see the note" : "자동으로 못 바꿈 — 설명 참고");
+
+    /// <summary>체크할 수 없는 줄의 「벤치」 칸 글(흐린 체크 상자 대신 이유를 보인다).</summary>
+    public static string NoCheckText => LiteralTranslator.IsEnglish ? "Warn" : "경고만";
 }
 
 /// <summary>힌트 대안 목록 한 줄. 체크하면 원문에 힌트를 넣은 변형이 벤치마크에 든다.</summary>
@@ -98,6 +105,11 @@ public sealed partial class HintCandidateItem : ObservableObject
     public bool CanCheck => Advice.Enabled;
 
     public bool IsDisabled => !Advice.Enabled;
+
+    /// <summary>「벤치」 칸 풍선 도움말 — 쓸 수 없으면 그 이유.</summary>
+    public string CheckTip => CanCheck
+        ? LiteralTranslator.IsEnglish ? "Include in the benchmark" : "벤치마크에 넣기"
+        : Advice.DisabledReason ?? (LiteralTranslator.IsEnglish ? "Not applicable" : "쓸 수 없는 힌트입니다");
 }
 
 /// <summary>벤치마크 변형의 출처.</summary>

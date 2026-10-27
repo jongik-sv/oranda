@@ -424,6 +424,18 @@ levels:
   - acceptance: 외부 자원 없는 HTML 하나가 만들어지고 브라우저에서 열린다 / SQL·값은 HTML 이스케이프 / 바인드 값은 고른 경우에만 / 팩 항목은 선언 없으면 빠지고 이유가 적힌다 / DB 에 쓰지 않는다 / 전체 시험 통과
   - note: 완료(2026-10-24) — 「튜닝 보고서 만들기…」(튜닝 메뉴 @490·도우미·계획 창·SQL 모니터 단추) 대화 상자 → 수집기(SELECT 만, 절별 실패·취소, 팩 없으면 AWR 안 보냄) → 순수 HTML 생성기(시안 11절·인라인 CSS/SVG·스크립트 없음·이스케이프·바인드 기본 뺌), 카탈로그 tuning.sql_stats·report_env, 26ai·11g 통합 보고서 생성 확인 (win144)
 
+- [x] TSK-06-09: 튜닝 도우미 「벤치」 칸이 흐려 체크가 안 되는 까닭이 안 보임 + 확실한 재작성 넓히기 [win144] w:1 2026-10-28~2026-10-28
+  - category: defect
+  - domain: fullstack
+  - model: opus
+  - priority: medium
+  - tags: tuning, rewrite, benchmark, ui, win144
+  - depends: TSK-06-05
+  - prd-ref: TN-10, TN-11
+  - requirements: 2026-10-28 사용자 「튜닝 도우미에서 벤치, 규칙들이 선택이 안된다」. Headless 재현 결과 클릭·선택은 되고, 바꾼 SQL 없는 「경고만」 규칙이 흐린 체크 상자로 보여 까닭을 알 수 없었다(설계). 「벤치」 칸: 체크 가능하면 칸 전체가 체크 자리, 불가면 「경고만」(재작성)·「—」(힌트) + 풍선 도움말에 까닭, 규칙 줄 오른쪽에 짧은 까닭, 목록 위 안내 한 줄. 재작성 넓히기(같은 결과가 확실한 것만): TO_NUMBER(문자 열) 이 계획에 보이면 = ·IN 의 정수 리터럴을 '…' 로·바인드를 TO_CHAR 로(SemanticsMayChange, 체크 기본 꺼짐), TO_CHAR(날짜 열, 'YYYYMMDD'·'YYYY-MM'·'YYYY' 등) = 값 → 날짜 범위, SUBSTR(열, 1, n) = 'n 글자' → LIKE '글자%'. 나머지(UPPER·NVL·크기 비교·열 형 모르는 변환·SELECT *)는 경고만 + 까닭(나중에 LLM 재작성 후보)
+  - acceptance: 줄 클릭 = 선택·상세, 체크 상자·칸 클릭 = 토글, 경고만 줄은 까닭이 보이고 체크되지 않는다 / 새 재작성은 원문과 같은 행 수(26ai·11g 통합 시험)
+  - note: 완료(2026-10-28) — RewriteAdvisor(NoRewriteReason·CharColumnEdits·DateFormatStep), TuningAssistantView 벤치 칸, 시험 Language 25·App Headless 2·통합 14(26ai 7·11g 7)
+
 ## WP-07: Role 기반 메뉴·기능 구성
 <!-- 담당 PC: win144(Windows 개발 PC) — 맥북 세션은 이 WP 의 Task 를 하지 않는다. 2026-10-25 사용자 확정(조사 docs/oranda1/research/role-features.md 권장안 승인): Role 6개 겹쳐 고르기 + 기능별 덮어쓰기, 1단계 = 메뉴 단순화 + 시작 초기화 빼기(어셈블리 분리 없음, 성능 비교 결과서만), 조회 전용 실제 차단. 설계 = PRD 12, TRD 10, decisions D-002~D-012. 계약(TSK-07-01)을 단독으로 먼저 머지하고 07-02~07-06 을 레인 5개로 병렬, 07-07 은 07-02·03 머지 뒤, 07-08 이 마지막. 파일 소유 = TRD 10.9 -->
 
@@ -1164,6 +1176,7 @@ graph LR
   TSK-06-02 --> TSK-06-07
   TSK-06-03 --> TSK-06-07
   TSK-06-05 --> TSK-06-07
+  TSK-06-05 --> TSK-06-09
   TSK-07-01 --> TSK-07-02
   TSK-07-01 --> TSK-07-03
   TSK-07-01 --> TSK-07-04

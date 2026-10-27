@@ -1,5 +1,7 @@
 using Avalonia;
 using Avalonia.Controls;
+using Avalonia.Headless;
+using Avalonia.Input;
 using Avalonia.Media.Imaging;
 using Avalonia.Styling;
 using Avalonia.Threading;
@@ -72,6 +74,113 @@ public sealed class TuningAssistantHeadlessTests
 
     private static bool Shows(Control root, string text) =>
         root.GetVisualDescendants().OfType<TextBlock>().Any(t => t.IsEffectivelyVisible && t.Text == text);
+
+    /// <summary>실제 포인터로 누르고 뗀다(<paramref name="at"/> 은 <paramref name="target"/> 안 좌표).</summary>
+    private static void Click(Window window, Visual target, Point at)
+    {
+        var p = target.TranslatePoint(at, window)!.Value;
+        window.MouseMove(p);
+        window.MouseDown(p, MouseButton.Left);
+        window.MouseUp(p, MouseButton.Left);
+        Pump();
+    }
+
+    private static Panel BenchCell(ListBoxItem row) => row.GetVisualDescendants().OfType<Panel>().First(p => p.Classes.Contains("bench-cell"));
+
+    [Fact]
+    public Task Rewrite_rows_select_on_click_and_the_bench_cell_toggles_while_warning_only_rows_say_why() => Ui.Run(async () =>
+    {
+        var (vm, _, _) = await TuningAssistantTests.LoadedAsync();
+        vm.CandidateTab = 1;
+        var (view, window) = Show(vm);
+        try
+        {
+            var list = Named<ListBox>(view, "RewriteList");
+            Assert.Equal(3, list.ItemCount); // NOT IN(바꾼 SQL, 꺼 둠)·TRUNC(바꾼 SQL, 켜 둠)·형 변환(경고만)
+            for (var i = 0; i < list.ItemCount; i++)
+            {
+                var row = (ListBoxItem)list.ContainerFromIndex(i)!;
+                var item = (RewriteCandidateItem)row.DataContext!;
+
+                // 줄 선택은 체크 가능 여부와 상관없이 된다 → 오른쪽 상세가 그 규칙으로 바뀐다.
+                Click(window, row, new Point(200, row.Bounds.Height / 2));
+                Assert.Same(item, vm.SelectedRewrite);
+                Assert.True(Shows(view, item.Title));
+
+                var cell = BenchCell(row);
+                var box = cell.GetVisualDescendants().OfType<CheckBox>().Single();
+                var before = item.IsChecked;
+                if (item.CanCheck)
+                {
+                    Assert.True(box.IsEffectivelyVisible);
+                    Click(window, box, new Point(box.Bounds.Width / 2, box.Bounds.Height / 2)); // 상자 가운데
+                    Assert.Equal(!before, item.IsChecked);
+                    Click(window, cell, new Point(3, cell.Bounds.Height / 2)); // 상자 밖 칸 왼쪽 끝
+                    Assert.Equal(before, item.IsChecked);
+                    Click(window, cell, new Point(cell.Bounds.Width - 3, 3)); // 칸 오른쪽 위 구석
+                    Assert.Equal(!before, item.IsChecked);
+                    Assert.Same(item, vm.SelectedRewrite);
+                }
+                else
+                {
+                    // 흐린 상자 대신 「경고만」 과 까닭이 줄에 보이고, 눌러도 체크되지 않는다.
+                    Assert.False(box.IsEffectivelyVisible);
+                    Assert.Contains(cell.GetVisualDescendants().OfType<TextBlock>(), t => t.IsEffectivelyVisible && t.Text == "경고만");
+                    Assert.True(Shows(row, item.NoRewriteReason));
+                    Assert.Contains(item.NoRewriteReason, (string)ToolTip.GetTip(cell)!, StringComparison.Ordinal);
+                    Click(window, cell, new Point(cell.Bounds.Width / 2, cell.Bounds.Height / 2));
+                    Assert.False(item.IsChecked);
+                    Assert.Same(item, vm.SelectedRewrite);
+                }
+            }
+
+            Assert.True(vm.HasWarningOnlyRewrite);
+            Assert.True(Shows(view, TuningAssistantViewModel.RewriteCheckNote));
+            Shots(window, "rewrite-bench-cell");
+        }
+        finally
+        {
+            window.Close();
+        }
+    });
+
+    [Fact]
+    public Task Hint_rows_toggle_from_the_bench_cell_and_disabled_hints_show_a_dash_with_the_reason() => Ui.Run(async () =>
+    {
+        var (vm, _, _) = await TuningAssistantTests.LoadedAsync();
+        vm.CandidateTab = 2;
+        var (view, window) = Show(vm);
+        try
+        {
+            var list = Named<ListBox>(view, "HintList");
+            Assert.True(vm.HasDisabledHint); // 병렬 힌트는 꺼져 있다
+            Assert.True(Shows(view, TuningAssistantViewModel.HintCheckNote));
+            for (var i = 0; i < list.ItemCount; i++)
+            {
+                var row = (ListBoxItem)list.ContainerFromIndex(i)!;
+                var item = (HintCandidateItem)row.DataContext!;
+                Click(window, row, new Point(300, row.Bounds.Height / 2));
+                Assert.Same(item, vm.SelectedHint);
+                var cell = BenchCell(row);
+                var before = item.IsChecked;
+                Click(window, cell, new Point(3, cell.Bounds.Height / 2));
+                if (item.CanCheck)
+                {
+                    Assert.Equal(!before, item.IsChecked);
+                }
+                else
+                {
+                    Assert.False(item.IsChecked);
+                    Assert.Contains(cell.GetVisualDescendants().OfType<TextBlock>(), t => t.IsEffectivelyVisible && t.Text == "—");
+                    Assert.Equal(item.Advice.DisabledReason, ToolTip.GetTip(cell));
+                }
+            }
+        }
+        finally
+        {
+            window.Close();
+        }
+    });
 
     [Fact]
     public Task Ready_state_with_benchmark_results_renders_candidates_and_the_table() => Ui.Run(async () =>
