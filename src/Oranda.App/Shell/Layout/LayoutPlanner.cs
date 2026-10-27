@@ -27,6 +27,12 @@ public static class LayoutPlanner
     public const string RightToolsOpenMigration = "rightToolsOpen";
 
     /// <summary>
+    /// 오른쪽 도구 창(템플릿·바인드 변수 …)을 문서 옆에서 [문서 / 아래 묶음] 열의 오른쪽으로 옮기는 일회성 이주의 표지 이름.
+    /// 표지 없는 저장 배치에서 문서 바로 옆(아래 묶음 위)에 붙은 오른쪽 창을 한 번 옮긴다(D-048). 이후 사용자가 끌어 놓은 배치는 그대로 둔다.
+    /// </summary>
+    public const string RightToolsFullHeightMigration = "rightToolsFullHeight";
+
+    /// <summary>
     /// 표지 없는 옛 배치에 한 번 여는 오른쪽 도구 창(위에서 아래 순서, TSK-13-16 이주). 새 기본 배치는 이 창들도 닫아 둔다(D-019).
     /// </summary>
     private static readonly string[] OpenRightTools = ["oranda.panel.binds", "oranda.panel.templates"];
@@ -89,7 +95,7 @@ public static class LayoutPlanner
         }
 
         // 이주 표지는 남긴다: 새 기본 배치에 옛 이주(바인드 변수·템플릿 한 번 열기)가 다시 돌지 않게.
-        return new LayoutDocument { Root = root, HiddenTools = hidden, Migrations = [RightToolsOpenMigration] };
+        return new LayoutDocument { Root = root, HiddenTools = hidden, Migrations = [RightToolsOpenMigration, RightToolsFullHeightMigration] };
     }
 
     /// <summary>
@@ -132,6 +138,13 @@ public static class LayoutPlanner
             }
 
             migrations.Add(RightToolsOpenMigration);
+        }
+
+        // 일회성 이주(D-048): 문서 바로 옆(아래 묶음 위)에 붙은 오른쪽 창을 [문서 / 아래 묶음] 열의 오른쪽으로 옮겨 세로 전체를 쓰게 한다.
+        if (!migrations.Contains(RightToolsFullHeightMigration))
+        {
+            root = LiftRightBesideColumn(root);
+            migrations.Add(RightToolsFullHeightMigration);
         }
 
         var hiddenSet = hidden.ToHashSet(StringComparer.Ordinal);
@@ -325,10 +338,20 @@ public static class LayoutPlanner
                 return node with { Tools = tools, ActiveTool = active, Children = [] };
 
             default:
-                var kids = (node.Children ?? []).Select(c => Prune(c, known, seen)).OfType<DockNode>().ToList();
+                var original = node.Children ?? [];
+                var pruned = original.Select(c => Prune(c, known, seen)).ToList();
+                var kids = pruned.OfType<DockNode>().ToList();
                 if (kids.Count == 0)
                 {
                     return null;
+                }
+
+                // 빠진 칸의 몫은 문서 영역 쪽 칸이 물려받는다(오른쪽 창을 닫으면 왼쪽 창이 넓어지지 않고 편집기·결과가 넓어진다).
+                if (kids.Count > 1 && kids.Count < original.Count && original.All(c => c.Proportion is > 0)
+                    && kids.FindIndex(k => FindDocuments(k) is not null) is var heir and >= 0)
+                {
+                    var lost = original.Where((_, i) => pruned[i] is null).Sum(c => c.Proportion!.Value);
+                    kids[heir] = kids[heir] with { Proportion = Math.Round(kids[heir].Proportion!.Value + lost, 4) };
                 }
 
                 // 자식이 하나 남으면 분할을 없애고 그 자식이 분할의 비율을 물려받는다.
@@ -366,27 +389,26 @@ public static class LayoutPlanner
 
         if (location == DockLocation.Bottom)
         {
-            // 왼쪽 묶음이 창 전체 높이를 쓰는 배치면 그 오른쪽 열 밑에, 아니면 전체 밑에 둔다.
-            if (root is { Kind: DockNodeKind.Split, Orientation: DockOrientation.Horizontal, Children.Count: 2 }
-                && root.Children[0].Kind == DockNodeKind.ToolGroup && FindDocuments(root.Children[1]) is not null)
+            // 아래 묶음은 문서 영역 밑에만 둔다: 왼쪽 묶음(창 전체 높이)과 오른쪽 묶음([문서 / 아래] 열 옆, D-048)은 세로 전체를 그대로 쓴다.
+            var docs = FindDocuments(root)!;
+            var parent = PathTo(root, n => ReferenceEquals(n, docs)) is { Count: > 1 } path ? path[^2] : null;
+            if (parent is { Kind: DockNodeKind.Split, Orientation: DockOrientation.Vertical })
             {
-                var rest = root.Children[1];
-                var column = new DockNode
-                {
-                    Kind = DockNodeKind.Split,
-                    Orientation = DockOrientation.Vertical,
-                    Proportion = rest.Proportion,
-                    Children = [rest with { Proportion = 1 - BottomProportion }, group],
-                };
-                return root with { Children = [root.Children[0], column] };
+                var kids = (parent.Children ?? []).ToList();
+                var index = kids.FindIndex(k => ReferenceEquals(k, docs));
+                kids[index] = docs with { Proportion = docs.Proportion is { } dp ? Math.Max(dp - BottomProportion, MinDocumentsProportion) : null };
+                kids.Insert(index + 1, group);
+                return Replace(root, parent, parent with { Children = kids });
             }
 
-            return new DockNode
+            var column = new DockNode
             {
                 Kind = DockNodeKind.Split,
                 Orientation = DockOrientation.Vertical,
-                Children = [root with { Proportion = 1 - BottomProportion }, group],
+                Proportion = docs.Proportion,
+                Children = [docs with { Proportion = 1 - BottomProportion }, group],
             };
+            return Replace(root, docs, column);
         }
 
         if (location == DockLocation.Left)
@@ -403,11 +425,20 @@ public static class LayoutPlanner
         return InsertRight(root, group, location);
     }
 
-    /// <summary>오른쪽(또는 문서 옆 왼쪽)에 노드를 끼운다. <paramref name="node"/> 의 비율이 차지할 몫이다.</summary>
+    /// <summary>
+    /// 오른쪽(또는 문서 옆 왼쪽)에 노드를 끼운다. <paramref name="node"/> 의 비율이 차지할 몫이다.
+    /// 오른쪽은 문서 영역 자체가 아니라 문서를 담은 세로 열([문서 / 아래 묶음])의 옆에 끼워, 편집기 위끝부터 아래 묶음 아래끝까지
+    /// 세로 전체를 쓰게 한다(D-048).
+    /// </summary>
     private static DockNode InsertRight(DockNode root, DockNode node, DockLocation location = DockLocation.Right)
     {
-        // 문서 영역이 이미 가로 분할 안에 있으면 그 옆에 끼워 넣고(합 1 유지), 아니면 가로 분할로 감싼다.
+        // 기준 노드가 이미 가로 분할 안에 있으면 그 옆에 끼워 넣고(합 1 유지), 아니면 가로 분할로 감싼다.
         var docs = FindDocuments(root)!;
+        if (location == DockLocation.Right)
+        {
+            docs = ColumnOf(root, docs);
+        }
+
         var share = node.Proportion!.Value;
         var parent = PathTo(root, n => ReferenceEquals(n, docs)) is { Count: > 1 } path ? path[^2] : null;
         if (parent is { Kind: DockNodeKind.Split, Orientation: DockOrientation.Horizontal })
@@ -429,6 +460,72 @@ public static class LayoutPlanner
                 : [node, docs with { Proportion = 1 - share }],
         };
         return Replace(root, docs, wrapped);
+    }
+
+    /// <summary>문서 영역에서 세로 분할 부모를 따라 올라간 가장 바깥 세로 열(세로 분할 안이 아니면 문서 영역 그대로).</summary>
+    private static DockNode ColumnOf(DockNode root, DockNode docs)
+    {
+        var path = PathTo(root, n => ReferenceEquals(n, docs))!;
+        var at = path.Count - 1;
+        while (at > 0 && path[at - 1] is { Kind: DockNodeKind.Split, Orientation: DockOrientation.Vertical })
+        {
+            at--;
+        }
+
+        return path[at];
+    }
+
+    /// <summary>
+    /// 이주(D-048): <c>세로[가로[…, 문서, 오른쪽…], …]</c> 처럼 문서 바로 옆 가로 분할의 문서 뒤 칸(오른쪽)을 그 세로 열 바깥 오른쪽으로 옮긴다.
+    /// 창 전체 기준 폭은 그대로 둔다. 그런 모양이 아니면 그대로 돌려준다.
+    /// </summary>
+    internal static DockNode LiftRightBesideColumn(DockNode root)
+    {
+        var docs = FindDocuments(root);
+        var path = docs is null ? null : PathTo(root, n => ReferenceEquals(n, docs));
+        if (path is not { Count: >= 3 }
+            || path[^2] is not { Kind: DockNodeKind.Split, Orientation: DockOrientation.Horizontal } row
+            || path[^3] is not { Kind: DockNodeKind.Split, Orientation: DockOrientation.Vertical } column)
+        {
+            return root;
+        }
+
+        var kids = (row.Children ?? []).ToList();
+        var index = kids.FindIndex(k => ReferenceEquals(k, docs));
+        var right = kids.Skip(index + 1).ToList();
+        if (right.Count == 0 || kids.Any(k => k.Proportion is not > 0))
+        {
+            return root;
+        }
+
+        // 가로 분할(= 세로 열 폭) 안 몫을 합 1 기준으로 잰다: 오른쪽이 차지하던 몫 r.
+        var sum = kids.Sum(k => k.Proportion!.Value);
+        var r = right.Sum(k => k.Proportion!.Value) / sum;
+        var keep = kids.Take(index + 1).ToList();
+        var newRow = keep.Count == 1
+            ? keep[0] with { Proportion = row.Proportion }
+            : row with { Children = [.. keep.Select(k => k with { Proportion = Math.Round(k.Proportion!.Value / sum / (1 - r), 4) })] };
+        var newColumn = Replace(column, row, newRow);
+
+        var outer = path.Count >= 4 ? path[^4] : null;
+        if (outer is { Kind: DockNodeKind.Split, Orientation: DockOrientation.Horizontal } && column.Proportion is > 0)
+        {
+            var outerKids = outer.Children.ToList();
+            var at = outerKids.FindIndex(k => ReferenceEquals(k, column));
+            var width = column.Proportion!.Value;
+            outerKids[at] = newColumn with { Proportion = Math.Round(width * (1 - r), 4) };
+            outerKids.InsertRange(at + 1, right.Select(k => k with { Proportion = Math.Round(width * k.Proportion!.Value / sum, 4) }));
+            return Replace(root, outer, outer with { Children = outerKids });
+        }
+
+        var wrapped = new DockNode
+        {
+            Kind = DockNodeKind.Split,
+            Orientation = DockOrientation.Horizontal,
+            Proportion = column.Proportion,
+            Children = [newColumn with { Proportion = Math.Round(1 - r, 4) }, .. right.Select(k => k with { Proportion = Math.Round(k.Proportion!.Value / sum, 4) })],
+        };
+        return Replace(root, column, wrapped);
     }
 
     /// <summary>오른쪽 한 열: 창마다 묶음 하나씩 위에서 아래로 쌓는다(하나뿐이면 묶음 그대로).</summary>

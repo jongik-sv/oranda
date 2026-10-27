@@ -172,7 +172,7 @@ public class LayoutPlannerTests
         Assert.Equal(saved.HiddenTools, r.HiddenTools);
         Assert.Contains(Id("plan"), LayoutPlanner.ToolIds(r.Root));
         Assert.Contains(Id("binds"), LayoutPlanner.ToolIds(r.Root));
-        Assert.Equal([LayoutPlanner.RightToolsOpenMigration], r.Migrations);
+        Assert.Equal([LayoutPlanner.RightToolsOpenMigration, LayoutPlanner.RightToolsFullHeightMigration], r.Migrations);
     }
 
     [Fact]
@@ -186,7 +186,7 @@ public class LayoutPlannerTests
         Assert.Contains(Id("binds"), LayoutPlanner.ToolIds(r.Root));
         Assert.Contains(Id("templates"), LayoutPlanner.ToolIds(r.Root));
         Assert.Contains(Id("plan"), LayoutPlanner.ToolIds(r.Root)); // 아래 7개는 그대로
-        Assert.Equal([LayoutPlanner.RightToolsOpenMigration], r.Migrations);
+        Assert.Equal([LayoutPlanner.RightToolsOpenMigration, LayoutPlanner.RightToolsFullHeightMigration], r.Migrations);
 
         var again = LayoutPlanner.Reconcile(r, Real);
         Assert.True(LayoutPlanner.SameShape(r.Root, again.Root));
@@ -534,6 +534,147 @@ public class LayoutPlannerTests
         Assert.Equal(DockOrientation.Horizontal, root.Orientation);
         Assert.Equal(DockNodeKind.Documents, root.Children[0].Kind);
         Assert.Equal([Id("schemaBrowser")], root.Children[1].Tools);
+    }
+
+    // D-048: 오른쪽 도구 창은 [문서 / 아래 묶음] 열의 오른쪽(맨 바깥 가로 분할의 마지막 칸)에 붙어 세로 전체를 쓴다.
+    [Fact]
+    public void Right_tool_opens_beside_the_documents_and_bottom_column_not_above_the_bottom_group()
+    {
+        var layout = LayoutPlanner.CreateDefault(Real);
+
+        var shown = LayoutPlanner.ShowTool(layout, Real.First(p => p.Id == Id("templates")));
+
+        var root = shown.Root!;
+        Assert.Equal(DockOrientation.Horizontal, root.Orientation);
+        Assert.Equal(3, root.Children.Count);
+        Assert.Equal(Id("schemaBrowser"), root.Children[0].Tools[0]);
+        var column = root.Children[1];
+        Assert.Equal(DockOrientation.Vertical, column.Orientation);
+        Assert.Equal(DockNodeKind.Documents, column.Children[0].Kind);
+        Assert.Contains(Id("results"), column.Children[1].Tools);
+        Assert.Equal([Id("templates")], root.Children[2].Tools);
+        Assert.Equal(DockLocation.Right, LayoutPlanner.LocationOf(root, root.Children[2]));
+        Assert.Equal(LayoutPlanner.LeftProportion, root.Children[0].Proportion);
+        Assert.Equal(1.0, root.Children.Sum(c => c.Proportion!.Value), 3);
+
+        // 바인드 변수도 같은 오른쪽 묶음의 탭으로 붙는다(패널 사이 전환).
+        var both = LayoutPlanner.ShowTool(shown, Real.First(p => p.Id == Id("binds")));
+        Assert.Equal([Id("templates"), Id("binds")], both.Root!.Children[2].Tools);
+        Assert.Equal(Id("binds"), both.Root.Children[2].ActiveTool);
+    }
+
+    [Fact]
+    public void Closing_the_right_tools_removes_the_column_and_gives_its_width_back_to_the_documents()
+    {
+        var layout = LayoutPlanner.CreateDefault(Real);
+        var shown = LayoutPlanner.ShowTool(LayoutPlanner.ShowTool(layout, Real.First(p => p.Id == Id("templates"))), Real.First(p => p.Id == Id("binds")));
+
+        var closed = LayoutPlanner.HideTool(LayoutPlanner.HideTool(shown, Id("binds")), Id("templates"));
+
+        Assert.True(LayoutPlanner.SameShape(layout.Root, closed.Root, 1e-3)); // 빈 열·칸이 남지 않고 왼쪽 폭도 그대로
+        Assert.Contains(Id("templates"), closed.HiddenTools);
+        Assert.Contains(Id("binds"), closed.HiddenTools);
+    }
+
+    [Fact]
+    public void Bottom_group_added_while_a_right_tool_is_open_goes_under_the_documents_only()
+    {
+        var noBottom = LayoutPlanner.CreateDefault(Standard);
+        foreach (var id in new[] { "output", "messages" })
+        {
+            noBottom = LayoutPlanner.HideTool(noBottom, Id(id));
+        }
+
+        var right = LayoutPlanner.ShowTool(noBottom, Standard.First(p => p.Id == Id("templates")));
+        var withBottom = LayoutPlanner.ShowTool(right, Standard.First(p => p.Id == Id("output")));
+
+        var root = withBottom.Root!;
+        Assert.Equal(DockOrientation.Horizontal, root.Orientation);
+        Assert.Equal([Id("templates")], root.Children[^1].Tools);
+        var column = root.Children[1];
+        Assert.Equal(DockOrientation.Vertical, column.Orientation);
+        Assert.Equal([Id("output")], column.Children[1].Tools);
+        Assert.Equal(DockLocation.Bottom, LayoutPlanner.LocationOf(root, column.Children[1]));
+    }
+
+    /// <summary>D-048 전 모양: 가로[왼쪽, 세로[가로[문서, 오른쪽], 아래]] — 오른쪽 창이 아래 묶음 위에서 끝난다.</summary>
+    private static LayoutDocument BeforeFullHeight(IReadOnlyList<string>? migrations) => new()
+    {
+        Root = new DockNode
+        {
+            Kind = DockNodeKind.Split,
+            Orientation = DockOrientation.Horizontal,
+            Children =
+            [
+                new DockNode { Kind = DockNodeKind.ToolGroup, Tools = [Id("schemaBrowser"), Id("scripts")], ActiveTool = Id("schemaBrowser"), Proportion = 0.2 },
+                new DockNode
+                {
+                    Kind = DockNodeKind.Split,
+                    Orientation = DockOrientation.Vertical,
+                    Proportion = 0.8,
+                    Children =
+                    [
+                        new DockNode
+                        {
+                            Kind = DockNodeKind.Split,
+                            Orientation = DockOrientation.Horizontal,
+                            Proportion = 0.7,
+                            Children =
+                            [
+                                new DockNode { Kind = DockNodeKind.Documents, Proportion = 0.75 },
+                                new DockNode { Kind = DockNodeKind.ToolGroup, Tools = [Id("binds"), Id("templates")], ActiveTool = Id("templates"), Proportion = 0.25 },
+                            ],
+                        },
+                        new DockNode { Kind = DockNodeKind.ToolGroup, Tools = [Id("output"), Id("messages")], ActiveTool = Id("output"), Proportion = 0.3 },
+                    ],
+                },
+            ],
+        },
+        HiddenTools = [Id("outline")],
+        Migrations = migrations,
+    };
+
+    [Fact]
+    public void A_saved_layout_with_the_right_tools_above_the_bottom_group_moves_them_to_full_height_once()
+    {
+        var saved = BeforeFullHeight([LayoutPlanner.RightToolsOpenMigration]);
+
+        var r = LayoutPlanner.Reconcile(saved, Standard);
+
+        var root = r.Root!;
+        Assert.Equal(3, root.Children.Count);
+        Assert.Equal(0.2, root.Children[0].Proportion!.Value, 3);
+        var column = root.Children[1];
+        Assert.Equal(DockOrientation.Vertical, column.Orientation);
+        Assert.Equal(DockNodeKind.Documents, column.Children[0].Kind);
+        Assert.Equal(0.7, column.Children[0].Proportion!.Value, 3);
+        Assert.Equal([Id("output"), Id("messages")], column.Children[1].Tools);
+        Assert.Equal(0.8 * 0.75, column.Proportion!.Value, 3); // 창 전체 기준 폭은 그대로
+        Assert.Equal([Id("binds"), Id("templates")], root.Children[2].Tools);
+        Assert.Equal(Id("templates"), root.Children[2].ActiveTool);
+        Assert.Equal(0.8 * 0.25, root.Children[2].Proportion!.Value, 3);
+        Assert.Contains(LayoutPlanner.RightToolsFullHeightMigration, r.Migrations!);
+        Assert.Equal([Id("outline")], r.HiddenTools);
+
+        // 표지가 붙은 뒤 사용자가 다시 아래 묶음 위로 끌어 놓은 배치는 그대로 둔다.
+        var dragged = BeforeFullHeight(r.Migrations);
+        Assert.True(LayoutPlanner.SameShape(dragged.Root, LayoutPlanner.Reconcile(dragged, Standard).Root));
+    }
+
+    [Fact]
+    public void Full_height_migration_without_a_left_column_wraps_the_documents_column()
+    {
+        var saved = BeforeFullHeight([LayoutPlanner.RightToolsOpenMigration]);
+        var withoutLeft = saved with { Root = saved.Root!.Children[1] with { Proportion = null } };
+        var tools = Standard.Where(p => p.DefaultLocation != DockLocation.Left).ToArray();
+
+        var root = LayoutPlanner.Reconcile(withoutLeft, tools).Root!;
+
+        Assert.Equal(DockOrientation.Horizontal, root.Orientation);
+        Assert.Equal(DockOrientation.Vertical, root.Children[0].Orientation);
+        Assert.Equal(0.75, root.Children[0].Proportion!.Value, 3);
+        Assert.Equal([Id("binds"), Id("templates")], root.Children[1].Tools);
+        Assert.Equal(DockLocation.Right, LayoutPlanner.LocationOf(root, root.Children[1]));
     }
 
     private static int CountDocuments(DockNode n) =>

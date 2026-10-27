@@ -126,10 +126,14 @@ public class ShellHeadlessTests
                 ws.ShowTool("oranda.panel.outline");
                 ws.HideTool("oranda.panel.scripts");
                 ws.ShowTool("oranda.panel.history");
-                // 구분선을 끌면 이웃 둘의 비율이 함께 바뀐다(합 1). 왼쪽 묶음의 이웃은 문서·아래 묶음을 담은 오른쪽 열이다.
+                // 구분선을 끌면 이웃 둘의 비율이 함께 바뀐다(합 1). 왼쪽 묶음의 이웃은 문서·아래 묶음을 담은 가운데 열이고,
+                // 그 오른쪽에 개요 창 묶음이 세로 전체로 붙는다(D-048).
                 var left = FindToolDock(ws.Layout!, "oranda.panel.schemaBrowser");
+                var siblings = ((IDock)left.Owner!).VisibleDockables!.OfType<IDock>().ToList();
+                var middle = siblings.Single(d => !ReferenceEquals(d, left) && d is not IToolDock);
+                var rest = siblings.Where(d => !ReferenceEquals(d, left) && !ReferenceEquals(d, middle)).Sum(d => d.Proportion);
                 left.Proportion = 0.30;
-                ((IDock)left.Owner!).VisibleDockables!.OfType<IDock>().Single(d => !ReferenceEquals(d, left)).Proportion = 0.70;
+                middle.Proportion = 0.70 - rest;
                 before = ws.Capture();
                 await h.Get<ShellController>().SaveLayoutAsync(h.Window.CapturePlacement());
             }

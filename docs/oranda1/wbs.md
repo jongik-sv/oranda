@@ -1093,6 +1093,18 @@ levels:
   - acceptance: SessionCommandGateTests 6(모든 기능이 같은 잠금 뒤에 줄 섬·즉시성 범위 바쁨·재진입 없음·닫힌 뒤 놓기·다른 세션 잠금 없음) / BusySessionLookupTests 2 / 통합 SessionCommandGateFlowTests 2 가 26ai·11.2 에서 통과(긴 실행 중 같은 세션 메타데이터는 기다리거나 바쁨으로 건너뜀, Broken 아님, 취소는 실행만 멈추고 기다리던 조회는 ORA-01013 없이 돎) / 기존 통합 묶음이 멈추지 않음 / `dotnet build Oranda.sln -warnaserror`
   - note: 세션 관리 적대적 검토(2026-10-26) 2번. 확인: 같은 통합 시험을 고치기 전 코드(3b189b9)에서 돌리면 기다림·취소 경우가 통과한다 — ODP.NET 관리 드라이버가 서버 왕복 하나는 안에서 직렬화한다. 그래서 「프로토콜 오류로 Broken」 은 재현하지 못했고, 남은 실제 문제는 브레이크·늦은 브레이크 흡수가 기능별 잠금 안에서만 지켜지는 것, 연결 단위 직렬화를 드라이버 내부 구현에 기대던 것, 즉시성 기능이 긴 실행 뒤에 줄을 서던 것, 모니터 잠금 중첩, LOB 읽기 무잠금이다. 결과: 단위 Oracle.Tests 373·Language 992·App 3,781 등 전체 통과, 통합 SessionCommandGateFlowTests 26ai 2/2·11.2 2/2(긴 실행 중 같은 세션 GetTable 은 실행이 끝날 때까지 기다림 2.8~3.6 s, 즉시성 범위는 111~114 ms 에 바쁨, 취소 반영 26ai 596 ms·11.2 15 ms, 기다리던 조회는 ORA-01013 없이 끝남), Oranda.Oracle.IntegrationTests 347/347(26ai Testcontainers + 11.2 상주), App 통합 26ai 200 중 154 통과·46 실패는 고치기 전 코드에서도 같은 46(MenuWidth·RoleSurface·RoleMenu 개수 단정, DeveloperFlow S3_1·S3_4), 11.2 묶음 WorkspaceSession 6·Plsql·InvalidSearch·ConnectionCombo·ObjectDetailKeyColumns 통과. 11.2 의 PlsqlRunWindowFlowTests.Full_shell_command_registry_opens_window_over_main_window 가 같은 클래스 시험 뒤에 돌면 멈추는 것(TSK-10-03 남은 문제)은 고치기 전 코드도 같다: 멈춤 덤프에서 스키마 속성 창의 GetObjectDetailAsync 가 meta.detail_dependencies(all_dependencies USED_BY) 를 10분 넘게 서버에서 기다리고 같은 세션의 GetProceduresAsync 가 그 뒤에 줄을 서 있다(혼자 돌리면 73 s 에 통과)
 
+- [x] TSK-14-14: 오른쪽 도구 창(템플릿·바인드 변수)이 편집기 옆만 쓰던 것을 [편집기 / 결과] 오른쪽 세로 전체로 [win144] w:1 2026-10-28~2026-10-28
+  - category: feat
+  - domain: frontend
+  - model: opus
+  - priority: medium
+  - tags: docking, layout, templates, binds, win144
+  - prd-ref: PRD 16, D-048
+  - depends: TSK-14-13
+  - requirements: 사용자 요구(2026-10-28) 「오른쪽에 붙는 템플릿, 바인드 변수가 SQL 에디터 오른쪽에 붙는데 오른쪽 전체를 사용하게 바꿔줘」. 전에는 오른쪽 창이 `세로[가로[문서, 오른쪽], 아래 결과 묶음]` 으로 결과 묶음 위에서 끝났다. 고침: LayoutPlanner 가 오른쪽 창을 [문서 / 아래 묶음] 세로 열 바깥 오른쪽에 끼우고(InsertRight·ColumnOf), 아래 묶음은 문서 밑에만 두고, 닫힌 칸 폭은 문서 쪽 칸이 물려받으며, 표지 없는 저장 배치는 한 번 옮긴다(LiftRightBesideColumn, 표지 rightToolsFullHeight); 제약: 열고 닫기·묶음 안 전환·폭 저장·단축키·메뉴·포커스 그대로, 닫히면 빈 열 없음, 결과 위 실행 띠·편집기/결과 세로 분할선 그대로, 실앱 SendKeys 금지(Headless 까지); 비고: 레인 sr-side
+  - acceptance: RightToolsFullHeightTests 2(Headless 1280×800: 템플릿 창 세로 범위가 편집기 위끝~결과 아래끝, 결과 폭 = 편집기 폭, 닫으면 창이 사라지고 편집기·결과가 처음 폭, 바인드 변수와 같은 묶음 전환) / LayoutPlannerTests 새 5(오른쪽은 열 옆, 닫으면 기본 모양·왼쪽 폭 그대로, 오른쪽이 열린 채 아래 묶음 추가, 저장 배치 이주 한 번·표지 뒤 유지, 왼쪽 없는 배치 이주) / 고치기 전 8개 실패·고친 뒤 통과 / `dotnet build Oranda.sln -warnaserror`
+  - note: 바꾼 곳 = src/Oranda.App/Shell/Layout/LayoutPlanner.cs 하나(Dock 쪽 DockWorkspace 는 DTO 트리를 그대로 짓는다). ShellHeadlessTests.Changed_layout_is_restored_after_restart 는 왼쪽 묶음 이웃이 둘(가운데 열·오른쪽 개요)이 된 것에 맞춰 고쳤다 (win144)
+
 ## 의존 그래프
 
 ### 그래프 (Mermaid)
@@ -1197,6 +1209,7 @@ graph LR
   TSK-14-11 --> TSK-14-12
   TSK-14-12 --> TSK-14-13
   TSK-14-05 --> TSK-14-09
+  TSK-14-13 --> TSK-14-14
   style TSK-01-02 fill:#e8f5e9,stroke:#2e7d32
   style TSK-03-01 stroke:#c62828,stroke-width:2px
   style TSK-02-02 stroke:#c62828,stroke-width:2px
