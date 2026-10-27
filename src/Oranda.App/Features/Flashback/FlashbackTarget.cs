@@ -24,8 +24,8 @@ public sealed record FlashbackTarget(DbObjectRef Table, IReadOnlyList<string> Na
 
     /// <summary>일반 실행 결과에 키(PK) 열이 빠졌을 때: 열을 함께 조회하거나 편집 모드(ROWID 키)로 다시 실행하라고 안내한다.</summary>
     public static string NeedsKeyColumns => EditModeKey.Localize(
-        "키(PK) 열이 결과에 없어 플래시백을 쓸 수 없습니다. PK 열을 함께 조회하거나 편집 모드{0}로 다시 실행하세요.",
-        "Flashback needs the key (PK) columns in the result. Select the PK columns too, or rerun in edit mode{0}.");
+        "키(PK) 열이 결과에 없어 플래시백을 쓸 수 없습니다(시노님으로 조회했다면 시노님이 가리키는 표의 PK). PK 열을 함께 조회하거나 편집 모드{0}로 다시 실행하세요.",
+        "Flashback needs the key (PK) columns in the result (for a synonym, the PK of the table it points to). Select the PK columns too, or rerun in edit mode{0}.");
 
     /// <summary>「이전 값으로 되돌리기」는 쓰기라 편집 모드 결과에서만 한다.</summary>
     public static string RestoreNeedsEditMode => EditModeKey.Localize(
@@ -102,7 +102,7 @@ public sealed record FlashbackTarget(DbObjectRef Table, IReadOnlyList<string> Na
         {
             EditBlockReason.MultipleTables or EditBlockReason.NotKeyPreserved => MultipleTables,
             EditBlockReason.NoKeyColumns when plain => NeedsKeyColumns,
-            EditBlockReason.NoKeyColumns => "행을 식별할 키(PK·ROWID)가 없는 결과라 플래시백을 쓸 수 없습니다.",
+            EditBlockReason.NoKeyColumns => "행을 식별할 키(PK·ROWID)가 없는 결과라 플래시백을 쓸 수 없습니다(시노님은 가리키는 표의 PK 를 봅니다).",
             _ => capability.Message is { Length: > 0 } m ? "편집할 수 없는 결과라 플래시백을 쓸 수 없습니다: " + m : "편집할 수 없는 결과라 플래시백을 쓸 수 없습니다.",
         };
     }

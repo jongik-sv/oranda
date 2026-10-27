@@ -275,6 +275,44 @@ public sealed partial class SettingsStoreTests : IDisposable
     }
 
     [Fact]
+    public async Task Flashback_track_settings_default_on_recent_one_and_a_half_days_and_round_trip()
+    {
+        // TSK-13-44: 변경 추적하기 사용·기간(최근 N일 / 가능한 전체 기간). 옛 파일(키 없음) = 켬·최근 1.5일.
+        await File.WriteAllTextAsync(Paths.SettingsFile, """{ "schemaVersion": 1, "grid": { "pageSize": 300 } }""");
+        var old = (await NewStore().LoadAsync(default)).Value.Grid;
+        Assert.True(old.FlashbackTrackEnabled);
+        Assert.Equal(FlashbackTrackRange.RecentDays, old.FlashbackTrackRange);
+        Assert.Equal(1.5, old.FlashbackTrackDays);
+
+        var store = NewStore();
+        await store.LoadAsync(default);
+        await store.SaveAsync(new AppSettings { Grid = new GridSettings { FlashbackTrackEnabled = false, FlashbackTrackRange = FlashbackTrackRange.All, FlashbackTrackDays = 2.25 } }, default);
+
+        var json = JsonNode.Parse(await File.ReadAllTextAsync(Paths.SettingsFile))!["grid"]!;
+        Assert.False(json["flashbackTrackEnabled"]!.GetValue<bool>());
+        Assert.Equal("All", json["flashbackTrackRange"]!.GetValue<string>());
+        Assert.Equal(2.25, json["flashbackTrackDays"]!.GetValue<double>());
+        var back = (await NewStore().LoadAsync(default)).Value.Grid;
+        Assert.False(back.FlashbackTrackEnabled);
+        Assert.Equal(FlashbackTrackRange.All, back.FlashbackTrackRange);
+        Assert.Equal(2.25, back.FlashbackTrackDays);
+        Assert.Contains("grid", _bus.PublishedOf<SettingsChanged>().Select(e => e.Section));
+    }
+
+    [Theory]
+    [InlineData(0.0, 0.01)]
+    [InlineData(-3.0, 0.01)]
+    [InlineData(1000.0, 365.0)]
+    [InlineData(1.234, 1.23)]
+    [InlineData(double.NaN, 1.5)]
+    public void Flashback_track_days_are_kept_in_range(double saved, double expected)
+    {
+        var v = SettingsStore.Normalize(new AppSettings { Grid = new GridSettings { FlashbackTrackDays = saved } });
+
+        Assert.Equal(expected, v.Grid.FlashbackTrackDays);
+    }
+
+    [Fact]
     public async Task Values_are_clamped_to_documented_ranges()
     {
         var store = NewStore();

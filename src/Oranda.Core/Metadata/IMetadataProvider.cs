@@ -35,6 +35,12 @@ public interface IMetadataProvider
 
     /// <summary>서버 컴파일 오류·경고(all_errors). TSK-08-01.</summary>
     Task<IReadOnlyList<CompileError>> GetCompileErrorsAsync(ISession s, DbObjectRef obj, CancellationToken ct);
+
+    /// <summary>
+    /// 이름 풀이 한 단계: <c>owner.name</c> 이 그 스키마의 표·뷰인지, 시노님이면 가리키는 곳(<see cref="SynonymResolver"/> 가 따라간다).
+    /// 사전에 없거나 읽지 못하면 null. 기본 구현은 늘 null(시노님을 풀지 않는다).
+    /// </summary>
+    Task<NameStep?> GetNameStepAsync(ISession s, string owner, string name, CancellationToken ct) => Task.FromResult<NameStep?>(null);
 }
 
 /// <summary>

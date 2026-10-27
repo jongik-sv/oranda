@@ -149,6 +149,33 @@ public sealed record GridSettings
     public int LocalSortMaxRows { get; init; } = DefaultLocalSortMaxRows;
 
     public const int DefaultLocalSortMaxRows = 100_000;
+
+    /// <summary>
+    /// 결과 그리드 「플래시백 ▸ 이 행 변경 이력」(변경 추적하기, TSK-13-44)을 쓴다. 끄면 그 명령만 메뉴·우클릭·팔레트·단축키에서 숨는다.
+    /// </summary>
+    public bool FlashbackTrackEnabled { get; init; } = true;
+
+    /// <summary>변경 추적 질의가 읽는 기간: 최근 N일(<see cref="FlashbackTrackDays"/>) 또는 가능한 전체 기간.</summary>
+    public FlashbackTrackRange FlashbackTrackRange { get; init; } = FlashbackTrackRange.RecentDays;
+
+    /// <summary>「최근 N일」 의 N(소수 허용, <see cref="MinFlashbackTrackDays"/>~<see cref="MaxFlashbackTrackDays"/>).</summary>
+    public double FlashbackTrackDays { get; init; } = DefaultFlashbackTrackDays;
+
+    public const double DefaultFlashbackTrackDays = 1.5;
+
+    public const double MinFlashbackTrackDays = 0.01;
+
+    public const double MaxFlashbackTrackDays = 365;
+}
+
+/// <summary>변경 추적 질의 기간(<c>grid.flashbackTrackRange</c>).</summary>
+public enum FlashbackTrackRange
+{
+    /// <summary><c>VERSIONS BETWEEN TIMESTAMP SYSDATE - N AND MAXVALUE</c>.</summary>
+    RecentDays,
+
+    /// <summary><c>VERSIONS BETWEEN SCN MINVALUE AND MAXVALUE</c>(DB 에 따라 ORA-08180).</summary>
+    All,
 }
 
 public sealed record HistorySettings

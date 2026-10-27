@@ -4594,6 +4594,40 @@ dotnet, testhost, Oranda.App
 - data-model: -
 - ui-spec: -
 
+### TSK-13-44: 플래시백이 시노님으로 조회한 표를 접속 계정 스키마에서 찾고, 변경 추적 질의가 운영 DB 에서 ORA-08180 — 시노님 따라가기·기간 설정 [win144]
+- category: defect
+- domain: fullstack
+- model: opus
+- status: [x]
+- priority: high
+- assignee: -
+- schedule: 2026-10-27 ~ 2026-10-27
+- tags: flashback, synonym, settings, win144
+- depends: TSK-13-33
+- blocked-by: -
+- entry-point: 결과 그리드 「플래시백 ▸ N분 전 값 보기 · 이 행 변경 이력 · 이전 값으로 되돌리기」, 설정 > 결과 그리드 「변경 추적하기」·「변경 추적 기간」
+- note: 담당 PC: win144. 2026-10-27 사용자 보고 둘(개인 계정으로 운영계에 접속해 시노님으로 앱 소유 계정의 표를 쓰는데 플래시백이 개인 계정 스키마에서 표를 찾음 / VERSIONS BETWEEN SCN MINVALUE AND MAXVALUE 가 ORA-08180, TIMESTAMP SYSDATE - 1.5 는 됨) + 조정자 추가 요구(「변경 추적하기는 옵션으로」: 사용 켜기/끄기·기간 설정). 원인: GridEditSession.PlanAsync 가 FROM 의 이름을 「접속 계정.이름」 표로만 보고 시노님을 풀지 않음, FlashbackTrackSql 이 전체 기간(SCN MINVALUE)만 읽음. 결정 D-044. 크기 M. 결과: 결과의 표 이름이 접속 계정 스키마의 표·뷰가 아니면 ALL_SYNONYMS(개인 → 스키마를 적지 않았을 때만 PUBLIC)로 소유자.표를 풀고(사슬 8단계, 순환·DB 링크 시노님은 이유 안내) 키·열 메타데이터·AS OF·되돌리기·변경 이력을 그 표로 한다. 변경 이력 기본 기간 = 최근 1.5일(VERSIONS BETWEEN TIMESTAMP SYSDATE - 1.5 AND MAXVALUE, 마지막 DDL 10초 뒤보다 앞으로 잡지 않음), 설정으로 가능한 전체 기간(SCN MINVALUE)·끄기. 단위 시험 + 통합(26ai·11.2: 소유 계정·조회 계정·개인/PUBLIC 시노님) 통과
+
+#### PRD 요구사항
+- prd-ref: PRD GRID-11
+- requirements:
+  - 결과의 원본 표 이름이 접속 계정 스키마의 표·뷰가 아니면 시노님(접속 계정의 개인 시노님 먼저, SQL 에 스키마를 적지 않았을 때만 PUBLIC)을 따라 실제 소유자.표로 풀어 플래시백(N분 전 값·이 행 변경 이력·되돌리기)과 그리드 편집 대상으로 쓴다. 시노님이 시노님을 가리키면 8단계까지 따라가고 순환·DB 링크 시노님은 이유를 보인다
+  - 「이 행 변경 이력」(변경 추적하기)은 설정 「변경 추적 기간」을 따른다: 최근 N일(기본 1.5, 소수, 0.01~365) = VERSIONS BETWEEN TIMESTAMP SYSDATE - N AND MAXVALUE, 또는 가능한 전체 기간 = SCN MINVALUE AND MAXVALUE(DB 에 따라 ORA-08180). 생성 SQL 주석에 기간과 설정 위치를 적는다
+  - 설정 「변경 추적하기」 를 끄면 그 명령만 우클릭·팔레트·단축키에서 숨고 기간 옵션은 흐려진다(다른 플래시백 명령은 그대로)
+  - 키 열을 못 찾을 때의 안내가 시노님을 언급하고, 다른 스키마 표의 FLASHBACK 권한 안내는 그대로 둔다
+- acceptance:
+  - 개인 계정으로 접속해 시노님 이름으로 조회한 결과에서 「이 행 변경 이력」 이 소유자.표의 이력을 ORA-08180 없이 보인다
+- constraints:
+  - 서버에 보조 객체를 설치하지 않는다
+- test-criteria:
+  - 시노님 풀기(개인·PUBLIC·내 표 우선·사슬·순환·DB 링크·스키마 적음), 일반 결과의 대상, 생성 SQL(최근 N일·전체·DDL 시각), 설정 저장·불러오기·범위, 끄면 숨김(Headless 우클릭·팔레트), 통합 26ai·11.2
+
+#### 기술 스펙 (TRD)
+- tech-spec: Core SynonymResolver + IMetadataProvider.GetNameStepAsync(카탈로그 meta.name_step), GridEditSession.PlanAsync, FlashbackTrackSql, 설정 grid.flashbackTrack*, FeatureGate.SettingSwitches
+- api-spec: -
+- data-model: 설정 grid.flashbackTrackEnabled · grid.flashbackTrackRange · grid.flashbackTrackDays
+- ui-spec: 설정 창 「결과 그리드」 탭
+
 ## 의존 그래프
 
 ### 그래프 (Mermaid)
@@ -4759,6 +4793,7 @@ graph LR
   TSK-13-29 --> TSK-13-31
   TSK-04-06 --> TSK-13-32
   TSK-13-31 --> TSK-13-33
+  TSK-13-33 --> TSK-13-44
   style TSK-01-02 fill:#fff3e0,stroke:#e65100
   style TSK-01-07 fill:#fff3e0,stroke:#e65100
   style TSK-01-02 stroke:#c62828,stroke-width:2px

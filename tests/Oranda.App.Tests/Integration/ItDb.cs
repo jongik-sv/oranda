@@ -51,7 +51,8 @@ public sealed class ItDb : IDisposable
     /// <summary>시험 사용자로 직접 연결 문자열(앱을 거치지 않는 「다른 세션」·검증용).</summary>
     public string UserConnectionString => $"User Id={User};Password={Password};Data Source={DataSource};Pooling=false";
 
-    private void Admin(string sql)
+    /// <summary>관리자(SYSTEM)로 SQL 한 문장. 시험 사용자끼리의 권한·시노님 픽스처를 만들 때 쓴다(끝나면 시험이 지운다).</summary>
+    public void Admin(string sql)
     {
         using var c = new OracleConnection(AdminConnectionString);
         c.Open();

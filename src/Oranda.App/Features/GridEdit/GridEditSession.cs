@@ -499,6 +499,7 @@ public sealed class GridEditSession
             return new RowEditPlan(new EditCapability(false, shape.Block) { Message = shape.BlockMessage }, new string?[columns.Count]);
         }
 
+        DbObjectRef? written = null;
         if (target is null)
         {
             var first = shape.Tables.FirstOrDefault(t => !t.IsInlineView);
@@ -511,13 +512,40 @@ public sealed class GridEditSession
             // 스키마를 적지 않았으면 현재 사용자(따옴표 없는 이름이므로 대문자).
             var owner = first.Owner ?? (session.Server.SessionUser ?? session.Profile.User).ToUpperInvariant();
             target = new DbObjectRef(owner, first.Name!, "TABLE");
+            if (!first.IsRemote)
+            {
+                // 시노님(개인 → PUBLIC)이면 실제 소유자.표로 푼다(TSK-13-44): 키·열 메타데이터와 DML·플래시백 질의는 그 표로 한다.
+                try
+                {
+                    var resolved = await SynonymResolver.ResolveAsync((o, n) => metadata.GetNameStepAsync(session, o, n, ct), target, first.Owner is not null)
+                        .ConfigureAwait(true);
+                    if (resolved != target)
+                    {
+                        written = target;
+                        target = resolved;
+                    }
+                }
+                catch (SynonymResolutionException e)
+                {
+                    return new RowEditPlan(new EditCapability(false, EditBlockReason.NotAnalyzable) { Message = e.Message }, new string?[columns.Count]);
+                }
+            }
         }
 
         var info = await metadata.GetTableAsync(session, target, ct).ConfigureAwait(true);
-        var plan = RowEditPlanner.Plan(query, columns, TableKeys.From(info));
+        var keys = TableKeys.From(info);
+
+        // 시노님으로 풀었으면 FROM 절과 맞춰 보는 이름은 SQL 에 적힌 시노님이고, 편집·플래시백 대상은 푼 표다.
+        var asWritten = written is null ? keys : keys with { Table = written };
+        var plan = RowEditPlanner.Plan(query, columns, asWritten);
 
         // IRowEditor 계약 경로로 한 번 더(구현이 바뀌어도 판단은 IRowEditor 가 정본).
-        var cap = editor.Analyze(query, columns, TableKeys.From(info));
+        var cap = editor.Analyze(query, columns, asWritten);
+        if (written is not null && cap.Target is not null)
+        {
+            cap = cap with { Target = target };
+        }
+
         return plan with { Capability = cap };
     }
 

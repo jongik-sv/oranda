@@ -21,6 +21,7 @@ public partial class MetaCatalogTests
     [InlineData("meta.arguments")]
     [InlineData("meta.detail_triggers")]
     [InlineData("meta.detail_referenced_by")]
+    [InlineData("meta.name_step")]
     public void Query_exists_for_19_and_needs_no_license_pack(string id)
     {
         var query = Catalog.Get(id, 19);
@@ -29,6 +30,19 @@ public partial class MetaCatalogTests
         Assert.InRange(query.Header.MinVersion, 11, 19);
         Assert.Equal(id, Catalog.Get(id, 11).Header.Id); // 11.2 (TSK-03-07)
         Assert.Contains("@PFX@_", query.Sql, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Name_step_reads_the_synonym_target_and_whether_a_table_or_view_owns_the_name()
+    {
+        // 시노님 따라가기(플래시백·편집 대상): 한 단계 = 그 스키마의 표·뷰인지, 시노님이면 가리키는 소유자·이름·DB 링크.
+        var sql = Catalog.Get("meta.name_step", 11).Sql;
+
+        Assert.Contains("@PFX@_synonyms", sql, StringComparison.Ordinal);
+        Assert.Contains("s.table_owner, s.table_name, s.db_link", sql, StringComparison.Ordinal);
+        Assert.Contains("s.owner = :owner AND s.synonym_name = :name", sql, StringComparison.Ordinal);
+        Assert.Contains("o.owner = :owner AND o.object_name = :name", sql, StringComparison.Ordinal);
+        Assert.Contains("'TABLE', 'VIEW', 'MATERIALIZED VIEW'", sql, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -79,6 +93,7 @@ public partial class MetaCatalogTests
     [Theory]
     [InlineData("meta.detail_triggers")]
     [InlineData("meta.detail_referenced_by")]
+    [InlineData("meta.name_step")]
     public void Detail_section_queries_bind_exactly_owner_and_name(string id)
     {
         var binds = BindName().Matches(Catalog.Get(id, 26).Sql).Select(m => m.Groups[1].Value).ToHashSet(StringComparer.Ordinal);

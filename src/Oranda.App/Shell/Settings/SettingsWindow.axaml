@@ -243,7 +243,7 @@
 
       <TabItem Header="{Binding Strings[tab.grid]}">
         <ScrollViewer HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
-          <Grid Classes="form" ColumnDefinitions="Auto,*" RowDefinitions="Auto,Auto,Auto,Auto,Auto" ColumnSpacing="12" RowSpacing="10">
+          <Grid Classes="form" ColumnDefinitions="Auto,*" RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto" ColumnSpacing="12" RowSpacing="10">
             <TextBlock Grid.Row="0" Text="{Binding Strings[page]}" />
             <NumericUpDown Grid.Row="0" Grid.Column="1" Minimum="50" Maximum="100000" Increment="100" FormatString="0"
                            Value="{Binding PageSize}" AutomationProperties.Name="{Binding Strings[pageName]}" />
@@ -261,6 +261,18 @@
             <NumericUpDown Grid.Row="4" Grid.Column="1" x:Name="GridFontSizeBox"
                            Minimum="8" Maximum="32" Increment="1" FormatString="0.#"
                            Value="{Binding GridFontSize}" AutomationProperties.Name="{Binding GridFontSizeLabel}" />
+            <TextBlock Grid.Row="5" Text="{Binding Strings[flashbackTrack]}" />
+            <CheckBox Grid.Row="5" Grid.Column="1" x:Name="FlashbackTrackBox" Content="{Binding Strings[flashbackTrackOn]}" IsChecked="{Binding FlashbackTrackEnabled}" />
+            <TextBlock Grid.Row="6" Text="{Binding Strings[flashbackRange]}" VerticalAlignment="Top" />
+            <StackPanel Grid.Row="6" Grid.Column="1" x:Name="FlashbackRangePanel" Spacing="6" IsEnabled="{Binding FlashbackTrackEnabled}">
+              <StackPanel Orientation="Horizontal" Spacing="8">
+                <RadioButton GroupName="flashbackRange" Content="{Binding Strings[flashbackRecent]}" IsChecked="{Binding FlashbackTrackRecent}" VerticalAlignment="Center" />
+                <NumericUpDown x:Name="FlashbackDaysBox" Minimum="0.01" Maximum="365" Increment="0.5" FormatString="0.##" MinWidth="110"
+                               Value="{Binding FlashbackTrackDays}" IsEnabled="{Binding FlashbackTrackRecent}"
+                               AutomationProperties.Name="{Binding Strings[flashbackDaysName]}" />
+              </StackPanel>
+              <RadioButton GroupName="flashbackRange" Content="{Binding Strings[flashbackAll]}" IsChecked="{Binding FlashbackTrackAll}" />
+            </StackPanel>
           </Grid>
         </ScrollViewer>
       </TabItem>

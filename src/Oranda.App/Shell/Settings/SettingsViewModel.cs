@@ -94,6 +94,19 @@ public sealed partial class SettingsViewModel : ViewModelBase
     [ObservableProperty]
     private decimal _lobFetchSize;
 
+    /// <summary>「변경 추적하기」(그리드 「플래시백 ▸ 이 행 변경 이력」, TSK-13-44) 쓰기. 끄면 기간 옵션이 흐려진다.</summary>
+    [ObservableProperty]
+    private bool _flashbackTrackEnabled;
+
+    /// <summary>변경 추적 기간이 「최근 N일」이면 true, 「가능한 전체 기간」이면 false.</summary>
+    [NotifyPropertyChangedFor(nameof(FlashbackTrackAll))]
+    [ObservableProperty]
+    private bool _flashbackTrackRecent;
+
+    /// <summary>「최근 N일」의 N(0.01~365, 소수 허용).</summary>
+    [ObservableProperty]
+    private decimal _flashbackTrackDays;
+
     [ObservableProperty]
     private bool _historyEnabled;
 
@@ -220,6 +233,9 @@ public sealed partial class SettingsViewModel : ViewModelBase
         _pageSize = s.Grid.PageSize;
         _memoryLimitMb = s.Grid.MemoryLimitMb;
         _lobFetchSize = s.Grid.InitialLobFetchSize;
+        _flashbackTrackEnabled = s.Grid.FlashbackTrackEnabled;
+        _flashbackTrackRecent = s.Grid.FlashbackTrackRange != FlashbackTrackRange.All;
+        _flashbackTrackDays = (decimal)s.Grid.FlashbackTrackDays;
         _gridFontFamily = string.IsNullOrWhiteSpace(s.Grid.FontFamily) ? FontChoices[0] : s.Grid.FontFamily;
         _gridFontSize = (decimal)s.Grid.FontSize;
         _historyEnabled = s.History.Enabled;
@@ -240,6 +256,13 @@ public sealed partial class SettingsViewModel : ViewModelBase
 
     /// <summary>「SQL 포맷」 쪽(Orange SQL Formatter 대응, TSK-13-38).</summary>
     public SqlFormatPage SqlFormat { get; }
+
+    /// <summary>「가능한 전체 기간」 라디오(<see cref="FlashbackTrackRecent"/> 의 반대).</summary>
+    public bool FlashbackTrackAll
+    {
+        get => !FlashbackTrackRecent;
+        set => FlashbackTrackRecent = !value;
+    }
 
     /// <summary>「기능」 탭(Role 선택·기능 세부·재시작 안내, TSK-07-04).</summary>
     public FeatureSettingsPage Features { get; }
@@ -457,6 +480,9 @@ public sealed partial class SettingsViewModel : ViewModelBase
                     PageSize = (int)PageSize,
                     MemoryLimitMb = (int)MemoryLimitMb,
                     InitialLobFetchSize = (int)LobFetchSize,
+                    FlashbackTrackEnabled = FlashbackTrackEnabled,
+                    FlashbackTrackRange = FlashbackTrackRecent ? FlashbackTrackRange.RecentDays : FlashbackTrackRange.All,
+                    FlashbackTrackDays = (double)Math.Clamp(FlashbackTrackDays, (decimal)GridSettings.MinFlashbackTrackDays, (decimal)GridSettings.MaxFlashbackTrackDays),
                     FontFamily = gridFamily,
                     FontSize = Math.Clamp((double)GridFontSize, SettingsService.MinEditorFontSize, SettingsService.MaxEditorFontSize),
                 },

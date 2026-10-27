@@ -347,3 +347,11 @@
 - **Rationale**: 함께 쓰는 세션이면 세션 기준 표지는 같은 작업 공간의 모든 탭에 붙어 어느 탭이 도는지 모른다. 회전은 렌더 스레드(컴포지션) 애니메이션이고 보일 때만 돌아 탭이 많아도 UI 스레드 비용이 없다. 150 ms 지연으로 짧은 실행에서는 나타나지 않아 탭 폭이 흔들리지 않는다(색은 「세션」 창 실행 중 점과 같아 뜻이 하나). 끝남 표지는 「언제 지우나」 규칙이 더 생기고, 점이 사라지는 것과 결과 창·상태 줄 「마지막 실행」 이 끝남을 이미 알린다(사용 단순함 우선).
 - **Reversible**: yes
 - **Source**: 사용자 요구(2026-10-27), 조정자 레인 sr-busy 지시
+
+## D-044 (2026-10-27T05:30:00Z)
+- **Phase**: build
+- **Decision needed**: 시노님으로 조회한 결과의 플래시백·편집 대상, 「이 행 변경 이력」(변경 추적하기)이 읽는 기간과 끄기(TSK-13-44)
+- **Decision made**: 결과의 표 이름은 오라클 이름 풀이 순서대로 푼다 — 그 스키마의 표·뷰 → 그 스키마의 개인 시노님 → SQL 에 스키마를 적지 않았을 때만 PUBLIC 시노님, 시노님 사슬은 8단계까지(순환·DB 링크 시노님은 이유를 보이고 쓰지 않음). 키·열 메타데이터·AS OF·되돌리기 UPDATE·변경 이력은 푼 소유자.표로 하고, FROM 절 맞춤만 적힌 시노님 이름으로 한다(그리드 편집도 같은 판정). 변경 이력 기간은 설정 `grid.flashbackTrackRange`/`grid.flashbackTrackDays`: 기본 최근 1.5일 `VERSIONS BETWEEN TIMESTAMP SYSDATE - 1.5 AND MAXVALUE`, 마지막 DDL 시각을 읽을 수 있으면 시작을 `GREATEST(SYSDATE - N, 마지막 DDL + 10초)` 로 잡는다. 가능한 전체 기간(`SCN MINVALUE AND MAXVALUE`)은 설정으로만. 끝은 `SYSDATE` 가 아니라 `MAXVALUE`. `grid.flashbackTrackEnabled`(기본 켬)를 끄면 그 명령만 기능 게이트의 설정 스위치로 레지스트리에서 빠진다(메뉴·우클릭·팔레트·단축키)
+- **Rationale**: 운영 DB 에서 SCN MINVALUE 는 ORA-08180 이 나고 사용자가 TIMESTAMP SYSDATE - 1.5 로 도는 것을 확인했다. 26ai·11.2 실측: 기간 시작이 표 생성·GRANT 같은 DDL 앞이면 ORA-01466(+3초는 실패, +5초부터 성공 → 10초 여유), `AND SYSDATE` 는 시각→SCN 대응이 몇 초 늦어 방금 커밋한 변경을 빠뜨리고 `AND MAXVALUE` 는 그렇지 않다, SYSDATE - 30 은 시각 대응 범위를 넘어 ORA-08180. 개인 계정 + 시노님은 회사 운영 환경의 흔한 방식이고 PUBLIC 을 스키마를 적은 이름에 쓰면 오라클과 다르게 푼다
+- **Reversible**: yes
+- **Source**: 사용자 보고(2026-10-27, 시노님·ORA-08180), 조정자 추가 요구 1·2(「변경 추적하기는 옵션으로」), 레인 sr-fb

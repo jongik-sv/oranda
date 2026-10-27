@@ -25,6 +25,16 @@ public sealed class FeatureGate : IFeatureGate
     private readonly ConcurrentDictionary<(string? Id, Type Type), string?> _tags = new();
     private State _state = State.AllOn;
     private IReadOnlySet<string>? _startup;
+    private IReadOnlySet<string> _switchedOff = new HashSet<string>(StringComparer.Ordinal);
+
+    /// <summary>
+    /// 기능보다 작은 단위로 설정이 끄는 명령(TSK-13-44): (명령 id, 설정 섹션, 켜짐 조건). 꺼지면 기능이 꺼진 명령처럼 레지스트리에서 빠진다
+    /// (메뉴·우클릭·팔레트·단축키가 함께 따른다). 설정이 없는 게이트(시험)에서는 늘 켬이다.
+    /// </summary>
+    internal static readonly IReadOnlyList<(string CommandId, string Section, Func<AppSettings, bool> IsOn)> SettingSwitches =
+    [
+        ("oranda.grid.flashback.history", "grid", s => s.Grid.FlashbackTrackEnabled),
+    ];
 
     /// <summary>설정·문맥 키 없이(시험). <see cref="Resolve"/> 를 직접 부른다.</summary>
     public FeatureGate()
@@ -48,8 +58,47 @@ public sealed class FeatureGate : IFeatureGate
                 {
                     Resolve(_settings!.Current.Features);
                 }
+                else if (SettingSwitches.Any(w => w.Section == e.Section))
+                {
+                    RefreshSwitches();
+                }
             });
         }
+    }
+
+    /// <summary>설정이 끈 명령 id(<see cref="SettingSwitches"/>)를 다시 읽는다. 바뀌었으면 <see cref="Changed"/> 를 낸다.</summary>
+    /// <returns>바뀌었으면 true.</returns>
+    public bool RefreshSwitches()
+    {
+        lock (_lock)
+        {
+            if (!UpdateSwitchesLocked())
+            {
+                return false;
+            }
+        }
+
+        Changed?.Invoke(this, EventArgs.Empty);
+        return true;
+    }
+
+    // _lock 안에서 부른다. 설정이 없으면(시험) 늘 켬.
+    private bool UpdateSwitchesLocked()
+    {
+        if (_settings is null)
+        {
+            return false;
+        }
+
+        var current = _settings.Current;
+        var off = new HashSet<string>(SettingSwitches.Where(w => !w.IsOn(current)).Select(w => w.CommandId), StringComparer.Ordinal);
+        if (off.SetEquals(_switchedOff))
+        {
+            return false;
+        }
+
+        Volatile.Write(ref _switchedOff, off);
+        return true;
     }
 
     /// <summary>다시 해석해 결과가 바뀐 뒤(켜진 집합·조회 전용·재시작 대기 중 하나라도). 스레드 보장 없음.</summary>
@@ -116,7 +165,8 @@ public sealed class FeatureGate : IFeatureGate
             }
 
             next = new State(enabled, FeatureCatalog.IsReadOnly(settings), pending.ToArray());
-            if (next.SameAs(_state))
+            var switched = UpdateSwitchesLocked(); // 설정을 처음 읽은 직후에도 설정이 끈 명령을 맞춘다
+            if (next.SameAs(_state) && !switched)
             {
                 return false;
             }
@@ -139,7 +189,7 @@ public sealed class FeatureGate : IFeatureGate
     {
         ArgumentNullException.ThrowIfNull(commandId);
         ArgumentNullException.ThrowIfNull(handlerType);
-        return IsTagEnabled(commandId, handlerType);
+        return !Volatile.Read(ref _switchedOff).Contains(commandId) && IsTagEnabled(commandId, handlerType);
     }
 
     public bool IsPanelEnabled(string panelId, Type viewModelType)

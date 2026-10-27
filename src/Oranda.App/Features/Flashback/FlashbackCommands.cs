@@ -5,12 +5,14 @@ using Oranda.App.Features.ResultGrid;
 using Oranda.App.Features.SqlEditor;
 using Oranda.App.Shell;
 using Oranda.App.Shell.Composition;
+using Oranda.App.Shell.Settings;
 using Oranda.Core.Catalog;
 using Oranda.Core.Events;
 using Oranda.Core.Execution;
 using Oranda.Core.Grid;
 using Oranda.Core.Metadata;
 using Oranda.Core.Sessions;
+using Oranda.Core.Settings;
 using Oranda.Core.Shell;
 using Oranda.Language.Editing;
 using Oranda.Oracle.Catalog;
@@ -209,10 +211,13 @@ public sealed class FlashbackCommandHandler : ICommandHandler
             return;
         }
 
+        // 기간은 설정 「변경 추적 기간」(TSK-13-44). 최근 N일이면 표 정의가 마지막으로 바뀐 시각 앞으로는 잡지 않는다(ORA-01466).
+        var days = FlashbackTrackSql.DaysFrom(container.GetService<SettingsService>()?.Current.Grid ?? new GridSettings());
+        var lastDdl = days is null ? null : await Runner(container).LastDdlAsync(source.Session, Catalog.Value, target.Table, ct).ConfigureAwait(true);
         var host = SqlEditorHost.Current;
         var profileId = host.Active?.ConnectionProfileId ?? source.Session.Profile.Id;
         var text = FlashbackTrackSql.Build(target.Table, target.Names, target.KeyNames, target.KeyOf(row),
-            source.Session.Server.SessionUser ?? source.Session.Profile.User);
+            source.Session.Server.SessionUser ?? source.Session.Profile.User, days, lastDdl);
         await OpenAndRunAsync(host, text, profileId, token => ExecutionCommands.Resolve(container).RunAsync(RunMode.Statement, ct: token), ct).ConfigureAwait(true);
         model.ReportNotice(string.Empty);
     }

@@ -231,6 +231,32 @@ internal sealed partial class OracleMetadataProvider
         => TryQueryAsync(s, s.Server.Capabilities.CanQueryDictionary ? "meta.detail_size" : "meta.detail_size_user", bind, ct);
 
     /// <summary>덧붙이는 구역 하나를 읽는다. 권한·뷰 문제로 실패하면 null(그 구역만 빼고 상세는 계속한다).</summary>
+    /// <summary>
+    /// 이름 풀이 한 단계(<c>meta.name_step</c>, TSK-13-44): 표·뷰면 <see cref="NameStep.TableOrView"/>, 시노님이면 가리키는 곳. 없거나 사전을 읽지 못하면 null
+    /// (부른 쪽은 적힌 이름 그대로 메타데이터를 읽어 「찾을 수 없음」을 알린다).
+    /// </summary>
+    public async Task<NameStep?> GetNameStepAsync(ISession s, string owner, string name, CancellationToken ct)
+    {
+        ArgumentNullException.ThrowIfNull(s);
+        ArgumentNullException.ThrowIfNull(owner);
+        ArgumentNullException.ThrowIfNull(name);
+        var rows = await TryQueryAsync(s, "meta.name_step", c =>
+        {
+            c.Parameters.Add("owner", owner);
+            c.Parameters.Add("name", name);
+        }, ct);
+        if (rows is not { Count: > 0 })
+        {
+            return null;
+        }
+
+        var row = rows[0];
+        return string.Equals(Convert.ToString(row[0], CultureInfo.InvariantCulture), "SYNONYM", StringComparison.Ordinal)
+            ? NameStep.Synonym(Convert.ToString(row[1], CultureInfo.InvariantCulture), Convert.ToString(row[2], CultureInfo.InvariantCulture) ?? name,
+                Convert.ToString(row[3], CultureInfo.InvariantCulture) is { Length: > 0 } link ? link : null)
+            : NameStep.TableOrView;
+    }
+
     private static async Task<List<object?[]>?> TryQueryAsync(ISession s, string id, Action<OracleCommand> bind, CancellationToken ct)
     {
         try

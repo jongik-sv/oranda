@@ -82,6 +82,9 @@
 | `grid.memoryLimitMb` | int | ○ | 200 | 페이지 캐시 상한 |
 | `grid.initialLobFetchSize` | int | ○ | 4000 | 문자 |
 | `grid.localSortMaxRows` | int | ○ | 100000 | 머리글 정렬을 이 PC 에서 바로 하는 행 수 문턱. 닿으면 「서버에서 ORDER BY 로 다시 조회」를 묻는다(TSK-13-17) |
+| `grid.flashbackTrackEnabled` | bool | ○ | true | 그리드 「플래시백 ▸ 이 행 변경 이력」(변경 추적하기) 쓰기. 끄면 그 명령만 메뉴·우클릭·팔레트·단축키에서 숨는다(TSK-13-44) |
+| `grid.flashbackTrackRange` | `FlashbackTrackRange` = `RecentDays`\|`All` | ○ | `RecentDays` | 변경 추적 기간: 최근 N일(`VERSIONS BETWEEN TIMESTAMP SYSDATE - N AND MAXVALUE`) 또는 가능한 전체 기간(`SCN MINVALUE AND MAXVALUE`, DB 에 따라 ORA-08180) |
+| `grid.flashbackTrackDays` | double | ○ | 1.5 | 「최근 N일」 의 N(0.01~365, 소수 둘째 자리까지). 선택 필드 추가라 스키마 버전은 그대로 |
 | `history.enabled` | bool | ○ | true | 실행 이력 기록 |
 | `history.saveBindValues` | bool | ○ | **false** | 켜야만 `binds_json` 기록 |
 | `history.maxEntries` | int | ○ | 50000 | 3.4 보존 정책 |

@@ -107,6 +107,13 @@ internal sealed class SettingsStore : ISettingsStore, IDisposable
             FontSize = Math.Clamp(s.Editor.FontSize, 8, 32),
             TabSize = Math.Clamp(s.Editor.TabSize, 1, 16),
         },
+        Grid = s.Grid with
+        {
+            FlashbackTrackDays = double.IsFinite(s.Grid.FlashbackTrackDays)
+                ? Math.Round(Math.Clamp(s.Grid.FlashbackTrackDays, GridSettings.MinFlashbackTrackDays, GridSettings.MaxFlashbackTrackDays), 2)
+                : GridSettings.DefaultFlashbackTrackDays,
+            FlashbackTrackRange = Enum.IsDefined(s.Grid.FlashbackTrackRange) ? s.Grid.FlashbackTrackRange : FlashbackTrackRange.RecentDays,
+        },
         Monitor = s.Monitor with { RefreshSeconds = Math.Clamp(s.Monitor.RefreshSeconds, 2, 60) },
         Workspace = s.Workspace with { AutosaveSeconds = Math.Clamp(s.Workspace.AutosaveSeconds, 1, 10) },
         Features = NormalizeFeatures(s.Features),
