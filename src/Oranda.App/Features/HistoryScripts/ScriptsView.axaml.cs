@@ -2,6 +2,7 @@ using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Interactivity;
 using Avalonia.Threading;
+using Avalonia.VisualTree;
 using Avalonia.Platform.Storage;
 using Oranda.App.Shell.Icons;
 
@@ -9,6 +10,7 @@ namespace Oranda.App.Features.HistoryScripts;
 
 public partial class ScriptsView : UserControl
 {
+    private readonly System.Func<NewScriptRequest, System.Threading.Tasks.Task<string?>> _prompt;
     private ScriptsViewModel? _wired;
 
     public ScriptsView()
@@ -62,33 +64,71 @@ public partial class ScriptsView : UserControl
             }
         };
         // 파일을 열면 새 편집기 탭으로 연다(Orange SQL Tool 의 File Mode). 활성 편집기에 끼워 넣기는 쓰지 않는다.
+        // 도킹은 탭을 오갈 때마다 이 보기를 새로 만든다. ViewModel 알림은 화면에 붙어 있는 동안만 받는다:
+        // 떼지 않으면 보기 수만큼 받는 곳이 쌓여 파일 하나가 편집기 탭 여러 개로 열린다(TSK-12-07).
+        _prompt = request => NewScriptDialog.ShowAsync(request, TopLevel.GetTopLevel(this) as Window);
         DataContextChanged += (_, _) =>
         {
-            if (DataContext is ScriptsViewModel vm && !ReferenceEquals(_wired, vm))
+            if (this.IsAttachedToVisualTree())
             {
-                _wired = vm;
-                // 메뉴는 열리기 전에는 데이터 문맥을 받지 못해 바인딩 대신 코드로 맞춘다.
-                void SyncMenu() => NewScriptMenu.IsEnabled = vm.CanNewScript;
-                vm.PropertyChanged += (_, e) =>
-                {
-                    if (e.PropertyName == nameof(ScriptsViewModel.CanNewScript))
-                    {
-                        SyncMenu();
-                    }
-                };
-                SyncMenu();
-                vm.NewScriptPrompt ??= request => NewScriptDialog.ShowAsync(request, TopLevel.GetTopLevel(this) as Window);
-                vm.OpenRequested += async (_, path) => await SqlEditor.SqlEditorHost.Current.OpenFileAsync(path, default);
+                Wire(DataContext as ScriptsViewModel);
             }
         };
         AttachedToVisualTree += (_, _) =>
         {
+            Wire(DataContext as ScriptsViewModel);
             if (DataContext is ScriptsViewModel { Roots.Count: 0 } vm)
             {
                 vm.Reload();
             }
         };
+        DetachedFromVisualTree += (_, _) => Wire(null);
     }
+
+    /// <summary>받는 ViewModel 을 바꾼다(null = 모두 뗀다). 같은 ViewModel 이면 아무 일도 없다.</summary>
+    private void Wire(ScriptsViewModel? vm)
+    {
+        if (ReferenceEquals(_wired, vm))
+        {
+            return;
+        }
+
+        if (_wired is { } old)
+        {
+            old.PropertyChanged -= OnViewModelPropertyChanged;
+            old.OpenRequested -= OnOpenRequested;
+            old.OpenAtRequested -= OnOpenAtRequested;
+            if (old.NewScriptPrompt == _prompt)
+            {
+                old.NewScriptPrompt = null; // 다음에 붙는 보기가 자기 창을 주인으로 띄운다
+            }
+        }
+
+        _wired = vm;
+        if (vm is null)
+        {
+            return;
+        }
+
+        vm.PropertyChanged += OnViewModelPropertyChanged;
+        vm.OpenRequested += OnOpenRequested;
+        vm.OpenAtRequested += OnOpenAtRequested;
+        vm.NewScriptPrompt ??= _prompt;
+        SyncMenu(vm);
+    }
+
+    // 메뉴는 열리기 전에는 데이터 문맥을 받지 못해 바인딩 대신 코드로 맞춘다.
+    private void SyncMenu(ScriptsViewModel vm) => NewScriptMenu.IsEnabled = vm.CanNewScript;
+
+    private void OnViewModelPropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName == nameof(ScriptsViewModel.CanNewScript) && sender is ScriptsViewModel vm)
+        {
+            SyncMenu(vm);
+        }
+    }
+
+    private async void OnOpenRequested(object? sender, string path) => await SqlEditor.SqlEditorHost.Current.OpenFileAsync(path, default);
 
     private async System.Threading.Tasks.Task NewScriptAsync()
     {

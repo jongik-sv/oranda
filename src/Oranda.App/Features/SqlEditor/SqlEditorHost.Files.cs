@@ -54,6 +54,13 @@ public sealed partial class SqlEditorHost
         }
 
         var bytes = await File.ReadAllBytesAsync(full, ct).ConfigureAwait(true);
+        // 읽는 사이 같은 파일 열기가 겹쳐 먼저 탭을 만들었으면 그 탭을 쓴다(같은 경로는 탭 하나, TSK-12-07).
+        if (Tabs.FirstOrDefault(t => string.Equals(t.FilePath, full, StringComparison.OrdinalIgnoreCase)) is { } opened)
+        {
+            Active = opened;
+            return opened;
+        }
+
         var (text, enc) = FileEncoding.Decode(bytes);
         IReadOnlyList<WorkspaceBind>? fileBinds = null;
         if (CarriesBinds(full))

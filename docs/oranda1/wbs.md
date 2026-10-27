@@ -899,6 +899,18 @@ levels:
   - acceptance: 오류 결과 뒤 새 실행을 시작한 직후(완료 전) 오류 탭·오류 상태가 없다 / 완료 뒤 새 결과만 보인다 / 고정 탭 유지 / 한 문장·스크립트·새 결과 탭·MyBatis 경로 / 취소·실패한 새 실행은 새 결과만 / `dotnet build Oranda.sln -warnaserror`
   - note: 담당 PC: win144(Windows 개발 PC) — 맥북 세션은 이 Task 를 하지 않는다. 사용자 원문(2026-10-26): 「앞선 스텝에서 오류가 발생한 조회 결과가 새로운 쿼리를 실행 중일때도 보여서 마치 계속 에러가 난것 처럼 보인다.」 크기 S. 레인 sc-errclear / 결과: 잰 결과 오류 상태(State)는 BeginRun 이 이미 지웠지만 결과 영역의 오류 탭은 실행이 끝나 Clear 가 불릴 때까지 한 문장·MyBatis 실행 내내 남았다(스크립트는 시작 때 Clear). ResultTabsViewModel.ClearErrors(고정 안 한 오류 탭만 닫음)를 더해 실행 시작 지점 GuardedAsync 에서 부르게 고쳤다; 새 시험 9개 통과, 실행·편집기·결과 탭 관련 697개 통과, PNG 는 ~/.coord/scripts-find/shots/sc-errclear (win144)
 
+- [x] TSK-12-07: 스크립트 창에서 SQL 파일을 추가하면 같은 파일이 여러 개 열림 [win144] w:1 2026-10-27~2026-10-27
+  - category: defect
+  - domain: frontend
+  - model: opus
+  - priority: high
+  - tags: scripts, new-script, editor-tabs, event-leak, win144
+  - prd-ref: 결함 보고 2026-10-27
+  - depends: TSK-10-02
+  - requirements: 사용자 보고 「스크립트에서 sql파일을 추가 하면 3개씩 추가가 된다.」 새 스크립트·트리에서 파일 열기·검색 결과 열기에서 같은 경로는 스크립트 트리에도, 편집기 탭에도 한 번만 보인다(Windows 는 대소문자 무시). 바깥에서 생긴 파일은 새로 고침 뒤 한 번, 겹친 연결 폴더(상위·하위)에서도 한 번; 제약: 범위를 넓히지 않는다, 파일 감시는 더하지 않는다
+  - acceptance: 왼쪽 탭(스키마 브라우저 ↔ 스크립트)을 오간 뒤 새 스크립트·파일 열기 = 편집기 탭 1개·트리 줄 1개 / 바깥 파일 + 새로 고침 여러 번 = 1개 / 겹친 폴더 = 1개 / 같은 경로 동시 열기 = 탭 1개 / `dotnet build Oranda.sln -warnaserror`
+  - note: 담당 PC: win144(Windows 개발 PC) — 맥북 세션은 이 Task 를 하지 않는다. 레인 sr-scr. 결과: 트리·목록은 중복이 없었고(LoadChildren 이 지우고 다시 읽음, 스크립트 창에 파일 감시 없음) 늘어난 것은 편집기 탭이었다. 도킹이 탭을 오갈 때마다 ScriptsView 를 새로 만드는데 보기마다 DataContextChanged 에서 vm.OpenRequested·OpenAtRequested·PropertyChanged 에 받는 곳을 더하고 떼지 않아(ScriptsView.axaml.cs 81줄, ScriptsView.Search.cs 31줄) 탭을 두 번 오가면 열기 한 번에 OpenFileAsync 가 세 번 돌고, OpenFileAsync 는 「이미 열림」 확인 뒤 파일을 읽는 동안 기다려 세 번 모두 새 탭을 만들었다(SqlEditorHost.Files.cs). 보기는 화면에 붙어 있는 동안만 받고(Attached/Detached 에서 붙이고 뗌, 새 스크립트 창 주인도 지금 보기), OpenFileAsync 는 읽은 뒤 한 번 더 같은 경로 탭을 찾는다. 시험 ScriptsAddOnceTests 7개(고치기 전 5개 실패: 탭 4·3·3개) (win144)
+
 ## WP-13: 작은 개선
 <!-- 담당 PC: win144(Windows 개발 PC) — 맥북 세션은 이 WP 의 Task 를 하지 않는다. 2026-10-26 사용자 요청, 조정자 기본안(사용자 「묻지 말고 진행」). 설계 = decisions D-032, PRD·TRD 는 따로 쓰지 않는다(작은 화면 개선). 레인 sc-ddl. 통합 확인은 TSK-10-03 이 맡는다 -->
 
@@ -1159,6 +1171,7 @@ graph LR
   TSK-12-03 --> TSK-10-03
   TSK-12-04 --> TSK-10-03
   TSK-13-01 --> TSK-10-03
+  TSK-10-02 --> TSK-12-07
   TSK-14-01 --> TSK-14-02
   TSK-14-02 --> TSK-14-03
   TSK-14-02 --> TSK-14-04

@@ -10,8 +10,6 @@ namespace Oranda.App.Features.HistoryScripts;
 // ScriptsView 의 일부: 거르기 줄·결과 목록 입력과 편집기로 열기(TSK-10-01).
 public partial class ScriptsView
 {
-    private ScriptsViewModel? _searchWired;
-
     private void WireSearch()
     {
         SearchBox.InnerLeftContent = ShellIcons.Create("find", 14);
@@ -23,14 +21,15 @@ public partial class ScriptsView
                 await vm.OpenResultAsync(row);
             }
         };
-        DataContextChanged += (_, _) =>
+    }
+
+    // 받고 떼기는 Wire(ScriptsView.axaml.cs)가 한다.
+    private async void OnOpenAtRequested(object? sender, ScriptOpenAt request)
+    {
+        if (sender is ScriptsViewModel vm)
         {
-            if (DataContext is ScriptsViewModel vm && !ReferenceEquals(_searchWired, vm))
-            {
-                _searchWired = vm;
-                vm.OpenAtRequested += async (_, request) => await OpenAtAsync(vm, request);
-            }
-        };
+            await OpenAtAsync(vm, request);
+        }
     }
 
     /// <summary>파일을 새 편집기 탭(이미 열려 있으면 그 탭)으로 열고 그 줄로 이동한다.</summary>
