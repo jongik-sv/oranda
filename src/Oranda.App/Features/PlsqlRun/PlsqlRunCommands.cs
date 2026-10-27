@@ -67,7 +67,7 @@ public sealed class PlsqlRunCommandHandler : ICommandHandler
             return;
         }
 
-        var vm = new PlsqlRunViewModel(deps);
+        var vm = new PlsqlRunViewModel(deps) { Marker = SourceMarker(context) };
         if (Presenter is not null)
         {
             Presenter(vm);
@@ -79,6 +79,17 @@ public sealed class PlsqlRunCommandHandler : ICommandHandler
 
         await vm.OpenAsync(target, member, cancellationToken).ConfigureAwait(true);
     }
+
+    /// <summary>편집기에서 열었으면 그 PL/SQL 탭의 실행 중 표지(TSK-14-13). 인자·스키마 브라우저에서 열었으면 null.</summary>
+    private Oranda.App.Shell.RunMarker? SourceMarker(CommandContext context) =>
+        context.Parameter is null && context.CommandId == "oranda.plsql.run"
+            ? (_container?.GetService<IShellUi>() as ShellController)?.Docking.ActiveDocument?.Panel switch
+            {
+                PlsqlWorkspace.PlsqlWorkspaceViewModel { ActiveTab: { } tab } => tab.Editor.Run,
+                PlsqlEditor.PlsqlEditorViewModel editor => editor.Editor.Run,
+                _ => null,
+            }
+            : null;
 
     private (DbObjectRef? Target, string? Member) ResolveTarget(CommandContext context)
     {

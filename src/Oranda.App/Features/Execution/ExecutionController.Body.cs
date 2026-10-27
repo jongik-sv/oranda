@@ -244,6 +244,7 @@ public sealed partial class ExecutionController
         _runs[session.Id] = cts;
         s_runningProfile.Value = session.Profile;
         State.BeginRun(session.Id, tab is null ? null : Host.WorkspaceOf(tab)); // 시작한 작업 공간(함께 쓰는 세션의 안내 막대, TSK-14-03)
+        tab?.Run.Begin(); // 이 탭 머리·작업 공간 문서 탭 머리의 실행 중 점(TSK-14-13): 다른 탭을 보고 있어도 남는다
         if (results is not null)
         {
             results.ClearErrors(); // 지난 실행의 오류 탭은 실행을 시작하는 순간 지운다(오류 상태는 State.BeginRun 이 지웠다)
@@ -271,6 +272,7 @@ public sealed partial class ExecutionController
                 results.IsRunning = false; // 끝·오류·취소 모두에서 끈다
             }
 
+            tab?.Run.End(); // 끝·오류·취소 모두에서 끈다
             State.ApplyTransaction(session.Id, session.HasPendingTransaction);
             State.EndRun(session.Id);
         }

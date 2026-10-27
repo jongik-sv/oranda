@@ -104,6 +104,8 @@
                               CommandParameter="{Binding}" />
                   </ContextMenu>
                 </StackPanel.ContextMenu>
+                <!-- 이 탭에서 시작한 실행이 도는 동안의 점(TSK-14-13, 깜빡이지 않는다). 다른 탭을 보고 있어도 남고 끝·오류·취소에 사라진다. -->
+                <Ellipse Classes="run-marker" IsVisible="{Binding Run.IsRunning}" ToolTip.Tip="{Binding Run.Tip}" />
                 <!-- MyBatis 문서의 문장 종류 표시 자리(비어 있으면 보이지 않는다). -->
                 <vm:SqlTabBadgeSlot VerticalAlignment="Center" Margin="0,0,4,0" />
                 <TextBlock Classes="tab-title" Text="{Binding DisplayTitle}" VerticalAlignment="Center"

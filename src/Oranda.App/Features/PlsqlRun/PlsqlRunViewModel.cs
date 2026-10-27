@@ -111,6 +111,9 @@ public sealed partial class PlsqlRunViewModel : ObservableObject
     /// <summary>OUT·반환값 REF CURSOR 결과를 담는 영역(결과 그리드, TSK-06-03).</summary>
     public ResultTabsViewModel Results { get; }
 
+    /// <summary>이 창을 연 PL/SQL 탭의 실행 중 표지(TSK-14-13). 실행하는 동안 켠다. 스키마 브라우저에서 열었으면 null.</summary>
+    public Oranda.App.Shell.RunMarker? Marker { get; init; }
+
     [ObservableProperty]
     public partial string Title { get; set; } = "PL/SQL 실행";
 
@@ -302,6 +305,7 @@ public sealed partial class PlsqlRunViewModel : ObservableObject
 
         ClearResults();
         IsRunning = true;
+        Marker?.Begin(); // 이 창을 연 PL/SQL 탭 머리의 실행 중 점(TSK-14-13)
 
         // 실행·트랜잭션 표시는 실제로 쓴 세션에 단다(지금 접속은 실행하는 사이 바뀔 수 있다, TSK-14-08). 작업 공간 밖의 실행이라 시작한 쪽은 모른다.
         _deps.State?.BeginRun(session.Id, null);
@@ -337,6 +341,7 @@ public sealed partial class PlsqlRunViewModel : ObservableObject
             _runningSession = null;
             _deps.State?.ApplyTransaction(session.Id, session.HasPendingTransaction);
             _deps.State?.EndRun(session.Id);
+            Marker?.End();
             IsRunning = false;
         }
 

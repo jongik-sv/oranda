@@ -40,6 +40,13 @@
       <TextBlock Text="{Binding Banner}" FontWeight="SemiBold" TextTrimming="CharacterEllipsis"
                  AutomationProperties.Name="접속 라벨" />
     </Border>
+    <!-- 실행 중 띠(TSK-14-13): 「실행 중 · 경과 n초」. 짧은 실행에는 보이지 않고(막대와 같은 지연) 끝·오류·취소에 사라진다. -->
+    <Border x:Name="RunBand" DockPanel.Dock="Top" Classes="run-band" IsVisible="{Binding IsRunBarVisible}">
+      <StackPanel Orientation="Horizontal">
+        <Ellipse Classes="run-marker" />
+        <TextBlock Text="{Binding Run.Tip}" VerticalAlignment="Center" />
+      </StackPanel>
+    </Border>
     <Grid>
     <TabControl x:Name="Tabs" ItemsSource="{Binding Tabs}" SelectedItem="{Binding Selected, Mode=TwoWay}">
       <TabControl.ItemTemplate>

@@ -74,6 +74,8 @@
   "Execution.status.brokenSuffix": " (끊김)",
   "Execution.status.connected": "연결됨",
   "Execution.status.running": "실행 중 {0}",
+  "Execution.runMarker.tip": "실행 중 · 경과 {0}초",
+  "Execution.runMarker.tabTip": "{0} 실행 중 · 경과 {1}초",
   "Execution.status.cancelling": "취소 중",
   "Execution.status.broken": "끊김",
   "Execution.status.uncommitted": "미커밋",

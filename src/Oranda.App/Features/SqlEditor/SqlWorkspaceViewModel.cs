@@ -16,7 +16,7 @@ namespace Oranda.App.Features.SqlEditor;
 /// Markdown 작업 공간 파일이나 MyBatis 매퍼를 열면 작업 공간 하나가 된다(<see cref="SourcePath"/>).
 /// 탭을 더하고 빼는 일과 활성 탭은 <see cref="SqlEditorHost"/> 가 맡는다(호스트의 <c>Active</c> 가 앱 전체의 「활성 SQL 탭」 신호다).
 /// </summary>
-public sealed partial class SqlWorkspaceViewModel : ToolPanelViewModelBase, IInnerTabsDocument, IDockTabActions, IToolScopeDocument
+public sealed partial class SqlWorkspaceViewModel : ToolPanelViewModelBase, IInnerTabsDocument, IDockTabActions, IToolScopeDocument, IRunningDocument
 {
     private string? _autosaveStamp;
 
@@ -134,6 +134,12 @@ public sealed partial class SqlWorkspaceViewModel : ToolPanelViewModelBase, IInn
     public bool IsEmpty => Tabs.Count == 0;
 
     public bool IsDirty => Tabs.Any(t => t.IsDirty) || MyBatis?.IsDirty == true;
+
+    /// <summary>SQL 탭 하나라도 실행 중이다(문서 탭 머리의 실행 중 점, TSK-14-13).</summary>
+    public bool HasRunningTab => Tabs.Any(t => t.Run.IsRunning);
+
+    /// <summary>실행 중인 SQL 탭마다 「이름 실행 중 · 경과 n초」(문서 탭 머리 점의 툴팁).</summary>
+    public string RunTip => RunningTabs.Describe(Tabs.Select(t => (t.Title, t.Run)));
 
     /// <summary>문서 탭 머리글: 고친 SQL 탭이 있으면 「* 이름」, 파일에서 연 작업 공간이면 뒤에 종류(「이름 (sqd)」).</summary>
     public string DisplayTitle => (IsDirty ? "* " : string.Empty) + Name + (Kind is { } kind ? $" ({kind})" : string.Empty);
@@ -283,16 +289,32 @@ public sealed partial class SqlWorkspaceViewModel : ToolPanelViewModelBase, IInn
         foreach (var t in e.OldItems?.OfType<SqlEditorViewModel>() ?? [])
         {
             t.PropertyChanged -= OnTabPropertyChanged;
+            t.Run.PropertyChanged -= OnTabRunChanged;
         }
 
         foreach (var t in e.NewItems?.OfType<SqlEditorViewModel>() ?? [])
         {
             t.PropertyChanged += OnTabPropertyChanged;
+            t.Run.PropertyChanged += OnTabRunChanged;
         }
 
+        OnPropertyChanged(nameof(HasRunningTab)); // 실행 중인 탭을 닫거나 옮겼다
+        OnPropertyChanged(nameof(RunTip));
         OnPropertyChanged(nameof(IsEmpty));
         OnPropertyChanged(nameof(IsDirty));
         OnPropertyChanged(nameof(DisplayTitle));
+    }
+
+    private void OnTabRunChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName == nameof(RunMarker.IsRunning))
+        {
+            OnPropertyChanged(nameof(HasRunningTab));
+        }
+        else if (e.PropertyName == nameof(RunMarker.Tip))
+        {
+            OnPropertyChanged(nameof(RunTip));
+        }
     }
 
     private void OnTabPropertyChanged(object? sender, PropertyChangedEventArgs e)

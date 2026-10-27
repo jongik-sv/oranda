@@ -41,7 +41,27 @@ public sealed class PanelDocument : Document
         Id = id;
         Title = title;
         CanFloat = panel is not IDockTabActions; // SQL 작업 공간은 떼어 내지 않는다(두 번 누르기 = 이름 바꾸기)
+        if (panel is IRunningDocument running)
+        {
+            running.PropertyChanged += (_, e) =>
+            {
+                if (e.PropertyName == nameof(IRunningDocument.HasRunningTab))
+                {
+                    OnPropertyChanged(nameof(IsRunning));
+                }
+                else if (e.PropertyName == nameof(IRunningDocument.RunTip))
+                {
+                    OnPropertyChanged(nameof(RunTip));
+                }
+            };
+        }
     }
+
+    /// <summary>안쪽 탭 하나라도 실행 중이다(<see cref="IRunningDocument"/>): 문서 탭 머리 앞에 실행 중 점을 보인다(TSK-14-13).</summary>
+    public bool IsRunning => Panel is IRunningDocument { HasRunningTab: true };
+
+    /// <summary>실행 중 점의 툴팁(실행 중인 안쪽 탭마다 「이름 실행 중 · 경과 n초」).</summary>
+    public string? RunTip => (Panel as IRunningDocument)?.RunTip is { Length: > 0 } tip ? tip : null;
 
     public ToolPanelDefinition Definition { get; }
 

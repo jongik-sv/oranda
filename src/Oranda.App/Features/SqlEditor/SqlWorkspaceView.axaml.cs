@@ -343,12 +343,26 @@ public partial class SqlWorkspaceView : UserControl
         var menu = new MenuFlyout();
         foreach (var tab in vm.Tabs)
         {
-            var item = new MenuItem { Header = tab.DisplayTitle, FontWeight = ReferenceEquals(tab, vm.ActiveTab) ? Avalonia.Media.FontWeight.SemiBold : Avalonia.Media.FontWeight.Normal };
-            item.Click += (_, _) => vm.ActiveTab = tab;
-            menu.Items.Add(item);
+            menu.Items.Add(TabListItem(vm, tab));
         }
 
         menu.ShowAt(TabListButton);
+    }
+
+    /// <summary>탭 목록 메뉴의 한 줄: 보이는 탭은 굵게, 실행 중인 탭은 탭 머리와 같은 점(TSK-14-13). 메뉴는 열 때마다 새로 만든다.</summary>
+    internal static MenuItem TabListItem(SqlWorkspaceViewModel vm, SqlEditorViewModel tab)
+    {
+        var item = new MenuItem { Header = tab.DisplayTitle, FontWeight = ReferenceEquals(tab, vm.ActiveTab) ? Avalonia.Media.FontWeight.SemiBold : Avalonia.Media.FontWeight.Normal };
+        if (tab.Run.IsRunning)
+        {
+            var dot = new Avalonia.Controls.Shapes.Ellipse();
+            dot.Classes.Add("run-marker");
+            item.Icon = dot;
+            ToolTip.SetTip(item, tab.Run.Tip);
+        }
+
+        item.Click += (_, _) => vm.ActiveTab = tab;
+        return item;
     }
 
     private void ClearDropMarker()

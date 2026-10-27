@@ -80,6 +80,8 @@
                               CommandParameter="{Binding}" />
                   </ContextMenu>
                 </StackPanel.ContextMenu>
+                <!-- 이 탭에서 연 PL/SQL 실행 창이 블록을 돌리는 동안의 점(TSK-14-13). -->
+                <Ellipse Classes="run-marker" IsVisible="{Binding Editor.Run.IsRunning}" ToolTip.Tip="{Binding Editor.Run.Tip}" />
                 <TextBlock Classes="tab-title" Classes.preview="{Binding IsPreviewTab}" Text="{Binding Title}" VerticalAlignment="Center" />
                 <!-- 한 작업 공간에 접속이 섞였을 때만 탭 머리에 접속 이름을 붙인다(결정 59). -->
                 <TextBlock Classes="tab-conn" Text="{Binding ConnectionName, StringFormat='@{0}'}" VerticalAlignment="Center"

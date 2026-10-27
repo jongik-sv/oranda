@@ -277,6 +277,27 @@ public class PlsqlRunTests
         Assert.StartsWith("완료", vm.StatusText, StringComparison.Ordinal); // 실행하면 힌트는 결과로 바뀐다
     }
 
+    /// <summary>TSK-14-13: 편집기에서 연 실행 창은 실행하는 동안 그 PL/SQL 탭의 실행 중 표지를 켜고, 끝나면 끈다.</summary>
+    [Fact]
+    public Task Run_marks_the_plsql_tab_it_was_opened_from_until_it_ends() => Ui.Run(async () =>
+    {
+        var rig = new Rig();
+        var daily = new DbObjectRef("SCOTT", "DAILY_BATCH", "PROCEDURE");
+        rig.Meta.Procedures[daily] = [new ProcedureInfo("DAILY_BATCH", false, [])];
+        var gate = new TaskCompletionSource<ExecutionResult>(TaskCreationOptions.RunContinuationsAsynchronously);
+        rig.Exec.Handler = (_, _) => gate.Task;
+        var marker = new Oranda.App.Shell.RunMarker();
+        var vm = new PlsqlRunViewModel(rig.Deps()) { Marker = marker };
+        await vm.OpenAsync(daily);
+
+        var run = vm.RunAsync();
+        Assert.True(marker.IsRunning);
+        await Oranda.App.Tests.Shell.Headless.HeadlessHost.WaitUntil(() => rig.Exec.Statements.Count == 1); // 엔진은 다른 스레드에서 불린다
+        gate.SetResult(new ExecutionResult(rig.Exec.Statements[0], ExecutionStatus.Failed));
+        await run;
+        Assert.False(marker.IsRunning);
+    });
+
     /// <summary>
     /// TSK-14-08: 실행 창은 실제로 쓴 세션의 실행·트랜잭션 표시를 바꾼다. 실행하는 사이 지금 접속이 다른 세션이어도 그 세션의 표시는 건드리지 않는다.
     /// </summary>

@@ -180,6 +180,9 @@ public sealed partial class SqlEditorViewModel : ToolPanelViewModelBase, IBindOw
 
     public string DisplayTitle => (IsDirty ? "* " : string.Empty) + Title;
 
+    /// <summary>이 탭에서 시작한 실행의 「실행 중」 표지(TSK-14-13): 탭 머리 점·작업 공간 문서 탭 머리가 따른다. 실행 컨트롤러가 켜고 끈다.</summary>
+    public RunMarker Run { get; } = new();
+
     /// <summary>탭 머리에서 이름을 제자리 편집하는 중(두 번 누르기·F2·오른쪽 클릭 「이름 바꾸기」).</summary>
     [ObservableProperty]
     public partial bool IsRenaming { get; set; }

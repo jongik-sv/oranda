@@ -23,7 +23,7 @@ namespace Oranda.App.Features.PlsqlWorkspace;
 /// 미리보기 탭은 하나뿐이고(머리글 기울임) 고치거나 고정하면 보통 탭이 된다. 마지막 탭을 닫아도 작업 공간은 빈 채로 남는다.
 /// </summary>
 [OrandaToolPanel("oranda.panel.plsqlWorkspace", ToolPanelKind.Document, DockLocation.Document, AllowMultiple = true)]
-public sealed partial class PlsqlWorkspaceViewModel : ToolPanelViewModelBase, IInnerTabsDocument, IPlsqlRunSource, ConnectionManager.IConnectionDocument
+public sealed partial class PlsqlWorkspaceViewModel : ToolPanelViewModelBase, IInnerTabsDocument, IPlsqlRunSource, ConnectionManager.IConnectionDocument, IRunningDocument
 {
     private PlsqlEditorViewModel? _titleSource;
 
@@ -390,5 +390,38 @@ public sealed partial class PlsqlWorkspaceViewModel : ToolPanelViewModelBase, II
     private void UpdateMixedConnections() =>
         MixedConnections = Tabs.Select(t => t.Session?.Profile.Id).Where(id => id is not null).Distinct().Skip(1).Any();
 
-    private void OnTabsChanged(object? sender, NotifyCollectionChangedEventArgs e) => OnPropertyChanged(nameof(IsEmpty));
+    /// <summary>PL/SQL 탭 하나라도 실행 중이다(실행 창이 그 탭에서 블록을 돌린다, TSK-14-13). 문서 탭 머리의 실행 중 점이 따른다.</summary>
+    public bool HasRunningTab => Tabs.Any(t => t.Editor.Run.IsRunning);
+
+    /// <summary>실행 중인 PL/SQL 탭마다 「이름 실행 중 · 경과 n초」.</summary>
+    public string RunTip => RunningTabs.Describe(Tabs.Select(t => (t.Title, t.Editor.Run)));
+
+    private void OnTabsChanged(object? sender, NotifyCollectionChangedEventArgs e)
+    {
+        foreach (var t in e.OldItems?.OfType<PlsqlEditorViewModel>() ?? [])
+        {
+            t.Editor.Run.PropertyChanged -= OnTabRunChanged;
+        }
+
+        foreach (var t in e.NewItems?.OfType<PlsqlEditorViewModel>() ?? [])
+        {
+            t.Editor.Run.PropertyChanged += OnTabRunChanged;
+        }
+
+        OnPropertyChanged(nameof(IsEmpty));
+        OnPropertyChanged(nameof(HasRunningTab));
+        OnPropertyChanged(nameof(RunTip));
+    }
+
+    private void OnTabRunChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName == nameof(RunMarker.IsRunning))
+        {
+            OnPropertyChanged(nameof(HasRunningTab));
+        }
+        else if (e.PropertyName == nameof(RunMarker.Tip))
+        {
+            OnPropertyChanged(nameof(RunTip));
+        }
+    }
 }

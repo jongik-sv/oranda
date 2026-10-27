@@ -97,10 +97,22 @@ public sealed partial class ResultTabsViewModel : ViewModelBase
         {
             if (SetProperty(ref _isRunning, value))
             {
+                if (value)
+                {
+                    Run.Begin();
+                }
+                else
+                {
+                    Run.End();
+                }
+
                 _runBar.Set(value);
             }
         }
     }
+
+    /// <summary>결과 영역 위 「실행 중 · 경과 n초」 띠의 표지(TSK-14-13). <see cref="IsRunning"/> 을 따른다.</summary>
+    public Oranda.App.Shell.RunMarker Run { get; } = new();
 
     /// <summary>실행 중 막대를 보인다(<see cref="RunBarDelay"/> 넘게 이어질 때만 — 짧은 쿼리는 깜빡이지 않는다).</summary>
     public bool IsRunBarVisible => _runBar.Visible;

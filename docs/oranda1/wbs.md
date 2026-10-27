@@ -1033,6 +1033,18 @@ levels:
   - acceptance: ToolbarConnectionPlacementTests 7개(모델·주 창 첫 두 단추 = 접속 관리자·접속 끊기 + 구분선, 콤보 최소·최대 폭, 「1 - scott@hr_dev_main (2)」·「새 세션(첫 실행 때) — scott@hr_dev」 가 1280 창에서 안 잘림·펼친 목록 줄도 안 잘림, 1280 창에서 상한 폭 콤보로도 넘침 없음, 960 창은 오른쪽부터 접고 접속 단추는 콤보 옆에 남음) 고치기 전 5개 실패·고친 뒤 통과 / MenuWidthTests·RoleSurfaceMatrixTests·RoleMenuFlowTests·ToolbarWhenTests 기대값 변화 없이 통과 / `dotnet build Oranda.sln -warnaserror`
   - note: 결과: 상한 460 의 근거 — 1280 창 툴바 폭 1272 에서 명령 검색 200 + 여백 12 + 단추 18개·구분선 6개 557 을 빼면 콤보 칸(콤보 + 오른쪽 여백 6)에 503 DIP 가 남는다. 460(칸 466)이면 37 DIP(단추 하나 남짓) 여유가 있어 첫 실행 창에서 넘치지 않는다. 글 칸은 약 390 DIP(Inter 14 영문 약 50자, 「새 세션(첫 실행 때) — 」 뒤 사용자@DB 약 33자). 펼친 목록은 Avalonia 가 콤보 폭 이상으로 내용만큼 넓혀 따로 고칠 것 없음. 최소 240 이라 960 창에서는 맨 오른쪽 단추(설정 등)가 「…」 로 접힐 수 있다. 원인 Features/ConnectionManager/ConnectionCombo.cs(MinWidth 180·MaxWidth 320)·ConnectionManagerCommands.cs·SqlEditor/SqlEditorCommandHandler.cs·PlsqlEditor/PlsqlEditorCommands.cs 의 toolbar:main 순서 값 (win144)
 
+- [x] TSK-14-13: 조회가 실행 중일 때 탭 머리·작업 공간 문서 탭·결과 영역에 실행 중 표지 [win144] w:1 2026-10-27~2026-10-27
+  - category: feat
+  - domain: frontend
+  - model: opus
+  - priority: medium
+  - tags: execution, docking, tabs, status, win144
+  - prd-ref: PRD 16, D-043
+  - depends: TSK-14-12
+  - requirements: 사용자 요구(2026-10-27) 「조회가 실행중이어도 별로 표시가 안난다. 탭 등에도 표시가 나면 좋겠어」. 전에는 상태 줄 2번 구간 「실행 중 mm:ss」, 툴바 취소 단추, 결과 영역 위 2 px 진행 막대, 「세션」 창 주황 점뿐이라 다른 탭을 보면 어디서 도는지 안 보였다. 실행을 시작한 SQL·MyBatis 탭과 PL/SQL 실행 창을 연 PL/SQL 탭 머리 앞 주황 점(툴팁 「실행 중 · 경과 n초」), 그 작업 공간의 문서 탭 머리 아이콘 자리 점(툴팁 = 실행 중인 탭마다 한 줄), SQL 탭 목록 메뉴 점, 결과 영역 위 띠 「실행 중 · 경과 n초」. 끝·오류·취소에 사라짐. 끝남 표지는 두지 않음(D-043). 애니메이션 없음, 경과 초는 도는 표지만 1초 타이머 하나; 제약: 실앱 SendKeys 금지(Headless 까지); 비고: 레인 sr-busy
+  - acceptance: RunMarkerTests 10개(표지 수 세기·경과 초, 컨트롤러 실행 중 다른 탭 활성일 때 탭·작업 공간·결과 띠 표지 + 성공·실패·예외·취소 4갈래에서 사라짐, PanelDocument 따름, PL/SQL 작업 공간 따름, SQL 탭 목록 메뉴 점, ShellHarness 에서 SQL 탭 머리·다른 작업 공간을 볼 때 문서 탭 머리 점 보임·끝나면 사라짐, 결과 띠) / PlsqlRunTests.Run_marks_the_plsql_tab_it_was_opened_from_until_it_ends / 고치기 전 7개 실패·고친 뒤 통과 / MenuWidthTests·RoleSurfaceMatrixTests·RoleMenuFlowTests 통과 / `dotnet build Oranda.sln -warnaserror`
+  - note: 결과: 표지 = 새 Shell/RunMarker.cs(RunMarker·IRunningDocument·RunningTabs). 켜고 끄는 곳 = Features/Execution/ExecutionController.Body.cs GuardedAsync(탭이 있는 모든 컨트롤러 실행), PlsqlRun/PlsqlRunViewModel.cs RunAsync(PlsqlRunCommands.cs 가 편집기에서 열 때 그 탭 표지를 넘김). 문서 탭 머리는 App.axaml 의 dockctl|DocumentControl IconTemplate(Dock 의 빈 아이콘 자리). 결과 그리드 다시 조회·행 수 세기·관련 행 등 결과 창에서 바로 도는 실행은 탭을 모르므로 결과 창 진행 막대만 쓴다 (win144)
+
 - [x] TSK-14-09: 한 세션 연결을 기능마다 다른 잠금이 지킴 → 연결 하나에 명령 잠금 하나 [win144] w:1 2026-10-26~2026-10-26
   - category: defect
   - domain: backend
@@ -1145,6 +1157,7 @@ graph LR
   TSK-14-07 --> TSK-14-10
   TSK-14-10 --> TSK-14-11
   TSK-14-11 --> TSK-14-12
+  TSK-14-12 --> TSK-14-13
   TSK-14-05 --> TSK-14-09
   style TSK-01-02 fill:#e8f5e9,stroke:#2e7d32
   style TSK-03-01 stroke:#c62828,stroke-width:2px
