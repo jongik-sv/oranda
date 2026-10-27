@@ -14,10 +14,19 @@ namespace Oranda.App.Features.ResultGrid;
 // ResultGridControl 의 일부: 키 입력·정렬(ResultGridControl.cs 에서 나눔, 동작 불변).
 public sealed partial class ResultGridControl
 {
+    /// <summary>
+    /// 포커스를 받으면 결과 명령(주 메뉴 「결과」·키맵)의 대상(<see cref="ResultGridCommands.Active"/>)이 되는가(기본 true).
+    /// 모니터 표처럼 SQL 문서 밖의 읽기 전용 그리드는 끈다(편집기 결과 명령이 모니터 표를 고치거나 복사하지 않게).
+    /// </summary>
+    public bool IsCommandTarget { get; set; } = true;
+
     protected override void OnGotFocus(FocusChangedEventArgs e)
     {
         base.OnGotFocus(e);
-        ResultGridCommands.Active = _model;
+        if (IsCommandTarget)
+        {
+            ResultGridCommands.Active = _model;
+        }
     }
 
     protected override void OnKeyDown(KeyEventArgs e)

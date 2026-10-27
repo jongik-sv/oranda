@@ -14,7 +14,7 @@ namespace Oranda.App.Features.SqlMonitor;
 /// <summary>SQL 모니터 문서. 단추는 <see cref="SqlMonitorViewModel"/> 의 동작을 부른다(명령 ID 와 같은 동작).</summary>
 public partial class SqlMonitorView : UserControl
 {
-    private readonly MonitorTableBinder<TopSqlItem> _grid;
+    private readonly MonitorGridBinder<TopSqlItem> _grid;
     private readonly MonitorTableBinder<AwrRowItem> _awrGrid;
     private readonly MonitorTableBinder<PlanControlItem> _controlsGrid;
     private readonly MonitorTableBinder<PlanCompareRowItem> _compareGrid;
@@ -24,12 +24,7 @@ public partial class SqlMonitorView : UserControl
     {
         InitializeComponent();
         ResultList.ExtraMenuItems = () => ShellContextMenus.Factory?.Invoke("monitor") ?? [];
-        ResultList.RightAlignedColumns = [2, 3, 4, 5, 6];
-        ResultList.MonospaceColumns = [0]; // SQL ID
-        _grid = new MonitorTableBinder<TopSqlItem>(ResultList,
-            ["SQL ID", "자식", "소요(s)", "CPU(s)", "실행", "읽은 블록", "디스크", "스키마", "SQL"],
-            i => [i.SqlId, i.ChildText, i.ElapsedText, i.CpuText, i.ExecutionsText, i.BlocksText, i.DiskText, i.Schema, i.Preview],
-            i => i.Row.Cursor);
+        _grid = new MonitorGridBinder<TopSqlItem>(ResultList, Columns, i => i.Row.Cursor);
 
         // 튜닝 탭 표(TSK-06-06): 숫자 칸 오른쪽 맞춤·단위, 고정폭 칸.
         AwrList.RightAlignedColumns = [1, 2, 3, 4];
@@ -88,7 +83,7 @@ public partial class SqlMonitorView : UserControl
         // 계획·바인드를 읽으면 아래 탭도 그 내용으로 넘긴다(결과가 숨은 탭에 들어가 안 보이지 않게).
         PlanButton.Click += (_, _) => Run(vm => vm.ShowPlanAsync(), tab: SqlMonitorViewModel.PlanTab);
         BindsButton.Click += (_, _) => Run(vm => vm.ShowBindsAsync(), tab: SqlMonitorViewModel.DetailTab);
-        ResultList.DoubleTapped += (_, _) => Run(vm => vm.ShowPlanAsync(), tab: SqlMonitorViewModel.PlanTab);
+        ResultList.RowDoubleTapped += (_, _) => Run(vm => vm.ShowPlanAsync(), tab: SqlMonitorViewModel.PlanTab);
         OrderBox.DisplayMemberBinding = new Avalonia.Data.Binding("Key");
         OrderBox.SelectedIndex = 0;
 
@@ -129,6 +124,22 @@ public partial class SqlMonitorView : UserControl
         };
         ClassBar.SizeChanged += (_, _) => RebuildClassBar();
     }
+
+    /// <summary>Top SQL 목록 열. 숫자 열은 오른쪽 맞춤·수로 정렬된다(초는 소수 둘째 자리까지).</summary>
+    internal static readonly MonitorColumn<TopSqlItem>[] Columns =
+    [
+        new("SQL ID", Oranda.Core.Grid.ColumnDataKind.Text, i => i.SqlId),
+        new("자식", Oranda.Core.Grid.ColumnDataKind.Number, i => i.Row.Cursor.ChildNumber),
+        new("소요(s)", Oranda.Core.Grid.ColumnDataKind.Number, i => Seconds(i.Row.ElapsedSeconds)),
+        new("CPU(s)", Oranda.Core.Grid.ColumnDataKind.Number, i => Seconds(i.Row.CpuSeconds)),
+        new("실행", Oranda.Core.Grid.ColumnDataKind.Number, i => i.Row.Executions),
+        new("읽은 블록", Oranda.Core.Grid.ColumnDataKind.Number, i => i.Row.BufferGets),
+        new("디스크", Oranda.Core.Grid.ColumnDataKind.Number, i => i.Row.DiskReads),
+        new("스키마", Oranda.Core.Grid.ColumnDataKind.Text, i => i.Schema),
+        new("SQL", Oranda.Core.Grid.ColumnDataKind.Text, i => i.Preview),
+    ];
+
+    private static decimal Seconds(double s) => double.IsFinite(s) ? Math.Round((decimal)s, 2) + 0.00m : 0.00m; // 늘 소수 둘째 자리까지 보인다
 
     // 대기 표 줄의 「Lock 모니터」 바로 가기.
     private void OnLockMonitorClick(object? sender, RoutedEventArgs e) => Run(vm => vm.OpenLockMonitorAsync());

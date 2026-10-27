@@ -55,6 +55,25 @@ public sealed partial class ResultGridControl
         return top < HeaderHeight || top > Bounds.Height ? null : new Rect(left, top, w, RowHeight);
     }
 
+    /// <summary>바깥 스크롤바 둘을 이 그리드의 스크롤 범위·위치에 맞춘다(결과 영역·모니터 표가 함께 쓴다). 범위가 없으면 숨긴다.</summary>
+    public void SyncScrollBars(Avalonia.Controls.Primitives.ScrollBar vertical, Avalonia.Controls.Primitives.ScrollBar horizontal)
+    {
+        ArgumentNullException.ThrowIfNull(vertical);
+        ArgumentNullException.ThrowIfNull(horizontal);
+        vertical.Maximum = MaxOffsetY;
+        vertical.ViewportSize = ViewportHeight;
+        vertical.LargeChange = ViewportHeight;
+        vertical.SmallChange = RowHeight;
+        vertical.Value = OffsetY;
+        vertical.IsVisible = MaxOffsetY > 0;
+        horizontal.Maximum = MaxOffsetX;
+        horizontal.ViewportSize = ViewportWidth;
+        horizontal.LargeChange = ViewportWidth;
+        horizontal.SmallChange = 40;
+        horizontal.Value = OffsetX;
+        horizontal.IsVisible = MaxOffsetX > 0;
+    }
+
     /// <summary>셀 편집을 열어 달라는 요청(두 번 누르기·F2). 편집 모드인지는 받는 쪽이 판단한다.</summary>
     public event EventHandler<GridCell>? EditRequested;
 

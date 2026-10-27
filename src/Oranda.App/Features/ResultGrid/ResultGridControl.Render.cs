@@ -334,8 +334,9 @@ public sealed partial class ResultGridControl
                 }
 
                 var isNull = m.IsNull(r, ord);
-                var key = (r << 12) | (uint)(ord & 0xFFF) | (isNull ? 1L << 62 : 0);
-                var brush = isNull ? pal.NullText : pal.Text;
+                var emphasized = !isNull && m.CellEmphasis is not null && m.IsEmphasized(r, ord); // 모니터의 블로커 칸 등
+                var key = (r << 12) | (uint)(ord & 0xFFF) | (isNull ? 1L << 62 : 0) | (emphasized ? 1L << 61 : 0);
+                var brush = isNull ? pal.NullText : emphasized ? pal.Danger : pal.Text;
                 var t = _cells.Get(key, text, s => f.Create(s, brush));
                 var tx = m.IsRightAligned(ord) ? x + w - CellPadX - t.Width : x + CellPadX;
                 t.Draw(ctx, new Point(tx, y + (rh - t.Height) / 2));
@@ -456,6 +457,9 @@ public sealed partial class ResultGridControl
 
         public required IBrush NullText { get; init; }
 
+        /// <summary>강조 칸(<see cref="ResultGridModel.CellEmphasis"/>) 글자 색.</summary>
+        public required IBrush Danger { get; init; }
+
         public required IPen Line { get; init; }
 
         public required IPen FrozenLine { get; init; }
@@ -491,6 +495,7 @@ public sealed partial class ResultGridControl
                 NeedsChange = Brush("OrandaGridNeedsChangeBrush", 0xFFFFD8A8, 0xFF6B3A10),
                 Text = Brush("OrandaGridTextBrush", 0xFF202020, 0xFFDCDDDE),
                 NullText = Brush("OrandaGridNullBrush", 0xFF9AA0A6, 0xFF7C828A),
+                Danger = Brush("OrandaDangerForegroundBrush", 0xFFC42B1C, 0xFFFF6B5E),
                 Line = new Pen(line, 1),
                 FrozenLine = new Pen(accent, 1),
                 ActiveBorder = new Pen(accent, 1),

@@ -4,10 +4,9 @@ using Avalonia.Headless;
 using Avalonia.Input;
 using Avalonia.Input.Platform;
 using Avalonia.Threading;
-using Avalonia.VisualTree;
+using Oranda.App.Features.ResultGrid;
 using Oranda.App.Features.SessionMonitor;
 using Oranda.App.Features.SqlMonitor;
-using Oranda.App.Shell.Controls;
 using Oranda.App.Tests.Shell.Headless;
 using Oranda.Core.Monitoring;
 using Oranda.Core.Plans;
@@ -15,47 +14,92 @@ using Oranda.Core.Sessions;
 
 namespace Oranda.App.Tests.Features.SessionMonitor;
 
-/// <summary>TSK-13-37: 세션 모니터·SQL 모니터의 표가 C안 격자(DetailTable)로 보이고, 선택 바인딩·새로 고침 뒤 선택 유지·Ctrl+C·오른쪽 클릭이 동작한다.</summary>
+/// <summary>
+/// TSK-14-15: 세션 모니터·SQL 모니터의 목록이 조회 결과와 같은 그리드(ResultGridControl)로 보이고, 머리글 정렬·열 끌기·너비·열 필터가 되며,
+/// 자동 새로 고침(목록을 비우고 다시 채움) 뒤에도 정렬·열 순서·너비·필터·고른 세션(키)·스크롤 위치가 남는다. Ctrl+C·오른쪽 클릭·블로커 강조도 그대로.
+/// </summary>
 public class MonitorGridTests
 {
     private static RawInputModifiers Primary
         => Application.Current!.PlatformSettings!.HotkeyConfiguration.CommandModifiers.HasFlag(KeyModifiers.Meta) ? RawInputModifiers.Meta : RawInputModifiers.Control;
 
-    private static SessionItem Sess(int sid, string status, string user) => new(new SessionRow(new SessionKey(1, sid, sid * 10), status) { Username = user, Program = "SQLPLUS" });
+    private static SessionItem Sess(int sid, string status, string user, long? elapsed = null) =>
+        new(new SessionRow(new SessionKey(1, sid, sid * 10), status) { Username = user, Program = "SQLPLUS", LastCallElapsedSeconds = elapsed });
 
-    private static (Window Window, SessionMonitorView View, SessionMonitorViewModel Vm, DetailTable Table) OpenSessions()
+    private static SessionItem[] Three() => [Sess(10, "INACTIVE", "SCOTT", 300), Sess(20, "ACTIVE", "SCOTT", 5), Sess(30, "ACTIVE", "HR", 40)];
+
+    private static async Task<(Window Window, SessionMonitorView View, SessionMonitorViewModel Vm, MonitorGrid Grid)> OpenSessionsAsync(params SessionItem[] items)
     {
         var vm = new SessionMonitorViewModel();
-        vm.Sessions.Add(Sess(10, "INACTIVE", "SCOTT"));
-        vm.Sessions.Add(Sess(20, "ACTIVE", "SCOTT"));
-        vm.Sessions.Add(Sess(30, "ACTIVE", "HR"));
+        foreach (var s in items.Length == 0 ? Three() : items)
+        {
+            vm.Sessions.Add(s);
+        }
+
         var view = new SessionMonitorView { DataContext = vm };
         var window = new Window { Content = view, Width = 1100, Height = 500 };
         window.Show();
+        var grid = view.FindControl<MonitorGrid>("SessionList")!;
+        await HeadlessHost.WaitUntil(() => grid.Model is { } m && m.RowCount == vm.Sessions.Count && grid.GridControl.Bounds.Height > 0);
         Dispatcher.UIThread.RunJobs();
-        return (window, view, vm, view.FindControl<DetailTable>("SessionList")!);
+        return (window, view, vm, grid);
     }
 
-    private static ListBoxItem Item(DetailTable t, int index) => t.List.GetVisualDescendants().OfType<ListBoxItem>().ElementAt(index);
-
-    private static void Click(Window w, DetailTable t, int index, MouseButton button = MouseButton.Left, RawInputModifiers mods = RawInputModifiers.None)
+    /// <summary>자동 새로 고침이 하는 일: 목록을 비우고 새 항목으로 채운 뒤 같은 키의 항목을 다시 고른다. 새 결과로 바뀔 때까지 기다린다.</summary>
+    private static async Task RefreshSessionsAsync(SessionMonitorViewModel vm, MonitorGrid grid, params SessionItem[] items)
     {
-        var item = Item(t, index);
-        var p = item.TranslatePoint(new Point(40 + index, item.Bounds.Height / 2), w)!.Value;
+        var before = grid.Model;
+        var key = vm.SelectedSession?.Row.Key;
+        vm.Sessions.Clear();
+        foreach (var s in items)
+        {
+            vm.Sessions.Add(s);
+        }
+
+        vm.SelectedSession = key is { } k ? vm.Sessions.FirstOrDefault(s => s.Row.Key == k) : null;
+        await HeadlessHost.WaitUntil(() => !ReferenceEquals(grid.Model, before));
+        Dispatcher.UIThread.RunJobs();
+    }
+
+    private static Point Cell(Window w, MonitorGrid g, long row, int visibleCol)
+    {
+        var c = g.GridControl;
+        var m = g.Model!;
+        var x = c.RowHeaderWidth + m.VisibleColumns.Take(visibleCol).Sum(m.GetColumnWidth) + 12 - c.OffsetX;
+        var y = c.HeaderHeight + (row * c.RowHeight) + (c.RowHeight / 2) - c.OffsetY;
+        return c.TranslatePoint(new Point(x, y), w)!.Value;
+    }
+
+    private static Point Header(Window w, MonitorGrid g, int visibleCol)
+    {
+        var c = g.GridControl;
+        var m = g.Model!;
+        var x = c.RowHeaderWidth + m.VisibleColumns.Take(visibleCol).Sum(m.GetColumnWidth) + 12;
+        return c.TranslatePoint(new Point(x, c.HeaderHeight / 2), w)!.Value;
+    }
+
+    private static void Click(Window w, Point p, MouseButton button = MouseButton.Left, RawInputModifiers mods = RawInputModifiers.None)
+    {
         w.MouseDown(p, button, mods);
         w.MouseUp(p, button, mods);
         Dispatcher.UIThread.RunJobs();
     }
 
+    private static string[] Column(ResultGridModel m, int ordinal) => [.. Enumerable.Range(0, (int)m.RowCount).Select(r => m.GetCellText(r, ordinal))];
+
     [Fact]
-    public Task Session_grid_shows_headers_rows_and_a_status_line() => HeadlessHost.Run(() =>
+    public Task Session_grid_is_the_result_grid_with_typed_columns() => HeadlessHost.Run(async () =>
     {
-        var (w, _, _, t) = OpenSessions();
+        var (w, _, _, g) = await OpenSessionsAsync();
         try
         {
-            Assert.Equal(["SID,SERIAL#", "사용자", "상태", "경과", "블로커", "대기 이벤트", "SQL ID", "프로그램", "델타"], t.Columns);
-            Assert.Equal(3, t.List.GetVisualDescendants().OfType<ListBoxItem>().Count());
-            Assert.Equal("3행", t.StatusText);
+            var m = g.Model!;
+            Assert.Equal(["SID,SERIAL#", "사용자", "상태", "경과(초)", "블로커", "대기 이벤트", "SQL ID", "프로그램", "델타"], m.Columns.Select(c => c.Name));
+            Assert.Equal(3, m.RowCount);
+            Assert.Equal(["10,100", "20,200", "30,300"], Column(m, 0));
+            Assert.True(m.IsRightAligned(3)); // 경과는 숫자 열
+            Assert.Equal("", m.GetCellText(0, 4)); // NULL 은 빈 칸
+            Assert.False(g.GridControl.IsCommandTarget); // 편집기 결과 명령의 대상이 되지 않는다
         }
         finally
         {
@@ -64,22 +108,20 @@ public class MonitorGridTests
     });
 
     [Fact]
-    public Task Clicking_a_row_selects_the_session_and_setting_it_from_code_moves_the_marker() => HeadlessHost.Run(() =>
+    public Task Clicking_a_cell_selects_the_session_and_setting_it_from_code_moves_the_current_row() => HeadlessHost.Run(async () =>
     {
-        var (w, _, vm, t) = OpenSessions();
+        var (w, _, vm, g) = await OpenSessionsAsync();
         try
         {
-            Click(w, t, 1);
+            Click(w, Cell(w, g, 1, 1));
             Assert.Same(vm.Sessions[1], vm.SelectedSession);
-            Assert.Equal(1, t.CurrentRowIndex);
+            Assert.Equal(1, g.Model!.Active.Row);
 
             vm.SelectedSession = vm.Sessions[2];
-            Assert.Equal(2, t.CurrentRowIndex);
-            Assert.Single(t.SelectedRows);
+            Assert.Equal(2, g.Model.Active.Row);
 
             vm.SelectedSession = null;
-            Assert.Equal(-1, t.CurrentRowIndex);
-            Assert.Empty(t.SelectedRows);
+            Assert.False(g.Model.HasSelection);
         }
         finally
         {
@@ -88,25 +130,24 @@ public class MonitorGridTests
     });
 
     [Fact]
-    public Task A_selection_set_from_code_is_replaced_by_a_plain_click() => HeadlessHost.Run(() =>
+    public Task A_selection_set_before_the_grid_appears_is_shown() => HeadlessHost.Run(async () =>
     {
         var vm = new SessionMonitorViewModel();
-        vm.Sessions.Add(Sess(10, "INACTIVE", "SCOTT"));
-        vm.Sessions.Add(Sess(20, "ACTIVE", "SCOTT"));
-        vm.Sessions.Add(Sess(30, "ACTIVE", "HR"));
+        foreach (var s in Three())
+        {
+            vm.Sessions.Add(s);
+        }
+
         vm.SelectedSession = vm.Sessions[1];
         var view = new SessionMonitorView { DataContext = vm };
         var w = new Window { Content = view, Width = 1100, Height = 500 };
         w.Show();
-        Dispatcher.UIThread.RunJobs();
         try
         {
-            var t = view.FindControl<DetailTable>("SessionList")!;
-            Assert.Equal("3행 · 1개 선택", t.StatusText);
-            Click(w, t, 0);
-            Assert.Equal("3행 · 1개 선택", t.StatusText);
-            Assert.Same(vm.Sessions[0], vm.SelectedSession);
-            Assert.Equal(["SCOTT"], t.SelectedRows.Select(r => (string)r[1]!));
+            var g = view.FindControl<MonitorGrid>("SessionList")!;
+            await HeadlessHost.WaitUntil(() => g.Model is { HasSelection: true });
+            Assert.Equal(1, g.Model!.Active.Row);
+            Assert.Same(vm.Sessions[1], vm.SelectedSession);
         }
         finally
         {
@@ -115,29 +156,135 @@ public class MonitorGridTests
     });
 
     [Fact]
-    public Task Refreshing_the_list_keeps_the_picked_rows_and_the_current_session() => HeadlessHost.Run(() =>
+    public Task Header_click_sorts_numbers_as_numbers_and_the_sort_survives_a_refresh() => HeadlessHost.Run(async () =>
     {
-        var (w, _, vm, t) = OpenSessions();
+        var (w, _, vm, g) = await OpenSessionsAsync();
         try
         {
-            Click(w, t, 2);
-            Click(w, t, 0, mods: Primary);
-            Assert.Equal("3행 · 2개 선택", t.StatusText);
-            // 자동 새로 고침이 하는 일: 목록을 비우고 새 항목으로 채운 뒤 같은 키의 항목을 다시 고른다. 맨 앞에 새 세션이 끼어든다.
-            var key = vm.SelectedSession!.Row.Key;
-            vm.Sessions.Clear();
-            foreach (var s in new[] { Sess(5, "ACTIVE", "SYS"), Sess(10, "INACTIVE", "SCOTT"), Sess(20, "ACTIVE", "SCOTT"), Sess(30, "ACTIVE", "HR") })
+            Click(w, Header(w, g, 3)); // 경과(초) 오름차순
+            await HeadlessHost.WaitUntil(() => g.Model!.SortColumn == 3);
+            Assert.Equal(["5", "40", "300"], Column(g.Model!, 3)); // 글자 순이면 300 이 40 앞에 온다
+
+            Click(w, Cell(w, g, 2, 1)); // 300 초 세션(10,100)을 고른다
+            Assert.Equal(10, vm.SelectedSession!.Row.Key.Sid);
+
+            // 새 세션이 끼어들고 값이 바뀐 새로 고침: 정렬은 남고, 고른 세션은 키로 다시 찾아 새 자리로 따라간다.
+            await RefreshSessionsAsync(vm, g, Sess(5, "ACTIVE", "SYS", 1000), Sess(10, "INACTIVE", "SCOTT", 20), Sess(20, "ACTIVE", "SCOTT", 6), Sess(30, "ACTIVE", "HR", 41));
+            var m = g.Model!;
+            Assert.Equal(3, m.SortColumn);
+            Assert.False(m.SortDescending);
+            Assert.Equal(["6", "20", "41", "1,000"], Column(m, 3));
+            Assert.Equal(10, vm.SelectedSession!.Row.Key.Sid);
+            Assert.Equal(1, m.Active.Row); // 20 초가 된 10,100 은 이제 둘째 줄
+            Assert.Equal(1, m.Active.Col);
+
+            Click(w, Header(w, g, 3)); // 내림차순
+            await HeadlessHost.WaitUntil(() => g.Model!.SortDescending);
+            await RefreshSessionsAsync(vm, g, Sess(10, "INACTIVE", "SCOTT", 20), Sess(20, "ACTIVE", "SCOTT", 6));
+            Assert.True(g.Model!.SortDescending);
+            Assert.Equal(["20", "6"], Column(g.Model, 3));
+            Assert.Equal(0, g.Model.Active.Row);
+        }
+        finally
+        {
+            w.Close();
+        }
+    });
+
+    [Fact]
+    public Task Dragged_column_order_widths_and_filters_survive_a_refresh() => HeadlessHost.Run(async () =>
+    {
+        var (w, _, vm, g) = await OpenSessionsAsync();
+        try
+        {
+            // 「상태」 머리글을 맨 앞(SID 앞)으로 끈다.
+            var from = Header(w, g, 2);
+            var to = Header(w, g, 0) - new Point(10, 0);
+            w.MouseDown(from, MouseButton.Left);
+            w.MouseMove(new Point(from.X - 30, from.Y));
+            w.MouseMove(to);
+            w.MouseUp(to, MouseButton.Left);
+            Dispatcher.UIThread.RunJobs();
+            Assert.Equal([2, 0, 1, 3, 4, 5, 6, 7, 8], g.Model!.VisibleColumns);
+            Assert.Equal(-1, g.Model.SortColumn); // 끌기는 정렬하지 않는다
+
+            g.Model.SetColumnWidth(1, 222);
+            g.Model.HideColumn(8);
+            await g.Model.SetLocalFilterAsync(g.Model.LocalFilter.WithColumn(2, new ColumnFilter { Values = new HashSet<string> { "ACTIVE" } }));
+            Assert.Equal(2, g.Model.RowCount);
+
+            await RefreshSessionsAsync(vm, g, [.. Three(), Sess(40, "INACTIVE", "HR")]);
+            var m = g.Model!;
+            Assert.Equal([2, 0, 1, 3, 4, 5, 6, 7], m.VisibleColumns);
+            Assert.Equal(222, m.GetColumnWidth(1));
+            Assert.Equal(2, m.RowCount); // ACTIVE 만
+            Assert.Equal(["20,200", "30,300"], Column(m, 0));
+        }
+        finally
+        {
+            w.Close();
+        }
+    });
+
+    [Fact]
+    public Task Scroll_position_and_picked_rows_survive_a_refresh() => HeadlessHost.Run(async () =>
+    {
+        SessionItem[] Many() => [.. Enumerable.Range(1, 200).Select(i => Sess(i, "ACTIVE", "U" + i, i))];
+        var (w, _, vm, g) = await OpenSessionsAsync(Many());
+        try
+        {
+            g.GridControl.ScrollTo(0, g.GridControl.RowHeight * 100);
+            var y = g.GridControl.OffsetY;
+            Assert.True(y > 0);
+            g.Model!.SetSelectedRows([(100, 101), (105, 105)], 105);
+            Dispatcher.UIThread.RunJobs();
+            Assert.Equal(106, vm.SelectedSession!.Row.Key.Sid);
+
+            await RefreshSessionsAsync(vm, g, Many());
+            Assert.Equal(y, g.GridControl.OffsetY);
+            Assert.Equal([(100L, 101L), (105L, 105L)], g.Model!.SelectedRowRanges());
+            Assert.Equal(105, g.Model.Active.Row);
+            Assert.Equal(106, vm.SelectedSession!.Row.Key.Sid);
+        }
+        finally
+        {
+            w.Close();
+        }
+    });
+
+    [Fact]
+    public Task Ctrl_C_copies_the_picked_cells_and_the_menu_has_the_copy_and_monitor_items() => HeadlessHost.Run(async () =>
+    {
+        var (w, _, vm, g) = await OpenSessionsAsync();
+        try
+        {
+            g.Model!.SetSelectedRows([(0, 0), (2, 2)], 2);
+            g.GridControl.Focus();
+            w.KeyPress(Key.C, Primary, PhysicalKey.C, "c");
+            string? text = null;
+            for (var i = 0; i < 100 && text is not { Length: > 0 }; i++)
             {
-                vm.Sessions.Add(s);
+                await Task.Delay(20);
+                text = await w.Clipboard!.TryGetTextAsync();
             }
 
-            vm.SelectedSession = vm.Sessions.First(s => s.Row.Key == key);
-            Dispatcher.UIThread.RunJobs();
+            text = text!.ReplaceLineEndings("\n");
+            Assert.Contains("10,100\tSCOTT\tINACTIVE\t300", text, StringComparison.Ordinal);
+            Assert.Contains("30,300\tHR\tACTIVE\t40", text, StringComparison.Ordinal);
 
-            Assert.Equal("4행 · 2개 선택", t.StatusText);
-            Assert.Equal(key, vm.SelectedSession.Row.Key);
-            Assert.Equal(["SCOTT", "HR"], t.SelectedRows.Select(r => (string)r[1]!));
-            Assert.Equal(1, t.CurrentRowIndex);
+            Assert.NotNull(g.ExtraMenuItems);
+            Assert.NotNull(g.GridControl.ContextMenu);
+            var items = g.MenuItems().OfType<MenuItem>().ToList();
+            Assert.All(items.Take(5), i => Assert.True(i.IsEnabled)); // 고른 칸이 있으면 복사 묶음이 켜진다
+            var headers = items.Select(i => i.Header as string).ToList();
+            Assert.Contains("복사", headers);
+            Assert.Contains("머리글 포함 복사", headers);
+            Assert.Contains("행 복사", headers);
+            Assert.Contains("열 숨기기", headers);
+
+            // 오른쪽 클릭: 고르지 않은 칸이면 그 세션이 선택된다.
+            Click(w, Cell(w, g, 1, 2), MouseButton.Right);
+            Assert.Same(vm.Sessions[1], vm.SelectedSession);
         }
         finally
         {
@@ -146,19 +293,18 @@ public class MonitorGridTests
     });
 
     [Fact]
-    public Task Ctrl_C_and_copy_with_headers_put_the_picked_sessions_on_the_clipboard() => HeadlessHost.Run(async () =>
+    public Task Blocker_cell_is_drawn_in_the_danger_colour_only_when_it_has_a_value() => HeadlessHost.Run(async () =>
     {
-        var (w, _, _, t) = OpenSessions();
+        var (w, _, _, g) = await OpenSessionsAsync(
+            Sess(10, "INACTIVE", "SCOTT"),
+            new SessionItem(new SessionRow(new SessionKey(1, 20, 200), "ACTIVE") { Username = "HR", BlockingSession = new SessionKey(1, 10, 100) }));
         try
         {
-            Click(w, t, 0);
-            Click(w, t, 2, mods: Primary);
-            t.List.Focus();
-            w.KeyPress(Key.C, Primary, PhysicalKey.C, "c");
-            await HeadlessHost.WaitUntil(() => true);
-            Assert.Equal("10,100\tSCOTT\tINACTIVE\t\t\t\t\tSQLPLUS\t\n30,300\tHR\tACTIVE\t\t\t\t\tSQLPLUS\t\n", await w.Clipboard!.TryGetTextAsync());
-
-            Assert.StartsWith("SID,SERIAL#\t사용자\t상태\t경과\t블로커\t대기 이벤트\tSQL ID\t프로그램\t델타\n", t.BuildTsv(withHeaders: true), StringComparison.Ordinal);
+            var m = g.Model!;
+            Assert.Equal("10", m.GetCellText(1, 4));
+            Assert.True(m.IsEmphasized(1, 4));
+            Assert.False(m.IsEmphasized(1, 1));
+            Assert.True(m.IsNull(0, 4)); // 블로커가 없는 행은 값이 없어 칠하지 않는다
         }
         finally
         {
@@ -167,59 +313,48 @@ public class MonitorGridTests
     });
 
     [Fact]
-    public Task Right_click_on_an_unpicked_row_makes_it_the_selected_session_and_the_menu_gets_the_monitor_items() => HeadlessHost.Run(() =>
+    public Task Sql_grid_sorts_by_elapsed_and_keeps_the_sort_and_the_selected_cursor_after_a_search() => HeadlessHost.Run(async () =>
     {
-        var (w, view, vm, t) = OpenSessions();
-        try
-        {
-            Click(w, t, 0);
-            Assert.NotNull(t.ExtraMenuItems);
-            Assert.NotNull(t.List.ContextMenu);
+        static TopSqlItem Top(string id, int child, double elapsed, long gets) =>
+            new(new TopSqlRow(new CursorRef(id, child, 1), "select " + id) { Executions = 1, ElapsedSeconds = elapsed, BufferGets = gets });
 
-            Click(w, t, 2, MouseButton.Right);
-            Assert.Same(vm.Sessions[2], vm.SelectedSession);
-
-            // 이미 고른 행 위에서 오른쪽 클릭하면 여러 행 선택을 깨지 않는다.
-            Click(w, t, 1, mods: Primary);
-            Click(w, t, 1, MouseButton.Right);
-            Assert.Equal(2, t.SelectedRows.Count);
-            Assert.NotNull(view);
-        }
-        finally
-        {
-            w.Close();
-        }
-    });
-
-    [Fact]
-    public Task Sql_grid_shows_headers_rows_and_binds_the_selected_sql() => HeadlessHost.Run(() =>
-    {
         var vm = new SqlMonitorViewModel();
-        vm.Results.Add(new TopSqlItem(new TopSqlRow(new CursorRef("sql1", 0, 1), "select 1 from dual") { Executions = 3, ElapsedSeconds = 2.5, BufferGets = 20_000, ParsingSchema = "SCOTT" }));
-        vm.Results.Add(new TopSqlItem(new TopSqlRow(new CursorRef("sql2", 1, 1), "select 2 from emp") { Executions = 1, ElapsedSeconds = 1.2, BufferGets = 12_000, DiskReads = 5 }));
+        vm.Results.Add(Top("sql1", 0, 2.5, 20_000));
+        vm.Results.Add(Top("sql2", 1, 12.25, 900));
+        vm.Results.Add(Top("sql3", 0, 3, 5));
         var view = new SqlMonitorView { DataContext = vm };
         var w = new Window { Content = view, Width = 1100, Height = 600 };
         w.Show();
-        Dispatcher.UIThread.RunJobs();
         try
         {
-            var t = view.FindControl<DetailTable>("ResultList")!;
-            Assert.Equal(["SQL ID", "자식", "소요(s)", "CPU(s)", "실행", "읽은 블록", "디스크", "스키마", "SQL"], t.Columns);
-            Assert.Equal("2행", t.StatusText);
-
-            Click(w, t, 1);
-            Assert.Same(vm.Results[1], vm.SelectedSql);
-
-            // 새로 고침 뒤에도 같은 커서를 다시 고른다.
-            var cursor = vm.SelectedSql!.Row.Cursor;
-            vm.Results.Clear();
-            vm.Results.Add(new TopSqlItem(new TopSqlRow(new CursorRef("sql2", 1, 1), "select 2 from emp") { ElapsedSeconds = 9 }));
-            vm.Results.Add(new TopSqlItem(new TopSqlRow(new CursorRef("sql1", 0, 1), "select 1 from dual")));
-            vm.SelectedSql = vm.Results.First(i => i.Row.Cursor == cursor);
+            var g = view.FindControl<MonitorGrid>("ResultList")!;
+            await HeadlessHost.WaitUntil(() => g.Model is { RowCount: 3 } && g.GridControl.Bounds.Height > 0);
             Dispatcher.UIThread.RunJobs();
-            Assert.Equal(0, t.CurrentRowIndex);
-            Assert.Equal("sql2", (string)t.SelectedRows.Single()[0]!);
-            Assert.Equal("sql2\t1\t9.00\t0.00\t0\t0\t0\t\tselect 2 from emp\n", t.BuildTsv(withHeaders: false));
+            var m = g.Model!;
+            Assert.Equal(["SQL ID", "자식", "소요(s)", "CPU(s)", "실행", "읽은 블록", "디스크", "스키마", "SQL"], m.Columns.Select(c => c.Name));
+            Assert.Equal(["2.50", "12.25", "3.00"], Column(m, 2));
+            Assert.Equal("20,000", m.GetCellText(0, 5));
+
+            Click(w, Header(w, g, 2));
+            await HeadlessHost.WaitUntil(() => g.Model!.SortColumn == 2);
+            Assert.Equal(["sql1", "sql3", "sql2"], Column(g.Model!, 0));
+            Click(w, Cell(w, g, 1, 0));
+            Assert.Equal("sql3", vm.SelectedSql!.Row.Cursor.SqlId);
+
+            // 다시 검색: 같은 커서(SQL_ID, CHILD#)를 키로 다시 고르고 정렬은 남는다.
+            var before = g.Model;
+            var cursor = vm.SelectedSql.Row.Cursor;
+            vm.Results.Clear();
+            vm.Results.Add(Top("sql3", 0, 30, 5));
+            vm.Results.Add(Top("sql4", 0, 1, 5));
+            vm.Results.Add(Top("sql1", 0, 2.5, 20_000));
+            vm.SelectedSql = vm.Results.First(i => i.Row.Cursor == cursor);
+            await HeadlessHost.WaitUntil(() => !ReferenceEquals(g.Model, before));
+            Dispatcher.UIThread.RunJobs();
+            Assert.Equal(2, g.Model!.SortColumn);
+            Assert.Equal(["sql4", "sql1", "sql3"], Column(g.Model, 0));
+            Assert.Equal(2, g.Model.Active.Row);
+            Assert.Same(vm.Results[0], vm.SelectedSql);
         }
         finally
         {
@@ -237,49 +372,20 @@ public class MonitorGridTests
     }
 
     [Fact]
-    public Task Session_monitor_shows_one_status_line_with_the_selection_count() => HeadlessHost.Run(() =>
+    public Task Session_monitor_shows_one_status_line_with_the_picked_row_count() => HeadlessHost.Run(async () =>
     {
-        var (w, view, vm, t) = OpenSessions();
+        var (w, view, vm, g) = await OpenSessionsAsync();
         try
         {
             vm.StatusText = "세션 3개 · 대기 중 1개 · 21:05:12 갱신";
             var line = view.FindControl<TextBlock>("StatusLine")!;
             Assert.Equal("세션 3개 · 대기 중 1개 · 21:05:12 갱신", line.Text);
-            Assert.DoesNotContain(t.GetVisualDescendants().OfType<Border>(), b => b.Classes.Contains("panel-status") && b.IsEffectivelyVisible);
-            Click(w, t, 0);
-            Click(w, t, 2, mods: Primary);
-            Assert.Equal("세션 3개 · 대기 중 1개 · 2개 선택 · 21:05:12 갱신", line.Text);
+            Click(w, Cell(w, g, 0, 1));
+            Click(w, Cell(w, g, 2, 1), mods: RawInputModifiers.Shift);
+            Assert.Equal("세션 3개 · 대기 중 1개 · 3개 선택 · 21:05:12 갱신", line.Text);
             vm.SelectedSession = null;
+            Dispatcher.UIThread.RunJobs();
             Assert.Equal("세션 3개 · 대기 중 1개 · 21:05:12 갱신", line.Text);
-        }
-        finally
-        {
-            w.Close();
-        }
-    });
-
-    [Fact]
-    public Task Session_monitor_colours_the_blocker_cell_and_sets_ids_in_monospace() => HeadlessHost.Run(() =>
-    {
-        var vm = new SessionMonitorViewModel();
-        vm.Sessions.Add(Sess(10, "INACTIVE", "SCOTT"));
-        vm.Sessions.Add(new SessionItem(new SessionRow(new SessionKey(1, 20, 200), "ACTIVE") { Username = "HR", BlockingSession = new SessionKey(1, 10, 100), SqlId = "7ctxk2vq" }));
-        var view = new SessionMonitorView { DataContext = vm };
-        var w = new Window { Content = view, Width = 1100, Height = 500 };
-        w.Show();
-        Dispatcher.UIThread.RunJobs();
-        try
-        {
-            Assert.True(Application.Current!.TryGetResource("OrandaDangerForegroundBrush", Application.Current.ActualThemeVariant, out var danger));
-            Assert.True(Application.Current.TryGetResource("OrandaGridFontFamily", Application.Current.ActualThemeVariant, out var mono));
-            var t = view.FindControl<DetailTable>("SessionList")!;
-            var cells = Item(t, 1).GetVisualDescendants().OfType<TextBlock>().ToList();
-            Assert.Equal(danger, cells.First(b => b.Text == "10").Foreground); // 블로커 칸
-            Assert.Equal(mono, cells.First(b => b.Text == "20,200").FontFamily);
-            Assert.Equal(mono, cells.First(b => b.Text == "7ctxk2vq").FontFamily);
-            Assert.NotEqual(mono, cells.First(b => b.Text == "HR").FontFamily);
-            // 블로커가 없는 행은 빨갛지 않다.
-            Assert.DoesNotContain(Item(t, 0).GetVisualDescendants().OfType<TextBlock>(), b => Equals(b.Foreground, danger));
         }
         finally
         {

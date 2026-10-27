@@ -9,7 +9,8 @@ using Oranda.App.Shell.Controls;
 namespace Oranda.App.Features.SessionMonitor;
 
 /// <summary>
-/// 세션 모니터·SQL 모니터가 목록(<see cref="ObservableCollection{T}"/>)을 C안 격자(<see cref="DetailTable"/>)로 보이게 잇는 어댑터.
+/// SQL 모니터 튜닝 탭의 작은 표(AWR 이력·계획 비교·계획 고정)가 목록(<see cref="ObservableCollection{T}"/>)을 C안 격자(<see cref="DetailTable"/>)로 보이게 잇는 어댑터.
+/// 세션 모니터·SQL 모니터의 주 목록은 조회 결과와 같은 그리드를 쓴다(<see cref="MonitorGridBinder{T}"/>, TSK-14-15).
 /// 칸 값 뒤에 항목 자체를 숨겨 붙인 행으로 표를 채우고, 현재 행(▶)을 화면 모델의 선택 항목과 맞춘다.
 /// 목록이 바뀌면(자동 새로 고침) 한 번에 몰아 다시 그리며, 고른 행(키로 찾음)·현재 행·세로 스크롤 위치를 남긴다.
 /// </summary>

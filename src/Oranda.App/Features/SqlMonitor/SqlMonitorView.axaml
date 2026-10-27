@@ -184,8 +184,8 @@
       <TextBlock x:Name="StatusLine" TextTrimming="CharacterEllipsis" />
     </Border>
     <Grid RowDefinitions="2*,4,3*">
-      <!-- C안 격자(DetailTable): 행은 코드(MonitorTableBinder)가 Results 에서 채운다. -->
-      <ctl:DetailTable x:Name="ResultList" Grid.Row="0" />
+      <!-- 조회 결과와 같은 그리드(MonitorGrid): 머리글 정렬·열 끌기·너비·열 필터. 행은 코드(MonitorGridBinder)가 Results 에서 채운다. -->
+      <mon:MonitorGrid x:Name="ResultList" Grid.Row="0" />
       <GridSplitter Grid.Row="1" ResizeDirection="Rows" Background="{DynamicResource OrandaSplitterBrush}" />
       <TabControl x:Name="DetailTabs" Grid.Row="2" SelectedIndex="{Binding DetailTabIndex, Mode=TwoWay}">
         <TabItem Header="전문·바인드">

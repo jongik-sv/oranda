@@ -3,7 +3,6 @@
              xmlns:keymaps="using:Oranda.App.Shell.Keymaps"
              xmlns:icons="using:Oranda.App.Shell.Icons"
              xmlns:vm="using:Oranda.App.Features.SessionMonitor"
-             xmlns:ctl="using:Oranda.App.Shell.Controls"
              x:Class="Oranda.App.Features.SessionMonitor.SessionMonitorView"
              keymaps:FocusSlot.Name="monitor"
              x:DataType="vm:SessionMonitorViewModel">
@@ -57,8 +56,8 @@
       <TextBlock x:Name="StatusLine" TextTrimming="CharacterEllipsis" />
     </Border>
     <Grid ColumnDefinitions="3*,4,2*">
-      <!-- C안 격자(DetailTable): 열 머리글·행 번호·현재 행 ▶·아래 상태 줄. 행은 코드(MonitorTableBinder)가 Sessions 에서 채운다. -->
-      <ctl:DetailTable x:Name="SessionList" Grid.Column="0" />
+      <!-- 조회 결과와 같은 그리드(MonitorGrid): 머리글 정렬·열 끌기·너비·열 필터·현재 행 ▶. 행은 코드(MonitorGridBinder)가 Sessions 에서 채운다. -->
+      <vm:MonitorGrid x:Name="SessionList" Grid.Column="0" />
       <GridSplitter Grid.Column="1" ResizeDirection="Columns" Background="{DynamicResource OrandaSplitterBrush}" />
       <TabControl Grid.Column="2">
         <TabItem Header="블로킹 트리">

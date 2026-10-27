@@ -1105,6 +1105,18 @@ levels:
   - acceptance: RightToolsFullHeightTests 2(Headless 1280×800: 템플릿 창 세로 범위가 편집기 위끝~결과 아래끝, 결과 폭 = 편집기 폭, 닫으면 창이 사라지고 편집기·결과가 처음 폭, 바인드 변수와 같은 묶음 전환) / LayoutPlannerTests 새 5(오른쪽은 열 옆, 닫으면 기본 모양·왼쪽 폭 그대로, 오른쪽이 열린 채 아래 묶음 추가, 저장 배치 이주 한 번·표지 뒤 유지, 왼쪽 없는 배치 이주) / 고치기 전 8개 실패·고친 뒤 통과 / `dotnet build Oranda.sln -warnaserror`
   - note: 바꾼 곳 = src/Oranda.App/Shell/Layout/LayoutPlanner.cs 하나(Dock 쪽 DockWorkspace 는 DTO 트리를 그대로 짓는다). ShellHeadlessTests.Changed_layout_is_restored_after_restart 는 왼쪽 묶음 이웃이 둘(가운데 열·오른쪽 개요)이 된 것에 맞춰 고쳤다 (win144)
 
+- [x] TSK-14-15: 세션 모니터·SQL 모니터 목록을 조회 결과와 같은 그리드로(정렬·열 끌기·너비·열 필터, 새로 고침 뒤 유지) [win144] w:1 2026-10-28~2026-10-28
+  - category: feat
+  - domain: frontend
+  - model: opus
+  - priority: medium
+  - tags: session-monitor, sql-monitor, result-grid, win144
+  - prd-ref: PRD 16, D-049
+  - depends: TSK-13-37
+  - requirements: 사용자 요구(2026-10-28) 「세션 모니터에서 그리드는 조회결과의 그리드와 동일하게 만들어줘. 소트, 컬럼 위치 변경 등...」, 「SQL 모니터도 조회결과 처럼 해줘」. 두 모니터의 주 목록(DetailTable)을 결과 그리드(ResultGridControl·ResultGridModel)로 바꾼다: 머리글 눌러 정렬(오름 → 내림 → 해제, 숫자 열은 수로), 머리글 끌어 열 순서 바꾸기, 경계 끌어 너비, ▾ 열 자동 필터, 칸·행 선택(Shift·Ctrl·행 머리), Ctrl+휠 글자 크기, 그리드 글꼴·색, 현재 행 ▶. 읽기 전용이라 편집·플래시백·외래키·서버 거르기 줄은 없다. 자동 새로 고침(목록을 비우고 다시 채움) 뒤에도 정렬·열 순서·숨김·고정·너비·열 필터·고른 행(세션 = SID,SERIAL#,인스턴스 / SQL = SQL_ID,CHILD#,인스턴스)·현재 칸·스크롤이 남는다. 블로커 칸 위험색, 상태 줄 한 줄, 오른쪽 클릭의 context:monitor/* 명령, 행 두 번 누르기 = 상세·계획은 그대로; 제약: 실앱 SendKeys 금지(Headless 까지); 비고: 레인 sr-mon
+  - acceptance: MonitorGridTests 11개(결과 그리드·숫자 열, 칸 클릭 ↔ 선택 항목, 붙기 전 선택, 숫자 정렬과 새로 고침 뒤 정렬·선택 키 따라감·내림차순 유지, 열 끌기·너비·숨김·열 필터 유지, 200행 스크롤·떨어진 행 선택 유지, Ctrl+C·메뉴 항목·오른쪽 클릭 선택, 블로커 강조, SQL 모니터 소요(s) 정렬·다시 검색 뒤 커서 키 유지, 상태 줄) / ResultGrid·SessionMonitor·SqlMonitor·LockMonitor·GridEdit 시험 통과 / `dotnet build Oranda.sln -warnaserror`
+  - note: 결과: 새 MonitorGrid(결과 그리드 + 스크롤바 + 열 필터 팝업 + 읽기 전용 메뉴)·MonitorGridBinder(목록 → MemoryResultSet → 새 ResultGridModel, 정렬·거르기를 마친 뒤 바꿔 끼움). ResultGridModel 에 CarryViewStateFrom·CarrySortAndFilterFromAsync·SourceRowOf·CellEmphasis 추가, ResultGridControl.IsCommandTarget(모니터 표는 편집기 결과 명령의 대상이 아님)·SyncScrollBars(결과 영역과 같이 씀). 경과는 「경과(초)」 숫자 열로 바뀜. Lock 모니터 표 7개와 SQL 모니터 튜닝 탭 작은 표 3개는 DetailTable 그대로(남김) (win144)
+
 ## 의존 그래프
 
 ### 그래프 (Mermaid)
@@ -1210,6 +1222,8 @@ graph LR
   TSK-14-12 --> TSK-14-13
   TSK-14-05 --> TSK-14-09
   TSK-14-13 --> TSK-14-14
+
+  TSK-13-37 --> TSK-14-15
   style TSK-01-02 fill:#e8f5e9,stroke:#2e7d32
   style TSK-03-01 stroke:#c62828,stroke-width:2px
   style TSK-02-02 stroke:#c62828,stroke-width:2px

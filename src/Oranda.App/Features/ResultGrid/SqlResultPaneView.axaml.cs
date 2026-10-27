@@ -494,18 +494,7 @@ public partial class SqlResultPaneView : UserControl
         _syncing = true;
         try
         {
-            VBar.Maximum = GridControl.MaxOffsetY;
-            VBar.ViewportSize = GridControl.ViewportHeight;
-            VBar.LargeChange = GridControl.ViewportHeight;
-            VBar.SmallChange = GridControl.RowHeight;
-            VBar.Value = GridControl.OffsetY;
-            VBar.IsVisible = GridControl.MaxOffsetY > 0;
-            HBar.Maximum = GridControl.MaxOffsetX;
-            HBar.ViewportSize = GridControl.ViewportWidth;
-            HBar.LargeChange = GridControl.ViewportWidth;
-            HBar.SmallChange = 40;
-            HBar.Value = GridControl.OffsetX;
-            HBar.IsVisible = GridControl.MaxOffsetX > 0;
+            GridControl.SyncScrollBars(VBar, HBar);
         }
         finally
         {
