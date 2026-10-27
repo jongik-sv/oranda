@@ -116,7 +116,7 @@ jobs:
       - name: Package
         run: >
           vpk pack --packId Oranda --packVersion "${{ steps.ver.outputs.version }}" --packTitle Oranda --packAuthors jongik-sv
-          --channel win --runtime win-x64 --packDir artifacts/publish/win-x64 --mainExe Oranda.App.exe --outputDir artifacts/release/win ${{ steps.ver.outputs.notes }}
+          --channel win --runtime win-x64 --packDir artifacts/publish/win-x64 --mainExe Oranda.App.exe --icon src/Oranda.App/Assets/oranda.ico --outputDir artifacts/release/win ${{ steps.ver.outputs.notes }}
       # 서명 2단계: Setup.exe(내려받을 때 SmartScreen 이 보는 파일). artifact configuration `installer`.
       - name: Upload installer for signing
         id: unsigned-setup
@@ -233,14 +233,14 @@ jobs:
           APPLE_SIGN_INSTALL_IDENTITY: ${{ secrets.APPLE_SIGN_INSTALL_IDENTITY }}
         run: >
           vpk pack --packId Oranda --packVersion "${{ steps.ver.outputs.version }}"
-          --packDir artifacts/publish/osx-arm64 --mainExe Oranda.App
+          --packDir artifacts/publish/osx-arm64 --mainExe Oranda.App --icon assets/icons/oranda-v3-claymorphism-mascot.icns
           --signAppIdentity "$APPLE_SIGN_APP_IDENTITY" --signInstallIdentity "$APPLE_SIGN_INSTALL_IDENTITY"
           --notaryProfile oranda-notary --outputDir artifacts/release ${{ steps.ver.outputs.notes }}
       - name: Package (unsigned, no secrets)
         if: env.HAS_APPLE_SECRETS != 'true'
         run: >
           vpk pack --packId Oranda --packVersion "${{ steps.ver.outputs.version }}"
-          --packDir artifacts/publish/osx-arm64 --mainExe Oranda.App --outputDir artifacts/release ${{ steps.ver.outputs.notes }}
+          --packDir artifacts/publish/osx-arm64 --mainExe Oranda.App --icon assets/icons/oranda-v3-claymorphism-mascot.icns --outputDir artifacts/release ${{ steps.ver.outputs.notes }}
       - name: Verify signature and Gatekeeper
         if: env.HAS_APPLE_SECRETS == 'true'
         run: |

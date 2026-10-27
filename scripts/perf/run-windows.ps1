@@ -46,7 +46,7 @@ if ($env:ORANDA_IT_ADMIN_PASSWORD) {
 if (-not $SkipInstaller) {
     if (Get-Command vpk -ErrorAction SilentlyContinue) {
         $rel = "$Out/release"
-        vpk pack --packId Oranda --packVersion 0.1.0 --packDir "artifacts/publish/$rid" --mainExe Oranda.App.exe --outputDir $rel
+        vpk pack --packId Oranda --packVersion 0.1.0 --packDir "artifacts/publish/$rid" --mainExe Oranda.App.exe --icon "src/Oranda.App/Assets/oranda.ico" --outputDir $rel
         Get-ChildItem $rel -File | Select-Object Name, @{n = 'MB'; e = { [math]::Round($_.Length / 1MB, 1) } } | Format-Table | Out-String | Set-Content "$Out/installer-size.txt"
         & "$PSScriptRoot/../release/check-installer-size.ps1" -Dir $rel
     } else {

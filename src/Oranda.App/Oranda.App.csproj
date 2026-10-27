@@ -1,6 +1,7 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
     <OutputType>WinExe</OutputType>
+    <ApplicationIcon>Assets\oranda.ico</ApplicationIcon>
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <!-- 화면 언어는 한/영뿐이다. 패키지 위성 리소스(AvaloniaEdit zh-Hans 등)는 넣지 않는다(TSK-08-07). -->
     <SatelliteResourceLanguages>ko;en</SatelliteResourceLanguages>

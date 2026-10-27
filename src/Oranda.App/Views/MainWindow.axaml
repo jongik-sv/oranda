@@ -4,7 +4,7 @@
         xmlns:docking="using:Oranda.App.Shell.Docking"
         x:Class="Oranda.App.Views.MainWindow"
         x:DataType="vm:MainViewModel"
-        Icon="/Assets/avalonia-logo.ico"
+        Icon="/Assets/oranda.ico"
         Title="{Binding Title}"
         MinWidth="960" MinHeight="600"
         FontFamily="Inter, Malgun Gothic, Apple SD Gothic Neo"

@@ -13,7 +13,7 @@ Remove-Item artifacts/publish/win-x64 -Recurse -Force -ErrorAction SilentlyConti
 dotnet publish src/Oranda.App -c Release -r win-x64 --self-contained -p:PublishReadyToRun=true -o artifacts/publish/win-x64
 if ($FeedUrl) { vpk download http --url $FeedUrl --outputDir $OutDir }  # 델타 생성용 이전 버전
 # --runtime 이 없으면 vpk 가 대상 아키텍처를 x86 으로 가정한다(경고만 낸다). 게시본의 *.pdb 는 csproj 가 빼고, vpk 도 기본으로 뺀다(--exclude).
-$args = @('pack', '--packId', 'Oranda', '--packVersion', $Version, '--runtime', 'win-x64', '--packDir', 'artifacts/publish/win-x64', '--mainExe', 'Oranda.App.exe', '--outputDir', $OutDir)
+$args = @('pack', '--packId', 'Oranda', '--packVersion', $Version, '--runtime', 'win-x64', '--packDir', 'artifacts/publish/win-x64', '--mainExe', 'Oranda.App.exe', '--icon', 'src/Oranda.App/Assets/oranda.ico', '--outputDir', $OutDir)
 # vpk 는 패키지 안의 exe·dll 과 Setup.exe·Update.exe 를 서명한다. Microsoft·Oracle dll 은 원래 서명을 지닌다(D-034, csproj 가 다시 컴파일하지 않음).
 # 원래 서명이 없는 51개(Oranda·Avalonia 등)와 Setup.exe·Update.exe 는 이 서명이 유일하다.
 $signed = $true
