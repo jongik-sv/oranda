@@ -177,6 +177,10 @@ public sealed partial class SettingsViewModel : ViewModelBase
     [ObservableProperty]
     private string _updateCheckText = string.Empty;
 
+    /// <summary>「지금 확인」 결과가 오류면 원문(예외 형식·메시지)을 툴팁으로 보인다.</summary>
+    [ObservableProperty]
+    private string? _updateCheckToolTip;
+
     private bool _skippedCleared;
 
     // 프로필 복사본을 만들었지만 설정에 아직 쓰지 못한 그 ID(다시 저장할 때 이어 쓴다).
@@ -310,6 +314,18 @@ public sealed partial class SettingsViewModel : ViewModelBase
     /// <summary>피드 칸이 비었을 때 회색으로 보일 안내: 빌드 기본값을 알려 주거나 「기본 주소 없음」.</summary>
     public string UpdateFeedPlaceholder => AppVersion.BuildDefaultFeed ?? _text.Lookup("Shell.settings.update.noDefaultFeed");
 
+    /// <summary>피드 칸 아래 도움말: 비우면 기본 주소, GitHub 릴리스 주소(<c>…/releases/latest/download</c>)도 넣을 수 있다는 예시.</summary>
+    public string UpdateFeedHint => string.Format(
+        System.Globalization.CultureInfo.CurrentCulture,
+        _text.Lookup("Shell.settings.update.feedHint"),
+        FeedExample(AppVersion.BuildDefaultFeed));
+
+    /// <summary>예시 주소: 빌드 기본값이 GitHub 저장소면 그 릴리스 주소, 아니면 일반 형식.</summary>
+    internal static string FeedExample(string? defaultFeed) =>
+        UpdateFeedParser.Parse(defaultFeed).Feed is { Kind: UpdateFeedKind.GitHub } github
+            ? github.Location + "/releases/latest/download"
+            : "https://github.com/<owner>/<repo>/releases/latest/download";
+
     /// <summary>피드 칸 아래 한 줄: 해석할 수 없는 값이면 이유, http 면 암호화 경고. 아니면 비어 있다.</summary>
     public string FeedMessage
     {
@@ -360,8 +376,10 @@ public sealed partial class SettingsViewModel : ViewModelBase
         }
 
         UpdateCheckText = _text.Lookup("Update.state.checking");
+        UpdateCheckToolTip = null;
         await service.CheckAsync(manual: true).ConfigureAwait(true);
         UpdateCheckText = UpdateTexts.Status(service, _text);
+        UpdateCheckToolTip = UpdateTexts.ErrorToolTip(service);
         OnPropertyChanged(nameof(LastCheckedText));
     }
 

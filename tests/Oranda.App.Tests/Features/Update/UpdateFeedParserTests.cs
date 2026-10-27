@@ -15,6 +15,10 @@ public class UpdateFeedParserTests
     [InlineData("https://github.com/acme/oranda", UpdateFeedKind.GitHub, "https://github.com/acme/oranda")]
     [InlineData("https://github.com/acme/oranda/", UpdateFeedKind.GitHub, "https://github.com/acme/oranda")]
     [InlineData("https://github.com/acme/oranda.git", UpdateFeedKind.GitHub, "https://github.com/acme/oranda")]
+    [InlineData("https://github.com/acme/oranda/releases/latest/download", UpdateFeedKind.Web, "https://github.com/acme/oranda/releases/latest/download")]
+    [InlineData("https://github.com/acme/oranda/releases/latest/download/", UpdateFeedKind.Web, "https://github.com/acme/oranda/releases/latest/download/")]
+    [InlineData("https://github.com/acme/oranda/releases/download/v0.1.3", UpdateFeedKind.Web, "https://github.com/acme/oranda/releases/download/v0.1.3")]
+    [InlineData("https://github.com/acme/oranda/releases/download/v0.1.3/", UpdateFeedKind.Web, "https://github.com/acme/oranda/releases/download/v0.1.3/")]
     public void Valid_values_are_classified(string value, UpdateFeedKind kind, string location)
     {
         var result = UpdateFeedParser.Parse(value);
@@ -32,6 +36,10 @@ public class UpdateFeedParserTests
     [InlineData("https://", UpdateFeedError.InvalidUrl)]
     [InlineData("https://github.com/acme", UpdateFeedError.InvalidGitHub)]
     [InlineData("https://github.com/acme/oranda/releases", UpdateFeedError.InvalidGitHub)]
+    [InlineData("https://github.com/acme/oranda/releases/latest", UpdateFeedError.InvalidGitHub)]
+    [InlineData("https://github.com/acme/oranda/releases/download", UpdateFeedError.InvalidGitHub)]
+    [InlineData("https://github.com/acme/oranda/releases/download/v1/extra", UpdateFeedError.InvalidGitHub)]
+    [InlineData("https://github.com/acme/oranda/tree/main", UpdateFeedError.InvalidGitHub)]
     [InlineData("releases/oranda", UpdateFeedError.RelativePath)]
     [InlineData("oranda", UpdateFeedError.RelativePath)]
     public void Invalid_values_report_the_reason(string? value, UpdateFeedError error)
@@ -41,6 +49,16 @@ public class UpdateFeedParserTests
         Assert.False(result.IsValid);
         Assert.Equal(error, result.Error);
         Assert.StartsWith("Update.feed.error.", UpdateFeedParser.ErrorKey(error), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Settings_hint_example_is_the_release_address_and_is_accepted()
+    {
+        var example = Oranda.App.Shell.Settings.SettingsViewModel.FeedExample("https://github.com/acme/oranda");
+
+        Assert.Equal("https://github.com/acme/oranda/releases/latest/download", example);
+        Assert.Equal(UpdateFeedKind.Web, UpdateFeedParser.Parse(example).Feed!.Kind);
+        Assert.Contains("releases/latest/download", Oranda.App.Shell.Settings.SettingsViewModel.FeedExample(null), StringComparison.Ordinal);
     }
 
     [Fact]

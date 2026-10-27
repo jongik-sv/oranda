@@ -884,13 +884,13 @@
   "Update.currentVersion": "Current version",
   "Update.devBuildSuffix": "(development build)",
   "Update.feed.error.empty": "The address is empty.",
-  "Update.feed.error.github": "A GitHub address must look like https://github.com/<owner>/<repo>.",
+  "Update.feed.error.github": "A GitHub address must look like https://github.com/<owner>/<repo> or …/releases/latest/download.",
   "Update.feed.error.relative": "A folder path must be absolute (for example D:\\releases or \\\\server\\share).",
   "Update.feed.error.scheme": "Only http or https addresses and folder paths are supported.",
   "Update.feed.error.url": "The address format is not valid.",
   "Update.newVersion": "New version",
   "Update.notes": "Release notes",
-"Update.notesNone": "No release notes",
+  "Update.notesNone": "No release notes",
   "Update.state.available": "Version {0} is available.",
   "Update.state.availableSkipped": "Version {0} is available. (skipped version)",
   "Update.state.checking": "Checking for updates…",
@@ -907,5 +907,9 @@
   "Update.status.downloading": "Downloading update {0} {1}%",
   "Update.status.ready": "Update {0} ready",
   "Update.status.tooltip": "Click to open the update window",
-  "Update.title": "Check for Updates"
+  "Update.title": "Check for Updates",
+  "Update.error.rateLimited": "The request limit was exceeded or the server refused the request (for example the GitHub rate limit). Try again later.",
+  "Update.error.notFound": "The update files were not found. Check the update server address.",
+  "Update.error.unreachable": "Could not reach the update server. Check the network, proxy or firewall.",
+  "Shell.settings.update.feedHint": "Leave empty to use the default address. A release address also works, for example {0}"
 }

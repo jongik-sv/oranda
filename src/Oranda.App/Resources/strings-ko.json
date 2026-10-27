@@ -884,7 +884,7 @@
   "Update.currentVersion": "현재 버전",
   "Update.devBuildSuffix": "(개발 실행본)",
   "Update.feed.error.empty": "주소가 비어 있습니다.",
-  "Update.feed.error.github": "GitHub 주소는 https://github.com/<소유자>/<저장소> 형식이어야 합니다.",
+  "Update.feed.error.github": "GitHub 주소는 https://github.com/<소유자>/<저장소> 또는 …/releases/latest/download 형식이어야 합니다.",
   "Update.feed.error.relative": "폴더 경로는 절대 경로로 적어야 합니다(예: D:\\releases 또는 \\\\서버\\공유).",
   "Update.feed.error.scheme": "http·https 주소나 폴더 경로만 쓸 수 있습니다.",
   "Update.feed.error.url": "주소 형식이 올바르지 않습니다.",
@@ -907,5 +907,9 @@
   "Update.status.downloading": "업데이트 {0} 받는 중 {1}%",
   "Update.status.ready": "업데이트 {0} 준비됨",
   "Update.status.tooltip": "눌러서 업데이트 창 열기",
-  "Update.title": "업데이트 확인"
+  "Update.title": "업데이트 확인",
+  "Update.error.rateLimited": "요청 한도를 넘었거나 서버가 요청을 거절했습니다(GitHub 요청 한도 초과 등). 잠시 뒤 다시 확인하세요.",
+  "Update.error.notFound": "업데이트 파일을 찾지 못했습니다. 업데이트 서버 주소를 확인하세요.",
+  "Update.error.unreachable": "업데이트 서버에 닿지 않습니다. 네트워크·프록시·방화벽을 확인하세요.",
+  "Shell.settings.update.feedHint": "비워 두면 기본 주소를 씁니다. 릴리스 주소도 넣을 수 있습니다. 예: {0}"
 }

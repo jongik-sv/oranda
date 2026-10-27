@@ -131,8 +131,11 @@ public sealed class UpdateService : IDisposable
 
     public UpdateFeedError FeedError { get; private set; }
 
-    /// <summary>오류 문구에 덧붙일 원인(예외 메시지).</summary>
+    /// <summary>오류 원문(예외 형식과 메시지). 화면은 툴팁으로 보인다.</summary>
     public string? ErrorDetail { get; private set; }
+
+    /// <summary>오류 종류. 화면은 종류별 쉬운 문구를 보인다(<see cref="UpdateFailure.Other"/> 면 원문).</summary>
+    public UpdateFailure ErrorKind { get; private set; }
 
     /// <summary>오류가 확인 중에 났는지(false 면 내려받기 중).</summary>
     public bool ErrorWhileDownloading { get; private set; }
@@ -301,10 +304,11 @@ public sealed class UpdateService : IDisposable
         }
         catch (Exception ex)
         {
-            Trace.TraceWarning("업데이트 확인 실패: {0}", ex.Message);
+            var kind = LogFailure("확인", feed, ex);
             if (_manualWanted)
             {
-                ErrorDetail = ex.Message;
+                ErrorDetail = UpdateFailures.Describe(ex);
+                ErrorKind = kind;
                 ErrorWhileDownloading = false;
                 Set(UpdatePhase.Error);
             }
@@ -366,8 +370,8 @@ public sealed class UpdateService : IDisposable
         }
         catch (Exception ex)
         {
-            Trace.TraceWarning("업데이트 내려받기 실패: {0}", ex.Message);
-            ErrorDetail = ex.Message;
+            ErrorKind = LogFailure("내려받기", ResolveFeed().Feed, ex);
+            ErrorDetail = UpdateFailures.Describe(ex);
             ErrorWhileDownloading = true;
             Progress = 0;
             Set(UpdatePhase.Error);
@@ -501,6 +505,16 @@ public sealed class UpdateService : IDisposable
             UpdateApplyMode.Restart => _updater.ApplyAndRestart,
             _ => null,
         };
+    }
+
+    /// <summary>실패를 앱 로그(<c>logs/oranda-yyyyMMdd.log</c>)에 한 줄 남긴다: 시각·종류·피드·원문.</summary>
+    private UpdateFailure LogFailure(string step, UpdateFeed? feed, Exception ex)
+    {
+        var kind = UpdateFailures.Classify(ex);
+        Trace.TraceWarning(
+            "{0:yyyy-MM-dd HH:mm:ss} 업데이트 {1} 실패 [{2}] 피드={3}: {4}",
+            Time.GetLocalNow(), step, kind, feed?.Location ?? "-", UpdateFailures.Describe(ex));
+        return kind;
     }
 
     private bool StartupCheckDue()

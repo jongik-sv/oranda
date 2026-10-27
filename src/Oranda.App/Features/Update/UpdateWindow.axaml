@@ -25,7 +25,7 @@
       <TextBlock Grid.Row="1" Grid.Column="1" x:Name="NewVersionText" Text="{Binding NewVersion}" IsVisible="{Binding ShowVersions}" FontWeight="SemiBold" />
     </Grid>
 
-    <TextBlock x:Name="StatusText" Text="{Binding StatusText}" TextWrapping="Wrap" />
+    <TextBlock x:Name="StatusText" Text="{Binding StatusText}" TextWrapping="Wrap" ToolTip.Tip="{Binding StatusToolTip}" />
 
     <ProgressBar x:Name="DownloadProgress" Minimum="0" Maximum="100" Value="{Binding Progress}" IsVisible="{Binding ShowProgress}"
                  AutomationProperties.Name="{Binding StatusText}" />

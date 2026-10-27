@@ -355,3 +355,11 @@
 - **Rationale**: 운영 DB 에서 SCN MINVALUE 는 ORA-08180 이 나고 사용자가 TIMESTAMP SYSDATE - 1.5 로 도는 것을 확인했다. 26ai·11.2 실측: 기간 시작이 표 생성·GRANT 같은 DDL 앞이면 ORA-01466(+3초는 실패, +5초부터 성공 → 10초 여유), `AND SYSDATE` 는 시각→SCN 대응이 몇 초 늦어 방금 커밋한 변경을 빠뜨리고 `AND MAXVALUE` 는 그렇지 않다, SYSDATE - 30 은 시각 대응 범위를 넘어 ORA-08180. 개인 계정 + 시노님은 회사 운영 환경의 흔한 방식이고 PUBLIC 을 스키마를 적은 이름에 쓰면 오라클과 다르게 푼다
 - **Reversible**: yes
 - **Source**: 사용자 보고(2026-10-27, 시노님·ORA-08180), 조정자 추가 요구 1·2(「변경 추적하기는 옵션으로」), 레인 sr-fb
+
+## D-047 (2026-10-27T08:00:00Z)
+- **Phase**: build
+- **Decision needed**: GitHub 피드 업데이트 확인이 인증 없는 GitHub API 요청 한도(IP 당 시간 60회, 회사망 공유 IP 에서 403)에 막힌다. 무엇으로 읽고, API 로 되돌아가는 대비를 둘지(TSK-10-09)
+- **Decision made**: GitHub 저장소 피드는 `https://github.com/<owner>/<repo>/releases/latest/download/` 를 Velopack 정적 웹 피드(SimpleWebSource)로 읽는다. 채널 파일(releases.win.json·releases.osx.json)과 full·delta nupkg 가 모두 이 경로의 302 리다이렉트로 받아진다. GithubSource(API)로 되돌아가는 대비는 두지 않는다 — 404 는 「업데이트 파일을 찾지 못했습니다」 로 알린다. 설정 칸은 `…/releases/latest/download`·`…/releases/download/<태그>` 를 웹 피드로 받는다
+- **Rationale**: latest/download 는 API 한도를 쓰지 않는다(조정자 확인: API 403·remaining 0 일 때 latest/download 200). 「최신 정식 릴리스(시험판·초안 제외)」 뜻이 GithubSource(prerelease=false)와 같고, CI 가 두 채널을 한 릴리스에 올리므로 여러 릴리스를 합쳐 읽을 필요가 없다. 대비를 두면 404 때 다시 API 403 을 만나 원인이 흐려진다. 차이: releases.{채널}.json 이 그 릴리스의 delta 만 담아 두 버전 이상 뒤처진 설치본은 delta 적용이 실패하고 Velopack 이 full 로 내려받는다(동작은 같고 받는 양만 크다)
+- **Reversible**: yes
+- **Source**: 사용자 보고(2026-10-27, 0.1.2 「업데이트를 확인하지 못했습니다」), 조정자 레인 sr-upd 지시

@@ -1,6 +1,6 @@
 # 릴리스 내는 법
 
-업데이트 피드 = 이 저장소의 GitHub Releases(`https://github.com/jongik-sv/oranda`, 공개). CI(`.github/workflows/ci.yml`)가 릴리스 빌드에 이 주소를 기본값(`OrandaUpdateFeed`)으로 넣으므로, 설치본은 설정의 피드 주소가 비어 있으면 여기서 새 버전을 찾는다. 로컬 빌드는 값이 없어 「피드 없음」이다.
+업데이트 피드 = 이 저장소의 GitHub Releases(`https://github.com/jongik-sv/oranda`, 공개). CI(`.github/workflows/ci.yml`)가 릴리스 빌드에 이 주소를 기본값(`OrandaUpdateFeed`)으로 넣으므로, 설치본은 설정의 피드 주소가 비어 있으면 여기서 새 버전을 찾는다. 로컬 빌드는 값이 없어 「피드 없음」이다. 앱은 GitHub API(인증 없이 IP 당 시간 60회)를 쓰지 않고 `…/releases/latest/download/releases.{win|osx}.json` 과 같은 경로의 nupkg 를 받으므로(D-047), 채널 파일과 full·delta 패키지는 반드시 같은 최신 정식 릴리스에 함께 올라가야 한다.
 
 한 릴리스에 두 채널이 함께 올라간다(Velopack 채널 이름 = 파일 이름의 `win`·`osx`).
 

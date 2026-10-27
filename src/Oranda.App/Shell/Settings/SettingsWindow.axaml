@@ -322,8 +322,11 @@
             <TextBlock Grid.Row="2" Text="{Binding Strings[update.feed]}" />
             <TextBox Grid.Row="2" Grid.Column="1" x:Name="UpdateFeedBox" MinWidth="280" Text="{Binding UpdateFeedUrl}"
                      PlaceholderText="{Binding UpdateFeedPlaceholder}" AutomationProperties.Name="{Binding Strings[update.feed]}" />
-            <TextBlock Grid.Row="3" Grid.Column="1" x:Name="UpdateFeedMessage" Classes="hint" Classes.error="{Binding FeedMessageIsError}"
-                       TextAlignment="Left" Text="{Binding FeedMessage}" IsVisible="{Binding HasFeedMessage}" />
+            <StackPanel Grid.Row="3" Grid.Column="1" Spacing="4">
+              <TextBlock x:Name="UpdateFeedMessage" Classes="hint" Classes.error="{Binding FeedMessageIsError}"
+                         TextAlignment="Left" Text="{Binding FeedMessage}" IsVisible="{Binding HasFeedMessage}" />
+              <TextBlock x:Name="UpdateFeedHint" Classes="hint" TextAlignment="Left" Text="{Binding UpdateFeedHint}" TextWrapping="Wrap" MaxWidth="360" />
+            </StackPanel>
             <TextBlock Grid.Row="4" Text="{Binding Strings[update.skipped]}" />
             <StackPanel Grid.Row="4" Grid.Column="1" Orientation="Horizontal" Spacing="8">
               <TextBlock Text="{Binding SkippedVersionText}" VerticalAlignment="Center" />
@@ -335,7 +338,8 @@
             <StackPanel Grid.Row="6" Grid.Column="1" Spacing="6">
               <Button x:Name="CheckUpdateNowButton" Content="{Binding Strings[update.checkNow]}" Command="{Binding CheckUpdateNowCommand}" HorizontalAlignment="Left" />
               <TextBlock Classes="hint" TextAlignment="Left" Text="{Binding Strings[update.checkNowHint]}" />
-              <TextBlock x:Name="UpdateCheckResult" TextAlignment="Left" Text="{Binding UpdateCheckText}" TextWrapping="Wrap" MaxWidth="360" />
+              <TextBlock x:Name="UpdateCheckResult" TextAlignment="Left" Text="{Binding UpdateCheckText}" TextWrapping="Wrap" MaxWidth="360"
+                         ToolTip.Tip="{Binding UpdateCheckToolTip}" />
             </StackPanel>
           </Grid>
         </ScrollViewer>

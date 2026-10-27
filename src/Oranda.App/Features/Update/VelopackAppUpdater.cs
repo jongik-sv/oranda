@@ -1,7 +1,7 @@
 using System.Diagnostics;
 using Oranda.Core.Composition;
 using Velopack;
-using Velopack.Sources;
+using Velopack.Locators;
 
 namespace Oranda.App.Features.Update;
 
@@ -9,6 +9,8 @@ namespace Oranda.App.Features.Update;
 /// <see cref="IAppUpdater"/> 의 Velopack 구현. 적용은 <c>WaitExitThenApplyUpdates</c> 만 쓴다: 갱신기를 띄워 두고 앱이 스스로 끝나기를 기다리므로
 /// 종료 확인·작업 공간 저장·서비스 정리가 그대로 돈다(<c>ApplyUpdatesAndRestart</c> 는 앱을 즉시 끄므로 쓰지 않는다).
 /// 무결성은 Velopack 이 릴리스 메타데이터의 해시로 확인한다(서명 확인이 아니다).
+/// GitHub 피드도 API(<c>GithubSource</c>, 인증 없이 IP 당 시간 60회라 회사망에서 금방 403)를 쓰지 않고
+/// <c>releases/latest/download/</c> 리다이렉트를 정적 웹 피드로 읽는다(채널 파일 <c>releases.{win|osx}.json</c>·패키지 모두 같은 경로).
 /// </summary>
 [OrandaService(typeof(IAppUpdater))]
 public sealed class VelopackAppUpdater : IAppUpdater
@@ -16,6 +18,9 @@ public sealed class VelopackAppUpdater : IAppUpdater
     private readonly object _gate = new();
     private UpdateManager? _manager;
     private UpdateInfo? _info;
+
+    /// <summary>Velopack 이 설치 정보를 읽는 곳. 시험이 가짜 설치본으로 바꾼다(null 이면 실제 설치본).</summary>
+    internal IVelopackLocator? Locator { get; init; }
 
     public bool IsInstalled => AppVersion.Installed is not null;
 
@@ -131,13 +136,16 @@ public sealed class VelopackAppUpdater : IAppUpdater
     {
         lock (_gate)
         {
-            return _manager ??= new UpdateManager(Path.GetTempPath());
+            return _manager ??= new UpdateManager(Path.GetTempPath(), null, Locator);
         }
     }
 
-    private static UpdateManager Create(UpdateFeed feed) => feed.Kind switch
-    {
-        UpdateFeedKind.GitHub => new UpdateManager(new GithubSource(feed.Location, null, false)),
-        _ => new UpdateManager(feed.Location),
-    };
+    private UpdateManager Create(UpdateFeed feed) => new(SourceLocation(feed), null, Locator);
+
+    /// <summary>
+    /// Velopack 에 넘길 피드 위치. GitHub 저장소는 가장 최근 정식 릴리스(시험판·초안 제외)의 첨부 파일로 리다이렉트되는
+    /// <c>https://github.com/&lt;owner&gt;/&lt;repo&gt;/releases/latest/download/</c>, 나머지는 그대로.
+    /// </summary>
+    internal static string SourceLocation(UpdateFeed feed) =>
+        feed.Kind == UpdateFeedKind.GitHub ? feed.Location.TrimEnd('/') + "/releases/latest/download/" : feed.Location;
 }

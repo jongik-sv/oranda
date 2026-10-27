@@ -76,6 +76,12 @@ public static class UpdateFeedParser
         if (uri.Host.Equals("github.com", StringComparison.OrdinalIgnoreCase) || uri.Host.Equals("www.github.com", StringComparison.OrdinalIgnoreCase))
         {
             var parts = uri.AbsolutePath.Split('/', StringSplitOptions.RemoveEmptyEntries);
+            if (IsReleaseDownload(parts))
+            {
+                // 릴리스 첨부 파일 주소(…/releases/latest/download, …/releases/download/<태그>)는 정적 웹 피드로 그대로 읽는다.
+                return new UpdateFeedParseResult(new UpdateFeed(UpdateFeedKind.Web, text), UpdateFeedError.None);
+            }
+
             if (parts.Length != 2)
             {
                 return Fail(UpdateFeedError.InvalidGitHub);
@@ -89,6 +95,11 @@ public static class UpdateFeedParser
 
         return new UpdateFeedParseResult(new UpdateFeed(UpdateFeedKind.Web, text), UpdateFeedError.None);
     }
+
+    /// <summary><c>owner/repo/releases/latest/download</c> 또는 <c>owner/repo/releases/download/태그</c>.</summary>
+    private static bool IsReleaseDownload(string[] parts) =>
+        parts.Length == 5 && parts[2] == "releases"
+        && ((parts[3] == "latest" && parts[4] == "download") || parts[3] == "download");
 
     /// <summary>UNC(<c>\\서버\공유</c>), 드라이브 경로(<c>C:\</c>·<c>C:/</c>), 유닉스 절대 경로(<c>/</c>)면 폴더로 본다.</summary>
     private static bool IsFolderPath(string text) =>

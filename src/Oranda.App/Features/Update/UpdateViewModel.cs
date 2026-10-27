@@ -66,6 +66,9 @@ public sealed partial class UpdateViewModel : ViewModelBase, IDisposable
 
     public string StatusText => UpdateTexts.Status(_service, _text);
 
+    /// <summary>오류일 때 상태 줄 툴팁: 원문(예외 형식·메시지). 오류가 아니면 null(툴팁 없음).</summary>
+    public string? StatusToolTip => UpdateTexts.ErrorToolTip(_service);
+
     public bool CanDownload => _service.Phase == UpdatePhase.Available || (_service.Phase == UpdatePhase.Error && _service.Offer is not null);
 
     public bool CanCancelDownload => _service.Phase == UpdatePhase.Downloading;

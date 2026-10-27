@@ -2822,6 +2822,41 @@ dotnet, testhost, Oranda.App
 - data-model: -
 - ui-spec: -
 
+### TSK-10-09: 업데이트 확인이 GitHub API 요청 한도(403)에 막힘 [win144]
+- category: defect
+- domain: infra
+- model: opus
+- status: [x]
+- priority: high
+- assignee: -
+- schedule: 2026-10-27 ~ 2026-10-27
+- tags: defect, update, win144
+- depends: TSK-10-01
+- blocked-by: -
+- entry-point: 도움말 > 업데이트 확인…
+- note: 담당 PC: win144. 2026-10-27 사용자 보고: 설치된 0.1.2(Windows)에서 「업데이트를 확인하지 못했습니다: Response status code does not indicate success: 403 (rate limit exceeded).」. 원인: GitHub 피드를 Velopack GithubSource(인증 없는 api.github.com, IP 당 시간 60회)로 읽어 회사망처럼 공인 IP 를 나눠 쓰면 바로 바닥난다. 고침(결정 D-047): GitHub 피드는 API 없이 `https://github.com/<owner>/<repo>/releases/latest/download/` 를 정적 웹 피드(SimpleWebSource)로 읽는다(채널 파일 releases.win.json·releases.osx.json, full·delta nupkg 모두 같은 경로로 302 → 200 확인). API 로 되돌아가는 대비는 두지 않는다. 실패 문구를 종류별로(요청 한도 403·429, 파일 없음 404, 서버에 닿지 않음) 바꾸고 원문은 상태 줄 툴팁·앱 로그 한 줄(시각·종류·피드). 설정 업데이트 주소 칸이 `…/releases/latest/download`·`…/releases/download/<태그>` 를 웹 피드로 받고 칸 아래 예시를 보인다. 이미 설치된 0.1.2·0.1.3 은 옛 코드라 한도가 풀릴 때 확인되거나 0.1.4 Setup.exe 를 직접 설치해야 한다
+
+#### PRD 요구사항
+- prd-ref: PRD 업데이트, TRD 설치·업데이트
+- requirements:
+  - GitHub 피드 확인·내려받기가 GitHub API 를 쓰지 않는다
+  - 실패 이유(요청 한도·파일 없음·네트워크)를 알아듣게 보이고 원문은 툴팁·로그에 남긴다
+  - 설정 칸에 GitHub 릴리스 주소를 그대로 넣을 수 있다
+- acceptance:
+  - 가짜 HTTP(latest/download → download/v태그 리다이렉트)에서 새 버전을 제안하고 /repos/ 요청이 없다
+  - 404·403·429·연결 실패가 각각의 문구(ko/en)로 보인다
+  - 실제 GitHub latest/download 의 releases.win.json 을 읽어 버전을 해석한다(통합 시험)
+- constraints:
+  - 실앱 실행·SendKeys 없이 단위·Headless 시험까지
+- test-criteria:
+  - UpdateFeedHttpTests, UpdateFeedParserTests, GitHubReleaseFeedIntegrationTests(Category=Integration)
+
+#### 기술 스펙 (TRD)
+- tech-spec: VelopackAppUpdater.SourceLocation, UpdateFailures.Classify
+- api-spec: -
+- data-model: -
+- ui-spec: 업데이트 창 상태 줄·설정 「지금 확인」 결과 툴팁 = 원문, 설정 피드 칸 아래 예시 한 줄
+
 ## WP-11: 통합테스트
 - schedule: 2026-12-01 ~ 2026-12-07
 - description: 기능 간 시나리오 E2E·성능·권한 교차 검증 (개별 기능 재검증 아님)
@@ -4749,6 +4784,7 @@ graph LR
   TSK-11-03 --> TSK-06-12
   TSK-11-03 --> TSK-10-06
   TSK-10-01 --> TSK-10-08
+  TSK-10-01 --> TSK-10-09
   TSK-07-02 --> TSK-07-05
   TSK-03-04 --> TSK-03-08
   TSK-03-08 --> TSK-04-11
