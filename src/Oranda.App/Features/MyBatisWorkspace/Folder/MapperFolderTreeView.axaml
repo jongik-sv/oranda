@@ -5,6 +5,21 @@
              xmlns:icons="using:Oranda.App.Shell.Icons"
              x:Class="Oranda.App.Features.MyBatisWorkspace.Folder.MapperFolderTreeView"
              x:DataType="vm:MapperFolderTreeViewModel">
+  <UserControl.Styles>
+    <!-- 요소 노드의 탭 열림 표시(「매퍼 쿼리」 목록과 같은 뜻): 열림 = 이름 굵게 + 흐린 막대, 지금 보는 탭 = 강조색 막대. -->
+    <Style Selector="TextBlock.open">
+      <Setter Property="FontWeight" Value="SemiBold" />
+    </Style>
+    <Style Selector="Border.open-bar">
+      <Setter Property="Background" Value="Transparent" />
+    </Style>
+    <Style Selector="Border.open-bar.open">
+      <Setter Property="Background" Value="{DynamicResource OrandaTreeGuideBrush}" />
+    </Style>
+    <Style Selector="Border.open-bar.current">
+      <Setter Property="Background" Value="{DynamicResource OrandaGridRowMarkerBrush}" />
+    </Style>
+  </UserControl.Styles>
   <DockPanel>
     <!-- 폴더 경로(툴팁 = 전체 경로) · 오른쪽 끝 다시 훑기 · 폴더 닫기. 이름은 툴팁으로 보인다. -->
     <Border DockPanel.Dock="Top" Background="Transparent" Padding="8,6,4,4" ToolTip.Tip="{Binding RootPath}">
@@ -87,10 +102,16 @@
       <TreeView.ItemTemplate>
         <TreeDataTemplate x:DataType="vm:MapperFolderTreeNode" ItemsSource="{Binding Children}">
           <StackPanel Orientation="Horizontal" Spacing="5" ToolTip.Tip="{Binding ToolTipText}">
+            <Border Classes="open-bar" Classes.open="{Binding IsOpen}" Classes.current="{Binding IsCurrent}" Width="3" Height="16"
+                    VerticalAlignment="Center" IsVisible="{Binding IsElement}" />
             <ContentControl Content="{Binding IconKey, Converter={x:Static icons:IconKeyConverter.Instance}}" VerticalAlignment="Center"
                             IsVisible="{Binding IconKey, Converter={x:Static ObjectConverters.IsNotNull}}" />
-            <stm:HighlightTextBlock Source="{Binding Name}" Terms="{Binding Highlight}" VerticalAlignment="Center" />
+            <stm:HighlightTextBlock Source="{Binding Name}" Terms="{Binding Highlight}" Classes.open="{Binding IsOpen}" VerticalAlignment="Center" />
             <TextBlock Text="{Binding Detail}" Opacity="0.6" VerticalAlignment="Center" FontSize="{DynamicResource OrandaFontSizeSmall}" />
+            <TextBlock Text="●" Foreground="{DynamicResource OrandaUncommittedBrush}" VerticalAlignment="Center" FontSize="{DynamicResource OrandaFontSizeSmall}"
+                       IsVisible="{Binding IsUnsaved}" ToolTip.Tip="저장 안 한 고침 있음" />
+            <TextBlock Text="○" Foreground="{DynamicResource OrandaIconTealBrush}" VerticalAlignment="Center" FontSize="{DynamicResource OrandaFontSizeSmall}"
+                       IsVisible="{Binding IsSaved}" ToolTip.Tip="xml 에 저장함 — 매퍼를 연 때와 다름" />
           </StackPanel>
         </TreeDataTemplate>
       </TreeView.ItemTemplate>

@@ -36,6 +36,18 @@ public sealed partial class MyBatisStatementNode : ObservableObject
     [ObservableProperty]
     private string _newText = string.Empty;
 
+    /// <summary>xml 에 저장해 매퍼를 연 때와 달라졌다(저장 안 한 고침이 없을 때만 글이 있다, 상태 칸 ○).</summary>
+    [ObservableProperty]
+    private string _savedText = string.Empty;
+
+    /// <summary>편집기 탭으로 열려 있다(id 를 굵게, 왼쪽 막대).</summary>
+    [ObservableProperty]
+    private bool _isOpen;
+
+    /// <summary>지금 보고 있는 탭의 쿼리(왼쪽 막대를 강조색으로). 목록 선택(따라가기)과 따로 그린다.</summary>
+    [ObservableProperty]
+    private bool _isCurrent;
+
     [ObservableProperty]
     private string _usageText = string.Empty;
 
@@ -58,7 +70,7 @@ public sealed partial class MyBatisStatementNode : ObservableObject
     [ObservableProperty]
     private string _usageNumber = string.Empty;
 
-    /// <summary>상태 칸 툴팁: 수정·새 쿼리·편집 불가·조합 오류·쓰는 곳의 뜻.</summary>
+    /// <summary>상태 칸 툴팁: 탭 열림·수정·저장함·새 쿼리·편집 불가·조합 오류·쓰는 곳의 뜻.</summary>
     [ObservableProperty]
     private string? _statusToolTip;
 

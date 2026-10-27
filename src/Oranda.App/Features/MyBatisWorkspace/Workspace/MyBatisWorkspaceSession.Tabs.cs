@@ -76,12 +76,14 @@ public sealed partial class MyBatisWorkspaceSession
             return;
         }
 
+        bool closed = false;
         foreach (var tab in e.OldItems?.OfType<SqlEditorViewModel>() ?? [])
         {
             // 탭 순서 바꾸기(Move)도 OldItems 에 그 탭이 온다: 작업 공간에 남아 있으면 그대로 잇는다.
             if (!_workspace.Tabs.Contains(tab) && EntryOf(tab) is { } entry)
             {
                 Untrack(entry); // 탭을 닫아도 고침은 남는다(design.md 2.2)
+                closed = true;
             }
         }
 
@@ -90,7 +92,13 @@ public sealed partial class MyBatisWorkspaceSession
             foreach (var entry in _entries.Where(x => x.Tab is not null && !_workspace.Tabs.Contains(x.Tab)).ToList())
             {
                 Untrack(entry);
+                closed = true;
             }
+        }
+
+        if (closed)
+        {
+            RaiseStateChanged(); // 「매퍼 쿼리」 목록의 열림 표시가 바로 풀리게
         }
     }
 

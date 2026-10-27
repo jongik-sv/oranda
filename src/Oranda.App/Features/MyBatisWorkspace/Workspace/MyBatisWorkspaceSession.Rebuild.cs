@@ -43,6 +43,7 @@ public sealed partial class MyBatisWorkspaceSession
             if (target is not null)
             {
                 taken.Add(target);
+                target.OpenedText = prev.OpenedText; // 「연 때와 다름」은 매퍼를 연 때 글과 견준다(저장·밖 디스크를 거쳐도)
             }
 
             if (mine && !(prev.IsDeleted && target is null))
@@ -51,6 +52,7 @@ public sealed partial class MyBatisWorkspaceSession
                 {
                     // 새 문장(또는 새 기준에서 사라진 문장)은 새 문장으로 남긴다.
                     target = new MyBatisStatementEntry(null, prev.Kind, prev.Id, prev.Text, ambiguous: false, prev.Indent);
+                    target.OpenedText = prev.OpenedText;
                     var at = _entries.FindLastIndex(e => e.Kind == prev.Kind);
                     _entries.Insert(at < 0 ? _entries.Count : at + 1, target);
                     taken.Add(target);
@@ -101,6 +103,12 @@ public sealed partial class MyBatisWorkspaceSession
             }
 
             Track(target, tab);
+        }
+
+        // 새 기준에만 있는 요소(밖에서 더해짐)는 연 때 없던 요소다. id 없는 요소(cache 등)는 맞대지 않으므로 그대로 둔다.
+        foreach (var entry in _entries.Where(e => e.OriginalId is not null && !taken.Contains(e)))
+        {
+            entry.OpenedText = null;
         }
 
         RaiseStateChanged();

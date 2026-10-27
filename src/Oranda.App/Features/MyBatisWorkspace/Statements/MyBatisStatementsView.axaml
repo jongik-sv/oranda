@@ -9,6 +9,23 @@
     <Style Selector="TextBlock.badge-info">
       <Setter Property="Foreground" Value="{DynamicResource OrandaIconBlueBrush}" />
     </Style>
+    <!-- 탭 열림 표시: 열린 쿼리 = id 굵게 + 왼쪽 흐린 막대, 지금 보는 탭의 쿼리 = 강조색 막대(목록 선택 배경과 겹치지 않는 자리). -->
+    <Style Selector="TextBlock.open">
+      <Setter Property="FontWeight" Value="SemiBold" />
+    </Style>
+    <Style Selector="Border.open-bar">
+      <Setter Property="Background" Value="Transparent" />
+    </Style>
+    <Style Selector="Border.open-bar.open">
+      <Setter Property="Background" Value="{DynamicResource OrandaTreeGuideBrush}" />
+    </Style>
+    <Style Selector="Border.open-bar.current">
+      <Setter Property="Background" Value="{DynamicResource OrandaGridRowMarkerBrush}" />
+    </Style>
+    <!-- 「열림 n」·「변경 n」 거르기 단추: 눌린 동안에도 글자는 보통 글자색(Fluent 의 눌림 글자색은 강조 배경용 흰색이라 옅은 배경에서 안 보인다). -->
+    <Style Selector="ToggleButton.state-filter:checked /template/ ContentPresenter#PART_ContentPresenter, ToggleButton.state-filter:checked:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+      <Setter Property="Foreground" Value="{DynamicResource TextControlForeground}" />
+    </Style>
   </UserControl.Styles>
   <Grid>
     <TextBlock Text="MyBatis 문서를 열면 쿼리 목록이 여기에 보입니다."
@@ -75,13 +92,30 @@
                 icons:ButtonIcon.Key="clear" icons:ButtonIcon.IconOnly="True" Click="OnClearSearchClick"
                 IsVisible="{Binding SearchText, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
       </Grid>
+      <!-- 탭 상태 거르기: 「열림 n」(편집기 탭으로 열린 쿼리만) · 「변경 n」(저장 안 한 고침·xml 에 저장해 연 때와 달라진 쿼리만). 수는 매퍼 전체. -->
+      <StackPanel x:Name="StateFilters" DockPanel.Dock="Top" Orientation="Horizontal" Spacing="4" Margin="6,0,6,4">
+        <StackPanel.IsVisible>
+          <MultiBinding Converter="{x:Static BoolConverters.And}">
+            <Binding Path="!IsModeActive" />
+            <Binding Path="HasSession" />
+          </MultiBinding>
+        </StackPanel.IsVisible>
+        <ToggleButton x:Name="OpenOnlyButton" Classes="toolbar state-filter" IsChecked="{Binding ShowOpenOnly, Mode=TwoWay}"
+                      ToolTip.Tip="{Binding OpenFilterToolTip}" AutomationProperties.Name="{Binding OpenFilterToolTip}">
+          <TextBlock Text="{Binding OpenFilterText}" FontSize="{DynamicResource OrandaFontSizeSmall}" />
+        </ToggleButton>
+        <ToggleButton x:Name="ChangedOnlyButton" Classes="toolbar state-filter" IsChecked="{Binding ShowChangedOnly, Mode=TwoWay}"
+                      ToolTip.Tip="{Binding ChangedFilterToolTip}" AutomationProperties.Name="{Binding ChangedFilterToolTip}">
+          <TextBlock Text="{Binding ChangedFilterText}" FontSize="{DynamicResource OrandaFontSizeSmall}" />
+        </ToggleButton>
+      </StackPanel>
       <DockPanel>
         <!-- 머리글 줄: 공용 격자(Styles/GridC)와 같은 머리글. 칸 너비는 아래 줄 서식과 같은 값을 쓴다(가상화 목록이라 공유 너비 대신 고정). -->
         <Border DockPanel.Dock="Top" Classes="grid-c-header" IsVisible="{Binding !IsModeActive}">
           <Grid ColumnDefinitions="40,*,48">
             <Border Classes="grid-c-cell"><TextBlock Text="종류" TextTrimming="CharacterEllipsis" /></Border>
             <Border Grid.Column="1" Classes="grid-c-cell"><TextBlock Text="id" /></Border>
-            <Border Grid.Column="2" Classes="grid-c-cell" ToolTip.Tip="● 저장 안 한 고침 · 붉은 숫자 = 조합 오류 수 · 흐린 숫자 = sql 조각을 쓰는 곳 수">
+            <Border Grid.Column="2" Classes="grid-c-cell" ToolTip.Tip="● 저장 안 한 고침 · ○ xml 에 저장함(연 때와 다름) · 붉은 숫자 = 조합 오류 수 · 흐린 숫자 = sql 조각을 쓰는 곳 수">
               <TextBlock Text="상태" TextTrimming="CharacterEllipsis" />
             </Border>
           </Grid>
@@ -101,15 +135,20 @@
                 </Border>
                 <Grid IsVisible="{Binding !IsGroup}" ColumnDefinitions="40,*,48" Opacity="{Binding RowOpacity}" ToolTip.Tip="{Binding ToolTipText}">
                   <Border Classes="grid-c-cell row-head" Padding="0">
-                    <TextBlock Text="{Binding KindText}" Opacity="0.75" FontSize="{DynamicResource OrandaFontSizeSmall}" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                    <Panel>
+                      <Border Classes="open-bar" Classes.open="{Binding IsOpen}" Classes.current="{Binding IsCurrent}" Width="3" HorizontalAlignment="Left" />
+                      <TextBlock Text="{Binding KindText}" Opacity="0.75" FontSize="{DynamicResource OrandaFontSizeSmall}" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                    </Panel>
                   </Border>
                   <Border Grid.Column="1" Classes="grid-c-cell" ToolTip.Tip="{Binding Title}">
-                    <vm:HighlightTextBlock Source="{Binding Title}" Terms="{Binding Highlight}" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
+                    <vm:HighlightTextBlock Source="{Binding Title}" Terms="{Binding Highlight}" Classes.open="{Binding IsOpen}" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
                   </Border>
                   <Border Grid.Column="2" Classes="grid-c-cell" Padding="4,0" ToolTip.Tip="{Binding StatusToolTip}">
                     <StackPanel Orientation="Horizontal" Spacing="3" VerticalAlignment="Center" TextElement.FontSize="{DynamicResource OrandaFontSizeSmall}">
                       <TextBlock Text="●" Foreground="{DynamicResource OrandaUncommittedBrush}"
                                  IsVisible="{Binding ModifiedText, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+                      <TextBlock Text="○" Foreground="{DynamicResource OrandaIconTealBrush}"
+                                 IsVisible="{Binding SavedText, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
                       <TextBlock Text="+" Foreground="{DynamicResource OrandaSuccessForegroundBrush}"
                                  IsVisible="{Binding NewText, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
                       <TextBlock Text="!" Classes="warning-text"

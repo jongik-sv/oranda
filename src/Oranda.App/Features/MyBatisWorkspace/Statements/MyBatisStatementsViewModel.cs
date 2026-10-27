@@ -47,6 +47,7 @@ public sealed partial class MyBatisStatementsViewModel : ToolPanelViewModelBase,
     private SqlEditorHost? _host;
     private SqlWorkspaceViewModel? _workspace;
     private MyBatisWorkspaceSession? _session;
+    private MyBatisStatementEntry? _current;
     private List<MyBatisStatementEntry> _shown = [];
     private List<IMyBatisStatementBadgeProvider> _providers = [];
     private DispatcherTimer? _usageTimer;
@@ -90,6 +91,42 @@ public sealed partial class MyBatisStatementsViewModel : ToolPanelViewModelBase,
     /// <summary>거른 결과가 하나도 없다(「일치하는 쿼리 없음」을 보인다).</summary>
     [ObservableProperty]
     private bool _showsNoMatch;
+
+    /// <summary>「열린 것만」: 편집기 탭으로 열린 쿼리만 보인다.</summary>
+    [ObservableProperty]
+    private bool _showOpenOnly;
+
+    /// <summary>「변경된 것만」: 저장 안 한 고침이 있거나 xml 에 저장해 연 때와 달라진 쿼리만 보인다.</summary>
+    [ObservableProperty]
+    private bool _showChangedOnly;
+
+    /// <summary>탭으로 열린 쿼리 수(매퍼 전체).</summary>
+    [ObservableProperty]
+    private int _openCount;
+
+    /// <summary>변경된 쿼리 수 = <see cref="UnsavedCount"/> + <see cref="SavedCount"/>.</summary>
+    [ObservableProperty]
+    private int _changedCount;
+
+    /// <summary>저장 안 한 고침이 있는 쿼리 수(새 쿼리 포함, 상태 칸 ●·+).</summary>
+    [ObservableProperty]
+    private int _unsavedCount;
+
+    /// <summary>저장 안 한 고침은 없고 xml 에 저장해 연 때와 달라진 쿼리 수(상태 칸 ○).</summary>
+    [ObservableProperty]
+    private int _savedCount;
+
+    [ObservableProperty]
+    private string _openFilterText = string.Empty;
+
+    [ObservableProperty]
+    private string _changedFilterText = string.Empty;
+
+    [ObservableProperty]
+    private string? _openFilterToolTip;
+
+    [ObservableProperty]
+    private string? _changedFilterToolTip;
 
     /// <summary>목록·도구 막대를 보인다: 세션이 있거나 쓸 수 있는 보기 모드(예 매퍼 폴더 트리)가 있다. 아니면 안내 한 줄만 보인다.</summary>
     [ObservableProperty]
@@ -251,7 +288,21 @@ public sealed partial class MyBatisStatementsViewModel : ToolPanelViewModelBase,
     /// <summary>목록 첫 항목(묶음 머리 제외), 없으면 null.</summary>
     public MyBatisStatementNode? FirstItem() => _groups.SelectMany(g => g.IsExpanded ? g.Children : []).FirstOrDefault();
 
-    private bool IsFiltering => _terms.Length > 0;
+    /// <summary>검색어나 상태 거르기가 켜져 있다(묶음을 모두 펼치고 묶음 머리에 맞은 수를 붙인다).</summary>
+    private bool IsFiltering => _terms.Length > 0 || IsStateFiltering;
+
+    partial void OnShowOpenOnlyChanged(bool value) => ApplyStateFilter();
+
+    partial void OnShowChangedOnlyChanged(bool value) => ApplyStateFilter();
+
+    private void ApplyStateFilter()
+    {
+        if (_session is not null)
+        {
+            Rebuild();
+            SyncSelection();
+        }
+    }
 
     /// <summary>항목을 고른다: 세션의 고른 문장이 된다(우클릭 메뉴·명령의 대상). 묶음 머리나 id 없는 요소는 세션에 알리지 않는다.</summary>
     public void SelectNode(MyBatisStatementNode? node)

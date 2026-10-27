@@ -60,6 +60,9 @@ public sealed partial class MyBatisWorkspaceSession : IMyBatisWorkspaceSession
             : _selected is { IsDeleted: false } picked && _entries.Contains(picked) ? picked
             : _workspace.ActiveTab is { } tab ? EntryOf(tab) : null;
 
+    /// <summary>작업 공간의 활성 탭이 보이는 요소(지금 보고 있는 쿼리). 활성 탭이 이 세션의 쿼리 탭이 아니면 null — 고른 문장(<see cref="SelectedEntry"/>)과 따로다.</summary>
+    public MyBatisStatementEntry? ActiveEntry => _workspace.ActiveTab is { } tab ? EntryOf(tab) : null;
+
     public IMyBatisFragmentResolver Fragments => _fragments;
 
     /// <summary>세션이 붙은 작업 공간.</summary>

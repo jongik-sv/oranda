@@ -145,6 +145,7 @@ public sealed partial class MyBatisStatementsViewModel
 
         UpdateHeader();
         RefreshUsage();
+        UpdateCounts();
     }
 
     private string GroupTitle(MyBatisStatementKind kind) => kind switch

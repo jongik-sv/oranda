@@ -67,6 +67,7 @@ public sealed partial class MyBatisStatementsViewModel
         if (session is null)
         {
             UpdateHeader();
+            UpdateCounts();
             HasSession = false;
             UpdateCommandStates();
             return;
@@ -89,7 +90,7 @@ public sealed partial class MyBatisStatementsViewModel
         }
 
         UpdateHeader();
-        if (_session.VisibleEntries.SequenceEqual(_shown))
+        if (_session.VisibleEntries.SequenceEqual(_shown) && StateMembersUnchanged())
         {
             RefreshNodes();
             ScheduleUsage();

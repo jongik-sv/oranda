@@ -27,6 +27,7 @@ public sealed class MyBatisStatementEntry
 {
     private MyBatisElement? _view;
     private bool _viewBuilt;
+    private string? _openedText;
 
     /// <param name="text">탭 공간의 지금 원문(<paramref name="indent"/> 를 걷어 낸 글).</param>
     /// <param name="indent">파일 들여쓰기 접두(<see cref="Indent"/>).</param>
@@ -38,6 +39,7 @@ public sealed class MyBatisStatementEntry
         StoredText = text;
         IsAmbiguous = ambiguous;
         Indent = indent;
+        OpenedText = baseline?.Text;
     }
 
     /// <summary>기준 문서의 요소(파일 공간 원문 그대로, 기준 문서 <c>Elements</c> 의 그 인스턴스). 새 문장이면 null.</summary>
@@ -68,6 +70,29 @@ public sealed class MyBatisStatementEntry
 
     /// <summary>지금 원문(탭이 열려 있으면 탭 글, 탭 공간).</summary>
     public string Text => Tab?.Text ?? StoredText;
+
+    /// <summary>편집기 탭으로 열려 있다.</summary>
+    public bool IsOpen => Tab is not null;
+
+    /// <summary>
+    /// 매퍼를 연 때 이 요소의 파일 원문(파일 공간). 연 때 없던 요소(이번에 만들어 저장한 새 쿼리, 밖에서 더해진 요소)는 null.
+    /// 저장·밖에서 바뀐 디스크로 기준이 바뀌어도 연 때 것을 물려받는다(<see cref="IsSavedChange"/> 의 비교 대상).
+    /// </summary>
+    internal string? OpenedText
+    {
+        get => _openedText;
+        set
+        {
+            _openedText = value;
+            IsSavedChange = Baseline is { } baseline && !string.Equals(baseline.Text, value, StringComparison.Ordinal);
+        }
+    }
+
+    /// <summary>
+    /// xml(기준 원문)이 매퍼를 연 때와 다르다: 이번에 저장해 반영한 고침(또는 밖에서 바뀐 디스크를 받은 것). 저장 안 한 고침은 <see cref="IsModified"/>.
+    /// 기준이 바뀔 때만 다시 정하므로 글자를 칠 때마다 견주지 않는다.
+    /// </summary>
+    public bool IsSavedChange { get; private set; }
 
     public bool IsNew => Baseline is null;
 

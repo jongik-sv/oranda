@@ -25,6 +25,22 @@ public sealed partial class MapperFolderTreeNode : ObservableObject
     [ObservableProperty]
     private bool _isExpanded;
 
+    /// <summary>요소 노드: 그 매퍼의 작업 공간에서 편집기 탭으로 열려 있다(이름 굵게, 왼쪽 막대).</summary>
+    [ObservableProperty]
+    private bool _isOpen;
+
+    /// <summary>요소 노드: 지금 보고 있는 탭의 쿼리(왼쪽 막대를 강조색으로).</summary>
+    [ObservableProperty]
+    private bool _isCurrent;
+
+    /// <summary>요소 노드: 저장 안 한 고침이 있다(●, 탭 머리 * 와 같은 뜻).</summary>
+    [ObservableProperty]
+    private bool _isUnsaved;
+
+    /// <summary>요소 노드: 저장 안 한 고침은 없고 xml 에 저장해 매퍼를 연 때와 달라졌다(○).</summary>
+    [ObservableProperty]
+    private bool _isSaved;
+
     private ObservableCollection<MapperFolderTreeNode>? _children;
     private Func<IEnumerable<MapperFolderTreeNode>>? _createChildren;
 
@@ -37,6 +53,9 @@ public sealed partial class MapperFolderTreeNode : ObservableObject
     }
 
     public MapperFolderNodeKind Kind { get; }
+
+    /// <summary>최상위 요소 노드다(탭 열림·변경 표시를 그린다).</summary>
+    public bool IsElement => Kind == MapperFolderNodeKind.Element;
 
     /// <summary>보이는 이름(폴더·파일 이름, 요소 id).</summary>
     public string Name { get; }
@@ -305,6 +324,7 @@ public sealed partial class MapperFolderTreeViewModel : ObservableObject, IDispo
 
         _active = true;
         _folder.Changed += OnFolderChanged;
+
         _languageSource = ActiveText;
         if (_languageSource is not null)
         {
@@ -324,6 +344,7 @@ public sealed partial class MapperFolderTreeViewModel : ObservableObject, IDispo
 
         _active = false;
         _folder.Changed -= OnFolderChanged;
+        UnhookHost();
         if (_languageSource is not null)
         {
             _languageSource.LanguageChanged -= OnLanguageChanged;
@@ -349,6 +370,7 @@ public sealed partial class MapperFolderTreeViewModel : ObservableObject, IDispo
         }
 
         _builtFiltered = _terms.Length > 0;
+        _elementNodes.Clear();
         var index = _folder.Index;
         RootPath = index?.Root ?? string.Empty;
 
@@ -424,7 +446,8 @@ public sealed partial class MapperFolderTreeViewModel : ObservableObject, IDispo
         }
 
         // 요소 자식은 처음 읽을 때 만든다(검색 글은 지금 것으로 묶어 둔다).
-        IEnumerable<MapperFolderTreeNode> Elements() => file.Elements
+        // 만든 요소 노드는 열린 작업 공간의 탭 열림·변경 표시를 받도록 기억한다(MapperFolderTreeViewModel.State.cs).
+        IEnumerable<MapperFolderTreeNode> Elements() => TrackElements(file.Path, file.Elements
             .Where(e => !filtered || MyBatisQueryFilter.Matches(e.Id ?? e.Name, terms))
             .Select(e => new MapperFolderTreeNode(MapperFolderNodeKind.Element, e.Id ?? e.Name, file.Path)
             {
@@ -434,7 +457,7 @@ public sealed partial class MapperFolderTreeViewModel : ObservableObject, IDispo
                 Namespace = file.Namespace,
                 ElementId = e.Id,
                 ElementKind = e.Kind,
-            });
+            }).ToList());
 
         return new MapperFolderTreeNode(MapperFolderNodeKind.File, Path.GetFileName(file.Path), file.Path, Elements)
         {

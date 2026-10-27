@@ -100,7 +100,7 @@ public sealed class StatementsSearchTests : IDisposable
 
             vm.OpenNode(plain);
             vm.Host.ActiveWorkspace!.ActiveTab!.Document.Insert(0, " ");
-            Assert.Equal("● 저장 안 한 고침 있음", plain.StatusToolTip);
+            Assert.Equal("● 저장 안 한 고침 있음" + Environment.NewLine + "지금 보고 있는 탭 (편집기에 열림)", plain.StatusToolTip); // 탭으로 열려 지금 보는 쿼리라 끝 줄이 붙는다
 
             var header = view.GetVisualDescendants().OfType<Border>().First(b => b.Classes.Contains("grid-c-header"));
             var legend = header.GetVisualDescendants().OfType<Border>().Select(ToolTip.GetTip).OfType<string>().Single();
