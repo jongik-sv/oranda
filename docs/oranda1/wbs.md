@@ -1009,6 +1009,18 @@ levels:
   - acceptance: SessionDisplayTests 11개(대기 표시·P 고르기 콤보/세션 창·사용 예정·대기 워크스페이스는 사용 예정 아님·이 워크스페이스 표지·이 세션 쓰기 꺼짐·고정 순번·설정 재동기화·닫힌 콤보 화살표/휠·공유 커밋 경고) / ActiveDocumentFocusTests 2개(도구 창 포커스·다른 영역 포커스) / 기존 SessionSwitch·Sessions·MultiSession·WorkspaceSession·SessionLifecycle·MenuBarTarget 시험 통과 / `dotnet build Oranda.sln -warnaserror`
   - note: 결과: 고치기 전 새 시험 실패 확인(Dock 은 도구 창을 누르면 CurrentDockable 이 도구 창이 되어 첫 문서 영역의 탭으로 되돌아가고, 다른 영역의 이미 보이는 탭을 누르면 ActiveDockableChanged 가 없어 알리지 않았다 — review 19 사실; Avalonia ComboBox 는 닫힌 채 화살표·휠로 지나는 줄마다 SelectedItem 을 바꿨다 — review 21 사실). 원인 Features/ConnectionManager/SessionRouter.cs(Select·SelectAsync 의 changed=false, LabelOf 위치 순번, 설정 구독 없음)·SessionRouter.Workspaces.cs(ChoosesSession 이 대기 중 접속 세션을 고름으로 안 봄)·ConnectionCombo.cs(Refresh 가 ShownSession 줄을 고름, 닫힌 콤보 키·휠)·ConnectionStatusItem.cs·Sessions/SessionRow.cs·SessionsViewModel.cs(CanUse 가 ShownSession 비교)·Shell/Docking/DockWorkspace.cs(FocusedDockableChanged 미구독)·Execution/ExecutionController.Transaction.cs(공유 커밋 경고 없음). SessionsViewModelTests 의 「이 세션 쓰기」 시험에 탭을 더함(탭 없으면 이제 꺼짐) (win144)
 
+- [x] TSK-14-11: 「세션」 창 기본 폭에서 「◀ 이 워크스페이스」 표지가 SID 뒤로 밀려 잘림 [win144] w:1 2026-10-27~2026-10-27
+  - category: defect
+  - domain: frontend
+  - model: opus
+  - priority: medium
+  - tags: sessions-panel, layout, multi-session, win144
+  - prd-ref: PRD 16, MS-09, D-042
+  - depends: TSK-14-10
+  - requirements: 세션 검토 「실앱 화면 확인」(2026-10-26) 발견. 첫 줄이 가로 StackPanel(점·이름·SID·표지)이라 이름이 줄지 않고 표지가 맨 끝에 붙어, 첫 실행 왼쪽 도구 창 폭(LayoutPlanner.LeftProportion × WindowPlacementPolicy.FirstRunMaxWidth ≈ 282 DIP)에서 접속 이름이 조금만 길어도 창 밖으로 밀려 안 보였다(UIA 에는 있음). 고침: 첫 줄을 DockPanel 로 — 점 왼쪽, SID 오른쪽 끝, 표지는 SID 바로 앞(고정), 이름만 남은 폭에서 말줄임(…, 전체 이름은 툴팁). 둘째 줄(사용 상태)은 그대로; 제약: 실앱 SendKeys 금지(Headless 까지); 비고: 레인 sr-mark
+  - acceptance: SessionsViewTests.The_this_workspace_marker_stays_inside_the_default_left_pane_with_a_long_name(30자 접속 이름, 기본 폭에서 표지·SID 경계가 목록 안) 고치기 전 실패·고친 뒤 통과 / 기존 Sessions 시험 통과 / `dotnet build Oranda.sln -warnaserror`
+  - note: 결과: 고치기 전 표지 664..804 DIP 로 목록 폭 282 밖. 원인 Features/Sessions/SessionsView.axaml 첫 줄 StackPanel(가로 StackPanel 은 자식에 무한 폭을 줘 TextTrimming 이 듣지 않음). SID 는 이제 모든 줄에서 오른쪽 끝에 맞춰진다 (win144)
+
 - [x] TSK-14-09: 한 세션 연결을 기능마다 다른 잠금이 지킴 → 연결 하나에 명령 잠금 하나 [win144] w:1 2026-10-26~2026-10-26
   - category: defect
   - domain: backend
@@ -1119,6 +1131,7 @@ graph LR
   TSK-14-06 --> TSK-14-07
   TSK-14-02 --> TSK-14-08
   TSK-14-07 --> TSK-14-10
+  TSK-14-10 --> TSK-14-11
   TSK-14-05 --> TSK-14-09
   style TSK-01-02 fill:#e8f5e9,stroke:#2e7d32
   style TSK-03-01 stroke:#c62828,stroke-width:2px

@@ -41,14 +41,16 @@
         <ListBox.ItemTemplate>
           <DataTemplate x:DataType="vm:SessionRow">
             <StackPanel Spacing="2" ToolTip.Tip="{Binding ToolTip}">
-              <StackPanel Orientation="Horizontal" Spacing="6">
-                <Ellipse Classes="dot" Classes.running="{Binding IsRunning}" Classes.broken="{Binding IsBroken}" Width="8" Height="8" VerticalAlignment="Center" />
-                <TextBlock Text="{Binding Label}" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
-                <TextBlock Classes="dim" Text="{Binding SidText}" VerticalAlignment="Center" />
+              <!-- 점 · 이름 · (표지) · SID. 이름만 줄여(…) 좁은 기본 폭 왼쪽 도구 창에서도 표지와 SID 가 잘리지 않는다(TSK-14-11). -->
+              <DockPanel>
+                <Ellipse DockPanel.Dock="Left" Classes="dot" Classes.running="{Binding IsRunning}" Classes.broken="{Binding IsBroken}" Width="8" Height="8"
+                         Margin="0,0,6,0" VerticalAlignment="Center" />
+                <TextBlock DockPanel.Dock="Right" Classes="dim" Text="{Binding SidText}" Margin="6,0,0,0" VerticalAlignment="Center" />
                 <!-- 지금 활성 작업 공간이 쓰는 세션(고른 줄과 따로, TSK-14-10). -->
-                <TextBlock Text="{Binding ShownText}" IsVisible="{Binding IsShown}" FontWeight="SemiBold" VerticalAlignment="Center"
-                           Foreground="{DynamicResource OrandaIconBlueBrush}" />
-              </StackPanel>
+                <TextBlock DockPanel.Dock="Right" Text="{Binding ShownText}" IsVisible="{Binding IsShown}" FontWeight="SemiBold" Margin="6,0,0,0"
+                           VerticalAlignment="Center" Foreground="{DynamicResource OrandaIconBlueBrush}" />
+                <TextBlock Text="{Binding Label}" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
+              </DockPanel>
               <TextBlock Classes="dim" Margin="14,0,0,0" Text="{Binding Detail}" TextTrimming="CharacterEllipsis" />
             </StackPanel>
           </DataTemplate>

@@ -99,6 +99,42 @@ public sealed class SessionsViewTests
     });
 
     [Fact]
+    public Task The_this_workspace_marker_stays_inside_the_default_left_pane_with_a_long_name() => Ui.Run(async () =>
+    {
+        // 실앱 화면 확인 발견(TSK-14-11): 표지가 SID 뒤에 붙어 기본 폭 왼쪽 도구 창 밖으로 밀려 잘렸다.
+        using var rig = new SessionsViewModelTests.Rig();
+        var longName = new string('N', 30);
+        await rig.ConnectAsync(longName);
+        var tab = rig.Host.NewDocument();
+        Assert.True(await rig.Router.PrepareAsync(tab));
+        rig.Host.Active = tab;
+        SessionsViewModelTests.Pump();
+        rig.Vm.Refresh();
+        SessionsViewModelTests.Pump();
+        Assert.True(rig.Vm.Rows[0].IsShown);
+
+        var view = new SessionsView { DataContext = rig.Vm };
+        var width = LayoutPlanner.LeftProportion * WindowPlacementPolicy.FirstRunMaxWidth; // 첫 실행 왼쪽 도구 창 폭
+        var window = new Window { Width = width, Height = 200, Content = view };
+        window.Show();
+        Dispatcher.UIThread.RunJobs();
+        window.UpdateLayout();
+
+        var list = view.FindControl<ListBox>("SessionList")!;
+        var blocks = list.GetVisualDescendants().OfType<TextBlock>().Where(t => t.IsEffectivelyVisible).ToList();
+        var marker = blocks.Single(t => t.Text == rig.Vm.Rows[0].ShownText);
+        var sid = blocks.Single(t => t.Text == rig.Vm.Rows[0].SidText);
+        foreach (var block in new[] { marker, sid })
+        {
+            var left = block.TranslatePoint(new Point(0, 0), list)!.Value.X;
+            Assert.True(left >= 0 && left + block.Bounds.Width <= list.Bounds.Width + 0.5,
+                $"{block.Text}: {left:0.#}..{left + block.Bounds.Width:0.#} > {list.Bounds.Width:0.#}");
+        }
+
+        window.Close();
+    });
+
+    [Fact]
     public Task The_empty_state_shows_a_hint_instead_of_a_list() => Ui.Run(() =>
     {
         using var rig = new SessionsViewModelTests.Rig();
