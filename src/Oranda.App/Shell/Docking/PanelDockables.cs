@@ -57,10 +57,10 @@ public sealed class PanelDocument : Document
         }
     }
 
-    /// <summary>안쪽 탭 하나라도 실행 중이다(<see cref="IRunningDocument"/>): 문서 탭 머리 앞에 실행 중 점을 보인다(TSK-14-13).</summary>
+    /// <summary>안쪽 탭 하나라도 실행 중이다(<see cref="IRunningDocument"/>): 문서 탭 머리 앞에 실행 중 스피너(Shell/RunSpinner)을 보인다(TSK-14-13).</summary>
     public bool IsRunning => Panel is IRunningDocument { HasRunningTab: true };
 
-    /// <summary>실행 중 점의 툴팁(실행 중인 안쪽 탭마다 「이름 실행 중 · 경과 n초」).</summary>
+    /// <summary>실행 중 스피너의 툴팁(실행 중인 안쪽 탭마다 「이름 실행 중 · 경과 n초」).</summary>
     public string? RunTip => (Panel as IRunningDocument)?.RunTip is { Length: > 0 } tip ? tip : null;
 
     public ToolPanelDefinition Definition { get; }

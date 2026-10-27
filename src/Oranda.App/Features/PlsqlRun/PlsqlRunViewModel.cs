@@ -305,7 +305,7 @@ public sealed partial class PlsqlRunViewModel : ObservableObject
 
         ClearResults();
         IsRunning = true;
-        Marker?.Begin(); // 이 창을 연 PL/SQL 탭 머리의 실행 중 점(TSK-14-13)
+        Marker?.Begin(); // 이 창을 연 PL/SQL 탭 머리의 실행 중 스피너(TSK-14-13)
 
         // 실행·트랜잭션 표시는 실제로 쓴 세션에 단다(지금 접속은 실행하는 사이 바뀔 수 있다, TSK-14-08). 작업 공간 밖의 실행이라 시작한 쪽은 모른다.
         _deps.State?.BeginRun(session.Id, null);

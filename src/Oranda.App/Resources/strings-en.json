@@ -76,6 +76,7 @@
   "Execution.status.running": "Running {0}",
   "Execution.runMarker.tip": "Running · {0}s elapsed",
   "Execution.runMarker.tabTip": "{0} running · {1}s elapsed",
+  "Execution.runMarker.name": "Running",
   "Execution.status.cancelling": "Cancelling",
   "Execution.status.broken": "Disconnected",
   "Execution.status.uncommitted": "Uncommitted",

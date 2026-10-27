@@ -1,6 +1,7 @@
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:icons="using:Oranda.App.Shell.Icons"
+             xmlns:shell="using:Oranda.App.Shell"
              xmlns:vm="using:Oranda.App.Features.Execution"
              x:Class="Oranda.App.Features.Execution.ResultTabsView"
              x:DataType="vm:ResultTabsViewModel">
@@ -43,7 +44,7 @@
     <!-- 실행 중 띠(TSK-14-13): 「실행 중 · 경과 n초」. 짧은 실행에는 보이지 않고(막대와 같은 지연) 끝·오류·취소에 사라진다. -->
     <Border x:Name="RunBand" DockPanel.Dock="Top" Classes="run-band" IsVisible="{Binding IsRunBarVisible}">
       <StackPanel Orientation="Horizontal">
-        <Ellipse Classes="run-marker" />
+        <shell:RunSpinner IsActive="{Binding IsRunBarVisible}" ShowAtOnce="True" />
         <TextBlock Text="{Binding Run.Tip}" VerticalAlignment="Center" />
       </StackPanel>
     </Border>

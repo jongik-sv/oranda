@@ -135,10 +135,10 @@ public sealed partial class SqlWorkspaceViewModel : ToolPanelViewModelBase, IInn
 
     public bool IsDirty => Tabs.Any(t => t.IsDirty) || MyBatis?.IsDirty == true;
 
-    /// <summary>SQL 탭 하나라도 실행 중이다(문서 탭 머리의 실행 중 점, TSK-14-13).</summary>
+    /// <summary>SQL 탭 하나라도 실행 중이다(문서 탭 머리의 실행 중 스피너, TSK-14-13).</summary>
     public bool HasRunningTab => Tabs.Any(t => t.Run.IsRunning);
 
-    /// <summary>실행 중인 SQL 탭마다 「이름 실행 중 · 경과 n초」(문서 탭 머리 점의 툴팁).</summary>
+    /// <summary>실행 중인 SQL 탭마다 「이름 실행 중 · 경과 n초」(문서 탭 머리 스피너의 툴팁).</summary>
     public string RunTip => RunningTabs.Describe(Tabs.Select(t => (t.Title, t.Run)));
 
     /// <summary>문서 탭 머리글: 고친 SQL 탭이 있으면 「* 이름」, 파일에서 연 작업 공간이면 뒤에 종류(「이름 (sqd)」).</summary>

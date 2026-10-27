@@ -349,15 +349,13 @@ public partial class SqlWorkspaceView : UserControl
         menu.ShowAt(TabListButton);
     }
 
-    /// <summary>탭 목록 메뉴의 한 줄: 보이는 탭은 굵게, 실행 중인 탭은 탭 머리와 같은 점(TSK-14-13). 메뉴는 열 때마다 새로 만든다.</summary>
+    /// <summary>탭 목록 메뉴의 한 줄: 보이는 탭은 굵게, 실행 중인 탭은 탭 머리와 같은 스피너(TSK-14-13). 메뉴는 열 때마다 새로 만든다(닫히면 떼어져 멈춘다).</summary>
     internal static MenuItem TabListItem(SqlWorkspaceViewModel vm, SqlEditorViewModel tab)
     {
         var item = new MenuItem { Header = tab.DisplayTitle, FontWeight = ReferenceEquals(tab, vm.ActiveTab) ? Avalonia.Media.FontWeight.SemiBold : Avalonia.Media.FontWeight.Normal };
         if (tab.Run.IsRunning)
         {
-            var dot = new Avalonia.Controls.Shapes.Ellipse();
-            dot.Classes.Add("run-marker");
-            item.Icon = dot;
+            item.Icon = new Oranda.App.Shell.RunSpinner { ShowAtOnce = true, IsActive = true };
             ToolTip.SetTip(item, tab.Run.Tip);
         }
 

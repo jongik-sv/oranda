@@ -390,7 +390,7 @@ public sealed partial class PlsqlWorkspaceViewModel : ToolPanelViewModelBase, II
     private void UpdateMixedConnections() =>
         MixedConnections = Tabs.Select(t => t.Session?.Profile.Id).Where(id => id is not null).Distinct().Skip(1).Any();
 
-    /// <summary>PL/SQL 탭 하나라도 실행 중이다(실행 창이 그 탭에서 블록을 돌린다, TSK-14-13). 문서 탭 머리의 실행 중 점이 따른다.</summary>
+    /// <summary>PL/SQL 탭 하나라도 실행 중이다(실행 창이 그 탭에서 블록을 돌린다, TSK-14-13). 문서 탭 머리의 실행 중 스피너이 따른다.</summary>
     public bool HasRunningTab => Tabs.Any(t => t.Editor.Run.IsRunning);
 
     /// <summary>실행 중인 PL/SQL 탭마다 「이름 실행 중 · 경과 n초」.</summary>

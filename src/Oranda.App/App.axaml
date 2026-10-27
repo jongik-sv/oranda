@@ -3,6 +3,7 @@
              xmlns:dock="using:Dock.Avalonia.Themes.Fluent"
              xmlns:dockctl="using:Dock.Avalonia.Controls"
              xmlns:docking="using:Oranda.App.Shell.Docking"
+             xmlns:shell="using:Oranda.App.Shell"
              xmlns:aedit="using:AvaloniaEdit.Editing"
              x:Class="Oranda.App.App"
              xmlns:local="using:Oranda.App"
@@ -467,14 +468,15 @@
         <Style Selector="dockctl|DocumentTabStripItem, dockctl|ToolTabStripItem">
             <Setter Property="FontSize" Value="{DynamicResource TabItemHeaderFontSize}" />
         </Style>
-        <!-- 실행 중 점(TSK-14-13): 실행한 SQL·PL/SQL 탭 머리, 그 탭이 든 작업 공간의 문서 탭 머리, 결과 영역 띠. 「세션」 창의 실행 중 점과 같은 주황.
-             깜빡이거나 돌지 않는다(탭이 많아도 그리기 비용이 없다). -->
-        <Style Selector="Ellipse.run-marker">
-            <Setter Property="Width" Value="8" />
-            <Setter Property="Height" Value="8" />
+        <!-- 실행 중 스피너(TSK-14-13): 실행한 SQL·PL/SQL 탭 머리, 그 탭이 든 작업 공간의 문서 탭 머리, SQL 탭 목록 메뉴, 결과 영역 띠.
+             지름 12(탭 글자 높이), 두께 2 의 270° 호가 1초에 한 바퀴 돈다. 「세션」 창의 실행 중 점과 같은 주황.
+             회전은 렌더 스레드(컴포지션) 애니메이션이고 보일 때만 돈다(Shell/RunSpinner.cs). -->
+        <Style Selector="shell|RunSpinner">
+            <Setter Property="Width" Value="12" />
+            <Setter Property="Height" Value="12" />
             <Setter Property="Margin" Value="0,0,5,0" />
             <Setter Property="VerticalAlignment" Value="Center" />
-            <Setter Property="Fill" Value="{DynamicResource OrandaIconOrangeBrush}" />
+            <Setter Property="Foreground" Value="{DynamicResource OrandaIconOrangeBrush}" />
         </Style>
         <Style Selector="Border.run-band">
             <Setter Property="Background" Value="{DynamicResource OrandaPanelHeaderBrush}" />
@@ -485,11 +487,11 @@
         <Style Selector="Border.run-band TextBlock">
             <Setter Property="FontSize" Value="{DynamicResource OrandaFontSizeSmall}" />
         </Style>
-        <!-- 문서 탭 머리의 아이콘 자리에 실행 중 점: 안쪽 탭 하나라도 실행 중인 작업 공간(PanelDocument.IsRunning). 그 문서를 보고 있지 않아도 보인다. -->
+        <!-- 문서 탭 머리의 아이콘 자리에 실행 중 스피너: 안쪽 탭 하나라도 실행 중인 작업 공간(PanelDocument.IsRunning). 그 문서를 보고 있지 않아도 보인다. -->
         <Style Selector="dockctl|DocumentControl">
             <Setter Property="IconTemplate">
                 <DataTemplate x:DataType="docking:PanelDocument">
-                    <Ellipse Classes="run-marker" IsVisible="{Binding IsRunning}" ToolTip.Tip="{Binding RunTip}" />
+                    <shell:RunSpinner IsActive="{Binding IsRunning}" ToolTip.Tip="{Binding RunTip}" />
                 </DataTemplate>
             </Setter>
         </Style>
