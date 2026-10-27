@@ -925,6 +925,17 @@ levels:
   - acceptance: 입력(스키마·이름·유형·INVALID)이 바뀌면 300ms 뒤 오른쪽 대상 탭에 맞는 객체가 나오고 연속 입력은 마지막 값으로 한 번만 조회한다 / 앞 조회는 취소되고 늦게 온 옛 결과가 새 결과를 덮지 않는다 / 표 3개 중 2개를 체크하고 추출하면 파일 2개가 생긴다(조건 전체를 다시 조회하지 않는다) / 아무것도 체크하지 않고 추출하면 「체크한 객체가 없다」 로 멈춘다 / 접속 없음·빈 결과·오류·불러오는 중·5,000개 초과 화면이 라이트·다크에서 읽힌다 / 기존 DbToolsTests 가 그대로 통과한다
   - note: 담당 PC: win144(Windows 개발 PC) — 맥북 세션은 이 Task 를 하지 않는다. 사용자 원문(2026-10-26): 「DDL 일괄 추출 시 테이블에 입력값에 대한 검색된 테이블들이 우측 빈 칸에 나오면 좋겠다」. 크기 M. 레인 sc-ddl. 결과: 오른쪽 칸을 「대상 (n)」·「추출 결과」 탭으로 나누고 입력 300ms 뒤 `SearchObjectsAsync` 로 대상 표(체크·유형·이름·상태·마지막 DDL, 5,000개 한도, 취소·목록째 교체)를 보이며 「추출」 은 체크한 객체만(`DdlExtractRequest.Objects`) 추출, 시험 DdlExtractTargetsTests 18개(상태별 Headless 라이트·다크 PNG)·Oracle 통합 DdlExtractPickedObjectsTests 3개(26ai, 표 3개 중 2개 체크 → 파일 2개) (win144)
 
+- [x] TSK-13-02: 실행 이력 아래 고른 문장 상자 높이를 끌어서 바꾸기 [win144] w:1 2026-10-28~2026-10-28
+  - category: feat
+  - domain: frontend
+  - model: opus
+  - priority: medium
+  - tags: history, splitter, ux, win144
+  - prd-ref: 사용자 요청 2026-10-28
+  - requirements: 실행 이력 창(`Features/HistoryScripts/HistoryView.axaml(.cs)`)에서 줄을 고르면 아래에 나오는 고른 문장 상자(SqlCodeView, 지금 MaxHeight 120 고정)를 목록과의 사이 가로 분할선(GridSplitter, 두께 5·OrandaSplitterBrush, 스키마 브라우저·템플릿 창과 같은 모양)으로 높이를 바꾸게 한다. 목록 최소 60, 상자 최소 40, 처음 140. 고른 것이 없으면 분할선과 상자 줄이 접힌다. 끈 높이는 앱을 켠 동안 기억(창을 다시 만들어도 이어짐) — 곁 패널 안 분할은 설정에 저장하는 관례가 없어 저장하지 않는다. 긴 문장은 상자 안에서 스크롤; 스크립트 창 검색 결과는 아래 미리보기가 없어 해당 없음; 시험: Headless 끌기
+  - acceptance: 분할선을 위로 80 끌면 상자가 80 커진다 / 끝까지 내려도 상자 40, 끝까지 올려도 목록 60 이상 / 고른 것을 놓으면 상자 줄 0 / 새 창에서도 끈 높이가 이어진다 / HistoryScriptsTests 통과
+  - note: 사용자 원문(2026-10-28): 「실행 이력에서 레코드를 누르면 쿼리가 밑에 나오는데 박스크기조절이 안된다. 높이 조절되게 해줘.」 레인 sr-hist. 결과: HistoryScriptsTests.History_detail_box_height_follows_the_splitter_with_minimums_and_is_remembered (win144)
+
 ## WP-14: 같은 DB 여러 세션
 <!-- 담당 PC: 맥북 — win144 세션은 이 WP 의 Task 를 하지 않는다. 2026-10-26 사용자 요청(PRD 16 원문), 사용자 승인 「권장안대로」(맥북에서 진행). 설계 = PRD 16, TRD 14, decisions D-034~D-038, 시안 docs/oranda1/mockups/multisession(원본 https://claude.ai/artifact/Xb4mBy56WPrRFcgxf1q4uf). win144 레인 sc-multisess 가 측정(PRD 16.1)과 세션 계층 초안(원격 브랜치 wip-multisess, TRD 14.3)을 남겼다: 14-01·14-02 는 초안을 이어받아 다듬고, 14-03·14-04 는 화면, 14-05 는 통합 확인 -->
 

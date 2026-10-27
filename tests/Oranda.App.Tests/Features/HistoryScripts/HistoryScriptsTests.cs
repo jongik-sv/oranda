@@ -1,4 +1,6 @@
+using Avalonia;
 using Avalonia.Controls;
+using Avalonia.Headless;
 using Avalonia.Threading;
 using Avalonia.VisualTree;
 using Oranda.App.Features.HistoryScripts;
@@ -150,6 +152,86 @@ public sealed class HistoryScriptsTests : IDisposable
             Assert.Equal("SELECT 1 FROM dual", detail.TextEditorControl.Text);
             window.Close();
         });
+    }
+
+    [Fact]
+    public async Task History_detail_box_height_follows_the_splitter_with_minimums_and_is_remembered()
+    {
+        var store = new ListStore([Entry(1, "SELECT 1 FROM dual"), Entry(2, string.Join(Environment.NewLine, Enumerable.Range(1, 60).Select(i => $"SELECT {i} FROM dual UNION ALL")))]);
+        using var vm = new HistoryViewModel(store, () => null);
+        vm.CurrentConnectionOnly = false;
+        await vm.ReloadAsync();
+        HistoryView.RememberedDetailHeight = HistoryView.DefaultDetailHeight;
+
+        try
+        {
+            await HeadlessHost.Run(() =>
+            {
+                var view = new HistoryView { DataContext = vm };
+                var window = new Window { Content = view, Width = 900, Height = 500 };
+                window.Show();
+                Dispatcher.UIThread.RunJobs();
+
+                var splitter = view.FindControl<GridSplitter>("DetailSplitter")!;
+                var grid = view.FindControl<Grid>("SplitGrid")!;
+                var detailRow = grid.RowDefinitions[3];
+                var listRow = grid.RowDefinitions[1];
+
+                // 고른 것이 없으면 분할선과 상자가 접힌다.
+                Assert.False(splitter.IsVisible);
+                Assert.Equal(0, detailRow.ActualHeight);
+
+                vm.Selected = vm.Items.Single(i => i.FullSql.Length > 100);
+                Dispatcher.UIThread.RunJobs();
+                Assert.True(splitter.IsVisible);
+                Assert.Equal(HistoryView.DefaultDetailHeight, detailRow.ActualHeight, 1);
+
+                // 긴 문장은 상자 안에서 스크롤한다(상자는 기억한 높이를 넘지 않는다).
+                var detail = view.FindControl<Oranda.App.Features.SqlEditor.SqlCodeView>("DetailBox")!;
+                Assert.True(detail.Bounds.Height <= HistoryView.DefaultDetailHeight);
+
+                // 위로 80 끌면 상자가 80 커진다.
+                Drag(window, splitter, -80);
+                Assert.Equal(HistoryView.DefaultDetailHeight + 80, detailRow.ActualHeight, 1);
+                Assert.Equal(HistoryView.DefaultDetailHeight + 80, HistoryView.RememberedDetailHeight, 1);
+
+                // 아래로 끝까지 끌어도 상자는 최소 높이를 지킨다.
+                Drag(window, splitter, 1000);
+                Assert.Equal(HistoryView.MinDetailHeight, detailRow.ActualHeight, 1);
+
+                // 위로 끝까지 끌어도 목록은 최소 높이를 지킨다.
+                Drag(window, splitter, -1000);
+                Assert.True(listRow.ActualHeight >= 60 - 0.5, $"목록 높이 {listRow.ActualHeight}");
+                var tall = detailRow.ActualHeight;
+
+                // 다른 문장을 골랐다 놓았다 해도, 창을 다시 만들어도 끈 높이가 이어진다.
+                vm.Selected = null;
+                Dispatcher.UIThread.RunJobs();
+                Assert.Equal(0, detailRow.ActualHeight);
+                window.Close();
+
+                var again = new HistoryView { DataContext = vm };
+                var window2 = new Window { Content = again, Width = 900, Height = 500 };
+                window2.Show();
+                vm.Selected = vm.Items[0];
+                Dispatcher.UIThread.RunJobs();
+                Assert.Equal(tall, again.FindControl<Grid>("SplitGrid")!.RowDefinitions[3].ActualHeight, 1);
+                window2.Close();
+            });
+        }
+        finally
+        {
+            HistoryView.RememberedDetailHeight = HistoryView.DefaultDetailHeight;
+        }
+
+        static void Drag(Window window, GridSplitter splitter, double dy)
+        {
+            var p = splitter.TranslatePoint(new Point(splitter.Bounds.Width / 2, splitter.Bounds.Height / 2), window)!.Value;
+            window.MouseDown(p, Avalonia.Input.MouseButton.Left);
+            window.MouseMove(new Point(p.X, p.Y + dy), Avalonia.Input.RawInputModifiers.LeftMouseButton);
+            window.MouseUp(new Point(p.X, p.Y + dy), Avalonia.Input.MouseButton.Left);
+            Dispatcher.UIThread.RunJobs();
+        }
     }
 
     [Fact]
