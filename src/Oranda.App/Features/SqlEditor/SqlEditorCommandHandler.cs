@@ -9,9 +9,9 @@ namespace Oranda.App.Features.SqlEditor;
 /// TSK-04-02 이 소유한 명령 52개의 처리기(commands.md 7장). 한 클래스가 <see cref="CommandContext.CommandId"/> 로 나눠 처리한다.
 /// 활성 탭은 <see cref="SqlEditorHost.Active"/>. 탭이 없을 때 편집 명령은 아무것도 하지 않는다(활성 조건은 셸이 막는다).
 /// </summary>
-[OrandaCommand("oranda.file.newSqlEditor", CommandCategory.File, Icon = "newSql", Placements = ["menu:file/newSqlEditor@10", "toolbar:main/newSql@10"])]
-[OrandaCommand("oranda.file.open", CommandCategory.File, Icon = "open", Placements = ["menu:file/open@100", "toolbar:main/open@20"])]
-[OrandaCommand("oranda.file.save", CommandCategory.File, Enablement = "hasDocument", Icon = "save", Placements = ["menu:file/save@200", "toolbar:main/save@30"])]
+[OrandaCommand("oranda.file.newSqlEditor", CommandCategory.File, Icon = "newSql", Placements = ["menu:file/newSqlEditor@10", "toolbar:main/newSql@110"])]
+[OrandaCommand("oranda.file.open", CommandCategory.File, Icon = "open", Placements = ["menu:file/open@100", "toolbar:main/open@120"])]
+[OrandaCommand("oranda.file.save", CommandCategory.File, Enablement = "hasDocument", Icon = "save", Placements = ["menu:file/save@200", "toolbar:main/save@130"])]
 [OrandaCommand("oranda.file.saveAs", CommandCategory.File, Enablement = "hasDocument && !mybatisDocActive", Placements = ["menu:file/saveAs@210"])]
 [OrandaCommand("oranda.file.saveAll", CommandCategory.File, Enablement = "hasDocument", Placements = ["menu:file/saveAll@220"])]
 [OrandaCommand("oranda.file.reopenClosed", CommandCategory.File, Placements = ["menu:file/tabs/reopenClosed@320"])]
@@ -21,7 +21,7 @@ namespace Oranda.App.Features.SqlEditor;
 [OrandaCommand("oranda.file.openWorkspaceFile", CommandCategory.File, Icon = "workspaceOpen", Placements = ["menu:file/workspace/openWorkspaceFile@301"])]
 [OrandaCommand("oranda.file.saveWorkspaceFile", CommandCategory.File, Enablement = "hasDocument && !mybatisDocActive", Icon = "workspaceSave", Placements = ["menu:file/workspace/saveWorkspaceFile@400"])]
 [OrandaCommand("oranda.file.saveWorkspaceFileAs", CommandCategory.File, Enablement = "hasDocument && !mybatisDocActive", Placements = ["menu:file/workspace/saveWorkspaceFileAs@401"])]
-[OrandaCommand("oranda.file.newWorkspace", CommandCategory.File, Icon = "folderAdd", Placements = ["menu:file/workspace/newWorkspace@300", "toolbar:main/newWorkspace@12"])]
+[OrandaCommand("oranda.file.newWorkspace", CommandCategory.File, Icon = "folderAdd", Placements = ["menu:file/workspace/newWorkspace@300", "toolbar:main/newWorkspace@112"])]
 [OrandaCommand("oranda.file.renameWorkspace", CommandCategory.File, Enablement = "sqlWorkspaceActive", Placements = ["menu:file/workspace/renameWorkspace@402"])]
 [OrandaCommand("oranda.file.closeWorkspace", CommandCategory.File, Enablement = "sqlWorkspaceActive", Placements = ["menu:file/workspace/closeWorkspace@600"])]
 [OrandaCommand("oranda.file.renameTab", CommandCategory.File, Enablement = "sqlDocActive && !mybatisDocActive", Icon = "rename", Placements = ["menu:file/tabs/renameTab@322", "context:editor/renameTab@900"])]

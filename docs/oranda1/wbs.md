@@ -1021,6 +1021,18 @@ levels:
   - acceptance: SessionsViewTests.The_this_workspace_marker_stays_inside_the_default_left_pane_with_a_long_name(30자 접속 이름, 기본 폭에서 표지·SID 경계가 목록 안) 고치기 전 실패·고친 뒤 통과 / 기존 Sessions 시험 통과 / `dotnet build Oranda.sln -warnaserror`
   - note: 결과: 고치기 전 표지 664..804 DIP 로 목록 폭 282 밖. 원인 Features/Sessions/SessionsView.axaml 첫 줄 StackPanel(가로 StackPanel 은 자식에 무한 폭을 줘 TextTrimming 이 듣지 않음). SID 는 이제 모든 줄에서 오른쪽 끝에 맞춰진다 (win144)
 
+- [x] TSK-14-12: 툴바 접속 관리자·접속 끊기를 세션 콤보 바로 옆으로, 세션 콤보 폭 넓히기 [win144] w:1 2026-10-27~2026-10-27
+  - category: feat
+  - domain: frontend
+  - model: opus
+  - priority: medium
+  - tags: toolbar, connection-combo, layout, multi-session, win144
+  - prd-ref: PRD 16, MS-09
+  - depends: TSK-14-11
+  - requirements: 사용자 요구(2026-10-27) 「접속관리자/접속 끊기가 세션 선택 콤보 바로 옆에 위치하게 버튼 순서 바꿔주고 세션 선택 콤보의 폭을 더 키워줘.」 툴바 배치 순서 값만 바꾼다 — 접속 묶음 @10·@20(전 @110·@120), 새 SQL·워크스페이스·PL/SQL·열기·저장 묶음 @110~@130(전 @10~@30). 나머지 단추의 상대 순서·구분선 수·Role 로 빠지는 단추는 그대로. 콤보 MinWidth 180→240, MaxWidth 320→460(폭은 고른 이름을 따라 그 사이); 제약: 실앱 SendKeys 금지(Headless 까지); 비고: 레인 sr-tool
+  - acceptance: ToolbarConnectionPlacementTests 7개(모델·주 창 첫 두 단추 = 접속 관리자·접속 끊기 + 구분선, 콤보 최소·최대 폭, 「1 - scott@hr_dev_main (2)」·「새 세션(첫 실행 때) — scott@hr_dev」 가 1280 창에서 안 잘림·펼친 목록 줄도 안 잘림, 1280 창에서 상한 폭 콤보로도 넘침 없음, 960 창은 오른쪽부터 접고 접속 단추는 콤보 옆에 남음) 고치기 전 5개 실패·고친 뒤 통과 / MenuWidthTests·RoleSurfaceMatrixTests·RoleMenuFlowTests·ToolbarWhenTests 기대값 변화 없이 통과 / `dotnet build Oranda.sln -warnaserror`
+  - note: 결과: 상한 460 의 근거 — 1280 창 툴바 폭 1272 에서 명령 검색 200 + 여백 12 + 단추 18개·구분선 6개 557 을 빼면 콤보 칸(콤보 + 오른쪽 여백 6)에 503 DIP 가 남는다. 460(칸 466)이면 37 DIP(단추 하나 남짓) 여유가 있어 첫 실행 창에서 넘치지 않는다. 글 칸은 약 390 DIP(Inter 14 영문 약 50자, 「새 세션(첫 실행 때) — 」 뒤 사용자@DB 약 33자). 펼친 목록은 Avalonia 가 콤보 폭 이상으로 내용만큼 넓혀 따로 고칠 것 없음. 최소 240 이라 960 창에서는 맨 오른쪽 단추(설정 등)가 「…」 로 접힐 수 있다. 원인 Features/ConnectionManager/ConnectionCombo.cs(MinWidth 180·MaxWidth 320)·ConnectionManagerCommands.cs·SqlEditor/SqlEditorCommandHandler.cs·PlsqlEditor/PlsqlEditorCommands.cs 의 toolbar:main 순서 값 (win144)
+
 - [x] TSK-14-09: 한 세션 연결을 기능마다 다른 잠금이 지킴 → 연결 하나에 명령 잠금 하나 [win144] w:1 2026-10-26~2026-10-26
   - category: defect
   - domain: backend
@@ -1132,6 +1144,7 @@ graph LR
   TSK-14-02 --> TSK-14-08
   TSK-14-07 --> TSK-14-10
   TSK-14-10 --> TSK-14-11
+  TSK-14-11 --> TSK-14-12
   TSK-14-05 --> TSK-14-09
   style TSK-01-02 fill:#e8f5e9,stroke:#2e7d32
   style TSK-03-01 stroke:#c62828,stroke-width:2px

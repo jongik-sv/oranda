@@ -19,7 +19,7 @@ namespace Oranda.App.Features.PlsqlEditor;
 /// TSK-08-01 PL/SQL 소스 편집·컴파일 명령 처리기(commands.md 7장). 서비스는 실행할 때 꺼낸다(시작 경로에서 Oracle 어셈블리를 올리지 않기 위해).
 /// 셸의 처리기 팩터리(DI)가 <see cref="IServiceProvider"/> 를 넣어 준다. 인자 없는 생성자는 아무것도 하지 않는다.
 /// </summary>
-[OrandaCommand("oranda.file.newPlsqlEditor", CommandCategory.File, Title = "새 PL/SQL 편집기", Icon = "newPlsql", Placements = ["menu:file/newPlsqlEditor@15", "toolbar:main/newPlsql@15"])]
+[OrandaCommand("oranda.file.newPlsqlEditor", CommandCategory.File, Title = "새 PL/SQL 편집기", Icon = "newPlsql", Placements = ["menu:file/newPlsqlEditor@15", "toolbar:main/newPlsql@115"])]
 [OrandaCommand("oranda.view.compileErrors", CommandCategory.View, Title = "컴파일 오류")]
 [OrandaCommand("oranda.plsql.openSource", CommandCategory.Database, Title = "PL/SQL 소스 열기", When = "schemaFocus", Enablement = "plsqlNodeSelected",
     Placements = ["context:schema/plsql@50"])]

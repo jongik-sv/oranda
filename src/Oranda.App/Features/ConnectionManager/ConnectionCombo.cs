@@ -325,12 +325,16 @@ public sealed class ConnectionComboViewModel : ViewModelBase
 /// <summary>툴바 맨 왼쪽의 접속 콤보 View. 항목 = 환경 칩 + 「번호 - 사용자@이름」.</summary>
 public sealed class ConnectionComboView : UserControl
 {
+    public const double MinComboWidth = 240;
+
+    public const double MaxComboWidth = 460;
+
     public ConnectionComboView()
     {
         var combo = new ComboBox
         {
-            MinWidth = 180,
-            MaxWidth = 320,
+            MinWidth = MinComboWidth,
+            MaxWidth = MaxComboWidth,
             VerticalAlignment = VerticalAlignment.Center,
             Margin = new Thickness(0, 0, 6, 0),
             ItemTemplate = new FuncDataTemplate<ConnectionComboItem>((item, _) => ItemView(item), supportsRecycling: false),
