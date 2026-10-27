@@ -153,15 +153,19 @@ internal static class PrdMatrix
         ("oranda.conn.manage", null),
     ];
 
-    /// <summary>시작 작업 14개 중 MyBatis 4개(RL-04, 조사 1.8).</summary>
+    /// <summary>시작 작업 16개 중 MyBatis 4개(RL-04, 조사 1.8).</summary>
     public static readonly string[] MyBatisTasks = ["MyBatisConvertReady", "MyBatisFolderReadyTask", "MyBatisWorkspaceWiring", "MapperWatchStartup"];
 
-    /// <summary>a507d81 의 시작 작업 14개.</summary>
+    /// <summary>
+    /// 시작 작업 16개 = a507d81 의 14개 + 그 뒤 더한 공통 2개: 「세션」 도구 창 자동 보이기(<c>SessionsAutoShow</c>, d02a414 TSK-14-04, 접속 = 공통)·
+    /// 메타데이터 캐시 보관 일수 정리(<c>MetadataCachePruner</c>, 6559bc0, Platform 저장소 = 공통).
+    /// </summary>
     public static readonly string[] AllTasks =
     [
         "EditorDiagnosticsStartup", "MyBatisConvertReady", "MyBatisFolderReadyTask", "MyBatisWorkspaceWiring", "MapperWatchStartup",
         "NavigationWiring", "PlsqlWorkspacePersistence", "RecentFilesStartup", "ResultGridSettingsStartup", "SqlEditorDockWiring",
         "UpdateStartup", "HistoryRecorder", "ChangeJournalRecorder", "PlSqlWarmUpTask",
+        "SessionsAutoShow", "MetadataCachePruner",
     ];
 
     /// <summary>켜진 기능으로 정답 시작 작업 이름 집합(TRD 10.2·10.7.2: PL/SQL 작업 공간 형은 plsqlEditor 에 매달린다).</summary>

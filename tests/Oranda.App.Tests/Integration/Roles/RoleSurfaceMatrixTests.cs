@@ -293,7 +293,7 @@ public sealed class RoleSurfaceMatrixTests
             Assert.Equal(a.TopMenus, b.TopMenus);
             Assert.Equal(a.StatusTypes.Order(), b.StatusTypes.Order());
             Assert.Equal(a.StartupTasks.Order(), b.StartupTasks.Order());
-            Assert.Equal(9, a.StartupTasks.Count);
+            Assert.Equal(11, a.StartupTasks.Count);
             Assert.Equal(10, a.TopMenus.Count); // 「모니터」 가 없다
             Assert.True(a.RegistryCommands.Count < ShellTestHelpers.AppContributions.Commands.Count);
         }
@@ -314,14 +314,14 @@ public sealed class RoleSurfaceMatrixTests
         Assert.Equal(all.Panels.Count, s.RegistryPanels.Count);
         Assert.Equal(11, s.TopMenus.Count);
         Assert.Equal(10, s.StatusTypes.Count);
-        Assert.Equal(14, s.StartupTasks.Count);
+        Assert.Equal(16, s.StartupTasks.Count);
         Assert.Empty(s.SkippedTasks);
         Assert.Equal(PrdMatrix.AllFeatures.Order(), s.GateEnabled.Order());
         Assert.False(s.GateReadOnlyRole);
         Assert.Equal(PrdMatrix.AllTasks.Order(), s.StartupTasks.Order());
 
-        // 조사 0절의 숫자(명령 281·도구 창 33·상태 칸 10·시작 작업 14) + WP-07 이 더한 것(기능 Role 고르기 명령 1개). 도구 창 33 = 개발 빌드 전용 포함.
-        Assert.Equal(282, all.Commands.Count);
+        // 조사 0절의 숫자(명령 281·도구 창 33·상태 칸 10·시작 작업 14) + WP-07 이 더한 것(기능 Role 고르기 명령 1개) + 도움말 「새 기능」(oranda.help.releaseNotes, eab3889) 1개. 시작 작업은 그 뒤 공통 2개를 더해 16(PrdMatrix.AllTasks). 도구 창 33 = 개발 빌드 전용 포함.
+        Assert.Equal(283, all.Commands.Count);
     });
 
     private static RoleSurface? _baseline;
