@@ -4,6 +4,8 @@ using System.ComponentModel;
 using System.Globalization;
 using System.Text.RegularExpressions;
 using CommunityToolkit.Mvvm.ComponentModel;
+using Oranda.App.Features.Ai.Agent;
+using Oranda.App.Features.Ai.Settings;
 using Oranda.App.Features.Localization;
 using Oranda.App.ViewModels;
 using Oranda.Core.Connection;
@@ -346,6 +348,38 @@ public sealed partial class ProfileEditorViewModel : ViewModelBase
     /// <summary>편집을 시작할 때의 폼 값. 지금 값과 다르면 <see cref="IsDirty"/>.</summary>
     private FormState _baseline;
 
+    private ConnectionAiAccessViewModel? _aiAccess;
+
+    /// <summary>「AI 허용 수준」 영역을 보인다: aiTuning 기능이 켜져 있을 때만(앱 밖에서는 보이지 않는다).</summary>
+    public bool AiVisible { get; set; } = (Avalonia.Application.Current as App)?.Services?.GetService<Oranda.Core.Features.IFeatureGate>()
+        ?.IsEnabled(Oranda.Core.Features.FeatureIds.AiTuning) ?? false;
+
+    /// <summary>「AI」 쪽 모델(AI 허용 수준·EXPLAIN 허용). 환경 라벨이 바뀌면 상한이 따라 바뀐다.</summary>
+    public ConnectionAiAccessViewModel AiAccess => _aiAccess ??= CreateAiAccess();
+
+    private ConnectionAiAccessViewModel CreateAiAccess()
+    {
+        var model = new ConnectionAiAccessViewModel(Original with { Environment = Environment }) { ConnectionName = Name.Trim() };
+        model.PropertyChanged += (_, _) => RefreshDerived();
+        return model;
+    }
+
+    partial void OnNameChanged(string value)
+    {
+        if (_aiAccess is not null)
+        {
+            _aiAccess.ConnectionName = value.Trim();
+        }
+    }
+
+    partial void OnEnvironmentChanged(ConnectionEnvironment value)
+    {
+        if (_aiAccess is not null)
+        {
+            _aiAccess.Environment = value;
+        }
+    }
+
     public ProfileEditorViewModel()
     {
         _baseline = Capture();
@@ -504,6 +538,7 @@ public sealed partial class ProfileEditorViewModel : ViewModelBase
             vm._loading = false;
         }
 
+        vm._aiAccess = vm.CreateAiAccess(); // 기준 값을 잡기 전에 만들어 둔다(나중에 만들면 저장된 허용 수준이 변경으로 보인다)
         vm._baseline = vm.Capture();
         vm.RefreshDerived();
         return vm;
@@ -633,14 +668,14 @@ public sealed partial class ProfileEditorViewModel : ViewModelBase
     private FormState Capture() => new(
         Name, Group, Environment, ColorText, Mode, Host, Port, Service, UseTls, UseSid, EasyConnect, TnsAlias, TnsAdmin, WalletLocation,
         User, SavePassword, Auth, ProxyUser, ReadOnly, LicensePack, ConnectTimeoutSeconds, KeepAliveSeconds,
-        NlsDateFormat, NlsTimestampFormat, NlsLanguage, NlsTerritory, NlsSort, Comment);
+        NlsDateFormat, NlsTimestampFormat, NlsLanguage, NlsTerritory, NlsSort, Comment, _aiAccess?.Draft.AiAccess, _aiAccess?.Draft.AllowExplainPlan);
 
     private sealed record FormState(
         string Name, string Group, ConnectionEnvironment Environment, string ColorText, ConnectionMode Mode, string Host, string Port,
         string Service, bool UseTls, bool UseSid, string EasyConnect, string TnsAlias, string TnsAdmin, string WalletLocation, string User,
         bool SavePassword, AuthMode Auth, string ProxyUser, bool ReadOnly, LicensePack LicensePack, decimal ConnectTimeoutSeconds,
         decimal KeepAliveSeconds, string NlsDateFormat, string NlsTimestampFormat, string NlsLanguage, string NlsTerritory, string NlsSort,
-        string Comment);
+        string Comment, Oranda.Core.Ai.Access.AiAccessLevel? AiAccess, bool? AiExplain);
 
     /// <summary>검증을 거쳐 프로필로 만든다. 문제가 있으면 null 과 문제 목록.</summary>
     public ConnectionProfile? TryBuild(out IReadOnlyList<string> errors)
@@ -686,6 +721,17 @@ public sealed partial class ProfileEditorViewModel : ViewModelBase
         };
 
         var tnsAdmin = IsTnsMode ? NullIfBlank(TnsAdmin) : null;
+        var ai = AiAccess.Result;
+        if (!AiVisible && AiAccess.NeedsNameConfirmation)
+        {
+            // 영역이 숨겨져 이름을 다시 입력할 수 없다: 올라가는 수준을 저장하지 않고 환경의 기본값(운영은 끔)으로 둔다.
+            ai = ai with { AiAccess = null };
+        }
+        else if (!AiAccess.CanSave)
+        {
+            list.Add("AI 허용 수준을 올리려면 「AI」 쪽에서 접속 이름을 다시 입력하세요.");
+        }
+
         var profile = Original with
         {
             Name = Name.Trim(),
@@ -704,11 +750,32 @@ public sealed partial class ProfileEditorViewModel : ViewModelBase
             Color = color,
             Group = NullIfBlank(Group),
             Comment = NullIfBlank(Comment),
+            AiAccess = ai.AiAccess,
+            AllowExplainPlan = ai.AllowExplainPlan,
         };
 
         list.AddRange(ConnectionProfileValidator.Validate(profile));
         errors = list;
-        return list.Count == 0 ? profile : null;
+        if (list.Count == 0)
+        {
+            RevokeAgentRunsIfAiChanged(profile);
+            return profile;
+        }
+
+        return null;
+    }
+
+    /// <summary>
+    /// 환경 라벨·AI 허용 수준·EXPLAIN 허용이 바뀐 접속의 진행 중인 AI 요청을 폐기한다. 요청은 시작 때의 접속 사본으로 판단하므로 바뀐 설정이 따라가지 않는다.
+    /// 저장하지 않고 접속 시험만 해도 폐기될 수 있다(안전한 쪽으로 틀린다).
+    /// </summary>
+    private void RevokeAgentRunsIfAiChanged(ConnectionProfile profile)
+    {
+        if (!IsNew
+            && (profile.Environment != Original.Environment || profile.AiAccess != Original.AiAccess || profile.AllowExplainPlan != Original.AllowExplainPlan))
+        {
+            AppAgentSessionSource.Current?.RevokeProfile(Original.Id);
+        }
     }
 
 

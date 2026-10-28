@@ -50,6 +50,7 @@ public class TuningMenuTests
         [
             "oranda.plan.explain", "oranda.plan.actual", "oranda.plan.displayCursorOptions", "oranda.plan.pinForCompare", "oranda.plan.compare",
             "oranda.monitor.sql", "oranda.monitor.sqlSearch", "oranda.monitor.sqlShowPlan", "oranda.monitor.sqlShowBinds",
+            "oranda.ai.tune",
         ];
         Assert.Equal(expected, ids.Where(id => !id.StartsWith("oranda.tuning.", StringComparison.Ordinal))); // oranda.tuning.* 은 각 Task 가 더한다
     }

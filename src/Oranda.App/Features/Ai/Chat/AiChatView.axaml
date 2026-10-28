@@ -1,0 +1,58 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:Oranda.App.Features.Ai.Chat"
+             xmlns:icons="using:Oranda.App.Shell.Icons"
+             x:Class="Oranda.App.Features.Ai.Chat.AiChatView"
+             x:DataType="vm:AiChatViewModel">
+  <!-- AI 대화 창 최소판(시안 8): 제목 줄 · 사용자 글 / 접힌 도구 카드 / AI 글 · 이어 말하기 입력 · 상태 · 멈춤/보내기. -->
+  <DockPanel>
+    <TextBlock x:Name="TitleText" DockPanel.Dock="Top" Text="{Binding Title}" Margin="10,8" Opacity="0.8"
+               FontSize="{DynamicResource OrandaFontSizeSmall}" TextTrimming="CharacterEllipsis" />
+    <Border DockPanel.Dock="Bottom" BorderBrush="{DynamicResource OrandaSeparatorBrush}" BorderThickness="0,1,0,0" Padding="8">
+      <StackPanel Spacing="6">
+        <TextBox x:Name="DraftBox" Text="{Binding Draft, Mode=TwoWay}" AcceptsReturn="True" TextWrapping="Wrap" MinHeight="48" MaxHeight="120"
+                 PlaceholderText="방향을 바꾸려면 적어 주세요" IsEnabled="{Binding !IsRunning}" AutomationProperties.Name="AI 에게 보낼 글">
+          <TextBox.KeyBindings>
+            <KeyBinding Gesture="Enter" Command="{Binding SendCommand}" />
+          </TextBox.KeyBindings>
+        </TextBox>
+        <Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="6">
+          <TextBlock x:Name="StatusLine" Text="{Binding StatusText}" VerticalAlignment="Center" Opacity="0.7"
+                     FontSize="{DynamicResource OrandaFontSizeSmall}" />
+          <Button x:Name="StopButton" Grid.Column="1" Classes="tool" Content="멈춤" icons:ButtonIcon.Key="cancel" Command="{Binding StopCommand}" />
+          <Button x:Name="SendButton" Grid.Column="2" Classes="tool" Content="보내기" icons:ButtonIcon.Key="run" Command="{Binding SendCommand}" />
+        </Grid>
+      </StackPanel>
+    </Border>
+    <ScrollViewer HorizontalScrollBarVisibility="Disabled">
+      <ItemsControl x:Name="EntryList" ItemsSource="{Binding Entries}" Margin="8" AutomationProperties.Name="대화">
+        <ItemsControl.ItemsPanel>
+          <ItemsPanelTemplate>
+            <StackPanel Spacing="6" />
+          </ItemsPanelTemplate>
+        </ItemsControl.ItemsPanel>
+        <ItemsControl.DataTemplates>
+          <DataTemplate x:DataType="vm:ChatUserEntry">
+            <Border HorizontalAlignment="Right" MaxWidth="360" Padding="10,6" CornerRadius="8,8,2,8"
+                    Background="{DynamicResource OrandaToolbarPressedBrush}">
+              <TextBlock Text="{Binding Text}" TextWrapping="Wrap" />
+            </Border>
+          </DataTemplate>
+          <DataTemplate x:DataType="vm:ChatToolEntry">
+            <Grid ColumnDefinitions="16,*,Auto,Auto" ColumnSpacing="8" ClipToBounds="True">
+              <TextBlock Text="{Binding Mark}" Opacity="0.8" FontSize="{DynamicResource OrandaFontSizeSmall}" />
+              <TextBlock Grid.Column="1" Text="{Binding Name}" FontFamily="Consolas,Menlo,monospace" TextTrimming="CharacterEllipsis"
+                         FontSize="{DynamicResource OrandaFontSizeSmall}" ToolTip.Tip="{Binding Name}" />
+              <TextBlock Grid.Column="2" Text="{Binding ResponseSize}" Opacity="0.6" FontSize="{DynamicResource OrandaFontSizeSmall}" />
+              <TextBlock Grid.Column="3" Text="{Binding Verdict}" MinWidth="36" TextAlignment="Right" Opacity="0.8"
+                         FontSize="{DynamicResource OrandaFontSizeSmall}" />
+            </Grid>
+          </DataTemplate>
+          <DataTemplate x:DataType="vm:ChatAssistantEntry">
+            <TextBlock Text="{Binding Text}" TextWrapping="Wrap" />
+          </DataTemplate>
+        </ItemsControl.DataTemplates>
+      </ItemsControl>
+    </ScrollViewer>
+  </DockPanel>
+</UserControl>

@@ -241,23 +241,42 @@ public static class MenuModelBuilder
         return bar;
     }
 
+    /// <summary>
+    /// 툴바 모델. <c>toolbar:main/&lt;이름&gt;@n</c> 은 단추 하나, <c>toolbar:main/&lt;부모 이름&gt;/&lt;자식 이름&gt;@n</c> 은 그 단추의 ▾ 자식 메뉴 줄(나눔 단추).
+    /// 자식이 하나라도 붙은 단추는 <see cref="MenuNode.Children"/> 을 채운 나눔 단추가 되고, 부모 단추가 없는 자식은 버린다.
+    /// </summary>
     public static IReadOnlyList<MenuNode> BuildToolbar(IEnumerable<CommandDefinition> commands, IShellText text, Func<string, string?> shortcut)
     {
         var items = new List<(Placement P, MenuNode N)>();
+        var children = new List<(Placement P, MenuNode N)>();
         foreach (var c in commands)
         {
             foreach (var raw in c.Placements)
             {
                 if (Placement.TryParse(raw, out var p) && p is { Surface: "toolbar" } && p.Path[0] == "main")
                 {
-                    items.Add((p, new MenuNode(MenuNodeKind.Command, text.Title(c), p.Order)
+                    var node = new MenuNode(MenuNodeKind.Command, text.Title(c), p.Order)
                     {
                         CommandId = c.Id,
                         Shortcut = shortcut(c.Id),
                         Icon = c.Icon,
                         When = c.When, // 툴바도 명령의 When 을 따른다(TRD 11.3, MenuVisibility.Toolbar)
                         Enablement = c.Enablement,
-                    }));
+                    };
+                    (p.Path.Count >= 3 ? children : items).Add((p, node));
+                }
+            }
+        }
+
+        if (children.Count > 0)
+        {
+            for (var i = 0; i < items.Count; i++)
+            {
+                var (p, node) = items[i];
+                var own = children.Where(ch => p.Path.Count >= 2 && string.Equals(ch.P.Path[1], p.Path[1], StringComparison.Ordinal)).ToList();
+                if (own.Count > 0)
+                {
+                    items[i] = (p, node with { Children = WithSeparators(own) });
                 }
             }
         }

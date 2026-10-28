@@ -132,6 +132,7 @@ public class ToolbarWhenTests
             {
                 ["oranda.exec.runStatement"] = "sqlDocFocus",
                 ["oranda.exec.runScript"] = "sqlDocFocus",
+                ["oranda.ai.tune"] = "sqlDocFocus",
                 ["oranda.exec.cancel"] = "sqlDocFocus",
                 ["oranda.plan.explain"] = "sqlDocFocus",
                 ["oranda.format.document"] = "editorFocus",

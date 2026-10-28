@@ -4,6 +4,7 @@ using System.Runtime.CompilerServices;
 using System.Text.Json;
 using Oranda.Core.Ai.Contracts;
 using Oranda.Core.Ai.Gate;
+using Oranda.Core.Composition;
 using Oranda.Core.Settings;
 using Oranda.Core.Storage;
 using Oranda.Platform.Ai.Bridge;
@@ -17,6 +18,7 @@ namespace Oranda.Platform.Ai.Cli;
 /// <c>--resume</c> 때도 같은 옵션을 모두 다시 준다(<see cref="ClaudeCliArguments"/>). 시작 직후 <c>system/init</c> 으로
 /// 실제 붙은 MCP 서버와 도구를 확인하고, orandactl 밖의 서버·도구가 있거나 orandactl 도구가 없으면 곧바로 끝낸다.
 /// </summary>
+[OrandaService(typeof(IAiDriver))]
 internal sealed class CliDriver : IAiDriver
 {
     private const int MaxArgumentSummaryChars = 300;

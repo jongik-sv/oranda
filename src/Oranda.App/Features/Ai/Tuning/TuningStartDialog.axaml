@@ -1,0 +1,66 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:t="using:Oranda.App.Features.Ai.Tuning"
+        x:Class="Oranda.App.Features.Ai.Tuning.TuningStartDialog"
+        x:DataType="t:TuningStartViewModel"
+        Title="AI 튜닝 시작"
+        Width="470" SizeToContent="Height" CanResize="False"
+        WindowStartupLocation="CenterOwner"
+        ShowInTaskbar="False"
+        FontSize="{DynamicResource OrandaFontSizeBase}">
+  <!-- AI 튜닝 시작 확인(시안 9): 대상 문장 · 공유 풀 · 먼저 보낼 것 / 요청 시 줄 것 / 보내지 않음 · 벤치마크·인덱스 문안·모델 · 취소/튜닝 시작. -->
+  <StackPanel Margin="14" Spacing="10">
+    <StackPanel Spacing="2">
+      <TextBlock Text="{Binding Info.Title}" FontWeight="SemiBold" />
+      <TextBlock Text="{Binding Info.StatementSummary}" Opacity="0.7" FontSize="{DynamicResource OrandaFontSizeSmall}"
+                 TextTrimming="CharacterEllipsis" />
+    </StackPanel>
+
+    <Border x:Name="BlockedBanner" IsVisible="{Binding IsBlocked}" Padding="8,6" CornerRadius="4"
+            BorderBrush="{DynamicResource OrandaUncommittedBrush}" BorderThickness="1">
+      <TextBlock Text="{Binding BlockedMessage}" TextWrapping="Wrap" FontSize="{DynamicResource OrandaFontSizeSmall}" />
+    </Border>
+
+    <Grid ColumnDefinitions="96,*" RowDefinitions="Auto,Auto,Auto,Auto" ColumnSpacing="10" RowSpacing="6">
+      <Grid.Styles>
+        <Style Selector="TextBlock">
+          <Setter Property="FontSize" Value="{DynamicResource OrandaFontSizeSmall}" />
+        </Style>
+      </Grid.Styles>
+      <TextBlock Grid.Row="0" Text="공유 풀" Opacity="0.7" IsVisible="{Binding HasSharedPoolLine}" />
+      <TextBlock Grid.Row="0" Grid.Column="1" Text="{Binding Info.SharedPoolLine}" TextWrapping="Wrap" IsVisible="{Binding HasSharedPoolLine}" />
+      <TextBlock Grid.Row="1" Text="먼저 보낼 것" Opacity="0.7" />
+      <TextBlock x:Name="SendFirstText" Grid.Row="1" Grid.Column="1" Text="{Binding Info.SendFirst}" TextWrapping="Wrap" />
+      <TextBlock Grid.Row="2" Text="요청 시 줄 것" Opacity="0.7" />
+      <TextBlock x:Name="SendOnRequestText" Grid.Row="2" Grid.Column="1" Text="{Binding Info.SendOnRequest}" TextWrapping="Wrap" />
+      <TextBlock Grid.Row="3" Text="보내지 않음" Opacity="0.7" />
+      <TextBlock x:Name="NotSentText" Grid.Row="3" Grid.Column="1" Text="{Binding Info.NotSent}" TextWrapping="Wrap" />
+    </Grid>
+
+    <Border Height="1" Background="{DynamicResource OrandaSeparatorBrush}" />
+
+    <StackPanel Spacing="6">
+      <CheckBox x:Name="BenchmarkCheck" IsChecked="{Binding Benchmark}" IsEnabled="{Binding BenchmarkEnabled}"
+                Content="후보를 벤치마크로 비교 (SELECT 3회, 결과 동일성 확인 · 개발·시험 접속만)"
+                ToolTip.Tip="{Binding BenchmarkNote}" />
+      <CheckBox x:Name="IndexDdlCheck" IsChecked="{Binding IndexDdl}"
+                Content="인덱스 후보 CREATE 문안도 받기 (새 탭에만 넣고 실행하지 않음)" />
+      <Grid ColumnDefinitions="Auto,*" ColumnSpacing="10">
+        <TextBlock Text="모델" VerticalAlignment="Center" Opacity="0.7" />
+        <ComboBox x:Name="ModelCombo" Grid.Column="1" HorizontalAlignment="Stretch"
+                  ItemsSource="{Binding Models}" SelectedItem="{Binding Model}" AutomationProperties.Name="모델">
+          <ComboBox.ItemTemplate>
+            <DataTemplate x:DataType="t:TuningModelOption">
+              <TextBlock Text="{Binding Title}" TextTrimming="CharacterEllipsis" />
+            </DataTemplate>
+          </ComboBox.ItemTemplate>
+        </ComboBox>
+      </Grid>
+    </StackPanel>
+
+    <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8">
+      <Button x:Name="CancelButton" Content="취소" IsCancel="True" />
+      <Button x:Name="StartButton" Content="튜닝 시작" Command="{Binding StartCommand}" IsDefault="True" Classes="accent" />
+    </StackPanel>
+  </StackPanel>
+</Window>

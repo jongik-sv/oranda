@@ -70,15 +70,16 @@ public sealed class RegistryFilterTests
     {
         var gate = new FeatureGate();
         var (commands, panels) = Registries(gate);
-        var plainCommands = new CommandRegistry(Contributions.Commands);
-        var plainPanels = new ToolPanelRegistry(Contributions.Panels, includeDevBuildOnly: true);
+        // 「모든 기능」 에는 직접 켜는 기능(aiTuning)의 항목이 들지 않는다.
+        var plainCommands = new CommandRegistry(OptInItems.Without(Contributions.Commands));
+        var plainPanels = new ToolPanelRegistry(OptInItems.Without(Contributions.Panels), includeDevBuildOnly: true);
         var raised = 0;
         commands.CommandsChanged += (_, _) => raised++;
         panels.PanelsChanged += (_, _) => raised++;
 
         gate.Resolve(All);
 
-        Assert.Equal(Contributions.Commands.Count, commands.Commands.Count);
+        Assert.Equal(OptInItems.Without(Contributions.Commands).Count(), commands.Commands.Count);
         Assert.Equal(plainCommands.Commands, commands.Commands);
         Assert.Equal(plainPanels.Panels, panels.Panels);
         Assert.Equal(0, raised);
@@ -113,7 +114,7 @@ public sealed class RegistryFilterTests
         var release = new ToolPanelRegistry(Contributions.Panels, includeDevBuildOnly: false, new FeatureGate());
 
         Assert.Null(release.Find("oranda.panel.extensionTest"));
-        Assert.Equal(Contributions.Panels.Count(p => !p.DevBuildOnly), release.Panels.Count);
+        Assert.Equal(OptInItems.Without(Contributions.Panels).Count(p => !p.DevBuildOnly), release.Panels.Count);
     }
 
     // ── 거르기 ──────────────────────────────────────────────────────
@@ -392,7 +393,7 @@ public sealed class RegistryFilterTests
 
         // 「모든 기능 쓰기」 로 되돌리면 원래 집합.
         await settings.UpdateAsync(s => s with { Features = All });
-        await HeadlessHost.WaitUntil(() => commands.Commands.Count == Contributions.Commands.Count);
+        await HeadlessHost.WaitUntil(() => commands.Commands.Count == OptInItems.Without(Contributions.Commands).Count());
         Assert.Equal(MenuModelBuilder.TopMenus.Count, TopItems(h).Length);
 
         // 설정을 비우면(아무것도 고르지 않음) 기본 Role(SQL 개발자)이라 Lock 모니터·튜닝 명령이 다시 빠진다(D-013).

@@ -18,6 +18,7 @@ using Oranda.App.Shell.Features;
 using Oranda.App.Tests.Features.BlockerAlert;
 using Oranda.App.Tests.Features.PlsqlWorkspace;
 using Oranda.App.Tests.Features.Roles.Probes;
+using Oranda.App.Tests.Shell;
 using Oranda.App.Tests.Shell.Headless;
 using Oranda.App.Views;
 using Oranda.Core.Composition;
@@ -233,7 +234,13 @@ namespace Oranda.App.Tests.Features.Roles
                     RoleIds.Viewer => [.. MyBatisStartupTasks, "PlsqlWorkspacePersistence", "ChangeJournalRecorder"],
                     _ => ["PlsqlWorkspacePersistence"], // MyBatis 개발: PL/SQL 없음, 변경 일지는 있음
                 };
-                Assert.Equal(AllStartupTasks.Except(expectedOff).Order(StringComparer.Ordinal), names.Order(StringComparer.Ordinal));
+                // 직접 켜는 기능(aiTuning)의 작업은 모든 기능을 켠 가짜 게이트(role null)에서만 돌고, Role 로 고른 게이트에서는 꺼져 있다.
+                if (role is not null)
+                {
+                    expectedOff = [.. expectedOff, .. OptInItems.StartupTaskNames];
+                }
+
+                Assert.Equal(AllStartupTasks.Concat(OptInItems.StartupTaskNames).Except(expectedOff).Order(StringComparer.Ordinal), names.Order(StringComparer.Ordinal));
                 Assert.Equal(expectedOff.Order(StringComparer.Ordinal), skipped.Select(t => t.Name).Order(StringComparer.Ordinal));
                 Assert.Contains("PlSqlWarmUpTask", names); // Language 의 공통 작업은 늘 돈다
             }

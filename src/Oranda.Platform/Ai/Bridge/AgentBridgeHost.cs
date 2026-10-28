@@ -1,8 +1,10 @@
 using System.Reflection;
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using Oranda.Core.Ai.Bridge;
 using Oranda.Core.Ai.Gate;
 using Oranda.Core.Ai.Protocol;
+using Oranda.Core.Composition;
 using Oranda.Core.Storage;
 using static Oranda.Core.Ai.Protocol.AgentRpc;
 
@@ -20,7 +22,8 @@ internal interface IAgentBridgeEndpoint
 /// 그 전의 다른 메서드는 <see cref="ErrorCodes.HelloRequired"/>, 토큰이 없으면 <see cref="ErrorCodes.RunRequired"/>,
 /// 모르거나 폐기된 토큰은 <see cref="ErrorCodes.TokenInvalid"/> 로 거절한다. 연결은 한 번에 하나, 요청은 차례로 처리한다.
 /// </summary>
-internal sealed class AgentBridgeHost : IAgentBridgeEndpoint, IAsyncDisposable
+[OrandaService(typeof(IAgentBridgeHost))]
+internal sealed class AgentBridgeHost : IAgentBridgeEndpoint, IAgentBridgeHost, IAsyncDisposable
 {
     private static readonly string ServerVersion =
         typeof(AgentBridgeHost).Assembly.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion ?? "0";

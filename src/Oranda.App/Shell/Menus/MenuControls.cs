@@ -550,13 +550,27 @@ public sealed class MenuControls(ICommandRegistry registry, IContextKeys keys, F
 
             // 아이콘이 있으면 아이콘만 그리고 이름은 툴팁으로 보인다(Orange·SQL Developer 툴바). 없으면 글자 단추.
             var icon = ShellIcons.Create(n.Icon);
-            var button = new Button
+            Button button;
+            if (n.Children.Count > 0)
             {
-                Content = icon ?? (object)n.Title,
-                Command = command,
-                Classes = { "toolbar", icon is null ? "toolbar-text" : "toolbar-icon" },
-                Tag = n.Icon, // 「…」 메뉴로 접힐 때 같은 아이콘을 다시 만든다(컨트롤은 한 부모만 갖는다).
-            };
+                // 나눔 단추: 주 동작 + ▾ 자식 메뉴. 넘침 「…」 메뉴에는 자식을 새로 만들어 싣는다(OverflowItems).
+                var flyout = new MenuFlyout();
+                foreach (var child in n.Children)
+                {
+                    flyout.Items.Add(child.Kind == MenuNodeKind.Separator ? new Separator() : MenuItemFor(child));
+                }
+
+                button = new ToolbarSplitButton(icon ?? (object)n.Title, flyout) { OverflowItems = () => BuildContextItems(n.Children) };
+            }
+            else
+            {
+                button = new Button { Content = icon ?? (object)n.Title };
+            }
+
+            button.Command = command;
+            button.Classes.Add("toolbar");
+            button.Classes.Add(icon is null ? "toolbar-text" : "toolbar-icon");
+            button.Tag = n.Icon; // 「…」 메뉴로 접힐 때 같은 아이콘을 다시 만든다(컨트롤은 한 부모만 갖는다).
             AutomationProperties.SetName(button, n.Title);
             ToolTip.SetTip(button, n.Shortcut is null ? n.Title : $"{n.Title} ({Keymaps.KeyBindingTable.ForScreen(n.Shortcut)})");
             _toolbar.Add((n, button));

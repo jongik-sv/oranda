@@ -1,0 +1,19 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:Oranda.App.Features.Ai.Settings"
+             x:Class="Oranda.App.Features.Ai.Settings.AiModelSettingsView"
+             x:DataType="vm:AiModelSettingsPage">
+  <!-- 설정 「AI 모델」 쪽 최소판(시안 1): 선택 안 함 / Claude Code + 모델. -->
+  <StackPanel Spacing="8">
+    <TextBlock Text="AI 모델" FontWeight="SemiBold" />
+    <RadioButton x:Name="NoneRadio" GroupName="aiProvider" Content="선택 안 함 (AI 단추를 비활성으로 두고 아무것도 호출하지 않습니다)"
+                 IsChecked="{Binding IsNone, Mode=TwoWay}" />
+    <RadioButton x:Name="ClaudeRadio" GroupName="aiProvider" Content="Claude Code (이 PC 에 로그인된 claude 를 씁니다)"
+                 IsChecked="{Binding IsClaudeCode, Mode=TwoWay}" />
+    <Grid ColumnDefinitions="Auto,200" ColumnSpacing="8" Margin="22,0,0,0">
+      <TextBlock Text="모델" VerticalAlignment="Center" />
+      <ComboBox x:Name="ModelBox" Grid.Column="1" HorizontalAlignment="Stretch" ItemsSource="{Binding Models}"
+                SelectedItem="{Binding Model, Mode=TwoWay}" IsEnabled="{Binding ModelEnabled}" AutomationProperties.Name="모델" />
+    </Grid>
+  </StackPanel>
+</UserControl>

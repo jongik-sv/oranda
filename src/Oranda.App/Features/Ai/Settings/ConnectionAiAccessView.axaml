@@ -1,0 +1,50 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:Oranda.App.Features.Ai.Settings"
+             x:Class="Oranda.App.Features.Ai.Settings.ConnectionAiAccessView"
+             x:DataType="vm:ConnectionAiAccessViewModel">
+  <!-- 접속 편집 「AI」 쪽(시안 5): 허용 수준 5칸 · 보내는 것/도구 · 운영 안내와 이름 확인 · EXPLAIN PLAN 허용. -->
+  <StackPanel Spacing="8">
+    <TextBlock Text="이 접속에서 AI 가 할 수 있는 일" FontWeight="SemiBold" />
+    <ItemsControl x:Name="LevelList" ItemsSource="{Binding Levels}" AutomationProperties.Name="허용 수준">
+      <ItemsControl.ItemsPanel>
+        <ItemsPanelTemplate>
+          <UniformGrid Rows="1" />
+        </ItemsPanelTemplate>
+      </ItemsControl.ItemsPanel>
+      <ItemsControl.ItemTemplate>
+        <DataTemplate x:DataType="vm:AiAccessLevelItem">
+          <ToggleButton Margin="0,0,4,0" HorizontalAlignment="Stretch" HorizontalContentAlignment="Left"
+                        IsChecked="{Binding IsSelected, Mode=OneWay}" IsEnabled="{Binding IsEnabled}"
+                        Command="{Binding $parent[ItemsControl].((vm:ConnectionAiAccessViewModel)DataContext).SelectLevelCommand}"
+                        CommandParameter="{Binding Level}" AutomationProperties.Name="{Binding Label}">
+            <StackPanel>
+              <TextBlock Text="{Binding Label}" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" />
+              <TextBlock Text="{Binding Sub}" Opacity="0.7" FontSize="{DynamicResource OrandaFontSizeSmall}" TextTrimming="CharacterEllipsis" />
+            </StackPanel>
+          </ToggleButton>
+        </DataTemplate>
+      </ItemsControl.ItemTemplate>
+    </ItemsControl>
+
+    <Border Padding="8,6" CornerRadius="4" BorderBrush="{DynamicResource OrandaSeparatorBrush}" BorderThickness="1">
+      <StackPanel Spacing="2" TextElement.FontSize="{DynamicResource OrandaFontSizeSmall}">
+        <TextBlock Text="보내는 것" Opacity="0.7" />
+        <TextBlock x:Name="SendsText" Text="{Binding SendsText}" TextWrapping="Wrap" />
+        <TextBlock Text="에이전트가 쓸 수 있는 도구" Opacity="0.7" Margin="0,4,0,0" />
+        <TextBlock x:Name="ToolsText" Text="{Binding ToolsText}" TextWrapping="Wrap" FontFamily="Consolas,Menlo,monospace" />
+      </StackPanel>
+    </Border>
+
+    <TextBlock x:Name="ProductionNote" IsVisible="{Binding IsProduction}" Text="{Binding ProductionText}" TextWrapping="Wrap"
+               FontSize="{DynamicResource OrandaFontSizeSmall}" Foreground="{DynamicResource OrandaUncommittedBrush}" />
+    <Grid x:Name="ConfirmRow" IsVisible="{Binding NeedsNameConfirmation}" ColumnDefinitions="Auto,*" ColumnSpacing="8">
+      <TextBlock Text="접속 이름 확인" VerticalAlignment="Center" />
+      <TextBox x:Name="ConfirmNameBox" Grid.Column="1" Text="{Binding ConfirmName, Mode=TwoWay}" PlaceholderText="{Binding ConfirmPlaceholder}"
+               AutomationProperties.Name="접속 이름 확인" />
+    </Grid>
+
+    <CheckBox x:Name="ExplainBox" IsChecked="{Binding ExplainAllowed}"
+              Content="EXPLAIN PLAN 허용 (PLAN__TABLE 에 행을 씁니다. 끄면 DISPLAY_CURSOR 로 실제 계획만 읽습니다)" />
+  </StackPanel>
+</UserControl>

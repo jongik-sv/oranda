@@ -347,6 +347,13 @@ public partial class MainWindow : Window
                 Command = button.Command,
                 Icon = ShellIcons.Create(button.Tag as string),
             });
+            if (button is ToolbarSplitButton { OverflowItems: { } more })
+            {
+                foreach (var item in more())
+                {
+                    flyout.Items.Add(item);
+                }
+            }
         }
 
         OverflowButton.Flyout = flyout;

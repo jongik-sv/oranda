@@ -1,9 +1,12 @@
 using System;
+using Oranda.App.Features.Ai.Agent;
 using Oranda.App.Shell.Appearance;
 using Oranda.App.Shell.Docking;
 using Oranda.App.Shell.Keymaps;
 using Oranda.App.Shell.Layout;
 using Oranda.App.Shell.Settings;
+using Oranda.Core.Ai.Bridge;
+using Oranda.Core.Ai.Gate;
 using Oranda.Core.Events;
 using Oranda.Core.Shell;
 using Oranda.Core.Storage;
@@ -62,6 +65,8 @@ public static class AppComposition
             container.AddInstance<IAppDataPaths>(new AppDataPaths(dir));
         }
 
+        RegisterAi(container);
+
         // 2) 셸 기여(명령·도구 창·상태 표시줄 구간) 수집과 레지스트리.
         var contributions = ShellContributions.Scan(typeof(AppComposition).Assembly);
         container.AddInstance(contributions);
@@ -90,5 +95,21 @@ public static class AppComposition
         container.AddFactory(typeof(IShellUi), c => c.GetRequiredService<ShellController>());
 
         return container;
+    }
+
+    /// <summary>
+    /// AI 튜닝 서비스(Core 구현은 스캔 대상이 아니라 직접 등록): 실행 토큰 저장소(앱 전체 하나)·에이전트 세션 출처·게이트.
+    /// 드라이버(<c>CliDriver</c>)와 다리(<c>AgentBridgeHost</c>)는 Platform 이 [OrandaService] 로 올리고, 다리를 여는 일은 시작 작업이 aiTuning 이 켜졌을 때만 한다.
+    /// 드라이버가 받는 다리 끝점(<c>IAgentBridgeEndpoint</c>)은 Platform 안쪽 형식이라 이름으로 찾아, 시작 작업이 여는 다리와 같은 인스턴스를 쓰게 잇는다.
+    /// </summary>
+    private static void RegisterAi(ServiceContainer container)
+    {
+        container.AddType(typeof(IAgentRunTokens), typeof(AgentRunTokenStore));
+        container.AddFactory(typeof(IAgentSessionSource), c => new AppAgentSessionSource(c).Publish());
+        container.AddType(typeof(IAgentGate), typeof(AgentGate));
+        if (typeof(PlatformAssembly).Assembly.GetType("Oranda.Platform.Ai.Bridge.IAgentBridgeEndpoint") is { } endpoint)
+        {
+            container.AddFactory(endpoint, c => c.GetRequiredService<IAgentBridgeHost>());
+        }
     }
 }

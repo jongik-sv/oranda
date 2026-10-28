@@ -1,6 +1,7 @@
 <Window xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:settings="using:Oranda.App.Shell.Settings"
+        xmlns:aiSettings="using:Oranda.App.Features.Ai.Settings"
         x:Class="Oranda.App.Shell.Settings.SettingsWindow"
         x:DataType="settings:SettingsViewModel"
         Title="{Binding TitleText}"
@@ -343,6 +344,9 @@
             </StackPanel>
           </Grid>
         </ScrollViewer>
+      </TabItem>
+      <TabItem x:Name="AiModelTab" Header="{Binding Strings[tab.ai]}" IsVisible="{Binding AiTabVisible}">
+        <aiSettings:AiModelSettingsView DataContext="{Binding AiModel}" />
       </TabItem>
     </TabControl>
     <TextBlock Grid.Row="1" Text="{Binding Notice}" IsVisible="{Binding HasNotice}"

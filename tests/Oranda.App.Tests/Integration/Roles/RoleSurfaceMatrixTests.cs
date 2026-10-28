@@ -205,7 +205,7 @@ public sealed class RoleSurfaceMatrixTests
             // ---- 상태 칸·시작 작업 ----
             Assert.Equal(PrdMatrix.ExpectedStatusTypes(expected, baseline.StatusTypes).Order(), s.StatusTypes.Order());
             Assert.Equal(PrdMatrix.ExpectedTasks(expected).Order(), s.StartupTasks.Order());
-            Assert.Equal(PrdMatrix.AllTasks.Except(PrdMatrix.ExpectedTasks(expected)).Order(), s.SkippedTasks.Order());
+            Assert.Equal(PrdMatrix.AllTasks.Except(PrdMatrix.ExpectedTasks(expected)).Concat(OptInItems.StartupTaskNames).Order(), s.SkippedTasks.Order()); // 직접 켜는 기능의 작업은 늘 건너뛴다
             Assert.Contains("PlSqlWarmUpTask", s.StartupTasks); // Language 의 공통 작업은 늘 돈다
             Assert.Equal(expected.Contains("blockerAlert"), app.BlockerChip() is not null);
         }
@@ -310,18 +310,18 @@ public sealed class RoleSurfaceMatrixTests
         var s = await BaselineAsync();
         var all = ShellTestHelpers.AppContributions;
 
-        Assert.Equal(all.Commands.Count, s.RegistryCommands.Count);
-        Assert.Equal(all.Panels.Count, s.RegistryPanels.Count);
+        Assert.Equal(OptInItems.Without(all.Commands).Count(), s.RegistryCommands.Count); // 직접 켜는 기능(aiTuning)의 항목은 「모든 기능」 에 들지 않는다
+        Assert.Equal(OptInItems.Without(all.Panels).Count(), s.RegistryPanels.Count);
         Assert.Equal(11, s.TopMenus.Count);
         Assert.Equal(10, s.StatusTypes.Count);
         Assert.Equal(16, s.StartupTasks.Count);
-        Assert.Empty(s.SkippedTasks);
+        Assert.Equal(OptInItems.StartupTaskNames.Order(StringComparer.Ordinal), s.SkippedTasks.Order(StringComparer.Ordinal));
         Assert.Equal(PrdMatrix.AllFeatures.Order(), s.GateEnabled.Order());
         Assert.False(s.GateReadOnlyRole);
         Assert.Equal(PrdMatrix.AllTasks.Order(), s.StartupTasks.Order());
 
         // 조사 0절의 숫자(명령 281·도구 창 33·상태 칸 10·시작 작업 14) + WP-07 이 더한 것(기능 Role 고르기 명령 1개) + 도움말 「새 기능」(oranda.help.releaseNotes, eab3889) 1개 + 튜닝 「튜닝 추천」(oranda.tuning.recommend, TSK-14-17) 1개. 시작 작업은 그 뒤 공통 2개를 더해 16(PrdMatrix.AllTasks). 도구 창 33 = 개발 빌드 전용 포함.
-        Assert.Equal(284, all.Commands.Count);
+        Assert.Equal(284, OptInItems.Without(all.Commands).Count());
     });
 
     private static RoleSurface? _baseline;

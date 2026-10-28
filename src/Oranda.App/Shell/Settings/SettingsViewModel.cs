@@ -4,11 +4,13 @@ using System.Linq;
 using System.Threading.Tasks;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using Oranda.App.Features.Ai.Settings;
 using Oranda.App.Features.FormatterProfiles;
 using Oranda.App.Features.Localization;
 using Oranda.App.Features.Update;
 using Oranda.App.Shell.Appearance;
 using Oranda.App.ViewModels;
+using Oranda.Core.Events;
 using Oranda.Core.Execution;
 using Oranda.Core.Features;
 using Oranda.Core.Formatting;
@@ -157,7 +159,14 @@ public sealed partial class SettingsViewModel : ViewModelBase
     /// <summary>「SQL 포맷」 탭의 순서(편집기 다음).</summary>
     public const int FormatTabIndex = 3;
 
-    /// <summary>업데이트 탭의 순서(<c>SettingsWindow.axaml</c> 의 마지막 탭).</summary>
+    /// <summary>「AI 모델」 쪽(시안 1). aiTuning 기능이 꺼져 있으면 탭을 보이지 않는다(<see cref="AiTabVisible"/>).</summary>
+    private AiSettings _aiSaved;
+
+    public AiModelSettingsPage AiModel { get; }
+
+    public bool AiTabVisible { get; }
+
+    /// <summary>업데이트 탭의 순서(<c>SettingsWindow.axaml</c> 의 업데이트 탭, 그 뒤에 AI 모델 탭).</summary>
     public const int UpdateTabIndex = 8;
 
     [ObservableProperty]
@@ -197,6 +206,10 @@ public sealed partial class SettingsViewModel : ViewModelBase
             settings.Current.Features,
             text,
             featureGate ?? (Avalonia.Application.Current as App)?.Services?.GetService<IFeatureGate>());
+        var gate = featureGate ?? (Avalonia.Application.Current as App)?.Services?.GetService<IFeatureGate>();
+        _aiSaved = settings.Current.Ai;
+        AiModel = new AiModelSettingsPage(settings.Current.Ai);
+        AiTabVisible = gate?.IsEnabled(FeatureIds.AiTuning) ?? false;
         Themes =
         [
             new ThemeChoice(Theme.System, text.Lookup("Shell.settings.theme.system")),
@@ -512,6 +525,7 @@ public sealed partial class SettingsViewModel : ViewModelBase
                     MaxAgeDays = (int)HistoryMaxAgeDays,
                 },
                 Monitor = s.Monitor with { RefreshSeconds = Math.Clamp((int)MonitorRefreshSeconds, 2, 60) },
+                Ai = AiModel.ToSettings(),
                 Workspace = s.Workspace with
                 {
                     AutosaveSeconds = Math.Clamp((int)AutosaveSeconds, 1, 10),
@@ -539,6 +553,7 @@ public sealed partial class SettingsViewModel : ViewModelBase
         }
 
         _pendingProfileId = null;
+        PublishAiChanged();
         UpdateService.Current?.RefreshSettings(); // 건너뛴 버전을 지웠으면 상태 표시줄 표시도 바로 맞춘다
         Features.AcceptSaved();
         if (allowStayOpen && featuresChanged && Features.HasPendingRestart)
@@ -550,6 +565,20 @@ public sealed partial class SettingsViewModel : ViewModelBase
 
         CloseRequested?.Invoke(this, EventArgs.Empty);
         return true;
+    }
+
+    /// <summary>
+    /// 설정 저장소는 <c>ai</c> 섹션이 바뀌어도 <see cref="SettingsChanged"/> 를 내지 않는다. AI 튜닝 명령의 문맥 키가 따라오도록 AI 모델이 바뀌었으면 여기서 알린다.
+    /// </summary>
+    private void PublishAiChanged()
+    {
+        if (_settings.Current.Ai == _aiSaved)
+        {
+            return;
+        }
+
+        _aiSaved = _settings.Current.Ai;
+        (Avalonia.Application.Current as App)?.Services?.GetService<IEventBus>()?.Publish(new SettingsChanged("ai"));
     }
 
     private static bool IsSaveError(Exception ex) =>

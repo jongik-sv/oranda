@@ -4,6 +4,7 @@ using Oranda.App.Features.Localization;
 using Oranda.App.Shell;
 using Oranda.App.Shell.Composition;
 using Oranda.App.Shell.Features;
+using Oranda.App.Tests.Shell;
 using Oranda.Core.Features;
 using Oranda.Core.Shell;
 
@@ -44,9 +45,9 @@ public sealed partial class FeatureContractTests
         var contributions = services.GetRequiredService<ShellContributions>();
 
         Assert.All(FeatureIds.All.Where(id => !FeatureCatalog.Find(id)!.OptIn), id => Assert.True(gate.IsEnabled(id), id));
-        Assert.All(contributions.Commands, c => Assert.True(gate.IsCommandEnabled(c.Definition.Id, c.HandlerType), c.Definition.Id));
-        Assert.All(contributions.Panels, p => Assert.True(gate.IsPanelEnabled(p.Id, p.ViewModelType), p.Id));
-        Assert.All(contributions.StatusBarItems, s => Assert.True(gate.IsTypeEnabled(s.ItemType), s.Id));
+        Assert.All(OptInItems.Without(contributions.Commands), c => Assert.True(gate.IsCommandEnabled(c.Definition.Id, c.HandlerType), c.Definition.Id));
+        Assert.All(OptInItems.Without(contributions.Panels), p => Assert.True(gate.IsPanelEnabled(p.Id, p.ViewModelType), p.Id));
+        Assert.All(contributions.StatusBarItems.Where(s => !OptInItems.Is(s.Id, s.ItemType)), s => Assert.True(gate.IsTypeEnabled(s.ItemType), s.Id));
         Assert.False(gate.ReadOnlyRole);
         Assert.Empty(gate.PendingRestart);
     }
