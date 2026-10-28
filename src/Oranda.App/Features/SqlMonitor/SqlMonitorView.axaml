@@ -459,6 +459,11 @@
             </Panel>
           </Border>
         </TabItem>
+
+        <!-- ───── 튜닝 추천(TSK-14-17): 규칙 기반, 수동 새로 고침 ───── -->
+        <TabItem Header="튜닝 추천">
+          <vm:TuningRecommendationsView x:Name="RecommendPane" DataContext="{Binding Recommendations}" />
+        </TabItem>
       </TabControl>
     </Grid>
   </DockPanel>

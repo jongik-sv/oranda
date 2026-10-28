@@ -254,6 +254,7 @@ public sealed partial class SqlMonitorViewModel
         _waits?.Reset();
         _awr?.Reset();
         _controls?.Reset();
+        _recommend?.Reset();
     }
 
     /// <summary>고른 SQL 이 바뀌었다.</summary>

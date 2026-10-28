@@ -33,5 +33,6 @@ public static class TuningCommands
         "oranda.tuning.tuningAdvisorScript",
         "oranda.tuning.baselineScript",
         "oranda.tuning.report",
+        "oranda.tuning.recommend",
     ];
 }

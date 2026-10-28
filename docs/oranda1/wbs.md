@@ -1141,6 +1141,18 @@ levels:
   - acceptance: RowViewerGridTests 6(네 열·숫자 번호·NULL 표시, 정렬·열 끌기·너비·열 필터·고른 칸이 다음 행으로 옮긴 뒤 남음, 80열 스크롤 유지, Ctrl+C 값·Ctrl+Shift+C 머리글 포함·메뉴 항목, LOB 두 번 누르기·Enter 로 값 보기, F2 → 아래 입력칸 → Enter 로 결과에 반영·강조색) / 기존 LobRowViewTests·LocalFilterTests 행 보기 시험 그대로 통과 / `dotnet build -warnaserror`
   - note: 바꾼 곳 = RowViewerView.axaml(.cs)(MonitorGrid + 아래 값 고치기 칸), RowViewerViewModel(ServiceContainer 생성자로 값 보기 처리기 잇기, OpenValueAsync, 다시 채워도 같은 열 계속 고름), LobRowViewCommandHandler.ViewValueAsync(그리드, 행, 열) 공개, MonitorGridBinder.DisplayOptions(행 보기는 결과의 NULL 글자). 그리드 열 머리글은 창을 만들 때의 언어로 정해진다(언어를 바꾸면 창을 다시 열 때 바뀜). 값 칸은 한 줄로 보이므로 긴 값은 값 보기·고치기 칸에서 본다 (win144)
 
+- [x] TSK-14-17: 세션·SQL 모니터에서 튜닝할 SQL 추천(규칙 기반 점수·이유·근거, 수동 새로 고침) [win144] w:1 2026-10-28~2026-10-28
+  - category: feat
+  - domain: fullstack
+  - model: opus
+  - priority: medium
+  - tags: sql-monitor, session-monitor, tuning, recommend, win144
+  - prd-ref: PRD 11, PRD 16, D-051
+  - depends: TSK-14-15
+  - requirements: 사용자 요구(2026-10-28) 「세션, SQL 모니터에서 튜닝 해야할 쿼리를 추천해주는 기능도 넣어 줄 수 있나?」. Core `TuningRecommendationRules`(순수 함수: SQL 통계 한 줄 + 선택적 계획 줄 → 점수·이유·근거 수치, 문턱값 상수, 내부 스키마·재귀 SQL·짧은 SQL 제외) / Oracle 카탈로그 `tuning.recommend_candidates`(gv$sqlstats 상위 N, 파싱 스키마는 그 줄에만)·`tuning.recommend_literals`(force_matching_signature 묶음)·`tuning.recommend_plan`(gv$sql_plan 눈여겨볼 줄 + 표 통계), 11g~26ai 한 파일·팩 없음·바인드 / SQL 모니터 「튜닝 추천」 탭(조회 결과 그리드 MonitorGrid, 점수·이유·SQL_ID·스키마·실행·실행당 경과·실행당 읽기·SQL, 고른 줄 = 이유 전체·근거·SQL 전문, 「튜닝 도우미로 열기」·「자식 커서」·「편집기로 열기」, 「내부 스키마 제외」 토글은 다시 묻지 않음) / 튜닝 메뉴 `oranda.tuning.recommend`(인자 sql_id 면 그 SQL 고름) / 세션 모니터 「튜닝 추천」 탭(활성 세션 SQL 검사·고른 세션 줄 「이 SQL 튜닝 추천: …」·「SQL 모니터의 튜닝 추천에서 보기」); 제약: LLM·외부 서비스 없음, AWR·ASH 안 씀, 자동 새로 고침 없음, 실앱 SendKeys 금지(Headless 까지); 비고: 레인 sr-rec
+  - acceptance: TuningRecommendationRulesTests 14(규칙마다 걸림/안 걸림·점수 순서·최대 100·0 나누기·NULL·실행 0·내부 제외·리터럴 묶음) / TuningCatalogTests(recommend_* 3개 팩 없음·11g·SELECT 전용·바인드·gv$sqlstats) / TuningRecommendLogicTests 2(sql_id 목록·행 매핑) / TuningRecommendTests 통합(26ai·11g 상주 컨테이너, 형태만) / TuningRecommendationTests 9(명령 등록·메뉴, 점수순 목록·토글, 행 선택 상세·전문, 도우미·자식 커서·편집기, 바로 가기 sql_id, 권한 오류·세션 없음, Headless 결과 그리드 줄·행 선택, 세션 탭 검사·고른 세션·이동, 활성 SQL 없음) / `dotnet build Oranda.sln -warnaserror`
+  - note: 결과: Core TuningRecommendation.cs, ITuningService 기본 구현 2개(GetTuningCandidatesAsync·GetPlanFindingsAsync), Oracle OracleTuningService.Recommend.cs, App SqlMonitor/TuningRecommendations*(뷰모델·뷰)·SqlMonitorViewModel.Recommend.cs, SessionMonitor/SessionTuningHints*·SessionMonitorViewModel.TuningHints.cs, 기존 axaml 에는 탭 한 줄씩. 후속 후보: 문턱값 설정화, AWR 기반 기간 추천(Diagnostics 선언 시), RAC 에서 파싱 스키마 부질의 비용 확인 (win144)
+
 ## 의존 그래프
 
 ### 그래프 (Mermaid)
@@ -1250,6 +1262,7 @@ graph LR
 
   TSK-13-37 --> TSK-14-15
   TSK-14-15 --> TSK-14-16
+  TSK-14-15 --> TSK-14-17
   style TSK-01-02 fill:#e8f5e9,stroke:#2e7d32
   style TSK-03-01 stroke:#c62828,stroke-width:2px
   style TSK-02-02 stroke:#c62828,stroke-width:2px

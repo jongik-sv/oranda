@@ -1,0 +1,29 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:icons="using:Oranda.App.Shell.Icons"
+             xmlns:vm="using:Oranda.App.Features.SessionMonitor"
+             x:Class="Oranda.App.Features.SessionMonitor.SessionTuningHintsView"
+             x:DataType="vm:SessionTuningHintsViewModel">
+  <!-- 세션 모니터 「튜닝 추천」 탭(TSK-14-17): 활성 세션 SQL 에 튜닝 추천 규칙을 적용(수동 검사). -->
+  <DockPanel>
+    <WrapPanel DockPanel.Dock="Top" Margin="4">
+      <Button x:Name="CheckButton" Classes="tool" Content="검사" IsEnabled="{Binding CanCheck}" icons:ButtonIcon.Key="find"
+              ToolTip.Tip="지금 활성 세션이 실행 중인 SQL 을 공유 풀 통계로 살펴봅니다(자동 반복 없음)" />
+      <Button x:Name="OpenButton" Classes="tool" Content="SQL 모니터의 튜닝 추천에서 보기" icons:ButtonIcon.Key="sqlMonitor"
+              IsEnabled="{Binding HasSelection}" IsVisible="{Binding CanOpenInSqlMonitor}" />
+    </WrapPanel>
+    <TextBlock DockPanel.Dock="Top" Margin="6,0,6,4" TextWrapping="Wrap" FontWeight="SemiBold" Text="{Binding SelectedSessionText}"
+               IsVisible="{Binding SelectedSessionText, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+    <TextBlock DockPanel.Dock="Bottom" Margin="6,4" TextWrapping="Wrap" Text="{Binding StatusText}" />
+    <TextBox DockPanel.Dock="Bottom" MaxHeight="160" Text="{Binding SelectedEvidence}" IsReadOnly="True" AcceptsReturn="True" TextWrapping="Wrap"
+             FontFamily="{StaticResource OrandaFixedFontFamily}" AutomationProperties.Name="추천 근거" />
+    <ListBox x:Name="HintList" ItemsSource="{Binding Items}" SelectedItem="{Binding SelectedHint, Mode=TwoWay}">
+      <ListBox.ItemTemplate>
+        <DataTemplate x:DataType="vm:SessionTuningHintItem">
+          <TextBlock Text="{Binding Title}" TextTrimming="CharacterEllipsis" FontFamily="{StaticResource OrandaFixedFontFamily}"
+                     ToolTip.Tip="{Binding Evidence}" />
+        </DataTemplate>
+      </ListBox.ItemTemplate>
+    </ListBox>
+  </DockPanel>
+</UserControl>

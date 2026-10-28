@@ -320,8 +320,8 @@ public sealed class RoleSurfaceMatrixTests
         Assert.False(s.GateReadOnlyRole);
         Assert.Equal(PrdMatrix.AllTasks.Order(), s.StartupTasks.Order());
 
-        // 조사 0절의 숫자(명령 281·도구 창 33·상태 칸 10·시작 작업 14) + WP-07 이 더한 것(기능 Role 고르기 명령 1개) + 도움말 「새 기능」(oranda.help.releaseNotes, eab3889) 1개. 시작 작업은 그 뒤 공통 2개를 더해 16(PrdMatrix.AllTasks). 도구 창 33 = 개발 빌드 전용 포함.
-        Assert.Equal(283, all.Commands.Count);
+        // 조사 0절의 숫자(명령 281·도구 창 33·상태 칸 10·시작 작업 14) + WP-07 이 더한 것(기능 Role 고르기 명령 1개) + 도움말 「새 기능」(oranda.help.releaseNotes, eab3889) 1개 + 튜닝 「튜닝 추천」(oranda.tuning.recommend, TSK-14-17) 1개. 시작 작업은 그 뒤 공통 2개를 더해 16(PrdMatrix.AllTasks). 도구 창 33 = 개발 빌드 전용 포함.
+        Assert.Equal(284, all.Commands.Count);
     });
 
     private static RoleSurface? _baseline;

@@ -15,7 +15,7 @@ public partial class TuningCatalogTests
     {
         "tuning.table_stats", "tuning.column_stats", "tuning.histogram", "tuning.index_stats", "tuning.index_columns",
         "tuning.child_cursors", "tuning.shared_cursor", "tuning.wait_sample", "tuning.trace_file", "tuning.prev_cursor",
-        "tuning.plan_controls",
+        "tuning.plan_controls", "tuning.recommend_candidates", "tuning.recommend_literals", "tuning.recommend_plan",
     };
 
     /// <summary>Diagnostics Pack 이 필요한 id(AWR·ASH).</summary>
@@ -62,7 +62,7 @@ public partial class TuningCatalogTests
     public void Every_tuning_query_is_a_select_and_writes_nothing()
     {
         var headers = Catalog.Entries.Where(h => h.Id.StartsWith("tuning.", StringComparison.Ordinal)).ToList();
-        Assert.Equal(18, headers.Select(h => h.Id).Distinct(StringComparer.Ordinal).Count()); // TSK-06-04: trace_file_self, TSK-06-07: sql_stats·report_env
+        Assert.Equal(21, headers.Select(h => h.Id).Distinct(StringComparer.Ordinal).Count()); // TSK-06-04: trace_file_self, TSK-06-07: sql_stats·report_env, TSK-14-17: recommend_*
         foreach (var header in headers)
         {
             var sql = Catalog.Get(header.Id, Math.Max(header.MinVersion, 11)).Sql.TrimStart();
@@ -105,6 +105,28 @@ public partial class TuningCatalogTests
             Assert.Equal(CatalogRac.Gv, Catalog.Get(id, 19).Header.Rac);
             Assert.Contains(":sql_id", Catalog.Get(id, 19).Sql, StringComparison.Ordinal);
         }
+    }
+
+    [Fact]
+    public void Recommendation_queries_limit_load_with_binds_and_light_views()
+    {
+        var candidates = Catalog.Get("tuning.recommend_candidates", 11).Sql;
+        Assert.Contains("gv$sqlstats", candidates, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("gv$sqlarea", candidates, StringComparison.OrdinalIgnoreCase);
+        foreach (var bind in new[] { ":top", ":min_executions", ":sql_ids" })
+        {
+            Assert.Contains(bind, candidates, StringComparison.Ordinal);
+        }
+
+        Assert.Contains("ROWNUM <= :top", candidates, StringComparison.Ordinal);
+        Assert.Contains(":min_count", Catalog.Get("tuning.recommend_literals", 11).Sql, StringComparison.Ordinal);
+        var plan = Catalog.Get("tuning.recommend_plan", 11).Sql;
+        foreach (var bind in new[] { ":inst_id", ":sql_id", ":plan_hash" })
+        {
+            Assert.Contains(bind, plan, StringComparison.Ordinal);
+        }
+
+        Assert.Contains("@PFX@_tables", plan, StringComparison.Ordinal);
     }
 
     [Fact]

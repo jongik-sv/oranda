@@ -47,6 +47,8 @@ public static class SqlMonitorCommands
 [OrandaCommand("oranda.tuning.ashWaits", CommandCategory.Monitor, Icon = "aggregate", Placements = ["menu:tuning/sqlWaits@500"])]
 [OrandaCommand("oranda.tuning.awrHistory", CommandCategory.Monitor, Icon = "history", Placements = ["menu:tuning/awrHistory@510"])]
 [OrandaCommand("oranda.tuning.planControls", CommandCategory.Monitor, Icon = "key", Placements = ["menu:tuning/planControls@520"])]
+// TSK-14-17 튜닝 추천(규칙 기반): SQL 모니터를 열고 「튜닝 추천」 탭으로. 인자 sql_id 면 그 SQL 을 골라 보인다(세션 모니터 바로 가기).
+[OrandaCommand(SqlMonitorViewModel.RecommendCommand, CommandCategory.Monitor, Icon = "star", Placements = ["menu:tuning/recommend@505"])]
 [OrandaCommand("oranda.tuning.tuningAdvisorScript", CommandCategory.Monitor, Icon = "docEdit", Enablement = "monitorSqlSelected",
     Placements = ["menu:tuning/scripts/tuningAdvisor@540"])]
 [OrandaCommand("oranda.tuning.baselineScript", CommandCategory.Monitor, Icon = "docEdit", Enablement = "monitorSqlSelected",
@@ -85,6 +87,7 @@ public sealed class SqlMonitorCommandHandler : ICommandHandler
             {
                 shell.Docking.Activate(open.Document);
                 open.Vm.DetailTabIndex = tab;
+                await RecommendAsync(open.Vm, context, cancellationToken).ConfigureAwait(true);
                 return;
             }
 
@@ -92,6 +95,7 @@ public sealed class SqlMonitorCommandHandler : ICommandHandler
             if (FindOpen(shell.Docking) is { } opened)
             {
                 opened.Vm.DetailTabIndex = tab;
+                await RecommendAsync(opened.Vm, context, cancellationToken).ConfigureAwait(true);
             }
 
             return;
@@ -128,8 +132,22 @@ public sealed class SqlMonitorCommandHandler : ICommandHandler
         "oranda.tuning.ashWaits" => SqlMonitorViewModel.WaitsTab,
         "oranda.tuning.awrHistory" => SqlMonitorViewModel.AwrTab,
         "oranda.tuning.planControls" => SqlMonitorViewModel.ControlsTab,
+        SqlMonitorViewModel.RecommendCommand => SqlMonitorViewModel.RecommendTab,
         _ => null,
     };
+
+    /// <summary>튜닝 추천 명령: 인자 sql_id 면 그 SQL 로, 아직 안 읽었으면 한 번 읽는다(그 뒤 새로 고침은 수동).</summary>
+    private static Task RecommendAsync(SqlMonitorViewModel vm, CommandContext context, CancellationToken ct)
+    {
+        if (context.CommandId != SqlMonitorViewModel.RecommendCommand || !vm.IsOpen)
+        {
+            return Task.CompletedTask;
+        }
+
+        return context.Parameter is string { Length: > 0 } sqlId
+            ? vm.Recommendations.FocusAsync(sqlId, ct)
+            : vm.Recommendations.IsLoaded ? Task.CompletedTask : vm.Recommendations.RefreshAsync(ct);
+    }
 
     private static (Shell.Docking.PanelDocument Document, SqlMonitorViewModel Vm)? FindOpen(Shell.Docking.DockWorkspace docking)
     {

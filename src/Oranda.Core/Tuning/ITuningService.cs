@@ -84,4 +84,15 @@ public interface ITuningService
     /// <summary>보고서 환경 절: 버전 배너·optimizer 매개변수 일부·NLS 일부. TN-17(TSK-06-07).</summary>
     Task<IReadOnlyList<TuningEnvRow>> GetTuningEnvironmentAsync(ISession s, CancellationToken ct) =>
         throw new NotSupportedException();
+
+    /// <summary>
+    /// 튜닝 추천 후보(TSK-14-17): gv$sqlstats 누적 경과 상위 <see cref="TuningCandidateQuery.Top"/> 개와(전체 조회면) 리터럴 묶음. 팩 없음.
+    /// 권한이 모자라면 서버 오류(ORA-00942 등)를 그대로 던진다 — 화면이 MonitorAccess 로 이유를 보인다.
+    /// </summary>
+    Task<TuningCandidateSet> GetTuningCandidatesAsync(ISession s, TuningCandidateQuery query, CancellationToken ct) =>
+        throw new NotSupportedException();
+
+    /// <summary>튜닝 추천: 커서 하나의 계획에서 눈여겨볼 줄(전체 스캔·INDEX FULL SCAN·CARTESIAN)만. 계획이 밀려났으면 빈 목록.</summary>
+    Task<IReadOnlyList<PlanFindingLine>> GetPlanFindingsAsync(ISession s, int? instanceId, string sqlId, long planHashValue, CancellationToken ct) =>
+        throw new NotSupportedException();
 }

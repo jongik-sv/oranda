@@ -39,15 +39,16 @@ public sealed class MenuWidthTests(ITestOutputHelper output)
 
     internal static readonly Dictionary<string, Config> Configs = new(StringComparer.Ordinal)
     {
-        ["all-features"] = new(PrdMatrix.FeaturesJson(null, allFeatures: true), 271, 11, ["view/도구 창=16", "sql=27", "database=22", "monitor=21", "tuning=21"], 15, 18, 18, 5, 16, 222, 281, 274, 11),
+        ["all-features"] = new(PrdMatrix.FeaturesJson(null, allFeatures: true), 272, 11, ["view/도구 창=16", "sql=27", "database=22", "monitor=21", "tuning=22"], 15, 18, 18, 5, 16, 223, 282, 274, 11),
         ["none(default-R1)"] = new(null, 203, 10, ["sql=23"], 15, 14, 14, 5, 13, 190, 205, 209, 10),
         ["R1"] = new(PrdMatrix.FeaturesJson(["sqlDev"]), 203, 10, ["sql=23"], 15, 14, 14, 5, 13, 190, 205, 209, 10),
         ["R2"] = new(PrdMatrix.FeaturesJson(["plsqlDev"]), 216, 10, ["sql=24", "database=19"], 15, 16, 16, 5, 14, 198, 218, 219, 10),
         ["R3"] = new(PrdMatrix.FeaturesJson(["myBatisDev"]), 210, 10, ["sql=26"], 14, 14, 14, 5, 15, 188, 218, 216, 10),
-        ["R4"] = new(PrdMatrix.FeaturesJson(["tuner"]), 235, 11, ["sql=23", "database=17", "monitor=21", "tuning=21"], 13, 18, 18, 5, 13, 197, 237, 239, 11),
-        ["R5"] = new(PrdMatrix.FeaturesJson(["dba"]), 253, 11, ["sql=24", "database=21", "monitor=21", "tuning=18"], 15, 18, 18, 5, 14, 213, 255, 256, 11),
+        ["R4"] = new(PrdMatrix.FeaturesJson(["tuner"]), 236, 11, ["sql=23", "database=17", "monitor=21", "tuning=22"], 13, 18, 18, 5, 13, 198, 238, 239, 11),
+        ["R5"] = new(PrdMatrix.FeaturesJson(["dba"]), 254, 11, ["sql=24", "database=21", "monitor=21", "tuning=19"], 15, 18, 18, 5, 14, 214, 256, 256, 11),
         ["R6"] = new(PrdMatrix.FeaturesJson(["viewer"]), 178, 9, ["sql=22"], 13, 12, 14, 5, 12, 164, 182, 184, 9),
-        ["R1+R4"] = new(PrdMatrix.FeaturesJson(["sqlDev", "tuner"]), 253, 11, ["sql=24", "database=19", "monitor=21", "tuning=21"], 15, 18, 18, 5, 14, 214, 257, 257, 11),
+        ["R1+R4"] = new(PrdMatrix.FeaturesJson(["sqlDev", "tuner"]), 254, 11, ["sql=24", "database=19", "monitor=21", "tuning=22"], 15, 18, 18, 5, 14, 215, 258, 257, 11),
+        // TSK-14-17: SQL 모니터 기능이 있는 구성(all-features·R4·R5·R1+R4)은 튜닝 메뉴 「튜닝 추천」 한 줄이 늘었다(항목·tuning·SQL 탭·팔레트 +1).
         ["roles-empty"] = new(PrdMatrix.FeaturesJson([]), 171, 9, ["sql=22"], 9, 14, 14, 5, 11, 160, 175, 176, 9),
     };
 
@@ -146,10 +147,11 @@ public sealed class MenuWidthTests(ITestOutputHelper output)
             var dupCount = ViewDuplicates.Count(id => registry.Find(id) is not null);
             var templates = registry.Find("oranda.view.templates") is not null ? 1 : 0;
             var reset = registry.Find("oranda.view.resetLayout") is not null ? 1 : 0;
+            var recommend = registry.Find("oranda.tuning.recommend") is not null ? 1 : 0; // TSK-14-17 튜닝 메뉴 「튜닝 추천」(SQL 모니터 기능이 있는 구성만)
             var sql = TopOf(app, bar, "sql");
             var sub = sql.Children.SingleOrDefault(c => c.Kind == MenuNodeKind.Submenu && c.Key == "Menu.sql.plsql");
             await Task.CompletedTask;
-            return (bar.Sum(b => UxWidth.Items(b.Children)), dupCount + templates + reset, sub is null ? 0 : UxWidth.Items(sub.Children));
+            return (bar.Sum(b => UxWidth.Items(b.Children)) - recommend, dupCount + templates + reset, sub is null ? 0 : UxWidth.Items(sub.Children));
         });
 
         output.WriteLine($"{name}: 조사 {Configs[name].Survey} − 중복 {dups} + PL/SQL {plsql} + 추가 {AddedSinceSurvey} = {Configs[name].Survey - dups + plsql + AddedSinceSurvey}, 지금 {items}");

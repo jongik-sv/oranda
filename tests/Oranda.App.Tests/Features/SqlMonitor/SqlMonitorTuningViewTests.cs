@@ -40,7 +40,7 @@ public class SqlMonitorTuningViewTests
         var h = await TuningHarness.StartAsync(select: false);
         var window = Show(h.Vm);
         var tabs = Named<TabControl>(window, "DetailTabs");
-        Assert.Equal(5, tabs.ItemCount);
+        Assert.Equal(6, tabs.ItemCount); // TSK-14-17 「튜닝 추천」 탭
         Assert.False(Named<Button>(window, "ChildCursorsButton").IsVisible);
         Assert.False(Named<Button>(window, "AdvisorScriptButton").IsEnabled);
 

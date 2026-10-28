@@ -661,6 +661,7 @@
 | `oranda.tuning.rewriteCandidates` | 재작성 후보 | - | 전역 | `tuningAssistantOpen` | TSK-06-05 |
 | `oranda.tuning.benchmark` | 변형 SQL 벤치마크 | - | 전역 | `tuningAssistantOpen` | TSK-06-05 |
 | `oranda.tuning.ashWaits` | SQL 대기 분해 (`menu:tuning/sqlWaits@500`, SQL 모니터를 열고 「대기 분해」 탭) | - | 전역 | 항상 | TSK-06-06 |
+| `oranda.tuning.recommend` | 튜닝 추천 (규칙 기반) (`menu:tuning/recommend@505`, SQL 모니터를 열고 「튜닝 추천」 탭 — 처음만 읽고 그 뒤 새로 고침은 수동, 인자 sql_id 면 그 SQL 을 고름) | - | 전역 | 항상 | TSK-14-17 |
 | `oranda.tuning.awrHistory` | AWR 계획 이력 (`@510`, 「AWR 계획 이력」 탭 — 팩 관문은 탭 안: 선언 없으면 이유·켜는 방법) | - | 전역 | 항상 | TSK-06-06 |
 | `oranda.tuning.planControls` | 계획 관리 보기 (Profile·Baseline·Patch) (`@520`, 「계획 관리」 탭) | - | 전역 | 항상 | TSK-06-06 |
 | `oranda.tuning.tuningAdvisorScript` | Tuning Advisor 스크립트 (하위 메뉴 `menu:tuning/scripts/tuningAdvisor@540`, 새 편집기 탭에 글만) | - | 전역 | `monitorSqlSelected` | TSK-06-06 |

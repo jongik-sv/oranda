@@ -1214,5 +1214,14 @@
   "조회 전용 Role 이라 쓰기 문장이 막혀 있습니다. 설정 > 기능에서 다른 Role 을 함께 고르면 풀립니다.": "Writes are blocked by the Read-only role. Choose another role as well in Settings > Features to allow them.",
   "열린 세션": "Open sessions",
   "이 세션 쓰기": "Use this session",
-  "세션 닫기": "Close session"
+  "세션 닫기": "Close session",
+  "튜닝 추천": "Tuning recommendations",
+  "공유 풀(v$sqlstats) 상위 SQL 을 다시 읽어 규칙으로 점수 매깁니다(자동 새로 고침 없음)": "Re-reads the top SQL in the shared pool (v$sqlstats) and scores them by rules (no auto refresh)",
+  "내부 스키마 제외": "Exclude internal schemas",
+  "SYS·SYSTEM 같은 Oracle 내부 스키마와 옵티마이저 재귀 SQL 을 뺍니다": "Leaves out Oracle internal schemas such as SYS and SYSTEM and optimizer recursive SQL",
+  "튜닝 도우미로 열기": "Open in Tuning Assistant",
+  "추천 이유와 SQL": "Recommendation reasons and SQL",
+  "지금 활성 세션이 실행 중인 SQL 을 공유 풀 통계로 살펴봅니다(자동 반복 없음)": "Checks the SQL that active sessions are running now against shared pool statistics (no auto repeat)",
+  "SQL 모니터의 튜닝 추천에서 보기": "Show in SQL Monitor tuning recommendations",
+  "추천 근거": "Recommendation evidence"
 }

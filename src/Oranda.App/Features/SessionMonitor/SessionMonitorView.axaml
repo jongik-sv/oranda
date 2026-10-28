@@ -80,6 +80,9 @@
                      FontFamily="{StaticResource OrandaFixedFontFamily}" ScrollViewer.HorizontalScrollBarVisibility="Auto" />
           </DockPanel>
         </TabItem>
+        <TabItem Header="튜닝 추천">
+          <vm:SessionTuningHintsView DataContext="{Binding TuningHints}" />
+        </TabItem>
       </TabControl>
     </Grid>
   </DockPanel>
