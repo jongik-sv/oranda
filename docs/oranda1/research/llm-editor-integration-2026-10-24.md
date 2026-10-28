@@ -5,6 +5,7 @@
 - 대상: Oranda (Oracle SQL 클라이언트, .NET 10 + Avalonia 12, Windows·macOS), 도메인 지식 프로젝트 domain-wiki(nl2sql·graphify)
 - 범위: 저장소 코드는 읽기만 했다. 이 문서는 조사와 설계안이고 구현은 하지 않았다.
 - 표기: 출처나 코드로 확인하지 못한 내용은 「확인 못 함」으로 적는다.
+- 후속: [LLM 호출 방식 비교와 도메인 프로젝트·튜닝 정보 제공 설계 (2026-10-28)](llm-invocation-design-2026-10-28.md) — §0 결론 1·5 와 §3 비교표를 넓힌다(Oranda 가 `claude -p` 를 띄우는 경로, 대화 창, 도메인 스킬 호출 실측).
 
 ---
 
