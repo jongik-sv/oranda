@@ -39,6 +39,7 @@ public partial class App : Application
     public override void Initialize()
     {
         AvaloniaXamlLoader.Load(this);
+        Shell.Keymaps.ShortcutGestureConverter.Install(); // 메뉴 단축키 글: Ctrl+Cancel → Ctrl+Break
 
         // Avalonia 는 플랫폼 초기화 직후(Initialize 다음) 응용 프로그램 메뉴를 읽으므로 여기서 붙여야 기본 항목(숨기기·종료)이 이어 붙는다.
         if (OperatingSystem.IsMacOS())

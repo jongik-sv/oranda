@@ -124,7 +124,7 @@ public sealed class KeyBindingTable
         return string.Join('+', mods.Append(parts[^1]));
     }
 
-    /// <summary>제스처를 사람이 읽는 글자로(<c>Ctrl+OemComma</c> → <c>Ctrl+,</c>, <c>D0</c> → <c>0</c>).</summary>
+    /// <summary>제스처를 사람이 읽는 글자로(<c>Ctrl+OemComma</c> → <c>Ctrl+,</c>, <c>D0</c> → <c>0</c>, <c>Ctrl+Cancel</c> → <c>Ctrl+Break</c>).</summary>
     public static string Display(KeyGesture gesture)
     {
         ArgumentNullException.ThrowIfNull(gesture);
@@ -132,6 +132,8 @@ public sealed class KeyBindingTable
         {
             Key.Return => "Enter",
             Key.Back => "Backspace",
+            Key.Cancel => "Break", // Windows 는 Ctrl+Break 를 VK_CANCEL 로 보낸다. 키맵 파일 표기는 Cancel 그대로.
+            Key.Pause => "Pause",
             Key.Prior => "PageUp",
             Key.Next => "PageDown",
             Key.OemComma => ",",
