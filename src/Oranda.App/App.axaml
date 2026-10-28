@@ -308,6 +308,15 @@
             <Setter Property="Padding" Value="8,2" />
             <Setter Property="MinHeight" Value="0" />
         </Style>
+        <!-- 결과 그리드 열 필터 팝업의 값 목록(TSK-13-26): 체크 상자 한 줄이 Fluent 기본(약 40 DIP)보다 촘촘하다. -->
+        <Style Selector="ListBox.filter-values ListBoxItem">
+            <Setter Property="Padding" Value="6,0" />
+            <Setter Property="MinHeight" Value="0" />
+        </Style>
+        <!-- Fluent 체크 상자는 상자 칸 Grid 높이가 32 로 고정이라 MinHeight 를 0 으로 해도 줄이 줄지 않는다. 상자(20)만큼으로 줄인다. -->
+        <Style Selector="ListBox.filter-values CheckBox /template/ Grid#RootGrid > Grid">
+            <Setter Property="Height" Value="22" />
+        </Style>
 
         <!-- 도구 창 안의 작은 툴바 띠와 아래 상태 줄(Orange 의 Sub Toolbar·Tool Statusbar). -->
         <Style Selector="Border.panel-toolbar">
