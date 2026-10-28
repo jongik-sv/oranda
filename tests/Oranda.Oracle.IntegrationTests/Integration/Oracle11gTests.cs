@@ -24,6 +24,7 @@ using Oranda.Oracle.Monitoring;
 using Oranda.Oracle.Plans;
 using Oranda.Oracle.Schema;
 using Oranda.Oracle.Sessions;
+using Xunit.Abstractions;
 
 namespace Oranda.Oracle.IntegrationTests.Integration;
 
@@ -195,9 +196,14 @@ public sealed class Oracle11gTests : IAsyncLifetime
     private readonly ExecBus _bus = new();
     private readonly ExecInteraction _ui = new();
     private readonly List<OracleConnection> _raw = [];
+    private readonly ITestOutputHelper _output;
     private OracleSessionManager _manager = null!;
 
-    public Oracle11gTests(Oracle11gFixture db) => _db = db;
+    public Oracle11gTests(Oracle11gFixture db, ITestOutputHelper output)
+    {
+        _db = db;
+        _output = output;
+    }
 
     public Task InitializeAsync()
     {
@@ -291,6 +297,10 @@ public sealed class Oracle11gTests : IAsyncLifetime
         var failures = new List<string>();
         var checkedCount = 0;
 
+        // Java 문장(requires: jvm)은 JVM 이 있는 서버에서만 본다. XE 에는 *_java_* 뷰·DBMS_JAVA 가 없다(제품도 meta.java_available 로 보고 보내지 않는다).
+        var jvm = await HasJvmAsync(raw, catalog.Get("meta.java_available", info));
+        var skippedForJvm = new List<string>();
+
         // 일부러 19 이상 전용인 id(예: session.my_blocking)는 11 변형이 없고 기능을 숨긴다. 단위 시험 Oracle11CatalogTests 가 목록을 단정한다.
         foreach (var id in catalog.Entries.Where(e => e.MinVersion < 12).Select(e => e.Id).Distinct(StringComparer.Ordinal).Order(StringComparer.Ordinal))
         {
@@ -301,10 +311,17 @@ public sealed class Oracle11gTests : IAsyncLifetime
                 continue; // 팩이 필요한 문장은 보유 선언 없이 서버로 보내지 않는다(SAFE-07).
             }
 
+            if (query.Header.RequiresJvm && !jvm)
+            {
+                skippedForJvm.Add(query.Header.Path);
+                continue;
+            }
+
             foreach (var prefix in new[] { "dba", "all" })
             {
                 var sql = query.Sql.Replace("@PFX@", prefix, StringComparison.Ordinal)
-                    .Replace("@SEGMENTS@", "dba_segments", StringComparison.Ordinal);
+                    .Replace("@SEGMENTS@", "dba_segments", StringComparison.Ordinal)
+                    .Replace("@LONGNAME@", "DBMS_JAVA.LONGNAME(j.object_name)", StringComparison.Ordinal);
                 try
                 {
                     await ParseOnlyAsync(raw, sql);
@@ -317,8 +334,21 @@ public sealed class Oracle11gTests : IAsyncLifetime
             }
         }
 
+        if (skippedForJvm.Count > 0)
+        {
+            _output.WriteLine($"JVM 없음(SYS.DBMS_JAVA 없음) — 건너뛴 Java 문장 {skippedForJvm.Count}개: {string.Join(", ", skippedForJvm)}");
+        }
+
         Assert.True(failures.Count == 0, string.Join(Environment.NewLine, failures));
         Assert.True(checkedCount >= 100, $"검사한 문장 {checkedCount}");
+    }
+
+    /// <summary>meta.java_available 를 그대로 돌려 서버에 JVM 이 있는지 본다.</summary>
+    private static async Task<bool> HasJvmAsync(OracleConnection conn, CatalogQuery check)
+    {
+        await using var cmd = conn.CreateCommand();
+        cmd.CommandText = check.Sql.Replace("@PFX@", "dba", StringComparison.Ordinal);
+        return Convert.ToInt32(await cmd.ExecuteScalarAsync(), System.Globalization.CultureInfo.InvariantCulture) > 0;
     }
 
     /// <summary>DBMS_SQL.PARSE 로 구문·열 이름만 확인한다(실행하지 않으므로 바인드 값이 없어도 된다).</summary>

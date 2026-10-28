@@ -3,7 +3,7 @@
 -- 긴 이름: max_rows 로 자른 뒤 짧은 이름이 '/' 로 시작하는(사전이 줄인) 줄만 푼다. @LONGNAME@ 은 호출 쪽이 DBMS_JAVA.LONGNAME(j.object_name) 또는 j.object_name 으로 바꾼다.
 -- id: meta.java_objects
 -- min-version: 11
--- requires: dba_objects, all_objects
+-- requires: dba_objects, all_objects, jvm
 -- license: none
 SELECT j.owner, j.object_name, j.object_type, j.status,
        CASE WHEN j.object_name LIKE '/%' THEN @LONGNAME@ ELSE j.object_name END AS long_name

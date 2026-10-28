@@ -35,6 +35,24 @@ public class JavaCatalogTests
     }
 
     [Fact]
+    public void Every_java_query_but_the_jvm_check_is_marked_as_needing_a_jvm()
+    {
+        // JVM 없는 서버(11g XE·26ai Free)에는 *_java_* 뷰·DBMS_JAVA 가 없다. 표시로 통합 파싱 시험이 건너뛰고, 확인 쿼리만 어디서나 돈다.
+        var javaIds = Catalog.Entries.Select(e => e.Id).Where(id => id.StartsWith("meta.java_", StringComparison.Ordinal)).Distinct(StringComparer.Ordinal).ToList();
+        Assert.Equal(11, javaIds.Count);
+        foreach (var id in javaIds)
+        {
+            foreach (var version in new[] { 11, 19, 23 })
+            {
+                Assert.Equal(id != "meta.java_available", Catalog.Get(id, version).Header.RequiresJvm);
+            }
+        }
+
+        // 다른 문장은 JVM 표시가 없다.
+        Assert.All(Catalog.Entries.Where(e => !javaIds.Contains(e.Id)), e => Assert.False(e.RequiresJvm, e.Path));
+    }
+
+    [Fact]
     public void Object_list_asks_one_owner_only_and_cuts_rows_before_resolving_long_names()
     {
         var sql = Catalog.Get("meta.java_objects", 23).Sql;

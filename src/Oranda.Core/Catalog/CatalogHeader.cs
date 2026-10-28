@@ -23,6 +23,15 @@ public sealed record CatalogHeader(
     /// 12c 이후 열·뷰를 쓰면 안 된다(<see cref="CatalogRules.Pre12cFeature"/>).
     /// </summary>
     public const int Release12 = 12;
+
+    /// <summary>
+    /// <c>requires:</c> 의 특별 항목: 서버에 Java(JVM, <c>SYS.DBMS_JAVA</c>·<c>*_JAVA_*</c> 뷰)가 있어야 하는 문장.
+    /// JVM 이 없는 서버(XE·Free)에서는 이 뷰·패키지가 없어 파싱부터 실패하므로, 호출 쪽은 <c>meta.java_available</c> 로 먼저 확인한다.
+    /// </summary>
+    public const string JvmRequirement = "jvm";
+
+    /// <summary>서버에 JVM 이 있어야 하는 문장인가(<see cref="JvmRequirement"/>).</summary>
+    public bool RequiresJvm => Requires.Contains(JvmRequirement, StringComparer.Ordinal);
 }
 
 /// <summary>
