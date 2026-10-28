@@ -1227,5 +1227,10 @@
   "호스트·포트": "Host/port",
   "서비스 이름": "Service name",
   "사용자 지정": "Custom",
-  "서비스 이름 또는 SID": "Service name or SID"
+  "서비스 이름 또는 SID": "Service name or SID",
+  "소스 열기": "Open source",
+  "이 클래스를 만든 Java 소스를 연다": "Open the Java source this class was compiled from",
+  "Java 소스": "Java sources",
+  "Java 클래스": "Java classes",
+  "Java 리소스": "Java resources"
 }

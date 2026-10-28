@@ -230,6 +230,33 @@ public sealed partial class ObjectDetailViewModel : ToolPanelViewModelBase
     [ObservableProperty]
     private bool _isDataSelected;
 
+    /// <summary>이 객체를 만든 소스 객체(JAVA CLASS → 같은 스키마의 JAVA SOURCE). 있으면 「소스 열기」 단추가 보인다(TSK-14-22).</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasSource))]
+    private DbObjectRef? _sourceTarget;
+
+    public bool HasSource => SourceTarget is not null;
+
+    /// <summary>시험용: 「소스 열기」가 문서를 여는 방법(기본 = 스키마 브라우저와 같은 <see cref="SchemaBrowser.SchemaObjectOpener"/>).</summary>
+    internal Func<DbObjectRef, ISession, Task>? SourceOpener { get; set; }
+
+    /// <summary>「소스 열기」: <see cref="SourceTarget"/> 을 고정 문서로 연다(JAVA SOURCE 는 DDL 탭에 소스 글). 연 것이 있으면 true.</summary>
+    public async Task<bool> OpenSourceAsync(CancellationToken ct = default)
+    {
+        if (SourceTarget is not { } source || _session is not { } session)
+        {
+            return false;
+        }
+
+        if (SourceOpener is { } open)
+        {
+            await open(source, session);
+            return true;
+        }
+
+        return await new SchemaBrowser.SchemaObjectOpener(_services).OpenAsync(source, session, preview: false, focus: true, ct) is not null;
+    }
+
     /// <summary>true 면 DDL 탭이 선택돼 있다.</summary>
     [ObservableProperty]
     private bool _isDdlSelected;
@@ -308,7 +335,9 @@ public sealed partial class ObjectDetailViewModel : ToolPanelViewModelBase
         _session = session;
         Target = target;
         Title = $"{target.Owner}.{target.Name}";
-        IsDdlSelected = showDdl;
+        // JAVA SOURCE 는 소스 글이 본문이라 DDL 탭(소스 글)을 먼저 보인다.
+        IsDdlSelected = showDdl || target.ObjectType == "JAVA SOURCE";
+        SourceTarget = null;
         Sections.Clear();
         SelectedSection = null;
         DdlText = string.Empty;
@@ -342,6 +371,8 @@ public sealed partial class ObjectDetailViewModel : ToolPanelViewModelBase
                 {
                     Sections.Add(new ObjectDetailSection(s));
                 }
+
+                SourceTarget = detail.SourceObject;
 
                 // 「데이터」 탭은 「열」 바로 뒤(SQL Developer 테이블 편집기의 Columns → Data 순서). 고르기 전에는 읽지 않는다.
                 if (ObjectDataViewModel.Supports(target))

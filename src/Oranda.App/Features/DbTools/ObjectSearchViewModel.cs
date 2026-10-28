@@ -148,6 +148,8 @@ public sealed partial class ObjectSearchViewModel : ToolPanelViewModelBase
     [
         "TABLE", "VIEW", "MATERIALIZED VIEW", "INDEX", "SEQUENCE", "SYNONYM", "PROCEDURE", "FUNCTION", "PACKAGE", "PACKAGE BODY",
         "TYPE", "TYPE BODY", "TRIGGER", "DATABASE LINK",
+        // Java 객체는 유형으로 고를 때만 찾는다(빈 유형 검색에는 들지 않는다 — SYS 쪽 Java 클래스는 수만 개, TSK-14-22).
+        "JAVA SOURCE", "JAVA CLASS", "JAVA RESOURCE",
     ];
 
     /// <summary>소스·열 검색 한 번에 보이는 최대 줄 수. 더 있으면 상태 줄에 알린다.</summary>

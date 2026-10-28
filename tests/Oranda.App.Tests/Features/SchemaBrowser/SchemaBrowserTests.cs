@@ -526,6 +526,21 @@ public class SchemaBrowserTests
 
         public Dictionary<DbObjectRef, TableInfo> Tables { get; } = [];
 
+        /// <summary>Java 저장 객체(스키마를 펼칠 때 따로 묻는다, TSK-14-22).</summary>
+        public List<JavaObjectInfo> Java { get; } = [];
+
+        public ObjectQuery? LastJavaQuery { get; private set; }
+
+        public Task<IReadOnlyList<JavaObjectInfo>> ListJavaObjectsAsync(ISession s, ObjectQuery q, CancellationToken ct)
+        {
+            LastJavaQuery = q;
+            return Task.FromResult<IReadOnlyList<JavaObjectInfo>>([.. Java
+                .Where(j => j.Ref.Owner == q.Owner)
+                .Where(j => q.ObjectTypes.Count == 0 || q.ObjectTypes.Contains(j.Ref.ObjectType))
+                .Where(j => !q.InvalidOnly || j.Status != "VALID")
+                .Take(q.Limit ?? int.MaxValue)]);
+        }
+
         public int ListObjectsCalls { get; private set; }
 
         public int TableCalls { get; private set; }

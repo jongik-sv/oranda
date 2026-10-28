@@ -1189,6 +1189,18 @@ levels:
   - acceptance: ConnectStringTextTests 15(여러 줄·주석·별칭·괄호 오류·이미 한 줄·따옴표 안 공백) / ConnectionCustomDescriptorTests 5(별칭 이름 제안·모양 그대로 저장·다시 열기·드라이버 Data Source 한 줄, 괄호 오류 안내·저장 거부, 여러 줄 SID 기술자 되읽기, Headless Enter 줄 바꿈·칸 높이 늘어남·저장 뒤 같은 모양) / CustomDescriptorIntegrationTests 1(26ai FREEPDB1 에 여러 줄 tnsnames 항목으로 접속) / ConnectionManager 시험 통과 / `dotnet build Oranda.sln -warnaserror`
   - note: 바꾼 곳 = Oranda.Core/Connection/ConnectStringText.cs(새), ConnectionProfileExtensions.BuildConnectionString(정규화), ProfileEditorViewModel(DataSourceComposer 판별·미리보기, EasyConnectError, 별칭 이름 제안), ProfileEditorView.axaml(EasyConnectBox·EasyConnectErrorText), ConnectionTreeNode·ConnectionStatusItem·비밀번호 창의 user@접속 문자열(한 줄로) (win144)
 
+- [x] TSK-14-22: 스키마 브라우저·객체 상세·객체 검색에서 Java 저장 객체(JAVA SOURCE·JAVA CLASS·JAVA RESOURCE) 보기(읽기 전용) [win144] w:1 2026-10-28~2026-10-28
+  - category: feat
+  - domain: fullstack
+  - model: opus
+  - priority: medium
+  - tags: schema-browser, object-detail, object-search, java, win144
+  - prd-ref: PRD SCH-01, D-054
+  - depends: TSK-07-02
+  - requirements: 사용자 요청(2026-10-28) 「자바 객체는 가져와서 보여줄 수는 없나?」. 스키마 브라우저에 Java 소스·Java 클래스·Java 리소스 폴더(제목 = DBMS_JAVA.LONGNAME 긴 이름, 키 = 짧은 object_name, INVALID 빨강). 객체 목록 캐시에는 넣지 않고 스키마를 펼칠 때 그 소유자만 meta.java_objects 로 묻는다(5000개 제한, 넘으면 상태 줄 안내, JVM 없음 = SYS.DBMS_JAVA 없음이면 접속마다 한 번 보고 묻지 않음, 긴 이름은 자른 뒤 '/' 로 시작하는 줄만 풀고 권한이 없으면 짧은 이름). 객체 상세: JAVA SOURCE 는 DDL 탭 먼저(all_source 줄 → CREATE OR REPLACE AND COMPILE JAVA SOURCE NAMED "소유자"."긴 이름" AS …, 종결자 /) + 그 소스에서 나온 클래스 표, JAVA CLASS 는 클래스 정보·메서드(서명)·필드·구현 인터페이스·내부 클래스(ALL_JAVA_*) + 같은 스키마 JAVA SOURCE 면 「소스 열기」, JAVA RESOURCE 는 이름·내용 안 읽음 안내, 컴파일 오류(all_errors) 구역. 뷰가 없거나 권한이 없으면 구역에 안내 한 줄. 객체 검색은 유형에서 Java 를 고를 때만 Java 객체를 찾는다(빈 유형 검색은 그대로). 컴파일·DROP 같은 쓰기 동작은 넣지 않음; 제약: 실앱 SendKeys 금지(Headless 까지); 비고: 레인 sr-java
+  - acceptance: JavaCatalogTests 27(11g 부터·FETCH FIRST 없음·소유자 한정·긴 이름은 자른 뒤·객체 검색 opt-in·캐시 목록은 Java 제외 유지·DDL 글·형식 이름·서명) / JavaObjectsBrowserTests 5(폴더·긴 이름 제목·INVALID·유형 필터·5000 제한 안내·JAVA SOURCE DDL 탭·「소스 열기」·Headless 단추) / JavaObjectsIntegrationTests 2(26ai FREEPDB1·11g XE: 둘 다 JVM 없음 ORA-29538 → 목록 빈 것·오류 없음만 확인, 소스·클래스 확인은 JVM 있는 서버에서) / `dotnet build Oranda.sln -warnaserror`
+  - note: 바꾼 곳 = Catalog/meta/java_*.sql(11개, 새), dbinfo/object_search(.11).sql(Java opt-in), IMetadataProvider.ListJavaObjectsAsync(기본 = 빈 목록)·JavaObjectInfo·ObjectDetail.SourceObject, OracleMetadataProvider.Java.cs(새)·Details(GetDdl·상세에 Java 갈래), SchemaBrowserViewModel(범주·Java 목록·긴 이름 제목), ObjectDetailViewModel/View(「소스 열기」·JAVA SOURCE DDL 탭), ObjectSearchViewModel.SearchableTypes. ALL_JAVA_* 열 이름은 JVM 있는 서버에서 아직 돌려 보지 못했다(Free·XE 둘 다 JVM 없음) (win144)
+
 ## 의존 그래프
 
 ### 그래프 (Mermaid)
@@ -1301,6 +1313,7 @@ graph LR
   TSK-14-15 --> TSK-14-17
   TSK-14-15 --> TSK-14-18
   TSK-09-10 --> TSK-14-19
+  TSK-07-02 --> TSK-14-22
   style TSK-01-02 fill:#e8f5e9,stroke:#2e7d32
   style TSK-03-01 stroke:#c62828,stroke-width:2px
   style TSK-02-02 stroke:#c62828,stroke-width:2px

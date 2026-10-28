@@ -28,7 +28,8 @@ SELECT owner, object_name, object_type, status, created, last_ddl_time, size_byt
            AND (:created_after IS NULL OR o.created > :created_after)
            AND (:modified_after IS NULL OR o.last_ddl_time > :modified_after)
            AND o.object_type NOT IN ('LOB', 'TABLE PARTITION', 'TABLE SUBPARTITION', 'INDEX PARTITION', 'INDEX SUBPARTITION',
-                                     'LOB PARTITION', 'JAVA CLASS', 'JAVA RESOURCE', 'JAVA SOURCE')
+                                     'LOB PARTITION')
+           AND (o.object_type NOT LIKE 'JAVA %' OR INSTR(:types, '|JAVA ') > 0) -- Java 객체(SYS 쪽 수만 개)는 유형으로 고를 때만
            AND o.object_name NOT LIKE 'BIN$%'
            AND (:min_size IS NULL OR seg.bytes >= :min_size)
            AND (:max_size IS NULL OR seg.bytes <= :max_size)

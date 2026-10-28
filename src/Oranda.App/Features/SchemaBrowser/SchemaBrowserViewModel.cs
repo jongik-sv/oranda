@@ -47,6 +47,9 @@ public sealed partial class SchemaBrowserViewModel : ToolPanelViewModelBase, IDi
         ("DIRECTORY", "디렉터리"),
         ("DOMAIN", "도메인"),
         ("PROPERTY GRAPH", "속성 그래프"),
+        ("JAVA SOURCE", "Java 소스"),
+        ("JAVA CLASS", "Java 클래스"),
+        ("JAVA RESOURCE", "Java 리소스"),
     ];
 
     /// <summary>범주 순서에 있는 객체 유형(필터 콤보 목록).</summary>

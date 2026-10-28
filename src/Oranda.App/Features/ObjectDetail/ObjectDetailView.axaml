@@ -27,6 +27,10 @@
               <Border DockPanel.Dock="Top" Classes="panel-toolbar" IsVisible="{Binding CanReorderColumns}">
                 <Button x:Name="ReorderColumnsButton" Classes="tool" Content="열 순서 바꾸기…" AutomationProperties.Name="열 순서 바꾸기" />
               </Border>
+              <!-- JAVA CLASS: 같은 스키마의 JAVA SOURCE 에서 왔으면 그 소스로 간다(TSK-14-22). -->
+              <Border DockPanel.Dock="Top" Classes="panel-toolbar" IsVisible="{Binding HasSource}">
+                <Button x:Name="OpenSourceButton" Classes="tool" Content="소스 열기" ToolTip.Tip="이 클래스를 만든 Java 소스를 연다" AutomationProperties.Name="소스 열기" />
+              </Border>
             <Panel>
               <!-- 구역 표(C안 격자, 행 선택·복사). 인덱스·제약 구역이면 아래에 고른 줄의 열 표(TSK-13-34). -->
               <Grid x:Name="SectionGrid" RowDefinitions="*,Auto,0" IsVisible="{Binding !IsDataSelected}">

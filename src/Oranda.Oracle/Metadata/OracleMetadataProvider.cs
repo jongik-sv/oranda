@@ -257,11 +257,16 @@ internal sealed partial class OracleMetadataProvider : IMetadataProvider
 
     private static string ViewPrefix(ISession s) => s.Server.Capabilities.CanQueryDictionary ? "dba" : "all";
 
-    internal static async Task<List<object?[]>> QueryAsync(ISession s, string id, Action<OracleCommand> bind, CancellationToken ct)
+    /// <param name="rewrite">본문의 호출 쪽 자리표(<c>@LONGNAME@</c> 등)를 바꾼다. 없으면 <c>@PFX@</c> 만 바꾼다.</param>
+    internal static async Task<List<object?[]>> QueryAsync(ISession s, string id, Action<OracleCommand> bind, CancellationToken ct, Func<string, string>? rewrite = null)
     {
         var session = AsOracle(s);
         var query = Catalog.Value.Get(id, s.Server);
         var sql = query.Sql.Replace("@PFX@", ViewPrefix(s), StringComparison.Ordinal);
+        if (rewrite is not null)
+        {
+            sql = rewrite(sql);
+        }
 
         // 세션 연결의 명령 잠금(D-041): 실행·결과 페이지·다른 도구와 한 줄로 선다. 결과 집합처럼 커서를 연 뒤에는 행 하나 읽는 동안만 쥔다:
         // 전체 목록 읽기(11g 비 DBA 의 all_objects 는 분 단위)가 그 사이 사용자의 실행을 끝까지 막지 않는다(서버 왕복 사이에 실행이 돈다).

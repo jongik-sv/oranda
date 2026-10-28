@@ -289,6 +289,24 @@ public sealed partial class SchemaBrowserViewModel
         }
 
         var objects = await _meta!.ListObjectsAsync(session, query, ct);
+
+        // Java 저장 객체는 객체 목록 캐시와 따로 이 소유자만 묻는다(행 수 제한, JVM 이 없으면 빈 목록). 실패해도 다른 객체는 보인다.
+        var (java, javaCut) = await ListJavaAsync(session, query, ct);
+        if (java.Count > 0)
+        {
+            foreach (var j in java)
+            {
+                _javaNames[j.Ref] = j.LongName;
+                if (invalid is not null && j.Status is { } st && !string.Equals(st, "VALID", StringComparison.Ordinal))
+                {
+                    invalid.Add(SchemaSql.FavoriteKey(j.Ref));
+                }
+            }
+
+            objects = [.. objects, .. java.Select(j => j.Ref)];
+        }
+
+        var javaNames = new Dictionary<DbObjectRef, string>(_javaNames);
         var favorites = _favorites;
         var matcher = _matcher;
         var groups = await Task.Run(
@@ -306,7 +324,7 @@ public sealed partial class SchemaBrowserViewModel
                 }
 
                 return src.GroupBy(o => o.ObjectType, StringComparer.Ordinal)
-                    .ToDictionary(g => g.Key, g => (IReadOnlyList<DbObjectRef>)[.. g.OrderBy(o => o.Name, StringComparer.Ordinal)], StringComparer.Ordinal);
+                    .ToDictionary(g => g.Key, g => (IReadOnlyList<DbObjectRef>)[.. g.OrderBy(o => javaNames.GetValueOrDefault(o, o.Name), StringComparer.Ordinal)], StringComparer.Ordinal);
             },
             ct);
         if (gen != _generation)
@@ -341,8 +359,36 @@ public sealed partial class SchemaBrowserViewModel
             node.Children.Add(new SchemaNode(null, SchemaNodeKind.Message, "해당하는 객체가 없다"));
         }
 
-        StatusText = $"{node.Owner}: 객체 {objects.Count}개" + (ActiveSavedFilter is { } saved ? $" · 필터 「{saved.Name}」" : "");
+        StatusText = $"{node.Owner}: 객체 {objects.Count}개" + (ActiveSavedFilter is { } saved ? $" · 필터 「{saved.Name}」" : "")
+            + (javaCut ? $" · Java 객체는 처음 {JavaListLimit}개만" : "");
     }
+
+    /// <summary>스키마 하나에서 보이는 Java 객체 최대 수(SYS 쪽 Java 클래스는 수만 개다). 넘으면 상태 줄에 알린다.</summary>
+    public const int JavaListLimit = 5000;
+
+    /// <summary>Java 객체의 긴 이름(트리 제목). 키는 짧은 이름의 참조.</summary>
+    private readonly Dictionary<DbObjectRef, string> _javaNames = [];
+
+    /// <summary>스키마의 Java 객체(한 개 더 읽어 잘렸는지 안다). 제공자가 실패하면 빈 목록.</summary>
+    private async Task<(IReadOnlyList<JavaObjectInfo> Items, bool Cut)> ListJavaAsync(ISession session, ObjectQuery query, CancellationToken ct)
+    {
+        try
+        {
+            var items = await _meta!.ListJavaObjectsAsync(session, query with { Limit = JavaListLimit + 1 }, ct);
+            return items.Count > JavaListLimit ? ([.. items.Take(JavaListLimit)], true) : (items, false);
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (Exception)
+        {
+            return ([], false);
+        }
+    }
+
+    /// <summary>트리에 보이는 객체 이름: Java 객체는 긴 이름(<c>com/example/Util</c>), 나머지는 사전 이름.</summary>
+    internal string DisplayName(DbObjectRef r) => _javaNames.TryGetValue(r, out var longName) ? longName : r.Name;
 
     private void AddPage(SchemaNode category)
     {
@@ -363,7 +409,7 @@ public sealed partial class SchemaBrowserViewModel
 
     private SchemaNode MakeObject(DbObjectRef r, SchemaNode? parent, string? status = null, string? detail = null)
     {
-        var n = new SchemaNode(this, SchemaNodeKind.Item, r.Name)
+        var n = new SchemaNode(this, SchemaNodeKind.Item, DisplayName(r))
         {
             Ref = r,
             Owner = r.Owner,

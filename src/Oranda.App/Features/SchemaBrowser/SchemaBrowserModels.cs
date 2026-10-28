@@ -147,7 +147,7 @@ public sealed partial class SchemaNode : ObservableObject
         "SYNONYM" => "objSynonym",
         "DATABASE LINK" => "objDbLink",
         "JOB" or "SCHEDULER JOB" => "objJob",
-        "JAVA CLASS" or "JAVA SOURCE" => "objJava",
+        "JAVA CLASS" or "JAVA SOURCE" or "JAVA RESOURCE" => "objJava",
         _ => "objOther",
     };
 

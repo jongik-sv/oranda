@@ -19,6 +19,12 @@ internal sealed partial class OracleMetadataProvider
         ArgumentNullException.ThrowIfNull(obj);
         ArgumentNullException.ThrowIfNull(o);
 
+        // Java 객체: DBMS_METADATA 대신 소스 줄로 만든다(JVM 이 있어야 하는 DBMS_METADATA JAVA_SOURCE 변환에 기대지 않는다). 클래스·리소스는 안내 글.
+        if (JavaTypes.Contains(obj.ObjectType))
+        {
+            return obj.ObjectType == "JAVA SOURCE" ? await GetJavaSourceDdlAsync(s, obj, o, ct) : JavaBinaryDdlNote(obj);
+        }
+
         var session = AsOracle(s);
         var query = Catalog.Value.Get("meta.ddl", s.Server);
 
@@ -164,6 +170,12 @@ internal sealed partial class OracleMetadataProvider
                 [.. privileges.Select(r => (IReadOnlyList<object?>)[Str(r[0]), Str(r[1]), Str(r[2]), Str(r[3])])]));
         }
 
+        DbObjectRef? sourceObject = null;
+        if (JavaTypes.Contains(type))
+        {
+            sourceObject = await AddJavaSectionsAsync(s, obj, sections, ct);
+        }
+
         var deps = await QueryAsync(s, "meta.detail_dependencies", BindObject, ct);
         if (deps.Count > 0)
         {
@@ -172,7 +184,7 @@ internal sealed partial class OracleMetadataProvider
                     string.Equals(Str(r[0]), "USES", StringComparison.Ordinal) ? "참조함" : "참조됨", Str(r[1]), Str(r[2]), Str(r[3])])]));
         }
 
-        return new ObjectDetail(obj, sections);
+        return new ObjectDetail(obj, sections) { SourceObject = sourceObject };
     }
 
     private static void AddTableSections(List<DetailSection> sections, TableInfo table, ServerFeatures features)

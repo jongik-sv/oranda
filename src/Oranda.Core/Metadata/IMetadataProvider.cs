@@ -41,7 +41,21 @@ public interface IMetadataProvider
     /// 사전에 없거나 읽지 못하면 null. 기본 구현은 늘 null(시노님을 풀지 않는다).
     /// </summary>
     Task<NameStep?> GetNameStepAsync(ISession s, string owner, string name, CancellationToken ct) => Task.FromResult<NameStep?>(null);
+
+    /// <summary>
+    /// Java 저장 객체(JAVA SOURCE·JAVA CLASS·JAVA RESOURCE) 목록. 객체 목록 캐시(<see cref="ListObjectsAsync"/>)와 따로, 스키마를 펼칠 때만 그 소유자로 묻는다
+    /// (SYS 쪽 Java 클래스는 수만 개라 전체 목록·캐시에 넣지 않는다). 쓰는 조건: <see cref="ObjectQuery.Owner"/>(필수)·유형·이름 패턴·INVALID 만·<see cref="ObjectQuery.Limit"/>.
+    /// 서버에 Java(JVM)가 없으면 빈 목록. 기본 구현은 늘 빈 목록(TSK-14-22).
+    /// </summary>
+    Task<IReadOnlyList<JavaObjectInfo>> ListJavaObjectsAsync(ISession s, ObjectQuery q, CancellationToken ct)
+        => Task.FromResult<IReadOnlyList<JavaObjectInfo>>([]);
 }
+
+/// <summary>
+/// Java 저장 객체 하나. <see cref="Ref"/> 의 이름은 사전의 짧은 이름(object_name, 키), <see cref="LongName"/> 은 <c>DBMS_JAVA.LONGNAME</c> 으로 푼 긴 이름
+/// (예 <c>com/example/Util</c>, 풀 수 없으면 짧은 이름 그대로). <see cref="Status"/> 는 VALID/INVALID.
+/// </summary>
+public sealed record JavaObjectInfo(DbObjectRef Ref, string LongName, string? Status);
 
 /// <summary>
 /// 객체 참조. <see cref="ObjectType"/> 은 Oracle OBJECT_TYPE 그대로(<c>TABLE</c>, <c>PACKAGE BODY</c>).
@@ -171,7 +185,11 @@ public sealed record ProcedureInfo(string Name, bool IsFunction, IReadOnlyList<A
 /// <summary>표 형태 상세 한 묶음(예: 「권한」, 「파티션」).</summary>
 public sealed record DetailSection(string Title, IReadOnlyList<string> Columns, IReadOnlyList<IReadOnlyList<object?>> Rows);
 
-public sealed record ObjectDetail(DbObjectRef Target, IReadOnlyList<DetailSection> Sections);
+public sealed record ObjectDetail(DbObjectRef Target, IReadOnlyList<DetailSection> Sections)
+{
+    /// <summary>이 객체를 만든 소스 객체(예: JAVA CLASS → 같은 스키마의 JAVA SOURCE). 없으면 null. 상세 화면이 「소스 열기」 단추로 보인다(TSK-14-22).</summary>
+    public DbObjectRef? SourceObject { get; init; }
+}
 
 /// <summary>서버 컴파일 오류(all_errors). 줄·열은 1부터.</summary>
 public sealed record CompileError(int Line, int Column, string Message, bool IsWarning)

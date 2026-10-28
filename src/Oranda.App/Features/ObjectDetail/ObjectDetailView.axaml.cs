@@ -21,6 +21,13 @@ public partial class ObjectDetailView : UserControl, Oranda.App.Shell.Docking.IF
             }
         };
         ReorderColumnsButton.Click += async (_, _) => await OpenReorderDialogAsync();
+        OpenSourceButton.Click += async (_, _) =>
+        {
+            if (_vm is not null)
+            {
+                await _vm.OpenSourceAsync();
+            }
+        };
         // 누른 줄의 선택이 끝난 뒤에 읽는다(읽은 결과가 위 표 칸을 고쳐 목록을 다시 지으면 진행 중인 클릭 선택이 사라진다).
         SectionTable.CurrentRowChanged += (_, row) => Avalonia.Threading.Dispatcher.UIThread.Post(() => _ = _vm?.SelectKeyRowAsync(row));
         Tabs.SelectionChanged += (_, _) =>
