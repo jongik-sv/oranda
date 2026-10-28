@@ -314,9 +314,9 @@ public sealed partial class ProfileEditorViewModel : ViewModelBase
     /// <summary>접속 방식 선택지(화면 콤보).</summary>
     public IReadOnlyList<ChoiceItem<ConnectionMode>> Modes { get; } =
     [
-        new(ConnectionMode.HostPortService, "호스트·포트·서비스"),
-        new(ConnectionMode.EasyConnect, "Easy Connect Plus 문자열"),
-        new(ConnectionMode.TnsAlias, "TNS 별칭"),
+        new(ConnectionMode.HostPortService, "호스트·포트"),
+        new(ConnectionMode.TnsAlias, "TNS"),
+        new(ConnectionMode.EasyConnect, "사용자 지정"),
     ];
 
     public IReadOnlyList<ChoiceItem<ConnectionEnvironment>> Environments { get; } =

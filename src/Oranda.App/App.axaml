@@ -308,6 +308,35 @@
             <Setter Property="Padding" Value="8,2" />
             <Setter Property="MinHeight" Value="0" />
         </Style>
+        <!-- 붙은 단추 묶음(ListBox.segmented): 계획 보기 바꾸기(트리·텍스트·비교)·접속 방식 고르기. 탭 머리글 줄 대신 써서 세로 공간을 아낀다. -->
+        <Style Selector="ListBox.segmented">
+          <Setter Property="Background" Value="Transparent" />
+          <Setter Property="BorderBrush" Value="{DynamicResource OrandaSeparatorBrush}" />
+          <Setter Property="BorderThickness" Value="1" />
+          <Setter Property="CornerRadius" Value="5" />
+          <Setter Property="Padding" Value="1" />
+          <Setter Property="VerticalAlignment" Value="Center" />
+          <Setter Property="ItemsPanel">
+            <ItemsPanelTemplate>
+              <StackPanel Orientation="Horizontal" Spacing="1" />
+            </ItemsPanelTemplate>
+          </Setter>
+        </Style>
+        <Style Selector="ListBox.segmented ListBoxItem">
+          <Setter Property="Padding" Value="8,2" />
+          <Setter Property="MinHeight" Value="0" />
+          <Setter Property="CornerRadius" Value="4" />
+          <Setter Property="FontSize" Value="{DynamicResource OrandaFontSizeSmall}" />
+        </Style>
+        <Style Selector="ListBox.segmented ListBoxItem:selected /template/ ContentPresenter#PART_ContentPresenter">
+          <Setter Property="Background" Value="{DynamicResource OrandaToolbarPressedBrush}" />
+        </Style>
+        <Style Selector="ListBox.segmented ListBoxItem:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+          <Setter Property="Background" Value="{DynamicResource OrandaToolbarHoverBrush}" />
+        </Style>
+        <Style Selector="ListBox.segmented ListBoxItem:selected TextBlock">
+          <Setter Property="FontWeight" Value="SemiBold" />
+        </Style>
         <!-- 결과 그리드 열 필터 팝업의 값 목록(TSK-13-26): 체크 상자 한 줄이 Fluent 기본(약 40 DIP)보다 촘촘하다. -->
         <Style Selector="ListBox.filter-values ListBoxItem">
             <Setter Property="Padding" Value="6,0" />

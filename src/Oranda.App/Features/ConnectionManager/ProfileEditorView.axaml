@@ -24,6 +24,11 @@
     <Style Selector="Border.section > TextBlock">
       <Setter Property="FontWeight" Value="SemiBold" />
     </Style>
+    <!-- 접속 방식 단추 묶음: 폼 안에서는 툴바보다 큰 본문 글자와 넉넉한 여백을 쓴다. -->
+    <Style Selector="ListBox.segmented.form ListBoxItem">
+      <Setter Property="FontSize" Value="{DynamicResource OrandaFontSizeBase}" />
+      <Setter Property="Padding" Value="10,3" />
+    </Style>
     <!-- 비어 있는 필수 칸: 라벨 글자와 칸 테두리를 빨강으로(접속·시험 단추도 꺼진다). -->
     <Style Selector="TextBlock.error">
       <Setter Property="Foreground" Value="{DynamicResource OrandaIconRedBrush}" />
@@ -128,9 +133,16 @@
         <ColumnDefinition Width="*" />
       </Grid.ColumnDefinitions>
       <TextBlock Text="접속 방식" />
-      <ComboBox x:Name="ModeBox" Grid.Column="1" HorizontalAlignment="Stretch"
-                ItemsSource="{Binding Modes}" SelectedValueBinding="{ReflectionBinding Value}"
-                SelectedValue="{Binding Mode}" AutomationProperties.Name="접속 방식" />
+      <!-- SQL Developer·DBeaver·Toad 처럼 방식을 붙은 단추로 고른다(호스트·포트 = Basic/Direct, TNS, 접속 문자열 = Custom). -->
+      <ListBox x:Name="ModeBox" Grid.Column="1" Classes="segmented form" HorizontalAlignment="Left"
+               ItemsSource="{Binding Modes}" SelectedValueBinding="{ReflectionBinding Value}"
+               SelectedValue="{Binding Mode}" AutomationProperties.Name="접속 방식">
+        <ListBox.ItemTemplate>
+          <DataTemplate>
+            <TextBlock Text="{ReflectionBinding Label}" />
+          </DataTemplate>
+        </ListBox.ItemTemplate>
+      </ListBox>
     </Grid>
 
     <Grid IsVisible="{Binding IsHostPortMode}" RowDefinitions="Auto,Auto" ColumnSpacing="12" RowSpacing="6">
@@ -144,7 +156,7 @@
       <TextBox x:Name="HostBox" Grid.Row="0" Grid.Column="1" Text="{Binding Host}" Classes.missing="{Binding HostMissing}" AutomationProperties.Name="호스트" />
       <TextBlock Grid.Row="0" Grid.Column="2" Classes="inline" Text="포트" />
       <TextBox x:Name="PortBox" Grid.Row="0" Grid.Column="3" Width="80" Text="{Binding Port}" AutomationProperties.Name="포트" />
-      <TextBlock Grid.Row="1" Text="서비스" Classes.error="{Binding ServiceMissing}" />
+      <TextBlock Grid.Row="1" Text="서비스 이름" Classes.error="{Binding ServiceMissing}" />
       <TextBox x:Name="ServiceBox" Grid.Row="1" Grid.Column="1" Text="{Binding Service}" Classes.missing="{Binding ServiceMissing}" AutomationProperties.Name="서비스" />
       <CheckBox x:Name="TlsBox" Grid.Row="1" Grid.Column="2" Grid.ColumnSpan="2" Content="TLS(tcps)" IsChecked="{Binding UseTls}" />
     </Grid>
@@ -155,8 +167,11 @@
         <ColumnDefinition Width="*" />
       </Grid.ColumnDefinitions>
       <TextBlock Text="접속 문자열" Classes.error="{Binding EasyConnectMissing}" />
+      <!-- 접속 기술자((DESCRIPTION=…))는 길어서 접어 보인다: 두 줄에서 시작해 세 줄까지 늘어난다(Enter 는 넣지 않는다). -->
       <TextBox x:Name="EasyConnectBox" Grid.Column="1" Text="{Binding EasyConnect}" Classes.missing="{Binding EasyConnectMissing}"
-               PlaceholderText="host:1521/service?connect_timeout=5 또는 tcps://…" AutomationProperties.Name="접속 문자열" />
+               TextWrapping="Wrap" AcceptsReturn="False" MinHeight="52" MaxHeight="76" VerticalContentAlignment="Top"
+               FontFamily="{StaticResource OrandaCodeFontFamily}"
+               PlaceholderText="host:1521/service?connect_timeout=5, tcps://… 또는 (DESCRIPTION=…)" AutomationProperties.Name="접속 문자열" />
     </Grid>
 
     <!-- 폴더 칸은 직접 입력하거나 「찾아보기…」 로 폴더 선택 창에서 고른다. 방식이 쓰지 않는 칸은 숨긴다(TNS 디렉터리 = TNS 별칭만, 지갑 = TLS 를 쓸 수 있을 때). -->
@@ -169,16 +184,6 @@
       <TextBlock Text="TNS 디렉터리" />
       <TextBox x:Name="TnsAdminBox" Grid.Column="1" Text="{Binding TnsAdmin}" PlaceholderText="tnsnames.ora 가 있는 폴더(선택)" AutomationProperties.Name="TNS 디렉터리" />
       <Button x:Name="TnsAdminBrowseButton" Grid.Column="2" Content="찾아보기…" AutomationProperties.Name="TNS 디렉터리 찾아보기" />
-    </Grid>
-    <Grid IsVisible="{Binding UsesWallet}" ColumnSpacing="12">
-      <Grid.ColumnDefinitions>
-        <ColumnDefinition Width="Auto" SharedSizeGroup="Label" />
-        <ColumnDefinition Width="*" />
-        <ColumnDefinition Width="Auto" />
-      </Grid.ColumnDefinitions>
-      <TextBlock Text="지갑 폴더" />
-      <TextBox x:Name="WalletBox" Grid.Column="1" Text="{Binding WalletLocation}" PlaceholderText="cwallet.sso 가 있는 폴더(선택)" AutomationProperties.Name="지갑 폴더" />
-      <Button x:Name="WalletBrowseButton" Grid.Column="2" Content="찾아보기…" AutomationProperties.Name="지갑 폴더 찾아보기" />
     </Grid>
 
     <Grid IsVisible="{Binding IsTnsMode}" RowDefinitions="Auto,Auto" ColumnSpacing="12" RowSpacing="2">
@@ -193,6 +198,17 @@
                 PlaceholderText="TNS 디렉터리를 넣으면 tnsnames.ora 의 별칭이 나옵니다" AutomationProperties.Name="TNS 별칭" />
       <TextBlock x:Name="TnsAliasDetail" Grid.Row="1" Grid.Column="1" Text="{Binding TnsAliasDetail}" Opacity="0.7"
                  FontSize="{DynamicResource OrandaFontSizeSmall}" IsVisible="{Binding TnsAliasDetail, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+    </Grid>
+
+    <Grid IsVisible="{Binding UsesWallet}" ColumnSpacing="12">
+      <Grid.ColumnDefinitions>
+        <ColumnDefinition Width="Auto" SharedSizeGroup="Label" />
+        <ColumnDefinition Width="*" />
+        <ColumnDefinition Width="Auto" />
+      </Grid.ColumnDefinitions>
+      <TextBlock Text="지갑 폴더" />
+      <TextBox x:Name="WalletBox" Grid.Column="1" Text="{Binding WalletLocation}" PlaceholderText="cwallet.sso 가 있는 폴더(선택)" AutomationProperties.Name="지갑 폴더" />
+      <Button x:Name="WalletBrowseButton" Grid.Column="2" Content="찾아보기…" AutomationProperties.Name="지갑 폴더 찾아보기" />
     </Grid>
 
     <Border Classes="section">
