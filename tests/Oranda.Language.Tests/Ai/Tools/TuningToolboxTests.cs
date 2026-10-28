@@ -24,7 +24,11 @@ public class TuningToolboxTests
 
         public string? PoolSchema { get; set; } = "APP";
 
-        public Task<TuningCandidateSet> GetTuningCandidatesAsync(ISession s, TuningCandidateQuery query, CancellationToken ct) => Pool(query, PoolSchema);
+        /// <summary>참이면 공유 풀(V$SQL) 조회가 권한 오류로 실패한다.</summary>
+        public bool PoolDenied { get; set; }
+
+        public Task<TuningCandidateSet> GetTuningCandidatesAsync(ISession s, TuningCandidateQuery query, CancellationToken ct) =>
+            PoolDenied ? throw new InvalidOperationException("ORA-00942: table or view does not exist") : Pool(query, PoolSchema);
 
         public Task<TableStatsRow?> GetTableStatsAsync(ISession s, string owner, string table, CancellationToken ct) =>
             Task.FromResult<TableStatsRow?>(new TableStatsRow(owner, table, 1_823_000, 40_000, 90, new DateTime(2026, 10, 27), false));
@@ -319,6 +323,39 @@ public class TuningToolboxTests
         Assert.Contains(ctx.Omitted, o => o.Contains("쓰지 않는 열 1개", StringComparison.Ordinal));
         Assert.Contains(ctx.Omitted, o => o.Contains("히스토그램 끝값", StringComparison.Ordinal));
         Assert.Equal(2481234567, ctx.Statement.PlanHash);
+    }
+
+    [Fact]
+    public async Task Tuning_context_without_v_sql_privilege_keeps_the_rest_and_withholds_sql_id()
+    {
+        var (box, _, tuning) = Make();
+        tuning.PoolDenied = true;
+        var sql = "SELECT stat_cd FROM app.tb_order WHERE stat_cd = :1";
+
+        // sql 만: 계산한 sql_id 의 가시성을 못 보므로 sql_id 없이 EXPLAIN 으로 계획을 낸다.
+        var byText = await box.GetTuningContextAsync(new FakeSession(), new TuningContextRequest(sql, null, 0, true, "APP"), CancellationToken.None);
+        // sql_id 도 준 호출: 같은 권한 오류여도 실패하지 않는다.
+        var byId = await box.GetTuningContextAsync(new FakeSession(), new TuningContextRequest(sql, "7h35", 0, false, "APP"), CancellationToken.None);
+
+        Assert.Null(byText.Statement.SqlId);
+        Assert.Equal("APP.TB_ORDER", Assert.Single(byText.Objects).Name);
+        Assert.Equal(2481234567, byText.Statement.PlanHash);
+        Assert.Contains("v$sql: 권한 없음", byText.Omitted);
+        Assert.Null(byId.Statement.SqlId);
+        Assert.Equal("APP.TB_ORDER", Assert.Single(byId.Objects).Name);
+        Assert.Contains("v$sql: 권한 없음", byId.Omitted);
+        Assert.DoesNotContain(byId.Omitted, o => o.Contains("찾지 못했습니다", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task Benchmark_without_v_sql_privilege_returns_results_without_sql_id()
+    {
+        var (box, _, tuning) = Make();
+        tuning.PoolDenied = true;
+
+        var r = await box.BenchmarkAsync(new FakeSession(), [new("a", "SELECT 1 FROM dual")], 1, true, "APP", CancellationToken.None);
+
+        Assert.Null(Assert.Single(r).SqlId);
     }
 
     [Fact]

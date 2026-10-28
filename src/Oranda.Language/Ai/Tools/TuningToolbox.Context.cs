@@ -11,6 +11,8 @@ public sealed partial class TuningToolbox
     /// <summary>줄이는 중에도 남기는 계획 지적 줄 수(1단계에서 이 수로, 2단계에서 0으로).</summary>
     private const int KeptPlanFindings = 3;
 
+    private const string NoSqlViewPrivilege = "v$sql: 권한 없음";
+
     /// <summary>
     /// <c>get_tuning_context</c>: 문장이 참조하는 객체의 통계·쓰는 열·인덱스와 계획 지적 줄을 한 번에 묶는다.
     /// 응답이 <see cref="TuningContextRequest.BudgetTokens"/> 를 넘으면 계획 지적 줄 → 인덱스 통계 → 열 통계 순서로 줄이고 <c>omitted</c> 에 적는다.
@@ -32,9 +34,16 @@ public sealed partial class TuningToolbox
 
         // 문장의 sql_id: 호출이 준 값, 없으면 문장 글에서 계산한 값이 공유 풀에 있을 때. 이 실행 범위의 스키마가 파싱한 커서만 쓴다.
         var sqlId = string.IsNullOrWhiteSpace(request.SqlId) ? null : request.SqlId;
+        // V$SQL 조회 권한이 없으면(null) 그 부분만 빼고 omitted 에 적는다. 보이는지 알 수 없으므로 sql_id 는 쓰지 않는다.
         if (sqlId is not null)
         {
-            if (!await CursorVisibleAsync(s, sqlId, request.CursorSchema, ct).ConfigureAwait(false))
+            var visible = await TryCursorVisibleAsync(s, sqlId, request.CursorSchema, ct).ConfigureAwait(false);
+            if (visible is null)
+            {
+                omitted.Add(NoSqlViewPrivilege);
+                sqlId = null;
+            }
+            else if (!visible.Value)
             {
                 omitted.Add($"계획: {CursorNotVisible}");
                 sqlId = null;
@@ -43,7 +52,12 @@ public sealed partial class TuningToolbox
         else if (!string.IsNullOrWhiteSpace(request.Sql))
         {
             var computed = SqlIdCalculator.Compute(request.Sql);
-            if (await CursorVisibleAsync(s, computed, request.CursorSchema, ct).ConfigureAwait(false))
+            var visible = await TryCursorVisibleAsync(s, computed, request.CursorSchema, ct).ConfigureAwait(false);
+            if (visible is null)
+            {
+                omitted.Add(NoSqlViewPrivilege);
+            }
+            else if (visible.Value)
             {
                 sqlId = computed;
             }

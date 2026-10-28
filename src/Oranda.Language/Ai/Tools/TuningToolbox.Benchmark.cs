@@ -65,7 +65,8 @@ public sealed partial class TuningToolbox
 
             // 실행한 문장의 sql_id: 글에서 계산한 값이 공유 풀에 있고 이 실행 범위의 스키마가 파싱한 커서일 때만 알린다.
             var computed = SqlIdCalculator.Compute(texts[i]);
-            var sqlId = await CursorVisibleAsync(s, computed, scopeSchema, ct).ConfigureAwait(false) ? computed : null;
+            // V$SQL 권한이 없으면(null) 이미 끝난 실행 결과를 버리지 않고 sql_id 만 알리지 않는다.
+            var sqlId = await TryCursorVisibleAsync(s, computed, scopeSchema, ct).ConfigureAwait(false) is true ? computed : null;
             results.Add(new BenchmarkDescription(
                 v.Label, r.Iterations, r.Elapsed.TotalMilliseconds, r.LogicalReads, r.PhysicalReads, r.Rows, r.PlanHashValue, sqlId));
         }

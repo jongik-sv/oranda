@@ -40,6 +40,25 @@ public sealed partial class TuningToolbox
     }
 
     /// <summary>
+    /// <see cref="CursorVisibleAsync"/> 와 같되 V$SQL 조회 권한이 없으면(ORA-00942·ORA-01031) 예외 대신 null 을 돌려준다.
+    /// 호출자는 null 을 「볼 수 없음」으로 다뤄야 한다(sql_id 를 알리지 않는 fail-closed). 다른 오류는 그대로 던진다.
+    /// </summary>
+    internal async Task<bool?> TryCursorVisibleAsync(ISession s, string sqlId, string? scopeSchema, CancellationToken ct)
+    {
+        try
+        {
+            return await CursorVisibleAsync(s, sqlId, scopeSchema, ct).ConfigureAwait(false);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException && !ct.IsCancellationRequested && IsNoPrivilege(ex))
+        {
+            return null;
+        }
+    }
+
+    private static bool IsNoPrivilege(Exception ex) =>
+        ex.Message.Contains("ORA-00942", StringComparison.Ordinal) || ex.Message.Contains("ORA-01031", StringComparison.Ordinal);
+
+    /// <summary>
     /// <c>explain_plan</c>: 예상 계획. 먼저 접속의 실효 허용(<paramref name="allowExplainPlan"/>: 개발 켬·운영 끔)과
     /// 문장 모양(언어 서비스로 확실히 분류된 SELECT/WITH 한 문장, FOR UPDATE·치환 변수 없음, 바인드는 허용)을 검사한다.
     /// 거부 메시지와 서버가 읽기 전용 접속이라 막는 경우(ORA-01456)는 <c>get_cursor_plan</c> 으로 안내한다.

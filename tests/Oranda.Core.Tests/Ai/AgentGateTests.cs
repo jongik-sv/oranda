@@ -627,6 +627,29 @@ public partial class AgentGateTests
     }
 
     [Fact]
+    public async Task Failed_call_records_only_the_ora_number_as_the_failure_kind()
+    {
+        var fx = new GateFixture();
+        var session = Session();
+        var handler = fx.Handlers[AgentToolNames.DescribeObject];
+
+        handler.Respond = _ => AgentToolOutput.Error("조회에 실패했습니다 (ORA-00942). password=hunter2");
+        var failed = await Call(fx, session, AgentToolNames.DescribeObject, """{"object":"TB_ORDER"}""");
+        handler.Respond = _ => throw new InvalidOperationException("ORA-01031: insufficient privileges at db01:1521");
+        var thrown = await Call(fx, session, AgentToolNames.DescribeObject, """{"object":"TB_ORDER"}""");
+        handler.Respond = _ => AgentToolOutput.Error("조회에 실패했습니다.");
+        var plain = await Call(fx, session, AgentToolNames.DescribeObject, """{"object":"TB_ORDER"}""");
+
+        Assert.Equal("tool_failed: ORA-00942", fx.Audit.Entries[0].Reason);
+        Assert.Equal("tool_failed: ORA-00942", failed.Note);
+        Assert.Equal("tool_exception: ORA-01031", fx.Audit.Entries[1].Reason);
+        Assert.Contains("ORA-01031", thrown.Result.Text, StringComparison.Ordinal);
+        Assert.Equal("tool_failed", fx.Audit.Entries[2].Reason);
+        Assert.Equal("tool_failed", plain.Note);
+        Assert.All(fx.Audit.Entries, e => Assert.DoesNotContain("hunter2", e.Reason, StringComparison.Ordinal));
+    }
+
+    [Fact]
     public async Task Oversized_result_is_replaced_by_a_narrowing_hint()
     {
         var fx = new GateFixture();

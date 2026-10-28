@@ -302,7 +302,7 @@ public sealed partial class AgentGate : IAgentGate
             // 호출자의 취소가 아닌 취소(세션 폐기·처리자 안의 시간 초과)는 실패로 본다.
             return ex is OperationCanceledException && session.IsRevoked
                 ? Deny("run_revoked", "This run has ended and no longer accepts tool calls.")
-                : Fail("tool_exception", ExceptionText(ex, level));
+                : FailWithKind("tool_exception", ExceptionText(ex, level), ex.Message);
         }
 
         // 처리자가 도는 동안 폐기됐으면 결과를 쓰지 않는다(sql_id 도 기억하지 않는다).
@@ -318,7 +318,7 @@ public sealed partial class AgentGate : IAgentGate
 
         if (output.IsError)
         {
-            return Fail("tool_failed", HandlerErrorText(output.ErrorMessage!, level));
+            return FailWithKind("tool_failed", HandlerErrorText(output.ErrorMessage!, level), output.ErrorMessage!);
         }
 
         // 처리자가 캐시 노드를 돌려줄 수 있으므로 복사본에서 가린다.
@@ -372,6 +372,17 @@ public sealed partial class AgentGate : IAgentGate
 
     private static GateOutcome Fail(string code, string message) => Reject(AiToolJudgement.Failed, code, message);
 
+    /// <summary>
+    /// 처리자 실패(<paramref name="rawMessage"/> 는 처리자 오류 글 또는 예외 메시지). 감사 사유에 오류 종류로 DB 오류 번호만 덧붙인다
+    /// (<c>tool_failed: ORA-00942</c>). 번호가 없으면 사유는 코드뿐이다. 원문은 감사 기록에 넣지 않는다.
+    /// </summary>
+    private static GateOutcome FailWithKind(string code, string message, string rawMessage)
+    {
+        var failed = Fail(code, message);
+        var ora = OraNumber().Match(rawMessage);
+        return ora.Success ? failed with { Reason = $"{code}: {ora.Value}" } : failed;
+    }
+
     private static GateOutcome Reject(AiToolJudgement judgement, string code, string message)
     {
         var body = new JsonObject { ["error"] = message, ["code"] = code };
@@ -390,9 +401,10 @@ public sealed partial class AgentGate : IAgentGate
             return SanitizeError(name + ": " + ex.Message);
         }
 
-        // Oracle 예외 계열은 오류 번호를 형 이름과 함께 남긴다(번호만으로는 값·서버 정보가 새지 않는다).
-        var ora = name.Contains("Oracle", StringComparison.OrdinalIgnoreCase) ? OraNumber().Match(ex.Message) : null;
-        return ora is { Success: true } ? name + ": " + ora.Value : name;
+        // 메시지에 오류 번호가 있으면 형 이름과 함께 남긴다(번호만으로는 값·서버 정보가 새지 않는다).
+        // 예외를 감싼 형(InvalidOperationException 등)도 번호는 같이 보여야 LLM 이 다른 도구로 돌아갈 수 있다.
+        var ora = OraNumber().Match(ex.Message);
+        return ora.Success ? name + ": " + ora.Value : name;
     }
 
     /// <summary>
