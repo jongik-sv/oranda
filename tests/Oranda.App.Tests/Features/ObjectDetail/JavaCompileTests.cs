@@ -53,8 +53,8 @@ public class JavaCompileTests
     public async Task Recompiling_a_source_confirms_runs_alter_through_the_engine_and_publishes_errors()
     {
         var (vm, meta, exec, probe) = Make();
-        meta.Errors = [new CompileError(3, 9, "cannot find symbol", false)];
-        exec.Failure = new DbError("ORA-24344", "success with compilation error");
+        // 실제 JVM 서버 모양(2026-10-28 확인): 오류가 있어도 ALTER JAVA SOURCE … COMPILE 은 예외 없이(성공으로) 끝나고 오류는 ALL_ERRORS 에만 있다.
+        meta.Errors = [new CompileError(3, 9, "cannot find symbol (symbol: variable missing; location: class Hello)", false)];
         var session = new Session();
         await vm.OpenAsync(session, Source, showDdl: false);
         Assert.True(vm.IsJavaCompilable);
@@ -72,7 +72,7 @@ public class JavaCompileTests
         Assert.Equal(StatementKind.Ddl, stmt.Kind);
         Assert.Equal(Oranda.Core.History.HistorySource.SchemaBrowser, Assert.Single(exec.Options)!.Source); // 실행 기록에 남는다
         Assert.Equal(Source, meta.LastErrorsTarget); // ALL_ERRORS 를 이 객체(JAVA SOURCE, 짧은 이름)로 읽는다
-        Assert.Equal("cannot find symbol", Assert.Single(vm.JavaErrors).Message);
+        Assert.StartsWith("cannot find symbol", Assert.Single(vm.JavaErrors).Message, StringComparison.Ordinal);
         Assert.Equal(1, probe.Shown);
         Assert.Contains("com/example/Hello", CompileErrorsViewModel.LastSource?.Title, StringComparison.Ordinal);
         Assert.True(meta.DetailReads > readsBefore); // 상태(VALID/INVALID)를 새로 읽는다

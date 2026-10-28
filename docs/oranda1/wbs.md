@@ -1213,6 +1213,18 @@ levels:
   - acceptance: JavaSourceSplitTests 14(; { } "…;…" // ; /* ; */ 섞인 코드·/ 단독 줄 종결·빈 줄 옵션·머리 변형·스크립트에 섞임·/ 없이 글 끝·커서 위치·USING BFILE·CLASS/RESOURCE·포맷터 원문 유지·L2 오류 없음) / JavaCompileTests 17(소스 COMPILE·클래스 RESOLVE·확인 거절·JVM 없음·읽기 전용·정책 거부·Java 아님·편집기로 열기·Headless 단추·머리 읽기·오류 줄 기준·편집기 실행 오류 읽기 판정) / DbToolsTests 일괄 컴파일 Java 1 / SchemaStatementsTests Java 2 / JavaObjectsIntegrationTests +1(JVM 있는 서버 전용: 분리한 글 컴파일·오류 줄·ALTER 다시 컴파일; 26ai·11g 는 JVM 없음이라 건너뜀, 돌려 보지 않음) / `dotnet build Oranda.sln -warnaserror`
   - note: 바꾼 곳 = Language/Lexing/StatementSplitter(Java 본문 모드·Piece.JavaSource), Formatting/FormatTokenizer(Java 소스 원문 줄), Parsing/PlSqlAnalyzer(Java 소스 건너뜀), Oracle/Schema/SchemaStatements.Compile(JAVA SOURCE·JAVA CLASS), IMetadataProvider.IsJavaAvailableAsync(기본 false)·OracleMetadataProvider(public), PlsqlSourceText(ParseJavaCreateHeader·SourceStart), SqlCompileErrors(Java 머리), ObjectDetailViewModel.Java.cs(새)·ObjectDetailView(Java 줄), ObjectSearchViewModel(일괄 컴파일에 Java), literals-en.json. JVM 있는 서버에서 ORA-24344/29535 반환 모양·오류 줄 기준은 아직 확인 못 함 (win144)
 
+- [x] TSK-14-24: JVM 있는 서버에서 Java 클래스 상세(메서드·필드 형식, 「소스 열기」, 소스의 클래스 표)와 Java 컴파일 오류 표시 고침 [win144] w:1 2026-10-28~2026-10-28
+  - category: defect
+  - domain: backend
+  - model: opus
+  - priority: high
+  - tags: object-detail, sql-editor, java, win144
+  - prd-ref: PRD SCH-01, D-054, D-055
+  - depends: TSK-14-23
+  - requirements: JVM 있는 시험 서버(26ai full 이미지, JAVAVM VALID)에서 JavaObjectsIntegrationTests 3개 중 2개가 실패한 원인을 실제 사전 값으로 고친다. ① ALL_JAVA_METHODS·ARGUMENTS·FIELDS 는 원시형이면 클래스 열(return_class·argument_class·field_class)이 NULL 이 아니라 '-', 클래스면 base_type 이 'class' — 클래스 열이 '-' 면 base_type 을 쓴다(상위·바깥 클래스 '-' 도 빈 값). 깨진 클래스의 이름 '-' 자리 행은 표에서 뺀다. ② ALL_JAVA_CLASSES.SOURCE 는 소스 객체 이름이 아니라 파일 표시(긴 이름의 마지막 조각, com/example/Hello → Hello) — 「소스 열기」·소스의 클래스 표는 ALL_JAVA_DERIVATIONS(source_name → class_name)로 찾는다. ③ 컴파일 오류가 있는 CREATE … JAVA SOURCE·ALTER JAVA SOURCE … COMPILE·ALTER JAVA CLASS … RESOLVE 는 ODP.NET 에서 예외 없이 끝난다(SQL*Plus 의 「with compilation errors」 경고) — 제품은 이미 성공 뒤에도 ALL_ERRORS 를 읽는다. 그러나 Java 의 ALL_ERRORS 는 줄·열이 0 이고 javac 출력 한 줄이 한 행이라(「이름:5: error: …」, 소스 줄, ^, symbol·location, 「1 error」) 머리 행마다 오류 하나로 묶고 줄은 머리에서(AS 다음 줄 = 1줄, 실제 5 확인), 열은 ^ 자리, 설명은 괄호로. 'Note:' 행(정상 컴파일에도 남음)은 경고. ④ 사전 이름이 줄어든(128자 초과, '/해시_끝이름') 소스는 편집기가 긴 이름으로 물어도 DBMS_JAVA.SHORTNAME 으로 ALL_ERRORS 를 찾는다(meta.java_errors, 못 부르면 meta.compile_errors); 제약: 실앱 SendKeys 금지(Headless 까지), JVM 컨테이너는 시험 때만 켬; 비고: 레인 sr-jvm
+  - acceptance: JavaCatalogTests 34(+'-' 형식·derivations·javac 묶기·Note 경고) / JavaObjectsIntegrationTests 4(JVM 서버 1523: 목록·긴 이름·상세 형식·「소스 열기」·예외 없는 컴파일 오류 줄 5·열 ^·INVALID 일괄 대상·깨진 채 ALTER·고친 뒤 오류 없음·128자 초과 이름 모두 통과, 26ai 1521·11g 1522 는 JVM 없음 경로 통과) / JavaCompileTests(다시 컴파일 = 성공 + ALL_ERRORS 모양) / `dotnet build Oranda.sln -warnaserror`
+  - note: 바꾼 곳 = Catalog/meta/java_source_object.sql·java_source_classes.sql(ALL_JAVA_DERIVATIONS), java_errors.sql(새), OracleMetadataProvider.Java.cs(Dash·JavaType·JavaCompileErrors·ReadJavaCompileErrorsAsync, 상세 「소스」 → 「소스 파일」), OracleMetadataProvider.Source.cs(Java 오류 갈래). 남은 것: ALL_JAVA_* 뷰가 한 번에 약 4초(시험 서버, DBA 도 같음)라 클래스 상세가 20초쯤 걸린다 — 사전 뷰 성능이라 이번에는 두었다 (win144)
+
 ## 의존 그래프
 
 ### 그래프 (Mermaid)
@@ -1327,6 +1339,7 @@ graph LR
   TSK-09-10 --> TSK-14-19
   TSK-07-02 --> TSK-14-22
   TSK-14-22 --> TSK-14-23
+  TSK-14-23 --> TSK-14-24
   style TSK-01-02 fill:#e8f5e9,stroke:#2e7d32
   style TSK-03-01 stroke:#c62828,stroke-width:2px
   style TSK-02-02 stroke:#c62828,stroke-width:2px

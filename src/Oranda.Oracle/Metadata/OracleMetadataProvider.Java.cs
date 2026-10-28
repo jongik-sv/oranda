@@ -1,5 +1,6 @@
 using System.Collections.Concurrent;
 using System.Text;
+using System.Text.RegularExpressions;
 using Oracle.ManagedDataAccess.Client;
 using Oranda.Core.Metadata;
 using Oranda.Core.Sessions;
@@ -121,18 +122,12 @@ internal sealed partial class OracleMetadataProvider
                 if (cls.Count > 0)
                 {
                     var r = cls[0];
-                    var sourceName = Str(r[8]);
-                    if (sourceName is { Length: > 0 })
+                    // all_java_classes.source 는 소스 파일 표시(긴 이름의 마지막 조각, 예 Hello)라 소스 객체는 all_java_derivations 로 찾는다.
+                    var sourceName = Dash(Str(r[8]));
+                    var found = await TryQueryAsync(s, "meta.java_source_object", Bind, ct);
+                    if (found is { Count: > 0 } && Str(found[0][0]) is { Length: > 0 } sourceObject)
                     {
-                        var found = await TryQueryAsync(s, "meta.java_source_object", c =>
-                        {
-                            c.Parameters.Add("owner", obj.Owner);
-                            c.Parameters.Add("source", sourceName);
-                        }, ct);
-                        if (found is { Count: > 0 } && Str(found[0][0]) is { Length: > 0 } sourceObject)
-                        {
-                            source = new DbObjectRef(obj.Owner, sourceObject, "JAVA SOURCE");
-                        }
+                        source = new DbObjectRef(obj.Owner, sourceObject, "JAVA SOURCE");
                     }
 
                     sections.Add(new DetailSection("Java 클래스", ["항목", "값"],
@@ -145,7 +140,7 @@ internal sealed partial class OracleMetadataProvider
                         ["내부 클래스", Str(r[5])],
                         ["상위 클래스", JavaTypeName(Str(r[6]))],
                         ["바깥 클래스", JavaTypeName(Str(r[7]))],
-                        ["소스", sourceName],
+                        ["소스 파일", sourceName],
                         ["소스 객체", source is null ? null : $"{source.Owner}.{source.Name}"],
                     ]));
                 }
@@ -153,7 +148,7 @@ internal sealed partial class OracleMetadataProvider
                 var methods = await TryQueryAsync(s, "meta.java_methods", Bind, ct);
                 var args = methods is { Count: > 0 } ? await TryQueryAsync(s, "meta.java_arguments", Bind, ct) : null;
                 sections.Add(methods is null ? Unavailable("메서드") : new DetailSection("메서드", ["#", "이름", "서명", "반환형", "접근", "static", "abstract", "final"],
-                    [.. methods.Select(m => (IReadOnlyList<object?>)
+                    [.. methods.Where(m => Dash(Str(m[1])) is not null).Select(m => (IReadOnlyList<object?>)
                     [
                         Int(m[0]), Str(m[1]), JavaSignature(Str(m[1]), Int(m[0]), Int(m[6]), args),
                         JavaType(Int(m[7]), Str(m[8]), Str(m[9])), Str(m[2]), Str(m[3]), Str(m[4]), Str(m[5]),
@@ -161,7 +156,7 @@ internal sealed partial class OracleMetadataProvider
 
                 var fields = await TryQueryAsync(s, "meta.java_fields", Bind, ct);
                 sections.Add(fields is null ? Unavailable("필드") : new DetailSection("필드", ["#", "이름", "형식", "접근", "static", "final"],
-                    [.. fields.Select(f => (IReadOnlyList<object?>)[Int(f[0]), Str(f[1]), JavaType(Int(f[5]), Str(f[6]), Str(f[7])), Str(f[2]), Str(f[3]), Str(f[4])])]));
+                    [.. fields.Where(f => Dash(Str(f[1])) is not null).Select(f => (IReadOnlyList<object?>)[Int(f[0]), Str(f[1]), JavaType(Int(f[5]), Str(f[6]), Str(f[7])), Str(f[2]), Str(f[3]), Str(f[4])])]));
 
                 var implements = await TryQueryAsync(s, "meta.java_implements", Bind, ct);
                 if (implements is { Count: > 0 })
@@ -199,11 +194,20 @@ internal sealed partial class OracleMetadataProvider
 
         if (obj.ObjectType is "JAVA SOURCE" or "JAVA CLASS")
         {
-            var errors = await TryQueryAsync(s, "meta.compile_errors", c => BindSourceObject(c, obj), ct);
+            IReadOnlyList<CompileError>? errors;
+            try
+            {
+                errors = await ReadJavaCompileErrorsAsync(s, obj, ct);
+            }
+            catch (OracleException)
+            {
+                errors = null;
+            }
+
             if (errors is { Count: > 0 })
             {
                 sections.Add(new DetailSection("컴파일 오류", ["줄", "열", "종류", "메시지"],
-                    [.. errors.Select(e => (IReadOnlyList<object?>)[Int(e[0]), Int(e[1]), Str(e[3]), (Str(e[2]) ?? string.Empty).Trim()])]));
+                    [.. errors.Select(e => (IReadOnlyList<object?>)[e.Line, e.Column, e.IsWarning ? "WARNING" : "ERROR", e.Message])]));
             }
         }
 
@@ -251,12 +255,19 @@ internal sealed partial class OracleMetadataProvider
         : $"-- {obj.Owner}.{obj.Name}: JAVA RESOURCE 는 바이트 내용이라 DDL 로 보이지 않는다(내용 읽기는 이번 판에 없다).";
 
     /// <summary>사전의 형식 이름(<c>java/lang/String</c>)을 Java 표기(<c>java.lang.String</c>)로.</summary>
-    internal static string? JavaTypeName(string? name) => name?.Replace('/', '.');
+    /// 사전은 없는 값(상위·바깥 클래스 없음 등)을 <c>-</c> 로 둔다 — null.
+    internal static string? JavaTypeName(string? name) => Dash(name)?.Replace('/', '.');
 
-    /// <summary>원시형(base_type) 또는 클래스(class_name)에 배열 차수만큼 <c>[]</c>.</summary>
+    /// <summary>사전의 「없음」 표시 <c>-</c> 를 null 로.</summary>
+    private static string? Dash(string? value) => value is null || value.Trim() is "-" or "" ? null : value;
+
+    /// <summary>
+    /// 원시형(base_type) 또는 클래스(class_name)에 배열 차수만큼 <c>[]</c>. 실제 사전: 원시형이면 클래스 열이 <c>-</c>,
+    /// 클래스면 base_type 이 <c>class</c> 다(JVM 서버 확인).
+    /// </summary>
     internal static string? JavaType(int? arrayDepth, string? baseType, string? className)
     {
-        var name = className is { Length: > 0 } ? JavaTypeName(className) : baseType;
+        var name = JavaTypeName(className) ?? Dash(baseType);
         if (name is null)
         {
             return null;
@@ -281,6 +292,129 @@ internal sealed partial class OracleMetadataProvider
 
         var types = args.Where(a => Int(a[0]) == methodIndex).Select(a => JavaType(Int(a[2]), Str(a[3]), Str(a[4])) ?? "?");
         return $"{method}({string.Join(", ", types)})";
+    }
+
+    /// <summary>Java 객체의 컴파일 오류(ALL_ERRORS). 사전 이름이 줄었으면 SHORTNAME 으로 찾고, DBMS_JAVA 를 못 부르면 그 이름 그대로 찾는다.</summary>
+    private static async Task<IReadOnlyList<CompileError>> ReadJavaCompileErrorsAsync(ISession s, DbObjectRef obj, CancellationToken ct)
+    {
+        var rows = await TryQueryAsync(s, "meta.java_errors", c => BindSourceObject(c, obj), ct)
+            ?? await QueryAsync(s, "meta.compile_errors", c => BindSourceObject(c, obj), ct);
+        return JavaCompileErrors(rows);
+    }
+
+    private static readonly Regex JavacHeader = new(@"^.*?:(?<line>\d+): (?<kind>error|warning): (?<msg>.*)$", RegexOptions.CultureInvariant);
+    private static readonly Regex JavacCaret = new(@"^\s*\^\s*$", RegexOptions.CultureInvariant);
+    private static readonly Regex JavacSummary = new(@"^\d+ (?:error|errors|warning|warnings)$", RegexOptions.CultureInvariant);
+    private static readonly Regex Spaces = new(@"\s+", RegexOptions.CultureInvariant);
+
+    /// <summary>
+    /// Java 객체의 ALL_ERRORS 행을 오류 목록으로 묶는다. 실제 모양(JVM 서버 확인): 줄·열이 0 이고 javac 출력 한 줄이 한 행이다 —
+    /// <c>이름:줄: error: 메시지</c>, 문제의 소스 줄, <c>^</c>(열 자리), 설명(<c>symbol: …</c>·<c>location: …</c>), 끝의 <c>1 error</c>.
+    /// 줄은 AS 다음 줄이 1줄. 머리 행마다 오류 하나(설명은 괄호로 붙이고 소스 줄·^·요약은 뺀다). <c>Note:</c> 행은 경고(정상 컴파일에도 남는다).
+    /// 줄 번호가 있는 행(줄 &gt; 0)은 그대로 쓴다.
+    /// </summary>
+    internal static List<CompileError> JavaCompileErrors(IReadOnlyList<object?[]> rows)
+    {
+        var result = new List<CompileError>();
+        JavacEntry? current = null;
+        string? pending = null; // 머리 다음 행: ^ 가 뒤따르면 소스 줄, 아니면 설명
+
+        void Flush()
+        {
+            if (current is not null)
+            {
+                if (pending is { Length: > 0 })
+                {
+                    current.Details.Add(pending);
+                }
+
+                var message = current.Details.Count == 0 ? current.Message : $"{current.Message} ({string.Join("; ", current.Details)})";
+                result.Add(new CompileError(current.Line, current.Column, message, current.Warning));
+            }
+
+            pending = null;
+            current = null;
+        }
+
+        foreach (var r in rows)
+        {
+            var raw = (Str(r[2]) ?? string.Empty).TrimEnd('\r', '\n');
+            var text = Collapse(raw);
+            var isWarning = string.Equals(Str(r[3]), "WARNING", StringComparison.Ordinal);
+            if (Int(r[0]) is > 0 and var line)
+            {
+                Flush();
+                result.Add(new CompileError(line, Math.Max(1, Int(r[1]) ?? 1), text, isWarning) { MessageNumber = Int(r[4]) ?? 0 });
+                continue;
+            }
+
+            if (JavacHeader.Match(raw) is { Success: true } m)
+            {
+                Flush();
+                current = new JavacEntry(int.Parse(m.Groups["line"].Value, System.Globalization.CultureInfo.InvariantCulture), Collapse(m.Groups["msg"].Value),
+                    isWarning || m.Groups["kind"].Value == "warning");
+                pending = string.Empty; // 다음 행을 기다린다
+                continue;
+            }
+
+            if (current is not null && JavacCaret.IsMatch(raw))
+            {
+                current.Column = raw.IndexOf('^', StringComparison.Ordinal) + 1;
+                pending = null; // 앞 행은 소스 줄이었다
+                continue;
+            }
+
+            if (text.Length == 0 || JavacSummary.IsMatch(text))
+            {
+                continue;
+            }
+
+            if (text.StartsWith("Note:", StringComparison.Ordinal))
+            {
+                Flush();
+                result.Add(new CompileError(1, 1, text, true));
+                continue;
+            }
+
+            if (current is not null)
+            {
+                if (pending is { Length: 0 })
+                {
+                    pending = text; // 소스 줄인지 아직 모른다
+                    continue;
+                }
+
+                if (pending is not null)
+                {
+                    current.Details.Add(pending);
+                    pending = null;
+                }
+
+                current.Details.Add(text);
+                continue;
+            }
+
+            result.Add(new CompileError(1, 1, text, isWarning) { MessageNumber = Int(r[4]) ?? 0 });
+        }
+
+        Flush();
+        return result;
+
+        static string Collapse(string value) => Spaces.Replace(value.Trim(), " ");
+    }
+
+    /// <summary>묶는 중인 javac 오류 하나.</summary>
+    private sealed class JavacEntry(int line, string message, bool warning)
+    {
+        public int Line { get; } = line;
+
+        public int Column { get; set; } = 1;
+
+        public string Message { get; } = message;
+
+        public bool Warning { get; } = warning;
+
+        public List<string> Details { get; } = [];
     }
 
     private static DetailSection Unavailable(string title) =>

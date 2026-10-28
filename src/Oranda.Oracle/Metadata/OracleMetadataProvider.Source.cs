@@ -39,6 +39,11 @@ internal sealed partial class OracleMetadataProvider
         ArgumentNullException.ThrowIfNull(s);
         ArgumentNullException.ThrowIfNull(obj);
 
+        if (JavaTypes.Contains(obj.ObjectType))
+        {
+            return await ReadJavaCompileErrorsAsync(s, obj, ct); // javac 출력 행을 묶고 줄을 꺼낸다(줄·열 열은 0)
+        }
+
         var rows = await QueryAsync(s, "meta.compile_errors", c => BindSourceObject(c, obj), ct);
         return [.. rows.Select(r => new CompileError(
             Math.Max(1, Int(r[0]) ?? 1),

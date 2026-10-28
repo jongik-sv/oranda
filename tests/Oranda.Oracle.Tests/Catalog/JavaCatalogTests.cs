@@ -23,6 +23,7 @@ public class JavaCatalogTests
     [InlineData("meta.java_fields")]
     [InlineData("meta.java_implements")]
     [InlineData("meta.java_inners")]
+    [InlineData("meta.java_errors")]
     public void Queries_run_from_11g_without_a_license_or_fetch_first(string id)
     {
         foreach (var version in new[] { 11, 19, 23 })
@@ -39,7 +40,7 @@ public class JavaCatalogTests
     {
         // JVM 없는 서버(11g XE·26ai Free)에는 *_java_* 뷰·DBMS_JAVA 가 없다. 표시로 통합 파싱 시험이 건너뛰고, 확인 쿼리만 어디서나 돈다.
         var javaIds = Catalog.Entries.Select(e => e.Id).Where(id => id.StartsWith("meta.java_", StringComparison.Ordinal)).Distinct(StringComparer.Ordinal).ToList();
-        Assert.Equal(11, javaIds.Count);
+        Assert.Equal(12, javaIds.Count);
         foreach (var id in javaIds)
         {
             foreach (var version in new[] { 11, 19, 23 })
@@ -87,6 +88,8 @@ public class JavaCatalogTests
     [InlineData("meta.java_implements", "@PFX@_java_implements")]
     [InlineData("meta.java_inners", "@PFX@_java_inners")]
     [InlineData("meta.java_source_classes", "@PFX@_java_classes")]
+    [InlineData("meta.java_source_classes", "@PFX@_java_derivations")]
+    [InlineData("meta.java_source_object", "@PFX@_java_derivations")]
     public void Class_detail_reads_the_java_dictionary_view_by_owner_and_long_name(string id, string view)
     {
         var sql = Catalog.Get(id, 23).Sql;
@@ -136,6 +139,65 @@ public class JavaCatalogTests
         Assert.Equal("void", OracleMetadataProvider.JavaType(null, "void", null));
         Assert.Null(OracleMetadataProvider.JavaType(0, null, null));
         Assert.Equal("com.example.Outer", OracleMetadataProvider.JavaTypeName("com/example/Outer"));
+
+        // 실제 사전(JVM 서버 확인): 원시형이면 클래스 열이 '-', 클래스면 base_type 이 'class'. 상위·바깥 클래스가 없으면 '-'.
+        Assert.Equal("int[]", OracleMetadataProvider.JavaType(1, "int", "-"));
+        Assert.Equal("void", OracleMetadataProvider.JavaType(0, "void", "-"));
+        Assert.Equal("java.lang.String[][]", OracleMetadataProvider.JavaType(2, "class", "java/lang/String"));
+        Assert.Null(OracleMetadataProvider.JavaTypeName("-"));
+    }
+
+    [Fact]
+    public void Source_link_comes_from_derivations_not_the_source_file_column()
+    {
+        // all_java_classes.source 는 「Hello」 같은 파일 표시라 소스 객체를 찾지 못한다.
+        Assert.DoesNotContain("c.source", Catalog.Get("meta.java_source_classes", 23).Sql, StringComparison.Ordinal);
+        Assert.Contains("d.class_name = :name", Catalog.Get("meta.java_source_object", 23).Sql, StringComparison.Ordinal);
+        Assert.Contains("DBMS_JAVA.SHORTNAME(:name)", Catalog.Get("meta.java_errors", 23).Sql, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Javac_rows_become_one_error_per_message_with_line_and_caret_column()
+    {
+        // JVM 서버의 ALL_ERRORS 실제 모양: 줄·열 0, javac 출력 한 줄 = 한 행.
+        object?[][] rows =
+        [
+            [0m, 0m, "com/example/Broken:5: error: cannot find symbol\n", "ERROR", 0m],
+            [0m, 0m, "    public static String hi() { String s = \"a;b}\"; return missing; }\n", "ERROR", 0m],
+            [0m, 0m, "                                                         ^\n", "ERROR", 0m],
+            [0m, 0m, "  symbol:   variable missing\n", "ERROR", 0m],
+            [0m, 0m, "  location: class Broken\n", "ERROR", 0m],
+            [0m, 0m, "com/example/Broken:7: warning: [deprecation] old() has been deprecated\n", "ERROR", 0m],
+            [0m, 0m, "1 error\n", "ERROR", 0m],
+            [0m, 0m, "1 warning\n", "ERROR", 0m],
+        ];
+
+        var errors = OracleMetadataProvider.JavaCompileErrors(rows);
+
+        Assert.Equal(2, errors.Count);
+        Assert.Equal(5, errors[0].Line); // AS 다음 줄이 1줄
+        Assert.Equal(((string)rows[2][2]!).IndexOf('^', StringComparison.Ordinal) + 1, errors[0].Column); // ^ 자리
+        Assert.Equal("cannot find symbol (symbol: variable missing; location: class Broken)", errors[0].Message);
+        Assert.False(errors[0].IsWarning);
+        Assert.Equal(7, errors[1].Line);
+        Assert.True(errors[1].IsWarning);
+        Assert.Equal("[deprecation] old() has been deprecated", errors[1].Message);
+    }
+
+    [Fact]
+    public void Javac_notes_are_warnings_and_other_rows_stay_errors()
+    {
+        object?[][] notes =
+        [
+            [0m, 0m, "Note: Warn uses unchecked or unsafe operations.", "ERROR", 0m],
+            [0m, 0m, "Note: Recompile with -Xlint:unchecked for details.", "ERROR", 0m],
+        ];
+        Assert.All(OracleMetadataProvider.JavaCompileErrors(notes), e => Assert.True(e.IsWarning));
+        Assert.Equal(2, OracleMetadataProvider.JavaCompileErrors(notes).Count);
+
+        // JAVA CLASS 쪽 행(소스가 깨져 다시 컴파일해야 한다)은 1줄 오류 하나.
+        var cls = Assert.Single(OracleMetadataProvider.JavaCompileErrors([[0m, 0m, "ORA-29535: source requires recompilation", "ERROR", 0m]]));
+        Assert.Equal((1, 1, false), (cls.Line, cls.Column, cls.IsWarning));
     }
 
     [Fact]
