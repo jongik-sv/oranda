@@ -397,7 +397,13 @@ public sealed partial class ProfileEditorViewModel : ViewModelBase
     public int ServiceKindIndex
     {
         get => UseSid ? 1 : 0;
-        set => UseSid = value == 1;
+        set
+        {
+            if (value is 0 or 1) // 콤보가 선택을 비울 때(-1)는 바꾸지 않는다
+            {
+                UseSid = value == 1;
+            }
+        }
     }
 
     /// <summary>

@@ -123,7 +123,7 @@
 ### 6.1 접속 관리 (CONN)
 | ID | 요구사항 | 우선 | 단계 |
 |---|---|---|---|
-| CONN-01 | 접속 방식: EZConnect Plus 문자열, `tnsnames.ora` 별칭(TNS 디렉터리 지정), 호스트·포트·서비스명 입력 폼 | P0 | M1 |
+| CONN-01 | 접속 방식(붙은 단추로 고름): 「호스트·포트」(서비스 이름 또는 SID, TLS), 「TNS」(TNS 디렉터리 + `tnsnames.ora` 별칭), 「사용자 지정」(EZConnect Plus 문자열·접속 기술자). 방식마다 그 방식이 쓰는 칸만 보이고 숨은 칸 값은 저장하지 않는다(TNS 디렉터리 = TNS 만, 지갑 폴더 = TNS·사용자 지정·TLS 호스트·포트) | P0 | M1 |
 | CONN-02 | 인증: 사용자/비밀번호, SYSDBA·SYSOPER·SYSBACKUP·SYSDG·SYSKM, 프록시 사용자(`app[scott]`) | P0 | M1 |
 | CONN-03 | TLS(TCPS)와 mTLS 지갑. ADB 지갑 zip을 끌어다 놓으면 압축을 풀어 접속 프로필을 만든다. 지갑 없는 단방향 TLS 지원 | P0 | M1 |
 | CONN-04 | 비밀번호 만료(ORA-28001) 시 새 비밀번호 입력 대화상자 | P1 | M1 |

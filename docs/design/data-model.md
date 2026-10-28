@@ -122,11 +122,11 @@
 | `id` | Guid | ● | 저장 시 새로 발급 | 프로필 식별자. 이력·작업 공간이 참조 |
 | `name` | string | ● | | 표시 이름. 파일 안에서 중복 금지 |
 | `user` | string | ● | | 접속 사용자. 프록시면 실제 대상 사용자(`scott`) |
-| `dataSource` | string | ● | | EZConnect Plus 문자열 또는 TNS 별칭 (CONN-01) |
+| `dataSource` | string | ● | | EZConnect Plus 문자열, 접속 기술자 또는 TNS 별칭 (CONN-01). 「호스트·포트」 방식의 서비스 이름은 `[tcps://]host[:port]/service`, SID 는 EZConnect 로 쓸 수 없어 `(DESCRIPTION=(ADDRESS=(PROTOCOL=TCP\|TCPS)(HOST=…)(PORT=…))(CONNECT_DATA=(SID=…)))` 로 저장한다. 이 모양의 기술자는 다시 열면 호스트·포트 + SID 로 보인다 |
 | `auth` | `AuthMode` = `Default`\|`SysDba`\|`SysOper`\|`SysBackup`\|`SysDg`\|`SysKm` | ○ | `Default` | CONN-02 |
 | `proxyUser` | string | ○ | null | 프록시 접속 사용자(`app[scott]` 의 `app`). 있으면 저장 비밀은 이 사용자의 것 |
-| `tnsAdmin` | string | ○ | null | TNS 디렉터리(접속별 `TNS_ADMIN`) |
-| `walletLocation` | string | ○ | null | 지갑 폴더(접속별 `Wallet_Location`). 자동 로그인 지갑(`cwallet.sso`) 전제 |
+| `tnsAdmin` | string | ○ | null | TNS 디렉터리. 연결 문자열 `TNS_ADMIN` 으로 접속마다 넘긴다(전역 `OracleConfiguration.TnsAdmin` 은 첫 접속 뒤 ORA-50099). 「TNS」 방식에서만 저장 |
+| `walletLocation` | string | ○ | null | 지갑 폴더(연결 문자열 `WALLET_LOCATION`). 자동 로그인 지갑(`cwallet.sso`) 전제. 「TNS」·「사용자 지정」·TLS 를 켠 「호스트·포트」에서만 저장 |
 | `connectTimeoutSeconds` | int | ○ | 15 | |
 | `environment` | `ConnectionEnvironment` = `Development`\|`Test`\|`Production` | ○ | `Development` | CONN-06, SAFE-01 |
 | `color` | string | ○ | null(환경 기본색) | `#RRGGBB`. 운영(`Production`)은 무시하고 항상 빨강 |

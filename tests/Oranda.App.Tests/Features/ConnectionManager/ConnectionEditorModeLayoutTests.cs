@@ -68,6 +68,36 @@ public sealed class ConnectionEditorModeLayoutTests : IDisposable
         }
     });
 
+    [Fact]
+    public Task Switching_between_a_sid_and_a_service_profile_keeps_both_clean() => HeadlessHost.Run(async () =>
+    {
+        // 라벨 자리 콤보는 SelectedIndex 를 양방향으로 묶는다: 편집기가 바뀌는 순간 -1·0 이 이전 편집기의 SID 를 끄면 안 된다.
+        using var fx = new ServiceFixture();
+        var sid = "(DESCRIPTION=(ADDRESS=(PROTOCOL=TCP)(HOST=db.example.com)(PORT=1521))(CONNECT_DATA=(SID=SALES)))";
+        await fx.Service.SaveProfileAsync(new ConnectionProfile("a-sid", "scott", sid), "pw", true, CancellationToken.None);
+        await fx.Service.SaveProfileAsync(new ConnectionProfile("b-svc", "scott", "db.example.com:1521/sales.example.com"), "pw", true, CancellationToken.None);
+        var vm = new ConnectionManagerViewModel(fx.Service);
+        await vm.LoadAsync();
+        var window = new ConnectionManagerWindow { DataContext = vm };
+        window.Show();
+        try
+        {
+            var a = vm.Tree.First(n => n.Title == "a-sid");
+            var b = vm.Tree.First(n => n.Title == "b-svc");
+            foreach (var (node, useSid) in new[] { (a, true), (b, false), (a, true), (b, false) })
+            {
+                vm.Selected = node;
+                Dispatcher.UIThread.RunJobs();
+                Assert.Equal(useSid, vm.Editor!.UseSid);
+                Assert.False(vm.Editor.IsDirty, node.Title + " 를 고르자마자 바뀐 것으로 치면 안 된다");
+            }
+        }
+        finally
+        {
+            window.Close();
+        }
+    });
+
     private static void Visible(ProfileEditorView editor, params string[] names)
     {
         foreach (var n in names)
