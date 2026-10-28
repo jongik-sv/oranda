@@ -338,7 +338,10 @@ internal sealed class BenchmarkQueriesHandler(AgentToolboxProvider boxes, IState
             await EnsureSameResolutionAsync(extractor, inv, v.Sql, ct).ConfigureAwait(false);
         }
 
-        // 실행 허용은 게이트가 문장을 검사한 뒤 채운다(Query 이상·운영 아님·검사 완료).
-        return Node(await box.BenchmarkAsync(inv.Db, variants, Number(inv, "repeat", 1, 5) ?? DefaultRepeat, inv.MayExecuteSql, ScopeSchema(inv), ct).ConfigureAwait(false));
+        // 실행 허용은 게이트가 문장을 검사한 뒤 채운다(Query 이상·검사 완료). 운영 접속은 문장마다 시간 상한을 둔다.
+        var production = inv.Session.Profile.Environment == ConnectionEnvironment.Production;
+        return Node(await box.BenchmarkAsync(
+            inv.Db, variants, Number(inv, "repeat", 1, 5) ?? DefaultRepeat, inv.MayExecuteSql, ScopeSchema(inv), ct,
+            production ? TuningToolbox.ProductionStatementTimeout : null).ConfigureAwait(false));
     }
 }

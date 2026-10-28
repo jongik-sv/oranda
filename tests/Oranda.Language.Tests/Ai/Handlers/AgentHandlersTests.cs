@@ -98,7 +98,7 @@ public class AgentHandlersTests
         return new AgentToolInvocation(
             new AgentSession(run), new FakeSession(profile), level, args, resolved.ToDictionary(r => r.Arg, r => r.Obj),
             ExplainPlanAllowed: level >= AiAccessLevel.Plan && Oranda.Core.Ai.Access.AiAccessPolicy.ExplainPlanEnabled(profile),
-            MayExecuteSql: level >= AiAccessLevel.Query && env != ConnectionEnvironment.Production);
+            MayExecuteSql: level >= AiAccessLevel.Query);
     }
 
     private static readonly (string, AgentObjectRef) TableArg = ("table", new AgentObjectRef("APP", "TB_ORDER", "TABLE"));
@@ -141,7 +141,7 @@ public class AgentHandlersTests
 
         Assert.Contains("ORA-01722", failed.ErrorMessage, StringComparison.Ordinal);
         Assert.DoesNotContain("SECRET", failed.ErrorMessage, StringComparison.Ordinal);
-        Assert.True(prod.IsError);
+        Assert.Contains("ORA-01722", prod.ErrorMessage, StringComparison.Ordinal); // 운영도 환경 때문에 거부되지 않고 실제로 실행된다
         Assert.Contains("sql_id", missing.ErrorMessage, StringComparison.Ordinal);
     }
 

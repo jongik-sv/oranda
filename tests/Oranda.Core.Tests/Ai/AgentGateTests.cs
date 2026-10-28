@@ -75,16 +75,22 @@ public partial class AgentGateTests
     }
 
     [Fact]
-    public async Task Production_connection_shrinks_a_wide_context_level_so_benchmark_is_denied()
+    public async Task Production_query_level_runs_benchmark_but_a_stored_query_rows_shrinks_to_plan_and_is_denied()
     {
         var fx = new GateFixture();
-        var session = Session(Prod(AiAccessLevel.Query), context: AiAccessLevel.QueryRows);
-        Assert.Equal(AiAccessLevel.Plan, session.Level);
+        const string benchmark = """{"variants":[{"label":"a","sql":"SELECT * FROM TB_ORDER"}]}""";
 
-        var response = await Call(fx, session, AgentToolNames.BenchmarkQueries, """{"variants":[{"label":"a","sql":"SELECT * FROM TB_ORDER"}]}""");
-        Assert.True(Code(response) is "level" or "environment");
-        Assert.Equal(AiToolJudgement.Denied, response.Judgement);
-        Assert.Empty(fx.Handlers[AgentToolNames.BenchmarkQueries].Calls);
+        var allowed = Session(Prod(AiAccessLevel.Query), context: AiAccessLevel.QueryRows);
+        Assert.Equal(AiAccessLevel.Query, allowed.Level);
+        var ok = await Call(fx, allowed, AgentToolNames.BenchmarkQueries, benchmark);
+        Assert.False(ok.Result.IsError);
+        Assert.True(Assert.Single(fx.Handlers[AgentToolNames.BenchmarkQueries].Calls).MayExecuteSql);
+
+        var narrowed = Session(Prod(AiAccessLevel.QueryRows), context: AiAccessLevel.QueryRows);
+        Assert.Equal(AiAccessLevel.Plan, narrowed.Level);
+        var response = await Call(fx, narrowed, AgentToolNames.BenchmarkQueries, benchmark);
+        AssertDenied(response, "level");
+        Assert.Single(fx.Handlers[AgentToolNames.BenchmarkQueries].Calls);
     }
 
     [Fact]
@@ -357,9 +363,10 @@ public partial class AgentGateTests
         Assert.DoesNotContain(AgentToolNames.BenchmarkQueries, plan);
 
         Assert.DoesNotContain(AgentToolNames.BenchmarkQueries, Names(Session(Prod(AiAccessLevel.Plan))));
+        Assert.Contains(AgentToolNames.BenchmarkQueries, Names(Session(Prod(AiAccessLevel.Query))));
         Assert.Contains(AgentToolNames.GetHistogram, Names(Session(Prod(AiAccessLevel.Plan))));
-        Assert.DoesNotContain(AgentToolNames.ExplainPlan, Names(Session(Prod(AiAccessLevel.Plan))));
-        Assert.Contains(AgentToolNames.ExplainPlan, Names(Session(new ConnectionProfile("p", "u", "h/s", Environment: ConnectionEnvironment.Production, AiAccess: AiAccessLevel.Plan, AllowExplainPlan: true))));
+        Assert.Contains(AgentToolNames.ExplainPlan, Names(Session(Prod(AiAccessLevel.Plan)))); // 운영도 EXPLAIN PLAN 기본 켬
+        Assert.DoesNotContain(AgentToolNames.ExplainPlan, Names(Session(new ConnectionProfile("p", "u", "h/s", Environment: ConnectionEnvironment.Production, AiAccess: AiAccessLevel.Plan, AllowExplainPlan: false))));
     }
 
     // ---------------------------------------------------------------- 결과 가림
@@ -826,7 +833,9 @@ public partial class AgentGateTests
     [InlineData(AiAccessLevel.Plan, false, false, false, false)]
     [InlineData(AiAccessLevel.QueryRows, false, null, true, true)]
     [InlineData(AiAccessLevel.Query, false, false, false, true)]
-    [InlineData(AiAccessLevel.Plan, true, null, false, false)]
+    [InlineData(AiAccessLevel.Plan, true, null, true, false)]
+    [InlineData(AiAccessLevel.Plan, true, false, false, false)]
+    [InlineData(AiAccessLevel.Query, true, null, true, true)]
     [InlineData(AiAccessLevel.Plan, true, true, true, false)]
     public async Task Handler_gets_the_explain_plan_and_execute_permissions(
         AiAccessLevel level, bool production, bool? allowExplain, bool expectExplain, bool expectExecute)

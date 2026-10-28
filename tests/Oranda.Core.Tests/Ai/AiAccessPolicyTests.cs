@@ -19,8 +19,16 @@ public class AiAccessPolicyTests
         Assert.Equal(expected, AiAccessPolicy.Effective(Profile(env)));
 
     [Fact]
-    public void Production_is_capped_at_plan_and_never_reaches_query()
+    public void Production_is_capped_at_query_and_a_stored_query_rows_shrinks_to_plan()
     {
+        var query = Profile(ConnectionEnvironment.Production, AiAccessLevel.Query);
+        Assert.Equal(AiAccessLevel.Query, AiAccessPolicy.MaxLevel(ConnectionEnvironment.Production));
+        Assert.Equal(AiAccessLevel.Query, AiAccessPolicy.Effective(query));
+        Assert.True(AiAccessPolicy.Allows(query, AiAccessLevel.Query));
+        Assert.False(AiAccessPolicy.Allows(query, AiAccessLevel.QueryRows));
+        Assert.Empty(AiAccessPolicy.Validate(query));
+
+        // 행 값은 운영으로 못 보낸다: 한 칸(Query)이 아니라 Plan 으로 줄인다.
         var prod = Profile(ConnectionEnvironment.Production, AiAccessLevel.QueryRows);
         Assert.Equal(AiAccessLevel.Plan, AiAccessPolicy.Effective(prod));
         Assert.False(AiAccessPolicy.Allows(prod, AiAccessLevel.Query));
@@ -43,7 +51,8 @@ public class AiAccessPolicyTests
 
     [Theory]
     [InlineData(ConnectionEnvironment.Development, null, true)]
-    [InlineData(ConnectionEnvironment.Production, null, false)]
+    [InlineData(ConnectionEnvironment.Production, null, true)]
+    [InlineData(ConnectionEnvironment.Production, false, false)]
     [InlineData(ConnectionEnvironment.Production, true, true)]
     [InlineData(ConnectionEnvironment.Test, false, false)]
     public void Explain_plan_follows_profile_then_environment(ConnectionEnvironment env, bool? flag, bool expected) =>

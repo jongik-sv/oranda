@@ -290,7 +290,7 @@ public class TuningToolboxTests
     }
 
     [Fact]
-    public async Task Benchmark_is_refused_on_production_and_clamps_repeat()
+    public async Task Benchmark_is_refused_when_not_allowed_and_clamps_repeat()
     {
         var (box, _, tuning) = Make();
         BenchmarkVariant[] one = [new("원문", "SELECT 1 FROM dual")];
@@ -451,6 +451,33 @@ public class TuningToolboxTests
 
         public Task<BenchmarkResult> RunBenchmarkAsync(ISession s, BenchmarkCase benchmark, int iterations, CancellationToken ct) =>
             throw new InvalidOperationException("ORA-01722: 수치가 부적합합니다 'SECRET-VALUE'");
+    }
+
+    private sealed class HangingBenchmarkTuning : ITuningService
+    {
+        public Task<TuningCandidateSet> GetTuningCandidatesAsync(ISession s, TuningCandidateQuery query, CancellationToken ct) => Pool(query, "APP");
+
+        public async Task<BenchmarkResult> RunBenchmarkAsync(ISession s, BenchmarkCase benchmark, int iterations, CancellationToken ct)
+        {
+            await Task.Delay(Timeout.Infinite, ct);
+            throw new InvalidOperationException("unreachable");
+        }
+    }
+
+    [Fact]
+    public async Task Benchmark_statement_timeout_stops_a_long_run_but_a_caller_cancel_still_cancels()
+    {
+        var box = new TuningToolbox(new HangingBenchmarkTuning(), new FakeMetadataProvider(), new FakeKeys(), new FakePlans(), new LanguageService());
+        BenchmarkVariant[] one = [new("느림", "SELECT 1 FROM dual")];
+
+        var ex = await Assert.ThrowsAsync<AiToolException>(() =>
+            box.BenchmarkAsync(new FakeSession(), one, 1, true, null, CancellationToken.None, TimeSpan.FromMilliseconds(50)));
+        Assert.Contains("'느림'", ex.Message, StringComparison.Ordinal);
+        Assert.Contains("제한 시간", ex.Message, StringComparison.Ordinal);
+
+        using var cts = new CancellationTokenSource(TimeSpan.FromMilliseconds(50));
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
+            box.BenchmarkAsync(new FakeSession(), one, 1, true, null, cts.Token, TimeSpan.FromMinutes(5)));
     }
 
     [Fact]

@@ -286,7 +286,7 @@ public sealed partial class AgentGate : IAgentGate
             state.Clean,
             state.Resolved,
             ExplainPlanAllowed: level >= AiAccessLevel.Plan && explainPlanEnabled,
-            MayExecuteSql: level >= AiAccessLevel.Query && !production && state.StatementsChecked);
+            MayExecuteSql: level >= AiAccessLevel.Query && state.StatementsChecked);
 
         AgentToolOutput output;
         try

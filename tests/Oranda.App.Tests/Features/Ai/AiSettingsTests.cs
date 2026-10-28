@@ -45,14 +45,15 @@ public class AiSettingsTests
     }
 
     [Fact]
-    public void Production_defaults_to_off_caps_at_plan_and_asks_for_the_name_when_turned_on()
+    public void Production_defaults_to_off_caps_at_query_and_asks_for_the_name_when_turned_on()
     {
         var vm = new ConnectionAiAccessViewModel(Profile(ConnectionEnvironment.Production));
         Assert.Equal(AiAccessLevel.Off, vm.Level);
-        Assert.False(vm.ExplainAllowed);
-        Assert.All(vm.Levels.Where(l => l.Level > AiAccessLevel.Plan), l => Assert.False(l.IsEnabled));
+        Assert.True(vm.ExplainAllowed); // 운영도 EXPLAIN PLAN 기본 켬
+        Assert.All(vm.Levels.Where(l => l.Level > AiAccessLevel.Query), l => Assert.False(l.IsEnabled));
+        Assert.All(vm.Levels.Where(l => l.Level <= AiAccessLevel.Query), l => Assert.True(l.IsEnabled));
 
-        vm.SelectLevelCommand.Execute(AiAccessLevel.Query);
+        vm.SelectLevelCommand.Execute(AiAccessLevel.QueryRows);
         Assert.Equal(AiAccessLevel.Off, vm.Level); // 상한 밖은 무시
 
         vm.SelectLevelCommand.Execute(AiAccessLevel.Plan);

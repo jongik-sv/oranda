@@ -4,7 +4,8 @@ namespace Oranda.Core.Ai.Access;
 
 /// <summary>
 /// 접속의 AI 허용 수준 계산·검증(연구서 §6.4).
-/// 운영 라벨은 기본 <see cref="AiAccessLevel.Off"/>, 최대 <see cref="AiAccessLevel.Plan"/>(행 값·SELECT 실행은 운영에서 보내지 않는다).
+/// 운영 라벨은 기본 <see cref="AiAccessLevel.Off"/>, 최대 <see cref="AiAccessLevel.Query"/>(SELECT 실행은 되지만 행 값은 운영에서 보내지 않는다).
+/// 운영 접속에 저장된 <see cref="AiAccessLevel.QueryRows"/>(옛 파일·손으로 고친 파일)는 한 칸이 아니라 <see cref="AiAccessLevel.Plan"/> 으로 줄여 읽는다: 행 값을 못 보내는 쪽으로 닫는다.
 /// 개발·시험은 기본 <see cref="AiAccessLevel.Plan"/>, 최대 <see cref="AiAccessLevel.QueryRows"/>.
 /// 프로필의 <see cref="ConnectionProfile.AiAccess"/> 가 null 이면 환경 기본값이고, 한도를 넘는 값은 한도로 줄여 읽는다.
 /// </summary>
@@ -16,7 +17,11 @@ public static class AiAccessPolicy
 
     /// <summary>환경 라벨이 허용하는 최대 수준.</summary>
     public static AiAccessLevel MaxLevel(ConnectionEnvironment environment) =>
-        environment == ConnectionEnvironment.Production ? AiAccessLevel.Plan : AiAccessLevel.QueryRows;
+        environment == ConnectionEnvironment.Production ? AiAccessLevel.Query : AiAccessLevel.QueryRows;
+
+    /// <summary>환경 한도를 넘는 수준을 읽을 때의 값: 운영의 <see cref="AiAccessLevel.QueryRows"/> 는 <see cref="AiAccessLevel.Plan"/>, 그 밖에는 그대로.</summary>
+    private static AiAccessLevel Limit(ConnectionEnvironment environment, AiAccessLevel level) =>
+        level > MaxLevel(environment) ? AiAccessLevel.Plan : level;
 
     /// <summary>실제로 적용되는 수준: (프로필 값 ?? 환경 기본값) 을 환경 한도로 줄인 값. 도구 호출은 항상 이 값으로 검사한다.</summary>
     public static AiAccessLevel Effective(ConnectionProfile profile)
@@ -30,15 +35,14 @@ public static class AiAccessPolicy
             return AiAccessLevel.Off;
         }
 
-        var max = MaxLevel(profile.Environment);
-        return level > max ? max : level;
+        return Limit(profile.Environment, level);
     }
 
-    /// <summary>AI 의 EXPLAIN PLAN 허용 여부: 프로필 값 ?? (운영이 아니면 켬). 수준이 <see cref="AiAccessLevel.Plan"/> 미만이면 어차피 거부된다.</summary>
+    /// <summary>AI 의 EXPLAIN PLAN 허용 여부: 프로필 값 ?? 켬(운영도 기본 켬, 접속별로 끌 수 있다). 수준이 <see cref="AiAccessLevel.Plan"/> 미만이면 어차피 거부된다.</summary>
     public static bool ExplainPlanEnabled(ConnectionProfile profile)
     {
         ArgumentNullException.ThrowIfNull(profile);
-        return profile.AllowExplainPlan ?? profile.Environment != ConnectionEnvironment.Production;
+        return profile.AllowExplainPlan ?? true;
     }
 
     /// <summary>
@@ -74,7 +78,7 @@ public static class AiAccessPolicy
     {
         ArgumentNullException.ThrowIfNull(profile);
         return profile.AiAccess is { } level && level > MaxLevel(profile.Environment)
-            ? profile with { AiAccess = MaxLevel(profile.Environment) }
+            ? profile with { AiAccess = Limit(profile.Environment, level) }
             : profile;
     }
 

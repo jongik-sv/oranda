@@ -194,7 +194,7 @@ public static class AgentTools
             } }
             """),
         new(AgentToolNames.BenchmarkQueries,
-            "Runs SELECT variants repeatedly and reports elapsed time, logical and physical reads, row count and plan hash of each. Development and test connections only.",
+            "Runs SELECT variants repeatedly and reports elapsed time, logical and physical reads, row count and plan hash of each. It really executes the statements, so keep the variants cheap and the repeat count low. On production connections each variant is stopped when it runs too long.",
             AiAccessLevel.Query,
             $$"""
             { "type": "object", "additionalProperties": false, "required": ["variants"], "properties": {
@@ -207,7 +207,7 @@ public static class AgentTools
               "repeat": { "type": "integer", "minimum": 1, "maximum": 5, "default": 3 }
             } }
             """,
-            DevTestOnly: true),
+            DevTestOnly: false),
     ];
 
     /// <summary>이름으로 정의를 찾는다. 없으면 null.</summary>

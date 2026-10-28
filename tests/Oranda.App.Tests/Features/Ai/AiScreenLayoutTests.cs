@@ -82,7 +82,7 @@ public class AiScreenLayoutTests
     });
 
     [Fact]
-    public Task Access_view_fits_five_levels_in_one_row_and_caps_production_at_plan() => HeadlessHost.Run(() =>
+    public Task Access_view_fits_five_levels_in_one_row_and_caps_production_at_query() => HeadlessHost.Run(() =>
     {
         var vm = new ConnectionAiAccessViewModel(new ConnectionProfile("PROD-ERP", "APP_OWNER", "db-example", Environment: ConnectionEnvironment.Production, AiAccess: AiAccessLevel.Plan));
         var window = new Window { Width = 720, Height = 560, Content = new ConnectionAiAccessView { DataContext = vm } };
@@ -93,7 +93,7 @@ public class AiScreenLayoutTests
         Assert.Equal(5, toggles.Count);
         Assert.Single(toggles.Select(t => Math.Round(t.TranslatePoint(default, window)!.Value.Y)).Distinct()); // 한 줄
         Assert.All(toggles, t => Assert.True(Inside(t, window)));
-        Assert.Equal([true, true, true, false, false], toggles.Select(t => t.IsEnabled)); // 운영 상한 = 계획
+        Assert.Equal([true, true, true, true, false], toggles.Select(t => t.IsEnabled)); // 운영 상한 = 조회
         Render(window, "ai-access");
         window.Close();
     });

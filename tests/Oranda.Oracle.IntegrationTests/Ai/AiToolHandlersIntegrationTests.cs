@@ -164,15 +164,15 @@ public sealed class AiToolsDbFixture : IAsyncLifetime
 
     public AgentToolInvocation Invoke(
         JsonObject args, AiAccessLevel level = AiAccessLevel.Plan, ConnectionEnvironment env = ConnectionEnvironment.Development,
-        params (string Arg, AgentObjectRef Obj)[] resolved)
+        bool? allowExplainPlan = null, params (string Arg, AgentObjectRef Obj)[] resolved)
     {
-        var profile = Profile with { Environment = env };
+        var profile = Profile with { Environment = env, AllowExplainPlan = allowExplainPlan };
         var run = new AgentRunScope("it-run", profile, new AiContext("it-admin", env, level, StatementText: StatementText, SqlId: SqlId, CurrentSchema: Owner));
         // 게이트를 거치지 않는 시험이라 게이트가 채우는 허용 값을 같은 규칙으로 채운다.
         return new AgentToolInvocation(
             new AgentSession(run), Db, level, args, resolved.ToDictionary(r => r.Arg, r => r.Obj),
             ExplainPlanAllowed: level >= AiAccessLevel.Plan && AiAccessPolicy.ExplainPlanEnabled(profile),
-            MayExecuteSql: level >= AiAccessLevel.Query && env != ConnectionEnvironment.Production);
+            MayExecuteSql: level >= AiAccessLevel.Query);
     }
 
     private async Task ExecAsync(string sql)
@@ -329,9 +329,11 @@ public sealed class AiToolHandlersIntegrationTests(AiToolsDbFixture db) : IClass
         var args = new JsonObject { ["sql"] = $"SELECT * FROM {db.Order} WHERE stat_cd = :1" };
 
         var dev = Ok(await h.ExecuteAsync(db.Invoke(args), default));
-        var prod = await h.ExecuteAsync(db.Invoke(args, env: ConnectionEnvironment.Production), default);
+        var prodDefault = Ok(await h.ExecuteAsync(db.Invoke(args, env: ConnectionEnvironment.Production), default));
+        var prod = await h.ExecuteAsync(db.Invoke(args, env: ConnectionEnvironment.Production, allowExplainPlan: false), default);
 
         Assert.NotEmpty(dev["steps"]!.AsArray());
+        Assert.NotEmpty(prodDefault["steps"]!.AsArray()); // 운영도 EXPLAIN PLAN 은 기본 켬
         Assert.True(prod.IsError);
         Assert.Contains("get_cursor_plan", prod.ErrorMessage, StringComparison.Ordinal);
     }
@@ -371,12 +373,12 @@ public sealed class AiToolHandlersIntegrationTests(AiToolsDbFixture db) : IClass
         JsonObject Args(string sql) => new() { ["variants"] = new JsonArray(new JsonObject { ["label"] = "a", ["sql"] = sql }), ["repeat"] = 2 };
 
         var ok = Ok(await h.ExecuteAsync(db.Invoke(Args($"SELECT COUNT(*) FROM {db.Order}"), AiAccessLevel.Query), default));
-        var prod = await h.ExecuteAsync(db.Invoke(Args("SELECT 1 FROM dual"), AiAccessLevel.Query, ConnectionEnvironment.Production), default);
+        var prod = Ok(await h.ExecuteAsync(db.Invoke(Args("SELECT 1 FROM dual"), AiAccessLevel.Query, ConnectionEnvironment.Production), default));
         var dml = await h.ExecuteAsync(db.Invoke(Args($"DELETE FROM {db.Order}"), AiAccessLevel.Query), default);
 
         Assert.Equal(1, ok[0]!["rows"]!.GetValue<long>());
         Assert.Equal(2, ok[0]!["repeat"]!.GetValue<int>());
-        Assert.True(prod.IsError);
+        Assert.Equal(1, prod[0]!["rows"]!.GetValue<long>()); // 운영도 SELECT 는 실행한다
         Assert.True(dml.IsError);
         Assert.Equal(20000, Convert.ToInt32(await ScalarAsync($"SELECT COUNT(*) FROM {db.Order}"), CultureInfo.InvariantCulture)); // 지워지지 않았다
     }

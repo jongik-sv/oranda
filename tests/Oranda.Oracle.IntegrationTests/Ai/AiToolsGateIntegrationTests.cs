@@ -197,13 +197,16 @@ public sealed class AiToolsGateIntegrationTests(AiToolsDbFixture db) : IClassFix
         using var plan = NewSession(AiAccessLevel.Plan);
         Assert.Equal("level", Code(await CallAsync(plan, AgentToolNames.BenchmarkQueries, variants())));
 
-        // 운영 접속: 최대 Plan, EXPLAIN PLAN 은 접속이 켜지 않으면 닫혀 있다. 목록에도 없다.
+        // 운영 접속: EXPLAIN PLAN 은 기본 켬이고 접속이 끄면 닫혀 목록에서도 사라진다. Plan 수준에서는 benchmark 가 목록에 없다.
         using var prod = NewSession(AiAccessLevel.Plan, ConnectionEnvironment.Production);
-        Assert.Equal("explain_plan_disabled", Code(await CallAsync(prod, AgentToolNames.ExplainPlan, sql)));
         Assert.Equal("level", Code(await CallAsync(prod, AgentToolNames.BenchmarkQueries, variants())));
         var listed = NewGate(prod, new MemoryAudit()).ListTools(prod).Select(t => t.Name).ToList();
-        Assert.DoesNotContain(AgentToolNames.ExplainPlan, listed);
+        Assert.Contains(AgentToolNames.ExplainPlan, listed);
         Assert.DoesNotContain(AgentToolNames.BenchmarkQueries, listed);
+
+        using var prodOff = NewSession(AiAccessLevel.Plan, ConnectionEnvironment.Production, allowExplain: false);
+        Assert.Equal("explain_plan_disabled", Code(await CallAsync(prodOff, AgentToolNames.ExplainPlan, sql)));
+        Assert.DoesNotContain(AgentToolNames.ExplainPlan, NewGate(prodOff, new MemoryAudit()).ListTools(prodOff).Select(t => t.Name));
 
         // 개발 접속이라도 EXPLAIN PLAN 을 끄면 거부한다.
         using var off = NewSession(AiAccessLevel.Plan, allowExplain: false);

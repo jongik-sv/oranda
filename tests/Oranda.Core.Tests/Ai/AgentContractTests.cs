@@ -31,7 +31,7 @@ public class AgentContractTests
 
         var bench = AgentTools.Find(AgentToolNames.BenchmarkQueries)!;
         Assert.Equal(AiAccessLevel.Query, bench.MinimumLevel);
-        Assert.True(bench.DevTestOnly);
+        Assert.False(bench.DevTestOnly); // 운영도 Query 수준이면 허용(시간 상한은 처리기가 건다)
         Assert.Null(AgentTools.Find("drop_everything"));
     }
 

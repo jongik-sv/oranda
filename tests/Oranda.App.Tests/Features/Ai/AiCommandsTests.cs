@@ -151,7 +151,7 @@ public class AiCommandsTests
 
         vm.Environment = ConnectionEnvironment.Production;
 
-        Assert.Equal(AiAccessLevel.Plan, vm.AiAccess.MaxLevel);
+        Assert.Equal(AiAccessLevel.Query, vm.AiAccess.MaxLevel);
         Assert.True(vm.IsDirty);
     }
 

@@ -12,18 +12,23 @@ public sealed partial class TuningToolbox
     /// <summary>문장당 반복 상한.</summary>
     public const int MaxBenchmarkRepeat = 5;
 
+    /// <summary>운영 접속에서 문장 하나(반복 전체)에 허용하는 시간. 넘으면 그 문장 실행을 취소한다.</summary>
+    public static readonly TimeSpan ProductionStatementTimeout = TimeSpan.FromSeconds(30);
+
     /// <summary>
     /// <c>benchmark_queries</c>: 문장마다 SELECT 한 개를 반복 실행해 경과·읽기·행 수를 잰다(SELECT 아닌 문장은 서비스가 거부한다).
-    /// 개발·시험 접속에서만 하므로 <paramref name="benchmarkAllowed"/>(접속의 실효 값, 운영은 거짓)가 거짓이면 실행하지 않는다.
+    /// <paramref name="benchmarkAllowed"/>(Query 이상이고 게이트가 문장을 검사했을 때만 참)가 거짓이면 실행하지 않는다.
+    /// <paramref name="statementTimeout"/> 이 있으면 문장 하나(반복 전체)가 그 시간을 넘길 때 취소한다. 운영 접속은 <see cref="ProductionStatementTimeout"/> 을 준다.
     /// </summary>
     public async Task<IReadOnlyList<BenchmarkDescription>> BenchmarkAsync(
-        ISession s, IReadOnlyList<BenchmarkVariant> variants, int repeat, bool benchmarkAllowed, string? scopeSchema, CancellationToken ct)
+        ISession s, IReadOnlyList<BenchmarkVariant> variants, int repeat, bool benchmarkAllowed, string? scopeSchema, CancellationToken ct,
+        TimeSpan? statementTimeout = null)
     {
         ArgumentNullException.ThrowIfNull(s);
         ArgumentNullException.ThrowIfNull(variants);
         if (!benchmarkAllowed)
         {
-            throw new AiToolException("운영 접속에서는 benchmark_queries 를 실행하지 않습니다. 개발·시험 접속에서 다시 시도하십시오.");
+            throw new AiToolException("이 접속의 허용 수준으로는 benchmark_queries 를 실행할 수 없습니다(Query 이상이 필요합니다).");
         }
 
         if (variants.Count is 0 or > MaxBenchmarkVariants)
@@ -51,10 +56,20 @@ public sealed partial class TuningToolbox
         {
             var v = variants[i];
             BenchmarkResult r;
+            using var limit = CancellationTokenSource.CreateLinkedTokenSource(ct);
+            if (statementTimeout is { } timeout)
+            {
+                limit.CancelAfter(timeout);
+            }
+
             try
             {
                 // 출처를 Agent 로 지정해 이력·실행 정책이 에이전트 실행으로 구분하게 한다.
-                r = await tuning.RunBenchmarkAsync(s, new BenchmarkCase(v.Label, v.Sql) { Source = HistorySource.Agent }, iterations, ct).ConfigureAwait(false);
+                r = await tuning.RunBenchmarkAsync(s, new BenchmarkCase(v.Label, v.Sql) { Source = HistorySource.Agent }, iterations, limit.Token).ConfigureAwait(false);
+            }
+            catch (OperationCanceledException) when (!ct.IsCancellationRequested && limit.IsCancellationRequested)
+            {
+                throw new AiToolException($"'{v.Label}' 문장이 제한 시간({statementTimeout!.Value.TotalSeconds:0}초)을 넘겨 중단됐습니다.");
             }
             catch (Exception ex) when (ex is not OperationCanceledException && ex is not AiToolException && !ct.IsCancellationRequested)
             {
