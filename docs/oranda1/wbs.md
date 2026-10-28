@@ -1165,6 +1165,18 @@ levels:
   - acceptance: LockMonitorGridTests 5(잠금 목록 ctime 숫자 정렬·TX 필터·너비·고른 세션이 새로 고침 뒤 남음, 잠금 줄 클릭 → 트리까지 같은 세션·Delete 로 종료 확인, 데드락 시각 정렬·Enter 로 편집기·새로 고침 뒤 정렬 유지, AWR 실행 정렬·느린 plan_hash 주의색·다시 읽기 뒤 같은 snap 고름, 계획 관리 정렬 유지·미승인 주의색) / 기존 LockMonitorView·LockP2View·SqlMonitorTuningView 시험을 그리드로 고쳐 통과 / LockMonitor·SqlMonitor·SessionMonitor·MonitorGrid·ResultGrid·Localization·RowView 시험 484 통과 / `dotnet build Oranda.sln -warnaserror`
   - note: 바꾼 곳 = LockMonitorView.axaml(.cs)(표 열 정의·어댑터 7개), SqlMonitorView.axaml(.cs)(튜닝 표 3개), MonitorGridBinder(CellWarning·SelectionGroup·CurrentItem·선택 없는 Attach, 이어진 행 여럿을 고를 때 ▶ 를 첫 행에), ResultGridModel.CellWarning·ResultGridControl 주의색, ImpactItem.Rank·TransactionSeconds. 쓸 곳이 없어진 MonitorTableBinder 를 지우고 MonitorStatusLine 만 남겼다. 복사·CSV 단추 글은 예전 Cells(「287 초」 꼴) 그대로 (win144)
 
+- [x] TSK-14-19: CI 에서 가끔 실패하는 시험 3개 안정화(이력 파일 잠금·자동 완성 시간 문턱·벤치마크 논리 읽기 비교)와 PRD 13.5 「15줄 넘는 메뉴 5 이하」 [win144] w:1 2026-10-28~2026-10-28
+  - category: defect
+  - domain: test
+  - model: opus
+  - priority: medium
+  - tags: ci, flaky, history, completion, tuning, menu, win144
+  - prd-ref: PRD 13.5
+  - depends: TSK-09-10
+  - requirements: 사용자 결정(2026-10-28) 「고친다」·「5 로」. (1) HistoryStoreTests.Secrets_are_redacted…: 지우기 뒤 백그라운드 VACUUM 이 oranda.db·-shm 을 잡은 채 시험이 파일을 읽어 windows「locked a portion」·macOS「being used」 IOException(CI 84c2ea8·410bf72) → 파일 읽기 전에 PendingVacuum 을 기다림(제품은 그대로: 지우기 뒤 VACUUM 은 설계대로 뒤에서 돈다) / (2) CompletionTests.Slow_metadata…: 150ms 예산 호출에 「5초 안」 경과 시간 단정 → macOS CI 6051ms 로 실패 → 시간 문턱을 빼고 문(Gate)이 닫힌 채 답이 온 것으로 「기다리지 않음」 을 단정(30초는 멈춤 감시) / (3) TuningServiceTests.Benchmark…: 3회 평균 논리 읽기에 첫 실행 하드 파스 재귀 읽기가 섞여 INDEX 386 > FULL 167 로 뒤집힘 → 두 문장을 1회씩 데워 커서를 만든 뒤 재고 실행 횟수는 데운 뒤 증가분 3 으로 단정 / PRD 13.5 「15를 넘는 메뉴 4 이하」 → 「5 이하」(보기 > 도구 창 ▸ 16줄이 더해진 지금 값), MenuWidthTests 는 이미 한도 5 라 설명 주석만; 제약: release-notes 안 넣음(사용자에게 안 보이는 변경); 비고: 레인 sr-flaky
+  - acceptance: 세 시험이 로컬 반복에서 흔들리지 않음(History·Completion 10회, Benchmark 26ai 3회+) / MenuWidthTests 38 통과·모든 기능 15줄 넘는 메뉴 5 / `dotnet build Oranda.sln -warnaserror`
+  - note: 결과: HistoryStoreTests 13×10·Slow_metadata 1×10 통과, TuningServiceTests 26ai 6×3·Benchmark 1회 추가 통과, MenuWidthTests 38/38. PRD.md 13.3 의 목표 줄(316행 「→ 4 이하」)은 지시대로 두었다(13.5 한 줄만) (win144)
+
 ## 의존 그래프
 
 ### 그래프 (Mermaid)
@@ -1276,6 +1288,7 @@ graph LR
   TSK-14-15 --> TSK-14-16
   TSK-14-15 --> TSK-14-17
   TSK-14-15 --> TSK-14-18
+  TSK-09-10 --> TSK-14-19
   style TSK-01-02 fill:#e8f5e9,stroke:#2e7d32
   style TSK-03-01 stroke:#c62828,stroke-width:2px
   style TSK-02-02 stroke:#c62828,stroke-width:2px

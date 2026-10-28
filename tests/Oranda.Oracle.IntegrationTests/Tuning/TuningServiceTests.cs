@@ -428,10 +428,19 @@ public sealed class TuningServiceTests : IAsyncLifetime
         var work = await SystemAsync(SessionPurpose.Work);
         var service = Service();
 
+        // 데우기: 첫 실행의 하드 파스(사전·통계 재귀 읽기)는 실행마다·CI 상태마다 크기가 달라 평균 논리 읽기를 흔든다
+        // (CI 에서 INDEX 첫 파스가 FULL 을 넘어 비교가 뒤집혔다). 커서를 한 번씩 만들어 둔 뒤 잰다.
+        var raw = _raw[0];
+        var warmed = new Dictionary<BenchmarkCase, int>();
+        foreach (var bench in new[] { full, index })
+        {
+            await service.RunBenchmarkAsync(work, bench, 1, default);
+            warmed[bench] = await ExecutionsAsync(raw, bench.Sql);
+        }
+
         var a = await service.RunBenchmarkAsync(work, full, 3, default);
         var b = await service.RunBenchmarkAsync(work, index, 3, default);
 
-        var raw = _raw[0];
         foreach (var (result, bench) in new[] { (a, full), (b, index) })
         {
             Assert.Same(bench, result.Case);
@@ -439,8 +448,7 @@ public sealed class TuningServiceTests : IAsyncLifetime
             Assert.Equal(1, result.Rows);
             Assert.True(result.LogicalReads > 0, bench.Label);
             Assert.True(result.Elapsed > TimeSpan.Zero);
-            Assert.Equal(3, Convert.ToInt32(await ScalarAsync(raw, "SELECT SUM(executions) FROM v$sql WHERE sql_text = :t",
-                new OracleParameter("t", OracleDbType.Varchar2) { Value = bench.Sql }), CultureInfo.InvariantCulture));
+            Assert.Equal(3, await ExecutionsAsync(raw, bench.Sql) - warmed[bench]);
             var planHash = Convert.ToInt64(await ScalarAsync(raw, "SELECT plan_hash_value FROM v$sql WHERE sql_text = :t AND ROWNUM = 1",
                 new OracleParameter("t", OracleDbType.Varchar2) { Value = bench.Sql }), CultureInfo.InvariantCulture);
             Assert.Equal(planHash, result.PlanHashValue);
@@ -457,6 +465,10 @@ public sealed class TuningServiceTests : IAsyncLifetime
         Assert.Equal(10000m, await ScalarAsync(raw, $"SELECT COUNT(*) FROM {_table}"));
         Assert.False(work.HasPendingTransaction);
     }
+
+    private static async Task<int> ExecutionsAsync(OracleConnection raw, string sql) =>
+        Convert.ToInt32(await ScalarAsync(raw, "SELECT NVL(SUM(executions), 0) FROM v$sql WHERE sql_text = :t",
+            new OracleParameter("t", OracleDbType.Varchar2) { Value = sql }), CultureInfo.InvariantCulture);
 
     [Fact]
     public async Task Wait_sample_trace_file_and_trace_contents_are_read_for_a_traced_session()

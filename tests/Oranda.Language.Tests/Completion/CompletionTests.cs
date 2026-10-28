@@ -389,13 +389,13 @@ public class CompletionTests
         // 객체 목록은 빠르게 캐시에 들어가 있다. 부하로 150ms 예산을 넘기면 캐시가 찰 때까지 다시 부른다.
         await CompleteUntilFullAsync(p, s, "SELECT * FROM |");
 
+        // 문이 닫혀 있는 동안 답이 오면 그것만으로 열 조회를 기다리지 않았다는 증거다(기다렸다면 문을 열기 전엔 끝나지 않는다).
+        // 경과 시간 문턱은 두지 않는다: 바쁜 CI 에서 150ms 타이머·이어 실행이 몇 초 늦어 흔들렸다. 30초는 멈춤 감시일 뿐이다.
         slow.Gate = new TaskCompletionSource();
-        var sw = Stopwatch.StartNew();
-        var first = await Complete(p, s, "SELECT * FROM emp e WHERE e.| = 1");
-        sw.Stop();
+        var first = await Complete(p, s, "SELECT * FROM emp e WHERE e.| = 1").WaitAsync(TimeSpan.FromSeconds(30));
+        Assert.False(slow.Gate.Task.IsCompleted);
         Assert.True(first.IsPartial);
         Assert.Empty(first.Items); // 열은 아직 캐시에 없다
-        Assert.True(sw.ElapsedMilliseconds < 5000, $"{sw.ElapsedMilliseconds} ms");
 
         var tables = await Complete(p, s, "SELECT * FROM emp, |");
         Assert.Contains(tables.Items, i => i.Label == "DEPT"); // 캐시 결과는 바로

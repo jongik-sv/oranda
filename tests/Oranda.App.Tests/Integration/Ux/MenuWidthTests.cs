@@ -104,10 +104,11 @@ public sealed class MenuWidthTests(ITestOutputHelper output)
 
     /// <summary>
     /// 지금 모든 기능의 15줄 넘는 메뉴는 5 — 기존 4(sql·database·monitor·tuning)에 보기 &gt; 도구 창 ▸ 16줄(세션 창 TSK-14-04 가 토글 한 줄을 더함)이 더해졌다.
+    /// PRD 13.5 목표도 이 5 를 받아들여 「5 이하」 로 고쳤다(2026-10-28 사용자 결정, TSK-14-19).
     /// </summary>
     private const int AllFeaturesWideLimit = 5;
 
-    /// <summary>PRD 13.5·D-023 목표: 15줄 넘는 메뉴 모든 기능 4 이하·R1 2 이하·R6 1 이하, 편집·파일·결과·그리드 오른쪽 클릭 각 15 이하, 보기 7 이하, 최상위 메뉴 수는 조사 이하.</summary>
+    /// <summary>PRD 13.5·D-023 목표: 15줄 넘는 메뉴 모든 기능 5 이하·R1 2 이하·R6 1 이하, 편집·파일·결과·그리드 오른쪽 클릭 각 15 이하, 보기 7 이하, 최상위 메뉴 수는 조사 이하.</summary>
     [Theory]
     [MemberData(nameof(ConfigNames))]
     public Task Prd_13_5_width_targets_hold(string name) => HeadlessHost.Run(async () =>

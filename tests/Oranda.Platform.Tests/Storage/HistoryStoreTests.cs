@@ -84,6 +84,7 @@ public sealed class HistoryStoreTests : IDisposable
         using var store = Store();
         await store.AddAsync(Entry($"ALTER USER a IDENTIFIED BY {Secret}") with { ErrorMessage = $"bad {Secret}" }, default);
         await store.ClearAsync(profileId: Guid.NewGuid(), default); // 다른 프로필: 아무것도 안 지움
+        await store.PendingVacuum; // 지우기 뒤 백그라운드 VACUUM 이 파일을 잡고 있으면 아래 파일 읽기가 잠금에 걸린다.
         SqliteConnection.ClearAllPools();
 
         var found = Assert.Single(await store.SearchAsync(new HistoryQuery(), default));
