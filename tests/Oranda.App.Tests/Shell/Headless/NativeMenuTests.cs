@@ -211,6 +211,64 @@ public class NativeMenuTests
     });
 
     [Fact]
+    public Task Open_native_menu_shows_every_shortcut_and_closing_gives_the_keys_back_to_the_keymap() => HeadlessHost.Run(() =>
+    {
+        // 시스템 메뉴의 Gesture 는 표시와 키 가로채기를 같이 맡는다. 닫혀 있을 때는 키맵이 그 명령으로 보내는 키만 쥐되(위 시험),
+        // 메뉴가 열려 있는 동안에는 창 안 메뉴(Windows)처럼 모든 단축키를 보인다 — 맥에서 단축키 표시가 거의 다 빠지던 문제.
+        using var h = new ShellHarness(nativeMenu: true);
+        var keys = h.Get<ContextKeyService>();
+        var table = h.Get<KeymapService>().Table;
+        var root = h.Window.NativeMenuBar!;
+        var edit = root.Items.OfType<NativeMenuItem>().Single(m => m.Header == "편집").Menu!;
+        var copy = FindCommandItem(edit, "oranda.edit.copy");
+        var upper = FindCommandItem(edit, "oranda.edit.upperCase");
+        var nested = ParentMenu(edit, upper)!;
+        Assert.NotSame(edit, nested); // 대문자로는 편집 > 하위 메뉴 안에 있다
+        var copyGesture = table.SingleGesture("oranda.edit.copy");
+        var upperGesture = table.SingleGesture("oranda.edit.upperCase");
+        Assert.NotNull(copyGesture);
+        Assert.NotNull(upperGesture);
+
+        keys.SetFocusSlot("sqlGrid"); // 그리드 포커스: ⌘C 는 결과 복사로 가고 편집 명령의 키는 맞지 않는다
+        Dispatcher.UIThread.RunJobs();
+        Assert.Null(copy.Gesture);
+        Assert.Null(upper.Gesture);
+
+        // 시스템이 메뉴를 열 때의 차례(NeedsUpdate → Opening). 두 이벤트는 내부 인터페이스로만 올릴 수 있다.
+        Raise(edit, "RaiseNeedsUpdate");
+        Raise(edit, "RaiseOpening");
+        Assert.Equal(copyGesture, copy.Gesture);
+        Assert.Equal(upperGesture, upper.Gesture);
+
+        // 열린 채 하위 메뉴를 열고 닫아도, 문맥 키가 바뀌어도 그대로 보인다.
+        Raise(nested, "RaiseNeedsUpdate");
+        Raise(nested, "RaiseOpening");
+        Raise(nested, "RaiseClosed");
+        keys.SetFocusSlot("schema");
+        Dispatcher.UIThread.RunJobs();
+        Assert.Equal(copyGesture, copy.Gesture);
+        Assert.Equal(upperGesture, upper.Gesture);
+
+        // 최상위 메뉴가 닫히면 키는 다시 키맵 몫이다.
+        Raise(edit, "RaiseClosed");
+        Assert.Null(copy.Gesture);
+        Assert.Null(upper.Gesture);
+    });
+
+    private static void Raise(NativeMenu menu, string method) =>
+        typeof(NativeMenu).GetInterfaces().Single(i => i.Name == "INativeMenuExporterEventsImplBridge").GetMethod(method)!.Invoke(menu, null);
+
+    private static NativeMenu? ParentMenu(NativeMenu menu, NativeMenuItem target)
+    {
+        if (menu.Items.Contains(target))
+        {
+            return menu;
+        }
+
+        return menu.Items.OfType<NativeMenuItem>().Select(i => i.Menu is { } sub ? ParentMenu(sub, target) : null).FirstOrDefault(m => m is not null);
+    }
+
+    [Fact]
     public Task Native_menu_has_no_access_key_markers() => HeadlessHost.Run(() =>
     {
         using var h = new ShellHarness(nativeMenu: true);

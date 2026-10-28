@@ -288,4 +288,73 @@ public sealed class ColumnFilterTests
             window.Close();
         }
     });
+
+    /// <summary>열 필터 팝업은 편집기 위에 뜨므로 바탕이 불투명하고, 값 줄은 촘촘하며, 조건 칸은 패널 폭 안에 든다.</summary>
+    /// <remarks><c>ORANDA_RENDER_DIR</c> 가 있으면 라이트·다크 PNG(<c>column-filter-{톤}.png</c>)를 쓴다.</remarks>
+    [Fact]
+    public Task Panel_is_opaque_compact_and_fits_its_width() => HeadlessHost.Run(async () =>
+    {
+        await using var m = await OpenAsync(20);
+        var list = await m.CollectColumnValuesAsync(1);
+        var panel = new ColumnFilterPanel(Cols[1], list, null);
+        panel.SetCondition(ConditionKind.Between, "a", "b"); // 두 칸이 다 보이는 가장 넓은 조건 줄
+        var window = new Window { Content = panel, Width = 400, Height = 600 };
+        window.Show();
+        try
+        {
+            var listBox = panel.GetVisualDescendants().OfType<ListBox>().Single();
+            await HeadlessHost.WaitUntil(() => listBox.GetVisualDescendants().OfType<ListBoxItem>().Any(i => i.Bounds.Height > 0));
+
+            // 팝업은 편집기 위에 뜨므로 바탕이 비치면 뒤 글자와 겹친다
+            var bg = Assert.IsAssignableFrom<Avalonia.Media.ISolidColorBrush>(panel.Background);
+            Assert.Equal(255, bg.Color.A);
+            Assert.NotNull(panel.BorderBrush);
+
+            // 값 한 줄은 Fluent 기본(약 40 DIP)보다 촘촘하다
+            Assert.All(listBox.GetVisualDescendants().OfType<ListBoxItem>(), i => Assert.InRange(i.Bounds.Height, 1, 28));
+
+            // 어떤 칸도 패널 오른쪽 안쪽 여백을 넘지 않는다
+            var right = panel.Bounds.Width - panel.Padding.Right - panel.BorderThickness.Right;
+            foreach (var box in panel.GetVisualDescendants().OfType<TextBox>().Where(t => t.IsVisible))
+            {
+                var edge = box.TranslatePoint(new Point(box.Bounds.Width, 0), panel)!.Value.X;
+                Assert.True(edge <= right + 0.5, $"칸 오른쪽 {edge} > 패널 안쪽 {right}");
+            }
+
+            Render(window);
+        }
+        finally
+        {
+            window.Close();
+        }
+    });
+
+    private static void Render(Window window)
+    {
+        var dir = Environment.GetEnvironmentVariable("ORANDA_RENDER_DIR");
+        if (string.IsNullOrEmpty(dir))
+        {
+            return;
+        }
+
+        Directory.CreateDirectory(dir);
+        try
+        {
+            foreach (var (variant, tone) in new[] { (Avalonia.Styling.ThemeVariant.Light, "light"), (Avalonia.Styling.ThemeVariant.Dark, "dark") })
+            {
+                Application.Current!.RequestedThemeVariant = variant;
+                Dispatcher.UIThread.RunJobs();
+                window.UpdateLayout();
+                using var bmp = new Avalonia.Media.Imaging.RenderTargetBitmap(new PixelSize((int)window.Bounds.Width, (int)window.Bounds.Height));
+                bmp.Render(window);
+#pragma warning disable CS0618 // 렌더 확인용: 새 오버로드가 없는 헤드리스 비트맵
+                bmp.Save(Path.Combine(dir, $"column-filter-{tone}.png"));
+#pragma warning restore CS0618
+            }
+        }
+        finally
+        {
+            Application.Current!.RequestedThemeVariant = Avalonia.Styling.ThemeVariant.Default;
+        }
+    }
 }

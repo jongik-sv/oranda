@@ -26,7 +26,7 @@ public sealed class ColumnFilterPanel : Border
     private readonly ValueItem? _nullItem;
     private readonly bool _truncated;
     private readonly TextBox _search = new() { PlaceholderText = UiText.Get("ColumnFilter.search", "값 검색") };
-    private readonly ListBox _list = new() { Height = 200 };
+    private readonly ListBox _list = new() { Height = 200, Classes = { "filter-values" } };
     private readonly ComboBox _kind = new() { HorizontalAlignment = HorizontalAlignment.Stretch };
     private readonly TextBox _text1 = new();
     private readonly TextBox _text2 = new() { PlaceholderText = UiText.Get("ColumnFilter.to", "끝") };
@@ -53,6 +53,9 @@ public sealed class ColumnFilterPanel : Border
         MinWidth = 300;
         CornerRadius = new CornerRadius(4);
         BorderThickness = new Thickness(1);
+        // 팝업은 편집기·결과 탭 위에 뜬다: 바탕을 칠하지 않으면 뒤 글자가 비쳐 겹친다. Fluent 플라이아웃과 같은 바탕·테두리.
+        this.Bind(BackgroundProperty, this.GetResourceObservable("FlyoutPresenterBackground"));
+        this.Bind(BorderBrushProperty, this.GetResourceObservable("FlyoutBorderThemeBrush"));
         AutomationProperties.SetName(this, UiText.Get("ColumnFilter.title", "열 필터") + " " + column.Name);
 
         _list.ItemTemplate = new FuncDataTemplate<ValueItem>((item, _) => ItemView(item), supportsRecycling: false);
@@ -103,7 +106,12 @@ public sealed class ColumnFilterPanel : Border
 
         panel.Children.Add(new TextBlock { Text = UiText.Get("ColumnFilter.condition", "조건"), Opacity = 0.7, FontSize = 12 });
         panel.Children.Add(_kind);
-        panel.Children.Add(new StackPanel { Orientation = Orientation.Horizontal, Spacing = 6, Children = { _text1, _text2 } });
+        // 범위는 두 칸을 반씩, 나머지는 한 칸을 패널 폭만큼(UpdateConditionBoxes)
+        var texts = new Grid { ColumnDefinitions = new ColumnDefinitions("*,6,*") };
+        Grid.SetColumn(_text2, 2);
+        texts.Children.Add(_text1);
+        texts.Children.Add(_text2);
+        panel.Children.Add(texts);
         panel.Children.Add(new StackPanel { Orientation = Orientation.Horizontal, Spacing = 6, HorizontalAlignment = HorizontalAlignment.Right, Children = { apply, clear, close } });
         Child = panel;
         Refresh();
@@ -179,8 +187,7 @@ public sealed class ColumnFilterPanel : Border
         _text1.IsVisible = kind is ConditionKind.Contains or ConditionKind.Equals or ConditionKind.StartsWith or ConditionKind.Between;
         _text2.IsVisible = kind is ConditionKind.Between;
         _text1.PlaceholderText = kind is ConditionKind.Between ? UiText.Get("ColumnFilter.from", "시작") : UiText.Get("ColumnFilter.value", "값");
-        _text1.Width = _text2.IsVisible ? 140 : 288;
-        _text2.Width = 140;
+        Grid.SetColumnSpan(_text1, _text2.IsVisible ? 1 : 3);
     }
 
     /// <summary>지금 체크·조건 상태를 열 필터로 만든다. 아무 제한이 없으면 null(필터 없음).</summary>
