@@ -270,6 +270,63 @@ public sealed class ConnectionManagerTests
         Assert.Equal(expected, DataSourceComposer.Detect(dataSource));
     }
 
+    [Theory]
+    [InlineData(false, "db.example.com", "1521", "ORCL", "(DESCRIPTION=(ADDRESS=(PROTOCOL=TCP)(HOST=db.example.com)(PORT=1521))(CONNECT_DATA=(SID=ORCL)))")]
+    [InlineData(true, "db.example.com", "2484", "ORCL", "(DESCRIPTION=(ADDRESS=(PROTOCOL=TCPS)(HOST=db.example.com)(PORT=2484))(CONNECT_DATA=(SID=ORCL)))")]
+    public void Sid_composes_a_descriptor_and_parses_back_to_host_port_sid(bool tls, string host, string port, string sid, string expected)
+    {
+        // SID 는 Easy Connect 로 쓸 수 없어 접속 기술자로 저장한다. 다시 열면 호스트·포트·SID 로 돌아온다.
+        Assert.Equal(expected, DataSourceComposer.Compose(tls, host, port, sid, useSid: true));
+        Assert.True(DataSourceComposer.TryParseBasic(expected, out var t, out var h, out var p, out var s, out var isSid));
+        Assert.Equal((tls, host, port, sid, true), (t, h, p, s, isSid));
+        Assert.Equal(ConnectionMode.HostPortService, DataSourceComposer.Detect(expected));
+    }
+
+    [Fact]
+    public void Sid_without_a_port_uses_1521_and_spaced_descriptors_still_parse()
+    {
+        Assert.Equal("(DESCRIPTION=(ADDRESS=(PROTOCOL=TCP)(HOST=h)(PORT=1521))(CONNECT_DATA=(SID=X)))", DataSourceComposer.Compose(false, "h", "", "X", useSid: true));
+        Assert.True(DataSourceComposer.TryParseBasic(" (DESCRIPTION = (ADDRESS = (PROTOCOL = tcp)(HOST = h)(PORT = 1522)) (CONNECT_DATA = (SID = X))) ", out _, out var host, out var port, out var sid, out var isSid));
+        Assert.Equal(("h", "1522", "X", true), (host, port, sid, isSid));
+    }
+
+    [Theory]
+    [InlineData("(DESCRIPTION=(ADDRESS_LIST=(ADDRESS=(PROTOCOL=TCP)(HOST=a)(PORT=1521))(ADDRESS=(PROTOCOL=TCP)(HOST=b)(PORT=1521)))(CONNECT_DATA=(SID=X)))")]
+    [InlineData("(DESCRIPTION=(ADDRESS=(PROTOCOL=TCP)(HOST=a)(PORT=1521))(CONNECT_DATA=(SID=X)(SERVER=DEDICATED)))")]
+    [InlineData("(DESCRIPTION=(CONNECT_TIMEOUT=5)(ADDRESS=(PROTOCOL=TCP)(HOST=a)(PORT=1521))(CONNECT_DATA=(SID=X)))")]
+    public void Sid_descriptors_with_more_than_one_address_or_option_stay_custom(string dataSource)
+    {
+        Assert.False(DataSourceComposer.TryParseBasic(dataSource, out _, out _, out _, out _, out _));
+        Assert.Equal(ConnectionMode.EasyConnect, DataSourceComposer.Detect(dataSource));
+    }
+
+    [Fact]
+    public void Editor_saves_sid_as_a_descriptor_and_reopens_it_as_host_port_sid_without_changes()
+    {
+        var vm = ProfileEditorViewModel.ForNew();
+        vm.Name = "sid";
+        vm.User = "u";
+        vm.Host = "db.example.com";
+        vm.Port = "1521";
+        vm.Service = "ORCL";
+        vm.UseSid = true;
+        var saved = vm.TryBuild(out var errors)!;
+        Assert.Empty(errors);
+        Assert.Equal("(DESCRIPTION=(ADDRESS=(PROTOCOL=TCP)(HOST=db.example.com)(PORT=1521))(CONNECT_DATA=(SID=ORCL)))", saved.DataSource);
+        Assert.Equal("u@" + saved.DataSource, vm.ConnectionStringPreview);
+
+        var reopened = ProfileEditorViewModel.From(saved);
+        Assert.Equal(ConnectionMode.HostPortService, reopened.Mode);
+        Assert.True(reopened.UseSid);
+        Assert.Equal(1, reopened.ServiceKindIndex);
+        Assert.Equal(("db.example.com", "1521", "ORCL"), (reopened.Host, reopened.Port, reopened.Service));
+        Assert.False(reopened.IsDirty); // 열자마자 바뀐 것으로 치지 않는다
+
+        reopened.ServiceKindIndex = 0; // 서비스 이름으로 바꾸면 바뀐 것이고 Easy Connect 로 저장한다
+        Assert.True(reopened.IsDirty);
+        Assert.Equal("db.example.com:1521/ORCL", reopened.TryBuild(out _)!.DataSource);
+    }
+
     // ---------- 색 규칙 ----------
 
     [Theory]

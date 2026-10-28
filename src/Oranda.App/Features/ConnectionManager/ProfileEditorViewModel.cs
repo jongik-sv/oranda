@@ -14,7 +14,7 @@ namespace Oranda.App.Features.ConnectionManager;
 /// <summary>접속 방식(CONN-01). 저장 형식은 모두 <c>dataSource</c> 문자열 하나다.</summary>
 public enum ConnectionMode
 {
-    /// <summary>호스트·포트·서비스를 따로 입력(Easy Connect 문자열로 합쳐 저장).</summary>
+    /// <summary>호스트·포트·서비스 이름(또는 SID)을 따로 입력. 서비스 이름은 Easy Connect 문자열, SID 는 접속 기술자로 합쳐 저장.</summary>
     HostPortService,
 
     /// <summary>Easy Connect Plus 문자열을 그대로 입력(<c>host:port/service?옵션</c>, <c>tcps://…</c>, 접속 기술자 포함).</summary>
@@ -30,9 +30,22 @@ public static partial class DataSourceComposer
     [GeneratedRegex(@"^(?:(?<scheme>tcps?)://)?(?<host>[A-Za-z0-9_.\-]+)(?::(?<port>\d{1,5}))?/(?<service>[A-Za-z0-9_.\-$#]+)$", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
     private static partial Regex HostPortPattern();
 
-    /// <summary>호스트·포트·서비스를 한 문자열로. 포트가 비면 생략(기본 1521). TLS 면 <c>tcps://</c>.</summary>
-    public static string Compose(bool tls, string host, string? port, string service)
+    // 공백을 뺀 단순 SID 기술자: 주소 하나(TCP·TCPS)와 CONNECT_DATA 의 SID 하나뿐. 다른 키가 있으면 사용자 지정으로 둔다.
+    [GeneratedRegex(@"^\(DESCRIPTION=\(ADDRESS=\(PROTOCOL=(?<proto>TCPS?)\)\(HOST=(?<host>[A-Za-z0-9_.\-]+)\)\(PORT=(?<port>\d{1,5})\)\)\(CONNECT_DATA=\(SID=(?<sid>[A-Za-z0-9_.\-$#]+)\)\)\)$", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
+    private static partial Regex SidDescriptorPattern();
+
+    /// <summary>
+    /// 호스트·포트·서비스를 한 문자열로. 포트가 비면 생략(기본 1521). TLS 면 <c>tcps://</c>.
+    /// SID 는 Easy Connect 로 쓸 수 없어 접속 기술자로 만든다(포트가 비면 1521, TLS 면 <c>PROTOCOL=TCPS</c>).
+    /// </summary>
+    public static string Compose(bool tls, string host, string? port, string service, bool useSid = false)
     {
+        if (useSid)
+        {
+            var p = string.IsNullOrWhiteSpace(port) ? "1521" : port.Trim();
+            return $"(DESCRIPTION=(ADDRESS=(PROTOCOL={(tls ? "TCPS" : "TCP")})(HOST={host.Trim()})(PORT={p}))(CONNECT_DATA=(SID={service.Trim()})))";
+        }
+
         var scheme = tls ? "tcps://" : string.Empty;
         var portPart = string.IsNullOrWhiteSpace(port) ? string.Empty : ":" + port.Trim();
         return $"{scheme}{host.Trim()}{portPart}/{service.Trim()}";
@@ -56,6 +69,32 @@ public static partial class DataSourceComposer
         return true;
     }
 
+    /// <summary>
+    /// 호스트·포트 방식으로 보일 수 있는 문자열이면 나눠 준다: <c>[tcps://]host[:port]/service</c> 또는 단순 SID 기술자
+    /// (공백은 무시, <paramref name="sid"/> = true).
+    /// </summary>
+    public static bool TryParseBasic(string dataSource, out bool tls, out string host, out string port, out string service, out bool sid)
+    {
+        sid = false;
+        if (TryParseHostPort(dataSource, out tls, out host, out port, out service))
+        {
+            return true;
+        }
+
+        var m = SidDescriptorPattern().Match(string.Concat(dataSource.Where(c => !char.IsWhiteSpace(c))));
+        if (!m.Success)
+        {
+            return false;
+        }
+
+        tls = m.Groups["proto"].Value.Equals("TCPS", StringComparison.OrdinalIgnoreCase);
+        host = m.Groups["host"].Value;
+        port = m.Groups["port"].Value;
+        service = m.Groups["sid"].Value;
+        sid = true;
+        return true;
+    }
+
     /// <summary>저장된 문자열을 보고 편집기에서 보일 방식을 고른다.</summary>
     public static ConnectionMode Detect(string dataSource)
     {
@@ -64,7 +103,7 @@ public static partial class DataSourceComposer
             return ConnectionMode.HostPortService;
         }
 
-        if (TryParseHostPort(dataSource, out _, out _, out _, out _))
+        if (TryParseBasic(dataSource, out _, out _, out _, out _, out _))
         {
             return ConnectionMode.HostPortService;
         }
@@ -220,6 +259,11 @@ public sealed partial class ProfileEditorViewModel : ViewModelBase
     [ObservableProperty]
     private bool _useTls;
 
+    /// <summary>서비스 칸이 SID 인지(아니면 서비스 이름). SID 면 접속 기술자로 저장한다.</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(ServiceKindIndex))]
+    private bool _useSid;
+
     [ObservableProperty]
     private string _easyConnect = string.Empty;
 
@@ -348,6 +392,13 @@ public sealed partial class ProfileEditorViewModel : ViewModelBase
     public bool IsEasyConnectMode => Mode == ConnectionMode.EasyConnect;
 
     public bool IsTnsMode => Mode == ConnectionMode.TnsAlias;
+
+    /// <summary>서비스 칸 라벨 콤보(0 = 서비스 이름, 1 = SID).</summary>
+    public int ServiceKindIndex
+    {
+        get => UseSid ? 1 : 0;
+        set => UseSid = value == 1;
+    }
 
     /// <summary>
     /// 지갑 폴더를 쓰는 방식인지: TNS 별칭(ADB 등), Easy Connect 문자열(<c>tcps://</c>), TLS 를 켠 호스트·포트·서비스.
@@ -545,7 +596,7 @@ public sealed partial class ProfileEditorViewModel : ViewModelBase
     /// <summary>미리보기용 접속 문자열(입력이 모자라면 빈 글자, 검증 오류는 내지 않는다).</summary>
     private string CurrentDataSource() => Mode switch
     {
-        ConnectionMode.HostPortService => IsBlank(Host) || IsBlank(Service) ? string.Empty : DataSourceComposer.Compose(UseTls, Host, Port, Service),
+        ConnectionMode.HostPortService => IsBlank(Host) || IsBlank(Service) ? string.Empty : DataSourceComposer.Compose(UseTls, Host, Port, Service, UseSid),
         ConnectionMode.EasyConnect => EasyConnect.Trim(),
         _ => TnsAlias.Trim(),
     };
@@ -554,13 +605,13 @@ public sealed partial class ProfileEditorViewModel : ViewModelBase
 
     /// <summary>비밀번호를 뺀 폼 값 전체(변경 여부 비교용).</summary>
     private FormState Capture() => new(
-        Name, Group, Environment, ColorText, Mode, Host, Port, Service, UseTls, EasyConnect, TnsAlias, TnsAdmin, WalletLocation,
+        Name, Group, Environment, ColorText, Mode, Host, Port, Service, UseTls, UseSid, EasyConnect, TnsAlias, TnsAdmin, WalletLocation,
         User, SavePassword, Auth, ProxyUser, ReadOnly, LicensePack, ConnectTimeoutSeconds, KeepAliveSeconds,
         NlsDateFormat, NlsTimestampFormat, NlsLanguage, NlsTerritory, NlsSort, Comment);
 
     private sealed record FormState(
         string Name, string Group, ConnectionEnvironment Environment, string ColorText, ConnectionMode Mode, string Host, string Port,
-        string Service, bool UseTls, string EasyConnect, string TnsAlias, string TnsAdmin, string WalletLocation, string User,
+        string Service, bool UseTls, bool UseSid, string EasyConnect, string TnsAlias, string TnsAdmin, string WalletLocation, string User,
         bool SavePassword, AuthMode Auth, string ProxyUser, bool ReadOnly, LicensePack LicensePack, decimal ConnectTimeoutSeconds,
         decimal KeepAliveSeconds, string NlsDateFormat, string NlsTimestampFormat, string NlsLanguage, string NlsTerritory, string NlsSort,
         string Comment);
@@ -662,9 +713,10 @@ public sealed partial class ProfileEditorViewModel : ViewModelBase
         switch (Mode)
         {
             case ConnectionMode.HostPortService:
-                if (DataSourceComposer.TryParseHostPort(p.DataSource, out var tls, out var host, out var port, out var service))
+                if (DataSourceComposer.TryParseBasic(p.DataSource, out var tls, out var host, out var port, out var service, out var sid))
                 {
                     UseTls = tls;
+                    UseSid = sid;
                     Host = host;
                     Port = port;
                     Service = service;
@@ -697,7 +749,7 @@ public sealed partial class ProfileEditorViewModel : ViewModelBase
                     return string.Empty;
                 }
 
-                return DataSourceComposer.Compose(UseTls, Host, Port, Service);
+                return DataSourceComposer.Compose(UseTls, Host, Port, Service, UseSid);
             case ConnectionMode.EasyConnect:
                 if (string.IsNullOrWhiteSpace(EasyConnect))
                 {

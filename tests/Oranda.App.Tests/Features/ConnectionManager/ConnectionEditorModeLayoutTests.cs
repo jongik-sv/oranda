@@ -47,6 +47,13 @@ public sealed class ConnectionEditorModeLayoutTests : IDisposable
             Hidden(editor, "TnsAdminBox", "TnsAliasBox", "WalletBox", "EasyConnectBox");
             Shots(window, "host");
 
+            editor.FindControl<ComboBox>("ServiceKindBox")!.SelectedIndex = 1; // 라벨 자리 콤보로 SID 를 고른다
+            vm.Editor.Service = "SALES";
+            Dispatcher.UIThread.RunJobs();
+            Assert.True(vm.Editor.UseSid);
+            Assert.Contains("(CONNECT_DATA=(SID=SALES))", vm.Editor.ConnectionStringPreview, StringComparison.Ordinal);
+            Shots(window, "host-sid");
+
             modes.SelectedIndex = 2;
             vm.Editor.EasyConnect = "(DESCRIPTION=(ADDRESS=(PROTOCOL=TCP)(HOST=db.example.com)(PORT=1521))(CONNECT_DATA=(SID=SALES)))";
             Dispatcher.UIThread.RunJobs();

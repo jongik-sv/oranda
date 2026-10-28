@@ -29,6 +29,15 @@
       <Setter Property="FontSize" Value="{DynamicResource OrandaFontSizeBase}" />
       <Setter Property="Padding" Value="10,3" />
     </Style>
+    <!-- 라벨 자리의 작은 고르기(서비스 이름/SID): 테두리·바탕 없이 라벨처럼 보이고 ▾ 로 바꾼다. -->
+    <Style Selector="ComboBox.label-choice">
+      <Setter Property="MinWidth" Value="0" />
+      <Setter Property="MinHeight" Value="0" />
+      <Setter Property="Padding" Value="6,2,0,2" />
+      <Setter Property="Background" Value="Transparent" />
+      <Setter Property="BorderThickness" Value="0" />
+      <Setter Property="HorizontalContentAlignment" Value="Right" />
+    </Style>
     <!-- 비어 있는 필수 칸: 라벨 글자와 칸 테두리를 빨강으로(접속·시험 단추도 꺼진다). -->
     <Style Selector="TextBlock.error">
       <Setter Property="Foreground" Value="{DynamicResource OrandaIconRedBrush}" />
@@ -156,7 +165,12 @@
       <TextBox x:Name="HostBox" Grid.Row="0" Grid.Column="1" Text="{Binding Host}" Classes.missing="{Binding HostMissing}" AutomationProperties.Name="호스트" />
       <TextBlock Grid.Row="0" Grid.Column="2" Classes="inline" Text="포트" />
       <TextBox x:Name="PortBox" Grid.Row="0" Grid.Column="3" Width="80" Text="{Binding Port}" AutomationProperties.Name="포트" />
-      <TextBlock Grid.Row="1" Text="서비스 이름" Classes.error="{Binding ServiceMissing}" />
+      <!-- SQL Developer·DBeaver 처럼 서비스 이름과 SID 를 고른다. 줄을 늘리지 않게 라벨 자리에 둔다(SID 는 접속 기술자로 저장). -->
+      <ComboBox x:Name="ServiceKindBox" Grid.Row="1" Classes="label-choice" HorizontalAlignment="Right"
+                SelectedIndex="{Binding ServiceKindIndex}" AutomationProperties.Name="서비스 이름 또는 SID">
+        <ComboBoxItem Content="서비스 이름" />
+        <ComboBoxItem Content="SID" />
+      </ComboBox>
       <TextBox x:Name="ServiceBox" Grid.Row="1" Grid.Column="1" Text="{Binding Service}" Classes.missing="{Binding ServiceMissing}" AutomationProperties.Name="서비스" />
       <CheckBox x:Name="TlsBox" Grid.Row="1" Grid.Column="2" Grid.ColumnSpan="2" Content="TLS(tcps)" IsChecked="{Binding UseTls}" />
     </Grid>

@@ -1226,5 +1226,6 @@
   "추천 근거": "Recommendation evidence",
   "호스트·포트": "Host/port",
   "서비스 이름": "Service name",
-  "사용자 지정": "Custom"
+  "사용자 지정": "Custom",
+  "서비스 이름 또는 SID": "Service name or SID"
 }
