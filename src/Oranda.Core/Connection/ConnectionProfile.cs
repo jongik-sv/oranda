@@ -1,3 +1,5 @@
+using Oranda.Core.Ai.Access;
+
 namespace Oranda.Core.Connection;
 
 /// <summary>
@@ -49,6 +51,8 @@ public sealed record NlsSettings
 /// <see cref="DataSource"/> 는 Easy Connect Plus 문자열 또는 tnsnames.ora 별칭.
 /// 비밀번호는 보관하지 않는다 — <see cref="CredentialRef"/> 로 <c>ICredentialStore</c> 에서 꺼낸다.
 /// <see cref="Comment"/> 는 사람이 적는 여러 줄 설명(null = 없음, TSK-13-12).
+/// <see cref="AiAccess"/> 는 AI 허용 수준, <see cref="AllowExplainPlan"/> 은 AI 의 EXPLAIN PLAN 허용 여부 — 둘 다 null 이면 환경 라벨의 기본값
+/// (<see cref="AiAccessPolicy"/>, 옛 JSON 도 null 로 읽힌다).
 /// D-004: 위치 매개변수 record 를 유지하고 새 매개변수는 끝에 기본값과 함께 덧붙인다.
 /// </summary>
 public sealed record ConnectionProfile(
@@ -70,7 +74,9 @@ public sealed record ConnectionProfile(
     string? Color = null,
     string? Group = null,
     DateTimeOffset? LastConnectedAt = null,
-    string? Comment = null);
+    string? Comment = null,
+    AiAccessLevel? AiAccess = null,
+    bool? AllowExplainPlan = null);
 
 /// <summary><c>connections.json</c> 루트.</summary>
 public sealed record ConnectionsDocument

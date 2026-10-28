@@ -3,12 +3,14 @@ using System.Text;
 using System.Text.RegularExpressions;
 using Oranda.Core.Connection;
 using Oranda.Core.Features;
+using Oranda.Core.History;
 
 namespace Oranda.Core.Execution;
 
 /// <summary>
 /// 정책 관문 규칙(TRD 4.9, SAFE-02·03·07·08). 앱 조립이 등록한다(Core 는 스캔 대상이 아니다). 소유: TSK-06-01.
 /// <list type="number">
+/// <item>(규칙 0) 에이전트 출처: 실효 분류가 Query 가 아니면 거부</item>
 /// <item>읽기 전용 프로필: 질의·트랜잭션 제어·SQL*Plus·EXPLAIN 외 거부</item>
 /// <item>조회 전용 Role(D-006, TSK-07-05): 게이트의 <see cref="IFeatureGate.ReadOnlyRole"/> 가 참이면 1번과 같은 기준으로 거부</item>
 /// <item>라이선스: 요구 팩이 프로필 선언(서버 <c>control_management_pack_access</c> 를 알면 그것과 둘 중 낮은 값)보다 높으면 거부</item>
@@ -80,6 +82,13 @@ public sealed class ExecutionPolicy : IExecutionPolicy
     private PolicyDecision Evaluate(PolicyContext ctx, SqlStatement stmt)
     {
         var kind = EffectiveKind(stmt);
+
+        // 0. 에이전트 출처(연구서 §6.1): 실효 분류가 Query 가 아니면 거부. 불확실 분류는 EffectiveKind 가 DML 로 보므로 함께 거부된다.
+        if (ctx.Source == HistorySource.Agent && kind != StatementKind.Query)
+        {
+            return new PolicyDecision(PolicyDecisionKind.Deny, PolicyRule.AgentSource,
+                $"AI 에이전트는 조회(SELECT)만 실행할 수 있습니다. {Describe(stmt, kind)} 은(는) 편집기 제안으로 보내세요.");
+        }
 
         // 1. 읽기 전용(SAFE-02)
         if (ctx.Profile.ReadOnly && !IsReadOnlySafe(stmt, kind))

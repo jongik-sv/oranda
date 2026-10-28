@@ -11,6 +11,9 @@ public enum HistorySource
     SchemaBrowser,
     Monitor,
     Extension,
+
+    /// <summary>AI 에이전트(<c>AgentGate</c>)가 요청한 실행. 정책 규칙 0 이 Query 외 문장을 거부한다.</summary>
+    Agent,
 }
 
 /// <summary>이력 <c>status</c> 열. <see cref="ExecutionStatus"/> 와 같은 이름.</summary>

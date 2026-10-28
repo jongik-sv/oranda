@@ -24,6 +24,42 @@ public class ExecutionPolicyTests
     private static PolicyDecision Eval(PolicyContext ctx, SqlStatement stmt) =>
         Policy.EvaluateAsync(ctx, stmt, default).AsTask().GetAwaiter().GetResult();
 
+    private static PolicyContext AgentCtx(ConnectionEnvironment env = ConnectionEnvironment.Development, bool readOnly = false) =>
+        new(TestData.Profile(env, readOnly, LicensePack.None), TestData.Server(), HistorySource.Agent);
+
+    [Theory]
+    [InlineData("UPDATE emp SET sal = 1 WHERE id = 1", StatementKind.Dml)]
+    [InlineData("CREATE TABLE t (x NUMBER)", StatementKind.Ddl)]
+    [InlineData("BEGIN NULL; END;", StatementKind.PlSql)]
+    [InlineData("COMMIT", StatementKind.TransactionControl)]
+    [InlineData("SET SERVEROUTPUT ON", StatementKind.SqlPlus)]
+    [InlineData("EXPLAIN PLAN FOR SELECT 1 FROM dual", StatementKind.Other)]
+    public void Agent_source_denies_everything_but_query_first(string text, StatementKind kind)
+    {
+        // 개발 접속·읽기 전용 아님: 다른 규칙이 아니라 규칙 0 이 거부한다.
+        var d = Eval(AgentCtx(), Stmt(text, kind));
+
+        Assert.Equal(PolicyDecisionKind.Deny, d.Kind);
+        Assert.Equal(PolicyRule.AgentSource, d.Rule);
+    }
+
+    [Fact]
+    public void Agent_source_denies_uncertain_classification_and_precedes_other_rules()
+    {
+        var uncertain = Stmt("SELECT f(x) FROM t", StatementKind.Query) with { IsClassificationUncertain = true };
+        Assert.Equal(PolicyRule.AgentSource, Eval(AgentCtx(), uncertain).Rule);
+
+        // 읽기 전용 프로필에서도 규칙 0 이 먼저 걸린다.
+        Assert.Equal(PolicyRule.AgentSource, Eval(AgentCtx(readOnly: true), Stmt("DELETE FROM t", StatementKind.Dml)).Rule);
+    }
+
+    [Fact]
+    public void Agent_source_allows_a_plain_query_and_other_sources_are_unchanged()
+    {
+        Assert.Same(PolicyDecision.Allowed, Eval(AgentCtx(), Stmt("SELECT 1 FROM dual", StatementKind.Query)));
+        Assert.Equal(PolicyDecisionKind.Allow, Eval(Ctx(), Stmt("DELETE FROM t WHERE id = 1", StatementKind.Dml)).Kind);
+    }
+
     [Fact]
     public void Plain_query_is_allowed()
     {

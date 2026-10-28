@@ -28,7 +28,7 @@ public class ModelContractTests
         Assert.Equal(
             ["Name", "User", "DataSource", "Auth", "TnsAdmin", "WalletLocation", "ConnectTimeoutSeconds",
              "Id", "Environment", "ReadOnly", "LicensePack", "KeepAliveSeconds", "Nls", "CredentialRef",
-             "ProxyUser", "Color", "Group", "LastConnectedAt", "Comment"],
+             "ProxyUser", "Color", "Group", "LastConnectedAt", "Comment", "AiAccess", "AllowExplainPlan"],
             ctor.GetParameters().Select(p => p.Name));
     }
 
@@ -55,7 +55,7 @@ public class ModelContractTests
         Assert.Equal(["Development", "Test", "Production"], Enum.GetNames<ConnectionEnvironment>());
         Assert.Equal(["None", "Diagnostics", "DiagnosticsAndTuning"], Enum.GetNames<LicensePack>());
         Assert.Equal(["Query", "Dml", "Ddl", "PlSql", "TransactionControl", "SqlPlus", "Other"], Enum.GetNames<Oranda.Core.Execution.StatementKind>());
-        Assert.Equal(["Editor", "Script", "GridEdit", "SchemaBrowser", "Monitor", "Extension"], Enum.GetNames<HistorySource>());
+        Assert.Equal(["Editor", "Script", "GridEdit", "SchemaBrowser", "Monitor", "Extension", "Agent"], Enum.GetNames<HistorySource>());
         Assert.Equal(["Succeeded", "Failed", "Cancelled", "Denied"], Enum.GetNames<HistoryStatus>());
         Assert.Equal(Enum.GetNames<HistoryStatus>(), Enum.GetNames<Oranda.Core.Execution.ExecutionStatus>());
         Assert.Equal(["Ask", "Stop", "Continue"], Enum.GetNames<Oranda.Core.Execution.ScriptErrorMode>());

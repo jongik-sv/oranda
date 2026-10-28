@@ -49,6 +49,37 @@ public sealed record AppSettings
 
     // "features": null 인 손으로 고친 파일도 기본값으로 받는다.
     private readonly FeaturesSettings _features = new();
+
+    /// <summary>AI 튜닝 설정(설계 §2.3). 새 섹션이라 스키마 버전은 그대로, 키가 없는 옛 파일 = 드라이버 없음.</summary>
+    public AiSettings Ai { get => _ai; init => _ai = value ?? new(); }
+
+    // "ai": null 인 손으로 고친 파일도 기본값으로 받는다.
+    private readonly AiSettings _ai = new();
+}
+
+/// <summary>AI 호출 방식(설계 §2). 새 값은 맨 끝에 추가한다.</summary>
+public enum AiDriverKind
+{
+    /// <summary>선택 안 함. AI 단추는 설정을 안내한다.</summary>
+    None,
+
+    /// <summary>Claude Code CLI(<c>claude -p</c>).</summary>
+    ClaudeCode,
+}
+
+/// <summary>설정 <c>ai</c> 섹션.</summary>
+public sealed record AiSettings
+{
+    public AiDriverKind Driver { get; init; } = AiDriverKind.None;
+
+    /// <summary>모델 이름(<c>claude --model</c> 값). null = CLI 기본.</summary>
+    public string? Model { get; init; }
+
+    /// <summary>CLI 실행 파일 경로. null = PATH 에서 찾는다.</summary>
+    public string? ExecutablePath { get; init; }
+
+    /// <summary>SQL 글의 리터럴 값을 <c>:v1</c> 로 바꿔 보낸다(연구서 §7.1). 다음 회차 구현: 이번 회차 코드는 이 값을 읽지 않는다.</summary>
+    public bool MaskLiterals { get; init; }
 }
 
 /// <summary>MyBatis 작업 공간 설정. 설정 창에는 없고 「바뀌는 부분」 창의 확인란이 바꾼다.</summary>

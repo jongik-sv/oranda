@@ -4,7 +4,7 @@ using Oranda.Core.History;
 namespace Oranda.Core.Execution;
 
 /// <summary>
-/// 정책 관문(TRD 4.9, SAFE). 규칙 순서: 읽기 전용 → 조회 전용 Role(TRD 10.7.4) → 라이선스 → 운영 DML/DDL 확인 → WHERE 없는 DML → 위험 명령.
+/// 정책 관문(TRD 4.9, SAFE). 규칙 순서: 에이전트 출처(규칙 0) → 읽기 전용 → 조회 전용 Role(TRD 10.7.4) → 라이선스 → 운영 DML/DDL 확인 → WHERE 없는 DML → 위험 명령.
 /// 구현: Oranda.Core <c>ExecutionPolicy</c>(TSK-06-01).
 /// </summary>
 public interface IExecutionPolicy
@@ -37,6 +37,9 @@ public enum PolicyRule
     ProductionChange,
     UnfilteredDml,
     DangerousCommand,
+
+    /// <summary>규칙 0: 에이전트 출처(<see cref="HistorySource.Agent"/>)는 실효 분류가 Query 인 문장만 허용한다.</summary>
+    AgentSource,
 }
 
 /// <summary>

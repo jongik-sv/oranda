@@ -30,6 +30,20 @@ public sealed class ConnectionStoreTests : IDisposable
         new(name, "scott", dataSource);
 
     [Fact]
+    public async Task Ai_access_round_trips_and_production_is_clamped_to_plan_on_load()
+    {
+        File.WriteAllText(
+            Path.Combine(_dir, "connections.json"),
+            """{"schemaVersion":1,"profiles":[{"name":"prod","user":"u","dataSource":"h/s","environment":"Production","aiAccess":"QueryRows"},{"name":"dev","user":"u","dataSource":"h/s","aiAccess":"QueryRows","allowExplainPlan":false}]}""");
+        using var store = NewStore();
+
+        var loaded = (await store.LoadAsync(CancellationToken.None)).Value.Profiles;
+        Assert.Equal(Core.Ai.Access.AiAccessLevel.Plan, loaded[0].AiAccess);
+        Assert.Equal(Core.Ai.Access.AiAccessLevel.QueryRows, loaded[1].AiAccess);
+        Assert.False(loaded[1].AllowExplainPlan);
+    }
+
+    [Fact]
     public async Task Missing_file_loads_empty_without_creating_it()
     {
         using var store = NewStore();

@@ -1,4 +1,5 @@
 using System.Text.RegularExpressions;
+using Oranda.Core.Ai.Access;
 using Oranda.Core.Composition;
 using Oranda.Core.Connection;
 using Oranda.Core.Serialization;
@@ -169,7 +170,7 @@ internal sealed class ConnectionStore : IConnectionStore, IDisposable
     }
 
     /// <summary>keepAliveSeconds 1~59 → 60 (CONN-12). 음수는 0(끔). 그룹(폴더 경로)은 단계마다 공백을 다듬는다.</summary>
-    internal static ConnectionProfile NormalizeProfile(ConnectionProfile p) => p with
+    internal static ConnectionProfile NormalizeProfile(ConnectionProfile p) => AiAccessPolicy.Clamp(p with
     {
         Group = ConnectionFolders.Normalize(p.Group),
         KeepAliveSeconds = p.KeepAliveSeconds switch
@@ -178,7 +179,7 @@ internal sealed class ConnectionStore : IConnectionStore, IDisposable
             < 60 => 60,
             _ => p.KeepAliveSeconds,
         },
-    };
+    });
 
     private static void Validate(IReadOnlyList<ConnectionProfile> profiles)
     {
