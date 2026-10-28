@@ -1,7 +1,9 @@
 using System.Globalization;
 using Oracle.ManagedDataAccess.Client;
 using Oranda.Core.Connection;
+using Oranda.Core.Events;
 using Oranda.Core.Execution;
+using Oranda.Core.History;
 using Oranda.Core.Monitoring;
 using Oranda.Core.Plans;
 using Oranda.Core.Security;
@@ -464,6 +466,24 @@ public sealed class TuningServiceTests : IAsyncLifetime
         Assert.Equal(0, await CursorCountAsync(raw, delete));
         Assert.Equal(10000m, await ScalarAsync(raw, $"SELECT COUNT(*) FROM {_table}"));
         Assert.False(work.HasPendingTransaction);
+    }
+
+    [Fact]
+    public async Task Benchmark_of_an_agent_statement_is_executed_with_the_agent_source()
+    {
+        var tag = "TBAGENT_" + Guid.NewGuid().ToString("N")[..8].ToUpperInvariant();
+        var bench = new BenchmarkCase("에이전트", $"SELECT /* {tag} */ COUNT(*) FROM {_table} x") { Source = HistorySource.Agent };
+        var work = await SystemAsync(SessionPurpose.Work);
+
+        await Service().RunBenchmarkAsync(work, bench, 1, default);
+
+        StatementExecuted[] seen;
+        lock (_bus.Events)
+        {
+            seen = [.. _bus.Events.OfType<StatementExecuted>().Where(e => e.Statement.Text.Contains(tag, StringComparison.Ordinal))];
+        }
+
+        Assert.Equal(HistorySource.Agent, Assert.Single(seen).Options.Source);
     }
 
     private static async Task<int> ExecutionsAsync(OracleConnection raw, string sql) =>

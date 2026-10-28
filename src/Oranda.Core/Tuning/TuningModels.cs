@@ -1,3 +1,5 @@
+using Oranda.Core.History;
+
 namespace Oranda.Core.Tuning;
 
 // 튜닝 조회 계약(TSK-06-01, PRD 11장 TN-01~16). 값 형만 둔다 — 조회·파서 구현은 TSK-06-02 이후.
@@ -143,7 +145,11 @@ public sealed record IndexColumnsRow(string IndexName, IReadOnlyList<string> Col
 /// <summary>벤치마크 대상 한 개(TN-11). SELECT 만 허용한다.</summary>
 /// <param name="Label">표시 이름(원본·변형 1…)</param>
 /// <param name="Sql">실행할 SELECT</param>
-public sealed record BenchmarkCase(string Label, string Sql);
+public sealed record BenchmarkCase(string Label, string Sql)
+{
+    /// <summary>실행 출처(이력 <c>source</c>·정책 판단). 사람이 튜닝 도우미에서 돌리면 <see cref="HistorySource.Script"/>, AI 에이전트가 쓴 SQL 이면 <see cref="HistorySource.Agent"/>.</summary>
+    public HistorySource Source { get; init; } = HistorySource.Script;
+}
 
 /// <summary>벤치마크 결과(TN-11). 값은 반복 평균.</summary>
 /// <param name="Case">대상</param>

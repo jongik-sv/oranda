@@ -65,6 +65,14 @@ public static class AgentFields
     public static IReadOnlyList<string> RowValueFields { get; } =
         [HistogramEndpoint, HistogramEndpointValue, HistogramEndpointActualValue, ColumnLowValue, ColumnHighValue];
 
+    /// <summary>
+    /// 결과에서 열을 식별하는 필드 이름 전부(비교는 소문자로 바꾸고 <c>_</c>·<c>-</c> 를 뺀 뒤 한다). <b>처리자는 결과에서 열을 식별할 때 이 이름만 쓴다.</b>
+    /// 게이트는 이 이름의 값(또는 값이 객체면 그 안의 같은 이름)이 민감 컬럼이면 그 객체의 행 값 필드를 지운다.
+    /// 다른 이름으로 열 이름을 내면 민감 컬럼 가림이 적용되지 않는다.
+    /// </summary>
+    public static IReadOnlyList<string> ColumnIdentityFields { get; } =
+        ["name", "column", "column_name", "col_name", "column_nm", "colname", "col"];
+
     /// <summary>기존 <c>HistogramBucket</c> 의 snake_case 직렬화 이름(<c>endpoint_value</c>). 처리자가 모델을 그대로 내보내도 가려지도록 목록에 둔다.</summary>
     public const string HistogramEndpointValue = "endpoint_value";
 

@@ -28,11 +28,14 @@ public sealed record ConnectionExportDocument
 /// <summary>접속 내보내기 파일 쓰기·읽기와 「같은 접속」 판정.</summary>
 public static class ConnectionExport
 {
-    /// <summary>파일에 넣지 않는 값(비밀 참조·이 PC 의 접속 기록)을 지운다.</summary>
+    /// <summary>
+    /// 파일에 넣지 않는 값(비밀 참조·이 PC 의 접속 기록·AI 허용 수준)을 지운다.
+    /// AI 허용 수준은 이 PC 에서 사용자가 직접 정한 값이어야 하므로, 남이 내보낸 파일을 가져와도 환경 라벨의 기본값(운영 = 끔)으로 돌아간다.
+    /// </summary>
     public static ConnectionProfile Strip(ConnectionProfile profile)
     {
         ArgumentNullException.ThrowIfNull(profile);
-        return profile with { CredentialRef = null, LastConnectedAt = null };
+        return profile with { CredentialRef = null, LastConnectedAt = null, AiAccess = null, AllowExplainPlan = null };
     }
 
     /// <summary>고른 접속을 내보내기 파일 본문(JSON)으로.</summary>

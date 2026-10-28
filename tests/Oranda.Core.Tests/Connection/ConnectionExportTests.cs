@@ -1,3 +1,4 @@
+using Oranda.Core.Ai.Access;
 using Oranda.Core.Connection;
 
 namespace Oranda.Core.Tests.Connection;
@@ -13,6 +14,23 @@ public class ConnectionExportTests
 
     private static readonly ConnectionProfile Local = new(
         "개발-로컬", "scott", "localhost:1521/FREEPDB1", Color: "#0063B1", ReadOnly: true, TnsAdmin: "/opt/tns");
+
+    [Fact]
+    public void Ai_access_is_not_exported_and_an_imported_profile_falls_back_to_the_environment_default()
+    {
+        var turnedOn = Orders with { AiAccess = AiAccessLevel.Plan, AllowExplainPlan = true };
+
+        var json = ConnectionExport.Write([turnedOn]);
+        Assert.DoesNotContain("aiAccess", json, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("allowExplainPlan", json, StringComparison.OrdinalIgnoreCase);
+
+        // 손으로 넣은 파일이어도 가져오면 지운다.
+        var handMade = json.Replace("\"user\"", "\"aiAccess\": \"Plan\", \"user\"", StringComparison.Ordinal);
+        Assert.Contains("aiAccess", handMade, StringComparison.Ordinal);
+        var back = Assert.Single(ConnectionExport.Read(handMade));
+        Assert.Null(back.AiAccess);
+        Assert.Equal(AiAccessLevel.Off, AiAccessPolicy.Effective(back));
+    }
 
     [Fact]
     public void Written_file_round_trips_profile_values_without_secrets()

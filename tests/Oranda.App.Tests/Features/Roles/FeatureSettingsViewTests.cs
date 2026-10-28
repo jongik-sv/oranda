@@ -75,7 +75,7 @@ public sealed class FeatureSettingsViewTests
         Assert.True(page.IsDefaultRole);
         Assert.True(page.ShowDefaultRoleNotice);
         Assert.Equal("아직 주 업무를 고르지 않아 SQL 개발자 메뉴로 쓰는 중입니다. 아래에서 다른 주 업무를 고를 수 있습니다.", page.DefaultRoleNoticeText);
-        Assert.Equal(25, page.Items.Count);
+        Assert.Equal(26, page.Items.Count);
         AssertSet(FeatureCatalog.RoleDefaults([RoleIds.SqlDev]), Checked(page));
         Assert.All(page.Items, i => Assert.Equal(FeatureState.RoleDefault, i.State));
         Assert.False(page.HasOverrides);
@@ -85,7 +85,7 @@ public sealed class FeatureSettingsViewTests
         Assert.False(page.HasRestartBanner);
         Assert.False(page.IsDirty);
         Assert.False(page.IsAdvancedExpanded); // 고급은 접혀 있다(UX-10)
-        Assert.Equal("기능 하나씩 켜고 끄기(고급) — 켜진 기능 10/25 · 직접 바꾼 것 0개", page.AdvancedHeader);
+        Assert.Equal("기능 하나씩 켜고 끄기(고급) — 켜진 기능 10/26 · 직접 바꾼 것 0개", page.AdvancedHeader);
     }
 
     [Fact]
@@ -119,11 +119,11 @@ public sealed class FeatureSettingsViewTests
         // 「모든 기능」 은 allFeatures 로 따로 저장된다.
         (_, store, vm) = await Create();
         vm.Features.Primary = PrimaryWorkKind.All;
-        Assert.All(vm.Features.Items, i => Assert.True(i.IsChecked, i.Id));
+        Assert.All(vm.Features.Items.Where(i => i.Id != FeatureIds.AiTuning), i => Assert.True(i.IsChecked, i.Id));
         await vm.SaveAsync();
         Assert.True(store.Saved.Features.AllFeatures);
         Assert.Null(store.Saved.Features.Roles);
-        Assert.Equal(FeatureIds.All.Count, FeatureCatalog.Resolve(store.Saved.Features).Count);
+        Assert.Equal(FeatureIds.All.Count - 1, FeatureCatalog.Resolve(store.Saved.Features).Count); // aiTuning 은 직접 켜는 기능이라 「모든 기능」에 들지 않는다
     }
 
     [Fact]
@@ -140,11 +140,11 @@ public sealed class FeatureSettingsViewTests
         Assert.True(page.PlsqlAddon); // 이미 들어 있어 켜져 보인다
         Assert.True(page.MyBatisAddon);
         Assert.Equal("모든 기능에 이미 들어 있습니다", page.AddonReason);
-        Assert.All(page.Items, i => Assert.True(i.IsChecked, i.Id));
+        Assert.All(page.Items.Where(i => i.Id != FeatureIds.AiTuning), i => Assert.True(i.IsChecked, i.Id));
         Assert.All(page.Items, i => Assert.Equal(FeatureState.RoleDefault, i.State));
         Assert.False(page.HasOverrides);
         Assert.False(page.IsDirty);
-        Assert.Equal("기능 하나씩 켜고 끄기(고급) — 켜진 기능 25/25 · 직접 바꾼 것 0개", page.AdvancedHeader);
+        Assert.Equal("기능 하나씩 켜고 끄기(고급) — 켜진 기능 25/26 · 직접 바꾼 것 0개", page.AdvancedHeader);
 
         // 흐린 덧붙임을 눌러도 바뀌지 않는다.
         page.PlsqlAddon = false;
@@ -233,11 +233,11 @@ public sealed class FeatureSettingsViewTests
         Assert.True(page.HasOverrides);
         AssertSet(FeatureCatalog.Resolve(vm.Features.ToSettings()), Checked(page));
 
-        // 접힌 머리의 숫자 = 켜진 기능 수 / 25 · 배지 수.
+        // 접힌 머리의 숫자 = 켜진 기능 수 / 26 · 배지 수.
         var on = FeatureCatalog.Resolve(vm.Features.ToSettings()).Count;
         Assert.Equal(on, page.EnabledCount);
         Assert.Equal(2, page.OverrideCount);
-        Assert.Equal($"기능 하나씩 켜고 끄기(고급) — 켜진 기능 {on}/25 · 직접 바꾼 것 2개", page.AdvancedHeader);
+        Assert.Equal($"기능 하나씩 켜고 끄기(고급) — 켜진 기능 {on}/26 · 직접 바꾼 것 2개", page.AdvancedHeader);
     }
 
     [Fact]
@@ -260,7 +260,7 @@ public sealed class FeatureSettingsViewTests
         Assert.True(page.AddonsEnabled);
         Assert.False(page.PlsqlAddon); // 모든 기능에서 보이던 「포함」 표시는 고른 값이 아니다
         AssertSet(FeatureCatalog.RoleDefaults([RoleIds.SqlDev]), Checked(page));
-        Assert.Equal("기능 하나씩 켜고 끄기(고급) — 켜진 기능 10/25 · 직접 바꾼 것 0개", page.AdvancedHeader);
+        Assert.Equal("기능 하나씩 켜고 끄기(고급) — 켜진 기능 10/26 · 직접 바꾼 것 0개", page.AdvancedHeader);
 
         page.MyBatisAddon = true;
         AssertSet(FeatureCatalog.RoleDefaults([RoleIds.SqlDev, RoleIds.MyBatisDev]), Checked(page));
@@ -272,7 +272,7 @@ public sealed class FeatureSettingsViewTests
         AssertSet(FeatureCatalog.RoleDefaults([RoleIds.Tuner, RoleIds.MyBatisDev]), Checked(page));
 
         page.Primary = PrimaryWorkKind.All; // 다시 모든 기능
-        Assert.All(page.Items, i => Assert.True(i.IsChecked, i.Id));
+        Assert.All(page.Items.Where(i => i.Id != FeatureIds.AiTuning), i => Assert.True(i.IsChecked, i.Id));
     }
 
     [Fact]
@@ -420,7 +420,7 @@ public sealed class FeatureSettingsViewTests
         Assert.Equal("지금 조합: Role 없음(그대로 두기)", page.PrimaryOptions[^1].Name);
         Assert.True(page.ShowNoRoleNotice);
         Assert.Empty(Checked(page));
-        Assert.Equal("기능 하나씩 켜고 끄기(고급) — 켜진 기능 0/25 · 직접 바꾼 것 0개", page.AdvancedHeader);
+        Assert.Equal("기능 하나씩 켜고 끄기(고급) — 켜진 기능 0/26 · 직접 바꾼 것 0개", page.AdvancedHeader);
 
         page.Primary = PrimaryWorkKind.SqlDev;
         Assert.False(page.ShowNoRoleNotice);
@@ -537,7 +537,7 @@ public sealed class FeatureSettingsViewTests
         var (_, store, vm) = await Create(All);
 
         Item(vm.Features, FeatureIds.Trace).IsChecked = false;
-        Assert.Equal("기능 하나씩 켜고 끄기(고급) — 켜진 기능 24/25 · 직접 바꾼 것 1개", vm.Features.AdvancedHeader);
+        Assert.Equal("기능 하나씩 켜고 끄기(고급) — 켜진 기능 24/26 · 직접 바꾼 것 1개", vm.Features.AdvancedHeader);
         await vm.SaveAsync();
 
         Assert.Null(store.Saved.Features.Roles);
@@ -987,12 +987,12 @@ public sealed class FeatureSettingsViewTests
             Assert.Equal(language == "ko", HangulShown());
             Render(window, $"tuner-{language}");
 
-            // 고급 펼침: 25개 확인란과 배지 2개(직접 켬·끔), 되돌리기.
+            // 고급 펼침: 26개 확인란과 배지 2개(직접 켬·끔), 되돌리기.
             vm.Features.IsAdvancedExpanded = true;
             Relayout(window);
             Assert.True(expander.IsExpanded);
             var featureChecks = view.FindControl<ItemsControl>("GroupList")!.GetVisualDescendants().OfType<CheckBox>().ToList();
-            Assert.Equal(25, featureChecks.Count);
+            Assert.Equal(26, featureChecks.Count);
             Assert.All(featureChecks, c => Assert.False(string.IsNullOrWhiteSpace(Avalonia.Automation.AutomationProperties.GetName(c))));
             var badges = view.GetVisualDescendants().OfType<Border>().Where(b => b.Classes.Contains("feat-badge") && b.IsVisible).ToList();
             Assert.Equal(2, badges.Count);

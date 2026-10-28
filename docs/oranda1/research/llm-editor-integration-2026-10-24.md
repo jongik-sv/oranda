@@ -302,6 +302,7 @@ sequenceDiagram
 - 에이전트 세션은 `SessionPurpose.Agent`(새 값)로 따로 연다.
   - 모든 트랜잭션은 `SET TRANSACTION READ ONLY` 로 시작해 자율 트랜잭션이 아닌 쓰기를 서버가 막게 한다.
   - `DBMS_APPLICATION_INFO` action 은 `agent:<클라이언트 이름>` 으로 둔다. 클라이언트 이름은 MCP initialize 의 clientInfo 에서 얻는다.
+- 구현 메모(2026-10-28): 규칙은 `PolicyRule.AgentSource` 로 구현했고 예외가 없다. `EXPLAIN` 은 Gate 가 Query 한 문장·실효 `AllowExplainPlan` 을 미리 검사하고 계획 서비스(기존 출처)로 보낸다. `Source=Agent` 는 에이전트가 쓴 SQL 을 실제 실행하는 경로(`benchmark_queries`)만 쓴다.
 - 행 상한(기본 100)·시간 상한(기본 30초)·동시 실행 1개를 지킨다.
 - 같은 SQL 을 짧은 시간에 되풀이하면 멈춘다(비용 한도와 함께 둔다).
 

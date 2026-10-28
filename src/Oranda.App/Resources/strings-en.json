@@ -166,6 +166,7 @@
   "Feature.tableStats": "Table statistics and gather script",
   "Feature.trace": "Trace viewer and 10053",
   "Feature.tuningReport": "Tuning HTML report",
+  "Feature.aiTuning": "AI tuning (experimental)",
   "Feature.sessionMonitor": "Session monitor",
   "Feature.lockMonitor": "Lock Monitor",
   "Feature.blockerAlert": "Blocker alert (status bar)",

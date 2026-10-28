@@ -43,7 +43,7 @@ public sealed partial class FeatureContractTests
         var gate = services.GetRequiredService<IFeatureGate>();
         var contributions = services.GetRequiredService<ShellContributions>();
 
-        Assert.All(FeatureIds.All, id => Assert.True(gate.IsEnabled(id), id));
+        Assert.All(FeatureIds.All.Where(id => !FeatureCatalog.Find(id)!.OptIn), id => Assert.True(gate.IsEnabled(id), id));
         Assert.All(contributions.Commands, c => Assert.True(gate.IsCommandEnabled(c.Definition.Id, c.HandlerType), c.Definition.Id));
         Assert.All(contributions.Panels, p => Assert.True(gate.IsPanelEnabled(p.Id, p.ViewModelType), p.Id));
         Assert.All(contributions.StatusBarItems, s => Assert.True(gate.IsTypeEnabled(s.ItemType), s.Id));
@@ -55,7 +55,7 @@ public sealed partial class FeatureContractTests
     public void Namespace_tags_point_at_real_feature_folders()
     {
         var namespaces = typeof(AppComposition).Assembly.GetTypes().Select(t => t.Namespace).OfType<string>().ToHashSet(StringComparer.Ordinal);
-        foreach (var tag in FeatureCatalog.NamespaceTags)
+        foreach (var tag in FeatureCatalog.NamespaceTags.Where(t => !FeatureCatalog.Find(t.FeatureId)!.OptIn)) // 직접 켜는 기능의 폴더는 그 모듈이 들어올 때 생긴다
         {
             Assert.True(
                 namespaces.Any(ns => ns == tag.Namespace || ns.StartsWith(tag.Namespace + ".", StringComparison.Ordinal)),
@@ -97,7 +97,7 @@ public sealed partial class FeatureContractTests
                 .Where(f => f.IsLiteral && f.Name != nameof(FeatureTexts.ReadOnlyRoleDeniedMessage) && !f.Name.EndsWith("Prefix", StringComparison.Ordinal))
                 .Select(f => (string)f.GetRawConstantValue()!))
             .ToList();
-        Assert.Equal(25 + 12 + 5 + 48, keys.Count); // FeatureTexts 48 = WP-07 28 − 기능 탭 모드·제목 4 + 주 업무·덧붙임·고급·팩 링크 17(TSK-09-08) + 새 설치 카드·접속 추가 7(TSK-09-09)
+        Assert.Equal(26 + 12 + 5 + 48, keys.Count); // FeatureTexts 48 = WP-07 28 − 기능 탭 모드·제목 4 + 주 업무·덧붙임·고급·팩 링크 17(TSK-09-08) + 새 설치 카드·접속 추가 7(TSK-09-09)
 
         foreach (var key in keys)
         {

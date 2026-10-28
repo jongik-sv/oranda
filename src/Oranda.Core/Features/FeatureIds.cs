@@ -1,7 +1,7 @@
 namespace Oranda.Core.Features;
 
 /// <summary>
-/// 기능 id 25개(PRD 12.2, D-002). 설정 <c>features.enabled</c>·<c>disabled</c> 와 문맥 키 <c>feature.&lt;id&gt;</c> 에 그대로 쓰이므로
+/// 기능 id 26개(PRD 12.2, D-002). 설정 <c>features.enabled</c>·<c>disabled</c> 와 문맥 키 <c>feature.&lt;id&gt;</c> 에 그대로 쓰이므로
 /// 한 번 내보낸 값은 바꾸지 않는다. 소유: TSK-07-01(계약).
 /// </summary>
 public static class FeatureIds
@@ -34,6 +34,9 @@ public static class FeatureIds
     public const string Trace = "trace";
     public const string TuningReport = "tuningReport";
 
+    /// <summary>AI 튜닝(실험). 직접 켜는 기능(<see cref="FeatureDefinition.OptIn"/>).</summary>
+    public const string AiTuning = "aiTuning";
+
     // 운영
     public const string SessionMonitor = "sessionMonitor";
     public const string LockMonitor = "lockMonitor";
@@ -50,7 +53,7 @@ public static class FeatureIds
         GridEdit, LobRowView, DataExport, DataImport, DedicatedSession, Flashback, ChangeJournal, TableSpec, MyBatisLog,
         PlsqlEditor, PlsqlWorkspace, PlsqlRun,
         MyBatis,
-        PlanAdvanced, SqlMonitor, TuningAssistant, ChildCursors, TableStats, Trace, TuningReport,
+        PlanAdvanced, SqlMonitor, TuningAssistant, ChildCursors, TableStats, Trace, TuningReport, AiTuning,
         SessionMonitor, LockMonitor, BlockerAlert, DbTools, ColumnReorder,
     ];
 

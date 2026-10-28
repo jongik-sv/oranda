@@ -43,7 +43,7 @@ public sealed class FeatureGateTests
         var gate = new FeatureGate();
 
         Assert.False(gate.IsResolved);
-        Assert.All(FeatureIds.All, id => Assert.True(gate.IsEnabled(id), id));
+        Assert.All(FeatureIds.All.Where(id => !FeatureCatalog.Find(id)!.OptIn), id => Assert.True(gate.IsEnabled(id), id));
         Assert.False(gate.ReadOnlyRole);
         Assert.Empty(gate.PendingRestart);
     }
@@ -79,7 +79,7 @@ public sealed class FeatureGateTests
         Assert.False(gate.Resolve(new FeaturesSettings { Disabled = [] , AllFeatures = true, Roles = [RoleIds.Viewer] })); // allFeatures 가 이긴다
 
         Assert.Equal(0, raised);
-        Assert.Equal(FeatureIds.All.ToHashSet(), gate.EnabledFeatures);
+        Assert.Equal(FeatureIds.All.Where(id => !FeatureCatalog.Find(id)!.OptIn).ToHashSet(), gate.EnabledFeatures); // 「모든 기능」은 직접 켜는 기능을 뺀다
         Assert.False(gate.ReadOnlyRole);
     }
 
@@ -229,7 +229,7 @@ public sealed class FeatureGateTests
 
         // 모든 기능 id 에 등록 항목이 하나 이상 있다(예외 없음).
         var covered = mapped.Select(m => m.Feature).OfType<string>().ToHashSet(StringComparer.Ordinal);
-        Assert.Empty(FeatureIds.All.Where(id => !covered.Contains(id)));
+        Assert.Empty(FeatureIds.All.Where(id => !FeatureCatalog.Find(id)!.OptIn && !covered.Contains(id))); // 직접 켜는 기능은 모듈이 들어오기 전까지 항목이 없어도 된다
 
         // 실제 스캔 결과의 대표 항목(시작 작업 14개 중 기능에 드는 것).
         Assert.Contains(("startup Oranda.Platform.Journal.ChangeJournalRecorder", FeatureIds.ChangeJournal), mapped);
@@ -296,7 +296,7 @@ public sealed class FeatureGateTests
         keys.Changed += (_, _) => changes++;
         var gate = new FeatureGate(null, null, keys);
 
-        Assert.All(FeatureIds.All, id => Assert.True(keys.Get(FeatureIds.ContextKey(id)), id));
+        Assert.All(FeatureIds.All.Where(id => !FeatureCatalog.Find(id)!.OptIn), id => Assert.True(keys.Get(FeatureIds.ContextKey(id)), id));
         changes = 0;
 
         gate.Resolve(Roles(RoleIds.Viewer));

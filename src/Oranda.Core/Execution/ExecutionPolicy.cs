@@ -84,6 +84,8 @@ public sealed class ExecutionPolicy : IExecutionPolicy
         var kind = EffectiveKind(stmt);
 
         // 0. 에이전트 출처(연구서 §6.1): 실효 분류가 Query 가 아니면 거부. 불확실 분류는 EffectiveKind 가 DML 로 보므로 함께 거부된다.
+        //    EXPLAIN 도 예외 없이 거부한다 — Core 는 FOR 뒤 문장을 못 보므로 「Other/EXPLAIN」 꼬리표만으로 통과시키면 구멍이 된다.
+        //    EXPLAIN 은 AgentGate 가 Query 한 문장·실효 AllowExplainPlan 을 미리 검사하고, 계획 서비스(기존 출처)로 보낸다.
         if (ctx.Source == HistorySource.Agent && kind != StatementKind.Query)
         {
             return new PolicyDecision(PolicyDecisionKind.Deny, PolicyRule.AgentSource,

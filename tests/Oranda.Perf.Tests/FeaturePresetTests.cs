@@ -50,7 +50,7 @@ public class FeaturePresetTests
             FeaturePreset.Parse("all").WriteSettings(dir);
             var all = JsonSerializer.Deserialize(File.ReadAllText(Path.Combine(dir, "settings.json")), OrandaJsonContext.Default.AppSettings)!;
             Assert.True(all.Features.AllFeatures);
-            Assert.Equal(FeatureIds.All.Count, FeatureCatalog.Resolve(all.Features).Count);
+            Assert.Equal(FeatureCatalog.RoleDefaults(null).Count, FeatureCatalog.Resolve(all.Features).Count);
 
             FeaturePreset.Parse("default").WriteSettings(dir);
             Assert.False(File.Exists(Path.Combine(dir, "settings.json")));
@@ -183,7 +183,7 @@ public class FeaturePresetTests
             Assert.Null(settings.Features.Roles);
             Assert.True(settings.Features.AllFeatures);
             var on = FeatureCatalog.Resolve(settings.Features);
-            Assert.Equal(FeatureIds.All.Count - 1, on.Count);
+            Assert.Equal(FeatureCatalog.RoleDefaults(null).Count - 1, on.Count);
             Assert.DoesNotContain(FeatureIds.BlockerAlert, on);
         }
         finally

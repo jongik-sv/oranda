@@ -48,7 +48,7 @@ public sealed partial class SettingsStoreTests
         var legacy = SettingsStore.NormalizeFeatures(new FeaturesSettings { Disabled = ["trace"] });
         Assert.False(legacy.AllFeatures);
         Assert.Null(legacy.Roles);
-        Assert.Equal(FeatureIds.All.Count - 1, FeatureCatalog.Resolve(legacy).Count);
+        Assert.Equal(FeatureCatalog.RoleDefaults(null).Count - 1, FeatureCatalog.Resolve(legacy).Count);
     }
 
     [Fact]
@@ -72,7 +72,7 @@ public sealed partial class SettingsStoreTests
         var loaded = (await NewStore().LoadAsync(default)).Value.Features;
         Assert.True(loaded.AllFeatures);
         Assert.Equal([FeatureIds.Trace], loaded.Disabled);
-        Assert.Equal(FeatureIds.All.Count - 1, FeatureCatalog.Resolve(loaded).Count);
+        Assert.Equal(FeatureCatalog.RoleDefaults(null).Count - 1, FeatureCatalog.Resolve(loaded).Count);
 
         await store.SaveAsync(new AppSettings { Features = new FeaturesSettings { Roles = [RoleIds.Tuner] } }, default);
         var back = (await NewStore().LoadAsync(default)).Value.Features;
@@ -89,7 +89,7 @@ public sealed partial class SettingsStoreTests
         Assert.Equal(FeatureCatalog.RoleDefaults([RoleIds.Dba]).Count, FeatureCatalog.Resolve((await NewStore().LoadAsync(default)).Value.Features).Count);
 
         await File.WriteAllTextAsync(Paths.SettingsFile, """{ "schemaVersion": 1, "features": { "enabled": [], "disabled": ["myBatis"] } }""");
-        Assert.Equal(FeatureIds.All.Count - 1, FeatureCatalog.Resolve((await NewStore().LoadAsync(default)).Value.Features).Count);
+        Assert.Equal(FeatureCatalog.RoleDefaults(null).Count - 1, FeatureCatalog.Resolve((await NewStore().LoadAsync(default)).Value.Features).Count);
 
         await File.WriteAllTextAsync(Paths.SettingsFile, """{ "schemaVersion": 1, "features": { "enabled": [], "disabled": [] } }""");
         Assert.True(FeatureCatalog.IsUnchosen((await NewStore().LoadAsync(default)).Value.Features));

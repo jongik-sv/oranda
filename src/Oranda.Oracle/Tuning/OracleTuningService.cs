@@ -197,7 +197,7 @@ internal sealed partial class OracleTuningService : ITuningService
 
             var sw = Stopwatch.StartNew();
             var result = await _execution.ExecuteAsync(s, stmt, new Dictionary<string, BindValue>(),
-                new ExecutionOptions { Source = HistorySource.Script, SkipHistory = i > 0 }, ct);
+                new ExecutionOptions { Source = benchmark.Source, SkipHistory = i > 0 }, ct);
             rows = await DrainAsync(result, ct);
             sw.Stop();
             elapsed += sw.Elapsed;

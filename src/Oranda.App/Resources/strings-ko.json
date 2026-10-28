@@ -166,6 +166,7 @@
   "Feature.tableStats": "표 통계·통계 수집 스크립트",
   "Feature.trace": "트레이스 뷰어·10053",
   "Feature.tuningReport": "튜닝 HTML 보고서",
+  "Feature.aiTuning": "AI 튜닝(실험)",
   "Feature.sessionMonitor": "세션 모니터",
   "Feature.lockMonitor": "Lock 모니터",
   "Feature.blockerAlert": "블로커 알림(상태 칸)",

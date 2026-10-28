@@ -220,7 +220,7 @@ public sealed class FeatureGate : IFeatureGate
     /// <summary>해석 결과 한 벌(바꾸지 않는다 — 통째로 갈아 끼운다).</summary>
     private sealed record State(IReadOnlySet<string> Enabled, bool ReadOnlyRole, IReadOnlyCollection<string> Pending)
     {
-        public static readonly State AllOn = new(new HashSet<string>(FeatureIds.All, StringComparer.Ordinal), false, []);
+        public static readonly State AllOn = new(new HashSet<string>(FeatureCatalog.Features.Where(f => !f.OptIn).Select(f => f.Id), StringComparer.Ordinal), false, []);
 
         public bool SameAs(State other) =>
             ReadOnlyRole == other.ReadOnlyRole

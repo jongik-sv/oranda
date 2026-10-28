@@ -21,10 +21,10 @@ public sealed class FeatureCatalogTests
     // ---- 카탈로그 데이터 ----
 
     [Fact]
-    public void There_are_25_features_and_6_roles_with_unique_ids_in_table_order()
+    public void There_are_26_features_and_6_roles_with_unique_ids_in_table_order()
     {
-        Assert.Equal(25, FeatureIds.All.Count);
-        Assert.Equal(25, FeatureIds.All.Distinct(StringComparer.Ordinal).Count());
+        Assert.Equal(26, FeatureIds.All.Count);
+        Assert.Equal(26, FeatureIds.All.Distinct(StringComparer.Ordinal).Count());
         Assert.Equal(FeatureIds.All, FeatureCatalog.Features.Select(f => f.Id));
 
         Assert.Equal(["sqlDev", "plsqlDev", "myBatisDev", "tuner", "dba", "viewer"], RoleIds.All);
@@ -39,7 +39,7 @@ public sealed class FeatureCatalogTests
         [
             "gridEdit", "lobRowView", "dataExport", "dataImport", "dedicatedSession", "flashback", "changeJournal", "tableSpec", "myBatisLog",
             "plsqlEditor", "plsqlWorkspace", "plsqlRun", "myBatis",
-            "planAdvanced", "sqlMonitor", "tuningAssistant", "childCursors", "tableStats", "trace", "tuningReport",
+            "planAdvanced", "sqlMonitor", "tuningAssistant", "childCursors", "tableStats", "trace", "tuningReport", "aiTuning",
             "sessionMonitor", "lockMonitor", "blockerAlert", "dbTools", "columnReorder",
         ];
         Assert.Equal(expected, FeatureIds.All);
@@ -51,7 +51,7 @@ public sealed class FeatureCatalogTests
     public void Role_default_table_is_the_same_as_prd_12_2()
     {
         var prd = ReadPrdRoleTable();
-        Assert.Equal(25, prd.Count);
+        Assert.Equal(26, prd.Count);
         Assert.Equal(FeatureIds.All, prd.Keys);
         foreach (var role in FeatureCatalog.Roles)
         {
@@ -67,7 +67,7 @@ public sealed class FeatureCatalogTests
         Assert.Equal(9, Count(FeatureGroup.DevAssist));
         Assert.Equal(3, Count(FeatureGroup.Plsql));
         Assert.Equal(1, Count(FeatureGroup.MyBatis));
-        Assert.Equal(7, Count(FeatureGroup.Tuning));
+        Assert.Equal(8, Count(FeatureGroup.Tuning));
         Assert.Equal(5, Count(FeatureGroup.Operations));
 
         Assert.Equal(StartupBoundIds.Order(), Ids(f => f.StartupBound).Order());
@@ -102,11 +102,33 @@ public sealed class FeatureCatalogTests
         Assert.Equal(FeatureCatalog.NamespaceTags.Count, FeatureCatalog.NamespaceTags.Select(t => t.Prefix).Distinct(StringComparer.Ordinal).Count());
     }
 
+    /// <summary>「모든 기능」·Role 합집합이 켜는 기능: 직접 켜는 기능(OptIn)을 뺀 것.</summary>
+    private static IReadOnlyList<string> OnByDefault { get; } = [.. FeatureIds.All.Where(id => !FeatureCatalog.Find(id)!.OptIn)];
+
+    [Fact]
+    public void Ai_tuning_is_opt_in_so_only_an_explicit_enable_turns_it_on()
+    {
+        var ai = FeatureCatalog.Find(FeatureIds.AiTuning)!;
+        Assert.True(ai.OptIn);
+        Assert.Equal(FeatureGroup.Tuning, ai.Group);
+        Assert.Equal(FeatureIds.AiTuning, FeatureCatalog.FeatureFor(null, "Oranda.App.Features.Ai.AiTuningCommands", "Oranda.App.Features.Ai"));
+        Assert.Equal(FeatureIds.AiTuning, FeatureCatalog.FeatureFor(null, "Oranda.App.Features.Ai.Chat.X", "Oranda.App.Features.Ai.Chat"));
+        Assert.Equal(FeatureIds.TuningAssistant, FeatureCatalog.FeatureFor(null, "Oranda.App.Features.Tuning.Assistant.X", "Oranda.App.Features.Tuning.Assistant"));
+        Assert.DoesNotContain(FeatureCatalog.Roles, r => r.DefaultFeatures.Contains(FeatureIds.AiTuning));
+
+        Assert.DoesNotContain(FeatureIds.AiTuning, FeatureCatalog.Resolve(new FeaturesSettings { AllFeatures = true }));
+        Assert.DoesNotContain(FeatureIds.AiTuning, FeatureCatalog.Resolve(new FeaturesSettings { Roles = [.. RoleIds.All] }));
+        Assert.DoesNotContain(FeatureIds.AiTuning, FeatureCatalog.Resolve(null));
+        Assert.Contains(FeatureIds.AiTuning, FeatureCatalog.Resolve(new FeaturesSettings { Roles = [RoleIds.Tuner], Enabled = [FeatureIds.AiTuning] }));
+        Assert.Contains(FeatureIds.AiTuning, FeatureCatalog.Resolve(new FeaturesSettings { AllFeatures = true, Enabled = [FeatureIds.AiTuning] }));
+        Assert.DoesNotContain(FeatureIds.AiTuning, FeatureCatalog.Resolve(new FeaturesSettings { AllFeatures = true, Enabled = [FeatureIds.AiTuning], Disabled = [FeatureIds.AiTuning] }));
+    }
+
     [Fact]
     public void Every_feature_is_reachable_from_some_role_and_every_role_has_defaults()
     {
         var union = FeatureCatalog.RoleDefaults(RoleIds.All);
-        Assert.Equal(FeatureIds.All.Order(), union.Order());
+        Assert.Equal(OnByDefault.Order(), union.Order());
         Assert.All(FeatureCatalog.Roles, r => Assert.NotEmpty(r.DefaultFeatures));
     }
 
@@ -214,7 +236,7 @@ public sealed class FeatureCatalogTests
         Assert.False(FeatureCatalog.IsReadOnly(new FeaturesSettings()));
 
         // RoleDefaults(null) 는 그대로 「모든 기능 바탕」이다(EffectiveRoles 가 null 을 낼 때).
-        Assert.Equal(FeatureIds.All.Order(), FeatureCatalog.RoleDefaults(null).Order());
+        Assert.Equal(OnByDefault.Order(), FeatureCatalog.RoleDefaults(null).Order());
     }
 
     [Fact]
@@ -223,16 +245,16 @@ public sealed class FeatureCatalogTests
         var all = new FeaturesSettings { AllFeatures = true };
         Assert.False(FeatureCatalog.IsUnchosen(all));
         Assert.Null(FeatureCatalog.EffectiveRoles(all));
-        Assert.Equal(FeatureIds.All.Order(), FeatureCatalog.Resolve(all).Order());
+        Assert.Equal(OnByDefault.Order(), FeatureCatalog.Resolve(all).Order());
 
         // 손으로 roles 를 같이 적어도 allFeatures 가 이긴다(조회 전용도 아니다).
         var withViewer = new FeaturesSettings { AllFeatures = true, Roles = [RoleIds.Viewer] };
-        Assert.Equal(FeatureIds.All.Order(), FeatureCatalog.Resolve(withViewer).Order());
+        Assert.Equal(OnByDefault.Order(), FeatureCatalog.Resolve(withViewer).Order());
         Assert.False(FeatureCatalog.IsReadOnly(withViewer));
 
         // 직접 끔은 그대로 적용된다.
         var minus = FeatureCatalog.Resolve(all with { Disabled = [FeatureIds.BlockerAlert] });
-        Assert.Equal(FeatureIds.All.Count - 1, minus.Count);
+        Assert.Equal(OnByDefault.Count - 1, minus.Count);
         Assert.DoesNotContain(FeatureIds.BlockerAlert, minus);
     }
 
@@ -243,11 +265,11 @@ public sealed class FeatureCatalogTests
         var off = new FeaturesSettings { Disabled = [FeatureIds.Trace] };
         Assert.False(FeatureCatalog.IsUnchosen(off));
         Assert.Null(FeatureCatalog.EffectiveRoles(off));
-        Assert.Equal(FeatureIds.All.Count - 1, FeatureCatalog.Resolve(off).Count);
+        Assert.Equal(OnByDefault.Count - 1, FeatureCatalog.Resolve(off).Count);
 
         var on = new FeaturesSettings { Enabled = ["futureFeature"] };
         Assert.False(FeatureCatalog.IsUnchosen(on));
-        Assert.Equal(FeatureIds.All.Count, FeatureCatalog.Resolve(on).Count);
+        Assert.Equal(OnByDefault.Count, FeatureCatalog.Resolve(on).Count);
 
         // 고른 Role 은 기본값과 무관하다(빈 목록 = 공통만, 조회 전용 = 조회 전용).
         Assert.False(FeatureCatalog.IsUnchosen(new FeaturesSettings { Roles = [] }));

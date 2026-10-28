@@ -185,4 +185,34 @@ public class AgentContractTests
         Assert.Contains("low_value", AgentFields.RowValueFields);
         Assert.Contains("high_value", AgentFields.RowValueFields);
     }
+
+    [Fact]
+    public void Token_store_issues_resolves_and_revokes_whole_sessions_thread_safely()
+    {
+        var store = new AgentRunTokenStore();
+        var profile = new ConnectionProfile("p", "u", "h/s");
+        var session = new AgentSession(new AgentRunScope("r", profile, new AiContext("p", null, AiAccessLevel.Plan)));
+        var other = new AgentSession(new AgentRunScope("r2", profile, new AiContext("p", null, AiAccessLevel.Plan)));
+
+        var a = store.Issue(session);
+        var b = store.Issue(session);
+        var c = store.Issue(other);
+        Assert.NotEqual(a, b);
+        Assert.Same(session, store.Resolve(a));
+        Assert.Null(store.Resolve("nope"));
+        Assert.Null(store.Resolve(""));
+
+        store.Revoke(a);
+        Assert.True(session.IsRevoked);
+        Assert.Null(store.Resolve(a));
+        Assert.Null(store.Resolve(b));
+        Assert.Same(other, store.Resolve(c));
+        Assert.Throws<InvalidOperationException>(() => store.Issue(session));
+        store.Revoke("unknown");
+
+        var tokens = new System.Collections.Concurrent.ConcurrentBag<string>();
+        Parallel.For(0, 200, _ => tokens.Add(store.Issue(other)));
+        Assert.Equal(200, tokens.Distinct().Count());
+        Assert.Equal(201, store.Count);
+    }
 }

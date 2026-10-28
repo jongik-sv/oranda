@@ -3,7 +3,7 @@ using Oranda.Core.Settings;
 namespace Oranda.Core.Features;
 
 /// <summary>
-/// 기능 카탈로그(TRD 10.2·10.4, PRD 12.2): 기능 25개의 묶음·문구 키·StartupBound·WritesOnly·Requires, Role 별 기본 켬 목록,
+/// 기능 카탈로그(TRD 10.2·10.4, PRD 12.2): 기능 26개의 묶음·문구 키·StartupBound·WritesOnly·Requires, Role 별 기본 켬 목록,
 /// 꼬리표 규칙 표 셋(네임스페이스 접두·id 덮어쓰기·형 이름 덮어쓰기). 데이터와 순수 계산만 둔다 — 게이트(시작 때 값·PendingRestart·변경 알림)는
 /// App 의 <c>FeatureGate</c>(TSK-07-02) 몫이다. Core 는 App 형을 참조하지 않으므로 네임스페이스·형 이름은 문자열로 적는다. 소유: TSK-07-01.
 /// </summary>
@@ -14,7 +14,7 @@ public static class FeatureCatalog
 
     private static readonly string[] None = [];
 
-    /// <summary>기능 25개(<see cref="FeatureIds.All"/> 순서).</summary>
+    /// <summary>기능 26개(<see cref="FeatureIds.All"/> 순서).</summary>
     public static IReadOnlyList<FeatureDefinition> Features { get; } =
     [
         new(FeatureIds.GridEdit, FeatureGroup.DevAssist, StartupBound: false, WritesOnly: true, None),
@@ -37,6 +37,7 @@ public static class FeatureCatalog
         new(FeatureIds.TableStats, FeatureGroup.Tuning, false, false, None),
         new(FeatureIds.Trace, FeatureGroup.Tuning, false, false, None),
         new(FeatureIds.TuningReport, FeatureGroup.Tuning, false, false, None),
+        new(FeatureIds.AiTuning, FeatureGroup.Tuning, StartupBound: false, WritesOnly: false, None, OptIn: true),
         new(FeatureIds.SessionMonitor, FeatureGroup.Operations, false, false, None),
         new(FeatureIds.LockMonitor, FeatureGroup.Operations, false, false, None),
         new(FeatureIds.BlockerAlert, FeatureGroup.Operations, StartupBound: true, false, None),
@@ -105,6 +106,7 @@ public static class FeatureCatalog
         new("Tuning.Stats", FeatureIds.TableStats),
         new("Tuning.Trace", FeatureIds.Trace),
         new("Tuning.Report", FeatureIds.TuningReport),
+        new("Ai", FeatureIds.AiTuning),
         new("SessionMonitor", FeatureIds.SessionMonitor),
         new("LockMonitor", FeatureIds.LockMonitor),
         new("BlockerAlert", FeatureIds.BlockerAlert),
@@ -228,14 +230,14 @@ public static class FeatureCatalog
     }
 
     /// <summary>
-    /// 고른 Role 들의 기본 켬 합집합(TRD 10.5-1). <paramref name="roles"/> 가 null(모든 기능 바탕, <see cref="EffectiveRoles"/>)이면 모든 기능,
-    /// 빈 목록이면 빈 집합(공통만). 모르는 Role id 는 건너뛴다.
+    /// 고른 Role 들의 기본 켬 합집합(TRD 10.5-1). <paramref name="roles"/> 가 null(모든 기능 바탕, <see cref="EffectiveRoles"/>)이면 모든 기능
+    /// (직접 켜는 기능 <see cref="FeatureDefinition.OptIn"/> 은 빼고), 빈 목록이면 빈 집합(공통만). 모르는 Role id 는 건너뛴다.
     /// </summary>
     public static IReadOnlySet<string> RoleDefaults(IEnumerable<string>? roles)
     {
         if (roles is null)
         {
-            return new HashSet<string>(FeatureIds.All, StringComparer.Ordinal);
+            return new HashSet<string>(Features.Where(f => !f.OptIn).Select(f => f.Id), StringComparer.Ordinal);
         }
 
         var set = new HashSet<string>(StringComparer.Ordinal);

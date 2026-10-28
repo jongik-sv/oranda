@@ -30,9 +30,13 @@ public interface IAgentRunTokens
     /// <summary>실행 범위에 묶인 새 토큰을 발급하고, 그 범위의 <see cref="AgentSession"/> 을 등록한다.</summary>
     string Issue(AgentSession session);
 
-    /// <summary>토큰으로 실행을 찾는다. 모르거나 폐기됐으면 null(고정 시간 비교).</summary>
+    /// <summary>토큰으로 실행을 찾는다. 모르거나 폐기됐으면 null.</summary>
     AgentSession? Resolve(string token);
 
-    /// <summary>토큰을 폐기한다. 그 실행의 세션 등록을 지우고 <see cref="AgentSession.Revoke"/> 를 불러, 이미 연결된 파이프에서도 이후 도구 호출이 거부되게 한다.</summary>
+    /// <summary>
+    /// 토큰을 폐기한다. 접속 설정(환경 라벨·AI 허용 수준)을 바꾼 쪽도 그 접속의 토큰을 폐기해야 한다 —
+    /// 실행 범위의 프로필은 시작 때 사본이라 이미 시작된 실행의 허용 수준은 따라 바뀌지 않는다.
+    /// 그 실행의 세션 등록을 지우고 <see cref="AgentSession.Revoke"/> 를 불러, 이미 연결된 파이프에서도 이후 도구 호출이 거부되게 한다.
+    /// </summary>
     void Revoke(string token);
 }
