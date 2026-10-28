@@ -21,6 +21,18 @@ public static class ConnectionProfileExtensions
             Pooling = false,
         };
 
+        // TNS 디렉터리·지갑 위치는 접속마다 넘긴다. 전역 OracleConfiguration.TnsAdmin·WalletLocation 은 한 번 접속을 시도한 뒤에는
+        // 같은 값이어도 넣으면 ORA-50099 를 던지므로, 프로필마다 다른 값을 쓸 수도 없고 두 번째 접속부터 깨진다.
+        if (!string.IsNullOrWhiteSpace(profile.TnsAdmin))
+        {
+            builder["TNS_ADMIN"] = profile.TnsAdmin;
+        }
+
+        if (!string.IsNullOrWhiteSpace(profile.WalletLocation))
+        {
+            builder["WALLET_LOCATION"] = profile.WalletLocation;
+        }
+
         if (profile.Auth != AuthMode.Default)
         {
             builder.DBAPrivilege = profile.Auth switch
@@ -47,23 +59,4 @@ public static class ConnectionProfileExtensions
     /// </summary>
     public static OracleConnection CreateConnection(string connectionString) =>
         new(connectionString) { UseHourOffsetForUnsupportedTimezone = true };
-
-    /// <summary>
-    /// TNS_ADMIN 과 지갑 위치는 ODP.NET 이 프로세스 전체 설정으로만 받는다.
-    /// 프로필마다 다르면 연결을 열기 직전에 한 번 적용한다.
-    /// </summary>
-    public static void ApplyProcessSettings(this ConnectionProfile profile)
-    {
-        ArgumentNullException.ThrowIfNull(profile);
-
-        if (!string.IsNullOrWhiteSpace(profile.TnsAdmin))
-        {
-            OracleConfiguration.TnsAdmin = profile.TnsAdmin;
-        }
-
-        if (!string.IsNullOrWhiteSpace(profile.WalletLocation))
-        {
-            OracleConfiguration.WalletLocation = profile.WalletLocation;
-        }
-    }
 }

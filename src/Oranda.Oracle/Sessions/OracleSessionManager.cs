@@ -30,7 +30,6 @@ internal sealed class OracleSessionManager : ISessionManager
         ArgumentNullException.ThrowIfNull(profile);
         ArgumentNullException.ThrowIfNull(credential);
 
-        profile.ApplyProcessSettings();
         var connection = profile.CreateConnection(credential.Secret.ToString());
         try
         {
