@@ -48,6 +48,27 @@ Download the latest release from [GitHub Releases](https://github.com/jongik-sv/
 
 Windows builds are **not code signed yet** (see [Code signing policy](#code-signing-policy)), so SmartScreen shows "Windows protected your PC": choose **More info → Run anyway**. Unsigned macOS builds must be opened with **right-click → Open** the first time. Step-by-step instructions, automatic updates and uninstalling: [docs/user/install.en.md](docs/user/install.en.md).
 
+### If Windows blocks Oranda (Smart App Control)
+
+On Windows 11, **Smart App Control** blocks programs and DLLs that are not signed and that Microsoft's cloud service does not recognize. Oranda's Windows builds and some libraries bundled with it (Avalonia, Dock) are not signed yet, so you may see one of these:
+
+- Windows Security shows "Part of this app has been blocked".
+- Oranda does not start, or `Oranda-win-Setup.exe` ends saying Oranda may not have installed correctly.
+
+To check the cause, open **Windows Security** (search for it in Start) and go to **App & browser control > Smart App Control settings**. If it is **On**, Smart App Control is blocking Oranda. The blocked files are listed in Event Viewer under *Applications and Services Logs > Microsoft > Windows > CodeIntegrity > Operational* (event ID 3077).
+
+To fix it, turn Smart App Control off:
+
+1. Open **Windows Security > App & browser control > Smart App Control settings**.
+2. Choose **Off**.
+3. Start Oranda again. If setup failed, run `Oranda-win-Setup.exe` again.
+
+Before you turn it off:
+
+- You cannot turn Smart App Control back on from Settings. Turning it on again needs a Windows reset or reinstall ([Microsoft: Smart App Control overview](https://learn.microsoft.com/windows/apps/develop/smart-app-control/overview)).
+- Microsoft Defender Antivirus and SmartScreen keep protecting the PC. Download Oranda only from the official [GitHub Releases](https://github.com/jongik-sv/oranda/releases) page.
+- On a company PC, the block can also come from App Control for Business (WDAC) or AppLocker policies. You cannot turn those off yourself; ask your administrator.
+
 ### First run
 
 1. Start Oranda. The connection manager opens.

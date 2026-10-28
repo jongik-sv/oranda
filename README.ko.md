@@ -48,6 +48,27 @@ Oranda 는 Windows·macOS 용 무료 오픈 소스 Oracle 데이터베이스 클
 
 Windows 빌드는 **아직 코드 서명이 없다**([코드 서명 정책](#코드-서명-정책)). SmartScreen 이 「Windows의 PC 보호」를 띄우면 **추가 정보 → 실행** 을 누른다. 서명 없는 macOS 빌드는 처음 한 번 **우클릭 → 열기** 로 연다. 자세한 순서·자동 업데이트·제거: [docs/user/install.md](docs/user/install.md).
 
+### Windows 가 Oranda 를 막을 때 (스마트 앱 컨트롤)
+
+Windows 11 의 **스마트 앱 컨트롤**은 서명이 없고 Microsoft 클라우드 서비스가 알지 못하는 프로그램·dll 을 막는다. Oranda 의 Windows 빌드와, 함께 들어 있는 일부 라이브러리(Avalonia·Dock)는 아직 서명이 없어서, 다음 중 하나가 나타날 수 있다.
+
+- Windows 보안이 「이 앱의 일부가 차단되었습니다」 알림을 띄운다.
+- Oranda 가 시작되지 않거나, `Oranda-win-Setup.exe` 가 「제대로 설치되지 않았을 수 있습니다」로 끝난다.
+
+원인을 확인하려면 시작 메뉴에서 **Windows 보안** 을 열고 **앱 및 브라우저 컨트롤 > 스마트 앱 컨트롤 설정** 으로 간다. **켜기** 로 되어 있으면 스마트 앱 컨트롤이 Oranda 를 막고 있는 것이다. 막힌 파일은 이벤트 뷰어의 *응용 프로그램 및 서비스 로그 > Microsoft > Windows > CodeIntegrity > Operational* 에 이벤트 ID 3077 로 남는다.
+
+해결하려면 스마트 앱 컨트롤을 끈다.
+
+1. **Windows 보안 > 앱 및 브라우저 컨트롤 > 스마트 앱 컨트롤 설정** 을 연다.
+2. **끄기** 를 고른다.
+3. Oranda 를 다시 시작한다. 설치가 실패했으면 `Oranda-win-Setup.exe` 를 다시 실행한다.
+
+끄기 전에 알아 둘 점:
+
+- 끈 스마트 앱 컨트롤은 설정 화면에서 다시 켤 수 없다. 다시 켜려면 Windows 를 초기화하거나 다시 설치해야 한다([Microsoft: Smart App Control overview](https://learn.microsoft.com/windows/apps/develop/smart-app-control/overview)).
+- Microsoft Defender 바이러스 백신과 SmartScreen 은 계속 PC 를 보호한다. Oranda 는 공식 [GitHub Releases](https://github.com/jongik-sv/oranda/releases) 에서만 받는다.
+- 회사 PC 에서는 App Control for Business(WDAC)·AppLocker 정책이 막는 경우도 있다. 이 정책은 사용자가 직접 끌 수 없으므로 관리자에게 문의한다.
+
 ### 처음 실행
 
 1. Oranda 를 시작하면 접속 관리자가 열린다.
