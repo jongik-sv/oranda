@@ -155,6 +155,52 @@ public sealed class JavaObjectsIntegrationTests : IAsyncLifetime
         Assert.Contains(sourceDetail.Sections.Single(x => x.Title == "Java 클래스").Rows, r => (string?)r[0] == "com.example.Hello");
     }
 
+    /// <summary>
+    /// TSK-14-23: 편집기 문장 분리기가 Java 코드(; { } 문자열·주석)를 한 문장으로 묶은 글을 그대로 보내면 서버가 받아 컴파일하고,
+    /// 오류는 ALL_ERRORS(JAVA SOURCE)로 읽히며, 고친 뒤 <c>ALTER JAVA SOURCE … COMPILE</c>·<c>ALTER JAVA CLASS … RESOLVE</c> 가 통한다.
+    /// JVM 이 없는 서버(Free·XE 이미지)에서는 건너뛴 까닭만 출력한다.
+    /// </summary>
+    [Fact]
+    public async Task Split_java_source_compiles_reports_errors_and_recompiles()
+    {
+        if (!_enabled || _noJava is not null)
+        {
+            _output.WriteLine("건너뜀: " + (_enabled ? "서버에 Java(JVM)가 없다 — " + _noJava : "환경 변수 없음"));
+            return;
+        }
+
+        const string name = "com/example/Broken";
+        string Script(string body) =>
+            $"CREATE OR REPLACE AND COMPILE JAVA SOURCE NAMED {_owner}.\"{name}\" AS\n"
+            + "package com.example;\n"
+            + "public class Broken {\n"
+            + "    // ; } in a comment\n"
+            + "    /* ; { */\n"
+            + "    public static String hi() { String s = \"a;b}\"; return " + body + "; }\n"
+            + "}\n/\nselect 1 from dual;\n";
+
+        var statements = Oranda.Language.Lexing.StatementSplitter.Split(Script("missing"), Oranda.Core.Language.SplitOptions.Default);
+        Assert.Equal(2, statements.Count);
+
+        await using var conn = Admin();
+        await conn.OpenAsync();
+        var failure = await Assert.ThrowsAsync<OracleException>(() => ExecAsync(conn, statements[0].Text));
+        _output.WriteLine(failure.Message);
+
+        var provider = NewProvider();
+        var s = await OpenAsync();
+        var source = new DbObjectRef(_owner, name, "JAVA SOURCE");
+        var errors = await provider.GetCompileErrorsAsync(s, source, default);
+        Assert.NotEmpty(errors);
+        Assert.Contains(errors, e => e.Line == 5); // AS 다음 줄이 1줄
+
+        var fixedText = Oranda.Language.Lexing.StatementSplitter.Split(Script("s"), Oranda.Core.Language.SplitOptions.Default)[0].Text;
+        await ExecAsync(conn, fixedText);
+        await ExecAsync(conn, Oranda.Oracle.Schema.SchemaStatements.Compile(source)!.Text);
+        await ExecAsync(conn, Oranda.Oracle.Schema.SchemaStatements.Compile(source with { ObjectType = "JAVA CLASS" })!.Text);
+        Assert.Empty(await provider.GetCompileErrorsAsync(s, source, default));
+    }
+
     private static OracleMetadataProvider NewProvider() => new(new MemoryMetadataCache(), new RecordingBus(), Timeout.InfiniteTimeSpan);
 
     private async Task<ISession> OpenAsync()

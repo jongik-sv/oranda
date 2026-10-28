@@ -1232,5 +1232,7 @@
   "이 클래스를 만든 Java 소스를 연다": "Open the Java source this class was compiled from",
   "Java 소스": "Java sources",
   "Java 클래스": "Java classes",
-  "Java 리소스": "Java resources"
+  "Java 리소스": "Java resources",
+  "다시 컴파일": "Recompile",
+  "확인한 뒤 서버에서 다시 컴파일한다": "Recompile it on the server after confirming"
 }

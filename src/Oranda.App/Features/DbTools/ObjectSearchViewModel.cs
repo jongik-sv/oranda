@@ -186,6 +186,9 @@ public sealed partial class ObjectSearchViewModel : ToolPanelViewModelBase
         _exec = exec;
     }
 
+    /// <summary>시험용: INVALID Java 객체(JAVA SOURCE·JAVA CLASS)를 묻는 메타데이터 제공자(기본 = 서비스의 <see cref="IMetadataProvider"/>).</summary>
+    internal IMetadataProvider? Metadata { get; set; }
+
     public ISession? Session { get; set; }
 
     /// <summary>검색 결과. 새 결과는 목록째 바꿔 끼운다(한 줄씩 넣으면 줄마다 목록이 다시 그려져 느린 PC 에서 화면이 출렁인다).</summary>
@@ -623,7 +626,7 @@ public sealed partial class ObjectSearchViewModel : ToolPanelViewModelBase
         CompileResults.Clear();
         try
         {
-            var initial = (await admin.SearchObjectsAsync(session, query, ct)).Select(r => r.Ref).ToList();
+            var initial = await InvalidTargetsAsync(admin, session, query, ct);
             if (initial.Count == 0)
             {
                 StatusText = "INVALID 객체가 없다";
@@ -663,7 +666,7 @@ public sealed partial class ObjectSearchViewModel : ToolPanelViewModelBase
                     }
                 }
 
-                var remaining = (await admin.SearchObjectsAsync(session, query, ct)).Select(r => r.Ref).ToList();
+                var remaining = await InvalidTargetsAsync(admin, session, query, ct);
                 var progressed = remaining.Count < pending.Count;
                 pending = remaining;
                 if (!progressed)
@@ -672,7 +675,7 @@ public sealed partial class ObjectSearchViewModel : ToolPanelViewModelBase
                 }
             }
 
-            var stillInvalid = (await admin.SearchObjectsAsync(session, query, ct)).Select(r => r.Ref).ToHashSet();
+            var stillInvalid = (await InvalidTargetsAsync(admin, session, query, ct)).ToHashSet();
             foreach (var obj in initial)
             {
                 CompileResults.Add(Classify(obj, stillInvalid.Contains(obj), failures.GetValueOrDefault(obj) ?? (stopped ? stopMessage : null)));
@@ -695,6 +698,43 @@ public sealed partial class ObjectSearchViewModel : ToolPanelViewModelBase
         }
     }
 
+    /// <summary>
+    /// 컴파일 대상 INVALID 객체: 객체 검색(Java 제외) + 그 스키마의 INVALID JAVA SOURCE·JAVA CLASS(소스 먼저, TSK-14-23).
+    /// Java 쪽은 메타데이터 제공자가 서버에 JVM 이 없으면 빈 목록을 준다. 읽지 못하면 Java 없이 간다.
+    /// </summary>
+    private async Task<List<DbObjectRef>> InvalidTargetsAsync(ISchemaAdminProvider admin, ISession session, ObjectSearchQuery query, CancellationToken ct)
+    {
+        var list = (await admin.SearchObjectsAsync(session, query, ct)).Select(r => r.Ref).ToList();
+        if (query.Owner is null || (Metadata ?? _services?.GetService(typeof(IMetadataProvider)) as IMetadataProvider) is not { } meta)
+        {
+            return list;
+        }
+
+        try
+        {
+            var java = await meta.ListJavaObjectsAsync(session, new ObjectQuery
+            {
+                Owner = query.Owner,
+                ObjectTypes = ["JAVA SOURCE", "JAVA CLASS"],
+                InvalidOnly = true,
+            }, ct);
+            list.AddRange(java.Select(j => j.Ref)
+                .Where(r => r.ObjectType is "JAVA SOURCE" or "JAVA CLASS" && !list.Contains(r))
+                .OrderBy(r => r.ObjectType == "JAVA SOURCE" ? 0 : 1));
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+#pragma warning disable CA1031 // Java 목록을 못 읽어도 PL/SQL 쪽 컴파일은 그대로 한다.
+        catch
+#pragma warning restore CA1031
+        {
+        }
+
+        return list;
+    }
+
     internal static CompileResultItem Classify(DbObjectRef obj, bool stillInvalid, string? failure)
     {
         if (BuildCompile(obj) is null)
@@ -710,7 +750,9 @@ public sealed partial class ObjectSearchViewModel : ToolPanelViewModelBase
         // 컴파일 오류가 있으면 서버는 「오류가 있는 채로 컴파일됨」(ORA-24344)을 알린다 — 실패가 아니라 INVALID 로 남은 것이다.
         return failure is not null && !failure.Contains("24344", StringComparison.Ordinal)
             ? new CompileResultItem(obj, CompileOutcome.Failed, failure)
-            : new CompileResultItem(obj, CompileOutcome.StillInvalid, "컴파일 오류가 있다(PL/SQL 소스 편집기·컴파일 오류 창에서 확인)");
+            : new CompileResultItem(obj, CompileOutcome.StillInvalid, obj.ObjectType.StartsWith("JAVA ", StringComparison.Ordinal)
+                ? "컴파일 오류가 있다(객체 상세의 「컴파일 오류」 구역에서 확인)"
+                : "컴파일 오류가 있다(PL/SQL 소스 편집기·컴파일 오류 창에서 확인)");
     }
 
     /// <summary>현재 스키마의 휴지통을 읽는다.</summary>

@@ -407,7 +407,15 @@
 ## D-054 (2026-10-28T15:00:00Z)
 - **Phase**: build
 - **Decision needed**: Java 저장 객체(JAVA SOURCE·JAVA CLASS·JAVA RESOURCE)를 스키마 브라우저·객체 검색에 보일 때(TSK-14-22), SYS 쪽 수만 개 Java 클래스가 객체 목록 캐시·검색을 무겁게 하지 않게 어떻게 읽을지
-- **Decision made**: 객체 목록 캐시(meta.objects)는 지금처럼 Java 를 뺀다. 스키마 브라우저는 스키마를 펼칠 때 그 소유자만 meta.java_objects 로 따로 묻고(캐시 안 함, 스키마당 5000개, 넘으면 상태 줄에 알림), 서버에 SYS.DBMS_JAVA 가 없으면(JVM 없음) 접속 대상마다 한 번 보고 다시 묻지 않는다. 긴 이름(DBMS_JAVA.LONGNAME)은 행을 자른 뒤 짧은 이름이 '/' 로 시작하는 줄만 풀고, 키는 짧은 이름(object_name)이다. 객체 검색은 유형에서 Java 를 고를 때만 Java 객체를 넣는다. 상세의 DDL 은 DBMS_METADATA 대신 all_source 줄로 만든다. 읽기만 한다
+- **Decision made**: 객체 목록 캐시(meta.objects)는 지금처럼 Java 를 뺀다. 스키마 브라우저는 스키마를 펼칠 때 그 소유자만 meta.java_objects 로 따로 묻고(캐시 안 함, 스키마당 5000개, 넘으면 상태 줄에 알림), 서버에 SYS.DBMS_JAVA 가 없으면(JVM 없음) 접속 대상마다 한 번 보고 다시 묻지 않는다. 긴 이름(DBMS_JAVA.LONGNAME)은 행을 자른 뒤 짧은 이름이 '/' 로 시작하는 줄만 풀고, 키는 짧은 이름(object_name)이다. 객체 검색은 유형에서 Java 를 고를 때만 Java 객체를 넣는다. 상세의 DDL 은 DBMS_METADATA 대신 all_source 줄로 만든다. 읽기만 한다(컴파일·적용은 D-055 가 열었다)
 - **Rationale**: JVM 이 깔린 DB 의 SYS 에는 Java 클래스가 수만 개라 전체 목록 갱신·캐시·「모든 유형」 검색에 넣으면 다른 객체가 행 수 제한에 밀린다. 펼친 스키마만 묻으면 부하는 사용자가 볼 때 그 스키마만큼이다. LONGNAME 은 행마다 PL/SQL 을 부르므로 자른 뒤·줄인 이름에만 부른다
 - **Reversible**: yes (캐시에 넣기·리소스 내용 읽기·Java 문법 강조는 후속)
 - **Source**: 사용자 요청(2026-10-28) 「자바 객체는 가져와서 보여줄 수는 없나?」, 조정자 레인 sr-java 지시
+
+## D-055 (2026-10-28T17:00:00Z)
+- **Phase**: build
+- **Decision needed**: D-054 의 「Java 저장 객체는 읽기만 한다」를 넘어, Java 소스를 고쳐 DB 에 컴파일·적용하는 길을 열지(TSK-14-23), 연다면 어디까지
+- **Decision made**: 연다(D-054 의 「읽기만」을 뒤집음). ① SQL 편집기의 문장 분리기가 CREATE … JAVA SOURCE … AS 뒤를 Java 코드로 보고 단독 줄 / 까지 한 문장으로 보낸다(SQL*Plus 와 같다). ② 객체 상세의 「다시 컴파일」은 ALTER JAVA SOURCE … COMPILE·ALTER JAVA CLASS … RESOLVE(이름 = 사전의 짧은 이름)를 확인 창 뒤 실행 엔진으로 보내 운영 접속 확인·읽기 전용 거부·실행 기록을 다른 DDL 과 같게 하고, JVM 이 없으면(meta.java_available) 막고 이유를 보인다. Java 소스는 「편집기로 열기」로 새 SQL 탭에 넣을 뿐 바로 실행하지 않는다. ③ INVALID 일괄 컴파일에 INVALID Java 소스·클래스를 넣는다(JVM 없으면 빠짐). 클래스 파일·jar 올리기(loadjava, DBMS_JAVA.LOADJAVA)와 DROP JAVA 단추는 넣지 않는다
+- **Rationale**: 사용자가 Java 소스를 고쳐 적용하길 원한다. 적용 수단은 이미 있는 SQL 실행 경로(편집기)와 PL/SQL 컴파일 관례(확인·정책 관문·오류 창)에 얹으면 새 안전 장치 없이 같은 보호를 받는다. loadjava 는 파일 올리기·권한(JAVAUSERPRIV 등)·서버 디렉터리가 얽혀 범위가 커서 뺀다
+- **Reversible**: yes (단추·분리 규칙을 되돌리면 D-054 의 읽기 전용으로 돌아간다)
+- **Source**: 사용자 요청(2026-10-28) 「자바 객체를 컴파일하고 적용 할 수도 있나?」, 조정자 레인 sr-javac 지시

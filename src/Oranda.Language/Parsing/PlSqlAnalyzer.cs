@@ -110,6 +110,11 @@ internal static class PlSqlAnalyzer
 
         var l1 = SqlLexer.Tokenize(sql);
         var words = Words(sql, l1);
+        if (IsJavaSource(words))
+        {
+            return StatementAnalysis.Skipped; // AS 뒤는 Java 코드다(SQL 문법으로 읽지 않는다, TSK-14-23).
+        }
+
         var input = MaskSubstitutions(sql, l1);
         bool usedLl = false;
         SyntaxIssue? first = null;
@@ -340,6 +345,37 @@ internal static class PlSqlAnalyzer
         }
 
         return kind is StatementKind.Ddl or StatementKind.Other && words.Count > 1 && first.Start <= words[1].Range.Start;
+    }
+
+    /// <summary><c>CREATE [OR REPLACE] [AND RESOLVE|COMPILE] [NOFORCE] JAVA SOURCE … AS</c> 인가.</summary>
+    private static bool IsJavaSource(List<(string Word, TextRange Range)> words)
+    {
+        if (words.Count < 3 || !words[0].Word.Equals("CREATE", StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+
+        var i = 1;
+        while (i < words.Count && words[i].Word.ToUpperInvariant() is "OR" or "REPLACE" or "AND" or "RESOLVE" or "COMPILE" or "NOFORCE")
+        {
+            i++;
+        }
+
+        if (i + 1 >= words.Count || !words[i].Word.Equals("JAVA", StringComparison.OrdinalIgnoreCase)
+            || !words[i + 1].Word.Equals("SOURCE", StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+
+        for (var j = i + 2; j < words.Count; j++)
+        {
+            if (words[j].Word.Equals("AS", StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private static List<(string Word, TextRange Range)> Words(string sql, List<Token> l1)

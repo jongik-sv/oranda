@@ -359,6 +359,7 @@ public sealed partial class ObjectDetailViewModel : ToolPanelViewModelBase
         try
         {
             string? error = null;
+            await UpdateJavaStateAsync(meta, session, ct); // Java 소스·클래스면 「다시 컴파일」을 쓸 수 있나(TSK-14-23)
             try
             {
                 var detail = await meta.GetObjectDetailAsync(session, target, ct);

@@ -32,7 +32,7 @@ internal static class FormatTokenizer
         {
             var r = p.Statement.Range;
             int a = LineOf(lineStarts, r.Start), b = LineOf(lineStarts, Math.Max(r.Start, r.End - 1));
-            var mark = p.Statement.Kind == StatementKind.SqlPlus ? rawLine : inStmt;
+            var mark = p.Statement.Kind == StatementKind.SqlPlus || p.JavaSource ? rawLine : inStmt; // Java 소스는 고치지 않는다(TSK-14-23)
             for (int l = a; l <= b; l++) mark[l] = true;
         }
 

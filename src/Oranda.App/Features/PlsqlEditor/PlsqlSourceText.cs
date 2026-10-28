@@ -21,6 +21,15 @@ public static class PlsqlSourceText
     /// <summary>머리가 <c>CREATE</c> 로 시작해야 하는 형태(SQL 편집기에서 실행한 문장 판정용).</summary>
     private static readonly Regex CreateHeader = new(@"^\s*" + CreateWords + TypeAndName, RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
 
+    /// <summary>
+    /// <c>CREATE [OR REPLACE] [AND RESOLVE|COMPILE] [NOFORCE] JAVA SOURCE NAMED [소유자.]이름 … AS</c>(TSK-14-23). 뒤의 공백까지 먹어
+    /// 일치 끝이 Java 코드의 첫 글자(서버 오류 1줄 1열)다.
+    /// </summary>
+    private static readonly Regex JavaCreateHeader = new(
+        @"^\s*CREATE\s+(?:OR\s+REPLACE\s+)?(?:AND\s+(?:RESOLVE|COMPILE)\s+)?(?:NOFORCE\s+)?JAVA\s+SOURCE\s+NAMED\s+"
+        + @"(?<a>""(?:[^""]|"""")+""|[\w$#]+)(?:\s*\.\s*(?<b>""(?:[^""]|"""")+""|[\w$#]+))?[\s\S]*?\bAS\b\s*",
+        RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+
     /// <summary>소스를 가진 객체 유형(Oracle OBJECT_TYPE).</summary>
     public static IReadOnlySet<string> SourceTypes { get; } = new HashSet<string>(StringComparer.Ordinal)
     {
@@ -359,6 +368,22 @@ public static class PlsqlSourceText
     }
 
     /// <summary>
+    /// <c>CREATE … JAVA SOURCE NAMED [소유자.]이름 … AS</c> 문장이면 (<c>JAVA SOURCE</c>, 소유자, 이름)을, 아니면 null(TSK-14-23).
+    /// 이름은 사전 이름 그대로(따옴표 없는 이름은 대문자). NAMED 가 없는 꼴(이름을 Java 코드에서 정한다)은 읽지 않는다.
+    /// </summary>
+    public static (string ObjectType, string? Owner, string Name)? ParseJavaCreateHeader(string text)
+    {
+        var m = JavaCreateHeader.Match(StripLeadingComments(text));
+        if (!m.Success)
+        {
+            return null;
+        }
+
+        var a = Unquote(m.Groups["a"].Value);
+        return m.Groups["b"].Success ? ("JAVA SOURCE", a, Unquote(m.Groups["b"].Value)) : ("JAVA SOURCE", null, a);
+    }
+
+    /// <summary>
     /// 서버가 소스로 저장하는 시작 위치(유형 낱말 <c>PACKAGE BODY</c> 등). 서버 오류의 줄·열은 여기서부터 센다.
     /// 반환 = (앞선 줄 수, 그 줄 안에서 앞선 글자 수). 읽을 수 없으면 (0, 0).
     /// </summary>
@@ -366,6 +391,14 @@ public static class PlsqlSourceText
     {
         var normalized = Normalize(text);
         var stripped = StripLeadingComments(normalized);
+        if (JavaCreateHeader.Match(stripped) is { Success: true } java)
+        {
+            // Java 소스: 서버는 AS 뒤 Java 코드부터 줄을 센다.
+            var start = normalized.Length - stripped.Length + java.Length;
+            var head = normalized[..start];
+            return (head.Count(c => c == '\n'), start - (head.LastIndexOf('\n') + 1));
+        }
+
         var m = Header.Match(stripped);
         if (!m.Success)
         {

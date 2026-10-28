@@ -26,6 +26,8 @@ public class SchemaStatementsTests
     [InlineData("PACKAGE BODY", "ALTER PACKAGE \"U\".\"N\" COMPILE BODY")]
     [InlineData("TYPE BODY", "ALTER TYPE \"U\".\"N\" COMPILE BODY")]
     [InlineData("MATERIALIZED VIEW", "ALTER MATERIALIZED VIEW \"U\".\"N\" COMPILE")]
+    [InlineData("JAVA SOURCE", "ALTER JAVA SOURCE \"U\".\"N\" COMPILE")]
+    [InlineData("JAVA CLASS", "ALTER JAVA CLASS \"U\".\"N\" RESOLVE")]
     public void Compile_statement_per_object_type(string type, string expected)
     {
         var stmt = SchemaStatements.Compile(new DbObjectRef("U", "N", type));
@@ -39,6 +41,7 @@ public class SchemaStatementsTests
     public void Compile_is_null_for_types_that_cannot_be_compiled_and_public_synonym_has_no_owner()
     {
         Assert.Null(SchemaStatements.Compile(new DbObjectRef("U", "T", "TABLE")));
+        Assert.Null(SchemaStatements.Compile(new DbObjectRef("U", "R", "JAVA RESOURCE")));
         Assert.Equal("ALTER PUBLIC SYNONYM \"S\" COMPILE", SchemaStatements.Compile(new DbObjectRef("PUBLIC", "S", "SYNONYM"))!.Text);
     }
 

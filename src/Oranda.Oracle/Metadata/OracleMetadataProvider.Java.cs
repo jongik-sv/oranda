@@ -7,7 +7,7 @@ using Oranda.Core.Sessions;
 namespace Oranda.Oracle.Metadata;
 
 /// <summary>
-/// Java 저장 객체(JAVA SOURCE·JAVA CLASS·JAVA RESOURCE) 읽기 — 목록·상세 구역·소스 DDL. 읽기만 한다(컴파일·DROP 없음). 소유: TSK-14-22.
+/// Java 저장 객체(JAVA SOURCE·JAVA CLASS·JAVA RESOURCE) 읽기 — 목록·상세 구역·소스 DDL. 여기는 읽기만 한다(컴파일 문장은 <c>SchemaStatements.Compile</c>, TSK-14-23). 소유: TSK-14-22.
 /// <para>
 /// 객체 목록 캐시(<see cref="ListObjectsAsync"/>)에는 넣지 않는다: SYS 쪽 Java 클래스가 수만 개라 전체 목록 갱신이 무거워진다.
 /// 스키마를 펼칠 때 그 소유자만 따로 묻고(<c>meta.java_objects</c>, 행 수 제한), 서버에 JVM 이 없으면(<c>SYS.DBMS_JAVA</c> 없음) 접속마다 한 번만 보고 묻지 않는다.
@@ -61,8 +61,9 @@ internal sealed partial class OracleMetadataProvider
     }
 
     /// <summary>서버에 JVM 이 있나(<c>SYS.DBMS_JAVA</c> 가 보이나). 접속 대상마다 한 번 묻는다.</summary>
-    internal async Task<bool> IsJavaAvailableAsync(ISession s, CancellationToken ct)
+    public async Task<bool> IsJavaAvailableAsync(ISession s, CancellationToken ct)
     {
+        ArgumentNullException.ThrowIfNull(s);
         if (_javaAvailable.TryGetValue(s.DbKey, out var known))
         {
             return known;

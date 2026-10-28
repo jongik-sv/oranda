@@ -1201,6 +1201,18 @@ levels:
   - acceptance: JavaCatalogTests 27(11g 부터·FETCH FIRST 없음·소유자 한정·긴 이름은 자른 뒤·객체 검색 opt-in·캐시 목록은 Java 제외 유지·DDL 글·형식 이름·서명) / JavaObjectsBrowserTests 5(폴더·긴 이름 제목·INVALID·유형 필터·5000 제한 안내·JAVA SOURCE DDL 탭·「소스 열기」·Headless 단추) / JavaObjectsIntegrationTests 2(26ai FREEPDB1·11g XE: 둘 다 JVM 없음 ORA-29538 → 목록 빈 것·오류 없음만 확인, 소스·클래스 확인은 JVM 있는 서버에서) / `dotnet build Oranda.sln -warnaserror`
   - note: 바꾼 곳 = Catalog/meta/java_*.sql(11개, 새), dbinfo/object_search(.11).sql(Java opt-in), IMetadataProvider.ListJavaObjectsAsync(기본 = 빈 목록)·JavaObjectInfo·ObjectDetail.SourceObject, OracleMetadataProvider.Java.cs(새)·Details(GetDdl·상세에 Java 갈래), SchemaBrowserViewModel(범주·Java 목록·긴 이름 제목), ObjectDetailViewModel/View(「소스 열기」·JAVA SOURCE DDL 탭), ObjectSearchViewModel.SearchableTypes. ALL_JAVA_* 열 이름은 JVM 있는 서버에서 아직 돌려 보지 못했다(Free·XE 둘 다 JVM 없음) (win144)
 
+- [x] TSK-14-23: Java 소스 컴파일·적용 — 편집기 실행(문장 분리), 객체 상세 「다시 컴파일」·「편집기로 열기」, INVALID 일괄 컴파일에 Java [win144] w:1 2026-10-28~2026-10-28
+  - category: feat
+  - domain: fullstack
+  - model: opus
+  - priority: medium
+  - tags: sql-editor, object-detail, object-search, java, win144
+  - prd-ref: PRD SCH-01, D-055
+  - depends: TSK-14-22
+  - requirements: 사용자 요청(2026-10-28) 「자바 객체를 컴파일하고 적용 할 수도 있나?」. ① 문장 분리: CREATE [OR REPLACE] [AND COMPILE|AND RESOLVE] [NOFORCE] JAVA SOURCE … AS 뒤는 Java 코드로 보고 단독 줄 / (없으면 글 끝)까지 한 문장(; { } 문자열·// /* */ 주석·빈 줄에서 끊지 않음, 끝 / 는 빼고 보냄, 바인드·치환 변수 안 찾음), USING BFILE 꼴·JAVA CLASS·JAVA RESOURCE 는 보통 문장(; 또는 / 로 끝). L2 문법 검사·포맷터는 Java 소스 문장을 건드리지 않는다. 편집기에서 실행한 CREATE JAVA SOURCE NAMED … 는 성공·ORA-24344·ORA-29535 면 ALL_ERRORS(JAVA SOURCE) 를 컴파일 오류 창에(줄은 AS 뒤 Java 코드 1줄부터). ② 객체 상세(JAVA SOURCE·JAVA CLASS) 위 줄: 「다시 컴파일」(확인 창 → ALTER JAVA SOURCE "소유자"."짧은 이름" COMPILE / ALTER JAVA CLASS … RESOLVE 를 실행 엔진으로 = 운영 접속 확인·읽기 전용 거부·실행 기록, SessionRouter.ForTool 세션, 뒤에 ALL_ERRORS → 컴파일 오류 창, 상세·스키마 브라우저 다시 읽기, 오류 없으면 「컴파일됨」), JVM 없음(meta.java_available)·읽기 전용 접속이면 단추를 막고 이유 글; JAVA SOURCE 는 「편집기로 열기」(DDL 을 이 접속의 새 SQL 탭에, / 줄 없으면 붙임, 실행 안 함). ③ INVALID 일괄 컴파일: 그 스키마의 INVALID JAVA SOURCE·JAVA CLASS(소스 먼저)를 ListJavaObjectsAsync 로 더한다(JVM 없으면 빈 목록 = 대상 아님). loadjava·DBMS_JAVA.LOADJAVA(클래스 파일·jar 올리기)는 범위 밖; 제약: 실앱 SendKeys 금지(Headless 까지); 비고: 레인 sr-javac
+  - acceptance: JavaSourceSplitTests 14(; { } "…;…" // ; /* ; */ 섞인 코드·/ 단독 줄 종결·빈 줄 옵션·머리 변형·스크립트에 섞임·/ 없이 글 끝·커서 위치·USING BFILE·CLASS/RESOURCE·포맷터 원문 유지·L2 오류 없음) / JavaCompileTests 17(소스 COMPILE·클래스 RESOLVE·확인 거절·JVM 없음·읽기 전용·정책 거부·Java 아님·편집기로 열기·Headless 단추·머리 읽기·오류 줄 기준·편집기 실행 오류 읽기 판정) / DbToolsTests 일괄 컴파일 Java 1 / SchemaStatementsTests Java 2 / JavaObjectsIntegrationTests +1(JVM 있는 서버 전용: 분리한 글 컴파일·오류 줄·ALTER 다시 컴파일; 26ai·11g 는 JVM 없음이라 건너뜀, 돌려 보지 않음) / `dotnet build Oranda.sln -warnaserror`
+  - note: 바꾼 곳 = Language/Lexing/StatementSplitter(Java 본문 모드·Piece.JavaSource), Formatting/FormatTokenizer(Java 소스 원문 줄), Parsing/PlSqlAnalyzer(Java 소스 건너뜀), Oracle/Schema/SchemaStatements.Compile(JAVA SOURCE·JAVA CLASS), IMetadataProvider.IsJavaAvailableAsync(기본 false)·OracleMetadataProvider(public), PlsqlSourceText(ParseJavaCreateHeader·SourceStart), SqlCompileErrors(Java 머리), ObjectDetailViewModel.Java.cs(새)·ObjectDetailView(Java 줄), ObjectSearchViewModel(일괄 컴파일에 Java), literals-en.json. JVM 있는 서버에서 ORA-24344/29535 반환 모양·오류 줄 기준은 아직 확인 못 함 (win144)
+
 ## 의존 그래프
 
 ### 그래프 (Mermaid)
@@ -1314,6 +1326,7 @@ graph LR
   TSK-14-15 --> TSK-14-18
   TSK-09-10 --> TSK-14-19
   TSK-07-02 --> TSK-14-22
+  TSK-14-22 --> TSK-14-23
   style TSK-01-02 fill:#e8f5e9,stroke:#2e7d32
   style TSK-03-01 stroke:#c62828,stroke-width:2px
   style TSK-02-02 stroke:#c62828,stroke-width:2px

@@ -406,6 +406,48 @@ public class DbToolsTests
     }
 
     [Fact]
+    public async Task Compile_invalid_includes_java_sources_before_classes_and_skips_java_without_jvm()
+    {
+        // TSK-14-23: 그 스키마의 INVALID JAVA SOURCE·JAVA CLASS 도 대상(소스 먼저). JVM 이 없으면 제공자가 빈 목록을 준다.
+        var exec = new FakeExec();
+        var admin = new FakeAdmin { Invalid = [BadProc] };
+        var java = new JavaInvalidMeta
+        {
+            Invalid =
+            [
+                new JavaObjectInfo(new DbObjectRef("SCOTT", "com/example/Hello", "JAVA CLASS"), "com/example/Hello", "INVALID"),
+                new JavaObjectInfo(new DbObjectRef("SCOTT", "com/example/Hello", "JAVA SOURCE"), "com/example/Hello", "INVALID"),
+            ],
+        };
+        exec.OnExecute = stmt =>
+        {
+            admin.Invalid = [.. admin.Invalid.Where(o => !stmt.Text.Contains(o.Name, StringComparison.Ordinal))];
+            java.Invalid = [.. java.Invalid.Where(o => !stmt.Text.Contains(o.Ref.ObjectType, StringComparison.Ordinal))];
+        };
+        var vm = new ObjectSearchViewModel(admin, exec) { Metadata = java };
+        vm.Attach(new FakeSession());
+
+        await vm.CompileInvalidAsync();
+
+        Assert.Equal(
+        [
+            "ALTER PROCEDURE \"SCOTT\".\"BAD_P\" COMPILE",
+            "ALTER JAVA SOURCE \"SCOTT\".\"com/example/Hello\" COMPILE",
+            "ALTER JAVA CLASS \"SCOTT\".\"com/example/Hello\" RESOLVE",
+        ], exec.Statements.Select(s => s.Text));
+        Assert.Equal("SCOTT", java.LastQuery?.Owner);
+        Assert.True(java.LastQuery?.InvalidOnly);
+        Assert.Equal(["JAVA SOURCE", "JAVA CLASS"], java.LastQuery?.ObjectTypes);
+        Assert.All(vm.CompileResults, r => Assert.Equal(CompileOutcome.Compiled, r.Outcome));
+        Assert.Contains("3개 컴파일됨", vm.StatusText);
+
+        var noJvm = new ObjectSearchViewModel(new FakeAdmin { Invalid = [BadProc] }, new FakeExec()) { Metadata = new JavaInvalidMeta { Jvm = false } };
+        noJvm.Attach(new FakeSession());
+        await noJvm.CompileInvalidAsync();
+        Assert.Equal([BadProc], noJvm.CompileResults.Select(r => r.Ref));
+    }
+
+    [Fact]
     public async Task Compile_invalid_reports_objects_that_stay_invalid_and_retries_without_progress_loop()
     {
         var exec = new FakeExec { Failure = new DbError("ORA-24344", "success with compilation error") };
@@ -843,6 +885,38 @@ public class DbToolsTests
             await Task.CompletedTask;
             yield break;
         }
+    }
+
+    /// <summary>INVALID Java 객체 목록만 아는 가짜(실제 제공자처럼 JVM 이 없으면 빈 목록).</summary>
+    private sealed class JavaInvalidMeta : IMetadataProvider
+    {
+        public bool Jvm { get; init; } = true;
+
+        public IReadOnlyList<JavaObjectInfo> Invalid { get; set; } = [];
+
+        public ObjectQuery? LastQuery { get; private set; }
+
+        public Task<IReadOnlyList<JavaObjectInfo>> ListJavaObjectsAsync(ISession s, ObjectQuery q, CancellationToken ct)
+        {
+            LastQuery = q;
+            return Task.FromResult(Jvm ? Invalid : []);
+        }
+
+        public Task<IReadOnlyList<string>> ListSchemasAsync(ISession s, CancellationToken ct) => throw new NotSupportedException();
+
+        public Task<IReadOnlyList<DbObjectRef>> ListObjectsAsync(ISession s, ObjectQuery q, CancellationToken ct) => throw new NotSupportedException();
+
+        public Task<TableInfo> GetTableAsync(ISession s, DbObjectRef table, CancellationToken ct) => throw new NotSupportedException();
+
+        public Task<IReadOnlyList<ProcedureInfo>> GetProceduresAsync(ISession s, DbObjectRef obj, CancellationToken ct) => throw new NotSupportedException();
+
+        public Task<string> GetDdlAsync(ISession s, DbObjectRef obj, DdlOptions o, CancellationToken ct) => throw new NotSupportedException();
+
+        public Task<Oranda.Core.Metadata.ObjectDetail> GetObjectDetailAsync(ISession s, DbObjectRef obj, CancellationToken ct) => throw new NotSupportedException();
+
+        public Task<string> GetSourceAsync(ISession s, DbObjectRef obj, CancellationToken ct) => throw new NotSupportedException();
+
+        public Task<IReadOnlyList<CompileError>> GetCompileErrorsAsync(ISession s, DbObjectRef obj, CancellationToken ct) => throw new NotSupportedException();
     }
 
     private sealed class FakeMeta : IMetadataProvider

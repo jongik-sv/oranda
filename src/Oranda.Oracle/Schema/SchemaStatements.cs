@@ -41,6 +41,10 @@ public static partial class SchemaStatements
             "SYNONYM" when string.Equals(obj.Owner, "PUBLIC", StringComparison.Ordinal) => $"ALTER PUBLIC SYNONYM {target} COMPILE",
             "PACKAGE" or "TYPE" or "PROCEDURE" or "FUNCTION" or "TRIGGER" or "VIEW" or "MATERIALIZED VIEW" or "SYNONYM"
                 => $"ALTER {obj.ObjectType} {target} COMPILE",
+
+            // Java(TSK-14-23): 이름은 사전의 짧은 이름(object_name). 소스는 다시 컴파일, 클래스는 참조를 다시 푼다.
+            "JAVA SOURCE" => $"ALTER JAVA SOURCE {target} COMPILE",
+            "JAVA CLASS" => $"ALTER JAVA CLASS {target} RESOLVE",
             _ => null,
         };
         return text is null ? null : new SqlStatement(text, default, StatementKind.Ddl) { Verb = "ALTER" };

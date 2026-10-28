@@ -10,6 +10,17 @@
     <Border DockPanel.Dock="Bottom" Classes="panel-status">
       <TextBlock Text="{Binding StatusText}" TextTrimming="CharacterEllipsis" />
     </Border>
+    <!-- Java 소스·클래스: 다시 컴파일(확인 후 ALTER JAVA …), 소스는 DDL 을 새 SQL 탭으로(TSK-14-23). JVM 이 없거나 읽기 전용 접속이면 막고 이유를 보인다. -->
+    <Border DockPanel.Dock="Top" Classes="panel-toolbar" IsVisible="{Binding IsJavaCompilable}">
+      <StackPanel Orientation="Horizontal">
+        <Button x:Name="CompileJavaButton" Classes="tool" Content="다시 컴파일" icons:ButtonIcon.Key="compile" Margin="0,0,6,0"
+                IsEnabled="{Binding CanCompileJava}" ToolTip.Tip="확인한 뒤 서버에서 다시 컴파일한다" ToolTip.ShowOnDisabled="True"
+                AutomationProperties.Name="다시 컴파일" />
+        <Button x:Name="OpenInEditorButton" Classes="tool" Content="편집기로 열기" icons:ButtonIcon.Key="newSql" Margin="0,0,6,0"
+                IsVisible="{Binding IsJavaSource}" ToolTip.Tip="새 SQL 탭에 넣습니다(실행하지 않음)" AutomationProperties.Name="편집기로 열기" />
+        <TextBlock x:Name="JavaCompileReasonText" Text="{Binding JavaCompileReason}" VerticalAlignment="Center" Margin="4,0" TextTrimming="CharacterEllipsis" />
+      </StackPanel>
+    </Border>
     <TabControl x:Name="Tabs">
       <TabItem Header="상세">
         <DockPanel>

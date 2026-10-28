@@ -59,7 +59,7 @@ public sealed class SqlCompileErrorSource(string title, SqlEditorViewModel tab) 
 
 /// <summary>
 /// SQL 편집기 실행 경로가 문장을 마칠 때 부르는 훅(TSK-13-28). CREATE [OR REPLACE] PROCEDURE·FUNCTION·PACKAGE [BODY]·TRIGGER·TYPE [BODY]
-/// 문장이 끝나면 서버의 오류 목록(<c>ALL_ERRORS</c>)을 읽어 컴파일 오류 창을 채운다. 오류 없이 끝나면 그 객체의 이전 항목을 지운다.
+/// ·JAVA SOURCE NAMED …(TSK-14-23) 문장이 끝나면 서버의 오류 목록(<c>ALL_ERRORS</c>)을 읽어 컴파일 오류 창을 채운다. 오류 없이 끝나면 그 객체의 이전 항목을 지운다.
 /// 기존 PL/SQL 편집기 컴파일 경로(<see cref="PlsqlEditorViewModel.CompileAsync"/>)는 건드리지 않는다.
 /// </summary>
 public static class SqlCompileErrors
@@ -74,14 +74,21 @@ public static class SqlCompileErrors
     {
         ArgumentNullException.ThrowIfNull(stmt);
         ArgumentNullException.ThrowIfNull(result);
-        if (PlsqlSourceText.ParseCreateHeader(stmt.Text) is null)
+        if (HeaderOf(stmt.Text) is not { } header)
         {
             return false;
         }
 
+        // Java 소스는 「다시 컴파일해야 한다」(ORA-29535)로 끝나도 객체는 만들어졌다.
         return result.Status == ExecutionStatus.Succeeded
-            || (result.Status == ExecutionStatus.Failed && result.Error is { } e && e.Code.Contains("24344", StringComparison.Ordinal));
+            || (result.Status == ExecutionStatus.Failed && result.Error is { } e
+                && (e.Code.Contains("24344", StringComparison.Ordinal)
+                    || (header.ObjectType == "JAVA SOURCE" && e.Code.Contains("29535", StringComparison.Ordinal))));
     }
+
+    /// <summary>PL/SQL 단위 또는 Java 소스(<c>NAMED</c> 가 있는 꼴)의 CREATE 머리.</summary>
+    private static (string ObjectType, string? Owner, string Name)? HeaderOf(string text)
+        => PlsqlSourceText.ParseCreateHeader(text) ?? PlsqlSourceText.ParseJavaCreateHeader(text);
 
     /// <summary>
     /// 오류를 읽어 창에 채운다. 오류(경고 포함)가 있으면 채우고 true(호출한 쪽이 창을 앞으로 가져온다), 없거나 읽지 못하면 false.
@@ -93,7 +100,7 @@ public static class SqlCompileErrors
         ArgumentNullException.ThrowIfNull(meta);
         ArgumentNullException.ThrowIfNull(session);
         ArgumentNullException.ThrowIfNull(tab);
-        if (!ShouldCapture(stmt, result) || PlsqlSourceText.ParseCreateHeader(stmt.Text) is not { } header)
+        if (!ShouldCapture(stmt, result) || HeaderOf(stmt.Text) is not { } header)
         {
             return false;
         }

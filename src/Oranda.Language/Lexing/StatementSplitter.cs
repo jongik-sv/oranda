@@ -7,11 +7,15 @@ namespace Oranda.Language.Lexing;
 /// <summary>
 /// 문장 분리·분류(TRD 4.3). 렉서 토큰으로 문자열·주석을 건너뛰고, PL/SQL 블록 안의 <c>;</c> 는 끝으로 보지 않는다.
 /// 끝 표지 = <c>;</c>, 단독 줄 <c>/</c>, (선택) 빈 줄. SQL*Plus 명령은 줄 끝이 끝이다.
+/// <c>CREATE … JAVA SOURCE … AS</c> 뒤의 Java 코드는 SQL 로 읽지 않고 단독 줄 <c>/</c>(또는 글 끝)까지 문장에 넣는다(SQL*Plus 와 같다, TSK-14-23).
 /// </summary>
 public static class StatementSplitter
 {
-    /// <summary>문장 + 커서 소속 판단용 범위(끝 표지와 같은 줄의 뒷공백·주석까지).</summary>
-    public readonly record struct Piece(SqlStatement Statement, int ExtentEnd);
+    /// <summary>
+    /// 문장 + 커서 소속 판단용 범위(끝 표지와 같은 줄의 뒷공백·주석까지). <paramref name="JavaSource"/> = AS 뒤가 Java 코드인
+    /// <c>CREATE JAVA SOURCE</c>(포맷터는 원문 그대로 둔다).
+    /// </summary>
+    public readonly record struct Piece(SqlStatement Statement, int ExtentEnd, bool JavaSource = false);
 
     public static IReadOnlyList<SqlStatement> Split(string text, SplitOptions o)
     {
@@ -46,6 +50,24 @@ public static class StatementSplitter
             int nl = text.IndexOf('\n', pos);
             int lineEnd = nl < 0 ? text.Length : nl;
             int next = nl < 0 ? text.Length + 1 : nl + 1;
+
+            if (b.InJavaBody)
+            {
+                // Java 코드: 단독 줄 / 만 끝 표지다(; { } 문자열·주석·빈 줄은 Java 의 것).
+                var raw = text.AsSpan(pos, lineEnd - pos);
+                var rawTrimmed = raw.Trim();
+                if (rawTrimmed.Length == 1 && rawTrimmed[0] == '/')
+                {
+                    b.Finish(pos + raw.IndexOf('/') + 1);
+                }
+                else if (rawTrimmed.Length > 0)
+                {
+                    b.ExtendRaw(pos + raw.TrimEnd().Length);
+                }
+
+                pos = next;
+                continue;
+            }
 
             if (state == SqlLexer.Normal)
             {
@@ -84,6 +106,14 @@ public static class StatementSplitter
             {
                 if (t.Kind is TokenKind.Comment or TokenKind.Hint) continue;
                 b.Add(t with { Start = t.Start + pos });
+                if (b.InJavaBody)
+                {
+                    // AS 뒤 같은 줄의 나머지는 Java 코드다. 렉서 상태(열린 문자열·주석)도 버린다.
+                    var rest = text.AsSpan(t.Start + pos + t.Length, lineEnd - (t.Start + pos + t.Length)).TrimEnd();
+                    if (rest.Trim().Length > 0) b.ExtendRaw(t.Start + pos + t.Length + rest.Length);
+                    state = SqlLexer.Normal;
+                    break;
+                }
             }
 
             pos = next;
@@ -185,8 +215,16 @@ public static class StatementSplitter
         readonly Stack<Scope> _stack = new();
         bool _anon, _blockCreate, _kindFixed, _opened, _external, _pendingSub, _pendingEnd, _skipCase;
         bool _trigger, _compound;
+        bool _javaSource, _javaBody;
+        int _rawEnd = -1;
 
         public bool IsEmpty => _toks.Count == 0;
+
+        /// <summary><c>CREATE … JAVA SOURCE … AS</c> 를 읽었다: 이제부터 단독 줄 <c>/</c> 까지는 Java 코드다.</summary>
+        public bool InJavaBody => _javaBody;
+
+        /// <summary>Java 코드가 <paramref name="end"/> 까지 이어진다(문장 끝 위치).</summary>
+        public void ExtendRaw(int end) => _rawEnd = Math.Max(_rawEnd, end);
 
         /// <summary>빈 줄로 문장을 끊어도 되는가(블록 안·블록 헤더 중에는 안 된다).</summary>
         public bool CanSplitAtBlankLine => _toks.Count > 0 && _stack.Count == 0 && !_anon && !_blockCreate;
@@ -239,6 +277,12 @@ public static class StatementSplitter
             int n = _toks.Count;
 
             if (!_kindFixed) DetectKind(n, s);
+            if (_javaSource)
+            {
+                if (IsWord(s, "AS")) _javaBody = true;
+                return;
+            }
+
             if (!IsBlockType && _stack.Count == 0) return;
 
             if (IsWord(s, "END")) _pendingEnd = true;
@@ -291,10 +335,18 @@ public static class StatementSplitter
                 return;
             }
 
-            // CREATE [OR REPLACE] [NO]FORCE [NON]EDITIONABLE <대상>
+            // CREATE [OR REPLACE] [NO]FORCE [NON]EDITIONABLE <대상>, CREATE [OR REPLACE] [AND RESOLVE|COMPILE] [NOFORCE] JAVA …
             if (IsWord(s, "OR") || IsWord(s, "REPLACE") || IsWord(s, "EDITIONABLE") || IsWord(s, "NONEDITIONABLE")
-                || IsWord(s, "FORCE") || IsWord(s, "NOFORCE") || IsWord(s, "NO"))
+                || IsWord(s, "FORCE") || IsWord(s, "NOFORCE") || IsWord(s, "NO")
+                || IsWord(s, "AND") || IsWord(s, "RESOLVE") || IsWord(s, "COMPILE") || IsWord(s, "JAVA"))
                 return;
+            if (IsWord(s, "SOURCE") && Is(n - 2, "JAVA"))
+            {
+                // JAVA SOURCE … AS <Java 코드>. USING BFILE 등 AS 가 없는 꼴은 보통 문장처럼 ; 로 끝난다.
+                _javaSource = true; _kindFixed = true;
+                return;
+            }
+
             if (IsWord(s, "PROCEDURE") || IsWord(s, "FUNCTION") || IsWord(s, "PACKAGE"))
             {
                 _blockCreate = true; _kindFixed = true; _pendingSub = true;
@@ -317,16 +369,18 @@ public static class StatementSplitter
         {
             if (_toks.Count > 0)
             {
-                int start = _toks[0].Start, end = _toks[^1].End;
+                int start = _toks[0].Start, end = Math.Max(_toks[^1].End, _rawEnd);
                 var st = StatementClassifier.Build(text, _toks, start, end, IsBlockType);
                 int ext = termEnd >= 0 ? ExtendToLineEnd(termEnd) : ExtendToLineEnd(end);
-                sink.Add(new Piece(st, ext));
+                sink.Add(new Piece(st, ext, _javaBody));
             }
 
             _toks.Clear();
             _stack.Clear();
             _anon = _blockCreate = _kindFixed = _opened = _external = _pendingSub = _pendingEnd = _skipCase = false;
             _trigger = _compound = false;
+            _javaSource = _javaBody = false;
+            _rawEnd = -1;
         }
 
         int ExtendToLineEnd(int p)

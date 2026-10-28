@@ -49,6 +49,9 @@ public interface IMetadataProvider
     /// </summary>
     Task<IReadOnlyList<JavaObjectInfo>> ListJavaObjectsAsync(ISession s, ObjectQuery q, CancellationToken ct)
         => Task.FromResult<IReadOnlyList<JavaObjectInfo>>([]);
+
+    /// <summary>서버에 Java(JVM, <c>SYS.DBMS_JAVA</c>)가 있나. 없으면 Java 객체를 컴파일하지 않는다(TSK-14-23). 기본 구현은 false(모른다 = 없다).</summary>
+    Task<bool> IsJavaAvailableAsync(ISession s, CancellationToken ct) => Task.FromResult(false);
 }
 
 /// <summary>
