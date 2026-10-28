@@ -35,6 +35,11 @@
     <PackageVersion Include="SQLitePCLRaw.lib.e_sqlite3" Version="2.1.14" />
   </ItemGroup>
 
+  <ItemGroup Label="Agent">
+    <!-- orandactl(MCP stdio 서버). Core 만 써서 호스팅 의존이 없다. 2.3.0 = 2026-10 기준 최신 안정판, net10.0 지원. -->
+    <PackageVersion Include="ModelContextProtocol.Core" Version="2.3.0" />
+  </ItemGroup>
+
   <ItemGroup Label="Release">
     <!-- 설치·자동 업데이트(TSK-10-01). 패키징 도구 vpk(CI 의 VPK_VERSION)와 같은 버전이어야 한다. -->
     <PackageVersion Include="Velopack" Version="1.2.161" />

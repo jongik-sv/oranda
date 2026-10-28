@@ -1,0 +1,19 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- orandactl: 외부 AI(claude CLI)가 띄우는 MCP stdio 서버. Core 만 참조한다(Oranda.Architecture.Tests 가 검사).
+       stdout 은 MCP 전용이므로 로그는 stderr 로만 쓴다. -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <AssemblyName>orandactl</AssemblyName>
+    <RootNamespace>Oranda.Agent.Cli</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="ModelContextProtocol.Core" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Oranda.Core\Oranda.Core.csproj" />
+  </ItemGroup>
+
+</Project>

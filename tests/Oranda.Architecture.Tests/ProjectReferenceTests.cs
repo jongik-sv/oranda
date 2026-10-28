@@ -19,6 +19,7 @@ public class ProjectReferenceTests
         "Oranda.Oracle",
         "Oranda.App",
         "Oranda.Platform",
+        "Oranda.Agent.Cli",
     ];
 
     [Theory]
