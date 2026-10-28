@@ -41,6 +41,16 @@ public static class AiAccessPolicy
         return profile.AllowExplainPlan ?? profile.Environment != ConnectionEnvironment.Production;
     }
 
+    /// <summary>
+    /// SQL 글의 리터럴 가림이 필요한가: 운영 접속이면 항상 참(끌 수 없다, 접속별 칸 없음), 아니면 설정 <paramref name="setting"/>
+    /// (<c>AiSettings.MaskLiterals</c>).
+    /// </summary>
+    public static bool MaskLiterals(ConnectionProfile profile, bool setting)
+    {
+        ArgumentNullException.ThrowIfNull(profile);
+        return profile.Environment == ConnectionEnvironment.Production || setting;
+    }
+
     /// <summary>수준이 <paramref name="required"/> 이상이고 <see cref="AiAccessLevel.Off"/> 가 아닌가.</summary>
     public static bool Allows(ConnectionProfile profile, AiAccessLevel required) =>
         required != AiAccessLevel.Off && Effective(profile) >= required;

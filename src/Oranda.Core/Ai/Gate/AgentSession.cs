@@ -24,6 +24,13 @@ public sealed record AgentRunScope(string RunId, ConnectionProfile Profile, AiCo
         : this(runId, profile, context, AgentSendScope.StatementOnly)
     {
     }
+
+    /// <summary>
+    /// 이 대화의 리터럴 값 사전. 리터럴 가림이 필요한 실행(운영 접속이거나 설정이 켜짐)이면 시작하는 쪽이 채우고,
+    /// 게이트가 도구 인자를 되돌리고 결과의 SQL 글을 가리는 데 쓴다. null 이면 이 실행에는 사전이 없다.
+    /// 가림이 필요한데 사전이 없으면 게이트는 SQL 을 다루는 도구를 막는다.
+    /// </summary>
+    public LiteralVault? Literals { get; init; }
 }
 
 /// <summary>

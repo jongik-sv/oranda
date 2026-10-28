@@ -1,0 +1,101 @@
+using Oranda.Core.Ai.Gate;
+
+namespace Oranda.Core.Tests.Ai;
+
+public class LiteralVaultTests
+{
+    [Fact]
+    public void Same_raw_token_gets_the_same_number_and_different_tokens_get_new_ones()
+    {
+        var vault = new LiteralVault();
+
+        Assert.Equal(":v1", vault.Add("'ABC'"));
+        Assert.Equal(":v2", vault.Add("100"));
+        Assert.Equal(":v1", vault.Add("'ABC'"));
+        Assert.Equal(":v3", vault.Add("'abc'"));
+        Assert.Equal(3, vault.Count);
+    }
+
+    [Fact]
+    public void Placeholder_is_restored_with_or_without_colon_and_ignoring_case()
+    {
+        var vault = new LiteralVault();
+        vault.Add("'ABC'");
+
+        Assert.True(vault.TryGetRaw(":v1", out var raw));
+        Assert.Equal("'ABC'", raw);
+        Assert.True(vault.TryGetRaw("V1", out raw));
+        Assert.Equal("'ABC'", raw);
+    }
+
+    [Theory]
+    [InlineData(":v2", false)]
+    [InlineData(":v0", false)]
+    [InlineData(":v01", false)]
+    [InlineData(":v1x", false)]
+    [InlineData(":x1", false)]
+    [InlineData(":v", false)]
+    public void Unknown_or_malformed_placeholders_are_not_restored(string text, bool expected)
+    {
+        var vault = new LiteralVault();
+        vault.Add("'ABC'");
+
+        Assert.Equal(expected, vault.TryGetRaw(text, out _));
+    }
+
+    [Fact]
+    public void Own_placeholder_shape_is_detected_even_when_the_vault_does_not_hold_it()
+    {
+        var vault = new LiteralVault("lit");
+
+        Assert.True(vault.IsOwnPlaceholder(":lit9"));
+        Assert.False(vault.IsOwnPlaceholder(":v9"));
+        Assert.False(vault.IsOwnPlaceholder(":lit"));
+        Assert.Equal(":lit1", vault.Add("1"));
+    }
+
+    [Theory]
+    [InlineData("")]
+    [InlineData(":v")]
+    [InlineData("1v")]
+    [InlineData("v 1")]
+    public void Invalid_prefix_is_rejected(string prefix) =>
+        Assert.Throws<ArgumentException>(() => new LiteralVault(prefix));
+
+    [Fact]
+    public void Statement_pairs_are_remembered_by_exact_masked_text()
+    {
+        var vault = new LiteralVault();
+        vault.RememberStatement("select * from t where a = :v1", "select /* c */ * from t where a = 'x'");
+
+        Assert.True(vault.TryGetStatement("select * from t where a = :v1", out var original));
+        Assert.Equal("select /* c */ * from t where a = 'x'", original);
+        Assert.False(vault.TryGetStatement("select * from t where a = :v1 ", out _));
+    }
+
+    [Fact]
+    public void To_string_never_prints_the_values()
+    {
+        var vault = new LiteralVault();
+        vault.Add("'secret-value'");
+
+        Assert.DoesNotContain("secret", vault.ToString(), StringComparison.Ordinal);
+        Assert.Equal("LiteralVault(1)", vault.ToString());
+    }
+
+    [Fact]
+    public void Redact_replaces_known_values_in_text_but_leaves_short_values_and_error_numbers_alone()
+    {
+        var vault = new LiteralVault();
+        vault.Add("'secret-value'");
+        vault.Add("1");
+        vault.Add("123456");
+
+        var redacted = vault.Redact("ORA-00001: bad 'secret-value' near secret-value and 123456 (row 1)");
+
+        Assert.DoesNotContain("secret-value", redacted, StringComparison.Ordinal);
+        Assert.DoesNotContain("123456", redacted, StringComparison.Ordinal);
+        Assert.Contains("ORA-00001", redacted, StringComparison.Ordinal);
+        Assert.Contains("row 1", redacted, StringComparison.Ordinal);
+    }
+}

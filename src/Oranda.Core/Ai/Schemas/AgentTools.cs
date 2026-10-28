@@ -66,6 +66,14 @@ public static class AgentFields
         [HistogramEndpoint, HistogramEndpointValue, HistogramEndpointActualValue, ColumnLowValue, ColumnHighValue];
 
     /// <summary>
+    /// 결과에서 SQL 글·술어 글이 들어가는 필드 이름 전부(계획 단계의 <c>access</c>·<c>filter</c>, 술어 칸, 문장 글). 리터럴 가림이 필요한 실행에서
+    /// 게이트는 이 이름의 문자열만 <c>ISqlLiteralMasker</c> 로 가린다. 모든 문자열을 가리면 <c>note</c>·숫자가 망가지므로 이름으로 정한다.
+    /// 처리자가 결과에 SQL 글을 넣어야 하면 이 이름 중 하나로만 넣는다(다른 이름은 가려지지 않는다).
+    /// </summary>
+    public static IReadOnlyList<string> SqlTextFields { get; } =
+        ["access", "filter", "access_predicates", "filter_predicates", "sql_text"];
+
+    /// <summary>
     /// 결과에서 열을 식별하는 필드 이름 전부(비교는 소문자로 바꾸고 <c>_</c>·<c>-</c> 를 뺀 뒤 한다). <b>처리자는 결과에서 열을 식별할 때 이 이름만 쓴다.</b>
     /// 게이트는 이 이름의 값(또는 값이 객체면 그 안의 같은 이름)이 민감 컬럼이면 그 객체의 행 값 필드를 지운다.
     /// 다른 이름으로 열 이름을 내면 민감 컬럼 가림이 적용되지 않는다.

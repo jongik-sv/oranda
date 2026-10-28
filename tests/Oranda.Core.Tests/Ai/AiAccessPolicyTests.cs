@@ -49,6 +49,22 @@ public class AiAccessPolicyTests
     public void Explain_plan_follows_profile_then_environment(ConnectionEnvironment env, bool? flag, bool expected) =>
         Assert.Equal(expected, AiAccessPolicy.ExplainPlanEnabled(Profile(env, explain: flag)));
 
+    [Theory]
+    [InlineData(ConnectionEnvironment.Production, false, true)]
+    [InlineData(ConnectionEnvironment.Production, true, true)]
+    [InlineData(ConnectionEnvironment.Development, false, false)]
+    [InlineData(ConnectionEnvironment.Test, true, true)]
+    public void Literal_masking_is_forced_on_production_and_follows_the_setting_elsewhere(ConnectionEnvironment env, bool setting, bool expected) =>
+        Assert.Equal(expected, AiAccessPolicy.MaskLiterals(Profile(env), setting));
+
+    [Fact]
+    public void Sql_text_fields_name_the_plan_predicate_and_statement_fields()
+    {
+        Assert.Equal(
+            ["access", "filter", "access_predicates", "filter_predicates", "sql_text"],
+            Oranda.Core.Ai.Schemas.AgentFields.SqlTextFields);
+    }
+
     [Fact]
     public void Name_confirmation_follows_effective_level_and_environment_changes()
     {

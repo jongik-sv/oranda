@@ -78,7 +78,9 @@ public sealed record AiSettings
     /// <summary>CLI 실행 파일 경로. null = PATH 에서 찾는다.</summary>
     public string? ExecutablePath { get; init; }
 
-    /// <summary>SQL 글의 리터럴 값을 <c>:v1</c> 로 바꿔 보낸다(연구서 §7.1). 다음 회차 구현: 이번 회차 코드는 이 값을 읽지 않는다.</summary>
+    /// <summary>
+    /// SQL 글의 리터럴 값을 <c>:v1</c> 로 바꿔 보낸다(연구서 §7.1). 운영 접속은 이 값과 관계없이 항상 가린다(<c>AiAccessPolicy.MaskLiterals</c>).
+    /// </summary>
     public bool MaskLiterals { get; init; }
 }
 
