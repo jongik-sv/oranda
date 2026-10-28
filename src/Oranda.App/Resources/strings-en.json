@@ -607,6 +607,7 @@
   "Connection.tns.noFile": "No tnsnames.ora in this folder.",
   "Connection.tns.count": "{0} aliases in tnsnames.ora",
   "Connection.tns.unknown": "This alias is not in tnsnames.ora.",
+  "Connection.custom.parens": "The parentheses in the connection string do not match. Check the opening and closing parentheses.",
   "Connection.color.default": "Default color",
   "Connection.color.blue": "Blue",
   "Connection.color.navy": "Navy",

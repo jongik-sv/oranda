@@ -90,9 +90,9 @@ public sealed class ConnectionStatusViewModel : ViewModelBase, IStatusBarItem
     public string ToolTip => Current is { } s
         ? ShownPendingNew
             ? UiText.Format("Execution.status.pendingNewTip", "{0}@{1} · Oracle {2} · 첫 실행 때 이 워크스페이스 전용 세션을 엽니다 — 눌러서 접속 관리자 열기",
-                s.Profile.User, s.Profile.DataSource, s.Server.Version)
+                s.Profile.User, ConnectStringText.Normalize(s.Profile.DataSource), s.Server.Version)
             : UiText.Format("Execution.status.connTip", "{0}@{1} · Oracle {2} · SID {3} — 눌러서 접속 관리자 열기",
-                s.Profile.User, s.Profile.DataSource, s.Server.Version, s.Server.SessionId.ToString(CultureInfo.InvariantCulture))
+                s.Profile.User, ConnectStringText.Normalize(s.Profile.DataSource), s.Server.Version, s.Server.SessionId.ToString(CultureInfo.InvariantCulture))
         : UiText.Get("Execution.status.connTipNone", "접속 관리자 열기");
 
     /// <summary><c>23.26.0.0.0</c> → <c>26ai</c>, <c>19.3.0.0.0</c> → <c>19c</c>. 모르면 빈 글.</summary>

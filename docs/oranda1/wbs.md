@@ -1177,6 +1177,18 @@ levels:
   - acceptance: 세 시험이 로컬 반복에서 흔들리지 않음(History·Completion 10회, Benchmark 26ai 3회+) / MenuWidthTests 38 통과·모든 기능 15줄 넘는 메뉴 5 / `dotnet build Oranda.sln -warnaserror`
   - note: 결과: HistoryStoreTests 13×10·Slow_metadata 1×10 통과, TuningServiceTests 26ai 6×3·Benchmark 1회 추가 통과, MenuWidthTests 38/38. PRD.md 13.3 의 목표 줄(316행 「→ 4 이하」)은 지시대로 두었다(13.5 한 줄만) (win144)
 
+- [x] TSK-14-20: 접속 관리자 「사용자 지정」 칸에 tnsnames.ora 형식 여러 줄 접속 기술자 넣기(별칭·주석·들여쓰기, 괄호 짝 안내) [win144] w:1 2026-10-28~2026-10-28
+  - category: feat
+  - domain: fullstack
+  - model: opus
+  - priority: medium
+  - tags: connection-manager, tnsnames, descriptor, win144
+  - prd-ref: PRD CONN-01
+  - depends: -
+  - requirements: 사용자 요청(2026-10-28) 「사용자 지정에서 접속 문자열을 한 줄로만 넣어야 된다. 여러 줄 tnsnames.ora 형식으로 들어가면 좋겠다」. 사용자 지정 칸을 여러 줄 편집으로(Enter = 줄 바꿈, Tab = 다음 칸, 3줄에서 12줄까지 늘고 그 뒤 칸 안 스크롤, 코드 글꼴). `별칭 = (DESCRIPTION = …)` 항목을 통째로 붙여 넣으면 별칭을 떼고(이름이 비었으면 이름으로 제안), `#` 주석 줄을 지운다. 저장은 적은 모양 그대로, 접속·시험·미리보기·목록 보조 글·방식 판별은 한 줄로 정리한 값(Core ConnectStringText). 괄호 짝이 안 맞으면 칸 아래 안내 + 저장 거부. 기존 한 줄 프로필·단순 SID 기술자 되읽기(호스트·포트 + SID)는 그대로; 제약: 실앱 SendKeys 금지(Headless 까지); 비고: 레인 sr-desc
+  - acceptance: ConnectStringTextTests 15(여러 줄·주석·별칭·괄호 오류·이미 한 줄·따옴표 안 공백) / ConnectionCustomDescriptorTests 5(별칭 이름 제안·모양 그대로 저장·다시 열기·드라이버 Data Source 한 줄, 괄호 오류 안내·저장 거부, 여러 줄 SID 기술자 되읽기, Headless Enter 줄 바꿈·칸 높이 늘어남·저장 뒤 같은 모양) / CustomDescriptorIntegrationTests 1(26ai FREEPDB1 에 여러 줄 tnsnames 항목으로 접속) / ConnectionManager 시험 통과 / `dotnet build Oranda.sln -warnaserror`
+  - note: 바꾼 곳 = Oranda.Core/Connection/ConnectStringText.cs(새), ConnectionProfileExtensions.BuildConnectionString(정규화), ProfileEditorViewModel(DataSourceComposer 판별·미리보기, EasyConnectError, 별칭 이름 제안), ProfileEditorView.axaml(EasyConnectBox·EasyConnectErrorText), ConnectionTreeNode·ConnectionStatusItem·비밀번호 창의 user@접속 문자열(한 줄로) (win144)
+
 ## 의존 그래프
 
 ### 그래프 (Mermaid)

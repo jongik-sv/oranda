@@ -125,7 +125,7 @@
   "all_tab_statistics.stale_stats = YES — 마지막 수집 뒤 바뀐 행이 많습니다": "all_tab_statistics.stale_stats = YES — many rows changed since the last gather",
   "cwallet.sso 가 있는 폴더(선택)": "Wallet folder",
   "gv$sql_shared_cursor 의 Y 열": "Y columns of gv$sql_shared_cursor",
-  "host:1521/service?connect_timeout=5, tcps://… 또는 (DESCRIPTION=…)": "host:1521/service?connect_timeout=5, tcps://... or (DESCRIPTION=...)",
+  "host:1521/service, tcps://… 또는 tnsnames.ora 형식 (DESCRIPTION = …) 여러 줄": "host:1521/service, tcps://... or a multi-line tnsnames.ora entry (DESCRIPTION = ...)",
   "id 바꾸기": "Rename id",
   "owner.table 또는 table(접속 계정의 표). Enter 로 읽습니다": "owner.table or table (a table of the connected account). Press Enter to read",
   "stale · 통계가 오래됨": "stale · statistics are out of date",

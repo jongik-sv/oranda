@@ -74,8 +74,8 @@ public sealed partial class ConnectionTreeNode : ObservableObject
     public string Subtitle => Profile switch
     {
         null => $"({ProfileCount})",
-        { Comment: { } c } when FirstLine(c) is { Length: > 0 } line => $"{line} · {Profile.User}@{Profile.DataSource}",
-        _ => $"{Profile.User}@{Profile.DataSource}",
+        { Comment: { } c } when FirstLine(c) is { Length: > 0 } line => $"{line} · {Profile.User}@{ConnectStringText.Normalize(Profile.DataSource)}",
+        _ => $"{Profile.User}@{ConnectStringText.Normalize(Profile.DataSource)}",
     };
 
     /// <summary>줄 풍선 도움말: 접속 설명 전체. 없거나 폴더면 null.</summary>

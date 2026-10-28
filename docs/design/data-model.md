@@ -122,7 +122,7 @@
 | `id` | Guid | ● | 저장 시 새로 발급 | 프로필 식별자. 이력·작업 공간이 참조 |
 | `name` | string | ● | | 표시 이름. 파일 안에서 중복 금지 |
 | `user` | string | ● | | 접속 사용자. 프록시면 실제 대상 사용자(`scott`) |
-| `dataSource` | string | ● | | EZConnect Plus 문자열, 접속 기술자 또는 TNS 별칭 (CONN-01). 「호스트·포트」 방식의 서비스 이름은 `[tcps://]host[:port]/service`, SID 는 EZConnect 로 쓸 수 없어 `(DESCRIPTION=(ADDRESS=(PROTOCOL=TCP\|TCPS)(HOST=…)(PORT=…))(CONNECT_DATA=(SID=…)))` 로 저장한다. 이 모양의 기술자는 다시 열면 호스트·포트 + SID 로 보인다 |
+| `dataSource` | string | ● | | EZConnect Plus 문자열, 접속 기술자 또는 TNS 별칭 (CONN-01). 「호스트·포트」 방식의 서비스 이름은 `[tcps://]host[:port]/service`, SID 는 EZConnect 로 쓸 수 없어 `(DESCRIPTION=(ADDRESS=(PROTOCOL=TCP\|TCPS)(HOST=…)(PORT=…))(CONNECT_DATA=(SID=…)))` 로 저장한다. 이 모양의 기술자는 다시 열면 호스트·포트 + SID 로 보인다. 「사용자 지정」 은 사람이 적은 여러 줄 모양(tnsnames.ora 항목, `#` 주석·`별칭 =` 포함)을 그대로 저장하고, 접속·방식 판별 때만 주석·별칭·줄 바꿈을 정리한 한 줄을 쓴다 |
 | `auth` | `AuthMode` = `Default`\|`SysDba`\|`SysOper`\|`SysBackup`\|`SysDg`\|`SysKm` | ○ | `Default` | CONN-02 |
 | `proxyUser` | string | ○ | null | 프록시 접속 사용자(`app[scott]` 의 `app`). 있으면 저장 비밀은 이 사용자의 것 |
 | `tnsAdmin` | string | ○ | null | TNS 디렉터리. 연결 문자열 `TNS_ADMIN` 으로 접속마다 넘긴다(전역 `OracleConfiguration.TnsAdmin` 은 첫 접속 뒤 ORA-50099). 「TNS」 방식에서만 저장 |

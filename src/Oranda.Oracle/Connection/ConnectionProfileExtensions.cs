@@ -13,7 +13,8 @@ public static class ConnectionProfileExtensions
 
         var builder = new OracleConnectionStringBuilder
         {
-            DataSource = profile.DataSource,
+            // 사용자 지정 칸은 여러 줄 tnsnames.ora 형식을 그대로 저장한다. 드라이버에는 주석·별칭·줄 바꿈을 정리한 한 줄을 넘긴다.
+            DataSource = ConnectStringText.Normalize(profile.DataSource),
             UserID = profile.User,
             Password = password,
             ConnectionTimeout = profile.ConnectTimeoutSeconds,

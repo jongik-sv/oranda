@@ -56,7 +56,7 @@ public static partial class DataSourceComposer
     {
         tls = false;
         host = port = service = string.Empty;
-        var m = HostPortPattern().Match(dataSource.Trim());
+        var m = HostPortPattern().Match(ConnectStringText.Normalize(dataSource));
         if (!m.Success)
         {
             return false;
@@ -76,12 +76,13 @@ public static partial class DataSourceComposer
     public static bool TryParseBasic(string dataSource, out bool tls, out string host, out string port, out string service, out bool sid)
     {
         sid = false;
-        if (TryParseHostPort(dataSource, out tls, out host, out port, out service))
+        var text = ConnectStringText.Normalize(dataSource);
+        if (TryParseHostPort(text, out tls, out host, out port, out service))
         {
             return true;
         }
 
-        var m = SidDescriptorPattern().Match(string.Concat(dataSource.Where(c => !char.IsWhiteSpace(c))));
+        var m = SidDescriptorPattern().Match(string.Concat(text.Where(c => !char.IsWhiteSpace(c))));
         if (!m.Success)
         {
             return false;
@@ -95,10 +96,11 @@ public static partial class DataSourceComposer
         return true;
     }
 
-    /// <summary>저장된 문자열을 보고 편집기에서 보일 방식을 고른다.</summary>
+    /// <summary>저장된 문자열을 보고 편집기에서 보일 방식을 고른다(여러 줄·주석·별칭은 정리한 한 줄로 판별).</summary>
     public static ConnectionMode Detect(string dataSource)
     {
-        if (string.IsNullOrWhiteSpace(dataSource))
+        dataSource = ConnectStringText.Normalize(dataSource);
+        if (dataSource.Length == 0)
         {
             return ConnectionMode.HostPortService;
         }
@@ -126,7 +128,7 @@ public static partial class DataSourceComposer
     /// </summary>
     public static string Describe(string? user, string? proxyUser, string? dataSource, AuthMode auth)
     {
-        var target = dataSource?.Trim() ?? string.Empty;
+        var target = ConnectStringText.Normalize(dataSource);
         var who = user?.Trim() ?? string.Empty;
         var proxy = proxyUser?.Trim() ?? string.Empty;
         if (target.Length == 0 || ConnectionProfileValidator.ContainsSecret(target) || who.Contains('/', StringComparison.Ordinal) || proxy.Contains('/', StringComparison.Ordinal))
@@ -333,7 +335,7 @@ public sealed partial class ProfileEditorViewModel : ViewModelBase
     private static readonly string[] Derived =
     [
         nameof(IsDirty), nameof(ShowRequired), nameof(NameMissing), nameof(UserMissing), nameof(HostMissing), nameof(ServiceMissing),
-        nameof(EasyConnectMissing), nameof(TnsAliasMissing), nameof(HasRequiredFields), nameof(ConnectionStringPreview),
+        nameof(EasyConnectMissing), nameof(EasyConnectError), nameof(TnsAliasMissing), nameof(HasRequiredFields), nameof(ConnectionStringPreview),
         nameof(IsHostPortMode), nameof(IsEasyConnectMode), nameof(IsTnsMode), nameof(UsesWallet), nameof(CanPickColor),
         nameof(EffectiveColor), nameof(ColorLabel), nameof(ColorWarning),
     ];
@@ -468,6 +470,11 @@ public sealed partial class ProfileEditorViewModel : ViewModelBase
 
     public bool TnsAliasMissing => ShowRequired && IsTnsMode && IsBlank(TnsAlias);
 
+    /// <summary>사용자 지정 접속 문자열의 괄호 짝이 맞지 않으면 칸 아래 안내 글(저장도 거부된다). 아니면 빈 글자.</summary>
+    public string EasyConnectError => IsEasyConnectMode && !IsBlank(EasyConnect) && !ConnectStringText.Parse(EasyConnect).ParenthesesBalanced
+        ? UiText.Get("Connection.custom.parens", "접속 문자열의 괄호 짝이 맞지 않습니다. 여는 괄호와 닫는 괄호 수를 확인하세요.")
+        : string.Empty;
+
     /// <summary>필수 칸(이름, 접속 방식에 따른 호스트·서비스 / 접속 문자열 / TNS 별칭, 사용자)이 다 찼는지. 접속·시험 단추가 이 값을 본다.</summary>
     public bool HasRequiredFields => !IsBlank(Name) && !IsBlank(User) && Mode switch
     {
@@ -550,6 +557,19 @@ public sealed partial class ProfileEditorViewModel : ViewModelBase
         }
 
         UpdateTnsAliasDetail();
+    }
+
+    /// <summary>
+    /// tnsnames.ora 항목을 통째로(<c>별칭 = (DESCRIPTION=…)</c>) 붙여 넣으면 이름이 비었거나 앞서 별칭으로 채운 이름일 때 그 별칭을 이름으로 제안한다.
+    /// 저장·접속은 별칭을 뗀 기술자를 쓴다(<see cref="ConnectStringText"/>).
+    /// </summary>
+    partial void OnEasyConnectChanged(string value)
+    {
+        if (!_loading && ConnectStringText.Parse(value).Alias is { } alias && (IsBlank(Name) || Name == _nameFromAlias))
+        {
+            Name = alias;
+            _nameFromAlias = Name;
+        }
     }
 
     /// <summary>별칭을 고르면 접속 요약을 보이고, 이름이 비었거나 앞서 별칭으로 채운 이름이면 이름도 별칭으로 채운다.</summary>
@@ -761,7 +781,12 @@ public sealed partial class ProfileEditorViewModel : ViewModelBase
                 {
                     errors.Add("접속 문자열을 입력하세요.");
                 }
+                else if (EasyConnectError is { Length: > 0 } parens)
+                {
+                    errors.Add(parens);
+                }
 
+                // 사람이 적은 여러 줄 모양 그대로 저장한다(다시 열면 같은 모양). 접속·시험 때만 한 줄로 정리한다.
                 return EasyConnect.Trim();
             default:
                 if (string.IsNullOrWhiteSpace(TnsAlias))

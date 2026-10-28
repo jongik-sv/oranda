@@ -175,17 +175,21 @@
       <CheckBox x:Name="TlsBox" Grid.Row="1" Grid.Column="2" Grid.ColumnSpan="2" Content="TLS(tcps)" IsChecked="{Binding UseTls}" />
     </Grid>
 
-    <Grid IsVisible="{Binding IsEasyConnectMode}" ColumnSpacing="12">
+    <Grid IsVisible="{Binding IsEasyConnectMode}" RowDefinitions="Auto,Auto" ColumnSpacing="12" RowSpacing="2">
       <Grid.ColumnDefinitions>
         <ColumnDefinition Width="Auto" SharedSizeGroup="Label" />
         <ColumnDefinition Width="*" />
       </Grid.ColumnDefinitions>
-      <TextBlock Text="접속 문자열" Classes.error="{Binding EasyConnectMissing}" />
-      <!-- 접속 기술자((DESCRIPTION=…))는 길어서 접어 보인다: 두 줄에서 시작해 세 줄까지 늘어난다(Enter 는 넣지 않는다). -->
+      <TextBlock Text="접속 문자열" Classes.error="{Binding EasyConnectMissing}" VerticalAlignment="Top" Margin="0,5,0,0" />
+      <!-- 여러 줄 편집: tnsnames.ora 항목(별칭 = (DESCRIPTION = …))을 들여쓰기·주석째 붙여 넣는다. Enter 는 줄 바꿈, Tab 은 다음 칸.
+           세 줄 높이에서 시작해 열두 줄까지 늘고 그 뒤는 칸 안에서 스크롤. 저장은 적은 모양 그대로, 접속 때만 한 줄로 정리한다. -->
       <TextBox x:Name="EasyConnectBox" Grid.Column="1" Text="{Binding EasyConnect}" Classes.missing="{Binding EasyConnectMissing}"
-               TextWrapping="Wrap" AcceptsReturn="False" MinHeight="52" MaxHeight="76" VerticalContentAlignment="Top"
-               FontFamily="{StaticResource OrandaCodeFontFamily}"
-               PlaceholderText="host:1521/service?connect_timeout=5, tcps://… 또는 (DESCRIPTION=…)" AutomationProperties.Name="접속 문자열" />
+               TextWrapping="Wrap" AcceptsReturn="True" AcceptsTab="False" MinHeight="68" MaxHeight="236" VerticalContentAlignment="Top"
+               ScrollViewer.VerticalScrollBarVisibility="Auto" FontFamily="{StaticResource OrandaCodeFontFamily}"
+               PlaceholderText="host:1521/service, tcps://… 또는 tnsnames.ora 형식 (DESCRIPTION = …) 여러 줄" AutomationProperties.Name="접속 문자열" />
+      <TextBlock x:Name="EasyConnectErrorText" Grid.Row="1" Grid.Column="1" Classes="error" Text="{Binding EasyConnectError}" TextWrapping="Wrap"
+                 TextAlignment="Left" FontSize="{DynamicResource OrandaFontSizeSmall}"
+                 IsVisible="{Binding EasyConnectError, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
     </Grid>
 
     <!-- 폴더 칸은 직접 입력하거나 「찾아보기…」 로 폴더 선택 창에서 고른다. 방식이 쓰지 않는 칸은 숨긴다(TNS 디렉터리 = TNS 별칭만, 지갑 = TLS 를 쓸 수 있을 때). -->

@@ -359,7 +359,7 @@ public static class ConnectionDialogs
         var window = Build(
             $"{profile.Name} 비밀번호",
             [
-                new TextBlock { Text = $"{profile.User}@{profile.DataSource}", TextWrapping = Avalonia.Media.TextWrapping.Wrap },
+                new TextBlock { Text = $"{profile.User}@{Oranda.Core.Connection.ConnectStringText.Normalize(profile.DataSource)}", TextWrapping = Avalonia.Media.TextWrapping.Wrap },
                 box,
             ],
             ok,

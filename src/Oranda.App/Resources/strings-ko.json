@@ -607,6 +607,7 @@
   "Connection.tns.noFile": "이 폴더에 tnsnames.ora 가 없습니다.",
   "Connection.tns.count": "tnsnames.ora 별칭 {0}개",
   "Connection.tns.unknown": "tnsnames.ora 에 이 별칭이 없습니다.",
+  "Connection.custom.parens": "접속 문자열의 괄호 짝이 맞지 않습니다. 여는 괄호와 닫는 괄호 수를 확인하세요.",
   "Connection.color.default": "기본 색",
   "Connection.color.blue": "파랑",
   "Connection.color.navy": "남색",
