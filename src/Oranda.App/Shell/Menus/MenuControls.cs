@@ -71,8 +71,12 @@ public sealed class MenuControls(ICommandRegistry registry, IContextKeys keys, F
 
         public List<Bound> Tops { get; } = [];
 
+        /// <summary>지금 열려 있는 최상위 메뉴 수(<see cref="NativeMenu.Opening"/>·<see cref="NativeMenu.Closed"/>). 0 보다 크면 단축키를 모두 보인다.</summary>
+        public int Open { get; set; }
+
         public void Clear()
         {
+            Open = 0; // 갈아 끼운 옛 메뉴의 닫힘은 오지 않을 수 있다: 키를 계속 쥐지 않게 닫힌 상태로 돌린다
             Tops.Clear();
             Commands.Clear();
             Panels.Clear();
@@ -113,9 +117,10 @@ public sealed class MenuControls(ICommandRegistry registry, IContextKeys keys, F
             }
 
             // 단축키는 지금 문맥에서 키맵이 이 명령으로 보낼 때만 메뉴가 가져간다(그리드에서 ⌘C 를 편집기 복사가 가로채지 않게).
+            // Gesture 는 표시도 맡으므로 메뉴가 열려 있는 동안(키를 찾지 않을 때)은 창 안 메뉴처럼 모두 보인다.
             foreach (var (item, commandId, key) in set.Gestures)
             {
-                var mine = resolve is null || string.Equals(resolve(key), commandId, StringComparison.Ordinal);
+                var mine = set.Open > 0 || resolve is null || string.Equals(resolve(key), commandId, StringComparison.Ordinal);
                 if (mine != (item.Gesture is not null))
                 {
                     item.Gesture = mine ? key : null;
@@ -360,6 +365,17 @@ public sealed class MenuControls(ICommandRegistry registry, IContextKeys keys, F
                     bound.SetEmpty = v => empty.IsVisible = v;
                 }
 
+                // 시스템은 메뉴를 열 때 NeedsUpdate 다음에 Opening 을 낸다. 하위 메뉴의 열림·닫힘은 세지 않는다(부모가 아직 열려 있다).
+                menu.Opening += (_, _) =>
+                {
+                    set.Open++;
+                    RefreshEnablement();
+                };
+                menu.Closed += (_, _) =>
+                {
+                    set.Open = Math.Max(0, set.Open - 1);
+                    RefreshEnablement();
+                };
                 root.Add(new NativeMenuItem(top.Title) { Menu = menu });
                 set.Tops.Add(bound);
                 ApplyState(bound);
