@@ -13,6 +13,12 @@ public sealed partial class ResultGridModel
     /// <summary>이 칸을 위험색으로 그리는가(<see cref="CellEmphasis"/>).</summary>
     public bool IsEmphasized(long viewRow, int ordinal) => CellEmphasis?.Invoke(viewRow, ordinal) == true;
 
+    /// <summary>(화면 행, 열 ordinal)을 받아 참이면 그 칸 글자를 주의색으로 그린다(튜닝 표의 느린 plan_hash·미승인 baseline 등). 위험색이 먼저. 기본 없음.</summary>
+    public Func<long, int, bool>? CellWarning { get; set; }
+
+    /// <summary>이 칸을 주의색으로 그리는가(<see cref="CellWarning"/>).</summary>
+    public bool IsWarned(long viewRow, int ordinal) => CellWarning?.Invoke(viewRow, ordinal) == true;
+
     /// <summary>화면 행 → 결과 집합의 원래 행 번호(정렬·거르기를 거친 뒤). 새 행이거나 범위 밖이면 -1.</summary>
     public long SourceRowOf(long viewRow)
     {

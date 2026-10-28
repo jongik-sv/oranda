@@ -335,8 +335,9 @@ public sealed partial class ResultGridControl
 
                 var isNull = m.IsNull(r, ord);
                 var emphasized = !isNull && m.CellEmphasis is not null && m.IsEmphasized(r, ord); // 모니터의 블로커 칸 등
-                var key = (r << 12) | (uint)(ord & 0xFFF) | (isNull ? 1L << 62 : 0) | (emphasized ? 1L << 61 : 0);
-                var brush = isNull ? pal.NullText : emphasized ? pal.Danger : pal.Text;
+                var warned = !isNull && !emphasized && m.CellWarning is not null && m.IsWarned(r, ord); // 튜닝 표의 느린 plan_hash 등
+                var key = (r << 12) | (uint)(ord & 0xFFF) | (isNull ? 1L << 62 : 0) | (emphasized ? 1L << 61 : 0) | (warned ? 1L << 60 : 0);
+                var brush = isNull ? pal.NullText : emphasized ? pal.Danger : warned ? pal.Warning : pal.Text;
                 var t = _cells.Get(key, text, s => f.Create(s, brush));
                 var tx = m.IsRightAligned(ord) ? x + w - CellPadX - t.Width : x + CellPadX;
                 t.Draw(ctx, new Point(tx, y + (rh - t.Height) / 2));
@@ -460,6 +461,9 @@ public sealed partial class ResultGridControl
         /// <summary>강조 칸(<see cref="ResultGridModel.CellEmphasis"/>) 글자 색.</summary>
         public required IBrush Danger { get; init; }
 
+        /// <summary>주의 칸(<see cref="ResultGridModel.CellWarning"/>) 글자 색.</summary>
+        public required IBrush Warning { get; init; }
+
         public required IPen Line { get; init; }
 
         public required IPen FrozenLine { get; init; }
@@ -496,6 +500,7 @@ public sealed partial class ResultGridControl
                 Text = Brush("OrandaGridTextBrush", 0xFF202020, 0xFFDCDDDE),
                 NullText = Brush("OrandaGridNullBrush", 0xFF9AA0A6, 0xFF7C828A),
                 Danger = Brush("OrandaDangerForegroundBrush", 0xFFC42B1C, 0xFFFF6B5E),
+                Warning = Brush("OrandaWarningForegroundBrush", 0xFF9A5B00, 0xFFE0A84A),
                 Line = new Pen(line, 1),
                 FrozenLine = new Pen(accent, 1),
                 ActiveBorder = new Pen(accent, 1),

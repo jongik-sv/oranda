@@ -5,7 +5,7 @@ using Avalonia.Styling;
 using Avalonia.Threading;
 using Avalonia.VisualTree;
 using Oranda.App.Features.LockMonitor;
-using Oranda.App.Shell.Controls;
+using Oranda.App.Features.SessionMonitor;
 using Oranda.App.Tests.Shell.Headless;
 using Oranda.Core.Connection;
 using Oranda.Core.Monitoring;
@@ -106,11 +106,12 @@ public class LockP2ViewTests
         var (w, view) = Show(h.Vm);
         try
         {
-            var idle = view.FindControl<DetailTable>("IdleTable")!;
+            var idle = view.FindControl<MonitorGrid>("IdleTable")!;
+            await HeadlessHost.WaitUntil(() => idle.Model is { RowCount: 4, HasSelection: true });
             Assert.True(idle.IsEffectivelyVisible);
-            Assert.Equal(IdleTransactionItem.Columns, idle.Columns);
-            Assert.Equal(4, idle.Rows!.Count);
-            Assert.Equal(0, idle.CurrentRowIndex); // 2·0644 가 ▶
+            Assert.Equal(LockMonitorView.IdleColumns.Select(c => c.Name), idle.Model!.Columns.Select(c => c.Name));
+            Assert.Equal(0, idle.Model.Active.Row); // 2·0644 가 ▶
+            Assert.True(idle.Model.IsEmphasized(0, 9)); // 차단 칸은 위험색
             Assert.True(view.FindControl<Border>("HistoryStrip")!.IsEffectivelyVisible);
             Assert.True(view.FindControl<LockHistoryChart>("HistoryChart")!.Bounds.Width > 200);
             Assert.True(view.FindControl<LockAlertToast>("InlineToast")!.IsEffectivelyVisible);
@@ -160,10 +161,10 @@ public class LockP2ViewTests
         {
             Assert.True(view.FindControl<Border>("CycleBand")!.IsEffectivelyVisible);
             Assert.StartsWith("1·0388 → 2·1903 → 1·0388", view.FindControl<TextBlock>("CycleTextLine")!.Text, StringComparison.Ordinal);
-            var table = view.FindControl<DetailTable>("DeadlockTable")!;
+            var table = view.FindControl<MonitorGrid>("DeadlockTable")!;
+            await HeadlessHost.WaitUntil(() => table.Model is { RowCount: 2 });
             Assert.True(table.IsEffectivelyVisible);
-            Assert.Equal(DeadlockItem.Columns, table.Columns);
-            Assert.Equal(2, table.Rows!.Count);
+            Assert.Equal(LockMonitorView.DeadlockColumns.Select(c => c.Name), table.Model!.Columns.Select(c => c.Name));
             Assert.Contains(Texts(view), t => t.Text == "Enter: 편집기로 열기");
             Render(w, "cycle-deadlocks", W, H);
 
@@ -201,14 +202,14 @@ public class LockP2ViewTests
         {
             Assert.Contains(Texts(view), t => t.Text == "이 버전은 데드락 기록을 읽지 않습니다");
             Assert.Contains(Texts(view), t => t.Text?.StartsWith("11g 에서는 alert 로그를", StringComparison.Ordinal) == true);
-            Assert.False(view.FindControl<DetailTable>("DeadlockTable")!.IsEffectivelyVisible);
+            Assert.False(view.FindControl<MonitorGrid>("DeadlockTable")!.IsEffectivelyVisible);
             Render(w, "deadlock-11g", 1100, 640);
 
             vm.TopTabIndex = LockMonitorViewModel.IdleTab;
             await vm.LoadIdleTransactionsAsync();
             Pump();
             Assert.Contains(Texts(view), t => t.Text == "방치 트랜잭션이 없습니다");
-            Assert.False(view.FindControl<DetailTable>("IdleTable")!.IsEffectivelyVisible);
+            Assert.False(view.FindControl<MonitorGrid>("IdleTable")!.IsEffectivelyVisible);
             Render(w, "idle-empty", 1100, 640);
         }
         finally

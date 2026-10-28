@@ -197,7 +197,7 @@ public sealed record LockSessionFacts(string? Username, string? Machine, string?
     }
 }
 
-/// <summary>잠금 목록 한 줄(DetailTable 칸 글).</summary>
+/// <summary>잠금 목록 한 줄. <see cref="Cells"/> 는 복사·CSV 글, 화면 그리드 열은 <see cref="LockMonitorView"/> 가 정한다.</summary>
 public sealed class LockItem(LockRow row, string objectText)
 {
     public static readonly string[] Columns =
@@ -267,6 +267,12 @@ public sealed class ImpactItem(int rank, BlockerImpact impact, LockTreeItem? hol
 
     public SessionKey Key => Impact.Holder;
 
+    /// <summary>순위(1 부터).</summary>
+    public int Rank => rank;
+
+    /// <summary>보유자 트랜잭션을 연 뒤 경과 초. 시작 시각을 모르면 null.</summary>
+    public long? TransactionSeconds => facts.TransactionStart is { } t ? (long)Math.Max(0, (collectedAt - t).TotalSeconds) : null;
+
     public IReadOnlyList<object?> Cells =>
     [
         rank.ToString(CultureInfo.InvariantCulture),
@@ -276,7 +282,7 @@ public sealed class ImpactItem(int rank, BlockerImpact impact, LockTreeItem? hol
         Impact.WaiterCount.ToString("N0", CultureInfo.InvariantCulture),
         LockText.Seconds(Impact.MaxWaitSeconds),
         LockText.Seconds(Impact.TotalWaitSeconds),
-        facts.TransactionStart is { } t ? LockText.Seconds((long)Math.Max(0, (collectedAt - t).TotalSeconds)) : LockText.Dash,
+        TransactionSeconds is { } elapsed ? LockText.Seconds(elapsed) : LockText.Dash,
         facts.Program ?? string.Empty,
     ];
 }

@@ -7,7 +7,7 @@ using Avalonia.Styling;
 using Avalonia.Threading;
 using Avalonia.VisualTree;
 using Oranda.App.Features.LockMonitor;
-using Oranda.App.Shell.Controls;
+using Oranda.App.Features.SessionMonitor;
 using Oranda.App.Tests.Shell.Headless;
 using Oranda.Core.Connection;
 
@@ -87,13 +87,14 @@ public class LockMonitorViewTests
         try
         {
             var tree = view.FindControl<ListBox>("TreeList")!;
-            var locks = view.FindControl<DetailTable>("LockTable")!;
+            var locks = view.FindControl<MonitorGrid>("LockTable")!;
+            await HeadlessHost.WaitUntil(() => locks.Model is { RowCount: > 0, HasSelection: true });
             Assert.True(Visible(view.FindControl<Grid>("DataGrid")!));
             Assert.Equal(8, tree.GetVisualDescendants().OfType<ListBoxItem>().Count());
-            Assert.Equal(LockItem.Columns, locks.Columns);
+            Assert.Equal(LockMonitorView.LockColumns.Select(c => c.Name), locks.Model!.Columns.Select(c => c.Name));
             Assert.Same(h.Vm.TreeRows[0], tree.SelectedItem);
-            Assert.Equal(2, locks.SelectedRows.Count); // 1·1287 의 TX·TM
-            Assert.Equal(0, locks.CurrentRowIndex);
+            Assert.Equal(2, locks.Model.SelectedRowCount); // 1·1287 의 TX·TM
+            Assert.Equal(0, locks.Model.Active.Row);
             Assert.Contains(Texts(view), t => t.Text == "보유 · 대기자 3");
             Render(w, "data");
 
@@ -101,14 +102,15 @@ public class LockMonitorViewTests
             tree.SelectedItem = h.Vm.TreeRows[4]; // 2·0644
             Pump();
             Assert.Equal(FakeLockMonitor.H2, h.Vm.SelectedKey);
-            Assert.Equal(6, locks.CurrentRowIndex);
+            Assert.Equal(6, locks.Model.Active.Row);
 
             // 자동 새로 고침(목록 다시 채움) 뒤에도 고름이 남는다.
+            var before = locks.Model;
             await h.Vm.RefreshAsync();
+            await HeadlessHost.WaitUntil(() => !ReferenceEquals(locks.Model, before));
             Pump();
-            view.Rebuild();
             Assert.Equal(FakeLockMonitor.H2, h.Vm.SelectedKey);
-            Assert.Equal(6, locks.CurrentRowIndex);
+            Assert.Equal(6, locks.Model!.Active.Row);
 
             // 영향 순위 탭 · 원인 힌트 탭 · DDL 탭 · 잠긴 행 탭.
             h.Vm.TopTabIndex = LockMonitorViewModel.RankTab;
@@ -117,7 +119,7 @@ public class LockMonitorViewTests
             Pump();
             view.Rebuild();
             Pump();
-            Assert.Equal(3, view.FindControl<DetailTable>("ImpactTable")!.Rows!.Count);
+            await HeadlessHost.WaitUntil(() => view.FindControl<MonitorGrid>("ImpactTable")!.Model is { RowCount: 3 });
             Render(w, "rank-hints");
 
             h.Vm.TopTabIndex = LockMonitorViewModel.DdlTab;
@@ -128,15 +130,15 @@ public class LockMonitorViewTests
             Pump();
             view.Rebuild();
             Pump();
-            Assert.Equal(3, view.FindControl<DetailTable>("DdlTable")!.Rows!.Count);
-            Assert.Equal(4, view.FindControl<DetailTable>("LockedRowTable")!.Rows!.Count);
+            await HeadlessHost.WaitUntil(() => view.FindControl<MonitorGrid>("DdlTable")!.Model is { RowCount: 3 });
+            await HeadlessHost.WaitUntil(() => view.FindControl<MonitorGrid>("LockedRowTable")!.Model is { RowCount: 4 });
             Render(w, "ddl-row");
 
             h.Vm.TopTabIndex = LockMonitorViewModel.TreeTab;
             h.Vm.DetailTabIndex = LockMonitorViewModel.BindTab;
             await h.Vm.LoadDetailAsync();
             Pump();
-            Assert.Equal(2, view.FindControl<DetailTable>("BindTable")!.Rows!.Count);
+            await HeadlessHost.WaitUntil(() => view.FindControl<MonitorGrid>("BindTable")!.Model is { RowCount: 2 });
             Render(w, "binds");
         }
         finally

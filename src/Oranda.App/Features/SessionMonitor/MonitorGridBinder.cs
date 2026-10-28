@@ -54,6 +54,18 @@ public sealed class MonitorGridBinder<T> where T : class
     /// <summary>(항목, 열 번호)를 받아 참이면 그 칸을 위험색 글자로 그린다(블로커 칸). 행을 채우기 전에 정한다.</summary>
     public Func<T, int, bool>? CellEmphasis { get; set; }
 
+    /// <summary>(항목, 열 번호)를 받아 참이면 그 칸을 주의색 글자로 그린다(느린 plan_hash·미승인 baseline). 위험색이 먼저. 행을 채우기 전에 정한다.</summary>
+    public Func<T, int, bool>? CellWarning { get; set; }
+
+    /// <summary>
+    /// 선택 묶음 키(없으면 행 키). 화면 모델이 항목을 고르면 같은 묶음의 행을 모두 고르고 ▶ 를 그 가운데 첫 행에 둔다
+    /// (Lock 모니터 잠금 목록: 고른 세션의 잠금 전부). 그리드의 현재 행이 이미 같은 묶음이면 그대로 둔다.
+    /// </summary>
+    public Func<T, object>? SelectionGroup { get; set; }
+
+    /// <summary>그리드 현재 행(▶)의 항목. 없으면 null.</summary>
+    public T? CurrentItem => _grid.Model is { } m ? ActiveItem(m) : null;
+
     /// <summary>지금 보이는 결과(시험용).</summary>
     public ResultGridModel? Model => _grid.Model;
 
@@ -113,6 +125,15 @@ public sealed class MonitorGridBinder<T> where T : class
         Refresh();
     }
 
+    /// <summary>화면 모델 선택 없이 항목 목록만 잇는다(데드락 기록·잠긴 행처럼 다른 표와 엮이지 않는 표). 현재 행은 <see cref="CurrentItem"/>.</summary>
+    public void Attach(ObservableCollection<T> items)
+    {
+        ArgumentNullException.ThrowIfNull(items);
+        _items = items;
+        items.CollectionChanged += (_, _) => Refresh();
+        Refresh();
+    }
+
     /// <summary>칸 값이 바뀌었을 때(델타 보기 전환 등)·목록이 바뀌었을 때 다시 만든다(한 번에 몰아서).</summary>
     public void Refresh()
     {
@@ -143,6 +164,11 @@ public sealed class MonitorGridBinder<T> where T : class
         if (CellEmphasis is { } emphasis)
         {
             m.CellEmphasis = (viewRow, ordinal) => m.SourceRowOf(viewRow) is var src && src >= 0 && src < items.Count && emphasis(items[(int)src], ordinal);
+        }
+
+        if (CellWarning is { } warning)
+        {
+            m.CellWarning = (viewRow, ordinal) => m.SourceRowOf(viewRow) is var src && src >= 0 && src < items.Count && warning(items[(int)src], ordinal);
         }
 
         var old = _grid.Model;
@@ -193,7 +219,7 @@ public sealed class MonitorGridBinder<T> where T : class
 
         // 화면 모델이 고른 항목(새로 고침 뒤 같은 키, 다른 창이 고르게 한 세션)이 그리드의 현재 행과 다르면 화면 모델 쪽을 따른다.
         var want = _getSelected?.Invoke();
-        if (want is not null && !Equals(ActiveItem(m) is { } a ? _key(a) : null, _key(want)))
+        if (want is not null && !(ActiveItem(m) is { } a && Same(a, want)))
         {
             SelectFromOwner();
         }
@@ -249,7 +275,22 @@ public sealed class MonitorGridBinder<T> where T : class
         }
         else
         {
-            m.SetSelectedRows(rows.Select(r => (r, r)), activeRow);
+            SelectRows(m, rows, activeRow);
+        }
+    }
+
+    // 행 여럿을 고른다. 이어진 행이고 현재 행이 첫 행이면 ▶ 를 첫 행에 두고(위로 넓힌 칸 범위), 아니면 떨어진 행 구간으로 고른다.
+    private static void SelectRows(ResultGridModel m, List<long> rows, long active)
+    {
+        rows.Sort();
+        if (rows.Count > 1 && active == rows[0] && rows[^1] - rows[0] == rows.Count - 1)
+        {
+            m.SelectCell(new GridCell(rows[^1], Math.Max(0, m.VisibleColumns.Count - 1)));
+            m.ExtendTo(new GridCell(rows[0], 0));
+        }
+        else
+        {
+            m.SetSelectedRows(rows.Select(r => (r, r)), active);
         }
     }
 
@@ -257,6 +298,44 @@ public sealed class MonitorGridBinder<T> where T : class
     {
         var src = model.SourceRowOf(viewRow);
         return src >= 0 && src < items.Count ? items[(int)src] : null;
+    }
+
+    // 같은 선택인가: 묶음 키가 있으면 묶음으로, 없으면 행 키로.
+    private bool Same(T a, T b) => SelectionGroup is { } g ? Equals(g(a), g(b)) : Equals(_key(a), _key(b));
+
+    // 묶음의 행을 모두 고르고 ▶ 를 첫 행(화면 순서)에 둔다(떨어진 행이면 첫 구간의 끝).
+    private void SelectGroup(ResultGridModel m, object groupKey, Func<T, object> group)
+    {
+        var rows = new List<long>();
+        for (var r = 0L; r < m.RowCount; r++)
+        {
+            if (ItemAt(m, _shown, r) is { } it && Equals(group(it), groupKey))
+            {
+                rows.Add(r);
+            }
+        }
+
+        if (rows.Count == 0)
+        {
+            return;
+        }
+
+        var col = m.HasSelection ? m.Active.Col : 0;
+        _syncing = true;
+        try
+        {
+            m.SelectAndReveal(new GridCell(rows[0], col));
+            if (rows.Count > 1)
+            {
+                SelectRows(m, rows, rows[0]);
+            }
+        }
+        finally
+        {
+            _syncing = false;
+        }
+
+        _lastActive = ActiveItem(m);
     }
 
     private T? ActiveItem(ResultGridModel m) => m.HasSelection ? ItemAt(m, _shown, m.Active.Row) : null;
@@ -323,12 +402,19 @@ public sealed class MonitorGridBinder<T> where T : class
             return;
         }
 
-        var key = _key(selected);
-        if (ActiveItem(m) is { } cur && Equals(_key(cur), key))
+        if (ActiveItem(m) is { } cur && Same(cur, selected))
         {
             _lastActive = cur;
             return;
         }
+
+        if (SelectionGroup is { } group)
+        {
+            SelectGroup(m, group(selected), group);
+            return;
+        }
+
+        var key = _key(selected);
 
         for (var r = 0L; r < m.RowCount; r++)
         {

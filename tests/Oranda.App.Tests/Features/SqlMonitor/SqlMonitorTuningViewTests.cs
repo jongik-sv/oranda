@@ -1,7 +1,7 @@
 using Avalonia.Controls;
 using Avalonia.Threading;
 using Oranda.App.Features.SqlMonitor;
-using Oranda.App.Shell.Controls;
+using Oranda.App.Features.SessionMonitor;
 using Oranda.App.Tests.Features.MyBatisWorkspace.Flow;
 using Oranda.App.Tests.Shell.Headless;
 using Oranda.Core.Connection;
@@ -127,14 +127,15 @@ public class SqlMonitorTuningViewTests
         h.Vm.DetailTabIndex = SqlMonitorViewModel.AwrTab;
         window = Show(h.Vm);
         Assert.Equal(AwrPaneState.Loaded, h.Vm.Awr.State);
-        Assert.Equal(4, Named<DetailTable>(window, "AwrList").Rows!.Count);
+        await HeadlessHost.WaitUntil(() => Named<MonitorGrid>(window, "AwrList").Model is { RowCount: 4 });
         Assert.True(Named<Button>(window, "AwrCompareButton").IsEnabled);
         h.Vm.Awr.SelectedRow = h.Vm.Awr.Rows[3];
         Shot(window, "awr-loaded");
 
         await h.Vm.Awr.CompareAsync();
         MyBatisFlowRig.Pump();
-        Assert.True(Named<DetailTable>(window, "AwrCompareList").IsEffectivelyVisible);
+        Assert.True(Named<MonitorGrid>(window, "AwrCompareList").IsEffectivelyVisible);
+        await HeadlessHost.WaitUntil(() => Named<MonitorGrid>(window, "AwrCompareList").Model is { RowCount: > 0 });
         Shot(window, "awr-compare");
 
         h.Tuning.Awr = [];
@@ -156,7 +157,8 @@ public class SqlMonitorTuningViewTests
         h.Vm.DetailTabIndex = SqlMonitorViewModel.ControlsTab;
         var window = Show(h.Vm);
         Assert.Equal(PlanControlsState.Loaded, h.Vm.Controls.State);
-        Assert.Equal(3, Named<DetailTable>(window, "ControlsList").Rows!.Count);
+        await HeadlessHost.WaitUntil(() => Named<MonitorGrid>(window, "ControlsList").Model is { RowCount: 3 });
+        Assert.True(Named<MonitorGrid>(window, "ControlsList").Model!.IsWarned(1, 2)); // 미승인 baseline 상태 칸은 주의색
         Shot(window, "controls-loaded");
 
         h.Tuning.Controls = [];

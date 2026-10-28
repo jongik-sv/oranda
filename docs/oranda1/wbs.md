@@ -1153,6 +1153,18 @@ levels:
   - acceptance: TuningRecommendationRulesTests 14(규칙마다 걸림/안 걸림·점수 순서·최대 100·0 나누기·NULL·실행 0·내부 제외·리터럴 묶음) / TuningCatalogTests(recommend_* 3개 팩 없음·11g·SELECT 전용·바인드·gv$sqlstats) / TuningRecommendLogicTests 2(sql_id 목록·행 매핑) / TuningRecommendTests 통합(26ai·11g 상주 컨테이너, 형태만) / TuningRecommendationTests 9(명령 등록·메뉴, 점수순 목록·토글, 행 선택 상세·전문, 도우미·자식 커서·편집기, 바로 가기 sql_id, 권한 오류·세션 없음, Headless 결과 그리드 줄·행 선택, 세션 탭 검사·고른 세션·이동, 활성 SQL 없음) / `dotnet build Oranda.sln -warnaserror`
   - note: 결과: Core TuningRecommendation.cs, ITuningService 기본 구현 2개(GetTuningCandidatesAsync·GetPlanFindingsAsync), Oracle OracleTuningService.Recommend.cs, App SqlMonitor/TuningRecommendations*(뷰모델·뷰)·SqlMonitorViewModel.Recommend.cs, SessionMonitor/SessionTuningHints*·SessionMonitorViewModel.TuningHints.cs, 기존 axaml 에는 탭 한 줄씩. 후속 후보: 문턱값 설정화, AWR 기반 기간 추천(Diagnostics 선언 시), RAC 에서 파싱 스키마 부질의 비용 확인 (win144)
 
+- [x] TSK-14-18: Lock 모니터 표 7개와 SQL 모니터 튜닝 탭 표 3개를 조회 결과와 같은 그리드로(정렬·열 끌기·너비·필터, 새로 고침 뒤 유지) [win144] w:1 2026-10-28~2026-10-28
+  - category: feat
+  - domain: frontend
+  - model: opus
+  - priority: medium
+  - tags: lock-monitor, sql-monitor, result-grid, win144
+  - prd-ref: PRD 16, D-049, D-052
+  - depends: TSK-14-15
+  - requirements: 사용자 결정(2026-10-28) 「바꾼다」 — TSK-14-15 에서 남긴 Lock 모니터 표 7개(잠금 목록·보유자 영향 순위·방치 트랜잭션·DDL 잠금·데드락 기록·잠긴 행·바인드)와 SQL 모니터 튜닝 탭 표 3개(AWR 계획 이력·두 plan_hash 비교·계획 관리)를 DetailTable 에서 MonitorGrid + MonitorGridBinder 로 바꾼다(복사 구현 없이). 숫자 열은 원시 값(수로 정렬, 천 단위 쉼표, 단위는 머리글: ctime(초)·undo(블록)·최대 대기(초)·경과/실행(ms) 등). 새로 고침·다시 읽기 뒤 정렬·열 순서·너비·필터·고른 행·스크롤 유지. 고유 키: 잠금 = 세션(인스턴스·SID·SERIAL#)+유형+id1+id2+요청 모드, 영향 순위·방치 트랜잭션 = 세션, DDL = 세션+객체+유형+모드, 데드락 = 시각+인스턴스, 잠긴 행 = 열 이름, 바인드 = 이름+위치, AWR = SNAP_ID+PLAN_HASH, 계획 관리 = 종류+이름, 비교 = 기준 Id+대상 Id. 그대로 둘 것: 어느 표에서 골라도 같은 세션(트리·잠금 목록·영향 순위·방치·DDL 연동), 잠금 목록·DDL 은 그 세션 줄을 모두 고르고 ▶ 첫 줄, 오른쪽 클릭 context:lockMonitor 명령, Delete = 세션 종료 확인, 데드락 Enter·두 번 누르기 = 편집기로, 위험색(요청 모드·차단·대기자·DDL 대기·비교 바뀜/큰 차이), 주의색(느린 plan_hash·미승인 baseline), 빈 상태 글·권한 띠; 제약: 실앱 SendKeys 금지(Headless 까지); 비고: 레인 sr-lockgrid
+  - acceptance: LockMonitorGridTests 5(잠금 목록 ctime 숫자 정렬·TX 필터·너비·고른 세션이 새로 고침 뒤 남음, 잠금 줄 클릭 → 트리까지 같은 세션·Delete 로 종료 확인, 데드락 시각 정렬·Enter 로 편집기·새로 고침 뒤 정렬 유지, AWR 실행 정렬·느린 plan_hash 주의색·다시 읽기 뒤 같은 snap 고름, 계획 관리 정렬 유지·미승인 주의색) / 기존 LockMonitorView·LockP2View·SqlMonitorTuningView 시험을 그리드로 고쳐 통과 / LockMonitor·SqlMonitor·SessionMonitor·MonitorGrid·ResultGrid·Localization·RowView 시험 484 통과 / `dotnet build Oranda.sln -warnaserror`
+  - note: 바꾼 곳 = LockMonitorView.axaml(.cs)(표 열 정의·어댑터 7개), SqlMonitorView.axaml(.cs)(튜닝 표 3개), MonitorGridBinder(CellWarning·SelectionGroup·CurrentItem·선택 없는 Attach, 이어진 행 여럿을 고를 때 ▶ 를 첫 행에), ResultGridModel.CellWarning·ResultGridControl 주의색, ImpactItem.Rank·TransactionSeconds. 쓸 곳이 없어진 MonitorTableBinder 를 지우고 MonitorStatusLine 만 남겼다. 복사·CSV 단추 글은 예전 Cells(「287 초」 꼴) 그대로 (win144)
+
 ## 의존 그래프
 
 ### 그래프 (Mermaid)
@@ -1263,6 +1275,7 @@ graph LR
   TSK-13-37 --> TSK-14-15
   TSK-14-15 --> TSK-14-16
   TSK-14-15 --> TSK-14-17
+  TSK-14-15 --> TSK-14-18
   style TSK-01-02 fill:#e8f5e9,stroke:#2e7d32
   style TSK-03-01 stroke:#c62828,stroke-width:2px
   style TSK-02-02 stroke:#c62828,stroke-width:2px

@@ -4,7 +4,6 @@
              xmlns:icons="using:Oranda.App.Shell.Icons"
              xmlns:vm="using:Oranda.App.Features.SqlMonitor"
              xmlns:mon="using:Oranda.App.Features.SessionMonitor"
-             xmlns:ctl="using:Oranda.App.Shell.Controls"
              x:Class="Oranda.App.Features.SqlMonitor.SqlMonitorView"
              keymaps:FocusSlot.Name="monitor"
              x:DataType="vm:SqlMonitorViewModel">
@@ -405,7 +404,7 @@
                         <TextBlock Text="{Binding SummaryText}" />
                       </DockPanel>
                     </Border>
-                    <ctl:DetailTable x:Name="AwrList" />
+                    <mon:MonitorGrid x:Name="AwrList" />
                   </DockPanel>
                 </Grid>
                 <Border Grid.Row="1" Classes="compare-banner" Classes.differs="{Binding CompareHashDiffers}" IsVisible="{Binding HasComparison}">
@@ -420,7 +419,7 @@
                     </StackPanel>
                   </DockPanel>
                 </Border>
-                <ctl:DetailTable x:Name="AwrCompareList" Grid.Row="2" MaxHeight="220" IsVisible="{Binding Comparison, Converter={x:Static ObjectConverters.IsNotNull}}" />
+                <mon:MonitorGrid x:Name="AwrCompareList" Grid.Row="2" MaxHeight="220" IsVisible="{Binding Comparison, Converter={x:Static ObjectConverters.IsNotNull}}" />
               </Grid>
             </Panel>
           </Border>
@@ -454,7 +453,7 @@
                 <Border DockPanel.Dock="Bottom" Classes="pane-foot">
                   <TextBlock Text="{Binding SourceText}" TextTrimming="CharacterEllipsis" />
                 </Border>
-                <ctl:DetailTable x:Name="ControlsList" />
+                <mon:MonitorGrid x:Name="ControlsList" />
               </DockPanel>
             </Panel>
           </Border>

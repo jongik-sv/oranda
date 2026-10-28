@@ -15,9 +15,9 @@ namespace Oranda.App.Features.SqlMonitor;
 public partial class SqlMonitorView : UserControl
 {
     private readonly MonitorGridBinder<TopSqlItem> _grid;
-    private readonly MonitorTableBinder<AwrRowItem> _awrGrid;
-    private readonly MonitorTableBinder<PlanControlItem> _controlsGrid;
-    private readonly MonitorTableBinder<PlanCompareRowItem> _compareGrid;
+    private readonly MonitorGridBinder<AwrRowItem> _awrGrid;
+    private readonly MonitorGridBinder<PlanControlItem> _controlsGrid;
+    private readonly MonitorGridBinder<PlanCompareRowItem> _compareGrid;
     private SqlMonitorViewModel? _bound;
 
     public SqlMonitorView()
@@ -26,27 +26,13 @@ public partial class SqlMonitorView : UserControl
         ResultList.ExtraMenuItems = () => ShellContextMenus.Factory?.Invoke("monitor") ?? [];
         _grid = new MonitorGridBinder<TopSqlItem>(ResultList, Columns, i => i.Row.Cursor);
 
-        // 튜닝 탭 표(TSK-06-06): 숫자 칸 오른쪽 맞춤·단위, 고정폭 칸.
-        AwrList.RightAlignedColumns = [1, 2, 3, 4];
-        AwrList.MonospaceColumns = [0, 1];
-        _awrGrid = new MonitorTableBinder<AwrRowItem>(AwrList,
-            ["snap", "plan_hash", "실행", "경과/실행", "gets/실행"],
-            i => [i.SnapText, i.PlanHashText, i.ExecutionsText, i.MsPerExecText, i.GetsPerExecText],
-            i => (i.Row.SnapId, i.Row.PlanHashValue));
-        ControlsList.MonospaceColumns = [1];
-        _controlsGrid = new MonitorTableBinder<PlanControlItem>(ControlsList,
-            ["종류", "이름", "상태", "만든 때", "SQL"],
-            i => [i.KindText, i.Row.Name, i.StatusText, i.CreatedText, i.SqlPreview],
-            i => (i.Row.Kind, i.Row.Name));
-        AwrCompareList.RightAlignedColumns = [1, 2, 5, 6];
-        AwrCompareList.RowNumbers = false;
-        _compareGrid = new MonitorTableBinder<PlanCompareRowItem>(AwrCompareList,
-            ["", "기준 Id", "대상 Id", "연산", "객체", "비용", "E-Rows"],
-            i => [i.KindMark, i.PinnedIdText, i.CurrentIdText, new string(' ', i.Depth * 2) + i.OperationText, i.ObjectText, Pair(i.CostText, i.CostDeltaText), Pair(i.RowsText, i.RowsDeltaText)],
-            i => i);
-        AwrCompareList.StatusLineVisible = false;
-        AwrCompareList.CellEmphasis = (c, row) => row.Count > 0 && row[^1] is PlanCompareRowItem item
-            && ((c == 0 && item.Row.Kind != PlanDiffKind.Same) || (c == 5 && item.CostBig) || (c == 6 && item.RowsBig));
+        // 튜닝 탭 표(TSK-06-06): 주 목록과 같은 그리드(TSK-14-18). 다시 읽어도 정렬·열·너비·필터·고른 행이 남는다.
+        _awrGrid = new MonitorGridBinder<AwrRowItem>(AwrList, AwrColumns, i => (i.Row.SnapId, i.Row.PlanHashValue));
+        _controlsGrid = new MonitorGridBinder<PlanControlItem>(ControlsList, ControlColumns, i => (i.Row.Kind, i.Row.Name));
+        _compareGrid = new MonitorGridBinder<PlanCompareRowItem>(AwrCompareList, CompareColumns, i => (i.Row.Pinned?.Id, i.Row.Current?.Id))
+        {
+            CellEmphasis = (item, c) => (c == 0 && item.Row.Kind != PlanDiffKind.Same) || (c == 5 && item.CostBig) || (c == 6 && item.RowsBig),
+        };
 
         OrderBox.SelectionChanged += (_, _) =>
         {
@@ -139,6 +125,38 @@ public partial class SqlMonitorView : UserControl
         new("SQL", Oranda.Core.Grid.ColumnDataKind.Text, i => i.Preview),
     ];
 
+    /// <summary>AWR 계획 이력 열. plan_hash 는 쉼표 없이 글로 보인다.</summary>
+    internal static readonly MonitorColumn<AwrRowItem>[] AwrColumns =
+    [
+        new("snap", Oranda.Core.Grid.ColumnDataKind.Text, i => i.SnapText),
+        new("plan_hash", Oranda.Core.Grid.ColumnDataKind.Text, i => i.PlanHashText),
+        new("실행", Oranda.Core.Grid.ColumnDataKind.Number, i => i.Row.Executions),
+        new("경과/실행(ms)", Oranda.Core.Grid.ColumnDataKind.Number, i => i.MsPerExec is { } ms && double.IsFinite(ms) ? Math.Round((decimal)ms, 2) : null),
+        new("gets/실행", Oranda.Core.Grid.ColumnDataKind.Number, i => i.Row.Executions > 0 ? Math.Round((decimal)i.Row.BufferGets / i.Row.Executions) : null),
+    ];
+
+    /// <summary>계획 관리(Profile·Baseline·Patch) 열.</summary>
+    internal static readonly MonitorColumn<PlanControlItem>[] ControlColumns =
+    [
+        new("종류", Oranda.Core.Grid.ColumnDataKind.Text, i => i.KindText),
+        new("이름", Oranda.Core.Grid.ColumnDataKind.Text, i => i.Row.Name),
+        new("상태", Oranda.Core.Grid.ColumnDataKind.Text, i => i.StatusText),
+        new("만든 때", Oranda.Core.Grid.ColumnDataKind.Text, i => i.CreatedText),
+        new("SQL", Oranda.Core.Grid.ColumnDataKind.Text, i => i.SqlPreview),
+    ];
+
+    /// <summary>두 plan_hash 비교 열. 연산은 깊이만큼 들여 쓴다.</summary>
+    internal static readonly MonitorColumn<PlanCompareRowItem>[] CompareColumns =
+    [
+        new("", Oranda.Core.Grid.ColumnDataKind.Text, i => i.KindMark),
+        new("기준 Id", Oranda.Core.Grid.ColumnDataKind.Number, i => i.Row.Pinned?.Id),
+        new("대상 Id", Oranda.Core.Grid.ColumnDataKind.Number, i => i.Row.Current?.Id),
+        new("연산", Oranda.Core.Grid.ColumnDataKind.Text, i => new string(' ', i.Depth * 2) + i.OperationText),
+        new("객체", Oranda.Core.Grid.ColumnDataKind.Text, i => i.ObjectText),
+        new("비용", Oranda.Core.Grid.ColumnDataKind.Text, i => Pair(i.CostText, i.CostDeltaText)),
+        new("E-Rows", Oranda.Core.Grid.ColumnDataKind.Text, i => Pair(i.RowsText, i.RowsDeltaText)),
+    ];
+
     private static decimal Seconds(double s) => double.IsFinite(s) ? Math.Round((decimal)s, 2) + 0.00m : 0.00m; // 늘 소수 둘째 자리까지 보인다
 
     // 대기 표 줄의 「Lock 모니터」 바로 가기.
@@ -149,13 +167,11 @@ public partial class SqlMonitorView : UserControl
     private void AttachTuning(SqlMonitorViewModel vm)
     {
         // 느린 plan_hash(가장 빠른 것의 2배 이상) 줄은 plan_hash·경과/실행 칸을, 미승인 baseline 은 상태 칸을 강조한다(표를 채우기 전에 정한다).
-        AwrList.CellWarning = (c, row) => (c is 1 or 3) && row.Count > 0 && row[^1] is AwrRowItem item && vm.Awr.IsSlowPlan(item.Row.PlanHashValue);
-        ControlsList.CellWarning = (c, row) => c == 2 && row.Count > 0 && row[^1] is PlanControlItem item && item.IsUnaccepted;
-        AwrList.StatusLineVisible = false;
-        ControlsList.StatusLineVisible = false;
+        _awrGrid.CellWarning = (item, c) => c is 1 or 3 && vm.Awr.IsSlowPlan(item.Row.PlanHashValue);
+        _controlsGrid.CellWarning = (item, c) => c == 2 && item.IsUnaccepted;
         _awrGrid.Attach(vm.Awr.Rows, vm.Awr, nameof(AwrHistoryViewModel.SelectedRow), () => vm.Awr.SelectedRow, i => vm.Awr.SelectedRow = i);
-        _controlsGrid.Attach(vm.Controls.Items, vm.Controls, "None", () => null, _ => { });
-        _compareGrid.Attach(vm.Awr.CompareRows, vm.Awr, "None", () => null, _ => { });
+        _controlsGrid.Attach(vm.Controls.Items);
+        _compareGrid.Attach(vm.Awr.CompareRows);
         vm.Waits.Classes.CollectionChanged += (_, _) => RebuildClassBar();
         RebuildClassBar();
     }

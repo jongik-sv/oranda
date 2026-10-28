@@ -6,7 +6,6 @@
              xmlns:sm="using:Oranda.App.Features.SessionMonitor"
              xmlns:plan="using:Oranda.App.Features.ExecutionPlan"
              xmlns:se="using:Oranda.App.Features.SqlEditor"
-             xmlns:ctl="using:Oranda.App.Shell.Controls"
              x:Class="Oranda.App.Features.LockMonitor.LockMonitorView"
              keymaps:FocusSlot.Name="lockMonitor"
              x:DataType="vm:LockMonitorViewModel">
@@ -424,7 +423,7 @@
               </Panel>
             </TabItem>
             <TabItem Header="보유자 영향 순위">
-              <ctl:DetailTable x:Name="ImpactTable" />
+              <sm:MonitorGrid x:Name="ImpactTable" />
             </TabItem>
             <TabItem AutomationProperties.Name="방치 트랜잭션">
               <TabItem.Header>
@@ -448,7 +447,7 @@
                     <TextBlock FontWeight="SemiBold" Text="방치 트랜잭션이 없습니다" />
                     <TextBlock Classes="dim" Text="트랜잭션을 연 채 쉬는(INACTIVE) 세션이 없습니다. 「60 초 이상만」 을 끄면 짧게 쉰 세션도 봅니다." />
                   </StackPanel>
-                  <ctl:DetailTable x:Name="IdleTable" IsVisible="{Binding HasIdleTransactions}" />
+                  <sm:MonitorGrid x:Name="IdleTable" IsVisible="{Binding HasIdleTransactions}" />
                 </Panel>
               </DockPanel>
             </TabItem>
@@ -473,7 +472,7 @@
                     <TextBlock Classes="dim" Text="나머지 탭은 그대로 동작합니다. DBA 에게 아래 GRANT 를 요청하세요." />
                     <Button x:Name="CopyDdlGrantButton" HorizontalAlignment="Center" Margin="0,6,0,0" Content="SQL 복사" ToolTip.Tip="{Binding DdlGrantSql}" />
                   </StackPanel>
-                  <ctl:DetailTable x:Name="DdlTable" IsVisible="{Binding !DdlDenied}" />
+                  <sm:MonitorGrid x:Name="DdlTable" IsVisible="{Binding !DdlDenied}" />
                 </Panel>
               </DockPanel>
             </TabItem>
@@ -506,7 +505,7 @@
                     <TextBlock FontWeight="SemiBold" Text="최근 24 시간 데드락이 없습니다" />
                     <TextBlock Classes="dim" Text="alert 로그(v$diag_alert_ext)의 ORA-00060 을 읽기 전용으로 봅니다. 이 뷰를 읽을 권한이 없어도 빈 목록으로 보입니다." />
                   </StackPanel>
-                  <ctl:DetailTable x:Name="DeadlockTable" IsVisible="{Binding HasDeadlocks}" />
+                  <sm:MonitorGrid x:Name="DeadlockTable" IsVisible="{Binding HasDeadlocks}" />
                 </Panel>
               </DockPanel>
             </TabItem>
@@ -522,7 +521,7 @@
                 </StackPanel>
               </DockPanel>
             </Border>
-            <ctl:DetailTable x:Name="LockTable" />
+            <sm:MonitorGrid x:Name="LockTable" />
           </DockPanel>
         </Grid>
         <GridSplitter Grid.Column="1" ResizeDirection="Columns" Background="{DynamicResource OrandaSplitterBrush}" />
@@ -582,7 +581,7 @@
               </StackPanel>
               <Panel>
                 <TextBlock Classes="dim" Text="{Binding LockedRowMessage}" TextWrapping="Wrap" IsVisible="{Binding !HasLockedRow}" />
-                <ctl:DetailTable x:Name="LockedRowTable" IsVisible="{Binding HasLockedRow}" />
+                <sm:MonitorGrid x:Name="LockedRowTable" IsVisible="{Binding HasLockedRow}" />
               </Panel>
             </DockPanel>
           </TabItem>
@@ -598,7 +597,7 @@
               </Border>
               <Panel>
                 <TextBlock Classes="dim" Text="{Binding BindMessage}" TextWrapping="Wrap" IsVisible="{Binding !HasBinds}" />
-                <ctl:DetailTable x:Name="BindTable" IsVisible="{Binding HasBinds}" />
+                <sm:MonitorGrid x:Name="BindTable" IsVisible="{Binding HasBinds}" />
               </Panel>
             </DockPanel>
           </TabItem>
