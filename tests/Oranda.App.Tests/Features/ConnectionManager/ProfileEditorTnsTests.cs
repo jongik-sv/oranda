@@ -66,7 +66,7 @@ public sealed class ProfileEditorTnsTests : IDisposable
 
         var withHost = ProfileEditorViewModel.ForNew();
         withHost.Host = "db.example";
-        withHost.TnsAdmin = one; // 이미 호스트를 넣었으면 접속 방식은 바꾸지 않는다(TNS 디렉터리는 지갑·tcps 에도 쓴다)
+        withHost.TnsAdmin = one; // 이미 호스트를 넣었으면 접속 방식은 바꾸지 않는다(그 방식에서는 TNS 디렉터리를 저장하지 않는다)
         Assert.Equal(ConnectionMode.HostPortService, withHost.Mode);
         Assert.Equal(["ONLY"], withHost.TnsAliases);
     }

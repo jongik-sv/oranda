@@ -290,7 +290,7 @@ public sealed partial class ProfileEditorViewModel : ViewModelBase
     [
         nameof(IsDirty), nameof(ShowRequired), nameof(NameMissing), nameof(UserMissing), nameof(HostMissing), nameof(ServiceMissing),
         nameof(EasyConnectMissing), nameof(TnsAliasMissing), nameof(HasRequiredFields), nameof(ConnectionStringPreview),
-        nameof(IsHostPortMode), nameof(IsEasyConnectMode), nameof(IsTnsMode), nameof(CanPickColor),
+        nameof(IsHostPortMode), nameof(IsEasyConnectMode), nameof(IsTnsMode), nameof(UsesWallet), nameof(CanPickColor),
         nameof(EffectiveColor), nameof(ColorLabel), nameof(ColorWarning),
     ];
 
@@ -348,6 +348,12 @@ public sealed partial class ProfileEditorViewModel : ViewModelBase
     public bool IsEasyConnectMode => Mode == ConnectionMode.EasyConnect;
 
     public bool IsTnsMode => Mode == ConnectionMode.TnsAlias;
+
+    /// <summary>
+    /// 지갑 폴더를 쓰는 방식인지: TNS 별칭(ADB 등), Easy Connect 문자열(<c>tcps://</c>), TLS 를 켠 호스트·포트·서비스.
+    /// TNS 디렉터리는 TNS 별칭에서만 쓴다(<see cref="IsTnsMode"/>). 쓰지 않는 칸은 화면에서 숨기고 저장하지 않는다.
+    /// </summary>
+    public bool UsesWallet => !IsHostPortMode || UseTls;
 
     /// <summary>운영은 색을 바꿀 수 없다(항상 빨강).</summary>
     public bool CanPickColor => Environment != ConnectionEnvironment.Production;
@@ -602,7 +608,7 @@ public sealed partial class ProfileEditorViewModel : ViewModelBase
             Sort = NullIfBlank(NlsSort),
         };
 
-        var tnsAdmin = NullIfBlank(TnsAdmin);
+        var tnsAdmin = IsTnsMode ? NullIfBlank(TnsAdmin) : null;
         var profile = Original with
         {
             Name = Name.Trim(),
@@ -610,7 +616,7 @@ public sealed partial class ProfileEditorViewModel : ViewModelBase
             DataSource = dataSource,
             Auth = Auth,
             TnsAdmin = tnsAdmin,
-            WalletLocation = NullIfBlank(WalletLocation),
+            WalletLocation = UsesWallet ? NullIfBlank(WalletLocation) : null,
             ConnectTimeoutSeconds = (int)ConnectTimeoutSeconds,
             Environment = Environment,
             ReadOnly = ReadOnly,

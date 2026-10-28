@@ -349,6 +349,37 @@ public sealed class ConnectionManagerTests
     }
 
     [Fact]
+    public void Editor_drops_hidden_tns_directory_and_wallet_when_the_mode_does_not_use_them()
+    {
+        // TNS 접속을 복제해 방식만 바꿔도 보이지 않는 칸의 값이 몰래 남지 않는다.
+        var vm = ProfileEditorViewModel.ForNew();
+        vm.Name = "copy";
+        vm.User = "u";
+        vm.Mode = ConnectionMode.TnsAlias;
+        vm.TnsAlias = "MYDB";
+        vm.TnsAdmin = "/net/admin";
+        vm.WalletLocation = "/net/wallet";
+
+        vm.Mode = ConnectionMode.HostPortService;
+        vm.Host = "db";
+        vm.Service = "svc";
+        var plain = vm.TryBuild(out _)!;
+        Assert.Null(plain.TnsAdmin);
+        Assert.Null(plain.WalletLocation);
+
+        vm.UseTls = true;
+        var tls = vm.TryBuild(out _)!;
+        Assert.Null(tls.TnsAdmin);
+        Assert.Equal("/net/wallet", tls.WalletLocation);
+
+        vm.Mode = ConnectionMode.EasyConnect;
+        vm.EasyConnect = "tcps://db:2484/svc";
+        var ez = vm.TryBuild(out _)!;
+        Assert.Null(ez.TnsAdmin);
+        Assert.Equal("/net/wallet", ez.WalletLocation);
+    }
+
+    [Fact]
     public void Editor_rejects_red_color_bad_port_blank_fields_and_secrets_in_connection_string()
     {
         var vm = ProfileEditorViewModel.ForNew();
@@ -987,6 +1018,22 @@ public sealed class ConnectionManagerTests
             Dispatcher.UIThread.RunJobs();
             Assert.True(editor.FindControl<ComboBox>("TnsAliasBox")!.IsEffectivelyVisible);
             Assert.False(editor.FindControl<TextBox>("HostBox")!.IsEffectivelyVisible);
+            Assert.True(editor.FindControl<TextBox>("TnsAdminBox")!.IsEffectivelyVisible);
+            Assert.True(editor.FindControl<TextBox>("WalletBox")!.IsEffectivelyVisible);
+
+            // TNS 디렉터리는 TNS 별칭에서만, 지갑 폴더는 TLS 를 쓸 수 있을 때만 보인다(쓰지 않는 칸은 헷갈린다).
+            vm.Editor.Mode = ConnectionMode.HostPortService;
+            vm.Editor.UseTls = false;
+            Dispatcher.UIThread.RunJobs();
+            Assert.False(editor.FindControl<TextBox>("TnsAdminBox")!.IsEffectivelyVisible);
+            Assert.False(editor.FindControl<TextBox>("WalletBox")!.IsEffectivelyVisible);
+            vm.Editor.UseTls = true;
+            Dispatcher.UIThread.RunJobs();
+            Assert.True(editor.FindControl<TextBox>("WalletBox")!.IsEffectivelyVisible);
+            vm.Editor.Mode = ConnectionMode.EasyConnect;
+            Dispatcher.UIThread.RunJobs();
+            Assert.False(editor.FindControl<TextBox>("TnsAdminBox")!.IsEffectivelyVisible);
+            Assert.True(editor.FindControl<TextBox>("WalletBox")!.IsEffectivelyVisible);
 
             Assert.True(window.Bounds.Width <= 960 + 0.5 && window.Bounds.Height <= 600 + 0.5);
             window.Close();
