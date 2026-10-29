@@ -1225,6 +1225,18 @@ levels:
   - acceptance: JavaCatalogTests 34(+'-' 형식·derivations·javac 묶기·Note 경고) / JavaObjectsIntegrationTests 4(JVM 서버 1523: 목록·긴 이름·상세 형식·「소스 열기」·예외 없는 컴파일 오류 줄 5·열 ^·INVALID 일괄 대상·깨진 채 ALTER·고친 뒤 오류 없음·128자 초과 이름 모두 통과, 26ai 1521·11g 1522 는 JVM 없음 경로 통과) / JavaCompileTests(다시 컴파일 = 성공 + ALL_ERRORS 모양) / `dotnet build Oranda.sln -warnaserror`
   - note: 바꾼 곳 = Catalog/meta/java_source_object.sql·java_source_classes.sql(ALL_JAVA_DERIVATIONS), java_errors.sql(새), OracleMetadataProvider.Java.cs(Dash·JavaType·JavaCompileErrors·ReadJavaCompileErrorsAsync, 상세 「소스」 → 「소스 파일」), OracleMetadataProvider.Source.cs(Java 오류 갈래). 남은 것: ALL_JAVA_* 뷰가 한 번에 약 4초(시험 서버, DBA 도 같음)라 클래스 상세가 20초쯤 걸린다 — 사전 뷰 성능이라 이번에는 두었다 (win144)
 
+- [x] TSK-14-25: 스키마 브라우저·객체 찾기 유형 고르기를 체크 다중 선택 드롭다운으로(전체 선택 세 상태·요약 글·접속별 기억) [win144] w:1 2026-10-29~2026-10-29
+  - category: feat
+  - domain: frontend
+  - model: opus
+  - priority: medium
+  - tags: schema-browser, object-search, win144
+  - prd-ref: PRD SCH-01, D-056
+  - depends: TSK-07-02
+  - requirements: 사용자 요청(2026-10-29) 「각 Table, … 을 선택해서 각각은 볼 수 있지만 전체 볼 수 있는 방법이 없네. 각 항목에 대해서 체크 버튼을 달아서 전체 선택도 있고 그렇게 필터링 해서 보는것이 좋을 것 같아.」 ① 유형 콤보(한 개만 고르면 「모든 유형」 으로 돌아갈 길이 안 보임)를 체크 드롭다운(TypeChoiceDropDown + TypeChoiceSet)으로: 맨 위 「전체 선택」(전부/일부/없음, 일부에서 누르면 전부), 그 아래 유형마다 체크 상자, 체크는 바로 반영되고 드롭다운은 열린 채 남는다. 닫힌 글 = 「모든 유형」(전부·없음) · 「TABLE」 · 「TABLE, VIEW」 · 「TABLE, VIEW 외 2」. 아무것도 안 고르면 모든 유형(D-056). ② 트리: 고른 유형 폴더만, 서버 조회(ListObjectsAsync·ListJavaObjectsAsync)는 고른 유형만 묻는다(빈 목록 = 모두). ③ 스키마 브라우저는 접속 프로필마다 설정 schemaBrowser.typeChoices 에 기억(모든 유형이면 지움), 필터 지우기·트리에서 찾기의 필터 풀기는 모든 유형으로. ④ 키보드: Enter 로 열면 「전체 선택」 에 포커스, Space 체크, ↑↓ 옮김, Esc 닫고 단추로. 접근성 이름(「객체 유형」, 체크 상자마다 유형 이름). ⑤ 객체 찾기의 유형 칸도 같은 부품(전부·없음 = 예전 빈 유형과 같아 Java 는 고를 때만); 제약: 실앱 SendKeys 금지(Headless 까지); 비고: 레인 sr-typefilter
+  - acceptance: SchemaBrowserTypeChoiceTests 10(전부·일부·없음·일부에서 전체 선택·모르는 이름/조용한 되살리기·여러 유형 트리와 서버 조회·바로 반영·접속별 기억과 설정 되살리기·객체 찾기 조회·Headless 드롭다운 열기/Space 체크/전체 선택/닫힌 글/Esc) / OrandaJsonContextTests +1(typeChoices 왕복) / 기존 SchemaBrowser·DbTools·Java·Reveal 시험을 새 API 로 / `dotnet build Oranda.sln -warnaserror`
+  - note: 바꾼 곳 = Shell/Controls/TypeChoiceSet.cs·TypeChoiceDropDown.axaml(새), SchemaBrowserViewModel(TypeFilter → Types)·.Tree·.SavedFilters(ResolveTypes·RememberTypes), SchemaFilter(ObjectType → ObjectTypes), SchemaBrowserView·ObjectSearchView(.axaml), ObjectSearchViewModel(TypeFilter → Types), AppSettings.SchemaBrowserSettings.TypeChoices, strings-ko/en(TypeChoice.*), literals-en(「전체 선택」). 객체 찾기의 유형 선택은 기억하지 않는다(창마다) (win144)
+
 ## 의존 그래프
 
 ### 그래프 (Mermaid)
@@ -1340,6 +1352,7 @@ graph LR
   TSK-07-02 --> TSK-14-22
   TSK-14-22 --> TSK-14-23
   TSK-14-23 --> TSK-14-24
+  TSK-07-02 --> TSK-14-25
   style TSK-01-02 fill:#e8f5e9,stroke:#2e7d32
   style TSK-03-01 stroke:#c62828,stroke-width:2px
   style TSK-02-02 stroke:#c62828,stroke-width:2px

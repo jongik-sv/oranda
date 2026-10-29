@@ -11,7 +11,6 @@ public partial class ObjectSearchView : UserControl
     public ObjectSearchView()
     {
         InitializeComponent();
-        TypeBox.ItemsSource = ObjectSearchViewModel.SearchableTypes;
         SearchButton.Click += (_, _) => Run(vm => vm.SearchAsync());
         NameBox.KeyDown += (_, e) =>
         {

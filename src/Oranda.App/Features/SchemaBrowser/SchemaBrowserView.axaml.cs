@@ -31,7 +31,6 @@ public partial class SchemaBrowserView : UserControl
     public SchemaBrowserView()
     {
         InitializeComponent();
-        TypeBox.ItemsSource = SchemaBrowserViewModel.KnownTypes;
         InvalidToggle.Content = ShellIcons.Create("invalid");
         FavoritesToggle.Content = ShellIcons.Create("star");
         RefreshButton.Content = ShellIcons.Create("refresh");

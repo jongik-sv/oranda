@@ -1,0 +1,28 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:c="using:Oranda.App.Shell.Controls"
+             x:Class="Oranda.App.Shell.Controls.TypeChoiceDropDown"
+             x:DataType="c:TypeChoiceSet">
+  <!-- 객체 유형 다중 선택(TSK-14-25): 펼치면 「전체 선택」(세 상태) 과 유형마다 체크 상자. 체크는 바로 반영되고 열린 채로 여러 개 고른다. -->
+  <DropDownButton x:Name="Toggle" HorizontalAlignment="Stretch" HorizontalContentAlignment="Left" MinHeight="26" Padding="8,2,4,2"
+                  ToolTip.Tip="{Binding Summary}" AutomationProperties.Name="객체 유형">
+    <TextBlock x:Name="SummaryText" Text="{Binding Summary}" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
+    <DropDownButton.Flyout>
+      <Flyout Placement="BottomEdgeAlignedLeft">
+        <ScrollViewer MaxHeight="420" HorizontalScrollBarVisibility="Disabled">
+          <StackPanel x:Name="List" MinWidth="180">
+            <CheckBox x:Name="AllBox" Content="전체 선택" IsChecked="{Binding AllChecked, Mode=TwoWay}" AutomationProperties.Name="전체 선택" />
+            <Separator Margin="0,2" />
+            <ItemsControl x:Name="ItemsList" ItemsSource="{Binding Items}">
+              <ItemsControl.ItemTemplate>
+                <DataTemplate x:DataType="c:TypeChoice">
+                  <CheckBox Content="{Binding Type}" IsChecked="{Binding IsChecked, Mode=TwoWay}" AutomationProperties.Name="{Binding Type}" />
+                </DataTemplate>
+              </ItemsControl.ItemTemplate>
+            </ItemsControl>
+          </StackPanel>
+        </ScrollViewer>
+      </Flyout>
+    </DropDownButton.Flyout>
+  </DropDownButton>
+</UserControl>

@@ -112,7 +112,7 @@ public class SchemaBrowserRevealTests
         var h = new NavBrowserHarness();
         await h.Vm.SetSessionAsync(h.Session);
         h.Vm.FilterText = "DEPT";
-        h.Vm.TypeFilter = "TABLE";
+        h.Vm.Types.SelectOnly(["TABLE"]);
         await h.Vm.ApplyFilterAsync();
         Assert.DoesNotContain(h.Vm.Roots.Single(r => r.Title == "SCOTT").Children, c => c.CategoryType == "VIEW");
 
@@ -120,7 +120,7 @@ public class SchemaBrowserRevealTests
 
         Assert.Equal("V_EMP", h.Vm.SelectedNode!.Title);
         Assert.Equal(string.Empty, h.Vm.FilterText);
-        Assert.Null(h.Vm.TypeFilter);
+        Assert.True(h.Vm.Types.IsAll);
         Assert.True(h.Vm.Filter.IsEmpty);
     }
 

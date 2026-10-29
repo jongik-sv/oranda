@@ -136,7 +136,7 @@ public class SchemaBrowserTests
         var h = new Harness();
         await h.Vm.SetSessionAsync(h.Session);
         h.Vm.FilterText = "emp";
-        h.Vm.TypeFilter = "TABLE";
+        h.Vm.Types.SelectOnly(["TABLE"]);
         h.Vm.InvalidOnly = true;
         await h.Vm.ApplyFilterAsync();
 
@@ -201,7 +201,7 @@ public class SchemaBrowserTests
         Assert.Equal(["테이블 (2)", "뷰 (1)", "프로시저 (1)"], scott.Children.Select(c => c.Title));
 
         h.Meta.ObjectsGate = new TaskCompletionSource();
-        h.Vm.TypeFilter = "TABLE";
+        h.Vm.Types.SelectOnly(["TABLE"]);
         var applying = h.Vm.ApplyFilterAsync();
         Assert.Equal(["테이블 (2)", "뷰 (1)", "프로시저 (1)"], scott.Children.Select(c => c.Title)); // 읽는 동안 「…」 로 비우지 않는다
         Assert.True(scott.IsExpanded);

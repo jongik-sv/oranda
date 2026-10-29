@@ -215,9 +215,8 @@ public sealed partial class ObjectSearchViewModel : ToolPanelViewModelBase
     [ObservableProperty]
     private string _nameText = string.Empty;
 
-    /// <summary>빈 문자열 = 모든 유형.</summary>
-    [ObservableProperty]
-    private string? _typeFilter;
+    /// <summary>찾을 객체 유형(체크 드롭다운, TSK-14-25). 전부 또는 아무것도 안 고르면 모든 유형(Java 는 빠진다).</summary>
+    public Oranda.App.Shell.Controls.TypeChoiceSet Types { get; } = new(SearchableTypes);
 
     [ObservableProperty]
     private bool _invalidOnly;
@@ -307,7 +306,7 @@ public sealed partial class ObjectSearchViewModel : ToolPanelViewModelBase
     public ObjectSearchQuery BuildQuery() => new()
     {
         Owner = string.IsNullOrWhiteSpace(Owner) ? null : Owner.Trim().ToUpperInvariant(),
-        ObjectTypes = string.IsNullOrWhiteSpace(TypeFilter) ? [] : [TypeFilter.Trim()],
+        ObjectTypes = Types.SelectedTypes,
         NamePattern = SchemaFilter.ToLikePattern(NameText),
         InvalidOnly = InvalidOnly,
         CreatedAfter = CreatedAfter?.Date,

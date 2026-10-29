@@ -8,7 +8,11 @@ public sealed partial class SchemaBrowserViewModel
 {
     partial void OnFilterTextChanged(string value) => ScheduleFilter();
 
-    partial void OnTypeFilterChanged(string? value) => ScheduleFilter();
+    private void OnTypesChanged(object? sender, EventArgs e)
+    {
+        RememberTypes();
+        ScheduleFilter();
+    }
 
     partial void OnInvalidOnlyChanged(bool value)
     {
@@ -74,6 +78,7 @@ public sealed partial class SchemaBrowserViewModel
             var schemas = await _meta.ListSchemasAsync(session, ct);
             var favs = await _favoriteStore.LoadAsync(session.Profile.Id, ct);
             ActiveSavedFilter = ResolveActiveFilter(session);
+            Types.Restore(ResolveTypes(session));
             var matcher = await BuildMatcherAsync(session, ct);
             if (gen != _buildGeneration)
             {
@@ -119,7 +124,7 @@ public sealed partial class SchemaBrowserViewModel
         }
     }
 
-    private SchemaFilter BuildFilter() => new(FilterText, TypeFilter, InvalidOnly, FavoritesOnly);
+    private SchemaFilter BuildFilter() => new(FilterText, Types.SelectedTypes, InvalidOnly, FavoritesOnly);
 
     /// <summary>필터를 적용한다: 이미 불러온 스키마 노드를 비우고 펼쳐 있던 것만 다시 읽는다.</summary>
     public Task ApplyFilterAsync(CancellationToken ct = default) => ApplyFilterCoreAsync(reuseInvalid: false, ct);
@@ -267,7 +272,7 @@ public sealed partial class SchemaBrowserViewModel
         var query = new ObjectQuery
         {
             Owner = node.Owner,
-            ObjectTypes = f.ObjectType is null ? [] : [f.ObjectType],
+            ObjectTypes = f.Types,
             NamePattern = SchemaFilter.ToLikePattern(f.Text),
             InvalidOnly = f.InvalidOnly,
         };
@@ -442,7 +447,7 @@ public sealed partial class SchemaBrowserViewModel
         try
         {
             FilterText = string.Empty;
-            TypeFilter = null;
+            Types.Reset();
             InvalidOnly = false;
             FavoritesOnly = false;
         }

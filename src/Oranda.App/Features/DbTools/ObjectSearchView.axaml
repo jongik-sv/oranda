@@ -1,6 +1,7 @@
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:icons="using:Oranda.App.Shell.Icons"
+             xmlns:controls="using:Oranda.App.Shell.Controls"
              xmlns:vm="using:Oranda.App.Features.DbTools"
              x:Class="Oranda.App.Features.DbTools.ObjectSearchView"
              x:DataType="vm:ObjectSearchViewModel">
@@ -15,7 +16,7 @@
             <WrapPanel>
             <TextBox Width="110" Margin="0,0,6,4" PlaceholderText="스키마" Text="{Binding Owner, Mode=TwoWay}" />
             <TextBox x:Name="NameBox" Width="170" Margin="0,0,6,4" PlaceholderText="이름 (* 와일드카드)" Text="{Binding NameText, Mode=TwoWay}" />
-            <ComboBox x:Name="TypeBox" Width="150" Margin="0,0,6,4" PlaceholderText="모든 유형" SelectedItem="{Binding TypeFilter, Mode=TwoWay}" />
+            <controls:TypeChoiceDropDown x:Name="TypeBox" Width="170" Margin="0,0,6,4" DataContext="{Binding Types}" />
             <CheckBox Margin="0,0,10,4" Content="INVALID 만" IsChecked="{Binding InvalidOnly, Mode=TwoWay}" />
             <CalendarDatePicker Margin="0,0,6,4" PlaceholderText="생성일 이후" SelectedDate="{Binding CreatedAfter, Mode=TwoWay}" />
             <CalendarDatePicker Margin="0,0,6,4" PlaceholderText="변경일 이후" SelectedDate="{Binding ModifiedAfter, Mode=TwoWay}" />

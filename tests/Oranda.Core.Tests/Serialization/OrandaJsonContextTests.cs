@@ -56,6 +56,19 @@ public class OrandaJsonContextTests
     }
 
     [Fact]
+    public void Schema_browser_type_choices_round_trip_and_compare_by_content()
+    {
+        var sb = new SchemaBrowserSettings { TypeChoices = new Dictionary<string, string> { ["p1"] = SchemaBrowserSettings.JoinTypes(["TABLE", "VIEW"]) } };
+        var json = JsonSerializer.Serialize(new AppSettings { SchemaBrowser = sb }, OrandaJsonContext.Default.AppSettings);
+        var back = JsonSerializer.Deserialize(json, OrandaJsonContext.Default.AppSettings)!;
+
+        Assert.Equal(sb, back.SchemaBrowser);
+        Assert.Equal(["TABLE", "VIEW"], SchemaBrowserSettings.SplitTypes(back.SchemaBrowser.TypeChoices["p1"]));
+        Assert.NotEqual(sb, new SchemaBrowserSettings());
+        Assert.Empty(SchemaBrowserSettings.SplitTypes(null));
+    }
+
+    [Fact]
     public void Schema_browser_settings_compare_saved_filters_by_content()
     {
         static SchemaBrowserSettings Make(SchemaBrowserFilter f) => new()

@@ -88,6 +88,7 @@ public sealed partial class SchemaBrowserViewModel : ToolPanelViewModelBase, IDi
     public SchemaBrowserViewModel()
     {
         _favoriteStore = new InMemorySchemaFavoriteStore();
+        Types.Changed += OnTypesChanged;
     }
 
     /// <summary>
@@ -99,6 +100,7 @@ public sealed partial class SchemaBrowserViewModel : ToolPanelViewModelBase, IDi
         ArgumentNullException.ThrowIfNull(services);
         _services = services;
         _favoriteStore = new InMemorySchemaFavoriteStore();
+        Types.Changed += OnTypesChanged;
         if (services.GetService(typeof(IEventBus)) is IEventBus bus)
         {
             _subscriptions.Add(bus.Subscribe<SessionOpened>(this, e => PostToUi(() => _ = OnSessionOpenedAsync(e))));
@@ -243,8 +245,10 @@ public sealed partial class SchemaBrowserViewModel : ToolPanelViewModelBase, IDi
     [ObservableProperty]
     private string _filterText = string.Empty;
 
-    [ObservableProperty]
-    private string? _typeFilter;
+    /// <summary>
+    /// 트리에 보일 객체 유형(체크 드롭다운, TSK-14-25). 전부 또는 아무것도 안 고르면 모든 유형. 바꾸면 바로 다시 거르고 접속별로 기억한다.
+    /// </summary>
+    public Oranda.App.Shell.Controls.TypeChoiceSet Types { get; } = new(KnownTypes);
 
     [ObservableProperty]
     private bool _invalidOnly;

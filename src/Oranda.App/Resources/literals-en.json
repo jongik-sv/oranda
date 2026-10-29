@@ -1234,5 +1234,6 @@
   "Java 클래스": "Java classes",
   "Java 리소스": "Java resources",
   "다시 컴파일": "Recompile",
-  "확인한 뒤 서버에서 다시 컴파일한다": "Recompile it on the server after confirming"
+  "확인한 뒤 서버에서 다시 컴파일한다": "Recompile it on the server after confirming",
+  "전체 선택": "Select all"
 }

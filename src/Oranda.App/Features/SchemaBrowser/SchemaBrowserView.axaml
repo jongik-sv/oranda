@@ -3,6 +3,7 @@
              xmlns:keymaps="using:Oranda.App.Shell.Keymaps"
              xmlns:vm="using:Oranda.App.Features.SchemaBrowser"
              xmlns:icons="using:Oranda.App.Shell.Icons"
+             xmlns:controls="using:Oranda.App.Shell.Controls"
              x:Class="Oranda.App.Features.SchemaBrowser.SchemaBrowserView"
              keymaps:FocusSlot.Name="schema"
              x:DataType="vm:SchemaBrowserViewModel">
@@ -27,8 +28,7 @@
                         ToolTip.Tip="즐겨찾기만" AutomationProperties.Name="즐겨찾기만" />
           <Button x:Name="RefreshButton" Classes="toolbar" ToolTip.Tip="새로 고침 (F5)" AutomationProperties.Name="새로 고침" />
         </StackPanel>
-        <ComboBox x:Name="TypeBox" Classes="compact" PlaceholderText="모든 유형" HorizontalAlignment="Stretch"
-                  SelectedItem="{Binding TypeFilter, Mode=TwoWay}" Margin="0,0,4,0" AutomationProperties.Name="객체 유형" />
+        <controls:TypeChoiceDropDown x:Name="TypeBox" DataContext="{Binding Types}" HorizontalAlignment="Stretch" Margin="0,0,4,0" />
       </DockPanel>
     </Border>
     <!-- 읽는 동안 필터 칸 아래 여백에 가는 막대를 겹쳐 보인다(트리가 밀리지 않게 자리를 따로 차지하지 않는다). -->

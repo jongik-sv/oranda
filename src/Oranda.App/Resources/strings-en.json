@@ -912,5 +912,7 @@
   "Update.error.rateLimited": "The request limit was exceeded or the server refused the request (for example the GitHub rate limit). Try again later.",
   "Update.error.notFound": "The update files were not found. Check the update server address.",
   "Update.error.unreachable": "Could not reach the update server. Check the network, proxy or firewall.",
-  "Shell.settings.update.feedHint": "Leave empty to use the default address. A release address also works, for example {0}"
+  "Shell.settings.update.feedHint": "Leave empty to use the default address. A release address also works, for example {0}",
+  "TypeChoice.all": "All types",
+  "TypeChoice.more": "{0} +{1} more"
 }

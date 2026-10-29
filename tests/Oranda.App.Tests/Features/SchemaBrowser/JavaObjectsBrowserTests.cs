@@ -58,7 +58,7 @@ public class JavaObjectsBrowserTests
         var h = new SchemaBrowserTests.Harness();
         h.Meta.Java.Add(new JavaObjectInfo(Source, "com/example/Hello", "VALID"));
         await h.Vm.SetSessionAsync(h.Session);
-        h.Vm.TypeFilter = "JAVA SOURCE";
+        h.Vm.Types.SelectOnly(["JAVA SOURCE"]);
         await h.Vm.ApplyFilterAsync();
 
         Assert.Equal(["JAVA SOURCE"], h.Meta.LastJavaQuery?.ObjectTypes);

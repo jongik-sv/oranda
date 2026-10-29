@@ -66,10 +66,10 @@ public sealed class InvalidSearchIntegrationTests(ItDb db, ITestOutputHelper out
             output.WriteLine($"object search {sw.ElapsedMilliseconds} ms");
             Assert.Equal(expected, search.Results.Select(r => r.Ref.Name).Order(StringComparer.Ordinal));
             Assert.All(search.Results, r => Assert.Equal("INVALID", r.Row.Status));
-            search.TypeFilter = "VIEW";
+            search.Types.SelectOnly(["VIEW"]);
             await search.SearchAsync();
             Assert.Equal([$"{t}_V"], search.Results.Select(r => r.Ref.Name));
-            search.TypeFilter = null;
+            search.Types.Reset();
             search.NameText = t.ToLowerInvariant();
             await search.SearchAsync();
             Assert.Equal(3, search.Results.Count);

@@ -193,9 +193,12 @@ public sealed partial class SchemaNode : ObservableObject
 }
 
 /// <summary>필터 바 값. 이름 패턴 · 유형 · INVALID 만 · 즐겨찾기만.</summary>
-public sealed record SchemaFilter(string? Text = null, string? ObjectType = null, bool InvalidOnly = false, bool FavoritesOnly = false)
+public sealed record SchemaFilter(string? Text = null, IReadOnlyList<string>? ObjectTypes = null, bool InvalidOnly = false, bool FavoritesOnly = false)
 {
-    public bool IsEmpty => string.IsNullOrWhiteSpace(Text) && ObjectType is null && !InvalidOnly && !FavoritesOnly;
+    /// <summary>거를 유형(빈 목록 = 모든 유형).</summary>
+    public IReadOnlyList<string> Types => ObjectTypes ?? [];
+
+    public bool IsEmpty => string.IsNullOrWhiteSpace(Text) && Types.Count == 0 && !InvalidOnly && !FavoritesOnly;
 
     /// <summary>
     /// 사용자 입력을 SQL LIKE(이스케이프 <c>\</c>)로 바꾼다. <c>*</c>·<c>%</c> 는 와일드카드, 그 밖의 <c>_</c> 는 글자 그대로.

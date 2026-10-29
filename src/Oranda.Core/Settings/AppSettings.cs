@@ -270,19 +270,33 @@ public sealed record SchemaBrowserSettings
     /// <summary>접속 프로필 id → 그 접속에서 마지막으로 고른 필터 id. 없으면 필터 없음.</summary>
     public IReadOnlyDictionary<string, string> ActiveFilters { get => _activeFilters; init => _activeFilters = value ?? EmptyMap; }
 
+    /// <summary>
+    /// 접속 프로필 id → 그 접속의 트리에 보일 객체 유형(<c>|</c> 로 이음, TSK-14-25). 없으면 모든 유형.
+    /// </summary>
+    public IReadOnlyDictionary<string, string> TypeChoices { get => _typeChoices; init => _typeChoices = value ?? EmptyMap; }
+
+    /// <summary><see cref="TypeChoices"/> 의 값으로 잇는다.</summary>
+    public static string JoinTypes(IEnumerable<string> types) => string.Join('|', types);
+
+    /// <summary><see cref="TypeChoices"/> 의 값을 유형 목록으로 나눈다.</summary>
+    public static IReadOnlyList<string> SplitTypes(string? joined) =>
+        string.IsNullOrEmpty(joined) ? [] : joined.Split('|', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+
     // 이 키가 생기기 전의 settings.json(구역은 있고 키는 없음)은 소스 생성 직렬화기가 null 을 넣으므로 빈 값으로 받는다.
     private static readonly IReadOnlyDictionary<string, string> EmptyMap = new Dictionary<string, string>();
     private readonly IReadOnlyList<SchemaBrowserFilter> _filters = [];
     private readonly IReadOnlyDictionary<string, string> _activeFilters = EmptyMap;
+    private readonly IReadOnlyDictionary<string, string> _typeChoices = EmptyMap;
 
     // 목록·사전은 참조가 아니라 내용으로 비교한다(설정 구역별 변경 알림이 같은 값을 「바뀜」으로 보지 않게).
     public bool Equals(SchemaBrowserSettings? other) =>
         other is not null
         && SingleClickPreview == other.SingleClickPreview
         && Filters.SequenceEqual(other.Filters)
-        && ContentEquality.SameEntries(ActiveFilters, other.ActiveFilters);
+        && ContentEquality.SameEntries(ActiveFilters, other.ActiveFilters)
+        && ContentEquality.SameEntries(TypeChoices, other.TypeChoices);
 
-    public override int GetHashCode() => HashCode.Combine(SingleClickPreview, Filters.Count, ActiveFilters.Count);
+    public override int GetHashCode() => HashCode.Combine(SingleClickPreview, Filters.Count, ActiveFilters.Count, TypeChoices.Count);
 }
 
 /// <summary>저장 필터의 스키마 범위(오렌지 필터 Schema 탭).</summary>

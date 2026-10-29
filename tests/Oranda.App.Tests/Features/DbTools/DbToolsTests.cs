@@ -134,12 +134,12 @@ public class DbToolsTests
         {
             Owner = " scott ",
             NameText = "emp*",
-            TypeFilter = "TABLE",
             InvalidOnly = true,
             CreatedAfter = new DateTime(2026, 1, 2, 13, 0, 0),
             MinSizeKb = 2,
             MaxSizeKb = 10,
         };
+        vm.Types.SelectOnly(["TABLE"]);
 
         var q = vm.BuildQuery();
 
@@ -786,7 +786,7 @@ public class DbToolsTests
         }
     }
 
-    private sealed class FakeAdmin : ISchemaAdminProvider
+    internal sealed class FakeAdmin : ISchemaAdminProvider
     {
         public IReadOnlyList<ObjectSearchRow> Rows { get; set; } = [];
 
@@ -848,7 +848,7 @@ public class DbToolsTests
         }
     }
 
-    private sealed class FakeExec : IExecutionService
+    internal sealed class FakeExec : IExecutionService
     {
         public List<SqlStatement> Statements { get; } = [];
 

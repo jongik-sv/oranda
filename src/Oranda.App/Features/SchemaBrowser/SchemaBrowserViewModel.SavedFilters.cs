@@ -44,6 +44,52 @@ public sealed partial class SchemaBrowserViewModel
 
     private static string ProfileKey(ISession session) => session.Profile.Id.ToString();
 
+    /// <summary>이 창에서 고른 접속별 유형 선택(빈 글 = 모든 유형). 설정 저장보다 먼저 맞는 값이다(저장은 기다리지 않는다).</summary>
+    private readonly Dictionary<string, string> _localTypeChoices = new(StringComparer.Ordinal);
+
+    /// <summary>이 접속에서 마지막으로 고른 유형(없으면 null = 모든 유형). 이 창에서 고른 것, 없으면 설정에 남은 것.</summary>
+    private IReadOnlyList<string>? ResolveTypes(ISession session)
+    {
+        var key = ProfileKey(session);
+        if (!_localTypeChoices.TryGetValue(key, out var joined)
+            && (Settings is not { } settings || !settings.Current.SchemaBrowser.TypeChoices.TryGetValue(key, out joined)))
+        {
+            return null;
+        }
+
+        return SchemaBrowserSettings.SplitTypes(joined);
+    }
+
+    /// <summary>지금 유형 선택을 이 접속의 선택으로 적는다(모든 유형이면 설정에서 지운다).</summary>
+    private void RememberTypes()
+    {
+        if (CurrentSession is not { } session)
+        {
+            return;
+        }
+
+        var key = ProfileKey(session);
+        var joined = Types.IsAll ? null : SchemaBrowserSettings.JoinTypes(Types.SelectedTypes);
+        _localTypeChoices[key] = joined ?? string.Empty;
+        if (Settings is { } settings)
+        {
+            _ = SaveTypeChoiceAsync(settings, key, joined);
+        }
+    }
+
+    private static async Task SaveTypeChoiceAsync(SettingsService settings, string key, string? joined)
+    {
+        try
+        {
+            await settings.UpdateAsync(
+                s => s with { SchemaBrowser = s.SchemaBrowser with { TypeChoices = WithChoice(s.SchemaBrowser.TypeChoices, key, joined) } }).ConfigureAwait(false);
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Trace.TraceWarning("스키마 브라우저 유형 선택을 저장하지 못했다: {0}", ex.Message);
+        }
+    }
+
     /// <summary>설정에서 이 접속이 고른 필터를 찾는다. 설정 서비스가 없으면 지금 값을 둔다.</summary>
     private SchemaBrowserFilter? ResolveActiveFilter(ISession session)
     {
