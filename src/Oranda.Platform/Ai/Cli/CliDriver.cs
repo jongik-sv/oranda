@@ -21,7 +21,7 @@ namespace Oranda.Platform.Ai.Cli;
 [OrandaService(typeof(IAiDriver))]
 internal sealed class CliDriver : IAiDriver
 {
-    private const int MaxArgumentSummaryChars = 300;
+    private const int MaxArgumentSummaryChars = 4000;
 
     private static readonly TimeSpan StaleRunAge = TimeSpan.FromHours(6);
 
