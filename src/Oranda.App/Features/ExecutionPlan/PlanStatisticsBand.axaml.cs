@@ -15,6 +15,7 @@ public partial class PlanStatisticsBand : UserControl
                 await vm.RerunAsync(PlanRerunMode.Hint);
             }
         };
+        CancelRerunButton.Click += (_, _) => (DataContext as PlanViewModel)?.CancelRerun();
         StatisticsLevelButton.Click += async (_, _) =>
         {
             if (DataContext is PlanViewModel vm)

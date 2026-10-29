@@ -55,6 +55,8 @@ public sealed partial class PlanViewModel
 
     private HashSet<int> _collapsed = [];
     private bool _autoRerunTried;
+    private CancellationTokenSource? _rerunCts;
+    private bool _loadingAlwaysHint;
     private CursorRef? _reportCursor;
     private SqlStatement? _lastStatement;
 
@@ -294,6 +296,9 @@ public sealed partial class PlanViewModel
         _autoRerunTried = true;
         IsRerunning = true;
         StatusText = mode == PlanRerunMode.Hint ? "사본 실행 중… (/*+ GATHER_PLAN_STATISTICS */, 모든 행을 끝까지 읽습니다)" : "STATISTICS_LEVEL = ALL 로 다시 실행 중… (모든 행을 끝까지 읽습니다)";
+        using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        _rerunCts = cts;
+        ct = cts.Token;
         try
         {
             var outcome = await rerun(mode, stmt, ct).ConfigureAwait(true);
@@ -315,13 +320,22 @@ public sealed partial class PlanViewModel
         }
         catch (Exception ex)
         {
+            if (ex is PlanRerunNotStartedException)
+            {
+                _autoRerunTried = false; // 아직 아무것도 보내지 않았다: 다음 Ctrl+Shift+E 에서 자동 재실행을 다시 시도한다
+            }
+
             StatusText = "다시 실행 실패: " + (ex.Message ?? string.Empty).Split('\n', 2)[0].Trim();
         }
         finally
         {
+            _rerunCts = null;
             IsRerunning = false;
         }
     }
+
+    /// <summary>다시 실행 중이면 취소한다(띠의 「취소」 단추). 자동 재실행도 같은 길로 멈춘다.</summary>
+    public void CancelRerun() => _rerunCts?.Cancel();
 
     /// <summary>그래프 노드를 눌렀다: 그 단계를 고르고(트리와 같이), 접힌 노드면 펼친다.</summary>
     public void SelectGraphStep(int stepId)
@@ -433,7 +447,27 @@ public sealed partial class PlanViewModel
         RebuildGraph();
     }
 
-    partial void OnAlwaysHintChanged(bool value) => SaveAlwaysHint?.Invoke(value);
+    partial void OnAlwaysHintChanged(bool value)
+    {
+        if (!_loadingAlwaysHint)
+        {
+            SaveAlwaysHint?.Invoke(value);
+        }
+    }
+
+    /// <summary>설정에서 읽은 「늘 힌트 넣기」 값을 반영한다(설정을 다시 저장하지 않는다).</summary>
+    public void SetAlwaysHintFromSettings(bool value)
+    {
+        _loadingAlwaysHint = true;
+        try
+        {
+            AlwaysHint = value;
+        }
+        finally
+        {
+            _loadingAlwaysHint = false;
+        }
+    }
 
     partial void OnSelectedTabIndexChanged(int value)
     {
@@ -483,9 +517,18 @@ public sealed partial class PlanViewModel
         else if (ShowStatisticsBand)
         {
             StatusText += " · A-Rows 없음(statistics_level = TYPICAL)";
-            if (AlwaysHint && !_autoRerunTried && !IsRerunning)
+            if (AlwaysHint && !_autoRerunTried && !IsRerunning && (LastStatement ?? CurrentStatement?.Invoke()) is { } stmt)
             {
-                _ = RerunAsync(PlanRerunMode.Hint);
+                if (PlanStatsRerunner.CanAutoRerun(stmt))
+                {
+                    _ = RerunAsync(PlanRerunMode.Hint);
+                }
+                else
+                {
+                    // 데이터를 바꾸거나 행을 잠글 수 있는 문장은 묻지 않고 다시 실행하지 않는다. 띠만 남긴다.
+                    _autoRerunTried = true;
+                    StatusText += " · 질의(SELECT)가 아니거나 FOR UPDATE 라 자동으로 다시 실행하지 않았습니다";
+                }
             }
         }
     }

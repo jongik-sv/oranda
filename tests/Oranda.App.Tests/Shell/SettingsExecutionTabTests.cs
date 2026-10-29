@@ -43,7 +43,7 @@ public sealed class SettingsExecutionTabTests
 
             // 안내 줄은 칸들보다 위에 있다.
             var boxes = content.GetVisualDescendants().OfType<CheckBox>().ToList();
-            Assert.Equal(3, boxes.Count); // 자동 커밋·DBMS_OUTPUT·빈 줄
+            Assert.Equal(4, boxes.Count); // 자동 커밋·DBMS_OUTPUT·빈 줄·A-Rows 자동 재실행
             Assert.All(boxes, b => Assert.EndsWith(mark, (string)b.Content!, StringComparison.Ordinal));
             Assert.All(boxes, b => Assert.True(hint.TranslatePoint(default, window)!.Value.Y < b.TranslatePoint(default, window)!.Value.Y));
             var labels = content.GetVisualDescendants().OfType<TextBlock>().Select(t => t.Text).ToList();

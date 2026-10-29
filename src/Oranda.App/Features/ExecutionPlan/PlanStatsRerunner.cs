@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
 using Oranda.App.Features.Binds;
@@ -21,6 +22,9 @@ public enum PlanRerunMode
     StatisticsLevel,
 }
 
+/// <summary>문장을 보내기 전에 막혔다(접속 없음·세션 끊김·실행 중). 아무것도 실행하지 않았으므로 자동 재실행을 다음 계획 열기에서 다시 시도해도 된다.</summary>
+public sealed class PlanRerunNotStartedException(string message) : InvalidOperationException(message);
+
 /// <summary>다시 실행한 결과: 쓴 세션, 새 커서, 가져온 행 수.</summary>
 public sealed record PlanRerunOutcome(ISession Session, CursorRef Cursor, long Rows);
 
@@ -30,7 +34,7 @@ public sealed record PlanRerunOutcome(ISession Session, CursorRef Cursor, long R
 /// 다른 문장을 보내기 전에 <see cref="IExecutionPlanService.GetLastCursorAsync"/> 로 그 커서를 읽는다.
 /// 바인드는 「바인드 변수」 목록의 지금 값을 쓴다(<see cref="GridRowCounter"/> 와 같은 방식). 세션을 「실행 중」으로 두어 다른 실행과 겹치지 않게 한다.
 /// </summary>
-public sealed class PlanStatsRerunner(
+public sealed partial class PlanStatsRerunner(
     ExecutionState state, Func<BindVariableStore> binds, Func<ISession?> session, Func<IExecutionService> execution, Func<IExecutionPlanService> plans)
 {
     /// <summary>ALTER SESSION 문(운영에서도 묻지 않는 ALTER, <see cref="ExecutionPolicy"/>). 이 세션에만 걸리고 DB 에 쓰지 않는다.</summary>
@@ -39,11 +43,21 @@ public sealed class PlanStatsRerunner(
     /// <summary>앱이 대신 보내는 문장이라 이력에 남기지 않는다(정책 관문은 그대로 거친다).</summary>
     private static readonly ExecutionOptions Options = new() { Source = HistorySource.Editor, SkipHistory = true };
 
+    /// <summary>
+    /// 묻지 않고 자동으로 다시 실행해도 되는 문장인가: 분류가 분명한 질의(SELECT·WITH … SELECT)이고 <c>FOR UPDATE</c> 가 없다.
+    /// DML·DDL·PL/SQL 블록·분류가 불확실한 문장은 데이터를 바꾸거나 행을 잠글 수 있으므로 자동으로 하지 않는다(띠의 단추로 직접 누를 때만).
+    /// </summary>
+    public static bool CanAutoRerun(SqlStatement? stmt) =>
+        stmt is { Kind: StatementKind.Query, IsClassificationUncertain: false } && !ForUpdate().IsMatch(stmt.Text);
+
+    [GeneratedRegex(@"\bFOR\s+UPDATE\b", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
+    private static partial Regex ForUpdate();
+
     /// <summary>다시 실행할 사본(<paramref name="mode"/> 가 힌트면 힌트를 넣은 글, 아니면 원문). 질의가 아니면 이유를 담은 예외.</summary>
     public static SqlStatement BuildCopy(SqlStatement stmt, PlanRerunMode mode)
     {
         ArgumentNullException.ThrowIfNull(stmt);
-        if (stmt.Kind != StatementKind.Query)
+        if (stmt.Kind != StatementKind.Query || stmt.IsClassificationUncertain)
         {
             throw new InvalidOperationException("질의(SELECT)만 다시 실행합니다. DML 은 사본도 데이터를 바꾸므로 직접 실행한 뒤 실제 계획을 보세요.");
         }
@@ -66,17 +80,17 @@ public sealed class PlanStatsRerunner(
         var copy = BuildCopy(stmt, mode);
         if (session() is not { } s)
         {
-            throw new InvalidOperationException("접속이 없습니다. 접속한 뒤 다시 실행하세요.");
+            throw new PlanRerunNotStartedException("접속이 없습니다. 접속한 뒤 다시 실행하세요.");
         }
 
         if (state.IsBroken(s.Id))
         {
-            throw new InvalidOperationException("세션이 끊겼습니다. 다시 접속한 뒤 실행하세요.");
+            throw new PlanRerunNotStartedException("세션이 끊겼습니다. 다시 접속한 뒤 실행하세요.");
         }
 
         if (state.IsBusy(s.Id))
         {
-            throw new InvalidOperationException("다른 문장을 실행하는 중입니다. 끝난 뒤 다시 실행하세요.");
+            throw new PlanRerunNotStartedException("다른 문장을 실행하는 중입니다. 끝난 뒤 다시 실행하세요.");
         }
 
         var values = GridRowCounter.BuildBinds(binds(), copy.BindNames, null);

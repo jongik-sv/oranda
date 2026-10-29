@@ -93,6 +93,9 @@ public sealed partial class SettingsViewModel : ViewModelBase
     private bool _splitOnBlankLine;
 
     [ObservableProperty]
+    private bool _gatherPlanStatisticsHint;
+
+    [ObservableProperty]
     private decimal _pageSize;
 
     [ObservableProperty]
@@ -259,6 +262,7 @@ public sealed partial class SettingsViewModel : ViewModelBase
         _dbmsOutput = s.Execution.DbmsOutput;
         _selectedErrorMode = ErrorModes.First(m => m.Mode == s.Execution.ScriptErrorMode);
         _splitOnBlankLine = s.Execution.SplitOnBlankLine;
+        _gatherPlanStatisticsHint = s.Execution.GatherPlanStatisticsHint;
         _pageSize = s.Grid.PageSize;
         _memoryLimitMb = s.Grid.MemoryLimitMb;
         _lobFetchSize = s.Grid.InitialLobFetchSize;
@@ -539,6 +543,7 @@ public sealed partial class SettingsViewModel : ViewModelBase
                     DbmsOutput = DbmsOutput,
                     ScriptErrorMode = SelectedErrorMode.Mode,
                     SplitOnBlankLine = SplitOnBlankLine,
+                    GatherPlanStatisticsHint = GatherPlanStatisticsHint,
                 },
                 Grid = s.Grid with
                 {

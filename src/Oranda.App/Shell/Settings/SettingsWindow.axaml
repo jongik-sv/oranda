@@ -234,7 +234,7 @@
           <!-- 여기 값은 새 탭·다음 실행의 기본값이다. 지금 탭은 SQL 메뉴의 「(이번 실행)」 토글로 바꾼다(D-016). -->
           <StackPanel Spacing="10">
             <TextBlock x:Name="ExecNotice" Classes="hint" HorizontalAlignment="Left" Text="{Binding Strings[execNotice]}" />
-            <Grid Classes="form" ColumnDefinitions="Auto,*" RowDefinitions="Auto,Auto,Auto,Auto" ColumnSpacing="12" RowSpacing="10">
+            <Grid Classes="form" ColumnDefinitions="Auto,*" RowDefinitions="Auto,Auto,Auto,Auto,Auto" ColumnSpacing="12" RowSpacing="10">
               <TextBlock Grid.Row="0" Text="{Binding Strings[tx]}" />
               <CheckBox Grid.Row="0" Grid.Column="1" Content="{Binding Strings[autoCommit]}" IsChecked="{Binding AutoCommit}" />
               <TextBlock Grid.Row="1" Text="{Binding Strings[dbmsOutput]}" />
@@ -250,6 +250,9 @@
               </ComboBox>
               <TextBlock Grid.Row="3" Text="{Binding Strings[splitLabel]}" />
               <CheckBox Grid.Row="3" Grid.Column="1" Content="{Binding Strings[split]}" IsChecked="{Binding SplitOnBlankLine}" />
+              <TextBlock Grid.Row="4" Text="{Binding Strings[planHintLabel]}" />
+              <CheckBox x:Name="PlanHintBox" Grid.Row="4" Grid.Column="1" Content="{Binding Strings[planHint]}" IsChecked="{Binding GatherPlanStatisticsHint}"
+                        ToolTip.Tip="{Binding Strings[planHintTip]}" />
             </Grid>
           </StackPanel>
         </ScrollViewer>

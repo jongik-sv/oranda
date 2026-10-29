@@ -194,7 +194,18 @@ public sealed class ExecutionPlanCommandHandler : ICommandHandler
     /// <summary>계획 창에 다시 실행·설정·문장 얻기를 한 번 잇는다.</summary>
     private void Wire(PlanViewModel vm)
     {
-        if (ReferenceEquals(_wired, vm) || _container is not { } container)
+        if (_container is not { } container)
+        {
+            return;
+        }
+
+        if (container.GetService<SettingsService>() is { } current)
+        {
+            // 설정 창에서 바꾼 값을 따른다(저장 콜백은 아래에서 한 번만 잇는다 — 값을 읽어 오는 것만으로 설정을 다시 쓰지 않는다).
+            vm.SetAlwaysHintFromSettings(current.Current.Execution.GatherPlanStatisticsHint);
+        }
+
+        if (ReferenceEquals(_wired, vm))
         {
             return;
         }
@@ -217,7 +228,6 @@ public sealed class ExecutionPlanCommandHandler : ICommandHandler
         vm.Rerunner = (mode, stmt, ct) => rerunner.RunAsync(stmt, mode, ct);
         if (container.GetService<SettingsService>() is { } settings)
         {
-            vm.AlwaysHint = settings.Current.Execution.GatherPlanStatisticsHint;
             vm.SaveAlwaysHint = on => _ = settings.UpdateAsync(s => s with { Execution = s.Execution with { GatherPlanStatisticsHint = on } });
         }
     }
