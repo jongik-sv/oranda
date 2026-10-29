@@ -57,12 +57,22 @@
                 ToolTip.Tip="끄면 그런 후보는 실행하지 않고 운영 커서 실측을 씁니다. 켜도 자치 트랜잭션의 커밋은 막지 못합니다." />
       <CheckBox x:Name="IndexDdlCheck" IsChecked="{Binding IndexDdl}"
                 Content="인덱스 후보 CREATE 문안도 받기 (새 탭에만 넣고 실행하지 않음)" />
-      <Grid ColumnDefinitions="Auto,*" ColumnSpacing="10">
+      <Grid ColumnDefinitions="Auto,*,Auto,110" ColumnSpacing="10">
         <TextBlock Text="모델" VerticalAlignment="Center" Opacity="0.7" />
         <ComboBox x:Name="ModelCombo" Grid.Column="1" HorizontalAlignment="Stretch"
                   ItemsSource="{Binding Models}" SelectedItem="{Binding Model}" AutomationProperties.Name="모델">
           <ComboBox.ItemTemplate>
             <DataTemplate x:DataType="t:TuningModelOption">
+              <TextBlock Text="{Binding Title}" TextTrimming="CharacterEllipsis" />
+            </DataTemplate>
+          </ComboBox.ItemTemplate>
+        </ComboBox>
+        <TextBlock Grid.Column="2" Text="effort" VerticalAlignment="Center" Opacity="0.7" />
+        <ComboBox x:Name="EffortCombo" Grid.Column="3" HorizontalAlignment="Stretch"
+                  ItemsSource="{Binding Efforts}" SelectedItem="{Binding Effort}" AutomationProperties.Name="effort"
+                  ToolTip.Tip="추론 노력(claude --effort). 높을수록 오래 생각하고 느립니다. 기본 값은 설정 창 AI 쪽에서 바꿉니다.">
+          <ComboBox.ItemTemplate>
+            <DataTemplate x:DataType="t:TuningEffortOption">
               <TextBlock Text="{Binding Title}" TextTrimming="CharacterEllipsis" />
             </DataTemplate>
           </ComboBox.ItemTemplate>

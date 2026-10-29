@@ -147,6 +147,8 @@ public sealed class AiTuningLauncher(IServiceProvider services)
         ArgumentNullException.ThrowIfNull(context);
         ArgumentNullException.ThrowIfNull(settings);
         var configured = string.IsNullOrWhiteSpace(settings.Model) ? null : settings.Model.Trim();
+        var effort = settings.Effort?.Trim().ToLowerInvariant();
+        var efforts = TuningStartInfo.EffortOptions(effort);
         return new TuningStartInfo(
             "AI 튜닝 — 커서 위치 문장",
             Summarize(statement),
@@ -157,7 +159,9 @@ public sealed class AiTuningLauncher(IServiceProvider services)
             context,
             BuildModelOptions(configured),
             configured ?? TuningStartInfo.DefaultModelId,
-            maskLiterals);
+            maskLiterals,
+            efforts,
+            efforts[0].Id == TuningStartInfo.DefaultModelId ? TuningStartInfo.DefaultModelId : effort!);
     }
 
     /// <summary>

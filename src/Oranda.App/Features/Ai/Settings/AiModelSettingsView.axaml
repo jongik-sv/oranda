@@ -10,10 +10,14 @@
                  IsChecked="{Binding IsNone, Mode=TwoWay}" />
     <RadioButton x:Name="ClaudeRadio" GroupName="aiProvider" Content="Claude Code (이 PC 에 로그인된 claude 를 씁니다)"
                  IsChecked="{Binding IsClaudeCode, Mode=TwoWay}" />
-    <Grid ColumnDefinitions="Auto,200" ColumnSpacing="8" Margin="22,0,0,0">
+    <Grid ColumnDefinitions="Auto,200" RowDefinitions="Auto,Auto" ColumnSpacing="8" RowSpacing="6" Margin="22,0,0,0">
       <TextBlock Text="모델" VerticalAlignment="Center" />
       <ComboBox x:Name="ModelBox" Grid.Column="1" HorizontalAlignment="Stretch" ItemsSource="{Binding Models}"
                 SelectedItem="{Binding Model, Mode=TwoWay}" IsEnabled="{Binding ModelEnabled}" AutomationProperties.Name="모델" />
+      <TextBlock Grid.Row="1" Text="effort" VerticalAlignment="Center" />
+      <ComboBox x:Name="EffortBox" Grid.Row="1" Grid.Column="1" HorizontalAlignment="Stretch" ItemsSource="{Binding Efforts}"
+                SelectedItem="{Binding Effort, Mode=TwoWay}" IsEnabled="{Binding ModelEnabled}" AutomationProperties.Name="effort"
+                ToolTip.Tip="추론 노력(claude --effort)의 기본 값. AI 튜닝 시작 창에서 대화마다 바꿀 수 있습니다." />
     </Grid>
     <CheckBox x:Name="MaskLiteralsCheck" IsChecked="{Binding MaskLiterals, Mode=TwoWay}"
               Content="SQL 의 리터럴 값을 :vN 으로 가려서 보냄 (운영 접속은 이 설정과 관계없이 항상 켜짐)" />

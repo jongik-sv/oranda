@@ -234,19 +234,21 @@ public sealed partial class AiTuningFlow(
     /// <summary>
     /// 응답 규칙(처음 요청과 이어 말하기 모두). 결론 한 줄(굵게) → 원문·제안 수치 표 → 근거 블릿 → 제안 → 뺀 후보 → 다음 → 확인할 것(인용 한 줄).
     /// 대화 창이 결론 줄+표를 결론 상자로, 인용을 주의 상자로 그린다. 본문 SQL 은 구조 결과의 제안 항목에만 둔다.
+    /// 도구·함수 이름은 쓰지 않고 사람 말(벤치마크·실행 계획·튜닝 정보)로, 지표 이름도 한국어로 쓴다.
     /// </summary>
     internal const string ResponseStyle =
         "Response style (applies to every answer, including follow-ups; the summary field is this chat answer in Markdown): write in Korean and be brief. "
         + "Use this order and skip a part that has nothing to say. "
         + "1) The conclusion as one bold line, for example **keep_last 재작성 · 37% 빨라짐**; a second plain line may add how it was measured. "
-        + "2) Right after it, a Markdown table of the numbers with three columns: 지표 | 원문 | 제안 (elapsed, logical reads, rows and so on); put numbers in the table, not in sentences. "
+        + "2) Right after it, a Markdown table of the numbers with three columns: 지표 | 원문 | 제안; name the metrics in Korean (경과, 논리 읽기, 결과 행, 계획 해시 and so on, not elapsed or logical reads); put numbers in the table, not in sentences. "
         + "3) ## 근거: 3 to 5 bullets, each about 40 characters on one line, ending in the noun style 「~함」 or 「~음」, quoting plan or statistics numbers. "
         + "4) ## 제안: one line per rewrite or index; put the full SQL only in the structured result, not in the chat text. "
         + "5) ## 뺀 후보: candidates you measured and dropped, one line each with why. "
         + "6) ## 다음: what could be tried next, marked 미측정 if not measured. "
         + "7) One line starting with > that says what the user must check before applying. "
         + "Use bold only for the conclusion line. No [name] tags, no long remarks in parentheses, no preamble or closing remarks, "
-        + "do not narrate each tool call and do not repeat yourself.";
+        + "do not narrate each tool call and do not repeat yourself. "
+        + "Never write tool or function names (get_*, benchmark_queries, explain_plan and so on) in the answer; say what was done in plain words such as 벤치마크, 실행 계획, 튜닝 정보.";
 
     /// <summary>카드 없는 재작성 후보 한 줄: 「- `이름` · 근거 · 측정」.</summary>
     private static string RewriteLine(TuningRewrite rewrite) =>
@@ -302,7 +304,9 @@ public sealed partial class AiTuningFlow(
         using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
         _running = cts;
         var session = sessionFactory?.Invoke(context, vault);
-        var request = new AiRequest(prompt, context, resumeId, TuningResult.Schema(), choice.ModelId == "default" ? null : choice.ModelId, session);
+        var request = new AiRequest(
+            prompt, context, resumeId, TuningResult.Schema(), choice.ModelId == "default" ? null : choice.ModelId, session,
+            choice.EffortId == TuningStartInfo.DefaultModelId ? null : choice.EffortId);
         JsonElement? result = null;
         try
         {

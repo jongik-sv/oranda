@@ -201,4 +201,96 @@ public sealed class AiChatStyleTests
             window.Close();
         }
     });
+    /// <summary>좁은 대화 창(약 300px)에서 잘리던 실제 답 모양: 결론 상자 표 · 일반 표 · 긴 지표 이름.</summary>
+    private const string NarrowAnswer = """
+        **keep_last 재작성 · 19% 빨라짐**
+        벤치마크 3회씩 실행해 비교했고, 두 쿼리 모두 817행을 돌려줌
+
+        | 지표 | 원문 | 제안 |
+        |---|---|---|
+        | 경과 | 113.1 ms | 92.0 ms |
+        | 논리 읽기 | 2,237 | 1,975 |
+        | 결과 행 | 817 | 817 |
+        | 계획 해시 | 2543686891 | 1933176000 |
+
+        | 후보 | 경과 | 논리 읽기 | 결과 행 |
+        |---|---|---|---|
+        | 원문 그대로 MO_INST 두 번 읽기 | 113.1 ms | 2,237 | 817 |
+        | keep_last 재작성 | 92.0 ms | 1,975 | 817 |
+        """;
+
+    private static string Plain(SelectableTextBlock cell) => string.Concat(cell.Inlines!.OfType<Avalonia.Controls.Documents.Run>().Select(r => r.Text));
+
+    [Fact]
+    public Task Tables_fit_a_narrow_chat_panel_with_numbers_on_one_line_and_names_wrapping() => Ui.Run(() =>
+    {
+        var vm = new AiChatViewModel();
+        vm.StartConversation("튜닝");
+        vm.BeginTurn("이 문장 튜닝");
+        vm.AddAssistantText(NarrowAnswer);
+        vm.EndTurn();
+
+        var window = new Window { Width = 300, Height = 700, Content = new AiChatView { DataContext = vm } };
+        window.Show();
+        Pump();
+        window.UpdateLayout();
+        Pump();
+        window.UpdateLayout();
+        try
+        {
+            var view = window.GetVisualDescendants().OfType<MarkdownView>().Single();
+            var cells = view.GetVisualDescendants().OfType<SelectableTextBlock>().Where(t => t.FindAncestorOfType<MarkdownTablePanel>() is not null).ToList();
+            Assert.Equal(27, cells.Count); // 머리 3 + 12, 머리 4 + 8
+            // 표마다: 맞출 수 있으면 모든 칸이 대화 폭 안. 숫자 칸만으로도 넘치면(글꼴이 넓은 환경) 글 칸을 가장 좁게 줄이고 표만 가로로 스크롤된다.
+            var tables = view.GetVisualDescendants().OfType<MarkdownTablePanel>().ToList();
+            Assert.Equal(2, tables.Count);
+            foreach (var table in tables)
+            {
+                Assert.True(table.FitWidth < 300, "표가 대화 폭을 받지 못함");
+                var scroll = table.FindAncestorOfType<ScrollViewer>()!;
+                if (table.Bounds.Width <= table.FitWidth + 0.5)
+                {
+                    foreach (var cell in table.GetVisualDescendants().OfType<SelectableTextBlock>())
+                    {
+                        var right = cell.TranslatePoint(new Point(cell.Bounds.Width, 0), view)!.Value.X;
+                        Assert.True(right <= view.Bounds.Width + 0.5, $"「{Plain(cell)}」 칸이 대화 폭({view.Bounds.Width:0}) 밖({right:0})으로 나감");
+                    }
+                }
+                else
+                {
+                    Assert.All(table.ColumnWidths.Where((_, c) => table.WrapsColumn(c)), w => Assert.True(w <= MarkdownTablePanel.MinWrapWidth + 0.5, $"글 칸({w:0})을 더 줄일 수 있는데 넘침"));
+                    Assert.True(scroll.Extent.Width > scroll.Viewport.Width, "넘치는 표가 가로로 스크롤되지 않음");
+                }
+            }
+
+            foreach (var cell in cells)
+            {
+                Assert.True(cell.Bounds.Width + 0.5 >= cell.DesiredSize.Width, $"「{Plain(cell)}」 칸이 칸 폭보다 넓음(잘림)");
+                if (MarkdownView.IsNumeric(Plain(cell)))
+                {
+                    Assert.Equal(TextWrapping.NoWrap, cell.TextWrapping); // 숫자는 한 줄
+                }
+            }
+
+            // 지표 이름 칸은 줄바꿈해 폭을 줄인다(긴 후보 이름이 두 줄 이상).
+            var longName = cells.First(t => t.Inlines!.OfType<Avalonia.Controls.Documents.Run>().Any(r => r.Text?.StartsWith("원문 그대로", StringComparison.Ordinal) == true));
+            Assert.Equal(TextWrapping.Wrap, longName.TextWrapping);
+            Assert.True(longName.Bounds.Height > 24, "긴 이름 칸이 줄바꿈되지 않음");
+
+            var dir = Environment.GetEnvironmentVariable("ORANDA_RENDER_DIR");
+            if (!string.IsNullOrEmpty(dir))
+            {
+                Directory.CreateDirectory(dir);
+                using var bmp = new RenderTargetBitmap(new PixelSize((int)Math.Ceiling(window.Bounds.Width), (int)Math.Ceiling(window.Bounds.Height)));
+                bmp.Render(window);
+#pragma warning disable CS0618 // 렌더 확인용: 새 오버로드가 없는 헤드리스 비트맵
+                bmp.Save(Path.Combine(dir, "ai-chat-narrow-table.png"));
+#pragma warning restore CS0618
+            }
+        }
+        finally
+        {
+            window.Close();
+        }
+    });
 }

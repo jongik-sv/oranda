@@ -6,11 +6,15 @@ using CommunityToolkit.Mvvm.Input;
 using Oranda.Core.Ai.Access;
 using Oranda.Core.Ai.Contracts;
 using Oranda.Core.Connection;
+using Oranda.Core.Settings;
 
 namespace Oranda.App.Features.Ai.Tuning;
 
 /// <summary>시작 확인 창의 모델 선택 줄(기본 모델·로컬 모델 등).</summary>
 public sealed record TuningModelOption(string Id, string Title);
+
+/// <summary>시작 확인 창의 effort 선택 줄(CLI 기본 · low~max).</summary>
+public sealed record TuningEffortOption(string Id, string Title);
 
 /// <summary>
 /// 시작 확인 창에 보일 사실. 접속의 허용 수준과 환경은 <paramref name="Context"/> 가 들고 있고(<see cref="AiAccessPolicy.Effective"/> 로 이미 계산된 값),
@@ -26,10 +30,30 @@ public sealed record TuningStartInfo(
     AiContext Context,
     IReadOnlyList<TuningModelOption> Models,
     string InitialModelId = TuningStartInfo.DefaultModelId,
-    bool MaskLiterals = false)
+    bool MaskLiterals = false,
+    IReadOnlyList<TuningEffortOption>? Efforts = null,
+    string InitialEffortId = TuningStartInfo.DefaultModelId)
 {
-    /// <summary>모델을 지정하지 않고 보내는 줄의 id(설정 값이 비어 있을 때의 기본). <c>InitialModelId</c> 는 처음 골라 둘 줄의 id(설정 값).</summary>
+    /// <summary>
+    /// 모델(또는 effort)을 지정하지 않고 보내는 줄의 id(설정 값이 비어 있을 때의 기본). <c>InitialModelId</c>·<c>InitialEffortId</c> 는 처음 골라 둘 줄의 id(설정 값).
+    /// <c>Efforts</c> 가 null 이면 CLI 기본 줄 + low~max 다.
+    /// </summary>
     public const string DefaultModelId = "default";
+
+    /// <summary>
+    /// 고를 수 있는 effort 줄: low~max. 설정 값이 비어 있거나 모르는 값이면 「기본 — Claude Code」 줄(effort 를 넘기지 않음)을 맨 앞에 둔다.
+    /// </summary>
+    public static IReadOnlyList<TuningEffortOption> EffortOptions(string? configured)
+    {
+        List<TuningEffortOption> options = [];
+        if (configured is null || !AiSettings.EffortLevels.Contains(configured))
+        {
+            options.Add(new TuningEffortOption(DefaultModelId, "기본 — Claude Code"));
+        }
+
+        options.AddRange(AiSettings.EffortLevels.Select(level => new TuningEffortOption(level, level)));
+        return options;
+    }
 
     /// <summary>접속의 AI 허용 수준이 「끔」이라 시작할 수 없다.</summary>
     public bool AccessOff => Context.AccessLevel == AiAccessLevel.Off;
@@ -42,8 +66,11 @@ public sealed record TuningStartInfo(
 }
 
 /// <summary>사용자가 「튜닝 시작」 을 눌러 확정한 선택.</summary>
-/// <summary>시작 창의 선택. <paramref name="RunRiskyFunctions"/> = 「위험 함수도 실행」(대화마다, 기본 꺼짐): 벤치마크가 위험 함수가 든 후보도 읽기 전용으로 실행한다.</summary>
-public sealed record TuningStartChoice(bool Benchmark, bool IndexDdl, string ModelId, bool RunRiskyFunctions = false);
+/// <summary>
+/// 시작 창의 선택. <paramref name="RunRiskyFunctions"/> = 「위험 함수도 실행」(대화마다, 기본 꺼짐): 벤치마크가 위험 함수가 든 후보도 읽기 전용으로 실행한다.
+/// <paramref name="EffortId"/> = <c>claude --effort</c> 값(이어 말하기에도 같은 값). <see cref="TuningStartInfo.DefaultModelId"/> 이면 넘기지 않는다.
+/// </summary>
+public sealed record TuningStartChoice(bool Benchmark, bool IndexDdl, string ModelId, bool RunRiskyFunctions = false, string EffortId = TuningStartInfo.DefaultModelId);
 
 /// <summary>AI 튜닝 시작 확인 창(시안 9): 먼저 보낼 것·요청 시 줄 것·보내지 않음, 벤치마크·인덱스 문안·모델 선택.</summary>
 public sealed partial class TuningStartViewModel : ObservableObject
@@ -69,6 +96,9 @@ public sealed partial class TuningStartViewModel : ObservableObject
     [ObservableProperty]
     private TuningModelOption? _model;
 
+    [ObservableProperty]
+    private TuningEffortOption? _effort;
+
     public TuningStartViewModel(TuningStartInfo info)
     {
         ArgumentNullException.ThrowIfNull(info);
@@ -76,11 +106,15 @@ public sealed partial class TuningStartViewModel : ObservableObject
         Benchmark = info.BenchmarkAllowed && !info.IsProduction; // 운영은 허용만 하고 기본은 끈다(문장당 30초·변형 5개·반복 5회 부하)
         Model = info.Models.FirstOrDefault(m => string.Equals(m.Id, info.InitialModelId, StringComparison.OrdinalIgnoreCase))
             ?? (info.Models.Count > 0 ? info.Models[0] : null);
+        Efforts = info.Efforts ?? TuningStartInfo.EffortOptions(null);
+        Effort = Efforts.FirstOrDefault(e => string.Equals(e.Id, info.InitialEffortId, StringComparison.OrdinalIgnoreCase)) ?? Efforts[0];
     }
 
     public TuningStartInfo Info { get; }
 
     public IReadOnlyList<TuningModelOption> Models => Info.Models;
+
+    public IReadOnlyList<TuningEffortOption> Efforts { get; }
 
     public bool IsBlocked => Info.AccessOff;
 
@@ -103,7 +137,7 @@ public sealed partial class TuningStartViewModel : ObservableObject
 
     /// <summary>확정한 선택. 시작할 수 없으면 null.</summary>
     public TuningStartChoice? Choice => CanStart
-        ? new TuningStartChoice(Benchmark && BenchmarkEnabled, IndexDdl, Model!.Id, Benchmark && BenchmarkEnabled && RunRiskyFunctions)
+        ? new TuningStartChoice(Benchmark && BenchmarkEnabled, IndexDdl, Model!.Id, Benchmark && BenchmarkEnabled && RunRiskyFunctions, Effort?.Id ?? TuningStartInfo.DefaultModelId)
         : null;
 
     partial void OnModelChanged(TuningModelOption? value) => OnPropertyChanged(nameof(CanStart));

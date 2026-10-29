@@ -28,6 +28,7 @@ public sealed record AiDriverCapabilities(bool Skills, bool Tools, bool Resume, 
 /// <param name="ResumeId">앞 대화를 잇는 id(CLI session_id 등). 새 대화면 null.</param>
 /// <param name="OutputSchema">결과를 이 JSON 스키마에 맞추도록 요구한다(튜닝 결과 등). null 이면 자유 글.</param>
 /// <param name="Model">모델 이름. null 이면 드라이버 기본값.</param>
+/// <param name="Effort">추론 노력(<c>AiSettings.EffortLevels</c> 중 하나). null 이면 설정 값, 그것도 없으면 드라이버 기본값.</param>
 /// <param name="Session">
 /// 도구 호출의 실행 범위. 호출한 쪽이 만들어 넘기고, 도구를 쓰는 드라이버는 <c>IAgentRunTokens.Issue</c> 로 토큰을 발급해 프로세스(또는 API 반복)가 끝나면 <c>Revoke</c> 한다.
 /// 호출한 쪽도 같은 객체로 중간에 <see cref="Oranda.Core.Ai.Gate.AgentSession.Revoke"/> 할 수 있다. 도구를 쓰지 않는 요청은 null.
@@ -38,4 +39,5 @@ public sealed record AiRequest(
     string? ResumeId = null,
     JsonElement? OutputSchema = null,
     string? Model = null,
-    Oranda.Core.Ai.Gate.AgentSession? Session = null);
+    Oranda.Core.Ai.Gate.AgentSession? Session = null,
+    string? Effort = null);

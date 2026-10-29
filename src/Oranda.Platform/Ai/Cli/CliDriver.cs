@@ -118,7 +118,7 @@ internal sealed class CliDriver : IAiDriver
 
             // 스키마는 줄바꿈 없이 한 줄로 넘긴다(공백·줄바꿈이 든 원문은 일부 실행 경로에서 인자가 잘린다).
             var schema = request.OutputSchema is { } element ? JsonSerializer.Serialize(element) : null;
-            var invocation = new ClaudeCliInvocation(configPath!, schema, request.Model ?? checkedRun.Settings!.Model, request.ResumeId);
+            var invocation = new ClaudeCliInvocation(configPath!, schema, request.Model ?? checkedRun.Settings!.Model, request.ResumeId, request.Effort ?? checkedRun.Settings!.Effort);
             var launch = new ClaudeLaunch(checkedRun.Executable!, ClaudeCliArguments.Build(invocation), workDirectory!, request.Prompt);
 
             (process, var startError) = TryStart(launch);

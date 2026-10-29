@@ -1284,5 +1284,9 @@
   "펼치기": "Expand",
   "접기": "Collapse",
   "위험 함수도 실행 (자치 트랜잭션·외부 접근 함수가 든 후보도 읽기 전용으로 실측)": "Run risky functions too (measure candidates whose functions use autonomous transactions or external access, read-only)",
-  "끄면 그런 후보는 실행하지 않고 운영 커서 실측을 씁니다. 켜도 자치 트랜잭션의 커밋은 막지 못합니다.": "When off, such candidates are not run and the production cursor's measured statistics are used instead. Even when on, commits made by autonomous transactions cannot be blocked."
+  "끄면 그런 후보는 실행하지 않고 운영 커서 실측을 씁니다. 켜도 자치 트랜잭션의 커밋은 막지 못합니다.": "When off, such candidates are not run and the production cursor's measured statistics are used instead. Even when on, commits made by autonomous transactions cannot be blocked.",
+  "기본 — Claude Code": "Default — Claude Code",
+  "기본 (Claude Code)": "Default (Claude Code)",
+  "추론 노력(claude --effort). 높을수록 오래 생각하고 느립니다. 기본 값은 설정 창 AI 쪽에서 바꿉니다.": "Reasoning effort (claude --effort). Higher thinks longer and is slower. Change the default on the AI page of Settings.",
+  "추론 노력(claude --effort)의 기본 값. AI 튜닝 시작 창에서 대화마다 바꿀 수 있습니다.": "Default reasoning effort (claude --effort). You can change it per conversation in the AI tuning start dialog."
 }

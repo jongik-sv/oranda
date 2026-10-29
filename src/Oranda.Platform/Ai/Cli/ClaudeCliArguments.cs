@@ -1,3 +1,5 @@
+using Oranda.Core.Settings;
+
 namespace Oranda.Platform.Ai.Cli;
 
 /// <summary>claude -p 한 번의 실행에 필요한 값. 계약(AiRequest)과 무관한 내부 형태다.</summary>
@@ -5,7 +7,8 @@ namespace Oranda.Platform.Ai.Cli;
 /// <param name="JsonSchema">결과를 맞출 JSON 스키마 글. null 이면 자유 글.</param>
 /// <param name="Model">모델 이름이나 별칭. null 이면 claude 기본값.</param>
 /// <param name="ResumeId">이어 말할 세션 id. 새 대화면 null.</param>
-internal sealed record ClaudeCliInvocation(string McpConfigPath, string? JsonSchema = null, string? Model = null, string? ResumeId = null);
+/// <param name="Effort">추론 노력(low·medium·high·xhigh·max). null 이나 모르는 값이면 claude 기본값.</param>
+internal sealed record ClaudeCliInvocation(string McpConfigPath, string? JsonSchema = null, string? Model = null, string? ResumeId = null, string? Effort = null);
 
 /// <summary>
 /// claude -p 인자 목록(b0 탐침으로 확인한 조합). 프롬프트는 인자로 싣지 않는다 — 표준 입력으로 쓰고 닫는다
@@ -46,6 +49,13 @@ internal static class ClaudeCliArguments
         {
             arguments.Add("--model");
             arguments.Add(invocation.Model);
+        }
+
+        // resume 때도 다시 준다(이어 말하기마다 새 프로세스라 앞 실행의 값이 남지 않는다). 모르는 값은 빼서 CLI 기본으로 둔다.
+        if (invocation.Effort?.Trim().ToLowerInvariant() is { } effort && AiSettings.EffortLevels.Contains(effort))
+        {
+            arguments.Add("--effort");
+            arguments.Add(effort);
         }
 
         if (invocation.ResumeId is not null)

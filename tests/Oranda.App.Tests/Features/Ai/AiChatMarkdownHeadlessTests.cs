@@ -122,7 +122,7 @@ public sealed class AiChatMarkdownHeadlessTests
             Assert.All(view.GetVisualDescendants().OfType<TextBlock>().Where(t => !string.IsNullOrEmpty(t.Text) || t.Inlines?.Count > 0 || t is SelectableTextBlock), t => Assert.True(t is SelectableTextBlock || t.Text is "•" or "1." or "2." or "sql" or "복사" || t.Text is null)); // 표식·코드 언어 이름·복사 단추 글만 일반 글 칸
             var selectable = view.GetVisualDescendants().OfType<SelectableTextBlock>().ToList();
             // 닫힌 sql 블록은 편집기와 같은 색으로 칠한 Run 들(키워드 SELECT 는 기본 글색이 아니다). 언어 없는 블록은 일반 글.
-            var sqlBlock = Assert.Single(selectable, t => t.TextWrapping == Avalonia.Media.TextWrapping.NoWrap && t.Inlines?.Count > 0);
+            var sqlBlock = Assert.Single(selectable, t => t.TextWrapping == Avalonia.Media.TextWrapping.NoWrap && t.Inlines?.Count > 0 && t.FindAncestorOfType<MarkdownTablePanel>() is null); // 표 숫자 칸도 한 줄이라 뺀다
             var sqlRuns = sqlBlock.Inlines!.OfType<Avalonia.Controls.Documents.Run>().ToList();
             Assert.StartsWith("SELECT o.*", string.Concat(sqlRuns.Select(r => r.Text)), StringComparison.Ordinal);
             Assert.NotNull(sqlRuns.First(r => r.Text == "SELECT").Foreground);

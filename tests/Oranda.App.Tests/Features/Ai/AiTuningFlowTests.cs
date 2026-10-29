@@ -242,6 +242,21 @@ public class AiTuningFlowTests
         Assert.StartsWith("인덱스는 만들지 말고 힌트로만", driver.Requests[1].Prompt, StringComparison.Ordinal);
     }
 
+    [Theory]
+    [InlineData("xhigh", "xhigh")]
+    [InlineData("default", null)]
+    public async Task Chosen_effort_goes_into_the_first_request_and_every_follow_up(string effortId, string? expected)
+    {
+        var driver = Driver();
+        var flow = new AiTuningFlow(new FakeEditor(Original), driver, new AiChatViewModel(), (_, _) => { });
+        await flow.StartAsync(new TuningStartChoice(true, true, "default", EffortId: effortId), Context);
+
+        await flow.FollowUpAsync("다른 방법도");
+
+        Assert.Equal(2, driver.Requests.Count);
+        Assert.All(driver.Requests, r => Assert.Equal(expected, r.Effort));
+    }
+
     [Fact]
     public async Task Response_style_rules_go_into_the_first_request_and_every_follow_up()
     {
@@ -260,6 +275,9 @@ public class AiTuningFlowTests
             Assert.Contains("## 뺀 후보", r.Prompt, StringComparison.Ordinal);
             Assert.Contains("One line starting with >", r.Prompt, StringComparison.Ordinal);
             Assert.Contains("No [name] tags, no long remarks in parentheses", r.Prompt, StringComparison.Ordinal);
+            Assert.Contains("Never write tool or function names (get_*, benchmark_queries, explain_plan and so on)", r.Prompt, StringComparison.Ordinal); // cf-2: 사람 말로
+            Assert.Contains("벤치마크, 실행 계획, 튜닝 정보", r.Prompt, StringComparison.Ordinal);
+            Assert.Contains("경과, 논리 읽기, 결과 행, 계획 해시", r.Prompt, StringComparison.Ordinal); // 지표 이름도 한국어
         });
     }
 

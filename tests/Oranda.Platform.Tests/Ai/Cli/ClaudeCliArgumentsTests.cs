@@ -39,7 +39,28 @@ public class ClaudeCliArgumentsTests
         AssertPair(arguments, "--setting-sources", "project");
         Assert.DoesNotContain("--json-schema", arguments);
         Assert.DoesNotContain("--model", arguments);
+        Assert.DoesNotContain("--effort", arguments); // 고르지 않으면 CLI 기본
     }
+
+    [Theory]
+    [InlineData("low")]
+    [InlineData("medium")]
+    [InlineData("high")]
+    [InlineData("xhigh")]
+    [InlineData("MAX")]
+    public void Effort_is_passed_on_new_and_resumed_conversations(string effort)
+    {
+        AssertPair(ClaudeCliArguments.Build(new ClaudeCliInvocation("C:/run/mcp.json", Effort: effort)), "--effort", effort.ToLowerInvariant());
+        AssertPair(ClaudeCliArguments.Build(new ClaudeCliInvocation("C:/run/mcp.json", ResumeId: "sid-1", Effort: effort)), "--effort", effort.ToLowerInvariant());
+    }
+
+    [Theory]
+    [InlineData("")]
+    [InlineData("  ")]
+    [InlineData("ultra")]
+    [InlineData("--verbose")]
+    public void Unknown_effort_is_left_out_so_the_cli_default_applies(string effort) =>
+        Assert.DoesNotContain("--effort", ClaudeCliArguments.Build(new ClaudeCliInvocation("C:/run/mcp.json", Effort: effort)));
 
     private static void AssertPair(IReadOnlyList<string> arguments, string option, string value)
     {

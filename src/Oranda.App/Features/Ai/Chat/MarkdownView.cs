@@ -339,32 +339,35 @@ public sealed partial class MarkdownView : StackPanel
         headBorder.Bind(Border.BorderBrushProperty, headBorder.GetResourceObservable("OrandaSeparatorBrush"));
         DockPanel.SetDock(headBorder, Avalonia.Controls.Dock.Top);
 
-        var grid = TableGrid(table, padding: 12, stretch: true);
+        var grid = TableGrid(table, padding: 10, stretch: true);
         var box = new Border
         {
             CornerRadius = new CornerRadius(8), BorderThickness = new Thickness(1), ClipToBounds = true, Classes = { "conclusion" },
-            Child = new DockPanel { Children = { headBorder, Scroll(grid) } },
+            Child = new DockPanel { Children = { headBorder, Scroll(grid, grid, inset: 0) } },
         };
         box.Bind(Border.BorderBrushProperty, box.GetResourceObservable("OrandaSeparatorBrush"));
         return box;
     }
 
-    /// <summary>표: 테두리 하나 · 머리 회색 · 줄무늬 · 숫자 칸 고정폭 오른쪽 정렬. 넓으면 가로로 스크롤된다.</summary>
-    private static ScrollViewer Table(MarkdownTable table)
+    /// <summary>표: 테두리 하나 · 머리 회색 · 줄무늬 · 숫자 칸 고정폭 오른쪽 정렬. 대화 폭에 맞추고, 그래도 넓으면 가로로 스크롤된다.</summary>
+    private static MarkdownTableScroll Table(MarkdownTable table)
     {
-        var border = new Border { BorderThickness = new Thickness(1), CornerRadius = new CornerRadius(4), ClipToBounds = true, Child = TableGrid(table, padding: 8, stretch: false), HorizontalAlignment = HorizontalAlignment.Left };
+        var grid = TableGrid(table, padding: 8, stretch: false);
+        var border = new Border { BorderThickness = new Thickness(1), CornerRadius = new CornerRadius(4), ClipToBounds = true, Child = grid, HorizontalAlignment = HorizontalAlignment.Left };
         border.Bind(Border.BorderBrushProperty, border.GetResourceObservable("OrandaSeparatorBrush"));
-        return Scroll(border);
+        return Scroll(border, grid, inset: 2);
     }
 
-    private static ScrollViewer Scroll(Control content) => new()
+    /// <summary>표를 감싸는 가로 스크롤 뷰. 보이는 폭(테두리 <paramref name="inset"/> 뺀 값)을 표 판에 넘겨 칸 폭을 맞추게 한다.</summary>
+    private static MarkdownTableScroll Scroll(Control content, MarkdownTablePanel table, double inset) => new(table, inset)
     {
         Content = content,
         HorizontalScrollBarVisibility = Avalonia.Controls.Primitives.ScrollBarVisibility.Auto,
         VerticalScrollBarVisibility = Avalonia.Controls.Primitives.ScrollBarVisibility.Disabled,
     };
 
-    private static Grid TableGrid(MarkdownTable table, double padding, bool stretch)
+    /// <summary>표 칸 판: 숫자 칸은 한 줄(줄바꿈 없음), 글 칸은 좁으면 줄바꿈된다(<see cref="MarkdownTablePanel"/>).</summary>
+    private static MarkdownTablePanel TableGrid(MarkdownTable table, double padding, bool stretch)
     {
         var columns = table.Aligns.Count;
         var numeric = new bool[columns];
@@ -374,12 +377,8 @@ public sealed partial class MarkdownView : StackPanel
             numeric[c] = cells.Count > 0 && cells.All(IsNumeric);
         }
 
-        var grid = new Grid();
-        for (var c = 0; c < columns; c++)
-        {
-            // 결론 상자 안의 표는 상자 폭을 채운다(첫 칸이 남는 폭을 받는다).
-            grid.ColumnDefinitions.Add(new ColumnDefinition(stretch && c == 0 ? new GridLength(1, GridUnitType.Star) : GridLength.Auto));
-        }
+        // 결론 상자 안의 표는 상자 폭을 채운다(첫 칸이 남는 폭을 받는다).
+        var grid = new MarkdownTablePanel(columns, numeric.Select(n => !n).ToArray(), stretchFirst: stretch);
 
         var rowIndex = 0;
         AddRow(grid, table.Header, table.Aligns, numeric, rowIndex++, header: true, padding);
@@ -391,14 +390,18 @@ public sealed partial class MarkdownView : StackPanel
         return grid;
     }
 
-    private static void AddRow(Grid grid, IReadOnlyList<IReadOnlyList<MarkdownSpan>> cells, IReadOnlyList<MarkdownAlign> aligns, bool[] numeric, int rowIndex, bool header, double padding)
+    private static void AddRow(MarkdownTablePanel grid, IReadOnlyList<IReadOnlyList<MarkdownSpan>> cells, IReadOnlyList<MarkdownAlign> aligns, bool[] numeric, int rowIndex, bool header, double padding)
     {
-        grid.RowDefinitions.Add(new RowDefinition(GridLength.Auto));
         for (var c = 0; c < aligns.Count; c++)
         {
             var spans = c < cells.Count ? cells[c] : [];
             var text = header ? SmallText(spans, FontWeight.SemiBold) : TextOf(spans);
             text.MaxWidth = CellMaxWidth;
+            if (numeric[c])
+            {
+                text.TextWrapping = TextWrapping.NoWrap; // 숫자는 한 줄로(칸이 좁으면 글 칸이 줄거나 표가 스크롤된다)
+            }
+
             text.TextAlignment = aligns[c] switch
             {
                 MarkdownAlign.Center => TextAlignment.Center,
@@ -426,8 +429,6 @@ public sealed partial class MarkdownView : StackPanel
                 cell.Bind(Border.BackgroundProperty, cell.GetResourceObservable("OrandaRowAltBrush")); // 줄무늬(머리글 다음 둘째 줄부터)
             }
 
-            Grid.SetRow(cell, rowIndex);
-            Grid.SetColumn(cell, c);
             grid.Children.Add(cell);
         }
     }

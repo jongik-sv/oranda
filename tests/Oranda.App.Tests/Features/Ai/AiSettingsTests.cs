@@ -30,6 +30,34 @@ public class AiSettingsTests
     }
 
     [Fact]
+    public void Model_page_effort_is_the_cli_default_until_a_level_is_chosen()
+    {
+        var page = new AiModelSettingsPage(new AiSettings());
+        Assert.Equal(["기본 (Claude Code)", "low", "medium", "high", "xhigh", "max"], page.Efforts);
+        Assert.Equal(AiModelSettingsPage.DefaultEffortText, page.Effort);
+        Assert.Null(page.ToSettings().Effort);
+
+        page.Effort = "xhigh";
+        Assert.Equal("xhigh", page.ToSettings().Effort);
+        Assert.Equal("high", new AiModelSettingsPage(new AiSettings { Effort = "high" }).Effort);
+        Assert.Equal(AiModelSettingsPage.DefaultEffortText, new AiModelSettingsPage(new AiSettings { Effort = "ultra" }).Effort); // 모르는 값은 기본
+    }
+
+    [Fact]
+    public Task Model_page_effort_box_writes_the_setting() => HeadlessHost.Run(() =>
+    {
+        var page = new AiModelSettingsPage(new AiSettings { Effort = "low" });
+        var window = new Window { Content = new AiModelSettingsView { DataContext = page } };
+        window.Show();
+
+        var box = ((AiModelSettingsView)window.Content!).FindControl<ComboBox>("EffortBox")!;
+        Assert.Equal("low", box.SelectedItem);
+        box.SelectedItem = "max";
+        Assert.Equal("max", page.ToSettings().Effort);
+        window.Close();
+    });
+
+    [Fact]
     public Task Model_page_mask_literals_checkbox_round_trips_through_the_settings() => HeadlessHost.Run(() =>
     {
         var page = new AiModelSettingsPage(new AiSettings { ExecutablePath = "claude-example", MaskLiterals = true });

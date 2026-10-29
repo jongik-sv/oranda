@@ -162,4 +162,57 @@ public class TuningStartTests
         Assert.False(dialog.FindControl<Button>("StartButton")!.Command!.CanExecute(null));
         dialog.Close();
     });
+    [Fact]
+    public void Effort_rows_start_with_the_cli_default_when_the_setting_is_empty()
+    {
+        var context = new AiContext("DEV-ERP", ConnectionEnvironment.Development, AiAccessLevel.Query);
+        var info = AiTuningLauncher.BuildStartInfo(null, context, new AiSettings());
+        Assert.Equal(["default", "low", "medium", "high", "xhigh", "max"], info.Efforts!.Select(e => e.Id));
+        var vm = new TuningStartViewModel(info);
+        Assert.Equal("default", vm.Choice!.EffortId);
+
+        vm.Effort = vm.Efforts.Single(e => e.Id == "max");
+        Assert.Equal("max", vm.Choice!.EffortId);
+    }
+
+    [Theory]
+    [InlineData("high", "high")]
+    [InlineData(" XHIGH ", "xhigh")]
+    public void A_set_effort_is_preselected_and_the_default_row_is_left_out(string setting, string expected)
+    {
+        var context = new AiContext("DEV-ERP", ConnectionEnvironment.Development, AiAccessLevel.Query);
+        var info = AiTuningLauncher.BuildStartInfo(null, context, new AiSettings { Effort = setting });
+        Assert.Equal(["low", "medium", "high", "xhigh", "max"], info.Efforts!.Select(e => e.Id));
+        Assert.Equal(expected, new TuningStartViewModel(info).Choice!.EffortId);
+    }
+
+    [Fact]
+    public void An_unknown_effort_setting_falls_back_to_the_cli_default() =>
+        Assert.Equal("default", new TuningStartViewModel(AiTuningLauncher.BuildStartInfo(null, new AiContext("DEV-ERP", ConnectionEnvironment.Development, AiAccessLevel.Query), new AiSettings { Effort = "ultra" })).Choice!.EffortId);
+
+    [Fact]
+    public Task Dialog_has_an_effort_box_next_to_the_model() => HeadlessHost.Run(() =>
+    {
+        var info = AiTuningLauncher.BuildStartInfo(null, new AiContext("DEV-ERP", ConnectionEnvironment.Development, AiAccessLevel.Query), new AiSettings { Effort = "high" });
+        var dialog = new TuningStartDialog { DataContext = new TuningStartViewModel(info) };
+        dialog.Show();
+        var effort = dialog.FindControl<ComboBox>("EffortCombo")!;
+        Assert.Equal(5, effort.ItemCount);
+        Assert.Equal("high", ((TuningEffortOption)effort.SelectedItem!).Id);
+        var model = dialog.FindControl<ComboBox>("ModelCombo")!;
+        Assert.Same(model.Parent, effort.Parent); // 같은 줄(「모델」 옆)
+
+        if (Environment.GetEnvironmentVariable("ORANDA_RENDER_DIR") is { Length: > 0 } dir)
+        {
+            Directory.CreateDirectory(dir);
+            dialog.UpdateLayout();
+            using var bmp = new Avalonia.Media.Imaging.RenderTargetBitmap(new Avalonia.PixelSize((int)Math.Ceiling(dialog.Bounds.Width), (int)Math.Ceiling(dialog.Bounds.Height)));
+            bmp.Render(dialog);
+#pragma warning disable CS0618 // 렌더 확인용: 새 오버로드가 없는 헤드리스 비트맵
+            bmp.Save(Path.Combine(dir, "ai-tuning-start-effort.png"));
+#pragma warning restore CS0618
+        }
+
+        dialog.Close();
+    });
 }

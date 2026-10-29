@@ -53,7 +53,7 @@ public sealed class CliDriverTests : IDisposable
         };
         var driver = NewDriver();
 
-        var events = await RunAsync(driver, Request(resumeId: "sid-prev", model: "haiku", schema: """{"type":"object"}"""));
+        var events = await RunAsync(driver, Request(resumeId: "sid-prev", model: "haiku", schema: """{"type":"object"}""", effort: "high"));
 
         Assert.IsType<AiStarted>(events[0]);
         Assert.Equal(2, events.OfType<AiToolCall>().Count());
@@ -70,6 +70,7 @@ public sealed class CliDriverTests : IDisposable
         Assert.Equal("the prompt", launch.Prompt);
         Assert.Equal("sid-prev", ArgumentAfter(launch.Arguments, "--resume"));
         Assert.Equal("haiku", ArgumentAfter(launch.Arguments, "--model"));
+        Assert.Equal("high", ArgumentAfter(launch.Arguments, "--effort"));
         Assert.Equal("""{"type":"object"}""", ArgumentAfter(launch.Arguments, "--json-schema"));
         Assert.True(Directory.Exists(launch.WorkingDirectory));
         Assert.Empty(Directory.EnumerateFileSystemEntries(launch.WorkingDirectory));
@@ -117,6 +118,19 @@ public sealed class CliDriverTests : IDisposable
         Assert.Equal("unexpected_mcp_server", Assert.IsType<AiError>(Assert.Single(events)).Code);
         Assert.True(_launcher.Process!.Killed);
         Assert.Equal(_tokens.Issued, _tokens.Revoked);
+    }
+
+    [Fact]
+    public async Task Effort_falls_back_to_the_settings_value_when_the_request_has_none()
+    {
+        _launcher.Lines =
+        [
+            """{"type":"result","subtype":"success","is_error":false,"session_id":"s1","structured_output":{"rows":1}}""",
+        ];
+
+        await RunAsync(NewDriver(settingsEffort: "medium"), Request());
+
+        Assert.Equal("medium", ArgumentAfter(_launcher.Launches.Single().Arguments, "--effort"));
     }
 
     [Fact]
@@ -222,7 +236,7 @@ public sealed class CliDriverTests : IDisposable
         return Path.Combine(directory!.FullName, "tests", "Oranda.Platform.Tests", "Ai", "Cli", "Fixtures", name);
     }
 
-    private static AiRequest Request(bool withSession = true, string? resumeId = null, string? model = null, string? schema = null)
+    private static AiRequest Request(bool withSession = true, string? resumeId = null, string? model = null, string? schema = null, string? effort = null)
     {
         var profile = new ConnectionProfile("p", "u", "h/s");
         var context = new AiContext("p", null, AiAccessLevel.Plan);
@@ -232,7 +246,8 @@ public sealed class CliDriverTests : IDisposable
             resumeId,
             schema is null ? null : JsonDocument.Parse(schema).RootElement.Clone(),
             model,
-            withSession ? new AgentSession(new AgentRunScope("run-1", profile, context)) : null);
+            withSession ? new AgentSession(new AgentRunScope("run-1", profile, context)) : null,
+            effort);
     }
 
     private static async Task<List<AiEvent>> RunAsync(CliDriver driver, AiRequest request)
@@ -249,7 +264,7 @@ public sealed class CliDriverTests : IDisposable
     private static async Task<string?> ErrorCodeAsync(CliDriver driver, AiRequest request)
         => Assert.IsType<AiError>(Assert.Single(await RunAsync(driver, request))).Code;
 
-    private CliDriver NewDriver(string? pipeName = "bridge-pipe", bool orandactlExists = true, bool cliExists = true, string cliFile = "claude.exe")
+    private CliDriver NewDriver(string? pipeName = "bridge-pipe", bool orandactlExists = true, bool cliExists = true, string cliFile = "claude.exe", string? settingsEffort = null)
     {
         var cli = Path.Combine(_dir, cliFile);
         var orandactl = Path.Combine(_dir, "orandactl.exe");
@@ -258,7 +273,7 @@ public sealed class CliDriverTests : IDisposable
             _gate,
             new FixedEndpoint(pipeName),
             new AppDataPaths(_dir),
-            new FixedSettings(new AppSettings { Ai = new AiSettings { ExecutablePath = cli } }),
+            new FixedSettings(new AppSettings { Ai = new AiSettings { ExecutablePath = cli, Effort = settingsEffort } }),
             _launcher,
             orandactl,
             () => null,

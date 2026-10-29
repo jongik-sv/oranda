@@ -75,6 +75,9 @@ public sealed record AiSettings
     /// <summary>모델 이름(<c>claude --model</c> 값). null = CLI 기본.</summary>
     public string? Model { get; init; }
 
+    /// <summary>추론 노력(<c>claude --effort</c> 값, <see cref="EffortLevels"/> 중 하나). null = CLI 기본.</summary>
+    public string? Effort { get; init; }
+
     /// <summary>CLI 실행 파일 경로. null = PATH 에서 찾는다.</summary>
     public string? ExecutablePath { get; init; }
 
@@ -82,6 +85,9 @@ public sealed record AiSettings
     /// SQL 글의 리터럴 값을 <c>:v1</c> 로 바꿔 보낸다(연구서 §7.1). 운영 접속은 이 값과 관계없이 항상 가린다(<c>AiAccessPolicy.MaskLiterals</c>).
     /// </summary>
     public bool MaskLiterals { get; init; }
+
+    /// <summary><c>claude --effort</c> 가 받는 값(낮은 것부터).</summary>
+    public static IReadOnlyList<string> EffortLevels { get; } = ["low", "medium", "high", "xhigh", "max"];
 }
 
 /// <summary>MyBatis 작업 공간 설정. 설정 창에는 없고 「바뀌는 부분」 창의 확인란이 바꾼다.</summary>
