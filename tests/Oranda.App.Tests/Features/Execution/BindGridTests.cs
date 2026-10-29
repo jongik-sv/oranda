@@ -1,5 +1,7 @@
 using System.Text.RegularExpressions;
+using Avalonia;
 using Avalonia.Controls;
+using Avalonia.Headless;
 using Avalonia.VisualTree;
 using Oranda.App.Features.Binds;
 using Oranda.App.Features.Execution;
@@ -263,6 +265,52 @@ public sealed partial class BindGridTests
         Assert.Equal("1000", vm.Rows[0].Text);
         Assert.Equal("2026-10-23 00:00:00", vm.Rows[1].Text);
         Assert.DoesNotContain("invalid", cell.Classes);
+        window.Close();
+        return Task.CompletedTask;
+    });
+
+    [Fact]
+    public Task Dragging_across_rows_selects_the_block_even_when_it_starts_in_a_name_cell() => Ui.Run(() =>
+    {
+        var vm = BindVariablesViewModel.ForHost(new EventBus(), new SqlEditorHost());
+        vm.Store.Ensure(["A", "B", "C", "D"]);
+        var view = new BindVariablesView { DataContext = vm };
+        var window = new Window { Width = 520, Height = 300, Content = view };
+        window.Show();
+        Avalonia.Threading.Dispatcher.UIThread.RunJobs();
+        var list = view.FindControl<ListBox>("RowList")!;
+
+        Avalonia.Point Center(int row, Func<Control, bool> which)
+        {
+            var target = ((Control)list.ContainerFromIndex(row)!).GetVisualDescendants().OfType<Control>().First(which);
+            return target.TranslatePoint(new Avalonia.Point(target.Bounds.Width / 2, target.Bounds.Height / 2), window)!.Value;
+        }
+
+        Avalonia.Point Head(int row) => Center(row, c => c.Classes.Contains("row-head"));
+        Avalonia.Point NameCell(int row) => Center(row, c => c is TextBox { Name: "NameBox" });
+        void Drag(Avalonia.Point from, params Avalonia.Point[] through)
+        {
+            window.MouseDown(from, Avalonia.Input.MouseButton.Left);
+            foreach (var p in through)
+            {
+                window.MouseMove(p, Avalonia.Input.RawInputModifiers.LeftMouseButton);
+            }
+
+            window.MouseUp(through[^1], Avalonia.Input.MouseButton.Left);
+            Avalonia.Threading.Dispatcher.UIThread.RunJobs();
+        }
+
+        Drag(Head(1), Head(2), Head(3));
+        Assert.Equal(["B", "C", "D"], vm.SelectedRows.Select(r => r.Name).Order());
+
+        // 이름 칸에서 시작해도 다른 줄로 넘어가면 글 고르기가 아니라 줄 고르기다: Ctrl+C 가 줄을 복사하도록 포커스도 목록으로 옮긴다.
+        Drag(NameCell(0), NameCell(1));
+        Assert.Equal(["A", "B"], vm.SelectedRows.Select(r => r.Name).Order());
+        Assert.IsNotType<TextBox>(window.FocusManager?.GetFocusedElement());
+        window.KeyPress(Avalonia.Input.Key.C, Avalonia.Input.RawInputModifiers.Control, Avalonia.Input.PhysicalKey.C, "c");
+        window.KeyRelease(Avalonia.Input.Key.C, Avalonia.Input.RawInputModifiers.Control, Avalonia.Input.PhysicalKey.C, "c");
+        Avalonia.Threading.Dispatcher.UIThread.RunJobs();
+        Assert.Equal("바인드 변수 2줄을 복사했습니다.", vm.StatusText);
         window.Close();
         return Task.CompletedTask;
     });

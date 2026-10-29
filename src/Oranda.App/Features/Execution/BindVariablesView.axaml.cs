@@ -1,5 +1,6 @@
 using Avalonia;
 using Avalonia.Controls;
+using Avalonia.Input;
 using Avalonia.Threading;
 using Avalonia.VisualTree;
 using Oranda.App.Features.Binds;
@@ -22,6 +23,9 @@ public partial class BindVariablesView : UserControl
             ApplyColumns();
         };
         RowList.AddHandler(KeyDownEvent, OnRowListKeyDown, Avalonia.Interactivity.RoutingStrategies.Tunnel);
+        RowList.AddHandler(PointerPressedEvent, OnRowListPointerPressed, Avalonia.Interactivity.RoutingStrategies.Tunnel);
+        RowList.AddHandler(PointerMovedEvent, OnRowListPointerMoved, Avalonia.Interactivity.RoutingStrategies.Tunnel);
+        RowList.AddHandler(PointerReleasedEvent, OnRowListPointerReleased, Avalonia.Interactivity.RoutingStrategies.Tunnel);
         DataContextChanged += (_, _) =>
         {
             if (_vm is not null)
@@ -146,6 +150,69 @@ public partial class BindVariablesView : UserControl
     }
 
     // ---- 블록 선택·복사·붙여 넣기(TSK-03-09) -------------------------------------------------
+
+    // 끌어서 고르기: 누른 줄에서 다른 줄로 끌면 그 사이 줄을 모두 고른다. 입력 칸에서 시작해도 다른 줄로 넘어가면 글 고르기를 멈추고
+    // 줄 고르기로 바꾼다(칸의 글 선택을 풀고 포커스를 줄로 옮겨 Ctrl+C 가 줄을 복사하게). 콤보에서 누른 것과 Shift·Ctrl 클릭은 목록 몫이다.
+    private int _dragAnchor = -1;
+    private bool _dragRows;
+
+    private int RowIndexAt(Avalonia.Input.PointerEventArgs e) =>
+        (RowList.InputHitTest(e.GetPosition(RowList)) as Visual)?.FindAncestorOfType<ListBoxItem>(includeSelf: true) is { } item
+            ? RowList.IndexFromContainer(item)
+            : -1;
+
+    private void OnRowListPointerPressed(object? sender, Avalonia.Input.PointerPressedEventArgs e)
+    {
+        _dragRows = false;
+        _dragAnchor = e.GetCurrentPoint(RowList).Properties.IsLeftButtonPressed && e.KeyModifiers == Avalonia.Input.KeyModifiers.None
+            && (e.Source as Visual)?.FindAncestorOfType<ComboBox>(includeSelf: true) is null
+            ? RowIndexAt(e)
+            : -1;
+    }
+
+    private void OnRowListPointerMoved(object? sender, Avalonia.Input.PointerEventArgs e)
+    {
+        if (_dragAnchor < 0 || !e.GetCurrentPoint(RowList).Properties.IsLeftButtonPressed)
+        {
+            return;
+        }
+
+        var index = RowIndexAt(e);
+        if (index < 0 || (!_dragRows && index == _dragAnchor))
+        {
+            return;
+        }
+
+        if (!_dragRows)
+        {
+            _dragRows = true;
+            if (TopLevel.GetTopLevel(this)?.FocusManager?.GetFocusedElement() is TextBox box)
+            {
+                box.ClearSelection();
+            }
+
+            e.Pointer.Capture(RowList); // 입력 칸이 잡은 포인터를 넘겨받아 칸이 글을 더 고르지 않게
+            RowList.ContainerFromIndex(_dragAnchor)?.Focus(); // 목록은 포커스를 받지 않는다: 줄 번호 칸을 누를 때처럼 줄에 둔다
+        }
+
+        RowList.Selection.BeginBatchUpdate();
+        RowList.Selection.Clear();
+        RowList.Selection.SelectRange(Math.Min(_dragAnchor, index), Math.Max(_dragAnchor, index));
+        RowList.Selection.EndBatchUpdate();
+        e.Handled = true;
+    }
+
+    private void OnRowListPointerReleased(object? sender, Avalonia.Input.PointerReleasedEventArgs e)
+    {
+        if (_dragRows)
+        {
+            e.Pointer.Capture(null);
+            e.Handled = true;
+        }
+
+        _dragAnchor = -1;
+        _dragRows = false;
+    }
 
     private void OnSelectionChanged(object? sender, SelectionChangedEventArgs e)
     {
