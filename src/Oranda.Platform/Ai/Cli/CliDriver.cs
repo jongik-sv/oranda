@@ -46,7 +46,7 @@ internal sealed class CliDriver : IAiDriver
             paths,
             settings,
             new SystemClaudeProcessLauncher(),
-            Path.Combine(AppContext.BaseDirectory, "orandactl", OperatingSystem.IsWindows() ? "orandactl.exe" : "orandactl"),
+            Path.Combine(AppContext.BaseDirectory, "agent", OperatingSystem.IsWindows() ? "orandactl.exe" : "orandactl"),
             () => Environment.GetEnvironmentVariable("PATH"),
             File.Exists)
     {

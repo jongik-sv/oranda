@@ -118,7 +118,8 @@
     <ProjectReference Include="..\Oranda.Language\Oranda.Language.csproj" />
     <ProjectReference Include="..\Oranda.Oracle\Oranda.Oracle.csproj" />
     <ProjectReference Include="..\Oranda.Platform\Oranda.Platform.csproj" />
-    <!-- orandactl(MCP 서버)은 앱이 코드로 참조하지 않는다. 빌드 순서와 출력 위치만 받아 앱 출력의 orandactl\ 폴더로 복사한다. -->
+    <!-- orandactl(MCP 서버)은 앱이 코드로 참조하지 않는다. 빌드 순서와 출력 위치만 받아 앱 출력의 agent\ 폴더로 복사한다.
+         폴더 이름을 orandactl 로 두면 macOS 에서 SDK 가 루트에 복사하는 확장자 없는 apphost(orandactl)와 이름이 겹쳐 복사가 실패한다. -->
     <ProjectReference Include="..\Oranda.Agent.Cli\Oranda.Agent.Cli.csproj" ReferenceOutputAssembly="false" OutputItemType="OrandactlOutput" />
   </ItemGroup>
 
@@ -126,6 +127,6 @@
     <ItemGroup>
       <_OrandactlFile Include="%(OrandactlOutput.RootDir)%(OrandactlOutput.Directory)*" />
     </ItemGroup>
-    <Copy SourceFiles="@(_OrandactlFile)" DestinationFolder="$(OutDir)orandactl" SkipUnchangedFiles="true" />
+    <Copy SourceFiles="@(_OrandactlFile)" DestinationFolder="$(OutDir)agent" SkipUnchangedFiles="true" />
   </Target>
 </Project>
