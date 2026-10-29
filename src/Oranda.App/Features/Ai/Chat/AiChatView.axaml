@@ -10,8 +10,11 @@
                FontSize="{DynamicResource OrandaFontSizeSmall}" TextTrimming="CharacterEllipsis" />
     <Border DockPanel.Dock="Bottom" BorderBrush="{DynamicResource OrandaSeparatorBrush}" BorderThickness="0,1,0,0" Padding="8">
       <StackPanel Spacing="6">
+        <!-- 입력은 튜닝 대화를 잇기만 한다: 시작한 대화가 없으면 막고 시작하는 길을 알린다. -->
+        <TextBlock x:Name="StartHint" Text="「AI 튜닝」 으로 튜닝을 시작하면 여기서 이어 말할 수 있습니다." IsVisible="{Binding !CanFollowUp}"
+                   TextWrapping="Wrap" Opacity="0.7" FontSize="{DynamicResource OrandaFontSizeSmall}" />
         <TextBox x:Name="DraftBox" Text="{Binding Draft, Mode=TwoWay}" AcceptsReturn="True" TextWrapping="Wrap" MinHeight="48" MaxHeight="120"
-                 PlaceholderText="방향을 바꾸려면 적어 주세요" IsEnabled="{Binding !IsRunning}" AutomationProperties.Name="AI 에게 보낼 글">
+                 PlaceholderText="방향을 바꾸려면 적어 주세요" IsEnabled="{Binding CanType}" AutomationProperties.Name="AI 에게 보낼 글">
           <TextBox.KeyBindings>
             <KeyBinding Gesture="Enter" Command="{Binding SendCommand}" />
           </TextBox.KeyBindings>

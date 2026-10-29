@@ -13,6 +13,8 @@ using Oranda.Core.Ai.Gate;
 using Oranda.Core.Connection;
 using Oranda.Core.Events;
 using Oranda.Core.Features;
+using Oranda.App.Tests.Shell.Headless;
+using Oranda.Core.Sessions;
 using Oranda.Core.Settings;
 using Oranda.Core.Shell;
 
@@ -78,6 +80,31 @@ public class AiCommandsTests
         Assert.True(keys.Evaluate(AiContextKeys.ConfiguredKey));
         Assert.False(keys.Evaluate(AiContextKeys.AccessOnKey));
     }
+
+    [Fact]
+    public Task Access_key_follows_the_saved_ai_level_of_the_shown_connection_not_the_copy_taken_at_connect() => HeadlessHost.Run(() =>
+    {
+        var keys = new ContextKeyService();
+        var bus = new EventBus();
+        var task = new AiContextKeys(new ServiceContainer().AddInstance<IContextKeys>(keys).AddInstance<IEventBus>(bus));
+        task.Attach();
+        var prod = Profile(ConnectionEnvironment.Production) with { Id = Guid.NewGuid(), AiAccess = AiAccessLevel.Off };
+        bus.Publish(new SessionOpened(Guid.NewGuid(), prod, Server, SessionPurpose.Work));
+        Assert.False(keys.Evaluate(AiContextKeys.AccessOnKey)); // 이 접속은 AI 를 꺼 두었다
+
+        // 접속한 채로 접속 편집에서 올렸다: 세션의 프로필은 접속할 때의 사본이라 바뀌지 않는다.
+        bus.Publish(new ConnectionProfileSaved(prod with { AiAccess = AiAccessLevel.Plan }));
+        Assert.True(keys.Evaluate(AiContextKeys.AccessOnKey));
+
+        bus.Publish(new ConnectionProfileSaved(prod with { Id = Guid.NewGuid(), AiAccess = AiAccessLevel.Off })); // 다른 접속
+        Assert.True(keys.Evaluate(AiContextKeys.AccessOnKey));
+
+        bus.Publish(new ConnectionProfileSaved(prod with { AiAccess = AiAccessLevel.Off }));
+        Assert.False(keys.Evaluate(AiContextKeys.AccessOnKey));
+    });
+
+    private static readonly ServerInfo Server = new("19.0.0.0.0", "ORCL", "db-example", "svc", "ORCL", null, false, 1,
+        new ServerCapabilities(false, true, true, false, false));
 
     [Fact]
     public async Task Settings_save_writes_the_ai_model_choice_and_the_tab_hides_without_the_feature()

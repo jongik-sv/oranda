@@ -195,6 +195,7 @@ public sealed class ConnectionService : IConnectionService, IDisposable
     private readonly IAppDataPaths _paths;
     private readonly IPasswordChanger _passwordChanger;
     private readonly IConnectionTester _tester;
+    private readonly IEventBus _events;
     private readonly ContextKeyService? _keys;
     private readonly SemaphoreSlim _gate = new(1, 1);
     private readonly List<IDisposable> _subscriptions = [];
@@ -232,6 +233,7 @@ public sealed class ConnectionService : IConnectionService, IDisposable
         _paths = paths;
         _passwordChanger = passwordChanger ?? new OdpPasswordChanger();
         _tester = tester ?? new OdpConnectionTester();
+        _events = events;
         _keys = keys;
         _subscriptions.Add(events.Subscribe<SessionBroken>(this, OnBroken));
         _subscriptions.Add(events.Subscribe<SessionClosed>(this, OnClosed));
@@ -459,6 +461,8 @@ public sealed class ConnectionService : IConnectionService, IDisposable
             await _credentials.SaveAsync(next.CredentialRef!, Encoding.UTF8.GetBytes(password)).ConfigureAwait(false);
         }
 
+        // 잠금 밖에서 알린다: 받는 쪽이 다시 저장소를 읽어도 막히지 않게.
+        _events.Publish(new ConnectionProfileSaved(next));
         return next;
     }
 

@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
 using Avalonia.Threading;
@@ -7,6 +8,7 @@ using Oranda.App.Shell;
 using Oranda.App.Shell.Settings;
 using Oranda.Core.Ai.Access;
 using Oranda.Core.Composition;
+using Oranda.Core.Connection;
 using Oranda.Core.Events;
 using Oranda.Core.Settings;
 using Oranda.Core.Shell;
@@ -16,6 +18,7 @@ namespace Oranda.App.Features.Ai.Agent;
 /// <summary>
 /// 시작 작업: AI 튜닝 명령의 문맥 키 둘을 설정과 보이는 세션에 맞춰 둔다.
 /// <c>aiConfigured</c> = 설정의 AI 모델이 「선택 안 함」 이 아니다, <c>aiAccessOn</c> = 보이는 세션 접속의 AI 허용 수준이 「끔」 이 아니다.
+/// 보이는 세션의 프로필은 접속할 때의 사본이라, 접속한 채로 접속 편집에서 바꾼 허용 수준은 저장 알림(<see cref="ConnectionProfileSaved"/>)으로 받은 값을 쓴다.
 /// 명령 처리기는 처음 실행할 때 만들어지므로 키는 처리기가 아니라 이 작업이 유지한다. <c>Features.Ai</c> 네임스페이스라 aiTuning 이 꺼져 있으면 만들어지지 않는다.
 /// </summary>
 [OrandaService(typeof(IStartupTask))]
@@ -25,7 +28,11 @@ public sealed class AiContextKeys(IServiceProvider services) : IStartupTask
 
     public const string AccessOnKey = "aiAccessOn";
 
+    // 접속 ID → 마지막으로 저장된 프로필(UI 스레드에서만 읽고 쓴다).
+    private readonly Dictionary<Guid, ConnectionProfile> _saved = [];
+
     private IDisposable? _settingsSubscription;
+    private IDisposable? _savedSubscription;
 
     public StartupPhase Phase => StartupPhase.AfterFirstFrame;
 
@@ -36,7 +43,7 @@ public sealed class AiContextKeys(IServiceProvider services) : IStartupTask
         return Task.CompletedTask;
     }
 
-    /// <summary>키를 한 번 맞추고, 설정(<c>ai</c> 섹션)이나 보이는 세션이 바뀔 때마다 다시 맞춘다.</summary>
+    /// <summary>키를 한 번 맞추고, 설정(<c>ai</c> 섹션)·보이는 세션·접속 프로필 저장이 있을 때마다 다시 맞춘다.</summary>
     public void Attach()
     {
         if (services.GetService(typeof(IEventBus)) is not IEventBus bus)
@@ -52,6 +59,13 @@ public sealed class AiContextKeys(IServiceProvider services) : IStartupTask
                 Post(Sync);
             }
         });
+
+        // 저장은 스레드 풀에서 끝날 수 있다: 사전도 UI 스레드에서 바꾼다.
+        _savedSubscription = bus.Subscribe<ConnectionProfileSaved>(this, e => Post(() =>
+        {
+            _saved[e.Profile.Id] = e.Profile;
+            Sync();
+        }));
         state.PropertyChanged += (_, _) => Post(Sync);
         Sync();
     }
@@ -66,8 +80,8 @@ public sealed class AiContextKeys(IServiceProvider services) : IStartupTask
 
         var configured = services.GetService(typeof(SettingsService)) is SettingsService settings && settings.Current.Ai.Driver != AiDriverKind.None;
         var accessOn = services.GetService(typeof(IEventBus)) is IEventBus bus
-            && ExecutionState.For(bus).ShownProfile is { } profile
-            && AiAccessPolicy.Effective(profile) != AiAccessLevel.Off;
+            && ExecutionState.For(bus).ShownProfile is { } shown
+            && AiAccessPolicy.Effective(_saved.GetValueOrDefault(shown.Id, shown)) != AiAccessLevel.Off;
         keys.Set(ConfiguredKey, configured);
         keys.Set(AccessOnKey, accessOn);
     }

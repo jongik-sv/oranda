@@ -40,7 +40,17 @@ public sealed partial class AiChatViewModel : ToolPanelViewModelBase
 
     [ObservableProperty]
     [NotifyCanExecuteChangedFor(nameof(SendCommand), nameof(StopCommand))]
+    [NotifyPropertyChangedFor(nameof(CanType))]
     private bool _isRunning;
+
+    /// <summary>
+    /// 이어 갈 튜닝 대화가 있다(<see cref="StartConversation"/> 이 한 번이라도 불렸다). 입력은 이어 말하기만 하므로, 없으면 보낸 글이 아무 데도 가지 않는다:
+    /// 보내기를 끄고 화면에 「AI 튜닝」 으로 시작하라는 안내를 보인다.
+    /// </summary>
+    [ObservableProperty]
+    [NotifyCanExecuteChangedFor(nameof(SendCommand))]
+    [NotifyPropertyChangedFor(nameof(CanType))]
+    private bool _canFollowUp;
 
     [ObservableProperty]
     [NotifyCanExecuteChangedFor(nameof(SendCommand))]
@@ -62,6 +72,9 @@ public sealed partial class AiChatViewModel : ToolPanelViewModelBase
 
     public ObservableCollection<ChatEntry> Entries { get; } = [];
 
+    /// <summary>입력 칸에 쓸 수 있다: 이어 갈 대화가 있고 실행 중이 아니다.</summary>
+    public bool CanType => CanFollowUp && !IsRunning;
+
     /// <summary>이어 말하기를 보냈다(인수 = 보낸 글). 호출 쪽이 같은 세션으로 다시 실행한다.</summary>
     public event EventHandler<string>? FollowUpRequested;
 
@@ -79,6 +92,7 @@ public sealed partial class AiChatViewModel : ToolPanelViewModelBase
         _toolCount = 0;
         _runCount = 0;
         IsRunning = false;
+        CanFollowUp = true;
     }
 
     /// <summary>한 번의 실행을 시작한다. <paramref name="userText"/> 를 사용자 줄로 보인다.</summary>
@@ -205,7 +219,7 @@ public sealed partial class AiChatViewModel : ToolPanelViewModelBase
         UpdateStatus();
     }
 
-    private bool CanSend() => !IsRunning && !string.IsNullOrWhiteSpace(Draft);
+    private bool CanSend() => CanType && !string.IsNullOrWhiteSpace(Draft);
 
     [RelayCommand(CanExecute = nameof(CanSend))]
     private void Send()

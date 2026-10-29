@@ -517,6 +517,20 @@ public sealed class ConnectionManagerTests
     }
 
     [Fact]
+    public async Task Save_announces_the_saved_profile_and_a_rejected_save_announces_nothing()
+    {
+        using var fx = new ServiceFixture();
+        var announced = new List<ConnectionProfile>();
+        fx.Events.Subscribe<ConnectionProfileSaved>(announced, e => announced.Add(e.Profile));
+
+        var saved = await fx.Service.SaveProfileAsync(Profile(), null, false, CancellationToken.None);
+        Assert.Equal([saved], announced); // 새 ID 가 붙은, 저장된 그대로의 프로필
+
+        await Assert.ThrowsAsync<ConnectionValidationException>(() => fx.Service.SaveProfileAsync(Profile() with { DataSource = "h/s;pwd=x" }, null, false, CancellationToken.None));
+        Assert.Single(announced);
+    }
+
+    [Fact]
     public async Task Invalid_profile_is_not_saved_and_its_password_is_not_stored()
     {
         using var fx = new ServiceFixture();

@@ -33,3 +33,9 @@ public sealed record PolicyDecisionMade(Guid? SessionId, SqlStatement Statement,
 
 /// <summary>설정 서비스 → 에디터, 그리드, 테마. <paramref name="Section"/> 은 <c>AppSettings</c> 섹션의 JSON 이름(<c>editor</c>, <c>grid</c> …).</summary>
 public sealed record SettingsChanged(string Section) : OrandaEvent;
+
+/// <summary>
+/// 접속 서비스 → AI 문맥 키. 접속 프로필을 저장했다(<paramref name="Profile"/> = 저장된 그대로). 열린 세션의 프로필은 접속할 때의 사본이라
+/// 저장한 값(환경 라벨·AI 허용 수준 등)을 따라가지 않으므로, 최신 값이 필요한 쪽이 이 알림을 받는다.
+/// </summary>
+public sealed record ConnectionProfileSaved(ConnectionProfile Profile) : OrandaEvent;
