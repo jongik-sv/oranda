@@ -103,7 +103,7 @@
             <TextBlock Grid.Row="3" Text="{Binding PanelFontSizeLabel}" />
             <NumericUpDown Grid.Row="3" Grid.Column="1" x:Name="PanelFontSizeBox"
                            Minimum="8" Maximum="32" Increment="1" FormatString="0.#"
-                           Watermark="{Binding PanelFontSizeWatermark}"
+                           PlaceholderText="{Binding PanelFontSizeWatermark}"
                            Value="{Binding PanelFontSize}" AutomationProperties.Name="{Binding PanelFontSizeLabel}" />
             <!-- 편집기·결과 그리드 글꼴이 다른 탭에 있다는 안내와 그 탭으로 가는 링크. -->
             <StackPanel Grid.Row="4" Grid.Column="1" Spacing="2">
