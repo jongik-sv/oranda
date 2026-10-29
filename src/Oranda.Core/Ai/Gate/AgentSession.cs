@@ -31,6 +31,12 @@ public sealed record AgentRunScope(string RunId, ConnectionProfile Profile, AiCo
     /// 가림이 필요한데 사전이 없으면 게이트는 SQL 을 다루는 도구를 막는다.
     /// </summary>
     public LiteralVault? Literals { get; init; }
+
+    /// <summary>
+    /// 이 실행에 리터럴 가림이 필요하다(시작하는 쪽이 <see cref="AiAccessPolicy.MaskLiterals"/> 로 채운다: 운영이거나 설정이 켜짐).
+    /// 참인데 <see cref="Literals"/> 가 없으면 게이트가 SQL 을 다루는 도구를 막는다. 운영 접속은 이 값과 관계없이 항상 필요로 본다.
+    /// </summary>
+    public bool MaskLiteralsRequired { get; init; }
 }
 
 /// <summary>

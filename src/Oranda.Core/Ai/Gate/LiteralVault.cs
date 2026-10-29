@@ -80,7 +80,7 @@ public sealed partial class LiteralVault
     public bool IsOwnPlaceholder(string bindText)
     {
         ArgumentNullException.ThrowIfNull(bindText);
-        return TryParseNumber(bindText, out _);
+        return HasOwnShape(bindText, out _);
     }
 
     /// <summary>자리표시(<c>:v1</c>, 앞의 <c>:</c> 는 없어도 된다)의 원래 토큰 글. 이 사전에 없으면 false.</summary>
@@ -156,17 +156,15 @@ public sealed partial class LiteralVault
             if (raw.Contains('\'', StringComparison.Ordinal))
             {
                 AddTarget(raw, placeholder, Regex.Escape(raw));
-                var first = raw.IndexOf('\'', StringComparison.Ordinal);
-                var last = raw.LastIndexOf('\'');
-                if (last - first - 1 >= MinRedactedInnerLength)
+                foreach (var inner in InnerTexts(raw))
                 {
-                    var inner = raw.Substring(first + 1, last - first - 1);
                     AddTarget(inner, placeholder, Regex.Escape(inner));
                 }
             }
             else if (raw.Length >= MinRedactedNumberLength && IsNumeric(raw))
             {
-                AddTarget(raw, placeholder, @"(?<![\w.])" + Regex.Escape(raw) + @"(?![\w.])");
+                // ORA-01234 같은 오류 번호는 값으로 보지 않는다(번호가 망가지면 오히려 값을 짐작하게 한다).
+                AddTarget(raw, placeholder, @"(?<![\w.])(?<!ORA-)" + Regex.Escape(raw) + @"(?![\w.])");
             }
         }
 
@@ -197,9 +195,10 @@ public sealed partial class LiteralVault
     /// <summary>값을 내지 않는다: 형 이름과 개수만. 로그·예외·감사에 우연히 실려도 원래 값이 새지 않게 한다.</summary>
     public override string ToString() => nameof(LiteralVault) + "(" + Count.ToString(CultureInfo.InvariantCulture) + ")";
 
-    private bool TryParseNumber(string bindText, out int number)
+    /// <summary>접두 + 숫자만인 모양인가(앞의 <c>:</c> 는 있어도 없어도 된다). 숫자가 이 사전이 만든 값인지는 보지 않는다.</summary>
+    private bool HasOwnShape(string bindText, out ReadOnlySpan<char> digits)
     {
-        number = 0;
+        digits = default;
         var span = bindText.AsSpan();
         if (span.Length > 0 && span[0] == ':')
         {
@@ -211,8 +210,8 @@ public sealed partial class LiteralVault
             return false;
         }
 
-        var digits = span[Prefix.Length..];
-        foreach (var c in digits)
+        var rest = span[Prefix.Length..];
+        foreach (var c in rest)
         {
             if (c is < '0' or > '9')
             {
@@ -220,7 +219,19 @@ public sealed partial class LiteralVault
             }
         }
 
-        // 선행 0(:v01)은 이 사전이 만든 모양이 아니다. 같은 값으로 읽히게 두지 않는다.
+        digits = rest;
+        return true;
+    }
+
+    private bool TryParseNumber(string bindText, out int number)
+    {
+        number = 0;
+        if (!HasOwnShape(bindText, out var digits))
+        {
+            return false;
+        }
+
+        // 선행 0(:v01)과 너무 큰 수는 이 사전이 만든 값이 아니다. 같은 값으로 읽히게 두지 않는다.
         if (digits.Length > 1 && digits[0] == '0')
         {
             return false;
@@ -229,11 +240,45 @@ public sealed partial class LiteralVault
         return int.TryParse(digits, NumberStyles.None, CultureInfo.InvariantCulture, out number);
     }
 
+    /// <summary>문자열 토큰 <paramref name="raw"/> 의 안쪽 글 후보: 따옴표 사이, <c>q'[…]'</c> 의 구분자 안, 겹따옴표를 푼 글. 3자 미만은 뺀다.</summary>
+    private static List<string> InnerTexts(string raw)
+    {
+        var result = new List<string>();
+        var first = raw.IndexOf('\'', StringComparison.Ordinal);
+        var last = raw.LastIndexOf('\'');
+        if (last - first - 1 < MinRedactedInnerLength)
+        {
+            return result;
+        }
+
+        var inner = raw.Substring(first + 1, last - first - 1);
+        result.Add(inner);
+
+        if (first > 0 && raw[first - 1] is 'q' or 'Q')
+        {
+            // q'[abc]' / nq'<abc>': 여는 구분자와 닫는 구분자를 뺀 글
+            if (inner.Length - 2 >= MinRedactedInnerLength)
+            {
+                result.Add(inner[1..^1]);
+            }
+        }
+        else if (inner.Contains("''", StringComparison.Ordinal))
+        {
+            var unescaped = inner.Replace("''", "'", StringComparison.Ordinal);
+            if (unescaped.Length >= MinRedactedInnerLength)
+            {
+                result.Add(unescaped);
+            }
+        }
+
+        return result;
+    }
+
     private static bool IsNumeric(string raw)
     {
         foreach (var c in raw)
         {
-            if (!(char.IsAsciiDigit(c) || c is '.' or '+' or '-' or 'e' or 'E'))
+            if (!(char.IsAsciiDigit(c) || c is '.' or '+' or '-' or 'e' or 'E' or 'f' or 'F' or 'd' or 'D'))
             {
                 return false;
             }

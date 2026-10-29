@@ -35,7 +35,9 @@ public partial class AgentGateTests
     {
         profile ??= Dev(AiAccessLevel.QueryRows);
         var ctx = new AiContext(profile.Name, profile.Environment, context, StatementText: statement, SqlId: sqlId, CurrentSchema: currentSchema);
-        return new AgentSession(new AgentRunScope("run-1", profile, ctx, send ?? AgentSendScope.StatementOnly)) { Client = "test-client" };
+        // 운영 접속은 리터럴 가림이 필수라 사전이 있어야 SQL 도구를 쓸 수 있다(없을 때의 닫힘은 AgentGateTests.Masking 이 시험한다).
+        var literals = profile.Environment == ConnectionEnvironment.Production ? new LiteralVault() : null;
+        return new AgentSession(new AgentRunScope("run-1", profile, ctx, send ?? AgentSendScope.StatementOnly) { Literals = literals }) { Client = "test-client" };
     }
 
     private static Task<AgentGateResponse> Call(GateFixture fx, AgentSession session, string tool, string? json = null) =>
@@ -1265,10 +1267,10 @@ public partial class AgentGateTests
 
     private sealed class GateFixture
     {
-        public GateFixture(TimeProvider? time = null, IEnumerable<IAgentToolHandler>? handlers = null, TimeSpan? auditTimeout = null)
+        public GateFixture(TimeProvider? time = null, IEnumerable<IAgentToolHandler>? handlers = null, TimeSpan? auditTimeout = null, ISqlLiteralMasker? masker = null, bool noMasker = false)
         {
             Handlers = AgentTools.All.ToDictionary(t => t.Name, t => new FakeHandler(t.Name), StringComparer.Ordinal);
-            Gate = new AgentGate(Source, Extractor, handlers ?? Handlers.Values, Audit, time) { AuditTimeout = auditTimeout ?? TimeSpan.FromSeconds(5) };
+            Gate = new AgentGate(Source, Extractor, handlers ?? Handlers.Values, Audit, time, noMasker ? null : masker ?? new FakeMasker()) { AuditTimeout = auditTimeout ?? TimeSpan.FromSeconds(5) };
             Gate.ToolCompleted += (_, e) => Events.Add(e);
         }
 

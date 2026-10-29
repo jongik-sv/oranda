@@ -51,6 +51,7 @@ public sealed partial class AgentGate : IAgentGate
     private readonly Dictionary<string, IAgentToolHandler> _handlers;
     private readonly IAgentAuditStore _audit;
     private readonly TimeProvider _time;
+    private readonly ISqlLiteralMasker? _masker;
     private readonly ConditionalWeakTable<AgentSession, ScopeHolder> _scopes = new();
 
     public AgentGate(
@@ -58,13 +59,15 @@ public sealed partial class AgentGate : IAgentGate
         IStatementReferenceExtractor extractor,
         IEnumerable<IAgentToolHandler> handlers,
         IAgentAuditStore audit,
-        TimeProvider? time = null)
+        TimeProvider? time = null,
+        ISqlLiteralMasker? masker = null)
     {
         _sessions = sessions ?? throw new ArgumentNullException(nameof(sessions));
         _extractor = extractor ?? throw new ArgumentNullException(nameof(extractor));
         ArgumentNullException.ThrowIfNull(handlers);
         _audit = audit ?? throw new ArgumentNullException(nameof(audit));
         _time = time ?? TimeProvider.System;
+        _masker = masker;
 
         // 같은 도구 이름의 처리자가 둘이면 어느 것이 도는지 모호하다. 조립 오류이므로 시작할 때 알린다.
         var map = new Dictionary<string, IAgentToolHandler>(StringComparer.Ordinal);
@@ -145,7 +148,7 @@ public sealed partial class AgentGate : IAgentGate
             // 분석기·DB 세션 선택 같은 협력 객체의 실패도 예외로 새지 않게 한다(감사 한 줄은 남아야 한다).
             outcome = ex is OperationCanceledException && session.IsRevoked
                 ? Deny("run_revoked", "This run has ended and no longer accepts tool calls.")
-                : Fail("internal_error", ExceptionText(ex, level));
+                : Fail("internal_error", ExceptionText(ex, level, session.Run.Literals));
         }
 
         return await FinishAsync(session, level, requested, shown, sequence, state, outcome, _time.GetElapsedTime(started)).ConfigureAwait(false);
@@ -219,6 +222,10 @@ public sealed partial class AgentGate : IAgentGate
             return Deny("unknown_tool", "Unknown tool.");
         }
 
+        // 리터럴 가림이 켜져 있는가는 첫 거부보다 먼저 정한다(어느 거부든 감사 요약에 literals=masked 가 남도록).
+        var literals = session.Run.Literals;
+        state.LiteralMasking = literals is not null && _masker is not null;
+
         if (CleanArguments(tool, arguments, state.Clean) is { } invalid)
         {
             return invalid;
@@ -259,6 +266,21 @@ public sealed partial class AgentGate : IAgentGate
         if (tool.RequiresExplainPlanSetting && !explainPlanEnabled)
         {
             return Deny("explain_plan_disabled", "EXPLAIN PLAN is not allowed for this connection.");
+        }
+
+        // 리터럴 가림(설계 ai-tuning-2): 사전이 있으면 가림 켜짐이고 운영 접속은 항상 필요하다. 필요한데 사전이나 마스커가 없으면
+        // SQL 을 다루는 도구를 막는다(닫힌 쪽으로 실패). 켜져 있으면 인자의 자리표시를 원래 글로 되돌린 뒤 범위 검사를 한다.
+        if (TouchesSql(tool.Name) && (production || session.Run.MaskLiteralsRequired || literals is not null))
+        {
+            if (!state.LiteralMasking)
+            {
+                return Deny("literal_mask_unavailable", "Literal masking is required for this request but is not available; SQL tools are disabled.");
+            }
+
+            if (RestoreLiterals(state.Clean, literals!) is { } unknown)
+            {
+                return unknown;
+            }
         }
 
         var db = await _sessions.AcquireDbSessionAsync(session, token).ConfigureAwait(false);
@@ -302,7 +324,7 @@ public sealed partial class AgentGate : IAgentGate
             // 호출자의 취소가 아닌 취소(세션 폐기·처리자 안의 시간 초과)는 실패로 본다.
             return ex is OperationCanceledException && session.IsRevoked
                 ? Deny("run_revoked", "This run has ended and no longer accepts tool calls.")
-                : FailWithKind("tool_exception", ExceptionText(ex, level), ex.Message);
+                : FailWithKind("tool_exception", ExceptionText(ex, level, session.Run.Literals), ex.Message);
         }
 
         // 처리자가 도는 동안 폐기됐으면 결과를 쓰지 않는다(sql_id 도 기억하지 않는다).
@@ -318,12 +340,23 @@ public sealed partial class AgentGate : IAgentGate
 
         if (output.IsError)
         {
-            return FailWithKind("tool_failed", HandlerErrorText(output.ErrorMessage!, level), output.ErrorMessage!);
+            return FailWithKind("tool_failed", HandlerErrorText(output.ErrorMessage!, level, session.Run.Literals), output.ErrorMessage!);
         }
 
         // 처리자가 캐시 노드를 돌려줄 수 있으므로 복사본에서 가린다.
         var result = output.Result?.DeepClone() ?? new JsonObject();
         var removed = MaskRowValues(ref result, tool.Name, level, state.Clean);
+
+        // 결과의 SQL 글·술어 칸(AgentFields.SqlTextFields)에서 리터럴을 가린다. 가릴 수 없는 모양의 결과는 내지 않는다.
+        if (state.LiteralMasking)
+        {
+            if (!IsMaskableShape(result))
+            {
+                return Deny("unsafe_result", "The tool result has a shape whose SQL text cannot be masked; it was withheld.");
+            }
+
+            MaskSqlTextFields(ref result, literals!);
+        }
 
         // 가릴 수 없는 모양의 결과(문자열·숫자 루트, JSON 글이 든 문자열)는 행 값이 숨어 있을 수 있어 내지 않는다.
         if (level < AiAccessLevel.QueryRows && !IsMaskableShape(result))
@@ -393,12 +426,13 @@ public sealed partial class AgentGate : IAgentGate
     /// 예외를 LLM 에 보일 글로. 행 값을 줄 수 없는 수준(<see cref="AiAccessLevel.QueryRows"/> 미만)에서는 형 이름만,
     /// 그 위에서는 형 이름과 정화한 메시지 앞부분.
     /// </summary>
-    private static string ExceptionText(Exception ex, AiAccessLevel level)
+    private static string ExceptionText(Exception ex, AiAccessLevel level, LiteralVault? vault = null)
     {
         var name = ex.GetType().Name;
         if (level >= AiAccessLevel.QueryRows)
         {
-            return SanitizeError(name + ": " + ex.Message);
+            // 정화·자르기 전에 사전의 값을 먼저 가린다(정화가 줄바꿈을 공백으로 바꾸고 300자로 자르면 값이 더는 맞지 않는다).
+            return SanitizeError(name + ": " + (vault?.Redact(ex.Message) ?? ex.Message));
         }
 
         // 메시지에 오류 번호가 있으면 형 이름과 함께 남긴다(번호만으로는 값·서버 정보가 새지 않는다).
@@ -411,11 +445,11 @@ public sealed partial class AgentGate : IAgentGate
     /// 처리자의 오류 글을 LLM 에 보일 글로. 행 값을 줄 수 없는 수준에서는 DB 오류 번호(있으면)와 고정 문장뿐이다
     /// (오류 글에 끼어드는 값·서버 정보를 막는다). 그 위에서는 정화한 글.
     /// </summary>
-    private static string HandlerErrorText(string message, AiAccessLevel level)
+    private static string HandlerErrorText(string message, AiAccessLevel level, LiteralVault? vault = null)
     {
         if (level >= AiAccessLevel.QueryRows)
         {
-            return SanitizeError(message);
+            return SanitizeError(vault?.Redact(message) ?? message);
         }
 
         var ora = OraNumber().Match(message);
@@ -527,6 +561,9 @@ public sealed partial class AgentGate : IAgentGate
         public JsonObject Clean { get; } = new();
 
         public Dictionary<string, AgentObjectRef> Resolved { get; } = new(StringComparer.Ordinal);
+
+        /// <summary>이 호출에 리터럴 가림이 켜져 있다(사전과 마스커가 모두 있다). 감사 기록의 인자 요약에 <c>literals=masked</c> 로 남는다.</summary>
+        public bool LiteralMasking { get; set; }
 
         /// <summary>처리자가 실행·계획에 쓸 문장(<c>sql</c>·<c>variants</c>·대상 문장)을 게이트가 검사했는가.</summary>
         public bool StatementsChecked { get; set; }

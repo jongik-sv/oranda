@@ -96,6 +96,52 @@ public sealed partial class AgentGate
     [GeneratedRegex(@"\A[0-9a-z]{13}\z", RegexOptions.CultureInvariant)]
     private static partial Regex SqlIdPattern();
 
+    /// <summary>SQL 글을 인자로 받거나(<c>sql</c>·<c>variants[].sql</c>) 결과에 SQL 글·술어를 싣는 도구. 리터럴 가림이 필요하면 사전이 있어야 쓸 수 있다.</summary>
+    private static bool TouchesSql(string toolName) =>
+        toolName is AgentToolNames.ExplainPlan or AgentToolNames.GetCursorPlan or AgentToolNames.GetTuningContext or AgentToolNames.BenchmarkQueries;
+
+    /// <summary>
+    /// <c>sql</c>·<c>variants[].sql</c> 의 자리표시(<c>:v1</c>)를 원래 글로 되돌려 <paramref name="clean"/> 에 넣는다.
+    /// 사전의 모양인데 사전에 없는 자리표시가 있으면 <c>literal_unknown</c> 으로 거부한다(LLM 이 지어낸 값을 실행하지 않는다).
+    /// </summary>
+    private GateOutcome? RestoreLiterals(JsonObject clean, LiteralVault vault)
+    {
+        if (TryGetString(clean, AgentFields.Sql, out var sql))
+        {
+            var restored = _masker!.Restore(sql, vault);
+            if (!restored.Succeeded)
+            {
+                return UnknownLiteral(restored);
+            }
+
+            clean[AgentFields.Sql] = JsonValue.Create(restored.Text);
+        }
+
+        if (clean[AgentFields.Variants] is JsonArray variants)
+        {
+            foreach (var item in variants)
+            {
+                if (item is JsonObject variant && TryGetString(variant, AgentFields.Sql, out var variantSql))
+                {
+                    var restored = _masker!.Restore(variantSql, vault);
+                    if (!restored.Succeeded)
+                    {
+                        return UnknownLiteral(restored);
+                    }
+
+                    variant[AgentFields.Sql] = JsonValue.Create(restored.Text);
+                }
+            }
+        }
+
+        return null;
+    }
+
+    private static GateOutcome UnknownLiteral(SqlRestoreResult restored) =>
+        Deny(
+            "literal_unknown",
+            $"The SQL uses the placeholder '{Clip(restored.UnknownPlaceholder, 40)}' that this request did not create; use only the placeholders that appear in the statement you were given.");
+
     private static bool HasLongString(JsonNode? node)
     {
         switch (node)
@@ -117,12 +163,18 @@ public sealed partial class AgentGate
     /// </summary>
     private static string? SummarizeArguments(CallState state)
     {
-        if (state.Clean.Count == 0)
+        if (state.Clean.Count == 0 && !state.LiteralMasking)
         {
             return null;
         }
 
+        // 가림 표시는 400자 제한에 잘리지 않도록 맨 앞에 둔다.
         var parts = new List<string>();
+        if (state.LiteralMasking)
+        {
+            parts.Add("literals=masked");
+        }
+
         foreach (var pair in state.Clean)
         {
             var key = pair.Key;

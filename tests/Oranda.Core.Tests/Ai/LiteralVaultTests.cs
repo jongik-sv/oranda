@@ -84,6 +84,35 @@ public class LiteralVaultTests
     }
 
     [Fact]
+    public void Redact_also_finds_q_quote_inner_text_doubled_quotes_and_suffixed_numbers_but_not_error_numbers()
+    {
+        var vault = new LiteralVault();
+        vault.Add("q'[SECRET]'");
+        vault.Add("'it''s fine'");
+        vault.Add("01234");
+        vault.Add("1234f");
+
+        var redacted = vault.Redact("a SECRET b; it's fine c; ORA-01234: x; 1234f");
+
+        Assert.DoesNotContain("SECRET", redacted, StringComparison.Ordinal);
+        Assert.DoesNotContain("it's fine", redacted, StringComparison.Ordinal);
+        Assert.DoesNotContain("1234f", redacted, StringComparison.Ordinal);
+        Assert.Contains("ORA-01234", redacted, StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData(":v01")]
+    [InlineData(":v99999999999")]
+    public void Placeholder_shape_is_ours_even_when_the_number_is_not_canonical(string text)
+    {
+        var vault = new LiteralVault();
+        vault.Add("1");
+
+        Assert.True(vault.IsOwnPlaceholder(text));
+        Assert.False(vault.TryGetRaw(text, out _));
+    }
+
+    [Fact]
     public void Redact_replaces_known_values_in_text_but_leaves_short_values_and_error_numbers_alone()
     {
         var vault = new LiteralVault();

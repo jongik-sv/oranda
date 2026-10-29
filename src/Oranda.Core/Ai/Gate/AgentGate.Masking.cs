@@ -46,8 +46,105 @@ public sealed partial class AgentGate
             expansions[i].Restore();
         }
 
+        // 결과를 다음 단계(SQL 글 가림)가 다시 배열에 담을 수 있도록 임시 배열에서 뗀다(부모가 있는 노드는 다른 곳에 담을 수 없다).
         result = holder[0]!;
+        holder.RemoveAt(0);
         return removed;
+    }
+
+    /// <summary>SQL 글·술어 필드 이름을 <see cref="NormalizeName"/> 으로 정규화한 집합(<c>access_predicates</c>·<c>accessPredicates</c> 를 한 이름으로 본다).</summary>
+    private static readonly HashSet<string> SqlTextNames = [.. AgentFields.SqlTextFields.Select(NormalizeName)];
+
+    /// <summary>
+    /// 결과에서 SQL 글 필드(<see cref="AgentFields.SqlTextFields"/>)의 문자열을 <see cref="ISqlLiteralMasker.MaskPredicate"/> 로 가린다
+    /// (<paramref name="result"/> 를 직접 고치며, 루트가 JSON 글이면 교체될 수 있다). 이름이 정해진 필드만 가린다 — 모든 문자열을 가리면 <c>note</c>·숫자가 망가진다.
+    /// 문자열 값이 JSON 객체·배열 글이면 펼쳐서 같은 규칙을 적용한다. 필드 값이 배열·객체면 안의 문자열을 모두 가린다.
+    /// </summary>
+    private void MaskSqlTextFields(ref JsonNode result, LiteralVault vault)
+    {
+        var holder = new JsonArray { result };
+        var expansions = new List<Expansion>();
+        ExpandEmbeddedJson(holder, expansions);
+
+        MaskSqlTexts(holder, vault);
+
+        for (var i = expansions.Count - 1; i >= 0; i--)
+        {
+            expansions[i].Restore();
+        }
+
+        result = holder[0]!;
+        holder.RemoveAt(0);
+    }
+
+    private void MaskSqlTexts(JsonNode? node, LiteralVault vault)
+    {
+        switch (node)
+        {
+            case JsonObject obj:
+                foreach (var name in obj.Select(p => p.Key).ToList())
+                {
+                    if (SqlTextNames.Contains(NormalizeName(name)))
+                    {
+                        var item = obj[name];
+                        var masked = MaskSqlValue(item, vault);
+                        if (!ReferenceEquals(masked, item))
+                        {
+                            obj[name] = masked;
+                        }
+                    }
+                    else
+                    {
+                        MaskSqlTexts(obj[name], vault);
+                    }
+                }
+
+                break;
+            case JsonArray array:
+                foreach (var item in array)
+                {
+                    MaskSqlTexts(item, vault);
+                }
+
+                break;
+        }
+    }
+
+    /// <summary>SQL 글 필드의 값: 문자열은 가리고, 배열·객체는 안의 문자열을 모두 가린다. 그 밖의 값(숫자·불리언·null)은 그대로.</summary>
+    private JsonNode? MaskSqlValue(JsonNode? value, LiteralVault vault)
+    {
+        switch (value)
+        {
+            case JsonValue text when text.TryGetValue<string>(out var s):
+                return JsonValue.Create(_masker!.MaskPredicate(s, vault));
+            case JsonArray array:
+                for (var i = 0; i < array.Count; i++)
+                {
+                    // 문자열만 새 노드로 바꾼다. 배열·객체·숫자는 제자리에 둔다(같은 노드를 다시 대입하면 부모가 있다는 예외가 난다).
+                    var item = array[i];
+                    var masked = MaskSqlValue(item, vault);
+                    if (!ReferenceEquals(masked, item))
+                    {
+                        array[i] = masked;
+                    }
+                }
+
+                return array;
+            case JsonObject obj:
+                foreach (var name in obj.Select(p => p.Key).ToList())
+                {
+                    var item = obj[name];
+                    var masked = MaskSqlValue(item, vault);
+                    if (!ReferenceEquals(masked, item))
+                    {
+                        obj[name] = masked;
+                    }
+                }
+
+                return obj;
+            default:
+                return value;
+        }
     }
 
     /// <summary>행 값 필드를 가릴 수 있는 모양인가(허용 수준이 <see cref="AiAccessLevel.QueryRows"/> 미만일 때). 결과 루트는 객체나 배열이어야 한다.</summary>
