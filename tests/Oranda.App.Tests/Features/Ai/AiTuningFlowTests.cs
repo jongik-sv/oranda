@@ -161,7 +161,25 @@ public class AiTuningFlowTests
 
         Assert.Equal(2, driver.Requests.Count);
         Assert.Equal("sess-2", driver.Requests[1].ResumeId);
-        Assert.Equal("인덱스는 만들지 말고 힌트로만", driver.Requests[1].Prompt);
+        Assert.StartsWith("인덱스는 만들지 말고 힌트로만", driver.Requests[1].Prompt, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task Response_style_rules_go_into_the_first_request_and_every_follow_up()
+    {
+        var driver = Driver();
+        var flow = new AiTuningFlow(new FakeEditor(Original), driver, new AiChatViewModel(), (_, _) => { });
+        await flow.StartAsync(new TuningStartChoice(true, true, "default"), Context);
+
+        await flow.FollowUpAsync("다른 방법도");
+
+        Assert.All(driver.Requests, r =>
+        {
+            Assert.Contains(AiTuningFlow.ResponseStyle, r.Prompt, StringComparison.Ordinal);
+            Assert.Contains("conclusion of one or two lines", r.Prompt, StringComparison.Ordinal);
+            Assert.Contains("3 to 5 bullets", r.Prompt, StringComparison.Ordinal);
+            Assert.Contains("No preamble or closing remarks", r.Prompt, StringComparison.Ordinal);
+        });
     }
 
     [Fact]

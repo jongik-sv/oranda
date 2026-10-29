@@ -199,7 +199,8 @@ public sealed class AiTuningFlow(
         }
 
         // 이어 말하기 글은 가리지 않고(사용자가 쓴 글) 자리표시를 그대로 쓰라는 안내만 덧붙인다.
-        var prompt = _vault is null ? text : text + Environment.NewLine + Environment.NewLine + PlaceholderReminder(_vault);
+        var prompt = text + Environment.NewLine + Environment.NewLine + ResponseStyle
+            + (_vault is null ? string.Empty : Environment.NewLine + PlaceholderReminder(_vault));
         await RunAsync(prompt, chat.ResumeId, text, ct).ConfigureAwait(true);
     }
 
@@ -216,6 +217,7 @@ public sealed class AiTuningFlow(
         text.AppendLine(choice.IndexDdl
             ? "Index CREATE statements may be suggested as text only; they are never executed."
             : "Do not suggest indexes; leave index_suggestions empty.");
+        text.AppendLine(ResponseStyle);
         if (vault is not null)
         {
             text.AppendLine(PlaceholderReminder(vault));
@@ -227,6 +229,14 @@ public sealed class AiTuningFlow(
         text.AppendLine("</statement>");
         return text.ToString();
     }
+
+    /// <summary>응답을 짧고 핵심부터 쓰게 하는 규칙(처음 요청과 이어 말하기 모두). 본문 SQL 은 구조 결과의 제안 항목에만 둔다.</summary>
+    internal const string ResponseStyle =
+        "Response style (applies to every answer, including follow-ups): write in Korean and be brief. "
+        + "Start with a conclusion of one or two lines: what the bottleneck is and what to change for how much gain. "
+        + "Then the evidence as 3 to 5 bullets that quote the plan or statistics numbers. "
+        + "Then the proposals, one line each for every rewrite or index; put the full SQL only in the structured result, not in the chat text. "
+        + "No preamble or closing remarks, do not narrate each tool call, do not repeat yourself, and use a table only when a comparison needs it.";
 
     /// <summary>리터럴 값을 자리표시로 가렸다는 안내. 값은 싣지 않고 접두만 쓴다.</summary>
     private static string PlaceholderReminder(LiteralVault vault) =>
