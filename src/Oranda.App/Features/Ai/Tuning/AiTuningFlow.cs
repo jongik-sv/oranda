@@ -161,7 +161,7 @@ public sealed class AiTuningFlow(
         _startTabId = tabs is null ? null : editor.GetActiveDocument()?.TabId; // 문장을 읽은 탭: 튜닝하는 사이 다른 탭이 활성이 돼도 이 탭 기준으로 제안을 넣는다
         _indexTabId = null; // 인덱스 후보 탭은 대화 하나에 하나다
         _generation++;
-        _context = context with { StatementText = statement.Text }; // 원문: 범위 검사·추출기가 쓴다(LLM 으로 가지 않는다)
+        _context = context with { StatementText = statement.Text, AllowRiskyFunctions = choice.RunRiskyFunctions }; // 원문: 범위 검사·추출기가 쓴다(LLM 으로 가지 않는다)
         chat.StartConversation("튜닝 — " + Shorten(promptStatement, 40));
         await RunAsync(BuildPrompt(choice, promptStatement, vault), resumeId: null, userText: null, ct).ConfigureAwait(true);
     }
@@ -195,11 +195,12 @@ public sealed class AiTuningFlow(
                 return;
             }
 
-            _context = fresh;
+            _context = fresh with { AllowRiskyFunctions = _choice!.RunRiskyFunctions }; // 대화마다 고른 값을 이어 말하기에도 쓴다
         }
 
         // 이어 말하기 글은 가리지 않고(사용자가 쓴 글) 자리표시를 그대로 쓰라는 안내만 덧붙인다.
-        var prompt = _vault is null ? text : text + Environment.NewLine + Environment.NewLine + PlaceholderReminder(_vault);
+        var prompt = text + Environment.NewLine + Environment.NewLine + ResponseStyle
+            + (_vault is null ? string.Empty : Environment.NewLine + PlaceholderReminder(_vault));
         await RunAsync(prompt, chat.ResumeId, text, ct).ConfigureAwait(true);
     }
 
@@ -216,6 +217,7 @@ public sealed class AiTuningFlow(
         text.AppendLine(choice.IndexDdl
             ? "Index CREATE statements may be suggested as text only; they are never executed."
             : "Do not suggest indexes; leave index_suggestions empty.");
+        text.AppendLine(ResponseStyle);
         if (vault is not null)
         {
             text.AppendLine(PlaceholderReminder(vault));
@@ -228,6 +230,14 @@ public sealed class AiTuningFlow(
         return text.ToString();
     }
 
+    /// <summary>응답을 짧고 핵심부터 쓰게 하는 규칙(처음 요청과 이어 말하기 모두). 본문 SQL 은 구조 결과의 제안 항목에만 둔다.</summary>
+    internal const string ResponseStyle =
+        "Response style (applies to every answer, including follow-ups): write in Korean and be brief. "
+        + "Start with a conclusion of one or two lines: what the bottleneck is and what to change for how much gain. "
+        + "Then the evidence as 3 to 5 bullets that quote the plan or statistics numbers. "
+        + "Then the proposals, one line each for every rewrite or index; put the full SQL only in the structured result, not in the chat text. "
+        + "No preamble or closing remarks, do not narrate each tool call, do not repeat yourself, and use a table only when a comparison needs it.";
+
     /// <summary>리터럴 값을 자리표시로 가렸다는 안내. 값은 싣지 않고 접두만 쓴다.</summary>
     private static string PlaceholderReminder(LiteralVault vault) =>
         $"Literal values in the SQL were replaced with placeholders such as {vault.Placeholder(1)}. Use the same placeholders unchanged when you pass SQL to the tools and when you write SQL in your answer; never guess the original values.";
@@ -239,7 +249,9 @@ public sealed class AiTuningFlow(
         var vault = _vault; // 결과를 반영하는 동안(미리보기 창) 새 대화가 시작돼도 이 대화의 사전·문장을 쓴다
         var target = _target!;
         var startTab = _startTabId;
-        var userLine = resumeId is null ? "이 문장 튜닝" + (choice.Benchmark ? " · 벤치마크 켬" : string.Empty) : userText ?? prompt;
+        var userLine = resumeId is null
+            ? "이 문장 튜닝" + (choice.Benchmark ? " · 벤치마크 켬" : string.Empty) + (choice.RunRiskyFunctions ? " · 위험 함수도 실행" : string.Empty)
+            : userText ?? prompt;
         chat.BeginTurn(userLine);
 
         using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
@@ -300,7 +312,13 @@ public sealed class AiTuningFlow(
         // 편집기·탭으로 가는 글은 자리표시를 원래 값으로 되돌린 뒤에만 넣는다. 되돌리지 못하면(모르는 자리표시) 넣지 않고 알린다.
         if (result.Rewrites.Count > 0 && TryRestore(result.Rewrites[0].Sql, $"재작성 후보 「{result.Rewrites[0].Label}」", vault, out var restoredSql))
         {
-            await ProposeRewriteAsync(result.Rewrites[0] with { Sql = restoredSql }, target, startTab, ct).ConfigureAwait(true);
+            // 비교 창을 열었으면 닫은 뒤에도 대화 창 카드에서 같은 제안을 다시 열 수 있게 남긴다(c6). 카드 글은 AI 가 보낸 라벨·근거 그대로다.
+            var rewrite = result.Rewrites[0];
+            var proposal = rewrite with { Sql = restoredSql };
+            if (await ProposeRewriteAsync(proposal, target, startTab, ct).ConfigureAwait(true) is { } accepted)
+            {
+                chat.AddProposal(rewrite.Label, OneLine(rewrite.Rationale), accepted, () => ProposeRewriteAsync(proposal, target, startTab, CancellationToken.None));
+            }
         }
 
         if (choice.IndexDdl && result.IndexSuggestions.Count > 0)
@@ -391,7 +409,8 @@ public sealed class AiTuningFlow(
         return false;
     }
 
-    private async Task ProposeRewriteAsync(TuningRewrite rewrite, SqlStatement target, Guid? startTab, CancellationToken ct)
+    /// <summary>재작성 제안을 시작 탭의 문장에 비교 창으로 보인다. 받아들이면 true, 거절하면 false, 열지 못했으면(탭이 닫힘·문장이 바뀜) null.</summary>
+    private async Task<bool?> ProposeRewriteAsync(TuningRewrite rewrite, SqlStatement target, Guid? startTab, CancellationToken ct)
     {
         if (tabs is not null && startTab is { } tabId)
         {
@@ -399,7 +418,7 @@ public sealed class AiTuningFlow(
             if (tabs.GetText(tabId) is null)
             {
                 chat.AddAssistantText("튜닝을 시작한 탭이 닫혀 제안을 편집기에 넣지 않았습니다.");
-                return;
+                return null;
             }
 
             // 옛 범위의 글만 같은지 보면 문장 뒤에 이어 친 글(WHERE …)을 놓친다: 그 자리의 문장이 글과 범위까지 같아야 한다.
@@ -407,13 +426,13 @@ public sealed class AiTuningFlow(
             if (current is null || current.Text != target.Text || current.Range != target.Range)
             {
                 chat.AddAssistantText("튜닝하는 사이 문장이 바뀌어 제안을 편집기에 넣지 않았습니다.");
-                return;
+                return null;
             }
 
             if (tabs.ActiveTabId != tabId && !tabs.Activate(tabId))
             {
                 chat.AddAssistantText("튜닝을 시작한 탭이 닫혀 제안을 편집기에 넣지 않았습니다.");
-                return;
+                return null;
             }
         }
         else
@@ -424,12 +443,13 @@ public sealed class AiTuningFlow(
             if (current is null || current.Text != target.Text || current.Range != target.Range)
             {
                 chat.AddAssistantText("튜닝하는 사이 문장이 바뀌어 제안을 편집기에 넣지 않았습니다.");
-                return;
+                return null;
             }
         }
 
         var accepted = await editor.ProposeEditAsync(new TextEdit(target.Range, MatchTerminator(target.Text, rewrite.Sql)) { Description = "AI 튜닝 — " + rewrite.Label }, ct).ConfigureAwait(true);
         chat.AddAssistantText(accepted ? "제안을 받아들였습니다. Ctrl+Z 한 번으로 되돌릴 수 있습니다." : "제안을 받아들이지 않았습니다.");
+        return accepted;
     }
 
     /// <summary>끝의 <c>;</c> 를 원문과 같게 맞춘다(원문 범위가 <c>;</c> 를 포함하지 않으면 뺀다).</summary>

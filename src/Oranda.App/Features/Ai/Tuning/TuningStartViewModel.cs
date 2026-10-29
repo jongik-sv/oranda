@@ -42,7 +42,8 @@ public sealed record TuningStartInfo(
 }
 
 /// <summary>사용자가 「튜닝 시작」 을 눌러 확정한 선택.</summary>
-public sealed record TuningStartChoice(bool Benchmark, bool IndexDdl, string ModelId);
+/// <summary>시작 창의 선택. <paramref name="RunRiskyFunctions"/> = 「위험 함수도 실행」(대화마다, 기본 꺼짐): 벤치마크가 위험 함수가 든 후보도 읽기 전용으로 실행한다.</summary>
+public sealed record TuningStartChoice(bool Benchmark, bool IndexDdl, string ModelId, bool RunRiskyFunctions = false);
 
 /// <summary>AI 튜닝 시작 확인 창(시안 9): 먼저 보낼 것·요청 시 줄 것·보내지 않음, 벤치마크·인덱스 문안·모델 선택.</summary>
 public sealed partial class TuningStartViewModel : ObservableObject
@@ -60,6 +61,10 @@ public sealed partial class TuningStartViewModel : ObservableObject
 
     [ObservableProperty]
     private bool _indexDdl = true;
+
+    /// <summary>「위험 함수도 실행」: 자치 트랜잭션·외부 접근·확인 못 한 함수가 든 후보도 실측한다(끄면 운영 커서 실측으로 대체). 대화마다 기본 꺼짐.</summary>
+    [ObservableProperty]
+    private bool _runRiskyFunctions;
 
     [ObservableProperty]
     private TuningModelOption? _model;
@@ -97,7 +102,9 @@ public sealed partial class TuningStartViewModel : ObservableObject
     public bool CanStart => !IsBlocked && Model is not null;
 
     /// <summary>확정한 선택. 시작할 수 없으면 null.</summary>
-    public TuningStartChoice? Choice => CanStart ? new TuningStartChoice(Benchmark && BenchmarkEnabled, IndexDdl, Model!.Id) : null;
+    public TuningStartChoice? Choice => CanStart
+        ? new TuningStartChoice(Benchmark && BenchmarkEnabled, IndexDdl, Model!.Id, Benchmark && BenchmarkEnabled && RunRiskyFunctions)
+        : null;
 
     partial void OnModelChanged(TuningModelOption? value) => OnPropertyChanged(nameof(CanStart));
 

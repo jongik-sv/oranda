@@ -254,6 +254,8 @@ public class AgentHandlersTests
 
     private sealed class PoolTuning(string? poolSchema) : ITuningService
     {
+        public List<string> Ran { get; } = [];
+
         public Task<TuningCandidateSet> GetTuningCandidatesAsync(ISession s, TuningCandidateQuery query, CancellationToken ct) =>
             Task.FromResult(new TuningCandidateSet(
                 poolSchema is null ? [] : [.. (query.SqlIds ?? []).Select(id => new SqlStatsSample(id) { ParsingSchema = poolSchema })], 0));
@@ -261,8 +263,11 @@ public class AgentHandlersTests
         public Task<SqlStatsRow?> GetSqlStatsAsync(ISession s, string sqlId, CancellationToken ct) =>
             Task.FromResult<SqlStatsRow?>(new SqlStatsRow(1, 1, 2, 4_000_000, 0, 100, 0, 10));
 
-        public Task<BenchmarkResult> RunBenchmarkAsync(ISession s, BenchmarkCase benchmark, int iterations, CancellationToken ct) =>
-            Task.FromResult(new BenchmarkResult(benchmark, iterations, TimeSpan.FromMilliseconds(5), 10, 0, 1, 99));
+        public Task<BenchmarkResult> RunBenchmarkAsync(ISession s, BenchmarkCase benchmark, int iterations, CancellationToken ct)
+        {
+            Ran.Add(benchmark.Sql);
+            return Task.FromResult(new BenchmarkResult(benchmark, iterations, TimeSpan.FromMilliseconds(5), 10, 0, 1, 99));
+        }
 
         public Task<IReadOnlyList<ColumnStatsRow>> GetColumnStatsAsync(ISession s, string owner, string table, CancellationToken ct) =>
             Task.FromResult<IReadOnlyList<ColumnStatsRow>>([]);
@@ -320,6 +325,76 @@ public class AgentHandlersTests
         Assert.Empty(otherSchema.SqlIds);
         Assert.Empty(notInPool.SqlIds);
         Assert.False(otherSchema.IsError);
+    }
+
+    [Fact]
+    public async Task Benchmark_substitutes_pool_cursor_stats_for_flagged_variants_without_running_them_and_keeps_the_order()
+    {
+        var meta = new Metadata();
+        var x = new AgentStatementReferenceExtractor(new LanguageService(), meta);
+        var args = new JsonObject
+        {
+            ["variants"] = new JsonArray(
+                new JsonObject { ["label"] = "risky", ["sql"] = "SELECT pkg_log.fn(1) FROM dual WHERE 1 = :b1" },
+                new JsonObject { ["label"] = "plain", ["sql"] = "SELECT 1 FROM dual" }),
+        };
+        var tuning = new PoolTuning("SCOTT");
+        var boxes = new AgentToolboxProvider(tuning, meta, new NoKeys(), new OnePlan(), new LanguageService());
+        var inv = Invoke(args, AiAccessLevel.Query) with { Substitutions = ["user_function_autonomous", null] };
+
+        var r = await new BenchmarkQueriesHandler(boxes, x).ExecuteAsync(inv, CancellationToken.None);
+
+        Assert.False(r.IsError, r.ErrorMessage);
+        Assert.Equal(["SELECT 1 FROM dual"], tuning.Ran); // 대체한 변형은 실행하지 않았다(바인드가 있어도 받는다)
+        var items = r.Result!.AsArray();
+        Assert.Equal("risky", items[0]!["label"]!.GetValue<string>());
+        Assert.Equal("cursor_stats", items[0]!["substituted"]!.GetValue<string>());
+        Assert.Equal("user_function_autonomous", items[0]!["reason"]!.GetValue<string>());
+        Assert.Equal(2, items[0]!["executions"]!.GetValue<long>());
+        Assert.Contains("운영 커서 실측", items[0]!["note"]!.GetValue<string>(), StringComparison.Ordinal);
+        Assert.Equal("plain", items[1]!["label"]!.GetValue<string>());
+        Assert.Null(items[1]!["substituted"]);
+        Assert.Contains(SqlIdCalculator.Compute("SELECT pkg_log.fn(1) FROM dual WHERE 1 = :b1"), r.SqlIds); // 이어서 get_cursor_plan 을 부를 수 있다
+    }
+
+    [Fact]
+    public async Task A_substituted_variant_that_cannot_be_read_is_refused_before_any_variant_runs()
+    {
+        var meta = new Metadata();
+        var x = new AgentStatementReferenceExtractor(new LanguageService(), meta);
+        var args = new JsonObject
+        {
+            ["variants"] = new JsonArray(
+                new JsonObject { ["label"] = "plain", ["sql"] = "SELECT 1 FROM dual" },
+                new JsonObject { ["label"] = "risky", ["sql"] = "SELECT 1 FROM dual; SELECT 2 FROM dual" }),
+        };
+        var tuning = new PoolTuning("SCOTT");
+        var boxes = new AgentToolboxProvider(tuning, meta, new NoKeys(), new OnePlan(), new LanguageService());
+
+        var r = await new BenchmarkQueriesHandler(boxes, x).ExecuteAsync(Invoke(args, AiAccessLevel.Query) with { Substitutions = [null, "db_link"] }, CancellationToken.None);
+
+        Assert.True(r.IsError);
+        Assert.Contains("'risky'", r.ErrorMessage, StringComparison.Ordinal);
+        Assert.Empty(tuning.Ran); // 앞 변형도 실행하지 않았다(실행한 결과가 버려지지 않게)
+    }
+
+    [Fact]
+    public async Task A_substituted_variant_without_a_pool_cursor_says_to_judge_from_the_plan()
+    {
+        var meta = new Metadata();
+        var x = new AgentStatementReferenceExtractor(new LanguageService(), meta);
+        var args = new JsonObject { ["variants"] = new JsonArray(new JsonObject { ["label"] = "a", ["sql"] = "SELECT * FROM t@remote_db" }) };
+        var tuning = new PoolTuning(null);
+        var boxes = new AgentToolboxProvider(tuning, meta, new NoKeys(), new OnePlan(), new LanguageService());
+
+        var r = await new BenchmarkQueriesHandler(boxes, x).ExecuteAsync(Invoke(args, AiAccessLevel.Query) with { Substitutions = ["db_link"] }, CancellationToken.None);
+
+        Assert.False(r.IsError, r.ErrorMessage);
+        Assert.Empty(tuning.Ran);
+        var item = Assert.Single(r.Result!.AsArray())!;
+        Assert.Equal(0, item["executions"]!.GetValue<long>());
+        Assert.Contains("실측 없음, 계획 기준으로 판단", item["note"]!.GetValue<string>(), StringComparison.Ordinal);
+        Assert.Empty(r.SqlIds);
     }
 
     [Fact]

@@ -27,8 +27,21 @@ internal sealed partial class AgentStatementReferenceExtractor(ILanguageService 
         "POWER RANK RATIO_TO_REPORT RAWTOHEX REGEXP_COUNT REGEXP_INSTR REGEXP_LIKE REGEXP_REPLACE REGEXP_SUBSTR REPLACE ROUND " +
         "ROW_NUMBER RPAD RTRIM SIGN SIN SINH SQRT STDDEV STDDEV_POP STDDEV_SAMP SUBSTR SUBSTRB SUM SYS_CONTEXT SYS_GUID SYSDATE " +
         "SYSTIMESTAMP TAN TANH TO_CHAR TO_CLOB TO_DATE TO_DSINTERVAL TO_NUMBER TO_TIMESTAMP TO_TIMESTAMP_TZ TO_YMINTERVAL TRANSLATE TRIM " +
-        "TRUNC UPPER USER VAR_POP VAR_SAMP VARIANCE XMLAGG XMLELEMENT JSON_VALUE JSON_QUERY JSON_EXISTS JSON_OBJECT JSON_ARRAY " +
-        "JSON_ARRAYAGG JSON_OBJECTAGG JSON_TABLE FIRST LAST NEXT_VALUE").Split(' ').ToFrozenSet(StringComparer.Ordinal);
+        "TRUNC UPPER USER VAR_POP VAR_SAMP VARIANCE XMLAGG XMLELEMENT FIRST LAST NEXT_VALUE " +
+        // 그 밖의 흔한 내장 함수. XMLQUERY·XMLTABLE 은 넣지 않는다(fn:collection·ora:view 로 범위 밖 표를 읽는다).
+        "NTH_VALUE TO_NCHAR TO_NCLOB TO_BINARY_DOUBLE TO_BINARY_FLOAT TO_LOB NANVL REMAINDER " +
+        "INSTRB INSTRC SUBSTRC LENGTHC WIDTH_BUCKET ORA_HASH CARDINALITY COLLECT " +
+        "NLS_UPPER NLS_LOWER NLS_INITCAP NLSSORT SOUNDEX DUMP VSIZE TZ_OFFSET FROM_TZ NEW_TIME SYS_EXTRACT_UTC SYS_CONNECT_BY_PATH " +
+        "UNISTR ASCIISTR COMPOSE DECOMPOSE CONVERT ROWIDTOCHAR CHARTOROWID EMPTY_CLOB EMPTY_BLOB BIN_TO_NUM STATS_MODE " +
+        "XMLSERIALIZE XMLPARSE XMLCAST").Split(' ').ToFrozenSet(StringComparer.Ordinal);
+
+    /// <summary>
+    /// 내장 함수가 아니거나(구문 낱말 GROUP BY ROLLUP/CUBE/GROUPING SETS, PIVOT/UNPIVOT) 버전에 따라 없는(11.2 의 JSON_*·ANY_VALUE 등) 이름.
+    /// 같은 이름의 사용자 함수가 있으면 그것이 불리므로 사용자 함수 후보로 넘기되, 확인기는 그런 객체가 없으면 문제 삼지 않는다.
+    /// </summary>
+    internal static readonly FrozenSet<string> MaybeUserFunctions = (
+        "ROLLUP CUBE SETS PIVOT UNPIVOT ANY_VALUE APPROX_COUNT_DISTINCT STANDARD_HASH JSON_VALUE JSON_QUERY JSON_EXISTS JSON_OBJECT " +
+        "JSON_ARRAY JSON_ARRAYAGG JSON_OBJECTAGG JSON_TABLE JSON_MERGEPATCH JSON_SERIALIZE JSON_TRANSFORM").Split(' ').ToFrozenSet(StringComparer.Ordinal);
 
     [GeneratedRegex(@"\bAS\s+(?=\(?\s*(SELECT|WITH)\b)", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
     private static partial Regex ViewBodyStart();
@@ -47,6 +60,8 @@ internal sealed partial class AgentStatementReferenceExtractor(ILanguageService 
         var objects = new List<AgentObjectRef>();
         var remote = false;
         var calls = false;
+        var forbidden = false;
+        var userFunctions = new List<string>();
         var locking = false;
 
         // 닫는 쪽으로 판정한다: 객체를 다 찾았다고 확신하지 못하면(해석 실패·모르는 구문·대소문자를 구분하는 이름) 분류 불확실로 돌려
@@ -57,7 +72,20 @@ internal sealed partial class AgentStatementReferenceExtractor(ILanguageService 
             var refs = StatementReferenceExtractor.Extract(stmt.Text);
             locking |= refs.HasLockingClause;
             remote |= refs.HasRemoteLink || refs.Objects.Any(o => o.IsRemote);
-            calls |= refs.Calls.Any(IsUserFunction);
+            foreach (var call in refs.Calls.Where(IsUserFunction))
+            {
+                calls = true;
+                uncertain |= HasLowercase(call); // 따옴표 이름("myFunc")은 대문자로 바꾸면 다른 객체를 확인하게 된다
+                if (IsForbiddenCall(call))
+                {
+                    forbidden = true;
+                }
+                else if (call.ToUpperInvariant() is var name && !userFunctions.Contains(name))
+                {
+                    userFunctions.Add(name);
+                }
+            }
+
             uncertain |= refs.Uncertain;
             var resolved = await StatementReferenceExtractor
                 .ResolveAsync(refs, owner, (o, n) => metadata.GetNameStepAsync(db, o, n, ct))
@@ -66,8 +94,16 @@ internal sealed partial class AgentStatementReferenceExtractor(ILanguageService 
             {
                 if (r.Target is null)
                 {
-                    uncertain = true;
-                    remote |= r.Problem?.Contains("DB 링크", StringComparison.Ordinal) == true;
+                    // DB 링크 너머의 객체(t@link·링크를 가리키는 동의어)는 원격 참조로만 센다: 해석 도구는 sql_unsafe 로 거부하고 실행 도구는 실행 없이 커서 실측으로 대체한다.
+                    if (r.Problem?.Contains("DB 링크", StringComparison.Ordinal) == true)
+                    {
+                        remote = true;
+                    }
+                    else
+                    {
+                        uncertain = true;
+                    }
+
                     continue;
                 }
 
@@ -81,7 +117,7 @@ internal sealed partial class AgentStatementReferenceExtractor(ILanguageService 
             }
         }
 
-        return new AgentStatementInfo(stmts[0].Kind, uncertain, objects, stmts.Count, locking, remote, calls);
+        return new AgentStatementInfo(stmts[0].Kind, uncertain, objects, stmts.Count, locking, remote, calls, HasForbiddenCall: forbidden, UserFunctions: userFunctions);
     }
 
     public async ValueTask<AgentObjectRef?> ResolveAsync(ISession db, string name, string? defaultSchema, CancellationToken ct)
@@ -204,6 +240,36 @@ internal sealed partial class AgentStatementReferenceExtractor(ILanguageService 
     }
 
     private static bool HasLowercase(string s) => !string.Equals(s, s.ToUpperInvariant(), StringComparison.Ordinal);
+
+    /// <summary>시스템 스키마(소유자로 쓰였을 때 SYS 패키지 호출).</summary>
+    private static readonly FrozenSet<string> SystemSchemas = (
+        "SYS SYSTEM XDB CTXSYS MDSYS ORDSYS ORDDATA OUTLN DBSNMP WMSYS LBACSYS DVSYS OJVMSYS APPQOSSYS GSMADMIN_INTERNAL")
+        .Split(' ').ToFrozenSet(StringComparer.Ordinal);
+
+    /// <summary>URI 형·XML 형 생성자와 메서드(네트워크·파일을 읽을 수 있다).</summary>
+    private static readonly FrozenSet<string> ForbiddenTypes = "HTTPURITYPE DBURITYPE XDBURITYPE URITYPE URIFACTORY XMLTYPE SYS_DBURIGEN"
+        .Split(' ').ToFrozenSet(StringComparer.Ordinal);
+
+    /// <summary>
+    /// 어떤 도구에서도 허용하지 않는 호출: 시퀀스 값(<c>NEXTVAL</c>·<c>CURRVAL</c>), 오라클 제공 패키지(<c>DBMS_*</c>·<c>UTL_*</c>·<c>CTX_*</c>·시스템 스키마 소유),
+    /// URI·XML 형. 나머지 사용자 함수는 호출자가 후보로 모아 도구에 따라 확인한다.
+    /// </summary>
+    internal static bool IsForbiddenCall(string call)
+    {
+        var parts = call.ToUpperInvariant().Split('.');
+        if (parts[^1] is "NEXTVAL" or "CURRVAL")
+        {
+            return true;
+        }
+
+        if (parts.Length >= 2 && SystemSchemas.Contains(parts[0]))
+        {
+            return true;
+        }
+
+        return parts.Any(p => p.StartsWith("DBMS_", StringComparison.Ordinal) || p.StartsWith("UTL_", StringComparison.Ordinal)
+            || p.StartsWith("CTX_", StringComparison.Ordinal) || ForbiddenTypes.Contains(p));
+    }
 
     private static bool IsUserFunction(string call) => call.Contains('.', StringComparison.Ordinal) || !BuiltIns.Contains(call);
 

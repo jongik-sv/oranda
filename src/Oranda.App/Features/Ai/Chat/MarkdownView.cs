@@ -7,6 +7,7 @@ using Avalonia.Controls.Primitives;
 using Avalonia.Input.Platform;
 using Avalonia.Layout;
 using Avalonia.Media;
+using Oranda.App.Features.SqlEditor;
 using Oranda.App.Shell.Icons;
 
 namespace Oranda.App.Features.Ai.Chat;
@@ -15,6 +16,7 @@ namespace Oranda.App.Features.Ai.Chat;
 /// AI 글을 Markdown 부분 집합으로 그리는 컨트롤(<see cref="MarkdownParser"/> 가 읽은 블록을 그대로 옮긴다).
 /// 글은 <see cref="SelectableTextBlock"/> 이라 마우스로 고르고 복사할 수 있다. 색은 기존 리소스 키를 동적으로 묶어 테마를 따른다.
 /// <see cref="Markdown"/> 이 바뀌면 통째로 다시 그린다(스트리밍으로 글이 늘 때마다 대화 창이 새 글을 넘겨 준다).
+/// SQL 코드 블록은 닫는 울타리까지 온 뒤에만 편집기와 같은 색으로 칠한다(<see cref="SqlInlineText"/>, 스트리밍 중인 블록은 일반 글).
 /// 그리다 예외가 나면 일반 글 한 덩어리로 보인다.
 /// </summary>
 public sealed class MarkdownView : StackPanel
@@ -30,7 +32,7 @@ public sealed class MarkdownView : StackPanel
 
     public MarkdownView()
     {
-        Spacing = 6;
+        Spacing = 8;
     }
 
     /// <summary>그릴 Markdown 글.</summary>
@@ -71,13 +73,15 @@ public sealed class MarkdownView : StackPanel
         MarkdownCode code => CodeBlock(code),
         MarkdownList list => List(list),
         MarkdownTable table => Table(table),
+        MarkdownQuote quote => Quote(quote),
+        MarkdownRule => Rule(),
         MarkdownParagraph paragraph => TextOf(paragraph.Spans),
         _ => new SelectableTextBlock { TextWrapping = TextWrapping.Wrap },
     };
 
     private static SelectableTextBlock TextOf(IReadOnlyList<MarkdownSpan> spans, double? fontSize = null, FontWeight? weight = null)
     {
-        var block = new SelectableTextBlock { TextWrapping = TextWrapping.Wrap };
+        var block = new SelectableTextBlock { TextWrapping = TextWrapping.Wrap, LineSpacing = 3 };
         if (fontSize is { } size)
         {
             block.FontSize = size;
@@ -104,7 +108,13 @@ public sealed class MarkdownView : StackPanel
             if (span.Style.HasFlag(MarkdownStyle.Code))
             {
                 run.Bind(TextElement.FontFamilyProperty, block.GetResourceObservable("OrandaCodeFontFamily"));
-                run.Bind(TextElement.BackgroundProperty, block.GetResourceObservable("OrandaCodeBackgroundBrush"));
+                run.Bind(TextElement.BackgroundProperty, block.GetResourceObservable("OrandaPanelHeaderBrush")); // 표 머리글과 같은 옅은 회색(선택 색과 헷갈리지 않게)
+            }
+
+            if (span.Style.HasFlag(MarkdownStyle.Link))
+            {
+                run.TextDecorations = Avalonia.Media.TextDecorations.Underline;
+                run.Bind(TextElement.ForegroundProperty, block.GetResourceObservable("OrandaIconBlueBrush"));
             }
 
             block.Inlines ??= [];
@@ -114,17 +124,62 @@ public sealed class MarkdownView : StackPanel
         return block;
     }
 
-    private static SelectableTextBlock Heading(MarkdownHeading heading) =>
-        TextOf(heading.Spans, heading.Level switch { 1 => 18, 2 => 16, _ => 15 }, FontWeight.Bold);
+    /// <summary>제목: 앞 블록과 떨어지게 위 여백을 더 두고, 1·2 단계는 아래에 얇은 선을 긋는다.</summary>
+    private static Control Heading(MarkdownHeading heading)
+    {
+        var text = TextOf(heading.Spans, heading.Level switch { 1 => 18, 2 => 16, _ => 14.5 }, FontWeight.Bold);
+        if (heading.Level == 3)
+        {
+            text.Margin = new Thickness(0, 4, 0, 0);
+            return text;
+        }
 
+        text.Margin = new Thickness(0, 0, 0, 3);
+        var border = new Border { BorderThickness = new Thickness(0, 0, 0, 1), Margin = new Thickness(0, 8, 0, 0), Child = text };
+        border.Bind(Border.BorderBrushProperty, border.GetResourceObservable("OrandaSeparatorBrush"));
+        return border;
+    }
+
+    private static Border Quote(MarkdownQuote quote)
+    {
+        var stack = new StackPanel { Spacing = 6, Opacity = 0.85 };
+        foreach (var block in quote.Blocks)
+        {
+            stack.Children.Add(Render(block));
+        }
+
+        var border = new Border { BorderThickness = new Thickness(3, 0, 0, 0), Padding = new Thickness(10, 2, 0, 2), Child = stack };
+        border.Bind(Border.BorderBrushProperty, border.GetResourceObservable("OrandaIconNeutralBrush"));
+        return border;
+    }
+
+    private static Border Rule()
+    {
+        var line = new Border { Height = 1, Margin = new Thickness(0, 4) };
+        line.Bind(Border.BackgroundProperty, line.GetResourceObservable("OrandaSeparatorBrush"));
+        return line;
+    }
+
+    private static bool IsSql(string language) =>
+        language.Trim().ToUpperInvariant() is "SQL" or "PLSQL" or "PL/SQL" or "ORACLE";
+
+    /// <summary>코드 블록: 머리 줄(언어 이름·복사 단추)과 가로로 스크롤되는 본문. SQL 은 닫힌 블록만 색을 칠한다.</summary>
     private static Border CodeBlock(MarkdownCode code)
     {
         var text = new SelectableTextBlock
         {
-            Text = code.Code,
             TextWrapping = TextWrapping.NoWrap,
-            Margin = new Thickness(10, 8, 34, 8),
+            Margin = new Thickness(12, 8, 12, 10),
         };
+        if (code.Closed && IsSql(code.Language))
+        {
+            SqlInlineText.SetSql(text, code.Code);
+        }
+        else
+        {
+            text.Text = code.Code;
+        }
+
         text.Bind(TextBlock.FontFamilyProperty, text.GetResourceObservable("OrandaCodeFontFamily"));
         text.Bind(TextBlock.FontSizeProperty, text.GetResourceObservable("OrandaEditorFontSize"));
 
@@ -138,8 +193,7 @@ public sealed class MarkdownView : StackPanel
         var copy = new Button
         {
             HorizontalAlignment = HorizontalAlignment.Right,
-            VerticalAlignment = VerticalAlignment.Top,
-            Margin = new Thickness(0, 2, 2, 0),
+            VerticalAlignment = VerticalAlignment.Center,
             Opacity = 0.75,
             Content = "복사",
         };
@@ -155,8 +209,13 @@ public sealed class MarkdownView : StackPanel
             }
         };
 
-        var host = new Grid { Children = { scroll, copy } };
-        var border = new Border { CornerRadius = new CornerRadius(4), BorderThickness = new Thickness(1), Child = host };
+        var language = new TextBlock { Text = code.Language.Trim().ToLowerInvariant(), VerticalAlignment = VerticalAlignment.Center, Opacity = 0.6, Margin = new Thickness(12, 0, 0, 0) };
+        language.Bind(TextBlock.FontSizeProperty, language.GetResourceObservable("OrandaFontSizeSmall"));
+        var bar = new Border { BorderThickness = new Thickness(0, 0, 0, 1), Child = new Grid { Children = { language, copy } } };
+        bar.Bind(Border.BorderBrushProperty, bar.GetResourceObservable("OrandaSeparatorBrush"));
+        DockPanel.SetDock(bar, Avalonia.Controls.Dock.Top);
+
+        var border = new Border { CornerRadius = new CornerRadius(6), BorderThickness = new Thickness(1), ClipToBounds = true, Child = new DockPanel { Children = { bar, scroll } } };
         border.Bind(Border.BackgroundProperty, border.GetResourceObservable("OrandaCodeBackgroundBrush"));
         border.Bind(Border.BorderBrushProperty, border.GetResourceObservable("OrandaSeparatorBrush"));
         return border;
@@ -164,11 +223,11 @@ public sealed class MarkdownView : StackPanel
 
     private static StackPanel List(MarkdownList list)
     {
-        var stack = new StackPanel { Spacing = 3 };
+        var stack = new StackPanel { Spacing = 4 };
         foreach (var item in list.Items)
         {
-            var row = new Grid { ColumnDefinitions = new ColumnDefinitions("Auto,*"), ColumnSpacing = 6, Margin = new Thickness(item.Depth * 16, 0, 0, 0) };
-            row.Children.Add(new TextBlock { Text = item.Marker, MinWidth = 14, TextAlignment = TextAlignment.Right, VerticalAlignment = VerticalAlignment.Top });
+            var row = new Grid { ColumnDefinitions = new ColumnDefinitions("Auto,*"), ColumnSpacing = 6, Margin = new Thickness(4 + (item.Depth * 18), 0, 0, 0) };
+            row.Children.Add(new TextBlock { Text = item.Marker, MinWidth = 16, TextAlignment = TextAlignment.Right, VerticalAlignment = VerticalAlignment.Top, Opacity = item.Marker == "•" ? 0.7 : 0.85 });
             var content = TextOf(item.Spans);
             Grid.SetColumn(content, 1);
             row.Children.Add(content);
@@ -212,11 +271,15 @@ public sealed class MarkdownView : StackPanel
             var text = TextOf(c < cells.Count ? cells[c] : [], weight: header ? FontWeight.SemiBold : null);
             text.MaxWidth = CellMaxWidth;
             text.TextAlignment = aligns[c] switch { MarkdownAlign.Center => TextAlignment.Center, MarkdownAlign.Right => TextAlignment.Right, _ => TextAlignment.Left };
-            var cell = new Border { BorderThickness = new Thickness(0, 0, 1, 1), Padding = new Thickness(6, 3), Child = text };
+            var cell = new Border { BorderThickness = new Thickness(0, 0, 1, 1), Padding = new Thickness(8, 4), Child = text };
             cell.Bind(Border.BorderBrushProperty, cell.GetResourceObservable("OrandaSeparatorBrush"));
             if (header)
             {
                 cell.Bind(Border.BackgroundProperty, cell.GetResourceObservable("OrandaPanelHeaderBrush"));
+            }
+            else if (rowIndex % 2 == 0)
+            {
+                cell.Bind(Border.BackgroundProperty, cell.GetResourceObservable("OrandaRowAltBrush")); // 줄무늬(머리글 다음 둘째 줄부터)
             }
 
             Grid.SetRow(cell, rowIndex);

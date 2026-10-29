@@ -43,6 +43,20 @@ public class TuningStartTests
         Assert.Equal(new TuningStartChoice(false, true, "local"), vm.Choice);
     }
 
+    [Fact]
+    public void Run_risky_functions_is_off_by_default_and_only_counts_with_the_benchmark_on()
+    {
+        var vm = new TuningStartViewModel(Info());
+        Assert.False(vm.RunRiskyFunctions);
+        Assert.False(vm.Choice!.RunRiskyFunctions);
+
+        vm.RunRiskyFunctions = true;
+        Assert.True(vm.Choice!.RunRiskyFunctions);
+
+        vm.Benchmark = false;
+        Assert.False(vm.Choice!.RunRiskyFunctions); // 벤치마크를 끄면 뜻이 없다
+    }
+
     [Theory]
     [InlineData("sonnet", "sonnet")]
     [InlineData("haiku", "haiku")]

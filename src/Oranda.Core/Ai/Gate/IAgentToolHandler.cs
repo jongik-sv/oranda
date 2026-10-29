@@ -40,6 +40,14 @@ public interface IAgentToolHandler
 /// 이 허용이 필요한 하위 동작을 이 값이 참일 때만 한다. 실행할 문장을 게이트가 검사했을 때만 참이다 —
 /// <c>sql</c>·<c>variants</c> 가 있거나 <c>get_tuning_context</c> 가 대상 문장으로 검사된 경우이고, <c>sql_id</c> 만 받은 호출은 거짓이다.
 /// </param>
+/// <param name="ReadOnlyExecution">
+/// 실행할 문장에 사용자 함수·패키지 함수가 있고 게이트가 확인을 통과시켰다. 처리자는 실행을 읽기 전용 트랜잭션 안에서만 한다
+/// (함수 안 DML 은 DB 가 막는다). 함수가 없는 문장은 거짓이다.
+/// </param>
+/// <param name="Substitutions">
+/// <c>variants</c> 순서대로, 실행하지 않고 공유 풀 커서 실측으로 대체할 변형의 사유 코드(위험 함수·DB 링크·시퀀스 등, 실행할 변형은 null).
+/// 대체할 변형이 없으면 null. 처리자는 사유가 있는 변형을 어떤 경우에도 실행하지 않는다.
+/// </param>
 public sealed record AgentToolInvocation(
     AgentSession Session,
     ISession Db,
@@ -47,7 +55,9 @@ public sealed record AgentToolInvocation(
     JsonObject Arguments,
     IReadOnlyDictionary<string, AgentObjectRef> Resolved,
     bool ExplainPlanAllowed = false,
-    bool MayExecuteSql = false);
+    bool MayExecuteSql = false,
+    bool ReadOnlyExecution = false,
+    IReadOnlyList<string?>? Substitutions = null);
 
 /// <summary>처리 결과. 실패는 예외 대신 <see cref="Error"/> 로 돌려 게이트가 감사 기록에 <c>Failed</c> 로 남기게 한다.</summary>
 public sealed record AgentToolOutput

@@ -53,6 +53,7 @@ public sealed partial class AgentGate : IAgentGate
     private readonly TimeProvider _time;
     private readonly ISqlLiteralMasker? _masker;
     private readonly ConditionalWeakTable<AgentSession, ScopeHolder> _scopes = new();
+    private readonly IUserFunctionSafetyChecker? _userFunctions;
 
     public AgentGate(
         IAgentSessionSource sessions,
@@ -60,8 +61,10 @@ public sealed partial class AgentGate : IAgentGate
         IEnumerable<IAgentToolHandler> handlers,
         IAgentAuditStore audit,
         TimeProvider? time = null,
-        ISqlLiteralMasker? masker = null)
+        ISqlLiteralMasker? masker = null,
+        IUserFunctionSafetyChecker? userFunctions = null)
     {
+        _userFunctions = userFunctions;
         _sessions = sessions ?? throw new ArgumentNullException(nameof(sessions));
         _extractor = extractor ?? throw new ArgumentNullException(nameof(extractor));
         ArgumentNullException.ThrowIfNull(handlers);
@@ -308,7 +311,9 @@ public sealed partial class AgentGate : IAgentGate
             state.Clean,
             state.Resolved,
             ExplainPlanAllowed: level >= AiAccessLevel.Plan && explainPlanEnabled,
-            MayExecuteSql: level >= AiAccessLevel.Query && state.StatementsChecked);
+            MayExecuteSql: level >= AiAccessLevel.Query && state.StatementsChecked,
+            ReadOnlyExecution: state.ReadOnlyExecution,
+            Substitutions: state.FirstSubstitution is null ? null : [.. state.Substitutions]);
 
         AgentToolOutput output;
         try
@@ -377,10 +382,12 @@ public sealed partial class AgentGate : IAgentGate
             session.AddSqlId(sqlId);
         }
 
+        // 대체한 결과는 성공이다. 화면 카드에는 대체했다는 것과 첫 사유를 남긴다(substituted: user_function_autonomous).
+        var reason = state.FirstSubstitution is { } substituted ? "substituted: " + substituted : null;
         return new GateOutcome(
             new AgentCallToolResult(false, text),
             removed > 0 ? AiToolJudgement.Masked : AiToolJudgement.Allowed,
-            removed > 0 ? "masked" : null);
+            removed > 0 ? (reason is null ? "masked" : "masked, " + reason) : reason);
     }
 
     private AgentAuditEntry BuildAuditEntry(
@@ -573,6 +580,17 @@ public sealed partial class AgentGate : IAgentGate
 
         /// <summary>처리자가 실행·계획에 쓸 문장(<c>sql</c>·<c>variants</c>·대상 문장)을 게이트가 검사했는가.</summary>
         public bool StatementsChecked { get; set; }
+
+        /// <summary>검사한 문장(들)에 든 사용자 함수·패키지 함수 후보 수(감사 요약의 <c>user_functions=N</c>).</summary>
+        public int UserFunctionCount { get; set; }
+
+        /// <summary>실행할 문장에 사용자 함수가 있고 확인을 통과했다(또는 사용자가 위험 함수 실행을 켰다): 처리자는 읽기 전용 트랜잭션 안에서만 실행한다.</summary>
+        public bool ReadOnlyExecution { get; set; }
+
+        /// <summary><c>variants</c> 순서대로, 실행하지 않고 커서 실측으로 대체할 변형의 사유 코드(실행하면 null).</summary>
+        public List<string?> Substitutions { get; } = [];
+
+        public string? FirstSubstitution => Substitutions.FirstOrDefault(x => x is not null);
     }
 
     /// <summary>판단 하나: 돌려줄 결과, 화면 판단, 사유 코드(Allowed 면 null, Masked 면 <c>masked</c>).</summary>

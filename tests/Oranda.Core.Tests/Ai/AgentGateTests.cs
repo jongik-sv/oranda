@@ -31,10 +31,11 @@ public partial class AgentGateTests
         string? statement = Statement,
         string? sqlId = null,
         AgentSendScope? send = null,
-        string? currentSchema = null)
+        string? currentSchema = null,
+        bool allowRiskyFunctions = false)
     {
         profile ??= Dev(AiAccessLevel.QueryRows);
-        var ctx = new AiContext(profile.Name, profile.Environment, context, StatementText: statement, SqlId: sqlId, CurrentSchema: currentSchema);
+        var ctx = new AiContext(profile.Name, profile.Environment, context, StatementText: statement, SqlId: sqlId, CurrentSchema: currentSchema, AllowRiskyFunctions: allowRiskyFunctions);
         // 운영 접속은 리터럴 가림이 필수라 사전이 있어야 SQL 도구를 쓸 수 있다(없을 때의 닫힘은 AgentGateTests.Masking 이 시험한다).
         var literals = profile.Environment == ConnectionEnvironment.Production ? new LiteralVault() : null;
         return new AgentSession(new AgentRunScope("run-1", profile, ctx, send ?? AgentSendScope.StatementOnly) { Literals = literals }) { Client = "test-client" };
@@ -257,7 +258,7 @@ public partial class AgentGateTests
     [InlineData("SELECT * FROM TB_ORDER FOR UPDATE", "sql_unsafe")]
     [InlineData("SELECT * FROM TB_ORDER@REMOTE_DB", "sql_unsafe")]
     [InlineData("SELECT SEQ_ORDER.NEXTVAL FROM TB_ORDER", "sql_unsafe")]
-    [InlineData("SELECT PKG_UTIL.FN(1) FROM TB_ORDER", "sql_unsafe")]
+    [InlineData("SELECT DBMS_LOCK.SLEEP(1) FROM TB_ORDER", "sql_unsafe")]
     [InlineData("DELETE FROM TB_ORDER", "sql_not_single_query")]
     [InlineData("SELECT 1 FROM TB_ORDER; SELECT 2 FROM TB_ORDER", "sql_not_single_query")]
     [InlineData("   ", "sql_not_single_query")]
@@ -1267,10 +1268,11 @@ public partial class AgentGateTests
 
     private sealed class GateFixture
     {
-        public GateFixture(TimeProvider? time = null, IEnumerable<IAgentToolHandler>? handlers = null, TimeSpan? auditTimeout = null, ISqlLiteralMasker? masker = null, bool noMasker = false)
+        public GateFixture(TimeProvider? time = null, IEnumerable<IAgentToolHandler>? handlers = null, TimeSpan? auditTimeout = null, ISqlLiteralMasker? masker = null, bool noMasker = false,
+            IUserFunctionSafetyChecker? userFunctions = null)
         {
             Handlers = AgentTools.All.ToDictionary(t => t.Name, t => new FakeHandler(t.Name), StringComparer.Ordinal);
-            Gate = new AgentGate(Source, Extractor, handlers ?? Handlers.Values, Audit, time, noMasker ? null : masker ?? new FakeMasker()) { AuditTimeout = auditTimeout ?? TimeSpan.FromSeconds(5) };
+            Gate = new AgentGate(Source, Extractor, handlers ?? Handlers.Values, Audit, time, noMasker ? null : masker ?? new FakeMasker(), userFunctions) { AuditTimeout = auditTimeout ?? TimeSpan.FromSeconds(5) };
             Gate.ToolCompleted += (_, e) => Events.Add(e);
         }
 
@@ -1408,6 +1410,12 @@ public partial class AgentGateTests
                 .ToList();
             var kind = StartsWithQuery().IsMatch(upper) ? StatementKind.Query : StatementKind.Dml;
             var count = sql.Split(';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).Length;
+            // 분류: NEXTVAL·DBMS_/UTL_ 호출은 금지, 그 밖의 OWNER.NAME( 꼴은 사용자 함수 후보. UNCLASSIFIED_CALL 은 분류하지 못한 호출.
+            var calls = QualifiedCall().Matches(upper).Select(m => m.Value.TrimEnd('(', ' ')).ToList();
+            var forbidden = upper.Contains(".NEXTVAL", StringComparison.Ordinal)
+                || calls.Any(c => c.StartsWith("DBMS_", StringComparison.Ordinal) || c.StartsWith("UTL_", StringComparison.Ordinal));
+            var functions = calls.Where(c => !c.StartsWith("DBMS_", StringComparison.Ordinal) && !c.StartsWith("UTL_", StringComparison.Ordinal)).Distinct().ToList();
+            var unclassified = upper.Contains("UNCLASSIFIED_CALL", StringComparison.Ordinal);
             return ValueTask.FromResult(new AgentStatementInfo(
                 kind,
                 false,
@@ -1415,8 +1423,10 @@ public partial class AgentGateTests
                 count,
                 HasLockingClause: upper.Contains("FOR UPDATE", StringComparison.Ordinal),
                 HasRemoteReference: upper.Contains('@', StringComparison.Ordinal),
-                CallsUserFunction: upper.Contains(".NEXTVAL", StringComparison.Ordinal) || QualifiedCall().IsMatch(upper),
-                NormalizedSql: Normalize?.Invoke(sql)));
+                CallsUserFunction: forbidden || unclassified || functions.Count > 0,
+                NormalizedSql: Normalize?.Invoke(sql),
+                HasForbiddenCall: forbidden,
+                UserFunctions: unclassified ? null : functions));
         }
 
         public ValueTask<AgentObjectRef?> ResolveAsync(ISession db, string name, string? defaultSchema, CancellationToken ct) =>

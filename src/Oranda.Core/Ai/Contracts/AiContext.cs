@@ -13,6 +13,10 @@ namespace Oranda.Core.Ai.Contracts;
 /// <param name="StatementText">튜닝·설명 대상 문장 글(선택 또는 커서 위치 문장).</param>
 /// <param name="SqlId">대상 문장의 sql_id 를 알면 그 값(실제 계획·통계 조회용).</param>
 /// <param name="CurrentSchema">편집기 세션의 현재 스키마(<c>ALTER SESSION SET CURRENT_SCHEMA</c> 반영). 문장의 객체 이름을 푸는 기본 스키마다. null 이면 접속 사용자.</param>
+/// <param name="AllowRiskyFunctions">
+/// 사용자가 시작 창에서 「위험 함수도 실행」 을 켰다(대화마다, 기본 꺼짐). 켜면 benchmark 가 자치 트랜잭션·외부 접근·확인 못 한 함수도
+/// 읽기 전용 트랜잭션 안에서 실행한다(자치 트랜잭션의 커밋은 읽기 전용이 막지 못한다). 끄면 실행하지 않고 커서 실측으로 대체한다.
+/// </param>
 public sealed record AiContext(
     string? ConnectionName,
     ConnectionEnvironment? Environment,
@@ -20,4 +24,5 @@ public sealed record AiContext(
     string? TabId = null,
     string? StatementText = null,
     string? SqlId = null,
-    string? CurrentSchema = null);
+    string? CurrentSchema = null,
+    bool AllowRiskyFunctions = false);

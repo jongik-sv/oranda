@@ -58,5 +58,13 @@ public sealed record SqlStatsDescription(
 
 public sealed record BenchmarkVariant(string Label, string Sql);
 
+/// <summary>
+/// benchmark_queries 가 실행하지 않고 대체한 변형: 같은 글의 공유 풀 커서 실측(실행 1회당 값). <paramref name="Substituted"/> 는 늘 <c>cursor_stats</c>,
+/// <paramref name="Reason"/> 은 대체 사유 코드(<c>user_function_autonomous</c>·<c>db_link</c> 등), <paramref name="Note"/> 는 AI 가 이어 갈 한 줄.
+/// </summary>
+public sealed record BenchmarkSubstitute(
+    string Label, string Substituted, string Reason, string Note, string? SqlId, long Executions, double? ElapsedMsPerExec,
+    double? BufferGetsPerExec, double? DiskReadsPerExec, double? RowsPerExec);
+
 public sealed record BenchmarkDescription(
     string Label, int Repeat, double ElapsedMs, long LogicalReads, long PhysicalReads, long Rows, long? PlanHash, string? SqlId = null);

@@ -19,6 +19,7 @@ public sealed partial class AgentGate
         var clean = state.Clean;
         var hasSql = TryGetString(clean, AgentFields.Sql, out var sql);
         var hasSqlId = TryGetString(clean, AgentFields.SqlId, out var sqlId);
+        var executes = tool.Name == AgentToolNames.BenchmarkQueries; // 문장을 실제로 실행하는 도구(나머지는 계획·통계 조회)
 
         if (tool.Name == AgentToolNames.GetTuningContext
             && !hasSql
@@ -54,7 +55,7 @@ public sealed partial class AgentGate
 
         if (hasSql)
         {
-            var check = await CheckSqlAsync(session, db, sql, string.Empty, ct).ConfigureAwait(false);
+            var check = await CheckSqlAsync(session, db, state, executes, sql, string.Empty, ct).ConfigureAwait(false);
             if (check.Denial is not null)
             {
                 return check.Denial;
@@ -67,7 +68,7 @@ public sealed partial class AgentGate
         else if (tool.Name == AgentToolNames.GetTuningContext && !hasSqlId)
         {
             // sql 도 sql_id 도 없으면 처리자는 요청의 대상 문장을 쓴다. 그 글도 sql 인자와 똑같이 검사해 sql 에 채워 넘긴다.
-            var check = await CheckSqlAsync(session, db, session.Context.StatementText ?? string.Empty, " (statement of the request)", ct).ConfigureAwait(false);
+            var check = await CheckSqlAsync(session, db, state, executes, session.Context.StatementText ?? string.Empty, " (statement of the request)", ct).ConfigureAwait(false);
             if (check.Denial is not null)
             {
                 return check.Denial;
@@ -88,13 +89,14 @@ public sealed partial class AgentGate
                     return Deny("invalid_arguments", "Each variant needs a string label and a string sql.");
                 }
 
-                var check = await CheckSqlAsync(session, db, variantSql, $" (variant '{Clip(label, 40)}')", ct).ConfigureAwait(false);
+                var check = await CheckSqlAsync(session, db, state, executes, variantSql, $" (variant '{Clip(label, 40)}')", ct).ConfigureAwait(false);
                 if (check.Denial is not null)
                 {
                     return check.Denial;
                 }
 
                 variant[AgentFields.Sql] = check.Sql;
+                state.Substitutions.Add(check.Substitute);
             }
 
             state.StatementsChecked = variants.Count > 0;
@@ -104,10 +106,12 @@ public sealed partial class AgentGate
     }
 
     /// <summary>
-    /// SQL 글 하나: 문장 1개·SELECT·확실한 분류·잠금/DB 링크/사용자 함수 없음·참조 객체 전부 범위 안.
+    /// SQL 글 하나: 문장 1개·SELECT·확실한 분류·잠금/DB 링크/금지 호출 없음·참조 객체 전부 범위 안.
     /// 어긋나면 각각 <c>sql_not_single_query</c>·<c>sql_unsafe</c>·<c>scope</c>.
+    /// 실행 도구에서는 DB 링크·시퀀스·오라클 제공 패키지·분류 못 한 호출·위험 함수를 거부하지 않고 커서 실측 대체(<see cref="SqlCheck.Substitute"/>)로 돌린다.
     /// </summary>
-    private async ValueTask<SqlCheck> CheckSqlAsync(AgentSession session, ISession db, string sql, string where, CancellationToken ct)
+    private async ValueTask<SqlCheck> CheckSqlAsync(
+        AgentSession session, ISession db, CallState state, bool executes, string sql, string where, CancellationToken ct)
     {
         if (string.IsNullOrWhiteSpace(sql))
         {
@@ -120,9 +124,19 @@ public sealed partial class AgentGate
             return SqlCheck.Denied(Deny("sql_not_single_query", $"The SQL{where} must be a single SELECT statement."));
         }
 
-        if (info.HasLockingClause || info.HasRemoteReference || info.CallsUserFunction)
+        string? substitute = null;
+        if (info.HasLockingClause || ((info.HasRemoteReference || HasUnvettedCall(info)) && !executes))
         {
-            return SqlCheck.Denied(Deny("sql_unsafe", $"The SQL{where} must not use FOR UPDATE, database links, user-defined function calls or sequence references."));
+            return SqlCheck.Denied(Deny("sql_unsafe", $"The SQL{where} must not use FOR UPDATE, database links, sequence references, Oracle-supplied packages (DBMS_*, UTL_*) or URL types."));
+        }
+
+        if (info.HasRemoteReference)
+        {
+            substitute = "db_link";
+        }
+        else if (HasUnvettedCall(info))
+        {
+            substitute = "sql_unsafe";
         }
 
         foreach (var reference in info.Objects)
@@ -131,6 +145,39 @@ public sealed partial class AgentGate
             {
                 return SqlCheck.Denied(Deny("scope", $"The SQL{where} references an object outside the scope of this request."));
             }
+        }
+
+        // 사용자 함수·패키지 함수(감사 요약에 개수를 남긴다). 해석·조회만 하는 도구는 확인 없이 허용한다(운영에서 튜닝하려면 래핑 패키지·자치 로그 함수가 든 문장의 계획도 봐야 한다).
+        // 문장을 실제로 실행하는 도구는 함수가 닿는 PL/SQL 객체를 확인한다: 안전하면 읽기 전용 트랜잭션 안에서 실행하고,
+        // 아니면(자치·외부·확인 불가) 실행하지 않고 커서 실측으로 대체한다. 사용자가 시작 창에서 「위험 함수도 실행」 을 켰으면 그래도 읽기 전용으로 실행한다.
+        if (info.UserFunctions is { Count: > 0 } functions)
+        {
+            state.UserFunctionCount += functions.Count;
+            if (executes && substitute is null)
+            {
+                var verdict = _userFunctions is null
+                    ? UserFunctionVerdict.Unverified
+                    : await _userFunctions.CheckAsync(db, functions, session.Context.CurrentSchema, ct).ConfigureAwait(false);
+                if (verdict == UserFunctionVerdict.Safe || session.Context.AllowRiskyFunctions)
+                {
+                    state.ReadOnlyExecution = true;
+                }
+                else
+                {
+                    substitute = verdict switch
+                    {
+                        UserFunctionVerdict.Autonomous => "user_function_autonomous",
+                        UserFunctionVerdict.External => "user_function_external",
+                        _ => "user_function_unverified",
+                    };
+                }
+            }
+        }
+
+        // 대체: 문장을 실행하지 않고 처리자가 글에서 sql_id 를 계산해 공유 풀의 실측만 읽는다. 원래 글(사용자 앱이 실행한 글)을 넘긴다.
+        if (substitute is not null)
+        {
+            return new SqlCheck(null, sql, substitute);
         }
 
         // 추출기가 준 풀어 쓴 글은 분석한 글이 아니다. 처리자에게 넘기기 전에 그 글을 다시 분석해 같은 문장(1개·SELECT·깨끗·같은 참조 객체)인지 확인한다.
@@ -142,7 +189,7 @@ public sealed partial class AgentGate
                 || again.IsUncertain
                 || again.HasLockingClause
                 || again.HasRemoteReference
-                || again.CallsUserFunction
+                || HasUnvettedCall(again)
                 || !SameObjects(info.Objects, again.Objects))
             {
                 return SqlCheck.Denied(Deny("sql_unsafe", $"The normalized form of the SQL{where} does not match the analyzed statement."));
@@ -161,6 +208,10 @@ public sealed partial class AgentGate
         return new SqlCheck(null, sql);
     }
 
+    /// <summary>금지 호출이 있거나, 내장이 아닌 호출이 있는데 사용자 함수 후보로 분류되지 않았다(예전 분류기·알 수 없는 호출은 닫힌 쪽으로 거부).</summary>
+    private static bool HasUnvettedCall(AgentStatementInfo info) =>
+        info.HasForbiddenCall || (info.CallsUserFunction && info.UserFunctions is not { Count: > 0 });
+
     private static bool SameObjects(IReadOnlyList<AgentObjectRef> left, IReadOnlyList<AgentObjectRef> right)
     {
         var keys = new HashSet<string>(left.Select(o => o.Key), StringComparer.OrdinalIgnoreCase);
@@ -168,7 +219,8 @@ public sealed partial class AgentGate
     }
 
     /// <summary>SQL 글 하나의 검사 결과: 거부(있으면)와 처리자에게 넘길 글.</summary>
-    private sealed record SqlCheck(GateOutcome? Denial, string Sql)
+    /// <summary>SQL 검사 결과. <paramref name="Substitute"/> 가 있으면 처리자는 그 문장을 실행하지 않고 커서 실측으로 대체한다(값 = 사유 코드).</summary>
+    private sealed record SqlCheck(GateOutcome? Denial, string Sql, string? Substitute = null)
     {
         public static SqlCheck Denied(GateOutcome denial) => new(denial, string.Empty);
     }

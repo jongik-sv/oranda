@@ -88,6 +88,10 @@ public sealed class StatementReferenceExtractor
         public string Name => Kind == TokenKind.QuotedIdent ? Text.Trim('"') : Upper;
     }
 
+    /// <summary>따옴표 없이도 쓸 수 있는 글자로만 된 이름인가(대소문자는 따로 본다).</summary>
+    private static bool IsPlainName(string s) =>
+        s.Length > 0 && char.IsAsciiLetter(s[0]) && s.All(c => char.IsAsciiLetterOrDigit(c) || c is '_' or '$' or '#');
+
     private static List<Tok> Lex(string sql)
     {
         var list = new List<Tok>();
@@ -451,6 +455,19 @@ public sealed class StatementReferenceExtractor
             }
         }
 
+        /// <summary>
+        /// 호출 이름(<paramref name="first"/> 부터 점으로 이은 낱말들)을 더한다. 따옴표 이름에 식별자 밖 글자(점·공백 등)가 있으면
+        /// 점으로 이은 이름이 다른 객체를 가리키게 되므로("A.B" ≠ A.B) 확신하지 않는다.
+        /// </summary>
+        private void AddCall(List<string> parts, int first)
+        {
+            _calls.Add(string.Join('.', parts));
+            for (var p = first; p < first + (2 * parts.Count); p += 2)
+            {
+                _uncertain |= t[p].Kind == TokenKind.QuotedIdent && !IsPlainName(t[p].Name);
+            }
+        }
+
         /// <summary><c>(</c> 에서 시작하는 묶음 안의 함수 호출 이름(<c>a.b(</c>)을 호출 목록에 더한다. 위치는 옮기지 않는다.</summary>
         private void CollectCalls()
         {
@@ -481,7 +498,7 @@ public sealed class StatementReferenceExtractor
 
                 if (j < _n && t[j].Upper == "(" && !(parts.Count == 1 && t[k].Kind != TokenKind.QuotedIdent && NotColumn.Contains(parts[0])))
                 {
-                    _calls.Add(string.Join('.', parts));
+                    AddCall(parts, k);
                 }
             }
         }
@@ -562,6 +579,7 @@ public sealed class StatementReferenceExtractor
                 return;
             }
 
+            var first = _i;
             var parts = new List<string> { t[_i].Name };
             _i++;
             while (_i + 1 < _n && t[_i].Upper == "." && t[_i + 1].IsName)
@@ -590,7 +608,7 @@ public sealed class StatementReferenceExtractor
 
             if (Is(_i, "(") && !columnListFollows)
             {
-                _calls.Add(string.Join('.', parts));
+                AddCall(parts, first);
                 return; // FROM 안의 함수 호출(파이프라인 함수 등): 표가 아니다
             }
 
@@ -702,6 +720,7 @@ public sealed class StatementReferenceExtractor
         private bool ReadChain(Block cur, ColumnClause clause, int depth, bool prevEnds)
         {
             var afterAs = _i > 0 && t[_i - 1].Upper == "AS";
+            var first = _i;
             var parts = new List<string> { t[_i].Name };
             var quoted = t[_i].Kind == TokenKind.QuotedIdent;
             _i++;
@@ -731,7 +750,7 @@ public sealed class StatementReferenceExtractor
             {
                 if (!(parts.Count == 1 && !quoted && NotColumn.Contains(parts[0])))
                 {
-                    _calls.Add(string.Join('.', parts));
+                    AddCall(parts, first);
                 }
 
                 return false; // 함수 호출: "(" 은 본문 순회가 괄호로 센다

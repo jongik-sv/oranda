@@ -44,14 +44,20 @@ public sealed record AgentObjectRef(string Owner, string Name, string Kind = "")
 /// <param name="HasLockingClause"><c>FOR UPDATE</c> 등 행 잠금 절이 있다(주석을 끼운 <c>FOR/**/UPDATE</c> 포함). 게이트가 거부한다.</param>
 /// <param name="HasRemoteReference">DB 링크(<c>@링크</c>) 참조가 있다. 게이트가 거부한다(다른 DB 로 나간다).</param>
 /// <param name="CallsUserFunction">
-/// 참조 객체에 드러나지 않는 부작용·우회가 될 수 있는 호출이 있다. 게이트가 거부한다. 다음은 모두 이 플래그를 세운다:
-/// 사용자 함수·패키지 호출, SYS 패키지 호출(<c>DBMS_*</c>·<c>UTL_*</c>), 객체형 생성자·메서드(<c>DBURITYPE</c>·<c>HTTPURITYPE</c>·<c>XMLTYPE</c> 등),
-/// <c>XMLQUERY</c>·<c>XMLTABLE</c>·<c>EXTRACT</c> 류 SQL/XML 연산자, 인라인 <c>EXTERNAL</c>, <c>WITH FUNCTION</c>/<c>PROCEDURE</c>,
-/// 시퀀스 <c>NEXTVAL</c>·<c>CURRVAL</c>.
+/// 내장 함수가 아닌 호출이 있다(사용자 함수·패키지 호출, SYS 패키지 호출, 객체형 생성자·메서드, 시퀀스 <c>NEXTVAL</c>·<c>CURRVAL</c> 등).
+/// <see cref="UserFunctions"/> 가 비어 있으면(분류하지 못한 호출) 게이트는 예전처럼 거부한다.
 /// </param>
 /// <param name="NormalizedSql">
 /// 추출기가 모든 참조를 <c>"OWNER"."NAME"</c> 으로 풀어 다시 쓴 문장 글. 있으면 게이트가 처리자에게 원문 대신 이 글을 넘겨,
 /// 검사한 객체와 처리자가 읽는 객체가 같도록 한다. 없으면(null) 게이트는 현재 스키마가 접속 사용자와 같을 때만 원문을 넘긴다.
+/// </param>
+/// <param name="HasForbiddenCall">
+/// 어떤 도구에서도 허용하지 않는 호출이 있다: 시퀀스 <c>NEXTVAL</c>·<c>CURRVAL</c>, SYS 패키지 호출(<c>DBMS_*</c>·<c>UTL_*</c>·<c>CTX_*</c>·시스템 스키마), URI 형 생성자(<c>HTTPURITYPE</c>·<c>DBURITYPE</c> 등).
+/// 게이트가 <c>sql_unsafe</c> 로 거부한다.
+/// </param>
+/// <param name="UserFunctions">
+/// 사용자 함수·패키지 함수 후보(대문자, 쓰인 그대로 <c>F</c>·<c>PKG.F</c>·<c>SCHEMA.PKG.F</c>, 중복 없음). 금지 호출은 들어 있지 않다.
+/// 비어 있지 않으면 게이트는 해석·조회 도구에서는 허용하고, 실행 도구에서는 <see cref="IUserFunctionSafetyChecker"/> 로 확인한다.
 /// </param>
 public sealed record AgentStatementInfo(
     StatementKind Kind,
@@ -61,4 +67,6 @@ public sealed record AgentStatementInfo(
     bool HasLockingClause = false,
     bool HasRemoteReference = false,
     bool CallsUserFunction = false,
-    string? NormalizedSql = null);
+    string? NormalizedSql = null,
+    bool HasForbiddenCall = false,
+    IReadOnlyList<string>? UserFunctions = null);

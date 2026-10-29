@@ -14,6 +14,7 @@ public enum MarkdownStyle
     Bold = 1,
     Italic = 2,
     Code = 4,
+    Link = 8,
 }
 
 /// <summary>같은 꾸밈이 이어지는 글 한 토막.</summary>
@@ -37,7 +38,13 @@ public sealed record MarkdownHeading(int Level, IReadOnlyList<MarkdownSpan> Span
 public sealed record MarkdownParagraph(IReadOnlyList<MarkdownSpan> Spans) : MarkdownBlock;
 
 /// <summary>코드 블록(``` 울타리). <see cref="Language"/> 는 울타리 뒤의 글(없으면 빈 글).</summary>
-public sealed record MarkdownCode(string Language, string Code) : MarkdownBlock;
+public sealed record MarkdownCode(string Language, string Code, bool Closed = true) : MarkdownBlock;
+
+/// <summary>인용(<c>&gt;</c>). 안의 글은 블록으로 다시 읽는다.</summary>
+public sealed record MarkdownQuote(IReadOnlyList<MarkdownBlock> Blocks) : MarkdownBlock;
+
+/// <summary>수평선(<c>---</c>·<c>***</c>·<c>___</c>).</summary>
+public sealed record MarkdownRule : MarkdownBlock;
 
 /// <summary>목록 항목 하나. <see cref="Marker"/> 는 앞에 그리는 표식(<c>•</c> 또는 <c>1.</c>).</summary>
 public sealed record MarkdownListItem(int Depth, string Marker, IReadOnlyList<MarkdownSpan> Spans);
@@ -77,6 +84,21 @@ public static partial class MarkdownParser
 
     [GeneratedRegex(@"^:?-+:?$", RegexOptions.CultureInvariant, RegexTimeoutMs)]
     private static partial Regex TableSeparatorCell();
+
+    [GeneratedRegex(@"^ {0,3}(?<mark>[-*_])(?:[ \t]*\k<mark>){2,}[ \t]*$", RegexOptions.CultureInvariant, RegexTimeoutMs)]
+    private static partial Regex RuleLine();
+
+    [GeneratedRegex(@"^ {0,3}>[ ]?(?<text>.*)$", RegexOptions.CultureInvariant, RegexTimeoutMs)]
+    private static partial Regex QuoteLine();
+
+    /// <summary>인용 안의 인용을 블록으로 읽는 깊이 상한(넘으면 글 그대로).</summary>
+    private const int MaxQuoteDepth = 3;
+
+    /// <summary>링크 <c>[글](주소)</c> 의 주소로 보는 최대 글자 수.</summary>
+    private const int MaxLinkTarget = 2_000;
+
+    /// <summary>링크 글 칸(<c>[글]</c>)으로 보는 최대 글자 수.</summary>
+    private const int MaxLinkLabel = 500;
 
     private static string HeadingText(string captured)
     {
@@ -139,7 +161,7 @@ public static partial class MarkdownParser
 
     private static MarkdownParagraph Plain(string markdown) => new([new MarkdownSpan(markdown)]);
 
-    private static List<MarkdownBlock> ParseCore(string markdown)
+    private static List<MarkdownBlock> ParseCore(string markdown, int quoteDepth = 0)
     {
         var lines = markdown.ReplaceLineEndings("\n").Split('\n');
         List<MarkdownBlock> blocks = [];
@@ -171,7 +193,8 @@ public static partial class MarkdownParser
                 i++;
                 StringBuilder code = new();
                 var first = true;
-                while (i < lines.Length && !IsClosingFence(lines[i], fence))
+                var closed = false;
+                while (i < lines.Length && !(closed = IsClosingFence(lines[i], fence)))
                 {
                     if (!first)
                     {
@@ -184,7 +207,7 @@ public static partial class MarkdownParser
                 }
 
                 i++; // 닫는 울타리(스트리밍 중이라 아직 없으면 글 끝)
-                blocks.Add(new MarkdownCode(language, code.ToString()));
+                blocks.Add(new MarkdownCode(language, code.ToString(), closed));
                 continue;
             }
 
@@ -193,6 +216,30 @@ public static partial class MarkdownParser
                 FlushParagraph();
                 blocks.Add(new MarkdownHeading(Math.Min(heading.Groups[1].Length, 3), ParseInline(HeadingText(heading.Groups[2].Value))));
                 i++;
+                continue;
+            }
+
+            // 수평선은 글머리 목록(* * *)보다 먼저 본다.
+            if (RuleLine().IsMatch(line))
+            {
+                FlushParagraph();
+                blocks.Add(new MarkdownRule());
+                i++;
+                continue;
+            }
+
+            // 인용: 이어지는 > 줄을 모아 안의 글을 블록으로 다시 읽는다(빈 줄·> 없는 줄에서 끝).
+            if (quoteDepth < MaxQuoteDepth && QuoteLine().Match(line) is { Success: true })
+            {
+                FlushParagraph();
+                List<string> quoted = [];
+                while (i < lines.Length && QuoteLine().Match(lines[i]) is { Success: true } q)
+                {
+                    quoted.Add(q.Groups["text"].Value);
+                    i++;
+                }
+
+                blocks.Add(new MarkdownQuote(ParseCore(string.Join('\n', quoted), quoteDepth + 1)));
                 continue;
             }
 
@@ -487,6 +534,20 @@ public static partial class MarkdownParser
                 continue;
             }
 
+            // 링크 [글](주소): 글은 링크 모양, 주소는 뒤에 괄호로 남긴다(누를 수 없다 — AI 글의 주소를 열지 않는다). 주소에 공백·줄바꿈이 있으면 일반 글.
+            if (depth < MaxInlineDepth && ch == '[' && TryLink(text, i, out var label, out var url, out var linkEnd))
+            {
+                Flush();
+                spans.AddRange(Inline(label, style | MarkdownStyle.Link, depth + 1));
+                if (!string.Equals(label, url, StringComparison.Ordinal))
+                {
+                    spans.Add(new MarkdownSpan(" (" + url + ")", style));
+                }
+
+                i = linkEnd;
+                continue;
+            }
+
             if (depth < MaxInlineDepth && (ch == '*' || ch == '_'))
             {
                 var run = RunLength(text, i, ch);
@@ -509,6 +570,49 @@ public static partial class MarkdownParser
 
         Flush();
         return spans;
+    }
+
+    private static bool TryLink(string text, int at, out string label, out string url, out int end)
+    {
+        label = string.Empty;
+        url = string.Empty;
+        end = at;
+        // 글 칸은 줄 하나·정해진 길이 안에서만 찾는다(여는 [ 가 많은 긴 글에서 [ 마다 끝까지 훑지 않게).
+        var window = text.AsSpan(at + 1, Math.Min(text.Length - at - 1, MaxLinkLabel));
+        var stop = window.IndexOfAny('[', '\n');
+        var close = (stop < 0 ? window : window[..stop]).IndexOf("](", StringComparison.Ordinal);
+        if (close <= 0)
+        {
+            return false;
+        }
+
+        close += at + 1;
+
+        var target = close + 2;
+        var limit = Math.Min(text.Length, target + MaxLinkTarget);
+        for (var j = target; j < limit; j++)
+        {
+            var c = text[j];
+            if (c == ')')
+            {
+                if (j == target)
+                {
+                    return false;
+                }
+
+                label = text[(at + 1)..close];
+                url = text[target..j];
+                end = j + 1;
+                return true;
+            }
+
+            if (char.IsWhiteSpace(c))
+            {
+                return false;
+            }
+        }
+
+        return false;
     }
 
     /// <summary>

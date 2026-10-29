@@ -187,6 +187,57 @@ internal sealed partial class OracleTuningService : ITuningService
         ArgumentOutOfRangeException.ThrowIfGreaterThan(iterations, MaxIterations);
         var stmt = BenchmarkStatement(_language, benchmark.Sql);
 
+        if (benchmark.ReadOnly && !s.Profile.ReadOnly)
+        {
+            // 사용자 함수가 든 문장: 읽기 전용 트랜잭션 안에서만 돌린다(함수 안 DML 은 DB 가 ORA-01456 으로 막는다). 시작하지 못하면 문장은 보내지 않는다.
+            // 읽기 전용 프로필은 실행 서비스가 이미 문장마다 읽기 전용 트랜잭션을 연다(SET TRANSACTION 을 다시 하면 ORA-01453).
+            await BeginReadOnlyAsync(s, ct);
+            try
+            {
+                return await RunBenchmarkCoreAsync(s, benchmark, stmt, iterations, ct);
+            }
+            finally
+            {
+                await s.RollbackAsync(CancellationToken.None);
+            }
+        }
+
+        return await RunBenchmarkCoreAsync(s, benchmark, stmt, iterations, ct);
+    }
+
+    /// <summary>
+    /// 읽기 전용 트랜잭션을 연다. SET TRANSACTION 은 트랜잭션의 첫 문장이어야 하므로 앞의 열린 트랜잭션(EXPLAIN PLAN 의 PLAN_TABLE 행 등)을 먼저 되돌린다.
+    /// 되돌리는 것은 에이전트가 쓰는 모니터 세션에서만 한다(사용자 작업 세션의 미커밋 작업을 지우지 않게, 그 밖의 세션은 거부).
+    /// </summary>
+    private static async Task BeginReadOnlyAsync(ISession s, CancellationToken ct)
+    {
+        var session = s as OracleSession ?? throw new ArgumentException("OracleSession 이 아닌 세션은 쓸 수 없습니다.", nameof(s));
+        if (session.Purpose != SessionPurpose.Monitor)
+        {
+            throw new InvalidOperationException("읽기 전용 벤치마크는 에이전트(모니터) 세션에서만 실행합니다.");
+        }
+
+        var gate = session.CommandGate;
+        await gate.EnterAsync(ct);
+        try
+        {
+            await using var cmd = session.Connection.CreateCommand();
+            cmd.CommandText = "BEGIN ROLLBACK; SET TRANSACTION READ ONLY; END;";
+            await cmd.ExecuteNonQueryAsync(ct);
+            session.SetPending(false); // 앞의 미커밋 표시는 방금 되돌렸다
+        }
+        catch (OracleException ex) when (session.ReportFailure(ex))
+        {
+            throw;
+        }
+        finally
+        {
+            gate.Release();
+        }
+    }
+
+    private async Task<BenchmarkResult> RunBenchmarkCoreAsync(ISession s, BenchmarkCase benchmark, SqlStatement stmt, int iterations, CancellationToken ct)
+    {
         var elapsed = TimeSpan.Zero;
         long logical = 0, physical = 0, rows = 0;
         long? planHash = null;

@@ -18,11 +18,72 @@ public sealed record ChatUserEntry(string Text) : ChatEntry;
 /// <summary>AI 가 돌려준 글.</summary>
 public sealed record ChatAssistantEntry(string Text) : ChatEntry;
 
-/// <summary>접힌 도구 카드: 도구 이름, 응답 크기, 게이트 판단(허용·거절·실행 중 등).</summary>
+/// <summary>
+/// 도구 카드: 도구 이름, 응답 크기, 게이트 판단(허용·거절·실행 중 등). 한 줄 제목·핵심 인자·거부/실패 사유 문장은 <see cref="ToolCardText"/> 표에서 만든다.
+/// <see cref="Arguments"/> 는 드라이버의 인자 요약(LLM 이 보낸 글 그대로라 리터럴은 이미 <c>:vN</c> 으로 가려져 있다), <see cref="Note"/> 는 게이트 사유 코드.
+/// </summary>
 public sealed record ChatToolEntry(string Name, string ResponseSize, string Verdict, bool Done = true, string? CallId = null) : ChatEntry
 {
+    public string Arguments { get; init; } = string.Empty;
+
+    public string? Note { get; init; }
+
+    /// <summary>부름부터 결과까지 걸린 시간(잴 수 없었거나 아주 짧으면 빈 글).</summary>
+    public string Elapsed { get; init; } = string.Empty;
+
+    internal DateTime StartedUtc { get; init; }
+
     /// <summary>카드 앞 상태 표식(시안 9): 끝났으면 ✓, 진행 중이면 …</summary>
     public string Mark => Done ? "✓" : "…";
+
+    /// <summary>사람 말 한 줄(예 「인덱스 정보 조회 · APS.TB_A」). 모르는 도구는 이름 그대로.</summary>
+    public string Headline
+    {
+        get
+        {
+            var line = ToolCardText.Describe(Name, Arguments);
+            return line.Detail is { } detail ? line.Title + " · " + detail : line.Title;
+        }
+    }
+
+    /// <summary>거부·실패 사유 문장(없으면 null).</summary>
+    public string? Reason => ToolCardText.ReasonText(Note);
+
+    public bool HasReason => Reason is not null;
+
+    /// <summary>펼침 칸: 도구 이름, 인자(가린 글 그대로 한 줄에 하나), 사유 코드 원문.</summary>
+    public string Details
+    {
+        get
+        {
+            var parts = new List<string> { "tool: " + Name };
+            if (!string.IsNullOrWhiteSpace(Arguments))
+            {
+                parts.Add(ToolCardText.Expand(Arguments));
+            }
+
+            if (!string.IsNullOrWhiteSpace(Note))
+            {
+                parts.Add("reason: " + Note);
+            }
+
+            return string.Join(Environment.NewLine, parts);
+        }
+    }
+}
+
+/// <summary>
+/// 재작성 제안 카드(c6): 비교 창을 거절·닫기 한 뒤에도 대화 창에 남고 「다시 보기」 로 같은 비교 창을 다시 연다. 받아들인 제안은 「적용함」.
+/// <see cref="Label"/>·<see cref="Summary"/> 는 AI 가 보낸 글 그대로다(가린 대화면 자리표시 그대로 — 되돌린 SQL 은 <see cref="Reopen"/> 안에만 있다).
+/// </summary>
+public sealed record ChatProposalEntry(string Label, string Summary, bool Applied) : ChatEntry
+{
+    /// <summary>비교 창을 다시 연다. 받아들이면 true, 거절하면 false, 열지 못했으면(탭이 닫힘·문장이 바뀜) null.</summary>
+    internal Func<Task<bool?>>? Reopen { get; init; }
+
+    public string Headline => "재작성 제안 · " + Label;
+
+    public bool CanReview => !Applied;
 }
 
 /// <summary>
@@ -39,9 +100,14 @@ public sealed partial class AiChatViewModel : ToolPanelViewModelBase
     private string _title = "대화";
 
     [ObservableProperty]
-    [NotifyCanExecuteChangedFor(nameof(SendCommand), nameof(StopCommand))]
+    [NotifyCanExecuteChangedFor(nameof(SendCommand), nameof(StopCommand), nameof(ReviewProposalCommand))]
     [NotifyPropertyChangedFor(nameof(CanType))]
     private bool _isRunning;
+
+    /// <summary>제안 비교 창을 다시 연 채다(그동안 다른 제안을 겹쳐 열지 않는다).</summary>
+    [ObservableProperty]
+    [NotifyCanExecuteChangedFor(nameof(ReviewProposalCommand))]
+    private bool _isReviewing;
 
     /// <summary>
     /// 이어 갈 튜닝 대화가 있다(<see cref="StartConversation"/> 이 한 번이라도 불렸다). 입력은 이어 말하기만 하므로, 없으면 보낸 글이 아무 데도 가지 않는다:
@@ -105,14 +171,21 @@ public sealed partial class AiChatViewModel : ToolPanelViewModelBase
         UpdateStatus();
     }
 
-    public void AddToolCall(string name, string responseSize, string verdict, bool done = true, string? callId = null)
+    public void AddToolCall(string name, string responseSize, string verdict, bool done = true, string? callId = null, string arguments = "")
+        => AddToolCard(new ChatToolEntry(name, responseSize, verdict, done, callId) { Arguments = arguments });
+
+    private void AddToolCard(ChatToolEntry card)
     {
-        Entries.Add(new ChatToolEntry(name, responseSize, verdict, done, callId));
+        Entries.Add(card);
         _toolCount++;
         UpdateStatus();
     }
 
     public void AddAssistantText(string text) => Entries.Add(new ChatAssistantEntry(text));
+
+    /// <summary>제안 카드를 남긴다. <paramref name="reopen"/> 은 같은 제안의 비교 창을 다시 여는 호출 쪽 동작.</summary>
+    public void AddProposal(string label, string summary, bool applied, Func<Task<bool?>> reopen)
+        => Entries.Add(new ChatProposalEntry(label, summary, applied) { Reopen = reopen });
 
     /// <summary>앞 대화를 잇는 id(<see cref="AiStarted"/>·<see cref="AiFinal"/> 이 알려 준다). 이어 말하기를 보낼 때 호출 쪽이 읽어 요청에 싣는다.</summary>
     public string? ResumeId { get; private set; }
@@ -141,7 +214,7 @@ public sealed partial class AiChatViewModel : ToolPanelViewModelBase
 
                 break;
             case AiToolCall call:
-                AddToolCall(call.ToolName, call.ArgumentsSummary, "…", done: false, callId: call.CallId);
+                AddToolCard(new ChatToolEntry(call.ToolName, string.Empty, "…", Done: false, call.CallId) { Arguments = call.ArgumentsSummary, StartedUtc = DateTime.UtcNow });
                 break;
             case AiToolResult result:
                 CompleteToolCall(result);
@@ -193,15 +266,25 @@ public sealed partial class AiChatViewModel : ToolPanelViewModelBase
         {
             if (Entries[i] is ChatToolEntry { Done: false } card && card.CallId == result.CallId)
             {
-                Entries[i] = new ChatToolEntry(card.Name, SizeText(result.Size), VerdictText(result.Judgement), true, card.CallId);
+                Entries[i] = card with
+                {
+                    ResponseSize = SizeText(result.Size), Verdict = VerdictText(result.Judgement), Done = true, Note = result.Note,
+                    Elapsed = ElapsedText(card.StartedUtc),
+                };
                 return;
             }
         }
 
-        AddToolCall(result.ToolName, SizeText(result.Size), VerdictText(result.Judgement), callId: result.CallId);
+        AddToolCard(new ChatToolEntry(result.ToolName, SizeText(result.Size), VerdictText(result.Judgement), true, result.CallId) { Note = result.Note });
     }
 
     private static string SizeText(int size) => string.Create(CultureInfo.CurrentCulture, $"{size:N0} 자");
+
+    private static string ElapsedText(DateTime startedUtc)
+    {
+        var seconds = startedUtc == default ? 0 : (DateTime.UtcNow - startedUtc).TotalSeconds;
+        return seconds < 0.1 ? string.Empty : string.Create(CultureInfo.CurrentCulture, $"{seconds:0.0} 초");
+    }
 
     private static string VerdictText(AiToolJudgement judgement) => judgement switch
     {
@@ -231,6 +314,31 @@ public sealed partial class AiChatViewModel : ToolPanelViewModelBase
 
     [RelayCommand(CanExecute = nameof(IsRunning))]
     private void Stop() => StopRequested?.Invoke(this, EventArgs.Empty);
+
+    private bool CanReviewProposal(ChatProposalEntry? entry) => entry is { Applied: false, Reopen: not null } && !IsRunning && !IsReviewing;
+
+    /// <summary>「다시 보기」: 제안 비교 창을 다시 연다. 받아들이면 카드를 「적용함」 으로 바꾼다. 실행 중에는 열지 않는다.</summary>
+    [RelayCommand(CanExecute = nameof(CanReviewProposal))]
+    private async Task ReviewProposalAsync(ChatProposalEntry? entry)
+    {
+        if (entry?.Reopen is not { } reopen)
+        {
+            return;
+        }
+
+        IsReviewing = true;
+        try
+        {
+            if (await reopen().ConfigureAwait(true) == true && Entries.IndexOf(entry) is >= 0 and var i)
+            {
+                Entries[i] = entry with { Applied = true };
+            }
+        }
+        finally
+        {
+            IsReviewing = false;
+        }
+    }
 
     private void UpdateStatus()
     {

@@ -42,14 +42,42 @@
             </Border>
           </DataTemplate>
           <DataTemplate x:DataType="vm:ChatToolEntry">
-            <Grid ColumnDefinitions="16,*,Auto,Auto" ColumnSpacing="8" ClipToBounds="True">
-              <TextBlock Text="{Binding Mark}" Opacity="0.8" FontSize="{DynamicResource OrandaFontSizeSmall}" />
-              <TextBlock Grid.Column="1" Text="{Binding Name}" FontFamily="Consolas,Menlo,monospace" TextTrimming="CharacterEllipsis"
-                         FontSize="{DynamicResource OrandaFontSizeSmall}" ToolTip.Tip="{Binding Name}" />
-              <TextBlock Grid.Column="2" Text="{Binding ResponseSize}" Opacity="0.6" FontSize="{DynamicResource OrandaFontSizeSmall}" />
-              <TextBlock Grid.Column="3" Text="{Binding Verdict}" MinWidth="36" TextAlignment="Right" Opacity="0.8"
-                         FontSize="{DynamicResource OrandaFontSizeSmall}" />
-            </Grid>
+            <!-- 도구 카드: 사람 말 한 줄(제목·핵심 인자) · 걸린 시간 · 응답 크기 · 판단, 거부·실패면 사유 한 줄. 펼치면 도구 이름·인자(가린 글 그대로)·사유 코드. -->
+            <Expander x:Name="ToolCard" HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch" Padding="10,6"
+                      AutomationProperties.Name="{Binding Headline}">
+              <Expander.Header>
+                <Grid ColumnDefinitions="16,*,Auto,Auto,Auto" RowDefinitions="Auto,Auto" ColumnSpacing="8" ClipToBounds="True">
+                  <TextBlock Text="{Binding Mark}" Opacity="0.8" FontSize="{DynamicResource OrandaFontSizeSmall}" />
+                  <TextBlock Grid.Column="1" Text="{Binding Headline}" TextTrimming="CharacterEllipsis"
+                             FontSize="{DynamicResource OrandaFontSizeSmall}" ToolTip.Tip="{Binding Headline}" />
+                  <TextBlock Grid.Column="2" Text="{Binding Elapsed}" Opacity="0.6" FontSize="{DynamicResource OrandaFontSizeSmall}" />
+                  <TextBlock Grid.Column="3" Text="{Binding ResponseSize}" Opacity="0.6" FontSize="{DynamicResource OrandaFontSizeSmall}" />
+                  <TextBlock Grid.Column="4" Text="{Binding Verdict}" MinWidth="36" TextAlignment="Right" Opacity="0.8"
+                             FontSize="{DynamicResource OrandaFontSizeSmall}" />
+                  <TextBlock Grid.Row="1" Grid.Column="1" Grid.ColumnSpan="4" Text="{Binding Reason}" IsVisible="{Binding HasReason}" TextWrapping="Wrap"
+                             Foreground="{DynamicResource OrandaWarningForegroundBrush}" FontSize="{DynamicResource OrandaFontSizeSmall}" />
+                </Grid>
+              </Expander.Header>
+              <SelectableTextBlock Text="{Binding Details}" TextWrapping="Wrap" FontFamily="{DynamicResource OrandaCodeFontFamily}" Opacity="0.85"
+                                   FontSize="{DynamicResource OrandaFontSizeSmall}" />
+            </Expander>
+          </DataTemplate>
+          <DataTemplate x:DataType="vm:ChatProposalEntry">
+            <!-- 재작성 제안 카드(c6): 비교 창을 닫아도 남는다. 「다시 보기」 = 같은 비교 창, 받아들인 제안은 「적용함」. -->
+            <Border Padding="10,6" CornerRadius="4" BorderThickness="1" BorderBrush="{DynamicResource OrandaSeparatorBrush}">
+              <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+                <StackPanel Spacing="2">
+                  <TextBlock Text="{Binding Headline}" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding Headline}" />
+                  <TextBlock Text="{Binding Summary}" Opacity="0.7" TextWrapping="Wrap" MaxLines="2" TextTrimming="CharacterEllipsis"
+                             FontSize="{DynamicResource OrandaFontSizeSmall}" />
+                </StackPanel>
+                <TextBlock x:Name="AppliedMark" Grid.Column="1" Text="적용함" IsVisible="{Binding Applied}" VerticalAlignment="Center"
+                           Foreground="{DynamicResource OrandaSuccessForegroundBrush}" FontSize="{DynamicResource OrandaFontSizeSmall}" />
+                <Button x:Name="ReviewButton" Grid.Column="1" Classes="tool" Content="다시 보기" IsVisible="{Binding CanReview}" VerticalAlignment="Center"
+                        Command="{Binding $parent[ItemsControl].((vm:AiChatViewModel)DataContext).ReviewProposalCommand}" CommandParameter="{Binding}"
+                        ToolTip.Tip="제안 비교 창을 다시 엽니다" />
+              </Grid>
+            </Border>
           </DataTemplate>
           <DataTemplate x:DataType="vm:ChatAssistantEntry">
             <!-- AI 글: Markdown 부분 집합으로 그린다. 글 선택·복사가 된다(SelectableTextBlock). -->

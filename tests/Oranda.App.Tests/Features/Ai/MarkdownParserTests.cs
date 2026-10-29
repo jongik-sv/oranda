@@ -76,9 +76,55 @@ public class MarkdownParserTests
         var code = Assert.IsType<MarkdownCode>(closed[1]);
         Assert.Equal("sql", code.Language);
         Assert.Equal("SELECT *\n  FROM t;", code.Code);
+        Assert.True(code.Closed);
 
         var streaming = MarkdownParser.Parse("설명\n```sql\nSELECT 1 FROM dual");
-        Assert.Equal("SELECT 1 FROM dual", Assert.IsType<MarkdownCode>(streaming[1]).Code);
+        var open = Assert.IsType<MarkdownCode>(streaming[1]);
+        Assert.Equal("SELECT 1 FROM dual", open.Code);
+        Assert.False(open.Closed); // 스트리밍 중: 화면은 색을 칠하지 않는다
+    }
+
+    [Fact]
+    public void Quotes_read_their_inner_blocks_and_rules_beat_bullet_lists()
+    {
+        var blocks = MarkdownParser.Parse("> **주의**: 운영 DB\n> - 통계 먼저\n\n---\n\n* * *\n\n- 항목\n\n___");
+
+        var quote = Assert.IsType<MarkdownQuote>(blocks[0]);
+        Assert.IsType<MarkdownParagraph>(quote.Blocks[0]);
+        Assert.IsType<MarkdownList>(quote.Blocks[1]);
+        Assert.IsType<MarkdownRule>(blocks[1]);
+        Assert.IsType<MarkdownRule>(blocks[2]);
+        Assert.IsType<MarkdownList>(blocks[3]);
+        Assert.IsType<MarkdownRule>(blocks[4]);
+        Assert.Equal(5, blocks.Count);
+
+        // 표 구분 줄·SQL 주석 줄은 수평선이 아니다. 깊은 인용은 상한에서 글로 남는다.
+        Assert.IsType<MarkdownTable>(Assert.Single(MarkdownParser.Parse("| a |\n|---|\n| 1 |")));
+        Assert.IsType<MarkdownParagraph>(Assert.Single(MarkdownParser.Parse("-- 주석")));
+        Assert.NotNull(MarkdownParser.Parse(string.Concat(Enumerable.Repeat(">", 50)) + " 깊음"));
+    }
+
+    [Theory]
+    [InlineData("문서 [Oracle 힌트](https://docs.oracle.com/x) 참고", "Oracle 힌트", true)]
+    [InlineData("배열 a[1] 과 (x) 는 글", "a[1]", false)]
+    [InlineData("[주소 없음]() 은 글", "[주소 없음]()", false)]
+    [InlineData("[공백 주소](a b) 은 글", "[공백 주소](a b)", false)]
+    [InlineData("[NOT EXISTS 로 재작성] 반조인", "[NOT EXISTS 로 재작성]", false)]
+    public void Links_show_their_text_with_link_style_and_keep_the_address_as_plain_text(string markdown, string text, bool link)
+    {
+        var spans = MarkdownParser.ParseInline(markdown);
+
+        if (link)
+        {
+            Assert.Contains(spans, s => s.Text == text && s.Style.HasFlag(MarkdownStyle.Link));
+            Assert.Equal("문서 Oracle 힌트 (https://docs.oracle.com/x) 참고", MarkdownParser.ToPlainText(spans));
+            Assert.DoesNotContain(spans, s => s.Text.Contains("https://", StringComparison.Ordinal) && s.Style.HasFlag(MarkdownStyle.Link));
+        }
+        else
+        {
+            Assert.DoesNotContain(spans, s => s.Style.HasFlag(MarkdownStyle.Link));
+            Assert.Contains(text, MarkdownParser.ToPlainText(spans), StringComparison.Ordinal);
+        }
     }
 
     [Fact]

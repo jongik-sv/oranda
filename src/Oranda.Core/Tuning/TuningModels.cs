@@ -149,6 +149,12 @@ public sealed record BenchmarkCase(string Label, string Sql)
 {
     /// <summary>실행 출처(이력 <c>source</c>·정책 판단). 사람이 튜닝 도우미에서 돌리면 <see cref="HistorySource.Script"/>, AI 에이전트가 쓴 SQL 이면 <see cref="HistorySource.Agent"/>.</summary>
     public HistorySource Source { get; init; } = HistorySource.Script;
+
+    /// <summary>
+    /// true 면 반복 전체를 <c>SET TRANSACTION READ ONLY</c> 안에서 돌리고 끝나면 롤백한다(사용자 함수가 든 문장을 에이전트가 돌릴 때: 함수 안 DML 을 DB 가 막는다).
+    /// 이미 열린 트랜잭션이 있어 시작하지 못하면 실행하지 않고 실패한다.
+    /// </summary>
+    public bool ReadOnly { get; init; }
 }
 
 /// <summary>벤치마크 결과(TN-11). 값은 반복 평균.</summary>

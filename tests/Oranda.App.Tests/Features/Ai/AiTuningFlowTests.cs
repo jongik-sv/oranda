@@ -119,6 +119,22 @@ public class AiTuningFlowTests
         Assert.Contains("Do not benchmark", request.Prompt, StringComparison.Ordinal);
         Assert.Contains("Do not suggest indexes", request.Prompt, StringComparison.Ordinal);
         Assert.Contains(Original, request.Prompt, StringComparison.Ordinal);
+        Assert.False(request.Context.AllowRiskyFunctions);
+    }
+
+    [Fact]
+    public async Task Run_risky_functions_reaches_the_gate_context_for_the_start_and_every_follow_up()
+    {
+        var driver = Driver();
+        var chat = new AiChatViewModel();
+        var flow = new AiTuningFlow(new FakeEditor(Original), driver, chat, (_, _) => { });
+
+        await flow.StartAsync(new TuningStartChoice(true, false, "default", RunRiskyFunctions: true), Context);
+        await flow.FollowUpAsync("인덱스는 빼고");
+
+        Assert.All(driver.Requests, r => Assert.True(r.Context.AllowRiskyFunctions));
+        Assert.Equal(2, driver.Requests.Count);
+        Assert.Contains(chat.Entries.OfType<ChatUserEntry>(), e => e.Text.Contains("위험 함수도 실행", StringComparison.Ordinal));
     }
 
     [Fact]
@@ -150,6 +166,66 @@ public class AiTuningFlowTests
     }
 
     [Fact]
+    public async Task A_rejected_proposal_stays_as_a_card_that_reopens_the_same_comparison_and_turns_applied_when_accepted()
+    {
+        var editor = new FakeEditor(Original) { Accept = false };
+        var chat = new AiChatViewModel();
+        var flow = new AiTuningFlow(editor, Driver(), chat, (_, _) => { });
+
+        await flow.StartAsync(new TuningStartChoice(true, false, "default"), Context);
+
+        var card = Assert.Single(chat.Entries.OfType<ChatProposalEntry>());
+        Assert.False(card.Applied);
+        Assert.Contains("NOT EXISTS", card.Label, StringComparison.Ordinal);
+        Assert.True(chat.ReviewProposalCommand.CanExecute(card));
+
+        editor.Accept = true;
+        await chat.ReviewProposalCommand.ExecuteAsync(card);
+
+        Assert.Equal(2, editor.Proposed.Count);
+        Assert.Equal(editor.Proposed[0], editor.Proposed[1]); // 같은 범위·같은 글(시작 탭 기준)
+        var applied = Assert.Single(chat.Entries.OfType<ChatProposalEntry>());
+        Assert.True(applied.Applied);
+        Assert.False(applied.CanReview);
+        Assert.False(chat.ReviewProposalCommand.CanExecute(applied));
+    }
+
+    [Fact]
+    public async Task An_accepted_proposal_card_says_applied_and_a_changed_statement_blocks_reopening_without_a_card_change()
+    {
+        var editor = new FakeEditor(Original);
+        var chat = new AiChatViewModel();
+        var flow = new AiTuningFlow(editor, Driver(), chat, (_, _) => { });
+        await flow.StartAsync(new TuningStartChoice(true, false, "default"), Context);
+        Assert.True(Assert.Single(chat.Entries.OfType<ChatProposalEntry>()).Applied);
+
+        var rejected = new FakeEditor(Original) { Accept = false };
+        var chat2 = new AiChatViewModel();
+        await new AiTuningFlow(rejected, Driver(), chat2, (_, _) => { }).StartAsync(new TuningStartChoice(true, false, "default"), Context);
+        var card = Assert.Single(chat2.Entries.OfType<ChatProposalEntry>());
+        rejected.StatementText = Original + " AND 1 = 1"; // 닫은 뒤 사용자가 문장을 고침
+
+        await chat2.ReviewProposalCommand.ExecuteAsync(card);
+
+        Assert.Single(rejected.Proposed); // 다시 열지 않았다
+        Assert.False(Assert.Single(chat2.Entries.OfType<ChatProposalEntry>()).Applied);
+        Assert.Contains(chat2.Entries.OfType<ChatAssistantEntry>(), e => e.Text.Contains("문장이 바뀌어", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void Reviewing_a_proposal_is_not_offered_while_a_run_is_in_progress()
+    {
+        var chat = new AiChatViewModel();
+        chat.AddProposal("r", "x", applied: false, () => Task.FromResult<bool?>(false));
+        var card = Assert.Single(chat.Entries.OfType<ChatProposalEntry>());
+
+        chat.BeginTurn("이어 말하기");
+        Assert.False(chat.ReviewProposalCommand.CanExecute(card));
+        chat.EndTurn();
+        Assert.True(chat.ReviewProposalCommand.CanExecute(card));
+    }
+
+    [Fact]
     public async Task Follow_up_resumes_with_the_previous_resume_id()
     {
         var driver = Driver();
@@ -161,7 +237,25 @@ public class AiTuningFlowTests
 
         Assert.Equal(2, driver.Requests.Count);
         Assert.Equal("sess-2", driver.Requests[1].ResumeId);
-        Assert.Equal("인덱스는 만들지 말고 힌트로만", driver.Requests[1].Prompt);
+        Assert.StartsWith("인덱스는 만들지 말고 힌트로만", driver.Requests[1].Prompt, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task Response_style_rules_go_into_the_first_request_and_every_follow_up()
+    {
+        var driver = Driver();
+        var flow = new AiTuningFlow(new FakeEditor(Original), driver, new AiChatViewModel(), (_, _) => { });
+        await flow.StartAsync(new TuningStartChoice(true, true, "default"), Context);
+
+        await flow.FollowUpAsync("다른 방법도");
+
+        Assert.All(driver.Requests, r =>
+        {
+            Assert.Contains(AiTuningFlow.ResponseStyle, r.Prompt, StringComparison.Ordinal);
+            Assert.Contains("conclusion of one or two lines", r.Prompt, StringComparison.Ordinal);
+            Assert.Contains("3 to 5 bullets", r.Prompt, StringComparison.Ordinal);
+            Assert.Contains("No preamble or closing remarks", r.Prompt, StringComparison.Ordinal);
+        });
     }
 
     [Fact]
@@ -321,6 +415,7 @@ public class AiTuningFlowTests
         Assert.Contains("WHERE stat_cd = '10';", tab, StringComparison.Ordinal);
         Assert.DoesNotContain("CREATE INDEX ix ON tb_order (stat_cd) WHERE stat_cd = :v1", tab, StringComparison.Ordinal);
         Assert.Contains("자리표시", tab, StringComparison.Ordinal); // 설명 줄은 되돌리지 않으므로 탭 머리에 안내
+        Assert.Single(chat.Entries.OfType<ChatProposalEntry>());
         AssertChatHidesOriginal(chat);
     }
 
@@ -330,6 +425,7 @@ public class AiTuningFlowTests
         Assert.DoesNotContain("'10'", chat.Title, StringComparison.Ordinal);
         Assert.DoesNotContain(chat.Entries.OfType<ChatUserEntry>(), e => e.Text.Contains("'10'", StringComparison.Ordinal));
         Assert.DoesNotContain(chat.Entries.OfType<ChatAssistantEntry>(), e => e.Text.Contains("'10'", StringComparison.Ordinal));
+        Assert.DoesNotContain(chat.Entries.OfType<ChatProposalEntry>(), e => (e.Headline + e.Summary).Contains("'10'", StringComparison.Ordinal));
     }
 
     [Fact]

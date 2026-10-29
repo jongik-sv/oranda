@@ -339,9 +339,38 @@ internal sealed class BenchmarkQueriesHandler(AgentToolboxProvider boxes, IState
         }
 
         // 실행 허용은 게이트가 문장을 검사한 뒤 채운다(Query 이상·검사 완료). 운영 접속은 문장마다 시간 상한을 둔다.
+        // 게이트가 대체하라고 한 변형(위험 함수·DB 링크·시퀀스 등)은 실행하지 않고 공유 풀 커서 실측으로 바꾼다. 결과 순서는 변형 순서 그대로다.
         var production = inv.Session.Profile.Environment == ConnectionEnvironment.Production;
-        return Node(await box.BenchmarkAsync(
-            inv.Db, variants, Number(inv, "repeat", 1, 5) ?? DefaultRepeat, inv.MayExecuteSql, ScopeSchema(inv), ct,
-            production ? TuningToolbox.ProductionStatementTimeout : null).ConfigureAwait(false));
+        var substitutions = inv.Substitutions ?? [];
+        if (substitutions.Count > 0 && substitutions.Count != variants.Count)
+        {
+            throw new AiToolException("변형 검사 결과의 개수가 맞지 않습니다.");
+        }
+
+        if (!inv.MayExecuteSql)
+        {
+            throw new AiToolException("이 접속의 허용 수준으로는 benchmark_queries 를 실행할 수 없습니다(Query 이상이 필요합니다).");
+        }
+
+        var run = variants.Where((_, i) => substitutions.Count == 0 || substitutions[i] is null).ToList();
+        box.CheckSubstitutes(variants.Where((_, i) => substitutions.Count > 0 && substitutions[i] is not null));
+        var measured = run.Count == 0 ? [] : await box.BenchmarkAsync(
+            inv.Db, run, Number(inv, "repeat", 1, 5) ?? DefaultRepeat, inv.MayExecuteSql, ScopeSchema(inv), ct,
+            production ? TuningToolbox.ProductionStatementTimeout : null, inv.ReadOnlyExecution).ConfigureAwait(false);
+        if (substitutions.Count == 0)
+        {
+            return Node(measured);
+        }
+
+        var result = new JsonArray();
+        var next = 0;
+        for (var i = 0; i < variants.Count; i++)
+        {
+            result.Add(substitutions[i] is { } reason
+                ? Node(await box.CursorStatsInsteadAsync(inv.Db, variants[i], reason, ScopeSchema(inv), ct).ConfigureAwait(false))
+                : Node(measured[next++]));
+        }
+
+        return result;
     }
 }
