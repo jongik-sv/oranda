@@ -58,10 +58,12 @@ public sealed partial class SessionsViewModel : ToolPanelViewModelBase, IDisposa
         _state = state;
         _ops = ops;
         _bus = bus;
-        PostToUi = a => a();
     }
 
-    /// <summary>화면을 UI 스레드로 넘기는 방법. 시험은 바로 실행하도록 바꾼다.</summary>
+    /// <summary>
+    /// 화면을 UI 스레드로 넘기는 방법. 시험 생성자도 이 기본값을 쓴다: 세션 닫힘 알림은 스레드 풀(세션 닫기)에서 오므로
+    /// 그 자리에서 바로 다시 만들면 UI 스레드의 다시 만들기와 겹쳐 행 사전(_byId)을 함께 고치고, 같은 세션 행이 새 객체로 바뀐다.
+    /// </summary>
     public Action<Action> PostToUi { get; set; } = a =>
     {
         if (Application.Current is null || Dispatcher.UIThread.CheckAccess())

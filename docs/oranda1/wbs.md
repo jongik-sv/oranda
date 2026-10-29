@@ -1237,6 +1237,18 @@ levels:
   - acceptance: SchemaBrowserTypeChoiceTests 10(전부·일부·없음·일부에서 전체 선택·모르는 이름/조용한 되살리기·여러 유형 트리와 서버 조회·바로 반영·접속별 기억과 설정 되살리기·객체 찾기 조회·Headless 드롭다운 열기/Space 체크/전체 선택/닫힌 글/Esc) / OrandaJsonContextTests +1(typeChoices 왕복) / 기존 SchemaBrowser·DbTools·Java·Reveal 시험을 새 API 로 / `dotnet build Oranda.sln -warnaserror`
   - note: 바꾼 곳 = Shell/Controls/TypeChoiceSet.cs·TypeChoiceDropDown.axaml(새), SchemaBrowserViewModel(TypeFilter → Types)·.Tree·.SavedFilters(ResolveTypes·RememberTypes), SchemaFilter(ObjectType → ObjectTypes), SchemaBrowserView·ObjectSearchView(.axaml), ObjectSearchViewModel(TypeFilter → Types), AppSettings.SchemaBrowserSettings.TypeChoices, strings-ko/en(TypeChoice.*), literals-en(「전체 선택」). 객체 찾기의 유형 선택은 기억하지 않는다(창마다) (win144)
 
+- [x] TSK-14-26: CI(Windows)에서 가끔 실패하는 시험 2개 안정화(세션 창 행 객체 경쟁·매퍼 폴더 트리 시험의 저장 실패) [win144] w:1 2026-10-29~2026-10-29
+  - category: defect
+  - domain: test
+  - model: opus
+  - priority: medium
+  - tags: ci, flaky, sessions, mybatis, mapper-folder, win144
+  - prd-ref: PRD 16
+  - depends: TSK-14-19
+  - requirements: 조정자 지시(2026-10-29) 「CI Windows 에서만 가끔 실패하는 시험 2개를 결정적으로」. (1) SessionsViewModelTests.Opening_and_closing_sessions…(CI 3초, Assert.Same 실패 = 같은 세션 행이 새 SessionRow 로 바뀜): 시험용 생성자가 PostToUi 를 「바로 실행」으로 바꿔 두어, 세션 닫힘 알림(SessionClosed, 세션 닫기가 도는 스레드 풀에서 옴)이 그 자리에서 Refresh 를 돌렸다. UI 스레드의 Refresh(실행 상태·라우터 바뀜)와 겹쳐 행 사전 _byId 를 함께 비우고 채우다 같은 세션의 행을 못 찾아 새로 만들었다(행 사전을 비운 뒤 300ms 멈춤을 넣으면 로컬에서 늘 재현) → 시험용 생성자도 기본 PostToUi(UI 스레드가 아니면 Post)를 쓴다. 셸 생성자의 실제 동작은 그대로 / (2) StatementsOpenChangedTests.The_mapper_folder_tree…(CI 12초·23초, 249행 저장 Assert.True 실패): 폴더 트리를 연 채 저장하면 폴더 감시·색인이 매퍼를 잠깐 여는 순간과 ReplaceFile 이 겹쳐 「바꿀 파일을 제거할 수 없습니다」(1175)로 쓰기가 실패했다(같은 시험을 병렬 클래스 16개로 돌리면 576회 중 3회 재현, 폴더 서비스를 닫고 저장하면 768회 중 0회). 사용자도 폴더 트리를 연 채 저장하면 같은 「쓰지 못했습니다」 를 볼 수 있다 → MapperFileWriter 가 공유 위반·잠금 위반·1175~1177 이면 임시 파일을 남긴 채 100ms 간격으로 5번까지 다시 바꾼다(1176 처럼 원본이 없어졌으면 옮기기만), 다른 오류는 바로 던진다. 시험 단정에 알림 글을 붙여 다음에 실패하면 이유가 보이게 함; 제약: release-notes 안 넣음(지시), 전체 시험은 돌리지 않음; 비고: 레인 sr-stable
+  - acceptance: MapperFileWriterTests +2(잠깐 잡힌 대상 = 재시도 알림에서 놓으면 한 번 다시 해 바꿈·임시 파일 없음, 끝까지 잡힘 = IOException·원본 유지·임시 파일 없음, 재시도 순간은 알림으로 정해 시간에 기대지 않음) / SessionsViewModelTests 13 ×10·StatementsOpenChangedTests 4 ×10 통과 / 재현 조건(행 사전 비운 뒤 지연 주입, 폴더 시험 병렬 16클래스)에서 고친 뒤 통과 / `dotnet build Oranda.sln -warnaserror`
+  - note: 결과: SessionsViewModelTests 13×10·StatementsOpenChangedTests 4×10·MapperFileWriterTests 14×10 통과, 폴더 시험 병렬 16클래스 재현 조건 고친 뒤 1024회 0 실패, MyBatisWorkspace 시험 505 통과. 바꾼 곳 = SessionsViewModel 시험용 생성자(PostToUi 덮어쓰기 뺌), Platform MapperFileWriter(바꾸기 재시도), 시험 단정 메시지. 남긴 것: 세션 창 QueueRefresh 는 UI 스레드에서 부르면 바로 다시 만들어 RaiseAll 한 번에 여러 번 돈다(주석의 「한 번에 모아」 와 다름, 동작 문제는 아님) (win144)
+
 ## 의존 그래프
 
 ### 그래프 (Mermaid)
@@ -1353,6 +1365,7 @@ graph LR
   TSK-14-22 --> TSK-14-23
   TSK-14-23 --> TSK-14-24
   TSK-07-02 --> TSK-14-25
+  TSK-14-19 --> TSK-14-26
   style TSK-01-02 fill:#e8f5e9,stroke:#2e7d32
   style TSK-03-01 stroke:#c62828,stroke-width:2px
   style TSK-02-02 stroke:#c62828,stroke-width:2px

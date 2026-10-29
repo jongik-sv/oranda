@@ -108,7 +108,7 @@ public sealed class StatementsOpenChangedTests
             vm.ShowChangedOnly = false;
 
             // xml 에 저장 → ● 가 ○(저장함, 연 때와 다름)로 바뀐다
-            Assert.True(await rig.Save.SaveAsync(ws, default));
+            Assert.True(await rig.Save.SaveAsync(ws, default), string.Join(" | ", rig.Dialogs.Messages)); // 실패하면 저장 처리기가 알린 이유를 보인다
             Settle(window);
             Assert.Empty(NodeOf(vm, Count).ModifiedText);
             Assert.NotEmpty(NodeOf(vm, Count).SavedText);
@@ -142,7 +142,7 @@ public sealed class StatementsOpenChangedTests
             Edit(again, "COUNT(EMPNO)", "COUNT(*)");
             Settle(window);
             Assert.NotEmpty(NodeOf(vm, Count).ModifiedText);
-            Assert.True(await rig.Save.SaveAsync(ws, default));
+            Assert.True(await rig.Save.SaveAsync(ws, default), string.Join(" | ", rig.Dialogs.Messages)); // 실패하면 저장 처리기가 알린 이유를 보인다
             Settle(window);
             Assert.Empty(NodeOf(vm, Count).ModifiedText);
             Assert.Empty(NodeOf(vm, Count).SavedText);
@@ -197,7 +197,7 @@ public sealed class StatementsOpenChangedTests
             Assert.Equal("열림 1", vm.OpenFilterText);
             Assert.Equal("변경 1", vm.ChangedFilterText);
 
-            Assert.True(await rig.Save.SaveAsync(ws, default));
+            Assert.True(await rig.Save.SaveAsync(ws, default), string.Join(" | ", rig.Dialogs.Messages)); // 실패하면 저장 처리기가 알린 이유를 보인다
             Settle(window);
             var node = NodeOf(vm, "selectNew");
             Assert.Empty(node.NewText);
@@ -246,7 +246,7 @@ public sealed class StatementsOpenChangedTests
         {
             MyBatisFlowRig.Render(window, "mbst-folder-unsaved", 340, 420);
 
-            Assert.True(await rig.Save.SaveAsync(ws, default));
+            Assert.True(await rig.Save.SaveAsync(ws, default), string.Join(" | ", rig.Dialogs.Messages)); // 실패하면 저장 처리기가 알린 이유를 보인다
             MyBatisFlowRig.Pump();
             Assert.False(Node(Count).IsUnsaved);
             Assert.True(Node(Count).IsSaved);

@@ -142,4 +142,63 @@ public sealed class MapperFileWriterTests : IDisposable
         Assert.NotNull(new FileInfo(link).LinkTarget);
         Assert.Equal(Encoding.UTF8.GetBytes("<a/>"), await File.ReadAllBytesAsync(target));
     }
+
+    // Windows 에서는 다른 쪽(폴더 트리 색인·IDE·검색기)이 대상을 잠깐 열어 두면 바꾸기가 IOException(공유 위반, 1175 「바꿀 파일을 제거할 수 없습니다」)으로 실패한다.
+    // 임시 파일을 남긴 채 몇 번 다시 바꾼다. 잡은 쪽이 놓는 순간은 재시도 알림(BeforeReplaceRetry)으로 정해 시간에 기대지 않는다.
+    [Fact]
+    public async Task WriteAsync_TargetBrieflyHeldOpen_RetriesAndReplaces()
+    {
+        if (!OperatingSystem.IsWindows())
+        {
+            return; // rename 은 열린 파일도 바꾼다(공유 위반이 없다)
+        }
+
+        var path = P();
+        await File.WriteAllBytesAsync(path, Original);
+        var holder = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read);
+        var retries = 0;
+        var writer = new MapperFileWriter
+        {
+            ReplaceRetryDelay = TimeSpan.Zero,
+            BeforeReplaceRetry = () =>
+            {
+                retries++;
+                holder.Dispose(); // 첫 실패 뒤 잡은 쪽이 놓는다
+            },
+        };
+        try
+        {
+            await writer.WriteAsync(path, "<a/>", Fmt("utf-8", false), CancellationToken.None);
+        }
+        finally
+        {
+            holder.Dispose();
+        }
+
+        Assert.Equal(1, retries);
+        Assert.Equal(Encoding.UTF8.GetBytes("<a/>"), await File.ReadAllBytesAsync(path));
+        Assert.False(File.Exists(path + ".oranda-tmp"));
+    }
+
+    [Fact]
+    public async Task WriteAsync_TargetHeldOpenThroughAllRetries_ThrowsKeepsTargetAndCleansTemp()
+    {
+        if (!OperatingSystem.IsWindows())
+        {
+            return;
+        }
+
+        var path = P();
+        await File.WriteAllBytesAsync(path, Original);
+        var retries = 0;
+        var writer = new MapperFileWriter { ReplaceRetryDelay = TimeSpan.Zero, BeforeReplaceRetry = () => retries++ };
+        using (new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read))
+        {
+            await Assert.ThrowsAnyAsync<IOException>(() => writer.WriteAsync(path, "<a/>", Fmt("utf-8", false), CancellationToken.None));
+        }
+
+        Assert.Equal(MapperFileWriter.ReplaceAttempts - 1, retries);
+        Assert.Equal(Original, await File.ReadAllBytesAsync(path));
+        Assert.False(File.Exists(path + ".oranda-tmp"));
+    }
 }

@@ -11,6 +11,18 @@ public sealed class MapperFileWriter : IMapperFileWriter
     private const int Cp949CodePage = 949;
     private static readonly byte[] Utf8Bom = [0xEF, 0xBB, 0xBF];
 
+    /// <summary>
+    /// 바꾸기를 해 보는 최대 횟수. Windows 에서는 다른 쪽(폴더 트리 색인·IDE·검색기 등)이 대상을 잠깐 열어 두면 ReplaceFile 이
+    /// 공유 위반이나 ERROR_UNABLE_TO_REMOVE_REPLACED(1175)로 실패한다. 임시 파일을 남긴 채 짧게 기다렸다 다시 바꾼다.
+    /// </summary>
+    internal const int ReplaceAttempts = 5;
+
+    /// <summary>다시 바꾸기 전에 기다리는 시간(시험이 0 으로 줄인다).</summary>
+    internal TimeSpan ReplaceRetryDelay { get; init; } = TimeSpan.FromMilliseconds(100);
+
+    /// <summary>다시 바꾸기 직전에 부른다(시험이 잡은 쪽을 놓는 순간으로 쓴다).</summary>
+    internal Action? BeforeReplaceRetry { get; init; }
+
     /// <inheritdoc />
     public async Task WriteAsync(string path, string text, MapperFileFormat format, CancellationToken ct)
     {
@@ -47,19 +59,33 @@ public sealed class MapperFileWriter : IMapperFileWriter
         {
             await File.WriteAllBytesAsync(tmp, bytes, ct).ConfigureAwait(false);
             ct.ThrowIfCancellationRequested();
-            if (exists)
+            // Unix 의 Replace 는 rename 이라 원본 권한 비트를 잃는다. 임시 파일에 먼저 옮겨 둔다.
+            if (exists && !OperatingSystem.IsWindows())
             {
-                // Unix 의 Replace 는 rename 이라 원본 권한 비트를 잃는다. 임시 파일에 먼저 옮겨 둔다.
-                if (!OperatingSystem.IsWindows())
-                {
-                    File.SetUnixFileMode(tmp, File.GetUnixFileMode(path));
-                }
-
-                File.Replace(tmp, path, destinationBackupFileName: null);
+                File.SetUnixFileMode(tmp, File.GetUnixFileMode(path));
             }
-            else
+
+            for (int attempt = 1; ; attempt++)
             {
-                File.Move(tmp, path);
+                try
+                {
+                    // 앞 시도가 원본을 지운 뒤 실패했으면(1176) 남은 임시 파일을 옮기기만 한다.
+                    if (exists && File.Exists(path))
+                    {
+                        File.Replace(tmp, path, destinationBackupFileName: null);
+                    }
+                    else
+                    {
+                        File.Move(tmp, path);
+                    }
+
+                    break;
+                }
+                catch (IOException ex) when (attempt < ReplaceAttempts && IsTransientReplaceFailure(ex) && File.Exists(tmp))
+                {
+                    BeforeReplaceRetry?.Invoke();
+                    await Task.Delay(ReplaceRetryDelay, ct).ConfigureAwait(false);
+                }
             }
         }
         catch
@@ -82,6 +108,11 @@ public sealed class MapperFileWriter : IMapperFileWriter
             throw;
         }
     }
+
+    // 다른 쪽이 잠깐 잡고 있을 때만 다시 한다: 공유 위반(32)·잠금 위반(33)·ReplaceFile 의 바꾸기 실패(1175~1177).
+    // 대상이 폴더인 경우 같은 다른 오류는 바로 던진다.
+    private static bool IsTransientReplaceFailure(IOException ex) =>
+        (ex.HResult & 0xFFFF) is 32 or 33 or 1175 or 1176 or 1177;
 
     private static byte[] BuildBytes(string text, MapperFileFormat format)
     {
