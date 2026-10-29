@@ -206,6 +206,7 @@ public sealed class SafetyCrossPolicyTests
     public async Task Policy_result_does_not_depend_on_the_requesting_feature()
     {
         // 같은 문장·같은 접속이면 출처(편집기·그리드·스크립트·모니터·확장·이력)와 상관없이 같은 판단이어야 한다.
+        // AI 에이전트 출처는 사람이 쓰는 기능이 아니라 더 좁은 신뢰 단계다: 규칙 0 이 Query 외 문장을 어느 접속에서나 거부한다.
         var profile = new ConnectionProfile("p", "u", "h:1521/s", Environment: ConnectionEnvironment.Production);
         var ro = profile with { ReadOnly = true };
         var stmt = new SqlStatement("UPDATE t SET a = 1 WHERE id = 1", default, StatementKind.Dml) { Verb = "UPDATE" };
@@ -214,13 +215,17 @@ public sealed class SafetyCrossPolicyTests
         foreach (var p in new[] { profile, ro })
         {
             var decisions = new HashSet<(PolicyDecisionKind, PolicyRule, string?)>();
-            foreach (var src in Enum.GetValues<HistorySource>())
+            foreach (var src in Enum.GetValues<HistorySource>().Where(s => s != HistorySource.Agent))
             {
                 var d = await policy.EvaluateAsync(new PolicyContext(p, Server, src), stmt, default);
                 decisions.Add((d.Kind, d.Rule, d.RetypeText));
             }
 
             Assert.Single(decisions);
+
+            var agent = await policy.EvaluateAsync(new PolicyContext(p, Server, HistorySource.Agent), stmt, default);
+            Assert.Equal(PolicyDecisionKind.Deny, agent.Kind);
+            Assert.Equal(PolicyRule.AgentSource, agent.Rule);
         }
     }
 }

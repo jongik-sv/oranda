@@ -483,8 +483,15 @@ public abstract class ReadOnlyRoleEngineTestsBase(RoleDbFixtureBase db, ITestOut
             {
                 var stmt = Assert.Single(rig.Language.Split(sql, SplitOptions.Default));
                 var r = await rig.Exec.ExecuteAsync(session, stmt, RoleEngineRig.NoBinds, new ExecutionOptions { Source = source }, default);
-                Assert.True(r.Status == ExecutionStatus.Denied && r.Policy?.Rule == PolicyRule.ReadOnlyRole, $"{source} / {sql} => {r.Status}/{r.Policy?.Rule}");
-                Assert.Contains(Denied, r.Policy!.Message, StringComparison.Ordinal);
+
+                // 에이전트 출처는 정책 규칙 0(AgentSource)이 조회 전용 Role 보다 먼저 거부한다. 거부라는 결과는 같다.
+                var rule = source == HistorySource.Agent ? PolicyRule.AgentSource : PolicyRule.ReadOnlyRole;
+                Assert.True(r.Status == ExecutionStatus.Denied && r.Policy?.Rule == rule, $"{source} / {sql} => {r.Status}/{r.Policy?.Rule}");
+                if (source != HistorySource.Agent)
+                {
+                    Assert.Contains(Denied, r.Policy!.Message, StringComparison.Ordinal);
+                }
+
                 Assert.Null(r.ResultSet);
                 Assert.False(session.HasPendingTransaction);
             }
