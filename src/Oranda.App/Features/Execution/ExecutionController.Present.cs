@@ -42,7 +42,7 @@ public sealed partial class ExecutionController
                 }
                 if (r.ResultSet is { } rs)
                 {
-                    results.AddQuery(rs, title, stmt, runBinds: runBinds);
+                    results.AddQuery(rs, title, stmt, runBinds: runBinds, elapsed: r.Elapsed);
                 }
                 else if (!scriptMode)
                 {
@@ -53,7 +53,7 @@ public sealed partial class ExecutionController
                 {
                     if (value is IResultSet cursor)
                     {
-                        results.AddQuery(cursor, ":" + name, stmt, runBinds: runBinds);
+                        results.AddQuery(cursor, ":" + name, stmt, runBinds: runBinds, elapsed: r.Elapsed);
                     }
                     else
                     {

@@ -696,6 +696,19 @@ public sealed class ExecutionTests
     });
 
     [Fact]
+    public Task Query_result_tab_header_shows_how_long_the_statement_took() => Ui.Run(async () =>
+    {
+        using var rig = new Rig();
+        var tab = rig.Host.NewDocument("select 1 from dual");
+        rig.Exec.Handler = (s, _) => Task.FromResult(Rig.Query(s) with { Elapsed = TimeSpan.FromMilliseconds(3200) });
+
+        await rig.Controller.RunAsync(RunMode.Statement);
+
+        var results = Assert.IsType<ResultTabsViewModel>(tab.ResultPane);
+        Assert.Equal("결과 1 (3.2s)", Assert.Single(results.Tabs).Header);
+    });
+
+    [Fact]
     public Task Script_run_passes_the_selected_error_mode_to_the_engine() => Ui.Run(async () =>
     {
         using var rig = new Rig();

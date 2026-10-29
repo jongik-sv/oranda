@@ -14,7 +14,14 @@ namespace Oranda.App.Features.Execution;
 public sealed partial class ResultTabItem : ObservableObject
 {
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(Header))]
     public partial string Title { get; set; } = string.Empty;
+
+    /// <summary>이 결과를 낸 문장의 실행 시간. 실행에서 온 결과가 아니면(외래키 따라가기·플래시백 등) null.</summary>
+    public TimeSpan? Elapsed { get; init; }
+
+    /// <summary>탭 머리 글: 제목 뒤에 실행 시간(「결과 1 (3.2s)」). 번호 찾기·「(편집)」 표시는 <see cref="Title"/> 을 쓴다.</summary>
+    public string Header => Elapsed is { } t ? $"{Title} ({FormatElapsed(t)})" : Title;
 
     /// <summary>질의 결과를 보이는 영역(TSK-06-03). 글 탭이면 null.</summary>
     public SqlResultPaneViewModel? Pane { get; init; }
@@ -51,6 +58,26 @@ public sealed partial class ResultTabItem : ObservableObject
 
     /// <summary>결과 탭 고정을 바꾼다(<c>oranda.grid.pinResultTab</c>).</summary>
     public void TogglePin() => IsPinned = !IsPinned;
+
+    /// <summary>탭 머리에 넣는 짧은 실행 시간: 1초 미만 「0.85s」, 1분 미만 「3.2s」, 그 위로 「1m 05s」·「1h 01m 05s」.</summary>
+    public static string FormatElapsed(TimeSpan t)
+    {
+        if (t.TotalSeconds < 0.995)
+        {
+            return t.TotalSeconds.ToString("0.00", CultureInfo.InvariantCulture) + "s";
+        }
+
+        var seconds = Math.Round(t.TotalSeconds, 1);
+        if (seconds < 60)
+        {
+            return seconds.ToString("0.0", CultureInfo.InvariantCulture) + "s";
+        }
+
+        var whole = TimeSpan.FromSeconds(Math.Round(t.TotalSeconds));
+        return whole.TotalHours >= 1
+            ? whole.ToString(@"h\h\ mm\m\ ss\s", CultureInfo.InvariantCulture)
+            : whole.ToString(@"m\m\ ss\s", CultureInfo.InvariantCulture);
+    }
 
     /// <summary>탭 머리의 닫기(×) 단추·문맥 메뉴: 이 탭을 닫고 왼쪽 이웃 탭을 보인다.</summary>
     [RelayCommand]
@@ -223,13 +250,14 @@ public sealed partial class ResultTabsViewModel : ViewModelBase
 
 
     /// <summary>질의 결과 탭을 더한다. 결과 집합의 수명은 탭(결과 영역)이 가진다.</summary>
+    /// <param name="elapsed">문장의 실행 시간. 주면 탭 머리에 보인다(<see cref="ResultTabItem.Header"/>).</param>
     public ResultTabItem AddQuery(IResultSet result, string title, SqlStatement? statement, GridDisplayOptions? display = null, bool closable = false,
-                                  IReadOnlyDictionary<string, BindValue>? runBinds = null)
+                                  IReadOnlyDictionary<string, BindValue>? runBinds = null, TimeSpan? elapsed = null)
     {
         ArgumentNullException.ThrowIfNull(result);
         var pane = new SqlResultPaneViewModel { Statement = statement, RunBinds = runBinds };
         pane.SetResult(result, display);
-        var tab = new ResultTabItem { Title = title, Pane = pane, Statement = statement, IsClosable = closable };
+        var tab = new ResultTabItem { Title = title, Pane = pane, Statement = statement, IsClosable = closable, Elapsed = elapsed };
         tab.CloseHandler = CloseToLeft;
         pane.CloseRequested += (_, _) => Close(tab);
         pane.PinRequested += (_, _) => tab.TogglePin();

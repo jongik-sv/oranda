@@ -60,7 +60,7 @@
             </StackPanel.ContextMenu>
             <Button Classes="tab-pin" Content="결과 탭 고정 풀기" Focusable="False" IsVisible="{Binding IsPinned}"
                     Command="{Binding UnpinCommand}" icons:ButtonIcon.Key="pin" icons:ButtonIcon.IconOnly="True" />
-            <TextBlock Text="{Binding Title}" VerticalAlignment="Center" />
+            <TextBlock Text="{Binding Header}" VerticalAlignment="Center" />
             <Button Classes="tab-close" Content="결과 탭 닫기" Focusable="False" IsVisible="{Binding IsClosable}"
                     Command="{Binding CloseTabCommand}" icons:ButtonIcon.Key="clear" icons:ButtonIcon.IconOnly="True" />
           </StackPanel>
