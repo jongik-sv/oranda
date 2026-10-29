@@ -164,8 +164,11 @@ public sealed record ExecutionSettings
 
     public bool SplitOnBlankLine { get; init; }
 
-    /// <summary>실제 계획(Ctrl+Shift+E)에 A-Rows 가 없으면 묻지 않고 <c>GATHER_PLAN_STATISTICS</c> 힌트 사본으로 다시 실행한다(TSK-06-04).</summary>
-    public bool GatherPlanStatisticsHint { get; init; }
+    /// <summary>
+    /// 실제 계획(Ctrl+Shift+E)에 A-Rows 가 없으면 묻지 않고 <c>GATHER_PLAN_STATISTICS</c> 힌트 사본으로 다시 실행한다(TSK-06-04).
+    /// 기본은 켬: 서버 statistics_level 이 TYPICAL 이어도 A-Rows 가 자동으로 보이게 한다. 저장된 설정에 명시적으로 꺼 둔 값(false)이 있으면 그 값을 따른다.
+    /// </summary>
+    public bool GatherPlanStatisticsHint { get; init; } = true;
 }
 
 public sealed record GridSettings

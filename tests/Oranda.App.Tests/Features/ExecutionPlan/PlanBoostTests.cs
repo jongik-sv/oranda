@@ -525,10 +525,146 @@ public class PlanBoostTests
         Assert.Contains("sql_id", unknown.Message, StringComparison.Ordinal);
 
         state.BeginRun(session.Id);
-        await Assert.ThrowsAsync<InvalidOperationException>(() => runner.RunAsync(Query, PlanRerunMode.Hint, default));
+        await Assert.ThrowsAsync<PlanRerunNotStartedException>(() => runner.RunAsync(Query, PlanRerunMode.Hint, default));
         state.EndRun(session.Id);
 
         var none = new PlanStatsRerunner(state, () => binds, () => null, () => engine, () => plans);
-        await Assert.ThrowsAsync<InvalidOperationException>(() => none.RunAsync(Query, PlanRerunMode.Hint, default));
+        await Assert.ThrowsAsync<PlanRerunNotStartedException>(() => none.RunAsync(Query, PlanRerunMode.Hint, default));
+    }
+
+    // ---- 늘 힌트 넣기(기본 켬): 자동 재실행 조건 ----
+
+    [Theory]
+    [InlineData("SELECT * FROM t", StatementKind.Query, false, true)]
+    [InlineData("WITH x AS (SELECT 1 c FROM dual) SELECT c FROM x", StatementKind.Query, false, true)]
+    [InlineData("SELECT * FROM t FOR UPDATE", StatementKind.Query, false, false)]
+    [InlineData("select * from t for\n update nowait", StatementKind.Query, false, false)]
+    [InlineData("SELECT * FROM t", StatementKind.Query, true, false)]
+    [InlineData("DELETE FROM t", StatementKind.Dml, false, false)]
+    [InlineData("BEGIN NULL; END;", StatementKind.PlSql, false, false)]
+    [InlineData("CREATE TABLE t (a NUMBER)", StatementKind.Ddl, false, false)]
+    public void Auto_rerun_is_allowed_only_for_certain_non_locking_queries(string sql, StatementKind kind, bool uncertain, bool expected) =>
+        Assert.Equal(expected, PlanStatsRerunner.CanAutoRerun(new SqlStatement(sql, default, kind) { IsClassificationUncertain = uncertain }));
+
+    [Fact]
+    public void Auto_rerun_is_not_allowed_without_a_statement() => Assert.False(PlanStatsRerunner.CanAutoRerun(null));
+
+    [Theory]
+    [InlineData("INSERT INTO t SELECT * FROM s", StatementKind.Dml)]
+    [InlineData("BEGIN NULL; END;", StatementKind.PlSql)]
+    public void Always_hint_never_reruns_data_changing_statements_and_keeps_the_band(string sql, StatementKind kind)
+    {
+        var vm = NewVm(new FakePlans(), out var session);
+        vm.AlwaysHint = true;
+        vm.LastStatement = new SqlStatement(sql, default, kind);
+        var runs = 0;
+        vm.Rerunner = (_, _, _) =>
+        {
+            runs++;
+            return Task.FromResult(new PlanRerunOutcome(session, new CursorRef("x"), 0));
+        };
+
+        vm.Apply(NoActuals(), "실제");
+
+        Assert.Equal(0, runs);
+        Assert.True(vm.ShowStatisticsBand);
+        Assert.False(vm.IsRerunning);
+        Assert.Contains("자동으로 다시 실행하지 않았습니다", vm.StatusText, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Always_hint_reruns_a_with_select_copy_by_itself()
+    {
+        var plans = new FakePlans();
+        plans.Cursors["w"] = WithActuals("w");
+        var vm = NewVm(plans, out var session);
+        vm.AlwaysHint = true;
+        var with = new SqlStatement("WITH x AS (SELECT 1 c FROM dual) SELECT c FROM x", default, StatementKind.Query) { Verb = "WITH" };
+        vm.LastStatement = with;
+        var seen = new List<(PlanRerunMode, SqlStatement)>();
+        vm.Rerunner = (mode, stmt, _) =>
+        {
+            seen.Add((mode, stmt));
+            return Task.FromResult(new PlanRerunOutcome(session, new CursorRef("w"), 1));
+        };
+
+        vm.Apply(NoActuals(), "실제");
+
+        Assert.Equal((PlanRerunMode.Hint, with), Assert.Single(seen));
+        Assert.True(vm.HasActuals);
+        Assert.False(vm.ShowStatisticsBand);
+    }
+
+    [Fact]
+    public async Task A_running_rerun_can_be_cancelled_and_is_not_started_again_by_itself()
+    {
+        var plans = new FakePlans();
+        plans.Cursors["still"] = NoActuals("still");
+        var vm = NewVm(plans, out _);
+        vm.AlwaysHint = true;
+        vm.LastStatement = Query;
+        var started = new TaskCompletionSource();
+        var runs = 0;
+        vm.Rerunner = async (_, _, ct) =>
+        {
+            runs++;
+            started.TrySetResult();
+            await Task.Delay(Timeout.Infinite, ct);
+            throw new InvalidOperationException("취소되지 않았다");
+        };
+
+        vm.Apply(NoActuals(), "실제");
+        await started.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        Assert.True(vm.IsRerunning);
+        Assert.Contains("사본 실행 중", vm.StatusText, StringComparison.Ordinal);
+
+        vm.CancelRerun();
+        for (var i = 0; i < 200 && vm.IsRerunning; i++)
+        {
+            await Task.Delay(10);
+        }
+
+        Assert.False(vm.IsRerunning);
+        Assert.Equal("다시 실행 취소됨", vm.StatusText);
+        Assert.Equal(1, runs);
+    }
+
+    [Fact]
+    public void Always_hint_tries_again_on_the_next_plan_when_nothing_was_sent_yet()
+    {
+        var plans = new FakePlans();
+        plans.Cursors["ok"] = WithActuals("ok");
+        var vm = NewVm(plans, out var session);
+        vm.AlwaysHint = true;
+        vm.LastStatement = Query;
+        var busy = true;
+        var runs = 0;
+        vm.Rerunner = (_, _, _) =>
+        {
+            runs++;
+            return busy ? throw new PlanRerunNotStartedException("다른 문장을 실행하는 중입니다.") : Task.FromResult(new PlanRerunOutcome(session, new CursorRef("ok"), 1));
+        };
+
+        vm.Apply(NoActuals(), "실제");
+        Assert.Equal(1, runs);
+        Assert.Contains("다시 실행 실패", vm.StatusText, StringComparison.Ordinal);
+
+        busy = false; // 세션이 비었다: 같은 문장으로 다시 연 실제 계획에서 자동 재실행이 이어진다
+        vm.Apply(NoActuals(), "실제");
+        Assert.Equal(2, runs);
+        Assert.True(vm.HasActuals);
+    }
+
+    [Fact]
+    public void Always_hint_read_from_settings_does_not_write_the_settings_back()
+    {
+        var vm = NewVm(new FakePlans(), out _);
+        var saved = new List<bool>();
+        vm.SaveAlwaysHint = saved.Add;
+
+        vm.SetAlwaysHintFromSettings(true);
+
+        Assert.True(vm.AlwaysHint);
+        Assert.Empty(saved);
     }
 }

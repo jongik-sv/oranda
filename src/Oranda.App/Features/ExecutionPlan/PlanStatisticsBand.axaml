@@ -24,6 +24,8 @@
       <ContentControl DockPanel.Dock="Left" Margin="0,0,8,0" VerticalAlignment="Center"
                       Content="{Binding Source='warn', Converter={x:Static icons:IconKeyConverter.Instance}, ConverterParameter=16}" />
       <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" Spacing="6" Margin="12,0,0,0" VerticalAlignment="Center">
+        <Button x:Name="CancelRerunButton" Content="다시 실행 취소" IsVisible="{Binding IsRerunning}"
+                ToolTip.Tip="실행 중인 힌트 사본(또는 STATISTICS_LEVEL 다시 실행)을 멈춥니다." />
         <Button x:Name="HintCopyButton" Classes="accent" Content="힌트 넣은 사본 실행" IsEnabled="{Binding CanRerun}"
                 ToolTip.Tip="/*+ GATHER_PLAN_STATISTICS */ 를 넣은 사본을 실행합니다. 편집기 글은 바꾸지 않습니다. 모든 행을 끝까지 읽습니다." />
         <Button x:Name="StatisticsLevelButton" Content="STATISTICS__LEVEL=ALL 로 다시 실행" IsEnabled="{Binding CanRerun}"
@@ -34,7 +36,7 @@
               <StackPanel Spacing="6" MaxWidth="300">
                 <CheckBox x:Name="AlwaysHintBox" Content="실제 계획 때 늘 힌트 넣은 사본으로 다시 실행" IsChecked="{Binding AlwaysHint, Mode=TwoWay}" />
                 <TextBlock Classes="panel-caption" TextWrapping="Wrap"
-                           Text="설정 execution.gatherPlanStatisticsHint 에 저장됩니다. 질의(SELECT)만 다시 실행하고 DML 은 하지 않습니다." />
+                           Text="설정 execution.gatherPlanStatisticsHint 에 저장됩니다(기본 켬, 설정 창 › 실행 탭에서도 바꿉니다). 질의(SELECT)만 다시 실행하고 DML 은 하지 않습니다." />
               </StackPanel>
             </Flyout>
           </Button.Flyout>
