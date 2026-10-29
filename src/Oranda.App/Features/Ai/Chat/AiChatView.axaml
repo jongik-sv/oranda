@@ -49,7 +49,8 @@
             </Grid>
           </DataTemplate>
           <DataTemplate x:DataType="vm:ChatAssistantEntry">
-            <TextBlock Text="{Binding Text}" TextWrapping="Wrap" />
+            <!-- AI 글: Markdown 부분 집합으로 그린다. 글 선택·복사가 된다(SelectableTextBlock). -->
+            <vm:MarkdownView Markdown="{Binding Text}" />
           </DataTemplate>
         </ItemsControl.DataTemplates>
       </ItemsControl>

@@ -208,7 +208,8 @@ public sealed class AiTuningLauncher(IServiceProvider services)
                 : null,
             RefreshContextAsync,
             services.GetService(typeof(ISqlLiteralMasker)) as ISqlLiteralMasker,
-            context => context.Environment == ConnectionEnvironment.Production || _profile is not { } profile || AiAccessPolicy.MaskLiterals(profile, MaskLiteralsSetting()));
+            context => context.Environment == ConnectionEnvironment.Production || _profile is not { } profile || AiAccessPolicy.MaskLiterals(profile, MaskLiteralsSetting()),
+            new HostEditorTabs());
         _flow.Attach();
         return _flow;
     }

@@ -166,6 +166,34 @@ public partial class AgentGateTests
     }
 
     [Fact]
+    public async Task Audit_summary_reports_the_masked_sql_length_and_the_placeholder_count()
+    {
+        var fx = new GateFixture(masker: new FakeMasker());
+        var (session, vault) = MaskedSession();
+        vault.Add("'a-much-longer-original-value-than-the-placeholder'");
+        const string masked = "SELECT * FROM TB_ORDER WHERE x = :v1 OR y = :v1";
+
+        await Call(fx, session, AgentToolNames.ExplainPlan, $$"""{"sql":"{{masked}}"}""");
+
+        // 되돌린 글의 길이가 아니라 LLM 이 보낸 가린 글의 길이다. 같은 자리표시도 쓰인 만큼 센다.
+        var entry = Assert.Single(fx.Audit.Entries);
+        Assert.Equal($"literals=masked, placeholders=2, sql=<{masked.Length} chars>", entry.Arguments);
+    }
+
+    [Fact]
+    public async Task Audit_summary_counts_the_placeholders_of_benchmark_variants()
+    {
+        var fx = new GateFixture(masker: new FakeMasker());
+        var (session, vault) = MaskedSession();
+        vault.Add("'A'");
+
+        await Call(fx, session, AgentToolNames.BenchmarkQueries, """{"variants":[{"label":"a","sql":"SELECT 1 FROM t WHERE x = :v1"},{"label":"b","sql":"SELECT 2 FROM t WHERE x = :v1 AND y = :v1"}]}""");
+
+        var arguments = Assert.Single(fx.Audit.Entries).Arguments;
+        Assert.StartsWith("literals=masked, placeholders=3", arguments, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task Required_flag_without_a_vault_closes_the_sql_tools_even_on_a_dev_connection()
     {
         var fx = new GateFixture();

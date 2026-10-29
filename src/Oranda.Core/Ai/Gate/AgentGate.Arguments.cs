@@ -104,10 +104,15 @@ public sealed partial class AgentGate
     /// <c>sql</c>·<c>variants[].sql</c> 의 자리표시(<c>:v1</c>)를 원래 글로 되돌려 <paramref name="clean"/> 에 넣는다.
     /// 사전의 모양인데 사전에 없는 자리표시가 있으면 <c>literal_unknown</c> 으로 거부한다(LLM 이 지어낸 값을 실행하지 않는다).
     /// </summary>
-    private GateOutcome? RestoreLiterals(JsonObject clean, LiteralVault vault)
+    private GateOutcome? RestoreLiterals(CallState state, LiteralVault vault)
     {
+        var clean = state.Clean;
+        state.PlaceholderCount = 0;
         if (TryGetString(clean, AgentFields.Sql, out var sql))
         {
+            // 감사 요약은 LLM 이 보낸 가린 글 기준이다: 되돌리기 전에 길이와 자리표시 사용 수를 적어 둔다.
+            state.MaskedSqlLength = sql.Length;
+            state.PlaceholderCount += CountPlaceholders(sql, vault);
             var restored = _masker!.Restore(sql, vault);
             if (!restored.Succeeded)
             {
@@ -123,6 +128,7 @@ public sealed partial class AgentGate
             {
                 if (item is JsonObject variant && TryGetString(variant, AgentFields.Sql, out var variantSql))
                 {
+                    state.PlaceholderCount += CountPlaceholders(variantSql, vault);
                     var restored = _masker!.Restore(variantSql, vault);
                     if (!restored.Succeeded)
                     {
@@ -136,6 +142,10 @@ public sealed partial class AgentGate
 
         return null;
     }
+
+    /// <summary>글에 나온 이 사전의 자리표시(<c>:v1</c> 꼴) 개수. 같은 자리표시가 여러 번 나오면 나온 만큼 센다.</summary>
+    private static int CountPlaceholders(string text, LiteralVault vault) =>
+        Regex.Count(text, @"(?<![\w:]):" + Regex.Escape(vault.Prefix) + @"\d+(?!\w)", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant, TimeSpan.FromSeconds(1));
 
     private static GateOutcome UnknownLiteral(SqlRestoreResult restored) =>
         Deny(
@@ -173,6 +183,10 @@ public sealed partial class AgentGate
         if (state.LiteralMasking)
         {
             parts.Add("literals=masked");
+            if (state.PlaceholderCount is { } placeholders)
+            {
+                parts.Add("placeholders=" + placeholders.ToString(CultureInfo.InvariantCulture));
+            }
         }
 
         foreach (var pair in state.Clean)
@@ -182,7 +196,9 @@ public sealed partial class AgentGate
             string text;
             if (key == AgentFields.Sql)
             {
-                text = value is JsonValue v && v.TryGetValue<string>(out var sql) ? $"<{sql.Length} chars>" : "<invalid>";
+                // 되돌린 뒤의 길이는 원문 길이를 드러낸다: 가림이 켜져 있으면 LLM 이 보낸 가린 글의 길이를 적는다.
+                text = state.MaskedSqlLength is { } maskedLength ? $"<{maskedLength} chars>"
+                    : value is JsonValue v && v.TryGetValue<string>(out var sql) ? $"<{sql.Length} chars>" : "<invalid>";
             }
             else if (key == AgentFields.Variants)
             {

@@ -277,7 +277,7 @@ public sealed partial class AgentGate : IAgentGate
                 return Deny("literal_mask_unavailable", "Literal masking is required for this request but is not available; SQL tools are disabled.");
             }
 
-            if (RestoreLiterals(state.Clean, literals!) is { } unknown)
+            if (RestoreLiterals(state, literals!) is { } unknown)
             {
                 return unknown;
             }
@@ -564,6 +564,12 @@ public sealed partial class AgentGate : IAgentGate
 
         /// <summary>이 호출에 리터럴 가림이 켜져 있다(사전과 마스커가 모두 있다). 감사 기록의 인자 요약에 <c>literals=masked</c> 로 남는다.</summary>
         public bool LiteralMasking { get; set; }
+
+        /// <summary>되돌리기 전, LLM 이 보낸 <c>sql</c> 인자(가린 글)의 길이. 감사 요약이 쓴다. 되돌리지 않았으면 null.</summary>
+        public int? MaskedSqlLength { get; set; }
+
+        /// <summary><c>sql</c>·<c>variants[].sql</c> 에 쓰인 자리표시 수. 되돌리지 않았으면 null.</summary>
+        public int? PlaceholderCount { get; set; }
 
         /// <summary>처리자가 실행·계획에 쓸 문장(<c>sql</c>·<c>variants</c>·대상 문장)을 게이트가 검사했는가.</summary>
         public bool StatementsChecked { get; set; }
