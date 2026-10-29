@@ -5,19 +5,60 @@
              x:Class="Oranda.App.Features.ExecutionPlan.PlanView"
              x:DataType="vm:PlanViewModel">
   <UserControl.Styles>
-    <!-- 트리 표 칸 폭(머리글과 줄이 같은 클래스를 써서 세로로 맞는다). -->
-    <Style Selector=":is(Control).c-id"><Setter Property="Width" Value="34" /></Style>
-    <Style Selector=":is(Control).c-order"><Setter Property="Width" Value="48" /></Style>
-    <Style Selector=":is(Control).c-op"><Setter Property="Width" Value="290" /></Style>
-    <Style Selector=":is(Control).c-obj"><Setter Property="Width" Value="150" /></Style>
-    <Style Selector=":is(Control).c-risk"><Setter Property="Width" Value="96" /></Style>
-    <Style Selector=":is(Control).c-cost"><Setter Property="Width" Value="66" /></Style>
-    <Style Selector=":is(Control).c-share"><Setter Property="Width" Value="100" /></Style>
-    <Style Selector=":is(Control).c-erows"><Setter Property="Width" Value="94" /></Style>
-    <Style Selector=":is(Control).c-arows"><Setter Property="Width" Value="94" /></Style>
-    <Style Selector=":is(Control).c-starts"><Setter Property="Width" Value="62" /></Style>
-    <Style Selector=":is(Control).c-time"><Setter Property="Width" Value="66" /></Style>
-    <Style Selector=":is(Control).c-ashare"><Setter Property="Width" Value="100" /></Style>
+    <!-- 트리 표 칸 폭(머리글과 줄이 같은 클래스·리소스를 써서 세로로 맞는다). 값은 PlanColumnWidths 에서 PlanView.axaml.cs 가 리소스로 옮긴다. -->
+    <Style Selector=":is(Control).c-id"><Setter Property="Width" Value="{DynamicResource PlanW.c-id}" /></Style>
+    <Style Selector=":is(Control).c-order"><Setter Property="Width" Value="{DynamicResource PlanW.c-order}" /></Style>
+    <Style Selector=":is(Control).c-op"><Setter Property="Width" Value="{DynamicResource PlanW.c-op}" /></Style>
+    <Style Selector=":is(Control).c-obj"><Setter Property="Width" Value="{DynamicResource PlanW.c-obj}" /></Style>
+    <Style Selector=":is(Control).c-risk"><Setter Property="Width" Value="{DynamicResource PlanW.c-risk}" /></Style>
+    <Style Selector=":is(Control).c-cost"><Setter Property="Width" Value="{DynamicResource PlanW.c-cost}" /></Style>
+    <Style Selector=":is(Control).c-share"><Setter Property="Width" Value="{DynamicResource PlanW.c-share}" /></Style>
+    <Style Selector=":is(Control).c-erows"><Setter Property="Width" Value="{DynamicResource PlanW.c-erows}" /></Style>
+    <Style Selector=":is(Control).c-arows"><Setter Property="Width" Value="{DynamicResource PlanW.c-arows}" /></Style>
+    <Style Selector=":is(Control).c-starts"><Setter Property="Width" Value="{DynamicResource PlanW.c-starts}" /></Style>
+    <Style Selector=":is(Control).c-time"><Setter Property="Width" Value="{DynamicResource PlanW.c-time}" /></Style>
+    <Style Selector=":is(Control).c-ashare"><Setter Property="Width" Value="{DynamicResource PlanW.c-ashare}" /></Style>
+    <!-- 머리글 칸: 글자는 줄 칸과 같은 안쪽 여백, 오른쪽 경계에 끌기 손잡이. -->
+    <Style Selector="StackPanel.head-cells > Panel > TextBlock">
+      <Setter Property="Padding" Value="6,0,10,0" />
+      <Setter Property="VerticalAlignment" Value="Center" />
+      <Setter Property="TextTrimming" Value="CharacterEllipsis" />
+    </Style>
+    <Style Selector="StackPanel.head-cells > Panel > TextBlock.num">
+      <Setter Property="Padding" Value="6,0" />
+      <Setter Property="TextAlignment" Value="Right" />
+    </Style>
+    <!-- 접기·펼치기 단추와 접힌 줄의 숨은 단계 수(가장 비싼 단계가 숨었으면 주황). -->
+    <Style Selector="Button.tree-toggle">
+      <Setter Property="Width" Value="14" />
+      <Setter Property="Height" Value="14" />
+      <Setter Property="Padding" Value="0" />
+      <Setter Property="MinHeight" Value="0" />
+      <Setter Property="MinWidth" Value="0" />
+      <Setter Property="FontSize" Value="10" />
+      <Setter Property="Background" Value="Transparent" />
+      <Setter Property="BorderThickness" Value="0" />
+      <Setter Property="HorizontalContentAlignment" Value="Center" />
+      <Setter Property="VerticalContentAlignment" Value="Center" />
+      <Setter Property="VerticalAlignment" Value="Center" />
+    </Style>
+    <Style Selector="Border.hidden-count">
+      <Setter Property="Margin" Value="4,0,0,0" />
+      <Setter Property="Padding" Value="5,0" />
+      <Setter Property="CornerRadius" Value="7" />
+      <Setter Property="VerticalAlignment" Value="Center" />
+      <Setter Property="Background" Value="{DynamicResource OrandaBarTrackBrush}" />
+    </Style>
+    <Style Selector="Border.hidden-count TextBlock">
+      <Setter Property="FontSize" Value="{DynamicResource OrandaFontSizeSmall}" />
+      <Setter Property="Padding" Value="0" />
+    </Style>
+    <Style Selector="Border.hidden-count.hot">
+      <Setter Property="Background" Value="{DynamicResource OrandaHotRowBrush}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource OrandaIconOrangeBrush}" />
+      <Setter Property="BorderThickness" Value="1" />
+    </Style>
+
     <!-- 비교 표 칸 폭. -->
     <Style Selector=":is(Control).k-mark"><Setter Property="Width" Value="30" /></Style>
     <Style Selector=":is(Control).k-id"><Setter Property="Width" Value="56" /></Style>
@@ -154,6 +195,13 @@
           </ListBox>
           <Separator Classes="toolbar" />
           <StackPanel Orientation="Horizontal" Spacing="2" IsVisible="{Binding IsTreeToolbar}">
+          <StackPanel Orientation="Horizontal" Spacing="2" IsVisible="{Binding IsTreeTab}">
+            <Button x:Name="TreeExpandAllButton" Classes="toolbar" Content="＋" AutomationProperties.Name="모두 펼치기" IsEnabled="{Binding HasCollapsed}"
+                    ToolTip.Tip="모두 펼치기: 접힌 하위 단계를 모두 폅니다" />
+            <Button x:Name="TreeCollapseAllButton" Classes="toolbar" Content="－" AutomationProperties.Name="모두 접기" IsEnabled="{Binding HasCollapsible}"
+                    ToolTip.Tip="모두 접기: 뿌리 단계만 남기고 하위 단계를 접습니다" />
+            <Separator Classes="toolbar" />
+          </StackPanel>
           <Button x:Name="FormatButton" Classes="tool" IsVisible="{Binding IsAdvancedEnabled}" ToolTip.Tip="실제 계획(DISPLAY_CURSOR) 형식" AutomationProperties.Name="실제 계획 형식">
             <StackPanel Orientation="Horizontal" Spacing="5">
               <ContentControl Content="{Binding Source='settings', Converter={x:Static icons:IconKeyConverter.Instance}, ConverterParameter=14}" VerticalAlignment="Center" />
@@ -261,19 +309,19 @@
             <ScrollViewer Grid.Column="0" HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled">
               <DockPanel>
                 <Border x:Name="TreeHeader" DockPanel.Dock="Top" Classes="grid-header">
-                  <StackPanel Orientation="Horizontal" Classes="cells" Margin="3,0,0,0">
-                    <TextBlock Classes="c-id num" Text="Id" />
-                    <TextBlock Classes="c-order num" Text="순서" ToolTip.Tip="실행 순서: 자식이 부모보다 먼저, 형제는 Id 순(보통의 규칙)" />
-                    <TextBlock Classes="c-op" Text="연산" />
-                    <TextBlock Classes="c-obj" Text="객체" />
-                    <TextBlock Classes="c-risk" Text="위험" />
-                    <TextBlock Classes="c-cost num" Text="비용" />
-                    <TextBlock Classes="c-share" Text="비용 비중" ToolTip.Tip="옅은 막대: 누적 비용 비중, 진한 막대: 자체 비용 비중" />
-                    <TextBlock Classes="c-erows num" Text="E-Rows" ToolTip.Tip="예상 행 수" />
-                    <TextBlock Classes="c-arows num" Text="A-Rows" ToolTip.Tip="실제 행 수" IsVisible="{Binding HasActuals}" />
-                    <TextBlock Classes="c-starts num" Text="Starts" IsVisible="{Binding HasActuals}" />
-                    <TextBlock Classes="c-time num" Text="시간(s)" ToolTip.Tip="누적 A-Time(초)" IsVisible="{Binding HasActuals}" />
-                    <TextBlock Classes="c-ashare" Text="실제 비중" ToolTip.Tip="실제 계획: 누적·자체 A-Time 비중(시간 통계가 없으면 A-Rows)" IsVisible="{Binding HasActuals}" />
+                  <StackPanel Orientation="Horizontal" Classes="head-cells" Margin="3,0,0,0">
+                    <Panel Classes="c-id"><TextBlock Classes="num" Text="Id" /><vm:PlanColumnGrip Key="c-id" /></Panel>
+                    <Panel Classes="c-order"><TextBlock Classes="num" Text="순서" ToolTip.Tip="실행 순서: 자식이 부모보다 먼저, 형제는 Id 순(보통의 규칙)" /><vm:PlanColumnGrip Key="c-order" /></Panel>
+                    <Panel Classes="c-op"><TextBlock Text="연산" /><vm:PlanColumnGrip Key="c-op" /></Panel>
+                    <Panel Classes="c-obj"><TextBlock Text="객체" /><vm:PlanColumnGrip Key="c-obj" /></Panel>
+                    <Panel Classes="c-risk"><TextBlock Text="위험" /><vm:PlanColumnGrip Key="c-risk" /></Panel>
+                    <Panel Classes="c-cost"><TextBlock Classes="num" Text="비용" /><vm:PlanColumnGrip Key="c-cost" /></Panel>
+                    <Panel Classes="c-share"><TextBlock Text="비용 비중" ToolTip.Tip="옅은 막대: 누적 비용 비중, 진한 막대: 자체 비용 비중" /><vm:PlanColumnGrip Key="c-share" /></Panel>
+                    <Panel Classes="c-erows"><TextBlock Classes="num" Text="E-Rows" ToolTip.Tip="예상 행 수" /><vm:PlanColumnGrip Key="c-erows" /></Panel>
+                    <Panel Classes="c-arows" IsVisible="{Binding HasActuals}"><TextBlock Classes="num" Text="A-Rows" ToolTip.Tip="실제 행 수" /><vm:PlanColumnGrip Key="c-arows" /></Panel>
+                    <Panel Classes="c-starts" IsVisible="{Binding HasActuals}"><TextBlock Classes="num" Text="Starts" /><vm:PlanColumnGrip Key="c-starts" /></Panel>
+                    <Panel Classes="c-time" IsVisible="{Binding HasActuals}"><TextBlock Classes="num" Text="시간(s)" ToolTip.Tip="누적 A-Time(초)" /><vm:PlanColumnGrip Key="c-time" /></Panel>
+                    <Panel Classes="c-ashare" IsVisible="{Binding HasActuals}"><TextBlock Text="실제 비중" ToolTip.Tip="실제 계획: 누적·자체 A-Time 비중(시간 통계가 없으면 A-Rows)" /><vm:PlanColumnGrip Key="c-ashare" /></Panel>
                   </StackPanel>
                 </Border>
                 <ListBox x:Name="PlanList" Classes="table" ItemsSource="{Binding Rows}" SelectedItem="{Binding SelectedRow, Mode=TwoWay}"
@@ -284,11 +332,20 @@
                         <StackPanel Orientation="Horizontal" Classes="cells">
                           <TextBlock Classes="c-id num dim" Text="{Binding Id}" />
                           <TextBlock Classes="c-order num dim" Text="{Binding ExecutionOrderText}" />
-                          <Border Classes="c-op" Padding="6,0,0,0">
+                          <Border Classes="c-op" Padding="6,0,0,0" ClipToBounds="True">
                           <DockPanel>
                             <vm:PlanTreeGuides DockPanel.Dock="Left" Lines="{Binding TreeLines}" Stroke="{DynamicResource OrandaTreeGuideBrush}" />
+                            <!-- 접기·펼치기 단추 칸(14 DIP). 자식이 없는 줄도 같은 폭을 비워 아이콘이 어긋나지 않는다. -->
+                            <Panel DockPanel.Dock="Left" Width="14">
+                              <Button Classes="tree-toggle" IsVisible="{Binding HasChildren}" Content="{Binding ToggleGlyph}"
+                                      ToolTip.Tip="{Binding ToggleTip}" AutomationProperties.Name="하위 단계 접기·펼치기" Focusable="False" />
+                            </Panel>
                             <ContentControl DockPanel.Dock="Left" Width="14" Height="14" Margin="0,0,5,0" VerticalAlignment="Center"
                                             Content="{Binding IconKey, Converter={x:Static icons:IconKeyConverter.Instance}, ConverterParameter=14}" />
+                            <Border DockPanel.Dock="Right" Classes="hidden-count" Classes.hot="{Binding HiddenHottest}" IsVisible="{Binding IsCollapsed}"
+                                    ToolTip.Tip="{Binding HiddenTip}">
+                              <TextBlock Text="{Binding HiddenCount, StringFormat='+{0}'}" />
+                            </Border>
                             <ContentControl DockPanel.Dock="Right" Margin="4,0,6,0" VerticalAlignment="Center" Opacity="0.7" IsVisible="{Binding HasPredicates}"
                                             Background="Transparent" ToolTip.Tip="{Binding Predicates}"
                                             Content="{Binding Source='filter', Converter={x:Static icons:IconKeyConverter.Instance}, ConverterParameter=12}" />
@@ -297,7 +354,7 @@
                           </DockPanel>
                           </Border>
                           <TextBlock Classes="c-obj" Text="{Binding ObjectText}" ToolTip.Tip="{Binding ObjectText}" />
-                          <Border Classes="c-risk" Padding="6,0,0,0">
+                          <Border Classes="c-risk" Padding="6,0,0,0" ClipToBounds="True">
                           <DockPanel IsVisible="{Binding IsRisky}">
                             <ContentControl DockPanel.Dock="Left" Margin="0,0,4,0" VerticalAlignment="Center"
                                             Content="{Binding Source='warn', Converter={x:Static icons:IconKeyConverter.Instance}, ConverterParameter=12}" />
@@ -306,7 +363,7 @@
                           </DockPanel>
                           </Border>
                           <TextBlock Classes="c-cost num" Text="{Binding CostText}" />
-                          <Grid Classes="c-share" ColumnDefinitions="66,*" Background="Transparent" ToolTip.Tip="{Binding CostTip}">
+                          <Grid Classes="c-share" ColumnDefinitions="66,*" ClipToBounds="True" Background="Transparent" ToolTip.Tip="{Binding CostTip}">
                             <Panel Margin="6,0,0,0">
                               <Border Classes="bar-track" />
                               <Border Classes="bar cost total" Width="{Binding CostBarWidth}" />
@@ -318,7 +375,7 @@
                           <TextBlock Classes="c-arows num" Text="{Binding ActualText}" IsVisible="{Binding HasActuals}" />
                           <TextBlock Classes="c-starts num" Text="{Binding StartsText}" IsVisible="{Binding HasActuals}" />
                           <TextBlock Classes="c-time num" Text="{Binding TimeText}" IsVisible="{Binding HasActuals}" />
-                          <Grid Classes="c-ashare" ColumnDefinitions="66,*" Background="Transparent" ToolTip.Tip="{Binding ActualTip}" IsVisible="{Binding HasActuals}">
+                          <Grid Classes="c-ashare" ColumnDefinitions="66,*" ClipToBounds="True" Background="Transparent" ToolTip.Tip="{Binding ActualTip}" IsVisible="{Binding HasActuals}">
                             <Panel Margin="6,0,0,0">
                               <Border Classes="bar-track" />
                               <Border Classes="bar actual total" Width="{Binding ActualBarWidth}" />

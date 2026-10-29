@@ -20,7 +20,7 @@ namespace Oranda.App.Features.ExecutionPlan;
 /// 계획 트리 한 줄(PLAN-01·03). 위험 단계는 <see cref="RiskText"/> 로, 가장 비싼 단계는 <see cref="IsHottest"/> 로 강조한다.
 /// 화면 글·막대 폭은 만들 때 한 번만 구한다(가상화된 목록이 줄을 다시 묶어도 새로 만들지 않는다).
 /// </summary>
-public sealed class PlanRowItem
+public sealed class PlanRowItem : ObservableObject
 {
     /// <summary>비중 막대의 가장 긴 폭(DIP). PlanView.axaml 의 막대 칸과 맞춘다.</summary>
     public const double BarWidth = 60;
@@ -37,7 +37,8 @@ public sealed class PlanRowItem
         OperationText = OperationName(step);
         Operation = new string(' ', step.Depth * 2) + OperationText;
         IconKey = PlanOperationIcons.KeyFor(step);
-        TreeLines = lines ?? new PlanTreeLines(step.Depth, true, false, new bool[Math.Max(0, step.Depth - 1)]);
+        _lines = lines ?? new PlanTreeLines(step.Depth, true, false, new bool[Math.Max(0, step.Depth - 1)]);
+        _collapsedLines = _lines with { HasChildren = false };
         HasActuals = actual != PlanActualMetric.None;
         AccessPredicates = string.IsNullOrEmpty(step.AccessPredicates) ? null : step.AccessPredicates;
         FilterPredicates = string.IsNullOrEmpty(step.FilterPredicates) ? null : step.FilterPredicates;
@@ -116,8 +117,58 @@ public sealed class PlanRowItem
     /// <summary>연산 종류 아이콘 키(<see cref="PlanOperationIcons"/>).</summary>
     public string IconKey { get; }
 
-    /// <summary>들여쓰기 안내선(├ └ │).</summary>
-    public PlanTreeLines TreeLines { get; }
+    private readonly PlanTreeLines _lines;
+    private readonly PlanTreeLines _collapsedLines;
+    private bool _isCollapsed;
+    private int _hiddenCount;
+    private bool _hiddenHottest;
+
+    /// <summary>들여쓰기 안내선(├ └ │). 접힌 줄은 아래로 내리는 선을 뺀다(보이는 자식이 없다).</summary>
+    public PlanTreeLines TreeLines => _isCollapsed ? _collapsedLines : _lines;
+
+    /// <summary>바로 아래 줄이 자식이다(접기·펼치기 단추를 보인다).</summary>
+    public bool HasChildren => _lines.HasChildren;
+
+    /// <summary>하위 트리를 접었다. 줄 목록에서 하위 단계를 빼는 일은 <see cref="PlanViewModel"/> 이 한다.</summary>
+    public bool IsCollapsed
+    {
+        get => _isCollapsed;
+        internal set
+        {
+            if (SetProperty(ref _isCollapsed, value))
+            {
+                OnPropertyChanged(nameof(TreeLines));
+                OnPropertyChanged(nameof(ToggleGlyph));
+                OnPropertyChanged(nameof(ToggleTip));
+            }
+        }
+    }
+
+    /// <summary>접힌 하위 단계 수(펼쳐 있어도 값은 유지한다).</summary>
+    public int HiddenCount
+    {
+        get => _hiddenCount;
+        internal set => SetProperty(ref _hiddenCount, value);
+    }
+
+    /// <summary>접힌 하위 단계 안에 가장 비싼 단계가 있다.</summary>
+    public bool HiddenHottest
+    {
+        get => _hiddenHottest;
+        internal set
+        {
+            if (SetProperty(ref _hiddenHottest, value))
+            {
+                OnPropertyChanged(nameof(HiddenTip));
+            }
+        }
+    }
+
+    public string ToggleGlyph => _isCollapsed ? "▸" : "▾";
+
+    public string ToggleTip => _isCollapsed ? "하위 단계 펼치기(→)" : "하위 단계 접기(←)";
+
+    public string HiddenTip => $"접힌 하위 단계 {HiddenCount}개" + (_hiddenHottest ? " · 가장 비싼 단계 포함" : string.Empty);
 
     /// <summary>실제 통계(A-Rows·시간)가 있는 계획이면 실제 열을 보인다.</summary>
     public bool HasActuals { get; }
@@ -295,12 +346,20 @@ public sealed partial class PlanViewModel : ToolPanelViewModelBase
         Current = this;
     }
 
+    /// <summary>트리 표 칸 폭. 서비스로 만들면 앱 데이터 폴더의 <c>plan-columns.json</c> 에 남고, 아니면 메모리만 쓴다.</summary>
+    public PlanColumnWidths Columns { get; init; } = new();
+
     /// <summary>셸(DI)이 쓰는 생성자.</summary>
     public PlanViewModel(IServiceProvider services)
     {
         ArgumentNullException.ThrowIfNull(services);
         _services = services;
         Current = this;
+        if (services.GetService(typeof(Oranda.Core.Storage.IAppDataPaths)) is Oranda.Core.Storage.IAppDataPaths paths)
+        {
+            Columns = new PlanColumnWidths(paths.DataDirectory);
+        }
+
         if (services.GetService(typeof(ICommandRegistry)) is ICommandRegistry registry)
         {
             // 「통계 보기」「자식 커서」 명령은 다른 기능이 등록한다 — 등록되면 단추가 나타난다.
@@ -438,11 +497,14 @@ public sealed partial class PlanViewModel : ToolPanelViewModelBase
         }
 
         SelectedRow = null;
+        _allRows = rows;
         Rows.Clear();
         foreach (var row in rows)
         {
             Rows.Add(row);
         }
+
+        UpdateCollapseState();
 
         HasActuals = metrics.Actual != PlanActualMetric.None;
         SelectedRow = metrics.HottestIndex >= 0 ? rows[metrics.HottestIndex] : null;

@@ -1266,5 +1266,9 @@
   "리터럴 :vN 가림": "Literals masked as :vN",
   "문자열·숫자 값은 :v1, :v2 같은 자리표시로 바꿔 보내고, 제안을 편집기에 넣을 때 원래 값으로 되돌립니다.": "String and number values are sent as placeholders such as :v1 and :v2, and restored to the original values when a proposal is put into the editor.",
   "후보를 벤치마크로 비교 (SELECT 3회, 결과 동일성 확인)": "Compare candidates with a benchmark (3 SELECT runs, result equality check)",
-  "SQL 의 리터럴 값을 :vN 으로 가려서 보냄 (운영 접속은 이 설정과 관계없이 항상 켜짐)": "Send SQL literal values masked as :vN (always on for production connections, regardless of this setting)"
+  "SQL 의 리터럴 값을 :vN 으로 가려서 보냄 (운영 접속은 이 설정과 관계없이 항상 켜짐)": "Send SQL literal values masked as :vN (always on for production connections, regardless of this setting)",
+  "모두 접기": "Collapse all",
+  "모두 접기: 뿌리 단계만 남기고 하위 단계를 접습니다": "Collapse all: keep only the root step and fold the steps below it",
+  "모두 펼치기: 접힌 하위 단계를 모두 폅니다": "Expand all: open every folded step",
+  "하위 단계 접기·펼치기": "Collapse or expand child steps"
 }

@@ -193,6 +193,9 @@ public sealed partial class PlanViewModel
 
     public bool IsTreeToolbar => SelectedTabIndex is 0 or 1 or 2;
 
+    /// <summary>트리 탭이다(접기·펼치기 단추를 보인다).</summary>
+    public bool IsTreeTab => SelectedTabIndex == 0;
+
     /// <summary>띠는 트리·텍스트·비교·그래프 탭 위에 보인다(보고서 탭은 자기 상태 화면이 있다).</summary>
     public bool IsBandVisible => ShowStatisticsBand && SelectedTabIndex != ReportTabIndex;
 
@@ -328,6 +331,7 @@ public sealed partial class PlanViewModel
             RebuildGraph();
         }
 
+        RevealRow(stepId);
         SelectedRow = Rows.FirstOrDefault(r => r.Id == stepId) ?? SelectedRow;
         GraphSelectedId = stepId;
     }
@@ -434,6 +438,7 @@ public sealed partial class PlanViewModel
     partial void OnSelectedTabIndexChanged(int value)
     {
         OnPropertyChanged(nameof(IsTreeToolbar));
+        OnPropertyChanged(nameof(IsTreeTab));
         OnPropertyChanged(nameof(IsGraphToolbar));
         OnPropertyChanged(nameof(IsReportToolbar));
         OnPropertyChanged(nameof(IsBandVisible));
