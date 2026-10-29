@@ -72,6 +72,12 @@ public sealed class ThemeService : IDisposable
     public static double ClampScale(double scale) =>
         double.IsNaN(scale) || double.IsInfinity(scale) ? 1.0 : Math.Clamp(scale, MinUiScale, MaxUiScale);
 
+    /// <summary>패널·표 글자 크기를 허용 범위(8~32pt)로 맞춘다. 숫자가 아니면 보조 글자 기본 크기.</summary>
+    public static double ClampPanelFontSize(double size) =>
+        double.IsNaN(size) || double.IsInfinity(size)
+            ? SmallUiFontSize
+            : Math.Clamp(size, SettingsService.MinEditorFontSize, SettingsService.MaxEditorFontSize);
+
     /// <summary>OS 고대비 설정이 켜져 있는가.</summary>
     public static bool SystemPrefersHighContrast(Application app) =>
         app.PlatformSettings?.GetColorValues().ContrastPreference == ColorContrastPreference.High;
@@ -101,7 +107,7 @@ public sealed class ThemeService : IDisposable
         app.RequestedThemeVariant = highContrast ? HighContrastVariant : ToVariant(s.Ui.Theme);
         var scale = ClampScale(s.Ui.UiScale);
         SetIfChanged(app, UiFontSizeBaseKey, BaseUiFontSize * scale);
-        SetIfChanged(app, UiFontSizeSmallKey, SmallUiFontSize * scale);
+        SetIfChanged(app, UiFontSizeSmallKey, s.Ui.PanelFontSize is { } panel ? ClampPanelFontSize(panel) : SmallUiFontSize * scale);
         SetIfChanged(app, TabHeaderFontSizeKey, (BaseUiFontSize - 0.5) * scale);
         var family = string.IsNullOrWhiteSpace(s.Editor.FontFamily)
             ? DefaultEditorFontFamily

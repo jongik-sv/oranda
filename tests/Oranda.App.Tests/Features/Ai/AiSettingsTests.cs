@@ -16,7 +16,7 @@ public class AiSettingsTests
     [Fact]
     public void Model_page_enables_the_model_list_only_for_claude_code_and_keeps_untouched_settings()
     {
-        var page = new AiModelSettingsPage(new AiSettings { ExecutablePath = "claude-example", MaskLiterals = false });
+        var page = new AiModelSettingsPage(new AiSettings { Driver = AiDriverKind.None, ExecutablePath = "claude-example", MaskLiterals = false });
         Assert.False(page.ModelEnabled);
         Assert.Equal("AI: 선택 안 함", page.Summary);
         Assert.Null(page.ToSettings().Model);
@@ -72,10 +72,12 @@ public class AiSettingsTests
     }
 
     [Fact]
-    public void Production_defaults_to_off_caps_at_query_and_asks_for_the_name_when_turned_on()
+    public void Production_defaults_to_query_caps_at_query_and_asks_for_the_name_only_when_the_user_raises_it()
     {
-        var vm = new ConnectionAiAccessViewModel(Profile(ConnectionEnvironment.Production));
+        var vm = new ConnectionAiAccessViewModel(Profile(ConnectionEnvironment.Production, AiAccessLevel.Off));
         Assert.Equal(AiAccessLevel.Off, vm.Level);
+        Assert.Equal(AiAccessLevel.Query, new ConnectionAiAccessViewModel(Profile(ConnectionEnvironment.Production)).Level);
+        Assert.False(new ConnectionAiAccessViewModel(Profile(ConnectionEnvironment.Production)).NeedsNameConfirmation);
         Assert.True(vm.ExplainAllowed); // 운영도 EXPLAIN PLAN 기본 켬
         Assert.All(vm.Levels.Where(l => l.Level > AiAccessLevel.Query), l => Assert.False(l.IsEnabled));
         Assert.All(vm.Levels.Where(l => l.Level <= AiAccessLevel.Query), l => Assert.True(l.IsEnabled));
@@ -104,7 +106,7 @@ public class AiSettingsTests
     [Fact]
     public Task Access_view_shows_five_levels_and_the_name_box_only_when_the_name_is_needed() => HeadlessHost.Run(() =>
     {
-        var vm = new ConnectionAiAccessViewModel(Profile(ConnectionEnvironment.Production));
+        var vm = new ConnectionAiAccessViewModel(Profile(ConnectionEnvironment.Production, AiAccessLevel.Off));
         var window = new Window { Width = 760, Content = new ConnectionAiAccessView { DataContext = vm } };
         window.Show();
 

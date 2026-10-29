@@ -29,7 +29,7 @@ public class ConnectionExportTests
         Assert.Contains("aiAccess", handMade, StringComparison.Ordinal);
         var back = Assert.Single(ConnectionExport.Read(handMade));
         Assert.Null(back.AiAccess);
-        Assert.Equal(AiAccessLevel.Off, AiAccessPolicy.Effective(back));
+        Assert.Equal(AiAccessLevel.Query, AiAccessPolicy.Effective(back)); // 운영 환경 기본값(2026-10-29 결정)
     }
 
     [Fact]

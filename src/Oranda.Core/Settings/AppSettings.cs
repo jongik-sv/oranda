@@ -70,7 +70,7 @@ public enum AiDriverKind
 /// <summary>설정 <c>ai</c> 섹션.</summary>
 public sealed record AiSettings
 {
-    public AiDriverKind Driver { get; init; } = AiDriverKind.None;
+    public AiDriverKind Driver { get; init; } = AiDriverKind.ClaudeCode;
 
     /// <summary>모델 이름(<c>claude --model</c> 값). null = CLI 기본.</summary>
     public string? Model { get; init; }
@@ -130,6 +130,12 @@ public sealed record UiSettings
 
     /// <summary>화면 글자 배율(0.8~2.5, 기본 1.0). 메뉴·대화상자·패널 글자가 함께 커진다(TSK-10-02).</summary>
     public double UiScale { get; init; } = 1.0;
+
+    /// <summary>
+    /// 패널·표·보조 글자 크기(pt, 8~32). 계획 트리·AI 대화·모니터·도우미 같은 편집기 밖 영역과 작은 글자 전체가 따른다.
+    /// null 이면 기본 크기에 <see cref="UiScale"/> 을 곱한 값. 값이 있으면 화면 글자 배율을 곱하지 않는다(그리드 글자 크기와 같은 방식).
+    /// </summary>
+    public double? PanelFontSize { get; init; }
 
     /// <summary>고대비 색 사용(OS 고대비 설정이 켜져 있으면 이 값과 상관없이 고대비로 그린다, TSK-10-02).</summary>
     public bool HighContrast { get; init; }

@@ -75,7 +75,7 @@
     <TabControl Grid.Row="0" x:Name="Categories" Classes="categories" TabStripPlacement="Left" Padding="16,0,0,0" SelectedIndex="{Binding SelectedTab}">
       <TabItem Header="{Binding Strings[tab.general]}">
         <ScrollViewer HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
-          <Grid Classes="form" ColumnDefinitions="Auto,*" RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto" ColumnSpacing="12" RowSpacing="10">
+          <Grid Classes="form" ColumnDefinitions="Auto,*" RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto" ColumnSpacing="12" RowSpacing="10">
             <TextBlock Grid.Row="0" Text="{Binding ThemeLabel}" />
             <ComboBox Grid.Row="0" Grid.Column="1" MinWidth="220" HorizontalAlignment="Stretch" x:Name="ThemeBox"
                       ItemsSource="{Binding Themes}" SelectedItem="{Binding SelectedTheme}"
@@ -100,22 +100,35 @@
             <NumericUpDown Grid.Row="2" Grid.Column="1" x:Name="UiScaleBox"
                            Minimum="80" Maximum="250" Increment="10" FormatString="0'%'"
                            Value="{Binding UiScalePercent}" AutomationProperties.Name="{Binding UiScaleLabel}" />
-            <TextBlock Grid.Row="3" Text="{Binding Strings[accessibility]}" />
-            <CheckBox Grid.Row="3" Grid.Column="1" x:Name="HighContrastBox"
+            <TextBlock Grid.Row="3" Text="{Binding PanelFontSizeLabel}" />
+            <NumericUpDown Grid.Row="3" Grid.Column="1" x:Name="PanelFontSizeBox"
+                           Minimum="8" Maximum="32" Increment="1" FormatString="0.#"
+                           Watermark="{Binding PanelFontSizeWatermark}"
+                           Value="{Binding PanelFontSize}" AutomationProperties.Name="{Binding PanelFontSizeLabel}" />
+            <!-- 편집기·결과 그리드 글꼴이 다른 탭에 있다는 안내와 그 탭으로 가는 링크. -->
+            <StackPanel Grid.Row="4" Grid.Column="1" Spacing="2">
+              <TextBlock Classes="hint" Text="{Binding FontSizeHint}" />
+              <WrapPanel Orientation="Horizontal">
+                <Button x:Name="EditorTabLinkButton" Classes="fmt-link" MinHeight="20" Margin="0,0,10,0" Content="{Binding EditorTabLinkLabel}" Command="{Binding ShowEditorTabCommand}" />
+                <Button x:Name="GridTabLinkButton" Classes="fmt-link" MinHeight="20" Content="{Binding GridTabLinkLabel}" Command="{Binding ShowGridTabCommand}" />
+              </WrapPanel>
+            </StackPanel>
+            <TextBlock Grid.Row="5" Text="{Binding Strings[accessibility]}" />
+            <CheckBox Grid.Row="5" Grid.Column="1" x:Name="HighContrastBox"
                       Content="{Binding HighContrastLabel}" IsChecked="{Binding HighContrast}"
                       AutomationProperties.Name="{Binding HighContrastLabel}" />
-            <TextBlock Grid.Row="4" Text="{Binding Strings[workspace]}" />
-            <StackPanel Grid.Row="4" Grid.Column="1" Spacing="4">
+            <TextBlock Grid.Row="6" Text="{Binding Strings[workspace]}" />
+            <StackPanel Grid.Row="6" Grid.Column="1" Spacing="4">
               <CheckBox Content="{Binding Strings[restore]}" IsChecked="{Binding RestoreOnStartup}" />
               <!-- TSK-14-03: 새 워크스페이스가 처음 실행할 때 자기 세션을 연다(끄면 지금 접속의 세션을 함께 쓴다). -->
               <CheckBox x:Name="SessionPerWorkspaceBox" Content="{Binding Strings[sessionPerWorkspace]}" IsChecked="{Binding SessionPerWorkspace}"
                         ToolTip.Tip="{Binding Strings[sessionPerWorkspaceTip]}" />
             </StackPanel>
-            <TextBlock Grid.Row="5" Text="{Binding Strings[autosave]}" />
-            <NumericUpDown Grid.Row="5" Grid.Column="1" Minimum="1" Maximum="10" Increment="1" FormatString="0"
+            <TextBlock Grid.Row="7" Text="{Binding Strings[autosave]}" />
+            <NumericUpDown Grid.Row="7" Grid.Column="1" Minimum="1" Maximum="10" Increment="1" FormatString="0"
                            Value="{Binding AutosaveSeconds}" AutomationProperties.Name="{Binding Strings[autosaveName]}" />
-            <TextBlock Grid.Row="6" Text="{Binding Strings[schemaBrowser]}" />
-            <CheckBox Grid.Row="6" Grid.Column="1" x:Name="SchemaPreviewBox" Content="{Binding Strings[schemaPreview]}"
+            <TextBlock Grid.Row="8" Text="{Binding Strings[schemaBrowser]}" />
+            <CheckBox Grid.Row="8" Grid.Column="1" x:Name="SchemaPreviewBox" Content="{Binding Strings[schemaPreview]}"
                       IsChecked="{Binding SchemaSingleClickPreview}" AutomationProperties.Name="{Binding Strings[schemaPreview]}" />
           </Grid>
         </ScrollViewer>

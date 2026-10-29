@@ -49,6 +49,7 @@ internal static class PrdMatrix
         ("tableStats", "...OO."),
         ("trace", "...OO."),
         ("tuningReport", "...O.."),
+        ("aiTuning", "OOOOO."), // PRD 12.2 (2026-10-29 결정): 조회 전용을 뺀 Role 의 기본 켬
         ("sessionMonitor", "...OO."),
         ("lockMonitor", "...OO."),
         ("blockerAlert", "OOOOO."),
@@ -166,6 +167,7 @@ internal static class PrdMatrix
         "NavigationWiring", "PlsqlWorkspacePersistence", "RecentFilesStartup", "ResultGridSettingsStartup", "SqlEditorDockWiring",
         "UpdateStartup", "HistoryRecorder", "ChangeJournalRecorder", "PlSqlWarmUpTask",
         "SessionsAutoShow", "MetadataCachePruner",
+        "AiContextKeys", "AgentBridgeStartup", // aiTuning(2026-10-29 기본 켬)
     ];
 
     /// <summary>켜진 기능으로 정답 시작 작업 이름 집합(TRD 10.2·10.7.2: PL/SQL 작업 공간 형은 plsqlEditor 에 매달린다).</summary>
@@ -176,6 +178,7 @@ internal static class PrdMatrix
             "MyBatisConvertReady" or "MyBatisFolderReadyTask" or "MyBatisWorkspaceWiring" or "MapperWatchStartup" => on.Contains("myBatis"),
             "PlsqlWorkspacePersistence" => on.Contains("plsqlEditor"),
             "ChangeJournalRecorder" => on.Contains("changeJournal"),
+            "AiContextKeys" or "AgentBridgeStartup" => on.Contains("aiTuning"),
             _ => true,
         }),
     ];

@@ -131,7 +131,7 @@ public sealed class RoleMenuFlowTests
                 Assert.Empty(first.RegistryCommands.Intersect(mybatisCommands));
                 Assert.Empty(first.PendingRestart);
                 Assert.Equal(PrdMatrix.ExpectedTasks(PrdMatrix.Enabled(["sqlDev"])).Order(), first.StartupTasks.Order());
-                Assert.Equal(11, first.StartupTasks.Count);
+                Assert.Equal(13, first.StartupTasks.Count);
                 Assert.DoesNotContain(first.StartupTasks, t => PrdMatrix.MyBatisTasks.Contains(t));
                 Assert.DoesNotContain("MapperSaveStatusViewModel", first.StatusTypes);
                 Assert.Contains("BlockerStatusViewModel", first.StatusTypes);
@@ -145,9 +145,9 @@ public sealed class RoleMenuFlowTests
                 {
                     await Oranda.App.App.RunStartupTasksAsync(app.Services, run, Oranda.Core.Composition.StartupPhase.AfterFirstFrame);
                     await Oranda.App.App.RunStartupTasksAsync(app.Services, run, null);
-                    Assert.Equal(11, run.Ran.Count);
-                    Assert.Equal(5 + OptInItems.StartupTaskNames.Count, run.Skipped.Count); // 직접 켜는 기능의 작업 포함
-                    Assert.Contains(trace.Lines, l => l.Contains($"시작 작업: 돈 11개, 건너뜀 {5 + OptInItems.StartupTaskNames.Count}개", StringComparison.Ordinal));
+                    Assert.Equal(13, run.Ran.Count);
+                    Assert.Equal(5 + OptInItems.StartupTaskNames.Count, run.Skipped.Count);
+                    Assert.Contains(trace.Lines, l => l.Contains($"시작 작업: 돈 13개, 건너뜀 {5 + OptInItems.StartupTaskNames.Count}개", StringComparison.Ordinal));
                 }
 
                 Assert.Same(MyBatisHooks.Empty, Oranda.App.Features.SqlEditor.SqlEditorHost.Current.MyBatisHooks); // MyBatis 배선이 돌지 않았다
@@ -190,7 +190,7 @@ public sealed class RoleMenuFlowTests
                 Assert.Empty(s.PendingRestart);
                 Assert.Equal(PrdMatrix.AllFeatures.Order(), s.GateEnabled.Order());
                 Assert.Equal(11, s.TopMenus.Count);
-                Assert.Equal(16, s.StartupTasks.Count);
+                Assert.Equal(18, s.StartupTasks.Count);
                 Assert.Equal(10, s.StatusTypes.Count);
                 Assert.Subset(s.RegistryCommands, mybatisCommands.ToHashSet(StringComparer.Ordinal));
                 Assert.Contains("MapperSaveStatusViewModel", s.StatusTypes);

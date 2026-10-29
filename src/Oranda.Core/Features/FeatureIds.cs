@@ -34,7 +34,7 @@ public static class FeatureIds
     public const string Trace = "trace";
     public const string TuningReport = "tuningReport";
 
-    /// <summary>AI 튜닝(실험). 직접 켜는 기능(<see cref="FeatureDefinition.OptIn"/>).</summary>
+    /// <summary>AI 튜닝. 조회 전용 Role 을 뺀 모든 Role 의 기본 켬이다(끄는 길은 기능 세부의 끔).</summary>
     public const string AiTuning = "aiTuning";
 
     // 운영

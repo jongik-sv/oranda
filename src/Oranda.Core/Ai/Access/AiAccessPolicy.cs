@@ -4,7 +4,7 @@ namespace Oranda.Core.Ai.Access;
 
 /// <summary>
 /// 접속의 AI 허용 수준 계산·검증(연구서 §6.4).
-/// 운영 라벨은 기본 <see cref="AiAccessLevel.Off"/>, 최대 <see cref="AiAccessLevel.Query"/>(SELECT 실행은 되지만 행 값은 운영에서 보내지 않는다).
+/// 운영 라벨은 기본·최대 모두 <see cref="AiAccessLevel.Query"/>(SELECT 실행은 되지만 행 값은 운영에서 보내지 않는다). 접속별로 <see cref="AiAccessLevel.Off"/> 로 끌 수 있다.
 /// 운영 접속에 저장된 <see cref="AiAccessLevel.QueryRows"/>(옛 파일·손으로 고친 파일)는 한 칸이 아니라 <see cref="AiAccessLevel.Plan"/> 으로 줄여 읽는다: 행 값을 못 보내는 쪽으로 닫는다.
 /// 개발·시험은 기본 <see cref="AiAccessLevel.Plan"/>, 최대 <see cref="AiAccessLevel.QueryRows"/>.
 /// 프로필의 <see cref="ConnectionProfile.AiAccess"/> 가 null 이면 환경 기본값이고, 한도를 넘는 값은 한도로 줄여 읽는다.
@@ -13,7 +13,7 @@ public static class AiAccessPolicy
 {
     /// <summary>환경 라벨의 기본 수준.</summary>
     public static AiAccessLevel DefaultLevel(ConnectionEnvironment environment) =>
-        environment == ConnectionEnvironment.Production ? AiAccessLevel.Off : AiAccessLevel.Plan;
+        environment == ConnectionEnvironment.Production ? AiAccessLevel.Query : AiAccessLevel.Plan;
 
     /// <summary>환경 라벨이 허용하는 최대 수준.</summary>
     public static AiAccessLevel MaxLevel(ConnectionEnvironment environment) =>
@@ -61,16 +61,19 @@ public static class AiAccessPolicy
 
     /// <summary>
     /// 접속 편집에서 저장할 때 접속 이름을 다시 입력받아야 하는가(SAFE-08 과 같은 방식).
-    /// 저장 뒤 운영 접속의 <b>실효 수준</b>이 <see cref="AiAccessLevel.Off"/> 가 아니고, 저장 전에는 운영이 아니었거나 실효 수준이 Off 였을 때 참이다.
-    /// 수준 값뿐 아니라 환경 라벨을 운영으로 바꾸는 편집도 잡는다(개발에서 Plan 으로 켜 둔 접속의 라벨을 바꿔도 묻는다).
+    /// 사용자가 수준을 직접 골랐을 때만 묻는다: 저장 뒤 운영 접속에 명시한 수준(<see cref="ConnectionProfile.AiAccess"/> 가 null 이 아님)이 있고
+    /// 그 <b>실효 수준</b>이 <see cref="AiAccessLevel.Off"/> 가 아니며, 저장 전에는 운영이 아니었거나 실효 수준이 지금보다 낮았을 때 참이다.
+    /// 환경 기본값 때문에 새 운영 접속을 저장할 때마다 묻지는 않는다. 환경 라벨을 운영으로 바꾸는 편집도 수준이 명시돼 있으면 잡는다
+    /// (개발에서 Plan 으로 켜 둔 접속의 라벨을 바꿔도 묻는다).
     /// </summary>
     public static bool NeedsNameConfirmation(ConnectionProfile before, ConnectionProfile after)
     {
         ArgumentNullException.ThrowIfNull(before);
         ArgumentNullException.ThrowIfNull(after);
         return after.Environment == ConnectionEnvironment.Production
+            && after.AiAccess is not null
             && Effective(after) != AiAccessLevel.Off
-            && (before.Environment != ConnectionEnvironment.Production || Effective(before) == AiAccessLevel.Off);
+            && (before.Environment != ConnectionEnvironment.Production || Effective(after) > Effective(before));
     }
 
     /// <summary>저장하기 전에 한도를 넘는 값을 한도로 줄인다(옛 파일·손으로 고친 파일 방어).</summary>

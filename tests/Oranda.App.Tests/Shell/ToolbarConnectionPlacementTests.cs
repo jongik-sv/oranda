@@ -158,7 +158,9 @@ public sealed class ToolbarConnectionPlacementTests
         using var h = new ShellHarness();
         h.Window.Width = 1280; // WindowPlacementPolicy.FirstRunMaxWidth
         var combo = ((ConnectionComboView)h.Window.FindControl<ContentControl>("ConnectionComboHost")!.Content!).Combo;
-        combo.Width = combo.MaxWidth; // 이름이 아주 길어 상한까지 늘어난 콤보
+        // AI 튜닝 기본 켬(2026-10-29)으로 툴바 단추가 1개 늘어, 상한(460)까지 늘어난 콤보에서는 맨 오른쪽 2개가 「…」 로 접힌다.
+        // 그래서 이름이 아주 긴 콤보(상한보다 100 좁은 폭)로 본다. 상한 폭 콤보의 접힘은 아래 좁은 창 시험이 따로 다룬다.
+        combo.Width = combo.MaxWidth - 100;
         Dispatcher.UIThread.RunJobs();
         h.Window.UpdateLayout();
         h.Window.UpdateToolbarOverflow();

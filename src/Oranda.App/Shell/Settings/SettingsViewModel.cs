@@ -52,7 +52,12 @@ public sealed partial class SettingsViewModel : ViewModelBase
 
     /// <summary>화면 글자 배율(%, 80~250).</summary>
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(PanelFontSizeWatermark))]
     private decimal _uiScalePercent;
+
+    /// <summary>패널·표·보조 글자 크기(pt, 8~32). null(비움) = 기본 크기에 화면 글자 배율을 곱한 값.</summary>
+    [ObservableProperty]
+    private decimal? _panelFontSize;
 
     [ObservableProperty]
     private bool _highContrast;
@@ -156,8 +161,14 @@ public sealed partial class SettingsViewModel : ViewModelBase
     /// <summary>「기능」 탭의 순서(일반 다음, TSK-07-04). <c>oranda.tools.roles</c> 가 이 탭으로 연다.</summary>
     public const int FeaturesTabIndex = 1;
 
+    /// <summary>「편집기」 탭의 순서(기능 다음).</summary>
+    public const int EditorTabIndex = 2;
+
     /// <summary>「SQL 포맷」 탭의 순서(편집기 다음).</summary>
     public const int FormatTabIndex = 3;
+
+    /// <summary>「그리드」 탭의 순서(실행 다음).</summary>
+    public const int GridTabIndex = 5;
 
     /// <summary>「AI 모델」 쪽(시안 1). aiTuning 기능이 꺼져 있으면 탭을 보이지 않는다(<see cref="AiTabVisible"/>).</summary>
     private AiSettings _aiSaved;
@@ -230,6 +241,7 @@ public sealed partial class SettingsViewModel : ViewModelBase
         var code = UiLanguage.Normalize(s.Ui.Language);
         _selectedLanguage = Languages.First(l => l.Code == code);
         _uiScalePercent = Math.Round((decimal)ThemeService.ClampScale(s.Ui.UiScale) * 100);
+        _panelFontSize = s.Ui.PanelFontSize is { } panel ? (decimal)ThemeService.ClampPanelFontSize(panel) : null;
         _highContrast = s.Ui.HighContrast;
         _fontFamily = string.IsNullOrWhiteSpace(s.Editor.FontFamily) ? FontChoices[0] : s.Editor.FontFamily;
         _fontSize = (decimal)s.Editor.FontSize;
@@ -421,6 +433,27 @@ public sealed partial class SettingsViewModel : ViewModelBase
 
     public string UiScaleLabel => _text.Lookup("Shell.settings.uiScale");
 
+    public string PanelFontSizeLabel => _text.Lookup("Shell.settings.panelFontSize");
+
+    /// <summary>패널·표 글자 크기를 비웠을 때 쓰이는 값(화면 글자 배율에 맞춘 pt)을 칸 안에 흐리게 보인다.</summary>
+    public string PanelFontSizeWatermark =>
+        string.Format(System.Globalization.CultureInfo.CurrentCulture, _text.Lookup("Shell.settings.panelFontSizeAuto"),
+            (ThemeService.SmallUiFontSize * ThemeService.ClampScale((double)UiScalePercent / 100)).ToString("0.#", System.Globalization.CultureInfo.CurrentCulture));
+
+    public string FontSizeHint => _text.Lookup("Shell.settings.fontSizeHint");
+
+    public string EditorTabLinkLabel => _text.Lookup("Shell.settings.fontHintEditorTab");
+
+    public string GridTabLinkLabel => _text.Lookup("Shell.settings.fontHintGridTab");
+
+    /// <summary>일반 탭 「글자 크기」 안내의 「편집기 탭」 링크: 편집기 글꼴을 바꾸는 탭으로 옮긴다.</summary>
+    [RelayCommand]
+    private void ShowEditorTab() => SelectedTab = EditorTabIndex;
+
+    /// <summary>일반 탭 「글자 크기」 안내의 「그리드 탭」 링크: 결과 그리드 글꼴을 바꾸는 탭으로 옮긴다.</summary>
+    [RelayCommand]
+    private void ShowGridTab() => SelectedTab = GridTabIndex;
+
     public string HighContrastLabel => _text.Lookup("Shell.settings.highContrast");
 
     public string FontLabel => _text.Lookup("Shell.settings.editorFont");
@@ -489,6 +522,7 @@ public sealed partial class SettingsViewModel : ViewModelBase
                     Theme = SelectedTheme.Theme,
                     Language = SelectedLanguage.Code,
                     UiScale = ThemeService.ClampScale((double)UiScalePercent / 100),
+                    PanelFontSize = PanelFontSize is { } panelSize ? ThemeService.ClampPanelFontSize((double)panelSize) : null,
                     HighContrast = HighContrast,
                 },
                 Editor = s.Editor with

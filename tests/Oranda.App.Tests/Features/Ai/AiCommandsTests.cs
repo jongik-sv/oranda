@@ -67,6 +67,10 @@ public class AiCommandsTests
         var task = new AiContextKeys(container);
 
         task.Sync();
+        Assert.True(keys.Evaluate(AiContextKeys.ConfiguredKey)); // 기본 드라이버가 Claude Code
+
+        await settings.UpdateAsync(s => s with { Ai = new AiSettings { Driver = AiDriverKind.None } });
+        task.Sync();
         Assert.False(keys.Evaluate(AiContextKeys.ConfiguredKey));
 
         await settings.UpdateAsync(s => s with { Ai = new AiSettings { Driver = AiDriverKind.ClaudeCode } });
@@ -100,7 +104,13 @@ public class AiCommandsTests
         Assert.Empty(devErrors);
         Assert.Equal(AiAccessLevel.QueryRows, saved.AiAccess);
 
-        var prod = ProfileEditorViewModel.From(Profile(ConnectionEnvironment.Production));
+        // 기본값(운영 Query)을 그대로 저장하는 편집은 이름을 묻지 않는다.
+        var untouched = ProfileEditorViewModel.From(Profile(ConnectionEnvironment.Production));
+        untouched.AiVisible = true;
+        Assert.NotNull(untouched.TryBuild(out _));
+
+        // 끔으로 저장돼 있던 운영 접속의 수준을 직접 올릴 때만 묻는다.
+        var prod = ProfileEditorViewModel.From(Profile(ConnectionEnvironment.Production) with { AiAccess = AiAccessLevel.Off });
         prod.AiVisible = true;
         prod.AiAccess.SelectLevelCommand.Execute(AiAccessLevel.Plan);
         Assert.Null(prod.TryBuild(out var errors));
@@ -111,7 +121,7 @@ public class AiCommandsTests
     }
 
     [Fact]
-    public void New_production_connection_confirms_against_the_name_typed_in_the_editor()
+    public void New_production_connection_saves_without_the_name_because_the_default_is_the_ceiling()
     {
         var vm = ProfileEditorViewModel.ForNew();
         vm.AiVisible = true;
@@ -120,12 +130,10 @@ public class AiCommandsTests
         vm.Host = "db-example";
         vm.Service = "svc";
         vm.Environment = ConnectionEnvironment.Production;
+        Assert.NotNull(vm.TryBuild(out _)); // 수준을 건드리지 않은 새 운영 접속은 이름을 묻지 않는다(기본 Query)
+
+        // 운영의 기본이 상한이라 새 접속에서 올릴 길이 없다: 낮춰 고른 수준도 이름 없이 저장된다.
         vm.AiAccess.SelectLevelCommand.Execute(AiAccessLevel.Plan);
-
-        Assert.Null(vm.TryBuild(out var errors)); // 이름을 다시 입력하지 않았다
-        Assert.Contains(errors, e => e.Contains("접속 이름을 다시 입력", StringComparison.Ordinal));
-
-        vm.AiAccess.ConfirmName = "PROD1";
         Assert.Equal(AiAccessLevel.Plan, vm.TryBuild(out _)!.AiAccess);
     }
 
@@ -133,14 +141,14 @@ public class AiCommandsTests
     public void Hidden_ai_area_never_blocks_a_save_and_a_production_relabel_drops_the_raised_level()
     {
         var vm = ProfileEditorViewModel.From(Profile(ConnectionEnvironment.Development) with { AiAccess = AiAccessLevel.Metadata });
-        Assert.False(vm.AiVisible); // 기능이 꺼진 상태(앱 밖)
+        vm.AiVisible = false; // 기능이 꺼진 상태(앱 밖). 기본값은 다른 시험이 남긴 앱의 게이트를 따르므로(aiTuning 기본 켬) 직접 정한다
 
         vm.Environment = ConnectionEnvironment.Production;
 
         var saved = vm.TryBuild(out var errors);
         Assert.NotNull(saved);
         Assert.Empty(errors);
-        Assert.Null(saved.AiAccess); // 운영 기본값(끔)으로 돌아간다
+        Assert.Null(saved.AiAccess); // 운영 기본값(Query)으로 돌아간다
     }
 
     [Fact]

@@ -85,7 +85,7 @@ public sealed class FeatureSettingsViewTests
         Assert.False(page.HasRestartBanner);
         Assert.False(page.IsDirty);
         Assert.False(page.IsAdvancedExpanded); // 고급은 접혀 있다(UX-10)
-        Assert.Equal("기능 하나씩 켜고 끄기(고급) — 켜진 기능 10/26 · 직접 바꾼 것 0개", page.AdvancedHeader);
+        Assert.Equal("기능 하나씩 켜고 끄기(고급) — 켜진 기능 11/26 · 직접 바꾼 것 0개", page.AdvancedHeader);
     }
 
     [Fact]
@@ -119,11 +119,11 @@ public sealed class FeatureSettingsViewTests
         // 「모든 기능」 은 allFeatures 로 따로 저장된다.
         (_, store, vm) = await Create();
         vm.Features.Primary = PrimaryWorkKind.All;
-        Assert.All(vm.Features.Items.Where(i => i.Id != FeatureIds.AiTuning), i => Assert.True(i.IsChecked, i.Id));
+        Assert.All(vm.Features.Items, i => Assert.True(i.IsChecked, i.Id));
         await vm.SaveAsync();
         Assert.True(store.Saved.Features.AllFeatures);
         Assert.Null(store.Saved.Features.Roles);
-        Assert.Equal(FeatureIds.All.Count - 1, FeatureCatalog.Resolve(store.Saved.Features).Count); // aiTuning 은 직접 켜는 기능이라 「모든 기능」에 들지 않는다
+        Assert.Equal(FeatureIds.All.Count, FeatureCatalog.Resolve(store.Saved.Features).Count);
     }
 
     [Fact]
@@ -140,11 +140,11 @@ public sealed class FeatureSettingsViewTests
         Assert.True(page.PlsqlAddon); // 이미 들어 있어 켜져 보인다
         Assert.True(page.MyBatisAddon);
         Assert.Equal("모든 기능에 이미 들어 있습니다", page.AddonReason);
-        Assert.All(page.Items.Where(i => i.Id != FeatureIds.AiTuning), i => Assert.True(i.IsChecked, i.Id));
+        Assert.All(page.Items, i => Assert.True(i.IsChecked, i.Id));
         Assert.All(page.Items, i => Assert.Equal(FeatureState.RoleDefault, i.State));
         Assert.False(page.HasOverrides);
         Assert.False(page.IsDirty);
-        Assert.Equal("기능 하나씩 켜고 끄기(고급) — 켜진 기능 25/26 · 직접 바꾼 것 0개", page.AdvancedHeader);
+        Assert.Equal("기능 하나씩 켜고 끄기(고급) — 켜진 기능 26/26 · 직접 바꾼 것 0개", page.AdvancedHeader);
 
         // 흐린 덧붙임을 눌러도 바뀌지 않는다.
         page.PlsqlAddon = false;
@@ -260,7 +260,7 @@ public sealed class FeatureSettingsViewTests
         Assert.True(page.AddonsEnabled);
         Assert.False(page.PlsqlAddon); // 모든 기능에서 보이던 「포함」 표시는 고른 값이 아니다
         AssertSet(FeatureCatalog.RoleDefaults([RoleIds.SqlDev]), Checked(page));
-        Assert.Equal("기능 하나씩 켜고 끄기(고급) — 켜진 기능 10/26 · 직접 바꾼 것 0개", page.AdvancedHeader);
+        Assert.Equal("기능 하나씩 켜고 끄기(고급) — 켜진 기능 11/26 · 직접 바꾼 것 0개", page.AdvancedHeader);
 
         page.MyBatisAddon = true;
         AssertSet(FeatureCatalog.RoleDefaults([RoleIds.SqlDev, RoleIds.MyBatisDev]), Checked(page));
@@ -272,7 +272,7 @@ public sealed class FeatureSettingsViewTests
         AssertSet(FeatureCatalog.RoleDefaults([RoleIds.Tuner, RoleIds.MyBatisDev]), Checked(page));
 
         page.Primary = PrimaryWorkKind.All; // 다시 모든 기능
-        Assert.All(page.Items.Where(i => i.Id != FeatureIds.AiTuning), i => Assert.True(i.IsChecked, i.Id));
+        Assert.All(page.Items, i => Assert.True(i.IsChecked, i.Id));
     }
 
     [Fact]
@@ -537,7 +537,7 @@ public sealed class FeatureSettingsViewTests
         var (_, store, vm) = await Create(All);
 
         Item(vm.Features, FeatureIds.Trace).IsChecked = false;
-        Assert.Equal("기능 하나씩 켜고 끄기(고급) — 켜진 기능 24/26 · 직접 바꾼 것 1개", vm.Features.AdvancedHeader);
+        Assert.Equal("기능 하나씩 켜고 끄기(고급) — 켜진 기능 25/26 · 직접 바꾼 것 1개", vm.Features.AdvancedHeader);
         await vm.SaveAsync();
 
         Assert.Null(store.Saved.Features.Roles);

@@ -106,21 +106,26 @@ public sealed class FeatureCatalogTests
     private static IReadOnlyList<string> OnByDefault { get; } = [.. FeatureIds.All.Where(id => !FeatureCatalog.Find(id)!.OptIn)];
 
     [Fact]
-    public void Ai_tuning_is_opt_in_so_only_an_explicit_enable_turns_it_on()
+    public void Ai_tuning_is_on_by_default_except_for_the_viewer_role_and_an_explicit_disable_wins()
     {
         var ai = FeatureCatalog.Find(FeatureIds.AiTuning)!;
-        Assert.True(ai.OptIn);
+        Assert.False(ai.OptIn);
         Assert.Equal(FeatureGroup.Tuning, ai.Group);
         Assert.Equal(FeatureIds.AiTuning, FeatureCatalog.FeatureFor(null, "Oranda.App.Features.Ai.AiTuningCommands", "Oranda.App.Features.Ai"));
         Assert.Equal(FeatureIds.AiTuning, FeatureCatalog.FeatureFor(null, "Oranda.App.Features.Ai.Chat.X", "Oranda.App.Features.Ai.Chat"));
         Assert.Equal(FeatureIds.TuningAssistant, FeatureCatalog.FeatureFor(null, "Oranda.App.Features.Tuning.Assistant.X", "Oranda.App.Features.Tuning.Assistant"));
-        Assert.DoesNotContain(FeatureCatalog.Roles, r => r.DefaultFeatures.Contains(FeatureIds.AiTuning));
+        Assert.All(FeatureCatalog.Roles.Where(r => r.Id != RoleIds.Viewer), r => Assert.Contains(FeatureIds.AiTuning, r.DefaultFeatures));
+        Assert.DoesNotContain(FeatureIds.AiTuning, FeatureCatalog.FindRole(RoleIds.Viewer)!.DefaultFeatures);
 
-        Assert.DoesNotContain(FeatureIds.AiTuning, FeatureCatalog.Resolve(new FeaturesSettings { AllFeatures = true }));
-        Assert.DoesNotContain(FeatureIds.AiTuning, FeatureCatalog.Resolve(new FeaturesSettings { Roles = [.. RoleIds.All] }));
-        Assert.DoesNotContain(FeatureIds.AiTuning, FeatureCatalog.Resolve(null));
-        Assert.Contains(FeatureIds.AiTuning, FeatureCatalog.Resolve(new FeaturesSettings { Roles = [RoleIds.Tuner], Enabled = [FeatureIds.AiTuning] }));
-        Assert.Contains(FeatureIds.AiTuning, FeatureCatalog.Resolve(new FeaturesSettings { AllFeatures = true, Enabled = [FeatureIds.AiTuning] }));
+        Assert.Contains(FeatureIds.AiTuning, FeatureCatalog.Resolve(new FeaturesSettings { AllFeatures = true }));
+        Assert.Contains(FeatureIds.AiTuning, FeatureCatalog.Resolve(new FeaturesSettings { Roles = [.. RoleIds.All] }));
+        Assert.Contains(FeatureIds.AiTuning, FeatureCatalog.Resolve(null)); // 새 설치: 기본 Role(sqlDev)
+        Assert.Contains(FeatureIds.AiTuning, FeatureCatalog.Resolve(new FeaturesSettings { Roles = [RoleIds.Tuner] }));
+        Assert.DoesNotContain(FeatureIds.AiTuning, FeatureCatalog.Resolve(new FeaturesSettings { Roles = [RoleIds.Viewer] }));
+
+        // 이미 저장된 설정에서 명시적으로 끈 값은 그대로 꺼진다.
+        Assert.DoesNotContain(FeatureIds.AiTuning, FeatureCatalog.Resolve(new FeaturesSettings { AllFeatures = true, Disabled = [FeatureIds.AiTuning] }));
+        Assert.DoesNotContain(FeatureIds.AiTuning, FeatureCatalog.Resolve(new FeaturesSettings { Roles = [RoleIds.Tuner], Disabled = [FeatureIds.AiTuning] }));
         Assert.DoesNotContain(FeatureIds.AiTuning, FeatureCatalog.Resolve(new FeaturesSettings { AllFeatures = true, Enabled = [FeatureIds.AiTuning], Disabled = [FeatureIds.AiTuning] }));
     }
 
@@ -225,7 +230,7 @@ public sealed class FeatureCatalogTests
         var r1 = FeatureCatalog.Resolve(new FeaturesSettings { Roles = [RoleIds.SqlDev] });
         Assert.Equal(r1.Order(), FeatureCatalog.Resolve(null).Order());
         Assert.Equal(r1.Order(), FeatureCatalog.Resolve(new FeaturesSettings()).Order());
-        Assert.Equal(10, r1.Count);
+        Assert.Equal(11, r1.Count); // PRD 10개 + aiTuning
         Assert.DoesNotContain(FeatureIds.SqlMonitor, r1);
         Assert.DoesNotContain(FeatureIds.MyBatis, r1);
         Assert.DoesNotContain(FeatureIds.PlsqlEditor, r1);
@@ -319,7 +324,7 @@ public sealed class FeatureCatalogTests
 
         // Role 을 고른 적 없어도 덮어쓰기는 먹는다.
         var all = FeatureCatalog.Resolve(new FeaturesSettings { Disabled = [FeatureIds.MyBatis] });
-        Assert.Equal(24, all.Count);
+        Assert.Equal(25, all.Count);
         Assert.DoesNotContain(FeatureIds.MyBatis, all);
     }
 

@@ -43,7 +43,10 @@ namespace Oranda.App.Tests.Features.Roles
             "EditorDiagnosticsStartup", "MyBatisConvertReady", "MyBatisFolderReadyTask", "MyBatisWorkspaceWiring", "MapperWatchStartup",
             "NavigationWiring", "PlsqlWorkspacePersistence", "RecentFilesStartup", "ResultGridSettingsStartup", "SqlEditorDockWiring",
             "UpdateStartup", "HistoryRecorder", "MetadataCachePruner", "ChangeJournalRecorder", "PlSqlWarmUpTask", "SessionsAutoShow",
+            "AiContextKeys", "AgentBridgeStartup",
         ];
+
+        private static readonly string[] AiStartupTasks = ["AiContextKeys", "AgentBridgeStartup"];
 
         private static readonly string[] MyBatisStartupTasks = ["MyBatisConvertReady", "MyBatisFolderReadyTask", "MyBatisWorkspaceWiring", "MapperWatchStartup"];
 
@@ -231,15 +234,9 @@ namespace Oranda.App.Tests.Features.Roles
                 {
                     null => [],
                     RoleIds.SqlDev => [.. MyBatisStartupTasks, "PlsqlWorkspacePersistence"],
-                    RoleIds.Viewer => [.. MyBatisStartupTasks, "PlsqlWorkspacePersistence", "ChangeJournalRecorder"],
+                    RoleIds.Viewer => [.. MyBatisStartupTasks, "PlsqlWorkspacePersistence", "ChangeJournalRecorder", .. AiStartupTasks], // 조회 전용은 AI 튜닝 기본 켬에서 빠진다
                     _ => ["PlsqlWorkspacePersistence"], // MyBatis 개발: PL/SQL 없음, 변경 일지는 있음
                 };
-                // 직접 켜는 기능(aiTuning)의 작업은 모든 기능을 켠 가짜 게이트(role null)에서만 돌고, Role 로 고른 게이트에서는 꺼져 있다.
-                if (role is not null)
-                {
-                    expectedOff = [.. expectedOff, .. OptInItems.StartupTaskNames];
-                }
-
                 Assert.Equal(AllStartupTasks.Concat(OptInItems.StartupTaskNames).Except(expectedOff).Order(StringComparer.Ordinal), names.Order(StringComparer.Ordinal));
                 Assert.Equal(expectedOff.Order(StringComparer.Ordinal), skipped.Select(t => t.Name).Order(StringComparer.Ordinal));
                 Assert.Contains("PlSqlWarmUpTask", names); // Language 의 공통 작업은 늘 돈다

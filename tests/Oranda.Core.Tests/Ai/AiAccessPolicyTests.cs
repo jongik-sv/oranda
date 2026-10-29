@@ -14,7 +14,7 @@ public class AiAccessPolicyTests
     [Theory]
     [InlineData(ConnectionEnvironment.Development, AiAccessLevel.Plan)]
     [InlineData(ConnectionEnvironment.Test, AiAccessLevel.Plan)]
-    [InlineData(ConnectionEnvironment.Production, AiAccessLevel.Off)]
+    [InlineData(ConnectionEnvironment.Production, AiAccessLevel.Query)]
     public void Unset_access_uses_environment_default(ConnectionEnvironment env, AiAccessLevel expected) =>
         Assert.Equal(expected, AiAccessPolicy.Effective(Profile(env)));
 
@@ -77,10 +77,20 @@ public class AiAccessPolicyTests
     [Fact]
     public void Name_confirmation_follows_effective_level_and_environment_changes()
     {
-        var offProd = Profile(ConnectionEnvironment.Production);
+        var defaultProd = Profile(ConnectionEnvironment.Production);
+        var offProd = Profile(ConnectionEnvironment.Production, AiAccessLevel.Off);
         var planProd = Profile(ConnectionEnvironment.Production, AiAccessLevel.Plan);
+
+        // 환경 기본값(운영 Query)은 묻지 않는다: 새 운영 접속 저장, 기본값을 그대로 둔 편집, 같은 값을 직접 고른 경우.
+        Assert.False(AiAccessPolicy.NeedsNameConfirmation(Profile(ConnectionEnvironment.Development), defaultProd));
+        Assert.False(AiAccessPolicy.NeedsNameConfirmation(defaultProd, defaultProd with { Comment = "x" }));
+        Assert.False(AiAccessPolicy.NeedsNameConfirmation(defaultProd, Profile(ConnectionEnvironment.Production, AiAccessLevel.Query)));
+
+        // 사용자가 직접 수준을 올릴 때만 묻는다.
         Assert.True(AiAccessPolicy.NeedsNameConfirmation(offProd, planProd));
+        Assert.True(AiAccessPolicy.NeedsNameConfirmation(planProd, planProd with { AiAccess = AiAccessLevel.Query }));
         Assert.False(AiAccessPolicy.NeedsNameConfirmation(planProd, planProd with { AiAccess = AiAccessLevel.Metadata }));
+        Assert.False(AiAccessPolicy.NeedsNameConfirmation(defaultProd, offProd));
         Assert.False(AiAccessPolicy.NeedsNameConfirmation(Profile(ConnectionEnvironment.Development), Profile(ConnectionEnvironment.Development, AiAccessLevel.Plan)));
 
         // 개발에서 Plan 으로 켜 둔 접속의 라벨만 운영으로 바꿔도 묻는다.
@@ -110,10 +120,14 @@ public class AiAccessPolicyTests
     }
 
     [Fact]
-    public void Ai_settings_default_to_no_driver_and_tolerate_null_section()
+    public void Ai_settings_default_to_claude_code_keep_an_explicit_none_and_tolerate_null_section()
     {
         var absent = JsonSerializer.Deserialize("""{ "schemaVersion": 1 }""", OrandaJsonContext.Default.AppSettings)!;
-        Assert.Equal(AiDriverKind.None, absent.Ai.Driver);
+        Assert.Equal(AiDriverKind.ClaudeCode, absent.Ai.Driver);
+
+        // 이미 저장된 설정에서 「없음」 으로 명시한 값은 유지된다.
+        var none = JsonSerializer.Deserialize("""{ "ai": { "driver": "None" } }""", OrandaJsonContext.Default.AppSettings)!;
+        Assert.Equal(AiDriverKind.None, none.Ai.Driver);
 
         var nullSection = JsonSerializer.Deserialize("""{ "schemaVersion": 1, "ai": null }""", OrandaJsonContext.Default.AppSettings)!;
         Assert.Equal(new AiSettings(), nullSection.Ai);

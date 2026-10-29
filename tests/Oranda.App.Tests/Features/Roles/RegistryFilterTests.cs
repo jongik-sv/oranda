@@ -264,9 +264,9 @@ public sealed class RegistryFilterTests
     [Fact]
     public void Tuning_menu_stays_while_any_tuning_feature_is_on_even_if_only_common_plan_commands_would_remain()
     {
-        // R1 = planAdvanced 만 튜닝 묶음 → 튜닝 메뉴가 있다. planAdvanced 를 끄면 공통 계획 명령만 남아도 그리지 않는다.
+        // R1 = planAdvanced·aiTuning 만 튜닝 묶음 → 튜닝 메뉴가 있다. 둘을 끄면 공통 계획 명령만 남아도 그리지 않는다.
         var on = FakeFeatureGate.ForRoles(RoleIds.SqlDev);
-        var off = FakeFeatureGate.For(new FeaturesSettings { Roles = [RoleIds.SqlDev], Disabled = [FeatureIds.PlanAdvanced] });
+        var off = FakeFeatureGate.For(new FeaturesSettings { Roles = [RoleIds.SqlDev], Disabled = [FeatureIds.PlanAdvanced, FeatureIds.AiTuning] });
         var (c1, p1) = Registries(on);
         var (c2, p2) = Registries(off);
 
