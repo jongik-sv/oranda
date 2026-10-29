@@ -714,6 +714,7 @@
   "Shell.about.title": "About Oranda",
   "Shell.dialog.apply": "Apply",
   "Shell.dialog.cancel": "Cancel",
+  "Shell.dialog.changes": "Changes",
   "Shell.dialog.current": "Current",
   "Shell.dialog.filter.markdown": "Markdown (*.md)",
   "Shell.dialog.filter.mybatis": "MyBatis mapper",

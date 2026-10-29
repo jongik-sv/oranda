@@ -1,7 +1,10 @@
+using System.Globalization;
+using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Media;
 using Avalonia.Platform.Storage;
 using Oranda.App.Features.Localization;
+using Oranda.App.Features.MyBatisWorkspace.Save;
 using Oranda.App.Shell.Controls;
 
 namespace Oranda.App.Features.SqlEditor;
@@ -174,20 +177,72 @@ public sealed class AvaloniaEditorDialogs : IEditorDialogs
     }
 
     public Task<bool> PreviewEditAsync(string title, string before, string after, CancellationToken ct)
-        => ShowAsync(title, BuildPreviewEditPanel(before, after), false, ok => ok, UiText.Get("Shell.dialog.apply", "적용"), UiText.Get("Shell.dialog.reject", "거절"));
+        => ShowAsync(title, BuildPreviewEditPanel(before, after, PreviewMaxSize(OwnerWorkArea())), false, ok => ok, UiText.Get("Shell.dialog.apply", "적용"), UiText.Get("Shell.dialog.reject", "거절"));
 
-    /// <summary>현재 글과 제안 글을 나란히 보이는 비교 판(시험용으로 분리). 두 칸 모두 SQL 강조가 걸린 읽기 전용 코드 뷰다.</summary>
-    internal static Grid BuildPreviewEditPanel(string before, string after)
+    /// <summary>
+    /// 비교 판의 최대 크기 상한. 창이 내용 크기를 따르므로(<see cref="SizeToContent.WidthAndHeight"/>) 막지 않으면 긴 문장에서 창이 화면만큼 커져
+    /// 적용·거절 단추가 화면 밖으로 밀려난다.
+    /// </summary>
+    internal const double PreviewMaxWidth = 1100;
+
+    internal const double PreviewMaxHeight = 560;
+
+    /// <summary>비교 판의 최대 크기: 상한과 화면 작업 영역의 80%(너비)·70%(높이) 중 작은 쪽. 작업 영역을 모르면 상한.</summary>
+    internal static Size PreviewMaxSize(Size? workArea) => workArea is { } area
+        ? new Size(Math.Min(PreviewMaxWidth, area.Width * 8 / 10), Math.Min(PreviewMaxHeight, area.Height * 7 / 10)) // 0.7 을 곱하면 476 이 475.999… 가 된다
+        : new Size(PreviewMaxWidth, PreviewMaxHeight);
+
+    /// <summary>주 창이 있는 화면의 작업 영역(작업 표시줄을 뺀 영역, DIP). 모르면 null.</summary>
+    private static Size? OwnerWorkArea() =>
+        Owner is { } owner && owner.Screens.ScreenFromWindow(owner) is { } screen ? screen.WorkingArea.Size.ToSize(screen.Scaling) : null;
+
+    /// <summary>
+    /// 위에 바뀐 부분(줄 diff, 앞뒤 같은 줄은 접는다), 아래에 현재 글과 제안 글 전체를 나란히 보이는 비교 판(시험용으로 분리).
+    /// 전체 글 두 칸은 SQL 강조가 걸린 읽기 전용 코드 뷰다. 크기는 <paramref name="max"/>(없으면 상한) 안이고, 넘치는 글은 칸마다 스크롤한다.
+    /// </summary>
+    internal static Grid BuildPreviewEditPanel(string before, string after, Size? max = null)
     {
-        var panel = new Grid { ColumnDefinitions = new ColumnDefinitions("*,*"), RowDefinitions = new RowDefinitions("Auto,*"), MinWidth = 640, MinHeight = 240 };
-        panel.Children.Add(new TextBlock { Text = UiText.Get("Shell.dialog.current", "현재"), FontWeight = FontWeight.SemiBold });
+        var limit = max ?? PreviewMaxSize(null);
+        var panel = new Grid
+        {
+            ColumnDefinitions = new ColumnDefinitions("*,*"),
+            RowDefinitions = new RowDefinitions("Auto,2*,Auto,3*"),
+            MinWidth = 640,
+            MinHeight = 240,
+            MaxWidth = limit.Width,
+            MaxHeight = limit.Height,
+        };
+        var lines = MapperLineDiff.Build(before, after, 1, 1);
+        var (added, removed) = MapperLineDiff.Count(lines);
+        var changes = new TextBlock
+        {
+            Text = string.Create(CultureInfo.InvariantCulture, $"{UiText.Get("Shell.dialog.changes", "바뀐 부분")}  +{added} −{removed}"),
+            FontWeight = FontWeight.SemiBold,
+        };
+        Grid.SetColumnSpan(changes, 2);
+        // diff 목록(ItemsControl)에는 스크롤이 없다: 바뀐 줄이 많아도 칸 안에서 넘기도록 감싼다.
+        var diff = new ScrollViewer
+        {
+            Content = new MapperDiffView { Rows = MapperDiffRow.Section(null, lines, sideBySide: false) },
+            HorizontalScrollBarVisibility = Avalonia.Controls.Primitives.ScrollBarVisibility.Disabled,
+            Margin = new Thickness(0, 2, 0, 8),
+        };
+        Grid.SetRow(diff, 1);
+        Grid.SetColumnSpan(diff, 2);
+        panel.Children.Add(changes);
+        panel.Children.Add(diff);
+
+        var current = new TextBlock { Text = UiText.Get("Shell.dialog.current", "현재"), FontWeight = FontWeight.SemiBold };
+        Grid.SetRow(current, 2);
         var right = new TextBlock { Text = UiText.Get("Shell.dialog.proposed", "제안"), FontWeight = FontWeight.SemiBold };
+        Grid.SetRow(right, 2);
         Grid.SetColumn(right, 1);
+        panel.Children.Add(current);
         panel.Children.Add(right);
         var left = new SqlCodeView { Text = before };
-        Grid.SetRow(left, 1);
+        Grid.SetRow(left, 3);
         var proposed = new SqlCodeView { Text = after };
-        Grid.SetRow(proposed, 1);
+        Grid.SetRow(proposed, 3);
         Grid.SetColumn(proposed, 1);
         panel.Children.Add(left);
         panel.Children.Add(proposed);
