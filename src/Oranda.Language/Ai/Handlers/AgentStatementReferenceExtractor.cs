@@ -53,6 +53,8 @@ internal sealed partial class AgentStatementReferenceExtractor(ILanguageService 
         var objects = new List<AgentObjectRef>();
         var remote = false;
         var calls = false;
+        var forbidden = false;
+        var userFunctions = new List<string>();
         var locking = false;
 
         // 닫는 쪽으로 판정한다: 객체를 다 찾았다고 확신하지 못하면(해석 실패·모르는 구문·대소문자를 구분하는 이름) 분류 불확실로 돌려
@@ -63,7 +65,19 @@ internal sealed partial class AgentStatementReferenceExtractor(ILanguageService 
             var refs = StatementReferenceExtractor.Extract(stmt.Text);
             locking |= refs.HasLockingClause;
             remote |= refs.HasRemoteLink || refs.Objects.Any(o => o.IsRemote);
-            calls |= refs.Calls.Any(IsUserFunction);
+            foreach (var call in refs.Calls.Where(IsUserFunction))
+            {
+                calls = true;
+                if (IsForbiddenCall(call))
+                {
+                    forbidden = true;
+                }
+                else if (call.ToUpperInvariant() is var name && !userFunctions.Contains(name))
+                {
+                    userFunctions.Add(name);
+                }
+            }
+
             uncertain |= refs.Uncertain;
             var resolved = await StatementReferenceExtractor
                 .ResolveAsync(refs, owner, (o, n) => metadata.GetNameStepAsync(db, o, n, ct))
@@ -87,7 +101,7 @@ internal sealed partial class AgentStatementReferenceExtractor(ILanguageService 
             }
         }
 
-        return new AgentStatementInfo(stmts[0].Kind, uncertain, objects, stmts.Count, locking, remote, calls);
+        return new AgentStatementInfo(stmts[0].Kind, uncertain, objects, stmts.Count, locking, remote, calls, HasForbiddenCall: forbidden, UserFunctions: userFunctions);
     }
 
     public async ValueTask<AgentObjectRef?> ResolveAsync(ISession db, string name, string? defaultSchema, CancellationToken ct)
@@ -210,6 +224,36 @@ internal sealed partial class AgentStatementReferenceExtractor(ILanguageService 
     }
 
     private static bool HasLowercase(string s) => !string.Equals(s, s.ToUpperInvariant(), StringComparison.Ordinal);
+
+    /// <summary>시스템 스키마(소유자로 쓰였을 때 SYS 패키지 호출).</summary>
+    private static readonly FrozenSet<string> SystemSchemas = (
+        "SYS SYSTEM XDB CTXSYS MDSYS ORDSYS ORDDATA OUTLN DBSNMP WMSYS LBACSYS DVSYS OJVMSYS APPQOSSYS GSMADMIN_INTERNAL")
+        .Split(' ').ToFrozenSet(StringComparer.Ordinal);
+
+    /// <summary>URI 형·XML 형 생성자와 메서드(네트워크·파일을 읽을 수 있다).</summary>
+    private static readonly FrozenSet<string> ForbiddenTypes = "HTTPURITYPE DBURITYPE XDBURITYPE URITYPE URIFACTORY XMLTYPE SYS_DBURIGEN"
+        .Split(' ').ToFrozenSet(StringComparer.Ordinal);
+
+    /// <summary>
+    /// 어떤 도구에서도 허용하지 않는 호출: 시퀀스 값(<c>NEXTVAL</c>·<c>CURRVAL</c>), 오라클 제공 패키지(<c>DBMS_*</c>·<c>UTL_*</c>·<c>CTX_*</c>·시스템 스키마 소유),
+    /// URI·XML 형. 나머지 사용자 함수는 호출자가 후보로 모아 도구에 따라 확인한다.
+    /// </summary>
+    internal static bool IsForbiddenCall(string call)
+    {
+        var parts = call.ToUpperInvariant().Split('.');
+        if (parts[^1] is "NEXTVAL" or "CURRVAL")
+        {
+            return true;
+        }
+
+        if (parts.Length >= 2 && SystemSchemas.Contains(parts[0]))
+        {
+            return true;
+        }
+
+        return parts.Any(p => p.StartsWith("DBMS_", StringComparison.Ordinal) || p.StartsWith("UTL_", StringComparison.Ordinal)
+            || p.StartsWith("CTX_", StringComparison.Ordinal) || ForbiddenTypes.Contains(p));
+    }
 
     private static bool IsUserFunction(string call) => call.Contains('.', StringComparison.Ordinal) || !BuiltIns.Contains(call);
 

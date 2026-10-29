@@ -187,6 +187,46 @@ internal sealed partial class OracleTuningService : ITuningService
         ArgumentOutOfRangeException.ThrowIfGreaterThan(iterations, MaxIterations);
         var stmt = BenchmarkStatement(_language, benchmark.Sql);
 
+        if (benchmark.ReadOnly)
+        {
+            // 사용자 함수가 든 문장: 읽기 전용 트랜잭션 안에서만 돌린다(함수 안 DML 은 DB 가 ORA-01456 으로 막는다). 시작하지 못하면 문장은 보내지 않는다.
+            await BeginReadOnlyAsync(s, ct);
+            try
+            {
+                return await RunBenchmarkCoreAsync(s, benchmark, stmt, iterations, ct);
+            }
+            finally
+            {
+                await s.RollbackAsync(CancellationToken.None);
+            }
+        }
+
+        return await RunBenchmarkCoreAsync(s, benchmark, stmt, iterations, ct);
+    }
+
+    private static async Task BeginReadOnlyAsync(ISession s, CancellationToken ct)
+    {
+        var session = s as OracleSession ?? throw new ArgumentException("OracleSession 이 아닌 세션은 쓸 수 없습니다.", nameof(s));
+        var gate = session.CommandGate;
+        await gate.EnterAsync(ct);
+        try
+        {
+            await using var cmd = session.Connection.CreateCommand();
+            cmd.CommandText = "SET TRANSACTION READ ONLY";
+            await cmd.ExecuteNonQueryAsync(ct);
+        }
+        catch (OracleException ex) when (session.ReportFailure(ex))
+        {
+            throw;
+        }
+        finally
+        {
+            gate.Release();
+        }
+    }
+
+    private async Task<BenchmarkResult> RunBenchmarkCoreAsync(ISession s, BenchmarkCase benchmark, SqlStatement stmt, int iterations, CancellationToken ct)
+    {
         var elapsed = TimeSpan.Zero;
         long logical = 0, physical = 0, rows = 0;
         long? planHash = null;
