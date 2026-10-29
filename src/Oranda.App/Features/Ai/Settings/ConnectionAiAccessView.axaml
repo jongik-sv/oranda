@@ -45,6 +45,6 @@
     </Grid>
 
     <CheckBox x:Name="ExplainBox" IsChecked="{Binding ExplainAllowed}"
-              Content="EXPLAIN PLAN 허용 (PLAN__TABLE 에 행을 씁니다. 끄면 DISPLAY_CURSOR 로 실제 계획만 읽습니다)" />
+              Content="EXPLAIN PLAN 허용 (PLAN__TABLE 에 행을 씁니다. 끄면 DISPLAY__CURSOR 로 실제 계획만 읽습니다)" />
   </StackPanel>
 </UserControl>

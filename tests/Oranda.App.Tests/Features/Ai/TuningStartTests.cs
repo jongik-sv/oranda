@@ -4,6 +4,7 @@ using Oranda.App.Tests.Shell.Headless;
 using Oranda.Core.Ai.Access;
 using Oranda.Core.Ai.Contracts;
 using Oranda.Core.Connection;
+using Oranda.Core.Settings;
 
 namespace Oranda.App.Tests.Features.Ai;
 
@@ -12,10 +13,10 @@ public class TuningStartTests
 {
     private static readonly TuningModelOption[] Models = [new("default", "기본 모델 — Claude Code · opus"), new("local", "ollama 로컬")];
 
-    /// <summary>허용 수준 끔 / 개발·조회 실행(벤치마크 가능) / 운영·계획(벤치마크 불가) 세 모양을 접속 문맥으로 만든다.</summary>
+    /// <summary>허용 수준 끔 / 개발·조회 실행(벤치마크 가능) / 개발·계획(벤치마크 불가) 세 모양을 접속 문맥으로 만든다.</summary>
     private static TuningStartInfo Info(bool accessOff = false, bool benchmarkAllowed = true) => Info(
         accessOff ? AiAccessLevel.Off : benchmarkAllowed ? AiAccessLevel.Query : AiAccessLevel.Plan,
-        benchmarkAllowed ? ConnectionEnvironment.Development : ConnectionEnvironment.Production);
+        ConnectionEnvironment.Development);
 
     private static TuningStartInfo Info(AiAccessLevel level, ConnectionEnvironment environment) => new(
         "AI 튜닝 — 커서 위치 문장", "8~15행 · SELECT d.dept_id …", "sql_id 7h35uxf5uhmm1 · 실행 1,240회",
@@ -42,6 +43,36 @@ public class TuningStartTests
         Assert.Equal(new TuningStartChoice(false, true, "local"), vm.Choice);
     }
 
+    [Theory]
+    [InlineData("sonnet", "sonnet")]
+    [InlineData("haiku", "haiku")]
+    [InlineData("opus", "opus")]
+    public void Model_rows_are_the_three_known_models_and_the_setting_is_preselected(string setting, string expected)
+    {
+        var info = AiTuningLauncher.BuildStartInfo(null, new AiContext("DEV-ERP", ConnectionEnvironment.Development, AiAccessLevel.Query), new AiSettings { Model = setting });
+        Assert.Equal(["opus", "sonnet", "haiku"], info.Models.Select(m => m.Id));
+
+        var vm = new TuningStartViewModel(info);
+        Assert.Equal(expected, vm.Model!.Id);
+        Assert.Equal(expected, vm.Choice!.ModelId);
+    }
+
+    [Fact]
+    public void A_setting_outside_the_list_is_added_as_a_row_and_preselected()
+    {
+        var info = AiTuningLauncher.BuildStartInfo(null, new AiContext("DEV-ERP", ConnectionEnvironment.Development, AiAccessLevel.Query), new AiSettings { Model = "claude-opus-4-1" });
+        Assert.Equal(["opus", "sonnet", "haiku", "claude-opus-4-1"], info.Models.Select(m => m.Id));
+        Assert.Equal("claude-opus-4-1", new TuningStartViewModel(info).Choice!.ModelId);
+    }
+
+    [Fact]
+    public void An_empty_setting_keeps_the_default_row_that_sends_no_model()
+    {
+        var info = AiTuningLauncher.BuildStartInfo(null, new AiContext("DEV-ERP", ConnectionEnvironment.Development, AiAccessLevel.Query), new AiSettings { Model = " " });
+        Assert.Equal(["default", "opus", "sonnet", "haiku"], info.Models.Select(m => m.Id));
+        Assert.Equal("default", new TuningStartViewModel(info).Choice!.ModelId);
+    }
+
     [Fact]
     public void Access_off_blocks_the_start_and_explains_where_to_change_it()
     {
@@ -53,14 +84,56 @@ public class TuningStartTests
     }
 
     [Fact]
-    public void Production_connection_never_benchmarks_even_if_checked()
+    public void Production_connection_at_query_level_may_benchmark_but_starts_with_it_off_and_shows_the_notice()
     {
-        var vm = new TuningStartViewModel(Info(benchmarkAllowed: false));
+        var vm = new TuningStartViewModel(Info(AiAccessLevel.Query, ConnectionEnvironment.Production));
+        Assert.True(vm.BenchmarkEnabled);
+        Assert.False(vm.Benchmark); // 운영은 허용만 하고 기본은 끔
+        Assert.Null(vm.BenchmarkNote);
+        Assert.Equal(TuningStartViewModel.ProductionNoticeText, vm.ProductionNotice);
+        Assert.False(vm.Choice!.Benchmark);
+
+        vm.Benchmark = true;
+        Assert.True(vm.Choice!.Benchmark);
+    }
+
+    [Fact]
+    public void Production_connection_below_query_level_does_not_benchmark_even_if_checked()
+    {
+        var vm = new TuningStartViewModel(Info(AiAccessLevel.Plan, ConnectionEnvironment.Production));
         Assert.False(vm.BenchmarkEnabled);
         Assert.False(vm.Benchmark);
         vm.Benchmark = true;
         Assert.False(vm.Choice!.Benchmark);
+        Assert.Equal(TuningStartViewModel.BenchmarkLevelText, vm.BenchmarkNote);
     }
+
+    [Fact]
+    public void Mask_line_follows_the_masking_decision_the_launcher_passes()
+    {
+        var context = new AiContext("DEV-ERP", ConnectionEnvironment.Development, AiAccessLevel.Query);
+        Assert.False(new TuningStartViewModel(AiTuningLauncher.BuildStartInfo(null, context, new AiSettings())).MasksLiterals);
+        Assert.True(new TuningStartViewModel(AiTuningLauncher.BuildStartInfo(null, context, new AiSettings(), maskLiterals: true)).MasksLiterals);
+        Assert.Null(new TuningStartViewModel(AiTuningLauncher.BuildStartInfo(null, context, new AiSettings())).ProductionNotice);
+    }
+
+    [Fact]
+    public Task Dialog_shows_the_mask_line_and_production_notice_only_when_they_apply() => HeadlessHost.Run(() =>
+    {
+        var info = Info(AiAccessLevel.Query, ConnectionEnvironment.Production) with { MaskLiterals = true };
+        var dialog = new TuningStartDialog { DataContext = new TuningStartViewModel(info) };
+        dialog.Show();
+        Assert.True(dialog.FindControl<TextBlock>("MaskLine")!.IsVisible);
+        Assert.True(dialog.FindControl<Border>("ProductionBanner")!.IsVisible);
+        Assert.True(dialog.FindControl<CheckBox>("BenchmarkCheck")!.IsEnabled);
+        dialog.Close();
+
+        var plain = new TuningStartDialog { DataContext = new TuningStartViewModel(Info()) };
+        plain.Show();
+        Assert.False(plain.FindControl<TextBlock>("MaskLine")!.IsVisible);
+        Assert.False(plain.FindControl<Border>("ProductionBanner")!.IsVisible);
+        plain.Close();
+    });
 
     [Fact]
     public Task Dialog_shows_the_three_send_rows_and_disables_start_when_blocked() => HeadlessHost.Run(() =>

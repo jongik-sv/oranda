@@ -37,11 +37,20 @@
       <TextBlock x:Name="NotSentText" Grid.Row="3" Grid.Column="1" Text="{Binding Info.NotSent}" TextWrapping="Wrap" />
     </Grid>
 
+    <TextBlock x:Name="MaskLine" Text="리터럴 :vN 가림" IsVisible="{Binding MasksLiterals}" Opacity="0.7"
+               FontSize="{DynamicResource OrandaFontSizeSmall}"
+               ToolTip.Tip="문자열·숫자 값은 :v1, :v2 같은 자리표시로 바꿔 보내고, 제안을 편집기에 넣을 때 원래 값으로 되돌립니다." />
+    <Border x:Name="ProductionBanner" IsVisible="{Binding IsProduction}" Padding="8,6" CornerRadius="4"
+            BorderBrush="{DynamicResource OrandaUncommittedBrush}" BorderThickness="1">
+      <TextBlock x:Name="ProductionNoticeText" Text="{Binding ProductionNotice}" TextWrapping="Wrap"
+                 FontSize="{DynamicResource OrandaFontSizeSmall}" />
+    </Border>
+
     <Border Height="1" Background="{DynamicResource OrandaSeparatorBrush}" />
 
     <StackPanel Spacing="6">
       <CheckBox x:Name="BenchmarkCheck" IsChecked="{Binding Benchmark}" IsEnabled="{Binding BenchmarkEnabled}"
-                Content="후보를 벤치마크로 비교 (SELECT 3회, 결과 동일성 확인 · 개발·시험 접속만)"
+                Content="후보를 벤치마크로 비교 (SELECT 3회, 결과 동일성 확인)"
                 ToolTip.Tip="{Binding BenchmarkNote}" />
       <CheckBox x:Name="IndexDdlCheck" IsChecked="{Binding IndexDdl}"
                 Content="인덱스 후보 CREATE 문안도 받기 (새 탭에만 넣고 실행하지 않음)" />

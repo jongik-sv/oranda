@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
 using System.Threading;
@@ -6,6 +7,7 @@ using System.Threading.Tasks;
 using Avalonia.Threading;
 using Oranda.App.Features.Ai.Agent;
 using Oranda.App.Features.Ai.Chat;
+using Oranda.App.Features.Ai.Settings;
 using Oranda.App.Features.Execution;
 using Oranda.App.Features.SqlEditor;
 using Oranda.App.Shell;
@@ -56,7 +58,7 @@ public sealed class AiTuningLauncher(IServiceProvider services)
         var settings = (services.GetService(typeof(SettingsService)) as SettingsService)?.Current.Ai ?? new AiSettings();
         var tabId = editor.GetActiveDocument()?.TabId.ToString("N", CultureInfo.InvariantCulture);
         var context = new AiContext(profile.Name, profile.Environment, AiAccessPolicy.Effective(profile), tabId, statement?.Text);
-        var info = BuildStartInfo(statement, context, settings);
+        var info = BuildStartInfo(statement, context, settings, AiAccessPolicy.MaskLiterals(profile, settings.MaskLiterals));
 
         var owner = (services.GetService(typeof(ShellController)) as ShellController)?.MainWindow;
         var choice = owner is null ? null : await TuningStartDialog.ShowAsync(owner, new TuningStartViewModel(info)).ConfigureAwait(true);
@@ -71,8 +73,22 @@ public sealed class AiTuningLauncher(IServiceProvider services)
             return;
         }
 
+        // 대화의 접속은 시작이 확정될 때만 바뀐다. 문장 없음·가림 불가로 거부된 시작이 프로필을 바꿔 두면 앞 대화의 이어 말하기가 새 접속으로 간다.
+        var flow = FlowFor(chat, editor, driver);
+        var previous = _profile;
+        var generation = flow.Generation;
         _profile = profile;
-        await FlowFor(chat, editor, driver).StartAsync(choice, context, ct).ConfigureAwait(true);
+        try
+        {
+            await flow.StartAsync(choice, context, ct).ConfigureAwait(true);
+        }
+        finally
+        {
+            if (flow.Generation == generation)
+            {
+                _profile = previous;
+            }
+        }
     }
 
     /// <summary>
@@ -89,8 +105,11 @@ public sealed class AiTuningLauncher(IServiceProvider services)
         return AiChatViewModel.Current;
     }
 
-    /// <summary>접속 저장소에 있는 이 접속의 지금 프로필. 저장소를 읽을 수 없으면 <paramref name="known"/> 을 그대로, 저장소에서 사라졌으면 null.</summary>
-    private async Task<ConnectionProfile?> LatestProfileAsync(ConnectionProfile known, CancellationToken ct)
+    /// <summary>
+    /// 접속 저장소에 있는 이 접속의 지금 프로필. 저장소에서 사라졌으면 null. 저장소를 읽을 수 없으면 <paramref name="known"/> 을 그대로 돌려주되,
+    /// <paramref name="failClosed"/> 이면(이어 말하기: 낡은 환경 라벨로 가림 검사를 지나치면 안 된다) null.
+    /// </summary>
+    private async Task<ConnectionProfile?> LatestProfileAsync(ConnectionProfile known, CancellationToken ct, bool failClosed = false)
     {
         if (services.GetService(typeof(IConnectionStore)) is not IConnectionStore store)
         {
@@ -106,14 +125,14 @@ public sealed class AiTuningLauncher(IServiceProvider services)
         catch (Exception ex) when (ex is not OperationCanceledException)
 #pragma warning restore CA1031
         {
-            return known;
+            return failClosed ? null : known;
         }
     }
 
     /// <summary>이어 말하기 때: 접속의 지금 설정으로 문맥을 다시 만든다. 접속이 사라졌으면 null.</summary>
     private async Task<AiContext?> RefreshContextAsync(AiContext old, CancellationToken ct)
     {
-        if (_profile is not { } known || await LatestProfileAsync(known, ct).ConfigureAwait(true) is not { } latest)
+        if (_profile is not { } known || await LatestProfileAsync(known, ct, failClosed: true).ConfigureAwait(true) is not { } latest)
         {
             return null;
         }
@@ -123,11 +142,11 @@ public sealed class AiTuningLauncher(IServiceProvider services)
     }
 
     /// <summary>시작 확인 창에 보일 사실을 만든다(시안 9). 문장을 못 찾으면 요약만 비운다.</summary>
-    public static TuningStartInfo BuildStartInfo(SqlStatement? statement, AiContext context, AiSettings settings)
+    public static TuningStartInfo BuildStartInfo(SqlStatement? statement, AiContext context, AiSettings settings, bool maskLiterals = false)
     {
         ArgumentNullException.ThrowIfNull(context);
         ArgumentNullException.ThrowIfNull(settings);
-        var model = string.IsNullOrWhiteSpace(settings.Model) ? "기본" : settings.Model;
+        var configured = string.IsNullOrWhiteSpace(settings.Model) ? null : settings.Model.Trim();
         return new TuningStartInfo(
             "AI 튜닝 — 커서 위치 문장",
             Summarize(statement),
@@ -136,7 +155,34 @@ public sealed class AiTuningLauncher(IServiceProvider services)
             SendOnRequest: "실제 계획 · 인덱스(열 순서·clustering factor) · 표·열 통계 · 히스토그램 개수",
             NotSent: "행 값 · 히스토그램 끝값 · 바인드 값 · 비밀번호·호스트",
             context,
-            [new TuningModelOption("default", "기본 모델 — Claude Code · " + model)]);
+            BuildModelOptions(configured),
+            configured ?? TuningStartInfo.DefaultModelId,
+            maskLiterals);
+    }
+
+    /// <summary>
+    /// 고를 수 있는 모델 줄: opus·sonnet·haiku. 설정 값이 이 목록에 없으면 그 값을 줄로 더하고,
+    /// 설정 값이 비어 있으면 Claude Code 의 기본 모델 줄을 맨 앞에 둔다(그 줄은 모델을 지정하지 않고 보낸다).
+    /// </summary>
+    public static IReadOnlyList<TuningModelOption> BuildModelOptions(string? configured)
+    {
+        List<TuningModelOption> options = [];
+        if (configured is null)
+        {
+            options.Add(new TuningModelOption(TuningStartInfo.DefaultModelId, "기본 모델 — Claude Code"));
+        }
+
+        foreach (var known in AiModelSettingsPage.KnownModels)
+        {
+            options.Add(new TuningModelOption(known, known));
+        }
+
+        if (configured is not null && !AiModelSettingsPage.KnownModels.Contains(configured, StringComparer.OrdinalIgnoreCase))
+        {
+            options.Add(new TuningModelOption(configured, configured));
+        }
+
+        return options;
     }
 
     private AiTuningFlow FlowFor(AiChatViewModel chat, IEditorContext editor, IAiDriver driver)
@@ -153,13 +199,23 @@ public sealed class AiTuningLauncher(IServiceProvider services)
             driver,
             chat,
             (title, text) => SqlEditorHost.Current.OpenTextTab(text, title),
-            context => _profile is { } profile && source is not null
-                ? source.Track(new AgentSession(new AgentRunScope(Guid.NewGuid().ToString("N"), profile, context)))
+            (context, vault) => _profile is { } profile && source is not null
+                ? source.Track(new AgentSession(new AgentRunScope(Guid.NewGuid().ToString("N"), profile, context)
+                {
+                    Literals = vault,
+                    MaskLiteralsRequired = AiAccessPolicy.MaskLiterals(profile, MaskLiteralsSetting()), // 사전이 없어도 게이트가 SQL 도구를 닫게 한다
+                }))
                 : null,
-            RefreshContextAsync);
+            RefreshContextAsync,
+            services.GetService(typeof(ISqlLiteralMasker)) as ISqlLiteralMasker,
+            context => context.Environment == ConnectionEnvironment.Production || _profile is not { } profile || AiAccessPolicy.MaskLiterals(profile, MaskLiteralsSetting()));
         _flow.Attach();
         return _flow;
     }
+
+    /// <summary>설정의 리터럴 가림 값(운영 접속은 이 값과 관계없이 항상 가린다: <see cref="AiAccessPolicy.MaskLiterals"/>).</summary>
+    private bool MaskLiteralsSetting() =>
+        (services.GetService(typeof(SettingsService)) as SettingsService)?.Current.Ai.MaskLiterals ?? false;
 
     private static string Summarize(SqlStatement? statement)
     {

@@ -1260,5 +1260,10 @@
   "후보를 벤치마크로 비교 (SELECT 3회, 결과 동일성 확인 · 개발·시험 접속만)": "Compare candidates with a benchmark (3 SELECT runs, result equality check · development and test connections only)",
   "인덱스 후보 CREATE 문안도 받기 (새 탭에만 넣고 실행하지 않음)": "Also get index CREATE statements (placed in a new tab only, never executed)",
   "튜닝 시작": "Start Tuning",
-  "AI 허용 수준": "AI Access Level"
+  "AI 허용 수준": "AI Access Level",
+  "EXPLAIN PLAN 허용 (PLAN__TABLE 에 행을 씁니다. 끄면 DISPLAY__CURSOR 로 실제 계획만 읽습니다)": "Allow EXPLAIN PLAN (writes rows to PLAN__TABLE; when off, only the actual plan is read with DISPLAY__CURSOR)",
+  "리터럴 :vN 가림": "Literals masked as :vN",
+  "문자열·숫자 값은 :v1, :v2 같은 자리표시로 바꿔 보내고, 제안을 편집기에 넣을 때 원래 값으로 되돌립니다.": "String and number values are sent as placeholders such as :v1 and :v2, and restored to the original values when a proposal is put into the editor.",
+  "후보를 벤치마크로 비교 (SELECT 3회, 결과 동일성 확인)": "Compare candidates with a benchmark (3 SELECT runs, result equality check)",
+  "SQL 의 리터럴 값을 :vN 으로 가려서 보냄 (운영 접속은 이 설정과 관계없이 항상 켜짐)": "Send SQL literal values masked as :vN (always on for production connections, regardless of this setting)"
 }

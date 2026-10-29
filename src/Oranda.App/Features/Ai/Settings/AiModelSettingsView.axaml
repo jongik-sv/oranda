@@ -15,5 +15,7 @@
       <ComboBox x:Name="ModelBox" Grid.Column="1" HorizontalAlignment="Stretch" ItemsSource="{Binding Models}"
                 SelectedItem="{Binding Model, Mode=TwoWay}" IsEnabled="{Binding ModelEnabled}" AutomationProperties.Name="모델" />
     </Grid>
+    <CheckBox x:Name="MaskLiteralsCheck" IsChecked="{Binding MaskLiterals, Mode=TwoWay}"
+              Content="SQL 의 리터럴 값을 :vN 으로 가려서 보냄 (운영 접속은 이 설정과 관계없이 항상 켜짐)" />
   </StackPanel>
 </UserControl>

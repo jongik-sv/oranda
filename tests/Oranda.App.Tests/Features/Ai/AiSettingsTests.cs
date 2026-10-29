@@ -30,6 +30,33 @@ public class AiSettingsTests
     }
 
     [Fact]
+    public Task Model_page_mask_literals_checkbox_round_trips_through_the_settings() => HeadlessHost.Run(() =>
+    {
+        var page = new AiModelSettingsPage(new AiSettings { ExecutablePath = "claude-example", MaskLiterals = true });
+        var window = new Window { Content = new AiModelSettingsView { DataContext = page } };
+        window.Show();
+
+        var check = ((AiModelSettingsView)window.Content!).FindControl<CheckBox>("MaskLiteralsCheck")!;
+        Assert.True(check.IsChecked);
+        Assert.True(page.ToSettings().MaskLiterals);
+
+        check.IsChecked = false;
+        var saved = page.ToSettings();
+        Assert.False(saved.MaskLiterals);
+        Assert.Equal("claude-example", saved.ExecutablePath);
+        window.Close();
+    });
+
+    [Fact]
+    public void Production_notice_matches_the_query_cap_and_is_shown_only_for_production()
+    {
+        var production = new ConnectionAiAccessViewModel(Profile(ConnectionEnvironment.Production));
+        Assert.Equal(ConnectionAiAccessViewModel.ProductionNotice, production.ProductionText);
+        Assert.Contains("조회 실행", ConnectionAiAccessViewModel.ProductionNotice, StringComparison.Ordinal);
+        Assert.Null(new ConnectionAiAccessViewModel(Profile(ConnectionEnvironment.Development)).ProductionText);
+    }
+
+    [Fact]
     public void Dev_connection_shows_the_environment_default_and_reaches_query_rows_without_confirmation()
     {
         var vm = new ConnectionAiAccessViewModel(Profile(ConnectionEnvironment.Development));

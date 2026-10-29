@@ -24,13 +24,21 @@ public sealed record TuningStartInfo(
     string SendOnRequest,
     string NotSent,
     AiContext Context,
-    IReadOnlyList<TuningModelOption> Models)
+    IReadOnlyList<TuningModelOption> Models,
+    string InitialModelId = TuningStartInfo.DefaultModelId,
+    bool MaskLiterals = false)
 {
+    /// <summary>모델을 지정하지 않고 보내는 줄의 id(설정 값이 비어 있을 때의 기본). <c>InitialModelId</c> 는 처음 골라 둘 줄의 id(설정 값).</summary>
+    public const string DefaultModelId = "default";
+
     /// <summary>접속의 AI 허용 수준이 「끔」이라 시작할 수 없다.</summary>
     public bool AccessOff => Context.AccessLevel == AiAccessLevel.Off;
 
-    /// <summary>벤치마크(SELECT 실행)는 운영이 아니고 허용 수준이 「조회 실행」 이상일 때만 쓴다.</summary>
-    public bool BenchmarkAllowed => Context.Environment != ConnectionEnvironment.Production && Context.AccessLevel >= AiAccessLevel.Query;
+    /// <summary>벤치마크(SELECT 실행)는 허용 수준이 「조회 실행」 이상일 때 쓴다(운영 접속도 같다: 상한이 「조회 실행」 이고 게이트가 SELECT 만 통과시킨다).</summary>
+    public bool BenchmarkAllowed => Context.AccessLevel >= AiAccessLevel.Query;
+
+    /// <summary>운영 접속이다(안내 문구를 보인다).</summary>
+    public bool IsProduction => Context.Environment == ConnectionEnvironment.Production;
 }
 
 /// <summary>사용자가 「튜닝 시작」 을 눌러 확정한 선택.</summary>
@@ -41,7 +49,9 @@ public sealed partial class TuningStartViewModel : ObservableObject
 {
     public const string BlockedText = "이 접속은 AI 허용 수준이 「끔」 입니다. 접속 편집에서 허용 수준을 바꾼 뒤 다시 시도하세요.";
 
-    public const string BenchmarkOffText = "이 접속은 운영 접속이라 벤치마크를 쓸 수 없습니다.";
+    public const string ProductionNoticeText = "운영 접속: 조회(SELECT)만 실행하고 벤치마크 반복은 5회 이하이며, 리터럴 값은 항상 가려서 보냅니다.";
+
+    public const string MaskLineText = "리터럴 :vN 가림";
 
     public const string BenchmarkLevelText = "벤치마크는 접속의 AI 허용 수준이 「조회 실행」 이상일 때만 쓸 수 있습니다.";
 
@@ -58,8 +68,9 @@ public sealed partial class TuningStartViewModel : ObservableObject
     {
         ArgumentNullException.ThrowIfNull(info);
         Info = info;
-        Benchmark = info.BenchmarkAllowed;
-        Model = info.Models.Count > 0 ? info.Models[0] : null;
+        Benchmark = info.BenchmarkAllowed && !info.IsProduction; // 운영은 허용만 하고 기본은 끈다(문장당 30초·변형 5개·반복 5회 부하)
+        Model = info.Models.FirstOrDefault(m => string.Equals(m.Id, info.InitialModelId, StringComparison.OrdinalIgnoreCase))
+            ?? (info.Models.Count > 0 ? info.Models[0] : null);
     }
 
     public TuningStartInfo Info { get; }
@@ -72,9 +83,14 @@ public sealed partial class TuningStartViewModel : ObservableObject
 
     public bool BenchmarkEnabled => Info.BenchmarkAllowed && !IsBlocked;
 
-    public string? BenchmarkNote => Info.BenchmarkAllowed
-        ? null
-        : Info.Context.Environment == ConnectionEnvironment.Production ? BenchmarkOffText : BenchmarkLevelText;
+    public string? BenchmarkNote => Info.BenchmarkAllowed ? null : BenchmarkLevelText;
+
+    /// <summary>값을 :vN 으로 가려 보낸다(운영 접속이거나 설정이 켜짐).</summary>
+    public bool MasksLiterals => Info.MaskLiterals;
+
+    public bool IsProduction => Info.IsProduction;
+
+    public string? ProductionNotice => IsProduction ? ProductionNoticeText : null;
 
     public bool HasSharedPoolLine => !string.IsNullOrEmpty(Info.SharedPoolLine);
 

@@ -1,9 +1,11 @@
 using System.Runtime.CompilerServices;
 using System.Text.Json;
+using System.Text.RegularExpressions;
 using Oranda.App.Features.Ai.Chat;
 using Oranda.App.Features.Ai.Tuning;
 using Oranda.Core.Ai.Access;
 using Oranda.Core.Ai.Contracts;
+using Oranda.Core.Ai.Gate;
 using Oranda.Core.Connection;
 using Oranda.Core.Execution;
 using Oranda.Core.Extensibility;
@@ -219,6 +221,235 @@ public class AiTuningFlowTests
 
         Assert.Single(driver.Requests);
         Assert.Contains(chat.Entries.OfType<ChatAssistantEntry>(), e => e.Text.Contains("허용 수준이 바뀌어", StringComparison.Ordinal));
+    }
+
+    /// <summary>작은따옴표 문자열만 가리는 시험용 가림 구현(실제 구현은 Language 의 렉서 기반).</summary>
+    private sealed class FakeMasker : ISqlLiteralMasker
+    {
+        public bool FailMask { get; set; }
+
+        public LiteralVault CreateVault(string statementText) => new();
+
+        public SqlMaskResult Mask(string sql, LiteralVault vault) => FailMask
+            ? SqlMaskResult.Failed
+            : SqlMaskResult.Ok(Regex.Replace(sql, "'[^']*'", m => vault.Add(m.Value)));
+
+        public SqlRestoreResult Restore(string sql, LiteralVault vault)
+        {
+            if (vault.TryGetStatement(sql, out var original))
+            {
+                return SqlRestoreResult.Ok(original);
+            }
+
+            string? unknown = null;
+            var text = Regex.Replace(sql, @":v\d+", m =>
+            {
+                if (vault.TryGetRaw(m.Value, out var raw))
+                {
+                    return raw;
+                }
+
+                unknown ??= m.Value;
+                return m.Value;
+            });
+            return unknown is null ? SqlRestoreResult.Ok(text) : SqlRestoreResult.Unknown(unknown);
+        }
+
+        public string MaskPredicate(string predicate, LiteralVault vault) => Regex.Replace(predicate, "'[^']*'", m => vault.Add(m.Value));
+    }
+
+    private static AiTuningFlow MaskedFlow(FakeEditor editor, FakeDriver driver, AiChatViewModel chat, List<(string Title, string Text)> tabs, ISqlLiteralMasker? masker, List<LiteralVault?>? vaults = null) =>
+        new(editor, driver, chat, (t, x) => tabs.Add((t, x)),
+            sessionFactory: (_, vault) =>
+            {
+                vaults?.Add(vault);
+                return null;
+            },
+            masker: masker,
+            maskRequired: _ => true);
+
+    [Fact]
+    public async Task Masked_start_sends_the_masked_statement_and_the_placeholder_note_and_hands_the_vault_to_the_session()
+    {
+        var driver = Driver();
+        var vaults = new List<LiteralVault?>();
+        var flow = MaskedFlow(new FakeEditor(Original), driver, new AiChatViewModel(), [], new FakeMasker(), vaults);
+
+        await flow.StartAsync(new TuningStartChoice(true, true, "default"), Context);
+
+        var request = Assert.Single(driver.Requests);
+        Assert.DoesNotContain("'10'", request.Prompt, StringComparison.Ordinal);
+        Assert.Contains("stat_cd = :v1", request.Prompt, StringComparison.Ordinal);
+        Assert.Contains("placeholders such as :v1", request.Prompt, StringComparison.Ordinal);
+        Assert.Equal(Original, request.Context.StatementText); // 원문은 문맥에 그대로(LLM 으로 가지 않는다)
+        Assert.NotNull(Assert.Single(vaults));
+    }
+
+    [Fact]
+    public async Task Masked_start_is_refused_without_a_masker_or_when_masking_fails()
+    {
+        var driver = Driver();
+        var chat = new AiChatViewModel();
+        await MaskedFlow(new FakeEditor(Original), driver, chat, [], masker: null).StartAsync(new TuningStartChoice(true, true, "default"), Context);
+        await MaskedFlow(new FakeEditor(Original), driver, chat, [], new FakeMasker { FailMask = true }).StartAsync(new TuningStartChoice(true, true, "default"), Context);
+
+        Assert.Empty(driver.Requests);
+        var texts = chat.Entries.OfType<ChatAssistantEntry>().Select(e => e.Text).ToList();
+        Assert.Contains(AiTuningFlow.MaskerMissingText, texts);
+        Assert.Contains(AiTuningFlow.MaskFailedText, texts);
+    }
+
+    [Fact]
+    public async Task Masked_result_is_restored_before_it_reaches_the_editor_and_the_index_tab()
+    {
+        const string result = """
+            { "summary": "s", "rewrites": [ { "label": "r", "sql": "SELECT o.* FROM tb_order o WHERE o.stat_cd = :v1;", "rationale": "x" } ],
+              "index_suggestions": [ { "table": "TB_ORDER", "columns": ["STAT_CD"], "ddl": "CREATE INDEX ix ON tb_order (stat_cd) WHERE stat_cd = :v1;", "rationale": "y" } ], "evidence": [] }
+            """;
+        var editor = new FakeEditor(Original);
+        var tabs = new List<(string Title, string Text)>();
+        var driver = new FakeDriver(new AiFinal(null, JsonDocument.Parse(result).RootElement.Clone(), "s"));
+        var chat = new AiChatViewModel();
+        var flow = MaskedFlow(editor, driver, chat, tabs, new FakeMasker());
+
+        await flow.StartAsync(new TuningStartChoice(true, true, "default"), Context);
+
+        var edit = Assert.Single(editor.Proposed);
+        Assert.Contains("o.stat_cd = '10'", edit.NewText, StringComparison.Ordinal);
+        Assert.DoesNotContain(":v1", edit.NewText, StringComparison.Ordinal);
+        var tab = Assert.Single(tabs).Text;
+        Assert.Contains("WHERE stat_cd = '10';", tab, StringComparison.Ordinal);
+        Assert.DoesNotContain("CREATE INDEX ix ON tb_order (stat_cd) WHERE stat_cd = :v1", tab, StringComparison.Ordinal);
+        Assert.Contains("자리표시", tab, StringComparison.Ordinal); // 설명 줄은 되돌리지 않으므로 탭 머리에 안내
+        AssertChatHidesOriginal(chat);
+    }
+
+    /// <summary>대화 창(제목·사용자 줄·안내 줄) 어디에도 원래 리터럴이 없다.</summary>
+    private static void AssertChatHidesOriginal(AiChatViewModel chat)
+    {
+        Assert.DoesNotContain("'10'", chat.Title, StringComparison.Ordinal);
+        Assert.DoesNotContain(chat.Entries.OfType<ChatUserEntry>(), e => e.Text.Contains("'10'", StringComparison.Ordinal));
+        Assert.DoesNotContain(chat.Entries.OfType<ChatAssistantEntry>(), e => e.Text.Contains("'10'", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task Unknown_placeholder_in_a_result_is_not_put_in_the_editor_and_the_chat_says_so()
+    {
+        const string result = """
+            { "summary": "s", "rewrites": [ { "label": "r", "sql": "SELECT 1 FROM dual WHERE x = :v9", "rationale": "x" } ],
+              "index_suggestions": [ { "table": "T", "columns": ["C"], "ddl": "CREATE INDEX ix ON t (c) WHERE c = :v7", "rationale": "y" } ], "evidence": [] }
+            """;
+        var editor = new FakeEditor(Original);
+        var tabs = new List<(string Title, string Text)>();
+        var chat = new AiChatViewModel();
+        var flow = MaskedFlow(editor, new FakeDriver(new AiFinal(null, JsonDocument.Parse(result).RootElement.Clone(), "s")), chat, tabs, new FakeMasker());
+
+        await flow.StartAsync(new TuningStartChoice(true, true, "default"), Context);
+
+        Assert.Empty(editor.Proposed);
+        Assert.Empty(tabs);
+        var texts = chat.Entries.OfType<ChatAssistantEntry>().Select(e => e.Text).ToList();
+        Assert.Contains(texts, t => t.Contains(":v9", StringComparison.Ordinal) && t.Contains("literal_unknown", StringComparison.Ordinal));
+        Assert.Contains(texts, t => t.Contains(":v7", StringComparison.Ordinal) && t.Contains("literal_unknown", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task Masked_follow_up_keeps_the_user_text_and_adds_only_the_placeholder_note()
+    {
+        var driver = Driver();
+        var chat = new AiChatViewModel();
+        var flow = MaskedFlow(new FakeEditor(Original), driver, chat, [], new FakeMasker());
+        await flow.StartAsync(new TuningStartChoice(true, true, "default"), Context);
+
+        await flow.FollowUpAsync("stat_cd 가 '20' 이면?");
+
+        var prompt = driver.Requests[1].Prompt;
+        Assert.StartsWith("stat_cd 가 '20' 이면?", prompt, StringComparison.Ordinal); // 사용자 글은 가리지 않는다
+        Assert.Contains("placeholders such as :v1", prompt, StringComparison.Ordinal);
+        Assert.Contains(chat.Entries.OfType<ChatUserEntry>(), e => e.Text == "stat_cd 가 '20' 이면?"); // 대화 창 줄에는 안내문이 없다
+    }
+
+    [Fact]
+    public async Task Unmasked_flow_stays_as_before_without_a_masker()
+    {
+        var driver = Driver();
+        var flow = new AiTuningFlow(new FakeEditor(Original), driver, new AiChatViewModel(), (_, _) => { }, maskRequired: _ => false);
+
+        await flow.StartAsync(new TuningStartChoice(true, true, "default"), Context);
+
+        Assert.Contains(Original, Assert.Single(driver.Requests).Prompt, StringComparison.Ordinal);
+        Assert.DoesNotContain("placeholders", driver.Requests[0].Prompt, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task Follow_up_hands_the_same_vault_to_the_new_session_and_a_new_unmasked_start_drops_it()
+    {
+        var driver = Driver();
+        var vaults = new List<LiteralVault?>();
+        var mask = true;
+        var flow = new AiTuningFlow(new FakeEditor(Original), driver, new AiChatViewModel(), (_, _) => { },
+            sessionFactory: (_, vault) =>
+            {
+                vaults.Add(vault);
+                return null;
+            },
+            masker: new FakeMasker(),
+            maskRequired: _ => mask);
+
+        await flow.StartAsync(new TuningStartChoice(true, true, "default"), Context);
+        await flow.FollowUpAsync("계속");
+        mask = false;
+        await flow.StartAsync(new TuningStartChoice(true, true, "default"), Context);
+
+        Assert.NotNull(vaults[0]);
+        Assert.Same(vaults[0], vaults[1]); // 이어 말하기 = 같은 대화의 같은 사전
+        Assert.Null(vaults[2]); // 가림 없는 새 대화에는 앞 사전이 섞이지 않는다
+    }
+
+    [Fact]
+    public async Task Follow_up_is_refused_when_the_connection_became_production_after_an_unmasked_start()
+    {
+        var driver = Driver();
+        var chat = new AiChatViewModel();
+        var production = false;
+        var flow = new AiTuningFlow(new FakeEditor(Original), driver, chat, (_, _) => { }, sessionFactory: null,
+            refreshContext: (old, _) => Task.FromResult<AiContext?>(old with { Environment = ConnectionEnvironment.Production }),
+            masker: new FakeMasker(),
+            maskRequired: ctx => production || ctx.Environment == ConnectionEnvironment.Production);
+
+        await flow.StartAsync(new TuningStartChoice(true, true, "default"), Context);
+        await flow.FollowUpAsync("계속");
+
+        Assert.Single(driver.Requests); // 이어 말하기 요청은 가려진 적 없는 앞 글 위에 올라가므로 보내지 않는다
+        Assert.Contains(chat.Entries.OfType<ChatAssistantEntry>(), e => e.Text.Contains("다시 시작하세요", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task Refused_starts_do_not_advance_the_generation_but_a_confirmed_one_does()
+    {
+        var chat = new AiChatViewModel();
+        var flow = MaskedFlow(new FakeEditor(Original), Driver(), chat, [], new FakeMasker { FailMask = true });
+        await flow.StartAsync(new TuningStartChoice(true, true, "default"), Context);
+        Assert.Equal(0, flow.Generation); // 가림 불가로 거부
+
+        var noStatement = new AiTuningFlow(new NoStatementEditor(), Driver(), chat, (_, _) => { });
+        await noStatement.StartAsync(new TuningStartChoice(true, true, "default"), Context);
+        Assert.Equal(0, noStatement.Generation); // 문장 없음으로 거부
+
+        var ok = new AiTuningFlow(new FakeEditor(Original), Driver(), chat, (_, _) => { });
+        await ok.StartAsync(new TuningStartChoice(true, true, "default"), Context);
+        Assert.Equal(1, ok.Generation);
+    }
+
+    [Fact]
+    public async Task Masked_conversation_shows_no_original_literal_in_the_chat()
+    {
+        var chat = new AiChatViewModel();
+        var flow = MaskedFlow(new FakeEditor(Original), Driver(), chat, [], new FakeMasker());
+
+        await flow.StartAsync(new TuningStartChoice(true, true, "default"), Context);
+
+        AssertChatHidesOriginal(chat);
     }
 
     private sealed class NoStatementEditor : IEditorContext

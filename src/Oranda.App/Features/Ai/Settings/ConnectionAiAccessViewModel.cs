@@ -31,7 +31,7 @@ public sealed partial class AiAccessLevelItem(AiAccessLevel level, string label,
 /// </summary>
 public sealed partial class ConnectionAiAccessViewModel : ObservableObject
 {
-    public const string ProductionNotice = "운영 접속은 기본이 「끔」 이고 에이전트 접속 목록에도 나오지 않습니다. 「계획」 까지만 올릴 수 있고, 올리려면 접속 이름을 다시 입력합니다.";
+    public const string ProductionNotice = "운영 접속은 기본이 「끔」 이고 에이전트 접속 목록에도 나오지 않습니다. 「조회 실행」 까지만 올릴 수 있고(SELECT 만 실행, 행 값은 보내지 않음), 올리려면 접속 이름을 다시 입력합니다. SQL 의 리터럴 값은 항상 가려서 보내고, EXPLAIN PLAN 은 기본으로 켜져 있습니다(끌 수 있음).";
 
     private static readonly (AiAccessLevel Level, string Label, string Sub, string Sends, string Tools)[] Defs =
     [
