@@ -20,7 +20,7 @@ public class AiChatTests
         vm.AddAssistantText("TB_ORDER 를 FULL 로 읽습니다.");
         vm.EndTurn();
 
-        Assert.Equal(["ChatUserEntry", "ChatToolEntry", "ChatToolEntry", "ChatAssistantEntry"], vm.Entries.Select(e => e.GetType().Name));
+        Assert.Equal(["ChatUserEntry", "ChatToolGroupEntry", "ChatToolEntry", "ChatToolEntry", "ChatAssistantEntry"], vm.Entries.Select(e => e.GetType().Name));
         Assert.Contains("도구 2개", vm.StatusText, StringComparison.Ordinal);
         Assert.Contains("실행 1회", vm.StatusText, StringComparison.Ordinal);
     }
@@ -108,7 +108,7 @@ public class AiChatTests
 
         var view = (AiChatView)window.Content!;
         Assert.Equal("튜닝 — 부서별 주문 수", view.FindControl<TextBlock>("TitleText")!.Text);
-        Assert.Equal(3, view.FindControl<ItemsControl>("EntryList")!.ItemCount);
+        Assert.Equal(4, view.FindControl<ItemsControl>("EntryList")!.ItemCount); // 사용자 글 · 도구 묶음 머리 줄 · 카드 · AI 글
         Assert.Contains("도구 1개", view.FindControl<TextBlock>("StatusLine")!.Text, StringComparison.Ordinal);
         Assert.True(view.FindControl<Button>("StopButton")!.Command!.CanExecute(null));
         window.Close();

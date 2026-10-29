@@ -4,6 +4,7 @@ using System.Globalization;
 using System.Linq;
 using System.Runtime.CompilerServices;
 using System.Text;
+using System.Text.RegularExpressions;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
@@ -38,7 +39,7 @@ namespace Oranda.App.Features.Ai.Tuning;
 /// <param name="tabs">
 /// 시작한 탭을 기억해 그 탭 기준으로 제안을 넣고, 인덱스 후보 탭을 대화당 하나만 열고 바꾼다. null 이면 활성 탭의 문장으로 비교하고 인덱스 후보를 매번 <paramref name="openTab"/> 으로 연다.
 /// </param>
-public sealed class AiTuningFlow(
+public sealed partial class AiTuningFlow(
     IEditorContext editor,
     IAiDriver driver,
     AiChatViewModel chat,
@@ -230,13 +231,57 @@ public sealed class AiTuningFlow(
         return text.ToString();
     }
 
-    /// <summary>응답을 짧고 핵심부터 쓰게 하는 규칙(처음 요청과 이어 말하기 모두). 본문 SQL 은 구조 결과의 제안 항목에만 둔다.</summary>
+    /// <summary>
+    /// 응답 규칙(처음 요청과 이어 말하기 모두). 결론 한 줄(굵게) → 원문·제안 수치 표 → 근거 블릿 → 제안 → 뺀 후보 → 다음 → 확인할 것(인용 한 줄).
+    /// 대화 창이 결론 줄+표를 결론 상자로, 인용을 주의 상자로 그린다. 본문 SQL 은 구조 결과의 제안 항목에만 둔다.
+    /// </summary>
     internal const string ResponseStyle =
-        "Response style (applies to every answer, including follow-ups): write in Korean and be brief. "
-        + "Start with a conclusion of one or two lines: what the bottleneck is and what to change for how much gain. "
-        + "Then the evidence as 3 to 5 bullets that quote the plan or statistics numbers. "
-        + "Then the proposals, one line each for every rewrite or index; put the full SQL only in the structured result, not in the chat text. "
-        + "No preamble or closing remarks, do not narrate each tool call, do not repeat yourself, and use a table only when a comparison needs it.";
+        "Response style (applies to every answer, including follow-ups; the summary field is this chat answer in Markdown): write in Korean and be brief. "
+        + "Use this order and skip a part that has nothing to say. "
+        + "1) The conclusion as one bold line, for example **keep_last 재작성 · 37% 빨라짐**; a second plain line may add how it was measured. "
+        + "2) Right after it, a Markdown table of the numbers with three columns: 지표 | 원문 | 제안 (elapsed, logical reads, rows and so on); put numbers in the table, not in sentences. "
+        + "3) ## 근거: 3 to 5 bullets, each about 40 characters on one line, ending in the noun style 「~함」 or 「~음」, quoting plan or statistics numbers. "
+        + "4) ## 제안: one line per rewrite or index; put the full SQL only in the structured result, not in the chat text. "
+        + "5) ## 뺀 후보: candidates you measured and dropped, one line each with why. "
+        + "6) ## 다음: what could be tried next, marked 미측정 if not measured. "
+        + "7) One line starting with > that says what the user must check before applying. "
+        + "Use bold only for the conclusion line. No [name] tags, no long remarks in parentheses, no preamble or closing remarks, "
+        + "do not narrate each tool call and do not repeat yourself.";
+
+    /// <summary>카드 없는 재작성 후보 한 줄: 「- `이름` · 근거 · 측정」.</summary>
+    private static string RewriteLine(TuningRewrite rewrite) =>
+        $"- `{OneLine(rewrite.Label)}` · {OneLine(rewrite.Rationale)}" + (string.IsNullOrWhiteSpace(rewrite.Benchmark) ? string.Empty : " · " + OneLine(rewrite.Benchmark));
+
+    /// <summary>
+    /// 벤치마크 글의 첫 「원문 → 제안」 경과(ms·s·초)에서 변화율(예 「−37%」). 벤치마크가 없거나 읽을 수 없으면 null(카드에 안 보인다).
+    /// </summary>
+    internal static string? ChangeText(string? benchmark)
+    {
+        if (string.IsNullOrWhiteSpace(benchmark) || ElapsedPair().Match(benchmark) is not { Success: true } m
+            || !double.TryParse(m.Groups[1].Value.Replace(",", string.Empty, StringComparison.Ordinal), NumberStyles.Float, CultureInfo.InvariantCulture, out var before)
+            || !double.TryParse(m.Groups[3].Value.Replace(",", string.Empty, StringComparison.Ordinal), NumberStyles.Float, CultureInfo.InvariantCulture, out var after))
+        {
+            return null;
+        }
+
+        before *= m.Groups[2].Value == "ms" ? 1 : 1000;
+        after *= m.Groups[4].Value == "ms" ? 1 : 1000;
+        if (before <= 0)
+        {
+            return null;
+        }
+
+        var percent = (int)Math.Round((after - before) / before * 100, MidpointRounding.AwayFromZero);
+        return percent switch
+        {
+            < 0 => string.Create(CultureInfo.InvariantCulture, $"−{-percent}%"),
+            > 0 => string.Create(CultureInfo.InvariantCulture, $"+{percent}%"),
+            _ => "0%",
+        };
+    }
+
+    [GeneratedRegex(@"(\d[\d,]*(?:\.\d+)?)\s*(ms|s|초)\s*(?:→|->)\s*(?:[^\d\s→]{1,8}\s*)?(\d[\d,]*(?:\.\d+)?)\s*(ms|s|초)", RegexOptions.CultureInvariant)]
+    private static partial Regex ElapsedPair();
 
     /// <summary>리터럴 값을 자리표시로 가렸다는 안내. 값은 싣지 않고 접두만 쓴다.</summary>
     private static string PlaceholderReminder(LiteralVault vault) =>
@@ -304,12 +349,9 @@ public sealed class AiTuningFlow(
 
         _lastResult = result;
         chat.AddAssistantText(result.Summary);
-        foreach (var rewrite in result.Rewrites)
-        {
-            chat.AddAssistantText($"[{rewrite.Label}] {rewrite.Rationale}" + (string.IsNullOrWhiteSpace(rewrite.Benchmark) ? string.Empty : $" ({rewrite.Benchmark})"));
-        }
 
         // 편집기·탭으로 가는 글은 자리표시를 원래 값으로 되돌린 뒤에만 넣는다. 되돌리지 못하면(모르는 자리표시) 넣지 않고 알린다.
+        var carded = false;
         if (result.Rewrites.Count > 0 && TryRestore(result.Rewrites[0].Sql, $"재작성 후보 「{result.Rewrites[0].Label}」", vault, out var restoredSql))
         {
             // 비교 창을 열었으면 닫은 뒤에도 대화 창 카드에서 같은 제안을 다시 열 수 있게 남긴다(c6). 카드 글은 AI 가 보낸 라벨·근거 그대로다.
@@ -317,8 +359,16 @@ public sealed class AiTuningFlow(
             var proposal = rewrite with { Sql = restoredSql };
             if (await ProposeRewriteAsync(proposal, target, startTab, ct).ConfigureAwait(true) is { } accepted)
             {
-                chat.AddProposal(rewrite.Label, OneLine(rewrite.Rationale), accepted, () => ProposeRewriteAsync(proposal, target, startTab, CancellationToken.None));
+                chat.AddProposal(rewrite.Label, OneLine(rewrite.Rationale), accepted, () => ProposeRewriteAsync(proposal, target, startTab, CancellationToken.None), ChangeText(rewrite.Benchmark));
+                carded = true;
             }
+        }
+
+        // 카드가 없는 후보는 블릿 한 줄씩(「[이름] 긴 글 (수치)」 꼬리표 대신).
+        var rest = result.Rewrites.Skip(carded ? 1 : 0).ToList();
+        if (rest.Count > 0)
+        {
+            chat.AddAssistantText((carded ? "## 다른 후보" : "## 재작성 후보") + "\n\n" + string.Join('\n', rest.Select(RewriteLine)));
         }
 
         if (choice.IndexDdl && result.IndexSuggestions.Count > 0)

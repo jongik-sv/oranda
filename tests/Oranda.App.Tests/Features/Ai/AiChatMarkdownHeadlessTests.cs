@@ -1,5 +1,6 @@
 using Avalonia;
 using Avalonia.Controls;
+using Avalonia.Controls.Primitives;
 using Avalonia.Media.Imaging;
 using Avalonia.Styling;
 using Avalonia.Threading;
@@ -118,7 +119,7 @@ public sealed class AiChatMarkdownHeadlessTests
             Assert.Equal(2, window.GetVisualDescendants().OfType<MarkdownView>().Count());
 
             // 제목·문단·목록·코드 블록·표·번호 목록이 모두 글 칸으로 그려지고, 글 칸은 선택·복사가 되는 형식이다.
-            Assert.All(view.GetVisualDescendants().OfType<TextBlock>().Where(t => !string.IsNullOrEmpty(t.Text) || t.Inlines?.Count > 0 || t is SelectableTextBlock), t => Assert.True(t is SelectableTextBlock || t.Text is "•" or "1." or "2." or "sql" || t.Text is null)); // 표식·코드 언어 이름만 일반 글 칸
+            Assert.All(view.GetVisualDescendants().OfType<TextBlock>().Where(t => !string.IsNullOrEmpty(t.Text) || t.Inlines?.Count > 0 || t is SelectableTextBlock), t => Assert.True(t is SelectableTextBlock || t.Text is "•" or "1." or "2." or "sql" or "복사" || t.Text is null)); // 표식·코드 언어 이름·복사 단추 글만 일반 글 칸
             var selectable = view.GetVisualDescendants().OfType<SelectableTextBlock>().ToList();
             // 닫힌 sql 블록은 편집기와 같은 색으로 칠한 Run 들(키워드 SELECT 는 기본 글색이 아니다). 언어 없는 블록은 일반 글.
             var sqlBlock = Assert.Single(selectable, t => t.TextWrapping == Avalonia.Media.TextWrapping.NoWrap && t.Inlines?.Count > 0);
@@ -127,7 +128,7 @@ public sealed class AiChatMarkdownHeadlessTests
             Assert.NotNull(sqlRuns.First(r => r.Text == "SELECT").Foreground);
             Assert.Contains(selectable, t => t.Text == "plain text block" && t.TextWrapping == Avalonia.Media.TextWrapping.NoWrap);
             Assert.Contains(selectable, t => t.Inlines?.OfType<Avalonia.Controls.Documents.Run>().Any(r => r.Text == "Oracle 문서" && r.TextDecorations is { Count: > 0 }) == true); // 링크 모양
-            Assert.Contains(view.GetVisualDescendants().OfType<Border>(), b => b.BorderThickness.Left == 3 && b.BorderThickness.Right == 0); // 인용 막대
+            Assert.Contains(view.GetVisualDescendants().OfType<Border>(), b => b.Classes.Contains("caution")); // 인용 = 주의 상자
             Assert.Contains(view.GetVisualDescendants().OfType<Border>(), b => b.Height == 1); // 수평선
             Assert.Contains(selectable, t => t.Inlines?.OfType<Avalonia.Controls.Documents.Run>().Any(r => r.Text == "FULL" && r.FontWeight == Avalonia.Media.FontWeight.Bold) == true);
             Assert.Contains(selectable, t => t.Inlines?.OfType<Avalonia.Controls.Documents.Run>().Any(r => r.Text == ":v1" || r.Text?.Contains(":v1", StringComparison.Ordinal) == true) == true); // 자리표시는 그대로
@@ -135,7 +136,7 @@ public sealed class AiChatMarkdownHeadlessTests
 
             // 사용자 글·도구 카드는 지금처럼 일반 글 칸.
             Assert.Contains(window.GetVisualDescendants().OfType<TextBlock>(), t => t.Text == "이 문장 튜닝");
-            Assert.Contains(window.GetVisualDescendants().OfType<TextBlock>(), t => t.Text == "실제 실행 계획(커서)");
+            Assert.Contains(window.GetVisualDescendants().OfType<TextBlock>(), t => t.Name == "ToolGroupSummary" && t.Text == "도구 1개 실행 · 모두 허용"); // 끝난 차례의 카드는 한 줄로 접힘
 
             Shots(window, "answer");
         }
@@ -160,22 +161,37 @@ public sealed class AiChatMarkdownHeadlessTests
         vm.Apply(new AiToolCall("c4", AgentToolNames.BenchmarkQueries, "{\"variants\":[{\"label\":\"a\",\"sql\":\"SELECT 1 FROM dual\"}],\"repeat\":3}"));
         vm.EndTurn();
         var reopened = 0;
-        vm.AddProposal("NOT EXISTS 로 재작성", "반조인을 쓰게 해 TB_ORDER 를 한 번만 읽습니다.", applied: false, () => { reopened++; return Task.FromResult<bool?>(true); });
+        vm.AddProposal("NOT EXISTS 로 재작성", "반조인을 쓰게 해 TB_ORDER 를 한 번만 읽습니다.", applied: false, () => { reopened++; return Task.FromResult<bool?>(true); }, change: "−88%");
         vm.AddProposal("인덱스 힌트", "IX_ORDER_STAT 를 쓰게 합니다.", applied: true, () => Task.FromResult<bool?>(true));
 
         var window = Show(vm);
         try
         {
-            // 제안 카드(c6): 적용 안 한 제안은 「다시 보기」, 적용한 제안은 「적용함」. 다시 보기로 받아들이면 그 카드도 「적용함」 이 된다.
+            // 도구 묶음(st-3): 차례가 끝나면 카드들은 한 줄 요약으로 접혀 있다.
+            var toggle = Assert.Single(window.GetVisualDescendants().OfType<ToggleButton>(), t => t.Name == "ToolGroupToggle");
+            Assert.False(toggle.IsChecked);
+            var summary = Assert.Single(window.GetVisualDescendants().OfType<TextBlock>(), t => t.Name == "ToolGroupSummary").Text!;
+            Assert.StartsWith("도구 4개 실행 중", summary, StringComparison.Ordinal); // c4 는 결과가 오지 않았다
+            Assert.Contains("거부 1", summary, StringComparison.Ordinal);
+            Assert.Contains("실패 1", summary, StringComparison.Ordinal);
+            Assert.All(window.GetVisualDescendants().OfType<Expander>(), c => Assert.False(c.IsEffectivelyVisible));
+
+            // 제안 카드(c6·st-4): 「제안」 배지 · 이름 · 변화율 · 두 단추. 적용한 제안은 「적용함」. 다시 보기로 받아들이면 그 카드도 「적용함」 이 된다.
             var review = Assert.Single(window.GetVisualDescendants().OfType<Button>(), b => b.Name == "ReviewButton" && b.IsEffectivelyVisible);
+            Assert.Single(window.GetVisualDescendants().OfType<Button>(), b => b.Name == "ApplyButton" && b.IsEffectivelyVisible);
             Assert.Single(window.GetVisualDescendants().OfType<TextBlock>(), t => t.Name == "AppliedMark" && t.IsEffectivelyVisible);
-            Assert.Contains(window.GetVisualDescendants().OfType<TextBlock>(), t => t.Text == "재작성 제안 · NOT EXISTS 로 재작성");
+            Assert.Contains(window.GetVisualDescendants().OfType<TextBlock>(), t => t.Name == "ProposalLabel" && t.Text == "NOT EXISTS 로 재작성");
+            Assert.Single(window.GetVisualDescendants().OfType<TextBlock>(), t => t.Name == "ProposalChange" && t.IsEffectivelyVisible && t.Text == "−88%"); // 벤치마크 없는 카드엔 없다
             Shots(window, "proposals");
             review.Command!.Execute(review.CommandParameter);
             Pump();
             window.UpdateLayout();
             Assert.Equal(1, reopened);
             Assert.Equal(2, window.GetVisualDescendants().OfType<TextBlock>().Count(t => t.Name == "AppliedMark" && t.IsEffectivelyVisible));
+
+            toggle.IsChecked = true; // 머리 줄을 누르면 카드 목록이 펼쳐진다
+            Pump();
+            window.UpdateLayout();
 
             var texts = window.GetVisualDescendants().OfType<TextBlock>().Where(t => t.IsEffectivelyVisible).Select(t => t.Text).ToList();
             Assert.Contains("튜닝 정보 묶음 · 요청의 대상 문장", texts);

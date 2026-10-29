@@ -4,7 +4,29 @@
              xmlns:icons="using:Oranda.App.Shell.Icons"
              x:Class="Oranda.App.Features.Ai.Chat.AiChatView"
              x:DataType="vm:AiChatViewModel">
-  <!-- AI 대화 창 최소판(시안 8): 제목 줄 · 사용자 글 / 접힌 도구 카드 / AI 글 · 이어 말하기 입력 · 상태 · 멈춤/보내기. -->
+  <!-- AI 대화 창 최소판(시안 8): 제목 줄 · 사용자 글 / 도구 묶음 한 줄(펼치면 카드) / AI 글 · 제안 카드 · 이어 말하기 입력 · 상태 · 멈춤/보내기. -->
+  <UserControl.Styles>
+    <!-- 도구 묶음 머리 줄: 펼친 채(:checked)에도 강조색으로 바뀌지 않는 옅은 회색 줄. -->
+    <Style Selector="ToggleButton.toolGroup">
+      <Setter Property="HorizontalAlignment" Value="Stretch" />
+      <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+      <Setter Property="Padding" Value="10,6" />
+      <Setter Property="CornerRadius" Value="6" />
+      <Setter Property="BorderThickness" Value="1" />
+      <Setter Property="BorderBrush" Value="{DynamicResource OrandaSeparatorBrush}" />
+      <Setter Property="Background" Value="{DynamicResource OrandaToolbarBackgroundBrush}" />
+    </Style>
+    <Style Selector="ToggleButton.toolGroup:checked /template/ ContentPresenter#PART_ContentPresenter, ToggleButton.toolGroup:pressed /template/ ContentPresenter#PART_ContentPresenter">
+      <Setter Property="Background" Value="{DynamicResource OrandaToolbarBackgroundBrush}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource OrandaSeparatorBrush}" />
+      <Setter Property="Foreground" Value="{DynamicResource SystemControlForegroundBaseHighBrush}" />
+    </Style>
+    <Style Selector="ToggleButton.toolGroup:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+      <Setter Property="Background" Value="{DynamicResource OrandaToolbarHoverBrush}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource OrandaSeparatorBrush}" />
+      <Setter Property="Foreground" Value="{DynamicResource SystemControlForegroundBaseHighBrush}" />
+    </Style>
+  </UserControl.Styles>
   <DockPanel>
     <TextBlock x:Name="TitleText" DockPanel.Dock="Top" Text="{Binding Title}" Margin="10,8" Opacity="0.8"
                FontSize="{DynamicResource OrandaFontSizeSmall}" TextTrimming="CharacterEllipsis" />
@@ -31,20 +53,36 @@
       <ItemsControl x:Name="EntryList" ItemsSource="{Binding Entries}" Margin="8" AutomationProperties.Name="대화">
         <ItemsControl.ItemsPanel>
           <ItemsPanelTemplate>
-            <StackPanel Spacing="6" />
+            <!-- 간격은 항목마다 아래 여백으로 둔다: 접힌 묶음의 감춘 카드는 자리를 차지하지 않는다. -->
+            <StackPanel />
           </ItemsPanelTemplate>
         </ItemsControl.ItemsPanel>
         <ItemsControl.DataTemplates>
           <DataTemplate x:DataType="vm:ChatUserEntry">
-            <Border HorizontalAlignment="Right" MaxWidth="360" Padding="10,6" CornerRadius="8,8,2,8"
+            <Border HorizontalAlignment="Right" MaxWidth="360" Padding="10,6" CornerRadius="8,8,2,8" Margin="0,0,0,10"
                     Background="{DynamicResource OrandaToolbarPressedBrush}">
               <TextBlock Text="{Binding Text}" TextWrapping="Wrap" />
             </Border>
           </DataTemplate>
+          <DataTemplate x:DataType="vm:ChatToolGroupEntry">
+            <!-- 도구 묶음 머리 줄: 「도구 N개 실행 · 합계 초 · 모두 허용」. 누르면 아래 카드 목록을 펼치고 접는다. 실행 중엔 펼친 채, 끝나면 접힌다. -->
+            <ToggleButton x:Name="ToolGroupToggle" Classes="toolGroup" Margin="0,0,0,6" IsChecked="{Binding Group.IsExpanded, Mode=TwoWay}"
+                          AutomationProperties.Name="{Binding Group.Summary}">
+              <Grid ColumnDefinitions="16,*,Auto" ColumnSpacing="8">
+                <TextBlock Text="{Binding Group.Mark}" FontWeight="Bold" FontSize="{DynamicResource OrandaFontSizeSmall}"
+                           Foreground="{DynamicResource OrandaSuccessForegroundBrush}" IsVisible="{Binding !Group.HasProblem}" />
+                <TextBlock Text="{Binding Group.Mark}" FontWeight="Bold" FontSize="{DynamicResource OrandaFontSizeSmall}"
+                           Foreground="{DynamicResource OrandaWarningForegroundBrush}" IsVisible="{Binding Group.HasProblem}" />
+                <TextBlock x:Name="ToolGroupSummary" Grid.Column="1" Text="{Binding Group.Summary}" TextTrimming="CharacterEllipsis"
+                           FontSize="{DynamicResource OrandaFontSizeSmall}" ToolTip.Tip="{Binding Group.Summary}" />
+                <TextBlock Grid.Column="2" Text="{Binding Group.ToggleText}" Opacity="0.65" FontSize="{DynamicResource OrandaFontSizeSmall}" />
+              </Grid>
+            </ToggleButton>
+          </DataTemplate>
           <DataTemplate x:DataType="vm:ChatToolEntry">
-            <!-- 도구 카드: 사람 말 한 줄(제목·핵심 인자) · 걸린 시간 · 응답 크기 · 판단, 거부·실패면 사유 한 줄. 펼치면 도구 이름·인자(가린 글 그대로)·사유 코드. -->
-            <Expander x:Name="ToolCard" HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch" Padding="10,6"
-                      AutomationProperties.Name="{Binding Headline}">
+            <!-- 도구 카드: 사람 말 한 줄(제목·핵심 인자) · 걸린 시간 · 응답 크기 · 판단, 거부·실패면 사유 한 줄. 펼치면 도구 이름·인자(가린 글 그대로)·사유 코드. 묶음이 접히면 감춘다. -->
+            <Expander x:Name="ToolCard" HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch" Padding="10,6" Margin="12,0,0,4"
+                      IsVisible="{Binding Group.IsExpanded, FallbackValue=True}" AutomationProperties.Name="{Binding Headline}">
               <Expander.Header>
                 <Grid ColumnDefinitions="16,*,Auto,Auto,Auto" RowDefinitions="Auto,Auto" ColumnSpacing="8" ClipToBounds="True">
                   <TextBlock Text="{Binding Mark}" Opacity="0.8" FontSize="{DynamicResource OrandaFontSizeSmall}" />
@@ -63,25 +101,37 @@
             </Expander>
           </DataTemplate>
           <DataTemplate x:DataType="vm:ChatProposalEntry">
-            <!-- 재작성 제안 카드(c6): 비교 창을 닫아도 남는다. 「다시 보기」 = 같은 비교 창, 받아들인 제안은 「적용함」. -->
-            <Border Padding="10,6" CornerRadius="4" BorderThickness="1" BorderBrush="{DynamicResource OrandaSeparatorBrush}">
-              <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
-                <StackPanel Spacing="2">
-                  <TextBlock Text="{Binding Headline}" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding Headline}" />
-                  <TextBlock Text="{Binding Summary}" Opacity="0.7" TextWrapping="Wrap" MaxLines="2" TextTrimming="CharacterEllipsis"
-                             FontSize="{DynamicResource OrandaFontSizeSmall}" />
-                </StackPanel>
-                <TextBlock x:Name="AppliedMark" Grid.Column="1" Text="적용함" IsVisible="{Binding Applied}" VerticalAlignment="Center"
+            <!-- 재작성 제안 카드(c6·st-4): 「제안」 배지 · 이름 · 변화율(벤치마크 있을 때만) · 한 줄 요약 · 「비교 다시 보기」「적용」.
+                 편집기 글은 비교 창에서 받아들일 때만 바뀐다(두 단추 모두 같은 비교 창을 연다. 「적용」 은 그 창의 받아들이기로 끝난다). 받아들인 제안은 「적용함」. -->
+            <Border Padding="12,10" CornerRadius="8" BorderThickness="1" BorderBrush="{DynamicResource OrandaButtonAccentBrush}" Margin="0,0,0,12">
+              <StackPanel Spacing="8">
+                <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="8">
+                  <Border Padding="6,1" CornerRadius="4" Background="{DynamicResource OrandaButtonAccentBrush}" VerticalAlignment="Center">
+                    <TextBlock Text="제안" FontWeight="Bold" Foreground="White" FontSize="{DynamicResource OrandaFontSizeSmall}" />
+                  </Border>
+                  <TextBlock x:Name="ProposalLabel" Grid.Column="1" Text="{Binding Label}" FontWeight="Bold" TextTrimming="CharacterEllipsis"
+                             VerticalAlignment="Center" ToolTip.Tip="{Binding Headline}" />
+                  <TextBlock x:Name="ProposalChange" Grid.Column="2" Text="{Binding Change}" IsVisible="{Binding HasChange}" VerticalAlignment="Center"
+                             FontFamily="{DynamicResource OrandaCodeFontFamily}" Foreground="{DynamicResource OrandaIconBlueBrush}" />
+                </Grid>
+                <TextBlock Text="{Binding Summary}" Opacity="0.75" TextTrimming="CharacterEllipsis" MaxLines="1" ToolTip.Tip="{Binding Summary}"
+                           FontSize="{DynamicResource OrandaFontSizeSmall}" />
+                <TextBlock x:Name="AppliedMark" Text="적용함" IsVisible="{Binding Applied}"
                            Foreground="{DynamicResource OrandaSuccessForegroundBrush}" FontSize="{DynamicResource OrandaFontSizeSmall}" />
-                <Button x:Name="ReviewButton" Grid.Column="1" Classes="tool" Content="다시 보기" IsVisible="{Binding CanReview}" VerticalAlignment="Center"
-                        Command="{Binding $parent[ItemsControl].((vm:AiChatViewModel)DataContext).ReviewProposalCommand}" CommandParameter="{Binding}"
-                        ToolTip.Tip="제안 비교 창을 다시 엽니다" />
-              </Grid>
+                <Grid ColumnDefinitions="*,*" ColumnSpacing="8" IsVisible="{Binding CanReview}">
+                  <Button x:Name="ReviewButton" Content="비교 다시 보기" HorizontalAlignment="Stretch" HorizontalContentAlignment="Center" MinHeight="30"
+                          Command="{Binding $parent[ItemsControl].((vm:AiChatViewModel)DataContext).ReviewProposalCommand}" CommandParameter="{Binding}"
+                          ToolTip.Tip="제안 비교 창을 다시 엽니다" />
+                  <Button x:Name="ApplyButton" Grid.Column="1" Classes="accent" Content="적용" HorizontalAlignment="Stretch" HorizontalContentAlignment="Center" MinHeight="30"
+                          Command="{Binding $parent[ItemsControl].((vm:AiChatViewModel)DataContext).ReviewProposalCommand}" CommandParameter="{Binding}"
+                          ToolTip.Tip="비교 창에서 확인하고 받아들이면 편집기에 넣습니다" />
+                </Grid>
+              </StackPanel>
             </Border>
           </DataTemplate>
           <DataTemplate x:DataType="vm:ChatAssistantEntry">
             <!-- AI 글: Markdown 부분 집합으로 그린다. 글 선택·복사가 된다(SelectableTextBlock). -->
-            <vm:MarkdownView Markdown="{Binding Text}" />
+            <vm:MarkdownView Markdown="{Binding Text}" Margin="0,0,0,12" />
           </DataTemplate>
         </ItemsControl.DataTemplates>
       </ItemsControl>

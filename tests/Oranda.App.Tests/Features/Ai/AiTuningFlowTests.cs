@@ -177,6 +177,8 @@ public class AiTuningFlowTests
         var card = Assert.Single(chat.Entries.OfType<ChatProposalEntry>());
         Assert.False(card.Applied);
         Assert.Contains("NOT EXISTS", card.Label, StringComparison.Ordinal);
+        Assert.Equal("−88%", card.Change); // 벤치마크 「1.82 s → 0.21 s」 의 변화율
+        Assert.DoesNotContain(chat.Entries.OfType<ChatAssistantEntry>(), e => e.Text.StartsWith('[')); // 「[이름] 근거 (수치)」 꼬리표 줄은 카드가 대신한다
         Assert.True(chat.ReviewProposalCommand.CanExecute(card));
 
         editor.Accept = true;
@@ -252,9 +254,12 @@ public class AiTuningFlowTests
         Assert.All(driver.Requests, r =>
         {
             Assert.Contains(AiTuningFlow.ResponseStyle, r.Prompt, StringComparison.Ordinal);
-            Assert.Contains("conclusion of one or two lines", r.Prompt, StringComparison.Ordinal);
-            Assert.Contains("3 to 5 bullets", r.Prompt, StringComparison.Ordinal);
-            Assert.Contains("No preamble or closing remarks", r.Prompt, StringComparison.Ordinal);
+            Assert.Contains("conclusion as one bold line", r.Prompt, StringComparison.Ordinal);
+            Assert.Contains("지표 | 원문 | 제안", r.Prompt, StringComparison.Ordinal);
+            Assert.Contains("3 to 5 bullets, each about 40 characters", r.Prompt, StringComparison.Ordinal);
+            Assert.Contains("## 뺀 후보", r.Prompt, StringComparison.Ordinal);
+            Assert.Contains("One line starting with >", r.Prompt, StringComparison.Ordinal);
+            Assert.Contains("No [name] tags, no long remarks in parentheses", r.Prompt, StringComparison.Ordinal);
         });
     }
 

@@ -20,7 +20,7 @@ public sealed record TuningResult(
           "additionalProperties": false,
           "required": ["summary", "rewrites", "index_suggestions", "evidence"],
           "properties": {
-            "summary": { "type": "string", "description": "One to three sentences: what is slow and what to change." },
+            "summary": { "type": "string", "description": "The chat answer in Markdown, following the response style in the prompt." },
             "rewrites": {
               "type": "array",
               "items": {
@@ -30,8 +30,8 @@ public sealed record TuningResult(
                 "properties": {
                   "label": { "type": "string" },
                   "sql": { "type": "string", "description": "Complete replacement statement." },
-                  "rationale": { "type": "string" },
-                  "benchmark": { "type": "string", "description": "Summary of benchmark_queries numbers, if measured." }
+                  "rationale": { "type": "string", "description": "One short line, about 40 characters." },
+                  "benchmark": { "type": "string", "description": "If measured with benchmark_queries: elapsed as '141.5 ms → 89.1 ms' (original → this rewrite), then other numbers." }
                 }
               }
             },
