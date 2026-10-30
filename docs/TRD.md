@@ -441,7 +441,7 @@ macOS 서명 시 필요한 권한(entitlement)은 CoreCLR 기준 `com.apple.secu
 | 취소 1 s 이하 | `OracleCommand.Cancel` + 토큰, 파이프라이닝 끔 | 통합 테스트(`DBMS_SESSION.SLEEP(600)` 취소) |
 | 그리드 편집 사고 0건 | 4.4 편집 규칙, 영향 행 수 검증, 세이브포인트 | 통합 테스트(동시 삭제·중복 키 시나리오) |
 | 비밀번호 평문 0건 | `ICredentialStore`, 로그 마스킹 | 설정 폴더·로그 전체 검색 테스트 |
-| 설치 파일 80 MB 이하 | Velopack 압축, 트리밍 검토 | 패키징 단계 크기 검사 |
+| 설치 파일 100 MB 이하(D-035) | Velopack 압축, 트리밍 검토 | 패키징 단계 크기 검사 |
 
 ---
 

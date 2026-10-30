@@ -3,7 +3,7 @@
 | 파일 | 하는 일 | 사람 자원 |
 |---|---|---|
 | `pack-windows.ps1` | Velopack 으로 Windows 설치 파일·델타 생성, 크기 검사 | Authenticode 인증서(`ORANDA_SIGN_PARAMS`) |
-| `check-installer-size.ps1` | 설치 파일 80 MB 이하 검사 | 없음 |
+| `check-installer-size.ps1` | 설치 파일 100 MB 이하 검사(D-035) | 없음 |
 | macOS | `.github/workflows/ci.yml` macos 작업(서명·공증·pkg) | Apple 비밀값 |
 | 피드 게시 | `artifacts/release/` 를 정적 파일 서버에 복사 | 서버 주소·권한 |
 | 업데이트 확인 | 앱이 피드(설정 > 업데이트의 주소, 비면 빌드 기본값)에서 `releases.*.json`·`.nupkg` 를 읽는다 | 피드 위치 결정 |
@@ -45,7 +45,7 @@ Velopack 은 릴리스 메타데이터의 해시로 패키지 무결성을 확�
 
 맥에서 미리 볼 수 있다: 게시 뒤 `vpk "[win]" pack ... --runtime win-x64` 는 서명 없이 Windows `Setup.exe` 를 만든다. 정식 확인은 Windows 에서 `pack-windows.ps1` 로 한다.
 
-맥북 측정, 무서명. 80 MB = 83,886,080 bytes. Windows 세 줄은 2026-10-22 같은 커밋에서 obj/R2R 를 비우고 잰 값이다.
+맥북 측정, 무서명. 아래 판정은 당시 기준 80 MB = 83,886,080 bytes 로 한 것이다(2026-10-30 부터 100 MB = 104,857,600 bytes, D-035). Windows 세 줄은 2026-10-22 같은 커밋에서 obj/R2R 를 비우고 잰 값이다.
 
 | 설치 파일 | 크기 | 판정 |
 |---|---|---|

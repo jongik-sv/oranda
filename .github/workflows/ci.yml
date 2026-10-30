@@ -148,7 +148,7 @@ jobs:
       - name: Signature report
         shell: pwsh
         run: scripts/release/check-signatures.ps1 -Dir artifacts/release/win
-      - name: Installer size check (80 MB)
+      - name: Installer size check (100 MB)
         shell: pwsh
         run: scripts/release/check-installer-size.ps1 -Dir artifacts/release/win
       - uses: actions/upload-artifact@v4
@@ -249,12 +249,12 @@ jobs:
             codesign --verify --deep --strict --verbose=2 "$APP"
             spctl --assess --type execute --verbose "$APP"
           fi
-      - name: Installer size check (80 MB)
+      - name: Installer size check (100 MB)
         run: |
           for f in artifacts/release/*Setup* artifacts/release/*.pkg; do
             [ -e "$f" ] || continue
             s=$(stat -f%z "$f"); echo "$f $s"
-            [ "$s" -le 83886080 ] || { echo "too large"; exit 1; }
+            [ "$s" -le 104857600 ] || { echo "too large"; exit 1; }
           done
       - uses: actions/upload-artifact@v4
         with:

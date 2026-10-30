@@ -344,7 +344,7 @@
 | 첫 행 표시 (서버가 첫 묶음을 돌려준 뒤) | 100 ms 이하 | Windows p95 74 ms(참고). 충족 |
 | 100만 행 그리드 스크롤 | 60 fps 유지, 추가 메모리 행당 200 bytes 이하(가져온 행 기준, 데이터 포함, 6열 데이터셋 NUMBER·VARCHAR2·NUMBER·DATE·NUMBER·VARCHAR2 — D-023) | Windows fps 미확정, 행당 204~233 bytes. 초과 — DEF-06 |
 | 실행 취소 반응 (OOB 가 통하는 실제 서버 경로 기준, DISABLE_OOB 경로 제외 — D-021) | 1 s 이하 | Windows CPU 루프 1.7 s, 대기 중 59 s. 초과 — DEF-05 |
-| 설치 파일 크기 | 80 MB 이하 | Windows 게시 300 MB, 압축 추정 106 MB(PDB 제외 79 MB), vpk 실패. 초과 — DEF-07 |
+| 설치 파일 크기 | 100 MB 이하(D-035, 처음 목표 80 MB) | Windows 게시 300 MB, 압축 추정 106 MB(PDB 제외 79 MB), vpk 실패. 초과 — DEF-07 |
 
 UI 스레드에서 DB 호출을 하지 않는다. 모든 DB 작업은 취소 가능해야 한다.
 

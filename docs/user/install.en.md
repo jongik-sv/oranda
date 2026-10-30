@@ -7,7 +7,7 @@
 | Supported | Windows 10/11 x64 | macOS 14.7 or later, Apple Silicon |
 | File | `Oranda-win-Setup.exe` (or `Oranda-win-Portable.zip`) | `Oranda-osx-Setup.pkg` |
 | Download | [GitHub Releases](https://github.com/jongik-sv/oranda/releases) | same |
-| Size | under 80 MB | under 80 MB |
+| Size | under 100 MB | under 100 MB |
 
 You do not need an Oracle Client. The installers work offline, so you can copy them to machines without internet access.
 
