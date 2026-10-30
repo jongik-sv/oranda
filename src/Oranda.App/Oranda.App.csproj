@@ -136,6 +136,8 @@
     <ItemGroup>
       <_OrandactlPublishFile Include="%(OrandactlOutput.RootDir)%(OrandactlOutput.Directory)*.dll" />
       <_OrandactlPublishFile Remove="@(_OrandactlPublishFile)" Condition="Exists('$(PublishDir)%(Filename)%(Extension)')" />
+      <!-- 앱이 일부러 뺀 런타임 파일(ExcludeDebugOnlyRuntimeFiles)은 orandactl 쪽 출력에 있어도 다시 넣지 않는다. -->
+      <_OrandactlPublishFile Remove="@(_OrandactlPublishFile)" Condition="'$(_OrandaDebugOnlyPattern)' != '' And $([System.Text.RegularExpressions.Regex]::IsMatch('%(Filename)%(Extension)', '$(_OrandaDebugOnlyPattern)'))" />
     </ItemGroup>
     <Copy SourceFiles="@(_OrandactlPublishFile)" DestinationFolder="$(PublishDir)" />
     <Error Condition="!Exists('$(PublishDir)orandactl.dll')" Text="orandactl.dll 이 게시 폴더에 없습니다." />
