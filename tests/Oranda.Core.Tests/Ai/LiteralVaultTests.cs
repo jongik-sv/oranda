@@ -127,4 +127,40 @@ public class LiteralVaultTests
         Assert.Contains("ORA-00001", redacted, StringComparison.Ordinal);
         Assert.Contains("row 1", redacted, StringComparison.Ordinal);
     }
+
+    [Fact]
+    public void Comments_get_their_own_numbers_and_come_back_only_into_a_placeholder_of_the_same_kind()
+    {
+        var vault = new LiteralVault();
+        vault.Add("'KIM'");
+
+        Assert.Equal("--c1", vault.AddComment("-- 월말 정산"));
+        Assert.Equal("/*c2*/", vault.AddComment("/* why */"));
+        Assert.Equal("--c1", vault.AddComment("-- 월말 정산"));
+        Assert.Equal(2, vault.CommentCount);
+        Assert.Equal(1, vault.Count);
+
+        Assert.True(vault.TryGetComment("-- C1 ", out var raw));
+        Assert.Equal("-- 월말 정산", raw);
+        Assert.True(vault.TryGetComment("/* c2 */", out raw));
+        Assert.Equal("/* why */", raw);
+        Assert.False(vault.TryGetComment("/*c1*/", out _)); // 줄 주석을 블록 자리에 넣지 않는다
+        Assert.False(vault.TryGetComment("--c3", out _));
+        Assert.False(vault.TryGetComment("--c01", out _));
+        Assert.False(vault.TryGetComment("-- c1 note", out _));
+        Assert.Equal(["--c1", "/*c2*/", "--c1"], LiteralVault.FindCommentPlaceholders("a --c1\nb /*c2*/ c --c1\n d /*c12x*/ :v1"));
+    }
+
+    [Fact]
+    public void Redact_replaces_remembered_comments_but_not_empty_ones()
+    {
+        var vault = new LiteralVault();
+        vault.AddComment("/* 고객 홍길동 요청 */");
+        vault.AddComment("--");
+
+        var redacted = vault.Redact("ORA-00933: near /* 고객 홍길동 요청 */ -- x");
+
+        Assert.Equal("ORA-00933: near /*c1*/ -- x", redacted);
+        Assert.Equal("ORA-00933: /*c1*/ 근처", vault.Redact("ORA-00933: 고객 홍길동 요청 근처"));
+    }
 }

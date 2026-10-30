@@ -200,7 +200,7 @@ public sealed partial class AiTuningFlow(
         }
 
         // 이어 말하기 글은 가리지 않고(사용자가 쓴 글) 자리표시를 그대로 쓰라는 안내만 덧붙인다.
-        var prompt = text + Environment.NewLine + Environment.NewLine + ResponseStyle
+        var prompt = text + Environment.NewLine + Environment.NewLine + ResponseStyle + Environment.NewLine + KeepCommentsRule
             + (_vault is null ? string.Empty : Environment.NewLine + PlaceholderReminder(_vault));
         await RunAsync(prompt, chat.ResumeId, text, ct).ConfigureAwait(true);
     }
@@ -219,6 +219,7 @@ public sealed partial class AiTuningFlow(
             ? "Index CREATE statements may be suggested as text only; they are never executed."
             : "Do not suggest indexes; leave index_suggestions empty.");
         text.AppendLine(ResponseStyle);
+        text.AppendLine(KeepCommentsRule);
         if (vault is not null)
         {
             text.AppendLine(PlaceholderReminder(vault));
@@ -249,6 +250,10 @@ public sealed partial class AiTuningFlow(
         + "Use bold only for the conclusion line. No [name] tags, no long remarks in parentheses, no preamble or closing remarks, "
         + "do not narrate each tool call and do not repeat yourself. "
         + "Never write tool or function names (get_*, benchmark_queries, explain_plan and so on) in the answer; say what was done in plain words such as 벤치마크, 실행 계획, 튜닝 정보.";
+
+    /// <summary>재작성 SQL 에 원래 주석을 남기라는 규칙(처음 요청과 이어 말하기 모두). 가린 대화면 주석 자리표시를 그대로 두라는 말이 <see cref="PlaceholderReminder"/> 에 붙는다.</summary>
+    internal const string KeepCommentsRule =
+        "Keep every comment of the original statement in each rewrite's sql, unchanged and next to the code it describes; do not drop, merge or reword comments.";
 
     /// <summary>카드 없는 재작성 후보 한 줄: 「- `이름` · 근거 · 측정」.</summary>
     private static string RewriteLine(TuningRewrite rewrite) =>
@@ -285,9 +290,12 @@ public sealed partial class AiTuningFlow(
     [GeneratedRegex(@"(\d[\d,]*(?:\.\d+)?)\s*(ms|s|초)\s*(?:→|->)\s*(?:[^\d\s→]{1,8}\s*)?(\d[\d,]*(?:\.\d+)?)\s*(ms|s|초)", RegexOptions.CultureInvariant)]
     private static partial Regex ElapsedPair();
 
-    /// <summary>리터럴 값을 자리표시로 가렸다는 안내. 값은 싣지 않고 접두만 쓴다.</summary>
+    /// <summary>리터럴 값을 자리표시로 가렸다는 안내. 값은 싣지 않고 접두만 쓴다. 가린 주석이 있으면 주석 자리표시도 그대로 두라고 덧붙인다.</summary>
     private static string PlaceholderReminder(LiteralVault vault) =>
-        $"Literal values in the SQL were replaced with placeholders such as {vault.Placeholder(1)}. Use the same placeholders unchanged when you pass SQL to the tools and when you write SQL in your answer; never guess the original values.";
+        $"Literal values in the SQL were replaced with placeholders such as {vault.Placeholder(1)}. Use the same placeholders unchanged when you pass SQL to the tools and when you write SQL in your answer; never guess the original values."
+        + (vault.CommentCount == 0
+            ? string.Empty
+            : $" Comments were replaced with placeholders such as {LiteralVault.CommentPlaceholder(1, lineComment: false)} and {LiteralVault.CommentPlaceholder(1, lineComment: true)}; keep each comment placeholder exactly as written, in the same place, in every SQL you write.");
 
     private async Task RunAsync(string prompt, string? resumeId, string? userText, CancellationToken ct)
     {
@@ -361,6 +369,13 @@ public sealed partial class AiTuningFlow(
             // 비교 창을 열었으면 닫은 뒤에도 대화 창 카드에서 같은 제안을 다시 열 수 있게 남긴다(c6). 카드 글은 AI 가 보낸 라벨·근거 그대로다.
             var rewrite = result.Rewrites[0];
             var proposal = rewrite with { Sql = restoredSql };
+
+            // AI 가 원래 주석(가린 대화면 주석 자리표시)을 빠뜨렸으면 제안은 그대로 두고 몇 개 빠졌는지만 알린다.
+            if (MissingComments(target.Text, restoredSql) is var missing and > 0)
+            {
+                chat.AddAssistantText($"주석 {missing}개 빠짐: 재작성 후보 「{rewrite.Label}」 에 원래 문장의 주석 {missing}개가 없습니다. 제안은 그대로 두었으니 비교 창에서 확인하세요.");
+            }
+
             if (await ProposeRewriteAsync(proposal, target, startTab, ct).ConfigureAwait(true) is { } accepted)
             {
                 chat.AddProposal(rewrite.Label, OneLine(rewrite.Rationale), accepted, () => ProposeRewriteAsync(proposal, target, startTab, CancellationToken.None), ChangeText(rewrite.Benchmark));
@@ -461,6 +476,39 @@ public sealed partial class AiTuningFlow(
         }
 
         return false;
+    }
+
+    /// <summary>
+    /// 원래 문장의 주석 중 <paramref name="proposal"/>(되돌린 제안)에 없는 수. 버리는 사전 하나로 두 글을 가려 같은 주석이 같은 자리표시가 되게 한 뒤
+    /// 자리표시 수를 비교한다(가린 대화·안 가린 대화 공통, 이 사전은 어디로도 보내지 않는다). 셀 수 없으면 0 이다(알리지 않는다).
+    /// </summary>
+    private int MissingComments(string original, string proposal)
+    {
+        if (masker is null)
+        {
+            return 0;
+        }
+
+        try
+        {
+            var scratch = masker.CreateVault(original);
+            var before = masker.Mask(original, scratch);
+            var after = masker.Mask(proposal, scratch);
+            if (!before.Succeeded || !after.Succeeded)
+            {
+                return 0;
+            }
+
+            var kept = LiteralVault.FindCommentPlaceholders(after.Text).CountBy(p => p).ToDictionary();
+            return LiteralVault.FindCommentPlaceholders(before.Text).CountBy(p => p)
+                .Sum(pair => Math.Max(0, pair.Value - kept.GetValueOrDefault(pair.Key)));
+        }
+#pragma warning disable CA1031 // 주석 셈은 알림용이다: 어떤 실패든 제안 반영을 막지 않는다.
+        catch (Exception ex) when (ex is not OperationCanceledException)
+#pragma warning restore CA1031
+        {
+            return 0;
+        }
     }
 
     /// <summary>재작성 제안을 시작 탭의 문장에 비교 창으로 보인다. 받아들이면 true, 거절하면 false, 열지 못했으면(탭이 닫힘·문장이 바뀜) null.</summary>

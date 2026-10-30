@@ -340,7 +340,7 @@ public class AiTuningFlowTests
         Assert.Contains(chat.Entries.OfType<ChatAssistantEntry>(), e => e.Text.Contains("허용 수준이 바뀌어", StringComparison.Ordinal));
     }
 
-    /// <summary>작은따옴표 문자열만 가리는 시험용 가림 구현(실제 구현은 Language 의 렉서 기반).</summary>
+    /// <summary>작은따옴표 문자열과 주석(힌트 제외)만 가리는 시험용 가림 구현(실제 구현은 Language 의 렉서 기반).</summary>
     private sealed class FakeMasker : ISqlLiteralMasker
     {
         public bool FailMask { get; set; }
@@ -349,7 +349,10 @@ public class AiTuningFlowTests
 
         public SqlMaskResult Mask(string sql, LiteralVault vault) => FailMask
             ? SqlMaskResult.Failed
-            : SqlMaskResult.Ok(Regex.Replace(sql, "'[^']*'", m => vault.Add(m.Value)));
+            : SqlMaskResult.Ok(MaskText(sql, vault));
+
+        private static string MaskText(string sql, LiteralVault vault) =>
+            Regex.Replace(sql, @"'[^']*'|/\*(?!\+)[\s\S]*?\*/|--[^\n]*", m => m.Value[0] == '\'' ? vault.Add(m.Value) : vault.AddComment(m.Value));
 
         public SqlRestoreResult Restore(string sql, LiteralVault vault)
         {
@@ -359,7 +362,8 @@ public class AiTuningFlowTests
             }
 
             string? unknown = null;
-            var text = Regex.Replace(sql, @":v\d+", m =>
+            var text = Regex.Replace(sql, @"/\*\s*c\d+\s*\*/|--\s*c\d+", m => vault.TryGetComment(m.Value, out var comment) ? comment : m.Value);
+            text = Regex.Replace(text, @":v\d+", m =>
             {
                 if (vault.TryGetRaw(m.Value, out var raw))
                 {
@@ -372,7 +376,7 @@ public class AiTuningFlowTests
             return unknown is null ? SqlRestoreResult.Ok(text) : SqlRestoreResult.Unknown(unknown);
         }
 
-        public string MaskPredicate(string predicate, LiteralVault vault) => Regex.Replace(predicate, "'[^']*'", m => vault.Add(m.Value));
+        public string MaskPredicate(string predicate, LiteralVault vault) => MaskText(predicate, vault);
     }
 
     private static AiTuningFlow MaskedFlow(FakeEditor editor, FakeDriver driver, AiChatViewModel chat, List<(string Title, string Text)> tabs, ISqlLiteralMasker? masker, List<LiteralVault?>? vaults = null) =>
@@ -578,5 +582,69 @@ public class AiTuningFlowTests
         public SqlStatement? GetCurrentStatement() => null;
 
         public Task<bool> ProposeEditAsync(TextEdit edit, CancellationToken ct) => Task.FromResult(false);
+    }
+
+    private const string Commented = "SELECT * /* 주문 상태 */ FROM tb_order -- 운영 점검\nWHERE stat_cd = '10'";
+
+    private static FakeDriver RewriteDriver(string sql) => new(new AiFinal(
+        null,
+        JsonDocument.Parse($$"""{ "summary": "s", "rewrites": [ { "label": "r", "sql": {{JsonSerializer.Serialize(sql)}}, "rationale": "x" } ], "index_suggestions": [], "evidence": [] }""").RootElement.Clone(),
+        "s"));
+
+    private static List<string> AssistantTexts(AiChatViewModel chat) => [.. chat.Entries.OfType<ChatAssistantEntry>().Select(e => e.Text)];
+
+    [Fact]
+    public async Task Masked_start_sends_comment_placeholders_and_the_rewrite_gets_the_original_comments_back()
+    {
+        var editor = new FakeEditor(Commented);
+        var driver = RewriteDriver("SELECT /*c1*/ o.* FROM tb_order o --c2\nWHERE o.stat_cd = :v1");
+        var chat = new AiChatViewModel();
+
+        await MaskedFlow(editor, driver, chat, [], new FakeMasker()).StartAsync(new TuningStartChoice(true, true, "default"), Context);
+
+        var prompt = Assert.Single(driver.Requests).Prompt;
+        Assert.Contains("SELECT * /*c1*/ FROM tb_order --c2", prompt, StringComparison.Ordinal);
+        Assert.DoesNotContain("주문 상태", prompt, StringComparison.Ordinal); // 주석 본문은 보내지 않는다
+        Assert.DoesNotContain("운영 점검", prompt, StringComparison.Ordinal);
+        Assert.Contains("such as /*c1*/ and --c1", prompt, StringComparison.Ordinal);
+        Assert.Contains(AiTuningFlow.KeepCommentsRule, prompt, StringComparison.Ordinal);
+        Assert.Equal("SELECT /* 주문 상태 */ o.* FROM tb_order o -- 운영 점검\nWHERE o.stat_cd = '10'", Assert.Single(editor.Proposed).NewText);
+        Assert.DoesNotContain(AssistantTexts(chat), t => t.Contains("빠짐", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task Masked_rewrite_that_drops_a_comment_placeholder_is_still_proposed_and_the_chat_counts_the_missing_comment()
+    {
+        var editor = new FakeEditor(Commented);
+        var chat = new AiChatViewModel();
+
+        // /*c2*/ 는 줄 주석(--c2) 자리가 아니므로 되돌리지 않는다: 원래 주석 둘 다 빠진 것으로 센다.
+        await MaskedFlow(editor, RewriteDriver("SELECT o.* FROM tb_order o /*c2*/ WHERE o.stat_cd = :v1"), chat, [], new FakeMasker())
+            .StartAsync(new TuningStartChoice(true, true, "default"), Context);
+
+        Assert.Equal("SELECT o.* FROM tb_order o /*c2*/ WHERE o.stat_cd = '10'", Assert.Single(editor.Proposed).NewText);
+        Assert.Contains(AssistantTexts(chat), t => t.StartsWith("주석 2개 빠짐", StringComparison.Ordinal));
+        Assert.DoesNotContain(AssistantTexts(chat), t => t.Contains("주문 상태", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task Unmasked_rewrite_that_drops_an_original_comment_is_still_proposed_and_the_chat_counts_it()
+    {
+        var kept = new FakeEditor(Commented);
+        var dropped = new FakeEditor(Commented);
+        var keptChat = new AiChatViewModel();
+        var droppedChat = new AiChatViewModel();
+        var keptDriver = RewriteDriver("SELECT /* 주문 상태 */ o.* FROM tb_order o -- 운영 점검\nWHERE o.stat_cd = '10'");
+
+        await new AiTuningFlow(kept, keptDriver, keptChat, (_, _) => { }, masker: new FakeMasker(), maskRequired: _ => false)
+            .StartAsync(new TuningStartChoice(true, true, "default"), Context);
+        await new AiTuningFlow(dropped, RewriteDriver("SELECT /* 주문 상태 */ o.* FROM tb_order o WHERE o.stat_cd = '10'"), droppedChat, (_, _) => { }, masker: new FakeMasker(), maskRequired: _ => false)
+            .StartAsync(new TuningStartChoice(true, true, "default"), Context);
+
+        Assert.Contains(AiTuningFlow.KeepCommentsRule, Assert.Single(keptDriver.Requests).Prompt, StringComparison.Ordinal);
+        Assert.Single(kept.Proposed);
+        Assert.DoesNotContain(AssistantTexts(keptChat), t => t.Contains("빠짐", StringComparison.Ordinal));
+        Assert.Equal("SELECT /* 주문 상태 */ o.* FROM tb_order o WHERE o.stat_cd = '10'", Assert.Single(dropped.Proposed).NewText);
+        Assert.Contains(AssistantTexts(droppedChat), t => t.StartsWith("주석 1개 빠짐", StringComparison.Ordinal));
     }
 }

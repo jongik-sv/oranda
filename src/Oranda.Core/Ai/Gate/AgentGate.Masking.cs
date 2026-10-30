@@ -58,6 +58,7 @@ public sealed partial class AgentGate
     /// <summary>
     /// 결과에서 SQL 글 필드(<see cref="AgentFields.SqlTextFields"/>)의 문자열을 <see cref="ISqlLiteralMasker.MaskPredicate"/> 로 가린다
     /// (<paramref name="result"/> 를 직접 고치며, 루트가 JSON 글이면 교체될 수 있다). 이름이 정해진 필드만 가린다 — 모든 문자열을 가리면 <c>note</c>·숫자가 망가진다.
+    /// 주석도 프롬프트와 같은 사전의 주석 자리표시(<c>/*c1*/</c>)가 되어, LLM 이 프롬프트와 도구 결과에서 같은 주석을 같은 모양으로 본다.
     /// 문자열 값이 JSON 객체·배열 글이면 펼쳐서 같은 규칙을 적용한다. 필드 값이 배열·객체면 안의 문자열을 모두 가린다.
     /// </summary>
     private void MaskSqlTextFields(ref JsonNode result, LiteralVault vault)

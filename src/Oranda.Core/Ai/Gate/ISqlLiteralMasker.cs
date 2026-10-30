@@ -15,7 +15,8 @@ public interface ISqlLiteralMasker
     LiteralVault CreateVault(string statementText);
 
     /// <summary>
-    /// 문장 글의 리터럴(문자열·숫자·<c>DATE '…'</c> 묶음)을 자리표시로 바꾸고 주석 본문을 비운다(힌트는 유지).
+    /// 문장 글의 리터럴(문자열·숫자·<c>DATE '…'</c> 묶음)을 자리표시로 바꾸고 주석을 주석 자리표시(<c>--c1</c>·<c>/*c1*/</c>)로 바꾼다(힌트는 유지).
+    /// 주석 본문은 LLM 에 보내지 않고 사전(<see cref="LiteralVault.AddComment"/>)에만 둔다.
     /// 가린 글과 원래 글은 <see cref="LiteralVault.RememberStatement"/> 로 짝을 지어 둔다.
     /// 렉서가 읽지 못하는 글(Error 토큰·닫히지 않은 문자열)은 <see cref="SqlMaskResult.Failed"/> 를 돌려준다.
     /// </summary>
@@ -23,13 +24,15 @@ public interface ISqlLiteralMasker
 
     /// <summary>
     /// <see cref="Mask"/> 로 가린 글의 자리표시를 원래 토큰 글로 되돌린다. 바인드 토큰 중 사전에 있는 것만 바꾸고(따옴표로 감싼 <c>':v1'</c> 도 자리표시로 본다)
+    /// 주석 자리표시는 같은 종류(줄·블록)의 원래 주석으로 되돌린다. 모르는 번호·종류가 다른 주석 자리표시는 그대로 둔다(실패로 보지 않는다).
     /// 글 전체가 기억한 가린 글과 같으면 원래 글(주석·sql_id 보존)을 쓴다.
     /// 사전의 모양인데 사전에 없는 자리표시가 있으면 <see cref="SqlRestoreResult.UnknownPlaceholder"/> 를 채워 돌려준다.
     /// </summary>
     SqlRestoreResult Restore(string sql, LiteralVault vault);
 
     /// <summary>
-    /// 실행 계획의 술어 칸(<c>access_predicates</c>·<c>filter_predicates</c>)이나 <see cref="AgentFields.SqlTextFields"/> 의 글에서 리터럴을 가린다.
+    /// 실행 계획의 술어 칸(<c>access_predicates</c>·<c>filter_predicates</c>)이나 <see cref="AgentFields.SqlTextFields"/> 의 글에서 리터럴과 주석을 <see cref="Mask"/> 와 같은 방식으로 가린다
+    /// (같은 사전을 쓰므로 프롬프트에 나온 주석은 같은 자리표시가 된다).
     /// 읽지 못하면 칸 전체를 <see cref="RedactedPlaceholder"/> 로 바꾼다.
     /// </summary>
     string MaskPredicate(string predicate, LiteralVault vault);

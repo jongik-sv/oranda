@@ -11,15 +11,13 @@ namespace Oranda.Language.Ai.Literals;
 /// <see cref="ISqlLiteralMasker"/> 구현(설계 ai-tuning-2). 렉서(<see cref="SqlLexer"/>) 토큰 기준으로 SQL 글의 리터럴을 <c>:vN</c> 으로 가리고 되돌린다.
 /// <list type="bullet">
 /// <item>문자열(<c>'…'</c>·<c>N'…'</c>·<c>q'…'</c>)과 숫자를 가린다. <c>DATE '…'</c>·<c>TIMESTAMP '…'</c> 은 키워드까지 한 묶음이다. 줄을 넘는 문자열은 하나로 합친다.</item>
-/// <item>주석 본문은 비우고(<c>--</c>·<c>/**/</c>) 힌트(<c>/*+ … */</c>)는 그대로 둔다.</item>
+/// <item>주석은 본문 대신 자리표시(<c>--c1</c>·<c>/*c1*/</c>)로 바꾸고 원래 글은 사전에 둔다(되돌릴 때 제자리에 넣는다). 힌트(<c>/*+ … */</c>)는 그대로 둔다.</item>
 /// <item>읽을 수 없는 글은 닫힌 쪽으로 실패한다: 렉서 Error 토큰, 닫히지 않은 문자열·따옴표 식별자·힌트, 사전에 없는 우리 모양의 자리표시.</item>
 /// </list>
 /// </summary>
 [OrandaService(typeof(ISqlLiteralMasker))]
 internal sealed class SqlLiteralMasker : ISqlLiteralMasker
 {
-    private const string BlockCommentReplacement = "/**/";
-    private const string LineCommentReplacement = "--";
     private const int MaxPrefixTries = 10_000;
 
     /// <summary>줄 경계를 넘는 토큰을 합친 토큰. 위치는 문서 오프셋이다.</summary>
@@ -96,18 +94,37 @@ internal sealed class SqlLiteralMasker : ISqlLiteralMasker
         return RestoreText(sql, vault);
     }
 
-    private static SqlRestoreResult RestoreText(string sql, LiteralVault vault)
+    private static SqlRestoreResult RestoreText(string sql, LiteralVault vault, bool inHint = false)
     {
         var builder = new StringBuilder(sql.Length);
         var cursor = 0;
-        foreach (var lexeme in Lex(sql, out _))
+        var lexemes = Lex(sql, out _);
+        for (var i = 0; i < lexemes.Count; i++)
         {
+            var lexeme = lexemes[i];
             var text = sql[lexeme.Start..lexeme.End];
+
+            // 주석 자리표시는 원래 주석으로 바꾼다. 모르는 번호·종류가 다른 자리표시는 그대로 둔다(주석은 실행되지 않으니 거부하지 않는다).
+            // 힌트 본문 안에는 가릴 때 주석 자리표시를 두지 않으므로 LLM 이 쓴 것이다: 줄 주석의 */ 가 힌트를 닫을 수 있어 되돌리지 않는다.
+            // 힌트 자리가 아니던 /*+ 를 DML 키워드 바로 뒤로 옮기면 살아 있는 힌트가 되므로 그 자리에는 되돌리지 않는다.
+            if (lexeme.Kind == TokenKind.Comment)
+            {
+                var commentEnd = CommentEnd(sql, lexeme);
+                if (!inHint
+                    && vault.TryGetComment(sql[lexeme.Start..commentEnd], out var comment)
+                    && !(comment.StartsWith("/*+", StringComparison.Ordinal) && IsHintPosition(sql, lexemes, i)))
+                {
+                    builder.Append(sql, cursor, lexeme.Start - cursor).Append(comment);
+                    cursor = commentEnd;
+                }
+
+                continue;
+            }
 
             // 힌트 안의 자리표시도 되돌린다(가릴 때 힌트 안의 값도 가렸다).
             if (lexeme.Kind == TokenKind.Hint && text.Length >= 5 && text.EndsWith("*/", StringComparison.Ordinal))
             {
-                var inner = RestoreText(text[3..^2], vault);
+                var inner = RestoreText(text[3..^2], vault, inHint: true);
                 if (!inner.Succeeded)
                 {
                     return inner;
@@ -206,7 +223,11 @@ internal sealed class SqlLiteralMasker : ISqlLiteralMasker
                         return null;
                     }
 
-                    replacement = text[lexeme.Start] == '-' ? LineCommentReplacement : BlockCommentReplacement;
+                    // 글 끝에서 닫히지 않은 블록 주석(잘린 SQL_TEXT 등)은 제자리에 되돌릴 수 없다: 본문만 비운다.
+                    end = CommentEnd(text, lexeme);
+                    replacement = text[lexeme.Start] == '/' && !IsClosedBlockComment(text.AsSpan(lexeme.Start, end - lexeme.Start))
+                        ? "/**/"
+                        : vault.AddComment(text[lexeme.Start..end]);
                     break;
 
                 case TokenKind.Hint:
@@ -216,8 +237,9 @@ internal sealed class SqlLiteralMasker : ISqlLiteralMasker
                     }
 
                     // 힌트로 남기는 것은 SELECT·INSERT·UPDATE·DELETE·MERGE 바로 뒤의 첫 /*+ */ 뿐이다(Oracle 이 힌트로 읽는 자리).
-                    // 그 안의 문자열·숫자는 가린다. 다른 자리의 /*+ 는 평범한 주석이므로 본문을 비우고, 읽을 수 없는 힌트도 비운다.
-                    replacement = MaskHint(text, lexemes, i, vault) ?? BlockCommentReplacement;
+                    // 그 안의 문자열·숫자는 가린다. 다른 자리의 /*+ 는 평범한 주석이므로 주석 자리표시로 바꾸고, 읽을 수 없는 힌트도 그렇게 한다.
+                    // (닫히지 않은 힌트는 위에서 글 전체가 실패하므로 여기의 힌트는 닫혀 있다.)
+                    replacement = MaskHint(text, lexemes, i, vault) ?? vault.AddComment(text[lexeme.Start..lexeme.End]);
                     break;
 
                 case TokenKind.Number:
@@ -255,20 +277,7 @@ internal sealed class SqlLiteralMasker : ISqlLiteralMasker
     private static string? MaskHint(string text, List<Lexeme> lexemes, int index, LiteralVault vault)
     {
         var lexeme = lexemes[index];
-        if (index == 0)
-        {
-            return null;
-        }
-
-        var owner = lexemes[index - 1];
-        var word = text.AsSpan(owner.Start, owner.End - owner.Start);
-        var ownsHint = owner.Kind == TokenKind.Keyword
-            && (word.Equals("SELECT", StringComparison.OrdinalIgnoreCase)
-                || word.Equals("INSERT", StringComparison.OrdinalIgnoreCase)
-                || word.Equals("UPDATE", StringComparison.OrdinalIgnoreCase)
-                || word.Equals("DELETE", StringComparison.OrdinalIgnoreCase)
-                || word.Equals("MERGE", StringComparison.OrdinalIgnoreCase));
-        if (!ownsHint || !IsBlank(text, owner.End, lexeme.Start))
+        if (!IsHintPosition(text, lexemes, index))
         {
             return null;
         }
@@ -281,8 +290,27 @@ internal sealed class SqlLiteralMasker : ISqlLiteralMasker
 
         var body = Transform(raw[3..^2].ToString(), vault, inHint: true);
 
-        // 힌트 모양이 아닌 글(이름·메일 같은 자유 글)은 Oracle 이 힌트로 읽지 않고 무시하므로 사실상 주석 본문이다. 비운다.
+        // 힌트 모양이 아닌 글(이름·메일 같은 자유 글)은 Oracle 이 힌트로 읽지 않고 무시하므로 사실상 주석 본문이다. 주석처럼 가린다.
         return body is null || !LooksLikeHints(body) ? null : "/*+" + body + "*/";
+    }
+
+    /// <summary>토큰 <paramref name="index"/> 가 Oracle 이 힌트로 읽는 자리인가: SELECT·INSERT·UPDATE·DELETE·MERGE 바로 뒤(사이는 공백만).</summary>
+    private static bool IsHintPosition(string text, List<Lexeme> lexemes, int index)
+    {
+        if (index == 0)
+        {
+            return false;
+        }
+
+        var owner = lexemes[index - 1];
+        var word = text.AsSpan(owner.Start, owner.End - owner.Start);
+        return owner.Kind == TokenKind.Keyword
+            && (word.Equals("SELECT", StringComparison.OrdinalIgnoreCase)
+                || word.Equals("INSERT", StringComparison.OrdinalIgnoreCase)
+                || word.Equals("UPDATE", StringComparison.OrdinalIgnoreCase)
+                || word.Equals("DELETE", StringComparison.OrdinalIgnoreCase)
+                || word.Equals("MERGE", StringComparison.OrdinalIgnoreCase))
+            && IsBlank(text, owner.End, lexemes[index].Start);
     }
 
     /// <summary>
@@ -347,6 +375,13 @@ internal sealed class SqlLiteralMasker : ISqlLiteralMasker
         "REWRITE", "NO_REWRITE", "STAR_TRANSFORMATION", "NO_STAR_TRANSFORMATION", "GATHER_PLAN_STATISTICS", "MONITOR", "NO_MONITOR",
         "INMEMORY", "NO_INMEMORY", "STATEMENT_QUEUING", "NO_STATEMENT_QUEUING", "DRIVING_SITE", "FRESH_MV", "NO_FACT", "FACT",
     }.ToFrozenSet(StringComparer.OrdinalIgnoreCase);
+
+    private static bool IsClosedBlockComment(ReadOnlySpan<char> comment) =>
+        comment.Length >= 4 && comment.StartsWith("/*", StringComparison.Ordinal) && comment.EndsWith("*/", StringComparison.Ordinal);
+
+    /// <summary>주석 토큰의 끝. 줄 주석 끝의 <c>\r</c> 는 줄바꿈이므로 주석 글에 넣지 않는다.</summary>
+    private static int CommentEnd(string text, Lexeme lexeme) =>
+        lexeme.End > lexeme.Start && text[lexeme.End - 1] == '\r' && text[lexeme.Start] == '-' ? lexeme.End - 1 : lexeme.End;
 
     private static bool IsIdentPart(char c) => char.IsLetterOrDigit(c) || c is '_' or '$' or '#';
 

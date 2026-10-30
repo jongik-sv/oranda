@@ -47,11 +47,80 @@ public class SqlLiteralMaskerTests
     }
 
     [Fact]
-    public void Comment_bodies_are_emptied_but_hints_are_kept()
+    public void Comment_bodies_become_numbered_comment_placeholders_but_hints_are_kept()
     {
-        var (masked, _) = Mask("select /*+ INDEX(t ix_a) */ a -- secret note 'x'\nfrom t /* multi\nline 'y' */ where a = 1");
+        var (masked, vault) = Mask("select /*+ INDEX(t ix_a) */ a -- secret note 'x'\nfrom t /* multi\nline 'y' */ where a = 1 -- secret note 'x'\r\n");
 
-        Assert.Equal("select /*+ INDEX(t ix_a) */ a --\nfrom t /**/ where a = :v1", masked);
+        // 주석 본문은 보내지 않는다: 같은 주석은 같은 번호, 줄 주석 끝의 \r 은 줄바꿈으로 남는다. 주석 안의 값은 리터럴 사전에 넣지 않는다.
+        Assert.Equal("select /*+ INDEX(t ix_a) */ a --c1\nfrom t /*c2*/ where a = :v1 --c1\r\n", masked);
+        Assert.Equal(1, vault.Count);
+        Assert.Equal(2, vault.CommentCount);
+        Assert.True(vault.TryGetComment("--c1", out var raw));
+        Assert.Equal("-- secret note 'x'", raw);
+        Assert.True(vault.TryGetComment("/*c2*/", out raw));
+        Assert.Equal("/* multi\nline 'y' */", raw);
+    }
+
+    [Fact]
+    public void Restore_puts_the_original_comments_back_where_the_model_kept_the_comment_placeholders()
+    {
+        var original = "select /* why */ a\nfrom t -- tail\nwhere a = 'KIM' /*c1*/";
+        var (masked, vault) = Mask(original);
+        Assert.Equal("select /*c1*/ a\nfrom t --c2\nwhere a = :v1 /*c3*/", masked);
+
+        // 공백을 넣은 자리표시도 되돌린다. 원래 글이 /*c1*/ 이던 주석도 제자리로 돌아온다.
+        var restored = Masker.Restore("select /*+ FULL(t) */ /* c1 */ a, b\nfrom t -- c2\nwhere a = :v1 /*c3*/", vault);
+
+        Assert.True(restored.Succeeded);
+        Assert.Equal("select /*+ FULL(t) */ /* why */ a, b\nfrom t -- tail\nwhere a = 'KIM' /*c1*/", restored.Text);
+    }
+
+    [Fact]
+    public void A_comment_placeholder_of_the_other_kind_or_an_unknown_number_is_left_as_written()
+    {
+        var (_, vault) = Mask("select a -- tail\nfrom t");
+
+        // 줄 주석을 블록 자리(/*c1*/)에 넣으면 같은 줄의 뒤 글이 주석이 된다: 되돌리지 않는다. 주석은 실행되지 않으니 실패로 보지도 않는다.
+        var restored = Masker.Restore("select /*c1*/ a from t /*c7*/ --c9", vault);
+
+        Assert.True(restored.Succeeded);
+        Assert.Equal("select /*c1*/ a from t /*c7*/ --c9", restored.Text);
+    }
+
+    [Fact]
+    public void An_unclosed_block_comment_at_the_end_is_emptied_instead_of_failing()
+    {
+        var (masked, vault) = Mask("select a from t where a = 1 /* 잘린 메모");
+
+        // V$SQL 의 SQL_TEXT 처럼 잘린 글: 제자리에 되돌릴 수 없으니 사전에 넣지 않고 본문만 비운다.
+        Assert.Equal("select a from t where a = :v1 /**/", masked);
+        Assert.Equal(0, vault.CommentCount);
+        Assert.Equal("A = :v1 /**/", Masker.MaskPredicate("A = 1 /* 잘린", vault));
+    }
+
+    [Fact]
+    public void Comment_placeholders_are_not_restored_inside_a_hint_or_as_a_hint()
+    {
+        var (masked, vault) = Mask("select a /*+ PARALLEL(t 64) */ from t -- old */ and s = 'Y'");
+        Assert.Equal("select a /*c1*/ from t --c2", masked);
+
+        // 힌트 본문 안의 주석 자리표시는 LLM 이 쓴 것이다(줄 주석의 */ 가 힌트를 닫을 수 있다). 힌트 자리가 아니던 /*+ 는 SELECT 바로 뒤에 넣지 않는다.
+        Assert.Equal("select /*+ FULL(t) --c2\n */ a from t", Masker.Restore("select /*+ FULL(t) --c2\n */ a from t", vault).Text);
+        Assert.Equal("select /*c1*/ a from t", Masker.Restore("select /*c1*/ a from t", vault).Text);
+        Assert.Equal("select a /*+ PARALLEL(t 64) */ from t", Masker.Restore("select a /*c1*/ from t", vault).Text);
+    }
+
+    [Fact]
+    public void Tool_result_sql_text_gets_the_same_comment_placeholders_as_the_prompt()
+    {
+        var (masked, vault) = Mask("select /* 월말 정산 */ a from t where a = 'KIM'");
+
+        // V$SQL 의 SQL_TEXT 처럼 같은 주석이 다시 오면 같은 번호, 새 주석은 다음 번호다.
+        var fromTool = Masker.MaskPredicate("SELECT /* 월말 정산 */ A FROM T WHERE A = 'KIM' -- 다른 메모", vault);
+
+        Assert.Equal("select /*c1*/ a from t where a = :v1", masked);
+        Assert.Equal("SELECT /*c1*/ A FROM T WHERE A = :v1 --c2", fromTool);
+        Assert.DoesNotContain("정산", fromTool, StringComparison.Ordinal);
     }
 
     [Theory]
@@ -151,9 +220,9 @@ public class SqlLiteralMaskerTests
     [Fact]
     public void Only_the_first_hint_right_after_a_dml_keyword_is_kept_and_its_values_are_masked()
     {
-        // 힌트 자리가 아닌 /*+ 는 평범한 주석이다(본문 비움). 올바른 자리의 힌트도 안의 문자열·숫자는 가린다.
+        // 힌트 자리가 아닌 /*+ 는 평범한 주석이다(주석 자리표시). 올바른 자리의 힌트도 안의 문자열·숫자는 가린다.
         Assert.Equal(
-            "select a from t where a = :v1 /**/",
+            "select a from t where a = :v1 /*c1*/",
             Mask("select a from t where a = 1 /*+ 홍길동 010-1234-5678 'KIM' */").Masked);
         Assert.Equal(
             "select /*+ INDEX(t ix) OPT_PARAM(:v1 :v2) :v3 */ a from t",
@@ -162,17 +231,17 @@ public class SqlLiteralMaskerTests
             "select /*+ INDEX(t ix)\n :v1 :v2 */ a from t",
             Mask("select /*+ INDEX(t ix)\n 'SECRET' 12345 */ a from t").Masked);
 
-        // 힌트 안에 주석(--)이 있거나 읽을 수 없으면 힌트 전체를 비우고, 두 번째 힌트도 비운다.
-        Assert.Equal("select /**/ a from t", Mask("select /*+ INDEX(t ix) -- 900101 */ a from t").Masked);
-        Assert.Equal("select /*+ FULL(t) */ /**/ a from t", Mask("select /*+ FULL(t) */ /*+ 'SECRET' */ a from t").Masked);
-        Assert.Equal("select /**/ a from t", Mask("select /*+ FULL(t) $ */ a from t").Masked);
+        // 힌트 안에 주석(--)이 있거나 읽을 수 없으면 힌트 전체를 주석 자리표시로 바꾸고, 두 번째 힌트도 그렇게 한다.
+        Assert.Equal("select /*c1*/ a from t", Mask("select /*+ INDEX(t ix) -- 900101 */ a from t").Masked);
+        Assert.Equal("select /*+ FULL(t) */ /*c1*/ a from t", Mask("select /*+ FULL(t) */ /*+ 'SECRET' */ a from t").Masked);
+        Assert.Equal("select /*c1*/ a from t", Mask("select /*+ FULL(t) $ */ a from t").Masked);
     }
 
     [Fact]
     public void Free_text_inside_a_hint_position_comment_is_dropped_but_real_hints_survive()
     {
-        Assert.Equal("select /**/ a from t", Mask("select /*+ 담당 홍길동 고객 김철수 kim@corp.com */ a from t").Masked);
-        Assert.Equal("select /**/ a from t", Mask("select /*+ written by kim for the test */ a from t").Masked);
+        Assert.Equal("select /*c1*/ a from t", Mask("select /*+ 담당 홍길동 고객 김철수 kim@corp.com */ a from t").Masked);
+        Assert.Equal("select /*c1*/ a from t", Mask("select /*+ written by kim for the test */ a from t").Masked);
         Assert.Equal(
             "select /*+ FULL(t) NO_MERGE LEADING(a b) PARALLEL(:v1) GATHER_PLAN_STATISTICS */ a from t",
             Mask("select /*+ FULL(t) NO_MERGE LEADING(a b) PARALLEL(8) GATHER_PLAN_STATISTICS */ a from t").Masked);

@@ -29,7 +29,7 @@ public sealed record TuningResult(
                 "required": ["label", "sql", "rationale"],
                 "properties": {
                   "label": { "type": "string" },
-                  "sql": { "type": "string", "description": "Complete replacement statement." },
+                  "sql": { "type": "string", "description": "Complete replacement statement. Keep every comment of the original statement unchanged, including comment placeholders such as /*c1*/ or --c1." },
                   "rationale": { "type": "string", "description": "One short line, about 40 characters." },
                   "benchmark": { "type": "string", "description": "If measured with benchmark_queries: elapsed as '141.5 ms → 89.1 ms' (original → this rewrite), then other numbers." }
                 }
