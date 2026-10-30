@@ -39,6 +39,7 @@ namespace Oranda.App.Features.Ai.Tuning;
 /// <param name="tabs">
 /// 시작한 탭을 기억해 그 탭 기준으로 제안을 넣고, 인덱스 후보 탭을 대화당 하나만 열고 바꾼다. null 이면 활성 탭의 문장으로 비교하고 인덱스 후보를 매번 <paramref name="openTab"/> 으로 연다.
 /// </param>
+/// <param name="showComparison">적용한 제안을 보기만 하는 비교 창(제목, 원본, 적용한 글). null 이면 적용한 카드에 「비교 보기」 가 없다.</param>
 public sealed partial class AiTuningFlow(
     IEditorContext editor,
     IAiDriver driver,
@@ -48,7 +49,8 @@ public sealed partial class AiTuningFlow(
     Func<AiContext, CancellationToken, Task<AiContext?>>? refreshContext = null,
     ISqlLiteralMasker? masker = null,
     Func<AiContext, bool>? maskRequired = null,
-    IEditorTabs? tabs = null)
+    IEditorTabs? tabs = null,
+    Func<string, string, string, Task>? showComparison = null)
 {
     /// <summary>도구를 부르는 횟수 예산(프롬프트로 알린다).</summary>
     public const int ToolBudget = 12;
@@ -376,9 +378,24 @@ public sealed partial class AiTuningFlow(
                 chat.AddAssistantText($"주석 {missing}개 빠짐: 재작성 후보 「{rewrite.Label}」 에 원래 문장의 주석 {missing}개가 없습니다. 제안은 그대로 두었으니 비교 창에서 확인하세요.");
             }
 
-            if (await ProposeRewriteAsync(proposal, target, startTab, ct).ConfigureAwait(true) is { } accepted)
+            // 받아들인 뒤 그 자리의 글(비교 창에서 고친 것까지)을 기억해 두고 「비교 보기」 로 원본과 견준다.
+            string? applied = null;
+            async Task<bool?> Propose(CancellationToken token)
             {
-                chat.AddProposal(rewrite.Label, OneLine(rewrite.Rationale), accepted, () => ProposeRewriteAsync(proposal, target, startTab, CancellationToken.None), ChangeText(rewrite.Benchmark));
+                var answer = await ProposeRewriteAsync(proposal, target, startTab, token).ConfigureAwait(true);
+                if (answer == true)
+                {
+                    applied = AppliedText(target, startTab) ?? MatchTerminator(target.Text, proposal.Sql);
+                }
+
+                return answer;
+            }
+
+            Func<Task>? view = showComparison is null ? null
+                : () => showComparison("AI 튜닝 — " + rewrite.Label + " (적용함)", target.Text, applied ?? MatchTerminator(target.Text, proposal.Sql));
+            if (await Propose(ct).ConfigureAwait(true) is { } accepted)
+            {
+                chat.AddProposal(rewrite.Label, OneLine(rewrite.Rationale), accepted, () => Propose(CancellationToken.None), ChangeText(rewrite.Benchmark), view);
                 carded = true;
             }
         }
@@ -553,6 +570,10 @@ public sealed partial class AiTuningFlow(
         chat.AddAssistantText(accepted ? "제안을 받아들였습니다. Ctrl+Z 한 번으로 되돌릴 수 있습니다." : "제안을 받아들이지 않았습니다.");
         return accepted;
     }
+
+    /// <summary>받아들인 직후 원래 문장 자리에 있는 글(시작 탭 기준, 없으면 활성 편집기의 문장). 읽지 못하면 null.</summary>
+    private string? AppliedText(SqlStatement target, Guid? startTab) =>
+        tabs is not null && startTab is { } tabId ? tabs.GetStatementAt(tabId, target.Range.Start)?.Text : editor.GetCurrentStatement()?.Text;
 
     /// <summary>끝의 <c>;</c> 를 원문과 같게 맞춘다(원문 범위가 <c>;</c> 를 포함하지 않으면 뺀다).</summary>
     private static string MatchTerminator(string original, string replacement)

@@ -32,7 +32,9 @@ internal sealed class PreviewEditPanel : UserControl
     private string? _diffFor;
     private Window? _window;
 
-    public PreviewEditPanel(string before, string after, Size limit)
+    /// <param name="labels">「현재 / 제안」 탭의 두 칸 머리글. null 이면 「현재」「제안」.</param>
+    /// <param name="readOnly">보기만 하는 판(이미 적용한 제안 다시 보기): 제안 칸도 고칠 수 없다.</param>
+    public PreviewEditPanel(string before, string after, Size limit, (string Before, string After)? labels = null, bool readOnly = false)
     {
         _before = before ?? string.Empty;
         after ??= string.Empty;
@@ -57,11 +59,11 @@ internal sealed class PreviewEditPanel : UserControl
 
         var current = new SqlCodeView { Text = _before };
         _proposed = new SqlCodeView { Text = after };
-        _proposed.TextEditorControl.IsReadOnly = false;
+        _proposed.TextEditorControl.IsReadOnly = readOnly;
         _proposed.TextEditorControl.Document.UndoStack.ClearAll(); // 처음 글을 넣은 일이 되돌리기에 남으면 Ctrl+Z 로 칸이 비어 버린다
         var textPage = new Grid { ColumnDefinitions = new ColumnDefinitions("*,*"), RowDefinitions = new RowDefinitions("Auto,*") };
-        textPage.Children.Add(Label(UiText.Get("Shell.dialog.current", "현재"), 0));
-        textPage.Children.Add(Label(UiText.Get("Shell.dialog.proposed", "제안"), 1));
+        textPage.Children.Add(Label(labels?.Before ?? UiText.Get("Shell.dialog.current", "현재"), 0));
+        textPage.Children.Add(Label(labels?.After ?? UiText.Get("Shell.dialog.proposed", "제안"), 1));
         Grid.SetRow(current, 1);
         Grid.SetRow(_proposed, 1);
         Grid.SetColumn(_proposed, 1);

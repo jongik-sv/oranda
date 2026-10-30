@@ -185,6 +185,13 @@ public sealed class AvaloniaEditorDialogs : IEditorDialogs
         return ShowAsync(title, panel, null, ok => ok ? panel.ProposedText : null, UiText.Get("Shell.dialog.apply", "적용"), UiText.Get("Shell.dialog.reject", "거절"), fill: true);
     }
 
+    public Task ShowComparisonAsync(string title, string before, string after, CancellationToken ct)
+    {
+        var labels = (UiText.Get("Shell.dialog.original", "원본"), UiText.Get("Shell.dialog.appliedProposal", "적용한 제안"));
+        var panel = new PreviewEditPanel(before, after, PreviewMaxSize(OwnerWorkArea()), labels, readOnly: true);
+        return ShowAsync(title, panel, false, ok => ok, UiText.Get("Shell.dialog.close", "닫기"), null, fill: true);
+    }
+
     /// <summary>
     /// 비교 판의 최대 크기 상한. 창이 내용 크기를 따르므로(<see cref="SizeToContent.WidthAndHeight"/>) 막지 않으면 긴 문장에서 창이 화면만큼 커져
     /// 적용·거절 단추가 화면 밖으로 밀려난다.

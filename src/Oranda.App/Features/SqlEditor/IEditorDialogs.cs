@@ -33,6 +33,13 @@ public interface IEditorDialogs
     async Task<string?> PreviewEditTextAsync(string title, string before, string after, CancellationToken ct)
         => await PreviewEditAsync(title, before, after, ct).ConfigureAwait(true) ? after : null;
 
+    /// <summary>
+    /// 이미 적용한 편집을 보기만 하는 비교 창(「바뀐 부분 비교」·「원본 / 적용한 제안」, 단추는 닫기 하나). 편집기 글은 바꾸지 않는다.
+    /// 기본은 <see cref="PreviewEditAsync"/> 로 보이고 답은 버린다.
+    /// </summary>
+    Task ShowComparisonAsync(string title, string before, string after, CancellationToken ct)
+        => PreviewEditAsync(title, before, after, ct);
+
     /// <summary>작업 공간 파일(.md, 열 때는 MyBatis .xml·Orange .sqd 도) 고르기. 기본은 일반 파일 고르기와 같다.</summary>
     Task<string?> PickWorkspaceFileAsync(bool save, string suggestedName, CancellationToken ct)
         => save ? PickSaveFileAsync(suggestedName, ct) : PickOpenFileAsync(ct);

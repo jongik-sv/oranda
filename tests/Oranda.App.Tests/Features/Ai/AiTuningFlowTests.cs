@@ -35,6 +35,9 @@ public class AiTuningFlowTests
 
         public bool Accept { get; set; } = true;
 
+        /// <summary>받아들이면 문장 글을 제안 글로 바꾼다(실제 편집기처럼).</summary>
+        public bool ApplyOnAccept { get; set; }
+
         public EditorSnapshot? GetActiveDocument() => null;
 
         public SqlStatement? GetCurrentStatement() => new(StatementText, new TextRange(10, StatementText.Length), StatementKind.Query);
@@ -42,6 +45,11 @@ public class AiTuningFlowTests
         public Task<bool> ProposeEditAsync(TextEdit edit, CancellationToken ct)
         {
             Proposed.Add(edit);
+            if (Accept && ApplyOnAccept)
+            {
+                StatementText = edit.NewText;
+            }
+
             return Task.FromResult(Accept);
         }
     }
@@ -212,6 +220,40 @@ public class AiTuningFlowTests
         Assert.Single(rejected.Proposed); // 다시 열지 않았다
         Assert.False(Assert.Single(chat2.Entries.OfType<ChatProposalEntry>()).Applied);
         Assert.Contains(chat2.Entries.OfType<ChatAssistantEntry>(), e => e.Text.Contains("문장이 바뀌어", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task An_applied_proposal_card_shows_the_original_and_the_applied_text_without_touching_the_editor()
+    {
+        var editor = new FakeEditor(Original) { ApplyOnAccept = true };
+        var chat = new AiChatViewModel();
+        var shown = new List<(string Title, string Before, string After)>();
+        var flow = new AiTuningFlow(editor, Driver(), chat, (_, _) => { },
+            showComparison: (title, before, after) => { shown.Add((title, before, after)); return Task.CompletedTask; });
+        await flow.StartAsync(new TuningStartChoice(true, false, "default"), Context);
+        var card = Assert.Single(chat.Entries.OfType<ChatProposalEntry>());
+        Assert.True(card.CanView);
+        Assert.False(card.CanReview);
+
+        await chat.ViewProposalCommand.ExecuteAsync(card);
+
+        var (title, before, after) = Assert.Single(shown);
+        Assert.Equal(Original, before);
+        Assert.Equal(Assert.Single(editor.Proposed).NewText, after);
+        Assert.Contains("적용함", title, StringComparison.Ordinal);
+        Assert.Single(editor.Proposed); // 보기만 했다
+    }
+
+    [Fact]
+    public void Viewing_is_offered_only_for_applied_cards_with_a_viewer()
+    {
+        var chat = new AiChatViewModel();
+        chat.AddProposal("a", "x", applied: false, () => Task.FromResult<bool?>(false), view: () => Task.CompletedTask);
+        chat.AddProposal("b", "x", applied: true, () => Task.FromResult<bool?>(true));
+        var cards = chat.Entries.OfType<ChatProposalEntry>().ToList();
+
+        Assert.False(chat.ViewProposalCommand.CanExecute(cards[0]));
+        Assert.False(chat.ViewProposalCommand.CanExecute(cards[1]));
     }
 
     [Fact]

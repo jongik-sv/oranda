@@ -102,7 +102,8 @@
           </DataTemplate>
           <DataTemplate x:DataType="vm:ChatProposalEntry">
             <!-- 재작성 제안 카드(c6·st-4): 「제안」 배지 · 이름 · 변화율(벤치마크 있을 때만) · 한 줄 요약 · 「비교 다시 보기」「적용」.
-                 편집기 글은 비교 창에서 받아들일 때만 바뀐다(두 단추 모두 같은 비교 창을 연다. 「적용」 은 그 창의 받아들이기로 끝난다). 받아들인 제안은 「적용함」. -->
+                 편집기 글은 비교 창에서 받아들일 때만 바뀐다(두 단추 모두 같은 비교 창을 연다. 「적용」 은 그 창의 받아들이기로 끝난다). 받아들인 제안은 「적용함」 과
+                 「비교 보기」(원본과 적용한 글을 보기만 하는 비교 창). -->
             <Border Padding="12,10" CornerRadius="8" BorderThickness="1" BorderBrush="{DynamicResource OrandaButtonAccentBrush}" Margin="0,0,0,12">
               <StackPanel Spacing="8">
                 <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="8">
@@ -116,8 +117,13 @@
                 </Grid>
                 <TextBlock Text="{Binding Summary}" Opacity="0.75" TextTrimming="CharacterEllipsis" MaxLines="1" ToolTip.Tip="{Binding Summary}"
                            FontSize="{DynamicResource OrandaFontSizeSmall}" />
-                <TextBlock x:Name="AppliedMark" Text="적용함" IsVisible="{Binding Applied}"
-                           Foreground="{DynamicResource OrandaSuccessForegroundBrush}" FontSize="{DynamicResource OrandaFontSizeSmall}" />
+                <Grid ColumnDefinitions="*,Auto" IsVisible="{Binding Applied}">
+                  <TextBlock x:Name="AppliedMark" Text="적용함" VerticalAlignment="Center"
+                             Foreground="{DynamicResource OrandaSuccessForegroundBrush}" FontSize="{DynamicResource OrandaFontSizeSmall}" />
+                  <Button x:Name="ViewAppliedButton" Grid.Column="1" Content="비교 보기" MinHeight="30" IsVisible="{Binding CanView}"
+                          Command="{Binding $parent[ItemsControl].((vm:AiChatViewModel)DataContext).ViewProposalCommand}" CommandParameter="{Binding}"
+                          ToolTip.Tip="원본과 적용한 제안을 비교 창으로 봅니다" />
+                </Grid>
                 <Grid ColumnDefinitions="*,*" ColumnSpacing="8" IsVisible="{Binding CanReview}">
                   <Button x:Name="ReviewButton" Content="비교 다시 보기" HorizontalAlignment="Stretch" HorizontalContentAlignment="Center" MinHeight="30"
                           Command="{Binding $parent[ItemsControl].((vm:AiChatViewModel)DataContext).ReviewProposalCommand}" CommandParameter="{Binding}"

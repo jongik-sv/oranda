@@ -132,7 +132,8 @@ public sealed partial class ChatToolGroup : ObservableObject
 }
 
 /// <summary>
-/// 재작성 제안 카드(c6): 비교 창을 거절·닫기 한 뒤에도 대화 창에 남고 「다시 보기」 로 같은 비교 창을 다시 연다. 받아들인 제안은 「적용함」.
+/// 재작성 제안 카드(c6): 비교 창을 거절·닫기 한 뒤에도 대화 창에 남고 「다시 보기」 로 같은 비교 창을 다시 연다. 받아들인 제안은 「적용함」 과
+/// 「비교 보기」(원본과 적용한 글을 보기만 하는 비교 창).
 /// <see cref="Label"/>·<see cref="Summary"/> 는 AI 가 보낸 글 그대로다(가린 대화면 자리표시 그대로 — 되돌린 SQL 은 <see cref="Reopen"/> 안에만 있다).
 /// </summary>
 public sealed record ChatProposalEntry(string Label, string Summary, bool Applied) : ChatEntry
@@ -145,9 +146,14 @@ public sealed record ChatProposalEntry(string Label, string Summary, bool Applie
     /// <summary>비교 창을 다시 연다. 받아들이면 true, 거절하면 false, 열지 못했으면(탭이 닫힘·문장이 바뀜) null.</summary>
     internal Func<Task<bool?>>? Reopen { get; init; }
 
+    /// <summary>적용한 제안을 보기만 하는 비교 창(원본과 적용한 글)을 연다. 편집기 글은 바꾸지 않는다.</summary>
+    internal Func<Task>? View { get; init; }
+
     public string Headline => "재작성 제안 · " + Label;
 
     public bool CanReview => !Applied;
+
+    public bool CanView => Applied && View is not null;
 }
 
 /// <summary>
@@ -164,13 +170,13 @@ public sealed partial class AiChatViewModel : ToolPanelViewModelBase
     private string _title = "대화";
 
     [ObservableProperty]
-    [NotifyCanExecuteChangedFor(nameof(SendCommand), nameof(StopCommand), nameof(ReviewProposalCommand))]
+    [NotifyCanExecuteChangedFor(nameof(SendCommand), nameof(StopCommand), nameof(ReviewProposalCommand), nameof(ViewProposalCommand))]
     [NotifyPropertyChangedFor(nameof(CanType))]
     private bool _isRunning;
 
     /// <summary>제안 비교 창을 다시 연 채다(그동안 다른 제안을 겹쳐 열지 않는다).</summary>
     [ObservableProperty]
-    [NotifyCanExecuteChangedFor(nameof(ReviewProposalCommand))]
+    [NotifyCanExecuteChangedFor(nameof(ReviewProposalCommand), nameof(ViewProposalCommand))]
     private bool _isReviewing;
 
     /// <summary>
@@ -265,8 +271,8 @@ public sealed partial class AiChatViewModel : ToolPanelViewModelBase
     public void AddAssistantText(string text) => Entries.Add(new ChatAssistantEntry(text));
 
     /// <summary>제안 카드를 남긴다. <paramref name="reopen"/> 은 같은 제안의 비교 창을 다시 여는 호출 쪽 동작, <paramref name="change"/> 는 벤치마크 변화율(없으면 null).</summary>
-    public void AddProposal(string label, string summary, bool applied, Func<Task<bool?>> reopen, string? change = null)
-        => Entries.Add(new ChatProposalEntry(label, summary, applied) { Reopen = reopen, Change = change });
+    public void AddProposal(string label, string summary, bool applied, Func<Task<bool?>> reopen, string? change = null, Func<Task>? view = null)
+        => Entries.Add(new ChatProposalEntry(label, summary, applied) { Reopen = reopen, Change = change, View = view });
 
     /// <summary>앞 대화를 잇는 id(<see cref="AiStarted"/>·<see cref="AiFinal"/> 이 알려 준다). 이어 말하기를 보낼 때 호출 쪽이 읽어 요청에 싣는다.</summary>
     public string? ResumeId { get; private set; }
@@ -424,6 +430,28 @@ public sealed partial class AiChatViewModel : ToolPanelViewModelBase
             {
                 Entries[i] = entry with { Applied = true };
             }
+        }
+        finally
+        {
+            IsReviewing = false;
+        }
+    }
+
+    private bool CanViewProposal(ChatProposalEntry? entry) => entry is { CanView: true } && !IsReviewing;
+
+    /// <summary>「비교 보기」: 적용한 제안의 원본과 적용한 글을 비교 창으로 다시 본다(닫기만 있음).</summary>
+    [RelayCommand(CanExecute = nameof(CanViewProposal))]
+    private async Task ViewProposalAsync(ChatProposalEntry? entry)
+    {
+        if (entry?.View is not { } view)
+        {
+            return;
+        }
+
+        IsReviewing = true;
+        try
+        {
+            await view().ConfigureAwait(true);
         }
         finally
         {

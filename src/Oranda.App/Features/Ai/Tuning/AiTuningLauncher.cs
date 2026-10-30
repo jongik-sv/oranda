@@ -239,7 +239,8 @@ public sealed class AiTuningLauncher(IServiceProvider services)
             RefreshContextAsync,
             services.GetService(typeof(ISqlLiteralMasker)) as ISqlLiteralMasker,
             context => context.Environment == ConnectionEnvironment.Production || _profile is not { } profile || AiAccessPolicy.MaskLiterals(profile, MaskLiteralsSetting()),
-            new HostEditorTabs());
+            new HostEditorTabs(),
+            (title, before, after) => SqlEditorHost.Current.Dialogs.ShowComparisonAsync(title, before, after, CancellationToken.None));
         _flow.Attach();
         return _flow;
     }
