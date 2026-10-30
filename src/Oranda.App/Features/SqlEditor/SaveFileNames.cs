@@ -20,11 +20,19 @@ internal static class SaveFileNames
 
     /// <summary>
     /// 피커가 제안 이름에 기본 확장자를 겹쳐 붙여 돌려준 경우(제안 「x.sql」 → 「x.sql.sql」)만 한 번으로 정리한다.
-    /// 사용자가 제안과 다른 이름을 직접 입력한 경우는 손대지 않는다.
+    /// 사용자가 제안과 다른 이름을 직접 입력한 경우는 손대지 않는다. macOS 피커는 한글을 자모로 나눈 꼴(NFD)로 돌려주므로
+    /// 경로를 먼저 NFC 로 맞춘다: 비교가 맞고, 저장한 파일 이름도 Windows 에서 자모가 갈라져 보이지 않는다.
     /// </summary>
     public static string? CollapseDoubled(string? path, string suggestedName, string defaultExtension)
     {
-        if (string.IsNullOrEmpty(path) || string.IsNullOrEmpty(defaultExtension))
+        if (string.IsNullOrEmpty(path))
+        {
+            return path;
+        }
+
+        path = path.Normalize(System.Text.NormalizationForm.FormC);
+        suggestedName = suggestedName.Normalize(System.Text.NormalizationForm.FormC);
+        if (string.IsNullOrEmpty(defaultExtension))
         {
             return path;
         }

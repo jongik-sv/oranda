@@ -183,6 +183,20 @@ public class MenuGroupingTests
         }
     }
 
+    [Fact]
+    public void Main_toolbar_has_a_workspace_save_button_right_after_save()
+    {
+        static int Order(string id) =>
+            int.Parse(AppCommands.Single(c => c.Id == id).Placements.Single(p => p.StartsWith("toolbar:main/", StringComparison.Ordinal)).Split('@')[1],
+                System.Globalization.CultureInfo.InvariantCulture);
+
+        var save = Order("oranda.file.save");
+        var workspace = Order("oranda.file.saveWorkspaceFile");
+        Assert.True(workspace > save);
+        Assert.DoesNotContain(AppCommands.SelectMany(c => c.Placements), p => p.StartsWith("toolbar:main/", StringComparison.Ordinal)
+            && int.Parse(p.Split('@')[1], System.Globalization.CultureInfo.InvariantCulture) is var o && o > save && o < workspace);
+    }
+
     // ---- 보기 메뉴 중복 자리 ----------------------------------------------------------------
 
     [Fact]

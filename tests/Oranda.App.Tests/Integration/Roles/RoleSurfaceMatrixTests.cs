@@ -220,11 +220,11 @@ public sealed class RoleSurfaceMatrixTests
     /// 조회 전용이 아닌 구성은 툴바가 그대로(놓인 단추 = 보이는 단추).
     /// </summary>
     [Theory]
-    [InlineData("R6-viewer", 14, 12)]
-    [InlineData("R1-sqlDev", 15, 15)] // + AI 튜닝 분할 단추 1개(aiTuning 기본 켬)
-    [InlineData("none(default-R1)", 15, 15)]
-    [InlineData("R6+R1", 15, 15)]
-    [InlineData("all-features", 19, 19)]
+    [InlineData("R6-viewer", 15, 13)]
+    [InlineData("R1-sqlDev", 16, 16)] // + AI 튜닝 분할 단추 1개(aiTuning 기본 켬)
+    [InlineData("none(default-R1)", 16, 16)]
+    [InlineData("R6+R1", 16, 16)]
+    [InlineData("all-features", 20, 20)]
     public Task Toolbar_hides_commit_and_rollback_only_for_read_only_without_a_pending_transaction(string name, int placed, int shownWithoutTxn) => HeadlessHost.Run(async () =>
     {
         var c = Cases[name];

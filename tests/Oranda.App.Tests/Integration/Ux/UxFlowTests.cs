@@ -387,7 +387,7 @@ public sealed class UxFlowTests(ITestOutputHelper output)
             await RoleApp.SettleAsync();
             var bus = app.Get<IEventBus>();
             var keys = app.Get<ContextKeyService>();
-            Assert.Equal(12, UxWidth.ShownToolbar(app).Count);
+            Assert.Equal(13, UxWidth.ShownToolbar(app).Count);
 
             // 접속(작업 세션) → 미커밋 생김(실행 엔진이 내는 이벤트) → 커밋·롤백 단추가 나타나고, 끝나면 다시 숨는다.
             var session = Guid.NewGuid();
@@ -397,11 +397,11 @@ public sealed class UxFlowTests(ITestOutputHelper output)
             await RoleApp.SettleAsync(() => keys.Get("txnPending"));
             await RoleApp.SettleAsync(() => UxWidth.ShownToolbar(app).Contains(Commit));
             Assert.Contains(Rollback, UxWidth.ShownToolbar(app));
-            Assert.Equal(14, UxWidth.ShownToolbar(app).Count);
+            Assert.Equal(15, UxWidth.ShownToolbar(app).Count);
 
             bus.Publish(new TransactionStateChanged(session, false));
             await RoleApp.SettleAsync(() => !UxWidth.ShownToolbar(app).Contains(Commit));
-            Assert.Equal(12, UxWidth.ShownToolbar(app).Count);
+            Assert.Equal(13, UxWidth.ShownToolbar(app).Count);
             bus.Publish(new SessionClosed(session));
         }
         finally

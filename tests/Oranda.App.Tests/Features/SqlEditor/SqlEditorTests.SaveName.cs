@@ -43,6 +43,18 @@ public sealed partial class SqlEditorTests
     public void Doubled_extension_from_picker_is_collapsed_only_when_suggestion_was_kept(string returned, string suggested, string ext, string expected)
         => Assert.Equal(expected, SaveFileNames.CollapseDoubled(returned, suggested, ext));
 
+    [Fact]
+    public void Doubled_extension_is_collapsed_when_macos_returns_a_decomposed_korean_name()
+    {
+        // macOS 저장 대화 상자는 한글 이름을 자모로 나눈 꼴(NFD)로 돌려준다: 제안 「원본.sql」(NFC)과 글자가 달라 보여도 같은 이름이다.
+        var returned = "/d/" + "원본.sql.sql".Normalize(System.Text.NormalizationForm.FormD);
+        Assert.NotEqual("/d/원본.sql.sql", returned);
+
+        Assert.Equal("/d/원본.sql", SaveFileNames.CollapseDoubled(returned, "원본.sql", "sql"));
+        Assert.Equal("/d/작업.workspace.md", SaveFileNames.CollapseDoubled("/d/" + "작업.workspace.md.md".Normalize(System.Text.NormalizationForm.FormD), "작업.workspace.md", "md"));
+        Assert.Equal("/d/새 이름.sql", SaveFileNames.CollapseDoubled("/d/" + "새 이름.sql".Normalize(System.Text.NormalizationForm.FormD), "원본.sql", "sql")); // 이름도 NFC 로 맞춘다
+    }
+
     [Theory]
     [InlineData("x", "x.workspace.md")]
     [InlineData("01. 작업", "01. 작업.workspace.md")]

@@ -39,18 +39,19 @@ public sealed class MenuWidthTests(ITestOutputHelper output)
 
     internal static readonly Dictionary<string, Config> Configs = new(StringComparer.Ordinal)
     {
-        ["all-features"] = new(PrdMatrix.FeaturesJson(null, allFeatures: true), 274, 11, ["view/도구 창=17", "sql=27", "database=22", "monitor=21", "tuning=23"], 15, 19, 19, 5, 17, 224, 287, 274, 11),
-        ["none(default-R1)"] = new(null, 205, 10, ["sql=23"], 15, 15, 15, 5, 14, 191, 210, 209, 10),
-        ["R1"] = new(PrdMatrix.FeaturesJson(["sqlDev"]), 205, 10, ["sql=23"], 15, 15, 15, 5, 14, 191, 210, 209, 10),
-        ["R2"] = new(PrdMatrix.FeaturesJson(["plsqlDev"]), 218, 10, ["sql=24", "database=19"], 15, 17, 17, 5, 15, 199, 223, 219, 10),
-        ["R3"] = new(PrdMatrix.FeaturesJson(["myBatisDev"]), 212, 10, ["view/도구 창=16", "sql=26"], 14, 15, 15, 5, 16, 189, 223, 216, 10),
-        ["R4"] = new(PrdMatrix.FeaturesJson(["tuner"]), 238, 11, ["sql=23", "database=17", "monitor=21", "tuning=23"], 13, 19, 19, 5, 14, 199, 243, 239, 11),
-        ["R5"] = new(PrdMatrix.FeaturesJson(["dba"]), 256, 11, ["sql=24", "database=21", "monitor=21", "tuning=20"], 15, 19, 19, 5, 15, 215, 261, 256, 11),
-        ["R6"] = new(PrdMatrix.FeaturesJson(["viewer"]), 178, 9, ["sql=22"], 13, 12, 14, 5, 12, 164, 182, 184, 9),
-        ["R1+R4"] = new(PrdMatrix.FeaturesJson(["sqlDev", "tuner"]), 256, 11, ["sql=24", "database=19", "monitor=21", "tuning=23"], 15, 19, 19, 5, 15, 216, 263, 257, 11),
+        ["all-features"] = new(PrdMatrix.FeaturesJson(null, allFeatures: true), 274, 11, ["view/도구 창=17", "sql=27", "database=22", "monitor=21", "tuning=23"], 15, 20, 20, 5, 17, 224, 287, 274, 11),
+        ["none(default-R1)"] = new(null, 205, 10, ["sql=23"], 15, 16, 16, 5, 14, 191, 210, 209, 10),
+        ["R1"] = new(PrdMatrix.FeaturesJson(["sqlDev"]), 205, 10, ["sql=23"], 15, 16, 16, 5, 14, 191, 210, 209, 10),
+        ["R2"] = new(PrdMatrix.FeaturesJson(["plsqlDev"]), 218, 10, ["sql=24", "database=19"], 15, 18, 18, 5, 15, 199, 223, 219, 10),
+        ["R3"] = new(PrdMatrix.FeaturesJson(["myBatisDev"]), 212, 10, ["view/도구 창=16", "sql=26"], 14, 16, 16, 5, 16, 189, 223, 216, 10),
+        ["R4"] = new(PrdMatrix.FeaturesJson(["tuner"]), 238, 11, ["sql=23", "database=17", "monitor=21", "tuning=23"], 13, 20, 20, 5, 14, 199, 243, 239, 11),
+        ["R5"] = new(PrdMatrix.FeaturesJson(["dba"]), 256, 11, ["sql=24", "database=21", "monitor=21", "tuning=20"], 15, 20, 20, 5, 15, 215, 261, 256, 11),
+        ["R6"] = new(PrdMatrix.FeaturesJson(["viewer"]), 178, 9, ["sql=22"], 13, 13, 15, 5, 12, 164, 182, 184, 9),
+        ["R1+R4"] = new(PrdMatrix.FeaturesJson(["sqlDev", "tuner"]), 256, 11, ["sql=24", "database=19", "monitor=21", "tuning=23"], 15, 20, 20, 5, 15, 216, 263, 257, 11),
         // AI 튜닝 기본 켬(2026-10-29): 조회 전용(R6)·Role 0개를 뺀 구성은 툴바 AI 단추 1·튜닝 메뉴 「AI 튜닝」 1·보기 > 도구 창 ▸ AI 대화 토글 1(항목 +2, 툴바 +1, 도구 창 등록 +1, 팔레트 +5).
         // TSK-14-17: SQL 모니터 기능이 있는 구성(all-features·R4·R5·R1+R4)은 튜닝 메뉴 「튜닝 추천」 한 줄이 늘었다(항목·tuning·SQL 탭·팔레트 +1).
-        ["roles-empty"] = new(PrdMatrix.FeaturesJson([]), 171, 9, ["sql=22"], 9, 14, 14, 5, 11, 160, 175, 176, 9),
+        // 작업 공간 저장 단추(2026-10-30): 모든 구성의 툴바 「저장」 옆에 1개(툴바 +1).
+        ["roles-empty"] = new(PrdMatrix.FeaturesJson([]), 171, 9, ["sql=22"], 9, 15, 15, 5, 11, 160, 175, 176, 9),
     };
 
     /// <summary>조사(413a33d) 뒤 모든 구성에 더해진 메뉴 줄: 보기 &gt; 도구 창 ▸ 「세션」 토글(TSK-14-04) 1, 도움말 「새 기능(릴리스 노트)」 1.</summary>

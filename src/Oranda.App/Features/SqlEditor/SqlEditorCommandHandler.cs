@@ -19,7 +19,7 @@ namespace Oranda.App.Features.SqlEditor;
 [OrandaCommand("oranda.file.saveWorkspace", CommandCategory.File, Enablement = "hasDocument", ShowInPalette = false)]
 [OrandaCommand("oranda.file.openWorkspace", CommandCategory.File, ShowInPalette = false)]
 [OrandaCommand("oranda.file.openWorkspaceFile", CommandCategory.File, Icon = "workspaceOpen", Placements = ["menu:file/workspace/openWorkspaceFile@301"])]
-[OrandaCommand("oranda.file.saveWorkspaceFile", CommandCategory.File, Enablement = "hasDocument && !mybatisDocActive", Icon = "workspaceSave", Placements = ["menu:file/workspace/saveWorkspaceFile@400"])]
+[OrandaCommand("oranda.file.saveWorkspaceFile", CommandCategory.File, Enablement = "hasDocument && !mybatisDocActive", Icon = "workspaceSave", Placements = ["menu:file/workspace/saveWorkspaceFile@400", "toolbar:main/saveWorkspaceFile@131"])]
 [OrandaCommand("oranda.file.saveWorkspaceFileAs", CommandCategory.File, Enablement = "hasDocument && !mybatisDocActive", Placements = ["menu:file/workspace/saveWorkspaceFileAs@401"])]
 [OrandaCommand("oranda.file.newWorkspace", CommandCategory.File, Icon = "folderAdd", Placements = ["menu:file/workspace/newWorkspace@300", "toolbar:main/newWorkspace@112"])]
 [OrandaCommand("oranda.file.renameWorkspace", CommandCategory.File, Enablement = "sqlWorkspaceActive", Placements = ["menu:file/workspace/renameWorkspace@402"])]
