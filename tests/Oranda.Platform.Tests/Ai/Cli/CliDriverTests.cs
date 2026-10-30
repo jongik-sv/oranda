@@ -237,6 +237,19 @@ public sealed class CliDriverTests : IDisposable
         Assert.False(ClaudeExecutable.IsBatchFile(@"C:\npm\claude.exe"));
     }
 
+    [Fact]
+    public void Claude_outside_path_is_found_in_a_usual_install_folder()
+    {
+        // macOS 에서 Finder 로 띄운 앱의 PATH 에는 Homebrew·설치기 폴더가 없다.
+        var home = Path.Combine("home", "u");
+        var installed = OperatingSystem.IsWindows()
+            ? Path.Combine(home, ".local", "bin", "claude.exe")
+            : Path.Combine(home, ".local", "bin", "claude");
+
+        Assert.Equal(installed, ClaudeExecutable.Find(null, OperatingSystem.IsWindows() ? @"C:\Windows" : "/usr/bin:/bin", p => p == installed, home));
+        Assert.Null(ClaudeExecutable.Find(null, "/usr/bin", _ => false, home));
+    }
+
     private static string ArgumentAfter(IReadOnlyList<string> arguments, string option) => arguments[arguments.ToList().IndexOf(option) + 1];
 
     private static string FixturePath(string name)

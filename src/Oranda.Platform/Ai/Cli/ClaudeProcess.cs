@@ -54,6 +54,17 @@ internal sealed class SystemClaudeProcessLauncher : IClaudeProcessLauncher
             info.ArgumentList.Add(argument);
         }
 
+        // PATH 밖(흔한 설치 위치)에서 찾은 claude 면 그 폴더를 자식 PATH 앞에 둔다: npm 설치의 claude 는 같은 폴더의 node 를 찾고,
+        // macOS 에서 Finder 로 띄운 앱의 PATH 에는 Homebrew 폴더가 없다.
+        if (Path.GetDirectoryName(launch.ExecutablePath) is { Length: > 0 } directory)
+        {
+            var path = info.Environment.TryGetValue("PATH", out var current) ? current ?? string.Empty : string.Empty;
+            if (!path.Split(Path.PathSeparator).Contains(directory, StringComparer.Ordinal))
+            {
+                info.Environment["PATH"] = path.Length == 0 ? directory : directory + Path.PathSeparator + path;
+            }
+        }
+
         var process = new Process { StartInfo = info };
         try
         {
