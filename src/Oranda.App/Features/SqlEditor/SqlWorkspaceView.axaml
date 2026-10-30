@@ -94,6 +94,10 @@
                               Command="{Binding $parent[UserControl].((vm:SqlWorkspaceViewModel)DataContext).BeginRenameTabCommand}"
                               CommandParameter="{Binding}" />
                     <Separator IsVisible="{Binding $parent[UserControl].((vm:SqlWorkspaceViewModel)DataContext).IsTabRenameAllowed}" />
+                    <MenuItem Header="탭 복사(새 탭에)"
+                              Command="{Binding $parent[UserControl].((vm:SqlWorkspaceViewModel)DataContext).DuplicateTabCommand}"
+                              CommandParameter="{Binding}" />
+                    <Separator />
                     <MenuItem Header="닫기"
                               Command="{Binding $parent[UserControl].((vm:SqlWorkspaceViewModel)DataContext).CloseTabCommand}"
                               CommandParameter="{Binding}" />

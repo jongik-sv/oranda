@@ -95,6 +95,7 @@ public sealed partial class SqlEditorHost
         Tabs.Insert(Math.Min(at, Tabs.Count), vm);
     }
 
+    /// <summary>탭을 새 이름 없는 탭으로 복사한다: SQL·접속·선택 영역과 바인드 변수 창의 줄(값·자료형·방향)을 모두 옮긴다.</summary>
     public SqlEditorViewModel Duplicate(SqlEditorViewModel source)
     {
         ArgumentNullException.ThrowIfNull(source);
@@ -106,6 +107,15 @@ public sealed partial class SqlEditorHost
         };
         vm.IsDirty = false;
         vm.Select(source.SelectionStart, source.SelectionLength);
+        // 메모리 안의 복사라 디스크 저장 규칙(기본값 줄·비밀 이름 빼기)과 달리 줄을 모두 옮긴다.
+        vm.Binds.Restore(source.Binds.Rows.Select(r => new WorkspaceBind
+        {
+            Name = r.Name,
+            Type = r.Type,
+            Direction = r.Direction,
+            Value = r.Text,
+            IsNull = r.Text.Length == 0,
+        }));
         AddTab(ws, vm);
         return vm;
     }

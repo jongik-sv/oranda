@@ -83,6 +83,7 @@
       <ListBox.ContextMenu>
         <ContextMenu>
           <MenuItem Header="복사" InputGesture="Ctrl+C" Click="OnCopyClick" />
+          <MenuItem Header="전체 복사" Click="OnCopyAllClick" />
           <MenuItem Header="머리글 포함 복사" Click="OnCopyWithHeaderClick" />
           <MenuItem Header="붙여 넣기" InputGesture="Ctrl+V" Click="OnPasteClick" />
         </ContextMenu>

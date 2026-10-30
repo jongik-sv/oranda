@@ -261,9 +261,9 @@ public partial class BindVariablesView : UserControl
         }
     }
 
-    internal async Task CopyAsync(bool withHeader)
+    internal async Task CopyAsync(bool withHeader, bool all = false)
     {
-        if (_vm is null || TopLevel.GetTopLevel(this)?.Clipboard is not { } clipboard || _vm.CopyText(withHeader) is not { } text)
+        if (_vm is null || TopLevel.GetTopLevel(this)?.Clipboard is not { } clipboard || _vm.CopyText(withHeader, all) is not { } text)
         {
             return;
         }
@@ -319,6 +319,8 @@ public partial class BindVariablesView : UserControl
     }
 
     private void OnCopyClick(object? sender, Avalonia.Interactivity.RoutedEventArgs e) => _ = CopyAsync(false);
+
+    private void OnCopyAllClick(object? sender, Avalonia.Interactivity.RoutedEventArgs e) => _ = CopyAsync(false, all: true);
 
     private void OnCopyWithHeaderClick(object? sender, Avalonia.Interactivity.RoutedEventArgs e) => _ = CopyAsync(true);
 

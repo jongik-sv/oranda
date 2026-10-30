@@ -194,6 +194,34 @@ public sealed partial class BindGridTests
     // ---- 창(VM·View) ----------------------------------------------------------------------
 
     [Fact]
+    public void Copy_all_takes_every_row_even_when_one_row_is_selected()
+    {
+        var vm = BindVariablesViewModel.ForHost(new EventBus(), new SqlEditorHost());
+        vm.Store.Ensure(["A", "B", "C"]);
+        vm.Selected = vm.Rows[1]; // 값 칸을 누르면 그 줄이 골라진다
+
+        Assert.Equal("B\t\tVarchar2\tIN\n", vm.CopyText());
+        Assert.Equal("A\t\tVarchar2\tIN\nB\t\tVarchar2\tIN\nC\t\tVarchar2\tIN\n", vm.CopyText(all: true));
+        Assert.Contains("3줄", vm.StatusText, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Paste_adds_rows_for_names_the_active_sql_uses_before_it_has_run()
+    {
+        var host = new SqlEditorHost();
+        host.NewDocument("select * from emp where empno = :EMPNO and deptno = :D");
+        var vm = BindVariablesViewModel.ForHost(new EventBus(), host);
+        Assert.Empty(vm.Rows); // 아직 실행하지 않아 줄이 없다
+
+        Assert.Equal(2, vm.PasteText("EMPNO\t7369\t숫자\tIN\nD\t10\nNOPE\t1\n"));
+
+        Assert.Equal(["EMPNO", "D"], vm.Rows.Select(r => r.Name));
+        Assert.Equal(("7369", BindDataType.Number), (vm.Store.Find("EMPNO")!.Text, vm.Store.Find("EMPNO")!.Type));
+        Assert.Equal("10", vm.Store.Find("D")!.Text);
+        Assert.Contains("1개는 건너뜀", vm.StatusText, StringComparison.Ordinal); // SQL 에 없는 이름은 여전히 건너뛴다
+    }
+
+    [Fact]
     public void Copy_and_paste_between_two_stores_with_block_selection_in_the_view_model()
     {
         var vm = BindVariablesViewModel.ForHost(new EventBus(), new SqlEditorHost());

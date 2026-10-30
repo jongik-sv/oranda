@@ -71,15 +71,20 @@ public static class BindTsv
         return entries;
     }
 
-    /// <summary>붙여 넣기를 목록에 적용한다. 이름이 같은 줄(대소문자·앞 콜론 무시)에만 채우고, 없는 이름은 세어서 돌려준다.</summary>
-    public static (int Applied, int Skipped) Apply(BindVariableStore store, string text, string? dateFormat = null)
+    /// <summary>
+    /// 붙여 넣기를 목록에 적용한다. 이름이 같은 줄(대소문자·앞 콜론 무시)에 채운다. 목록에 없어도 <paramref name="addable"/>
+    /// (탭의 SQL 이 쓰는 이름 — 아직 실행하지 않아 줄이 없을 때)에 있으면 줄을 만들어 채우고, 그 밖의 이름은 세어서 돌려준다.
+    /// </summary>
+    public static (int Applied, int Skipped) Apply(BindVariableStore store, string text, string? dateFormat = null, IEnumerable<string>? addable = null)
     {
         ArgumentNullException.ThrowIfNull(store);
+        var canAdd = new HashSet<string>(addable ?? [], StringComparer.OrdinalIgnoreCase);
         var applied = 0;
         var skipped = 0;
         foreach (var e in Parse(text))
         {
-            if (store.Find(e.Name) is not { } row)
+            var row = store.Find(e.Name) ?? (canAdd.Contains(e.Name) ? store.Add(e.Name) : null);
+            if (row is null)
             {
                 skipped++;
                 continue;

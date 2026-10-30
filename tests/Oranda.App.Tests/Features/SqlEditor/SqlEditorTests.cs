@@ -616,6 +616,39 @@ public sealed partial class SqlEditorTests : IDisposable
     }
 
     [Fact]
+    public void Duplicate_copies_the_bind_values_into_an_independent_list()
+    {
+        var host = new SqlEditorHost();
+        var a = host.NewDocument("select :A, :PWD from dual");
+        a.Binds.Restore([
+            new Oranda.Core.Workspaces.WorkspaceBind { Name = "A", Type = Oranda.Core.Execution.BindDataType.Number, Value = "1" },
+            new Oranda.Core.Workspaces.WorkspaceBind { Name = "PWD", Value = "tiger", Direction = Oranda.Core.Execution.BindDirection.InOut },
+        ]);
+
+        var copy = host.Duplicate(a);
+
+        Assert.Equal(
+            [("A", "1", Oranda.Core.Execution.BindDataType.Number, Oranda.Core.Execution.BindDirection.In), ("PWD", "tiger", Oranda.Core.Execution.BindDataType.Varchar2, Oranda.Core.Execution.BindDirection.InOut)],
+            copy.Binds.Rows.Select(r => (r.Name, r.Text, r.Type, r.Direction)));
+        copy.Binds.Find("A")!.Text = "2";
+        Assert.Equal("1", a.Binds.Find("A")!.Text); // 따로 고칠 수 있다
+    }
+
+    [Fact]
+    public void Tab_menu_duplicate_command_opens_the_copy_next_to_the_tabs()
+    {
+        var host = new SqlEditorHost();
+        var a = host.NewDocument("select 1 from dual");
+        var ws = host.ActiveWorkspace!;
+
+        ws.DuplicateTabCommand.Execute(a);
+
+        Assert.Equal(2, ws.Tabs.Count);
+        Assert.Equal("select 1 from dual", host.Active!.Text);
+        Assert.NotSame(a, host.Active);
+    }
+
+    [Fact]
     public Task Open_edit_save_round_trip_keeps_bom_and_dedupes_open_tabs() => Ui.Run(async () =>
     {
         Directory.CreateDirectory(_root);

@@ -203,17 +203,24 @@ public sealed class BindPaneShellKeysTests
         rig.ClickRowHead(0, MouseButton.Right);
         var menu = rig.List.ContextMenu!;
         Assert.True(menu.IsOpen);
-        var items = menu.Items.OfType<MenuItem>().ToList();
+        MenuItem Item(string header) => menu.Items.OfType<MenuItem>().Single(i => (string?)i.Header == header);
 
         await rig.Clipboard.SetTextAsync("before");
-        ClickMenuItem(items[1]); // 머리글 포함 복사
+        ClickMenuItem(Item("머리글 포함 복사"));
         await HeadlessHost.WaitUntil(() => true);
         Dispatcher.UIThread.RunJobs();
         Assert.Equal(BindTsv.Format([rig.Vm.Rows[0]], true), await rig.Clipboard.TryGetTextAsync());
 
+        // 전체 복사: 한 줄을 골라 두어도 모든 줄을 복사한다
+        rig.ClickRowHead(0, MouseButton.Right);
+        ClickMenuItem(Item("전체 복사"));
+        await HeadlessHost.WaitUntil(() => true);
+        Dispatcher.UIThread.RunJobs();
+        Assert.Equal(BindTsv.Format(rig.Vm.Rows), await rig.Clipboard.TryGetTextAsync());
+
         await rig.Clipboard.SetTextAsync("ENAME\tWARD\tVARCHAR2\tIN");
         rig.ClickRowHead(0, MouseButton.Right);
-        ClickMenuItem(menu.Items.OfType<MenuItem>().ToList()[2]); // 붙여 넣기
+        ClickMenuItem(Item("붙여 넣기"));
         await HeadlessHost.WaitUntil(() => rig.Vm.Rows[1].Text == "WARD");
     });
 

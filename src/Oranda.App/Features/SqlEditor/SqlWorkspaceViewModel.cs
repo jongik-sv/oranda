@@ -183,6 +183,16 @@ public sealed partial class SqlWorkspaceViewModel : ToolPanelViewModelBase, IInn
         }
     }
 
+    /// <summary>SQL 탭 문맥 메뉴 「탭 복사(새 탭에)」: SQL 과 바인드 변수 값까지 새 탭으로 복사한다(<c>oranda.file.duplicateTab</c> 와 같다).</summary>
+    [RelayCommand]
+    private void DuplicateTab(SqlEditorViewModel? tab)
+    {
+        if (tab is not null)
+        {
+            Host.Duplicate(tab);
+        }
+    }
+
     [RelayCommand]
     private async Task CloseOtherTabsAsync(SqlEditorViewModel? tab)
     {

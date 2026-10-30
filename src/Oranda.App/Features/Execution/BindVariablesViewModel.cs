@@ -110,10 +110,10 @@ public sealed partial class BindVariablesViewModel : ToolPanelViewModelBase
         Selected = Rows.Count == 0 ? null : Rows[Math.Min(index, Rows.Count - 1)];
     }
 
-    /// <summary>고른 줄(없으면 전체)을 TSV 4열로. 복사할 줄이 없으면 null.</summary>
-    public string? CopyText(bool withHeader = false)
+    /// <summary>고른 줄(없거나 <paramref name="all"/> 이면 전체)을 TSV 4열로. 복사할 줄이 없으면 null.</summary>
+    public string? CopyText(bool withHeader = false, bool all = false)
     {
-        var block = Block();
+        var block = all ? [] : Block();
         if (block.Count == 0)
         {
             block = [.. Rows];
@@ -128,10 +128,15 @@ public sealed partial class BindVariablesViewModel : ToolPanelViewModelBase
         return BindTsv.Format(block, withHeader);
     }
 
-    /// <summary>TSV 를 읽어 이름이 같은 변수에 값·자료형·방향을 채운다. 채운 줄 수를 돌려준다.</summary>
+    /// <summary>
+    /// TSV 를 읽어 이름이 같은 변수에 값·자료형·방향을 채운다. 활성 탭의 SQL 이 쓰는 이름은 아직 줄이 없어도(실행 전) 줄을 만든다.
+    /// 채운 줄 수를 돌려준다.
+    /// </summary>
     public int PasteText(string text)
     {
-        var (applied, skipped) = BindTsv.Apply(Store, text);
+        var tab = _host.Active;
+        var addable = tab is not null && ReferenceEquals(tab.Binds, Store) ? tab.ReferencedBindNames : null;
+        var (applied, skipped) = BindTsv.Apply(Store, text, addable: addable);
         StatusText = skipped > 0
             ? $"바인드 변수 {applied.ToString(System.Globalization.CultureInfo.InvariantCulture)}줄에 붙여 넣었습니다(목록에 없는 이름 {skipped.ToString(System.Globalization.CultureInfo.InvariantCulture)}개는 건너뜀)."
             : $"바인드 변수 {applied.ToString(System.Globalization.CultureInfo.InvariantCulture)}줄에 붙여 넣었습니다.";
