@@ -331,12 +331,13 @@ public sealed partial class BindGridTests
         Drag(Head(1), Head(2), Head(3));
         Assert.Equal(["B", "C", "D"], vm.SelectedRows.Select(r => r.Name).Order());
 
-        // 이름 칸에서 시작해도 다른 줄로 넘어가면 글 고르기가 아니라 줄 고르기다: Ctrl+C 가 줄을 복사하도록 포커스도 목록으로 옮긴다.
+        // 이름 칸에서 시작해도 다른 줄로 넘어가면 글 고르기가 아니라 줄 고르기다: 복사 단축키가 줄을 복사하도록 포커스도 목록으로 옮긴다.
         Drag(NameCell(0), NameCell(1));
         Assert.Equal(["A", "B"], vm.SelectedRows.Select(r => r.Name).Order());
         Assert.IsNotType<TextBox>(window.FocusManager?.GetFocusedElement());
-        window.KeyPress(Avalonia.Input.Key.C, Avalonia.Input.RawInputModifiers.Control, Avalonia.Input.PhysicalKey.C, "c");
-        window.KeyRelease(Avalonia.Input.Key.C, Avalonia.Input.RawInputModifiers.Control, Avalonia.Input.PhysicalKey.C, "c");
+        var primary = OperatingSystem.IsMacOS() ? Avalonia.Input.RawInputModifiers.Meta : Avalonia.Input.RawInputModifiers.Control;
+        window.KeyPress(Avalonia.Input.Key.C, primary, Avalonia.Input.PhysicalKey.C, "c");
+        window.KeyRelease(Avalonia.Input.Key.C, primary, Avalonia.Input.PhysicalKey.C, "c");
         Avalonia.Threading.Dispatcher.UIThread.RunJobs();
         Assert.Equal("바인드 변수 2줄을 복사했습니다.", vm.StatusText);
         window.Close();

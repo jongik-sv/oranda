@@ -65,6 +65,18 @@ public class OptionTextGuardTests
     }
 
     [Fact]
+    public void Text_typed_right_after_option_escape_is_not_swallowed()
+    {
+        var (guard, _, _, _, advance) = Create();
+
+        // Option+Esc(자동완성 열기)는 글자를 만들지 않으므로, 이어서 곧바로 친 글자는 편집기에 들어가야 한다.
+        guard.NoteKeyDown(Key.Escape, KeyModifiers.Alt, handled: true);
+        advance(TimeSpan.FromMilliseconds(50));
+
+        Assert.False(guard.ShouldSwallowText("."));
+    }
+
+    [Fact]
     public void Text_long_after_the_option_key_is_not_swallowed()
     {
         var (guard, _, dispatcher, _, advance) = Create();

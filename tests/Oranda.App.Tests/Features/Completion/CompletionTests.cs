@@ -174,6 +174,44 @@ public sealed class CompletionTests
     });
 
     [Fact]
+    public Task Shortcut_opens_the_window_on_the_focused_editor_not_the_active_sql_tab() => HeadlessHost.Run(async () =>
+    {
+        // 활성 SQL 탭(숨은 쪽)과, 호스트 밖에서 포커스를 가진 편집기(PL/SQL·MyBatis 탭 역할)를 따로 둔다.
+        var host = new SqlEditorHost();
+        var hidden = host.NewDocument("sel");
+        var hiddenView = new SqlEditorView { DataContext = hidden };
+        var hiddenWindow = new Window { Width = 600, Height = 400, Content = hiddenView };
+        hiddenWindow.Show();
+        Dispatcher.UIThread.RunJobs();
+        hiddenView.TextEditorControl.CaretOffset = 3;
+
+        var (focusedWindow, focusedView, _) = Show("sel", 3);
+        Assert.True(focusedView.TextEditorControl.TextArea.IsKeyboardFocusWithin);
+
+        var c = Controller();
+        var handler = new CompletionCommandHandler { Host = host, Controller = c };
+        await handler.ExecuteAsync(new CommandContext(CompletionCommands.TriggerCompletion, FakeContextKeys.AllTrue), CancellationToken.None);
+
+        Assert.Same(focusedView.TextEditorControl.TextArea, c.CurrentWindow!.TextArea);
+        c.CloseCompletion();
+        focusedWindow.Close();
+        hiddenWindow.Close();
+    });
+
+    [Fact]
+    public Task Shortcut_without_any_sql_tab_still_opens_on_the_focused_editor() => HeadlessHost.Run(async () =>
+    {
+        var (window, view, _) = Show("sel", 3);
+        var c = Controller();
+        var handler = new CompletionCommandHandler { Host = new SqlEditorHost(), Controller = c };
+        await handler.ExecuteAsync(new CommandContext(CompletionCommands.TriggerCompletion, FakeContextKeys.AllTrue), CancellationToken.None);
+
+        Assert.Same(view.TextEditorControl.TextArea, c.CurrentWindow!.TextArea);
+        c.CloseCompletion();
+        window.Close();
+    });
+
+    [Fact]
     public Task Result_is_dropped_when_the_caret_moved_away_meanwhile() => HeadlessHost.Run(async () =>
     {
         var (window, view, _) = Show("SELECT e. FROM emp e", 9);

@@ -248,7 +248,11 @@ public sealed class UxFlowTests(ITestOutputHelper output)
                 Assert.True(dispatcher.Handle(Key.Enter, KeyModifiers.Control)); // 키를 삼키고 시나리오 실행 명령을 부른다(열린 매퍼가 없으면 아무 일 없음)
                 await dispatcher.LastRun!;
                 keys.SetFocusSlot("sqlText");
-                Assert.Equal("oranda.exec.runStatement", keymap.Table.Find(CtrlEnter, keys, Available).CommandId);
+                // macOS 키맵은 Ctrl+Enter 를 runForEdit 에 묶고 runStatement 는 Cmd+Enter 다(default.json 의 "mac").
+                Assert.Equal(
+                    OperatingSystem.IsMacOS() ? "oranda.exec.runForEdit" : "oranda.exec.runStatement",
+                    keymap.Table.Find(CtrlEnter, keys, Available).CommandId);
+                Assert.Equal("oranda.exec.runStatement", keymap.Table.Find([(Key.Enter, OperatingSystem.IsMacOS() ? KeyModifiers.Meta : KeyModifiers.Control)], keys, Available).CommandId);
                 keys.SetFocusSlot(null);
                 Assert.Equal("Ctrl+Enter", keymap.ShortcutText("oranda.mybatis.runScenario")?.Split(',')[0].Trim());
 
@@ -448,22 +452,23 @@ public sealed class UxFlowTests(ITestOutputHelper output)
             Assert.Equal(registry.Commands.Count - 2, paletteIds.Count);
 
             // 하위 메뉴 안 명령의 단축키가 그대로 그 명령을 찾는다.
+            var primary = OperatingSystem.IsMacOS() ? KeyModifiers.Meta : KeyModifiers.Control;
             keys.SetFocusSlot("sqlText");
-            Assert.Equal("oranda.edit.upperCase", keymap.Table.Find([(Key.U, KeyModifiers.Control | KeyModifiers.Shift)], keys, Available).CommandId);
-            Assert.Equal("oranda.edit.toggleLineComment", keymap.Table.Find([(Key.Oem2, KeyModifiers.Control)], keys, Available).CommandId);
-            Assert.Equal("oranda.nav.quickOpenObject", keymap.Table.Find([(Key.P, KeyModifiers.Control)], keys, Available).CommandId);
+            Assert.Equal("oranda.edit.upperCase", keymap.Table.Find([(Key.U, primary | KeyModifiers.Shift)], keys, Available).CommandId);
+            Assert.Equal("oranda.edit.toggleLineComment", keymap.Table.Find([(Key.Oem2, primary)], keys, Available).CommandId);
+            Assert.Equal("oranda.nav.quickOpenObject", keymap.Table.Find([(Key.P, primary)], keys, Available).CommandId);
             keys.SetFocusSlot("sqlGrid");
-            Assert.Equal("oranda.grid.copyWithHeaders", keymap.Table.Find([(Key.C, KeyModifiers.Control | KeyModifiers.Shift)], keys, Available).CommandId);
+            Assert.Equal("oranda.grid.copyWithHeaders", keymap.Table.Find([(Key.C, primary | KeyModifiers.Shift)], keys, Available).CommandId);
             keys.SetFocusSlot(null);
             Assert.Contains("oranda.edit.upperCase", paletteIds);
             Assert.Contains("oranda.grid.copyWithHeaders", paletteIds);
 
-            // 실제 실행: Alt+4(메뉴에서 뺀 「실행 계획」) → 닫혀 있던 실행 계획 창이 열린다.
+            // 실제 실행: Alt+4(macOS 는 Ctrl+4, 메뉴에서 뺀 「실행 계획」) → 닫혀 있던 실행 계획 창이 열린다.
             await UxWidth.OpenSqlTabAsync(app);
             var ws = app.Get<DockWorkspace>();
             Assert.DoesNotContain("oranda.panel.plan", ws.VisibleToolIds);
             var dispatcher = new KeyDispatcher(() => keymap.Table, registry, keys);
-            Assert.True(dispatcher.Handle(Key.D4, KeyModifiers.Alt));
+            Assert.True(dispatcher.Handle(Key.D4, OperatingSystem.IsMacOS() ? KeyModifiers.Control : KeyModifiers.Alt)); // macOS 키맵은 Ctrl+4
             await dispatcher.LastRun!;
             Dispatcher.UIThread.RunJobs();
             Assert.Contains("oranda.panel.plan", ws.VisibleToolIds);

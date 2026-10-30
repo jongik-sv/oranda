@@ -28,8 +28,19 @@ public sealed class OptionTextGuard(KeyDispatcher dispatcher, Func<DateTime>? cl
             return;
         }
 
+        // Option+Esc 처럼 글자를 만들지 않는 키는 뒤따르는 TextInput 이 없다. 기억해 두면 250ms 안에 직접 친 글자를 삼킨다.
+        if (ProducesNoText(key))
+        {
+            _last = null;
+            return;
+        }
+
         _last = (key, modifiers, handled, _now());
     }
+
+    private static bool ProducesNoText(Key key) =>
+        key is Key.Escape or >= Key.F1 and <= Key.F24
+            or Key.Up or Key.Down or Key.Left or Key.Right or Key.Home or Key.End or Key.PageUp or Key.PageDown or Key.Insert or Key.Delete;
 
     /// <summary>
     /// 방금 Option 키 입력에 딸린 글자 입력이면 true(편집기에 넣지 않는다).

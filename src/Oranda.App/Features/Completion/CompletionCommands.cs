@@ -37,6 +37,32 @@ public static class CompletionCommands
         }
 
         InputElement.TextInputEvent.AddClassHandler<InputElement>(OnTextInput, RoutingStrategies.Bubble, handledEventsToo: true);
+        InputElement.GotFocusEvent.AddClassHandler<TextArea>(OnTextAreaGotFocus, RoutingStrategies.Bubble, handledEventsToo: true);
+    }
+
+    private static WeakReference<TextArea>? s_focusedArea;
+
+    private static void OnTextAreaGotFocus(TextArea sender, FocusChangedEventArgs e)
+    {
+        if (ReferenceEquals(sender, e.Source))
+        {
+            s_focusedArea = new WeakReference<TextArea>(sender);
+        }
+    }
+
+    /// <summary>
+    /// 키보드 포커스가 지금 들어 있는 SQL 편집기(SQL 탭·PL/SQL 탭·MyBatis 문장 탭 공통). 없으면 null.
+    /// 단축키는 포커스된 편집기에 창을 열어야 하므로, 활성 SQL 탭 대신 마지막으로 포커스를 받은 편집 영역을 쓴다.
+    /// </summary>
+    internal static (TextArea Area, SqlEditorViewModel? Tab)? FocusedEditor()
+    {
+        if (s_focusedArea is not { } weak || !weak.TryGetTarget(out var area) || !area.IsKeyboardFocusWithin
+            || area.FindAncestorOfType<SqlEditorView>() is not { } view)
+        {
+            return null;
+        }
+
+        return (area, view.DataContext as SqlEditorViewModel);
     }
 
     private static void OnTextInput(InputElement sender, TextInputEventArgs e)
@@ -62,7 +88,7 @@ public static class CompletionCommands
 
 /// <summary>
 /// <c>oranda.edit.triggerCompletion</c>(Ctrl+Space, macOS Option+Esc)·<c>oranda.edit.parameterHints</c>(Ctrl+Shift+Space) 처리기.
-/// 활성 SQL 편집기 탭(<see cref="SqlEditorHost.Active"/>)의 편집 영역에 창을 연다.
+/// 포커스된 편집기(PL/SQL·MyBatis 문장 탭 포함)의 편집 영역에 창을 연다. 포커스된 편집기를 모르면 활성 SQL 편집기 탭(<see cref="SqlEditorHost.Active"/>)에 연다.
 /// </summary>
 [OrandaCommand(CompletionCommands.TriggerCompletion, CommandCategory.Edit, Title = "자동완성 열기", When = "editorFocus",
     Placements = ["menu:edit/assist/triggerCompletion@240"])]
@@ -90,13 +116,23 @@ public sealed class CompletionCommandHandler : ICommandHandler
     public async Task ExecuteAsync(CommandContext context, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(context);
-        var tab = Host.Active;
-        if (tab?.Surface is not SqlEditorView view)
+        TextArea area;
+        SqlEditorViewModel? tab;
+        if (CompletionCommands.FocusedEditor() is { } focused)
         {
-            return;
+            (area, tab) = focused;
+        }
+        else
+        {
+            tab = Host.Active;
+            if (tab?.Surface is not SqlEditorView view)
+            {
+                return;
+            }
+
+            area = view.TextEditorControl.TextArea;
         }
 
-        var area = view.TextEditorControl.TextArea;
         if (context.CommandId == CompletionCommands.ParameterHints)
         {
             await Controller.ShowParameterHintsAsync(area, tab, cancellationToken).ConfigureAwait(true);
