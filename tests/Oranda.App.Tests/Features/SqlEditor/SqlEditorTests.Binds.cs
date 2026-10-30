@@ -42,13 +42,13 @@ public sealed partial class SqlEditorTests
         SetBind(tab.Binds, "EMPNO", "1002", BindDataType.Number);
         SetBind(tab.Binds, "SINCE", string.Empty, BindDataType.Date); // NULL 날짜
         SetBind(tab.Binds, "NOTE", "a\nb */ 'c' & \"d\"");
-        tab.Binds.Ensure(["DEPT"]); // 실행이 만들어 둔 빈 줄(빈 값·문자열·IN)은 남기지 않는다
+        tab.Binds.Ensure(["DEPT"]); // 실행이 만들어 둔 빈 줄(빈 값·문자열·IN)도 NULL 로 남긴다: 다시 열면 어떤 변수가 있는지 바로 보인다
         SetBind(tab.Binds, "UNUSED", "x"); // 탭이 참조하지 않는 이름도 남기지 않는다
         await host.ShutdownAsync(default);
 
         var json = await File.ReadAllTextAsync(Path.Combine(_root, "workspaces", "default.json"));
         Assert.Contains("\"binds\": [", json, StringComparison.Ordinal);
-        Assert.DoesNotContain("\"name\": \"DEPT\"", json, StringComparison.Ordinal);
+        Assert.Contains("\"name\": \"DEPT\"", json, StringComparison.Ordinal);
         Assert.DoesNotContain("UNUSED", json, StringComparison.Ordinal);
 
         // 복원하면 저장한 값·형식·NULL 이 그 탭의 목록으로 돌아온다.
@@ -59,6 +59,7 @@ public sealed partial class SqlEditorTests
                 ("EMPNO", "1002", BindDataType.Number, BindDirection.In),
                 ("SINCE", string.Empty, BindDataType.Date, BindDirection.In),
                 ("NOTE", "a\nb */ 'c' & \"d\"", BindDataType.Varchar2, BindDirection.In),
+                ("DEPT", string.Empty, BindDataType.Varchar2, BindDirection.In),
             ],
             RowsOf(Assert.Single(host.Tabs).Binds));
     });

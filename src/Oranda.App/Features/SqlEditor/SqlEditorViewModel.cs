@@ -594,7 +594,7 @@ public sealed partial class SqlEditorViewModel : ToolPanelViewModelBase, IBindOw
     public WorkspaceTab ToWorkspaceTab(BindVariableStore? binds = null)
     {
         bool keepContent = FilePath is null || IsDirty;
-        var values = (binds ?? Binds).Snapshot(ReferencedBindNames);
+        var values = (binds ?? Binds).Snapshot(ReferencedBindNames, includeEmpty: true);
         return new WorkspaceTab
         {
             Id = TabId,

@@ -229,17 +229,19 @@ public sealed class BindVariableStore
     }
 
     /// <summary>
-    /// 디스크에 남길 값(작업 공간 <c>tabs[].binds</c>·.sql 바인드 블록). <paramref name="names"/> 순서로, 목록에 있고 기본값
-    /// (빈 값·문자열·IN — 실행이 만들어 둔 빈 줄)이 아닌 줄만 담는다. 비밀로 보이는 이름(<see cref="SensitiveBindNames"/>)은 뺀다.
+    /// 디스크에 남길 값(작업 공간 <c>tabs[].binds</c>·.workspace.md·.sql 바인드 블록). <paramref name="names"/> 순서로 목록에 있는 줄을 담는다.
+    /// 기본값 줄(빈 값·문자열·IN — 실행이 만들어 둔 빈 줄)은 <paramref name="includeEmpty"/> 일 때만 NULL 로 담는다: 작업 공간은 담아
+    /// 다시 열면 어떤 변수가 있는지 바로 보이게 하고, .sql 파일은 담지 않아 실행만 한 파일이 바뀌지 않게 한다.
+    /// 비밀로 보이는 이름(<see cref="SensitiveBindNames"/>)은 뺀다.
     /// </summary>
-    public IReadOnlyList<WorkspaceBind> Snapshot(IEnumerable<string> names)
+    public IReadOnlyList<WorkspaceBind> Snapshot(IEnumerable<string> names, bool includeEmpty = false)
     {
         ArgumentNullException.ThrowIfNull(names);
         var binds = new List<WorkspaceBind>();
         foreach (var name in names.Distinct(StringComparer.OrdinalIgnoreCase))
         {
             if (SensitiveBindNames.IsSensitive(name) || Find(name) is not { } row
-                || (row.Text.Length == 0 && row.Type == BindDataType.Varchar2 && row.Direction == BindDirection.In))
+                || (!includeEmpty && row.Text.Length == 0 && row.Type == BindDataType.Varchar2 && row.Direction == BindDirection.In))
             {
                 continue;
             }
@@ -275,11 +277,11 @@ public sealed class BindVariableStore
         }
     }
 
-    /// <summary>자동 저장 변경 감지용 표지: <see cref="Snapshot"/> 이 담을 이름·형식·방향·NULL·값.</summary>
+    /// <summary>자동 저장 변경 감지용 표지: 작업 공간이 담을(<see cref="Snapshot"/>, 빈 줄 포함) 이름·형식·방향·NULL·값.</summary>
     public string Fingerprint(IEnumerable<string> names)
     {
         var sb = new StringBuilder();
-        foreach (var b in Snapshot(names))
+        foreach (var b in Snapshot(names, includeEmpty: true))
         {
             sb.Append(b.Name).Append('\u0003').Append(b.Type).Append('\u0003').Append(b.Direction).Append('\u0003')
                 .Append(b.IsNull).Append('\u0003').Append(b.Value.Length).Append(':').Append(b.Value).Append('\u0004');

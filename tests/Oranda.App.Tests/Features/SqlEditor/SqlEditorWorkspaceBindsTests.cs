@@ -18,7 +18,9 @@ public sealed partial class SqlEditorTests
             new WorkspaceBind { Name = "EMPNO", Type = BindDataType.Number, Value = "7369" },
             new WorkspaceBind { Name = "PASSWORD", Value = "tiger" },
         ]);
-        host.NewDocument("select * from dept where deptno = :D").Binds.Restore([new WorkspaceBind { Name = "D", Value = "10" }]);
+        var dept = host.NewDocument("select * from dept where deptno = :D and loc = :LOC");
+        dept.Binds.Restore([new WorkspaceBind { Name = "D", Value = "10" }]);
+        dept.Binds.Ensure(["LOC"]); // 실행이 만든 빈 줄(NULL)도 남는다
 
         Assert.True(await host.SaveWorkspaceFileAsync(askPath: true, default));
         var md = await File.ReadAllTextAsync(path);
@@ -31,6 +33,6 @@ public sealed partial class SqlEditorTests
         Assert.Equal("select * from emp where empno = :EMPNO and pwd = :PASSWORD", tabs[^2].Text);
         var empRow = Assert.Single(tabs[^2].Binds.Rows);
         Assert.Equal(("EMPNO", "7369", BindDataType.Number), (empRow.Name.Trim(), empRow.Text, empRow.Type));
-        Assert.Equal("10", Assert.Single(tabs[^1].Binds.Rows).Text);
+        Assert.Equal([("D", "10"), ("LOC", "")], tabs[^1].Binds.Rows.Select(r => (r.Name.Trim(), r.Text)));
     });
 }
