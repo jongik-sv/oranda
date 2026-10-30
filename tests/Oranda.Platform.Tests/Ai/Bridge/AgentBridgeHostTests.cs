@@ -26,7 +26,9 @@ public sealed class AgentBridgeHostTests : IAsyncDisposable
         var unique = Guid.NewGuid().ToString("N")[..12];
         _host = new AgentBridgeHost(_gate, _tokens, (_, instance) => $"oranda-bridge-test-{unique}" + (instance is null ? string.Empty : "-" + instance))
         {
-            HelloTimeout = TimeSpan.FromMilliseconds(600),
+            // hello 시한이 짧으면 바쁜 CI 에서 연결하고 hello 를 보내기 전에 서버가 연결을 닫아 다른 시험이 「Broken pipe」 로 깨진다.
+            // 시한 시험(Connection_without_hello_…)이 기다리는 시간과 견줘 넉넉한 값.
+            HelloTimeout = TimeSpan.FromSeconds(3),
             CallQueueTimeout = TimeSpan.FromMilliseconds(700),
         };
         _pipeName = _host.Start();
