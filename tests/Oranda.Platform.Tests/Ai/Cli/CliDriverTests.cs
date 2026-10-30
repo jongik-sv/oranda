@@ -34,6 +34,20 @@ public sealed class CliDriverTests : IDisposable
     }
 
     [Fact]
+    public void Orandactl_is_found_in_agent_for_builds_and_beside_the_app_for_installed_packages()
+    {
+        var root = Path.Combine("app");
+        var exe = OperatingSystem.IsWindows() ? "orandactl.exe" : "orandactl";
+        var agent = Path.Combine(root, "agent", exe);
+        var beside = Path.Combine(root, exe);
+        var dll = Path.Combine(root, "orandactl.dll");
+
+        Assert.Equal(agent, CliDriver.OrandactlPath(root, p => p == agent || p == beside)); // 빌드 출력: agent\ 가 있다
+        Assert.Equal(beside, CliDriver.OrandactlPath(root, p => p == beside || p == dll)); // 게시본: 앱 폴더에 본체까지 있다
+        Assert.Equal(agent, CliDriver.OrandactlPath(root, p => p == beside)); // 본체 없는 실행 파일만 있으면 쓰지 않는다(없음으로 알림)
+    }
+
+    [Fact]
     public async Task Successful_run_translates_the_recorded_stream_and_cleans_up()
     {
         _launcher.Lines = File.ReadAllLines(FixturePath("two-tool-calls.jsonl"));

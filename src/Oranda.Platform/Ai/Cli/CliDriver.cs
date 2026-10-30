@@ -46,10 +46,23 @@ internal sealed class CliDriver : IAiDriver
             paths,
             settings,
             new SystemClaudeProcessLauncher(),
-            Path.Combine(AppContext.BaseDirectory, "agent", OperatingSystem.IsWindows() ? "orandactl.exe" : "orandactl"),
+            OrandactlPath(AppContext.BaseDirectory, File.Exists),
             () => Environment.GetEnvironmentVariable("PATH"),
             File.Exists)
     {
+    }
+
+    /// <summary>
+    /// orandactl 경로. 빌드 출력에서는 <c>agent/</c> 폴더(앱 프로젝트가 복사), 게시본(설치판)에서는 앱과 같은 폴더다
+    /// (앱의 자체 포함 런타임을 같이 쓴다). 앱 폴더의 orandactl 은 본체(<c>orandactl.dll</c>)가 옆에 있을 때만 쓴다:
+    /// 빌드 출력의 앱 폴더에는 SDK 가 복사한 실행 파일만 있고 본체가 없다.
+    /// </summary>
+    internal static string OrandactlPath(string baseDirectory, Func<string, bool> fileExists)
+    {
+        var exe = OperatingSystem.IsWindows() ? "orandactl.exe" : "orandactl";
+        var agent = Path.Combine(baseDirectory, "agent", exe);
+        var beside = Path.Combine(baseDirectory, exe);
+        return !fileExists(agent) && fileExists(beside) && fileExists(Path.Combine(baseDirectory, "orandactl.dll")) ? beside : agent;
     }
 
     /// <summary>시험용: 프로세스 실행·경로 찾기를 바꿔 넣는다.</summary>

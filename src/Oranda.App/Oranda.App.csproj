@@ -129,4 +129,15 @@
     </ItemGroup>
     <Copy SourceFiles="@(_OrandactlFile)" DestinationFolder="$(OutDir)agent" SkipUnchangedFiles="true" />
   </Target>
+
+  <!-- 게시본(설치 패키지)에는 agent\ 를 두지 않고 orandactl 을 앱 폴더에 함께 둔다: 자체 포함 런타임을 같이 써서 따로 런타임을 싣지 않는다.
+       SDK 가 orandactl 실행 파일·deps·runtimeconfig 는 이미 게시하므로 본체(orandactl.dll)와 앱에 없는 의존 dll 만 더한다(앱에 있는 같은 이름은 덮어쓰지 않음). -->
+  <Target Name="PublishOrandactlBesideApp" AfterTargets="Publish" Condition="'@(OrandactlOutput)' != ''">
+    <ItemGroup>
+      <_OrandactlPublishFile Include="%(OrandactlOutput.RootDir)%(OrandactlOutput.Directory)*.dll" />
+      <_OrandactlPublishFile Remove="@(_OrandactlPublishFile)" Condition="Exists('$(PublishDir)%(Filename)%(Extension)')" />
+    </ItemGroup>
+    <Copy SourceFiles="@(_OrandactlPublishFile)" DestinationFolder="$(PublishDir)" />
+    <Error Condition="!Exists('$(PublishDir)orandactl.dll')" Text="orandactl.dll 이 게시 폴더에 없습니다." />
+  </Target>
 </Project>
