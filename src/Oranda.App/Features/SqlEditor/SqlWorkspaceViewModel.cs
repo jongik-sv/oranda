@@ -53,6 +53,9 @@ public sealed partial class SqlWorkspaceViewModel : ToolPanelViewModelBase, IInn
         }
     }
 
+    /// <summary>「작업 공간 이름 바꾸기」 로 이름을 바꾼 뒤 아직 「작업 공간 저장」 하지 않았다(저장할 때 파일도 새 이름으로 옮긴다).</summary>
+    internal bool RenamedSinceSave { get; set; }
+
     /// <summary>문서 탭에 붙는 원본 종류: md·sqd·MyBatis. 파일 없이 앱 안에만 저장되는 작업 공간이면 null.</summary>
     public string? Kind => WorkspaceFiles.KindOf(SourcePath);
 

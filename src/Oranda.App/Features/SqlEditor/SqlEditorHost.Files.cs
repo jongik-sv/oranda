@@ -199,7 +199,7 @@ public sealed partial class SqlEditorHost
             return false;
         }
 
-        if (bound && RenamedWorkspacePath(ws, path) is { } renamed)
+        if (bound && ws.RenamedSinceSave && RenamedWorkspacePath(ws, path) is { } renamed)
         {
             // 이름을 바꾼 작업 공간: 파일도 같은 폴더의 새 이름으로 옮긴다. 그 이름의 파일이 이미 있으면 덮어쓰지 않고 저장 위치를 묻는다.
             if (File.Exists(renamed) && !string.Equals(renamed, Path.GetFullPath(path), StringComparison.OrdinalIgnoreCase)) // 대소문자만 바꾼 것은 같은 파일
@@ -228,6 +228,7 @@ public sealed partial class SqlEditorHost
         await File.WriteAllTextAsync(path, WorkspaceFiles.WriteMarkdown(name, tabs), new UTF8Encoding(false), ct).ConfigureAwait(true);
         ws.SourcePath = Path.GetFullPath(path);
         ws.Name = name;
+        ws.RenamedSinceSave = false;
         NoteFileUsed(ws.SourcePath, workspace: true);
         OnPropertyChanged(nameof(WorkspaceName));
         foreach (var t in ws.Tabs.Where(t => t.FilePath is null))
@@ -244,7 +245,7 @@ public sealed partial class SqlEditorHost
     private static string? RenamedWorkspacePath(SqlWorkspaceViewModel ws, string path)
     {
         var wanted = SaveFileNames.SuggestWorkspace(ws.Name.Trim());
-        if (string.Equals(WorkspaceFiles.NameOf(path).Normalize(), WorkspaceFiles.NameOf(wanted), StringComparison.Ordinal))
+        if (string.Equals(WorkspaceFiles.NameOf(path).Normalize(), WorkspaceFiles.NameOf(wanted).Normalize(), StringComparison.Ordinal))
         {
             return null;
         }

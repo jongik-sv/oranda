@@ -28,6 +28,22 @@ public sealed partial class SqlEditorTests
     });
 
     [Fact]
+    public Task Saving_without_a_rename_keeps_the_file_where_it_is_even_when_its_header_name_differs() => Ui.Run(async () =>
+    {
+        Directory.CreateDirectory(_root);
+        var path = Path.Combine(_root, "파일이름.workspace.md");
+        await File.WriteAllTextAsync(path, "# 머리글이름\n\n## SQL 1\n\n```sql\nselect 1 from dual\n```\n");
+        var host = new SqlEditorHost(NewStore(), new FakeDialogs());
+        await host.OpenWorkspaceFileAsync(path, default);
+
+        Assert.True(await host.SaveWorkspaceFileAsync(askPath: false, default));
+
+        Assert.True(File.Exists(path));
+        Assert.False(File.Exists(Path.Combine(_root, "머리글이름.workspace.md")));
+        Assert.Equal(Path.GetFullPath(path), host.ActiveWorkspace!.SourcePath);
+    });
+
+    [Fact]
     public Task Saving_a_renamed_workspace_asks_where_when_a_file_with_the_new_name_exists() => Ui.Run(async () =>
     {
         Directory.CreateDirectory(_root);

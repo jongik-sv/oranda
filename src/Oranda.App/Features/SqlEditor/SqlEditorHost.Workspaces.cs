@@ -103,7 +103,10 @@ public sealed partial class SqlEditorHost
         WorkspaceClosed?.Invoke(this, workspace);
     }
 
-    /// <summary>「작업 공간 이름 바꾸기」. 저장 파일 ID 는 「작업 공간 저장」 때만 바뀐다(닫았다 열어도 같은 파일).</summary>
+    /// <summary>
+    /// 「작업 공간 이름 바꾸기」. 저장 파일 ID 는 「작업 공간 저장」 때만 바뀐다(닫았다 열어도 같은 파일).
+    /// 작업 공간 파일에 묶여 있으면 다음 「작업 공간 저장」 때 파일도 새 이름으로 옮긴다.
+    /// </summary>
     public async Task<bool> RenameWorkspaceAsync(SqlWorkspaceViewModel workspace, CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(workspace);
@@ -113,7 +116,12 @@ public sealed partial class SqlEditorHost
             return false;
         }
 
-        workspace.Name = name.Trim();
+        if (workspace.Name != name.Trim())
+        {
+            workspace.Name = name.Trim();
+            workspace.RenamedSinceSave = true;
+        }
+
         return true;
     }
 
