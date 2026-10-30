@@ -24,15 +24,16 @@ public sealed partial class SqlEditorTests
 
         Assert.True(await host.SaveWorkspaceFileAsync(askPath: true, default));
         var md = await File.ReadAllTextAsync(path);
-        Assert.DoesNotContain("tiger", md, StringComparison.Ordinal); // 비밀로 보이는 이름은 남기지 않는다
+        Assert.Contains("tiger", md, StringComparison.Ordinal); // 비밀로 보이는 이름도 남긴다
 
         var other = new SqlEditorHost();
         await other.OpenWorkspaceFileAsync(path, default);
 
         var tabs = other.ActiveWorkspace!.Tabs;
         Assert.Equal("select * from emp where empno = :EMPNO and pwd = :PASSWORD", tabs[^2].Text);
-        var empRow = Assert.Single(tabs[^2].Binds.Rows);
-        Assert.Equal(("EMPNO", "7369", BindDataType.Number), (empRow.Name.Trim(), empRow.Text, empRow.Type));
+        Assert.Equal(
+            [("EMPNO", "7369", BindDataType.Number), ("PASSWORD", "tiger", BindDataType.Varchar2)],
+            tabs[^2].Binds.Rows.Select(r => (r.Name.Trim(), r.Text, r.Type)));
         Assert.Equal([("D", "10"), ("LOC", "")], tabs[^1].Binds.Rows.Select(r => (r.Name.Trim(), r.Text)));
     });
 }

@@ -147,7 +147,7 @@ public sealed partial class SqlEditorTests
     });
 
     [Fact]
-    public Task Sql_without_bind_values_saves_exactly_the_same_bytes_as_before() => Ui.Run(async () =>
+    public Task Sql_without_binds_saves_the_same_bytes_and_unset_binds_are_saved_as_null() => Ui.Run(async () =>
     {
         Directory.CreateDirectory(_root);
         var noRefs = Path.Combine(_root, "plain.sql");
@@ -166,7 +166,10 @@ public sealed partial class SqlEditorTests
         Assert.True(await host.SaveAsync(noValuesTab, default));
 
         Assert.Equal(plainBytes, await File.ReadAllBytesAsync(noRefs));
-        Assert.Equal(noValueBytes, await File.ReadAllBytesAsync(noValues));
+        // 값이 없는 바인드도 NULL 로 남는다: 다시 열면 어떤 변수가 있는지 바로 보인다
+        var noValueText = await File.ReadAllTextAsync(noValues);
+        Assert.StartsWith("select :id from dual", noValueText, StringComparison.Ordinal);
+        Assert.Contains("{\"name\":\"ID\",\"type\":\"Varchar2\",\"direction\":\"In\",\"value\":\"\",\"isNull\":true}", noValueText, StringComparison.Ordinal);
     });
 
     [Fact]
@@ -234,7 +237,7 @@ public sealed partial class SqlEditorTests
     });
 
     [Fact]
-    public Task Secret_looking_binds_are_never_written_to_disk() => Ui.Run(async () =>
+    public Task Secret_looking_binds_are_saved_like_any_other_bind() => Ui.Run(async () =>
     {
         Directory.CreateDirectory(_root);
         var path = Path.Combine(_root, "login.sql");
@@ -257,7 +260,7 @@ public sealed partial class SqlEditorTests
             Assert.Contains("scott", saved, StringComparison.Ordinal);
             foreach (var secret in SecretNamesAndValues)
             {
-                Assert.DoesNotContain(secret, saved, StringComparison.OrdinalIgnoreCase);
+                Assert.Contains(secret, saved, StringComparison.OrdinalIgnoreCase); // 사용자 요청(2026-10-30): 비밀로 보이는 이름도 남긴다
             }
         }
     });

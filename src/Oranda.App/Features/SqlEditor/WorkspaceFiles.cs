@@ -2,7 +2,6 @@ using System.Globalization;
 using System.Text;
 using System.Text.RegularExpressions;
 using Oranda.Core.Execution;
-using Oranda.Core.Security;
 using Oranda.Core.Workspaces;
 
 namespace Oranda.App.Features.SqlEditor;
@@ -272,11 +271,6 @@ public static partial class WorkspaceFiles
         if (type != "0")
         {
             unknownTypes.Add(type);
-        }
-
-        if (SensitiveBindNames.IsSensitive(name))
-        {
-            value = string.Empty;
         }
 
         return new WorkspaceBind { Name = name, Type = BindDataType.Varchar2, Direction = BindDirection.In, Value = value, IsNull = value.Length == 0 };

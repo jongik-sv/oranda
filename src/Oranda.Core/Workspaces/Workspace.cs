@@ -57,7 +57,7 @@ public sealed record WorkspaceTab
     public Guid? ConnectionProfileId { get; init; }
 
     /// <summary>
-    /// 이 탭의 SQL 이 참조하는 바인드 변수의 값(바인드 변수 창에 기본값이 아닌 줄이 있는 이름만, SQL 에 처음 나온 순서).
+    /// 이 탭의 SQL 이 참조하는 바인드 변수의 값(참조하는 이름 모두, 값이 없으면 NULL, SQL 에 처음 나온 순서).
     /// 없으면 null. 탭을 열면 이 값으로 바인드 변수 창의 줄을 만들거나 덮어쓴다.
     /// </summary>
     public IReadOnlyList<WorkspaceBind>? Binds { get; init; }
@@ -65,7 +65,7 @@ public sealed record WorkspaceTab
 
 /// <summary>
 /// 바인드 변수 값 하나(EXEC-03 바인드 변수 창 한 줄). 작업 공간 <c>tabs[].binds</c> 와 .sql 파일 끝 바인드 블록
-/// (<see cref="SqlFileBinds"/>)이 같은 모양을 쓴다. 이름이 비밀로 보이면(<see cref="Security.SensitiveBindNames"/>) 만들지 않는다.
+/// (<see cref="SqlFileBinds"/>)이 같은 모양을 쓴다. 이름이 비밀로 보여도 값 그대로 만든다.
 /// </summary>
 public sealed record WorkspaceBind
 {

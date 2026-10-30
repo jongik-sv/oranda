@@ -75,15 +75,15 @@ public sealed class WorkspaceFilesSqdTests
     }
 
     [Fact]
-    public void Secret_looking_bind_names_lose_their_value_and_unknown_types_leave_a_note()
+    public void Secret_looking_bind_names_keep_their_value_and_unknown_types_leave_a_note()
     {
         var read = WorkspaceFiles.ReadSqd(Sqd(WithHeader(
             "COUNT=1", "NAME=a", "STMT=1", "select 1 from dual", "VAR=3",
             ":DB_PASSWORD=0,hunter2", ":api_token=0,abc", ":QTY=3,5")), "x");
 
         var binds = Assert.Single(read.Tabs).Binds!;
-        Assert.Equal(string.Empty, binds[0].Value);
-        Assert.Equal(string.Empty, binds[1].Value);
+        Assert.Equal("hunter2", binds[0].Value);
+        Assert.Equal("abc", binds[1].Value);
         Assert.Equal("5", binds[2].Value);
         Assert.Contains(read.Notes, n => n.Contains("타입 코드(3)", StringComparison.Ordinal));
     }
