@@ -176,8 +176,14 @@ public sealed class AvaloniaEditorDialogs : IEditorDialogs
         return dialog;
     }
 
-    public Task<bool> PreviewEditAsync(string title, string before, string after, CancellationToken ct)
-        => ShowAsync(title, BuildPreviewEditPanel(before, after, PreviewMaxSize(OwnerWorkArea())), false, ok => ok, UiText.Get("Shell.dialog.apply", "적용"), UiText.Get("Shell.dialog.reject", "거절"));
+    public async Task<bool> PreviewEditAsync(string title, string before, string after, CancellationToken ct)
+        => await PreviewEditTextAsync(title, before, after, ct).ConfigureAwait(true) is not null;
+
+    public Task<string?> PreviewEditTextAsync(string title, string before, string after, CancellationToken ct)
+    {
+        var panel = BuildPreviewEditPanel(before, after, PreviewMaxSize(OwnerWorkArea()));
+        return ShowAsync(title, panel, null, ok => ok ? panel.ProposedText : null, UiText.Get("Shell.dialog.apply", "적용"), UiText.Get("Shell.dialog.reject", "거절"), fill: true);
+    }
 
     /// <summary>
     /// 비교 판의 최대 크기 상한. 창이 내용 크기를 따르므로(<see cref="SizeToContent.WidthAndHeight"/>) 막지 않으면 긴 문장에서 창이 화면만큼 커져
@@ -197,59 +203,13 @@ public sealed class AvaloniaEditorDialogs : IEditorDialogs
         Owner is { } owner && owner.Screens.ScreenFromWindow(owner) is { } screen ? screen.WorkingArea.Size.ToSize(screen.Scaling) : null;
 
     /// <summary>
-    /// 위에 바뀐 부분(줄 diff, 앞뒤 같은 줄은 접는다), 아래에 현재 글과 제안 글 전체를 나란히 보이는 비교 판(시험용으로 분리).
-    /// 전체 글 두 칸은 SQL 강조가 걸린 읽기 전용 코드 뷰다. 크기는 <paramref name="max"/>(없으면 상한) 안이고, 넘치는 글은 칸마다 스크롤한다.
+    /// 탭 둘로 된 비교 판(시험용으로 분리): 「바뀐 부분 비교」(왼쪽 기존·오른쪽 변경 줄 diff)와 「현재 / 제안」(SQL 강조가 걸린 글 전체 두 칸, 제안 칸은 고칠 수 있음).
+    /// 크기는 <paramref name="max"/>(없으면 상한) 안에서 글 길이로 정해 고정하고, 넘치는 글은 칸마다 스크롤한다.
     /// </summary>
-    internal static Grid BuildPreviewEditPanel(string before, string after, Size? max = null)
-    {
-        var limit = max ?? PreviewMaxSize(null);
-        var panel = new Grid
-        {
-            ColumnDefinitions = new ColumnDefinitions("*,*"),
-            RowDefinitions = new RowDefinitions("Auto,2*,Auto,3*"),
-            MinWidth = 640,
-            MinHeight = 240,
-            MaxWidth = limit.Width,
-            MaxHeight = limit.Height,
-        };
-        var lines = MapperLineDiff.Build(before, after, 1, 1);
-        var (added, removed) = MapperLineDiff.Count(lines);
-        var changes = new TextBlock
-        {
-            Text = string.Create(CultureInfo.InvariantCulture, $"{UiText.Get("Shell.dialog.changes", "바뀐 부분")}  +{added} −{removed}"),
-            FontWeight = FontWeight.SemiBold,
-        };
-        Grid.SetColumnSpan(changes, 2);
-        // diff 목록(ItemsControl)에는 스크롤이 없다: 바뀐 줄이 많아도 칸 안에서 넘기도록 감싼다.
-        var diff = new ScrollViewer
-        {
-            Content = new MapperDiffView { Rows = MapperDiffRow.Section(null, lines, sideBySide: false) },
-            HorizontalScrollBarVisibility = Avalonia.Controls.Primitives.ScrollBarVisibility.Disabled,
-            Margin = new Thickness(0, 2, 0, 8),
-        };
-        Grid.SetRow(diff, 1);
-        Grid.SetColumnSpan(diff, 2);
-        panel.Children.Add(changes);
-        panel.Children.Add(diff);
+    internal static PreviewEditPanel BuildPreviewEditPanel(string before, string after, Size? max = null)
+        => new(before, after, max ?? PreviewMaxSize(null));
 
-        var current = new TextBlock { Text = UiText.Get("Shell.dialog.current", "현재"), FontWeight = FontWeight.SemiBold };
-        Grid.SetRow(current, 2);
-        var right = new TextBlock { Text = UiText.Get("Shell.dialog.proposed", "제안"), FontWeight = FontWeight.SemiBold };
-        Grid.SetRow(right, 2);
-        Grid.SetColumn(right, 1);
-        panel.Children.Add(current);
-        panel.Children.Add(right);
-        var left = new SqlCodeView { Text = before };
-        Grid.SetRow(left, 3);
-        var proposed = new SqlCodeView { Text = after };
-        Grid.SetRow(proposed, 3);
-        Grid.SetColumn(proposed, 1);
-        panel.Children.Add(left);
-        panel.Children.Add(proposed);
-        return panel;
-    }
-
-    private static async Task<T> ShowAsync<T>(string title, Control content, T cancelled, Func<bool, T> result, string? okText = null, string? cancelText = "")
+    private static async Task<T> ShowAsync<T>(string title, Control content, T cancelled, Func<bool, T> result, string? okText = null, string? cancelText = "", bool fill = false)
     {
         var owner = Owner;
         if (owner is null)
@@ -258,6 +218,17 @@ public sealed class AvaloniaEditorDialogs : IEditorDialogs
         }
 
         bool accepted = false;
+        var dialog = BuildDialog(title, content, okText, cancelText, () => accepted = true, fill);
+        await dialog.ShowDialog(owner).ConfigureAwait(true);
+        return result(accepted);
+    }
+
+    /// <summary>
+    /// 대화상자 창. <paramref name="fill"/> 이면 본문이 창의 남은 높이를 채우는 틀을 쓴다(세로 StackPanel 인 <see cref="DialogShell.Framed"/> 는 본문을 자기 크기로만 두어,
+    /// 스크롤하는 칸이 든 본문은 창 크기를 정하지 못한다).
+    /// </summary>
+    internal static Window BuildDialog(string title, Control content, string? okText, string? cancelText, Action onAccept, bool fill = false)
+    {
         var dialog = new Window
         {
             Title = title,
@@ -271,11 +242,21 @@ public sealed class AvaloniaEditorDialogs : IEditorDialogs
         var cancel = new Button { Content = cancelText, IsCancel = true, MinWidth = 80, IsVisible = cancelText is not null };
         ok.Click += (_, _) =>
         {
-            accepted = true;
+            onAccept();
             dialog.Close();
         };
         cancel.Click += (_, _) => dialog.Close();
-        dialog.Content = DialogShell.Framed(content, DialogShell.Buttons(ok, cancel));
+        var buttons = DialogShell.Buttons(ok, cancel);
+        if (fill)
+        {
+            Grid.SetRow(buttons, 1);
+            dialog.Content = new Grid { Margin = new Thickness(16), RowSpacing = 12, RowDefinitions = new RowDefinitions("*,Auto"), Children = { content, buttons } };
+        }
+        else
+        {
+            dialog.Content = DialogShell.Framed(content, buttons);
+        }
+
         dialog.Opened += (_, _) =>
         {
             // 입력 칸이 있으면 바로 칠 수 있게 포커스를 주고 기존 글을 고른다(없으면 확인 단추).
@@ -293,7 +274,6 @@ public sealed class AvaloniaEditorDialogs : IEditorDialogs
                 ok.Focus();
             }
         };
-        await dialog.ShowDialog(owner).ConfigureAwait(true);
-        return result(accepted);
+        return dialog;
     }
 }

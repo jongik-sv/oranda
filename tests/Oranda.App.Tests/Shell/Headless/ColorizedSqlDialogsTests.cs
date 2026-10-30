@@ -65,13 +65,15 @@ public sealed class ColorizedSqlDialogsTests
     [Fact]
     public Task Preview_edit_panel_colors_both_before_and_after() => HeadlessHost.Run(() =>
     {
-        var window = new Window { Content = AvaloniaEditorDialogs.BuildPreviewEditPanel("select 1 from dual", "select 2 from dual"), Width = 800, Height = 300 };
+        var panel = AvaloniaEditorDialogs.BuildPreviewEditPanel("select 1 from dual", "select 2 from dual");
+        var window = new Window { Content = panel, Width = 800, Height = 300 };
         window.Show();
+        panel.Tabs.SelectedIndex = 1; // 「현재 / 제안」 탭
         Dispatcher.UIThread.RunJobs();
         var views = window.GetVisualDescendants().OfType<SqlCodeView>().ToList();
         Assert.Equal(2, views.Count);
         Assert.All(views, v => Assert.NotNull(v.Colorizer));
-        Assert.All(views, v => Assert.True(v.TextEditorControl.IsReadOnly));
+        Assert.True(views[0].TextEditorControl.IsReadOnly); // 현재 칸은 읽기 전용, 제안 칸은 고칠 수 있다
         window.Close();
     });
 

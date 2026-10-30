@@ -55,10 +55,10 @@ public sealed class EditorContext : IEditorContext
 
         var versionAtPreview = tab.Version;
         var before = tab.Document.GetText(edit.Range.Start, edit.Range.Length);
-        var accepted = await Host.Dialogs
-            .PreviewEditAsync(edit.Description ?? "제안된 편집", before, edit.NewText, ct)
+        var newText = await Host.Dialogs
+            .PreviewEditTextAsync(edit.Description ?? "제안된 편집", before, edit.NewText, ct)
             .ConfigureAwait(true);
-        if (!accepted)
+        if (newText is null)
         {
             return false;
         }
@@ -69,6 +69,6 @@ public sealed class EditorContext : IEditorContext
             return false;
         }
 
-        return tab.Apply(new TextOpResult(edit.Range.Start, edit.Range.Length, edit.NewText, edit.Range.Start, edit.NewText.Length));
+        return tab.Apply(new TextOpResult(edit.Range.Start, edit.Range.Length, newText, edit.Range.Start, newText.Length));
     }
 }

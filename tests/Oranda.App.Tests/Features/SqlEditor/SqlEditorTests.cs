@@ -1209,6 +1209,20 @@ public sealed partial class SqlEditorTests : IDisposable
     });
 
     [Fact]
+    public Task Propose_edit_applies_the_text_the_user_edited_in_the_preview() => Ui.Run(async () =>
+    {
+        var dialogs = new FakeDialogs { AcceptPreview = true, EditedPreview = "a" };
+        var host = new SqlEditorHost(dialogs: dialogs);
+        var tab = host.NewDocument("select * from t");
+        var ctx = new EditorContext { Host = host };
+
+        Assert.True(await ctx.ProposeEditAsync(new TextEdit(new TextRange(7, 1), "a, b"), default));
+        Assert.Equal("select a from t", tab.Text); // 제안 글 "a, b" 가 아니라 고친 글 "a"
+        tab.Document.UndoStack.Undo();
+        Assert.Equal("select * from t", tab.Text); // 한 번에 되돌려진다
+    });
+
+    [Fact]
     public Task Propose_edit_rejects_bad_range_read_only_stale_document_and_no_tab() => Ui.Run(async () =>
     {
         var dialogs = new FakeDialogs { AcceptPreview = true };
@@ -1253,6 +1267,9 @@ public sealed partial class SqlEditorTests : IDisposable
         public bool Confirm { get; set; }
 
         public bool AcceptPreview { get; set; }
+
+        /// <summary>null 이 아니면 미리보기에서 사용자가 제안 글을 이 글로 고쳤다고 본다(받아들일 때만 쓰임).</summary>
+        public string? EditedPreview { get; set; }
 
         /// <summary>저장 확인 대화상자의 답. 기본은 저장 안 함(닫기를 막지 않는다).</summary>
         public SaveChoice SaveAnswer { get; set; } = SaveChoice.DontSave;
@@ -1316,6 +1333,9 @@ public sealed partial class SqlEditorTests : IDisposable
             OnPreview?.Invoke();
             return Task.FromResult(AcceptPreview);
         }
+
+        public async Task<string?> PreviewEditTextAsync(string title, string before, string after, CancellationToken ct)
+            => await PreviewEditAsync(title, before, after, ct) ? EditedPreview ?? after : null;
     }
 
     private sealed class RootPaths(string root) : IAppDataPaths
