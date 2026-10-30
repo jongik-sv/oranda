@@ -3,8 +3,11 @@ namespace Oranda.Language.Ai.Tools;
 // 도구 응답 모양(설계 §5.2·§5.3). 직렬화 때 snake_case 로 바뀐다. 날짜는 yyyy-MM-dd.
 // 행 값(히스토그램 끝값·바인드 값)은 어떤 응답에도 싣지 않는다. 값을 줄지는 AgentGate 의 허용 수준이 따로 정한다.
 
-/// <summary>도구가 거부하거나 입력이 잘못됐을 때. 메시지는 LLM 이 읽는다(무엇을 하면 되는지 포함).</summary>
-public sealed class AiToolException(string message) : InvalidOperationException(message);
+/// <summary>
+/// 도구가 거부하거나 입력이 잘못됐을 때. 메시지는 앱이 쓴 글이고 LLM 이 읽는다(무엇을 하면 되는지 포함). DB·드라이버 오류 원문은 메시지에 넣지 않는다.
+/// 원인 예외(<paramref name="innerException"/>)의 원문은 LLM 으로 가지 않고, 게이트가 가린 뒤 Oranda 로그에만 쓴다.
+/// </summary>
+public sealed class AiToolException(string message, Exception? innerException = null) : InvalidOperationException(message, innerException);
 
 public sealed record ColumnDescription(string Name, string Type, bool Nullable, string? Default, string? Comment);
 

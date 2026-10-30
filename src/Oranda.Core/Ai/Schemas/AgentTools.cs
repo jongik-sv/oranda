@@ -194,15 +194,15 @@ public static class AgentTools
             } }
             """),
         new(AgentToolNames.BenchmarkQueries,
-            "Runs SELECT variants repeatedly and reports elapsed time, logical and physical reads, row count and plan hash of each. It really executes the statements, so keep the variants cheap and the repeat count low. On production connections each variant is stopped when it runs too long.",
+            "Runs SELECT variants repeatedly and reports elapsed time, logical and physical reads, row count and plan hash of each. It really executes the statements, so keep the variants cheap and the repeat count low. On production connections each variant is stopped when it runs too long. To measure the original statement as it is, omit sql in that variant. Bind variables (:NAME) of the original statement are bound locally with the values from the editor; you never see those values, and a variant whose bind has no value fails and names the missing bind.",
             AiAccessLevel.Query,
             $$"""
             { "type": "object", "additionalProperties": false, "required": ["variants"], "properties": {
               {{Conn}},
               "variants": { "type": "array", "minItems": 1, "maxItems": 5, "items": {
-                "type": "object", "additionalProperties": false, "required": ["label", "sql"], "properties": {
+                "type": "object", "additionalProperties": false, "required": ["label"], "properties": {
                   "label": { "type": "string" },
-                  "sql": { "type": "string", "description": "A single SELECT statement." }
+                  "sql": { "type": "string", "description": "A single SELECT statement. Omit it to measure the statement of the current request exactly as it is (do not copy the statement in)." }
                 } } },
               "repeat": { "type": "integer", "minimum": 1, "maximum": 5, "default": 3 }
             } }

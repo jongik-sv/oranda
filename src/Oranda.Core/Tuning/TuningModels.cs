@@ -1,3 +1,4 @@
+using Oranda.Core.Execution;
 using Oranda.Core.History;
 
 namespace Oranda.Core.Tuning;
@@ -155,6 +156,69 @@ public sealed record BenchmarkCase(string Label, string Sql)
     /// 이미 열린 트랜잭션이 있어 시작하지 못하면 실행하지 않고 실패한다.
     /// </summary>
     public bool ReadOnly { get; init; }
+
+    /// <summary>
+    /// 문장의 바인드 값(이름 → 값). 문장의 바인드 이름마다 값이 있어야 실행한다(빠진 이름이 있으면 보내지 않고 거부).
+    /// 기본은 빈 사전이라 바인드가 있는 문장은 실행하지 않는다(사람이 쓰는 튜닝 도우미 경로).
+    /// </summary>
+    public IReadOnlyDictionary<string, BindValue> Binds { get; init; } = new Dictionary<string, BindValue>();
+}
+
+/// <summary>
+/// 벤치마크 문장의 바인드 판정 한 곳(에이전트 도구 상자와 튜닝 서비스가 같이 쓴다). 문장의 바인드 이름마다 값이 있어야 실행한다.
+/// 비밀로 보이는 이름(<see cref="Oranda.Core.Security.SensitiveBindNames"/>)은 값이 있어도 쓰지 않는다.
+/// </summary>
+public static class BenchmarkBinds
+{
+    /// <summary>빠진 이름이 있으면 거부 사유(빠진 이름을 밝힌다), 모두 있으면 null.</summary>
+    public static string? MissingReason(IEnumerable<string> names, IReadOnlyDictionary<string, BindValue> binds)
+    {
+        ArgumentNullException.ThrowIfNull(names);
+        ArgumentNullException.ThrowIfNull(binds);
+        var missing = new List<string>();
+        var secret = new List<string>();
+        foreach (var name in names.Distinct(StringComparer.OrdinalIgnoreCase))
+        {
+            if (Oranda.Core.Security.SensitiveBindNames.IsSensitive(name))
+            {
+                secret.Add(":" + name);
+            }
+            else if (!binds.ContainsKey(name))
+            {
+                missing.Add(":" + name);
+            }
+        }
+
+        var reasons = new List<string>(2);
+        if (missing.Count > 0)
+        {
+            reasons.Add($"바인드 {string.Join(", ", missing)} 값이 없어 실행하지 않습니다(편집기 바인드 변수 창에 값을 넣고 튜닝을 다시 시작하십시오).");
+        }
+
+        if (secret.Count > 0)
+        {
+            reasons.Add($"바인드 {string.Join(", ", secret)} 는 비밀로 보이는 이름이라 값을 쓰지 않아 실행하지 않습니다.");
+        }
+
+        return reasons.Count == 0 ? null : string.Join(" ", reasons);
+    }
+
+    /// <summary>문장이 쓰는 이름의 값만 고른 사전(실행에 넘긴다). 비밀로 보이는 이름은 넣지 않는다.</summary>
+    public static Dictionary<string, BindValue> For(IEnumerable<string> names, IReadOnlyDictionary<string, BindValue> binds)
+    {
+        ArgumentNullException.ThrowIfNull(names);
+        ArgumentNullException.ThrowIfNull(binds);
+        var picked = new Dictionary<string, BindValue>(StringComparer.OrdinalIgnoreCase);
+        foreach (var name in names)
+        {
+            if (!Oranda.Core.Security.SensitiveBindNames.IsSensitive(name) && binds.TryGetValue(name, out var value))
+            {
+                picked[name] = value;
+            }
+        }
+
+        return picked;
+    }
 }
 
 /// <summary>벤치마크 결과(TN-11). 값은 반복 평균.</summary>

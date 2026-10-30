@@ -91,10 +91,13 @@ public sealed partial class TuningToolbox
         reason + " 이미 실행된 문장이면 get_cursor_plan 에 sql_id 를 넘겨 실제 계획(DISPLAY_CURSOR)을 확인하십시오.";
 
     /// <summary>예상 계획을 낼 문장: 한 문장, 확실한 SELECT/WITH 질의, FOR UPDATE·치환 변수 없음. 바인드는 값 없이 분석되므로 허용.</summary>
-    private SqlStatement ExplainableStatement(string sql) => SingleSelect(sql, allowBinds: true, "explain_plan");
+    private SqlStatement ExplainableStatement(string sql) => SingleSelect(sql, "explain_plan");
 
-    /// <summary>한 문장, 확실한 SELECT/WITH 질의, FOR UPDATE·치환 변수 없음(<paramref name="allowBinds"/> 가 거짓이면 바인드도 없음).</summary>
-    private SqlStatement SingleSelect(string sql, bool allowBinds, string tool)
+    /// <summary>
+    /// 한 문장, 확실한 SELECT/WITH 질의, FOR UPDATE·치환 변수 없음. 바인드는 받는다 — 실행하는 쪽(<c>benchmark_queries</c>)이
+    /// 바인드 이름마다 값이 있는지 따로 본다(<see cref="BenchmarkBinds.MissingReason"/>).
+    /// </summary>
+    private SqlStatement SingleSelect(string sql, string tool)
     {
         if (string.IsNullOrWhiteSpace(sql))
         {
@@ -122,11 +125,6 @@ public sealed partial class TuningToolbox
         if (stmt.SubstitutionNames.Count > 0)
         {
             throw new AiToolException("치환 변수(&)가 있는 문장은 분석하지 않습니다.");
-        }
-
-        if (!allowBinds && stmt.BindNames.Count > 0)
-        {
-            throw new AiToolException($"{tool} 은 바인드 변수가 있는 문장을 실행하지 않습니다. 값을 글자로 넣어 주십시오.");
         }
 
         return stmt;

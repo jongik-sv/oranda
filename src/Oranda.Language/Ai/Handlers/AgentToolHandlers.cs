@@ -35,6 +35,7 @@ internal sealed class AgentToolboxProvider(
 /// <summary>
 /// 도구 처리자 공통: 인자를 읽고 도구 상자를 불러 결과 JSON 을 만든다. 허용 수준·범위·감사·가림은 AgentGate 몫이라 여기서 하지 않는다.
 /// 실패는 예외 대신 <see cref="AgentToolOutput.Error"/> 로 돌려준다(서버 오류 원문은 ORA 번호만).
+/// <see cref="AiToolException"/> 은 앱이 쓴 글이라 <see cref="AgentToolOutput.AppWritten"/> 을 켠다. 원인 예외의 원문은 <see cref="AgentToolOutput.LogDetail"/> 로만 넘긴다(게이트가 가려 로그에 쓴다).
 /// </summary>
 internal abstract partial class ToolHandlerBase(AgentToolboxProvider boxes) : IAgentToolHandler
 {
@@ -59,20 +60,20 @@ internal abstract partial class ToolHandlerBase(AgentToolboxProvider boxes) : IA
         }
         catch (AiToolException ex)
         {
-            return AgentToolOutput.Error(ex.Message);
+            return AgentToolOutput.Error(ex.Message) with { AppWritten = true, LogDetail = Detail(ex.InnerException) };
         }
         catch (ArgumentException ex)
         {
-            return AgentToolOutput.Error("인자가 올바르지 않습니다: " + ex.Message);
+            return AgentToolOutput.Error("인자가 올바르지 않습니다: " + ex.Message) with { LogDetail = Detail(ex) };
         }
-        catch (OperationCanceledException)
+        catch (OperationCanceledException ex)
         {
-            return AgentToolOutput.Error("조회 시간이 초과되었습니다."); // 호출자의 취소가 아닌 취소(명령 시간 초과 등)
+            return AgentToolOutput.Error("조회 시간이 초과되었습니다.") with { LogDetail = Detail(ex) }; // 호출자의 취소가 아닌 취소(명령 시간 초과 등)
         }
         catch (Exception ex)
         {
             var code = OraCode().Match(ex.Message).Value;
-            return AgentToolOutput.Error(code.Length > 0 ? $"조회에 실패했습니다 ({code})." : "조회에 실패했습니다.");
+            return AgentToolOutput.Error(code.Length > 0 ? $"조회에 실패했습니다 ({code})." : "조회에 실패했습니다.") with { LogDetail = Detail(ex) };
         }
     }
 
@@ -99,6 +100,9 @@ internal abstract partial class ToolHandlerBase(AgentToolboxProvider boxes) : IA
     }
 
     protected abstract Task<JsonNode> RunAsync(TuningToolbox box, AgentToolInvocation inv, CancellationToken ct);
+
+    /// <summary>로그에 남길 원인 예외의 형 이름과 원문(가리지 않은 글: 게이트가 가린 뒤에 쓴다). 원인이 없으면 null.</summary>
+    private static string? Detail(Exception? ex) => ex is null ? null : ex.GetType().Name + ": " + ex.Message;
 
     /// <summary>
     /// 이 결과로 이 요청에서 조회해도 되게 된 sql_id(게이트는 결과 본문을 훑지 않으므로 여기서만 알린다).
@@ -339,6 +343,7 @@ internal sealed class BenchmarkQueriesHandler(AgentToolboxProvider boxes, IState
         }
 
         // 실행 허용은 게이트가 문장을 검사한 뒤 채운다(Query 이상·검사 완료). 운영 접속은 문장마다 시간 상한을 둔다.
+        // 바인드 값은 시작 탭에서 담은 값(실행 범위)만 쓴다. AI 는 값을 모르고 보내지도 않는다.
         // 게이트가 대체하라고 한 변형(위험 함수·DB 링크·시퀀스 등)은 실행하지 않고 공유 풀 커서 실측으로 바꾼다. 결과 순서는 변형 순서 그대로다.
         var production = inv.Session.Profile.Environment == ConnectionEnvironment.Production;
         var substitutions = inv.Substitutions ?? [];
@@ -356,7 +361,7 @@ internal sealed class BenchmarkQueriesHandler(AgentToolboxProvider boxes, IState
         box.CheckSubstitutes(variants.Where((_, i) => substitutions.Count > 0 && substitutions[i] is not null));
         var measured = run.Count == 0 ? [] : await box.BenchmarkAsync(
             inv.Db, run, Number(inv, "repeat", 1, 5) ?? DefaultRepeat, inv.MayExecuteSql, ScopeSchema(inv), ct,
-            production ? TuningToolbox.ProductionStatementTimeout : null, inv.ReadOnlyExecution).ConfigureAwait(false);
+            production ? TuningToolbox.ProductionStatementTimeout : null, inv.ReadOnlyExecution, inv.Session.Run.Binds).ConfigureAwait(false);
         if (substitutions.Count == 0)
         {
             return Node(measured);

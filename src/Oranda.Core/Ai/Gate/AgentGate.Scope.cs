@@ -82,14 +82,26 @@ public sealed partial class AgentGate
         {
             foreach (var item in variants)
             {
-                if (item is not JsonObject variant
-                    || !TryGetString(variant, "label", out var label)
-                    || !TryGetString(variant, AgentFields.Sql, out var variantSql))
+                if (item is not JsonObject variant || !TryGetString(variant, "label", out var label))
                 {
-                    return Deny("invalid_arguments", "Each variant needs a string label and a string sql.");
+                    return Deny("invalid_arguments", "Each variant needs a string label.");
                 }
 
-                var check = await CheckSqlAsync(session, db, state, executes, variantSql, $" (variant '{Clip(label, 40)}')", ct).ConfigureAwait(false);
+                // sql 을 뺀 변형은 요청의 대상 문장(원문)을 잰다: get_tuning_context 와 같이 리터럴을 되돌린 뒤에 채우고 같은 검사를 거친다.
+                // 인자 길이 한도(MaxArgumentChars)는 LLM 이 보낸 글에만 걸리므로 긴 원문도 그대로 잴 수 있다.
+                var where = $" (variant '{Clip(label, 40)}')";
+                if (!TryGetString(variant, AgentFields.Sql, out var variantSql))
+                {
+                    if (string.IsNullOrWhiteSpace(session.Context.StatementText))
+                    {
+                        return Deny("no_statement", $"The variant '{Clip(label, 40)}' has no sql and this request has no statement; pass sql.");
+                    }
+
+                    variantSql = session.Context.StatementText;
+                    where = $" (variant '{Clip(label, 40)}', statement of the request)";
+                }
+
+                var check = await CheckSqlAsync(session, db, state, executes, variantSql, where, ct).ConfigureAwait(false);
                 if (check.Denial is not null)
                 {
                     return check.Denial;

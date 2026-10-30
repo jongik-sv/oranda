@@ -350,17 +350,18 @@ public sealed partial class AgentGate
                 return "must contain only strings";
             }
 
-            // benchmark_queries 의 변형: { label, sql } 만, 둘 다 문자열.
+            // benchmark_queries 의 변형: 문자열 label(필수)과 문자열 sql(선택: 빼면 게이트가 요청의 대상 문장으로 채운다)만.
+            // 스키마의 items.required 를 따로 읽지 않으므로 그 모양(required = ["label"])을 여기서 검사한다.
             if (Name == AgentFields.Variants)
             {
                 foreach (var item in array)
                 {
                     if (item is not JsonObject variant
-                        || variant.Count != 2
                         || !IsString(variant["label"])
-                        || !IsString(variant[AgentFields.Sql]))
+                        || variant.Any(pair => pair.Key is not ("label" or AgentFields.Sql))
+                        || (variant.ContainsKey(AgentFields.Sql) && !IsString(variant[AgentFields.Sql])))
                     {
-                        return "must contain objects with exactly the string fields 'label' and 'sql'";
+                        return "must contain objects with a string field 'label' and an optional string field 'sql' (omit sql to use the statement of the request)";
                     }
                 }
             }

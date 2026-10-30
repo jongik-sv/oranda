@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Runtime.CompilerServices;
 using System.Text;
 using System.Text.Encodings.Web;
@@ -9,6 +10,7 @@ using Oranda.Core.Ai.Contracts;
 using Oranda.Core.Ai.Protocol;
 using Oranda.Core.Ai.Schemas;
 using Oranda.Core.Connection;
+using Oranda.Core.Execution;
 using Oranda.Core.Sessions;
 
 namespace Oranda.Core.Ai.Gate;
@@ -29,6 +31,7 @@ public sealed partial class AgentGate : IAgentGate
     private const int AuditToolMaxChars = 200;
     private const int ExceptionMessageMaxChars = 200;
     private const int ErrorTextMaxChars = 300;
+    private const int LogTextMaxChars = 2_000;
 
     /// <summary>U+2028·U+2029(U+0085 는 제어 문자에 든다). 줄바꿈으로 읽히는 유니코드 문자.</summary>
     private const char LineSeparator = (char)0x2028;
@@ -327,9 +330,13 @@ public sealed partial class AgentGate : IAgentGate
         catch (Exception ex)
         {
             // 호출자의 취소가 아닌 취소(세션 폐기·처리자 안의 시간 초과)는 실패로 본다.
-            return ex is OperationCanceledException && session.IsRevoked
-                ? Deny("run_revoked", "This run has ended and no longer accepts tool calls.")
-                : FailWithKind("tool_exception", ExceptionText(ex, level, session.Run.Literals), ex.Message);
+            if (ex is OperationCanceledException && session.IsRevoked)
+            {
+                return Deny("run_revoked", "This run has ended and no longer accepts tool calls.");
+            }
+
+            LogFailure(session, tool.Name, ex.GetType().Name, ex.Message);
+            return FailWithKind("tool_exception", ExceptionText(ex, level, session.Run.Literals), ex.Message);
         }
 
         // 처리자가 도는 동안 폐기됐으면 결과를 쓰지 않는다(sql_id 도 기억하지 않는다).
@@ -345,7 +352,13 @@ public sealed partial class AgentGate : IAgentGate
 
         if (output.IsError)
         {
-            return FailWithKind("tool_failed", HandlerErrorText(output.ErrorMessage!, level, session.Run.Literals), output.ErrorMessage!);
+            LogFailure(session, tool.Name, output.ErrorMessage!, output.LogDetail);
+
+            // 앱이 쓴 거부 글(도구 상자의 거부)은 어느 수준에서든 정화해 보인다: 모델이 무엇을 고칠지 알아야 같은 실수를 되풀이하지 않는다.
+            var shownError = output.AppWritten
+                ? SanitizeError(session.Run.Literals?.Redact(output.ErrorMessage!) ?? output.ErrorMessage!)
+                : HandlerErrorText(output.ErrorMessage!, level, session.Run.Literals);
+            return FailWithKind("tool_failed", shownError, output.ErrorMessage!);
         }
 
         // 처리자가 캐시 노드를 돌려줄 수 있으므로 복사본에서 가린다.
@@ -462,6 +475,91 @@ public sealed partial class AgentGate : IAgentGate
         var ora = OraNumber().Match(message);
         return ora.Success ? ora.Value + ": " + FailedGenericText : FailedGenericText;
     }
+
+    /// <summary>
+    /// 처리자 실패를 Oranda 로그(<see cref="Trace"/>: 앱이 데이터 폴더 <c>logs</c> 에 쓴다)에 남긴다. 감사 기록에는 오류 번호만 남으므로 원인은 여기서만 볼 수 있다.
+    /// <paramref name="message"/> 는 처리자의 오류 글, <paramref name="detail"/> 은 원인 예외의 원문(없으면 null)이다.
+    /// 바인드 값(긴 값부터) → 사전의 리터럴 순으로 가리고, 원문에 남은 따옴표 글(사전이 없을 때의 리터럴 등)은 통째로 지운다.
+    /// 글자로 확실히 맞출 수 없는 바인드 값(날짜·이진 등)이 있으면 원문 대신 오류 번호만 남긴다. 로그 쓰기 실패는 도구 결과를 막지 않는다.
+    /// </summary>
+    private static void LogFailure(AgentSession session, string tool, string message, string? detail)
+    {
+        try
+        {
+            var forms = new List<string>();
+            var unsure = false;
+            foreach (var bind in session.Run.Binds.Values)
+            {
+                unsure |= !TryAddBindForms(bind, forms);
+            }
+
+            forms = [.. forms.Distinct(StringComparer.Ordinal).OrderByDescending(f => f.Length)];
+            var text = Redact(message, session.Run.Literals, forms);
+            if (detail is not null)
+            {
+                var shownDetail = unsure
+                    ? string.Join(", ", OraNumber().Matches(detail).Select(m => m.Value).Distinct(StringComparer.Ordinal))
+                    : QuotedText().Replace(Redact(detail, session.Run.Literals, forms), "'[removed]'");
+                text += " / " + (shownDetail.Length > 0 ? shownDetail : "[detail withheld]");
+            }
+
+            Trace.TraceWarning("AI 도구 실패 ({0}, run {1}): {2}", tool, session.RunId, Clip(text, LogTextMaxChars));
+        }
+        catch (Exception)
+        {
+            // 로그 수신자의 오류가 도구 결과를 막지 않는다.
+        }
+    }
+
+    /// <summary>바인드 값을 먼저 가리고(사전이 따옴표 안을 바꾸면 값이 더는 맞지 않는다) 사전의 리터럴을 가린다.</summary>
+    private static string Redact(string text, LiteralVault? vault, IReadOnlyList<string> bindForms)
+    {
+        foreach (var form in bindForms)
+        {
+            // 앞뒤가 영문·숫자가 아닌 자리만 바꾼다(값 1 이 다른 숫자를 망가뜨리지 않게, 한글이 바로 붙은 값도 맞게). 오류 번호의 숫자는 그대로 둔다.
+            var pattern = @"(?<![A-Za-z0-9_])(?<!ORA-)" + Regex.Escape(form) + @"(?![A-Za-z0-9_])";
+            text = Regex.Replace(text, pattern, "[bind]", RegexOptions.CultureInvariant, TimeSpan.FromSeconds(1));
+        }
+
+        return vault?.Redact(text) ?? text;
+    }
+
+    /// <summary>바인드 값이 글에 나타날 수 있는 모양을 더한다. 문자열·정수·실수만 확실히 맞출 수 있다(그 밖이면 false).</summary>
+    private static bool TryAddBindForms(BindValue bind, List<string> forms)
+    {
+        var invariant = System.Globalization.CultureInfo.InvariantCulture;
+        switch (bind.Value)
+        {
+            case null:
+                return true;
+            case string text:
+                if (text.Length > 0)
+                {
+                    forms.Add(text);
+                }
+
+                return true;
+            case sbyte or byte or short or ushort or int or uint or long or ulong:
+                forms.Add(((IFormattable)bind.Value).ToString(null, invariant));
+                return true;
+            case decimal or double or float:
+                var number = ((IFormattable)bind.Value).ToString(null, invariant);
+                forms.Add(number);
+                // Oracle 은 1 보다 작은 수를 앞의 0 없이 쓴다(.5, -.5).
+                if (number.StartsWith("0.", StringComparison.Ordinal) || number.StartsWith("-0.", StringComparison.Ordinal))
+                {
+                    forms.Add(number.Replace("0.", ".", StringComparison.Ordinal));
+                }
+
+                return true;
+            default:
+                return false;
+        }
+    }
+
+    /// <summary>작은따옴표로 감싼 글(한 줄, 400자까지).</summary>
+    [GeneratedRegex(@"'[^'\r\n]{0,400}'", RegexOptions.CultureInvariant)]
+    private static partial Regex QuotedText();
 
     /// <summary>오류 글 정화: <c>host:port</c>·IP·경로를 지우고 줄바꿈을 없애며 300자로 줄인다.</summary>
     private static string SanitizeError(string text)

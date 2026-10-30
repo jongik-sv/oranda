@@ -1,8 +1,10 @@
 using System.Collections.Concurrent;
+using System.Collections.Frozen;
 using System.Text.RegularExpressions;
 using Oranda.Core.Ai.Access;
 using Oranda.Core.Ai.Contracts;
 using Oranda.Core.Connection;
+using Oranda.Core.Execution;
 
 namespace Oranda.Core.Ai.Gate;
 
@@ -37,6 +39,21 @@ public sealed record AgentRunScope(string RunId, ConnectionProfile Profile, AiCo
     /// 참인데 <see cref="Literals"/> 가 없으면 게이트가 SQL 을 다루는 도구를 막는다. 운영 접속은 이 값과 관계없이 항상 필요로 본다.
     /// </summary>
     public bool MaskLiteralsRequired { get; init; }
+
+    /// <summary>
+    /// 시작 탭의 바인드 값(이름 → 값, 대소문자 무시). 대상 문장이 쓰는 이름만, 비밀로 보이는 이름(<see cref="Oranda.Core.Security.SensitiveBindNames"/>)은 빼고 시작하는 쪽이 채운다.
+    /// AI 로 보내지 않는다 — <c>benchmark_queries</c> 가 변형 SELECT 를 로컬에서 실행할 때만 바인드한다. 넣은 사전을 복사해 두므로 시작한 쪽이 고쳐도 바뀌지 않는다.
+    /// 기본은 빈 사전이다(바인드가 있는 문장은 벤치마크하지 않는다).
+    /// </summary>
+    public IReadOnlyDictionary<string, BindValue> Binds
+    {
+        get => _binds;
+        init => _binds = (value ?? throw new ArgumentNullException(nameof(value)))
+            .Where(pair => pair.Value.Direction == BindDirection.In)
+            .ToFrozenDictionary(pair => pair.Key, pair => pair.Value, StringComparer.OrdinalIgnoreCase);
+    }
+
+    private readonly FrozenDictionary<string, BindValue> _binds = FrozenDictionary<string, BindValue>.Empty;
 }
 
 /// <summary>

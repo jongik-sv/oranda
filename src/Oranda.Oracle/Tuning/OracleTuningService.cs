@@ -185,7 +185,7 @@ internal sealed partial class OracleTuningService : ITuningService
         ArgumentNullException.ThrowIfNull(benchmark);
         ArgumentOutOfRangeException.ThrowIfLessThan(iterations, 1);
         ArgumentOutOfRangeException.ThrowIfGreaterThan(iterations, MaxIterations);
-        var stmt = BenchmarkStatement(_language, benchmark.Sql);
+        var stmt = BenchmarkStatement(_language, benchmark.Sql, benchmark.Binds);
 
         if (benchmark.ReadOnly && !s.Profile.ReadOnly)
         {
@@ -238,6 +238,7 @@ internal sealed partial class OracleTuningService : ITuningService
 
     private async Task<BenchmarkResult> RunBenchmarkCoreAsync(ISession s, BenchmarkCase benchmark, SqlStatement stmt, int iterations, CancellationToken ct)
     {
+        var binds = BenchmarkBinds.For(stmt.BindNames, benchmark.Binds); // 문장이 쓰는 이름만(검사는 BenchmarkStatement 가 했다)
         var elapsed = TimeSpan.Zero;
         long logical = 0, physical = 0, rows = 0;
         long? planHash = null;
@@ -247,7 +248,7 @@ internal sealed partial class OracleTuningService : ITuningService
             var before = await SessionStatistics.CaptureAsync(_execution, s, ct);
 
             var sw = Stopwatch.StartNew();
-            var result = await _execution.ExecuteAsync(s, stmt, new Dictionary<string, BindValue>(),
+            var result = await _execution.ExecuteAsync(s, stmt, binds,
                 new ExecutionOptions { Source = benchmark.Source, SkipHistory = i > 0 }, ct);
             rows = await DrainAsync(result, ct);
             sw.Stop();
@@ -318,10 +319,11 @@ internal sealed partial class OracleTuningService : ITuningService
     }
 
     /// <summary>
-    /// 벤치마크로 보낼 문장: 한 문장, SELECT/WITH 질의, FOR UPDATE 없음(잠금), 바인드·치환 변수 없음(값을 받지 않는다).
+    /// 벤치마크로 보낼 문장: 한 문장, SELECT/WITH 질의, FOR UPDATE 없음(잠금), 치환 변수 없음, 바인드는 이름마다 <paramref name="binds"/> 에 값이 있을 때만.
     /// 분류는 언어 서비스(StatementClassifier)가 한다. 아니면 <see cref="ArgumentException"/> — 아무것도 보내지 않는다.
+    /// 바인드 값이 없는 호출(사람이 쓰는 튜닝 도우미)은 예전처럼 바인드가 있는 문장을 거부한다.
     /// </summary>
-    internal static SqlStatement BenchmarkStatement(ILanguageService language, string sql)
+    internal static SqlStatement BenchmarkStatement(ILanguageService language, string sql, IReadOnlyDictionary<string, BindValue>? binds = null)
     {
         ArgumentNullException.ThrowIfNull(language);
         if (string.IsNullOrWhiteSpace(sql))
@@ -346,9 +348,14 @@ internal sealed partial class OracleTuningService : ITuningService
             throw new ArgumentException("SELECT … FOR UPDATE 는 행을 잠가 벤치마크하지 않습니다.", nameof(sql));
         }
 
-        if (stmt.BindNames.Count > 0 || stmt.SubstitutionNames.Count > 0)
+        if (stmt.SubstitutionNames.Count > 0 || (stmt.BindNames.Count > 0 && (binds is null || binds.Count == 0)))
         {
             throw new ArgumentException("바인드·치환 변수가 있는 문장은 벤치마크하지 않습니다(값을 글자로 넣어 주세요).", nameof(sql));
+        }
+
+        if (BenchmarkBinds.MissingReason(stmt.BindNames, binds ?? new Dictionary<string, BindValue>()) is { } missing)
+        {
+            throw new ArgumentException(missing, nameof(sql));
         }
 
         return stmt;

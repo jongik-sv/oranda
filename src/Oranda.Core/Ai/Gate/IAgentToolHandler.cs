@@ -71,6 +71,17 @@ public sealed record AgentToolOutput
     /// <summary>이 결과로 이 요청에서 조회해도 되게 된 sql_id 들(예: 벤치마크로 실행해 본 문장). 게이트는 결과 본문을 훑어 sql_id 를 모으지 않으므로, 넓히려면 여기에만 적는다.</summary>
     public IReadOnlyList<string> SqlIds { get; init; } = [];
 
+    /// <summary>
+    /// <see cref="ErrorMessage"/> 가 앱이 쓴 글이다(DB·드라이버 오류 원문이 없다). 처리자의 도구 거부(<c>AiToolException</c>)만 켠다.
+    /// 켜진 실패는 행 값을 줄 수 없는 수준에서도 게이트가 정화한 글을 그대로 LLM 에 보인다(무엇을 고치면 되는지 알도록). 꺼진 실패는 오류 번호와 고정 문장뿐이다.
+    /// </summary>
+    public bool AppWritten { get; init; }
+
+    /// <summary>
+    /// 로그에만 남길 실패 원문(원인 예외의 형 이름과 메시지). LLM 으로 가지 않는다. 게이트가 리터럴·바인드 값을 가린 뒤 Oranda 로그에 쓴다.
+    /// </summary>
+    public string? LogDetail { get; init; }
+
     public bool IsError => ErrorMessage is not null;
 
     public static AgentToolOutput Ok(JsonNode result) => new() { Result = result };

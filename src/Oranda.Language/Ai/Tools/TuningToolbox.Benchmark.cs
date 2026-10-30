@@ -1,3 +1,4 @@
+using Oranda.Core.Execution;
 using Oranda.Core.History;
 using Oranda.Core.Sessions;
 using Oranda.Core.Tuning;
@@ -52,7 +53,7 @@ public sealed partial class TuningToolbox
     {
         try
         {
-            return SingleSelect(variant.Sql, allowBinds: true, "benchmark_queries").Text;
+            return SingleSelect(variant.Sql, "benchmark_queries").Text;
         }
         catch (AiToolException ex)
         {
@@ -65,10 +66,12 @@ public sealed partial class TuningToolbox
     /// <paramref name="benchmarkAllowed"/>(Query 이상이고 게이트가 문장을 검사했을 때만 참)가 거짓이면 실행하지 않는다.
     /// <paramref name="statementTimeout"/> 이 있으면 문장 하나(반복 전체)가 그 시간을 넘길 때 취소한다. 운영 접속은 <see cref="ProductionStatementTimeout"/> 을 준다.
     /// <paramref name="readOnly"/> 가 참이면(게이트가 사용자 함수를 확인해 통과시킨 문장) 문장마다 읽기 전용 트랜잭션 안에서 실행한다.
+    /// <paramref name="binds"/> 는 시작 탭의 바인드 값이다(AI 로 보내지 않고 실행에만 쓴다). 바인드가 있는 변형은 이름마다 값이 있을 때만 실행하고,
+    /// 하나라도 빠지면 아무것도 실행하기 전에 빠진 이름을 밝혀 거부한다. 받는 글은 게이트가 리터럴 자리표시(<c>:v1</c>)를 되돌린 뒤의 글이다.
     /// </summary>
     public async Task<IReadOnlyList<BenchmarkDescription>> BenchmarkAsync(
         ISession s, IReadOnlyList<BenchmarkVariant> variants, int repeat, bool benchmarkAllowed, string? scopeSchema, CancellationToken ct,
-        TimeSpan? statementTimeout = null, bool readOnly = false)
+        TimeSpan? statementTimeout = null, bool readOnly = false, IReadOnlyDictionary<string, BindValue>? binds = null)
     {
         ArgumentNullException.ThrowIfNull(s);
         ArgumentNullException.ThrowIfNull(variants);
@@ -83,12 +86,19 @@ public sealed partial class TuningToolbox
         }
 
         // 하나라도 못 보내는 문장이면 아무것도 실행하기 전에 거부한다(앞 문장만 돌고 결과가 버려지지 않게).
-        var texts = new List<string>(variants.Count);
+        var given = binds ?? new Dictionary<string, BindValue>();
+        var statements = new List<SqlStatement>(variants.Count);
         foreach (var v in variants)
         {
             try
             {
-                texts.Add(SingleSelect(v.Sql, allowBinds: false, "benchmark_queries").Text);
+                var stmt = SingleSelect(v.Sql, "benchmark_queries");
+                if (BenchmarkBinds.MissingReason(stmt.BindNames, given) is { } missing)
+                {
+                    throw new AiToolException(missing);
+                }
+
+                statements.Add(stmt);
             }
             catch (AiToolException ex)
             {
@@ -111,7 +121,12 @@ public sealed partial class TuningToolbox
             try
             {
                 // 출처를 Agent 로 지정해 이력·실행 정책이 에이전트 실행으로 구분하게 한다.
-                r = await tuning.RunBenchmarkAsync(s, new BenchmarkCase(v.Label, v.Sql) { Source = HistorySource.Agent, ReadOnly = readOnly }, iterations, limit.Token).ConfigureAwait(false);
+                r = await tuning.RunBenchmarkAsync(s, new BenchmarkCase(v.Label, v.Sql)
+                {
+                    Source = HistorySource.Agent,
+                    ReadOnly = readOnly,
+                    Binds = BenchmarkBinds.For(statements[i].BindNames, given),
+                }, iterations, limit.Token).ConfigureAwait(false);
             }
             catch (OperationCanceledException) when (!ct.IsCancellationRequested && limit.IsCancellationRequested)
             {
@@ -119,13 +134,13 @@ public sealed partial class TuningToolbox
             }
             catch (Exception ex) when (ex is not OperationCanceledException && ex is not AiToolException && !ct.IsCancellationRequested)
             {
-                // 서버 오류 원문에는 변환에 실패한 값이 들어갈 수 있으므로 오류 번호만 돌려준다.
+                // 서버 오류 원문에는 변환에 실패한 값이 들어갈 수 있으므로 LLM 에는 오류 번호만 돌려준다. 원문은 원인 예외로 넘겨 게이트가 가려 로그에 쓴다.
                 var code = System.Text.RegularExpressions.Regex.Match(ex.Message, @"ORA-\d{5}").Value;
-                throw new AiToolException($"'{v.Label}' 문장 실행이 실패했습니다" + (code.Length > 0 ? $" ({code})." : "."));
+                throw new AiToolException($"'{v.Label}' 문장 실행이 실패했습니다" + (code.Length > 0 ? $" ({code})." : "."), ex);
             }
 
             // 실행한 문장의 sql_id: 글에서 계산한 값이 공유 풀에 있고 이 실행 범위의 스키마가 파싱한 커서일 때만 알린다.
-            var computed = SqlIdCalculator.Compute(texts[i]);
+            var computed = SqlIdCalculator.Compute(statements[i].Text);
             // V$SQL 권한이 없으면(null) 이미 끝난 실행 결과를 버리지 않고 sql_id 만 알리지 않는다.
             var sqlId = await TryCursorVisibleAsync(s, computed, scopeSchema, ct).ConfigureAwait(false) is true ? computed : null;
             results.Add(new BenchmarkDescription(

@@ -172,7 +172,7 @@ public partial class AgentGateTests
         AssertDenied(await fx.Gate.CallToolAsync(session, AgentToolNames.DescribeObject, JsonNode.Parse("[1]"), CancellationToken.None), "invalid_arguments");
         AssertDenied(await Call(fx, session, AgentToolNames.GetTableStats, """{"table":"TB_ORDER","columns":[1]}"""), "invalid_arguments");
         AssertDenied(await Call(fx, session, AgentToolNames.GetCursorPlan, """{"sql_id":"abcdefghij123","child":"1"}"""), "invalid_arguments");
-        AssertDenied(await Call(fx, session, AgentToolNames.BenchmarkQueries, """{"variants":[{"label":"a"}]}"""), "invalid_arguments");
+        AssertDenied(await Call(fx, session, AgentToolNames.BenchmarkQueries, """{"variants":[{"sql":"select 1"}]}"""), "invalid_arguments");
         AssertDenied(await Call(fx, session, AgentToolNames.BenchmarkQueries, """{"variants":[{"label":"a","sql":"select 1","extra":"x"}]}"""), "invalid_arguments");
     }
 
