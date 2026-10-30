@@ -12,7 +12,7 @@ public class AgentPipeServerTests
     [Fact]
     public async Task Round_trips_messages_on_the_fixed_name_and_serves_next_connection_after_close()
     {
-        var unique = Guid.NewGuid().ToString("N");
+        var unique = Guid.NewGuid().ToString("N")[..12];
         await using var server = new AgentPipeServer(NameOf(unique), EchoAsync);
         var name = server.Start();
         Assert.Equal($"oranda-test-{unique}", name);
@@ -31,7 +31,7 @@ public class AgentPipeServerTests
     [Fact]
     public async Task Second_server_falls_back_to_pid_suffixed_name()
     {
-        var unique = Guid.NewGuid().ToString("N");
+        var unique = Guid.NewGuid().ToString("N")[..12];
         await using var first = new AgentPipeServer(NameOf(unique), EchoAsync);
         await using var second = new AgentPipeServer(NameOf(unique), EchoAsync);
 
@@ -45,7 +45,7 @@ public class AgentPipeServerTests
     [Fact]
     public async Task Line_over_the_limit_closes_only_that_connection()
     {
-        var unique = Guid.NewGuid().ToString("N");
+        var unique = Guid.NewGuid().ToString("N")[..12];
         await using var server = new AgentPipeServer(NameOf(unique), EchoAsync);
         var name = server.Start();
 
@@ -73,7 +73,7 @@ public class AgentPipeServerTests
     [Fact]
     public async Task Handler_exception_closes_the_connection_but_server_keeps_running()
     {
-        var unique = Guid.NewGuid().ToString("N");
+        var unique = Guid.NewGuid().ToString("N")[..12];
         var calls = 0;
         await using var server = new AgentPipeServer(NameOf(unique), (channel, ct) =>
             Interlocked.Increment(ref calls) == 1 ? throw new InvalidOperationException("boom") : EchoAsync(channel, ct));
@@ -91,7 +91,7 @@ public class AgentPipeServerTests
     [Fact]
     public async Task Serves_several_connections_at_once_and_reports_when_it_stops()
     {
-        var unique = Guid.NewGuid().ToString("N");
+        var unique = Guid.NewGuid().ToString("N")[..12];
         var server = new AgentPipeServer(NameOf(unique), EchoAsync);
         var name = server.Start();
         Assert.True(server.IsRunning);
@@ -126,6 +126,7 @@ public class AgentPipeServerTests
         }
     }
 
+    // 시험 이름의 unique 는 12자: macOS 는 파이프가 $TMPDIR/CoreFxPipe_<이름> 유닉스 소켓이라 경로가 104자를 넘으면 열지 못한다.
     private static Func<string, int?, string> NameOf(string unique) =>
         (_, instance) => $"oranda-test-{unique}" + (instance is null ? string.Empty : "-" + instance);
 

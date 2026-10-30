@@ -22,7 +22,8 @@ public sealed class AgentBridgeHostTests : IAsyncDisposable
 
     public AgentBridgeHostTests()
     {
-        var unique = Guid.NewGuid().ToString("N");
+        // macOS 는 파이프가 $TMPDIR/CoreFxPipe_<이름> 유닉스 소켓이라 경로가 104자를 넘으면 열지 못한다: 이름을 짧게 둔다.
+        var unique = Guid.NewGuid().ToString("N")[..12];
         _host = new AgentBridgeHost(_gate, _tokens, (_, instance) => $"oranda-bridge-test-{unique}" + (instance is null ? string.Empty : "-" + instance))
         {
             HelloTimeout = TimeSpan.FromMilliseconds(600),
