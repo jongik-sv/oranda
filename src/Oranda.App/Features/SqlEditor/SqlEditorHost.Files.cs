@@ -190,12 +190,35 @@ public sealed partial class SqlEditorHost
     public async Task<bool> SaveWorkspaceFileAsync(bool askPath, CancellationToken ct)
     {
         var ws = EnsureWorkspace();
-        var path = askPath || WorkspaceFilePath is null
+        var bound = !askPath && WorkspaceFilePath is not null;
+        var path = !bound
             ? await Dialogs.PickWorkspaceFileAsync(save: true, SaveFileNames.SuggestWorkspace(ws.Name), ct).ConfigureAwait(true)
             : WorkspaceFilePath;
         if (string.IsNullOrWhiteSpace(path))
         {
             return false;
+        }
+
+        if (bound && RenamedWorkspacePath(ws, path) is { } renamed)
+        {
+            // 이름을 바꾼 작업 공간: 파일도 같은 폴더의 새 이름으로 옮긴다. 그 이름의 파일이 이미 있으면 덮어쓰지 않고 저장 위치를 묻는다.
+            if (File.Exists(renamed) && !string.Equals(renamed, Path.GetFullPath(path), StringComparison.OrdinalIgnoreCase)) // 대소문자만 바꾼 것은 같은 파일
+            {
+                path = await Dialogs.PickWorkspaceFileAsync(save: true, SaveFileNames.SuggestWorkspace(ws.Name), ct).ConfigureAwait(true);
+                if (string.IsNullOrWhiteSpace(path))
+                {
+                    return false;
+                }
+            }
+            else
+            {
+                if (File.Exists(path))
+                {
+                    File.Move(path, renamed);
+                }
+
+                path = renamed;
+            }
         }
 
         path = WorkspaceFiles.SavePath(path); // 새 파일은 이름.workspace.md (D-028)
@@ -213,6 +236,20 @@ public sealed partial class SqlEditorHost
         }
 
         return true;
+    }
+
+    /// <summary>
+    /// 저장된 파일 이름과 작업 공간 이름이 다르면(「작업 공간 이름 바꾸기」 뒤) 같은 폴더에서 새 이름으로 쓸 경로. 같으면 null.
+    /// </summary>
+    private static string? RenamedWorkspacePath(SqlWorkspaceViewModel ws, string path)
+    {
+        var wanted = SaveFileNames.SuggestWorkspace(ws.Name.Trim());
+        if (string.Equals(WorkspaceFiles.NameOf(path).Normalize(), WorkspaceFiles.NameOf(wanted), StringComparison.Ordinal))
+        {
+            return null;
+        }
+
+        return Path.Combine(Path.GetDirectoryName(Path.GetFullPath(path)) ?? string.Empty, wanted);
     }
 
     /// <summary>
