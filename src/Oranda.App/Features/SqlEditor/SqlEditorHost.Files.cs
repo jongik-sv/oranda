@@ -200,7 +200,8 @@ public sealed partial class SqlEditorHost
 
         path = WorkspaceFiles.SavePath(path); // 새 파일은 이름.workspace.md (D-028)
         var name = WorkspaceFiles.NameOf(path);
-        var tabs = ws.Tabs.Select(t => new WorkspaceFileTab(t.Title, t.Text, t.ConnectionProfileId?.ToString()));
+        var tabs = ws.Tabs.Select(t => new WorkspaceFileTab(t.Title, t.Text, t.ConnectionProfileId?.ToString(),
+            t.Binds.Snapshot(t.ReferencedBindNames) is { Count: > 0 } binds ? binds : null));
         await File.WriteAllTextAsync(path, WorkspaceFiles.WriteMarkdown(name, tabs), new UTF8Encoding(false), ct).ConfigureAwait(true);
         ws.SourcePath = Path.GetFullPath(path);
         ws.Name = name;

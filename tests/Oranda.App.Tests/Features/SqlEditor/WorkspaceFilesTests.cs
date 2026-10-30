@@ -24,6 +24,32 @@ public sealed class WorkspaceFilesTests
     }
 
     [Fact]
+    public void Markdown_round_trips_bind_values_in_the_sql_block()
+    {
+        IReadOnlyList<Oranda.Core.Workspaces.WorkspaceBind> binds =
+        [
+            new() { Name = "EMPNO", Type = Oranda.Core.Execution.BindDataType.Number, Value = "7369" },
+            new() { Name = "ENAME", Value = "김|철수 `x`" },
+            new() { Name = "D", Direction = Oranda.Core.Execution.BindDirection.Out, IsNull = true },
+        ];
+        var tabs = new[]
+        {
+            new WorkspaceFileTab("사원", "select * from emp\n where empno = :EMPNO and ename = :ENAME and deptno = :D", null, binds),
+            new WorkspaceFileTab("값 없음", "select 1 from dual"),
+        };
+
+        var md = WorkspaceFiles.WriteMarkdown("w", tabs);
+        var read = WorkspaceFiles.ReadMarkdown(md, "w");
+
+        // .sql 파일과 같은 바인드 블록이 SQL 코드 블록 안 끝에 보인다.
+        Assert.Contains(Oranda.Core.Workspaces.SqlFileBinds.Marker, md, StringComparison.Ordinal);
+        Assert.Equal(tabs[0].Text, read.Tabs[0].Text);
+        Assert.Equal(binds, read.Tabs[0].Binds);
+        Assert.Equal("select 1 from dual", read.Tabs[1].Text);
+        Assert.Null(read.Tabs[1].Binds);
+    }
+
+    [Fact]
     public void Markdown_fence_grows_when_sql_contains_backticks()
     {
         var tab = new WorkspaceFileTab("백틱", "select '```' as x from dual");

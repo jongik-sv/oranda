@@ -286,6 +286,8 @@ public static partial class WorkspaceFiles
 
     /// <summary>
     /// 탭마다 <c>## 탭 이름</c> 과 <c>```sql</c> 코드 블록. SQL 안에 백틱이 이어 나오면 울타리를 그보다 길게 만든다.
+    /// 탭에 바인드 값이 있으면 .sql 파일과 같은 바인드 블록(<see cref="SqlFileBinds"/>)을 코드 블록 안 SQL 끝에 붙인다 —
+    /// 모두 <c>--</c> 줄 주석이라 코드 블록을 그대로 복사해 실행해도 문장이 바뀌지 않는다.
     /// </summary>
     public static string WriteMarkdown(string name, IEnumerable<WorkspaceFileTab> tabs)
     {
@@ -305,9 +307,10 @@ public static partial class WorkspaceFiles
                 sb.AppendLine();
             }
 
-            var fence = new string('`', Math.Max(3, LongestRun(tab.Text, '`') + 1));
+            var sql = SqlFileBinds.Append(tab.Text.TrimEnd('\r', '\n'), tab.Binds ?? []).TrimEnd('\r', '\n');
+            var fence = new string('`', Math.Max(3, LongestRun(sql, '`') + 1));
             sb.Append(fence).AppendLine("sql");
-            sb.Append(tab.Text.TrimEnd('\r', '\n')).AppendLine();
+            sb.Append(sql).AppendLine();
             sb.AppendLine(fence);
         }
 
@@ -316,7 +319,7 @@ public static partial class WorkspaceFiles
 
     /// <summary>
     /// <c>## 제목</c> 아래 첫 코드 블록이 그 탭의 SQL 이다. 제목이 없는 코드 블록은 「SQL n」 탭이 되고,
-    /// 코드 블록이 하나도 없으면 파일 전체를 탭 하나로 연다.
+    /// 코드 블록이 하나도 없으면 파일 전체를 탭 하나로 연다. 코드 블록 끝의 바인드 블록은 떼어 그 탭의 바인드 값으로 돌려준다.
     /// </summary>
     public static WorkspaceFile ReadMarkdown(string text, string fallbackName)
     {
@@ -378,7 +381,8 @@ public static partial class WorkspaceFiles
             }
 
             var tabTitle = title ?? "SQL " + (tabs.Count + 1).ToString(CultureInfo.InvariantCulture);
-            tabs.Add(new WorkspaceFileTab(tabTitle, string.Join('\n', body), connection));
+            var (sql, binds) = SqlFileBinds.Split(string.Join('\n', body));
+            tabs.Add(new WorkspaceFileTab(tabTitle, sql, connection, binds));
             tookBlock = title is not null;
         }
 
