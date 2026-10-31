@@ -131,6 +131,34 @@ public class AiTuningFlowTests
     }
 
     [Fact]
+    public void Prompt_with_index_ddl_carries_the_reuse_rules()
+    {
+        var prompt = AiTuningFlow.BuildPrompt(new TuningStartChoice(true, true, "default"), Original);
+
+        Assert.Contains("check the existing indexes of that table", prompt, StringComparison.Ordinal); // (a)
+        Assert.Contains("action=modify", prompt, StringComparison.Ordinal); // (b)
+        Assert.Contains("leading column", prompt, StringComparison.Ordinal);
+        Assert.Contains("DROP INDEX then CREATE INDEX", prompt, StringComparison.Ordinal);
+        Assert.Contains("already covers", prompt, StringComparison.Ordinal); // (c)
+        Assert.Contains("hint or a rewrite", prompt, StringComparison.Ordinal);
+        Assert.Contains("condition and join columns only, at most 4", prompt, StringComparison.Ordinal); // (d)
+        Assert.Contains("benchmark evidence", prompt, StringComparison.Ordinal);
+        Assert.Contains("which other SQL that uses the existing index", prompt, StringComparison.Ordinal); // (e)
+        Assert.DoesNotContain("may be suggested as text only", prompt, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Covering_index_is_allowed_only_when_the_benchmark_is_on()
+    {
+        var on = AiTuningFlow.BuildPrompt(new TuningStartChoice(true, true, "default"), Original);
+        var off = AiTuningFlow.BuildPrompt(new TuningStartChoice(false, true, "default"), Original);
+
+        Assert.Contains("allowed only with benchmark evidence", on, StringComparison.Ordinal);
+        Assert.Contains("do not suggest one", off, StringComparison.Ordinal);
+        Assert.DoesNotContain("Index rules", AiTuningFlow.BuildPrompt(new TuningStartChoice(true, false, "default"), Original), StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task Run_risky_functions_reaches_the_gate_context_for_the_start_and_every_follow_up()
     {
         var driver = Driver();

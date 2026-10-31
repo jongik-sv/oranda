@@ -68,6 +68,32 @@ public class AgentContractTests
     }
 
     [Fact]
+    public void Tuning_result_schema_requires_an_action_and_parses_a_modify_suggestion()
+    {
+        var item = JsonNode.Parse(TuningResult.SchemaJson)!["properties"]!["index_suggestions"]!["items"]!;
+        Assert.Contains("action", item["required"]!.AsArray().Select(n => (string)n!));
+        Assert.Equal(["modify", "create"], item["properties"]!["action"]!["enum"]!.AsArray().Select(n => (string)n!));
+        Assert.NotNull(item["properties"]!["existing_index"]);
+        Assert.NotNull(item["properties"]!["existing_columns"]);
+
+        using var doc = JsonDocument.Parse("""
+            { "summary": "s", "rewrites": [], "evidence": [],
+              "index_suggestions": [
+                { "action": "modify", "existing_index": "APSUSER.IX_APS_COIL_INST_T1", "existing_columns": ["MTL_MO_NO"], "table": "APSUSER.TB_APS_COIL_INST",
+                  "columns": ["MTL_MO_NO", "MO_NO"], "ddl": "DROP INDEX ...; CREATE INDEX ...;", "rationale": "r" },
+                { "action": "create", "table": "T", "columns": ["C"], "ddl": "CREATE INDEX i ON t (c);", "rationale": "r" },
+                { "table": "T", "columns": ["C"], "ddl": "CREATE INDEX i ON t (c);", "rationale": "old result without action" } ] }
+            """);
+        var s = TuningResult.Parse(doc.RootElement).IndexSuggestions;
+        Assert.True(s[0].IsModify);
+        Assert.Equal("APSUSER.IX_APS_COIL_INST_T1", s[0].ExistingIndex);
+        Assert.Equal(["MTL_MO_NO"], s[0].ExistingColumns!.ToArray());
+        Assert.False(s[1].IsModify);
+        Assert.Null(s[1].ExistingIndex);
+        Assert.Equal(TuningIndexSuggestion.ActionCreate, s[2].Action); // 옛 결과는 create 로 읽는다
+    }
+
+    [Fact]
     public void Pipe_names_are_stable_per_user_and_hide_the_sid()
     {
         const string sid = "S-1-5-21-111-222-333-1001";

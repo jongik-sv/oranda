@@ -24,6 +24,7 @@ using Oranda.Core.Extensibility;
 using Oranda.Core.Security;
 using Oranda.Core.Settings;
 using Oranda.Core.Storage;
+using Oranda.Core.Tuning;
 
 namespace Oranda.App.Features.Ai.Tuning;
 
@@ -240,9 +241,29 @@ public sealed class AiTuningLauncher(IServiceProvider services)
             services.GetService(typeof(ISqlLiteralMasker)) as ISqlLiteralMasker,
             context => context.Environment == ConnectionEnvironment.Production || _profile is not { } profile || AiAccessPolicy.MaskLiterals(profile, MaskLiteralsSetting()),
             new HostEditorTabs(),
-            (title, before, after) => SqlEditorHost.Current.Dialogs.ShowComparisonAsync(title, before, after, CancellationToken.None));
+            (title, before, after) => SqlEditorHost.Current.Dialogs.ShowComparisonAsync(title, before, after, CancellationToken.None),
+            ReadIndexesAsync);
         _flow.Attach();
         return _flow;
+    }
+
+    /// <summary>
+    /// AI 인덱스 후보를 대조할 기존 인덱스 열 구성(TN-09). 대화의 접속으로 AI 조회용 세션을 빌려 읽고,
+    /// 접속·서비스가 없거나 못 읽으면 null(대조를 건너뛴다). 소유자를 모르면 접속 사용자.
+    /// </summary>
+    private async Task<IReadOnlyList<IndexColumnsRow>?> ReadIndexesAsync(string owner, string table, CancellationToken ct)
+    {
+        if (_profile is not { } profile
+            || services.GetService(typeof(IAgentSessionSource)) is not AppAgentSessionSource source
+            || services.GetService(typeof(ITuningService)) is not ITuningService tuning)
+        {
+            return null;
+        }
+
+        using var session = new AgentSession(new AgentRunScope(Guid.NewGuid().ToString("N"), profile, new AiContext(profile.Name, profile.Environment, AiAccessPolicy.Effective(profile))));
+        var db = await source.AcquireDbSessionAsync(session, ct).ConfigureAwait(true);
+        var effectiveOwner = owner.Length > 0 ? owner : profile.User?.ToUpperInvariant() ?? string.Empty;
+        return await tuning.GetIndexColumnsAsync(db, effectiveOwner, table, ct).ConfigureAwait(true);
     }
 
     /// <summary>설정의 리터럴 가림 값(운영 접속은 이 값과 관계없이 항상 가린다: <see cref="AiAccessPolicy.MaskLiterals"/>).</summary>

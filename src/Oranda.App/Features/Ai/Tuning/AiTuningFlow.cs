@@ -16,6 +16,8 @@ using Oranda.Core.Ai.Schemas;
 using Oranda.Core.Execution;
 using Oranda.Core.Extensibility;
 using Oranda.Core.Text;
+using Oranda.Core.Tuning;
+using Oranda.Language.Tuning;
 
 namespace Oranda.App.Features.Ai.Tuning;
 
@@ -40,6 +42,7 @@ namespace Oranda.App.Features.Ai.Tuning;
 /// 시작한 탭을 기억해 그 탭 기준으로 제안을 넣고, 인덱스 후보 탭을 대화당 하나만 열고 바꾼다. null 이면 활성 탭의 문장으로 비교하고 인덱스 후보를 매번 <paramref name="openTab"/> 으로 연다.
 /// </param>
 /// <param name="showComparison">적용한 제안을 보기만 하는 비교 창(제목, 원본, 적용한 글). null 이면 적용한 카드에 「비교 보기」 가 없다.</param>
+/// <param name="readIndexes">표의 실제 기존 인덱스 열 구성(소유자 — 모르면 빈 글, 표). AI 인덱스 후보를 받은 뒤 대조에 쓴다. null 이거나 못 읽으면 대조를 건너뛴다(「확인 못함」).</param>
 public sealed partial class AiTuningFlow(
     IEditorContext editor,
     IAiDriver driver,
@@ -50,7 +53,8 @@ public sealed partial class AiTuningFlow(
     ISqlLiteralMasker? masker = null,
     Func<AiContext, bool>? maskRequired = null,
     IEditorTabs? tabs = null,
-    Func<string, string, string, Task>? showComparison = null)
+    Func<string, string, string, Task>? showComparison = null,
+    Func<string, string, CancellationToken, Task<IReadOnlyList<IndexColumnsRow>?>>? readIndexes = null)
 {
     /// <summary>도구를 부르는 횟수 예산(프롬프트로 알린다).</summary>
     public const int ToolBudget = 12;
@@ -218,7 +222,7 @@ public sealed partial class AiTuningFlow(
             ? "You may compare candidates with benchmark_queries and compare_results."
             : "Do not benchmark: do not run candidate statements.");
         text.AppendLine(choice.IndexDdl
-            ? "Index CREATE statements may be suggested as text only; they are never executed."
+            ? IndexRules(choice.Benchmark)
             : "Do not suggest indexes; leave index_suggestions empty.");
         text.AppendLine(ResponseStyle);
         text.AppendLine(KeepCommentsRule);
@@ -252,6 +256,24 @@ public sealed partial class AiTuningFlow(
         + "Use bold only for the conclusion line. No [name] tags, no long remarks in parentheses, no preamble or closing remarks, "
         + "do not narrate each tool call and do not repeat yourself. "
         + "Never write tool or function names (get_*, benchmark_queries, explain_plan and so on) in the answer; say what was done in plain words such as 벤치마크, 실행 계획, 튜닝 정보.";
+
+    /// <summary>
+    /// 인덱스 제안 규칙(인덱스 DDL 을 켠 요청만): 기존 인덱스를 먼저 확인하고, 변형(modify)을 새 인덱스(create)보다 먼저 고려하며,
+    /// 열은 조건·조인 열만 4개 이하로 하고 조회 열을 담는 커버링은 측정 근거가 있을 때만 쓰게 한다.
+    /// </summary>
+    internal static string IndexRules(bool benchmark) =>
+        "Index rules (index_suggestions items are text only and never executed): "
+        + "(a) Before suggesting any index, check the existing indexes of that table (tuning information or index information); never suggest from the plan alone. "
+        + "(b) If the leading column(s) of an existing index equal the leading column(s) of your candidate, do not create a new index: modify that index (add a column or reorder) with action=modify, "
+        + "existing_index as OWNER.NAME and existing_columns as its current columns, and keep the same index name (DROP INDEX then CREATE INDEX in ddl). "
+        + "Use action=create only when no existing index of the table fits. "
+        + "(c) If an existing index already covers the candidate columns, do not suggest an index; suggest a hint or a rewrite instead. "
+        + $"(d) Index columns are the condition and join columns only, at most {IndexAdvisor.MaxColumns}. "
+        + "Do not add the selected columns just to make the index covering"
+        + (benchmark
+            ? "; a covering index is allowed only with benchmark evidence, and the rationale must state that measurement."
+            : "; a covering index needs benchmark evidence, which is not available here, so do not suggest one.")
+        + " (e) For modify, state in risk which other SQL that uses the existing index may be affected.";
 
     /// <summary>재작성 SQL 에 원래 주석을 남기라는 규칙(처음 요청과 이어 말하기 모두). 가린 대화면 주석 자리표시를 그대로 두라는 말이 <see cref="PlaceholderReminder"/> 에 붙는다.</summary>
     internal const string KeepCommentsRule =
@@ -418,11 +440,36 @@ public sealed partial class AiTuningFlow(
                 }
             }
 
-            if (restored.Count > 0)
+            var review = await AiIndexReview.ReviewAsync(restored, readIndexes, ct).ConfigureAwait(true);
+            if (review.Dropped.Count > 0)
             {
-                ShowIndexCandidates(BuildIndexText(restored, vault is not null), restored.Count);
+                chat.AddAssistantText(string.Join('\n', review.Dropped));
+            }
+
+            if (review.Kept.Count > 0)
+            {
+                ShowIndexCandidates(BuildIndexText(review.Kept, review.Dropped, vault is not null), CountText(review.Kept));
             }
         }
+    }
+
+    /// <summary>대화 한 줄에 쓸 개수 글: 기존 인덱스 변형을 먼저, 새 인덱스를 뒤에(예 「2개(변형 1 · 새 인덱스 1)」).</summary>
+    private static string CountText(IReadOnlyList<ReviewedIndex> kept)
+    {
+        var modify = kept.Count(r => r.Suggestion.IsModify);
+        var created = kept.Count - modify;
+        var parts = new List<string>();
+        if (modify > 0)
+        {
+            parts.Add(string.Create(CultureInfo.InvariantCulture, $"변형 {modify}"));
+        }
+
+        if (created > 0)
+        {
+            parts.Add(string.Create(CultureInfo.InvariantCulture, $"새 인덱스 {created}"));
+        }
+
+        return string.Create(CultureInfo.InvariantCulture, $"{kept.Count}개({string.Join(" · ", parts)})");
     }
 
     private const string IndexTabTitle = "AI 인덱스 후보";
@@ -431,12 +478,12 @@ public sealed partial class AiTuningFlow(
     /// 인덱스 후보 글을 탭에 넣는다. 대화 하나에 탭 하나만 쓴다: 열려 있으면 그 탭의 글만 바꾸고(활성 탭은 그대로),
     /// 글이 같으면 건드리지 않으며, 사용자가 닫았으면 새로 연다. 실행은 하지 않는다.
     /// </summary>
-    private void ShowIndexCandidates(string text, int count)
+    private void ShowIndexCandidates(string text, string count)
     {
         if (tabs is null)
         {
             openTab(IndexTabTitle, text);
-            chat.AddAssistantText($"인덱스 후보 {count}개를 새 탭에 넣었습니다. 실행은 하지 않았습니다.");
+            chat.AddAssistantText($"인덱스 후보 {count}를 새 탭에 넣었습니다. 실행은 하지 않았습니다.");
             return;
         }
 
@@ -450,13 +497,13 @@ public sealed partial class AiTuningFlow(
 
             if (tabs.ReplaceText(existing, text))
             {
-                chat.AddAssistantText($"인덱스 후보 {count}개로 「{IndexTabTitle}」 탭의 내용을 바꾸었습니다. 실행은 하지 않았습니다.");
+                chat.AddAssistantText($"인덱스 후보 {count}로 「{IndexTabTitle}」 탭의 내용을 바꾸었습니다. 실행은 하지 않았습니다.");
                 return;
             }
         }
 
         _indexTabId = tabs.OpenText(IndexTabTitle, text);
-        chat.AddAssistantText($"인덱스 후보 {count}개를 새 탭에 넣었습니다. 실행은 하지 않았습니다.");
+        chat.AddAssistantText($"인덱스 후보 {count}를 새 탭에 넣었습니다. 실행은 하지 않았습니다.");
     }
 
     /// <summary>
@@ -586,7 +633,11 @@ public sealed partial class AiTuningFlow(
             : text.TrimEnd(';').TrimEnd();
     }
 
-    private static string BuildIndexText(IReadOnlyList<TuningIndexSuggestion> suggestions, bool masked)
+    /// <summary>
+    /// 인덱스 후보 탭 글. 기존 인덱스를 바꾸는 안(modify)을 먼저, 새 인덱스(create)를 뒤에 둔다.
+    /// 후보마다 받은 뒤 확인(<see cref="AiIndexReview"/>)의 줄이 붙고, 기존 인덱스가 이미 덮어 뺀 후보는 머리에 한 줄씩 남긴다.
+    /// </summary>
+    internal static string BuildIndexText(IReadOnlyList<ReviewedIndex> suggestions, IReadOnlyList<string> dropped, bool masked)
     {
         var text = new StringBuilder();
         text.AppendLine("-- AI 가 제안한 인덱스 후보입니다. Oranda 는 실행하지 않았습니다. 검토한 뒤 직접 실행하세요.");
@@ -594,14 +645,28 @@ public sealed partial class AiTuningFlow(
         {
             text.AppendLine("-- 설명 줄의 :v1 같은 표시는 가려서 보낸 리터럴 값의 자리표시입니다. CREATE 문의 값은 원래대로 되돌렸습니다.");
         }
-        foreach (var s in suggestions)
+
+        foreach (var line in dropped)
         {
+            text.AppendLine("-- " + OneLine(line));
+        }
+
+        foreach (var reviewed in suggestions.OrderBy(r => r.Suggestion.IsModify ? 0 : 1))
+        {
+            var s = reviewed.Suggestion;
             text.AppendLine();
-            text.AppendLine(CultureInfo.InvariantCulture, $"-- {s.Table} ({string.Join(", ", s.Columns)})");
+            text.AppendLine(s.IsModify && s.ExistingIndex is { Length: > 0 } existing
+                ? $"-- 기존 {existing} ({string.Join(", ", s.ExistingColumns ?? [])}) → ({string.Join(", ", s.Columns)}) 로 변형"
+                : $"-- 새 인덱스: {s.Table} ({string.Join(", ", s.Columns)})");
             text.AppendLine("-- " + OneLine(s.Rationale));
             if (!string.IsNullOrWhiteSpace(s.Risk))
             {
                 text.AppendLine("-- 위험: " + OneLine(s.Risk));
+            }
+
+            foreach (var note in reviewed.Notes)
+            {
+                text.AppendLine("-- 확인: " + OneLine(note));
             }
 
             text.AppendLine(s.Ddl.Trim());
