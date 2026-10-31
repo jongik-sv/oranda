@@ -130,7 +130,7 @@
                           ToolTip.Tip="제안 비교 창을 다시 엽니다" />
                   <Button x:Name="ApplyButton" Grid.Column="1" Classes="accent" Content="적용" HorizontalAlignment="Stretch" HorizontalContentAlignment="Center" MinHeight="30"
                           Command="{Binding $parent[ItemsControl].((vm:AiChatViewModel)DataContext).ReviewProposalCommand}" CommandParameter="{Binding}"
-                          ToolTip.Tip="비교 창에서 확인하고 받아들이면 편집기에 넣습니다" />
+                          ToolTip.Tip="비교 창에서 확인하고 받아들이면 새 탭에 넣습니다" />
                 </Grid>
               </StackPanel>
             </Border>

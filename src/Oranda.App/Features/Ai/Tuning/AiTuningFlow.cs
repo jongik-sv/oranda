@@ -25,7 +25,7 @@ namespace Oranda.App.Features.Ai.Tuning;
 /// 「이 문장 튜닝」 실행 흐름(u5): 시작 확인 창의 선택으로 <see cref="AiRequest"/> 를 만들고, <see cref="IAiDriver"/> 사건을 대화 창에 옮기고,
 /// 끝의 구조 결과(<see cref="TuningResult"/>)를 반영한다. 반영 규칙은 둘뿐이다.
 /// <list type="bullet">
-/// <item>재작성 후보 → <see cref="IEditorContext.ProposeEditAsync"/> 로만(차이 미리보기에서 사용자가 받아들일 때만 바뀐다).</item>
+/// <item>재작성 후보 → 차이 미리보기(<c>previewEdit</c>)에서 사용자가 받아들일 때만, 원래 탭은 그대로 두고 「원래 탭명 (튜닝)」 새 탭에 넣는다.</item>
 /// <item>인덱스 CREATE 문안 → 새 탭에 글로만 넣는다. 실행하지 않는다.</item>
 /// </list>
 /// 멈춤은 진행 중인 요청을 취소하고, 이어 말하기는 앞 요청의 <c>ResumeId</c> 로 다음 요청을 보낸다.
@@ -33,28 +33,33 @@ namespace Oranda.App.Features.Ai.Tuning;
 /// <param name="editor">활성 편집기(문장 읽기와 제안 넣기).</param>
 /// <param name="driver">AI 호출 경로.</param>
 /// <param name="chat">대화 창 모델.</param>
-/// <param name="openTab">글을 새 탭으로 연다(제목, 글).</param>
+/// <param name="openTab">글을 새 탭으로 연다(제목, 글, 접속 프로필 — 없으면 null). <paramref name="tabs"/> 가 없을 때만 쓴다.</param>
 /// <param name="refreshContext">이어 말하기 때 접속의 지금 설정으로 문맥을 다시 만든다(옛 허용 수준으로 새 요청이 열리지 않게). null 을 돌려주면 이어 말하지 않는다.</param>
 /// <param name="sessionFactory">도구 호출의 실행 범위를 만든다(문맥, 이 대화의 값 사전). null 이거나 null 을 돌려주면 도구 없이 보낸다.</param>
 /// <param name="masker">SQL 글의 리터럴을 가리고 되돌리는 구현. 가림이 필요한데 null 이면 시작하지 않는다.</param>
 /// <param name="maskRequired">이 문맥의 접속에서 리터럴 가림이 필요한가(운영 접속이거나 설정이 켜짐). null 이면 가리지 않는다.</param>
 /// <param name="tabs">
-/// 시작한 탭을 기억해 그 탭 기준으로 제안을 넣고, 인덱스 후보 탭을 대화당 하나만 열고 바꾼다. null 이면 활성 탭의 문장으로 비교하고 인덱스 후보를 매번 <paramref name="openTab"/> 으로 연다.
+/// 시작한 탭을 기억해 그 탭 기준으로 제안을 새 「(튜닝)」 탭에 넣고, 인덱스 후보 탭을 대화당 하나만 열고 바꾼다. null 이면 활성 탭의 문장으로 비교하고 (튜닝) 탭·인덱스 후보 탭을 매번 <paramref name="openTab"/> 으로 연다.
 /// </param>
 /// <param name="showComparison">적용한 제안을 보기만 하는 비교 창(제목, 원본, 적용한 글). null 이면 적용한 카드에 「비교 보기」 가 없다.</param>
+/// <param name="previewEdit">
+/// 제안을 보이는 비교 창(고칠 수 있음): 제안 편집, 바뀌는 자리의 원래 글 → 받아들이면 고친 최종 글, 거절하면 null. 편집기의 글은 바꾸지 않는다(제안은 새 탭에 들어간다).
+/// null 이면 비교 창을 쓸 수 없어 제안을 넣지 않는다.
+/// </param>
 /// <param name="readIndexes">표의 실제 기존 인덱스 열 구성(소유자 — 모르면 빈 글, 표). AI 인덱스 후보를 받은 뒤 대조에 쓴다. null 이거나 못 읽으면 대조를 건너뛴다(「확인 못함」).</param>
 public sealed partial class AiTuningFlow(
     IEditorContext editor,
     IAiDriver driver,
     AiChatViewModel chat,
-    Action<string, string> openTab,
+    Action<string, string, Guid?> openTab,
     Func<AiContext, LiteralVault?, AgentSession?>? sessionFactory = null,
     Func<AiContext, CancellationToken, Task<AiContext?>>? refreshContext = null,
     ISqlLiteralMasker? masker = null,
     Func<AiContext, bool>? maskRequired = null,
     IEditorTabs? tabs = null,
     Func<string, string, string, Task>? showComparison = null,
-    Func<string, string, CancellationToken, Task<IReadOnlyList<IndexColumnsRow>?>>? readIndexes = null)
+    Func<string, string, CancellationToken, Task<IReadOnlyList<IndexColumnsRow>?>>? readIndexes = null,
+    Func<TextEdit, string, CancellationToken, Task<string?>>? previewEdit = null)
 {
     /// <summary>도구를 부르는 횟수 예산(프롬프트로 알린다).</summary>
     public const int ToolBudget = 12;
@@ -71,6 +76,7 @@ public sealed partial class AiTuningFlow(
     private LiteralVault? _vault;
     private Guid? _startTabId;
     private Guid? _indexTabId;
+    private Guid? _tuneTabId;
     private CancellationTokenSource? _running;
     private TuningResult? _lastResult;
     private int _generation;
@@ -167,6 +173,7 @@ public sealed partial class AiTuningFlow(
         _vault = vault;
         _startTabId = tabs is null ? null : editor.GetActiveDocument()?.TabId; // 문장을 읽은 탭: 튜닝하는 사이 다른 탭이 활성이 돼도 이 탭 기준으로 제안을 넣는다
         _indexTabId = null; // 인덱스 후보 탭은 대화 하나에 하나다
+        _tuneTabId = null; // 「(튜닝)」 탭도 대화 하나에 하나다
         _generation++;
         _context = context with { StatementText = statement.Text, AllowRiskyFunctions = choice.RunRiskyFunctions }; // 원문: 범위 검사·추출기가 쓴다(LLM 으로 가지 않는다)
         chat.StartConversation("튜닝 — " + Shorten(promptStatement, 40));
@@ -404,10 +411,10 @@ public sealed partial class AiTuningFlow(
             string? applied = null;
             async Task<bool?> Propose(CancellationToken token)
             {
-                var answer = await ProposeRewriteAsync(proposal, target, startTab, token).ConfigureAwait(true);
+                var (answer, finalText) = await ProposeRewriteAsync(proposal, target, startTab, token).ConfigureAwait(true);
                 if (answer == true)
                 {
-                    applied = AppliedText(target, startTab) ?? MatchTerminator(target.Text, proposal.Sql);
+                    applied = finalText;
                 }
 
                 return answer;
@@ -482,7 +489,7 @@ public sealed partial class AiTuningFlow(
     {
         if (tabs is null)
         {
-            openTab(IndexTabTitle, text);
+            openTab(IndexTabTitle, text, null);
             chat.AddAssistantText($"인덱스 후보 {count}를 새 탭에 넣었습니다. 실행은 하지 않았습니다.");
             return;
         }
@@ -575,31 +582,43 @@ public sealed partial class AiTuningFlow(
         }
     }
 
-    /// <summary>재작성 제안을 시작 탭의 문장에 비교 창으로 보인다. 받아들이면 true, 거절하면 false, 열지 못했으면(탭이 닫힘·문장이 바뀜) null.</summary>
-    private async Task<bool?> ProposeRewriteAsync(TuningRewrite rewrite, SqlStatement target, Guid? startTab, CancellationToken ct)
+    private const string TuneSuffix = " (튜닝)";
+
+    /// <summary>원래 탭 제목 뒤에 「 (튜닝)」 을 붙인다(이미 그렇게 끝나면 그대로).</summary>
+    internal static string TuneTitle(string? original)
     {
+        var title = string.IsNullOrWhiteSpace(original) ? "SQL" : original.Trim();
+        return title.EndsWith("(튜닝)", StringComparison.Ordinal) ? title : title + TuneSuffix;
+    }
+
+    /// <summary>
+    /// 재작성 제안을 비교 창으로 보인다. 받아들이면 원래 탭은 그대로 두고 「원래 탭명 (튜닝)」 새 탭에 (원래 글에서 그 문장 자리만 바꾼 글을) 넣고 true,
+    /// 거절하면 false, 열지 못했으면(탭이 닫힘·문장이 바뀜·비교 창 없음) null. 같은 대화에서 다시 받아들이면 열려 있는 그 탭의 글을 바꾼다.
+    /// </summary>
+    private async Task<(bool? Answer, string? Applied)> ProposeRewriteAsync(TuningRewrite rewrite, SqlStatement target, Guid? startTab, CancellationToken ct)
+    {
+        string? fullText;
+        string? originTitle;
+        Guid? profile = null;
         if (tabs is not null && startTab is { } tabId)
         {
-            // 시작한 탭의 글로 비교한다(인덱스 후보 탭이 열려 활성 탭이 바뀌어도 문장은 그대로다). 비교 창은 활성 탭에 적용되므로 시작 탭을 활성으로 돌린다.
-            if (tabs.GetText(tabId) is null)
+            // 시작한 탭의 글로 비교한다(인덱스 후보 탭이 열려 활성 탭이 바뀌어도 문장은 그대로다).
+            fullText = tabs.GetText(tabId);
+            if (fullText is null)
             {
-                chat.AddAssistantText("튜닝을 시작한 탭이 닫혀 제안을 편집기에 넣지 않았습니다.");
-                return null;
+                chat.AddAssistantText("튜닝을 시작한 탭이 닫혀 제안을 새 탭에 넣지 않았습니다.");
+                return (null, null);
             }
 
             // 옛 범위의 글만 같은지 보면 문장 뒤에 이어 친 글(WHERE …)을 놓친다: 그 자리의 문장이 글과 범위까지 같아야 한다.
             var current = tabs.GetStatementAt(tabId, target.Range.Start);
             if (current is null || current.Text != target.Text || current.Range != target.Range)
             {
-                chat.AddAssistantText("튜닝하는 사이 문장이 바뀌어 제안을 편집기에 넣지 않았습니다.");
-                return null;
+                chat.AddAssistantText("튜닝하는 사이 문장이 바뀌어 제안을 새 탭에 넣지 않았습니다.");
+                return (null, null);
             }
 
-            if (tabs.ActiveTabId != tabId && !tabs.Activate(tabId))
-            {
-                chat.AddAssistantText("튜닝을 시작한 탭이 닫혀 제안을 편집기에 넣지 않았습니다.");
-                return null;
-            }
+            originTitle = tabs.GetTitle(tabId);
         }
         else
         {
@@ -608,19 +627,60 @@ public sealed partial class AiTuningFlow(
             // 튜닝하는 동안 사용자가 문장을 고쳤으면 옛 범위에 덮어쓰지 않는다.
             if (current is null || current.Text != target.Text || current.Range != target.Range)
             {
-                chat.AddAssistantText("튜닝하는 사이 문장이 바뀌어 제안을 편집기에 넣지 않았습니다.");
-                return null;
+                chat.AddAssistantText("튜닝하는 사이 문장이 바뀌어 제안을 새 탭에 넣지 않았습니다.");
+                return (null, null);
             }
+
+            var snapshot = editor.GetActiveDocument();
+            fullText = snapshot?.Text;
+            originTitle = snapshot?.Title;
+            profile = snapshot?.ConnectionProfileId;
         }
 
-        var accepted = await editor.ProposeEditAsync(new TextEdit(target.Range, MatchTerminator(target.Text, rewrite.Sql)) { Description = "AI 튜닝 — " + rewrite.Label }, ct).ConfigureAwait(true);
-        chat.AddAssistantText(accepted ? "제안을 받아들였습니다. Ctrl+Z 한 번으로 되돌릴 수 있습니다." : "제안을 받아들이지 않았습니다.");
-        return accepted;
+        if (previewEdit is null)
+        {
+            chat.AddAssistantText("비교 창을 쓸 수 없어 제안을 새 탭에 넣지 않았습니다.");
+            return (null, null);
+        }
+
+        var edit = new TextEdit(target.Range, MatchTerminator(target.Text, rewrite.Sql)) { Description = "AI 튜닝 — " + rewrite.Label };
+        var finalText = await previewEdit(edit, target.Text, ct).ConfigureAwait(true);
+        if (finalText is null)
+        {
+            chat.AddAssistantText("제안을 받아들이지 않았습니다.");
+            return (false, null);
+        }
+
+        var title = TuneTitle(originTitle);
+        var text = ApplyToFullText(fullText, target, finalText);
+        if (tabs is not null)
+        {
+            if (_tuneTabId is { } existing && tabs.ReplaceText(existing, text) && tabs.Activate(existing))
+            {
+                // 같은 대화에서 다시 받아들인 제안: 열려 있는 (튜닝) 탭의 글만 바꾸고 그 탭을 보인다.
+            }
+            else
+            {
+                _tuneTabId = tabs.OpenText(title, text, startTab);
+            }
+        }
+        else
+        {
+            openTab(title, text, profile);
+        }
+
+        chat.AddAssistantText($"제안을 새 탭 「{title}」 에 넣었습니다. 원래 탭은 그대로입니다.");
+        return (true, finalText);
     }
 
-    /// <summary>받아들인 직후 원래 문장 자리에 있는 글(시작 탭 기준, 없으면 활성 편집기의 문장). 읽지 못하면 null.</summary>
-    private string? AppliedText(SqlStatement target, Guid? startTab) =>
-        tabs is not null && startTab is { } tabId ? tabs.GetStatementAt(tabId, target.Range.Start)?.Text : editor.GetCurrentStatement()?.Text;
+    /// <summary>원래 탭 글에서 <paramref name="target"/> 자리만 <paramref name="replacement"/> 로 바꾼 글. 원래 글을 모르거나 자리가 맞지 않으면 바꾼 문장만.</summary>
+    private static string ApplyToFullText(string? fullText, SqlStatement target, string replacement)
+    {
+        var range = target.Range;
+        return fullText is not null && range.End <= fullText.Length && string.CompareOrdinal(fullText, range.Start, target.Text, 0, target.Text.Length) == 0
+            ? string.Concat(fullText.AsSpan(0, range.Start), replacement, fullText.AsSpan(range.End))
+            : replacement;
+    }
 
     /// <summary>끝의 <c>;</c> 를 원문과 같게 맞춘다(원문 범위가 <c>;</c> 를 포함하지 않으면 뺀다).</summary>
     private static string MatchTerminator(string original, string replacement)

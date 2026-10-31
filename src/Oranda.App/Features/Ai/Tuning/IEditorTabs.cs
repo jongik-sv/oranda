@@ -28,8 +28,14 @@ public interface IEditorTabs
     /// <summary>탭을 활성으로 만든다(제안 비교 창이 활성 탭에 적용되기 때문이다). 탭이 닫혔으면 false.</summary>
     bool Activate(Guid tabId);
 
-    /// <summary>글을 새 탭으로 열고(활성이 된다) 그 탭의 식별자를 돌려준다.</summary>
-    Guid OpenText(string title, string text);
+    /// <summary>탭의 제목. 탭이 닫혔으면 null.</summary>
+    string? GetTitle(Guid tabId);
+
+    /// <summary>
+    /// 글을 새 탭으로 열고(활성이 된다) 그 탭의 식별자를 돌려준다.
+    /// <paramref name="connectionFrom"/> 이 열려 있는 탭이면 새 탭이 그 탭과 같은 접속으로 열린다.
+    /// </summary>
+    Guid OpenText(string title, string text, Guid? connectionFrom = null);
 
     /// <summary>탭의 글을 바꾼다(활성 탭은 그대로 둔다). 탭이 닫혔으면 false.</summary>
     bool ReplaceText(Guid tabId, string text);
@@ -58,7 +64,10 @@ public sealed class HostEditorTabs : IEditorTabs
         return true;
     }
 
-    public Guid OpenText(string title, string text) => Host.OpenTextTab(text, title).TabId;
+    public string? GetTitle(Guid tabId) => Find(tabId)?.Title;
+
+    public Guid OpenText(string title, string text, Guid? connectionFrom = null) =>
+        Host.OpenTextTab(text, title, connectionFrom is { } from ? Find(from)?.ConnectionProfileId : null).TabId;
 
     public bool ReplaceText(Guid tabId, string text)
     {

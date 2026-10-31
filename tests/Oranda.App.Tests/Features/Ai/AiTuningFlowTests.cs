@@ -52,7 +52,16 @@ public class AiTuningFlowTests
 
             return Task.FromResult(Accept);
         }
+
+        /// <summary>비교 창 흉내: 제안을 기록하고 받아들이면 제안 글을, 거절하면 null 을 돌려준다(편집기 글은 바뀌지 않는다).</summary>
+        public Task<string?> Preview(TextEdit edit, string before, CancellationToken ct)
+        {
+            Proposed.Add(edit);
+            return Task.FromResult(Accept ? edit.NewText : null);
+        }
     }
+
+    private static Task<string?> PreviewAccept(TextEdit edit, string before, CancellationToken ct) => Task.FromResult<string?>(edit.NewText);
 
     private sealed class FakeDriver(params AiEvent[] events) : IAiDriver
     {
@@ -91,7 +100,7 @@ public class AiTuningFlowTests
         var driver = Driver();
         var chat = new AiChatViewModel();
         var tabs = new List<(string Title, string Text)>();
-        var flow = new AiTuningFlow(editor, driver, chat, (t, x) => tabs.Add((t, x)));
+        var flow = new AiTuningFlow(editor, driver, chat, (t, x, _) => tabs.Add((t, x)), previewEdit: editor.Preview);
 
         await flow.StartAsync(new TuningStartChoice(true, true, "default"), Context);
 
@@ -100,7 +109,10 @@ public class AiTuningFlowTests
         Assert.DoesNotContain(';', edit.NewText); // 원문 범위에 ; 가 없으므로 맞춤
         Assert.Contains("NOT EXISTS", edit.Description, StringComparison.Ordinal);
 
-        var tab = Assert.Single(tabs);
+        Assert.Equal(2, tabs.Count);
+        Assert.Equal("SQL (튜닝)", tabs[0].Title); // 제안은 새 (튜닝) 탭으로, 인덱스 후보는 그 뒤 탭으로
+        Assert.Contains("SELECT o.* FROM tb_order o", tabs[0].Text, StringComparison.Ordinal);
+        var tab = tabs[1];
         Assert.Contains("CREATE INDEX ix_order_stat", tab.Text, StringComparison.Ordinal);
         Assert.StartsWith("-- AI 가 제안한 인덱스 후보", tab.Text, StringComparison.Ordinal);
 
@@ -114,7 +126,7 @@ public class AiTuningFlowTests
     public async Task Request_carries_the_schema_statement_model_and_the_choice_flags()
     {
         var driver = Driver();
-        var flow = new AiTuningFlow(new FakeEditor(Original), driver, new AiChatViewModel(), (_, _) => { });
+        var flow = new AiTuningFlow(new FakeEditor(Original), driver, new AiChatViewModel(), (_, _, _) => { }, previewEdit: PreviewAccept);
 
         await flow.StartAsync(new TuningStartChoice(false, false, "sonnet"), Context);
 
@@ -163,7 +175,7 @@ public class AiTuningFlowTests
     {
         var driver = Driver();
         var chat = new AiChatViewModel();
-        var flow = new AiTuningFlow(new FakeEditor(Original), driver, chat, (_, _) => { });
+        var flow = new AiTuningFlow(new FakeEditor(Original), driver, chat, (_, _, _) => { }, previewEdit: PreviewAccept);
 
         await flow.StartAsync(new TuningStartChoice(true, false, "default", RunRiskyFunctions: true), Context);
         await flow.FollowUpAsync("인덱스는 빼고");
@@ -177,11 +189,11 @@ public class AiTuningFlowTests
     public async Task Index_text_is_skipped_when_the_user_did_not_ask_for_it()
     {
         var tabs = new List<(string, string)>();
-        var flow = new AiTuningFlow(new FakeEditor(Original), Driver(), new AiChatViewModel(), (t, x) => tabs.Add((t, x)));
+        var flow = new AiTuningFlow(new FakeEditor(Original), Driver(), new AiChatViewModel(), (t, x, _) => tabs.Add((t, x)), previewEdit: PreviewAccept);
 
         await flow.StartAsync(new TuningStartChoice(true, false, "default"), Context);
 
-        Assert.Empty(tabs);
+        Assert.Equal("SQL (튜닝)", Assert.Single(tabs).Item1); // 인덱스 탭은 없고 제안을 받아들인 (튜닝) 탭만 있다
     }
 
     [Fact]
@@ -193,7 +205,7 @@ public class AiTuningFlowTests
         {
             OnRun = () => editor.StatementText = Original + " AND 1 = 1", // 실행 도중 사용자가 문장을 고침
         };
-        var flow = new AiTuningFlow(editor, driver, chat, (_, _) => { });
+        var flow = new AiTuningFlow(editor, driver, chat, (_, _, _) => { }, previewEdit: editor.Preview);
 
         await flow.StartAsync(new TuningStartChoice(true, true, "default"), Context);
 
@@ -206,7 +218,7 @@ public class AiTuningFlowTests
     {
         var editor = new FakeEditor(Original) { Accept = false };
         var chat = new AiChatViewModel();
-        var flow = new AiTuningFlow(editor, Driver(), chat, (_, _) => { });
+        var flow = new AiTuningFlow(editor, Driver(), chat, (_, _, _) => { }, previewEdit: editor.Preview);
 
         await flow.StartAsync(new TuningStartChoice(true, false, "default"), Context);
 
@@ -233,13 +245,13 @@ public class AiTuningFlowTests
     {
         var editor = new FakeEditor(Original);
         var chat = new AiChatViewModel();
-        var flow = new AiTuningFlow(editor, Driver(), chat, (_, _) => { });
+        var flow = new AiTuningFlow(editor, Driver(), chat, (_, _, _) => { }, previewEdit: editor.Preview);
         await flow.StartAsync(new TuningStartChoice(true, false, "default"), Context);
         Assert.True(Assert.Single(chat.Entries.OfType<ChatProposalEntry>()).Applied);
 
         var rejected = new FakeEditor(Original) { Accept = false };
         var chat2 = new AiChatViewModel();
-        await new AiTuningFlow(rejected, Driver(), chat2, (_, _) => { }).StartAsync(new TuningStartChoice(true, false, "default"), Context);
+        await new AiTuningFlow(rejected, Driver(), chat2, (_, _, _) => { }, previewEdit: rejected.Preview).StartAsync(new TuningStartChoice(true, false, "default"), Context);
         var card = Assert.Single(chat2.Entries.OfType<ChatProposalEntry>());
         rejected.StatementText = Original + " AND 1 = 1"; // 닫은 뒤 사용자가 문장을 고침
 
@@ -256,8 +268,8 @@ public class AiTuningFlowTests
         var editor = new FakeEditor(Original) { ApplyOnAccept = true };
         var chat = new AiChatViewModel();
         var shown = new List<(string Title, string Before, string After)>();
-        var flow = new AiTuningFlow(editor, Driver(), chat, (_, _) => { },
-            showComparison: (title, before, after) => { shown.Add((title, before, after)); return Task.CompletedTask; });
+        var flow = new AiTuningFlow(editor, Driver(), chat, (_, _, _) => { },
+            showComparison: (title, before, after) => { shown.Add((title, before, after)); return Task.CompletedTask; }, previewEdit: editor.Preview);
         await flow.StartAsync(new TuningStartChoice(true, false, "default"), Context);
         var card = Assert.Single(chat.Entries.OfType<ChatProposalEntry>());
         Assert.True(card.CanView);
@@ -302,7 +314,7 @@ public class AiTuningFlowTests
     {
         var driver = Driver();
         var chat = new AiChatViewModel();
-        var flow = new AiTuningFlow(new FakeEditor(Original), driver, chat, (_, _) => { });
+        var flow = new AiTuningFlow(new FakeEditor(Original), driver, chat, (_, _, _) => { }, previewEdit: PreviewAccept);
         await flow.StartAsync(new TuningStartChoice(true, true, "default"), Context);
 
         await flow.FollowUpAsync("인덱스는 만들지 말고 힌트로만");
@@ -318,7 +330,7 @@ public class AiTuningFlowTests
     public async Task Chosen_effort_goes_into_the_first_request_and_every_follow_up(string effortId, string? expected)
     {
         var driver = Driver();
-        var flow = new AiTuningFlow(new FakeEditor(Original), driver, new AiChatViewModel(), (_, _) => { });
+        var flow = new AiTuningFlow(new FakeEditor(Original), driver, new AiChatViewModel(), (_, _, _) => { }, previewEdit: PreviewAccept);
         await flow.StartAsync(new TuningStartChoice(true, true, "default", EffortId: effortId), Context);
 
         await flow.FollowUpAsync("다른 방법도");
@@ -331,7 +343,7 @@ public class AiTuningFlowTests
     public async Task Response_style_rules_go_into_the_first_request_and_every_follow_up()
     {
         var driver = Driver();
-        var flow = new AiTuningFlow(new FakeEditor(Original), driver, new AiChatViewModel(), (_, _) => { });
+        var flow = new AiTuningFlow(new FakeEditor(Original), driver, new AiChatViewModel(), (_, _, _) => { }, previewEdit: PreviewAccept);
         await flow.StartAsync(new TuningStartChoice(true, true, "default"), Context);
 
         await flow.FollowUpAsync("다른 방법도");
@@ -356,7 +368,7 @@ public class AiTuningFlowTests
     {
         var chat = new AiChatViewModel();
         var driver = Driver();
-        var flow = new AiTuningFlow(new NoStatementEditor(), driver, chat, (_, _) => { });
+        var flow = new AiTuningFlow(new NoStatementEditor(), driver, chat, (_, _, _) => { });
 
         await flow.StartAsync(new TuningStartChoice(true, true, "default"), Context);
 
@@ -369,7 +381,7 @@ public class AiTuningFlowTests
     {
         var chat = new AiChatViewModel();
         var driver = Driver();
-        var flow = new AiTuningFlow(new FakeEditor(Original), driver, chat, (_, _) => { });
+        var flow = new AiTuningFlow(new FakeEditor(Original), driver, chat, (_, _, _) => { }, previewEdit: PreviewAccept);
         var inner = Task.CompletedTask;
         driver.OnRun = () => inner = flow.StartAsync(new TuningStartChoice(true, true, "default"), Context); // 실행이 도는 동안 다시 시작
 
@@ -385,8 +397,8 @@ public class AiTuningFlowTests
     {
         var driver = Driver();
         var seen = new List<AiAccessLevel>();
-        var flow = new AiTuningFlow(new FakeEditor(Original), driver, new AiChatViewModel(), (_, _) => { }, sessionFactory: null,
-            refreshContext: (old, _) => Task.FromResult<AiContext?>(old with { AccessLevel = AiAccessLevel.Metadata }));
+        var flow = new AiTuningFlow(new FakeEditor(Original), driver, new AiChatViewModel(), (_, _, _) => { }, sessionFactory: null,
+            refreshContext: (old, _) => Task.FromResult<AiContext?>(old with { AccessLevel = AiAccessLevel.Metadata }), previewEdit: PreviewAccept);
 
         await flow.StartAsync(new TuningStartChoice(true, true, "default"), Context);
         await flow.FollowUpAsync("다른 방법도 보여줘");
@@ -400,8 +412,8 @@ public class AiTuningFlowTests
     {
         var chat = new AiChatViewModel();
         var driver = Driver();
-        var flow = new AiTuningFlow(new FakeEditor(Original), driver, chat, (_, _) => { }, sessionFactory: null,
-            refreshContext: (old, _) => Task.FromResult<AiContext?>(old with { AccessLevel = AiAccessLevel.Off }));
+        var flow = new AiTuningFlow(new FakeEditor(Original), driver, chat, (_, _, _) => { }, sessionFactory: null,
+            refreshContext: (old, _) => Task.FromResult<AiContext?>(old with { AccessLevel = AiAccessLevel.Off }), previewEdit: PreviewAccept);
 
         await flow.StartAsync(new TuningStartChoice(true, true, "default"), Context);
         await flow.FollowUpAsync("계속");
@@ -450,14 +462,15 @@ public class AiTuningFlowTests
     }
 
     private static AiTuningFlow MaskedFlow(FakeEditor editor, FakeDriver driver, AiChatViewModel chat, List<(string Title, string Text)> tabs, ISqlLiteralMasker? masker, List<LiteralVault?>? vaults = null) =>
-        new(editor, driver, chat, (t, x) => tabs.Add((t, x)),
+        new(editor, driver, chat, (t, x, _) => tabs.Add((t, x)),
             sessionFactory: (_, vault) =>
             {
                 vaults?.Add(vault);
                 return null;
             },
             masker: masker,
-            maskRequired: _ => true);
+            maskRequired: _ => true,
+            previewEdit: editor.Preview);
 
     [Fact]
     public async Task Masked_start_sends_the_masked_statement_and_the_placeholder_note_and_hands_the_vault_to_the_session()
@@ -508,7 +521,9 @@ public class AiTuningFlowTests
         var edit = Assert.Single(editor.Proposed);
         Assert.Contains("o.stat_cd = '10'", edit.NewText, StringComparison.Ordinal);
         Assert.DoesNotContain(":v1", edit.NewText, StringComparison.Ordinal);
-        var tab = Assert.Single(tabs).Text;
+        Assert.Equal(2, tabs.Count);
+        Assert.Contains("o.stat_cd = '10'", tabs[0].Text, StringComparison.Ordinal);
+        var tab = tabs[1].Text;
         Assert.Contains("WHERE stat_cd = '10';", tab, StringComparison.Ordinal);
         Assert.DoesNotContain("CREATE INDEX ix ON tb_order (stat_cd) WHERE stat_cd = :v1", tab, StringComparison.Ordinal);
         Assert.Contains("자리표시", tab, StringComparison.Ordinal); // 설명 줄은 되돌리지 않으므로 탭 머리에 안내
@@ -566,7 +581,7 @@ public class AiTuningFlowTests
     public async Task Unmasked_flow_stays_as_before_without_a_masker()
     {
         var driver = Driver();
-        var flow = new AiTuningFlow(new FakeEditor(Original), driver, new AiChatViewModel(), (_, _) => { }, maskRequired: _ => false);
+        var flow = new AiTuningFlow(new FakeEditor(Original), driver, new AiChatViewModel(), (_, _, _) => { }, maskRequired: _ => false, previewEdit: PreviewAccept);
 
         await flow.StartAsync(new TuningStartChoice(true, true, "default"), Context);
 
@@ -580,14 +595,14 @@ public class AiTuningFlowTests
         var driver = Driver();
         var vaults = new List<LiteralVault?>();
         var mask = true;
-        var flow = new AiTuningFlow(new FakeEditor(Original), driver, new AiChatViewModel(), (_, _) => { },
+        var flow = new AiTuningFlow(new FakeEditor(Original), driver, new AiChatViewModel(), (_, _, _) => { },
             sessionFactory: (_, vault) =>
             {
                 vaults.Add(vault);
                 return null;
             },
             masker: new FakeMasker(),
-            maskRequired: _ => mask);
+            maskRequired: _ => mask, previewEdit: PreviewAccept);
 
         await flow.StartAsync(new TuningStartChoice(true, true, "default"), Context);
         await flow.FollowUpAsync("계속");
@@ -605,10 +620,10 @@ public class AiTuningFlowTests
         var driver = Driver();
         var chat = new AiChatViewModel();
         var production = false;
-        var flow = new AiTuningFlow(new FakeEditor(Original), driver, chat, (_, _) => { }, sessionFactory: null,
+        var flow = new AiTuningFlow(new FakeEditor(Original), driver, chat, (_, _, _) => { }, sessionFactory: null,
             refreshContext: (old, _) => Task.FromResult<AiContext?>(old with { Environment = ConnectionEnvironment.Production }),
             masker: new FakeMasker(),
-            maskRequired: ctx => production || ctx.Environment == ConnectionEnvironment.Production);
+            maskRequired: ctx => production || ctx.Environment == ConnectionEnvironment.Production, previewEdit: PreviewAccept);
 
         await flow.StartAsync(new TuningStartChoice(true, true, "default"), Context);
         await flow.FollowUpAsync("계속");
@@ -625,11 +640,11 @@ public class AiTuningFlowTests
         await flow.StartAsync(new TuningStartChoice(true, true, "default"), Context);
         Assert.Equal(0, flow.Generation); // 가림 불가로 거부
 
-        var noStatement = new AiTuningFlow(new NoStatementEditor(), Driver(), chat, (_, _) => { });
+        var noStatement = new AiTuningFlow(new NoStatementEditor(), Driver(), chat, (_, _, _) => { });
         await noStatement.StartAsync(new TuningStartChoice(true, true, "default"), Context);
         Assert.Equal(0, noStatement.Generation); // 문장 없음으로 거부
 
-        var ok = new AiTuningFlow(new FakeEditor(Original), Driver(), chat, (_, _) => { });
+        var ok = new AiTuningFlow(new FakeEditor(Original), Driver(), chat, (_, _, _) => { }, previewEdit: PreviewAccept);
         await ok.StartAsync(new TuningStartChoice(true, true, "default"), Context);
         Assert.Equal(1, ok.Generation);
     }
@@ -706,9 +721,9 @@ public class AiTuningFlowTests
         var droppedChat = new AiChatViewModel();
         var keptDriver = RewriteDriver("SELECT /* 주문 상태 */ o.* FROM tb_order o -- 운영 점검\nWHERE o.stat_cd = '10'");
 
-        await new AiTuningFlow(kept, keptDriver, keptChat, (_, _) => { }, masker: new FakeMasker(), maskRequired: _ => false)
+        await new AiTuningFlow(kept, keptDriver, keptChat, (_, _, _) => { }, masker: new FakeMasker(), maskRequired: _ => false, previewEdit: kept.Preview)
             .StartAsync(new TuningStartChoice(true, true, "default"), Context);
-        await new AiTuningFlow(dropped, RewriteDriver("SELECT /* 주문 상태 */ o.* FROM tb_order o WHERE o.stat_cd = '10'"), droppedChat, (_, _) => { }, masker: new FakeMasker(), maskRequired: _ => false)
+        await new AiTuningFlow(dropped, RewriteDriver("SELECT /* 주문 상태 */ o.* FROM tb_order o WHERE o.stat_cd = '10'"), droppedChat, (_, _, _) => { }, masker: new FakeMasker(), maskRequired: _ => false, previewEdit: dropped.Preview)
             .StartAsync(new TuningStartChoice(true, true, "default"), Context);
 
         Assert.Contains(AiTuningFlow.KeepCommentsRule, Assert.Single(keptDriver.Requests).Prompt, StringComparison.Ordinal);

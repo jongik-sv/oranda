@@ -100,7 +100,7 @@
 | `schemaBrowser.singleClickPreview` | bool | ○ | true | 스키마 브라우저에서 객체를 한 번 누르면(방향키로 고르고 잠깐 멈추면) 미리보기 문서로 연다. false 면 두 번 누르기·Enter 로만 연다(SCH-01) |
 | `schemaBrowser.filters` | object[] | ○ | `[]` | 저장 필터(모든 접속 공용, TSK-13-10). 항목: `id`(바뀌지 않는 식별자), `name`, `scope`(`All`·`LogonSchema`·`SchemasWithObjects`·`Selected`·`Pattern`), `schemas`(string[], `Selected` 일 때), `schemaPattern`(string?, `Pattern` 일 때 스키마 이름에 거는 .NET 정규식: 대소문자 무시·일부 일치·시간 제한 100 ms. 옛 파일에는 없음 = null), `hiddenTypes`(숨길 OBJECT_TYPE), `namePatterns`(OBJECT_TYPE → 이름 패턴, `*`·`%` 와일드카드), `underscoreIsWildcard`(기본 false), `wrapWithPercent`(기본 true: 와일드카드가 없으면 포함 검색) |
 | `schemaBrowser.activeFilters` | object | ○ | `{}` | 접속 프로필 id → 그 접속에서 고른 필터 `id`. 없으면 필터 없음 |
-| `update.checkOnStartup` | bool | ○ | true | 메인 창이 뜬 20초 뒤 백그라운드로 새 버전 확인(24시간에 한 번). 확인은 원격 전송 동의 대상이 아니다(PRD 7.4) |
+| `update.checkOnStartup` | bool | ○ | true | 시작할 때마다 메인 창이 뜬 5초 뒤, 실행 중에는 1시간마다 백그라운드로 새 버전 확인. 확인은 원격 전송 동의 대상이 아니다(PRD 7.4) |
 | `update.autoDownload` | bool | ○ | true | 새 버전을 찾으면 백그라운드로 내려받는다. 끄면 「있음」만 알린다 |
 | `update.feedUrl` | string | ○ | `null`(빌드 기본값 `OrandaUpdateFeed`) | http(s) 주소, 폴더·UNC 경로, `https://github.com/<owner>/<repo>`. http 는 설정 화면에 암호화 경고 |
 | `update.skippedVersion` | string | ○ | `null` | 「이 버전 건너뛰기」 한 버전. 시작 확인에서 알리지 않는다 |

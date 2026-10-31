@@ -228,7 +228,7 @@ public sealed class AiTuningLauncher(IServiceProvider services)
             editor,
             driver,
             chat,
-            (title, text) => SqlEditorHost.Current.OpenTextTab(text, title),
+            (title, text, profile) => SqlEditorHost.Current.OpenTextTab(text, title, profile),
             (context, vault) => _profile is { } profile && source is not null
                 ? source.Track(new AgentSession(new AgentRunScope(Guid.NewGuid().ToString("N"), profile, context)
                 {
@@ -242,7 +242,8 @@ public sealed class AiTuningLauncher(IServiceProvider services)
             context => context.Environment == ConnectionEnvironment.Production || _profile is not { } profile || AiAccessPolicy.MaskLiterals(profile, MaskLiteralsSetting()),
             new HostEditorTabs(),
             (title, before, after) => SqlEditorHost.Current.Dialogs.ShowComparisonAsync(title, before, after, CancellationToken.None),
-            ReadIndexesAsync);
+            ReadIndexesAsync,
+            (edit, before, token) => SqlEditorHost.Current.Dialogs.PreviewEditTextAsync(edit.Description ?? "제안된 편집", before, edit.NewText, token));
         _flow.Attach();
         return _flow;
     }

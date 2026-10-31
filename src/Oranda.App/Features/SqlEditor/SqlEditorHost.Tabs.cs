@@ -19,11 +19,13 @@ public sealed partial class SqlEditorHost
     /// <summary>
     /// 만든 글(AI 인덱스 문안 등)을 새 SQL 탭에 담아 연다. 실행은 하지 않으며 사용자가 직접 실행한다.
     /// 저장하지 않은 글이므로 닫을 때 저장 여부를 묻도록 변경됨으로 표시한다.
+    /// <paramref name="connectionProfileId"/> 가 있으면 그 접속으로 연다(없으면 접속 없는 탭).
     /// </summary>
-    public SqlEditorViewModel OpenTextTab(string text, string title)
+    public SqlEditorViewModel OpenTextTab(string text, string title, Guid? connectionProfileId = null)
     {
         var vm = NewDocument(text);
         vm.Title = title;
+        vm.ConnectionProfileId = connectionProfileId;
         vm.IsDirty = true;
         return vm;
     }

@@ -181,7 +181,7 @@ public class AiIndexReviewTests
         var chat = new AiChatViewModel();
         var tabs = new List<string>();
         var flow = new AiTuningFlow(
-            new FixedEditor("SELECT 1 FROM dual"), driver, chat, (_, text) => tabs.Add(text),
+            new FixedEditor("SELECT 1 FROM dual"), driver, chat, (_, text, _) => tabs.Add(text),
             readIndexes: (_, table, _) => Task.FromResult<IReadOnlyList<IndexColumnsRow>?>(
                 table == "TB_APS_COIL_INST" ? [new("IX_APS_COIL_INST_T1", ["MTL_MO_NO"])] : []));
 
