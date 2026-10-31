@@ -60,6 +60,9 @@
         </ItemsControl>
       </Border>
 
+      <!-- 업데이트 알림 띠(비모달): 알릴 것이 없으면 자리를 차지하지 않는다. 내용은 Attach 가 넣는다. -->
+      <ContentControl x:Name="UpdateBannerHost" DockPanel.Dock="Top" />
+
       <docking:DockHostView x:Name="DockHost" DataContext="{Binding Docking}" />
     </DockPanel>
   </Border>

@@ -123,6 +123,11 @@ public partial class MainWindow : Window
             DataContext = new Features.ConnectionManager.ConnectionComboViewModel(services.GetService<IEventBus>(), services),
         };
 
+        if (services.GetService<Features.Update.UpdateService>() is { } updates)
+        {
+            UpdateBannerHost.Content = new Features.Update.UpdateBanner { DataContext = new Features.Update.UpdateBannerViewModel(updates) };
+        }
+
         _dispatcher = new KeyDispatcher(() => _keymap.Table, _registry, _keys);
         _optionText = new OptionTextGuard(_dispatcher);
         _controls = new MenuControls(

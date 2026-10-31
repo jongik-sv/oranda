@@ -66,22 +66,105 @@ public class UpdateServiceTests
     // ---- 시작 확인 규칙 ----
 
     [Fact]
-    public async Task Startup_check_respects_the_24_hour_rule_and_remembers_the_time()
+    public async Task Startup_check_runs_every_start_even_a_minute_after_the_last_check()
     {
         var h = new UpdateHarness();
-        await h.Configure(u => u with { AutoDownload = false });
+        await h.Configure(u => u with { AutoDownload = false, LastCheckedUtc = h.Time.Now - TimeSpan.FromMinutes(1) });
 
         await h.Service.RunStartupAsync(TimeSpan.Zero);
-        Assert.Equal(1, h.Updater.CheckCalls);
+
+        Assert.Equal(1, h.Updater.CheckCalls); // 직전 확인이 1분 전이어도 시작 확인은 돈다
         Assert.Equal(h.Time.Now, h.Store.Saved.Update.LastCheckedUtc);
+    }
 
-        h.Time.Now += TimeSpan.FromHours(23);
-        await h.Service.RunStartupAsync(TimeSpan.Zero);
-        Assert.Equal(1, h.Updater.CheckCalls); // 24시간 전에는 다시 확인하지 않는다
+    [Fact]
+    public void Startup_delay_is_short_so_the_notice_comes_early()
+    {
+        Assert.Equal(TimeSpan.FromSeconds(5), UpdateService.StartupDelay);
+    }
 
-        h.Time.Now += TimeSpan.FromHours(2);
-        await h.Service.RunStartupAsync(TimeSpan.Zero);
-        Assert.Equal(2, h.Updater.CheckCalls);
+    // ---- 실행 중 주기 확인 ----
+
+    [Fact]
+    public async Task Periodic_check_runs_once_per_hour_while_the_app_is_open()
+    {
+        var h = new UpdateHarness();
+        h.Time.FakeTimers = true;
+        h.Updater.Offer = null; // 최신 버전
+        using var cts = new CancellationTokenSource();
+        var loop = h.Service.RunPeriodicAsync(cts.Token);
+
+        h.Time.Advance(UpdateService.PeriodicInterval - TimeSpan.FromMinutes(1));
+        await Task.Delay(50);
+        Assert.Equal(0, h.Updater.CheckCalls);
+
+        h.Time.Advance(TimeSpan.FromMinutes(1));
+        await WaitFor(() => h.Updater.CheckCalls == 1);
+
+        h.Time.Advance(UpdateService.PeriodicInterval);
+        await WaitFor(() => h.Updater.CheckCalls == 2);
+
+        cts.Cancel();
+        await loop.WaitAsync(TimeSpan.FromSeconds(5)); // 취소하면 조용히 끝난다
+    }
+
+    [Fact]
+    public async Task Periodic_check_is_skipped_when_auto_check_is_off()
+    {
+        var h = new UpdateHarness();
+        h.Time.FakeTimers = true;
+        await h.Configure(u => u with { CheckOnStartup = false });
+        using var cts = new CancellationTokenSource();
+        var loop = h.Service.RunPeriodicAsync(cts.Token);
+
+        h.Time.Advance(UpdateService.PeriodicInterval);
+        await Task.Delay(100);
+
+        Assert.Equal(0, h.Updater.CheckCalls);
+        cts.Cancel();
+        await loop.WaitAsync(TimeSpan.FromSeconds(5));
+    }
+
+    [Fact]
+    public async Task Periodic_check_is_skipped_once_a_version_was_found()
+    {
+        var h = new UpdateHarness();
+        h.Time.FakeTimers = true;
+        await h.Configure(u => u with { AutoDownload = false });
+        await h.Service.CheckAsync(manual: false);
+        Assert.Equal(UpdatePhase.Available, h.Service.Phase);
+        Assert.Equal(1, h.Updater.CheckCalls);
+        using var cts = new CancellationTokenSource();
+        var loop = h.Service.RunPeriodicAsync(cts.Token);
+
+        h.Time.Advance(UpdateService.PeriodicInterval);
+        await Task.Delay(100);
+
+        Assert.Equal(1, h.Updater.CheckCalls);
+        cts.Cancel();
+        await loop.WaitAsync(TimeSpan.FromSeconds(5));
+    }
+
+    [Fact]
+    public async Task Periodic_loop_ends_when_the_app_exits()
+    {
+        var h = new UpdateHarness();
+        h.Time.FakeTimers = true;
+        var loop = h.Service.RunPeriodicAsync();
+
+        h.Exit.Quit(); // 종료 확인을 통과 → 서비스가 백그라운드 일을 멈춘다
+
+        await loop.WaitAsync(TimeSpan.FromSeconds(5));
+    }
+
+    private static async Task WaitFor(Func<bool> condition)
+    {
+        for (var i = 0; i < 100 && !condition(); i++)
+        {
+            await Task.Delay(20);
+        }
+
+        Assert.True(condition());
     }
 
     [Fact]

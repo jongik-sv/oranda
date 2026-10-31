@@ -70,11 +70,11 @@ public interface IExitFlow
 [OrandaService(typeof(UpdateService))]
 public sealed class UpdateService : IDisposable
 {
-    /// <summary>시작 확인은 마지막 확인 뒤 이만큼 지나야 다시 한다.</summary>
-    public static readonly TimeSpan StartupInterval = TimeSpan.FromHours(24);
+    /// <summary>실행 중 주기 확인의 간격.</summary>
+    public static readonly TimeSpan PeriodicInterval = TimeSpan.FromHours(1);
 
     /// <summary>메인 창이 뜬 뒤 시작 확인까지 기다리는 시간.</summary>
-    public static readonly TimeSpan StartupDelay = TimeSpan.FromSeconds(20);
+    public static readonly TimeSpan StartupDelay = TimeSpan.FromSeconds(5);
 
     /// <summary>응답 없는 서버(UNC 공유·웹)에서 확인이 끝없이 매달리지 않게 하는 상한.</summary>
     public static readonly TimeSpan CheckTimeout = TimeSpan.FromSeconds(60);
@@ -112,6 +112,9 @@ public sealed class UpdateService : IDisposable
     public string? DefaultFeed { get; set; }
 
     public bool IsInstalled => _updater.IsInstalled;
+
+    /// <summary>설정의 「자동으로 내려받기」. 꺼져 있으면 찾은 버전을 사용자가 직접 받아야 한다.</summary>
+    public bool AutoDownload => _settings.Current.Update.AutoDownload;
 
     public UpdatePhase Phase { get; private set; } = UpdatePhase.Idle;
 
@@ -167,8 +170,8 @@ public sealed class UpdateService : IDisposable
     }
 
     /// <summary>
-    /// 시작할 때 한 번: 앞선 실행에서 받아 둔 업데이트가 있으면 「준비됨」으로 두고(종료할 때 적용), 아니면 조건이 맞을 때
-    /// <paramref name="delay"/> 뒤 조용히 확인한다. 지연 동안 사용자가 직접 확인했거나 설정이 바뀌었으면 조건을 다시 보고 물러난다.
+    /// 시작할 때 한 번: 앞선 실행에서 받아 둔 업데이트가 있으면 「준비됨」으로 두고(종료할 때 적용), 아니면 자동 확인이 켜져 있을 때
+    /// (마지막 확인이 언제였든) <paramref name="delay"/> 뒤 조용히 확인한다. 지연 동안 사용자가 직접 확인했거나 설정이 바뀌었으면 조건을 다시 보고 물러난다.
     /// 실패는 로그만 남긴다. 부르는 쪽이 기다리지 않아도 되도록 설계했다.
     /// </summary>
     public async Task RunStartupAsync(TimeSpan delay, CancellationToken ct = default)
@@ -184,7 +187,7 @@ public sealed class UpdateService : IDisposable
             return;
         }
 
-        if (!StartupCheckDue())
+        if (!AutoCheckEnabled())
         {
             return;
         }
@@ -195,13 +198,51 @@ public sealed class UpdateService : IDisposable
             if (delay > TimeSpan.Zero)
             {
                 await Task.Delay(delay, Time, linked.Token).ConfigureAwait(false);
-                if (Phase != UpdatePhase.Idle || !StartupCheckDue())
+                if (Phase != UpdatePhase.Idle || !AutoCheckEnabled())
                 {
                     return; // 지연 동안 상황이 바뀌었다(직접 확인·설정 변경)
                 }
             }
 
             await CheckAsync(manual: false, linked.Token).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException)
+        {
+            // 앱이 끝나는 중이다.
+        }
+    }
+
+    /// <summary>
+    /// 앱이 떠 있는 동안 <see cref="PeriodicInterval"/> 마다 조용히 확인한다(<see cref="CheckAsync"/> 의 시작 확인과 같은 경로).
+    /// 자동 확인이 꺼져 있거나 이미 찾았거나 받는 중이거나 받았으면 그 차례는 건너뛴다. 앱이 끝나거나 <paramref name="ct"/> 가 취소되면 끝난다.
+    /// </summary>
+    public async Task RunPeriodicAsync(CancellationToken ct = default)
+    {
+        if (!_updater.IsInstalled)
+        {
+            return;
+        }
+
+        using var linked = CancellationTokenSource.CreateLinkedTokenSource(ct, _life.Token);
+        using var timer = new PeriodicTimer(PeriodicInterval, Time);
+        try
+        {
+            while (await timer.WaitForNextTickAsync(linked.Token).ConfigureAwait(false))
+            {
+                if (Phase is UpdatePhase.Available or UpdatePhase.Downloading or UpdatePhase.Ready || !AutoCheckEnabled())
+                {
+                    continue;
+                }
+
+                try
+                {
+                    await CheckAsync(manual: false, linked.Token).ConfigureAwait(false);
+                }
+                catch (Exception ex) when (ex is not OperationCanceledException)
+                {
+                    Trace.TraceWarning("주기 업데이트 확인 실패: {0}", ex.Message);
+                }
+            }
         }
         catch (OperationCanceledException)
         {
@@ -517,18 +558,8 @@ public sealed class UpdateService : IDisposable
         return kind;
     }
 
-    private bool StartupCheckDue()
-    {
-        var options = _settings.Current.Update;
-        if (!options.CheckOnStartup || ResolveFeed().Feed is null)
-        {
-            return false;
-        }
-
-        // 마지막 확인이 미래 시각이면(시계를 되돌렸다) 때가 된 것으로 본다.
-        var now = Time.GetUtcNow();
-        return options.LastCheckedUtc is not { } last || last > now || now - last >= StartupInterval;
-    }
+    // 「자동으로 업데이트 확인」 설정이 켜져 있고 피드가 있을 때만 조용한 확인(시작·주기)을 한다.
+    private bool AutoCheckEnabled() => _settings.Current.Update.CheckOnStartup && ResolveFeed().Feed is not null;
 
     private string? PendingVersion()
     {

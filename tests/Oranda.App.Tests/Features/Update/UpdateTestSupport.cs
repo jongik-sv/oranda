@@ -21,9 +21,91 @@ internal sealed class MemorySettingsStore : ISettingsStore
 
 internal sealed class ManualTimeProvider(DateTimeOffset now) : TimeProvider
 {
+    private readonly List<ManualTimer> _timers = [];
+
     public DateTimeOffset Now { get; set; } = now;
 
+    /// <summary>true 면 타이머(<see cref="PeriodicTimer"/> 포함)가 <see cref="Advance"/> 로만 간다. false 면 실제 시계로 돈다(짧은 실제 지연 시험용).</summary>
+    public bool FakeTimers { get; set; }
+
     public override DateTimeOffset GetUtcNow() => Now;
+
+    public override ITimer CreateTimer(TimerCallback callback, object? state, TimeSpan dueTime, TimeSpan period)
+    {
+        if (!FakeTimers)
+        {
+            return base.CreateTimer(callback, state, dueTime, period);
+        }
+
+        var timer = new ManualTimer(this, callback, state, Now + dueTime, period);
+        lock (_timers)
+        {
+            _timers.Add(timer);
+        }
+
+        return timer;
+    }
+
+    /// <summary>시계를 <paramref name="by"/> 만큼 보내며 그 사이 도래한 타이머를 부른다.</summary>
+    public void Advance(TimeSpan by)
+    {
+        var target = Now + by;
+        while (true)
+        {
+            ManualTimer? next;
+            lock (_timers)
+            {
+                next = _timers.Where(t => t.Due <= target).OrderBy(t => t.Due).FirstOrDefault();
+            }
+
+            if (next is null)
+            {
+                break;
+            }
+
+            Now = next.Due;
+            next.Fire();
+        }
+
+        Now = target;
+    }
+
+    internal void Remove(ManualTimer timer)
+    {
+        lock (_timers)
+        {
+            _timers.Remove(timer);
+        }
+    }
+
+    internal sealed class ManualTimer(ManualTimeProvider owner, TimerCallback callback, object? state, DateTimeOffset due, TimeSpan period) : ITimer
+    {
+        public DateTimeOffset Due { get; private set; } = due;
+
+        public void Fire()
+        {
+            if (period > TimeSpan.Zero)
+            {
+                Due += period;
+            }
+            else
+            {
+                owner.Remove(this);
+            }
+
+            callback(state);
+        }
+
+        public bool Change(TimeSpan dueTime, TimeSpan newPeriod) => true;
+
+        public void Dispose() => owner.Remove(this);
+
+        public ValueTask DisposeAsync()
+        {
+            Dispose();
+            return ValueTask.CompletedTask;
+        }
+    }
 }
 
 /// <summary>시험용 가짜 업데이트 구현. 호출 횟수를 센다.</summary>
