@@ -21,7 +21,7 @@ public static partial class AiErrorText
             return string.Empty;
         }
 
-        var clean = SqlQuoted().Replace(text, "'***'"); // SQL 문자열 리터럴(실제 값)은 따옴표 안을 먼저 지운다
+        var clean = SqlQuoted().Replace(text, "'***'"); // SQL 문자열 리터럴(실제 값)은 따옴표 안을 먼저 지운다. 닫히지 않은 따옴표는 따옴표부터 글 끝까지 지운다
         clean = Secrets().Replace(clean, m => m.Groups[1].Value + "=***");
         return UserInfo().Replace(clean, "://***@");
     }
@@ -29,7 +29,7 @@ public static partial class AiErrorText
     [System.Text.RegularExpressions.GeneratedRegex(@"(?i)\b(bearer|authorization|api[-_ ]?key|apikey|token|password|passwd|secret)\b\W{0,3}\s*(?:bearer\s+|basic\s+)?[^\s,;]+", System.Text.RegularExpressions.RegexOptions.CultureInvariant)]
     private static partial System.Text.RegularExpressions.Regex Secrets();
 
-    [System.Text.RegularExpressions.GeneratedRegex(@"'(?:[^']|'')*'", System.Text.RegularExpressions.RegexOptions.CultureInvariant)]
+    [System.Text.RegularExpressions.GeneratedRegex(@"'(?:''|[^'])*(?:'|\z)", System.Text.RegularExpressions.RegexOptions.CultureInvariant)]
     private static partial System.Text.RegularExpressions.Regex SqlQuoted();
 
     [System.Text.RegularExpressions.GeneratedRegex(@"://[^/@\s]+@", System.Text.RegularExpressions.RegexOptions.CultureInvariant)]

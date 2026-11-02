@@ -54,6 +54,9 @@ public sealed class AiTuningLauncher(IServiceProvider services)
     /// <summary>튜닝을 시작하다 예외가 났을 때 화면에 보이는 고정 글(상세는 가린 뒤 추적 기록에만 남긴다).</summary>
     public const string StartFailedText = "AI 튜닝을 시작하지 못했습니다. 자세한 원인은 로그에 남겼습니다.";
 
+    /// <summary>활성 문서가 지금 접속의 SQL 탭이 아니라 튜닝을 시작하지 않았을 때 대화 창에 남기는 안내.</summary>
+    public const string OtherDocumentText = "활성 문서가 지금 접속의 SQL 탭이 아니라서 튜닝을 시작하지 않았습니다(PL/SQL 편집기·객체 상세이거나 다른 접속의 탭). 튜닝할 SQL 탭을 열고 문장 위에 커서를 둔 뒤 다시 시도하세요.";
+
     /// <summary>서비스 모음마다 하나인 조립(명령 처리기와 대화 창이 같은 것을 쓴다: 흐름은 대화 창당 하나라서).</summary>
     public static AiTuningLauncher For(IServiceProvider services)
     {
@@ -113,10 +116,18 @@ public sealed class AiTuningLauncher(IServiceProvider services)
             return;
         }
 
+        // 활성 문서가 지금 접속의 SQL 탭이 아니면(PL/SQL 편집기·객체 상세·다른 접속의 탭, 또는 판단 불가) 시작 창을 띄우지 않고 알린다:
+        // 편집기 맥락은 마지막 SQL 탭의 문장을 돌려주므로 그대로 두면 다른 접속 탭의 문장이 지금 접속의 가림·허용 수준 아래로 나간다. 일반 대화와 같은 판단이다.
+        var (source, statement) = AiStatementScope.Resolve(editor, SqlDocumentActive(), shown.Id);
+        if (source == AiStatementSource.OtherDocument)
+        {
+            await ReportFailureAsync(OtherDocumentText).ConfigureAwait(true);
+            return;
+        }
+
         // 보이는 세션의 프로필은 접속할 때의 사본이라, 접속 편집에서 바꾼 AI 허용 수준·환경 라벨이 빠져 있다. 저장된 최신 값을 쓴다.
         var profile = await LatestProfileAsync(shown, ct).ConfigureAwait(true) ?? shown;
 
-        var statement = editor.GetCurrentStatement();
         var settings = (services.GetService(typeof(SettingsService)) as SettingsService)?.Current.Ai ?? new AiSettings();
         var document = editor.GetActiveDocument();
         var tabId = document?.TabId.ToString("N", CultureInfo.InvariantCulture);

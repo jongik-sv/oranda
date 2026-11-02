@@ -148,29 +148,24 @@ public sealed partial class AiTuningFlow
         // 활성 문서가 SQL 탭이 아니거나 그 탭의 접속이 지금 접속(scope)과 다르면 그 문장을 싣지 않고 도구도 닫는다. 판단할 수 없으면 닫는다.
         string? scopeText = null;
         string? closedText = null;
+        var otherDocument = false;
         if (tools)
         {
-            var document = editor.GetActiveDocument();
-            if (scope.SqlDocumentActive != true || document is null
-                || (document.ConnectionProfileId is { } tabConnection && scope.ConnectionId != tabConnection))
+            var (source, found) = AiStatementScope.Resolve(editor, scope.SqlDocumentActive, scope.ConnectionId);
+            scopeText = found?.Text;
+            otherDocument = source == AiStatementSource.OtherDocument;
+            closedText = source switch
             {
-                closedText = GeneralOtherDocumentText;
-            }
-            else if (editor.GetCurrentStatement() is { } found && !string.IsNullOrWhiteSpace(found.Text))
-            {
-                scopeText = found.Text;
-            }
-            else
-            {
-                closedText = GeneralNoStatementText;
-            }
-
+                AiStatementSource.OtherDocument => GeneralOtherDocumentText,
+                AiStatementSource.NoStatement => GeneralNoStatementText,
+                _ => null,
+            };
             tools = scopeText is not null;
         }
 
-        // 다음 문장에 진짜 바인드(:v1)가 있어 이 대화의 자리표시 접두와 겹치면 앞 사전을 쓸 수 없다: 새 대화로 간다.
-        if (tools && scope.Masking && masker is not null && chat.ResumeId is not null && _generalVault is { } existingVault
-            && masker.CreateVault(scopeText!).Prefix != existingVault.Prefix)
+        // 다음 문장에 진짜 바인드가 있어 이 대화의 자리표시(예 :v1)와 겹치면 앞 사전을 쓸 수 없다: 새 대화로 간다.
+        // 새 문장 자체가 어떤 접두를 고를지가 아니라, 새 문장의 바인드가 기존 사전의 접두와 겹치는지만 본다.
+        if (tools && scope.Masking && chat.ResumeId is not null && _generalVault is { } existingVault && CollidesWithPrefix(scopeText!, existingVault))
         {
             chat.AddAssistantText(GeneralPrefixChangedText);
             chat.ForgetResume();
@@ -215,9 +210,9 @@ public sealed partial class AiTuningFlow
             }
             else
             {
-                vault = _generalVault ??= masker.CreateVault(scopeText!);
                 try
                 {
+                    vault = _generalVault ??= masker.CreateVault(scopeText!); // 접두를 못 고르는 등 사전을 못 만들어도 고정 글로 끝낸다
                     var masked = masker.Mask(scopeText!, vault);
                     if (masked.Succeeded)
                     {
@@ -247,6 +242,7 @@ public sealed partial class AiTuningFlow
         }
 
         ShowScopeLine(generation, tools, closedText, scopeText);
+        var styleReason = tools ? GeneralToolState.Tools : otherDocument ? GeneralToolState.OtherDocument : GeneralToolState.NoTools;
 
         var context = connected is null ? new AiContext(null, null, AiAccessLevel.Off) : tools ? connected with { StatementText = scopeText } : connected;
 
@@ -276,7 +272,7 @@ public sealed partial class AiTuningFlow
         }
 
         var text = followUp.Text.Length == 0 ? "Look at the attached image(s) and answer." : followUp.Text;
-        var prompt = text + Environment.NewLine + Environment.NewLine + GeneralStyle(tools, vault is not null)
+        var prompt = text + Environment.NewLine + Environment.NewLine + GeneralStyle(styleReason, vault is not null)
             + (promptStatement is null ? string.Empty : Environment.NewLine + Environment.NewLine + "<statement>" + Environment.NewLine + promptStatement + Environment.NewLine + "</statement>")
             + (vault is null ? string.Empty : Environment.NewLine + PlaceholderReminder(vault, statementOnly: true));
         return new GeneralTurn(prompt, context, tools, vault, route, generation);
@@ -333,13 +329,36 @@ public sealed partial class AiTuningFlow
     /// 일반 대화 안내(매 차례): 튜닝 보고서 형식을 쓰지 않고, 도구가 있는지 없는지를 알린다.
     /// 도구가 있으면 범위가 활성 탭의 문장뿐임을, 가리는 대화면 자리표시가 도구 결과와 그 문장에만 해당함을 사실대로 적는다(사용자가 쓴 글은 가리지 않는다).
     /// </summary>
-    internal static string GeneralStyle(bool tools, bool masked = false) =>
+    internal static string GeneralStyle(GeneralToolState state, bool masked = false) =>
         "This is a general conversation inside Oranda, an Oracle development tool, not a SQL tuning request: answer the question directly in Korean, briefly, in Markdown; "
         + "do not produce a tuning report, index suggestions or a structured result unless the user asks for one. "
-        + (tools
-            ? $"The user's active editor statement is given below as the scope of the Oranda tools: use the tools only for that statement and its related objects, only when the answer needs facts from the connected database (at most {ToolBudget} tool calls); do not guess those facts. If the user asks about any SQL other than that statement, say that the tools cannot see it."
-              + (masked ? " Literal values in that statement and in tool results are masked; the user's own message is not masked." : string.Empty)
-            : "No database tools are available in this conversation (no connection, access is off, or no statement in the active SQL tab): if the question needs live database facts, say so and tell the user to connect and put the cursor on a statement.");
+        + state switch
+        {
+            GeneralToolState.Tools =>
+                $"The user's active editor statement is given below as the scope of the Oranda tools: use the tools only for that statement and its related objects, only when the answer needs facts from the connected database (at most {ToolBudget} tool calls); do not guess those facts. If the user asks about any SQL other than that statement, say that the tools cannot see it."
+                + (masked ? " Literal values in that statement and in tool results are masked; the user's own message is not masked." : string.Empty),
+            GeneralToolState.OtherDocument =>
+                "No database tools are available in this conversation: the active document is not an SQL tab of the current connection (another connection's tab, a PL/SQL editor or an object detail), so its statement was not sent. If the question needs live database facts or that statement, say so and tell the user to activate the SQL tab of the current connection and put the cursor on a statement.",
+            _ =>
+                "No database tools are available in this conversation (no connection, access is off, or no statement in the active SQL tab): if the question needs live database facts, say so and tell the user to connect and put the cursor on a statement.",
+        };
+
+    /// <summary>일반 대화 프롬프트가 알리는 도구 상태.</summary>
+    internal enum GeneralToolState
+    {
+        /// <summary>활성 탭의 문장 범위에서 도구를 쓴다.</summary>
+        Tools,
+
+        /// <summary>연결 없음·허용 수준 끔·문장 없음·가림 실패 등으로 도구가 없다.</summary>
+        NoTools,
+
+        /// <summary>활성 문서가 지금 접속의 SQL 탭이 아니라 그 문장을 보내지 않고 도구가 없다.</summary>
+        OtherDocument,
+    }
+
+    /// <summary>새 문장의 실제 바인드(예 <c>:v1</c>)가 이 사전의 자리표시 접두와 겹친다.</summary>
+    private static bool CollidesWithPrefix(string statement, LiteralVault vault) =>
+        System.Text.RegularExpressions.Regex.IsMatch(statement, ":" + System.Text.RegularExpressions.Regex.Escape(vault.Prefix) + @"\d+", System.Text.RegularExpressions.RegexOptions.IgnoreCase | System.Text.RegularExpressions.RegexOptions.CultureInvariant);
 
     private async Task RunGeneralAsync(GeneralTurn turn, ChatFollowUp followUp, CancellationToken ct)
     {

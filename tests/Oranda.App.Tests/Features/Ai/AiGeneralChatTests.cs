@@ -634,6 +634,7 @@ public class AiGeneralChatTests
         }))
         {
             ChatOverride = () => Task.FromResult<AiChatViewModel?>(chat),
+            SqlDocumentActiveProvider = () => true, // 이 시험은 문서 판단이 아니라 시작 중 예외 표시를 본다
         };
 
         await launcher.RunAsync(CancellationToken.None); // 예외를 밖으로 내지 않는다
@@ -645,7 +646,7 @@ public class AiGeneralChatTests
 
     private sealed class ThrowingEditor : IEditorContext
     {
-        public EditorSnapshot? GetActiveDocument() => null;
+        public EditorSnapshot? GetActiveDocument() => new(Guid.NewGuid(), string.Empty, new TextRange(0, 0), 0);
 
         public SqlStatement? GetCurrentStatement() => throw new InvalidOperationException("편집기 오류");
 
@@ -862,7 +863,7 @@ public class AiGeneralChatTests
         Assert.Equal(AiAccessLevel.Off, request.Session!.Level);
         Assert.Empty(h.SessionContexts);
         Assert.DoesNotContain("<statement>", request.Prompt, StringComparison.Ordinal);
-        Assert.Contains("no statement in the active SQL tab", request.Prompt, StringComparison.Ordinal); // 프롬프트도 사실대로
+        Assert.Contains(hasDocument ? "no statement in the active SQL tab" : "the active document is not an SQL tab", request.Prompt, StringComparison.Ordinal); // 프롬프트도 사실대로
         Assert.Contains(h.Chat.Entries.OfType<ChatAssistantEntry>(), e => e.Text == (hasDocument ? AiTuningFlow.GeneralNoStatementText : AiTuningFlow.GeneralOtherDocumentText));
     }
 
@@ -1466,5 +1467,75 @@ public class AiGeneralChatTests
         Assert.DoesNotContain("secret", clean, StringComparison.Ordinal);
         Assert.Contains("'***'", clean, StringComparison.Ordinal);
         Assert.Contains("WHERE name", clean, StringComparison.Ordinal);
+    }
+
+    // ── 후속: 접두 오탐·사전 생성 실패·닫히지 않은 따옴표·프롬프트 사유 ──
+
+    [Fact]
+    public async Task A_next_statement_without_binds_does_not_reset_a_conversation_whose_vault_prefix_was_changed_by_the_first_statement()
+    {
+        var h = new Harness(withMasker: true) { Mask = true, MaskerOverride = new PrefixAwareMasker() };
+        h.Editor.Statement = "SELECT * FROM t WHERE c = :v1"; // 첫 문장의 진짜 바인드 때문에 접두가 lit
+        await h.SendAsync("첫 질문");
+        Assert.Equal("lit", h.Driver.Requests[0].Session!.Run.Literals!.Prefix);
+        h.Editor.Statement = "SELECT * FROM t WHERE c = 1"; // 바인드 없음: 새로 계산하면 v 지만 겹치지 않는다
+
+        await h.SendAsync("둘째 질문");
+
+        Assert.Equal("sess-1", h.Driver.Requests[1].ResumeId); // 같은 대화로 이어 간다
+        Assert.DoesNotContain(h.Chat.Entries.OfType<ChatAssistantEntry>(), e => e.Text == AiTuningFlow.GeneralPrefixChangedText);
+        Assert.Equal("lit", h.Driver.Requests[1].Session!.Run.Literals!.Prefix);
+    }
+
+    private sealed class ThrowingVaultMasker : ISqlLiteralMasker
+    {
+        public LiteralVault CreateVault(string statementText) => throw new InvalidOperationException("접두를 고르지 못함");
+
+        public SqlMaskResult Mask(string sql, LiteralVault vault) => SqlMaskResult.Ok(sql);
+
+        public SqlRestoreResult Restore(string sql, LiteralVault vault) => SqlRestoreResult.Ok(sql);
+
+        public string MaskPredicate(string predicate, LiteralVault vault) => predicate;
+    }
+
+    [Fact]
+    public async Task A_vault_that_cannot_be_created_ends_with_the_fixed_text_and_sends_no_statement()
+    {
+        var h = new Harness(withMasker: true) { Mask = true, MaskerOverride = new ThrowingVaultMasker() };
+        h.Editor.Statement = "SELECT * FROM t WHERE c = 'SECRET-LITERAL'";
+
+        await h.SendAsync("질문"); // 예외가 밖으로 나가지 않는다
+
+        var request = Assert.Single(h.Driver.Requests);
+        Assert.DoesNotContain("SECRET-LITERAL", request.Prompt, StringComparison.Ordinal);
+        Assert.DoesNotContain("<statement>", request.Prompt, StringComparison.Ordinal);
+        Assert.Equal(AiAccessLevel.Off, request.Session!.Level);
+        Assert.Contains(h.Chat.Entries.OfType<ChatAssistantEntry>(), e => e.Text == AiTuningFlow.GeneralMaskFailedText);
+        Assert.DoesNotContain(h.Chat.Entries.OfType<ChatAssistantEntry>(), e => e.Text.Contains("접두를 고르지", StringComparison.Ordinal)); // 상세는 화면에 없다
+    }
+
+    [Fact]
+    public void Redact_erases_an_unclosed_quote_to_the_end()
+    {
+        var clean = AiErrorText.Redact("ORA-01756: quoted string not properly terminated near WHERE name = 'Hong Gildong and more");
+
+        Assert.DoesNotContain("Hong", clean, StringComparison.Ordinal);
+        Assert.DoesNotContain("more", clean, StringComparison.Ordinal);
+        Assert.Contains("WHERE name = '***'", clean, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task The_no_tools_prompt_names_the_other_document_reason_only_for_that_case()
+    {
+        var other = new Harness { SqlDocumentActive = false };
+        await other.SendAsync("질문");
+        Assert.Contains("the active document is not an SQL tab of the current connection", other.Driver.Requests.Single().Prompt, StringComparison.Ordinal);
+
+        var none = new Harness();
+        none.Editor.Statement = null;
+        await none.SendAsync("질문");
+        var prompt = none.Driver.Requests.Single().Prompt;
+        Assert.Contains("no statement in the active SQL tab", prompt, StringComparison.Ordinal);
+        Assert.DoesNotContain("another connection's tab", prompt, StringComparison.Ordinal);
     }
 }
