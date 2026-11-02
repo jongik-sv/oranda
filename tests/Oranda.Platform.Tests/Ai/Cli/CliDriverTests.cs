@@ -81,7 +81,10 @@ public sealed class CliDriverTests : IDisposable
 
         // 인자·프롬프트
         var launch = _launcher.Launches.Single();
-        Assert.Equal("the prompt", launch.Prompt);
+        var content = JsonDocument.Parse(launch.StandardInput).RootElement.GetProperty("message").GetProperty("content");
+        Assert.Equal("the prompt", content[0].GetProperty("text").GetString());
+        Assert.Equal("stream-json", ArgumentAfter(launch.Arguments, "--input-format"));
+        Assert.Empty(launch.Environment!); // Claude Code 경로는 환경 변수를 더하지 않는다(구독 인증 유지)
         Assert.Equal("sid-prev", ArgumentAfter(launch.Arguments, "--resume"));
         Assert.Equal("haiku", ArgumentAfter(launch.Arguments, "--model"));
         Assert.Equal("high", ArgumentAfter(launch.Arguments, "--effort"));
@@ -305,71 +308,5 @@ public sealed class CliDriverTests : IDisposable
             orandactl,
             () => null,
             path => path == orandactl ? orandactlExists : path == cli && cliExists);
-    }
-
-    private sealed class FixedEndpoint(string? pipeName) : IAgentBridgeEndpoint
-    {
-        public string? PipeName { get; } = pipeName;
-    }
-
-    private sealed class FixedSettings(AppSettings settings) : ISettingsStore
-    {
-        public Task<StoredDocument<AppSettings>> LoadAsync(CancellationToken ct) => Task.FromResult(new StoredDocument<AppSettings>(settings));
-
-        public Task SaveAsync(AppSettings value, CancellationToken ct) => Task.CompletedTask;
-    }
-
-    private sealed class FakeLauncher : IClaudeProcessLauncher
-    {
-        public string[] Lines { get; set; } = [];
-
-        public string StandardError { get; set; } = string.Empty;
-
-        public int ExitCode { get; set; }
-
-        public bool Blocking { get; set; }
-
-        public Action<ClaudeLaunch>? OnStart { get; set; }
-
-        public List<ClaudeLaunch> Launches { get; } = [];
-
-        public FakeProcess? Process { get; private set; }
-
-        public TaskCompletionSource Started { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
-
-        public IClaudeProcess Start(ClaudeLaunch launch)
-        {
-            Launches.Add(launch);
-            OnStart?.Invoke(launch);
-            Process = new FakeProcess(this);
-            Started.TrySetResult();
-            return Process;
-        }
-    }
-
-    private sealed class FakeProcess(FakeLauncher launcher) : IClaudeProcess
-    {
-        public bool Killed { get; private set; }
-
-        public string StandardErrorTail => launcher.StandardError;
-
-        public async IAsyncEnumerable<string> ReadLinesAsync([EnumeratorCancellation] CancellationToken cancellationToken)
-        {
-            if (launcher.Blocking)
-            {
-                await Task.Delay(Timeout.Infinite, cancellationToken);
-            }
-
-            foreach (var line in launcher.Lines)
-            {
-                yield return line;
-            }
-        }
-
-        public Task<int> WaitForExitAsync(CancellationToken cancellationToken) => Task.FromResult(launcher.ExitCode);
-
-        public void Kill() => Killed = true;
-
-        public ValueTask DisposeAsync() => ValueTask.CompletedTask;
     }
 }

@@ -17,6 +17,7 @@ namespace Oranda.Platform.Tests.Ai.Cli;
 /// 실제 claude 를 한 번 부르는 끝까지 확인(구독 한도를 쓰므로 기본은 건너뜀). 환경 변수 <c>ORANDA_AI_E2E=1</c> 일 때만 돈다.
 /// 가짜 게이트 + 진짜 AgentBridgeHost + 진짜 orandactl(<c>src/Oranda.Agent.Cli</c> 빌드 출력) + 진짜 claude.
 /// </summary>
+[Collection(RealClaudeGroup.Name)]
 public sealed class ClaudeEndToEndTests : IDisposable
 {
     private readonly string _dir = Path.Combine(Path.GetTempPath(), "oranda-e2e-" + Guid.NewGuid().ToString("N"));

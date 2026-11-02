@@ -16,6 +16,7 @@ public class ClaudeCliArgumentsTests
         AssertPair(arguments, "--setting-sources", "project");
         AssertPair(arguments, "--tools", string.Empty);
         AssertPair(arguments, "--output-format", "stream-json");
+        AssertPair(arguments, "--input-format", "stream-json");
         Assert.Contains("--verbose", arguments);
         AssertPair(arguments, "--json-schema", "{\"type\":\"object\"}");
         AssertPair(arguments, "--model", "haiku");

@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using System.Runtime.CompilerServices;
 using System.Text;
+using Oranda.Platform.Ai.Profiles;
 
 namespace Oranda.Platform.Ai.Cli;
 
@@ -8,8 +9,28 @@ namespace Oranda.Platform.Ai.Cli;
 /// <param name="ExecutablePath">claude 실행 파일 경로.</param>
 /// <param name="Arguments"><see cref="ClaudeCliArguments.Build"/> 의 결과.</param>
 /// <param name="WorkingDirectory">빈 작업 폴더(프로젝트 설정·파일을 읽지 못하게 한다).</param>
-/// <param name="Prompt">표준 입력으로 쓰고 닫을 프롬프트.</param>
-internal sealed record ClaudeLaunch(string ExecutablePath, IReadOnlyList<string> Arguments, string WorkingDirectory, string Prompt);
+/// <param name="StandardInput">표준 입력으로 쓰고 닫을 글(<see cref="ClaudeStreamInput.Build"/> 가 만든 stream-json 한 줄).</param>
+/// <param name="Environment">자식 프로세스 환경 변수 덮어쓰기. 값이 null 이면 부모에게서 물려받은 변수를 지운다. 비어 있으면 부모 환경 그대로다.</param>
+/// <param name="IsolateEnvironment">true 면 부모 환경에서 <see cref="ClaudeProfileEnvironment.IsScrubbed"/> 이름을 물려받지 않는다(프로필 실행). false 는 구독 경로로, 부모 환경을 그대로 쓴다.</param>
+/// <param name="Secret">표준 오류에 나와도 가려야 하는 값(프로필 API 키). 줄 단위로 가린 뒤 끝부분을 쌓으므로, 자르는 경계에 걸쳐 일부가 남지 않는다.</param>
+internal sealed record ClaudeLaunch(
+    string ExecutablePath,
+    IReadOnlyList<string> Arguments,
+    string WorkingDirectory,
+    string StandardInput,
+    IReadOnlyDictionary<string, string?>? Environment = null,
+    string? Secret = null,
+    bool IsolateEnvironment = false)
+{
+    // 기본 출력(ToString·로그·디버거)에 키(환경 변수 값)와 사용자 글(표준 입력)이 나오지 않게 한다.
+    private bool PrintMembers(StringBuilder builder)
+    {
+        builder.Append("ExecutablePath = ").Append(ExecutablePath)
+            .Append(", Arguments = ").Append(Arguments.Count)
+            .Append(", Environment = ").Append(Environment?.Count ?? 0);
+        return true;
+    }
+}
 
 /// <summary>실행 중인 claude. 시험은 가짜로 바꾼다.</summary>
 internal interface IClaudeProcess : IAsyncDisposable
@@ -33,9 +54,9 @@ internal interface IClaudeProcessLauncher
 
 internal sealed class SystemClaudeProcessLauncher : IClaudeProcessLauncher
 {
-    public IClaudeProcess Start(ClaudeLaunch launch)
+    /// <summary>실행 정보를 만든다(시험이 실제 <see cref="ProcessStartInfo"/> 수준에서 환경 변수 조합을 확인한다).</summary>
+    internal static ProcessStartInfo CreateStartInfo(ClaudeLaunch launch)
     {
-        ArgumentNullException.ThrowIfNull(launch);
         var utf8 = new UTF8Encoding(encoderShouldEmitUTF8Identifier: false);
         var info = new ProcessStartInfo(launch.ExecutablePath)
         {
@@ -54,16 +75,51 @@ internal sealed class SystemClaudeProcessLauncher : IClaudeProcessLauncher
             info.ArgumentList.Add(argument);
         }
 
-        // PATH 밖(흔한 설치 위치)에서 찾은 claude 면 그 폴더를 자식 PATH 앞에 둔다: npm 설치의 claude 는 같은 폴더의 node 를 찾고,
-        // macOS 에서 Finder 로 띄운 앱의 PATH 에는 Homebrew 폴더가 없다.
+        ApplyEnvironment(info.Environment, launch);
+        return info;
+    }
+
+    /// <summary>
+    /// 자식 환경을 정한다: 실행 파일 폴더를 PATH 앞에 두고, <see cref="ClaudeLaunch.Environment"/> 를 적용한다(null 값은 지운다).
+    /// PATH 밖(흔한 설치 위치)에서 찾은 claude 면 그 폴더를 자식 PATH 앞에 둔다: npm 설치의 claude 는 같은 폴더의 node 를 찾고,
+    /// macOS 에서 Finder 로 띄운 앱의 PATH 에는 Homebrew 폴더가 없다.
+    /// </summary>
+    internal static void ApplyEnvironment(IDictionary<string, string?> environment, ClaudeLaunch launch)
+    {
         if (Path.GetDirectoryName(launch.ExecutablePath) is { Length: > 0 } directory)
         {
-            var path = info.Environment.TryGetValue("PATH", out var current) ? current ?? string.Empty : string.Empty;
+            var path = environment.TryGetValue("PATH", out var current) ? current ?? string.Empty : string.Empty;
             if (!path.Split(Path.PathSeparator).Contains(directory, StringComparer.Ordinal))
             {
-                info.Environment["PATH"] = path.Length == 0 ? directory : directory + Path.PathSeparator + path;
+                environment["PATH"] = path.Length == 0 ? directory : directory + Path.PathSeparator + path;
             }
         }
+
+        if (launch.IsolateEnvironment)
+        {
+            foreach (var name in environment.Keys.Where(ClaudeProfileEnvironment.IsScrubbed).ToList())
+            {
+                environment.Remove(name);
+            }
+        }
+
+        foreach (var (name, value) in launch.Environment ?? new Dictionary<string, string?>())
+        {
+            if (value is null)
+            {
+                environment.Remove(name);
+            }
+            else
+            {
+                environment[name] = value;
+            }
+        }
+    }
+
+    public IClaudeProcess Start(ClaudeLaunch launch)
+    {
+        ArgumentNullException.ThrowIfNull(launch);
+        var info = CreateStartInfo(launch);
 
         var process = new Process { StartInfo = info };
         try
@@ -76,7 +132,7 @@ internal sealed class SystemClaudeProcessLauncher : IClaudeProcessLauncher
             throw;
         }
 
-        return new SystemClaudeProcess(process, launch.Prompt);
+        return new SystemClaudeProcess(process, launch.StandardInput, launch.Secret);
     }
 }
 
@@ -89,11 +145,13 @@ internal sealed class SystemClaudeProcess : IClaudeProcess
     private readonly StringBuilder _errorTail = new();
     private readonly Task _stdin;
     private readonly Task _stderr;
+    private readonly string? _secret;
 
-    public SystemClaudeProcess(Process process, string prompt)
+    public SystemClaudeProcess(Process process, string standardInput, string? secret = null)
     {
         _process = process;
-        _stdin = WriteAndCloseStdinAsync(prompt);
+        _secret = secret;
+        _stdin = WriteAndCloseStdinAsync(standardInput);
         _stderr = DrainStandardErrorAsync();
     }
 
@@ -145,16 +203,16 @@ internal sealed class SystemClaudeProcess : IClaudeProcess
         _process.Dispose();
     }
 
-    private async Task WriteAndCloseStdinAsync(string prompt)
+    private async Task WriteAndCloseStdinAsync(string standardInput)
     {
         try
         {
-            await _process.StandardInput.WriteAsync(prompt).ConfigureAwait(false);
+            await _process.StandardInput.WriteAsync(standardInput).ConfigureAwait(false);
             await _process.StandardInput.FlushAsync().ConfigureAwait(false);
         }
-        catch (IOException)
+        catch (Exception ex) when (ex is IOException or ObjectDisposedException or InvalidOperationException)
         {
-            // 프롬프트를 다 읽기 전에 claude 가 끝났다. 결과는 종료 코드와 출력으로 드러난다.
+            // 입력을 다 읽기 전에 claude 가 끝났거나(깨진 파이프) 취소로 프로세스가 정리됐다. 결과는 종료 코드와 출력으로 드러난다.
         }
         finally
         {
@@ -162,7 +220,7 @@ internal sealed class SystemClaudeProcess : IClaudeProcess
             {
                 _process.StandardInput.Close();
             }
-            catch (IOException)
+            catch (Exception ex) when (ex is IOException or ObjectDisposedException or InvalidOperationException)
             {
                 // 이미 닫혔다.
             }
@@ -177,7 +235,7 @@ internal sealed class SystemClaudeProcess : IClaudeProcess
             {
                 lock (_errorLock)
                 {
-                    _errorTail.AppendLine(line);
+                    _errorTail.AppendLine(SecretRedactor.Redact(line, _secret));
                     if (_errorTail.Length > MaxErrorTailChars)
                     {
                         _errorTail.Remove(0, _errorTail.Length - MaxErrorTailChars);

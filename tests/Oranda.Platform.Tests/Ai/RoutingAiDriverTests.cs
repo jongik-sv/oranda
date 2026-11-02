@@ -75,13 +75,13 @@ public sealed class RoutingAiDriverTests
     }
 
     [Fact]
-    public async Task Anthropic_format_profile_goes_to_the_cli_driver_which_still_closes_it_until_env_vars_exist()
+    public async Task Anthropic_format_profile_goes_to_the_cli_driver()
     {
         var api = new ScriptedApiDriver();
         Use(AiDriverKind.ClaudeCode, AnthropicProfile.Id, AnthropicProfile);
 
-        // profile_cli_pending 은 CliDriver 의 프로필 가드가 낸다: 환경 변수 없이 구독 인증으로 나가는 일이 없다(ai-cli 레인이 가드를 없앤다).
-        Assert.Equal("profile_cli_pending", CodeOf(await RunAsync(Create(api))));
+        // 요청에 실행 범위(Session)가 없어 CliDriver 가 session_required 로 닫는다: 프로필 환경 변수 검사를 지나 CLI 드라이버까지 왔다는 뜻이다.
+        Assert.Equal("session_required", CodeOf(await RunAsync(Create(api))));
         Assert.Empty(api.Requests);
     }
 
@@ -289,7 +289,7 @@ public sealed class RoutingAiDriverTests
         var driver = Create(api);
 
         Use(AiDriverKind.ClaudeCode, AnthropicProfile.Id, AnthropicProfile, OpenAiProfile);
-        Assert.Equal("profile_cli_pending", CodeOf(await RunAsync(driver)));
+        Assert.Equal("session_required", CodeOf(await RunAsync(driver)));
 
         Use(AiDriverKind.ClaudeCode, OpenAiProfile.Id, AnthropicProfile, OpenAiProfile);
         Assert.IsType<AiFinal>(Assert.Single(await RunAsync(driver)));

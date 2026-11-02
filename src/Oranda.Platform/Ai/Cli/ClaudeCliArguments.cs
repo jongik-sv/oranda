@@ -11,7 +11,7 @@ namespace Oranda.Platform.Ai.Cli;
 internal sealed record ClaudeCliInvocation(string McpConfigPath, string? JsonSchema = null, string? Model = null, string? ResumeId = null, string? Effort = null);
 
 /// <summary>
-/// claude -p 인자 목록(b0 탐침으로 확인한 조합). 프롬프트는 인자로 싣지 않는다 — 표준 입력으로 쓰고 닫는다
+/// claude -p 인자 목록(b0 탐침으로 확인한 조합). 프롬프트는 인자로 싣지 않는다 — 표준 입력으로 stream-json 한 줄을 쓰고 닫는다
 /// (Windows 명령줄 32K 한도를 넘는 SQL 글과 '-' 로 시작하는 글을 안전하게 넘기기 위해서다).
 /// </summary>
 internal static class ClaudeCliArguments
@@ -36,6 +36,9 @@ internal static class ClaudeCliArguments
             // 내장 도구(Read·Edit·Task 등)를 모두 끈다. 남는 것은 MCP 도구와 합성 도구뿐이라 파일·셸 통로가 없다.
             "--tools", string.Empty,
             "--output-format", "stream-json",
+
+            // 입력도 stream-json: 글·이미지 경로를 하나로 만든다. 표준 입력에 한 줄을 쓰고 닫는다(ClaudeStreamInput).
+            "--input-format", "stream-json",
             "--verbose",
         };
 

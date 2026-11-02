@@ -4,10 +4,12 @@ using System.Runtime.CompilerServices;
 using System.Text.Json;
 using Oranda.Core.Ai.Contracts;
 using Oranda.Core.Ai.Gate;
+using Oranda.Core.Ai.Profiles;
 using Oranda.Core.Composition;
 using Oranda.Core.Settings;
 using Oranda.Core.Storage;
 using Oranda.Platform.Ai.Bridge;
+using Oranda.Platform.Ai.Profiles;
 
 namespace Oranda.Platform.Ai.Cli;
 
@@ -94,23 +96,46 @@ internal sealed class CliDriver : IAiDriver
     public IAsyncEnumerable<AiEvent> RunAsync(AiRequest request, CancellationToken ct) => RunAsync(request, AiRoute.ClaudeCode, ct);
 
     /// <summary>
-    /// 라우터가 고른 전송 대상으로 실행한다. 프로필 경로의 환경 변수 적용은 아직 없다(ai-cli 레인이 <paramref name="route"/> 로 채운다):
-    /// 지금은 프로필 경로를 <c>profile_cli_pending</c> 으로 닫고 Claude Code 경로만 실행한다.
+    /// 라우터가 고른 전송 대상으로 실행한다. 프로필 경로는 환경 변수(<see cref="ClaudeProfileEnvironment"/>)로 주소·키·최대 출력을 싣고,
+    /// 모델은 프로필 모델만 쓴다. 키는 <paramref name="route"/> 에서만 받으며, 오류 글에는 키가 나가지 않게 가린다.
     /// </summary>
     internal async IAsyncEnumerable<AiEvent> RunAsync(AiRequest request, AiRoute route, [EnumeratorCancellation] CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(request);
         ArgumentNullException.ThrowIfNull(route);
 
-        // 프로필의 URL·키를 환경 변수로 싣는 일이 아직 없다. 그냥 실행하면 프로필을 골랐는데도 구독 인증 Claude Code 로 SQL 이 나가므로 닫는다.
-        // ai-cli 레인이 환경 변수 적용을 넣을 때 이 가드를 없앤다.
-        if (route.Profile is not null)
+        // 표준 오류 끝부분·claude 결과 글·서버 오류를 되풀이한 글이 한 곳을 지나가게 해서 키가 사용자 화면으로 나가지 않게 한다.
+        await foreach (var aiEvent in RunCoreAsync(request, route, ct).ConfigureAwait(false))
         {
-            yield return new AiError("이 버전은 Anthropic 형식 프로필의 연결을 아직 지원하지 않습니다.", "profile_cli_pending");
+            yield return route.ApiKey is { Length: > 0 } key ? RedactEvent(aiEvent, key) : aiEvent;
+        }
+    }
+
+    private static AiEvent RedactEvent(AiEvent aiEvent, string key) => aiEvent switch
+    {
+        AiError error => error with { Message = SecretRedactor.Redact(error.Message, key) },
+        AiTextDelta delta => delta with { Text = SecretRedactor.Redact(delta.Text, key) },
+        AiFinal { Text: { } text } final => final with { Text = SecretRedactor.Redact(text, key) },
+        AiToolCall call => call with { ArgumentsSummary = SecretRedactor.Redact(call.ArgumentsSummary, key) },
+        _ => aiEvent,
+    };
+
+    private async IAsyncEnumerable<AiEvent> RunCoreAsync(AiRequest request, AiRoute route, [EnumeratorCancellation] CancellationToken ct)
+    {
+        var (variables, environmentError) = ClaudeProfileEnvironment.Resolve(route);
+        if (environmentError is not null)
+        {
+            yield return environmentError;
             yield break;
         }
 
-        var checkedRun = await CheckPreconditionsAsync(request, ct).ConfigureAwait(false);
+        if (ClaudeStreamInput.Validate(request.Prompt, request.Images) is { } imageError)
+        {
+            yield return imageError;
+            yield break;
+        }
+
+        var checkedRun = await CheckPreconditionsAsync(request, route.Profile is not null, ct).ConfigureAwait(false);
         if (checkedRun.Error is not null)
         {
             yield return checkedRun.Error;
@@ -119,6 +144,17 @@ internal sealed class CliDriver : IAiDriver
 
         var session = request.Session!;
         var aiDirectory = Path.Combine(_paths.DataDirectory, "ai");
+
+        // 다른 경로(다른 프로필·구독)가 만든 세션을 이어 말하면 claude 가 저장된 앞 대화를 지금 서버로 보낸다. 띄우기 전에 막는다.
+        var owners = new ClaudeSessionOwners(Path.Combine(aiDirectory, "sessions"));
+        // 소속 = 프로필 id + 정규화한 서버 주소: 같은 프로필의 주소를 바꾸면(사내 서버 → 외부 클라우드) 앞 대화가 새 서버로 가므로 다른 소속이다.
+        var ownerId = route.Profile is { } ownerProfile ? $"{ownerProfile.Id:N}|{AiProfileUrl.CliBaseUrl(ownerProfile.BaseUrl)}" : null;
+        if (request.ResumeId is { Length: > 0 } resumeId && owners.CheckResume(resumeId, ownerId) is { } resumeError)
+        {
+            yield return resumeError;
+            yield break;
+        }
+
         var runsDirectory = Path.Combine(aiDirectory, "runs");
         var runDirectory = Path.Combine(runsDirectory, $"{session.RunId}-{Guid.NewGuid():N}");
         DeleteStaleRuns(runsDirectory);
@@ -147,8 +183,18 @@ internal sealed class CliDriver : IAiDriver
 
             // 스키마는 줄바꿈 없이 한 줄로 넘긴다(공백·줄바꿈이 든 원문은 일부 실행 경로에서 인자가 잘린다).
             var schema = request.OutputSchema is { } element ? JsonSerializer.Serialize(element) : null;
-            var invocation = new ClaudeCliInvocation(configPath!, schema, request.Model ?? checkedRun.Settings!.Model, request.ResumeId, request.Effort ?? checkedRun.Settings!.Effort);
-            var launch = new ClaudeLaunch(checkedRun.Executable!, ClaudeCliArguments.Build(invocation), workDirectory!, request.Prompt);
+
+            // 프로필이면 프로필 모델만 쓴다. 요청·설정에 Claude Code 용 모델(opus 등)이 남아 있어도 프로필 서버로 나가면 안 된다.
+            var model = route.Profile is { } profile ? profile.Model.Trim() : request.Model ?? checkedRun.Settings!.Model;
+            var invocation = new ClaudeCliInvocation(configPath!, schema, model, request.ResumeId, request.Effort ?? checkedRun.Settings!.Effort);
+            var launch = new ClaudeLaunch(
+                checkedRun.Executable!,
+                ClaudeCliArguments.Build(invocation),
+                workDirectory!,
+                ClaudeStreamInput.Build(request.Prompt, request.Images),
+                variables,
+                route.ApiKey,
+                IsolateEnvironment: route.Profile is not null);
 
             (process, var startError) = TryStart(launch);
             if (startError is not null)
@@ -178,6 +224,14 @@ internal sealed class CliDriver : IAiDriver
                         }
 
                         validated = true;
+
+                        // 기록은 앱에 세션 id 가 알려지기(AiStarted) 전에, 그리고 서버로 요청이 나가기 전에 남긴다. 남기지 못하면 구독 경로가 이 세션을
+                        // 이어 말하게 될 수 있으므로 시작하지 않고 닫는다.
+                        if (ownerId is not null && !owners.Record(init.SessionId, ownerId))
+                        {
+                            yield return new AiError("대화의 소속을 기록하지 못해 중단했습니다. 앱 데이터 폴더의 쓰기 권한을 확인하세요.", "session_record_failed");
+                            yield break;
+                        }
                     }
                     else if (!validated && streamEvent is ClaudeToolUse or ClaudeResult { IsError: false })
                     {
@@ -186,10 +240,17 @@ internal sealed class CliDriver : IAiDriver
                         yield break;
                     }
 
-                    foreach (var aiEvent in Translate(streamEvent, toolNames, judgements))
+                    // 이어 말하기에서 결과의 세션 id 가 시작 때와 다르면 새 id 도 같은 소속으로 기록한다. 기록하지 못하면 앱이 그 id 로 이어 말하지 못하게 id 를 비운다.
+                    var resumeRecorded = true;
+                    if (ownerId is not null && streamEvent is ClaudeResult { IsError: false, SessionId: { Length: > 0 } finalSessionId })
+                    {
+                        resumeRecorded = owners.Record(finalSessionId, ownerId);
+                    }
+
+                    foreach (var aiEvent in Translate(streamEvent, toolNames, judgements, includeCost: route.Profile is null))
                     {
                         finished |= aiEvent is AiFinal or AiError;
-                        yield return aiEvent;
+                        yield return !resumeRecorded && aiEvent is AiFinal final ? final with { ResumeId = null } : aiEvent;
                     }
                 }
             }
@@ -242,7 +303,8 @@ internal sealed class CliDriver : IAiDriver
     private static List<AiEvent> Translate(
         ClaudeStreamEvent streamEvent,
         Dictionary<string, string> toolNames,
-        ConcurrentDictionary<string, ConcurrentQueue<AgentToolActivityEventArgs>> judgements)
+        ConcurrentDictionary<string, ConcurrentQueue<AgentToolActivityEventArgs>> judgements,
+        bool includeCost)
     {
         var events = new List<AiEvent>();
         switch (streamEvent)
@@ -281,7 +343,8 @@ internal sealed class CliDriver : IAiDriver
                     break;
                 }
 
-                events.Add(new AiUsage(result.InputTokens, result.OutputTokens, result.CostUsd));
+                // 프로필이면 CLI 가 내는 비용은 실제 비용이 아니라(구독 기준 환산) 숨긴다.
+                events.Add(new AiUsage(result.InputTokens, result.OutputTokens, includeCost ? result.CostUsd : null));
                 events.Add(new AiFinal(result.StructuredOutput is null ? result.Text : null, result.StructuredOutput, result.SessionId));
                 break;
         }
@@ -384,7 +447,7 @@ internal sealed class CliDriver : IAiDriver
         }
     }
 
-    private async Task<(AiError? Error, string? Executable, AiSettings? Settings, string? PipeName)> CheckPreconditionsAsync(AiRequest request, CancellationToken ct)
+    private async Task<(AiError? Error, string? Executable, AiSettings? Settings, string? PipeName)> CheckPreconditionsAsync(AiRequest request, bool viaProfile, CancellationToken ct)
     {
         if (request.Session is null)
         {
@@ -420,7 +483,13 @@ internal sealed class CliDriver : IAiDriver
         var executable = ClaudeExecutable.Find(settings.ExecutablePath, _pathVariable(), _fileExists);
         if (executable is null)
         {
-            return (new AiError("claude 실행 파일을 찾지 못했습니다. 설정에서 경로를 지정하거나 Claude Code 를 설치하세요.", "cli_not_found"), null, null, null);
+            var message = "claude 실행 파일을 찾지 못했습니다. 설정에서 경로를 지정하거나 Claude Code 를 설치하세요.";
+            if (viaProfile)
+            {
+                message += " OpenAI 형식을 쓰면 claude 없이 연결할 수 있습니다.";
+            }
+
+            return (new AiError(message, "cli_not_found"), null, null, null);
         }
 
         return ClaudeExecutable.IsBatchFile(executable)
