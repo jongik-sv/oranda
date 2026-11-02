@@ -362,7 +362,9 @@
         </ScrollViewer>
       </TabItem>
       <TabItem x:Name="AiModelTab" Header="{Binding Strings[tab.ai]}" IsVisible="{Binding AiTabVisible}">
-        <aiSettings:AiModelSettingsView DataContext="{Binding AiModel}" />
+        <ScrollViewer HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
+          <aiSettings:AiModelSettingsView DataContext="{Binding AiModel}" />
+        </ScrollViewer>
       </TabItem>
     </TabControl>
     <TextBlock Grid.Row="1" Text="{Binding Notice}" IsVisible="{Binding HasNotice}"

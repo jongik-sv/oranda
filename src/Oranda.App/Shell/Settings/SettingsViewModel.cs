@@ -10,10 +10,12 @@ using Oranda.App.Features.Localization;
 using Oranda.App.Features.Update;
 using Oranda.App.Shell.Appearance;
 using Oranda.App.ViewModels;
+using Oranda.Core.Ai.Profiles;
 using Oranda.Core.Events;
 using Oranda.Core.Execution;
 using Oranda.Core.Features;
 using Oranda.Core.Formatting;
+using Oranda.Core.Security;
 using Oranda.Core.Settings;
 using Oranda.Core.Shell;
 using Oranda.Core.Storage;
@@ -222,7 +224,9 @@ public sealed partial class SettingsViewModel : ViewModelBase
             featureGate ?? (Avalonia.Application.Current as App)?.Services?.GetService<IFeatureGate>());
         var gate = featureGate ?? (Avalonia.Application.Current as App)?.Services?.GetService<IFeatureGate>();
         _aiSaved = settings.Current.Ai;
-        AiModel = new AiModelSettingsPage(settings.Current.Ai);
+        AiModel = new AiModelSettingsPage(settings.Current.Ai, CreateAiProfileServices(settings, text));
+        // 프로필 관리 창이 이미 기록하고 알렸으면 확인 때 같은 변경을 다시 알리지 않는다.
+        AiModel.ProfilesPersisted += (_, _) => _aiSaved = _settings.Current.Ai;
         AiTabVisible = gate?.IsEnabled(FeatureIds.AiTuning) ?? false;
         Themes =
         [
@@ -302,6 +306,17 @@ public sealed partial class SettingsViewModel : ViewModelBase
 
     /// <summary>시험용: 「자세히…」가 포매터 프로필 화면을 여는 길(기본 = <c>oranda.format.profiles</c> 명령).</summary>
     internal Func<Task>? OpenProfiles { get; init; }
+
+    private static AiProfileServices CreateAiProfileServices(SettingsService settings, IShellText text)
+    {
+        var services = (Avalonia.Application.Current as App)?.Services;
+        return new AiProfileServices(
+            settings,
+            services?.GetService<ICredentialStore>(),
+            services?.GetService<IAiProfileProbe>(),
+            services?.GetService<IEventBus>(),
+            text);
+    }
 
     private static SqlFormatPage CreateSqlFormatPage(SettingsService settings, IShellText text)
     {
@@ -564,7 +579,8 @@ public sealed partial class SettingsViewModel : ViewModelBase
                     MaxAgeDays = (int)HistoryMaxAgeDays,
                 },
                 Monitor = s.Monitor with { RefreshSeconds = Math.Clamp((int)MonitorRefreshSeconds, 2, 60) },
-                Ai = AiModel.ToSettings(),
+                // 프로필 목록은 저장소의 지금 값을 쓴다: 프로필 관리 창이 그사이 기록한 목록을 옛 사본으로 덮지 않는다.
+                Ai = AiModel.ToSettings(s.Ai),
                 Workspace = s.Workspace with
                 {
                     AutosaveSeconds = Math.Clamp((int)AutosaveSeconds, 1, 10),

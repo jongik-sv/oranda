@@ -1,24 +1,167 @@
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:vm="using:Oranda.App.Features.Ai.Settings"
+             xmlns:icons="using:Oranda.App.Shell.Icons"
              x:Class="Oranda.App.Features.Ai.Settings.AiModelSettingsView"
              x:DataType="vm:AiModelSettingsPage">
-  <!-- 설정 「AI 모델」 쪽 최소판(시안 1): 선택 안 함 / Claude Code + 모델. -->
-  <StackPanel Spacing="8">
-    <TextBlock Text="AI 모델" FontWeight="SemiBold" />
-    <RadioButton x:Name="NoneRadio" GroupName="aiProvider" Content="선택 안 함 (AI 단추를 비활성으로 두고 아무것도 호출하지 않습니다)"
-                 IsChecked="{Binding IsNone, Mode=TwoWay}" />
-    <RadioButton x:Name="ClaudeRadio" GroupName="aiProvider" Content="Claude Code (이 PC 에 로그인된 claude 를 씁니다)"
-                 IsChecked="{Binding IsClaudeCode, Mode=TwoWay}" />
-    <Grid ColumnDefinitions="Auto,200" RowDefinitions="Auto,Auto" ColumnSpacing="8" RowSpacing="6" Margin="22,0,0,0">
-      <TextBlock Text="모델" VerticalAlignment="Center" />
-      <ComboBox x:Name="ModelBox" Grid.Column="1" HorizontalAlignment="Stretch" ItemsSource="{Binding Models}"
-                SelectedItem="{Binding Model, Mode=TwoWay}" IsEnabled="{Binding ModelEnabled}" AutomationProperties.Name="모델" />
-      <TextBlock Grid.Row="1" Text="effort" VerticalAlignment="Center" />
-      <ComboBox x:Name="EffortBox" Grid.Row="1" Grid.Column="1" HorizontalAlignment="Stretch" ItemsSource="{Binding Efforts}"
-                SelectedItem="{Binding Effort, Mode=TwoWay}" IsEnabled="{Binding ModelEnabled}" AutomationProperties.Name="effort"
-                ToolTip.Tip="추론 노력(claude --effort)의 기본 값. AI 튜닝 시작 창에서 대화마다 바꿀 수 있습니다." />
-    </Grid>
+  <!-- 설정 「AI 모델」 쪽(승인 시안 1~3): 「선택 안 함 / 직접 선택」 카드 · 프로필 드롭다운(시스템 CLI · 내 프로필) · 아래 칸(Claude Code 의 CLI 모델·effort, 프로필의 읽기 전용 정보). -->
+  <UserControl.Styles>
+    <!-- 선택 카드: 고른 쪽은 강조 테두리와 옅은 바탕. -->
+    <Style Selector="Button.aiCard">
+      <Setter Property="Width" Value="180" />
+      <Setter Property="MinWidth" Value="0" />
+      <Setter Property="Padding" Value="12,9" />
+      <Setter Property="CornerRadius" Value="8" />
+      <Setter Property="HorizontalContentAlignment" Value="Left" />
+      <Setter Property="VerticalContentAlignment" Value="Top" />
+    </Style>
+    <Style Selector="Button.aiRow:disabled /template/ ContentPresenter#PART_ContentPresenter">
+      <Setter Property="Background" Value="Transparent" />
+    </Style>
+    <Style Selector="Button.aiCard.selected">
+      <Setter Property="BorderThickness" Value="2" />
+      <Setter Property="Padding" Value="11,8" />
+      <Setter Property="BorderBrush" Value="{DynamicResource OrandaButtonAccentBrush}" />
+      <Setter Property="Background" Value="{DynamicResource OrandaTableSelectionBrush}" />
+    </Style>
+    <Style Selector="Button.aiRow">
+      <Setter Property="MinWidth" Value="0" />
+      <Setter Property="MinHeight" Value="30" />
+      <Setter Property="Padding" Value="10,0" />
+      <Setter Property="BorderThickness" Value="0" />
+      <Setter Property="Background" Value="Transparent" />
+      <Setter Property="HorizontalAlignment" Value="Stretch" />
+      <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+    </Style>
+  </UserControl.Styles>
+  <StackPanel Spacing="12">
+    <StackPanel Spacing="3">
+      <TextBlock Text="AI 모델" FontWeight="SemiBold" />
+      <TextBlock Text="AI 튜닝과 대화에 사용할 모델을 선택합니다." Classes="dim" FontSize="{DynamicResource OrandaFontSizeSmall}" />
+    </StackPanel>
+
+    <Border BorderBrush="{DynamicResource OrandaSeparatorBrush}" BorderThickness="1" CornerRadius="8" Padding="14">
+      <StackPanel Spacing="12">
+        <Grid ColumnDefinitions="*,Auto">
+          <TextBlock Text="사용 모델" FontWeight="SemiBold" VerticalAlignment="Center" />
+          <Button x:Name="ManageButton" Grid.Column="1" Content="프로필 관리" icons:ButtonIcon.Key="settings"
+                  Command="{Binding ManageProfilesCommand}" ToolTip.Tip="LLM 프로필을 만들고 고치고 지웁니다." />
+        </Grid>
+
+        <StackPanel Orientation="Horizontal" Spacing="10">
+          <Button x:Name="NoneCard" Classes="aiCard" Classes.selected="{Binding IsNone}" Command="{Binding SelectNoneCommand}"
+                  AutomationProperties.Name="선택 안 함">
+            <StackPanel Spacing="3">
+              <TextBlock Text="선택 안 함" FontWeight="SemiBold" />
+              <TextBlock Text="AI 기능을 쓰지 않습니다" Classes="dim" FontSize="{DynamicResource OrandaFontSizeSmall}" TextWrapping="Wrap" />
+            </StackPanel>
+          </Button>
+          <Button x:Name="DirectCard" Classes="aiCard" Classes.selected="{Binding IsClaudeCode}" Command="{Binding SelectDirectCommand}"
+                  AutomationProperties.Name="직접 선택">
+            <StackPanel Spacing="3">
+              <TextBlock Text="직접 선택" FontWeight="SemiBold" />
+              <TextBlock Text="CLI·내 프로필에서 선택" Classes="dim" FontSize="{DynamicResource OrandaFontSizeSmall}" TextWrapping="Wrap" />
+            </StackPanel>
+          </Button>
+        </StackPanel>
+
+        <StackPanel Spacing="4" IsVisible="{Binding ShowSelection}">
+          <TextBlock Text="프로필" FontSize="{DynamicResource OrandaFontSizeSmall}" Opacity="0.75" />
+          <Button x:Name="ProfileBox" HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch" MinHeight="36" Padding="12,0"
+                  Command="{Binding ToggleDropdownCommand}" AutomationProperties.Name="프로필">
+            <Grid ColumnDefinitions="*,Auto">
+              <TextBlock x:Name="ProfileTitle" Text="{Binding SelectedTitle}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
+              <Path Grid.Column="1" Data="M2.5 4.5 6 8l3.5-3.5" Stroke="{DynamicResource OrandaIconNeutralBrush}" StrokeThickness="1.5"
+                    Width="12" Height="12" Stretch="None" VerticalAlignment="Center" Margin="8,0,0,0" />
+            </Grid>
+          </Button>
+          <Popup x:Name="ProfilePopup" IsOpen="{Binding IsDropdownOpen, Mode=TwoWay}" PlacementTarget="{Binding #ProfileBox}"
+                 Placement="BottomEdgeAlignedLeft" IsLightDismissEnabled="True">
+            <Border Width="{Binding #ProfileBox.Bounds.Width}" Padding="6" CornerRadius="8" BorderThickness="1"
+                    Background="{DynamicResource OrandaPanelHeaderBrush}" BorderBrush="{DynamicResource OrandaSeparatorBrush}">
+              <ScrollViewer MaxHeight="360" HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
+              <ItemsControl x:Name="ChoiceList" ItemsSource="{Binding Choices}">
+                <ItemsControl.ItemTemplate>
+                  <DataTemplate x:DataType="vm:AiProfileChoice">
+                    <StackPanel>
+                      <TextBlock Text="{Binding Title}" IsVisible="{Binding IsHeader}" FontWeight="SemiBold" Opacity="0.7"
+                                 FontSize="{DynamicResource OrandaFontSizeSmall}" Margin="10,6,10,3" />
+                      <Button Classes="aiRow" IsVisible="{Binding IsRow}" IsEnabled="{Binding Selectable}" Click="OnChoiceClick">
+                        <Grid ColumnDefinitions="22,*,Auto">
+                          <Path Data="M2.5 7.5 5.5 10.5 11.5 4" Stroke="{DynamicResource OrandaButtonAccentBrush}" StrokeThickness="1.8"
+                                IsVisible="{Binding IsCurrent}" Width="14" Height="14" Stretch="None" HorizontalAlignment="Left" VerticalAlignment="Center" />
+                          <TextBlock Grid.Column="1" Text="{Binding Title}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
+                          <TextBlock Grid.Column="2" Text="{Binding DetailText}" IsVisible="{Binding HasDetail}" Classes="mono dim" Margin="12,0,0,0"
+                                     FontSize="{DynamicResource OrandaFontSizeSmall}" VerticalAlignment="Center" />
+                        </Grid>
+                      </Button>
+                      <Button Classes="aiRow accent" IsVisible="{Binding IsNewProfile}" Margin="0,2,0,0" Click="OnChoiceClick"
+                              HorizontalContentAlignment="Left" AutomationProperties.Name="새 프로필 만들기…">
+                        <StackPanel Orientation="Horizontal" Spacing="8">
+                          <Path Data="M7 2.5v9M2.5 7h9" Stroke="{Binding $parent[Button].Foreground}" StrokeThickness="1.8" Width="14" Height="14" Stretch="None" VerticalAlignment="Center" />
+                          <TextBlock Text="새 프로필 만들기…" VerticalAlignment="Center" />
+                        </StackPanel>
+                      </Button>
+                    </StackPanel>
+                  </DataTemplate>
+                </ItemsControl.ItemTemplate>
+              </ItemsControl>
+              </ScrollViewer>
+            </Border>
+          </Popup>
+        </StackPanel>
+
+        <TextBlock x:Name="NoticeText" Text="{Binding Notice}" IsVisible="{Binding HasNotice}" Classes="warning-text" TextWrapping="Wrap"
+                   FontSize="{DynamicResource OrandaFontSizeSmall}" />
+
+        <StackPanel Spacing="8" IsVisible="{Binding ShowCliSettings}">
+          <Grid ColumnDefinitions="*,*" ColumnSpacing="10">
+            <StackPanel Spacing="4">
+              <TextBlock Text="CLI 모델" FontSize="{DynamicResource OrandaFontSizeSmall}" Opacity="0.75" />
+              <ComboBox x:Name="ModelBox" HorizontalAlignment="Stretch" ItemsSource="{Binding Models}" SelectedItem="{Binding Model, Mode=TwoWay}"
+                        IsEnabled="{Binding ModelEnabled}" AutomationProperties.Name="모델" />
+            </StackPanel>
+            <StackPanel Grid.Column="1" Spacing="4">
+              <TextBlock Text="effort" FontSize="{DynamicResource OrandaFontSizeSmall}" Opacity="0.75" />
+              <ComboBox x:Name="EffortBox" HorizontalAlignment="Stretch" ItemsSource="{Binding Efforts}" SelectedItem="{Binding Effort, Mode=TwoWay}"
+                        IsEnabled="{Binding ModelEnabled}" AutomationProperties.Name="effort"
+                        ToolTip.Tip="추론 노력(claude --effort)의 기본 값. AI 튜닝 시작 창에서 대화마다 바꿀 수 있습니다." />
+            </StackPanel>
+          </Grid>
+          <TextBlock Text="이 PC 에 로그인된 claude 를 씁니다. 키·URL 이 필요 없습니다." Classes="dim" FontSize="{DynamicResource OrandaFontSizeSmall}" TextWrapping="Wrap" />
+        </StackPanel>
+
+        <Border x:Name="ProfileInfo" IsVisible="{Binding ShowProfileInfo}" Background="{DynamicResource OrandaPanelHeaderBrush}" CornerRadius="6" Padding="12">
+          <Grid ColumnDefinitions="72,*" RowDefinitions="Auto,Auto,Auto,Auto" ColumnSpacing="10" RowSpacing="7">
+            <Grid.Styles>
+              <Style Selector="TextBlock">
+                <Setter Property="FontSize" Value="{DynamicResource OrandaFontSizeSmall}" />
+              </Style>
+            </Grid.Styles>
+            <TextBlock Text="모델" Opacity="0.7" />
+            <TextBlock x:Name="ProfileModelText" Grid.Column="1" Text="{Binding ProfileModel}" Classes="mono" TextWrapping="Wrap" />
+            <TextBlock Grid.Row="1" Text="주소" Opacity="0.7" />
+            <TextBlock x:Name="ProfileUrlText" Grid.Row="1" Grid.Column="1" Text="{Binding ProfileUrl}" Classes="mono" TextWrapping="Wrap" />
+            <TextBlock Grid.Row="2" Text="API 형식" Opacity="0.7" />
+            <TextBlock Grid.Row="2" Grid.Column="1" Text="{Binding ProfileFormatText}" TextWrapping="Wrap" />
+            <TextBlock Grid.Row="3" Text="이미지" Opacity="0.7" />
+            <TextBlock Grid.Row="3" Grid.Column="1" Text="{Binding ProfileImagesText}" TextWrapping="Wrap" />
+          </Grid>
+        </Border>
+
+        <StackPanel x:Name="PlainTextWarning" Orientation="Horizontal" Spacing="8" IsVisible="{Binding ShowPlainTextWarning}">
+          <ContentControl icons:ButtonIcon.Key="warn" icons:ButtonIcon.IconOnly="True" VerticalAlignment="Top" Margin="0,1,0,0" />
+          <TextBlock Text="{Binding PlainTextWarningText}" Classes="warning-text" TextWrapping="Wrap" FontSize="{DynamicResource OrandaFontSizeSmall}" />
+        </StackPanel>
+
+        <StackPanel x:Name="ProblemPanel" Orientation="Horizontal" Spacing="8" IsVisible="{Binding ShowProblem}">
+          <ContentControl icons:ButtonIcon.Key="warn" icons:ButtonIcon.IconOnly="True" VerticalAlignment="Top" Margin="0,1,0,0" />
+          <TextBlock x:Name="ProblemText" Text="{Binding ProblemText}" Classes="warning-text" TextWrapping="Wrap" MaxWidth="520"
+                     FontSize="{DynamicResource OrandaFontSizeSmall}" />
+        </StackPanel>
+      </StackPanel>
+    </Border>
+
     <CheckBox x:Name="MaskLiteralsCheck" IsChecked="{Binding MaskLiterals, Mode=TwoWay}"
               Content="SQL 의 리터럴 값을 :vN 으로 가려서 보냄 (운영 접속은 이 설정과 관계없이 항상 켜짐)" />
   </StackPanel>

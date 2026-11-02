@@ -1,0 +1,222 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="using:Oranda.App.Features.Ai.Settings"
+        xmlns:icons="using:Oranda.App.Shell.Icons"
+        x:Class="Oranda.App.Features.Ai.Settings.AiProfileManagerWindow"
+        x:DataType="vm:AiProfileManagerViewModel"
+        Title="LLM 프로필 관리"
+        Width="960" Height="780" MinWidth="780" MinHeight="560"
+        WindowStartupLocation="CenterOwner" ShowInTaskbar="False"
+        FontSize="{DynamicResource OrandaFontSizeBase}">
+  <!-- LLM 프로필 관리 창(승인 시안): 왼쪽 프로필 목록 · 오른쪽 프리셋 카드 7개와 입력 칸 · 아래 결과 띠와 삭제/취소/연결 테스트/프로필 저장. -->
+  <Window.Styles>
+    <!-- 아이콘만 있는 키 단추: 공통 최소 폭(84)을 쓰지 않는다. -->
+    <Style Selector="Button.aiIconButton">
+      <Setter Property="MinWidth" Value="0" />
+    </Style>
+    <Style Selector="Button.aiCard">
+      <Setter Property="MinWidth" Value="0" />
+      <Setter Property="Padding" Value="10,8" />
+      <Setter Property="CornerRadius" Value="8" />
+      <Setter Property="HorizontalAlignment" Value="Stretch" />
+      <Setter Property="HorizontalContentAlignment" Value="Left" />
+      <Setter Property="VerticalContentAlignment" Value="Top" />
+    </Style>
+    <Style Selector="Button.aiCard.selected">
+      <Setter Property="BorderThickness" Value="2" />
+      <Setter Property="Padding" Value="9,7" />
+      <Setter Property="BorderBrush" Value="{DynamicResource OrandaButtonAccentBrush}" />
+      <Setter Property="Background" Value="{DynamicResource OrandaTableSelectionBrush}" />
+    </Style>
+    <Style Selector="Button.aiItem">
+      <Setter Property="MinWidth" Value="0" />
+      <Setter Property="Padding" Value="8" />
+      <Setter Property="BorderThickness" Value="0" />
+      <Setter Property="CornerRadius" Value="6" />
+      <Setter Property="Background" Value="Transparent" />
+      <Setter Property="HorizontalAlignment" Value="Stretch" />
+      <Setter Property="HorizontalContentAlignment" Value="Left" />
+    </Style>
+    <Style Selector="Button.aiItem.selected">
+      <Setter Property="Background" Value="{DynamicResource OrandaTableSelectionBrush}" />
+    </Style>
+    <Style Selector="TextBox.mono, ComboBox.mono">
+      <Setter Property="FontFamily" Value="{DynamicResource OrandaGridFontFamily}" />
+    </Style>
+    <Style Selector="TextBlock.fieldLabel">
+      <Setter Property="FontWeight" Value="SemiBold" />
+    </Style>
+    <Style Selector="TextBlock.hint">
+      <Setter Property="FontSize" Value="{DynamicResource OrandaFontSizeSmall}" />
+      <Setter Property="Opacity" Value="0.7" />
+      <Setter Property="TextWrapping" Value="Wrap" />
+    </Style>
+    <Style Selector="TextBlock.error">
+      <Setter Property="FontSize" Value="{DynamicResource OrandaFontSizeSmall}" />
+      <Setter Property="Foreground" Value="{DynamicResource OrandaDangerForegroundBrush}" />
+      <Setter Property="TextWrapping" Value="Wrap" />
+    </Style>
+  </Window.Styles>
+
+  <Grid ColumnDefinitions="230,*">
+    <!-- 왼쪽: 내 프로필 목록 -->
+    <Border Background="{DynamicResource OrandaPanelHeaderBrush}" BorderBrush="{DynamicResource OrandaSeparatorBrush}" BorderThickness="0,0,1,0" Padding="10,14">
+      <DockPanel LastChildFill="True">
+        <StackPanel DockPanel.Dock="Bottom" Margin="0,8,0,0">
+          <Button x:Name="NewProfileButton" Content="새 프로필" icons:ButtonIcon.Key="add" HorizontalAlignment="Stretch"
+                  Command="{Binding NewProfileCommand}" ToolTip.Tip="직접 입력 초안으로 새 프로필을 만듭니다." />
+        </StackPanel>
+        <ScrollViewer HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
+        <StackPanel Spacing="4">
+          <TextBlock Text="내 프로필" FontWeight="SemiBold" Opacity="0.7" FontSize="{DynamicResource OrandaFontSizeSmall}" Margin="8,0,8,4" />
+          <ItemsControl x:Name="ProfileList" ItemsSource="{Binding Items}">
+            <ItemsControl.ItemTemplate>
+              <DataTemplate x:DataType="vm:AiProfileListItem">
+                <Button Classes="aiItem" Classes.selected="{Binding IsSelected}" Click="OnItemClick" Margin="0,0,0,4">
+                  <StackPanel Spacing="2">
+                    <TextBlock Text="{Binding Name}" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" />
+                    <TextBlock Text="{Binding Subtitle}" Classes="hint" TextTrimming="CharacterEllipsis" TextWrapping="NoWrap" />
+                  </StackPanel>
+                </Button>
+              </DataTemplate>
+            </ItemsControl.ItemTemplate>
+          </ItemsControl>
+        </StackPanel>
+        </ScrollViewer>
+      </DockPanel>
+    </Border>
+
+    <!-- 오른쪽: 편집 칸 -->
+    <DockPanel Grid.Column="1">
+      <!-- 아래 결과 띠와 단추 줄 -->
+      <Border DockPanel.Dock="Bottom" Padding="20,10,20,14" BorderBrush="{DynamicResource OrandaSeparatorBrush}" BorderThickness="0,1,0,0">
+        <StackPanel Spacing="10">
+          <StackPanel x:Name="ResultBand" Orientation="Horizontal" Spacing="8" IsVisible="{Binding HasResult}">
+            <ContentControl icons:ButtonIcon.Key="ok" icons:ButtonIcon.IconOnly="True" IsVisible="{Binding ResultIsSuccess}" VerticalAlignment="Top" />
+            <ContentControl icons:ButtonIcon.Key="error" icons:ButtonIcon.IconOnly="True" IsVisible="{Binding ResultIsFailure}" VerticalAlignment="Top" />
+            <ContentControl icons:ButtonIcon.Key="info" icons:ButtonIcon.IconOnly="True" IsVisible="{Binding ResultIsInfo}" VerticalAlignment="Top" />
+            <TextBlock x:Name="ResultText" Text="{Binding ResultText}" TextWrapping="Wrap" VerticalAlignment="Center" />
+          </StackPanel>
+          <TextBlock x:Name="ProbeUnavailableNote" Text="{Binding ProbeUnavailableText}" IsVisible="{Binding !HasProbe}" Classes="hint" />
+          <TextBlock x:Name="GeneralErrorText" Text="{Binding GeneralError}" IsVisible="{Binding GeneralError, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" Classes="error" />
+          <Grid ColumnDefinitions="Auto,*,Auto">
+            <Button x:Name="DeleteButton" Content="삭제" icons:ButtonIcon.Key="delete" Command="{Binding DeleteCommand}" IsEnabled="{Binding CanDelete}"
+                    ToolTip.Tip="이 프로필과 저장된 키를 지웁니다." />
+            <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="8">
+              <Button x:Name="CancelButton" Content="취소" icons:ButtonIcon.Key="cancel" Command="{Binding CancelCommand}"
+                      ToolTip.Tip="저장하지 않고 닫습니다." />
+              <Button x:Name="StopButton" Content="중지" icons:ButtonIcon.Key="kill" Command="{Binding StopProbeCommand}" IsVisible="{Binding IsBusy}"
+                      ToolTip.Tip="진행 중인 모델 새로고침·연결 테스트를 멈춥니다." />
+              <Button x:Name="TestButton" Content="연결 테스트" icons:ButtonIcon.Key="connect" Command="{Binding TestConnectionCommand}" IsEnabled="{Binding CanProbe}"
+                      ToolTip.Tip="저장하기 전에도 고른 모델로 작은 요청을 한 번 보내 연결을 시험합니다." />
+              <Button x:Name="SaveButton" Content="프로필 저장" Classes="accent" Command="{Binding SaveCommand}" IsEnabled="{Binding CanSave}"
+                      ToolTip.Tip="설정 창의 확인과 별개로 지금 저장합니다." />
+            </StackPanel>
+          </Grid>
+        </StackPanel>
+      </Border>
+
+      <ScrollViewer VerticalScrollBarVisibility="Auto">
+        <StackPanel Margin="20,16" Spacing="12">
+          <Border x:Name="InvalidBanner" IsVisible="{Binding !IsEditable}" Padding="10,8" CornerRadius="6" BorderThickness="1"
+                  BorderBrush="{DynamicResource OrandaWarningForegroundBrush}">
+            <TextBlock Text="{Binding InvalidReason}" TextWrapping="Wrap" FontSize="{DynamicResource OrandaFontSizeSmall}" />
+          </Border>
+
+          <StackPanel Spacing="12" IsEnabled="{Binding IsEditable}">
+            <ItemsControl x:Name="PresetList" ItemsSource="{Binding PresetCards}">
+              <ItemsControl.ItemsPanel>
+                <ItemsPanelTemplate>
+                  <UniformGrid Columns="4" />
+                </ItemsPanelTemplate>
+              </ItemsControl.ItemsPanel>
+              <ItemsControl.ItemTemplate>
+                <DataTemplate x:DataType="vm:AiPresetCard">
+                  <Button Classes="aiCard" Classes.selected="{Binding IsSelected}" Click="OnPresetClick" Margin="0,0,8,8" AutomationProperties.Name="{Binding Title}">
+                    <StackPanel Spacing="3">
+                      <TextBlock Text="{Binding Title}" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" />
+                      <TextBlock Text="{Binding Subtitle}" Classes="hint" TextTrimming="CharacterEllipsis" TextWrapping="NoWrap" />
+                    </StackPanel>
+                  </Button>
+                </DataTemplate>
+              </ItemsControl.ItemTemplate>
+            </ItemsControl>
+
+            <StackPanel Spacing="4">
+              <TextBlock Text="API 형식" Classes="fieldLabel" />
+              <StackPanel Orientation="Horizontal" Spacing="16">
+                <RadioButton x:Name="FormatAnthropicRadio" GroupName="aiFormat" Content="Anthropic" IsChecked="{Binding IsFormatAnthropic, Mode=TwoWay}"
+                             IsEnabled="{Binding FormatSelectable}" />
+                <RadioButton x:Name="FormatOpenAiRadio" GroupName="aiFormat" Content="OpenAI" IsChecked="{Binding IsFormatOpenAi, Mode=TwoWay}"
+                             IsEnabled="{Binding FormatSelectable}" />
+              </StackPanel>
+              <TextBlock Text="{Binding FormatDescription}" Classes="hint" />
+            </StackPanel>
+
+            <StackPanel Spacing="4">
+              <TextBlock Text="API Base URL" Classes="fieldLabel" />
+              <TextBox x:Name="BaseUrlBox" Text="{Binding BaseUrl, Mode=TwoWay}" Classes="mono" AutomationProperties.Name="API Base URL" />
+              <TextBlock x:Name="UrlErrorText" Text="{Binding UrlError}" IsVisible="{Binding UrlError, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" Classes="error" />
+              <StackPanel x:Name="PlainTextWarning" Orientation="Horizontal" Spacing="6" IsVisible="{Binding ShowPlainTextWarning}">
+                <ContentControl icons:ButtonIcon.Key="warn" icons:ButtonIcon.IconOnly="True" VerticalAlignment="Top" />
+                <TextBlock Text="{Binding PlainTextWarningText}" Classes="warning-text" TextWrapping="Wrap" FontSize="{DynamicResource OrandaFontSizeSmall}" />
+              </StackPanel>
+            </StackPanel>
+
+            <StackPanel Spacing="4">
+              <StackPanel Orientation="Horizontal" Spacing="4">
+                <TextBlock Text="API Key" Classes="fieldLabel" />
+                <TextBlock Text="{Binding KeyLabelSuffix}" Classes="hint" VerticalAlignment="Center" />
+              </StackPanel>
+              <Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="6">
+                <!-- 키는 바인딩하지 않는다: 저장·연결 테스트 때 창이 이 칸의 글을 읽어 넘긴다. -->
+                <TextBox x:Name="KeyBox" PasswordChar="●" PlaceholderText="{Binding KeyPlaceholder}" Classes="mono" AutomationProperties.Name="API Key" />
+                <Button x:Name="KeyToggleButton" Grid.Column="1" Content="키 보기" icons:ButtonIcon.Key="objView" icons:ButtonIcon.IconOnly="True"
+                        Command="{Binding ToggleKeyVisibleCommand}" Classes="aiIconButton" />
+                <Button x:Name="KeyClearButton" Grid.Column="2" Content="저장된 키 지우기" icons:ButtonIcon.Key="eraser" icons:ButtonIcon.IconOnly="True"
+                        Command="{Binding ClearStoredKeyCommand}" IsVisible="{Binding HasStoredKey}" Classes="aiIconButton" />
+              </Grid>
+              <TextBlock x:Name="KeyErrorText" Text="{Binding KeyError}" IsVisible="{Binding KeyError, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" Classes="error" />
+            </StackPanel>
+
+            <StackPanel Spacing="4">
+              <Grid ColumnDefinitions="*,Auto">
+                <TextBlock Text="모델명" Classes="fieldLabel" VerticalAlignment="Center" />
+                <Button x:Name="RefreshModelsButton" Grid.Column="1" Content="모델 새로고침" icons:ButtonIcon.Key="refresh"
+                        Command="{Binding RefreshModelsCommand}" IsEnabled="{Binding CanProbe}"
+                        ToolTip.Tip="서버에서 모델 목록을 읽어 옵니다. 서버가 알려 주면 이미지 입력 지원도 채웁니다." />
+              </Grid>
+              <ComboBox x:Name="ModelBox" IsEditable="True" HorizontalAlignment="Stretch" VerticalContentAlignment="Center" MinHeight="32" ItemsSource="{Binding Models}" Text="{Binding ModelName, Mode=TwoWay}"
+                        Classes="mono" AutomationProperties.Name="모델명" />
+              <TextBlock x:Name="ModelErrorText" Text="{Binding ModelError}" IsVisible="{Binding ModelError, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" Classes="error" />
+            </StackPanel>
+
+            <StackPanel Orientation="Horizontal" Spacing="10">
+              <CheckBox x:Name="ImagesCheck" IsChecked="{Binding ImagesChecked, Mode=TwoWay}" Content="이미지 입력 지원" />
+              <TextBlock Text="{Binding ImagesNote}" Classes="hint" VerticalAlignment="Center" />
+            </StackPanel>
+
+            <Grid ColumnDefinitions="*,*" ColumnSpacing="12">
+              <StackPanel Spacing="4">
+                <TextBlock Text="최대 입력 토큰" Classes="fieldLabel" />
+                <TextBox x:Name="InputTokensBox" Text="{Binding MaxInputTokensText, Mode=TwoWay}" Classes="mono" AutomationProperties.Name="최대 입력 토큰" />
+                <TextBlock Text="{Binding InputTokensError}" IsVisible="{Binding InputTokensError, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" Classes="error" />
+              </StackPanel>
+              <StackPanel Grid.Column="1" Spacing="4">
+                <TextBlock Text="최대 출력 토큰" Classes="fieldLabel" />
+                <TextBox x:Name="OutputTokensBox" Text="{Binding MaxOutputTokensText, Mode=TwoWay}" Classes="mono" AutomationProperties.Name="최대 출력 토큰" />
+                <TextBlock Text="{Binding OutputTokensError}" IsVisible="{Binding OutputTokensError, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" Classes="error" />
+              </StackPanel>
+            </Grid>
+
+            <StackPanel Spacing="4">
+              <TextBlock Text="프로필 이름" Classes="fieldLabel" />
+              <TextBox x:Name="NameBox" Text="{Binding Name, Mode=TwoWay}" AutomationProperties.Name="프로필 이름" />
+              <TextBlock x:Name="NameErrorText" Text="{Binding NameError}" IsVisible="{Binding NameError, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" Classes="error" />
+            </StackPanel>
+          </StackPanel>
+        </StackPanel>
+      </ScrollViewer>
+    </DockPanel>
+  </Grid>
+</Window>

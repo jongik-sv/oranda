@@ -62,7 +62,7 @@ public class AiMaskScreenTests
     [Fact]
     public Task Settings_view_keeps_the_mask_checkbox_inside_the_window() => HeadlessHost.Run(() =>
     {
-        var window = new Window { Width = 640, Height = 220, Content = new AiModelSettingsView { DataContext = new AiModelSettingsPage(new AiSettings { Driver = AiDriverKind.ClaudeCode, Model = "sonnet" }) } };
+        var window = new Window { Width = 640, Height = 420, Content = new AiModelSettingsView { DataContext = new AiModelSettingsPage(new AiSettings { Driver = AiDriverKind.ClaudeCode, Model = "sonnet" }) } };
         window.Show();
 
         var check = ((AiModelSettingsView)window.Content!).FindControl<CheckBox>("MaskLiteralsCheck")!;

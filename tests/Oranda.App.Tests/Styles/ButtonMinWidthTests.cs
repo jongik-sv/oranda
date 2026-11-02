@@ -36,7 +36,7 @@ public class ButtonMinWidthTests
                     continue;
                 }
 
-                offenders.Add($"{Path.GetRelativePath(srcDir, file)}: {button.Attribute("Content")?.Value ?? button.Attribute("x:Name")?.Value ?? "(이름 없음)"}");
+                offenders.Add($"{Path.GetRelativePath(srcDir, file)}: {button.Attribute("Content")?.Value ?? button.Attribute(XName.Get("Name", "http://schemas.microsoft.com/winfx/2006/xaml"))?.Value ?? "(이름 없음)"}");
             }
         }
 
