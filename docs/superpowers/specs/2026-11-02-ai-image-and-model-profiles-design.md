@@ -90,7 +90,7 @@ CLI 경로를 남기는 이유: 이미 검증된 MCP 경로(claude → orandactl
   - `CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC` = `1`
 - **배경 호출.** 확인 결과 없다(5절). 이 상태를 지키도록 가짜 HTTP 서버 시험으로 요청의 모델을 검사한다.
 - **입력 형식.** 모든 실행을 `--input-format stream-json` 으로 바꾼다 **[설계]**. 표준 입력에 `{"type":"user","message":{"role":"user","content":[…]}}` 한 줄을 쓰고 닫는다. 글·이미지 경로를 하나로 만들기 위해서다.
-- **모델.** `--model` 에 프로필의 모델 이름을 그대로 넘긴다. 설정 화면의 CLI 모델 목록(opus·sonnet·haiku)은 Claude Code 프로필에서만 보인다.
+- **모델.** `--model` 에 프로필의 모델 이름을 그대로 넘긴다. 요청의 `Model` 이 비어 있거나(`default`) 설정의 CLI 모델(`opus` 등)이 남아 있어도 프로필이면 프로필 모델을 쓴다: 프로필 서버로 `--model opus` 가 나가면 안 된다. 설정 화면의 CLI 모델 목록(opus·sonnet·haiku)은 Claude Code 프로필에서만 보인다.
 - **비용.** Claude Code 프로필이 아니면 `AiUsage.CostUsd` 를 null 로 낸다(CLI 가 내는 값은 실제 비용이 아니다).
 
 ### 6.2 API 경로(`OpenAiApiDriver`)
@@ -104,7 +104,8 @@ CLI 경로를 남기는 이유: 이미 검증된 MCP 경로(claude → orandactl
 - **상한.** 한 번의 실행에서 모델 호출 40회, 도구 호출 60회. 넘으면 `AiError(turn_limit)` **[설계]**. 게이트에는 도구 예산이 없고 프롬프트의 도구 예산(`ToolBudget`)은 글일 뿐이므로 드라이버에 상한을 둔다. 게이트·CLI 동작은 바꾸지 않는다.
 - **게이트.** 프로세스 안에서 직접 부르므로 실행 토큰과 파이프가 필요 없다. `session.IsRevoked` 는 매 호출 전에 확인한다. `IAiDriver.cs` 의 `Session` 주석을 이에 맞게 고친다.
 - **assistant 메시지 보존.** 도구 반복에서 assistant 메시지를 되돌려 보낼 때 받은 JSON 을 그대로 쓴다. 모르는 칸(`reasoning_content`, Gemini 의 `extra_content` 서명)을 버리면 일부 제공자가 거부하기 때문이다.
-- **구조 결과.** `OutputSchema` 가 있으면 합성 도구 `StructuredOutput` 을 함께 보낸다 **[설계]**. CLI 와 같은 방식이며 `response_format` 과 도구를 함께 쓸 때 생기는 제공자 차이를 피한다. 모델이 이 도구를 부르지 않고 끝내면 한 번 더 요구하고, 그래도 없으면 `AiError(structured_output_missing)`. 입력 인자를 `AiFinal.Result` 로, 함께 온 글을 `AiFinal.Text` 로 낸다.
+- **구조 결과.** `OutputSchema` 가 있으면 합성 도구 `StructuredOutput` 을 함께 보낸다 **[설계]**. CLI 와 같은 방식이며 `response_format` 과 도구를 함께 쓸 때 생기는 제공자 차이를 피한다. 모델이 이 도구를 부르지 않고 끝내면 한 번 더 요구하고, 그래도 없으면 `AiError(structured_output_missing)`. 입력 인자를 `AiFinal.Result` 로 내고 `AiFinal.Text` 는 null 로 둔다(CLI 와 같다. 대화 창이 `Summary` 를 넣으므로 글을 함께 내면 두 번 보인다). 합성 도구는 도구 카드에 보이지 않는다.
+- **감사 기록.** 파이프의 hello 가 없으므로 드라이버가 `session.Client` 를 직접 채운다. 비우면 감사 기록의 client 칸이 비게 된다.
 - **이어 말하기.** 드라이버가 `ResumeId → 메시지 목록` 을 메모리에 둔다(대화 창도 저장하지 않으므로 충분하다). 앱을 다시 시작하면 사라지며, 모르는 id 는 `AiError(resume_unknown)` 이다. 대화당 메시지 수와 이미지를 포함한 총량에 상한을 둔다 **[구현]**.
 - **동시 실행.** 슬롯 1개 서버에서는 요청이 서버 쪽에서 대기한다. 드라이버가 따로 줄을 세우지 않는다 **[설계]**.
 - **시스템 프롬프트.** CLI 는 Claude Code 자체 시스템 프롬프트가 있지만 API 경로에는 없다. 도구만 쓰고 추측하지 말라는 짧은 시스템 프롬프트를 드라이버가 넣는다 **[구현: 문구]**.
@@ -179,7 +180,8 @@ URL 입력은 끝의 `/`·`/v1` 유무와 무관하게 받아서 형식에 맞�
 - **모델 새로고침.** 정규화한 URL 의 `models` 를 `GET` 한다(Anthropic 형식 `{base}/v1/models`, OpenAI 형식 `{base}/models`). Anthropic 형식은 `x-api-key`·`anthropic-version` 헤더를 붙인다. 응답에 `architecture.input_modalities` 가 있으면 `SupportsImages` 를 채운다. Ollama 는 `/api/tags` 의 `capabilities` 로 채운다 **[구현: 그 밖의 제공자 판별]**. 저장 전 사용자가 바꿀 수 있는 확인란으로 보인다.
 - **연결 테스트.** 고른 모델로 최대 출력이 작은 요청을 한 번 보내 성공·실패·걸린 시간을 표시한다. 저장 전에도 실행할 수 있다.
 - **평문 경고.** URL 이 `http://` 이고 localhost 가 아니면 「SQL 과 이미지가 암호화 없이 전달됩니다」 안내 한 줄을 보인다 **[설계]**.
-- **요약 줄.** 편집기 위 요약은 `AI: <프로필 이름> · <모델>` 이다.
+- **요약 글.** `AiModelSettingsPage.Summary` 속성 글을 `AI: <프로필 이름> · <모델>` 로 바꾼다. 이 속성은 지금 어떤 화면에도 바인딩되어 있지 않으며, 편집기 위에 새로 보이게 하지는 않는다(시안에 없음) **[설계]**.
+- **변경 알림.** 프로필 관리 창 저장은 `SettingsChanged("ai")` 를 직접 발행한다(`SettingsStore` 는 `ai` 변경을 알리지 않는다). 대화 레인은 보낼 때 프로필을 다시 확인한다.
 - **튜닝 시작 창.** 모델 줄은 활성 프로필에 맞춘다. 프로필이면 그 모델 하나만 보이고 effort 줄은 API 경로에서 끈다. `AiContextKeys` 의 `configured` 판단은 `Driver != None` 그대로 유효하다.
 
 토큰 값의 쓰임:
@@ -197,7 +199,7 @@ URL 입력은 끝의 `/`·`/v1` 유무와 무관하게 받아서 형식에 맞�
   - 인코딩은 PNG 를 유지하고, 5 MB 를 넘으면 JPEG 로 다시 인코딩한다. 그래도 넘으면 첨부를 거절하고 이유를 보인다.
   - 형식은 PNG·JPEG·WebP·GIF.
 - **보낸 줄.** `ChatUserEntry` 에 축소 이미지를 함께 보인다.
-- **지원하지 않는 모델.** `SupportsImages == false` 이거나 드라이버 능력이 false 이면 입구를 끄고 이유를 툴팁으로 보인다. 첨부한 뒤 지원하지 않는 프로필로 바꾸면 보내기를 막는다.
+- **지원하지 않는 모델.** 활성 프로필의 `SupportsImages == false` 이면 입구를 끄고 이유를 툴팁으로 보인다. 판단은 `SettingsService.Current.Ai` 로 한다: `IAiDriver.Capabilities` 는 동기라 프로필별로 답할 수 없어 라우터는 고정 `Images=true` 로 둔다. 첨부한 뒤 지원하지 않는 프로필로 바꾸면 보내기를 막는다.
 - **이어 말하기 경계.** 프로필을 바꾸면 앞 대화의 `ResumeId` 를 쓸 수 없다. `AiTuningFlow` 가 대화 시작 때 프로필 id·URL·형식·모델을 기억하고, 하나라도 달라지면 「모델이 바뀌어 이어 말할 수 없습니다. 「AI 튜닝」 으로 다시 시작하세요.」 로 안내한다. 같은 프로필의 URL 을 고친 경우도 포함한다: 앞서 보낸 이미지가 경고 없이 새로운 곳으로 가지 않게 하기 위해서다 **[설계]**.
 
 **운영 접속 경고 [사용자].** 이미지는 가림을 적용할 수 없으므로 새 이미지를 보낼 때마다 확인 창을 띄운다. 「이번만 묻지 않기」 는 없다. 이미 보낸 이미지가 이어 말하기로 같은 곳에 다시 전송되는 경우와 글만 보내는 이어 말하기에는 경고하지 않는다.
@@ -210,7 +212,7 @@ URL 입력은 끝의 `/`·`/v1` 유무와 무관하게 받아서 형식에 맞�
 
 ## 7. 제약
 
-- 서버 IP·회사 호스트를 코드·시험·문서·커밋·레인 지시문에 넣지 않는다. 시험은 `http://llm.example:8080` 같은 자리표시자를 쓰고, 실서버 시험은 환경 변수(`ORANDA_AI_E2E_BASE_URL`, `ORANDA_AI_E2E_MODEL`)가 있을 때만 돈다.
+- 서버 IP·회사 호스트를 코드·시험·문서·커밋·레인 지시문에 넣지 않는다. 시험은 `http://llm.example:8080` 같은 자리표시자를 쓰고, 실서버 시험은 환경 변수(`ORANDA_AI_E2E_BASE_URL`, `ORANDA_AI_E2E_MODEL`)가 있을 때만 돈다. 구독 Claude 시험은 기존 `ORANDA_AI_E2E=1` 게이트를 그대로 쓴다.
 - 새 NuGet 의존성 없이 `HttpClient`·`System.Text.Json` 으로 구현한다 **[설계]**.
 - `AiToolJudgement` 값은 맨 끝에만 추가한다(기존 주석 규칙). `AiDriverKind` 에는 값을 추가하지 않는다(6.3).
 - 설정 파일 호환: 새 칸이 없는 파일을 새 앱이 읽어야 하고, 새 앱이 쓴 파일을 옛 앱이 초기화 없이 읽어야 한다. `SchemaVersions.Settings` 는 올리지 않는다.
