@@ -9,6 +9,7 @@ using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using Oranda.App.Features.Ai.Chat;
+using Oranda.App.Features.Ai.Report;
 using Oranda.Core.Ai.Access;
 using Oranda.Core.Ai.Contracts;
 using Oranda.Core.Ai.Gate;
@@ -79,6 +80,8 @@ public sealed partial class AiTuningFlow(
     private Guid? _tuneTabId;
     private CancellationTokenSource? _running;
     private TuningResult? _lastResult;
+    private string _promptStatement = string.Empty; // 대화에 보낸 대상 문장(가린 대화면 가린 글): 레포트용
+    private DateTimeOffset _startedAt;
     private int _generation;
 
     /// <summary>대화 창의 멈춤·이어 말하기를 이 흐름에 잇는다(창당 한 번).</summary>
@@ -171,6 +174,8 @@ public sealed partial class AiTuningFlow(
         _choice = choice;
         _target = statement;
         _vault = vault;
+        _promptStatement = promptStatement;
+        _startedAt = DateTimeOffset.Now;
         _startTabId = tabs is null ? null : editor.GetActiveDocument()?.TabId; // 문장을 읽은 탭: 튜닝하는 사이 다른 탭이 활성이 돼도 이 탭 기준으로 제안을 넣는다
         _indexTabId = null; // 인덱스 후보 탭은 대화 하나에 하나다
         _tuneTabId = null; // 「(튜닝)」 탭도 대화 하나에 하나다
@@ -391,6 +396,11 @@ public sealed partial class AiTuningFlow(
         }
 
         _lastResult = result;
+
+        // 레포트 재료: 결과 그대로(가린 대화의 자리표시도 그대로). 인덱스 후보는 시작 창에서 고른 때만 싣는다.
+        chat.SetReportSource(new AiTuningReportSource(
+            _startedAt, _context?.Environment, choice.ModelId == "default" ? null : choice.ModelId, vault is not null, _promptStatement,
+            choice.IndexDdl ? result : result with { IndexSuggestions = [] }));
         chat.AddAssistantText(result.Summary);
 
         // 편집기·탭으로 가는 글은 자리표시를 원래 값으로 되돌린 뒤에만 넣는다. 되돌리지 못하면(모르는 자리표시) 넣지 않고 알린다.

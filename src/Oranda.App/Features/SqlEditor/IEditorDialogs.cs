@@ -11,6 +11,12 @@ public interface IEditorDialogs
     /// <summary>저장할 파일 경로. 취소하면 null.</summary>
     Task<string?> PickSaveFileAsync(string suggestedName, CancellationToken ct);
 
+    /// <summary>
+    /// AI 튜닝 레포트를 저장할 경로(형식 선택 Markdown(.md)·HTML(.html), 형식은 돌려받은 경로의 확장자로 정한다). 취소하면 null.
+    /// 기본은 일반 저장 창과 같다.
+    /// </summary>
+    Task<string?> PickReportSaveFileAsync(string suggestedName, CancellationToken ct) => PickSaveFileAsync(suggestedName, ct);
+
     /// <summary>한 줄 입력. 취소하면 null.</summary>
     Task<string?> PromptAsync(string title, string initial, CancellationToken ct);
 

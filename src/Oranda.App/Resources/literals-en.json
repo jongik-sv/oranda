@@ -958,6 +958,7 @@
   "이 표 통계": "Table statistics",
   "이 계획의 표 통계 보기(SELECT 만)": "Show the table statistics of this plan (SELECT only)",
   "튜닝 도우미": "Tuning assistant",
+  "튜닝 결과 레포트 저장": "Save tuning report",
   "이 문장의 인덱스·재작성·힌트 후보": "Index, rewrite and hint candidates for this statement",
   "SQL 모니터 보고서는 Tuning Pack 이 필요합니다": "The SQL Monitor report needs the Tuning Pack",
   "실제 계획 보기 (팩 없음)": "Show the actual plan (no pack)",

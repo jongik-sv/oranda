@@ -27,6 +27,8 @@ public sealed class AvaloniaEditorDialogs : IEditorDialogs
 
     private static FilePickerFileType MarkdownFiles => new(UiText.Get("Shell.dialog.filter.markdown", "Markdown 파일 (*.md)")) { Patterns = ["*.md", "*.markdown"] };
 
+    private static FilePickerFileType HtmlFiles => new(UiText.Get("Shell.dialog.filter.html", "HTML 파일 (*.html)")) { Patterns = ["*.html", "*.htm"] };
+
     private static FilePickerFileType MyBatisFiles => new(UiText.Get("Shell.dialog.filter.mybatis", "MyBatis 매퍼")) { Patterns = ["*.xml"] };
 
     private static FilePickerFileType SqdFiles => new(UiText.Get("Shell.dialog.filter.sqd", "Orange 작업 공간 (*.sqd)")) { Patterns = ["*.sqd"] };
@@ -64,6 +66,23 @@ public sealed class AvaloniaEditorDialogs : IEditorDialogs
             FileTypeChoices = [SqlFiles, FilePickerFileTypes.All],
         }).ConfigureAwait(true);
         return SaveFileNames.CollapseDoubled(file?.TryGetLocalPath(), suggestedName, "sql");
+    }
+
+    public async Task<string?> PickReportSaveFileAsync(string suggestedName, CancellationToken ct)
+    {
+        if (Owner?.StorageProvider is not { } sp)
+        {
+            return null;
+        }
+
+        var file = await sp.SaveFilePickerAsync(new FilePickerSaveOptions
+        {
+            Title = UiText.Get("Shell.dialog.saveAiReport", "튜닝 레포트 저장"),
+            SuggestedFileName = suggestedName,
+            DefaultExtension = Path.HasExtension(suggestedName) ? null : "html",
+            FileTypeChoices = Path.GetExtension(suggestedName).Equals(".md", StringComparison.OrdinalIgnoreCase) ? [MarkdownFiles, HtmlFiles] : [HtmlFiles, MarkdownFiles],
+        }).ConfigureAwait(true);
+        return SaveFileNames.CollapseDoubled(file?.TryGetLocalPath(), suggestedName, Path.GetExtension(suggestedName).TrimStart('.'));
     }
 
     public async Task<string?> PickWorkspaceFileAsync(bool save, string suggestedName, CancellationToken ct)

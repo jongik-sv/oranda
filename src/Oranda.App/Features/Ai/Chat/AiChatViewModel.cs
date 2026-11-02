@@ -1,8 +1,13 @@
 using System;
 using System.Collections.ObjectModel;
 using System.Globalization;
+using System.IO;
+using System.Security;
+using System.Text;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using Oranda.App.Features.Ai.Report;
+using Oranda.App.Features.SqlEditor;
 using Oranda.App.Shell;
 using Oranda.Core.Ai.Contracts;
 using Oranda.Core.Shell;
@@ -170,8 +175,8 @@ public sealed partial class AiChatViewModel : ToolPanelViewModelBase
     private string _title = "대화";
 
     [ObservableProperty]
-    [NotifyCanExecuteChangedFor(nameof(SendCommand), nameof(StopCommand), nameof(ReviewProposalCommand), nameof(ViewProposalCommand))]
-    [NotifyPropertyChangedFor(nameof(CanType))]
+    [NotifyCanExecuteChangedFor(nameof(SendCommand), nameof(StopCommand), nameof(ReviewProposalCommand), nameof(ViewProposalCommand), nameof(SaveReportCommand))]
+    [NotifyPropertyChangedFor(nameof(CanType), nameof(CanSaveReport))]
     private bool _isRunning;
 
     /// <summary>제안 비교 창을 다시 연 채다(그동안 다른 제안을 겹쳐 열지 않는다).</summary>
@@ -211,6 +216,29 @@ public sealed partial class AiChatViewModel : ToolPanelViewModelBase
 
     public ObservableCollection<ChatEntry> Entries { get; } = [];
 
+    /// <summary>레포트로 저장할 재료(튜닝 결과를 반영한 뒤에 생긴다). 새 대화를 열면 비운다.</summary>
+    private AiTuningReportSource? _reportSource;
+
+    private bool _isSavingReport;
+
+    /// <summary>저장 창을 띄우는 쪽. 기본은 편집기의 대화상자 모음이고 시험에서 가짜로 바꾼다.</summary>
+    internal Func<IEditorDialogs> DialogsProvider { get; set; } = () => SqlEditorHost.Current.Dialogs;
+
+    /// <summary>파일에 쓰는 동작(경로, 글). 시험에서 실패하는 쪽으로 바꾼다.</summary>
+    internal Func<string, string, CancellationToken, Task> FileWriter { get; set; } =
+        (path, text, ct) => File.WriteAllTextAsync(path, text, new UTF8Encoding(false), ct);
+
+    /// <summary>튜닝 결과가 있는 대화이고 실행 중이 아니다: 「레포트 저장」 을 쓸 수 있다.</summary>
+    public bool CanSaveReport => _reportSource is not null && !IsRunning && !_isSavingReport;
+
+    /// <summary>튜닝 흐름이 결과를 반영한 뒤 레포트 재료를 넘긴다(가린 대화의 자리표시는 그대로).</summary>
+    public void SetReportSource(AiTuningReportSource? source)
+    {
+        _reportSource = source;
+        OnPropertyChanged(nameof(CanSaveReport));
+        SaveReportCommand.NotifyCanExecuteChanged();
+    }
+
     /// <summary>입력 칸에 쓸 수 있다: 이어 갈 대화가 있고 실행 중이 아니다.</summary>
     public bool CanType => CanFollowUp && !IsRunning;
 
@@ -224,6 +252,7 @@ public sealed partial class AiChatViewModel : ToolPanelViewModelBase
     public void StartConversation(string title)
     {
         Entries.Clear();
+        SetReportSource(null); // 앞 대화의 결과로 새 대화의 레포트를 저장하지 않게
         ResumeId = null; // 앞 대화의 claude 세션을 새 대화가 이어 받지 않게
         Title = title;
         Draft = string.Empty;
@@ -456,6 +485,49 @@ public sealed partial class AiChatViewModel : ToolPanelViewModelBase
         finally
         {
             IsReviewing = false;
+        }
+    }
+
+    /// <summary>
+    /// 「레포트 저장」: 형식(.md·.html)은 저장 창에서 고른 파일 확장자로 정한다. 저장하면 경로 한 줄을, 쓰지 못하면 사유 한 줄을 대화 창에 남긴다(예외는 밖으로 내지 않는다).
+    /// </summary>
+    [RelayCommand(CanExecute = nameof(CanSaveReport))]
+    private async Task SaveReportAsync()
+    {
+        if (_reportSource is not { } source)
+        {
+            return;
+        }
+
+        _isSavingReport = true;
+        OnPropertyChanged(nameof(CanSaveReport));
+        SaveReportCommand.NotifyCanExecuteChanged();
+        try
+        {
+            var suggested = AiTuningReportFiles.SuggestName(source.CreatedAt, AiTuningReportFormat.Html);
+            var picked = await DialogsProvider().PickReportSaveFileAsync(suggested, CancellationToken.None).ConfigureAwait(true);
+            if (string.IsNullOrWhiteSpace(picked))
+            {
+                return; // 취소
+            }
+
+            var path = AiTuningReportFiles.Resolve(picked, out var format);
+            try
+            {
+                var input = AiTuningReportAssembler.Build(source, Title, Entries);
+                await FileWriter(path, AiTuningReportBuilder.Build(input, format), CancellationToken.None).ConfigureAwait(true);
+                AddAssistantText(AiTuningReportAssembler.SavedPrefix + path);
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or SecurityException or ArgumentException or NotSupportedException)
+            {
+                AddAssistantText(AiTuningReportAssembler.FailedPrefix + ex.Message);
+            }
+        }
+        finally
+        {
+            _isSavingReport = false;
+            OnPropertyChanged(nameof(CanSaveReport));
+            SaveReportCommand.NotifyCanExecuteChanged();
         }
     }
 
