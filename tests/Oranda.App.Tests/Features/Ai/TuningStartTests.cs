@@ -87,6 +87,54 @@ public class TuningStartTests
         Assert.Equal("default", new TuningStartViewModel(info).Choice!.ModelId);
     }
 
+    private static AiSettings WithProfile(AiApiFormat format, string model = "model-a", string? effort = "high")
+    {
+        var id = Guid.NewGuid();
+        return new AiSettings
+        {
+            Model = "sonnet",
+            Effort = effort,
+            Profiles = [new AiLlmProfile { Id = id, Name = "예제 LLM", Preset = AiProfilePreset.Custom, Format = format, BaseUrl = "http://llm.example:8080", Model = model }],
+            ActiveProfileId = id,
+        };
+    }
+
+    [Fact]
+    public void An_active_openai_profile_shows_only_its_model_and_hides_the_effort_row()
+    {
+        var info = AiTuningLauncher.BuildStartInfo(null, new AiContext("DEV-ERP", ConnectionEnvironment.Development, AiAccessLevel.Query), WithProfile(AiApiFormat.OpenAi));
+
+        var vm = new TuningStartViewModel(info);
+
+        Assert.Equal(["model-a"], vm.Models.Select(m => m.Id));
+        Assert.Equal("model-a", vm.Choice!.ModelId);
+        Assert.False(vm.ShowEffort);
+        Assert.Equal("default", vm.Choice.EffortId); // 설정의 high 가 API 경로로 새지 않는다
+    }
+
+    [Fact]
+    public void An_active_anthropic_profile_shows_its_model_and_keeps_the_effort_row()
+    {
+        var info = AiTuningLauncher.BuildStartInfo(null, new AiContext("DEV-ERP", ConnectionEnvironment.Development, AiAccessLevel.Query), WithProfile(AiApiFormat.Anthropic));
+
+        var vm = new TuningStartViewModel(info);
+
+        Assert.Equal(["model-a"], vm.Models.Select(m => m.Id));
+        Assert.True(vm.ShowEffort);
+        Assert.Equal("high", vm.Choice!.EffortId);
+    }
+
+    [Fact]
+    public void Claude_code_keeps_the_three_model_rows_and_the_effort_row()
+    {
+        var info = AiTuningLauncher.BuildStartInfo(null, new AiContext("DEV-ERP", ConnectionEnvironment.Development, AiAccessLevel.Query), new AiSettings { Model = "sonnet", Effort = "high" });
+
+        var vm = new TuningStartViewModel(info);
+
+        Assert.Equal(["opus", "sonnet", "haiku"], vm.Models.Select(m => m.Id));
+        Assert.True(vm.ShowEffort);
+    }
+
     [Fact]
     public void Access_off_blocks_the_start_and_explains_where_to_change_it()
     {

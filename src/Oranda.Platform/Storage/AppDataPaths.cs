@@ -3,6 +3,7 @@ using Oranda.Core.Composition;
 using Oranda.Core.Storage;
 
 [assembly: InternalsVisibleTo("Oranda.Platform.Tests")]
+[assembly: InternalsVisibleTo("Oranda.App.Tests")]
 
 namespace Oranda.Platform.Storage;
 

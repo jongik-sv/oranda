@@ -99,7 +99,7 @@ public class AiProfileReviewTests
     [Fact]
     public async Task Changing_the_model_reapplies_the_detected_image_support_unless_the_user_set_it()
     {
-        var harness = await ProfileHarness.CreateAsync(ProfileSamples.With(ProfileSamples.Qwen()));
+        var harness = await ProfileHarness.CreateAsync(ProfileSamples.With(ProfileSamples.Example()));
         harness.Probe.ModelResult = AiModelListResult.Ok([new AiModelInfo("text-only", false), new AiModelInfo("vision-example", true)]);
         var vm = harness.Manager();
         await vm.Ready;
@@ -120,7 +120,7 @@ public class AiProfileReviewTests
     [Fact]
     public async Task Refreshing_the_model_list_alone_does_not_mark_the_form_changed()
     {
-        var harness = await ProfileHarness.CreateAsync(ProfileSamples.With(ProfileSamples.Qwen()));
+        var harness = await ProfileHarness.CreateAsync(ProfileSamples.With(ProfileSamples.Example()));
         harness.Probe.ModelResult = AiModelListResult.Ok([new AiModelInfo("a"), new AiModelInfo("b")]);
         var vm = harness.Manager();
         await vm.Ready;
@@ -132,8 +132,8 @@ public class AiProfileReviewTests
     [Fact]
     public async Task Loading_a_profile_or_starting_a_draft_raises_CanDelete_changed()
     {
-        var qwen = ProfileSamples.Qwen();
-        var harness = await ProfileHarness.CreateAsync(ProfileSamples.With(qwen));
+        var exampleProfile = ProfileSamples.Example();
+        var harness = await ProfileHarness.CreateAsync(ProfileSamples.With(exampleProfile));
         var vm = harness.Manager();
         await vm.Ready;
         var raised = new List<string?>();
@@ -142,7 +142,7 @@ public class AiProfileReviewTests
         await vm.NewProfileAsync();
         Assert.Contains(nameof(AiProfileManagerViewModel.CanDelete), raised);
         raised.Clear();
-        await vm.SelectProfileAsync(qwen.Id);
+        await vm.SelectProfileAsync(exampleProfile.Id);
         Assert.Contains(nameof(AiProfileManagerViewModel.CanDelete), raised);
     }
 
@@ -197,20 +197,20 @@ public class AiProfileReviewTests
     [InlineData("http://other.example:8080")] // 호스트
     public async Task Saving_without_a_key_is_blocked_when_the_port_scheme_or_host_differs(string address)
     {
-        var qwen = ProfileSamples.Qwen();
-        var harness = await ProfileHarness.CreateAsync(ProfileSamples.With(qwen));
-        harness.Credentials.Put(AiProfileCredentials.KeyFor(qwen.Id), "old-key-example");
+        var exampleProfile = ProfileSamples.Example();
+        var harness = await ProfileHarness.CreateAsync(ProfileSamples.With(exampleProfile));
+        harness.Credentials.Put(AiProfileCredentials.KeyFor(exampleProfile.Id), "old-key-example");
         var vm = harness.Manager();
         await vm.Ready;
         vm.BaseUrl = address;
         Assert.False(await vm.SaveProfileAsync(null));
-        Assert.Equal(qwen.BaseUrl, harness.Ai.Profiles.Single().BaseUrl);
+        Assert.Equal(exampleProfile.BaseUrl, harness.Ai.Profiles.Single().BaseUrl);
     }
 
     [Fact]
     public async Task A_failed_key_removal_stops_the_save_and_keeps_the_old_profile_and_key()
     {
-        var saved = ProfileSamples.Qwen(); // 키가 선택인 프로필: 지워도 검사는 통과해 저장 단계까지 간다
+        var saved = ProfileSamples.Example(); // 키가 선택인 프로필: 지워도 검사는 통과해 저장 단계까지 간다
         var harness = await ProfileHarness.CreateAsync(ProfileSamples.With(saved));
         harness.Credentials.Put(AiProfileCredentials.KeyFor(saved.Id), "old-key-example");
         var vm = harness.Manager();
@@ -247,7 +247,7 @@ public class AiProfileReviewTests
     [Fact]
     public async Task Saving_a_server_change_while_the_stored_key_is_still_being_read_is_blocked()
     {
-        var saved = ProfileSamples.Qwen(); // 키가 선택인 프로필: 키 필수 검사에 막혀 통과하는 일이 없게 한다
+        var saved = ProfileSamples.Example(); // 키가 선택인 프로필: 키 필수 검사에 막혀 통과하는 일이 없게 한다
         var harness = await ProfileHarness.CreateAsync(ProfileSamples.With(saved));
         harness.Credentials.Put(AiProfileCredentials.KeyFor(saved.Id), "old-key-example");
         var hold = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -267,7 +267,7 @@ public class AiProfileReviewTests
     [Fact]
     public async Task The_manual_image_choice_flag_is_set_only_by_the_image_checkbox_not_by_other_edits()
     {
-        var harness = await ProfileHarness.CreateAsync(ProfileSamples.With(ProfileSamples.Qwen()));
+        var harness = await ProfileHarness.CreateAsync(ProfileSamples.With(ProfileSamples.Example()));
         harness.Probe.ModelResult = AiModelListResult.Ok([new AiModelInfo("text-only", false), new AiModelInfo("vision-example", true)]);
         var vm = harness.Manager();
         await vm.Ready;
@@ -290,7 +290,7 @@ public class AiProfileReviewTests
     [Fact]
     public async Task A_non_cancel_exception_after_a_cancel_is_swallowed_for_both_queries()
     {
-        var harness = await ProfileHarness.CreateAsync(ProfileSamples.With(ProfileSamples.Qwen()));
+        var harness = await ProfileHarness.CreateAsync(ProfileSamples.With(ProfileSamples.Example()));
         var vm = harness.Manager();
         await vm.Ready;
         harness.Probe.ThrowOtherAfterCancel = true;
@@ -310,7 +310,7 @@ public class AiProfileReviewTests
     [Fact]
     public async Task A_late_result_after_switching_the_preset_changes_nothing()
     {
-        var harness = await ProfileHarness.CreateAsync(ProfileSamples.With(ProfileSamples.Qwen()));
+        var harness = await ProfileHarness.CreateAsync(ProfileSamples.With(ProfileSamples.Example()));
         var vm = harness.Manager();
         await vm.Ready;
         harness.Probe.ModelResult = AiModelListResult.Ok([new AiModelInfo("late-model", true)]);
@@ -334,7 +334,7 @@ public class AiProfileReviewTests
     [Fact]
     public async Task A_normal_result_that_arrives_after_the_cancel_is_discarded()
     {
-        var harness = await ProfileHarness.CreateAsync(ProfileSamples.With(ProfileSamples.Qwen()));
+        var harness = await ProfileHarness.CreateAsync(ProfileSamples.With(ProfileSamples.Example()));
         var vm = harness.Manager();
         await vm.Ready;
         harness.Probe.IgnoreCancel = true;
@@ -360,7 +360,7 @@ public class AiProfileReviewTests
 
     private static async Task<(ProfileHarness Harness, AiLlmProfile A, AiLlmProfile B, AiProfileManagerViewModel Vm)> TwoProfilesAsync(bool keyUnknown = false)
     {
-        var a = ProfileSamples.Qwen();
+        var a = ProfileSamples.Example();
         var b = ProfileSamples.Ollama();
         var harness = await ProfileHarness.CreateAsync(ProfileSamples.With(a, b));
         harness.Credentials.Put(AiProfileCredentials.KeyFor(a.Id), "old-key-example");
@@ -441,7 +441,7 @@ public class AiProfileReviewTests
     [Fact]
     public async Task Clearing_a_key_that_could_not_be_read_works_and_a_failed_write_after_it_reports_the_loss()
     {
-        var a = ProfileSamples.Qwen();
+        var a = ProfileSamples.Example();
         var harness = await ProfileHarness.CreateAsync(ProfileSamples.With(a));
         harness.Credentials.Put(AiProfileCredentials.KeyFor(a.Id), "old-key-example");
         harness.Credentials.FailLoad = true;

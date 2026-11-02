@@ -93,6 +93,62 @@ public sealed class ConnectionComboSwitchTests
         public void Attach(ISession session) => UseSession(session);
     }
 
+    /// <summary>요청을 모으기만 하는 AI 드라이버 대역.</summary>
+    private sealed class RecordingAiDriver : Oranda.Core.Ai.Contracts.IAiDriver
+    {
+        public List<Oranda.Core.Ai.Contracts.AiRequest> Requests { get; } = [];
+
+        public Oranda.Core.Ai.Contracts.AiDriverCapabilities Capabilities { get; } = new(false, true, true, false, false, true);
+
+        public async IAsyncEnumerable<Oranda.Core.Ai.Contracts.AiEvent> RunAsync(Oranda.Core.Ai.Contracts.AiRequest request, [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken ct)
+        {
+            Requests.Add(request);
+            yield return new Oranda.Core.Ai.Contracts.AiFinal("답", null, "sess-1");
+            await Task.Yield();
+        }
+    }
+
+    [Fact]
+    public Task General_chat_does_not_send_the_last_sql_tab_statement_while_a_plsql_document_of_another_connection_is_active() => Ui.Run(async () =>
+    {
+        // 실제 SessionRouter·EditorContext: 활성 문서가 접속 b 의 PL/SQL 편집기인데 EditorContext 는 마지막 SQL 탭(접속 a)의 문장을 돌려준다.
+        using var rig = new RouterRig();
+        var a = await ConnectAsync(rig.Fx, "a");
+        var tab = rig.Host.NewDocument();
+        var b = await ConnectAsync(rig.Fx, "b");
+        rig.Answer(true);
+        Assert.Equal(SessionSelect.Selected, await rig.Router.SelectAsync(a));
+        tab.Document.Text = "select 'TAB-LITERAL' from t";
+        var editor = new EditorContext { Host = rig.Host };
+        var driver = new RecordingAiDriver();
+        var chat = new Oranda.App.Features.Ai.Chat.AiChatViewModel();
+        var flow = new Oranda.App.Features.Ai.Tuning.AiTuningFlow(
+            editor, driver, chat, (_, _, _) => { },
+            generalContext: _ =>
+            {
+                var shown = rig.State.ShownProfile!;
+                return Task.FromResult(new Oranda.App.Features.Ai.Tuning.AiGeneralScope(
+                    new Oranda.Core.Ai.Contracts.AiContext(shown.Name, shown.Environment, Oranda.Core.Ai.Access.AiAccessLevel.Query), false, shown.Id, rig.Router.SqlDocumentActive));
+            });
+
+        // 대조: SQL 탭이 활성이고 탭의 접속이 지금 접속이면 문장이 범위가 된다.
+        rig.ShowDocument(null);
+        await flow.FollowUpAsync(new Oranda.App.Features.Ai.Chat.ChatFollowUp("질문", []));
+        Assert.Contains("TAB-LITERAL", driver.Requests[^1].Prompt, System.StringComparison.Ordinal);
+        chat.StartNewConversation();
+
+        // PL/SQL 문서(접속 b)가 활성: 마지막 SQL 탭의 문장(접속 a 의 리터럴)을 싣지 않고 도구도 닫는다.
+        rig.ShowDocument(new FakeDocument(b));
+        Assert.False(rig.Router.SqlDocumentActive);
+        Assert.Equal(b.Profile.Id, rig.State.ShownProfile!.Id);
+        await flow.FollowUpAsync(new Oranda.App.Features.Ai.Chat.ChatFollowUp("질문", []));
+
+        var request = driver.Requests[^1];
+        Assert.DoesNotContain("TAB-LITERAL", request.Prompt, System.StringComparison.Ordinal);
+        Assert.Equal(Oranda.Core.Ai.Access.AiAccessLevel.Off, request.Session!.Level);
+        Assert.Contains(chat.Entries.OfType<Oranda.App.Features.Ai.Chat.ChatAssistantEntry>(), e => e.Text == Oranda.App.Features.Ai.Tuning.AiTuningFlow.GeneralOtherDocumentText);
+    });
+
     // ---------- SQL 탭 ----------
 
     [Fact]

@@ -15,7 +15,7 @@ public sealed class AiProfileProbeTests
 
     // 사내 서버 실측 응답 형태(주소 없음).
     private const string StrataModels =
-        """{"object":"list","data":[{"id":"qwen3.8-flash-next-iq3_xxs","object":"model","status":{"value":"loaded"},"meta":{"n_ctx":262144},"architecture":{"input_modalities":["text","image"],"output_modalities":["text"]}}]}""";
+        """{"object":"list","data":[{"id":"model-example-q4","object":"model","status":{"value":"loaded"},"meta":{"n_ctx":262144},"architecture":{"input_modalities":["text","image"],"output_modalities":["text"]}}]}""";
 
     [Fact]
     public async Task OpenAi_format_lists_models_and_reads_image_support_from_architecture()
@@ -27,7 +27,7 @@ public sealed class AiProfileProbeTests
 
         Assert.True(result.Success);
         var model = Assert.Single(result.Models);
-        Assert.Equal("qwen3.8-flash-next-iq3_xxs", model.Id);
+        Assert.Equal("model-example-q4", model.Id);
         Assert.True(model.SupportsImages);
         var call = Assert.Single(server.Calls);
         Assert.Equal("GET", call.Method);
@@ -76,14 +76,14 @@ public sealed class AiProfileProbeTests
     public async Task Ollama_reads_vision_from_api_tags_on_the_origin_and_tolerates_a_failing_tags_call()
     {
         using var server = new StubServer(call => call.Url.EndsWith("/v1/models", StringComparison.Ordinal)
-            ? Json("""{"object":"list","data":[{"id":"llava:7b"},{"id":"qwen3:8b"},{"id":"gemma3"},{"id":"plain"}]}""")
-            : Json("""{"models":[{"name":"llava:7b","capabilities":["completion","vision"]},{"name":"qwen3:8b","capabilities":["completion","tools"]},{"name":"gemma3:latest","capabilities":["vision"]},{"name":"plain"}]}"""));
+            ? Json("""{"object":"list","data":[{"id":"llava:7b"},{"id":"model-c:8b"},{"id":"gemma3"},{"id":"plain"}]}""")
+            : Json("""{"models":[{"name":"llava:7b","capabilities":["completion","vision"]},{"name":"model-c:8b","capabilities":["completion","tools"]},{"name":"gemma3:latest","capabilities":["vision"]},{"name":"plain"}]}"""));
         using var probe = server.Probe();
         var request = Request(AiProfilePreset.Ollama, AiApiFormat.OpenAi, "http://localhost:11434/v1");
 
         var result = await probe.ListModelsAsync(request, CancellationToken.None);
 
-        Assert.Equal([("llava:7b", true), ("qwen3:8b", false), ("gemma3", true), ("plain", (bool?)null)], result.Models.Select(m => (m.Id, m.SupportsImages)).ToArray());
+        Assert.Equal([("llava:7b", true), ("model-c:8b", false), ("gemma3", true), ("plain", (bool?)null)], result.Models.Select(m => (m.Id, m.SupportsImages)).ToArray());
         Assert.Equal("http://localhost:11434/api/tags", server.Calls[1].Url);
 
         using var broken = new StubServer(call => call.Url.EndsWith("/v1/models", StringComparison.Ordinal) ? Json("""{"data":[{"id":"llava:7b"}]}""") : new Reply(HttpStatusCode.InternalServerError, "x"));
@@ -173,7 +173,7 @@ public sealed class AiProfileProbeTests
         using var server = new StubServer(_ => Json("""{"choices":[{"message":{"content":"pong"}}]}"""));
         using var probe = server.Probe();
 
-        var result = await probe.TestConnectionAsync(Request(AiProfilePreset.Custom, AiApiFormat.OpenAi, "http://llm.example:8080/", Key, "qwen3.8"), CancellationToken.None);
+        var result = await probe.TestConnectionAsync(Request(AiProfilePreset.Custom, AiApiFormat.OpenAi, "http://llm.example:8080/", Key, "model-example"), CancellationToken.None);
 
         Assert.True(result.Success);
         Assert.True(result.Elapsed >= TimeSpan.Zero);
@@ -182,7 +182,7 @@ public sealed class AiProfileProbeTests
         Assert.Equal("http://llm.example:8080/v1/chat/completions", call.Url);
         Assert.Equal("Bearer " + Key, call.Authorization);
         var body = JsonDocument.Parse(call.Body!).RootElement;
-        Assert.Equal("qwen3.8", body.GetProperty("model").GetString());
+        Assert.Equal("model-example", body.GetProperty("model").GetString());
         Assert.Equal(16, body.GetProperty("max_tokens").GetInt32());
         var message = Assert.Single(body.GetProperty("messages").EnumerateArray());
         Assert.Equal("ping", message.GetProperty("content").GetString());

@@ -1,5 +1,4 @@
 using System;
-using System.Runtime.CompilerServices;
 using System.Threading;
 using System.Threading.Tasks;
 using Oranda.App.Features.Ai.Tuning;
@@ -25,8 +24,6 @@ namespace Oranda.App.Features.Ai;
     Enablement = "aiNotYet", Placements = ["toolbar:main/aiTune/fixError@40"])]
 public sealed class AiCommandHandler : ICommandHandler
 {
-    private static readonly ConditionalWeakTable<IServiceProvider, AiTuningLauncher> Launchers = [];
-
     private readonly IServiceProvider? _services;
 
     public AiCommandHandler()
@@ -43,7 +40,7 @@ public sealed class AiCommandHandler : ICommandHandler
             return Task.CompletedTask;
         }
 
-        return Launchers.GetValue(_services, s => new AiTuningLauncher(s)).RunAsync(cancellationToken);
+        return AiTuningLauncher.For(_services).RunAsync(cancellationToken);
     }
 }
 

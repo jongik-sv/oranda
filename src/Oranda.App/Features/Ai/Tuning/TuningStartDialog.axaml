@@ -67,9 +67,9 @@
             </DataTemplate>
           </ComboBox.ItemTemplate>
         </ComboBox>
-        <TextBlock Grid.Column="2" Text="effort" VerticalAlignment="Center" Opacity="0.7" />
+        <TextBlock x:Name="EffortLabel" Grid.Column="2" Text="effort" VerticalAlignment="Center" Opacity="0.7" IsVisible="{Binding ShowEffort}" />
         <ComboBox x:Name="EffortCombo" Grid.Column="3" HorizontalAlignment="Stretch"
-                  ItemsSource="{Binding Efforts}" SelectedItem="{Binding Effort}" AutomationProperties.Name="effort"
+                  ItemsSource="{Binding Efforts}" SelectedItem="{Binding Effort}" AutomationProperties.Name="effort" IsVisible="{Binding ShowEffort}"
                   ToolTip.Tip="추론 노력(claude --effort). 높을수록 오래 생각하고 느립니다. 기본 값은 설정 창 AI 쪽에서 바꿉니다.">
           <ComboBox.ItemTemplate>
             <DataTemplate x:DataType="t:TuningEffortOption">

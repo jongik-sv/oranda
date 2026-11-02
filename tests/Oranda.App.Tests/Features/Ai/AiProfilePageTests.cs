@@ -28,8 +28,8 @@ public class AiProfilePageTests
     [Fact]
     public void Dropdown_groups_system_clis_and_my_profiles_without_unknown_entries()
     {
-        var qwen = ProfileSamples.Qwen();
-        var page = new AiModelSettingsPage(ProfileSamples.With(qwen));
+        var exampleProfile = ProfileSamples.Example();
+        var page = new AiModelSettingsPage(ProfileSamples.With(exampleProfile));
 
         var rows = page.Choices;
         Assert.Equal(["시스템 CLI", "Claude Code", "Antigravity CLI", "Codex CLI", "내 프로필", "예제 LLM", "새 프로필 만들기…"], rows.Select(r => r.Title));
@@ -48,13 +48,13 @@ public class AiProfilePageTests
     [Fact]
     public void Choosing_a_profile_switches_the_lower_area_and_the_summary_and_choosing_claude_code_returns()
     {
-        var qwen = ProfileSamples.Qwen();
-        var page = new AiModelSettingsPage(ProfileSamples.With(qwen));
+        var exampleProfile = ProfileSamples.Example();
+        var page = new AiModelSettingsPage(ProfileSamples.With(exampleProfile));
 
         page.Choose(page.Choices.Single(r => r.Kind == AiChoiceKind.Profile));
 
         Assert.Equal(AiActiveKind.Profile, page.ActiveKind);
-        Assert.Equal(qwen.Id, page.ActiveProfileId);
+        Assert.Equal(exampleProfile.Id, page.ActiveProfileId);
         Assert.True(page.ShowProfileInfo);
         Assert.False(page.ShowCliSettings);
         Assert.Equal("AI: 예제 LLM · example-model", page.Summary);
@@ -63,7 +63,7 @@ public class AiProfilePageTests
         Assert.Equal("지원", page.ProfileImagesText);
         Assert.True(page.ShowPlainTextWarning); // 사내 HTTP 서버: SQL 과 이미지가 암호화 없이 나간다
         var saved = page.ToSettings();
-        Assert.Equal((AiDriverKind.ClaudeCode, qwen.Id), (saved.Driver, saved.ActiveProfileId));
+        Assert.Equal((AiDriverKind.ClaudeCode, exampleProfile.Id), (saved.Driver, saved.ActiveProfileId));
 
         page.Choose(page.Choices.Single(r => r.Kind == AiChoiceKind.ClaudeCode));
         Assert.Equal(AiActiveKind.ClaudeCode, page.ActiveKind);
@@ -78,7 +78,7 @@ public class AiProfilePageTests
     [InlineData("http://llm.example:8080", true)]
     public void Plain_http_warning_appears_only_for_remote_hosts(string url, bool warns)
     {
-        var profile = ProfileSamples.Qwen() with { BaseUrl = url };
+        var profile = ProfileSamples.Example() with { BaseUrl = url };
         var page = new AiModelSettingsPage(new AiSettings { Profiles = [profile], ActiveProfileId = profile.Id });
 
         Assert.Equal(warns, page.ShowPlainTextWarning);
@@ -87,7 +87,7 @@ public class AiProfilePageTests
     [Fact]
     public void New_profile_row_opens_the_manager_without_changing_the_selection()
     {
-        var page = new AiModelSettingsPage(ProfileSamples.With(ProfileSamples.Qwen()));
+        var page = new AiModelSettingsPage(ProfileSamples.With(ProfileSamples.Example()));
         ProfileManagerRequestedEventArgs? request = null;
         page.ProfileManagerRequested += (_, e) => request = e;
 
@@ -114,7 +114,7 @@ public class AiProfilePageTests
     public void A_deleted_profile_stays_selected_with_its_reason_instead_of_falling_back_silently()
     {
         var gone = Guid.NewGuid();
-        var page = new AiModelSettingsPage(new AiSettings { ActiveProfileId = gone, Profiles = [ProfileSamples.Qwen()] });
+        var page = new AiModelSettingsPage(new AiSettings { ActiveProfileId = gone, Profiles = [ProfileSamples.Example()] });
 
         Assert.Equal(AiActiveKind.ProfileMissing, page.ActiveKind);
         Assert.True(page.ShowProblem);
@@ -139,7 +139,7 @@ public class AiProfilePageTests
     [Fact]
     public void A_profile_this_build_does_not_know_shows_the_reason_and_cannot_be_picked()
     {
-        var unknown = ProfileSamples.Qwen() with { Preset = AiProfilePreset.Unknown };
+        var unknown = ProfileSamples.Example() with { Preset = AiProfilePreset.Unknown };
         var page = new AiModelSettingsPage(new AiSettings { Profiles = [unknown], ActiveProfileId = unknown.Id });
 
         Assert.Equal(AiActiveKind.ProfileInvalid, page.ActiveKind);
@@ -157,12 +157,12 @@ public class AiProfilePageTests
     [Fact]
     public void None_keeps_the_chosen_profile_so_switching_back_restores_it()
     {
-        var qwen = ProfileSamples.Qwen();
-        var page = new AiModelSettingsPage(new AiSettings { Profiles = [qwen], ActiveProfileId = qwen.Id, Model = "sonnet" });
+        var exampleProfile = ProfileSamples.Example();
+        var page = new AiModelSettingsPage(new AiSettings { Profiles = [exampleProfile], ActiveProfileId = exampleProfile.Id, Model = "sonnet" });
 
         page.IsNone = true;
         var off = page.ToSettings();
-        Assert.Equal((AiDriverKind.None, null, qwen.Id), (off.Driver, off.Model, off.ActiveProfileId));
+        Assert.Equal((AiDriverKind.None, null, exampleProfile.Id), (off.Driver, off.Model, off.ActiveProfileId));
         Assert.Equal("AI: 선택 안 함", page.Summary);
         Assert.False(page.ShowSelection);
 
@@ -212,7 +212,7 @@ public class AiProfilePageTests
     [Fact]
     public void A_stale_page_copy_only_contributes_its_own_choices_to_the_current_settings()
     {
-        var kept = ProfileSamples.Qwen();
+        var kept = ProfileSamples.Example();
         var page = new AiModelSettingsPage(new AiSettings()); // 프로필 없는 옛 사본
         var current = new AiSettings { Profiles = [kept], ExecutablePath = "claude-example" };
 
@@ -227,8 +227,8 @@ public class AiProfilePageTests
     {
         Assert.False(new AiModelSettingsPage(new AiSettings()).ManageProfilesCommand.CanExecute(null));
 
-        var qwen = ProfileSamples.Qwen();
-        var harness = await ProfileHarness.CreateAsync(new AiSettings { Profiles = [qwen], ActiveProfileId = qwen.Id });
+        var exampleProfile = ProfileSamples.Example();
+        var harness = await ProfileHarness.CreateAsync(new AiSettings { Profiles = [exampleProfile], ActiveProfileId = exampleProfile.Id });
         var page = harness.Page();
         ProfileManagerRequestedEventArgs? request = null;
         page.ProfileManagerRequested += (_, e) => request = e;
@@ -236,6 +236,6 @@ public class AiProfilePageTests
         Assert.True(page.ManageProfilesCommand.CanExecute(null));
         page.ManageProfilesCommand.Execute(null);
 
-        Assert.Equal((qwen.Id, false), (request!.ProfileId, request.StartNew));
+        Assert.Equal((exampleProfile.Id, false), (request!.ProfileId, request.StartNew));
     }
 }

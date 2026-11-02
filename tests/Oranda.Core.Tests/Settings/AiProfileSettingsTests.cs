@@ -20,7 +20,7 @@ public class AiProfileSettingsTests
         Preset = AiProfilePreset.Custom,
         Format = AiApiFormat.OpenAi,
         BaseUrl = "http://llm.example:8080",
-        Model = "qwen-example",
+        Model = "model-example",
         MaxInputTokens = 128000,
         MaxOutputTokens = 4096,
         SupportsImages = true,

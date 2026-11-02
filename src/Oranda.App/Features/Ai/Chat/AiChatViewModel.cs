@@ -4,12 +4,15 @@ using System.Globalization;
 using System.IO;
 using System.Security;
 using System.Text;
+using Avalonia.Media.Imaging;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Oranda.App.Features.Ai.Report;
 using Oranda.App.Features.SqlEditor;
 using Oranda.App.Shell;
 using Oranda.Core.Ai.Contracts;
+using Oranda.Core.Ai.Profiles;
+using Oranda.Core.Settings;
 using Oranda.Core.Shell;
 
 namespace Oranda.App.Features.Ai.Chat;
@@ -17,8 +20,72 @@ namespace Oranda.App.Features.Ai.Chat;
 /// <summary>대화 창에 쌓이는 한 줄의 공통 뿌리(사용자 글·도구 카드·AI 글).</summary>
 public abstract record ChatEntry;
 
-/// <summary>사용자가 보낸 글(처음 요청 문구나 이어 말하기).</summary>
-public sealed record ChatUserEntry(string Text) : ChatEntry;
+/// <summary>사용자가 보낸 글(처음 요청 문구나 이어 말하기). 이어 말하기에 이미지를 붙였으면 축소 이미지가 글 위에 함께 보인다(메모리에만 있고 저장하지 않는다).</summary>
+public sealed record ChatUserEntry(string Text) : ChatEntry
+{
+    public IReadOnlyList<ChatImage> Images { get; init; } = [];
+
+    public bool HasImages => Images.Count > 0;
+
+    public bool HasText => !string.IsNullOrEmpty(Text);
+}
+
+/// <summary>
+/// 대화에 붙인 이미지 한 장. 정규화를 마친 전송용 첨부와 화면용 축소 PNG 를 들고 있다. 축소 이미지(<see cref="Thumbnail"/>)는 처음 그릴 때 만든다
+/// (모델 시험이 화면 플랫폼 없이 돌 수 있게).
+/// </summary>
+#pragma warning disable CA1001 // 축소 이미지(264px 이하)는 대화 줄이 사는 동안 쓰고 대화를 닫을 때 GC 가 거둔다. 줄마다 Dispose 시점을 따로 관리하지 않는다.
+public sealed class ChatImage(AiNormalizedImage image)
+#pragma warning restore CA1001
+{
+    private Bitmap? _thumbnail;
+    private bool _thumbnailTried;
+
+    /// <summary>모델로 보낼 이미지.</summary>
+    public AiImageAttachment Attachment { get; } = image.Attachment;
+
+    internal byte[] PreviewBytes { get; } = image.Preview;
+
+    public int Width { get; } = image.Width;
+
+    public int Height { get; } = image.Height;
+
+    /// <summary>보낼 크기(「1.8 MB」).</summary>
+    public string SizeText => AiImageNormalizer.SizeText(Attachment.Data.Length);
+
+    /// <summary>툴팁·접근성 글: 「1280×720 · 340 KB」.</summary>
+    public string Description => string.Create(CultureInfo.CurrentCulture, $"{Width}×{Height} · {SizeText}");
+
+    /// <summary>화면에 보일 축소 이미지. 만들지 못하면 null.</summary>
+    public Bitmap? Thumbnail
+    {
+        get
+        {
+            if (!_thumbnailTried)
+            {
+                _thumbnailTried = true;
+                try
+                {
+                    _thumbnail = new Bitmap(new MemoryStream(PreviewBytes, writable: false));
+                }
+#pragma warning disable CA1031 // 화면 플랫폼이 없거나 디코딩에 실패하면 축소 이미지 없이 글 칸만 보인다.
+                catch (Exception ex) when (ex is not OperationCanceledException)
+#pragma warning restore CA1031
+                {
+                    _thumbnail = null;
+                }
+            }
+
+            return _thumbnail;
+        }
+    }
+
+    /// <summary>여러 장의 전송 크기 합.</summary>
+    public static long TotalBytes(IEnumerable<ChatImage> images) => images.Sum(i => (long)i.Attachment.Data.Length);
+}
+
+/// <summary>보내기를 눌러 확정한 이어 말하기: 글과 붙인 이미지. 호출 쪽이 취소하면 <see cref="AiChatViewModel.RestoreFollowUp"/> 으로 되돌린다.</summary>
+public sealed record ChatFollowUp(string Text, IReadOnlyList<ChatImage> Images);
 
 /// <summary>AI 가 돌려준 글.</summary>
 public sealed record ChatAssistantEntry(string Text) : ChatEntry;
@@ -175,8 +242,8 @@ public sealed partial class AiChatViewModel : ToolPanelViewModelBase
     private string _title = "대화";
 
     [ObservableProperty]
-    [NotifyCanExecuteChangedFor(nameof(SendCommand), nameof(StopCommand), nameof(ReviewProposalCommand), nameof(ViewProposalCommand), nameof(SaveReportCommand))]
-    [NotifyPropertyChangedFor(nameof(CanType), nameof(CanSaveReport))]
+    [NotifyCanExecuteChangedFor(nameof(SendCommand), nameof(StopCommand), nameof(ReviewProposalCommand), nameof(ViewProposalCommand), nameof(SaveReportCommand), nameof(NewConversationCommand))]
+    [NotifyPropertyChangedFor(nameof(CanType), nameof(CanSaveReport), nameof(CanAttach))]
     private bool _isRunning;
 
     /// <summary>제안 비교 창을 다시 연 채다(그동안 다른 제안을 겹쳐 열지 않는다).</summary>
@@ -185,20 +252,26 @@ public sealed partial class AiChatViewModel : ToolPanelViewModelBase
     private bool _isReviewing;
 
     /// <summary>
-    /// 이어 갈 튜닝 대화가 있다(<see cref="StartConversation"/> 이 한 번이라도 불렸다). 입력은 이어 말하기만 하므로, 없으면 보낸 글이 아무 데도 가지 않는다:
-    /// 보내기를 끄고 화면에 「AI 튜닝」 으로 시작하라는 안내를 보인다.
+    /// 지금 대화가 튜닝 대화다(<see cref="StartConversation"/> 이 불렸다). 튜닝 대화의 이어 말하기는 튜닝 규칙(구조 결과·제안·인덱스 후보)으로 가고,
+    /// 아니면 처음부터 열려 있는 일반 대화로 간다(<see cref="StartNewConversation"/> 이 일반 대화로 되돌린다). 입력칸은 어느 쪽이든 열려 있다.
     /// </summary>
     [ObservableProperty]
-    [NotifyCanExecuteChangedFor(nameof(SendCommand))]
-    [NotifyPropertyChangedFor(nameof(CanType))]
-    private bool _canFollowUp;
+    [NotifyPropertyChangedFor(nameof(ShowStartHint))]
+    [NotifyCanExecuteChangedFor(nameof(NewConversationCommand))]
+    private bool _isTuning;
 
     [ObservableProperty]
     [NotifyCanExecuteChangedFor(nameof(SendCommand))]
     private string _draft = string.Empty;
 
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(FooterText))]
     private string _statusText = string.Empty;
+
+    /// <summary>이미지 첨부 결과 안내(5장 초과·읽지 못함 등). 다음 첨부·빼기·보내기 때 지운다.</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasAttachNotice))]
+    private string? _attachNotice;
 
     private int _toolCount;
     private int _runCount;
@@ -212,9 +285,191 @@ public sealed partial class AiChatViewModel : ToolPanelViewModelBase
     public AiChatViewModel()
     {
         Current = this;
+        Attachments.CollectionChanged += (_, _) => OnAttachmentsChanged();
+        Entries.CollectionChanged += (_, _) =>
+        {
+            OnPropertyChanged(nameof(ShowStartHint));
+            NewConversationCommand.NotifyCanExecuteChanged();
+        };
     }
 
     public ObservableCollection<ChatEntry> Entries { get; } = [];
+
+    /// <summary>다음 이어 말하기에 실을 이미지(입력칸 위에 보인다). 최대 <see cref="AiImageNormalizer.MaxCount"/> 장.</summary>
+    public ObservableCollection<ChatImage> Attachments { get; } = [];
+
+    /// <summary>
+    /// 지금 설정(<c>ai</c> 섹션). 활성 프로필의 이미지 지원 판단과 제목 줄의 모델 이름에 쓴다. 셸이 대화 창을 만든 뒤 튜닝 시작 쪽이 연결하며,
+    /// 연결이 없으면 모든 것을 허용으로 본다. <c>IAiDriver.Capabilities</c> 는 동기 속성이라 프로필별로 답하지 못해 쓰지 않는다.
+    /// </summary>
+    internal Func<AiSettings?> SettingsProvider { get; set; } = () => null;
+
+    /// <summary>이미지 입구를 닫는 사유 글(활성 프로필이 이미지를 지원하지 않음). 열려 있으면 null. 지원 여부를 모르는(null) 프로필은 열어 둔다.</summary>
+    public string? ImagesBlockedReason =>
+        SettingsProvider() is { } settings && AiActiveProfile.Find(settings) is { Kind: AiActiveKind.Profile, Profile.SupportsImages: false }
+            ? ImagesUnsupportedText
+            : null;
+
+    public const string ImagesUnsupportedText = "이 모델은 이미지 입력을 지원하지 않습니다. 설정에서 다른 프로필을 고르십시오.";
+
+    /// <summary>입구(붙여 넣기·끌어 놓기·파일 선택)가 열려 있다.</summary>
+    public bool ImagesAllowed => ImagesBlockedReason is null;
+
+    /// <summary>
+    /// AI 를 쓸 수 없는 원인을 돌려주는 쪽(없으면 null = 쓸 수 있음 또는 모름). 입력칸은 이 원인이 있어도 열려 있고, 원인을 입력칸 위에 보인다.
+    /// 셸이 대화 창을 만든 뒤 튜닝 쪽 조립이 연결한다.
+    /// </summary>
+    internal Func<string?> UnavailableProvider { get; set; } = () => null;
+
+    /// <summary>AI 를 쓸 수 없는 원인 글(드라이버 없음·모델 선택 안 함·프로필 없음 등). 쓸 수 있으면 null.</summary>
+    public string? UnavailableReason => UnavailableProvider();
+
+    public bool HasUnavailableReason => UnavailableReason is not null;
+
+    /// <summary>입력칸 위 안내: 일반 대화 시작 전(줄이 하나도 없음)이고 AI 를 쓸 수 없는 원인도 없을 때 보인다.</summary>
+    public bool ShowStartHint => !IsTuning && Entries.Count == 0 && !HasUnavailableReason;
+
+    /// <summary>제목 줄 오른쪽의 모델 이름: 프로필 이름 또는 Claude Code. 설정을 모르면 빈 글.</summary>
+    public string ModelLabel => SettingsProvider() is { } settings
+        ? AiActiveProfile.Find(settings) switch
+        {
+            { Kind: AiActiveKind.Profile or AiActiveKind.ProfileInvalid, Profile: { } profile } => profile.Name,
+            { Kind: AiActiveKind.ClaudeCode } => "Claude Code",
+            _ => string.Empty,
+        }
+        : string.Empty;
+
+    /// <summary>더 붙일 수 있는 장수(입구가 읽을 파일 수를 미리 자르는 데 쓴다).</summary>
+    public int RemainingSlots => Math.Max(0, AiImageNormalizer.MaxCount - Attachments.Count);
+
+    public bool HasAttachments => Attachments.Count > 0;
+
+    public bool HasAttachNotice => !string.IsNullOrEmpty(AttachNotice);
+
+    /// <summary>이미지를 더 붙일 수 있다: 입력이 열려 있고 입구가 열려 있으며 장수가 남았다.</summary>
+    public bool CanAttach => CanType && ImagesAllowed && Attachments.Count < AiImageNormalizer.MaxCount;
+
+    /// <summary>입력칸 아래 상태 줄: 이미지를 붙였으면 「이미지 N장 · 최대 5장」, 아니면 실행 상태.</summary>
+    public string FooterText => Attachments.Count > 0
+        ? string.Create(CultureInfo.CurrentCulture, $"이미지 {Attachments.Count}장 · 최대 {AiImageNormalizer.MaxCount}장")
+        : StatusText;
+
+    /// <summary>설정이 바뀌었을 수 있다(프로필 교체 등): 입구·모델 이름·보내기 상태를 다시 계산한다.</summary>
+    public void RefreshActiveModel()
+    {
+        OnPropertyChanged(nameof(ImagesBlockedReason));
+        OnPropertyChanged(nameof(ImagesAllowed));
+        OnPropertyChanged(nameof(ModelLabel));
+        OnPropertyChanged(nameof(CanAttach));
+        OnPropertyChanged(nameof(UnavailableReason));
+        OnPropertyChanged(nameof(HasUnavailableReason));
+        OnPropertyChanged(nameof(ShowStartHint));
+        SendCommand.NotifyCanExecuteChanged();
+    }
+
+    private void OnAttachmentsChanged()
+    {
+        OnPropertyChanged(nameof(HasAttachments));
+        OnPropertyChanged(nameof(CanAttach));
+        OnPropertyChanged(nameof(FooterText));
+        SendCommand.NotifyCanExecuteChanged();
+    }
+
+    /// <summary>
+    /// 이미지 바이트를 정규화해 붙인다(디코딩은 백그라운드). 입구가 닫혔거나 5장을 넘기거나 읽지 못한 것은 붙이지 않고 <see cref="AttachNotice"/> 에 이유를 남긴다.
+    /// 붙인 장수를 돌려준다.
+    /// </summary>
+    public async Task<int> AddImagesAsync(IEnumerable<byte[]> blobs)
+    {
+        ArgumentNullException.ThrowIfNull(blobs);
+        AttachNotice = null;
+        if (!CanType)
+        {
+            return 0;
+        }
+
+        if (ImagesBlockedReason is { } blocked)
+        {
+            AttachNotice = blocked;
+            return 0;
+        }
+
+        var added = 0;
+        var notices = new List<string>();
+        foreach (var blob in blobs)
+        {
+            if (Attachments.Count >= AiImageNormalizer.MaxCount)
+            {
+                notices.Add(string.Create(CultureInfo.CurrentCulture, $"이미지는 한 번에 {AiImageNormalizer.MaxCount}장까지 붙일 수 있습니다."));
+                break;
+            }
+
+            var result = await Task.Run(() => AiImageNormalizer.Normalize(blob)).ConfigureAwait(true);
+
+            // 디코딩하는 사이 다른 입구(붙여 넣기·끌어 놓기)가 장수를 채우거나 보내기가 눌렸을 수 있다: 붙이기 직전에 다시 확인한다.
+            if (!CanType)
+            {
+                notices.Add("이어 말하는 중이라 이미지를 붙이지 못했습니다. 끝난 뒤 다시 붙여 주세요.");
+                break;
+            }
+
+            if (Attachments.Count >= AiImageNormalizer.MaxCount)
+            {
+                notices.Add(string.Create(CultureInfo.CurrentCulture, $"이미지는 한 번에 {AiImageNormalizer.MaxCount}장까지 붙일 수 있습니다."));
+                break;
+            }
+
+            if (result.Image is { } image)
+            {
+                Attachments.Add(new ChatImage(image));
+                added++;
+            }
+            else
+            {
+                notices.Add(result.Error ?? "이미지를 붙이지 못했습니다.");
+            }
+        }
+
+        OnAttachmentsChanged();
+        AttachNotice = notices.Count == 0 ? null : string.Join(' ', notices.Distinct());
+        return added;
+    }
+
+    [RelayCommand]
+    private void RemoveAttachment(ChatImage? image)
+    {
+        if (image is not null && Attachments.Remove(image))
+        {
+            AttachNotice = null;
+        }
+    }
+
+    /// <summary>
+    /// 취소한 이어 말하기를 입력칸으로 되돌린다: 글은 입력칸이 비어 있으면 그대로, 그 사이 새 글이 있으면 원래 글을 앞에 두고 줄을 바꿔 잇는다(어느 쪽도 잃지 않는다).
+    /// 이미지는 앞쪽에 다시 붙이고, 장수 상한 때문에 못 붙인 것이 있으면 <see cref="AttachNotice"/> 로 알린다.
+    /// </summary>
+    public void RestoreFollowUp(ChatFollowUp followUp)
+    {
+        ArgumentNullException.ThrowIfNull(followUp);
+        if (followUp.Text.Length > 0)
+        {
+            Draft = string.IsNullOrWhiteSpace(Draft) ? followUp.Text : followUp.Text + Environment.NewLine + Draft;
+        }
+
+        var pending = followUp.Images.Where(i => !Attachments.Contains(i)).ToList();
+        var room = RemainingSlots;
+        foreach (var (image, index) in pending.Take(room).Select((i, n) => (i, n)))
+        {
+            Attachments.Insert(index, image);
+        }
+
+        if (pending.Count > room)
+        {
+            AttachNotice = string.Create(CultureInfo.CurrentCulture, $"이미지는 한 번에 {AiImageNormalizer.MaxCount}장까지 붙일 수 있어 일부를 되돌리지 못했습니다.");
+        }
+
+        OnAttachmentsChanged();
+    }
 
     /// <summary>레포트로 저장할 재료(튜닝 결과를 반영한 뒤에 생긴다). 새 대화를 열면 비운다.</summary>
     private AiTuningReportSource? _reportSource;
@@ -242,35 +497,95 @@ public sealed partial class AiChatViewModel : ToolPanelViewModelBase
         SaveReportCommand.NotifyCanExecuteChanged();
     }
 
-    /// <summary>입력 칸에 쓸 수 있다: 이어 갈 대화가 있고 실행 중이 아니며 레포트를 저장하는 중도 아니다(저장 중에 보낸 글이 레포트와 어긋나지 않게).</summary>
-    public bool CanType => CanFollowUp && !IsRunning && !_isSavingReport;
+    /// <summary>입력 칸에 쓸 수 있다: 처음부터 열려 있고, 실행 중이 아니며 레포트를 저장하는 중도 아니다(저장 중에 보낸 글이 레포트와 어긋나지 않게).</summary>
+    public bool CanType => !IsRunning && !_isSavingReport;
 
-    /// <summary>이어 말하기를 보냈다(인수 = 보낸 글). 호출 쪽이 같은 세션으로 다시 실행한다.</summary>
-    public event EventHandler<string>? FollowUpRequested;
+    /// <summary>이어 말하기를 보냈다(인수 = 보낸 글과 붙인 이미지). 호출 쪽이 같은 세션으로 다시 실행한다. 입력칸과 첨부는 이 사건 전에 비운다.</summary>
+    public event EventHandler<ChatFollowUp>? FollowUpRequested;
 
     /// <summary>멈춤을 눌렀다.</summary>
     public event EventHandler? StopRequested;
 
-    /// <summary>새 대화를 연다(앞의 줄은 지운다).</summary>
+    /// <summary>새 튜닝 대화를 연다(앞의 줄은 지운다).</summary>
     public void StartConversation(string title)
     {
+        ResetConversation(title);
+        IsTuning = true;
+    }
+
+    /// <summary>
+    /// 새 일반 대화로 되돌린다(앞의 줄·세션 이어받기 id·레포트 재료를 지운다). 일반 대화든 튜닝 대화든 쓸 수 있고, 실행 중이거나 레포트를 저장하는 중에는 쓰지 않는다.
+    /// 입력칸에 쓰던 글과 붙인 이미지는 그대로 둔다.
+    /// </summary>
+    [RelayCommand(CanExecute = nameof(CanStartNew))]
+    private void NewConversation() => StartNewConversation();
+
+    private bool CanStartNew() => !IsRunning && !IsBusy && !_isSavingReport && (IsTuning || Entries.Count > 0 || ResumeId is not null);
+
+    /// <summary>
+    /// 대화 세대: 새 대화(<see cref="StartConversation"/>·<see cref="StartNewConversation"/>)나 이어받기 id 를 잊는 일(<see cref="ForgetResume"/>)마다 늘어난다.
+    /// 보내기를 준비하거나 결과를 반영하는 흐름이 시작 때의 값을 기억했다가 끝에서 대조해, 그 사이 대화가 바뀌었으면 옛 대화의 요청·레포트 재료·줄이 새 대화에 섞이지 않게 한다.
+    /// </summary>
+    public int ConversationGeneration { get; private set; }
+
+    /// <summary>
+    /// 흐름이 보내기를 준비하거나(확인 창·감사) 튜닝 결과를 반영하는 중이다(실행 중이 아니어도). 이 동안 「새 대화」 는 쓸 수 없다.
+    /// 흐름이 시작과 끝에서 켜고 끈다.
+    /// </summary>
+    public bool IsBusy
+    {
+        get => _isBusy;
+        set
+        {
+            if (_isBusy != value)
+            {
+                _isBusy = value;
+                OnPropertyChanged();
+                NewConversationCommand.NotifyCanExecuteChanged();
+            }
+        }
+    }
+
+    private bool _isBusy;
+
+    /// <summary>새 일반 대화로 되돌린다(<see cref="NewConversationCommand"/> 와 같다).</summary>
+    public void StartNewConversation()
+    {
+        var draft = Draft;
+        var attachments = Attachments.ToList();
+        ResetConversation("대화");
+        Draft = draft;
+        foreach (var image in attachments)
+        {
+            Attachments.Add(image);
+        }
+
+        IsTuning = false;
+    }
+
+    private void ResetConversation(string title)
+    {
+        ConversationGeneration++;
         Entries.Clear();
         SetReportSource(null); // 앞 대화의 결과로 새 대화의 레포트를 저장하지 않게
         ResumeId = null; // 앞 대화의 claude 세션을 새 대화가 이어 받지 않게
         Title = title;
         Draft = string.Empty;
+        Attachments.Clear();
+        AttachNotice = null;
         StatusText = string.Empty;
         _toolCount = 0;
         _runCount = 0;
         _openGroup = null;
         IsRunning = false;
-        CanFollowUp = true;
+        OnPropertyChanged(nameof(ShowStartHint));
+        NewConversationCommand.NotifyCanExecuteChanged();
     }
 
-    /// <summary>한 번의 실행을 시작한다. <paramref name="userText"/> 를 사용자 줄로 보인다.</summary>
-    public void BeginTurn(string userText)
+    /// <summary>한 번의 실행을 시작한다. <paramref name="userText"/> 를 사용자 줄로 보이고, <paramref name="images"/> 가 있으면 그 줄에 축소 이미지를 함께 보인다.</summary>
+    public void BeginTurn(string userText, IReadOnlyList<ChatImage>? images = null)
     {
-        Entries.Add(new ChatUserEntry(userText));
+        Entries.Add(new ChatUserEntry(userText) { Images = images ?? [] });
         _openGroup = null;
         _turnStart = DateTime.UtcNow;
         _runCount++;
@@ -308,6 +623,14 @@ public sealed partial class AiChatViewModel : ToolPanelViewModelBase
 
     /// <summary>앞 대화를 잇는 id(<see cref="AiStarted"/>·<see cref="AiFinal"/> 이 알려 준다). 이어 말하기를 보낼 때 호출 쪽이 읽어 요청에 싣는다.</summary>
     public string? ResumeId { get; private set; }
+
+    /// <summary>앞 대화를 잇는 id 를 잊는다(다음 보내기가 새 대화가 된다). 줄은 그대로 둔다: 보낼 곳이 바뀐 일반 대화가 새 모델로 앞 대화를 보내지 않게 한다.</summary>
+    public void ForgetResume()
+    {
+        ConversationGeneration++;
+        ResumeId = null;
+        NewConversationCommand.NotifyCanExecuteChanged();
+    }
 
     /// <summary>
     /// 드라이버 사건 하나를 화면에 옮긴다(UI 스레드). 도구 부름은 진행 중 카드로 두었다가 같은 호출 id 의 결과가 오면 크기·게이트 판단으로 바꾼다.
@@ -352,7 +675,7 @@ public sealed partial class AiChatViewModel : ToolPanelViewModelBase
                 EndTurn();
                 break;
             case AiError error:
-                AddAssistantText("오류: " + error.Message);
+                AddAssistantText("오류: " + AiErrorText.Describe(error));
                 EndTurn();
                 break;
         }
@@ -431,14 +754,23 @@ public sealed partial class AiChatViewModel : ToolPanelViewModelBase
         UpdateStatus();
     }
 
-    private bool CanSend() => CanType && !string.IsNullOrWhiteSpace(Draft);
+    // 글이나 이미지 중 하나는 있어야 한다. 이미지를 붙인 뒤 지원하지 않는 프로필로 바뀌었으면 막는다(글만 보내려면 이미지를 뺀다).
+    private bool CanSend() => CanType && (!string.IsNullOrWhiteSpace(Draft) || Attachments.Count > 0) && (Attachments.Count == 0 || ImagesAllowed);
 
     [RelayCommand(CanExecute = nameof(CanSend))]
     private void Send()
     {
-        var text = Draft.Trim();
-        Draft = string.Empty;
-        FollowUpRequested?.Invoke(this, text);
+        if (FollowUpRequested is null)
+        {
+            AddAssistantText("AI 연결이 아직 준비되지 않아 보내지 못했습니다. 잠시 뒤 다시 보내세요."); // 입력을 비우지 않는다: 받는 쪽이 없으면 글이 사라진다
+            return;
+        }
+
+        var followUp = new ChatFollowUp(Draft.Trim(), [.. Attachments]);
+        Draft = string.Empty; // 이벤트 전에 비운다. 취소되면 호출 쪽이 RestoreFollowUp 으로 되돌린다
+        Attachments.Clear();
+        AttachNotice = null;
+        FollowUpRequested?.Invoke(this, followUp);
     }
 
     [RelayCommand(CanExecute = nameof(IsRunning))]
@@ -548,8 +880,10 @@ public sealed partial class AiChatViewModel : ToolPanelViewModelBase
     {
         OnPropertyChanged(nameof(CanSaveReport));
         OnPropertyChanged(nameof(CanType));
+        OnPropertyChanged(nameof(CanAttach));
         SaveReportCommand.NotifyCanExecuteChanged();
         SendCommand.NotifyCanExecuteChanged();
+        NewConversationCommand.NotifyCanExecuteChanged();
     }
 
     private void UpdateStatus()

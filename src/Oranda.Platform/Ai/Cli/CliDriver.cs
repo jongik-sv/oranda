@@ -217,7 +217,7 @@ internal sealed class CliDriver : IAiDriver
                 {
                     if (streamEvent is ClaudeSessionStarted init)
                     {
-                        if (ValidateInit(init) is { } problem)
+                        if (ValidateInit(init, allowNoTools: session.Level == Oranda.Core.Ai.Access.AiAccessLevel.Off) is { } problem)
                         {
                             yield return problem;
                             yield break;
@@ -275,7 +275,12 @@ internal sealed class CliDriver : IAiDriver
     /// claude 가 실제로 붙인 것을 확인한다. MCP 서버는 orandactl 하나뿐이고 연결돼 있어야 하며, 도구는 orandactl 도구 1개 이상과
     /// 합성 도구(StructuredOutput·ToolSearch)뿐이어야 한다. 어긋나면 AI 가 도구 없이 지어낸 결과를 내거나 게이트를 건너뛰는 통로가 생긴다.
     /// </summary>
-    internal static AiError? ValidateInit(ClaudeSessionStarted init)
+    /// <param name="init">claude 가 보낸 시작 정보.</param>
+    /// <param name="allowNoTools">
+    /// 이 실행의 허용 수준이 「끔」 이라 게이트가 도구를 하나도 내지 않는다(연결 없는 일반 대화 등): 도구 목록이 비어 있어도 오류로 보지 않는다.
+    /// MCP 서버 연결과 낯선 도구 검사는 그대로 한다.
+    /// </param>
+    internal static AiError? ValidateInit(ClaudeSessionStarted init, bool allowNoTools = false)
     {
         var foreign = init.McpServers.FirstOrDefault(s => s.Name != ClaudeCliArguments.McpServerName);
         if (foreign is not null)
@@ -295,7 +300,7 @@ internal sealed class CliDriver : IAiDriver
             return new AiError($"예상하지 못한 도구가 열렸습니다: {unexpectedTool}", "unexpected_tool");
         }
 
-        return init.Tools.Any(t => t.StartsWith(ClaudeCliArguments.McpToolPrefix, StringComparison.Ordinal))
+        return allowNoTools || init.Tools.Any(t => t.StartsWith(ClaudeCliArguments.McpToolPrefix, StringComparison.Ordinal))
             ? null
             : new AiError("Oranda 도구 목록이 비어 있습니다. 앱의 AI 연결 상태와 접속의 AI 허용 수준을 확인하세요.", "bridge_unavailable");
     }

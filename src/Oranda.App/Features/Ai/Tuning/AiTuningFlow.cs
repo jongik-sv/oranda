@@ -16,6 +16,7 @@ using Oranda.Core.Ai.Gate;
 using Oranda.Core.Ai.Schemas;
 using Oranda.Core.Execution;
 using Oranda.Core.Extensibility;
+using Oranda.Core.Settings;
 using Oranda.Core.Text;
 using Oranda.Core.Tuning;
 using Oranda.Language.Tuning;
@@ -47,6 +48,15 @@ namespace Oranda.App.Features.Ai.Tuning;
 /// 제안을 보이는 비교 창(고칠 수 있음): 제안 편집, 바뀌는 자리의 원래 글 → 받아들이면 고친 최종 글, 거절하면 null. 편집기의 글은 바꾸지 않는다(제안은 새 탭에 들어간다).
 /// null 이면 비교 창을 쓸 수 없어 제안을 넣지 않는다.
 /// </param>
+/// <param name="settings">지금 설정의 <c>ai</c> 섹션. 대화를 시작할 때 보낼 곳(프로필 id·주소·형식·모델)을 기억하고 이어 말할 때 달라졌는지 확인하며, 라우터에 넘기는 <see cref="AiRequest.Expected"/> 를 채운다. null 이면 확인·기대값 없이 보낸다(시험).</param>
+/// <param name="confirmImages">가리는 대화에 새 이미지를 보낼 때 띄우는 확인 창(참이면 보냄). 이 대화가 가리는 중인데 null 이면 이미지는 보내지 않는다(확인 없이 나가지 않게).</param>
+/// <param name="auditImages">새 이미지를 보낸다는 사실(장수·크기·받는 곳)을 감사 기록에 남긴다. 실패해도 보내기를 막지 않고 대화 창에 알린다(게이트의 감사와 같은 규칙).</param>
+/// <param name="generalContext">
+/// 일반 대화(튜닝 없이 보내는 글)의 접속 정보를 보낼 때마다 만든다(<see cref="AiGeneralScope"/>): 활성 접속의 지금 설정과 가리는 대화인지.
+/// 연결이 없으면 문맥이 null 이고 DB 도구 없이 답한다. 이 인자 자체가 null 이면 항상 연결 없음·가리지 않음으로 본다(시험).
+/// </param>
+/// <param name="generalSessionFactory">일반 대화의 도구 실행 범위를 만든다(튜닝의 바인드 값을 싣지 않는다). null 이면 <paramref name="sessionFactory"/> 를 쓴다.</param>
+/// <param name="confirmText">가리는 일반 대화에서 입력한 글이 가려지지 않고 나간다는 확인 창(대화당 한 번, 참이면 보냄). 가리는 대화인데 null 이면 보내지 않는다(확인 없이 나가지 않게).</param>
 /// <param name="readIndexes">표의 실제 기존 인덱스 열 구성(소유자 — 모르면 빈 글, 표). AI 인덱스 후보를 받은 뒤 대조에 쓴다. null 이거나 못 읽으면 대조를 건너뛴다(「확인 못함」).</param>
 public sealed partial class AiTuningFlow(
     IEditorContext editor,
@@ -60,7 +70,13 @@ public sealed partial class AiTuningFlow(
     IEditorTabs? tabs = null,
     Func<string, string, string, Task>? showComparison = null,
     Func<string, string, CancellationToken, Task<IReadOnlyList<IndexColumnsRow>?>>? readIndexes = null,
-    Func<TextEdit, string, CancellationToken, Task<string?>>? previewEdit = null)
+    Func<TextEdit, string, CancellationToken, Task<string?>>? previewEdit = null,
+    Func<AiSettings?>? settings = null,
+    Func<AiImageSendNotice, CancellationToken, Task<bool>>? confirmImages = null,
+    Func<AiImageSendNotice, CancellationToken, Task>? auditImages = null,
+    Func<CancellationToken, Task<AiGeneralScope>>? generalContext = null,
+    Func<AiContext, LiteralVault?, AgentSession?>? generalSessionFactory = null,
+    Func<AiImageSendNotice, CancellationToken, Task<bool>>? confirmText = null)
 {
     /// <summary>도구를 부르는 횟수 예산(프롬프트로 알린다).</summary>
     public const int ToolBudget = 12;
@@ -68,10 +84,20 @@ public sealed partial class AiTuningFlow(
     /// <summary>가림이 필요한데 가림 구현이 없을 때 대화 창에 남기는 안내.</summary>
     public const string MaskerMissingText = "이 접속은 SQL 의 리터럴 값을 가려서 보내야 하는데 가림 기능을 쓸 수 없어 튜닝을 시작하지 않았습니다.";
 
+    /// <summary>이어 말하는 사이 보낼 곳(프로필·주소·형식·모델)이 바뀌었을 때 대화 창에 남기는 안내.</summary>
+    public const string ProfileChangedText = "모델이 바뀌어 이어 말할 수 없습니다. 「AI 튜닝」 으로 다시 시작하세요.";
+
+    /// <summary>이어 말하는 중 예외가 났을 때 화면에 보이는 고정 글(상세는 가린 뒤 추적 기록에만 남긴다).</summary>
+    public const string FollowUpFailedText = "이어 말하는 중 오류가 났습니다. 자세한 원인은 로그에 남겼습니다.";
+
+    /// <summary>가리는 대화인데 이미지 확인 창을 열 수 없을 때의 안내(확인 없이 보내지 않는다).</summary>
+    public const string ImageConfirmMissingText = "이미지는 가려지지 않아 확인이 필요한데 확인 창을 열 수 없어 보내지 않았습니다.";
+
     /// <summary>문장을 가리지 못했을 때 대화 창에 남기는 안내.</summary>
     public const string MaskFailedText = "문장의 리터럴 값을 가리지 못해(닫히지 않은 문자열 등) 튜닝을 시작하지 않았습니다. 문장을 고친 뒤 다시 시도하세요.";
 
     private AiContext? _context;
+    private AiConversationTarget? _route; // 대화를 시작할 때의 보낼 곳. 이어 말하기·이미지 경고·라우터 기대값의 기준이다
     private TuningStartChoice? _choice;
     private SqlStatement? _target;
     private LiteralVault? _vault;
@@ -84,22 +110,32 @@ public sealed partial class AiTuningFlow(
     private DateTimeOffset _startedAt;
     private readonly List<AiTuningReportTurn> _reportTurns = []; // 차례별 구조 결과(레포트용): 이어 말하기가 앞 차례 결과를 덮지 않게 모은다
     private int _generation;
+    private bool _preparing; // 이어 말하기가 확인·감사를 거치는 중(요청이 시작되기 전)이다: 겹쳐 시작하지 않는다
 
-    /// <summary>대화 창의 멈춤·이어 말하기를 이 흐름에 잇는다(창당 한 번).</summary>
-    public void Attach()
+    /// <summary>
+    /// 대화 창의 멈춤·이어 말하기를 이 흐름에 잇는다(창당 한 번). <paramref name="followUps"/> 가 거짓이면 이어 말하기는 잇지 않는다
+    /// (대화 창 앞에서 보낼 곳을 먼저 확인하는 쪽이 <see cref="FollowUpAsync(ChatFollowUp, CancellationToken)"/> 를 직접 부른다).
+    /// </summary>
+    public void Attach(bool followUps = true)
     {
         chat.StopRequested += (_, _) => Stop();
-        chat.FollowUpRequested += async (_, text) =>
+        if (!followUps)
+        {
+            return;
+        }
+
+        chat.FollowUpRequested += async (_, followUp) =>
         {
             try
             {
-                await FollowUpAsync(text).ConfigureAwait(true);
+                await FollowUpAsync(followUp).ConfigureAwait(true);
             }
 #pragma warning disable CA1031 // 이벤트 처리기라 예외를 밖으로 내면 앱 전역 미처리 예외가 된다: 대화 창에 알린다.
             catch (Exception ex) when (ex is not OperationCanceledException)
 #pragma warning restore CA1031
             {
-                chat.AddAssistantText("이어 말하는 중 오류가 났습니다: " + ex.Message);
+                System.Diagnostics.Trace.TraceError("이어 말하기 중 예외: {0}", AiErrorText.Redact(ex.GetType().Name + ": " + ex.Message));
+                chat.AddAssistantText(FollowUpFailedText);
             }
         };
     }
@@ -126,7 +162,7 @@ public sealed partial class AiTuningFlow(
     {
         ArgumentNullException.ThrowIfNull(choice);
         ArgumentNullException.ThrowIfNull(context);
-        if (IsRunning)
+        if (IsRunning || _preparing)
         {
             chat.AddAssistantText("튜닝이 진행 중입니다. 멈춤을 누른 뒤 다시 시작하세요.");
             return;
@@ -172,6 +208,7 @@ public sealed partial class AiTuningFlow(
             }
         }
 
+        _route = CurrentTarget();
         _choice = choice;
         _target = statement;
         _vault = vault;
@@ -184,20 +221,101 @@ public sealed partial class AiTuningFlow(
         _reportTurns.Clear();
         _context = context with { StatementText = statement.Text, AllowRiskyFunctions = choice.RunRiskyFunctions }; // 원문: 범위 검사·추출기가 쓴다(LLM 으로 가지 않는다)
         chat.StartConversation("튜닝 — " + Shorten(promptStatement, 40));
-        await RunAsync(BuildPrompt(choice, promptStatement, vault), resumeId: null, userText: null, ct).ConfigureAwait(true);
+        chat.IsBusy = true;
+        try
+        {
+            await RunAsync(BuildPrompt(choice, promptStatement, vault), resumeId: null, userText: null, images: [], ct).ConfigureAwait(true);
+        }
+        finally
+        {
+            chat.IsBusy = false;
+        }
     }
 
-    /// <summary>앞 대화에 이어 말한다(<see cref="AiChatViewModel.ResumeId"/> 가 없으면 새 대화로 보낸다).</summary>
-    public async Task FollowUpAsync(string text, CancellationToken ct = default)
+    /// <summary>글만 이어 말한다(<see cref="FollowUpAsync(ChatFollowUp, CancellationToken)"/> 의 이미지 없는 형태).</summary>
+    public Task FollowUpAsync(string text, CancellationToken ct = default) => FollowUpAsync(new ChatFollowUp(text, []), ct);
+
+    /// <summary>
+    /// 앞 대화에 이어 말한다(<see cref="AiChatViewModel.ResumeId"/> 가 없으면 새 대화로 보낸다). 아무것도 보내지 않고 끝나면(보낼 곳이 바뀜·허용 수준 변경·확인 창 취소·
+    /// 준비 중 예외 등) 입력칸이 이미 비워졌으므로 글과 첨부를 <see cref="AiChatViewModel.RestoreFollowUp"/> 으로 되돌린다. 요청을 시작한 뒤의 실패는 대화 줄이 남으므로 되돌리지 않는다.
+    /// </summary>
+    public async Task FollowUpAsync(ChatFollowUp followUp, CancellationToken ct = default)
     {
-        if (_context is null || _choice is null)
+        ArgumentNullException.ThrowIfNull(followUp);
+        if (!chat.IsTuning)
         {
+            await GeneralFollowUpAsync(followUp, ct).ConfigureAwait(true); // 튜닝 없이 시작한 일반 대화
             return;
         }
 
-        if (IsRunning)
+        if (_preparing)
         {
+            chat.AddAssistantText("앞서 보낸 이어 말하기를 준비하는 중입니다. 끝난 뒤 다시 보내세요.");
+            chat.RestoreFollowUp(followUp); // 앞 이어 말하기가 확인·감사 중이다: 겹쳐 보내지 않는다
             return;
+        }
+
+        string? prompt;
+        var conversation = chat.ConversationGeneration;
+        var route = _route; // 확인 창에 적는 받는 곳: 기다리는 사이 바뀌지 않았는지 보고, 실제 요청의 기대값도 이것으로 채운다
+        _preparing = true;
+        chat.IsBusy = true; // 준비하는 동안(확인 창·감사) 새 대화로 바뀌지 않게
+        try
+        {
+            try
+            {
+                prompt = await PrepareFollowUpAsync(followUp, route, ct).ConfigureAwait(true);
+            }
+            catch
+            {
+                chat.RestoreFollowUp(followUp);
+                throw;
+            }
+            finally
+            {
+                _preparing = false;
+            }
+
+            if (prompt is null)
+            {
+                chat.RestoreFollowUp(followUp);
+                return;
+            }
+
+            if (conversation != chat.ConversationGeneration)
+            {
+                chat.RestoreFollowUp(followUp); // 준비하는 사이 대화가 바뀌었다: 옛 대화의 요청을 새 대화로 보내지 않는다
+                return;
+            }
+
+            await RunAsync(prompt, chat.ResumeId, followUp.Text, followUp.Images, ct, route).ConfigureAwait(true);
+        }
+        finally
+        {
+            chat.IsBusy = false;
+        }
+    }
+
+    /// <summary>이어 말하기를 보내도 되는지 확인하고(보낼 곳·허용 수준·가림·새 이미지 확인) 요청 글을 만든다. 보내면 안 되면 사유를 대화 창에 남기고 null.</summary>
+    private async Task<string?> PrepareFollowUpAsync(ChatFollowUp followUp, AiConversationTarget? route, CancellationToken ct)
+    {
+        var generation = _generation;
+        if (_context is null || _choice is null || IsRunning)
+        {
+            return null;
+        }
+
+        if (followUp.Images.Count > AiImageNormalizer.MaxCount)
+        {
+            chat.AddAssistantText(string.Create(CultureInfo.CurrentCulture, $"이미지는 한 번에 {AiImageNormalizer.MaxCount}장까지 보낼 수 있습니다."));
+            return null;
+        }
+
+        // 보낼 곳(프로필·주소·형식·모델)이 대화를 시작할 때와 다르면 앞 대화의 ResumeId 를 쓸 수 없고, 앞서 보낸 이미지가 경고 없이 새로운 곳으로 가면 안 된다.
+        if (route is { } started && CurrentTarget() is { } now && !started.IsSameAs(now))
+        {
+            chat.AddAssistantText(ProfileChangedText);
+            return null;
         }
 
         if (refreshContext is not null)
@@ -206,23 +324,80 @@ public sealed partial class AiTuningFlow(
             if (fresh is null || fresh.AccessLevel == AiAccessLevel.Off)
             {
                 chat.AddAssistantText("이 접속의 AI 허용 수준이 바뀌어 이어 말할 수 없습니다. 「AI 튜닝」 으로 다시 시작하세요.");
-                return;
+                return null;
             }
 
             // 이어 말하는 사이 접속이 운영으로 바뀌었는데 이 대화는 사전 없이 시작했다면, 앞서 보낸 글에 원래 값이 이미 실려 있다: 새로 시작하게 한다.
             if (_vault is null && maskRequired?.Invoke(fresh) == true)
             {
                 chat.AddAssistantText("이 접속은 이제 리터럴 값을 가려서 보내야 해 이어 말할 수 없습니다. 「AI 튜닝」 으로 다시 시작하세요.");
-                return;
+                return null;
             }
 
             _context = fresh with { AllowRiskyFunctions = _choice!.RunRiskyFunctions }; // 대화마다 고른 값을 이어 말하기에도 쓴다
         }
 
+        // 새 이미지를 보낼 때만(글만 보내는 이어 말하기·이미 보낸 이미지는 해당 없음): 가리는 대화면 확인을 거치고, 보낸다는 사실을 감사에 남긴다.
+        if (followUp.Images.Count > 0
+            && !await ConfirmAndAuditImagesAsync(followUp, route, _context, _vault is not null || maskRequired?.Invoke(_context) == true, ct).ConfigureAwait(true))
+        {
+            return null;
+        }
+
+        // 기다리는 동안(접속 새로 고침·확인 창·감사) 대화가 바뀌었거나 보낼 곳이 달라졌으면 확인한 곳과 다른 곳으로 나가지 않도록 접는다.
+        if (generation != _generation || IsRunning || (route is { } confirmed && CurrentTarget() is { } latest && !confirmed.IsSameAs(latest)))
+        {
+            chat.AddAssistantText(ProfileChangedText);
+            return null;
+        }
+
         // 이어 말하기 글은 가리지 않고(사용자가 쓴 글) 자리표시를 그대로 쓰라는 안내만 덧붙인다.
-        var prompt = text + Environment.NewLine + Environment.NewLine + ResponseStyle + Environment.NewLine + KeepCommentsRule
+        var text = followUp.Text.Length == 0 ? "Look at the attached image(s) and continue." : followUp.Text;
+        return text + Environment.NewLine + Environment.NewLine + ResponseStyle + Environment.NewLine + KeepCommentsRule
             + (_vault is null ? string.Empty : Environment.NewLine + PlaceholderReminder(_vault));
-        await RunAsync(prompt, chat.ResumeId, text, ct).ConfigureAwait(true);
+    }
+
+    /// <summary>이 대화가 지금 보낼 곳(설정을 모르면 null).</summary>
+    private AiConversationTarget? CurrentTarget() => settings?.Invoke() is { } current ? AiConversationTarget.From(current) : null;
+
+    /// <summary>
+    /// 새 이미지의 확인(가리는 대화만)과 감사 기록. 보내도 되면 true. 확인 창을 취소하면 false 이고 아무것도 보내지 않으며 감사에도 남기지 않는다(보내지 않았으므로).
+    /// 감사 기록 실패는 보내기를 막지 않는다(게이트의 감사와 같은 규칙).
+    /// </summary>
+    private async Task<bool> ConfirmAndAuditImagesAsync(ChatFollowUp followUp, AiConversationTarget? route, AiContext context, bool masking, CancellationToken ct)
+    {
+        var notice = new AiImageSendNotice(
+            context.ConnectionName ?? string.Empty, context.Environment ?? Oranda.Core.Connection.ConnectionEnvironment.Development, route?.Label ?? "AI", route?.RecipientUrl,
+            followUp.Images.Count, ChatImage.TotalBytes(followUp.Images), masking, context.AccessLevel);
+        if (masking)
+        {
+            if (confirmImages is null)
+            {
+                chat.AddAssistantText(ImageConfirmMissingText);
+                return false;
+            }
+
+            if (!await confirmImages(notice, ct).ConfigureAwait(true))
+            {
+                return false;
+            }
+        }
+
+        if (auditImages is not null)
+        {
+            try
+            {
+                await auditImages(notice, ct).ConfigureAwait(true);
+            }
+#pragma warning disable CA1031 // 감사 저장 실패가 이어 말하기를 막지 않는다(저장소 계약). 시간 제한으로 취소된 것도 실패다: 호출 쪽이 취소한 것만 밖으로 낸다.
+            catch (Exception ex) when (ex is not OperationCanceledException || !ct.IsCancellationRequested)
+#pragma warning restore CA1031
+            {
+                chat.AddAssistantText("이미지를 보낸다는 기록을 감사 기록에 남기지 못했습니다.");
+            }
+        }
+
+        return true;
     }
 
     /// <summary>시작 확인 창의 선택과 대상 문장으로 요청 글을 만든다(문장은 씨앗, 나머지는 도구로 가져오게 한다). <paramref name="vault"/> 가 있으면 문장은 이미 가려진 글이고 자리표시 안내가 붙는다.</summary>
@@ -293,6 +468,52 @@ public sealed partial class AiTuningFlow(
     internal const string KeepCommentsRule =
         "Keep every comment of the original statement in each rewrite's sql, unchanged and next to the code it describes; do not drop, merge or reword comments.";
 
+    /// <summary>
+    /// 구조 결과에서 AI 가 빠뜨린 칸(역직렬화가 null 로 두는 문자열·목록·항목)을 빈 값으로 채운다. 스키마가 필수로 요구해도 모델이 칸을 빼면
+    /// 뒤의 반영·카드·레포트 코드가 <see cref="NullReferenceException"/> 으로 죽지 않게, 읽는 자리 한 곳에서 막는다.
+    /// SQL 이 비어 있는 재작성 후보와 DDL 이 비어 있는 인덱스 후보는 쓸 수 없으므로 뺀다.
+    /// </summary>
+    internal static TuningResult Sanitize(TuningResult result) => Sanitize(result, out _, out _, out _);
+
+    internal static TuningResult Sanitize(TuningResult result, out int skippedRewrites, out int skippedIndexes) => Sanitize(result, out skippedRewrites, out skippedIndexes, out _);
+
+    /// <summary>
+    /// <see cref="Sanitize(TuningResult)"/> 에 쓸 수 없어 건너뛴 재작성·인덱스 후보 수와, 기존 인덱스 이름 없이 DROP 이 든 채 변형으로 남긴 후보 수를 함께 돌려준다.
+    /// </summary>
+    internal static TuningResult Sanitize(TuningResult result, out int skippedRewrites, out int skippedIndexes, out int modifyWithoutName)
+    {
+        ArgumentNullException.ThrowIfNull(result);
+        var rewriteSource = (result.Rewrites ?? []).ToList();
+        var indexSource = (result.IndexSuggestions ?? []).ToList();
+        var rewrites = rewriteSource
+            .Where(r => r is not null && !string.IsNullOrWhiteSpace(r.Sql))
+            .Select(r => r with { Label = string.IsNullOrWhiteSpace(r.Label) ? "(이름 없음)" : r.Label, Rationale = r.Rationale ?? string.Empty })
+            .ToList();
+        skippedRewrites = rewriteSource.Count - rewrites.Count;
+        var indexes = indexSource
+            .Where(i => i is not null && !string.IsNullOrWhiteSpace(i.Ddl))
+            .Select(i => i with
+            {
+                Table = i.Table ?? string.Empty,
+                Columns = i.Columns ?? [],
+                Rationale = i.Rationale ?? string.Empty,
+                Action = i.Action ?? TuningIndexSuggestion.ActionCreate,
+            })
+            // 변형(modify)인데 바꿀 기존 인덱스 이름이 없으면 대화·탭 모두 「새 인덱스」 로 같게 다룬다(대화는 「변형 1」, 탭은 「새 인덱스」 로 어긋나지 않게).
+            .Select(i => i.IsModify && string.IsNullOrWhiteSpace(i.ExistingIndex) && !DropsIndex(i.Ddl) ? i with { Action = TuningIndexSuggestion.ActionCreate } : i)
+            .ToList();
+        skippedIndexes = indexSource.Count - indexes.Count;
+        modifyWithoutName = indexes.Count(i => i.IsModify && string.IsNullOrWhiteSpace(i.ExistingIndex));
+        var evidence = (result.Evidence ?? []).Where(e => e is not null).ToList();
+        return new TuningResult(result.Summary ?? string.Empty, rewrites, indexes, evidence);
+    }
+
+    /// <summary>DDL 에 DROP INDEX 가 있다(기존 인덱스를 지우는 변형).</summary>
+    private static bool DropsIndex(string ddl) => DropIndex().IsMatch(ddl);
+
+    [GeneratedRegex(@"\bDROP\s+INDEX\b", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
+    private static partial Regex DropIndex();
+
     /// <summary>카드 없는 재작성 후보 한 줄: 「- `이름` · 근거 · 측정」.</summary>
     private static string RewriteLine(TuningRewrite rewrite) =>
         $"- `{OneLine(rewrite.Label)}` · {OneLine(rewrite.Rationale)}" + (string.IsNullOrWhiteSpace(rewrite.Benchmark) ? string.Empty : " · " + OneLine(rewrite.Benchmark));
@@ -329,15 +550,18 @@ public sealed partial class AiTuningFlow(
     private static partial Regex ElapsedPair();
 
     /// <summary>리터럴 값을 자리표시로 가렸다는 안내. 값은 싣지 않고 접두만 쓴다. 가린 주석이 있으면 주석 자리표시도 그대로 두라고 덧붙인다.</summary>
-    private static string PlaceholderReminder(LiteralVault vault) =>
-        $"Literal values in the SQL were replaced with placeholders such as {vault.Placeholder(1)}. Use the same placeholders unchanged when you pass SQL to the tools and when you write SQL in your answer; never guess the original values."
+    private static string PlaceholderReminder(LiteralVault vault, bool statementOnly = false) =>
+        (statementOnly
+            ? $"Literal values in the statement above and in the tool results were replaced with placeholders such as {vault.Placeholder(1)}; the user's own message was not masked. Use the same placeholders unchanged when you pass SQL to the tools and when you write SQL in your answer; never guess the original values."
+            : $"Literal values in the SQL were replaced with placeholders such as {vault.Placeholder(1)}. Use the same placeholders unchanged when you pass SQL to the tools and when you write SQL in your answer; never guess the original values.")
         + (vault.CommentCount == 0
             ? string.Empty
             : $" Comments were replaced with placeholders such as {LiteralVault.CommentPlaceholder(1, lineComment: false)} and {LiteralVault.CommentPlaceholder(1, lineComment: true)}; keep each comment placeholder exactly as written, in the same place, in every SQL you write.");
 
-    private async Task RunAsync(string prompt, string? resumeId, string? userText, CancellationToken ct)
+    private async Task RunAsync(string prompt, string? resumeId, string? userText, IReadOnlyList<ChatImage> images, CancellationToken ct, AiConversationTarget? route = null)
     {
         var context = _context!;
+        var conversation = chat.ConversationGeneration;
         var choice = _choice!;
         var vault = _vault; // 결과를 반영하는 동안(미리보기 창) 새 대화가 시작돼도 이 대화의 사전·문장을 쓴다
         var target = _target!;
@@ -345,14 +569,16 @@ public sealed partial class AiTuningFlow(
         var userLine = resumeId is null
             ? "이 문장 튜닝" + (choice.Benchmark ? " · 벤치마크 켬" : string.Empty) + (choice.RunRiskyFunctions ? " · 위험 함수도 실행" : string.Empty)
             : userText ?? prompt;
-        chat.BeginTurn(userLine);
+        chat.BeginTurn(userLine, images);
 
         using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
         _running = cts;
         var session = sessionFactory?.Invoke(context, vault);
         var request = new AiRequest(
             prompt, context, resumeId, TuningResult.Schema(), choice.ModelId == "default" ? null : choice.ModelId, session,
-            choice.EffortId == TuningStartInfo.DefaultModelId ? null : choice.EffortId);
+            choice.EffortId == TuningStartInfo.DefaultModelId ? null : choice.EffortId,
+            Images: images.Count == 0 ? null : [.. images.Select(i => i.Attachment)],
+            Expected: (route ?? _route)?.ToExpectation()); // 확인 창에 적은 곳과 실제 전송처가 같게: 라우터가 설정의 활성 프로필과 대조한다(profile_changed)
         JsonElement? result = null;
         try
         {
@@ -366,7 +592,7 @@ public sealed partial class AiTuningFlow(
 
         if (result is { } structured && !cts.IsCancellationRequested)
         {
-            await ApplyResultAsync(structured, choice, vault, target, startTab, ct).ConfigureAwait(true);
+            await ApplyResultAsync(structured, choice, vault, target, startTab, conversation, ct).ConfigureAwait(true);
         }
     }
 
@@ -384,12 +610,18 @@ public sealed partial class AiTuningFlow(
         }
     }
 
-    private async Task ApplyResultAsync(JsonElement structured, TuningStartChoice choice, LiteralVault? vault, SqlStatement target, Guid? startTab, CancellationToken ct)
+    private async Task ApplyResultAsync(JsonElement structured, TuningStartChoice choice, LiteralVault? vault, SqlStatement target, Guid? startTab, int conversation, CancellationToken ct)
     {
+        if (conversation != chat.ConversationGeneration)
+        {
+            return; // 결과를 기다리는 사이 대화가 바뀌었다: 옛 결과의 줄·제안·레포트 재료를 새 대화에 넣지 않는다
+        }
+
         TuningResult result;
+        int skippedRewrites, skippedIndexes, modifyWithoutName;
         try
         {
-            result = TuningResult.Parse(structured);
+            result = Sanitize(TuningResult.Parse(structured), out skippedRewrites, out skippedIndexes, out modifyWithoutName);
         }
         catch (JsonException ex)
         {
@@ -404,7 +636,7 @@ public sealed partial class AiTuningFlow(
         var turn = chat.Entries.OfType<ChatUserEntry>().Count() - 1; // 0 = 처음 튜닝, N = N 번째 이어 말하기
         void ReportTurn(IReadOnlyList<TuningIndexSuggestion> indexes, IReadOnlyList<string> dropped)
         {
-            if (generation != _generation)
+            if (generation != _generation || conversation != chat.ConversationGeneration)
             {
                 return; // 그 사이 새 대화가 시작됐다
             }
@@ -419,7 +651,24 @@ public sealed partial class AiTuningFlow(
         {
             ReportTurn([], []); // 인덱스 확인이 남았으면 확인 뒤에 한 번에 넘긴다(후보 없는 레포트가 먼저 저장되지 않게)
         }
-        chat.AddAssistantText(result.Summary);
+        if (!string.IsNullOrWhiteSpace(result.Summary))
+        {
+            chat.AddAssistantText(result.Summary); // 요약이 비면 빈 말풍선을 만들지 않는다
+        }
+
+        // 쓸 수 없는 후보(SQL·DDL 이 빠진 것, 빈 항목)는 건너뛰고 나머지는 그대로 보인다. 인덱스를 고르지 않은 대화에는 인덱스 건너뜀을 말하지 않는다.
+        var skippedShown = skippedRewrites + (choice.IndexDdl ? skippedIndexes : 0);
+        if (skippedShown > 0)
+        {
+            chat.AddAssistantText(choice.IndexDdl
+                ? string.Create(CultureInfo.InvariantCulture, $"AI 가 보낸 후보 중 내용이 빠져 쓸 수 없는 것을 건너뛰었습니다(재작성 {skippedRewrites}개 · 인덱스 {skippedIndexes}개).")
+                : string.Create(CultureInfo.InvariantCulture, $"AI 가 보낸 후보 중 내용이 빠져 쓸 수 없는 것을 건너뛰었습니다(재작성 {skippedRewrites}개)."));
+        }
+
+        if (modifyWithoutName > 0 && choice.IndexDdl)
+        {
+            chat.AddAssistantText(string.Create(CultureInfo.InvariantCulture, $"인덱스 변형 후보 {modifyWithoutName}개에 바꿀 기존 인덱스 이름이 없습니다. DDL 의 DROP 대상을 직접 확인하세요."));
+        }
 
         // 편집기·탭으로 가는 글은 자리표시를 원래 값으로 되돌린 뒤에만 넣는다. 되돌리지 못하면(모르는 자리표시) 넣지 않고 알린다.
         var carded = false;
@@ -491,6 +740,11 @@ public sealed partial class AiTuningFlow(
             }
 
             ReportTurn([.. review.Kept.Select(k => originals[k.Suggestion])], reportDropped);
+            if (conversation != chat.ConversationGeneration)
+            {
+                return; // 기존 인덱스를 읽는 사이 대화가 바뀌었다: 옛 결과의 후보 탭·줄을 새 대화에 넣지 않는다(레포트 재료는 ReportTurn 이 같은 대조로 막았다)
+            }
+
             if (review.Dropped.Count > 0)
             {
                 chat.AddAssistantText(string.Join('\n', review.Dropped));
@@ -766,7 +1020,9 @@ public sealed partial class AiTuningFlow(
             text.AppendLine();
             text.AppendLine(s.IsModify && s.ExistingIndex is { Length: > 0 } existing
                 ? $"-- 기존 {existing} ({string.Join(", ", s.ExistingColumns ?? [])}) → ({string.Join(", ", s.Columns)}) 로 변형"
-                : $"-- 새 인덱스: {s.Table} ({string.Join(", ", s.Columns)})");
+                : s.IsModify
+                    ? $"-- 변형(기존 인덱스 이름 없음 — DROP 대상을 확인하세요): {s.Table} ({string.Join(", ", s.Columns)})"
+                    : $"-- 새 인덱스: {s.Table} ({string.Join(", ", s.Columns)})");
             text.AppendLine("-- " + OneLine(s.Rationale));
             if (!string.IsNullOrWhiteSpace(s.Risk))
             {

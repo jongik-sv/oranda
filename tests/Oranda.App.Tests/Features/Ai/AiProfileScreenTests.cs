@@ -72,8 +72,8 @@ public class AiProfileScreenTests
     [Fact]
     public Task Settings_page_shows_the_claude_code_state_then_the_profile_state_with_the_http_warning() => HeadlessHost.Run(() =>
     {
-        var qwen = ProfileSamples.Qwen() with { Model = "example-model" };
-        var page = Page(new AiSettings { Profiles = [qwen, ProfileSamples.Ollama()] });
+        var exampleProfile = ProfileSamples.Example() with { Model = "example-model" };
+        var page = Page(new AiSettings { Profiles = [exampleProfile, ProfileSamples.Ollama()] });
         var window = Host(page);
         try
         {
@@ -85,7 +85,7 @@ public class AiProfileScreenTests
             Assert.False(Find<Border>(window, "ProfileInfo").IsEffectivelyVisible);
             Render(window, "ai-settings-claude");
 
-            page.Choose(page.Choices.First(c => c.ProfileId == qwen.Id));
+            page.Choose(page.Choices.First(c => c.ProfileId == exampleProfile.Id));
             window.UpdateLayout();
             Assert.Equal("예제 LLM", Find<TextBlock>(window, "ProfileTitle").Text);
             Assert.False(Find<ComboBox>(window, "ModelBox").IsEffectivelyVisible);
@@ -111,7 +111,7 @@ public class AiProfileScreenTests
     [Fact]
     public Task Settings_page_shows_why_a_deleted_profile_cannot_run() => HeadlessHost.Run(() =>
     {
-        var page = Page(new AiSettings { ActiveProfileId = Guid.NewGuid(), Profiles = [ProfileSamples.Qwen()] });
+        var page = Page(new AiSettings { ActiveProfileId = Guid.NewGuid(), Profiles = [ProfileSamples.Example()] });
         var window = Host(page);
         try
         {
@@ -129,8 +129,8 @@ public class AiProfileScreenTests
     [Fact]
     public Task The_dropdown_lists_the_groups_and_a_row_click_chooses_the_profile() => HeadlessHost.Run(() =>
     {
-        var qwen = ProfileSamples.Qwen();
-        var page = Page(new AiSettings { Profiles = [qwen, ProfileSamples.Ollama()] });
+        var exampleProfile = ProfileSamples.Example();
+        var page = Page(new AiSettings { Profiles = [exampleProfile, ProfileSamples.Ollama()] });
         var window = Host(page);
         try
         {
@@ -143,9 +143,9 @@ public class AiProfileScreenTests
             Assert.Equal(page.Choices.Count, list.ItemsSource is System.Collections.IEnumerable e ? e.Cast<object>().Count() : -1);
             Render(popup.Child as Control ?? window, "ai-settings-dropdown");
 
-            page.Choose(page.Choices.First(c => c.ProfileId == qwen.Id));
+            page.Choose(page.Choices.First(c => c.ProfileId == exampleProfile.Id));
             Assert.False(page.IsDropdownOpen);
-            Assert.Equal(qwen.Id, page.ActiveProfileId);
+            Assert.Equal(exampleProfile.Id, page.ActiveProfileId);
         }
         finally
         {
@@ -166,10 +166,10 @@ public class AiProfileScreenTests
     [Fact]
     public async Task Manager_window_shows_the_profile_list_the_seven_cards_and_the_result_band() => await HeadlessHost.Run(async () =>
     {
-        var qwen = ProfileSamples.Qwen() with { Model = "example-model", MaxInputTokens = 200000, MaxOutputTokens = 10000 };
-        var harness = await ProfileHarness.CreateAsync(ProfileSamples.With(qwen, ProfileSamples.Ollama()));
+        var exampleProfile = ProfileSamples.Example() with { Model = "example-model", MaxInputTokens = 200000, MaxOutputTokens = 10000 };
+        var harness = await ProfileHarness.CreateAsync(ProfileSamples.With(exampleProfile, ProfileSamples.Ollama()));
         harness.Probe.TestResult = new AiConnectionTestResult(true, TimeSpan.FromSeconds(1), "응답 확인");
-        var (window, model) = await OpenManagerAsync(harness, qwen.Id);
+        var (window, model) = await OpenManagerAsync(harness, exampleProfile.Id);
         try
         {
             Assert.Equal(7, Find<ItemsControl>(window, "PresetList").GetVisualDescendants().OfType<Button>().Count());
@@ -236,7 +236,7 @@ public class AiProfileScreenTests
     [Fact]
     public async Task Closing_the_manager_window_cancels_a_running_probe() => await HeadlessHost.Run(async () =>
     {
-        var harness = await ProfileHarness.CreateAsync(ProfileSamples.With(ProfileSamples.Qwen()));
+        var harness = await ProfileHarness.CreateAsync(ProfileSamples.With(ProfileSamples.Example()));
         harness.Probe.Gate = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var (window, model) = await OpenManagerAsync(harness);
 
@@ -252,7 +252,7 @@ public class AiProfileScreenTests
     [Fact]
     public async Task Refreshing_models_keeps_the_typed_name_and_picking_the_second_model_shows_it() => await HeadlessHost.Run(async () =>
     {
-        var harness = await ProfileHarness.CreateAsync(ProfileSamples.With(ProfileSamples.Qwen()));
+        var harness = await ProfileHarness.CreateAsync(ProfileSamples.With(ProfileSamples.Example()));
         harness.Probe.ModelResult = AiModelListResult.Ok([new AiModelInfo("model-a"), new AiModelInfo("model-b")]);
         var (window, model) = await OpenManagerAsync(harness);
         try
@@ -286,14 +286,14 @@ public class AiProfileScreenTests
     [Fact]
     public async Task A_typed_key_does_not_follow_to_another_profile_and_is_cleared_after_a_save() => await HeadlessHost.Run(async () =>
     {
-        var qwen = ProfileSamples.Qwen();
-        var harness = await ProfileHarness.CreateAsync(ProfileSamples.With(qwen, ProfileSamples.Ollama()));
-        var (window, model) = await OpenManagerAsync(harness, qwen.Id);
+        var exampleProfile = ProfileSamples.Example();
+        var harness = await ProfileHarness.CreateAsync(ProfileSamples.With(exampleProfile, ProfileSamples.Ollama()));
+        var (window, model) = await OpenManagerAsync(harness, exampleProfile.Id);
         try
         {
             var keyBox = Find<TextBox>(window, "KeyBox");
             keyBox.Text = "typed-example";
-            await model.SelectProfileAsync(harness.Ai.Profiles.First(p => p.Id != qwen.Id).Id);
+            await model.SelectProfileAsync(harness.Ai.Profiles.First(p => p.Id != exampleProfile.Id).Id);
             Assert.True(string.IsNullOrEmpty(keyBox.Text));
 
             keyBox.Text = "typed-example";
@@ -309,7 +309,7 @@ public class AiProfileScreenTests
     [Fact]
     public async Task Closing_with_unsaved_changes_asks_first_and_stays_open_when_declined() => await HeadlessHost.Run(async () =>
     {
-        var harness = await ProfileHarness.CreateAsync(ProfileSamples.With(ProfileSamples.Qwen()));
+        var harness = await ProfileHarness.CreateAsync(ProfileSamples.With(ProfileSamples.Example()));
         var asked = 0;
         var answer = false;
         var model = harness.Manager(confirm: _ =>
@@ -335,7 +335,7 @@ public class AiProfileScreenTests
     [Fact]
     public async Task The_settings_view_opens_the_manager_window_on_top_of_its_owner() => await HeadlessHost.Run(async () =>
     {
-        var harness = await ProfileHarness.CreateAsync(ProfileSamples.With(ProfileSamples.Qwen()));
+        var harness = await ProfileHarness.CreateAsync(ProfileSamples.With(ProfileSamples.Example()));
         var host = Host(harness.Page());
         try
         {
@@ -366,7 +366,7 @@ public class AiProfileScreenTests
     [Fact]
     public async Task Typing_in_the_key_box_marks_the_form_changed() => await HeadlessHost.Run(async () =>
     {
-        var harness = await ProfileHarness.CreateAsync(ProfileSamples.With(ProfileSamples.Qwen()));
+        var harness = await ProfileHarness.CreateAsync(ProfileSamples.With(ProfileSamples.Example()));
         var (window, model) = await OpenManagerAsync(harness);
         try
         {
@@ -384,7 +384,7 @@ public class AiProfileScreenTests
     [Fact]
     public async Task The_manage_button_command_opens_the_manager_through_the_page_event() => await HeadlessHost.Run(async () =>
     {
-        var harness = await ProfileHarness.CreateAsync(ProfileSamples.With(ProfileSamples.Qwen()));
+        var harness = await ProfileHarness.CreateAsync(ProfileSamples.With(ProfileSamples.Example()));
         var host = Host(harness.Page());
         try
         {

@@ -1,0 +1,47 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="using:Oranda.App.Features.Ai.Chat"
+        x:Class="Oranda.App.Features.Ai.Chat.AiImageWarningDialog"
+        x:DataType="vm:AiImageWarningViewModel"
+        Title="이미지 보내기 확인"
+        Width="480" SizeToContent="Height" CanResize="False"
+        WindowStartupLocation="CenterOwner"
+        ShowInTaskbar="False"
+        FontSize="{DynamicResource OrandaFontSizeBase}">
+  <!-- 가림 대화에 새 이미지를 보낼 때마다 뜨는 확인 창(시안 ChatWarning). 「이번만 묻지 않기」 는 없다. 받는 곳·장수·크기를 보이고, 취소하면 아무것도 보내지 않는다. -->
+  <StackPanel Margin="20" Spacing="14">
+    <StackPanel Orientation="Horizontal" Spacing="10">
+      <Path Data="M7 1.5 13 12.5H1Z M7 5.5v3.5M7 10.4v.6" Stroke="{DynamicResource OrandaEnvProductionBrush}" StrokeThickness="1.2" Width="22" Height="22"
+            Stretch="Uniform" VerticalAlignment="Center" />
+      <TextBlock Text="이미지의 값은 가려지지 않습니다" FontSize="15" FontWeight="SemiBold" VerticalAlignment="Center" />
+    </StackPanel>
+    <TextBlock x:Name="MessageText" TextWrapping="Wrap" LineHeight="20"
+               Text="이 대화는 SQL 리터럴을 가리고 있지만, 이미지 안의 값은 가릴 수 없습니다. 실행 계획의 조건절에 실제 값이 보이는지 확인하십시오." />
+    <Border Padding="12,10" CornerRadius="6" Background="{DynamicResource OrandaToolbarBackgroundBrush}">
+      <Grid ColumnDefinitions="64,*" RowDefinitions="Auto,Auto,Auto" ColumnSpacing="10" RowSpacing="6">
+        <Grid.Styles>
+          <Style Selector="TextBlock.key">
+            <Setter Property="Opacity" Value="0.7" />
+            <Setter Property="FontSize" Value="{DynamicResource OrandaFontSizeSmall}" />
+          </Style>
+        </Grid.Styles>
+        <TextBlock Classes="key" Text="접속 이름" />
+        <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="6">
+          <Border x:Name="EnvBadge" Padding="6,1" CornerRadius="3" Background="{DynamicResource OrandaEnvProductionBrush}" IsVisible="{Binding Notice.IsProduction}">
+            <TextBlock Text="{Binding Notice.EnvironmentLabel}" Foreground="{DynamicResource OrandaEnvProductionForegroundBrush}" FontSize="{DynamicResource OrandaFontSizeSmall}" />
+          </Border>
+          <TextBlock x:Name="ConnectionText" Text="{Binding Notice.ConnectionName}" FontSize="{DynamicResource OrandaFontSizeSmall}" />
+        </StackPanel>
+        <TextBlock Grid.Row="1" Classes="key" Text="받는 곳" />
+        <TextBlock x:Name="RecipientText" Grid.Row="1" Grid.Column="1" Text="{Binding Notice.Recipient}" TextWrapping="Wrap" FontSize="{DynamicResource OrandaFontSizeSmall}" />
+        <TextBlock Grid.Row="2" Classes="key" Text="이미지" />
+        <TextBlock x:Name="ImagesText" Grid.Row="2" Grid.Column="1" Text="{Binding Notice.ImageSummary}" FontSize="{DynamicResource OrandaFontSizeSmall}" />
+      </Grid>
+    </Border>
+    <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8">
+      <Button x:Name="CancelButton" Content="취소" IsCancel="True" Command="{Binding CancelCommand}" />
+      <Button x:Name="ConfirmButton" Content="그대로 보내기" Command="{Binding ConfirmCommand}"
+              Background="{DynamicResource OrandaEnvProductionBrush}" Foreground="{DynamicResource OrandaEnvProductionForegroundBrush}" FontWeight="SemiBold" />
+    </StackPanel>
+  </StackPanel>
+</Window>

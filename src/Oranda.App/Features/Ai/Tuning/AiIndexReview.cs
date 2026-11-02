@@ -86,7 +86,7 @@ public static class AiIndexReview
     {
         ArgumentNullException.ThrowIfNull(suggestion);
         List<string> notes = [];
-        var columns = suggestion.Columns;
+        var columns = suggestion.Columns ?? [];
         if (columns.Count >= WarnColumns)
         {
             notes.Add(string.Create(CultureInfo.InvariantCulture, $"열이 {columns.Count}개입니다. 조건·조인 열만 {IndexAdvisor.MaxColumns}개 이하로 두는 것이 좋습니다. 조회 열까지 담는 커버링은 측정으로 확인한 경우에만 쓰세요."));

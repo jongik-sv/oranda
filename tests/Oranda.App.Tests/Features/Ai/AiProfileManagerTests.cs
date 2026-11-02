@@ -161,9 +161,9 @@ public class AiProfileManagerTests
     [Fact]
     public async Task A_profile_this_build_does_not_know_can_only_be_deleted_and_other_profiles_survive_saves()
     {
-        var unknown = ProfileSamples.Qwen() with { Preset = AiProfilePreset.Unknown, Name = "미래 프로필" };
-        var qwen = ProfileSamples.Qwen();
-        var harness = await ProfileHarness.CreateAsync(ProfileSamples.With(unknown, qwen));
+        var unknown = ProfileSamples.Example() with { Preset = AiProfilePreset.Unknown, Name = "미래 프로필" };
+        var exampleProfile = ProfileSamples.Example();
+        var harness = await ProfileHarness.CreateAsync(ProfileSamples.With(unknown, exampleProfile));
 
         var vm = harness.Manager(select: unknown.Id);
         Assert.False(vm.IsEditable);
@@ -172,7 +172,7 @@ public class AiProfileManagerTests
         Assert.False(await vm.SaveProfileAsync(null));
         Assert.True(vm.CanDelete);
 
-        await vm.SelectProfileAsync(qwen.Id);
+        await vm.SelectProfileAsync(exampleProfile.Id);
         vm.Name = "이름 바꿈";
         Assert.True(await vm.SaveProfileAsync(null));
         Assert.Equal(["미래 프로필", "이름 바꿈"], harness.Ai.Profiles.Select(p => p.Name));
@@ -213,9 +213,9 @@ public class AiProfileManagerTests
     [Fact]
     public async Task Saving_an_existing_profile_with_an_empty_key_field_keeps_the_stored_key()
     {
-        var qwen = ProfileSamples.Qwen();
-        var harness = await ProfileHarness.CreateAsync(ProfileSamples.With(qwen));
-        harness.Credentials.Put(AiProfileCredentials.KeyFor(qwen.Id), "stored-example");
+        var exampleProfile = ProfileSamples.Example();
+        var harness = await ProfileHarness.CreateAsync(ProfileSamples.With(exampleProfile));
+        harness.Credentials.Put(AiProfileCredentials.KeyFor(exampleProfile.Id), "stored-example");
         var vm = harness.Manager();
         await vm.Ready;
         Assert.True(vm.HasStoredKey);
@@ -224,14 +224,14 @@ public class AiProfileManagerTests
         vm.ModelName = "other-model";
         Assert.True(await vm.SaveProfileAsync(""));
 
-        Assert.Equal("stored-example", harness.Credentials.Get(AiProfileCredentials.KeyFor(qwen.Id)));
+        Assert.Equal("stored-example", harness.Credentials.Get(AiProfileCredentials.KeyFor(exampleProfile.Id)));
         Assert.Equal("other-model", harness.Ai.Profiles[0].Model);
     }
 
     [Fact]
     public async Task Clearing_the_stored_key_is_a_separate_action_and_a_typed_key_replaces_it()
     {
-        var profile = ProfileSamples.Qwen() with { Preset = AiProfilePreset.Custom };
+        var profile = ProfileSamples.Example() with { Preset = AiProfilePreset.Custom };
         var harness = await ProfileHarness.CreateAsync(ProfileSamples.With(profile));
         var name = AiProfileCredentials.KeyFor(profile.Id);
         harness.Credentials.Put(name, "stored-example");
@@ -268,9 +268,9 @@ public class AiProfileManagerTests
     [Fact]
     public async Task A_failed_settings_write_rolls_back_a_new_key_and_restores_a_replaced_one()
     {
-        var qwen = ProfileSamples.Qwen();
-        var harness = await ProfileHarness.CreateAsync(ProfileSamples.With(qwen));
-        var oldName = AiProfileCredentials.KeyFor(qwen.Id);
+        var exampleProfile = ProfileSamples.Example();
+        var harness = await ProfileHarness.CreateAsync(ProfileSamples.With(exampleProfile));
+        var oldName = AiProfileCredentials.KeyFor(exampleProfile.Id);
         harness.Credentials.Put(oldName, "old-example");
         var vm = harness.Manager();
         await vm.Ready;
@@ -323,14 +323,14 @@ public class AiProfileManagerTests
     [Fact]
     public async Task Deleting_asks_first_then_removes_the_profile_and_its_key_and_resets_an_active_one()
     {
-        var qwen = ProfileSamples.Qwen();
+        var exampleProfile = ProfileSamples.Example();
         var ollama = ProfileSamples.Ollama();
-        var harness = await ProfileHarness.CreateAsync(new AiSettings { Profiles = [qwen, ollama], ActiveProfileId = qwen.Id });
-        harness.Credentials.Put(AiProfileCredentials.KeyFor(qwen.Id), "stored-example");
+        var harness = await ProfileHarness.CreateAsync(new AiSettings { Profiles = [exampleProfile, ollama], ActiveProfileId = exampleProfile.Id });
+        harness.Credentials.Put(AiProfileCredentials.KeyFor(exampleProfile.Id), "stored-example");
         var page = harness.Page();
         var asked = new List<string>();
         var answer = false;
-        var vm = harness.Manager(confirm: m => { asked.Add(m); return Task.FromResult(answer); }, applied: page.ApplyStoreChange, select: qwen.Id);
+        var vm = harness.Manager(confirm: m => { asked.Add(m); return Task.FromResult(answer); }, applied: page.ApplyStoreChange, select: exampleProfile.Id);
         await vm.Ready;
 
         Assert.False(await vm.DeleteProfileAsync()); // 거절
@@ -342,7 +342,7 @@ public class AiProfileManagerTests
 
         Assert.Equal([ollama], harness.Ai.Profiles);
         Assert.Null(harness.Ai.ActiveProfileId);
-        Assert.Null(harness.Credentials.Get(AiProfileCredentials.KeyFor(qwen.Id)));
+        Assert.Null(harness.Credentials.Get(AiProfileCredentials.KeyFor(exampleProfile.Id)));
         Assert.Single(harness.Bus.PublishedOf<SettingsChanged>());
         Assert.Equal(AiActiveKind.ClaudeCode, page.ActiveKind);
         Assert.Contains("Claude Code", page.Notice);
@@ -352,12 +352,12 @@ public class AiProfileManagerTests
     [Fact]
     public async Task Deleting_an_inactive_profile_leaves_the_pending_page_selection_alone()
     {
-        var qwen = ProfileSamples.Qwen();
+        var exampleProfile = ProfileSamples.Example();
         var ollama = ProfileSamples.Ollama();
-        var harness = await ProfileHarness.CreateAsync(ProfileSamples.With(qwen, ollama));
+        var harness = await ProfileHarness.CreateAsync(ProfileSamples.With(exampleProfile, ollama));
         var page = harness.Page();
         page.Choose(page.Choices.Single(c => c.ProfileId == ollama.Id)); // 아직 확인 전인 선택
-        var vm = harness.Manager(applied: page.ApplyStoreChange, select: qwen.Id);
+        var vm = harness.Manager(applied: page.ApplyStoreChange, select: exampleProfile.Id);
 
         Assert.True(await vm.DeleteProfileAsync());
 
@@ -368,15 +368,15 @@ public class AiProfileManagerTests
     [Fact]
     public async Task Delete_is_refused_on_a_read_only_file_and_a_failed_key_removal_is_reported_after_the_profile_is_gone()
     {
-        var qwen = ProfileSamples.Qwen();
-        var readOnly = await ProfileHarness.CreateAsync(ProfileSamples.With(qwen), readOnly: true);
+        var exampleProfile = ProfileSamples.Example();
+        var readOnly = await ProfileHarness.CreateAsync(ProfileSamples.With(exampleProfile), readOnly: true);
         var refused = readOnly.Manager();
         Assert.False(await refused.DeleteProfileAsync());
         Assert.Contains("읽기 전용", refused.GeneralError);
         Assert.Single(readOnly.Ai.Profiles);
 
-        var harness = await ProfileHarness.CreateAsync(ProfileSamples.With(qwen));
-        harness.Credentials.Put(AiProfileCredentials.KeyFor(qwen.Id), "stored-example");
+        var harness = await ProfileHarness.CreateAsync(ProfileSamples.With(exampleProfile));
+        harness.Credentials.Put(AiProfileCredentials.KeyFor(exampleProfile.Id), "stored-example");
         harness.Credentials.FailDelete = true;
         var vm = harness.Manager();
         Assert.True(await vm.DeleteProfileAsync());
@@ -387,28 +387,28 @@ public class AiProfileManagerTests
     [Fact]
     public async Task A_failed_settings_write_on_delete_keeps_the_profile_and_its_key()
     {
-        var qwen = ProfileSamples.Qwen();
-        var harness = await ProfileHarness.CreateAsync(new AiSettings { Profiles = [qwen], ActiveProfileId = qwen.Id });
-        harness.Credentials.Put(AiProfileCredentials.KeyFor(qwen.Id), "stored-example");
+        var exampleProfile = ProfileSamples.Example();
+        var harness = await ProfileHarness.CreateAsync(new AiSettings { Profiles = [exampleProfile], ActiveProfileId = exampleProfile.Id });
+        harness.Credentials.Put(AiProfileCredentials.KeyFor(exampleProfile.Id), "stored-example");
         var vm = harness.Manager();
         harness.Store.FailSave = true;
 
         Assert.False(await vm.DeleteProfileAsync());
 
-        Assert.Equal([qwen], harness.Ai.Profiles);
-        Assert.Equal(qwen.Id, harness.Ai.ActiveProfileId);
-        Assert.Equal("stored-example", harness.Credentials.Get(AiProfileCredentials.KeyFor(qwen.Id)));
+        Assert.Equal([exampleProfile], harness.Ai.Profiles);
+        Assert.Equal(exampleProfile.Id, harness.Ai.ActiveProfileId);
+        Assert.Equal("stored-example", harness.Credentials.Get(AiProfileCredentials.KeyFor(exampleProfile.Id)));
     }
 
     [Fact]
     public async Task Leaving_with_unsaved_edits_asks_before_discarding()
     {
-        var qwen = ProfileSamples.Qwen();
+        var exampleProfile = ProfileSamples.Example();
         var ollama = ProfileSamples.Ollama();
-        var harness = await ProfileHarness.CreateAsync(ProfileSamples.With(qwen, ollama));
+        var harness = await ProfileHarness.CreateAsync(ProfileSamples.With(exampleProfile, ollama));
         var allow = false;
         var asked = 0;
-        var vm = harness.Manager(confirm: _ => { asked++; return Task.FromResult(allow); }, select: qwen.Id);
+        var vm = harness.Manager(confirm: _ => { asked++; return Task.FromResult(allow); }, select: exampleProfile.Id);
         vm.Name = "고친 이름";
 
         await vm.SelectProfileAsync(ollama.Id);
@@ -439,9 +439,9 @@ public class AiProfileManagerTests
     [Fact]
     public async Task An_unreadable_stored_key_does_not_break_selecting_or_replacing_it()
     {
-        var qwen = ProfileSamples.Qwen();
-        var harness = await ProfileHarness.CreateAsync(ProfileSamples.With(qwen));
-        harness.Credentials.Put(AiProfileCredentials.KeyFor(qwen.Id), "stored-example");
+        var exampleProfile = ProfileSamples.Example();
+        var harness = await ProfileHarness.CreateAsync(ProfileSamples.With(exampleProfile));
+        harness.Credentials.Put(AiProfileCredentials.KeyFor(exampleProfile.Id), "stored-example");
         harness.Credentials.FailLoad = true;
         var vm = harness.Manager();
         await vm.Ready; // 예외로 새지 않는다
@@ -449,7 +449,7 @@ public class AiProfileManagerTests
 
         Assert.True(await vm.SaveProfileAsync("new-example")); // 옛 키를 못 읽어도 새 키로 고치는 저장은 된다
         harness.Credentials.FailLoad = false;
-        Assert.Equal("new-example", harness.Credentials.Get(AiProfileCredentials.KeyFor(qwen.Id)));
+        Assert.Equal("new-example", harness.Credentials.Get(AiProfileCredentials.KeyFor(exampleProfile.Id)));
 
         harness.Credentials.FailLoad = true;
         vm.ModelName = "m";
@@ -460,9 +460,9 @@ public class AiProfileManagerTests
     [Fact]
     public async Task A_failed_key_restore_is_reported_together_with_the_settings_failure()
     {
-        var qwen = ProfileSamples.Qwen();
-        var harness = await ProfileHarness.CreateAsync(ProfileSamples.With(qwen));
-        harness.Credentials.Put(AiProfileCredentials.KeyFor(qwen.Id), "old-example");
+        var exampleProfile = ProfileSamples.Example();
+        var harness = await ProfileHarness.CreateAsync(ProfileSamples.With(exampleProfile));
+        harness.Credentials.Put(AiProfileCredentials.KeyFor(exampleProfile.Id), "old-example");
         var vm = harness.Manager();
         await vm.Ready;
         harness.Store.FailSave = true;
@@ -477,9 +477,9 @@ public class AiProfileManagerTests
     [Fact]
     public async Task The_stored_key_is_not_sent_to_a_different_server_than_the_saved_profile()
     {
-        var qwen = ProfileSamples.Qwen();
-        var harness = await ProfileHarness.CreateAsync(ProfileSamples.With(qwen));
-        harness.Credentials.Put(AiProfileCredentials.KeyFor(qwen.Id), "stored-example");
+        var exampleProfile = ProfileSamples.Example();
+        var harness = await ProfileHarness.CreateAsync(ProfileSamples.With(exampleProfile));
+        harness.Credentials.Put(AiProfileCredentials.KeyFor(exampleProfile.Id), "stored-example");
         var vm = harness.Manager();
         await vm.Ready;
 
@@ -552,13 +552,13 @@ public class AiProfileManagerTests
     [Fact]
     public async Task Deleting_the_profile_the_saved_settings_use_tells_the_page_even_if_another_is_pending()
     {
-        var qwen = ProfileSamples.Qwen();
+        var exampleProfile = ProfileSamples.Example();
         var ollama = ProfileSamples.Ollama();
-        var harness = await ProfileHarness.CreateAsync(new AiSettings { Profiles = [qwen, ollama], ActiveProfileId = qwen.Id });
+        var harness = await ProfileHarness.CreateAsync(new AiSettings { Profiles = [exampleProfile, ollama], ActiveProfileId = exampleProfile.Id });
         var page = harness.Page();
         page.Choose(page.Choices.Single(c => c.ProfileId == ollama.Id)); // 미확정 선택
         var asked = new List<string>();
-        var vm = harness.Manager(confirm: m => { asked.Add(m); return Task.FromResult(true); }, applied: page.ApplyStoreChange, select: qwen.Id);
+        var vm = harness.Manager(confirm: m => { asked.Add(m); return Task.FromResult(true); }, applied: page.ApplyStoreChange, select: exampleProfile.Id);
 
         Assert.True(await vm.DeleteProfileAsync());
 
@@ -571,17 +571,17 @@ public class AiProfileManagerTests
     [Fact]
     public async Task A_typed_key_counts_as_an_unsaved_change_and_a_late_confirmation_does_not_delete_after_closing()
     {
-        var qwen = ProfileSamples.Qwen();
+        var exampleProfile = ProfileSamples.Example();
         var ollama = ProfileSamples.Ollama();
-        var harness = await ProfileHarness.CreateAsync(ProfileSamples.With(qwen, ollama));
+        var harness = await ProfileHarness.CreateAsync(ProfileSamples.With(exampleProfile, ollama));
         var asked = 0;
-        var vm = harness.Manager(confirm: _ => { asked++; return Task.FromResult(false); }, select: qwen.Id);
+        var vm = harness.Manager(confirm: _ => { asked++; return Task.FromResult(false); }, select: exampleProfile.Id);
         vm.NotifyKeyTyped(true);
         await vm.SelectProfileAsync(ollama.Id);
         Assert.Equal(1, asked);
 
         var gate = new TaskCompletionSource<bool>();
-        var slow = harness.Manager(confirm: _ => gate.Task, select: qwen.Id);
+        var slow = harness.Manager(confirm: _ => gate.Task, select: exampleProfile.Id);
         var deleting = slow.DeleteProfileAsync();
         slow.Dispose(); // 확인을 기다리는 동안 창이 닫힌다
         gate.SetResult(true);
@@ -668,9 +668,9 @@ public class AiProfileManagerTests
     [Fact]
     public async Task Connection_test_requires_a_valid_url_and_a_model_and_uses_the_stored_key_when_the_field_is_empty()
     {
-        var qwen = ProfileSamples.Qwen();
-        var harness = await ProfileHarness.CreateAsync(ProfileSamples.With(qwen));
-        harness.Credentials.Put(AiProfileCredentials.KeyFor(qwen.Id), "stored-example");
+        var exampleProfile = ProfileSamples.Example();
+        var harness = await ProfileHarness.CreateAsync(ProfileSamples.With(exampleProfile));
+        harness.Credentials.Put(AiProfileCredentials.KeyFor(exampleProfile.Id), "stored-example");
         var vm = harness.Manager();
         await vm.Ready;
 
@@ -691,11 +691,11 @@ public class AiProfileManagerTests
     [Fact]
     public async Task Stopping_closing_or_switching_cancels_a_running_probe_and_late_results_are_ignored()
     {
-        var qwen = ProfileSamples.Qwen();
+        var exampleProfile = ProfileSamples.Example();
         var ollama = ProfileSamples.Ollama();
-        var harness = await ProfileHarness.CreateAsync(ProfileSamples.With(qwen, ollama));
+        var harness = await ProfileHarness.CreateAsync(ProfileSamples.With(exampleProfile, ollama));
         harness.Probe.Gate = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-        var vm = harness.Manager(select: qwen.Id);
+        var vm = harness.Manager(select: exampleProfile.Id);
 
         var running = vm.TestConnectionAsync(null);
         Assert.True(vm.IsBusy);

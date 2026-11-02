@@ -27,7 +27,7 @@ public sealed class OpenAiApiDriverTests : IDisposable
         Preset = AiProfilePreset.Custom,
         Format = AiApiFormat.OpenAi,
         BaseUrl = "http://llm.example:8080",
-        Model = "qwen-test",
+        Model = "model-test",
         MaxInputTokens = 1000,
         MaxOutputTokens = 777,
     };
@@ -103,7 +103,7 @@ public sealed class OpenAiApiDriverTests : IDisposable
         Assert.Null(request.Authorization);
         Assert.Contains("text/event-stream", request.Accept, StringComparison.Ordinal);
         var body = request.Json;
-        Assert.Equal("qwen-test", (string?)body["model"]);
+        Assert.Equal("model-test", (string?)body["model"]);
         Assert.True((bool)body["stream"]!);
         Assert.True((bool)body["stream_options"]!["include_usage"]!);
         Assert.Equal(777, (int)body["max_tokens"]!);

@@ -45,7 +45,7 @@ public sealed class ClaudeProfileRunTests : IDisposable
         var events = await RunAsync(NewDriver(settingsModel: "opus"), Request(model: "haiku"), Route(AiProfilePreset.Anthropic, "https://llm.example/v1/"));
 
         var launch = _launcher.Launches.Single();
-        Assert.Equal("qwen3.8-flash", ArgumentAfter(launch.Arguments, "--model"));
+        Assert.Equal("model-example", ArgumentAfter(launch.Arguments, "--model"));
         Assert.DoesNotContain("opus", launch.Arguments);
         Assert.DoesNotContain("haiku", launch.Arguments);
 
@@ -335,10 +335,10 @@ public sealed class ClaudeProfileRunTests : IDisposable
         return Path.Combine(directory!.FullName, "tests", "Oranda.Platform.Tests", "Ai", "Cli", "Fixtures", name);
     }
 
-    private static AiLlmProfile Profile(AiProfilePreset preset, string baseUrl, AiApiFormat format = AiApiFormat.Anthropic, string model = "qwen3.8-flash")
+    private static AiLlmProfile Profile(AiProfilePreset preset, string baseUrl, AiApiFormat format = AiApiFormat.Anthropic, string model = "model-example")
         => new() { Id = Guid.NewGuid(), Name = "시험 프로필", Preset = preset, Format = format, BaseUrl = baseUrl, Model = model, MaxOutputTokens = 4096 };
 
-    private static AiRoute Route(AiProfilePreset preset, string baseUrl, string? apiKey = Key, string model = "qwen3.8-flash")
+    private static AiRoute Route(AiProfilePreset preset, string baseUrl, string? apiKey = Key, string model = "model-example")
         => new(Profile(preset, baseUrl, model: model), apiKey);
 
     private static AiRequest Request(string? model = null, IReadOnlyList<AiImageAttachment>? images = null, string? resumeId = null)

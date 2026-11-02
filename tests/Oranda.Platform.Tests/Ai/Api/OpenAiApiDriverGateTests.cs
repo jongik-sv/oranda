@@ -29,7 +29,7 @@ public sealed class OpenAiApiDriverGateTests : IDisposable
         Preset = AiProfilePreset.Custom,
         Format = AiApiFormat.OpenAi,
         BaseUrl = "http://llm.example:8080",
-        Model = "qwen-test",
+        Model = "model-test",
     };
 
     private readonly FakeOpenAiServer _server = new();

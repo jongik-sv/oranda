@@ -77,7 +77,7 @@ public class AiChatTests
         var stops = 0;
         string? sent = null;
         vm.StopRequested += (_, _) => stops++;
-        vm.FollowUpRequested += (_, text) => sent = text;
+        vm.FollowUpRequested += (_, followUp) => sent = followUp.Text;
 
         vm.StartConversation("튜닝 — 부서별 주문 수");
         vm.Draft = "인덱스는 만들지 말고 힌트로만";
@@ -115,17 +115,18 @@ public class AiChatTests
     });
 
     [Fact]
-    public void Send_stays_off_until_a_tuning_conversation_starts()
+    public void Send_is_available_from_the_start_and_locks_only_while_running()
     {
         var vm = new AiChatViewModel();
         vm.Draft = "인덱스는 만들지 말고 힌트로만";
-        Assert.False(vm.CanFollowUp);
-        Assert.False(vm.CanType);
-        Assert.False(vm.SendCommand.CanExecute(null)); // 이어 갈 대화가 없으면 보낸 글이 아무 데도 가지 않는다
+        vm.FollowUpRequested += (_, _) => { };
+        Assert.False(vm.IsTuning);
+        Assert.True(vm.CanType); // 튜닝을 시작하지 않아도 일반 대화로 쓸 수 있다
+        Assert.True(vm.SendCommand.CanExecute(null));
 
         vm.StartConversation("튜닝 — 부서별 주문 수");
         vm.Draft = "인덱스는 만들지 말고 힌트로만";
-        Assert.True(vm.CanFollowUp);
+        Assert.True(vm.IsTuning);
         Assert.True(vm.CanType);
         Assert.True(vm.SendCommand.CanExecute(null));
 
@@ -138,7 +139,7 @@ public class AiChatTests
     {
         var vm = new AiChatViewModel();
         string? sent = null;
-        vm.FollowUpRequested += (_, text) => sent = text;
+        vm.FollowUpRequested += (_, followUp) => sent = followUp.Text;
         var window = new Window { Width = 440, Height = 500, Content = new AiChatView { DataContext = vm } };
         window.Show();
         vm.StartConversation("튜닝 — 부서별 주문 수");
@@ -159,7 +160,7 @@ public class AiChatTests
     });
 
     [Fact]
-    public Task View_shows_the_start_hint_and_locks_the_input_before_a_conversation() => HeadlessHost.Run(() =>
+    public Task View_shows_the_general_hint_with_the_input_enabled_before_a_conversation() => HeadlessHost.Run(() =>
     {
         var vm = new AiChatViewModel();
         var window = new Window { Width = 440, Height = 500, Content = new AiChatView { DataContext = vm } };
@@ -168,7 +169,7 @@ public class AiChatTests
         var hint = view.FindControl<TextBlock>("StartHint")!;
         var box = view.FindControl<TextBox>("DraftBox")!;
         Assert.True(hint.IsVisible);
-        Assert.False(box.IsEnabled);
+        Assert.True(box.IsEnabled);
 
         vm.StartConversation("튜닝 — 부서별 주문 수");
         Avalonia.Threading.Dispatcher.UIThread.RunJobs();

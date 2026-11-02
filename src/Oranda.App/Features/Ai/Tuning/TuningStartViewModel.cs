@@ -32,11 +32,12 @@ public sealed record TuningStartInfo(
     string InitialModelId = TuningStartInfo.DefaultModelId,
     bool MaskLiterals = false,
     IReadOnlyList<TuningEffortOption>? Efforts = null,
-    string InitialEffortId = TuningStartInfo.DefaultModelId)
+    string InitialEffortId = TuningStartInfo.DefaultModelId,
+    bool ShowEffort = true)
 {
     /// <summary>
     /// 모델(또는 effort)을 지정하지 않고 보내는 줄의 id(설정 값이 비어 있을 때의 기본). <c>InitialModelId</c>·<c>InitialEffortId</c> 는 처음 골라 둘 줄의 id(설정 값).
-    /// <c>Efforts</c> 가 null 이면 CLI 기본 줄 + low~max 다.
+    /// <c>Efforts</c> 가 null 이면 CLI 기본 줄 + low~max 다. <c>ShowEffort</c> 가 false 면 effort 줄을 숨기고 값을 넘기지 않는다.
     /// </summary>
     public const string DefaultModelId = "default";
 
@@ -116,6 +117,9 @@ public sealed partial class TuningStartViewModel : ObservableObject
 
     public IReadOnlyList<TuningEffortOption> Efforts { get; }
 
+    /// <summary>effort 줄을 보인다. API 경로(OpenAI 형식 프로필)는 effort 를 쓰지 않아 끈다.</summary>
+    public bool ShowEffort => Info.ShowEffort;
+
     public bool IsBlocked => Info.AccessOff;
 
     public string? BlockedMessage => IsBlocked ? BlockedText : null;
@@ -137,7 +141,7 @@ public sealed partial class TuningStartViewModel : ObservableObject
 
     /// <summary>확정한 선택. 시작할 수 없으면 null.</summary>
     public TuningStartChoice? Choice => CanStart
-        ? new TuningStartChoice(Benchmark && BenchmarkEnabled, IndexDdl, Model!.Id, Benchmark && BenchmarkEnabled && RunRiskyFunctions, Effort?.Id ?? TuningStartInfo.DefaultModelId)
+        ? new TuningStartChoice(Benchmark && BenchmarkEnabled, IndexDdl, Model!.Id, Benchmark && BenchmarkEnabled && RunRiskyFunctions, ShowEffort ? Effort?.Id ?? TuningStartInfo.DefaultModelId : TuningStartInfo.DefaultModelId)
         : null;
 
     partial void OnModelChanged(TuningModelOption? value) => OnPropertyChanged(nameof(CanStart));

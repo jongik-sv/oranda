@@ -181,6 +181,50 @@ public sealed class CliDriverTests : IDisposable
     }
 
     [Fact]
+    public void Init_validation_accepts_an_empty_tool_list_only_when_the_run_is_toolless()
+    {
+        var init = Assert.IsType<ClaudeSessionStarted>(Assert.Single(new ClaudeStreamParser().Parse(
+            """{"type":"system","subtype":"init","session_id":"s1","mcp_servers":[{"name":"orandactl","status":"connected"}],"tools":["StructuredOutput"]}""")));
+        Assert.Equal("bridge_unavailable", CliDriver.ValidateInit(init)?.Code);
+        Assert.Null(CliDriver.ValidateInit(init, allowNoTools: true)); // 허용 수준 「끔」: 연결 없는 일반 대화
+
+        var foreign = Assert.IsType<ClaudeSessionStarted>(Assert.Single(new ClaudeStreamParser().Parse(
+            """{"type":"system","subtype":"init","session_id":"s1","mcp_servers":[{"name":"orandactl","status":"connected"}],"tools":["Read"]}""")));
+        Assert.Equal("unexpected_tool", CliDriver.ValidateInit(foreign, allowNoTools: true)?.Code); // 낯선 도구는 여전히 막는다
+    }
+
+    [Fact]
+    public async Task Access_off_session_runs_with_an_empty_tool_list()
+    {
+        _launcher.Lines =
+        [
+            """{"type":"system","subtype":"init","session_id":"s1","mcp_servers":[{"name":"orandactl","status":"connected"}],"tools":["StructuredOutput"]}""",
+            """{"type":"result","subtype":"success","is_error":false,"session_id":"s1","result":"안녕하세요"}""",
+        ];
+        var context = new AiContext(null, null, AiAccessLevel.Off);
+        var session = new AgentSession(new AgentRunScope("run-off", new ConnectionProfile(string.Empty, string.Empty, string.Empty, AiAccess: AiAccessLevel.Off), context));
+
+        var events = await RunAsync(NewDriver(), new AiRequest("질문", context, Session: session));
+
+        Assert.DoesNotContain(events, e => e is AiError);
+        Assert.Equal("안녕하세요", Assert.IsType<AiFinal>(events[^1]).Text);
+    }
+
+    [Fact]
+    public async Task A_session_above_off_with_an_empty_tool_list_still_fails_with_bridge_unavailable()
+    {
+        _launcher.Lines =
+        [
+            """{"type":"system","subtype":"init","session_id":"s1","mcp_servers":[{"name":"orandactl","status":"connected"}],"tools":["StructuredOutput"]}""",
+            """{"type":"result","subtype":"success","is_error":false,"session_id":"s1","result":"답"}""",
+        ];
+
+        var events = await RunAsync(NewDriver(), Request()); // 허용 수준 Plan: 도구가 비었으면 연결 문제다
+
+        Assert.Equal("bridge_unavailable", Assert.IsType<AiError>(Assert.Single(events)).Code);
+    }
+
+    [Fact]
     public async Task Process_that_ends_without_a_result_reports_cli_failed_with_stderr()
     {
         _launcher.Lines = [];

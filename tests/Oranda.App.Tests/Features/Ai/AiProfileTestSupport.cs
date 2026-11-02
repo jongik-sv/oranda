@@ -216,7 +216,7 @@ internal sealed class ProfileHarness
 
 internal static class ProfileSamples
 {
-    public static AiLlmProfile Qwen(Guid? id = null) => new()
+    public static AiLlmProfile Example(Guid? id = null) => new()
     {
         Id = id ?? Guid.NewGuid(),
         Name = "예제 LLM",
