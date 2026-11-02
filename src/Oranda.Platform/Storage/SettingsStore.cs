@@ -21,6 +21,7 @@ internal sealed class SettingsStore : ISettingsStore, IAiSettingsResetSignal, ID
     private AppSettings? _current;
     private bool _readOnly;
     private int _resetPending;
+    private int _markerSignaled;
     private bool _corruptActive;
 
     public SettingsStore(IAppDataPaths paths, IEventBus events, IEnumerable<ISettingsMigration> migrations)
@@ -32,8 +33,40 @@ internal sealed class SettingsStore : ISettingsStore, IAiSettingsResetSignal, ID
 
     public void Dispose() => _gate.Dispose();
 
-    /// <summary>손상 복구(<see cref="JsonLoadState.Corrupt"/>)가 있었으면 한 번만 true. 미래 버전·변환 실패(읽기 전용)는 해당하지 않는다.</summary>
-    public bool TryTakeReset() => Interlocked.Exchange(ref _resetPending, 0) == 1;
+    /// <summary>
+    /// 손상 복구(<see cref="JsonLoadState.Corrupt"/>)가 있었으면 한 번만 true. 미래 버전·변환 실패(읽기 전용)는 해당하지 않는다.
+    /// 메모리 신호뿐 아니라 설정 파일 옆 디스크 표식도 확인해, 복구 뒤 앱이 다시 시작돼도 신호를 넘긴다. 표식은 읽으면서 지운다(지우지 못해도 표식 신호는 프로세스당 한 번).
+    /// </summary>
+    public bool TryTakeReset()
+    {
+        var pending = Interlocked.Exchange(ref _resetPending, 0) == 1;
+        var marker = ResetMarkerPath;
+        try
+        {
+            // 표식에서 나오는 신호는 프로세스당 한 번만이다: 읽기 전용 폴더처럼 표식을 지우지 못해도 모든 AI 실행이 영구히 거부되지 않게 한다.
+            // 표식은 있으면 항상 지우려 시도한다. 신호를 내는 것만 프로세스당 한 번으로 막는다.
+            if (File.Exists(marker))
+            {
+                if (Interlocked.CompareExchange(ref _markerSignaled, 1, 0) == 0)
+                {
+                    pending = true;
+                }
+
+                File.Delete(marker);
+            }
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            // 표식을 지우지 못해도 이번 신호는 넘긴다(다음 확인에서 한 번 더 나올 수 있을 뿐 거부가 사라지지는 않는다).
+        }
+
+        return pending;
+    }
+
+    /// <summary>설정 파일 옆 복구 표식(비밀 없음, 고정 문구 한 줄). 복구된 기본값을 저장하기 전에 먼저 쓴다.</summary>
+    private string ResetMarkerPath => Path.Combine(Path.GetDirectoryName(_paths.SettingsFile) ?? string.Empty, ResetMarkerName);
+
+    internal const string ResetMarkerName = "settings.reset-pending";
 
     public async Task<StoredDocument<AppSettings>> LoadAsync(CancellationToken ct)
     {
@@ -124,6 +157,27 @@ internal sealed class SettingsStore : ISettingsStore, IAiSettingsResetSignal, ID
         {
             _corruptActive = true;
             Interlocked.Exchange(ref _resetPending, 1);
+            WriteResetMarker();
+        }
+    }
+
+    /// <summary>표식을 남긴다. 쓰지 못해도 메모리 신호는 이미 섰으므로 조용히 넘어간다.</summary>
+    private void WriteResetMarker()
+    {
+        try
+        {
+            var marker = ResetMarkerPath;
+            var dir = Path.GetDirectoryName(marker);
+            if (!string.IsNullOrEmpty(dir))
+            {
+                Directory.CreateDirectory(dir);
+            }
+
+            File.WriteAllText(marker, "settings recovered from corrupt file\n");
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            // 디스크 표식은 재시작을 넘기기 위한 보강이라 실패해도 읽기 흐름을 막지 않는다.
         }
     }
 

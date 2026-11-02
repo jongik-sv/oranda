@@ -213,7 +213,7 @@ SELECT s.inst_id, s.sid, s.serial#, s.username, ...
 | `IEditorContext` | 활성 문서·선택 영역·현재 문장 읽기, 제안 텍스트 삽입(차이 미리보기 후) | 포매터, 템플릿 삽입 |
 | `IExecutionService` + `IExecutionPolicy` | 실행은 반드시 정책 관문 통과 | 모든 실행 |
 | `IToolPanelRegistry` | 도킹 패널·명령 등록 | 기본 도구 창 등록 |
-| `IOutboundConsent` | 외부 전송 전 동의·전송 내용 미리보기 | 1.0에서는 업데이트 확인·충돌 보고 전송 |
+| `IOutboundConsent` | 외부 전송 전 동의·전송 내용 미리보기 | 1.0에서는 업데이트 확인·충돌 보고 전송. LLM 프로필 전송은 이 경로가 아니다 |
 나중의 챗봇은 `IToolPanelRegistry`로 패널을 붙이고, 위 인터페이스만 써서 메타데이터를 읽고 SQL을 제안·삽입한다. Core 변경 없이 붙는지를 PRD 9.4 수락 기준의 시험 패널로 확인한다.
 
 ### 4.11 UI 구조 (APP)
@@ -392,7 +392,7 @@ PRD 7.2 성능 예산을 아래처럼 나눈다.
 - 자격 증명: 4.12. 메모리에는 필요한 순간만 두고, ODP.NET 23.7 이상의 `OracleOpaqueString` 사용 가능성을 M1에서 확인한다.
 - 전송: TCPS는 TLS 1.2 이상, `SSL_SERVER_DN_MATCH=true` 기본. 네이티브 암호화(NNE) 설정은 프로필 고급 항목.
 - 로그 마스킹: 연결 문자열의 `Password=` 값, 바인드 값(기본), 지갑 경로 외 비밀값은 로그에 쓰기 전에 지운다(Serilog 필터 + 단위 테스트).
-- 외부 전송: 업데이트 확인(업데이트 서버)만 기본 허용. 충돌 보고 전송은 동의 후(`IOutboundConsent`).
+- 외부 전송: 업데이트 확인은 기본 허용, 충돌 보고 전송은 동의 후(`IOutboundConsent`), LLM 프로필 전송은 사용자가 등록한 주소로만(허용 파일 3개를 `SafetyCrossNoDbTests` 가 고정).
 - 서명: Windows Authenticode(코드 서명 인증서), macOS Developer ID + 공증. 업데이트 패키지는 Velopack 서명 검증.
 
 ---

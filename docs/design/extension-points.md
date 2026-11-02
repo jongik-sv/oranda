@@ -21,7 +21,7 @@
 1. 도구 창 ViewModel 을 만든다(`ToolPanelViewModelBase` 상속). View 는 이름 규칙(`…ViewModel` → `…View`).
 2. App 안 기능이면 `[OrandaToolPanel]`·`[OrandaCommand]` 특성만 단다. 바깥 어셈블리면 `IToolPanelRegistry.Register`·`ICommandRegistry.Register` 로 붙인다.
 3. 생성자는 인자 없음과 `IServiceProvider` 둘만 둔다. 서비스는 **처음 쓸 때** `GetService` 로 꺼낸다(시작 때 Oracle·ANTLR 어셈블리를 깨우지 않기 위해, D-006).
-4. 편집은 `ProposeEditAsync`, 실행은 `IExecutionService`, 외부 전송은 `IOutboundConsent` 를 거친다. 다른 길은 없다.
+4. 편집은 `ProposeEditAsync`, 실행은 `IExecutionService`, 외부 전송은 `IOutboundConsent` 를 거친다. 다른 길은 없다(앱 자체의 LLM 프로필 전송은 별도).
 
 ## 3. 시험 패널이 하는 일
 

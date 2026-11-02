@@ -161,8 +161,16 @@ internal sealed class RoutingAiDriver : IAiDriver
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
-            // 예외 메시지에 비밀 저장소 내용이 섞일 수 있어 종류만 알린다.
-            return Selection.Fail($"프로필 「{profile.Name}」 의 API 키를 읽지 못했습니다({ex.GetType().Name}).", "profile_key_unreadable");
+            if (AiProfilePresets.Get(profile.Preset).KeyRequirement == AiKeyRequirement.NotNeeded)
+            {
+                // 키가 필요 없는 프리셋(Ollama·LM Studio)은 키체인이 읽히지 않아도 키 없이 진행한다.
+                key = null;
+            }
+            else
+            {
+                // 예외 메시지에 비밀 저장소 내용이 섞일 수 있어 종류만 알린다.
+                return Selection.Fail($"프로필 「{profile.Name}」 의 API 키를 읽지 못했습니다({ex.GetType().Name}).", "profile_key_unreadable");
+            }
         }
 
         ct.ThrowIfCancellationRequested();

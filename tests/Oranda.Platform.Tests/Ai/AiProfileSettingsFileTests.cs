@@ -150,6 +150,35 @@ public sealed class AiProfileSettingsFileTests : IDisposable
     }
 
     [Fact]
+    public void A_reset_marker_that_cannot_be_deleted_is_signalled_once_per_process_not_forever()
+    {
+        var marker = Path.Combine(_dir, SettingsStore.ResetMarkerName);
+        File.WriteAllText(marker, "settings recovered from corrupt file\n");
+        using var held = new FileStream(marker, FileMode.Open, FileAccess.Read, FileShare.Read); // 지우려 하면 공유 위반으로 실패한다
+        var store = NewStore();
+
+        Assert.True(store.TryTakeReset());
+        Assert.False(store.TryTakeReset());
+        Assert.False(store.TryTakeReset());
+    }
+
+    [Fact]
+    public void A_reset_marker_is_always_deleted_even_when_the_signal_was_already_given()
+    {
+        var marker = Path.Combine(_dir, SettingsStore.ResetMarkerName);
+        File.WriteAllText(marker, "settings recovered from corrupt file");
+        var store = NewStore();
+
+        Assert.True(store.TryTakeReset());
+        Assert.False(File.Exists(marker));
+
+        // 같은 프로세스에서 표식이 다시 생겨도 신호는 다시 내지 않고 표식은 지운다(다음 실행이 막히지 않게).
+        File.WriteAllText(marker, "settings recovered from corrupt file");
+        Assert.False(store.TryTakeReset());
+        Assert.False(File.Exists(marker));
+    }
+
+    [Fact]
     public async Task A_future_version_file_is_read_only_and_leaves_no_reset_signal()
     {
         await WriteSettingsAsync("""{ "schemaVersion": 99, "ui": { "theme": "Dark" } }""");

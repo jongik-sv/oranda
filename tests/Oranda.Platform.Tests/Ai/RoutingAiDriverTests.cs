@@ -191,6 +191,44 @@ public sealed class RoutingAiDriverTests
     }
 
     [Fact]
+    public async Task A_preset_without_a_key_requirement_runs_with_no_key_even_when_the_key_store_throws()
+    {
+        var api = new ScriptedApiDriver(new AiFinal("x", null, null));
+        var profile = OpenAiProfile with { Preset = AiProfilePreset.Ollama };
+        Use(AiDriverKind.ClaudeCode, profile.Id, profile);
+
+        var events = await RunAsync(Create(api, new ThrowingCredentialStore()));
+
+        Assert.IsType<AiFinal>(Assert.Single(events));
+        Assert.Null(Assert.Single(api.Routes).ApiKey);
+    }
+
+    [Fact]
+    public async Task A_settings_reset_signal_survives_a_restart_through_the_marker_file_and_is_taken_once()
+    {
+        var dir = Path.Combine(Path.GetTempPath(), "oranda-reset-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(dir);
+        try
+        {
+            var paths = new AppDataPaths(dir);
+            await File.WriteAllTextAsync(paths.SettingsFile, "{ not json");
+
+            using (var first = new SettingsStore(paths, new Oranda.Testing.FakeEventBus(), []))
+            {
+                await first.LoadAsync(CancellationToken.None);
+            }
+
+            using var restarted = new SettingsStore(paths, new Oranda.Testing.FakeEventBus(), []);
+            Assert.True(restarted.TryTakeReset());
+            Assert.False(restarted.TryTakeReset());
+        }
+        finally
+        {
+            Directory.Delete(dir, recursive: true);
+        }
+    }
+
+    [Fact]
     public async Task The_first_run_after_a_settings_reset_is_refused_once()
     {
         var api = new ScriptedApiDriver(new AiFinal("답", null, null));

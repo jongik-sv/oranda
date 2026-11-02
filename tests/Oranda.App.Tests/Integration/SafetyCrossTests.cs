@@ -269,22 +269,31 @@ public sealed class SafetyCrossNoDbTests : IDisposable
         Assert.Contains("Zx1secretvalue", Assert.Single(consent.Requests).PayloadPreview, StringComparison.Ordinal);
     }
 
+    // 오라클 드라이버 밖의 네트워크는 LLM 프로필(사용자가 등록한 서버)만 허용한다. HTTP 를 쓸 수 있는 소스는 이 세 파일이 전부다.
+    private static readonly string[] LlmProfileHttpFiles =
+    [
+        "src/Oranda.Platform/Ai/Api/OpenAiApiDriver.cs",
+        "src/Oranda.Platform/Ai/Api/OpenAiApiDriver.Transport.cs",
+        "src/Oranda.Platform/Ai/Profiles/AiProfileProbe.cs",
+    ];
+
     [Fact]
     public void No_product_assembly_references_a_network_client_library()
     {
         // 네트워크 라이브러리를 아예 참조하지 않으면 코드 경로에 따라 보낼 수 없다(Oracle 접속은 ODP.NET 이 맡는다).
+        // 예외는 Oranda.Platform 의 System.Net.Http 하나다. 쓰는 파일은 아래 소스 시험이 LlmProfileHttpFiles 로 묶는다.
+        var banned = new[] { "System.Net.Http", "System.Net.WebClient", "System.Net.Sockets", "System.Net.Requests", "System.Net.WebSockets.Client" };
         var assemblies = new[]
         {
-            typeof(Oranda.App.App).Assembly,
-            typeof(Oranda.Core.Execution.ExecutionPolicy).Assembly,
-            typeof(CrashReportWriter).Assembly,
+            (Assembly: typeof(Oranda.App.App).Assembly, Allowed: Array.Empty<string>()),
+            (Assembly: typeof(Oranda.Core.Execution.ExecutionPolicy).Assembly, Allowed: Array.Empty<string>()),
+            (Assembly: typeof(CrashReportWriter).Assembly, Allowed: new[] { "System.Net.Http" }),
         };
-        var banned = new[] { "System.Net.Http", "System.Net.WebClient", "System.Net.Sockets", "System.Net.Requests", "System.Net.WebSockets.Client" };
 
-        foreach (var asm in assemblies)
+        foreach (var (asm, allowed) in assemblies)
         {
             var refs = asm.GetReferencedAssemblies().Select(a => a.Name).ToHashSet(StringComparer.Ordinal);
-            foreach (var name in banned)
+            foreach (var name in banned.Except(allowed, StringComparer.Ordinal))
             {
                 Assert.DoesNotContain(name, refs);
             }
@@ -295,8 +304,15 @@ public sealed class SafetyCrossNoDbTests : IDisposable
     public void Product_sources_do_not_use_http_or_socket_apis_outside_the_oracle_driver()
     {
         var root = RepoRoot();
-        var pattern = new[] { "HttpClient", "WebClient", "WebRequest", "TcpClient", "UdpClient", "new Socket(", "System.Net.Http" };
+
+        // ImplicitUsings 가 System.Net.Http 를 전역으로 열어 주므로 using 없이 쓸 수 있는 형식 이름도 함께 본다.
+        var pattern = new[]
+        {
+            "HttpClient", "WebClient", "WebRequest", "TcpClient", "UdpClient", "new Socket(", "System.Net.Http",
+            "SocketsHttpHandler", "HttpMessageHandler", "HttpMessageInvoker", "HttpRequestMessage", "ClientWebSocket", "TcpListener",
+        };
         var hits = new List<string>();
+        var allowedInUse = new List<string>();
         foreach (var file in Directory.EnumerateFiles(Path.Combine(root, "src"), "*.cs", SearchOption.AllDirectories))
         {
             if (file.Contains(Path.DirectorySeparatorChar + "obj" + Path.DirectorySeparatorChar, StringComparison.Ordinal))
@@ -305,10 +321,25 @@ public sealed class SafetyCrossNoDbTests : IDisposable
             }
 
             var text = File.ReadAllText(file);
-            hits.AddRange(pattern.Where(p => text.Contains(p, StringComparison.Ordinal)).Select(p => Path.GetRelativePath(root, file) + ": " + p));
+            var found = pattern.Where(p => text.Contains(p, StringComparison.Ordinal)).ToList();
+            var relative = Path.GetRelativePath(root, file).Replace('\\', '/');
+            if (!LlmProfileHttpFiles.Contains(relative, StringComparer.Ordinal))
+            {
+                hits.AddRange(found.Select(p => relative + ": " + p));
+                continue;
+            }
+
+            if (found.Count > 0)
+            {
+                allowedInUse.Add(relative);
+            }
+
+            // 받는 곳은 프로필 주소뿐이다. 허용 파일에 서버 주소를 박아 넣지 못한다.
+            Assert.DoesNotMatch(@"https?://[A-Za-z0-9\[]", text);
         }
 
         Assert.Empty(hits);
+        Assert.Equal(LlmProfileHttpFiles.Order(StringComparer.Ordinal), allowedInUse.Order(StringComparer.Ordinal)); // 허용 목록에 죽은 항목을 남기지 않는다
     }
 
     // ---- 설정 파일(connections.json)에 비밀이 들어가는 길 ------------------------------------------------
