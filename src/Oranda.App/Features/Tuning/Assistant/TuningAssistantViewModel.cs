@@ -33,6 +33,9 @@ public sealed record TuningAssistantInput(SqlStatement? Statement, ISession? Ses
     /// <summary>편집기 탭 제목(예: query3.sql).</summary>
     public string? SourceTitle { get; init; }
 
+    /// <summary>도우미를 연 편집기 탭의 식별자. 후보를 새 탭에 넣을 때 이 탭의 바인드 값을 복사한다. 모르면 null.</summary>
+    public Guid? SourceTabId { get; init; }
+
     /// <summary>문장 첫 줄(1 부터). 모르면 null.</summary>
     public int? FirstLine { get; init; }
 

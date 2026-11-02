@@ -65,7 +65,5 @@ public sealed partial class PlanViewModel
         RefreshCommandButtons();
     }
 
-    private void OnFeaturesChanged(object? sender, EventArgs e) => PostToUi(RefreshFeatures);
-
-    partial void OnHasPinnedChanged(bool value) => OnPropertyChanged(nameof(ShowPinnedChip));
+    private void OnFeaturesChanged(object? sender, EventArgs e) => PostToUi(RefreshFeatures); // 시험이 게이트를 직접 넣은 경우
 }

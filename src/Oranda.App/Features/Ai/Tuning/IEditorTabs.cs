@@ -39,6 +39,14 @@ public interface IEditorTabs
 
     /// <summary>탭의 글을 바꾼다(활성 탭은 그대로 둔다). 탭이 닫혔으면 false.</summary>
     bool ReplaceText(Guid tabId, string text);
+
+    /// <summary>
+    /// <paramref name="fromTab"/> 의 바인드 값을 <paramref name="toTab"/> 의 글이 참조하는 이름만큼 복사한다(「(튜닝)」 탭이 원래 탭의 값으로 바로 실행되게).
+    /// 어느 쪽이든 탭이 닫혔으면 아무것도 하지 않는다. 구현하지 않으면 복사하지 않는다.
+    /// </summary>
+    void CopyBinds(Guid fromTab, Guid toTab)
+    {
+    }
 }
 
 /// <summary><see cref="SqlEditorHost"/> 로 <see cref="IEditorTabs"/> 를 구현한다. 호스트는 부를 때마다 <see cref="SqlEditorHost.Current"/> 를 읽는다.</summary>
@@ -68,6 +76,8 @@ public sealed class HostEditorTabs : IEditorTabs
 
     public Guid OpenText(string title, string text, Guid? connectionFrom = null) =>
         Host.OpenTextTab(text, title, connectionFrom is { } from ? Find(from)?.ConnectionProfileId : null).TabId;
+
+    public void CopyBinds(Guid fromTab, Guid toTab) => Host.CopyBinds(fromTab, toTab);
 
     public bool ReplaceText(Guid tabId, string text)
     {

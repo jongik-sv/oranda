@@ -69,7 +69,7 @@ public class PlanColumnTests : IDisposable
     [Fact]
     public Task Changing_a_width_moves_header_and_every_row_together_and_the_drag_and_double_click_work() => HeadlessHost.Run(() =>
     {
-        var vm = new PlanViewModel { Columns = new PlanColumnWidths(_dir) };
+        var vm = new PlanViewModel(new PlanShared { Columns = new PlanColumnWidths(_dir) }) { PostToUi = a => a() };
         vm.Apply(new CorePlan(PlanMetricsTests.HashJoin(), string.Empty), "예상");
         var view = new PlanView { DataContext = vm };
         var window = new Window { Content = view, Width = 1600, Height = 600 };
@@ -137,7 +137,7 @@ public class PlanColumnTests : IDisposable
         first.Set("c-op", 380);
         first.Save();
 
-        var vm = new PlanViewModel { Columns = new PlanColumnWidths(_dir) };
+        var vm = new PlanViewModel(new PlanShared { Columns = new PlanColumnWidths(_dir) }) { PostToUi = a => a() };
         vm.Apply(new CorePlan(PlanMetricsTests.HashJoin(), string.Empty), "예상");
         var view = new PlanView { DataContext = vm };
         var window = new Window { Content = view, Width = 1600, Height = 600 };

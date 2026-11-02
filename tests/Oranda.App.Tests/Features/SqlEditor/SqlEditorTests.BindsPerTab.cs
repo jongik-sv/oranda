@@ -93,4 +93,93 @@ public sealed partial class SqlEditorTests
         Assert.Equal([("V", "7", BindDataType.Number, BindDirection.In)], RowsOf(back.Binds));
         return Task.CompletedTask;
     });
+
+    [Fact]
+    public Task Text_tab_opened_for_a_source_tab_copies_the_binds_it_references() => Ui.Run(() =>
+    {
+        var host = new SqlEditorHost();
+        var source = host.NewDocument("select :id, :other from dual");
+        SetBind(source.Binds, "ID", "5", BindDataType.Number);
+        SetBind(source.Binds, "OTHER", "x");
+
+        // 새 탭 문장이 참조하는 이름 중 원본에 줄이 있는 것(ID)만 가져온다: 원본에만 있는 OTHER 도, 원본에 없는 EXTRA 의 빈 줄도 만들지 않는다
+        // (빈 줄이 미리 생기면 「값 없이 실행 금지」 확인을 건너뛰게 된다).
+        var opened = host.OpenTextTabWithBinds("select :id, :extra from dual", source.TabId);
+
+        Assert.NotSame(source.Binds, opened.Binds);
+        Assert.Equal([("ID", "5", BindDataType.Number, BindDirection.In)], RowsOf(opened.Binds));
+        Assert.Equal(2, RowsOf(source.Binds).Length); // 원본은 그대로
+        return Task.CompletedTask;
+    });
+
+    [Fact]
+    public Task Text_tab_opened_after_the_source_tab_closed_gets_no_binds() => Ui.Run(() =>
+    {
+        var host = new SqlEditorHost(dialogs: new FakeDialogs { Confirm = true });
+        host.NewDocument("select 1 from dual");
+        var source = host.NewDocument("select :id from dual");
+        SetBind(source.Binds, "ID", "5", BindDataType.Number);
+        var sourceId = source.TabId;
+        host.Close(source);
+
+        var opened = host.OpenTextTabWithBinds("select :id from dual", sourceId);
+
+        Assert.Empty(opened.Binds.Rows);
+        return Task.CompletedTask;
+    });
+
+    [Fact]
+    public Task Copying_binds_to_a_tab_after_the_source_closed_does_nothing() => Ui.Run(() =>
+    {
+        var host = new SqlEditorHost(dialogs: new FakeDialogs { Confirm = true });
+        host.NewDocument("select 1 from dual");
+        var source = host.NewDocument("select :id from dual");
+        source.Binds.Add("ID").Text = "5";
+        var target = host.NewDocument("select :id from dual");
+        host.CopyBinds(source.TabId, target.TabId);
+        Assert.Equal("5", Assert.Single(target.Binds.Rows).Text);
+
+        var other = host.NewDocument("select :id from dual");
+        var closed = source.TabId;
+        host.Close(source);
+        host.CopyBinds(closed, other.TabId);
+        Assert.Empty(other.Binds.Rows);
+        return Task.CompletedTask;
+    });
+
+    [Fact]
+    public Task Copying_binds_again_keeps_the_values_the_user_already_set_in_the_target() => Ui.Run(() =>
+    {
+        var host = new SqlEditorHost();
+        var source = host.NewDocument("select :id, :name from dual");
+        SetBind(source.Binds, "ID", "5", BindDataType.Number);
+        SetBind(source.Binds, "NAME", "scott");
+        var target = host.NewDocument("select :id, :name from dual");
+        SetBind(target.Binds, "ID", "99", BindDataType.Number); // 사용자가 (튜닝) 탭에서 직접 고친 값
+
+        host.CopyBinds(source.TabId, target.TabId);
+
+        // 있던 줄은 그대로(값·형식 보존), 없던 줄만 원본에서 가져온다.
+        Assert.Equal(
+            [("ID", "99", BindDataType.Number, BindDirection.In), ("NAME", "scott", BindDataType.Varchar2, BindDirection.In)],
+            RowsOf(target.Binds));
+        return Task.CompletedTask;
+    });
+
+    [Fact]
+    public Task Copying_binds_skips_empty_and_null_source_values_and_fills_empty_target_rows() => Ui.Run(() =>
+    {
+        var host = new SqlEditorHost();
+        var source = host.NewDocument("select :a, :b, :c from dual");
+        SetBind(source.Binds, "A", "1", BindDataType.Number);
+        SetBind(source.Binds, "B", ""); // 가드가 만든 빈 줄·명시적 NULL
+        var target = host.NewDocument("select :a, :b, :c from dual");
+        SetBind(target.Binds, "A", ""); // 받는 탭의 빈 줄은 채운다
+
+        host.CopyBinds(source.TabId, target.TabId);
+
+        // B(원본이 빈 값)와 C(원본에 줄 없음)는 만들지 않는다: 새 탭에서 「값 없이 실행 금지」 확인이 다시 묻는다.
+        Assert.Equal([("A", "1", BindDataType.Number, BindDirection.In)], RowsOf(target.Binds));
+        return Task.CompletedTask;
+    });
 }

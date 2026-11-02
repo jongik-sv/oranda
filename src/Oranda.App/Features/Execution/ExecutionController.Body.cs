@@ -281,6 +281,13 @@ public sealed partial class ExecutionController
     /// <summary>자동 커밋이 켜져 있으면 성공한 변경 뒤에 커밋한다.</summary>
     private async Task AfterStatementAsync(SqlEditorViewModel tab, ISession session, SqlStatement stmt, ExecutionResult r, CancellationToken ct)
     {
+        // 서버에 보내 성공한 문장만, 그 순간의 세션 순번과 함께 시작한 탭에 남긴다(실행 계획이 「세션의 직전 문장」 이 이 탭 것인지 알도록).
+        // 실패한 문장은 세션 순번만 오르고 탭에는 남기지 않는다: 구문 분석 실패는 세션의 직전 문장(PREV_SQL_ID)을 바꾸지 않을 수 있어 다른 탭의 계획이 들어온다.
+        if (r.Status == ExecutionStatus.Succeeded && State.RunLog.SequenceOf(r) is { } sequence)
+        {
+            tab.RecordRun(stmt, session.Id, sequence);
+        }
+
         if (State.AutoCommit && r.Status == ExecutionStatus.Succeeded && r.TransactionPending && !session.Profile.ReadOnly)
         {
             await Task.Run(() => session.CommitAsync(ct), CancellationToken.None).ConfigureAwait(true);

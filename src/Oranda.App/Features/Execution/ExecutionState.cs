@@ -100,8 +100,12 @@ public sealed class ExecutionState : ObservableObject
         public int Runs { get; set; }
     }
 
+    /// <summary>세션별 실행 순번(실제 계획이 「세션의 직전 문장」 이 누구 것인지 아는 데 쓴다). 첫 실행 전에 이미 듣고 있다.</summary>
+    public SessionRunLog RunLog { get; }
+
     public ExecutionState(IEventBus? bus = null)
     {
+        RunLog = new SessionRunLog(bus);
         if (bus is null)
         {
             return;

@@ -1,0 +1,8 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:Oranda.App.Features.ExecutionPlan"
+             x:Class="Oranda.App.Features.ExecutionPlan.PlanPanelView"
+             x:DataType="vm:PlanPanelViewModel">
+  <!-- 계획 View 는 SQL 탭마다 만들어 두고 바꿔 끼운다(고른 줄·스크롤·펼침 상태를 지킨다). -->
+  <ContentControl x:Name="PlanHost" />
+</UserControl>

@@ -266,11 +266,12 @@ public sealed class PlanRowItem : ObservableObject
 }
 
 /// <summary>
-/// <c>oranda.panel.plan</c> — 예상 계획(EXPLAIN PLAN)·실제 계획(DISPLAY_CURSOR) 트리, DBMS_XPLAN 텍스트, 형식 옵션(TSK-07-01, PLAN-01~05).
+/// SQL 탭 하나의 실행 계획 — 예상 계획(EXPLAIN PLAN)·실제 계획(DISPLAY_CURSOR) 트리, DBMS_XPLAN 텍스트, 비교, 그래프, 보고서(TSK-07-01, PLAN-01~05).
+/// 도구 창(<see cref="PlanPanelViewModel"/>, <c>oranda.panel.plan</c>)은 하나이고 활성 탭이 바뀌면 그 탭의 이 모델로 바꿔 보인다.
+/// 형식 옵션·열 폭·비교 기준 고정은 앱 전체가 함께 쓰므로 <see cref="PlanShared"/> 에 있다.
 /// <para>서비스는 처음 쓸 때 꺼낸다(D-006). 팩이 필요한 형식은 쓰지 않는다.</para>
 /// </summary>
-[OrandaToolPanel("oranda.panel.plan", ToolPanelKind.Tool, DockLocation.Bottom, Order = 30)]
-public sealed partial class PlanViewModel : ToolPanelViewModelBase
+public sealed partial class PlanViewModel : ToolPanelViewModelBase, IDisposable
 {
     /// <summary>기본 형식 선택지(DBMS_XPLAN 형식 문자열의 바탕).</summary>
     public static readonly IReadOnlyList<string> BaseFormats = ["BASIC", "TYPICAL", "SERIAL", "ALL", "ALLSTATS"];
@@ -278,25 +279,38 @@ public sealed partial class PlanViewModel : ToolPanelViewModelBase
     private readonly IServiceProvider? _services;
     private IExecutionPlanService? _plans;
 
-    [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(FormatText))]
-    private string _baseFormat = "ALLSTATS";
+    /// <summary>앱 전체가 함께 쓰는 값(형식 옵션·열 폭·비교 기준 고정).</summary>
+    public PlanShared Shared { get; }
 
-    [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(FormatText))]
-    private bool _lastOnly = true;
+    public string BaseFormat
+    {
+        get => Shared.BaseFormat;
+        set => Shared.BaseFormat = value;
+    }
 
-    [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(FormatText))]
-    private bool _peekedBinds;
+    public bool LastOnly
+    {
+        get => Shared.LastOnly;
+        set => Shared.LastOnly = value;
+    }
 
-    [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(FormatText))]
-    private bool _alias;
+    public bool PeekedBinds
+    {
+        get => Shared.PeekedBinds;
+        set => Shared.PeekedBinds = value;
+    }
 
-    [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(FormatText))]
-    private bool _outline;
+    public bool Alias
+    {
+        get => Shared.Alias;
+        set => Shared.Alias = value;
+    }
+
+    public bool Outline
+    {
+        get => Shared.Outline;
+        set => Shared.Outline = value;
+    }
 
     /// <summary>트리에서 고른 단계(상세 칸이 조건절을 보인다). 새 계획을 받으면 가장 비싼 단계를 고른다.</summary>
     [ObservableProperty]
@@ -310,7 +324,7 @@ public sealed partial class PlanViewModel : ToolPanelViewModelBase
     private string _planText = string.Empty;
 
     [ObservableProperty]
-    private string _statusText = "실행 계획: SQL 편집기에서 Ctrl+E(예상), Ctrl+Shift+E(실제). " + ExplainNotice;
+    private string _statusText = "실행 계획: 위의 「예상 계획」·「실제 계획」 단추나 SQL 편집기의 Ctrl+E(예상), Ctrl+Shift+E(실제)로 만듭니다. " + ExplainNotice;
 
     [ObservableProperty]
     private string? _sqlIdText;
@@ -318,12 +332,13 @@ public sealed partial class PlanViewModel : ToolPanelViewModelBase
     [ObservableProperty]
     private string _title = string.Empty;
 
-    /// <summary>고정한 비교 기준 계획 설명(없으면 빈 문자열).</summary>
-    [ObservableProperty]
-    private string _pinnedText = string.Empty;
+    /// <summary>고정한 비교 기준 계획 설명(어느 탭의 계획인지 포함, 없으면 빈 문자열).</summary>
+    public string PinnedText => Shared.PinnedText;
 
-    [ObservableProperty]
-    private bool _hasPinned;
+    public bool HasPinned => Shared.HasPinned;
+
+    /// <summary>이 모델이 속한 SQL 탭 이름(고정 설명에 어느 탭의 계획인지 보이는 데 쓴다). 탭이 없으면 빈 문자열.</summary>
+    public string TabLabel { get; set; } = string.Empty;
 
     /// <summary>비교 첫 줄: plan_hash_value 같음/다름.</summary>
     [ObservableProperty]
@@ -342,47 +357,103 @@ public sealed partial class PlanViewModel : ToolPanelViewModelBase
 
     /// <summary>시험·디자이너용: 서비스 없이 만든다.</summary>
     public PlanViewModel()
+        : this(new PlanShared())
     {
         Current = this;
-    }
-
-    /// <summary>트리 표 칸 폭. 서비스로 만들면 앱 데이터 폴더의 <c>plan-columns.json</c> 에 남고, 아니면 메모리만 쓴다.</summary>
-    public PlanColumnWidths Columns { get; init; } = new();
-
-    /// <summary>셸(DI)이 쓰는 생성자.</summary>
-    public PlanViewModel(IServiceProvider services)
-    {
-        ArgumentNullException.ThrowIfNull(services);
-        _services = services;
-        Current = this;
-        if (services.GetService(typeof(Oranda.Core.Storage.IAppDataPaths)) is Oranda.Core.Storage.IAppDataPaths paths)
-        {
-            Columns = new PlanColumnWidths(paths.DataDirectory);
-        }
-
-        if (services.GetService(typeof(ICommandRegistry)) is ICommandRegistry registry)
-        {
-            // 「통계 보기」「자식 커서」 명령은 다른 기능이 등록한다 — 등록되면 단추가 나타난다.
-            registry.CommandsChanged += (_, _) => PostToUi(RefreshCommandButtons);
-        }
-
-        // planAdvanced 끔이면 고급 보기·단추를 숨긴다(TSK-07-06). 게이트 Changed 로 바로 다시 본다.
-        _features = services.GetService(typeof(Oranda.Core.Features.IFeatureGate)) as Oranda.Core.Features.IFeatureGate;
-        if (_features is not null)
-        {
-            _features.Changed += OnFeaturesChanged;
-        }
     }
 
     /// <summary>시험용: 서비스를 직접 준다.</summary>
     public PlanViewModel(IExecutionPlanService plans)
+        : this(new PlanShared())
     {
         _plans = plans;
         Current = this;
     }
 
-    /// <summary>가장 최근에 만든 계획 창(명령 처리기가 결과를 넣는 곳).</summary>
+    /// <summary>
+    /// 도구 창(<see cref="PlanPanelViewModel"/>)이 SQL 탭마다 만드는 생성자. 명령 목록·문맥 키·기능 게이트가 바뀐 소식은
+    /// 창이 한 번만 구독해서 보이는 모델에 알려 주므로(<see cref="NotifyEnvironmentChanged"/>), 모델마다 구독을 늘리지 않는다.
+    /// </summary>
+    internal PlanViewModel(IServiceProvider services, PlanShared shared)
+        : this(shared)
+    {
+        ArgumentNullException.ThrowIfNull(services);
+        _services = services;
+
+        // 실행 단추는 단축키와 같은 활성 조건을 따른다: 명령 활성 조건 + 열린 일반 SQL 탭.
+        var registry = services.GetService(typeof(ICommandRegistry)) as ICommandRegistry;
+        var keys = services.GetService(typeof(ContextKeyService)) as ContextKeyService ?? ContextKeyService.Shared;
+        if (registry is not null && keys is not null)
+        {
+            CanRunCommand = id => registry.CanExecute(id, keys) && keys.Evaluate("sqlDocActive && !mybatisDocActive");
+        }
+
+        // planAdvanced 끔이면 고급 보기·단추를 숨긴다(TSK-07-06). 게이트가 바뀌면 창이 알려 준다.
+        _features = services.GetService(typeof(Oranda.Core.Features.IFeatureGate)) as Oranda.Core.Features.IFeatureGate;
+    }
+
+    /// <summary>도구 창 시험용: 공유 값과 계획 서비스를 직접 준다.</summary>
+    internal PlanViewModel(PlanShared shared, IExecutionPlanService plans)
+        : this(shared)
+    {
+        _plans = plans;
+    }
+
+    internal PlanViewModel(PlanShared shared)
+    {
+        Shared = shared;
+        Shared.PropertyChanged += OnSharedPropertyChanged;
+        Shared.PinChanged += OnPinChanged;
+    }
+
+    /// <summary>트리 표 칸 폭(앱 전체 공유).</summary>
+    public PlanColumnWidths Columns => Shared.Columns;
+
+    /// <summary>
+    /// 명령 처리기가 결과를 넣는 계획 모델: 도구 창에서는 활성 SQL 탭의 것, 도구 창이 없는 시험에서는 가장 최근에 만든 것.
+    /// </summary>
     public static PlanViewModel? Current { get; private set; }
+
+    /// <summary>도구 창이 활성 탭의 모델을 가리킬 때 부른다.</summary>
+    internal static void SetCurrent(PlanViewModel? vm) => Current = vm;
+
+    /// <summary>탭이 닫혔다: 공유 값의 구독을 끊고, 진행 중인 다시 실행을 취소한다. 해제된 뒤에는 늦게 도착한 결과도 받지 않고 다시 실행도 시작하지 않는다.</summary>
+    public void Dispose()
+    {
+        _disposed = true;
+        _rerunCts?.Cancel();
+        Rerunner = null;
+        Shared.PropertyChanged -= OnSharedPropertyChanged;
+        Shared.PinChanged -= OnPinChanged;
+        Features = null;
+        if (ReferenceEquals(Current, this))
+        {
+            Current = null;
+        }
+    }
+
+    private void OnSharedPropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName is nameof(PlanShared.BaseFormat) or nameof(PlanShared.LastOnly) or nameof(PlanShared.PeekedBinds)
+            or nameof(PlanShared.Alias) or nameof(PlanShared.Outline))
+        {
+            OnPropertyChanged(e.PropertyName);
+            OnPropertyChanged(nameof(FormatText));
+        }
+    }
+
+    /// <summary>비교 기준 고정이 바뀌었다(어느 탭에서든): 이 탭의 비교도 다시 한다.</summary>
+    private void OnPinChanged(object? sender, EventArgs e)
+    {
+        OnPropertyChanged(nameof(PinnedPlan));
+        OnPropertyChanged(nameof(HasPinned));
+        OnPropertyChanged(nameof(PinnedText));
+        OnPropertyChanged(nameof(ShowPinnedChip));
+        RefreshComparison();
+    }
+
+    /// <summary>명령 목록·문맥 키·기능 게이트가 바뀌었다(창이 보이는 모델에만 알린다: 다른 탭은 보이게 될 때 다시 본다).</summary>
+    internal void NotifyEnvironmentChanged() => PostToUi(RefreshFeatures);
 
     /// <summary>비교 탭 위치(<see cref="SelectedTabIndex"/>).</summary>
     public const int CompareTabIndex = 2;
@@ -398,8 +469,8 @@ public sealed partial class PlanViewModel : ToolPanelViewModelBase
     /// <summary>지금 보이는 계획의 종류(예상·실제(형식)).</summary>
     public string CurrentKind { get; private set; } = string.Empty;
 
-    /// <summary>비교 기준으로 고정한 계획(없으면 null).</summary>
-    public CorePlan? PinnedPlan { get; private set; }
+    /// <summary>비교 기준으로 고정한 계획(없으면 null, 앱 전체 공유).</summary>
+    public CorePlan? PinnedPlan => Shared.PinnedPlan;
 
     /// <summary>마지막 비교 결과(고정이 없거나 비교 전이면 null).</summary>
     public PlanComparison? Comparison { get; private set; }
@@ -488,6 +559,11 @@ public sealed partial class PlanViewModel : ToolPanelViewModelBase
     public void Apply(CorePlan plan, string kind)
     {
         ArgumentNullException.ThrowIfNull(plan);
+        if (_disposed)
+        {
+            return; // 닫힌 탭: 늦게 도착한 결과로 자동 재실행 같은 일을 새로 시작하지 않는다
+        }
+
         var metrics = PlanMetrics.Compute(plan.Steps);
         var lines = PlanTreeLines.Compute([.. plan.Steps.Select(s => s.Depth)]);
         var rows = new List<PlanRowItem>(plan.Steps.Count);
@@ -545,14 +621,11 @@ public sealed partial class PlanViewModel : ToolPanelViewModelBase
             return false;
         }
 
-        PinnedPlan = plan;
-        HasPinned = true;
         var hash = PlanComparer.PlanHashOf(plan);
-        PinnedText = $"고정: {CurrentKind} {plan.Steps.Count}단계"
+        Shared.Pin(plan, "고정: " + (TabLabel.Length > 0 ? $"[{TabLabel}] " : string.Empty) + $"{CurrentKind} {plan.Steps.Count}단계"
             + (hash is { } h ? $", plan hash {h.ToString(CultureInfo.InvariantCulture)}" : string.Empty)
             + (plan.Cursor is { } c ? $", sql_id {c.SqlId}" : string.Empty)
-            + $" ({DateTime.Now.ToString("HH:mm:ss", CultureInfo.InvariantCulture)})";
-        RefreshComparison();
+            + $" ({DateTime.Now.ToString("HH:mm:ss", CultureInfo.InvariantCulture)})"); // PinChanged 가 이 탭의 비교도 다시 한다
         StatusText = "지금 계획을 비교 기준으로 고정했습니다. 새 계획을 만든 뒤 「비교」를 누르세요.";
         return true;
     }
@@ -560,10 +633,7 @@ public sealed partial class PlanViewModel : ToolPanelViewModelBase
     /// <summary>고정을 푼다.</summary>
     public void Unpin()
     {
-        PinnedPlan = null;
-        HasPinned = false;
-        PinnedText = string.Empty;
-        RefreshComparison();
+        Shared.Unpin(); // PinChanged 가 이 탭의 비교도 다시 한다
         StatusText = "비교 기준 고정을 풀었습니다.";
     }
 

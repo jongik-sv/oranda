@@ -101,7 +101,7 @@ public sealed class TuningAssistantCommandHandler : ICommandHandler
         {
             vm.OpenInNewEditor = text =>
             {
-                var tab = SqlEditorHost.Current.NewDocument(text);
+                var tab = SqlEditorHost.Current.OpenTextTabWithBinds(text, vm.Input?.SourceTabId);
                 tab.ConnectionProfileId = vm.Input?.Session?.Profile.Id;
             };
             vm.Confirm = (message, token) => SqlEditorHost.Current.Dialogs.ConfirmAsync(message, token);
@@ -141,6 +141,7 @@ public sealed class TuningAssistantCommandHandler : ICommandHandler
         await vm.LoadAsync(new TuningAssistantInput(statement, session)
         {
             SourceTitle = title,
+            SourceTabId = snapshot?.TabId,
             FirstLine = statement is not null && snapshot is not null ? LineOf(snapshot.Text, statement.Range.Start) : null,
             Plan = plan,
             PlanIsActual = plan is not null,

@@ -76,6 +76,10 @@ public class AiTuningFlowTabsTests
             return id;
         }
 
+        public List<(Guid From, Guid To)> BindCopies { get; } = [];
+
+        public void CopyBinds(Guid fromTab, Guid toTab) => BindCopies.Add((fromTab, toTab));
+
         public bool ReplaceText(Guid tabId, string text)
         {
             if (!Texts.ContainsKey(tabId))
@@ -273,6 +277,21 @@ public class AiTuningFlowTabsTests
 
         Assert.Equal(2, tabs.Opened.Count);
         Assert.Equal("주문 조회 (튜닝)", tabs.Titles[tabs.Opened[1]]);
+    }
+
+    [Fact]
+    public async Task The_tuned_tab_gets_the_start_tab_binds_both_when_opened_and_when_reused()
+    {
+        var (flow, tabs, _, _, startTab) = CreateTitled();
+        await flow.StartAsync(NoIndexChoice, Context);
+        var tuned = Assert.Single(tabs.Opened);
+        Assert.Equal([(startTab, tuned)], tabs.BindCopies);
+
+        tabs.Activate(startTab);
+        await flow.FollowUpAsync("다시"); // 같은 (튜닝) 탭을 다시 쓴다
+
+        Assert.Single(tabs.Opened);
+        Assert.Equal([(startTab, tuned), (startTab, tuned)], tabs.BindCopies);
     }
 
     [Fact]

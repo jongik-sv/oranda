@@ -43,6 +43,8 @@ public sealed partial class PlanViewModel
     /// <summary>보고서 탭 위치.</summary>
     public const int ReportTabIndex = 4;
 
+    public const string ExplainCommandId = "oranda.plan.explain";
+    public const string ActualCommandId = "oranda.plan.actual";
     public const string StatsCommandId = "oranda.tuning.stats";
     public const string ChildCursorsCommandId = "oranda.tuning.childCursors";
     public const string AssistantCommandId = "oranda.tuning.assistant";
@@ -56,6 +58,7 @@ public sealed partial class PlanViewModel
     private HashSet<int> _collapsed = [];
     private bool _autoRerunTried;
     private CancellationTokenSource? _rerunCts;
+    private bool _disposed;
     private bool _loadingAlwaysHint;
     private CursorRef? _reportCursor;
     private SqlStatement? _lastStatement;
@@ -121,6 +124,24 @@ public sealed partial class PlanViewModel
             _lastStatement = value;
             _autoRerunTried = false; // 새로 실행한 문장이면 「늘 힌트 넣기」를 다시 한 번 할 수 있다
         }
+    }
+
+    /// <summary>탭이 마지막으로 실행한 문장을 얻는 방법(명령 처리기가 탭의 기억을 가리킨다). <see cref="LastStatement"/> 를 직접 넣었으면 그것이 먼저다.</summary>
+    public Func<SqlStatement?>? LastStatementSource { get; set; }
+
+    private SqlStatement? _seenSource;
+
+    /// <summary>다시 실행할 문장: 직접 넣은 <see cref="LastStatement"/>, 없으면 탭이 마지막으로 실행한 문장. 새로 실행한 문장이면 자동 재실행 표시를 지운다.</summary>
+    private SqlStatement? ResolveLastStatement()
+    {
+        var source = LastStatementSource?.Invoke();
+        if (!ReferenceEquals(source, _seenSource))
+        {
+            _seenSource = source;
+            _autoRerunTried = false;
+        }
+
+        return _lastStatement ?? source;
     }
 
     /// <summary>편집기 지금 문장(명령 처리기가 넣는다).</summary>
@@ -228,9 +249,35 @@ public sealed partial class PlanViewModel
         return held >= LicensePack.DiagnosticsAndTuning;
     }
 
+    /// <summary>
+    /// 명령을 지금 실행할 수 있는지 묻는 방법(명령 ID → 가능 여부). 셸은 레지스트리 활성 조건과 SQL 문서 활성 여부를 보고, 시험은 직접 넣는다.
+    /// 없으면(null) 실행 단추는 꺼진다.
+    /// </summary>
+    public Func<string, bool>? CanRunCommand { get; set; }
+
+    /// <summary>「예상 계획」 단추를 누를 수 있는가(활성 SQL 탭과 접속이 있을 때).</summary>
+    public bool CanExplainNow => CanRunCommand?.Invoke(ExplainCommandId) ?? false;
+
+    /// <summary>「실제 계획」 단추를 누를 수 있는가(활성 SQL 탭과 접속이 있을 때).</summary>
+    public bool CanActualNow => CanRunCommand?.Invoke(ActualCommandId) ?? false;
+
+    /// <summary>실행 단추의 활성 상태를 다시 본다(문맥 키·활성 탭이 바뀐 뒤).</summary>
+    public void RefreshRunButtons()
+    {
+        OnPropertyChanged(nameof(CanExplainNow));
+        OnPropertyChanged(nameof(CanActualNow));
+    }
+
+    /// <summary>예상 계획 단추: 단축키 Ctrl+E 와 같은 명령을 부른다(새 실행 경로를 만들지 않는다).</summary>
+    public Task ExplainFromButtonAsync() => RunCommand(ExplainCommandId);
+
+    /// <summary>실제 계획 단추: 단축키 Ctrl+Shift+E 와 같은 명령을 부른다.</summary>
+    public Task ActualFromButtonAsync() => RunCommand(ActualCommandId);
+
     /// <summary>명령 목록이 바뀌었을 때(단추 보이기 다시 계산).</summary>
     public void RefreshCommandButtons()
     {
+        RefreshRunButtons();
         OnPropertyChanged(nameof(HasStatsCommand));
         OnPropertyChanged(nameof(HasChildCursorsCommand));
         OnPropertyChanged(nameof(HasAssistantCommand));
@@ -275,12 +322,12 @@ public sealed partial class PlanViewModel
     /// <summary>A-Rows 를 받으며 다시 실행한다(띠 단추·메뉴 「실제 행 수 받으며 다시 실행」). 끝나면 새 커서의 실제 계획을 보인다.</summary>
     public async Task RerunAsync(PlanRerunMode mode, CancellationToken ct = default)
     {
-        if (IsRerunning)
+        if (IsRerunning || _disposed)
         {
             return;
         }
 
-        var stmt = LastStatement ?? CurrentStatement?.Invoke();
+        var stmt = ResolveLastStatement() ?? CurrentStatement?.Invoke();
         if (stmt is null)
         {
             StatusText = "다시 실행할 문장이 없습니다. 편집기에서 문장을 실행한 뒤 다시 누르세요.";
@@ -517,7 +564,8 @@ public sealed partial class PlanViewModel
         else if (ShowStatisticsBand)
         {
             StatusText += " · A-Rows 없음(statistics_level = TYPICAL)";
-            if (AlwaysHint && !_autoRerunTried && !IsRerunning && (LastStatement ?? CurrentStatement?.Invoke()) is { } stmt)
+            var last = ResolveLastStatement(); // 먼저 부른다: 새로 실행한 문장이면 자동 재실행 표시를 지운 뒤 아래 조건을 본다
+            if (AlwaysHint && !_autoRerunTried && !IsRerunning && (last ?? CurrentStatement?.Invoke()) is { } stmt)
             {
                 if (PlanStatsRerunner.CanAutoRerun(stmt))
                 {

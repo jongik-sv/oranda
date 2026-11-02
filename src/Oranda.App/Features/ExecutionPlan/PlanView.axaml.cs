@@ -15,6 +15,7 @@ namespace Oranda.App.Features.ExecutionPlan;
 public partial class PlanView : UserControl
 {
     private PlanViewModel? _vm;
+    private bool _attached;
     private PlanColumnWidths? _columns;
 
     public PlanView()
@@ -27,6 +28,8 @@ public partial class PlanView : UserControl
         PlanList.AddHandler(KeyDownEvent, OnPlanListKeyDown, Avalonia.Interactivity.RoutingStrategies.Tunnel);
         TreeExpandAllButton.Click += (_, _) => Run(vm => vm.ExpandAll());
         TreeCollapseAllButton.Click += (_, _) => Run(vm => vm.CollapseAll());
+        ExplainButton.Click += async (_, _) => await RunAsync(vm => vm.ExplainFromButtonAsync());
+        ActualButton.Click += async (_, _) => await RunAsync(vm => vm.ActualFromButtonAsync());
         PinButton.Click += (_, _) => Run(vm => vm.PinCurrent());
         CompareButton.Click += (_, _) => Run(vm => vm.CompareWithPinned());
         UnpinButton.Click += (_, _) => Run(vm => vm.Unpin());
@@ -108,23 +111,48 @@ public partial class PlanView : UserControl
         }
     }
 
-    /// <summary>칸 폭을 리소스(<c>PlanW.c-id</c> …)로 옮긴다. 머리글과 줄의 칸 스타일이 이 리소스를 써서 같이 바뀐다.</summary>
+    /// <summary>
+    /// 칸 폭을 리소스(<c>PlanW.c-id</c> …)로 옮긴다. 머리글과 줄의 칸 스타일이 이 리소스를 써서 같이 바뀐다.
+    /// 칸 폭은 앱 전체가 함께 쓰는 하나라서(<see cref="PlanShared.Columns"/>) 변경 구독은 화면에 붙어 있는 동안만 둔다:
+    /// 닫힌 탭의 View 가 앱 전체 객체에 매달려 해제되지 못하는 일을 막는다.
+    /// </summary>
     private void SyncColumns(PlanColumnWidths? columns)
     {
-        if (_columns is not null)
-        {
-            _columns.Changed -= OnColumnChanged;
-        }
-
+        HookColumns(false);
         _columns = columns;
         foreach (var key in PlanColumnWidths.Keys)
         {
             Resources["PlanW." + key] = columns?.Get(key) ?? PlanColumnWidths.DefaultOf(key);
         }
 
-        if (columns is not null)
+        HookColumns(_attached);
+    }
+
+    protected override void OnAttachedToVisualTree(Avalonia.VisualTreeAttachmentEventArgs e)
+    {
+        base.OnAttachedToVisualTree(e);
+        _attached = true;
+        SyncColumns(_vm?.Columns); // 떨어져 있는 사이 바뀐 폭을 따라잡는다
+    }
+
+    protected override void OnDetachedFromVisualTree(Avalonia.VisualTreeAttachmentEventArgs e)
+    {
+        base.OnDetachedFromVisualTree(e);
+        _attached = false;
+        HookColumns(false);
+    }
+
+    private void HookColumns(bool on)
+    {
+        if (_columns is null)
         {
-            columns.Changed += OnColumnChanged;
+            return;
+        }
+
+        _columns.Changed -= OnColumnChanged;
+        if (on)
+        {
+            _columns.Changed += OnColumnChanged;
         }
     }
 

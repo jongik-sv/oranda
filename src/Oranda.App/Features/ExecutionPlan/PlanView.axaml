@@ -160,6 +160,12 @@
     <Border DockPanel.Dock="Top" Classes="panel-toolbar">
       <DockPanel>
         <StackPanel DockPanel.Dock="Left" Orientation="Horizontal" Spacing="2">
+          <!-- 계획 만들기: 단축키(Ctrl+E · Ctrl+Shift+E)와 같은 명령을 부른다. 활성 SQL 탭·접속이 없으면 꺼진다. -->
+          <Button x:Name="ExplainButton" Classes="toolbar" Content="예상 계획" icons:ButtonIcon.Key="explainPlan" icons:ButtonIcon.IconOnly="True" AutomationProperties.Name="예상 계획" IsEnabled="{Binding CanExplainNow}"
+                  ToolTip.ShowOnDisabled="True" ToolTip.Tip="활성 SQL 탭의 문장으로 예상 계획을 만듭니다(Ctrl+E)" />
+          <Button x:Name="ActualButton" Classes="toolbar" Content="실제 계획" icons:ButtonIcon.Key="plan" icons:ButtonIcon.IconOnly="True" AutomationProperties.Name="실제 계획" IsEnabled="{Binding CanActualNow}"
+                  ToolTip.ShowOnDisabled="True" ToolTip.Tip="마지막으로 실행한 문장(또는 입력한 sql_id)의 실제 계획을 읽습니다(Ctrl+Shift+E)" />
+          <Separator Classes="toolbar" />
           <ListBox x:Name="ViewSwitch" Classes="segmented" SelectedIndex="{Binding SelectedTabIndex, Mode=TwoWay}"
                    AutomationProperties.Name="계획 보기">
             <ListBoxItem ToolTip.Tip="계획 트리">

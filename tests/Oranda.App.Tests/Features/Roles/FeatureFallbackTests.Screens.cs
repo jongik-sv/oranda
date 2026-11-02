@@ -105,7 +105,9 @@ public sealed partial class FeatureFallbackTests
     {
         var gate = new FakeFeatureGate();
         var services = new GatedServices(gate);
-        var vm = new PlanViewModel(services) { PostToUi = a => a() };
+        using var panel = new PlanPanelViewModel(services); // 명령 목록·기능 게이트가 바뀐 소식은 창이 받아 탭의 모델에 알린다
+        var vm = panel.Active!;
+        vm.PostToUi = a => a();
         vm.Apply(PlanBoostTests.WithActuals("x"), "실제");
         var view = new PlanView { DataContext = vm };
         var window = new Window { Content = view, Width = 1300, Height = 420 };

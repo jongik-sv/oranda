@@ -30,6 +30,36 @@ public sealed partial class SqlEditorHost
         return vm;
     }
 
+    /// <summary>
+    /// 만든 글을 새 SQL 탭에 담아 열면서, 그 글을 만든 원본 탭(<paramref name="sourceTabId"/>)의 바인드 값을 새 탭이 참조하는 이름만큼 복사한다.
+    /// 원본 탭이 닫혔거나 모르면(null) 복사 없이 연다. 원본에 값이 없는 이름은 복사하지 않는다.
+    /// </summary>
+    public SqlEditorViewModel OpenTextTabWithBinds(string text, Guid? sourceTabId)
+    {
+        var vm = NewDocument(text);
+        if (sourceTabId is { } id)
+        {
+            CopyBinds(id, vm.TabId);
+        }
+
+        return vm;
+    }
+
+    /// <summary>
+    /// <paramref name="fromTab"/> 의 바인드 값을 <paramref name="toTab"/> 이 참조하는 이름만큼 복사한다.
+    /// 원본에 값이 있는 이름만 가져온다(빈 값·명시적 NULL 을 옮기면 새 탭이 「값 없이 실행 금지」 확인을 건너뛴다).
+    /// 받는 탭의 줄이 비어 있거나 없으면 채우고, 값이 있으면 건드리지 않는다(사용자가 고친 값·형식 보존).
+    /// 어느 쪽이든 탭이 닫혔으면 아무것도 하지 않는다.
+    /// </summary>
+    public void CopyBinds(Guid fromTab, Guid toTab)
+    {
+        if (Tabs.FirstOrDefault(t => t.TabId == fromTab) is { } source && Tabs.FirstOrDefault(t => t.TabId == toTab) is { } target)
+        {
+            var names = target.ReferencedBindNames.Where(n => source.Binds.Find(n) is { Text.Length: > 0 } && target.Binds.Find(n) is null or { Text.Length: 0 });
+            target.Binds.Restore(source.Binds.Snapshot(names));
+        }
+    }
+
     private static string NextUntitledName(SqlWorkspaceViewModel ws)
     {
         for (int n = 1; ; n++)

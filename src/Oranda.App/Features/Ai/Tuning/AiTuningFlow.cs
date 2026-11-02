@@ -673,6 +673,12 @@ public sealed partial class AiTuningFlow(
             {
                 _tuneTabId = tabs.OpenText(title, text, startTab);
             }
+
+            // 원래 탭의 바인드 값을 (튜닝) 탭에 옮긴다(탭을 다시 쓴 경우도 같다). 시작 탭이 닫혔으면 복사하지 않는다.
+            if (startTab is { } from && _tuneTabId is { } tuned)
+            {
+                tabs.CopyBinds(from, tuned);
+            }
         }
         else
         {
