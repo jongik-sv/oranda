@@ -1,3 +1,4 @@
+using Oranda.Core.Ai.Profiles;
 using Oranda.Core.Composition;
 using Oranda.Core.Events;
 using Oranda.Core.Serialization;
@@ -11,7 +12,7 @@ namespace Oranda.Platform.Storage;
 /// 저장하면 바뀐 섹션마다 <see cref="SettingsChanged"/> 를 발행한다. 소유: TSK-03-01.
 /// </summary>
 [OrandaService(typeof(ISettingsStore))]
-internal sealed class SettingsStore : ISettingsStore, IDisposable
+internal sealed class SettingsStore : ISettingsStore, IAiSettingsResetSignal, IDisposable
 {
     private readonly IAppDataPaths _paths;
     private readonly IEventBus _events;
@@ -19,6 +20,8 @@ internal sealed class SettingsStore : ISettingsStore, IDisposable
     private readonly SemaphoreSlim _gate = new(1, 1);
     private AppSettings? _current;
     private bool _readOnly;
+    private int _resetPending;
+    private bool _corruptActive;
 
     public SettingsStore(IAppDataPaths paths, IEventBus events, IEnumerable<ISettingsMigration> migrations)
     {
@@ -28,6 +31,9 @@ internal sealed class SettingsStore : ISettingsStore, IDisposable
     }
 
     public void Dispose() => _gate.Dispose();
+
+    /// <summary>손상 복구(<see cref="JsonLoadState.Corrupt"/>)가 있었으면 한 번만 true. 미래 버전·변환 실패(읽기 전용)는 해당하지 않는다.</summary>
+    public bool TryTakeReset() => Interlocked.Exchange(ref _resetPending, 0) == 1;
 
     public async Task<StoredDocument<AppSettings>> LoadAsync(CancellationToken ct)
     {
@@ -47,6 +53,8 @@ internal sealed class SettingsStore : ISettingsStore, IDisposable
             var value = Normalize(result.Value);
             _current = value;
             _readOnly = result.IsReadOnly;
+            NoteLoadState(result.State);
+
             return new StoredDocument<AppSettings>(value, result.IsReadOnly) { Notice = result.Notice };
         }
         finally
@@ -76,6 +84,7 @@ internal sealed class SettingsStore : ISettingsStore, IDisposable
                     ct).ConfigureAwait(false);
                 _current = Normalize(loaded.Value);
                 _readOnly = loaded.IsReadOnly;
+                NoteLoadState(loaded.State);
             }
 
             if (_readOnly)
@@ -96,6 +105,25 @@ internal sealed class SettingsStore : ISettingsStore, IDisposable
         foreach (var section in changed)
         {
             _events.Publish(new SettingsChanged(section));
+        }
+    }
+
+    /// <summary>
+    /// 손상 복구는 활성 프로필 선택도 기본값으로 돌려놓으므로 첫 AI 실행이 이를 알아채도록 신호를 남긴다(<see cref="IAiSettingsResetSignal"/>).
+    /// 손상 파일을 백업으로 옮기지 못해 같은 손상이 계속 읽히는 동안은 다시 세우지 않는다(AI 실행이 매번 막히지 않게).
+    /// </summary>
+    private void NoteLoadState(JsonLoadState state)
+    {
+        if (state != JsonLoadState.Corrupt)
+        {
+            _corruptActive = false;
+            return;
+        }
+
+        if (!_corruptActive)
+        {
+            _corruptActive = true;
+            Interlocked.Exchange(ref _resetPending, 1);
         }
     }
 

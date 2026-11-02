@@ -1,3 +1,4 @@
+using System.Text.Json.Serialization;
 using Oranda.Core.Execution;
 
 namespace Oranda.Core.Settings;
@@ -63,8 +64,83 @@ public enum AiDriverKind
     /// <summary>선택 안 함. AI 단추는 설정을 안내한다.</summary>
     None,
 
-    /// <summary>Claude Code CLI(<c>claude -p</c>).</summary>
+    /// <summary>
+    /// 시스템 CLI 의 Claude Code(<c>claude -p</c>). <see cref="AiSettings.ActiveProfileId"/> 가 있으면 그 프로필로 나간다.
+    /// 프로필 종류는 이 enum 에 값을 더하지 않고 <see cref="AiSettings.Profiles"/> 로 표현한다:
+    /// 옛 빌드가 모르는 enum 값을 읽으면 <c>JsonDocumentFile</c> 이 파일 전체를 손상으로 보고 모든 설정을 초기화하기 때문이다.
+    /// </summary>
     ClaudeCode,
+}
+
+/// <summary>LLM 프로필의 제공자 종류(프리셋). 설정 파일에는 문자열로 저장된다. 모르는 값은 <see cref="Unknown"/> 으로 읽는다.</summary>
+public enum AiProfilePreset
+{
+    /// <summary>이 빌드가 모르는 프리셋(다음 버전이 더한 값 등). 프로필 목록에는 남지만 실행할 수 없고(<c>profile_invalid</c>) 화면의 프리셋 목록에는 나오지 않는다.</summary>
+    Unknown = -1,
+
+    Anthropic,
+    ZAi,
+    Gemini,
+    OpenAi,
+    Ollama,
+    LmStudio,
+
+    /// <summary>직접 입력. <see cref="AiLlmProfile.Format"/> 을 사용자가 고른다.</summary>
+    Custom,
+}
+
+/// <summary>프로필 서버의 API 형식. 형식이 실행 경로를 정한다(Anthropic = <c>claude</c> CLI, OpenAI = 앱 안 API 드라이버).</summary>
+public enum AiApiFormat
+{
+    /// <summary>이 빌드가 모르는 형식. 실행할 수 없다(<c>profile_invalid</c>).</summary>
+    Unknown = -1,
+
+    Anthropic,
+    OpenAi,
+}
+
+/// <summary>
+/// 사용자가 만든 LLM 접속 프로필. API 키는 이 레코드에 없고 <c>ICredentialStore</c> 의 <c>oranda:ai:{guid}</c> 키에 저장한다.
+/// </summary>
+public sealed record AiLlmProfile
+{
+    public const int DefaultMaxInputTokens = 200000;
+
+    public const int DefaultMaxOutputTokens = 10000;
+
+    // 손으로 고친 파일의 null·빠진 칸·0 이하 값이 그대로 들어오지 않게 칸마다 기본값으로 보정한다.
+    // 배열 원소는 파일 병합(JsonDocumentFile.OverDefaults)이 기본값을 깔아 주지 않으므로 속성 쪽에서 막는다.
+    private readonly string _name = "";
+    private readonly string _baseUrl = "";
+    private readonly string _model = "";
+    private readonly int _maxInputTokens = DefaultMaxInputTokens;
+    private readonly int _maxOutputTokens = DefaultMaxOutputTokens;
+
+    public Guid Id { get; init; }
+
+    public string Name { get => _name; init => _name = value ?? ""; }
+
+    /// <summary>모르는 값은 <see cref="AiProfilePreset.Unknown"/> 으로 읽는다.</summary>
+    [JsonConverter(typeof(TolerantEnumConverter<AiProfilePreset>))]
+    public AiProfilePreset Preset { get; init; }
+
+    /// <summary>모르는 값은 <see cref="AiApiFormat.Unknown"/> 으로 읽는다.</summary>
+    [JsonConverter(typeof(TolerantEnumConverter<AiApiFormat>))]
+    public AiApiFormat Format { get; init; }
+
+    /// <summary>사용자가 입력한 그대로의 기준 URL. 요청마다 쓰는 형태는 <c>AiProfileUrl</c> 이 형식에 맞게 만든다.</summary>
+    public string BaseUrl { get => _baseUrl; init => _baseUrl = value ?? ""; }
+
+    public string Model { get => _model; init => _model = value ?? ""; }
+
+    /// <summary>API 경로에서 보낸 입력 토큰이 이 값을 넘으면 이어 말하기를 막는다. CLI 경로는 쓰지 않는다. 0 이하는 기본값.</summary>
+    public int MaxInputTokens { get => _maxInputTokens; init => _maxInputTokens = value > 0 ? value : DefaultMaxInputTokens; }
+
+    /// <summary>API 경로는 <c>max_tokens</c>, CLI 경로는 <c>CLAUDE_CODE_MAX_OUTPUT_TOKENS</c> 로 넘긴다. 0 이하는 기본값.</summary>
+    public int MaxOutputTokens { get => _maxOutputTokens; init => _maxOutputTokens = value > 0 ? value : DefaultMaxOutputTokens; }
+
+    /// <summary>이미지 입력 지원. null = 모름(보내 보고 서버 오류를 보여 준다).</summary>
+    public bool? SupportsImages { get; init; }
 }
 
 /// <summary>설정 <c>ai</c> 섹션.</summary>
@@ -86,8 +162,34 @@ public sealed record AiSettings
     /// </summary>
     public bool MaskLiterals { get; init; }
 
+    /// <summary>저장된 LLM 프로필 목록. 키가 없거나 null 인 파일은 빈 목록이다.</summary>
+    public IReadOnlyList<AiLlmProfile> Profiles { get => _profiles; init => _profiles = value is null ? [] : [.. value.Where(p => p is not null)]; }
+
+    // "profiles": null 이나 null 원소가 든 손으로 고친 파일도 받는다(빈 목록, null 원소 제거).
+    private readonly IReadOnlyList<AiLlmProfile> _profiles = [];
+
+    /// <summary>
+    /// 쓰는 프로필 id. <see cref="Driver"/> 가 <see cref="AiDriverKind.ClaudeCode"/> 일 때 null 이면 시스템 CLI 의 Claude Code,
+    /// 값이 있으면 그 프로필이다. 목록에 없으면 <c>profile_missing</c> 오류가 된다. 있는데 읽을 수 없는 값은 <see cref="Guid.Empty"/> 로 읽혀 같은 오류가 된다.
+    /// </summary>
+    [JsonConverter(typeof(TolerantActiveProfileIdConverter))]
+    public Guid? ActiveProfileId { get; init; }
+
     /// <summary><c>claude --effort</c> 가 받는 값(낮은 것부터).</summary>
     public static IReadOnlyList<string> EffortLevels { get; } = ["low", "medium", "high", "xhigh", "max"];
+
+    // 프로필 목록은 참조가 아니라 내용으로 비교한다(설정 구역별 변경 알림이 같은 값을 「바뀜」으로 보지 않게).
+    public bool Equals(AiSettings? other) =>
+        other is not null
+        && Driver == other.Driver
+        && Model == other.Model
+        && Effort == other.Effort
+        && ExecutablePath == other.ExecutablePath
+        && MaskLiterals == other.MaskLiterals
+        && ActiveProfileId == other.ActiveProfileId
+        && Profiles.SequenceEqual(other.Profiles);
+
+    public override int GetHashCode() => HashCode.Combine(Driver, Model, Effort, ExecutablePath, MaskLiterals, ActiveProfileId, Profiles.Count);
 }
 
 /// <summary>MyBatis 작업 공간 설정. 설정 창에는 없고 「바뀌는 부분」 창의 확인란이 바꾼다.</summary>

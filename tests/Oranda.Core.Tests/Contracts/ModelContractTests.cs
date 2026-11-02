@@ -18,7 +18,7 @@ public class ModelContractTests
         typeof(HistoryEntry), typeof(MetaSource), typeof(MetaObject),
     ];
 
-    private static readonly string[] SecretWords = ["password", "pwd", "secret", "token"];
+    private static readonly string[] SecretWords = ["password", "pwd", "secret", "token", "apikey"];
 
     [Fact]
     public void Connection_profile_keeps_positional_order_and_appends_new_parameters()
@@ -117,7 +117,8 @@ public class ModelContractTests
 
             foreach (var property in type.GetProperties(BindingFlags.Public | BindingFlags.Instance))
             {
-                if (SecretWords.Any(w => property.Name.Contains(w, StringComparison.OrdinalIgnoreCase)))
+                // 숫자 속성은 비밀을 담지 못한다(예: AiLlmProfile.MaxInputTokens 의 「토큰」 은 모델 토큰 수 한도).
+                if (property.PropertyType != typeof(int) && SecretWords.Any(w => property.Name.Contains(w, StringComparison.OrdinalIgnoreCase)))
                 {
                     violations.Add($"{type.Name}.{property.Name}");
                 }

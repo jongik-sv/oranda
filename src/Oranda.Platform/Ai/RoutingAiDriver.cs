@@ -1,0 +1,193 @@
+using System.Runtime.CompilerServices;
+using System.Text;
+using Oranda.Core.Ai.Contracts;
+using Oranda.Core.Ai.Profiles;
+using Oranda.Core.Composition;
+using Oranda.Core.Security;
+using Oranda.Core.Settings;
+using Oranda.Core.Storage;
+using Oranda.Platform.Ai.Cli;
+
+namespace Oranda.Platform.Ai;
+
+/// <summary>
+/// 라우터가 한 번 찾아 드라이버에 넘기는 전송 대상. 드라이버는 설정과 자격 증명 저장소를 다시 읽지 않고 이 값만 쓴다
+/// (읽는 곳이 둘이면 경고 창에 적힌 곳과 실제 전송처가 어긋날 수 있다).
+/// <see cref="Profile"/> 이 null 이면 시스템 CLI 의 Claude Code(구독 인증)다.
+/// </summary>
+/// <param name="Profile">활성 프로필. null = Claude Code.</param>
+/// <param name="ApiKey">프로필의 API 키. 없으면 null. 로그·메시지·명령줄에 넣지 않는다.</param>
+internal sealed record AiRoute(AiLlmProfile? Profile, string? ApiKey)
+{
+    /// <summary>시스템 CLI 의 Claude Code 경로.</summary>
+    public static AiRoute ClaudeCode { get; } = new(null, null);
+
+    // 기본 출력(ToString·로그·디버거)에 키가 나오지 않게 한다.
+    private bool PrintMembers(StringBuilder builder)
+    {
+        builder.Append("Profile = ").Append(Profile?.Name ?? "(Claude Code)").Append(", ApiKey = ").Append(string.IsNullOrEmpty(ApiKey) ? "(none)" : "***");
+        return true;
+    }
+}
+
+/// <summary>
+/// API 경로(OpenAI 형식 프로필) 드라이버가 구현하는 표식. 구현 클래스는 <c>[OrandaService(typeof(IApiAiDriver))]</c> 로 등록하며,
+/// <see cref="RoutingAiDriver"/> 가 실행마다 이 형식을 컨테이너에서 찾아 <see cref="RunAsync(AiRequest, AiRoute, CancellationToken)"/> 로 부른다.
+/// 등록이 없으면 <c>api_driver_pending</c> 오류가 된다. <see cref="IAiDriver"/> 자체로 등록하면 라우터와 겹쳐 훑는 순서로 승자가 정해지므로 쓰지 않는다.
+/// </summary>
+internal interface IApiAiDriver : IAiDriver
+{
+    /// <summary>라우터가 고른 프로필과 키로 실행한다. 설정·자격 증명 저장소를 다시 읽지 않는다.</summary>
+    IAsyncEnumerable<AiEvent> RunAsync(AiRequest request, AiRoute route, CancellationToken ct);
+}
+
+/// <summary>
+/// <see cref="IAiDriver"/> 의 유일한 DI 등록(설계 §6). 실행마다 설정(<c>ai</c> 섹션)을 읽어 활성 프로필을 한 번 찾고, 맞는 경로로 넘긴다.
+/// 보낼 곳이 확실하지 않으면 보내지 않고 오류로 닫는다(기본 주소·구독 인증으로 조용히 나가는 일이 없게).
+/// <list type="bullet">
+/// <item>설정이 손상 복구된 직후 첫 실행: <c>settings_reset</c>(다음 실행부터 통과).</item>
+/// <item>선택 안 함: <c>driver_none</c>.</item>
+/// <item>호출한 쪽이 기대한 프로필과 설정의 활성 프로필이 다름(<see cref="AiRequest.Expected"/>): <c>profile_changed</c>.</item>
+/// <item>활성 프로필이 목록에 없음: <c>profile_missing</c>. 프리셋·형식을 모름: <c>profile_invalid</c>.</item>
+/// <item>주소가 올바르지 않음: <c>profile_invalid_url</c>. 키가 필요한데 없음: <c>profile_key_missing</c>(읽기 실패는 <c>profile_key_unreadable</c>).</item>
+/// <item>Claude Code·Anthropic 형식 프로필: <see cref="CliDriver"/>. OpenAI 형식 프로필: <see cref="IApiAiDriver"/>(등록이 없으면 <c>api_driver_pending</c>).</item>
+/// </list>
+/// <see cref="Capabilities"/> 는 동기 속성이라 프로필별로 답하지 못하므로 고정 값이다(<see cref="AiDriverCapabilities.Images"/> 는 항상 true).
+/// 프로필별 이미지 지원 여부는 화면이 <see cref="AiLlmProfile.SupportsImages"/> 로 판단한다.
+/// </summary>
+[OrandaService(typeof(IAiDriver))]
+internal sealed class RoutingAiDriver : IAiDriver
+{
+    private static readonly AiDriverCapabilities DriverCapabilities =
+        new(Skills: false, Tools: true, Resume: true, LocalOnly: false, Streaming: false, Images: true);
+
+    private readonly ISettingsStore _settings;
+    private readonly ICredentialStore _credentials;
+    private readonly CliDriver _cli;
+    private readonly IServiceProvider _services;
+
+    public RoutingAiDriver(ISettingsStore settings, ICredentialStore credentials, CliDriver cli, IServiceProvider services)
+    {
+        _settings = settings ?? throw new ArgumentNullException(nameof(settings));
+        _credentials = credentials ?? throw new ArgumentNullException(nameof(credentials));
+        _cli = cli ?? throw new ArgumentNullException(nameof(cli));
+        _services = services ?? throw new ArgumentNullException(nameof(services));
+    }
+
+    public AiDriverCapabilities Capabilities => DriverCapabilities;
+
+    public async IAsyncEnumerable<AiEvent> RunAsync(AiRequest request, [EnumeratorCancellation] CancellationToken ct)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+
+        var selected = await SelectAsync(request, ct).ConfigureAwait(false);
+        if (selected.Error is not null)
+        {
+            yield return selected.Error;
+            yield break;
+        }
+
+        var events = selected.Api is { } api ? api.RunAsync(request, selected.Route!, ct) : _cli.RunAsync(request, selected.Route!, ct);
+        await foreach (var e in events.ConfigureAwait(false))
+        {
+            yield return e;
+        }
+    }
+
+    private async Task<Selection> SelectAsync(AiRequest request, CancellationToken ct)
+    {
+        AiSettings settings;
+        try
+        {
+            settings = (await _settings.LoadAsync(ct).ConfigureAwait(false)).Value.Ai;
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            return Selection.Fail($"설정을 읽지 못했습니다: {ex.Message}", "settings_unreadable");
+        }
+
+        // 손상 복구 직후 첫 실행: 활성 프로필 선택이 기본값으로 돌아가 있을 수 있으므로 한 번 멈추고 사용자가 확인하게 한다.
+        if (_settings is IAiSettingsResetSignal reset && reset.TryTakeReset())
+        {
+            return Selection.Fail("설정 파일이 손상되어 기본값으로 복구되었습니다. 설정의 「AI 모델」 을 확인한 뒤 다시 실행하세요.", "settings_reset");
+        }
+
+        var active = AiActiveProfile.Find(settings);
+        if (active.Kind == AiActiveKind.None)
+        {
+            return Selection.Fail("AI 모델이 선택되지 않았습니다. 설정의 「AI 모델」 에서 고르세요.", "driver_none");
+        }
+
+        if (request.Expected is { } expected && expected.ProfileId != settings.ActiveProfileId)
+        {
+            return Selection.Fail("AI 모델이 바뀌어 요청을 보내지 않았습니다. 설정을 확인한 뒤 다시 실행하세요.", "profile_changed");
+        }
+
+        switch (active.Kind)
+        {
+            case AiActiveKind.ClaudeCode:
+                return Selection.Cli(AiRoute.ClaudeCode);
+            case AiActiveKind.ProfileMissing:
+                return Selection.Fail("선택한 LLM 프로필을 찾지 못했습니다. 설정의 「AI 모델」 에서 프로필을 다시 고르세요.", AiActiveProfile.ProfileMissingCode);
+            case AiActiveKind.ProfileInvalid:
+                return Selection.Fail($"프로필 「{active.Profile!.Name}」 의 종류나 API 형식을 이 버전이 알지 못합니다. 프로필을 다시 만드세요.", AiActiveProfile.ProfileInvalidCode);
+            default:
+                if (request.Expected is { } check && !MatchesExpectation(check, active.Profile!))
+                {
+                    return Selection.Fail("AI 모델의 접속 정보가 바뀌어 요청을 보내지 않았습니다. 설정을 확인한 뒤 다시 실행하세요.", "profile_changed");
+                }
+
+                return await SelectProfileAsync(active.Profile!, ct).ConfigureAwait(false);
+        }
+    }
+
+    private static bool MatchesExpectation(AiProfileExpectation expected, AiLlmProfile profile) =>
+        (expected.BaseUrl is null || string.Equals(expected.BaseUrl.Trim(), profile.BaseUrl.Trim(), StringComparison.Ordinal))
+        && (expected.Format is null || expected.Format == profile.Format);
+
+    private async Task<Selection> SelectProfileAsync(AiLlmProfile profile, CancellationToken ct)
+    {
+        // 주소가 올바르지 않으면 기본 주소(구독 계정)나 엉뚱한 곳으로 나갈 수 있으므로 여기서 닫는다.
+        if (AiProfileUrl.BaseFor(profile.Format, profile.BaseUrl) is null)
+        {
+            return Selection.Fail($"프로필 「{profile.Name}」 의 서버 주소가 올바르지 않습니다. http:// 또는 https:// 로 시작하는 주소를 입력하세요.", "profile_invalid_url");
+        }
+
+        string? key;
+        try
+        {
+            var bytes = await _credentials.LoadAsync(AiProfileCredentials.KeyFor(profile.Id)).ConfigureAwait(false);
+            key = bytes is { Length: > 0 } ? Encoding.UTF8.GetString(bytes).Trim() : null;
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            // 예외 메시지에 비밀 저장소 내용이 섞일 수 있어 종류만 알린다.
+            return Selection.Fail($"프로필 「{profile.Name}」 의 API 키를 읽지 못했습니다({ex.GetType().Name}).", "profile_key_unreadable");
+        }
+
+        ct.ThrowIfCancellationRequested();
+        if (string.IsNullOrEmpty(key) && AiProfilePresets.Get(profile.Preset).KeyRequirement == AiKeyRequirement.Required)
+        {
+            return Selection.Fail($"프로필 「{profile.Name}」 에는 API 키가 필요합니다. 프로필 관리에서 키를 입력하세요.", "profile_key_missing");
+        }
+
+        var route = new AiRoute(profile, string.IsNullOrEmpty(key) ? null : key);
+        if (profile.Format == AiApiFormat.Anthropic)
+        {
+            return Selection.Cli(route);
+        }
+
+        return _services.GetService(typeof(IApiAiDriver)) is IApiAiDriver api
+            ? Selection.ViaApi(api, route)
+            : Selection.Fail("OpenAI 형식 프로필의 연결은 아직 준비되지 않았습니다.", "api_driver_pending");
+    }
+
+    private sealed record Selection(AiRoute? Route, IApiAiDriver? Api, AiError? Error)
+    {
+        public static Selection Cli(AiRoute route) => new(route, null, null);
+
+        public static Selection ViaApi(IApiAiDriver api, AiRoute route) => new(route, api, null);
+
+        public static Selection Fail(string message, string code) => new(null, null, new AiError(message, code));
+    }
+}

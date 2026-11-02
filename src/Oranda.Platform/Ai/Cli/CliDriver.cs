@@ -18,7 +18,7 @@ namespace Oranda.Platform.Ai.Cli;
 /// <c>--resume</c> 때도 같은 옵션을 모두 다시 준다(<see cref="ClaudeCliArguments"/>). 시작 직후 <c>system/init</c> 으로
 /// 실제 붙은 MCP 서버와 도구를 확인하고, orandactl 밖의 서버·도구가 있거나 orandactl 도구가 없으면 곧바로 끝낸다.
 /// </summary>
-[OrandaService(typeof(IAiDriver))]
+[OrandaService(typeof(CliDriver))]
 internal sealed class CliDriver : IAiDriver
 {
     private const int MaxArgumentSummaryChars = 4000;
@@ -90,9 +90,25 @@ internal sealed class CliDriver : IAiDriver
 
     public AiDriverCapabilities Capabilities => DriverCapabilities;
 
-    public async IAsyncEnumerable<AiEvent> RunAsync(AiRequest request, [EnumeratorCancellation] CancellationToken ct)
+    /// <summary>시스템 CLI 의 Claude Code 경로(구독 인증).</summary>
+    public IAsyncEnumerable<AiEvent> RunAsync(AiRequest request, CancellationToken ct) => RunAsync(request, AiRoute.ClaudeCode, ct);
+
+    /// <summary>
+    /// 라우터가 고른 전송 대상으로 실행한다. 프로필 경로의 환경 변수 적용은 아직 없다(ai-cli 레인이 <paramref name="route"/> 로 채운다):
+    /// 지금은 프로필 경로를 <c>profile_cli_pending</c> 으로 닫고 Claude Code 경로만 실행한다.
+    /// </summary>
+    internal async IAsyncEnumerable<AiEvent> RunAsync(AiRequest request, AiRoute route, [EnumeratorCancellation] CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(request);
+        ArgumentNullException.ThrowIfNull(route);
+
+        // 프로필의 URL·키를 환경 변수로 싣는 일이 아직 없다. 그냥 실행하면 프로필을 골랐는데도 구독 인증 Claude Code 로 SQL 이 나가므로 닫는다.
+        // ai-cli 레인이 환경 변수 적용을 넣을 때 이 가드를 없앤다.
+        if (route.Profile is not null)
+        {
+            yield return new AiError("이 버전은 Anthropic 형식 프로필의 연결을 아직 지원하지 않습니다.", "profile_cli_pending");
+            yield break;
+        }
 
         var checkedRun = await CheckPreconditionsAsync(request, ct).ConfigureAwait(false);
         if (checkedRun.Error is not null)
