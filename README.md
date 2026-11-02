@@ -115,7 +115,7 @@ macOS releases are signed and notarized with an Apple Developer ID when the rele
 
 Oranda connects only to the databases you configure and, when you use the AI features, the LLM servers you register. Apart from that:
 
-- **LLM profiles**: prompts, SQL and tool results, and attached images are sent to the address you registered in the profile (or the address of the preset you picked). Masking is not applied to images. No proxy is used and redirects are not followed.
+- **LLM profiles**: prompts, SQL and tool results, and attached images are sent to the address you registered in the profile (or the address of the preset you picked). Masking is not applied to images. OpenAI-format profiles are sent by Oranda itself, without a proxy and without following redirects. Anthropic-format profiles are sent by the `claude` process Oranda starts: proxy environment variables are not passed on, but Oranda does not control redirects. If you choose Claude Code (subscription) as the AI model, `claude` sends to the Anthropic service.
 - **Update check**: an installed copy checks [GitHub Releases](https://github.com/jongik-sv/oranda/releases) for a new version once a day (20 seconds after start). This is a normal HTTPS request to GitHub; [GitHub's privacy statement](https://docs.github.com/site-policy/privacy-policies/github-general-privacy-statement) applies. Turn it off in **Settings > Update**.
 - **Crash reports** are saved locally. Nothing is sent unless you review the report and press **Send**; passwords are masked.
 - No telemetry or usage statistics are collected.

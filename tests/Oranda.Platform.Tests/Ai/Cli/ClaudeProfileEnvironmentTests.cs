@@ -167,6 +167,7 @@ public class ClaudeProfileEnvironmentTests
 
         Assert.False(handler.UseProxy);
         Assert.False(handler.AllowAutoRedirect);
+        Assert.False(handler.UseCookies);
     }
 
     [Fact]

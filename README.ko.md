@@ -115,7 +115,7 @@ macOS 릴리스는 릴리스 워크플로에 Apple 인증 정보가 있으면 De
 
 Oranda 는 사용자가 설정한 데이터베이스와, AI 기능을 쓸 때 사용자가 등록한 LLM 서버에만 접속한다. 그 밖에는:
 
-- **LLM 프로필**: 프로필에 등록한 주소(프리셋을 고르면 그 주소)로 프롬프트와 SQL·도구 결과, 첨부 이미지를 보낸다. 이미지에는 가림이 적용되지 않는다. 프록시를 쓰지 않고 리디렉션을 따라가지 않는다.
+- **LLM 프로필**: 프롬프트와 SQL·도구 결과, 첨부 이미지를 프로필에 등록한 주소(프리셋을 고르면 그 주소)로 보낸다. 이미지에는 가림이 적용되지 않는다. OpenAI 형식 프로필은 Oranda 가 직접 보내며 프록시를 쓰지 않고 리디렉션을 따라가지 않는다. Anthropic 형식 프로필은 Oranda 가 띄운 `claude` 프로세스가 보낸다. 프록시 환경 변수는 넘기지 않지만 리디렉션은 Oranda 가 제어하지 않는다. AI 모델로 Claude Code(구독)를 고르면 `claude` 가 Anthropic 서비스로 보낸다.
 - **업데이트 확인**: 설치본은 하루에 한 번(시작 20초 뒤) [GitHub Releases](https://github.com/jongik-sv/oranda/releases) 에 새 버전이 있는지 묻는다. GitHub 로 가는 보통의 HTTPS 요청이며 [GitHub 개인정보 처리방침](https://docs.github.com/site-policy/privacy-policies/github-general-privacy-statement)이 적용된다. **설정 > 업데이트** 에서 끌 수 있다.
 - **오류 보고서**는 내 PC 에만 저장된다. 내용을 확인하고 **전송** 을 눌렀을 때만 보낸다. 비밀번호는 가려진다.
 - 사용 통계·원격 측정은 모으지 않는다.

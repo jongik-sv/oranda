@@ -230,13 +230,13 @@ internal sealed partial class OpenAiApiDriver : IApiAiDriver, IDisposable
                 }
 
                 // 오류성 끝 사유를 정상 답으로 확정하지 않는다(받은 글 조각은 이미 화면에 나갔을 수 있다).
-                if (turn.FinishReason == "content_filter")
+                if (turn.FinishReason is not null && (turn.FinishReason.Equals("content_filter", StringComparison.OrdinalIgnoreCase) || turn.FinishReason.Equals("safety", StringComparison.OrdinalIgnoreCase)))
                 {
                     yield return new AiError("서버가 응답을 콘텐츠 필터로 막았습니다. 질문이나 첨부를 바꿔 다시 시도하세요.", "content_filtered");
                     yield break;
                 }
 
-                if (turn.FinishReason == "error")
+                if (string.Equals(turn.FinishReason, "error", StringComparison.OrdinalIgnoreCase))
                 {
                     yield return new AiError("서버가 응답 도중 오류로 끝냈다고 알려 왔습니다. 서버 상태를 확인하세요.", "api_error");
                     yield break;
@@ -430,6 +430,28 @@ internal sealed partial class OpenAiApiDriver : IApiAiDriver, IDisposable
         return null;
     }
 
+    // 중복 키는 칸을 처음 읽을 때 ArgumentException 이 나므로 안쪽 객체까지 미리 읽어 둔다.
+    private static void Touch(JsonNode? node)
+    {
+        switch (node)
+        {
+            case JsonObject obj:
+                foreach (var property in obj)
+                {
+                    Touch(property.Value);
+                }
+
+                break;
+            case JsonArray array:
+                foreach (var item in array)
+                {
+                    Touch(item);
+                }
+
+                break;
+        }
+    }
+
     private static string SchemaIssuesResult(string issues) =>
         new JsonObject
         {
@@ -457,6 +479,7 @@ internal sealed partial class OpenAiApiDriver : IApiAiDriver, IDisposable
 
             // 짝 없는 서로게이트 같은 글자는 다시 쓸 때(게이트·기록) 예외가 나므로 여기서 미리 써 보고 읽을 수 없는 인자로 취급한다.
             _ = parsed?.ToJsonString();
+            Touch(parsed);
 
             // 중복 키는 칸을 처음 읽을 때 ArgumentException 이 나므로 여기서 미리 읽어 읽을 수 없는 인자로 취급한다.
             _ = parsed?.TryGetPropertyValue(string.Empty, out _);

@@ -5,8 +5,9 @@ namespace Oranda.Platform.Ai.Api;
 
 /// <summary>
 /// 구조 결과(StructuredOutput 인자)를 요청에 실은 스키마로 검사한다. 모델이 다시 제출할 수 있게 어긋난 칸의 경로를 돌려준다.
-/// 보는 것: <c>type</c>(문자열 또는 배열), <c>required</c>, <c>properties</c>, <c>items</c>, <c>enum</c>. 그 밖의 키워드는 무시한다.
-/// <c>type</c> 에 <c>null</c> 이 들어 있는 칸만 null 을 받는다.
+/// 보는 것: <c>type</c>(문자열 또는 배열), <c>required</c>, <c>properties</c>, <c>items</c>, <c>enum</c>(글은 대소문자 무시). 그 밖의 키워드는 무시한다.
+/// null 은 <c>type</c> 에 <c>null</c> 이 들어 있는 칸만 받는다. 다만 부모의 <c>required</c> 에 없는 칸의 null 은 "없는 칸"으로 본다
+/// (선택 칸을 null 로 비워 보내는 모델이 흔하고 받는 쪽도 없는 칸과 같게 읽는다). 필수 칸의 null 은 형식 위반이다.
 /// </summary>
 internal static class OpenAiSchemaCheck
 {
@@ -34,7 +35,7 @@ internal static class OpenAiSchemaCheck
         }
 
         if (schema.TryGetProperty("enum", out var allowed) && allowed.ValueKind == JsonValueKind.Array && value is not null
-            && !allowed.EnumerateArray().Any(a => string.Equals(a.GetRawText(), value.ToJsonString(), StringComparison.Ordinal)))
+            && !allowed.EnumerateArray().Any(a => EnumEquals(a, value)))
         {
             issues.Add($"{path}: 허용된 값이 아닙니다({string.Join(", ", allowed.EnumerateArray().Select(a => a.GetRawText()))} 중 하나)");
             return;
@@ -58,7 +59,7 @@ internal static class OpenAiSchemaCheck
                 {
                     foreach (var property in properties.EnumerateObject())
                     {
-                        if (obj.TryGetPropertyValue(property.Name, out var child))
+                        if (obj.TryGetPropertyValue(property.Name, out var child) && !(child is null && !IsRequired(schema, property.Name)))
                         {
                             Check(property.Value, child, Join(path, property.Name), issues);
                         }
@@ -77,6 +78,21 @@ internal static class OpenAiSchemaCheck
 
                 break;
         }
+    }
+
+    private static bool IsRequired(JsonElement schema, string name) =>
+        schema.TryGetProperty("required", out var required) && required.ValueKind == JsonValueKind.Array
+        && required.EnumerateArray().Any(r => r.ValueKind == JsonValueKind.String && r.GetString() == name);
+
+    // 글은 대소문자를 무시한다(받는 쪽이 action 을 대소문자 없이 읽는다). 한글 이스케이프 같은 표기 차이는 값으로 비교한다.
+    private static bool EnumEquals(JsonElement allowed, JsonNode value)
+    {
+        if (allowed.ValueKind == JsonValueKind.String && value is JsonValue v && v.GetValueKind() == JsonValueKind.String)
+        {
+            return string.Equals(allowed.GetString(), v.GetValue<string>(), StringComparison.OrdinalIgnoreCase);
+        }
+
+        return string.Equals(allowed.GetRawText(), value.ToJsonString(), StringComparison.Ordinal);
     }
 
     private static string Join(string path, string name) => path == "$" ? name : $"{path}.{name}";

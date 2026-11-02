@@ -62,7 +62,7 @@ internal sealed class AiProfileProbe : IAiProfileProbe, IDisposable
     /// <summary>
     /// 운영 전송 계층. 리디렉션을 따라가지 않고(키가 다른 호스트로 가지 않게), 프록시를 쓰지 않는다(실제 실행의 프로필 경로가 프록시 변수를 넘기지 않는 것과 같다).
     /// </summary>
-    internal static SocketsHttpHandler CreateHandler() => new() { AllowAutoRedirect = false, ConnectTimeout = TimeSpan.FromSeconds(10), UseProxy = false };
+    internal static SocketsHttpHandler CreateHandler() => new() { AllowAutoRedirect = false, UseCookies = false, ConnectTimeout = TimeSpan.FromSeconds(10), UseProxy = false };
 
     /// <summary>시험용: 전송 계층·claude 확인·시간 제한을 바꿔 넣는다. 핸들러는 이 객체가 소유한다. <paramref name="claudeStatus"/> 가 null 이면 실행 파일을 확인하지 않는다.</summary>
     internal AiProfileProbe(HttpMessageHandler handler, Func<CancellationToken, Task<ClaudeStatus>>? claudeStatus = null, TimeSpan? listTimeout = null, TimeSpan? testTimeout = null)

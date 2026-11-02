@@ -1057,6 +1057,185 @@ public sealed class OpenAiApiDriverTests : IDisposable
         Assert.DoesNotContain(events, e => e is AiToolCall or AiToolResult);
     }
 
+    // ---------------------------------------------------------------- 후속 리뷰 수정: 선택 칸 null·안쪽 중복 키·오류 본문 상한·폐기 경계
+
+    [Fact]
+    public async Task Optional_fields_sent_as_null_count_as_absent()
+    {
+        var withNull = """{"summary":"s","rewrites":[{"label":"a","sql":"select 1 from dual","rationale":"r","benchmark":null}],"index_suggestions":[{"action":"modify","table":"T","columns":["C"],"ddl":"d","rationale":"r","risk":null,"existing_index":null,"existing_columns":null}],"evidence":[]}""";
+        _server.EnqueueSse(FakeOpenAiServer.ToolCallTurn("c1", "StructuredOutput", withNull));
+
+        var events = await RunAsync(Create(), Request(NewSession(), schema: TuningSchema));
+
+        Assert.NotNull(Oranda.Core.Ai.Schemas.TuningResult.Parse(events.OfType<AiFinal>().Single().Result!.Value));
+        Assert.Single(_server.Requests);
+    }
+
+    [Fact]
+    public async Task A_required_field_sent_as_null_is_still_refused()
+    {
+        _server.EnqueueSse(FakeOpenAiServer.ToolCallTurn("c1", "StructuredOutput", """{"summary":null,"rewrites":[],"index_suggestions":[],"evidence":[]}"""));
+        _server.EnqueueSse(FakeOpenAiServer.ToolCallTurn("c2", "StructuredOutput", ValidTuning));
+
+        var events = await RunAsync(Create(), Request(NewSession(), schema: TuningSchema));
+
+        Assert.IsType<AiFinal>(events.Last());
+        Assert.Contains("summary", (string?)_server.Requests[1].Messages[^1]!["content"], StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task Duplicate_keys_inside_nested_arguments_are_returned_to_the_model_not_thrown()
+    {
+        _server.EnqueueSse(FakeOpenAiServer.ToolCallTurn("c1", "StructuredOutput", """{"summary":"s","rewrites":[{"label":"a","label":"b","sql":"s","rationale":"r"}],"index_suggestions":[],"evidence":[]}"""));
+        _server.EnqueueSse(FakeOpenAiServer.ToolCallTurn("c2", "StructuredOutput", ValidTuning));
+
+        var events = await RunAsync(Create(), Request(NewSession(), schema: TuningSchema));
+
+        Assert.IsType<AiFinal>(events.Last());
+        Assert.Contains("invalid_arguments", (string?)_server.Requests[1].Messages[^1]!["content"], StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task Enum_text_is_compared_by_value_ignoring_case()
+    {
+        var upper = ValidTuning.Replace("\"create\"", "\"CREATE\"", StringComparison.Ordinal);
+        _server.EnqueueSse(FakeOpenAiServer.ToolCallTurn("c1", "StructuredOutput", upper));
+        Assert.IsType<AiFinal>((await RunAsync(Create(), Request(NewSession(), schema: TuningSchema))).Last());
+
+        var korean = JsonDocument.Parse("""{"type":"object","required":["k"],"properties":{"k":{"type":"string","enum":["한글"]}}}""").RootElement.Clone();
+        _server.EnqueueSse(FakeOpenAiServer.ToolCallTurn("c2", "StructuredOutput", "{\"k\":\"\\ud55c\\uae00\"}"));
+        Assert.IsType<AiFinal>((await RunAsync(Create(), Request(NewSession(), schema: korean))).Last());
+    }
+
+    [Theory]
+    [InlineData("CONTENT_FILTER")]
+    [InlineData("SAFETY")]
+    [InlineData("safety")]
+    public async Task Other_spellings_of_a_filter_finish_reason_are_content_filtered(string reason)
+    {
+        _server.EnqueueSse(FakeOpenAiServer.Text("부분"), FakeOpenAiServer.Finish(reason));
+
+        Assert.Equal("content_filtered", CodeOf(await RunAsync(Create(), Request(NewSession()))));
+    }
+
+    [Fact]
+    public async Task Only_the_first_64_kb_of_an_error_body_is_read()
+    {
+        // 공백 70 KB 뒤의 JSON 오류 글은 읽지 않는다. 상한이 있으면 앞 64 KB 가 공백뿐이라 본문 전체가 JSON 이 아니고 메시지가 비며,
+        // 상한을 없애면 뒤의 오류 글(MARK)이 메시지에 나온다.
+        _server.Enqueue(FakeOpenAiServer.Error(HttpStatusCode.InternalServerError, new string(' ', 70 * 1024) + "{\"error\":{\"message\":\"MARK\"}}"));
+
+        var error = Assert.IsType<AiError>((await RunAsync(Create(), Request(NewSession()))).Last());
+
+        Assert.Equal("api_http_error", error.Code);
+        Assert.DoesNotContain("MARK", error.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task Whitespace_heavy_error_bodies_are_clipped_before_collapsing()
+    {
+        // 공백이 많은 본문에서 뒤쪽 글이 접힌 뒤에 나타나지 않도록 정규식 앞에서 자른다.
+        _server.Enqueue(FakeOpenAiServer.Error(HttpStatusCode.InternalServerError, new string(' ', 1500) + "TAIL_MARKER"));
+
+        var error = Assert.IsType<AiError>((await RunAsync(Create(), Request(NewSession()))).Last());
+
+        Assert.Equal("api_http_error", error.Code);
+        Assert.DoesNotContain("TAIL_MARKER", error.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task An_endless_error_body_still_ends_with_an_http_error()
+    {
+        _server.Enqueue(new HttpResponseMessage(HttpStatusCode.InternalServerError) { Content = new StreamContent(new EndlessSpaces()) });
+
+        var events = await RunAsync(Create(), Request(NewSession())).WaitAsync(TimeSpan.FromSeconds(20));
+
+        Assert.Equal("api_http_error", CodeOf(events));
+    }
+
+    [Fact]
+    public async Task A_revoked_session_stops_the_remaining_calls_of_the_same_message_before_they_reach_the_gate()
+    {
+        var session = NewSession();
+        var calls = 0;
+        var gate = new StubGate(new AgentGateResponse(new AgentCallToolResult(false, "{}"), AiToolJudgement.Allowed)) { OnCall = () => { calls++; session.Revoke(); } };
+        _server.EnqueueSse(TwoCalls("describe_object", "{}", "describe_object", "{}"), FakeOpenAiServer.Finish("tool_calls"));
+
+        var events = await RunAsync(Create(gate: gate), Request(session));
+
+        Assert.Equal(1, calls);
+        Assert.Equal("session_revoked", CodeOf(events));
+    }
+
+    [Fact]
+    public async Task A_cancellation_caused_by_revoking_the_session_closes_the_tool_card_and_ends_as_session_revoked()
+    {
+        var session = NewSession();
+        var gate = new RevokingCancelGate(session);
+        _server.EnqueueSse(FakeOpenAiServer.ToolCallTurn("call_1", "describe_object", "{}"));
+
+        var events = await RunAsync(Create(gate: gate), Request(session));
+
+        Assert.Equal("session_revoked", CodeOf(events));
+        var card = Assert.Single(events.OfType<AiToolResult>());
+        Assert.Equal(AiToolJudgement.Failed, card.Judgement);
+        Assert.Equal("session_revoked", card.Note);
+        Assert.True(events.IndexOf(card) < events.Count - 1);
+    }
+
+    private sealed class RevokingCancelGate(AgentSession session) : IAgentGate
+    {
+        public event EventHandler<AgentToolActivityEventArgs>? ToolCompleted
+        {
+            add { }
+            remove { }
+        }
+
+        public IReadOnlyList<AgentToolInfo> ListTools(AgentSession s) =>
+            [new AgentToolInfo("describe_object", "describe", new JsonObject { ["type"] = "object" })];
+
+        public Task<AgentGateResponse> CallToolAsync(AgentSession s, string toolName, JsonNode? arguments, CancellationToken ct)
+        {
+            session.Revoke();
+            throw new OperationCanceledException("revoked");
+        }
+    }
+
+    private sealed class EndlessSpaces : Stream
+    {
+        public override bool CanRead => true;
+
+        public override bool CanSeek => false;
+
+        public override bool CanWrite => false;
+
+        public override long Length => throw new NotSupportedException();
+
+        public override long Position
+        {
+            get => throw new NotSupportedException();
+            set => throw new NotSupportedException();
+        }
+
+        public override ValueTask<int> ReadAsync(Memory<byte> buffer, CancellationToken cancellationToken = default)
+        {
+            buffer.Span.Fill((byte)' ');
+            return new ValueTask<int>(buffer.Length);
+        }
+
+        public override int Read(byte[] buffer, int offset, int count) => throw new NotSupportedException();
+
+        public override void Flush()
+        {
+        }
+
+        public override long Seek(long offset, SeekOrigin origin) => throw new NotSupportedException();
+
+        public override void SetLength(long value) => throw new NotSupportedException();
+
+        public override void Write(byte[] buffer, int offset, int count) => throw new NotSupportedException();
+    }
+
     // ---------------------------------------------------------------- 등록
 
     [Fact]
