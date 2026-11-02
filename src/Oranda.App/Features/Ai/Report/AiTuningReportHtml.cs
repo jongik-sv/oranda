@@ -58,7 +58,7 @@ internal static partial class AiTuningReportHtml
             for (var i = 0; i < input.Result.Rewrites.Count; i++)
             {
                 var rewrite = input.Result.Rewrites[i];
-                sb.Append("<article class=\"card\">\n<h3>").Append(Number(i)).Append(". ").Append(H(OneLine(rewrite.Label))).Append("</h3>\n<ul class=\"facts\">");
+                sb.Append("<article class=\"card\">\n<h3>").Append(Number(i)).Append(". ").Append(H(OneLine(rewrite.Label) + TurnMark(input.RewriteTurns, i))).Append("</h3>\n<ul class=\"facts\">");
                 sb.Append("<li><b>근거</b> ").Append(H(OneLine(rewrite.Rationale))).Append("</li>");
                 if (!string.IsNullOrWhiteSpace(rewrite.Benchmark))
                 {
@@ -73,13 +73,18 @@ internal static partial class AiTuningReportHtml
             sb.Append("</section>\n");
         }
 
-        if (input.Result.IndexSuggestions.Count > 0)
+        if (input.Result.IndexSuggestions.Count > 0 || input.DroppedIndexes.Count > 0)
         {
             sb.Append("<section>\n<h2>").Append(IndexesHeading).Append("</h2>\n<p class=\"note\">").Append(H(IndexNote)).Append("</p>\n");
+            if (input.DroppedIndexes.Count > 0)
+            {
+                sb.Append("<p class=\"note\">").Append(H(DroppedText(input))).Append("</p>\n");
+            }
+
             for (var i = 0; i < input.Result.IndexSuggestions.Count; i++)
             {
                 var index = input.Result.IndexSuggestions[i];
-                sb.Append("<article class=\"card\">\n<h3>").Append(Number(i)).Append(". ").Append(H(OneLine(IndexTitle(index)))).Append(" <span class=\"badge\">실행 안 함</span></h3>\n<ul class=\"facts\">");
+                sb.Append("<article class=\"card\">\n<h3>").Append(Number(i)).Append(". ").Append(H(OneLine(IndexTitle(index)) + TurnMark(input.IndexTurns, i))).Append(" <span class=\"badge\">실행 안 함</span></h3>\n<ul class=\"facts\">");
                 sb.Append("<li><b>근거</b> ").Append(H(OneLine(index.Rationale))).Append("</li>");
                 if (!string.IsNullOrWhiteSpace(index.Risk))
                 {

@@ -64,7 +64,7 @@ public static class AiTuningReportBuilder
             for (var i = 0; i < input.Result.Rewrites.Count; i++)
             {
                 var rewrite = input.Result.Rewrites[i];
-                sb.Append("### ").Append(Number(i)).Append(". ").Append(OneLine(rewrite.Label)).Append("\n\n");
+                sb.Append("### ").Append(Number(i)).Append(". ").Append(OneLine(rewrite.Label)).Append(TurnMark(input.RewriteTurns, i)).Append("\n\n");
                 sb.Append("- 근거: ").Append(OneLine(rewrite.Rationale)).Append('\n');
                 if (!string.IsNullOrWhiteSpace(rewrite.Benchmark))
                 {
@@ -75,13 +75,18 @@ public static class AiTuningReportBuilder
             }
         }
 
-        if (input.Result.IndexSuggestions.Count > 0)
+        if (input.Result.IndexSuggestions.Count > 0 || input.DroppedIndexes.Count > 0)
         {
             sb.Append("## ").Append(IndexesHeading).Append("\n\n> ").Append(IndexNote).Append("\n\n");
+            if (input.DroppedIndexes.Count > 0)
+            {
+                sb.Append(DroppedText(input)).Append("\n\n");
+            }
+
             for (var i = 0; i < input.Result.IndexSuggestions.Count; i++)
             {
                 var index = input.Result.IndexSuggestions[i];
-                sb.Append("### ").Append(Number(i)).Append(". ").Append(OneLine(IndexTitle(index))).Append("\n\n");
+                sb.Append("### ").Append(Number(i)).Append(". ").Append(OneLine(IndexTitle(index))).Append(TurnMark(input.IndexTurns, i)).Append("\n\n");
                 sb.Append("- 근거: ").Append(OneLine(index.Rationale)).Append('\n');
                 if (!string.IsNullOrWhiteSpace(index.Risk))
                 {
@@ -140,6 +145,14 @@ public static class AiTuningReportBuilder
     internal static string IndexTitle(Oranda.Core.Ai.Schemas.TuningIndexSuggestion index) =>
         index.Columns.Count == 0 ? index.Table : $"{index.Table} ({string.Join(", ", index.Columns)})";
 
+    /// <summary>이어 말하기에서 나온 후보의 표시(「 · 질문 N」). 처음 튜닝에서 나온 후보는 빈 글.</summary>
+    internal static string TurnMark(IReadOnlyList<int> turns, int index) =>
+        index < turns.Count && turns[index] > 0 ? " · 질문 " + turns[index].ToString(CultureInfo.InvariantCulture) : string.Empty;
+
+    /// <summary>앱이 빼서 싣지 않은 인덱스 후보를 「뺀 후보」 한 줄로(이유는 후보마다 이미 한 줄 글이다).</summary>
+    internal static string DroppedText(AiTuningReportInput input) =>
+        "뺀 후보: " + string.Join(" / ", input.DroppedIndexes.Select(d => OneLine(d.StartsWith("뺀 인덱스 후보: ", StringComparison.Ordinal) ? d["뺀 인덱스 후보: ".Length..] : d)));
+
     internal static string Number(int zeroBased) => (zeroBased + 1).ToString(CultureInfo.InvariantCulture);
 
     internal static string OneLine(string? value) => (value ?? string.Empty).ReplaceLineEndings(" ").Trim();
@@ -186,6 +199,12 @@ public static class AiTuningReportBuilder
             var ch = line[0];
             var length = line.TakeWhile(c => c == ch).Count();
             if (length < 3)
+            {
+                continue;
+            }
+
+            // MarkdownParser.TryFence 와 같은 규칙: 정보 문자열에 백틱이 든 ``` 줄은 한 줄 인라인 코드라 여는 울타리가 아니다.
+            if (openLength == 0 && ch == '`' && line[length..].Contains('`', StringComparison.Ordinal))
             {
                 continue;
             }

@@ -82,6 +82,7 @@ public sealed partial class AiTuningFlow(
     private TuningResult? _lastResult;
     private string _promptStatement = string.Empty; // 대화에 보낸 대상 문장(가린 대화면 가린 글): 레포트용
     private DateTimeOffset _startedAt;
+    private readonly List<AiTuningReportTurn> _reportTurns = []; // 차례별 구조 결과(레포트용): 이어 말하기가 앞 차례 결과를 덮지 않게 모은다
     private int _generation;
 
     /// <summary>대화 창의 멈춤·이어 말하기를 이 흐름에 잇는다(창당 한 번).</summary>
@@ -180,6 +181,7 @@ public sealed partial class AiTuningFlow(
         _indexTabId = null; // 인덱스 후보 탭은 대화 하나에 하나다
         _tuneTabId = null; // 「(튜닝)」 탭도 대화 하나에 하나다
         _generation++;
+        _reportTurns.Clear();
         _context = context with { StatementText = statement.Text, AllowRiskyFunctions = choice.RunRiskyFunctions }; // 원문: 범위 검사·추출기가 쓴다(LLM 으로 가지 않는다)
         chat.StartConversation("튜닝 — " + Shorten(promptStatement, 40));
         await RunAsync(BuildPrompt(choice, promptStatement, vault), resumeId: null, userText: null, ct).ConfigureAwait(true);
@@ -397,10 +399,26 @@ public sealed partial class AiTuningFlow(
 
         _lastResult = result;
 
-        // 레포트 재료: 결과 그대로(가린 대화의 자리표시도 그대로). 인덱스 후보는 시작 창에서 고른 때만 싣는다.
-        chat.SetReportSource(new AiTuningReportSource(
-            _startedAt, _context?.Environment, choice.ModelId == "default" ? null : choice.ModelId, vault is not null, _promptStatement,
-            choice.IndexDdl ? result : result with { IndexSuggestions = [] }));
+        // 레포트 재료: 결과 그대로(가린 대화의 자리표시도 그대로). 인덱스 후보는 시작 창에서 고른 때만 싣고, 확인에서 빠진 것은 확인 뒤에 걸러 다시 넘긴다.
+        var generation = _generation;
+        var turn = chat.Entries.OfType<ChatUserEntry>().Count() - 1; // 0 = 처음 튜닝, N = N 번째 이어 말하기
+        void ReportTurn(IReadOnlyList<TuningIndexSuggestion> indexes, IReadOnlyList<string> dropped)
+        {
+            if (generation != _generation)
+            {
+                return; // 그 사이 새 대화가 시작됐다
+            }
+
+            _reportTurns.RemoveAll(t => t.Index == turn);
+            _reportTurns.Add(new AiTuningReportTurn(turn, result with { IndexSuggestions = indexes }, dropped));
+            chat.SetReportSource(new AiTuningReportSource(
+                _startedAt, _context?.Environment, choice.ModelId == "default" ? null : choice.ModelId, vault is not null, _promptStatement, [.. _reportTurns]));
+        }
+
+        if (!choice.IndexDdl || result.IndexSuggestions.Count == 0)
+        {
+            ReportTurn([], []); // 인덱스 확인이 남았으면 확인 뒤에 한 번에 넘긴다(후보 없는 레포트가 먼저 저장되지 않게)
+        }
         chat.AddAssistantText(result.Summary);
 
         // 편집기·탭으로 가는 글은 자리표시를 원래 값으로 되돌린 뒤에만 넣는다. 되돌리지 못하면(모르는 자리표시) 넣지 않고 알린다.
@@ -449,15 +467,30 @@ public sealed partial class AiTuningFlow(
         if (choice.IndexDdl && result.IndexSuggestions.Count > 0)
         {
             List<TuningIndexSuggestion> restored = [];
+            Dictionary<TuningIndexSuggestion, TuningIndexSuggestion> originals = new(ReferenceEqualityComparer.Instance); // 되돌린 후보 → AI 가 보낸 후보(레포트는 자리표시 그대로)
+            var notRestored = 0;
             foreach (var suggestion in result.IndexSuggestions)
             {
                 if (TryRestore(suggestion.Ddl, $"인덱스 후보 {suggestion.Table}", vault, out var ddl))
                 {
-                    restored.Add(suggestion with { Ddl = ddl });
+                    var candidate = suggestion with { Ddl = ddl };
+                    restored.Add(candidate);
+                    originals[candidate] = suggestion;
+                }
+                else
+                {
+                    notRestored++;
                 }
             }
 
             var review = await AiIndexReview.ReviewAsync(restored, readIndexes, ct).ConfigureAwait(true);
+            List<string> reportDropped = [.. review.Dropped];
+            if (notRestored > 0)
+            {
+                reportDropped.Add($"자리표시를 되돌리지 못해 뺀 후보 {notRestored}개");
+            }
+
+            ReportTurn([.. review.Kept.Select(k => originals[k.Suggestion])], reportDropped);
             if (review.Dropped.Count > 0)
             {
                 chat.AddAssistantText(string.Join('\n', review.Dropped));

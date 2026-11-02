@@ -17,6 +17,8 @@ public class AiTuningReportTests
         [new TuningIndexSuggestion("TB_ORDER", ["ORD_DT", "CUST_ID"], "CREATE INDEX IX_ORDER ON TB_ORDER (ORD_DT, CUST_ID)", "범위 읽기 감소", "쓰기 비용 증가")],
         []);
 
+    private static IReadOnlyList<AiTuningReportTurn> Turns(TuningResult? result = null) => [new AiTuningReportTurn(0, result ?? Result(), [])];
+
     private static AiTuningReportInput Input(TuningResult? result = null, bool masked = false, string target = "SELECT * FROM tb_order") => new(
         "튜닝 — SELECT * FROM tb_order", Created, "운영", "sonnet", masked, target, result ?? Result(),
         [new AiTuningReportTool("실행 계획 보기", "허용", "1,400 자", "0.4 초"), new AiTuningReportTool("run|query", "거부", "0 자", string.Empty)],
@@ -90,7 +92,7 @@ public class AiTuningReportTests
     public void Assembler_turns_chat_lines_into_tools_and_follow_ups_without_the_conclusion_or_save_notices()
     {
         var result = Result();
-        var source = new AiTuningReportSource(Created, ConnectionEnvironment.Production, null, false, "SELECT 1", result);
+        var source = new AiTuningReportSource(Created, ConnectionEnvironment.Production, null, false, "SELECT 1", Turns(result));
         var vm = new AiChatViewModel();
         vm.StartConversation("튜닝");
         vm.BeginTurn("이 문장 튜닝");
@@ -98,8 +100,7 @@ public class AiTuningReportTests
         vm.AddAssistantText(result.Summary);
         vm.EndTurn();
         vm.BeginTurn("인덱스는요?");
-        vm.AddAssistantText("새 인덱스가 필요합니다.");
-        vm.AddAssistantText(result.Summary);
+        vm.AddAssistantText("새 인덱스가 필요합니다."); // 구조 결과가 없는 차례: AI 글이 답이다
         vm.AddAssistantText(AiTuningReportAssembler.SavedPrefix + "/tmp/x.html");
         vm.EndTurn();
 
@@ -120,7 +121,7 @@ public class AiTuningReportTests
         Assert.False(vm.CanSaveReport);
         Assert.False(vm.SaveReportCommand.CanExecute(null));
 
-        vm.SetReportSource(new AiTuningReportSource(Created, null, null, false, "SELECT 1", Result()));
+        vm.SetReportSource(new AiTuningReportSource(Created, null, null, false, "SELECT 1", Turns()));
         Assert.True(vm.SaveReportCommand.CanExecute(null));
 
         vm.BeginTurn("이어서");
@@ -165,6 +166,122 @@ public class AiTuningReportTests
         Assert.True(vm.CanSaveReport);
     }
 
+    [Fact]
+    public void Assembler_keeps_each_turns_result_so_a_follow_up_does_not_replace_the_first_conclusion()
+    {
+        var first = new TuningResult("처음 결론", [Rewrite("r1", "SELECT 1")], [Index("TB_A", "CREATE INDEX IX_A ON TB_A (A)")], []);
+        var second = new TuningResult("두 번째 답", [Rewrite("r1", "SELECT 1"), Rewrite("r2", "SELECT 2")], [Index("TB_A", "CREATE INDEX IX_A ON TB_A (A)"), Index("TB_B", "CREATE INDEX IX_B ON TB_B (B)")], []);
+        var source = new AiTuningReportSource(Created, null, null, false, "SELECT 0", [new(0, first, []), new(1, second, [])]);
+        var vm = new AiChatViewModel();
+        vm.StartConversation("튜닝");
+        vm.BeginTurn("이 문장 튜닝");
+        vm.AddAssistantText(first.Summary);
+        vm.EndTurn();
+        vm.BeginTurn("r2 도 보여 주세요");
+        vm.AddAssistantText(second.Summary);
+        vm.EndTurn();
+        vm.BeginTurn("구조 결과 없는 질문");
+        vm.AddAssistantText("그냥 말로 한 답");
+        vm.EndTurn();
+
+        var input = AiTuningReportAssembler.Build(source, vm.Title, vm.Entries);
+
+        Assert.Equal("처음 결론", input.Result.Summary);
+        Assert.Equal(["두 번째 답", "그냥 말로 한 답"], input.FollowUps.Select(f => f.Answer));
+        Assert.Equal(["r1", "r2"], input.Result.Rewrites.Select(r => r.Label)); // 같은 라벨·SQL 은 한 번만
+        Assert.Equal([0, 1], input.RewriteTurns);
+        Assert.Equal([0, 1], input.IndexTurns);
+        var md = AiTuningReportBuilder.ToMarkdown(input);
+        Assert.Contains("### 2. r2 · 질문 1", md, StringComparison.Ordinal);
+        Assert.Contains("### 1. r1\n", md, StringComparison.Ordinal);
+        Assert.Contains("TB_B (C) · 질문 1", md, StringComparison.Ordinal);
+    }
+
+    private static TuningRewrite Rewrite(string label, string sql) => new(label, sql, "근거", null);
+
+    private static TuningIndexSuggestion Index(string table, string ddl) => new(table, ["C"], ddl, "근거", null);
+
+    [Fact]
+    public void Markdown_does_not_treat_a_one_line_inline_code_triple_backtick_as_an_open_fence()
+    {
+        var result = Result("앞 문단\n\n```code``` 한 줄 코드\n\n뒤 문단");
+
+        var md = AiTuningReportBuilder.ToMarkdown(Input(result));
+
+        var conclusion = md[..md.IndexOf("## 대상 SQL", StringComparison.Ordinal)];
+        Assert.DoesNotContain(conclusion.Split('\n'), l => l.TrimEnd() == "```");
+        Assert.Contains("뒤 문단", conclusion, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Markdown_lists_dropped_index_candidates_in_one_line()
+    {
+        var input = Input() with { DroppedIndexes = ["뺀 인덱스 후보: TB_X (A) — 기존 IX_X (A) 가 이미 덮음"] };
+
+        var md = AiTuningReportBuilder.ToMarkdown(input);
+
+        Assert.Contains("뺀 후보: TB_X (A) — 기존 IX_X (A) 가 이미 덮음", md, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task Typing_and_sending_are_blocked_while_saving_and_a_run_started_meanwhile_stops_the_write()
+    {
+        var vm = NewChat(out var dialogs);
+        vm.Draft = "이어서";
+        Assert.True(vm.CanType);
+        Assert.True(vm.SendCommand.CanExecute(null));
+        var gate = new TaskCompletionSource();
+        dialogs.Gate = gate.Task;
+        dialogs.Path = "/tmp/report.html";
+        var wrote = false;
+        vm.FileWriter = (_, _, _) =>
+        {
+            wrote = true;
+            return Task.CompletedTask;
+        };
+
+        var saving = vm.SaveReportCommand.ExecuteAsync(null);
+        Assert.False(vm.CanType);
+        Assert.False(vm.SendCommand.CanExecute(null));
+
+        vm.BeginTurn("저장 창이 떠 있는 사이 시작된 차례");
+        gate.SetResult();
+        await saving;
+
+        Assert.False(wrote);
+        Assert.StartsWith(AiTuningReportAssembler.FailedPrefix, ((ChatAssistantEntry)vm.Entries[^1]).Text, StringComparison.Ordinal);
+        vm.EndTurn();
+        Assert.True(vm.CanType);
+    }
+
+    [Theory]
+    [InlineData("/tmp/report", false)]
+    [InlineData("/tmp/report.txt", false)]
+    [InlineData("/tmp/report.MD", true)]
+    [InlineData("/tmp/report.htm", true)]
+    public void Only_md_and_html_paths_are_accepted_and_the_path_is_never_rewritten(string path, bool accepted)
+    {
+        Assert.Equal(accepted, AiTuningReportFiles.TryResolve(path, out _));
+    }
+
+    [Fact]
+    public async Task Save_refuses_a_path_without_a_report_extension_instead_of_appending_one()
+    {
+        var vm = NewChat(out var dialogs);
+        dialogs.Path = "/tmp/report.txt";
+        var wrote = false;
+        vm.FileWriter = (_, _, _) =>
+        {
+            wrote = true;
+            return Task.CompletedTask;
+        };
+
+        await vm.SaveReportCommand.ExecuteAsync(null);
+
+        Assert.False(wrote);
+        Assert.StartsWith(AiTuningReportAssembler.FailedPrefix, ((ChatAssistantEntry)vm.Entries[^1]).Text, StringComparison.Ordinal);
+    }
+
     private static AiChatViewModel NewChat(out FakeDialogs dialogs)
     {
         var fake = dialogs = new FakeDialogs();
@@ -172,7 +289,7 @@ public class AiTuningReportTests
         vm.StartConversation("튜닝 — SELECT 1");
         vm.BeginTurn("이 문장 튜닝");
         vm.EndTurn();
-        vm.SetReportSource(new AiTuningReportSource(Created, ConnectionEnvironment.Development, "sonnet", false, "SELECT 1", Result()));
+        vm.SetReportSource(new AiTuningReportSource(Created, ConnectionEnvironment.Development, "sonnet", false, "SELECT 1", Turns()));
         return vm;
     }
 
@@ -182,10 +299,18 @@ public class AiTuningReportTests
 
         public string? Suggested { get; private set; }
 
-        public Task<string?> PickReportSaveFileAsync(string suggestedName, CancellationToken ct)
+        /// <summary>있으면 저장 창이 이 작업이 끝날 때까지 떠 있는 것으로 본다.</summary>
+        public Task? Gate { get; set; }
+
+        public async Task<string?> PickReportSaveFileAsync(string suggestedName, CancellationToken ct)
         {
             Suggested = suggestedName;
-            return Task.FromResult(Path);
+            if (Gate is not null)
+            {
+                await Gate;
+            }
+
+            return Path;
         }
 
         public Task<string?> PickOpenFileAsync(CancellationToken ct) => Task.FromResult<string?>(null);

@@ -221,6 +221,9 @@ public sealed partial class AiChatViewModel : ToolPanelViewModelBase
 
     private bool _isSavingReport;
 
+    /// <summary>지금 저장할 레포트 재료(시험이 튜닝 흐름이 넘긴 내용을 확인하는 용도).</summary>
+    internal AiTuningReportSource? ReportSource => _reportSource;
+
     /// <summary>저장 창을 띄우는 쪽. 기본은 편집기의 대화상자 모음이고 시험에서 가짜로 바꾼다.</summary>
     internal Func<IEditorDialogs> DialogsProvider { get; set; } = () => SqlEditorHost.Current.Dialogs;
 
@@ -239,8 +242,8 @@ public sealed partial class AiChatViewModel : ToolPanelViewModelBase
         SaveReportCommand.NotifyCanExecuteChanged();
     }
 
-    /// <summary>입력 칸에 쓸 수 있다: 이어 갈 대화가 있고 실행 중이 아니다.</summary>
-    public bool CanType => CanFollowUp && !IsRunning;
+    /// <summary>입력 칸에 쓸 수 있다: 이어 갈 대화가 있고 실행 중이 아니며 레포트를 저장하는 중도 아니다(저장 중에 보낸 글이 레포트와 어긋나지 않게).</summary>
+    public bool CanType => CanFollowUp && !IsRunning && !_isSavingReport;
 
     /// <summary>이어 말하기를 보냈다(인수 = 보낸 글). 호출 쪽이 같은 세션으로 다시 실행한다.</summary>
     public event EventHandler<string>? FollowUpRequested;
@@ -500,8 +503,7 @@ public sealed partial class AiChatViewModel : ToolPanelViewModelBase
         }
 
         _isSavingReport = true;
-        OnPropertyChanged(nameof(CanSaveReport));
-        SaveReportCommand.NotifyCanExecuteChanged();
+        NotifySavingChanged();
         try
         {
             var suggested = AiTuningReportFiles.SuggestName(source.CreatedAt, AiTuningReportFormat.Html);
@@ -511,10 +513,22 @@ public sealed partial class AiChatViewModel : ToolPanelViewModelBase
                 return; // 취소
             }
 
-            var path = AiTuningReportFiles.Resolve(picked, out var format);
+            if (IsRunning)
+            {
+                AddAssistantText(AiTuningReportAssembler.FailedPrefix + "이어 말하는 중입니다. 끝난 뒤 다시 저장하세요."); // 저장 창이 떠 있는 사이 다른 경로로 시작된 차례
+                return;
+            }
+
+            if (!AiTuningReportFiles.TryResolve(picked, out var format))
+            {
+                AddAssistantText(AiTuningReportAssembler.FailedPrefix + "파일 확장자는 .md 또는 .html 이어야 합니다.");
+                return;
+            }
+
+            var path = picked;
             try
             {
-                var input = AiTuningReportAssembler.Build(source, Title, Entries);
+                var input = AiTuningReportAssembler.Build(_reportSource ?? source, Title, Entries); // 저장 창이 떠 있는 사이 갱신된 재료를 쓴다
                 await FileWriter(path, AiTuningReportBuilder.Build(input, format), CancellationToken.None).ConfigureAwait(true);
                 AddAssistantText(AiTuningReportAssembler.SavedPrefix + path);
             }
@@ -526,9 +540,16 @@ public sealed partial class AiChatViewModel : ToolPanelViewModelBase
         finally
         {
             _isSavingReport = false;
-            OnPropertyChanged(nameof(CanSaveReport));
-            SaveReportCommand.NotifyCanExecuteChanged();
+            NotifySavingChanged();
         }
+    }
+
+    private void NotifySavingChanged()
+    {
+        OnPropertyChanged(nameof(CanSaveReport));
+        OnPropertyChanged(nameof(CanType));
+        SaveReportCommand.NotifyCanExecuteChanged();
+        SendCommand.NotifyCanExecuteChanged();
     }
 
     private void UpdateStatus()

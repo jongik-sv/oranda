@@ -193,4 +193,29 @@ public class AiIndexReviewTests
         Assert.Contains("CREATE INDEX IX_B", tab, StringComparison.Ordinal);
         Assert.Contains(chat.Entries.OfType<ChatAssistantEntry>(), e => e.Text.Contains("뺀 인덱스 후보:", StringComparison.Ordinal) && e.Text.Contains("IX_APS_COIL_INST_T1", StringComparison.Ordinal));
     }
+
+    [Fact]
+    public async Task Flow_hands_the_report_only_the_candidates_the_app_kept_and_names_the_dropped_ones()
+    {
+        const string json = """
+            { "summary": "s", "rewrites": [], "evidence": [], "index_suggestions": [
+                { "action": "create", "table": "APSUSER.TB_APS_COIL_INST", "columns": ["MTL_MO_NO"], "ddl": "CREATE INDEX IX_A ON APSUSER.TB_APS_COIL_INST (MTL_MO_NO);", "rationale": "r" },
+                { "action": "create", "table": "APSUSER.TB_APS_MO_INST", "columns": ["MO_NO", "FAC_CD"], "ddl": "CREATE INDEX IX_B ON APSUSER.TB_APS_MO_INST (MO_NO, FAC_CD);", "rationale": "r" } ] }
+            """;
+        var driver = new ScriptedDriver(new AiFinal(null, JsonDocument.Parse(json).RootElement.Clone(), "s"));
+        var chat = new AiChatViewModel();
+        var flow = new AiTuningFlow(
+            new FixedEditor("SELECT 1 FROM dual"), driver, chat, (_, _, _) => { },
+            readIndexes: (_, table, _) => Task.FromResult<IReadOnlyList<IndexColumnsRow>?>(
+                table == "TB_APS_COIL_INST" ? [new("IX_APS_COIL_INST_T1", ["MTL_MO_NO"])] : []));
+
+        await flow.StartAsync(new TuningStartChoice(false, true, "default"), new AiContext("DEV", ConnectionEnvironment.Development, AiAccessLevel.Query));
+
+        var turn = Assert.Single(chat.ReportSource!.Turns);
+        Assert.Equal(0, turn.Index);
+        await flow.FollowUpAsync("더 보여 주세요");
+        Assert.Equal([0, 1], chat.ReportSource!.Turns.Select(t => t.Index));
+        Assert.Equal("APSUSER.TB_APS_MO_INST", Assert.Single(turn.Result.IndexSuggestions).Table);
+        Assert.Contains("TB_APS_COIL_INST", Assert.Single(turn.DroppedIndexes), StringComparison.Ordinal);
+    }
 }

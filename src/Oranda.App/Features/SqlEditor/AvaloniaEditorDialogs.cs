@@ -75,14 +75,15 @@ public sealed class AvaloniaEditorDialogs : IEditorDialogs
             return null;
         }
 
+        var reportExtension = Path.GetExtension(suggestedName).Equals(".md", StringComparison.OrdinalIgnoreCase) ? "md" : "html";
         var file = await sp.SaveFilePickerAsync(new FilePickerSaveOptions
         {
             Title = UiText.Get("Shell.dialog.saveAiReport", "튜닝 레포트 저장"),
             SuggestedFileName = suggestedName,
-            DefaultExtension = Path.HasExtension(suggestedName) ? null : "html",
-            FileTypeChoices = Path.GetExtension(suggestedName).Equals(".md", StringComparison.OrdinalIgnoreCase) ? [MarkdownFiles, HtmlFiles] : [HtmlFiles, MarkdownFiles],
+            DefaultExtension = reportExtension, // 확장자 없이 쓴 이름에는 창이 붙이고 덮어쓰기 확인도 창이 맡는다(겹쳐 붙으면 아래에서 한 번으로 정리)
+            FileTypeChoices = reportExtension == "md" ? [MarkdownFiles, HtmlFiles] : [HtmlFiles, MarkdownFiles],
         }).ConfigureAwait(true);
-        return SaveFileNames.CollapseDoubled(file?.TryGetLocalPath(), suggestedName, Path.GetExtension(suggestedName).TrimStart('.'));
+        return SaveFileNames.CollapseDoubled(file?.TryGetLocalPath(), suggestedName, reportExtension);
     }
 
     public async Task<string?> PickWorkspaceFileAsync(bool save, string suggestedName, CancellationToken ct)
