@@ -87,7 +87,7 @@ public class AiProfileScreenTests
 
             page.Choose(page.Choices.First(c => c.ProfileId == qwen.Id));
             window.UpdateLayout();
-            Assert.Equal("사내 Qwen", Find<TextBlock>(window, "ProfileTitle").Text);
+            Assert.Equal("예제 LLM", Find<TextBlock>(window, "ProfileTitle").Text);
             Assert.False(Find<ComboBox>(window, "ModelBox").IsEffectivelyVisible);
             Assert.True(Find<Border>(window, "ProfileInfo").IsEffectivelyVisible);
             Assert.Equal("example-model", Find<TextBlock>(window, "ProfileModelText").Text);
@@ -175,7 +175,7 @@ public class AiProfileScreenTests
             Assert.Equal(7, Find<ItemsControl>(window, "PresetList").GetVisualDescendants().OfType<Button>().Count());
             Assert.Equal(2, Find<ItemsControl>(window, "ProfileList").GetVisualDescendants().OfType<Button>().Count());
             Assert.Equal("http://llm.example:8080", Find<TextBox>(window, "BaseUrlBox").Text);
-            Assert.Equal("사내 Qwen", Find<TextBox>(window, "NameBox").Text);
+            Assert.Equal("예제 LLM", Find<TextBox>(window, "NameBox").Text);
             Assert.True(Find<StackPanel>(window, "PlainTextWarning").IsEffectivelyVisible);
             Assert.True(Find<Button>(window, "DeleteButton").IsEnabled);
             Assert.True(Find<Button>(window, "TestButton").IsEnabled);

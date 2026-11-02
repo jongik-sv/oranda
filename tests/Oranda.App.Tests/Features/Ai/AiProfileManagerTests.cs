@@ -187,7 +187,7 @@ public class AiProfileManagerTests
         var harness = await ProfileHarness.CreateAsync();
         var applied = new List<(AiSettings Latest, Guid? Deleted, Guid? Created)>();
         var vm = harness.Manager(applied: (l, d, c) => applied.Add((l, d, c)), startNew: true);
-        FillValid(vm, name: "사내 서버", url: "http://llm.example:8080", model: "qwen-example");
+        FillValid(vm, name: "사내 서버", url: "http://llm.example:8080", model: "example-model");
         vm.SupportsImages = true;
         vm.MaxInputTokensText = "32000";
         var consumed = false;
@@ -196,7 +196,7 @@ public class AiProfileManagerTests
         Assert.True(await vm.SaveProfileAsync("  secret-value-example  "));
 
         var saved = Assert.Single(harness.Ai.Profiles);
-        Assert.Equal(("사내 서버", AiProfilePreset.Custom, AiApiFormat.Anthropic, "http://llm.example:8080", "qwen-example", 32000, true),
+        Assert.Equal(("사내 서버", AiProfilePreset.Custom, AiApiFormat.Anthropic, "http://llm.example:8080", "example-model", 32000, true),
             (saved.Name, saved.Preset, saved.Format, saved.BaseUrl, saved.Model, saved.MaxInputTokens, saved.SupportsImages));
         Assert.Equal(1, harness.Store.SaveCalls);
         Assert.Equal("secret-value-example", harness.Credentials.Get(AiProfileCredentials.KeyFor(saved.Id)));
@@ -279,7 +279,7 @@ public class AiProfileManagerTests
         vm.Name = "바뀐 이름";
         Assert.False(await vm.SaveProfileAsync("replacement-example"));
         Assert.Equal("old-example", harness.Credentials.Get(oldName)); // 옛 키 복원
-        Assert.Equal("사내 Qwen", harness.Ai.Profiles[0].Name); // 메모리 값도 되돌림
+        Assert.Equal("예제 LLM", harness.Ai.Profiles[0].Name); // 메모리 값도 되돌림
         Assert.NotEmpty(vm.GeneralError);
 
         var fresh = harness.Manager(startNew: true);
@@ -335,7 +335,7 @@ public class AiProfileManagerTests
 
         Assert.False(await vm.DeleteProfileAsync()); // 거절
         Assert.Equal(2, harness.Ai.Profiles.Count);
-        Assert.Contains("사내 Qwen", Assert.Single(asked));
+        Assert.Contains("예제 LLM", Assert.Single(asked));
 
         answer = true;
         Assert.True(await vm.DeleteProfileAsync());

@@ -219,11 +219,11 @@ internal static class ProfileSamples
     public static AiLlmProfile Qwen(Guid? id = null) => new()
     {
         Id = id ?? Guid.NewGuid(),
-        Name = "사내 Qwen",
+        Name = "예제 LLM",
         Preset = AiProfilePreset.Custom,
         Format = AiApiFormat.Anthropic,
         BaseUrl = "http://llm.example:8080",
-        Model = "qwen-example",
+        Model = "example-model",
         SupportsImages = true,
     };
 

@@ -32,7 +32,7 @@ public class AiProfilePageTests
         var page = new AiModelSettingsPage(ProfileSamples.With(qwen));
 
         var rows = page.Choices;
-        Assert.Equal(["시스템 CLI", "Claude Code", "Antigravity CLI", "Codex CLI", "내 프로필", "사내 Qwen", "새 프로필 만들기…"], rows.Select(r => r.Title));
+        Assert.Equal(["시스템 CLI", "Claude Code", "Antigravity CLI", "Codex CLI", "내 프로필", "예제 LLM", "새 프로필 만들기…"], rows.Select(r => r.Title));
         Assert.Equal([AiChoiceKind.Header, AiChoiceKind.ClaudeCode, AiChoiceKind.DisabledCli, AiChoiceKind.DisabledCli, AiChoiceKind.Header, AiChoiceKind.Profile, AiChoiceKind.NewProfile],
             rows.Select(r => r.Kind));
         Assert.All(rows.Where(r => r.Kind == AiChoiceKind.DisabledCli), r =>
@@ -41,7 +41,7 @@ public class AiProfilePageTests
             Assert.Equal("준비 중", r.Detail);
         });
         Assert.True(rows.Single(r => r.Kind == AiChoiceKind.ClaudeCode).IsCurrent);
-        Assert.Equal("qwen-example", rows.Single(r => r.Kind == AiChoiceKind.Profile).Detail);
+        Assert.Equal("example-model", rows.Single(r => r.Kind == AiChoiceKind.Profile).Detail);
         Assert.DoesNotContain(rows, r => r.Title.Contains("Unknown", StringComparison.OrdinalIgnoreCase));
     }
 
@@ -57,8 +57,8 @@ public class AiProfilePageTests
         Assert.Equal(qwen.Id, page.ActiveProfileId);
         Assert.True(page.ShowProfileInfo);
         Assert.False(page.ShowCliSettings);
-        Assert.Equal("AI: 사내 Qwen · qwen-example", page.Summary);
-        Assert.Equal(("qwen-example", "http://llm.example:8080"), (page.ProfileModel, page.ProfileUrl));
+        Assert.Equal("AI: 예제 LLM · example-model", page.Summary);
+        Assert.Equal(("example-model", "http://llm.example:8080"), (page.ProfileModel, page.ProfileUrl));
         Assert.Equal("Anthropic (claude 실행 파일 사용)", page.ProfileFormatText);
         Assert.Equal("지원", page.ProfileImagesText);
         Assert.True(page.ShowPlainTextWarning); // 사내 HTTP 서버: SQL 과 이미지가 암호화 없이 나간다

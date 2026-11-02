@@ -172,8 +172,13 @@ public sealed partial class AiProfileManagerViewModel : ObservableObject, IDispo
     private AiProfilePreset _preset = AiProfilePreset.Custom;
 
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(KeyPlaceholder))]
+    [NotifyPropertyChangedFor(nameof(KeyPlaceholder), nameof(CanClearKey))]
     private bool _hasStoredKey;
+
+    /// <summary>키 저장소를 읽지 못해 저장된 키가 있는지 알 수 없다. 이때도 저장된 키 지우기는 쓸 수 있다(새 키 입력과 함께 막힌 저장을 푸는 길).</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(CanClearKey))]
+    private bool _keyReadFailed;
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(KeyPlaceholder))]
@@ -324,6 +329,9 @@ public sealed partial class AiProfileManagerViewModel : ObservableObject, IDispo
     /// <summary>서버 조회(모델 새로고침·연결 테스트)를 할 수 있다: 조회 서비스가 있고, 도는 작업이 없으며, 고칠 수 있는 프로필이다.</summary>
     public bool CanProbe => _services.Probe is not null && !IsBusy && !IsSaving && IsEditable && IsEditing;
 
+    /// <summary>「저장된 키 지우기」 단추를 보인다: 저장된 키가 있거나, 있는지 읽지 못했다.</summary>
+    public bool CanClearKey => HasStoredKey || KeyReadFailed;
+
     public bool HasProbe => _services.Probe is not null;
 
     public string ProbeUnavailableText => _t.T("이 빌드에서는 서버 조회를 쓸 수 없습니다. 모델명을 직접 입력하세요.", "Server queries are not available in this build. Type the model name.");
@@ -423,6 +431,7 @@ public sealed partial class AiProfileManagerViewModel : ObservableObject, IDispo
         ResultText = string.Empty;
         ClearKeyRequested = false;
         HasStoredKey = false;
+        KeyReadFailed = false;
         IsKeyVisible = false;
         ImagesNote = string.Empty;
         _detectedModels = [];
@@ -521,18 +530,23 @@ public sealed partial class AiProfileManagerViewModel : ObservableObject, IDispo
             if (!_disposed && _editingId == id)
             {
                 HasStoredKey = stored;
+                KeyReadFailed = false;
             }
         }
         catch (Exception ex) when (IsStoreError(ex))
         {
-            // 키 저장소를 못 읽으면 「저장된 키 있음」 을 알 수 없다. 저장할 때 키가 필요한 프리셋은 다시 입력을 요구하므로 안전한 쪽이다.
+            // 키 저장소를 못 읽으면 「저장된 키 있음」 을 알 수 없다. 저장할 때 서버가 바뀌었으면 다시 읽어 막고, 지우기도 쓸 수 있다.
+            if (!_disposed && _editingId == id)
+            {
+                KeyReadFailed = true;
+            }
         }
     }
 
     /// <summary>왼쪽 목록에서 프로필을 고른다. 저장하지 않은 변경이 있으면 버려도 되는지 묻는다.</summary>
     public async Task SelectProfileAsync(Guid id)
     {
-        if (_editingId == id && !_isNew)
+        if (IsSaving || (_editingId == id && !_isNew))
         {
             return;
         }
@@ -555,6 +569,11 @@ public sealed partial class AiProfileManagerViewModel : ObservableObject, IDispo
     /// <summary>「새 프로필」: 직접 입력 초안을 연다. 저장하지 않은 변경이 있으면 버려도 되는지 묻는다.</summary>
     public async Task NewProfileAsync()
     {
+        if (IsSaving)
+        {
+            return;
+        }
+
         if (!await ConfirmDiscardAsync().ConfigureAwait(true))
         {
             return;
@@ -583,7 +602,7 @@ public sealed partial class AiProfileManagerViewModel : ObservableObject, IDispo
     /// </summary>
     public void SelectPreset(AiProfilePreset preset)
     {
-        if (!IsEditable || SafeInfo(preset) is null || preset == Preset)
+        if (IsSaving || !IsEditable || SafeInfo(preset) is null || preset == Preset)
         {
             return;
         }
@@ -718,7 +737,7 @@ public sealed partial class AiProfileManagerViewModel : ObservableObject, IDispo
     [RelayCommand]
     private void ClearStoredKey()
     {
-        if (HasStoredKey)
+        if (CanClearKey)
         {
             ClearKeyRequested = !ClearKeyRequested;
         }
@@ -829,14 +848,17 @@ public sealed partial class AiProfileManagerViewModel : ObservableObject, IDispo
             return false;
         }
 
-        if (await StoredKeyBlocksSaveAsync(enteredKey).ConfigureAwait(true) || _disposed)
-        {
-            return false;
-        }
-
+        // 키 저장소를 다시 읽는 동안(macOS 키체인 프롬프트가 떠 있을 수 있다)에도 다른 조작이 편집 대상을 바꾸지 못하게 먼저 잠근다.
         IsSaving = true;
         try
         {
+            var id = _editingId;
+            var address = BaseUrl;
+            if (await StoredKeyBlocksSaveAsync(enteredKey).ConfigureAwait(true) || _disposed || id != _editingId || address != BaseUrl)
+            {
+                return false; // 막혔거나, 기다리는 사이 편집 대상·주소가 달라졌으면 저장하지 않는다
+            }
+
             return await SaveCoreAsync(string.IsNullOrWhiteSpace(enteredKey) ? null : enteredKey.Trim()).ConfigureAwait(true);
         }
         finally
@@ -867,6 +889,7 @@ public sealed partial class AiProfileManagerViewModel : ObservableObject, IDispo
                 if (_editingId == id)
                 {
                     HasStoredKey = true;
+                    KeyReadFailed = false;
                 }
             }
 
@@ -878,12 +901,16 @@ public sealed partial class AiProfileManagerViewModel : ObservableObject, IDispo
         catch (Exception ex) when (IsStoreError(ex))
         {
             blocked = true; // 읽지 못하면 키가 있는지 알 수 없다: 안전한 쪽으로 막는다
+            if (_editingId == id)
+            {
+                KeyReadFailed = true; // 지우기 단추를 쓸 수 있게 한다
+            }
         }
 
         if (blocked && !_disposed)
         {
-            KeyError = _t.T("주소가 저장된 프로필과 다른 서버입니다. 저장된 키를 보내지 않으니 새 API Key 를 입력하거나 저장된 키 지우기를 누르세요(키 저장소를 읽지 못했으면 새 키를 입력하세요).",
-                "The address points to a different server than the saved profile. The stored key is not sent: enter a new API key or clear the stored key (if the key store could not be read, enter a new key).");
+            KeyError = _t.T("주소가 저장된 프로필과 다른 서버입니다. 저장된 키를 보내지 않으니 새 API Key 를 입력하거나 저장된 키 지우기를 누르세요(키 저장소를 읽지 못했어도 지우기를 쓸 수 있습니다).",
+                "The address points to a different server than the saved profile. The stored key is not sent: enter a new API key or clear the stored key (clearing also works when the key store could not be read).");
         }
 
         return blocked;
@@ -957,7 +984,14 @@ public sealed partial class AiProfileManagerViewModel : ObservableObject, IDispo
         }
         catch (Exception ex) when (IsStoreError(ex))
         {
-            var rollbackNote = await RollbackAsync(keyWritten, previousKey, credentialName, before).ConfigureAwait(true);
+            var (rollbackNote, keyLost) = await RollbackAsync(keyWritten, previousKey, credentialName, before, keyCleared: clear).ConfigureAwait(true);
+            if (keyLost)
+            {
+                HasStoredKey = false; // 지운 키를 되돌리지 못했다: 화면도 키가 없다고 맞춘다
+                KeyReadFailed = false;
+                ClearKeyRequested = false;
+            }
+
             GeneralError = _t.T("설정 파일에 저장하지 못했습니다: ", "Could not write the settings file: ") + ex.Message + rollbackNote;
             if (previousKey is not null)
             {
@@ -991,9 +1025,10 @@ public sealed partial class AiProfileManagerViewModel : ObservableObject, IDispo
         return true;
     }
 
-    private async Task<string> RollbackAsync(bool keyWritten, byte[]? previousKey, string credentialName, AiSettings before)
+    private async Task<(string Note, bool KeyLost)> RollbackAsync(bool keyWritten, byte[]? previousKey, string credentialName, AiSettings before, bool keyCleared = false)
     {
         var note = string.Empty;
+        var keyLost = false;
         if (keyWritten && _services.Credentials is { } store)
         {
             try
@@ -1005,11 +1040,27 @@ public sealed partial class AiProfileManagerViewModel : ObservableObject, IDispo
                 else
                 {
                     await store.DeleteAsync(credentialName).ConfigureAwait(true);
+                    if (keyCleared)
+                    {
+                        // 지우기 전에 옛 키를 읽지 못했으므로 되돌릴 값이 없다: 키는 사라졌다.
+                        keyLost = true;
+                        note = " " + _t.T("또한 지운 저장된 키는 읽을 수 없어 되돌리지 못했습니다. 키가 사라졌으니 API Key 를 다시 입력하세요.",
+                            "Also, the stored key that was removed could not be read beforehand and cannot be restored. The key is gone: enter the API key again.");
+                    }
                 }
             }
             catch (Exception ex) when (IsStoreError(ex))
             {
-                note = " " + _t.T("또한 방금 저장한 키를 되돌리지 못했습니다(저장소에 새 키가 남았을 수 있습니다): ", "Also, the key that was just saved could not be undone (the new key may remain in the store): ") + ex.Message;
+                if (keyCleared)
+                {
+                    keyLost = true;
+                    note = " " + _t.T("또한 지운 저장된 키를 되돌리지 못해 키가 사라졌습니다. API Key 를 다시 입력하세요: ",
+                        "Also, the stored key that was removed could not be restored, so the key is gone. Enter the API key again: ") + ex.Message;
+                }
+                else
+                {
+                    note = " " + _t.T("또한 방금 저장한 키를 되돌리지 못했습니다(저장소에 새 키가 남았을 수 있습니다): ", "Also, the key that was just saved could not be undone (the new key may remain in the store): ") + ex.Message;
+                }
             }
         }
 
@@ -1023,7 +1074,7 @@ public sealed partial class AiProfileManagerViewModel : ObservableObject, IDispo
             // 같은 저장소가 다시 실패해도 메모리 값은 이미 되돌려졌다.
         }
 
-        return note;
+        return (note, keyLost);
     }
 
     private static List<AiLlmProfile> Upsert(IReadOnlyList<AiLlmProfile> list, AiLlmProfile profile)

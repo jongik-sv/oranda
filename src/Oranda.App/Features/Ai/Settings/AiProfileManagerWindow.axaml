@@ -174,7 +174,7 @@
                 <Button x:Name="KeyToggleButton" Grid.Column="1" Content="키 보기" icons:ButtonIcon.Key="objView" icons:ButtonIcon.IconOnly="True"
                         Command="{Binding ToggleKeyVisibleCommand}" Classes="aiIconButton" />
                 <Button x:Name="KeyClearButton" Grid.Column="2" Content="저장된 키 지우기" icons:ButtonIcon.Key="eraser" icons:ButtonIcon.IconOnly="True"
-                        Command="{Binding ClearStoredKeyCommand}" IsVisible="{Binding HasStoredKey}" Classes="aiIconButton" />
+                        Command="{Binding ClearStoredKeyCommand}" IsVisible="{Binding CanClearKey}" Classes="aiIconButton" />
               </Grid>
               <TextBlock x:Name="KeyErrorText" Text="{Binding KeyError}" IsVisible="{Binding KeyError, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" Classes="error" />
             </StackPanel>

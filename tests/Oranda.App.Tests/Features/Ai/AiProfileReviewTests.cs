@@ -355,4 +355,114 @@ public class AiProfileReviewTests
         await test.WaitAsync(Limit);
         Assert.Equal(AiResultKind.None, vm.ResultKind);
     }
+
+    // ---------------------------------------------------------------- 후속: 저장 중 잠금 · 복원 실패 · 읽기 실패 때 지우기
+
+    private static async Task<(ProfileHarness Harness, AiLlmProfile A, AiLlmProfile B, AiProfileManagerViewModel Vm)> TwoProfilesAsync(bool keyUnknown = false)
+    {
+        var a = ProfileSamples.Qwen();
+        var b = ProfileSamples.Ollama();
+        var harness = await ProfileHarness.CreateAsync(ProfileSamples.With(a, b));
+        harness.Credentials.Put(AiProfileCredentials.KeyFor(a.Id), "old-key-example");
+        harness.Credentials.FailLoad = keyUnknown; // 창을 열 때 키를 읽지 못해 「키 있음」 을 모른다: 검사는 통과하고 저장 시점 재검사만 막을 수 있다
+        var vm = harness.Manager(select: a.Id);
+        await vm.Ready;
+        harness.Credentials.FailLoad = false;
+        return (harness, a, b, vm);
+    }
+
+    [Fact]
+    public async Task Moving_to_another_profile_while_the_save_waits_for_the_key_store_does_not_save_it()
+    {
+        var (harness, a, b, vm) = await TwoProfilesAsync(keyUnknown: true);
+        vm.BaseUrl = "http://other.example:9000"; // 서버가 바뀌어 저장 시점 재검사가 키 저장소를 읽는다
+        var hold = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        harness.Credentials.HoldFirstLoad = hold;
+
+        var saving = vm.SaveProfileAsync(null);
+        Assert.True(vm.IsSaving);
+        await vm.SelectProfileAsync(b.Id); // 키체인 프롬프트가 떠 있는 동안의 다른 조작
+        vm.SelectPreset(AiProfilePreset.OpenAi);
+        await vm.NewProfileAsync();
+        Assert.Equal(a.Id, vm.EditingId);
+
+        hold.SetResult();
+        Assert.False(await saving.WaitAsync(Limit));
+        Assert.Equal(a.BaseUrl, harness.Ai.Profiles.Single(p => p.Id == a.Id).BaseUrl);
+        Assert.Equal(b, harness.Ai.Profiles.Single(p => p.Id == b.Id));
+        Assert.Equal("old-key-example", harness.Credentials.Get(AiProfileCredentials.KeyFor(a.Id)));
+    }
+
+    [Fact]
+    public async Task Deleting_the_profile_while_the_save_waits_for_the_key_store_does_nothing()
+    {
+        var (harness, a, _, vm) = await TwoProfilesAsync(keyUnknown: true);
+        vm.BaseUrl = "http://other.example:9000";
+        var hold = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        harness.Credentials.HoldFirstLoad = hold;
+
+        var saving = vm.SaveProfileAsync(null);
+        Assert.False(await vm.DeleteProfileAsync());
+        Assert.Contains(harness.Ai.Profiles, p => p.Id == a.Id);
+
+        hold.SetResult();
+        Assert.False(await saving.WaitAsync(Limit));
+        Assert.Contains(harness.Ai.Profiles, p => p.Id == a.Id);
+        Assert.Equal("old-key-example", harness.Credentials.Get(AiProfileCredentials.KeyFor(a.Id)));
+        Assert.False(vm.IsSaving);
+    }
+
+    [Fact]
+    public async Task A_cleared_key_is_restored_when_the_settings_write_fails()
+    {
+        var (harness, a, _, vm) = await TwoProfilesAsync();
+        vm.ClearStoredKeyCommand.Execute(null);
+        harness.Store.FailSave = true;
+
+        Assert.False(await vm.SaveProfileAsync(null));
+        Assert.Equal("old-key-example", harness.Credentials.Get(AiProfileCredentials.KeyFor(a.Id))); // 지운 키를 되돌렸다
+        Assert.True(vm.HasStoredKey);
+    }
+
+    [Fact]
+    public async Task When_the_cleared_key_cannot_be_restored_the_user_is_told_the_key_is_gone()
+    {
+        var (harness, a, _, vm) = await TwoProfilesAsync();
+        vm.ClearStoredKeyCommand.Execute(null);
+        harness.Store.FailSave = true;
+        harness.Credentials.FailSave = true; // 복원(SaveAsync)도 실패
+
+        Assert.False(await vm.SaveProfileAsync(null));
+        Assert.Null(harness.Credentials.Get(AiProfileCredentials.KeyFor(a.Id)));
+        Assert.False(vm.HasStoredKey);
+        Assert.Contains("사라졌", vm.GeneralError);
+    }
+
+    [Fact]
+    public async Task Clearing_a_key_that_could_not_be_read_works_and_a_failed_write_after_it_reports_the_loss()
+    {
+        var a = ProfileSamples.Qwen();
+        var harness = await ProfileHarness.CreateAsync(ProfileSamples.With(a));
+        harness.Credentials.Put(AiProfileCredentials.KeyFor(a.Id), "old-key-example");
+        harness.Credentials.FailLoad = true;
+        var vm = harness.Manager();
+        await vm.Ready;
+        Assert.False(vm.HasStoredKey);
+        Assert.True(vm.KeyReadFailed);
+        Assert.True(vm.CanClearKey); // 읽기 실패에서도 지우기 단추가 보인다
+
+        vm.ClearStoredKeyCommand.Execute(null);
+        Assert.True(vm.ClearKeyRequested);
+
+        harness.Store.FailSave = true; // 이전 키를 읽지 못했으므로 쓰기 실패 때 되돌릴 수 없다
+        Assert.False(await vm.SaveProfileAsync(null));
+        Assert.Contains("사라졌", vm.GeneralError);
+        Assert.False(vm.KeyReadFailed);
+
+        harness.Store.FailSave = false;
+        harness.Credentials.FailLoad = false;
+        vm.ClearStoredKeyCommand.Execute(null);
+        Assert.True(await vm.SaveProfileAsync(null)); // 이제는 지우고 저장이 된다
+        Assert.Null(harness.Credentials.Get(AiProfileCredentials.KeyFor(a.Id)));
+    }
 }
