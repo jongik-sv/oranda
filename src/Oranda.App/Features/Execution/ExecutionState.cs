@@ -58,6 +58,7 @@ public sealed class ExecutionState : ObservableObject
     private DbError? _lastError;
     private SqlStatement? _lastErrorStatement;
     private Guid? _lastErrorTab;
+    private Guid? _lastErrorProfile;
     private ScriptErrorMode _errorMode = ScriptErrorMode.Ask;
     private bool _dbmsOutputEnabled = true;
     private bool _blankLineDelimiter;
@@ -193,6 +194,9 @@ public sealed class ExecutionState : ObservableObject
 
     /// <summary>마지막 오류가 난 편집기 탭(오류 문장으로 이동).</summary>
     public Guid? LastErrorTab => _lastErrorTab;
+
+    /// <summary>마지막 오류가 난 문장을 실제로 실행한 세션의 접속 프로필 id. 모르면 null(AI 「오류 고치기」 는 모르면 보내지 않는다).</summary>
+    public Guid? LastErrorProfile => _lastErrorProfile;
 
     public ScriptErrorMode ErrorMode
     {
@@ -382,11 +386,16 @@ public sealed class ExecutionState : ObservableObject
 
     public void EndRun() => End(P);
 
-    public void SetError(SqlStatement stmt, DbError? error, Guid? tab)
+    /// <param name="profileId">
+    /// 그 문장을 실제로 실행한 세션의 접속 프로필 id. 실행을 시작할 때 잡은 세션에서 가져온다(호출 시점의 탭 접속이나 「지금 접속」 이 아니다:
+    /// 실행 중에 탭 접속이 바뀔 수 있다). 필수 — 모르면 <see cref="Guid.Empty"/> 이고 null 로 저장된다.
+    /// </param>
+    public void SetError(SqlStatement stmt, DbError? error, Guid? tab, Guid profileId)
     {
         _lastError = error;
         _lastErrorStatement = stmt;
         _lastErrorTab = tab;
+        _lastErrorProfile = profileId == Guid.Empty ? null : profileId;
         HasExecError = true;
     }
 
@@ -398,6 +407,7 @@ public sealed class ExecutionState : ObservableObject
         _lastError = null;
         _lastErrorStatement = null;
         _lastErrorTab = null;
+        _lastErrorProfile = null;
         HasExecError = false;
     }
 

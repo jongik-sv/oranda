@@ -21,7 +21,8 @@ public sealed partial class ExecutionController
     // ---- 결과 반영 ---------------------------------------------------------------------------
 
     /// <param name="binds">이 실행이 쓴 바인드 값. 결과 탭이 문장에 나온 이름의 값만 남겨 두었다가 서버 재조회(내보내기 등)에 그대로 쓴다.</param>
-    private void Present(SqlEditorViewModel tab, ResultTabsViewModel results, SqlStatement stmt, ExecutionResult r, int ordinal,
+    /// <param name="profileId">이 실행에 쓴 세션의 접속 프로필 id(실행을 시작할 때 잡은 세션의 것. 지금 탭 접속이 아니다: 실행 중에 바뀔 수 있다). 오류 상태에 같이 저장한다.</param>
+    private void Present(SqlEditorViewModel tab, ResultTabsViewModel results, SqlStatement stmt, ExecutionResult r, int ordinal, Guid profileId,
                          IReadOnlyDictionary<string, BindValue>? binds = null, bool scriptMode = false)
     {
         var runBinds = SnapshotBinds(stmt, binds);
@@ -64,7 +65,7 @@ public sealed partial class ExecutionController
                 break;
 
             case ExecutionStatus.Failed:
-                State.SetError(stmt, r.Error, tab.TabId);
+                State.SetError(stmt, r.Error, tab.TabId, profileId);
                 Log.AddMessage(MessageKind.Error, $"{Brief(stmt)} — {text}");
                 if (!scriptMode)
                 {

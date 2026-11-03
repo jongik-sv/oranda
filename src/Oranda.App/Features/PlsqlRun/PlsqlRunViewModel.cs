@@ -345,7 +345,7 @@ public sealed partial class PlsqlRunViewModel : ObservableObject
             IsRunning = false;
         }
 
-        return Present(block, result);
+        return Present(block, result, session.Profile.Id);
     }
 
     /// <summary>실행을 취소한다(서버에서 중단은 엔진이 맡는다).</summary>
@@ -359,7 +359,8 @@ public sealed partial class PlsqlRunViewModel : ObservableObject
         _cts?.Cancel();
     }
 
-    private bool Present(CallBlock block, ExecutionResult r)
+    /// <param name="profileId">이 블록을 실제로 실행한 세션의 접속 프로필 id(실행을 시작할 때 잡은 세션. 실행하는 사이 지금 접속이 바뀔 수 있다).</param>
+    private bool Present(CallBlock block, ExecutionResult r, Guid profileId)
     {
         if (r.DbmsOutput.Count > 0)
         {
@@ -397,7 +398,7 @@ public sealed partial class PlsqlRunViewModel : ObservableObject
             case ExecutionStatus.Failed:
                 var text = Execution.DbErrorText.Format(r.Error);
                 SetStatus(text, error: true);
-                _deps.State?.SetError(block.Statement, r.Error, null);
+                _deps.State?.SetError(block.Statement, r.Error, null, profileId);
                 _deps.Log?.AddMessage(MessageKind.Error, $"{title} — {text}");
                 return false;
 
