@@ -31,6 +31,7 @@ public class PlanRunActualWiringTests
     [Fact]
     public Task The_command_handler_routes_run_actual_through_the_prepare_path_for_the_tab_that_started_it() => HeadlessHost.Run(async () =>
     {
+        PlanViewModel.SetCurrent(null); // 앞 시험이 남긴 낡은 모델을 지운다
         using var h = new ShellHarness();
         var wiring = h.Services.GetService<IEnumerable<Oranda.Core.Composition.IStartupTask>>()!.OfType<SqlEditorDockWiring>().Single();
         await wiring.RunAsync(default);
@@ -39,23 +40,25 @@ public class PlanRunActualWiringTests
         SqlEditorHost.Current.Active = tab;
 
         // 접속이 없다: 처리기 → RunActualAsync(활성 탭) → 문장 결정 → 다시 실행 길(세션 없음)까지 간다. 어느 단계에서 끊겨도 상태 줄이 달라진다.
-        // 계획 창 모델은 정적 연결(PlanPanelViewModel.Instance)이라 같은 UI 스레드의 다른 시험이 중간에 바꾸면 못 볼 수 있어, 그때만 세 번까지 다시 해 본다.
-        PlanViewModel? vm = null;
-        for (var attempt = 0; attempt < 3; attempt++)
-        {
-            await new ExecutionPlanCommandHandler(h.Services).ExecuteAsync(new CommandContext(ExecutionPlanCommands.RunActualId, h.Get<IContextKeys>()), default);
-            Dispatcher.UIThread.RunJobs();
-            vm = PlanPanelViewModel.Instance!.For(tab)!;
-            if (vm.StatusText.Contains("접속", StringComparison.Ordinal))
-            {
-                break;
-            }
-        }
+        // 처리기는 계획 창 모델을 정적 연결(PlanPanelViewModel.Instance → 없으면 PlanViewModel.Current)로 찾는다. 앞 시험이 남긴 낡은 Current 를 돌려받지 않게 먼저 지운다.
+        var handler = new ExecutionPlanCommandHandler(h.Services);
+        var context = new CommandContext(ExecutionPlanCommands.RunActualId, h.Get<IContextKeys>());
+        await handler.ExecuteAsync(context, default);
+        Dispatcher.UIThread.RunJobs();
+        var vm = PlanPanelViewModel.Instance!.For(tab)!;
 
-        Assert.Contains("접속", vm!.StatusText, StringComparison.Ordinal);
+        Assert.Contains("접속", vm.StatusText, StringComparison.Ordinal);
         Assert.DoesNotContain("활성 SQL 탭이 없습니다", vm.StatusText, StringComparison.Ordinal);
         Assert.DoesNotContain("실행할 문장이 없습니다", vm.StatusText, StringComparison.Ordinal);
         Assert.Null(vm.CurrentPlan);
+
+        // 처리기 입구가 일반 실행의 문장 결정(ExecutionController.PrepareSingleStatementAsync → SelectStatements)을 지나는지: 선택 영역에 문장이 둘이면
+        // 그 길만 「여러 개」 로 막는다(커서 문장만 쓰는 길이면 첫 문장을 실행하려 들어 이 안내가 나오지 않는다).
+        tab.Document.Text = "select 1 from dual;" + Environment.NewLine + "select 2 from dual;";
+        tab.Select(0, tab.Text.Length);
+        await handler.ExecuteAsync(context, default);
+        Dispatcher.UIThread.RunJobs();
+        Assert.Contains("여러 개", PlanPanelViewModel.Instance!.For(tab)!.StatusText, StringComparison.Ordinal);
     });
 
     // ---- N5b·N6: 시작한 작업 공간(owner)이 바쁨 표시에 전달된다 ----
