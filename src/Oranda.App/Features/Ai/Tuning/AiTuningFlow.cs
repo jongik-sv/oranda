@@ -382,7 +382,7 @@ public sealed partial class AiTuningFlow(
 
         // 이어 말하기 글은 가리지 않고(사용자가 쓴 글) 자리표시를 그대로 쓰라는 안내만 덧붙인다.
         var text = followUp.Text.Length == 0 ? "Look at the attached image(s) and continue." : followUp.Text;
-        var rules = Command is { } command ? command.ResponseRules : ResponseStyle + Environment.NewLine + KeepCommentsRule;
+        var rules = Command is { } command ? command.ResponseRules : ResponseStyle + Environment.NewLine + KeepCommentsRule + Environment.NewLine + OracleJoinRule;
         return text + Environment.NewLine + Environment.NewLine + rules
             + (_vault is null ? string.Empty : Environment.NewLine + PlaceholderReminder(_vault));
     }
@@ -445,6 +445,7 @@ public sealed partial class AiTuningFlow(
             : "Do not suggest indexes; leave index_suggestions empty.");
         text.AppendLine(ResponseStyle);
         text.AppendLine(KeepCommentsRule);
+        text.AppendLine(OracleJoinRule);
         if (vault is not null)
         {
             text.AppendLine(PlaceholderReminder(vault));
@@ -497,6 +498,34 @@ public sealed partial class AiTuningFlow(
     /// <summary>재작성 SQL 에 원래 주석을 남기라는 규칙(처음 요청과 이어 말하기 모두). 가린 대화면 주석 자리표시를 그대로 두라는 말이 <see cref="PlaceholderReminder"/> 에 붙는다.</summary>
     internal const string KeepCommentsRule =
         "Keep every comment of the original statement in each rewrite's sql, unchanged and next to the code it describes; do not drop, merge or reword comments.";
+
+    /// <summary>
+    /// Oracle 조인 문법 규칙의 공통 글(튜닝 <see cref="OracleJoinRule"/>·오류 고치기 <c>FixErrorCommand.FixErrorJoinRule</c> 이 const 조합으로 같이 쓴다): 쉼표 FROM·WHERE 조인 조건·<c>(+)</c>,
+    /// 외부 조인 쪽 상수 조건의 <c>(+)</c>. 프롬프트 글만이다(결과가 Oracle 문법인지 검사하거나 바꾸지 않는다).
+    /// </summary>
+    internal const string OracleJoinSyntaxRule =
+        "Oracle join syntax: list the tables in the FROM clause separated by commas, put every join condition in the WHERE clause, and mark an outer join with the (+) operator on the optional side. "
+        + "Put (+) on every condition that belongs to the outer join (what was in the ON clause) and refers to the outer-joined table, including conditions against a constant, a literal or a bind variable such as t.status(+) = 'A' or t.k(+) = :v1; if you leave one out the outer join silently turns into an inner join and the result changes. "
+        + "Do not put (+) on a filter that was in the WHERE clause and applies after the join, and a condition that only restricts the preserved (non-optional) table inside an ON clause cannot take (+), so keep that join in ANSI syntax. ";
+
+    /// <summary>Oracle 문법으로 쓸 수 없을 때의 ANSI 예외와, 같은 쿼리 블록에 ANSI 와 <c>(+)</c> 를 섞지 말라는 제약(ORA-25156). 두 규칙이 공유한다.</summary>
+    internal const string OracleJoinExceptionRule =
+        "Use ANSI join syntax only when Oracle syntax cannot express the join, for example FULL OUTER JOIN, a partitioned outer join, LATERAL or APPLY, or a condition that (+) rejects (ORA-01417, ORA-01719, ORA-01799), and then state the reason in that proposal's rationale. "
+        + "Never mix ANSI joins and (+) in one query block (ORA-25156): a query block that keeps an ANSI join must not use (+), so write every join of that block in ANSI. ";
+
+    /// <summary>두 규칙이 공유하는 맺음: 가림 자리표시(<c>:vN</c>)와 주석 유지 규칙을 깨지 않는다.</summary>
+    internal const string OracleJoinKeepRule =
+        "Keep every bind variable token of the statement (such as :1, :name or :v1) exactly as it is; the rule about keeping comments still applies.";
+
+    /// <summary>
+    /// 튜닝: 제안하는 재작성 SQL 은 늘 Oracle 조인 문법으로 쓴다(처음 요청과 이어 말하기 모두). 원래 문장이 ANSI 조인이어도 바꾸며 결과 집합은 같아야 한다.
+    /// 설명 명령은 제안 SQL 이 없어 붙이지 않는다. 오류 고치기는 자기가 쓰거나 고치는 조인만 다루는 <c>FixErrorCommand.FixErrorJoinRule</c> 을 따로 쓴다.
+    /// </summary>
+    internal const string OracleJoinRule =
+        "Write the sql of every rewrite you propose in " + OracleJoinSyntaxRule
+        + "Do this even when the original statement uses ANSI joins (JOIN ... ON, LEFT or RIGHT OUTER JOIN): convert them, and the proposed SQL must return the same result set. "
+        + OracleJoinExceptionRule
+        + OracleJoinKeepRule;
 
     /// <summary>
     /// 구조 결과에서 AI 가 빠뜨린 칸(역직렬화가 null 로 두는 문자열·목록·항목)을 빈 값으로 채운다. 스키마가 필수로 요구해도 모델이 칸을 빼면
