@@ -15,6 +15,7 @@ public partial class SqlResultPaneView : UserControl
     {
         InitializeComponent();
         GotFocus += (_, _) => PushGridKeys();
+        AttachedToVisualTree += (_, _) => TakeOverAsTargetInResults();
         ShellContextMenus.Attach(GridControl, "grid");
         GridControl.ScrollChanged += (_, _) => SyncBars();
         GridControl.SizeChanged += (_, _) => SyncBars();
@@ -73,9 +74,7 @@ public partial class SqlResultPaneView : UserControl
             if (e.Source is Button { Tag: string id } && id.StartsWith("oranda.grid.edit.", StringComparison.Ordinal))
             {
                 e.Handled = true;
-                ResultGridCommands.Active = GridControl.Model ?? ResultGridCommands.Active; // 이 창의 결과를 대상으로 삼는다
-                PushGridKeys();
-                await ShellCommandRunner.RunAsync(id);
+                await RunOnThisGridAsync(id);
             }
         });
 
@@ -289,11 +288,18 @@ public partial class SqlResultPaneView : UserControl
                 GridControl.Focus();
             }
         };
-        FilterFetchAllButton.Click += async (_, _) =>
-        {
-            ResultGridCommands.Active = GridControl.Model ?? ResultGridCommands.Active;
-            await ShellCommandRunner.RunAsync("oranda.grid.fetchAll");
-        };
+        FilterFetchAllButton.Click += async (_, _) => await RunOnThisGridAsync("oranda.grid.fetchAll");
+    }
+
+    /// <summary>
+    /// 이 창의 단추로 그리드 명령을 실행한다. 단추는 포커스를 받지 않고(Focusable=False) 실행 뒤 포커스는 편집기에 남으므로,
+    /// 포커스를 기다리지 않고 이 그리드를 명령의 대상으로 삼아 활성 조건 키를 먼저 맞춘다.
+    /// </summary>
+    private async Task RunOnThisGridAsync(string commandId)
+    {
+        ResultGridCommands.Active = GridControl.Model ?? ResultGridCommands.Active;
+        PublishGridKeys();
+        await ShellCommandRunner.RunAsync(commandId);
     }
 
     /// <summary>
@@ -365,6 +371,26 @@ public partial class SqlResultPaneView : UserControl
         }
 
         SyncBars();
+        TakeOverAsTargetInResults();
+    }
+
+    /// <summary>
+    /// 결과 창에 포커스가 있는 채 보이는 결과가 바뀌면(결과 탭 전환·다시 실행) 새 그리드가 포커스를 받기 전이라도 명령의 대상이 된다.
+    /// 그러지 않으면 Alt+End 같은 단축키가 화면에 없는 옛 그리드로 가거나 옛 키로 거부된다.
+    /// 포커스 자리는 자리 없는 곳(객체 상세 데이터 탭의 그리드 등)으로 옮겨도 직전 값이 남으므로, 지금 포커스가 정말 결과 창에 있는지도 본다.
+    /// 포커스가 없거나 떨어져 나간 컨트롤에 남은 것은 탭 전환으로 옛 그리드가 빠진 경우다.
+    /// </summary>
+    private void TakeOverAsTargetInResults()
+    {
+        if (GridControl.IsCommandTarget && GridControl.Model is { } m && Oranda.App.Shell.Keymaps.FocusSlot.Find(this) == "sqlGrid"
+            && ContextKeyService.Shared is { FocusSlot: "sqlGrid" }
+            && (TopLevel.GetTopLevel(this)?.FocusManager?.GetFocusedElement() is not Avalonia.Visual now
+                || TopLevel.GetTopLevel(now) is null
+                || Oranda.App.Shell.Keymaps.FocusSlot.Find(now) == "sqlGrid"))
+        {
+            ResultGridCommands.Active = m;
+            PublishGridKeys();
+        }
     }
 
     private void OnModelChanged(object? sender, EventArgs e) => PushGridKeys();
@@ -372,7 +398,16 @@ public partial class SqlResultPaneView : UserControl
     /// <summary>그리드 명령(복사·열 고정 등)의 활성 조건 키를 맞춘다. 포커스가 이 그리드에 있을 때만 의미가 있다.</summary>
     private void PushGridKeys()
     {
-        if (ContextKeyService.Shared is not { } keys || GridControl.Model is not { } m || !(GridControl.IsFocused || IsKeyboardFocusWithin))
+        if (GridControl.IsFocused || IsKeyboardFocusWithin)
+        {
+            PublishGridKeys();
+        }
+    }
+
+    /// <summary>이 그리드의 상태를 활성 조건 키로 옮긴다(포커스 검사 없음: 포커스 변화나 이 창의 단추가 부른다).</summary>
+    private void PublishGridKeys()
+    {
+        if (ContextKeyService.Shared is not { } keys || GridControl.Model is not { } m)
         {
             return;
         }

@@ -48,6 +48,7 @@ public sealed partial class ResultGridModel
         using var own = CancellationTokenSource.CreateLinkedTokenSource(ct);
         _fetchAllCts = own;
         IsFetchingAll = true;
+        FetchAllError = null;
         RaiseChanged();
         try
         {
@@ -69,6 +70,11 @@ public sealed partial class ResultGridModel
         {
             // 「취소」 단추(CancelFetchAll)로 멈췄다: 가져온 만큼은 그대로 두고 조용히 끝낸다.
         }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            FetchAllError = ex; // 상태 줄에 보인다. 호출한 쪽으로도 던진다(다시 누를 수 있어 Error 에는 넣지 않는다)
+            throw;
+        }
         finally
         {
             _fetchAllCts = null;
@@ -82,6 +88,9 @@ public sealed partial class ResultGridModel
 
     /// <summary>「모두 가져오기」가 도는 중(상태 줄 단추가 「취소」로 바뀐다).</summary>
     public bool IsFetchingAll { get; private set; }
+
+    /// <summary>마지막 「모두 가져오기」의 실패(없으면 null). 다시 시작하면 지운다.</summary>
+    public Exception? FetchAllError { get; private set; }
 
     /// <summary>페이지를 서버에서 받는 중(스크롤 미리 읽기·모두 가져오기·정렬용 읽기). 실행 중 막대의 근거.</summary>
     public bool IsFetching => _fetching > 0 || IsFetchingAll;
@@ -157,6 +166,11 @@ public sealed partial class ResultGridModel
         {
             _knownRows = _loadedRows;
             changed = true;
+        }
+
+        if (changed)
+        {
+            FetchAllError = null; // 커서가 다시 나아갔다(스크롤 미리 읽기 포함): 지난 실패 문구는 낡았다
         }
 
         if (changed || page.RowCount > 0)

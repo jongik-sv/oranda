@@ -214,14 +214,26 @@ public sealed partial class ExecutionController
 
     /// <summary>
     /// 결과를 끝까지 가져오는 긴 작업(「모두 가져오기」)을 실행 상태로 돌린다. 그동안 취소 명령이 켜지고, 누르면 페이지 가져오기를
-    /// 서버에서 끊는다(EXEC-02, TSK-06-11). 이미 실행 중이거나 접속이 없으면 상태 없이 그냥 돌린다.
+    /// 서버에서 끊는다(EXEC-02, TSK-06-11). 이미 실행 중이거나 접속이 없으면 상태 없이 그냥 돌린다. 실패·취소는 어느 쪽이든 메시지로 남긴다.
     /// </summary>
     public async Task FetchAsync(Func<CancellationToken, Task> fetch, CancellationToken ct = default)
     {
         ArgumentNullException.ThrowIfNull(fetch);
         if (SessionFor(Host.Active) is not { } session || State.IsBusy(session.Id))
         {
-            await fetch(ct).ConfigureAwait(true);
+            try
+            {
+                await fetch(ct).ConfigureAwait(true);
+            }
+            catch (OperationCanceledException)
+            {
+                Log.AddMessage(MessageKind.Info, "취소되었습니다.");
+            }
+            catch (Exception e)
+            {
+                Log.AddMessage(MessageKind.Error, "실행 중 오류: " + e.Message);
+            }
+
             return;
         }
 

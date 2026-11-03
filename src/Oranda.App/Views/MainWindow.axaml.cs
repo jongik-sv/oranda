@@ -208,7 +208,7 @@ public partial class MainWindow : Window
 
         ApplyStaticText();
         RebuildMenus();
-        ShellCommandRunner.Runner = id => _registry is null || _keys is null ? Task.CompletedTask : _registry.ExecuteAsync(id, _keys);
+        ShellCommandRunner.Runner = ShellCommandRunner.Bind(_registry, _keys);
         DataTemplates.Add(StartPage.HostTemplate(() => new StartPage(_registry, _keys, _shell.Text, _keymap.ShortcutText, services.GetService<Features.RecentFiles.RecentFilesService>(), services)));
         _shell.Docking.EmptyDocumentContent = () => StartPageContent.Instance; // 화면은 위 템플릿이 문서 영역 호스트마다 새로 만든다
         ShellContextMenus.Factory = surface =>

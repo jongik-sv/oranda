@@ -76,6 +76,12 @@ public sealed partial class SqlResultPaneViewModel
         {
             text += " · 거르는 중…";
         }
+
+        if (_model.FetchAllError is { } fetchError)
+        {
+            text += " · 모두 가져오기 실패: " + fetchError.Message;
+        }
+
         if (_model.EditOverlay?.ExtraRows is > 0 and var added)
         {
             text += $" · 새 행 {added}"; // 편집 모드에서 아직 반영하지 않은 새 행

@@ -93,6 +93,7 @@ public sealed class ResultGridCommandHandler : ICommandHandler
         var g = context.Parameter as ResultGridModel ?? ResultGridCommands.Active;
         if (g is null)
         {
+            System.Diagnostics.Trace.TraceWarning("결과 명령 '{0}' 의 대상 그리드가 없어 실행하지 않았다.", context.CommandId);
             return;
         }
 

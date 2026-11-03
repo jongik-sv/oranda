@@ -418,7 +418,7 @@ public sealed partial class GridEditTests : IDisposable
         public ValueTask DisposeAsync() => ValueTask.CompletedTask;
     }
 
-    private sealed class RecordingExecution : IExecutionService
+    internal sealed class RecordingExecution : IExecutionService
     {
         public List<(SqlStatement Statement, ExecutionOptions? Options, IReadOnlyDictionary<string, BindValue> Binds)> Calls { get; } = [];
 
@@ -447,7 +447,7 @@ public sealed partial class GridEditTests : IDisposable
         }
     }
 
-    private sealed class TestSession(bool readOnly) : ISession
+    internal sealed class TestSession(bool readOnly) : ISession
     {
         public Guid Id { get; } = Guid.NewGuid();
 
@@ -477,7 +477,7 @@ public sealed partial class GridEditTests : IDisposable
         public ValueTask DisposeAsync() => ValueTask.CompletedTask;
     }
 
-    private sealed class OneTableMetadata(TableInfo table) : IMetadataProvider
+    internal sealed class OneTableMetadata(TableInfo table) : IMetadataProvider
     {
         public Task<TableInfo> GetTableAsync(ISession s, DbObjectRef t, CancellationToken ct) =>
             Task.FromResult(table with { Table = t });
