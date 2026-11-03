@@ -11,6 +11,7 @@ using Oranda.App.Features.GridEdit;
 using Oranda.App.Features.ResultGrid;
 using Oranda.App.Features.SqlEditor;
 using Oranda.App.Shell;
+using Oranda.App.Shell.Keymaps;
 using Oranda.App.Shell.Menus;
 using Oranda.App.Tests.Features.GridEdit;
 using Oranda.App.Tests.Shell.Headless;
@@ -399,7 +400,7 @@ public sealed class FetchAllCommandPathTests
             Dispatcher.UIThread.RunJobs();
             Assert.True(y.IsFocused);
 
-            rig.Harness.Window.KeyPress(Key.Delete, RawInputModifiers.Alt, PhysicalKey.Delete, null);
+            PressShortcut(rig, "oranda.grid.edit.deleteRow");
             await HeadlessHost.WaitUntil(() => inResults.IsDirty || inY.IsDirty, 5000);
 
             Assert.False(inResults.IsDirty);
@@ -411,6 +412,31 @@ public sealed class FetchAllCommandPathTests
             GridEditCommands.Active = previous;
         }
     });
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void Row_delete_key_read_from_the_keymap_runs_the_command_on_each_os(bool macOS)
+    {
+        var table = KeyBindingTable.Build(KeymapLoader.LoadPreset("default"), macOS);
+        var keys = new ContextKeyService();
+        keys.SetFocusSlot("sqlGrid");
+
+        var gesture = Assert.IsType<KeyGesture>(table.SingleGesture("oranda.grid.edit.deleteRow"));
+
+        Assert.Equal("oranda.grid.edit.deleteRow", table.Find([(gesture.Key, gesture.KeyModifiers)], keys).CommandId);
+    }
+
+    /// <summary>
+    /// 명령에 묶인 지금 OS 의 첫 단축키를 창에 보낸다. 키맵의 mac 목록은 keys 를 대신하므로(Keymap.KeysFor) 키를 시험에 박으면 다른 OS 에서 명령이 돌지 않는다.
+    /// KeyModifiers 와 RawInputModifiers 의 Alt·Control·Shift·Meta 는 값이 같다.
+    /// </summary>
+    private static void PressShortcut(Rig rig, string commandId)
+    {
+        var gesture = rig.Harness.Get<KeymapService>().Table.SingleGesture(commandId)
+            ?? throw new Xunit.Sdk.XunitException($"키맵에 {commandId} 의 단축키가 없다.");
+        rig.Harness.Window.KeyPress(gesture.Key, (RawInputModifiers)gesture.KeyModifiers, PhysicalKey.None, null);
+    }
 
     /// <summary>객체 상세 데이터 탭처럼 포커스 자리가 없는 곳에 결과 그리드를 하나 더 띄운다.</summary>
     private static async Task<(ResultGridControl Grid, SqlResultPaneViewModel Pane)> HostGridWithoutSlotAsync(Rig rig, IResultSet set)
