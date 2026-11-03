@@ -4,6 +4,7 @@ using Avalonia.Markup.Xaml.Styling;
 using Avalonia.Media;
 using AvaloniaEdit;
 using Oranda.App.Shell.Appearance;
+using Oranda.App.Shell.Keymaps;
 
 namespace Oranda.App.Features.SqlEditor;
 
@@ -40,6 +41,8 @@ public sealed class SqlCodeView : UserControl
         _editor.Bind(TextEditor.FontFamilyProperty, _editor.GetResourceObservable(ThemeService.EditorFontFamilyKey));
         _editor.Bind(TextEditor.FontSizeProperty, _editor.GetResourceObservable(ThemeService.EditorFontSizeKey));
         Content = _editor;
+        // 도구 창은 포커스 자리가 없어, 표시가 없으면 주 창이 Ctrl+C 를 직전 편집기로 보낸다.
+        EditKeyScope.SetOwns(this, true);
     }
 
     public string? Text

@@ -1,8 +1,12 @@
+using System;
+using System.Collections.Generic;
 using System.ComponentModel;
 using System.Linq;
+using System.Threading.Tasks;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Input;
+using Avalonia.Input.Platform;
 using Avalonia.Interactivity;
 
 namespace Oranda.App.Features.HistoryScripts;
@@ -65,6 +69,15 @@ public partial class HistoryView : UserControl
             }
         };
         List.KeyDown += OnListKeyDown;
+        ListMenu.Opening += (_, e) =>
+        {
+            var items = SelectedItemsInListOrder();
+            e.Cancel = items.Count == 0;
+            CopyErrorMenu.IsEnabled = items.Any(i => i.ErrorText is not null);
+        };
+        CopySqlMenu.Click += (_, _) => _ = CopySelectionAsync(HistoryViewModel.CopySql);
+        CopyErrorMenu.Click += (_, _) => _ = CopySelectionAsync(HistoryViewModel.CopyErrors);
+        CopyRowMenu.Click += (_, _) => _ = CopySelectionAsync(HistoryViewModel.CopyRows);
         AttachedToVisualTree += async (_, _) =>
         {
             if (DataContext is HistoryViewModel vm)
@@ -141,9 +154,47 @@ public partial class HistoryView : UserControl
         }
     }
 
+    // 고른 순서가 아니라 목록 순서로 돌려준다(여러 줄 복사가 보이는 차례를 따르게).
+    private List<HistoryItem> SelectedItemsInListOrder()
+    {
+        if (DataContext is not HistoryViewModel vm || List.SelectedItems is not { } selected)
+        {
+            return [];
+        }
+
+        var picked = selected.OfType<HistoryItem>().ToHashSet();
+        return [.. vm.Items.Where(picked.Contains)];
+    }
+
+    private async Task CopySelectionAsync(Func<IReadOnlyList<HistoryItem>, string> format)
+    {
+        var items = SelectedItemsInListOrder();
+        var text = format(items);
+        if (text.Length == 0 || DataContext is not HistoryViewModel vm || TopLevel.GetTopLevel(this)?.Clipboard is not { } clipboard)
+        {
+            return;
+        }
+
+        try
+        {
+            await clipboard.SetTextAsync(text);
+            vm.StatusMessage = $"{items.Count}건 복사";
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            vm.StatusMessage = "복사하지 못했다: " + ex.Message;
+        }
+    }
+
     private async void OnListKeyDown(object? sender, KeyEventArgs e)
     {
-        if (e.Key == Key.Delete && DataContext is HistoryViewModel vm)
+        var primary = Application.Current?.PlatformSettings?.HotkeyConfiguration.CommandModifiers ?? KeyModifiers.Control;
+        if (e.Key == Key.C && e.KeyModifiers == primary)
+        {
+            e.Handled = true;
+            await CopySelectionAsync(HistoryViewModel.CopySql);
+        }
+        else if (e.Key == Key.Delete && DataContext is HistoryViewModel vm)
         {
             await vm.DeleteAsync([.. List.SelectedItems?.OfType<HistoryItem>() ?? []]);
             e.Handled = true;

@@ -1,6 +1,7 @@
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:icons="using:Oranda.App.Shell.Icons"
+             xmlns:keymaps="using:Oranda.App.Shell.Keymaps"
              xmlns:sqled="using:Oranda.App.Features.SqlEditor"
              xmlns:vm="using:Oranda.App.Features.HistoryScripts"
              x:Class="Oranda.App.Features.HistoryScripts.HistoryView"
@@ -63,8 +64,15 @@
           <TextBlock Grid.Column="5" Padding="10,0,6,0" Text="SQL" />
         </Grid>
       </Border>
-      <ListBox x:Name="List" Grid.Row="1" Classes="table" ItemsSource="{Binding Items}" SelectedItem="{Binding Selected, Mode=TwoWay}" SelectionMode="Multiple"
+      <ListBox x:Name="List" Grid.Row="1" Classes="table" keymaps:EditKeyScope.Owns="True" ItemsSource="{Binding Items}" SelectedItem="{Binding Selected, Mode=TwoWay}" SelectionMode="Multiple"
                ScrollViewer.HorizontalScrollBarVisibility="Disabled" AutomationProperties.Name="실행 이력">
+        <ListBox.ContextMenu>
+          <ContextMenu x:Name="ListMenu">
+            <MenuItem x:Name="CopySqlMenu" Header="SQL 복사" InputGesture="Ctrl+C" />
+            <MenuItem x:Name="CopyErrorMenu" Header="오류 복사" />
+            <MenuItem x:Name="CopyRowMenu" Header="줄 전체 복사" />
+          </ContextMenu>
+        </ListBox.ContextMenu>
         <ListBox.ItemTemplate>
           <DataTemplate x:DataType="vm:HistoryItem">
             <Grid ColumnDefinitions="128,74,120,72,72,*,Auto" ToolTip.Tip="{Binding FullSql}">

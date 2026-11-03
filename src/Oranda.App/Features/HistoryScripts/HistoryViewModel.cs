@@ -324,6 +324,22 @@ public sealed partial class HistoryViewModel : ToolPanelViewModelBase, IDisposab
         StatusMessage = ok ? "편집기에 넣었다" : "편집기가 열려 있지 않거나 취소했다";
     }
 
+    /// <summary>복사할 SQL 전체. 여러 건은 빈 줄로 나눈다.</summary>
+    public static string CopySql(IReadOnlyList<HistoryItem> items) =>
+        string.Join(Environment.NewLine + Environment.NewLine, items.Select(i => i.FullSql));
+
+    /// <summary>복사할 오류 글. 오류가 없는 건은 건너뛴다.</summary>
+    public static string CopyErrors(IReadOnlyList<HistoryItem> items) =>
+        string.Join(Environment.NewLine, items.Select(i => i.ErrorText).OfType<string>());
+
+    /// <summary>표에 보이는 칸 전부를 탭으로 나눈 글(한 건에 한 줄). SQL·오류의 줄바꿈은 공백으로 바꾼다.</summary>
+    public static string CopyRows(IReadOnlyList<HistoryItem> items) =>
+        string.Join(Environment.NewLine, items.Select(i => string.Join('\t',
+            i.TimeText, i.StatusText, i.ProfileName, i.ElapsedText, i.RowsText, OneLine(i.FullSql), OneLine(i.ErrorText ?? string.Empty))));
+
+    private static string OneLine(string text) =>
+        string.Join(' ', text.Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries));
+
     internal HistoryQuery BuildQuery(long? beforeId) => new()
     {
         ProfileId = CurrentConnectionOnly ? CurrentProfileId() : null,

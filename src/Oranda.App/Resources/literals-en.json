@@ -354,6 +354,8 @@
   "코드를 복사합니다": "Copy the code",
   "머리글 포함 복사": "Copy with headers",
   "전체 복사": "Copy all",
+  "오류 복사": "Copy error",
+  "줄 전체 복사": "Copy whole row",
   "붙여 넣기": "Paste",
   "복제": "Duplicate",
   "본문": "Body",
