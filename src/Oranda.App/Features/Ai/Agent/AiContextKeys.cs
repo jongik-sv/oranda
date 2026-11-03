@@ -16,8 +16,9 @@ using Oranda.Core.Shell;
 namespace Oranda.App.Features.Ai.Agent;
 
 /// <summary>
-/// 시작 작업: AI 튜닝 명령의 문맥 키 둘을 설정과 보이는 세션에 맞춰 둔다.
-/// <c>aiConfigured</c> = 설정의 AI 모델이 「선택 안 함」 이 아니다, <c>aiAccessOn</c> = 보이는 세션 접속의 AI 허용 수준이 「끔」 이 아니다.
+/// 시작 작업: AI 튜닝 명령의 문맥 키 셋을 설정과 보이는 세션에 맞춰 둔다.
+/// <c>aiConfigured</c> = 설정의 AI 모델이 「선택 안 함」 이 아니다, <c>aiAccessOn</c> = 보이는 세션 접속의 AI 허용 수준이 「끔」 이 아니다,
+/// <c>aiAccessPlan</c> = 그 허용 수준이 「계획」 이상이다.
 /// 보이는 세션의 프로필은 접속할 때의 사본이라, 접속한 채로 접속 편집에서 바꾼 허용 수준은 저장 알림(<see cref="ConnectionProfileSaved"/>)으로 받은 값을 쓴다.
 /// 명령 처리기는 처음 실행할 때 만들어지므로 키는 처리기가 아니라 이 작업이 유지한다. <c>Features.Ai</c> 네임스페이스라 aiTuning 이 꺼져 있으면 만들어지지 않는다.
 /// </summary>
@@ -27,6 +28,9 @@ public sealed class AiContextKeys(IServiceProvider services) : IStartupTask
     public const string ConfiguredKey = "aiConfigured";
 
     public const string AccessOnKey = "aiAccessOn";
+
+    /// <summary>보이는 세션 접속의 실효 AI 허용 수준이 「계획」 이상이다(실행 계획 해설이 계획 도구를 읽을 수 있는 조건).</summary>
+    public const string AccessPlanKey = "aiAccessPlan";
 
     // 접속 ID → 마지막으로 저장된 프로필(UI 스레드에서만 읽고 쓴다).
     private readonly Dictionary<Guid, ConnectionProfile> _saved = [];
@@ -79,11 +83,12 @@ public sealed class AiContextKeys(IServiceProvider services) : IStartupTask
         }
 
         var configured = services.GetService(typeof(SettingsService)) is SettingsService settings && settings.Current.Ai.Driver != AiDriverKind.None;
-        var accessOn = services.GetService(typeof(IEventBus)) is IEventBus bus
-            && ExecutionState.For(bus).ShownProfile is { } shown
-            && AiAccessPolicy.Effective(_saved.GetValueOrDefault(shown.Id, shown)) != AiAccessLevel.Off;
+        var level = services.GetService(typeof(IEventBus)) is IEventBus bus && ExecutionState.For(bus).ShownProfile is { } shown
+            ? AiAccessPolicy.Effective(_saved.GetValueOrDefault(shown.Id, shown))
+            : AiAccessLevel.Off;
         keys.Set(ConfiguredKey, configured);
-        keys.Set(AccessOnKey, accessOn);
+        keys.Set(AccessOnKey, level != AiAccessLevel.Off);
+        keys.Set(AccessPlanKey, level >= AiAccessLevel.Plan);
     }
 
     private static void Post(Action action)

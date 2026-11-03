@@ -79,6 +79,7 @@ public sealed partial class AiTuningFlow
             return;
         }
 
+        _command = null; // 튜닝 없이 보내는 일반 대화로 넘어왔다: 앞 명령 대화의 종류(상한·스키마·레포트 조건)가 남지 않게
         GeneralTurn? turn;
         _preparing = true;
         chat.IsBusy = true; // 준비하는 동안 새 대화로 바뀌지 않게

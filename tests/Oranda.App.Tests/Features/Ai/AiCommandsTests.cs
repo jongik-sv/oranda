@@ -103,6 +103,34 @@ public class AiCommandsTests
         Assert.False(keys.Evaluate(AiContextKeys.AccessOnKey));
     });
 
+    [Fact]
+    public Task Access_plan_key_needs_the_plan_level_and_its_reason_is_explained() => HeadlessHost.Run(() =>
+    {
+        var keys = new ContextKeyService();
+        var bus = new EventBus();
+        var task = new AiContextKeys(new ServiceContainer().AddInstance<IContextKeys>(keys).AddInstance<IEventBus>(bus));
+        task.Attach();
+        Assert.False(keys.Evaluate(AiContextKeys.AccessPlanKey)); // 보이는 접속이 없다
+
+        var dev = Profile(ConnectionEnvironment.Development) with { Id = Guid.NewGuid(), AiAccess = AiAccessLevel.Metadata };
+        bus.Publish(new SessionOpened(Guid.NewGuid(), dev, Server, SessionPurpose.Work));
+        Assert.True(keys.Evaluate(AiContextKeys.AccessOnKey));
+        Assert.False(keys.Evaluate(AiContextKeys.AccessPlanKey)); // 메타데이터는 계획 도구를 읽을 수 없다
+
+        bus.Publish(new ConnectionProfileSaved(dev with { AiAccess = AiAccessLevel.Plan }));
+        Assert.True(keys.Evaluate(AiContextKeys.AccessPlanKey));
+
+        bus.Publish(new ConnectionProfileSaved(dev with { AiAccess = AiAccessLevel.Off }));
+        Assert.False(keys.Evaluate(AiContextKeys.AccessPlanKey));
+
+        var text = new ShellText(language: "ko");
+        bus.Publish(new ConnectionProfileSaved(dev with { AiAccess = AiAccessLevel.Metadata }));
+        keys.Set("hasSession", true);
+        keys.Set(AiContextKeys.ConfiguredKey, true); // 설정 서비스가 없는 시험이라 동기화가 거짓으로 둔 키를 직접 켠다
+        var reason = ContextKeyReasons.Explain(AiCommands.TuneEnablement + " && " + AiContextKeys.AccessPlanKey, keys.Evaluate, k => text.Lookup(k) is var v && v != k ? v : null);
+        Assert.Contains("「계획」", reason, StringComparison.Ordinal);
+    });
+
     private static readonly ServerInfo Server = new("19.0.0.0.0", "ORCL", "db-example", "svc", "ORCL", null, false, 1,
         new ServerCapabilities(false, true, true, false, false));
 

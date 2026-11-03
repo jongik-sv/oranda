@@ -10,6 +10,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using Oranda.App.Features.Ai.Chat;
 using Oranda.App.Features.Ai.Report;
+using Oranda.App.Features.Ai.Tuning.Commands;
 using Oranda.Core.Ai.Access;
 using Oranda.Core.Ai.Contracts;
 using Oranda.Core.Ai.Gate;
@@ -99,6 +100,7 @@ public sealed partial class AiTuningFlow(
     private AiContext? _context;
     private AiConversationTarget? _route; // 대화를 시작할 때의 보낼 곳. 이어 말하기·이미지 경고·라우터 기대값의 기준이다
     private TuningStartChoice? _choice;
+    private AiCommandSpec? _command; // 이 대화를 연 AI 명령(튜닝 대화면 null). 수명: 새 튜닝·새 명령 시작이 확정될 때 바뀌고, 일반 대화로 넘어가면 지운다
     private SqlStatement? _target;
     private LiteralVault? _vault;
     private Guid? _startTabId;
@@ -140,6 +142,12 @@ public sealed partial class AiTuningFlow(
         };
     }
 
+    /// <summary>
+    /// 지금 대화를 연 AI 명령(없으면 null = 튜닝). 대화 창이 튜닝 대화가 아니게 되면(새 대화·일반 대화) 앞 명령을 물려받지 않도록 null 로 본다.
+    /// 시험·이어 말하기 확인용.
+    /// </summary>
+    internal AiCommandSpec? Command => chat.IsTuning ? _command : null;
+
     /// <summary>마지막으로 반영한 구조 결과(시험·이어 말하기 확인용).</summary>
     public TuningResult? LastResult => _lastResult;
 
@@ -176,38 +184,12 @@ public sealed partial class AiTuningFlow(
         }
 
         // 가림이 필요하면 대화 하나에 쓸 사전을 만들고 문장을 가린다. 못 하면 원래 글을 보내지 않고 시작을 거부한다.
-        LiteralVault? vault = null;
-        var promptStatement = statement.Text;
-        if (maskRequired?.Invoke(context) == true)
+        if (!TryMaskStatement(context, statement, MaskerMissingText, MaskFailedText, out var vault, out var promptStatement))
         {
-            if (masker is null)
-            {
-                chat.AddAssistantText(MaskerMissingText);
-                return;
-            }
-
-            try
-            {
-                vault = masker.CreateVault(statement.Text);
-                var masked = masker.Mask(statement.Text, vault);
-                if (!masked.Succeeded)
-                {
-                    chat.AddAssistantText(MaskFailedText);
-                    return;
-                }
-
-                vault.RememberStatement(masked.Text, statement.Text);
-                promptStatement = masked.Text;
-            }
-#pragma warning disable CA1031 // 가림 구현의 어떤 실패든 원래 글을 보내는 쪽으로 이어지면 안 된다: 시작을 거부한다.
-            catch (Exception ex) when (ex is not OperationCanceledException)
-#pragma warning restore CA1031
-            {
-                chat.AddAssistantText(MaskFailedText);
-                return;
-            }
+            return;
         }
 
+        _command = null; // 튜닝 대화다(앞 명령 대화의 종류가 남지 않게)
         _route = CurrentTarget();
         _choice = choice;
         _target = statement;
@@ -229,6 +211,52 @@ public sealed partial class AiTuningFlow(
         finally
         {
             chat.IsBusy = false;
+        }
+    }
+
+    /// <summary>
+    /// 이 문맥의 접속이 리터럴 가림을 요구하면 대화 하나에 쓸 사전을 만들고 <paramref name="statement"/> 를 가린다(튜닝과 명령이 같이 쓴다).
+    /// 가림 구현이 없거나 가리지 못하면 원래 글을 보내지 않도록 <paramref name="missingText"/>·<paramref name="failedText"/> 를 대화 창에 남기고 false.
+    /// 가림이 필요 없으면 사전 없이 원래 글로 true.
+    /// </summary>
+    private bool TryMaskStatement(AiContext context, SqlStatement statement, string missingText, string failedText, out LiteralVault? vault, out string promptStatement)
+    {
+        vault = null;
+        promptStatement = statement.Text;
+        if (maskRequired?.Invoke(context) != true)
+        {
+            return true;
+        }
+
+        if (masker is null)
+        {
+            chat.AddAssistantText(missingText);
+            return false;
+        }
+
+        try
+        {
+            vault = masker.CreateVault(statement.Text);
+            var masked = masker.Mask(statement.Text, vault);
+            if (!masked.Succeeded)
+            {
+                vault = null;
+                chat.AddAssistantText(failedText);
+                return false;
+            }
+
+            vault.RememberStatement(masked.Text, statement.Text);
+            promptStatement = masked.Text;
+            return true;
+        }
+#pragma warning disable CA1031 // 가림 구현의 어떤 실패든 원래 글을 보내는 쪽으로 이어지면 안 된다: 시작을 거부한다.
+        catch (Exception ex) when (ex is not OperationCanceledException)
+#pragma warning restore CA1031
+        {
+            vault = null;
+            promptStatement = statement.Text;
+            chat.AddAssistantText(failedText);
+            return false;
         }
     }
 
@@ -334,7 +362,8 @@ public sealed partial class AiTuningFlow(
                 return null;
             }
 
-            _context = fresh with { AllowRiskyFunctions = _choice!.RunRiskyFunctions }; // 대화마다 고른 값을 이어 말하기에도 쓴다
+            // 대화마다 고른 값을 이어 말하기에도 쓴다. 명령 대화는 접속의 지금 수준으로 되돌아온 값에 명령의 상한을 다시 건다(안 걸면 이어 말하기에서 벤치마크가 열린다).
+            _context = fresh with { AllowRiskyFunctions = _choice!.RunRiskyFunctions, AccessLevel = Cap(Command, fresh.AccessLevel) };
         }
 
         // 새 이미지를 보낼 때만(글만 보내는 이어 말하기·이미 보낸 이미지는 해당 없음): 가리는 대화면 확인을 거치고, 보낸다는 사실을 감사에 남긴다.
@@ -353,7 +382,8 @@ public sealed partial class AiTuningFlow(
 
         // 이어 말하기 글은 가리지 않고(사용자가 쓴 글) 자리표시를 그대로 쓰라는 안내만 덧붙인다.
         var text = followUp.Text.Length == 0 ? "Look at the attached image(s) and continue." : followUp.Text;
-        return text + Environment.NewLine + Environment.NewLine + ResponseStyle + Environment.NewLine + KeepCommentsRule
+        var rules = Command is { } command ? command.ResponseRules : ResponseStyle + Environment.NewLine + KeepCommentsRule;
+        return text + Environment.NewLine + Environment.NewLine + rules
             + (_vault is null ? string.Empty : Environment.NewLine + PlaceholderReminder(_vault));
     }
 
@@ -566,16 +596,18 @@ public sealed partial class AiTuningFlow(
         var vault = _vault; // 결과를 반영하는 동안(미리보기 창) 새 대화가 시작돼도 이 대화의 사전·문장을 쓴다
         var target = _target!;
         var startTab = _startTabId;
+        var command = Command; // 결과를 반영하는 동안 새 대화가 시작돼도 이 요청을 연 명령의 규칙을 쓴다
         var userLine = resumeId is null
-            ? "이 문장 튜닝" + (choice.Benchmark ? " · 벤치마크 켬" : string.Empty) + (choice.RunRiskyFunctions ? " · 위험 함수도 실행" : string.Empty)
+            ? command?.UserLine ?? "이 문장 튜닝" + (choice.Benchmark ? " · 벤치마크 켬" : string.Empty) + (choice.RunRiskyFunctions ? " · 위험 함수도 실행" : string.Empty)
             : userText ?? prompt;
         chat.BeginTurn(userLine, images);
 
         using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
         _running = cts;
-        var session = sessionFactory?.Invoke(context, vault);
+        // 명령은 튜닝의 바인드 값을 싣지 않는 쪽(일반 대화와 같은 범위 만들기)을 쓴다: 명령은 문장을 실행하지 않는다.
+        var session = (command is null ? sessionFactory : generalSessionFactory ?? sessionFactory)?.Invoke(context, vault);
         var request = new AiRequest(
-            prompt, context, resumeId, TuningResult.Schema(), choice.ModelId == "default" ? null : choice.ModelId, session,
+            prompt, context, resumeId, command is null ? TuningResult.Schema() : command.OutputSchema, choice.ModelId == "default" ? null : choice.ModelId, session,
             choice.EffortId == TuningStartInfo.DefaultModelId ? null : choice.EffortId,
             Images: images.Count == 0 ? null : [.. images.Select(i => i.Attachment)],
             Expected: (route ?? _route)?.ToExpectation()); // 확인 창에 적은 곳과 실제 전송처가 같게: 라우터가 설정의 활성 프로필과 대조한다(profile_changed)
@@ -590,9 +622,9 @@ public sealed partial class AiTuningFlow(
             session?.Revoke();
         }
 
-        if (result is { } structured && !cts.IsCancellationRequested)
+        if (result is { } structured && !cts.IsCancellationRequested && (command is null || command.OutputSchema is not null))
         {
-            await ApplyResultAsync(structured, choice, vault, target, startTab, conversation, ct).ConfigureAwait(true);
+            await ApplyResultAsync(structured, choice, vault, target, startTab, conversation, command, ct).ConfigureAwait(true);
         }
     }
 
@@ -610,7 +642,7 @@ public sealed partial class AiTuningFlow(
         }
     }
 
-    private async Task ApplyResultAsync(JsonElement structured, TuningStartChoice choice, LiteralVault? vault, SqlStatement target, Guid? startTab, int conversation, CancellationToken ct)
+    private async Task ApplyResultAsync(JsonElement structured, TuningStartChoice choice, LiteralVault? vault, SqlStatement target, Guid? startTab, int conversation, AiCommandSpec? command, CancellationToken ct)
     {
         if (conversation != chat.ConversationGeneration)
         {
@@ -625,7 +657,7 @@ public sealed partial class AiTuningFlow(
         }
         catch (JsonException ex)
         {
-            chat.AddAssistantText("튜닝 결과의 모양을 읽지 못했습니다: " + ex.Message);
+            chat.AddAssistantText((command is null ? "튜닝" : command.WorkName) + " 결과의 모양을 읽지 못했습니다: " + ex.Message);
             return;
         }
 
@@ -636,6 +668,11 @@ public sealed partial class AiTuningFlow(
         var turn = chat.Entries.OfType<ChatUserEntry>().Count() - 1; // 0 = 처음 튜닝, N = N 번째 이어 말하기
         void ReportTurn(IReadOnlyList<TuningIndexSuggestion> indexes, IReadOnlyList<string> dropped)
         {
+            if (command is { ProducesReport: false })
+            {
+                return; // 레포트는 튜닝(과 레포트를 만든다고 밝힌 명령)만 만든다: 저장 단추는 비활성으로 남는다
+            }
+
             if (generation != _generation || conversation != chat.ConversationGeneration)
             {
                 return; // 그 사이 새 대화가 시작됐다
@@ -688,7 +725,7 @@ public sealed partial class AiTuningFlow(
             string? applied = null;
             async Task<bool?> Propose(CancellationToken token)
             {
-                var (answer, finalText) = await ProposeRewriteAsync(proposal, target, startTab, token).ConfigureAwait(true);
+                var (answer, finalText) = await ProposeRewriteAsync(proposal, target, startTab, command, token).ConfigureAwait(true);
                 if (answer == true)
                 {
                     applied = finalText;
@@ -698,7 +735,7 @@ public sealed partial class AiTuningFlow(
             }
 
             Func<Task>? view = showComparison is null ? null
-                : () => showComparison("AI 튜닝 — " + rewrite.Label + " (적용함)", target.Text, applied ?? MatchTerminator(target.Text, proposal.Sql));
+                : () => showComparison((command?.ProposalLabel ?? ProposalLabelTune) + rewrite.Label + " (적용함)", target.Text, applied ?? MatchTerminator(target.Text, proposal.Sql));
             if (await Propose(ct).ConfigureAwait(true) is { } accepted)
             {
                 chat.AddProposal(rewrite.Label, OneLine(rewrite.Rationale), accepted, () => Propose(CancellationToken.None), ChangeText(rewrite.Benchmark), view);
@@ -881,18 +918,33 @@ public sealed partial class AiTuningFlow(
 
     private const string TuneSuffix = " (튜닝)";
 
+    private const string ProposalLabelTune = "AI 튜닝 — ";
+
+    /// <summary>반영하기 전에 대상 문장이 바뀌었을 때의 안내(튜닝은 옛 글 그대로, 명령은 <see cref="AiCommandSpec.WorkName"/>).</summary>
+    private static string StatementChangedText(AiCommandSpec? command) =>
+        command is null
+            ? "튜닝하는 사이 문장이 바뀌어 제안을 새 탭에 넣지 않았습니다."
+            : $"{command.WorkName} 중에 문장이 바뀌어 제안을 새 탭에 넣지 않았습니다.";
+
     /// <summary>원래 탭 제목 뒤에 「 (튜닝)」 을 붙인다(이미 그렇게 끝나면 그대로).</summary>
-    internal static string TuneTitle(string? original)
+    internal static string TuneTitle(string? original) => SuffixedTitle(original, TuneSuffix);
+
+    /// <summary>원래 탭 제목 뒤에 <paramref name="suffix"/>(앞 공백 포함, 예 「 (수정)」)를 붙인다(이미 그렇게 끝나면 그대로).</summary>
+    internal static string SuffixedTitle(string? original, string suffix)
     {
         var title = string.IsNullOrWhiteSpace(original) ? "SQL" : original.Trim();
-        return title.EndsWith("(튜닝)", StringComparison.Ordinal) ? title : title + TuneSuffix;
+        return title.EndsWith(suffix.Trim(), StringComparison.Ordinal) ? title : title + suffix;
     }
+
+    /// <summary>이 대화의 도구 수준 상한(명령이 없으면 상한 없음)을 <paramref name="level"/> 에 건다.</summary>
+    internal static AiAccessLevel Cap(AiCommandSpec? command, AiAccessLevel level) =>
+        command is null ? level : (AiAccessLevel)Math.Min((int)level, (int)command.AccessCeiling);
 
     /// <summary>
     /// 재작성 제안을 비교 창으로 보인다. 받아들이면 원래 탭은 그대로 두고 「원래 탭명 (튜닝)」 새 탭에 (원래 글에서 그 문장 자리만 바꾼 글을) 넣고 true,
     /// 거절하면 false, 열지 못했으면(탭이 닫힘·문장이 바뀜·비교 창 없음) null. 같은 대화에서 다시 받아들이면 열려 있는 그 탭의 글을 바꾼다.
     /// </summary>
-    private async Task<(bool? Answer, string? Applied)> ProposeRewriteAsync(TuningRewrite rewrite, SqlStatement target, Guid? startTab, CancellationToken ct)
+    private async Task<(bool? Answer, string? Applied)> ProposeRewriteAsync(TuningRewrite rewrite, SqlStatement target, Guid? startTab, AiCommandSpec? command, CancellationToken ct)
     {
         string? fullText;
         string? originTitle;
@@ -903,7 +955,7 @@ public sealed partial class AiTuningFlow(
             fullText = tabs.GetText(tabId);
             if (fullText is null)
             {
-                chat.AddAssistantText("튜닝을 시작한 탭이 닫혀 제안을 새 탭에 넣지 않았습니다.");
+                chat.AddAssistantText(command is null ? "튜닝을 시작한 탭이 닫혀 제안을 새 탭에 넣지 않았습니다." : $"{command.WorkName} 시작 탭이 닫혀 제안을 새 탭에 넣지 않았습니다.");
                 return (null, null);
             }
 
@@ -911,7 +963,7 @@ public sealed partial class AiTuningFlow(
             var current = tabs.GetStatementAt(tabId, target.Range.Start);
             if (current is null || current.Text != target.Text || current.Range != target.Range)
             {
-                chat.AddAssistantText("튜닝하는 사이 문장이 바뀌어 제안을 새 탭에 넣지 않았습니다.");
+                chat.AddAssistantText(StatementChangedText(command));
                 return (null, null);
             }
 
@@ -924,7 +976,7 @@ public sealed partial class AiTuningFlow(
             // 튜닝하는 동안 사용자가 문장을 고쳤으면 옛 범위에 덮어쓰지 않는다.
             if (current is null || current.Text != target.Text || current.Range != target.Range)
             {
-                chat.AddAssistantText("튜닝하는 사이 문장이 바뀌어 제안을 새 탭에 넣지 않았습니다.");
+                chat.AddAssistantText(StatementChangedText(command));
                 return (null, null);
             }
 
@@ -940,7 +992,7 @@ public sealed partial class AiTuningFlow(
             return (null, null);
         }
 
-        var edit = new TextEdit(target.Range, MatchTerminator(target.Text, rewrite.Sql)) { Description = "AI 튜닝 — " + rewrite.Label };
+        var edit = new TextEdit(target.Range, MatchTerminator(target.Text, rewrite.Sql)) { Description = (command?.ProposalLabel ?? ProposalLabelTune) + rewrite.Label };
         var finalText = await previewEdit(edit, target.Text, ct).ConfigureAwait(true);
         if (finalText is null)
         {
@@ -948,7 +1000,7 @@ public sealed partial class AiTuningFlow(
             return (false, null);
         }
 
-        var title = TuneTitle(originTitle);
+        var title = command is null ? TuneTitle(originTitle) : SuffixedTitle(originTitle, command.TabSuffix);
         var text = ApplyToFullText(fullText, target, finalText);
         if (tabs is not null)
         {

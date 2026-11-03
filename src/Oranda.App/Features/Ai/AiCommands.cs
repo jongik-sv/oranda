@@ -2,13 +2,15 @@ using System;
 using System.Threading;
 using System.Threading.Tasks;
 using Oranda.App.Features.Ai.Tuning;
+using Oranda.App.Features.Ai.Tuning.Commands;
 using Oranda.Core.Shell;
 
 namespace Oranda.App.Features.Ai;
 
 /// <summary>
-/// 「AI 튜닝」 명령(툴바 나눔 단추의 본체와 ▾ 자식, 튜닝 메뉴). 이번 회차는 「이 문장 튜닝」 만 동작한다.
-/// 해설·설명·오류 고치기는 늘 거짓인 키(<c>aiNotYet</c>)로 비활성 자리만 잡는다.
+/// 「AI 튜닝」 명령(툴바 나눔 단추의 본체와 ▾ 자식, 튜닝 메뉴). 「이 문장 튜닝」 만 동작한다.
+/// 해설·설명·오류 고치기는 각 명령 파일(<c>Tuning/Commands/*</c>)의 <c>Enablement</c> 상수를 활성 식으로 쓰고, 켜기 전에는 늘 거짓인 키(<c>aiNotYet</c>)다.
+/// 명령을 켜는 항목은 이 파일이 아니라 자기 명령 파일의 상수만 바꾼다.
 /// 설정에서 AI 모델을 고르지 않았거나(<c>aiConfigured</c>) 접속의 AI 허용 수준이 「끔」 이면(<c>aiAccessOn</c>) 비활성이고, 이유는 메뉴에 나온다.
 /// 이 형은 <c>Features.Ai</c> 네임스페이스라 aiTuning 기능이 꺼져 있으면 명령 자체가 보이지 않는다.
 /// </summary>
@@ -17,11 +19,11 @@ namespace Oranda.App.Features.Ai;
 [OrandaCommand(AiCommands.TuneStatement, CommandCategory.Sql, Title = "이 문장 튜닝", When = "sqlDocFocus",
     Enablement = AiCommands.TuneEnablement, Placements = ["toolbar:main/aiTune/tuneStatement@10"])]
 [OrandaCommand(AiCommands.ExplainPlan, CommandCategory.Sql, Title = "실행 계획 해설", When = "sqlDocFocus",
-    Enablement = "aiNotYet", Placements = ["toolbar:main/aiTune/explainPlan@20"])]
+    Enablement = ExplainPlanCommand.Enablement, Placements = ["toolbar:main/aiTune/explainPlan@20"])]
 [OrandaCommand(AiCommands.ExplainSql, CommandCategory.Sql, Title = "SQL 설명", When = "sqlDocFocus",
-    Enablement = "aiNotYet", Placements = ["toolbar:main/aiTune/explainSql@30"])]
+    Enablement = ExplainSqlCommand.Enablement, Placements = ["toolbar:main/aiTune/explainSql@30"])]
 [OrandaCommand(AiCommands.FixError, CommandCategory.Sql, Title = "오류 고치기", When = "sqlDocFocus",
-    Enablement = "aiNotYet", Placements = ["toolbar:main/aiTune/fixError@40"])]
+    Enablement = FixErrorCommand.Enablement, Placements = ["toolbar:main/aiTune/fixError@40"])]
 public sealed class AiCommandHandler : ICommandHandler
 {
     private readonly IServiceProvider? _services;
@@ -35,12 +37,20 @@ public sealed class AiCommandHandler : ICommandHandler
     public Task ExecuteAsync(CommandContext context, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(context);
-        if (_services is null || context.CommandId is not (AiCommands.Tune or AiCommands.TuneStatement))
+        if (_services is null)
         {
             return Task.CompletedTask;
         }
 
-        return AiTuningLauncher.For(_services).RunAsync(cancellationToken);
+        var launcher = AiTuningLauncher.For(_services);
+        return context.CommandId switch
+        {
+            AiCommands.Tune or AiCommands.TuneStatement => launcher.RunAsync(cancellationToken),
+            AiCommands.ExplainSql => launcher.RunCommandAsync(ExplainSqlCommand.Instance, cancellationToken),
+            AiCommands.ExplainPlan => launcher.RunCommandAsync(ExplainPlanCommand.Instance, cancellationToken),
+            AiCommands.FixError => launcher.RunCommandAsync(FixErrorCommand.Instance, cancellationToken),
+            _ => Task.CompletedTask,
+        };
     }
 }
 

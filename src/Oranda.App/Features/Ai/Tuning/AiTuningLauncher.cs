@@ -10,6 +10,7 @@ using Avalonia.Threading;
 using Oranda.App.Features.Ai.Agent;
 using Oranda.App.Features.Ai.Chat;
 using Oranda.App.Features.Ai.Settings;
+using Oranda.App.Features.Ai.Tuning.Commands;
 using Oranda.App.Features.Binds;
 using Oranda.App.Features.ConnectionManager;
 using Oranda.App.Features.DataTransfer;
@@ -83,6 +84,32 @@ public sealed class AiTuningLauncher(IServiceProvider services)
         }
     }
 
+    /// <summary>명령(SQL 설명·실행 계획 해설·오류 고치기)을 시작하다 예외가 났을 때 화면에 보이는 고정 글.</summary>
+    public const string CommandStartFailedText = "AI 명령을 시작하지 못했습니다. 자세한 원인은 로그에 남겼습니다.";
+
+    /// <summary>활성 문서가 지금 접속의 SQL 탭이 아니라 명령을 보내지 않았을 때 대화 창에 남기는 안내.</summary>
+    public const string CommandOtherDocumentText = "활성 문서가 지금 접속의 SQL 탭이 아니라서 보내지 않았습니다(PL/SQL 편집기·객체 상세이거나 다른 접속의 탭). SQL 탭을 열고 다시 시도하세요.";
+
+    /// <summary>
+    /// AI 명령 하나를 시작한다(시작 확인 창 없이 바로). 보낼 수 없거나 명령이 거부하면 대화 창에 이유만 남기고 앞 대화는 건드리지 않는다.
+    /// 시작하다 예외가 나면 <see cref="RunAsync"/> 와 같이 대화 창에 고정 글을 남긴다.
+    /// </summary>
+    public async Task RunCommandAsync(AiCommandSpec spec, CancellationToken ct)
+    {
+        ArgumentNullException.ThrowIfNull(spec);
+        try
+        {
+            await RunCommandCoreAsync(spec, ct).ConfigureAwait(true);
+        }
+#pragma warning disable CA1031 // 어떤 실패든 명령 경로에서 삼켜지기 전에 대화 창에 보인다.
+        catch (Exception ex) when (ex is not OperationCanceledException)
+#pragma warning restore CA1031
+        {
+            Trace.TraceError("AI 명령 시작 중 예외({0}): {1}", spec.Id, AiErrorText.Redact(ex.GetType().Name + ": " + ex.Message));
+            await ReportFailureAsync(CommandStartFailedText).ConfigureAwait(true);
+        }
+    }
+
     private async Task ReportFailureAsync(string text)
     {
         try
@@ -100,20 +127,35 @@ public sealed class AiTuningLauncher(IServiceProvider services)
         }
     }
 
-    private async Task RunCoreAsync(CancellationToken ct)
+    /// <summary>튜닝과 명령이 같이 쓰는 시작 앞부분의 결과.</summary>
+    private sealed record StartScope(
+        IEditorContext Editor,
+        IAiDriver Driver,
+        ConnectionProfile Profile,
+        AiSettings Settings,
+        EditorSnapshot? Document,
+        string? TabId,
+        AiStatementSource Source,
+        SqlStatement? Statement);
+
+    /// <summary>
+    /// 시작 앞부분 공통: 서비스·보이는 세션 확인, 진행 중이면 그 창만 보임, 활성 문서가 지금 접속의 SQL 탭인지 확인(아니면 <paramref name="otherDocumentText"/> 를 알림),
+    /// 저장된 최신 프로필 읽기. 시작하지 않을 때 null.
+    /// </summary>
+    private async Task<StartScope?> ResolveStartAsync(string otherDocumentText, CancellationToken ct)
     {
         if (services.GetService(typeof(IEditorContext)) is not IEditorContext editor
             || services.GetService(typeof(IAiDriver)) is not IAiDriver driver
             || services.GetService(typeof(IEventBus)) is not IEventBus bus
             || ExecutionState.For(bus).ShownProfile is not { } shown)
         {
-            return;
+            return null;
         }
 
         if (_flow is { IsRunning: true })
         {
-            await ShowChatAsync().ConfigureAwait(true); // 진행 중인 튜닝이 있다: 새로 시작하지 않고 그 창만 보인다
-            return;
+            await ShowChatAsync().ConfigureAwait(true); // 진행 중인 작업이 있다: 새로 시작하지 않고 그 창만 보인다
+            return null;
         }
 
         // 활성 문서가 지금 접속의 SQL 탭이 아니면(PL/SQL 편집기·객체 상세·다른 접속의 탭, 또는 판단 불가) 시작 창을 띄우지 않고 알린다:
@@ -121,16 +163,74 @@ public sealed class AiTuningLauncher(IServiceProvider services)
         var (source, statement) = AiStatementScope.Resolve(editor, SqlDocumentActive(), shown.Id);
         if (source == AiStatementSource.OtherDocument)
         {
-            await ReportFailureAsync(OtherDocumentText).ConfigureAwait(true);
-            return;
+            await ReportFailureAsync(otherDocumentText).ConfigureAwait(true);
+            return null;
         }
 
         // 보이는 세션의 프로필은 접속할 때의 사본이라, 접속 편집에서 바꾼 AI 허용 수준·환경 라벨이 빠져 있다. 저장된 최신 값을 쓴다.
         var profile = await LatestProfileAsync(shown, ct).ConfigureAwait(true) ?? shown;
-
         var settings = (services.GetService(typeof(SettingsService)) as SettingsService)?.Current.Ai ?? new AiSettings();
         var document = editor.GetActiveDocument();
         var tabId = document?.TabId.ToString("N", CultureInfo.InvariantCulture);
+        return new StartScope(editor, driver, profile, settings, document, tabId, source, statement);
+    }
+
+    private async Task RunCommandCoreAsync(AiCommandSpec spec, CancellationToken ct)
+    {
+        if (await ResolveStartAsync(CommandOtherDocumentText, ct).ConfigureAwait(true) is not { } scope)
+        {
+            return;
+        }
+
+        var (editor, driver, profile, settings, document, tabId, source, statement) = scope;
+        var context = new AiContext(profile.Name, profile.Environment, AiAccessPolicy.Effective(profile), tabId, statement?.Text);
+        if (context.AccessLevel == AiAccessLevel.Off)
+        {
+            await ReportFailureAsync(AiTuningFlow.CommandAccessOffText).ConfigureAwait(true);
+            return;
+        }
+
+        var env = new AiCommandStartEnv(
+            services, editor, profile, context, source, statement, document?.TabId, AiAccessPolicy.MaskLiterals(profile, settings.MaskLiterals));
+        var preparation = await spec.PrepareAsync(env, ct).ConfigureAwait(true);
+        if (preparation.Target is not { } target)
+        {
+            await ReportFailureAsync(preparation.RefusalText ?? CommandStartFailedText).ConfigureAwait(true);
+            return;
+        }
+
+        AgentBridgeStartup.Start(services); // 시작 작업이 이미 열었으면 아무 일도 없다
+        if (await ShowChatAsync().ConfigureAwait(true) is not { } chat)
+        {
+            return;
+        }
+
+        // 명령은 바인드 값을 쓰지 않는다(문장을 실행하지 않고, 도구 범위는 빈 바인드 사전). 대화의 접속은 시작이 확정될 때만 바뀐다: 거부되면 앞 값으로 되돌린다.
+        var flow = FlowFor(chat, editor, driver);
+        var previous = _profile;
+        var generation = flow.Generation;
+        _profile = profile;
+        try
+        {
+            await flow.StartCommandAsync(spec, target, context, ct).ConfigureAwait(true);
+        }
+        finally
+        {
+            if (flow.Generation == generation)
+            {
+                _profile = previous;
+            }
+        }
+    }
+
+    private async Task RunCoreAsync(CancellationToken ct)
+    {
+        if (await ResolveStartAsync(OtherDocumentText, ct).ConfigureAwait(true) is not { } scope)
+        {
+            return;
+        }
+
+        var (editor, driver, profile, settings, document, tabId, _, statement) = scope;
         var context = new AiContext(profile.Name, profile.Environment, AiAccessPolicy.Effective(profile), tabId, statement?.Text);
         var info = BuildStartInfo(statement, context, settings, AiAccessPolicy.MaskLiterals(profile, settings.MaskLiterals));
 
