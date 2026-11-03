@@ -216,6 +216,16 @@ SELECT s.inst_id, s.sid, s.serial#, s.username, ...
 | `IOutboundConsent` | 외부 전송 전 동의·전송 내용 미리보기 | 1.0에서는 업데이트 확인·충돌 보고 전송. LLM 프로필 전송은 이 경로가 아니다 |
 나중의 챗봇은 `IToolPanelRegistry`로 패널을 붙이고, 위 인터페이스만 써서 메타데이터를 읽고 SQL을 제안·삽입한다. Core 변경 없이 붙는지를 PRD 9.4 수락 기준의 시험 패널로 확인한다.
 
+**AI 튜닝·대화 구현(0.1.x, 위 확장 지점과 별개로 `Features/Ai`·`Platform/Ai` 에 있다)**
+- 드라이버 경로: `IAiDriver` 는 `RoutingAiDriver` 가 실행마다 설정을 읽어 고른다. Claude Code(구독)와 Anthropic 형식 프로필(Anthropic·Z.AI·직접 입력)은 `CliDriver`(claude 실행 파일, MCP 왕복), OpenAI 형식 프로필(OpenAI·Gemini·Ollama·LM Studio·직접 입력)은 `OpenAiApiDriver`(`POST {base}/chat/completions` 스트리밍, 실행 파일 불필요)로 간다. 설정 파일에는 `AiSettings.Profiles`·`ActiveProfileId` 만 더했고(`AiDriverKind`·`SchemaVersions.Settings` 는 그대로) API 키는 `ICredentialStore` 의 `oranda:ai:{guid}` 에 둔다.
+- 게이트: 어느 경로든 도구 호출은 `AgentGate` 를 지난다(허용 수준·범위 검사·리터럴 가림·감사 기록). API 경로는 프로세스 안에서 게이트를 직접 부르고, 한 실행당 모델 호출 40회·도구 호출 60회가 상한이다(넘으면 `turn_limit`). 구조 결과는 합성 도구 `StructuredOutput` 으로 받고, 이어 말하기 대화(`ResumeId` → 메시지)는 메모리에만 둔다.
+- 프로필 경로의 네트워크: 프록시를 거치지 않는다. CLI 는 프록시 환경 변수를 비우고, API 드라이버·연결 테스트는 `UseProxy=false`·`AllowAutoRedirect=false` 다. CLI 프로필 실행은 부모 환경의 `ANTHROPIC_*`·`CLAUDE*`·`OTEL_*` 변수를 물려받지 않고(설정 폴더·Git Bash 경로·클라이언트 인증서만 예외), 등급별 기본 모델 변수를 프로필 모델로 채운다. 구독 경로는 환경을 더하지 않는다(D-036).
+- 이미지: `AiRequest.Images` 로 보낸다. 대화 입력칸의 붙여 넣기·끌어 놓기·파일 선택으로 한 번에 5장, 긴 변 4000px·장당 5 MB(PNG, 넘으면 JPEG)로 줄이고 PNG·JPEG·WebP·GIF 만 받는다. 가리는 대화(운영 접속이거나 가림 설정)에서 새 이미지를 보낼 때마다 확인 창을 거치며 장수·크기·받는 곳을 감사 기록에 남긴다(이미지 내용은 남기지 않는다. 이미지 감사 기록은 항상 남긴다). 디코딩 가능한 BMP 는 PNG 로 바꿔 받는다. 프로필이 이미지를 지원하지 않으면(`SupportsImages == false`) 첨부 입구를 닫는다.
+- 일반 대화: 대화 창은 튜닝을 시작하지 않고도 쓴다. 범위는 `AiStatementScope` 가 고른다 — 활성 문서가 지금 접속의 SQL 탭일 때만 그 탭의 현재 문장으로 튜닝과 같은 게이트·범위 계산을 거쳐 DB 도구를 연다. SQL 탭이 아니거나 다른 접속의 탭이면(또는 판단할 수 없으면) 문장과 도구를 닫고 도구 없이 답한다. 가리는 대화는 대화당 한 번 입력한 글이 가려지지 않는다는 확인을 받는다. 대화 도중 보낼 곳(프로필 id·주소·형식·모델, `AiConversationTarget`)이나 접속이 바뀌면 앞 대화를 이어 보내지 않고 새 대화로 시작한다.
+- 튜닝 레포트: 대화 창에서 Markdown 또는 HTML 로 저장한다(`Features/Ai/Report`). 가린 대화는 자리표시를 되돌리지 않고, 인덱스 후보는 제안만 담으며, 파일 이름에 SQL 을 넣지 않는다.
+- 탭별 계획: 실행 계획 창(`PlanPanelViewModel`)은 창 하나에 활성 SQL 탭의 계획을 바꿔 보이며 탭마다 계획이 따로 남는다. 실제 계획은 세션별 실행 순번이 탭 기록과 같을 때만 `DISPLAY_CURSOR(NULL)` 로 읽는다(이 앱의 실행 기록이 없는 세션은 전처럼 읽는다).
+- A-Rows 실제 계획 실행(`oranda.plan.runActual`): 일반 실행(Ctrl+Enter)과 같은 준비(`PrepareSingleStatementAsync`: 접속 확인, 작업 공간 세션 묶기, 실행 중 확인, 선택 영역, 커서 아래 문장, 「빈 줄로 문장 나누기」 를 켠 때만 빈 줄 구분. 선택 영역에 문장이 여러 개면 실행하지 않고 안내)로 문장 하나를 얻어 `GATHER_PLAN_STATISTICS` 힌트 사본으로 실행 엔진(정책 관문)에 보내고, 모든 행을 끝까지 읽은 뒤 그 커서의 실제 계획을 읽는다. 받은 계획의 SQL 본문을 실행한 글과 대조해(`PlanSqlMatch`) 다르면 열지 않는다. 질의(SELECT·WITH … SELECT)만 허용하고 `FOR UPDATE`, DML, WITH 뒤 DML 은 거부한다. 메뉴의 「실제 행 수 받으며 다시 실행」도 같은 접속·세션 준비(`EnsureConnectionAsync`)를 거친다. 탭의 마지막 실행 기록(LastRun)은 남기지 않는다.
+
 ### 4.11 UI 구조 (APP)
 - Shell: Dock.Avalonia 레이아웃(문서 영역 = 편집기 탭, 도구 창 = 스키마·출력·이력·모니터). 레이아웃은 앱 DTO로 JSON 저장.
 - 명령: 모든 기능을 `ICommandRegistry`에 ID로 등록 → 메뉴·툴바·단축키·명령 팔레트가 같은 ID를 쓴다. 키맵 프리셋(기본, Orange 5, PL/SQL Developer, SQL Developer)은 ID→키 표(JSON).
