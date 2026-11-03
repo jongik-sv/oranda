@@ -135,6 +135,7 @@ public class ToolbarWhenTests
                 ["oranda.ai.tune"] = "sqlDocFocus",
                 ["oranda.exec.cancel"] = "sqlDocFocus",
                 ["oranda.plan.explain"] = "sqlDocFocus",
+                ["oranda.plan.runActual"] = "sqlDocFocus",
                 ["oranda.format.document"] = "editorFocus",
                 ["oranda.txn.commit"] = "!readOnlySession || txnPending",
                 ["oranda.txn.rollback"] = "!readOnlySession || txnPending",

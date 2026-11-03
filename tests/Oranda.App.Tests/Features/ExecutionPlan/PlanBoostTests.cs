@@ -486,6 +486,7 @@ public class PlanBoostTests
         var rows = TestResultSet.FromText(["ENAME"], [.. Enumerable.Range(0, 1200).Select(i => new object?[] { "E" + i })]);
         var engine = new Engine { Result = s => new ExecutionResult(s, ExecutionStatus.Succeeded) { ResultSet = s.Kind == StatementKind.Query ? rows : null } };
         var plans = new FakePlans { LastCursor = new CursorRef("abc", 1) };
+        plans.Cursors["abc"] = WithActuals("abc"); // 읽은 커서의 계획 본문을 보낸 사본과 대조한다(PlanSqlMatch)
         var runner = new PlanStatsRerunner(state, () => binds, () => session, () => engine, () => plans);
 
         var outcome = await runner.RunAsync(Query, PlanRerunMode.StatisticsLevel, default);

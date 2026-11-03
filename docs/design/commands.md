@@ -281,6 +281,7 @@
 | `oranda.txn.rollback` | - | - | `Shift+F10` | `F12` |
 | `oranda.plan.explain` | `Ctrl+E` | `Ctrl+E` | `F5` | `F10` |
 | `oranda.plan.actual` | `Ctrl+Shift+E` | `Ctrl+Shift+E` | `Ctrl+Shift+E` | `F6` |
+| `oranda.plan.runActual` | `Ctrl+Alt+Shift+E` | `Ctrl+Alt+Shift+E` | `Ctrl+Alt+Shift+E` | `Ctrl+Alt+Shift+E` |
 | `oranda.view.history` | `Alt+5`, `F8` | `Alt+5`, `F8` | `Alt+5`, `Ctrl+E` | `Alt+5`, `F8` |
 | `oranda.view.zoomOut` | `Ctrl+-` | - | `Ctrl+-` | `Ctrl+-` |
 | `oranda.plsql.compile` | `F5` | `F5` | `F8` | `Ctrl+Shift+F9` |
@@ -433,6 +434,7 @@
 | `oranda.txn.toggleAutoCommit` | 자동 커밋 켜기/끄기 (이번 실행) | - | 전역 | `(hasSession \|\| dedicatedSession) && !readOnlySession` | TSK-06-02 |
 | `oranda.plan.explain` | 예상 실행 계획 | `Ctrl+E` | `sqlDocFocus` | `(hasSession \|\| dedicatedSession) && !sessionBusy && !mybatisDocActive` | TSK-07-01 |
 | `oranda.plan.actual` | 실제 실행 계획(마지막 실행) | `Ctrl+Shift+E` | `sqlDocFocus` | `(hasSession \|\| dedicatedSession) && hasLastSqlId && !mybatisDocActive` | TSK-07-01 |
+| `oranda.plan.runActual` | 실행하고 실제 계획(A-Rows) | `Ctrl+Alt+Shift+E` | `sqlDocFocus` | `(hasSession \|\| dedicatedSession) && !sessionBusy && !mybatisDocActive` | plan-arows (`toolbar:main/explain@231`·`menu:tuning/runActualPlan@25`; 조회만 힌트 사본으로 끝까지 읽음, 탭 기록(LastRun)은 남기지 않음) |
 | `oranda.plan.displayCursorOptions` | DISPLAY_CURSOR 형식 옵션 | - | 전역 | `hasSession` | TSK-07-01 |
 | `oranda.plan.pinForCompare` | 이 계획 고정(비교 기준) | - | 전역 | 항상 | TSK-07-01 |
 | `oranda.plan.compare` | 고정한 계획과 비교 | - | 전역 | 항상 | TSK-07-01 |

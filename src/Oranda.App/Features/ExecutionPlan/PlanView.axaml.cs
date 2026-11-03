@@ -30,6 +30,8 @@ public partial class PlanView : UserControl
         TreeCollapseAllButton.Click += (_, _) => Run(vm => vm.CollapseAll());
         ExplainButton.Click += async (_, _) => await RunAsync(vm => vm.ExplainFromButtonAsync());
         ActualButton.Click += async (_, _) => await RunAsync(vm => vm.ActualFromButtonAsync());
+        RunActualButton.Click += async (_, _) => await RunAsync(vm => vm.RunActualFromButtonAsync());
+        CancelRunButton.Click += (_, _) => Run(vm => vm.CancelRerun());
         PinButton.Click += (_, _) => Run(vm => vm.PinCurrent());
         CompareButton.Click += (_, _) => Run(vm => vm.CompareWithPinned());
         UnpinButton.Click += (_, _) => Run(vm => vm.Unpin());

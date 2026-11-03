@@ -132,6 +132,7 @@ internal static class PrdMatrix
         ("oranda.mybatis.checkCombinations", "myBatis"),
         ("oranda.plan.explain", null),
         ("oranda.plan.actual", null),
+        ("oranda.plan.runActual", null),
         ("oranda.plan.compare", "planAdvanced"),
         ("oranda.plan.pinForCompare", "planAdvanced"),
         ("oranda.monitor.sql", "sqlMonitor"),

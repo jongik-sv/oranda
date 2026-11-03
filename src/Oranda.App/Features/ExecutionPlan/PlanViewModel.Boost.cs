@@ -45,6 +45,7 @@ public sealed partial class PlanViewModel
 
     public const string ExplainCommandId = "oranda.plan.explain";
     public const string ActualCommandId = "oranda.plan.actual";
+    public const string RunActualCommandId = ExecutionPlanCommands.RunActualId;
     public const string StatsCommandId = "oranda.tuning.stats";
     public const string ChildCursorsCommandId = "oranda.tuning.childCursors";
     public const string AssistantCommandId = "oranda.tuning.assistant";
@@ -70,7 +71,7 @@ public sealed partial class PlanViewModel
 
     /// <summary>힌트 사본·STATISTICS_LEVEL 다시 실행 중(띠 단추를 끈다).</summary>
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(CanRerun))]
+    [NotifyPropertyChangedFor(nameof(CanRerun), nameof(CanRunActualNow))]
     private bool _isRerunning;
 
     /// <summary>지금 계획이 예상 계획(EXPLAIN PLAN)이다.</summary>
@@ -141,8 +142,16 @@ public sealed partial class PlanViewModel
             _autoRerunTried = false;
         }
 
+        // 「실행하고 실제 계획」·다시 실행으로 열린 계획이 지금 보이는 계획이면 실제로 그 계획을 얻은 문장이 먼저다(탭의 마지막 실행과 다를 수 있다).
+        if (_openedBy is { } opened && CurrentPlan?.Cursor is { } shown && shown.SqlId == opened.Cursor.SqlId)
+        {
+            return opened.Statement;
+        }
+
         return _lastStatement ?? source;
     }
+
+    private (CursorRef Cursor, SqlStatement Statement)? _openedBy;
 
     /// <summary>편집기 지금 문장(명령 처리기가 넣는다).</summary>
     public Func<SqlStatement?>? CurrentStatement { get; set; }
@@ -261,12 +270,19 @@ public sealed partial class PlanViewModel
     /// <summary>「실제 계획」 단추를 누를 수 있는가(활성 SQL 탭과 접속이 있을 때).</summary>
     public bool CanActualNow => CanRunCommand?.Invoke(ActualCommandId) ?? false;
 
+    /// <summary>「실행하고 실제 계획(A-Rows)」 단추를 누를 수 있는가(활성 SQL 탭·접속이 있고, 세션이 바쁘지 않고, 다시 실행 중이 아닐 때).</summary>
+    public bool CanRunActualNow => !IsRerunning && (CanRunCommand?.Invoke(RunActualCommandId) ?? false);
+
     /// <summary>실행 단추의 활성 상태를 다시 본다(문맥 키·활성 탭이 바뀐 뒤).</summary>
     public void RefreshRunButtons()
     {
         OnPropertyChanged(nameof(CanExplainNow));
         OnPropertyChanged(nameof(CanActualNow));
+        OnPropertyChanged(nameof(CanRunActualNow));
     }
+
+    /// <summary>실행하고 실제 계획 단추: 단축키와 같은 명령을 부른다(현재 문장은 명령 처리기가 시작한 탭에서 얻는다).</summary>
+    public Task RunActualFromButtonAsync() => RunCommand(RunActualCommandId);
 
     /// <summary>예상 계획 단추: 단축키 Ctrl+E 와 같은 명령을 부른다(새 실행 경로를 만들지 않는다).</summary>
     public Task ExplainFromButtonAsync() => RunCommand(ExplainCommandId);
@@ -320,14 +336,17 @@ public sealed partial class PlanViewModel
     }
 
     /// <summary>A-Rows 를 받으며 다시 실행한다(띠 단추·메뉴 「실제 행 수 받으며 다시 실행」). 끝나면 새 커서의 실제 계획을 보인다.</summary>
-    public async Task RerunAsync(PlanRerunMode mode, CancellationToken ct = default)
+    public Task RerunAsync(PlanRerunMode mode, CancellationToken ct = default) => RerunAsync(mode, null, ct);
+
+    /// <summary><paramref name="statement"/> 를 주면 그 문장을, 없으면 마지막으로 실행한 문장(없으면 편집기 지금 문장)을 다시 실행한다.</summary>
+    public async Task RerunAsync(PlanRerunMode mode, SqlStatement? statement, CancellationToken ct = default)
     {
         if (IsRerunning || _disposed)
         {
             return;
         }
 
-        var stmt = ResolveLastStatement() ?? CurrentStatement?.Invoke();
+        var stmt = statement ?? ResolveLastStatement() ?? CurrentStatement?.Invoke();
         if (stmt is null)
         {
             StatusText = "다시 실행할 문장이 없습니다. 편집기에서 문장을 실행한 뒤 다시 누르세요.";
@@ -349,6 +368,7 @@ public sealed partial class PlanViewModel
         try
         {
             var outcome = await rerun(mode, stmt, ct).ConfigureAwait(true);
+            _openedBy = (outcome.Cursor, stmt);
             await ShowCursorAsync(outcome.Session, outcome.Cursor, ct).ConfigureAwait(true);
             // 계획 반영(Apply)은 UI 스레드로 넘겨지므로 같은 길로 뒤에 붙인다.
             PostToUi(() =>
@@ -379,6 +399,33 @@ public sealed partial class PlanViewModel
             _rerunCts = null;
             IsRerunning = false;
         }
+    }
+
+    /// <summary>
+    /// 「실행하고 실제 계획(A-Rows)」: 넘겨받은 문장(편집기 현재 문장)을 한 번에 힌트 사본으로 실행해 A-Rows 가 있는 실제 계획을 연다.
+    /// 새 실행 길을 만들지 않고 <see cref="RerunAsync"/>(→ <see cref="PlanStatsRerunner"/> → 실행 엔진 정책 관문)를 쓴다.
+    /// 질의(SELECT·WITH)만 실행한다: DML·DDL·PL/SQL 과 <c>FOR UPDATE</c> 는 데이터를 바꾸거나 행을 잠글 수 있어 실행하지 않고 안내한다. 편집기 글은 바꾸지 않는다.
+    /// </summary>
+    public async Task RunWithActualRowsAsync(SqlStatement? statement, CancellationToken ct = default)
+    {
+        if (IsRerunning || _disposed)
+        {
+            return;
+        }
+
+        if (statement is null)
+        {
+            StatusText = "실행할 문장이 없습니다(커서를 문장 안에 두세요).";
+            return;
+        }
+
+        if (!PlanStatsRerunner.CanAutoRerun(statement))
+        {
+            StatusText = "질의(SELECT)만 실행해 실제 계획을 봅니다. DML·DDL·PL/SQL·FOR UPDATE 는 실행하지 않았습니다 — 직접 실행한 뒤 「실제 계획」(Ctrl+Shift+E)을 보세요.";
+            return;
+        }
+
+        await RerunAsync(PlanRerunMode.Hint, statement, ct).ConfigureAwait(true);
     }
 
     /// <summary>다시 실행 중이면 취소한다(띠의 「취소」 단추). 자동 재실행도 같은 길로 멈춘다.</summary>

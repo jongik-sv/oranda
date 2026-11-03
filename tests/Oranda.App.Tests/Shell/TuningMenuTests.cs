@@ -48,7 +48,7 @@ public class TuningMenuTests
         var ids = CommandIds(TuningMenu()).Where(id => !id.StartsWith("oranda.tuning.", StringComparison.Ordinal)).ToList();
         string[] expected =
         [
-            "oranda.plan.explain", "oranda.plan.actual", "oranda.plan.displayCursorOptions", "oranda.plan.pinForCompare", "oranda.plan.compare",
+            "oranda.plan.explain", "oranda.plan.actual", "oranda.plan.runActual", "oranda.plan.displayCursorOptions", "oranda.plan.pinForCompare", "oranda.plan.compare",
             "oranda.monitor.sql", "oranda.monitor.sqlSearch", "oranda.monitor.sqlShowPlan", "oranda.monitor.sqlShowBinds",
             "oranda.ai.tune",
         ];
@@ -91,6 +91,10 @@ public class TuningMenuTests
         var explain = AppCommands.Single(c => c.Id == "oranda.plan.explain");
         Assert.Contains("toolbar:main/explain@230", explain.Placements);
         Assert.Contains("menu:sql/explain@50", explain.Placements);
+        var runActual = AppCommands.Single(c => c.Id == "oranda.plan.runActual"); // 예상 계획 바로 옆(@230 다음), 기존 두 명령의 배치는 그대로
+        Assert.Contains("toolbar:main/explain@231", runActual.Placements);
+        Assert.Contains("menu:tuning/runActualPlan@25", runActual.Placements);
+        Assert.DoesNotContain(AppCommands.Single(c => c.Id == "oranda.plan.actual").Placements, p => p.StartsWith("toolbar:", StringComparison.Ordinal));
         var sql = AppCommands.Single(c => c.Id == "oranda.monitor.sql");
         Assert.Contains("toolbar:main/sqlMonitor@520", sql.Placements);
     }

@@ -220,11 +220,11 @@ public sealed class RoleSurfaceMatrixTests
     /// 조회 전용이 아닌 구성은 툴바가 그대로(놓인 단추 = 보이는 단추).
     /// </summary>
     [Theory]
-    [InlineData("R6-viewer", 15, 13)]
-    [InlineData("R1-sqlDev", 16, 16)] // + AI 튜닝 분할 단추 1개(aiTuning 기본 켬)
-    [InlineData("none(default-R1)", 16, 16)]
-    [InlineData("R6+R1", 16, 16)]
-    [InlineData("all-features", 20, 20)]
+    [InlineData("R6-viewer", 16, 14)] // + 실행하고 실제 계획 단추 1개
+    [InlineData("R1-sqlDev", 17, 17)] // + AI 튜닝 분할 단추 1개(aiTuning 기본 켬)
+    [InlineData("none(default-R1)", 17, 17)]
+    [InlineData("R6+R1", 17, 17)]
+    [InlineData("all-features", 21, 21)]
     public Task Toolbar_hides_commit_and_rollback_only_for_read_only_without_a_pending_transaction(string name, int placed, int shownWithoutTxn) => HeadlessHost.Run(async () =>
     {
         var c = Cases[name];
@@ -321,7 +321,7 @@ public sealed class RoleSurfaceMatrixTests
         Assert.Equal(PrdMatrix.AllTasks.Order(), s.StartupTasks.Order());
 
         // 조사 0절의 숫자(명령 281·도구 창 33·상태 칸 10·시작 작업 14) + WP-07 이 더한 것(기능 Role 고르기 명령 1개) + 도움말 「새 기능」(oranda.help.releaseNotes, eab3889) 1개 + 튜닝 「튜닝 추천」(oranda.tuning.recommend, TSK-14-17) 1개. 시작 작업은 그 뒤 공통 2개를 더해 16(PrdMatrix.AllTasks). 도구 창 33 = 개발 빌드 전용 포함.
-        Assert.Equal(289, all.Commands.Count); // + AI 튜닝 명령 5개(aiTuning 기본 켬)
+        Assert.Equal(290, all.Commands.Count); // + 실행하고 실제 계획(oranda.plan.runActual) 1개 + AI 튜닝 명령 5개(aiTuning 기본 켬)
     });
 
     private static RoleSurface? _baseline;

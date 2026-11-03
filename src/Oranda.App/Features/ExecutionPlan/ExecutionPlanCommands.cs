@@ -30,6 +30,7 @@ public static class ExecutionPlanCommands
     [
         "oranda.plan.explain",
         "oranda.plan.actual",
+        RunActualId,
         "oranda.plan.displayCursorOptions",
         "oranda.plan.pinForCompare",
         "oranda.plan.compare",
@@ -37,6 +38,9 @@ public static class ExecutionPlanCommands
         RerunWithHintId,
         RerunWithStatisticsLevelId,
     ];
+
+    /// <summary>「실행하고 실제 계획(A-Rows)」: 활성 탭의 현재 문장(조회만)을 힌트 사본으로 끝까지 읽고 A-Rows 가 있는 실제 계획을 연다.</summary>
+    public const string RunActualId = "oranda.plan.runActual";
 
     /// <summary>「실제 행 수 받으며 다시 실행 › 힌트 넣은 사본」(TSK-06-04).</summary>
     public const string RerunWithHintId = "oranda.tuning.rerunWithHint";
@@ -53,6 +57,8 @@ public static class ExecutionPlanCommands
     Icon = "explainPlan", Placements = ["menu:sql/explain@50", "menu:tuning/explain@10", "toolbar:main/explain@230", "context:editor/explain@1020"])]
 [OrandaCommand("oranda.plan.actual", CommandCategory.Sql, When = "sqlDocFocus", Enablement = "(hasSession || dedicatedSession) && !mybatisDocActive",
     Placements = ["menu:sql/actualPlan@60", "menu:tuning/actualPlan@20"])]
+[OrandaCommand(ExecutionPlanCommands.RunActualId, CommandCategory.Sql, When = "sqlDocFocus", Enablement = "(hasSession || dedicatedSession) && !sessionBusy && !mybatisDocActive",
+    Icon = "planRun", Placements = ["menu:tuning/runActualPlan@25", "toolbar:main/explain@231"])]
 [OrandaCommand("oranda.plan.displayCursorOptions", CommandCategory.Sql, Enablement = "hasSession",
     Placements = ["menu:tuning/displayCursorOptions@30"])]
 [OrandaCommand("oranda.plan.pinForCompare", CommandCategory.Sql, Icon = "lock",
@@ -105,7 +111,18 @@ public sealed class ExecutionPlanCommandHandler : ICommandHandler
         {
             if (vm is not null)
             {
-                await vm.RerunAsync(context.CommandId == ExecutionPlanCommands.RerunWithHintId ? PlanRerunMode.Hint : PlanRerunMode.StatisticsLevel, cancellationToken).ConfigureAwait(true);
+                await RerunPreparedAsync(vm, tab, ExecutionCommands.Resolve(_container),
+                    context.CommandId == ExecutionPlanCommands.RerunWithHintId ? PlanRerunMode.Hint : PlanRerunMode.StatisticsLevel, cancellationToken).ConfigureAwait(true);
+            }
+
+            return;
+        }
+
+        if (context.CommandId == ExecutionPlanCommands.RunActualId)
+        {
+            if (vm is not null)
+            {
+                await RunActualAsync(vm, tab, ExecutionCommands.Resolve(_container), cancellationToken).ConfigureAwait(true);
             }
 
             return;
@@ -201,6 +218,62 @@ public sealed class ExecutionPlanCommandHandler : ICommandHandler
         }
     }
 
+    /// <summary>
+    /// 「실행하고 실제 계획」: 일반 실행(Ctrl+Enter)과 같은 길로 탭의 접속·세션을 확인하고(<see cref="ExecutionController.PrepareSingleStatementAsync"/>:
+    /// 접속 안 됨 묻기, 작업 공간 세션 묶기, 실행 중 확인, 선택 영역·빈 줄 구분 규칙) 문장 하나를 얻어 힌트 사본으로 실행한다.
+    /// 막히면 이유를 계획 창 상태 줄에 알리고 아무것도 보내지 않는다. 실행·정책 관문은 다시 실행 경로(PlanStatsRerunner → IExecutionService)를 그대로 쓴다.
+    /// </summary>
+    internal static async Task RunActualAsync(PlanViewModel vm, SqlEditorViewModel? tab, ExecutionController controller, CancellationToken ct)
+    {
+        if (tab is null)
+        {
+            vm.StatusText = "활성 SQL 탭이 없습니다.";
+            return;
+        }
+
+        var (statement, problem) = await controller.PrepareSingleStatementAsync(tab, ct).ConfigureAwait(true);
+        if (statement is null)
+        {
+            vm.StatusText = problem ?? "실행할 문장이 없습니다(커서를 문장 안에 두세요).";
+            return;
+        }
+
+        await vm.RunWithActualRowsAsync(statement, ct).ConfigureAwait(true);
+    }
+
+    /// <summary>
+    /// 메뉴 「실제 행 수 받으며 다시 실행」(힌트 사본·STATISTICS_LEVEL=ALL): 서버에 보내기 전에 일반 실행과 같은 길로 탭의 접속·세션을 확인한다
+    /// (<see cref="ExecutionController.EnsureConnectionAsync"/>). 첫 실행 전인 작업 공간의 탭이 다른 작업 공간의 세션에 ALTER SESSION 을 남기지 않게 한다.
+    /// </summary>
+    internal static async Task RerunPreparedAsync(PlanViewModel vm, SqlEditorViewModel? tab, ExecutionController controller, PlanRerunMode mode, CancellationToken ct)
+    {
+        if (tab is not null && !await controller.EnsureConnectionAsync(tab, ct).ConfigureAwait(true))
+        {
+            vm.StatusText = "접속을 확인하지 못해 실행하지 않았습니다. 접속한 뒤 다시 실행하세요.";
+            return;
+        }
+
+        await vm.RerunAsync(mode, ct).ConfigureAwait(true);
+    }
+
+    /// <summary>탭의 다시 실행 실행기(운영 연결): 탭의 바인드·세션, 실행 엔진·계획 서비스, 시작한 작업 공간(바쁨 표시). 시험이 같은 연결을 확인한다.</summary>
+    internal static PlanStatsRerunner CreateRerunner(ServiceContainer container, SqlEditorViewModel? tab)
+    {
+        var bus = container.GetService<IEventBus>();
+        var state = ExecutionState.For(bus);
+        return new PlanStatsRerunner(
+            state,
+            () => BindVariableStore.ForTab(tab ?? SqlEditorHost.Current.Active, bus),
+            () => SessionRouter.Resolve(container).SessionFor(tab ?? SqlEditorHost.Current.Active),
+            () =>
+            {
+                ExecutionCommands.EnsureEngineServices(container, state);
+                return container.GetRequiredService<IExecutionService>();
+            },
+            () => container.GetRequiredService<IExecutionPlanService>(),
+            () => (tab ?? SqlEditorHost.Current.Active) is { } t ? SqlEditorHost.Current.WorkspaceOf(t) : null); // 시작한 작업 공간(바쁨 표시)
+    }
+
     /// <summary>탭의 계획 모델에 다시 실행·설정·문장 얻기를 한 번 잇는다(모델마다 한 번).</summary>
     private void Wire(PlanViewModel vm, SqlEditorViewModel? tab)
     {
@@ -223,18 +296,7 @@ public sealed class ExecutionPlanCommandHandler : ICommandHandler
         _wired.Add(vm, new object());
         vm.LastStatementSource = () => tab?.LastRun.Statement; // 탭이 시작한 실행만: 다른 탭의 문장이 섞이지 않는다
         vm.CurrentStatement = () => tab is not null ? tab.GetStatementAtCaret() : container.GetService<IEditorContext>()?.GetCurrentStatement();
-        var bus = container.GetService<IEventBus>();
-        var state = ExecutionState.For(bus);
-        var rerunner = new PlanStatsRerunner(
-            state,
-            () => BindVariableStore.ForTab(tab ?? SqlEditorHost.Current.Active, bus),
-            () => SessionRouter.Resolve(container).SessionFor(tab ?? SqlEditorHost.Current.Active),
-            () =>
-            {
-                ExecutionCommands.EnsureEngineServices(container, state);
-                return container.GetRequiredService<IExecutionService>();
-            },
-            () => container.GetRequiredService<IExecutionPlanService>());
+        var rerunner = CreateRerunner(container, tab);
         vm.Rerunner = (mode, stmt, ct) => rerunner.RunAsync(stmt, mode, ct);
         if (container.GetService<SettingsService>() is { } settings)
         {

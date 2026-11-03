@@ -34,6 +34,7 @@ public sealed class MyBatisCommandContractTests
         "oranda.exec.runStatement",
         "oranda.exec.runForEdit",
         "oranda.plan.explain",
+        "oranda.plan.runActual",
         "oranda.format.document",
     ];
 

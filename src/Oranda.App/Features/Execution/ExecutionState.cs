@@ -552,6 +552,36 @@ public sealed class ExecutionState : ObservableObject
         }
     }
 
+    private readonly System.Collections.Concurrent.ConcurrentDictionary<Guid, Action> _backgroundCancels = new();
+
+    /// <summary>
+    /// 컨트롤러 밖에서 세션을 「실행 중」으로 잡고 도는 일(계획 다시 실행 등)이 취소 방법을 맡겨 둔다. 실행 취소(<c>oranda.exec.cancel</c>)가 이것도 끊는다.
+    /// 반환값을 버리면(Dispose) 맡긴 방법이 빠진다. 컨트롤러가 이 일의 종류를 몰라도 되게 하는 방향이다(Execution → 기능 의존 없음).
+    /// </summary>
+    public IDisposable RegisterCancel(Guid sessionId, Action cancel)
+    {
+        ArgumentNullException.ThrowIfNull(cancel);
+        _backgroundCancels[sessionId] = cancel;
+        return new CancelHandle(this, sessionId, cancel);
+    }
+
+    /// <summary>맡겨 둔 취소 방법이 있으면 부른다. 있었으면 true.</summary>
+    public bool CancelBackground(Guid sessionId)
+    {
+        if (!_backgroundCancels.TryGetValue(sessionId, out var cancel))
+        {
+            return false;
+        }
+
+        cancel();
+        return true;
+    }
+
+    private sealed class CancelHandle(ExecutionState owner, Guid sessionId, Action cancel) : IDisposable
+    {
+        public void Dispose() => ((ICollection<KeyValuePair<Guid, Action>>)owner._backgroundCancels).Remove(new KeyValuePair<Guid, Action>(sessionId, cancel));
+    }
+
     public void MarkCancelling(Guid sessionId)
     {
         if (TrackOf(sessionId) is { } t)

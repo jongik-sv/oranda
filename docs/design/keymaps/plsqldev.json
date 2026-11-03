@@ -63,6 +63,7 @@
     { "command": "oranda.txn.rollback", "keys": ["Shift+F10"] },
     { "command": "oranda.plan.explain", "keys": ["F5"], "when": "sqlDocFocus" },
     { "command": "oranda.plan.actual", "keys": ["Primary+Shift+E"], "when": "sqlDocFocus" },
+    { "command": "oranda.plan.runActual", "keys": ["Primary+Alt+Shift+E"], "when": "sqlDocFocus" },
     { "command": "oranda.grid.copy", "keys": ["Primary+C"], "when": "gridFocus" },
     { "command": "oranda.grid.copyWithHeaders", "keys": ["Primary+Shift+C"], "when": "gridFocus" },
     { "command": "oranda.grid.copyRows", "keys": ["Primary+Alt+C"], "when": "gridFocus" },

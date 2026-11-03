@@ -102,13 +102,56 @@ public sealed partial class ExecutionController
     /// </summary>
     public void Cancel()
     {
-        if (FocusedSession() is { } session
-            && _runs.TryGetValue(session.Id, out var cts) && !cts.IsCancellationRequested)
+        if (FocusedSession() is not { } session)
+        {
+            return;
+        }
+
+        if (_runs.TryGetValue(session.Id, out var cts))
+        {
+            if (!cts.IsCancellationRequested)
+            {
+                State.MarkCancelling(session.Id);
+                Log.AddMessage(MessageKind.Info, "실행 취소를 요청했습니다.");
+                cts.Cancel();
+            }
+
+            return;
+        }
+
+        // 컨트롤러가 시작하지 않았지만 이 세션을 잡고 도는 일(계획 「다시 실행」·「실행하고 실제 계획」)도 같은 취소로 끊는다.
+        if (State.CancelBackground(session.Id))
         {
             State.MarkCancelling(session.Id);
             Log.AddMessage(MessageKind.Info, "실행 취소를 요청했습니다.");
-            cts.Cancel();
         }
+    }
+
+    /// <summary>
+    /// 실행 버튼이 아닌 다른 기능(계획 「실행하고 실제 계획」)이 탭의 현재 문장을 서버에 보내기 전에 거치는 길. 일반 실행(<see cref="RunAsync"/>)과 같은 순서다:
+    /// 연결 확인·작업 공간 세션 묶기(<see cref="EnsureConnectionAsync"/>) → 세션 실행 중 확인 → 문장 고르기(<see cref="SelectStatements"/>, 선택 영역·빈 줄 구분 규칙 포함).
+    /// 문장 하나를 얻으면 (문장, null), 막히면 (null, 사용자에게 알릴 이유).
+    /// </summary>
+    public async Task<(SqlStatement? Statement, string? Problem)> PrepareSingleStatementAsync(SqlEditorViewModel tab, CancellationToken ct = default)
+    {
+        ArgumentNullException.ThrowIfNull(tab);
+        if (!await EnsureConnectionAsync(tab, ct).ConfigureAwait(true))
+        {
+            return (null, "접속을 확인하지 못해 실행하지 않았습니다. 접속한 뒤 다시 실행하세요.");
+        }
+
+        if (IsBusy(SessionFor(tab)))
+        {
+            return (null, "이 접속에서 다른 문장이 실행 중입니다. 끝난 뒤 다시 실행하세요.");
+        }
+
+        var (stmts, _) = SelectStatements(tab, RunMode.Statement);
+        return stmts.Count switch
+        {
+            0 => (null, "실행할 문장이 없습니다(커서를 문장 안에 두세요)."),
+            1 => (stmts[0], null),
+            _ => (null, "선택 영역에 문장이 여러 개입니다. 문장 하나만 고르세요."),
+        };
     }
 
     private bool IsBusy(ISession? session) => session is null ? State.Busy : State.IsBusy(session.Id);

@@ -208,7 +208,7 @@ public class PlanCompareTests
             Assert.NotNull(registry.Find(id));
         }
 
-        Assert.Equal(8, ExecutionPlanCommands.Ids.Length); // TSK-06-04: 다시 실행 두 명령
+        Assert.Equal(9, ExecutionPlanCommands.Ids.Length); // TSK-06-04: 다시 실행 두 명령 + 실행하고 실제 계획
         var pin = registry.Find("oranda.plan.pinForCompare")!;
         var compare = registry.Find("oranda.plan.compare")!;
         Assert.Null(pin.Enablement);

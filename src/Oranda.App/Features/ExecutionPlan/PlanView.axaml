@@ -165,6 +165,11 @@
                   ToolTip.ShowOnDisabled="True" ToolTip.Tip="활성 SQL 탭의 문장으로 예상 계획을 만듭니다(Ctrl+E)" />
           <Button x:Name="ActualButton" Classes="toolbar" Content="실제 계획" icons:ButtonIcon.Key="plan" icons:ButtonIcon.IconOnly="True" AutomationProperties.Name="실제 계획" IsEnabled="{Binding CanActualNow}"
                   ToolTip.ShowOnDisabled="True" ToolTip.Tip="마지막으로 실행한 문장(또는 입력한 sql_id)의 실제 계획을 읽습니다(Ctrl+Shift+E)" />
+          <!-- 실행하고 A-Rows 까지: 활성 탭의 현재 문장(조회만)을 힌트 사본으로 끝까지 읽고 실제 계획을 연다. 실행 중에는 옆의 중단 단추가 나온다. -->
+          <Button x:Name="RunActualButton" Classes="toolbar" Content="실행하고 실제 계획" icons:ButtonIcon.Key="planRun" icons:ButtonIcon.IconOnly="True" AutomationProperties.Name="실행하고 실제 계획(A-Rows)" IsEnabled="{Binding CanRunActualNow}"
+                  ToolTip.ShowOnDisabled="True" ToolTip.Tip="활성 SQL 탭의 현재 문장을 실행하고 A-Rows 가 있는 실제 계획을 엽니다(Ctrl+Alt+Shift+E). 모든 행을 끝까지 읽습니다. 조회(SELECT)만 실행하며 편집기 글은 바꾸지 않습니다." />
+          <Button x:Name="CancelRunButton" Classes="toolbar" Content="실행 중단" icons:ButtonIcon.Key="cancel" icons:ButtonIcon.IconOnly="True" AutomationProperties.Name="실행 중단" IsVisible="{Binding IsRerunning}"
+                  ToolTip.Tip="실행 중인 실제 계획 사본을 멈춥니다." />
           <Separator Classes="toolbar" />
           <ListBox x:Name="ViewSwitch" Classes="segmented" SelectedIndex="{Binding SelectedTabIndex, Mode=TwoWay}"
                    AutomationProperties.Name="계획 보기">
