@@ -8,9 +8,8 @@ using Oranda.Core.Shell;
 namespace Oranda.App.Features.Ai;
 
 /// <summary>
-/// 「AI 튜닝」 명령(툴바 나눔 단추의 본체와 ▾ 자식, 튜닝 메뉴). 「이 문장 튜닝」 만 동작한다.
-/// 해설·설명·오류 고치기는 각 명령 파일(<c>Tuning/Commands/*</c>)의 <c>Enablement</c> 상수를 활성 식으로 쓰고, 켜기 전에는 늘 거짓인 키(<c>aiNotYet</c>)다.
-/// 명령을 켜는 항목은 이 파일이 아니라 자기 명령 파일의 상수만 바꾼다.
+/// 「AI 튜닝」 명령(툴바 나눔 단추의 본체와 ▾ 자식, 튜닝 메뉴): 이 문장 튜닝, 실행 계획 해설, SQL 설명, 오류 고치기.
+/// 해설·설명·오류 고치기는 각 명령 파일(<c>Tuning/Commands/*</c>)의 <c>Enablement</c> 상수를 활성 식으로 쓴다.
 /// 설정에서 AI 모델을 고르지 않았거나(<c>aiConfigured</c>) 접속의 AI 허용 수준이 「끔」 이면(<c>aiAccessOn</c>) 비활성이고, 이유는 메뉴에 나온다.
 /// 이 형은 <c>Features.Ai</c> 네임스페이스라 aiTuning 기능이 꺼져 있으면 명령 자체가 보이지 않는다.
 /// </summary>

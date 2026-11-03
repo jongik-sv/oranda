@@ -54,7 +54,6 @@ public class AiCommandsTests
 
         keys.Set(AiContextKeys.AccessOnKey, true);
         Assert.True(keys.Evaluate(AiCommands.TuneEnablement));
-        Assert.False(keys.Evaluate("aiNotYet"));
     }
 
     private static string? Reason(ContextKeyService keys, ShellText text) =>

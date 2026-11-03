@@ -307,7 +307,6 @@
   "Menu.disabled.aiConfigured": "Choose an AI model in Settings first",
   "Menu.disabled.aiAccessOn": "AI access is Off for this connection. Change it in the connection editor",
   "Menu.disabled.aiAccessPlan": "AI access for this connection must be Plan or higher. Change it in the connection editor",
-  "Menu.disabled.aiNotYet": "Not supported yet",
   "Menu.disabled.monitorSessionOpen": "Open the session monitor first",
   "Menu.disabled.monitorSessionSelected": "Select a row in the session list",
   "Menu.disabled.monitorSqlOpen": "Open the SQL monitor first",
