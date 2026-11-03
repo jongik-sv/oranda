@@ -376,3 +376,291 @@ public sealed class RoutingAiDriverTests
         public Task DeleteAsync(string key) => Task.CompletedTask;
     }
 }
+
+/// <summary>
+/// 시스템 CLI(Claude Code 외) 경로. 사용할 수 없는 CLI 는 Claude 구독(CliDriver)으로 넘어가지 않고 닫히며,
+/// 사용 가능한 CLI 는 등록된 드라이버로만 간다(모델·노력은 비워서). 플랫폼은 주입한 목록으로 양쪽 분기를 지난다.
+/// </summary>
+public sealed class RoutingAiDriverSystemCliTests
+{
+    private static readonly AiRequest Request = new("질문", new AiContext("p", null, AiAccessLevel.Plan), Model: "opus", Effort: "high");
+
+    private readonly FakeSettingsStore _settings = new();
+
+    private RoutingAiDriver Create(IReadOnlyList<AiSystemCliInfo> clis, params ISystemCliAiDriver[] drivers)
+    {
+        var cli = new CliDriver(new FakeRunTokens(), new FakeGate(), new FixedBridgeEndpoint("pipe"), new AppDataPaths(Path.GetTempPath()), _settings);
+        return new RoutingAiDriver(_settings, new FakeCredentialStore(), cli, new CliServices(drivers)) { SystemClis = clis };
+    }
+
+    private void Use(string? cliId, Guid? profileId = null) =>
+        _settings.Current = new AppSettings { Ai = new AiSettings { SystemCliId = cliId, ActiveProfileId = profileId } };
+
+    private static async Task<List<AiEvent>> RunAsync(RoutingAiDriver driver, AiRequest? request = null)
+    {
+        var events = new List<AiEvent>();
+        await foreach (var e in driver.RunAsync(request ?? Request, CancellationToken.None))
+        {
+            events.Add(e);
+        }
+
+        return events;
+    }
+
+    private static string? CodeOf(IReadOnlyList<AiEvent> events) => Assert.IsType<AiError>(Assert.Single(events)).Code;
+
+    private static IReadOnlyList<AiSystemCliInfo> Clis(bool codexAvailable) =>
+    [
+        new(AiProfilePresets.ClaudeCodeId, "Claude Code", true),
+        new(AiProfilePresets.CodexCliId, "Codex CLI", codexAvailable),
+    ];
+
+    [Theory]
+    [InlineData(AiProfilePresets.CodexCliId)]
+    [InlineData("unknown-cli")]
+    [InlineData(AiSettings.UnreadableSystemCliId)]
+    public async Task An_unavailable_or_unknown_cli_closes_and_never_reaches_the_claude_driver(string id)
+    {
+        var fake = new FakeSystemCliDriver(AiProfilePresets.CodexCliId);
+        Use(id);
+
+        var code = CodeOf(await RunAsync(Create(Clis(codexAvailable: false), fake)));
+
+        // session_required 였다면 CliDriver 가 불린 것이다.
+        Assert.Equal("system_cli_unavailable", code);
+        Assert.Empty(fake.Requests);
+    }
+
+    [Fact]
+    public async Task The_default_table_keeps_codex_and_antigravity_closed_on_a_hand_edited_setting()
+    {
+        var cli = new CliDriver(new FakeRunTokens(), new FakeGate(), new FixedBridgeEndpoint("pipe"), new AppDataPaths(Path.GetTempPath()), _settings);
+        var driver = new RoutingAiDriver(_settings, new FakeCredentialStore(), cli, new CliServices());
+
+        foreach (var id in new[] { AiProfilePresets.CodexCliId, AiProfilePresets.AntigravityCliId })
+        {
+            Use(id);
+            Assert.Equal("system_cli_unavailable", CodeOf(await RunAsync(driver)));
+        }
+    }
+
+    [Fact]
+    public async Task An_available_cli_without_a_registered_driver_closes()
+    {
+        Use(AiProfilePresets.CodexCliId);
+
+        Assert.Equal("system_cli_unavailable", CodeOf(await RunAsync(Create(Clis(codexAvailable: true)))));
+        Assert.Equal("system_cli_unavailable", CodeOf(await RunAsync(Create(Clis(codexAvailable: true), new FakeSystemCliDriver("other-cli")))));
+    }
+
+    [Fact]
+    public async Task An_available_cli_with_a_driver_runs_it_without_model_or_effort()
+    {
+        var fake = new FakeSystemCliDriver(AiProfilePresets.CodexCliId);
+        Use(AiProfilePresets.CodexCliId);
+
+        var events = await RunAsync(Create(Clis(codexAvailable: true), fake));
+
+        Assert.IsType<AiFinal>(Assert.Single(events));
+        var seen = Assert.Single(fake.Requests);
+        Assert.Null(seen.Model);
+        Assert.Null(seen.Effort);
+        Assert.Equal("질문", seen.Prompt);
+    }
+
+    [Fact]
+    public async Task Every_platform_branch_closes_codex()
+    {
+        Use(AiProfilePresets.CodexCliId);
+
+        foreach (var platform in new[] { AiHostPlatform.MacOS, AiHostPlatform.Windows, AiHostPlatform.Linux })
+        {
+            var fake = new FakeSystemCliDriver(AiProfilePresets.CodexCliId);
+            Assert.Equal("system_cli_unavailable", CodeOf(await RunAsync(Create(AiProfilePresets.SystemClisFor(platform), fake))));
+            Assert.Empty(fake.Requests);
+        }
+    }
+
+    [Fact]
+    public async Task An_available_antigravity_row_with_a_driver_runs_it_without_model_or_effort()
+    {
+        Use(AiProfilePresets.AntigravityCliId);
+        var request = Request with { Model = "opus", Effort = "high" };
+        IReadOnlyList<AiSystemCliInfo> clis =
+        [
+            new(AiProfilePresets.ClaudeCodeId, "Claude Code", true),
+            new(AiProfilePresets.AntigravityCliId, "Antigravity CLI", true),
+        ];
+
+        var fake = new FakeSystemCliDriver(AiProfilePresets.AntigravityCliId);
+        Assert.IsType<AiFinal>(Assert.Single(await RunAsync(Create(clis, fake), request)));
+        var seen = Assert.Single(fake.Requests);
+        Assert.Null(seen.Model);
+        Assert.Null(seen.Effort);
+    }
+
+    /// <summary>
+    /// 두 CLI 는 어떤 플랫폼에서도 켜져 있지 않다(not enabled on any platform). 실제 드라이버(파일은 모두 있다고 답하는 대역)를 등록해도
+    /// 설정 파일에 id 가 저장되어 있으면 <c>system_cli_unavailable</c> 로 닫히고 CLI 프로세스는 한 건도 시작되지 않는다.
+    /// </summary>
+    [Theory]
+    [InlineData(AiHostPlatform.Windows, AiProfilePresets.CodexCliId)]
+    [InlineData(AiHostPlatform.MacOS, AiProfilePresets.CodexCliId)]
+    [InlineData(AiHostPlatform.Linux, AiProfilePresets.CodexCliId)]
+    [InlineData(AiHostPlatform.Windows, AiProfilePresets.AntigravityCliId)]
+    [InlineData(AiHostPlatform.MacOS, AiProfilePresets.AntigravityCliId)]
+    [InlineData(AiHostPlatform.Linux, AiProfilePresets.AntigravityCliId)]
+    public async Task A_stored_codex_or_antigravity_id_closes_on_every_platform_and_starts_no_process(AiHostPlatform platform, string cliId)
+    {
+        var launcher = new Cli.FakeLauncher();
+        var tokens = new FakeRunTokens();
+        var gate = new FakeGate();
+        var endpoint = new Cli.FixedEndpoint("bridge-pipe");
+        var paths = new AppDataPaths(Path.GetTempPath());
+        var codex = new CodexDriver(
+            tokens, gate, endpoint, paths, launcher, "/fake/orandactl", () => "/fake/bin", _ => true,
+            (_, _, _) => Task.FromResult<(string? Output, string? Error)>((null, "none")), _ => null, "/home/x", TimeSpan.FromMinutes(1),
+            (_, _, _) => Task.FromResult<string?>("codex-cli 0.166.0"));
+        var agy = new AgyDriver(
+            tokens, gate, endpoint, paths, launcher, "/fake/orandactl", () => "/fake/bin", _ => true, "/home/x", TimeSpan.FromMinutes(1),
+            (_, _, _) => Task.FromResult<string?>("1.4.12"));
+        Use(cliId);
+
+        var code = CodeOf(await RunAsync(Create(AiProfilePresets.SystemClisFor(platform), codex, agy)));
+
+        Assert.Equal("system_cli_unavailable", code);
+        Assert.Empty(launcher.Launches);
+        Assert.Empty(tokens.Issued);
+    }
+
+    [Fact]
+    public async Task An_expectation_of_a_different_cli_than_the_setting_is_profile_changed()
+    {
+        var fake = new FakeSystemCliDriver(AiProfilePresets.CodexCliId);
+        var driver = Create(Clis(codexAvailable: true), fake);
+
+        Use(AiProfilePresets.CodexCliId);
+        Assert.Equal("profile_changed", CodeOf(await RunAsync(driver, Request with { Expected = new AiProfileExpectation(null) })));
+        Assert.Equal("profile_changed", CodeOf(await RunAsync(driver, Request with { Expected = new AiProfileExpectation(null, SystemCliId: "other-cli") })));
+        Assert.Empty(fake.Requests);
+        Assert.IsType<AiFinal>(Assert.Single(await RunAsync(driver, Request with { Expected = new AiProfileExpectation(null, SystemCliId: AiProfilePresets.CodexCliId) })));
+
+        // 설정이 Claude Code 로 돌아가면 Codex 를 기대한 요청은 거부된다.
+        Use(null);
+        Assert.Equal("profile_changed", CodeOf(await RunAsync(driver, Request with { Expected = new AiProfileExpectation(null, SystemCliId: AiProfilePresets.CodexCliId) })));
+    }
+
+    [Fact]
+    public async Task Claude_code_ids_null_and_claude_code_are_the_same_expectation()
+    {
+        Use(AiProfilePresets.ClaudeCodeId);
+
+        var code = CodeOf(await RunAsync(Create(Clis(codexAvailable: true)), Request with { Expected = new AiProfileExpectation(null) }));
+
+        Assert.Equal("session_required", code);
+    }
+
+    private sealed class FakeSystemCliDriver(string cliId) : ISystemCliAiDriver
+    {
+        public List<AiRequest> Requests { get; } = [];
+
+        public string CliId => cliId;
+
+        public async IAsyncEnumerable<AiEvent> RunAsync(AiRequest request, [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken ct)
+        {
+            Requests.Add(request);
+            await Task.CompletedTask;
+            yield return new AiFinal("답", null, null);
+        }
+    }
+
+    private sealed class CliServices(params ISystemCliAiDriver[] drivers) : IServiceProvider
+    {
+        public object? GetService(Type serviceType) => serviceType == typeof(IEnumerable<ISystemCliAiDriver>) ? drivers : null;
+    }
+}
+
+/// <summary>활성 대상이 Codex CLI 일 때(주입한 표에서 사용 가능으로 켠 경우) 라우터가 실제 Codex 드라이버까지 보내고 Claude 전용 값을 비우는지 확인한다.</summary>
+public sealed class RoutingToCodexDriverTests : IDisposable
+{
+    // Windows 는 이름.exe 를 찾으므로(SystemCliExecutable) 대역 실행 파일 이름도 맞춘다.
+    private static readonly string FakeCodex = Path.Combine("/fake/bin", OperatingSystem.IsWindows() ? "codex.exe" : "codex");
+
+    private readonly string _dir = Path.Combine(Path.GetTempPath(), "oranda-route-codex-" + Guid.NewGuid().ToString("N"));
+    private readonly FakeSettingsStore _settings = new();
+    private readonly Oranda.Platform.Tests.Ai.Cli.FakeLauncher _launcher = new();
+
+    public RoutingToCodexDriverTests() => Directory.CreateDirectory(_dir);
+
+    public void Dispose()
+    {
+        try
+        {
+            Directory.Delete(_dir, recursive: true);
+        }
+        catch (IOException)
+        {
+            // 임시 폴더 정리 실패는 무시한다.
+        }
+    }
+
+    [Fact]
+    public async Task Codex_cli_setting_reaches_the_codex_driver_with_no_model_effort_or_claude_path()
+    {
+        var tokens = new FakeRunTokens();
+        var gate = new FakeGate();
+        var codex = new CodexDriver(
+            tokens,
+            gate,
+            new FixedBridgeEndpoint("pipe"),
+            new AppDataPaths(_dir),
+            _launcher,
+            "/fake/orandactl",
+            () => "/fake/bin",
+            path => path == FakeCodex || path == "/fake/orandactl",
+            (_, _, _) => Task.FromResult<(string?, string?)>((
+                """{"models":[{"tool_mode":"x","apply_patch_tool_type":"x","multi_agent_version":"x","experimental_supported_tools":[],"supports_search_tool":true}]}""", null)),
+            _ => null,
+            "/home/x",
+            TimeSpan.FromMinutes(1),
+            (_, _, _) => Task.FromResult<string?>("codex-cli 0.166.0"));
+        var cli = new CliDriver(tokens, gate, new FixedBridgeEndpoint("pipe"), new AppDataPaths(_dir), _settings);
+        var router = new RoutingAiDriver(_settings, new FakeCredentialStore(), cli, new CodexServices(codex))
+        {
+            SystemClis = [new(AiProfilePresets.ClaudeCodeId, "Claude Code", true), new(AiProfilePresets.CodexCliId, "Codex CLI", true)],
+        };
+        _settings.Current = new AppSettings
+        {
+            Ai = new AiSettings { SystemCliId = AiProfilePresets.CodexCliId, Model = "sonnet", Effort = "high", ExecutablePath = "/opt/claude" },
+        };
+        _launcher.Lines =
+        [
+            """{"type":"thread.started","thread_id":"th-1"}""",
+            """{"type":"item.completed","item":{"id":"m","type":"agent_message","text":"ok"}}""",
+            """{"type":"turn.completed","usage":{"input_tokens":1,"output_tokens":1}}""",
+        ];
+        var profile = new Oranda.Core.Connection.ConnectionProfile("p", "u", "h/s");
+        var context = new AiContext("p", null, AiAccessLevel.Plan);
+        var request = new AiRequest("질문", context, Model: "opus", Effort: "max", Session: new Oranda.Core.Ai.Gate.AgentSession(new Oranda.Core.Ai.Gate.AgentRunScope("run-1", profile, context)),
+            Expected: new AiProfileExpectation(null, SystemCliId: AiProfilePresets.CodexCliId));
+
+        var events = new List<AiEvent>();
+        await foreach (var e in router.RunAsync(request, CancellationToken.None))
+        {
+            events.Add(e);
+        }
+
+        Assert.IsType<AiFinal>(events[^1]);
+        var launch = Assert.Single(_launcher.Launches);
+        Assert.Equal(FakeCodex, launch.ExecutablePath); // 설정의 Claude 경로(/opt/claude)가 아니다
+        Assert.DoesNotContain("-m", launch.Arguments);
+        Assert.DoesNotContain("opus", launch.Arguments);
+        Assert.DoesNotContain("sonnet", launch.Arguments);
+        Assert.DoesNotContain(launch.Arguments, a => a.Contains("effort", StringComparison.OrdinalIgnoreCase));
+    }
+
+    private sealed class CodexServices(CodexDriver codex) : IServiceProvider
+    {
+        public object? GetService(Type serviceType) => serviceType == typeof(IEnumerable<ISystemCliAiDriver>) ? new ISystemCliAiDriver[] { codex } : null;
+    }
+}

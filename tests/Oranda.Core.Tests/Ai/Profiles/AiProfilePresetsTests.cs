@@ -29,10 +29,15 @@ public class AiProfilePresetsTests
         Assert.Equal(Enum.GetValues<AiProfilePreset>().Where(p => p != AiProfilePreset.Unknown).Order(), AiProfilePresets.All.Select(p => p.Preset).Order());
 
     [Fact]
-    public void System_cli_list_has_only_claude_code_available() =>
-        Assert.Equal(
-            [("Claude Code", true), ("Antigravity CLI", false), ("Codex CLI", false)],
-            AiProfilePresets.SystemClis.Select(c => (c.DisplayName, c.Available)));
+    public void System_cli_list_has_claude_code_everywhere_and_the_other_two_coming_soon()
+    {
+        foreach (var platform in new[] { AiHostPlatform.Windows, AiHostPlatform.MacOS, AiHostPlatform.Linux })
+        {
+            Assert.Equal(
+                [("Claude Code", true), ("Antigravity CLI", false), ("Codex CLI", false)],
+                AiProfilePresets.SystemClisFor(platform).Select(c => (c.DisplayName, c.Available)));
+        }
+    }
 
     [Fact]
     public void New_draft_takes_format_and_url_from_the_preset()

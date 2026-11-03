@@ -28,12 +28,19 @@ public enum AiChoiceKind
 
     /// <summary><c>+ 새 프로필 만들기…</c>. 고르면 관리 창을 열 뿐 선택은 바뀌지 않는다.</summary>
     NewProfile,
+
+    /// <summary>사용할 수 있는 Claude Code 외 시스템 CLI. 고르면 <c>SystemCliId</c> 를 쓴다(<see cref="AiProfileChoice.CliId"/>).</summary>
+    SystemCli,
+
+    /// <summary>설정이 가리키는 시스템 CLI 를 쓸 수 없다(목록에 없음·읽을 수 없는 값). 이유를 보이는 현재 선택 줄이다(고를 수 없음).</summary>
+    MissingCli,
 }
 
 /// <summary>프로필 드롭다운 한 줄.</summary>
 /// <param name="Detail">오른쪽에 흐리게 보이는 글(모델명 · 「준비 중」).</param>
 /// <param name="Reason">고를 수 없는 이유(잘못된·지워진 프로필).</param>
-public sealed record AiProfileChoice(AiChoiceKind Kind, string Title, string? Detail = null, Guid? ProfileId = null, bool IsCurrent = false, string? Reason = null)
+/// <param name="CliId">시스템 CLI 줄의 id(<see cref="AiChoiceKind.SystemCli"/> · <see cref="AiChoiceKind.MissingCli"/>).</param>
+public sealed record AiProfileChoice(AiChoiceKind Kind, string Title, string? Detail = null, Guid? ProfileId = null, bool IsCurrent = false, string? Reason = null, string? CliId = null)
 {
     public bool IsHeader => Kind == AiChoiceKind.Header;
 
@@ -43,7 +50,7 @@ public sealed record AiProfileChoice(AiChoiceKind Kind, string Title, string? De
     public bool IsRow => Kind is not (AiChoiceKind.Header or AiChoiceKind.NewProfile);
 
     /// <summary>고를 수 있는 줄.</summary>
-    public bool Selectable => Kind is AiChoiceKind.ClaudeCode or AiChoiceKind.NewProfile || (Kind == AiChoiceKind.Profile && Reason is null);
+    public bool Selectable => Kind is AiChoiceKind.ClaudeCode or AiChoiceKind.SystemCli or AiChoiceKind.NewProfile || (Kind == AiChoiceKind.Profile && Reason is null);
 
     /// <summary>들여쓰기 없이 체크 표시만 보이는 줄(현재 선택).</summary>
     public bool HasDetail => !string.IsNullOrEmpty(Detail ?? Reason);
@@ -78,6 +85,7 @@ public sealed partial class AiModelSettingsPage : ObservableObject
 
     private readonly AiSettingsText _t;
     private AiSettings _source;
+    private readonly IReadOnlyList<AiSystemCliInfo> _systemClis;
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(ModelEnabled), nameof(IsNone), nameof(IsClaudeCode), nameof(Summary))]
@@ -124,6 +132,16 @@ public sealed partial class AiModelSettingsPage : ObservableObject
     [NotifyPropertyChangedFor(nameof(SelectedTitle), nameof(ShowPlainTextWarning), nameof(Choices), nameof(ProfileModel), nameof(ProfileUrl), nameof(ProfileFormatText), nameof(ProfileImagesText))]
     private Guid? _activeProfileId;
 
+    /// <summary>
+    /// 쓰는 시스템 CLI id. null 이면 Claude Code(프로필이 없을 때). 목록에 없는 값·읽을 수 없는 값도 그대로 들고 있다가 저장한다(말없이 Claude Code 로 바꾸지 않는다).
+    /// <see cref="ActiveProfileId"/> 와 함께 고르지 않는다: 한쪽을 고르면 다른 쪽을 비운다.
+    /// </summary>
+    [ObservableProperty]
+    private string? _systemCliId;
+
+    // 시스템 CLI 가 바뀌면 파생 값(표시 이름·문제 표시·드롭다운 줄 등)을 모두 다시 알린다.
+    partial void OnSystemCliIdChanged(string? value) => OnPropertyChanged(string.Empty);
+
     /// <summary>저장된 프로필 목록(설정 파일의 사본). 관리 창이 기록한 뒤 <see cref="ApplyStoreChange"/> 로 갱신된다.</summary>
     private IReadOnlyList<AiLlmProfile> _profiles;
 
@@ -135,13 +153,16 @@ public sealed partial class AiModelSettingsPage : ObservableObject
     [ObservableProperty]
     private bool _isDropdownOpen;
 
-    public AiModelSettingsPage(AiSettings? settings = null, AiProfileServices? services = null)
+    /// <param name="systemClis">시스템 CLI 목록. 기본은 지금 플랫폼의 표(<see cref="AiProfilePresets.SystemClis"/>)이고, 시험이 사용 가능한 줄을 주입한다.</param>
+    public AiModelSettingsPage(AiSettings? settings = null, AiProfileServices? services = null, IReadOnlyList<AiSystemCliInfo>? systemClis = null)
     {
+        _systemClis = systemClis ?? AiProfilePresets.SystemClis;
         _source = settings ?? new AiSettings();
         Services = services;
         _t = new AiSettingsText(services?.Text);
         _driver = _source.Driver;
         _activeProfileId = _source.ActiveProfileId;
+        _systemCliId = _source.SystemCliId;
         _profiles = _source.Profiles;
         _maskLiterals = _source.MaskLiterals;
         _benchmarkTimeoutText = _source.BenchmarkTimeoutSeconds.ToString(System.Globalization.CultureInfo.InvariantCulture);
@@ -203,7 +224,7 @@ public sealed partial class AiModelSettingsPage : ObservableObject
     /// <summary>고른 프로필(<see cref="AiActiveKind.Profile"/> · <see cref="AiActiveKind.ProfileInvalid"/> 일 때만).</summary>
     public AiLlmProfile? ActiveProfile => Active.Profile;
 
-    private AiActiveProfile Active => AiActiveProfile.Find(new AiSettings { Driver = Driver, ActiveProfileId = ActiveProfileId, Profiles = _profiles });
+    private AiActiveProfile Active => AiActiveProfile.Find(new AiSettings { Driver = Driver, ActiveProfileId = ActiveProfileId, SystemCliId = SystemCliId, Profiles = _profiles }, _systemClis);
 
     public bool ShowSelection => Driver == AiDriverKind.ClaudeCode;
 
@@ -211,7 +232,7 @@ public sealed partial class AiModelSettingsPage : ObservableObject
 
     public bool ShowProfileInfo => ShowSelection && ActiveKind == AiActiveKind.Profile;
 
-    public bool ShowProblem => ShowSelection && ActiveKind is AiActiveKind.ProfileMissing or AiActiveKind.ProfileInvalid;
+    public bool ShowProblem => ShowSelection && ActiveKind is AiActiveKind.ProfileMissing or AiActiveKind.ProfileInvalid or AiActiveKind.SystemCliUnavailable;
 
     /// <summary>지워진 프로필·잘못된 프로필이면 그 이유(말없이 Claude Code 로 되돌리지 않고 선택지에 보인다).</summary>
     public string ProblemText => ActiveKind switch
@@ -220,6 +241,8 @@ public sealed partial class AiModelSettingsPage : ObservableObject
             "The selected profile was not found. It may have been deleted or the settings file changed. Pick another profile or Claude Code. If left as is, AI runs fail with an error."),
         AiActiveKind.ProfileInvalid => _t.T("이 프로필의 프리셋·API 형식을 이 버전이 모릅니다(다음 버전이 만든 프로필일 수 있습니다). 다른 프로필을 고르세요. 지우지 않으면 프로필은 그대로 남습니다.",
             "This version does not recognize this profile's preset or API format (a newer version may have created it). Pick another profile. The profile is kept unless you delete it."),
+        AiActiveKind.SystemCliUnavailable => _t.T("선택한 시스템 CLI 를 쓸 수 없습니다. 아직 준비 중이거나 이 컴퓨터에서 지원하지 않거나 설정 파일이 바뀌었습니다. 다른 줄을 고르세요. 이대로 두면 AI 를 실행할 때 오류가 나며, Claude Code 로 바뀌지 않습니다.",
+            "The selected system CLI is not available. It may still be in preparation, unsupported on this computer, or the settings file changed. Pick another row. If left as is, AI runs fail with an error; Claude Code is not used instead."),
         _ => string.Empty,
     };
 
@@ -229,6 +252,8 @@ public sealed partial class AiModelSettingsPage : ObservableObject
         AiActiveKind.ClaudeCode => "Claude Code",
         AiActiveKind.Profile or AiActiveKind.ProfileInvalid => ActiveProfile!.Name,
         AiActiveKind.ProfileMissing => _t.T("삭제된 프로필", "Deleted profile"),
+        AiActiveKind.SystemCli => Active.SystemCli!.DisplayName,
+        AiActiveKind.SystemCliUnavailable => Active.SystemCli?.DisplayName ?? _t.T("사용할 수 없는 시스템 CLI", "System CLI unavailable"),
         _ => string.Empty,
     };
 
@@ -263,11 +288,31 @@ public sealed partial class AiModelSettingsPage : ObservableObject
         {
             var active = Active;
             var rows = new List<AiProfileChoice> { new(AiChoiceKind.Header, _t.T("시스템 CLI", "System CLI")) };
-            foreach (var cli in AiProfilePresets.SystemClis)
+            foreach (var cli in _systemClis)
             {
-                rows.Add(cli.Available
-                    ? new AiProfileChoice(AiChoiceKind.ClaudeCode, cli.DisplayName, IsCurrent: active.Kind == AiActiveKind.ClaudeCode)
-                    : new AiProfileChoice(AiChoiceKind.DisabledCli, cli.DisplayName, _t.T("준비 중", "Coming soon")));
+                if (cli.Id == AiProfilePresets.ClaudeCodeId)
+                {
+                    rows.Add(cli.Available
+                        ? new AiProfileChoice(AiChoiceKind.ClaudeCode, cli.DisplayName, IsCurrent: active.Kind == AiActiveKind.ClaudeCode)
+                        : new AiProfileChoice(AiChoiceKind.DisabledCli, cli.DisplayName, _t.T("준비 중", "Coming soon"), CliId: cli.Id));
+                }
+                else if (cli.Available)
+                {
+                    rows.Add(new AiProfileChoice(AiChoiceKind.SystemCli, cli.DisplayName, CliId: cli.Id,
+                        IsCurrent: active.Kind == AiActiveKind.SystemCli && active.SystemCliId == cli.Id));
+                }
+                else
+                {
+                    // 설정이 이 줄을 가리키면(손으로 고친 파일) 현재 줄로 표시한다. 고를 수는 없다.
+                    rows.Add(new AiProfileChoice(AiChoiceKind.DisabledCli, cli.DisplayName, _t.T("준비 중", "Coming soon"),
+                        IsCurrent: active.Kind == AiActiveKind.SystemCliUnavailable && active.SystemCliId == cli.Id, CliId: cli.Id));
+                }
+            }
+
+            if (active.Kind == AiActiveKind.SystemCliUnavailable && active.SystemCli is null)
+            {
+                rows.Add(new AiProfileChoice(AiChoiceKind.MissingCli, _t.T("사용할 수 없는 시스템 CLI", "System CLI unavailable"), active.SystemCliId, IsCurrent: true,
+                    Reason: _t.T("쓸 수 없음", "Not available"), CliId: active.SystemCliId));
             }
 
             rows.Add(new AiProfileChoice(AiChoiceKind.Header, _t.T("내 프로필", "My profiles")));
@@ -297,6 +342,8 @@ public sealed partial class AiModelSettingsPage : ObservableObject
         AiActiveKind.ClaudeCode => $"AI: Claude Code · {Model}",
         AiActiveKind.Profile => $"AI: {ActiveProfile!.Name} · {ActiveProfile.Model}",
         AiActiveKind.ProfileInvalid => $"AI: {ActiveProfile!.Name} · {_t.T("사용할 수 없음", "unusable")}",
+        AiActiveKind.SystemCli => $"AI: {Active.SystemCli!.DisplayName}",
+        AiActiveKind.SystemCliUnavailable => $"AI: {Active.SystemCli?.DisplayName ?? _t.T("시스템 CLI", "System CLI")} · {_t.T("사용 불가", "unavailable")}",
         _ => _t.T("AI: 프로필 없음", "AI: profile missing"),
     };
 
@@ -314,6 +361,7 @@ public sealed partial class AiModelSettingsPage : ObservableObject
         {
             Driver = Driver,
             ActiveProfileId = ActiveProfileId,
+            SystemCliId = SystemCliId,
             Model = Driver == AiDriverKind.None ? null : Model,
             Effort = Effort == DefaultEffortText ? null : Effort,
             MaskLiterals = MaskLiterals,
@@ -346,11 +394,19 @@ public sealed partial class AiModelSettingsPage : ObservableObject
                 Notice = string.Empty;
                 Driver = AiDriverKind.ClaudeCode;
                 ActiveProfileId = null;
+                SystemCliId = null;
+                break;
+            case AiChoiceKind.SystemCli when choice.CliId is { } cliId:
+                Notice = string.Empty;
+                Driver = AiDriverKind.ClaudeCode;
+                ActiveProfileId = null;
+                SystemCliId = cliId;
                 break;
             case AiChoiceKind.Profile when choice.ProfileId is { } id:
                 Notice = string.Empty;
                 Driver = AiDriverKind.ClaudeCode;
                 ActiveProfileId = id;
+                SystemCliId = null;
                 break;
             case AiChoiceKind.NewProfile:
                 ProfileManagerRequested?.Invoke(this, new ProfileManagerRequestedEventArgs(null, startNew: true));
@@ -393,6 +449,7 @@ public sealed partial class AiModelSettingsPage : ObservableObject
         if (deletedId is { } gone && ActiveProfileId == gone)
         {
             ActiveProfileId = null;
+            SystemCliId = null;
             Notice = _t.T("사용 중이던 프로필을 지워 Claude Code 로 되돌렸습니다.", "The profile in use was deleted, so Claude Code is selected again.");
         }
         else if (wasStoredActive)
@@ -403,6 +460,7 @@ public sealed partial class AiModelSettingsPage : ObservableObject
         else if (selectNew is { } id && Driver == AiDriverKind.ClaudeCode && _profiles.Any(p => p.Id == id))
         {
             ActiveProfileId = id;
+            SystemCliId = null;
             Notice = string.Empty;
         }
 

@@ -306,7 +306,8 @@ public sealed partial class AiChatViewModel : ToolPanelViewModelBase
 
     /// <summary>이미지 입구를 닫는 사유 글(활성 프로필이 이미지를 지원하지 않음). 열려 있으면 null. 지원 여부를 모르는(null) 프로필은 열어 둔다.</summary>
     public string? ImagesBlockedReason =>
-        SettingsProvider() is { } settings && AiActiveProfile.Find(settings) is { Kind: AiActiveKind.Profile, Profile.SupportsImages: false }
+        SettingsProvider() is { } settings && (AiActiveProfile.Find(settings) is { Kind: AiActiveKind.Profile, Profile.SupportsImages: false }
+            or { Kind: AiActiveKind.SystemCli or AiActiveKind.SystemCliUnavailable, SystemCli.SupportsImages: false })
             ? ImagesUnsupportedText
             : null;
 
@@ -335,6 +336,7 @@ public sealed partial class AiChatViewModel : ToolPanelViewModelBase
         {
             { Kind: AiActiveKind.Profile or AiActiveKind.ProfileInvalid, Profile: { } profile } => profile.Name,
             { Kind: AiActiveKind.ClaudeCode } => "Claude Code",
+            { Kind: AiActiveKind.SystemCli or AiActiveKind.SystemCliUnavailable, SystemCli: { } cli } => cli.DisplayName,
             _ => string.Empty,
         }
         : string.Empty;

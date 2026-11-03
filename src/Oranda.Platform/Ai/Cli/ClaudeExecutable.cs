@@ -21,36 +21,12 @@ internal static class ClaudeExecutable
             return fileExists(configuredPath) ? configuredPath : null;
         }
 
-        var directories = (pathVariable ?? string.Empty).Split(Path.PathSeparator, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
-            .Concat(KnownDirectories(home ?? Environment.GetFolderPath(Environment.SpecialFolder.UserProfile)));
-        foreach (var directory in directories)
-        {
-            if (OperatingSystem.IsWindows())
-            {
-                var exe = Path.Combine(directory, "claude.exe");
-                if (fileExists(exe))
-                {
-                    return exe;
-                }
-
-                var npmShim = Path.Combine(directory, "claude.cmd");
-                if (fileExists(npmShim))
-                {
-                    var native = Path.Combine(directory, "node_modules", "@anthropic-ai", "claude-code", "bin", "claude.exe");
-                    return fileExists(native) ? native : npmShim;
-                }
-            }
-            else
-            {
-                var candidate = Path.Combine(directory, "claude");
-                if (fileExists(candidate))
-                {
-                    return candidate;
-                }
-            }
-        }
-
-        return null;
+        return SystemCliExecutable.Find(
+            "claude",
+            pathVariable,
+            fileExists,
+            KnownDirectories(home ?? Environment.GetFolderPath(Environment.SpecialFolder.UserProfile)),
+            directory => Path.Combine(directory, "node_modules", "@anthropic-ai", "claude-code", "bin", "claude.exe"));
     }
 
     /// <summary>

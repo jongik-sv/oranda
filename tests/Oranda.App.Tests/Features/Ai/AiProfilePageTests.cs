@@ -29,7 +29,7 @@ public class AiProfilePageTests
     public void Dropdown_groups_system_clis_and_my_profiles_without_unknown_entries()
     {
         var exampleProfile = ProfileSamples.Example();
-        var page = new AiModelSettingsPage(ProfileSamples.With(exampleProfile));
+        var page = new AiModelSettingsPage(ProfileSamples.With(exampleProfile), systemClis: AiProfilePresets.SystemClisFor(AiHostPlatform.Windows));
 
         var rows = page.Choices;
         Assert.Equal(["시스템 CLI", "Claude Code", "Antigravity CLI", "Codex CLI", "내 프로필", "예제 LLM", "새 프로필 만들기…"], rows.Select(r => r.Title));

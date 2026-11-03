@@ -1285,6 +1285,7 @@
   "대화": "Chat",
   "AI 모델": "AI Model",
   "AI 튜닝과 대화에 사용할 모델을 선택합니다.": "Choose the model used for AI tuning and chat.",
+  "(사용할 수 없는 시스템 CLI)": "(System CLI unavailable)",
   "사용 모델": "Model in use",
   "프로필 관리": "Manage profiles",
   "LLM 프로필을 만들고 고치고 지웁니다.": "Create, edit and delete LLM profiles.",

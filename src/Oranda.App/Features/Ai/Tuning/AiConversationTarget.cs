@@ -15,7 +15,8 @@ namespace Oranda.App.Features.Ai.Tuning;
 /// <param name="BaseUrl">프로필의 서버 주소(앞뒤 공백 제거, 라우터와 같은 비교). Claude Code 면 null.</param>
 /// <param name="Format">프로필의 API 형식. Claude Code 면 null.</param>
 /// <param name="Model">프로필의 모델. Claude Code 면 null(CLI 모델은 대화마다 고른 값이라 비교하지 않는다).</param>
-public sealed record AiConversationTarget(Guid? ProfileId, string Label, string? BaseUrl, AiApiFormat? Format, string? Model)
+/// <param name="SystemCliId">Claude Code 가 아닌 시스템 CLI 의 id(쓸 수 없는 줄 포함). 프로필·Claude Code 면 null.</param>
+public sealed record AiConversationTarget(Guid? ProfileId, string Label, string? BaseUrl, AiApiFormat? Format, string? Model, string? SystemCliId = null)
 {
     /// <summary>설정의 활성 대상으로 만든다. 프로필을 찾지 못하거나 모르는 프로필이어도 id 는 그대로 남겨 라우터가 거부하게 한다.</summary>
     public static AiConversationTarget From(AiSettings settings)
@@ -27,12 +28,14 @@ public sealed record AiConversationTarget(Guid? ProfileId, string Label, string?
             { Kind: AiActiveKind.Profile or AiActiveKind.ProfileInvalid, Profile: { } profile } =>
                 new AiConversationTarget(profile.Id, profile.Name, profile.BaseUrl.Trim(), profile.Format, profile.Model.Trim()),
             { Kind: AiActiveKind.ClaudeCode } => new AiConversationTarget(null, "Claude Code", null, null, null),
+            { Kind: AiActiveKind.SystemCli, SystemCli: { } cli } => new AiConversationTarget(null, cli.DisplayName, null, null, null, cli.Id),
+            { Kind: AiActiveKind.SystemCliUnavailable } => new AiConversationTarget(null, "(사용할 수 없는 시스템 CLI)", null, null, null, active.SystemCliId),
             { Kind: AiActiveKind.None } => new AiConversationTarget(settings.ActiveProfileId, "(AI 선택 안 함)", null, null, null),
             _ => new AiConversationTarget(settings.ActiveProfileId, "(찾을 수 없는 프로필)", null, null, null),
         };
     }
 
-    public AiProfileExpectation ToExpectation() => new(ProfileId, BaseUrl, Format);
+    public AiProfileExpectation ToExpectation() => new(ProfileId, BaseUrl, Format, SystemCliId);
 
     /// <summary>
     /// 확인 창·감사 기록에 보일 주소(Claude Code 는 null). 사용자 정보(<c>user:pw@</c>)·쿼리·조각은 빼고 형식에 맞게 정규화한 기준 주소만 쓴다:
@@ -45,6 +48,7 @@ public sealed record AiConversationTarget(Guid? ProfileId, string Label, string?
     {
         ArgumentNullException.ThrowIfNull(other);
         return ProfileId == other.ProfileId
+            && string.Equals(SystemCliId, other.SystemCliId, StringComparison.Ordinal)
             && string.Equals(BaseUrl, other.BaseUrl, StringComparison.Ordinal)
             && Format == other.Format
             && string.Equals(Model, other.Model, StringComparison.Ordinal);

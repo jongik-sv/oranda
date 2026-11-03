@@ -1,5 +1,3 @@
-using System.Collections.Concurrent;
-using System.ComponentModel;
 using System.Runtime.CompilerServices;
 using System.Text.Json;
 using Oranda.Core.Ai.Contracts;
@@ -25,18 +23,12 @@ internal sealed class CliDriver : IAiDriver
 {
     private const int MaxArgumentSummaryChars = 4000;
 
-    private static readonly TimeSpan StaleRunAge = TimeSpan.FromHours(6);
-
     private static readonly AiDriverCapabilities DriverCapabilities =
         new(Skills: false, Tools: true, Resume: true, LocalOnly: false, Streaming: false);
 
-    private readonly IAgentRunTokens _tokens;
-    private readonly IAgentGate _gate;
-    private readonly IAgentBridgeEndpoint _bridge;
-    private readonly IAppDataPaths _paths;
+    private readonly SystemCliRunner _runner;
     private readonly ISettingsStore _settings;
     private readonly IClaudeProcessLauncher _launcher;
-    private readonly string _orandactlPath;
     private readonly Func<string?> _pathVariable;
     private readonly Func<string, bool> _fileExists;
 
@@ -79,13 +71,9 @@ internal sealed class CliDriver : IAiDriver
         Func<string?> pathVariable,
         Func<string, bool> fileExists)
     {
-        _tokens = tokens ?? throw new ArgumentNullException(nameof(tokens));
-        _gate = gate ?? throw new ArgumentNullException(nameof(gate));
-        _bridge = bridge ?? throw new ArgumentNullException(nameof(bridge));
-        _paths = paths ?? throw new ArgumentNullException(nameof(paths));
+        _runner = new SystemCliRunner(tokens, gate, bridge, paths, orandactlPath, fileExists);
         _settings = settings ?? throw new ArgumentNullException(nameof(settings));
         _launcher = launcher ?? throw new ArgumentNullException(nameof(launcher));
-        _orandactlPath = orandactlPath;
         _pathVariable = pathVariable;
         _fileExists = fileExists;
     }
@@ -143,7 +131,7 @@ internal sealed class CliDriver : IAiDriver
         }
 
         var session = request.Session!;
-        var aiDirectory = Path.Combine(_paths.DataDirectory, "ai");
+        var aiDirectory = _runner.AiDirectory;
 
         // 다른 경로(다른 프로필·구독)가 만든 세션을 이어 말하면 claude 가 저장된 앞 대화를 지금 서버로 보낸다. 띄우기 전에 막는다.
         var owners = new ClaudeSessionOwners(Path.Combine(aiDirectory, "sessions"));
@@ -155,31 +143,23 @@ internal sealed class CliDriver : IAiDriver
             yield break;
         }
 
-        var runsDirectory = Path.Combine(aiDirectory, "runs");
-        var runDirectory = Path.Combine(runsDirectory, $"{session.RunId}-{Guid.NewGuid():N}");
-        DeleteStaleRuns(runsDirectory);
-
-        var judgements = new ConcurrentDictionary<string, ConcurrentQueue<AgentToolActivityEventArgs>>(StringComparer.Ordinal);
-        void OnToolCompleted(object? sender, AgentToolActivityEventArgs e)
-        {
-            if (e.RunId == session.RunId)
-            {
-                judgements.GetOrAdd(e.ToolName, _ => new ConcurrentQueue<AgentToolActivityEventArgs>()).Enqueue(e);
-            }
-        }
-
-        var token = _tokens.Issue(session);
-        IClaudeProcess? process = null;
-        CancellationTokenRegistration killOnCancel = default;
-        _gate.ToolCompleted += OnToolCompleted;
+        var run = _runner.Begin(session, checkedRun.PipeName!, ct);
         try
         {
-            var (configPath, workDirectory, prepareError) = Prepare(runDirectory, aiDirectory, checkedRun.PipeName!, token);
+            var (prepared, prepareError) = SystemCliRun.Prepare(() =>
+            {
+                var config = McpConfigWriter.Write(run.RunDirectory, run.OrandactlPath, run.PipeName, run.Token);
+                var work = Path.Combine(aiDirectory, "work");
+                Directory.CreateDirectory(work);
+                return (config, work);
+            });
             if (prepareError is not null)
             {
                 yield return prepareError;
                 yield break;
             }
+
+            var (configPath, workDirectory) = prepared;
 
             // 스키마는 줄바꿈 없이 한 줄로 넘긴다(공백·줄바꿈이 든 원문은 일부 실행 경로에서 인자가 잘린다).
             var schema = request.OutputSchema is { } element ? JsonSerializer.Serialize(element) : null;
@@ -196,22 +176,18 @@ internal sealed class CliDriver : IAiDriver
                 route.ApiKey,
                 IsolateEnvironment: route.Profile is not null);
 
-            (process, var startError) = TryStart(launch);
+            var (started, startError) = run.Start(_launcher, launch, "claude");
             if (startError is not null)
             {
                 yield return startError;
                 yield break;
             }
 
-            // 읽기 취소가 늦게 반영되는 경우에도 취소하면 곧바로 프로세스를 끝낸다.
-            var started = process!;
-            killOnCancel = ct.Register(started.Kill);
-
             var parser = new ClaudeStreamParser();
             var toolNames = new Dictionary<string, string>(StringComparer.Ordinal);
             var finished = false;
             var validated = false;
-            await foreach (var line in started.ReadLinesAsync(ct).ConfigureAwait(false))
+            await foreach (var line in started!.ReadLinesAsync(ct).ConfigureAwait(false))
             {
                 foreach (var streamEvent in parser.Parse(line))
                 {
@@ -247,7 +223,7 @@ internal sealed class CliDriver : IAiDriver
                         resumeRecorded = owners.Record(finalSessionId, ownerId);
                     }
 
-                    foreach (var aiEvent in Translate(streamEvent, toolNames, judgements, includeCost: route.Profile is null))
+                    foreach (var aiEvent in Translate(streamEvent, toolNames, run.Judgements, includeCost: route.Profile is null))
                     {
                         finished |= aiEvent is AiFinal or AiError;
                         yield return !resumeRecorded && aiEvent is AiFinal final ? final with { ResumeId = null } : aiEvent;
@@ -255,10 +231,10 @@ internal sealed class CliDriver : IAiDriver
                 }
             }
 
-            var exitCode = await started.WaitForExitAsync(ct).ConfigureAwait(false);
+            var exitCode = await started!.WaitForExitAsync(ct).ConfigureAwait(false);
             if (!finished)
             {
-                var detail = started.StandardErrorTail.Trim();
+                var detail = started!.StandardErrorTail.Trim();
                 yield return new AiError(
                     detail.Length == 0 ? $"claude 가 결과 없이 끝났습니다(종료 코드 {exitCode})." : $"claude 가 결과 없이 끝났습니다(종료 코드 {exitCode}): {detail}",
                     "cli_failed");
@@ -266,8 +242,7 @@ internal sealed class CliDriver : IAiDriver
         }
         finally
         {
-            _gate.ToolCompleted -= OnToolCompleted;
-            await CleanUpAsync(token, process, killOnCancel, runDirectory).ConfigureAwait(false);
+            await run.DisposeAsync().ConfigureAwait(false);
         }
     }
 
@@ -308,7 +283,7 @@ internal sealed class CliDriver : IAiDriver
     private static List<AiEvent> Translate(
         ClaudeStreamEvent streamEvent,
         Dictionary<string, string> toolNames,
-        ConcurrentDictionary<string, ConcurrentQueue<AgentToolActivityEventArgs>> judgements,
+        SystemCliJudgements judgements,
         bool includeCost)
     {
         var events = new List<AiEvent>();
@@ -329,7 +304,7 @@ internal sealed class CliDriver : IAiDriver
 
             case ClaudeToolResult result:
                 var name = toolNames.GetValueOrDefault(result.CallId, string.Empty);
-                if (judgements.TryGetValue(name, out var queue) && queue.TryDequeue(out var completed))
+                if (judgements.TryTake(name, out var completed))
                 {
                     events.Add(new AiToolResult(result.CallId, name, completed.Size, completed.Judgement, completed.Note));
                 }
@@ -360,119 +335,12 @@ internal sealed class CliDriver : IAiDriver
     private static string Summarize(string inputJson)
         => inputJson.Length <= MaxArgumentSummaryChars ? inputJson : inputJson[..MaxArgumentSummaryChars] + "…";
 
-    private static void DeleteQuietly(string directory)
-    {
-        try
-        {
-            if (Directory.Exists(directory))
-            {
-                Directory.Delete(directory, recursive: true);
-            }
-        }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
-        {
-            // 다음 실행이 오래된 실행 폴더를 정리한다.
-        }
-    }
-
-    /// <summary>앱이 죽었거나 삭제가 실패해 남은 오래된 실행 폴더(토큰이 든 mcp.json)를 지운다. 진행 중인 다른 실행은 건드리지 않는다.</summary>
-    private static void DeleteStaleRuns(string runsDirectory)
-    {
-        try
-        {
-            if (!Directory.Exists(runsDirectory))
-            {
-                return;
-            }
-
-            foreach (var directory in Directory.EnumerateDirectories(runsDirectory))
-            {
-                if (DateTime.UtcNow - Directory.GetLastWriteTimeUtc(directory) > StaleRunAge)
-                {
-                    DeleteQuietly(directory);
-                }
-            }
-        }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
-        {
-            // 정리는 최선을 다하는 일이다.
-        }
-    }
-
-    /// <summary>한 단계가 실패해도 나머지(프로세스 종료·토큰 폐기·폴더 삭제)는 반드시 한다.</summary>
-    private async Task CleanUpAsync(string token, IClaudeProcess? process, CancellationTokenRegistration killOnCancel, string runDirectory)
-    {
-        try
-        {
-            await killOnCancel.DisposeAsync().ConfigureAwait(false);
-            if (process is not null)
-            {
-                process.Kill();
-                await process.DisposeAsync().ConfigureAwait(false);
-            }
-        }
-        finally
-        {
-            try
-            {
-                _tokens.Revoke(token);
-            }
-            finally
-            {
-                DeleteQuietly(runDirectory);
-            }
-        }
-    }
-
-    /// <summary>실행 폴더·mcp-config·작업 폴더를 만든다. 디스크 오류는 예외 대신 AiError 로 알린다.</summary>
-    private (string? ConfigPath, string? WorkDirectory, AiError? Error) Prepare(string runDirectory, string aiDirectory, string pipeName, string token)
-    {
-        try
-        {
-            var configPath = McpConfigWriter.Write(runDirectory, _orandactlPath, pipeName, token);
-            var workDirectory = Path.Combine(aiDirectory, "work");
-            Directory.CreateDirectory(workDirectory);
-            return (configPath, workDirectory, null);
-        }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
-        {
-            return (null, null, new AiError($"AI 실행 준비에 실패했습니다: {ex.Message}", "cli_start_failed"));
-        }
-    }
-
-    private (IClaudeProcess? Process, AiError? Error) TryStart(ClaudeLaunch launch)
-    {
-        try
-        {
-            return (_launcher.Start(launch), null);
-        }
-        catch (Exception ex) when (ex is Win32Exception or IOException or InvalidOperationException or UnauthorizedAccessException)
-        {
-            return (null, new AiError($"claude 를 시작하지 못했습니다: {ex.Message}", "cli_start_failed"));
-        }
-    }
-
     private async Task<(AiError? Error, string? Executable, AiSettings? Settings, string? PipeName)> CheckPreconditionsAsync(AiRequest request, bool viaProfile, CancellationToken ct)
     {
-        if (request.Session is null)
+        var (preconditionError, pipeName) = _runner.CheckPreconditions(request);
+        if (preconditionError is not null)
         {
-            return (new AiError("AI 요청에 실행 범위(Session)가 없습니다.", "session_required"), null, null, null);
-        }
-
-        if (request.Session.IsRevoked)
-        {
-            return (new AiError("이 AI 요청의 실행 범위가 이미 폐기되었습니다. 새 요청으로 다시 시작하세요.", "session_revoked"), null, null, null);
-        }
-
-        var pipeName = _bridge.PipeName;
-        if (pipeName is null)
-        {
-            return (new AiError("AI 연결이 열려 있지 않습니다. AI 튜닝 기능이 켜져 있는지 확인하세요.", "bridge_not_ready"), null, null, null);
-        }
-
-        if (!_fileExists(_orandactlPath))
-        {
-            return (new AiError("orandactl 실행 파일을 찾지 못했습니다.", "orandactl_missing"), null, null, null);
+            return (preconditionError, null, null, null);
         }
 
         AiSettings settings;

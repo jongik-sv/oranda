@@ -42,12 +42,31 @@ internal interface IApiAiDriver : IAiDriver
 }
 
 /// <summary>
+/// 시스템 CLI(Claude Code 외: Codex·Antigravity 등) 드라이버가 구현하는 표식. <see cref="CliId"/> 로 구분하며,
+/// <c>[OrandaService(typeof(ISystemCliAiDriver))]</c> 로 등록한다. <see cref="IAiDriver"/> 로 직접 등록하지 않는다(라우터와 겹친다).
+/// 라우터는 <see cref="AiProfilePresets.SystemClis"/> 에서 사용 가능한 CLI 만 이 드라이버로 보내고, 등록이 없으면 <c>system_cli_unavailable</c> 로 닫는다.
+/// <see cref="RunAsync"/> 는 Claude 전용 값(<see cref="AiRequest.Model"/>·<see cref="AiRequest.Effort"/>·실행 파일 경로)을 받지 않는다:
+/// 라우터가 요청에서 모델·노력을 비워 넘기고 경로는 아예 넘기지 않는다.
+/// 구현은 <c>CliDriver</c> 와 같은 도구 통제 의무를 진다: <see cref="AiRequest.Session"/> 으로 토큰을 발급해 프로세스가 끝나면 폐기하고,
+/// 실행 중 <c>Session.IsRevoked</c> 를 확인하며, 모든 도구 호출을 <c>AgentGate</c> 로만 보내고 그 CLI 자체의 셸·파일 도구는 끈다.
+/// </summary>
+internal interface ISystemCliAiDriver
+{
+    /// <summary>담당하는 시스템 CLI id(<see cref="AiProfilePresets.SystemClis"/> 의 <c>Id</c>).</summary>
+    string CliId { get; }
+
+    /// <summary>모델·노력이 비워진 요청으로 실행한다. 설정·자격 증명 저장소를 다시 읽지 않는다.</summary>
+    IAsyncEnumerable<AiEvent> RunAsync(AiRequest request, CancellationToken ct);
+}
+
+/// <summary>
 /// <see cref="IAiDriver"/> 의 유일한 DI 등록(설계 §6). 실행마다 설정(<c>ai</c> 섹션)을 읽어 활성 프로필을 한 번 찾고, 맞는 경로로 넘긴다.
 /// 보낼 곳이 확실하지 않으면 보내지 않고 오류로 닫는다(기본 주소·구독 인증으로 조용히 나가는 일이 없게).
 /// <list type="bullet">
 /// <item>설정이 손상 복구된 직후 첫 실행: <c>settings_reset</c>(다음 실행부터 통과).</item>
 /// <item>선택 안 함: <c>driver_none</c>.</item>
 /// <item>호출한 쪽이 기대한 프로필과 설정의 활성 프로필이 다름(<see cref="AiRequest.Expected"/>): <c>profile_changed</c>.</item>
+/// <item>시스템 CLI 가 목록에 없거나 쓸 수 없음, 또는 드라이버 등록이 없음: <c>system_cli_unavailable</c>(Claude Code 로 넘기지 않는다).</item>
 /// <item>활성 프로필이 목록에 없음: <c>profile_missing</c>. 프리셋·형식을 모름: <c>profile_invalid</c>.</item>
 /// <item>주소가 올바르지 않음: <c>profile_invalid_url</c>. 키가 필요한데 없음: <c>profile_key_missing</c>(읽기 실패는 <c>profile_key_unreadable</c>).</item>
 /// <item>Claude Code·Anthropic 형식 프로필: <see cref="CliDriver"/>. OpenAI 형식 프로필: <see cref="IApiAiDriver"/>(등록이 없으면 <c>api_driver_pending</c>).</item>
@@ -76,6 +95,9 @@ internal sealed class RoutingAiDriver : IAiDriver
 
     public AiDriverCapabilities Capabilities => DriverCapabilities;
 
+    /// <summary>시스템 CLI 목록. 기본은 지금 플랫폼의 표이고, 시험이 플랫폼별 목록을 넣을 수 있다.</summary>
+    internal IReadOnlyList<AiSystemCliInfo> SystemClis { get; init; } = AiProfilePresets.SystemClis;
+
     public async IAsyncEnumerable<AiEvent> RunAsync(AiRequest request, [EnumeratorCancellation] CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(request);
@@ -87,7 +109,9 @@ internal sealed class RoutingAiDriver : IAiDriver
             yield break;
         }
 
-        var events = selected.Api is { } api ? api.RunAsync(request, selected.Route!, ct) : _cli.RunAsync(request, selected.Route!, ct);
+        var events = selected.SystemCli is { } systemCli
+            ? systemCli.RunAsync(request with { Model = null, Effort = null }, ct)
+            : selected.Api is { } api ? api.RunAsync(request, selected.Route!, ct) : _cli.RunAsync(request, selected.Route!, ct);
         await foreach (var e in events.ConfigureAwait(false))
         {
             yield return e;
@@ -112,7 +136,7 @@ internal sealed class RoutingAiDriver : IAiDriver
             return Selection.Fail("설정 파일이 손상되어 기본값으로 복구되었습니다. 설정의 「AI 모델」 을 확인한 뒤 다시 실행하세요.", "settings_reset");
         }
 
-        var active = AiActiveProfile.Find(settings);
+        var active = AiActiveProfile.Find(settings, SystemClis);
         if (active.Kind == AiActiveKind.None)
         {
             return Selection.Fail("AI 모델이 선택되지 않았습니다. 설정의 「AI 모델」 에서 고르세요.", "driver_none");
@@ -123,10 +147,23 @@ internal sealed class RoutingAiDriver : IAiDriver
             return Selection.Fail("AI 모델이 바뀌어 요청을 보내지 않았습니다. 설정을 확인한 뒤 다시 실행하세요.", "profile_changed");
         }
 
+        // 프로필이 아닌 쪽(시스템 CLI)에서는 기대한 CLI 와 지금 설정의 CLI 도 같아야 한다(null 과 claude-code 는 같다).
+        if (request.Expected is { } expectedCli && settings.ActiveProfileId is null
+            && NormalizeCliId(expectedCli.SystemCliId) != NormalizeCliId(settings.SystemCliId))
+        {
+            return Selection.Fail("AI 모델이 바뀌어 요청을 보내지 않았습니다. 설정을 확인한 뒤 다시 실행하세요.", "profile_changed");
+        }
+
         switch (active.Kind)
         {
             case AiActiveKind.ClaudeCode:
                 return Selection.Cli(AiRoute.ClaudeCode);
+            case AiActiveKind.SystemCliUnavailable:
+                return SystemCliUnavailable(active.SystemCliId);
+            case AiActiveKind.SystemCli:
+                var cliDriver = (_services.GetService(typeof(IEnumerable<ISystemCliAiDriver>)) as IEnumerable<ISystemCliAiDriver>)
+                    ?.FirstOrDefault(d => string.Equals(d.CliId, active.SystemCliId, StringComparison.Ordinal));
+                return cliDriver is null ? SystemCliUnavailable(active.SystemCliId) : Selection.ViaSystemCli(cliDriver);
             case AiActiveKind.ProfileMissing:
                 return Selection.Fail("선택한 LLM 프로필을 찾지 못했습니다. 설정의 「AI 모델」 에서 프로필을 다시 고르세요.", AiActiveProfile.ProfileMissingCode);
             case AiActiveKind.ProfileInvalid:
@@ -140,6 +177,11 @@ internal sealed class RoutingAiDriver : IAiDriver
                 return await SelectProfileAsync(active.Profile!, ct).ConfigureAwait(false);
         }
     }
+
+    private static string NormalizeCliId(string? id) => id ?? AiProfilePresets.ClaudeCodeId;
+
+    private static Selection SystemCliUnavailable(string? cliId) =>
+        Selection.Fail($"선택한 시스템 CLI({cliId})를 이 컴퓨터에서 쓸 수 없습니다. 설정의 「AI 모델」 에서 다른 모델을 고르세요.", AiActiveProfile.SystemCliUnavailableCode);
 
     private static bool MatchesExpectation(AiProfileExpectation expected, AiLlmProfile profile) =>
         (expected.BaseUrl is null || string.Equals(expected.BaseUrl.Trim(), profile.BaseUrl.Trim(), StringComparison.Ordinal))
@@ -190,11 +232,13 @@ internal sealed class RoutingAiDriver : IAiDriver
             : Selection.Fail("OpenAI 형식 프로필의 연결은 아직 준비되지 않았습니다.", "api_driver_pending");
     }
 
-    private sealed record Selection(AiRoute? Route, IApiAiDriver? Api, AiError? Error)
+    private sealed record Selection(AiRoute? Route, IApiAiDriver? Api, AiError? Error, ISystemCliAiDriver? SystemCli = null)
     {
         public static Selection Cli(AiRoute route) => new(route, null, null);
 
         public static Selection ViaApi(IApiAiDriver api, AiRoute route) => new(route, api, null);
+
+        public static Selection ViaSystemCli(ISystemCliAiDriver driver) => new(null, null, null, driver);
 
         public static Selection Fail(string message, string code) => new(null, null, new AiError(message, code));
     }

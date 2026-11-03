@@ -218,6 +218,17 @@ public sealed record AiSettings
     [JsonConverter(typeof(TolerantActiveProfileIdConverter))]
     public Guid? ActiveProfileId { get; init; }
 
+    /// <summary>
+    /// 쓰는 시스템 CLI id(<c>codex-cli</c> 등). null 이면 Claude Code 다. <see cref="ActiveProfileId"/> 가 있으면 프로필이 우선이라 이 값은 보지 않는다.
+    /// 읽을 수 없는 값(숫자·객체)은 <see cref="UnreadableSystemCliId"/> 로 읽혀 목록에 없는 id 가 되고, 라우터가 <c>system_cli_unavailable</c> 로 닫는다(조용히 Claude Code 로 바뀌지 않는다).
+    /// <see cref="Model"/>·<see cref="Effort"/>·<see cref="ExecutablePath"/> 는 Claude Code 전용이다.
+    /// </summary>
+    [JsonConverter(typeof(TolerantSystemCliIdConverter))]
+    public string? SystemCliId { get; init; }
+
+    /// <summary>읽을 수 없는 <c>systemCliId</c> 를 가리키는 id. 어떤 시스템 CLI 와도 겹치지 않는다.</summary>
+    public const string UnreadableSystemCliId = "(unreadable)";
+
     /// <summary><c>claude --effort</c> 가 받는 값(낮은 것부터).</summary>
     public static IReadOnlyList<string> EffortLevels { get; } = ["low", "medium", "high", "xhigh", "max"];
 
@@ -231,9 +242,10 @@ public sealed record AiSettings
         && MaskLiterals == other.MaskLiterals
         && BenchmarkTimeoutSeconds == other.BenchmarkTimeoutSeconds
         && ActiveProfileId == other.ActiveProfileId
+        && string.Equals(SystemCliId, other.SystemCliId, StringComparison.Ordinal)
         && Profiles.SequenceEqual(other.Profiles);
 
-    public override int GetHashCode() => HashCode.Combine(Driver, Model, Effort, ExecutablePath, MaskLiterals, ActiveProfileId, Profiles.Count, BenchmarkTimeoutSeconds);
+    public override int GetHashCode() => HashCode.Combine(Driver, Model, Effort, ExecutablePath, MaskLiterals, ActiveProfileId, Profiles.Count, HashCode.Combine(SystemCliId, BenchmarkTimeoutSeconds));
 }
 
 /// <summary>MyBatis 작업 공간 설정. 설정 창에는 없고 「바뀌는 부분」 창의 확인란이 바꾼다.</summary>

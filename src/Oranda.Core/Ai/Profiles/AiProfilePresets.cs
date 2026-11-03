@@ -30,8 +30,20 @@ public enum AiKeyRequirement
 
 /// <summary>시스템 CLI 한 줄(프로필 드롭다운의 「시스템 CLI」 묶음).</summary>
 /// <param name="Id">안정적인 구분 값.</param>
-/// <param name="Available">false 면 「준비 중」 비활성 줄이다.</param>
-public sealed record AiSystemCliInfo(string Id, string DisplayName, bool Available);
+/// <param name="Available">false 면 「준비 중」 비활성 줄이다. 실행하는 플랫폼에 따라 정해진다(<see cref="AiProfilePresets.SystemClisFor"/>).</param>
+/// <param name="SupportsImages">이미지 입력을 보낼 수 있다. Claude Code 는 지금 동작대로 true.</param>
+public sealed record AiSystemCliInfo(string Id, string DisplayName, bool Available, bool SupportsImages = true);
+
+/// <summary>실행 중인 운영체제(시스템 CLI 를 켤 플랫폼 판단용). 시험이 값을 주입할 수 있게 판단 지점은 이 값만 받는다.</summary>
+[Flags]
+public enum AiHostPlatform
+{
+    None = 0,
+    Windows = 1,
+    MacOS = 2,
+    Linux = 4,
+    All = Windows | MacOS | Linux,
+}
 
 /// <summary>프리셋 표와 시스템 CLI 표시 목록. 표시 순서가 곧 카드·줄 순서다.</summary>
 public static class AiProfilePresets
@@ -49,13 +61,34 @@ public static class AiProfilePresets
         new(AiProfilePreset.Custom, "직접 입력", AiApiFormat.Anthropic, true, "", AiKeyRequirement.Optional),
     ];
 
-    /// <summary>시스템 CLI 표시 목록. Claude Code 만 실행할 수 있고 나머지는 「준비 중」 이다.</summary>
-    public static IReadOnlyList<AiSystemCliInfo> SystemClis { get; } =
+    public const string AntigravityCliId = "antigravity-cli";
+
+    public const string CodexCliId = "codex-cli";
+
+    // 시스템 CLI 정의. EnabledOn = 실행할 수 있는 플랫폼. 드라이버가 생긴 CLI 는 이 값 한 줄만 바꿔 켠다(예: AiHostPlatform.MacOS).
+    // 지금은 Antigravity·Codex 모두 어떤 플랫폼에서도 켜지 않는다(AiHostPlatform.None = 「준비 중」). 실제 왕복 확인 뒤에 켠다.
+    private sealed record SystemCliDefinition(string Id, string DisplayName, bool SupportsImages, AiHostPlatform EnabledOn);
+
+    private static readonly SystemCliDefinition[] SystemCliDefinitions =
     [
-        new(ClaudeCodeId, "Claude Code", true),
-        new("antigravity-cli", "Antigravity CLI", false),
-        new("codex-cli", "Codex CLI", false),
+        new(ClaudeCodeId, "Claude Code", true, AiHostPlatform.All),
+        new(AntigravityCliId, "Antigravity CLI", false, AiHostPlatform.None),
+        new(CodexCliId, "Codex CLI", true, AiHostPlatform.None),
     ];
+
+    /// <summary>지금 실행 중인 플랫폼. 운영체제를 묻는 곳은 여기뿐이다.</summary>
+    public static AiHostPlatform CurrentPlatform =>
+        OperatingSystem.IsWindows() ? AiHostPlatform.Windows
+        : OperatingSystem.IsMacOS() ? AiHostPlatform.MacOS
+        : OperatingSystem.IsLinux() ? AiHostPlatform.Linux
+        : AiHostPlatform.None;
+
+    /// <summary>시스템 CLI 표시 목록(지금 플랫폼 기준). 이 항목 기준으로 Claude Code 만 실행할 수 있고 나머지는 「준비 중」 이다.</summary>
+    public static IReadOnlyList<AiSystemCliInfo> SystemClis { get; } = SystemClisFor(CurrentPlatform);
+
+    /// <summary>주어진 플랫폼에서 보이는 시스템 CLI 목록. <see cref="AiSystemCliInfo.Available"/> 은 그 플랫폼에서 실행할 수 있는지다.</summary>
+    public static IReadOnlyList<AiSystemCliInfo> SystemClisFor(AiHostPlatform platform) =>
+        [.. SystemCliDefinitions.Select(d => new AiSystemCliInfo(d.Id, d.DisplayName, (d.EnabledOn & platform) != 0, d.SupportsImages))];
 
     public static AiProfilePresetInfo Get(AiProfilePreset preset) =>
         All.FirstOrDefault(p => p.Preset == preset) ?? throw new ArgumentOutOfRangeException(nameof(preset), preset, "알 수 없는 프리셋입니다.");

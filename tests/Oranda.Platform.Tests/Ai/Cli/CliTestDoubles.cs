@@ -28,6 +28,9 @@ internal sealed class FakeLauncher : IClaudeProcessLauncher
 
     public bool Blocking { get; set; }
 
+    /// <summary>true 면 <see cref="FakeProcess.Kill"/> 이 예외를 낸다(정리가 끝까지 도는지 확인).</summary>
+    public bool KillThrows { get; set; }
+
     public Action<ClaudeLaunch>? OnStart { get; set; }
 
     public List<ClaudeLaunch> Launches { get; } = [];
@@ -67,7 +70,14 @@ internal sealed class FakeProcess(FakeLauncher launcher) : IClaudeProcess
 
     public Task<int> WaitForExitAsync(CancellationToken cancellationToken) => Task.FromResult(launcher.ExitCode);
 
-    public void Kill() => Killed = true;
+    public void Kill()
+    {
+        Killed = true;
+        if (launcher.KillThrows)
+        {
+            throw new InvalidOperationException("kill failed");
+        }
+    }
 
     public ValueTask DisposeAsync() => ValueTask.CompletedTask;
 }

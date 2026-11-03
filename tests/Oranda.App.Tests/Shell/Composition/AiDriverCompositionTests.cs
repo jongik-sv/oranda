@@ -27,4 +27,32 @@ public class AiDriverCompositionTests
         // 라우터는 손상 복구 신호를 실제 설정 저장소 인스턴스에서 읽는다(DI 의 ISettingsStore 가 신호도 구현해야 한다).
         Assert.IsAssignableFrom<IAiSettingsResetSignal>(container.GetService<ISettingsStore>());
     }
+
+    [Fact]
+    public void Real_container_registers_the_antigravity_driver_as_a_system_cli_driver_and_not_as_IAiDriver()
+    {
+        var dir = Path.Combine(Path.GetTempPath(), "oranda-aidriver-" + Guid.NewGuid().ToString("N"));
+        using var container = AppComposition.Create(new AppCompositionOptions { DataDirectory = dir });
+
+        var drivers = container.GetService<IEnumerable<Oranda.Platform.Ai.ISystemCliAiDriver>>();
+
+        Assert.NotNull(drivers);
+        var agy = Assert.Single(drivers, d => d.CliId == AiProfilePresets.AntigravityCliId);
+        Assert.Equal("AgyDriver", agy.GetType().Name);
+        Assert.Equal("RoutingAiDriver", container.GetService<IAiDriver>()!.GetType().Name);
+    }
+
+    [Fact]
+    public void Real_container_registers_the_codex_driver_as_a_system_cli_driver_and_not_as_IAiDriver()
+    {
+        var dir = Path.Combine(Path.GetTempPath(), "oranda-aidriver-" + Guid.NewGuid().ToString("N"));
+        using var container = AppComposition.Create(new AppCompositionOptions { DataDirectory = dir });
+
+        var drivers = container.GetService<IEnumerable<Oranda.Platform.Ai.ISystemCliAiDriver>>();
+
+        Assert.NotNull(drivers);
+        var codex = Assert.Single(drivers, d => d.CliId == AiProfilePresets.CodexCliId);
+        Assert.Equal("CodexDriver", codex.GetType().Name);
+        Assert.Equal("RoutingAiDriver", container.GetService<IAiDriver>()!.GetType().Name);
+    }
 }

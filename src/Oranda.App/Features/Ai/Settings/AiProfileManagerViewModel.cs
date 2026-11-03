@@ -1067,7 +1067,7 @@ public sealed partial class AiProfileManagerViewModel : ObservableObject, IDispo
         // 설정 서비스는 저장소에 쓰기 전에 메모리 값을 바꾼다: 쓰기 실패 뒤에도 화면·실행이 쓰지 않은 프로필을 보지 않도록 메모리 값을 되돌린다.
         try
         {
-            await _services.Settings.UpdateAsync(s => s with { Ai = s.Ai with { Profiles = before.Profiles, ActiveProfileId = before.ActiveProfileId } }).ConfigureAwait(true);
+            await _services.Settings.UpdateAsync(s => s with { Ai = s.Ai with { Profiles = before.Profiles, ActiveProfileId = before.ActiveProfileId, SystemCliId = before.SystemCliId } }).ConfigureAwait(true);
         }
         catch (Exception ex) when (IsStoreError(ex))
         {
@@ -1139,6 +1139,7 @@ public sealed partial class AiProfileManagerViewModel : ObservableObject, IDispo
                     {
                         Profiles = [.. s.Ai.Profiles.Where(p => p.Id != id)],
                         ActiveProfileId = s.Ai.ActiveProfileId == id ? null : s.Ai.ActiveProfileId,
+                        SystemCliId = s.Ai.ActiveProfileId == id ? null : s.Ai.SystemCliId, // 되돌아가는 곳은 Claude Code 이므로 낡은 시스템 CLI 값도 비운다
                     },
                 }).ConfigureAwait(true);
             }

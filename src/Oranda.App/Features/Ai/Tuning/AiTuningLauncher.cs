@@ -520,10 +520,12 @@ public sealed class AiTuningLauncher(IServiceProvider services)
         var active = AiActiveProfile.Find(settings);
         var profile = active.Kind == AiActiveKind.Profile ? active.Profile : null;
         var configured = string.IsNullOrWhiteSpace(settings.Model) ? null : settings.Model.Trim();
-        var apiProfile = profile is { Format: AiApiFormat.OpenAi }; // API 경로는 effort 를 쓰지 않는다
+        var systemCli = active.Kind is AiActiveKind.SystemCli or AiActiveKind.SystemCliUnavailable; // 시스템 CLI 에는 Claude 의 모델·노력 줄을 만들지 않는다
+        var apiProfile = systemCli || profile is { Format: AiApiFormat.OpenAi }; // API 경로·시스템 CLI 는 effort 를 쓰지 않는다
         var effort = apiProfile ? null : settings.Effort?.Trim().ToLowerInvariant();
         var efforts = TuningStartInfo.EffortOptions(effort);
-        var models = profile is null ? BuildModelOptions(configured) : BuildProfileModelOptions(profile);
+        var models = systemCli ? [new TuningModelOption(TuningStartInfo.DefaultModelId, active.SystemCli?.DisplayName ?? "기본 모델")]
+            : profile is null ? BuildModelOptions(configured) : BuildProfileModelOptions(profile);
         return new TuningStartInfo(
             "AI 튜닝 — 커서 위치 문장",
             Summarize(statement),
@@ -533,7 +535,7 @@ public sealed class AiTuningLauncher(IServiceProvider services)
             NotSent: "행 값 · 히스토그램 끝값 · 바인드 값(로컬 실행에만 씀) · 비밀번호·호스트",
             context,
             models,
-            profile is null ? configured ?? TuningStartInfo.DefaultModelId : models[0].Id,
+            systemCli ? TuningStartInfo.DefaultModelId : profile is null ? configured ?? TuningStartInfo.DefaultModelId : models[0].Id,
             maskLiterals,
             efforts,
             efforts[0].Id == TuningStartInfo.DefaultModelId ? TuningStartInfo.DefaultModelId : effort!,
