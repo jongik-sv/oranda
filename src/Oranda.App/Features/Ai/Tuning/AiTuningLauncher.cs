@@ -49,6 +49,10 @@ public sealed class AiTuningLauncher(IServiceProvider services)
     private ConnectionProfile? _profile;
     private readonly TuningStartBinds _binds = new();
 
+    // 이 대화의 운영 벤치마크 제한 시간(초). 시작 창에서 확정한 값이며 이어 말하기도 같은 값을 쓴다(설정에는 저장하지 않는다).
+    // 아직 시작한 적이 없으면 기본 30초로 닫는다(제한 없음은 사용자가 0 으로 명시한 경우에만).
+    private int _benchmarkTimeoutSeconds = AiSettings.DefaultBenchmarkTimeoutSeconds;
+
     /// <summary>시험용: 도구 창을 띄우지 않고 쓸 대화 창 모델을 직접 준다(전역 <see cref="AiChatViewModel.Current"/> 를 거치지 않게).</summary>
     internal Func<Task<AiChatViewModel?>>? ChatOverride { get; set; }
 
@@ -254,6 +258,7 @@ public sealed class AiTuningLauncher(IServiceProvider services)
         var generation = flow.Generation;
         _profile = profile;
         var active = SqlEditorHost.Current.Active;
+        var previousTimeout = CaptureBenchmarkTimeout(choice.BenchmarkTimeoutSeconds);
         var previousBinds = _binds.Capture(statement, document is not null && active?.TabId == document.TabId ? active.Binds : null);
         try
         {
@@ -265,6 +270,7 @@ public sealed class AiTuningLauncher(IServiceProvider services)
             {
                 _profile = previous;
                 _binds.Restore(previousBinds);
+                _benchmarkTimeoutSeconds = previousTimeout; // 거부된 시작이 앞 대화의 제한 시간을 바꿔 두지 않게
             }
         }
     }
@@ -364,6 +370,23 @@ public sealed class AiTuningLauncher(IServiceProvider services)
         set => _profile = value;
     }
 
+    /// <summary>
+    /// 일반 대화(시작 창이 없다)가 쓰는 제한 시간. 설정값이되, 0(제한 없음)은 경고를 보고 정한 값이 아니므로 30초로 닫는다. 설정을 못 읽어도 30초다.
+    /// </summary>
+    internal static int GeneralChatBenchmarkTimeout(int? configured) =>
+        configured is { } seconds and > 0 ? AiSettings.NormalizeBenchmarkTimeout(seconds) : AiSettings.DefaultBenchmarkTimeoutSeconds;
+
+    /// <summary>시작이 확정될 때 시작 창의 제한 시간(초)을 담고, 시작이 거부되면 되돌릴 앞 값을 돌려준다. 범위 밖 값은 30초가 된다.</summary>
+    internal int CaptureBenchmarkTimeout(int seconds)
+    {
+        var previous = _benchmarkTimeoutSeconds;
+        _benchmarkTimeoutSeconds = AiSettings.NormalizeBenchmarkTimeout(seconds);
+        return previous;
+    }
+
+    /// <summary>시험용: 튜닝 시작 때 확정한 운영 벤치마크 제한 시간(초).</summary>
+    internal int StartedBenchmarkTimeoutSeconds => _benchmarkTimeoutSeconds;
+
     /// <summary>시험용: 튜닝 시작 때 담은 바인드 값.</summary>
     internal TuningStartBinds StartedBinds => _binds;
 
@@ -382,7 +405,9 @@ public sealed class AiTuningLauncher(IServiceProvider services)
     internal AgentSession? NewSessionFor(bool general, AiContext context, LiteralVault? vault)
     {
         var source = services.GetService(typeof(IAgentSessionSource)) as AppAgentSessionSource;
-        return NewSession(source, context, vault, general ? new Dictionary<string, BindValue>() : _binds.Current);
+        // 일반 대화는 시작 창을 거치지 않으므로 설정의 기본값을 쓴다(앞 튜닝에서 이번 실행에만 바꾼 값이 섞이지 않게). 설정이 0 이어도 30초로 닫는다.
+        return NewSession(source, context, vault, general ? new Dictionary<string, BindValue>() : _binds.Current,
+            general ? GeneralChatBenchmarkTimeout(CurrentAiSettings()?.BenchmarkTimeoutSeconds) : _benchmarkTimeoutSeconds);
     }
 
     /// <summary>시험용: 이 대화 창 모델이 AI 에 이어져 있다.</summary>
@@ -512,7 +537,8 @@ public sealed class AiTuningLauncher(IServiceProvider services)
             maskLiterals,
             efforts,
             efforts[0].Id == TuningStartInfo.DefaultModelId ? TuningStartInfo.DefaultModelId : effort!,
-            ShowEffort: !apiProfile);
+            ShowEffort: !apiProfile,
+            BenchmarkTimeoutSeconds: settings.BenchmarkTimeoutSeconds);
     }
 
     /// <summary>프로필이 활성이면 모델 줄은 그 프로필의 모델 하나뿐이다(Claude Code 의 opus·sonnet·haiku 는 프로필 서버에 맞지 않는다). 모델이 비었으면 지정하지 않는 줄.</summary>
@@ -584,13 +610,14 @@ public sealed class AiTuningLauncher(IServiceProvider services)
         return _flow;
     }
 
-    private AgentSession? NewSession(AppAgentSessionSource? source, AiContext context, LiteralVault? vault, IReadOnlyDictionary<string, BindValue> binds) =>
+    private AgentSession? NewSession(AppAgentSessionSource? source, AiContext context, LiteralVault? vault, IReadOnlyDictionary<string, BindValue> binds, int benchmarkTimeoutSeconds) =>
         _profile is { } profile && (SessionTracker is not null || source is not null)
             ? (SessionTracker ?? source!.Track)(new AgentSession(new AgentRunScope(Guid.NewGuid().ToString("N"), profile, context)
             {
                 Literals = vault,
                 MaskLiteralsRequired = AiAccessPolicy.MaskLiterals(profile, MaskLiteralsSetting()), // 사전이 없어도 게이트가 SQL 도구를 닫게 한다
                 Binds = binds,
+                BenchmarkTimeoutSeconds = benchmarkTimeoutSeconds,
             }))
             : null;
 

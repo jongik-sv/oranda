@@ -1369,5 +1369,11 @@
   "기본 — Claude Code": "Default — Claude Code",
   "기본 (Claude Code)": "Default (Claude Code)",
   "추론 노력(claude --effort). 높을수록 오래 생각하고 느립니다. 기본 값은 설정 창 AI 쪽에서 바꿉니다.": "Reasoning effort (claude --effort). Higher thinks longer and is slower. Change the default on the AI page of Settings.",
-  "추론 노력(claude --effort)의 기본 값. AI 튜닝 시작 창에서 대화마다 바꿀 수 있습니다.": "Default reasoning effort (claude --effort). You can change it per conversation in the AI tuning start dialog."
+  "추론 노력(claude --effort)의 기본 값. AI 튜닝 시작 창에서 대화마다 바꿀 수 있습니다.": "Default reasoning effort (claude --effort). You can change it per conversation in the AI tuning start dialog.",
+  "운영 제한 시간(초)": "Production time limit (s)",
+  "문장 하나(반복 전체)가 이 시간을 넘기면 중단합니다. 이번 실행에만 적용하며 설정에는 저장하지 않습니다. 0 은 제한 없음입니다.": "A statement (all repeats) is stopped when it exceeds this time. Applies to this run only and is not saved to settings. 0 means no limit.",
+  "제한 시간은 5~3600초 또는 0(제한 없음)으로 입력하세요.": "Enter a time limit of 5-3600 seconds, or 0 for no limit.",
+  "사용자가 중지할 때까지 운영 DB 에서 실행합니다": "Runs on the production database until you stop it",
+  "운영 벤치마크 제한 시간(초)": "Production benchmark time limit (s)",
+  "운영 접속에서 AI 벤치마크가 문장 하나(반복 전체)에 허용하는 시간입니다. 기본 30초, 0 은 제한 없음입니다. 튜닝 시작 창에서 이번 실행만 바꿀 수 있습니다. 시작 창이 없는 일반 대화에는 0 이어도 30초가 적용됩니다.": "Time the AI benchmark may spend on one statement (all repeats) on a production connection. Default 30 seconds; 0 means no limit. You can change it for one run in the tuning start dialog. General chat has no start dialog, so 30 seconds applies even when this is 0."
 }

@@ -55,6 +55,19 @@
       <CheckBox x:Name="RiskyFunctionsCheck" IsChecked="{Binding RunRiskyFunctions}" IsEnabled="{Binding Benchmark}" Margin="24,0,0,0"
                 Content="위험 함수도 실행 (자치 트랜잭션·외부 접근 함수가 든 후보도 읽기 전용으로 실측)"
                 ToolTip.Tip="끄면 그런 후보는 실행하지 않고 운영 커서 실측을 씁니다. 켜도 자치 트랜잭션의 커밋은 막지 못합니다." />
+      <StackPanel x:Name="BenchmarkTimeoutPanel" Margin="24,0,0,0" Spacing="4" IsVisible="{Binding ShowBenchmarkTimeout}">
+        <StackPanel Orientation="Horizontal" Spacing="8">
+          <TextBlock Text="운영 제한 시간(초)" VerticalAlignment="Center" Opacity="0.7" FontSize="{DynamicResource OrandaFontSizeSmall}" />
+          <TextBox x:Name="BenchmarkTimeoutBox" Width="80" Text="{Binding BenchmarkTimeoutText, Mode=TwoWay}" AutomationProperties.Name="운영 제한 시간(초)"
+                   ToolTip.Tip="문장 하나(반복 전체)가 이 시간을 넘기면 중단합니다. 이번 실행에만 적용하며 설정에는 저장하지 않습니다. 0 은 제한 없음입니다." />
+        </StackPanel>
+        <TextBlock x:Name="BenchmarkTimeoutError" Text="제한 시간은 5~3600초 또는 0(제한 없음)으로 입력하세요." IsVisible="{Binding ShowBenchmarkTimeoutError}"
+                   TextWrapping="Wrap" FontSize="{DynamicResource OrandaFontSizeSmall}" />
+        <Border x:Name="BenchmarkTimeoutWarning" IsVisible="{Binding ShowBenchmarkTimeoutWarning}" Padding="8,6" CornerRadius="4"
+                BorderBrush="{DynamicResource OrandaUncommittedBrush}" BorderThickness="1">
+          <TextBlock Text="사용자가 중지할 때까지 운영 DB 에서 실행합니다" TextWrapping="Wrap" FontSize="{DynamicResource OrandaFontSizeSmall}" />
+        </Border>
+      </StackPanel>
       <CheckBox x:Name="IndexDdlCheck" IsChecked="{Binding IndexDdl}"
                 Content="인덱스 후보 CREATE 문안도 받기 (새 탭에만 넣고 실행하지 않음)" />
       <Grid ColumnDefinitions="Auto,*,Auto,110" ColumnSpacing="10">

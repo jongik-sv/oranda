@@ -13,8 +13,15 @@ public sealed partial class TuningToolbox
     /// <summary>문장당 반복 상한.</summary>
     public const int MaxBenchmarkRepeat = 5;
 
-    /// <summary>운영 접속에서 문장 하나(반복 전체)에 허용하는 시간. 넘으면 그 문장 실행을 취소한다.</summary>
-    public static readonly TimeSpan ProductionStatementTimeout = TimeSpan.FromSeconds(30);
+    /// <summary>
+    /// 운영 접속에서 문장 하나(반복 전체)에 허용하는 시간을 실행 범위의 초 값에서 만든다. 넘으면 그 문장 실행을 취소한다.
+    /// 0 은 제한 없음이라 null 을 돌려준다(취소 타이머를 걸지 않는다. 호출 측의 중지는 그대로 동작한다). 범위 밖 값은 기본 30초다.
+    /// </summary>
+    public static TimeSpan? ProductionStatementTimeout(int seconds)
+    {
+        var normalized = Oranda.Core.Settings.AiSettings.NormalizeBenchmarkTimeout(seconds);
+        return normalized == 0 ? null : TimeSpan.FromSeconds(normalized);
+    }
 
     /// <summary>
     /// <c>benchmark_queries</c> 의 대체 경로: 문장을 실행하지 않고, 글에서 sql_id 를 계산해 이 실행 범위의 스키마가 파싱한 공유 풀 커서가 있으면 그 실측을 돌려준다.
@@ -64,7 +71,7 @@ public sealed partial class TuningToolbox
     /// <summary>
     /// <c>benchmark_queries</c>: 문장마다 SELECT 한 개를 반복 실행해 경과·읽기·행 수를 잰다(SELECT 아닌 문장은 서비스가 거부한다).
     /// <paramref name="benchmarkAllowed"/>(Query 이상이고 게이트가 문장을 검사했을 때만 참)가 거짓이면 실행하지 않는다.
-    /// <paramref name="statementTimeout"/> 이 있으면 문장 하나(반복 전체)가 그 시간을 넘길 때 취소한다. 운영 접속은 <see cref="ProductionStatementTimeout"/> 을 준다.
+    /// <paramref name="statementTimeout"/> 이 있으면 문장 하나(반복 전체)가 그 시간을 넘길 때 취소한다. 운영 접속은 <see cref="ProductionStatementTimeout"/> 으로 만든 값을 준다(null 이면 제한 없음).
     /// <paramref name="readOnly"/> 가 참이면(게이트가 사용자 함수를 확인해 통과시킨 문장) 문장마다 읽기 전용 트랜잭션 안에서 실행한다.
     /// <paramref name="binds"/> 는 시작 탭의 바인드 값이다(AI 로 보내지 않고 실행에만 쓴다). 바인드가 있는 변형은 이름마다 값이 있을 때만 실행하고,
     /// 하나라도 빠지면 아무것도 실행하기 전에 빠진 이름을 밝혀 거부한다. 받는 글은 게이트가 리터럴 자리표시(<c>:v1</c>)를 되돌린 뒤의 글이다.

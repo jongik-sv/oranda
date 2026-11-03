@@ -54,6 +54,19 @@ public sealed record AgentRunScope(string RunId, ConnectionProfile Profile, AiCo
     }
 
     private readonly FrozenDictionary<string, BindValue> _binds = FrozenDictionary<string, BindValue>.Empty;
+
+    /// <summary>
+    /// 운영 접속에서 <c>benchmark_queries</c> 가 문장 하나(반복 전체)에 허용하는 시간(초). 시작하는 쪽(튜닝 시작 창·설정)이 채우며 도구 인자로는 바꿀 수 없다.
+    /// 기본은 30 이다 — 값을 넘기지 않은 실행 범위가 제한 없음이 되지 않게 닫는다. 0(제한 없음)은 명시해서 넣을 때만 남고,
+    /// 허용 범위(0 또는 5~3600) 밖 값은 30 으로 바뀐다. 개발·테스트 접속은 이 값과 관계없이 제한이 없다.
+    /// </summary>
+    public int BenchmarkTimeoutSeconds
+    {
+        get => _benchmarkTimeoutSeconds;
+        init => _benchmarkTimeoutSeconds = Oranda.Core.Settings.AiSettings.NormalizeBenchmarkTimeout(value);
+    }
+
+    private readonly int _benchmarkTimeoutSeconds = Oranda.Core.Settings.AiSettings.DefaultBenchmarkTimeoutSeconds;
 }
 
 /// <summary>

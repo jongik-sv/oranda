@@ -361,7 +361,7 @@ internal sealed class BenchmarkQueriesHandler(AgentToolboxProvider boxes, IState
         box.CheckSubstitutes(variants.Where((_, i) => substitutions.Count > 0 && substitutions[i] is not null));
         var measured = run.Count == 0 ? [] : await box.BenchmarkAsync(
             inv.Db, run, Number(inv, "repeat", 1, 5) ?? DefaultRepeat, inv.MayExecuteSql, ScopeSchema(inv), ct,
-            production ? TuningToolbox.ProductionStatementTimeout : null, inv.ReadOnlyExecution, inv.Session.Run.Binds).ConfigureAwait(false);
+            production ? TuningToolbox.ProductionStatementTimeout(inv.Session.Run.BenchmarkTimeoutSeconds) : null, inv.ReadOnlyExecution, inv.Session.Run.Binds).ConfigureAwait(false);
         if (substitutions.Count == 0)
         {
             return Node(measured);

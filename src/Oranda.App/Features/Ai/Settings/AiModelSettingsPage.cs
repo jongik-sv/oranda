@@ -92,6 +92,27 @@ public sealed partial class AiModelSettingsPage : ObservableObject
     [ObservableProperty]
     private bool _maskLiterals;
 
+    /// <summary>운영 벤치마크 제한 시간(초) 입력 글. 올바르지 않으면 <see cref="ToSettings(AiSettings)"/> 가 설정의 기존 값을 그대로 둔다.</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(BenchmarkTimeoutValid), nameof(ShowBenchmarkTimeoutError), nameof(ShowBenchmarkTimeoutWarning))]
+    private string _benchmarkTimeoutText;
+
+    /// <summary>입력한 글에서 읽은 제한 시간(초). 정수가 아니거나 범위(0 또는 5~3600) 밖이면 null.</summary>
+    public int? ParsedBenchmarkTimeout =>
+        int.TryParse(BenchmarkTimeoutText?.Trim(), System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture, out var seconds)
+        && AiSettings.IsValidBenchmarkTimeout(seconds) ? seconds : null;
+
+    public bool BenchmarkTimeoutValid => ParsedBenchmarkTimeout is not null;
+
+    public bool ShowBenchmarkTimeoutError => !BenchmarkTimeoutValid;
+
+    /// <summary>0(제한 없음)을 입력했다: 운영 DB 에서 사용자가 중지할 때까지 도는 경고를 보인다.</summary>
+    public bool ShowBenchmarkTimeoutWarning => ParsedBenchmarkTimeout == 0;
+
+    public string BenchmarkTimeoutErrorText => _t.T("5~3600초 또는 0(제한 없음)으로 입력하세요.", "Enter 5-3600 seconds, or 0 for no limit.");
+
+    public string BenchmarkTimeoutWarningText => _t.T("사용자가 중지할 때까지 운영 DB 에서 실행합니다", "Runs on the production database until you stop it");
+
     /// <summary>고른 effort 줄: <see cref="DefaultEffortText"/> 이면 설정에 null(CLI 기본).</summary>
     [ObservableProperty]
     private string _effort;
@@ -123,6 +144,7 @@ public sealed partial class AiModelSettingsPage : ObservableObject
         _activeProfileId = _source.ActiveProfileId;
         _profiles = _source.Profiles;
         _maskLiterals = _source.MaskLiterals;
+        _benchmarkTimeoutText = _source.BenchmarkTimeoutSeconds.ToString(System.Globalization.CultureInfo.InvariantCulture);
         _model = string.IsNullOrWhiteSpace(_source.Model) ? KnownModels[0] : _source.Model;
         var effort = _source.Effort?.Trim().ToLowerInvariant();
         _effort = effort is not null && AiSettings.EffortLevels.Contains(effort) ? effort : DefaultEffortText;
@@ -295,6 +317,7 @@ public sealed partial class AiModelSettingsPage : ObservableObject
             Model = Driver == AiDriverKind.None ? null : Model,
             Effort = Effort == DefaultEffortText ? null : Effort,
             MaskLiterals = MaskLiterals,
+            BenchmarkTimeoutSeconds = ParsedBenchmarkTimeout ?? current.BenchmarkTimeoutSeconds, // 올바르지 않은 글은 저장하지 않는다
         };
     }
 

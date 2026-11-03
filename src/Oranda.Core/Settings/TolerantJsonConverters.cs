@@ -71,3 +71,29 @@ internal sealed class TolerantActiveProfileIdConverter : JsonConverter<Guid?>
         }
     }
 }
+
+/// <summary>
+/// <c>ai.benchmarkTimeoutSeconds</c> 판독기. 정수가 아닌 값(문자열·소수·객체·null)과 범위 밖 정수는 예외 대신 기본값 30 으로 읽는다.
+/// 설정 파일 전체가 손상으로 취급되어 초기화되지 않게 하고, 깨진 값이 조용히 제한 없음(0)이 되지도 않게 한다.
+/// </summary>
+internal sealed class TolerantBenchmarkTimeoutConverter : JsonConverter<int?>
+{
+    public override bool HandleNull => true;
+
+    public override int? Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
+    {
+        switch (reader.TokenType)
+        {
+            case JsonTokenType.Number:
+                return reader.TryGetInt32(out var seconds) ? AiSettings.NormalizeBenchmarkTimeout(seconds) : AiSettings.DefaultBenchmarkTimeoutSeconds;
+            case JsonTokenType.StartObject or JsonTokenType.StartArray:
+                reader.Skip();
+                return AiSettings.DefaultBenchmarkTimeoutSeconds;
+            default:
+                return AiSettings.DefaultBenchmarkTimeoutSeconds;
+        }
+    }
+
+    public override void Write(Utf8JsonWriter writer, int? value, JsonSerializerOptions options) =>
+        writer.WriteNumberValue(value ?? AiSettings.DefaultBenchmarkTimeoutSeconds);
+}

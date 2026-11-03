@@ -162,6 +162,49 @@ public sealed record AiSettings
     /// </summary>
     public bool MaskLiterals { get; init; }
 
+    /// <summary>운영 벤치마크 제한 시간(초)의 기본값.</summary>
+    public const int DefaultBenchmarkTimeoutSeconds = 30;
+
+    /// <summary>운영 벤치마크 제한 시간(초)의 허용 범위 아래쪽 끝(0 은 제한 없음이라 따로 허용한다).</summary>
+    public const int MinBenchmarkTimeoutSeconds = 5;
+
+    /// <summary>운영 벤치마크 제한 시간(초)의 허용 범위 위쪽 끝.</summary>
+    public const int MaxBenchmarkTimeoutSeconds = 3600;
+
+    /// <summary>제한 시간(초)으로 쓸 수 있는 값인가: 0(제한 없음) 또는 5~3600.</summary>
+    public static bool IsValidBenchmarkTimeout(int seconds) =>
+        seconds == 0 || seconds is >= MinBenchmarkTimeoutSeconds and <= MaxBenchmarkTimeoutSeconds;
+
+    /// <summary>범위 밖 값을 기본값(30초)으로 바꾼다. 제한 없음(0)은 명시한 값일 때만 남는다.</summary>
+    public static int NormalizeBenchmarkTimeout(int seconds) => IsValidBenchmarkTimeout(seconds) ? seconds : DefaultBenchmarkTimeoutSeconds;
+
+    /// <summary>
+    /// 운영 접속의 벤치마크가 문장 하나(반복 전체)에 허용하는 시간(초). 튜닝 시작 창이 이번 실행에만 바꿀 수 있고, 그 값은 설정에 저장하지 않는다.
+    /// 0 은 제한 없음(사용자가 중지할 때까지). 범위(0 또는 5~3600) 밖이거나 숫자가 아닌 값, 파일에 키가 없는 경우는 기본값 30 이다.
+    /// 파일에서는 <see cref="BenchmarkTimeoutStored"/> 로 읽고 쓴다.
+    /// </summary>
+    [JsonIgnore]
+    public int BenchmarkTimeoutSeconds
+    {
+        get => _benchmarkTimeoutSeconds ?? DefaultBenchmarkTimeoutSeconds;
+        init => _benchmarkTimeoutSeconds = NormalizeBenchmarkTimeout(value);
+    }
+
+    /// <summary>
+    /// 파일 칸(<c>benchmarkTimeoutSeconds</c>). 원본 생성 역직렬화는 파일에 없는 init 칸에도 <c>default</c> 를 넣으므로, <c>int</c> 로 받으면 키가 없는 옛 파일이
+    /// 0(제한 없음)으로 읽힌다. 그래서 null 허용으로 받아 없음(null)을 30 으로 닫는다. 쓸 때는 항상 실제 값을 쓴다.
+    /// </summary>
+    [JsonInclude]
+    [JsonPropertyName("benchmarkTimeoutSeconds")]
+    [JsonConverter(typeof(TolerantBenchmarkTimeoutConverter))]
+    internal int? BenchmarkTimeoutStored
+    {
+        get => BenchmarkTimeoutSeconds;
+        init => _benchmarkTimeoutSeconds = value is { } seconds ? NormalizeBenchmarkTimeout(seconds) : null;
+    }
+
+    private readonly int? _benchmarkTimeoutSeconds;
+
     /// <summary>저장된 LLM 프로필 목록. 키가 없거나 null 인 파일은 빈 목록이다.</summary>
     public IReadOnlyList<AiLlmProfile> Profiles { get => _profiles; init => _profiles = value is null ? [] : [.. value.Where(p => p is not null)]; }
 
@@ -186,10 +229,11 @@ public sealed record AiSettings
         && Effort == other.Effort
         && ExecutablePath == other.ExecutablePath
         && MaskLiterals == other.MaskLiterals
+        && BenchmarkTimeoutSeconds == other.BenchmarkTimeoutSeconds
         && ActiveProfileId == other.ActiveProfileId
         && Profiles.SequenceEqual(other.Profiles);
 
-    public override int GetHashCode() => HashCode.Combine(Driver, Model, Effort, ExecutablePath, MaskLiterals, ActiveProfileId, Profiles.Count);
+    public override int GetHashCode() => HashCode.Combine(Driver, Model, Effort, ExecutablePath, MaskLiterals, ActiveProfileId, Profiles.Count, BenchmarkTimeoutSeconds);
 }
 
 /// <summary>MyBatis 작업 공간 설정. 설정 창에는 없고 「바뀌는 부분」 창의 확인란이 바꾼다.</summary>
