@@ -81,7 +81,7 @@ public sealed class ExplainPlanCommand : AiCommandSpec
         // 치환 변수(&)가 있는 문장은 편집기 글과 서버 글이 달라 맞지 않는다: 안전하게 sql_id 없이 간다.
         if (_readScreenPlan(env.ActiveTabId) is { SqlId: { Length: > 0 } shownId } shown
             && PlanSqlMatch.ExtractSql(shown.Text) is not null
-            && PlanSqlMatch.Matches(shown.Text, statement.Text))
+            && IsPlanOfStatement(shown.Text, statement.Text))
         {
             sqlId = shownId;
         }
@@ -109,6 +109,14 @@ public sealed class ExplainPlanCommand : AiCommandSpec
             + $"Call at most {ToolBudget} tools. Answer in Korean. "
             + "Do not suggest rewrites or indexes (if the user wants tuning, tell them to use 「AI 튜닝」).";
     }
+
+    /// <summary>
+    /// 화면 계획이 이 문장의 것인가. 「실제 계획(A-Rows)」 은 서버에 힌트(GATHER_PLAN_STATISTICS)를 넣은 사본을 보내므로 서버 글에는 힌트가 있고 편집기 글에는 없다.
+    /// 그래서 편집기 글 그대로와 <see cref="PlanStatisticsHint"/> 사본 두 가지만 같은 문장으로 인정한다. 힌트 외의 차이는 <see cref="PlanSqlMatch"/> 가 그대로 거른다.
+    /// </summary>
+    private static bool IsPlanOfStatement(string? planText, string statementText) =>
+        PlanSqlMatch.Matches(planText, statementText)
+        || (PlanStatisticsHint.AddTo(statementText) is { } hinted && PlanSqlMatch.Matches(planText, hinted));
 
     private static ScreenPlan? ReadScreenPlanFromPanel(Guid? tabId)
     {

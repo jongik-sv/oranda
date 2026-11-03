@@ -1,5 +1,6 @@
 using Oranda.App.Features.Ai;
 using Oranda.App.Features.Ai.Tuning.Commands;
+using Oranda.App.Features.ExecutionPlan;
 using Oranda.Core.Ai.Access;
 
 namespace Oranda.App.Tests.Features.Ai;
@@ -55,6 +56,55 @@ public class AiCommandExplainPlanTests
         Assert.Contains("explain_plan", request.Prompt, StringComparison.Ordinal);
         Assert.Contains("estimate", request.Prompt, StringComparison.Ordinal);
         Assert.DoesNotContain("tb_customer", request.Prompt, StringComparison.Ordinal);
+    }
+
+    // 「실제 계획(A-Rows)」 은 서버에 힌트 사본을 보낸다: 서버 글의 본문은 PlanStatisticsHint 가 만든 사본이다.
+    private static string HintedScreenText(string statement) =>
+        "SQL_ID  abc123xyz, child number 0\n-------------------------------------\n"
+        + PlanStatisticsHint.AddTo(statement) + "\n\n"
+        + "Plan hash value: 111\n\n"
+        + "Predicate Information:\n   1 - filter(\"STAT_CD\"='SECRET-PREDICATE')\n";
+
+    [Fact]
+    public async Task A_plan_of_the_hinted_copy_of_this_statement_gives_the_sql_id_and_a_plan_of_another_hinted_statement_does_not()
+    {
+        var same = new AiCommandExplainRig();
+        Assert.Null(await same.RunAsync(With("abc123xyz", HintedScreenText(AiCommandExplainRig.Cursor)), tabId: Tab));
+        var request = Assert.Single(same.Driver.Requests);
+        Assert.Equal("abc123xyz", request.Context.SqlId);
+        Assert.Contains("get_cursor_plan", request.Prompt, StringComparison.Ordinal);
+        Assert.DoesNotContain("GATHER_PLAN_STATISTICS", request.Prompt, StringComparison.Ordinal);
+        Assert.DoesNotContain("SECRET-PREDICATE", request.Prompt, StringComparison.Ordinal);
+
+        // 서버가 줄을 끊고 공백을 바꿔 보여도 같다.
+        var wrapped = HintedScreenText(AiCommandExplainRig.Cursor).Replace(" FROM ", "\n FROM\t", StringComparison.Ordinal);
+        var rewrapped = new AiCommandExplainRig();
+        Assert.Null(await rewrapped.RunAsync(With("abc123xyz", wrapped), tabId: Tab));
+        Assert.Equal("abc123xyz", Assert.Single(rewrapped.Driver.Requests).Context.SqlId);
+
+        // 편집기 글에 이미 같은 힌트가 있어도 같다.
+        var already = PlanStatisticsHint.AddTo(AiCommandExplainRig.Cursor)!;
+        var withHint = new AiCommandExplainRig();
+        Assert.Null(await withHint.RunAsync(With("abc123xyz", HintedScreenText(already)), statement: already, tabId: Tab));
+        Assert.Equal("abc123xyz", Assert.Single(withHint.Driver.Requests).Context.SqlId);
+
+        // 다른 문장의 힌트 사본, 힌트 외 차이가 있는 사본은 거른다.
+        foreach (var other in new[]
+        {
+            AiCommandExplainRig.Cursor.Replace("tb_order", "tb_customer", StringComparison.Ordinal),
+            AiCommandExplainRig.Cursor.Replace("stat_cd", "stat_cd2", StringComparison.Ordinal),
+        })
+        {
+            var rig = new AiCommandExplainRig();
+            Assert.Null(await rig.RunAsync(With("abc123xyz", HintedScreenText(other)), tabId: Tab));
+            var sent = Assert.Single(rig.Driver.Requests);
+            Assert.Null(sent.Context.SqlId);
+            Assert.Contains("explain_plan", sent.Prompt, StringComparison.Ordinal);
+        }
+
+        var denied = new AiCommandExplainRig();
+        var otherText = HintedScreenText(AiCommandExplainRig.Cursor.Replace("tb_order", "tb_customer", StringComparison.Ordinal));
+        Assert.Equal(ExplainPlanCommand.NoReadablePlanText, await denied.RunAsync(With("abc123xyz", otherText), profile: ExplainOff(), tabId: Tab));
     }
 
     [Fact]
