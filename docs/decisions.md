@@ -291,6 +291,15 @@
 - **Reversible**: yes
 - **Source**: 사용자 결정(2026-11-02, 프록시: 「내부 네트워크에서 쓸 수 있으면 된다」), 레인 결정 후보를 조정 세션이 확정. 설계 `docs/superpowers/specs/2026-11-02-ai-image-and-model-profiles-design.md`
 
+## D-040 (2026-11-04T12:00:00Z)
+- **Phase**: ai-cli-custom-win144 회차(기타 CLI 등록, opencode 전용 드라이버)
+- **Decision needed**: (1) 사용자가 등록하는 기타 CLI 를 어디까지 지원할지, (2) opencode 를 전용 드라이버로 만들었지만 켤지, (3) 명령 틀 표의 「확인됨」 표시를 어떻게 둘지
+- **Decision made**: (1) 기타 CLI(`AiCustomCliCommand`)는 일반 대화와 명령 3종(실행 계획 해설, SQL 설명, 오류 고치기)만 돌린다. 튜닝은 시작하지 않고 안내만 하고 닫는다. 가림 대상(운영) 접속에는 보내지 않는다. 자동 승인 옵션이 든 명령은 등록 때 경고한다(막지 않는다). (2) opencode 전용 드라이버(`OpencodeDriver`)는 넣되 프리셋 `opencode-cli` 는 `AiHostPlatform.None` 으로 꺼 둔다. 설정 화면에는 비활성 「opencode」 줄만 있다. 실제 왕복(O3)과 켜기(O4)는 사용자 결정으로 보류한다. (3) 명령 틀 표의 opencode 「확인됨」 표시는 사용자가 유지하기로 했다(근거는 아래 한계). (4) opencode 드라이버 설계: ① MCP 대신 플러그인 직접 도구 경로: MCP 도구는 코드 모드 `execute` 로만 호출되고 그 런타임의 `fetch` 가 외부 HTTP 에 열려 있어(끄는 키 없음) 잠글 수 없다. 플러그인(`plugins/oranda.js`)이 기본 도구를 지우고 앱 도구를 `codemode:false` 직접 도구로 등록하며 브리지에 직접 연결한다(5초 제한도 없음, 200초 호출 정상). ② 검증 버전 고정: 2.0.32 만 허용하고 그 밖은 `cli_version_unverified` 로 거부한다. `tool_use` 가 도구 완료 뒤에만 한 번 나와 스트림 감시가 늦기 때문이다. ③ 이어 말하기: 대화에 저장된 권한이 잠금을 우회한다(대화에 allow `*` 를 저장하고 `--session` 으로 이어 가면 `execute` 가 호출됨, 설정 키·플러그인 훅으로는 막지 못함). 그래서 이어 말하기 전에 `opencode session export --standalone --sanitize` 의 `info` 를 읽어 닫는 쪽으로만 판단한다(`OpencodeSessionCheck`). 남는 틈은 확인과 실행 사이에 다른 쪽이 권한을 저장하는 경우다. ④ 사용자 설정은 `provider`·`model`·`enabled_providers`·`disabled_providers` 네 키만 `OPENCODE_CONFIG_CONTENT` 로 전달한다(설정 파일 링크는 `plugin`·`experimental.policies`·`share` 등 잠금이 다루지 않는 키가 살아나 폐기). 읽지 못하거나 모양이 다르면 `opencode_config_unsupported`. 값 안에 주석이 있는 JSONC 도 읽는다
+- **Rationale**: 기타 CLI 는 도구 잠금을 Oranda 가 걸 수 없으므로 DB 도구를 쓰는 튜닝과 가림 대상 접속을 열지 않는다. opencode 는 드라이버가 가짜 LLM 측정으로만 확인됐고 D-037 의 켜기 조건(플러그인 도구 호출 성공, 구조 결과 파싱, 스트림 감시, 잠금 쪽 실행 뒤 검사)을 실제 모델 왕복으로 확인하지 못했다. 왕복 4차 중 3차는 모델 호출 전에 닫혔다(무료 한도, 사용자 공급자 소실, JSONC 주석 파싱 오류). 마지막은 보류
+- **Limits**: ① 사용자 설정 `provider` 블록에 키가 글자 그대로 있으면 `OPENCODE_CONFIG_CONTENT` 환경 변수로 opencode 자식 프로세스(`opencode serve --stdio` 포함)와 그 플러그인 코드에 전달된다. 독립 리뷰 대상이며 켜기 전에 확인한다. ② 사용자 전역 플러그인 코드는 돈다(조정 결정: 허용). ③ 대화·도구 결과가 사용자 전역 opencode 저장소에 남는다. ④ 도구 카드는 완료 때만 보인다. ⑤ macOS 관리 폴더·MDM·원격 설정의 MCP 는 덮어쓰기에 안 잡힐 수 있다(추정). ⑥ 사용자 설정에 remote MCP 가 있으면 사전 거부한다(과잉일 수 있음). ⑦ 모델을 지정하지 않으면 opencode 기본 모델로 가고, 없으면 무료 한도 오류 원문이 그대로 나온다. ⑧ 기타 CLI: 가림은 환경 변수 값과 글자 그대로 같은 글만 해당하고, 명령 인자에 직접 쓴 비밀은 가리지 않는다. 5글자 미만·`true`/`false` 류·숫자만인 값은 가림 대상에서 빠져 짧은 비밀이 답에 보일 수 있다. 앱을 닫아도 실행 중인 CLI 가 바로 멈추지 않을 수 있다(코드로 확인하지 못함). 설치 표시(PATH 기준)와 실제 실행 결과가 다를 수 있다. ⑨ 명령 틀 표의 opencode 「확인됨」 은 Mac 조정 메모의 기록을 인용한 것이다(원 출력 없음). 같은 날 Mac 재시도는 무료 사용량 한도, win144 1회는 CLI 안 오류로 응답을 받지 못했다. Codex 「확인됨」 은 Mac·win144 에서 직접 왕복했다
+- **Reversible**: yes(opencode 는 프리셋 `EnabledOn` 값 하나, 기타 CLI 는 설정 화면의 등록 목록)
+- **Source**: 사용자 결정(opencode 왕복·켜기 보류, 「확인됨」 표시 유지), 조정 세션 확정(2026-11-04). D-037, D-038, D-039 본문은 고치지 않음
+
 ## D-039 (2026-11-04T04:40:00Z)
 - **Phase**: 0.1.14 준비
 - **Decision needed**: D-038 (2)의 시스템 CLI 운영 접속 차단을 유지할지
