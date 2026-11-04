@@ -291,6 +291,14 @@
 - **Reversible**: yes
 - **Source**: 사용자 결정(2026-11-02, 프록시: 「내부 네트워크에서 쓸 수 있으면 된다」), 레인 결정 후보를 조정 세션이 확정. 설계 `docs/superpowers/specs/2026-11-02-ai-image-and-model-profiles-design.md`
 
+## D-039 (2026-11-04T04:40:00Z)
+- **Phase**: 0.1.14 준비
+- **Decision needed**: D-038 (2)의 시스템 CLI 운영 접속 차단을 유지할지
+- **Decision made**: 차단을 해제한다. `RoutingAiDriver` 는 운영 접속의 요청도 Codex·Antigravity 드라이버로 보내며 `system_cli_production_blocked` 오류 코드는 없앤다. 설정 고지의 「운영 접속에서는 DB 도구를 쓰는 요청을 보내지 않습니다.」 문장은 운영 접속에서도 쓸 수 있고 가린 뒤의 대화 내용도 CLI 폴더에 남는다는 안내로 바꾼다.
+- **Rationale**: 사용자가 Claude 외의 도구에만 걸린 차단을 풀어 달라고 요청했다. 실제 왕복과 Windows 잠금(실행 토큰의 프로세스 환경 노출, 파일 권한)은 여전히 확인하지 못했으므로 이 위험은 남는다. 차단이 없어도 `AgentGate`, `AiAccessPolicy`(운영 기본 허용 수준), 운영 리터럴 가림, 대화 흐름의 확인 창은 시스템 CLI 경로에도 그대로 적용된다.
+- **Reversible**: yes(조건 하나를 되돌리면 된다)
+- **Source**: 사용자 요청(2026-11-04, 「Claude를 제외한 다른 도구들은 운영계 접속 차단이 되어 있는데 풀어줘.」). D-038 본문은 고치지 않는다.
+
 ## D-038 (2026-11-04T09:00:00Z)
 - **Phase**: 0.1.13 준비
 - **Decision needed**: D-037 에서 끈 Codex·Antigravity 를 실제 왕복 전에 켤지

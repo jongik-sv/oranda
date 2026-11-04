@@ -134,6 +134,8 @@ public class AiSystemCliSettingsTests
             Assert.Equal(AiActiveKind.SystemCli, page.ActiveKind);
             Assert.True(page.ShowSystemCliInfo);
             Assert.Contains("~/.codex", page.SystemCliInfoText, StringComparison.Ordinal);
+            Assert.Contains("운영 접속에서도 쓸 수 있으며", page.SystemCliInfoText, StringComparison.Ordinal);
+            Assert.DoesNotContain("보내지 않습니다", page.SystemCliInfoText, StringComparison.Ordinal);
 
             page.Choose(page.Choices.Single(c => c.Kind == AiChoiceKind.SystemCli && c.CliId == AiProfilePresets.AntigravityCliId));
             Assert.Contains("antigravity-cli", page.SystemCliInfoText, StringComparison.Ordinal);

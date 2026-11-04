@@ -66,7 +66,7 @@ public static class AiProfilePresets
     public const string CodexCliId = "codex-cli";
 
     // 시스템 CLI 정의. EnabledOn = 실행할 수 있는 플랫폼(AiHostPlatform.None = 「준비 중」).
-    // Antigravity·Codex 는 사용자 결정으로 실제 왕복 확인 전에 켰다(D-038). 라우터가 운영 접속의 DB 도구 요청은 막는다.
+    // Antigravity·Codex 는 사용자 결정으로 실제 왕복 확인 전에 켰다(D-038). 운영 접속도 막지 않는다(D-039).
     private sealed record SystemCliDefinition(string Id, string DisplayName, bool SupportsImages, AiHostPlatform EnabledOn);
 
     private static readonly SystemCliDefinition[] SystemCliDefinitions =

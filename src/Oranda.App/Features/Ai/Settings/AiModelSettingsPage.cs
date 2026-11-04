@@ -267,12 +267,12 @@ public sealed partial class AiModelSettingsPage : ObservableObject
     /// <summary>Codex·Antigravity 를 고르면 그 CLI 의 고지 글을 보인다.</summary>
     public bool ShowSystemCliInfo => ShowSelection && ActiveKind == AiActiveKind.SystemCli;
 
-    /// <summary>시스템 CLI 고지: 대화 기록을 지울 수 없음, 실행 시간 한도, 운영 접속 제한.</summary>
+    /// <summary>시스템 CLI 고지: 대화 기록을 지울 수 없음, 실행 시간 한도, 운영 접속에서도 쓸 수 있음.</summary>
     public string SystemCliInfoText => Active.SystemCliId == AiProfilePresets.CodexCliId
-        ? _t.T("이 PC 에 로그인된 Codex CLI 를 씁니다. 대화는 ~/.codex 폴더에 남으며 Oranda 가 지울 수 없습니다. 한 차례 실행은 최대 6시간입니다. 운영 접속에서는 DB 도구를 쓰는 요청을 보내지 않습니다.",
-            "Uses the Codex CLI signed in on this PC. Conversations stay in ~/.codex and Oranda cannot delete them. One run lasts at most 6 hours. Requests that use database tools are not sent on production connections.")
-        : _t.T("이 PC 에 로그인된 Antigravity CLI 를 씁니다. 대화는 ~/.gemini/antigravity-cli 폴더에 남으며 Oranda 가 지울 수 없습니다. 한 차례 실행은 최대 6시간입니다. 운영 접속에서는 DB 도구를 쓰는 요청을 보내지 않습니다.",
-            "Uses the Antigravity CLI signed in on this PC. Conversations stay in ~/.gemini/antigravity-cli and Oranda cannot delete them. One run lasts at most 6 hours. Requests that use database tools are not sent on production connections.");
+        ? _t.T("이 PC 에 로그인된 Codex CLI 를 씁니다. 대화는 ~/.codex 폴더에 남으며 Oranda 가 지울 수 없습니다. 한 차례 실행은 최대 6시간입니다. 운영 접속에서도 쓸 수 있으며, 가린 뒤의 대화 내용도 위 폴더에 남습니다.",
+            "Uses the Codex CLI signed in on this PC. Conversations stay in ~/.codex and Oranda cannot delete them. One run lasts at most 6 hours. It also works on production connections, and the conversation after masking stays in the folder above.")
+        : _t.T("이 PC 에 로그인된 Antigravity CLI 를 씁니다. 대화는 ~/.gemini/antigravity-cli 폴더에 남으며 Oranda 가 지울 수 없습니다. 한 차례 실행은 최대 6시간입니다. 운영 접속에서도 쓸 수 있으며, 가린 뒤의 대화 내용도 위 폴더에 남습니다.",
+            "Uses the Antigravity CLI signed in on this PC. Conversations stay in ~/.gemini/antigravity-cli and Oranda cannot delete them. One run lasts at most 6 hours. It also works on production connections, and the conversation after masking stays in the folder above.");
 
     public bool ShowProblem => ShowSelection && ActiveKind is AiActiveKind.ProfileMissing or AiActiveKind.ProfileInvalid or AiActiveKind.SystemCliUnavailable;
 

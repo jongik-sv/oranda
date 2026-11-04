@@ -489,15 +489,16 @@ public sealed class RoutingAiDriverSystemCliTests
     [Theory]
     [InlineData(AiProfilePresets.CodexCliId)]
     [InlineData(AiProfilePresets.AntigravityCliId)]
-    public async Task A_system_cli_is_blocked_on_a_production_session_and_starts_nothing(string cliId)
+    public async Task A_system_cli_request_on_a_production_session_reaches_the_driver_with_its_session(string cliId)
     {
         Use(cliId);
         var fake = new FakeSystemCliDriver(cliId);
+        var session = SessionOn(ConnectionEnvironment.Production);
 
-        var code = CodeOf(await RunAsync(Create(AiProfilePresets.SystemClisFor(AiHostPlatform.Windows), fake), Request with { Session = SessionOn(ConnectionEnvironment.Production) }));
+        var events = await RunAsync(Create(AiProfilePresets.SystemClisFor(AiHostPlatform.Windows), fake), Request with { Session = session });
 
-        Assert.Equal(RoutingAiDriver.SystemCliProductionBlockedCode, code);
-        Assert.Empty(fake.Requests);
+        Assert.IsType<AiFinal>(Assert.Single(events));
+        Assert.Same(session, Assert.Single(fake.Requests).Session);
     }
 
     [Theory]
