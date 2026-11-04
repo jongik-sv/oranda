@@ -45,6 +45,10 @@ public sealed record AiImageAttachment(string MediaType, byte[] Data);
 /// 호출한 쪽이 화면에서 확인한 활성 프로필. 실행 때 설정의 활성 프로필이 이와 다르면 라우터가 <c>profile_changed</c> 오류로 끝낸다(사용자가 경고 창에서 본 곳과 실제 전송처가 달라지지 않게).
 /// null 이면 검사하지 않는다.
 /// </param>
+/// <param name="MaskingRequired">
+/// 이 요청의 글이 가림 대상 접속(운영 표시 또는 가림 설정)의 것이라 값을 가려야 하는가. 기타 CLI 는 값을 가려 보낼 수단이 없으므로 <c>false</c> 로 확인된 요청만 받는다
+/// (null 은 「확인하지 못함」 이라 막는다). 채우는 일은 요청을 만드는 쪽(튜닝 흐름·대화)의 몫이다.
+/// </param>
 public sealed record AiRequest(
     string Prompt,
     AiContext Context,
@@ -54,12 +58,14 @@ public sealed record AiRequest(
     Oranda.Core.Ai.Gate.AgentSession? Session = null,
     string? Effort = null,
     IReadOnlyList<AiImageAttachment>? Images = null,
-    AiProfileExpectation? Expected = null);
+    AiProfileExpectation? Expected = null,
+    bool? MaskingRequired = null);
 
 /// <summary>
 /// 호출한 쪽이 기대하는 활성 프로필. <paramref name="ProfileId"/> 가 null 이면 시스템 CLI 의 Claude Code 를 기대한다.
 /// <paramref name="BaseUrl"/>·<paramref name="Format"/> 을 채우면 같은 프로필의 주소·형식이 확인 뒤에 바뀐 경우도 막는다(경고 창에 적힌 곳과 실제 전송처가 달라지지 않게).
 /// 이 두 칸은 프로필을 기대할 때만 뜻이 있고, null 이면 비교하지 않는다.
 /// <paramref name="SystemCliId"/> 는 프로필이 아닌 시스템 CLI 를 기대할 때의 id 다(null = Claude Code). <paramref name="ProfileId"/> 가 있으면 보지 않는다.
+/// 기타 CLI(<c>custom:&lt;id&gt;</c>)를 기대할 때는 <paramref name="CustomCliCommandHash"/>(<c>AiCustomCliTarget.CommandHash</c>)가 같아야 한다: 확인 뒤에 명령만 고쳐도 다른 대상이다.
 /// </summary>
-public sealed record AiProfileExpectation(Guid? ProfileId, string? BaseUrl = null, Oranda.Core.Settings.AiApiFormat? Format = null, string? SystemCliId = null);
+public sealed record AiProfileExpectation(Guid? ProfileId, string? BaseUrl = null, Oranda.Core.Settings.AiApiFormat? Format = null, string? SystemCliId = null, string? CustomCliCommandHash = null);

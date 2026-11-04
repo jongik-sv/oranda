@@ -135,6 +135,77 @@ internal sealed class TolerantJoinSyntaxConverter : JsonConverter<AiJoinSyntax>
 }
 
 /// <summary>
+/// <c>ai.customClis</c> 판독기. 배열이 아닌 값은 빈 목록으로, 객체가 아닌 원소는 건너뛰고, 문자열이 아닌 칸(id·name·command)은 빈 문자열로 읽는다.
+/// 설정 파일 전체가 손상으로 취급되어 초기화되지 않게 하고, 깨진 줄은 빈 명령이 되어 실행되지 않는다(다른 CLI 로 바뀌지도 않는다).
+/// </summary>
+internal sealed class TolerantCustomCliListConverter : JsonConverter<IReadOnlyList<AiCustomCli>>
+{
+    public override bool HandleNull => true;
+
+    public override IReadOnlyList<AiCustomCli> Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
+    {
+        if (reader.TokenType != JsonTokenType.StartArray)
+        {
+            reader.Skip();
+            return [];
+        }
+
+        var items = new List<AiCustomCli>();
+        while (reader.Read() && reader.TokenType != JsonTokenType.EndArray)
+        {
+            if (reader.TokenType != JsonTokenType.StartObject)
+            {
+                reader.Skip();
+                continue;
+            }
+
+            string id = "", name = "", command = "";
+            while (reader.Read() && reader.TokenType != JsonTokenType.EndObject)
+            {
+                var property = reader.GetString();
+                reader.Read();
+                var text = reader.TokenType == JsonTokenType.String ? reader.GetString() ?? "" : null;
+                if (text is null)
+                {
+                    reader.Skip();
+                }
+                else if (string.Equals(property, "id", StringComparison.OrdinalIgnoreCase))
+                {
+                    id = text;
+                }
+                else if (string.Equals(property, "name", StringComparison.OrdinalIgnoreCase))
+                {
+                    name = text;
+                }
+                else if (string.Equals(property, "command", StringComparison.OrdinalIgnoreCase))
+                {
+                    command = text;
+                }
+            }
+
+            items.Add(new AiCustomCli { Id = id, Name = name, Command = command });
+        }
+
+        return items;
+    }
+
+    public override void Write(Utf8JsonWriter writer, IReadOnlyList<AiCustomCli> value, JsonSerializerOptions options)
+    {
+        writer.WriteStartArray();
+        foreach (var cli in value)
+        {
+            writer.WriteStartObject();
+            writer.WriteString("id", cli.Id);
+            writer.WriteString("name", cli.Name);
+            writer.WriteString("command", cli.Command);
+            writer.WriteEndObject();
+        }
+
+        writer.WriteEndArray();
+    }
+}
+
+/// <summary>
 /// <c>ai.benchmarkTimeoutSeconds</c> 판독기. 정수가 아닌 값(문자열·소수·객체·null)과 범위 밖 정수는 예외 대신 기본값 30 으로 읽는다.
 /// 설정 파일 전체가 손상으로 취급되어 초기화되지 않게 하고, 깨진 값이 조용히 제한 없음(0)이 되지도 않게 한다.
 /// </summary>

@@ -153,6 +153,26 @@ public sealed record AiLlmProfile
     public bool? SupportsImages { get; init; }
 }
 
+/// <summary>
+/// 사용자가 이름과 실행 명령을 등록한 「기타 CLI」 한 줄. DB 도구와 실행 토큰 없이 글만 주고받는다.
+/// 명령 문자열은 설정 파일에 평문으로 남으므로 비밀 값을 넣지 않도록 화면이 안내한다. 칸이 비었거나 읽을 수 없으면 빈 문자열이고, 빈 명령은 실행하지 않는다.
+/// </summary>
+public sealed record AiCustomCli
+{
+    private readonly string _id = "";
+    private readonly string _name = "";
+    private readonly string _command = "";
+
+    /// <summary>안정 id. 이름·명령을 고쳐도 바뀌지 않는다. 선택은 <c>custom:</c> 접두어를 붙여 <see cref="AiSettings.SystemCliId"/> 에 저장한다.</summary>
+    public string Id { get => _id; init => _id = value ?? ""; }
+
+    /// <summary>화면에 보일 이름.</summary>
+    public string Name { get => _name; init => _name = value ?? ""; }
+
+    /// <summary>실행 명령 문자열(셸 없이 인자로 나눠 실행한다).</summary>
+    public string Command { get => _command; init => _command = value ?? ""; }
+}
+
 /// <summary>설정 <c>ai</c> 섹션.</summary>
 public sealed record AiSettings
 {
@@ -240,6 +260,16 @@ public sealed record AiSettings
     [JsonConverter(typeof(TolerantSystemCliIdConverter))]
     public string? SystemCliId { get; init; }
 
+    /// <summary>
+    /// 사용자가 등록한 기타 CLI 목록. 키가 없거나 null 인 파일은 빈 목록이다. 객체가 아닌 원소는 건너뛰고, 칸이 깨진 원소는 그 칸만 비워(빈 명령 = 실행하지 않음) 설정 전체가 손상으로 취급되지 않게 한다.
+    /// 선택은 <see cref="SystemCliId"/> 에 <c>custom:&lt;id&gt;</c> 로 저장한다: 이 목록을 모르는 옛 빌드는 목록에 없는 id 로 읽어 <c>system_cli_unavailable</c> 로 닫는다.
+    /// </summary>
+    [JsonConverter(typeof(TolerantCustomCliListConverter))]
+    public IReadOnlyList<AiCustomCli> CustomClis { get => _customClis; init => _customClis = value is null ? [] : [.. value.Where(c => c is not null)]; }
+
+    // "customClis": null 이나 null 원소가 든 손으로 고친 파일도 받는다(빈 목록, null 원소 제거).
+    private readonly IReadOnlyList<AiCustomCli> _customClis = [];
+
     /// <summary>읽을 수 없는 <c>systemCliId</c> 를 가리키는 id. 어떤 시스템 CLI 와도 겹치지 않는다.</summary>
     public const string UnreadableSystemCliId = "(unreadable)";
 
@@ -258,9 +288,10 @@ public sealed record AiSettings
         && JoinSyntax == other.JoinSyntax
         && ActiveProfileId == other.ActiveProfileId
         && string.Equals(SystemCliId, other.SystemCliId, StringComparison.Ordinal)
-        && Profiles.SequenceEqual(other.Profiles);
+        && Profiles.SequenceEqual(other.Profiles)
+        && CustomClis.SequenceEqual(other.CustomClis);
 
-    public override int GetHashCode() => HashCode.Combine(Driver, Model, Effort, ExecutablePath, MaskLiterals, ActiveProfileId, Profiles.Count, HashCode.Combine(SystemCliId, BenchmarkTimeoutSeconds, JoinSyntax));
+    public override int GetHashCode() => HashCode.Combine(Driver, Model, Effort, ExecutablePath, MaskLiterals, ActiveProfileId, Profiles.Count, HashCode.Combine(SystemCliId, BenchmarkTimeoutSeconds, JoinSyntax, CustomClis.Count));
 }
 
 /// <summary>MyBatis 작업 공간 설정. 설정 창에는 없고 「바뀌는 부분」 창의 확인란이 바꾼다.</summary>

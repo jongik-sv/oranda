@@ -3,6 +3,7 @@ using System.Text;
 using Oranda.Core.Ai.Contracts;
 using Oranda.Core.Ai.Profiles;
 using Oranda.Core.Composition;
+using Oranda.Core.Connection;
 using Oranda.Core.Security;
 using Oranda.Core.Settings;
 using Oranda.Core.Storage;
@@ -60,6 +61,18 @@ internal interface ISystemCliAiDriver
 }
 
 /// <summary>
+/// 사용자가 등록한 기타 CLI 드라이버가 구현하는 표식. 구현 클래스는 <c>[OrandaService(typeof(ICustomCliAiDriver))]</c> 로 등록하며,
+/// <see cref="RoutingAiDriver"/> 가 실행마다 이 형식을 컨테이너에서 찾아 <see cref="RunAsync"/> 로 부른다. 등록이 없으면 <c>custom_cli_unavailable</c> 로 닫는다.
+/// <see cref="ISystemCliAiDriver"/> 와 달리 DB 도구·실행 토큰·<see cref="AiRequest.Session"/> 을 쓰지 않는다: 글만 주고받고, 라우터가 요청의 세션을 비워 넘기므로 구현은 토큰을 발급하지 않는다.
+/// 라우터가 가림 대상 요청(<see cref="AiRequest.MaskingRequired"/> 가 false 가 아님·가림 설정·운영 접속)을 걸러 낸 뒤에만 부른다.
+/// </summary>
+internal interface ICustomCliAiDriver
+{
+    /// <summary>모델·노력이 비워진 요청과 라우터가 찾은 등록 줄로 실행한다. 설정을 다시 읽지 않는다.</summary>
+    IAsyncEnumerable<AiEvent> RunAsync(AiRequest request, AiCustomCli cli, CancellationToken ct);
+}
+
+/// <summary>
 /// <see cref="IAiDriver"/> 의 유일한 DI 등록(설계 §6). 실행마다 설정(<c>ai</c> 섹션)을 읽어 활성 프로필을 한 번 찾고, 맞는 경로로 넘긴다.
 /// 보낼 곳이 확실하지 않으면 보내지 않고 오류로 닫는다(기본 주소·구독 인증으로 조용히 나가는 일이 없게).
 /// <list type="bullet">
@@ -67,6 +80,8 @@ internal interface ISystemCliAiDriver
 /// <item>선택 안 함: <c>driver_none</c>.</item>
 /// <item>호출한 쪽이 기대한 프로필과 설정의 활성 프로필이 다름(<see cref="AiRequest.Expected"/>): <c>profile_changed</c>.</item>
 /// <item>시스템 CLI 가 목록에 없거나 쓸 수 없음, 또는 드라이버 등록이 없음: <c>system_cli_unavailable</c>(Claude Code 로 넘기지 않는다).</item>
+/// <item>기타 CLI(<c>custom:&lt;id&gt;</c>)가 목록에 없거나 명령이 비었거나 드라이버 등록이 없음: <c>custom_cli_unavailable</c>(Claude Code 로 넘기지 않는다).
+/// 확인한 명령과 지금 명령이 다름: <c>profile_changed</c>. 가림 대상(<see cref="AiRequest.MaskingRequired"/> 가 false 가 아님·가림 설정 켬·운영 접속): <c>custom_cli_masking_blocked</c>.</item>
 /// <item>활성 프로필이 목록에 없음: <c>profile_missing</c>. 프리셋·형식을 모름: <c>profile_invalid</c>.</item>
 /// <item>주소가 올바르지 않음: <c>profile_invalid_url</c>. 키가 필요한데 없음: <c>profile_key_missing</c>(읽기 실패는 <c>profile_key_unreadable</c>).</item>
 /// <item>Claude Code·Anthropic 형식 프로필: <see cref="CliDriver"/>. OpenAI 형식 프로필: <see cref="IApiAiDriver"/>(등록이 없으면 <c>api_driver_pending</c>).</item>
@@ -77,6 +92,8 @@ internal interface ISystemCliAiDriver
 [OrandaService(typeof(IAiDriver))]
 internal sealed class RoutingAiDriver : IAiDriver
 {
+    internal const string CustomCliMaskingBlockedCode = "custom_cli_masking_blocked";
+
     private static readonly AiDriverCapabilities DriverCapabilities =
         new(Skills: false, Tools: true, Resume: true, LocalOnly: false, Streaming: false, Images: true);
 
@@ -109,9 +126,11 @@ internal sealed class RoutingAiDriver : IAiDriver
             yield break;
         }
 
-        var events = selected.SystemCli is { } systemCli
-            ? systemCli.RunAsync(request with { Model = null, Effort = null }, ct)
-            : selected.Api is { } api ? api.RunAsync(request, selected.Route!, ct) : _cli.RunAsync(request, selected.Route!, ct);
+        var events = selected.CustomDriver is { } customDriver
+            ? customDriver.RunAsync(request with { Model = null, Effort = null, Session = null }, selected.CustomCli!, ct) // 도구 세션은 넘기지 않는다(글만 주고받는다)
+            : selected.SystemCli is { } systemCli
+                ? systemCli.RunAsync(request with { Model = null, Effort = null }, ct)
+                : selected.Api is { } api ? api.RunAsync(request, selected.Route!, ct) : _cli.RunAsync(request, selected.Route!, ct);
         await foreach (var e in events.ConfigureAwait(false))
         {
             yield return e;
@@ -160,6 +179,10 @@ internal sealed class RoutingAiDriver : IAiDriver
                 return Selection.Cli(AiRoute.ClaudeCode);
             case AiActiveKind.SystemCliUnavailable:
                 return SystemCliUnavailable(active.SystemCliId);
+            case AiActiveKind.CustomCliUnavailable:
+                return CustomCliUnavailable();
+            case AiActiveKind.CustomCli:
+                return SelectCustomCli(request, settings, active.CustomCli!);
             case AiActiveKind.SystemCli:
                 var cliDriver = (_services.GetService(typeof(IEnumerable<ISystemCliAiDriver>)) as IEnumerable<ISystemCliAiDriver>)
                     ?.FirstOrDefault(d => string.Equals(d.CliId, active.SystemCliId, StringComparison.Ordinal));
@@ -183,6 +206,32 @@ internal sealed class RoutingAiDriver : IAiDriver
                 return await SelectProfileAsync(active.Profile!, ct).ConfigureAwait(false);
         }
     }
+
+    private Selection SelectCustomCli(AiRequest request, AiSettings settings, AiCustomCli cli)
+    {
+        // 확인 창에 적은 명령과 지금 명령이 다르면 보내지 않는다. 확인한 명령이 없는 요청(기대값 자체가 null 이거나 해시가 null)도 같은 대상으로 보지 않는다.
+        if (!string.Equals(request.Expected?.CustomCliCommandHash, AiCustomCliTarget.CommandHash(cli.Command), StringComparison.Ordinal))
+        {
+            return Selection.Fail("AI 모델이 바뀌어 요청을 보내지 않았습니다. 설정을 확인한 뒤 다시 실행하세요.", "profile_changed");
+        }
+
+        // 기타 CLI 는 값을 가려 보낼 수 없다. 가림 대상(운영 표시·전역 가림 설정·세션의 리터럴 가림 요구)이거나 가림이 필요 없다고 확인되지 않은 요청은 접속이 없어도 보내지 않는다.
+        if (request.MaskingRequired != false || settings.MaskLiterals || IsProduction(request) || request.Session?.Run.MaskLiteralsRequired == true)
+        {
+            return Selection.Fail("가림 대상 접속(운영 표시 또는 값 가림 설정)에서는 기타 CLI 로 보내지 않습니다. 요청을 보내지 않았으니 설정의 「AI 모델」 에서 다른 모델을 고르세요.", CustomCliMaskingBlockedCode);
+        }
+
+        return _services.GetService(typeof(ICustomCliAiDriver)) is ICustomCliAiDriver driver
+            ? Selection.ViaCustomCli(driver, cli)
+            : CustomCliUnavailable();
+    }
+
+    private static bool IsProduction(AiRequest request) =>
+        request.Context.Environment == ConnectionEnvironment.Production
+        || request.Session?.Run.Context.Environment == ConnectionEnvironment.Production;
+
+    private static Selection CustomCliUnavailable() =>
+        Selection.Fail("선택한 기타 CLI 를 쓸 수 없습니다. 목록에서 지워졌거나 실행 명령이 비어 있습니다. 설정의 「AI 모델」 에서 다시 고르세요.", AiActiveProfile.CustomCliUnavailableCode);
 
     private static string NormalizeCliId(string? id) => id ?? AiProfilePresets.ClaudeCodeId;
 
@@ -238,8 +287,10 @@ internal sealed class RoutingAiDriver : IAiDriver
             : Selection.Fail("OpenAI 형식 프로필의 연결은 아직 준비되지 않았습니다.", "api_driver_pending");
     }
 
-    private sealed record Selection(AiRoute? Route, IApiAiDriver? Api, AiError? Error, ISystemCliAiDriver? SystemCli = null)
+    private sealed record Selection(AiRoute? Route, IApiAiDriver? Api, AiError? Error, ISystemCliAiDriver? SystemCli = null, ICustomCliAiDriver? CustomDriver = null, AiCustomCli? CustomCli = null)
     {
+        public static Selection ViaCustomCli(ICustomCliAiDriver driver, AiCustomCli cli) => new(null, null, null, null, driver, cli);
+
         public static Selection Cli(AiRoute route) => new(route, null, null);
 
         public static Selection ViaApi(IApiAiDriver api, AiRoute route) => new(route, api, null);
