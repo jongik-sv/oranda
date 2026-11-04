@@ -5,6 +5,7 @@ using Avalonia.Input;
 using Avalonia.Layout;
 using Avalonia.Media;
 using Avalonia.Threading;
+using Avalonia.VisualTree;
 using Oranda.App.Features.Localization;
 using Oranda.App.Shell;
 using Oranda.App.ViewModels;
@@ -100,7 +101,11 @@ public sealed class UpdateStatusView : UserControl
 
     public UpdateStatusView()
     {
-        _dot.Bind(Border.BackgroundProperty, _dot.GetResourceObservable("OrandaButtonAccentBrush"));
+        // 단추 바탕용 강조색(OrandaButtonAccentBrush)은 다크 상태 표시줄 바탕에서 2.47:1 이라 점이 묻힌다. 두 테마 모두 3:1 을 넘는 아이콘 파랑을 쓴다.
+        // 운영 연결이면 상태 표시줄 바탕이 빨강(OrandaEnvProductionBrush)이라 파랑 점이 1.1~1.3:1 로 묻힌다. 그 바탕의 글자색(흰/검정)을 따른다.
+        AttachedToVisualTree += (_, _) => WatchStatusBar();
+        DetachedFromVisualTree += (_, _) => UnwatchStatusBar();
+        ActualThemeVariantChanged += (_, _) => ApplyDotBrush();
         Content = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 4, Children = { _dot, _text } };
         Cursor = new Cursor(StandardCursorType.Hand);
         Background = Brushes.Transparent;
@@ -126,6 +131,37 @@ public sealed class UpdateStatusView : UserControl
 
             Refresh();
         };
+    }
+
+    private Border? _bar;
+
+    private void WatchStatusBar()
+    {
+        UnwatchStatusBar();
+        _bar = this.GetVisualAncestors().OfType<Border>().FirstOrDefault(b => b.Classes.Contains("statusbar"));
+        if (_bar is not null)
+        {
+            _bar.Classes.CollectionChanged += OnBarClassesChanged;
+        }
+
+        ApplyDotBrush();
+    }
+
+    private void UnwatchStatusBar()
+    {
+        if (_bar is not null)
+        {
+            _bar.Classes.CollectionChanged -= OnBarClassesChanged;
+            _bar = null;
+        }
+    }
+
+    private void OnBarClassesChanged(object? sender, System.Collections.Specialized.NotifyCollectionChangedEventArgs e) => ApplyDotBrush();
+
+    private void ApplyDotBrush()
+    {
+        var key = _bar?.Classes.Contains("env-production") == true ? "OrandaEnvProductionForegroundBrush" : "OrandaIconBlueBrush";
+        _dot.Background = this.TryFindResource(key, ActualThemeVariant, out var brush) ? brush as IBrush : null;
     }
 
     private void OnChanged(object? sender, PropertyChangedEventArgs e) => Refresh();

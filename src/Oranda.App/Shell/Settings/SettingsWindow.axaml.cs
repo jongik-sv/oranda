@@ -10,6 +10,7 @@ public partial class SettingsWindow : Window
     public SettingsWindow()
     {
         InitializeComponent();
+        UpdateFeedBox.TemplateApplied += SolidPlaceholder;
         DataContextChanged += (_, _) =>
         {
             if (DataContext is SettingsViewModel vm)
@@ -19,6 +20,16 @@ public partial class SettingsWindow : Window
         };
         Opened += (_, _) => FitLargestCategory();
         Closed += (_, _) => (DataContext as SettingsViewModel)?.Features.Dispose();
+    }
+
+    /// <summary>Fluent 템플릿이 안내 글자(PART_Placeholder)에 Opacity 0.5 를 직접 박아 스타일로는 되돌릴 수 없다. 반투명이면 어떤 색이든 4.5:1 에 못 미치므로
+    /// 템플릿이 만들어질 때 불투명으로 돌린다(색은 axaml 의 PlaceholderForeground 테마 색).</summary>
+    private static void SolidPlaceholder(object? sender, Avalonia.Controls.Primitives.TemplateAppliedEventArgs e)
+    {
+        if (e.NameScope.Find<TextBlock>("PART_Placeholder") is { } placeholder)
+        {
+            placeholder.Opacity = 1;
+        }
     }
 
     /// <summary>본문 폭 상한(DIP). 헤드리스 측정에서 범주별 내용 폭은 428~886 이었고, 대부분 600 안쪽이며 넘는 쪽은 편집기(감사 열 칸)·업데이트(피드 주소 칸)처럼
