@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Collections.Specialized;
 using System.ComponentModel;
 using System.Linq;
 using System.Threading.Tasks;
@@ -41,7 +42,13 @@ public partial class AiChatView : UserControl
         };
         _progressTimer.Tick += (_, _) => Vm?.RefreshProgress();
         ConversationScroll.ScrollChanged += OnConversationScrollChanged;
+        _selection = new ChatTextSelection(ConversationScroll, ConversationContent);
     }
+
+    private readonly ChatTextSelection _selection;
+
+    /// <summary>대화 창의 여러 문단 선택(시험용).</summary>
+    internal ChatTextSelection Selection => _selection;
 
     private readonly DispatcherTimer _progressTimer = new() { Interval = TimeSpan.FromSeconds(1) };
     private AiChatViewModel? _observed;
@@ -52,15 +59,32 @@ public partial class AiChatView : UserControl
         if (_observed is not null)
         {
             _observed.PropertyChanged -= OnViewModelPropertyChanged;
+            _observed.Entries.CollectionChanged -= OnEntriesChanged;
         }
 
         _observed = Vm;
+        _selection.Reset(); // 다른 대화로 바뀌면 이전 선택은 의미가 없다
         if (_observed is not null)
         {
             _observed.PropertyChanged += OnViewModelPropertyChanged;
+            _observed.Entries.CollectionChanged += OnEntriesChanged;
         }
 
         SyncProgressTimer();
+    }
+
+    // 새 대화(Reset)면 선택을 지운다. 항목이 지워지거나 바뀔 때(스트리밍은 마지막 항목을 토큰마다 바꾼다)는 화면이 새로 그려진 뒤
+    // 선택한 글 칸이 떨어졌는지만 보고 지운다. 항목이 덧붙는 것은 선택에 영향이 없다.
+    private void OnEntriesChanged(object? sender, NotifyCollectionChangedEventArgs e)
+    {
+        if (e.Action == NotifyCollectionChangedAction.Reset)
+        {
+            _selection.Reset();
+        }
+        else if (e.Action is NotifyCollectionChangedAction.Remove or NotifyCollectionChangedAction.Replace)
+        {
+            Dispatcher.UIThread.Post(_selection.DropIfDetached, DispatcherPriority.Background);
+        }
     }
 
     private void OnViewModelPropertyChanged(object? sender, PropertyChangedEventArgs e)
@@ -83,7 +107,7 @@ public partial class AiChatView : UserControl
     private void OnConversationScrollChanged(object? sender, ScrollChangedEventArgs e)
     {
         var grew = e.ExtentDelta.Y > 0;
-        if (grew && _followEnd && Vm is { IsRunning: true })
+        if (grew && _followEnd && Vm is { IsRunning: true } && !_selection.IsDragging) // 드래그 중에는 화면이 저절로 움직이지 않게 한다
         {
             ConversationScroll.ScrollToEnd();
         }

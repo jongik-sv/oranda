@@ -2,6 +2,7 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:vm="using:Oranda.App.Features.Ai.Chat"
              xmlns:icons="using:Oranda.App.Shell.Icons"
+             xmlns:keymaps="using:Oranda.App.Shell.Keymaps"
              x:Class="Oranda.App.Features.Ai.Chat.AiChatView"
              x:DataType="vm:AiChatViewModel">
   <!-- AI 대화 창 최소판(시안 8): 제목 줄 · 사용자 글 / 도구 묶음 한 줄(펼치면 카드) / AI 글 · 제안 카드 · 이어 말하기 입력 · 상태 · 멈춤/보내기. -->
@@ -139,8 +140,9 @@
         </Grid>
       </StackPanel>
     </Border>
-    <ScrollViewer x:Name="ConversationScroll" HorizontalScrollBarVisibility="Disabled">
-      <StackPanel Margin="8">
+    <!-- 복사 키(Ctrl/Cmd+C)는 이 영역이 스스로 처리한다(여러 문단에 걸친 선택 복사). 주 창 키맵·시스템 메뉴가 편집기 복사로 가져가지 않게 표시한다. -->
+    <ScrollViewer x:Name="ConversationScroll" HorizontalScrollBarVisibility="Disabled" keymaps:EditKeyScope.Owns="True">
+      <StackPanel x:Name="ConversationContent" Margin="8">
       <ItemsControl x:Name="EntryList" ItemsSource="{Binding Entries}" AutomationProperties.Name="대화">
         <ItemsControl.ItemsPanel>
           <ItemsPanelTemplate>
@@ -170,7 +172,9 @@
                     </DataTemplate>
                   </ItemsControl.ItemTemplate>
                 </ItemsControl>
-                <TextBlock Text="{Binding Text}" TextWrapping="Wrap" IsVisible="{Binding HasText}" />
+                <!-- 사용자 글도 AI 글처럼 드래그로 고르고 여러 문단과 함께 복사한다. -->
+                <SelectableTextBlock Text="{Binding Text}" TextWrapping="Wrap" IsVisible="{Binding HasText}"
+                                     SelectionBrush="{DynamicResource OrandaEditorSelectionBrush}" ContextFlyout="{x:Static vm:ChatTextSelection.CopyFlyout}" />
               </StackPanel>
             </Border>
           </DataTemplate>
@@ -211,7 +215,8 @@
                 </Grid>
               </Expander.Header>
               <SelectableTextBlock Text="{Binding Details}" TextWrapping="Wrap" FontFamily="{DynamicResource OrandaCodeFontFamily}" Opacity="0.85"
-                                   FontSize="{DynamicResource OrandaFontSizeSmall}" />
+                                   FontSize="{DynamicResource OrandaFontSizeSmall}"
+                                   SelectionBrush="{DynamicResource OrandaEditorSelectionBrush}" ContextFlyout="{x:Static vm:ChatTextSelection.CopyFlyout}" />
             </Expander>
           </DataTemplate>
           <DataTemplate x:DataType="vm:ChatProposalEntry">

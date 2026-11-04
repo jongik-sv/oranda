@@ -7,6 +7,7 @@ using Avalonia.Controls;
 using Avalonia.Controls.Documents;
 using Avalonia.Controls.Primitives;
 using Avalonia.Input.Platform;
+using Avalonia.Interactivity;
 using Avalonia.Layout;
 using Avalonia.Media;
 using Oranda.App.Features.SqlEditor;
@@ -51,6 +52,7 @@ public sealed partial class MarkdownView : StackPanel
 
     private void Rebuild()
     {
+        RaiseEvent(new RoutedEventArgs(ChatTextSelection.RebuiltEvent)); // 대화 창의 글 선택이 이 글 안의 선택을 지운다
         Children.Clear();
         var markdown = Markdown;
         if (string.IsNullOrEmpty(markdown))
@@ -79,7 +81,7 @@ public sealed partial class MarkdownView : StackPanel
 #pragma warning restore CA1031
         {
             Children.Clear();
-            Children.Add(new SelectableTextBlock { Text = markdown, TextWrapping = TextWrapping.Wrap });
+            Children.Add(Prepared(new SelectableTextBlock { Text = markdown, TextWrapping = TextWrapping.Wrap }));
         }
     }
 
@@ -134,12 +136,18 @@ public sealed partial class MarkdownView : StackPanel
         MarkdownQuote quote => Caution(quote),
         MarkdownRule => Rule(),
         MarkdownParagraph paragraph => TextOf(paragraph.Spans),
-        _ => new SelectableTextBlock { TextWrapping = TextWrapping.Wrap },
+        _ => Prepared(new SelectableTextBlock { TextWrapping = TextWrapping.Wrap }),
     };
+
+    private static SelectableTextBlock Prepared(SelectableTextBlock block)
+    {
+        ChatTextSelection.Prepare(block);
+        return block;
+    }
 
     private static SelectableTextBlock TextOf(IReadOnlyList<MarkdownSpan> spans, double? fontSize = null, FontWeight? weight = null)
     {
-        var block = new SelectableTextBlock { TextWrapping = TextWrapping.Wrap, LineSpacing = 3 };
+        var block = Prepared(new SelectableTextBlock { TextWrapping = TextWrapping.Wrap, LineSpacing = 3 });
         if (fontSize is { } size)
         {
             block.FontSize = size;
@@ -242,12 +250,12 @@ public sealed partial class MarkdownView : StackPanel
     /// <summary>코드 블록: 머리 줄(언어 이름·「복사」 글 단추)과 가로로 스크롤되는 본문. SQL 은 닫힌 블록만 색을 칠한다.</summary>
     private static Border CodeBlock(MarkdownCode code)
     {
-        var text = new SelectableTextBlock
+        var text = Prepared(new SelectableTextBlock
         {
             TextWrapping = TextWrapping.NoWrap,
             Margin = new Thickness(10, 8, 10, 10),
             LineSpacing = 2,
-        };
+        });
         if (code.Closed && IsSql(code.Language))
         {
             SqlInlineText.SetSql(text, code.Code);
@@ -304,11 +312,15 @@ public sealed partial class MarkdownView : StackPanel
     private static StackPanel List(MarkdownList list)
     {
         var stack = new StackPanel { Spacing = 2 };
+        var first = true;
         foreach (var item in list.Items)
         {
             var row = new Grid { ColumnDefinitions = new ColumnDefinitions("Auto,*"), ColumnSpacing = 6, Margin = new Thickness(2 + (item.Depth * 18), 0, 0, 0) };
             row.Children.Add(new TextBlock { Text = item.Marker, MinWidth = 12, TextAlignment = TextAlignment.Right, VerticalAlignment = VerticalAlignment.Top, Opacity = item.Marker == "•" ? 0.6 : 0.85 });
             var content = TextOf(item.Spans);
+            ChatTextSelection.SetLead(content, new string(' ', item.Depth * 2) + item.Marker + " "); // 복사할 때 표지를 앞에 붙인다
+            ChatTextSelection.SetBreak(content, first ? ChatCopyBreak.Blank : ChatCopyBreak.Line);
+            first = false;
             Grid.SetColumn(content, 1);
             row.Children.Add(content);
             stack.Children.Add(row);
@@ -330,6 +342,7 @@ public sealed partial class MarkdownView : StackPanel
         foreach (var line in lines.Skip(1).Where(l => l.Count > 0))
         {
             var sub = SmallText(line);
+            ChatTextSelection.SetBreak(sub, ChatCopyBreak.Line);
             sub.Opacity = 0.8;
             head.Children.Add(sub);
         }
@@ -397,6 +410,15 @@ public sealed partial class MarkdownView : StackPanel
             var spans = c < cells.Count ? cells[c] : [];
             var text = header ? SmallText(spans, FontWeight.SemiBold) : TextOf(spans);
             text.MaxWidth = CellMaxWidth;
+            if (c > 0)
+            {
+                ChatTextSelection.SetBreak(text, ChatCopyBreak.Tab);
+            }
+            else if (rowIndex > 0)
+            {
+                ChatTextSelection.SetBreak(text, ChatCopyBreak.Line);
+            }
+
             if (numeric[c])
             {
                 text.TextWrapping = TextWrapping.NoWrap; // 숫자는 한 줄로(칸이 좁으면 글 칸이 줄거나 표가 스크롤된다)
