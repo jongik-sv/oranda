@@ -88,6 +88,12 @@ public sealed partial class AiTuningFlow(
     /// <summary>이어 말하는 사이 보낼 곳(프로필·주소·형식·모델)이 바뀌었을 때 대화 창에 남기는 안내.</summary>
     public const string ProfileChangedText = "모델이 바뀌어 이어 말할 수 없습니다. 「AI 튜닝」 으로 다시 시작하세요.";
 
+    /// <summary>이어 말하는 사이 보낼 곳이 기타 CLI 로 바뀌었을 때의 안내(기타 CLI 는 튜닝을 거절하므로 실제 출구인 새 대화를 알린다).</summary>
+    public const string ProfileChangedToCustomCliText = "모델이 기타 CLI 로 바뀌어 이어 말할 수 없습니다. 기타 CLI 는 튜닝을 지원하지 않으므로 「새 대화」 로 시작하세요.";
+
+    private static string ProfileChangedTextFor(AiConversationTarget? now) =>
+        AiTuningCustomCli.IsCustom(now) ? ProfileChangedToCustomCliText : ProfileChangedText;
+
     /// <summary>이어 말하는 중 예외가 났을 때 화면에 보이는 고정 글(상세는 가린 뒤 추적 기록에만 남긴다).</summary>
     public const string FollowUpFailedText = "이어 말하는 중 오류가 났습니다. 자세한 원인은 로그에 남겼습니다.";
 
@@ -176,6 +182,14 @@ public sealed partial class AiTuningFlow(
             return;
         }
 
+        // 기타 CLI 는 DB 도구가 없어 튜닝에 쓰지 않는다. 아래 _route 와 같은 값으로 판단해, 확인한 뒤 설정이 바뀌어도 어긋나지 않게 한다.
+        var route = CurrentTarget();
+        if (AiTuningCustomCli.IsCustom(route))
+        {
+            chat.AddAssistantText(AiTuningCustomCli.TuningText);
+            return;
+        }
+
         var statement = editor.GetCurrentStatement();
         if (statement is null)
         {
@@ -190,7 +204,7 @@ public sealed partial class AiTuningFlow(
         }
 
         _command = null; // 튜닝 대화다(앞 명령 대화의 종류가 남지 않게)
-        _route = CurrentTarget();
+        _route = route;
         _choice = choice;
         _target = statement;
         _vault = vault;
@@ -342,7 +356,14 @@ public sealed partial class AiTuningFlow(
         // 보낼 곳(프로필·주소·형식·모델)이 대화를 시작할 때와 다르면 앞 대화의 ResumeId 를 쓸 수 없고, 앞서 보낸 이미지가 경고 없이 새로운 곳으로 가면 안 된다.
         if (route is { } started && CurrentTarget() is { } now && !started.IsSameAs(now))
         {
-            chat.AddAssistantText(ProfileChangedText);
+            chat.AddAssistantText(ProfileChangedTextFor(now));
+            return null;
+        }
+
+        // 기타 CLI 는 이미지를 받지 않는다. 입구를 닫아도 설정을 바꾸기 전에 붙인 첨부가 남을 수 있어 보내기 직전에 다시 막는다.
+        if (AiTuningCustomCli.IsCustom(route) && followUp.Images.Count > 0)
+        {
+            chat.AddAssistantText(AiTuningCustomCli.ImagesText);
             return null;
         }
 
@@ -366,6 +387,13 @@ public sealed partial class AiTuningFlow(
             _context = fresh with { AllowRiskyFunctions = _choice!.RunRiskyFunctions, AccessLevel = Cap(Command, fresh.AccessLevel) };
         }
 
+        // 기타 CLI 는 값을 가려 보낼 수 없다: 이어 말하는 사이 접속이 운영으로 바뀌었거나 가림 설정이 켜졌으면 보내지 않는다.
+        if (AiTuningCustomCli.IsCustom(route) && MaskingRequiredFor(_context, _vault))
+        {
+            chat.AddAssistantText(AiTuningCustomCli.MaskingBlockedText);
+            return null;
+        }
+
         // 새 이미지를 보낼 때만(글만 보내는 이어 말하기·이미 보낸 이미지는 해당 없음): 가리는 대화면 확인을 거치고, 보낸다는 사실을 감사에 남긴다.
         if (followUp.Images.Count > 0
             && !await ConfirmAndAuditImagesAsync(followUp, route, _context, _vault is not null || maskRequired?.Invoke(_context) == true, ct).ConfigureAwait(true))
@@ -376,7 +404,7 @@ public sealed partial class AiTuningFlow(
         // 기다리는 동안(접속 새로 고침·확인 창·감사) 대화가 바뀌었거나 보낼 곳이 달라졌으면 확인한 곳과 다른 곳으로 나가지 않도록 접는다.
         if (generation != _generation || IsRunning || (route is { } confirmed && CurrentTarget() is { } latest && !confirmed.IsSameAs(latest)))
         {
-            chat.AddAssistantText(ProfileChangedText);
+            chat.AddAssistantText(ProfileChangedTextFor(CurrentTarget()));
             return null;
         }
 
@@ -386,6 +414,13 @@ public sealed partial class AiTuningFlow(
         return text + Environment.NewLine + Environment.NewLine + rules
             + (_vault is null ? string.Empty : Environment.NewLine + PlaceholderReminder(_vault));
     }
+
+    /// <summary>
+    /// 이 요청의 글을 가려 보내야 하는가(<see cref="AiRequest.MaskingRequired"/>). 사전이 있거나 가림 판단을 모르면(판단 쪽이 없음) 참으로 닫는다.
+    /// 가림이 필요 없다고 확인된 요청만 거짓이며, 이 값을 읽는 것은 값을 가려 보낼 수 없는 기타 CLI 의 라우터뿐이다.
+    /// </summary>
+    private bool MaskingRequiredFor(AiContext context, LiteralVault? vault) =>
+        vault is not null || maskRequired is null || maskRequired(context);
 
     /// <summary>이 대화가 지금 보낼 곳(설정을 모르면 null).</summary>
     private AiConversationTarget? CurrentTarget() => settings?.Invoke() is { } current ? AiConversationTarget.From(current) : null;
@@ -665,7 +700,8 @@ public sealed partial class AiTuningFlow(
             prompt, context, resumeId, command is null ? TuningResult.Schema() : command.OutputSchema, choice.ModelId == "default" ? null : choice.ModelId, session,
             choice.EffortId == TuningStartInfo.DefaultModelId ? null : choice.EffortId,
             Images: images.Count == 0 ? null : [.. images.Select(i => i.Attachment)],
-            Expected: (route ?? _route)?.ToExpectation()); // 확인 창에 적은 곳과 실제 전송처가 같게: 라우터가 설정의 활성 프로필과 대조한다(profile_changed)
+            Expected: (route ?? _route)?.ToExpectation(), // 확인 창에 적은 곳과 실제 전송처가 같게: 라우터가 설정의 활성 프로필과 대조한다(profile_changed)
+            MaskingRequired: MaskingRequiredFor(context, vault)); // 값을 가려 보낼 수 없는 기타 CLI 의 라우터만 읽는다(알 수 없으면 참으로 닫는다)
         JsonElement? result = null;
         try
         {

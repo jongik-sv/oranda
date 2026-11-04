@@ -25,7 +25,11 @@ namespace Oranda.App.Features.Ai.Tuning;
 /// 활성 문서가 SQL 작업 공간 문서인가(<c>SessionRouter.SqlDocumentActive</c>). PL/SQL 편집기·객체 상세처럼 SQL 탭이 아닌 문서가 활성이면 false 이고, 이때 편집기 맥락은
 /// 활성 문서와 무관하게 마지막 SQL 탭을 돌려주므로 그 탭의 문장은 지금 접속의 것이 아닐 수 있다. 판단할 수 없으면 null — 닫는 쪽(도구 없음)으로 본다.
 /// </param>
-public sealed record AiGeneralScope(AiContext? Context, bool Masking, Guid? ConnectionId = null, bool? SqlDocumentActive = null);
+/// <param name="UnsafeBinding">
+/// 보이는 접속은 없지만(<paramref name="Context"/> 가 null) 활성 SQL 탭이 접속이 닫힌 접속에 묶여 있다. 그 접속이 운영이거나 저장소에서 찾을 수 없으면 참이다. 「연결 없음」(탭 자체가 없거나 접속이 묶이지 않음)과 달리 값을 가려 보낼 수 없는 기타 CLI 는 이때 보내지 않는다.
+/// 다른 종류의 대화는 이 값을 보지 않는다(글을 가리지 않는 동작은 그대로).
+/// </param>
+public sealed record AiGeneralScope(AiContext? Context, bool Masking, Guid? ConnectionId = null, bool? SqlDocumentActive = null, bool UnsafeBinding = false);
 
 /// <summary>
 /// 일반 대화: 튜닝을 시작하지 않고 대화 창에 쓴 글(과 이미지)을 그대로 AI 에게 보낸다. 튜닝과 같은 드라이버 경로·프로필 선택·이미지 확인·감사를 쓰되,
@@ -68,7 +72,7 @@ public sealed partial class AiTuningFlow
     private (int Generation, string Key)? _scopeShown; // 대화에 마지막으로 보인 도구 범위 안내
 
     /// <summary>일반 대화에서 보내기 전에 준비를 마친 한 차례.</summary>
-    private sealed record GeneralTurn(string Prompt, AiContext Context, bool Tools, LiteralVault? Vault, AiConversationTarget? Route, int Generation);
+    private sealed record GeneralTurn(string Prompt, AiContext Context, bool Tools, LiteralVault? Vault, AiConversationTarget? Route, int Generation, bool Masking);
 
     private async Task GeneralFollowUpAsync(ChatFollowUp followUp, CancellationToken ct)
     {
@@ -142,8 +146,17 @@ public sealed partial class AiTuningFlow
             return null; // 읽는 사이 대화가 바뀌었다: 옛 대화의 글을 새 대화로 보내지 않는다
         }
 
+        // 기타 CLI 는 글만 주고받는다: 이미지·편집기 문장·DB 도구를 쓰지 않고, 값을 가려 보낼 수 없으므로 가림 대상 접속에는 보내지 않는다.
+        // 보낼 곳은 아래 요청의 기대값(_route)이 되는 같은 값으로 한 번만 읽어, 판단과 실제 전송처가 어긋나지 않게 한다.
+        var now = CurrentTarget();
+        var custom = AiTuningCustomCli.IsCustom(now);
+        if (custom && !CustomCliGeneralAllowed(followUp, now!, scope))
+        {
+            return null;
+        }
+
         var connected = scope.Context;
-        var tools = connected is { AccessLevel: not AiAccessLevel.Off };
+        var tools = !custom && connected is { AccessLevel: not AiAccessLevel.Off };
 
         // 도구의 범위 = 활성 SQL 탭의 문장(튜닝과 같은 범위 계산을 쓴다). 편집기 맥락은 활성 문서와 무관하게 마지막 SQL 탭을 돌려주므로,
         // 활성 문서가 SQL 탭이 아니거나 그 탭의 접속이 지금 접속(scope)과 다르면 그 문장을 싣지 않고 도구도 닫는다. 판단할 수 없으면 닫는다.
@@ -164,6 +177,11 @@ public sealed partial class AiTuningFlow
             tools = scopeText is not null;
         }
 
+        if (custom)
+        {
+            closedText = AiTuningCustomCli.GeneralText;
+        }
+
         // 다음 문장에 진짜 바인드가 있어 이 대화의 자리표시(예 :v1)와 겹치면 앞 사전을 쓸 수 없다: 새 대화로 간다.
         // 새 문장 자체가 어떤 접두를 고를지가 아니라, 새 문장의 바인드가 기존 사전의 접두와 겹치는지만 본다.
         if (tools && scope.Masking && chat.ResumeId is not null && _generalVault is { } existingVault && CollidesWithPrefix(scopeText!, existingVault))
@@ -173,7 +191,6 @@ public sealed partial class AiTuningFlow
         }
 
         // 새 일반 대화(이어 갈 앞 대화가 없음)면 지금의 보낼 곳·접속을 기준으로 삼는다. 이어 가는 중에 달라졌으면 새 대화로 바꾼다.
-        var now = CurrentTarget();
         var signature = SignatureOf(scope);
         if (chat.ResumeId is not null)
         {
@@ -243,7 +260,7 @@ public sealed partial class AiTuningFlow
         }
 
         ShowScopeLine(generation, tools, closedText, scopeText);
-        var styleReason = tools ? GeneralToolState.Tools : otherDocument ? GeneralToolState.OtherDocument : GeneralToolState.NoTools;
+        var styleReason = custom ? GeneralToolState.CustomCli : tools ? GeneralToolState.Tools : otherDocument ? GeneralToolState.OtherDocument : GeneralToolState.NoTools;
 
         var context = connected is null ? new AiContext(null, null, AiAccessLevel.Off) : tools ? connected with { StatementText = scopeText } : connected;
 
@@ -276,7 +293,35 @@ public sealed partial class AiTuningFlow
         var prompt = text + Environment.NewLine + Environment.NewLine + GeneralStyle(styleReason, vault is not null)
             + (promptStatement is null ? string.Empty : Environment.NewLine + Environment.NewLine + "<statement>" + Environment.NewLine + promptStatement + Environment.NewLine + "</statement>")
             + (vault is null ? string.Empty : Environment.NewLine + PlaceholderReminder(vault, statementOnly: true));
-        return new GeneralTurn(prompt, context, tools, vault, route, generation);
+        return new GeneralTurn(prompt, context, tools, vault, route, generation, scope.Masking || scope.UnsafeBinding || generalContext is null);
+    }
+
+    /// <summary>
+    /// 기타 CLI 로 일반 대화를 보내도 되는지 확인한다. 쓸 수 없는 줄·이미지·가림 대상 접속이면 이유를 대화 창에 남기고 false(라우터도 같은 조건으로 닫지만,
+    /// 여기서 먼저 막아 가림 확인 창이나 쓸데없는 준비를 거치지 않게 한다). 접속을 알 수 없는 대화(<paramref name="scope"/> 의 <c>Masking</c>·<c>UnsafeBinding</c>)와
+    /// 접속 정보를 읽는 쪽이 없는 흐름도 가림 대상으로 본다(닫힌 쪽으로).
+    /// </summary>
+    private bool CustomCliGeneralAllowed(ChatFollowUp followUp, AiConversationTarget target, AiGeneralScope scope)
+    {
+        if (AiTuningCustomCli.IsUnavailable(target))
+        {
+            chat.AddAssistantText(AiTuningCustomCli.UnavailableText);
+            return false;
+        }
+
+        if (followUp.Images.Count > 0)
+        {
+            chat.AddAssistantText(AiTuningCustomCli.ImagesText);
+            return false;
+        }
+
+        if (scope.Masking || scope.UnsafeBinding || generalContext is null)
+        {
+            chat.AddAssistantText(AiTuningCustomCli.MaskingBlockedText);
+            return false;
+        }
+
+        return true;
     }
 
     /// <summary>대화에 어느 문장이 도구의 범위인지(그 문장도 함께 보낸다는 뜻 포함) 한 줄로 보인다. 도구를 닫았으면 그 이유를 보인다. 바뀔 때만.</summary>
@@ -340,6 +385,8 @@ public sealed partial class AiTuningFlow
                 + (masked ? " Literal values in that statement and in tool results are masked; the user's own message is not masked." : string.Empty),
             GeneralToolState.OtherDocument =>
                 "No database tools are available in this conversation: the active document is not an SQL tab of the current connection (another connection's tab, a PL/SQL editor or an object detail), so its statement was not sent. If the question needs live database facts or that statement, say so and tell the user to activate the SQL tab of the current connection and put the cursor on a statement.",
+            GeneralToolState.CustomCli =>
+                "No database tools exist in this conversation and nothing but the user's message was sent: no editor statement and no database information. If the question needs live database facts or a particular statement, say that you cannot see them and ask the user to paste what is needed into the message.",
             _ =>
                 "No database tools are available in this conversation (no connection, access is off, or no statement in the active SQL tab): if the question needs live database facts, say so and tell the user to connect and put the cursor on a statement.",
         };
@@ -355,6 +402,9 @@ public sealed partial class AiTuningFlow
 
         /// <summary>활성 문서가 지금 접속의 SQL 탭이 아니라 그 문장을 보내지 않고 도구가 없다.</summary>
         OtherDocument,
+
+        /// <summary>기타 CLI 를 쓴다: 입력한 글만 보내고, 문장·DB 정보·도구가 없다.</summary>
+        CustomCli,
     }
 
     /// <summary>새 문장의 실제 바인드(예 <c>:v1</c>)가 이 사전의 자리표시 접두와 겹친다.</summary>
@@ -380,7 +430,8 @@ public sealed partial class AiTuningFlow
             var request = new AiRequest(
                 turn.Prompt, turn.Context, chat.ResumeId, OutputSchema: null, Model: null, session,
                 Images: followUp.Images.Count == 0 ? null : [.. followUp.Images.Select(i => i.Attachment)],
-                Expected: turn.Route?.ToExpectation()); // 확인 창에 적은 곳과 실제 전송처가 같게: 라우터가 설정의 활성 프로필과 대조한다
+                Expected: turn.Route?.ToExpectation(), // 확인 창에 적은 곳과 실제 전송처가 같게: 라우터가 설정의 활성 프로필과 대조한다
+                MaskingRequired: turn.Masking); // 값을 가려 보낼 수 없는 기타 CLI 의 라우터만 읽는다(접속을 알 수 없는 대화는 이미 가리는 대화로 본다)
             await chat.RunAsync(driver.RunAsync(request, cts.Token), cts.Token).ConfigureAwait(true);
         }
         finally

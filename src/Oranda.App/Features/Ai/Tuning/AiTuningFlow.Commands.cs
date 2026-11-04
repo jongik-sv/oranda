@@ -58,6 +58,13 @@ public sealed partial class AiTuningFlow
             return;
         }
 
+        // 기타 CLI 는 DB 도구가 없어 도구를 전제하는 명령 글을 보낼 수 없다: DB 를 읽기 전에 닫는다.
+        if (AiTuningCustomCli.IsCustom(CurrentTarget()))
+        {
+            chat.AddAssistantText(AiTuningCustomCli.CommandUnsupportedText);
+            return;
+        }
+
         // 튜닝과 같은 가림 경로. 못 하면 원래 글을 보내지 않고 시작을 거부한다.
         if (!TryMaskStatement(context, statement, spec.MaskerMissingText ?? CommandMaskerMissingText, spec.MaskFailedText ?? CommandMaskFailedText, out var vault, out var promptStatement))
         {

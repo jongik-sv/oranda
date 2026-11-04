@@ -236,6 +236,14 @@ public sealed class AiTuningLauncher(IServiceProvider services)
         }
 
         var (editor, driver, profile, settings, document, tabId, _, statement) = scope;
+
+        // 기타 CLI 는 DB 도구가 없어 튜닝에 쓰지 않는다: 시작 창을 띄우기 전에 안내하고 닫는다(흐름의 시작도 같은 판단으로 한 번 더 막는다).
+        if (AiTuningCustomCli.IsSelected(settings))
+        {
+            await ReportFailureAsync(AiTuningCustomCli.TuningText).ConfigureAwait(true);
+            return;
+        }
+
         var context = new AiContext(profile.Name, profile.Environment, AiAccessPolicy.Effective(profile), tabId, statement?.Text);
         var info = BuildStartInfo(statement, context, settings, AiAccessPolicy.MaskLiterals(profile, settings.MaskLiterals));
 
@@ -328,6 +336,7 @@ public sealed class AiTuningLauncher(IServiceProvider services)
                 AiActiveKind.None => "AI 모델이 「선택 안 함」 입니다. 설정에서 AI 모델을 고르면 보낼 수 있습니다.",
                 AiActiveKind.ProfileMissing => "선택한 AI 프로필을 찾을 수 없습니다. 설정에서 다른 프로필을 고르십시오.",
                 AiActiveKind.ProfileInvalid => "선택한 AI 프로필의 형식을 이 버전이 알지 못합니다. 설정에서 다른 프로필을 고르십시오.",
+                AiActiveKind.CustomCliUnavailable => AiTuningCustomCli.UnavailableText,
                 _ => null,
             }
             : null;
@@ -448,9 +457,10 @@ public sealed class AiTuningLauncher(IServiceProvider services)
     {
         _profile = null;
         var globalMask = MaskLiteralsSetting();
-        if (services.GetService(typeof(IEventBus)) is not IEventBus bus || ExecutionState.For(bus).ShownProfile is not { } shown)
+        var shownProfile = services.GetService(typeof(IEventBus)) is IEventBus bus ? ExecutionState.For(bus).ShownProfile : null;
+        if (shownProfile is not { } shown)
         {
-            return new AiGeneralScope(null, globalMask);
+            return new AiGeneralScope(null, globalMask, UnsafeBinding: await UnsafeBindingAsync(ct).ConfigureAwait(true));
         }
 
         var sqlDocumentActive = SqlDocumentActive();
@@ -464,7 +474,48 @@ public sealed class AiTuningLauncher(IServiceProvider services)
             new AiContext(latest.Name, latest.Environment, AiAccessPolicy.Effective(latest)),
             AiAccessPolicy.MaskLiterals(latest, globalMask),
             latest.Id,
-            sqlDocumentActive);
+            sqlDocumentActive,
+            UnsafeBinding: await UnsafeBindingAsync(ct).ConfigureAwait(true)); // 보이는 접속이 있어도 접속을 기다리는 PL/SQL 문서는 닫는다
+    }
+
+    /// <summary>
+    /// 보이는 접속이 없는데 활성 SQL 탭이 접속이 닫힌 접속에 묶여 있고(<see cref="AiGeneralScope.UnsafeBinding"/>) 그 접속이 운영이거나 저장소에서 찾을 수 없으면(읽지 못함 포함) 참.
+    /// 저장소 최신 환경 라벨을 보며, 알 수 없으면 닫는다. PL/SQL 문서가 활성이면 보이는 접속이 그 문서의 세션을 따라가므로 따로 보지 않는다(문서가 아직 세션을 갖지 못했으면 접속을 알 수 없어 닫는다).
+    /// </summary>
+    private async Task<bool> UnsafeBindingAsync(CancellationToken ct)
+    {
+        var router = SessionRouter.Find(services);
+
+        // 접속을 기다리는 PL/SQL 문서(세션이 아직 없다)가 활성이면 그 문서의 접속을 알 수 없다: 닫는다.
+        if (router?.ConnectionDocument is { Session: null })
+        {
+            return true;
+        }
+
+        var missing = router?.ShownMissing;
+        if (missing is not { } id)
+        {
+            return false;
+        }
+
+        if (services.GetService(typeof(IConnectionStore)) is not IConnectionStore store)
+        {
+            return true;
+        }
+
+        try
+        {
+            var profile = (await store.LoadAsync(ct).ConfigureAwait(true)).Value.Profiles.FirstOrDefault(p => p.Id == id);
+            return IsUnsafe(profile);
+        }
+#pragma warning disable CA1031 // 저장소를 못 읽으면 환경을 알 수 없다: 닫는다.
+        catch (Exception ex) when (ex is not OperationCanceledException)
+#pragma warning restore CA1031
+        {
+            return true;
+        }
+
+        static bool IsUnsafe(ConnectionProfile? profile) => profile is null || profile.Environment == ConnectionEnvironment.Production;
     }
 
     /// <summary>
@@ -546,11 +597,11 @@ public sealed class AiTuningLauncher(IServiceProvider services)
         var active = AiActiveProfile.Find(settings);
         var profile = active.Kind == AiActiveKind.Profile ? active.Profile : null;
         var configured = string.IsNullOrWhiteSpace(settings.Model) ? null : settings.Model.Trim();
-        var systemCli = active.Kind is AiActiveKind.SystemCli or AiActiveKind.SystemCliUnavailable; // 시스템 CLI 에는 Claude 의 모델·노력 줄을 만들지 않는다
+        var systemCli = active.Kind is AiActiveKind.SystemCli or AiActiveKind.SystemCliUnavailable or AiActiveKind.CustomCli or AiActiveKind.CustomCliUnavailable; // 시스템 CLI·기타 CLI 에는 Claude 의 모델·노력 줄을 만들지 않는다
         var apiProfile = systemCli || profile is { Format: AiApiFormat.OpenAi }; // API 경로·시스템 CLI 는 effort 를 쓰지 않는다
         var effort = apiProfile ? null : settings.Effort?.Trim().ToLowerInvariant();
         var efforts = TuningStartInfo.EffortOptions(effort);
-        var models = systemCli ? [new TuningModelOption(TuningStartInfo.DefaultModelId, active.SystemCli?.DisplayName ?? "기본 모델")]
+        var models = systemCli ? [new TuningModelOption(TuningStartInfo.DefaultModelId, active.SystemCli?.DisplayName ?? CustomCliLabel(active) ?? "기본 모델")]
             : profile is null ? BuildModelOptions(configured) : BuildProfileModelOptions(profile);
         return new TuningStartInfo(
             "AI 튜닝 — 커서 위치 문장",
@@ -568,6 +619,10 @@ public sealed class AiTuningLauncher(IServiceProvider services)
             ShowEffort: !apiProfile,
             BenchmarkTimeoutSeconds: settings.BenchmarkTimeoutSeconds);
     }
+
+    /// <summary>기타 CLI 가 활성이면 그 이름(이름이 비면 id). 아니면 null.</summary>
+    private static string? CustomCliLabel(AiActiveProfile active) =>
+        active.CustomCli is { } custom ? (custom.Name.Trim().Length > 0 ? custom.Name.Trim() : custom.Id) : null;
 
     /// <summary>프로필이 활성이면 모델 줄은 그 프로필의 모델 하나뿐이다(Claude Code 의 opus·sonnet·haiku 는 프로필 서버에 맞지 않는다). 모델이 비었으면 지정하지 않는 줄.</summary>
     public static IReadOnlyList<TuningModelOption> BuildProfileModelOptions(AiLlmProfile profile)
