@@ -121,16 +121,32 @@ public class AiCustomCliCommandTests
         Assert.Equal(AiCustomCliCommandError.Empty, ErrorOf("FOO=bar \"\""));
     }
 
-    [Theory]
-    [InlineData("mycli\t--x", 1)]
-    [InlineData("mycli\u3000--x", 1)] // 한글 입력기의 전각 공백
-    [InlineData("mycli\u00A0--x", 1)]
-    public void Any_unicode_blank_separates_words(string command, int arguments)
+    [Fact]
+    public void Only_a_space_or_a_tab_separates_words_and_other_blanks_outside_quotes_are_refused()
     {
-        var parsed = Ok(command);
+        Assert.Equal(["--x"], Ok("mycli\t--x").Arguments);
+        Assert.Equal(AiCustomCliCommandError.AmbiguousWhitespace, ErrorOf("mycli\u3000--x")); // 한글 입력기의 전각 공백
+        Assert.Equal(AiCustomCliCommandError.AmbiguousWhitespace, ErrorOf("mycli\u00A0--x"));
+        Assert.Equal(AiCustomCliCommandError.AmbiguousWhitespace, ErrorOf("/Users/x/Tool\u3000Dir/cli"));
+    }
 
-        Assert.Equal("mycli", parsed.Executable);
-        Assert.Equal(arguments, parsed.Arguments.Count);
+    [Fact]
+    public void Those_blanks_are_kept_as_they_are_inside_quotes()
+    {
+        var command = Ok("mycli \"a\u3000b\" 'c\u00A0d'");
+
+        Assert.Equal(["a\u3000b", "c\u00A0d"], command.Arguments);
+    }
+
+    [Fact]
+    public void A_very_long_command_is_refused_before_it_is_split()
+    {
+        Assert.Equal(AiCustomCliCommandError.TooLong, ErrorOf("mycli " + new string('a', AiCustomCliCommand.MaxCommandLength)));
+        Assert.True(AiCustomCliCommand.Parse("mycli " + new string('a', AiCustomCliCommand.MaxCommandLength - 6)).Succeeded);
+
+        // 대입이 아주 많아도 빨리 끝난다(같은 이름 덮어쓰기에 제곱 시간이 들지 않는다).
+        var many = string.Join(' ', Enumerable.Range(0, 800).Select(i => $"V{i % 50}={i}"));
+        Assert.Equal(50, Ok(many + " mycli").Environment.Count);
     }
 
     [Theory]
@@ -200,9 +216,15 @@ public class AiCustomCliCommandTests
     public void Expansion_fails_for_an_overlong_prompt_argument_or_a_missing_prompt_file()
     {
         var argument = Ok("mycli {prompt}");
-        Assert.False(argument.TryExpand(new string('a', AiCustomCliCommand.PromptArgumentLimit + 1), null, out _, out var tooLong));
+        var overhead = OperatingSystem.IsWindows() ? 2 : 0; // Windows 는 인자마다 감싸는 따옴표 2자가 든다
+        var room = AiCustomCliCommand.PromptArgumentLimit - overhead;
+        Assert.False(argument.TryExpand(new string('a', room + 1), null, out _, out var tooLong));
         Assert.Equal("prompt_too_long", tooLong);
-        Assert.True(argument.TryExpand(new string('a', AiCustomCliCommand.PromptArgumentLimit), null, out _, out _));
+        Assert.True(argument.TryExpand(new string('a', room), null, out _, out _));
+
+        // 따옴표는 Windows 에서 \" 로 늘어나므로 두 배로 센다(유닉스는 바이트 수라 한 바이트).
+        Assert.Equal(!OperatingSystem.IsWindows(), argument.TryExpand(new string('"', room / 2 + 1), null, out _, out _));
+        Assert.True(argument.TryExpand(new string('"', room / 2 - 1), null, out _, out _));
 
         // 한 글자가 3바이트인 글은 유닉스에서 바이트 수로 잰다(Windows 는 글자 수).
         var korean = new string('가', AiCustomCliCommand.PromptArgumentLimit / 2);
@@ -242,6 +264,23 @@ public class AiCustomCliCommandTests
         var command = Ok("MY_API_KEY=sk-test TOKEN= PLAIN=1 DB_PASSWORD=x mycli");
 
         Assert.Equal(["MY_API_KEY", "DB_PASSWORD"], command.SecretEnvironmentNames);
+    }
+
+    [Fact]
+    public void Secret_detection_leans_towards_reporting_more()
+    {
+        var command = Ok("DB_PASS=1 ORACLE_PWD=2 ACCESS_KEY=3 OPENAI_KEY=4 DATABASE_URL=5 AWS_ACCESS_KEY_ID=6 NODE_ENV=prod KEYBOARD=us mycli");
+
+        Assert.Equal(["DB_PASS", "ORACLE_PWD", "ACCESS_KEY", "OPENAI_KEY", "DATABASE_URL", "AWS_ACCESS_KEY_ID"], command.SecretEnvironmentNames);
+    }
+
+    [Fact]
+    public void Loader_and_runtime_variables_are_reported_but_not_refused()
+    {
+        var command = Ok("LD_PRELOAD=/x.so DYLD_INSERT_LIBRARIES=/y NODE_OPTIONS=--inspect PYTHONPATH=/z PATH=/bin HOME=/h mycli");
+
+        Assert.Equal(["LD_PRELOAD", "DYLD_INSERT_LIBRARIES", "NODE_OPTIONS", "PYTHONPATH", "PATH"], command.RiskyEnvironmentNames);
+        Assert.Empty(Ok("A=1 mycli").RiskyEnvironmentNames);
     }
 
     [Fact]

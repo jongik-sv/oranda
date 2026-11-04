@@ -52,6 +52,40 @@ public sealed class SystemClaudeProcessTests
     }
 
     [Fact]
+    public async Task A_line_limit_keeps_only_the_tail_of_a_huge_line_and_marks_it_truncated_while_no_limit_reads_it_whole()
+    {
+        if (OperatingSystem.IsWindows())
+        {
+            return;
+        }
+
+        const string Script = "head -c 3000000 /dev/zero | tr \"\\0\" x; echo; echo end";
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(30));
+
+        await using (var bounded = new SystemClaudeProcessLauncher().Start(new ClaudeLaunch("/bin/sh", ["-c", Script], Path.GetTempPath(), string.Empty, MaxLineChars: 1000)))
+        {
+            var lines = new List<string>();
+            await foreach (var line in bounded.ReadLinesAsync(timeout.Token))
+            {
+                lines.Add(line);
+            }
+
+            Assert.Equal([1000, 3], lines.Select(l => l.Length));
+            Assert.True(bounded.OutputLineTruncated);
+        }
+
+        await using var unbounded = new SystemClaudeProcessLauncher().Start(new ClaudeLaunch("/bin/sh", ["-c", Script], Path.GetTempPath(), string.Empty));
+        var all = new List<string>();
+        await foreach (var line in unbounded.ReadLinesAsync(timeout.Token))
+        {
+            all.Add(line);
+        }
+
+        Assert.Equal([3_000_000, 3], all.Select(l => l.Length));
+        Assert.False(unbounded.OutputLineTruncated);
+    }
+
+    [Fact]
     public async Task Secret_is_hidden_in_standard_error_before_the_tail_is_cut()
     {
         if (OperatingSystem.IsWindows())

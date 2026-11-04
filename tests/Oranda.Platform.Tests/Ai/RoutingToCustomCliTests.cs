@@ -112,6 +112,18 @@ public sealed class RoutingToCustomCliTests
     }
 
     [Fact]
+    public async Task A_request_with_images_is_refused_by_the_router_before_the_driver()
+    {
+        var fake = new FakeCustomDriver();
+        Use(Mine);
+
+        var code = CodeOf(await RunAsync(Create(fake), Confirmed() with { Images = [new AiImageAttachment("image/png", [1, 2, 3])] }));
+
+        Assert.Equal(RoutingAiDriver.CustomCliImagesUnsupportedCode, code);
+        Assert.Empty(fake.Calls);
+    }
+
+    [Fact]
     public async Task The_global_masking_setting_blocks_even_without_a_connection()
     {
         var fake = new FakeCustomDriver();

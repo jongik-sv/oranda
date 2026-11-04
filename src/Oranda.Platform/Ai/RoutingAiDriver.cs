@@ -81,7 +81,7 @@ internal interface ICustomCliAiDriver
 /// <item>호출한 쪽이 기대한 프로필과 설정의 활성 프로필이 다름(<see cref="AiRequest.Expected"/>): <c>profile_changed</c>.</item>
 /// <item>시스템 CLI 가 목록에 없거나 쓸 수 없음, 또는 드라이버 등록이 없음: <c>system_cli_unavailable</c>(Claude Code 로 넘기지 않는다).</item>
 /// <item>기타 CLI(<c>custom:&lt;id&gt;</c>)가 목록에 없거나 명령이 비었거나 드라이버 등록이 없음: <c>custom_cli_unavailable</c>(Claude Code 로 넘기지 않는다).
-/// 확인한 명령과 지금 명령이 다름: <c>profile_changed</c>. 가림 대상(<see cref="AiRequest.MaskingRequired"/> 가 false 가 아님·가림 설정 켬·운영 접속): <c>custom_cli_masking_blocked</c>.</item>
+/// 확인한 명령과 지금 명령이 다름: <c>profile_changed</c>. 가림 대상(<see cref="AiRequest.MaskingRequired"/> 가 false 가 아님·가림 설정 켬·운영 접속): <c>custom_cli_masking_blocked</c>. 이미지가 든 요청: <c>custom_cli_images_unsupported</c>.</item>
 /// <item>활성 프로필이 목록에 없음: <c>profile_missing</c>. 프리셋·형식을 모름: <c>profile_invalid</c>.</item>
 /// <item>주소가 올바르지 않음: <c>profile_invalid_url</c>. 키가 필요한데 없음: <c>profile_key_missing</c>(읽기 실패는 <c>profile_key_unreadable</c>).</item>
 /// <item>Claude Code·Anthropic 형식 프로필: <see cref="CliDriver"/>. OpenAI 형식 프로필: <see cref="IApiAiDriver"/>(등록이 없으면 <c>api_driver_pending</c>).</item>
@@ -93,6 +93,10 @@ internal interface ICustomCliAiDriver
 internal sealed class RoutingAiDriver : IAiDriver
 {
     internal const string CustomCliMaskingBlockedCode = "custom_cli_masking_blocked";
+
+    internal const string CustomCliImagesUnsupportedCode = "custom_cli_images_unsupported";
+
+    internal const string CustomCliImagesUnsupportedMessage = "기타 CLI 는 이미지를 받지 못합니다. 이미지를 빼고 다시 보내세요.";
 
     private static readonly AiDriverCapabilities DriverCapabilities =
         new(Skills: false, Tools: true, Resume: true, LocalOnly: false, Streaming: false, Images: true);
@@ -213,6 +217,12 @@ internal sealed class RoutingAiDriver : IAiDriver
         if (!string.Equals(request.Expected?.CustomCliCommandHash, AiCustomCliTarget.CommandHash(cli.Command), StringComparison.Ordinal))
         {
             return Selection.Fail("AI 모델이 바뀌어 요청을 보내지 않았습니다. 설정을 확인한 뒤 다시 실행하세요.", "profile_changed");
+        }
+
+        // 이미지는 드라이버까지 가지 않게 여기서도 막는다(흐름의 가드에만 기대면 새 호출 경로가 생길 때 뚫린다).
+        if (request.Images is { Count: > 0 })
+        {
+            return Selection.Fail(CustomCliImagesUnsupportedMessage, CustomCliImagesUnsupportedCode);
         }
 
         // 기타 CLI 는 값을 가려 보낼 수 없다. 가림 대상(운영 표시·전역 가림 설정·세션의 리터럴 가림 요구)이거나 가림이 필요 없다고 확인되지 않은 요청은 접속이 없어도 보내지 않는다.

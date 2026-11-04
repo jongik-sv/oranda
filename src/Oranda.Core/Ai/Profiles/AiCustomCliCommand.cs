@@ -18,6 +18,12 @@ public enum AiCustomCliCommandError
     /// <summary>줄바꿈 등 제어 문자가 있다(한 줄 명령만 받는다).</summary>
     ControlCharacter,
 
+    /// <summary>따옴표 밖에 전각 공백·줄 바꿈 없는 공백(NBSP) 같은 보이지 않는 공백이 있다. 낱말이 조용히 나뉘어 다른 파일을 실행하는 일을 막으려고 거부한다.</summary>
+    AmbiguousWhitespace,
+
+    /// <summary>명령이 <see cref="AiCustomCliCommand.MaxCommandLength"/> 를 넘는다.</summary>
+    TooLong,
+
     /// <summary>폴더 구분자가 든 상대 경로 실행 파일이다. 이름만 쓰거나 절대 경로를 써야 한다.</summary>
     RelativeExecutable,
 
@@ -51,12 +57,23 @@ public sealed record AiCustomCliCommand
     /// <summary><c>{prompt}</c> 를 쓸 때 치환된 인자 전체가 명령줄에서 차지하는 크기의 상한(OS 상한 아래에서 보수적으로 잡은 값. Windows 는 글자 수, 그 밖은 UTF-8 바이트 수).</summary>
     public static int PromptArgumentLimit => OperatingSystem.IsWindows() ? WindowsPromptChars : UnixPromptBytes;
 
+    /// <summary>명령 문자열 길이 상한(잘못 붙여넣은 긴 글이 화면을 멈추지 않게).</summary>
+    public const int MaxCommandLength = 8192;
+
     private const int WindowsPromptChars = 24_000;
     private const int UnixPromptBytes = 100_000;
 
     private static readonly Regex Placeholders = new(@"\{prompt_file\}|\{prompt\}", RegexOptions.CultureInvariant | RegexOptions.Compiled);
     private static readonly Regex AssignmentName = new(@"^[A-Za-z_][A-Za-z0-9_]*=", RegexOptions.CultureInvariant | RegexOptions.Compiled);
-    private static readonly Regex SecretName = new(@"API[_-]?KEY|TOKEN|SECRET|PASSWORD|PASSWD|PASSPHRASE|CREDENTIAL|AUTH|PRIVATE[_-]?KEY", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant | RegexOptions.Compiled);
+    private static readonly Regex SecretName = new(@"API[_-]?KEY|ACCESS[_-]?KEY|PRIVATE[_-]?KEY|(?:^|[_-])KEY$|TOKEN|SECRET|PASS|PWD|CREDENTIAL|AUTH|DATABASE[_-]?URL|CONNECTION[_-]?STRING|DSN", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant | RegexOptions.Compiled);
+
+    // 로더·런타임 동작을 바꾸는 환경 변수(표시용 경고 대상. 등록하는 사람이 사용자 자신이므로 막지 않는다).
+    private static readonly HashSet<string> RiskyEnvironment = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "LD_PRELOAD", "LD_LIBRARY_PATH", "DYLD_INSERT_LIBRARIES", "DYLD_LIBRARY_PATH", "DYLD_FRAMEWORK_PATH", "DYLD_FALLBACK_LIBRARY_PATH",
+        "NODE_OPTIONS", "NODE_PATH", "PYTHONPATH", "PYTHONSTARTUP", "PYTHONHOME", "PERL5OPT", "PERL5LIB", "RUBYOPT", "RUBYLIB",
+        "JAVA_TOOL_OPTIONS", "_JAVA_OPTIONS", "JDK_JAVA_OPTIONS", "CLASSPATH", "BASH_ENV", "ENV", "PATH",
+    };
 
     // 값이 없는 자동 승인 옵션.
     private static readonly HashSet<string> AutoApproveFlags = new(StringComparer.Ordinal)
@@ -99,16 +116,21 @@ public sealed record AiCustomCliCommand
     /// <summary>알려진 자동 승인 옵션이 든 인자(표시용, 예: <c>--approval-mode yolo</c>). 저장을 막지 않는다.</summary>
     public IReadOnlyList<string> AutoApproveOptions { get; init; } = [];
 
-    /// <summary>값이 있는데 이름이 비밀로 보이는 환경 변수 이름(표시용). 값은 설정에 평문으로 남는다.</summary>
+    /// <summary>값이 있는데 이름이 비밀로 보이는 환경 변수 이름(표시용). 값은 설정에 평문으로 남는다. 오탐보다 누락을 줄이는 쪽으로 넓게 잡는다.</summary>
     public IReadOnlyList<string> SecretEnvironmentNames { get; init; } = [];
+
+    /// <summary>프로그램 로딩·런타임 동작을 바꾸는 환경 변수 이름(<c>LD_PRELOAD</c>·<c>NODE_OPTIONS</c>·<c>PATH</c> 등, 표시용). 막지 않는다.</summary>
+    public IReadOnlyList<string> RiskyEnvironmentNames { get; init; } = [];
 
     /// <summary>실패 이유를 고정된 한국어 글로 바꾼다(값을 끼워 넣지 않는다).</summary>
     public static string MessageOf(AiCustomCliCommandError error) => error switch
     {
         AiCustomCliCommandError.Empty => "실행 명령이 비어 있습니다. 실행 파일 이름이나 절대 경로를 입력하세요.",
         AiCustomCliCommandError.UnterminatedQuote => "따옴표가 닫히지 않았습니다. 큰따옴표 안의 \\\" 는 따옴표 문자로 읽으므로, 경로 끝의 \\ 바로 뒤에 닫는 따옴표를 붙이지 마세요.",
-        AiCustomCliCommandError.ShellSyntax => "셸 기호(| ; & < > ` $()는 쓸 수 없습니다. 명령은 셸 없이 실행하므로 해석되지 않습니다. 필요하면 따옴표 안에 넣으세요.",
+        AiCustomCliCommandError.ShellSyntax => "셸 기호(| ; & < > ` $()는 쓸 수 없습니다. 명령은 셸 없이 실행하므로 해석되지 않습니다. 글자 그대로 쓰려면 작은따옴표 안에 넣으세요(큰따옴표 안에서는 ` 와 $( 를 쓸 수 없습니다).",
         AiCustomCliCommandError.ControlCharacter => "명령은 한 줄로 입력하세요.",
+        AiCustomCliCommandError.AmbiguousWhitespace => "따옴표 밖에 전각 공백 같은 보이지 않는 공백이 있습니다. 낱말은 일반 공백이나 탭으로 나누세요. 경로에 그 공백이 들어 있다면 따옴표로 감싸세요.",
+        AiCustomCliCommandError.TooLong => "실행 명령이 너무 깁니다(8192자 이하).",
         AiCustomCliCommandError.RelativeExecutable => "폴더 구분자가 든 상대 경로는 쓸 수 없습니다. 실행 파일 이름만 쓰거나 절대 경로를 입력하세요.",
         AiCustomCliCommandError.ReservedVariable => "ORANDA_ 로 시작하는 환경 변수는 쓸 수 없습니다.",
         AiCustomCliCommandError.PlaceholderMisplaced => "{prompt}·{prompt_file} 는 실행 파일이나 환경 변수 값이 아닌 인자에만 쓸 수 있습니다.",
@@ -123,12 +145,18 @@ public sealed record AiCustomCliCommand
             return Fail(AiCustomCliCommandError.Empty);
         }
 
+        if (command.Length > MaxCommandLength)
+        {
+            return Fail(AiCustomCliCommandError.TooLong);
+        }
+
         if (!Tokenize(command, out var tokens, out var error))
         {
             return Fail(error);
         }
 
-        var environment = new List<KeyValuePair<string, string>>();
+        // 같은 이름은 마지막 값이 이긴다. Windows 의 환경 변수 이름은 대소문자를 구분하지 않는다(Path 와 PATH 는 같은 변수).
+        var assignments = new Dictionary<string, (int Order, string Name, string Value)>(OperatingSystem.IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal);
         var index = 0;
         while (index < tokens.Count && IsAssignment(tokens[index], out var name, out var value))
         {
@@ -142,12 +170,11 @@ public sealed record AiCustomCliCommand
                 return Fail(AiCustomCliCommandError.PlaceholderMisplaced);
             }
 
-            // Windows 의 환경 변수 이름은 대소문자를 구분하지 않는다(Path 와 PATH 는 같은 변수).
-            var nameComparison = OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal;
-            environment.RemoveAll(pair => string.Equals(pair.Key, name, nameComparison));
-            environment.Add(new(name, value));
+            assignments[name] = (index, name, value);
             index++;
         }
+
+        var environment = assignments.Values.OrderBy(a => a.Order).Select(a => new KeyValuePair<string, string>(a.Name, a.Value)).ToList();
 
         if (index >= tokens.Count || tokens[index].Text.Length == 0)
         {
@@ -173,6 +200,7 @@ public sealed record AiCustomCliCommand
             Environment = environment,
             AutoApproveOptions = FindAutoApprove(arguments),
             SecretEnvironmentNames = [.. environment.Where(p => p.Value.Length > 0 && SecretName.IsMatch(p.Key)).Select(p => p.Key)],
+            RiskyEnvironmentNames = [.. environment.Where(p => RiskyEnvironment.Contains(p.Key)).Select(p => p.Key)],
         };
         return new AiCustomCliParseResult(parsed, null);
     }
@@ -216,14 +244,14 @@ public sealed record AiCustomCliCommand
         return true;
     }
 
-    // 명령줄에 실리는 크기: Windows 는 글자 수(따옴표·역슬래시는 이스케이프로 늘어나므로 두 배로 센다), 그 밖은 UTF-8 바이트 수. 인자 사이 구분 공백을 더한다.
+    // 명령줄에 실리는 크기: Windows 는 글자 수(인자마다 감싸는 따옴표 2자를 더하고, 글 안의 따옴표·역슬래시는 이스케이프로 늘어나므로 두 배로 센다), 그 밖은 UTF-8 바이트 수. 인자 사이 구분 공백을 더한다.
     private static long ArgumentSize(List<string> arguments)
     {
         long size = Math.Max(0, arguments.Count - 1);
         foreach (var argument in arguments)
         {
             size += OperatingSystem.IsWindows()
-                ? argument.Length + argument.Count(c => c is '"' or '\\')
+                ? argument.Length + 2 + argument.Count(c => c is '"' or '\\')
                 : Encoding.UTF8.GetByteCount(argument);
         }
 
@@ -360,9 +388,15 @@ public sealed record AiCustomCliCommand
 
                     break;
                 default:
-                    if (char.IsWhiteSpace(c))
+                    if (c is ' ' or '\t')
                     {
                         EndToken();
+                    }
+                    else if (char.IsWhiteSpace(c))
+                    {
+                        // 전각 공백·NBSP 같은 보이지 않는 공백이 따옴표 밖에 있으면 경로가 조용히 둘로 나뉘어 다른 파일을 실행할 수 있다.
+                        error = AiCustomCliCommandError.AmbiguousWhitespace;
+                        return false;
                     }
                     else if (c is '\'' or '"')
                     {
