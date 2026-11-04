@@ -188,7 +188,7 @@ public partial class HistoryView : UserControl
 
     private async void OnListKeyDown(object? sender, KeyEventArgs e)
     {
-        var primary = Application.Current?.PlatformSettings?.HotkeyConfiguration.CommandModifiers ?? KeyModifiers.Control;
+        var primary = OperatingSystem.IsMacOS() ? KeyModifiers.Meta : KeyModifiers.Control;
         if (e.Key == Key.C && e.KeyModifiers == primary)
         {
             e.Handled = true;
