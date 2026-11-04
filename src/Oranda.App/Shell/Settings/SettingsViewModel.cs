@@ -315,7 +315,8 @@ public sealed partial class SettingsViewModel : ViewModelBase
             services?.GetService<ICredentialStore>(),
             services?.GetService<IAiProfileProbe>(),
             services?.GetService<IEventBus>(),
-            text);
+            text,
+            services?.GetService<IAiCustomCliLocator>() is { } locator ? name => locator.Locate(name) is not null : null);
     }
 
     private static SqlFormatPage CreateSqlFormatPage(SettingsService settings, IShellText text)

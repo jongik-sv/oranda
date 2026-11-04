@@ -1,3 +1,4 @@
+using System;
 using Oranda.App.Shell;
 using Oranda.Core.Ai.Profiles;
 using Oranda.Core.Events;
@@ -26,9 +27,11 @@ internal sealed class AiSettingsText(IShellText? text)
 /// <param name="Probe">모델 목록·연결 테스트(구현은 Platform). null 이면 두 단추가 비활성이다.</param>
 /// <param name="Bus">저장 뒤 <c>SettingsChanged("ai")</c> 를 낼 버스. 설정 저장소는 <c>ai</c> 섹션 변경을 알리지 않는다.</param>
 /// <param name="Text">한/영 글.</param>
+/// <param name="CustomCliInstalled">기타 CLI 의 실행 파일 이름을 PATH 에서 찾는다(찾기만 하고 실행하지 않는다). 설정 화면이 UI 스레드 밖에서 부른다. null 이면 설치 여부를 확인하지 않는다.</param>
 public sealed record AiProfileServices(
     SettingsService Settings,
     ICredentialStore? Credentials = null,
     IAiProfileProbe? Probe = null,
     IEventBus? Bus = null,
-    IShellText? Text = null);
+    IShellText? Text = null,
+    Func<string, bool>? CustomCliInstalled = null);

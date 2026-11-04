@@ -57,6 +57,32 @@ public partial class AiModelSettingsView : UserControl
         }
     }
 
+    // 기타 CLI 줄의 「사용」 단추.
+    private void OnUseCustomCliClick(object? sender, RoutedEventArgs e)
+    {
+        if (sender is Control { DataContext: AiCustomCliRow row } && _page is not null)
+        {
+            _page.UseCustomCliRowCommand.Execute(row);
+        }
+    }
+
+    // 기타 CLI 줄의 「삭제」 단추: 확인을 받은 뒤 지운다.
+    private void OnDeleteCustomCliClick(object? sender, RoutedEventArgs e) => _ = DeleteCustomCliAsync(sender);
+
+    private async Task DeleteCustomCliAsync(object? sender)
+    {
+        if (sender is not Control { DataContext: AiCustomCliRow row } || _page is not { } page || TopLevel.GetTopLevel(this) is not Window owner)
+        {
+            return;
+        }
+
+        var english = page.Services?.Text?.Language == "en";
+        if (await AiConfirmDialog.ShowAsync(owner, page.DeleteCustomCliConfirmText(row), english ? "OK" : "확인", english ? "Cancel" : "취소").ConfigureAwait(true))
+        {
+            page.RemoveCustomCli(row);
+        }
+    }
+
     // 드롭다운 줄 클릭: 줄의 데이터(AiProfileChoice)를 페이지에 넘긴다.
     private void OnChoiceClick(object? sender, RoutedEventArgs e)
     {
