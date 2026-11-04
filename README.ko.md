@@ -4,7 +4,9 @@
 
 Oranda 는 Windows·macOS 용 무료 오픈 소스 Oracle 데이터베이스 클라이언트다. 오래된 *Orange for ORACLE* 5.0 을 대신하려고 만들었다. SQL·PL/SQL 편집, 결과 그리드, 실행 계획, 세션·Lock 모니터, 튜닝 도구를 Oracle Client 설치 없이 쓴다.
 
-> 스크린샷 자리: `docs/images/screenshot-main.png` (추가 예정)
+![스키마 브라우저, SQL 편집기, 결과 그리드가 보이는 Oranda 주 화면](docs/images/screenshot-main.png)
+
+**사용 설명서: [https://jongik-sv.github.io/oranda/](https://jongik-sv.github.io/oranda/)**: 설치, 접속, 모든 화면을 캡처와 함께 설명한다.
 
 - Oracle Client·Instant Client 가 필요 없다. 관리 코드 ODP.NET Core 드라이버(Thin)로 붙는다.
 - Windows x64 와 Apple Silicon Mac 에서 같은 기능.
@@ -46,7 +48,7 @@ Oranda 는 Windows·macOS 용 무료 오픈 소스 Oracle 데이터베이스 클
 | Windows | `Oranda-win-Setup.exe`(설치) 또는 `Oranda-win-Portable.zip` |
 | macOS | `Oranda-osx-Setup.pkg` |
 
-Windows 빌드는 **아직 코드 서명이 없다**([코드 서명 정책](#코드-서명-정책)). SmartScreen 이 「Windows의 PC 보호」를 띄우면 **추가 정보 → 실행** 을 누른다. 서명 없는 macOS 빌드는 처음 한 번 **우클릭 → 열기** 로 연다. 자세한 순서·자동 업데이트·제거: [docs/user/install.md](docs/user/install.md).
+Windows 빌드는 **아직 코드 서명이 없다**([코드 서명 정책](#코드-서명-정책)). SmartScreen 이 「Windows의 PC 보호」를 띄우면 **추가 정보 → 실행** 을 누른다. 서명 없는 macOS 빌드는 처음 한 번 **우클릭 → 열기** 로 연다. 자세한 순서·자동 업데이트·제거: [사용 설명서 설치 장](https://jongik-sv.github.io/oranda/install/prerequisites/).
 
 ### Windows 가 Oranda 를 막을 때 (스마트 앱 컨트롤)
 

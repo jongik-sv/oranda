@@ -4,7 +4,9 @@
 
 Oranda is a free, open source Oracle Database client for Windows and macOS. It is built as a replacement for the aging *Orange for ORACLE* 5.0 workflow: SQL and PL/SQL editing, result grids, execution plans, session and lock monitoring, and tuning tools — without installing an Oracle Client.
 
-> Screenshot placeholder: `docs/images/screenshot-main.png` (to be added)
+![Oranda main window with the schema browser, a SQL editor and a result grid](docs/images/screenshot-main.png)
+
+**User manual (Korean): [https://jongik-sv.github.io/oranda/](https://jongik-sv.github.io/oranda/)**: installation, connections, and every screen with screenshots.
 
 - No Oracle Client or Instant Client needed: Oranda uses the managed ODP.NET Core driver (thin mode).
 - Same features on Windows x64 and Apple Silicon Macs.
@@ -46,7 +48,7 @@ Download the latest release from [GitHub Releases](https://github.com/jongik-sv/
 | Windows | `Oranda-win-Setup.exe` (installer) or `Oranda-win-Portable.zip` |
 | macOS | `Oranda-osx-Setup.pkg` |
 
-Windows builds are **not code signed yet** (see [Code signing policy](#code-signing-policy)), so SmartScreen shows "Windows protected your PC": choose **More info → Run anyway**. Unsigned macOS builds must be opened with **right-click → Open** the first time. Step-by-step instructions, automatic updates and uninstalling: [docs/user/install.en.md](docs/user/install.en.md).
+Windows builds are **not code signed yet** (see [Code signing policy](#code-signing-policy)), so SmartScreen shows "Windows protected your PC": choose **More info → Run anyway**. Unsigned macOS builds must be opened with **right-click → Open** the first time. Step-by-step instructions, automatic updates and uninstalling: [docs/user/install.en.md](docs/user/install.en.md) (English) or the [Korean manual](https://jongik-sv.github.io/oranda/install/prerequisites/).
 
 ### If Windows blocks Oranda (Smart App Control)
 
