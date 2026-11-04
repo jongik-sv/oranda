@@ -5,6 +5,7 @@ using System.Threading.Tasks;
 using Oranda.App.Features.Ai.Tuning.Commands;
 using Oranda.Core.Ai.Access;
 using Oranda.Core.Ai.Contracts;
+using Oranda.Core.Settings;
 
 namespace Oranda.App.Features.Ai.Tuning;
 
@@ -91,7 +92,7 @@ public sealed partial class AiTuningFlow
         try
         {
             var input = new AiCommandPromptInput(commandTarget, promptStatement, vault, masker, capped);
-            await RunAsync(BuildCommandPrompt(spec, input), resumeId: null, userText: null, images: [], ct).ConfigureAwait(true);
+            await RunAsync(BuildCommandPrompt(spec, input, JoinSyntax), resumeId: null, userText: null, images: [], ct).ConfigureAwait(true);
         }
         finally
         {
@@ -102,13 +103,13 @@ public sealed partial class AiTuningFlow
     /// <summary>
     /// 처음 요청 글: 명령의 지시 → 응답 규칙 → (가린 대화면) 자리표시 안내 → 문장 블록. 문장 블록과 자리표시 안내는 명령이 빠뜨릴 수 없게 흐름이 붙인다.
     /// </summary>
-    internal static string BuildCommandPrompt(AiCommandSpec spec, AiCommandPromptInput input)
+    internal static string BuildCommandPrompt(AiCommandSpec spec, AiCommandPromptInput input, AiJoinSyntax joinSyntax = AiJoinSyntax.Oracle)
     {
         ArgumentNullException.ThrowIfNull(spec);
         ArgumentNullException.ThrowIfNull(input);
         var text = new StringBuilder();
         text.AppendLine(spec.BuildInstruction(input));
-        text.AppendLine(spec.ResponseRules);
+        text.AppendLine(CommandRules(spec, joinSyntax));
         if (input.Vault is not null)
         {
             text.AppendLine(PlaceholderReminder(input.Vault));
@@ -120,6 +121,10 @@ public sealed partial class AiTuningFlow
         text.AppendLine("</statement>");
         return text.ToString();
     }
+
+    /// <summary>명령의 응답 규칙 + (재작성을 내는 명령이면) 설정 문법의 조인 규칙. 처음 요청과 이어 말하기가 같이 쓴다.</summary>
+    private static string CommandRules(AiCommandSpec spec, AiJoinSyntax joinSyntax) =>
+        spec.JoinRule(joinSyntax) is { Length: > 0 } rule ? spec.ResponseRules + " " + rule : spec.ResponseRules;
 
     private static string SentLine(AiCommandSpec spec, string promptStatement, bool masked)
     {

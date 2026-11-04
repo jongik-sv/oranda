@@ -111,6 +111,30 @@ internal sealed class TolerantActiveProfileIdConverter : JsonConverter<Guid?>
 }
 
 /// <summary>
+/// <c>ai.joinSyntax</c> 판독기. 이름이 아닌 값이나 모르는 이름은 예외 대신 Oracle 로 읽어, 설정 파일 전체가 손상으로 취급되지 않게 한다.
+/// </summary>
+internal sealed class TolerantJoinSyntaxConverter : JsonConverter<AiJoinSyntax>
+{
+    public override bool HandleNull => true;
+
+    public override AiJoinSyntax Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
+    {
+        if (reader.TokenType is JsonTokenType.StartObject or JsonTokenType.StartArray)
+        {
+            reader.Skip();
+            return AiJoinSyntax.Oracle;
+        }
+
+        return reader.TokenType == JsonTokenType.String && string.Equals(reader.GetString(), "ansi", StringComparison.OrdinalIgnoreCase)
+            ? AiJoinSyntax.Ansi
+            : AiJoinSyntax.Oracle;
+    }
+
+    public override void Write(Utf8JsonWriter writer, AiJoinSyntax value, JsonSerializerOptions options) =>
+        writer.WriteStringValue(value == AiJoinSyntax.Ansi ? "ansi" : "oracle");
+}
+
+/// <summary>
 /// <c>ai.benchmarkTimeoutSeconds</c> 판독기. 정수가 아닌 값(문자열·소수·객체·null)과 범위 밖 정수는 예외 대신 기본값 30 으로 읽는다.
 /// 설정 파일 전체가 손상으로 취급되어 초기화되지 않게 하고, 깨진 값이 조용히 제한 없음(0)이 되지도 않게 한다.
 /// </summary>

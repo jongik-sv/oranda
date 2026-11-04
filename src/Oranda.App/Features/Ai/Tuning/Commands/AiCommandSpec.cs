@@ -9,6 +9,7 @@ using Oranda.Core.Ai.Schemas;
 using Oranda.Core.Connection;
 using Oranda.Core.Execution;
 using Oranda.Core.Extensibility;
+using Oranda.Core.Settings;
 
 namespace Oranda.App.Features.Ai.Tuning.Commands;
 
@@ -56,6 +57,9 @@ public abstract class AiCommandSpec
     /// 응답 규칙. 처음 요청과 모든 이어 말하기 뒤에 붙는다(튜닝의 <c>ResponseStyle</c> 에 해당). 재작성을 내는 명령은 원래 주석을 지키라는 규칙도 여기에 넣는다.
     /// </summary>
     public abstract string ResponseRules { get; }
+
+    /// <summary>설정의 조인 문법에 맞는 조인 규칙. <see cref="ResponseRules"/> 뒤에 붙는다. 재작성을 내지 않는 명령은 null.</summary>
+    public virtual string? JoinRule(AiJoinSyntax syntax) => null;
 
     /// <summary>제안을 받아들일 때 열 새 탭 이름 뒤에 붙는 글(원래 탭명 + 이 글). <see cref="OutputSchema"/> 가 있을 때만 쓴다.</summary>
     public virtual string TabSuffix => " (수정)";

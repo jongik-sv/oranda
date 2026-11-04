@@ -206,7 +206,7 @@ public sealed partial class AiTuningFlow(
         chat.IsBusy = true;
         try
         {
-            await RunAsync(BuildPrompt(choice, promptStatement, vault), resumeId: null, userText: null, images: [], ct).ConfigureAwait(true);
+            await RunAsync(BuildPrompt(choice, promptStatement, vault, JoinSyntax), resumeId: null, userText: null, images: [], ct).ConfigureAwait(true);
         }
         finally
         {
@@ -382,13 +382,16 @@ public sealed partial class AiTuningFlow(
 
         // 이어 말하기 글은 가리지 않고(사용자가 쓴 글) 자리표시를 그대로 쓰라는 안내만 덧붙인다.
         var text = followUp.Text.Length == 0 ? "Look at the attached image(s) and continue." : followUp.Text;
-        var rules = Command is { } command ? command.ResponseRules : ResponseStyle + Environment.NewLine + KeepCommentsRule + Environment.NewLine + OracleJoinRule;
+        var rules = Command is { } command ? CommandRules(command, JoinSyntax) : ResponseStyle + Environment.NewLine + KeepCommentsRule + Environment.NewLine + TuningJoinRule(JoinSyntax);
         return text + Environment.NewLine + Environment.NewLine + rules
             + (_vault is null ? string.Empty : Environment.NewLine + PlaceholderReminder(_vault));
     }
 
     /// <summary>이 대화가 지금 보낼 곳(설정을 모르면 null).</summary>
     private AiConversationTarget? CurrentTarget() => settings?.Invoke() is { } current ? AiConversationTarget.From(current) : null;
+
+    /// <summary>설정의 조인 문법. 요청을 만들 때마다 읽으므로 대화 중에 바꾸면 다음 요청부터 따른다. 설정을 모르면 Oracle.</summary>
+    private AiJoinSyntax JoinSyntax => settings?.Invoke()?.JoinSyntax ?? AiJoinSyntax.Oracle;
 
     /// <summary>
     /// 새 이미지의 확인(가리는 대화만)과 감사 기록. 보내도 되면 true. 확인 창을 취소하면 false 이고 아무것도 보내지 않으며 감사에도 남기지 않는다(보내지 않았으므로).
@@ -431,7 +434,7 @@ public sealed partial class AiTuningFlow(
     }
 
     /// <summary>시작 확인 창의 선택과 대상 문장으로 요청 글을 만든다(문장은 씨앗, 나머지는 도구로 가져오게 한다). <paramref name="vault"/> 가 있으면 문장은 이미 가려진 글이고 자리표시 안내가 붙는다.</summary>
-    public static string BuildPrompt(TuningStartChoice choice, string statement, LiteralVault? vault = null)
+    public static string BuildPrompt(TuningStartChoice choice, string statement, LiteralVault? vault = null, AiJoinSyntax joinSyntax = AiJoinSyntax.Oracle)
     {
         ArgumentNullException.ThrowIfNull(choice);
         var text = new StringBuilder();
@@ -445,7 +448,7 @@ public sealed partial class AiTuningFlow(
             : "Do not suggest indexes; leave index_suggestions empty.");
         text.AppendLine(ResponseStyle);
         text.AppendLine(KeepCommentsRule);
-        text.AppendLine(OracleJoinRule);
+        text.AppendLine(TuningJoinRule(joinSyntax));
         if (vault is not null)
         {
             text.AppendLine(PlaceholderReminder(vault));
@@ -518,7 +521,7 @@ public sealed partial class AiTuningFlow(
         "Keep every bind variable token of the statement (such as :1, :name or :v1) exactly as it is; the rule about keeping comments still applies.";
 
     /// <summary>
-    /// 튜닝: 제안하는 재작성 SQL 은 늘 Oracle 조인 문법으로 쓴다(처음 요청과 이어 말하기 모두). 원래 문장이 ANSI 조인이어도 바꾸며 결과 집합은 같아야 한다.
+    /// 튜닝, 설정이 Oracle 일 때: 제안하는 재작성 SQL 을 Oracle 조인 문법으로 쓴다(처음 요청과 이어 말하기 모두). 원래 문장이 ANSI 조인이어도 바꾸며 결과 집합은 같아야 한다.
     /// 설명 명령은 제안 SQL 이 없어 붙이지 않는다. 오류 고치기는 자기가 쓰거나 고치는 조인만 다루는 <c>FixErrorCommand.FixErrorJoinRule</c> 을 따로 쓴다.
     /// </summary>
     internal const string OracleJoinRule =
@@ -526,6 +529,29 @@ public sealed partial class AiTuningFlow(
         + "Do this even when the original statement uses ANSI joins (JOIN ... ON, LEFT or RIGHT OUTER JOIN): convert them, and the proposed SQL must return the same result set. "
         + OracleJoinExceptionRule
         + OracleJoinKeepRule;
+
+    /// <summary>
+    /// ANSI 조인 문법 규칙의 공통 글. <c>(+)</c> 가 붙은 조건은 상수 조건까지 ON 으로 옮기고, <c>(+)</c> 없는 조건은 조인 뒤 필터라 WHERE 에 둔다.
+    /// </summary>
+    internal const string AnsiJoinSyntaxRule =
+        "ANSI join syntax: write every join in the FROM clause with JOIN ... ON, LEFT OUTER JOIN, RIGHT OUTER JOIN, FULL OUTER JOIN or CROSS JOIN, put each join condition in its ON clause and keep filters in the WHERE clause. "
+        + "When you convert an Oracle outer join, move every condition that carries (+), including conditions against a constant, a literal or a bind variable such as t.status(+) = 'A' or t.k(+) = :v1, into that join's ON clause without the (+); if you leave one in the WHERE clause the outer join silently turns into an inner join and the result changes. "
+        + "A condition on the outer-joined table without (+) is a filter applied after the join, so keep it in the WHERE clause. ";
+
+    /// <summary>ANSI 문법으로 쓸 수 없을 때의 Oracle 예외와, 같은 쿼리 블록에 섞으면 안 되는 조합(쉼표 나열 + ANSI 는 ON 이 앞 표를 못 봄, ANSI + <c>(+)</c> 는 ORA-25156).</summary>
+    internal const string AnsiJoinExceptionRule =
+        "Use Oracle join syntax only when ANSI syntax cannot be used for the statement, and then state the reason in that proposal's rationale. "
+        + "Never mix ANSI joins and (+) in one query block (ORA-25156), and do not put comma-separated tables and ANSI joins in one query block, because an ON clause cannot see a table listed before the comma (ORA-00904). ";
+
+    /// <summary>튜닝, 설정이 ANSI 일 때: 제안하는 재작성 SQL 을 ANSI 조인 문법으로 쓴다. 원래 문장이 Oracle 조인이어도 바꾸며 결과 집합은 같아야 한다.</summary>
+    internal const string AnsiJoinRule =
+        "Write the sql of every rewrite you propose in " + AnsiJoinSyntaxRule
+        + "Do this even when the original statement uses Oracle joins (comma-separated tables or (+)): convert them, and the proposed SQL must return the same result set. "
+        + AnsiJoinExceptionRule
+        + OracleJoinKeepRule;
+
+    /// <summary>설정의 문법에 맞는 튜닝 조인 규칙.</summary>
+    internal static string TuningJoinRule(AiJoinSyntax syntax) => syntax == AiJoinSyntax.Ansi ? AnsiJoinRule : OracleJoinRule;
 
     /// <summary>
     /// 구조 결과에서 AI 가 빠뜨린 칸(역직렬화가 null 로 두는 문자열·목록·항목)을 빈 값으로 채운다. 스키마가 필수로 요구해도 모델이 칸을 빼면

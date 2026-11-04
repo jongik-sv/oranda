@@ -2,6 +2,7 @@ using System.Runtime.CompilerServices;
 using System.Text.Json;
 using Oranda.App.Features.Ai;
 using Oranda.App.Features.Ai.Chat;
+using Oranda.App.Features.Ai.Settings;
 using Oranda.App.Features.Ai.Tuning;
 using Oranda.App.Features.Ai.Tuning.Commands;
 using Oranda.Core.Ai.Access;
@@ -11,12 +12,13 @@ using Oranda.Core.Connection;
 using Oranda.Core.Events;
 using Oranda.Core.Execution;
 using Oranda.Core.Extensibility;
+using Oranda.Core.Settings;
 using Oranda.Core.Text;
 
 namespace Oranda.App.Tests.Features.Ai;
 
 /// <summary>
-/// oracle-join-style: AI 가 제안하는 SQL 은 Oracle 조인 문법으로 쓰라는 프롬프트 규칙이 처음 요청과 이어 말하기 양쪽에 있다.
+/// AI 가 제안하는 SQL 의 조인 문법을 정하는 프롬프트 규칙이 처음 요청과 이어 말하기 양쪽에 있다. 설정(기본 Oracle, ANSI 선택)이 어느 규칙을 보낼지 정한다.
 /// 튜닝은 <c>OracleJoinRule</c>(ANSI 도 바꿈), 오류 고치기는 <c>FixErrorJoinRule</c>(자기가 쓰거나 고치는 조인만). 제안 SQL 이 없는 SQL 설명·실행 계획 해설에는 둘 다 없다. 규칙 글만 확인한다(실제 모델이 따르는지는 이 시험으로 알 수 없다).
 /// </summary>
 public class AiCommandJoinStyleTests
@@ -59,13 +61,16 @@ public class AiCommandJoinStyleTests
 
         public AiTuningFlow Flow { get; }
 
+        public AiSettings? Settings { get; set; }
+
         public Rig()
         {
             var editor = new Editor();
             Flow = new AiTuningFlow(
                 editor, Driver, Chat, (_, _, _) => { },
                 refreshContext: (context, _) => Task.FromResult<AiContext?>(context with { AccessLevel = AiAccessLevel.QueryRows }),
-                previewEdit: Editor.Preview);
+                previewEdit: Editor.Preview,
+                settings: () => Settings);
         }
     }
 
@@ -216,6 +221,101 @@ public class AiCommandJoinStyleTests
                 Assert.Contains(command.ResponseRules, prompt, StringComparison.Ordinal); // 이 명령의 규칙은 그대로 붙어 있다(빈 글로 통과하지 않는다)
             }
         }
+    }
+
+    // ── 설정의 조인 문법(Oracle / ANSI) ──
+
+    private static readonly AiSettings AnsiSettings = new() { JoinSyntax = AiJoinSyntax.Ansi };
+
+    [Fact]
+    public void The_ansi_rules_carry_their_own_syntax_and_the_conversion_traps()
+    {
+        foreach (var rule in new[] { AiTuningFlow.AnsiJoinRule, FixErrorCommand.FixErrorAnsiJoinRule })
+        {
+            Assert.Contains(AiTuningFlow.AnsiJoinSyntaxRule, rule, StringComparison.Ordinal);
+            Assert.Contains(AiTuningFlow.AnsiJoinExceptionRule, rule, StringComparison.Ordinal);
+            Assert.Contains(AiTuningFlow.OracleJoinKeepRule, rule, StringComparison.Ordinal);
+            Assert.Contains("into that join's ON clause", rule, StringComparison.Ordinal); // (+) 상수 조건을 WHERE 에 두면 안쪽 조인이 된다
+            Assert.Contains("ORA-25156", rule, StringComparison.Ordinal);
+            Assert.Contains("ORA-00904", rule, StringComparison.Ordinal); // 쉼표 나열 + ANSI
+            Assert.DoesNotContain(AiTuningFlow.OracleJoinSyntaxRule, rule, StringComparison.Ordinal);
+        }
+
+        Assert.Contains("even when the original statement uses Oracle joins", AiTuningFlow.AnsiJoinRule, StringComparison.Ordinal);
+        Assert.Contains("keep that join's current syntax", FixErrorCommand.FixErrorAnsiJoinRule, StringComparison.Ordinal);
+        Assert.Contains("Leave every Oracle join", FixErrorCommand.FixErrorAnsiJoinRule, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task Ansi_tuning_sends_only_the_ansi_rule_on_the_first_request_and_the_follow_up()
+    {
+        var rig = new Rig { Settings = AnsiSettings };
+        await rig.Flow.StartAsync(new TuningStartChoice(true, true, "default"), Full);
+        await rig.Flow.FollowUpAsync("조금 더 설명해 줘");
+
+        Assert.Equal(2, rig.Driver.Requests.Count);
+        foreach (var request in rig.Driver.Requests)
+        {
+            Assert.Equal(1, Count(request.Prompt, AiTuningFlow.AnsiJoinRule));
+            Assert.DoesNotContain(AiTuningFlow.OracleJoinSyntaxRule, request.Prompt, StringComparison.Ordinal);
+        }
+    }
+
+    [Fact]
+    public async Task Ansi_fix_error_sends_only_the_ansi_rule_on_the_first_request_and_the_follow_up()
+    {
+        var rig = new Rig { Settings = AnsiSettings };
+        var target = new AiCommandTarget(Statement(), TabId: Guid.NewGuid(), State: new FixErrorState(904, 83, 1, 84, "ORA-00904"));
+        await rig.Flow.StartCommandAsync(new FixErrorCommand(new NoTabs()), target, Full);
+        await rig.Flow.FollowUpAsync("조금 더 설명해 줘");
+
+        Assert.Equal(2, rig.Driver.Requests.Count);
+        foreach (var request in rig.Driver.Requests)
+        {
+            Assert.Equal(1, Count(request.Prompt, FixErrorCommand.FixErrorAnsiJoinRule));
+            Assert.DoesNotContain(FixErrorCommand.FixErrorJoinRule, request.Prompt, StringComparison.Ordinal);
+            Assert.DoesNotContain(AiTuningFlow.OracleJoinSyntaxRule, request.Prompt, StringComparison.Ordinal);
+        }
+    }
+
+    [Fact]
+    public async Task Changing_the_setting_during_a_conversation_applies_from_the_next_request()
+    {
+        var rig = new Rig { Settings = new AiSettings() };
+        await rig.Flow.StartAsync(new TuningStartChoice(true, true, "default"), Full);
+        rig.Settings = AnsiSettings;
+        await rig.Flow.FollowUpAsync("조금 더 설명해 줘");
+
+        Assert.Contains(AiTuningFlow.OracleJoinRule, rig.Driver.Requests[0].Prompt, StringComparison.Ordinal);
+        Assert.Contains(AiTuningFlow.AnsiJoinRule, rig.Driver.Requests[1].Prompt, StringComparison.Ordinal);
+        Assert.DoesNotContain(AiTuningFlow.OracleJoinRule, rig.Driver.Requests[1].Prompt, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task Explain_commands_carry_no_join_rule_even_when_ansi_is_set()
+    {
+        foreach (AiCommandSpec command in new AiCommandSpec[] { ExplainSqlCommand.Instance, ExplainPlanCommand.Instance })
+        {
+            var rig = new Rig { Settings = AnsiSettings };
+            await rig.Flow.StartCommandAsync(command, new AiCommandTarget(Statement()), Full);
+
+            Assert.DoesNotContain("ANSI join syntax", Assert.Single(rig.Driver.Requests).Prompt, StringComparison.Ordinal);
+        }
+    }
+
+    [Fact]
+    public void The_settings_page_reads_and_writes_the_join_syntax()
+    {
+        var page = new AiModelSettingsPage(AnsiSettings);
+        Assert.True(page.JoinSyntaxIsAnsi);
+        Assert.False(page.JoinSyntaxIsOracle);
+
+        page.JoinSyntaxIsAnsi = false; // 라디오가 꺼지며 들어오는 false 는 값을 바꾸지 않는다
+        Assert.Equal(AiJoinSyntax.Ansi, page.ToSettings().JoinSyntax);
+
+        page.JoinSyntaxIsOracle = true;
+        Assert.Equal(AiJoinSyntax.Oracle, page.ToSettings(AnsiSettings).JoinSyntax);
+        Assert.False(page.JoinSyntaxIsAnsi);
     }
 
     private sealed class NoTabs : IEditorTabs

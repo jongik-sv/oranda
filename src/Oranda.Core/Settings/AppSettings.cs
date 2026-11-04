@@ -99,6 +99,16 @@ public enum AiApiFormat
     OpenAi,
 }
 
+/// <summary>AI 가 쓰는 SQL 의 조인 문법. 파일에 키가 없으면 기본값 0 이 되므로 <see cref="Oracle"/> 을 0 으로 둔다.</summary>
+public enum AiJoinSyntax
+{
+    /// <summary>쉼표로 나열한 FROM, WHERE 의 조인 조건, 외부 조인의 <c>(+)</c>.</summary>
+    Oracle,
+
+    /// <summary><c>JOIN … ON</c>, <c>LEFT OUTER JOIN</c> 등.</summary>
+    Ansi,
+}
+
 /// <summary>
 /// 사용자가 만든 LLM 접속 프로필. API 키는 이 레코드에 없고 <c>ICredentialStore</c> 의 <c>oranda:ai:{guid}</c> 키에 저장한다.
 /// </summary>
@@ -205,6 +215,10 @@ public sealed record AiSettings
 
     private readonly int? _benchmarkTimeoutSeconds;
 
+    /// <summary>AI 튜닝의 재작성 제안과 오류 고치기가 쓸 조인 문법. 프롬프트 지시일 뿐이며 결과를 검사하거나 바꾸지 않는다. 키가 없거나 읽을 수 없는 값은 Oracle 이다.</summary>
+    [JsonConverter(typeof(TolerantJoinSyntaxConverter))]
+    public AiJoinSyntax JoinSyntax { get; init; }
+
     /// <summary>저장된 LLM 프로필 목록. 키가 없거나 null 인 파일은 빈 목록이다.</summary>
     public IReadOnlyList<AiLlmProfile> Profiles { get => _profiles; init => _profiles = value is null ? [] : [.. value.Where(p => p is not null)]; }
 
@@ -241,11 +255,12 @@ public sealed record AiSettings
         && ExecutablePath == other.ExecutablePath
         && MaskLiterals == other.MaskLiterals
         && BenchmarkTimeoutSeconds == other.BenchmarkTimeoutSeconds
+        && JoinSyntax == other.JoinSyntax
         && ActiveProfileId == other.ActiveProfileId
         && string.Equals(SystemCliId, other.SystemCliId, StringComparison.Ordinal)
         && Profiles.SequenceEqual(other.Profiles);
 
-    public override int GetHashCode() => HashCode.Combine(Driver, Model, Effort, ExecutablePath, MaskLiterals, ActiveProfileId, Profiles.Count, HashCode.Combine(SystemCliId, BenchmarkTimeoutSeconds));
+    public override int GetHashCode() => HashCode.Combine(Driver, Model, Effort, ExecutablePath, MaskLiterals, ActiveProfileId, Profiles.Count, HashCode.Combine(SystemCliId, BenchmarkTimeoutSeconds, JoinSyntax));
 }
 
 /// <summary>MyBatis 작업 공간 설정. 설정 창에는 없고 「바뀌는 부분」 창의 확인란이 바꾼다.</summary>

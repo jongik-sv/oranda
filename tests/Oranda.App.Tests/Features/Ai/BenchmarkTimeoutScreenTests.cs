@@ -389,12 +389,15 @@ public class BenchmarkTimeoutScreenTests
     {
         var page = new AiModelSettingsPage(new AiSettings { Driver = AiDriverKind.ClaudeCode, Model = "sonnet", BenchmarkTimeoutSeconds = 45 });
         var view = new AiModelSettingsView { DataContext = page };
-        var window = new Window { Width = 640, Height = 460, Content = view };
+        var window = new Window { Width = 640, Height = 560, Content = view };
         window.Show();
 
         var box = view.FindControl<TextBox>("BenchmarkTimeoutBox")!;
         Assert.Equal("45", box.Text);
         Assert.True(Inside(box, window));
+        Assert.True(view.FindControl<RadioButton>("JoinSyntaxOracle")!.IsChecked);
+        Assert.False(view.FindControl<RadioButton>("JoinSyntaxAnsi")!.IsChecked);
+        Assert.True(Inside(view.FindControl<RadioButton>("JoinSyntaxAnsi")!, window));
         Assert.False(view.FindControl<TextBlock>("BenchmarkTimeoutError")!.IsVisible);
         Assert.False(view.FindControl<StackPanel>("BenchmarkTimeoutWarning")!.IsVisible);
         Render(window, "ai-settings-timeout");

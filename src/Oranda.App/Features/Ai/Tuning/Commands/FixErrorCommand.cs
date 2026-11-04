@@ -8,6 +8,7 @@ using Oranda.App.Features.Execution;
 using Oranda.Core.Ai.Access;
 using Oranda.Core.Ai.Schemas;
 using Oranda.Core.Events;
+using Oranda.Core.Settings;
 
 namespace Oranda.App.Features.Ai.Tuning.Commands;
 
@@ -88,7 +89,7 @@ public sealed class FixErrorCommand(IEditorTabs tabs) : AiCommandSpec
         masked ? "오류 메시지 본문은 보내지 않고 ORA 번호와 (알 수 있으면) 위치만 보냅니다." : null;
 
     /// <summary>
-    /// 오류 고치기의 조인 문법 규칙: 새 조인을 쓰거나 조인 구조를 새로 써야 할 때만 Oracle 문법을 쓰고, 조인 안의 작은 오류(ON 절 열 이름 오타 등)는 그 조인의 현재 문법을 유지한 채 그 자리만 고치며,
+    /// 오류 고치기의 조인 문법 규칙(설정이 Oracle 일 때): 새 조인을 쓰거나 조인 구조를 새로 써야 할 때만 Oracle 문법을 쓰고, 조인 안의 작은 오류(ON 절 열 이름 오타 등)는 그 조인의 현재 문법을 유지한 채 그 자리만 고치며,
     /// 오류와 무관한 ANSI 조인은 그대로 둔다(최소 변경 지시와 충돌하지 않는다).
     /// 공통 글은 튜닝 규칙과 const 로 공유한다. 고친 조인이 있는 쿼리 블록에 ANSI 조인이 남으면 한 블록에 ANSI 와 <c>(+)</c> 를 섞을 수 없으므로(ORA-25156) 그 블록은 ANSI 로 쓴다.
     /// </summary>
@@ -101,6 +102,21 @@ public sealed class FixErrorCommand(IEditorTabs tabs) : AiCommandSpec
         + AiTuningFlow.OracleJoinExceptionRule
         + AiTuningFlow.OracleJoinKeepRule;
 
+    /// <summary>
+    /// 설정이 ANSI 일 때의 규칙. <see cref="FixErrorJoinRule"/> 의 거울이다: 작은 오류는 그 조인의 문법을 유지하고, 새로 쓰는 조인만 ANSI 로 쓰며, 무관한 Oracle 조인은 그대로 둔다.
+    /// 고친 블록에 Oracle 조인(쉼표 나열이나 <c>(+)</c>)이 남으면 섞을 수 없으므로 그 블록은 Oracle 문법으로 쓴다.
+    /// </summary>
+    internal const string FixErrorAnsiJoinRule =
+        "Fix a small error inside an existing join (for example a misspelled column or table name in an ON clause) in place: keep that join's current syntax, ANSI or Oracle, and change only that spot. "
+        + "When you add a new join, or must rewrite the structure of a join to remove the error, write that join in " + AiTuningFlow.AnsiJoinSyntaxRule
+        + "Leave every Oracle join that has nothing to do with the error exactly as it is; do not convert it. "
+        + "If a query block you fixed still contains an Oracle join (comma-separated tables or (+)) you leave unchanged, write the join you added or rewrote in Oracle syntax in that block too and state the reason in the rationale; other query blocks, such as subqueries, are decided separately. "
+        + "That case is one more reason to use Oracle syntax; besides it, the following applies. "
+        + AiTuningFlow.AnsiJoinExceptionRule
+        + AiTuningFlow.OracleJoinKeepRule;
+
+    public override string? JoinRule(AiJoinSyntax syntax) => syntax == AiJoinSyntax.Ansi ? FixErrorAnsiJoinRule : FixErrorJoinRule;
+
     public override string ResponseRules =>
         "Response style (applies to every answer, including follow-ups; the summary field is this chat answer in Markdown): write in Korean and be brief. "
         + "1) The cause as one bold line, for example **ORA-00942 · 표 이름 오타**. "
@@ -109,7 +125,7 @@ public sealed class FixErrorCommand(IEditorTabs tabs) : AiCommandSpec
         + "Put the corrected SQL only in the structured result (rewrites), never in the chat text. "
         + "Never write tool or function names (get_*, explain_plan and so on) in the answer; say what was done in plain words. "
         + "No preamble or closing remarks. "
-        + AiTuningFlow.KeepCommentsRule + " " + FixErrorJoinRule;
+        + AiTuningFlow.KeepCommentsRule;
 
     public override Task<AiCommandPreparation> PrepareAsync(AiCommandStartEnv env, CancellationToken ct)
     {

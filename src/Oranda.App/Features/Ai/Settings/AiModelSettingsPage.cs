@@ -121,6 +121,37 @@ public sealed partial class AiModelSettingsPage : ObservableObject
 
     public string BenchmarkTimeoutWarningText => _t.T("사용자가 중지할 때까지 운영 DB 에서 실행합니다", "Runs on the production database until you stop it");
 
+    /// <summary>AI 가 쓰는 SQL 의 조인 문법.</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(JoinSyntaxIsOracle), nameof(JoinSyntaxIsAnsi))]
+    private AiJoinSyntax _joinSyntax;
+
+    /// <summary>「Oracle」 라디오. 다른 쪽이 켜지며 들어오는 false 는 무시한다.</summary>
+    public bool JoinSyntaxIsOracle
+    {
+        get => JoinSyntax == AiJoinSyntax.Oracle;
+        set
+        {
+            if (value)
+            {
+                JoinSyntax = AiJoinSyntax.Oracle;
+            }
+        }
+    }
+
+    /// <summary>「ANSI」 라디오. 다른 쪽이 켜지며 들어오는 false 는 무시한다.</summary>
+    public bool JoinSyntaxIsAnsi
+    {
+        get => JoinSyntax == AiJoinSyntax.Ansi;
+        set
+        {
+            if (value)
+            {
+                JoinSyntax = AiJoinSyntax.Ansi;
+            }
+        }
+    }
+
     /// <summary>고른 effort 줄: <see cref="DefaultEffortText"/> 이면 설정에 null(CLI 기본).</summary>
     [ObservableProperty]
     private string _effort;
@@ -166,6 +197,7 @@ public sealed partial class AiModelSettingsPage : ObservableObject
         _profiles = _source.Profiles;
         _maskLiterals = _source.MaskLiterals;
         _benchmarkTimeoutText = _source.BenchmarkTimeoutSeconds.ToString(System.Globalization.CultureInfo.InvariantCulture);
+        _joinSyntax = _source.JoinSyntax;
         _model = string.IsNullOrWhiteSpace(_source.Model) ? KnownModels[0] : _source.Model;
         var effort = _source.Effort?.Trim().ToLowerInvariant();
         _effort = effort is not null && AiSettings.EffortLevels.Contains(effort) ? effort : DefaultEffortText;
@@ -366,6 +398,7 @@ public sealed partial class AiModelSettingsPage : ObservableObject
             Effort = Effort == DefaultEffortText ? null : Effort,
             MaskLiterals = MaskLiterals,
             BenchmarkTimeoutSeconds = ParsedBenchmarkTimeout ?? current.BenchmarkTimeoutSeconds, // 올바르지 않은 글은 저장하지 않는다
+            JoinSyntax = JoinSyntax,
         };
     }
 
