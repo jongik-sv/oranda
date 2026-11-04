@@ -30,6 +30,11 @@ public sealed class OpencodeDriverTests : IDisposable
     private string? _versionOutput = "opencode v2.0.32";
     private int _versionReads;
 
+    /// <summary>이어 말하기 전 대화 내보내기 결과. 기본은 Oranda 가 만든 권한 규칙 없는 대화.</summary>
+    private string? _exported = ExportOf(SessionId);
+
+    private readonly List<string> _exportCalls = [];
+
     /// <summary>시작 훅이 플러그인 대신 설정 폴더에 남길 표식. null 이면 아무것도 남기지 않는다(플러그인이 로드되지 않음).</summary>
     private Action<string>? _plugin;
 
@@ -72,7 +77,15 @@ public sealed class OpencodeDriverTests : IDisposable
             {
                 _versionReads++;
                 return Task.FromResult(_versionOutput);
+            },
+            (_, id, _, _) =>
+            {
+                _exportCalls.Add(id);
+                return Task.FromResult(_exported);
             });
+
+    private static string ExportOf(string id, string agent = "oranda_locked", string extraInfo = "") =>
+        "{\"info\":{\"id\":\"" + id + "\",\"agent\":\"" + agent + "\",\"title\":\"t\"" + extraInfo + "},\"messages\":[]}";
 
     private static AiRequest Request(string? resume = null, JsonElement? schema = null, string? model = null, IReadOnlyList<AiImageAttachment>? images = null, AgentSession? session = null)
     {
@@ -459,6 +472,101 @@ public sealed class OpencodeDriverTests : IDisposable
         Assert.Equal("1", environment["OPENCODE_DISABLE_PROJECT_CONFIG"]);
         Assert.Equal("1", environment["OPENCODE_CONFIG_PROJECT_DISABLE"]);
         Assert.Equal("1", environment["OPENCODE_DISABLE_CLAUDE_CODE"]);
+    }
+
+    [Fact]
+    public async Task Only_the_provider_and_model_choice_of_the_user_config_reaches_the_run_and_the_lock_wins()
+    {
+        _files[Path.Combine(Home, ".config", "opencode", "opencode.jsonc")] = """
+            {
+              // 사용자 설정
+              "provider": { "example": { "options": { "baseURL": "https://llm.example/v1" } } },
+              "model": "example/m",
+              "plugin": ["some-plugin"],
+              "share": "auto",
+              "permissions": [{ "action": "*", "resource": "*", "effect": "allow" }],
+              "agents": { "oranda_locked": { "permissions": [{ "action": "*", "resource": "*", "effect": "allow" }] } },
+              "experimental": { "policies": [] },
+            }
+            """;
+        _launcher.Lines = GoodRun();
+
+        await RunAsync(NewDriver(), Request());
+
+        using var config = JsonDocument.Parse(Assert.Single(_launcher.Launches).Environment!["OPENCODE_CONFIG_CONTENT"]!);
+        var root = config.RootElement;
+        Assert.Equal("example/m", root.GetProperty("model").GetString());
+        Assert.True(root.GetProperty("provider").TryGetProperty("example", out _));
+        Assert.False(root.TryGetProperty("plugin", out _));
+        Assert.False(root.TryGetProperty("share", out _));
+        Assert.False(root.TryGetProperty("experimental", out _));
+        Assert.Equal("deny", root.GetProperty("permissions")[0].GetProperty("effect").GetString()); // 사용자의 allow 가 아니라 잠금 규칙
+        Assert.Equal("deny", root.GetProperty("agents").GetProperty("oranda_locked").GetProperty("permissions")[0].GetProperty("effect").GetString());
+    }
+
+    [Fact]
+    public async Task An_unreadable_user_settings_value_closes_the_run()
+    {
+        _files[Path.Combine(Home, ".config", "opencode", "opencode.jsonc")] = """{ "provider": "not-an-object" }""";
+        _launcher.Lines = GoodRun();
+
+        Assert.Equal("opencode_config_unsupported", CodeOf(await RunAsync(NewDriver(), Request())));
+        Assert.Empty(_launcher.Launches);
+    }
+
+    [Fact]
+    public async Task A_resumed_run_first_checks_that_the_conversation_has_no_stored_permissions()
+    {
+        _launcher.Lines = GoodRun();
+
+        await RunAsync(NewDriver(), Request(resume: SessionId));
+
+        Assert.Equal([SessionId], _exportCalls);
+        Assert.Single(_launcher.Launches);
+    }
+
+    [Fact]
+    public async Task A_new_conversation_is_not_exported()
+    {
+        _launcher.Lines = GoodRun();
+
+        await RunAsync(NewDriver(), Request());
+
+        Assert.Empty(_exportCalls);
+    }
+
+    [Theory]
+    [InlineData("""{"info":{"id":"ses_e5b124059ffeAppIM3ZV7gwvYH","agent":"oranda_locked","permissions":[{"action":"*","resource":"*","effect":"allow"}]}}""", "resume_permissions_unexpected")]
+    [InlineData("""{"info":{"id":"ses_e5b124059ffeAppIM3ZV7gwvYH","agent":"oranda_locked","permission":[{"action":"*"}]}}""", "resume_permissions_unexpected")] // 필드 이름이 바뀌어도 permission 이 들어가면 본다
+    [InlineData("""{"info":{"id":"ses_e5b124059ffeAppIM3ZV7gwvYH","agent":"oranda_locked","sessionPermissions":{"execute":"allow"}}}""", "resume_permissions_unexpected")]
+    [InlineData("""{"info":{"id":"ses_e5b124059ffeAppIM3ZV7gwvYH","agent":"build"}}""", "resume_not_verified")] // Oranda 의 대화가 아님
+    [InlineData("""{"info":{"id":"ses_other0000000000000000","agent":"oranda_locked"}}""", "resume_not_verified")]
+    [InlineData("""{"messages":[]}""", "resume_not_verified")] // 모양을 알 수 없음
+    [InlineData("not json", "resume_not_verified")]
+    [InlineData("", "resume_not_verified")]
+    [InlineData(null, "resume_not_verified")] // 대화를 못 찾음·시간 초과·상한 초과
+    public async Task A_resume_is_refused_unless_the_stored_conversation_is_verified(string? exported, string code)
+    {
+        _launcher.Lines = GoodRun();
+        _exported = exported;
+
+        var events = await RunAsync(NewDriver(), Request(resume: SessionId));
+
+        Assert.Equal(code, CodeOf(events));
+        Assert.Empty(_launcher.Launches);
+        Assert.Equal(_tokens.Issued, _tokens.Revoked);
+        Assert.Empty(_tokens.Issued);
+    }
+
+    [Theory]
+    [InlineData("""{"info":{"id":"ses_e5b124059ffeAppIM3ZV7gwvYH","agent":"oranda_locked","permissions":[]}}""")]
+    [InlineData("""{"info":{"id":"ses_e5b124059ffeAppIM3ZV7gwvYH","agent":"oranda_locked","permissions":null}}""")]
+    public async Task Empty_stored_permissions_are_accepted(string exported)
+    {
+        _launcher.Lines = GoodRun();
+        _exported = exported;
+
+        Assert.IsType<AiFinal>((await RunAsync(NewDriver(), Request(resume: SessionId)))[^1]);
     }
 
     [Fact]

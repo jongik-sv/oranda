@@ -50,9 +50,10 @@ public sealed class OpencodeGlobalConfigTests
     {
         var files = new Dictionary<string, string?>
         {
-            ["/xdg/opencode/opencode.json"] = """{"mcp":{"a":{"type":"local","command":["a"]}}}""",
-            ["/home/x/opencode.json"] = """{"mcp":{"b":{"type":"local","command":["b"]}}}""",
-            ["/home/x/data/.opencode/opencode.jsonc"] = """{"mcp":{"c":{"type":"local","command":["c"]}}}""",
+            // 드라이버는 경로를 Path.Combine·GetFullPath 로 만들므로 열쇠도 같은 방식으로 만든다(Windows 는 구분자가 \\ 이고 드라이브 문자가 붙는다).
+            [Path.Combine("/xdg", "opencode", "opencode.json")] = """{"mcp":{"a":{"type":"local","command":["a"]}}}""",
+            [Path.Combine(Path.GetFullPath(Home), "opencode.json")] = """{"mcp":{"b":{"type":"local","command":["b"]}}}""",
+            [Path.Combine(Path.GetFullPath(Home), "data", ".opencode", "opencode.jsonc")] = """{"mcp":{"c":{"type":"local","command":["c"]}}}""",
         };
 
         var (names, problem) = Read(files, name => name == "XDG_CONFIG_HOME" ? "/xdg" : null);
@@ -82,4 +83,50 @@ public sealed class OpencodeGlobalConfigTests
 
         Assert.NotNull(problem);
     }
+
+    private static (System.Text.Json.Nodes.JsonObject Settings, string? Problem) Settings(Dictionary<string, string?> files)
+        => OpencodeGlobalConfig.ReadUserSettings(_ => null, Home, path => files.GetValueOrDefault(path));
+
+    [Fact]
+    public void User_settings_keep_only_the_provider_and_model_choice()
+    {
+        var (settings, problem) = Settings(new()
+        {
+            [GlobalFile()] = """
+                {
+                  "provider": { "example": { "models": { "m": {} } } }, // 주석
+                  "model": "example/m",
+                  "enabled_providers": ["example"],
+                  "plugin": ["x"], "mcp": {}, "agents": {}, "permissions": [], "share": "auto", "instructions": ["a.md"],
+                }
+                """,
+        });
+
+        Assert.Null(problem);
+        Assert.Equal(["enabled_providers", "model", "provider"], settings.Select(p => p.Key).Order(StringComparer.Ordinal));
+    }
+
+    [Theory]
+    [InlineData("""{ "provider": [] }""")]
+    [InlineData("""{ "model": 1 }""")]
+    [InlineData("""{ "enabled_providers": "a" }""")]
+    [InlineData("[]")]
+    [InlineData("{ broken")]
+    public void A_user_settings_file_with_an_unknown_shape_is_a_problem(string text)
+        => Assert.NotNull(Settings(new() { [GlobalFile()] = text }).Problem);
+
+    [Fact]
+    public void A_missing_user_config_gives_empty_settings()
+    {
+        var (settings, problem) = Settings([]);
+
+        Assert.Null(problem);
+        Assert.Empty(settings);
+    }
+
+    [Fact]
+    public void XDG_CONFIG_HOME_moves_the_user_config_folder()
+        => Assert.Equal(
+            Path.Combine("/custom", "opencode"),
+            OpencodeGlobalConfig.GlobalDirectory(name => name == "XDG_CONFIG_HOME" ? "/custom" : null, Home));
 }

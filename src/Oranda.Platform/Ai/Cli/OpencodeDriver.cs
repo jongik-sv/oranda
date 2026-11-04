@@ -53,6 +53,7 @@ internal sealed class OpencodeDriver : ISystemCliAiDriver
     private readonly string _home;
     private readonly TimeSpan _timeLimit;
     private readonly SystemCliVersion.Reader _readVersion;
+    private readonly OpencodeSessionCheck.Exporter _exportSession;
 
     public OpencodeDriver(IAgentRunTokens tokens, IAgentGate gate, IAgentBridgeEndpoint bridge, IAppDataPaths paths)
         : this(
@@ -84,7 +85,8 @@ internal sealed class OpencodeDriver : ISystemCliAiDriver
         Func<string, string?> environment,
         string home,
         TimeSpan timeLimit,
-        SystemCliVersion.Reader readVersion)
+        SystemCliVersion.Reader readVersion,
+        OpencodeSessionCheck.Exporter? exportSession = null)
     {
         // orandactl 을 쓰지 않으므로 경로는 비운다(실행 골격의 orandactl 확인은 쓰지 않고 이 드라이버가 사전 조건을 직접 확인한다).
         _runner = new SystemCliRunner(tokens, gate, bridge, paths, string.Empty, fileExists);
@@ -98,6 +100,7 @@ internal sealed class OpencodeDriver : ISystemCliAiDriver
         _home = home;
         _timeLimit = timeLimit;
         _readVersion = readVersion ?? throw new ArgumentNullException(nameof(readVersion));
+        _exportSession = exportSession ?? OpencodeSessionCheck.ExportAsync;
     }
 
     public string CliId => AiProfilePresets.OpencodeCliId;
@@ -193,6 +196,14 @@ internal sealed class OpencodeDriver : ISystemCliAiDriver
             yield break;
         }
 
+        // 사용자 설정의 공급자·모델 선택만 옮긴다(OPENCODE_CONFIG_DIR 가 전역 설정 폴더를 대체하므로 옮기지 않으면 사용자 공급자를 쓸 수 없다). 읽지 못하면 닫는다.
+        var (userSettings, settingsProblem) = OpencodeGlobalConfig.ReadUserSettings(_environment, _home, _readText);
+        if (settingsProblem is not null)
+        {
+            yield return new AiError($"opencode 의 사용자 설정을 확인하지 못해 실행하지 않았습니다. {settingsProblem}", "opencode_config_unsupported");
+            yield break;
+        }
+
         // 버전 읽기는 토큰 발급 전에 하고 토큰을 주지 않는다. 검증하지 않은 버전은 닫는다(스트림 감시가 도구 실행 뒤에야 걸리기 때문).
         var version = SystemCliVersion.Parse(await ReadVersionAsync(executable!, ct).ConfigureAwait(false));
         if (version is null || !VerifiedVersions.Contains(version))
@@ -200,6 +211,14 @@ internal sealed class OpencodeDriver : ISystemCliAiDriver
             yield return new AiError(
                 $"이 버전의 opencode({version ?? "버전을 읽지 못함"})는 Oranda 에서 잠금을 검증하지 않아 실행하지 않았습니다. 검증한 버전: {string.Join(", ", VerifiedVersions)}.",
                 "cli_version_unverified");
+            yield break;
+        }
+
+        // 이어 말하기: 대화에 저장된 권한 규칙은 에이전트 deny 뒤에 붙어 이기므로(execute 가 되살아난다) 규칙이 없는 Oranda 의 대화인지 먼저 확인한다.
+        if (resumeId is not null
+            && await OpencodeSessionCheck.VerifyAsync(_exportSession, executable!, resumeId, ct).ConfigureAwait(false) is { } resumeError)
+        {
+            yield return resumeError;
             yield break;
         }
 
@@ -234,7 +253,7 @@ internal sealed class OpencodeDriver : ISystemCliAiDriver
 
             var environment = LaunchEnvironment(run.Token);
             environment["OPENCODE_CONFIG_DIR"] = configDirectory;
-            environment["OPENCODE_CONFIG_CONTENT"] = OpencodeArguments.BuildConfigContent(allowed, mcpNames);
+            environment["OPENCODE_CONFIG_CONTENT"] = OpencodeArguments.BuildConfigContent(allowed, mcpNames, userSettings);
             var launch = new ClaudeLaunch(
                 executable!,
                 OpencodeArguments.Build(new OpencodeInvocation(resumeId)),

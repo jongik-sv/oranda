@@ -98,10 +98,92 @@ internal static class OpencodeGlobalConfig
         return ([.. names], null);
     }
 
+    /// <summary>사용자 전역 설정 폴더: <c>$XDG_CONFIG_HOME/opencode</c>(없으면 <c>~/.config/opencode</c>).</summary>
+    public static string GlobalDirectory(Func<string, string?> environment, string home)
+    {
+        ArgumentNullException.ThrowIfNull(environment);
+        var configHome = environment("XDG_CONFIG_HOME");
+        return Path.Combine(string.IsNullOrWhiteSpace(configHome) ? Path.Combine(home, ".config") : configHome, "opencode");
+    }
+
+    /// <summary>실행에 물려줄 사용자 설정 키. 공급자·모델 선택만 옮기고 나머지(plugin·permissions·agents·experimental·share·instructions 등)는 옮기지 않는다.</summary>
+    internal static readonly IReadOnlyList<string> UserSettingKeys = ["provider", "model", "enabled_providers", "disabled_providers"];
+
+    /// <summary>
+    /// 사용자 전역 설정에서 공급자·모델 선택(<see cref="UserSettingKeys"/>)만 꺼낸다. <c>OPENCODE_CONFIG_DIR</c> 는 전역 설정 폴더를 대체하므로(2.0.32 에서 확인: 모델 목록에서
+    /// 사용자 설정의 공급자가 사라진다) 이 값을 실행 설정(<c>OPENCODE_CONFIG_CONTENT</c>)에 실어 주지 않으면 사용자가 설정한 공급자·모델을 쓸 수 없다.
+    /// 설정 파일을 폴더째 걸지 않는 이유: 그러면 <c>plugin</c>·<c>experimental.policies</c>·<c>share</c> 같은 잠금이 다루지 않는 키가 모두 다시 로드된다.
+    /// 읽을 수 없거나 모양을 모르면 문제로 돌려준다(호출 측은 닫는다). 값은 환경 변수로만 넘기고 파일에 쓰지 않는다.
+    /// </summary>
+    public static (System.Text.Json.Nodes.JsonObject Settings, string? Problem) ReadUserSettings(
+        Func<string, string?> environment,
+        string home,
+        Func<string, string?> readText)
+    {
+        ArgumentNullException.ThrowIfNull(environment);
+        ArgumentNullException.ThrowIfNull(readText);
+
+        var settings = new System.Text.Json.Nodes.JsonObject();
+        var globalDirectory = GlobalDirectory(environment, home);
+        foreach (var name in FileNames.Reverse())
+        {
+            var file = Path.Combine(globalDirectory, name);
+            string? text;
+            try
+            {
+                text = readText(file);
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+                return (new(), $"설정 파일을 읽지 못했습니다: {file}");
+            }
+
+            if (string.IsNullOrWhiteSpace(text))
+            {
+                continue;
+            }
+
+            try
+            {
+                using var document = JsonDocument.Parse(text, JsoncOptions);
+                if (document.RootElement.ValueKind != JsonValueKind.Object)
+                {
+                    return (new(), $"설정 파일의 모양을 알 수 없습니다: {file}");
+                }
+
+                foreach (var key in UserSettingKeys)
+                {
+                    if (!document.RootElement.TryGetProperty(key, out var value))
+                    {
+                        continue;
+                    }
+
+                    var expected = key switch
+                    {
+                        "provider" => JsonValueKind.Object,
+                        "model" => JsonValueKind.String,
+                        _ => JsonValueKind.Array,
+                    };
+                    if (value.ValueKind != expected)
+                    {
+                        return (new(), $"설정 파일의 {key} 항목 모양을 알 수 없습니다: {file}");
+                    }
+
+                    settings[key] = System.Text.Json.Nodes.JsonNode.Parse(value.GetRawText());
+                }
+            }
+            catch (JsonException)
+            {
+                return (new(), $"설정 파일을 읽지 못했습니다(JSON 형식 오류): {file}");
+            }
+        }
+
+        return (settings, null);
+    }
+
     private static IEnumerable<string> CandidateFiles(Func<string, string?> environment, string home, string runDirectory)
     {
-        var configHome = environment("XDG_CONFIG_HOME");
-        var globalDirectory = Path.Combine(string.IsNullOrWhiteSpace(configHome) ? Path.Combine(home, ".config") : configHome, "opencode");
+        var globalDirectory = GlobalDirectory(environment, home);
         foreach (var name in FileNames)
         {
             yield return Path.Combine(globalDirectory, name);

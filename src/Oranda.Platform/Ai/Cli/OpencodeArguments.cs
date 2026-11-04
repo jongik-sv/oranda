@@ -62,24 +62,29 @@ internal static partial class OpencodeArguments
     /// <summary>
     /// <c>OPENCODE_CONFIG_CONTENT</c> 로 주입할 설정 JSON. 잠금 규칙(deny-* 다음에 도구 이름별 allow)은 최상위와 전용 에이전트에 똑같이 넣는다.
     /// <paramref name="mcpServerNames"/> 는 사용자 설정에 있는 MCP 서버 이름이다(모두 끈다).
+    /// <paramref name="userSettings"/> 는 사용자 전역 설정에서 옮겨 온 공급자·모델 선택이다(<see cref="OpencodeGlobalConfig.ReadUserSettings"/>): 잠금 키보다 먼저 넣어
+    /// 같은 키가 있어도 잠금이 이긴다.
     /// </summary>
-    public static string BuildConfigContent(IReadOnlyList<string> allowedTools, IReadOnlyList<string> mcpServerNames)
+    public static string BuildConfigContent(IReadOnlyList<string> allowedTools, IReadOnlyList<string> mcpServerNames, JsonObject? userSettings = null)
     {
         ArgumentNullException.ThrowIfNull(allowedTools);
         ArgumentNullException.ThrowIfNull(mcpServerNames);
 
-        var root = new JsonObject
+        var root = new JsonObject();
+        foreach (var (key, value) in userSettings ?? [])
         {
-            ["default_agent"] = AgentName,
-            ["permissions"] = Rules(allowedTools),
-            ["agents"] = new JsonObject
+            root[key] = value?.DeepClone();
+        }
+
+        root["default_agent"] = AgentName;
+        root["permissions"] = Rules(allowedTools);
+        root["agents"] = new JsonObject
+        {
+            [AgentName] = new JsonObject
             {
-                [AgentName] = new JsonObject
-                {
-                    ["mode"] = "primary",
-                    ["description"] = "Oranda locked agent",
-                    ["permissions"] = Rules(allowedTools),
-                },
+                ["mode"] = "primary",
+                ["description"] = "Oranda locked agent",
+                ["permissions"] = Rules(allowedTools),
             },
         };
 
