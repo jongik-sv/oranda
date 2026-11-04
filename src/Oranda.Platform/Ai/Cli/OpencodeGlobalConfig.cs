@@ -169,7 +169,8 @@ internal static class OpencodeGlobalConfig
                         return (new(), $"설정 파일의 {key} 항목 모양을 알 수 없습니다: {file}");
                     }
 
-                    settings[key] = System.Text.Json.Nodes.JsonNode.Parse(value.GetRawText());
+                    // GetRawText 는 원본 글자를 그대로 잘라 오므로 값 안의 주석·꼬리 쉼표가 남는다: 같은 JSONC 옵션으로 다시 읽어 깨끗한 JSON 노드로 만든다.
+                    settings[key] = System.Text.Json.Nodes.JsonNode.Parse(value.GetRawText(), documentOptions: JsoncOptions);
                 }
             }
             catch (JsonException)

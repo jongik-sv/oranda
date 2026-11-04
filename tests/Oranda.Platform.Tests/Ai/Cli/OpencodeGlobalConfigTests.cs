@@ -106,6 +106,30 @@ public sealed class OpencodeGlobalConfigTests
         Assert.Equal(["enabled_providers", "model", "provider"], settings.Select(p => p.Key).Order(StringComparer.Ordinal));
     }
 
+    [Fact]
+    public void Comments_and_trailing_commas_inside_the_copied_values_are_dropped()
+    {
+        var (settings, problem) = Settings(new()
+        {
+            [GlobalFile()] = """
+                {
+                  "provider": {
+                    // 공급자 설명
+                    "example": { "options": { "baseURL": "https://llm.example/v1", /* 끝 */ }, "models": { "m": {}, }, },
+                  },
+                  "enabled_providers": ["example", /* 뒤 */],
+                }
+                """,
+        });
+
+        Assert.Null(problem);
+        var text = settings.ToJsonString();
+        Assert.DoesNotContain("//", text.Replace("https://", string.Empty, StringComparison.Ordinal), StringComparison.Ordinal);
+        Assert.DoesNotContain("/*", text, StringComparison.Ordinal);
+        using var parsed = System.Text.Json.JsonDocument.Parse(text); // 엄격한 JSON 으로 다시 읽힌다
+        Assert.Equal("https://llm.example/v1", parsed.RootElement.GetProperty("provider").GetProperty("example").GetProperty("options").GetProperty("baseURL").GetString());
+    }
+
     [Theory]
     [InlineData("""{ "provider": [] }""")]
     [InlineData("""{ "model": 1 }""")]
