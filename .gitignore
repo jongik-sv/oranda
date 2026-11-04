@@ -29,3 +29,8 @@ Thumbs.db
 /docs/orange-analysis.md
 /docs/orange5-features.md
 /.dflow
+
+# 매뉴얼 사이트(Astro Starlight) — 설치물과 빌드 산출물
+/site/node_modules/
+/site/dist/
+/site/.astro/
