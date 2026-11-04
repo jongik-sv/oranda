@@ -59,6 +59,23 @@ public sealed partial class AiModelSettingsPage
         "운영 표시 접속과 값 가림을 켠 접속에는 기타 CLI 로 보내지 않습니다.",
         "Nothing is sent to a custom CLI on connections marked production or with value masking on.");
 
+    /// <summary>명령 틀 목록(고르면 이름과 명령을 채운 새 줄을 더한다). 확인됨이 위에 온다.</summary>
+    public IReadOnlyList<AiCustomCliExampleChoice> Examples => _examples ??=
+        [.. AiCustomCliExamples.All.Select(e => new AiCustomCliExampleChoice(e,
+            $"{e.Name}  ·  {(e.Verification == AiCustomCliVerification.Confirmed ? _t.T("확인됨", "Verified") : _t.T("미확인(문서 기준)", "Unverified (per docs)"))}"))];
+
+    private IReadOnlyList<AiCustomCliExampleChoice>? _examples;
+
+    /// <summary>명령 틀을 골라 채운 새 줄을 더한다. 채운 뒤 이름·명령을 마음대로 고칠 수 있다.</summary>
+    public AiCustomCliRow AddFromExample(AiCustomCliExample example)
+    {
+        ArgumentNullException.ThrowIfNull(example);
+        var row = NewRow(example.Name, example.Command);
+        AttachRow(row);
+        Recheck(row, TimeSpan.Zero);
+        return row;
+    }
+
     partial void OnMaskLiteralsChanged(bool value) => OnPropertyChanged(nameof(ShowCustomCliMaskBlock));
 
     partial void OnDriverChanged(AiDriverKind value)
@@ -248,6 +265,7 @@ public sealed partial class AiModelSettingsPage
         var check = _analyze(row.Command);
         row.Check = check;
         row.Warnings = BuildWarnings(check);
+        row.TemplateNote = TemplateNoteFor(check);
         var probe = Services?.CustomCliInstalled;
         if (probe is null || check.Executable is null)
         {
@@ -286,6 +304,33 @@ public sealed partial class AiModelSettingsPage
         {
             row.InstallState = result;
         }
+    }
+
+    // 명령 틀 표가 같은 실행 파일에 붙인 안내. 다시 열어도 같은 줄에 보이게 저장한 값이 아니라 명령에서 다시 정한다.
+    private string? TemplateNoteFor(AiCustomCliCheck check)
+    {
+        if (check.Executable is null)
+        {
+            return null;
+        }
+
+        foreach (var example in AiCustomCliExamples.All)
+        {
+            if (example.NoteKo is null || AiCustomCliCommand.Parse(example.Command).Command is not { } template
+                || !string.Equals(template.Executable, check.Executable, StringComparison.Ordinal))
+            {
+                continue;
+            }
+
+            if (example.NoteUnlessOption is { } option && check.Arguments.Any(a => string.Equals(a, option, StringComparison.Ordinal)))
+            {
+                return null;
+            }
+
+            return _t.IsEnglish ? example.NoteEn : example.NoteKo;
+        }
+
+        return null;
     }
 
     private List<string> BuildWarnings(AiCustomCliCheck check)

@@ -290,6 +290,34 @@ public class AiCustomCliSettingsTests
     }
 
     [Fact]
+    public void The_template_note_follows_the_executable_after_a_reload_and_goes_away_with_an_explicit_mode()
+    {
+        var zcode = AiCustomCliExamples.All.Single(e => e.Id == "zcode");
+        var reloaded = new AiModelSettingsPage(Base(null, Cli("c1", "Z", zcode.Command)));
+        Assert.Equal(zcode.NoteKo, reloaded.CustomClis[0].TemplateNote); // 저장하지 않은 안내가 다시 연 설정에서도 보인다
+
+        reloaded.CustomClis[0].Command = "zcode --mode edit -p \"{prompt}\"";
+        Assert.Null(reloaded.CustomClis[0].TemplateNote); // 사용자가 모드를 정했다
+
+        reloaded.CustomClis[0].Command = "unrelatedcli";
+        Assert.Null(reloaded.CustomClis[0].TemplateNote);
+    }
+
+    [Fact]
+    public void Picking_a_template_adds_a_filled_saved_row_that_can_still_be_edited()
+    {
+        var page = new AiModelSettingsPage(Base());
+        var codex = AiCustomCliExamples.All.Single(e => e.Id == "codex");
+
+        var row = page.AddFromExample(codex);
+
+        Assert.Equal((codex.Name, codex.Command), (row.Name, row.Command));
+        Assert.Equal([new AiCustomCli { Id = row.Id, Name = codex.Name, Command = codex.Command }], page.ToSettings().CustomClis);
+        row.Command += " --extra";
+        Assert.EndsWith("--extra", page.ToSettings().CustomClis[0].Command);
+    }
+
+    [Fact]
     public void The_delete_confirmation_names_the_row_in_both_languages()
     {
         var page = new AiModelSettingsPage(Base(null, Cli("c1", "My CLI")));

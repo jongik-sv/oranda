@@ -57,6 +57,56 @@ public partial class AiModelSettingsView : UserControl
         }
     }
 
+    // 명령 틀 선택: 목록을 연 채로 고르고 닫을 때만 줄을 더한다. 닫힌 채 마우스 휠·방향키로 선택이 바뀌어도 줄을 더하지 않는다(선택만 비운다).
+    private AiCustomCliExampleChoice? _pendingExample;
+    private bool _resettingExample;
+
+    private void OnExampleSelected(object? sender, SelectionChangedEventArgs e)
+    {
+        if (_resettingExample || sender is not ComboBox box)
+        {
+            return;
+        }
+
+        if (box.SelectedItem is AiCustomCliExampleChoice choice && box.IsDropDownOpen)
+        {
+            _pendingExample = choice;
+        }
+        else if (!box.IsDropDownOpen)
+        {
+            ResetExampleBox(box);
+        }
+    }
+
+    private void OnExampleDropDownClosed(object? sender, EventArgs e)
+    {
+        if (sender is not ComboBox box)
+        {
+            return;
+        }
+
+        var choice = _pendingExample;
+        _pendingExample = null;
+        ResetExampleBox(box);
+        if (choice is not null && _page is not null)
+        {
+            _page.AddFromExample(choice.Example);
+        }
+    }
+
+    private void ResetExampleBox(ComboBox box)
+    {
+        _resettingExample = true;
+        try
+        {
+            box.SelectedItem = null; // 같은 틀을 다시 고를 수 있게 비운다
+        }
+        finally
+        {
+            _resettingExample = false;
+        }
+    }
+
     // 기타 CLI 줄의 「사용」 단추.
     private void OnUseCustomCliClick(object? sender, RoutedEventArgs e)
     {

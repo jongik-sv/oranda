@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using CommunityToolkit.Mvvm.ComponentModel;
+using Oranda.Core.Ai.Profiles;
 using Oranda.Core.Settings;
 
 namespace Oranda.App.Features.Ai.Settings;
@@ -46,6 +47,9 @@ public sealed record AiCustomCliCheck(
     public static AiCustomCliCheck None { get; } = new(null, [], null, [], [], false);
 }
 
+/// <summary>명령 틀 목록의 한 줄: 틀과 화면에 보일 글(이름 · 확인됨/미확인).</summary>
+public sealed record AiCustomCliExampleChoice(AiCustomCliExample Example, string Label);
+
 /// <summary>
 /// 등록 목록의 한 줄(편집 중인 값). 설정의 <see cref="AiCustomCli"/> 는 불변이라 화면은 이 행을 고치고, 저장 때 <see cref="ToModel"/> 로 바꾼다.
 /// 불러온 값은 다듬지 않는다(공백·빈 칸을 그대로 두어야 아무것도 건드리지 않은 설정이 바뀐 것으로 보이지 않는다).
@@ -90,6 +94,13 @@ public sealed partial class AiCustomCliRow : ObservableObject
     private IReadOnlyList<string> _warnings = [];
 
     public bool HasWarnings => Warnings.Count > 0;
+
+    /// <summary>명령 틀 표가 이 CLI 에 붙인 안내(저장하지 않고 명령이 바뀔 때마다 다시 정한다. 분해기가 못 잡는 위험을 알릴 때 쓴다).</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasTemplateNote))]
+    private string? _templateNote;
+
+    public bool HasTemplateNote => !string.IsNullOrEmpty(TemplateNote);
 
     /// <summary>가장 최근에 시작한 설치 확인(시험이 끝나기를 기다린다).</summary>
     internal System.Threading.Tasks.Task PendingCheck { get; set; } = System.Threading.Tasks.Task.CompletedTask;

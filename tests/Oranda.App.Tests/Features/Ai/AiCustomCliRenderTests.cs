@@ -70,6 +70,7 @@ public class AiCustomCliRenderTests
             Assert.Equal(2, window.GetVisualDescendants().OfType<TextBox>().Count(t => t.Name == "CustomCliCommandBox"));
             Assert.Equal(2, window.GetVisualDescendants().OfType<Button>().Count(b => b.Name == "DeleteCustomCliButton"));
             Assert.False(Find<TextBlock>(window, "NoCustomClisText").IsEffectivelyVisible);
+            Assert.NotNull(Find<ComboBox>(window, "ExampleBox").ItemsSource);
 
             foreach (var (variant, tone) in new[] { (ThemeVariant.Light, "light"), (ThemeVariant.Dark, "dark") })
             {
