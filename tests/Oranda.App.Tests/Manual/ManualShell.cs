@@ -53,6 +53,9 @@ internal sealed class ManualShell : IDisposable
         return shell;
     }
 
+    /// <summary>접속 없이 셸(서비스)만 띄운다. 설정 창·포매터 프로필처럼 DB 가 필요 없는 화면용.</summary>
+    internal static ManualShell OpenOffline() => new(new ShellHarness());
+
     private static async Task ConnectAsync(ShellHarness harness)
     {
         var wiring = harness.Services.GetService<IEnumerable<IStartupTask>>()!.OfType<SqlEditorDockWiring>().Single();

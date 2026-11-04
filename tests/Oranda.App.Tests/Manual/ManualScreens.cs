@@ -20,15 +20,10 @@ namespace Oranda.App.Tests.Manual;
 [Collection("UiLanguage")]
 public sealed class ManualScreens
 {
-    [Fact]
-    public Task Connection_manager() => HeadlessHost.Run(async () =>
+    /// <summary>예시 접속 4개를 담은 접속 관리자 창을 연다(첫 접속을 고른 상태). 호출한 쪽이 창을 닫는다.</summary>
+    private static async Task<(ConnectionManagerWindow Window, ServiceFixture Fixture)> OpenConnectionManagerAsync()
     {
-        if (!ManualCapture.Enabled)
-        {
-            return;
-        }
-
-        using var fx = new ServiceFixture();
+        var fx = new ServiceFixture();
         foreach (var (name, user, source, group, env) in new[]
         {
             ("dev-example", "app_dev", "db.example.com:1521/devsvc", "개발", ConnectionEnvironment.Development),
@@ -46,17 +41,107 @@ public sealed class ManualScreens
         var window = new ConnectionManagerWindow { DataContext = vm };
         window.Show();
         Dispatcher.UIThread.RunJobs();
+        return (window, fx);
+    }
 
-        ManualCapture.Save(window, "connection-manager",
-        [
-            new(window.FindControl<Button>("AddButton")!, 1),
-            new(window.FindControl<TextBox>("SearchBox")!, 2),
-            new(window.FindControl<TreeView>("ConnectionTree")!, 3),
-            new(window.FindControl<ProfileEditorView>("EditorView")!, 4),
-            new(window.FindControl<Button>("TestButton")!, 5),
-            new(window.FindControl<Button>("ConnectButton")!, 6),
-        ]);
-        window.Close();
+    private static T In<T>(Window window, string name)
+        where T : Control =>
+        ManualCapture.Find<T>(window, c => c.Name == name);
+
+    [Fact]
+    public Task Connection_manager() => HeadlessHost.Run(async () =>
+    {
+        if (!ManualCapture.Enabled)
+        {
+            return;
+        }
+
+        var (window, fx) = await OpenConnectionManagerAsync();
+        using (fx)
+        {
+            ManualCapture.Save(window, "connection-manager",
+            [
+                new(In<Button>(window, "AddButton"), 1),
+                new(In<TextBox>(window, "SearchBox"), 2),
+                new(In<TreeView>(window, "ConnectionTree"), 3),
+                new(In<ProfileEditorView>(window, "EditorView"), 4),
+                new(In<TextBox>(window, "PreviewBox"), 5),
+                new(In<Button>(window, "TestButton"), 6),
+                new(In<Button>(window, "SaveButton"), 7),
+                new(In<Button>(window, "ConnectButton"), 8),
+            ]);
+            window.Close();
+        }
+    });
+
+    /// <summary>접속 편집 영역의 변형(같은 창, 다른 상태). 번호는 본문의 번호별 설명과 같아야 한다.</summary>
+    [Fact]
+    public Task Connection_editor_variants() => HeadlessHost.Run(async () =>
+    {
+        if (!ManualCapture.Enabled)
+        {
+            return;
+        }
+
+        var (window, fx) = await OpenConnectionManagerAsync();
+        using (fx)
+        {
+            var editorModel = ((ConnectionManagerViewModel)window.DataContext!).Editor!;
+            T E<T>(string name)
+                where T : Control => In<T>(window, name);
+
+            ManualCapture.Save(window, "connection-editor",
+            [
+                new(E<TextBox>("NameBox"), 1),
+                new(E<ListBox>("ModeBox"), 2),
+                new(E<TextBox>("HostBox"), 3),
+                new(E<TextBox>("ServiceBox"), 4),
+                new(E<CheckBox>("TlsBox"), 5),
+                new(E<TextBox>("UserBox"), 6),
+                new(E<ComboBox>("AuthBox"), 7),
+                new(E<TextBox>("PasswordBox"), 8),
+            ]);
+
+            ManualCapture.Save(window, "connection-editor-general",
+            [
+                new(E<AutoCompleteBox>("GroupBox"), 1),
+                new(E<ComboBox>("EnvironmentBox"), 2),
+                new(E<DropDownButton>("ColorButton"), 3),
+                new(E<TextBox>("CommentBox"), 4),
+            ]);
+
+            editorModel.Mode = ConnectionMode.TnsAlias;
+            editorModel.TnsAdmin = "/opt/oracle/network/admin";
+            editorModel.TnsAlias = "DEVDB_EXAMPLE";
+            editorModel.TnsAliasDetail = "→ db.example.com:1521/devsvc";
+            Dispatcher.UIThread.RunJobs();
+            ManualCapture.Save(window, "connection-editor-tns",
+            [
+                new(E<TextBox>("TnsAdminBox"), 1),
+                new(E<Button>("TnsAdminBrowseButton"), 2),
+                new(E<ComboBox>("TnsAliasBox"), 3),
+                new(E<TextBlock>("TnsAliasDetail"), 4),
+                new(E<TextBox>("WalletBox"), 5),
+                new(E<Button>("WalletBrowseButton"), 6),
+            ]);
+
+            editorModel.Mode = ConnectionMode.HostPortService;
+            E<Expander>("AdvancedExpander").IsExpanded = true;
+            window.Height = 980;
+            Dispatcher.UIThread.RunJobs();
+            ManualCapture.Save(window, "connection-editor-advanced",
+            [
+                new(E<Expander>("AdvancedExpander"), 1),
+                new(E<TextBox>("ProxyBox"), 2),
+                new(E<CheckBox>("ReadOnlyBox"), 3),
+                new(E<ComboBox>("PackBox"), 4),
+                new(E<NumericUpDown>("TimeoutBox"), 5),
+                new(E<NumericUpDown>("KeepAliveBox"), 6),
+                new(E<TextBox>("NlsDateBox"), 7),
+                new(E<TextBox>("NlsLanguageBox"), 8),
+            ]);
+            window.Close();
+        }
     });
 
     [Fact]
