@@ -53,6 +53,7 @@ public class AiDriverCompositionTests
         Assert.NotNull(drivers);
         var codex = Assert.Single(drivers, d => d.CliId == AiProfilePresets.CodexCliId);
         Assert.Equal("CodexDriver", codex.GetType().Name);
+        Assert.Equal("OpencodeDriver", Assert.Single(drivers, d => d.CliId == AiProfilePresets.OpencodeCliId).GetType().Name);
         Assert.Equal("RoutingAiDriver", container.GetService<IAiDriver>()!.GetType().Name);
     }
 }

@@ -65,6 +65,8 @@ public static class AiProfilePresets
 
     public const string CodexCliId = "codex-cli";
 
+    public const string OpencodeCliId = "opencode-cli";
+
     // 시스템 CLI 정의. EnabledOn = 실행할 수 있는 플랫폼(AiHostPlatform.None = 「준비 중」).
     // Antigravity·Codex 는 사용자 결정으로 실제 왕복 확인 전에 켰다(D-038). 운영 접속도 막지 않는다(D-039).
     private sealed record SystemCliDefinition(string Id, string DisplayName, bool SupportsImages, AiHostPlatform EnabledOn);
@@ -74,6 +76,7 @@ public static class AiProfilePresets
         new(ClaudeCodeId, "Claude Code", true, AiHostPlatform.All),
         new(AntigravityCliId, "Antigravity CLI", false, AiHostPlatform.All),
         new(CodexCliId, "Codex CLI", true, AiHostPlatform.All),
+        new(OpencodeCliId, "opencode", false, AiHostPlatform.None), // 실제 왕복(O3) 통과 전에는 「준비 중」
     ];
 
     /// <summary>지금 실행 중인 플랫폼. 운영체제를 묻는 곳은 여기뿐이다.</summary>

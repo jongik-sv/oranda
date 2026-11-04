@@ -126,7 +126,10 @@ public class AiSystemCliSettingsTests
             var rows = page.Choices.Where(c => c.Kind == AiChoiceKind.SystemCli).ToList();
             Assert.Equal(["Antigravity CLI", "Codex CLI"], rows.Select(c => c.Title));
             Assert.All(rows, c => Assert.True(c.Selectable));
-            Assert.DoesNotContain(page.Choices, c => c.Kind == AiChoiceKind.DisabledCli);
+            // opencode 는 실제 왕복 통과 전이라 어느 플랫폼에서도 「준비 중」 줄로만 보인다(고를 수 없다).
+            var disabled = Assert.Single(page.Choices, c => c.Kind == AiChoiceKind.DisabledCli);
+            Assert.Equal("opencode", disabled.Title);
+            Assert.False(disabled.Selectable);
             Assert.False(page.ShowSystemCliInfo);
 
             page.Choose(rows[1]);

@@ -1,0 +1,85 @@
+using Oranda.Platform.Ai.Cli;
+
+namespace Oranda.Platform.Tests.Ai.Cli;
+
+/// <summary>사용자 설정의 MCP 서버 이름 읽기. 읽지 못하거나 모양을 모르면 이름을 추측하지 않고 문제로 돌려준다(fail-closed).</summary>
+public sealed class OpencodeGlobalConfigTests
+{
+    private const string Home = "/home/x";
+    private const string RunDirectory = "/home/x/data/ai/runs/run";
+
+    private static string GlobalFile(string name = "opencode.jsonc") => Path.Combine(Home, ".config", "opencode", name);
+
+    private static (IReadOnlyList<string> Names, string? Problem) Read(Dictionary<string, string?> files, Func<string, string?>? environment = null)
+        => OpencodeGlobalConfig.ReadMcpServerNames(environment ?? (_ => null), Home, RunDirectory, path => files.GetValueOrDefault(path));
+
+    [Fact]
+    public void No_config_files_means_no_servers_and_no_problem()
+    {
+        var (names, problem) = Read([]);
+
+        Assert.Empty(names);
+        Assert.Null(problem);
+    }
+
+    [Fact]
+    public void Server_names_are_read_from_jsonc_with_comments_and_trailing_commas()
+    {
+        var files = new Dictionary<string, string?>
+        {
+            [GlobalFile()] = """
+                {
+                  // 주석
+                  "$schema": "https://opencode.ai/config.json",
+                  "mcp": {
+                    "rea": { "type": "local", "command": ["x", "mcp"], "enabled": true, },
+                    "z": { "type": "local", "command": ["y"] },
+                  },
+                }
+                """,
+        };
+
+        var (names, problem) = Read(files);
+
+        Assert.Null(problem);
+        Assert.Equal(["rea", "z"], names);
+    }
+
+    [Fact]
+    public void Names_from_the_xdg_config_home_and_project_folders_above_the_run_folder_are_included()
+    {
+        var files = new Dictionary<string, string?>
+        {
+            ["/xdg/opencode/opencode.json"] = """{"mcp":{"a":{"type":"local","command":["a"]}}}""",
+            ["/home/x/opencode.json"] = """{"mcp":{"b":{"type":"local","command":["b"]}}}""",
+            ["/home/x/data/.opencode/opencode.jsonc"] = """{"mcp":{"c":{"type":"local","command":["c"]}}}""",
+        };
+
+        var (names, problem) = Read(files, name => name == "XDG_CONFIG_HOME" ? "/xdg" : null);
+
+        Assert.Null(problem);
+        Assert.Equal(["a", "b", "c"], names);
+    }
+
+    [Theory]
+    [InlineData("""{"mcp":{"r":{"type":"remote","url":"https://x.example"}}}""")]
+    [InlineData("""{"mcp":{"r":{"command":["x"]}}}""")]
+    [InlineData("""{"mcp":{"r":"oops"}}""")]
+    [InlineData("""{"mcp":[1]}""")]
+    [InlineData("""[1]""")]
+    [InlineData("""{ not json""")]
+    public void A_server_shape_that_cannot_be_turned_off_or_a_broken_file_is_a_problem(string content)
+    {
+        var (_, problem) = Read(new Dictionary<string, string?> { [GlobalFile()] = content });
+
+        Assert.NotNull(problem);
+    }
+
+    [Fact]
+    public void An_unreadable_file_is_a_problem()
+    {
+        var (_, problem) = OpencodeGlobalConfig.ReadMcpServerNames(_ => null, Home, RunDirectory, _ => throw new UnauthorizedAccessException());
+
+        Assert.NotNull(problem);
+    }
+}

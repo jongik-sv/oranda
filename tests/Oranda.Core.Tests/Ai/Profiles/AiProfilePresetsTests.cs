@@ -29,12 +29,12 @@ public class AiProfilePresetsTests
         Assert.Equal(Enum.GetValues<AiProfilePreset>().Where(p => p != AiProfilePreset.Unknown).Order(), AiProfilePresets.All.Select(p => p.Preset).Order());
 
     [Fact]
-    public void System_cli_list_has_all_three_clis_available_everywhere()
+    public void System_cli_list_has_the_first_three_clis_available_everywhere_and_opencode_not_yet_available_anywhere()
     {
         foreach (var platform in new[] { AiHostPlatform.Windows, AiHostPlatform.MacOS, AiHostPlatform.Linux })
         {
             Assert.Equal(
-                [("Claude Code", true), ("Antigravity CLI", true), ("Codex CLI", true)],
+                [("Claude Code", true), ("Antigravity CLI", true), ("Codex CLI", true), ("opencode", false)],
                 AiProfilePresets.SystemClisFor(platform).Select(c => (c.DisplayName, c.Available)));
         }
     }
