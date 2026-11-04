@@ -3,6 +3,7 @@ using System.Text;
 using Oranda.Core.Ai.Contracts;
 using Oranda.Core.Ai.Profiles;
 using Oranda.Core.Composition;
+using Oranda.Core.Connection;
 using Oranda.Core.Security;
 using Oranda.Core.Settings;
 using Oranda.Core.Storage;
@@ -67,6 +68,7 @@ internal interface ISystemCliAiDriver
 /// <item>선택 안 함: <c>driver_none</c>.</item>
 /// <item>호출한 쪽이 기대한 프로필과 설정의 활성 프로필이 다름(<see cref="AiRequest.Expected"/>): <c>profile_changed</c>.</item>
 /// <item>시스템 CLI 가 목록에 없거나 쓸 수 없음, 또는 드라이버 등록이 없음: <c>system_cli_unavailable</c>(Claude Code 로 넘기지 않는다).</item>
+/// <item>시스템 CLI 로 운영 접속의 DB 도구를 여는 요청: <c>system_cli_production_blocked</c>.</item>
 /// <item>활성 프로필이 목록에 없음: <c>profile_missing</c>. 프리셋·형식을 모름: <c>profile_invalid</c>.</item>
 /// <item>주소가 올바르지 않음: <c>profile_invalid_url</c>. 키가 필요한데 없음: <c>profile_key_missing</c>(읽기 실패는 <c>profile_key_unreadable</c>).</item>
 /// <item>Claude Code·Anthropic 형식 프로필: <see cref="CliDriver"/>. OpenAI 형식 프로필: <see cref="IApiAiDriver"/>(등록이 없으면 <c>api_driver_pending</c>).</item>
@@ -77,6 +79,8 @@ internal interface ISystemCliAiDriver
 [OrandaService(typeof(IAiDriver))]
 internal sealed class RoutingAiDriver : IAiDriver
 {
+    internal const string SystemCliProductionBlockedCode = "system_cli_production_blocked";
+
     private static readonly AiDriverCapabilities DriverCapabilities =
         new(Skills: false, Tools: true, Resume: true, LocalOnly: false, Streaming: false, Images: true);
 
@@ -163,7 +167,15 @@ internal sealed class RoutingAiDriver : IAiDriver
             case AiActiveKind.SystemCli:
                 var cliDriver = (_services.GetService(typeof(IEnumerable<ISystemCliAiDriver>)) as IEnumerable<ISystemCliAiDriver>)
                     ?.FirstOrDefault(d => string.Equals(d.CliId, active.SystemCliId, StringComparison.Ordinal));
-                return cliDriver is null ? SystemCliUnavailable(active.SystemCliId) : Selection.ViaSystemCli(cliDriver);
+                if (cliDriver is null)
+                {
+                    return SystemCliUnavailable(active.SystemCliId);
+                }
+
+                // Codex·Antigravity 는 실제 왕복과 Windows 잠금을 확인하지 못한 채 켰다(D-038). 운영 DB 도구는 열지 않는다.
+                return request.Session?.Run.Context.Environment == ConnectionEnvironment.Production
+                    ? Selection.Fail($"{active.SystemCli!.DisplayName} 는 운영 접속에서 DB 도구를 쓸 수 없어 요청을 보내지 않았습니다. 설정의 「AI 모델」 에서 다른 모델을 고르세요.", SystemCliProductionBlockedCode)
+                    : Selection.ViaSystemCli(cliDriver);
             case AiActiveKind.ProfileMissing:
                 return Selection.Fail("선택한 LLM 프로필을 찾지 못했습니다. 설정의 「AI 모델」 에서 프로필을 다시 고르세요.", AiActiveProfile.ProfileMissingCode);
             case AiActiveKind.ProfileInvalid:

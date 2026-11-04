@@ -18,8 +18,7 @@ using Oranda.Core.Settings;
 namespace Oranda.App.Tests.Features.Ai;
 
 /// <summary>
-/// 시스템 CLI 가 「준비 중」 인 화면의 헤드리스 확인(cli-render): 설정 드롭다운의 「준비 중」 줄, 설정 파일에 CLI id 가 남은 경우의 설정 화면,
-/// 같은 경우의 튜닝 시작 창 모델 줄. <c>ORANDA_RENDER_DIR</c> 가 있을 때만 PNG(<c>cli-*.png</c>)를 쓴다. 저장소에 넣지 않는다.
+/// 시스템 CLI 화면의 헤드리스 확인(cli-render): 설정 드롭다운의 CLI 줄, CLI 를 고른 설정 화면의 고지 글, 같은 경우의 튜닝 시작 창 모델 줄. <c>ORANDA_RENDER_DIR</c> 가 있을 때만 PNG(<c>cli-*.png</c>)를 쓴다. 저장소에 넣지 않는다.
 /// </summary>
 public class AiSystemCliRenderTests
 {
@@ -61,7 +60,7 @@ public class AiSystemCliRenderTests
         where T : Control => window.GetVisualDescendants().OfType<T>().First(c => c.Name == name);
 
     [Fact]
-    public Task The_open_dropdown_lists_both_system_clis_as_coming_soon_rows() => HeadlessHost.Run(() =>
+    public Task The_open_dropdown_lists_both_system_clis_as_selectable_rows() => HeadlessHost.Run(() =>
     {
         var page = Page(new AiSettings { Profiles = [ProfileSamples.Example()] });
         var window = Host(page);
@@ -71,9 +70,9 @@ public class AiSystemCliRenderTests
             Assert.True(page.IsDropdownOpen);
             Dispatcher.UIThread.RunJobs();
 
-            var disabled = page.Choices.Where(c => c.Kind == AiChoiceKind.DisabledCli).ToList();
-            Assert.Equal(["Antigravity CLI", "Codex CLI"], disabled.Select(c => c.Title));
-            Assert.All(disabled, c => Assert.False(c.Selectable));
+            var rows = page.Choices.Where(c => c.Kind == AiChoiceKind.SystemCli).ToList();
+            Assert.Equal(["Antigravity CLI", "Codex CLI"], rows.Select(c => c.Title));
+            Assert.All(rows, c => Assert.True(c.Selectable));
 
             var popup = window.GetVisualDescendants().OfType<Popup>().First(p => p.Name == "ProfilePopup");
             var list = popup.Child!.GetVisualDescendants().OfType<ItemsControl>().First(c => c.Name == "ChoiceList");
@@ -89,14 +88,15 @@ public class AiSystemCliRenderTests
     [Theory]
     [InlineData(AiProfilePresets.CodexCliId, "cli-settings-stored-codex")]
     [InlineData(AiProfilePresets.AntigravityCliId, "cli-settings-stored-antigravity")]
-    public Task A_stored_cli_id_shows_the_problem_note_and_its_coming_soon_row_in_the_settings_page(string id, string file) => HeadlessHost.Run(() =>
+    public Task A_chosen_cli_shows_its_notice_and_no_problem_in_the_settings_page(string id, string file) => HeadlessHost.Run(() =>
     {
         var page = Page(new AiSettings { SystemCliId = id });
         var window = Host(page);
         try
         {
-            Assert.True(Find<StackPanel>(window, "ProblemPanel").IsEffectivelyVisible);
-            Assert.NotEmpty(Find<TextBlock>(window, "ProblemText").Text ?? string.Empty);
+            Assert.False(Find<StackPanel>(window, "ProblemPanel").IsEffectivelyVisible);
+            Assert.True(Find<TextBlock>(window, "SystemCliInfo").IsEffectivelyVisible);
+            Assert.Contains("운영 접속", Find<TextBlock>(window, "SystemCliInfo").Text ?? string.Empty, StringComparison.Ordinal);
             Assert.False(Find<ComboBox>(window, "ModelBox").IsEffectivelyVisible); // Claude 모델 칸을 보이지 않는다
             Render(window, file);
         }

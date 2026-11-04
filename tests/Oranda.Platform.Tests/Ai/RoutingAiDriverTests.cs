@@ -1,8 +1,10 @@
 using System.Reflection;
 using Oranda.Core.Ai.Access;
 using Oranda.Core.Ai.Contracts;
+using Oranda.Core.Ai.Gate;
 using Oranda.Core.Ai.Profiles;
 using Oranda.Core.Composition;
+using Oranda.Core.Connection;
 using Oranda.Core.Security;
 using Oranda.Core.Settings;
 using Oranda.Platform.Ai;
@@ -469,16 +471,47 @@ public sealed class RoutingAiDriverSystemCliTests
     }
 
     [Fact]
-    public async Task Every_platform_branch_closes_codex()
+    public async Task Every_platform_branch_runs_codex()
     {
         Use(AiProfilePresets.CodexCliId);
 
         foreach (var platform in new[] { AiHostPlatform.MacOS, AiHostPlatform.Windows, AiHostPlatform.Linux })
         {
             var fake = new FakeSystemCliDriver(AiProfilePresets.CodexCliId);
-            Assert.Equal("system_cli_unavailable", CodeOf(await RunAsync(Create(AiProfilePresets.SystemClisFor(platform), fake))));
-            Assert.Empty(fake.Requests);
+            Assert.IsType<AiFinal>(Assert.Single(await RunAsync(Create(AiProfilePresets.SystemClisFor(platform), fake))));
+            Assert.Single(fake.Requests);
         }
+    }
+
+    private static AgentSession SessionOn(ConnectionEnvironment environment) =>
+        new(new AgentRunScope("r", new ConnectionProfile("p", "u", "h/s", Environment: environment), new AiContext("p", environment, AiAccessLevel.Query)));
+
+    [Theory]
+    [InlineData(AiProfilePresets.CodexCliId)]
+    [InlineData(AiProfilePresets.AntigravityCliId)]
+    public async Task A_system_cli_is_blocked_on_a_production_session_and_starts_nothing(string cliId)
+    {
+        Use(cliId);
+        var fake = new FakeSystemCliDriver(cliId);
+
+        var code = CodeOf(await RunAsync(Create(AiProfilePresets.SystemClisFor(AiHostPlatform.Windows), fake), Request with { Session = SessionOn(ConnectionEnvironment.Production) }));
+
+        Assert.Equal(RoutingAiDriver.SystemCliProductionBlockedCode, code);
+        Assert.Empty(fake.Requests);
+    }
+
+    [Theory]
+    [InlineData(ConnectionEnvironment.Development)]
+    [InlineData(ConnectionEnvironment.Test)]
+    public async Task A_system_cli_runs_on_a_non_production_session(ConnectionEnvironment environment)
+    {
+        Use(AiProfilePresets.CodexCliId);
+        var fake = new FakeSystemCliDriver(AiProfilePresets.CodexCliId);
+
+        var events = await RunAsync(Create(AiProfilePresets.SystemClisFor(AiHostPlatform.Windows), fake), Request with { Session = SessionOn(environment) });
+
+        Assert.IsType<AiFinal>(Assert.Single(events));
+        Assert.Single(fake.Requests);
     }
 
     [Fact]
@@ -499,18 +532,11 @@ public sealed class RoutingAiDriverSystemCliTests
         Assert.Null(seen.Effort);
     }
 
-    /// <summary>
-    /// 두 CLI 는 어떤 플랫폼에서도 켜져 있지 않다(not enabled on any platform). 실제 드라이버(파일은 모두 있다고 답하는 대역)를 등록해도
-    /// 설정 파일에 id 가 저장되어 있으면 <c>system_cli_unavailable</c> 로 닫히고 CLI 프로세스는 한 건도 시작되지 않는다.
-    /// </summary>
+    /// <summary>「준비 중」 줄(<c>Available = false</c>)은 실제 드라이버를 등록해도 <c>system_cli_unavailable</c> 로 닫히고 CLI 프로세스는 한 건도 시작되지 않는다.</summary>
     [Theory]
-    [InlineData(AiHostPlatform.Windows, AiProfilePresets.CodexCliId)]
-    [InlineData(AiHostPlatform.MacOS, AiProfilePresets.CodexCliId)]
-    [InlineData(AiHostPlatform.Linux, AiProfilePresets.CodexCliId)]
-    [InlineData(AiHostPlatform.Windows, AiProfilePresets.AntigravityCliId)]
-    [InlineData(AiHostPlatform.MacOS, AiProfilePresets.AntigravityCliId)]
-    [InlineData(AiHostPlatform.Linux, AiProfilePresets.AntigravityCliId)]
-    public async Task A_stored_codex_or_antigravity_id_closes_on_every_platform_and_starts_no_process(AiHostPlatform platform, string cliId)
+    [InlineData(AiProfilePresets.CodexCliId)]
+    [InlineData(AiProfilePresets.AntigravityCliId)]
+    public async Task A_stored_id_of_a_coming_soon_row_closes_and_starts_no_process(string cliId)
     {
         var launcher = new Cli.FakeLauncher();
         var tokens = new FakeRunTokens();
@@ -526,7 +552,13 @@ public sealed class RoutingAiDriverSystemCliTests
             (_, _, _) => Task.FromResult<string?>("1.4.12"));
         Use(cliId);
 
-        var code = CodeOf(await RunAsync(Create(AiProfilePresets.SystemClisFor(platform), codex, agy)));
+        IReadOnlyList<AiSystemCliInfo> clis =
+        [
+            new(AiProfilePresets.ClaudeCodeId, "Claude Code", true),
+            new(AiProfilePresets.AntigravityCliId, "Antigravity CLI", false),
+            new(AiProfilePresets.CodexCliId, "Codex CLI", false),
+        ];
+        var code = CodeOf(await RunAsync(Create(clis, codex, agy)));
 
         Assert.Equal("system_cli_unavailable", code);
         Assert.Empty(launcher.Launches);

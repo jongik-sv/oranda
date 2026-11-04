@@ -117,45 +117,43 @@ public class AiSystemCliSettingsTests
     }
 
     [Fact]
-    public void The_windows_list_has_both_clis_as_coming_soon_and_unselectable()
+    public void Both_clis_can_be_chosen_on_every_platform_and_show_their_notice()
     {
-        var page = new AiModelSettingsPage(Base(), systemClis: AiProfilePresets.SystemClisFor(AiHostPlatform.Windows));
+        foreach (var platform in new[] { AiHostPlatform.Windows, AiHostPlatform.MacOS, AiHostPlatform.Linux })
+        {
+            var page = new AiModelSettingsPage(Base(), systemClis: AiProfilePresets.SystemClisFor(platform));
 
-        var disabled = page.Choices.Where(c => c.Kind == AiChoiceKind.DisabledCli).ToList();
-        Assert.Equal(["Antigravity CLI", "Codex CLI"], disabled.Select(c => c.Title));
-        Assert.All(disabled, c => Assert.False(c.Selectable));
-        Assert.DoesNotContain(page.Choices, c => c.Kind == AiChoiceKind.SystemCli);
+            var rows = page.Choices.Where(c => c.Kind == AiChoiceKind.SystemCli).ToList();
+            Assert.Equal(["Antigravity CLI", "Codex CLI"], rows.Select(c => c.Title));
+            Assert.All(rows, c => Assert.True(c.Selectable));
+            Assert.DoesNotContain(page.Choices, c => c.Kind == AiChoiceKind.DisabledCli);
+            Assert.False(page.ShowSystemCliInfo);
 
-        page.Choose(disabled[0]);
-        Assert.Null(page.ToSettings().SystemCliId);
-        Assert.Equal(AiActiveKind.ClaudeCode, page.ActiveKind);
+            page.Choose(rows[1]);
+            Assert.Equal(AiProfilePresets.CodexCliId, page.ToSettings().SystemCliId);
+            Assert.Equal(AiActiveKind.SystemCli, page.ActiveKind);
+            Assert.True(page.ShowSystemCliInfo);
+            Assert.Contains("~/.codex", page.SystemCliInfoText, StringComparison.Ordinal);
+
+            page.Choose(page.Choices.Single(c => c.Kind == AiChoiceKind.SystemCli && c.CliId == AiProfilePresets.AntigravityCliId));
+            Assert.Contains("antigravity-cli", page.SystemCliInfoText, StringComparison.Ordinal);
+        }
     }
 
-    [Fact]
-    public void The_macos_list_also_has_both_clis_as_coming_soon_and_unselectable()
-    {
-        var page = new AiModelSettingsPage(Base(), systemClis: AiProfilePresets.SystemClisFor(AiHostPlatform.MacOS));
+    private static IReadOnlyList<AiSystemCliInfo> ComingSoon() =>
+    [
+        new(AiProfilePresets.ClaudeCodeId, "Claude Code", true),
+        new(AiProfilePresets.AntigravityCliId, "Antigravity CLI", false),
+        new(AiProfilePresets.CodexCliId, "Codex CLI", false),
+    ];
 
-        var disabled = page.Choices.Where(c => c.Kind == AiChoiceKind.DisabledCli).ToList();
-        Assert.Equal(["Antigravity CLI", "Codex CLI"], disabled.Select(c => c.Title));
-        Assert.All(disabled, c => Assert.False(c.Selectable));
-        Assert.DoesNotContain(page.Choices, c => c.Kind == AiChoiceKind.SystemCli);
-
-        page.Choose(disabled[0]);
-        Assert.Null(page.ToSettings().SystemCliId);
-    }
-
-    /// <summary>설정 파일에 두 id 가 저장되어 있어도 어떤 플랫폼에서든 그 줄은 「준비 중」 이고 선택되지 않는다(not enabled on any platform).</summary>
+    /// <summary>「준비 중」 줄은 고를 수 없고, 설정 파일에 그 id 가 저장되어 있으면 현재 줄로 보이되 조용히 바뀌지 않는다.</summary>
     [Theory]
-    [InlineData(AiHostPlatform.Windows, AiProfilePresets.CodexCliId)]
-    [InlineData(AiHostPlatform.MacOS, AiProfilePresets.CodexCliId)]
-    [InlineData(AiHostPlatform.Linux, AiProfilePresets.CodexCliId)]
-    [InlineData(AiHostPlatform.Windows, AiProfilePresets.AntigravityCliId)]
-    [InlineData(AiHostPlatform.MacOS, AiProfilePresets.AntigravityCliId)]
-    [InlineData(AiHostPlatform.Linux, AiProfilePresets.AntigravityCliId)]
-    public void A_stored_codex_or_antigravity_id_shows_as_its_coming_soon_row_on_every_platform(AiHostPlatform platform, string id)
+    [InlineData(AiProfilePresets.CodexCliId)]
+    [InlineData(AiProfilePresets.AntigravityCliId)]
+    public void A_stored_id_of_a_coming_soon_row_shows_as_that_row(string id)
     {
-        var page = new AiModelSettingsPage(Base(id), systemClis: AiProfilePresets.SystemClisFor(platform));
+        var page = new AiModelSettingsPage(Base(id), systemClis: ComingSoon());
 
         Assert.Equal(AiActiveKind.SystemCliUnavailable, page.ActiveKind);
         var current = Assert.Single(page.Choices, c => c.IsCurrent);
@@ -169,12 +167,12 @@ public class AiSystemCliSettingsTests
     }
 
     [Theory]
-    [InlineData("codex-cli")] // 준비 중인 CLI(기본 목록)
+    [InlineData("codex-cli")] // 준비 중인 CLI
     [InlineData("no-such-cli")]
     [InlineData(AiSettings.UnreadableSystemCliId)]
     public void An_unusable_cli_value_shows_as_a_problem_not_as_claude_code(string id)
     {
-        var page = new AiModelSettingsPage(Base(id)); // 기본 목록: 두 CLI 모두 준비 중
+        var page = new AiModelSettingsPage(Base(id), systemClis: ComingSoon());
 
         Assert.Equal(AiActiveKind.SystemCliUnavailable, page.ActiveKind);
         Assert.True(page.ShowProblem);
@@ -227,7 +225,7 @@ public class AiSystemCliSettingsTests
     public void The_summary_names_the_cli_or_the_failure()
     {
         var ok = new AiModelSettingsPage(Base("codex-cli"), systemClis: Enabled);
-        var bad = new AiModelSettingsPage(Base("codex-cli"));
+        var bad = new AiModelSettingsPage(Base("codex-cli"), systemClis: ComingSoon());
 
         Assert.Equal("AI: Codex CLI", ok.Summary);
         Assert.Contains("사용 불가", bad.Summary, StringComparison.Ordinal);

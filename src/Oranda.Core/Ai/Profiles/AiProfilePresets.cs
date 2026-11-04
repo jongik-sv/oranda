@@ -65,15 +65,15 @@ public static class AiProfilePresets
 
     public const string CodexCliId = "codex-cli";
 
-    // 시스템 CLI 정의. EnabledOn = 실행할 수 있는 플랫폼. 드라이버가 생긴 CLI 는 이 값 한 줄만 바꿔 켠다(예: AiHostPlatform.MacOS).
-    // 지금은 Antigravity·Codex 모두 어떤 플랫폼에서도 켜지 않는다(AiHostPlatform.None = 「준비 중」). 실제 왕복 확인 뒤에 켠다.
+    // 시스템 CLI 정의. EnabledOn = 실행할 수 있는 플랫폼(AiHostPlatform.None = 「준비 중」).
+    // Antigravity·Codex 는 사용자 결정으로 실제 왕복 확인 전에 켰다(D-038). 라우터가 운영 접속의 DB 도구 요청은 막는다.
     private sealed record SystemCliDefinition(string Id, string DisplayName, bool SupportsImages, AiHostPlatform EnabledOn);
 
     private static readonly SystemCliDefinition[] SystemCliDefinitions =
     [
         new(ClaudeCodeId, "Claude Code", true, AiHostPlatform.All),
-        new(AntigravityCliId, "Antigravity CLI", false, AiHostPlatform.None),
-        new(CodexCliId, "Codex CLI", true, AiHostPlatform.None),
+        new(AntigravityCliId, "Antigravity CLI", false, AiHostPlatform.All),
+        new(CodexCliId, "Codex CLI", true, AiHostPlatform.All),
     ];
 
     /// <summary>지금 실행 중인 플랫폼. 운영체제를 묻는 곳은 여기뿐이다.</summary>
@@ -83,7 +83,7 @@ public static class AiProfilePresets
         : OperatingSystem.IsLinux() ? AiHostPlatform.Linux
         : AiHostPlatform.None;
 
-    /// <summary>시스템 CLI 표시 목록(지금 플랫폼 기준). 이 항목 기준으로 Claude Code 만 실행할 수 있고 나머지는 「준비 중」 이다.</summary>
+    /// <summary>시스템 CLI 표시 목록(지금 플랫폼 기준).</summary>
     public static IReadOnlyList<AiSystemCliInfo> SystemClis { get; } = SystemClisFor(CurrentPlatform);
 
     /// <summary>주어진 플랫폼에서 보이는 시스템 CLI 목록. <see cref="AiSystemCliInfo.Available"/> 은 그 플랫폼에서 실행할 수 있는지다.</summary>

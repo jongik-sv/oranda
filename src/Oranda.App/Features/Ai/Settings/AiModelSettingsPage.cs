@@ -89,7 +89,7 @@ public sealed partial class AiModelSettingsPage : ObservableObject
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(ModelEnabled), nameof(IsNone), nameof(IsClaudeCode), nameof(Summary))]
-    [NotifyPropertyChangedFor(nameof(ShowSelection), nameof(ShowCliSettings), nameof(ShowProfileInfo), nameof(ShowProblem), nameof(ProblemText))]
+    [NotifyPropertyChangedFor(nameof(ShowSelection), nameof(ShowCliSettings), nameof(ShowProfileInfo), nameof(ShowProblem), nameof(ProblemText), nameof(ShowSystemCliInfo))]
     [NotifyPropertyChangedFor(nameof(SelectedTitle), nameof(ShowPlainTextWarning), nameof(Choices))]
     private AiDriverKind _driver;
 
@@ -159,7 +159,7 @@ public sealed partial class AiModelSettingsPage : ObservableObject
     /// <summary>쓰는 프로필 id. null 이면 Claude Code. 목록에 없는 값(지워진 프로필·읽을 수 없는 값)도 그대로 들고 있다가 저장한다.</summary>
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(Summary), nameof(ActiveKind), nameof(ActiveProfile))]
-    [NotifyPropertyChangedFor(nameof(ShowSelection), nameof(ShowCliSettings), nameof(ShowProfileInfo), nameof(ShowProblem), nameof(ProblemText))]
+    [NotifyPropertyChangedFor(nameof(ShowSelection), nameof(ShowCliSettings), nameof(ShowProfileInfo), nameof(ShowProblem), nameof(ProblemText), nameof(ShowSystemCliInfo))]
     [NotifyPropertyChangedFor(nameof(SelectedTitle), nameof(ShowPlainTextWarning), nameof(Choices), nameof(ProfileModel), nameof(ProfileUrl), nameof(ProfileFormatText), nameof(ProfileImagesText))]
     private Guid? _activeProfileId;
 
@@ -263,6 +263,16 @@ public sealed partial class AiModelSettingsPage : ObservableObject
     public bool ShowCliSettings => ShowSelection && ActiveKind == AiActiveKind.ClaudeCode;
 
     public bool ShowProfileInfo => ShowSelection && ActiveKind == AiActiveKind.Profile;
+
+    /// <summary>Codex·Antigravity 를 고르면 그 CLI 의 고지 글을 보인다.</summary>
+    public bool ShowSystemCliInfo => ShowSelection && ActiveKind == AiActiveKind.SystemCli;
+
+    /// <summary>시스템 CLI 고지: 대화 기록을 지울 수 없음, 실행 시간 한도, 운영 접속 제한.</summary>
+    public string SystemCliInfoText => Active.SystemCliId == AiProfilePresets.CodexCliId
+        ? _t.T("이 PC 에 로그인된 Codex CLI 를 씁니다. 대화는 ~/.codex 폴더에 남으며 Oranda 가 지울 수 없습니다. 한 차례 실행은 최대 6시간입니다. 운영 접속에서는 DB 도구를 쓰는 요청을 보내지 않습니다.",
+            "Uses the Codex CLI signed in on this PC. Conversations stay in ~/.codex and Oranda cannot delete them. One run lasts at most 6 hours. Requests that use database tools are not sent on production connections.")
+        : _t.T("이 PC 에 로그인된 Antigravity CLI 를 씁니다. 대화는 ~/.gemini/antigravity-cli 폴더에 남으며 Oranda 가 지울 수 없습니다. 한 차례 실행은 최대 6시간입니다. 운영 접속에서는 DB 도구를 쓰는 요청을 보내지 않습니다.",
+            "Uses the Antigravity CLI signed in on this PC. Conversations stay in ~/.gemini/antigravity-cli and Oranda cannot delete them. One run lasts at most 6 hours. Requests that use database tools are not sent on production connections.");
 
     public bool ShowProblem => ShowSelection && ActiveKind is AiActiveKind.ProfileMissing or AiActiveKind.ProfileInvalid or AiActiveKind.SystemCliUnavailable;
 

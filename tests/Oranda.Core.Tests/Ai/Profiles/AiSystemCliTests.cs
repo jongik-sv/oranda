@@ -57,13 +57,13 @@ public class AiSystemCliTests
         Assert.Equal(AiActiveKind.None, Find("on-cli", driver: AiDriverKind.None).Kind);
 
     [Fact]
-    public void Default_list_find_closes_codex_and_antigravity_on_every_platform()
+    public void Default_list_find_opens_codex_and_antigravity_on_every_platform()
     {
         foreach (var platform in new[] { AiHostPlatform.MacOS, AiHostPlatform.Windows, AiHostPlatform.Linux })
         {
             var clis = AiProfilePresets.SystemClisFor(platform);
-            Assert.Equal(AiActiveKind.SystemCliUnavailable, AiActiveProfile.Find(new AiSettings { SystemCliId = AiProfilePresets.CodexCliId }, clis).Kind);
-            Assert.Equal(AiActiveKind.SystemCliUnavailable, AiActiveProfile.Find(new AiSettings { SystemCliId = AiProfilePresets.AntigravityCliId }, clis).Kind);
+            Assert.Equal(AiActiveKind.SystemCli, AiActiveProfile.Find(new AiSettings { SystemCliId = AiProfilePresets.CodexCliId }, clis).Kind);
+            Assert.Equal(AiActiveKind.SystemCli, AiActiveProfile.Find(new AiSettings { SystemCliId = AiProfilePresets.AntigravityCliId }, clis).Kind);
         }
     }
 
@@ -72,12 +72,12 @@ public class AiSystemCliTests
     [InlineData(AiHostPlatform.Windows)]
     [InlineData(AiHostPlatform.Linux)]
     [InlineData(AiHostPlatform.None)]
-    public void Codex_and_antigravity_are_not_enabled_on_any_platform(AiHostPlatform platform)
+    public void All_three_clis_are_enabled_on_every_known_platform(AiHostPlatform platform)
     {
         var clis = AiProfilePresets.SystemClisFor(platform);
 
-        Assert.False(clis.Single(c => c.Id == AiProfilePresets.CodexCliId).Available);
-        Assert.False(clis.Single(c => c.Id == AiProfilePresets.AntigravityCliId).Available);
+        Assert.Equal(platform != AiHostPlatform.None, clis.Single(c => c.Id == AiProfilePresets.CodexCliId).Available);
+        Assert.Equal(platform != AiHostPlatform.None, clis.Single(c => c.Id == AiProfilePresets.AntigravityCliId).Available);
         Assert.Equal(platform != AiHostPlatform.None, clis.Single(c => c.Id == AiProfilePresets.ClaudeCodeId).Available);
     }
 

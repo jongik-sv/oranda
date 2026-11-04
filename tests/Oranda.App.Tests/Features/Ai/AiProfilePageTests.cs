@@ -33,13 +33,9 @@ public class AiProfilePageTests
 
         var rows = page.Choices;
         Assert.Equal(["시스템 CLI", "Claude Code", "Antigravity CLI", "Codex CLI", "내 프로필", "예제 LLM", "새 프로필 만들기…"], rows.Select(r => r.Title));
-        Assert.Equal([AiChoiceKind.Header, AiChoiceKind.ClaudeCode, AiChoiceKind.DisabledCli, AiChoiceKind.DisabledCli, AiChoiceKind.Header, AiChoiceKind.Profile, AiChoiceKind.NewProfile],
+        Assert.Equal([AiChoiceKind.Header, AiChoiceKind.ClaudeCode, AiChoiceKind.SystemCli, AiChoiceKind.SystemCli, AiChoiceKind.Header, AiChoiceKind.Profile, AiChoiceKind.NewProfile],
             rows.Select(r => r.Kind));
-        Assert.All(rows.Where(r => r.Kind == AiChoiceKind.DisabledCli), r =>
-        {
-            Assert.False(r.Selectable);
-            Assert.Equal("준비 중", r.Detail);
-        });
+        Assert.All(rows.Where(r => r.Kind == AiChoiceKind.SystemCli), r => Assert.True(r.Selectable));
         Assert.True(rows.Single(r => r.Kind == AiChoiceKind.ClaudeCode).IsCurrent);
         Assert.Equal("example-model", rows.Single(r => r.Kind == AiChoiceKind.Profile).Detail);
         Assert.DoesNotContain(rows, r => r.Title.Contains("Unknown", StringComparison.OrdinalIgnoreCase));
@@ -102,11 +98,18 @@ public class AiProfilePageTests
     [Fact]
     public void Disabled_cli_rows_cannot_be_chosen()
     {
-        var page = new AiModelSettingsPage(new AiSettings());
+        var page = new AiModelSettingsPage(new AiSettings(), systemClis:
+        [
+            new(AiProfilePresets.ClaudeCodeId, "Claude Code", true),
+            new(AiProfilePresets.CodexCliId, "Codex CLI", false),
+        ]);
         var before = page.ToSettings();
+        var row = page.Choices.First(r => r.Kind == AiChoiceKind.DisabledCli);
 
-        page.Choose(page.Choices.First(r => r.Kind == AiChoiceKind.DisabledCli));
+        page.Choose(row);
 
+        Assert.False(row.Selectable);
+        Assert.Equal("준비 중", row.Detail);
         Assert.Equal(before, page.ToSettings());
     }
 

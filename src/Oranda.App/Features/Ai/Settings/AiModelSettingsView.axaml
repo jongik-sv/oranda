@@ -131,6 +131,9 @@
           <TextBlock Text="이 PC 에 로그인된 claude 를 씁니다. 키·URL 이 필요 없습니다." Classes="dim" FontSize="{DynamicResource OrandaFontSizeSmall}" TextWrapping="Wrap" />
         </StackPanel>
 
+        <TextBlock x:Name="SystemCliInfo" Text="{Binding SystemCliInfoText}" IsVisible="{Binding ShowSystemCliInfo}" Classes="dim" TextWrapping="Wrap"
+                   FontSize="{DynamicResource OrandaFontSizeSmall}" />
+
         <Border x:Name="ProfileInfo" IsVisible="{Binding ShowProfileInfo}" Background="{DynamicResource OrandaPanelHeaderBrush}" CornerRadius="6" Padding="12">
           <Grid ColumnDefinitions="72,*" RowDefinitions="Auto,Auto,Auto,Auto" ColumnSpacing="10" RowSpacing="7">
             <Grid.Styles>
