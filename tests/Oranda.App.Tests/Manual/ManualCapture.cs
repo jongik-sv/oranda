@@ -39,10 +39,11 @@ internal static class ManualCapture
         window.RequestedThemeVariant = ThemeVariant.Light;
         Settle(window);
 
-        Canvas? overlay = null;
+        Control? original = null;
         if (callouts is { Count: > 0 })
         {
-            overlay = WrapWithOverlay(window);
+            original = window.Content as Control ?? throw new InvalidOperationException("창 내용이 컨트롤이 아니다.");
+            var overlay = WrapWithOverlay(window, original);
             Settle(window);
             foreach (var callout in callouts)
             {
@@ -55,6 +56,14 @@ internal static class ManualCapture
         var size = new PixelSize(Math.Max(1, (int)Math.Ceiling(window.Bounds.Width)), Math.Max(1, (int)Math.Ceiling(window.Bounds.Height)));
         using var bitmap = new RenderTargetBitmap(size);
         bitmap.Render(window);
+
+        // 번호 표시는 이 캡처에만 쓴다. 같은 창으로 다음 캡처를 이어서 하므로 원래 내용으로 되돌린다.
+        if (original is not null)
+        {
+            ((Panel)window.Content!).Children.Clear();
+            window.Content = original;
+            Settle(window);
+        }
 
         Directory.CreateDirectory(OutputDir);
         var path = Path.Combine(OutputDir, name + ".png");
@@ -102,9 +111,8 @@ internal static class ManualCapture
         }
     }
 
-    private static Canvas WrapWithOverlay(Window window)
+    private static Canvas WrapWithOverlay(Window window, Control original)
     {
-        var original = window.Content as Control ?? throw new InvalidOperationException("창 내용이 컨트롤이 아니다.");
         window.Content = null;
         var host = new Grid();
         host.Children.Add(original);
