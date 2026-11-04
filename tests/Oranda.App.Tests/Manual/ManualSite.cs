@@ -9,7 +9,7 @@ internal static class ManualSite
     /// 아직 초안(<c>draft: true</c>)인 쪽을 F1 표·범위표가 가리켜도 되는지. 초안은 게시 빌드에서 빠지므로 가리키면 404 다.
     /// 본문을 다 쓰는 마지막 단계(M6)에서 false 로 바꾼다.
     /// </summary>
-    internal const bool AllowDraftPages = true;
+    internal const bool AllowDraftPages = false;
 
     /// <summary>저장소 루트.</summary>
     internal static string RepoRoot => Root.Value;
