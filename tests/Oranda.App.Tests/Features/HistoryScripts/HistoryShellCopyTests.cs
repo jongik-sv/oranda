@@ -159,7 +159,9 @@ public sealed class HistoryShellCopyTests
     {
         using var rig = await Rig.StartAsync();
         rig.ClickRow(1);
-        rig.ClickRow(0, modifiers: Ctrl); // 아래 줄을 먼저 골라도 복사는 목록 순서를 따른다
+        // 목록의 다중 선택 키는 Avalonia 가 플랫폼 설정으로 판단한다(macOS Headless 는 실제 앱의 Cmd 와 다를 수 있다).
+        var toggle = Application.Current!.PlatformSettings!.HotkeyConfiguration.CommandModifiers == KeyModifiers.Meta ? RawInputModifiers.Meta : RawInputModifiers.Control;
+        rig.ClickRow(0, modifiers: toggle); // 아래 줄을 먼저 골라도 복사는 목록 순서를 따른다
 
         await rig.Clipboard.SetTextAsync("before");
         await rig.PressCopyAsync();
