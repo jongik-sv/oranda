@@ -2,17 +2,22 @@ using System.Runtime.CompilerServices;
 using Avalonia.Threading;
 using Oranda.App.Features.Ai.Chat;
 using Oranda.App.Features.Ai.Tuning;
+using Oranda.App.Features.Ai.Tuning.Commands;
 using Oranda.App.Features.ConnectionManager;
 using Oranda.App.Features.DedicatedSession;
 using Oranda.App.Features.Execution;
 using Oranda.App.Features.SqlEditor;
 using Oranda.App.Shell.Composition;
+using Oranda.App.Shell.Settings;
 using Oranda.App.Tests.Features.Execution;
 using Oranda.App.Tests.Features.SqlEditor;
+using Oranda.App.Tests.Shell.Headless;
 using Oranda.Core.Ai.Contracts;
 using Oranda.Core.Connection;
 using Oranda.Core.Extensibility;
 using Oranda.Core.Sessions;
+using Oranda.Core.Settings;
+using Oranda.Core.Storage;
 
 namespace Oranda.App.Tests.Features.ConnectionManager;
 
@@ -33,7 +38,7 @@ public sealed class AiLauncherRouterTests
             Fx.Sessions.PublishOpened = true;
             Fx.Container.AddInstance<IConnectionService>(Fx.Service);
             Fx.Container.AddInstance<IEditorContext>(new EditorContext { Host = Host });
-            Fx.Container.AddInstance<IAiDriver>(new IdleDriver());
+            Fx.Container.AddInstance<IAiDriver>(Driver);
             if (withRouter)
             {
                 Router = SessionRouter.Resolve(Fx.Container);
@@ -44,6 +49,8 @@ public sealed class AiLauncherRouterTests
         }
 
         public ServiceFixture Fx { get; } = new();
+
+        public IdleDriver Driver { get; } = new();
 
         public SqlEditorHost Host { get; } = new();
 
@@ -91,11 +98,90 @@ public sealed class AiLauncherRouterTests
     {
         public AiDriverCapabilities Capabilities { get; } = new(false, true, true, false, false, true);
 
+        public AiRequest? Last { get; private set; }
+
         public async IAsyncEnumerable<AiEvent> RunAsync(AiRequest request, [EnumeratorCancellation] CancellationToken ct)
         {
+            Last = request;
             yield return new AiFinal("답", null, "s");
             await Task.Yield();
         }
+    }
+
+    private sealed class NoPipeHost : Oranda.Core.Ai.Bridge.IAgentBridgeHost
+    {
+        public string Start() => "pipe-example";
+    }
+
+    /// <summary>파일처럼 읽을 때마다 <see cref="Disk"/> 를 돌려주는 저장소. 다른 앱 창의 저장은 <see cref="Disk"/> 를 직접 바꿔 흉내 낸다.</summary>
+    private sealed class DiskSettingsStore : ISettingsStore
+    {
+        public AppSettings Disk { get; set; } = new();
+
+        public Task<StoredDocument<AppSettings>> LoadAsync(CancellationToken ct) => Task.FromResult(new StoredDocument<AppSettings>(Disk));
+
+        public Task SaveAsync(AppSettings settings, CancellationToken ct)
+        {
+            Disk = settings;
+            return Task.CompletedTask;
+        }
+    }
+
+    /// <summary>이 앱은 메모리에 codex 를 들고 있는데, 다른 앱 창이 파일을 Claude Code 로 저장한 상태.</summary>
+    private static async Task<SettingsService> SettingsChangedByAnotherWindowAsync(Rig rig)
+    {
+        var store = new DiskSettingsStore();
+        var settings = new SettingsService(store);
+        rig.Fx.Container.AddInstance(settings);
+        rig.Fx.Container.AddInstance<Oranda.Core.Ai.Bridge.IAgentBridgeHost>(new NoPipeHost()); // 시험마다 실제 파이프를 열지 않는다
+        await settings.UpdateAsync(s => s with { Ai = new AiSettings { SystemCliId = "codex" } });
+        store.Disk = store.Disk with { Ai = new AiSettings() };
+        Assert.Equal("codex", AiConversationTarget.From(settings.Current.Ai).ToExpectation().SystemCliId); // 고치기 전이면 라우터가 profile_changed 로 막는 값
+        return settings;
+    }
+
+    [Fact]
+    public Task A_command_uses_the_ai_settings_saved_by_another_window() => Ui.Run(async () =>
+    {
+        using var rig = new Rig();
+        await rig.SqlTabOnAsync("a");
+        var settings = await SettingsChangedByAnotherWindowAsync(rig);
+
+        await rig.Launcher.RunCommandAsync(ExplainSqlCommand.Instance, CancellationToken.None);
+
+        Assert.Null(settings.Current.Ai.SystemCliId);
+        Assert.NotNull(rig.Driver.Last);
+        Assert.Null(rig.Driver.Last!.Expected!.SystemCliId);
+    });
+
+    [Fact]
+    public Task A_message_from_the_chat_uses_the_ai_settings_saved_by_another_window() => Ui.Run(async () =>
+    {
+        using var rig = new Rig();
+        await rig.SqlTabOnAsync("a");
+        var settings = await SettingsChangedByAnotherWindowAsync(rig);
+        rig.Launcher.EnsureChat(rig.Chat);
+
+        rig.Chat.Draft = "왜 느려?";
+        rig.Chat.SendCommand.Execute(null);
+        await HeadlessHost.WaitUntil(() => rig.Driver.Last is not null);
+
+        Assert.Null(settings.Current.Ai.SystemCliId);
+        Assert.Null(rig.Driver.Last!.Expected!.SystemCliId);
+    });
+
+    [Fact]
+    public async Task Reloading_ai_settings_leaves_the_other_sections_alone()
+    {
+        var store = new DiskSettingsStore();
+        var settings = new SettingsService(store);
+        await settings.SetThemeAsync(Theme.Dark);
+        store.Disk = new AppSettings { Ai = new AiSettings { SystemCliId = "codex" } };
+
+        await settings.ReloadAiAsync();
+
+        Assert.Equal("codex", settings.Current.Ai.SystemCliId);
+        Assert.Equal(Theme.Dark, settings.Current.Ui.Theme); // 이 창의 다른 설정은 다른 창의 값으로 덮지 않는다
     }
 
     private sealed class FakeDocument(ISession? session) : IConnectionDocument

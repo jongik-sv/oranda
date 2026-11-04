@@ -40,7 +40,7 @@ public static partial class AiErrorText
     /// <summary>다시 시작하라는 안내가 붙는 오류 코드와 글.</summary>
     private static string? ForCode(string? code) => code switch
     {
-        "profile_changed" => "AI 모델의 설정이 바뀌어 요청을 보내지 않았습니다. 이어 말할 수 없으니 " + Restart,
+        "profile_changed" => "AI 모델 설정이 바뀌어 요청을 보내지 않았습니다. 설정을 확인한 뒤 대화 창의 「새 대화」 단추로 다시 시작하세요.",
         "resume_unknown" => "이어 말할 앞 대화를 찾지 못했습니다(앱을 다시 시작했거나 모델이 바뀌었습니다). " + Restart,
 
         // CLI: 앞 대화를 다른 경로(다른 프로필·구독)가 만들었거나, 소속 기록을 읽지·쓰지 못한 경우. 앞 대화를 지금 서버로 보내지 않으려고 드라이버가 막았다.

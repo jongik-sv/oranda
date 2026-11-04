@@ -84,6 +84,24 @@ public sealed class SettingsService
         return doc.Value;
     }
 
+    /// <summary>
+    /// 파일의 <c>ai</c> 섹션만 다시 읽어 <see cref="Current"/> 에 넣는다. AI 라우터는 파일을 읽으므로, 다른 앱 창이 설정을 저장한 뒤에도 메모리와 어긋나지 않게 보내기 전에 부른다.
+    /// 다른 섹션은 건드리지 않는다. 저장과 겹치지 않게 <see cref="UpdateAsync"/> 와 같은 문을 쓴다.
+    /// </summary>
+    public async Task ReloadAiAsync(CancellationToken ct = default)
+    {
+        await _updateGate.WaitAsync(ct).ConfigureAwait(false);
+        try
+        {
+            var doc = await _store.LoadAsync(ct).ConfigureAwait(false);
+            Volatile.Write(ref _current, Current with { Ai = doc.Value.Ai });
+        }
+        finally
+        {
+            _updateGate.Release();
+        }
+    }
+
     /// <summary>값을 바꾸고 저장한다. 바뀐 값이 먼저 <see cref="Current"/> 가 된 뒤 이벤트가 나간다.</summary>
     public async Task UpdateAsync(Func<AppSettings, AppSettings> change, CancellationToken ct = default)
     {

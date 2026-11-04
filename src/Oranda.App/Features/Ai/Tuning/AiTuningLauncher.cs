@@ -173,6 +173,7 @@ public sealed class AiTuningLauncher(IServiceProvider services)
 
         // 보이는 세션의 프로필은 접속할 때의 사본이라, 접속 편집에서 바꾼 AI 허용 수준·환경 라벨이 빠져 있다. 저장된 최신 값을 쓴다.
         var profile = await LatestProfileAsync(shown, ct).ConfigureAwait(true) ?? shown;
+        await ReloadAiSettingsAsync(ct).ConfigureAwait(true);
         var settings = (services.GetService(typeof(SettingsService)) as SettingsService)?.Current.Ai ?? new AiSettings();
         var document = editor.GetActiveDocument();
         var tabId = document?.TabId.ToString("N", CultureInfo.InvariantCulture);
@@ -332,11 +333,36 @@ public sealed class AiTuningLauncher(IServiceProvider services)
             : null;
     }
 
+    /// <summary>
+    /// 보내기 전에 파일의 AI 설정을 다시 읽는다: 다른 앱 창이 저장했어도 확인 창·기대값과 라우터가 같은 설정을 본다.
+    /// 읽지 못하면 앞의 값을 두고 넘어간다(라우터가 같은 파일을 읽어 <c>settings_unreadable</c> 로 막는다).
+    /// </summary>
+    private async Task ReloadAiSettingsAsync(CancellationToken ct)
+    {
+        if (services.GetService(typeof(SettingsService)) is not SettingsService settings)
+        {
+            return;
+        }
+
+        try
+        {
+            await settings.ReloadAiAsync(ct).ConfigureAwait(true);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            Trace.TraceWarning("AI 설정을 다시 읽지 못했습니다: {0}", AiErrorText.Redact(ex.GetType().Name + ": " + ex.Message));
+            return;
+        }
+
+        _wiredChat?.RefreshActiveModel();
+    }
+
     /// <summary>대화 창에서 보낸 글(일반 대화 또는 튜닝 이어 말하기)을 흐름으로 넘긴다. 못 보내면 원인을 남기고 글을 입력칸에 돌려 둔다.</summary>
     private async Task FollowUpAsync(AiChatViewModel chat, ChatFollowUp followUp)
     {
         try
         {
+            await ReloadAiSettingsAsync(CancellationToken.None).ConfigureAwait(true);
             if (chat.UnavailableReason is { } reason)
             {
                 chat.AddAssistantText("오류: " + reason);
