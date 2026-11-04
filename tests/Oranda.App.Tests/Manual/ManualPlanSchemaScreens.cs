@@ -282,7 +282,7 @@ public sealed class ManualPlanSchemaScreens
                 new Mark(chip, 2),
                 new Mark(summary, 3, 760),
                 new Mark(header, 4, 440),
-                new Mark(rows, 5, 440, 4),
+                new Mark(rows, 5, 440, 15),
             ]);
         }
     });

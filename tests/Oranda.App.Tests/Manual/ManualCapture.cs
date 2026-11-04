@@ -17,8 +17,8 @@ namespace Oranda.App.Tests.Manual;
 /// </summary>
 internal static class ManualCapture
 {
-    /// <summary>번호 표시 한 개: 설명할 컨트롤과 번호. 위치는 컨트롤의 화면 좌표에서 계산한다.</summary>
-    internal sealed record Callout(Control Target, int Number);
+    /// <summary>번호 표시 한 개: 설명할 컨트롤과 번호. 위치는 컨트롤의 화면 좌표에서 계산하고, 글자를 가리면 <paramref name="Dx"/>·<paramref name="Dy"/> 만큼 옮긴다.</summary>
+    internal sealed record Callout(Control Target, int Number, double Dx = 0, double Dy = 0);
 
     /// <summary>캡처를 쓸 수 있는지(생성기 켜짐 + 실제 픽셀 그리기).</summary>
     internal static bool Enabled =>
@@ -65,6 +65,40 @@ internal static class ManualCapture
             Settle(window);
         }
 
+        return Write(bitmap, name);
+    }
+
+    /// <summary>
+    /// 번호 표시 겹침판을 먼저 얹는다. 내용을 옮겨 붙이면 목록 항목이 새로 만들어지거나 화면이 다시 읽어 선택이 풀리는 창에 쓴다.
+    /// 그 뒤에 상태를 만들고 컨트롤을 찾아 <see cref="SaveOverlaid"/> 로 그린다.
+    /// </summary>
+    internal static Canvas AddOverlay(Window window)
+    {
+        window.RequestedThemeVariant = ThemeVariant.Light;
+        Settle(window);
+        var overlay = WrapWithOverlay(window, window.Content as Control ?? throw new InvalidOperationException("창 내용이 컨트롤이 아니다."));
+        Settle(window);
+        return overlay;
+    }
+
+    /// <summary><see cref="AddOverlay"/> 를 쓴 창을 번호 표시와 함께 <paramref name="name"/>.png 로 쓴다.</summary>
+    internal static string SaveOverlaid(Window window, Canvas overlay, string name, IReadOnlyList<Callout> callouts)
+    {
+        Settle(window);
+        foreach (var callout in callouts)
+        {
+            AddBadge(overlay, callout);
+        }
+
+        Settle(window);
+        var size = new PixelSize(Math.Max(1, (int)Math.Ceiling(window.Bounds.Width)), Math.Max(1, (int)Math.Ceiling(window.Bounds.Height)));
+        using var bitmap = new RenderTargetBitmap(size);
+        bitmap.Render(window);
+        return Write(bitmap, name);
+    }
+
+    private static string Write(RenderTargetBitmap bitmap, string name)
+    {
         Directory.CreateDirectory(OutputDir);
         var path = Path.Combine(OutputDir, name + ".png");
 #pragma warning disable CS0618 // 렌더 확인용: 새 오버로드가 없는 헤드리스 비트맵
@@ -146,8 +180,8 @@ internal static class ManualCapture
             },
         };
         // 컨트롤의 왼쪽 위 모서리에 반쯤 걸치게 두되 창 밖으로 나가지 않게 한다.
-        Canvas.SetLeft(badge, Math.Max(0, origin.X - diameter / 2));
-        Canvas.SetTop(badge, Math.Max(0, origin.Y - diameter / 2));
+        Canvas.SetLeft(badge, Math.Max(0, origin.X - diameter / 2 + callout.Dx));
+        Canvas.SetTop(badge, Math.Max(0, origin.Y - diameter / 2 + callout.Dy));
         overlay.Children.Add(badge);
     }
 }
