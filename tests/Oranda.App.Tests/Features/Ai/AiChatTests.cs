@@ -21,8 +21,7 @@ public class AiChatTests
         vm.EndTurn();
 
         Assert.Equal(["ChatUserEntry", "ChatToolGroupEntry", "ChatToolEntry", "ChatToolEntry", "ChatAssistantEntry"], vm.Entries.Select(e => e.GetType().Name));
-        Assert.Contains("도구 2개", vm.StatusText, StringComparison.Ordinal);
-        Assert.Contains("실행 1회", vm.StatusText, StringComparison.Ordinal);
+        Assert.Contains("도구 2개", vm.ResultText, StringComparison.Ordinal);
     }
 
     private static async IAsyncEnumerable<AiEvent> Events(params AiEvent[] events)
@@ -109,7 +108,7 @@ public class AiChatTests
         var view = (AiChatView)window.Content!;
         Assert.Equal("튜닝 — 부서별 주문 수", view.FindControl<TextBlock>("TitleText")!.Text);
         Assert.Equal(4, view.FindControl<ItemsControl>("EntryList")!.ItemCount); // 사용자 글 · 도구 묶음 머리 줄 · 카드 · AI 글
-        Assert.Contains("도구 1개", view.FindControl<TextBlock>("StatusLine")!.Text, StringComparison.Ordinal);
+        Assert.Equal("AI 응답을 기다리는 중", view.FindControl<TextBlock>("ProgressText")!.Text);
         Assert.True(view.FindControl<Button>("StopButton")!.Command!.CanExecute(null));
         window.Close();
     });

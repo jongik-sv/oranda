@@ -1,11 +1,13 @@
 using System;
 using System.Collections.Generic;
+using System.ComponentModel;
 using System.Linq;
 using System.Threading.Tasks;
 using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Interactivity;
 using Avalonia.Platform.Storage;
+using Avalonia.Threading;
 using Avalonia.VisualTree;
 
 namespace Oranda.App.Features.Ai.Chat;
@@ -26,8 +28,70 @@ public partial class AiChatView : UserControl
         AddHandler(DragDrop.DragOverEvent, OnDragOver, RoutingStrategies.Tunnel);
         AddHandler(DragDrop.DropEvent, OnDrop, RoutingStrategies.Tunnel);
         AttachButton.Click += async (_, _) => await PickFilesAsync();
-        AttachedToVisualTree += (_, _) => ConnectAi();
-        DataContextChanged += (_, _) => ConnectAi();
+        AttachedToVisualTree += (_, _) =>
+        {
+            ConnectAi();
+            SyncProgressTimer();
+        };
+        DetachedFromVisualTree += (_, _) => _progressTimer.Stop();
+        DataContextChanged += (_, _) =>
+        {
+            ConnectAi();
+            ObserveViewModel();
+        };
+        _progressTimer.Tick += (_, _) => Vm?.RefreshProgress();
+        ConversationScroll.ScrollChanged += OnConversationScrollChanged;
+    }
+
+    private readonly DispatcherTimer _progressTimer = new() { Interval = TimeSpan.FromSeconds(1) };
+    private AiChatViewModel? _observed;
+    private bool _followEnd = true;
+
+    private void ObserveViewModel()
+    {
+        if (_observed is not null)
+        {
+            _observed.PropertyChanged -= OnViewModelPropertyChanged;
+        }
+
+        _observed = Vm;
+        if (_observed is not null)
+        {
+            _observed.PropertyChanged += OnViewModelPropertyChanged;
+        }
+
+        SyncProgressTimer();
+    }
+
+    private void OnViewModelPropertyChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName == nameof(AiChatViewModel.IsRunning))
+        {
+            SyncProgressTimer();
+            if (Vm is { IsRunning: true })
+            {
+                _followEnd = true; // 새로 보내면 진행 줄이 보이게 맨 아래로 돌아간다
+                Dispatcher.UIThread.Post(() => ConversationScroll.ScrollToEnd(), DispatcherPriority.Background);
+            }
+        }
+    }
+
+    // 화면에 붙어 있고 실행 중일 때만 초를 센다.
+    private void SyncProgressTimer() => _progressTimer.IsEnabled = this.IsAttachedToVisualTree() && Vm is { IsRunning: true };
+
+    // 실행 중 대화가 늘면 맨 아래를 따라간다. 사용자가 위로 올리면 따라가지 않고, 맨 아래로 돌아오면 다시 따라간다.
+    private void OnConversationScrollChanged(object? sender, ScrollChangedEventArgs e)
+    {
+        var grew = e.ExtentDelta.Y > 0;
+        if (grew && _followEnd && Vm is { IsRunning: true })
+        {
+            ConversationScroll.ScrollToEnd();
+        }
+        else if (!grew)
+        {
+            var scroll = ConversationScroll;
+            _followEnd = scroll.Offset.Y + scroll.Viewport.Height >= scroll.Extent.Height - 24;
+        }
     }
 
     /// <summary>

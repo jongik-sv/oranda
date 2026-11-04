@@ -34,6 +34,36 @@
     <Style Selector="Button#AttachButton:disabled Path">
       <Setter Property="Opacity" Value="0.4" />
     </Style>
+    <!-- 실행 중 회전 표식. 움직이는 동안만 aiSpin 을 달아, 쉬는 동안에는 애니메이션이 화면을 다시 그리지 않게 한다. -->
+    <Style Selector="Arc.aiSpinner">
+      <Setter Property="StartAngle" Value="0" />
+      <Setter Property="SweepAngle" Value="270" />
+      <Setter Property="StrokeThickness" Value="2" />
+      <Setter Property="Stroke" Value="{DynamicResource OrandaIconBlueBrush}" />
+      <Setter Property="VerticalAlignment" Value="Center" />
+    </Style>
+    <Style Selector="Arc.aiSpinner.slow">
+      <Setter Property="Stroke" Value="{DynamicResource OrandaWarningForegroundBrush}" />
+    </Style>
+    <Style Selector="Arc.aiSpin">
+      <Style.Animations>
+        <Animation Duration="0:0:0.9" IterationCount="Infinite">
+          <KeyFrame Cue="0%">
+            <Setter Property="RotateTransform.Angle" Value="0" />
+          </KeyFrame>
+          <KeyFrame Cue="100%">
+            <Setter Property="RotateTransform.Angle" Value="360" />
+          </KeyFrame>
+        </Animation>
+      </Style.Animations>
+    </Style>
+    <!-- 끝난 차례의 결과 줄 색: 완료는 초록, 오류는 경고색, 멈춤은 기본 글자색. -->
+    <Style Selector="TextBlock.aiResult.completed">
+      <Setter Property="Foreground" Value="{DynamicResource OrandaSuccessForegroundBrush}" />
+    </Style>
+    <Style Selector="TextBlock.aiResult.failed">
+      <Setter Property="Foreground" Value="{DynamicResource OrandaWarningForegroundBrush}" />
+    </Style>
   </UserControl.Styles>
   <DockPanel>
     <!-- 제목 줄: 제목 · 오른쪽 아이콘 단추 「튜닝 결과 레포트 저장」(튜닝 결과가 있고 실행 중이 아닐 때만 켜진다. 툴팁이 단추 이름). -->
@@ -109,8 +139,9 @@
         </Grid>
       </StackPanel>
     </Border>
-    <ScrollViewer HorizontalScrollBarVisibility="Disabled">
-      <ItemsControl x:Name="EntryList" ItemsSource="{Binding Entries}" Margin="8" AutomationProperties.Name="대화">
+    <ScrollViewer x:Name="ConversationScroll" HorizontalScrollBarVisibility="Disabled">
+      <StackPanel Margin="8">
+      <ItemsControl x:Name="EntryList" ItemsSource="{Binding Entries}" AutomationProperties.Name="대화">
         <ItemsControl.ItemsPanel>
           <ItemsPanelTemplate>
             <!-- 간격은 항목마다 아래 여백으로 둔다: 접힌 묶음의 감춘 카드는 자리를 차지하지 않는다. -->
@@ -148,10 +179,12 @@
             <ToggleButton x:Name="ToolGroupToggle" Classes="toolGroup" Margin="0,0,0,6" IsChecked="{Binding Group.IsExpanded, Mode=TwoWay}"
                           AutomationProperties.Name="{Binding Group.Summary}">
               <Grid ColumnDefinitions="16,*,Auto" ColumnSpacing="8">
+                <Arc x:Name="ToolGroupSpinner" Classes="aiSpinner" Classes.aiSpin="{Binding Group.IsToolRunning}" Width="10" Height="10" HorizontalAlignment="Left"
+                     IsVisible="{Binding Group.IsToolRunning}" />
                 <TextBlock Text="{Binding Group.Mark}" FontWeight="Bold" FontSize="{DynamicResource OrandaFontSizeSmall}"
-                           Foreground="{DynamicResource OrandaSuccessForegroundBrush}" IsVisible="{Binding !Group.HasProblem}" />
+                           Foreground="{DynamicResource OrandaSuccessForegroundBrush}" IsVisible="{Binding Group.ShowDoneMark}" />
                 <TextBlock Text="{Binding Group.Mark}" FontWeight="Bold" FontSize="{DynamicResource OrandaFontSizeSmall}"
-                           Foreground="{DynamicResource OrandaWarningForegroundBrush}" IsVisible="{Binding Group.HasProblem}" />
+                           Foreground="{DynamicResource OrandaWarningForegroundBrush}" IsVisible="{Binding Group.ShowProblemMark}" />
                 <TextBlock x:Name="ToolGroupSummary" Grid.Column="1" Text="{Binding Group.Summary}" TextTrimming="CharacterEllipsis"
                            FontSize="{DynamicResource OrandaFontSizeSmall}" ToolTip.Tip="{Binding Group.Summary}" />
                 <TextBlock Grid.Column="2" Text="{Binding Group.ToggleText}" Opacity="0.65" FontSize="{DynamicResource OrandaFontSizeSmall}" />
@@ -164,7 +197,9 @@
                       IsVisible="{Binding Group.IsExpanded, FallbackValue=True}" AutomationProperties.Name="{Binding Headline}">
               <Expander.Header>
                 <Grid ColumnDefinitions="16,*,Auto,Auto,Auto" RowDefinitions="Auto,Auto" ColumnSpacing="8" ClipToBounds="True">
-                  <TextBlock Text="{Binding Mark}" Opacity="0.8" FontSize="{DynamicResource OrandaFontSizeSmall}" />
+                  <Arc x:Name="ToolCardSpinner" Classes="aiSpinner" Classes.aiSpin="{Binding IsSpinning}" Width="10" Height="10" HorizontalAlignment="Left"
+                       IsVisible="{Binding IsSpinning}" />
+                  <TextBlock Text="{Binding Mark}" Opacity="0.8" FontSize="{DynamicResource OrandaFontSizeSmall}" IsVisible="{Binding ShowMark}" />
                   <TextBlock Grid.Column="1" Text="{Binding Headline}" TextTrimming="CharacterEllipsis"
                              FontSize="{DynamicResource OrandaFontSizeSmall}" ToolTip.Tip="{Binding Headline}" />
                   <TextBlock Grid.Column="2" Text="{Binding Elapsed}" Opacity="0.6" FontSize="{DynamicResource OrandaFontSizeSmall}" />
@@ -220,6 +255,40 @@
           </DataTemplate>
         </ItemsControl.DataTemplates>
       </ItemsControl>
+      <!-- 진행 줄(시안 A): 실행 중에만 대화 끝에 보인다. 지금 하는 일과 이번 차례 경과 시간. 새 소식이 오래 없으면 경고 색과 멈춤 안내로 바뀐다. -->
+      <StackPanel x:Name="ProgressPanel" Spacing="4" Margin="0,2,0,4" IsVisible="{Binding IsRunning}">
+        <Border x:Name="ProgressRow" Padding="10,8" CornerRadius="6" BorderThickness="1"
+                Background="{DynamicResource OrandaTableSelectionBrush}" BorderBrush="{DynamicResource OrandaTableSelectionBrush}"
+                IsVisible="{Binding ShowProgressNormal}">
+          <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="8">
+            <Arc x:Name="ProgressSpinner" Classes="aiSpinner" Classes.aiSpin="{Binding ShowProgressNormal}" Width="14" Height="14" />
+            <TextBlock x:Name="ProgressText" Grid.Column="1" Text="{Binding ProgressText}" FontWeight="SemiBold" TextTrimming="CharacterEllipsis"
+                       VerticalAlignment="Center" ToolTip.Tip="{Binding ProgressText}" />
+            <TextBlock x:Name="ProgressElapsed" Grid.Column="2" Text="{Binding ProgressElapsed}" VerticalAlignment="Center" />
+          </Grid>
+        </Border>
+        <Border x:Name="ProgressSlowRow" Padding="10,8" CornerRadius="6" BorderThickness="1" BorderBrush="{DynamicResource OrandaWarningForegroundBrush}"
+                IsVisible="{Binding IsProgressSlow}">
+          <StackPanel Spacing="4">
+            <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="8">
+              <Arc Classes="aiSpinner slow" Classes.aiSpin="{Binding IsProgressSlow}" Width="14" Height="14" />
+              <TextBlock x:Name="ProgressSlowText" Grid.Column="1" Text="{Binding ProgressText}" FontWeight="SemiBold" TextWrapping="Wrap" VerticalAlignment="Center"
+                         Foreground="{DynamicResource OrandaWarningForegroundBrush}" />
+              <TextBlock Grid.Column="2" Text="{Binding ProgressElapsed}" VerticalAlignment="Center" Foreground="{DynamicResource OrandaWarningForegroundBrush}" />
+            </Grid>
+            <TextBlock x:Name="ProgressSlowHint" Text="계속 기다리거나 아래 「멈춤」 으로 끝낼 수 있습니다." TextWrapping="Wrap" Opacity="0.75"
+                       FontSize="{DynamicResource OrandaFontSizeSmall}" />
+          </StackPanel>
+        </Border>
+      </StackPanel>
+      <!-- 결과 줄: 끝난 차례가 어떻게 끝났는지. 다음 차례가 시작되면 사라진다. -->
+      <Grid x:Name="ResultRow" ColumnDefinitions="16,*" ColumnSpacing="8" Margin="10,0,0,4" IsVisible="{Binding HasResult}">
+        <TextBlock Text="{Binding ResultMark}" FontWeight="Bold" FontSize="{DynamicResource OrandaFontSizeSmall}" Classes="aiResult"
+                   Classes.completed="{Binding ResultIsCompleted}" Classes.failed="{Binding ResultIsFailed}" />
+        <TextBlock x:Name="ResultText" Grid.Column="1" Text="{Binding ResultText}" FontSize="{DynamicResource OrandaFontSizeSmall}" Classes="aiResult"
+                   Classes.completed="{Binding ResultIsCompleted}" Classes.failed="{Binding ResultIsFailed}" />
+      </Grid>
+      </StackPanel>
     </ScrollViewer>
   </DockPanel>
 </UserControl>

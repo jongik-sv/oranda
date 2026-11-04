@@ -171,7 +171,8 @@ public sealed class AiChatMarkdownHeadlessTests
             var toggle = Assert.Single(window.GetVisualDescendants().OfType<ToggleButton>(), t => t.Name == "ToolGroupToggle");
             Assert.False(toggle.IsChecked);
             var summary = Assert.Single(window.GetVisualDescendants().OfType<TextBlock>(), t => t.Name == "ToolGroupSummary").Text!;
-            Assert.StartsWith("도구 4개 실행 중", summary, StringComparison.Ordinal); // c4 는 결과가 오지 않았다
+            Assert.StartsWith("도구 4개 실행", summary, StringComparison.Ordinal);
+            Assert.DoesNotContain("실행 중", summary, StringComparison.Ordinal); // c4 는 결과가 오지 않았지만 차례가 끝났으니 더 돌지 않는다
             Assert.Contains("거부 1", summary, StringComparison.Ordinal);
             Assert.Contains("실패 1", summary, StringComparison.Ordinal);
             Assert.All(window.GetVisualDescendants().OfType<Expander>(), c => Assert.False(c.IsEffectivelyVisible));

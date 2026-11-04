@@ -111,6 +111,14 @@ public sealed record ChatToolEntry(string Name, string ResponseSize, string Verd
 
     internal DateTime StartedUtc { get; init; }
 
+    /// <summary>결과가 오기 전에 차례가 끝났다(멈춤·오류). 더는 돌지 않는다.</summary>
+    public bool Interrupted { get; init; }
+
+    /// <summary>지금 실행 중인 카드다(앞에 회전 표식을 보인다).</summary>
+    public bool IsSpinning => !Done && !Interrupted;
+
+    public bool ShowMark => !IsSpinning;
+
     /// <summary>카드 앞 상태 표식(시안 9): 끝났으면 ✓, 진행 중이면 …</summary>
     public string Mark => Done ? "✓" : "…";
 
@@ -174,11 +182,21 @@ public sealed partial class ChatToolGroup : ObservableObject
     private string _mark = "…";
 
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(ShowDoneMark), nameof(ShowProblemMark))]
     private bool _hasProblem;
+
+    /// <summary>묶음 안에 지금 실행 중인 카드가 있다(머리 줄 앞에 회전 표식을 보인다).</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(ShowDoneMark), nameof(ShowProblemMark))]
+    private bool _isToolRunning;
+
+    public bool ShowDoneMark => !IsToolRunning && !HasProblem;
+
+    public bool ShowProblemMark => !IsToolRunning && HasProblem;
 
     internal void Update(IReadOnlyList<ChatToolEntry> cards)
     {
-        var running = cards.Any(c => !c.Done);
+        var running = cards.Any(c => c.IsSpinning);
         var seconds = cards.Sum(c => c.Seconds);
         var parts = new List<string> { string.Create(CultureInfo.CurrentCulture, $"도구 {cards.Count}개 {(running ? "실행 중" : "실행")}") };
         if (seconds >= 0.1)
@@ -198,7 +216,8 @@ public sealed partial class ChatToolGroup : ObservableObject
         }
 
         Summary = string.Join(" · ", parts);
-        HasProblem = done.Any(c => c.Verdict is "거부" or "실패");
+        IsToolRunning = running;
+        HasProblem = done.Any(c => c.Verdict is "거부" or "실패") || cards.Any(c => c.Interrupted);
         Mark = running ? "…" : HasProblem ? "!" : "✓";
     }
 }
@@ -236,14 +255,25 @@ public sealed record ChatProposalEntry(string Label, string Summary, bool Applie
 [OrandaToolPanel("oranda.panel.aiChat", ToolPanelKind.Tool, DockLocation.Right, Order = 50)]
 public sealed partial class AiChatViewModel : ToolPanelViewModelBase
 {
+    /// <summary>새 소식이 이만큼 없으면 오래 걸린다고 알린다.</summary>
+    internal static readonly TimeSpan SlowAfter = TimeSpan.FromMinutes(1);
+
+    /// <summary>도구가 실행 중일 때의 기준. 성능 비교처럼 오래 걸리는 도구가 있어 더 길다.</summary>
+    internal static readonly TimeSpan SlowToolAfter = TimeSpan.FromMinutes(5);
+
     private DateTime _turnStart;
+    private DateTime _lastEventUtc;
+    private int _turnToolCount;
+    private bool _writingAnswer;
+    private bool _turnStopped;
+    private bool _turnFailed;
 
     [ObservableProperty]
     private string _title = "대화";
 
     [ObservableProperty]
     [NotifyCanExecuteChangedFor(nameof(SendCommand), nameof(StopCommand), nameof(ReviewProposalCommand), nameof(ViewProposalCommand), nameof(SaveReportCommand), nameof(NewConversationCommand))]
-    [NotifyPropertyChangedFor(nameof(CanType), nameof(CanSaveReport), nameof(CanAttach))]
+    [NotifyPropertyChangedFor(nameof(CanType), nameof(CanSaveReport), nameof(CanAttach), nameof(ShowProgressNormal))]
     private bool _isRunning;
 
     /// <summary>제안 비교 창을 다시 연 채다(그동안 다른 제안을 겹쳐 열지 않는다).</summary>
@@ -264,17 +294,37 @@ public sealed partial class AiChatViewModel : ToolPanelViewModelBase
     [NotifyCanExecuteChangedFor(nameof(SendCommand))]
     private string _draft = string.Empty;
 
+    /// <summary>진행 줄 글(실행 중에만 있다): 지금 무엇을 하는지.</summary>
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(FooterText))]
-    private string _statusText = string.Empty;
+    private string _progressText = string.Empty;
+
+    /// <summary>진행 줄의 이번 차례 경과 시간.</summary>
+    [ObservableProperty]
+    private string _progressElapsed = string.Empty;
+
+    /// <summary>새 소식이 오래 없다(진행 줄을 경고 색으로 보이고 멈춤을 안내한다).</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(ShowProgressNormal))]
+    private bool _isProgressSlow;
+
+    /// <summary>끝난 차례의 결과 줄 글. 다음 차례가 시작될 때까지 남는다.</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasResult))]
+    private string _resultText = string.Empty;
+
+    [ObservableProperty]
+    private string _resultMark = string.Empty;
+
+    [ObservableProperty]
+    private bool _resultIsCompleted;
+
+    [ObservableProperty]
+    private bool _resultIsFailed;
 
     /// <summary>이미지 첨부 결과 안내(5장 초과·읽지 못함 등). 다음 첨부·빼기·보내기 때 지운다.</summary>
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(HasAttachNotice))]
     private string? _attachNotice;
-
-    private int _toolCount;
-    private int _runCount;
 
     /// <summary>지금 카드를 이어 붙일 도구 묶음(차례가 새로 시작되면 끊긴다).</summary>
     private ChatToolGroup? _openGroup;
@@ -351,10 +401,17 @@ public sealed partial class AiChatViewModel : ToolPanelViewModelBase
     /// <summary>이미지를 더 붙일 수 있다: 입력이 열려 있고 입구가 열려 있으며 장수가 남았다.</summary>
     public bool CanAttach => CanType && ImagesAllowed && Attachments.Count < AiImageNormalizer.MaxCount;
 
-    /// <summary>입력칸 아래 상태 줄: 이미지를 붙였으면 「이미지 N장 · 최대 5장」, 아니면 실행 상태.</summary>
+    /// <summary>입력칸 아래 상태 줄: 이미지를 붙였으면 「이미지 N장 · 최대 5장」. 실행 상태는 대화 끝의 진행 줄·결과 줄이 보인다.</summary>
     public string FooterText => Attachments.Count > 0
         ? string.Create(CultureInfo.CurrentCulture, $"이미지 {Attachments.Count}장 · 최대 {AiImageNormalizer.MaxCount}장")
-        : StatusText;
+        : string.Empty;
+
+    public bool ShowProgressNormal => IsRunning && !IsProgressSlow;
+
+    public bool HasResult => ResultText.Length > 0;
+
+    /// <summary>지금 시각(시험에서 바꾼다).</summary>
+    internal Func<DateTime> UtcNow { get; set; } = () => DateTime.UtcNow;
 
     /// <summary>설정이 바뀌었을 수 있다(프로필 교체 등): 입구·모델 이름·보내기 상태를 다시 계산한다.</summary>
     public void RefreshActiveModel()
@@ -575,11 +632,10 @@ public sealed partial class AiChatViewModel : ToolPanelViewModelBase
         Draft = string.Empty;
         Attachments.Clear();
         AttachNotice = null;
-        StatusText = string.Empty;
-        _toolCount = 0;
-        _runCount = 0;
         _openGroup = null;
         IsRunning = false;
+        ClearResult();
+        RefreshProgress();
         OnPropertyChanged(nameof(ShowStartHint));
         NewConversationCommand.NotifyCanExecuteChanged();
     }
@@ -589,10 +645,14 @@ public sealed partial class AiChatViewModel : ToolPanelViewModelBase
     {
         Entries.Add(new ChatUserEntry(userText) { Images = images ?? [] });
         _openGroup = null;
-        _turnStart = DateTime.UtcNow;
-        _runCount++;
+        _turnStart = _lastEventUtc = UtcNow();
+        _turnToolCount = 0;
+        _writingAnswer = false;
+        _turnStopped = false;
+        _turnFailed = false;
+        ClearResult();
         IsRunning = true;
-        UpdateStatus();
+        RefreshProgress();
     }
 
     public void AddToolCall(string name, string responseSize, string verdict, bool done = true, string? callId = null, string arguments = "")
@@ -610,9 +670,9 @@ public sealed partial class AiChatViewModel : ToolPanelViewModelBase
         }
 
         Entries.Add(card with { Group = _openGroup });
-        _toolCount++;
+        _turnToolCount++;
         UpdateGroup(_openGroup!);
-        UpdateStatus();
+        RefreshProgress();
     }
 
     private void UpdateGroup(ChatToolGroup group) => group.Update(Entries.OfType<ChatToolEntry>().Where(c => c.Group == group).ToList());
@@ -641,12 +701,14 @@ public sealed partial class AiChatViewModel : ToolPanelViewModelBase
     public void Apply(AiEvent e)
     {
         ArgumentNullException.ThrowIfNull(e);
+        _lastEventUtc = UtcNow();
         switch (e)
         {
             case AiStarted started:
                 ResumeId = started.ResumeId ?? ResumeId;
                 break;
             case AiTextDelta delta:
+                _writingAnswer = true;
                 if (Entries.Count > 0 && Entries[^1] is ChatAssistantEntry last)
                 {
                     Entries[^1] = last with { Text = last.Text + delta.Text };
@@ -658,9 +720,11 @@ public sealed partial class AiChatViewModel : ToolPanelViewModelBase
 
                 break;
             case AiToolCall call:
-                AddToolCard(new ChatToolEntry(call.ToolName, string.Empty, "…", Done: false, call.CallId) { Arguments = call.ArgumentsSummary, StartedUtc = DateTime.UtcNow });
+                _writingAnswer = false;
+                AddToolCard(new ChatToolEntry(call.ToolName, string.Empty, "실행 중", Done: false, call.CallId) { Arguments = call.ArgumentsSummary, StartedUtc = DateTime.UtcNow });
                 break;
             case AiToolResult result:
+                _writingAnswer = false;
                 CompleteToolCall(result);
                 break;
             case AiNeedsChoice choice:
@@ -677,10 +741,13 @@ public sealed partial class AiChatViewModel : ToolPanelViewModelBase
                 EndTurn();
                 break;
             case AiError error:
+                _turnFailed = true;
                 AddAssistantText("오류: " + AiErrorText.Describe(error));
                 EndTurn();
                 break;
         }
+
+        RefreshProgress();
     }
 
     /// <summary>드라이버가 내는 사건 흐름을 끝까지 화면에 옮긴다. 흐름이 끝나거나 취소·예외로 멈추면 실행 중 표시를 내린다.</summary>
@@ -697,6 +764,7 @@ public sealed partial class AiChatViewModel : ToolPanelViewModelBase
         catch (OperationCanceledException)
         {
             // 멈춤: 아래 finally 가 실행 중 표시를 내린다.
+            _turnStopped = true;
         }
         finally
         {
@@ -747,13 +815,86 @@ public sealed partial class AiChatViewModel : ToolPanelViewModelBase
     /// <summary>실행이 끝났거나 멈췄다.</summary>
     public void EndTurn()
     {
+        var wasRunning = IsRunning;
         IsRunning = false;
+        MarkUnfinishedToolsInterrupted();
         foreach (var group in Entries.OfType<ChatToolGroupEntry>())
         {
             group.Group.IsExpanded = false; // 끝난 차례의 도구 카드는 한 줄 요약으로 접는다
         }
 
-        UpdateStatus();
+        if (wasRunning)
+        {
+            ShowResult();
+        }
+
+        RefreshProgress();
+    }
+
+    // 결과가 오지 않은 카드는 차례가 끝나면 더 돌지 않는다.
+    private void MarkUnfinishedToolsInterrupted()
+    {
+        for (var i = 0; i < Entries.Count; i++)
+        {
+            if (Entries[i] is ChatToolEntry { IsSpinning: true } card)
+            {
+                Entries[i] = card with { Interrupted = true, Verdict = "중단" };
+                if (card.Group is { } group)
+                {
+                    UpdateGroup(group);
+                }
+            }
+        }
+    }
+
+    private void ShowResult()
+    {
+        var tail = string.Create(CultureInfo.CurrentCulture, $"{DurationText(UtcNow() - _turnStart)} · 도구 {_turnToolCount}개");
+        (ResultMark, ResultText) = _turnStopped ? ("■", "멈춤 · " + tail)
+            : _turnFailed ? ("!", "오류로 끝남 · " + tail)
+            : ("✓", "완료 · " + tail);
+        ResultIsCompleted = !_turnStopped && !_turnFailed;
+        ResultIsFailed = !_turnStopped && _turnFailed;
+    }
+
+    private void ClearResult()
+    {
+        ResultText = string.Empty;
+        ResultMark = string.Empty;
+        ResultIsCompleted = false;
+        ResultIsFailed = false;
+    }
+
+    /// <summary>진행 줄을 지금 상태로 다시 계산한다. 사건이 없어도 초가 흐르도록 화면이 1초마다 부른다.</summary>
+    public void RefreshProgress()
+    {
+        if (!IsRunning)
+        {
+            ProgressText = string.Empty;
+            ProgressElapsed = string.Empty;
+            IsProgressSlow = false;
+            return;
+        }
+
+        var now = UtcNow();
+        var tool = Entries.OfType<ChatToolEntry>().LastOrDefault(c => c.IsSpinning);
+        var slowAfter = tool is null ? SlowAfter : SlowToolAfter;
+        ProgressElapsed = DurationText(now - _turnStart);
+        IsProgressSlow = now - _lastEventUtc >= slowAfter;
+        ProgressText = IsProgressSlow ? string.Create(CultureInfo.CurrentCulture, $"AI 작업 중 · {slowAfter.TotalMinutes:0}분 넘게 새 소식 없음")
+            : tool is not null ? "AI 작업 중 · " + ToolCardText.Describe(tool.Name, tool.Arguments).Title
+            : _writingAnswer ? "답변 작성 중"
+            : "AI 응답을 기다리는 중";
+    }
+
+    /// <summary>「14초」, 「1분 12초」, 「2분」.</summary>
+    private static string DurationText(TimeSpan elapsed)
+    {
+        var total = (int)Math.Max(0, elapsed.TotalSeconds);
+        var (minutes, seconds) = (total / 60, total % 60);
+        return minutes == 0 ? string.Create(CultureInfo.CurrentCulture, $"{seconds}초")
+            : seconds == 0 ? string.Create(CultureInfo.CurrentCulture, $"{minutes}분")
+            : string.Create(CultureInfo.CurrentCulture, $"{minutes}분 {seconds}초");
     }
 
     // 글이나 이미지 중 하나는 있어야 한다. 이미지를 붙인 뒤 지원하지 않는 프로필로 바뀌었으면 막는다(글만 보내려면 이미지를 뺀다).
@@ -776,7 +917,11 @@ public sealed partial class AiChatViewModel : ToolPanelViewModelBase
     }
 
     [RelayCommand(CanExecute = nameof(IsRunning))]
-    private void Stop() => StopRequested?.Invoke(this, EventArgs.Empty);
+    private void Stop()
+    {
+        _turnStopped = true;
+        StopRequested?.Invoke(this, EventArgs.Empty);
+    }
 
     private bool CanReviewProposal(ChatProposalEntry? entry) => entry is { Applied: false, Reopen: not null } && !IsRunning && !IsReviewing;
 
@@ -886,13 +1031,5 @@ public sealed partial class AiChatViewModel : ToolPanelViewModelBase
         SaveReportCommand.NotifyCanExecuteChanged();
         SendCommand.NotifyCanExecuteChanged();
         NewConversationCommand.NotifyCanExecuteChanged();
-    }
-
-    private void UpdateStatus()
-    {
-        var seconds = (int)Math.Max(0, (DateTime.UtcNow - _turnStart).TotalSeconds);
-        StatusText = _runCount == 0
-            ? string.Empty
-            : string.Create(CultureInfo.CurrentCulture, $"실행 {_runCount}회 · {seconds} 초 · 도구 {_toolCount}개");
     }
 }
