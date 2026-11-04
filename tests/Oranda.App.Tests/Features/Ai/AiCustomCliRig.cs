@@ -85,6 +85,8 @@ internal sealed class AiCustomCliRig
 
     public bool SessionMissing { get; set; }
 
+    public bool GateMissing { get; set; }
+
     public AiTuningFlow Flow => _flow ??= Build();
 
     private AiTuningFlow Build()
@@ -104,7 +106,8 @@ internal sealed class AiCustomCliRig
             {
                 TextConfirmed.Add(notice);
                 return Task.FromResult(true);
-            });
+            },
+            gate: GateMissing ? null : Gate);
         Chat.SettingsProvider = () => Settings;
         flow.Attach();
         return flow;
@@ -188,6 +191,9 @@ internal sealed class AiCustomCliRig
         }
 
         public static AgentGateResponse Ok(string text) => new(new AgentCallToolResult(false, text), AiToolJudgement.Allowed);
+
+        /// <summary>진짜 게이트가 처리자 예외·DB 오류·시간 초과를 돌려주는 모양(던지지 않고 Failed 판단으로 낸다).</summary>
+        public static AgentGateResponse Failure(string text, string note = "tool_exception") => new(new AgentCallToolResult(true, text), AiToolJudgement.Failed, note);
 
         public static AgentGateResponse Error(string text, string note = "denied") => new(new AgentCallToolResult(true, text), AiToolJudgement.Denied, note);
     }

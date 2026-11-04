@@ -609,6 +609,26 @@ public sealed partial class AiChatViewModel : ToolPanelViewModelBase
 
     private bool _isBusy;
 
+    /// <summary>
+    /// 흐름이 보내기 전에 정보를 읽는 중이다(기타 CLI 명령의 문맥 미리 읽기). 아직 실행(<see cref="IsRunning"/>)은 아니지만 「멈춤」 은 쓸 수 있다.
+    /// 흐름이 읽기 시작과 끝에서 켜고 끈다.
+    /// </summary>
+    public bool IsPreparing
+    {
+        get => _isPreparing;
+        set
+        {
+            if (_isPreparing != value)
+            {
+                _isPreparing = value;
+                OnPropertyChanged();
+                StopCommand.NotifyCanExecuteChanged();
+            }
+        }
+    }
+
+    private bool _isPreparing;
+
     /// <summary>새 일반 대화로 되돌린다(<see cref="NewConversationCommand"/> 와 같다).</summary>
     public void StartNewConversation()
     {
@@ -918,7 +938,9 @@ public sealed partial class AiChatViewModel : ToolPanelViewModelBase
         FollowUpRequested?.Invoke(this, followUp);
     }
 
-    [RelayCommand(CanExecute = nameof(IsRunning))]
+    private bool CanStop() => IsRunning || IsPreparing;
+
+    [RelayCommand(CanExecute = nameof(CanStop))]
     private void Stop()
     {
         _turnStopped = true;

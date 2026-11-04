@@ -688,7 +688,8 @@ public sealed class AiTuningLauncher(IServiceProvider services)
             AuditImagesAsync,
             GeneralContextAsync,
             (context, vault) => NewSessionFor(general: true, context, vault), // 일반 대화는 바인드 값이 없다(앞 튜닝의 값이 섞이지 않게)
-            ConfirmTextAsync);
+            ConfirmTextAsync,
+            services.GetService(typeof(IAgentGate)) as IAgentGate); // 기타 CLI 명령의 문맥 미리 읽기(도구와 같은 관문)
         _flow.Attach(followUps: false); // 이어 말하기는 EnsureChat 이 먼저 받아 넘긴다(사용할 수 없는 원인을 확인하려고)
         return _flow;
     }

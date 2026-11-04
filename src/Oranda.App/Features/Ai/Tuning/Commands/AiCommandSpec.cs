@@ -1,5 +1,7 @@
 using System;
+using System.Collections.Generic;
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using System.Threading;
 using System.Threading.Tasks;
 using Oranda.Core.Ai.Access;
@@ -90,6 +92,49 @@ public abstract class AiCommandSpec
     /// 가리는 대화에서 원래 글이나 서버 값이 새지 않도록 <see cref="AiCommandPromptInput"/> 의 가린 글만 쓴다.
     /// </summary>
     public abstract string BuildInstruction(AiCommandPromptInput input);
+
+    /// <summary>
+    /// 기타 CLI(DB 도구 없이 글만 주고받음)로 보낼 수 있는 명령인가. 기본은 거짓이라 새 명령은 <see cref="CustomCliPreloads"/>·<see cref="BuildCustomCliInstruction"/> 을
+    /// 직접 정한 뒤에만 기타 CLI 로 나간다(도구를 전제하는 <see cref="BuildInstruction"/> 이 그대로 나가지 않게).
+    /// </summary>
+    public virtual bool SupportsCustomCli => false;
+
+    /// <summary>
+    /// 기타 CLI 에는 도구가 없으므로, 프롬프트를 만들기 전에 앱이 게이트(<c>IAgentGate</c>)로 미리 읽을 도구 호출. 기본은 없음(문장만 보낸다).
+    /// 읽은 결과는 <see cref="BuildCustomCliInstruction"/> 으로 넘어온다. 가림 대상 접속에서는 기타 CLI 가 막히므로 이 호출 전에 가림은 이미 필요 없다고 확인된 상태다.
+    /// </summary>
+    public virtual IReadOnlyList<AiPreloadCall> CustomCliPreloads(AiCommandPromptInput input) => [];
+
+    /// <summary>
+    /// 기타 CLI 용 지시 글. 도구를 부르라는 말을 쓰지 않고, <paramref name="preloaded"/> (읽지 못한 항목 포함)를 어떻게 쓸지 적는다.
+    /// 문장 블록(<c>&lt;statement&gt;</c>)·미리 읽은 문맥 블록·<see cref="ResponseRules"/> 는 흐름이 뒤에 붙인다.
+    /// </summary>
+    public virtual string BuildCustomCliInstruction(AiCommandPromptInput input, IReadOnlyList<AiPreloadedSection> preloaded) =>
+        throw new NotSupportedException($"명령 {Id} 은 기타 CLI 를 지원하지 않습니다({nameof(SupportsCustomCli)}).");
+
+    /// <summary>기타 CLI 로 보냈을 때 대화 창 첫 줄 뒤에 덧붙일 글. 없으면 null.</summary>
+    public virtual string? CustomCliSentNote => null;
+}
+
+/// <summary>기타 CLI 를 위해 앱이 미리 부를 도구 한 번.</summary>
+/// <param name="Label">대화 창과 프롬프트의 문맥 블록에 쓰는 이름(「실행 계획」).</param>
+/// <param name="Tool">도구 이름(<c>AgentToolNames</c>).</param>
+/// <param name="Arguments">도구 인자.</param>
+/// <param name="Required">참이면 읽기에 실패했을 때 보내지 않고 닫는다. 거짓이면 읽지 못했다는 사실을 문맥에 적고 계속 보낸다.</param>
+public sealed record AiPreloadCall(string Label, string Tool, JsonObject Arguments, bool Required);
+
+/// <summary>미리 읽은 문맥 한 덩어리(프롬프트에 데이터 블록으로 들어간다).</summary>
+/// <param name="Label">이름.</param>
+/// <param name="Text">읽은 글(크기 상한 안). 읽지 못했으면 빈 글.</param>
+/// <param name="OriginalLength">상한을 적용하기 전 글자 수.</param>
+/// <param name="Failure">읽지 못한 이유(선택 읽기만). 읽었으면 null.</param>
+public sealed record AiPreloadedSection(string Label, string Text, int OriginalLength, string? Failure = null)
+{
+    /// <summary>상한 때문에 글이 잘렸다.</summary>
+    public bool Truncated => Text.Length < OriginalLength;
+
+    /// <summary>읽었다.</summary>
+    public bool Read => Failure is null;
 }
 
 /// <summary>시작 준비가 돌려주는 대상.</summary>

@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
 using Oranda.Core.Ai.Access;
@@ -49,6 +50,23 @@ public sealed class ExplainSqlCommand : AiCommandSpec
         return Task.FromResult(env.CursorStatement is { } statement && !string.IsNullOrWhiteSpace(statement.Text)
             ? AiCommandPreparation.Ready(new AiCommandTarget(statement, TabId: env.ActiveTabId))
             : AiCommandPreparation.Refuse(NoStatementText));
+    }
+
+    public override bool SupportsCustomCli => true;
+
+    /// <summary>기타 CLI 로 보낸 뒤 대화 창 첫 줄에 덧붙이는 글: 문장만 보냈다는 사실.</summary>
+    internal const string CustomCliSentNoteText = "문장 글만 보냈고, DB 의 값이나 객체 정보는 보내지 않았습니다. 표·열의 뜻은 이름으로 짐작한 설명일 수 있습니다.";
+
+    public override string? CustomCliSentNote => CustomCliSentNoteText;
+
+    /// <summary>기타 CLI 용 지시 글: 문장 하나만 받는다(미리 읽는 정보가 없고 도구도 없다).</summary>
+    public override string BuildCustomCliInstruction(AiCommandPromptInput input, IReadOnlyList<AiPreloadedSection> preloaded)
+    {
+        System.ArgumentNullException.ThrowIfNull(input);
+        return "Explain this Oracle SQL statement to the user in plain Korean: what it reads, how the tables are joined and filtered, and what the result means. "
+            + "You only have the statement text below: you cannot query the database and no table definitions were sent, so infer meanings from the names and say briefly when a meaning is only a guess; do not invent column contents. "
+            + "Answer in Korean. "
+            + "Do not suggest rewrites or indexes (if the user wants tuning, tell them to use 「AI 튜닝」 with Claude Code or an API model).";
     }
 
     /// <summary>지시 글. 원문 문장이나 대상 상태는 읽지 않고, 가림 여부(<see cref="AiCommandPromptInput.Masked"/>)로만 갈린다.</summary>

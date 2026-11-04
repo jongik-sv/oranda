@@ -138,20 +138,6 @@ public class AiCustomCliFlowTests
     }
 
     [Fact]
-    public async Task A_command_on_a_custom_cli_is_refused_before_anything_is_read_or_sent()
-    {
-        var rig = new AiCustomCliRig();
-        var generation = rig.Flow.Generation;
-
-        Assert.Null(await rig.RunCommandAsync(new Oranda.App.Features.Ai.Tuning.Commands.ExplainSqlCommand()));
-
-        Assert.Empty(rig.Driver.Requests);
-        Assert.Empty(rig.Sessions);
-        Assert.Contains(AiTuningCustomCli.CommandUnsupportedText, rig.AssistantTexts);
-        Assert.Equal(generation, rig.Flow.Generation);
-    }
-
-    [Fact]
     public async Task The_image_entrance_is_closed_for_a_custom_cli_and_the_model_label_is_its_name()
     {
         var rig = new AiCustomCliRig();

@@ -58,10 +58,12 @@ public sealed partial class AiTuningFlow
             return;
         }
 
-        // 기타 CLI 는 DB 도구가 없어 도구를 전제하는 명령 글을 보낼 수 없다: DB 를 읽기 전에 닫는다.
-        if (AiTuningCustomCli.IsCustom(CurrentTarget()))
+        // 기타 CLI 는 DB 도구가 없고 값을 가려 보낼 수 없다: 지원하지 않는 명령·쓸 수 없는 줄·가림 대상 접속은 DB 를 읽기 전에 여기서 닫는다.
+        // 아래 _route 와 같은 값으로 판단해, 확인한 뒤 설정이 바뀌어도 어긋나지 않게 한다.
+        var route = CurrentTarget();
+        var custom = AiTuningCustomCli.IsCustom(route);
+        if (custom && !CustomCliCommandAllowed(spec, route!, context))
         {
-            chat.AddAssistantText(AiTuningCustomCli.CommandUnsupportedText);
             return;
         }
 
@@ -80,30 +82,48 @@ public sealed partial class AiTuningFlow
             AccessLevel = Cap(spec, context.AccessLevel),
         };
 
-        _command = spec;
-        _route = CurrentTarget();
-        _choice = choice;
-        _target = statement;
-        _vault = vault;
-        _promptStatement = promptStatement;
-        _startedAt = DateTimeOffset.Now;
-        _startTabId = tabs is null ? null : commandTarget.TabId ?? editor.GetActiveDocument()?.TabId;
-        _indexTabId = null;
-        _tuneTabId = null;
-        _generation++;
-        _reportTurns.Clear();
-        _context = capped;
-        chat.StartConversation(spec.ConversationTitle + " — " + Shorten(promptStatement, 40));
-        chat.AddAssistantText(SentLine(spec, promptStatement, vault is not null)); // 첫 줄: 무엇을 보냈고 가렸는지
+        // 기타 CLI 는 프롬프트 전에 문맥을 미리 읽는다. 대화 상태(세대·프로필)를 바꾸기 전에 끝내, 읽기가 실패하면 앞 대화를 건드리지 않고 닫는다.
+        CustomCliPreload? preload = null;
+        if (custom)
+        {
+            preload = await PreloadCustomCliAsync(spec, new AiCommandPromptInput(commandTarget, promptStatement, vault, masker, capped), ct).ConfigureAwait(true);
+            if (preload is null)
+            {
+                return;
+            }
+        }
+
         chat.IsBusy = true;
         try
         {
+            _command = spec;
+            _route = route;
+            _choice = choice;
+            _target = statement;
+            _vault = vault;
+            _promptStatement = promptStatement;
+            _startedAt = DateTimeOffset.Now;
+            _startTabId = tabs is null ? null : commandTarget.TabId ?? editor.GetActiveDocument()?.TabId;
+            _indexTabId = null;
+            _tuneTabId = null;
+            _generation++;
+            _reportTurns.Clear();
+            _context = capped;
+            chat.StartConversation(spec.ConversationTitle + " — " + Shorten(promptStatement, 40));
+            chat.AddAssistantText(preload is null ? SentLine(spec, promptStatement, vault is not null) : CustomCliSentLine(spec, promptStatement, preload.Sections)); // 첫 줄: 무엇을 보냈고 가렸는지
+            foreach (var notice in preload?.Notices ?? [])
+            {
+                chat.AddAssistantText(notice); // 읽지 못한 정보가 있다는 사실(글에도 적혀 있다)
+            }
+
             var input = new AiCommandPromptInput(commandTarget, promptStatement, vault, masker, capped);
-            await RunAsync(BuildCommandPrompt(spec, input, JoinSyntax), resumeId: null, userText: null, images: [], ct).ConfigureAwait(true);
+            var prompt = preload is null ? BuildCommandPrompt(spec, input, JoinSyntax) : BuildCustomCliCommandPrompt(spec, input, preload.Sections, JoinSyntax);
+            await RunAsync(prompt, resumeId: null, userText: null, images: [], ct, prepared: preload?.Session).ConfigureAwait(true);
         }
         finally
         {
             chat.IsBusy = false;
+            preload?.Session?.Revoke(); // 미리 읽는 데 쓴 실행 범위를 실행이 끝나도 남기지 않는다(예외로 RunAsync 에 닿지 못한 경우 포함)
         }
     }
 

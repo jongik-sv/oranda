@@ -59,6 +59,10 @@ namespace Oranda.App.Features.Ai.Tuning;
 /// <param name="generalSessionFactory">일반 대화의 도구 실행 범위를 만든다(튜닝의 바인드 값을 싣지 않는다). null 이면 <paramref name="sessionFactory"/> 를 쓴다.</param>
 /// <param name="confirmText">가리는 일반 대화에서 입력한 글이 가려지지 않고 나간다는 확인 창(대화당 한 번, 참이면 보냄). 가리는 대화인데 null 이면 보내지 않는다(확인 없이 나가지 않게).</param>
 /// <param name="readIndexes">표의 실제 기존 인덱스 열 구성(소유자 — 모르면 빈 글, 표). AI 인덱스 후보를 받은 뒤 대조에 쓴다. null 이거나 못 읽으면 대조를 건너뛴다(「확인 못함」).</param>
+/// <param name="gate">
+/// 도구 호출 관문. 기타 CLI 에는 도구가 없어 AI 명령의 문맥을 프롬프트 전에 앱이 이 관문으로 미리 읽는다(감사·허용 수준·취소·제한 시간은 관문 그대로).
+/// null 이면 미리 읽을 길이 없으므로 미리 읽어야 하는 기타 CLI 명령은 보내지 않는다.
+/// </param>
 public sealed partial class AiTuningFlow(
     IEditorContext editor,
     IAiDriver driver,
@@ -77,7 +81,8 @@ public sealed partial class AiTuningFlow(
     Func<AiImageSendNotice, CancellationToken, Task>? auditImages = null,
     Func<CancellationToken, Task<AiGeneralScope>>? generalContext = null,
     Func<AiContext, LiteralVault?, AgentSession?>? generalSessionFactory = null,
-    Func<AiImageSendNotice, CancellationToken, Task<bool>>? confirmText = null)
+    Func<AiImageSendNotice, CancellationToken, Task<bool>>? confirmText = null,
+    IAgentGate? gate = null)
 {
     /// <summary>도구를 부르는 횟수 예산(프롬프트로 알린다).</summary>
     public const int ToolBudget = 12;
@@ -167,7 +172,15 @@ public sealed partial class AiTuningFlow(
     public bool IsRunning => _running is not null;
 
     /// <summary>진행 중인 요청을 멈춘다.</summary>
-    public void Stop() => _running?.Cancel();
+    public void Stop()
+    {
+        _running?.Cancel();
+        if (_preloading is { } preloading)
+        {
+            _preloadStopRequested = true;
+            preloading.Cancel(); // 기타 CLI 명령의 문맥 미리 읽기도 멈춘다
+        }
+    }
 
     /// <summary>
     /// 새 튜닝을 시작한다. 시작할 문장이 없으면(커서가 문장 밖) 대화 창에 안내만 남기고 끝낸다.
@@ -678,7 +691,7 @@ public sealed partial class AiTuningFlow(
             ? string.Empty
             : $" Comments were replaced with placeholders such as {LiteralVault.CommentPlaceholder(1, lineComment: false)} and {LiteralVault.CommentPlaceholder(1, lineComment: true)}; keep each comment placeholder exactly as written, in the same place, in every SQL you write.");
 
-    private async Task RunAsync(string prompt, string? resumeId, string? userText, IReadOnlyList<ChatImage> images, CancellationToken ct, AiConversationTarget? route = null)
+    private async Task RunAsync(string prompt, string? resumeId, string? userText, IReadOnlyList<ChatImage> images, CancellationToken ct, AiConversationTarget? route = null, AgentSession? prepared = null)
     {
         var context = _context!;
         var conversation = chat.ConversationGeneration;
@@ -695,7 +708,7 @@ public sealed partial class AiTuningFlow(
         using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
         _running = cts;
         // 명령은 튜닝의 바인드 값을 싣지 않는 쪽(일반 대화와 같은 범위 만들기)을 쓴다: 명령은 문장을 실행하지 않는다.
-        var session = (command is null ? sessionFactory : generalSessionFactory ?? sessionFactory)?.Invoke(context, vault);
+        var session = prepared ?? (command is null ? sessionFactory : generalSessionFactory ?? sessionFactory)?.Invoke(context, vault); // prepared: 미리 읽는 데 쓴 같은 범위(실행이 끝나면 회수한다)
         var request = new AiRequest(
             prompt, context, resumeId, command is null ? TuningResult.Schema() : command.OutputSchema, choice.ModelId == "default" ? null : choice.ModelId, session,
             choice.EffortId == TuningStartInfo.DefaultModelId ? null : choice.EffortId,

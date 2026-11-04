@@ -12,7 +12,7 @@ namespace Oranda.App.Features.Ai.Tuning;
 internal static class AiTuningCustomCli
 {
     /// <summary>AI 튜닝을 시작하려는데 기타 CLI 가 선택돼 있을 때 대화 창에 남기는 안내.</summary>
-    public const string TuningText = "기타 CLI 는 DB 도구를 쓸 수 없어 AI 튜닝에는 쓰지 않습니다. 튜닝은 설정의 「AI 모델」 에서 Claude Code 나 API 프로필을 고른 뒤 시작하세요. 기타 CLI 로는 지금 일반 대화만 쓸 수 있습니다(SQL 설명·실행 계획 해설·오류 고치기는 아직 지원하지 않습니다).";
+    public const string TuningText = "기타 CLI 는 DB 도구를 쓸 수 없어 AI 튜닝에는 쓰지 않습니다. 튜닝은 설정의 「AI 모델」 에서 Claude Code 나 API 프로필을 고른 뒤 시작하세요. 기타 CLI 로는 일반 대화와 SQL 설명, 실행 계획 해설, 오류 고치기를 쓸 수 있습니다.";
 
     /// <summary>가림 대상 접속(운영 표시 또는 값 가림 설정)에서 기타 CLI 로 보내지 않았을 때의 안내.</summary>
     public const string MaskingBlockedText = "가림 대상 접속(운영 표시 또는 값 가림 설정)에서는 기타 CLI 로 보내지 않습니다. 기타 CLI 는 값을 가려서 보낼 수 없으므로 아무것도 보내지 않았습니다. 설정의 「AI 모델」 에서 다른 모델을 고르세요.";
