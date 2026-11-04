@@ -291,6 +291,14 @@
 - **Reversible**: yes
 - **Source**: 사용자 결정(2026-11-02, 프록시: 「내부 네트워크에서 쓸 수 있으면 된다」), 레인 결정 후보를 조정 세션이 확정. 설계 `docs/superpowers/specs/2026-11-02-ai-image-and-model-profiles-design.md`
 
+## D-038 (2026-11-04T09:00:00Z)
+- **Phase**: 0.1.13 준비
+- **Decision needed**: D-037 에서 끈 Codex·Antigravity 를 실제 왕복 전에 켤지
+- **Decision made**: (1) 사용자 요청으로 두 CLI 를 모든 플랫폼에서 고를 수 있게 켜고, 시험은 사용자가 릴리스 뒤 직접 한다. (2) `RoutingAiDriver` 가 운영 접속의 DB 도구 요청을 `system_cli_production_blocked` 로 막는다. 사용자는 켜 달라고 했을 뿐 이 차단을 고르지 않았으며, 범위를 고르는 질문에 답이 없어 구현한 세션이 더 안전한 쪽으로 정했다. (3) AI 가 쓰는 조인 문법을 설정(`AiSettings.JoinSyntax`, 기본 Oracle, ANSI 선택)으로 바꾼다
+- **Rationale**: 드라이버 코드는 들어와 있고 사용자가 시험을 맡았다. 다만 왕복과 Windows 잠금(실행 토큰의 프로세스 환경 노출, 파일 권한)이 확인되지 않아 운영 DB 도구까지 열지는 않는다
+- **Reversible**: yes(차단은 조건 하나, 켜기는 `EnabledOn` 값이다)
+- **Source**: 사용자 요청(2026-11-04, 「Codex CLI·Antigravity CLI 을 선택하도록 하자」, 「테스트는 릴리즈후에 해볼께」)
+
 ## D-037 (2026-11-03T09:00:00Z)
 - **Phase**: ai-cli-commands 회차(AI 명령 3종, 운영 벤치마크 제한 시간, Oracle 조인 문법 규칙, 시스템 CLI 전달)
 - **Decision needed**: 시스템 CLI(Codex·Antigravity)를 이번 회차에 켤지, 켠다면 어느 플랫폼에서 켤지

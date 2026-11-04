@@ -1283,6 +1283,7 @@
   "이 대화는 SQL 리터럴을 가리고 있지만, 직접 입력한 글은 가리지 않고 그대로 나갑니다. 글에 실제 값(이름·번호·금액 등)이 들어 있지 않은지 확인하십시오. 이 대화에서는 다시 묻지 않습니다.": "This conversation masks SQL literals, but text you type yourself is sent as is. Check that it contains no real values (names, numbers, amounts). You will not be asked again in this conversation.",
   "AI 에게 보낼 글": "Message for the AI",
   "멈춤": "Stop",
+  "계속 기다리거나 아래 「멈춤」 으로 끝낼 수 있습니다.": "Keep waiting, or end it with Stop below.",
   "보내기": "Send",
   "대화": "Chat",
   "AI 모델": "AI Model",
@@ -1378,5 +1379,10 @@
   "제한 시간은 5~3600초 또는 0(제한 없음)으로 입력하세요.": "Enter a time limit of 5-3600 seconds, or 0 for no limit.",
   "사용자가 중지할 때까지 운영 DB 에서 실행합니다": "Runs on the production database until you stop it",
   "운영 벤치마크 제한 시간(초)": "Production benchmark time limit (s)",
+  "AI 가 쓰는 조인 문법": "Join syntax AI writes",
+  "Codex CLI 는 운영 접속에서 DB 도구를 쓸 수 없어 요청을 보내지 않았습니다. 설정의 「AI 모델」 에서 다른 모델을 고르세요.": "Codex CLI cannot use database tools on a production connection, so the request was not sent. Pick another model in AI Model settings.",
+  "Antigravity CLI 는 운영 접속에서 DB 도구를 쓸 수 없어 요청을 보내지 않았습니다. 설정의 「AI 모델」 에서 다른 모델을 고르세요.": "Antigravity CLI cannot use database tools on a production connection, so the request was not sent. Pick another model in AI Model settings.",
+  "Oracle (쉼표 FROM, (+))": "Oracle (comma FROM, (+))",
+  "AI 튜닝의 재작성 제안과 오류 고치기에 적용됩니다. AI 에 주는 지시이므로 적용 전에 비교 창에서 확인하세요.": "Applies to AI tuning rewrites and error fixes. It is an instruction to the AI, so check the result in the compare window before applying it.",
   "운영 접속에서 AI 벤치마크가 문장 하나(반복 전체)에 허용하는 시간입니다. 기본 30초, 0 은 제한 없음입니다. 튜닝 시작 창에서 이번 실행만 바꿀 수 있습니다. 시작 창이 없는 일반 대화에는 0 이어도 30초가 적용됩니다.": "Time the AI benchmark may spend on one statement (all repeats) on a production connection. Default 30 seconds; 0 means no limit. You can change it for one run in the tuning start dialog. General chat has no start dialog, so 30 seconds applies even when this is 0."
 }
