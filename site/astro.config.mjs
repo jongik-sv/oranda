@@ -3,7 +3,7 @@ import { defineConfig } from 'astro/config';
 import starlight from '@astrojs/starlight';
 import remarkMissingImages from './plugins/remark-missing-images.mjs';
 
-// 게시 주소: https://jongik-sv.github.io/oranda/
+// 게시 주소: https://jongik-sv.github.io/oranda/ (랜딩 페이지), https://jongik-sv.github.io/oranda/manual/ (설명서 첫 화면)
 // 영어 판을 추가할 때는 locales 에 en 항목을 더하고 src/content/docs/en/ 아래에 본문을 둔다.
 export default defineConfig({
   site: 'https://jongik-sv.github.io',
@@ -12,6 +12,14 @@ export default defineConfig({
   integrations: [
     starlight({
       title: 'Oranda 사용 설명서',
+      logo: { src: './src/assets/brand/oranda-o.png', alt: '' },
+      favicon: '/favicon.png',
+      customCss: ['./src/styles/brand.css', './src/styles/manual.css'],
+      components: {
+        Hero: './src/components/ManualHero.astro',
+        SocialIcons: './src/components/HeaderLinks.astro',
+      },
+      routeMiddleware: './src/route-data.ts',
       defaultLocale: 'root',
       locales: {
         root: { label: '한국어', lang: 'ko' },

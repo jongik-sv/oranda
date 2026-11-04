@@ -1,0 +1,785 @@
+---
+import { Image } from 'astro:assets';
+import '../styles/brand.css';
+import logo from '../assets/brand/oranda-o.png';
+import aiChat from '../assets/landing/ai-chat.png';
+import connectionList from '../assets/landing/connection-list.png';
+import lockMonitor from '../assets/landing/lock-monitor.png';
+import mainWindow from '../assets/landing/main-window.png';
+import mascot from '../assets/landing/mascot.png';
+import mybatis from '../assets/landing/mybatis.png';
+import planCompare from '../assets/landing/plan-compare.png';
+import { page, siteUrl } from '../lib/links';
+
+const releases = 'https://github.com/jongik-sv/oranda/releases/latest';
+const windowsSetup = `${releases}/download/Oranda-win-Setup.exe`;
+const macSetup = `${releases}/download/Oranda-osx-Setup.pkg`;
+const github = 'https://github.com/jongik-sv/oranda';
+const manual = page('manual/');
+const wideSizes = '(max-width: 1320px) 100vw, 1240px';
+---
+
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Oranda: Oracle Client 없이 쓰는 무료 Oracle 클라이언트</title>
+    <meta
+      name="description"
+      content="Oranda는 Windows와 macOS에서 쓰는 무료 오픈 소스 Oracle 클라이언트입니다. Oracle Client를 설치하지 않고 SQL 편집, 실행 계획, 세션과 Lock 모니터를 씁니다."
+    />
+    <link rel="icon" type="image/png" href={siteUrl('favicon.png')} />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      rel="stylesheet"
+      href="https://fonts.googleapis.com/css2?family=Black+Han+Sans&family=IBM+Plex+Sans+KR:wght@400;500;700&display=swap"
+    />
+    <script is:inline>
+      // 설명서에서 고른 테마를 따른다. 고른 적이 없으면 운영체제 설정을 따른다.
+      (function () {
+        var theme = '';
+        try {
+          theme = localStorage.getItem('starlight-theme') || '';
+        } catch (e) {}
+        if (theme !== 'light' && theme !== 'dark') {
+          theme = matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+        }
+        document.documentElement.dataset.theme = theme;
+      })();
+    </script>
+  </head>
+  <body>
+    <div class="coral">
+      <div class="wrap">
+        <header class="site-header">
+          <a class="brand" href={siteUrl('')}>
+            <Image src={logo} width={36} height={36} alt="" loading="eager" />
+            <span class="oranda-display">Oranda</span>
+          </a>
+          <nav aria-label="주 메뉴" class="site-nav">
+            <a href={manual}>사용 설명서</a>
+            <a href={github}>GitHub</a>
+          </nav>
+        </header>
+
+        <main class="hero">
+          <div class="hero-copy">
+            <h1 class="oranda-display">
+              <span>Oracle Client 없이</span>
+              <span>바로 접속합니다</span>
+            </h1>
+            <p class="lead">
+              Oranda는 Windows와 macOS에서 쓰는 무료 오픈 소스 Oracle 클라이언트입니다. SQL과 PL/SQL 편집, 결과 그리드,
+              실행 계획, 세션과 Lock 모니터, 튜닝 도구를 한 프로그램에서 씁니다. 오래된 Orange for ORACLE 5.0을 대신하려고
+              만들었습니다.
+            </p>
+            <div class="actions">
+              <a class="btn" href={windowsSetup}>Windows용 내려받기</a>
+              <a class="btn" href={macSetup}>macOS용 내려받기</a>
+              <a class="text-action" href={manual}>사용 설명서 읽기</a>
+            </div>
+            <p class="note">
+              아직 코드 서명이 없습니다. Windows는 처음 실행할 때 SmartScreen 경고를 표시하고, macOS는 처음 한 번 오른쪽
+              클릭으로 열어야 합니다.{' '}
+              <a href={page('install/prerequisites/')}>설치 안내 읽기</a>
+            </p>
+          </div>
+          <Image
+            class="mascot"
+            src={mascot}
+            widths={[240, 480]}
+            sizes="(max-width: 700px) 112px, 240px"
+            alt="데이터베이스를 끌어안은 금붕어 Oranda 마스코트"
+            loading="eager"
+          />
+        </main>
+      </div>
+    </div>
+
+    <div class="hero-window">
+      <div class="wrap">
+        <Image
+          src={mainWindow}
+          widths={[800, mainWindow.width]}
+          sizes={wideSizes}
+          alt="Oranda 주 화면. 왼쪽에 스키마 브라우저, 오른쪽 위에 SQL 편집기, 오른쪽 아래에 결과 그리드가 보입니다."
+          loading="eager"
+          fetchpriority="high"
+        />
+      </div>
+    </div>
+
+    <section class="facts" aria-label="Oranda의 특징">
+      <div class="wrap facts-grid">
+        <div>
+          <h2>Oracle Client가 필요 없습니다</h2>
+          <p>관리 코드 ODP.NET Core 드라이버(Thin)로 접속합니다. Instant Client도 설치하지 않습니다.</p>
+        </div>
+        <div>
+          <h2>Windows와 Mac에서 같습니다</h2>
+          <p>Windows x64와 Apple Silicon Mac에서 같은 기능을 씁니다.</p>
+        </div>
+        <div>
+          <h2>데스크톱 앱입니다</h2>
+          <p>.NET 10과 Avalonia로 만들었습니다. Java나 Electron을 쓰지 않습니다.</p>
+        </div>
+        <div>
+          <h2>무료 오픈 소스입니다</h2>
+          <p>MIT 라이선스이며 소스 코드를 GitHub에서 공개합니다.</p>
+        </div>
+      </div>
+    </section>
+
+    <section class="moment">
+      <div class="wrap moment-inner">
+        <div class="moment-head">
+          <h2 class="oranda-display">어제까지 빠르던 쿼리가 오늘 느려졌습니다</h2>
+          <div class="moment-text">
+            <p>고정해 둔 계획과 지금 계획을 줄 단위로 비교합니다. 바뀐 연산과 비용 변화가 표시되므로 어디부터 봐야 할지 바로 알 수 있습니다.</p>
+            <a href={page('plan/execution-plan/#계획-고정과-비교')}>계획 고정과 비교 읽기</a>
+          </div>
+        </div>
+        <div class="capture framed" tabindex="0" role="group" aria-label="실행 계획 비교 화면. 좁은 화면에서는 옆으로 밀어서 봅니다.">
+          <Image
+            src={planCompare}
+            widths={[800, planCompare.width]}
+            sizes={wideSizes}
+            alt="실행 계획 비교 표. 계획이 바뀌었다는 안내 아래에 바뀐 줄과 추가된 줄이 색으로 표시되어 있습니다."
+          />
+        </div>
+      </div>
+    </section>
+
+    <section class="moment dark">
+      <div class="wrap moment-inner">
+        <div class="moment-head">
+          <h2 class="oranda-display">화면이 멈췄다는 전화가 왔습니다</h2>
+          <div class="moment-text">
+            <p>Lock 모니터가 잠금을 보유한 세션과 기다리는 세션을 트리로 보여 줍니다. 보유자가 마지막으로 실행한 SQL도 함께 확인할 수 있습니다.</p>
+            <a href={page('tools/monitor/#lock-모니터')}>Lock 모니터 읽기</a>
+          </div>
+        </div>
+        <figure>
+          <div class="capture" tabindex="0" role="group" aria-label="Lock 모니터 화면. 좁은 화면에서는 옆으로 밀어서 봅니다.">
+            <Image
+              src={lockMonitor}
+              widths={[800, lockMonitor.width]}
+              sizes={wideSizes}
+              alt="Lock 모니터. 대기 트리에 보유 세션 하나와 대기 세션 둘이 있고, 오른쪽에 각 세션의 SQL이 보입니다."
+            />
+          </div>
+          <figcaption>화면의 세션과 SQL은 설명을 위한 예시입니다.</figcaption>
+        </figure>
+      </div>
+    </section>
+
+    <section class="moment">
+      <div class="wrap moment-inner">
+        <div class="moment-head">
+          <h2 class="oranda-display">이 매퍼가 실제로 어떤 SQL을 실행하는지 궁금합니다</h2>
+          <div class="moment-text">
+            <p>매퍼 XML을 열고 값을 넣으면 동적 태그를 펼친 SQL이 옆에 나타납니다. 저장할 때는 바꾼 문장만 파일에 씁니다.</p>
+            <a href={page('editor/mybatis/')}>MyBatis 매퍼 읽기</a>
+          </div>
+        </div>
+        <div class="capture framed" tabindex="0" role="group" aria-label="MyBatis 화면. 좁은 화면에서는 옆으로 밀어서 봅니다.">
+          <Image
+            src={mybatis}
+            widths={[800, mybatis.width]}
+            sizes={wideSizes}
+            alt="왼쪽에 MyBatis 매퍼 XML이, 오른쪽에 조건을 채워 펼친 SQL이 보입니다."
+          />
+        </div>
+      </div>
+    </section>
+
+    <section class="trio">
+      <div class="wrap trio-grid">
+        <div class="trio-item">
+          <h2 class="oranda-display">운영 DB에 잘못 붙을까 봐 걱정됩니다</h2>
+          <p>접속마다 개발, 테스트, 운영을 정합니다. 운영은 항상 빨간색으로 표시하고, 읽기 전용 접속은 쓰기 문장을 막습니다.</p>
+          <a href={page('connect/manage/#환경-구분과-색')}>환경 구분과 색 읽기</a>
+          <Image
+            class="trio-image"
+            src={connectionList}
+            alt="접속 목록. 접속 이름 앞에 개발, 테스트, 운영 칩이 색으로 구분되어 있습니다."
+          />
+        </div>
+        <div class="trio-item">
+          <h2 class="oranda-display">Orange 단축키가 손에 익었습니다</h2>
+          <p>「도구 &gt; 단축키 프리셋」에서 Orange 5를 고르면 바로 바뀝니다. 접속 목록은 Orange, SQL Developer, tnsnames.ora에서 가져올 수 있습니다.</p>
+          <a href={page('settings/shortcuts/#키맵-프리셋')}>키맵 프리셋 읽기</a>
+          <ul class="presets" aria-label="단축키 프리셋 네 가지">
+            <li>기본</li>
+            <li class="selected">Orange 5</li>
+            <li>PL/SQL Developer</li>
+            <li>SQL Developer</li>
+          </ul>
+        </div>
+        <div class="trio-item">
+          <h2 class="oranda-display">왜 느린지 AI에게 물어보고 싶습니다</h2>
+          <p>이 PC에 로그인된 Claude Code나 Codex CLI를 그대로 씁니다. 비밀번호와 호스트는 AI에 보내지 않고, 접속마다 AI 허용 수준을 정합니다. AI 기능은 아직 실험 기능입니다.</p>
+          <a href={page('ai/overview/')}>AI 기능 개요 읽기</a>
+          <figure>
+            <Image
+              class="trio-image"
+              src={aiChat}
+              alt="AI 대화 창. 느린 이유를 묻는 질문에 원인 설명과 재작성 제안이 답으로 나와 있습니다."
+            />
+            <figcaption>화면의 내용은 설명을 위한 예시입니다.</figcaption>
+          </figure>
+        </div>
+      </div>
+    </section>
+
+    <section class="support">
+      <div class="wrap support-inner">
+        <h2 class="oranda-display">지원 범위</h2>
+        <div class="support-table">
+          <table>
+            <tbody>
+              <tr>
+                <th scope="row">Oracle Database</th>
+                <td>11.2 이상입니다. 11.2, 19c, 23ai/26ai, Autonomous Database에서 시험했습니다. 12c, 18c, 21c는 접속할 수 있지만 시험하지 않았고, 11.1 이하는 접속을 거부합니다.</td>
+              </tr>
+              <tr>
+                <th scope="row">Windows</th>
+                <td>Windows 10, 11 (x64)</td>
+              </tr>
+              <tr>
+                <th scope="row">macOS</th>
+                <td>macOS 14.7 이상 (Apple Silicon)</td>
+              </tr>
+              <tr>
+                <th scope="row">지원하지 않음</th>
+                <td>Intel Mac용 판은 없습니다. Windows on ARM은 실행될 수 있지만 시험하지 않았습니다. Linux 데스크톱 판은 배포하지 않습니다.</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <section class="closing coral">
+      <div class="wrap closing-inner">
+        <h2 class="oranda-display">설치하고 첫 쿼리를 실행해 보세요</h2>
+        <div class="actions">
+          <a class="btn" href={windowsSetup}>Windows용 내려받기</a>
+          <a class="btn" href={macSetup}>macOS용 내려받기</a>
+          <a class="text-action" href={releases}>다른 파일 보기</a>
+        </div>
+      </div>
+    </section>
+
+    <footer class="site-footer">
+      <div class="wrap footer-inner">
+        <p>Oracle은 Oracle 및 그 계열사의 등록 상표입니다. Orange for ORACLE은 웨어밸리의 제품입니다. Oranda는 독립 프로젝트이며 Oracle, 웨어밸리와 관계가 없고 그들의 보증을 받지 않았습니다.</p>
+        <nav aria-label="바닥글 메뉴" class="footer-nav">
+          <a href={manual}>사용 설명서</a>
+          <a href={github}>GitHub</a>
+        </nav>
+      </div>
+    </footer>
+  </body>
+</html>
+
+<style is:global>
+  :root {
+    --bg: #fff;
+    --text: #16292c;
+    --muted: #4a5c5f;
+    --tint: #f3f3f3;
+    --line: #c9d2d2;
+    --link: #0b5a60;
+    --link-hover: #0b2f33;
+    --chip: #fff;
+  }
+
+  :root[data-theme='dark'] {
+    --bg: #101f22;
+    --text: #e4f0ef;
+    --muted: #a9bdbc;
+    --tint: #16292d;
+    --line: #2e474b;
+    --link: #8ed6d4;
+    --link-hover: #bde6e3;
+    --chip: #101f22;
+    color-scheme: dark;
+  }
+
+  body {
+    margin: 0;
+    font-family: var(--oranda-body);
+    font-size: 1.0625rem;
+    line-height: 1.65;
+    color: var(--text);
+    background: var(--bg);
+    word-break: keep-all;
+    overflow-wrap: break-word;
+  }
+
+  img {
+    display: block;
+    max-width: 100%;
+    height: auto;
+  }
+
+  figure {
+    display: flex;
+    flex-direction: column;
+    gap: 0.625rem;
+    margin: 0;
+  }
+
+  figcaption {
+    font-size: 0.875rem;
+    color: var(--muted);
+  }
+
+  a {
+    color: var(--link);
+  }
+
+  a:hover {
+    color: var(--link-hover);
+  }
+
+  a:focus-visible,
+  .capture:focus-visible {
+    outline: 3px solid currentColor;
+    outline-offset: 3px;
+  }
+
+  .wrap {
+    width: 100%;
+    max-width: 82.5rem;
+    margin-inline: auto;
+    padding-inline: clamp(1rem, 4vw, 2.5rem);
+    box-sizing: border-box;
+  }
+
+  .coral {
+    background: var(--oranda-coral);
+    color: var(--oranda-ink);
+  }
+
+  .coral a {
+    color: var(--oranda-ink);
+  }
+
+  .site-header {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.5rem 1.5rem;
+    padding-block: 1rem;
+  }
+
+  .brand {
+    display: flex;
+    align-items: center;
+    gap: 0.625rem;
+    min-height: 2.75rem;
+    text-decoration: none;
+  }
+
+  .brand span {
+    font-size: 1.5rem;
+    line-height: 1;
+  }
+
+  .site-nav,
+  .footer-nav {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.25rem 1.25rem;
+  }
+
+  .site-nav a,
+  .footer-nav a {
+    display: flex;
+    align-items: center;
+    min-height: 2.75rem;
+    font-weight: 500;
+  }
+
+  .hero {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-end;
+    justify-content: space-between;
+    gap: 1.5rem;
+    padding-top: clamp(1.5rem, 4vw, 3.5rem);
+  }
+
+  .hero-copy {
+    flex: 1 1 35rem;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 1.5rem;
+    padding-bottom: 2.5rem;
+  }
+
+  h1 {
+    margin: 0;
+    font-size: clamp(2.75rem, 6.6vw, 5.5rem);
+    line-height: 1.1;
+    letter-spacing: -0.005em;
+  }
+
+  h1 span {
+    display: block;
+  }
+
+  /* 휴대폰에서도 「Oracle Client 없이」가 한 줄에 들어가게 한다. */
+  @media (max-width: 30rem) {
+    h1 {
+      font-size: 10vw;
+    }
+  }
+
+  .lead {
+    margin: 0;
+    max-width: 38em;
+    font-size: clamp(1.0625rem, 1.5vw, 1.25rem);
+    line-height: 1.6;
+    text-wrap: pretty;
+  }
+
+  .actions {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.75rem 1rem;
+  }
+
+  .coral a.btn {
+    display: inline-flex;
+    align-items: center;
+    min-height: 3.25rem;
+    padding-inline: 1.5rem;
+    border-radius: 8px;
+    background: var(--oranda-ink);
+    color: #fff;
+    font-weight: 700;
+    text-decoration: none;
+  }
+
+  .coral a.btn:hover {
+    background: #06484e;
+  }
+
+  .text-action {
+    display: inline-flex;
+    align-items: center;
+    min-height: 2.75rem;
+    padding-inline: 0.5rem;
+    font-weight: 700;
+  }
+
+  .note {
+    margin: 0;
+    max-width: 44em;
+    font-size: 0.9375rem;
+    line-height: 1.6;
+  }
+
+  .note a {
+    font-weight: 500;
+  }
+
+  .mascot {
+    flex: 0 0 auto;
+    width: clamp(7rem, 17vw, 15rem);
+    margin-inline-start: auto;
+    margin-bottom: -1.125rem;
+    position: relative;
+    z-index: 2;
+  }
+
+  .hero-window {
+    /* 소수점 배율에서 위 띠와 사이에 틈이 보이지 않도록 1px 겹친다. */
+    margin-top: -1px;
+    background: linear-gradient(var(--oranda-coral) 0, var(--oranda-coral) 58%, var(--bg) 58%, var(--bg) 100%);
+  }
+
+  .hero-window img {
+    width: 100%;
+    border-radius: 8px;
+    box-shadow: 0 28px 56px rgba(11, 47, 51, 0.32);
+  }
+
+  .facts {
+    padding-block: clamp(3.5rem, 7vw, 6rem) clamp(2rem, 4vw, 3.5rem);
+  }
+
+  .facts-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(min(15.5rem, 100%), 1fr));
+    gap: 2rem 2.5rem;
+  }
+
+  .facts h2 {
+    margin: 0 0 0.375rem;
+    font-size: 1.1875rem;
+    line-height: 1.4;
+  }
+
+  .facts p {
+    margin: 0;
+    font-size: 1rem;
+    color: var(--muted);
+  }
+
+  .moment {
+    padding-block: clamp(3rem, 6vw, 5.5rem);
+  }
+
+  .moment.dark {
+    --muted: #c4d6d5;
+    background: var(--oranda-teal);
+    color: #e4f0ef;
+    padding-block: clamp(3.5rem, 7vw, 6.5rem);
+  }
+
+  .moment.dark a {
+    color: #ffc2a8;
+  }
+
+  .moment.dark a:hover {
+    color: #fff;
+  }
+
+  .moment.dark h2 {
+    color: #fff;
+  }
+
+  .moment-inner {
+    display: flex;
+    flex-direction: column;
+    gap: 2rem;
+  }
+
+  .moment-head {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-end;
+    justify-content: space-between;
+    gap: 1rem 3.5rem;
+  }
+
+  .moment-head h2 {
+    flex: 1 1 32.5rem;
+    margin: 0;
+    font-size: clamp(1.875rem, 3.8vw, 3.125rem);
+    line-height: 1.2;
+    text-wrap: balance;
+  }
+
+  .moment-text {
+    flex: 1 1 21.25rem;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.5rem;
+  }
+
+  .moment-text p {
+    margin: 0;
+    text-wrap: pretty;
+  }
+
+  .moment-text a,
+  .trio-item > a {
+    font-weight: 500;
+  }
+
+  .capture {
+    overflow-x: auto;
+    border-radius: 8px;
+  }
+
+  .capture.framed {
+    border: 1px solid var(--line);
+  }
+
+  .capture img {
+    width: 100%;
+    min-width: 45rem;
+  }
+
+  .trio {
+    background: var(--tint);
+    padding-block: clamp(3.5rem, 7vw, 6rem);
+  }
+
+  .trio-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(min(21.25rem, 100%), 1fr));
+    gap: 3.5rem 2.5rem;
+  }
+
+  .trio-item {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.875rem;
+  }
+
+  .trio-item h2 {
+    margin: 0;
+    font-size: clamp(1.5rem, 2.2vw, 1.875rem);
+    line-height: 1.25;
+    text-wrap: balance;
+  }
+
+  .trio-item p {
+    margin: 0;
+    text-wrap: pretty;
+  }
+
+  .trio-item figure {
+    width: 100%;
+  }
+
+  .trio-image {
+    width: 100%;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    box-sizing: border-box;
+  }
+
+  .presets {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .presets li {
+    padding: 0.5rem 0.875rem;
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    background: var(--chip);
+    font-size: 0.9375rem;
+  }
+
+  .presets li.selected {
+    border-color: var(--oranda-ink);
+    background: var(--oranda-coral);
+    color: var(--oranda-ink);
+    font-weight: 700;
+  }
+
+  .support {
+    padding-block: clamp(3.5rem, 7vw, 6rem);
+  }
+
+  .support-inner {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 1.5rem 3.5rem;
+  }
+
+  .support h2 {
+    flex: 1 1 17.5rem;
+    margin: 0;
+    font-size: clamp(1.875rem, 3.8vw, 3.125rem);
+    line-height: 1.2;
+  }
+
+  .support-table {
+    flex: 999 1 35rem;
+    min-width: 0;
+  }
+
+  table {
+    width: 100%;
+    border-collapse: collapse;
+  }
+
+  tr {
+    border-block: 1px solid var(--line);
+  }
+
+  th,
+  td {
+    padding-block: 0.875rem;
+    text-align: start;
+    vertical-align: top;
+  }
+
+  th {
+    padding-inline-end: 1.5rem;
+    white-space: nowrap;
+    font-weight: 700;
+  }
+
+  /* 좁은 화면에서는 제목 칸 때문에 설명 칸이 좁아지므로 위아래로 쌓는다. */
+  @media (max-width: 37.5rem) {
+    th,
+    td {
+      display: block;
+    }
+
+    th {
+      padding-bottom: 0;
+    }
+
+    td {
+      padding-top: 0.25rem;
+    }
+  }
+
+  .closing {
+    padding-block: clamp(3.5rem, 7vw, 6rem);
+  }
+
+  .closing-inner {
+    display: flex;
+    flex-direction: column;
+    gap: 1.5rem;
+  }
+
+  .closing h2 {
+    margin: 0;
+    font-size: clamp(2rem, 4.6vw, 3.75rem);
+    line-height: 1.15;
+    text-wrap: balance;
+  }
+
+  .site-footer {
+    padding-block: 2rem;
+    background: var(--oranda-teal);
+    color: #c4d6d5;
+    font-size: 0.875rem;
+  }
+
+  .footer-inner {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    gap: 1rem 3.5rem;
+  }
+
+  .footer-inner p {
+    flex: 1 1 32.5rem;
+    max-width: 56em;
+    margin: 0;
+  }
+
+  .footer-nav a {
+    color: #ffc2a8;
+  }
+
+  .footer-nav a:hover {
+    color: #fff;
+  }
+</style>

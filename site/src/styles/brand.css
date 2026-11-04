@@ -1,0 +1,15 @@
+/* 랜딩 페이지와 설명서가 함께 쓰는 값. 색은 금붕어 마스코트와 마스코트가 안은 DB 띠에서 가져왔다. */
+:root {
+  --oranda-coral: #fa7a4e;
+  --oranda-ink: #0b2f33;
+  --oranda-teal: #0e3a3f;
+  --oranda-display: 'Black Han Sans', 'Apple SD Gothic Neo', 'Malgun Gothic', 'Noto Sans KR', sans-serif;
+  --oranda-body: 'IBM Plex Sans KR', 'Apple SD Gothic Neo', 'Malgun Gothic', 'Noto Sans KR', sans-serif;
+}
+
+/* Black Han Sans 는 굵기가 하나뿐이다. 합성 굵기를 막아 글꼴이 그대로 보이게 하고, 대체 글꼴에서만 800 이 적용되게 한다. */
+.oranda-display {
+  font-family: var(--oranda-display);
+  font-weight: 800;
+  font-synthesis: none;
+}

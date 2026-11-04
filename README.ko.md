@@ -6,7 +6,7 @@ Oranda 는 Windows·macOS 용 무료 오픈 소스 Oracle 데이터베이스 클
 
 ![스키마 브라우저, SQL 편집기, 결과 그리드가 보이는 Oranda 주 화면](docs/images/screenshot-main.png)
 
-**사용 설명서: [https://jongik-sv.github.io/oranda/](https://jongik-sv.github.io/oranda/)**: 설치, 접속, 모든 화면을 캡처와 함께 설명한다.
+**사용 설명서: [https://jongik-sv.github.io/oranda/manual/](https://jongik-sv.github.io/oranda/manual/)**: 설치, 접속, 모든 화면을 캡처와 함께 설명한다.
 
 - Oracle Client·Instant Client 가 필요 없다. 관리 코드 ODP.NET Core 드라이버(Thin)로 붙는다.
 - Windows x64 와 Apple Silicon Mac 에서 같은 기능.
@@ -35,7 +35,7 @@ Oranda 는 Windows·macOS 용 무료 오픈 소스 Oracle 데이터베이스 클
 | Oracle Database | 11.2 이상. 시험한 버전은 11.2, 19c, 23ai/26ai(23.26.x), Autonomous Database(Serverless). 12c·18c·21c 는 막지 않지만 시험하지 않았다. 11.1 이하는 안내와 함께 접속을 거부한다. |
 | Windows | Windows 10·11, x64 |
 | macOS | macOS 14.7 이상, Apple Silicon(ARM64) |
-| 지원 안 함 | Intel Mac·Windows ARM(돌 수 있으나 시험 안 함), Linux 데스크톱(빌드만 됨, 배포 안 함) |
+| 지원 안 함 | Intel Mac(배포 판 없음), Windows ARM(돌 수 있으나 시험 안 함), Linux 데스크톱(빌드만 됨, 배포 안 함) |
 
 근거: `docs/PRD.md` 7.1, `docs/decisions.md` D-026·D-030.
 

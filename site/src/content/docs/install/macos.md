@@ -1,6 +1,8 @@
 ---
 title: macOS 설치
 description: macOS에서 Oranda를 설치하고 보안 경고를 처리하는 방법을 안내합니다.
+sidebar:
+  order: 3
 ---
 
 ## 설치하기

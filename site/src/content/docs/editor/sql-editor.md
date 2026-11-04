@@ -1,6 +1,8 @@
 ---
 title: SQL 편집기
 description: SQL 탭을 열고 저장하고 고치고 찾는 방법을 안내합니다.
+sidebar:
+  order: 1
 ---
 
 SQL 편집기는 SQL을 쓰고 고치고 저장하는 화면입니다. SQL 탭, 파일, 편집 명령, 찾기, 이동을 이 쪽에서 설명합니다.

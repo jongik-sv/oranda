@@ -1,0 +1,35 @@
+/* 설명서 전체의 강조색을 마스코트의 청록으로 맞춘다. */
+:root {
+  --sl-color-accent-low: #0e3a3f;
+  --sl-color-accent: #2e8f93;
+  --sl-color-accent-high: #bde6e3;
+}
+
+:root[data-theme='light'] {
+  --sl-color-accent-high: #0b2f33;
+  --sl-color-accent: #0b5a60;
+  --sl-color-accent-low: #c7e3e1;
+}
+
+/* 설명서 첫 화면 전용: 코랄 띠가 창 끝까지 닿도록 본문 틀의 여백을 없앤다. 404 같은 다른 splash 쪽은 그대로 둔다. */
+html:has(.manual-hero) {
+  --sl-main-pad: 0;
+}
+
+html:has(.manual-hero) .content-panel {
+  padding: 0;
+}
+
+html:has(.manual-hero) .content-panel .sl-container {
+  max-width: none;
+  margin: 0;
+}
+
+html:has(.manual-hero) .content-panel .sl-container > * + * {
+  margin-top: 0;
+}
+
+/* 첫 화면에는 큰 검색창이 있으므로 머리글의 검색 단추를 숨긴다. 검색 창(dialog)과 단축키는 그대로 동작한다. */
+html:has(.manual-hero) header site-search > button[data-open-modal] {
+  display: none;
+}

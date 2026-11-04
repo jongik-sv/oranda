@@ -6,7 +6,7 @@ Oranda is a free, open source Oracle Database client for Windows and macOS. It i
 
 ![Oranda main window with the schema browser, a SQL editor and a result grid](docs/images/screenshot-main.png)
 
-**User manual (Korean): [https://jongik-sv.github.io/oranda/](https://jongik-sv.github.io/oranda/)**: installation, connections, and every screen with screenshots.
+**User manual (Korean): [https://jongik-sv.github.io/oranda/manual/](https://jongik-sv.github.io/oranda/manual/)**: installation, connections, and every screen with screenshots.
 
 - No Oracle Client or Instant Client needed: Oranda uses the managed ODP.NET Core driver (thin mode).
 - Same features on Windows x64 and Apple Silicon Macs.
@@ -35,7 +35,7 @@ Oranda is a free, open source Oracle Database client for Windows and macOS. It i
 | Oracle Database | 11.2 and later. Tested with 11.2, 19c, 23ai/26ai (23.26.x) and Autonomous Database (Serverless). 12c, 18c and 21c are allowed but not tested. 11.1 and earlier are refused with a message. |
 | Windows | Windows 10 and 11, x64 |
 | macOS | macOS 14.7 or later on Apple Silicon (ARM64) |
-| Not supported | Intel Macs and Windows on ARM (may work, not tested); Linux desktop (builds, not released) |
+| Not supported | Intel Macs (no release build); Windows on ARM (may work, not tested); Linux desktop (builds, not released) |
 
 Source: `docs/PRD.md` section 7.1 and decisions D-026 / D-030 in `docs/decisions.md`.
 

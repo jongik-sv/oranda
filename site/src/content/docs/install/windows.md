@@ -1,6 +1,8 @@
 ---
 title: Windows 설치
 description: Windows에서 Oranda를 설치하거나 설치 없이 실행하는 방법을 안내합니다.
+sidebar:
+  order: 2
 ---
 
 ## 설치 파일로 설치하기
