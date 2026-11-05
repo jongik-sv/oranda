@@ -54,6 +54,9 @@ public partial class SqlResultPaneView : UserControl
 
         GridControl.ColumnFilterRequested += async (_, e) => await OpenColumnFilterAsync(e);
         GridControl.EditRequested += (_, cell) => BeginEdit(cell);
+        GridControl.CellDoubleTapped += (_, cell) => OnCellDoubleTapped(cell);
+        GridControl.RowOrderChanging += (_, _) => CommitOpenEditor();
+        GridControl.HeaderInsertRequested += (_, ordinal) => Vm?.InsertColumnName(ordinal);
         EditHintClose.Click += (_, _) => Vm?.HideEditHint();
         EditHintRerun.Click += async (_, _) => await RunEditHintActionAsync();
         EditHintRowId.Click += async (_, _) => await RunEditHintActionAsync();
@@ -106,6 +109,23 @@ public partial class SqlResultPaneView : UserControl
                 CancelEdit();
             }
         };
+        // ↑·↓: 반영하고 같은 열의 위·아래 행 셀 편집으로 이어 간다(첫 행의 ↑·끝 행의 ↓ 는 반영만 하고 닫는다). 값에 줄바꿈이 있어도 행 이동이다.
+        // 입력 칸이 이 키를 먼저 처리하므로(커서 이동) 터널링 단계에서 가로챈다.
+        CellEditor.AddHandler(KeyDownEvent, (_, e) =>
+        {
+            if (e.Key is Key.Up or Key.Down && (e.KeyModifiers & (KeyModifiers.Control | KeyModifiers.Alt | KeyModifiers.Meta)) == 0)
+            {
+                e.Handled = true;
+                CommitAndEditRow(e.Key == Key.Up ? -1 : 1);
+            }
+        }, Avalonia.Interactivity.RoutingStrategies.Tunnel);
+        CellEditor.PropertyChanged += (_, e) =>
+        {
+            if (e.Property == TextBox.TextProperty && CellEditor.IsVisible && !string.Equals(CellEditor.Text, _editBaseline, StringComparison.Ordinal))
+            {
+                _editTouched = true; // 열 때 넣은 글(baseline)과 다른 글이 한 번이라도 있었다 = 고쳤다
+            }
+        };
         CellEditor.LostFocus += (_, _) =>
         {
             if (CellEditor.IsVisible)
@@ -116,6 +136,38 @@ public partial class SqlResultPaneView : UserControl
     }
 
     private GridCell? _editing;
+
+    // 셀 편집기를 열 때 보인 글. 확정할 때 글이 같으면(지나가기만 했으면) 값을 건드리지 않는다 —
+    // 표시 글(여러 줄의 ↵, 같은 값 숨김의 빈 글자)을 값으로 읽어 손대지 않은 칸이 바뀌는 것을 막는다.
+    private string _editBaseline = string.Empty;
+
+    // 사용자가 편집기 글을 실제로 고쳤는가(열 때 넣은 글은 제외). 같은 값 숨김처럼 보이는 글이 빈 글자인 칸을 지워서 NULL 로 만들려는 뜻은 글이 같아도 살린다.
+    private bool _editTouched;
+
+    private void CommitOpenEditor()
+    {
+        if (_editing is not null)
+        {
+            CommitEdit(moveDown: false);
+        }
+    }
+
+    // 값 더블클릭: 편집 모드(편집 세션이 있는 결과)면 예전처럼 셀 편집을 열고, 아니면 편집기에 SQL 리터럴로 넣는다. 넣을 편집기가 없는 영역(객체 상세 등)은 예전 동작을 유지한다.
+    private void OnCellDoubleTapped(GridCell cell)
+    {
+        if (GridControl.Model is not { } m)
+        {
+            return;
+        }
+
+        if (Vm is { CanInsertToEditor: true } vm && Oranda.App.Features.GridEdit.GridEditBinding.Of(m) is null)
+        {
+            vm.InsertCellValue(cell);
+            return;
+        }
+
+        BeginEdit(cell);
+    }
 
     /// <summary>편집 모드 그리드에서 셀 편집기를 연다. 키 열이 아니어도 편집할 수 없는 열(대상 테이블 밖)은 열지 않는다.</summary>
     private bool BeginEdit(GridCell cell, string? typed = null)
@@ -149,6 +201,8 @@ public partial class SqlResultPaneView : UserControl
         CellEditor.Width = Math.Max(60, r.Width);
         CellEditor.Height = r.Height;
         CellEditor.Text = m.TryGetValue(cell.Row, ord, out var v) && v is not null ? m.GetCellText(cell.Row, ord) : string.Empty;
+        _editBaseline = CellEditor.Text;
+        _editTouched = false;
         CellEditor.IsVisible = true;
         CellEditor.Focus();
         if (typed is null)
@@ -159,12 +213,65 @@ public partial class SqlResultPaneView : UserControl
         {
             CellEditor.Text = typed; // 친 글자로 값을 바꿔 쓴다
             CellEditor.CaretIndex = typed.Length;
+            _editTouched = true;
         }
 
         return true;
     }
 
-    private void CommitAndEditNext(int step)
+    private void CommitAndEditNext(int step) => CommitAndEditAt(cell =>
+    {
+        var cols = GridControl.Model!.VisibleColumns.Count;
+        var index = (cell.Row * cols) + cell.Col + step;
+        return cols == 0 || index < 0 || index >= GridControl.Model.RowCount * cols ? null : new GridCell(index / cols, (int)(index % cols));
+    });
+
+    // ↑·↓: 같은 열의 위·아래 행. 가져온 마지막 행에서 ↓ 이고 더 가져올 행이 있으면 다음 페이지를 가져와 이어 간다.
+    private void CommitAndEditRow(int step)
+    {
+        if (_editing is { } cell && GridControl.Model is { IsLocalFiltered: false, IsSorted: false, HasMoreRows: true } m && step > 0 && cell.Row + 1 >= m.RowCount
+            && m.RowCount == m.BaseRowCount) // 반영하지 않은 새 행이 끝에 붙어 있으면 가져온 행이 그 사이로 끼어들어 이어 갈 칸이 어긋난다
+        {
+            CommitEdit(moveDown: false);
+            _ = ContinueAfterFetchAsync(m, cell);
+            return;
+        }
+
+        CommitAndEditAt(cell =>
+        {
+            var row = cell.Row + step;
+            return row < 0 || row >= GridControl.Model!.RowCount ? null : cell with { Row = row };
+        });
+    }
+
+    private async Task ContinueAfterFetchAsync(ResultGridModel m, GridCell last)
+    {
+        try
+        {
+            await m.FetchNextPageAsync().ConfigureAwait(true);
+        }
+        catch (OperationCanceledException)
+        {
+            return;
+        }
+        catch (Exception e)
+        {
+            m.ReportNotice("다음 행을 가져오지 못했습니다: " + e.Message.ReplaceLineEndings(" "));
+            return;
+        }
+
+        // 가져오는 사이 사용자가 다른 칸을 고르거나 편집을 시작했으면 그대로 둔다(입력 중인 값을 덮어쓰지 않는다).
+        var target = last with { Row = last.Row + 1 };
+        if (ReferenceEquals(GridControl.Model, m) && _editing is null && m.Active == last && target.Row < m.RowCount)
+        {
+            m.SelectCell(target);
+            GridControl.EnsureVisible(target);
+            BeginEdit(target);
+        }
+    }
+
+    /// <summary>편집 중인 값을 반영하고, <paramref name="next"/> 가 돌려준 칸의 편집을 이어서 연다. 돌려줄 칸이 없으면(끝) 반영만 하고 닫는다.</summary>
+    private void CommitAndEditAt(Func<GridCell, GridCell?> next)
     {
         if (_editing is not { } cell || GridControl.Model is not { } m)
         {
@@ -173,17 +280,14 @@ public partial class SqlResultPaneView : UserControl
         }
 
         CommitEdit(moveDown: false);
-        var cols = m.VisibleColumns.Count;
-        var index = (cell.Row * cols) + cell.Col + step;
-        if (cols == 0 || index < 0 || index >= m.RowCount * cols)
+        if (next(cell) is not { } target)
         {
             return;
         }
 
-        var next = new GridCell(index / cols, (int)(index % cols));
-        m.SelectCell(next);
-        GridControl.EnsureVisible(next);
-        BeginEdit(next);
+        m.SelectCell(target);
+        GridControl.EnsureVisible(target);
+        BeginEdit(target);
     }
 
     private void CommitEdit(bool moveDown)
@@ -196,7 +300,11 @@ public partial class SqlResultPaneView : UserControl
 
         var ord = m.VisibleColumns[cell.Col];
         var row = Oranda.App.Features.GridEdit.GridEditBinding.ToEditRow(m, es, cell.Row);
-        es.SetCell(row, ord, Oranda.App.Features.GridEdit.GridEditBinding.Parse(m, ord, CellEditor.Text));
+        if (!string.Equals(CellEditor.Text, _editBaseline, StringComparison.Ordinal) || (_editTouched && string.IsNullOrEmpty(CellEditor.Text)))
+        {
+            es.SetCell(row, ord, Oranda.App.Features.GridEdit.GridEditBinding.Parse(m, ord, CellEditor.Text));
+        }
+
         CancelEdit();
         if (moveDown && cell.Row + 1 < m.RowCount)
         {
@@ -214,6 +322,8 @@ public partial class SqlResultPaneView : UserControl
 
     private SqlResultPaneViewModel? Vm => DataContext as SqlResultPaneViewModel;
 
+    private void OnCommitEditorRequested(object? sender, EventArgs e) => CommitOpenEditor();
+
     private Task RunEditHintActionAsync() => Vm?.RunEditHintActionAsync() ?? Task.CompletedTask;
 
     private void Bind()
@@ -223,19 +333,23 @@ public partial class SqlResultPaneView : UserControl
             _bound.PropertyChanged -= OnVmPropertyChanged;
             _bound.FilterFocusRequested -= OnFilterFocusRequested;
             _bound.QuickFilterFocusRequested -= OnQuickFilterFocusRequested;
+            _bound.CommitEditorRequested -= OnCommitEditorRequested;
             _bound = null;
         }
 
         if (Vm is not { } vm)
         {
             GridControl.Model = null;
+            GridControl.HeaderDoubleClickInserts = false;
             return;
         }
 
+        GridControl.HeaderDoubleClickInserts = vm.CanInsertToEditor; // 편집기 결과 탭만: 머리글 더블클릭 = 이름 넣기(첫 클릭 정렬은 더블클릭 시간만큼 미룸)
         _bound = vm;
         vm.PropertyChanged += OnVmPropertyChanged;
         vm.FilterFocusRequested += OnFilterFocusRequested;
         vm.QuickFilterFocusRequested += OnQuickFilterFocusRequested;
+        vm.CommitEditorRequested += OnCommitEditorRequested;
         AttachModel(vm);
     }
 

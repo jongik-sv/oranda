@@ -50,11 +50,13 @@ public sealed class ResultTabsExcelButtonTests : IDisposable
             var first = view.FindControl<TabControl>("Tabs")!.GetVisualDescendants().OfType<TabItem>().First();
             var headerHeight = first.Bounds.Height;
             Assert.True(button.IsVisible);
-            Assert.True(button.Bounds.Right > view.Bounds.Width - 20); // 오른쪽 끝
-            Assert.True(button.Bounds.Bottom <= headerHeight + 0.5); // 탭 머리 줄 높이 안에 있다
+            var bottomRight = button.TranslatePoint(new Point(button.Bounds.Width, button.Bounds.Height), view)!.Value; // 단추는 StackPanel 안이라 뷰 좌표로 바꿔 본다
+            Assert.True(bottomRight.X > view.Bounds.Width - 20); // 오른쪽 끝
+            Assert.True(bottomRight.Y <= headerHeight + 0.5); // 탭 머리 줄 높이 안에 있다
             var last = view.FindControl<TabControl>("Tabs")!.GetVisualDescendants().OfType<TabItem>().Last();
             var lastRight = last.TranslatePoint(new Point(last.Bounds.Width, 0), view)!.Value.X;
-            Assert.True(lastRight <= button.Bounds.Left + 0.5); // 탭이 단추를 가리지 않는다
+            var panelLeft = button.Parent is Control panel ? panel.TranslatePoint(default, view)!.Value.X : 0;
+            Assert.True(lastRight <= panelLeft + 0.5); // 탭이 단추 묶음을 가리지 않는다
 
             // 단추가 줄을 늘리지 않는다: 단추를 숨겨도 탭 머리 높이가 같다.
             button.IsVisible = false;

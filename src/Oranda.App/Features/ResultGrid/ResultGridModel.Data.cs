@@ -11,6 +11,19 @@ public sealed partial class ResultGridModel
     /// <summary>첫 페이지를 가져온다. 열이 없는 결과(DML 등)면 아무것도 하지 않는다.</summary>
     public Task LoadFirstPageAsync(CancellationToken ct = default) => HasResult ? FetchPageAsync(0, ct) : Task.CompletedTask;
 
+    /// <summary>
+    /// 가져온 행 다음 페이지 하나를 가져온다(셀 편집 중 ↓ 로 가져온 마지막 행을 넘어갈 때). 정렬·거르기가 걸린 결과이거나 더 가져올 행이 없으면 아무것도 하지 않는다.
+    /// </summary>
+    public async Task FetchNextPageAsync(CancellationToken ct = default)
+    {
+        if (!HasResult || !HasMoreRows || IsSorted || _match is not null)
+        {
+            return;
+        }
+
+        await FetchPageAsync((int)(_loadedRows / PageSize), ct).ConfigureAwait(true);
+    }
+
     /// <summary>보이는 행 범위가 쓸 페이지를 백그라운드로 요청한다(Render 에서 불러도 싸다).</summary>
     public void Prefetch(long firstViewRow, long lastViewRow)
     {

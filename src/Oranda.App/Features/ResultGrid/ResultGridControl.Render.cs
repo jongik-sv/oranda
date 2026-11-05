@@ -366,7 +366,7 @@ public sealed partial class ResultGridControl
         var label = m.Columns[ord].Name + (m.SortColumn == ord ? (m.SortDescending ? " ▼" : " ▲") : string.Empty);
         var filtered = m.LocalFilter.Columns.TryGetValue(ord, out var colFilter) && !colFilter.IsEmpty;
         var hovered = _hoverHeaderCol >= 0 && _hoverHeaderCol < m.VisibleColumns.Count && m.VisibleColumns[_hoverHeaderCol] == ord;
-        var showFilter = !m.IsTextMode && w >= FilterButtonMinColumn && (filtered || hovered);
+        var showFilter = !m.IsTextMode && m.ColumnFilterEnabled && w >= FilterButtonMinColumn && (filtered || hovered);
         var textRight = x + w - 1 - (showFilter ? FilterButtonWidth + ResizeGrip : 0);
         using (ctx.PushClip(new Rect(clipLeft, 0, Math.Max(0, textRight - clipLeft), hh)))
         {
@@ -419,7 +419,7 @@ public sealed partial class ResultGridControl
 
     /// <summary>머리글의 ▾ 영역을 맞혔는지: 열 오른쪽 경계까지의 거리가 크기 조절 손잡이 안쪽 <see cref="FilterButtonWidth"/> 안이고 열이 충분히 넓다.</summary>
     private bool IsOnFilterButton(int visibleCol, double rightEdgeDistance) =>
-        _model is { IsTextMode: false } m && visibleCol >= 0 && visibleCol < m.VisibleColumns.Count
+        _model is { IsTextMode: false, ColumnFilterEnabled: true } m && visibleCol >= 0 && visibleCol < m.VisibleColumns.Count
         && m.GetColumnWidth(m.VisibleColumns[visibleCol]) >= FilterButtonMinColumn
         && rightEdgeDistance > ResizeGrip && rightEdgeDistance <= ResizeGrip + FilterButtonWidth;
 

@@ -34,6 +34,12 @@ public static class GridEditCommands
     public static Func<SqlStatement?, CancellationToken, Task>? Rerun { get; set; }
 
     /// <summary>
+    /// 같은 문장을 읽기 결과로 다시 실행한다(결과 탭 줄의 편집 모드 단추를 다시 눌러 편집 모드에서 돌아올 때).
+    /// <see cref="Rerun"/> 과 같은 길이되 편집 세션을 붙이지 않는다. 실행 화면이 채운다.
+    /// </summary>
+    public static Func<SqlStatement?, CancellationToken, Task>? RerunReadOnly { get; set; }
+
+    /// <summary>
     /// 반영하는 동안 세션을 「실행 중」 으로 둘 실행 상태(TSK-14-08, 실행 화면이 채운다). 세션 창의 커밋·롤백·닫기가 꺼지고, 같은 세션을 쓰는
     /// 다른 작업 공간은 바쁨 막대를 본다. null 이면 표시 없이 반영한다.
     /// </summary>

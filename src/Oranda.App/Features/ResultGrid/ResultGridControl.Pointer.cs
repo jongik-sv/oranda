@@ -46,6 +46,7 @@ public sealed partial class ResultGridControl
 
         var p = e.GetPosition(this);
         var props = e.GetCurrentPoint(this).Properties;
+        _model.HeaderContextColumn = -1; // 오른쪽 클릭 메뉴의 정렬 대상 열은 머리글을 오른쪽 클릭했을 때만 정해진다
         if (p.Y < HeaderHeight)
         {
             if (_model.IsTextMode)
@@ -88,8 +89,14 @@ public sealed partial class ResultGridControl
                 {
                     _model.SelectColumn(col);
                 }
+                else if (TryHandleHeaderDoubleClick(e, col))
+                {
+                    // 더블클릭: 첫 클릭의 정렬은 버리고 컬럼 이름을 편집기에 넣는다. 놓을 때 할 일이 없다.
+                }
                 else
                 {
+                    // 새 클릭이 오면 앞서 미룬 정렬을 먼저 한다(더블클릭의 두 번째 누르기는 위에서 걸러진다).
+                    FlushPendingSort();
                     // 누르는 순간에는 정렬하지 않는다. 끌지 않고 놓으면(OnPointerReleased) 그때 정렬한다.
                     _headerPressCol = col;
                     _headerPressPoint = p;
@@ -98,9 +105,14 @@ public sealed partial class ResultGridControl
                     e.Pointer.Capture(this);
                 }
             }
-            else if (props.IsRightButtonPressed && !_model.IsSelected(0, col))
+            else if (props.IsRightButtonPressed)
             {
-                _model.SelectColumn(col);
+                if (!_model.IsSelected(0, col))
+                {
+                    _model.SelectColumn(col);
+                }
+
+                _model.HeaderContextColumn = col;
             }
 
             e.Handled = true;
@@ -256,7 +268,14 @@ public sealed partial class ResultGridControl
             }
             else if (col < pressed.VisibleColumns.Count)
             {
-                _ = SortAsync(pressed.VisibleColumns[col]);
+                if (pressed.ColumnFilterEnabled)
+                {
+                    SortFromHeaderClick(pressed.VisibleColumns[col]);
+                }
+                else
+                {
+                    pressed.SelectColumn(col); // 열 필터를 끈 결과: 머리글 클릭 = 열 전체 선택(정렬은 오른쪽 클릭 메뉴)
+                }
             }
         }
 

@@ -96,7 +96,7 @@ public sealed partial class PlsqlRunViewModel : ObservableObject
     {
         ArgumentNullException.ThrowIfNull(deps);
         _deps = deps;
-        Results = new ResultTabsViewModel(deps.Session()?.Profile);
+        Results = new ResultTabsViewModel(deps.Session()?.Profile) { IsEditorResults = false };
     }
 
     public DbObjectRef? Target { get; private set; }

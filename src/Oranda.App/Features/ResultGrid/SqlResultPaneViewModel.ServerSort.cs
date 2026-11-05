@@ -109,6 +109,7 @@ public sealed partial class SqlResultPaneViewModel
         }
 
         var editing = _editSession;
+        var wasActive = editing is not null && ReferenceEquals(GridEditCommands.Active, editing);
         var filter = _activeFilter;
         SetResultCore(result, _model.Display, keepLocalFilter: true); // 편집 상태·거른 표시를 풀고 새 모델을 만든다. 아래에서 되살린다
         _activeFilter = filter is null ? null : filter with { OrderBy = request.OrderBy };
@@ -120,6 +121,10 @@ public sealed partial class SqlResultPaneViewModel
                 editing.Rebind(GridEditBinding.OriginalValues(sorted), () => sorted.LoadedRowCount);
                 GridEditBinding.Attach(sorted, editing);
                 SetEditSession(editing);
+                if (wasActive)
+                {
+                    GridEditCommands.Active = editing; // 세션을 버리는 정리(Detach)가 비운 편집 명령의 대상을 되돌린다
+                }
             }
 
             if (ordinal >= 0)

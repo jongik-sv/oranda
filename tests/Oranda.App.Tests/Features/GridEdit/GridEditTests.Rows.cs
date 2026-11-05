@@ -47,12 +47,13 @@ public sealed partial class GridEditTests
 
     /// <summary>결과 영역 + 그리드 모델(첫 페이지까지) + 클립보드. <paramref name="edit"/> 면 실행 화면처럼 편집 세션을 붙인다.</summary>
     private async Task<(SqlResultPaneViewModel Pane, ResultGridModel Grid, GridEditSession? Session, FakeClipboard Clip)> RowsPaneAsync(
-        bool edit, string sql = EmpRowsSql, ResultColumn[]? cols = null)
+        bool edit, string sql = EmpRowsSql, ResultColumn[]? cols = null, SqlResultPaneViewModel? into = null, object?[][]? rows = null)
     {
         cols ??= EmpRowCols;
         var stmt = new SqlStatement(sql, default, StatementKind.Query) { Verb = "SELECT" };
-        var pane = new SqlResultPaneViewModel { Statement = stmt };
-        pane.SetResult(new MemoryResult(cols, EmpRows()));
+        var pane = into ?? new SqlResultPaneViewModel { Statement = stmt };
+        pane.Statement = stmt;
+        pane.SetResult(new MemoryResult(cols, rows ?? EmpRows()));
         var m = pane.Model!;
         await m.LoadFirstPageAsync();
         var clip = new FakeClipboard();

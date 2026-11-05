@@ -334,6 +334,9 @@ public sealed partial class ResultGridModel : IAsyncDisposable
     /// <summary>「모든 거르기 지우기」 명령이 빠른 거르기 글까지 지우라고 알린다(칸의 글은 결과 영역이 안다).</summary>
     public event EventHandler? ClearLocalFiltersRequested;
 
+    /// <summary>「열 필터 켜기/끄기」 명령이 머리글 열 필터를 켜거나 끄라고 알린다(<c>oranda.grid.toggleColumnFilter</c>). 상태는 결과 영역이 안다.</summary>
+    public event EventHandler? ColumnFilterToggleRequested;
+
     /// <summary>셀 값 거르기 명령이 활성 칸의 값으로 거르라고 알린다(문장·바인드는 결과 영역이 안다).</summary>
     public event EventHandler<CellFilterKind>? CellFilterRequested;
 
@@ -380,6 +383,26 @@ public sealed partial class ResultGridModel : IAsyncDisposable
     public void RequestClearLocalFilters() => ClearLocalFiltersRequested?.Invoke(this, EventArgs.Empty);
 
     public void RequestFilterBar() => FilterBarRequested?.Invoke(this, EventArgs.Empty);
+
+    public void RequestToggleColumnFilter() => ColumnFilterToggleRequested?.Invoke(this, EventArgs.Empty);
+
+    /// <summary>
+    /// 머리글 열 필터(▾·깔때기)를 보인다. 꺼진 결과는 머리글을 눌러도 필터를 열지 않는다. 기본 켬(모니터 표 등 다른 그리드는 항상 켬).
+    /// 끄기 전에 결과 영역이 걸려 있던 열 필터를 지운다 — 필터를 지울 길이 사라진 채로 남지 않게.
+    /// </summary>
+    public bool ColumnFilterEnabled { get; private set; } = true;
+
+    /// <summary>열 필터 표시 상태를 바꾸고 다시 그리게 한다(결과 영역이 부른다).</summary>
+    public void SetColumnFilterEnabled(bool enabled)
+    {
+        if (ColumnFilterEnabled == enabled)
+        {
+            return;
+        }
+
+        ColumnFilterEnabled = enabled;
+        RaiseChanged();
+    }
 
     public void RequestCellFilter(CellFilterKind kind) => CellFilterRequested?.Invoke(this, kind);
 

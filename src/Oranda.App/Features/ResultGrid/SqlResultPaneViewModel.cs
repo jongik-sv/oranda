@@ -199,7 +199,7 @@ public sealed partial class SqlResultPaneViewModel : ToolPanelViewModelBase
     public bool HasEditHintAction => EditHintAction is not null;
 
     /// <summary>안내 막대에 「편집 모드로 다시 실행」 단추를 보인다(읽기 전용 결과, 거른 결과·외래키로 연 결과는 빼고).</summary>
-    public bool OffersRerunForEdit => _editHint is not null && _editSession is null && _activeFilter is null && !_hasStatementBinds;
+    public bool OffersRerunForEdit => _editHint is not null && _editSession is null && _activeFilter is null && !_hasStatementBinds && IsPlainQuery;
 
     /// <summary>안내 막대에 「ROWID 추가 후 다시 실행」 단추를 보인다(키가 없어 고칠 수 없는 결과).</summary>
     public bool OffersRowIdRerun => _editHint is not null && _editSession is { CanEdit: false, Capability.CanAddRowId: true };

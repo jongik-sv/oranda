@@ -16,6 +16,8 @@ public sealed class ResultGridSettingsStartup(SettingsService settings) : IStart
     {
         ResultGridModel.LocalSortMaxRowsProvider = () => settings.Current.Grid.LocalSortMaxRows;
         ResultGridModel.CacheOptionsProvider = () => new ResultPageCacheOptions { MaxMemoryBytes = Math.Max(1, settings.Current.Grid.MemoryLimitMb) * 1024L * 1024 };
+        SqlResultPaneViewModel.ColumnFilterDefaultProvider = () => settings.Current.Grid.ColumnFilterEnabled;
+        SqlResultPaneViewModel.ColumnFilterDefaultSaver = on => settings.UpdateAsync(s => s with { Grid = s.Grid with { ColumnFilterEnabled = on } });
         Oranda.App.Shell.ShellText.TitleOverride ??= GridRowTitles.For; // 행 명령 이름에 고른 행 수(TSK-11-01)
         return Task.CompletedTask;
     }

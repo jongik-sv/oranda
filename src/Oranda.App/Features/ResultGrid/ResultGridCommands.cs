@@ -71,6 +71,13 @@ public static class ResultGridCommands
     Icon = "filter", Placements = ["context:grid/filter/filter@14"])]
 [OrandaCommand("oranda.grid.toggleQuickFilter", CommandCategory.Result, When = "gridFocus", Enablement = "gridHasResult",
     Icon = "filter", Placements = ["context:grid/filter/filter@10"])]
+[OrandaCommand("oranda.grid.toggleColumnFilter", CommandCategory.Result, When = "gridFocus", Enablement = "gridHasResult", Icon = "filter")]
+[OrandaCommand("oranda.grid.sortAscending", CommandCategory.Result, When = "gridFocus", Enablement = "gridHasResult && gridHasSelection",
+    Placements = ["context:grid/filter/columns@10"])]
+[OrandaCommand("oranda.grid.sortDescending", CommandCategory.Result, When = "gridFocus", Enablement = "gridHasResult && gridHasSelection",
+    Placements = ["context:grid/filter/columns@12"])]
+[OrandaCommand("oranda.grid.clearSort", CommandCategory.Result, When = "gridFocus", Enablement = "gridHasResult",
+    Placements = ["context:grid/filter/columns@14"])]
 [OrandaCommand("oranda.grid.clearLocalFilters", CommandCategory.Result, When = "gridFocus", Enablement = "gridHasResult",
     Icon = "filterClear", Placements = ["context:grid/filter/filter@12"])]
 [OrandaCommand("oranda.grid.filterByValue", CommandCategory.Result, When = "gridFocus",
@@ -161,6 +168,18 @@ public sealed class ResultGridCommandHandler : ICommandHandler
             case "oranda.grid.toggleQuickFilter":
                 g.RequestQuickFilter(); // 결과 영역이 「결과 안에서 거르기」 칸을 열거나 닫는다
                 break;
+            case "oranda.grid.toggleColumnFilter":
+                g.RequestToggleColumnFilter(); // 결과 영역이 열 필터를 켜거나 끈다(끌 때 걸린 열 필터를 지운다)
+                break;
+            case "oranda.grid.sortAscending":
+                await SortActiveColumnAsync(g, descending: false, cancellationToken).ConfigureAwait(true);
+                break;
+            case "oranda.grid.sortDescending":
+                await SortActiveColumnAsync(g, descending: true, cancellationToken).ConfigureAwait(true);
+                break;
+            case "oranda.grid.clearSort":
+                await RunSortAsync(() => g.ClearSortAsync(cancellationToken)).ConfigureAwait(true);
+                break;
             case "oranda.grid.clearLocalFilters":
                 g.RequestClearLocalFilters(); // 결과 영역이 칸의 글과 모델의 거르기를 함께 지운다
                 break;
@@ -184,6 +203,31 @@ public sealed class ResultGridCommandHandler : ICommandHandler
                 break;
             default:
                 break;
+        }
+    }
+
+    // 머리글 오른쪽 클릭 메뉴(필터를 꺼서 머리글 클릭이 정렬이 아닐 때의 정렬 길): 현재 칸의 열을 정렬한다. 머리글 오른쪽 클릭은 그 열을 현재 열로 고른다.
+    private static Task SortActiveColumnAsync(ResultGridModel g, bool descending, CancellationToken ct)
+    {
+        var col = g.HeaderContextColumn >= 0 ? g.HeaderContextColumn : g.Active.Col;
+        if (!g.HasSelection || col < 0 || col >= g.VisibleColumns.Count)
+        {
+            return Task.CompletedTask;
+        }
+
+        var ordinal = g.VisibleColumns[col];
+        return RunSortAsync(() => g.SortAsync(ordinal, descending, ct));
+    }
+
+    private static async Task RunSortAsync(Func<Task> sort)
+    {
+        try
+        {
+            await sort().ConfigureAwait(true);
+        }
+        catch (Exception)
+        {
+            // 취소·원본 오류는 Model.Error 로 보인다(머리글 클릭 정렬과 같다).
         }
     }
 

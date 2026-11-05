@@ -228,6 +228,7 @@ public static class ExecutionCommands
 
         ExecutionState.For(container.GetService<IEventBus>()).UseFeatures(container.GetService<IFeatureGate>()); // 시작 때부터 readOnlySession 이 Role 을 따른다
         GridEditCommands.Rerun ??= (stmt, ct) => Resolve(container).RerunForEditAsync(stmt, ct);
+        GridEditCommands.RerunReadOnly ??= (stmt, ct) => Resolve(container).RerunAsync(stmt, ct);
         GridEditCommands.ConfirmPreview ??= (text, commit, ct) => Resolve(container).ConfirmPreviewAsync(text, commit, ct);
         GridEditCommands.Report ??= notice => Resolve(container).ReportGridApply(notice);
         ResultGrid.ResultGridCommands.CountRows ??= (stmt, ct) => RowCounter(container).CountAsync(stmt, ct);

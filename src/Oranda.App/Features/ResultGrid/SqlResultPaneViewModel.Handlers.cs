@@ -37,6 +37,7 @@ public sealed partial class SqlResultPaneViewModel
     private void OnEditChanged(object? sender, EventArgs e)
     {
         OnPropertyChanged(nameof(IsEditMode));
+        OnPropertyChanged(nameof(HasEditSession));
         OnPropertyChanged(nameof(IsEditDirty));
     }
 
@@ -44,6 +45,11 @@ public sealed partial class SqlResultPaneViewModel
     {
         if (_editSession is not null)
         {
+            if (ReferenceEquals(GridEditCommands.Active, _editSession))
+            {
+                GridEditCommands.Active = null; // 버린 편집 세션을 메뉴·팔레트의 반영 명령이 가리키지 않게
+            }
+
             _editSession.Changed -= OnEditChanged;
             _editSession = null;
             OnEditChanged(this, EventArgs.Empty);
@@ -72,6 +78,7 @@ public sealed partial class SqlResultPaneViewModel
         _model.FilterBarRequested -= OnFilterBarRequested;
         _model.QuickFilterRequested -= OnQuickFilterRequested;
         _model.ClearLocalFiltersRequested -= OnClearLocalFiltersRequested;
+        _model.ColumnFilterToggleRequested -= OnColumnFilterToggleRequested;
         _model.CellFilterRequested -= OnCellFilterRequested;
         _model.PinRequested -= OnPinRequested;
         _model.RelatedRowsRequested -= OnRelatedRowsRequested;

@@ -25,6 +25,7 @@ public sealed partial class GridEditTests : IDisposable
         GridEditCommands.Active = null;
         GridEditCommands.ConfirmPreview = null;
         GridEditCommands.Rerun = null;
+        GridEditCommands.RerunReadOnly = null;
         GridEditCommands.Report = null;
         GridEditCommands.State = null;
         Oranda.App.Features.ResultGrid.ResultGridCommands.Active = null;

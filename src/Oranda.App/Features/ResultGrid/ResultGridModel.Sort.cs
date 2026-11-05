@@ -28,23 +28,57 @@ public sealed partial class ResultGridModel
 
         if (SortColumn == ordinal && SortDescending)
         {
-            if (_serverSorted && ServerSort is { } reset)
-            {
-                // 서버가 정렬한 결과의 해제 = 순서표를 지우는 것으로는 원래 순서가 돌아오지 않는다: 정렬 없이 다시 조회한다.
-                await RunServerSortAsync(reset, -1, false, ct).ConfigureAwait(true);
-                return;
-            }
-
-            SortColumn = -1;
-            SortDescending = false;
-            _order = null;
-            RebuildView();
-            ClearSortNotice();
-            RaiseChanged();
+            await ClearSortCoreAsync(ct).ConfigureAwait(true);
             return;
         }
 
-        var desc = SortColumn == ordinal;
+        await SortCoreAsync(ordinal, desc: SortColumn == ordinal, ct).ConfigureAwait(true);
+    }
+
+    /// <summary>
+    /// 머리글 오른쪽 클릭 메뉴의 「오름차순」·「내림차순」: 방향을 직접 정해 정렬한다. 이미 그 열을 그 방향으로 정렬했으면 아무것도 하지 않는다.
+    /// 큰 결과의 확인(<see cref="ConfirmLargeSort"/>)·취소·편집 중 거부는 <see cref="ToggleSortAsync"/> 와 같은 길을 탄다.
+    /// </summary>
+    public async Task SortAsync(int ordinal, bool descending, CancellationToken ct = default)
+    {
+        if (IsSorting || RefuseSortForEdits() || ordinal < 0 || ordinal >= Columns.Count || (SortColumn == ordinal && SortDescending == descending))
+        {
+            return;
+        }
+
+        await SortCoreAsync(ordinal, descending, ct).ConfigureAwait(true);
+    }
+
+    /// <summary>머리글 오른쪽 클릭 메뉴의 「정렬 해제」: 정렬을 풀고 원래 순서로 돌린다. 정렬하지 않은 결과면 아무것도 하지 않는다.</summary>
+    public async Task ClearSortAsync(CancellationToken ct = default)
+    {
+        if (SortColumn < 0 || IsSorting || RefuseSortForEdits())
+        {
+            return;
+        }
+
+        await ClearSortCoreAsync(ct).ConfigureAwait(true);
+    }
+
+    private async Task ClearSortCoreAsync(CancellationToken ct)
+    {
+        if (_serverSorted && ServerSort is { } reset)
+        {
+            // 서버가 정렬한 결과의 해제 = 순서표를 지우는 것으로는 원래 순서가 돌아오지 않는다: 정렬 없이 다시 조회한다.
+            await RunServerSortAsync(reset, -1, false, ct).ConfigureAwait(true);
+            return;
+        }
+
+        SortColumn = -1;
+        SortDescending = false;
+        _order = null;
+        RebuildView();
+        ClearSortNotice();
+        RaiseChanged();
+    }
+
+    private async Task SortCoreAsync(int ordinal, bool desc, CancellationToken ct)
+    {
         using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct, _cts.Token);
         _sortCts = cts;
         SetSortPhase(SortPhase.Fetching);
@@ -72,6 +106,12 @@ public sealed partial class ResultGridModel
             SetSortPhase(SortPhase.None);
         }
     }
+
+    /// <summary>
+    /// 머리글을 오른쪽 클릭해 연 메뉴의 대상 열(보이는 열 위치). 여러 열을 고른 범위 안의 머리글을 눌러도 선택은 그대로 두므로
+    /// 현재 칸이 눌린 열과 다를 수 있다 — 정렬 명령은 이 열을 먼저 쓴다. 다른 곳을 누르면 -1.
+    /// </summary>
+    public int HeaderContextColumn { get; set; } = -1;
 
     /// <summary>정렬 가져오기·계산이 도는 단계. 상태 줄이 진행을 보이는 데 쓴다.</summary>
     public SortPhase SortingPhase { get; private set; }

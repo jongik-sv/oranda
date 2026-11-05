@@ -464,6 +464,10 @@
 | `oranda.grid.countRows` | 전체 행 수 세기 | - | `gridFocus` | `gridQueryResult && hasSession && !sessionBusy` | TSK-06-03 |
 | `oranda.grid.toggleFilterBar` | 결과 거르기 줄 | - | `gridFocus` | `gridQueryResult` | TSK-06-03 |
 | `oranda.grid.toggleQuickFilter` | 결과 안에서 거르기 | - | `gridFocus` | `gridHasResult` | TSK-13-26 |
+| `oranda.grid.toggleColumnFilter` | 열 필터 켜기/끄기 | - | `gridFocus` | `gridHasResult` | 결과 탭 줄 필터 단추 |
+| `oranda.grid.sortAscending` | 오름차순 정렬 | - | `gridFocus` | `gridHasResult && gridHasSelection` | 머리글 오른쪽 클릭 메뉴 |
+| `oranda.grid.sortDescending` | 내림차순 정렬 | - | `gridFocus` | `gridHasResult && gridHasSelection` | 머리글 오른쪽 클릭 메뉴 |
+| `oranda.grid.clearSort` | 정렬 해제 | - | `gridFocus` | `gridHasResult` | 머리글 오른쪽 클릭 메뉴 |
 | `oranda.grid.clearLocalFilters` | 결과 안 거르기 모두 지우기 | - | `gridFocus` | `gridHasResult` | TSK-13-26 |
 | `oranda.grid.filterByValue` | 이 값으로 거르기 | - | `gridFocus` | `gridQueryResult && gridHasSelection && hasSession && !sessionBusy` | TSK-06-03 |
 | `oranda.grid.filterExcludeValue` | 이 값 빼고 거르기 | - | `gridFocus` | `gridQueryResult && gridHasSelection && hasSession && !sessionBusy` | TSK-06-03 |

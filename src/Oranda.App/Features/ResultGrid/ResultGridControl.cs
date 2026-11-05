@@ -73,7 +73,7 @@ public sealed partial class ResultGridControl : Control
     /// <summary>보이는 열 위치 <paramref name="visibleCol"/> 의 자동 필터를 열어 달라고 알린다(▾ 누르기와 같다).</summary>
     public void RequestColumnFilter(int visibleCol)
     {
-        if (_model is not { HasResult: true, IsTextMode: false } m || visibleCol < 0 || visibleCol >= m.VisibleColumns.Count)
+        if (_model is not { HasResult: true, IsTextMode: false, ColumnFilterEnabled: true } m || visibleCol < 0 || visibleCol >= m.VisibleColumns.Count)
         {
             return;
         }
@@ -111,6 +111,7 @@ public sealed partial class ResultGridControl : Control
                 _model.SavedOffsetY = _offsetY;
             }
 
+            CancelPendingSort(); // 다른 결과로 바뀌면 앞 결과의 정렬 예약은 버린다
             _model = value;
             _cells.Clear();
             _headers.Clear();

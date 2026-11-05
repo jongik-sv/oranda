@@ -403,6 +403,12 @@ public sealed record GridSettings
     public const int DefaultLocalSortMaxRows = 100_000;
 
     /// <summary>
+    /// 편집기 결과 탭의 열 필터(머리글 ▾·깔때기)를 쓴다(결과 탭 줄의 필터 단추, <c>oranda.grid.toggleColumnFilter</c>).
+    /// 마지막으로 고른 상태를 기억해 새 결과가 그대로 시작한다. 끄면 머리글 클릭이 열 선택이 된다.
+    /// </summary>
+    public bool ColumnFilterEnabled { get; init; } = true;
+
+    /// <summary>
     /// 결과 그리드 「플래시백 ▸ 이 행 변경 이력」(변경 추적하기, TSK-13-44)을 쓴다. 끄면 그 명령만 메뉴·우클릭·팔레트·단축키에서 숨는다.
     /// </summary>
     public bool FlashbackTrackEnabled { get; init; } = true;

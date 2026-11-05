@@ -39,6 +39,7 @@ public sealed partial class SqlResultPaneViewModel
             m.Display = display;
         }
 
+        m.SetColumnFilterEnabled(_columnFilterEnabled); // 다시 조회한 결과도 이 영역의 열 필터 상태를 이어받는다
         m.Changed += OnModelChanged;
         m.FindRequested += OnFindRequested;
         m.CloseRequested += OnCloseRequested;
@@ -46,6 +47,7 @@ public sealed partial class SqlResultPaneViewModel
         m.FilterBarRequested += OnFilterBarRequested;
         m.QuickFilterRequested += OnQuickFilterRequested;
         m.ClearLocalFiltersRequested += OnClearLocalFiltersRequested;
+        m.ColumnFilterToggleRequested += OnColumnFilterToggleRequested;
         m.CellFilterRequested += OnCellFilterRequested;
         m.PinRequested += OnPinRequested;
         m.RelatedRowsRequested += OnRelatedRowsRequested;
@@ -140,7 +142,7 @@ public sealed partial class SqlResultPaneViewModel
 
     /// <summary>편집 모드가 아닌 이 결과를 편집 모드로 다시 실행할 수 있는지(거른 결과·외래키로 연 결과가 아니고, 다시 실행할 문장과 방법이 있다).</summary>
     public bool CanStartEditMode =>
-        _editSession is null && _activeFilter is null && !_hasStatementBinds && Statement is not null
+        _editSession is null && _activeFilter is null && !_hasStatementBinds && IsPlainQuery
         && (Runner?.RerunForEdit ?? GridEditCommands.Rerun) is not null;
 
     /// <summary>

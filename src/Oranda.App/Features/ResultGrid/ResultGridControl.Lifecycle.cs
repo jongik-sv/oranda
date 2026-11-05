@@ -40,6 +40,7 @@ public sealed partial class ResultGridControl
         }
 
         ActualThemeVariantChanged -= OnThemeChanged;
+        CancelPendingSort();
         UnsubscribeFontResources();
         _cells.Clear();
         _headers.Clear();

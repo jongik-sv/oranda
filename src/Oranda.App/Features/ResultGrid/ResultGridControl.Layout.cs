@@ -80,8 +80,22 @@ public sealed partial class ResultGridControl
     protected override void OnDoubleTapped(Avalonia.Input.TappedEventArgs e)
     {
         base.OnDoubleTapped(e);
-        if (_model is { HasSelection: true } m && !m.IsTextMode && e.GetPosition(this).Y >= HeaderHeight)
+        var p = e.GetPosition(this);
+        if (_model is { HasSelection: true } m && !m.IsTextMode && p.Y >= HeaderHeight)
         {
+            // 값 칸을 더블클릭: 받는 쪽이 있으면 그 칸을 알린다(편집 모드면 셀 편집, 아니면 편집기에 넣기). 없거나 행 머리면 예전처럼 셀 편집 요청.
+            if (CellDoubleTapped is { } tapped && p.X >= RowHeaderWidth)
+            {
+                // 끝 행 아래 빈 곳(HitCell 은 끝 행으로 맞춘다)은 값이 없으니 아무것도 하지 않는다.
+                var rawRow = (long)Math.Floor((p.Y - HeaderHeight + _offsetY) / RowHeight);
+                if (rawRow >= 0 && rawRow < m.RowCount && HitCell(p) is var (row, col) && col >= 0)
+                {
+                    tapped(this, new GridCell(row, col));
+                }
+
+                return;
+            }
+
             EditRequested?.Invoke(this, m.Active);
         }
     }

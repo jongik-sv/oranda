@@ -44,6 +44,13 @@ public sealed partial class ResultGridControl
             return;
         }
 
+        if (e.Key == Key.Escape && _pendingSortOrdinal >= 0)
+        {
+            CancelPendingSort(); // 더블클릭을 기다리는 정렬을 취소한다
+            e.Handled = true;
+            return;
+        }
+
         if (e.Key == Key.Escape && _headerPressCol >= 0)
         {
             CancelHeaderPress(); // 끌기를 취소하고, 놓아도 정렬하지 않는다
@@ -98,6 +105,7 @@ public sealed partial class ResultGridControl
     {
         try
         {
+            RowOrderChanging?.Invoke(this, EventArgs.Empty); // 열린 셀 편집기가 있으면 먼저 확정한다(정렬하면 행 번호가 바뀐다)
             await _model!.ToggleSortAsync(ordinal).ConfigureAwait(true);
         }
         catch (Exception)

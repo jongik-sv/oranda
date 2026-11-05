@@ -240,6 +240,28 @@ public sealed partial class ExecutionController
         await GuardedAsync(session, Host.Active, fetch, ct).ConfigureAwait(true);
     }
 
+    /// <summary>
+    /// 결과 탭 줄의 편집 모드 단추를 다시 눌러 읽기 결과로 돌아간다: 한 문장을 일반 실행해 결과를 그 자리에서 바꾼다(편집 세션을 붙이지 않는다).
+    /// <paramref name="query"/> 가 null 이면 커서 문장.
+    /// </summary>
+    public async Task RerunAsync(SqlStatement? query, CancellationToken ct)
+    {
+        var tab = Host.Active;
+        if (tab is null || !await EnsureConnectionAsync(tab, ct).ConfigureAwait(true) || IsBusy(SessionFor(tab)))
+        {
+            return;
+        }
+
+        var stmt = query ?? tab.GetStatementAtCaret();
+        if (stmt is null)
+        {
+            Log.AddMessage(MessageKind.Warning, "실행할 문장이 없습니다.");
+            return;
+        }
+
+        await RunOneAsync(tab, stmt, newResultTab: false, ct).ConfigureAwait(true);
+    }
+
     /// <summary>F9 · 「ROWID 추가 후 다시 실행」: 한 문장을 실행하고 결과를 편집 모드로 연다. <paramref name="query"/> 가 null 이면 커서 문장.</summary>
     public async Task RerunForEditAsync(SqlStatement? query, CancellationToken ct)
     {

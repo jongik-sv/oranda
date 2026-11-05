@@ -3,6 +3,7 @@ using System.Globalization;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Oranda.App.Features.ResultGrid;
+using Oranda.App.Features.SqlEditor;
 using Oranda.App.ViewModels;
 using Oranda.Core.Connection;
 using Oranda.Core.Execution;
@@ -107,6 +108,66 @@ public sealed partial class ResultTabsViewModel : ViewModelBase
     }
 
     public ConnectionProfile? Profile { get; private set; }
+
+    /// <summary>
+    /// SQL 편집기 문서의 결과 영역이다(기본). false 면 PL/SQL 실행 창처럼 편집기 탭이 없는 영역이라 열 필터 단추·머리글/값 더블클릭 넣기가 꺼진다
+    /// (결과 탭은 예전처럼 동작한다).
+    /// </summary>
+    public bool IsEditorResults { get; init; } = true;
+
+    /// <summary>
+    /// 이 결과 영역을 가진 편집기 탭(머리글·값 더블클릭이 글을 넣는 곳). 비어 있으면 편집기 호스트에서 이 영역을 결과 영역으로 가진 탭을 찾는다.
+    /// 시험이 호스트 없이 직접 정하는 자리이기도 하다.
+    /// </summary>
+    public SqlEditorViewModel? OwnerTab { get; set; }
+
+    private SqlEditorViewModel? FindOwnerTab() =>
+        OwnerTab ?? SqlEditorHost.Current.Tabs.FirstOrDefault(t => ReferenceEquals(t.ResultPane, this));
+
+    private Task<bool> ConfirmDiscardEditsAsync(CancellationToken ct) =>
+        SqlEditorHost.Current.Dialogs.ConfirmAsync("반영하지 않은 변경이 있습니다. 변경을 버리고 읽기 결과로 돌아갈까요?", ct);
+
+    /// <summary>
+    /// 결과 탭 줄의 편집 모드 단추를 쓸 수 있다: 선택한 탭에 결과 그리드가 있고, 실행 중이 아니고, 읽기 전용 접속이 아니고,
+    /// 이 영역이 편집기 탭의 것이며(PL/SQL 실행 창 등은 아니다), 문장이 조회 하나로 확실하고(<see cref="SqlResultPaneViewModel.IsPlainQuery"/>),
+    /// 편집 세션이 붙어 있거나(돌아가기) 편집 모드로 다시 실행할 수 있다.
+    /// </summary>
+    public bool CanToggleEditMode =>
+        Selected is { Pane: { Model.HasResult: true } pane }
+        && !IsRunning
+        && Profile is not { ReadOnly: true }
+        && FindOwnerTab() is not null
+        && pane.IsPlainQuery
+        && (pane.HasEditSession || pane.CanStartEditMode);
+
+    /// <summary>선택한 결과 탭의 편집 모드를 켜거나 끈다(단추).</summary>
+    public Task ToggleEditModeAsync() => Selected?.Pane?.ToggleEditModeAsync() ?? Task.CompletedTask;
+
+    private string? InsertIntoEditor(string text) =>
+        FindOwnerTab() is { } tab ? InsertInto(tab, text) : "결과를 만든 편집기 탭이 닫혀 있어 넣을 수 없습니다.";
+
+    /// <summary>
+    /// 편집기의 커서 자리(선택이 있으면 선택을 바꾸어)에 글을 넣는다. 실행 취소 한 단계이고 넣은 뒤 커서는 글 끝이다.
+    /// 포커스는 옮기지 않는다(그리드에서 이어서 더블클릭할 수 있게). 넣었으면 null, 못 넣었으면 안내 글.
+    /// </summary>
+    internal static string? InsertInto(SqlEditorViewModel tab, string text)
+    {
+        ArgumentNullException.ThrowIfNull(tab);
+        if (tab.IsReadOnly)
+        {
+            return "읽기 전용 편집기라 넣을 수 없습니다.";
+        }
+
+        if (tab.HasMultiPieceSelection)
+        {
+            return SqlEditorViewModel.BlockSelectionNotice; // 열 블록·여러 커서 선택은 한 덩어리가 아니라 둘레 범위를 바꾸면 블록 밖 글이 지워진다
+        }
+
+        var length = tab.Text.Length;
+        var start = Math.Clamp(tab.SelectionLength > 0 ? tab.SelectionStart : tab.CaretOffset, 0, length);
+        var replace = Math.Clamp(tab.SelectionLength, 0, length - start);
+        return tab.Apply(new TextOpResult(start, replace, text, start + text.Length, 0)) ? null : "편집기에 넣지 못했습니다.";
+    }
 
     public ObservableCollection<ResultTabItem> Tabs { get; } = [];
 
@@ -256,6 +317,13 @@ public sealed partial class ResultTabsViewModel : ViewModelBase
     {
         ArgumentNullException.ThrowIfNull(result);
         var pane = new SqlResultPaneViewModel { Statement = statement, RunBinds = runBinds };
+        if (IsEditorResults)
+        {
+            pane.UseColumnFilterDefault(); // 편집기 결과 탭만 마지막으로 고른 열 필터 상태로 시작한다
+            pane.EditorInserter = InsertIntoEditor; // 편집기 결과 탭만 머리글·값 더블클릭으로 편집기에 글을 넣는다
+            pane.ConfirmDiscardEdits = ConfirmDiscardEditsAsync;
+        }
+
         pane.SetResult(result, display);
         var tab = new ResultTabItem { Title = title, Pane = pane, Statement = statement, IsClosable = closable, Elapsed = elapsed };
         tab.CloseHandler = CloseToLeft;

@@ -29,9 +29,9 @@
     <Style Selector="Button.tab-close:pointerover">
       <Setter Property="Opacity" Value="1" />
     </Style>
-    <!-- 탭 머리 줄 오른쪽 끝을 Excel 단추 자리로 비워 둔다(탭이 많으면 탭 쪽이 줄어들어 단추는 가려지지 않는다). -->
+    <!-- 탭 머리 줄 오른쪽 끝을 단추 셋(결과 편집 모드·필터·Excel) 자리로 비워 둔다(탭이 많으면 탭 쪽이 줄어들어 단추는 가려지지 않는다). -->
     <Style Selector="TabControl#Tabs /template/ ItemsPresenter#PART_ItemsPresenter">
-      <Setter Property="Margin" Value="0,0,34,0" />
+      <Setter Property="Margin" Value="0,0,90,0" />
     </Style>
   </UserControl.Styles>
   <DockPanel>
@@ -77,11 +77,17 @@
         </DataTemplate>
       </TabControl.ContentTemplate>
     </TabControl>
-    <!-- 선택한 결과 탭의 결과를 Excel 로 내보낸다(oranda.grid.exportExcel). 결과 그리드가 없는 탭이면 꺼진다. -->
-    <Button x:Name="ExcelButton" Classes="toolbar" HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,2,4,0"
-            Focusable="False" Tag="oranda.grid.exportExcel" Content="Excel 로 내보내기"
-            IsEnabled="{Binding Selected.HasPane, FallbackValue=False}"
-            icons:ButtonIcon.Key="excel" icons:ButtonIcon.IconOnly="True" />
+    <!-- 탭 줄 오른쪽 단추 셋. 왼쪽부터 결과 편집 모드(oranda.exec.runForEdit 와 같은 다시 실행)·열 필터 켜기/끄기(oranda.grid.toggleColumnFilter)·
+         Excel 내보내기(oranda.grid.exportExcel). 결과 그리드가 없는 탭이면 꺼진다. 켜짐 표시는 코드 숨김이 선택한 결과 탭의 상태에 맞춘다. -->
+    <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,0,4,0">
+      <ToggleButton x:Name="EditModeButton" Classes="toolbar" Focusable="False" Content="결과 편집 모드"
+                    icons:ButtonIcon.Key="tableEdit" icons:ButtonIcon.IconOnly="True" />
+      <ToggleButton x:Name="ColumnFilterButton" Classes="toolbar" Focusable="False" Content="열 필터"
+                    icons:ButtonIcon.Key="filter" icons:ButtonIcon.IconOnly="True" />
+      <Button x:Name="ExcelButton" Classes="toolbar" Focusable="False" Tag="oranda.grid.exportExcel" Content="Excel 로 내보내기"
+              IsEnabled="{Binding Selected.HasPane, FallbackValue=False}"
+              icons:ButtonIcon.Key="excel" icons:ButtonIcon.IconOnly="True" />
+    </StackPanel>
     <!-- 문장을 실행하는 동안(결과가 오기 전까지) 결과 영역 위쪽 가장자리에 겹치는 얇은 막대. 끝·오류·취소에 사라진다. -->
     <ProgressBar x:Name="RunBar" IsIndeterminate="True" IsVisible="{Binding IsRunBarVisible}" Height="2" MinHeight="2"
                  VerticalAlignment="Top" IsHitTestVisible="False" AutomationProperties.Name="쿼리를 실행하는 중" />
