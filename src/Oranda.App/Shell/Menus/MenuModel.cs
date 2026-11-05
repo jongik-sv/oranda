@@ -314,7 +314,7 @@ public static class MenuModelBuilder
     }
 
     /// <summary>오른쪽 클릭 메뉴에서 묶음 이름의 순서가 같을 때(그리드처럼 묶음마다 10 부터 센다) 쓰는 차례.</summary>
-    private static readonly string[] ContextSectionOrder = ["run", "refresh", "copy", "view", "filter", "columns", "rows", "navigate", "edit", "insert", "favorite", "detail", "export"];
+    private static readonly string[] ContextSectionOrder = ["run", "refresh", "copy", "view", "sort", "filter", "columns", "rows", "navigate", "edit", "insert", "favorite", "detail", "export"];
 
     /// <summary>
     /// 오른쪽 클릭 배치는 두 관례가 섞여 있다. <c>context:grid/copy@10</c> 처럼 둘째 마디를 여러 명령이 같이 쓰거나 셋째 마디(하위 메뉴)가 있으면 그것이 묶음 이름이고,

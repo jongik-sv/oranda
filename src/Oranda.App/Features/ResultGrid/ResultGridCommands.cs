@@ -73,11 +73,11 @@ public static class ResultGridCommands
     Icon = "filter", Placements = ["context:grid/filter/filter@10"])]
 [OrandaCommand("oranda.grid.toggleColumnFilter", CommandCategory.Result, When = "gridFocus", Enablement = "gridHasResult", Icon = "filter")]
 [OrandaCommand("oranda.grid.sortAscending", CommandCategory.Result, When = "gridFocus", Enablement = "gridHasResult && gridHasSelection",
-    Placements = ["context:grid/filter/columns@10"])]
+    Placements = ["context:grid/sort@10"])]
 [OrandaCommand("oranda.grid.sortDescending", CommandCategory.Result, When = "gridFocus", Enablement = "gridHasResult && gridHasSelection",
-    Placements = ["context:grid/filter/columns@12"])]
+    Placements = ["context:grid/sort@12"])]
 [OrandaCommand("oranda.grid.clearSort", CommandCategory.Result, When = "gridFocus", Enablement = "gridHasResult",
-    Placements = ["context:grid/filter/columns@14"])]
+    Placements = ["context:grid/sort@14"])]
 [OrandaCommand("oranda.grid.clearLocalFilters", CommandCategory.Result, When = "gridFocus", Enablement = "gridHasResult",
     Icon = "filterClear", Placements = ["context:grid/filter/filter@12"])]
 [OrandaCommand("oranda.grid.filterByValue", CommandCategory.Result, When = "gridFocus",

@@ -198,13 +198,13 @@ public class MenuStateHeadlessTests
     });
 
     [Fact]
-    public Task Grid_context_menu_draws_submenus_with_at_most_fifteen_lines() => HeadlessHost.Run(() =>
+    public Task Grid_context_menu_draws_submenus_with_at_most_eighteen_lines() => HeadlessHost.Run(() =>
     {
-        // TSK-09-03: 그리드 오른쪽 클릭 37개 → 한 단계 15줄 이하. 복사(TSV)·행 보기·내보내기 2개는 최상위, 나머지는 하위 메뉴 5개.
+        // TSK-09-03: 그리드 오른쪽 클릭 37개 → 한 단계 18줄 이하(D-043). 복사(TSV)·행 보기·내보내기 2개·정렬 3개는 최상위, 나머지는 하위 메뉴 5개.
         using var h = new ShellHarness();
         var items = ShellContextMenus.Factory!("grid");
         var lines = items.OfType<MenuItem>().ToList();
-        Assert.True(lines.Count <= 15, $"한 단계 {lines.Count}줄");
+        Assert.True(lines.Count <= 18, $"한 단계 {lines.Count}줄");
         Assert.Equal(["복사 형식", "거르기", "열", "행 편집", "플래시백"], lines.Where(m => m.ItemsSource is not null).Select(m => (string)m.Header!));
         string?[] top = [.. lines.Select(m => (m.Command as RegistryCommand)?.CommandId)];
         foreach (var id in GridTopCommands)

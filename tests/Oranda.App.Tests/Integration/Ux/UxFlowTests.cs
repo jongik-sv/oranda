@@ -173,7 +173,7 @@ public sealed class UxFlowTests(ITestOutputHelper output)
                 var gridMenu = UxWidth.GridContext(app);
                 Assert.Contains(gridMenu, n => n.CommandId == "oranda.grid.export"); // 최상위 줄(하위 메뉴 안이 아니다)
                 Assert.Contains(gridMenu, n => n.CommandId == "oranda.grid.exportExcel");
-                Assert.True(UxWidth.Lines(gridMenu) <= UxWidth.WideLimit);
+                Assert.True(UxWidth.Lines(gridMenu) <= 18); // D-043: 정렬 3항목이 최상위로 올라와 18줄
 
                 SaveFeedback.Clear();
                 var excelRun = registry.ExecuteAsync("oranda.grid.exportExcel", keys);

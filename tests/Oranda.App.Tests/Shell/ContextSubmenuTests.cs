@@ -6,7 +6,7 @@ namespace Oranda.App.Tests.Shell;
 
 /// <summary>
 /// TSK-09-03(D-015, TRD 11.2): 오른쪽 클릭 하위 메뉴 문법 <c>context:&lt;표면&gt;/&lt;묶음&gt;/&lt;하위 메뉴&gt;@n</c>,
-/// 결과 메뉴로 옮겨 싣기, 그리드 오른쪽 클릭 37줄을 한 단계 15줄 이하로 묶기.
+/// 결과 메뉴로 옮겨 싣기, 그리드 오른쪽 클릭 37줄을 한 단계 15줄 이하로 묶기(정렬 3항목을 최상위로 올린 D-043 뒤로는 18줄 이하).
 /// </summary>
 public class ContextSubmenuTests
 {
@@ -121,10 +121,10 @@ public class ContextSubmenuTests
     // ---- 앱의 그리드 오른쪽 클릭·결과 메뉴 -------------------------------------------------------------
 
     [Fact]
-    public void Grid_context_menu_shows_at_most_fifteen_lines_with_frequent_commands_on_top()
+    public void Grid_context_menu_shows_at_most_eighteen_lines_with_frequent_commands_on_top()
     {
         var grid = Grid();
-        Assert.True(Lines(grid) <= 15, $"한 단계 {Lines(grid)}줄: {Shape(grid)}");
+        Assert.True(Lines(grid) <= 18, $"한 단계 {Lines(grid)}줄: {Shape(grid)}");
         foreach (var id in new[] { "oranda.grid.copy", "oranda.grid.rowView", "oranda.grid.export", "oranda.grid.exportExcel" })
         {
             Assert.Contains(grid, n => n.CommandId == id);
@@ -140,7 +140,7 @@ public class ContextSubmenuTests
     [InlineData("filter", new[] { "oranda.grid.toggleQuickFilter", "oranda.grid.clearLocalFilters", "oranda.grid.toggleFilterBar", "oranda.grid.filterByValue", "oranda.grid.filterExcludeValue", "oranda.grid.filterNullRows" })]
     [InlineData("edit", new[] { "oranda.grid.edit.addRow", "oranda.grid.edit.duplicateRow", "oranda.grid.edit.pasteRows", "oranda.grid.edit.deleteRow", "oranda.grid.edit.previewDml", "oranda.grid.edit.applyAndCommit", "oranda.grid.edit.apply", "oranda.grid.edit.resetRow", "oranda.grid.edit.resetAll" })]
     [InlineData("flashback", new[] { "oranda.grid.flashback.asOf", "oranda.grid.flashback.history", "oranda.grid.flashback.restore" })]
-    [InlineData("columns", new[] { "oranda.grid.sortAscending", "oranda.grid.sortDescending", "oranda.grid.clearSort", "oranda.grid.freezeColumns", "oranda.grid.hideColumn", "oranda.grid.showAllColumns" })]
+    [InlineData("columns", new[] { "oranda.grid.freezeColumns", "oranda.grid.hideColumn", "oranda.grid.showAllColumns" })]
     public void Grid_submenus_hold_their_commands_in_order(string name, string[] ids)
     {
         var sub = Assert.Single(Grid(), n => n.Key == "Menu.context.grid." + name);
@@ -156,8 +156,9 @@ public class ContextSubmenuTests
         Assert.Equal(
             "oranda.grid.copy Menu.context.grid.copyAs[oranda.grid.copyWithHeaders oranda.grid.copyRows oranda.grid.copyRowsWithHeaders - oranda.grid.copyAsCsv oranda.grid.copyAsInsert oranda.grid.copyAsInList]"
             + " - oranda.grid.rowView oranda.grid.viewValue"
+            + " - oranda.grid.sortAscending oranda.grid.sortDescending oranda.grid.clearSort"
             + " - Menu.context.grid.filter[oranda.grid.toggleQuickFilter oranda.grid.clearLocalFilters oranda.grid.toggleFilterBar - oranda.grid.filterByValue oranda.grid.filterExcludeValue oranda.grid.filterNullRows]"
-            + " Menu.context.grid.columns[oranda.grid.sortAscending oranda.grid.sortDescending oranda.grid.clearSort oranda.grid.freezeColumns oranda.grid.hideColumn oranda.grid.showAllColumns]"
+            + " Menu.context.grid.columns[oranda.grid.freezeColumns oranda.grid.hideColumn oranda.grid.showAllColumns]"
             + " - oranda.grid.countRows oranda.grid.fetchAll oranda.grid.pinResultTab"
             + " - oranda.grid.followForeignKey oranda.grid.showReferencingRows"
             + " - Menu.context.grid.edit[oranda.grid.edit.addRow oranda.grid.edit.duplicateRow oranda.grid.edit.pasteRows oranda.grid.edit.deleteRow - oranda.grid.edit.previewDml oranda.grid.edit.applyAndCommit oranda.grid.edit.apply - oranda.grid.edit.resetRow oranda.grid.edit.resetAll]"
@@ -167,10 +168,10 @@ public class ContextSubmenuTests
     }
 
     [Fact]
-    public void Result_menu_shows_at_most_fifteen_lines_and_the_same_submenus()
+    public void Result_menu_shows_at_most_eighteen_lines_and_the_same_submenus()
     {
         var result = ResultMenu(AppCommands);
-        Assert.True(Lines(result.Children) <= 15, $"한 단계 {Lines(result.Children)}줄: {Shape(result.Children)}");
+        Assert.True(Lines(result.Children) <= 18, $"한 단계 {Lines(result.Children)}줄: {Shape(result.Children)}");
         Assert.Equal(
             Grid().Where(n => n.Kind == MenuNodeKind.Submenu).Select(n => Shape([n])),
             result.Children.Where(n => n.Kind == MenuNodeKind.Submenu).Select(n => Shape([n])));
@@ -178,6 +179,21 @@ public class ContextSubmenuTests
         Assert.Contains(result.Children, n => n.CommandId == "oranda.grid.copy");
         Assert.Contains(result.Children, n => n.CommandId == "oranda.grid.rowView");
         Assert.Contains(result.Children, n => n.CommandId == "oranda.grid.export");
+    }
+
+    [Fact]
+    public void Sort_commands_sit_at_top_level_above_filter_in_context_and_result_menus()
+    {
+        var ids = new[] { "oranda.grid.sortAscending", "oranda.grid.sortDescending", "oranda.grid.clearSort" };
+        foreach (var level in new[] { Grid(), ResultMenu(AppCommands).Children })
+        {
+            var at = level.ToList().FindIndex(n => n.CommandId == ids[0]);
+            Assert.True(at > 0);
+            Assert.Equal(ids, level.Skip(at).Take(3).Select(n => n.CommandId!));
+            Assert.Equal(MenuNodeKind.Separator, level[at - 1].Kind);
+            Assert.Equal(MenuNodeKind.Separator, level[at + 3].Kind);
+            Assert.Equal("Menu.context.grid.filter", level[at + 4].Key);
+        }
     }
 
     [Fact]
