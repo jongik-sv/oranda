@@ -69,6 +69,7 @@ public partial class SqlEditorView : UserControl, IEditorSurface
         FindBox.KeyDown += OnFindKeyDown;
         ReplaceBox.KeyDown += OnFindKeyDown;
         InstallImeEnter();
+        InstallImePreedit();
     }
 
     /// <summary>안쪽 편집기 컨트롤(시험·계측·확장용).</summary>

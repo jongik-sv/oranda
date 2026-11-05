@@ -382,6 +382,15 @@
 - **Reversible**: yes(컨트롤러 안 동작이라 되돌려도 문서 형식은 달라지지 않는다)
 - **Source**: 사용자 결정(editor-column-edit 회차), 조정 세션 기본안. D-007 본문은 고치지 않음
 
+## D-042 (2026-11-05T12:00:00Z)
+- **Phase**: editor-column-edit 회차(editor-preedit 레인: macOS 한글 조합 글자 표시)
+- **Decision needed**: macOS 에서 한글을 조합하는 동안 글자가 편집기에 보이지 않는 증상(초성·중성·종성을 쳐도 다음 글자나 Enter·Space 로 확정해야 보임)을 AvaloniaEdit 포크 없이 고칠 수 있는지, 고친다면 어떻게 보여 줄지
+- **Decision made**: 사용자가 이번에 고치기로 했다. 포크하지 않고 앱에서 입력기 클라이언트를 바꾼다. ① AvaloniaEdit `TextArea` 의 클라이언트는 private 이고 `SupportsPreedit` 가 false 로 고정이라 조합 글자(`SetPreeditText`)를 받지 못한다. `SqlEditorView` 가 `TextInputMethodClientRequested` 이벤트에 버블 단계 인스턴스 처리기를 달아, AvaloniaEdit 클래스 처리기가 세운 `e.Client` 를 `PreeditInputMethodClient`(위임 클래스)로 감싸 바꾼다. 캐럿 사각형·주변 글·선택·이벤트는 안쪽 클라이언트에 위임하므로 AvaloniaEdit 와 같은 값을 내고, 바뀌는 것은 `SupportsPreedit`(true)와 `SetPreeditText` 둘뿐이다. 읽기 전용 편집기는 AvaloniaEdit 가 클라이언트를 주지 않으므로(null) 그대로 둔다. ② 표시는 `VisualLineElementGenerator` 로 캐럿 자리에 문서 길이 0 인 시각 요소(`PreeditElement`)를 끼워 편집기 글꼴과 밑줄로 그린다. 뒤 글자는 오른쪽으로 밀려 겹치지 않고, 스크롤·글꼴 크기·긴 줄·접기는 AvaloniaEdit 가 처리한다. 문서·실행 취소·`IsDirty`·파서·자동 완성·바인드 스캔은 조합 글자를 보지 못한다. 추가 커서는 커서마다, 열 블록은 줄마다 블록 왼쪽 끝(`RectangleSelection.Segments` 의 시작)에 같은 글자를 그린다. 폭 있는 블록의 글자는 확정 전까지 지우지 않는다. ③ 조합 글자는 `TextAnchor` 로 자리를 잡고, 빈 문자열·확정 `TextInput`(문서에 글자가 들어가기 전 터널 단계)·Esc·포커스 이탈·포인터 누름·캐럿 이동·문서 교체·화면에서 떨어짐에서 지운다. ④ `OperatingSystem.IsMacOS()` 일 때만 클라이언트를 바꾼다(`SqlEditorView.PreeditEnabled`). 다른 플랫폼은 이전과 같다
+- **Rationale**: D-007 의 「포크 없음」 방침을 지킨다. 공개 API(`TextInputMethodClient` 의 가상 멤버, 라우팅 이벤트, `VisualLineElementGenerator`)만 쓰고 AvaloniaEdit private 멤버를 리플렉션으로 건드리지 않는다. 글자 배경을 칠하는 덧그리기 대신 시각 요소를 끼우는 방식을 고른 것은 뒤 글자와 겹치지 않고 레이아웃 계산을 AvaloniaEdit 에 맡길 수 있기 때문이다
+- **Limits**: ① 헤드리스는 실제 입력기를 재현하지 못해 시험은 클라이언트 메서드를 직접 불러 확인했다. 실제 macOS 키보드 확인은 게시 빌드로 해야 한다(Debug 빌드는 조합 동작이 다르다). ② 확정 때 입력기가 `insertText`(TextInput) 다음에 `setMarkedText`(SetPreeditText) 순서로 부른다고 가정한다(Cocoa 표준 순서). 반대 순서면 새 조합 글자가 확정 직후 지워질 수 있다. ③ 확정 글자가 오지 않고 `SetPreeditText("")` 도 오지 않는 취소는 Esc·포커스 이탈·포인터·캐럿 이동으로만 지운다. ④ 조합 중 캐럿은 조합 글자 앞에 그려지고, 입력기 후보 창 위치는 캐럿 사각형을 그대로 쓴다. ⑤ 조합 중 Backspace 는 입력기가 처리한다. 앱은 조합을 지우는 키 처리를 더하지 않는다. ⑥ Windows(MS IME)는 확인하지 않았으므로 바꾸지 않았다. ⑦ 생성기는 맨 앞에 두어(접기 관리자가 View 를 붙일 때마다 맨 앞에 다시 넣으므로 조합 글자를 올릴 때마다 확인) 링크·접기 요소가 시작하는 자리에서도 보인다. 다만 캐럿이 링크·접힌 구간 안쪽에 있거나 3000자가 넘는 줄(AvaloniaEdit 가 생성기를 부르지 않음)이면 확정 전까지 보이지 않는다. ⑧ 줄 끝을 넘겨 끈 열 블록에서 짧은 줄의 조합 글자는 줄 끝에 그려지고, 확정하면 공백이 채워져 블록 열로 옮겨진다
+- **Reversible**: yes(처리기 등록 한 줄과 새 파일 3개를 빼면 이전 동작으로 돌아가고 문서 형식은 달라지지 않는다)
+- **Source**: 사용자 결정(editor-column-edit 회차, 설치본 0.1.14 에서도 같은 증상), 조정 세션 지시 editor-preedit-1
+
 ## D-043 (2026-11-05T12:00:00Z)
 - **Phase**: editor-column-edit 회차(grid-sort-menu 레인: 결과 그리드 정렬 메뉴 최상위)
 - **Decision needed**: 정렬 3항목(오름차순·내림차순·정렬 해제)을 「열」 하위에서 최상위로 올리면 그리드 오른쪽 클릭과 결과 메뉴의 한 단계 줄 수가 15를 넘는데, PRD 13.5·D-023 상한(15줄)을 어떻게 할지
