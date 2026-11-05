@@ -1,3 +1,4 @@
+using Oranda.App.Features.Execution;
 using Oranda.App.Features.MyBatisWorkspace.Expanded;
 using Oranda.App.Features.MyBatisWorkspace.Parameters;
 using Oranda.App.Features.SqlEditor;
@@ -139,6 +140,48 @@ public sealed partial class ParamsRunTests
         RowOf(rig.Tab, "ENAME").Text = "JONES";
         eval.Flush();
         Assert.Equal("JONES", Assert.Single(await ListOf(rig)).Values["ename"].Text);
+    });
+
+    [Fact]
+    public Task Clearing_values_in_the_bind_panel_empties_the_selected_scenario_and_keeps_the_rows() => HeadlessHost.Run(async () =>
+    {
+        using var rig = Rig.Create();
+        var eval = rig.Hub.Active!;
+        await eval.EnsureLoadedAsync();
+        eval.SelectScenario(eval.Scenarios[2]); // 전체 조건: 네 값이 모두 있다
+        var types = rig.Tab.Binds.Rows.Select(r => r.Type).ToList();
+        var panel = BindVariablesViewModel.ForHost(null, rig.Host);
+
+        panel.ClearValuesCommand.Execute(null);
+        eval.Flush();
+
+        Assert.Equal(["EMPNO", "ENAME", "DEPTIDS", "$ORDERBY"], rig.Tab.Binds.Rows.Select(r => r.Name));
+        Assert.All(rig.Tab.Binds.Rows, r => Assert.Equal(string.Empty, r.Text));
+        Assert.Equal(types, rig.Tab.Binds.Rows.Select(r => r.Type));
+
+        var list = await ListOf(rig);
+        Assert.All(list.Single(s => s.Name == "전체 조건").Values.Values, v => Assert.Equal(MyBatisScenarioValueKind.Null, v.Kind));
+        Assert.Equal("KIM", list.Single(s => s.Name == "이름 검색").Values["ename"].Text); // 고르지 않은 시나리오는 그대로
+        Assert.DoesNotContain(list, s => s.Name == MyBatisStatementEval.AutoScenarioName);
+    });
+
+    [Fact]
+    public Task Clearing_values_of_a_statement_without_scenarios_creates_no_auto_scenario() => HeadlessHost.Run(async () =>
+    {
+        using var rig = Rig.Create(withScenarios: false);
+        var eval = rig.Hub.Active!;
+        await eval.EnsureLoadedAsync();
+        RowOf(rig.Tab, "ENAME").Text = "SMITH";
+        eval.Flush();
+        var panel = BindVariablesViewModel.ForHost(null, rig.Host);
+
+        panel.ClearValuesCommand.Execute(null);
+        eval.Flush();
+
+        var saved = Assert.Single(await ListOf(rig)); // 이미 만든 자동 저장 시나리오의 값만 비운다
+        Assert.Equal(MyBatisStatementEval.AutoScenarioName, saved.Name);
+        Assert.Equal(MyBatisScenarioValueKind.Null, saved.Values["ename"].Kind);
+        Assert.Equal(string.Empty, RowOf(rig.Tab, "ENAME").Text);
     });
 
     [Fact]

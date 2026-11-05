@@ -206,6 +206,22 @@ public sealed class BindVariableStore
 
     public void Clear() => Rows.Clear();
 
+    /// <summary>모든 줄의 값을 비운다(NULL). 이름·형식·방향은 그대로 둔다. 값이 있던 줄 수를 돌려준다.</summary>
+    public int ClearValues()
+    {
+        var cleared = 0;
+        foreach (var row in Rows)
+        {
+            if (row.Text.Length > 0)
+            {
+                row.Text = string.Empty;
+                cleared++;
+            }
+        }
+
+        return cleared;
+    }
+
     /// <summary>
     /// <paramref name="keep"/> 에 없는 줄을 지운다(TSK-04-12: 글에서 사라진 이름이 목록에 남지 않게). 지운 줄이 있으면 true.
     /// </summary>

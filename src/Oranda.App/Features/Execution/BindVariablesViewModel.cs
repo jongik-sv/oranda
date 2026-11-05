@@ -152,6 +152,19 @@ public sealed partial class BindVariablesViewModel : ToolPanelViewModelBase
         Selected = null;
     }
 
+    /// <summary>
+    /// 줄은 두고 값만 비운다. MyBatis 쿼리 탭이면 행 동기화(<c>MyBatisBindSync</c>)가 빈 값을 고른 시나리오에 저장한다
+    /// (값을 직접 지운 것과 같은 길).
+    /// </summary>
+    [RelayCommand]
+    private void ClearValues()
+    {
+        var cleared = Store.ClearValues();
+        StatusText = cleared > 0
+            ? $"바인드 변수 {cleared.ToString(System.Globalization.CultureInfo.InvariantCulture)}줄의 값을 비웠습니다."
+            : "비울 값이 없습니다.";
+    }
+
     /// <summary>편집기의 바인드 변수를 값으로 바꿔 넣는다(오렌지 「Paste Bind Variables Into Editor」).</summary>
     [RelayCommand]
     private Task PasteIntoEditor() => Rows.Count == 0 ? Task.CompletedTask : ShellCommandRunner.RunAsync("oranda.exec.pasteBindValues");

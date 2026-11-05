@@ -254,6 +254,30 @@ public sealed partial class BindGridTests
     }
 
     [Fact]
+    public void Clear_values_empties_every_value_and_keeps_names_types_and_directions()
+    {
+        var vm = BindVariablesViewModel.ForHost(new EventBus(), new SqlEditorHost());
+        vm.Store.Ensure(["A", "B", "C"]);
+        vm.Rows[0].Type = BindDataType.Number;
+        vm.Rows[0].Text = "7369";
+        vm.Rows[1].Direction = BindDirection.InOut;
+        vm.Rows[1].Text = "x";
+        vm.Selected = vm.Rows[1];
+
+        vm.ClearValuesCommand.Execute(null);
+
+        Assert.Equal(["A", "B", "C"], vm.Rows.Select(r => r.Name));
+        Assert.All(vm.Rows, r => Assert.Equal(string.Empty, r.Text));
+        Assert.Equal(BindDataType.Number, vm.Rows[0].Type);
+        Assert.Equal(BindDirection.InOut, vm.Rows[1].Direction);
+        Assert.Same(vm.Rows[1], vm.Selected);
+        Assert.Contains("2줄", vm.StatusText, StringComparison.Ordinal); // 값이 있던 줄 수
+
+        vm.ClearValuesCommand.Execute(null);
+        Assert.Contains("비울 값이 없습니다", vm.StatusText, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public Task View_uses_the_grid_style_multi_select_and_value_cell_shows_error_and_formats_on_leave() => Ui.Run(() =>
     {
         var vm = BindVariablesViewModel.ForHost(new EventBus(), new SqlEditorHost());

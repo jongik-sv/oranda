@@ -47,6 +47,7 @@
         <Button Classes="toolbar" Content="바인드 변수 더하기" Command="{Binding AddCommand}" icons:ButtonIcon.Key="add" icons:ButtonIcon.IconOnly="True" />
         <Button Classes="toolbar" Content="고른 변수 지우기" Command="{Binding DeleteCommand}" icons:ButtonIcon.Key="remove" icons:ButtonIcon.IconOnly="True" />
         <Button Classes="toolbar" Content="목록 비우기" Command="{Binding ClearCommand}" icons:ButtonIcon.Key="eraser" icons:ButtonIcon.IconOnly="True" />
+        <Button Classes="toolbar" Content="값 비우기" Command="{Binding ClearValuesCommand}" icons:ButtonIcon.Key="reset" icons:ButtonIcon.IconOnly="True" />
         <Separator Classes="toolbar" />
         <Button Classes="toolbar" Content="편집기에 값 붙여 넣기" Command="{Binding PasteIntoEditorCommand}" icons:ButtonIcon.Key="docEdit" icons:ButtonIcon.IconOnly="True" />
       </StackPanel>
