@@ -17,13 +17,20 @@ public sealed record MyBatisLogPasteResult(int Statements, int Binds);
 /// </summary>
 public static class MyBatisLogPaste
 {
-    /// <summary>로그에서 쌍을 못 찾았거나 편집기가 읽기 전용이면 null.</summary>
+    /// <summary>열 블록·여러 커서 선택이면 true: 선택을 대신해 넣을 수 없다(블록을 감싸는 범위가 통째로 바뀐다).</summary>
+    public static bool IsBlocked(SqlEditorViewModel tab)
+    {
+        ArgumentNullException.ThrowIfNull(tab);
+        return tab.HasMultiPieceSelection;
+    }
+
+    /// <summary>로그에서 쌍을 못 찾았거나 편집기가 읽기 전용이거나 <see cref="IsBlocked"/> 이면 null.</summary>
     public static MyBatisLogPasteResult? Apply(SqlEditorViewModel tab, BindVariableStore binds, string logText)
     {
         ArgumentNullException.ThrowIfNull(tab);
         ArgumentNullException.ThrowIfNull(binds);
         ArgumentNullException.ThrowIfNull(logText);
-        if (tab.IsReadOnly)
+        if (tab.IsReadOnly || IsBlocked(tab))
         {
             return null;
         }

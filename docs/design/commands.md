@@ -385,6 +385,8 @@
 | `oranda.edit.parameterHints` | 인자 도움말 | `Ctrl+Shift+Space` | `editorFocus` | `hasSession` | TSK-04-05 |
 | `oranda.edit.insertSnippet` | 코드 조각 삽입 | `Ctrl+Shift+J` | `editorFocus` | `!readOnlyDoc` | TSK-04-07 |
 
+> 다중 커서·열 블록(D-041): 새 명령이나 키는 없다. Alt(macOS Option)+왼쪽 버튼은 제자리에서 떼면 커서 추가, 끌면 열 블록 선택이다. 추가 커서가 있으면 방향키·Home·End·단어 이동·Shift 선택·Tab·`oranda.edit.copy`·`cut`·`paste` 가 모든 커서에 적용되고, 대소문자 변환 같은 글자 연산은 열 블록이면 줄마다 선택된 글자에만 적용된다. `Esc` 와 일반 클릭은 추가 커서를 해제한다. `oranda.edit.copy`·`cut` 의 활성 조건 `hasSelection` 은 선택을 가진 추가 커서에서도 참이다.
+
 ### 탐색
 
 | ID | 제목 | 기본 키 | 키 범위(when) | 활성 조건 | 소유 Task |

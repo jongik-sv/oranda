@@ -41,7 +41,7 @@
 | 호스팅·DI·설정·로깅 추상화 | Microsoft.Extensions.* | 10.0.x | MIT | Generic Host를 `Program.Main`에서 만들고 `App`에 ServiceProvider 전달 |
 | 로깅 | Serilog + Sinks.File | 4.4.0 / 7.0.0 | Apache-2.0 | 코드 기반 설정(리플렉션 설정 미사용 — 트리밍 대비) |
 | DB 드라이버 | Oracle.ManagedDataAccess.Core | 23.26.301 | Oracle Free Use Terms | Thin, 19c 이상, 23부터 실제 비동기. 파이프라이닝은 끈다(취소·타임아웃 미지원). 딸려 오는 `System.Security.Cryptography.Pkcs` 8.0.1에 알려진 취약점이 있어 10.0.13을 직접 참조한다 |
-| 에디터 | Avalonia.AvaloniaEdit (+ AvaloniaEdit.TextMate) | 12.0.0 | MIT | 문서 rope·줄 가상화, 접기, 자동완성 창, 열 선택. **다중 커서 정식 지원 없음** → EDIT-07은 자체 확장 또는 단계 조정(T-D03) |
+| 에디터 | Avalonia.AvaloniaEdit (+ AvaloniaEdit.TextMate) | 12.0.0 | MIT | 문서 rope·줄 가상화, 접기, 자동완성 창, 열 선택(`RectangleSelection`). **다중 커서 정식 지원 없음** → EDIT-07은 포크 없는 자체 확장(`MultiCaretController`, T-D03·D-041). 열 블록 선택은 내장 마우스 처리 대신 Alt(macOS Option)+왼쪽 드래그를 자체 처리해 Windows·macOS 조작을 같게 한다 |
 | 도킹 | Dock.Avalonia | 12.1.0.12 | MIT | 사실상 유일한 OSS 도킹. 레이아웃 직렬화는 앱 자체 DTO로 감싼다 |
 | 색 고르기 | Avalonia.Controls.ColorPicker | 12.1.4 | MIT | 접속 라벨 색(TSK-13-11). 색 스펙트럼·밝기 막대만 쓰고, 테마는 프로필 편집기 화면에서만 읽는다 |
 | 결과 그리드 | **자체 구현 가상 그리드** | — | — | 100만 행·넓은 테이블 대응(4.4). 보조 표(속성 창 등)는 Avalonia.Controls.DataGrid 12.1.2 |
@@ -176,7 +176,7 @@ SELECT s.inst_id, s.sid, s.serial#, s.username, ...
 - 구문 강조: 1단계는 TextMate SQL 문법(AvaloniaEdit.TextMate), M1 안에 L1 렉서 기반 colorizer로 교체해 PL/SQL 키워드·바인드·객체명을 구분한다.
 - **자동완성**: L1이 커서 위치의 문맥(FROM 절, `별칭.` 뒤, 패키지명 뒤, 힌트 주석 안)을 판별 → `IMetadataProvider`(4.7)에서 후보 조회. 메타데이터는 메모리 + SQLite 캐시, 150 ms 안에 응답하지 못하면 캐시 결과만 먼저 보여 준다.
   - 스키마를 쓰지 않은 표 자리는 접속 사용자 스키마에 더해 `FindObjectsByPrefixAsync`로 SQLite 캐시의 서버 전체 목록을 이름 앞부분으로 찾는다(이름 인덱스 범위 검색, 서버 질의 없음, 객체 10만 개에 10 ms 안쪽). 접두어가 비었거나 한도에 닿으면 `CompletionResult.IsIncomplete`로 알리고, 편집기는 다음 글자에서 다시 묻는다(목록 창은 열릴 때 한 번만 채워지기 때문). 현재 스키마는 `ALTER SESSION SET CURRENT_SCHEMA`를 따라가지 않고 접속 사용자로 본다.
-- **다중 커서(EDIT-07)**: AvaloniaEdit에 정식 기능이 없다. M0에서 확장 가능성을 시험하고, 어려우면 열 선택(Alt+드래그)으로 대체하고 다중 커서는 P1로 낮춘다(T-D03).
+- **다중 커서(EDIT-07)**: AvaloniaEdit에 정식 기능이 없어 포크 없이 확장했다(T-D03, D-007·D-041). 추가 커서는 `TextAnchor` 쌍(커서·선택), 그리기는 `IBackgroundRenderer`, 입력은 TextArea 터널 이벤트다. 이동·Shift 선택·복사/잘라내기/붙여넣기·Tab 이 모든 커서에 적용되고 한 번의 실행 취소 단계가 된다. Alt(macOS Option)+왼쪽 버튼은 제자리에서 떼면 커서 추가, 끌면 열 블록(`RectangleSelection`) 선택이며 둘은 동시에 두지 않는다. 열 블록·여러 커서 선택은 줄(커서)마다 선택 조각을 내고, 선택 실행과 글자 연산은 그 조각에만 적용된다.
 
 ### 4.6 포매터 (FMT)
 - **입력**: L1 토큰 열 + 가능하면 L2 구문 트리. 구문 트리를 못 얻는 구간(오류)은 토큰 규칙만 적용하고 원문 배치를 최대한 유지한다.
@@ -488,7 +488,7 @@ macOS 서명 시 필요한 권한(entitlement)은 CoreCLR 기준 `com.apple.secu
 |---|---|---|---|
 | T-D01 | 런타임: .NET 8 지원 종료(2026-11-10) 대응 | **A안 — .NET 10 + Avalonia 12.** 2026-10-19 전환 완료(빌드 경고 0, 테스트 통과) | 결정 |
 | T-D02 | 결과 그리드 | 직접 그리기 가상 그리드 확정, TreeDataGrid 포크 제외(D-008). 60 fps 는 로컬 콘솔 재측정 필요 | 결정 |
-| T-D03 | 다중 커서 | 포크 없는 AvaloniaEdit 확장(앵커+배경 렌더러+터널 입력). 1.0 범위는 D-007 | 결정 |
+| T-D03 | 다중 커서·열 블록 | 포크 없는 AvaloniaEdit 확장(앵커+배경 렌더러+터널 입력). 1.0 범위는 D-007, 이동·커서별 선택·클립보드·Tab·Alt 드래그·블록 실행은 D-041 | 결정 |
 | T-D04 | 파서 | L1 자체 렉서·경량 파서 + L2 ANTLR(grammars-v4 PL/SQL) | 제안 |
 | T-D05 | macOS 자격 증명 | 키체인 P/Invoke 직접 구현(150줄 안팎) | 제안 |
 | T-D06 | 업데이트 | Velopack + 정적 파일 서버 | 제안 |

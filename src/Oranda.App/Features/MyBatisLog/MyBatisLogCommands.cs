@@ -56,6 +56,12 @@ public sealed class MyBatisLogCommandHandler(ServiceContainer container) : IComm
             return;
         }
 
+        if (MyBatisLogPaste.IsBlocked(tab))
+        {
+            log.AddMessage(MessageKind.Warning, SqlEditorViewModel.BlockSelectionNotice);
+            return;
+        }
+
         var result = MyBatisLogPaste.Apply(tab, tab.Binds, text);
         if (result is null)
         {

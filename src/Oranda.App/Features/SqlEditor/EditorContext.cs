@@ -27,6 +27,9 @@ public sealed class EditorContext : IEditorContext
         init => _host = value;
     }
 
+    /// <summary>활성 탭의 선택이 열 블록·여러 커서처럼 조각 둘 이상인가. 선택을 한 덩어리로 읽거나 바꾸는 기능이 실행 전에 거른다.</summary>
+    public bool HasMultiPieceSelection => Host.Active?.HasMultiPieceSelection ?? false;
+
     public EditorSnapshot? GetActiveDocument()
     {
         var tab = Host.Active;
@@ -35,7 +38,10 @@ public sealed class EditorContext : IEditorContext
             return null;
         }
 
-        return new EditorSnapshot(tab.TabId, tab.Text, new TextRange(tab.SelectionStart, tab.SelectionLength), tab.CaretOffset)
+        // 열 블록·여러 커서 선택은 한 덩어리 범위로 나타낼 수 없다: 블록을 감싸는 범위를 내보내면 블록 밖 글이 선택된 것처럼 읽히고 바뀐다.
+        // 그래서 선택 없음(캐럿 자리)으로 알린다. 한 덩어리 선택을 막아야 하는 쪽은 <see cref="HasMultiPieceSelection"/> 으로 먼저 거른다.
+        var selection = tab.HasMultiPieceSelection ? new TextRange(tab.CaretOffset, 0) : new TextRange(tab.SelectionStart, tab.SelectionLength);
+        return new EditorSnapshot(tab.TabId, tab.Text, selection, tab.CaretOffset)
         {
             Title = tab.Title,
             ConnectionProfileId = tab.ConnectionProfileId,

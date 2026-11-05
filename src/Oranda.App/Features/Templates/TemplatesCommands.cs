@@ -105,6 +105,12 @@ public sealed class TemplatesCommandHandler : ICommandHandler
             return;
         }
 
+        if (tab.HasMultiPieceSelection)
+        {
+            await Host.Dialogs.ShowMessageAsync("코드 조각", SqlEditorViewModel.BlockSelectionNotice, ct).ConfigureAwait(true);
+            return;
+        }
+
         var user = await LoadUserSnippetsAsync(ct).ConfigureAwait(true);
         switch (parameter)
         {

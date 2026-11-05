@@ -253,7 +253,7 @@ public sealed class SqlEditorCommandHandler : ICommandHandler
                 tab.Apply(ToggleLineComment);
                 break;
             case "oranda.edit.toggleBlockComment":
-                tab.Apply(ToggleBlockComment);
+                tab.ApplyToPieces(ToggleBlockComment); // 열 블록이면 블록 밖 글을 감싸지 않도록 조각마다
                 break;
             case "oranda.edit.commentLines":
                 tab.Apply(CommentLines);
@@ -269,22 +269,22 @@ public sealed class SqlEditorCommandHandler : ICommandHandler
                 break;
 
             case "oranda.edit.upperCase":
-                tab.Apply((t, a, l) => ChangeCase(t, a, l, CaseMode.Upper));
+                tab.ApplyToPieces((t, a, l) => ChangeCase(t, a, l, CaseMode.Upper));
                 break;
             case "oranda.edit.lowerCase":
-                tab.Apply((t, a, l) => ChangeCase(t, a, l, CaseMode.Lower));
+                tab.ApplyToPieces((t, a, l) => ChangeCase(t, a, l, CaseMode.Lower));
                 break;
             case "oranda.edit.titleCase":
-                tab.Apply((t, a, l) => ChangeCase(t, a, l, CaseMode.Title));
+                tab.ApplyToPieces((t, a, l) => ChangeCase(t, a, l, CaseMode.Title));
                 break;
             case "oranda.edit.sentenceCase":
-                tab.Apply((t, a, l) => ChangeCase(t, a, l, CaseMode.Sentence));
+                tab.ApplyToPieces((t, a, l) => ChangeCase(t, a, l, CaseMode.Sentence));
                 break;
             case "oranda.edit.invertCase":
-                tab.Apply((t, a, l) => ChangeCase(t, a, l, CaseMode.Invert));
+                tab.ApplyToPieces((t, a, l) => ChangeCase(t, a, l, CaseMode.Invert));
                 break;
             case "oranda.edit.cycleCase":
-                tab.Apply((t, a, l) => ChangeCase(t, a, l, CaseMode.Cycle));
+                tab.ApplyToPieces((t, a, l) => ChangeCase(t, a, l, CaseMode.Cycle));
                 break;
 
             case "oranda.edit.duplicateLine":

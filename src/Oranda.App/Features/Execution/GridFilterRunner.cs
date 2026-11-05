@@ -30,7 +30,7 @@ public sealed class GridFilterRunner(ExecutionState state, BindVariableStore bin
         var query = request.Query;
         if (request.IsEmpty)
         {
-            return query with { Range = default };
+            return query with { Range = default, SourcePieces = null };
         }
 
         var text = "SELECT * FROM (\n" + query.Text + "\n)";
@@ -51,6 +51,7 @@ public sealed class GridFilterRunner(ExecutionState state, BindVariableStore bin
         {
             Text = text,
             Range = default,
+            SourcePieces = null, // 글이 문서와 달라져 열 블록 조각 대응이 맞지 않는다
             Kind = StatementKind.Query,
             Verb = "SELECT",
             BindNames = bindNames,

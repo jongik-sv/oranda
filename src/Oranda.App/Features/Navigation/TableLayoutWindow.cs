@@ -191,7 +191,19 @@ public sealed class TableLayoutWindow : Window
     }
 
     /// <summary>고른 행을 편집기에 넣는다(Enter·「넣기」).</summary>
-    internal bool PasteSelection() => SelectedRows is { Count: > 0 } rows && _session.Paste(rows);
+    internal bool PasteSelection() => SelectedRows is { Count: > 0 } rows && !Blocked() && _session.Paste(rows);
+
+    // 편집기가 열 블록·여러 커서 선택이면 넣지 않고 상태 표시줄로 알린다.
+    private bool Blocked()
+    {
+        if (!_session.IsBlocked)
+        {
+            return false;
+        }
+
+        _status.Text = SqlEditor.SqlEditorViewModel.BlockSelectionNotice;
+        return true;
+    }
 
     /// <summary>고른 행의 넣기 글을 클립보드에 둔다(⌘C·Ctrl+C).</summary>
     internal async Task<bool> CopySelectionAsync()
@@ -222,7 +234,7 @@ public sealed class TableLayoutWindow : Window
             Select(rows); // 첫 클릭이 줄인 선택을 되돌린다.
         }
 
-        return _session.Paste(rows);
+        return !Blocked() && _session.Paste(rows);
     }
 
     internal void Select(IEnumerable<TableLayoutRow> rows)

@@ -192,7 +192,7 @@ public sealed partial class ExecutionController : IDisposable
             return false;
         }
 
-        int offset = Math.Min(stmt.Range.Start + Math.Max(0, State.LastError?.Offset ?? 0), tab.Document.TextLength);
+        int offset = Math.Min(DocumentOffset(stmt, State.LastError?.Offset ?? 0), tab.Document.TextLength);
         host.Active = tab;
         tab.Select(offset, 0);
         tab.Surface?.ScrollToLine(tab.PositionOf(offset).Line);

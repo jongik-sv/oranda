@@ -241,6 +241,12 @@ public sealed partial class TemplatesViewModel : ToolPanelViewModelBase
             return false;
         }
 
+        if (tab.HasMultiPieceSelection)
+        {
+            Status = SqlEditorViewModel.BlockSelectionNotice;
+            return false;
+        }
+
         if (!SnippetInserter.Insert(tab, s))
         {
             Status = Text("Templates.status.readOnly", "읽기 전용 문서다.");

@@ -149,9 +149,9 @@ public static class SnippetInserter
     {
         ArgumentNullException.ThrowIfNull(editor);
         ArgumentNullException.ThrowIfNull(snippet);
-        if (editor.IsReadOnly)
+        if (editor.IsReadOnly || editor.HasMultiPieceSelection)
         {
-            return false;
+            return false; // 열 블록·여러 커서 선택은 블록을 감싸는 범위를 통째로 바꾸게 되므로 넣지 않는다
         }
 
         var text = editor.Text;

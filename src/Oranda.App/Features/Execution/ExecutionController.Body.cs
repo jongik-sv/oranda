@@ -34,7 +34,7 @@ public sealed partial class ExecutionController
             return false;
         }
 
-        Flash(tab, stmt.Range.Start, stmt.Range.End);
+        Flash(tab, [stmt]);
         ExecutionResult? result = null;
         await GuardedAsync(session, tab, async token =>
         {
@@ -122,7 +122,7 @@ public sealed partial class ExecutionController
             results.Clear();
         }
 
-        Flash(tab, stmts[0].Range.Start, stmts[^1].Range.End);
+        Flash(tab, stmts);
         int ok = 0, failed = 0, done = 0;
         bool cancelled = false;
         var summary = new StringBuilder();

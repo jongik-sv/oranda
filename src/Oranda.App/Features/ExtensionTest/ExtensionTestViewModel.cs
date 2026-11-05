@@ -156,6 +156,12 @@ public sealed partial class ExtensionTestViewModel : ToolPanelViewModelBase
             return Report(false, "활성 SQL 편집기가 없습니다.");
         }
 
+        if (editor is Oranda.App.Features.SqlEditor.EditorContext { HasMultiPieceSelection: true })
+        {
+            SourceRange = null;
+            return Report(false, Oranda.App.Features.SqlEditor.SqlEditorViewModel.BlockSelectionNotice);
+        }
+
         TextRange range;
         if (snapshot.Selection.Length > 0)
         {

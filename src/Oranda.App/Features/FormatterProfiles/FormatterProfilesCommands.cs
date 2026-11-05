@@ -172,6 +172,11 @@ public sealed class FormatterProfilesCommandHandler : ICommandHandler
 
             range = statement.Range;
         }
+        else if (tab.HasMultiPieceSelection)
+        {
+            await NotifyAsync(SqlEditorViewModel.BlockSelectionNotice).ConfigureAwait(true); // 블록을 감싸는 범위를 포맷하면 블록 밖 글이 바뀐다
+            return;
+        }
         else if (tab.HasSelection)
         {
             range = new TextRange(tab.SelectionStart, tab.SelectionLength);

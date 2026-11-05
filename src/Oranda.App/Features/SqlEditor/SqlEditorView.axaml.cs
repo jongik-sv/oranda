@@ -4,6 +4,7 @@ using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Threading;
+using AvaloniaEdit.Editing;
 using AvaloniaEdit.Folding;
 using AvaloniaEdit.Rendering;
 using Oranda.App.Shell.Appearance;
@@ -83,6 +84,15 @@ public partial class SqlEditorView : UserControl, IEditorSurface
 
     public int CursorCount => _carets?.Count ?? 1;
 
+    /// <summary>다중 커서 컨트롤러(시험용).</summary>
+    internal MultiCaretController? Carets => _carets;
+
+    public IReadOnlyList<TextRange> SelectionSegments => _carets?.SelectedRanges() ?? [];
+
+    public bool HasExtraSelection => _carets?.HasExtraSelection ?? false;
+
+    private void OnCaretsChanged(object? sender, EventArgs e) => _vm?.NotifyCursorsChanged();
+
     public int FirstVisibleLine
         => Editor.TextArea.TextView.GetDocumentLineByVisualTop(Editor.TextArea.TextView.ScrollOffset.Y)?.LineNumber ?? 1;
 
@@ -113,6 +123,7 @@ public partial class SqlEditorView : UserControl, IEditorSurface
         _colorizer = new SqlSyntaxColorizer(Editor);
         _folding = FoldingManager.Install(Editor.TextArea);
         _carets = new MultiCaretController(Editor);
+        _carets.StateChanged += OnCaretsChanged;
         _bookmarkRenderer = new BookmarkRenderer(vm);
         Editor.TextArea.TextView.BackgroundRenderers.Add(_bookmarkRenderer);
         Editor.TextArea.TextView.BackgroundRenderers.Add(_brackets);
@@ -122,10 +133,11 @@ public partial class SqlEditorView : UserControl, IEditorSurface
         vm.TextChanged += OnVmTextChanged;
         vm.BookmarksChanged += OnBookmarksChanged;
         vm.FlashRequested += OnFlashRequested;
+        vm.FlashRangesRequested += OnFlashRangesRequested;
         vm.PropertyChanged += OnVmPropertyChanged;
 
         int caret = Math.Clamp(vm.CaretOffset, 0, vm.Document.TextLength);
-        if (vm.SelectionLength > 0)
+        if (vm.SelectionLength > 0 && !vm.SelectionIsBlock) // 블록 선택은 둘레 범위로 되살리면 블록 밖 글까지 고른 선택이 되므로 캐럿만 되살린다
         {
             Editor.Select(vm.SelectionStart, vm.SelectionLength);
         }
@@ -153,6 +165,7 @@ public partial class SqlEditorView : UserControl, IEditorSurface
             _vm.TextChanged -= OnVmTextChanged;
             _vm.BookmarksChanged -= OnBookmarksChanged;
             _vm.FlashRequested -= OnFlashRequested;
+            _vm.FlashRangesRequested -= OnFlashRangesRequested;
             _vm.PropertyChanged -= OnVmPropertyChanged;
             if (ReferenceEquals(_vm.Surface, this))
             {
@@ -161,7 +174,12 @@ public partial class SqlEditorView : UserControl, IEditorSurface
         }
 
         _colorizer?.Detach();
-        _carets?.Detach();
+        if (_carets is not null)
+        {
+            _carets.StateChanged -= OnCaretsChanged;
+            _carets.Detach();
+        }
+
         if (_folding is not null)
         {
             FoldingManager.Uninstall(_folding);
@@ -197,6 +215,8 @@ public partial class SqlEditorView : UserControl, IEditorSurface
         => Editor.TextArea.TextView.InvalidateLayer(KnownLayer.Background);
 
     private void OnFlashRequested(object? sender, TextRange range) => _flash.Flash(range);
+
+    private void OnFlashRangesRequested(object? sender, IReadOnlyList<TextRange> ranges) => _flash.Flash(ranges);
 
     private void OnVmTextChanged(object? sender, EventArgs e)
     {
@@ -237,7 +257,7 @@ public partial class SqlEditorView : UserControl, IEditorSurface
         }
 
         var area = Editor.TextArea;
-        _vm.UpdateCaret(area.Caret.Offset, Editor.SelectionStart, Editor.SelectionLength);
+        _vm.UpdateCaret(area.Caret.Offset, Editor.SelectionStart, Editor.SelectionLength, area.Selection is RectangleSelection);
         UpdateBrackets();
     }
 
@@ -284,11 +304,42 @@ public partial class SqlEditorView : UserControl, IEditorSurface
 
     // ---- IEditorSurface -------------------------------------------------------------------
 
-    public void Cut() => Editor.Cut();
+    // 추가 커서·열 블록 선택이 있으면 MultiCaretController 가 클립보드를 맡는다(AvaloniaEdit 복사는 글자만, 붙여넣기는 블록 모양을 모른다).
+    public void Cut()
+    {
+        if (_carets is { OwnsClipboard: true } c)
+        {
+            c.Cut();
+        }
+        else
+        {
+            Editor.Cut();
+        }
+    }
 
-    public void Copy() => Editor.Copy();
+    public void Copy()
+    {
+        if (_carets is { OwnsClipboard: true } c)
+        {
+            c.Copy();
+        }
+        else
+        {
+            Editor.Copy();
+        }
+    }
 
-    public void Paste() => Editor.Paste();
+    public void Paste()
+    {
+        if (_carets is { } c)
+        {
+            c.Paste(Editor.Paste);
+        }
+        else
+        {
+            Editor.Paste();
+        }
+    }
 
     public void SelectAll() => Editor.SelectAll();
 

@@ -51,6 +51,12 @@ public sealed partial class SchemaBrowserViewModel
             return false;
         }
 
+        if (_editor is SqlEditor.EditorContext { HasMultiPieceSelection: true })
+        {
+            StatusText = SqlEditor.SqlEditorViewModel.BlockSelectionNotice;
+            return false;
+        }
+
         var text = await BuildTextAsync(node, mode, ct);
         if (text is null)
         {

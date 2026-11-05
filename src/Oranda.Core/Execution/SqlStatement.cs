@@ -44,4 +44,13 @@ public sealed record SqlStatement(string Text, TextRange Range, StatementKind Ki
 
     /// <summary>언어 서비스가 분류에 확신이 없으면 true(정책 관문이 보수적으로 판단).</summary>
     public bool IsClassificationUncertain { get; init; }
+
+    /// <summary>
+    /// 문장 글이 문서에서 떨어진 조각들로 이루어진 경우(열 블록 실행)의 대응. 일반 문장은 null 이고 문장 글이 <see cref="Range"/> 와 같다.
+    /// 문장을 <c>with</c> 로 복사해도(치환 변수 치환 등) 대응이 함께 따라간다.
+    /// </summary>
+    public IReadOnlyList<StatementPiece>? SourcePieces { get; init; }
 }
+
+/// <summary>문장 글 안의 한 조각: 문장 글의 <paramref name="TextOffset"/> 부터 <paramref name="Length"/> 글자가 문서의 <paramref name="DocumentOffset"/> 에 있다.</summary>
+public readonly record struct StatementPiece(int TextOffset, int DocumentOffset, int Length);

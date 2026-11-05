@@ -45,9 +45,9 @@ public sealed class EditorStatusViewModel : ViewModelBase, IStatusBarItem, IDisp
 
             var p = tab.CaretPosition;
             var text = UiText.Format("Editor.status.position", "줄 {0}, 열 {1}", p.Line, p.Column);
-            if (tab.SelectionLength > 0)
+            if (tab.HasSelection)
             {
-                text += UiText.Format("Editor.status.selection", " (선택 {0}자)", tab.SelectionLength);
+                text += UiText.Format("Editor.status.selection", " (선택 {0}자)", tab.SelectionPieces.Sum(piece => piece.Length));
             }
 
             if (tab.CursorCount > 1)
@@ -108,7 +108,8 @@ public sealed class EditorStatusViewModel : ViewModelBase, IStatusBarItem, IDisp
 
     private void OnTabChanged(object? sender, PropertyChangedEventArgs e)
     {
-        if (e.PropertyName is nameof(SqlEditorViewModel.CaretOffset) or nameof(SqlEditorViewModel.SelectionLength))
+        if (e.PropertyName is nameof(SqlEditorViewModel.CaretOffset) or nameof(SqlEditorViewModel.SelectionLength)
+            or nameof(SqlEditorViewModel.CursorCount))
         {
             OnPropertyChanged(nameof(Text));
         }

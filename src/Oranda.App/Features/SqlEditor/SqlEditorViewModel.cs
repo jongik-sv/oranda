@@ -28,6 +28,15 @@ public interface IEditorSurface
 {
     int CursorCount { get; }
 
+    /// <summary>추가 커서 중 선택을 가진 것이 있는가(주 커서 선택은 <see cref="SqlEditorViewModel.SelectionLength"/> 가 따로 나타낸다).</summary>
+    bool HasExtraSelection { get; }
+
+    /// <summary>
+    /// 선택된 글의 조각들(문서 순서, 빈 조각 제외). 열 블록 선택은 줄마다 한 조각, 선택을 가진 추가 커서는 커서마다 한 조각.
+    /// 조각이 없으면 빈 목록(선택 없음). 일반 선택 하나는 한 조각이다.
+    /// </summary>
+    IReadOnlyList<TextRange> SelectionSegments { get; }
+
     /// <summary>맨 위에 보이는 줄(1부터).</summary>
     int FirstVisibleLine { get; }
 
@@ -170,7 +179,47 @@ public sealed partial class SqlEditorViewModel : ToolPanelViewModelBase, IBindOw
 
     public string Text => Document.Text;
 
-    public bool HasSelection => SelectionLength > 0;
+    /// <summary>
+    /// 선택된 글의 조각들. <see cref="SelectionStart"/>·<see cref="SelectionLength"/> 는 열 블록 선택에서 블록을 감싸는 한 덩어리
+    /// (블록 밖 글 포함)를 가리키므로, 선택된 글만 다뤄야 하는 곳(실행·글자 연산)은 이 조각들을 쓴다.
+    /// </summary>
+    public IReadOnlyList<TextRange> SelectionPieces
+    {
+        get
+        {
+            if (Surface?.SelectionSegments is { Count: > 0 } pieces)
+            {
+                return pieces;
+            }
+
+            return SelectionLength > 0 ? [new TextRange(SelectionStart, SelectionLength)] : [];
+        }
+    }
+
+    /// <summary>
+    /// 선택이 일반 선택 하나가 아닌가: 조각이 둘 이상이거나(열 블록·선택을 가진 여러 커서), 조각 하나가 <see cref="SelectionStart"/>·<see cref="SelectionLength"/> 와 다르다
+    /// (그 열에 글이 있는 줄이 하나뿐인 블록은 조각이 하나여도 SelectionLength 는 블록을 감싼다). 선택을 한 덩어리로 읽거나 바꾸는 기능이 막는 기준이다.
+    /// </summary>
+    public bool HasMultiPieceSelection
+    {
+        get
+        {
+            var pieces = SelectionPieces;
+            return pieces.Count > 1 || (pieces.Count == 1 && (pieces[0].Start != SelectionStart || pieces[0].Length != SelectionLength));
+        }
+    }
+
+    /// <summary>선택을 한 덩어리로 다루는 기능이 <see cref="HasMultiPieceSelection"/> 일 때 하지 않고 알리는 문구.</summary>
+    public const string BlockSelectionNotice = "열 블록·여러 커서 선택에서는 쓸 수 없습니다. 선택을 하나로 줄인 뒤 다시 하세요.";
+
+    public bool HasSelection => SelectionLength > 0 || (Surface?.HasExtraSelection ?? false);
+
+    /// <summary>추가 커서·그 선택이 바뀌었다는 알림(커서 수·복사 가능 여부 갱신). View 의 다중 커서가 부른다.</summary>
+    public void NotifyCursorsChanged()
+    {
+        OnPropertyChanged(nameof(CursorCount));
+        OnPropertyChanged(nameof(HasSelection));
+    }
 
     public bool CanUndo => Document.UndoStack.CanUndo;
 
@@ -275,6 +324,48 @@ public sealed partial class SqlEditorViewModel : ToolPanelViewModelBase, IBindOw
         return Apply(op(Text, SelectionStart, SelectionLength));
     }
 
+    /// <summary>
+    /// 글자 단위 연산(대소문자 변환 등)을 선택된 글에만 적용한다. 열 블록 선택·선택을 가진 여러 커서는 조각마다 따로 적용하고
+    /// (블록 밖 글은 건드리지 않는다), 한 번의 실행 취소 단계로 묶는다. 조각이 하나뿐인 일반 선택은 <see cref="Apply(Func{string, int, int, TextOpResult?})"/> 와 같다.
+    /// </summary>
+    public bool ApplyToPieces(Func<string, int, int, TextOpResult?> op)
+    {
+        ArgumentNullException.ThrowIfNull(op);
+        var pieces = SelectionPieces;
+        bool plain = pieces.Count == 0 || (pieces.Count == 1 && pieces[0].Start == SelectionStart && pieces[0].Length == SelectionLength);
+        if (plain)
+        {
+            return Apply(op);
+        }
+
+        if (IsReadOnly)
+        {
+            return false;
+        }
+
+        var text = Text;
+        var results = pieces.Select(p => op(text, p.Start, p.Length)).OfType<TextOpResult>().OrderByDescending(r => r.Start).ToList();
+        if (results.Count == 0)
+        {
+            return false;
+        }
+
+        Document.BeginUpdate();
+        try
+        {
+            foreach (var r in results)
+            {
+                Document.Replace(r.Start, r.Length, r.NewText);
+            }
+        }
+        finally
+        {
+            Document.EndUpdate();
+        }
+
+        return true;
+    }
+
     public void Select(int start, int length)
     {
         start = Math.Clamp(start, 0, Document.TextLength);
@@ -282,15 +373,23 @@ public sealed partial class SqlEditorViewModel : ToolPanelViewModelBase, IBindOw
         SelectionStart = start;
         SelectionLength = length;
         CaretOffset = start + length;
+        SelectionIsBlock = false; // View 가 없으면 선택 변경 알림이 오지 않아 이전 블록 표시가 남는다
         Surface?.SelectRange(start, length);
     }
 
-    public void UpdateCaret(int caretOffset, int selectionStart, int selectionLength)
+    public void UpdateCaret(int caretOffset, int selectionStart, int selectionLength, bool selectionIsBlock = false)
     {
         CaretOffset = caretOffset;
         SelectionStart = selectionStart;
         SelectionLength = selectionLength;
+        SelectionIsBlock = selectionIsBlock && selectionLength > 0;
     }
+
+    /// <summary>
+    /// 마지막으로 알려진 선택이 열 블록인가. <see cref="SelectionStart"/>·<see cref="SelectionLength"/> 는 블록을 감싸는 범위라
+    /// 그대로 되살리면 블록 밖 글까지 고른 일반 선택이 되므로, View 를 새로 만들 때 이 값이 참이면 선택을 되살리지 않는다.
+    /// </summary>
+    public bool SelectionIsBlock { get; private set; }
 
     // ---- 줄·열 ------------------------------------------------------------------------
 
@@ -358,6 +457,9 @@ public sealed partial class SqlEditorViewModel : ToolPanelViewModelBase, IBindOw
     /// <summary>실행한 범위를 잠깐 칠해 달라는 요청. View 가 옅은 배경을 칠했다가 서서히 지운다(View 가 없으면 아무 일도 없다).</summary>
     public event EventHandler<TextRange>? FlashRequested;
 
+    /// <summary>떨어진 여러 범위를 함께 잠깐 칠해 달라는 요청(열 블록 실행). 범위가 하나면 <see cref="FlashRequested"/> 를 쓴다.</summary>
+    public event EventHandler<IReadOnlyList<TextRange>>? FlashRangesRequested;
+
     /// <summary>
     /// 실행 범위 잠깐 강조(DataGrip·SQL Developer 의 실행 문장 표시). 실행 컨트롤러가 실행 직전에 부른다.
     /// 범위는 문서 안으로 자르고, 빈 범위는 무시한다.
@@ -369,6 +471,27 @@ public sealed partial class SqlEditorViewModel : ToolPanelViewModelBase, IBindOw
         if (length > 0)
         {
             FlashRequested?.Invoke(this, new TextRange(start, length));
+        }
+    }
+
+    /// <summary>떨어진 여러 범위를 함께 잠깐 칠한다. 문서 안으로 자르고 빈 범위는 뺀다.</summary>
+    public void FlashRanges(IReadOnlyList<TextRange> ranges)
+    {
+        ArgumentNullException.ThrowIfNull(ranges);
+        var clipped = new List<TextRange>(ranges.Count);
+        foreach (var r in ranges)
+        {
+            int start = Math.Clamp(r.Start, 0, Document.TextLength);
+            int length = Math.Clamp(r.Length, 0, Document.TextLength - start);
+            if (length > 0)
+            {
+                clipped.Add(new TextRange(start, length));
+            }
+        }
+
+        if (clipped.Count > 0)
+        {
+            FlashRangesRequested?.Invoke(this, clipped);
         }
     }
 
@@ -553,6 +676,11 @@ public sealed partial class SqlEditorViewModel : ToolPanelViewModelBase, IBindOw
         if (IsReadOnly)
         {
             return false;
+        }
+
+        if (HasMultiPieceSelection)
+        {
+            return FindNext(); // 블록을 감싸는 범위를 바꾸면 블록 밖 글이 바뀐다
         }
 
         var f = CreateFinder();

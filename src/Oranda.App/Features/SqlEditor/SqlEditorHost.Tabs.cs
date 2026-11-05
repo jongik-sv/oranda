@@ -138,7 +138,8 @@ public sealed partial class SqlEditorHost
             ConnectionProfileId = source.ConnectionProfileId,
         };
         vm.IsDirty = false;
-        vm.Select(source.SelectionStart, source.SelectionLength);
+        bool block = source.HasMultiPieceSelection || source.SelectionIsBlock; // View 가 없는 탭은 조각을 읽지 못하므로 마지막 선택이 블록이었는지도 본다
+        vm.Select(block ? source.CaretOffset : source.SelectionStart, block ? 0 : source.SelectionLength); // 블록 선택은 둘레 범위로 바꿔 옮기지 않는다
         // 메모리 안의 복사라 디스크 저장 규칙(기본값 줄·비밀 이름 빼기)과 달리 줄을 모두 옮긴다.
         vm.Binds.Restore(source.Binds.Rows.Select(r => new WorkspaceBind
         {

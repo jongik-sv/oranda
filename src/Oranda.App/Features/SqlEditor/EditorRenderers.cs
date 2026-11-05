@@ -89,7 +89,7 @@ public sealed class RangeFlashRenderer : IBackgroundRenderer
 
     private readonly TextView _view;
     private readonly DispatcherTimer _timer;
-    private readonly TextSegment _segment = new();
+    private readonly List<TextSegment> _segments = [];
     private long _startedAt;
     private int _step = -1; // -1 = 강조 없음
 
@@ -103,8 +103,11 @@ public sealed class RangeFlashRenderer : IBackgroundRenderer
 
     public KnownLayer Layer => KnownLayer.Background;
 
-    /// <summary>지금 칠하는 범위(없으면 null).</summary>
-    public TextRange? Range => _step < 0 ? null : new TextRange(_segment.StartOffset, _segment.Length);
+    /// <summary>지금 칠하는 범위(없으면 null). 조각이 여럿이면 첫 조각.</summary>
+    public TextRange? Range => _step < 0 || _segments.Count == 0 ? null : new TextRange(_segments[0].StartOffset, _segments[0].Length);
+
+    /// <summary>지금 칠하는 모든 조각(열 블록 실행처럼 떨어진 범위가 여럿일 수 있다). 없으면 빈 목록.</summary>
+    public IReadOnlyList<TextRange> Ranges => _step < 0 ? [] : [.. _segments.Select(x => new TextRange(x.StartOffset, x.Length))];
 
     /// <summary>지금 붓 단계(0 = 가장 진함, -1 = 강조 없음).</summary>
     public int Step => _step;
@@ -124,10 +127,14 @@ public sealed class RangeFlashRenderer : IBackgroundRenderer
     }
 
     /// <summary>범위를 처음부터 다시 칠한다(앞의 강조가 남아 있으면 바꾼다).</summary>
-    public void Flash(TextRange range)
+    public void Flash(TextRange range) => Flash([range]);
+
+    /// <summary>떨어진 여러 범위를 함께 처음부터 다시 칠한다.</summary>
+    public void Flash(IReadOnlyList<TextRange> ranges)
     {
-        _segment.StartOffset = range.Start;
-        _segment.Length = range.Length;
+        ArgumentNullException.ThrowIfNull(ranges);
+        _segments.Clear();
+        _segments.AddRange(ranges.Select(r => new TextSegment { StartOffset = r.Start, Length = r.Length }));
         _startedAt = Stopwatch.GetTimestamp();
         _step = 0;
         if (!_timer.IsEnabled)
@@ -170,15 +177,18 @@ public sealed class RangeFlashRenderer : IBackgroundRenderer
 
     public void Draw(TextView textView, DrawingContext drawingContext)
     {
-        if (_step < 0 || textView.Document is not { } doc || _segment.EndOffset > doc.TextLength)
+        if (_step < 0 || textView.Document is not { } doc)
         {
             return;
         }
 
         var fill = Fills[_step];
-        foreach (var rect in BackgroundGeometryBuilder.GetRectsForSegment(textView, _segment))
+        foreach (var segment in _segments.Where(x => x.EndOffset <= doc.TextLength))
         {
-            drawingContext.FillRectangle(fill, rect);
+            foreach (var rect in BackgroundGeometryBuilder.GetRectsForSegment(textView, segment))
+            {
+                drawingContext.FillRectangle(fill, rect);
+            }
         }
     }
 

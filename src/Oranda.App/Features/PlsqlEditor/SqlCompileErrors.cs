@@ -20,6 +20,11 @@ public sealed class SqlCompileErrorSource(string title, SqlEditorViewModel tab) 
     private int _firstLine = 1;
     private int _firstColumnShift;
 
+    // 열 블록으로 실행한 문장: 문장 글의 줄마다 문서 위치와 글자 수(블록 밖 글이 끼어 줄·열이 어긋나는 것을 막는다). 일반 문장은 null.
+    private int[]? _lineDocumentStarts;
+    private int[]? _lineLengths;
+    private int _lineOffset;
+
     public string Title { get; } = title;
 
     public ObservableCollection<CompileError> Errors { get; } = [];
@@ -31,17 +36,49 @@ public sealed class SqlCompileErrorSource(string title, SqlEditorViewModel tab) 
     /// 서버 소스 1줄이 SQL 편집기의 어디인지 정한다. <paramref name="statementLine"/> = 문장이 시작하는 줄(1부터),
     /// <paramref name="statementText"/> = 실행한 문장 글자(머리 주석·<c>CREATE OR REPLACE</c> 를 건너뛰어 유형 낱말 위치를 찾는다).
     /// </summary>
-    public void Anchor(SqlEditorViewModel tab, int statementLine, string statementText)
+    public void Anchor(SqlEditorViewModel tab, int statementLine, string statementText, SqlStatement? statement = null)
     {
         Tab = tab;
         var (lineOffset, colOffset) = PlsqlSourceText.SourceStart(statementText);
         _firstLine = statementLine + lineOffset;
         _firstColumnShift = colOffset;
+        _lineOffset = lineOffset;
+        _lineDocumentStarts = null;
+        _lineLengths = null;
+        if (statement is not null && Execution.ExecutionController.HasSourcePieces(statement))
+        {
+            var lines = statementText.Split('\n');
+            _lineDocumentStarts = new int[lines.Length];
+            _lineLengths = new int[lines.Length];
+            int offset = 0;
+            for (int i = 0; i < lines.Length; i++)
+            {
+                _lineDocumentStarts[i] = Execution.ExecutionController.DocumentOffset(statement, offset);
+                _lineLengths[i] = lines[i].Length;
+                offset += lines[i].Length + 1;
+            }
+        }
     }
 
     public bool NavigateTo(CompileError item)
     {
         ArgumentNullException.ThrowIfNull(item);
+        if (_lineDocumentStarts is { } starts && _lineLengths is { } lengths)
+        {
+            int textLine = _lineOffset + item.Line - 1;
+            if (textLine < 0 || textLine >= starts.Length)
+            {
+                return false;
+            }
+
+            int column = item.Column + (item.Line == 1 ? _firstColumnShift : 0);
+            int target = Math.Min(starts[textLine] + Math.Clamp(column - 1, 0, lengths[textLine]), Tab.Document.TextLength);
+            Tab.Select(target, 0);
+            Tab.Surface?.ScrollToLine(Tab.PositionOf(target).Line);
+            Tab.Surface?.FocusEditor();
+            return true;
+        }
+
         var line = _firstLine + item.Line - 1;
         if (line < 1 || line > Tab.Document.LineCount)
         {
@@ -138,7 +175,7 @@ public static class SqlCompileErrors
         }
 
         var line = tab.Document.GetLineByOffset(Math.Clamp(stmt.Range.Start, 0, tab.Document.TextLength)).LineNumber;
-        source.Anchor(tab, line, stmt.Text);
+        source.Anchor(tab, line, stmt.Text, stmt);
         source.Errors.Clear();
         foreach (var e in errors)
         {

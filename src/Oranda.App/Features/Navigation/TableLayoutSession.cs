@@ -59,11 +59,14 @@ public sealed class TableLayoutSession
         return delimited is null ? "\n" : Tab.Document.GetText(delimited.EndOffset, delimited.DelimiterLength);
     }
 
+    /// <summary>편집기 선택이 열 블록·여러 커서라 넣을 수 없는가.</summary>
+    public bool IsBlocked => Tab.HasMultiPieceSelection;
+
     /// <summary>행들을 편집기 커서 자리(선택이 있으면 선택을 대체)에 넣는다. 넣었으면 true.</summary>
     public bool Paste(IReadOnlyList<TableLayoutRow> rows)
     {
         var text = TextFor(rows);
-        if (text.Length == 0)
+        if (text.Length == 0 || IsBlocked)
         {
             return false;
         }
