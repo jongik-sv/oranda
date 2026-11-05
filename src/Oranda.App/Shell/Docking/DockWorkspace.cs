@@ -18,6 +18,7 @@ namespace Oranda.App.Shell.Docking;
 /// 도킹 배치를 Dock.Avalonia 모델로 만들고(<see cref="Apply"/>) 다시 앱 DTO 로 읽어내는(<see cref="Capture"/>) 곳.
 /// <c>Dock.*</c> 형식은 이 폴더 밖으로 새지 않는다(ui-shell.md 3장 조건 2). 배치 규칙은 <see cref="LayoutPlanner"/> 가 정한다.
 /// 도구 창 보이기·숨기기는 「DTO 로 읽기 → 계획 바꾸기 → 다시 짓기」 한 길로만 한다(결정 가능하고 시험하기 쉽다).
+/// DTO 에 문서 영역은 1개뿐이므로, 사용자가 나눈 문서 영역은 이 길에서 살아 있는 칸을 그대로 새 배치에 옮겨 유지한다(<see cref="TakeSplitDocumentArea"/>).
 /// </summary>
 public sealed partial class DockWorkspace
 {
@@ -215,12 +216,19 @@ public sealed partial class DockWorkspace
     private IReadOnlyList<string>? _migrations;
 
     /// <summary>저장된 배치를 현재 등록 목록에 맞춰 도킹 모델로 짓는다. 열려 있던 문서는 새 문서 영역으로 옮긴다.</summary>
-    public void Apply(LayoutDocument layout)
+    public void Apply(LayoutDocument layout) => Apply(layout, keepSplitDocuments: false);
+
+    /// <param name="layout">지을 배치.</param>
+    /// <param name="keepSplitDocuments">
+    /// 참이면 사용자가 나눈 문서 영역을 그대로 새 배치에 옮긴다. 도구 창을 보이거나 숨기는 길이 쓴다: 세션 창 자동 표시·실행 중 도구 창 열기처럼
+    /// 사용자가 배치를 고르지 않은 일로 분할이 풀리면 안 된다(2026-11-05 사용자 신고). 시작 복원·이름 붙인 레이아웃·기본 배치로 되돌리기는 거짓(한 영역으로 합친다).
+    /// </param>
+    private void Apply(LayoutDocument layout, bool keepSplitDocuments)
     {
         var rehide = BeginScopedApply(); // 짓는 동안 생기는 활성 변경은 숨기기 판단에 쓰지 않는다(.ScopedTools.cs)
         try
         {
-            ApplyCore(layout);
+            ApplyCore(layout, keepSplitDocuments);
         }
         finally
         {
@@ -228,23 +236,41 @@ public sealed partial class DockWorkspace
         }
     }
 
-    private void ApplyCore(LayoutDocument layout)
+    private void ApplyCore(LayoutDocument layout, bool keepSplitDocuments)
     {
         var planned = LayoutPlanner.Reconcile(layout, PlanningPanels());
         _migrations = planned.Migrations;
-        var keepDocuments = Layout is null ? [] : Documents.Concat(FloatingDocuments()).ToList(); // 떠 있던 문서도 메인 문서 영역으로 들인다
         var active = ActiveDocument; // 옛 영역에서 문서를 빼기 전에 읽는다(뺀 뒤에는 탭 줄이 남은 탭을 활성으로 써 넣어 다른 문서가 된다)
+        var splitArea = keepSplitDocuments && Layout is not null ? TakeSplitDocumentArea() : null; // 나누지 않은 영역은 지금까지처럼 새 영역으로 옮긴다
+        var inSplitArea = new HashSet<IDockable>(ReferenceEqualityComparer.Instance);
+        if (splitArea is not null)
+        {
+            Visit(splitArea, d => inSplitArea.Add(d));
+        }
+
+        // 떠 있던 문서와 나눈 칸 밖의 문서 영역에 있던 문서는 메인 문서 영역으로 들인다.
+        var keepDocuments = Layout is null ? [] : Documents.Concat(FloatingDocuments()).Where(d => !inSplitArea.Contains(d)).ToList();
         foreach (var doc in keepDocuments.Where(d => d.Owner is IDock { VisibleDockables: { } own } && own.Contains(d)))
         {
             // 옛 창이 닫힐 때 그 안의 문서까지 정리되지 않도록 옛 문서 영역에서 먼저 뺀다.
             ((IDock)doc.Owner!).VisibleDockables!.Remove(doc);
         }
 
+        if (splitArea is not null)
+        {
+            if (splitArea.Owner is IDock { VisibleDockables: { } siblings })
+            {
+                siblings.Remove(splitArea); // 나눈 칸도 같은 이유로 옛 트리에서 뺀다
+            }
+
+            DropNonDocuments(splitArea); // 칸에 끌어 넣은 도구 창은 DTO 에서 닫힌 창이므로 도구 묶음과 겹쳐 들어가지 않게 뺀다
+        }
+
         var rootNode = planned.Root!;
         var dockRoot = Factory.CreateRootDock();
         dockRoot.Id = "oranda.root";
         dockRoot.IsCollapsable = false;
-        var content = Build(rootNode, rootNode);
+        var content = Build(rootNode, rootNode, splitArea);
         dockRoot.VisibleDockables = Factory.CreateList(content);
         dockRoot.ActiveDockable = content;
         dockRoot.DefaultDockable = content;
@@ -259,13 +285,126 @@ public sealed partial class DockWorkspace
                 doc.Owner = documents;
             }
 
-            documents.ActiveDockable = (active is not null && keepDocuments.Contains(active)) ? active : keepDocuments.LastOrDefault();
+            if (active is not null && keepDocuments.Contains(active))
+            {
+                documents.ActiveDockable = active;
+            }
+            else if (splitArea is null || documents.ActiveDockable is null)
+            {
+                documents.ActiveDockable = keepDocuments.LastOrDefault() ?? documents.ActiveDockable; // 나눈 칸을 유지해도 합쳐 넣은 문서가 있는 빈 첫 칸은 활성 탭이 있어야 한다
+            }
         }
 
         Factory.InitLayout(dockRoot);
         ApplyEmptyContent();
         LayoutRebuilt?.Invoke(this, EventArgs.Empty);
     }
+
+    /// <summary>
+    /// 사용자가 나눈 문서 칸 전체를 하나의 분할로 돌려준다(DTO 의 Documents 노드 하나와 대응). 나누지 않았으면 null.
+    /// 첫 문서 영역에서 위로, 문서 영역만 담은 분할까지 올라간다. 도구 창과 한 분할에 나란히 펼쳐진 연속 문서 칸
+    /// (위아래 분할: 세로 [문서, 문서, 도구]) 은 새 분할로 감싼다 - 이때 칸을 옛 부모에서 떼어 낸다.
+    /// 인접하지 않은 문서 영역은 포함하지 않으므로 그 문서는 첫 영역으로 합쳐진다.
+    /// </summary>
+    private IProportionalDock? TakeSplitDocumentArea()
+    {
+        IDockable? area = DocumentDocks().FirstOrDefault();
+        while (area?.Owner is IProportionalDock parent && IsDocumentsOnly(parent))
+        {
+            area = parent;
+        }
+
+        if (area is null)
+        {
+            return null;
+        }
+
+        if (area.Owner is not IProportionalDock { VisibleDockables: { } siblings } host)
+        {
+            return area as IProportionalDock;
+        }
+
+        var cells = siblings.Where(k => k is not IProportionalDockSplitter).ToList();
+        var first = cells.IndexOf(area);
+        var last = first;
+        while (first > 0 && IsDocumentsOnly(cells[first - 1]))
+        {
+            first--;
+        }
+
+        while (last < cells.Count - 1 && IsDocumentsOnly(cells[last + 1]))
+        {
+            last++;
+        }
+
+        if (first == last)
+        {
+            return area as IProportionalDock;
+        }
+
+        var run = cells.GetRange(first, last - first + 1);
+        var shares = run.Select(ScopedProportion).ToList();
+        var wrapper = Factory.CreateProportionalDock();
+        wrapper.Id = "oranda.split." + Guid.NewGuid().ToString("N")[..8];
+        wrapper.Orientation = host.Orientation;
+        var total = shares.Sum();
+        var known = shares.All(s => !double.IsNaN(s) && s > 0);
+        wrapper.Proportion = known ? total : double.NaN; // 바깥 비율은 Build 가 DTO 값으로 다시 쓴다
+        var kids = Factory.CreateList<IDockable>();
+        for (var i = 0; i < run.Count; i++)
+        {
+            if (kids.Count > 0)
+            {
+                kids.Add(Factory.CreateProportionalDockSplitter());
+            }
+
+            siblings.Remove(run[i]); // 옛 부모가 닫힐 때 문서까지 정리되지 않도록 떼어 낸다
+            run[i].Proportion = known ? shares[i] / total : 1.0 / run.Count; // 안쪽 비율은 합이 1 이 되게 다시 맞춘다
+            run[i].Owner = wrapper;
+            kids.Add(run[i]);
+        }
+
+        wrapper.VisibleDockables = kids;
+        wrapper.ActiveDockable = run[0];
+        return wrapper;
+    }
+
+    /// <summary>유지하는 문서 칸 안의 문서 아닌 탭(끌어 넣은 도구 창)을 뺀다. 빠진 탭이 활성이었으면 남은 마지막 탭을 활성으로 한다.</summary>
+    private static void DropNonDocuments(IDockable area)
+    {
+        if (area is not IDock dock)
+        {
+            return;
+        }
+
+        if (dock is IDocumentDock { VisibleDockables: { } tabs } documentDock)
+        {
+            foreach (var extra in tabs.Where(t => t is not PanelDocument).ToList())
+            {
+                tabs.Remove(extra);
+                extra.Owner = null;
+            }
+
+            if (documentDock.ActiveDockable is not null && !tabs.Contains(documentDock.ActiveDockable))
+            {
+                documentDock.ActiveDockable = tabs.LastOrDefault();
+            }
+
+            return;
+        }
+
+        foreach (var child in (dock.VisibleDockables ?? []).ToList())
+        {
+            DropNonDocuments(child);
+        }
+    }
+
+    private static bool IsDocumentsOnly(IDockable dockable) => dockable switch
+    {
+        IDocumentDock => true,
+        IProportionalDock split => (split.VisibleDockables ?? []).Where(k => k is not IProportionalDockSplitter).ToList() is { Count: > 0 } kids && kids.All(IsDocumentsOnly),
+        _ => false,
+    };
 
     /// <summary>지금 배치를 앱 DTO 로 읽는다. 창 위치는 <paramref name="window"/> 로 받아 그대로 싣는다.</summary>
     public LayoutDocument Capture(WindowPlacement? window = null)
@@ -320,7 +459,7 @@ public sealed partial class DockWorkspace
         _showingTool = toolId;
         try
         {
-            Apply(LayoutPlanner.ShowTool(current, def));
+            Apply(LayoutPlanner.ShowTool(current, def), keepSplitDocuments: true);
         }
         finally
         {
@@ -343,7 +482,7 @@ public sealed partial class DockWorkspace
         }
 
         var current = LayoutPlanner.Reconcile(Capture(), PlanningPanels());
-        Apply(LayoutPlanner.HideTool(current, toolId));
+        Apply(LayoutPlanner.HideTool(current, toolId), keepSplitDocuments: true);
         return true;
     }
 
@@ -593,7 +732,7 @@ public sealed partial class DockWorkspace
         }
     }
 
-    private IDockable Build(DockNode node, DockNode root)
+    private IDockable Build(DockNode node, DockNode root, IProportionalDock? splitArea)
     {
         switch (node.Kind)
         {
@@ -611,7 +750,7 @@ public sealed partial class DockWorkspace
                             kids.Add(Factory.CreateProportionalDockSplitter());
                         }
 
-                        kids.Add(Build(child, root));
+                        kids.Add(Build(child, root, splitArea));
                     }
 
                     split.VisibleDockables = kids;
@@ -644,6 +783,12 @@ public sealed partial class DockWorkspace
 
             default:
                 {
+                    if (splitArea is not null)
+                    {
+                        splitArea.Proportion = node.Proportion ?? double.NaN; // 칸 안쪽 비율은 사용자가 둔 그대로 둔다
+                        return splitArea;
+                    }
+
                     var docs = Factory.CreateDocumentDock();
                     docs.Id = DocumentsId;
                     docs.Proportion = node.Proportion ?? double.NaN;
@@ -740,11 +885,30 @@ public sealed partial class DockWorkspace
         {
             case IProportionalDock split:
                 {
-                    var kids = (split.VisibleDockables ?? [])
-                        .Where(k => k is not IProportionalDockSplitter)
-                        .Select(CaptureNode)
-                        .OfType<DockNode>()
-                        .ToList();
+                    var kids = new List<DockNode>();
+                    var documentsAt = -1; // 바로 앞 칸이 문서 칸이고 kids 에 적혔으면 그 위치
+                    foreach (var child in (split.VisibleDockables ?? []).Where(k => k is not IProportionalDockSplitter))
+                    {
+                        var node = CaptureNode(child);
+                        var isDocuments = IsDocumentsOnly(child);
+                        if (node is null && isDocuments && documentsAt >= 0)
+                        {
+                            // 이어진 문서 칸은 DTO 에 Documents 하나로 적으므로, 뒤 칸의 비율을 앞 칸에 더한다.
+                            // 그러지 않으면 [.36 문서, .36 문서, .28 도구] 가 [.36, .28] 로 기록되어 다시 지을 때마다 아래 창이 커진다.
+                            var last = kids[documentsAt];
+                            var extra = ScopedProportion(child);
+                            kids[documentsAt] = last with { Proportion = last.Proportion is { } sum && !double.IsNaN(extra) ? Math.Round(sum + extra, 4) : null };
+                            continue;
+                        }
+
+                        if (node is not null)
+                        {
+                            kids.Add(node);
+                        }
+
+                        documentsAt = node is not null && isDocuments ? kids.Count - 1 : -1;
+                    }
+
                     if (kids.Count == 0)
                     {
                         return null;
@@ -777,7 +941,8 @@ public sealed partial class DockWorkspace
                 }
 
             case IDocumentDock:
-                // 문서 영역이 분할되어 여럿이어도 DTO 에는 첫째만 둔다(탭 목록은 작업 공간 파일 몫).
+                // 문서 영역이 분할되어 여럿이어도 DTO 에는 첫째만 둔다(탭 목록은 작업 공간 파일 몫). 분할은 layout.json 에 남지 않고
+                // 실행 중 배치를 다시 지을 때만 살아 있는 칸으로 유지한다(ApplyCore).
                 if (_documentsCaptured)
                 {
                     return null;
