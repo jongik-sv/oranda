@@ -324,6 +324,187 @@ public class CompletionTests
         Assert.Equal("JOBS", Assert.Single(hr.Items).Label);
     }
 
+    // ---- 스키마를 쓰지 않은 표 이름: 다른 스키마·PUBLIC 시노님 --------------------------------------
+
+    [Theory]
+    [InlineData("SELECT * FROM jo|", "hr.jobs")]
+    [InlineData("SELECT * FROM JO|", "HR.JOBS")]
+    [InlineData("UPDATE jo|", "hr.jobs")]
+    public async Task Table_prefix_finds_other_schema_tables_and_inserts_the_owner(string withCaret, string inserted)
+    {
+        using var p = new CompletionProvider(Meta());
+        var r = await Complete(p, new FakeSession(), withCaret);
+        var item = Assert.Single(r.Items);
+        Assert.Equal("JOBS", item.Label);
+        Assert.Equal(CompletionItemKind.Table, item.Kind);
+        Assert.Equal(inserted, item.InsertText);
+        Assert.Equal("TABLE · HR", item.Detail);
+    }
+
+    [Fact]
+    public async Task Owner_and_name_are_quoted_separately_when_needed()
+    {
+        var m = Meta();
+        m.Objects.AddRange([new DbObjectRef("Hr App", "JOBS2", "TABLE"), new DbObjectRef("HR", "JOB Log", "TABLE")]);
+        using var p = new CompletionProvider(m);
+        var r = await Complete(p, new FakeSession(), "SELECT * FROM JOB|");
+        Assert.Contains(r.Items, i => i.InsertText == "\"Hr App\".JOBS2");
+        Assert.Contains(r.Items, i => i.InsertText == "HR.\"JOB Log\"");
+    }
+
+    [Fact]
+    public async Task Own_objects_come_first_then_public_synonyms_then_other_schemas()
+    {
+        var m = Meta();
+        m.Objects.AddRange([new DbObjectRef("HR", "EMP", "TABLE"), new DbObjectRef("PUBLIC", "EMP_PUB", "SYNONYM")]);
+        using var p = new CompletionProvider(m);
+        var r = await Complete(p, new FakeSession(), "SELECT * FROM EMP|");
+        // 이름이 같은 SCOTT.EMP 와 HR.EMP 는 합치지 않는다. PUBLIC 시노님은 스키마 없이 이름만 넣는다.
+        Assert.Equal(["EMP", "EMP_V", "EMP_SYN", "EMP_PUB", "HR.EMP"], r.Items.Select(i => i.InsertText));
+        var pub = r.Items.Single(i => i.Label == "EMP_PUB");
+        Assert.Equal(CompletionItemKind.Synonym, pub.Kind);
+        Assert.Equal("SYNONYM · PUBLIC", pub.Detail);
+    }
+
+    [Fact]
+    public async Task Table_prefix_skips_internal_schemas_and_objects_that_cannot_follow_from()
+    {
+        var m = Meta();
+        m.Objects.AddRange(
+        [
+            new DbObjectRef("SYS", "JOB$", "TABLE"),
+            new DbObjectRef("APEX_240200", "JOB_QUEUE", "TABLE"),
+            new DbObjectRef("HR", "JOBS_PKG", "PACKAGE"),
+            new DbObjectRef("HR", "JOBS_PK", "INDEX"),
+            new DbObjectRef("HR", "JOBS_PRIVATE_SYN", "SYNONYM"),
+            new DbObjectRef("PUBLIC", "jobs/JavaClass", "SYNONYM"), // Java 클래스 시노님은 소문자·슬래시 이름이다
+            new DbObjectRef("HR", "JOBS_V", "VIEW"),
+            new DbObjectRef("HR", "JOBS_MV", "MATERIALIZED VIEW"),
+        ]);
+        using var p = new CompletionProvider(m);
+        var r = await Complete(p, new FakeSession(), "SELECT * FROM jo|");
+        Assert.Equal(["hr.jobs", "hr.jobs_mv", "hr.jobs_v"], r.Items.Select(i => i.InsertText)); // 이름순
+    }
+
+    /// <summary>목록은 열릴 때 한 번 채워지므로, 빠진 후보가 있으면 다음 입력 때 다시 물어야 한다는 표지를 함께 준다.</summary>
+    [Fact]
+    public async Task Empty_table_prefix_leaves_other_schemas_out_and_marks_the_list_incomplete()
+    {
+        using var p = new CompletionProvider(Meta());
+        var s = new FakeSession();
+
+        var empty = await Complete(p, s, "SELECT * FROM |");
+        Assert.True(empty.IsIncomplete);
+        Assert.DoesNotContain(empty.Items, i => i.Label == "JOBS");
+
+        Assert.False((await Complete(p, s, "SELECT * FROM jo|")).IsIncomplete);
+        Assert.False((await Complete(p, s, "SELECT * FROM hr.|")).IsIncomplete);
+        Assert.False((await Complete(p, s, "SELECT e.| FROM emp e")).IsIncomplete);
+        Assert.False((await Complete(p, null, "SELECT * FROM |")).IsIncomplete); // 접속이 없으면 더 물을 곳이 없다
+    }
+
+    [Fact]
+    public async Task Too_many_table_candidates_are_cut_and_mark_the_list_incomplete()
+    {
+        var m = Meta();
+        for (int i = 0; i <= CompletionProvider.MaxItems; i++)
+        {
+            m.Objects.Add(new DbObjectRef("HR", "TX" + i.ToString(System.Globalization.CultureInfo.InvariantCulture), "TABLE"));
+        }
+
+        using var p = new CompletionProvider(m);
+        var r = await Complete(p, new FakeSession(), "SELECT * FROM TX|");
+        Assert.Equal(CompletionProvider.MaxItems, r.Items.Count);
+        Assert.True(r.IsIncomplete);
+    }
+
+    /// <summary>이름 검색이 늦어도 150 ms 예산으로 먼저 답하고, 끝난 검색은 다음 호출이 쓴다.</summary>
+    [Fact]
+    public async Task Slow_name_search_answers_with_own_objects_first()
+    {
+        var slow = new SlowNameSearch(Meta());
+        using var p = new CompletionProvider(slow, null, TimeSpan.FromMilliseconds(50));
+        var s = new FakeSession();
+        await CompleteUntilFullAsync(p, s, "SELECT * FROM |"); // 내 스키마 목록을 메모리에 채운다
+
+        var first = await Complete(p, s, "SELECT * FROM e|").WaitAsync(TimeSpan.FromSeconds(30));
+        Assert.True(first.IsPartial);
+        Assert.Contains(first.Items, i => i.Label == "EMP");
+        Assert.Equal(1, slow.Calls);
+
+        slow.Gate.SetResult();
+        var second = await CompleteUntilFullAsync(p, s, "SELECT * FROM e|");
+        Assert.False(second.IsPartial);
+        Assert.Equal(1, slow.Calls); // 같은 접두어는 한 번만 찾는다
+    }
+
+    /// <summary>처음 접속해 객체 목록 캐시가 없으면 검색이 실패한다. 실패는 기억하지 않고 다음 입력 때 다시 찾는다.</summary>
+    [Fact]
+    public async Task Failed_name_search_marks_the_list_incomplete_and_is_tried_again()
+    {
+        var search = new SlowNameSearch(Meta()) { FailNext = true };
+        search.Gate.SetResult();
+        using var p = new CompletionProvider(search);
+        var s = new FakeSession();
+
+        var first = await Complete(p, s, "SELECT * FROM jo|");
+        Assert.Empty(first.Items);
+        Assert.True(first.IsIncomplete);
+
+        var second = await Complete(p, s, "SELECT * FROM jo|");
+        Assert.Equal("hr.jobs", Assert.Single(second.Items).InsertText);
+        Assert.False(second.IsIncomplete);
+    }
+
+    private static readonly DbObjectRef Jobs = new("HR", "JOBS", "TABLE");
+
+    private static FakeMetadataProvider SynonymMeta()
+    {
+        var m = Meta();
+        m.Tables[Jobs] = new TableInfo(Jobs, [new ColumnInfo("JOB_ID", 1, "VARCHAR2")]);
+        m.NameSteps[("HR", "JOBS")] = NameStep.TableOrView;
+        return m;
+    }
+
+    [Fact]
+    public async Task Alias_of_a_public_synonym_lists_the_columns_of_its_target()
+    {
+        var m = SynonymMeta();
+        m.NameSteps[("PUBLIC", "JOBS_PUB")] = NameStep.Synonym("HR", "JOBS");
+        using var p = new CompletionProvider(m);
+        var r = await Complete(p, new FakeSession(), "SELECT x.| FROM jobs_pub x");
+        Assert.Equal("JOB_ID", Assert.Single(r.Items).Label);
+    }
+
+    [Fact]
+    public async Task Own_private_synonym_lists_the_columns_of_its_target_in_every_column_position()
+    {
+        var m = SynonymMeta();
+        m.NameSteps[("SCOTT", "EMP_SYN")] = NameStep.Synonym("HR", "JOBS");
+        using var p = new CompletionProvider(m);
+        var s = new FakeSession();
+        Assert.Equal("JOB_ID", Assert.Single((await Complete(p, s, "SELECT x.| FROM emp_syn x")).Items).Label);
+        Assert.Contains((await Complete(p, s, "SELECT | FROM emp_syn")).Items, i => i.Label == "JOB_ID" && i.Detail!.StartsWith("EMP_SYN · ", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task Written_owner_does_not_fall_back_to_a_public_synonym()
+    {
+        var m = SynonymMeta();
+        m.NameSteps[("PUBLIC", "JOBS_PUB")] = NameStep.Synonym("HR", "JOBS");
+        using var p = new CompletionProvider(m);
+        Assert.Empty((await Complete(p, new FakeSession(), "SELECT x.| FROM hr.jobs_pub x")).Items);
+    }
+
+    [Fact]
+    public async Task Synonym_over_a_db_link_gives_no_columns_and_no_exception()
+    {
+        var m = SynonymMeta();
+        m.NameSteps[("PUBLIC", "JOBS_REMOTE")] = NameStep.Synonym("HR", "JOBS", "REMOTE_DB");
+        using var p = new CompletionProvider(m);
+        Assert.Empty((await Complete(p, new FakeSession(), "SELECT x.| FROM jobs_remote x")).Items);
+    }
+
     [Fact]
     public async Task Package_dot_lists_members_with_signatures()
     {
@@ -473,6 +654,47 @@ public class CompletionTests
         Assert.Null(ParameterHints.FindCallSite("SELECT 1 FROM dual", 8));
         var (t3, o3) = Caret("SELECT (1 + |");
         Assert.Null(ParameterHints.FindCallSite(t3, o3));
+    }
+
+    /// <summary>이름 앞부분 검색만 <see cref="Gate"/> 가 열릴 때까지 붙잡는 제공자.</summary>
+    private sealed class SlowNameSearch(FakeMetadataProvider inner) : IMetadataProvider
+    {
+        private int _calls;
+
+        public TaskCompletionSource Gate { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        public int Calls => _calls;
+
+        public bool FailNext { get; set; }
+
+        public async Task<IReadOnlyList<DbObjectRef>> FindObjectsByPrefixAsync(ISession s, string namePrefix, int limit, CancellationToken ct)
+        {
+            Interlocked.Increment(ref _calls);
+            await Gate.Task.ConfigureAwait(false);
+            if (FailNext)
+            {
+                FailNext = false;
+                throw new InvalidOperationException("객체 목록 캐시가 아직 없습니다.");
+            }
+
+            return await ((IMetadataProvider)inner).FindObjectsByPrefixAsync(s, namePrefix, limit, ct).ConfigureAwait(false);
+        }
+
+        public Task<IReadOnlyList<string>> ListSchemasAsync(ISession s, CancellationToken ct) => inner.ListSchemasAsync(s, ct);
+
+        public Task<IReadOnlyList<DbObjectRef>> ListObjectsAsync(ISession s, ObjectQuery q, CancellationToken ct) => inner.ListObjectsAsync(s, q, ct);
+
+        public Task<TableInfo> GetTableAsync(ISession s, DbObjectRef table, CancellationToken ct) => inner.GetTableAsync(s, table, ct);
+
+        public Task<IReadOnlyList<ProcedureInfo>> GetProceduresAsync(ISession s, DbObjectRef obj, CancellationToken ct) => inner.GetProceduresAsync(s, obj, ct);
+
+        public Task<string> GetDdlAsync(ISession s, DbObjectRef obj, DdlOptions o, CancellationToken ct) => inner.GetDdlAsync(s, obj, o, ct);
+
+        public Task<ObjectDetail> GetObjectDetailAsync(ISession s, DbObjectRef obj, CancellationToken ct) => inner.GetObjectDetailAsync(s, obj, ct);
+
+        public Task<string> GetSourceAsync(ISession s, DbObjectRef obj, CancellationToken ct) => inner.GetSourceAsync(s, obj, ct);
+
+        public Task<IReadOnlyList<CompileError>> GetCompileErrorsAsync(ISession s, DbObjectRef obj, CancellationToken ct) => inner.GetCompileErrorsAsync(s, obj, ct);
     }
 
     /// <summary>테이블 조회만 <see cref="Gate"/> 가 열릴 때까지 붙잡는 제공자.</summary>

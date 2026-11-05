@@ -18,6 +18,12 @@ public sealed class FakeMetadataProvider : IMetadataProvider
 
     public Dictionary<DbObjectRef, string> Sources { get; } = [];
 
+    /// <summary>이름 풀이 한 단계의 답(소유자, 이름). 없으면 사전에 없는 이름이다.</summary>
+    public Dictionary<(string Owner, string Name), NameStep> NameSteps { get; } = [];
+
+    public Task<NameStep?> GetNameStepAsync(ISession s, string owner, string name, CancellationToken ct) =>
+        Task.FromResult(NameSteps.GetValueOrDefault((owner, name)));
+
     public Task<IReadOnlyList<string>> ListSchemasAsync(ISession s, CancellationToken ct) =>
         Task.FromResult<IReadOnlyList<string>>(Schemas);
 

@@ -3,6 +3,7 @@ using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Markup.Xaml.Styling;
 using AvaloniaEdit.CodeCompletion;
+using AvaloniaEdit.Document;
 using AvaloniaEdit.Editing;
 using Oranda.App.Features.ConnectionManager;
 using Oranda.App.Features.SqlEditor;
@@ -46,6 +47,20 @@ public sealed class CompletionController
 
     /// <summary>마지막으로 받은 후보(진단·시험용).</summary>
     public CompletionResult? LastResult { get; private set; }
+
+    /// <summary>마지막 목록 창이 닫힐 때의 문서 버전.</summary>
+    private ITextSourceVersion? _closedAtVersion;
+
+    /// <summary>
+    /// 방금 친 글자로 후보를 다시 물어야 하나(<see cref="CompletionResult.IsIncomplete"/>). 다 담지 못한 목록이 열려 있거나, 그 글자에 맞는 후보가 없어 방금 닫혔을 때다.
+    /// 목록은 글자가 들어간 뒤 닫히므로 문서 버전이 그대로면 이 입력이 닫은 것이다. Esc 로 닫은 뒤 친 글자는 버전이 달라 다시 열지 않는다.
+    /// </summary>
+    public bool NeedsRefill(TextArea area)
+    {
+        ArgumentNullException.ThrowIfNull(area);
+        return LastResult is { IsIncomplete: true }
+            && (CurrentWindow is not null || (_closedAtVersion is not null && ReferenceEquals(_closedAtVersion, area.Document?.Version)));
+    }
 
     /// <summary>
     /// 커서 위치의 후보를 구해 목록 창을 연다. 열었으면 true.
@@ -108,6 +123,7 @@ public sealed class CompletionController
             if (ReferenceEquals(CurrentWindow, window))
             {
                 CurrentWindow = null;
+                _closedAtVersion = doc.Version;
             }
         };
         CurrentWindow = window;

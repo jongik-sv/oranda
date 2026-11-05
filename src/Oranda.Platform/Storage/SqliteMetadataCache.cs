@@ -3,7 +3,6 @@ using Oranda.Core.Composition;
 using Oranda.Core.Metadata;
 using Oranda.Core.Settings;
 using Oranda.Core.Storage;
-using Oranda.Core.Text;
 
 namespace Oranda.Platform.Storage;
 
@@ -91,9 +90,11 @@ public sealed class SqliteMetadataCache : IMetadataCache, IDisposable
         return await RunAsync(async c =>
         {
             await using var cmd = c.CreateCommand();
-            cmd.CommandText = Select + " WHERE db_key = $k AND name LIKE $p ESCAPE '\\' ORDER BY name, owner, type LIMIT $n";
+            // 범위 조건이라야 이름 인덱스를 탄다. LIKE 는 대소문자를 가리지 않아 인덱스의 db_key 까지만 쓰고 행을 다 읽는다(객체 10만 개에 250 ms).
+            // char(1114111) = U+10FFFF: 이 접두어로 시작하는 어떤 이름보다 뒤에 온다.
+            cmd.CommandText = Select + " WHERE db_key = $k AND name >= $p AND name < ($p || char(1114111)) ORDER BY name, owner, type LIMIT $n";
             cmd.Parameters.AddWithValue("$k", dbKey);
-            cmd.Parameters.AddWithValue("$p", SqlLike.Escape(namePrefix) + "%");
+            cmd.Parameters.AddWithValue("$p", namePrefix);
             cmd.Parameters.AddWithValue("$n", limit <= 0 ? -1 : limit);
             return await ReadObjectsAsync(cmd, ct);
         }, ct);

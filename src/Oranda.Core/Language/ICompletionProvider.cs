@@ -35,9 +35,18 @@ public enum CompletionItemKind
 public sealed record CompletionItem(string Label, CompletionItemKind Kind, string InsertText)
 {
     public string? Detail { get; init; }
+
+    /// <summary>넣을 때 이름 앞에 붙이는 스키마(스키마를 쓰지 않고 찾은 다른 스키마의 객체). 없으면 이름만 넣는다.</summary>
+    public string? Qualifier { get; init; }
 }
 
 public sealed record CompletionResult(IReadOnlyList<CompletionItem> Items, TextRange ReplaceRange)
 {
     public bool IsPartial { get; init; }
+
+    /// <summary>
+    /// 담지 못한 후보가 있다(스키마를 쓰지 않은 빈 접두어라 다른 스키마를 빼거나, 한도에서 잘랐다). 글자를 더 치면 다시 물어야 한다:
+    /// 편집기 목록은 열릴 때 한 번 채워지고 뒤의 입력은 그 안에서만 거른다.
+    /// </summary>
+    public bool IsIncomplete { get; init; }
 }

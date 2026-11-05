@@ -5,6 +5,7 @@ using Oranda.Core.Events;
 using Oranda.Core.Language;
 using Oranda.Core.Metadata;
 using Oranda.Core.Sessions;
+using Oranda.Core.Tuning;
 
 namespace Oranda.Language.Completion;
 
@@ -22,6 +23,9 @@ internal sealed class CompletionProvider : ICompletionProvider, IDisposable
 
     /// <summary>한 번에 돌려주는 후보 수 한도(목록 창이 무거워지지 않게).</summary>
     internal const int MaxItems = 1000;
+
+    /// <summary>모든 스키마에서 이름으로 찾는 행 수 한도. 캐시에는 인덱스·트리거 이름도 있어 목록 한도보다 넉넉히 읽고 거른다.</summary>
+    internal const int NameSearchLimit = 5000;
 
     private readonly LanguageService _language = new();
     private readonly MetadataLookup _lookup;
@@ -64,6 +68,7 @@ internal sealed class CompletionProvider : ICompletionProvider, IDisposable
         AddWords(ctx, items);
 
         bool partial = false;
+        bool cut = false;
         if (session is not null && ctx.Kind is not (CompletionContextKind.Keyword or CompletionContextKind.Hint))
         {
             var full = BuildAsync(new Source(_lookup, session, Peek: false), ctx);
@@ -78,33 +83,38 @@ internal sealed class CompletionProvider : ICompletionProvider, IDisposable
             ct.ThrowIfCancellationRequested();
             if (full.IsCompleted)
             {
-                items.InsertRange(0, await full.ConfigureAwait(false));
+                var built = await full.ConfigureAwait(false);
+                cut = built.Cut;
+                items.InsertRange(0, built.Items);
             }
             else
             {
                 partial = true;
-                items.InsertRange(0, await BuildAsync(new Source(_lookup, session, Peek: true), ctx).ConfigureAwait(false));
+                items.InsertRange(0, (await BuildAsync(new Source(_lookup, session, Peek: true), ctx).ConfigureAwait(false)).Items);
             }
         }
 
         bool lower = PrefersLowerCase(text, ctx);
         var result = new List<CompletionItem>(Math.Min(items.Count, MaxItems));
-        var seen = new HashSet<(string, CompletionItemKind)>();
+        var seen = new HashSet<(string, CompletionItemKind, string?)>();
         foreach (var item in items)
         {
-            if (!item.Label.StartsWith(ctx.Prefix, StringComparison.OrdinalIgnoreCase) || !seen.Add((item.Label, item.Kind)))
+            if (!item.Label.StartsWith(ctx.Prefix, StringComparison.OrdinalIgnoreCase) || !seen.Add((item.Label, item.Kind, item.Qualifier)))
             {
                 continue;
             }
 
-            result.Add(item with { InsertText = Format(item.InsertText, item.Kind, lower) });
+            result.Add(item with { InsertText = InsertTextOf(item, lower) });
             if (result.Count >= MaxItems)
             {
                 break;
             }
         }
 
-        return new CompletionResult(result, ctx.ReplaceRange) { IsPartial = partial };
+        // 스키마를 쓰지 않은 표 자리는 모든 스키마가 후보다. 다 담지 못했으면 글자를 더 칠 때 다시 묻게 한다.
+        bool incomplete = session is not null && ctx is { Kind: CompletionContextKind.TableOrView, Qualifier: null }
+            && (ctx.Prefix.Length == 0 || partial || cut || result.Count >= MaxItems);
+        return new CompletionResult(result, ctx.ReplaceRange) { IsPartial = partial, IsIncomplete = incomplete };
     }
 
     // ---- DB 없는 후보 -------------------------------------------------------------------------
@@ -151,6 +161,14 @@ internal sealed class CompletionProvider : ICompletionProvider, IDisposable
             => Peek ? Task.FromResult(PeekOrNull<IReadOnlyList<DbObjectRef>>(MetadataLookup.ObjectsKey(Session, owner)))
                     : Safe(Lookup.ObjectsAsync(Session, owner));
 
+        public Task<IReadOnlyList<DbObjectRef>?> NameSearchAsync(string prefix)
+            => Peek ? Task.FromResult(PeekOrNull<IReadOnlyList<DbObjectRef>>(MetadataLookup.NameSearchKey(Session, prefix)))
+                    : Safe(Lookup.NameSearchAsync(Session, prefix, NameSearchLimit));
+
+        public Task<NameStep?> NameStepAsync(string owner, string name)
+            => Peek ? Task.FromResult(PeekOrNull<NameStep>(MetadataLookup.NameStepKey(Session, owner, name)))
+                    : Safe(Lookup.NameStepAsync(Session, owner, name));
+
         public Task<TableInfo?> TableAsync(DbObjectRef table)
             => Peek ? Task.FromResult(PeekOrNull<TableInfo>(MetadataLookup.TableKey(Session, table.Owner, table.Name)))
                     : Safe(Lookup.TableAsync(Session, table));
@@ -163,7 +181,7 @@ internal sealed class CompletionProvider : ICompletionProvider, IDisposable
             where T : class => Lookup.TryPeek<T>(key, out var v) ? v : null;
 
         private static async Task<T?> Safe<T>(Task<T> task)
-            where T : class
+            where T : class?
         {
             try
             {
@@ -176,9 +194,11 @@ internal sealed class CompletionProvider : ICompletionProvider, IDisposable
         }
     }
 
-    private static async Task<List<CompletionItem>> BuildAsync(Source src, CompletionContext ctx)
+    /// <returns>후보와, 이름 검색 결과를 다 담지 못했는지.</returns>
+    private static async Task<(List<CompletionItem> Items, bool Cut)> BuildAsync(Source src, CompletionContext ctx)
     {
         var items = new List<CompletionItem>();
+        bool cut = false;
         switch (ctx.Kind)
         {
             case CompletionContextKind.TableOrView:
@@ -188,6 +208,12 @@ internal sealed class CompletionProvider : ICompletionProvider, IDisposable
                     if (ctx.Qualifier is null)
                     {
                         AddSchemas(items, await src.SchemasAsync().ConfigureAwait(false));
+                        if (ctx.Prefix.Length > 0)
+                        {
+                            var found = await src.NameSearchAsync(ctx.Prefix.ToUpperInvariant()).ConfigureAwait(false);
+                            cut = found is null || found.Count >= NameSearchLimit; // 찾지 못했거나(캐시 없음·바쁨) 뒤쪽을 못 읽었다
+                            AddOutsideOwnSchema(items, found, src.DefaultOwner);
+                        }
                     }
 
                     break;
@@ -217,7 +243,7 @@ internal sealed class CompletionProvider : ICompletionProvider, IDisposable
                 break;
         }
 
-        return items;
+        return (items, cut);
     }
 
     private static (string Owner, string Name) Split(string qualified, string defaultOwner)
@@ -238,7 +264,8 @@ internal sealed class CompletionProvider : ICompletionProvider, IDisposable
         var objects = await src.ObjectsAsync(owner).ConfigureAwait(false);
         var type = objects?.FirstOrDefault(o => string.Equals(o.Name, name, StringComparison.Ordinal)
             && o.ObjectType is "TABLE" or "VIEW" or "MATERIALIZED VIEW")?.ObjectType ?? "TABLE";
-        var info = await src.TableAsync(new DbObjectRef(owner, name, type)).ConfigureAwait(false);
+        var info = await src.TableAsync(new DbObjectRef(owner, name, type)).ConfigureAwait(false)
+            ?? await SynonymTargetAsync(src, owner, name, ownerWritten: qualifiedName.Contains('.', StringComparison.Ordinal)).ConfigureAwait(false);
         if (info is null)
         {
             return;
@@ -249,6 +276,23 @@ internal sealed class CompletionProvider : ICompletionProvider, IDisposable
             var detail = ColumnDetail(c);
             items.Add(new CompletionItem(c.Name, CompletionItemKind.Column, c.Name) { Detail = withTable ? name + " · " + detail : detail });
         }
+    }
+
+    /// <summary>표·뷰가 아닌 이름을 시노님으로 풀어 대상의 열을 읽는다. 시노님이 아니거나 DB 링크·순환이면 열을 모른다.</summary>
+    private static async Task<TableInfo?> SynonymTargetAsync(Source src, string owner, string name, bool ownerWritten)
+    {
+        var written = new DbObjectRef(owner, name, "TABLE");
+        DbObjectRef target;
+        try
+        {
+            target = await SynonymResolver.ResolveAsync(src.NameStepAsync, written, ownerWritten).ConfigureAwait(false);
+        }
+        catch (SynonymResolutionException)
+        {
+            return null;
+        }
+
+        return ReferenceEquals(target, written) ? null : await src.TableAsync(target).ConfigureAwait(false);
     }
 
     private static async Task AddMembersAsync(Source src, string qualifier, List<CompletionItem> items)
@@ -303,6 +347,40 @@ internal sealed class CompletionProvider : ICompletionProvider, IDisposable
             if (kind is { } k)
             {
                 items.Add(new CompletionItem(o.Name, k, o.Name) { Detail = o.ObjectType + " · " + o.Owner });
+            }
+        }
+    }
+
+    /// <summary>
+    /// 내 스키마 밖에서 찾은 표 자리 후보. PUBLIC 시노님은 이름만으로 쓰므로 먼저 두고, 다른 스키마의 표·뷰는 소유자를 붙여 넣는다.
+    /// 오라클 내부 스키마와, 소문자·슬래시 이름인 Java 클래스 시노님은 뺀다.
+    /// </summary>
+    private static void AddOutsideOwnSchema(List<CompletionItem> items, IReadOnlyList<DbObjectRef>? found, string defaultOwner)
+    {
+        if (found is null)
+        {
+            return;
+        }
+
+        foreach (var o in found)
+        {
+            if (o is { Owner: "PUBLIC", ObjectType: "SYNONYM" } && o.Name.All(IsPlainUpper))
+            {
+                items.Add(new CompletionItem(o.Name, CompletionItemKind.Synonym, o.Name) { Detail = o.ObjectType + " · " + o.Owner });
+            }
+        }
+
+        foreach (var o in found)
+        {
+            CompletionItemKind? kind = o.ObjectType switch
+            {
+                "TABLE" => CompletionItemKind.Table,
+                "VIEW" or "MATERIALIZED VIEW" => CompletionItemKind.View,
+                _ => null,
+            };
+            if (kind is { } k && o.Owner != "PUBLIC" && o.Owner != defaultOwner && !TuningRecommendationRules.IsInternalSchema(o.Owner))
+            {
+                items.Add(new CompletionItem(o.Name, k, o.Name) { Detail = o.ObjectType + " · " + o.Owner, Qualifier = o.Owner });
             }
         }
     }
@@ -416,6 +494,12 @@ internal sealed class CompletionProvider : ICompletionProvider, IDisposable
         }
 
         return false;
+    }
+
+    private static string InsertTextOf(CompletionItem item, bool lower)
+    {
+        var name = Format(item.InsertText, item.Kind, lower);
+        return item.Qualifier is { } owner ? Format(owner, CompletionItemKind.Schema, lower) + "." + name : name;
     }
 
     private static string Format(string name, CompletionItemKind kind, bool lower)

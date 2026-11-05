@@ -7,6 +7,7 @@ using Oranda.Core.Sessions;
 using Oranda.Core.Settings;
 using Oranda.Core.Storage;
 using Oranda.Oracle.Connection;
+using Oranda.Oracle.IntegrationTests.Execution;
 using Oranda.Oracle.IntegrationTests.Integration;
 using Oranda.Oracle.IntegrationTests.Sessions;
 using Oranda.Oracle.Metadata;
@@ -30,6 +31,37 @@ public class MetadataProviderLogicTests
     [InlineData("a%", "ABC", false)]
     public void Like_pattern_translates_like_the_server(string pattern, string name, bool expected)
         => Assert.Equal(expected, OracleMetadataProvider.LikeToRegex(pattern).IsMatch(name));
+
+    /// <summary>DriverlessSession 은 OracleSession 이 아니라, 서버를 읽으려 하면 예외로 끝난다.</summary>
+    [Fact]
+    public async Task Name_search_answers_from_the_cache_across_owners_without_reading_the_server()
+    {
+        var cache = new MemoryMetadataCache();
+        var session = new DriverlessSession(new ConnectionProfile("p", "u", "h:1521/s"));
+        await cache.UpsertAsync(
+            new MetaSource { DbKey = session.DbKey, RefreshedAt = DateTimeOffset.UtcNow, LastUsedAt = DateTimeOffset.UtcNow },
+            [Cached(session.DbKey, "HR", "JOBS"), Cached(session.DbKey, "APP", "JOBS2"), Cached(session.DbKey, "HR", "EMP")],
+            default);
+        var provider = new OracleMetadataProvider(cache, new RecordingBus(), Timeout.InfiniteTimeSpan);
+
+        var found = await provider.FindObjectsByPrefixAsync(session, "JOB", 10, default);
+
+        Assert.Equal(["APP.JOBS2", "HR.JOBS"], found.Select(o => o.Owner + "." + o.Name).Order(StringComparer.Ordinal));
+        Assert.Single(await provider.FindObjectsByPrefixAsync(session, "JOB", 1, default));
+    }
+
+    /// <summary>빈 목록으로 답하면 메모리 캐시에 남아, 캐시가 찬 뒤에도 그 접두어의 후보가 나오지 않는다. 서버를 읽으면 형식이 다른 예외(ArgumentException)로 끝난다.</summary>
+    [Fact]
+    public async Task Name_search_without_a_cache_fails_and_does_not_read_the_server()
+    {
+        var session = new DriverlessSession(new ConnectionProfile("p", "u", "h:1521/s"));
+        var provider = new OracleMetadataProvider(new MemoryMetadataCache(), new RecordingBus(), Timeout.InfiniteTimeSpan);
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() => provider.FindObjectsByPrefixAsync(session, "JOB", 10, default));
+    }
+
+    private static MetaObject Cached(string dbKey, string owner, string name)
+        => new() { DbKey = dbKey, Owner = owner, Name = name, Type = "TABLE", Status = "VALID", FetchedAt = DateTimeOffset.UtcNow };
 }
 
 /// <summary>시험용 메모리 캐시. <see cref="IMetadataCache"/> 의 뜻(Invalidate 는 목록을 낡게 만든다)을 그대로 따른다.</summary>

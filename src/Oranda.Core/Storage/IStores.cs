@@ -109,7 +109,7 @@ public interface IMetadataCache
 
     Task<IReadOnlyList<MetaObject>> GetObjectsAsync(string dbKey, string? owner, string? type, CancellationToken ct);
 
-    /// <summary>이름 앞부분 검색(자동완성).</summary>
+    /// <summary>이름 앞부분 검색(자동완성). 이름 인덱스를 타려고 대소문자를 가린다.</summary>
     Task<IReadOnlyList<MetaObject>> FindByPrefixAsync(string dbKey, string namePrefix, int limit, CancellationToken ct);
 
     Task UpsertAsync(MetaSource source, IReadOnlyList<MetaObject> objects, CancellationToken ct);

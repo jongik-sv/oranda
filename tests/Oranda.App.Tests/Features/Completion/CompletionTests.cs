@@ -125,6 +125,101 @@ public sealed class CompletionTests
         }
     });
 
+    /// <summary>목록은 열릴 때 한 번만 채워진다. 스키마 이름 없이 열어 둔 목록은 글자를 치면 다른 스키마 후보로 다시 채운다.</summary>
+    [Fact]
+    public Task Typing_after_an_empty_table_prefix_refills_the_list_with_other_schemas() => HeadlessHost.Run(async () =>
+    {
+        var (window, view, _) = Show("SELECT * FROM ", 14);
+        var shared = CompletionController.Shared;
+        var (p, m, s) = (shared.ProviderResolver, shared.MetadataResolver, shared.SessionResolver);
+        var fake = Controller();
+        shared.ProviderResolver = fake.ProviderResolver;
+        shared.MetadataResolver = fake.MetadataResolver;
+        shared.SessionResolver = fake.SessionResolver;
+        try
+        {
+            var area = view.TextEditorControl.TextArea;
+            Assert.True(await shared.ShowCompletionAsync(area, null, automatic: false));
+            var first = shared.CurrentWindow!;
+            Assert.DoesNotContain(first.CompletionList.CompletionData.Cast<CompletionData>(), d => d.Text == "JOBS");
+
+            area.RaiseEvent(new TextInputEventArgs { RoutedEvent = InputElement.TextInputEvent, Text = "j" });
+            await HeadlessHost.WaitUntil(() => shared.CurrentWindow is { } w && !ReferenceEquals(w, first));
+
+            var items = shared.CurrentWindow!.CompletionList.CompletionData.Cast<CompletionData>().ToList();
+            Assert.Contains(items, d => d.Text == "JOBS" && d.Item.InsertText == "hr.jobs");
+        }
+        finally
+        {
+            shared.CloseCompletion();
+            (shared.ProviderResolver, shared.MetadataResolver, shared.SessionResolver) = (p, m, s);
+            window.Close();
+        }
+    });
+
+    [Fact]
+    public Task Typing_after_closing_the_list_does_not_open_it_again() => HeadlessHost.Run(async () =>
+    {
+        var (window, view, _) = Show("SELECT * FROM ", 14);
+        var shared = CompletionController.Shared;
+        var (p, m, s) = (shared.ProviderResolver, shared.MetadataResolver, shared.SessionResolver);
+        var fake = Controller();
+        shared.ProviderResolver = fake.ProviderResolver;
+        shared.MetadataResolver = fake.MetadataResolver;
+        shared.SessionResolver = fake.SessionResolver;
+        try
+        {
+            var area = view.TextEditorControl.TextArea;
+            Assert.True(await shared.ShowCompletionAsync(area, null, automatic: false));
+            shared.CloseCompletion(); // Esc 와 같다
+
+            area.RaiseEvent(new TextInputEventArgs { RoutedEvent = InputElement.TextInputEvent, Text = "j" });
+            Dispatcher.UIThread.RunJobs();
+            await Task.Delay(50);
+            Dispatcher.UIThread.RunJobs();
+
+            Assert.Equal("SELECT * FROM j", view.TextEditorControl.Text);
+            Assert.Null(shared.CurrentWindow);
+        }
+        finally
+        {
+            shared.CloseCompletion();
+            (shared.ProviderResolver, shared.MetadataResolver, shared.SessionResolver) = (p, m, s);
+            window.Close();
+        }
+    });
+
+    [Fact]
+    public Task Typing_in_a_complete_list_only_filters_it() => HeadlessHost.Run(async () =>
+    {
+        var (window, view, _) = Show("SELECT * FROM e", 15);
+        var shared = CompletionController.Shared;
+        var (p, m, s) = (shared.ProviderResolver, shared.MetadataResolver, shared.SessionResolver);
+        var fake = Controller();
+        shared.ProviderResolver = fake.ProviderResolver;
+        shared.MetadataResolver = fake.MetadataResolver;
+        shared.SessionResolver = fake.SessionResolver;
+        try
+        {
+            var area = view.TextEditorControl.TextArea;
+            Assert.True(await shared.ShowCompletionAsync(area, null, automatic: false));
+            var first = shared.CurrentWindow!;
+
+            area.RaiseEvent(new TextInputEventArgs { RoutedEvent = InputElement.TextInputEvent, Text = "m" });
+            Dispatcher.UIThread.RunJobs();
+            await Task.Delay(50);
+            Dispatcher.UIThread.RunJobs();
+
+            Assert.Same(first, shared.CurrentWindow);
+        }
+        finally
+        {
+            shared.CloseCompletion();
+            (shared.ProviderResolver, shared.MetadataResolver, shared.SessionResolver) = (p, m, s);
+            window.Close();
+        }
+    });
+
     [Fact]
     public Task Dot_without_session_does_nothing_but_ctrl_space_still_offers_keywords() => HeadlessHost.Run(async () =>
     {
@@ -269,7 +364,12 @@ public sealed class CompletionTests
         public Task<IReadOnlyList<string>> ListSchemasAsync(ISession s, CancellationToken ct) => Task.FromResult<IReadOnlyList<string>>(["SCOTT"]);
 
         public Task<IReadOnlyList<DbObjectRef>> ListObjectsAsync(ISession s, ObjectQuery q, CancellationToken ct)
-            => Task.FromResult<IReadOnlyList<DbObjectRef>>(q.Owner is null or "SCOTT" ? [Emp, EmpPkg] : []);
+            => Task.FromResult<IReadOnlyList<DbObjectRef>>(q.Owner switch
+            {
+                null => [Emp, EmpPkg, new DbObjectRef("HR", "JOBS", "TABLE")],
+                "SCOTT" => [Emp, EmpPkg],
+                _ => [],
+            });
 
         public Task<TableInfo> GetTableAsync(ISession s, DbObjectRef table, CancellationToken ct)
             => table.Name == "EMP"

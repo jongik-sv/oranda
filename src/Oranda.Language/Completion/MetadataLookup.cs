@@ -35,6 +35,12 @@ internal sealed class MetadataLookup(IMetadataProvider metadata)
     public Task<IReadOnlyList<ProcedureInfo>> ProceduresAsync(ISession s, DbObjectRef obj)
         => Get(ProceduresKey(s, obj.Owner, obj.Name), () => metadata.GetProceduresAsync(s, obj, CancellationToken.None));
 
+    public Task<IReadOnlyList<DbObjectRef>> NameSearchAsync(ISession s, string prefix, int limit)
+        => Get(NameSearchKey(s, prefix), () => metadata.FindObjectsByPrefixAsync(s, prefix, limit, CancellationToken.None));
+
+    public Task<NameStep?> NameStepAsync(ISession s, string owner, string name)
+        => Get(NameStepKey(s, owner, name), () => metadata.GetNameStepAsync(s, owner, name, CancellationToken.None));
+
     /// <summary>끝난 조회 결과가 메모리에 있으면 true(조회를 새로 시작하지 않는다).</summary>
     public bool TryPeek<T>(string key, out T value)
     {
@@ -55,6 +61,10 @@ internal sealed class MetadataLookup(IMetadataProvider metadata)
     public static string TableKey(ISession s, string owner, string name) => s.DbKey + "|table|" + owner + "." + name;
 
     public static string ProceduresKey(ISession s, string owner, string name) => s.DbKey + "|procs|" + owner + "." + name;
+
+    public static string NameSearchKey(ISession s, string prefix) => s.DbKey + "|search|" + prefix;
+
+    public static string NameStepKey(ISession s, string owner, string name) => s.DbKey + "|step|" + owner + "." + name;
 
     /// <summary>접속 하나(<paramref name="dbKey"/>)의 메모리 캐시를 지운다(<c>MetadataInvalidated</c>).</summary>
     public void Invalidate(string dbKey)

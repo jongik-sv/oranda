@@ -99,6 +99,19 @@ internal sealed partial class OracleMetadataProvider : IMetadataProvider
     }
 
     /// <summary>
+    /// 캐시에서만 찾는다: 키 입력마다 불리므로 서버의 전체 목록을 읽지 않고 갱신도 시작하지 않는다(캐시는 <see cref="ListObjectsAsync"/> 가 채운다).
+    /// 캐시로 답할 수 없으면 실패로 끝낸다: 빈 목록으로 답하면 부른 쪽 메모리에 남아 캐시가 찬 뒤에도 그 접두어의 후보가 나오지 않는다.
+    /// </summary>
+    public async Task<IReadOnlyList<DbObjectRef>> FindObjectsByPrefixAsync(ISession s, string namePrefix, int limit, CancellationToken ct)
+    {
+        ArgumentNullException.ThrowIfNull(s);
+        ArgumentNullException.ThrowIfNull(namePrefix);
+        var source = await TryCacheAsync(() => _cache.GetSourceAsync(s.DbKey, ct));
+        var found = source?.RefreshedAt is null ? null : await TryCacheAsync(() => _cache.FindByPrefixAsync(s.DbKey, namePrefix, limit, ct));
+        return found is null ? throw new InvalidOperationException("객체 목록 캐시가 아직 없습니다.") : ToRefs(found);
+    }
+
+    /// <summary>
     /// 서버의 전체 객체 목록을 받아 캐시와 비교한다. 새로 생기거나 <c>last_ddl_time</c>·상태가 바뀐 것은 상세(payload)를 비우고,
     /// 사라진 것은 지운다. 이전 갱신이 있었고 바뀐 것이 있으면 <see cref="MetadataInvalidated"/> 를 낸다.
     /// </summary>

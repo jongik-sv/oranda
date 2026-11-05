@@ -12,7 +12,7 @@ namespace Oranda.App.Features.Completion;
 /// <summary>
 /// TSK-04-05 문맥 자동완성 — 명령 ID 와 편집기 입력 연결.
 /// <c>.</c> 입력 자동 열기는 앱 어셈블리가 올라올 때 한 번 거는 입력 처리기(<see cref="Install"/>)로 붙인다 —
-/// 편집기(TSK-04-02) 파일을 고치지 않고 모든 SQL 편집기 탭에 붙이기 위해서다. 처리기는 글자가 <c>.</c> 인지만 보고 곧바로 돌아간다.
+/// 편집기(TSK-04-02) 파일을 고치지 않고 모든 SQL 편집기 탭에 붙이기 위해서다. 처리기는 글자가 <c>.</c> 인지와 마지막 목록이 다 담지 못했는지만 보고 곧바로 돌아간다.
 /// </summary>
 public static class CompletionCommands
 {
@@ -67,10 +67,34 @@ public static class CompletionCommands
 
     private static void OnTextInput(InputElement sender, TextInputEventArgs e)
     {
-        if (e.Text == "." && ReferenceEquals(sender, e.Source))
+        if (!ReferenceEquals(sender, e.Source))
+        {
+            return;
+        }
+
+        if (e.Text == ".")
         {
             OnDot(sender);
         }
+        else if (CompletionController.Shared.LastResult is { IsIncomplete: true } && IsNameText(e.Text))
+        {
+            OnNameTyped(sender);
+        }
+    }
+
+    private static bool IsNameText(string? text) => !string.IsNullOrEmpty(text) && text.All(c => char.IsLetterOrDigit(c) || c is '_' or '$' or '#');
+
+    /// <summary>열린 목록은 그 안에서만 거른다. 다 담지 못한 목록은 지금 글자로 다시 물어 채운다.</summary>
+    private static void OnNameTyped(InputElement sender)
+    {
+        var controller = CompletionController.Shared;
+        if (sender is not TextArea area || !controller.NeedsRefill(area) || area.FindAncestorOfType<SqlEditorView>() is not { } view)
+        {
+            return;
+        }
+
+        var tab = view.DataContext as SqlEditorViewModel;
+        Dispatcher.UIThread.Post(() => _ = controller.ShowCompletionAsync(area, tab, automatic: true));
     }
 
     private static void OnDot(InputElement sender)

@@ -175,6 +175,7 @@ SELECT s.inst_id, s.sid, s.serial#, s.username, ...
 - 문법은 grammars-v4 PL/SQL을 저장소에 포함해 빌드 시 생성(Antlr4BuildTasks)하고, 23ai/26ai 구문 보강은 별도 문법 파일 차이로 관리한다.
 - 구문 강조: 1단계는 TextMate SQL 문법(AvaloniaEdit.TextMate), M1 안에 L1 렉서 기반 colorizer로 교체해 PL/SQL 키워드·바인드·객체명을 구분한다.
 - **자동완성**: L1이 커서 위치의 문맥(FROM 절, `별칭.` 뒤, 패키지명 뒤, 힌트 주석 안)을 판별 → `IMetadataProvider`(4.7)에서 후보 조회. 메타데이터는 메모리 + SQLite 캐시, 150 ms 안에 응답하지 못하면 캐시 결과만 먼저 보여 준다.
+  - 스키마를 쓰지 않은 표 자리는 접속 사용자 스키마에 더해 `FindObjectsByPrefixAsync`로 SQLite 캐시의 서버 전체 목록을 이름 앞부분으로 찾는다(이름 인덱스 범위 검색, 서버 질의 없음, 객체 10만 개에 10 ms 안쪽). 접두어가 비었거나 한도에 닿으면 `CompletionResult.IsIncomplete`로 알리고, 편집기는 다음 글자에서 다시 묻는다(목록 창은 열릴 때 한 번만 채워지기 때문). 현재 스키마는 `ALTER SESSION SET CURRENT_SCHEMA`를 따라가지 않고 접속 사용자로 본다.
 - **다중 커서(EDIT-07)**: AvaloniaEdit에 정식 기능이 없다. M0에서 확장 가능성을 시험하고, 어려우면 열 선택(Alt+드래그)으로 대체하고 다중 커서는 P1로 낮춘다(T-D03).
 
 ### 4.6 포매터 (FMT)

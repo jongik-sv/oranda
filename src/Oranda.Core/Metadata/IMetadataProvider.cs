@@ -16,6 +16,21 @@ public interface IMetadataProvider
     /// <summary>객체 이름 목록(유형·이름 패턴·상태 필터). TSK-04-04.</summary>
     Task<IReadOnlyList<DbObjectRef>> ListObjectsAsync(ISession s, ObjectQuery q, CancellationToken ct);
 
+    /// <summary>
+    /// 이름이 <paramref name="namePrefix"/> 로 시작하는 모든 스키마의 객체를 찾는다(대소문자를 가린다, 이름순, 최대 <paramref name="limit"/>개).
+    /// 키 입력마다 불리므로 전체 목록을 읽지 않고 찾는 구현을 둔다. 기본 구현은 목록을 받아 거른다.
+    /// </summary>
+    async Task<IReadOnlyList<DbObjectRef>> FindObjectsByPrefixAsync(ISession s, string namePrefix, int limit, CancellationToken ct)
+    {
+        var all = await ListObjectsAsync(s, new ObjectQuery(), ct).ConfigureAwait(false);
+        return
+        [
+            .. all.Where(o => o.Name.StartsWith(namePrefix, StringComparison.Ordinal))
+                .OrderBy(o => o.Name, StringComparer.Ordinal)
+                .Take(limit),
+        ];
+    }
+
     /// <summary>테이블·뷰의 열·제약·인덱스·주석. TSK-04-04.</summary>
     Task<TableInfo> GetTableAsync(ISession s, DbObjectRef table, CancellationToken ct);
 

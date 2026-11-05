@@ -92,6 +92,26 @@ public sealed class MetadataCacheTests : IDisposable
         Assert.NotNull((await cache.GetSourceAsync(Key, default))!.RefreshedAt);
     }
 
+    /// <summary>자동완성이 키 입력마다 부르므로 150 ms 예산 안에 끝나야 한다: 이름 인덱스를 범위로 탄다(LIKE 로 다 훑으면 250 ms 쯤 걸린다).</summary>
+    [Trait("Category", "Perf")]
+    [Fact]
+    public async Task FindByPrefix_on_100k_objects_uses_the_name_index()
+    {
+        using var cache = SqliteMetadataCache.ForFile(DbFile);
+        var rows = Enumerable.Range(0, 100_000)
+            .Select(i => Obj(i % 2 == 0 ? "HR" : "SYS", (char)('A' + (i % 26)) + "X_" + i.ToString(System.Globalization.CultureInfo.InvariantCulture), "TABLE", payload: i % 50 == 0 ? new string('x', 4000) : null))
+            .ToList();
+        await cache.UpsertAsync(Source(DateTimeOffset.UtcNow), rows, default);
+        await cache.FindByPrefixAsync(Key, "AX", 5000, default); // 데우기
+
+        var sw = System.Diagnostics.Stopwatch.StartNew();
+        var found = await cache.FindByPrefixAsync(Key, "TX_1", 5000, default);
+        sw.Stop();
+
+        Assert.NotEmpty(found);
+        Assert.True(sw.ElapsedMilliseconds <= 100, $"{sw.ElapsedMilliseconds} ms");
+    }
+
     [Fact]
     public async Task FindByPrefix_matches_name_start_only_and_escapes_wildcards()
     {
@@ -102,6 +122,7 @@ public sealed class MetadataCacheTests : IDisposable
         Assert.Single(await cache.FindByPrefixAsync(Key, "EM", 1, default));
         Assert.Equal(["A_B"], (await cache.FindByPrefixAsync(Key, "A_", 10, default)).Select(o => o.Name));
         Assert.Empty(await cache.FindByPrefixAsync(Key, "MP", 10, default));
+        Assert.Empty(await cache.FindByPrefixAsync(Key, "em", 10, default)); // 인덱스를 타려고 대소문자를 가린다
     }
 
     [Fact]
