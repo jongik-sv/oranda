@@ -540,6 +540,7 @@
   "MyBatis.save.title": "Save to Mapper",
   "MyBatis.save.unreadable": "Could not read {0} as a mapper, so nothing was saved: {1}",
   "MyBatis.save.writeFailed": "Could not write to {0}. Your edits are still here.\n{1}",
+  "MyBatis.scenario.autoName": "Auto-saved",
   "MyBatis.scenario.copyName": "{0} copy",
   "MyBatis.scenario.failed": "Could not update the scenario: {0}",
   "MyBatis.scenario.newName": "Scenario {0}",

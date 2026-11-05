@@ -180,7 +180,9 @@ public sealed class MyBatisSampleFlowTests
         eval.Flush();
         var second = await eval.AddScenarioAsync("큰 급여");
         Assert.NotNull(second);
-        Assert.Equal(2, eval.Scenarios.Count);
+        // 시나리오를 만들기 전에 입력한 값은 자동 저장 시나리오로 남아 있다(D-044)
+        var auto = Oranda.App.Features.MyBatisWorkspace.Parameters.MyBatisStatementEval.AutoScenarioName;
+        Assert.Equal([auto, "정상 급여", "큰 급여"], eval.Scenarios.Select(s => s.Name));
         eval.SelectScenario(first);
         MyBatisFlowRig.Pump();
         Assert.Equal("1500", sal.Text);
@@ -191,7 +193,7 @@ public sealed class MyBatisSampleFlowTests
         // 오류: 이름이 빈 시나리오는 만들지 않는다 / 되돌림: 지우면 목록에서 빠진다
         await Assert.ThrowsAnyAsync<ArgumentException>(() => eval.AddScenarioAsync("  "));
         await eval.DeleteScenarioAsync(second!);
-        Assert.Single(eval.Scenarios);
+        Assert.Equal([auto, "정상 급여"], eval.Scenarios.Select(s => s.Name));
         Assert.Equal(original, File.ReadAllBytes(path)); // 여기까지 파일은 그대로(저장 전)
         window.Close();
     });

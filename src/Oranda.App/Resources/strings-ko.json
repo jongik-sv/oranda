@@ -540,6 +540,7 @@
   "MyBatis.save.title": "매퍼에 저장",
   "MyBatis.save.unreadable": "{0} 을(를) 매퍼로 읽지 못해 저장하지 않았습니다: {1}",
   "MyBatis.save.writeFailed": "{0} 에 쓰지 못했습니다. 고침은 남아 있습니다.\n{1}",
+  "MyBatis.scenario.autoName": "자동 저장",
   "MyBatis.scenario.copyName": "{0} 복사",
   "MyBatis.scenario.failed": "시나리오를 처리하지 못했습니다: {0}",
   "MyBatis.scenario.newName": "시나리오 {0}",

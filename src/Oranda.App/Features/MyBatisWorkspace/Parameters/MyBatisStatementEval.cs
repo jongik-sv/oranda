@@ -19,6 +19,9 @@ public sealed class MyBatisStatementEval : IDisposable
     /// <summary>값·원문 고침 뒤 다시 계산까지 기다리는 시간(MB-05).</summary>
     public static readonly TimeSpan DefaultDebounce = TimeSpan.FromMilliseconds(300);
 
+    /// <summary>시나리오가 없는 문장에 값을 넣으면 만드는 시나리오의 이름(D-044). 그 뒤로는 다른 시나리오처럼 고칠 때마다 저장한다.</summary>
+    public static string AutoScenarioName => MyBatisText.Format("MyBatis.scenario.autoName", "자동 저장");
+
     private readonly MyBatisEvalHub _hub;
     private readonly Dictionary<string, MyBatisScenarioValue> _values = new(StringComparer.Ordinal);
     private readonly Dictionary<string, BindDataType> _types = new(StringComparer.Ordinal);
@@ -32,6 +35,8 @@ public sealed class MyBatisStatementEval : IDisposable
     private CancellationTokenSource? _pending;
     private bool _saveSelected;
     private bool _loaded;
+    private bool _listed; // 저장소 목록을 읽었다(읽기 전에는 자동 저장 시나리오를 만들지 않는다)
+    private bool _creatingAuto; // 자동 저장 시나리오를 만드는 중
 
     internal MyBatisStatementEval(MyBatisEvalHub hub, IMyBatisWorkspaceSession session, string statementId)
     {
@@ -59,7 +64,7 @@ public sealed class MyBatisStatementEval : IDisposable
     /// <summary>이 문장의 시나리오(저장소 순서).</summary>
     public IReadOnlyList<MyBatisScenario> Scenarios => _scenarios;
 
-    /// <summary>고른 시나리오. 시나리오가 없으면 null(값은 이 상태에만 있고 저장하지 않는다).</summary>
+    /// <summary>고른 시나리오. 시나리오가 없으면 null(사용자가 값을 넣으면 <see cref="AutoScenarioName"/> 시나리오를 만들어 고른다).</summary>
     public MyBatisScenario? SelectedScenario { get; private set; }
 
     /// <summary>지금 값(파라미터 이름 → 값 칸 글, <see cref="MyBatisValues.FromCellText"/>). 고른 시나리오 값에서 시작해 「바인드 변수」 창에서 고친다.</summary>
@@ -166,14 +171,14 @@ public sealed class MyBatisStatementEval : IDisposable
 
     /// <summary>
     /// 값 하나를 고친다. 300 ms 뒤 다시 계산하고, <paramref name="byUser"/> 면 고른 시나리오에 그 이름의 값만 저장한다
-    /// (고치지 않은 값은 시나리오에 있던 종류 그대로 둔다).
+    /// (고치지 않은 값은 시나리오에 있던 종류 그대로 둔다). 고른 시나리오가 없으면 지금 값으로 <see cref="AutoScenarioName"/> 시나리오를 만든다.
     /// </summary>
     public void SetValue(string name, MyBatisScenarioValue value, bool byUser = true)
     {
         ArgumentNullException.ThrowIfNull(name);
         ArgumentNullException.ThrowIfNull(value);
         _values[name] = value;
-        if (byUser && SelectedScenario is not null)
+        if (byUser)
         {
             _edited.Add(name);
             _saveSelected = true;
@@ -356,7 +361,13 @@ public sealed class MyBatisStatementEval : IDisposable
         }
 
         var list = await store.ListAsync(Session.MapperPath, Session.MapperNamespace, StatementId, ct).ConfigureAwait(true);
+        _listed = true;
         _scenarios = list;
+        if (_creatingAuto && selectId is null && SelectedScenario is null)
+        {
+            return; // 저장소 Changed 가 먼저 왔다: 값을 다시 채우지 않는다(입력 중인 글자를 지킨다). 고르는 일은 만드는 쪽이 한다.
+        }
+
         var wanted = selectId ?? SelectedScenario?.Id;
         var pick = list.FirstOrDefault(s => s.Id == wanted) ?? (list.Count > 0 ? list[0] : null);
         if (pick is not null && SelectedScenario is { } current && current.Id == pick.Id && selectId is null)
@@ -482,11 +493,17 @@ public sealed class MyBatisStatementEval : IDisposable
         }
     }
 
-    /// <summary>표에서 고친 값을 고른 시나리오에 쓴다(고친 것이 없으면 아무것도 안 한다).</summary>
+    /// <summary>표에서 고친 값을 고른 시나리오에 쓴다(고친 것이 없으면 아무것도 안 한다). 고른 시나리오가 없으면 자동 저장 시나리오를 만든다.</summary>
     private async Task SaveSelectedNowAsync(CancellationToken ct)
     {
-        if (!_saveSelected || SelectedScenario is not { } scenario || _hub.Store is not { } store)
+        if (!_saveSelected || _creatingAuto || _hub.Store is not { } store)
         {
+            return;
+        }
+
+        if (SelectedScenario is not { } scenario)
+        {
+            await CreateAutoScenarioAsync(store, ct).ConfigureAwait(true);
             return;
         }
 
@@ -513,6 +530,60 @@ public sealed class MyBatisStatementEval : IDisposable
             Error = "시나리오를 저장하지 못했습니다: " + e.Message;
             Changed?.Invoke(this, EventArgs.Empty);
         }
+    }
+
+    // 시나리오가 없는 문장의 값을 자동 저장 시나리오로 남긴다(D-044). AddScenarioAsync 와 달리 값을 다시 채우지 않고 고르기만 한다:
+    // 저장하는 동안 입력한 글자가 저장한 값으로 덮이지 않게 하고, 그 글자는 끝난 뒤 이어서 저장한다.
+    private async Task CreateAutoScenarioAsync(IMyBatisScenarioStore store, CancellationToken ct)
+    {
+        if (!_listed)
+        {
+            return; // 목록을 읽기 전: 이미 시나리오가 있는 문장에 또 만들지 않는다
+        }
+
+        _saveSelected = false;
+        _edited.Clear();
+        if (_values.Values.All(v => v.Kind == MyBatisScenarioValueKind.Null))
+        {
+            return; // 빈 칸뿐이면 남길 값이 없다
+        }
+
+        _creatingAuto = true;
+        try
+        {
+            var saved = await store.SaveAsync(
+                new MyBatisScenario
+                {
+                    MapperPath = Session.MapperPath,
+                    Namespace = Session.MapperNamespace,
+                    StatementId = StatementId,
+                    Name = AutoScenarioName,
+                    Values = new Dictionary<string, MyBatisScenarioValue>(_values, StringComparer.Ordinal),
+                },
+                ct).ConfigureAwait(true);
+
+            // 저장소가 읽기 전용이면 ID 가 0 이다(저장되지 않았다). 그사이 다른 시나리오가 골렸으면 그것을 둔다.
+            if (saved.Id == 0 || SelectedScenario is not null)
+            {
+                return;
+            }
+
+            _scenarios = await store.ListAsync(Session.MapperPath, Session.MapperNamespace, StatementId, ct).ConfigureAwait(true);
+            SelectedScenario = _scenarios.FirstOrDefault(s => s.Id == saved.Id) ?? saved;
+            ScenariosChanged?.Invoke(this, EventArgs.Empty);
+        }
+        catch (Exception e) when (e is not OutOfMemoryException and not OperationCanceledException)
+        {
+            Error = "시나리오를 저장하지 못했습니다: " + e.Message;
+            Changed?.Invoke(this, EventArgs.Empty);
+            return;
+        }
+        finally
+        {
+            _creatingAuto = false;
+        }
+
+        await SaveSelectedNowAsync(ct).ConfigureAwait(true);
     }
 
     private void CancelPending()
