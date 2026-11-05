@@ -64,7 +64,7 @@ public class AiAccessPolicyTests
     [InlineData(ConnectionEnvironment.Development, false, false)]
     [InlineData(ConnectionEnvironment.Test, true, true)]
     public void Literal_masking_is_forced_on_production_and_follows_the_setting_elsewhere(ConnectionEnvironment env, bool setting, bool expected) =>
-        Assert.Equal(expected, AiAccessPolicy.MaskLiterals(Profile(env), setting));
+        Assert.Equal(expected, AiAccessPolicy.MaskLiterals(Profile(env), setting, localAi: false));
 
     [Fact]
     public void Sql_text_fields_name_the_plan_predicate_and_statement_fields()

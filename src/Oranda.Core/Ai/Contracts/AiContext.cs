@@ -17,6 +17,10 @@ namespace Oranda.Core.Ai.Contracts;
 /// 사용자가 시작 창에서 「위험 함수도 실행」 을 켰다(대화마다, 기본 꺼짐). 켜면 benchmark 가 자치 트랜잭션·외부 접근·확인 못 한 함수도
 /// 읽기 전용 트랜잭션 안에서 실행한다(자치 트랜잭션의 커밋은 읽기 전용이 막지 못한다). 끄면 실행하지 않고 커서 실측으로 대체한다.
 /// </param>
+/// <param name="LocalAi">
+/// 이 요청을 받는 곳이 사용자가 「로컬 AI」 로 지정한 프로필이다(D-045). 대화를 시작하는 쪽이 보낼 곳을 읽은 값으로 채우고, 게이트는 설정을 다시 읽지 않고 이 값만 본다.
+/// 켜져 있으면 값을 가리지 않는다(<see cref="AiAccessPolicy.MaskLiterals(bool, bool, bool)"/>·<see cref="AiAccessPolicy.DataLevel"/>).
+/// </param>
 public sealed record AiContext(
     string? ConnectionName,
     ConnectionEnvironment? Environment,
@@ -25,4 +29,5 @@ public sealed record AiContext(
     string? StatementText = null,
     string? SqlId = null,
     string? CurrentSchema = null,
-    bool AllowRiskyFunctions = false);
+    bool AllowRiskyFunctions = false,
+    bool LocalAi = false);

@@ -67,5 +67,6 @@ public sealed record AiRequest(
 /// 이 두 칸은 프로필을 기대할 때만 뜻이 있고, null 이면 비교하지 않는다.
 /// <paramref name="SystemCliId"/> 는 프로필이 아닌 시스템 CLI 를 기대할 때의 id 다(null = Claude Code). <paramref name="ProfileId"/> 가 있으면 보지 않는다.
 /// 기타 CLI(<c>custom:&lt;id&gt;</c>)를 기대할 때는 <paramref name="CustomCliCommandHash"/>(<c>AiCustomCliTarget.CommandHash</c>)가 같아야 한다: 확인 뒤에 명령만 고쳐도 다른 대상이다.
+/// <paramref name="LocalAi"/> 가 true 면 값을 가리지 않은 요청이다: 지금 프로필도 「로컬 AI」 로 지정되어 있어야 보낸다(지정을 풀었으면 <c>profile_changed</c>, D-045).
 /// </summary>
-public sealed record AiProfileExpectation(Guid? ProfileId, string? BaseUrl = null, Oranda.Core.Settings.AiApiFormat? Format = null, string? SystemCliId = null, string? CustomCliCommandHash = null);
+public sealed record AiProfileExpectation(Guid? ProfileId, string? BaseUrl = null, Oranda.Core.Settings.AiApiFormat? Format = null, string? SystemCliId = null, string? CustomCliCommandHash = null, bool LocalAi = false);

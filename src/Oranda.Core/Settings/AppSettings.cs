@@ -151,6 +151,17 @@ public sealed record AiLlmProfile
 
     /// <summary>이미지 입력 지원. null = 모름(보내 보고 서버 오류를 보여 준다).</summary>
     public bool? SupportsImages { get; init; }
+
+    /// <summary>
+    /// 사용자가 「로컬 AI」 로 지정할 때의 서버 주소(D-045). 지금 <see cref="BaseUrl"/> 과 같을 때만 효력이 있어, 주소를 고치면 지정이 풀린다.
+    /// 주소나 사설 대역으로 자동 판단하지 않는다. null = 지정하지 않음(기본).
+    /// </summary>
+    public string? LocalAiConfirmedUrl { get; init; }
+
+    /// <summary>이 프로필이 지금 주소로 「로컬 AI」 로 지정되어 있다: 값을 가리지 않고 보낸다(<c>AiAccessPolicy.MaskLiterals</c>).</summary>
+    [JsonIgnore]
+    public bool IsLocalAi =>
+        !string.IsNullOrWhiteSpace(LocalAiConfirmedUrl) && string.Equals(LocalAiConfirmedUrl.Trim(), BaseUrl.Trim(), StringComparison.Ordinal);
 }
 
 /// <summary>
@@ -188,7 +199,7 @@ public sealed record AiSettings
     public string? ExecutablePath { get; init; }
 
     /// <summary>
-    /// SQL 글의 리터럴 값을 <c>:v1</c> 로 바꿔 보낸다(연구서 §7.1). 운영 접속은 이 값과 관계없이 항상 가린다(<c>AiAccessPolicy.MaskLiterals</c>).
+    /// SQL 글의 리터럴 값을 <c>:v1</c> 로 바꿔 보낸다(연구서 §7.1). 운영 접속은 이 값과 관계없이 가리고, 「로컬 AI」 프로필로 보낼 때는 이 값과 운영 여부에 관계없이 가리지 않는다(<c>AiAccessPolicy.MaskLiterals</c>, D-045).
     /// </summary>
     public bool MaskLiterals { get; init; }
 

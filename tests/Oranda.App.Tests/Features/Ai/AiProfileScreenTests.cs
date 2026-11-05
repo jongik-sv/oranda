@@ -164,6 +164,35 @@ public class AiProfileScreenTests
     }
 
     [Fact]
+    public async Task Manager_window_shows_the_local_ai_switch_and_warns_about_plain_http_only_when_it_is_on() => await HeadlessHost.Run(async () =>
+    {
+        var profile = ProfileSamples.Example() with { BaseUrl = "http://192.0.2.10:8080/v1", Model = "example-model" };
+        var harness = await ProfileHarness.CreateAsync(ProfileSamples.With(profile));
+        var (window, model) = await OpenManagerAsync(harness, profile.Id);
+        try
+        {
+            var check = Find<CheckBox>(window, "LocalAiCheck");
+            Assert.False(check.IsChecked);
+            Assert.True(Find<TextBlock>(window, "LocalAiHintText").IsEffectivelyVisible);
+            Assert.False(Find<StackPanel>(window, "LocalAiPlainTextWarning").IsEffectivelyVisible);
+
+            check.IsChecked = true;
+            window.UpdateLayout();
+            Assert.True(model.LocalAi);
+            Assert.True(Find<StackPanel>(window, "LocalAiPlainTextWarning").IsEffectivelyVisible);
+            Render(window, "ai-profile-local-ai");
+
+            model.BaseUrl = "https://llm.example/v1";
+            window.UpdateLayout();
+            Assert.False(check.IsChecked); // 주소를 고치면 풀린다
+        }
+        finally
+        {
+            window.Close();
+        }
+    });
+
+    [Fact]
     public async Task Manager_window_shows_the_profile_list_the_seven_cards_and_the_result_band() => await HeadlessHost.Run(async () =>
     {
         var exampleProfile = ProfileSamples.Example() with { Model = "example-model", MaxInputTokens = 200000, MaxOutputTokens = 10000 };

@@ -188,7 +188,8 @@ public sealed class AiTuningLauncher(IServiceProvider services)
         }
 
         var (editor, driver, profile, settings, document, tabId, source, statement) = scope;
-        var context = new AiContext(profile.Name, profile.Environment, AiAccessPolicy.Effective(profile), tabId, statement?.Text);
+        var localAi = AiConversationTarget.From(settings).LocalAi;
+        var context = new AiContext(profile.Name, profile.Environment, AiAccessPolicy.Effective(profile), tabId, statement?.Text, LocalAi: localAi);
         if (context.AccessLevel == AiAccessLevel.Off)
         {
             await ReportFailureAsync(AiTuningFlow.CommandAccessOffText).ConfigureAwait(true);
@@ -196,7 +197,7 @@ public sealed class AiTuningLauncher(IServiceProvider services)
         }
 
         var env = new AiCommandStartEnv(
-            services, editor, profile, context, source, statement, document?.TabId, AiAccessPolicy.MaskLiterals(profile, settings.MaskLiterals));
+            services, editor, profile, context, source, statement, document?.TabId, AiAccessPolicy.MaskLiterals(profile, settings.MaskLiterals, localAi));
         var preparation = await spec.PrepareAsync(env, ct).ConfigureAwait(true);
         if (preparation.Target is not { } target)
         {
@@ -244,8 +245,9 @@ public sealed class AiTuningLauncher(IServiceProvider services)
             return;
         }
 
-        var context = new AiContext(profile.Name, profile.Environment, AiAccessPolicy.Effective(profile), tabId, statement?.Text);
-        var info = BuildStartInfo(statement, context, settings, AiAccessPolicy.MaskLiterals(profile, settings.MaskLiterals));
+        var localAi = AiConversationTarget.From(settings).LocalAi;
+        var context = new AiContext(profile.Name, profile.Environment, AiAccessPolicy.Effective(profile), tabId, statement?.Text, LocalAi: localAi);
+        var info = BuildStartInfo(statement, context, settings, AiAccessPolicy.MaskLiterals(profile, settings.MaskLiterals, localAi));
 
         var owner = (services.GetService(typeof(ShellController)) as ShellController)?.MainWindow;
         var choice = owner is null ? null : await TuningStartDialog.ShowAsync(owner, new TuningStartViewModel(info)).ConfigureAwait(true);
@@ -307,7 +309,11 @@ public sealed class AiTuningLauncher(IServiceProvider services)
             {
                 if (e.Section == "ai")
                 {
-                    Dispatcher.UIThread.Post(chat.RefreshActiveModel);
+                    Dispatcher.UIThread.Post(() =>
+                    {
+                        chat.RefreshActiveModel();
+                        _flow?.StopIfLocalAiLapsed();
+                    });
                 }
             });
         }
@@ -472,7 +478,7 @@ public sealed class AiTuningLauncher(IServiceProvider services)
         _profile = latest;
         return new AiGeneralScope(
             new AiContext(latest.Name, latest.Environment, AiAccessPolicy.Effective(latest)),
-            AiAccessPolicy.MaskLiterals(latest, globalMask),
+            AiAccessPolicy.MaskLiterals(latest, globalMask, localAi: false), // 「로컬 AI」 판단은 보낼 곳을 읽는 흐름이 한다
             latest.Id,
             sqlDocumentActive,
             UnsafeBinding: await UnsafeBindingAsync(ct).ConfigureAwait(true)); // 보이는 접속이 있어도 접속을 기다리는 PL/SQL 문서는 닫는다
@@ -608,8 +614,12 @@ public sealed class AiTuningLauncher(IServiceProvider services)
             Summarize(statement),
             SharedPoolLine: null,
             SendFirst: "문장 글 · 접속 별칭 · 환경 라벨 · AI 허용 수준",
-            SendOnRequest: "실제 계획 · 인덱스(열 순서·clustering factor) · 표·열 통계 · 히스토그램 개수",
-            NotSent: "행 값 · 히스토그램 끝값 · 바인드 값(로컬 실행에만 씀) · 비밀번호·호스트",
+            SendOnRequest: context.LocalAi
+                ? "실제 계획 · 인덱스(열 순서·clustering factor) · 표·열 통계 · 히스토그램 개수 · 히스토그램 끝값"
+                : "실제 계획 · 인덱스(열 순서·clustering factor) · 표·열 통계 · 히스토그램 개수",
+            NotSent: context.LocalAi
+                ? "비밀번호·주민번호·카드·계좌·주소 열의 히스토그램 끝값 · 바인드 값(로컬 실행에만 씀) · 비밀번호·호스트"
+                : "행 값 · 히스토그램 끝값 · 바인드 값(로컬 실행에만 씀) · 비밀번호·호스트",
             context,
             models,
             systemCli ? TuningStartInfo.DefaultModelId : profile is null ? configured ?? TuningStartInfo.DefaultModelId : models[0].Id,
@@ -678,7 +688,8 @@ public sealed class AiTuningLauncher(IServiceProvider services)
             (context, vault) => NewSessionFor(general: false, context, vault), // 시작 때 담은 값. 로컬 실행에만 쓴다(AI 로 보내지 않는다)
             RefreshContextAsync,
             services.GetService(typeof(ISqlLiteralMasker)) as ISqlLiteralMasker,
-            context => context.Environment == ConnectionEnvironment.Production || _profile is not { } profile || AiAccessPolicy.MaskLiterals(profile, MaskLiteralsSetting()),
+            context => _profile is not { } profile
+                || AiAccessPolicy.MaskLiterals(context.Environment == ConnectionEnvironment.Production || profile.Environment == ConnectionEnvironment.Production, MaskLiteralsSetting(), context.LocalAi),
             new HostEditorTabs(),
             (title, before, after) => SqlEditorHost.Current.Dialogs.ShowComparisonAsync(title, before, after, CancellationToken.None),
             ReadIndexesAsync,
@@ -699,7 +710,7 @@ public sealed class AiTuningLauncher(IServiceProvider services)
             ? (SessionTracker ?? source!.Track)(new AgentSession(new AgentRunScope(Guid.NewGuid().ToString("N"), profile, context)
             {
                 Literals = vault,
-                MaskLiteralsRequired = AiAccessPolicy.MaskLiterals(profile, MaskLiteralsSetting()), // 사전이 없어도 게이트가 SQL 도구를 닫게 한다
+                MaskLiteralsRequired = AiAccessPolicy.MaskLiterals(profile, MaskLiteralsSetting(), context.LocalAi), // 사전이 없어도 게이트가 SQL 도구를 닫게 한다
                 Binds = binds,
                 BenchmarkTimeoutSeconds = benchmarkTimeoutSeconds,
             }))
@@ -784,7 +795,7 @@ public sealed class AiTuningLauncher(IServiceProvider services)
         return await tuning.GetIndexColumnsAsync(db, effectiveOwner, table, ct).ConfigureAwait(true);
     }
 
-    /// <summary>설정의 리터럴 가림 값(운영 접속은 이 값과 관계없이 항상 가린다: <see cref="AiAccessPolicy.MaskLiterals"/>).</summary>
+    /// <summary>설정의 리터럴 가림 값(운영 접속과 「로컬 AI」 는 이 값과 관계없이 정해진다: <see cref="AiAccessPolicy.MaskLiterals(bool, bool, bool)"/>).</summary>
     private bool MaskLiteralsSetting() =>
         (services.GetService(typeof(SettingsService)) as SettingsService)?.Current.Ai.MaskLiterals ?? false;
 

@@ -196,6 +196,15 @@
               <TextBlock Text="{Binding ImagesNote}" Classes="hint" VerticalAlignment="Center" />
             </StackPanel>
 
+            <StackPanel Spacing="4">
+              <CheckBox x:Name="LocalAiCheck" IsChecked="{Binding LocalAi, Mode=TwoWay}" Content="{Binding LocalAiLabel}" />
+              <TextBlock x:Name="LocalAiHintText" Text="{Binding LocalAiHint}" Classes="hint" TextWrapping="Wrap" />
+              <StackPanel x:Name="LocalAiPlainTextWarning" Orientation="Horizontal" Spacing="6" IsVisible="{Binding ShowLocalAiPlainTextWarning}">
+                <ContentControl icons:ButtonIcon.Key="warn" icons:ButtonIcon.IconOnly="True" VerticalAlignment="Top" />
+                <TextBlock Text="{Binding LocalAiPlainTextWarningText}" Classes="warning-text" TextWrapping="Wrap" FontSize="{DynamicResource OrandaFontSizeSmall}" />
+              </StackPanel>
+            </StackPanel>
+
             <Grid ColumnDefinitions="*,*" ColumnSpacing="12">
               <StackPanel Spacing="4">
                 <TextBlock Text="최대 입력 토큰" Classes="fieldLabel" />

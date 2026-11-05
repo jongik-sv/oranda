@@ -143,8 +143,16 @@ public sealed partial class AiProfileManagerViewModel : ObservableObject, IDispo
     private string _name = string.Empty;
 
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(ShowPlainTextWarning), nameof(KeyPlaceholder))]
+    [NotifyPropertyChangedFor(nameof(ShowPlainTextWarning), nameof(KeyPlaceholder), nameof(ShowLocalAiPlainTextWarning))]
     private string _baseUrl = string.Empty;
+
+    /// <summary>「로컬 AI」 지정(D-045): 값을 가리지 않고 이 서버로 보낸다. 기본 꺼짐이고, 주소를 고치면 풀린다.</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(ShowLocalAiPlainTextWarning))]
+    private bool _localAi;
+
+    // 「로컬 AI」 로 지정할 때의 주소. 이 주소에서 벗어나면 지정을 푼다(글자 앞뒤 공백은 같은 주소다).
+    private string? _localAiUrl;
 
     [ObservableProperty]
     private string _modelName = string.Empty;
@@ -287,6 +295,20 @@ public sealed partial class AiProfileManagerViewModel : ObservableObject, IDispo
     public string PlainTextWarningText => _t.T("암호화하지 않은 HTTP 입니다. SQL 과 이미지가 암호화 없이 전달됩니다.",
         "This is plain HTTP. SQL and images are sent without encryption.");
 
+    public string LocalAiLabel => _t.T("로컬 AI (값을 가리지 않고 보냄)", "Local AI (send values unmasked)");
+
+    public string LocalAiHint => _t.T(
+        "켜면 운영 접속을 포함해 SQL 의 값, 주석, 오류 글, 히스토그램 끝값을 가리지 않고 이 서버로 보냅니다. 비밀번호, 주민번호, 카드, 계좌, 주소 열의 히스토그램 끝값은 계속 가립니다(열 이름으로 판단합니다). SQL 문장에 직접 쓴 값은 열과 관계없이 그대로 갑니다. 직접 관리하는 서버에만 켜세요. 서버 주소를 고치면 꺼집니다.",
+        "When on, SQL values, comments, error text and histogram endpoints go to this server unmasked, including on production connections. Histogram endpoints of password, resident number, card, account and address columns stay masked (judged by column name). Values written in SQL text go as they are, whatever the column. Turn it on only for a server you manage. Changing the server address turns it off.");
+
+    public bool ShowLocalAiPlainTextWarning => LocalAi && ShowPlainTextWarning;
+
+    private string LocalAiLapsedText => _t.T("주소가 바뀌어 「로컬 AI」 지정을 풀었습니다. 이 서버가 맞으면 다시 켜세요.",
+        "The address changed, so the Local AI setting was turned off. Turn it on again if this server is right.");
+
+    public string LocalAiPlainTextWarningText => _t.T("이 서버는 암호화하지 않은 HTTP 라서 가리지 않은 값이 암호화 없이 전달됩니다.",
+        "This server uses plain HTTP, so unmasked values are sent without encryption.");
+
     public string KeyLabelSuffix => SafeInfo(Preset)?.KeyRequirement == AiKeyRequirement.Optional ? _t.T("(선택)", "(optional)") : string.Empty;
 
     /// <summary>키 입력 칸에 흐리게 보이는 안내. 기존 키가 있으면 「비워 두면 그대로」, 지우기를 눌렀으면 그 사실을 알린다.</summary>
@@ -372,7 +394,8 @@ public sealed partial class AiProfileManagerViewModel : ObservableObject, IDispo
         }
 
         var format = profile.Format == AiApiFormat.OpenAi ? "OpenAI" : "Anthropic";
-        return _t.T($"{PresetName(SafeInfo(profile.Preset)!)} · {format} 형식", $"{PresetName(SafeInfo(profile.Preset)!)} · {format} format");
+        var local = profile.IsLocalAi ? _t.T(" · 로컬 AI", " · Local AI") : string.Empty;
+        return _t.T($"{PresetName(SafeInfo(profile.Preset)!)} · {format} 형식", $"{PresetName(SafeInfo(profile.Preset)!)} · {format} format") + local;
     }
 
     private void ReloadItems()
@@ -458,6 +481,8 @@ public sealed partial class AiProfileManagerViewModel : ObservableObject, IDispo
             Format = profile.Format == AiApiFormat.Unknown ? AiApiFormat.Anthropic : profile.Format;
             Name = profile.Name;
             BaseUrl = profile.BaseUrl;
+            LocalAi = profile.IsLocalAi;
+            _localAiUrl = LocalAi ? BaseUrl.Trim() : null;
             ModelName = profile.Model;
             MaxInputTokensText = profile.MaxInputTokens.ToString(CultureInfo.InvariantCulture);
             MaxOutputTokensText = profile.MaxOutputTokens.ToString(CultureInfo.InvariantCulture);
@@ -493,6 +518,8 @@ public sealed partial class AiProfileManagerViewModel : ObservableObject, IDispo
             Format = draft.Format;
             Name = PresetName(SafeInfo(preset)!);
             BaseUrl = draft.BaseUrl;
+            LocalAi = false;
+            _localAiUrl = null;
             ModelName = string.Empty;
             MaxInputTokensText = draft.MaxInputTokens.ToString(CultureInfo.InvariantCulture);
             MaxOutputTokensText = draft.MaxOutputTokens.ToString(CultureInfo.InvariantCulture);
@@ -607,6 +634,7 @@ public sealed partial class AiProfileManagerViewModel : ObservableObject, IDispo
             return;
         }
 
+        var localBefore = LocalAi;
         var previous = SafeInfo(Preset);
         var draft = AiProfilePresets.NewDraft(preset);
         var next = SafeInfo(preset)!;
@@ -649,6 +677,11 @@ public sealed partial class AiProfileManagerViewModel : ObservableObject, IDispo
                 "The server changed, so the API key you typed was cleared. Enter the key for the new server."));
         }
 
+        if (localBefore && !LocalAi)
+        {
+            SetResult(AiResultKind.Info, keyDropped ? ResultText + " " + LocalAiLapsedText : LocalAiLapsedText); // 주소가 바뀌어 지정이 풀렸다는 안내가 위 초기화에 지워지지 않게 한다
+        }
+
         MarkSelected();
     }
 
@@ -671,8 +704,18 @@ public sealed partial class AiProfileManagerViewModel : ObservableObject, IDispo
 
         switch (e.PropertyName)
         {
+            case nameof(LocalAi):
+                _localAiUrl = LocalAi ? BaseUrl.Trim() : null;
+                goto case nameof(Name);
             case nameof(BaseUrl):
             case nameof(Format):
+                // 지정한 서버와 다른 주소가 되면 값을 가리지 않는 지정을 잇지 않는다(다시 확인하게 한다).
+                if (LocalAi && !string.Equals(BaseUrl.Trim(), _localAiUrl, StringComparison.Ordinal))
+                {
+                    LocalAi = false;
+                    SetResult(AiResultKind.Info, LocalAiLapsedText);
+                }
+
                 if (IsBusy)
                 {
                     CancelOperation(); // 바뀌기 전 주소로 보낸 조회는 결과를 버린다
@@ -811,6 +854,7 @@ public sealed partial class AiProfileManagerViewModel : ObservableObject, IDispo
             MaxInputTokens = input,
             MaxOutputTokens = output,
             SupportsImages = SupportsImages,
+            LocalAiConfirmedUrl = LocalAi ? BaseUrl.Trim() : null,
         };
     }
 

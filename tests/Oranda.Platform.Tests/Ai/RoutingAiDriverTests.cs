@@ -287,6 +287,26 @@ public sealed class RoutingAiDriverTests
     }
 
     [Fact]
+    public async Task An_unmasked_request_goes_only_to_a_profile_that_is_still_local_ai()
+    {
+        var api = new ScriptedApiDriver(new AiFinal("답", null, null));
+        var local = OpenAiProfile with { LocalAiConfirmedUrl = OpenAiProfile.BaseUrl };
+        var expected = new AiProfileExpectation(OpenAiProfile.Id, OpenAiProfile.BaseUrl, AiApiFormat.OpenAi, LocalAi: true);
+
+        Use(AiDriverKind.ClaudeCode, OpenAiProfile.Id, OpenAiProfile); // 지정을 풀었다
+        Assert.Equal("profile_changed", CodeOf(await RunAsync(Create(api), Request with { Expected = expected })));
+        Assert.Empty(api.Requests);
+
+        Use(AiDriverKind.ClaudeCode, OpenAiProfile.Id, local with { BaseUrl = "http://192.0.2.11:8080" }); // 주소를 고쳤다: 지정이 풀린다
+        Assert.Equal("profile_changed", CodeOf(await RunAsync(Create(api), Request with { Expected = expected with { BaseUrl = "http://192.0.2.11:8080" } })));
+        Assert.Empty(api.Requests);
+
+        Use(AiDriverKind.ClaudeCode, OpenAiProfile.Id, local);
+        Assert.IsType<AiFinal>(Assert.Single(await RunAsync(Create(api), Request with { Expected = expected })));
+        Assert.IsType<AiFinal>(Assert.Single(await RunAsync(Create(api), Request with { Expected = expected with { LocalAi = false } }))); // 가린 요청은 로컬 AI 로 가도 된다
+    }
+
+    [Fact]
     public async Task The_checks_run_in_a_fixed_order_reset_then_none_then_changed_then_profile_state()
     {
         var api = new ScriptedApiDriver();

@@ -61,6 +61,7 @@ public sealed partial class AiTuningFlow
         // 기타 CLI 는 DB 도구가 없고 값을 가려 보낼 수 없다: 지원하지 않는 명령·쓸 수 없는 줄·가림 대상 접속은 DB 를 읽기 전에 여기서 닫는다.
         // 아래 _route 와 같은 값으로 판단해, 확인한 뒤 설정이 바뀌어도 어긋나지 않게 한다.
         var route = CurrentTarget();
+        context = context with { LocalAi = route?.LocalAi == true }; // 값을 가릴지도 실제 전송처(_route)와 같은 값으로 정한다(D-045)
         var custom = AiTuningCustomCli.IsCustom(route);
         if (custom && !CustomCliCommandAllowed(spec, route!, context))
         {

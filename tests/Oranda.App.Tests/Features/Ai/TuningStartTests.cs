@@ -146,6 +146,15 @@ public class TuningStartTests
     }
 
     [Fact]
+    public void A_production_start_on_local_ai_says_values_go_unmasked()
+    {
+        var info = Info(AiAccessLevel.Query, ConnectionEnvironment.Production);
+        var vm = new TuningStartViewModel(info with { Context = info.Context with { LocalAi = true } });
+
+        Assert.Equal(TuningStartViewModel.ProductionNoticeLocalAiText, vm.ProductionNotice);
+    }
+
+    [Fact]
     public void Production_connection_at_query_level_may_benchmark_but_starts_with_it_off_and_shows_the_notice()
     {
         var vm = new TuningStartViewModel(Info(AiAccessLevel.Query, ConnectionEnvironment.Production));

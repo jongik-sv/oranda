@@ -250,7 +250,8 @@ internal sealed class RoutingAiDriver : IAiDriver
 
     private static bool MatchesExpectation(AiProfileExpectation expected, AiLlmProfile profile) =>
         (expected.BaseUrl is null || string.Equals(expected.BaseUrl.Trim(), profile.BaseUrl.Trim(), StringComparison.Ordinal))
-        && (expected.Format is null || expected.Format == profile.Format);
+        && (expected.Format is null || expected.Format == profile.Format)
+        && (!expected.LocalAi || profile.IsLocalAi); // 값을 가리지 않은 요청은 지금도 「로컬 AI」 로 지정된 프로필로만 나간다(D-045)
 
     private async Task<Selection> SelectProfileAsync(AiLlmProfile profile, CancellationToken ct)
     {

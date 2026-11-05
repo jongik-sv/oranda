@@ -154,7 +154,7 @@ public sealed partial class AgentGate : IAgentGate
             // 분석기·DB 세션 선택 같은 협력 객체의 실패도 예외로 새지 않게 한다(감사 한 줄은 남아야 한다).
             outcome = ex is OperationCanceledException && session.IsRevoked
                 ? Deny("run_revoked", "This run has ended and no longer accepts tool calls.")
-                : Fail("internal_error", ExceptionText(ex, level, session.Run.Literals));
+                : Fail("internal_error", ExceptionText(ex, session.DataLevel, session.Run.Literals));
         }
 
         return await FinishAsync(session, level, requested, shown, sequence, state, outcome, _time.GetElapsedTime(started)).ConfigureAwait(false);
@@ -231,6 +231,7 @@ public sealed partial class AgentGate : IAgentGate
         // 리터럴 가림이 켜져 있는가는 첫 거부보다 먼저 정한다(어느 거부든 감사 요약에 literals=masked 가 남도록).
         var literals = session.Run.Literals;
         state.LiteralMasking = literals is not null && _masker is not null;
+        state.LocalAi = session.Context.LocalAi;
 
         if (CleanArguments(tool, arguments, state.Clean) is { } invalid)
         {
@@ -274,9 +275,10 @@ public sealed partial class AgentGate : IAgentGate
             return Deny("explain_plan_disabled", "EXPLAIN PLAN is not allowed for this connection.");
         }
 
-        // 리터럴 가림(설계 ai-tuning-2): 사전이 있으면 가림 켜짐이고 운영 접속은 항상 필요하다. 필요한데 사전이나 마스커가 없으면
+        // 리터럴 가림(설계 ai-tuning-2): 사전이 있으면 가림 켜짐이고, 운영 접속은 「로컬 AI」 실행이 아니면 항상 필요하다(D-045). 필요한데 사전이나 마스커가 없으면
         // SQL 을 다루는 도구를 막는다(닫힌 쪽으로 실패). 켜져 있으면 인자의 자리표시를 원래 글로 되돌린 뒤 범위 검사를 한다.
-        if (TouchesSql(tool.Name) && (production || session.Run.MaskLiteralsRequired || literals is not null))
+        if (TouchesSql(tool.Name)
+            && (AiAccessPolicy.MaskLiterals(production, session.Run.MaskLiteralsRequired, session.Context.LocalAi) || literals is not null))
         {
             if (!state.LiteralMasking)
             {
@@ -307,10 +309,12 @@ public sealed partial class AgentGate : IAgentGate
             return Fail("not_implemented", "This tool is not implemented yet.");
         }
 
+        // 처리자에게는 값을 판단할 수준을 넘긴다(히스토그램 끝값을 읽을지 정한다). 도구 허용과 실행 여부는 위에서 level 로 판단했다.
+        var dataLevel = session.DataLevel;
         var invocation = new AgentToolInvocation(
             session,
             db,
-            level,
+            dataLevel,
             state.Clean,
             state.Resolved,
             ExplainPlanAllowed: level >= AiAccessLevel.Plan && explainPlanEnabled,
@@ -336,7 +340,7 @@ public sealed partial class AgentGate : IAgentGate
             }
 
             LogFailure(session, tool.Name, ex.GetType().Name, ex.Message);
-            return FailWithKind("tool_exception", ExceptionText(ex, level, session.Run.Literals), ex.Message);
+            return FailWithKind("tool_exception", ExceptionText(ex, dataLevel, session.Run.Literals), ex.Message);
         }
 
         // 처리자가 도는 동안 폐기됐으면 결과를 쓰지 않는다(sql_id 도 기억하지 않는다).
@@ -355,15 +359,16 @@ public sealed partial class AgentGate : IAgentGate
             LogFailure(session, tool.Name, output.ErrorMessage!, output.LogDetail);
 
             // 앱이 쓴 거부 글(도구 상자의 거부)은 어느 수준에서든 정화해 보인다: 모델이 무엇을 고칠지 알아야 같은 실수를 되풀이하지 않는다.
+            var errorText = LocalAiErrorText(session, output);
             var shownError = output.AppWritten
-                ? SanitizeError(session.Run.Literals?.Redact(output.ErrorMessage!) ?? output.ErrorMessage!)
-                : HandlerErrorText(output.ErrorMessage!, level, session.Run.Literals);
+                ? SanitizeError(session.Run.Literals?.Redact(errorText) ?? errorText)
+                : HandlerErrorText(errorText, dataLevel, session.Run.Literals);
             return FailWithKind("tool_failed", shownError, output.ErrorMessage!);
         }
 
         // 처리자가 캐시 노드를 돌려줄 수 있으므로 복사본에서 가린다.
         var result = output.Result?.DeepClone() ?? new JsonObject();
-        var removed = MaskRowValues(ref result, tool.Name, level, state.Clean);
+        var removed = MaskRowValues(ref result, tool.Name, dataLevel, state.Clean, session.Context.LocalAi);
 
         // 결과의 SQL 글·술어 칸(AgentFields.SqlTextFields)에서 리터럴을 가린다. 가릴 수 없는 모양의 결과는 내지 않는다.
         if (state.LiteralMasking)
@@ -377,7 +382,7 @@ public sealed partial class AgentGate : IAgentGate
         }
 
         // 가릴 수 없는 모양의 결과(문자열·숫자 루트, JSON 글이 든 문자열)는 행 값이 숨어 있을 수 있어 내지 않는다.
-        if (level < AiAccessLevel.QueryRows && !IsMaskableShape(result))
+        if (dataLevel < AiAccessLevel.QueryRows && !IsMaskableShape(result))
         {
             return Deny("unsafe_result", "The tool result has a shape whose row values cannot be masked; it was withheld.");
         }
@@ -474,6 +479,30 @@ public sealed partial class AgentGate : IAgentGate
 
         var ora = OraNumber().Match(message);
         return ora.Success ? ora.Value + ": " + FailedGenericText : FailedGenericText;
+    }
+
+    /// <summary>
+    /// LLM 에 보일 처리자 오류 글. 처리자는 DB 오류를 번호만 남기고 원문을 <see cref="AgentToolOutput.LogDetail"/> 에 둔다.
+    /// 「로컬 AI」 실행에는 원문을 덧붙이되(D-045), 바인드 값은 AI 로 보내지 않으므로 먼저 가린다. 바인드 값을 글자로 확실히 맞출 수 없으면 원문을 붙이지 않는다.
+    /// </summary>
+    private static string LocalAiErrorText(AgentSession session, AgentToolOutput output)
+    {
+        if (!session.Context.LocalAi || string.IsNullOrWhiteSpace(output.LogDetail))
+        {
+            return output.ErrorMessage!;
+        }
+
+        var forms = new List<string>();
+        foreach (var bind in session.Run.Binds.Values)
+        {
+            if (!TryAddBindForms(bind, forms))
+            {
+                return output.ErrorMessage!;
+            }
+        }
+
+        forms = [.. forms.Distinct(StringComparer.Ordinal).OrderByDescending(f => f.Length)];
+        return output.ErrorMessage + " " + Redact(output.LogDetail, null, forms);
     }
 
     /// <summary>
@@ -669,6 +698,9 @@ public sealed partial class AgentGate : IAgentGate
 
         /// <summary>이 호출에 리터럴 가림이 켜져 있다(사전과 마스커가 모두 있다). 감사 기록의 인자 요약에 <c>literals=masked</c> 로 남는다.</summary>
         public bool LiteralMasking { get; set; }
+
+        /// <summary>이 호출은 「로컬 AI」 실행이다(값을 가리지 않는다, D-045). 감사 기록의 인자 요약에 <c>data=local_ai</c> 로 남는다.</summary>
+        public bool LocalAi { get; set; }
 
         /// <summary>되돌리기 전, LLM 이 보낸 <c>sql</c> 인자(가린 글)의 길이. 감사 요약이 쓴다. 되돌리지 않았으면 null.</summary>
         public int? MaskedSqlLength { get; set; }

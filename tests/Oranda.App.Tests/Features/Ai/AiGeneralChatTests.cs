@@ -1415,6 +1415,228 @@ public class AiGeneralChatTests
         Assert.Single(h.Driver.Requests);
     }
 
+    // ── 로컬 AI(D-045): 보낼 곳을 읽은 값으로 가림을 정하고, 지정을 풀면 이어 보내지 않는다 ──
+
+    private static AiSettings LocalProfile()
+    {
+        var settings = Profile();
+        return settings with { Profiles = [settings.Profiles[0] with { LocalAiConfirmedUrl = settings.Profiles[0].BaseUrl }] };
+    }
+
+    private static readonly AiContext ProductionConnection = new("ERP", ConnectionEnvironment.Production, AiAccessLevel.Query);
+
+    [Fact]
+    public void The_target_is_local_only_for_a_confirmed_profile_and_a_toggle_makes_it_another_target()
+    {
+        var plain = AiConversationTarget.From(Profile());
+        var local = AiConversationTarget.From(LocalProfile());
+
+        Assert.False(plain.LocalAi);
+        Assert.True(local.LocalAi);
+        Assert.False(plain.IsSameAs(local));
+        Assert.True(local.ToExpectation().LocalAi);
+        Assert.False(plain.ToExpectation().LocalAi);
+
+        var moved = LocalProfile();
+        moved = moved with { Profiles = [moved.Profiles[0] with { BaseUrl = "http://192.0.2.11:8080" }] };
+        Assert.False(AiConversationTarget.From(moved).LocalAi); // 주소를 고치면 풀린다
+        Assert.False(AiConversationTarget.From(new AiSettings()).LocalAi); // Claude Code 는 프로필이 아니다
+    }
+
+    [Fact]
+    public async Task General_chat_on_local_ai_sends_the_real_values_without_asking_and_marks_the_run()
+    {
+        var h = new Harness(withMasker: true) { Mask = true, Connected = ProductionConnection, Settings = LocalProfile() };
+        h.Editor.TabConnectionId = h.ConnectionId;
+
+        await h.SendAsync("이 문장 설명해 줘");
+
+        var request = Assert.Single(h.Driver.Requests);
+        Assert.Contains("'10'", request.Prompt, StringComparison.Ordinal); // 값을 가리지 않았다
+        Assert.DoesNotContain(":v1", request.Prompt, StringComparison.Ordinal);
+        Assert.Empty(h.TextConfirmed); // 가리지 않는 대화라 확인 창이 없다
+        Assert.True(request.Expected!.LocalAi);
+        Assert.True(request.Context.LocalAi);
+        Assert.True(Assert.Single(h.SessionContexts).LocalAi); // 게이트는 시작 때 담은 이 값을 본다
+        Assert.Null(request.Session!.Run.Literals);
+    }
+
+    [Fact]
+    public async Task General_chat_on_an_ordinary_profile_still_masks_a_production_connection()
+    {
+        var h = new Harness(withMasker: true) { Mask = true, Connected = ProductionConnection };
+        h.Editor.TabConnectionId = h.ConnectionId;
+
+        await h.SendAsync("이 문장 설명해 줘");
+
+        var request = Assert.Single(h.Driver.Requests);
+        Assert.DoesNotContain("'10'", request.Prompt, StringComparison.Ordinal);
+        Assert.Contains(":v1", request.Prompt, StringComparison.Ordinal);
+        Assert.Single(h.TextConfirmed);
+        Assert.False(request.Expected!.LocalAi);
+        Assert.False(request.Context.LocalAi);
+    }
+
+    [Fact]
+    public async Task Turning_local_ai_off_starts_a_new_masked_conversation_instead_of_continuing()
+    {
+        var h = new Harness(withMasker: true) { Mask = true, Connected = ProductionConnection, Settings = LocalProfile() };
+        h.Editor.TabConnectionId = h.ConnectionId;
+        await h.SendAsync("첫 질문");
+        Assert.NotNull(h.Chat.ResumeId);
+
+        h.Settings = Profile(); // 같은 프로필의 지정만 풀었다
+        await h.SendAsync("다음 질문");
+
+        Assert.Equal(2, h.Driver.Requests.Count);
+        var next = h.Driver.Requests[1];
+        Assert.Null(next.ResumeId); // 가리지 않은 앞 대화를 이어 보내지 않는다
+        Assert.Contains(h.Chat.Entries.OfType<ChatAssistantEntry>(), e => e.Text == AiTuningFlow.GeneralTargetChangedText);
+        Assert.DoesNotContain("'10'", next.Prompt, StringComparison.Ordinal);
+        Assert.False(next.Expected!.LocalAi);
+    }
+
+    private static AiTuningFlow TuningFlow(FakeEditor editor, IAiDriver driver, AiChatViewModel chat, Func<AiSettings> settings, List<AiContext>? sessions = null) => new(
+        editor, driver, chat, (_, _, _) => { },
+        sessionFactory: (context, vault) =>
+        {
+            sessions?.Add(context);
+            return new AgentSession(new AgentRunScope("run-t", new ConnectionProfile(context.ConnectionName ?? "x", "u", "h/s"), context) { Literals = vault });
+        },
+        masker: new PassThroughMasker(),
+        maskRequired: context => AiAccessPolicy.MaskLiterals(production: true, setting: false, context.LocalAi),
+        settings: settings);
+
+    [Fact]
+    public async Task Tuning_on_local_ai_sends_the_original_statement_with_no_vault()
+    {
+        var driver = new RecordingDriver();
+        var sessions = new List<AiContext>();
+
+        await TuningFlow(new FakeEditor(), driver, new AiChatViewModel(), LocalProfile, sessions).StartAsync(new TuningStartChoice(false, false, "default"), ProductionConnection);
+
+        var request = Assert.Single(driver.Requests);
+        Assert.Contains("'10'", request.Prompt, StringComparison.Ordinal);
+        Assert.True(request.Expected!.LocalAi);
+        Assert.True(Assert.Single(sessions).LocalAi);
+        Assert.Null(request.Session!.Run.Literals);
+    }
+
+    [Fact]
+    public async Task Tuning_on_an_ordinary_profile_masks_the_statement()
+    {
+        var driver = new RecordingDriver();
+
+        await TuningFlow(new FakeEditor(), driver, new AiChatViewModel(), () => Profile()).StartAsync(new TuningStartChoice(false, false, "default"), ProductionConnection);
+
+        var request = Assert.Single(driver.Requests);
+        Assert.DoesNotContain("'10'", request.Prompt, StringComparison.Ordinal);
+        Assert.False(request.Expected!.LocalAi);
+        Assert.NotNull(request.Session!.Run.Literals);
+    }
+
+    [Fact]
+    public async Task A_tuning_follow_up_is_refused_after_local_ai_was_turned_off()
+    {
+        var driver = new RecordingDriver();
+        var chat = new AiChatViewModel();
+        var settings = LocalProfile();
+        var flow = TuningFlow(new FakeEditor(), driver, chat, () => settings);
+        await flow.StartAsync(new TuningStartChoice(false, false, "default"), ProductionConnection);
+
+        settings = Profile();
+        await flow.FollowUpAsync("계속");
+
+        Assert.Single(driver.Requests); // 가리지 않은 앞 글이 지정을 푼 곳으로 이어지지 않는다
+    }
+
+    [Fact]
+    public async Task A_tuning_follow_up_keeps_the_flag_while_the_target_stays_local()
+    {
+        var driver = new RecordingDriver();
+        var sessions = new List<AiContext>();
+        var flow = TuningFlow(new FakeEditor(), driver, new AiChatViewModel(), LocalProfile, sessions);
+        await flow.StartAsync(new TuningStartChoice(false, false, "default"), ProductionConnection);
+
+        await flow.FollowUpAsync("계속");
+
+        Assert.Equal(2, driver.Requests.Count);
+        Assert.True(driver.Requests[1].Expected!.LocalAi);
+        Assert.All(sessions, context => Assert.True(context.LocalAi));
+    }
+
+    [Fact]
+    public async Task A_running_local_ai_conversation_stops_when_the_mark_is_removed()
+    {
+        var driver = new RecordingDriver { Gate = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously) };
+        var chat = new AiChatViewModel();
+        var settings = LocalProfile();
+        var flow = TuningFlow(new FakeEditor(), driver, chat, () => settings);
+        var run = flow.StartAsync(new TuningStartChoice(false, false, "default"), ProductionConnection);
+        while (driver.Requests.Count == 0)
+        {
+            await Task.Delay(5);
+        }
+
+        Assert.False(flow.StopIfLocalAiLapsed()); // 설정이 그대로면 멈추지 않는다
+
+        settings = Profile();
+        Assert.True(flow.StopIfLocalAiLapsed());
+        Assert.Contains(chat.Entries.OfType<ChatAssistantEntry>(), e => e.Text == AiTuningFlow.LocalAiLapsedText);
+
+        driver.Gate.SetResult();
+        await run;
+        Assert.False(flow.StopIfLocalAiLapsed()); // 돌고 있지 않으면 할 일이 없다
+    }
+
+    [Fact]
+    public async Task A_running_ordinary_conversation_is_not_stopped_by_a_settings_change()
+    {
+        var driver = new RecordingDriver { Gate = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously) };
+        var settings = Profile();
+        var flow = TuningFlow(new FakeEditor(), driver, new AiChatViewModel(), () => settings);
+        var run = flow.StartAsync(new TuningStartChoice(false, false, "default"), ProductionConnection);
+        while (driver.Requests.Count == 0)
+        {
+            await Task.Delay(5);
+        }
+
+        settings = LocalProfile();
+        Assert.False(flow.StopIfLocalAiLapsed());
+
+        driver.Gate.SetResult();
+        await run;
+    }
+
+    [Fact]
+    public void The_start_dialog_lists_what_a_local_ai_run_sends_and_keeps_the_old_text_otherwise()
+    {
+        var plain = AiTuningLauncher.BuildStartInfo(null, Connection, Profile());
+        var local = AiTuningLauncher.BuildStartInfo(null, Connection with { LocalAi = true }, LocalProfile());
+
+        Assert.StartsWith("행 값 · 히스토그램 끝값", plain.NotSent, StringComparison.Ordinal);
+        Assert.DoesNotContain("히스토그램 끝값", plain.SendOnRequest, StringComparison.Ordinal);
+        Assert.Contains("히스토그램 끝값", local.SendOnRequest, StringComparison.Ordinal);
+        Assert.StartsWith("비밀번호·주민번호·카드·계좌·주소 열의 히스토그램 끝값", local.NotSent, StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData(true, false)]
+    [InlineData(false, true)]
+    public void A_session_for_local_ai_does_not_require_masking_even_on_production(bool localAi, bool required)
+    {
+        var launcher = new AiTuningLauncher(new Services([]))
+        {
+            SessionTracker = session => session,
+            ActiveProfile = new ConnectionProfile("ERP", "scott", "h/s", Id: Guid.NewGuid(), Environment: ConnectionEnvironment.Production),
+        };
+
+        var session = launcher.NewSessionFor(general: true, ProductionConnection with { LocalAi = localAi }, null)!;
+
+        Assert.Equal(required, session.Run.MaskLiteralsRequired);
+        Assert.Equal(localAi, session.Context.LocalAi);
+    }
+
     // ── 재리뷰: 튜닝 바인드·대화 대조·창·로그 ──
 
     [Fact]

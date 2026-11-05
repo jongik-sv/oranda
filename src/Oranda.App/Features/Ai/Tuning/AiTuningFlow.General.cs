@@ -149,6 +149,13 @@ public sealed partial class AiTuningFlow
         // 기타 CLI 는 글만 주고받는다: 이미지·편집기 문장·DB 도구를 쓰지 않고, 값을 가려 보낼 수 없으므로 가림 대상 접속에는 보내지 않는다.
         // 보낼 곳은 아래 요청의 기대값(_route)이 되는 같은 값으로 한 번만 읽어, 판단과 실제 전송처가 어긋나지 않게 한다.
         var now = CurrentTarget();
+
+        // 「로컬 AI」 로 보내면 가리지 않는다(D-045). 접속 쪽 판단(scope)을 받아 보낼 곳과 같은 값으로 여기서 한 번만 정한다.
+        if (now?.LocalAi == true)
+        {
+            scope = scope with { Masking = false, Context = scope.Context is { } local ? local with { LocalAi = true } : null };
+        }
+
         var custom = AiTuningCustomCli.IsCustom(now);
         if (custom && !CustomCliGeneralAllowed(followUp, now!, scope))
         {

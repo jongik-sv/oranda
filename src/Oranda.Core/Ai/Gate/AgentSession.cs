@@ -35,8 +35,8 @@ public sealed record AgentRunScope(string RunId, ConnectionProfile Profile, AiCo
     public LiteralVault? Literals { get; init; }
 
     /// <summary>
-    /// 이 실행에 리터럴 가림이 필요하다(시작하는 쪽이 <see cref="AiAccessPolicy.MaskLiterals"/> 로 채운다: 운영이거나 설정이 켜짐).
-    /// 참인데 <see cref="Literals"/> 가 없으면 게이트가 SQL 을 다루는 도구를 막는다. 운영 접속은 이 값과 관계없이 항상 필요로 본다.
+    /// 이 실행에 리터럴 가림이 필요하다(시작하는 쪽이 <see cref="AiAccessPolicy.MaskLiterals(ConnectionProfile, bool, bool)"/> 로 채운다).
+    /// 참인데 <see cref="Literals"/> 가 없으면 게이트가 SQL 을 다루는 도구를 막는다. 운영 접속은 「로컬 AI」 실행(<see cref="AiContext.LocalAi"/>)이 아니면 이 값과 관계없이 필요로 본다.
     /// </summary>
     public bool MaskLiteralsRequired { get; init; }
 
@@ -116,6 +116,9 @@ public sealed class AgentSession : IDisposable
             return requested < effective ? requested : effective;
         }
     }
+
+    /// <summary>값(행 값 필드·오류 글)을 판단할 수준: 시작 때 담은 「로컬 AI」 값으로 <see cref="AiAccessPolicy.DataLevel"/> 을 구한다. 쓸 수 있는 도구는 <see cref="Level"/> 이 정한다.</summary>
+    public AiAccessLevel DataLevel => AiAccessPolicy.DataLevel(Level, Context.LocalAi);
 
     /// <summary>
     /// 폐기됐는가. 폐기된 세션의 도구 호출은 이미 연결된 파이프에서도 게이트가 거부한다.

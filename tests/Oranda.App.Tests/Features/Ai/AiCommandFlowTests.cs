@@ -5,6 +5,7 @@ using Oranda.App.Features.Ai.Chat;
 using Oranda.App.Features.Ai.Tuning;
 using Oranda.App.Features.Ai.Tuning.Commands;
 using Oranda.Core.Ai.Access;
+using Oranda.Core.Settings;
 using Oranda.Core.Ai.Contracts;
 using Oranda.Core.Ai.Gate;
 using Oranda.Core.Ai.Schemas;
@@ -161,6 +162,8 @@ public class AiCommandFlowTests
 
         public bool Mask { get; set; }
 
+        public AiSettings? Settings { get; set; }
+
         public List<(string Title, string Text)> Tabs { get; } = [];
 
         public List<(string Kind, AgentSession Session, LiteralVault? Vault)> Sessions { get; } = [];
@@ -174,8 +177,9 @@ public class AiCommandFlowTests
             generalSessionFactory: (c, v) => MakeSession("general", c, v),
             refreshContext: (context, _) => Task.FromResult<AiContext?>(context with { AccessLevel = AiAccessLevel.QueryRows }), // 접속의 지금 수준으로 되돌아온다(launcher 와 같다)
             masker: Masker,
-            maskRequired: _ => Mask,
-            previewEdit: Editor.Preview);
+            maskRequired: context => AiAccessPolicy.MaskLiterals(production: false, setting: Mask, context.LocalAi),
+            previewEdit: Editor.Preview,
+            settings: Settings is null ? null : () => Settings);
 
         private AgentSession MakeSession(string kind, AiContext context, LiteralVault? vault)
         {
@@ -190,6 +194,25 @@ public class AiCommandFlowTests
             Flow.StartCommandAsync(spec, new AiCommandTarget(Statement(text ?? Cursor), sqlId), Full);
 
         public IEnumerable<string> AssistantTexts => Chat.Entries.OfType<ChatAssistantEntry>().Select(e => e.Text);
+    }
+
+    [Fact]
+    public async Task A_command_sent_to_local_ai_keeps_literals_and_comment_bodies_even_where_masking_is_on()
+    {
+        var id = Guid.NewGuid();
+        var profile = new AiLlmProfile { Id = id, Name = "로컬", Preset = AiProfilePreset.Custom, Format = AiApiFormat.OpenAi, BaseUrl = "http://192.0.2.10:8080/v1", Model = "m", LocalAiConfirmedUrl = "http://192.0.2.10:8080/v1" };
+        var rig = new Rig { Mask = true, Settings = new AiSettings { Profiles = [profile], ActiveProfileId = id } };
+        rig.Driver.Result = JsonDocument.Parse(ResultJson).RootElement.Clone();
+
+        await rig.StartCommand(new FreeSpec());
+
+        var request = Assert.Single(rig.Driver.Requests);
+        Assert.Contains("SECRET", request.Prompt, StringComparison.Ordinal);
+        Assert.Contains("메모본문", request.Prompt, StringComparison.Ordinal);
+        Assert.Contains("가리지 않고 보냈습니다", rig.AssistantTexts.First(), StringComparison.Ordinal);
+        Assert.Null(Assert.Single(rig.Sessions).Vault);
+        Assert.True(request.Context.LocalAi);
+        Assert.True(request.Expected!.LocalAi);
     }
 
     [Fact]

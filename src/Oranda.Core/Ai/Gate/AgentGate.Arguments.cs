@@ -173,13 +173,18 @@ public sealed partial class AgentGate
     /// </summary>
     private static string? SummarizeArguments(CallState state)
     {
-        if (state.Clean.Count == 0 && !state.LiteralMasking && state.UserFunctionCount == 0 && state.FirstSubstitution is null)
+        if (state.Clean.Count == 0 && !state.LiteralMasking && !state.LocalAi && state.UserFunctionCount == 0 && state.FirstSubstitution is null)
         {
             return null;
         }
 
         // 가림 표시는 400자 제한에 잘리지 않도록 맨 앞에 둔다.
         var parts = new List<string>();
+        if (state.LocalAi)
+        {
+            parts.Add("data=local_ai");
+        }
+
         if (state.UserFunctionCount > 0)
         {
             parts.Add("user_functions=" + state.UserFunctionCount.ToString(CultureInfo.InvariantCulture));

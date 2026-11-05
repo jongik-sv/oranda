@@ -20,15 +20,17 @@ public sealed partial class AgentGate
     /// <item><description><see cref="AiAccessLevel.QueryRows"/> 미만: 모든 깊이에서 <see cref="AgentFields.RowValueFields"/> 속성을 지운다.</description></item>
     /// <item><description><see cref="AiAccessLevel.QueryRows"/>: <c>get_histogram</c> 의 <c>column</c> 인자가 민감하면 결과 전체에서, 그 밖에는 열 이름이 민감 컬럼으로 식별되는 객체 안에서만 지운다.</description></item>
     /// </list>
+    /// <paramref name="localAi"/> 면 민감 컬럼은 비밀번호·주민번호·카드·계좌·주소로 좁힌다(<see cref="SensitiveColumns.IsAlwaysHidden"/>, D-045).
     /// 문자열 값이 JSON 객체·배열 글이면(모든 수준에서) 파싱해 같은 규칙을 적용하고, 바뀐 것만 문자열로 되돌려 넣는다.
     /// </summary>
-    private static int MaskRowValues(ref JsonNode result, string toolName, AiAccessLevel level, JsonObject arguments)
+    private static int MaskRowValues(ref JsonNode result, string toolName, AiAccessLevel level, JsonObject arguments, bool localAi)
     {
-        Func<JsonNode?, int> strip = StripSensitiveColumns;
+        Func<string?, bool> sensitive = localAi ? SensitiveColumns.IsAlwaysHidden : SensitiveColumns.IsSensitive;
+        Func<JsonNode?, int> strip = node => StripSensitiveColumns(node, sensitive);
         if (level < AiAccessLevel.QueryRows
             || (toolName == AgentToolNames.GetHistogram
                 && TryGetString(arguments, AgentFields.Column, out var column)
-                && SensitiveColumns.IsSensitive(column)))
+                && sensitive(column)))
         {
             strip = StripRowValues;
         }
@@ -281,29 +283,29 @@ public sealed partial class AgentGate
     /// 열 이름이 민감 컬럼으로 식별되는 객체(와 그 안쪽)에서만 행 값 필드를 지운다. 속성 키 자체가 민감 컬럼 이름이면
     /// (<c>{"columns":{"JUMIN_NO":{…}}}</c> 같은 사전 모양) 그 값 아래의 행 값 필드를 모두 지운다.
     /// </summary>
-    private static int StripSensitiveColumns(JsonNode? node)
+    private static int StripSensitiveColumns(JsonNode? node, Func<string?, bool> sensitive)
     {
         var removed = 0;
         switch (node)
         {
             case JsonObject obj:
-                if (IdentifiesSensitiveColumn(obj))
+                if (IdentifiesSensitiveColumn(obj, sensitive))
                 {
                     return StripRowValues(obj);
                 }
 
                 foreach (var pair in obj.ToList())
                 {
-                    removed += SensitiveColumns.IsSensitive(pair.Key)
+                    removed += sensitive(pair.Key)
                         ? StripRowValues(pair.Value)
-                        : StripSensitiveColumns(pair.Value);
+                        : StripSensitiveColumns(pair.Value, sensitive);
                 }
 
                 break;
             case JsonArray array:
                 foreach (var item in array)
                 {
-                    removed += StripSensitiveColumns(item);
+                    removed += StripSensitiveColumns(item, sensitive);
                 }
 
                 break;
@@ -316,7 +318,7 @@ public sealed partial class AgentGate
     /// 객체 자신이나 자식이 민감 열을 가리키는가: <see cref="AgentFields.ColumnIdentityFields"/> 속성이 민감한 글이거나,
     /// 값이 객체이고 그 안의 같은 이름 속성이 민감한 글이다.
     /// </summary>
-    private static bool IdentifiesSensitiveColumn(JsonObject obj)
+    private static bool IdentifiesSensitiveColumn(JsonObject obj, Func<string?, bool> sensitive)
     {
         foreach (var pair in obj)
         {
@@ -327,7 +329,7 @@ public sealed partial class AgentGate
 
             switch (pair.Value)
             {
-                case JsonValue value when value.TryGetValue<string>(out var text) && SensitiveColumns.IsSensitive(text):
+                case JsonValue value when value.TryGetValue<string>(out var text) && sensitive(text):
                     return true;
                 case JsonObject inner:
                     foreach (var innerPair in inner)
@@ -335,7 +337,7 @@ public sealed partial class AgentGate
                         if (ColumnIdentityNames.Contains(NormalizeName(innerPair.Key))
                             && innerPair.Value is JsonValue innerValue
                             && innerValue.TryGetValue<string>(out var innerText)
-                            && SensitiveColumns.IsSensitive(innerText))
+                            && sensitive(innerText))
                         {
                             return true;
                         }

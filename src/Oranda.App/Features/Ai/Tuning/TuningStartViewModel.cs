@@ -89,6 +89,8 @@ public sealed partial class TuningStartViewModel : ObservableObject
 
     public const string ProductionNoticeText = "운영 접속: 조회(SELECT)만 실행하고 벤치마크 반복은 5회 이하이며, 리터럴 값은 항상 가려서 보냅니다.";
 
+    public const string ProductionNoticeLocalAiText = "운영 접속: 조회(SELECT)만 실행하고 벤치마크 반복은 5회 이하입니다. 「로컬 AI」 프로필이라 값을 가리지 않고 보냅니다(비밀번호·주민번호·카드·계좌·주소 열의 히스토그램 끝값 제외).";
+
     public const string MaskLineText = "리터럴 :vN 가림";
 
     public const string BenchmarkLevelText = "벤치마크는 접속의 AI 허용 수준이 「조회 실행」 이상일 때만 쓸 수 있습니다.";
@@ -149,6 +151,9 @@ public sealed partial class TuningStartViewModel : ObservableObject
 
     public bool IsProduction => Info.IsProduction;
 
+    /// <summary>「로컬 AI」 프로필로 보낸다(값을 가리지 않는다는 줄을 보인다).</summary>
+    public bool IsLocalAi => Info.Context.LocalAi;
+
     public const string TimeoutUnlimitedWarningText = "사용자가 중지할 때까지 운영 DB 에서 실행합니다";
 
     public const string TimeoutRangeText = "제한 시간은 5~3600초 또는 0(제한 없음)으로 입력하세요.";
@@ -170,7 +175,7 @@ public sealed partial class TuningStartViewModel : ObservableObject
     /// <summary>0(제한 없음)을 입력했다: 사용자가 중지할 때까지 운영 DB 에서 도는 경고를 보인다.</summary>
     public bool ShowBenchmarkTimeoutWarning => ShowBenchmarkTimeout && ParsedBenchmarkTimeout == 0;
 
-    public string? ProductionNotice => IsProduction ? ProductionNoticeText : null;
+    public string? ProductionNotice => IsProduction ? (Info.Context.LocalAi ? ProductionNoticeLocalAiText : ProductionNoticeText) : null;
 
     public bool HasSharedPoolLine => !string.IsNullOrEmpty(Info.SharedPoolLine);
 

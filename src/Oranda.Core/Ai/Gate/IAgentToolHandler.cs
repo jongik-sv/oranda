@@ -78,7 +78,8 @@ public sealed record AgentToolOutput
     public bool AppWritten { get; init; }
 
     /// <summary>
-    /// 로그에만 남길 실패 원문(원인 예외의 형 이름과 메시지). LLM 으로 가지 않는다. 게이트가 리터럴·바인드 값을 가린 뒤 Oranda 로그에 쓴다.
+    /// 로그에 남길 실패 원문(원인 예외의 형 이름과 메시지). 게이트가 리터럴·바인드 값을 가린 뒤 Oranda 로그에 쓴다.
+    /// LLM 으로는 가지 않는다. 예외는 「로컬 AI」 실행이다(바인드 값을 가린 뒤 오류 글에 덧붙인다, D-045).
     /// </summary>
     public string? LogDetail { get; init; }
 

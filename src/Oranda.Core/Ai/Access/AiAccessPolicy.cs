@@ -46,14 +46,24 @@ public static class AiAccessPolicy
     }
 
     /// <summary>
-    /// SQL 글의 리터럴 가림이 필요한가: 운영 접속이면 항상 참(끌 수 없다, 접속별 칸 없음), 아니면 설정 <paramref name="setting"/>
-    /// (<c>AiSettings.MaskLiterals</c>).
+    /// SQL 글의 리터럴·주석 가림이 필요한가(모든 판단이 이 함수를 지난다, D-045). 「로컬 AI」 로 보내면 거짓, 아니면 운영 접속이면 참(접속별 칸 없음),
+    /// 그 밖에는 설정 <paramref name="setting"/>(<c>AiSettings.MaskLiterals</c>).
     /// </summary>
-    public static bool MaskLiterals(ConnectionProfile profile, bool setting)
+    public static bool MaskLiterals(bool production, bool setting, bool localAi) => !localAi && (production || setting);
+
+    /// <inheritdoc cref="MaskLiterals(bool, bool, bool)"/>
+    public static bool MaskLiterals(ConnectionProfile profile, bool setting, bool localAi)
     {
         ArgumentNullException.ThrowIfNull(profile);
-        return profile.Environment == ConnectionEnvironment.Production || setting;
+        return MaskLiterals(profile.Environment == ConnectionEnvironment.Production, setting, localAi);
     }
+
+    /// <summary>
+    /// 값을 얼마나 보여도 되는가를 판단할 수준(행 값 필드·오류 글). 「로컬 AI」 로 보내면 <see cref="AiAccessLevel.QueryRows"/> 로 보고, 아니면 <paramref name="level"/> 그대로다.
+    /// <see cref="AiAccessLevel.Off"/> 는 그대로 끔이다. 쓸 수 있는 도구는 이 값이 아니라 <paramref name="level"/> 이 정한다(값이 늘어도 도구는 늘지 않는다).
+    /// </summary>
+    public static AiAccessLevel DataLevel(AiAccessLevel level, bool localAi) =>
+        localAi && level != AiAccessLevel.Off ? AiAccessLevel.QueryRows : level;
 
     /// <summary>수준이 <paramref name="required"/> 이상이고 <see cref="AiAccessLevel.Off"/> 가 아닌가.</summary>
     public static bool Allows(ConnectionProfile profile, AiAccessLevel required) =>

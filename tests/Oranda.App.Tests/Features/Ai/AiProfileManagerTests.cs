@@ -146,6 +146,112 @@ public class AiProfileManagerTests
     }
 
     [Fact]
+    public async Task Local_ai_is_off_by_default_even_for_a_local_preset_and_is_saved_with_its_address()
+    {
+        var harness = await ProfileHarness.CreateAsync();
+        var vm = harness.Manager();
+
+        vm.SelectPreset(AiProfilePreset.Ollama);
+        Assert.False(vm.LocalAi); // 프리셋·주소로 판단하지 않는다
+        vm.SelectPreset(AiProfilePreset.Custom);
+        FillValid(vm, url: "http://192.0.2.10:8080/v1");
+        Assert.False(vm.ShowLocalAiPlainTextWarning);
+
+        vm.LocalAi = true;
+        Assert.True(vm.ShowLocalAiPlainTextWarning); // 사내 서버의 plain http: 값이 암호화 없이 간다
+        Assert.True(await vm.SaveProfileAsync("secret"));
+
+        var saved = Assert.Single(harness.Ai.Profiles);
+        Assert.Equal("http://192.0.2.10:8080/v1", saved.LocalAiConfirmedUrl);
+        Assert.True(saved.IsLocalAi);
+        Assert.Contains("로컬 AI", Assert.Single(vm.Items).Subtitle, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task Changing_the_address_turns_local_ai_off_and_says_so()
+    {
+        var harness = await ProfileHarness.CreateAsync();
+        var vm = harness.Manager();
+        FillValid(vm, url: "http://192.0.2.10:8080/v1");
+        vm.LocalAi = true;
+
+        vm.BaseUrl = " http://192.0.2.10:8080/v1 "; // 앞뒤 공백은 같은 주소다
+        Assert.True(vm.LocalAi);
+
+        vm.BaseUrl = "http://192.0.2.11:8080/v1";
+        Assert.False(vm.LocalAi);
+        Assert.Contains("로컬 AI", vm.ResultText, StringComparison.Ordinal);
+
+        Assert.True(await vm.SaveProfileAsync("secret"));
+        var saved = Assert.Single(harness.Ai.Profiles);
+        Assert.Null(saved.LocalAiConfirmedUrl);
+        Assert.False(saved.IsLocalAi);
+    }
+
+    [Fact]
+    public async Task A_preset_that_changes_the_address_turns_local_ai_off_and_the_notice_stays()
+    {
+        var harness = await ProfileHarness.CreateAsync();
+        var vm = harness.Manager();
+        vm.SelectPreset(AiProfilePreset.Ollama);
+        vm.LocalAi = true;
+
+        vm.SelectPreset(AiProfilePreset.LmStudio);
+
+        Assert.False(vm.LocalAi);
+        Assert.True(vm.ResultIsInfo);
+        Assert.Contains("로컬 AI", vm.ResultText, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task Selecting_a_profile_shows_its_own_local_ai_state_and_the_toggle_marks_the_form_dirty()
+    {
+        var harness = await ProfileHarness.CreateAsync();
+        var vm = harness.Manager();
+        FillValid(vm, name: "로컬", url: "http://192.0.2.10:8080/v1");
+        vm.LocalAi = true;
+        Assert.True(vm.IsDirty);
+        Assert.True(await vm.SaveProfileAsync("k1"));
+        var localId = vm.EditingId;
+        await vm.NewProfileAsync();
+        Assert.False(vm.LocalAi); // 새 초안은 앞 프로필의 지정을 잇지 않는다
+        FillValid(vm, name: "외부", url: "https://llm.example/v1");
+        Assert.True(await vm.SaveProfileAsync("k2"));
+
+        await vm.SelectProfileAsync(localId);
+        Assert.True(vm.LocalAi);
+        Assert.False(vm.IsDirty);
+
+        vm.LocalAi = false;
+        Assert.True(vm.IsDirty);
+        Assert.True(await vm.SaveProfileAsync(null));
+        Assert.False(harness.Ai.Profiles.Single(p => p.Id == localId).IsLocalAi);
+    }
+
+    [Fact]
+    public async Task Two_local_profiles_each_keep_their_own_address_when_switching_between_them()
+    {
+        var harness = await ProfileHarness.CreateAsync();
+        var vm = harness.Manager();
+        FillValid(vm, name: "로컬1", url: "http://192.0.2.10:8080/v1");
+        vm.LocalAi = true;
+        Assert.True(await vm.SaveProfileAsync("k1"));
+        var first = vm.EditingId;
+        await vm.NewProfileAsync();
+        FillValid(vm, name: "로컬2", url: "http://192.0.2.11:8080/v1");
+        vm.LocalAi = true;
+        Assert.True(await vm.SaveProfileAsync("k2"));
+
+        await vm.SelectProfileAsync(first); // 켜짐 → 켜짐: 값은 그대로지만 기억한 주소는 바뀌어야 한다
+        vm.Name = "이름만 고침";
+        Assert.True(await vm.SaveProfileAsync(null));
+
+        var saved = harness.Ai.Profiles.Single(p => p.Id == first);
+        Assert.Equal("http://192.0.2.10:8080/v1", saved.LocalAiConfirmedUrl);
+        Assert.True(saved.IsLocalAi);
+    }
+
+    [Fact]
     public async Task The_plain_http_warning_follows_the_url()
     {
         var harness = await ProfileHarness.CreateAsync();

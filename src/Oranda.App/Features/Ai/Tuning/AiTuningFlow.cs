@@ -172,6 +172,25 @@ public sealed partial class AiTuningFlow(
     public bool IsRunning => _running is not null;
 
     /// <summary>진행 중인 요청을 멈춘다.</summary>
+    /// <summary>「로컬 AI」 로 시작한 실행이 도는 중에 지정이 풀렸거나 보낼 곳이 바뀌어 멈췄을 때의 안내.</summary>
+    public const string LocalAiLapsedText = "「로컬 AI」 지정이나 AI 모델이 바뀌어 실행을 멈췄습니다. 값을 가리지 않은 결과를 더 보내지 않습니다.";
+
+    /// <summary>
+    /// 「로컬 AI」 로 시작한 실행이 도는 중에 설정이 바뀌어 보낼 곳이 달라졌으면 실행을 멈춘다(D-045). 앞으로의 도구 결과가 가리지 않은 채 나가지 않게 한다.
+    /// 설정을 다시 읽는 곳은 여기뿐이고, 게이트는 시작 때 담은 값만 본다. 멈췄으면 true.
+    /// </summary>
+    public bool StopIfLocalAiLapsed()
+    {
+        if (!IsRunning || _route is not { LocalAi: true } started || CurrentTarget() is not { } now || started.IsSameAs(now))
+        {
+            return false;
+        }
+
+        Stop();
+        chat.AddAssistantText(LocalAiLapsedText);
+        return true;
+    }
+
     public void Stop()
     {
         _running?.Cancel();
@@ -202,6 +221,8 @@ public sealed partial class AiTuningFlow(
             chat.AddAssistantText(AiTuningCustomCli.TuningText);
             return;
         }
+
+        context = context with { LocalAi = route?.LocalAi == true }; // 값을 가릴지도 실제 전송처(_route)와 같은 값으로 정한다(D-045)
 
         var statement = editor.GetCurrentStatement();
         if (statement is null)
@@ -388,6 +409,8 @@ public sealed partial class AiTuningFlow(
                 chat.AddAssistantText("이 접속의 AI 허용 수준이 바뀌어 이어 말할 수 없습니다. 「AI 튜닝」 으로 다시 시작하세요.");
                 return null;
             }
+
+            fresh = fresh with { LocalAi = _context.LocalAi }; // 보낼 곳이 시작 때와 같음을 위에서 확인했다
 
             // 이어 말하는 사이 접속이 운영으로 바뀌었는데 이 대화는 사전 없이 시작했다면, 앞서 보낸 글에 원래 값이 이미 실려 있다: 새로 시작하게 한다.
             if (_vault is null && maskRequired?.Invoke(fresh) == true)
