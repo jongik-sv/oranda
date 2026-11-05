@@ -57,6 +57,7 @@ public static class ResultGridCommands
 [OrandaCommand("oranda.grid.copyAsCsv", CommandCategory.Result, When = "gridFocus", Enablement = "gridHasSelection", Placements = ["context:grid/copy/copyAs@130"])]
 [OrandaCommand("oranda.grid.copyAsInsert", CommandCategory.Result, When = "gridFocus", Enablement = "gridHasSelection", Placements = ["context:grid/copy/copyAs@140"])]
 [OrandaCommand("oranda.grid.copyAsInList", CommandCategory.Result, When = "gridFocus", Enablement = "gridHasSelection", Placements = ["context:grid/copy/copyAs@150"])]
+[OrandaCommand("oranda.grid.copyAsInListLines", CommandCategory.Result, When = "gridFocus", Enablement = "gridHasSelection", Placements = ["context:grid/copy/copyAs@155"])]
 [OrandaCommand("oranda.grid.find", CommandCategory.Result, When = "gridFocus", Enablement = "gridHasResult")]
 [OrandaCommand("oranda.grid.fetchAll", CommandCategory.Result, When = "gridFocus", Enablement = "gridHasMoreRows", Placements = ["context:grid/rows@20"])]
 [OrandaCommand("oranda.grid.toggleTextMode", CommandCategory.Result, When = "gridFocus", Enablement = "gridHasResult")]
@@ -126,6 +127,9 @@ public sealed class ResultGridCommandHandler : ICommandHandler
                 break;
             case "oranda.grid.copyAsInList":
                 await g.CopyAsync(CopyFormat.InList, false, cancellationToken).ConfigureAwait(true);
+                break;
+            case "oranda.grid.copyAsInListLines":
+                await g.CopyAsync(CopyFormat.InListLines, false, cancellationToken).ConfigureAwait(true);
                 break;
             case "oranda.grid.find":
                 g.RequestFind();

@@ -168,6 +168,89 @@ public sealed class CurrentRowMarkerTests
         }
     });
 
+    [Theory]
+    [InlineData(0L, 3)]
+    [InlineData(999L, 3)]
+    [InlineData(1000L, 4)]
+    [InlineData(1234567L, 7)]
+    [InlineData(long.MaxValue, 19)]
+    public void Row_number_digits_keep_three_and_grow_with_the_row_count(long rowCount, int digits)
+    {
+        Assert.Equal(digits, ResultGridControl.RowNumberDigits(rowCount));
+    }
+
+    [Fact]
+    public void Row_number_text_counts_from_one_without_separators()
+    {
+        Assert.Equal("1", ResultGridControl.RowNumberText(0));
+        Assert.Equal("1000", ResultGridControl.RowNumberText(999));
+    }
+
+    [Fact]
+    public Task Row_header_widens_for_a_fourth_digit_and_columns_start_after_it() => HeadlessHost.Run(async () =>
+    {
+        async Task<double> HeadFor(int rows)
+        {
+            var vm = new SqlResultPaneViewModel();
+            vm.SetResult(new Rows(rows));
+            var view = new SqlResultPaneView { DataContext = vm };
+            var window = new Window { Content = view, Width = 700, Height = 400 };
+            window.Show();
+            try
+            {
+                await HeadlessHost.WaitUntil(() => vm.Model!.LoadedRowCount == rows);
+                var grid = view.FindControl<ResultGridControl>("GridControl")!;
+                await HeadlessHost.WaitUntil(() => grid.Bounds.Height > 0);
+                Assert.Equal(grid.RowHeaderWidth, grid.CellBounds(new GridCell(0, 0))!.Value.X);
+                return grid.RowHeaderWidth;
+            }
+            finally
+            {
+                window.Close();
+            }
+        }
+
+        Assert.Equal(await HeadFor(10), await HeadFor(999));
+        Assert.True(await HeadFor(1000) > await HeadFor(999));
+    });
+
+    /// <summary>ORANDA_RENDER_DIR 를 줄 때만 실제 픽셀로 그려 행 번호를 눈으로 확인한다.</summary>
+    [Theory]
+    [InlineData(200)]
+    [InlineData(12000)]
+    public Task Row_numbers_render_for_a_visual_check(int rows) => HeadlessHost.Run(async () =>
+    {
+        var dir = Environment.GetEnvironmentVariable("ORANDA_RENDER_DIR");
+        if (string.IsNullOrEmpty(dir))
+        {
+            return;
+        }
+
+        var vm = new SqlResultPaneViewModel();
+        vm.SetResult(new Rows(rows));
+        var view = new SqlResultPaneView { DataContext = vm };
+        var window = new Window { Content = view, Width = 700, Height = 400 };
+        window.Show();
+        try
+        {
+            await HeadlessHost.WaitUntil(() => vm.Model!.LoadedRowCount == rows);
+            var grid = view.FindControl<ResultGridControl>("GridControl")!;
+            await HeadlessHost.WaitUntil(() => grid.Bounds.Height > 0);
+            vm.Model!.SelectCell(new GridCell(1, 0));
+            Avalonia.Threading.Dispatcher.UIThread.RunJobs();
+
+            Directory.CreateDirectory(dir);
+            using var frame = HeadlessWindowExtensions.CaptureRenderedFrame(window)!;
+#pragma warning disable CS0618 // 렌더 확인용
+            frame.Save(Path.Combine(dir, $"row-numbers-{rows}.png"));
+#pragma warning restore CS0618
+        }
+        finally
+        {
+            window.Close();
+        }
+    });
+
     [Fact]
     public void Row_header_glyphs_match_edit_row_states()
     {

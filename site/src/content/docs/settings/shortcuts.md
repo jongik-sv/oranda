@@ -97,6 +97,7 @@ Oranda의 모든 명령은 단축키로 부르거나 명령 팔레트에서 이�
 | 복사 | `Ctrl+C` | `Cmd+C` |
 | 머리글과 함께 복사 | `Ctrl+Shift+C` | `Cmd+Shift+C` |
 | 행 복사 | `Ctrl+Alt+C` | `Cmd+Option+C` |
+| 줄 단위 IN 목록으로 복사 | `Alt+C` | `Option+C` |
 | 결과에서 찾기 | `Ctrl+F` | `Cmd+F` |
 | Excel로 내보내기 | `Ctrl+Alt+E` | `Cmd+Option+E` |
 | 모두 가져오기 | `Alt+End` | `Option+End` |

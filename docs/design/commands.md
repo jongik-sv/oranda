@@ -453,6 +453,7 @@
 | `oranda.grid.copyAsCsv` | CSV 로 복사 | - | `gridFocus` | `gridHasSelection` | TSK-06-03 |
 | `oranda.grid.copyAsInsert` | INSERT 문으로 복사 | - | `gridFocus` | `gridHasSelection` | TSK-06-03 |
 | `oranda.grid.copyAsInList` | IN 목록으로 복사 | - | `gridFocus` | `gridHasSelection` | TSK-06-03 |
+| `oranda.grid.copyAsInListLines` | 줄 단위 IN 목록으로 복사 | `Alt+C` | `gridFocus` | `gridHasSelection` | 복사 형식 하위 메뉴 |
 | `oranda.grid.find` | 결과에서 찾기 | `Ctrl+F` | `gridFocus` | `gridHasResult` | TSK-06-03 |
 | `oranda.grid.fetchAll` | 모두 가져오기 | `Alt+End` | `gridFocus` | `gridHasMoreRows` | TSK-06-03 |
 | `oranda.grid.toggleTextMode` | 텍스트 결과 모드 | - | `gridFocus` | `gridHasResult` | TSK-06-03 |

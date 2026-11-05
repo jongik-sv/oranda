@@ -216,6 +216,8 @@ public sealed class ResultGridTests
         Assert.Equal("INSERT INTO TABLE_NAME (ID, NAME, GRP) VALUES (1, 'n9', 'g0');\nINSERT INTO TABLE_NAME (ID, NAME, GRP) VALUES (2, 'n8', 'g0');", clip);
         await m.CopyAsync(CopyFormat.InList);
         Assert.Equal("(1, 'n9', 2, 'n8')", clip);
+        await m.CopyAsync(CopyFormat.InListLines);
+        Assert.Equal("1,\n'n9',\n2,\n'n8'", clip);
 
         m.HideColumn(0);
         m.SelectAll();
@@ -223,6 +225,20 @@ public sealed class ResultGridTests
         Assert.StartsWith("NAME,GRP", csv, StringComparison.Ordinal);
         Assert.Contains(",g0", csv, StringComparison.Ordinal);
         Assert.Contains("n9,g0", csv, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Line_in_list_copy_is_bound_to_alt_c_on_the_grid_in_every_preset()
+    {
+        foreach (var id in Oranda.App.Shell.Keymaps.KeymapLoader.PresetIds)
+        {
+            var binding = Assert.Single(
+                Oranda.App.Shell.Keymaps.KeymapLoader.LoadPreset(id).Bindings,
+                b => b.Command == "oranda.grid.copyAsInListLines");
+            Assert.Equal(["Alt+C"], binding.Keys);
+            Assert.Equal(["Alt+C", "Ctrl+Alt+C"], binding.Mac);
+            Assert.Equal("gridFocus", binding.When);
+        }
     }
 
     [Fact]
@@ -353,7 +369,7 @@ public sealed class ResultGridTests
         string[] expected =
         [
             "oranda.grid.copy", "oranda.grid.copyWithHeaders", "oranda.grid.copyRows", "oranda.grid.copyRowsWithHeaders",
-            "oranda.grid.copyAsCsv", "oranda.grid.copyAsInsert", "oranda.grid.copyAsInList",
+            "oranda.grid.copyAsCsv", "oranda.grid.copyAsInsert", "oranda.grid.copyAsInList", "oranda.grid.copyAsInListLines",
             "oranda.grid.find", "oranda.grid.fetchAll", "oranda.grid.toggleTextMode", "oranda.grid.freezeColumns", "oranda.grid.hideColumn",
             "oranda.grid.showAllColumns", "oranda.grid.toggleRepeatHide", "oranda.grid.closeResultTab", "oranda.grid.countRows",
             "oranda.grid.toggleFilterBar", "oranda.grid.toggleQuickFilter", "oranda.grid.clearLocalFilters", "oranda.grid.filterByValue", "oranda.grid.filterExcludeValue", "oranda.grid.filterNullRows",

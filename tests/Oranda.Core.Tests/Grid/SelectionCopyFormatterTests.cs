@@ -58,6 +58,31 @@ public class SelectionCopyFormatterTests
     }
 
     [Fact]
+    public void InListLines_puts_one_literal_per_line_with_commas_between()
+    {
+        var text = SelectionCopyFormatter.Format(CopyFormat.InListLines, [Name], Rows(["K711270"], ["K803341"], ["K803609"], ["D222403"]));
+        Assert.Equal("'K711270',\n'K803341',\n'K803609',\n'D222403'", text);
+    }
+
+    [Fact]
+    public void InListLines_follows_the_in_list_value_rules()
+    {
+        var skipsNullAndDedupes = SelectionCopyFormatter.Format(CopyFormat.InListLines, [Name], Rows(["O'Neil"], [null], ["b"], ["O'Neil"]));
+        Assert.Equal("'O''Neil',\n'b'", skipsNullAndDedupes);
+
+        var numbers = SelectionCopyFormatter.Format(CopyFormat.InListLines, [Id], Rows([1m], [2.50m]));
+        Assert.Equal("1,\n2.50", numbers);
+
+        var acrossColumns = SelectionCopyFormatter.Format(CopyFormat.InListLines, [Id, Name], Rows([1m, "a"], [2m, "b"]));
+        Assert.Equal("1,\n'a',\n2,\n'b'", acrossColumns);
+
+        Assert.Equal(string.Empty, SelectionCopyFormatter.Format(CopyFormat.InListLines, [Name], Rows([null], [null])));
+
+        var crlf = SelectionCopyFormatter.Format(CopyFormat.InListLines, [Name], Rows(["a"], ["b"]), new CopyOptions { NewLine = "\r\n" });
+        Assert.Equal("'a',\r\n'b'", crlf);
+    }
+
+    [Fact]
     public void Literals_cover_timestamp_interval_raw_boolean_and_lobs()
     {
         var ts = new ResultColumn(0, "T", "TIMESTAMP", ColumnDataKind.Timestamp);

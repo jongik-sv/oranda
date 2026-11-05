@@ -174,6 +174,9 @@ public sealed partial class ResultGridControl
     private double DropLineXOfColumn(int col) => DropLineX(col);
 
     /// <summary>행 머리 글자: 편집 행 상태(새 행 *, 고친 행 ✎, 지울 행 ✕, 반영 실패 !). 상태가 없으면 빈 글자.</summary>
+    /// <summary>화면 행 위치(0부터)의 행 번호 글자(1부터).</summary>
+    public static string RowNumberText(long row) => (row + 1).ToString(System.Globalization.CultureInfo.InvariantCulture);
+
     public static string RowMarkGlyph(GridRowMark mark) => mark switch
     {
         GridRowMark.Inserted => "*",
@@ -231,7 +234,7 @@ public sealed partial class ResultGridControl
     }
 
     /// <summary>
-    /// 왼쪽 행 머리: 보이는 행만 그린다. 현재 행은 옅은 띠 + ▶, 편집 모드 행은 상태 글자.
+    /// 왼쪽 행 머리: 보이는 행만 그린다. 행마다 화면 순서 번호, 현재 행은 옅은 띠 + ▶, 편집 모드 행은 상태 글자.
     /// 열을 다 그린 뒤 맨 위에 덮으므로 가로 스크롤한 열이 행 머리 밑으로 비치지 않는다.
     /// </summary>
     private void DrawRowHeaders(DrawingContext ctx, Size size, Palette pal, GridTextFactory f, long first, long last, double yStart)
@@ -255,6 +258,11 @@ public sealed partial class ResultGridControl
                     ctx.DrawGeometry(pal.RowMarker, null, Marker(ms));
                 }
             }
+
+            // 상태 글자 키((r << 3) | mark)는 0 이상이라 음수 키와 겹치지 않는다.
+            var number = _rowHeads.Get(-(r + 1), RowNumberText(r), s => f.Create(s, pal.NullText));
+            var numberRight = head - 4 - (editing ? f.CharWidth + 2 : 0); // 편집 모드에서는 오른쪽 끝을 상태 글자에 내준다
+            number.Draw(ctx, new Point(numberRight - number.Width, y + ((rh - number.Height) / 2)));
 
             var mark = editing ? m.RowMarkOf(r) : GridRowMark.None;
             if (mark == GridRowMark.None)

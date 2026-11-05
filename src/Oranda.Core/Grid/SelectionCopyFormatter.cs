@@ -9,6 +9,9 @@ public enum CopyFormat
     Csv,
     Insert,
     InList,
+
+    /// <summary>IN 목록과 같은 값을 괄호 없이 한 줄에 하나씩, 줄 끝에 쉼표를 붙여 쓴다.</summary>
+    InListLines,
 }
 
 /// <summary>복사 옵션.</summary>
@@ -50,7 +53,8 @@ public static class SelectionCopyFormatter
             CopyFormat.Tsv => Delimited(columns, rows, o, '\t', o.NewLine ?? "\n"),
             CopyFormat.Csv => Delimited(columns, rows, o, ',', o.NewLine ?? "\r\n"),
             CopyFormat.Insert => Insert(columns, rows, o),
-            CopyFormat.InList => InList(columns, rows, o),
+            CopyFormat.InList => "(" + string.Join(", ", InListItems(columns, rows, o)) + ")",
+            CopyFormat.InListLines => string.Join("," + (o.NewLine ?? "\n"), InListItems(columns, rows, o)),
             _ => throw new ArgumentOutOfRangeException(nameof(format)),
         };
     }
@@ -95,7 +99,7 @@ public static class SelectionCopyFormatter
         return sb.ToString();
     }
 
-    private static string InList(IReadOnlyList<ResultColumn> columns, IReadOnlyList<IReadOnlyList<object?>> rows, CopyOptions o)
+    private static List<string> InListItems(IReadOnlyList<ResultColumn> columns, IReadOnlyList<IReadOnlyList<object?>> rows, CopyOptions o)
     {
         var items = new List<string>();
         var seen = new HashSet<string>(StringComparer.Ordinal);
@@ -117,6 +121,6 @@ public static class SelectionCopyFormatter
             }
         }
 
-        return "(" + string.Join(", ", items) + ")";
+        return items;
     }
 }

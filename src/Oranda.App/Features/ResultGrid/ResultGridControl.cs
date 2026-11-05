@@ -223,8 +223,20 @@ public sealed partial class ResultGridControl : Control
 
     public double ExtentWidth => _model is null ? 0 : (_model.IsTextMode ? TextExtentWidth() : RowHeaderWidth + TotalColumnsWidth());
 
-    /// <summary>왼쪽 행 머리 너비(▶ 와 행 상태 글자 한 칸씩). 결과가 없거나 텍스트 결과 모드면 0.</summary>
-    public double RowHeaderWidth => _model is null || _model.IsTextMode ? 0 : Math.Ceiling((Factory.CharWidth * 3) + 8);
+    /// <summary>왼쪽 행 머리 너비(▶, 행 번호, 행 상태 글자). 결과가 없거나 텍스트 결과 모드면 0.</summary>
+    public double RowHeaderWidth => _model is null || _model.IsTextMode ? 0 : Math.Ceiling((Factory.CharWidth * (3 + RowNumberDigits(_model.RowCount))) + 8);
+
+    /// <summary>행 번호에 잡아 둘 자릿수. 세 자리까지는 너비를 고정해 행을 더 가져와도 열이 움직이지 않게 한다.</summary>
+    public static int RowNumberDigits(long rowCount)
+    {
+        var digits = 3;
+        for (var limit = 1000L; rowCount >= limit && digits < 19; limit *= 10)
+        {
+            digits++;
+        }
+
+        return digits;
+    }
 
     public double ExtentHeight => (_model?.RowCount ?? 0) * RowHeight;
 

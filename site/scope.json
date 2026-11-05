@@ -103,6 +103,7 @@
     {"id": "oranda.grid.copy", "page": "run/result-grid"},
     {"id": "oranda.grid.copyAsCsv", "page": "run/result-grid"},
     {"id": "oranda.grid.copyAsInList", "page": "run/result-grid"},
+    {"id": "oranda.grid.copyAsInListLines", "page": "run/result-grid"},
     {"id": "oranda.grid.copyAsInsert", "page": "run/result-grid"},
     {"id": "oranda.grid.copyRows", "page": "run/result-grid"},
     {"id": "oranda.grid.copyRowsWithHeaders", "page": "run/result-grid"},

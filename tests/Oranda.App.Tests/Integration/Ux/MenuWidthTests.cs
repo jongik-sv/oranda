@@ -39,27 +39,29 @@ public sealed class MenuWidthTests(ITestOutputHelper output)
 
     internal static readonly Dictionary<string, Config> Configs = new(StringComparer.Ordinal)
     {
-        ["all-features"] = new(PrdMatrix.FeaturesJson(null, allFeatures: true), 279, 11, ["view/도구 창=17", "sql=27", "result=18", "database=22", "monitor=21", "tuning=24"], 18, 21, 21, 5, 17, 229, 293, 275, 11),
-        ["none(default-R1)"] = new(null, 210, 10, ["sql=23", "result=18"], 18, 17, 17, 5, 14, 196, 216, 210, 10),
-        ["R1"] = new(PrdMatrix.FeaturesJson(["sqlDev"]), 210, 10, ["sql=23", "result=18"], 18, 17, 17, 5, 14, 196, 216, 210, 10),
-        ["R2"] = new(PrdMatrix.FeaturesJson(["plsqlDev"]), 223, 10, ["sql=24", "result=18", "database=19"], 18, 19, 19, 5, 15, 204, 229, 220, 10),
-        ["R3"] = new(PrdMatrix.FeaturesJson(["myBatisDev"]), 217, 10, ["view/도구 창=16", "sql=26", "result=17"], 17, 17, 17, 5, 16, 194, 229, 217, 10),
-        ["R4"] = new(PrdMatrix.FeaturesJson(["tuner"]), 243, 11, ["sql=23", "result=16", "database=17", "monitor=21", "tuning=24"], 16, 21, 21, 5, 14, 204, 249, 240, 11),
-        ["R5"] = new(PrdMatrix.FeaturesJson(["dba"]), 261, 11, ["sql=24", "result=18", "database=21", "monitor=21", "tuning=21"], 18, 21, 21, 5, 15, 220, 267, 257, 11),
-        ["R6"] = new(PrdMatrix.FeaturesJson(["viewer"]), 182, 9, ["sql=22", "result=16"], 16, 14, 16, 5, 12, 168, 188, 184, 9),
-        ["R1+R4"] = new(PrdMatrix.FeaturesJson(["sqlDev", "tuner"]), 261, 11, ["sql=24", "result=18", "database=19", "monitor=21", "tuning=24"], 18, 21, 21, 5, 15, 221, 269, 258, 11),
+        ["all-features"] = new(PrdMatrix.FeaturesJson(null, allFeatures: true), 280, 11, ["view/도구 창=17", "sql=27", "result=18", "database=22", "monitor=21", "tuning=24"], 18, 21, 21, 5, 17, 230, 294, 275, 11),
+        ["none(default-R1)"] = new(null, 211, 10, ["sql=23", "result=18"], 18, 17, 17, 5, 14, 197, 217, 210, 10),
+        ["R1"] = new(PrdMatrix.FeaturesJson(["sqlDev"]), 211, 10, ["sql=23", "result=18"], 18, 17, 17, 5, 14, 197, 217, 210, 10),
+        ["R2"] = new(PrdMatrix.FeaturesJson(["plsqlDev"]), 224, 10, ["sql=24", "result=18", "database=19"], 18, 19, 19, 5, 15, 205, 230, 220, 10),
+        ["R3"] = new(PrdMatrix.FeaturesJson(["myBatisDev"]), 218, 10, ["view/도구 창=16", "sql=26", "result=17"], 17, 17, 17, 5, 16, 195, 230, 217, 10),
+        ["R4"] = new(PrdMatrix.FeaturesJson(["tuner"]), 244, 11, ["sql=23", "result=16", "database=17", "monitor=21", "tuning=24"], 16, 21, 21, 5, 14, 205, 250, 240, 11),
+        ["R5"] = new(PrdMatrix.FeaturesJson(["dba"]), 262, 11, ["sql=24", "result=18", "database=21", "monitor=21", "tuning=21"], 18, 21, 21, 5, 15, 221, 268, 257, 11),
+        ["R6"] = new(PrdMatrix.FeaturesJson(["viewer"]), 183, 9, ["sql=22", "result=16"], 16, 14, 16, 5, 12, 169, 189, 184, 9),
+        ["R1+R4"] = new(PrdMatrix.FeaturesJson(["sqlDev", "tuner"]), 262, 11, ["sql=24", "result=18", "database=19", "monitor=21", "tuning=24"], 18, 21, 21, 5, 15, 222, 270, 258, 11),
         // AI 튜닝 기본 켬(2026-10-29): 조회 전용(R6)·Role 0개를 뺀 구성은 툴바 AI 단추 1·튜닝 메뉴 「AI 튜닝」 1·보기 > 도구 창 ▸ AI 대화 토글 1(항목 +2, 툴바 +1, 도구 창 등록 +1, 팔레트 +5).
         // TSK-14-17: SQL 모니터 기능이 있는 구성(all-features·R4·R5·R1+R4)은 튜닝 메뉴 「튜닝 추천」 한 줄이 늘었다(항목·tuning·SQL 탭·팔레트 +1).
         // 실행하고 실제 계획(oranda.plan.runActual): 툴바 +1·튜닝 메뉴 +1(튜닝 메뉴가 없는 R6·roles-empty 는 항목 그대로)·팔레트 +1.
         // 작업 공간 저장 단추(2026-10-30): 모든 구성의 툴바 「저장」 옆에 1개(툴바 +1).
         // 도움말 「사용자 문서」(oranda.help.docs, F1, 2026-11-04): 모든 구성의 항목·SQL 탭·팔레트 +1.
         // 결과 그리드 정렬 명령 3(오름차순·내림차순·정렬 해제, 열 ▸ 하위 메뉴)과 열 필터 켜기/끄기(메뉴 없음): 모든 구성의 항목·SQL 탭 +3, 팔레트 +4.
-        ["roles-empty"] = new(PrdMatrix.FeaturesJson([]), 175, 9, ["sql=22"], 12, 16, 16, 5, 11, 164, 181, 176, 9),
+        // 복사 형식 ▸ 「줄 단위 IN 목록으로 복사」: 모든 구성의 항목·SQL 탭·팔레트 +1.
+        ["roles-empty"] = new(PrdMatrix.FeaturesJson([]), 176, 9, ["sql=22"], 12, 16, 16, 5, 11, 165, 182, 176, 9),
     };
 
     /// <summary>조사(413a33d) 뒤 모든 구성에 더해진 메뉴 줄: 보기 &gt; 도구 창 ▸ 「세션」 토글(TSK-14-04) 1, 도움말 「새 기능(릴리스 노트)」 1, 도움말 「사용자 문서」 1,
-    /// 결과 &gt; 열 ▸ 「오름차순 정렬」·「내림차순 정렬」·「정렬 해제」 3(열 필터를 끈 결과의 머리글 오른쪽 클릭 정렬).</summary>
-    private const int AddedSinceSurvey = 6;
+    /// 결과 &gt; 열 ▸ 「오름차순 정렬」·「내림차순 정렬」·「정렬 해제」 3(열 필터를 끈 결과의 머리글 오른쪽 클릭 정렬),
+    /// 결과 &gt; 복사 형식 ▸ 「줄 단위 IN 목록으로 복사」 1.</summary>
+    private const int AddedSinceSurvey = 7;
 
     /// <summary>AI 튜닝(aiTuning)이 켜진 구성이 더하는 메뉴 줄: 튜닝 메뉴 「AI 튜닝」 1, 보기 &gt; 도구 창 ▸ 「AI 대화」 토글 1.</summary>
     private const int AiMenuItems = 2;

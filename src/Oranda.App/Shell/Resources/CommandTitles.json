@@ -120,6 +120,7 @@
   "Cmd.oranda.grid.copyAsCsv": "CSV 로 복사",
   "Cmd.oranda.grid.copyAsInsert": "INSERT 문으로 복사",
   "Cmd.oranda.grid.copyAsInList": "IN 목록으로 복사",
+  "Cmd.oranda.grid.copyAsInListLines": "줄 단위 IN 목록으로 복사",
   "Cmd.oranda.grid.find": "결과에서 찾기",
   "Cmd.oranda.grid.fetchAll": "모두 가져오기",
   "Cmd.oranda.grid.toggleTextMode": "텍스트 결과 모드",

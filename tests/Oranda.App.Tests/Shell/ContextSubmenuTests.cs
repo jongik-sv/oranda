@@ -130,13 +130,13 @@ public class ContextSubmenuTests
             Assert.Contains(grid, n => n.CommandId == id);
         }
 
-        // 묶기 전 40개 명령이 하나도 빠지지 않는다(행 보기·값 보기·내보내기 2 포함).
-        Assert.Equal(40, Flatten(grid).Count(n => n.Kind == MenuNodeKind.Command));
+        // 묶기 전 41개 명령이 하나도 빠지지 않는다(행 보기·값 보기·내보내기 2 포함).
+        Assert.Equal(41, Flatten(grid).Count(n => n.Kind == MenuNodeKind.Command));
         Assert.DoesNotContain(grid, n => n.Kind == MenuNodeKind.Submenu && n.Children.Count == 0);
     }
 
     [Theory]
-    [InlineData("copyAs", new[] { "oranda.grid.copyWithHeaders", "oranda.grid.copyRows", "oranda.grid.copyRowsWithHeaders", "oranda.grid.copyAsCsv", "oranda.grid.copyAsInsert", "oranda.grid.copyAsInList" })]
+    [InlineData("copyAs", new[] { "oranda.grid.copyWithHeaders", "oranda.grid.copyRows", "oranda.grid.copyRowsWithHeaders", "oranda.grid.copyAsCsv", "oranda.grid.copyAsInsert", "oranda.grid.copyAsInList", "oranda.grid.copyAsInListLines" })]
     [InlineData("filter", new[] { "oranda.grid.toggleQuickFilter", "oranda.grid.clearLocalFilters", "oranda.grid.toggleFilterBar", "oranda.grid.filterByValue", "oranda.grid.filterExcludeValue", "oranda.grid.filterNullRows" })]
     [InlineData("edit", new[] { "oranda.grid.edit.addRow", "oranda.grid.edit.duplicateRow", "oranda.grid.edit.pasteRows", "oranda.grid.edit.deleteRow", "oranda.grid.edit.previewDml", "oranda.grid.edit.applyAndCommit", "oranda.grid.edit.apply", "oranda.grid.edit.resetRow", "oranda.grid.edit.resetAll" })]
     [InlineData("flashback", new[] { "oranda.grid.flashback.asOf", "oranda.grid.flashback.history", "oranda.grid.flashback.restore" })]
@@ -154,7 +154,7 @@ public class ContextSubmenuTests
     public void Grid_context_menu_sections_are_in_the_planned_order()
     {
         Assert.Equal(
-            "oranda.grid.copy Menu.context.grid.copyAs[oranda.grid.copyWithHeaders oranda.grid.copyRows oranda.grid.copyRowsWithHeaders - oranda.grid.copyAsCsv oranda.grid.copyAsInsert oranda.grid.copyAsInList]"
+            "oranda.grid.copy Menu.context.grid.copyAs[oranda.grid.copyWithHeaders oranda.grid.copyRows oranda.grid.copyRowsWithHeaders - oranda.grid.copyAsCsv oranda.grid.copyAsInsert oranda.grid.copyAsInList oranda.grid.copyAsInListLines]"
             + " - oranda.grid.rowView oranda.grid.viewValue"
             + " - oranda.grid.sortAscending oranda.grid.sortDescending oranda.grid.clearSort"
             + " - Menu.context.grid.filter[oranda.grid.toggleQuickFilter oranda.grid.clearLocalFilters oranda.grid.toggleFilterBar - oranda.grid.filterByValue oranda.grid.filterExcludeValue oranda.grid.filterNullRows]"
