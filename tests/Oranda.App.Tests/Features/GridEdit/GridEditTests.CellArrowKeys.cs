@@ -143,6 +143,124 @@ public sealed partial class GridEditTests
         }
     });
 
+    [Fact]
+    public Task Enter_on_the_selected_cell_of_an_editable_result_opens_the_cell_editor() => HeadlessHost.Run(async () =>
+    {
+        var (pane, m, session, _) = await RowsPaneAsync(edit: true);
+        var (window, _, grid, editor) = await ShowAsync(pane);
+        try
+        {
+            m.SelectCell(new GridCell(0, 1));
+            grid.Focus();
+            Dispatcher.UIThread.RunJobs();
+
+            window.KeyPress(Key.Enter, RawInputModifiers.None, PhysicalKey.Enter, null);
+            Dispatcher.UIThread.RunJobs();
+
+            Assert.True(editor.IsVisible);
+            Assert.Equal("SMITH", editor.Text);
+            Assert.Equal(new GridCell(0, 1), m.Active); // 커서는 그대로
+            Assert.False(session!.IsDirty); // 열기만 해서는 값이 바뀌지 않는다
+        }
+        finally
+        {
+            window.Close();
+            pane.Clear();
+        }
+    });
+
+    [Fact]
+    public Task Enter_in_the_cell_editor_commits_and_continues_in_the_same_column_like_the_down_arrow() => HeadlessHost.Run(async () =>
+    {
+        var (pane, m, session, _) = await RowsPaneAsync(edit: true);
+        var (window, _, grid, editor) = await ShowAsync(pane);
+        try
+        {
+            DoubleClickEname(window, grid, m, 0);
+            editor.Text = "SMYTHE";
+
+            window.KeyPress(Key.Enter, RawInputModifiers.None, PhysicalKey.Enter, null);
+            Dispatcher.UIThread.RunJobs();
+
+            Assert.True(editor.IsVisible); // 아래 행 편집으로 이어 갔다
+            Assert.Equal("O'NEIL", editor.Text);
+            Assert.Equal(new GridCell(1, 1), m.Active);
+            Assert.True(session!.IsDirty);
+            Assert.True(m.TryGetValue(0, m.VisibleColumns[1], out var committed));
+            Assert.Equal("SMYTHE", committed);
+
+            editor.Text = "LAST";
+            window.KeyPress(Key.Enter, RawInputModifiers.None, PhysicalKey.Enter, null);
+            Dispatcher.UIThread.RunJobs();
+
+            Assert.False(editor.IsVisible); // 끝 행: 반영만 하고 닫는다
+            Assert.Equal(new GridCell(1, 1), m.Active);
+            Assert.True(m.TryGetValue(1, m.VisibleColumns[1], out var last));
+            Assert.Equal("LAST", last);
+
+            window.KeyPress(Key.Enter, RawInputModifiers.None, PhysicalKey.Enter, null);
+            Dispatcher.UIThread.RunJobs();
+
+            Assert.True(editor.IsVisible); // 닫힌 뒤 Enter 는 같은 칸을 다시 연다
+            Assert.Equal("LAST", editor.Text);
+        }
+        finally
+        {
+            window.Close();
+            pane.Clear();
+        }
+    });
+
+    [Fact]
+    public Task Enter_on_a_read_only_result_opens_nothing_and_shows_no_edit_hint() => HeadlessHost.Run(async () =>
+    {
+        var (pane, m, _, _) = await RowsPaneAsync(edit: false);
+        var (window, _, grid, editor) = await ShowAsync(pane);
+        try
+        {
+            m.SelectCell(new GridCell(0, 1));
+            grid.Focus();
+            Dispatcher.UIThread.RunJobs();
+
+            window.KeyPress(Key.Enter, RawInputModifiers.None, PhysicalKey.Enter, null);
+            Dispatcher.UIThread.RunJobs();
+
+            Assert.False(editor.IsVisible);
+            Assert.False(pane.HasEditHint); // F2 와 달리 안내도 띄우지 않는다
+        }
+        finally
+        {
+            window.Close();
+            pane.Clear();
+        }
+    });
+
+    [Theory]
+    [InlineData(RawInputModifiers.Control)]
+    [InlineData(RawInputModifiers.Alt)]
+    [InlineData(RawInputModifiers.Shift)]
+    public Task Enter_with_a_modifier_on_the_grid_does_not_open_the_cell_editor(RawInputModifiers modifier) => HeadlessHost.Run(async () =>
+    {
+        var (pane, m, _, _) = await RowsPaneAsync(edit: true);
+        var (window, _, grid, editor) = await ShowAsync(pane);
+        try
+        {
+            m.SelectCell(new GridCell(0, 1));
+            grid.Focus();
+            Dispatcher.UIThread.RunJobs();
+
+            window.KeyPress(Key.Enter, modifier, PhysicalKey.Enter, null);
+            Dispatcher.UIThread.RunJobs();
+
+            Assert.False(editor.IsVisible); // Ctrl+Enter(실행)·Alt+Enter(행 보기)는 그 키의 명령 몫이다
+        }
+        finally
+        {
+            window.Close();
+            pane.Clear();
+        }
+    });
+
     private static async Task<(Window Window, SqlResultPaneView View, ResultGridControl Grid, TextBox Editor)> ShowAsync(SqlResultPaneViewModel pane)
     {
         var view = new SqlResultPaneView { DataContext = pane };

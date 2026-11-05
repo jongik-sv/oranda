@@ -90,12 +90,29 @@ public partial class SqlResultPaneView : UserControl
                 e.Handled = true;
             }
         };
+        // Enter: 고른 칸의 셀 편집을 연다. 편집할 수 있는 결과에서만 키를 받는다(읽기 전용 결과는 F2 와 달리 안내도 띄우지 않는다).
+        GridControl.KeyDown += (_, e) =>
+        {
+            if (e.Key == Key.Enter && e.KeyModifiers == KeyModifiers.None && GridControl.Model is { HasSelection: true, IsTextMode: false } m
+                && Oranda.App.Features.GridEdit.GridEditBinding.Of(m) is { CanEdit: true } && BeginEdit(m.Active))
+            {
+                e.Handled = true;
+            }
+        };
         CellEditor.KeyDown += (_, e) =>
         {
             if (e.Key == Key.Enter)
             {
+                // Enter: ↓ 와 같게 반영하고 아래 행 셀 편집으로 이어 간다. 수식키가 붙은 Enter 는 반영하고 칸만 옮긴다.
                 e.Handled = true;
-                CommitEdit(moveDown: true);
+                if (e.KeyModifiers == KeyModifiers.None)
+                {
+                    CommitAndEditRow(1);
+                }
+                else
+                {
+                    CommitEdit(moveDown: true);
+                }
             }
             else if (e.Key == Key.Tab)
             {
