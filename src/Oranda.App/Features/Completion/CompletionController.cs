@@ -2,6 +2,7 @@ using System.Runtime.CompilerServices;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Markup.Xaml.Styling;
+using Avalonia.Threading;
 using AvaloniaEdit.CodeCompletion;
 using AvaloniaEdit.Document;
 using AvaloniaEdit.Editing;
@@ -25,7 +26,7 @@ namespace Oranda.App.Features.Completion;
 /// </para>
 /// UI 스레드에서만 쓴다.
 /// </summary>
-public sealed class CompletionController
+public sealed class CompletionController : IDisposable
 {
     public static CompletionController Shared { get; } = new();
 
@@ -40,6 +41,18 @@ public sealed class CompletionController
 
     /// <summary><c>.</c> 입력 때 자동으로 연다.</summary>
     public bool AutoTriggerOnDot { get; set; } = true;
+
+    /// <summary>테이블 이름 자리에서 스키마 없이 2자 이상 치고 잠시 멈추면 단축키 없이 목록을 연다.</summary>
+    public bool AutoOpenOnTyping { get; set; } = true;
+
+    /// <summary>마지막 입력 뒤 목록을 열기까지 기다리는 시간. 그 사이 더 치면 처음부터 다시 센다.</summary>
+    public TimeSpan AutoOpenDelay { get; set; } = TimeSpan.FromMilliseconds(150);
+
+    /// <summary>일정 시간 뒤 동작을 한 번 실행하게 하고 취소 손잡이를 돌려준다(기본 = UI 스레드 타이머). 시험이 바꿔 실제로 기다리지 않는다.</summary>
+    public Func<TimeSpan, Action, IDisposable> Schedule { get; set; } = static (delay, action) => DispatcherTimer.RunOnce(action, delay);
+
+    /// <summary>문맥 판정기(기본 = 앱 컨테이너의 <see cref="ILanguageService"/>). 타이머가 울릴 때 처음 꺼낸다. 시험이 바꾼다.</summary>
+    public Func<ILanguageService?> LanguageResolver { get; set; } = () => Resolve<ILanguageService>();
 
     public CompletionWindow? CurrentWindow { get; private set; }
 
@@ -66,9 +79,18 @@ public sealed class CompletionController
     /// 커서 위치의 후보를 구해 목록 창을 연다. 열었으면 true.
     /// <paramref name="automatic"/> = <c>.</c> 입력으로 연 경우: 접속이 없으면 묻지 않고, 후보가 없으면 조용히 끝낸다.
     /// </summary>
-    public async Task<bool> ShowCompletionAsync(TextArea area, SqlEditorViewModel? tab, bool automatic, CancellationToken ct = default)
+    public Task<bool> ShowCompletionAsync(TextArea area, SqlEditorViewModel? tab, bool automatic, CancellationToken ct = default)
     {
         ArgumentNullException.ThrowIfNull(area);
+        return ShowCoreAsync(area, tab, automatic, null, ct);
+    }
+
+    /// <summary>
+    /// <paramref name="guard"/> = 입력 중 자동 열기(<see cref="ScheduleAutoOpen"/>)의 확인: 후보가 오는 사이 입력·커서·포커스가 바뀌었거나 다른 목록이 열렸으면 버리고,
+    /// 후보가 없거나 입력한 글자와 똑같은 이름 하나뿐이면 열지 않는다(그때 Enter 는 줄바꿈이어야 한다).
+    /// </summary>
+    private async Task<bool> ShowCoreAsync(TextArea area, SqlEditorViewModel? tab, bool automatic, AutoOpenGuard? guard, CancellationToken ct)
+    {
         var session = SessionResolver(tab);
         if (automatic && session is null)
         {
@@ -92,6 +114,14 @@ public sealed class CompletionController
         catch (OperationCanceledException)
         {
             return false;
+        }
+
+        if (guard is not null)
+        {
+            if (!guard.IsFresh(this) || result.Items.Count == 0 || IsOnlyTheTypedName(result, doc, caret))
+            {
+                return false;
+            }
         }
 
         LastResult = result;
@@ -140,6 +170,178 @@ public sealed class CompletionController
         }
 
         return true;
+    }
+
+    private static bool IsOnlyTheTypedName(CompletionResult result, TextDocument doc, int caret)
+    {
+        int start = result.ReplaceRange.Start;
+        return result.Items.Count == 1 && start >= 0 && start <= caret && caret <= doc.TextLength
+            && string.Equals(result.Items[0].Label, doc.GetText(start, caret - start), StringComparison.OrdinalIgnoreCase);
+    }
+
+    // ---- 입력 중 자동 열기 -----------------------------------------------------------------------
+
+    private CancellationTokenSource? _autoCts;
+    private IDisposable? _autoTimer;
+    private TextArea? _autoArea;
+    private int _autoGeneration;
+    private WeakReference<TextDocument>? _escapedDoc;
+    private TextAnchor? _escapedAnchor;
+    private readonly ConditionalWeakTable<TextArea, object> _hooked = [];
+
+    /// <summary>기다리는 자동 열기가 있나(시험용).</summary>
+    public bool HasPendingAutoOpen => _autoTimer is not null;
+
+    /// <summary>
+    /// 이름 글자가 하나 들어갔다: 마지막 입력 뒤 <see cref="AutoOpenDelay"/> 가 지나면 후보를 물을지 정한다.
+    /// 여기서는 값싼 조건만 본다 — 열린 목록이 있거나 다시 채울 목록이면(<see cref="NeedsRefill"/>) 그쪽이 맡고, 확정한 이름 글자가 2자 미만이거나
+    /// 스키마를 쓰는 중이거나 Esc 로 닫은 단어면 걸지 않는다. 접속·문맥 판정은 타이머가 울릴 때 본다.
+    /// <paramref name="blocked"/> = 읽기 전용·추가 커서·열 블록처럼 편집기가 알려 주는 막힘(걸 때와 울릴 때 모두 본다).
+    /// </summary>
+    public void ScheduleAutoOpen(TextArea area, SqlEditorViewModel? tab, Func<bool> blocked)
+    {
+        ArgumentNullException.ThrowIfNull(area);
+        ArgumentNullException.ThrowIfNull(blocked);
+        CancelAutoOpen();
+        var doc = area.Document;
+        if (!AutoOpenOnTyping || doc is null || CurrentWindow is not null || NeedsRefill(area) || blocked())
+        {
+            return;
+        }
+
+        int caret = area.Caret.Offset;
+        int start = caret;
+        while (start > 0 && IsNameChar(doc.GetCharAt(start - 1)))
+        {
+            start--;
+        }
+
+        if (caret - start < 2 || (start > 0 && doc.GetCharAt(start - 1) == '.') || IsEscapedWord(doc, start))
+        {
+            return;
+        }
+
+        if (SessionResolver(tab) is null)
+        {
+            return;
+        }
+
+        Hook(area);
+        var cts = _autoCts = new CancellationTokenSource();
+        var guard = new AutoOpenGuard(area, doc, doc.Version, caret, blocked, ++_autoGeneration);
+        _autoArea = area;
+        _autoTimer = Schedule(AutoOpenDelay, () => _ = RunAutoOpenAsync(area, tab, guard, cts.Token));
+    }
+
+    public void Dispose() => CancelAutoOpen();
+
+    /// <summary>기다리던 자동 열기와 진행 중인 조회를 버린다. 글자가 아닌 입력·포커스 이동·편집기 제거에서 부른다.</summary>
+    public void CancelAutoOpen()
+    {
+        _autoGeneration++;
+        _autoTimer?.Dispose();
+        _autoTimer = null;
+        _autoArea = null;
+        var cts = _autoCts;
+        _autoCts = null;
+        if (cts is not null)
+        {
+            cts.Cancel();
+            cts.Dispose();
+        }
+    }
+
+    /// <summary>목록이 열린 채 Esc 를 눌렀다: 이 단어를 계속 치는 동안은 다시 열지 않는다(다음 단어에서는 다시 열린다).</summary>
+    public void NoteEscape(TextArea area)
+    {
+        ArgumentNullException.ThrowIfNull(area);
+        if (CurrentWindow is not { } window || area.Document is not { } doc)
+        {
+            return;
+        }
+
+        _escapedDoc = new WeakReference<TextDocument>(doc);
+        _escapedAnchor = doc.CreateAnchor(Math.Clamp(window.StartOffset, 0, doc.TextLength));
+        _escapedAnchor.MovementType = AnchorMovementType.BeforeInsertion;
+    }
+
+    private bool IsEscapedWord(TextDocument doc, int wordStart)
+    {
+        if (_escapedAnchor is not { IsDeleted: false } anchor || _escapedDoc is null || !_escapedDoc.TryGetTarget(out var escaped) || !ReferenceEquals(escaped, doc))
+        {
+            _escapedAnchor = null;
+            _escapedDoc = null;
+            return false;
+        }
+
+        return anchor.Offset == wordStart;
+    }
+
+    /// <summary>편집기가 사라지거나 포커스를 잃으면 기다리던 자동 열기를 버린다(탭을 닫아도 타이머가 남지 않는다).</summary>
+    private void Hook(TextArea area)
+    {
+        if (_hooked.TryGetValue(area, out _))
+        {
+            return;
+        }
+
+        _hooked.Add(area, area);
+        area.DetachedFromVisualTree += (_, _) => CancelFor(area);
+        area.LostFocus += (_, _) => CancelFor(area);
+    }
+
+    private void CancelFor(TextArea area)
+    {
+        if (ReferenceEquals(_autoArea, area))
+        {
+            CancelAutoOpen();
+        }
+    }
+
+    private async Task RunAutoOpenAsync(TextArea area, SqlEditorViewModel? tab, AutoOpenGuard guard, CancellationToken ct)
+    {
+        try
+        {
+            _autoTimer = null;
+            if (!guard.IsFresh(this) || LanguageResolver() is not { } language)
+            {
+                return;
+            }
+
+            var text = guard.Doc.Text;
+            var context = await Task.Run(() => language.GetCompletionContext(text, guard.Caret), ct).ConfigureAwait(true);
+            if (context is { Kind: CompletionContextKind.TableOrView, Qualifier: null } && context.Prefix.Length >= 2 && guard.IsFresh(this))
+            {
+                await ShowCoreAsync(area, tab, automatic: true, guard, ct).ConfigureAwait(true);
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            // 새 입력이나 포커스 이동이 버렸다.
+        }
+        finally
+        {
+            if (_autoGeneration == guard.Generation)
+            {
+                _autoArea = null; // 끝난 자동 열기가 편집기를 붙들고 있지 않게 한다
+            }
+        }
+    }
+
+    private static bool IsNameChar(char c) => char.IsLetterOrDigit(c) || c is '_' or '$' or '#';
+
+    /// <summary>자동 열기를 건 순간의 모습. 후보를 기다린 뒤에도 같아야 연다.</summary>
+    private sealed record AutoOpenGuard(TextArea Area, TextDocument Doc, ITextSourceVersion Version, int Caret, Func<bool> Blocked, int Generation)
+    {
+        public bool IsFresh(CompletionController c)
+            => c._autoGeneration == Generation
+                && ReferenceEquals(Area.Document, Doc)
+                && ReferenceEquals(Doc.Version, Version)
+                && Area.Caret.Offset == Caret
+                && Area.IsKeyboardFocusWithin
+                && Area.IsEffectivelyVisible
+                && c.CurrentWindow is null
+                && !Blocked();
     }
 
     /// <summary>커서를 감싼 호출의 시그니처 창을 연다. 열었으면 true.</summary>

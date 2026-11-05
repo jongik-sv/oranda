@@ -38,7 +38,31 @@ public static class CompletionCommands
 
         InputElement.TextInputEvent.AddClassHandler<InputElement>(OnTextInput, RoutingStrategies.Bubble, handledEventsToo: true);
         InputElement.GotFocusEvent.AddClassHandler<TextArea>(OnTextAreaGotFocus, RoutingStrategies.Bubble, handledEventsToo: true);
+        InputElement.KeyDownEvent.AddClassHandler<TextArea>(OnTextAreaKeyDownTunnel, RoutingStrategies.Tunnel, handledEventsToo: true);
     }
+
+    /// <summary>
+    /// 주 창 터널 처리기가 이미 명령으로 보낸 키(실행 키·저장 등 F 키나 Ctrl·Alt·Cmd 조합)면 열려 있는 목록을 닫는다.
+    /// 목록이 쓰는 키(방향·Enter·Tab·Esc·Home·End)는 수식키가 없어 여기에 걸리지 않고, 목록이 그대로 받아 항목을 넣거나 거른다.
+    /// 실행 명령이 목록 위에서 쿼리를 돌리게 두면 뒤늦게 항목이 들어가는 일이 생긴다.
+    /// </summary>
+    private static void OnTextAreaKeyDownTunnel(TextArea sender, KeyEventArgs e)
+    {
+        var controller = CompletionController.Shared;
+        if (e.Handled && IsCommandKey(e.Key, e.KeyModifiers))
+        {
+            // 명령으로 간 키는 문서·커서를 바꾸지 않으므로, 기다리던 자동 열기를 여기서 버리지 않으면 쿼리를 돌린 뒤에 목록이 뜬다.
+            controller.CancelAutoOpen();
+            controller.CloseCompletion();
+        }
+        else if (e.Key == Key.Escape && e.KeyModifiers == KeyModifiers.None && controller.CurrentWindow is not null)
+        {
+            controller.NoteEscape(sender); // 목록이 닫힌 뒤에도 같은 단어에서는 다시 열지 않는다
+        }
+    }
+
+    private static bool IsCommandKey(Key key, KeyModifiers modifiers)
+        => key is >= Key.F1 and <= Key.F24 || (modifiers & (KeyModifiers.Control | KeyModifiers.Alt | KeyModifiers.Meta)) != 0;
 
     private static WeakReference<TextArea>? s_focusedArea;
 
@@ -74,13 +98,41 @@ public static class CompletionCommands
 
         if (e.Text == ".")
         {
+            CompletionController.Shared.CancelAutoOpen();
             OnDot(sender);
         }
-        else if (CompletionController.Shared.LastResult is { IsIncomplete: true } && IsNameText(e.Text))
+        else if (IsNameText(e.Text))
         {
-            OnNameTyped(sender);
+            if (CompletionController.Shared.LastResult is { IsIncomplete: true })
+            {
+                OnNameTyped(sender);
+            }
+
+            OnNameTypedAutoOpen(sender);
+        }
+        else
+        {
+            CompletionController.Shared.CancelAutoOpen(); // 이름이 끊기는 글자(공백·쉼표 등)
         }
     }
+
+    /// <summary>
+    /// 테이블 이름 자리에서 2자째부터 잠시 멈추면 목록을 열도록 건다. 읽기 전용 편집기·추가 커서·열 블록에서는 열지 않는다.
+    /// 조건과 시간은 컨트롤러가 본다(<see cref="CompletionController.ScheduleAutoOpen"/>).
+    /// </summary>
+    private static void OnNameTypedAutoOpen(InputElement sender)
+    {
+        if (sender is not TextArea area || area.FindAncestorOfType<SqlEditorView>() is not { } view)
+        {
+            return;
+        }
+
+        CompletionController.Shared.ScheduleAutoOpen(area, view.DataContext as SqlEditorViewModel, () => IsAutoOpenBlocked(area, view));
+    }
+
+    private static bool IsAutoOpenBlocked(TextArea area, SqlEditorView view)
+        => view.TextEditorControl.IsReadOnly || (view.DataContext as SqlEditorViewModel)?.IsReadOnly == true
+            || view.Carets?.HasExtra == true || area.Selection is RectangleSelection;
 
     private static bool IsNameText(string? text) => !string.IsNullOrEmpty(text) && text.All(c => char.IsLetterOrDigit(c) || c is '_' or '$' or '#');
 

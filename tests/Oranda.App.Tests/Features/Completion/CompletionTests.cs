@@ -18,7 +18,7 @@ using Oranda.Language.Completion;
 namespace Oranda.App.Tests.Features.Completion;
 
 /// <summary>TSK-04-05 헤드리스 UI 시험: 편집기 위 자동완성 목록·인자 도움말 창, <c>.</c> 입력 자동 열기, 명령 등록, 150 ms.</summary>
-public sealed class CompletionTests
+public sealed partial class CompletionTests
 {
     private static readonly DbObjectRef Emp = new("SCOTT", "EMP", "TABLE");
     private static readonly DbObjectRef EmpPkg = new("SCOTT", "EMP_PKG", "PACKAGE");
