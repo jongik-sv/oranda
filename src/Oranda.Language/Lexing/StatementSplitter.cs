@@ -383,18 +383,28 @@ public static class StatementSplitter
             _rawEnd = -1;
         }
 
+        /// <summary>
+        /// <paramref name="p"/> 뒤에 공백·주석만 남은 줄이면 그 줄 끝까지 넓힌다. 여러 줄 블록 주석은 닫는 줄까지 본다.
+        /// 주석 뒤에 다른 글이 있으면 다음 문장 앞의 주석으로 보고 넓히지 않는다.
+        /// </summary>
         int ExtendToLineEnd(int p)
         {
             int i = p;
-            while (i < text.Length && (text[i] == ' ' || text[i] == '\t' || text[i] == '\r')) i++;
-            if (i >= text.Length || text[i] == '\n') return i;
-            if (text[i] == '-' && i + 1 < text.Length && text[i + 1] == '-')
+            while (true)
             {
-                int nl = text.IndexOf('\n', i);
-                return nl < 0 ? text.Length : nl;
-            }
+                while (i < text.Length && (text[i] == ' ' || text[i] == '\t' || text[i] == '\r')) i++;
+                if (i >= text.Length || text[i] == '\n') return i;
+                if (text[i] == '-' && i + 1 < text.Length && text[i + 1] == '-')
+                {
+                    int nl = text.IndexOf('\n', i);
+                    return nl < 0 ? text.Length : nl;
+                }
 
-            return p;
+                if (text[i] != '/' || i + 1 >= text.Length || text[i + 1] != '*') return p;
+                int close = text.IndexOf("*/", i + 2, StringComparison.Ordinal);
+                if (close < 0) return text.Length;
+                i = close + 2;
+            }
         }
     }
 }

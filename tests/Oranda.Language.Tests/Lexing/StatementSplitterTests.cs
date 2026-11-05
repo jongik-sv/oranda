@@ -238,6 +238,43 @@ public class StatementSplitterTests
         Assert.Equal(3, svc.Split(sql, Opt).Count);
     }
 
+    [Theory]
+    [InlineData("select 1 from dual /* c */")]
+    [InlineData("select 1 from dual; /* c */")]
+    [InlineData("select 1 from dual /* a */ /* b */")]
+    [InlineData("select 1 from dual /* a */ -- b")]
+    [InlineData("select 1 from dual /* a\n   b */")]
+    [InlineData("select 1 from dual /* never closed")]
+    public void GetStatementAt_keeps_the_statement_when_the_caret_is_past_a_trailing_block_comment(string sql)
+    {
+        var svc = Service();
+        Assert.Equal("select 1 from dual", svc.GetStatementAt(sql, sql.Length, Opt)!.Text);
+        Assert.Equal("select 1 from dual", svc.GetStatementAt(sql, sql.IndexOf("/*", StringComparison.Ordinal) + 2, Opt)!.Text);
+    }
+
+    [Fact]
+    public void GetStatementAt_does_not_give_a_comment_before_the_next_statement_to_the_previous_one()
+    {
+        var svc = Service();
+
+        const string sameLine = "select 1 from dual; /* c */ select 2 from dual;";
+        Assert.Null(svc.GetStatementAt(sameLine, sameLine.IndexOf("/*", StringComparison.Ordinal) + 2, Opt));
+        Assert.Equal("select 2 from dual", svc.GetStatementAt(sameLine, sameLine.IndexOf('2', StringComparison.Ordinal), Opt)!.Text);
+
+        const string nextLine = "select 1 from dual;\n/* c */\nselect 2 from dual;";
+        Assert.Null(svc.GetStatementAt(nextLine, nextLine.IndexOf("/*", StringComparison.Ordinal) + 2, Opt));
+        Assert.Equal("select 2 from dual", svc.GetStatementAt(nextLine, nextLine.IndexOf('2', StringComparison.Ordinal), Opt)!.Text);
+    }
+
+    [Fact]
+    public void GetStatementAt_stops_a_trailing_block_comment_at_the_end_of_its_closing_line()
+    {
+        const string sql = "select 1 from dual; /* a\n b */\nselect 2 from dual;";
+        var svc = Service();
+        Assert.Equal("select 1 from dual", svc.GetStatementAt(sql, sql.IndexOf("b */", StringComparison.Ordinal), Opt)!.Text);
+        Assert.Equal("select 2 from dual", svc.GetStatementAt(sql, sql.IndexOf("select 2", StringComparison.Ordinal), Opt)!.Text);
+    }
+
     [Fact]
     public void Empty_and_comment_only_documents_have_no_statements()
     {
