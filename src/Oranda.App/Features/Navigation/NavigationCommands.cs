@@ -70,12 +70,13 @@ public sealed class NavigationCommandHandler : ICommandHandler
 
             case "oranda.nav.describeObject":
                 {
+                    var connection = tab.ConnectionProfileId; // 조회 중 접속이 바뀌어도 이 표를 읽은 접속으로 센다.
                     var info = await svc.DescribeAsync(tab, tab.CaretOffset, cancellationToken).ConfigureAwait(true);
                     if (info is not null)
                     {
                         // 테이블 레이아웃 창의 쉼표 위치 = 설정 「SQL 포맷」의 목록 쉼표(TSK-13-38).
                         var comma = info.Layout is null ? CommaPosition.Trailing : await CommaAsync(cancellationToken).ConfigureAwait(true);
-                        Show(tab, info, comma);
+                        Show(tab, info, comma, connection);
                     }
 
                     break;
@@ -86,7 +87,7 @@ public sealed class NavigationCommandHandler : ICommandHandler
                     var refs = NavigationService.FindReferences(tab, tab.CaretOffset);
                     if (refs is not null)
                     {
-                        Show(tab, refs.Summary, CommaPosition.Trailing);
+                        Show(tab, refs.Summary, CommaPosition.Trailing, tab.ConnectionProfileId);
                     }
 
                     break;
@@ -130,7 +131,7 @@ public sealed class NavigationCommandHandler : ICommandHandler
         }
     }
 
-    private void Show(SqlEditorViewModel tab, ObjectInfo info, CommaPosition comma)
+    private void Show(SqlEditorViewModel tab, ObjectInfo info, CommaPosition comma, Guid? connection)
     {
         if (Presenter is not null)
         {
@@ -140,7 +141,7 @@ public sealed class NavigationCommandHandler : ICommandHandler
 
         if (info.Layout is { } layout)
         {
-            TableLayoutWindow.Show(NewSession(tab, layout, comma));
+            TableLayoutWindow.Show(NewSession(tab, layout, comma, connection), Host);
             return;
         }
 
@@ -148,12 +149,12 @@ public sealed class NavigationCommandHandler : ICommandHandler
     }
 
     // 확인란 4개는 설정에서 읽고(설정이 없는 시험은 기본값), 바뀌면 바로 저장해 다음 팝업에도 유지한다.
-    private TableLayoutSession NewSession(SqlEditorViewModel tab, TableLayoutModel layout, CommaPosition comma)
+    private TableLayoutSession NewSession(SqlEditorViewModel tab, TableLayoutModel layout, CommaPosition comma, Guid? connection)
     {
         var settings = _services?.GetService(typeof(SettingsService)) as SettingsService;
         var options = TableLayoutOptions.From(settings?.Current.TableLayout ?? new TableLayoutSettings()) with { Comma = comma };
         LastLayoutOptions = options;
-        return new TableLayoutSession(tab, layout, options, settings is null ? null : s => _ = SaveAsync(settings, s));
+        return new TableLayoutSession(tab, layout, options, settings is null ? null : s => _ = SaveAsync(settings, s), connection);
     }
 
     private static async Task SaveAsync(SettingsService settings, TableLayoutSettings value)
