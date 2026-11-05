@@ -68,6 +68,7 @@ public partial class SqlEditorView : UserControl, IEditorSurface
         CloseFindButton.Click += (_, _) => _vm?.CloseFind();
         FindBox.KeyDown += OnFindKeyDown;
         ReplaceBox.KeyDown += OnFindKeyDown;
+        InstallImeEnter();
     }
 
     /// <summary>안쪽 편집기 컨트롤(시험·계측·확장용).</summary>
