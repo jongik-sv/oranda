@@ -1617,7 +1617,7 @@ public class AiGeneralChatTests
         Assert.StartsWith("행 값 · 히스토그램 끝값", plain.NotSent, StringComparison.Ordinal);
         Assert.DoesNotContain("히스토그램 끝값", plain.SendOnRequest, StringComparison.Ordinal);
         Assert.Contains("히스토그램 끝값", local.SendOnRequest, StringComparison.Ordinal);
-        Assert.StartsWith("비밀번호·주민번호·카드·계좌·주소 열의 히스토그램 끝값", local.NotSent, StringComparison.Ordinal);
+        Assert.StartsWith("비밀번호·주민번호·카드·계좌·주소·인증값 열의 히스토그램 끝값", local.NotSent, StringComparison.Ordinal);
     }
 
     [Theory]

@@ -7,7 +7,7 @@ using Oranda.Core.Connection;
 
 namespace Oranda.Core.Tests.Ai;
 
-// D-045: 「로컬 AI」 실행(AiContext.LocalAi)은 운영 접속에서도 사전 없이 원문으로 돌고 값을 그대로 낸다. 비밀번호·주민번호·카드·계좌·주소 열은 지운다.
+// D-045: 「로컬 AI」 실행(AiContext.LocalAi)은 운영 접속에서도 사전 없이 원문으로 돌고 값을 그대로 낸다. 비밀번호·주민번호·카드·계좌·주소·인증값 열은 지운다.
 public partial class AgentGateTests
 {
     private const string StatsResult = """
@@ -121,6 +121,8 @@ public partial class AgentGateTests
     [InlineData("계좌번호", false)]
     [InlineData("CUST_ADDR", false)]
     [InlineData("주소", false)]
+    [InlineData("ACCESS_TOKEN", false)]
+    [InlineData("CLIENT_SECRET", false)]
     public async Task A_local_ai_histogram_keeps_endpoints_unless_the_column_is_always_hidden(string column, bool kept)
     {
         var fx = new GateFixture();

@@ -298,8 +298,8 @@ public sealed partial class AiProfileManagerViewModel : ObservableObject, IDispo
     public string LocalAiLabel => _t.T("로컬 AI (값을 가리지 않고 보냄)", "Local AI (send values unmasked)");
 
     public string LocalAiHint => _t.T(
-        "켜면 운영 접속을 포함해 SQL 의 값, 주석, 오류 글, 히스토그램 끝값을 가리지 않고 이 서버로 보냅니다. 비밀번호, 주민번호, 카드, 계좌, 주소 열의 히스토그램 끝값은 계속 가립니다(열 이름으로 판단합니다). SQL 문장에 직접 쓴 값은 열과 관계없이 그대로 갑니다. 직접 관리하는 서버에만 켜세요. 서버 주소를 고치면 꺼집니다.",
-        "When on, SQL values, comments, error text and histogram endpoints go to this server unmasked, including on production connections. Histogram endpoints of password, resident number, card, account and address columns stay masked (judged by column name). Values written in SQL text go as they are, whatever the column. Turn it on only for a server you manage. Changing the server address turns it off.");
+        "켜면 운영 접속을 포함해 SQL 의 값, 주석, 오류 글, 히스토그램 끝값을 가리지 않고 이 서버로 보냅니다. 비밀번호, 주민번호, 카드, 계좌, 주소, 인증값 열의 히스토그램 끝값은 계속 가립니다(열 이름으로 판단합니다). SQL 문장에 직접 쓴 값은 열과 관계없이 그대로 갑니다. 직접 관리하는 서버에만 켜세요. 서버 주소를 고치면 꺼집니다.",
+        "When on, SQL values, comments, error text and histogram endpoints go to this server unmasked, including on production connections. Histogram endpoints of password, resident number, card, account, address and credential columns stay masked (judged by column name). Values written in SQL text go as they are, whatever the column. Turn it on only for a server you manage. Changing the server address turns it off.");
 
     public bool ShowLocalAiPlainTextWarning => LocalAi && ShowPlainTextWarning;
 

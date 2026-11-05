@@ -618,7 +618,7 @@ public sealed class AiTuningLauncher(IServiceProvider services)
                 ? "실제 계획 · 인덱스(열 순서·clustering factor) · 표·열 통계 · 히스토그램 개수 · 히스토그램 끝값"
                 : "실제 계획 · 인덱스(열 순서·clustering factor) · 표·열 통계 · 히스토그램 개수",
             NotSent: context.LocalAi
-                ? "비밀번호·주민번호·카드·계좌·주소 열의 히스토그램 끝값 · 바인드 값(로컬 실행에만 씀) · 비밀번호·호스트"
+                ? "비밀번호·주민번호·카드·계좌·주소·인증값 열의 히스토그램 끝값 · 바인드 값(로컬 실행에만 씀) · 비밀번호·호스트"
                 : "행 값 · 히스토그램 끝값 · 바인드 값(로컬 실행에만 씀) · 비밀번호·호스트",
             context,
             models,

@@ -7,7 +7,7 @@ using Oranda.Core.Settings;
 
 namespace Oranda.Core.Tests.Ai;
 
-/// <summary>D-045: 사용자가 「로컬 AI」 로 지정한 프로필에는 비밀번호·주민번호·카드·계좌·주소 열을 빼고 값을 가리지 않는다.</summary>
+/// <summary>D-045: 사용자가 「로컬 AI」 로 지정한 프로필에는 비밀번호·주민번호·카드·계좌·주소·인증값 열을 빼고 값을 가리지 않는다.</summary>
 public class LocalAiPolicyTests
 {
     private const string Url = "http://192.0.2.10:8080/v1";
@@ -47,6 +47,14 @@ public class LocalAiPolicyTests
     [InlineData("RRN")]
     [InlineData("CUST_SSN")]
     [InlineData("주민번호")]
+    [InlineData("CLIENT_SECRET")]
+    [InlineData("ACCESS_TOKEN")]
+    [InlineData("API_KEY")]
+    [InlineData("AUTHKEY")]
+    [InlineData("USER_CREDENTIAL")]
+    [InlineData("OTP_NO")]
+    [InlineData("토큰")]
+    [InlineData("인증번호")]
     [InlineData("USER_PW")]
     [InlineData("MBR_PW")]
     [InlineData("PW")]
@@ -103,7 +111,6 @@ public class LocalAiPolicyTests
     [InlineData("EMAIL")]
     [InlineData("BIRTH_DT")]
     [InlineData("CUST_NM")]
-    [InlineData("TOKEN")]
     public void Other_sensitive_columns_are_sent_to_local_ai_but_stay_sensitive_elsewhere(string column)
     {
         Assert.False(SensitiveColumns.IsAlwaysHidden(column));

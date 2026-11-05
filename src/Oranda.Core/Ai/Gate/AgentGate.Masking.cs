@@ -20,7 +20,7 @@ public sealed partial class AgentGate
     /// <item><description><see cref="AiAccessLevel.QueryRows"/> 미만: 모든 깊이에서 <see cref="AgentFields.RowValueFields"/> 속성을 지운다.</description></item>
     /// <item><description><see cref="AiAccessLevel.QueryRows"/>: <c>get_histogram</c> 의 <c>column</c> 인자가 민감하면 결과 전체에서, 그 밖에는 열 이름이 민감 컬럼으로 식별되는 객체 안에서만 지운다.</description></item>
     /// </list>
-    /// <paramref name="localAi"/> 면 민감 컬럼은 비밀번호·주민번호·카드·계좌·주소로 좁힌다(<see cref="SensitiveColumns.IsAlwaysHidden"/>, D-045).
+    /// <paramref name="localAi"/> 면 민감 컬럼은 비밀번호·주민번호·카드·계좌·주소·인증값으로 좁힌다(<see cref="SensitiveColumns.IsAlwaysHidden"/>, D-045).
     /// 문자열 값이 JSON 객체·배열 글이면(모든 수준에서) 파싱해 같은 규칙을 적용하고, 바뀐 것만 문자열로 되돌려 넣는다.
     /// </summary>
     private static int MaskRowValues(ref JsonNode result, string toolName, AiAccessLevel level, JsonObject arguments, bool localAi)

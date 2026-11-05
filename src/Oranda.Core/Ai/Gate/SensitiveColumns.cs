@@ -20,6 +20,7 @@ public static partial class SensitiveColumns
         "PASS", "PW", "PSWORD", "비번", "패스워드", "암호",
         "JUMN", "JMN_NO", "JMNO", "RESNO", "RES_REG", "RESI_NO", "RSDT", "RSDNT", "IHIDNUM",
         "CRDNO", "ACNT", "ACC_NO", "ACCNO", "ADRS", "ADRES", "주소",
+        "API_KEY", "APIKEY", "AUTH_KEY", "AUTHKEY", "CREDENTIAL", "OTP_", "토큰", "비밀키", "인증키", "인증번호",
     ];
 
     /// <summary>조각을 우연히 품은 일반 낱말. 이 낱말은 지우고 남은 이름으로 조각을 찾는다(예: HOTEL_NM 은 민감하지 않고 HOTEL_TEL_NO 는 민감하다).</summary>
@@ -28,7 +29,7 @@ public static partial class SensitiveColumns
     /// <summary>이 접두로 시작하는 이름은 민감하다(통계 확장·숨은 열).</summary>
     private static readonly string[] HiddenPrefixes = ["SYS_STU", "SYS_STS"];
 
-    /// <summary>「로컬 AI」 로 보낼 때도 값을 가리는 조각: 비밀번호·주민번호·카드·계좌·주소(D-045, 사용자 결정). <see cref="Fragments"/> 의 일부다.</summary>
+    /// <summary>「로컬 AI」 로 보낼 때도 값을 가리는 조각: 비밀번호·주민번호·카드·계좌·주소·인증값(D-045, 사용자 결정). <see cref="Fragments"/> 의 일부다.</summary>
     public static IReadOnlyList<string> AlwaysHiddenFragments { get; } =
     [
         "PASS", "PW", "PSWD", "PSWORD", "비밀번호", "비번", "패스워드", "암호",
@@ -36,12 +37,13 @@ public static partial class SensitiveColumns
         "CARD", "CRD_NO", "CRDNO", "카드",
         "ACCT", "ACCOUNT", "ACNT", "ACNO", "ACC_NO", "ACCNO", "IBAN", "계좌",
         "ADDR", "ADRS", "ADRES", "주소",
+        "SECRET", "TOKEN", "API_KEY", "APIKEY", "AUTH_KEY", "AUTHKEY", "CREDENTIAL", "OTP_", "토큰", "비밀키", "인증키", "인증번호",
     ];
 
     /// <summary>컬럼 이름이 민감한가. 비었으면 false.</summary>
     public static bool IsSensitive(string? columnName) => Matches(columnName, Fragments);
 
-    /// <summary>「로컬 AI」 로 보낼 때도 값을 가리는 컬럼인가: 비밀번호·주민번호·카드·계좌·주소, 그리고 무엇을 담았는지 알 수 없는 가상·숨은 열. 비었으면 false.</summary>
+    /// <summary>「로컬 AI」 로 보낼 때도 값을 가리는 컬럼인가: 비밀번호·주민번호·카드·계좌·주소·인증값, 그리고 무엇을 담았는지 알 수 없는 가상·숨은 열. 비었으면 false.</summary>
     public static bool IsAlwaysHidden(string? columnName) => Matches(columnName, AlwaysHiddenFragments);
 
     private static bool Matches(string? columnName, IReadOnlyList<string> fragments)

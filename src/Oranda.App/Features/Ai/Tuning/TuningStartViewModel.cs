@@ -89,7 +89,7 @@ public sealed partial class TuningStartViewModel : ObservableObject
 
     public const string ProductionNoticeText = "운영 접속: 조회(SELECT)만 실행하고 벤치마크 반복은 5회 이하이며, 리터럴 값은 항상 가려서 보냅니다.";
 
-    public const string ProductionNoticeLocalAiText = "운영 접속: 조회(SELECT)만 실행하고 벤치마크 반복은 5회 이하입니다. 「로컬 AI」 프로필이라 값을 가리지 않고 보냅니다(비밀번호·주민번호·카드·계좌·주소 열의 히스토그램 끝값 제외).";
+    public const string ProductionNoticeLocalAiText = "운영 접속: 조회(SELECT)만 실행하고 벤치마크 반복은 5회 이하입니다. 「로컬 AI」 프로필이라 값을 가리지 않고 보냅니다(비밀번호·주민번호·카드·계좌·주소·인증값 열의 히스토그램 끝값 제외).";
 
     public const string MaskLineText = "리터럴 :vN 가림";
 
