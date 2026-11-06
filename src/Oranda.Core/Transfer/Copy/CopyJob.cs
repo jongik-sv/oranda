@@ -64,7 +64,10 @@ public sealed record TableRule(string Table, RuleKind Kind, TargetAction Action)
     /// <summary>원본 표 계정. null 이면 작업의 기본 원본 계정(<see cref="CopyJob.SourceOwner"/>)이다(<see cref="CopyOwners.Source"/>).</summary>
     public string? SourceOwner { get; init; }
 
-    /// <summary>대상 표 계정. null 이면 작업의 기본 대상 계정(<see cref="CopyJob.TargetOwner"/>)이다(<see cref="CopyOwners.Target"/>). 대상 표 이름은 <see cref="Table"/> 과 같다.</summary>
+    /// <summary>
+    /// 대상 표 계정. null 이면 원본 계정의 대상 기본값(<see cref="CopyOwners.MapTarget"/>: 기본 원본 계정의 표면 작업 기본 대상 계정, 아니면 원본 계정 그대로)이다
+    /// (<see cref="CopyOwners.Target"/>). 대상 표 이름은 <see cref="Table"/> 과 같다.
+    /// </summary>
     public string? TargetOwner { get; init; }
 
     /// <summary>

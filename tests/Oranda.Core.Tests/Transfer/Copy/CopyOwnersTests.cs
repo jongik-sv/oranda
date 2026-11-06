@@ -50,6 +50,33 @@ public class CopyOwnersTests
     }
 
     [Fact]
+    public void Missing_target_owner_of_another_owner_rule_maps_to_its_source_owner()
+    {
+        // 대상 계정을 적지 않은 다른 계정 규칙: 작업 기본 대상 계정(DST)이 아니라 원본 계정 그대로(MapTarget, B-1 a).
+        var other = new TableRule("ORDERS", RuleKind.All, TargetAction.MergeByPk) { SourceOwner = "APP2" };
+        var mine = new TableRule("ITEMS", RuleKind.All, TargetAction.MergeByPk) { SourceOwner = "SRC" };
+        var job = Job(other, mine);
+
+        Assert.Equal("APP2", CopyOwners.Target(job, other));
+        Assert.Equal("APP2.ORDERS", CopyOwners.TargetName(job, other));
+        Assert.Equal("DST", CopyOwners.Target(job, mine));
+    }
+
+    [Fact]
+    public void Parent_target_is_the_same_whether_an_excluded_parent_rule_without_target_owner_stays_or_goes()
+    {
+        var child = new TableRule("LINES", RuleKind.ParentKey, TargetAction.DeleteRangeInsert)
+        {
+            SourceOwner = "SRC",
+            Parent = new ParentLink("HEADERS", ["H_ID"], ["ID"]) { ParentOwner = "APP" },
+        };
+        var excludedParent = new TableRule("HEADERS", RuleKind.Exclude, TargetAction.MergeByPk) { SourceOwner = "APP" };
+
+        Assert.Equal("APP", CopyOwners.ParentTarget(Job(child, excludedParent), child));
+        Assert.Equal("APP", CopyOwners.ParentTarget(Job(child), child));
+    }
+
+    [Fact]
     public void Parent_owner_defaults_to_child_source_and_target_follows_parent_rule()
     {
         var parent = new TableRule("CUSTOMERS", RuleKind.All, TargetAction.MergeByPk) { SourceOwner = "APP", TargetOwner = "APPX" };

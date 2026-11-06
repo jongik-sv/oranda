@@ -19,12 +19,15 @@ public static class CopyOwners
         return string.IsNullOrEmpty(rule.SourceOwner) ? job.SourceOwner : rule.SourceOwner;
     }
 
-    /// <summary>규칙의 대상 계정. 비었으면 작업 기본 대상 계정.</summary>
+    /// <summary>
+    /// 규칙의 대상 계정. 비었으면 그 규칙 원본 계정의 대상 기본값(<see cref="MapTarget"/>): 기본 원본 계정의 표면 작업 기본 대상 계정,
+    /// 다른 계정의 표면 원본 계정 이름 그대로. 작업 밖 부모(<see cref="ParentTarget"/>)와 같은 규칙이다.
+    /// </summary>
     public static string Target(CopyJob job, TableRule rule)
     {
         ArgumentNullException.ThrowIfNull(job);
         ArgumentNullException.ThrowIfNull(rule);
-        return string.IsNullOrEmpty(rule.TargetOwner) ? job.TargetOwner : rule.TargetOwner;
+        return string.IsNullOrEmpty(rule.TargetOwner) ? MapTarget(job, Source(job, rule)) : rule.TargetOwner;
     }
 
     /// <summary>
@@ -90,7 +93,10 @@ public static class CopyOwners
     /// <summary>작업 안의 부모 규칙(제외 규칙 포함). 작업 밖이면 null.</summary>
     public static TableRule? Parent(CopyJob job, TableRule rule) => rule.Parent is null ? null : Find(job, ParentKey(job, rule));
 
-    /// <summary>부모 표의 대상 계정: 작업 안이면 그 규칙의 대상 계정, 밖이면 <see cref="MapTarget"/>.</summary>
+    /// <summary>
+    /// 부모 표의 대상 계정: 작업 안이면(제외 규칙 포함) 그 규칙의 대상 계정, 밖이면 <see cref="MapTarget"/>.
+    /// 부모 규칙의 대상 계정이 비었으면 <see cref="Target"/> 도 <see cref="MapTarget"/> 이라, 계정을 적지 않은 부모 규칙(제외 규칙)을 지우든 남기든 같은 계정이 나온다.
+    /// </summary>
     public static string ParentTarget(CopyJob job, TableRule rule)
         => Parent(job, rule) is { } parent ? Target(job, parent) : MapTarget(job, ParentSource(job, rule));
 
