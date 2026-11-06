@@ -1,0 +1,110 @@
+{
+  "schemaVersion": 2,
+  "id": "0123456789abcdef0123456789abcdef",
+  "name": "월간 주문 복사",
+  "source": {
+    "name": "운영 조회",
+    "user": "SRC_USER"
+  },
+  "target": {
+    "name": "개발",
+    "user": "DEV_USER"
+  },
+  "sourceOwner": "SRC",
+  "targetOwner": "DST",
+  "period": {
+    "kind": "PreviousMonth"
+  },
+  "tables": [
+    {
+      "table": "CUSTOMERS",
+      "kind": "All",
+      "action": "MergeByPk",
+      "sourceOwner": "SRC",
+      "targetOwner": "DST",
+      "periodColumns": [],
+      "masks": [
+        {
+          "column": "PHONE",
+          "kind": "KeepFirst",
+          "count": 3
+        }
+      ],
+      "skipColumns": []
+    },
+    {
+      "table": "ORDERS",
+      "kind": "Period",
+      "action": "DeleteRangeInsert",
+      "sourceOwner": "SRC",
+      "targetOwner": "DST",
+      "periodColumns": [
+        {
+          "column": "ORDER_DT"
+        }
+      ],
+      "extraWhere": "STATUS <> 'X'",
+      "masks": [],
+      "skipColumns": []
+    },
+    {
+      "table": "ORDER_ITEM",
+      "kind": "ParentKey",
+      "action": "DeleteRangeInsert",
+      "sourceOwner": "SRC",
+      "targetOwner": "DST",
+      "periodColumns": [],
+      "parent": {
+        "parentTable": "ORDERS",
+        "childColumns": [
+          "ORDER_ID"
+        ],
+        "parentColumns": [
+          "ID"
+        ],
+        "foreignKeyName": "FK_ITEM_ORDER",
+        "parentOwner": "SRC"
+      },
+      "masks": [],
+      "skipColumns": []
+    },
+    {
+      "table": "TEMP_X",
+      "kind": "Exclude",
+      "action": "DeleteRangeInsert",
+      "sourceOwner": "SRC",
+      "targetOwner": "DST",
+      "periodColumns": [],
+      "masks": [],
+      "skipColumns": []
+    },
+    {
+      "table": "ORDERS",
+      "kind": "All",
+      "action": "MergeByPk",
+      "sourceOwner": "APP2",
+      "targetOwner": "APP2",
+      "writtenAs": "ORDERS2",
+      "periodColumns": [],
+      "masks": [],
+      "skipColumns": []
+    }
+  ],
+  "options": {
+    "batchSize": 5000,
+    "commit": "PerTable",
+    "disableTriggersByDefault": false,
+    "maxFailedRows": 100,
+    "sequenceGapConfirm": 10000000
+  },
+  "sequences": [
+    {
+      "sequence": "SEQ_ORDER_ID",
+      "table": "ORDERS",
+      "column": "ID",
+      "owner": "DST"
+    }
+  ],
+  "consistentRead": true,
+  "maskSalt": "c2FsdC1mb3ItZXhhbXBsZS1vbmx5LTMyYnl0ZXM="
+}

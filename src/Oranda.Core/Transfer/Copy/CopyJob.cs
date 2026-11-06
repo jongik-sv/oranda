@@ -1,9 +1,12 @@
 namespace Oranda.Core.Transfer.Copy;
 
-/// <summary>작업 파일 스키마 버전. 파일의 <c>schemaVersion</c> 이 이보다 크면 읽기 전용으로 연다.</summary>
+/// <summary>
+/// 작업 파일 스키마 버전. 파일의 <c>schemaVersion</c> 이 이보다 크면 읽기 전용으로 연다.
+/// 2 = 규칙마다 원본·대상 계정(묶음 B). 1 → 2 변환은 <see cref="CopyJobMigrationV1"/>.
+/// </summary>
 public static class CopyJobSchema
 {
-    public const int Current = 1;
+    public const int Current = 2;
 }
 
 /// <summary>접속 간 데이터 복사 작업 한 건. 비밀번호는 담지 않는다(설계 6.1).</summary>

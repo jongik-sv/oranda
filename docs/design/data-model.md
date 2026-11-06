@@ -316,16 +316,17 @@ select * from emp where empno = :empno;
 
 ### 2.7 `copy-jobs/{작업 이름}.json` — `CopyJob`
 
-접속 간 데이터 복사(PRD EXP-04, 설계 `docs/superpowers/specs/2026-11-06-cross-connection-data-copy-design.md`)의 작업 파일이다. 직렬화는 1.3 의 공통 규칙을 따르며 문맥은 Core 의 `CopyJobJsonContext` 다. 현재 버전 상수는 `CopyJobSchema.Current` = **1** 이다(`SchemaVersions` 에 넣지 않고 복사 쪽에 둔다).
+접속 간 데이터 복사(PRD EXP-04, 설계 `docs/superpowers/specs/2026-11-06-cross-connection-data-copy-design.md`)의 작업 파일이다. 직렬화는 1.3 의 공통 규칙을 따르며 문맥은 Core 의 `CopyJobJsonContext` 다. 현재 버전 상수는 `CopyJobSchema.Current` = **2** 이다(`SchemaVersions` 에 넣지 않고 복사 쪽에 둔다). 버전 2 는 규칙마다 원본·대상 계정을 둔다: 예전 앱이 새 파일을 읽으면 표마다의 계정을 버리고 작업 대상 계정의 같은 이름 표를 지우게 되므로(의미 변경) 버전을 올렸다.
 
 - 파일 이름은 작업 이름에서 만든다(파일 이름에 못 쓰는 글자와 제어 문자는 `_` 로 바꾸고, UTF-8 80바이트까지). 겹치면 `{이름} (2).json` 처럼 번호를 붙인다. 작업은 파일 이름이 아니라 `id` 로 찾는다.
 - 비밀번호 필드는 모델에 없다. 해시 마스킹의 비밀 값(`maskSalt`)은 들어 있으며, 작업을 내보내고 가져와도 같은 값을 써서 서로 복사한 데이터끼리 조인이 맞게 한다.
-- `schemaVersion` 이 현재보다 크면 읽기 전용으로 연다(4.1 의 미래 버전 규칙). 저장·이름 바꾸기·복제·내보내기는 하지 않고 삭제만 한다. 아직 상향 변환기는 없다.
+- `schemaVersion` 이 현재보다 크면 읽기 전용으로 연다(4.1 의 미래 버전 규칙). 저장·이름 바꾸기·복제·내보내기는 하지 않고 삭제만 한다.
+- 1 → 2 변환기 `CopyJobMigrationV1`(파일 종류 `copy-job`): 규칙마다 `sourceOwner`·`targetOwner` 를 작업의 값으로, `parent.parentOwner` 를 작업 `sourceOwner` 로, `sequences[].owner` 를 작업 `targetOwner` 로 채운다(이미 있으면 둔다). 읽기(백업 후 다시 쓰기)와 가져오기가 같은 변환기를 쓴다. 예제: `examples/v1/copy-job.json` → `examples/copy-job.json`.
 - 가져오기는 기존 작업을 덮어쓰지 않는다. `id` 나 이름이 겹치면 새 `id` 와 ` (2)` 를 붙인 이름으로 저장한다. 가져오기와 복제는 `lastRun` 을 비운다. `schemaVersion` 이 현재보다 큰 파일은 열기는 읽기 전용이지만 가져오기는 거부한다(`InvalidDataException`).
 
 | 필드 | 형식 | 필수 | 기본값 | 설명 |
 |---|---|---|---|---|
-| `schemaVersion` | int | ● | 1 | |
+| `schemaVersion` | int | ● | 2 | 1 → 2: 규칙마다 계정(위) |
 | `id` | string | ● | | 작업 식별자 |
 | `name` | string | ● | | 표시 이름 |
 | `source`, `target` | `ConnectionRef` | ● | | 접속 참조. `name`(접속 이름), `user`(사용자 이름), `idHint`(Guid, 같은 PC 에서 빨리 찾기 위한 힌트, 선택). 비밀번호는 없다 |
@@ -533,7 +534,7 @@ CREATE INDEX ix_change_journal_time   ON change_journal(captured_at DESC);
 
 | 항목 | 규칙 |
 |---|---|
-| 변환기 | 파일 종류별·버전 단계별 1개: `ISettingsMigration { string FileKind; int FromVersion; JsonNode Apply(JsonNode) }` (`FileKind` = `settings`, `connections`, `formatter`, `keymap`, `layout`, `workspace`). 반드시 1 단계씩(1→2, 2→3). 건너뛰는 변환기 금지 |
+| 변환기 | 파일 종류별·버전 단계별 1개: `ISettingsMigration { string FileKind; int FromVersion; JsonNode Apply(JsonNode) }` (`FileKind` = `settings`, `connections`, `formatter`, `keymap`, `layout`, `workspace`, `copy-job`). 반드시 1 단계씩(1→2, 2→3). 건너뛰는 변환기 금지 |
 | 변환기 성질 | 순수 함수(입력 노드만 보고 결과 노드 반환), 파일·네트워크·키체인 접근 금지. 비밀을 만들어 넣지 않는다 |
 | 백업 이름 | `backup/{파일이름}.v{옛 버전}.{UTC yyyyMMddHHmmss}.bak`. 종류별 최근 3개만 남김 |
 | 시험 | 변환기마다 `examples/` 의 옛 버전 예제 → 새 버전 기대값 비교 시험을 둔다. 새 버전을 만들 때 그때의 예제를 `examples/v{n}/` 에 얼려 둔다 |

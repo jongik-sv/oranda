@@ -146,7 +146,7 @@ public sealed class CopyJobStoreTests : IDisposable
         var job = Sample();
         await store.SaveAsync(job, CancellationToken.None);
         var path = Assert.Single(await store.ListAsync(CancellationToken.None)).FilePath;
-        var text = (await File.ReadAllTextAsync(path)).Replace("\"schemaVersion\": 1", "\"schemaVersion\": 99", StringComparison.Ordinal);
+        var text = (await File.ReadAllTextAsync(path)).Replace("\"schemaVersion\": 2", "\"schemaVersion\": 99", StringComparison.Ordinal);
         await File.WriteAllTextAsync(path, text);
 
         var entry = Assert.Single(await store.ListAsync(CancellationToken.None));
@@ -157,6 +157,55 @@ public sealed class CopyJobStoreTests : IDisposable
         Assert.Contains("\"schemaVersion\": 99", await File.ReadAllTextAsync(path), StringComparison.Ordinal);
     }
 
+    /// <summary>버전 1 파일(모든 표 = 작업 계정): 백업하고 규칙마다 작업 계정을 채워 버전 2 로 다시 쓴다.</summary>
+    [Fact]
+    public async Task Version_1_file_is_migrated_with_job_owners_on_each_rule()
+    {
+        var store = NewStore();
+        Directory.CreateDirectory(Paths.CopyJobsDirectory);
+        var path = Path.Combine(Paths.CopyJobsDirectory, "옛 작업.json");
+        await File.WriteAllTextAsync(path, V1Json("v1-job"));
+
+        var entry = Assert.Single(await store.ListAsync(CancellationToken.None));
+
+        Assert.False(entry.IsReadOnly);
+        var rule = entry.Job.Tables[1];
+        Assert.Equal(("SCOTT", "SCOTT_DEV"), (rule.SourceOwner, rule.TargetOwner));
+        Assert.Equal("SCOTT", rule.Parent!.ParentOwner);
+        Assert.Equal("SCOTT_DEV", Assert.Single(entry.Job.Sequences).Owner);
+        Assert.Contains("\"schemaVersion\": 2", await File.ReadAllTextAsync(path), StringComparison.Ordinal);
+        Assert.Single(Directory.GetFiles(Paths.BackupDirectory, "옛 작업.json.v1.*.bak"));
+    }
+
+    [Fact]
+    public async Task Version_1_import_is_migrated()
+    {
+        var store = NewStore();
+        Directory.CreateDirectory(_root);
+        var file = Path.Combine(_root, "peer-v1.json");
+        await File.WriteAllTextAsync(file, V1Json("peer1"));
+
+        var imported = await store.ImportAsync(file, CancellationToken.None);
+
+        Assert.Equal(CopyJobSchema.Current, imported.SchemaVersion);
+        Assert.All(imported.Tables, r => Assert.Equal(("SCOTT", "SCOTT_DEV"), (r.SourceOwner, r.TargetOwner)));
+    }
+
+    private static string V1Json(string id) => """
+        {
+          "schemaVersion": 1, "id": "ID_PLACE", "name": "옛 작업",
+          "source": { "name": "src", "user": "SCOTT" }, "target": { "name": "dev", "user": "SCOTT_DEV" },
+          "sourceOwner": "SCOTT", "targetOwner": "SCOTT_DEV",
+          "tables": [
+            { "table": "ORDERS", "kind": "All", "action": "MergeByPk" },
+            { "table": "ITEM", "kind": "ParentKey", "action": "DeleteRangeInsert",
+              "parent": { "parentTable": "ORDERS", "childColumns": ["ORDER_ID"], "parentColumns": ["ID"] } }
+          ],
+          "sequences": [ { "sequence": "SEQ_ITEM", "table": "ITEM", "column": "ID" } ],
+          "maskSalt": "c2FsdA=="
+        }
+        """.Replace("ID_PLACE", id, StringComparison.Ordinal);
+
     [Fact]
     public async Task Future_schema_version_cannot_be_duplicated_or_exported()
     {
@@ -164,7 +213,7 @@ public sealed class CopyJobStoreTests : IDisposable
         var job = Sample();
         await store.SaveAsync(job, CancellationToken.None);
         var path = Assert.Single(await store.ListAsync(CancellationToken.None)).FilePath;
-        await File.WriteAllTextAsync(path, (await File.ReadAllTextAsync(path)).Replace("\"schemaVersion\": 1", "\"schemaVersion\": 99", StringComparison.Ordinal));
+        await File.WriteAllTextAsync(path, (await File.ReadAllTextAsync(path)).Replace("\"schemaVersion\": 2", "\"schemaVersion\": 99", StringComparison.Ordinal));
 
         await Assert.ThrowsAsync<InvalidOperationException>(() => store.DuplicateAsync(job.Id, "사본", CancellationToken.None));
         await Assert.ThrowsAsync<InvalidOperationException>(() => store.ExportAsync(job.Id, Path.Combine(_root, "x.json"), CancellationToken.None));

@@ -18,8 +18,8 @@ namespace Oranda.Platform.Storage.Copy;
 [OrandaService(typeof(ICopyJobStore))]
 internal sealed partial class CopyJobStore : ICopyJobStore
 {
-    /// <summary>변환기 선택용 파일 종류. 아직 상향 변환이 없어 쓰이지 않는다.</summary>
-    private const string FileKind = "copy-job";
+    /// <summary>변환기 선택용 파일 종류(<see cref="CopyJobMigrations.FileKind"/>).</summary>
+    private const string FileKind = CopyJobMigrations.FileKind;
 
     /// <summary>파일 이름 줄기의 UTF-8 바이트 상한. 접미사 ` (n)`·`.json`·`.tmp` 를 붙여도 255바이트 한도 안에 든다.</summary>
     private const int MaxFileStemBytes = 80;
@@ -297,6 +297,19 @@ internal sealed partial class CopyJobStore : ICopyJobStore
                 throw new InvalidDataException($"새 버전 Oranda 가 만든 복사 작업 파일(schemaVersion {version})이라 가져올 수 없다.");
             }
 
+            // 옛 버전 파일은 읽기와 같은 변환기로 올린다(버전 1 = 모든 표가 작업 계정).
+            if (version < CopyJobSchema.Current)
+            {
+                try
+                {
+                    node = CopyJobMigrations.Upgrade(node, version);
+                }
+                catch (InvalidOperationException ex)
+                {
+                    throw new InvalidDataException($"옛 버전 복사 작업 파일(schemaVersion {version})을 변환하지 못했다: {ex.Message}", ex);
+                }
+            }
+
             var merged = JsonDocumentFile.OverDefaults(node, Placeholder(id), CopyJobJsonContext.Default.CopyJob);
             return merged.Deserialize(CopyJobJsonContext.Default.CopyJob) ?? throw new InvalidDataException("복사 작업을 읽을 수 없다.");
         }
@@ -347,7 +360,7 @@ internal sealed partial class CopyJobStore : ICopyJobStore
                 CopyJobSchema.Current,
                 CopyJobJsonContext.Default.CopyJob,
                 () => Placeholder(stem),
-                [],
+                CopyJobMigrations.All,
                 _paths.BackupDirectory,
                 ct).ConfigureAwait(false);
 
