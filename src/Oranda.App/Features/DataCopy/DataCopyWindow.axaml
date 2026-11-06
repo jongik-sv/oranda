@@ -192,6 +192,11 @@
               </StackPanel>
 
               <TextBlock Text="{Binding Notice}" TextWrapping="Wrap" Classes="error" IsVisible="{Binding Notice, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+              <StackPanel Orientation="Horizontal" Spacing="6" IsVisible="{Binding HasTargetReadOnlyNotice}">
+                <ContentControl Content="{Binding Source='error', Converter={x:Static icons:IconKeyConverter.Instance}, ConverterParameter=14}" VerticalAlignment="Center" />
+                <TextBlock x:Name="TargetReadOnlyNoticeText" Text="{Binding TargetReadOnlyNotice}" TextWrapping="Wrap" VerticalAlignment="Center" FontWeight="SemiBold"
+                           AutomationProperties.Name="대상 접속 읽기 전용 안내" />
+              </StackPanel>
 
               <Grid ColumnDefinitions="*,6,360" MinHeight="300">
                 <!-- 규칙 표 -->
@@ -358,6 +363,22 @@
           <Grid ColumnDefinitions="*,6,*" Margin="8">
             <DockPanel>
               <TextBlock DockPanel.Dock="Top" Text="점검 결과" FontWeight="SemiBold" Margin="0,0,0,4" />
+              <!-- 작업에 이미 연결된 시퀀스: 체크를 끄면 연결이 풀린다 -->
+              <StackPanel x:Name="LinkedSequencesPanel" DockPanel.Dock="Top" Margin="0,0,0,6" IsVisible="{Binding Precheck.HasLinkedSequences}">
+                <TextBlock Text="연결된 시퀀스(복사 뒤 값을 맞춥니다)" FontSize="{DynamicResource OrandaFontSizeSmall}" Opacity="0.7" />
+                <ItemsControl ItemsSource="{Binding Precheck.LinkedSequences}">
+                  <ItemsControl.ItemTemplate>
+                    <DataTemplate x:DataType="dc:SequenceLinkViewModel">
+                      <CheckBox IsChecked="{Binding IsLinked}" MinHeight="22" Click="OnSequenceLinkClick" AutomationProperties.Name="시퀀스 연결">
+                        <StackPanel Orientation="Horizontal" Spacing="6">
+                          <TextBlock Text="{Binding Text}" />
+                          <TextBlock Text="{Binding StateText}" FontSize="{DynamicResource OrandaFontSizeSmall}" Opacity="0.7" />
+                        </StackPanel>
+                      </CheckBox>
+                    </DataTemplate>
+                  </ItemsControl.ItemTemplate>
+                </ItemsControl>
+              </StackPanel>
               <ScrollViewer>
                 <ItemsControl ItemsSource="{Binding Precheck.Items}">
                   <ItemsControl.ItemTemplate>
@@ -371,6 +392,20 @@
                             <TextBlock Text="{Binding Table}" Opacity="0.75" />
                           </StackPanel>
                           <TextBlock Text="{Binding Message}" TextWrapping="Wrap" />
+                          <!-- 시퀀스 후보: 켜면 작업에 연결해 저장하고 다시 점검한다 -->
+                          <ContentControl Content="{Binding SequenceLink}" IsVisible="{Binding HasSequenceLink}">
+                            <ContentControl.ContentTemplate>
+                              <DataTemplate x:DataType="dc:SequenceLinkViewModel">
+                                <CheckBox IsChecked="{Binding IsLinked}" MinHeight="22" Click="OnSequenceLinkClick" AutomationProperties.Name="시퀀스 연결"
+                                          ToolTip.Tip="켜면 이 시퀀스를 작업에 저장하고, 복사가 끝난 뒤 값을 원본 최대값에 맞춥니다.">
+                                  <StackPanel Orientation="Horizontal" Spacing="4">
+                                    <TextBlock Text="작업에 연결:" />
+                                    <TextBlock Text="{Binding Text}" />
+                                  </StackPanel>
+                                </CheckBox>
+                              </DataTemplate>
+                            </ContentControl.ContentTemplate>
+                          </ContentControl>
                           <ItemsControl ItemsSource="{Binding Choices}">
                             <ItemsControl.ItemTemplate>
                               <DataTemplate x:DataType="dc:CheckChoiceViewModel">

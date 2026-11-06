@@ -387,8 +387,17 @@ public sealed partial class RunViewModel(DataCopyServices services) : ViewModelB
             {
                 if (Rows.FirstOrDefault(r => r.Table == table.Table) is { } row)
                 {
-                    row.TargetRows = table.TargetRows;
+                    var sent = rows.Count(r => r.Table == table.Table);
+                    var remaining = result.FailedRows.Count(f => f.Table == table.Table);
+                    row.TargetRows = AddRetriedRows(row.TargetRows, table.TargetRows, sent, remaining);
                     row.Message = table.Message ?? string.Empty;
+
+                    // 실패 행이 모두 들어갔으면 표 줄도 성공으로 바꾼다(남았으면 그대로). 표 전체가 실패한 줄은 건드리지 않는다.
+                    if (row.Outcome == CopyOutcome.PartiallyFailed && !result.FailedRows.Any(f => f.Table == table.Table))
+                    {
+                        row.Outcome = CopyOutcome.Succeeded;
+                        row.Phase = "완료";
+                    }
                 }
             }
 
@@ -420,6 +429,15 @@ public sealed partial class RunViewModel(DataCopyServices services) : ViewModelB
             running.TrySetResult();
         }
     }
+
+    /// <summary>
+    /// 다시 넣기 결과의 <c>TargetRows</c> 는 기간 조건 없이 키로 읽어 이번에 넣은 행 수다(실행기가 대상 건수를 다시 세지 않는다).
+    /// 그래서 앞선 대상 건수에 더해 원본·대상 건수 비교를 이어 간다. 앞선 건수를 모르면(없거나 음수) 그대로 둔다.
+    /// 실행기는 커밋하지 못해 되돌린 표의 넣은 수도 담고 그 표의 입력 행을 모두 실패 행으로 돌려주므로,
+    /// 「넣은 수 + 남은 실패 수 = 보낸 수」가 맞을 때만(확정된 표) 더한다.
+    /// </summary>
+    internal static long? AddRetriedRows(long? before, long retried, int sent, int remaining) =>
+        before is >= 0 && retried >= 0 && retried + remaining == sent ? before.Value + retried : before;
 
     /// <summary>
     /// 「CSV로 저장」: 사용자가 누를 때만 호출한다. <paramref name="open"/> 이 저장 위치를 물어 스트림을 열어 주고, 취소하면 null 을 돌려준다.

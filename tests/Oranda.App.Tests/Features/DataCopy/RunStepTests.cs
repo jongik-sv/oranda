@@ -77,6 +77,84 @@ public sealed class RunStepTests
     }
 
     [Fact]
+    public async Task Retry_adds_confirmed_rows_to_the_target_count()
+    {
+        var h = new DataCopyHarness();
+        // 처음 실행: 원본 10행 중 2행 실패 → 대상 8행.
+        h.Runner.Behavior = _ => Task.FromResult(new CopyRunResult(CopyOutcome.PartiallyFailed,
+            [new TableRunResult("ORDERS", 10, 8, TimeSpan.FromSeconds(1), CopyOutcome.PartiallyFailed, null)],
+            [Failed("7"), Failed("9")], [], new DateTimeOffset(2026, 11, 6, 12, 0, 1, TimeSpan.Zero)));
+        // 다시 넣기: 이번에 2행을 넣었다(실행기는 이 값을 TargetRows 에 담는다).
+        h.Runner.RetryResult = new CopyRunResult(CopyOutcome.Succeeded,
+            [new TableRunResult("ORDERS", 2, 2, TimeSpan.FromSeconds(1), CopyOutcome.Succeeded, null)], [], [], new DateTimeOffset(2026, 11, 6, 12, 0, 2, TimeSpan.Zero));
+        var vm = new RunViewModel(h.Services());
+        await vm.StartAsync(Sessions(), TestJobs.Job("다시 넣기"), Report(), NoDecisions, Period);
+        Assert.Equal("10 → 8", Assert.Single(vm.Rows).CountsText);
+
+        await vm.RetryFailedAsync();
+
+        var row = Assert.Single(vm.Rows);
+        Assert.Equal(10, row.TargetRows); // 8 + 2
+        Assert.Equal("10 → 10", row.CountsText);
+        Assert.True(row.CountsMatch);
+        Assert.Empty(vm.FailedRows);
+        Assert.Equal(CopyOutcome.Succeeded, row.Outcome); // 실패 행이 모두 해소되면 표 줄도 성공
+        Assert.Equal("완료", row.Phase);
+    }
+
+    [Fact]
+    public async Task Retry_keeps_the_table_row_problem_state_while_failed_rows_remain()
+    {
+        var h = new DataCopyHarness();
+        h.Runner.Behavior = _ => Task.FromResult(TestJobs.Result(CopyOutcome.PartiallyFailed, Failed("7"), Failed("9")));
+        h.Runner.RetryResult = new CopyRunResult(CopyOutcome.PartiallyFailed,
+            [new TableRunResult("ORDERS", 2, 1, TimeSpan.FromSeconds(1), CopyOutcome.PartiallyFailed, null)], [Failed("9")], [],
+            new DateTimeOffset(2026, 11, 6, 12, 0, 2, TimeSpan.Zero));
+        var vm = new RunViewModel(h.Services());
+        await vm.StartAsync(Sessions(), TestJobs.Job("남은 실패"), Report(), NoDecisions, Period);
+
+        await vm.RetryFailedAsync();
+
+        var row = Assert.Single(vm.Rows);
+        Assert.Equal(CopyOutcome.PartiallyFailed, row.Outcome);
+        Assert.Equal("문제 있음", row.Phase);
+        Assert.Equal("ID=9", Assert.Single(vm.FailedRows).KeyText);
+    }
+
+    [Theory]
+    [InlineData(8L, 2L, 2, 0, 10L)] // 보낸 2행 모두 넣었다
+    [InlineData(8L, 1L, 2, 1, 9L)] // 1행 넣고 1행 실패 남음(확정된 표)
+    [InlineData(8L, 0L, 2, 2, 8L)] // 하나도 못 넣음
+    [InlineData(8L, 1L, 2, 2, 8L)] // 넣은 수가 되돌려졌다(실패 행이 모두 돌아옴): 더하지 않는다
+    [InlineData(8L, -1L, 2, 2, 8L)] // 이번 건수를 모르면 앞 건수 그대로
+    [InlineData(-1L, 2L, 2, 0, -1L)] // 앞 건수를 모르면 계속 모른다
+    [InlineData(null, 2L, 2, 0, null)]
+    public void Retried_rows_are_added_only_for_a_confirmed_table_with_a_known_count(long? before, long retried, int sent, int remaining, long? expected) =>
+        Assert.Equal(expected, RunViewModel.AddRetriedRows(before, retried, sent, remaining));
+
+    [Fact]
+    public async Task Retry_does_not_add_rows_that_were_rolled_back()
+    {
+        var h = new DataCopyHarness();
+        h.Runner.Behavior = _ => Task.FromResult(new CopyRunResult(CopyOutcome.PartiallyFailed,
+            [new TableRunResult("ORDERS", 10, 8, TimeSpan.FromSeconds(1), CopyOutcome.PartiallyFailed, null)],
+            [Failed("7"), Failed("9")], [], new DateTimeOffset(2026, 11, 6, 12, 0, 1, TimeSpan.Zero)));
+        // 중지로 되돌렸다: 1행을 넣었지만 확정하지 못해 입력 행 2개가 모두 돌아온다.
+        h.Runner.RetryResult = new CopyRunResult(CopyOutcome.Stopped,
+            [new TableRunResult("ORDERS", 2, 1, TimeSpan.FromSeconds(1), CopyOutcome.Stopped, null)], [Failed("7"), Failed("9")], [],
+            new DateTimeOffset(2026, 11, 6, 12, 0, 2, TimeSpan.Zero));
+        var vm = new RunViewModel(h.Services());
+        await vm.StartAsync(Sessions(), TestJobs.Job("되돌린 다시 넣기"), Report(), NoDecisions, Period);
+
+        await vm.RetryFailedAsync();
+
+        var row = Assert.Single(vm.Rows);
+        Assert.Equal(8, row.TargetRows); // 8 + 1 이 아니다
+        Assert.Equal(CopyOutcome.PartiallyFailed, row.Outcome);
+        Assert.Equal(2, vm.FailedRows.Count);
+    }
+
+    [Fact]
     public async Task Csv_is_written_only_on_explicit_save()
     {
         var h = new DataCopyHarness();

@@ -106,8 +106,8 @@ public sealed partial class DataCopyViewModel : ViewModelBase, IAsyncDisposable
 
     public bool HasJob => CurrentJob is not null;
 
-    /// <summary>점검을 시작할 수 있는지: 열린 작업이 있고, 다른 점검·세션 열기·실행이 도는 중이 아닐 때.</summary>
-    public bool CanGoToPrecheck => HasJob && !IsBusy && !Run.IsRunning;
+    /// <summary>점검을 시작할 수 있는지: 열린 작업이 있고, 다른 점검·세션 열기·실행이 도는 중이 아니며, 대상이 읽기 전용이 아닐 때.</summary>
+    public bool CanGoToPrecheck => HasJob && !IsBusy && !Run.IsRunning && !Editor.HasTargetReadOnlyNotice;
 
     /// <summary>「복사 실행」: 점검이 통과했고 다른 점검·세션 열기·실행이 도는 중이 아닐 때.</summary>
     public bool CanStartRun => Precheck.CanRun && !IsBusy && !Run.IsRunning;
@@ -126,6 +126,11 @@ public sealed partial class DataCopyViewModel : ViewModelBase, IAsyncDisposable
     // 이미 세션이 열려 있으면 규칙을 고를 때 열 정보를 자동으로 읽는다. 열려 있지 않으면 비밀번호를 묻게 되므로 「열 정보 읽기」를 눌렀을 때만 읽는다.
     private void OnEditorChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
     {
+        if (e.PropertyName == nameof(RuleEditorViewModel.HasTargetReadOnlyNotice))
+        {
+            OnPropertyChanged(nameof(CanGoToPrecheck)); // 읽기 전용 대상을 고르면 다음 단계 단추가 꺼진다
+        }
+
         if (e.PropertyName == nameof(RuleEditorViewModel.SelectedRule) && Editor.SelectedRule is { HasColumns: false } rule
             && (_sessions is not null || _metadataSession is not null))
         {
@@ -589,6 +594,34 @@ public sealed partial class DataCopyViewModel : ViewModelBase, IAsyncDisposable
     {
         if (CurrentJob is null || _sessions is null || IsBusy || Precheck.IsRunning || Run.IsRunning
             || PrecheckViewModel.ApplyJobChoice(CurrentJob, item, choice) is not { } changed)
+        {
+            return;
+        }
+
+        await ApplyJobChangeAsync(changed, ct).ConfigureAwait(true);
+    }
+
+    /// <summary>
+    /// 「연결」 체크: 시퀀스 규칙을 작업에 넣거나 빼고 저장한 뒤 점검을 다시 한다(연결한 규칙은 점검의 시퀀스 점검 대상이 된다).
+    /// 지금 바꿀 수 없는 상태(점검·실행이 도는 중, 세션 없음)면 체크를 원래대로 돌린다.
+    /// </summary>
+    public async Task SetSequenceLinkAsync(SequenceLinkViewModel link, bool linked, CancellationToken ct = default)
+    {
+        ArgumentNullException.ThrowIfNull(link);
+        if (CurrentJob is null || _sessions is null || IsBusy || Precheck.IsRunning || Run.IsRunning
+            || PrecheckViewModel.ApplySequenceLink(CurrentJob, link.Rule, linked) is not { } changed)
+        {
+            link.IsLinked = !linked;
+            return;
+        }
+
+        await ApplyJobChangeAsync(changed, ct).ConfigureAwait(true);
+    }
+
+    // 점검 결과를 먼저 지운 뒤 바뀐 작업을 저장하고 점검을 다시 한다(저장이 실패해도 옛 점검 결과로 실행하지 않는다).
+    private async Task ApplyJobChangeAsync(CopyJob changed, CancellationToken ct)
+    {
+        if (_sessions is null)
         {
             return;
         }

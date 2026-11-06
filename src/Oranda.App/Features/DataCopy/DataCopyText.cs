@@ -14,6 +14,7 @@ internal static class DataCopyText
     public const string TargetMissing = "대상 접속을 고르세요.";
     public const string NoTables = "복사할 테이블을 하나 이상 추가하세요.";
     public const string ProductionTarget = "운영 접속은 복사 대상으로 쓸 수 없습니다.";
+    public const string ReadOnlyTarget = "대상 접속이 읽기 전용이라 복사할 수 없습니다. 쓰기가 가능한 접속을 고르세요.";
     public const string RunStopped = "사용자가 복사를 중지했습니다.";
     public const string UnfinishedHeader = "지난 실행이 끝나지 않았습니다. 대상 트리거·FK 상태를 확인하세요.";
 

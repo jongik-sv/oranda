@@ -33,7 +33,7 @@ public sealed partial class RuleEditorViewModel : ViewModelBase
     private ConnectionOption? _source;
 
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(CanRecreate), nameof(AvailableActions))]
+    [NotifyPropertyChangedFor(nameof(CanRecreate), nameof(AvailableActions), nameof(TargetReadOnlyNotice), nameof(HasTargetReadOnlyNotice))]
     private ConnectionOption? _target;
 
     [ObservableProperty]
@@ -113,6 +113,11 @@ public sealed partial class RuleEditorViewModel : ViewModelBase
     /// <summary>대상이 개발 접속일 때만 「테이블 다시 만들기」를 고를 수 있다(설계 6.2.3).</summary>
     public bool CanRecreate => Target is { } t && CopyTargetGuard.CanRecreate(t.Profile);
 
+    /// <summary>고른 대상 접속이 읽기 전용이면 복사할 수 없다는 안내. 아니면 빈 글자.</summary>
+    public string TargetReadOnlyNotice => Target is { Profile.ReadOnly: true } ? DataCopyText.ReadOnlyTarget : string.Empty;
+
+    public bool HasTargetReadOnlyNotice => TargetReadOnlyNotice.Length > 0;
+
     public IReadOnlyList<TargetAction> AvailableActions =>
         CanRecreate
             ? [TargetAction.DeleteAllInsert, TargetAction.DeleteRangeInsert, TargetAction.AppendOnly, TargetAction.MergeByPk, TargetAction.Recreate]
@@ -145,7 +150,7 @@ public sealed partial class RuleEditorViewModel : ViewModelBase
         {
             SourceOptions.Add(new ConnectionOption(profile, true, profile.ReadOnly ? "읽기 전용 접속" : null));
             var allowed = CopyTargetGuard.IsAllowedTarget(profile);
-            TargetOptions.Add(new ConnectionOption(profile, allowed, allowed ? null : DataCopyText.ProductionTarget));
+            TargetOptions.Add(new ConnectionOption(profile, allowed, allowed ? (profile.ReadOnly ? DataCopyText.ReadOnlyTarget : null) : DataCopyText.ProductionTarget));
         }
 
         // 목록을 다시 채워도 고른 접속은 같은 접속으로 이어 둔다(목록을 비우면 선택이 풀리기 때문).
@@ -233,6 +238,12 @@ public sealed partial class RuleEditorViewModel : ViewModelBase
         if (!CopyTargetGuard.IsAllowedTarget(Target.Profile))
         {
             return DataCopyText.ProductionTarget;
+        }
+
+        // 읽기 전용 접속은 정책 관문이 모든 쓰기를 거부하므로, 사전 점검 전에 이유를 알리고 막는다.
+        if (Target.Profile.ReadOnly)
+        {
+            return DataCopyText.ReadOnlyTarget;
         }
 
         // 같은 접속·같은 소유자의 같은 테이블을 원본이자 대상으로 두면 원본 행을 지운다.

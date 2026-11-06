@@ -85,6 +85,9 @@ internal sealed class FakePrecheck(PrecheckReport report) : ICopyPrecheckService
 {
     public int Calls { get; private set; }
 
+    /// <summary>설정하면 작업에 따라 다른 결과를 돌려준다(운영 점검처럼 연결한 시퀀스는 후보에서 빠진다).</summary>
+    public Func<CopyJob, PrecheckReport>? ReportFor { get; set; }
+
     /// <summary>설정하면 점검이 이 작업이 끝날 때까지 기다린다(점검이 도는 중 상태 재현).</summary>
     public TaskCompletionSource? Gate { get; set; }
 
@@ -96,7 +99,7 @@ internal sealed class FakePrecheck(PrecheckReport report) : ICopyPrecheckService
             await gate.Task.WaitAsync(ct).ConfigureAwait(false);
         }
 
-        return report;
+        return ReportFor?.Invoke(job) ?? report;
     }
 }
 
@@ -124,11 +127,14 @@ internal sealed class FakeRunner : ICopyRunner
 
     public int RetryCalls { get; private set; }
 
+    /// <summary>다시 넣기가 돌려줄 결과. 설정하지 않으면 기본 결과.</summary>
+    public CopyRunResult? RetryResult { get; set; }
+
     public Task<CopyRunResult> RetryFailedRowsAsync(CopySessions sessions, CopyJob job, PrecheckReport report, IReadOnlyList<FailedRow> rows,
         IProgress<CopyProgress>? progress, CancellationToken ct)
     {
         RetryCalls++;
-        return Task.FromResult(TestJobs.Result());
+        return Task.FromResult(RetryResult ?? TestJobs.Result());
     }
 }
 

@@ -418,6 +418,14 @@ public partial class DataCopyWindow : Window
         }
     }
 
+    private async void OnSequenceLinkClick(object? sender, RoutedEventArgs e)
+    {
+        if (Vm is { } vm && (sender as Control)?.DataContext is SequenceLinkViewModel link)
+        {
+            await RunUiAsync(ct => vm.SetSequenceLinkAsync(link, link.IsLinked, ct)).ConfigureAwait(true);
+        }
+    }
+
     private async void OnSaveCsv(object? sender, RoutedEventArgs e)
     {
         if (Vm is not { } vm)

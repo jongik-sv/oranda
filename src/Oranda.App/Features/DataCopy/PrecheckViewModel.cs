@@ -36,6 +36,24 @@ public sealed partial class CheckChoiceViewModel(CheckChoice choice, string? tab
     };
 }
 
+/// <summary>
+/// 시퀀스 연결 한 건: 표의 숫자 키 열과 시퀀스를 짝지은 규칙. 켜면 작업의 <see cref="CopyJob.Sequences"/> 에 들어가
+/// 복사가 끝난 뒤 시퀀스 값을 원본의 최대값에 맞춘다. 후보(아직 연결 전)와 이미 작업에 있는 규칙을 같은 모양으로 보인다.
+/// </summary>
+public sealed partial class SequenceLinkViewModel(SequenceRule rule, bool isLinked) : ViewModelBase
+{
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(StateText))]
+    private bool _isLinked = isLinked;
+
+    public SequenceRule Rule { get; } = rule;
+
+    public string Text => $"{Rule.Table}.{Rule.Column} ← {Rule.Sequence}";
+
+    /// <summary>연결된 규칙은 「연결됨」, 후보는 빈 글자.</summary>
+    public string StateText => IsLinked ? "연결됨" : string.Empty;
+}
+
 /// <summary>점검 결과 한 줄.</summary>
 public sealed class CheckItemViewModel
 {
@@ -60,6 +78,11 @@ public sealed class CheckItemViewModel
     public string Code => Item.Code;
 
     public IReadOnlyList<CheckChoiceViewModel> Choices { get; }
+
+    /// <summary>시퀀스 후보 항목이면 「연결」 체크 한 개. 아니면 null.</summary>
+    public SequenceLinkViewModel? SequenceLink { get; internal set; }
+
+    public bool HasSequenceLink => SequenceLink is not null;
 
     /// <summary>수준별 아이콘 키(오류 = 빨강, 확인 필요 = 주황·노랑, 통과 = 초록 계열 색은 아이콘 톤이 정한다).</summary>
     public string IconKey => Level switch
@@ -129,6 +152,11 @@ public sealed partial class PrecheckViewModel(DataCopyServices services) : ViewM
     public ObservableCollection<CheckItemViewModel> Items { get; } = [];
 
     public ObservableCollection<PreviewRowViewModel> Preview { get; } = [];
+
+    /// <summary>작업에 이미 연결된 시퀀스 규칙. 체크를 끄면 연결이 풀린다.</summary>
+    public ObservableCollection<SequenceLinkViewModel> LinkedSequences { get; } = [];
+
+    public bool HasLinkedSequences => LinkedSequences.Count > 0;
 
     /// <summary>새 SQL 탭으로 열기(창이 연결한다). 연결이 없으면 아무 일도 하지 않는다.</summary>
     public Func<string, Task>? OpenInEditor { get; set; }
@@ -245,7 +273,9 @@ public sealed partial class PrecheckViewModel(DataCopyServices services) : ViewM
         Report = null;
         Items.Clear();
         Preview.Clear();
+        LinkedSequences.Clear();
         RetypeInput = string.Empty;
+        OnPropertyChanged(nameof(HasLinkedSequences));
         OnPropertyChanged(nameof(HasDenied));
         OnPropertyChanged(nameof(NeedsRetype));
         OnPropertyChanged(nameof(RetypeSatisfied));
@@ -260,7 +290,13 @@ public sealed partial class PrecheckViewModel(DataCopyServices services) : ViewM
     {
         Items.Clear();
         Preview.Clear();
+        LinkedSequences.Clear();
         RetypeInput = string.Empty;
+        foreach (var rule in job.Sequences)
+        {
+            LinkedSequences.Add(new SequenceLinkViewModel(rule, isLinked: true));
+        }
+
         var plans = report.Order.ToDictionary(p => p.Rule.Table, StringComparer.Ordinal);
         foreach (var item in report.Items.OrderBy(i => i.Level switch { CheckLevel.Error => 0, CheckLevel.Confirm => 1, _ => 2 }))
         {
@@ -278,7 +314,13 @@ public sealed partial class PrecheckViewModel(DataCopyServices services) : ViewM
                 choices.Add(new CheckChoiceViewModel(choice, item.Table, visible, chosen));
             }
 
-            Items.Add(new CheckItemViewModel(item, choices));
+            var row = new CheckItemViewModel(item, choices);
+            if (item is { Code: "SequenceGap", Table: { } table, Column: { } column, Sequence: { } sequence })
+            {
+                row.SequenceLink = new SequenceLinkViewModel(new SequenceRule(sequence, table, column), isLinked: false);
+            }
+
+            Items.Add(row);
         }
 
         foreach (var statement in report.Preview)
@@ -287,6 +329,7 @@ public sealed partial class PrecheckViewModel(DataCopyServices services) : ViewM
         }
 
         Report = report;
+        OnPropertyChanged(nameof(HasLinkedSequences));
         OnPropertyChanged(nameof(HasDenied));
         OnPropertyChanged(nameof(NeedsRetype));
         OnPropertyChanged(nameof(RetypeSatisfied));
@@ -354,6 +397,23 @@ public sealed partial class PrecheckViewModel(DataCopyServices services) : ViewM
             _ => rule,
         }).ToList();
         return job with { Tables = tables };
+    }
+
+    /// <summary>
+    /// 시퀀스 연결을 켜거나 끈 작업을 만든다. 같은 표·열의 규칙은 하나뿐이라 켤 때 먼저 지우고 넣는다.
+    /// 바뀐 것이 없으면 null(호출한 쪽이 점검을 다시 하지 않는다).
+    /// </summary>
+    public static CopyJob? ApplySequenceLink(CopyJob job, SequenceRule rule, bool linked)
+    {
+        ArgumentNullException.ThrowIfNull(job);
+        ArgumentNullException.ThrowIfNull(rule);
+        var rest = job.Sequences.Where(s => !(s.Table == rule.Table && s.Column == rule.Column)).ToList();
+        if (linked)
+        {
+            rest.Add(rule);
+        }
+
+        return rest.SequenceEqual(job.Sequences) ? null : job with { Sequences = rest };
     }
 
     public async Task OpenScriptInEditorAsync()

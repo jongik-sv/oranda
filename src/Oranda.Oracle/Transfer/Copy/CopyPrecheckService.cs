@@ -601,6 +601,7 @@ internal sealed partial class CopyPrecheckService(IBulkExecutionService bulk, IM
                         $"{guess.Table}.{guess.Column}: 시퀀스 후보 {guess.Sequence}. 작업에 연결하면 복사 뒤 값을 맞춥니다.")
                     {
                         Column = guess.Column,
+                        Sequence = guess.Sequence,
                     });
                 }
             }

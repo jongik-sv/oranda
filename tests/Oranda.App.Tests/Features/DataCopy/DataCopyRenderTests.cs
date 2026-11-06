@@ -178,6 +178,57 @@ public sealed class DataCopyRenderTests : IDisposable
     });
 
     [Fact]
+    public Task Precheck_step_with_sequence_candidates_renders_without_clipping() => HeadlessHost.Run(async () =>
+    {
+        var h = new DataCopyHarness();
+        var items = new[]
+        {
+            new CheckItem("ORDERS", "SequenceGap", CheckLevel.Pass, "ORDERS.ORDER_ID: 시퀀스 후보 ORDERS_SEQ. 작업에 연결하면 복사 뒤 값을 맞춥니다.")
+                { Column = "ORDER_ID", Sequence = "ORDERS_SEQ" },
+            new CheckItem("ORDER_ITEMS", "SequenceGap", CheckLevel.Pass, "ORDER_ITEMS.ITEM_ID: 시퀀스 후보 ORDER_ITEMS_SEQ. 작업에 연결하면 복사 뒤 값을 맞춥니다.")
+                { Column = "ITEM_ID", Sequence = "ORDER_ITEMS_SEQ" },
+            new CheckItem("CODES", "SequenceGap", CheckLevel.Confirm, "CODES.CODE_ID: 복사 뒤 시퀀스 CODES_SEQ 를 약 1,250번 소비해 값을 앞당깁니다.") { Column = "CODE_ID" },
+        };
+        h.Precheck = new FakePrecheck(TestJobs.Report(items, [TestJobs.Plan("ORDERS"), TestJobs.Plan("ORDER_ITEMS"), TestJobs.Plan("CODES")]));
+        var (window, vm) = await OpenWindowAsync(h);
+        try
+        {
+            vm.CurrentJob = vm.CurrentJob! with { Sequences = [new SequenceRule("CODES_SEQ", "CODES", "CODE_ID")] };
+            await vm.Precheck.RunAsync(Sessions(), vm.CurrentJob!, new ResolvedPeriod(null, null));
+            vm.Step = DataCopyStep.Precheck;
+            Settle(window);
+
+            Assert.True(window.FindControl<StackPanel>("LinkedSequencesPanel")!.IsEffectivelyVisible);
+            Assert.Equal(2, vm.Precheck.Items.Count(i => i.HasSequenceLink));
+            AssertNotClipped(window, "사전 점검(시퀀스 후보)");
+            Shots(window, "2-precheck-sequences");
+        }
+        finally
+        {
+            window.Close();
+        }
+    });
+
+    [Fact]
+    public Task Read_only_target_notice_renders_in_the_rule_edit_step() => HeadlessHost.Run(async () =>
+    {
+        var h = new DataCopyHarness();
+        h.Profiles[1] = h.Target with { ReadOnly = true };
+        var (window, vm) = await OpenWindowAsync(h);
+        try
+        {
+            Assert.True(window.FindControl<TextBlock>("TargetReadOnlyNoticeText")!.IsEffectivelyVisible);
+            Assert.False(window.FindControl<Button>("ToPrecheckButton")!.IsEffectivelyEnabled); // 다음 단계로 못 간다
+            AssertNotClipped(window, "규칙 편집(읽기 전용 대상)");
+            Shots(window, "1-rules-readonly-target");
+        }
+        finally
+        {
+            window.Close();
+        }
+    });
+
+    [Fact]
     public Task Run_step_renders_without_clipping() => HeadlessHost.Run(async () =>
     {
         var h = new DataCopyHarness();

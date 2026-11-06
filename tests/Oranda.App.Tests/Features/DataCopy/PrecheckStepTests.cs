@@ -477,8 +477,9 @@ public sealed class PrecheckStepTests
 
         h.Profiles[1] = h.Profiles[1] with { ReadOnly = true };
         await vm.GoToPrecheckAsync();
-        Assert.Equal(6, h.Opened.Count);
-        Assert.True(h.Opened[5].ReadOnly);
+        Assert.Equal(4, h.Opened.Count); // 읽기 전용 대상은 점검 전에 막아 새 세션을 열지 않는다
+        Assert.True(vm.StatusIsError);
+        Assert.Equal(DataCopyText.ReadOnlyTarget, vm.StatusText);
     }
 
     [Fact]
@@ -566,6 +567,119 @@ public sealed class PrecheckStepTests
 
         Assert.Equal(["오류", "확인", "통과"], vm.Items.Select(i => i.Message));
         Assert.Equal(["error", "warn", "ok"], vm.Items.Select(i => i.IconKey));
+    }
+
+    private static CheckItem Candidate(string sequence = "ORDERS_SEQ") =>
+        new("ORDERS", "SequenceGap", CheckLevel.Pass, $"ORDERS.ID: 시퀀스 후보 {sequence}. 작업에 연결하면 복사 뒤 값을 맞춥니다.")
+        {
+            Column = "ID",
+            Sequence = sequence,
+        };
+
+    [Fact]
+    public async Task Sequence_candidate_is_unlinked_until_checked_then_saved_to_the_job()
+    {
+        var h = new DataCopyHarness();
+        h.Precheck = new FakePrecheck(TestJobs.Report([Candidate()]))
+        {
+            // 운영 점검처럼: 작업에 이미 연결된 표·열은 후보로 내지 않는다.
+            ReportFor = job => TestJobs.Report(job.Sequences.Any(s => s.Table == "ORDERS" && s.Column == "ID") ? [] : [Candidate()]),
+        };
+        var vm = await PrecheckedAsync(h);
+
+        var link = Assert.IsType<SequenceLinkViewModel>(vm.Precheck.Items.Single().SequenceLink);
+        Assert.False(link.IsLinked); // 기본은 꺼짐
+        Assert.Empty(vm.CurrentJob!.Sequences);
+        Assert.Empty(vm.Precheck.LinkedSequences);
+
+        link.IsLinked = true;
+        await vm.SetSequenceLinkAsync(link, true);
+
+        var rule = Assert.Single(vm.CurrentJob!.Sequences);
+        Assert.Equal(new SequenceRule("ORDERS_SEQ", "ORDERS", "ID"), rule);
+        Assert.Equal([rule], h.Store.Jobs[vm.CurrentJob.Id].Sequences); // 작업 파일에 함께 저장
+        Assert.Equal([rule], vm.Editor.BuildJob().Sequences); // 규칙 편집으로 돌아가도 남는다
+        Assert.Equal(2, h.Precheck.Calls); // 연결한 규칙이 점검되도록 다시 점검
+        Assert.True(vm.Precheck.CanRun);
+        Assert.Equal("연결됨", Assert.Single(vm.Precheck.LinkedSequences).StateText);
+        Assert.DoesNotContain(vm.Precheck.Items, i => i.HasSequenceLink); // 연결한 뒤에는 후보가 사라지고 연결 목록으로 옮겨 간다
+    }
+
+    [Fact]
+    public async Task Linked_sequence_can_be_unlinked_and_the_job_file_follows()
+    {
+        var h = new DataCopyHarness();
+        h.Precheck = new FakePrecheck(TestJobs.Report());
+        var rule = new SequenceRule("ORDERS_SEQ", "ORDERS", "ID");
+        var job = TestJobs.Job("연결된 작업", rules: TestJobs.Rule("ORDERS")) with { Sequences = [rule] };
+        var vm = await h.OpenAsync(job);
+        await vm.GoToPrecheckAsync();
+
+        var link = Assert.Single(vm.Precheck.LinkedSequences);
+        Assert.True(link.IsLinked); // 이미 작업에 있는 규칙은 연결됨으로 보인다
+
+        link.IsLinked = false;
+        await vm.SetSequenceLinkAsync(link, false);
+
+        Assert.Empty(vm.CurrentJob!.Sequences);
+        Assert.Empty(h.Store.Jobs[job.Id].Sequences);
+        Assert.Empty(vm.Precheck.LinkedSequences);
+    }
+
+    [Fact]
+    public async Task Sequence_link_is_reverted_while_a_check_is_running()
+    {
+        var h = new DataCopyHarness();
+        h.Precheck = new FakePrecheck(TestJobs.Report([Candidate()]));
+        var vm = await PrecheckedAsync(h);
+        var link = vm.Precheck.Items.Single().SequenceLink!;
+        var gate = new TaskCompletionSource();
+        h.Precheck.Gate = gate;
+        var recheck = vm.GoToPrecheckAsync(); // 점검이 도는 중
+        await Task.Delay(100);
+
+        link.IsLinked = true;
+        await vm.SetSequenceLinkAsync(link, true);
+
+        Assert.False(link.IsLinked); // 지금은 바꿀 수 없어 체크를 되돌린다
+        Assert.Empty(vm.CurrentJob!.Sequences);
+        gate.SetResult();
+        await recheck;
+    }
+
+    [Fact]
+    public async Task Pass_item_without_candidate_sequence_has_no_link()
+    {
+        var h = new DataCopyHarness();
+        h.Precheck = new FakePrecheck(TestJobs.Report([new CheckItem("ORDERS", "SequenceGap", CheckLevel.Confirm, "최대값을 읽지 못했습니다.") { Column = "ID" }]));
+        var vm = await PrecheckedAsync(h);
+
+        Assert.Null(vm.Precheck.Items.Single().SequenceLink);
+    }
+
+    [Fact]
+    public async Task Read_only_target_stops_before_the_precheck_with_a_notice()
+    {
+        var h = new DataCopyHarness();
+        h.Profiles[1] = h.Target with { ReadOnly = true };
+        var vm = await h.OpenAsync(TestJobs.Job("읽기 전용 대상", rules: TestJobs.Rule("ORDERS")));
+
+        Assert.Equal(DataCopyText.ReadOnlyTarget, vm.Editor.TargetReadOnlyNotice);
+        Assert.True(vm.Editor.HasTargetReadOnlyNotice);
+        Assert.Equal(DataCopyText.ReadOnlyTarget, vm.Editor.Validate());
+        Assert.False(vm.CanGoToPrecheck);
+
+        await vm.GoToPrecheckAsync();
+
+        Assert.Equal(DataCopyStep.RuleEdit, vm.Step);
+        Assert.Empty(h.Opened);
+        Assert.Equal(0, h.Precheck.Calls);
+        Assert.Equal(DataCopyText.ReadOnlyTarget, vm.StatusText);
+        Assert.True(vm.StatusIsError);
+
+        vm.Editor.Target = vm.Editor.TargetOptions.First(o => !o.Profile.ReadOnly && o.IsEnabled); // 쓰기 가능한 접속으로 바꾸면 풀린다
+        Assert.False(vm.Editor.HasTargetReadOnlyNotice);
+        Assert.True(vm.CanGoToPrecheck);
     }
 
     private sealed class ThrowingPrecheck : ICopyPrecheckService

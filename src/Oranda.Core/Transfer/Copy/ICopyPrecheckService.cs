@@ -21,6 +21,9 @@ public sealed record CheckItem(string? Table, string Code, CheckLevel Level, str
 {
     public IReadOnlyList<CheckChoice> Choices { get; init; } = [];
     public string? Column { get; init; }
+
+    /// <summary>시퀀스 후보 항목일 때 후보 시퀀스 이름. 화면이 「연결」 체크로 작업에 저장한다.</summary>
+    public string? Sequence { get; init; }
 }
 
 public sealed record CopyTablePlan(TableRule Rule, TableInfo Source, TableInfo Target,
