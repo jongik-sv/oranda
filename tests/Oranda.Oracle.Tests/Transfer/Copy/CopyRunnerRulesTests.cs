@@ -173,4 +173,39 @@ public class CopyRunnerRulesTests
         Assert.False(CopyRunner.SameRule(a, a with { Parent = new ParentLink("P", ["P_ID"], ["ID"]) { ParentOwner = "APP" } }));
         Assert.True(CopyRunner.SameRule(a, a with { WrittenAs = "SYN" })); // 표시용 이름은 실행과 상관없다
     }
+
+    [Fact]
+    public void Disable_targets_turn_off_only_the_chosen_schemas_foreign_key_and_report_rule_keys()
+    {
+        // 같은 이름 FK(FK_ORD)가 두 계정에 있다: APP 쪽만 고르면 APP2 쪽 FK 는 그대로 켜져 있어야 한다.
+        var job = ReportJob(
+            new TableRule("ORDERS", RuleKind.All, TargetAction.DeleteAllInsert),
+            new TableRule("ORDERS", RuleKind.All, TargetAction.DeleteAllInsert) { SourceOwner = "APP2", TargetOwner = "APP2" });
+        var app = new DisabledObject(DisabledKind.ForeignKey, "DST", "ITEMS", "FK_ORD");
+        var app2 = new DisabledObject(DisabledKind.ForeignKey, "APP2", "ITEMS", "FK_ORD");
+        var report = ReportFor(job);
+        report = report with
+        {
+            Order =
+            [
+                report.Order[0] with { DisablableForeignKeys = [app], CanDisableTriggers = true, Triggers = ["ORD_TRG"] },
+                report.Order[1] with { DisablableForeignKeys = [app2], CanDisableTriggers = true, Triggers = ["ORD_TRG"] },
+            ],
+        };
+        var decisions = new CopyDecisions(new HashSet<string> { "APP2.ORDERS" }, new HashSet<ForeignKeyRef> { new("DST", "FK_ORD") },
+            new HashSet<string>(), ProceedSequenceGap: false);
+
+        var targets = CopyRunner.DisableTargets(report, decisions, p => CopyOwners.Key(job, p.Rule));
+
+        Assert.Equal(2, targets.Count);
+        var trigger = Assert.Single(targets, t => t.Object.Kind == DisabledKind.Trigger);
+        Assert.Equal(("APP2", "ORD_TRG", "APP2.ORDERS"), (trigger.Object.Owner, trigger.Object.Name, trigger.Key)); // 진행 줄은 규칙 키
+        var fk = Assert.Single(targets, t => t.Object.Kind == DisabledKind.ForeignKey);
+        Assert.Same(app, fk.Object);
+        Assert.Equal("ORDERS", fk.Key);
+
+        // 결정이 FK 이름만 같고 계정이 다르면(대소문자도 글자 그대로) 끄지 않는다.
+        var other = decisions with { DisableTriggerTables = new HashSet<string>(), DisableForeignKeys = new HashSet<ForeignKeyRef> { new("dst", "FK_ORD") } };
+        Assert.Empty(CopyRunner.DisableTargets(report, other, p => CopyOwners.Key(job, p.Rule)));
+    }
 }

@@ -12,8 +12,22 @@ public interface ICopyRunner
                                              CancellationToken ct);
 }
 
-public sealed record CopyDecisions(IReadOnlySet<string> DisableTriggerTables, IReadOnlySet<string> DisableForeignKeys,
+/// <summary>
+/// 사전 점검에서 사용자가 고른 실행 결정. 트리거 끄기는 규칙 키, FK 끄기는 (FK 계정, FK 이름)이다:
+/// FK 이름은 계정마다 따로라 이름만 담으면 다른 계정의 같은 이름 FK 까지 꺼진다.
+/// </summary>
+public sealed record CopyDecisions(IReadOnlySet<string> DisableTriggerTables, IReadOnlySet<ForeignKeyRef> DisableForeignKeys,
                                    IReadOnlySet<string> PreConfirmedSql, bool ProceedSequenceGap);
+
+/// <summary>끌 FK 하나: 제약의 계정(자식 표 계정, <see cref="DisabledObject.Owner"/>)과 이름. 글자 그대로 비교한다(문장에 따옴표로 들어간다).</summary>
+public sealed record ForeignKeyRef(string Owner, string Name)
+{
+    public static ForeignKeyRef Of(DisabledObject fk)
+    {
+        ArgumentNullException.ThrowIfNull(fk);
+        return new ForeignKeyRef(fk.Owner, fk.Name);
+    }
+}
 
 public sealed record CopyProgress(string Table, long Rows, long? Estimated, string Phase);
 

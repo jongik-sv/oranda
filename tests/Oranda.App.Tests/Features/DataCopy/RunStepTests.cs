@@ -10,7 +10,7 @@ public sealed class RunStepTests
 {
     private static readonly ResolvedPeriod Period = new(null, null);
 
-    private static readonly CopyDecisions NoDecisions = new(new HashSet<string>(), new HashSet<string>(), new HashSet<string>(), false);
+    private static readonly CopyDecisions NoDecisions = new(new HashSet<string>(), new HashSet<ForeignKeyRef>(), new HashSet<string>(), false);
 
     private static CopySessions Sessions() => new(new FakeSession(), new FakeSession());
 

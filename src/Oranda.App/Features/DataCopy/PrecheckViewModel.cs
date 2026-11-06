@@ -420,7 +420,7 @@ public sealed partial class PrecheckViewModel(DataCopyServices services) : ViewM
     public CopyDecisions BuildDecisions()
     {
         var disableTriggers = new HashSet<string>(StringComparer.Ordinal);
-        var disableForeignKeys = new HashSet<string>(StringComparer.Ordinal);
+        var disableForeignKeys = new HashSet<ForeignKeyRef>(); // (계정, 이름): 다른 계정의 같은 이름 FK 는 끄지 않는다
         var plans = Report is { } report && _job is { } job ? PlansByKey(job, report) : [];
         var proceedGap = false;
         foreach (var item in Items)
@@ -435,7 +435,7 @@ public sealed partial class PrecheckViewModel(DataCopyServices services) : ViewM
                     case CheckChoice.DisableForeignKeys when choice.Table is { } fkTable && plans.TryGetValue(fkTable, out var plan):
                         foreach (var fk in plan.DisablableForeignKeys)
                         {
-                            disableForeignKeys.Add(fk.Name);
+                            disableForeignKeys.Add(ForeignKeyRef.Of(fk));
                         }
 
                         break;

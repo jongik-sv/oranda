@@ -452,7 +452,7 @@ public sealed class ManualCopyScreens : IDisposable
         {
             var report = TestJobs.Report(order: [TestJobs.Plan("CODES"), TestJobs.Plan("ORDERS"), TestJobs.Plan("ORDER_ITEMS")]);
             await vm.Run.StartAsync(Sessions(), vm.CurrentJob!, report,
-                new CopyDecisions(new HashSet<string>(), new HashSet<string>(), new HashSet<string>(), false),
+                new CopyDecisions(new HashSet<string>(), new HashSet<ForeignKeyRef>(), new HashSet<string>(), false),
                 PeriodCalculator.Resolve(vm.CurrentJob!.Period, new DateTime(2026, 11, 6)));
             vm.Step = DataCopyStep.Run;
             Settle(window);

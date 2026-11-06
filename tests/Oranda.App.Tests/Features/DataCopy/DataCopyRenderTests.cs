@@ -422,7 +422,7 @@ public sealed class DataCopyRenderTests : IDisposable
         {
             var report = TestJobs.Report(order: [TestJobs.Plan("CODES"), TestJobs.Plan("ORDERS"), TestJobs.Plan("ORDER_ITEMS")]);
             var run = vm.Run.StartAsync(Sessions(), vm.CurrentJob!, report,
-                new CopyDecisions(new HashSet<string>(), new HashSet<string>(), new HashSet<string>(), false), new ResolvedPeriod(null, null));
+                new CopyDecisions(new HashSet<string>(), new HashSet<ForeignKeyRef>(), new HashSet<string>(), false), new ResolvedPeriod(null, null));
             vm.Step = DataCopyStep.Run;
             await h.Runner.Started.Task.WaitAsync(TimeSpan.FromSeconds(10));
             Settle(window); // 그리드가 「대기」·빈 건수로 먼저 그려진다
@@ -688,7 +688,7 @@ public sealed class DataCopyRenderTests : IDisposable
         {
             var report = TestJobs.Report(order: [TestJobs.Plan("ORDERS")]);
             var run = vm.Run.StartAsync(Sessions(), vm.CurrentJob!, report,
-                new CopyDecisions(new HashSet<string>(), new HashSet<string>(), new HashSet<string>(), false), new ResolvedPeriod(null, null));
+                new CopyDecisions(new HashSet<string>(), new HashSet<ForeignKeyRef>(), new HashSet<string>(), false), new ResolvedPeriod(null, null));
             await h.Runner.Started.Task.WaitAsync(TimeSpan.FromSeconds(10));
             Assert.True(vm.Run.IsRunning);
 

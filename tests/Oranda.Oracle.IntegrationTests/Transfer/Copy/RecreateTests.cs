@@ -334,7 +334,7 @@ public sealed class RecreateTests
     {
         scope.Ui.ConfirmAnswer = false;
         var decisions = new CopyDecisions(
-            new HashSet<string>(StringComparer.Ordinal), new HashSet<string>(StringComparer.Ordinal),
+            new HashSet<string>(StringComparer.Ordinal), new HashSet<ForeignKeyRef>(),
             report.Preview.Where(p => p.Policy == PolicyDecisionKind.Confirm).Select(p => p.Sql).ToHashSet(StringComparer.Ordinal),
             ProceedSequenceGap: false);
         var runner = new CopyRunner(scope.Bulk(), NewExecution(scope), log);

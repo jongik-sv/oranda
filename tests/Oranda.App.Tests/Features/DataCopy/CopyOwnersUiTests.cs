@@ -256,6 +256,30 @@ public sealed class CopyOwnersUiTests
     }
 
     [Fact]
+    public async Task Disabling_foreign_keys_keeps_the_schema_of_each_constraint()
+    {
+        // 같은 이름 FK 가 두 계정에 있다. 한 표의 「FK 끄기」를 고르면 그 표 계획의 FK(계정, 이름)만 결정에 든다.
+        var job = MixedJob();
+        var item = new CheckItem("APP2.ORDERS", "TargetFkBlocks", CheckLevel.Confirm, "FK") { Choices = [CheckChoice.DisableForeignKeys] };
+        var plans = new[]
+        {
+            TestJobs.Plan("CUSTOMERS") with { DisablableForeignKeys = [new DisabledObject(DisabledKind.ForeignKey, "APP", "ITEMS", "FK_ITEMS")] },
+            new CopyTablePlan(job.Tables[1], TestJobs.Table("ORDERS"), TestJobs.Table("ORDERS"), [], [])
+            {
+                DisablableForeignKeys = [new DisabledObject(DisabledKind.ForeignKey, "APP2", "ITEMS", "FK_ITEMS")],
+            },
+        };
+        var h = new DataCopyHarness { Precheck = new FakePrecheck(TestJobs.Report([item], plans)) };
+        var precheck = new PrecheckViewModel(h.Services());
+        await precheck.RunAsync(Sessions(), job, Period);
+
+        var choice = Assert.Single(precheck.Items.Single(i => i.Table == "APP2.ORDERS").Choices);
+        Assert.True(choice.IsVisible);
+        choice.IsChosen = true;
+        Assert.Equal([new ForeignKeyRef("APP2", "FK_ITEMS")], precheck.BuildDecisions().DisableForeignKeys);
+    }
+
+    [Fact]
     public void Run_confirmation_is_asked_only_for_several_target_schemas_or_a_non_session_schema()
     {
         var single = TestJobs.Job("한 계정", rules: TestJobs.Rule("ORDERS")) with { TargetOwner = "TGT_USER" };
@@ -309,7 +333,7 @@ public sealed class CopyOwnersUiTests
         var run = new RunViewModel(h.Services());
         var report = TestJobs.Report(order: [TestJobs.Plan("CUSTOMERS"), new CopyTablePlan(job.Tables[1], TestJobs.Table("ORDERS"), TestJobs.Table("ORDERS"), [], [])]);
 
-        await run.StartAsync(Sessions(), job, report, new CopyDecisions(new HashSet<string>(), new HashSet<string>(), new HashSet<string>(), false), Period);
+        await run.StartAsync(Sessions(), job, report, new CopyDecisions(new HashSet<string>(), new HashSet<ForeignKeyRef>(), new HashSet<string>(), false), Period);
 
         Assert.Equal(["CUSTOMERS", "APP2.ORDERS"], run.Rows.Select(r => r.Table));
         Assert.Equal(["APP.CUSTOMERS", "APP2.ORDERS"], run.Rows.Select(r => r.Display));

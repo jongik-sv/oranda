@@ -499,7 +499,7 @@ public sealed class CopyRunnerTests
         var log = new RecordingRunLog { OnRecordDisabled = async () => statusAtRecord = await TriggerStatusAsync(scope, "DO_PARENT_TRG") };
 
         var result = await RunAsync(scope, sessions, job, report, NoPeriod, log,
-            Decisions(report, disableTriggerTables: ["DO_PARENT"], disableForeignKeys: [fk.Name]));
+            Decisions(report, disableTriggerTables: ["DO_PARENT"], disableForeignKeys: [ForeignKeyRef.Of(fk)]));
 
         // 기록하는 순간 트리거는 아직 켜져 있다: 기록이 ALTER ... DISABLE 보다 먼저다.
         Assert.Equal("ENABLED", statusAtRecord);
@@ -780,10 +780,10 @@ public sealed class CopyRunnerTests
     /// <summary>
     /// 화면이 「복사 실행」에서 하는 것과 같다: 미리 보기에서 확인이 필요한 문장(WHERE 없는 DELETE 등)을 미리 받은 확인으로 넘긴다.
     /// </summary>
-    private static CopyDecisions Decisions(PrecheckReport report, IEnumerable<string>? disableTriggerTables = null, IEnumerable<string>? disableForeignKeys = null)
+    private static CopyDecisions Decisions(PrecheckReport report, IEnumerable<string>? disableTriggerTables = null, IEnumerable<ForeignKeyRef>? disableForeignKeys = null)
         => new(
             new HashSet<string>(disableTriggerTables ?? [], StringComparer.Ordinal),
-            new HashSet<string>(disableForeignKeys ?? [], StringComparer.Ordinal),
+            new HashSet<ForeignKeyRef>(disableForeignKeys ?? []),
             report.Preview.Where(p => p.Policy == PolicyDecisionKind.Confirm).Select(p => p.Sql).ToHashSet(StringComparer.Ordinal),
             ProceedSequenceGap: false);
 

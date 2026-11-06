@@ -141,7 +141,7 @@ internal static class CrossOwnerCases
 
     /// <summary>화면이 「복사 실행」에서 하는 것처럼 미리 보기에서 확인이 필요한 문장을 미리 받은 확인으로 넘긴다.</summary>
     public static CopyDecisions Decisions(PrecheckReport report)
-        => new(new HashSet<string>(StringComparer.Ordinal), new HashSet<string>(StringComparer.Ordinal),
+        => new(new HashSet<string>(StringComparer.Ordinal), new HashSet<ForeignKeyRef>(),
             report.Preview.Where(p => p.Policy == PolicyDecisionKind.Confirm).Select(p => p.Sql).ToHashSet(StringComparer.Ordinal),
             ProceedSequenceGap: false);
 

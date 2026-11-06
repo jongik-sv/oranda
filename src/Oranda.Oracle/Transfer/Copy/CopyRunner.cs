@@ -412,39 +412,22 @@ internal sealed class CopyRunner : ICopyRunner
     /// <summary>끌 목록을 먼저 기록(디스크)한 뒤 끈다(Review Focus 3). 하나라도 끄지 못하면 더 진행하지 않는다.</summary>
     private async Task DisableAsync(RunState run, CopyDecisions decisions, CancellationToken ct)
     {
-        var targets = new List<DisabledObject>();
-        foreach (var plan in run.Report.Order)
-        {
-            // 결정은 규칙 키로 받는다. 트리거는 그 표의 대상 계정 것이다(사전 점검이 그 계정 소유만 골랐다).
-            if (plan.CanDisableTriggers && decisions.DisableTriggerTables.Contains(run.Key(plan)))
-            {
-                targets.AddRange(plan.Triggers.Select(t => new DisabledObject(DisabledKind.Trigger, plan.Target.Table.Owner, plan.Rule.Table, t)));
-            }
-        }
-
-        var seen = new HashSet<(string, string, string)>();
-        foreach (var fk in run.Report.Order.SelectMany(p => p.DisablableForeignKeys))
-        {
-            if (decisions.DisableForeignKeys.Contains(fk.Name) && seen.Add((fk.Owner, fk.Table, fk.Name)))
-            {
-                targets.Add(fk);
-            }
-        }
-
-        if (targets.Count == 0)
+        var chosen = DisableTargets(run.Report, decisions, run.Key);
+        if (chosen.Count == 0)
         {
             return;
         }
 
-        await run.Record!.RecordDisabledAsync(targets, ct);
-        foreach (var obj in targets)
+        await run.Record!.RecordDisabledAsync([.. chosen.Select(c => c.Object)], ct);
+        foreach (var (obj, key) in chosen)
         {
-            run.Progress(obj.Table, 0, null, PhaseDisable);
+            run.Progress(key, 0, null, PhaseDisable); // 진행 줄은 규칙 키다(다른 계정의 같은 이름 표와 섞이지 않게)
             var stmt = obj.Kind == DisabledKind.Trigger
                 ? CopyStatements.DisableTrigger(obj.Owner, obj.Name)
                 : CopyStatements.DisableConstraint(obj);
             // 보내기 전에 목록에 넣는다: ALTER 가 도는 중에 중지되면 서버에서 꺼졌는지 알 수 없다. 꺼지지 않은 것을 켜는 것은 해가 없다.
             run.Disabled.Add(obj);
+            run.DisabledKeys[obj] = key;
             var r = await ExecuteLoggedAsync(run, run.Target, stmt, NoBinds, ct);
             if (r.Status != ExecutionStatus.Succeeded)
             {
@@ -454,6 +437,38 @@ internal sealed class CopyRunner : ICopyRunner
                 return;
             }
         }
+    }
+
+    /// <summary>
+    /// 결정에 따라 끌 트리거·FK 와 그 진행을 보일 규칙 키. 트리거는 규칙 키로 고른 표의 대상 계정 것(사전 점검이 그 계정 소유만 골랐다),
+    /// FK 는 (계정, 이름)이 결정에 있는 것만이다: 이름만 보면 다른 계정의 같은 이름 FK 까지 끈다. 같은 FK 는 한 번만 넣는다.
+    /// </summary>
+    internal static IReadOnlyList<(DisabledObject Object, string Key)> DisableTargets(PrecheckReport report, CopyDecisions decisions,
+                                                                                       Func<CopyTablePlan, string> keyOf)
+    {
+        var targets = new List<(DisabledObject, string)>();
+        foreach (var plan in report.Order)
+        {
+            var key = keyOf(plan);
+            if (plan.CanDisableTriggers && decisions.DisableTriggerTables.Contains(key))
+            {
+                targets.AddRange(plan.Triggers.Select(t => (new DisabledObject(DisabledKind.Trigger, plan.Target.Table.Owner, plan.Rule.Table, t), key)));
+            }
+        }
+
+        var seen = new HashSet<(string, string, string)>();
+        foreach (var plan in report.Order)
+        {
+            foreach (var fk in plan.DisablableForeignKeys)
+            {
+                if (decisions.DisableForeignKeys.Contains(ForeignKeyRef.Of(fk)) && seen.Add((fk.Owner, fk.Table, fk.Name)))
+                {
+                    targets.Add((fk, keyOf(plan)));
+                }
+            }
+        }
+
+        return targets;
     }
 
     // ---- 1a. 테이블 다시 만들기(설계 6.2.3, 개발 대상만) ----
@@ -1729,7 +1744,7 @@ internal sealed class CopyRunner : ICopyRunner
         for (var i = run.Disabled.Count - 1; i >= 0; i--)
         {
             var obj = run.Disabled[i];
-            run.Progress(obj.Table, 0, null, PhaseEnable);
+            run.Progress(run.DisabledKeys.GetValueOrDefault(obj, obj.Table), 0, null, PhaseEnable); // 끌 때와 같은 규칙 키
             try
             {
                 if (obj.Kind == DisabledKind.Trigger)
@@ -2243,6 +2258,9 @@ internal sealed class CopyRunner : ICopyRunner
         public Dictionary<string, TableState> Tables { get; } = new(StringComparer.Ordinal);
 
         public List<DisabledObject> Disabled { get; } = [];
+
+        /// <summary>끈 객체의 진행을 보인 규칙 키(다시 켤 때도 같은 줄에 보인다).</summary>
+        public Dictionary<DisabledObject, string> DisabledKeys { get; } = [];
 
         public List<FailedRow> FailedRows { get; } = [];
 
