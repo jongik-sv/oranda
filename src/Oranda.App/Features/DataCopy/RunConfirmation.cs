@@ -17,9 +17,9 @@ public sealed record RunConfirmation(string SessionUser, IReadOnlyList<RunOwnerL
         ArgumentNullException.ThrowIfNull(job);
         ArgumentNullException.ThrowIfNull(sessionUser);
         var groups = job.Tables.Where(r => r.Kind != RuleKind.Exclude)
-            .GroupBy(r => CopyOwners.Target(job, r), StringComparer.OrdinalIgnoreCase)
+            .GroupBy(r => CopyOwners.Target(job, r), CopyOwners.OwnerComparer)
             .ToList();
-        if (groups.Count == 0 || (groups.Count == 1 && string.Equals(groups[0].Key, sessionUser, StringComparison.OrdinalIgnoreCase)))
+        if (groups.Count == 0 || (groups.Count == 1 && CopyOwners.SameOwner(groups[0].Key, sessionUser)))
         {
             return null;
         }
@@ -28,7 +28,7 @@ public sealed record RunConfirmation(string SessionUser, IReadOnlyList<RunOwnerL
             g.Key,
             g.Count(),
             string.Join(", ", g.GroupBy(r => r.Action).Select(a => ActionText(a.Key) + " " + a.Count().ToString(System.Globalization.CultureInfo.InvariantCulture))),
-            string.Equals(g.Key, sessionUser, StringComparison.OrdinalIgnoreCase))).ToList();
+            CopyOwners.SameOwner(g.Key, sessionUser))).ToList();
         return new RunConfirmation(sessionUser, lines);
     }
 

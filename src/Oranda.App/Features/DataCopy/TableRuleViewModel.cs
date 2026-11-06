@@ -162,11 +162,11 @@ public sealed partial class TableRuleViewModel : ViewModelBase
     public bool HasSynonym => WrittenAs is not null;
 
     /// <summary>대상 계정이 원본 계정과 같은지(그리드에서 흐린 글자).</summary>
-    public bool IsTargetSameAsSource => string.Equals(SourceOwner, TargetOwner, StringComparison.OrdinalIgnoreCase);
+    public bool IsTargetSameAsSource => CopyOwners.SameOwner(SourceOwner, TargetOwner);
 
     /// <summary>대상 계정이 대상 접속 계정이 아닌지(그리드에서 경고색, 상세 칸 안내). 접속을 모르면 거짓.</summary>
     public bool IsOtherTargetOwner => SessionUser.Length > 0 && TargetOwner.Length > 0
-        && !string.Equals(TargetOwner.Trim(), SessionUser, StringComparison.OrdinalIgnoreCase);
+        && !CopyOwners.SameOwner(TargetOwner.Trim(), SessionUser);
 
     /// <summary>접속 계정이 아닌 계정에 쓸 때 상세 칸 안내. 아니면 빈 글자.</summary>
     public string OtherTargetOwnerNotice => IsOtherTargetOwner ? DataCopyText.L(DataCopyText.OtherTargetOwner) : string.Empty;
@@ -370,7 +370,7 @@ public sealed partial class TableRuleViewModel : ViewModelBase
             ?? ParentCandidates.FirstOrDefault(c => saved.ForeignKeyName is not null
                 && string.Equals(c.ForeignKeyName, saved.ForeignKeyName, StringComparison.OrdinalIgnoreCase))
             ?? ParentCandidates.FirstOrDefault(c => string.Equals(c.ParentTable, saved.ParentTable, StringComparison.OrdinalIgnoreCase)
-                && string.Equals(c.ParentOwner ?? SourceOwner, saved.ParentOwner ?? SourceOwner, StringComparison.OrdinalIgnoreCase)
+                && CopyOwners.SameOwner(c.ParentOwner ?? SourceOwner, saved.ParentOwner ?? SourceOwner)
                 && c.ChildColumns.SequenceEqual(saved.ChildColumns, StringComparer.OrdinalIgnoreCase));
         if (found is null)
         {

@@ -95,8 +95,8 @@ public sealed partial class RuleEditorViewModel : ViewModelBase
 
         foreach (var rule in Rules)
         {
-            var source = string.Equals(rule.SourceOwner, oldSource ?? string.Empty, StringComparison.OrdinalIgnoreCase) ? newSource : rule.SourceOwner;
-            var target = string.Equals(rule.TargetOwner, oldTarget ?? string.Empty, StringComparison.OrdinalIgnoreCase) ? newTarget : rule.TargetOwner;
+            var source = CopyOwners.SameOwner(rule.SourceOwner, oldSource ?? string.Empty) ? newSource : rule.SourceOwner;
+            var target = CopyOwners.SameOwner(rule.TargetOwner, oldTarget ?? string.Empty) ? newTarget : rule.TargetOwner;
             rule.Rebase(source, target);
         }
     }
@@ -118,7 +118,7 @@ public sealed partial class RuleEditorViewModel : ViewModelBase
                 return;
             }
 
-            if (options.FirstOrDefault(o => string.Equals(o.Owner, owner, StringComparison.OrdinalIgnoreCase)) is { Owner: not null } found)
+            if (options.FirstOrDefault(o => CopyOwners.SameOwner(o.Owner, owner)) is { Owner: not null } found)
             {
                 found.Hints.Add(hint);
                 return;

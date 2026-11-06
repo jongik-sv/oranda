@@ -81,6 +81,15 @@ public sealed class CopyOwnersUiTests
         var built = vm.Editor.BuildJob();
         Assert.Equal("CUSTOMERS", Assert.Single(built.Sequences).Table); // 기본 계정의 표 키는 여전히 이름만
         Assert.Equal("APP9", built.SourceOwner);
+        Assert.Empty(CopyOwners.Problems(built)); // 시퀀스 연결이 규칙을 잃지 않는다
+        Assert.Null(vm.Editor.Validate());
+
+        // 다른 계정 규칙의 키(APP2.ORDERS)도 기본 원본 계정이 APP2 가 되면 이름만(ORDERS)으로 다시 잇는다.
+        var other = await h.OpenAsync(MixedJob());
+        other.Editor.SourceOwner = "APP2";
+        var rekeyed = other.Editor.BuildJob();
+        Assert.Equal("ORDERS", Assert.Single(rekeyed.Sequences).Table);
+        Assert.Same(rekeyed.Tables.Single(r => r.Table == "ORDERS"), CopyOwners.Find(rekeyed, "ORDERS"));
     }
 
     [Fact]
