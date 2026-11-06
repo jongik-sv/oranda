@@ -767,7 +767,16 @@ public sealed partial class DataCopyViewModel : ViewModelBase, IAsyncDisposable
         await Run.StartAsync(sessions, job, report, decisions, period, ct).ConfigureAwait(true);
         if (Run.LastRun is { } last && CurrentJob is { } current && current.Id == job.Id)
         {
+            // 점검한 작업과 같은 객체였다면(복사 도중 작업 내용이 바뀌지 않았다면) 마지막 실행 요약만 바뀐 새 객체를 점검한 작업으로도 맞춘다.
+            // 그렇지 않으면 「실패 행만 다시 넣기」의 직전 확인이 같은 객체인지 비교해서 복사 직후에도 늘 거부한다.
+            // 작업 내용이 실제로 바뀌었으면(다른 객체였으면) 점검한 작업은 그대로 두어 다시 점검을 요구한다.
+            var unchangedSinceCheck = ReferenceEquals(_checkedJob, current);
             CurrentJob = current with { LastRun = last }; // 다음 저장이 옛 값으로 덮어쓰지 않게 열린 작업에 합친다
+            if (unchangedSinceCheck)
+            {
+                _checkedJob = CurrentJob;
+            }
+
             Editor.UpdateBase(CurrentJob);
         }
 

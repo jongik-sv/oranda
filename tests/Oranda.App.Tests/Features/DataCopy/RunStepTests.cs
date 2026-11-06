@@ -155,6 +155,38 @@ public sealed class RunStepTests
     }
 
     [Fact]
+    public async Task Last_run_rows_leave_out_tables_whose_target_count_is_unknown()
+    {
+        var h = new DataCopyHarness();
+        h.Runner.Behavior = _ => Task.FromResult(new CopyRunResult(CopyOutcome.PartiallyFailed,
+            [
+                new TableRunResult("ORDERS", 10, 8, TimeSpan.FromSeconds(1), CopyOutcome.PartiallyFailed, null),
+                new TableRunResult("CODES", 5, -1, TimeSpan.FromSeconds(1), CopyOutcome.Failed, "대상 건수를 세지 못했습니다"), // -1 = 모름
+            ],
+            [], [], new DateTimeOffset(2026, 11, 6, 12, 0, 1, TimeSpan.Zero)));
+        var vm = new RunViewModel(h.Services());
+
+        await vm.StartAsync(Sessions(), TestJobs.Job("알 수 없는 건수"), Report(), NoDecisions, Period);
+
+        Assert.Equal(8, vm.LastRun!.Rows); // 8 + (-1) = 7 이 아니다
+    }
+
+    [Fact]
+    public async Task Last_run_is_not_recorded_when_every_target_count_is_unknown()
+    {
+        var h = new DataCopyHarness();
+        h.Runner.Behavior = _ => Task.FromResult(new CopyRunResult(CopyOutcome.Stopped,
+            [new TableRunResult("ORDERS", 3, -1, TimeSpan.FromSeconds(1), CopyOutcome.Stopped, null)], [], [],
+            new DateTimeOffset(2026, 11, 6, 12, 0, 1, TimeSpan.Zero)));
+        var vm = new RunViewModel(h.Services());
+
+        await vm.StartAsync(Sessions(), TestJobs.Job("모두 모름"), Report(), NoDecisions, Period);
+
+        Assert.Null(vm.LastRun); // 0 도 음수도 아니라 요약 자체를 남기지 않는다(행 수를 모름으로 둘 자리가 없다)
+        Assert.DoesNotContain(h.Store.Calls, c => c.StartsWith("save:", StringComparison.Ordinal));
+    }
+
+    [Fact]
     public async Task Csv_is_written_only_on_explicit_save()
     {
         var h = new DataCopyHarness();

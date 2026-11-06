@@ -449,6 +449,44 @@ public sealed class PrecheckStepTests
     }
 
     [Fact]
+    public async Task Retry_right_after_a_run_is_not_refused_when_only_the_last_run_summary_changed()
+    {
+        var h = new DataCopyHarness();
+        h.Runner.Behavior = _ => Task.FromResult(TestJobs.Result(CopyOutcome.PartiallyFailed,
+            new FailedRow("ORDERS", new Dictionary<string, string?> { ["ID"] = "1" }, "ORA-00001")));
+        var vm = await PrecheckedAsync(h);
+        await vm.StartRunAsync();
+        Assert.True(vm.Run.CanRetry);
+        Assert.NotNull(vm.CurrentJob!.LastRun); // 복사가 끝나면 열린 작업에 마지막 실행 요약이 합쳐진다
+        var retryCalls = h.Runner.RetryCalls;
+
+        await vm.RetryFailedRowsAsync(); // 창이 부르는 경로(직전 확인 포함)
+
+        Assert.Equal(retryCalls + 1, h.Runner.RetryCalls);
+        Assert.False(vm.StatusIsError);
+    }
+
+    [Fact]
+    public async Task Retry_after_a_run_is_refused_when_the_open_job_changed()
+    {
+        var h = new DataCopyHarness();
+        h.Runner.Behavior = _ => Task.FromResult(TestJobs.Result(CopyOutcome.PartiallyFailed,
+            new FailedRow("ORDERS", new Dictionary<string, string?> { ["ID"] = "1" }, "ORA-00001")));
+        var vm = await PrecheckedAsync(h);
+        vm.Jobs.Selected = vm.Jobs.Items.First(i => i.Job.Id == vm.CurrentJob!.Id);
+        await vm.StartRunAsync();
+        Assert.True(vm.Run.CanRetry);
+        await vm.RenameSelectedAsync("복사 뒤에 바꾼 이름"); // 마지막 실행 요약 말고 작업 내용이 바뀌었다
+        var retryCalls = h.Runner.RetryCalls;
+
+        await vm.RetryFailedRowsAsync();
+
+        Assert.Equal(retryCalls, h.Runner.RetryCalls);
+        Assert.True(vm.StatusIsError);
+        Assert.Contains("다시 점검하세요", vm.StatusText, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task Failed_validation_on_recheck_clears_the_old_report()
     {
         var h = new DataCopyHarness();

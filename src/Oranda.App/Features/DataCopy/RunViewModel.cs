@@ -282,7 +282,16 @@ public sealed partial class RunViewModel(DataCopyServices services) : ViewModelB
 
     private async Task SaveLastRunAsync(CopyJob job, CopyRunResult result, CancellationToken ct)
     {
-        var rows = result.Tables.Sum(t => t.TargetRows);
+        // 대상 건수를 세지 못한 표(중지·예외로 건수 비교를 건너뛴 표)는 -1(모름)이다. 합에 넣으면 행 수가 음수가 될 수 있다.
+        // 모든 표가 모름이면 행 수를 0 이나 음수로 둘 수 없는데 마지막 실행 요약에는 모름을 담을 자리가 없으므로 요약을 남기지 않는다.
+        var known = result.Tables.Where(t => t.TargetRows >= 0).ToList();
+        if (known.Count == 0 && result.Tables.Count > 0)
+        {
+            LastRun = null;
+            return;
+        }
+
+        var rows = known.Sum(t => t.TargetRows);
         LastRun = new LastRunInfo(services.Time.GetUtcNow(), result.Outcome, rows);
         if (!SaveLastRun || services.Store is not { } store)
         {
