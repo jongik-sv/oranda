@@ -102,10 +102,10 @@ internal static class PrecheckRules
 
     // ---- 열 비교(설계 7장) ----
 
-    /// <summary>원본과 대상의 열 차이. 항목의 <see cref="CheckItem.Table"/> 은 <c>rule.Table</c> 이다.</summary>
-    public static IReadOnlyList<CheckItem> CompareColumns(TableInfo source, TableInfo target, TableRule rule)
+    /// <summary>원본과 대상의 열 차이. 항목의 <see cref="CheckItem.Table"/> 은 <paramref name="key"/>(규칙 키, 없으면 <c>rule.Table</c>)다.</summary>
+    public static IReadOnlyList<CheckItem> CompareColumns(TableInfo source, TableInfo target, TableRule rule, string? key = null)
     {
-        var table = rule.Table;
+        var table = key ?? rule.Table;
         var items = new List<CheckItem>();
         var skip = rule.SkipColumns.ToHashSet(StringComparer.Ordinal);
         var targetColumns = target.Columns.ToDictionary(c => c.Name, StringComparer.Ordinal);
@@ -180,14 +180,14 @@ internal static class PrecheckRules
     /// 마스킹 규칙 점검. PK·UK 열과 부모 키 규칙의 연결 열에는 마스킹을 걸 수 없다(<c>MaskOnKey</c>).
     /// 가리는 열이 있으면 목록을 <c>MaskedColumns</c> 통과 항목으로 보여 준다. 규칙이 원본에 없는 열이나 열 형식에 못 쓰는 종류면 오류다.
     /// </summary>
-    public static IReadOnlyList<CheckItem> CheckMasks(TableRule rule, TableInfo source, IReadOnlyList<string> keyColumns)
+    public static IReadOnlyList<CheckItem> CheckMasks(TableRule rule, TableInfo source, IReadOnlyList<string> keyColumns, string? key = null)
     {
         if (rule.Masks.Count == 0)
         {
             return [];
         }
 
-        var table = rule.Table;
+        var table = key ?? rule.Table;
         var keys = new HashSet<string>(keyColumns, StringComparer.Ordinal);
         foreach (var c in source.Constraints.Where(c => c.Kind is ConstraintKind.PrimaryKey or ConstraintKind.Unique))
         {
@@ -246,26 +246,54 @@ internal static class PrecheckRules
     /// <summary>
     /// 부모 키 규칙이 기대는 부모 쪽 연결 열에 마스킹이 걸렸는지. 자식 조건은 부모의 연결 열 값으로 만들어지므로 가리면 대상 쪽 범위가 어긋난다.
     /// </summary>
-    public static IReadOnlyList<CheckItem> CheckParentLinkMasks(IReadOnlyList<TableRule> rules)
+    public static IReadOnlyList<CheckItem> CheckParentLinkMasks(CopyJob job)
     {
+        ArgumentNullException.ThrowIfNull(job);
         var items = new List<CheckItem>();
-        foreach (var child in rules.Where(r => r.Kind == RuleKind.ParentKey && r.Parent is not null))
+        foreach (var child in job.Tables.Where(r => r.Kind == RuleKind.ParentKey && r.Parent is not null))
         {
             var link = child.Parent!;
-            var parent = rules.FirstOrDefault(r => string.Equals(r.Table, link.ParentTable, StringComparison.Ordinal));
+            var parent = CopyOwners.Parent(job, child);
             if (parent is null)
             {
                 continue;
             }
 
+            var parentKey = CopyOwners.Key(job, parent);
             foreach (var mask in parent.Masks.Where(m => link.ParentColumns.Contains(m.Column, StringComparer.Ordinal)))
             {
-                items.Add(new CheckItem(parent.Table, "MaskOnKey", CheckLevel.Error,
-                    $"{parent.Table}.{mask.Column}: {child.Table} 의 부모 키 연결 열이라 가릴 수 없습니다.") { Column = mask.Column });
+                items.Add(new CheckItem(parentKey, "MaskOnKey", CheckLevel.Error,
+                    $"{parentKey}.{mask.Column}: {CopyOwners.Key(job, child)} 의 부모 키 연결 열이라 가릴 수 없습니다.") { Column = mask.Column });
             }
         }
 
         return items;
+    }
+
+    // ---- 계정(묶음 B) ----
+
+    /// <summary>
+    /// 대상 접속 계정(<paramref name="sessionUser"/>)이 아닌 계정의 표에 쓰는 규칙이 있으면 확인 항목 하나(<see cref="CopyCheckCodes.OtherOwnerTargets"/>), 없으면 null.
+    /// 계정·표 수와 그중 지우는 표 수를 적는다(실행 확인 대화상자와 같은 셈).
+    /// </summary>
+    public static CheckItem? OtherOwnerTargets(CopyJob job, string sessionUser)
+    {
+        ArgumentNullException.ThrowIfNull(job);
+        var owners = CopyOwners.OtherTargetOwners(job, sessionUser);
+        if (owners.Count == 0)
+        {
+            return null;
+        }
+
+        var rules = job.Tables.Where(r => r.Kind != RuleKind.Exclude
+                                          && owners.Contains(CopyOwners.Target(job, r), StringComparer.OrdinalIgnoreCase)).ToList();
+        var deleting = rules.Count(r => r.Action is TargetAction.DeleteAllInsert or TargetAction.DeleteRangeInsert or TargetAction.Recreate);
+        var n = rules.Count.ToString(CultureInfo.InvariantCulture);
+        var what = deleting == rules.Count
+            ? $"표 {n}개를 지우고 넣습니다"
+            : $"표 {n}개에 씁니다(그중 {deleting.ToString(CultureInfo.InvariantCulture)}개는 지우고 넣습니다)";
+        return new CheckItem(null, CopyCheckCodes.OtherOwnerTargets, CheckLevel.Confirm,
+            $"대상 접속 계정({sessionUser})이 아닌 계정 {string.Join(", ", owners)} 의 {what}: {string.Join(", ", rules.Select(r => CopyOwners.TargetName(job, r)))}.");
     }
 
     // ---- 시퀀스 ----

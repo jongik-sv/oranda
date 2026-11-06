@@ -137,4 +137,51 @@ public sealed class PrecheckRulesTests
         Assert.Contains("PHONE", listed.Message, StringComparison.Ordinal);
         Assert.DoesNotContain("PARENT_ID", listed.Message, StringComparison.Ordinal);
     }
+
+    // ---- 규칙마다의 계정(묶음 B) ----
+
+    private static CopyJob Job(params TableRule[] rules) => new()
+    {
+        Id = "1", Name = "n", Source = new ConnectionRef("s", "SRC"), Target = new ConnectionRef("t", "DST"),
+        SourceOwner = "SRC", TargetOwner = "DST", MaskSalt = "AA==", Tables = rules,
+    };
+
+    [Fact]
+    public void Other_owner_targets_lists_accounts_tables_and_deletes()
+    {
+        var job = Job(
+            new TableRule("A", RuleKind.All, TargetAction.DeleteAllInsert),
+            new TableRule("B", RuleKind.All, TargetAction.MergeByPk) { SourceOwner = "APP", TargetOwner = "APP" },
+            new TableRule("C", RuleKind.Period, TargetAction.DeleteRangeInsert) { SourceOwner = "APP2", TargetOwner = "APP2" },
+            new TableRule("D", RuleKind.Exclude, TargetAction.DeleteAllInsert) { SourceOwner = "Z", TargetOwner = "Z" });
+
+        Assert.Null(PrecheckRules.OtherOwnerTargets(Job(new TableRule("A", RuleKind.All, TargetAction.DeleteAllInsert)), "dst"));
+
+        var item = PrecheckRules.OtherOwnerTargets(job, "DST");
+        Assert.NotNull(item);
+        Assert.Equal(CopyCheckCodes.OtherOwnerTargets, item.Code);
+        Assert.Equal(CheckLevel.Confirm, item.Level);
+        Assert.Null(item.Table);
+        Assert.Contains("대상 접속 계정(DST)이 아닌 계정 APP, APP2 의 표 2개에 씁니다(그중 1개는 지우고 넣습니다)", item.Message, StringComparison.Ordinal);
+        Assert.Contains("APP2.C", item.Message, StringComparison.Ordinal);
+        Assert.DoesNotContain("Z.D", item.Message, StringComparison.Ordinal);
+
+        // 쓰기 계정(W)으로 접속하면 기본 대상 계정 표도 남의 계정이다.
+        Assert.Contains("DST, APP, APP2", PrecheckRules.OtherOwnerTargets(job, "W")!.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Parent_link_masks_find_the_parent_by_owner()
+    {
+        var parent = new TableRule("ORDERS", RuleKind.All, TargetAction.MergeByPk) { SourceOwner = "APP2", Masks = [new MaskRule("ID", MaskKind.Hash)] };
+        var sameName = new TableRule("ORDERS", RuleKind.All, TargetAction.MergeByPk) { Masks = [new MaskRule("ID", MaskKind.Hash)] };
+        var child = new TableRule("ITEM", RuleKind.ParentKey, TargetAction.DeleteRangeInsert)
+        {
+            Parent = new ParentLink("ORDERS", ["ORDER_ID"], ["ID"]) { ParentOwner = "APP2" },
+        };
+
+        var item = Assert.Single(PrecheckRules.CheckParentLinkMasks(Job(parent, sameName, child)));
+        Assert.Equal("APP2.ORDERS", item.Table);
+        Assert.Equal("MaskOnKey", item.Code);
+    }
 }

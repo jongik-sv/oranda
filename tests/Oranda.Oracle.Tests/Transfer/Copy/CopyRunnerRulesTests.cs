@@ -42,6 +42,14 @@ public class CopyRunnerRulesTests
     }
 
     [Fact]
+    public void Same_database_ignores_owner_names()
+    {
+        Assert.True(CopyRunner.IsSameDatabase("ORCL/PDB1/APP_R", Server("h", "i"), "orcl/pdb1/OTHER", Server("h", "i")));
+        Assert.False(CopyRunner.IsSameDatabase("ORCL/PDB1/APP_R", Server("h", "i"), "ORCL/PDB2/APP_R", Server("h", "i")));
+        Assert.False(CopyRunner.IsSameDatabase("ORCL/PDB1/APP_R", Server("h1", "i"), "ORCL/PDB1/APP_R", Server("h2", "i")));
+    }
+
+    [Fact]
     public void Same_rule_compares_lists_by_content()
     {
         var a = new TableRule("T", RuleKind.Period, TargetAction.DeleteRangeInsert)

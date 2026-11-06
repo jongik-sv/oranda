@@ -257,6 +257,11 @@ internal sealed class CopyRunner : ICopyRunner
     /// </remarks>
     internal static bool IsSameDatabaseAndOwner(string sourceDbKey, ServerInfo source, string targetDbKey, ServerInfo target,
                                                 string sourceOwner, string targetOwner)
+        => string.Equals(sourceOwner, targetOwner, StringComparison.OrdinalIgnoreCase)
+           && IsSameDatabase(sourceDbKey, source, targetDbKey, target);
+
+    /// <summary>원본과 대상이 같은 DB 인가(<see cref="IsSameDatabaseAndOwner"/> 의 DB 판정). 모르면 같다고 본다(막는 쪽).</summary>
+    internal static bool IsSameDatabase(string sourceDbKey, ServerInfo source, string targetDbKey, ServerInfo target)
     {
         static string Db(string key)
         {
@@ -267,8 +272,7 @@ internal sealed class CopyRunner : ICopyRunner
         static bool SameOrUnknown(string? a, string? b) =>
             a is null || b is null || string.Equals(a, b, StringComparison.OrdinalIgnoreCase);
 
-        if (!string.Equals(sourceOwner, targetOwner, StringComparison.OrdinalIgnoreCase)
-            || !string.Equals(Db(sourceDbKey), Db(targetDbKey), StringComparison.OrdinalIgnoreCase))
+        if (!string.Equals(Db(sourceDbKey), Db(targetDbKey), StringComparison.OrdinalIgnoreCase))
         {
             return false;
         }
@@ -276,6 +280,15 @@ internal sealed class CopyRunner : ICopyRunner
         return source.IsRac || target.IsRac
                || (SameOrUnknown(source.HostName, target.HostName) && SameOrUnknown(source.InstanceName, target.InstanceName));
     }
+
+    /// <summary>
+    /// 같은 DB 일 때 대상 정리가 원본 행을 지우는 규칙(규칙 사이 비교, <see cref="CopyOwners.TargetsReadAsSource"/>). 다른 DB 면 빈 목록.
+    /// 사전 점검과 실행기가 같은 판정을 쓴다.
+    /// </summary>
+    internal static IReadOnlyList<(string Key, string Table)> SameSourceTargets(CopySessions sessions, CopyJob job)
+        => IsSameDatabase(sessions.Source.DbKey, sessions.Source.Server, sessions.Target.DbKey, sessions.Target.Server)
+            ? CopyOwners.TargetsReadAsSource(job)
+            : [];
 
     /// <summary>DROP·CREATE 는 개발 라벨 대상에서만 실행한다(사전 점검과 따로 한 번 더 막는다, Global Constraints).</summary>
     private static void EnsureRecreateAllowed(CopySessions sessions, CopyJob job)
