@@ -28,8 +28,10 @@ public static class SynonymResolver
     /// <paramref name="table"/> 을 푼다. <paramref name="step"/> 은 (소유자, 이름) 한 단계의 답(사전에 없으면 null).
     /// <paramref name="ownerWritten"/> 은 SQL 에 스키마를 적었는지(적었으면 PUBLIC 시노님을 보지 않는다).
     /// DB 링크 시노님·순환·상한 초과는 <see cref="SynonymResolutionException"/>.
+    /// <paramref name="dbLinkMessage"/> 는 DB 링크 시노님일 때의 오류 글(쓰임새마다 다르다): 인자는 (적은 이름 <c>소유자.이름</c>, DB 링크). null 이면 플래시백·편집 문구.
     /// </summary>
-    public static async Task<DbObjectRef> ResolveAsync(Func<string, string, Task<NameStep?>> step, DbObjectRef table, bool ownerWritten)
+    public static async Task<DbObjectRef> ResolveAsync(Func<string, string, Task<NameStep?>> step, DbObjectRef table, bool ownerWritten,
+                                                       Func<string, string, string>? dbLinkMessage = null)
     {
         ArgumentNullException.ThrowIfNull(step);
         ArgumentNullException.ThrowIfNull(table);
@@ -52,8 +54,8 @@ public static class SynonymResolver
         {
             if (found.DbLink is { Length: > 0 } link)
             {
-                throw new SynonymResolutionException(
-                    $"시노님 {start} 은(는) DB 링크({link})를 거쳐 다른 DB 의 표를 가리켜 플래시백·편집 대상으로 쓸 수 없습니다(이 DB 의 표만 지원).");
+                throw new SynonymResolutionException(dbLinkMessage?.Invoke(start, link)
+                    ?? $"시노님 {start} 은(는) DB 링크({link})를 거쳐 다른 DB 의 표를 가리켜 플래시백·편집 대상으로 쓸 수 없습니다(이 DB 의 표만 지원).");
             }
 
             // TABLE_OWNER 가 비어 있으면(드묾) 시노님 소유자 스키마의 이름이다.
