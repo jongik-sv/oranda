@@ -145,7 +145,7 @@ public sealed partial class TableRuleViewModel : ViewModelBase
 
     public bool FirstFormatVisible => FirstColumn?.DefaultFormat is not null || (FirstColumn is not null && IsStringType(FirstColumn.DataType));
 
-    public bool SecondFormatVisible => SecondColumn is not null && IsStringType(SecondColumn.DataType);
+    public bool SecondFormatVisible => SecondColumn is not null && (SecondColumn.DefaultFormat is not null || IsStringType(SecondColumn.DataType));
 
     public bool HasColumns => _source is not null;
 
@@ -239,27 +239,37 @@ public sealed partial class TableRuleViewModel : ViewModelBase
         OnPropertyChanged(nameof(CanAddSecondColumn));
     }
 
-    // 저장된 기간 열 이름을 후보 목록의 항목으로 되살린다. 열이 후보에 없으면(이름이 바뀜) 저장된 값을 그대로 보인다.
+    // 저장된 기간 열 이름을 후보 목록의 항목으로 되살린다. 열이 후보에 없으면(열 정보를 아직 안 읽음·이름이 바뀜) 저장된 열을
+    // 후보 목록에 넣어 콤보에 그대로 보이게 한다(목록에 없는 SelectedItem 은 콤보가 빈칸으로 그린다).
+    // 저장된 문자열 형식은 그 항목의 기본 형식으로 두어 형식 칸도 보인다. 「열 정보 읽기」(SetSource) 뒤에는 실제 열 항목으로 바뀐다.
     private void RestorePeriodColumns()
     {
         FirstColumn = null;
         SecondColumn = null;
         if (SavedPeriodColumns.Count > 0)
         {
-            FirstColumn = FindOption(SavedPeriodColumns[0].Column);
+            FirstColumn = FindOption(SavedPeriodColumns[0]);
             FirstFormat = SavedPeriodColumns[0].StringFormat;
         }
 
         if (SavedPeriodColumns.Count > 1)
         {
-            SecondColumn = FindOption(SavedPeriodColumns[1].Column);
+            SecondColumn = FindOption(SavedPeriodColumns[1]);
             SecondFormat = SavedPeriodColumns[1].StringFormat;
         }
     }
 
-    private PeriodColumnOption FindOption(string column) =>
-        PeriodColumnOptions.FirstOrDefault(o => string.Equals(o.Column, column, StringComparison.OrdinalIgnoreCase))
-        ?? new PeriodColumnOption(column, string.Empty, false, null);
+    private PeriodColumnOption FindOption(PeriodColumn saved)
+    {
+        if (PeriodColumnOptions.FirstOrDefault(o => string.Equals(o.Column, saved.Column, StringComparison.OrdinalIgnoreCase)) is { } found)
+        {
+            return found;
+        }
+
+        var kept = new PeriodColumnOption(saved.Column, string.Empty, false, saved.StringFormat);
+        PeriodColumnOptions.Add(kept);
+        return kept;
+    }
 
     partial void OnFirstColumnChanged(PeriodColumnOption? value)
     {

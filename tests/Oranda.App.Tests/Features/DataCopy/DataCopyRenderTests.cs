@@ -1,9 +1,11 @@
 using Avalonia;
+using Avalonia.Automation;
 using Avalonia.Controls;
 using Avalonia.Headless;
 using Avalonia.Media.Imaging;
 using Avalonia.Styling;
 using Avalonia.Threading;
+using Avalonia.VisualTree;
 using Oranda.App.Features.DataCopy;
 using Oranda.App.Features.Localization;
 using Oranda.App.Features.SessionMonitor;
@@ -78,7 +80,7 @@ public sealed class DataCopyRenderTests : IDisposable
 
     private static CopySessions Sessions() => new(new FakeSession(), new FakeSession());
 
-    private static async Task<(DataCopyWindow Window, DataCopyViewModel Vm)> OpenWindowAsync(DataCopyHarness h)
+    private static async Task<(DataCopyWindow Window, DataCopyViewModel Vm)> OpenWindowAsync(DataCopyHarness h, bool readColumns = true)
     {
         var text = new ShellText(language: "ko");
         UiText.Current = text;
@@ -105,7 +107,11 @@ public sealed class DataCopyRenderTests : IDisposable
         };
         var job = TestJobs.Job("월말 운영 데이터 복사", "SRC", "TGT", rules) with { Period = new CopyPeriod(PeriodKind.LastMonth) };
         var vm = await h.OpenAsync(job);
-        vm.Editor.Rules[0].SetSource(orders);
+        if (readColumns)
+        {
+            vm.Editor.Rules[0].SetSource(orders);
+        }
+
         vm.Editor.SelectedRule = vm.Editor.Rules[0];
 
         var window = new DataCopyWindow { DataContext = vm };
@@ -138,6 +144,32 @@ public sealed class DataCopyRenderTests : IDisposable
             AssertFillsWidth(grid);
             AssertNotClipped(window, "규칙 편집");
             Shots(window, "1-rules");
+        }
+        finally
+        {
+            window.Close();
+        }
+    });
+
+    [Fact]
+    public Task Saved_job_shows_period_columns_before_columns_are_read() => HeadlessHost.Run(async () =>
+    {
+        // 저장된 작업을 열고 「열 정보 읽기」 전: 기간 열 콤보 둘과 형식 칸이 저장된 값을 보인다(빈칸이 아니다).
+        var h = new DataCopyHarness();
+        var (window, vm) = await OpenWindowAsync(h, readColumns: false);
+        try
+        {
+            Assert.False(vm.Editor.Rules[0].HasColumns);
+            var first = window.GetVisualDescendants().OfType<ComboBox>().Single(c => AutomationProperties.GetName(c) == "기간 열");
+            var second = window.GetVisualDescendants().OfType<ComboBox>().Single(c => AutomationProperties.GetName(c) == "두 번째 기간 열");
+            var format = window.GetVisualDescendants().OfType<ComboBox>().Single(c => AutomationProperties.GetName(c) == "문자열 날짜 형식");
+            Assert.Equal("ORDER_DT", Assert.IsType<PeriodColumnOption>(first.SelectedItem).Column);
+            Assert.Equal(0, first.SelectedIndex);
+            Assert.Equal("UPDATED_AT", Assert.IsType<PeriodColumnOption>(second.SelectedItem).Column);
+            Assert.True(format.IsEffectivelyVisible);
+            Assert.Equal("YYYYMMDD", format.Text);
+            AssertNotClipped(window, "열 정보 읽기 전");
+            Shots(window, "1-rules-saved-before-columns");
         }
         finally
         {

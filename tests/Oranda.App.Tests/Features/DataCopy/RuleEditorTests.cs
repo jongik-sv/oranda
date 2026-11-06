@@ -46,6 +46,31 @@ public sealed class RuleEditorTests
     }
 
     [Fact]
+    public void Saved_period_columns_show_in_combo_before_columns_are_read()
+    {
+        // 저장된 작업을 열면 열 정보 읽기 전이라 후보 목록이 비어 있다. 저장된 열을 후보에 넣어야 콤보가 빈칸이 아니다.
+        var rule = new TableRuleViewModel(TestJobs.Rule("ORDERS", RuleKind.Period) with
+        {
+            PeriodColumns = [new PeriodColumn("ORDER_DT", "YYYYMMDD"), new PeriodColumn("UPDATED_AT")],
+        });
+
+        Assert.Equal(["ORDER_DT", "UPDATED_AT"], rule.PeriodColumnOptions.Select(o => o.Column));
+        Assert.Same(rule.PeriodColumnOptions[0], rule.FirstColumn);
+        Assert.Same(rule.PeriodColumnOptions[1], rule.SecondColumn);
+        Assert.Equal("YYYYMMDD", rule.FirstFormat);
+        Assert.True(rule.FirstFormatVisible); // 형식 칸도 보인다
+        Assert.False(rule.SecondFormatVisible); // 형식 없는 열(DATE·TIMESTAMP 로 저장됨)
+        Assert.Equal(2, rule.ToRule().PeriodColumns.Count);
+
+        // 열 정보를 읽으면 실제 열 항목으로 바뀐다(저장 형식 유지).
+        rule.SetSource(TestJobs.Table("ORDERS", TestJobs.Column("ORDER_DT", "VARCHAR2", 1, length: 8), TestJobs.Column("UPDATED_AT", "DATE", 2)));
+        Assert.Equal("VARCHAR2", rule.FirstColumn!.DataType);
+        Assert.Equal("DATE", rule.SecondColumn!.DataType);
+        Assert.Equal("YYYYMMDD", rule.FirstFormat);
+        Assert.Equal(2, rule.PeriodColumnOptions.Count);
+    }
+
+    [Fact]
     public void Period_rule_defaults_string_format_from_length()
     {
         var rule = PeriodRule(TestJobs.Column("ORDER_DT", "VARCHAR2", 1, length: 8), TestJobs.Column("MONTH_YM", "CHAR", 2, length: 6));
