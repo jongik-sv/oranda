@@ -85,9 +85,9 @@ public sealed partial class ResultGridControl
             }
             else if (props.IsLeftButtonPressed)
             {
-                if (e.KeyModifiers.HasFlag(KeyModifiers.Control))
+                if (IsAddModifier(e.KeyModifiers))
                 {
-                    _model.SelectColumn(col);
+                    _model.ToggleColumnInSelection(col); // Ctrl+클릭: 떨어진 열을 더하거나 뺀다(1·3·4·7번째 열만 복사)
                 }
                 else if (TryHandleHeaderDoubleClick(e, col))
                 {
@@ -127,7 +127,7 @@ public sealed partial class ResultGridControl
         else if (p.X < RowHeaderWidth)
         {
             // 행 머리: 그 행 전체를 고르고, 끌면 행 단위로 넓힌다. 고른 행 안에서 오른쪽 클릭은 선택을 유지한다.
-            if (props.IsLeftButtonPressed && (e.KeyModifiers.HasFlag(KeyModifiers.Control) || e.KeyModifiers.HasFlag(KeyModifiers.Meta)))
+            if (props.IsLeftButtonPressed && IsAddModifier(e.KeyModifiers))
             {
                 _model.ToggleRowInSelection(row); // Ctrl+클릭: 떨어진 행을 더하거나 뺀다(행 삭제·복사·복제가 고른 모든 행에)
                 e.Handled = true;
@@ -156,6 +156,10 @@ public sealed partial class ResultGridControl
             if (e.KeyModifiers.HasFlag(KeyModifiers.Shift))
             {
                 _model.ExtendTo(cell);
+            }
+            else if (props.IsLeftButtonPressed && IsAddModifier(e.KeyModifiers))
+            {
+                _model.AddCellRange(cell); // Ctrl+끌기: 지금 범위를 남기고 떨어진 칸 범위를 더한다(엑셀처럼)
             }
             else
             {
@@ -290,6 +294,9 @@ public sealed partial class ResultGridControl
         base.OnPointerCaptureLost(e);
         CancelHeaderPress(); // 창을 옮기거나 포인터를 뺏기면 정렬도 이동도 하지 않는다
     }
+
+    /// <summary>떨어진 행·열·칸 범위를 더하는 수식 키: Ctrl(macOS 는 Cmd 도).</summary>
+    private static bool IsAddModifier(KeyModifiers m) => m.HasFlag(KeyModifiers.Control) || m.HasFlag(KeyModifiers.Meta);
 
     /// <summary>머리글 끌기 문턱(DIP). 플랫폼의 누르기 허용 거리, 없으면 4.</summary>
     internal static double HeaderDragThreshold(PointerEventArgs e)

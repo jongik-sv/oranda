@@ -86,6 +86,7 @@ public sealed partial class ResultGridModel
             FrozenCount--;
         }
 
+        _extraRanges.Clear(); // 열 위치가 당겨져 Ctrl 로 더한 범위는 다른 열을 가리킨다
         ClampSelection();
         RaiseChanged();
         RefreshQuickFilterColumns();
@@ -95,6 +96,7 @@ public sealed partial class ResultGridModel
     {
         _visible.Clear();
         _visible.AddRange(Enumerable.Range(0, Columns.Count));
+        _extraRanges.Clear();
         RaiseChanged();
         RefreshQuickFilterColumns();
     }
@@ -120,6 +122,7 @@ public sealed partial class ResultGridModel
         var ordinal = _visible[from];
         _visible.RemoveAt(from);
         _visible.Insert(to, ordinal);
+        _extraRanges.Clear();
         if (HasSelection)
         {
             // 선택은 열 위치를 따르므로 어긋난다. 보던 행은 그대로 두고 옮긴 열의 그 칸 하나만 고른다(행 보기 창이 행을 따라가므로 행을 바꾸지 않는다).

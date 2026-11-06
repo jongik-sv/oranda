@@ -235,15 +235,15 @@ public sealed class ResultGridCommandHandler : ICommandHandler
         }
     }
 
-    private static void HideSelectedColumns(ResultGridModel g)
+    /// <summary>고른 열(Ctrl 로 더한 떨어진 열 포함)을 모두 숨긴다.</summary>
+    internal static void HideSelectedColumns(ResultGridModel g)
     {
         if (!g.HasSelection)
         {
             return;
         }
 
-        var (from, to) = g.SelectionRect();
-        foreach (var ord in g.VisibleColumns.Skip(from.Col).Take(to.Col - from.Col + 1).ToList())
+        foreach (var ord in g.SelectedVisibleColumns().Select(c => g.VisibleColumns[c]).ToList())
         {
             g.HideColumn(ord);
         }

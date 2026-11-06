@@ -116,6 +116,11 @@ public static class ExcelExportPlan
             return (0, 0);
         }
 
+        if (model.HasMultipleRanges)
+        {
+            return (model.SelectedRowCount, model.SelectedVisibleColumns().Count); // Ctrl 로 더한 범위: 행·열 합집합
+        }
+
         var (from, to) = model.SelectionRect();
         return (to.Row - from.Row + 1, to.Col - from.Col + 1);
     }
@@ -149,6 +154,14 @@ public static class ExcelExportPlan
                     throw new InvalidOperationException("선택한 셀이 없다.");
                 }
 
+                if (model.HasMultipleRanges)
+                {
+                    // Ctrl 로 더한 범위: 복사와 같이 고른 열(화면 순서)을 고른 행 구간마다 이어 쓴다.
+                    var picked = model.SelectedVisibleColumns().Select(c => model.VisibleColumns[c]).ToList();
+                    var ranges = model.SelectedRowRanges();
+                    return new ExcelExportData(picked.Select(o => model.Columns[o]).ToList(), StreamRanges(model, picked, ranges), model.SelectedRowCount);
+                }
+
                 var (from, to) = model.SelectionRect();
                 var selected = model.VisibleColumns.Skip(from.Col).Take(to.Col - from.Col + 1).ToList();
                 return new ExcelExportData(selected.Select(o => model.Columns[o]).ToList(), Stream(model, selected, from.Row, to.Row), to.Row - from.Row + 1);
@@ -161,6 +174,18 @@ public static class ExcelExportPlan
                 return new ExcelExportData(all.Select(o => model.Columns[o]).ToList(), model.ReadAllFetchedRowsAsync(all), FetchedRows(model));
             default:
                 throw new ArgumentOutOfRangeException(nameof(scope), scope, "서버에서 다시 읽는 범위는 그리드에서 만들 수 없다.");
+        }
+    }
+
+    private static async IAsyncEnumerable<IReadOnlyList<object?>> StreamRanges(ResultGridModel model, IReadOnlyList<int> ordinals, IReadOnlyList<(long First, long Last)> ranges,
+        [EnumeratorCancellation] CancellationToken ct = default)
+    {
+        foreach (var (first, last) in ranges)
+        {
+            await foreach (var row in Stream(model, ordinals, first, last, ct).ConfigureAwait(true))
+            {
+                yield return row;
+            }
         }
     }
 

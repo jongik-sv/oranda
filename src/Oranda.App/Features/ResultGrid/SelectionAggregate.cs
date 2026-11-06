@@ -40,6 +40,11 @@ public sealed record SelectionAggregate
             return null;
         }
 
+        if (model.HasMultipleRanges)
+        {
+            return MultiRangeScope(model);
+        }
+
         var (from, to) = model.SelectionRect();
         var lastRow = Math.Min(to.Row, model.RowCount - 1);
         var lastCol = Math.Min(to.Col, model.VisibleColumns.Count - 1);
@@ -57,6 +62,34 @@ public sealed record SelectionAggregate
         return new SelectionScope(from.Row, lastRow, from.Col, lastCol, hash.ToHashCode(), model.SortColumn, model.SortDescending);
     }
 
+    /// <summary>Ctrl 로 범위를 더한 선택: 범위들을 감싼 행·열 구간을 범위로 하고, 범위 모양을 열 해시에 섞어 범위가 바뀌면 다시 센다.</summary>
+    private static SelectionScope? MultiRangeScope(ResultGridModel model)
+    {
+        var rows = model.SelectedRowRanges();
+        var cols = model.SelectedVisibleColumns();
+        if (rows.Count == 0 || cols.Count == 0)
+        {
+            return null;
+        }
+
+        var hash = new HashCode();
+        foreach (var c in cols)
+        {
+            hash.Add(model.VisibleColumns[c]);
+        }
+
+        foreach (var (first, last) in rows)
+        {
+            hash.Add(first);
+            hash.Add(last);
+        }
+
+        hash.Add(model.Anchor);
+        hash.Add(model.Active);
+        var lastRow = Math.Min(rows[^1].Last, model.RowCount - 1);
+        return new SelectionScope(rows[0].First, lastRow, cols[0], cols[^1], hash.ToHashCode(), model.SortColumn, model.SortDescending);
+    }
+
     /// <summary>고른 칸을 집계한다. 칸이 둘보다 적으면 null.</summary>
     public static SelectionAggregate? Compute(ResultGridModel model, int maxCells = DefaultMaxCells)
     {
@@ -70,10 +103,16 @@ public sealed record SelectionAggregate
         var acc = new Accumulator();
         long count = 0, scanned = 0;
         var partial = false;
+        var multi = model.HasMultipleRanges; // 떨어진 범위: 감싼 구간 안에서 실제로 고른 칸만 센다
         for (var r = scope.FirstRow; r <= scope.LastRow && !partial; r++)
         {
             for (var c = scope.FirstCol; c <= scope.LastCol; c++)
             {
+                if (multi && !model.IsSelected(r, c))
+                {
+                    continue;
+                }
+
                 if (scanned == maxCells)
                 {
                     partial = true;

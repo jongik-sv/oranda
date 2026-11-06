@@ -10,6 +10,7 @@ public sealed partial class ResultGridModel
 
     /// <summary>
     /// 선택 범위를 복사 글자로 만든다. 선택이 없으면 빈 글자. 아직 못 받은 행은 가져온다.
+    /// Ctrl 로 더한 범위가 있으면 고른 열(범위들의 열 합집합)을 화면 순서로, 고른 행(범위들의 행 합집합)마다 이어 붙인다.
     /// INSERT 문은 고른 칸의 열이 아니라 고른 칸이 걸친 행의 모든 열로 만든다(숨긴 열·ROWID 같은 의사 열은 빼고 결과 열 순서대로, 오렌지·Toad 처럼).
     /// </summary>
     public async Task<string> BuildCopyTextAsync(CopyFormat format, bool includeHeaders = false, CancellationToken ct = default)
@@ -19,10 +20,10 @@ public sealed partial class ResultGridModel
             return string.Empty;
         }
 
-        var (from, to) = SelectionRect();
+        // 고른 열: Ctrl 로 더한 떨어진 범위까지 합쳐 화면 순서로 둔다(1·3·4·7번째 열만 고르면 그 넷만).
         var ordinals = format == CopyFormat.Insert
             ? _visible.Where(o => !IsPseudoColumn(Columns[o])).ToList()
-            : _visible.Skip(from.Col).Take(to.Col - from.Col + 1).ToList();
+            : SelectedVisibleColumns().Select(c => _visible[c]).ToList();
         if (ordinals.Count == 0)
         {
             return string.Empty;
