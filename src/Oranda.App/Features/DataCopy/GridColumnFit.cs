@@ -9,7 +9,8 @@ namespace Oranda.App.Features.DataCopy;
 /// <list type="bullet">
 /// <item>바인더는 새 결과에 이전 결과의 열 너비를 이어 준다. 그래서 빈 목록이나 첫 값(「대기」, 첫 표)으로 정한 너비가 굳는다.
 /// 결과를 바꿔 끼울 때마다 새 값이 들어가지 않는 열만 넓힌다(줄이지 않으므로 사용자가 넓힌 너비·정렬·필터는 그대로다).</item>
-/// <item>마지막 열(조건·내용·문장·오류·결과)은 남은 폭을 채운다: 열들이 그리드보다 좁으면 늘리고, 넓으면 원래 너비로 둔다.</item>
+/// <item>마지막 열(조건·내용·문장·오류·결과)은 남은 폭에 맞춘다: 남은 폭이 최소값(120) 이상이면 값이 조금 길어도 남은 폭으로 줄이거나 늘려
+/// 가로 스크롤을 만들지 않고, 앞 열들이 넓어 남은 폭이 그보다 좁을 때만 원래 너비로 둔다.</item>
 /// </list>
 /// 너비 계산은 조회 결과 그리드의 자동 크기(<see cref="ResultGridModel.AutoSizeColumns"/>)와 같은 규칙(글자 칸 수 × 글자 폭 + 16, 56~360)을 쓴다.
 /// </summary>
@@ -18,6 +19,7 @@ internal sealed class GridColumnFit
     private const double Padding = 16;
     private const double Min = 56;
     private const double Max = 360;
+    private const double LastMin = 120;
     private const int SampleRows = 200;
 
     private readonly MonitorGrid _grid;
@@ -119,8 +121,11 @@ internal sealed class GridColumnFit
             _natural = width; // 자동 크기·넓히기를 했거나 사용자가 너비를 바꿨다: 그 너비가 새 기준
         }
 
+        // 남은 폭이 최소값 이상이면 마지막 열을 남은 폭에 딱 맞춘다(값이 조금 길어도 가로 스크롤을 만들지 않는다. 긴 글은 상세 칸·복사로 본다).
+        // 앞 열들이 넓어 남은 폭이 그보다 좁을 때만 원래 너비로 두고 가로 스크롤을 쓴다.
         var others = control.ExtentWidth - control.RowHeaderWidth - width;
-        var want = Math.Max(_natural, Math.Floor(control.ViewportWidth - control.RowHeaderWidth - others - 1));
+        var remaining = Math.Floor(control.ViewportWidth - control.RowHeaderWidth - others - 1);
+        var want = remaining >= LastMin ? remaining : _natural;
         if (Math.Abs(want - width) < 0.5)
         {
             _filled = width;

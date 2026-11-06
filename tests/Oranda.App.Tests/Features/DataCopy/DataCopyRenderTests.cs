@@ -193,12 +193,66 @@ public sealed class DataCopyRenderTests : IDisposable
         }
     }
 
-    // 마지막 열이 남은 폭을 채워 그리드 오른쪽에 빈 끝 칸이 남지 않는다.
-    private static void AssertFillsWidth(MonitorGrid grid)
+    // 마지막 열이 남은 폭에 맞아 그리드 오른쪽에 빈 끝 칸도, 가로 스크롤도 생기지 않는다(열 폭 합 ≈ 그리드 폭, ±2).
+    // 앞 열들이 넓어 마지막 열 자리가 최소값(GridColumnFit 의 120)보다 좁을 때만 가로 스크롤을 허용하고, 그때도 빈 끝 칸은 없어야 한다.
+    // 반환: 남은 폭에 맞추는 경우(엄격 검사)였는가.
+    private static bool AssertFillsWidth(MonitorGrid grid)
     {
         var c = grid.GridControl;
-        Assert.True(c.ExtentWidth >= c.ViewportWidth - 2, $"그리드 폭 {c.ViewportWidth} 에 열 폭 합 {c.ExtentWidth}");
+        var m = grid.Model!;
+        var others = c.ExtentWidth - c.RowHeaderWidth - m.GetColumnWidth(m.VisibleColumns[^1]);
+        var room = c.ViewportWidth - c.RowHeaderWidth - others - 1;
+        var widths = string.Join(", ", m.VisibleColumns.Select(i => $"{m.Columns[i].Name}={m.GetColumnWidth(i)}"));
+        if (room >= 120)
+        {
+            Assert.True(Math.Abs(c.ExtentWidth - c.ViewportWidth) <= 2, $"{grid.Name}: 그리드 폭 {c.ViewportWidth} 에 열 폭 합 {c.ExtentWidth} ({widths})");
+            return true;
+        }
+
+        Assert.True(c.ExtentWidth >= c.ViewportWidth - 2, $"{grid.Name}: 그리드 폭 {c.ViewportWidth} 에 열 폭 합 {c.ExtentWidth} ({widths})");
+        return false;
     }
+
+    [Fact]
+    public Task Rule_grid_fits_width_after_duplicating_a_job() => HeadlessHost.Run(async () =>
+    {
+        // 복제·새 작업처럼 열 정보 없이 다른 작업을 열어 규칙 표를 비우고 다시 채운다. 부모 키 조건 글이 남은 폭보다 조금 길어도
+        // 가로 스크롤 없이 마지막 열이 남은 폭에 맞아야 한다.
+        var h = new DataCopyHarness();
+        var (window, vm) = await OpenWindowAsync(h);
+        try
+        {
+            var copy = TestJobs.Job("월말 운영 데이터 복사 복사본", "SRC", "TGT",
+                TestJobs.Rule("ORDER_ITEMS", RuleKind.ParentKey) with
+                {
+                    Parent = new ParentLink("CUSTOMERS", ["CUST_ID"], ["CUST_ID"], "FK_ORDER_ITEMS_CUSTOMERS"),
+                },
+                TestJobs.Rule("ORDERS"),
+                TestJobs.Rule("CODES"));
+            h.Store.Jobs[copy.Id] = copy;
+            await vm.OpenJobAsync(copy);
+            Settle(window);
+
+            var grid = window.FindControl<MonitorGrid>("RuleGrid")!;
+            Assert.Equal(3, grid.Model!.RowCount);
+            AssertFillsWidth(grid);
+
+            // 헤드리스 글꼴은 글자가 넓다: 조건 칸이 값에 필요한 폭(상한 360)보다 남은 폭이 좁고 최소값보다는 넓은 창 폭에서 본다.
+            foreach (var width in new[] { 1500.0, 1600 })
+            {
+                window.Width = width;
+                Settle(window);
+                Assert.True(AssertFillsWidth(grid), $"창 폭 {width}: 마지막 열 자리가 최소값보다 좁아 검사가 느슨해졌습니다");
+                Assert.True(grid.GridControl.MaxOffsetX <= 0, $"창 폭 {width}: 가로 스크롤이 생겼습니다");
+            }
+
+            Shots(window, "1-rules-duplicated");
+        }
+        finally
+        {
+            window.Close();
+        }
+    });
 
     [Fact]
     public Task Rule_edit_step_fits_a_narrow_window() => HeadlessHost.Run(async () =>
