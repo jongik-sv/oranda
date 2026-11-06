@@ -115,6 +115,7 @@ public sealed partial class TableRuleViewModel : ViewModelBase
         SavedMasks = rule.Masks;
         SavedSkips = rule.SkipColumns;
         RestorePeriodColumns();
+        RestoreParent();
     }
 
     public string Table { get; }
@@ -221,6 +222,8 @@ public sealed partial class TableRuleViewModel : ViewModelBase
             }
         }
 
+        RestoreParent();
+
         Masks.Clear();
         foreach (var rule in SavedMasks)
         {
@@ -269,6 +272,29 @@ public sealed partial class TableRuleViewModel : ViewModelBase
         var kept = new PeriodColumnOption(saved.Column, string.Empty, false, saved.StringFormat);
         PeriodColumnOptions.Add(kept);
         return kept;
+    }
+
+    // 고른(저장된) 부모 키를 후보 목록의 항목으로 되살린다. 후보에 없으면(열 정보를 아직 안 읽음·FK 가 바뀜) 그 연결을 후보에 넣어
+    // 콤보에 그대로 보이게 한다(목록에 없는 SelectedItem 은 콤보가 빈칸으로 그린다). 「열 정보 읽기」 뒤에는 같은 FK 의 실제 후보로 바뀐다.
+    private void RestoreParent()
+    {
+        if (Parent is not { } saved)
+        {
+            return;
+        }
+
+        var found = ParentCandidates.FirstOrDefault(c => ReferenceEquals(c, saved))
+            ?? ParentCandidates.FirstOrDefault(c => saved.ForeignKeyName is not null
+                && string.Equals(c.ForeignKeyName, saved.ForeignKeyName, StringComparison.OrdinalIgnoreCase))
+            ?? ParentCandidates.FirstOrDefault(c => string.Equals(c.ParentTable, saved.ParentTable, StringComparison.OrdinalIgnoreCase)
+                && c.ChildColumns.SequenceEqual(saved.ChildColumns, StringComparer.OrdinalIgnoreCase));
+        if (found is null)
+        {
+            ParentCandidates.Add(saved);
+            found = saved;
+        }
+
+        Parent = found;
     }
 
     partial void OnFirstColumnChanged(PeriodColumnOption? value)

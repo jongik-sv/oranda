@@ -71,6 +71,41 @@ public sealed class RuleEditorTests
     }
 
     [Fact]
+    public void Saved_parent_key_shows_in_combo_before_columns_are_read()
+    {
+        // 열 정보 읽기 전에는 FK 후보가 없다. 저장된 부모 키를 후보에 넣어야 「부모 테이블(FK)」 콤보가 빈칸이 아니다.
+        var saved = new ParentLink("CUSTOMERS", ["CUST_ID"], ["CUST_ID"], "FK_ITEMS_CUST");
+        var rule = new TableRuleViewModel(TestJobs.Rule("ORDER_ITEMS", RuleKind.ParentKey) with { Parent = saved });
+
+        Assert.Same(saved, Assert.Single(rule.ParentCandidates));
+        Assert.Same(rule.ParentCandidates[0], rule.Parent);
+
+        // 열 정보를 읽으면 같은 FK 의 실제 후보로 바뀐다(저장된 임시 항목은 남지 않는다).
+        var customers = new DbObjectRef("APP", "CUSTOMERS", "TABLE");
+        var orders = new DbObjectRef("APP", "ORDERS", "TABLE");
+        var source = TestJobs.Table("ORDER_ITEMS", TestJobs.Column("CUST_ID", "NUMBER", 1), TestJobs.Column("ORDER_ID", "NUMBER", 2)) with
+        {
+            Constraints =
+            [
+                new ConstraintInfo("FK_ITEMS_ORDERS", ConstraintKind.ForeignKey, ["ORDER_ID"]) { ReferencedTable = orders, ReferencedConstraint = "PK_ORDERS" },
+                new ConstraintInfo("FK_ITEMS_CUST", ConstraintKind.ForeignKey, ["CUST_ID"]) { ReferencedTable = customers, ReferencedConstraint = "PK_CUST" },
+            ],
+        };
+        var parents = new Dictionary<string, TableInfo>
+        {
+            ["CUSTOMERS"] = TestJobs.Table("CUSTOMERS") with { Constraints = [new ConstraintInfo("PK_CUST", ConstraintKind.PrimaryKey, ["CUST_ID"])] },
+            ["ORDERS"] = TestJobs.Table("ORDERS") with { Constraints = [new ConstraintInfo("PK_ORDERS", ConstraintKind.PrimaryKey, ["ORDER_ID"])] },
+        };
+        rule.SetSource(source, parents);
+
+        Assert.Equal(2, rule.ParentCandidates.Count);
+        Assert.Contains(rule.Parent!, rule.ParentCandidates);
+        Assert.NotSame(saved, rule.Parent);
+        Assert.Equal("FK_ITEMS_CUST", rule.Parent!.ForeignKeyName);
+        Assert.Equal("CUSTOMERS", rule.ToRule().Parent!.ParentTable);
+    }
+
+    [Fact]
     public void Period_rule_defaults_string_format_from_length()
     {
         var rule = PeriodRule(TestJobs.Column("ORDER_DT", "VARCHAR2", 1, length: 8), TestJobs.Column("MONTH_YM", "CHAR", 2, length: 6));

@@ -237,6 +237,13 @@ public sealed class DataCopyRenderTests : IDisposable
             Assert.Equal(3, grid.Model!.RowCount);
             AssertFillsWidth(grid);
 
+            // 열 정보 읽기 전에도 상세 칸 「부모 테이블(FK)」 콤보에 저장된 부모 표가 보인다.
+            vm.Editor.SelectedRule = vm.Editor.Rules.Single(r => r.Table == "ORDER_ITEMS");
+            Settle(window);
+            var parentCombo = window.GetVisualDescendants().OfType<ComboBox>().Single(c => AutomationProperties.GetName(c) == "부모 키 연결");
+            Assert.Equal(0, parentCombo.SelectedIndex);
+            Assert.Equal("CUSTOMERS", Assert.IsType<ParentLink>(parentCombo.SelectedItem).ParentTable);
+
             // 헤드리스 글꼴은 글자가 넓다: 조건 칸이 값에 필요한 폭(상한 360)보다 남은 폭이 좁고 최소값보다는 넓은 창 폭에서 본다.
             foreach (var width in new[] { 1500.0, 1600 })
             {
