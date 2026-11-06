@@ -211,6 +211,57 @@ public sealed class UpdateContrastTests
         }
     });
 
+    /// <summary>알림 띠: 바탕은 종류 색(있음 주황·준비됨 초록)이고, 띠 글자와 주 버튼 글자는 각자 바탕 위에서 4.5:1 이상이어야 한다. 보조 버튼 테두리는 띠와 3:1 이상.</summary>
+    [Theory]
+    [InlineData("light", "available")]
+    [InlineData("light", "ready")]
+    [InlineData("dark", "available")]
+    [InlineData("dark", "ready")]
+    public Task Banner_text_and_primary_button_are_readable_in_both_themes(string tone, string kind) => HeadlessHost.Run(async () =>
+    {
+        UiText.Current = new Oranda.App.Shell.ShellText(language: "ko");
+        var variant = tone == "dark" ? ThemeVariant.Dark : ThemeVariant.Light;
+        Application.Current!.RequestedThemeVariant = variant;
+        try
+        {
+            var h = new UpdateHarness();
+            if (kind == "available")
+            {
+                await h.Configure(u => u with { AutoDownload = false });
+            }
+
+            await h.Service.RunStartupAsync(TimeSpan.Zero);
+            var banner = new UpdateBanner { DataContext = new UpdateBannerViewModel(h.Service) };
+            var window = new Window { Width = 900, Height = 80, Content = new DockPanel { Children = { banner } }, RequestedThemeVariant = variant };
+            window.Show();
+            Dispatcher.UIThread.RunJobs();
+
+            var strip = banner.GetVisualDescendants().OfType<Border>().First(b => b.Child is DockPanel);
+            var primary = banner.GetVisualDescendants().OfType<Button>().First(b => b.Name == "UpdateBannerPrimaryButton");
+            var later = banner.GetVisualDescendants().OfType<Button>().First(b => b.Name == "UpdateBannerLaterButton");
+            var text = banner.GetVisualDescendants().OfType<TextBlock>().First(t => t.Inlines is { Count: > 0 });
+            var expected = kind == "ready" ? "OrandaUpdateReadyBrush" : "OrandaUpdateAvailableBrush";
+            Assert.True(banner.TryFindResource(expected, variant, out var want));
+            Assert.Equal(Solid(want as IBrush), Solid(strip.Background)); // 색 값은 테마 리소스에서 온다
+
+            var body = Ratio(Solid(text.Foreground), Solid(strip.Background));
+            var primaryText = Ratio(Solid(primary.Foreground), Solid(primary.Background));
+            var primaryEdge = Ratio(Solid(primary.Background), Solid(strip.Background));
+            var laterText = Ratio(Solid(later.Foreground), Solid(strip.Background));
+            window.Close();
+
+            Assert.True(body >= TextMinimum, $"{tone}/{kind}: 띠 글자 대비 {body:F2}:1 (4.5:1 미만)");
+            Assert.True(primaryText >= TextMinimum, $"{tone}/{kind}: 주 버튼 글자 대비 {primaryText:F2}:1 (4.5:1 미만)");
+            Assert.True(primaryEdge >= NonTextMinimum, $"{tone}/{kind}: 주 버튼과 띠 대비 {primaryEdge:F2}:1 (3:1 미만)");
+            Assert.True(laterText >= TextMinimum, $"{tone}/{kind}: 보조 버튼 글자 대비 {laterText:F2}:1 (4.5:1 미만)");
+        }
+        finally
+        {
+            Application.Current!.RequestedThemeVariant = ThemeVariant.Default;
+            Dispatcher.UIThread.RunJobs();
+        }
+    });
+
     /// <summary>ORANDA_RENDER_DIR 를 줄 때만 실제 픽셀로 그려 상태 표시줄 배지를 눈으로 확인한다(두 테마 × 평소·운영 × 있음·준비됨).</summary>
     [Theory]
     [InlineData("light", "available")]

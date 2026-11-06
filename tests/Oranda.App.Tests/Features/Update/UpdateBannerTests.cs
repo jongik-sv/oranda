@@ -24,6 +24,10 @@ public sealed class UpdateBannerTests
     private static T Named<T>(Control root, string name)
         where T : Control => root.GetVisualDescendants().OfType<T>().First(c => c.Name == name);
 
+    /// <summary>버전만 굵게 나눈 Run 들을 이어 붙인 띠 글(Inlines 를 쓰면 TextBlock.Text 는 비어 있다).</summary>
+    private static string BannerText(Control banner) =>
+        string.Concat(banner.GetVisualDescendants().OfType<TextBlock>().First(t => t.Inlines is { Count: > 0 }).Inlines!.OfType<Avalonia.Controls.Documents.Run>().Select(r => r.Text));
+
     private static Window Show(UpdateBannerViewModel vm, out UpdateBanner banner)
     {
         banner = new UpdateBanner { DataContext = vm };
@@ -63,7 +67,7 @@ public sealed class UpdateBannerTests
         Dispatcher.UIThread.RunJobs();
 
         Assert.True(banner.IsVisible);
-        Assert.Contains(banner.GetVisualDescendants().OfType<TextBlock>(), t => t.Text == "Oranda 0.1.9 이 준비되었습니다");
+        Assert.Equal("Oranda 0.1.9 이 준비되었습니다", BannerText(banner));
         Assert.Equal("다시 시작해 적용", (string?)Named<Button>(banner, "UpdateBannerPrimaryButton").Content);
         Assert.Equal("자세히", (string?)Named<Button>(banner, "UpdateBannerDetailsButton").Content);
         Render(window, "update-banner-ready-ko");
@@ -112,13 +116,13 @@ public sealed class UpdateBannerTests
         Dispatcher.UIThread.RunJobs();
 
         Assert.True(banner.IsVisible);
-        Assert.Contains(banner.GetVisualDescendants().OfType<TextBlock>(), t => t.Text == "Oranda 0.1.9 을 내려받을 수 있습니다");
+        Assert.Equal("Oranda 0.1.9 을 내려받을 수 있습니다", BannerText(banner));
         Assert.Equal("내려받기", (string?)Named<Button>(banner, "UpdateBannerPrimaryButton").Content);
 
         await vm.PrimaryAsync(); // 내려받기 → 준비됨
         Dispatcher.UIThread.RunJobs();
         Assert.Equal(UpdatePhase.Ready, h.Service.Phase);
-        Assert.Contains(banner.GetVisualDescendants().OfType<TextBlock>(), t => t.Text == "Oranda 0.1.9 이 준비되었습니다");
+        Assert.Equal("Oranda 0.1.9 이 준비되었습니다", BannerText(banner));
         window.Close();
     });
 
@@ -182,7 +186,7 @@ public sealed class UpdateBannerTests
             await h.Service.RunStartupAsync(TimeSpan.Zero);
             Dispatcher.UIThread.RunJobs();
 
-            Assert.Contains(banner.GetVisualDescendants().OfType<TextBlock>(), t => t.Text == "Oranda 0.1.9 is ready");
+            Assert.Equal("Oranda 0.1.9 is ready", BannerText(banner));
             Assert.Equal("Restart to apply", (string?)Named<Button>(banner, "UpdateBannerPrimaryButton").Content);
             Assert.Equal("Later", (string?)Named<Button>(banner, "UpdateBannerLaterButton").Content);
             Render(window, "update-banner-ready-en");
@@ -191,6 +195,47 @@ public sealed class UpdateBannerTests
         finally
         {
             Ko();
+        }
+    });
+
+    /// <summary>ORANDA_RENDER_DIR 를 줄 때만 실제 픽셀로 그려 띠를 눈으로 확인한다(있음·준비됨 × 라이트·다크, 좁은 창 폭 700).</summary>
+    [Theory]
+    [InlineData("light", "available", 900)]
+    [InlineData("light", "ready", 900)]
+    [InlineData("dark", "available", 900)]
+    [InlineData("dark", "ready", 900)]
+    [InlineData("light", "available", 700)]
+    public Task Banner_renders_for_a_visual_check(string tone, string kind, int width) => HeadlessHost.Run(async () =>
+    {
+        if (string.IsNullOrEmpty(Environment.GetEnvironmentVariable("ORANDA_RENDER_DIR")))
+        {
+            return;
+        }
+
+        Ko();
+        var variant = tone == "dark" ? Avalonia.Styling.ThemeVariant.Dark : Avalonia.Styling.ThemeVariant.Light;
+        Application.Current!.RequestedThemeVariant = variant;
+        try
+        {
+            var h = new UpdateHarness();
+            if (kind == "available")
+            {
+                await h.Configure(u => u with { AutoDownload = false });
+            }
+
+            var vm = new UpdateBannerViewModel(h.Service);
+            var banner = new UpdateBanner { DataContext = vm };
+            var window = new Window { Width = width, Height = 70, SizeToContent = SizeToContent.Height, Content = new DockPanel { Children = { banner } }, RequestedThemeVariant = variant };
+            window.Show();
+            await h.Service.RunStartupAsync(TimeSpan.Zero);
+            Dispatcher.UIThread.RunJobs();
+            Render(window, $"update-banner-{kind}-{tone}-{width}");
+            window.Close();
+        }
+        finally
+        {
+            Application.Current!.RequestedThemeVariant = Avalonia.Styling.ThemeVariant.Default;
+            Dispatcher.UIThread.RunJobs();
         }
     });
 }
