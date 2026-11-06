@@ -4,6 +4,7 @@ using Oracle.ManagedDataAccess.Types;
 using Oranda.Core.Execution;
 using Oranda.Core.History;
 using Oranda.Core.Sessions;
+using Oranda.Core.Transfer.Copy;
 
 namespace Oranda.Oracle.Transfer.Copy;
 
@@ -163,7 +164,7 @@ internal static class CopyCatalogQueries
 /// <summary>한 세션의 접속 계정·켜진 롤·시스템 권한. 이름은 대소문자를 가리지 않고 비교한다.</summary>
 internal sealed record SessionAccess(string User, IReadOnlySet<string> Roles, IReadOnlySet<string> SystemPrivileges)
 {
-    public bool IsOwner(string owner) => string.Equals(User, owner, StringComparison.OrdinalIgnoreCase);
+    public bool IsOwner(string owner) => CopyOwners.SameOwner(User, owner);
 
     public bool Has(string systemPrivilege) => SystemPrivileges.Contains(systemPrivilege);
 

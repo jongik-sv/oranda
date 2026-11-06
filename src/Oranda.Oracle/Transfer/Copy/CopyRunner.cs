@@ -302,7 +302,7 @@ internal sealed class CopyRunner : ICopyRunner
     /// </remarks>
     internal static bool IsSameDatabaseAndOwner(string sourceDbKey, ServerInfo source, string targetDbKey, ServerInfo target,
                                                 string sourceOwner, string targetOwner)
-        => string.Equals(sourceOwner, targetOwner, StringComparison.OrdinalIgnoreCase)
+        => CopyOwners.SameOwner(sourceOwner, targetOwner)
            && IsSameDatabase(sourceDbKey, source, targetDbKey, target);
 
     /// <summary>원본과 대상이 같은 DB 인가(<see cref="IsSameDatabaseAndOwner"/> 의 DB 판정). 모르면 같다고 본다(막는 쪽).</summary>
@@ -346,7 +346,7 @@ internal sealed class CopyRunner : ICopyRunner
 
         // 다시 만들기는 대상 소유자 계정으로만 한다(표마다, 사전 점검 RecreateNoPrivilege 와 같은 판정). DbKey 의 끝 마디가 SESSION_USER 다.
         var user = SessionUser(sessions.Target.DbKey);
-        if (user is not null && recreate.FirstOrDefault(r => !string.Equals(CopyOwners.Target(job, r), user, StringComparison.OrdinalIgnoreCase)) is { } other)
+        if (user is not null && recreate.FirstOrDefault(r => !CopyOwners.SameOwner(CopyOwners.Target(job, r), user)) is { } other)
         {
             throw new InvalidOperationException($"{CopyOwners.Key(job, other)}: 「테이블 다시 만들기」는 대상 소유자({CopyOwners.Target(job, other)}) 계정으로 접속해야 합니다(지금 {user}).");
         }
@@ -483,8 +483,8 @@ internal sealed class CopyRunner : ICopyRunner
             // 표마다 그 표의 대상 계정에 다시 만든다. 작업 안 FK 는 원본 계정·대상 계정이 모두 같은 다시 만들기 표끼리만 붙인다(사전 점검과 같은 판정).
             var owner = plan.Target.Table.Owner;
             var sourceOwner = plan.Source.Table.Owner;
-            var planned = plans.Where(p => string.Equals(p.Target.Table.Owner, owner, StringComparison.OrdinalIgnoreCase)
-                                           && string.Equals(p.Source.Table.Owner, sourceOwner, StringComparison.Ordinal))
+            var planned = plans.Where(p => CopyOwners.SameOwner(p.Target.Table.Owner, owner)
+                                           && CopyOwners.SameOwner(p.Source.Table.Owner, sourceOwner))
                 .Select(p => p.Rule.Table).ToHashSet(StringComparer.Ordinal);
             try
             {
@@ -896,7 +896,7 @@ internal sealed class CopyRunner : ICopyRunner
                 // 이 표의 원본 FK, 그리고 다른 다시 만들기 표가 받아 둔 「이 표가 자식인」 옛 FK 도 넣는다(휴지통에서 되돌려도 다른 표를 참조하는 FK 는 안 돌아온다).
                 var asChild = run.Tables.Values.Where(o => o.Preserved is not null && !ReferenceEquals(o, t))
                     .SelectMany(o => o.Preserved!.ReferencingConstraints.Select((fk, i) => (fk, i, o.Preserved!))
-                        .Where(x => string.Equals(x.fk.Owner, owner, StringComparison.OrdinalIgnoreCase) && x.fk.Table == t.TableName && x.i < x.Item3.ReferencingForeignKeys.Count)
+                        .Where(x => CopyOwners.SameOwner(x.fk.Owner, owner) && x.fk.Table == t.TableName && x.i < x.Item3.ReferencingForeignKeys.Count)
                         .Select(x => x.Item3.ReferencingForeignKeys[x.i]));
                 var pending = kept.Triggers.Concat(kept.Grants).Concat(kept.ReferencingForeignKeys)
                     .Concat(t.JobForeignKeys.Select(f => f.Ddl))
@@ -2289,7 +2289,7 @@ internal sealed class CopyRunner : ICopyRunner
 
         /// <summary>대상 계정·표로 이 실행의 표를 찾는다(대상 FK 의 자식·부모를 맞출 때). 없으면 null.</summary>
         public TableState? ByTarget(string owner, string table)
-            => Tables.Values.FirstOrDefault(t => string.Equals(t.Owner, owner, StringComparison.OrdinalIgnoreCase)
+            => Tables.Values.FirstOrDefault(t => CopyOwners.SameOwner(t.Owner, owner)
                                                  && string.Equals(t.TableName, table, StringComparison.Ordinal));
 
         public void Abort(string? notice)

@@ -12,6 +12,18 @@ namespace Oranda.Core.Transfer.Copy;
 /// </summary>
 public static class CopyOwners
 {
+    /// <summary>
+    /// 계정 이름 비교 한 곳. 대소문자를 가리지 않는다: 계정은 사전에 대문자로 있고(따옴표로 만든 소문자 계정은 드물다),
+    /// 화면에서 소문자로 적은 기본 계정(<c>scott</c>)과 사전에서 읽은 규칙 계정(<c>SCOTT</c>)이 같은 계정으로 보여야 한다.
+    /// 대소문자만 다른 두 계정을 같은 계정으로 보면 겹침·같은 표 판정이 늘어나는 쪽(막는 쪽)이다.
+    /// 문장에는 저장된 이름을 그대로 따옴표로 감싸 쓴다(이 비교가 이름을 바꾸지 않는다).
+    /// 점검 뒤 바뀜 감지(<c>CopyRunner.EnsureReportMatchesJob</c>·<c>SameRule</c>)는 글자 그대로 비교한다(문장 글이 달라지므로).
+    /// </summary>
+    public static bool SameOwner(string? a, string? b) => string.Equals(a, b, StringComparison.OrdinalIgnoreCase);
+
+    /// <summary><see cref="SameOwner"/> 와 같은 규칙의 비교자(계정 이름 집합·사전용).</summary>
+    public static StringComparer OwnerComparer => StringComparer.OrdinalIgnoreCase;
+
     /// <summary>규칙의 원본 계정. 비었으면 작업 기본 원본 계정.</summary>
     public static string Source(CopyJob job, TableRule rule)
     {
@@ -39,7 +51,7 @@ public static class CopyOwners
     {
         ArgumentNullException.ThrowIfNull(job);
         ArgumentNullException.ThrowIfNull(sourceOwner);
-        return string.Equals(sourceOwner, job.SourceOwner, StringComparison.Ordinal) ? job.TargetOwner : sourceOwner;
+        return SameOwner(sourceOwner, job.SourceOwner) ? job.TargetOwner : sourceOwner;
     }
 
     /// <summary>
@@ -55,7 +67,7 @@ public static class CopyOwners
     {
         ArgumentNullException.ThrowIfNull(job);
         ArgumentNullException.ThrowIfNull(table);
-        return string.IsNullOrEmpty(sourceOwner) || string.Equals(sourceOwner, job.SourceOwner, StringComparison.Ordinal)
+        return string.IsNullOrEmpty(sourceOwner) || SameOwner(sourceOwner, job.SourceOwner)
             ? KeyPart(table)
             : KeyPart(sourceOwner) + "." + KeyPart(table);
     }
@@ -172,7 +184,7 @@ public static class CopyOwners
     {
         ArgumentNullException.ThrowIfNull(job);
         return job.Tables.FirstOrDefault(r => string.Equals(r.Table, table, StringComparison.Ordinal)
-                                              && string.Equals(Target(job, r), targetOwner, StringComparison.OrdinalIgnoreCase));
+                                              && SameOwner(Target(job, r), targetOwner));
     }
 
     /// <summary>원본 계정·표로 규칙을 찾는다(제외 규칙 포함). 없으면 null.</summary>
@@ -261,7 +273,7 @@ public static class CopyOwners
     {
         ArgumentNullException.ThrowIfNull(job);
         return [.. job.Tables.Where(r => r.Kind != RuleKind.Exclude).Select(r => Target(job, r))
-            .Where(o => !string.Equals(o, sessionUser, StringComparison.OrdinalIgnoreCase))
-            .Distinct(StringComparer.OrdinalIgnoreCase)];
+            .Where(o => !SameOwner(o, sessionUser))
+            .Distinct(OwnerComparer)];
     }
 }

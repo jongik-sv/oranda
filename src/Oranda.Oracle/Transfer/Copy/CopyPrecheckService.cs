@@ -202,7 +202,7 @@ internal sealed partial class CopyPrecheckService(IBulkExecutionService bulk, IM
             var saved = $"{SourceOwner(rule)}.{rule.Table}";
             var now = await CopyTableInput.ResolveAsync((o, n) => metadata.GetNameStepAsync(Source, o, n, ct), rule.WrittenAs, job.SourceOwner, _sourceAccess.User)
                 .ConfigureAwait(false);
-            if (now.Table is { } t && string.Equals(t.Owner, SourceOwner(rule), StringComparison.Ordinal) && string.Equals(t.Table, rule.Table, StringComparison.Ordinal))
+            if (now.Table is { } t && CopyOwners.SameOwner(t.Owner, SourceOwner(rule)) && string.Equals(t.Table, rule.Table, StringComparison.Ordinal))
             {
                 return;
             }
@@ -428,13 +428,13 @@ internal sealed partial class CopyPrecheckService(IBulkExecutionService bulk, IM
         /// <summary>대상 계정이 <paramref name="targetOwner"/> 인 다시 만들기 표 이름(<paramref name="sourceOwner"/> 를 주면 원본 계정도 같은 것만).</summary>
         private HashSet<string> RecreatedTables(string targetOwner, string? sourceOwner)
             => job.Tables.Where(r => r.Kind != RuleKind.Exclude && IsRecreate(r)
-                                     && string.Equals(TargetOwner(r), targetOwner, StringComparison.OrdinalIgnoreCase)
-                                     && (sourceOwner is null || string.Equals(SourceOwner(r), sourceOwner, StringComparison.Ordinal)))
+                                     && CopyOwners.SameOwner(TargetOwner(r), targetOwner)
+                                     && (sourceOwner is null || CopyOwners.SameOwner(SourceOwner(r), sourceOwner)))
                 .Select(r => r.Table).ToHashSet(StringComparer.Ordinal);
 
         /// <summary>원본 FK 의 부모가 같은 원본 계정·같은 대상 계정으로 함께 다시 만드는 표인가(실행기 <c>RecreateStep.SourceForeignKeysAsync</c> 와 같은 판정).</summary>
         private bool IsLinkedParent(DbObjectRef parent, TableRule rule, HashSet<string> linked)
-            => string.Equals(parent.Owner, SourceOwner(rule), StringComparison.OrdinalIgnoreCase) && linked.Contains(parent.Name);
+            => CopyOwners.SameOwner(parent.Owner, SourceOwner(rule)) && linked.Contains(parent.Name);
 
         /// <summary>
         /// 지우기 전에 알 수 있는 CREATE 실패 원인. 지원 밖 형식 열(건너뛴 열도 다시 만들 때 만들어진다: 객체형·VECTOR·JSON·XMLTYPE·LONG),
@@ -616,7 +616,7 @@ internal sealed partial class CopyPrecheckService(IBulkExecutionService bulk, IM
             var all = rows.Select(r => (Owner: CopyCatalogQueries.Text(r[0]), Name: CopyCatalogQueries.Text(r[1]))).ToList();
 
             // 트리거 이름은 그 표의 대상 소유자 기준이다(메모 D4). 다른 소유자의 트리거는 보여 주기만 한다.
-            var owned = all.Where(t => t.Name is not null && string.Equals(t.Owner, owner, StringComparison.OrdinalIgnoreCase))
+            var owned = all.Where(t => t.Name is not null && CopyOwners.SameOwner(t.Owner, owner))
                 .Select(t => t.Name!).ToList();
             var canDisable = _targetAccess.IsOwner(owner) || _targetAccess.Has("ALTER ANY TRIGGER");
 
@@ -674,7 +674,7 @@ internal sealed partial class CopyPrecheckService(IBulkExecutionService bulk, IM
                 choices.Add(CheckChoice.DisableForeignKeys);
             }
 
-            var children = string.Join(", ", blocking.Select(fk => (string.Equals(fk.Owner, TargetOwner(rule), StringComparison.OrdinalIgnoreCase) ? "" : fk.Owner + ".")
+            var children = string.Join(", ", blocking.Select(fk => (CopyOwners.SameOwner(fk.Owner, TargetOwner(rule)) ? "" : fk.Owner + ".")
                                                                     + $"{fk.Table}({fk.Name})").Distinct(StringComparer.Ordinal));
             _items.Add(new CheckItem(Key(rule), "ChildRowsMayBlock", CheckLevel.Confirm,
                 $"{Key(rule)}: 자식 표 {children} 의 행이 남아 있으면 지울 때 ORA-02292 가 날 수 있습니다. 대상 처리를 PK 기준 MERGE 로 바꾸세요.")
@@ -956,8 +956,8 @@ internal sealed partial class CopyPrecheckService(IBulkExecutionService bulk, IM
             }
 
             // 시퀀스 이름은 표의 대상 계정마다 한 번 읽는다(후보는 그 표의 대상 계정에 있는 시퀀스).
-            var namesByOwner = new Dictionary<string, List<string>>(StringComparer.OrdinalIgnoreCase);
-            foreach (var owner in candidates.Select(c => TargetOwner(c.Plan.Rule)).Distinct(StringComparer.OrdinalIgnoreCase))
+            var namesByOwner = new Dictionary<string, List<string>>(CopyOwners.OwnerComparer);
+            foreach (var owner in candidates.Select(c => TargetOwner(c.Plan.Rule)).Distinct(CopyOwners.OwnerComparer))
             {
                 try
                 {

@@ -286,7 +286,7 @@ internal static class PrecheckRules
         }
 
         var rules = job.Tables.Where(r => r.Kind != RuleKind.Exclude
-                                          && owners.Contains(CopyOwners.Target(job, r), StringComparer.OrdinalIgnoreCase)).ToList();
+                                          && owners.Contains(CopyOwners.Target(job, r), CopyOwners.OwnerComparer)).ToList();
         var deleting = rules.Count(r => r.Action is TargetAction.DeleteAllInsert or TargetAction.DeleteRangeInsert or TargetAction.Recreate);
         var n = rules.Count.ToString(CultureInfo.InvariantCulture);
         var what = deleting == rules.Count

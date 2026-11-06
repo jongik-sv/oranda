@@ -106,6 +106,22 @@ public class CopyOwnersTests
     }
 
     [Fact]
+    public void Owner_names_compare_without_case_everywhere()
+    {
+        // 화면에서 소문자로 적은 기본 계정과 사전에서 읽은 대문자 규칙 계정은 같은 계정이다(키·대상 기본값·대상 찾기 모두).
+        var rule = new TableRule("ORDERS", RuleKind.All, TargetAction.MergeByPk) { SourceOwner = "SRC" };
+        var job = Job(rule) with { SourceOwner = "src" };
+
+        Assert.True(CopyOwners.SameOwner("app", "APP"));
+        Assert.False(CopyOwners.SameOwner("APP", "APP2"));
+        Assert.Equal("ORDERS", CopyOwners.Key(job, rule));
+        Assert.Equal("DST", CopyOwners.MapTarget(job, "SRC"));
+        Assert.Equal("DST", CopyOwners.Target(job, rule));
+        Assert.Same(rule, CopyOwners.FindByTarget(job, "dst", "ORDERS"));
+        Assert.Same(rule, CopyOwners.FindBySource(job, "Src", "ORDERS"));
+    }
+
+    [Fact]
     public void Map_target_keeps_job_mapping_for_default_owner_and_owner_name_otherwise()
     {
         var job = Job();
