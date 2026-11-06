@@ -153,24 +153,17 @@ internal sealed partial class OracleExecutionService : IExecutionService
             stmt = substituted;
         }
 
-        // 2. 정책 관문. 거부면 드라이버를 부르지 않는다(SAFE-07: 문자열 자체를 보내지 않음).
-        var ctx = new PolicyContext(s.Profile, s.Server, options.Source) { RequiredLicense = options.RequiredLicense };
-        var decision = await _policy.EvaluateAsync(ctx, stmt, ct);
-        _events.Publish(new PolicyDecisionMade(s.Id, stmt, decision));
-        PolicyDecision? applied = null;
-        switch (decision.Kind)
+        // 2. 정책 관문. 거부면 드라이버를 부르지 않는다(SAFE-07: 문자열 자체를 보내지 않음). 미리 받은 확인은 치환 뒤 텍스트로 비교한다.
+        var gate = await PolicyGate.DecideAsync(_policy, _interaction, _events, s, stmt, options, ct);
+        switch (gate.Outcome)
         {
-            case PolicyDecisionKind.Deny:
-                return new ExecutionResult(stmt, ExecutionStatus.Denied) { Policy = decision };
-            case PolicyDecisionKind.Confirm:
-                if (!await _interaction.ConfirmAsync(stmt, decision, ct))
-                {
-                    return new ExecutionResult(stmt, ExecutionStatus.Cancelled) { Policy = decision };
-                }
-
-                applied = decision;
-                break;
+            case PolicyGateOutcome.Denied:
+                return new ExecutionResult(stmt, ExecutionStatus.Denied) { Policy = gate.Decision };
+            case PolicyGateOutcome.Cancelled:
+                return new ExecutionResult(stmt, ExecutionStatus.Cancelled) { Policy = gate.Decision };
         }
+
+        var applied = gate.Applied;
 
         // 3. SQL*Plus 명령
         if (stmt.Kind == StatementKind.SqlPlus)
@@ -394,7 +387,7 @@ internal sealed partial class OracleExecutionService : IExecutionService
     }
 
     /// <summary>DBMS_TRANSACTION.LOCAL_TRANSACTION_ID 로 미커밋 상태를 갱신한다. 읽기 전용 프로필은 늘 false.</summary>
-    private static async Task<bool> TrackTransactionAsync(OracleSession session, SqlStatement stmt, StatementKind kind, CancellationToken ct)
+    internal static async Task<bool> TrackTransactionAsync(OracleSession session, SqlStatement stmt, StatementKind kind, CancellationToken ct)
     {
         if (session.Profile.ReadOnly)
         {
@@ -415,7 +408,7 @@ internal sealed partial class OracleExecutionService : IExecutionService
         return pending;
     }
 
-    private static async Task<bool> SafeTrackAfterFailureAsync(OracleSession session, SqlStatement stmt, StatementKind kind)
+    internal static async Task<bool> SafeTrackAfterFailureAsync(OracleSession session, SqlStatement stmt, StatementKind kind)
     {
         if (session.State is SessionState.Broken or SessionState.Closed)
         {
@@ -536,7 +529,7 @@ internal sealed partial class OracleExecutionService : IExecutionService
         await cmd.ExecuteNonQueryAsync(ct);
     }
 
-    private static bool IsCancellation(Exception ex, CancellationToken ct) =>
+    internal static bool IsCancellation(Exception ex, CancellationToken ct) =>
         ex is OperationCanceledException
         || (ex is OracleException oe && oe.Number == CancelledNumber && ct.IsCancellationRequested);
 
