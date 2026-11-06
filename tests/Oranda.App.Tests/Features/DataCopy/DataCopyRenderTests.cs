@@ -121,6 +121,16 @@ public sealed class DataCopyRenderTests : IDisposable
         return (window, vm);
     }
 
+    /// <summary>컨트롤이 부모 칸보다 넓게 그려져 오른쪽이 잘리지 않는다(최소 폭이 칸 폭보다 클 때 생긴다).</summary>
+    private static void AssertInsideParent(Control control)
+    {
+        var parent = (Control)control.GetVisualParent()!;
+        Assert.True(control.Bounds.Right <= parent.Bounds.Width + 0.5,
+            $"{AutomationProperties.GetName(control)}: 오른쪽 {control.Bounds.Right} > 부모 폭 {parent.Bounds.Width}");
+        Assert.True(control.DesiredSize.Width <= control.Bounds.Width + 0.5,
+            $"{AutomationProperties.GetName(control)}: 원하는 폭 {control.DesiredSize.Width} > 받은 폭 {control.Bounds.Width}");
+    }
+
     private static void AssertNotClipped(Window window, string state)
     {
         var clipped = TextClipping.Find(window);
@@ -291,9 +301,21 @@ public sealed class DataCopyRenderTests : IDisposable
             vm.Editor.CustomFrom = new DateTime(2026, 10, 1);
             vm.Editor.CustomTo = new DateTime(2026, 11, 1);
             vm.Editor.Rules[0].FirstFormat = "YYYY-MM-DD HH24:MI:SS";
+            vm.Editor.Rules[0].Masks[0].Kind = MaskKind.Fixed; // 값 칸이 생긴다
             window.Width = 1000;
             Settle(window);
             AssertNotClipped(window, "직접 지정 기간(폭 1000)");
+
+            // 끝 날짜 옆 「미만」·「끝 날짜 포함」 콤보가 보이고 칸 안에 들어간다.
+            var endBox = window.GetVisualDescendants().OfType<ComboBox>().Single(c => AutomationProperties.GetName(c) == "끝 날짜 셈");
+            Assert.True(endBox.IsEffectivelyVisible);
+            Assert.True(endBox.Bounds.Width >= 60, $"끝 날짜 셈 폭 {endBox.Bounds.Width}");
+            AssertInsideParent(endBox);
+
+            // 마스킹 고정값 칸이 줄 오른쪽 밖으로 밀려나 잘리지 않는다.
+            var valueBox = window.GetVisualDescendants().OfType<TextBox>().Single(t => AutomationProperties.GetName(t) == "고정값");
+            Assert.True(valueBox.IsEffectivelyVisible);
+            AssertInsideParent(valueBox);
             Shots(window, "1-rules-custom-narrow");
         }
         finally

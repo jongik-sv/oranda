@@ -318,7 +318,7 @@ public sealed partial class RuleEditorViewModel : ViewModelBase
         {
             var resolved = ResolvePeriod();
             return resolved is { From: { } from, To: { } to }
-                ? string.Create(CultureInfo.InvariantCulture, $"{from:yyyy-MM-dd} ~ {to:yyyy-MM-dd}")
+                ? string.Create(CultureInfo.InvariantCulture, $"{from:yyyy-MM-dd} ~ {to:yyyy-MM-dd} 미만")
                 : "기간 없음";
         }
     }

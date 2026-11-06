@@ -230,10 +230,10 @@ public sealed class RuleEditorTests
         Assert.Equal("기간 없음", editor.PeriodText);
 
         editor.PeriodChoice = editor.PeriodKinds.Single(k => k.Kind == PeriodKind.LastMonth);
-        Assert.Equal("2026-10-07 ~ 2026-11-07", editor.PeriodText);
+        Assert.Equal("2026-10-07 ~ 2026-11-07 미만", editor.PeriodText);
 
         editor.PeriodChoice = editor.PeriodKinds.Single(k => k.Kind == PeriodKind.PreviousMonth);
-        Assert.Equal("2026-10-01 ~ 2026-11-01", editor.PeriodText);
+        Assert.Equal("2026-10-01 ~ 2026-11-01 미만", editor.PeriodText);
     }
 
     [Fact]
