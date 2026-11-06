@@ -93,6 +93,10 @@ public sealed class CopyCrossOwnerTests
         => await CrossOwnerCases.TargetThatIsNotATableAsync(await CopyDbScope.CreateAsync(_db, CopyDbScope.NewTag()));
 
     [Fact]
+    public async Task Rule_with_another_target_owner_copies_there_and_leaves_the_default_target_table_alone()
+        => await CrossOwnerCases.OtherTargetOwnerLeavesDefaultTargetAloneAsync(await CopyDbScope.CreateAsync(_db, CopyDbScope.NewTag()));
+
+    [Fact]
     public async Task Mixed_owner_recreate_needs_each_target_owner()
     {
         await using var scope = await CopyDbScope.CreateAsync(_db, CopyDbScope.NewTag());
@@ -249,6 +253,45 @@ internal static class CrossOwnerCases
             Assert.Equal(3, await scope.CountAsync(scope.DstUser, "ORDERS"));
             Assert.Equal(3, await scope.CountAsync(scope.AppUser, "CUSTOMERS")); // 원본은 그대로
         }
+    }
+
+    /// <summary>
+    /// 대상 계정이 작업 기본 대상 계정(DST)과 다른 규칙 SRC.ORDERS → APP.ORDERS 를 실제로 복사한다. APP.ORDERS 만 비우고 채우며,
+    /// 기본 대상 계정의 같은 이름 표 DST.ORDERS 는 행이 그대로다(대상 계정이 DST 로 새지 않는다).
+    /// 원본과 대상이 같은 DB 라 원본 계정과 같은 대상 계정(APP→APP)은 SameSourceTarget 이 되므로 원본은 기본 계정 표로 둔다.
+    /// </summary>
+    public static async Task OtherTargetOwnerLeavesDefaultTargetAloneAsync(CopyDbScope owned)
+    {
+        await using var scope = owned;
+        await scope.CreateSourceTableAsync("ORDERS", CustomerColumns);
+        await scope.ExecSourceAsync("BEGIN INSERT INTO ORDERS VALUES (1, 'a'); INSERT INTO ORDERS VALUES (2, 'b'); COMMIT; END;");
+        await scope.ExecAppAsync($"CREATE TABLE ORDERS ({CustomerColumns})");
+        await scope.ExecAppAsync("BEGIN INSERT INTO ORDERS VALUES (8, 'app-old'); COMMIT; END;");
+        await scope.ExecAppAsync($"GRANT SELECT, INSERT, UPDATE, DELETE ON ORDERS TO {scope.DstUser}");
+        await scope.CreateTargetTableAsync("ORDERS", CustomerColumns);
+        await scope.ExecTargetAsync("BEGIN INSERT INTO ORDERS VALUES (90, 'keep1'); INSERT INTO ORDERS VALUES (91, 'keep2'); INSERT INTO ORDERS VALUES (92, 'keep3'); COMMIT; END;");
+
+        var rule = new TableRule("ORDERS", RuleKind.All, TargetAction.DeleteAllInsert) { TargetOwner = scope.AppUser };
+        var job = scope.Job(rule);
+        Assert.Equal("ORDERS", CopyOwners.Key(job, rule));
+        Assert.Equal($"{scope.AppUser}.ORDERS", CopyOwners.TargetName(job, rule));
+        var sessions = await scope.OpenSessionsAsync();
+
+        var report = await scope.Precheck().RunAsync(sessions, job, NoPeriod, null, default);
+
+        Assert.False(report.HasErrors, Errors(report));
+        Assert.Equal(scope.AppUser, Assert.Single(report.Order).Target.Table.Owner);
+        Assert.Contains(report.Items, i => i.Code == CopyCheckCodes.OtherOwnerTargets && i.Message.Contains($"{scope.AppUser}.ORDERS", StringComparison.Ordinal));
+        Assert.Contains(report.Preview, p => p.Sql == $"DELETE FROM \"{scope.AppUser}\".\"ORDERS\"");
+        Assert.DoesNotContain(report.Preview, p => p.Sql.Contains($"\"{scope.DstUser}\".\"ORDERS\"", StringComparison.Ordinal));
+
+        scope.Ui.ConfirmAnswer = false;
+        var result = await NewRunner(scope).RunAsync(sessions, job, report, Decisions(report), NoPeriod, null, new CopyRunControl(), default);
+
+        Assert.True(result.Outcome == CopyOutcome.Succeeded, Describe(result));
+        Assert.Equal(2, await scope.CountAsync(scope.AppUser, "ORDERS"));
+        Assert.Equal(3, await scope.CountAsync(scope.DstUser, "ORDERS")); // 기본 대상 계정의 같은 이름 표는 그대로
+        Assert.Equal(2, await scope.CountAsync(scope.SrcUser, "ORDERS"));
     }
 
     /// <summary>

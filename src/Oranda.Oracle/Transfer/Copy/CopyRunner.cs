@@ -220,7 +220,7 @@ internal sealed class CopyRunner : ICopyRunner
     /// 점검 미리 보기의 DELETE 와 글자까지 같아야 한다(작업 밖·제외된 부모의 대상 계정이 바뀌어 지우는 범위가 달라지는 것도 막는다).
     /// DELETE 비교는 실행(<paramref name="period"/> 있음)에서만 한다. 「실패 행만 다시 넣기」는 지우지 않는다.
     /// </remarks>
-    private static void EnsureReportMatchesJob(CopyJob job, PrecheckReport report, ResolvedPeriod? period)
+    internal static void EnsureReportMatchesJob(CopyJob job, PrecheckReport report, ResolvedPeriod? period)
     {
         if (CopyOwners.Problems(job) is { Count: > 0 } problems)
         {

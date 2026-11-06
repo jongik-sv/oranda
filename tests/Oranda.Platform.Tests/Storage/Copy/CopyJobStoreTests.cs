@@ -191,6 +191,50 @@ public sealed class CopyJobStoreTests : IDisposable
         Assert.All(imported.Tables, r => Assert.Equal(("SCOTT", "SCOTT_DEV"), (r.SourceOwner, r.TargetOwner)));
     }
 
+    /// <summary>버전 2 파일에 계정 칸이 일부만 있다: 빈 칸은 그대로 비워 읽고(변환하지 않음), 뜻은 CopyOwners 의 기본값 규칙을 따른다.</summary>
+    [Fact]
+    public async Task Version_2_file_with_some_owner_fields_missing_reads_with_defaults()
+    {
+        var store = NewStore();
+        Directory.CreateDirectory(Paths.CopyJobsDirectory);
+        var path = Path.Combine(Paths.CopyJobsDirectory, "일부 계정.json");
+        await File.WriteAllTextAsync(path, """
+            {
+              "schemaVersion": 2, "id": "v2-part", "name": "일부 계정",
+              "source": { "name": "src", "user": "SCOTT" }, "target": { "name": "dev", "user": "SCOTT_DEV" },
+              "sourceOwner": "SCOTT", "targetOwner": "SCOTT_DEV",
+              "tables": [
+                { "table": "ORDERS", "kind": "All", "action": "MergeByPk", "sourceOwner": "APP2" },
+                { "table": "CODES", "kind": "All", "action": "MergeByPk", "targetOwner": "CODES_DEV" },
+                { "table": "ITEM", "kind": "ParentKey", "action": "DeleteRangeInsert",
+                  "parent": { "parentTable": "ORDERS", "childColumns": ["ORDER_ID"], "parentColumns": ["ID"], "parentOwner": "APP2" } }
+              ],
+              "sequences": [ { "sequence": "SEQ_ITEM", "table": "ITEM", "column": "ID" } ],
+              "maskSalt": "c2FsdA=="
+            }
+            """);
+
+        var entry = Assert.Single(await store.ListAsync(CancellationToken.None));
+
+        Assert.False(entry.IsReadOnly);
+        var job = entry.Job;
+        Assert.Equal([("APP2", null), (null, "CODES_DEV"), (null, null)], job.Tables.Select(r => (r.SourceOwner, r.TargetOwner)));
+        Assert.Null(job.Sequences[0].Owner);
+
+        // 대상 계정이 빈 다른 계정 규칙은 원본 계정 그대로, 원본 계정이 빈 규칙은 작업 기본 원본 계정.
+        Assert.Equal("APP2.ORDERS", CopyOwners.TargetName(job, job.Tables[0]));
+        Assert.Equal(("SCOTT.CODES", "CODES_DEV.CODES"), (CopyOwners.SourceName(job, job.Tables[1]), CopyOwners.TargetName(job, job.Tables[1])));
+        Assert.Equal(("SCOTT.ITEM", "SCOTT_DEV.ITEM"), (CopyOwners.SourceName(job, job.Tables[2]), CopyOwners.TargetName(job, job.Tables[2])));
+        Assert.Same(job.Tables[0], CopyOwners.Parent(job, job.Tables[2]));
+        Assert.Equal("APP2", CopyOwners.ParentTarget(job, job.Tables[2]));
+        Assert.Equal("SCOTT_DEV", CopyOwners.SequenceOwner(job, job.Sequences[0]));
+        Assert.Empty(CopyOwners.Problems(job));
+
+        // 버전 2 라 백업·다시 쓰기를 하지 않는다.
+        Assert.False(Directory.Exists(Paths.BackupDirectory) && Directory.GetFiles(Paths.BackupDirectory).Length > 0);
+        Assert.DoesNotContain("\"targetOwner\": \"APP2\"", await File.ReadAllTextAsync(path), StringComparison.Ordinal);
+    }
+
     private static string V1Json(string id) => """
         {
           "schemaVersion": 1, "id": "ID_PLACE", "name": "옛 작업",

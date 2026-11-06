@@ -29,6 +29,10 @@ public sealed class CopyCrossOwner11gTests
         => await CrossOwnerCases.TwoOwnerCopyAsync(await CopyDbScope.CreateAsync(_db, CopyDbScope.NewTag()));
 
     [Fact]
+    public async Task Rule_with_another_target_owner_copies_there_and_leaves_the_default_target_table_alone()
+        => await CrossOwnerCases.OtherTargetOwnerLeavesDefaultTargetAloneAsync(await CopyDbScope.CreateAsync(_db, CopyDbScope.NewTag()));
+
+    [Fact]
     public async Task Target_view_synonym_or_materialized_view_is_target_missing()
         => await CrossOwnerCases.TargetThatIsNotATableAsync(await CopyDbScope.CreateAsync(_db, CopyDbScope.NewTag()));
 }
