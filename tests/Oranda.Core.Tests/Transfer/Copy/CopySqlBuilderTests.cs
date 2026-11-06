@@ -180,6 +180,8 @@ public class CopySqlBuilderTests
     [InlineData("X=1; DELETE FROM T")]
     [InlineData("(X=1")]
     [InlineData("NAME = 'A")]
+    [InlineData("X = q'[a'b]') OR (1=1 OR 'x'='x")]
+    [InlineData("N = nQ'{x}'")]
     public void Escaping_user_conditions_are_rejected_for_extra_and_custom_conditions(string where)
     {
         Assert.NotNull(CopySqlBuilder.CheckUserCondition(where));
@@ -191,11 +193,21 @@ public class CopySqlBuilderTests
         Assert.Throws<InvalidOperationException>(() => b.SourceSelect("O", ["A"]));
     }
 
+    // 대체 따옴표 안의 ' 는 문자열을 닫지 않아 괄호 검사가 문자열 끝을 잘못 본다: 머리(q'·nq', 대소문자 무관)부터 막는다.
+    [Theory]
+    [InlineData("X = q'[a'b]') OR (1=1 OR 'x'='x")]
+    [InlineData("N = nQ'{x}'")]
+    [InlineData("Q'<a>' = X")]
+    [InlineData("X IN (Nq'!a!')")]
+    public void Alternative_quoting_is_rejected(string where) =>
+        Assert.Equal("대체 따옴표(q'…')는 쓸 수 없습니다.", CopySqlBuilder.CheckUserCondition(where));
+
     [Theory]
     [InlineData("NOTE = 'a) OR (1=1'")]
     [InlineData("NOTE LIKE '--%' AND MEMO <> '/* x */;'")]
     [InlineData("NAME = 'O''BRIEN' AND (A = 1 OR (B = 2))")]
     [InlineData("\"Odd)Name\" = 1")]
+    [InlineData("NAME = seq'a'")]
     public void Parentheses_and_comment_marks_inside_quotes_are_allowed(string where)
     {
         Assert.Null(CopySqlBuilder.CheckUserCondition(where));

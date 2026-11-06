@@ -158,6 +158,7 @@ public sealed class CopySqlBuilder(CopyJob job, ResolvedPeriod period,
             var c = where[i];
             if (c is '\'' or '"')
             {
+                if (c == '\'' && IsAlternativeQuotePrefix(where, i)) return AlternativeQuoteProblem;
                 var close = where.IndexOf(c, i + 1);
                 if (close < 0) return c == '\'' ? "닫히지 않은 작은따옴표가 있습니다." : "닫히지 않은 큰따옴표가 있습니다.";
                 i = close; // '' 는 닫고 바로 다시 여는 것과 같아 따로 다루지 않아도 된다
@@ -171,6 +172,24 @@ public sealed class CopySqlBuilder(CopyJob job, ResolvedPeriod period,
         }
         return depth == 0 ? null : "괄호 짝이 맞지 않습니다.";
     }
+
+    private const string AlternativeQuoteProblem = "대체 따옴표(q'…')는 쓸 수 없습니다.";
+
+    /// <summary>
+    /// 문자열 밖의 작은따옴표(<paramref name="quote"/> 자리) 바로 앞이 Oracle 대체 따옴표 머리(<c>q</c>, <c>nq</c>, 대소문자 무관)인지 본다.
+    /// 대체 따옴표 안에서는 <c>'</c> 가 문자열을 닫지 않아 위 검사가 문자열 끝을 잘못 보므로 아예 막는다.
+    /// 머리 앞이 식별자 글자면(<c>seq'a'</c> 의 <c>q</c>) 식별자의 끝이라 대체 따옴표가 아니다.
+    /// </summary>
+    private static bool IsAlternativeQuotePrefix(string where, int quote)
+    {
+        var q = quote - 1;
+        if (q < 0 || where[q] is not ('q' or 'Q')) return false;
+        if (q == 0 || !IsIdentifierChar(where[q - 1])) return true;
+        var n = q - 1;
+        return where[n] is 'n' or 'N' && (n == 0 || !IsIdentifierChar(where[n - 1]));
+    }
+
+    private static bool IsIdentifierChar(char c) => char.IsLetterOrDigit(c) || c is '_' or '$' or '#';
 
     private string? PeriodPredicate(TableRule rule, string table, bool isTarget, Dictionary<string, BindValue> binds, ref int counter)
     {
