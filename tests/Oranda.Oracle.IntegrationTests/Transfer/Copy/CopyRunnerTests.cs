@@ -232,6 +232,40 @@ public sealed class CopyRunnerTests
         Assert.Equal("2026-04-10:b3", await AdminScalarAsync($"SELECT TO_CHAR(ORDER_DT, 'YYYY-MM-DD') || ':' || NOTE FROM {scope.DstUser}.ORD WHERE ID = 2"));
     }
 
+    // 기간 규칙 + 추가 조건(AND): 사전 점검을 통과하고, 원본·대상 건수가 추가 조건만큼 줄며, 대상 지우기는 조건 밖 행(기간 안이라도)을 남긴다.
+    [Fact]
+    public async Task Period_rule_with_extra_where_copies_and_deletes_only_matching_rows()
+    {
+        await using var scope = await CopyDbScope.CreateAsync(_db, CopyDbScope.NewTag());
+        await BothAsync(scope, "EX_ORD", "ID NUMBER PRIMARY KEY, ORDER_DT DATE, STATUS VARCHAR2(10)");
+        await scope.ExecSourceAsync(Block(
+            $"INSERT INTO EX_ORD VALUES (1, {Dt("2026-03-05 00:00:00")}, 'DONE')",
+            $"INSERT INTO EX_ORD VALUES (2, {Dt("2026-03-10 00:00:00")}, 'OPEN')",
+            $"INSERT INTO EX_ORD VALUES (3, {Dt("2026-03-20 00:00:00")}, 'DONE')",
+            $"INSERT INTO EX_ORD VALUES (4, {Dt("2026-02-10 00:00:00")}, 'DONE')"));
+        await scope.ExecTargetAsync(Block(
+            $"INSERT INTO EX_ORD VALUES (10, {Dt("2026-03-12 00:00:00")}, 'OPEN')",  // 기간 안·조건 밖: 남는다
+            $"INSERT INTO EX_ORD VALUES (11, {Dt("2026-03-15 00:00:00")}, 'DONE')",  // 기간 안·조건 안: 지워진다
+            $"INSERT INTO EX_ORD VALUES (12, {Dt("2026-02-01 00:00:00")}, 'DONE')")); // 기간 밖: 남는다
+        var job = scope.Job(new TableRule("EX_ORD", RuleKind.Period, TargetAction.DeleteRangeInsert)
+        {
+            PeriodColumns = [new PeriodColumn("ORDER_DT")],
+            ExtraWhere = "STATUS = 'DONE'",
+        });
+        var sessions = await scope.OpenSessionsAsync();
+
+        var report = await PrecheckAsync(scope, sessions, job, March);
+        Assert.Contains(report.Preview, p => p.Side == PreviewSide.Target && p.Sql.StartsWith("DELETE", StringComparison.Ordinal)
+                                             && p.Sql.EndsWith("AND (STATUS = 'DONE')", StringComparison.Ordinal));
+        var result = await RunAsync(scope, sessions, job, report, March, new RecordingRunLog());
+        AssertSucceeded(result);
+
+        var table = Assert.Single(result.Tables);
+        Assert.Equal(2, table.SourceRows); // 3월 3행(1·2·3) 가운데 DONE 2행(1, 3). OPEN(2)·2월(4)은 읽지 않는다
+        Assert.Equal(2, table.TargetRows); // 대상 건수도 같은 조건: 남은 OPEN(10)·2월(12)은 세지 않는다
+        Assert.Equal("1,3,10,12", await IdsAsync(scope.DstUser, "EX_ORD"));
+    }
+
     [Fact]
     public async Task Copies_lob_columns()
     {

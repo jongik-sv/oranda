@@ -277,6 +277,12 @@ public sealed partial class RuleEditorViewModel : ViewModelBase
             return DataCopyText.RecreateNotAllowed(recreate.Table);
         }
 
+        // 괄호 밖으로 빠져나가는 조건(주석·세미콜론 포함)은 대상 지우기 범위를 넓히므로 넘어가지 않는다.
+        if (Rules.FirstOrDefault(r => r.Kind != RuleKind.Exclude && r.HasConditionError) is { } invalid)
+        {
+            return DataCopyText.InvalidCondition(invalid.Table, invalid.ConditionError!);
+        }
+
         return Rules.Any(r => r.Kind != RuleKind.Exclude) ? null : DataCopyText.NoTables;
     }
 

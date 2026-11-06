@@ -237,6 +237,7 @@ internal sealed class CopyRunner : ICopyRunner
     internal static bool SameRule(TableRule a, TableRule b) =>
         a.Table == b.Table && a.Kind == b.Kind && a.Action == b.Action
         && string.Equals(a.CustomWhere, b.CustomWhere, StringComparison.Ordinal)
+        && string.Equals(a.ExtraWhere, b.ExtraWhere, StringComparison.Ordinal)
         && a.PeriodColumns.SequenceEqual(b.PeriodColumns)
         && a.Masks.SequenceEqual(b.Masks)
         && a.SkipColumns.SequenceEqual(b.SkipColumns, StringComparer.Ordinal)

@@ -110,6 +110,7 @@ public sealed class ManualCopyScreens : IDisposable
             PeriodColumns = [new PeriodColumn("ORDER_DT", "YYYYMMDD"), new PeriodColumn("UPDATED_AT")],
             Masks = [new MaskRule("CUST_NAME", MaskKind.Hash)],
             SkipColumns = ["MEMO"],
+            ExtraWhere = "STATUS <> 'CANCELED'",
         },
         new TableRule("ORDER_ITEMS", RuleKind.ParentKey, TargetAction.DeleteRangeInsert)
         {

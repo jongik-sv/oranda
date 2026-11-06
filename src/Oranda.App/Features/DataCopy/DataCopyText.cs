@@ -20,6 +20,8 @@ internal static class DataCopyText
 
     public const string SameSourceAndTarget = "원본과 대상이 같은 접속·같은 소유자입니다. 원본 행이 지워질 수 있어 시작하지 않습니다.";
 
+    public static string InvalidCondition(string table, string problem) => $"테이블 {table} 의 조건을 쓸 수 없습니다. {problem}";
+
     public static string RecreateNotAllowed(string table) =>
         $"테이블 {table} 의 「테이블 다시 만들기」는 대상이 개발 접속일 때만 쓸 수 있습니다. 대상 처리를 바꾸세요.";
 

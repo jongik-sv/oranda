@@ -382,9 +382,16 @@
                       <StackPanel Spacing="5" Margin="8,6,10,8">
                         <Grid ColumnDefinitions="68,*" RowDefinitions="Auto,Auto,Auto" ColumnSpacing="6" RowSpacing="4" Classes="form">
                           <TextBlock Text="규칙" />
-                          <ComboBox x:Name="KindBox" Grid.Column="1" Classes="compact" HorizontalAlignment="Stretch" AutomationProperties.Name="규칙 종류">
+                          <ComboBox x:Name="KindBox" Grid.Column="1" Classes="compact" HorizontalAlignment="Stretch" AutomationProperties.Name="규칙 종류"
+                                    ToolTip.Tip="어떤 행을 복사할지 고릅니다. WHERE 절을 직접 쓰려면 「직접 조건」, 기간에 조건을 더하려면 「기간」의 추가 조건을 씁니다.">
                             <ComboBox.ItemTemplate>
-                              <DataTemplate x:DataType="core:RuleKind"><TextBlock Text="{Binding ., Converter={x:Static dc:DataCopyConverters.RuleKindText}}" /></DataTemplate>
+                              <DataTemplate x:DataType="core:RuleKind">
+                                <StackPanel Orientation="Horizontal" Spacing="8">
+                                  <TextBlock Text="{Binding ., Converter={x:Static dc:DataCopyConverters.RuleKindText}}" VerticalAlignment="Center" />
+                                  <TextBlock Text="{Binding ., Converter={x:Static dc:DataCopyConverters.RuleKindHint}}" Classes="dim" FontSize="{DynamicResource OrandaFontSizeSmall}"
+                                             VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
+                                </StackPanel>
+                              </DataTemplate>
                             </ComboBox.ItemTemplate>
                           </ComboBox>
                           <TextBlock Grid.Row="1" Text="대상 처리" />
@@ -424,6 +431,14 @@
                           </StackPanel>
                           <Button x:Name="AddSecondColumnButton" Classes="tool" Content="두 번째 기간 열 더하기(OR)" icons:ButtonIcon.Key="add" HorizontalAlignment="Left"
                                   IsVisible="{Binding CanAddSecondColumn}" ToolTip.Tip="생성 시각 또는 수정 시각처럼 두 열 중 하나라도 기간 안이면 복사합니다" />
+                          <!-- 추가 조건: 기간식과 AND 로 묶어 원본 조회·대상 지우기·건수 비교에 같이 쓴다. -->
+                          <TextBlock Classes="section-label" Text="추가 조건(AND)" Margin="0,4,0,0" />
+                          <TextBox x:Name="ExtraWhereBox" Classes="compact" AcceptsReturn="True" MinHeight="48" TextWrapping="Wrap" Text="{Binding ExtraWhere}"
+                                   FontFamily="{DynamicResource OrandaGridFontFamily}" PlaceholderText="예: STATUS = 'DONE'" AutomationProperties.Name="추가 조건" />
+                          <TextBlock Text="{Binding ConditionError}" IsVisible="{Binding HasConditionError}" Classes="danger-text" TextWrapping="Wrap" FontWeight="SemiBold"
+                                     AutomationProperties.Name="추가 조건 오류" />
+                          <TextBlock Text="기간 안의 행 가운데 이 조건에도 맞는 행만 복사하고, 대상에서도 같은 조건으로 지웁니다. :FROM_DT, :TO_DT 를 쓸 수 있습니다."
+                                     Classes="dim" TextWrapping="Wrap" FontSize="{DynamicResource OrandaFontSizeSmall}" />
                         </StackPanel>
 
                         <!-- 부모 키 규칙 -->
@@ -441,6 +456,8 @@
                           <TextBlock Classes="section-label" Text="WHERE 조건" Margin="0,4,0,0" />
                           <TextBox Classes="compact" AcceptsReturn="True" MinHeight="64" TextWrapping="Wrap" Text="{Binding CustomWhere}" PlaceholderText=":FROM_DT, :TO_DT 를 쓸 수 있습니다"
                                    FontFamily="{DynamicResource OrandaGridFontFamily}" AutomationProperties.Name="직접 조건" />
+                          <TextBlock Text="{Binding ConditionError}" IsVisible="{Binding HasConditionError}" Classes="danger-text" TextWrapping="Wrap" FontWeight="SemiBold"
+                                     AutomationProperties.Name="직접 조건 오류" />
                         </StackPanel>
 
                         <!-- 마스킹 -->

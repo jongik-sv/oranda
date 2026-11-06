@@ -96,6 +96,114 @@ public class CopySqlBuilderTests
         Assert.Empty(none.SourceSelect("C", ["D"]).Binds);
     }
 
+    // 기간 규칙 + 추가 조건(AND): 원본 조회·원본 건수·대상 지우기·대상 건수가 모두 같은 식을 쓴다. 추가 조건 안의 OR 는 괄호 안에 머문다.
+    [Fact]
+    public void Period_extra_where_is_anded_into_every_statement_of_the_rule()
+    {
+        var b = B([new TableRule("ORDERS", RuleKind.Period, TargetAction.DeleteRangeInsert)
+                   { PeriodColumns = [new PeriodColumn("ORDER_DT")], ExtraWhere = "STATUS = 'DONE' OR STATUS = 'SHIP'" }],
+                  null, ("ORDERS", Cols(("ORDER_DT", "DATE"), ("STATUS", "VARCHAR2"))));
+        const string where = " WHERE (\"ORDER_DT\" >= :B1_FROM AND \"ORDER_DT\" < :B1_TO) AND (STATUS = 'DONE' OR STATUS = 'SHIP')";
+        Assert.Equal("SELECT \"ORDER_DT\" FROM \"SRC\".\"ORDERS\"" + where, b.SourceSelect("ORDERS", ["ORDER_DT"]).Sql);
+        Assert.Equal("SELECT COUNT(*) FROM \"SRC\".\"ORDERS\"" + where, b.SourceCount("ORDERS").Sql);
+        Assert.Equal("DELETE FROM \"TGT\".\"ORDERS\"" + where, b.TargetDelete("ORDERS")!.Sql); // 조건 밖 행은 대상에 남는다
+        Assert.Equal("SELECT COUNT(*) FROM \"TGT\".\"ORDERS\"" + where, b.TargetCount("ORDERS").Sql);
+        Assert.Equal(["B1_FROM", "B1_TO"], b.TargetDelete("ORDERS")!.Binds.Keys.Order());
+    }
+
+    [Fact]
+    public void Two_period_columns_with_extra_where_keep_the_or_group_together()
+    {
+        var b = B([new TableRule("O", RuleKind.Period, TargetAction.DeleteRangeInsert)
+                   { PeriodColumns = [new PeriodColumn("A"), new PeriodColumn("B")], ExtraWhere = "X = 1" }],
+                  null, ("O", Cols(("A", "DATE"), ("B", "DATE"))));
+        Assert.Equal(
+            "SELECT \"A\" FROM \"SRC\".\"O\" WHERE ((\"A\" >= :B1_FROM AND \"A\" < :B1_TO) OR (\"B\" >= :B2_FROM AND \"B\" < :B2_TO)) AND (X = 1)",
+            b.SourceSelect("O", ["A"]).Sql);
+    }
+
+    [Fact]
+    public void Extra_where_binds_from_and_to_dt_like_a_custom_condition()
+    {
+        var b = B([new TableRule("O", RuleKind.Period, TargetAction.DeleteRangeInsert)
+                   { PeriodColumns = [new PeriodColumn("A")], ExtraWhere = "SHIP_DT < :TO_DT" }],
+                  null, ("O", Cols(("A", "DATE"))));
+        var s = b.SourceSelect("O", ["A"]);
+        Assert.EndsWith(" AND (SHIP_DT < :TO_DT)", s.Sql, StringComparison.Ordinal);
+        Assert.Equal(new BindValue(BindDataType.Date, Period.To), s.Binds["TO_DT"]);
+        Assert.False(s.Binds.ContainsKey("FROM_DT"));
+    }
+
+    [Fact]
+    public void Open_period_with_extra_where_uses_only_the_extra_condition_and_blank_extra_changes_nothing()
+    {
+        var open = B([new TableRule("O", RuleKind.Period, TargetAction.DeleteRangeInsert)
+                      { PeriodColumns = [new PeriodColumn("A")], ExtraWhere = "X = 1" }],
+                     new ResolvedPeriod(null, null), ("O", Cols(("A", "DATE"))));
+        Assert.Equal("DELETE FROM \"TGT\".\"O\" WHERE (X = 1)", open.TargetDelete("O")!.Sql);
+
+        var blank = B([new TableRule("O", RuleKind.Period, TargetAction.DeleteRangeInsert)
+                       { PeriodColumns = [new PeriodColumn("A")], ExtraWhere = "  " }],
+                      null, ("O", Cols(("A", "DATE"))));
+        Assert.Equal("SELECT \"A\" FROM \"SRC\".\"O\" WHERE \"A\" >= :B1_FROM AND \"A\" < :B1_TO", blank.SourceSelect("O", ["A"]).Sql);
+    }
+
+    [Fact]
+    public void Extra_where_is_ignored_for_rules_that_are_not_period_rules()
+    {
+        var b = B([new TableRule("CODE", RuleKind.All, TargetAction.DeleteRangeInsert) { ExtraWhere = "X = 1" },
+                   new TableRule("C", RuleKind.Custom, TargetAction.DeleteRangeInsert) { CustomWhere = "Y = 2", ExtraWhere = "X = 1" }],
+                  null, ("CODE", Cols(("X", "NUMBER"))), ("C", Cols(("Y", "NUMBER"))));
+        Assert.Equal("SELECT \"X\" FROM \"SRC\".\"CODE\"", b.SourceSelect("CODE", ["X"]).Sql);
+        Assert.Equal("SELECT \"Y\" FROM \"SRC\".\"C\" WHERE (Y = 2)", b.SourceSelect("C", ["Y"]).Sql);
+    }
+
+    [Fact]
+    public void Parent_key_subquery_carries_the_parent_extra_where()
+    {
+        var rules = new[]
+        {
+            new TableRule("ORDERS", RuleKind.Period, TargetAction.DeleteRangeInsert) { PeriodColumns = [new PeriodColumn("ORDER_DT")], ExtraWhere = "STATUS = 'DONE'" },
+            new TableRule("ITEM", RuleKind.ParentKey, TargetAction.DeleteRangeInsert) { Parent = new ParentLink("ORDERS", ["ORDER_ID"], ["ID"]) },
+        };
+        var b = B(rules, null, ("ORDERS", Cols(("ID", "NUMBER"), ("ORDER_DT", "DATE"))), ("ITEM", Cols(("ORDER_ID", "NUMBER"))));
+        const string sub = " WHERE \"ORDER_ID\" IN (SELECT \"ID\" FROM \"{0}\".\"ORDERS\" WHERE (\"ORDER_DT\" >= :B1_FROM AND \"ORDER_DT\" < :B1_TO) AND (STATUS = 'DONE'))";
+        Assert.Equal("SELECT \"ORDER_ID\" FROM \"SRC\".\"ITEM\"" + string.Format(System.Globalization.CultureInfo.InvariantCulture, sub, "SRC"), b.SourceSelect("ITEM", ["ORDER_ID"]).Sql);
+        Assert.Equal("DELETE FROM \"TGT\".\"ITEM\"" + string.Format(System.Globalization.CultureInfo.InvariantCulture, sub, "TGT"), b.TargetDelete("ITEM")!.Sql);
+    }
+
+    // 괄호 밖으로 빠져나가는 조건은 AND 를 벗어나 대상 지우기 범위를 표 전체로 넓힌다: 검사가 거부하고, 빌더도 최후 방어로 문장을 만들지 않는다.
+    [Theory]
+    [InlineData("X=1) OR (1=1")]
+    [InlineData("X=1 -- 뒤는 주석")]
+    [InlineData("X=1 /* 주석 */")]
+    [InlineData("X=1; DELETE FROM T")]
+    [InlineData("(X=1")]
+    [InlineData("NAME = 'A")]
+    public void Escaping_user_conditions_are_rejected_for_extra_and_custom_conditions(string where)
+    {
+        Assert.NotNull(CopySqlBuilder.CheckUserCondition(where));
+        var b = B([new TableRule("O", RuleKind.Period, TargetAction.DeleteRangeInsert) { PeriodColumns = [new PeriodColumn("A")], ExtraWhere = where },
+                   new TableRule("C", RuleKind.Custom, TargetAction.DeleteRangeInsert) { CustomWhere = where }],
+                  null, ("O", Cols(("A", "DATE"))), ("C", Cols(("A", "DATE"))));
+        Assert.Throws<InvalidOperationException>(() => b.TargetDelete("O"));
+        Assert.Throws<InvalidOperationException>(() => b.TargetDelete("C"));
+        Assert.Throws<InvalidOperationException>(() => b.SourceSelect("O", ["A"]));
+    }
+
+    [Theory]
+    [InlineData("NOTE = 'a) OR (1=1'")]
+    [InlineData("NOTE LIKE '--%' AND MEMO <> '/* x */;'")]
+    [InlineData("NAME = 'O''BRIEN' AND (A = 1 OR (B = 2))")]
+    [InlineData("\"Odd)Name\" = 1")]
+    public void Parentheses_and_comment_marks_inside_quotes_are_allowed(string where)
+    {
+        Assert.Null(CopySqlBuilder.CheckUserCondition(where));
+        var b = B([new TableRule("O", RuleKind.Period, TargetAction.DeleteRangeInsert) { PeriodColumns = [new PeriodColumn("A")], ExtraWhere = where }],
+                  null, ("O", Cols(("A", "DATE"))));
+        Assert.EndsWith($" AND ({where})", b.TargetDelete("O")!.Sql, StringComparison.Ordinal);
+    }
+
     private static IReadOnlyList<TableRule> Chain() =>
     [
         new TableRule("ORDERS", RuleKind.Period, TargetAction.DeleteRangeInsert) { PeriodColumns = [new PeriodColumn("ORDER_DT")] },

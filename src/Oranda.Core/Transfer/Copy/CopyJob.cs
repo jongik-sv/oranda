@@ -58,6 +58,9 @@ public sealed record TableRule(string Table, RuleKind Kind, TargetAction Action)
     public IReadOnlyList<PeriodColumn> PeriodColumns { get; init; } = [];
     public ParentLink? Parent { get; init; }
     public string? CustomWhere { get; init; }
+    /// <summary>기간 규칙에만 쓰는 추가 조건(<c>WHERE</c> 뒤 식). 기간식과 AND 로 묶는다. 비었거나 기간이 아닌 규칙이면 무시한다.
+    /// <see cref="CustomWhere"/> 와 따로 두어, 예전 작업 파일에 남은 직접 조건이 기간 규칙에 갑자기 붙지 않게 한다.</summary>
+    public string? ExtraWhere { get; init; }
     public IReadOnlyList<MaskRule> Masks { get; init; } = [];
     public IReadOnlyList<string> SkipColumns { get; init; } = [];
 }

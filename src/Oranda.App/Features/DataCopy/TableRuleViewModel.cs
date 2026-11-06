@@ -66,7 +66,7 @@ public sealed partial class SkipColumnViewModel(string column, bool skipped) : V
 public sealed partial class TableRuleViewModel : ViewModelBase
 {
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(IsPeriod), nameof(IsParentKey), nameof(IsCustom), nameof(ConditionText))]
+    [NotifyPropertyChangedFor(nameof(IsPeriod), nameof(IsParentKey), nameof(IsCustom), nameof(ConditionText), nameof(ConditionError), nameof(HasConditionError))]
     private RuleKind _kind;
 
     [ObservableProperty]
@@ -89,8 +89,13 @@ public sealed partial class TableRuleViewModel : ViewModelBase
     private string? _secondFormat;
 
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(ConditionText))]
+    [NotifyPropertyChangedFor(nameof(ConditionText), nameof(ConditionError), nameof(HasConditionError))]
     private string? _customWhere;
+
+    /// <summary>기간 규칙의 추가 조건(기간식과 AND). 다른 규칙 종류에서는 저장하지 않는다.</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(ConditionText), nameof(HasExtraWhere), nameof(ConditionError), nameof(HasConditionError))]
+    private string? _extraWhere;
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(ConditionText))]
@@ -104,6 +109,7 @@ public sealed partial class TableRuleViewModel : ViewModelBase
         _kind = rule.Kind;
         _action = rule.Action;
         _customWhere = rule.CustomWhere;
+        _extraWhere = rule.ExtraWhere;
         _parent = rule.Parent;
         SavedPeriodColumns = rule.PeriodColumns;
         SavedMasks = rule.Masks;
@@ -162,6 +168,22 @@ public sealed partial class TableRuleViewModel : ViewModelBase
         _ => "복사하지 않음",
     };
 
+    /// <summary>
+    /// 지금 규칙 종류에서 쓰는 사용자 조건(직접 조건·기간 규칙의 추가 조건)을 쓸 수 없는 이유. 문제가 없으면 null.
+    /// 괄호 밖으로 빠져나가는 조건은 대상 지우기 범위를 넓히므로 사전 점검으로 넘어가지 못하게 한다(<see cref="CopySqlBuilder.CheckUserCondition"/>).
+    /// </summary>
+    public string? ConditionError => Kind switch
+    {
+        RuleKind.Custom when !string.IsNullOrWhiteSpace(CustomWhere) => CopySqlBuilder.CheckUserCondition(CustomWhere),
+        RuleKind.Period when HasExtraWhere => CopySqlBuilder.CheckUserCondition(ExtraWhere!),
+        _ => null,
+    };
+
+    public bool HasConditionError => ConditionError is not null;
+
+    /// <summary>추가 조건이 있는가(비어 있지 않은 글).</summary>
+    public bool HasExtraWhere => !string.IsNullOrWhiteSpace(ExtraWhere);
+
     private string PeriodText()
     {
         if (FirstColumn is null)
@@ -170,7 +192,8 @@ public sealed partial class TableRuleViewModel : ViewModelBase
         }
 
         var first = ColumnText(FirstColumn, FirstFormat);
-        return SecondColumn is null ? first : $"{first} 또는 {ColumnText(SecondColumn, SecondFormat)}";
+        var period = SecondColumn is null ? first : $"{first} 또는 {ColumnText(SecondColumn, SecondFormat)}";
+        return HasExtraWhere ? $"{period} · 추가 조건 {ExtraWhere!.Trim()}" : period;
     }
 
     private static string ColumnText(PeriodColumnOption column, string? format) =>
@@ -329,6 +352,7 @@ public sealed partial class TableRuleViewModel : ViewModelBase
             PeriodColumns = periodColumns,
             Parent = Kind == RuleKind.ParentKey ? Parent : null,
             CustomWhere = Kind == RuleKind.Custom ? CustomWhere : null,
+            ExtraWhere = Kind == RuleKind.Period ? EmptyToNull(ExtraWhere)?.Trim() : null,
             Masks = masks,
             SkipColumns = skips,
         };

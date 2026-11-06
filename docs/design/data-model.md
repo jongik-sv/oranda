@@ -338,6 +338,7 @@ select * from emp where empno = :empno;
 | `tables[].periodColumns[]` | `PeriodColumn[]` | ○ | `[]` | 0~2개(2개면 OR). `column`, `stringFormat`(없으면 DATE·TIMESTAMP 열) |
 | `tables[].parent` | `ParentLink` | ○ | null | `parentTable`, `childColumns[]`, `parentColumns[]`, `foreignKeyName` |
 | `tables[].customWhere` | string | ○ | null | `WHERE` 뒤에 올 조건 |
+| `tables[].extraWhere` | string | ○ | null | 기간 규칙(`kind: Period`)의 추가 조건. 기간식과 `AND` 로 묶어 원본 조회·대상 지우기·건수 비교에 쓰고 다른 종류에서는 무시한다. `:FROM_DT`·`:TO_DT` 를 쓸 수 있다 |
 | `tables[].masks[]` | `MaskRule[]` | ○ | `[]` | `column`, `kind`(`Fixed`·`KeepFirst`·`KeepLast`·`Hash`·`Null`), `value`, `count` |
 | `tables[].skipColumns[]` | string[] | ○ | `[]` | 복사하지 않는 열 |
 | `options` | `CopyOptions` | ○ | | `batchSize`(5000), `commit`(`PerTable`·`PerBatch`·`AtEnd`, 기본 `PerTable`), `disableTriggersByDefault`(false), `maxFailedRows`(100), `sequenceGapConfirm`(10000000) |

@@ -47,6 +47,30 @@ public class CopyJobJsonTests
     }
 
     [Fact]
+    public void Extra_where_round_trips_and_older_files_without_it_read_as_null()
+    {
+        var job = Sample() with
+        {
+            Tables = [new TableRule("ORDERS", RuleKind.Period, TargetAction.DeleteRangeInsert)
+                      { PeriodColumns = [new PeriodColumn("ORDER_DT")], ExtraWhere = "STATUS = 'DONE'" }],
+        };
+        var json = JsonSerializer.Serialize(job, CopyJobJsonContext.Default.CopyJob);
+        Assert.Contains("\"extraWhere\": \"STATUS = 'DONE'\"", json.Replace("\\u0027", "'", StringComparison.Ordinal));
+        Assert.Equal("STATUS = 'DONE'", JsonSerializer.Deserialize(json, CopyJobJsonContext.Default.CopyJob)!.Tables[0].ExtraWhere);
+
+        // 예전 파일(속성 없음): 추가 조건 없이 읽고, 직접 조건(customWhere)이 남아 있어도 기간 규칙에 붙이지 않는다.
+        var node = System.Text.Json.Nodes.JsonNode.Parse(json)!;
+        var table = node["tables"]![0]!.AsObject();
+        table.Remove("extraWhere");
+        table["customWhere"] = "LEFTOVER = 1";
+        var old = JsonSerializer.Deserialize(node.ToJsonString(), CopyJobJsonContext.Default.CopyJob)!;
+        Assert.Null(old.Tables[0].ExtraWhere);
+
+        var plain = Sample() with { Tables = [new TableRule("ORDERS", RuleKind.Period, TargetAction.DeleteRangeInsert) { PeriodColumns = [new PeriodColumn("ORDER_DT")] }] };
+        Assert.DoesNotContain("extraWhere", JsonSerializer.Serialize(plain, CopyJobJsonContext.Default.CopyJob), StringComparison.Ordinal); // 없으면 쓰지 않는다
+    }
+
+    [Fact]
     public void Writes_camel_case_enum_strings_and_no_password_field()
     {
         var json = JsonSerializer.Serialize(Sample(), CopyJobJsonContext.Default.CopyJob);

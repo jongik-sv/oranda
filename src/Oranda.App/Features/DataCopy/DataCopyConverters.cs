@@ -1,5 +1,6 @@
 using System.Globalization;
 using Avalonia.Data.Converters;
+using Oranda.App.Features.Localization;
 using Oranda.Core.Transfer.Copy;
 
 namespace Oranda.App.Features.DataCopy;
@@ -14,6 +15,17 @@ public static class DataCopyConverters
         RuleKind.ParentKey => "부모 키",
         RuleKind.Custom => "직접 조건",
         RuleKind.Exclude => "제외",
+        _ => string.Empty,
+    });
+
+    /// <summary>규칙 종류 콤보에서 이름 옆에 붙는 짧은 설명(「직접 조건」이 WHERE 직접 입력임을 바로 알 수 있게).</summary>
+    public static IValueConverter RuleKindHint { get; } = new TextConverter(v => v switch
+    {
+        RuleKind.All => "모든 행",
+        RuleKind.Period => "기간 열 + 추가 조건(AND)",
+        RuleKind.ParentKey => "부모 표와 FK 로 이은 행",
+        RuleKind.Custom => "WHERE 절 직접 입력",
+        RuleKind.Exclude => "복사하지 않음",
         _ => string.Empty,
     });
 
@@ -54,9 +66,14 @@ public static class DataCopyConverters
         _ => string.Empty,
     });
 
+    // 바인딩으로 들어가는 글은 화면 번역(LiteralTranslator)이 지나간 뒤에 바뀌므로, 영어 화면이면 여기서 문구 표의 영어로 바꾼다.
     private sealed class TextConverter(Func<object?, string> map) : IValueConverter
     {
-        public object? Convert(object? value, Type targetType, object? parameter, CultureInfo culture) => map(value);
+        public object? Convert(object? value, Type targetType, object? parameter, CultureInfo culture)
+        {
+            var text = map(value);
+            return LiteralTranslator.IsEnglish && LiteralTranslator.Table.TryGetValue(text, out var english) ? english : text;
+        }
 
         public object? ConvertBack(object? value, Type targetType, object? parameter, CultureInfo culture) => throw new NotSupportedException();
     }

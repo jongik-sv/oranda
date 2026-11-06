@@ -203,6 +203,45 @@ public sealed class RuleEditorTests
     }
 
     [Fact]
+    public void Extra_where_is_saved_only_for_period_rules_and_shown_in_the_condition_column()
+    {
+        var rule = PeriodRule(TestJobs.Column("ORDER_DT", "DATE", 1));
+        rule.FirstColumn = rule.PeriodColumnOptions[0];
+        rule.ExtraWhere = "  STATUS = 'DONE' ";
+
+        Assert.Equal("STATUS = 'DONE'", rule.ToRule().ExtraWhere);
+        Assert.Equal("ORDER_DT · 추가 조건 STATUS = 'DONE'", rule.ConditionText);
+
+        rule.ChangeKind(RuleKind.All);
+        Assert.Null(rule.ToRule().ExtraWhere); // 기간이 아닌 규칙에는 저장하지 않는다
+
+        var loaded = new TableRuleViewModel(TestJobs.Rule("ORDERS", RuleKind.Period) with { ExtraWhere = "X = 1" });
+        Assert.Equal("X = 1", loaded.ExtraWhere);
+        Assert.True(loaded.HasExtraWhere);
+    }
+
+    [Fact]
+    public async Task Condition_that_escapes_its_parentheses_is_shown_as_an_error_and_blocks_the_precheck()
+    {
+        var h = new DataCopyHarness();
+        var vm = await h.OpenAsync(TestJobs.Job("조건 검사", rules: TestJobs.Rule("AUDIT", RuleKind.Custom) with { CustomWhere = "A = 1" }));
+        var rule = vm.Editor.Rules[0];
+        Assert.False(rule.HasConditionError);
+        Assert.Null(vm.Editor.Validate());
+
+        rule.CustomWhere = "A = 1) OR (1=1";
+        Assert.True(rule.HasConditionError);
+        Assert.Contains("AUDIT", vm.Editor.Validate(), StringComparison.Ordinal); // 사전 점검으로 넘어가지 않는다
+
+        rule.ChangeKind(RuleKind.Period);
+        Assert.False(rule.HasConditionError); // 기간 규칙은 추가 조건만 본다
+        rule.ExtraWhere = "X = 1 -- 주석";
+        Assert.True(rule.HasConditionError);
+        rule.ExtraWhere = "NOTE = '--'";
+        Assert.False(rule.HasConditionError);
+    }
+
+    [Fact]
     public void Commands_are_listed_in_commands_md()
     {
         var doc = File.ReadAllText(FindCommandsDoc());

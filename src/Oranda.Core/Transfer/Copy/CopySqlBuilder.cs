@@ -95,16 +95,19 @@ public sealed class CopySqlBuilder(CopyJob job, ResolvedPeriod period,
         switch (rule.Kind)
         {
             case RuleKind.Period:
-                return PeriodPredicate(rule, table, isTarget, binds, ref counter);
-            case RuleKind.Custom:
             {
-                if (string.IsNullOrWhiteSpace(rule.CustomWhere)) return null;
-                var where = rule.CustomWhere;
-                // 기간이 열려 있어도 조건에 이름이 있으면 NULL 로 묶는다(바인드 누락 오류를 막는다).
-                if (FromDtRegex.IsMatch(where)) binds["FROM_DT"] = new BindValue(BindDataType.Date, period.From);
-                if (ToDtRegex.IsMatch(where)) binds["TO_DT"] = new BindValue(BindDataType.Date, period.To);
-                return $"({where})";
+                // 기간식과 추가 조건은 AND 로 묶는다. 기간식(두 기간 열이면 OR 묶음)은 괄호로 감싸 AND 가 OR 한쪽에만 붙지 않게 한다.
+                var periodWhere = PeriodPredicate(rule, table, isTarget, binds, ref counter);
+                var extra = UserCondition(table, rule.ExtraWhere, binds);
+                return (periodWhere, extra) switch
+                {
+                    (null, _) => extra,
+                    (_, null) => periodWhere,
+                    _ => $"({periodWhere}) AND {extra}",
+                };
             }
+            case RuleKind.Custom:
+                return UserCondition(table, rule.CustomWhere, binds);
             case RuleKind.ParentKey:
             {
                 var link = rule.Parent ?? throw new InvalidOperationException($"{table}: 부모 키 규칙에 부모 연결이 없다.");
@@ -124,6 +127,49 @@ public sealed class CopySqlBuilder(CopyJob job, ResolvedPeriod period,
             default:
                 return null;
         }
+    }
+
+    /// <summary>
+    /// 사용자가 쓴 조건(직접 조건·기간 규칙의 추가 조건). 비었으면 null. 괄호로 감싸 앞뒤 식과 섞이지 않게 한다.
+    /// 괄호 밖으로 빠져나가는 조건(예: <c>X=1) OR (1=1</c>)은 대상 지우기 범위를 표 전체로 넓히므로 최후 방어로 예외를 낸다(화면은 같은 검사로 먼저 막는다).
+    /// </summary>
+    private string? UserCondition(string table, string? where, Dictionary<string, BindValue> binds)
+    {
+        if (string.IsNullOrWhiteSpace(where)) return null;
+        if (CheckUserCondition(where) is { } problem)
+            throw new InvalidOperationException($"{table}: 조건을 쓸 수 없습니다. {problem}");
+        // 기간이 열려 있어도 조건에 이름이 있으면 NULL 로 묶는다(바인드 누락 오류를 막는다).
+        if (FromDtRegex.IsMatch(where)) binds["FROM_DT"] = new BindValue(BindDataType.Date, period.From);
+        if (ToDtRegex.IsMatch(where)) binds["TO_DT"] = new BindValue(BindDataType.Date, period.To);
+        return $"({where})";
+    }
+
+    /// <summary>
+    /// 사용자 조건이 괄호 하나 안에 머무는지 본다. 문제가 없으면 null, 있으면 이유.
+    /// 작은따옴표 문자열과 큰따옴표 식별자 밖에서 괄호 짝이 맞아야 하고(닫는 괄호가 먼저 나오면 안 된다), 주석(<c>--</c>, <c>/*</c>)과 <c>;</c> 는 쓸 수 없다.
+    /// 문자열 안의 괄호·<c>--</c> 는 상관없다(<c>''</c> 는 문자열 안의 작은따옴표 하나).
+    /// </summary>
+    public static string? CheckUserCondition(string where)
+    {
+        ArgumentNullException.ThrowIfNull(where);
+        var depth = 0;
+        for (var i = 0; i < where.Length; i++)
+        {
+            var c = where[i];
+            if (c is '\'' or '"')
+            {
+                var close = where.IndexOf(c, i + 1);
+                if (close < 0) return c == '\'' ? "닫히지 않은 작은따옴표가 있습니다." : "닫히지 않은 큰따옴표가 있습니다.";
+                i = close; // '' 는 닫고 바로 다시 여는 것과 같아 따로 다루지 않아도 된다
+                continue;
+            }
+            if (c == '(') depth++;
+            else if (c == ')' && --depth < 0) return "여는 괄호보다 닫는 괄호가 먼저 나옵니다.";
+            else if (c == ';') return "세미콜론(;)은 쓸 수 없습니다.";
+            else if (c == '-' && i + 1 < where.Length && where[i + 1] == '-') return "주석(--)은 쓸 수 없습니다.";
+            else if (c == '/' && i + 1 < where.Length && where[i + 1] == '*') return "주석(/* */)은 쓸 수 없습니다.";
+        }
+        return depth == 0 ? null : "괄호 짝이 맞지 않습니다.";
     }
 
     private string? PeriodPredicate(TableRule rule, string table, bool isTarget, Dictionary<string, BindValue> binds, ref int counter)

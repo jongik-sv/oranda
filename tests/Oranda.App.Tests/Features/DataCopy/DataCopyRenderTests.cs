@@ -97,6 +97,7 @@ public sealed class DataCopyRenderTests : IDisposable
             {
                 PeriodColumns = [new PeriodColumn("ORDER_DT", "YYYYMMDD"), new PeriodColumn("UPDATED_AT")],
                 Masks = [new MaskRule("CUST_NAME", MaskKind.Hash)],
+                ExtraWhere = "STATUS <> 'CANCELED'",
             },
             TestJobs.Rule("ORDER_ITEMS", RuleKind.ParentKey),
             TestJobs.Rule("CODES"),
@@ -221,7 +222,7 @@ public sealed class DataCopyRenderTests : IDisposable
         };
         var preview = new[]
         {
-            new PreviewStatement("DELETE FROM \"APP\".\"ORDERS\" WHERE \"ORDER_DT\" >= :FROM_S AND \"ORDER_DT\" < :TO_S", PreviewSide.Target, PolicyDecisionKind.Allow, null, null),
+            new PreviewStatement("DELETE FROM \"APP\".\"ORDERS\" WHERE (\"ORDER_DT\" >= :FROM_S AND \"ORDER_DT\" < :TO_S) AND (STATUS <> 'CANCELED')", PreviewSide.Target, PolicyDecisionKind.Allow, null, null),
             new PreviewStatement("DELETE FROM \"APP\".\"CODES\"", PreviewSide.Target, PolicyDecisionKind.Confirm, "WHERE 없는 DELETE", null),
             new PreviewStatement("SELECT * FROM \"APP\".\"ORDERS\" WHERE \"ORDER_DT\" >= :FROM_S AND \"ORDER_DT\" < :TO_S", PreviewSide.Source, PolicyDecisionKind.Allow, null, null),
         };
@@ -232,7 +233,7 @@ public sealed class DataCopyRenderTests : IDisposable
             await vm.Precheck.RunAsync(Sessions(), vm.CurrentJob!, new ResolvedPeriod(null, null));
             vm.Step = DataCopyStep.Precheck;
             Settle(window);
-            vm.Precheck.SelectedPreview = vm.Precheck.Preview[1]; // 아래 코드 칸에 문장 전체가 보이는 장면
+            vm.Precheck.SelectedPreview = vm.Precheck.Preview[0]; // 아래 코드 칸에 추가 조건(AND)까지 문장 전체가 보이는 장면
             Settle(window);
 
             Assert.True(window.FindControl<Button>("RunButton")!.IsEffectivelyVisible);
