@@ -18,13 +18,20 @@ public sealed class RunStepTests
 
     private static FailedRow Failed(string key) => new("ORDERS", new Dictionary<string, string?> { ["ID"] = key }, "ORA-00001: unique constraint violated");
 
+    // xUnit 의 동기화 컨텍스트(작업 스레드 수 = CPU 수) 밖에서 돈다: 코어가 적은 macOS 러너에서 다른 UI 시험이 그 스레드를 붙잡으면
+    // 중지 뒤 이어지는 코드가 차례를 얻지 못해 시간 초과가 났다(2026-11-07 CI). 시험하려는 것은 중지 동작이지 스레드 배정이 아니다.
     [Fact]
-    public async Task Stop_cancels_runner_token_and_shows_stopped()
+    public Task Stop_cancels_runner_token_and_shows_stopped() => Task.Run(async () =>
     {
         var h = new DataCopyHarness();
+        var cancelled = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         h.Runner.Behavior = async ct =>
         {
-            await Task.Delay(Timeout.Infinite, ct); // 취소될 때까지 기다린다
+            await using (ct.Register(() => cancelled.TrySetResult()))
+            {
+                await Task.Delay(Timeout.Infinite, ct); // 취소될 때까지 기다린다
+            }
+
             return TestJobs.Result();
         };
         var vm = new RunViewModel(h.Services());
@@ -36,13 +43,17 @@ public sealed class RunStepTests
         Assert.False(h.Runner.Token.IsCancellationRequested);
 
         vm.Stop();
-        await run.WaitAsync(TimeSpan.FromSeconds(10));
+        await cancelled.Task.WaitAsync(TimeSpan.FromSeconds(10));
+        var finished = await Task.WhenAny(run, Task.Delay(TimeSpan.FromSeconds(20)));
+        Assert.True(finished == run,
+            $"중지 뒤 실행이 끝나지 않음: 토큰 취소={h.Runner.Token.IsCancellationRequested}, IsRunning={vm.IsRunning}, 상태={vm.StatusText}, 결과={vm.Outcome}");
+        await run;
 
         Assert.True(h.Runner.Token.IsCancellationRequested);
         Assert.Equal(CopyOutcome.Stopped, vm.Outcome);
         Assert.Contains("중지", vm.StatusText, StringComparison.Ordinal);
         Assert.False(vm.IsRunning);
-    }
+    });
 
     [Fact]
     public async Task Result_fills_counts_and_failed_rows_and_read_start_time()
