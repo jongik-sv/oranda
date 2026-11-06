@@ -1,0 +1,204 @@
+using System.Globalization;
+using System.Text.RegularExpressions;
+using System.Text;
+using Oranda.Core.Execution;
+using Oranda.Core.Metadata;
+using Oranda.Core.Text;
+
+namespace Oranda.Core.Transfer.Copy;
+
+public sealed record SqlWithBinds(string Sql, IReadOnlyDictionary<string, BindValue> Binds);
+
+/// <summary>
+/// 작업 규칙에서 원본 읽기·대상 삭제·삽입·MERGE 문장을 만든다. 식별자는 항상 따옴표로 감싸고,
+/// 기간 경계는 시작 포함·끝 제외(<c>&gt;=</c>, <c>&lt;</c>)이며 열에 <c>TO_DATE</c>·<c>TO_CHAR</c> 를 씌우지 않는다.
+/// 기간 열 바인드 이름은 문장 안에 나타나는 순서대로 <c>:B1_FROM</c>, <c>:B1_TO</c>, <c>:B2_FROM</c> … 이다.
+/// </summary>
+public sealed class CopySqlBuilder(CopyJob job, ResolvedPeriod period,
+                                   IReadOnlyDictionary<string, TableInfo> sourceTables,
+                                   IReadOnlyDictionary<string, TableInfo> targetTables)
+{
+    private static readonly Regex FromDtRegex = new(@":FROM_DT\b", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+    private static readonly Regex ToDtRegex = new(@":TO_DT\b", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+
+    public SqlWithBinds SourceSelect(string table, IReadOnlyList<string> columns)
+    {
+        var binds = new Dictionary<string, BindValue>(StringComparer.Ordinal);
+        var sql = $"SELECT {string.Join(", ", columns.Select(SqlIdentifier.QuoteAlways))} FROM {Qualified(job.SourceOwner, table)}"
+                  + Where(table, isTarget: false, binds);
+        return new SqlWithBinds(sql, binds);
+    }
+
+    public SqlWithBinds SourceCount(string table) => Count(table, isTarget: false);
+
+    public SqlWithBinds TargetCount(string table) => Count(table, isTarget: true);
+
+    /// <summary><c>DeleteAllInsert</c> → 조건 없는 DELETE, <c>DeleteRangeInsert</c> → 범위 DELETE, 그 밖은 null.</summary>
+    public SqlWithBinds? TargetDelete(string table)
+    {
+        var rule = RuleOf(table);
+        if (rule.Action is not (TargetAction.DeleteAllInsert or TargetAction.DeleteRangeInsert)) return null;
+        var binds = new Dictionary<string, BindValue>(StringComparer.Ordinal);
+        var sql = $"DELETE FROM {Qualified(job.TargetOwner, table)}";
+        if (rule.Action == TargetAction.DeleteRangeInsert) sql += Where(table, isTarget: true, binds);
+        return new SqlWithBinds(sql, binds);
+    }
+
+    /// <summary>바인드 이름은 <c>:C1</c>…<c>:Cn</c>, 열 순서와 같다.</summary>
+    public string Insert(string table, IReadOnlyList<string> columns)
+        => $"INSERT INTO {Qualified(job.TargetOwner, table)} ({Quoted(columns)}) VALUES ({string.Join(", ", columns.Select((_, i) => ":C" + (i + 1).ToString(CultureInfo.InvariantCulture)))})";
+
+    public string Merge(string table, IReadOnlyList<string> columns, IReadOnlyList<string> keyColumns)
+    {
+        if (keyColumns.Count == 0) throw new ArgumentException("MERGE 에는 키 열이 필요하다.", nameof(keyColumns));
+        if (keyColumns.Any(k => !columns.Contains(k, StringComparer.Ordinal)))
+            throw new ArgumentException("키 열이 복사 열에 없다.", nameof(keyColumns));
+        var sb = new StringBuilder();
+        sb.Append("MERGE INTO ").Append(Qualified(job.TargetOwner, table)).Append(" T USING (SELECT ");
+        sb.Append(string.Join(", ", columns.Select((c, i) => $":C{(i + 1).ToString(CultureInfo.InvariantCulture)} AS {SqlIdentifier.QuoteAlways(c)}")));
+        sb.Append(" FROM DUAL) S ON (");
+        sb.Append(string.Join(" AND ", keyColumns.Select(k => $"T.{SqlIdentifier.QuoteAlways(k)} = S.{SqlIdentifier.QuoteAlways(k)}")));
+        sb.Append(')');
+        var updates = columns.Where(c => !keyColumns.Contains(c, StringComparer.Ordinal)).ToList();
+        if (updates.Count > 0)
+        {
+            sb.Append(" WHEN MATCHED THEN UPDATE SET ");
+            sb.Append(string.Join(", ", updates.Select(c => $"T.{SqlIdentifier.QuoteAlways(c)} = S.{SqlIdentifier.QuoteAlways(c)}")));
+        }
+        sb.Append(" WHEN NOT MATCHED THEN INSERT (").Append(Quoted(columns)).Append(") VALUES (");
+        sb.Append(string.Join(", ", columns.Select(c => "S." + SqlIdentifier.QuoteAlways(c)))).Append(')');
+        return sb.ToString();
+    }
+
+    /// <summary>실패 행 다시 읽기. 키 바인드는 <c>:K1</c>…<c>:Kn</c>.</summary>
+    public string SourceSelectByKeys(string table, IReadOnlyList<string> columns, IReadOnlyList<string> keyColumns)
+        => $"SELECT {Quoted(columns)} FROM {Qualified(job.SourceOwner, table)} WHERE "
+           + string.Join(" AND ", keyColumns.Select((k, i) => $"{SqlIdentifier.QuoteAlways(k)} = :K{(i + 1).ToString(CultureInfo.InvariantCulture)}"));
+
+    private SqlWithBinds Count(string table, bool isTarget)
+    {
+        var binds = new Dictionary<string, BindValue>(StringComparer.Ordinal);
+        var owner = isTarget ? job.TargetOwner : job.SourceOwner;
+        return new SqlWithBinds($"SELECT COUNT(*) FROM {Qualified(owner, table)}{Where(table, isTarget, binds)}", binds);
+    }
+
+    private string Where(string table, bool isTarget, Dictionary<string, BindValue> binds)
+    {
+        var counter = 0;
+        var predicate = Predicate(table, isTarget, binds, ref counter);
+        return predicate is null ? "" : " WHERE " + predicate;
+    }
+
+    private string? Predicate(string table, bool isTarget, Dictionary<string, BindValue> binds, ref int counter, HashSet<string>? visiting = null)
+    {
+        var rule = RuleOf(table);
+        switch (rule.Kind)
+        {
+            case RuleKind.Period:
+                return PeriodPredicate(rule, table, isTarget, binds, ref counter);
+            case RuleKind.Custom:
+            {
+                if (string.IsNullOrWhiteSpace(rule.CustomWhere)) return null;
+                var where = rule.CustomWhere;
+                // 기간이 열려 있어도 조건에 이름이 있으면 NULL 로 묶는다(바인드 누락 오류를 막는다).
+                if (FromDtRegex.IsMatch(where)) binds["FROM_DT"] = new BindValue(BindDataType.Date, period.From);
+                if (ToDtRegex.IsMatch(where)) binds["TO_DT"] = new BindValue(BindDataType.Date, period.To);
+                return $"({where})";
+            }
+            case RuleKind.ParentKey:
+            {
+                var link = rule.Parent ?? throw new InvalidOperationException($"{table}: 부모 키 규칙에 부모 연결이 없다.");
+                var owner = isTarget ? job.TargetOwner : job.SourceOwner;
+                visiting ??= new HashSet<string>(StringComparer.Ordinal) { table };
+                if (!visiting.Add(link.ParentTable))
+                    throw new InvalidOperationException($"{table}: 부모 키 연결이 순환한다({link.ParentTable}).");
+                var child = ColumnList(link.ChildColumns);
+                var parentCols = Quoted(link.ParentColumns);
+                var parentWhere = job.Tables.Any(r => r.Table == link.ParentTable)
+                    ? Predicate(link.ParentTable, isTarget, binds, ref counter, visiting)
+                    : null;
+                var sub = $"SELECT {parentCols} FROM {Qualified(owner, link.ParentTable)}" + (parentWhere is null ? "" : " WHERE " + parentWhere);
+                visiting.Remove(link.ParentTable);
+                return $"{child} IN ({sub})";
+            }
+            default:
+                return null;
+        }
+    }
+
+    private string? PeriodPredicate(TableRule rule, string table, bool isTarget, Dictionary<string, BindValue> binds, ref int counter)
+    {
+        if (rule.PeriodColumns.Count == 0)
+            throw new InvalidOperationException($"{table}: 기간 규칙에 기간 열이 없다.");
+        var info = (isTarget ? targetTables : sourceTables).GetValueOrDefault(table);
+        var groups = new List<string>();
+        foreach (var pc in rule.PeriodColumns)
+        {
+            var parts = new List<string>();
+            BindDataType type;
+            object? from, to;
+            if (pc.StringFormat is { } format)
+            {
+                type = BindDataType.Varchar2;
+                var b = DateStringFormat.Bounds(period, format);
+                from = period.From is null ? null : b.From;
+                to = period.To is null ? null : b.To;
+            }
+            else
+            {
+                type = BindTypeOf(info, pc.Column);
+                from = period.From;
+                to = period.To;
+            }
+            if (from is null && to is null) continue;
+            var n = ++counter;
+            var col = SqlIdentifier.QuoteAlways(pc.Column);
+            if (from is not null)
+            {
+                var name = $"B{n.ToString(CultureInfo.InvariantCulture)}_FROM";
+                parts.Add($"{col} >= :{name}");
+                binds[name] = new BindValue(type, from);
+            }
+            if (to is not null)
+            {
+                var name = $"B{n.ToString(CultureInfo.InvariantCulture)}_TO";
+                parts.Add($"{col} < :{name}");
+                binds[name] = new BindValue(type, to);
+            }
+            groups.Add(string.Join(" AND ", parts));
+        }
+        return groups.Count switch
+        {
+            0 => null,
+            1 => groups[0],
+            _ => string.Join(" OR ", groups.Select(g => $"({g})")),
+        };
+    }
+
+    private static BindDataType BindTypeOf(TableInfo? info, string column)
+    {
+        var dataType = info?.Columns.FirstOrDefault(c => string.Equals(c.Name, column, StringComparison.Ordinal))?.DataType
+                       ?? throw new InvalidOperationException($"기간 열 '{column}' 의 타입을 알 수 없다.");
+        var t = dataType.Trim().ToUpperInvariant();
+        if (t == "DATE") return BindDataType.Date;
+        if (t.StartsWith("TIMESTAMP", StringComparison.Ordinal))
+        {
+            if (t.Contains("WITH LOCAL TIME ZONE", StringComparison.Ordinal)) return BindDataType.TimestampLtz;
+            return t.Contains("WITH TIME ZONE", StringComparison.Ordinal) ? BindDataType.TimestampTz : BindDataType.Timestamp;
+        }
+        throw new InvalidOperationException($"기간 열 '{column}' 의 타입 {dataType} 은 날짜로 비교할 수 없다.");
+    }
+
+    private TableRule RuleOf(string table)
+        => job.Tables.FirstOrDefault(r => string.Equals(r.Table, table, StringComparison.Ordinal))
+           ?? throw new InvalidOperationException($"작업에 테이블 '{table}' 규칙이 없다.");
+
+    private static string Qualified(string owner, string table)
+        => SqlIdentifier.QuoteAlways(owner) + "." + SqlIdentifier.QuoteAlways(table);
+
+    private static string Quoted(IReadOnlyList<string> columns) => string.Join(", ", columns.Select(SqlIdentifier.QuoteAlways));
+
+    // 한 열이면 그대로, 여러 열이면 튜플.
+    private static string ColumnList(IReadOnlyList<string> columns)
+        => columns.Count == 1 ? SqlIdentifier.QuoteAlways(columns[0]) : "(" + Quoted(columns) + ")";
+}
