@@ -80,8 +80,13 @@ internal sealed partial class CopyPrecheckService(IBulkExecutionService bulk, IM
     private const string AllTriggerCountSql =
         "SELECT COUNT(*) FROM all_triggers WHERE table_owner = :OWN AND table_name = :TBL AND base_object_type = 'TABLE'";
 
-    /// <summary>대상이 표인가(뷰·시노님·MV 는 대상으로 쓰지 않는다). 권한이 하나라도 있으면 보인다.</summary>
-    private const string TargetIsTableSql = "SELECT COUNT(*) FROM all_tables WHERE owner = :OWN AND table_name = :TBL";
+    /// <summary>
+    /// 대상이 표인가(뷰·시노님·MV 는 대상으로 쓰지 않는다). 권한이 하나라도 있으면 보인다.
+    /// MV 의 저장 표는 ALL_TABLES 에도 같은 이름으로 나오므로 ALL_MVIEWS 에 있으면 뺀다(11.2·26ai 모두 있는 뷰).
+    /// </summary>
+    private const string TargetIsTableSql =
+        "SELECT COUNT(*) FROM all_tables t WHERE t.owner = :OWN AND t.table_name = :TBL"
+        + " AND NOT EXISTS (SELECT 1 FROM all_mviews m WHERE m.owner = t.owner AND m.mview_name = t.table_name)";
 
     /// <summary>한 번의 점검이 쓰는 상태. 점검 항목을 순서대로 쌓는다.</summary>
     private sealed class Run(IBulkExecutionService bulk, IMetadataProvider metadata, IExecutionPolicy policy,
@@ -166,13 +171,14 @@ internal sealed partial class CopyPrecheckService(IBulkExecutionService bulk, IM
                         $"{key}: 원본에 표 {sourceOwner}.{rule.Table} 이(가) 없거나 SELECT 권한이 없습니다(권한이 없으면 표가 없는 것처럼 보입니다).{hint}"));
                 }
 
-                // 대상은 표여야 한다(뷰·시노님에 지우고 넣지 않는다). 표가 아니면 구조를 읽지 않는다.
+                // 대상은 표여야 한다(뷰·시노님·MV 에 지우고 넣지 않는다). 표가 아니거나 확인하지 못하면(조회 오류) 구조를 읽지 않고 막는다.
                 var isTable = await TryCountAsync(TargetIsTableSql, ct, ("OWN", targetOwner), ("TBL", rule.Table)).ConfigureAwait(false);
-                var target = isTable is 0 ? null : await TryGetTableAsync(Target, targetOwner, rule.Table, ct).ConfigureAwait(false);
+                var target = isTable is > 0 ? await TryGetTableAsync(Target, targetOwner, rule.Table, ct).ConfigureAwait(false) : null;
                 if (target is null)
                 {
-                    _items.Add(new CheckItem(key, "TargetMissing", CheckLevel.Error,
-                        $"{key}: 대상에 표 {targetOwner}.{rule.Table} 이(가) 없거나 표가 아니거나(뷰·시노님) 접근 권한이 없습니다(권한이 없으면 표가 없는 것처럼 보입니다)."));
+                    _items.Add(new CheckItem(key, "TargetMissing", CheckLevel.Error, isTable is null
+                        ? $"{key}: 대상 {targetOwner}.{rule.Table} 이(가) 표인지 확인하지 못했습니다(ALL_TABLES·ALL_MVIEWS 조회 실패). 확인할 수 있을 때까지 실행하지 않습니다."
+                        : $"{key}: 대상에 표 {targetOwner}.{rule.Table} 이(가) 없거나 표가 아니거나(뷰·시노님·MV) 접근 권한이 없습니다(권한이 없으면 표가 없는 것처럼 보입니다)."));
                 }
 
                 if (source is null || target is null)

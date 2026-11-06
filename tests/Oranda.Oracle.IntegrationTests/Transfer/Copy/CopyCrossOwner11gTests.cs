@@ -27,4 +27,8 @@ public sealed class CopyCrossOwner11gTests
     [Fact]
     public async Task Two_owner_job_orders_by_cross_owner_fk_and_rerun_gives_the_same_result()
         => await CrossOwnerCases.TwoOwnerCopyAsync(await CopyDbScope.CreateAsync(_db, CopyDbScope.NewTag()));
+
+    [Fact]
+    public async Task Target_view_synonym_or_materialized_view_is_target_missing()
+        => await CrossOwnerCases.TargetThatIsNotATableAsync(await CopyDbScope.CreateAsync(_db, CopyDbScope.NewTag()));
 }

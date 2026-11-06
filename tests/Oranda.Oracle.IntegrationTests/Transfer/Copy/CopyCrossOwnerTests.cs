@@ -89,6 +89,10 @@ public sealed class CopyCrossOwnerTests
         => await CrossOwnerCases.TwoOwnerCopyAsync(await CopyDbScope.CreateAsync(_db, CopyDbScope.NewTag()));
 
     [Fact]
+    public async Task Target_view_synonym_or_materialized_view_is_target_missing()
+        => await CrossOwnerCases.TargetThatIsNotATableAsync(await CopyDbScope.CreateAsync(_db, CopyDbScope.NewTag()));
+
+    [Fact]
     public async Task Mixed_owner_recreate_needs_each_target_owner()
     {
         await using var scope = await CopyDbScope.CreateAsync(_db, CopyDbScope.NewTag());
@@ -245,6 +249,39 @@ internal static class CrossOwnerCases
             Assert.Equal(3, await scope.CountAsync(scope.DstUser, "ORDERS"));
             Assert.Equal(3, await scope.CountAsync(scope.AppUser, "CUSTOMERS")); // 원본은 그대로
         }
+    }
+
+    /// <summary>
+    /// 대상 이름이 표가 아니면(뷰·시노님·MV) TargetMissing 이다. MV 의 저장 표는 ALL_TABLES 에도 나오므로 ALL_MVIEWS 로 뺀다.
+    /// 대상 표는 지우지 않고 계획에도 넣지 않는다.
+    /// </summary>
+    public static async Task TargetThatIsNotATableAsync(CopyDbScope owned)
+    {
+        await using var scope = owned;
+        await scope.ExecAdminAsync($"GRANT CREATE VIEW, CREATE MATERIALIZED VIEW TO {scope.DstUser}");
+        foreach (var name in new[] { "T_VIEW", "T_SYN", "T_MV" })
+        {
+            await scope.CreateSourceTableAsync(name, CustomerColumns);
+            await scope.ExecSourceAsync($"BEGIN INSERT INTO {name} VALUES (1, 'a'); COMMIT; END;");
+        }
+
+        await scope.CreateTargetTableAsync("BASE_T", CustomerColumns);
+        await scope.ExecTargetAsync("BEGIN INSERT INTO BASE_T VALUES (9, 'keep'); COMMIT; END;");
+        await scope.ExecTargetAsync("CREATE VIEW T_VIEW AS SELECT * FROM BASE_T");
+        await scope.ExecTargetAsync("CREATE SYNONYM T_SYN FOR BASE_T");
+        await scope.ExecTargetAsync("CREATE MATERIALIZED VIEW T_MV AS SELECT * FROM BASE_T");
+        var job = scope.Job(
+            new TableRule("T_VIEW", RuleKind.All, TargetAction.DeleteAllInsert),
+            new TableRule("T_SYN", RuleKind.All, TargetAction.DeleteAllInsert),
+            new TableRule("T_MV", RuleKind.All, TargetAction.DeleteAllInsert));
+        var sessions = await scope.OpenSessionsAsync();
+
+        var report = await scope.Precheck().RunAsync(sessions, job, NoPeriod, null, default);
+
+        var missing = report.Items.Where(i => i.Code == "TargetMissing").Select(i => i.Table).Order(StringComparer.Ordinal);
+        Assert.Equal(["T_MV", "T_SYN", "T_VIEW"], missing);
+        Assert.Empty(report.Order);
+        Assert.Equal(1, await scope.CountAsync(scope.DstUser, "BASE_T"));
     }
 
     private static string Describe(CopyRunResult result)
