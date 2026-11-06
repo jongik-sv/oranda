@@ -71,5 +71,11 @@ public class CopyRunnerRulesTests
         Assert.False(CopyRunner.SameRule(a, a with { Kind = RuleKind.Exclude }));
         Assert.False(CopyRunner.SameRule(a, a with { Masks = [] }));
         Assert.False(CopyRunner.SameRule(a, a with { Parent = new ParentLink("P", ["P_ID2"], ["ID"]) }));
+
+        // 표마다의 계정(묶음 B): 원본·대상·부모 계정이 바뀌면 다른 규칙이다(지우는 표가 달라진다).
+        Assert.False(CopyRunner.SameRule(a, a with { SourceOwner = "APP2" }));
+        Assert.False(CopyRunner.SameRule(a, a with { TargetOwner = "APP2" }));
+        Assert.False(CopyRunner.SameRule(a, a with { Parent = new ParentLink("P", ["P_ID"], ["ID"]) { ParentOwner = "APP" } }));
+        Assert.True(CopyRunner.SameRule(a, a with { WrittenAs = "SYN" })); // 표시용 이름은 실행과 상관없다
     }
 }

@@ -111,7 +111,7 @@ internal sealed class CopyRunner : ICopyRunner
             throw new InvalidOperationException("사전 점검에 오류가 있어 실행할 수 없습니다.");
         }
 
-        EnsureReportMatchesJob(job, report);
+        EnsureReportMatchesJob(job, report, period);
         EnsureRecreateAllowed(sessions, job);
         EnsureDistinct(sessions, job);
         var run = new RunState(sessions, job, report, period, decisions.PreConfirmedSql, progress);
@@ -172,7 +172,7 @@ internal sealed class CopyRunner : ICopyRunner
         EnsureSessions(sessions);
 
         // 기간 경계는 키로 다시 읽을 때 쓰지 않는다(키 조건만). 실행 기록 머리글에는 작업의 기간 규칙 이름만 남는다.
-        EnsureReportMatchesJob(job, report);
+        EnsureReportMatchesJob(job, report, period: null);
         EnsureDistinct(sessions, job);
         var period = new ResolvedPeriod(null, null);
         var run = new RunState(sessions, job, report, period, new HashSet<string>(StringComparer.Ordinal), progress);
@@ -215,27 +215,71 @@ internal sealed class CopyRunner : ICopyRunner
     /// 사전 점검 뒤 규칙이 바뀌었으면 실행하지 않는다. 문장(DELETE·SELECT)은 작업에서, MERGE 판정·마스킹·끄기는 보고서에서 만들므로
     /// 둘이 다르면 미리 받은 확인(PreConfirmedSql)이 다른 뜻의 문장에 쓰이거나 제외한 표를 읽을 수 있다.
     /// </summary>
-    private static void EnsureReportMatchesJob(CopyJob job, PrecheckReport report)
+    /// <remarks>
+    /// 표마다의 계정(묶음 B)도 본다: 규칙의 원본·대상 계정이 점검한 표의 계정과 같아야 하고, 지금 작업으로 만든 대상 DELETE 가
+    /// 점검 미리 보기의 DELETE 와 글자까지 같아야 한다(작업 밖·제외된 부모의 대상 계정이 바뀌어 지우는 범위가 달라지는 것도 막는다).
+    /// DELETE 비교는 실행(<paramref name="period"/> 있음)에서만 한다. 「실패 행만 다시 넣기」는 지우지 않는다.
+    /// </remarks>
+    private static void EnsureReportMatchesJob(CopyJob job, PrecheckReport report, ResolvedPeriod? period)
     {
-        if (report.Order.Any(p => !string.Equals(p.Source.Table.Owner, job.SourceOwner, StringComparison.Ordinal)
-                                  || !string.Equals(p.Target.Table.Owner, job.TargetOwner, StringComparison.Ordinal)))
+        if (CopyOwners.Problems(job).Count > 0)
         {
-            throw new InvalidOperationException("사전 점검 뒤 원본·대상 소유자가 바뀌었습니다. 사전 점검을 다시 하세요.");
+            throw new InvalidOperationException("작업에 같은 원본 표나 같은 대상 표의 규칙이 여럿 있습니다. 사전 점검을 다시 하세요.");
         }
 
-        var active = job.Tables.Where(r => r.Kind != RuleKind.Exclude).ToDictionary(r => r.Table, StringComparer.Ordinal);
-        var planned = report.Order.Select(p => p.Rule.Table).ToHashSet(StringComparer.Ordinal);
-        var same = active.Count == planned.Count
-                   && report.Order.All(p => active.TryGetValue(p.Rule.Table, out var rule) && SameRule(rule, p.Rule));
+        var active = job.Tables.Where(r => r.Kind != RuleKind.Exclude).ToDictionary(r => CopyOwners.Key(job, r), StringComparer.Ordinal);
+        var planned = report.Order.Select(p => CopyOwners.Key(job, p.Rule)).ToHashSet(StringComparer.Ordinal);
+        var same = active.Count == planned.Count && planned.Count == report.Order.Count
+                   && report.Order.All(p => active.TryGetValue(CopyOwners.Key(job, p.Rule), out var rule) && SameRule(rule, p.Rule));
         if (!same)
         {
             throw new InvalidOperationException("사전 점검 뒤 작업 규칙이 바뀌었습니다. 사전 점검을 다시 하세요.");
         }
+
+        if (report.Order.Any(p => !string.Equals(p.Source.Table.Owner, CopyOwners.Source(job, p.Rule), StringComparison.Ordinal)
+                                  || !string.Equals(p.Target.Table.Owner, CopyOwners.Target(job, p.Rule), StringComparison.Ordinal)
+                                  || !string.Equals(p.Source.Table.Name, p.Rule.Table, StringComparison.Ordinal)
+                                  || !string.Equals(p.Target.Table.Name, p.Rule.Table, StringComparison.Ordinal)))
+        {
+            throw new InvalidOperationException("사전 점검 뒤 원본·대상 소유자가 바뀌었습니다. 사전 점검을 다시 하세요.");
+        }
+
+        if (period is null)
+        {
+            return;
+        }
+
+        var builder = new CopySqlBuilder(job, period,
+            report.Order.ToDictionary(p => CopyOwners.Key(job, p.Rule), p => p.Source, StringComparer.Ordinal),
+            report.Order.ToDictionary(p => CopyOwners.Key(job, p.Rule), p => p.Target, StringComparer.Ordinal));
+        var previewed = report.Preview.Where(x => x.Side == PreviewSide.Target).Select(x => x.Sql).ToHashSet(StringComparer.Ordinal);
+        foreach (var plan in report.Order)
+        {
+            if (DeleteText(builder, CopyOwners.Key(job, plan.Rule)) is { } text && !previewed.Contains(text))
+            {
+                throw new InvalidOperationException("사전 점검 뒤 대상 지우기 문장이 바뀌었습니다(계정·부모 표). 사전 점검을 다시 하세요.");
+            }
+        }
     }
 
-    /// <summary>규칙 값 비교(목록은 내용으로 비교한다. record 의 기본 비교는 목록을 참조로 비교한다).</summary>
+    /// <summary>대상 DELETE 글(지우지 않는 처리면 null). 문장을 만들 수 없는 규칙은 사전 점검이 이미 오류로 냈으므로 비교하지 않는다(null).</summary>
+    private static string? DeleteText(CopySqlBuilder builder, string key)
+    {
+        try
+        {
+            return builder.TargetDelete(key)?.Sql;
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or FormatException)
+        {
+            return null;
+        }
+    }
+
+    /// <summary>규칙 값 비교(목록은 내용으로 비교한다. record 의 기본 비교는 목록을 참조로 비교한다). 표마다의 계정도 비교한다.</summary>
     internal static bool SameRule(TableRule a, TableRule b) =>
         a.Table == b.Table && a.Kind == b.Kind && a.Action == b.Action
+        && string.Equals(a.SourceOwner, b.SourceOwner, StringComparison.Ordinal)
+        && string.Equals(a.TargetOwner, b.TargetOwner, StringComparison.Ordinal)
         && string.Equals(a.CustomWhere, b.CustomWhere, StringComparison.Ordinal)
         && string.Equals(a.ExtraWhere, b.ExtraWhere, StringComparison.Ordinal)
         && a.PeriodColumns.SequenceEqual(b.PeriodColumns)
@@ -245,7 +289,8 @@ internal sealed class CopyRunner : ICopyRunner
         && (a.Parent is null || (a.Parent.ParentTable == b.Parent!.ParentTable
                                  && a.Parent.ChildColumns.SequenceEqual(b.Parent.ChildColumns, StringComparer.Ordinal)
                                  && a.Parent.ParentColumns.SequenceEqual(b.Parent.ParentColumns, StringComparer.Ordinal)
-                                 && a.Parent.ForeignKeyName == b.Parent.ForeignKeyName));
+                                 && a.Parent.ForeignKeyName == b.Parent.ForeignKeyName
+                                 && string.Equals(a.Parent.ParentOwner, b.Parent.ParentOwner, StringComparison.Ordinal)));
 
     /// <summary>
     /// 원본과 대상이 같은 DB·같은 소유자면 거부한다. 다른 프로필 둘이 같은 곳을 가리키면 대상 DELETE·커밋이 원본 행을 지운다.
@@ -293,19 +338,38 @@ internal sealed class CopyRunner : ICopyRunner
     /// <summary>DROP·CREATE 는 개발 라벨 대상에서만 실행한다(사전 점검과 따로 한 번 더 막는다, Global Constraints).</summary>
     private static void EnsureRecreateAllowed(CopySessions sessions, CopyJob job)
     {
-        if (job.Tables.Any(r => r.Kind != RuleKind.Exclude && r.Action == TargetAction.Recreate)
-            && !CopyTargetGuard.CanRecreate(sessions.Target.Profile))
+        var recreate = job.Tables.Where(r => r.Kind != RuleKind.Exclude && r.Action == TargetAction.Recreate).ToList();
+        if (recreate.Count > 0 && !CopyTargetGuard.CanRecreate(sessions.Target.Profile))
         {
             throw new InvalidOperationException($"대상 접속 '{sessions.Target.Profile.Name}' 은 개발 접속이 아니라 「테이블 다시 만들기」를 실행할 수 없습니다.");
         }
+
+        // 다시 만들기는 대상 소유자 계정으로만 한다(표마다, 사전 점검 RecreateNoPrivilege 와 같은 판정). DbKey 의 끝 마디가 SESSION_USER 다.
+        var user = SessionUser(sessions.Target.DbKey);
+        if (user is not null && recreate.FirstOrDefault(r => !string.Equals(CopyOwners.Target(job, r), user, StringComparison.OrdinalIgnoreCase)) is { } other)
+        {
+            throw new InvalidOperationException($"{CopyOwners.Key(job, other)}: 「테이블 다시 만들기」는 대상 소유자({CopyOwners.Target(job, other)}) 계정으로 접속해야 합니다(지금 {user}).");
+        }
     }
 
+    /// <summary><c>{DB_UNIQUE_NAME}/{CON_NAME}/{SESSION_USER}</c> 의 끝 마디. 모양이 다르면 null.</summary>
+    private static string? SessionUser(string dbKey)
+    {
+        var last = dbKey.LastIndexOf('/');
+        return last < 0 || last == dbKey.Length - 1 ? null : dbKey[(last + 1)..];
+    }
+
+    /// <summary>같은 DB 에서 어떤 규칙의 대상 표가 어떤 규칙이 읽는 원본 표면 거부한다(사전 점검과 따로 한 번 더, 표 단위·규칙 사이).</summary>
     private static void EnsureDistinct(CopySessions sessions, CopyJob job)
     {
-        if (IsSameDatabaseAndOwner(sessions.Source.DbKey, sessions.Source.Server, sessions.Target.DbKey, sessions.Target.Server,
-                                   job.SourceOwner, job.TargetOwner))
+        if (CopyOwners.Problems(job) is { Count: > 0 } problems)
         {
-            throw new InvalidOperationException("원본과 대상이 같은 DB 의 같은 소유자입니다. 원본 행을 지울 수 있어 실행하지 않습니다.");
+            throw new InvalidOperationException(problems[0]);
+        }
+
+        if (SameSourceTargets(sessions, job) is { Count: > 0 } same)
+        {
+            throw new InvalidOperationException($"원본과 대상이 같은 DB 이고 대상 표 {same[0].Table} 을(를) 원본으로도 읽습니다. 원본 행을 지울 수 있어 실행하지 않습니다.");
         }
     }
 
@@ -351,9 +415,10 @@ internal sealed class CopyRunner : ICopyRunner
         var targets = new List<DisabledObject>();
         foreach (var plan in run.Report.Order)
         {
-            if (plan.CanDisableTriggers && decisions.DisableTriggerTables.Contains(plan.Rule.Table))
+            // 결정은 규칙 키로 받는다. 트리거는 그 표의 대상 계정 것이다(사전 점검이 그 계정 소유만 골랐다).
+            if (plan.CanDisableTriggers && decisions.DisableTriggerTables.Contains(run.Key(plan)))
             {
-                targets.AddRange(plan.Triggers.Select(t => new DisabledObject(DisabledKind.Trigger, run.Job.TargetOwner, plan.Rule.Table, t)));
+                targets.AddRange(plan.Triggers.Select(t => new DisabledObject(DisabledKind.Trigger, plan.Target.Table.Owner, plan.Rule.Table, t)));
             }
         }
 
@@ -408,8 +473,6 @@ internal sealed class CopyRunner : ICopyRunner
             return;
         }
 
-        var owner = run.Job.TargetOwner;
-        var planned = plans.Select(p => p.Rule.Table).ToHashSet(StringComparer.Ordinal);
         var step = new RecreateStep(_bulk);
         var noForeignKeys = new HashSet<string>(StringComparer.Ordinal);
         foreach (var plan in plans)
@@ -417,12 +480,18 @@ internal sealed class CopyRunner : ICopyRunner
             var table = run.Table(plan);
             table.Recreate = true;
             run.Progress(table.Name, 0, null, PhaseRecreate);
+            // 표마다 그 표의 대상 계정에 다시 만든다. 작업 안 FK 는 원본 계정·대상 계정이 모두 같은 다시 만들기 표끼리만 붙인다(사전 점검과 같은 판정).
+            var owner = plan.Target.Table.Owner;
+            var sourceOwner = plan.Source.Table.Owner;
+            var planned = plans.Where(p => string.Equals(p.Target.Table.Owner, owner, StringComparison.OrdinalIgnoreCase)
+                                           && string.Equals(p.Source.Table.Owner, sourceOwner, StringComparison.Ordinal))
+                .Select(p => p.Rule.Table).ToHashSet(StringComparer.Ordinal);
             try
             {
                 table.Preserved = await step.CaptureAsync(run.Target, owner, plan.Rule.Table, ct);
                 // 작업 안 FK 는 CreateTableDdl 대신 원본 카탈로그로 만든다(ON DELETE·DEFERRABLE·UK 참조를 원본대로, 조정 결정 16).
                 table.CreateDdl = CreateTableDdl.Build(plan.Source, owner, noForeignKeys);
-                table.JobForeignKeys = await step.SourceForeignKeysAsync(run.Source, run.Job.SourceOwner, plan.Rule.Table, planned, owner, ct);
+                table.JobForeignKeys = await step.SourceForeignKeysAsync(run.Source, sourceOwner, plan.Rule.Table, planned, owner, ct);
                 table.BinBefore = await step.RecycleBinAsync(run.Target, plan.Rule.Table, ct);
             }
             catch (Exception ex) when (!ct.IsCancellationRequested && ex is OracleException or InvalidOperationException or BulkDeniedException or ArgumentException)
@@ -498,7 +567,7 @@ internal sealed class CopyRunner : ICopyRunner
         }
 
         await record.RecordStatementAsync(
-            $"-- 보존 DDL: 다시 만들 표 {string.Join(", ", plans.Select(p => p.Rule.Table))}(옛 표는 휴지통으로). 다시 만들기가 끝나지 않았으면 아래 문장을 직접 실행하세요.", ct);
+            $"-- 보존 DDL: 다시 만들 표 {string.Join(", ", plans.Select(p => run.Table(p).TargetName))}(옛 표는 휴지통으로). 다시 만들기가 끝나지 않았으면 아래 문장을 직접 실행하세요.", ct);
         foreach (var plan in plans)
         {
             var t = run.Table(plan);
@@ -520,8 +589,7 @@ internal sealed class CopyRunner : ICopyRunner
         for (var j = 0; j < kept.ReferencingConstraints.Count; j++)
         {
             var fk = kept.ReferencingConstraints[j];
-            if (string.Equals(fk.Owner, run.Job.TargetOwner, StringComparison.Ordinal)
-                && run.Tables.TryGetValue(fk.Table, out var child) && child.Dropped)
+            if (run.ByTarget(fk.Owner, fk.Table) is { Dropped: true })
             {
                 continue;
             }
@@ -543,8 +611,8 @@ internal sealed class CopyRunner : ICopyRunner
     /// <summary>DROP(CASCADE 없이). 지웠으면 true. 안 보이는 FK(ORA-02449)·실패면 전체를 멈춘다. 결과를 모르면 표가 있는지 다시 본다.</summary>
     private async Task<bool> DropAsync(RunState run, RecreateStep step, TableState table)
     {
-        var owner = run.Job.TargetOwner;
-        var drop = await CleanupStatementAsync(run, CopyStatements.DropTable(owner, table.Name), LongCleanupTimeout);
+        var owner = table.Owner;
+        var drop = await CleanupStatementAsync(run, CopyStatements.DropTable(owner, table.TableName), LongCleanupTimeout);
         if (drop.Status != ExecutionStatus.Succeeded)
         {
             if (drop.Error?.Number == ReferencedByForeignKeys)
@@ -554,7 +622,7 @@ internal sealed class CopyRunner : ICopyRunner
                 return false;
             }
 
-            if (!await TableGoneAsync(run, owner, table.Name))
+            if (!await TableGoneAsync(run, owner, table.TableName))
             {
                 table.Fail("표를 지우지 못했습니다: " + Describe(drop));
                 run.Abort($"{table.Name}: 표를 지우지 못해 복사를 멈췄습니다. 이미 지운 표는 다시 만들고 트리거·권한·FK 를 되살립니다.");
@@ -573,7 +641,7 @@ internal sealed class CopyRunner : ICopyRunner
         try
         {
             using var check = new CancellationTokenSource(CleanupTimeout);
-            var after = await step.RecycleBinAsync(run.Target, table.Name, check.Token);
+            var after = await step.RecycleBinAsync(run.Target, table.TableName, check.Token);
             table.BinKnown = true;
             table.BinName = after.Except(table.BinBefore, StringComparer.Ordinal).Order(StringComparer.Ordinal).LastOrDefault();
         }
@@ -630,10 +698,10 @@ internal sealed class CopyRunner : ICopyRunner
             run.Progress(t.Name, 0, null, PhaseRestore);
 
             // IDENTITY 는 새로 만들면 1부터 시작한다: 복사한 최대값 뒤로 옮긴다(앱이 ID 없이 넣을 때 ORA-00001 이 나지 않게).
-            var plan = run.Report.Order.FirstOrDefault(p => string.Equals(p.Rule.Table, t.Name, StringComparison.Ordinal));
+            var plan = run.Report.Order.FirstOrDefault(p => string.Equals(run.Key(p), t.Name, StringComparison.Ordinal));
             foreach (var c in plan?.Source.Columns.Where(c => c.IsIdentity) ?? [])
             {
-                var text = $"ALTER TABLE {CopyStatements.Qualified(run.Job.TargetOwner, t.Name)} MODIFY ({SqlIdentifier.QuoteAlways(c.Name)}"
+                var text = $"ALTER TABLE {CopyStatements.Qualified(t.Owner, t.TableName)} MODIFY ({SqlIdentifier.QuoteAlways(c.Name)}"
                            + " GENERATED BY DEFAULT AS IDENTITY (START WITH LIMIT VALUE))";
                 var r = await TryRestoreAsync(run, text, LongCleanupTimeout);
                 if (r is not { Status: ExecutionStatus.Succeeded })
@@ -682,7 +750,7 @@ internal sealed class CopyRunner : ICopyRunner
         {
             foreach (var (parent, text, name) in t.JobForeignKeys)
             {
-                if (run.Tables.TryGetValue(parent, out var p) && p.Dropped && !p.Created)
+                if (run.ByTarget(t.Owner, parent) is { Dropped: true, Created: false })
                 {
                     var message = $"부모 표 {parent} 를 다시 만들지 못해 FK 를 만들지 않았습니다. 부모를 되돌린 뒤 직접 실행하세요: {text}";
                     t.Degrade(message);
@@ -703,8 +771,7 @@ internal sealed class CopyRunner : ICopyRunner
             foreach (var i in indexes)
             {
                 var fk = kept.ReferencingConstraints[i];
-                if (string.Equals(fk.Owner, run.Job.TargetOwner, StringComparison.Ordinal)
-                    && run.Tables.TryGetValue(fk.Table, out var child) && child.Dropped)
+                if (run.ByTarget(fk.Owner, fk.Table) is { Dropped: true })
                 {
                     continue;
                 }
@@ -739,7 +806,7 @@ internal sealed class CopyRunner : ICopyRunner
         if (name is not null)
         {
             using var count = new CancellationTokenSource(LongCleanupTimeout);
-            orphans = await OrphanCountAsync(run, new DisabledObject(DisabledKind.ForeignKey, run.Job.TargetOwner, t.Name, name), count.Token);
+            orphans = await OrphanCountAsync(run, new DisabledObject(DisabledKind.ForeignKey, t.Owner, t.TableName, name), count.Token);
         }
 
         run.Notices.Add($"{t.Name}: 원본 FK {name ?? "(서버 이름)"} 는 부모 없는 행 {orphans} 때문에 ENABLE NOVALIDATE 로 만들었습니다.");
@@ -805,8 +872,8 @@ internal sealed class CopyRunner : ICopyRunner
     {
         foreach (var t in run.Tables.Values.Where(t => t.Dropped))
         {
-            var owner = run.Job.TargetOwner;
-            var source = t.BinName is { } binName ? CopyStatements.Qualified(owner, binName) : CopyStatements.Qualified(owner, t.Name);
+            var owner = t.Owner;
+            var source = t.BinName is { } binName ? CopyStatements.Qualified(owner, binName) : CopyStatements.Qualified(owner, t.TableName);
             if (t.BinKnown && t.BinName is null)
             {
                 const string Lost = "지운 옛 표가 휴지통에 남지 않았습니다(영구 삭제: 테이블스페이스가 휴지통을 지원하지 않거나 공간이 부족했습니다).";
@@ -816,7 +883,7 @@ internal sealed class CopyRunner : ICopyRunner
             else
             {
                 var hint = t.Created
-                    ? $"지운 옛 표는 휴지통에 있습니다. 옛 표를 보려면 FLASHBACK TABLE {source} TO BEFORE DROP RENAME TO {SqlIdentifier.QuoteAlways(t.Name + "_OLD")}"
+                    ? $"지운 옛 표는 휴지통에 있습니다. 옛 표를 보려면 FLASHBACK TABLE {source} TO BEFORE DROP RENAME TO {SqlIdentifier.QuoteAlways(t.TableName + "_OLD")}"
                       + " 로 다른 이름으로 되살리세요(Flashback 화면에서도 할 수 있습니다)."
                     : $"지운 표를 다시 만들지 못해 표가 없습니다. FLASHBACK TABLE {source} TO BEFORE DROP 으로 휴지통에서 되돌리세요"
                       + "(트리거는 BIN$ 이름으로, 인덱스·권한과 함께 돌아옵니다. 이 표를 참조하던 FK 는 돌아오지 않습니다).";
@@ -829,7 +896,7 @@ internal sealed class CopyRunner : ICopyRunner
                 // 이 표의 원본 FK, 그리고 다른 다시 만들기 표가 받아 둔 「이 표가 자식인」 옛 FK 도 넣는다(휴지통에서 되돌려도 다른 표를 참조하는 FK 는 안 돌아온다).
                 var asChild = run.Tables.Values.Where(o => o.Preserved is not null && !ReferenceEquals(o, t))
                     .SelectMany(o => o.Preserved!.ReferencingConstraints.Select((fk, i) => (fk, i, o.Preserved!))
-                        .Where(x => string.Equals(x.fk.Owner, owner, StringComparison.Ordinal) && x.fk.Table == t.Name && x.i < x.Item3.ReferencingForeignKeys.Count)
+                        .Where(x => string.Equals(x.fk.Owner, owner, StringComparison.OrdinalIgnoreCase) && x.fk.Table == t.TableName && x.i < x.Item3.ReferencingForeignKeys.Count)
                         .Select(x => x.Item3.ReferencingForeignKeys[x.i]));
                 var pending = kept.Triggers.Concat(kept.Grants).Concat(kept.ReferencingForeignKeys)
                     .Concat(t.JobForeignKeys.Select(f => f.Ddl))
@@ -871,7 +938,7 @@ internal sealed class CopyRunner : ICopyRunner
         for (var i = run.Report.Order.Count - 1; i >= 0; i--)
         {
             var plan = run.Report.Order[i];
-            var delete = run.Builder.TargetDelete(plan.Rule.Table);
+            var delete = run.Builder.TargetDelete(run.Key(plan));
             if (delete is null)
             {
                 continue;
@@ -918,8 +985,8 @@ internal sealed class CopyRunner : ICopyRunner
         try
         {
             var shape = RowShape.Create(run.Job, plan);
-            var dml = CopyStatements.ArrayDml(DmlFor(run.Builder, plan), plan.Columns.Count);
-            var estimated = run.Report.EstimatedRows.TryGetValue(plan.Rule.Table, out var e) ? e : (long?)null;
+            var dml = CopyStatements.ArrayDml(DmlFor(run.Builder, plan, table.Name), plan.Columns.Count);
+            var estimated = run.Report.EstimatedRows.TryGetValue(table.Name, out var e) ? e : (long?)null;
             run.Progress(table.Name, 0, estimated, PhaseLoad);
 
             // 실패 행 상한을 넘거나 원본 읽기가 실패하면 이 표의 적재분만 되돌린다(앞 표의 정리·적재는 남긴다).
@@ -935,7 +1002,7 @@ internal sealed class CopyRunner : ICopyRunner
                 return;
             }
 
-            var select = run.Builder.SourceSelect(plan.Rule.Table, plan.Columns);
+            var select = run.Builder.SourceSelect(table.Name, plan.Columns);
             var batch = new List<object?[]>(run.Job.Options.BatchSize);
             var stop = false;
             try
@@ -1171,24 +1238,23 @@ internal sealed class CopyRunner : ICopyRunner
         return RunState.Accept(set, table, "원본에서 읽기 전용 트랜잭션을 시작하지 못했습니다", ct);
     }
 
-    private static string DmlFor(CopySqlBuilder builder, CopyTablePlan plan)
+    private static string DmlFor(CopySqlBuilder builder, CopyTablePlan plan, string key)
     {
-        var table = plan.Rule.Table;
         // 사전 점검의 필요 권한(UPDATE)과 같은 판정을 쓴다.
         var merge = PrecheckRules.UsesMerge(plan.Rule, plan.KeyColumns);
         if (!merge && plan.Rule.Action == TargetAction.MergeByPk)
         {
-            throw new InvalidOperationException($"{table}: PK 기준 MERGE 에 쓸 키 열이 없습니다.");
+            throw new InvalidOperationException($"{key}: PK 기준 MERGE 에 쓸 키 열이 없습니다.");
         }
 
-        return merge ? builder.Merge(table, plan.Columns, plan.KeyColumns) : builder.Insert(table, plan.Columns);
+        return merge ? builder.Merge(key, plan.Columns, plan.KeyColumns) : builder.Insert(key, plan.Columns);
     }
 
     // ---- 「실패 행만 다시 넣기」 ----
 
     private async Task RetryTableAsync(RunState run, string tableName, IReadOnlyList<FailedRow> rows, CancellationToken ct)
     {
-        var plan = run.Report.Order.FirstOrDefault(p => string.Equals(p.Rule.Table, tableName, StringComparison.Ordinal));
+        var plan = run.Report.Order.FirstOrDefault(p => string.Equals(run.Key(p), tableName, StringComparison.Ordinal));
         if (plan is null)
         {
             run.Notices.Add($"{tableName}: 사전 점검 결과에 없는 표라 다시 넣지 않았습니다.");
@@ -1206,7 +1272,7 @@ internal sealed class CopyRunner : ICopyRunner
             }
 
             var shape = RowShape.Create(run.Job, plan);
-            var dml = CopyStatements.ArrayDml(DmlFor(run.Builder, plan), plan.Columns.Count);
+            var dml = CopyStatements.ArrayDml(DmlFor(run.Builder, plan, tableName), plan.Columns.Count);
             var query = CopyStatements.Query(run.Builder.SourceSelectByKeys(tableName, plan.Columns, plan.KeyColumns));
             var savepoint = await ControlAsync(run.Target, CopyStatements.Savepoint(CopyStatements.TableSavepoint), ct);
             if (!RunState.Accept(savepoint, table, "다시 넣기를 시작하지 못했습니다", ct))
@@ -1304,12 +1370,13 @@ internal sealed class CopyRunner : ICopyRunner
             }
 
             run.Progress(rule.Table, 0, null, PhaseSequence);
-            var owner = run.Job.TargetOwner;
+            // 시퀀스는 그 계정(없으면 표의 대상 계정), 최대값은 표의 대상 계정에서 읽는다.
+            var owner = CopyOwners.SequenceOwner(run.Job, rule);
             try
             {
                 var next = CopyStatements.NextValues(owner, rule.Sequence);
                 var maxCell = await ScalarAsync(run, run.Target,
-                    CopyStatements.Query($"SELECT MAX({SqlIdentifier.QuoteAlways(rule.Column)}) FROM {CopyStatements.Qualified(owner, rule.Table)}"),
+                    CopyStatements.Query($"SELECT MAX({SqlIdentifier.QuoteAlways(rule.Column)}) FROM {CopyStatements.Qualified(loaded.Owner, loaded.TableName)}"),
                     NoBinds, ct);
                 if (maxCell is not OracleDecimal { IsNull: false } maxValue)
                 {
@@ -2003,11 +2070,24 @@ internal sealed class CopyRunner : ICopyRunner
         }
     }
 
-    private sealed class TableState(string name)
+    /// <param name="name">규칙 키(결과·진행·실패 행·실행 기록의 표 이름).</param>
+    /// <param name="owner">대상 계정.</param>
+    /// <param name="table">대상 표 이름.</param>
+    private sealed class TableState(string name, string owner, string table)
     {
         private readonly List<string> _messages = [];
 
+        /// <summary>규칙 키.</summary>
         public string Name { get; } = name;
+
+        /// <summary>대상 계정.</summary>
+        public string Owner { get; } = owner;
+
+        /// <summary>대상 표 이름.</summary>
+        public string TableName { get; } = table;
+
+        /// <summary>대상 표 <c>계정.표</c>(안내 글).</summary>
+        public string TargetName => Owner + "." + TableName;
 
         public long SourceRows { get; set; }
 
@@ -2133,8 +2213,8 @@ internal sealed class CopyRunner : ICopyRunner
             Job = job;
             Report = report;
             _progress = progress;
-            _sourceTables = report.Order.ToDictionary(p => p.Rule.Table, p => p.Source, StringComparer.Ordinal);
-            _targetTables = report.Order.ToDictionary(p => p.Rule.Table, p => p.Target, StringComparer.Ordinal);
+            _sourceTables = report.Order.ToDictionary(p => CopyOwners.Key(job, p.Rule), p => p.Source, StringComparer.Ordinal);
+            _targetTables = report.Order.ToDictionary(p => CopyOwners.Key(job, p.Rule), p => p.Target, StringComparer.Ordinal);
             Builder = new CopySqlBuilder(job, period, _sourceTables, _targetTables);
             HistoryOptions = new ExecutionOptions { Source = HistorySource.DataCopy, PreConfirmed = preConfirmed };
             BulkOptions = new ExecutionOptions { Source = HistorySource.DataCopy, SkipHistory = true, PreConfirmed = preConfirmed };
@@ -2192,16 +2272,25 @@ internal sealed class CopyRunner : ICopyRunner
         /// <summary>대상 정리(DELETE) 뒤 커밋이 한 번이라도 성공함(다른 표의 DELETE 도 확정됨).</summary>
         public bool DeletesPersisted { get; set; }
 
+        /// <summary>규칙 키.</summary>
+        public string Key(CopyTablePlan plan) => CopyOwners.Key(Job, plan.Rule);
+
         public TableState Table(CopyTablePlan plan)
         {
-            if (!Tables.TryGetValue(plan.Rule.Table, out var t))
+            var key = Key(plan);
+            if (!Tables.TryGetValue(key, out var t))
             {
-                t = new TableState(plan.Rule.Table);
-                Tables[plan.Rule.Table] = t;
+                t = new TableState(key, plan.Target.Table.Owner, plan.Rule.Table);
+                Tables[key] = t;
             }
 
             return t;
         }
+
+        /// <summary>대상 계정·표로 이 실행의 표를 찾는다(대상 FK 의 자식·부모를 맞출 때). 없으면 null.</summary>
+        public TableState? ByTarget(string owner, string table)
+            => Tables.Values.FirstOrDefault(t => string.Equals(t.Owner, owner, StringComparison.OrdinalIgnoreCase)
+                                                 && string.Equals(t.TableName, table, StringComparison.Ordinal));
 
         public void Abort(string? notice)
         {
