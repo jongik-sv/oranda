@@ -32,6 +32,7 @@ public sealed class ManualCopyScreens : IDisposable
 
     private static readonly Guid ProdId = new("00000000-0000-0000-0000-0000000000a1");
     private static readonly Guid TestId = new("00000000-0000-0000-0000-0000000000a2");
+    private static readonly Guid DevId = new("00000000-0000-0000-0000-0000000000a3");
 
     private static readonly ConnectionProfile Prod = new("prod-db", "acme", "db.example.com:1521/prodsvc", Id: ProdId, Environment: ConnectionEnvironment.Production);
     private static readonly ConnectionProfile Test = new("test-db", "acme_test", "db.example.com:1521/testsvc", Id: TestId, Environment: ConnectionEnvironment.Test);
@@ -284,6 +285,70 @@ public sealed class ManualCopyScreens : IDisposable
                 new(confirmTexts[^1], 8, 62, 0),
                 new(Named<Button>(window, "BackToRulesButton"), 9, -8, 0),
                 new(Named<Button>(window, "RunButton"), 10, -10, 0),
+            ]);
+        }
+        finally
+        {
+            window.Close();
+        }
+    });
+
+    // ---- 2단계: 사전 점검(테이블 다시 만들기) ---------------------------------------------------
+
+    [Fact]
+    public Task Precheck_recreate() => HeadlessHost.Run(async () =>
+    {
+        if (!ManualCapture.Enabled)
+        {
+            return;
+        }
+
+        var h = new DataCopyHarness();
+        var dev = new ConnectionProfile("dev-db", "acme_dev", "db.example.com:1521/devsvc", Id: DevId, Environment: ConnectionEnvironment.Development);
+
+        // 점검 항목 문구는 CopyPrecheckService.CheckRecreateAsync 가 내는 모양을 따른다.
+        var items = new[]
+        {
+            new CheckItem("CODES", "RecreateTable", CheckLevel.Confirm,
+                "CODES: 대상 표를 지우고 원본 구조로 다시 만든 뒤 넣습니다. 지운 표는 휴지통에 남습니다(PURGE 없음, 공간이 부족하면 휴지통 객체가 자동으로 지워질 수 있음)."
+                + " DROP·CREATE 는 DDL 이라 커밋 방식과 상관없이 되돌릴 수 없습니다."
+                + " 대상의 트리거 1개·다른 계정에 준 권한·이 표를 참조하던 FK 는 적재 뒤 되살립니다"
+                + "(참조 FK 는 지우기 전에 떼어 내고, 대상 계정에 보이지 않는 FK 가 있으면 지우지 않고 멈춥니다)."
+                + " 원본과 다르게 만들어지는 것: 문자 길이는 글자 단위(CHAR), DEFAULT ON NULL·IDENTITY 옵션(ALWAYS·시작·증가)·DEFERRABLE PK/UK·COLLATE 은 빠지고,"
+                + " 파티션·IOT·임시 표는 일반 표가 됩니다. 되살리지 않는 것: 열 권한 2개."),
+            new CheckItem("CODES", "MaskedColumns", CheckLevel.Pass, "CODES: 가리는 열이 없습니다."),
+        };
+
+        var rules = new TableRule[] { new("CODES", RuleKind.All, TargetAction.Recreate) };
+        var job = ExampleJob(MainJobId, "월말 테스트 DB 갱신", rules: rules);
+        var codes = TestJobs.Table("CODES",
+            TestJobs.Column("CODE_ID", "NUMBER", 1),
+            TestJobs.Column("CODE_NAME", "VARCHAR2", 2, length: 50));
+        var period = PeriodCalculator.Resolve(job.Period, new DateTime(2026, 11, 6));
+        var builder = new CopySqlBuilder(job, period,
+            new Dictionary<string, TableInfo> { ["CODES"] = codes }, new Dictionary<string, TableInfo> { ["CODES"] = codes });
+        var preview = new[]
+        {
+            new PreviewStatement(builder.SourceSelect("CODES", ["CODE_ID", "CODE_NAME"]).Sql, PreviewSide.Source, PolicyDecisionKind.Allow, null, null),
+            new PreviewStatement("DROP TABLE \"ACME_SALES\".\"CODES\"", PreviewSide.Target, PolicyDecisionKind.Confirm,
+                "위험 명령 DROP 입니다. 계속하려면 대상 이름 'CODES' 을(를) 다시 입력하세요.", "CODES"),
+        };
+        h.Precheck = new FakePrecheck(TestJobs.Report(items, [TestJobs.Plan("CODES")], preview));
+
+        var (window, vm, overlay) = await OpenWindowAsync(h);
+        try
+        {
+            await vm.Precheck.RunAsync(new CopySessions(new FakeSession(Prod with { ReadOnly = true }), new FakeSession(dev)), vm.CurrentJob!, period);
+            vm.Step = DataCopyStep.Precheck;
+            Settle(window);
+
+            ManualCapture.SaveOverlaid(window, overlay, "data-copy-recreate",
+            [
+                new(AllText(window, "확인 필요")[0], 1, -24, 0),
+                new(VisibleText(window, "SQL 미리 보기(대상에서 실행할 문장과 원본 조회)"), 2, -14, 0),
+                new(AllText(window, "확인 필요")[^1], 3, 62, 0),
+                new(ByAutomationName<TextBox>(window, "대상 접속 이름 다시 입력"), 4),
+                new(Named<Button>(window, "RunButton"), 5, -10, 0),
             ]);
         }
         finally

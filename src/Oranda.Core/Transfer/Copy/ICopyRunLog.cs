@@ -28,7 +28,8 @@ public sealed record UnfinishedRun(string RunFile, DateTimeOffset StartedAt, IRe
 
 /// <summary>
 /// 실패 행의 키 열 값만 담는다. 값 글자 형식: 숫자 = 고정 소수점 invariant 글자,
-/// DATE = <c>yyyy-MM-ddTHH:mm:ss</c>, TIMESTAMP = <c>yyyy-MM-ddTHH:mm:ss.fffffff</c>(TZ 는 끝에 <c>zzz</c>),
+/// DATE = <c>yyyy-MM-ddTHH:mm:ss</c>, TIMESTAMP = <c>yyyy-MM-ddTHH:mm:ss.fffffff</c>(100ns 아래 자리가 있으면 9자리,
+/// TZ 는 끝에 <c>zzz</c>),
 /// RAW = 대문자 16진수, 문자 = 그대로. 변환은 T9 의 <c>FailedRowKeys</c> 가 맡는다.
 /// </summary>
 public sealed record FailedRow(string Table, IReadOnlyDictionary<string, string?> Key, string Error);

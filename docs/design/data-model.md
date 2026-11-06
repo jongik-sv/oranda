@@ -29,6 +29,8 @@
 | `{data}/layouts/{id}.json` | 이름 붙인 레이아웃(창 → 레이아웃 이름 붙여 저장) | JSON | `LayoutDocument`(+`name`, 창 위치 없음) | 2.5 |
 | `{data}/workspaces/{id}.json` | 작업 공간(탭 목록) | JSON | `Workspace` | 2.6 |
 | `{data}/autosave/{workspaceId}.json` | 복구용 자동 저장(10 s 간격) | JSON | `Workspace` (같은 스키마) | 2.6 |
+| `{data}/copy-jobs/{작업 이름}.json` | 접속 간 데이터 복사 작업(1 파일 = 1 작업) | JSON | `CopyJob` | 2.7 |
+| `{data}/logs/copy-runs/{yyyyMMdd-HHmmss}-{작업 Id}.jsonl` | 데이터 복사 실행 기록(1 파일 = 1 실행) | JSON Lines | — | 2.8 |
 | `{data}/oranda.db` (+ `-wal`, `-shm`) | 실행 이력, 메타데이터 캐시, 변경 일지 | SQLite | — | 3 |
 | `{data}/credentials/{hash}.bin` | **Windows 만**. DPAPI(현재 사용자)로 암호화한 비밀 | 바이너리 | — | 5 |
 | `{data}/logs/` | Serilog 파일(7일 보관) | 텍스트 | — | 범위 밖 |
@@ -312,6 +314,57 @@ select * from emp where empno = :empno;
 - 파일을 열면(작업 공간 복원에서 파일을 다시 읽을 때도) 표지 줄부터 파일 끝까지 모든 줄이 `-- ` 로 시작하고 JSON 으로 읽히는 경우에만 블록을 떼어 편집기에는 본문만 보이고 값은 바인드 변수 창에 넣는다(작업 공간에 남은 값이 있으면 그것이 이긴다). 하나라도 어긋나면 떼지 않는다. 형식·방향 이름은 대소문자·공백·밑줄을 가리지 않고 읽는다(`NUMBER`, `IN OUT`).
 - 편집기 글에는 블록이 없으므로 몇 번을 저장해도 블록은 하나다. 저장할 값이 없으면 블록을 쓰지 않아 예전과 같은 바이트가 된다. 바인드 값만 바꾸면 탭은 변경됨(`*`)이 되지 않는다(「모두 저장」은 변경된 탭만 쓴다).
 
+### 2.7 `copy-jobs/{작업 이름}.json` — `CopyJob`
+
+접속 간 데이터 복사(PRD EXP-04, 설계 `docs/superpowers/specs/2026-11-06-cross-connection-data-copy-design.md`)의 작업 파일이다. 직렬화는 1.3 의 공통 규칙을 따르며 문맥은 Core 의 `CopyJobJsonContext` 다. 현재 버전 상수는 `CopyJobSchema.Current` = **1** 이다(`SchemaVersions` 에 넣지 않고 복사 쪽에 둔다).
+
+- 파일 이름은 작업 이름에서 만든다(파일 이름에 못 쓰는 글자와 제어 문자는 `_` 로 바꾸고, UTF-8 80바이트까지). 겹치면 `{이름} (2).json` 처럼 번호를 붙인다. 작업은 파일 이름이 아니라 `id` 로 찾는다.
+- 비밀번호 필드는 모델에 없다. 해시 마스킹의 비밀 값(`maskSalt`)은 들어 있으며, 작업을 내보내고 가져와도 같은 값을 써서 서로 복사한 데이터끼리 조인이 맞게 한다.
+- `schemaVersion` 이 현재보다 크면 읽기 전용으로 연다(4.1 의 미래 버전 규칙). 저장·이름 바꾸기·복제·내보내기는 하지 않고 삭제만 한다. 아직 상향 변환기는 없다.
+- 가져오기는 기존 작업을 덮어쓰지 않는다. `id` 나 이름이 겹치면 새 `id` 와 ` (2)` 를 붙인 이름으로 저장한다. 가져오기와 복제는 `lastRun` 을 비운다. `schemaVersion` 이 현재보다 큰 파일은 열기는 읽기 전용이지만 가져오기는 거부한다(`InvalidDataException`).
+
+| 필드 | 형식 | 필수 | 기본값 | 설명 |
+|---|---|---|---|---|
+| `schemaVersion` | int | ● | 1 | |
+| `id` | string | ● | | 작업 식별자 |
+| `name` | string | ● | | 표시 이름 |
+| `source`, `target` | `ConnectionRef` | ● | | 접속 참조. `name`(접속 이름), `user`(사용자 이름), `idHint`(Guid, 같은 PC 에서 빨리 찾기 위한 힌트, 선택). 비밀번호는 없다 |
+| `sourceOwner`, `targetOwner` | string | ● | | 원본·대상 표 소유자 |
+| `period` | `CopyPeriod` | ○ | `{kind:"None"}` | `kind` = `None`·`LastWeek`·`LastMonth`·`Last3Months`·`PreviousMonth`·`Custom`, `from`·`to`(Custom 일 때만) |
+| `tables[]` | `TableRule[]` | ○ | `[]` | 규칙 목록 |
+| `tables[].table` | string | ● | | 표 이름. 화면이 표 추가 때 대문자로 바꿔 저장한다(파일 형식이 강제하지는 않는다) |
+| `tables[].kind` | `RuleKind` | ● | | `All`·`Period`·`ParentKey`·`Custom`·`Exclude` |
+| `tables[].action` | `TargetAction` | ● | | `DeleteAllInsert`·`DeleteRangeInsert`·`AppendOnly`·`MergeByPk`·`Recreate` |
+| `tables[].periodColumns[]` | `PeriodColumn[]` | ○ | `[]` | 0~2개(2개면 OR). `column`, `stringFormat`(없으면 DATE·TIMESTAMP 열) |
+| `tables[].parent` | `ParentLink` | ○ | null | `parentTable`, `childColumns[]`, `parentColumns[]`, `foreignKeyName` |
+| `tables[].customWhere` | string | ○ | null | `WHERE` 뒤에 올 조건 |
+| `tables[].masks[]` | `MaskRule[]` | ○ | `[]` | `column`, `kind`(`Fixed`·`KeepFirst`·`KeepLast`·`Hash`·`Null`), `value`, `count` |
+| `tables[].skipColumns[]` | string[] | ○ | `[]` | 복사하지 않는 열 |
+| `options` | `CopyOptions` | ○ | | `batchSize`(5000), `commit`(`PerTable`·`PerBatch`·`AtEnd`, 기본 `PerTable`), `disableTriggersByDefault`(false), `maxFailedRows`(100), `sequenceGapConfirm`(10000000) |
+| `sequences[]` | `SequenceRule[]` | ○ | `[]` | 시퀀스 보정 연결. `sequence`, `table`, `column` |
+| `consistentRead` | bool | ○ | true | 모든 표를 같은 시점 기준으로 읽기 |
+| `maskSalt` | string | ● | | 해시 마스킹 비밀 값. 32바이트 난수의 Base64. 작업을 만들 때 한 번 정한다 |
+| `lastRun` | `LastRunInfo` | ○ | null | 마지막 실행. `at`, `outcome`(`Succeeded`·`PartiallyFailed`·`Failed`·`Stopped`), `rows`(끝난 뒤 센 대상 건수의 합. 건수를 세지 못한 표는 합에서 빼고, 모든 표를 세지 못했으면 `lastRun` 을 쓰지 않는다) |
+
+### 2.8 `logs/copy-runs/*.jsonl` — 복사 실행 기록
+
+복사를 실행할 때마다 파일 하나를 만든다. 한 줄에 JSON 객체 하나를 덧붙이고 줄마다 디스크까지 flush 한다. 트리거·FK 를 끈 직후 앱이 죽어도 끈 목록이 남게 하려는 것이다(설계 9장). 파일 이름은 `{yyyyMMdd-HHmmss}-{작업 Id}.jsonl` 이고, 같은 초에 같은 작업을 다시 시작하면 `{yyyyMMdd-HHmmss}.{n}-{작업 Id}.jsonl` 이 된다. 모든 줄에 `type` 이 있고, `at` 은 UTC ISO 8601 문자열이다(`startedAt` 만 시작한 시각을 PC 의 시간대 오프셋 그대로 쓴다).
+
+| `type` | 쓰는 때 | 필드 |
+|---|---|---|
+| `header` | 첫 줄 | `schemaVersion`(= `CopyJobSchema.Current`), `jobId`, `jobName`, `source`, `target`(접속 이름), `periodFrom`, `periodTo`(`yyyy-MM-ddTHH:mm:ss`, 없으면 null), `startedAt` |
+| `disabled` | 트리거·FK 를 끈 직후 | `at`, `objects[]`(`kind` = `Trigger`·`ForeignKey`, `owner`, `table`, `name`) |
+| `statement` | 대상에서 문장을 실행한 뒤 | `at`, `sql`. 「테이블 다시 만들기」는 첫 `DROP` 전에 보존 DDL 을 `-- 보존 DDL` 줄로 쓴다(아래) |
+| `table` | 표 하나가 끝난 뒤 | `at`, `table`, `sourceRows`, `targetRows`, `elapsedMs`, `outcome`, `message`(선택) |
+| `failedRow` | 넣지 못한 행이 확정될 때 | `at`, `table`, `key`(키 열 이름 → 글자), `error` |
+| `complete` | 마지막 | `at`, `outcome` |
+| `recovered` | 「다시 켜기」로 복구한 뒤 | `at` |
+
+- `complete` 도 `recovered` 도 없는 기록이 「끝나지 않은 실행」이다. 작업을 열 때 이런 기록의 `disabled` 줄로 다시 켜지 못한 객체를 찾는다. 마지막 줄이 앱이 죽으며 잘려 있으면 그 줄은 건너뛰어 읽고, `recovered` 를 덧붙일 때는 줄을 먼저 끊는다.
+- **행 값은 쓰지 않는다**(설계 4장). `failedRow.key` 의 값은 키 열 값 하나뿐이다. 값 글자 형식은 숫자 = 고정 소수점 invariant 글자, DATE = `yyyy-MM-ddTHH:mm:ss`, TIMESTAMP = `yyyy-MM-ddTHH:mm:ss.fffffff`(100ns 아래 자리가 있으면 9자리로 쓴다. 시간대는 끝에 `zzz`), RAW = 대문자 16진수, 문자 = 그대로다. 마스킹한 열은 키가 될 수 없어서 마스킹 대상 값은 기록에 들어가지 않는다.
+- **보존 DDL.** 「테이블 다시 만들기」는 표를 지우기 전에 대상 표의 트리거, 다른 계정에 준 권한, 이 표를 참조하던 FK 의 DDL 과 작업 안 표끼리의 FK 를 `statement` 줄로 쓴다. 첫 줄은 `-- 보존 DDL: 다시 만들 표 A, B(옛 표는 휴지통으로). 다시 만들기가 끝나지 않았으면 아래 문장을 직접 실행하세요.` 이고, 이어서 문장마다 `-- 보존 DDL {표}: {DDL}` 이 온다. 이 줄은 **실행한 문장이 아니다**(주석으로 시작한다). 이 기록을 쓰지 못하면 아무 표도 지우지 않고 멈춘다. 앱이 죽어도 이 줄로 되살릴 수 있다. 미완료 실행 화면에는 아직 나오지 않는다(후속).
+- 결과에서 뺀 실패 행(적재를 끝내지 못한 표의 행)이 기록에는 남을 수 있다. 「배치마다 커밋」에서 앞 배치를 커밋할 때 이미 `failedRow` 로 썼기 때문이다. 그 표의 `table` 줄 메시지가 이 행들을 덮는 것으로 본다(기록에 무효 표시 줄은 없다).
+
 ---
 
 ## 3. `oranda.db` SQLite 스키마
@@ -528,6 +581,8 @@ connections.json ◀────── credentialRef 문자열만 저장 ("orand
 | `formatter/*.json` | 없음 | 서식 옵션만 | 시험 ① |
 | `keymaps/*.json` | 없음 | 명령 ID·키만 | 시험 ① |
 | `layout.json` | 없음 | 좌표·도구 ID만 | 시험 ① |
+| `copy-jobs/*.json` | 접속 `user`, `customWhere`(사용자가 쓴 조건), `maskSalt` | 비밀번호 필드 없음. 접속은 이름·사용자·ID 힌트만 저장한다. `maskSalt` 는 해시 마스킹 비밀 값이며 작업 공유 때 함께 간다(설계 8.5) | `CopyJobStoreTests.Saved_file_never_contains_password` |
+| `logs/copy-runs/*.jsonl` | 실패 행의 키 열 값, 실행한 문장 | 행 값은 쓰지 않고 키 열 값만 쓴다. 마스킹 대상 열은 키가 될 수 없다(설계 8.5) | — |
 | `workspaces/*.json`, `autosave/*.json` | `tabs[].content`(사용자가 쓴 SQL 본문), `tabs[].binds[].value`(바인드 값) | 사용자 작성 내용이므로 가리지 않는다. 대신 접속 비밀번호를 앱이 넣는 경로는 없다. 이름에 `pass`·`pwd`·`secret`·`token` 이 든 바인드는 저장하지 않는다(이력 가림과 같은 규칙, Core `SensitiveBindNames`) | 시험 ② + 바인드 저장 시험 |
 | SQL 편집기의 `.sql` 파일(사용자 폴더) | 끝 바인드 블록(2.6) | 위와 같은 규칙으로 비밀로 보이는 바인드는 넣지 않는다 | 바인드 저장 시험 |
 | `oranda.db` `history.sql_text` | `IDENTIFIED BY …`, `CONNECT u/p@…` 같은 문장 | 기록 전 5.3 가림 규칙 적용 | 시험 ③ |
