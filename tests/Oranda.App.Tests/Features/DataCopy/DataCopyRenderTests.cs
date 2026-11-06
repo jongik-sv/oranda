@@ -534,6 +534,49 @@ public sealed class DataCopyRenderTests : IDisposable
     });
 
     [Fact]
+    public Task Target_schema_choices_follow_the_default_source_and_an_empty_cell_shows_the_default_target() => HeadlessHost.Run(async () =>
+    {
+        var h = new DataCopyHarness();
+        var (window, vm) = await OpenOwnersWindowAsync(h);
+        try
+        {
+            vm.Editor.SelectedRule = vm.Editor.Rules[0]; // APP.CUSTOMERS → TGT_USER(기본을 따름)
+            Settle(window);
+            var targetOwner = window.FindControl<ComboBox>("TargetOwnerBox")!;
+            Assert.Equal("APP", targetOwner.Items.OfType<TargetOwnerOption>().First().Owner);
+
+            // 기본 원본 계정을 바꾸면 「원본과 같음」 이 새 계정을 가리킨다(목록을 다시 만든다).
+            vm.Editor.SourceOwner = " app5 ";
+            Settle(window);
+            Assert.Equal("APP5", vm.Editor.Rules[0].SourceOwner);
+            Assert.Equal("APP5", targetOwner.Items.OfType<TargetOwnerOption>().First().Owner);
+            Assert.Equal("TGT_USER", targetOwner.Text);
+
+            // 대상 칸을 비우면 실제로 쓰는 기본 대상을 흐린 글자로 보인다.
+            targetOwner.Text = string.Empty;
+            Settle(window);
+            Assert.Equal(string.Empty, vm.Editor.Rules[0].TargetOwner);
+            var grid = window.FindControl<MonitorGrid>("RuleGrid")!.Model!;
+            Assert.Equal("TGT_USER", grid.GetCellText(0, 2));
+            Assert.True(grid.IsMuted(0, 2));
+            Assert.False(grid.IsWarned(0, 2));
+            Shots(window, "1-rules-default-target");
+
+            // 기본 대상이 접속 계정이 아니게 되면 비운 칸의 기본 대상도 경고색.
+            vm.Editor.TargetOwner = "qa";
+            Settle(window);
+            var warned = window.FindControl<MonitorGrid>("RuleGrid")!.Model!;
+            Assert.Equal("QA (!)", warned.GetCellText(0, 2));
+            Assert.True(warned.IsWarned(0, 2));
+            Assert.Equal("QA", vm.Editor.BuildJob().Tables[0].TargetOwner);
+        }
+        finally
+        {
+            window.Close();
+        }
+    });
+
+    [Fact]
     public Task Run_confirmation_dialog_lists_schemas_and_defaults_to_cancel() => HeadlessHost.Run(async () =>
     {
         var h = new DataCopyHarness();

@@ -21,6 +21,22 @@ public static class CopyOwners
     /// </summary>
     public static bool SameOwner(string? a, string? b) => string.Equals(a, b, StringComparison.OrdinalIgnoreCase);
 
+    /// <summary>
+    /// 화면에 적은 계정 이름을 사전 이름으로 정리한다(<see cref="CopyTableInput.Parse"/> 관례): 앞뒤 공백을 지우고 대문자로 바꾼다.
+    /// 큰따옴표로 감싼 이름(<c>"app"</c>)만 따옴표를 벗기고 글자 그대로 둔다(안의 <c>""</c> 는 <c>"</c> 하나). 비면 빈 글자.
+    /// 계정은 문장에 따옴표로 그대로 들어가므로, 정리한 뒤에는 글자 그대로 비교해도 된다.
+    /// </summary>
+    public static string NormalizeOwner(string? text)
+    {
+        var trimmed = (text ?? string.Empty).Trim();
+        if (trimmed.Length >= 2 && trimmed[0] == '"' && trimmed[^1] == '"')
+        {
+            return trimmed[1..^1].Replace("\"\"", "\"", StringComparison.Ordinal);
+        }
+
+        return trimmed.ToUpperInvariant();
+    }
+
     /// <summary><see cref="SameOwner"/> 와 같은 규칙의 비교자(계정 이름 집합·사전용).</summary>
     public static StringComparer OwnerComparer => StringComparer.OrdinalIgnoreCase;
 

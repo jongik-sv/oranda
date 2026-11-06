@@ -17,9 +17,10 @@ public sealed record RunConfirmation(string SessionUser, IReadOnlyList<RunOwnerL
         ArgumentNullException.ThrowIfNull(job);
         ArgumentNullException.ThrowIfNull(sessionUser);
         var groups = job.Tables.Where(r => r.Kind != RuleKind.Exclude)
-            .GroupBy(r => CopyOwners.Target(job, r), CopyOwners.OwnerComparer)
+            .GroupBy(r => CopyOwners.Target(job, r), StringComparer.Ordinal)
             .ToList();
-        if (groups.Count == 0 || (groups.Count == 1 && CopyOwners.SameOwner(groups[0].Key, sessionUser)))
+        // 계정은 정리한 이름(대문자, 따옴표로 감싸 적은 이름만 그대로)이고 문장에 따옴표로 그대로 들어가므로 글자 그대로 비교한다.
+        if (groups.Count == 0 || (groups.Count == 1 && string.Equals(groups[0].Key, sessionUser, StringComparison.Ordinal)))
         {
             return null;
         }
@@ -28,7 +29,7 @@ public sealed record RunConfirmation(string SessionUser, IReadOnlyList<RunOwnerL
             g.Key,
             g.Count(),
             string.Join(", ", g.GroupBy(r => r.Action).Select(a => ActionText(a.Key) + " " + a.Count().ToString(System.Globalization.CultureInfo.InvariantCulture))),
-            CopyOwners.SameOwner(g.Key, sessionUser))).ToList();
+            string.Equals(g.Key, sessionUser, StringComparison.Ordinal))).ToList();
         return new RunConfirmation(sessionUser, lines);
     }
 

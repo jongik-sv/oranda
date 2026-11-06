@@ -294,4 +294,15 @@ public class CopyOwnersTests
         Assert.Equal(["APP"], CopyOwners.OtherTargetOwners(job, "dst"));
         Assert.Equal(["DST"], CopyOwners.OtherTargetOwners(job, "APP"));
     }
+
+    [Theory]
+    [InlineData(" app ", "APP")]
+    [InlineData("App2", "APP2")]
+    [InlineData("\"app\"", "app")]
+    [InlineData(" \"My \"\"X\"\"\" ", "My \"X\"")]
+    [InlineData("", "")]
+    [InlineData(null, "")]
+    [InlineData("\"", "\"")]
+    public void Normalize_owner_follows_the_table_input_rules(string? text, string expected)
+        => Assert.Equal(expected, CopyOwners.NormalizeOwner(text));
 }

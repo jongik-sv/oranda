@@ -408,7 +408,7 @@
                           <TextBlock Grid.Row="1" Text="대상 계정" />
                           <!-- 글자는 코드(SyncRulePanel)가 고른 규칙과 맞춘다: 바인딩으로 두면 규칙을 바꾸는 순간 앞 규칙에 새 규칙 값이 써진다. -->
                           <ComboBox x:Name="TargetOwnerBox" Grid.Row="1" Grid.Column="1" Classes="compact" HorizontalAlignment="Stretch" IsEditable="True"
-                                    AutomationProperties.Name="대상 계정"
+                                    AutomationProperties.Name="대상 계정" PlaceholderText="{Binding DefaultTarget}"
                                     ToolTip.Tip="이 표를 넣을 대상 계정입니다. 고르거나 직접 적습니다.">
                             <ComboBox.ItemTemplate>
                               <DataTemplate x:DataType="dc:TargetOwnerOption">

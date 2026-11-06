@@ -18,6 +18,9 @@ public sealed record ConnectionOption(ConnectionProfile Profile, bool IsEnabled,
 /// <summary>상세 칸 「대상 계정」 콤보의 한 줄. 고르면 칸 글자가 <see cref="Owner"/> 가 된다(<see cref="ToString"/>).</summary>
 public sealed record TargetOwnerOption(string Owner, string Hint)
 {
+    /// <summary>그 규칙의 기본 대상(<see cref="RuleEditorViewModel.DefaultTargetFor(TableRuleViewModel)"/>)인지. 고르면 다시 기본 계정을 따른다.</summary>
+    public bool IsDefault { get; init; }
+
     public override string ToString() => Owner;
 }
 
@@ -78,15 +81,52 @@ public sealed partial class RuleEditorViewModel : ViewModelBase
     // 작업을 올리는 동안에는 기본 계정이 바뀌어도 규칙을 따라 바꾸지 않는다(규칙은 저장된 계정 그대로).
     private bool _loading;
 
-    partial void OnSourceOwnerChanged(string? oldValue, string newValue) => RebaseRules(oldValue, newValue, TargetOwner, TargetOwner);
+    // 사전에서 풀린 계정 이름을 기본 계정 칸에 넣는 중(정리하지 않는다).
+    private bool _dictionaryName;
 
-    partial void OnTargetOwnerChanged(string? oldValue, string newValue) => RebaseRules(SourceOwner, SourceOwner, oldValue, newValue);
+    private void SetDictionaryOwner(Action set)
+    {
+        _dictionaryName = true;
+        try
+        {
+            set();
+        }
+        finally
+        {
+            _dictionaryName = false;
+        }
+    }
+
+    // 사용자가 적은 기본 계정은 사전 이름으로 정리한다(앞뒤 공백·대문자, 큰따옴표로 감싼 이름만 그대로). 저장된 작업·사전에서 풀린 이름은 그대로 둔다.
+    partial void OnSourceOwnerChanged(string value)
+    {
+        if (!_loading && !_dictionaryName && CopyOwners.NormalizeOwner(value) is var normalized && !string.Equals(normalized, value, StringComparison.Ordinal))
+        {
+            SetDictionaryOwner(() => SourceOwner = normalized); // 정리한 값은 다시 정리하지 않는다("qa" → qa → QA 가 되지 않게)
+            return;
+        }
+
+        RebaseRules();
+    }
+
+    partial void OnTargetOwnerChanged(string value)
+    {
+        if (!_loading && !_dictionaryName && CopyOwners.NormalizeOwner(value) is var normalized && !string.Equals(normalized, value, StringComparison.Ordinal))
+        {
+            SetDictionaryOwner(() => TargetOwner = normalized);
+            return;
+        }
+
+        RebaseRules();
+    }
 
     /// <summary>
-    /// 기본 계정을 바꿀 때 규칙 계정을 맞추는 단 한 곳: 원본 계정이 옛 기본 원본 계정과 같던 규칙은 새 기본 원본 계정으로,
-    /// 대상 계정이 옛 기본 대상 계정과 같던 규칙은 새 기본 대상 계정으로 바꾼다. 다른 계정 규칙(시노님으로 더한 APP2.ORDERS 등)은 그대로다.
+    /// 기본 계정을 바꿀 때 규칙 계정을 맞추는 단 한 곳. 규칙마다 「기본을 따름」 표시(<see cref="TableRuleViewModel.FollowsDefaultSource"/>·
+    /// <see cref="TableRuleViewModel.FollowsDefaultTarget"/>)를 보고 따르는 규칙만 바꾼다. 옛 값과 같은지로 고르지 않으므로
+    /// 기본 계정을 A→B→A 로 바꾸면 처음과 같아진다(원래 B 에 쓰던 규칙이 A 로 끌려가지 않는다).
+    /// 다른 계정 규칙(시노님으로 더한 APP2.ORDERS 등)·사용자가 대상 계정을 고른 규칙은 그대로다.
     /// </summary>
-    private void RebaseRules(string? oldSource, string newSource, string? oldTarget, string newTarget)
+    private void RebaseRules()
     {
         if (_loading)
         {
@@ -95,10 +135,44 @@ public sealed partial class RuleEditorViewModel : ViewModelBase
 
         foreach (var rule in Rules)
         {
-            var source = CopyOwners.SameOwner(rule.SourceOwner, oldSource ?? string.Empty) ? newSource : rule.SourceOwner;
-            var target = CopyOwners.SameOwner(rule.TargetOwner, oldTarget ?? string.Empty) ? newTarget : rule.TargetOwner;
-            rule.Rebase(source, target);
+            var source = rule.FollowsDefaultSource ? SourceOwner : rule.SourceOwner;
+            rule.Rebase(source, DefaultTargetFor(rule.FollowsDefaultSource, source));
         }
+    }
+
+    /// <summary>기본 대상 계정 칸이 비었으면 기본 원본 계정(저장할 때와 같다).</summary>
+    private string EffectiveDefaultTarget => string.IsNullOrWhiteSpace(TargetOwner) ? SourceOwner : TargetOwner;
+
+    // 규칙의 기본 대상(결정 B-1): 원본이 기본 원본 계정을 따르면 작업 기본 대상 계정, 아니면 원본 계정 이름 그대로.
+    private string DefaultTargetFor(bool followsSource, string source) => followsSource ? EffectiveDefaultTarget : source;
+
+    /// <summary>규칙의 기본 대상 계정(대상 칸이 비면 쓰는 계정, 「기본 대상」 고르기).</summary>
+    public string DefaultTargetFor(TableRuleViewModel rule)
+    {
+        ArgumentNullException.ThrowIfNull(rule);
+        return DefaultTargetFor(rule.FollowsDefaultSource, rule.SourceOwner);
+    }
+
+    /// <summary>
+    /// 상세 칸 「대상 계정」 콤보에서 사용자가 고르거나 적은 값. 적은 이름은 사전 이름으로 정리한다(<see cref="CopyOwners.NormalizeOwner"/>).
+    /// 목록의 「기본 대상」 항목(<see cref="TargetOwnerOption.IsDefault"/>)을 고르거나 칸을 비우면 다시 기본을 따르고, 그 밖에는 따름을 푼다.
+    /// </summary>
+    public static void ChooseTargetOwner(TableRuleViewModel rule, string? text, TargetOwnerOption? chosen = null)
+    {
+        ArgumentNullException.ThrowIfNull(rule);
+        if (chosen is { } option && string.Equals(option.Owner, text?.Trim(), StringComparison.Ordinal))
+        {
+            rule.SetFollowedTarget(option.Owner, option.IsDefault);
+            return;
+        }
+
+        var owner = CopyOwners.NormalizeOwner(text);
+        if (string.Equals(owner, rule.TargetOwner, StringComparison.Ordinal))
+        {
+            return;
+        }
+
+        rule.TargetOwner = owner;
     }
 
     /// <summary>대상 접속 계정(대문자). 대상을 고르지 않았으면 빈 글자.</summary>
@@ -128,9 +202,13 @@ public sealed partial class RuleEditorViewModel : ViewModelBase
         }
 
         Add(rule.SourceOwner, "원본과 같음");
-        Add(TargetOwner, "기본 대상");
+        Add(EffectiveDefaultTarget, "기본 대상");
         Add(TargetSessionUser, "접속 계정");
-        return [.. options.Select(o => new TargetOwnerOption(o.Owner, string.Join(" · ", o.Hints.Select(DataCopyText.L))))];
+        var ruleDefault = DefaultTargetFor(rule);
+        return [.. options.Select(o => new TargetOwnerOption(o.Owner, string.Join(" · ", o.Hints.Select(DataCopyText.L)))
+        {
+            IsDefault = string.Equals(o.Owner, ruleDefault, StringComparison.Ordinal),
+        })];
     }
 
     [ObservableProperty]
@@ -283,13 +361,20 @@ public sealed partial class RuleEditorViewModel : ViewModelBase
         SequenceGapConfirm = job.Options.SequenceGapConfirm;
         Rules.Clear();
         // 규칙마다 실제 계정을 풀어 둔다(비어 있던 계정 = 작업 기본 계정). 저장할 때는 늘 계정을 적어 저장한다.
+        // 「기본을 따름」: 원본 계정이 비었거나 작업 기본 원본 계정이면 따르고, 대상 계정이 비었거나 그 규칙의 기본 대상(MapTarget)이면 따른다.
+        _removedOrigins.Clear();
         foreach (var rule in job.Tables)
         {
-            Rules.Add(new TableRuleViewModel(rule, CopyOwners.Source(job, rule), CopyOwners.Target(job, rule))
+            var ruleSource = CopyOwners.Source(job, rule);
+            var vm = new TableRuleViewModel(rule, ruleSource, CopyOwners.Target(job, rule))
             {
                 Origin = rule,
                 SessionUser = TargetSessionUser,
-            });
+                FollowsDefaultSource = string.IsNullOrEmpty(rule.SourceOwner) || string.Equals(rule.SourceOwner, job.SourceOwner, StringComparison.Ordinal),
+                FollowsDefaultTarget = string.IsNullOrEmpty(rule.TargetOwner) || string.Equals(rule.TargetOwner, CopyOwners.MapTarget(job, ruleSource), StringComparison.Ordinal),
+            };
+            vm.DefaultTarget = DefaultTargetFor(vm); // 대상 계정은 저장된 글자 그대로 둔다
+            Rules.Add(vm);
         }
 
         SelectedRule = Rules.FirstOrDefault();
@@ -298,7 +383,26 @@ public sealed partial class RuleEditorViewModel : ViewModelBase
     }
 
     /// <summary>화면에 없는 필드(마지막 실행·식별자 등)의 기준 작업을 바꾼다. 실행·이름 바꾸기 뒤 옛 값으로 덮어쓰지 않게 한다.</summary>
-    public void UpdateBase(CopyJob job) => _loaded = job;
+    /// <remarks>
+    /// 새 기준 작업의 규칙이 이 화면이 만든 규칙(<see cref="TableRuleViewModel.LastBuilt"/>)이면 줄마다 그 규칙을 <see cref="TableRuleViewModel.Origin"/> 으로
+    /// 다시 잇는다(그래야 다음 저장이 시퀀스 연결을 그 규칙의 새 키로 잇는다).
+    /// </remarks>
+    public void UpdateBase(CopyJob job)
+    {
+        ArgumentNullException.ThrowIfNull(job);
+        _loaded = job;
+        var tables = new HashSet<TableRule>(job.Tables, ReferenceEqualityComparer.Instance);
+        foreach (var rule in Rules)
+        {
+            if (rule.LastBuilt is { } built && tables.Contains(built))
+            {
+                rule.Origin = built;
+            }
+        }
+    }
+
+    // 지운 규칙(불러온 작업의 규칙). 그 규칙의 시퀀스 연결도 저장할 때 지운다.
+    private readonly HashSet<TableRule> _removedOrigins = new(ReferenceEqualityComparer.Instance);
 
     /// <summary>화면의 값을 작업 모델로 만든다. 접속 참조는 이름과 사용자명, 이 PC 의 ID 는 힌트로만 담는다(설계 6.3).</summary>
     public CopyJob BuildJob()
@@ -308,22 +412,39 @@ public sealed partial class RuleEditorViewModel : ViewModelBase
         var targetOwner = string.IsNullOrWhiteSpace(TargetOwner) ? SourceOwner : TargetOwner;
         var defaults = baseJob with { SourceOwner = sourceOwner, TargetOwner = targetOwner };
 
-        // 규칙마다 계정을 적어 저장한다(묶음 B 설계 1장): 비었으면 기본 원본 계정, 대상은 결정 B-1 의 기본값.
+        // 규칙마다 계정을 적어 저장한다(묶음 B 설계 1장): 비었으면 기본 원본 계정, 대상이 비었으면 그 규칙의 기본 대상(화면에 흐린 글자로 보인 계정).
         TableRule Explicit(TableRuleViewModel vm)
         {
             var rule = vm.ToRule();
             var source = rule.SourceOwner ?? sourceOwner;
-            return rule with { SourceOwner = source, TargetOwner = rule.TargetOwner ?? CopyOwners.MapTarget(defaults, source) };
+            var target = rule.TargetOwner ?? (vm.DefaultTarget.Length > 0 ? vm.DefaultTarget : CopyOwners.MapTarget(defaults, source));
+            var built = rule with { SourceOwner = source, TargetOwner = target };
+            vm.LastBuilt = built;
+            return built;
         }
 
-        var tables = Rules.Select(Explicit).ToList();
-        var built = defaults with { Tables = tables };
+        var pairs = Rules.Select(vm => (Vm: vm, Rule: Explicit(vm))).ToList();
+        var tables = pairs.Select(p => p.Rule).ToList();
+        var job = defaults with { Tables = tables };
 
-        // 시퀀스 연결의 표는 규칙 키다. 기본 계정을 바꿔 키가 달라진 규칙은 새 키로 잇는다.
-        var sequences = baseJob.Sequences.Select(seq =>
-            CopyOwners.Find(baseJob, seq.Table) is { } before && Rules.FirstOrDefault(r => ReferenceEquals(r.Origin, before)) is { } now
-                ? seq with { Table = CopyOwners.Key(built, now.SourceOwner.Length > 0 ? now.SourceOwner : sourceOwner, now.Table) }
-                : seq).ToList();
+        // 시퀀스 연결의 표는 규칙 키다. 기본 계정을 바꿔 키가 달라진 규칙은 새 키로 잇고, 시퀀스 계정이 그 표의 옛 대상 계정이면(예전 작업은
+        // 작업 대상 계정을 적어 두었다) 새 대상 계정으로 함께 옮긴다. 지운 규칙의 시퀀스 연결은 함께 지운다(남기면 점검으로 넘어가지 못한다).
+        var sequences = new List<SequenceRule>();
+        foreach (var seq in baseJob.Sequences)
+        {
+            var before = CopyOwners.Find(baseJob, seq.Table);
+            if (before is not null && pairs.FirstOrDefault(p => ReferenceEquals(p.Vm.Origin, before)) is { Vm: not null } now)
+            {
+                var owner = seq.Owner is { Length: > 0 } o && CopyOwners.SameOwner(o, CopyOwners.Target(baseJob, before))
+                    ? CopyOwners.Target(job, now.Rule)
+                    : seq.Owner;
+                sequences.Add(seq with { Table = CopyOwners.Key(job, now.Rule), Owner = owner });
+            }
+            else if (before is null || !_removedOrigins.Contains(before))
+            {
+                sequences.Add(seq);
+            }
+        }
         return baseJob with
         {
             Name = Name,
@@ -416,7 +537,7 @@ public sealed partial class RuleEditorViewModel : ViewModelBase
     public async Task<TableRuleViewModel> AddTableAsync(CopyTableName table, ISession? sourceSession, CancellationToken ct = default)
     {
         ArgumentNullException.ThrowIfNull(table);
-        if (Rules.FirstOrDefault(r => string.Equals(EffectiveSource(r), table.Owner, StringComparison.Ordinal)
+        if (Rules.FirstOrDefault(r => CopyOwners.SameOwner(EffectiveSource(r), table.Owner)
                                       && string.Equals(r.Table, table.Table, StringComparison.Ordinal)) is { } existing)
         {
             SelectedRule = existing;
@@ -425,7 +546,7 @@ public sealed partial class RuleEditorViewModel : ViewModelBase
 
         if (string.IsNullOrWhiteSpace(SourceOwner))
         {
-            SourceOwner = table.Owner;
+            SetDictionaryOwner(() => SourceOwner = table.Owner); // 사전에서 풀린 이름: 정리하지 않는다
         }
 
         // 대상 소유자는 대상 접속의 사용자(스키마)로 시작한다. 대상을 아직 고르지 않았으면(스키마 브라우저에서 새 작업으로 추가) 원본 표 소유자로
@@ -438,15 +559,20 @@ public sealed partial class RuleEditorViewModel : ViewModelBase
             }
             else
             {
-                TargetOwner = table.Owner;
+                SetDictionaryOwner(() => TargetOwner = table.Owner);
                 _provisionalTargetOwner = table.Owner;
             }
         }
 
-        var target = string.Equals(table.Owner, SourceOwner, StringComparison.Ordinal) ? TargetOwner : table.Owner;
+        // 기본 원본 계정의 표면 원본·대상 모두 기본을 따른다. 다른 계정의 표는 원본은 그대로, 대상은 원본 계정 이름(기본 대상)을 따른다.
+        var followsSource = CopyOwners.SameOwner(table.Owner, SourceOwner);
+        var target = DefaultTargetFor(followsSource, table.Owner);
         var rule = new TableRuleViewModel(new TableRule(table.Table, RuleKind.All, TargetAction.DeleteAllInsert) { WrittenAs = table.WrittenAs }, table.Owner, target)
         {
             SessionUser = TargetSessionUser,
+            FollowsDefaultSource = followsSource,
+            FollowsDefaultTarget = true,
+            DefaultTarget = target,
         };
         Rules.Add(rule);
         SelectedRule = rule;
@@ -502,9 +628,15 @@ public sealed partial class RuleEditorViewModel : ViewModelBase
         return rule.SourceOwner.Length > 0 ? rule.SourceOwner : SourceOwner;
     }
 
+    /// <summary>규칙을 지운다. 그 규칙에 이은 시퀀스 연결도 함께 지운다(저장할 때, <see cref="BuildJob"/>).</summary>
     public void RemoveRule(TableRuleViewModel rule)
     {
-        Rules.Remove(rule);
+        ArgumentNullException.ThrowIfNull(rule);
+        if (Rules.Remove(rule) && rule.Origin is { } origin)
+        {
+            _removedOrigins.Add(origin);
+        }
+
         if (ReferenceEquals(SelectedRule, rule))
         {
             SelectedRule = Rules.FirstOrDefault();

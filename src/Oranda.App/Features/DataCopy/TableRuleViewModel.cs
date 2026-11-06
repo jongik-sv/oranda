@@ -101,15 +101,52 @@ public sealed partial class TableRuleViewModel : ViewModelBase
     [NotifyPropertyChangedFor(nameof(ConditionText))]
     private ParentLink? _parent;
 
-    /// <summary>대상 계정(대상 표 = 이 계정의 <see cref="Table"/>). 상세 칸 콤보에서 고치거나 적는다. 비면 작업 기본 대상 계정.</summary>
+    /// <summary>
+    /// 대상 계정(대상 표 = 이 계정의 <see cref="Table"/>). 상세 칸 콤보에서 고치거나 적는다. 비면 이 규칙의 기본 대상(<see cref="DefaultTarget"/>).
+    /// 기본 계정을 따라 바꾸는 때(<see cref="Rebase"/>) 말고 바꾸면 「기본 대상을 따름」이 풀린다(비우면 다시 따른다).
+    /// </summary>
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(TargetName), nameof(IsTargetSameAsSource), nameof(IsOtherTargetOwner), nameof(OtherTargetOwnerNotice))]
+    [NotifyPropertyChangedFor(nameof(TargetName), nameof(IsTargetSameAsSource), nameof(IsOtherTargetOwner), nameof(OtherTargetOwnerNotice),
+        nameof(EffectiveTarget), nameof(IsTargetDefaultShown))]
     private string _targetOwner = string.Empty;
 
     /// <summary>대상 접속 계정(대문자). 편집 화면이 대상 접속을 고를 때 넣는다. 모르면 빈 글자.</summary>
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(IsOtherTargetOwner), nameof(OtherTargetOwnerNotice))]
     private string _sessionUser = string.Empty;
+
+    /// <summary>
+    /// 이 규칙의 기본 대상 계정: 원본이 기본 원본 계정을 따르면 작업 기본 대상 계정, 아니면 원본 계정 이름 그대로(결정 B-1).
+    /// 대상 칸이 비면 이 계정에 쓴다(그리드에 흐린 글자로 보인다). 편집 화면이 기본 계정이 바뀔 때마다 넣는다.
+    /// </summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(TargetName), nameof(IsTargetSameAsSource), nameof(IsOtherTargetOwner), nameof(OtherTargetOwnerNotice),
+        nameof(EffectiveTarget))]
+    private string _defaultTarget = string.Empty;
+
+    // 기본 계정을 따라 바꾸는 중(따름 표시를 풀지 않는다).
+    private bool _following;
+
+    partial void OnTargetOwnerChanged(string value)
+    {
+        if (!_following)
+        {
+            // 사용자가 고치면 기본을 따르지 않는다. 비우면 기본 대상을 쓴다는 뜻이라 다시 따른다.
+            FollowsDefaultTarget = string.IsNullOrWhiteSpace(value);
+        }
+    }
+
+    /// <summary>원본 계정이 작업 기본 원본 계정을 따르는지. 따르면 기본 원본 계정을 바꿀 때 함께 바뀐다(불러올 때·더할 때 정한다).</summary>
+    public bool FollowsDefaultSource { get; internal set; }
+
+    /// <summary>대상 계정이 이 규칙의 기본 대상(<see cref="DefaultTarget"/>)을 따르는지. 따르면 기본 계정을 바꿀 때 함께 바뀐다.</summary>
+    public bool FollowsDefaultTarget { get; internal set; }
+
+    /// <summary>실제로 쓰는 대상 계정: 칸이 비었으면 <see cref="DefaultTarget"/>.</summary>
+    public string EffectiveTarget => TargetOwner.Trim().Length > 0 ? TargetOwner.Trim() : DefaultTarget;
+
+    /// <summary>대상 칸이 비어 기본 대상을 보이는지(그리드에서 흐린 글자).</summary>
+    public bool IsTargetDefaultShown => TargetOwner.Trim().Length == 0;
 
     private TableInfo? _source;
 
@@ -148,13 +185,16 @@ public sealed partial class TableRuleViewModel : ViewModelBase
     public string? WrittenAs { get; }
 
     /// <summary>작업에서 불러온 규칙이면 그 규칙(시퀀스 연결의 규칙 키를 저장할 때 다시 잇는다). 새로 더한 표면 null.</summary>
-    internal TableRule? Origin { get; init; }
+    internal TableRule? Origin { get; set; }
+
+    /// <summary>마지막으로 <see cref="RuleEditorViewModel.BuildJob"/> 이 이 줄에서 만든 규칙. 기준 작업을 바꿀 때(<see cref="RuleEditorViewModel.UpdateBase"/>) <see cref="Origin"/> 을 다시 잇는 데 쓴다.</summary>
+    internal TableRule? LastBuilt { get; set; }
 
     /// <summary>원본 표 이름 <c>계정.표</c>(계정을 모르면 표 이름만). 상세 칸 머리에 쓴다.</summary>
     public string SourceName => SourceOwner.Length > 0 ? SourceOwner + "." + Table : Table;
 
     /// <summary>대상 표 이름 <c>계정.표</c>.</summary>
-    public string TargetName => TargetOwner.Length > 0 ? TargetOwner + "." + Table : Table;
+    public string TargetName => EffectiveTarget.Length > 0 ? EffectiveTarget + "." + Table : Table;
 
     /// <summary>상세 칸 머리 옆 작은 글: 「← 시노님 ORDERS」. 시노님으로 더하지 않았으면 빈 글자.</summary>
     public string SynonymText => WrittenAs is { } written ? "← " + DataCopyText.L("시노님") + " " + written : string.Empty;
@@ -162,30 +202,98 @@ public sealed partial class TableRuleViewModel : ViewModelBase
     public bool HasSynonym => WrittenAs is not null;
 
     /// <summary>대상 계정이 원본 계정과 같은지(그리드에서 흐린 글자).</summary>
-    public bool IsTargetSameAsSource => CopyOwners.SameOwner(SourceOwner, TargetOwner);
+    public bool IsTargetSameAsSource => string.Equals(SourceOwner, EffectiveTarget, StringComparison.Ordinal);
 
-    /// <summary>대상 계정이 대상 접속 계정이 아닌지(그리드에서 경고색, 상세 칸 안내). 접속을 모르면 거짓.</summary>
-    public bool IsOtherTargetOwner => SessionUser.Length > 0 && TargetOwner.Length > 0
-        && !CopyOwners.SameOwner(TargetOwner.Trim(), SessionUser);
+    /// <summary>
+    /// 실제 대상 계정(<see cref="EffectiveTarget"/>, 칸이 비면 기본 대상)이 대상 접속 계정이 아닌지(그리드에서 경고색, 상세 칸 안내). 접속을 모르면 거짓.
+    /// 계정은 정리한 이름이라(<see cref="CopyOwners.NormalizeOwner"/>) 글자 그대로 비교한다: 문장에 따옴표로 그대로 들어가므로 대소문자가 다르면 다른 계정이다.
+    /// </summary>
+    public bool IsOtherTargetOwner => SessionUser.Length > 0 && EffectiveTarget.Length > 0
+        && !string.Equals(EffectiveTarget, SessionUser, StringComparison.Ordinal);
 
     /// <summary>접속 계정이 아닌 계정에 쓸 때 상세 칸 안내. 아니면 빈 글자.</summary>
     public string OtherTargetOwnerNotice => IsOtherTargetOwner ? DataCopyText.L(DataCopyText.OtherTargetOwner) : string.Empty;
 
     /// <summary>
-    /// 기본 계정이 바뀔 때(<see cref="RuleEditorViewModel"/> 한 곳에서만 부른다): 원본·대상 계정을 새 값으로 바꾼다.
+    /// 기본 계정이 바뀔 때(<see cref="RuleEditorViewModel"/> 한 곳에서만 부른다): 원본 계정·이 규칙의 기본 대상을 새 값으로 바꾸고,
+    /// 대상이 기본을 따르면(<see cref="FollowsDefaultTarget"/>, 칸이 비어 있지 않으면) 대상 계정도 새 기본 대상으로 바꾼다. 따름 표시는 그대로다.
+    /// 원본 계정이 바뀌면 같은 계정 FK 의 부모(부모 계정 = 옛 원본 계정)도 함께 옮긴다. 계정을 넘는 FK 의 부모는 그대로다.
     /// </summary>
-    internal void Rebase(string sourceOwner, string targetOwner)
+    internal void Rebase(string sourceOwner, string defaultTarget)
     {
         if (!string.Equals(SourceOwner, sourceOwner, StringComparison.Ordinal))
         {
+            var old = SourceOwner;
             SourceOwner = sourceOwner;
+            MoveSameOwnerParents(old, sourceOwner);
             OnPropertyChanged(nameof(SourceOwner));
             OnPropertyChanged(nameof(SourceName));
             OnPropertyChanged(nameof(IsTargetSameAsSource));
             OnPropertyChanged(nameof(ConditionText));
         }
 
-        TargetOwner = targetOwner;
+        _following = true;
+        try
+        {
+            DefaultTarget = defaultTarget;
+            if (FollowsDefaultTarget && TargetOwner.Trim().Length > 0)
+            {
+                TargetOwner = defaultTarget;
+            }
+        }
+        finally
+        {
+            _following = false;
+        }
+    }
+
+    /// <summary>편집 화면이 기본 대상만 새로 알릴 때(대상 계정은 그대로). 따름 표시를 건드리지 않는다.</summary>
+    internal void SetFollowedTarget(string targetOwner, bool follows)
+    {
+        _following = true;
+        try
+        {
+            TargetOwner = targetOwner;
+            FollowsDefaultTarget = follows;
+        }
+        finally
+        {
+            _following = false;
+        }
+    }
+
+    // 부모 계정이 옛 원본 계정인 연결(같은 계정 FK)을 새 원본 계정으로 옮긴다. 계정을 적지 않은 연결(null)은 자식 원본 계정을 따르므로 그대로 둔다.
+    private void MoveSameOwnerParents(string oldSource, string newSource)
+    {
+        if (oldSource.Length == 0)
+        {
+            return;
+        }
+
+        ParentLink Move(ParentLink link) => link.ParentOwner is { Length: > 0 } owner && CopyOwners.SameOwner(owner, oldSource)
+            ? link with { ParentOwner = newSource.Length > 0 ? newSource : null }
+            : link;
+
+        var selected = Parent;
+        ParentLink? movedSelected = selected is null ? null : Move(selected);
+        for (var i = 0; i < ParentCandidates.Count; i++)
+        {
+            var moved = Move(ParentCandidates[i]);
+            if (ReferenceEquals(ParentCandidates[i], selected))
+            {
+                movedSelected = moved;
+            }
+
+            if (!ReferenceEquals(moved, ParentCandidates[i]))
+            {
+                ParentCandidates[i] = moved;
+            }
+        }
+
+        if (!ReferenceEquals(movedSelected, selected))
+        {
+            Parent = movedSelected;
+        }
     }
 
     /// <summary>대상 처리가 PK 기준 MERGE 일 때만 「원본에서 지워진 행은 MERGE 가 남깁니다」 안내를 보인다(설계 6.2).</summary>

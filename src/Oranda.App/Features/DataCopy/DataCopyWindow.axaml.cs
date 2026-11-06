@@ -18,6 +18,9 @@ public partial class DataCopyWindow : Window
     private TableRuleViewModel? _rule;
     private bool _syncing;
 
+    // 대상 계정 칸에 사용자가 적는 중(규칙 값이 바뀌어도 칸 글자를 되쓰지 않는다).
+    private bool _typingTarget;
+
     public DataCopyWindow()
     {
         InitializeComponent();
@@ -141,7 +144,9 @@ public partial class DataCopyWindow : Window
 
     private void OnEditorChanged(object? sender, PropertyChangedEventArgs e)
     {
-        if (e.PropertyName is nameof(RuleEditorViewModel.SelectedRule) or nameof(RuleEditorViewModel.Target) or nameof(RuleEditorViewModel.TargetOwner))
+        // 기본 원본 계정을 바꿔도 「원본과 같음」·「기본 대상」 이 달라지므로 대상 계정 목록을 다시 만든다.
+        if (e.PropertyName is nameof(RuleEditorViewModel.SelectedRule) or nameof(RuleEditorViewModel.Target) or nameof(RuleEditorViewModel.TargetOwner)
+            or nameof(RuleEditorViewModel.SourceOwner))
         {
             SyncRulePanel();
         }
@@ -170,7 +175,26 @@ public partial class DataCopyWindow : Window
             ActionBox.ItemsSource = _editor.AvailableActions;
             ActionBox.SelectedItem = _rule.Action;
             AddMaskBox.ItemsSource = _rule.MaskableColumns.ToList();
-            // 대상 계정 고를 거리(원본과 같음·기본 대상·접속 계정). 칸 글자는 규칙의 TargetOwner 에 묶여 있어 목록을 바꿔도 그대로다.
+            RefreshTargetOwnerChoices();
+        }
+        finally
+        {
+            _syncing = false;
+        }
+    }
+
+    // 대상 계정 고를 거리(원본과 같음·기본 대상·접속 계정)를 다시 만든다. 칸 글자는 규칙의 TargetOwner 그대로 둔다(목록을 바꿔도 값이 바뀌지 않게).
+    private void RefreshTargetOwnerChoices()
+    {
+        if (_rule is null || _editor is null)
+        {
+            return;
+        }
+
+        var syncing = _syncing;
+        _syncing = true;
+        try
+        {
             var owner = _rule.TargetOwner;
             TargetOwnerBox.ItemsSource = _editor.TargetOwnerOptions(_rule);
             TargetOwnerBox.SelectedItem = null;
@@ -178,7 +202,7 @@ public partial class DataCopyWindow : Window
         }
         finally
         {
-            _syncing = false;
+            _syncing = syncing;
         }
     }
 
@@ -200,9 +224,14 @@ public partial class DataCopyWindow : Window
             {
                 ActionBox.SelectedItem = _rule.Action;
             }
-            else if (e.PropertyName == nameof(TableRuleViewModel.TargetOwner) && !string.Equals(TargetOwnerBox.Text, _rule.TargetOwner, StringComparison.Ordinal))
+            else if (e.PropertyName == nameof(TableRuleViewModel.TargetOwner) && !_typingTarget
+                     && !string.Equals(TargetOwnerBox.Text, _rule.TargetOwner, StringComparison.Ordinal))
             {
                 TargetOwnerBox.Text = _rule.TargetOwner; // 기본 계정을 바꿔 따라 바뀐 값
+            }
+            else if (e.PropertyName is nameof(TableRuleViewModel.SourceOwner) or nameof(TableRuleViewModel.DefaultTarget))
+            {
+                RefreshTargetOwnerChoices(); // 「원본과 같음」·「기본 대상」 이 가리키는 계정이 바뀌었다
             }
             else if (e.PropertyName == nameof(TableRuleViewModel.HasColumns))
             {
@@ -242,13 +271,37 @@ public partial class DataCopyWindow : Window
                 _syncing = false;
             }
         };
-        // 대상 계정 콤보: 고르거나 적은 글자를 고른 규칙에 돌려준다(코드가 맞추는 동안은 건너뛴다).
+        // 대상 계정 콤보: 고르거나 적은 글자를 고른 규칙에 돌려준다(코드가 맞추는 동안은 건너뛴다). 적은 이름은 사전 이름으로 정리하고
+        // (대문자, 큰따옴표로 감싼 이름만 그대로), 「기본 대상」 항목을 고르거나 비우면 다시 기본 계정을 따른다. 적는 동안에는 칸 글자를 되쓰지 않고 칸을 떠날 때 정리한 글자를 보인다.
         TargetOwnerBox.PropertyChanged += (_, e) =>
         {
-            if (e.Property == ComboBox.TextProperty && !_syncing && _rule is not null && TargetOwnerBox.Text is { } text
-                && !string.Equals(text.Trim(), _rule.TargetOwner, StringComparison.Ordinal))
+            if (e.Property == ComboBox.TextProperty && !_syncing && _rule is not null && _editor is not null && TargetOwnerBox.Text is { } text)
             {
-                _rule.TargetOwner = text.Trim();
+                _typingTarget = true;
+                try
+                {
+                    RuleEditorViewModel.ChooseTargetOwner(_rule, text, TargetOwnerBox.SelectedItem as TargetOwnerOption);
+                }
+                finally
+                {
+                    _typingTarget = false;
+                }
+            }
+        };
+        TargetOwnerBox.SelectionChanged += (_, _) =>
+        {
+            if (!_syncing && _rule is not null && _editor is not null && TargetOwnerBox.SelectedItem is TargetOwnerOption option)
+            {
+                RuleEditorViewModel.ChooseTargetOwner(_rule, option.Owner, option);
+            }
+        };
+        TargetOwnerBox.LostFocus += (_, _) =>
+        {
+            if (_rule is not null && !string.Equals(TargetOwnerBox.Text, _rule.TargetOwner, StringComparison.Ordinal))
+            {
+                _syncing = true;
+                TargetOwnerBox.Text = _rule.TargetOwner;
+                _syncing = false;
             }
         };
         LoadColumnsButton.Click +=async (_, _) => await LoadSelectedColumnsAsync().ConfigureAwait(true);

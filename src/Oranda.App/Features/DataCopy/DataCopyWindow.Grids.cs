@@ -40,7 +40,8 @@ public partial class DataCopyWindow
     [
         new(L("원본 계정"), ColumnDataKind.Text, r => r.SourceOwner),
         new(L("테이블"), ColumnDataKind.Text, r => r.Table),
-        new(L("대상 계정"), ColumnDataKind.Text, r => r.IsOtherTargetOwner ? r.TargetOwner + " (!)" : r.TargetOwner),
+        // 대상 칸이 비면 실제로 쓰는 기본 대상(EffectiveTarget)을 흐린 글자로 보인다. 접속 계정이 아니면 (!) 와 경고색.
+        new(L("대상 계정"), ColumnDataKind.Text, r => r.IsOtherTargetOwner ? r.EffectiveTarget + " (!)" : r.EffectiveTarget),
         new(L("규칙"), ColumnDataKind.Text, r => Text(DataCopyConverters.RuleKindText, r.Kind)),
         new(L("대상 처리"), ColumnDataKind.Text, r => Text(DataCopyConverters.ActionText, r.Action)),
         new(L("조건"), ColumnDataKind.Text, r => L(r.ConditionText)),
@@ -103,7 +104,7 @@ public partial class DataCopyWindow
 
         var editor = vm.Editor;
         _ruleGrid = Bind(RuleGrid, RuleColumns(), r => r);
-        _ruleGrid.CellMuted = (r, col) => col == TargetOwnerColumn && r.IsTargetSameAsSource && !r.IsOtherTargetOwner; // 원본과 같은 계정: 흐린 글자
+        _ruleGrid.CellMuted = (r, col) => col == TargetOwnerColumn && (r.IsTargetSameAsSource || r.IsTargetDefaultShown) && !r.IsOtherTargetOwner; // 원본과 같은 계정·비운 칸의 기본 대상: 흐린 글자
         _ruleGrid.CellWarning = (r, col) => col == TargetOwnerColumn && r.IsOtherTargetOwner; // 접속 계정이 아닌 계정에 씀: 경고색
         _ruleGrid.Attach(editor.Rules, editor, nameof(RuleEditorViewModel.SelectedRule), () => editor.SelectedRule, r => editor.SelectedRule = r);
         RefreshOnChange(editor.Rules, _ruleGrid.Refresh);
