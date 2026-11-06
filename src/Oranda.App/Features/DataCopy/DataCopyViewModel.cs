@@ -43,7 +43,6 @@ public sealed partial class DataCopyViewModel : ViewModelBase, IAsyncDisposable
 
     private readonly SemaphoreSlim _sessionGate = new(1, 1);
     private bool _disposed;
-    private bool _readOnlyJob;
     private ResolvedPeriod? _checkedPeriod;
     private CopyJob? _checkedJob;
     private ConnectionProfile? _checkedSource;
@@ -66,6 +65,14 @@ public sealed partial class DataCopyViewModel : ViewModelBase, IAsyncDisposable
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(CanGoToPrecheck), nameof(CanStartRun))]
     private bool _isBusy;
+
+    /// <summary>
+    /// 열린 작업이 이 앱보다 새 버전 파일이라 읽기 전용으로 열렸는지. 모르는 필드(표마다 계정 등)를 버린 채 실행하면 다른 계정의 표를 지울 수 있으므로
+    /// 저장뿐 아니라 사전 점검·실행도 막는다(묶음 B 설계 2장).
+    /// </summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(CanGoToPrecheck), nameof(CanStartRun), nameof(ReadOnlyJobNotice), nameof(HasReadOnlyJobNotice))]
+    private bool _isReadOnlyJob;
 
     public DataCopyViewModel(DataCopyServices services)
     {
@@ -106,11 +113,28 @@ public sealed partial class DataCopyViewModel : ViewModelBase, IAsyncDisposable
 
     public bool HasJob => CurrentJob is not null;
 
-    /// <summary>점검을 시작할 수 있는지: 열린 작업이 있고, 다른 점검·세션 열기·실행이 도는 중이 아니며, 대상이 읽기 전용이 아닐 때.</summary>
-    public bool CanGoToPrecheck => HasJob && !IsBusy && !Run.IsRunning && !Editor.HasTargetReadOnlyNotice;
+    /// <summary>점검을 시작할 수 있는지: 열린 작업이 있고, 다른 점검·세션 열기·실행이 도는 중이 아니며, 대상이 읽기 전용이 아니고, 새 버전 작업이 아닐 때.</summary>
+    public bool CanGoToPrecheck => HasJob && !IsBusy && !Run.IsRunning && !Editor.HasTargetReadOnlyNotice && !IsReadOnlyJob;
 
-    /// <summary>「복사 실행」: 점검이 통과했고 다른 점검·세션 열기·실행이 도는 중이 아닐 때.</summary>
-    public bool CanStartRun => Precheck.CanRun && !IsBusy && !Run.IsRunning;
+    /// <summary>「복사 실행」: 점검이 통과했고 다른 점검·세션 열기·실행이 도는 중이 아니며, 새 버전 작업이 아닐 때.</summary>
+    public bool CanStartRun => Precheck.CanRun && !IsBusy && !Run.IsRunning && !IsReadOnlyJob;
+
+    /// <summary>새 버전 작업이면 점검·실행을 막은 이유. 아니면 빈 글자.</summary>
+    public string ReadOnlyJobNotice => IsReadOnlyJob ? DataCopyText.L(DataCopyText.NewerVersionJob) : string.Empty;
+
+    public bool HasReadOnlyJobNotice => IsReadOnlyJob;
+
+    // 새 버전 작업이면 상태 줄에 이유를 남기고 참.
+    private bool ReadOnlyJobBlocked()
+    {
+        if (!IsReadOnlyJob)
+        {
+            return false;
+        }
+
+        Say(DataCopyText.NewerVersionJob, error: true);
+        return true;
+    }
 
     public bool HasUnfinished => UnfinishedRuns.Count > 0;
 
@@ -204,11 +228,16 @@ public sealed partial class DataCopyViewModel : ViewModelBase, IAsyncDisposable
         Precheck.Reset();
         Run.Reset();
         _checkedPeriod = null;
-        _readOnlyJob = Jobs.Items.FirstOrDefault(i => i.Job.Id == job.Id)?.IsReadOnly ?? false;
-        Run.SaveLastRun = !_readOnlyJob;
+        IsReadOnlyJob = Jobs.Items.FirstOrDefault(i => i.Job.Id == job.Id)?.IsReadOnly ?? false;
+        Run.SaveLastRun = !IsReadOnlyJob;
         var source = ConnectionRelinker.Resolve(job.Source, _profiles, isTarget: false);
         var target = ConnectionRelinker.Resolve(job.Target, _profiles, isTarget: true);
         var notices = new List<string>();
+        if (IsReadOnlyJob)
+        {
+            notices.Add(DataCopyText.NewerVersionJob);
+        }
+
         if (source.Profile is null && !string.IsNullOrEmpty(job.Source.Name))
         {
             notices.Add(DataCopyText.SourceNotFound(job.Source.Name));
@@ -387,7 +416,7 @@ public sealed partial class DataCopyViewModel : ViewModelBase, IAsyncDisposable
     /// <summary>1단계 → 2단계: 입력을 확인하고 작업을 저장한 뒤 세션을 열어 사전 점검을 돌린다.</summary>
     public async Task GoToPrecheckAsync(CancellationToken ct = default)
     {
-        if (CurrentJob is null || IsBusy || Run.IsRunning)
+        if (CurrentJob is null || IsBusy || Run.IsRunning || ReadOnlyJobBlocked())
         {
             return; // 점검·세션 열기가 도는 중에 겹쳐 시작하지 않는다
         }
@@ -406,7 +435,7 @@ public sealed partial class DataCopyViewModel : ViewModelBase, IAsyncDisposable
 
             var job = Editor.BuildJob();
             CurrentJob = job;
-            if (_services.Store is { } store && !_readOnlyJob)
+            if (_services.Store is { } store && !IsReadOnlyJob)
             {
                 await store.SaveAsync(job, ct).ConfigureAwait(true);
             }
@@ -612,7 +641,7 @@ public sealed partial class DataCopyViewModel : ViewModelBase, IAsyncDisposable
     /// </summary>
     public async Task ApplyChoiceAsync(CheckItemViewModel item, CheckChoice choice, CancellationToken ct = default)
     {
-        if (CurrentJob is null || _sessions is null || IsBusy || Precheck.IsRunning || Run.IsRunning
+        if (CurrentJob is null || _sessions is null || IsBusy || Precheck.IsRunning || Run.IsRunning || IsReadOnlyJob
             || PrecheckViewModel.ApplyJobChoice(CurrentJob, item, choice) is not { } changed)
         {
             return;
@@ -628,7 +657,7 @@ public sealed partial class DataCopyViewModel : ViewModelBase, IAsyncDisposable
     public async Task SetSequenceLinkAsync(SequenceLinkViewModel link, bool linked, CancellationToken ct = default)
     {
         ArgumentNullException.ThrowIfNull(link);
-        if (CurrentJob is null || _sessions is null || IsBusy || Precheck.IsRunning || Run.IsRunning
+        if (CurrentJob is null || _sessions is null || IsBusy || Precheck.IsRunning || Run.IsRunning || IsReadOnlyJob
             || PrecheckViewModel.ApplySequenceLink(CurrentJob, link.Rule, linked) is not { } changed)
         {
             link.IsLinked = !linked;
@@ -653,7 +682,7 @@ public sealed partial class DataCopyViewModel : ViewModelBase, IAsyncDisposable
             _checkedJob = null;
             CurrentJob = changed;
             Editor.Load(changed, Editor.Source?.Profile, Editor.Target?.Profile, Editor.Notice);
-            if (_services.Store is { } store && !_readOnlyJob)
+            if (_services.Store is { } store && !IsReadOnlyJob)
             {
                 try
                 {
@@ -731,7 +760,7 @@ public sealed partial class DataCopyViewModel : ViewModelBase, IAsyncDisposable
     /// <summary>「실패 행만 다시 넣기」: 실행과 같은 직전 확인을 거친다.</summary>
     public async Task RetryFailedRowsAsync(CancellationToken ct = default)
     {
-        if (IsBusy || Run.IsRunning || !Run.CanRetry)
+        if (IsBusy || Run.IsRunning || !Run.CanRetry || ReadOnlyJobBlocked())
         {
             return;
         }
@@ -759,7 +788,7 @@ public sealed partial class DataCopyViewModel : ViewModelBase, IAsyncDisposable
     public async Task StartRunAsync(CancellationToken ct = default)
     {
         if (CurrentJob is null || IsBusy || Run.IsRunning || Precheck.Report is not { } report || !Precheck.CanRun
-            || Step != DataCopyStep.Precheck || _checkedPeriod is not { } period)
+            || Step != DataCopyStep.Precheck || _checkedPeriod is not { } period || ReadOnlyJobBlocked())
         {
             return;
         }
@@ -831,6 +860,7 @@ public sealed partial class DataCopyViewModel : ViewModelBase, IAsyncDisposable
         {
             await CloseSessionsAsync().ConfigureAwait(true);
             CurrentJob = null;
+            IsReadOnlyJob = false;
             Precheck.Reset();
             Run.Reset();
             UnfinishedRuns.Clear();

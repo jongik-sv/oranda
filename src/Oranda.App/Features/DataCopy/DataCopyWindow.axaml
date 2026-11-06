@@ -239,6 +239,16 @@
             </DockPanel>
           </Border>
 
+          <!-- 새 버전 Oranda 가 만든 작업(읽기 전용): 점검·실행을 막은 이유 -->
+          <Border DockPanel.Dock="Top" IsVisible="{Binding HasReadOnlyJobNotice}" Padding="8,5"
+                  Background="{DynamicResource OrandaToolbarBackgroundBrush}" BorderBrush="{DynamicResource OrandaIconAmberBrush}" BorderThickness="0,0,0,2">
+            <StackPanel Orientation="Horizontal" Spacing="6">
+              <ContentControl Content="{Binding Source='warn', Converter={x:Static icons:IconKeyConverter.Instance}, ConverterParameter=14}" VerticalAlignment="Center" />
+              <TextBlock x:Name="ReadOnlyJobNoticeText" Text="{Binding ReadOnlyJobNotice}" TextWrapping="Wrap" VerticalAlignment="Center" FontWeight="SemiBold"
+                         AutomationProperties.Name="새 버전 작업 안내" />
+            </StackPanel>
+          </Border>
+
           <DockPanel IsEnabled="{Binding HasJob}">
             <!-- 작업 설정: 작업 이름 줄 + 원본 | 대상 | 범위·실행 묶음 -->
             <StackPanel DockPanel.Dock="Top" Spacing="6" Margin="8,6,8,0" DataContext="{Binding Editor}" x:DataType="dc:RuleEditorViewModel">

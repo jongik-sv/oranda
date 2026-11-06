@@ -26,8 +26,11 @@ internal sealed class FakeJobStore : ICopyJobStore
     public Task<IReadOnlyList<CopyJobEntry>> ListAsync(CancellationToken ct)
     {
         Calls.Add("list");
-        return Task.FromResult<IReadOnlyList<CopyJobEntry>>([.. Jobs.Values.Select(j => new CopyJobEntry(j, "/jobs/" + j.Id + ".json", false, null))]);
+        return Task.FromResult<IReadOnlyList<CopyJobEntry>>([.. Jobs.Values.Select(j => new CopyJobEntry(j, "/jobs/" + j.Id + ".json", ReadOnlyIds.Contains(j.Id), null))]);
     }
+
+    /// <summary>읽기 전용(새 버전 파일)으로 보일 작업 ID.</summary>
+    public HashSet<string> ReadOnlyIds { get; } = [];
 
     /// <summary>설정하면 저장할 때 이 예외를 던진다(저장 실패 재현).</summary>
     public Exception? SaveFailure { get; set; }

@@ -811,6 +811,47 @@ public sealed class PrecheckStepTests
         Assert.True(vm.CanGoToPrecheck);
     }
 
+    [Fact]
+    public async Task Job_from_a_newer_file_version_cannot_be_prechecked_or_run()
+    {
+        // 예전 앱이 새 버전 파일(표마다 계정)을 읽기 전용으로 열면 모르는 필드를 버린 채 기본 계정의 표를 지울 수 있다: 점검·실행을 막는다.
+        var h = new DataCopyHarness();
+        var job = TestJobs.Job("새 버전 작업", rules: TestJobs.Rule("ORDERS"));
+        h.Store.ReadOnlyIds.Add(job.Id);
+        var vm = await h.OpenAsync(job);
+
+        Assert.True(vm.IsReadOnlyJob);
+        Assert.True(vm.HasReadOnlyJobNotice);
+        Assert.Equal(DataCopyText.NewerVersionJob, vm.ReadOnlyJobNotice);
+        Assert.Contains(DataCopyText.NewerVersionJob, vm.Editor.Notice, StringComparison.Ordinal);
+        Assert.Null(vm.Editor.Validate()); // 입력은 문제없지만
+        Assert.False(vm.CanGoToPrecheck); // 단추가 꺼진다
+
+        await vm.GoToPrecheckAsync();
+        Assert.Equal(DataCopyStep.RuleEdit, vm.Step);
+        Assert.Empty(h.Opened);
+        Assert.Equal(0, h.Precheck.Calls);
+        Assert.Empty(h.Store.Calls.Where(c => c.StartsWith("save:", StringComparison.Ordinal)));
+        Assert.Equal(DataCopyText.NewerVersionJob, vm.StatusText);
+        Assert.True(vm.StatusIsError);
+
+        // 점검 결과가 어떻게든 있어도 실행하지 않는다.
+        await vm.Precheck.RunAsync(Sessions(), job, Period);
+        vm.Step = DataCopyStep.Precheck;
+        Assert.True(vm.Precheck.CanRun);
+        Assert.False(vm.CanStartRun);
+        await vm.StartRunAsync();
+        Assert.Equal(0, h.Runner.Calls);
+
+        // 보통 작업을 열면 풀린다.
+        var normal = TestJobs.Job("보통 작업", rules: TestJobs.Rule("ORDERS"));
+        h.Store.Jobs[normal.Id] = normal;
+        await vm.Jobs.RefreshAsync();
+        await vm.OpenJobAsync(normal);
+        Assert.False(vm.IsReadOnlyJob);
+        Assert.True(vm.CanGoToPrecheck);
+    }
+
     private sealed class ThrowingPrecheck : ICopyPrecheckService
     {
         public Task<PrecheckReport> RunAsync(CopySessions sessions, CopyJob job, ResolvedPeriod period, IProgress<string>? progress, CancellationToken ct) =>
