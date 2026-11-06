@@ -54,6 +54,10 @@ public sealed class AppDataPaths : IAppDataPaths
 
     public string BackupDirectory => Path.Combine(DataDirectory, "backup");
 
+    public string CopyJobsDirectory => Path.Combine(DataDirectory, "copy-jobs");
+
+    public string CopyRunsDirectory => Path.Combine(LogsDirectory, "copy-runs");
+
     /// <summary>환경 변수 조회 함수를 받아 데이터 폴더를 정한다(시험에서 가짜 환경을 넣는다).</summary>
     internal static string ResolveDataDirectory(Func<string, string?> getEnvironmentVariable)
     {

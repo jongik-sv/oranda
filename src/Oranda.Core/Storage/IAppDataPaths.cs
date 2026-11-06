@@ -29,4 +29,10 @@ public interface IAppDataPaths
     string LogsDirectory { get; }
 
     string BackupDirectory { get; }
+
+    /// <summary>접속 간 데이터 복사 작업 파일 폴더(<c>copy-jobs/</c>).</summary>
+    string CopyJobsDirectory { get; }
+
+    /// <summary>복사 실행 기록 폴더(<c>logs/copy-runs/</c>).</summary>
+    string CopyRunsDirectory { get; }
 }

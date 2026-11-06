@@ -235,5 +235,9 @@ public sealed class CredentialStoreTests : IDisposable
         public string LogsDirectory => Path.Combine(DataDirectory, "logs");
 
         public string BackupDirectory => Path.Combine(DataDirectory, "backup");
+
+        public string CopyJobsDirectory => Path.Combine(DataDirectory, "copy-jobs");
+
+        public string CopyRunsDirectory => Path.Combine(DataDirectory, "logs", "copy-runs");
     }
 }

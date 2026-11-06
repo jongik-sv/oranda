@@ -1363,5 +1363,9 @@ public sealed partial class SqlEditorTests : IDisposable
         public string LogsDirectory => Path.Combine(root, "logs");
 
         public string BackupDirectory => Path.Combine(root, "backup");
+
+        public string CopyJobsDirectory => Path.Combine(root, "copy-jobs");
+
+        public string CopyRunsDirectory => Path.Combine(root, "logs", "copy-runs");
     }
 }
