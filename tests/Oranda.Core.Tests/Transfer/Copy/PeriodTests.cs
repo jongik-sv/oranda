@@ -30,6 +30,36 @@ public class PeriodTests
         Assert.Equal(new ResolvedPeriod(null, null), R(PeriodKind.None));
     }
 
+    [Fact]
+    public void Custom_end_inclusive_ends_at_next_midnight()
+    {
+        var oneDay = PeriodCalculator.Resolve(
+            new CopyPeriod(PeriodKind.Custom, new DateTime(2026, 11, 1), new DateTime(2026, 11, 1), EndInclusive: true), Today);
+        Assert.Equal(new ResolvedPeriod(new DateTime(2026, 11, 1), new DateTime(2026, 11, 2)), oneDay);
+        Assert.Equal(("20261101", "20261102"), DateStringFormat.Bounds(oneDay, "YYYYMMDD"));
+
+        // 끝 날짜 포함은 직접 지정에만 쓴다.
+        Assert.Equal(R(PeriodKind.LastMonth), PeriodCalculator.Resolve(new CopyPeriod(PeriodKind.LastMonth, EndInclusive: true), Today));
+    }
+
+    [Fact]
+    public void Day_start_hour_shifts_only_time_bounds_and_business_today()
+    {
+        var p = PeriodCalculator.Resolve(
+            new CopyPeriod(PeriodKind.Custom, new DateTime(2026, 11, 1), new DateTime(2026, 11, 1), EndInclusive: true, DayStartHour: 7), Today);
+        Assert.Equal((new DateTime(2026, 11, 1), new DateTime(2026, 11, 2)), (p.From, p.To));
+        Assert.Equal((new DateTime(2026, 11, 1, 7, 0, 0), new DateTime(2026, 11, 2, 7, 0, 0)), (p.TimeFrom, p.TimeTo));
+        Assert.Equal(("20261101", "20261102"), DateStringFormat.Bounds(p, "YYYYMMDD")); // 문자열 날짜는 그대로
+        Assert.Equal(("202611", "202612"), DateStringFormat.Bounds(p, "YYYYMM"));
+
+        // 11-01 05:00 은 7시 기준 업무 날짜로 10-31 이다: 지난달 = 9월.
+        var early = PeriodCalculator.Resolve(new CopyPeriod(PeriodKind.PreviousMonth, DayStartHour: 7), new DateTime(2026, 11, 1, 5, 0, 0));
+        Assert.Equal((new DateTime(2026, 9, 1), new DateTime(2026, 10, 1)), (early.From, early.To));
+        Assert.Equal(new DateTime(2026, 10, 1, 7, 0, 0), early.TimeTo);
+
+        Assert.Equal(p.From, PeriodCalculator.Resolve(new CopyPeriod(PeriodKind.Custom, p.From, p.From, true), Today).TimeFrom); // 0 = 자정
+    }
+
     [Theory]
     [InlineData(6, "YYYYMM")]
     [InlineData(8, "YYYYMMDD")]

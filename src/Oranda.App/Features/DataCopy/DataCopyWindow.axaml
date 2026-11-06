@@ -318,7 +318,7 @@
                 </Border>
                 <!-- 범위·실행 -->
                 <Border Grid.Column="4" Classes="group">
-                  <Grid ColumnDefinitions="64,110,*" RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto" ColumnSpacing="6" RowSpacing="4">
+                  <Grid ColumnDefinitions="64,110,*" RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto" ColumnSpacing="6" RowSpacing="4">
                     <StackPanel Grid.ColumnSpan="3" Orientation="Horizontal" Spacing="6">
                       <ContentControl Content="{Binding Source='settings', Converter={x:Static icons:IconKeyConverter.Instance}, ConverterParameter=14}" VerticalAlignment="Center" />
                       <TextBlock Classes="section-label" Text="범위 · 실행" VerticalAlignment="Center" />
@@ -337,16 +337,30 @@
                     <TextBlock Grid.Row="2" Classes="field" Text="시작" IsVisible="{Binding IsCustomPeriod}" />
                     <CalendarDatePicker Grid.Row="2" Grid.Column="1" Grid.ColumnSpan="2" SelectedDate="{Binding CustomFrom}" HorizontalAlignment="Stretch"
                                         IsVisible="{Binding IsCustomPeriod}" AutomationProperties.Name="시작 날짜" />
-                    <TextBlock Grid.Row="3" Classes="field" Text="끝(제외)" IsVisible="{Binding IsCustomPeriod}" />
-                    <CalendarDatePicker Grid.Row="3" Grid.Column="1" Grid.ColumnSpan="2" SelectedDate="{Binding CustomTo}" HorizontalAlignment="Stretch"
-                                        IsVisible="{Binding IsCustomPeriod}" AutomationProperties.Name="끝 날짜(포함하지 않음)" />
-                    <TextBlock Grid.Row="4" Classes="field" Text="배치 크기" />
-                    <NumericUpDown Grid.Row="4" Grid.Column="1" Minimum="1" Maximum="50000" Increment="500" FormatString="0" Value="{Binding BatchSize}" AutomationProperties.Name="배치 크기" />
-                    <TextBlock Grid.Row="4" Grid.Column="2" Text="행씩" VerticalAlignment="Center" Classes="dim" />
-                    <TextBlock Grid.Row="5" Classes="field" Text="실패 상한" />
-                    <NumericUpDown Grid.Row="5" Grid.Column="1" Minimum="1" Maximum="100000" Increment="10" FormatString="0" Value="{Binding MaxFailedRows}"
+                    <TextBlock Grid.Row="3" Classes="field" Text="끝" IsVisible="{Binding IsCustomPeriod}" />
+                    <!-- 끝 날짜 + 「미만」·「끝 날짜 포함」 -->
+                    <Grid Grid.Row="3" Grid.Column="1" Grid.ColumnSpan="2" ColumnDefinitions="*,Auto" IsVisible="{Binding IsCustomPeriod}">
+                      <CalendarDatePicker SelectedDate="{Binding CustomTo}" HorizontalAlignment="Stretch" AutomationProperties.Name="끝 날짜" />
+                      <ComboBox Grid.Column="1" Classes="compact" Margin="4,0,0,0" VerticalAlignment="Center" ItemsSource="{Binding PeriodEnds}" SelectedItem="{Binding PeriodEnd}"
+                                AutomationProperties.Name="끝 날짜 셈" ToolTip.Tip="미만: 끝 날짜는 들어가지 않습니다 · 끝 날짜 포함: 끝 날짜 하루 끝까지 들어갑니다">
+                        <ComboBox.ItemTemplate>
+                          <DataTemplate x:DataType="dc:PeriodEndOption"><TextBlock Text="{Binding Display}" /></DataTemplate>
+                        </ComboBox.ItemTemplate>
+                      </ComboBox>
+                    </Grid>
+                    <!-- 전기일: DATE·TIMESTAMP 기간 열의 하루를 이 시각부터 다음 날 이 시각 전까지로 센다(문자열 날짜 열은 그대로). -->
+                    <TextBlock Grid.Row="4" Classes="field" Text="전기일" IsVisible="{Binding HasPeriod}" />
+                    <NumericUpDown Grid.Row="4" Grid.Column="1" Minimum="0" Maximum="23" Increment="1" FormatString="0" Value="{Binding DayStartHour}"
+                                   IsVisible="{Binding HasPeriod}" AutomationProperties.Name="전기일 기준 시각"
+                                   ToolTip.Tip="DATE·TIMESTAMP 기간 열은 하루를 이 시각부터 다음 날 이 시각 전까지로 셉니다(7 이면 11-01 07:00 ~ 11-02 07:00 미만). 0 은 자정, 문자열 날짜 열은 그대로입니다" />
+                    <TextBlock Grid.Row="4" Grid.Column="2" Text="시 기준" VerticalAlignment="Center" Classes="dim" IsVisible="{Binding HasPeriod}" />
+                    <TextBlock Grid.Row="5" Classes="field" Text="배치 크기" />
+                    <NumericUpDown Grid.Row="5" Grid.Column="1" Minimum="1" Maximum="50000" Increment="500" FormatString="0" Value="{Binding BatchSize}" AutomationProperties.Name="배치 크기" />
+                    <TextBlock Grid.Row="5" Grid.Column="2" Text="행씩" VerticalAlignment="Center" Classes="dim" />
+                    <TextBlock Grid.Row="6" Classes="field" Text="실패 상한" />
+                    <NumericUpDown Grid.Row="6" Grid.Column="1" Minimum="1" Maximum="100000" Increment="10" FormatString="0" Value="{Binding MaxFailedRows}"
                                    AutomationProperties.Name="실패 행 상한" ToolTip.Tip="한 표에서 넣지 못한 행이 이 수를 넘으면 그 표를 멈춥니다" />
-                    <TextBlock Grid.Row="5" Grid.Column="2" Text="행" VerticalAlignment="Center" Classes="dim" />
+                    <TextBlock Grid.Row="6" Grid.Column="2" Text="행" VerticalAlignment="Center" Classes="dim" />
                   </Grid>
                 </Border>
               </Grid>

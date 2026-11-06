@@ -182,6 +182,48 @@ public sealed class RuleEditorTests
     }
 
     [Fact]
+    public void Custom_end_choice_loads_saves_and_resolves()
+    {
+        var h = new DataCopyHarness();
+        var editor = Editor(h);
+        var day = new DateTime(2026, 11, 1);
+        editor.SetConnections([h.Source, h.Target]);
+        editor.Load(TestJobs.Job("끝 날짜") with { Period = new CopyPeriod(PeriodKind.Custom, day, day, EndInclusive: true) }, h.Source, h.Target);
+
+        Assert.True(editor.PeriodEnd.Inclusive);
+        Assert.True(editor.BuildJob().Period.EndInclusive);
+        Assert.Equal(new ResolvedPeriod(day, day.AddDays(1)), editor.ResolvePeriod());
+
+        editor.PeriodEnd = editor.PeriodEnds.Single(e => !e.Inclusive);
+        Assert.Equal("미만", editor.PeriodEnd.Display);
+        Assert.False(editor.BuildJob().Period.EndInclusive);
+        Assert.Equal(new ResolvedPeriod(day, day), editor.ResolvePeriod());
+
+        // 다른 기간 종류는 끝 날짜 셈을 저장하지 않는다.
+        editor.PeriodEnd = editor.PeriodEnds.Single(e => e.Inclusive);
+        editor.PeriodChoice = editor.PeriodKinds.Single(k => k.Kind == PeriodKind.LastMonth);
+        Assert.False(editor.BuildJob().Period.EndInclusive);
+    }
+
+    [Fact]
+    public void Day_start_hour_loads_saves_and_is_dropped_without_period()
+    {
+        var h = new DataCopyHarness();
+        var editor = Editor(h);
+        editor.SetConnections([h.Source, h.Target]);
+        editor.Load(TestJobs.Job("전기일") with { Period = new CopyPeriod(PeriodKind.LastWeek, DayStartHour: 7) }, h.Source, h.Target);
+
+        Assert.True(editor.HasPeriod);
+        Assert.Equal(7, editor.DayStartHour);
+        Assert.Equal(7, editor.BuildJob().Period.DayStartHour);
+        Assert.Equal(7, editor.ResolvePeriod().DayStartHour);
+
+        editor.PeriodChoice = editor.PeriodKinds.Single(k => k.Kind == PeriodKind.None);
+        Assert.False(editor.HasPeriod);
+        Assert.Equal(0, editor.BuildJob().Period.DayStartHour);
+    }
+
+    [Fact]
     public void Calculated_dates_are_always_shown()
     {
         var editor = Editor(); // 가짜 시계: 2026-11-06

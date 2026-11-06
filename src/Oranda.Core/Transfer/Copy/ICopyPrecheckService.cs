@@ -26,6 +26,9 @@ public static class CopyCheckCodes
 
     /// <summary>확인 필요: 표를 더할 때 적은 시노님(<see cref="TableRule.WrittenAs"/>)이 지금은 다른 표를 가리키거나 풀리지 않는다. 작업은 저장된 표를 그대로 복사한다.</summary>
     public const string SynonymChanged = "SynonymChanged";
+
+    /// <summary>오류: 기간 규칙이 있는데 기간 범위가 비었다(끝 경계가 시작보다 늦지 않음). 그대로 두면 0행을 복사하고 성공으로 끝난다.</summary>
+    public const string EmptyPeriod = "EmptyPeriod";
 }
 
 public enum CheckChoice { DisableTriggers, DisableForeignKeys, SkipColumn, ProceedSequenceGap, SwitchToMerge }

@@ -312,6 +312,7 @@ internal sealed class CopyRunLog : ICopyRunLog
                     w.WriteString("target", header.TargetName);
                     WriteDateTime(w, "periodFrom", header.Period.From);
                     WriteDateTime(w, "periodTo", header.Period.To);
+                    if (header.Period.DayStartHour != 0) w.WriteNumber("dayStartHour", header.Period.DayStartHour);
                     w.WriteString("startedAt", header.StartedAt.ToString("O", CultureInfo.InvariantCulture));
                 }),
                 ct);

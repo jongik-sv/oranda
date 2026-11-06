@@ -1,3 +1,5 @@
+using System.Text.Json.Serialization;
+
 namespace Oranda.Core.Transfer.Copy;
 
 /// <summary>
@@ -37,9 +39,31 @@ public sealed record ConnectionRef(string Name, string User, Guid? IdHint = null
 
 public enum PeriodKind { None, LastWeek, LastMonth, Last3Months, PreviousMonth, Custom }
 
-public sealed record CopyPeriod(PeriodKind Kind, DateTime? From = null, DateTime? To = null);
+/// <summary>
+/// 작업의 기간. <paramref name="EndInclusive"/> 는 직접 지정에서만 쓴다: false 면 끝 날짜 미만, true 면 끝 날짜 포함(그날 끝까지).
+/// 다른 종류에서는 무시한다. <paramref name="DayStartHour"/> 는 전기일(업무 날짜)이 바뀌는 시각(0~23, 0 = 자정)이고
+/// DATE·TIMESTAMP 기간 열과 <c>:FROM_DT</c>·<c>:TO_DT</c> 에만 쓴다. 둘 다 기본값이면 파일에 쓰지 않는다(예전 파일과 같다).
+/// </summary>
+public sealed record CopyPeriod(
+    PeriodKind Kind,
+    DateTime? From = null,
+    DateTime? To = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)] bool EndInclusive = false,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)] int DayStartHour = 0);
 
-public sealed record ResolvedPeriod(DateTime? From, DateTime? To);
+/// <summary>
+/// 계산한 기간(날짜, 시작 포함·끝 제외). 문자열 날짜 열은 이 날짜를 그대로 쓰고,
+/// DATE·TIMESTAMP 열과 <c>:FROM_DT</c>·<c>:TO_DT</c> 는 <see cref="DayStartHour"/> 시간만큼 민 시각(<see cref="TimeFrom"/>·<see cref="TimeTo"/>)을 쓴다.
+/// </summary>
+public sealed record ResolvedPeriod(DateTime? From, DateTime? To)
+{
+    /// <summary>전기일이 바뀌는 시각(0~23). 0 이면 자정.</summary>
+    public int DayStartHour { get; init; }
+
+    public DateTime? TimeFrom => From?.AddHours(DayStartHour);
+
+    public DateTime? TimeTo => To?.AddHours(DayStartHour);
+}
 
 public enum RuleKind { All, Period, ParentKey, Custom, Exclude }
 

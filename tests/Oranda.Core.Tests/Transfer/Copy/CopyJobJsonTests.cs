@@ -47,6 +47,24 @@ public class CopyJobJsonTests
     }
 
     [Fact]
+    public void End_inclusive_and_day_start_round_trip_and_defaults_are_not_written()
+    {
+        var job = Sample() with { Period = new CopyPeriod(PeriodKind.Custom, new DateTime(2026, 11, 1), new DateTime(2026, 11, 1), true, 7) };
+        var json = JsonSerializer.Serialize(job, CopyJobJsonContext.Default.CopyJob);
+        var back = JsonSerializer.Deserialize(json, CopyJobJsonContext.Default.CopyJob)!.Period;
+        Assert.True(back.EndInclusive);
+        Assert.Equal(7, back.DayStartHour);
+
+        // 기본값(미만·자정)은 쓰지 않아 예전 파일과 같고, 예전 파일은 기본값으로 읽는다.
+        var old = JsonSerializer.Serialize(Sample(), CopyJobJsonContext.Default.CopyJob);
+        Assert.DoesNotContain("endInclusive", old, StringComparison.Ordinal);
+        Assert.DoesNotContain("dayStartHour", old, StringComparison.Ordinal);
+        var oldPeriod = JsonSerializer.Deserialize(old, CopyJobJsonContext.Default.CopyJob)!.Period;
+        Assert.False(oldPeriod.EndInclusive);
+        Assert.Equal(0, oldPeriod.DayStartHour);
+    }
+
+    [Fact]
     public void Extra_where_round_trips_and_older_files_without_it_read_as_null()
     {
         var job = Sample() with

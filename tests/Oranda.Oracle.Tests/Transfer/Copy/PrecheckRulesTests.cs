@@ -171,6 +171,28 @@ public sealed class PrecheckRulesTests
     }
 
     [Fact]
+    public void Empty_period_blocks_only_jobs_with_period_rules()
+    {
+        var periodRule = new TableRule("A", RuleKind.Period, TargetAction.DeleteRangeInsert) { PeriodColumns = [new PeriodColumn("D")] };
+        var day = new DateTime(2026, 11, 1);
+        var job = Job(periodRule) with { Period = new CopyPeriod(PeriodKind.Custom, day, day) };
+
+        var item = PrecheckRules.EmptyPeriod(job, PeriodCalculator.Resolve(job.Period, day));
+        Assert.NotNull(item);
+        Assert.Equal(CopyCheckCodes.EmptyPeriod, item.Code);
+        Assert.Equal(CheckLevel.Error, item.Level);
+        Assert.Contains("끝 날짜 포함", item.Message, StringComparison.Ordinal);
+
+        var inclusive = job with { Period = job.Period with { EndInclusive = true } };
+        Assert.Null(PrecheckRules.EmptyPeriod(inclusive, PeriodCalculator.Resolve(inclusive.Period, day)));
+
+        var noPeriodRule = Job(new TableRule("A", RuleKind.All, TargetAction.DeleteAllInsert)) with { Period = job.Period };
+        Assert.Null(PrecheckRules.EmptyPeriod(noPeriodRule, new ResolvedPeriod(day, day)));
+        Assert.NotNull(PrecheckRules.EmptyPeriod(job, new ResolvedPeriod(day.AddDays(1), day)));
+        Assert.Null(PrecheckRules.EmptyPeriod(job, new ResolvedPeriod(null, null)));
+    }
+
+    [Fact]
     public void Parent_link_masks_find_the_parent_by_owner()
     {
         var parent = new TableRule("ORDERS", RuleKind.All, TargetAction.MergeByPk) { SourceOwner = "APP2", Masks = [new MaskRule("ID", MaskKind.Hash)] };

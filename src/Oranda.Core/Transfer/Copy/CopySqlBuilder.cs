@@ -147,8 +147,8 @@ public sealed class CopySqlBuilder(CopyJob job, ResolvedPeriod period,
         if (CheckUserCondition(where) is { } problem)
             throw new InvalidOperationException($"{table}: 조건을 쓸 수 없습니다. {problem}");
         // 기간이 열려 있어도 조건에 이름이 있으면 NULL 로 묶는다(바인드 누락 오류를 막는다).
-        if (FromDtRegex.IsMatch(where)) binds["FROM_DT"] = new BindValue(BindDataType.Date, period.From);
-        if (ToDtRegex.IsMatch(where)) binds["TO_DT"] = new BindValue(BindDataType.Date, period.To);
+        if (FromDtRegex.IsMatch(where)) binds["FROM_DT"] = new BindValue(BindDataType.Date, period.TimeFrom);
+        if (ToDtRegex.IsMatch(where)) binds["TO_DT"] = new BindValue(BindDataType.Date, period.TimeTo);
         return $"({where})";
     }
 
@@ -219,9 +219,10 @@ public sealed class CopySqlBuilder(CopyJob job, ResolvedPeriod period,
             }
             else
             {
+                // DATE·TIMESTAMP 는 전기일 시각만큼 민 경계(7시 기준이면 11-01 07:00 이상 11-02 07:00 미만).
                 type = BindTypeOf(info, pc.Column);
-                from = period.From;
-                to = period.To;
+                from = period.TimeFrom;
+                to = period.TimeTo;
             }
             if (from is null && to is null) continue;
             var n = ++counter;

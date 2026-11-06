@@ -121,6 +121,11 @@ internal sealed partial class CopyPrecheckService(IBulkExecutionService bulk, IM
             await LoadTablesAsync(active, ct).ConfigureAwait(false);
             _builder = new CopySqlBuilder(job, period, _sourceTables, _targetTables);
 
+            if (PrecheckRules.EmptyPeriod(job, period) is { } empty)
+            {
+                _items.Add(empty);
+            }
+
             // 대상 접속 계정이 아닌 계정의 표를 지우고 넣는다: 범위가 다른 계정으로 넓어지므로 확인을 받는다(묶음 B 7장).
             if (PrecheckRules.OtherOwnerTargets(job, _targetAccess.User) is { } other)
             {

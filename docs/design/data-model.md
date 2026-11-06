@@ -331,7 +331,7 @@ select * from emp where empno = :empno;
 | `name` | string | ● | | 표시 이름 |
 | `source`, `target` | `ConnectionRef` | ● | | 접속 참조. `name`(접속 이름), `user`(사용자 이름), `idHint`(Guid, 같은 PC 에서 빨리 찾기 위한 힌트, 선택). 비밀번호는 없다 |
 | `sourceOwner`, `targetOwner` | string | ● | | 기본 원본·대상 계정. 규칙의 계정이 비었을 때 쓰고, 표 이름만 입력했을 때 먼저 찾는 계정이다 |
-| `period` | `CopyPeriod` | ○ | `{kind:"None"}` | `kind` = `None`·`LastWeek`·`LastMonth`·`Last3Months`·`PreviousMonth`·`Custom`, `from`·`to`(Custom 일 때만) |
+| `period` | `CopyPeriod` | ○ | `{kind:"None"}` | `kind` = `None`·`LastWeek`·`LastMonth`·`Last3Months`·`PreviousMonth`·`Custom`, `from`·`to`(Custom 일 때만), `endInclusive`(bool, 기본 false = `to` 미만, true = `to` 날짜 포함 → 다음 날 미만. Custom 일 때만), `dayStartHour`(int 0~23, 기본 0 = 자정. 전기일 시각: DATE·TIMESTAMP 기간 열과 `:FROM_DT`·`:TO_DT` 경계를 이 시간만큼 민다. 문자열 날짜 열은 그대로). 두 값은 기본값이면 쓰지 않는다 |
 | `tables[]` | `TableRule[]` | ○ | `[]` | 규칙 목록 |
 | `tables[].table` | string | ● | | 표 이름. 화면이 표 추가 때 대문자로 바꿔 저장한다(파일 형식이 강제하지는 않는다) |
 | `tables[].sourceOwner` | string | ○ | null | 원본 표 계정. 없으면 `sourceOwner`. 시노님으로 더한 표는 풀린 실제 계정이다 |

@@ -270,6 +270,30 @@ internal static class PrecheckRules
         return items;
     }
 
+    // ---- 기간 ----
+
+    /// <summary>
+    /// 기간 규칙이 있는데 계산한 범위(시작 포함·끝 제외)가 비었으면 오류 항목 하나(<see cref="CopyCheckCodes.EmptyPeriod"/>), 아니면 null.
+    /// 예: 직접 지정 2026-11-01 ~ 2026-11-01 「미만」.
+    /// </summary>
+    public static CheckItem? EmptyPeriod(CopyJob job, ResolvedPeriod period)
+    {
+        ArgumentNullException.ThrowIfNull(job);
+        ArgumentNullException.ThrowIfNull(period);
+        if (period is not { From: { } from, To: { } to } || from < to
+            || !job.Tables.Any(r => r.Kind == RuleKind.Period))
+        {
+            return null;
+        }
+
+        var hint = job.Period is { Kind: PeriodKind.Custom, EndInclusive: false } && from == to
+            ? " 끝 날짜를 하루 늦추거나 「끝 날짜 포함」을 고르세요."
+            : " 끝 날짜를 시작보다 늦게 고르세요.";
+        return new CheckItem(null, CopyCheckCodes.EmptyPeriod, CheckLevel.Error,
+            string.Create(CultureInfo.InvariantCulture,
+                $"기간 {from:yyyy-MM-dd} 이상 {to:yyyy-MM-dd} 미만에 드는 날이 없어 기간 규칙 표는 한 행도 복사하지 않습니다.{hint}"));
+    }
+
     // ---- 계정(묶음 B) ----
 
     /// <summary>

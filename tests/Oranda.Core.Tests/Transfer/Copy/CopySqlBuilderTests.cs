@@ -49,6 +49,21 @@ public class CopySqlBuilderTests
     }
 
     [Fact]
+    public void Day_start_hour_shifts_date_binds_but_not_string_dates()
+    {
+        var day = new ResolvedPeriod(new DateTime(2026, 11, 1), new DateTime(2026, 11, 2)) { DayStartHour = 7 };
+        var b = B([new TableRule("O", RuleKind.Period, TargetAction.DeleteRangeInsert)
+                   { PeriodColumns = [new PeriodColumn("ORDER_DT"), new PeriodColumn("YMD", "YYYYMMDD")], ExtraWhere = "X < :TO_DT" }],
+                  day, ("O", Cols(("ORDER_DT", "DATE"), ("YMD", "VARCHAR2"))));
+        var s = b.SourceSelect("O", ["ORDER_DT"]);
+        Assert.Equal(new BindValue(BindDataType.Date, new DateTime(2026, 11, 1, 7, 0, 0)), s.Binds["B1_FROM"]);
+        Assert.Equal(new BindValue(BindDataType.Date, new DateTime(2026, 11, 2, 7, 0, 0)), s.Binds["B1_TO"]);
+        Assert.Equal(new BindValue(BindDataType.Varchar2, "20261101"), s.Binds["B2_FROM"]);
+        Assert.Equal(new BindValue(BindDataType.Varchar2, "20261102"), s.Binds["B2_TO"]);
+        Assert.Equal(new BindValue(BindDataType.Date, new DateTime(2026, 11, 2, 7, 0, 0)), s.Binds["TO_DT"]);
+    }
+
+    [Fact]
     public void Period_timestamp_tz_and_ltz_columns_bind_matching_types()
     {
         var b = B([new TableRule("E", RuleKind.Period, TargetAction.DeleteRangeInsert)

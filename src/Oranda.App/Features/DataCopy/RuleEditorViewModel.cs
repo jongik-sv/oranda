@@ -27,6 +27,9 @@ public sealed record TargetOwnerOption(string Owner, string Hint)
 /// <summary>기간 종류 고르기 목록의 한 줄.</summary>
 public sealed record PeriodKindOption(PeriodKind Kind, string Display);
 
+/// <summary>직접 지정 기간의 끝 날짜 셈. <paramref name="Inclusive"/> 면 끝 날짜까지 들어간다.</summary>
+public sealed record PeriodEndOption(bool Inclusive, string Display);
+
 /// <summary>
 /// 규칙 편집 단계(1단계): 원본·대상 접속, 소유자, 기간, 읽기 일관성, 옵션, 테이블별 규칙. 기간은 상대값으로 저장하고
 /// 작업을 열 때 오늘 날짜로 다시 계산한 날짜를 항상 화면에 보인다(설계 6.4).
@@ -212,7 +215,7 @@ public sealed partial class RuleEditorViewModel : ViewModelBase
     }
 
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(PeriodText), nameof(IsCustomPeriod))]
+    [NotifyPropertyChangedFor(nameof(PeriodText), nameof(IsCustomPeriod), nameof(HasPeriod))]
     private PeriodKindOption _periodChoice;
 
     [ObservableProperty]
@@ -222,6 +225,16 @@ public sealed partial class RuleEditorViewModel : ViewModelBase
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(PeriodText))]
     private DateTime? _customTo;
+
+    /// <summary>직접 지정의 끝 날짜를 어떻게 셀지(「미만」 또는 「끝 날짜 포함」). 새 작업과 예전 작업은 「미만」.</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(PeriodText))]
+    private PeriodEndOption _periodEnd;
+
+    /// <summary>전기일이 바뀌는 시각(0~23). DATE·TIMESTAMP 기간 열에만 쓴다. 0 = 자정.</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(PeriodText))]
+    private int _dayStartHour;
 
     /// <summary>「모든 테이블을 같은 시점 기준으로 읽기」(설계 8.1). 새 작업은 켜져 있다.</summary>
     [ObservableProperty]
@@ -263,9 +276,13 @@ public sealed partial class RuleEditorViewModel : ViewModelBase
             new(PeriodKind.Custom, "직접 지정"),
         ];
         _periodChoice = PeriodKinds[0];
+        PeriodEnds = [new(false, "미만"), new(true, "끝 날짜 포함")];
+        _periodEnd = PeriodEnds[0];
     }
 
     public IReadOnlyList<PeriodKindOption> PeriodKinds { get; }
+
+    public IReadOnlyList<PeriodEndOption> PeriodEnds { get; }
 
     public ObservableCollection<ConnectionOption> SourceOptions { get; } = [];
 
@@ -278,6 +295,8 @@ public sealed partial class RuleEditorViewModel : ViewModelBase
     public IReadOnlyList<CommitMode> CommitModes { get; } = [CommitMode.PerTable, CommitMode.PerBatch, CommitMode.AtEnd];
 
     public bool IsCustomPeriod => PeriodChoice.Kind == PeriodKind.Custom;
+
+    public bool HasPeriod => PeriodChoice.Kind != PeriodKind.None;
 
     /// <summary>대상이 개발 접속일 때만 「테이블 다시 만들기」를 고를 수 있다(설계 6.2.3).</summary>
     public bool CanRecreate => Target is { } t && CopyTargetGuard.CanRecreate(t.Profile);
@@ -304,7 +323,9 @@ public sealed partial class RuleEditorViewModel : ViewModelBase
         }
     }
 
-    public CopyPeriod Period => new(PeriodChoice.Kind, CustomFrom, CustomTo);
+    public CopyPeriod Period => new(PeriodChoice.Kind, CustomFrom, CustomTo,
+        PeriodChoice.Kind == PeriodKind.Custom && PeriodEnd.Inclusive,
+        PeriodChoice.Kind == PeriodKind.None ? 0 : Math.Clamp(DayStartHour, 0, 23));
 
     public ResolvedPeriod ResolvePeriod() => PeriodCalculator.Resolve(Period, _services.Time.GetLocalNow().DateTime);
 
@@ -353,6 +374,8 @@ public sealed partial class RuleEditorViewModel : ViewModelBase
         PeriodChoice = PeriodKinds.First(k => k.Kind == job.Period.Kind);
         CustomFrom = job.Period.From;
         CustomTo = job.Period.To;
+        PeriodEnd = PeriodEnds.First(e => e.Inclusive == job.Period.EndInclusive);
+        DayStartHour = Math.Clamp(job.Period.DayStartHour, 0, 23);
         ConsistentRead = job.ConsistentRead;
         BatchSize = job.Options.BatchSize;
         Commit = job.Options.Commit;

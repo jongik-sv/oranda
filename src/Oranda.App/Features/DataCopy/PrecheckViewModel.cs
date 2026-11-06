@@ -62,6 +62,7 @@ public sealed class CheckItemViewModel
     {
         ["ChildRowsMayBlock"] = "자식 행이 지우기를 막음",
         ["ColumnNotInTarget"] = "대상에 없는 열",
+        [CopyCheckCodes.EmptyPeriod] = "빈 기간",
         ["FkCycle"] = "외래키 순환",
         ["IdentityAlways"] = "IDENTITY 열",
         ["MaskedColumns"] = "마스킹 열",
