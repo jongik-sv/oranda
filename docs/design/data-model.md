@@ -329,23 +329,29 @@ select * from emp where empno = :empno;
 | `id` | string | ● | | 작업 식별자 |
 | `name` | string | ● | | 표시 이름 |
 | `source`, `target` | `ConnectionRef` | ● | | 접속 참조. `name`(접속 이름), `user`(사용자 이름), `idHint`(Guid, 같은 PC 에서 빨리 찾기 위한 힌트, 선택). 비밀번호는 없다 |
-| `sourceOwner`, `targetOwner` | string | ● | | 원본·대상 표 소유자 |
+| `sourceOwner`, `targetOwner` | string | ● | | 기본 원본·대상 계정. 규칙의 계정이 비었을 때 쓰고, 표 이름만 입력했을 때 먼저 찾는 계정이다 |
 | `period` | `CopyPeriod` | ○ | `{kind:"None"}` | `kind` = `None`·`LastWeek`·`LastMonth`·`Last3Months`·`PreviousMonth`·`Custom`, `from`·`to`(Custom 일 때만) |
 | `tables[]` | `TableRule[]` | ○ | `[]` | 규칙 목록 |
 | `tables[].table` | string | ● | | 표 이름. 화면이 표 추가 때 대문자로 바꿔 저장한다(파일 형식이 강제하지는 않는다) |
+| `tables[].sourceOwner` | string | ○ | null | 원본 표 계정. 없으면 `sourceOwner`. 시노님으로 더한 표는 풀린 실제 계정이다 |
+| `tables[].targetOwner` | string | ○ | null | 대상 표 계정(대상 표 이름은 `table` 과 같다). 없으면 `targetOwner` |
+| `tables[].writtenAs` | string | ○ | null | 표시용. 시노님으로 더했을 때 사용자가 적은 이름. 실행은 쓰지 않고, 사전 점검이 지금 다른 표를 가리키면 확인 항목으로 알린다 |
 | `tables[].kind` | `RuleKind` | ● | | `All`·`Period`·`ParentKey`·`Custom`·`Exclude` |
 | `tables[].action` | `TargetAction` | ● | | `DeleteAllInsert`·`DeleteRangeInsert`·`AppendOnly`·`MergeByPk`·`Recreate` |
 | `tables[].periodColumns[]` | `PeriodColumn[]` | ○ | `[]` | 0~2개(2개면 OR). `column`, `stringFormat`(없으면 DATE·TIMESTAMP 열) |
-| `tables[].parent` | `ParentLink` | ○ | null | `parentTable`, `childColumns[]`, `parentColumns[]`, `foreignKeyName` |
+| `tables[].parent` | `ParentLink` | ○ | null | `parentTable`, `childColumns[]`, `parentColumns[]`, `foreignKeyName`, `parentOwner`(부모 원본 계정, 없으면 자식 표의 원본 계정) |
 | `tables[].customWhere` | string | ○ | null | `WHERE` 뒤에 올 조건 |
 | `tables[].extraWhere` | string | ○ | null | 기간 규칙(`kind: Period`)의 추가 조건. 기간식과 `AND` 로 묶어 원본 조회·대상 지우기·건수 비교에 쓰고 다른 종류에서는 무시한다. `:FROM_DT`·`:TO_DT` 를 쓸 수 있다 |
 | `tables[].masks[]` | `MaskRule[]` | ○ | `[]` | `column`, `kind`(`Fixed`·`KeepFirst`·`KeepLast`·`Hash`·`Null`), `value`, `count` |
 | `tables[].skipColumns[]` | string[] | ○ | `[]` | 복사하지 않는 열 |
 | `options` | `CopyOptions` | ○ | | `batchSize`(5000), `commit`(`PerTable`·`PerBatch`·`AtEnd`, 기본 `PerTable`), `disableTriggersByDefault`(false), `maxFailedRows`(100), `sequenceGapConfirm`(10000000) |
-| `sequences[]` | `SequenceRule[]` | ○ | `[]` | 시퀀스 보정 연결. `sequence`, `table`, `column` |
+| `sequences[]` | `SequenceRule[]` | ○ | `[]` | 시퀀스 보정 연결. `sequence`, `table`(규칙 키, 아래), `column`, `owner`(시퀀스 계정, 없으면 그 표 규칙의 대상 계정) |
 | `consistentRead` | bool | ○ | true | 모든 표를 같은 시점 기준으로 읽기 |
 | `maskSalt` | string | ● | | 해시 마스킹 비밀 값. 32바이트 난수의 Base64. 작업을 만들 때 한 번 정한다 |
 | `lastRun` | `LastRunInfo` | ○ | null | 마지막 실행. `at`, `outcome`(`Succeeded`·`PartiallyFailed`·`Failed`·`Stopped`), `rows`(끝난 뒤 센 대상 건수의 합. 건수를 세지 못한 표는 합에서 빼고, 모든 표를 세지 못했으면 `lastRun` 을 쓰지 않는다) |
+
+- **규칙 키.** 작업 안에서 규칙 하나를 가리키는 이름이다(Core `CopyOwners.Key`). 원본 계정이 `sourceOwner` 와 같으면 표 이름만(`ORDERS`), 다르면 `계정.표`(`APP2.ORDERS`)다. 그래서 계정이 하나인 작업의 키는 표 이름 그대로다. `sequences[].table`, 사전 점검 항목·실행 결과·실패 행·실행 기록(2.8)의 표 이름이 이 키다.
+- 원본 키가 같은 규칙 둘, 대상 `계정.표` 가 같은 규칙 둘은 오류다(사전 점검 `RuleInvalid`, 실행기도 거부). 원본과 대상이 같은 DB 이면 어떤 규칙이 쓰는 대상 표가 다른 규칙이 읽는 원본 표(부모 키 규칙의 부모 원본 표 포함)와 같을 때 `SameSourceTarget` 으로 막는다.
 
 ### 2.8 `logs/copy-runs/*.jsonl` — 복사 실행 기록
 

@@ -46,7 +46,11 @@ public enum TargetAction { DeleteAllInsert, DeleteRangeInsert, AppendOnly, Merge
 public sealed record PeriodColumn(string Column, string? StringFormat = null);
 
 public sealed record ParentLink(string ParentTable, IReadOnlyList<string> ChildColumns,
-                                IReadOnlyList<string> ParentColumns, string? ForeignKeyName = null);
+                                IReadOnlyList<string> ParentColumns, string? ForeignKeyName = null)
+{
+    /// <summary>부모 표의 원본 계정. null 이면 자식 표의 원본 계정이다(<see cref="CopyOwners.ParentSource"/>).</summary>
+    public string? ParentOwner { get; init; }
+}
 
 public enum MaskKind { Fixed, KeepFirst, KeepLast, Hash, Null }
 
@@ -54,6 +58,18 @@ public sealed record MaskRule(string Column, MaskKind Kind, string? Value = null
 
 public sealed record TableRule(string Table, RuleKind Kind, TargetAction Action)
 {
+    /// <summary>원본 표 계정. null 이면 작업의 기본 원본 계정(<see cref="CopyJob.SourceOwner"/>)이다(<see cref="CopyOwners.Source"/>).</summary>
+    public string? SourceOwner { get; init; }
+
+    /// <summary>대상 표 계정. null 이면 작업의 기본 대상 계정(<see cref="CopyJob.TargetOwner"/>)이다(<see cref="CopyOwners.Target"/>). 대상 표 이름은 <see cref="Table"/> 과 같다.</summary>
+    public string? TargetOwner { get; init; }
+
+    /// <summary>
+    /// 표시용: 사용자가 시노님으로 적어 더했을 때 적은 이름(예 <c>ORDERS</c>, <c>APP.ORDERS_SYN</c>). 실행은 이 값을 쓰지 않고 풀린 계정·표(<see cref="SourceOwner"/>·<see cref="Table"/>)만 쓴다.
+    /// 사전 점검은 이 이름이 지금 다른 표를 가리키면 확인 항목으로 알리기만 한다(자동으로 바꾸지 않는다).
+    /// </summary>
+    public string? WrittenAs { get; init; }
+
     /// <summary>0~2개. 2개면 OR 로 묶는다.</summary>
     public IReadOnlyList<PeriodColumn> PeriodColumns { get; init; } = [];
     public ParentLink? Parent { get; init; }
@@ -76,7 +92,14 @@ public sealed record CopyOptions
     public long SequenceGapConfirm { get; init; } = 10_000_000;
 }
 
-public sealed record SequenceRule(string Sequence, string Table, string Column);
+/// <summary>
+/// 시퀀스 보정 연결. <paramref name="Table"/> 은 규칙 키(<see cref="CopyOwners.Key(CopyJob, TableRule)"/>: 기본 원본 계정의 표는 이름만, 다른 계정이면 <c>계정.표</c>).
+/// </summary>
+public sealed record SequenceRule(string Sequence, string Table, string Column)
+{
+    /// <summary>시퀀스 계정. null 이면 그 표 규칙의 대상 계정(<see cref="CopyOwners.SequenceOwner"/>)이다.</summary>
+    public string? Owner { get; init; }
+}
 
 public enum CopyOutcome { Succeeded, PartiallyFailed, Failed, Stopped }
 

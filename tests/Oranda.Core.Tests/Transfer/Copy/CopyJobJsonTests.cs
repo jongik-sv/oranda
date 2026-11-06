@@ -71,6 +71,34 @@ public class CopyJobJsonTests
     }
 
     [Fact]
+    public void Per_table_owners_round_trip_and_are_left_out_when_empty()
+    {
+        var job = Sample() with
+        {
+            Tables =
+            [
+                new TableRule("ORDERS", RuleKind.All, TargetAction.MergeByPk) { SourceOwner = "APP2", TargetOwner = "APP2", WrittenAs = "ORDERS" },
+                new TableRule("ITEM", RuleKind.ParentKey, TargetAction.DeleteRangeInsert)
+                {
+                    Parent = new ParentLink("ORDERS", ["ORDER_ID"], ["ID"]) { ParentOwner = "APP2" },
+                },
+            ],
+            Sequences = [new SequenceRule("SEQ_ITEM", "ITEM", "ID") { Owner = "TGT_USER" }],
+        };
+        var json = JsonSerializer.Serialize(job, CopyJobJsonContext.Default.CopyJob);
+        Assert.Contains("\"sourceOwner\": \"APP2\"", json, StringComparison.Ordinal);
+        Assert.Contains("\"writtenAs\": \"ORDERS\"", json, StringComparison.Ordinal);
+        Assert.Contains("\"parentOwner\": \"APP2\"", json, StringComparison.Ordinal);
+        Assert.Contains("\"owner\": \"TGT_USER\"", json, StringComparison.Ordinal);
+        Assert.Equivalent(job, JsonSerializer.Deserialize(json, CopyJobJsonContext.Default.CopyJob));
+
+        // 계정을 비운 규칙은 필드를 쓰지 않는다(작업 기본 계정).
+        var plain = JsonSerializer.Serialize(Sample(), CopyJobJsonContext.Default.CopyJob);
+        Assert.DoesNotContain("writtenAs", plain, StringComparison.Ordinal);
+        Assert.DoesNotContain("parentOwner", plain, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void Writes_camel_case_enum_strings_and_no_password_field()
     {
         var json = JsonSerializer.Serialize(Sample(), CopyJobJsonContext.Default.CopyJob);
