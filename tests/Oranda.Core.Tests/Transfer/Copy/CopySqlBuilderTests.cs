@@ -335,4 +335,71 @@ public class CopySqlBuilderTests
         Assert.Throws<ArgumentException>(() => b.Merge("E", ["ID"], []));
         Assert.Throws<ArgumentException>(() => b.Merge("E", ["ID"], ["OTHER"]));
     }
+
+    // ---- 규칙마다의 계정(묶음 B) ----
+
+    private static CopySqlBuilder Owners(params TableRule[] rules)
+    {
+        var job = new CopyJob
+        {
+            Id = "1", Name = "n", Source = new ConnectionRef("s", "SRC"), Target = new ConnectionRef("t", "TGT"),
+            SourceOwner = "SRC", TargetOwner = "TGT", MaskSalt = "AA==", Tables = rules,
+        };
+        var empty = rules.ToDictionary(r => CopyOwners.Key(job, r), _ => T("X", "X"));
+        return new CopySqlBuilder(job, Period, empty, empty);
+    }
+
+    [Fact]
+    public void Each_statement_uses_its_rule_source_and_target_owner()
+    {
+        var b = Owners(
+            new TableRule("ORDERS", RuleKind.All, TargetAction.DeleteAllInsert),
+            new TableRule("ORDERS", RuleKind.All, TargetAction.DeleteAllInsert) { SourceOwner = "APP2", TargetOwner = "APP2X" });
+
+        // 같은 이름 표 둘: 기본 계정 표는 이름만, 다른 계정 표는 계정.표 키로 가린다.
+        Assert.Equal("SELECT \"ID\" FROM \"SRC\".\"ORDERS\"", b.SourceSelect("ORDERS", ["ID"]).Sql);
+        Assert.Equal("SELECT \"ID\" FROM \"APP2\".\"ORDERS\"", b.SourceSelect("APP2.ORDERS", ["ID"]).Sql);
+        Assert.Equal("DELETE FROM \"TGT\".\"ORDERS\"", b.TargetDelete("ORDERS")!.Sql);
+        Assert.Equal("DELETE FROM \"APP2X\".\"ORDERS\"", b.TargetDelete("APP2.ORDERS")!.Sql);
+        Assert.Equal("INSERT INTO \"APP2X\".\"ORDERS\" (\"ID\") VALUES (:C1)", b.Insert("APP2.ORDERS", ["ID"]));
+        Assert.StartsWith("MERGE INTO \"APP2X\".\"ORDERS\" T", b.Merge("APP2.ORDERS", ["ID", "N"], ["ID"]), StringComparison.Ordinal);
+        Assert.Equal("SELECT COUNT(*) FROM \"APP2\".\"ORDERS\"", b.SourceCount("APP2.ORDERS").Sql);
+        Assert.Equal("SELECT COUNT(*) FROM \"APP2X\".\"ORDERS\"", b.TargetCount("APP2.ORDERS").Sql);
+        Assert.Equal("SELECT \"ID\" FROM \"APP2\".\"ORDERS\" WHERE \"ID\" = :K1", b.SourceSelectByKeys("APP2.ORDERS", ["ID"], ["ID"]));
+        Assert.Throws<InvalidOperationException>(() => b.SourceSelect("SRC.ORDERS", ["ID"])); // 기본 계정 표의 키는 이름만이다
+    }
+
+    [Fact]
+    public void Parent_key_reads_parent_owner_on_source_and_parent_rule_target_on_target()
+    {
+        var b = Owners(
+            new TableRule("CUSTOMERS", RuleKind.Custom, TargetAction.MergeByPk) { SourceOwner = "APP", TargetOwner = "APPT", CustomWhere = "ACTIVE = 1" },
+            new TableRule("ORDERS", RuleKind.ParentKey, TargetAction.DeleteRangeInsert)
+            {
+                SourceOwner = "APP2", TargetOwner = "APP2T",
+                Parent = new ParentLink("CUSTOMERS", ["CUST_ID"], ["ID"]) { ParentOwner = "APP" },
+            });
+
+        Assert.Equal("SELECT \"ID\" FROM \"APP2\".\"ORDERS\" WHERE \"CUST_ID\" IN (SELECT \"ID\" FROM \"APP\".\"CUSTOMERS\" WHERE (ACTIVE = 1))",
+            b.SourceSelect("APP2.ORDERS", ["ID"]).Sql);
+        Assert.Equal("DELETE FROM \"APP2T\".\"ORDERS\" WHERE \"CUST_ID\" IN (SELECT \"ID\" FROM \"APPT\".\"CUSTOMERS\" WHERE (ACTIVE = 1))",
+            b.TargetDelete("APP2.ORDERS")!.Sql);
+    }
+
+    [Fact]
+    public void Parent_outside_job_uses_child_source_owner_and_mapped_target()
+    {
+        var b = Owners(
+            new TableRule("LINES", RuleKind.ParentKey, TargetAction.DeleteRangeInsert)
+            {
+                SourceOwner = "APP2", TargetOwner = "APP2",
+                Parent = new ParentLink("HEADERS", ["H_ID"], ["ID"]),
+            },
+            new TableRule("ITEM", RuleKind.ParentKey, TargetAction.DeleteRangeInsert) { Parent = new ParentLink("HEAD", ["H_ID"], ["ID"]) });
+
+        // 부모가 작업 밖: 원본은 자식의 원본 계정, 대상은 MapTarget(기본 계정이 아니면 이름 그대로, 기본 계정이면 기본 대상 계정).
+        Assert.Equal("DELETE FROM \"APP2\".\"LINES\" WHERE \"H_ID\" IN (SELECT \"ID\" FROM \"APP2\".\"HEADERS\")", b.TargetDelete("APP2.LINES")!.Sql);
+        Assert.Equal("DELETE FROM \"TGT\".\"ITEM\" WHERE \"H_ID\" IN (SELECT \"ID\" FROM \"TGT\".\"HEAD\")", b.TargetDelete("ITEM")!.Sql);
+        Assert.Equal("SELECT \"ID\" FROM \"SRC\".\"ITEM\" WHERE \"H_ID\" IN (SELECT \"ID\" FROM \"SRC\".\"HEAD\")", b.SourceSelect("ITEM", ["ID"]).Sql);
+    }
 }

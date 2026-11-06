@@ -13,6 +13,11 @@ public sealed record SqlWithBinds(string Sql, IReadOnlyDictionary<string, BindVa
 /// 작업 규칙에서 원본 읽기·대상 삭제·삽입·MERGE 문장을 만든다. 식별자는 항상 따옴표로 감싸고,
 /// 기간 경계는 시작 포함·끝 제외(<c>&gt;=</c>, <c>&lt;</c>)이며 열에 <c>TO_DATE</c>·<c>TO_CHAR</c> 를 씌우지 않는다.
 /// 기간 열 바인드 이름은 문장 안에 나타나는 순서대로 <c>:B1_FROM</c>, <c>:B1_TO</c>, <c>:B2_FROM</c> … 이다.
+/// <para>
+/// 표는 규칙 키(<see cref="CopyOwners.Key(CopyJob, TableRule)"/>)로 가리키고, 원본 문장은 규칙의 원본 계정, 대상 문장은 규칙의 대상 계정에 쓴다.
+/// <paramref name="sourceTables"/>·<paramref name="targetTables"/> 도 규칙 키로 찾는다. 부모 키 규칙의 부모 표는 원본 쪽 = 부모 원본 계정,
+/// 대상 쪽 = 부모 규칙의 대상 계정(작업 밖이면 <see cref="CopyOwners.MapTarget"/>)이다.
+/// </para>
 /// </summary>
 public sealed class CopySqlBuilder(CopyJob job, ResolvedPeriod period,
                                    IReadOnlyDictionary<string, TableInfo> sourceTables,
@@ -21,40 +26,41 @@ public sealed class CopySqlBuilder(CopyJob job, ResolvedPeriod period,
     private static readonly Regex FromDtRegex = new(@":FROM_DT\b", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
     private static readonly Regex ToDtRegex = new(@":TO_DT\b", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
 
-    public SqlWithBinds SourceSelect(string table, IReadOnlyList<string> columns)
+    /// <param name="key">규칙 키.</param>
+    public SqlWithBinds SourceSelect(string key, IReadOnlyList<string> columns)
     {
         var binds = new Dictionary<string, BindValue>(StringComparer.Ordinal);
-        var sql = $"SELECT {string.Join(", ", columns.Select(SqlIdentifier.QuoteAlways))} FROM {Qualified(job.SourceOwner, table)}"
-                  + Where(table, isTarget: false, binds);
+        var sql = $"SELECT {string.Join(", ", columns.Select(SqlIdentifier.QuoteAlways))} FROM {SourceTable(key)}"
+                  + Where(key, isTarget: false, binds);
         return new SqlWithBinds(sql, binds);
     }
 
-    public SqlWithBinds SourceCount(string table) => Count(table, isTarget: false);
+    public SqlWithBinds SourceCount(string key) => Count(key, isTarget: false);
 
-    public SqlWithBinds TargetCount(string table) => Count(table, isTarget: true);
+    public SqlWithBinds TargetCount(string key) => Count(key, isTarget: true);
 
-    /// <summary><c>DeleteAllInsert</c> → 조건 없는 DELETE, <c>DeleteRangeInsert</c> → 범위 DELETE, 그 밖은 null.</summary>
-    public SqlWithBinds? TargetDelete(string table)
+    /// <summary><c>DeleteAllInsert</c> → 조건 없는 DELETE, <c>DeleteRangeInsert</c> → 범위 DELETE, 그 밖은 null. 지우는 표는 규칙의 대상 계정이다.</summary>
+    public SqlWithBinds? TargetDelete(string key)
     {
-        var rule = RuleOf(table);
+        var rule = RuleOf(key);
         if (rule.Action is not (TargetAction.DeleteAllInsert or TargetAction.DeleteRangeInsert)) return null;
         var binds = new Dictionary<string, BindValue>(StringComparer.Ordinal);
-        var sql = $"DELETE FROM {Qualified(job.TargetOwner, table)}";
-        if (rule.Action == TargetAction.DeleteRangeInsert) sql += Where(table, isTarget: true, binds);
+        var sql = $"DELETE FROM {TargetTable(key)}";
+        if (rule.Action == TargetAction.DeleteRangeInsert) sql += Where(key, isTarget: true, binds);
         return new SqlWithBinds(sql, binds);
     }
 
     /// <summary>바인드 이름은 <c>:C1</c>…<c>:Cn</c>, 열 순서와 같다.</summary>
-    public string Insert(string table, IReadOnlyList<string> columns)
-        => $"INSERT INTO {Qualified(job.TargetOwner, table)} ({Quoted(columns)}) VALUES ({string.Join(", ", columns.Select((_, i) => ":C" + (i + 1).ToString(CultureInfo.InvariantCulture)))})";
+    public string Insert(string key, IReadOnlyList<string> columns)
+        => $"INSERT INTO {TargetTable(key)} ({Quoted(columns)}) VALUES ({string.Join(", ", columns.Select((_, i) => ":C" + (i + 1).ToString(CultureInfo.InvariantCulture)))})";
 
-    public string Merge(string table, IReadOnlyList<string> columns, IReadOnlyList<string> keyColumns)
+    public string Merge(string key, IReadOnlyList<string> columns, IReadOnlyList<string> keyColumns)
     {
         if (keyColumns.Count == 0) throw new ArgumentException("MERGE 에는 키 열이 필요하다.", nameof(keyColumns));
         if (keyColumns.Any(k => !columns.Contains(k, StringComparer.Ordinal)))
             throw new ArgumentException("키 열이 복사 열에 없다.", nameof(keyColumns));
         var sb = new StringBuilder();
-        sb.Append("MERGE INTO ").Append(Qualified(job.TargetOwner, table)).Append(" T USING (SELECT ");
+        sb.Append("MERGE INTO ").Append(TargetTable(key)).Append(" T USING (SELECT ");
         sb.Append(string.Join(", ", columns.Select((c, i) => $":C{(i + 1).ToString(CultureInfo.InvariantCulture)} AS {SqlIdentifier.QuoteAlways(c)}")));
         sb.Append(" FROM DUAL) S ON (");
         sb.Append(string.Join(" AND ", keyColumns.Select(k => $"T.{SqlIdentifier.QuoteAlways(k)} = S.{SqlIdentifier.QuoteAlways(k)}")));
@@ -71,15 +77,15 @@ public sealed class CopySqlBuilder(CopyJob job, ResolvedPeriod period,
     }
 
     /// <summary>실패 행 다시 읽기. 키 바인드는 <c>:K1</c>…<c>:Kn</c>.</summary>
-    public string SourceSelectByKeys(string table, IReadOnlyList<string> columns, IReadOnlyList<string> keyColumns)
-        => $"SELECT {Quoted(columns)} FROM {Qualified(job.SourceOwner, table)} WHERE "
+    public string SourceSelectByKeys(string key, IReadOnlyList<string> columns, IReadOnlyList<string> keyColumns)
+        => $"SELECT {Quoted(columns)} FROM {SourceTable(key)} WHERE "
            + string.Join(" AND ", keyColumns.Select((k, i) => $"{SqlIdentifier.QuoteAlways(k)} = :K{(i + 1).ToString(CultureInfo.InvariantCulture)}"));
 
-    private SqlWithBinds Count(string table, bool isTarget)
+    private SqlWithBinds Count(string key, bool isTarget)
     {
         var binds = new Dictionary<string, BindValue>(StringComparer.Ordinal);
-        var owner = isTarget ? job.TargetOwner : job.SourceOwner;
-        return new SqlWithBinds($"SELECT COUNT(*) FROM {Qualified(owner, table)}{Where(table, isTarget, binds)}", binds);
+        var from = isTarget ? TargetTable(key) : SourceTable(key);
+        return new SqlWithBinds($"SELECT COUNT(*) FROM {from}{Where(key, isTarget, binds)}", binds);
     }
 
     private string Where(string table, bool isTarget, Dictionary<string, BindValue> binds)
@@ -111,17 +117,19 @@ public sealed class CopySqlBuilder(CopyJob job, ResolvedPeriod period,
             case RuleKind.ParentKey:
             {
                 var link = rule.Parent ?? throw new InvalidOperationException($"{table}: 부모 키 규칙에 부모 연결이 없다.");
-                var owner = isTarget ? job.TargetOwner : job.SourceOwner;
+                // 부모 표: 원본 쪽은 부모 원본 계정, 대상 쪽은 부모 규칙의 대상 계정(작업 밖이면 MapTarget). 작업 안의 부모는 키로 찾는다.
+                var parentKey = CopyOwners.ParentKey(job, rule);
+                var owner = isTarget ? CopyOwners.ParentTarget(job, rule) : CopyOwners.ParentSource(job, rule);
                 visiting ??= new HashSet<string>(StringComparer.Ordinal) { table };
-                if (!visiting.Add(link.ParentTable))
-                    throw new InvalidOperationException($"{table}: 부모 키 연결이 순환한다({link.ParentTable}).");
+                if (!visiting.Add(parentKey))
+                    throw new InvalidOperationException($"{table}: 부모 키 연결이 순환한다({parentKey}).");
                 var child = ColumnList(link.ChildColumns);
                 var parentCols = Quoted(link.ParentColumns);
-                var parentWhere = job.Tables.Any(r => r.Table == link.ParentTable)
-                    ? Predicate(link.ParentTable, isTarget, binds, ref counter, visiting)
+                var parentWhere = CopyOwners.Find(job, parentKey) is not null
+                    ? Predicate(parentKey, isTarget, binds, ref counter, visiting)
                     : null;
                 var sub = $"SELECT {parentCols} FROM {Qualified(owner, link.ParentTable)}" + (parentWhere is null ? "" : " WHERE " + parentWhere);
-                visiting.Remove(link.ParentTable);
+                visiting.Remove(parentKey);
                 return $"{child} IN ({sub})";
             }
             default:
@@ -254,9 +262,20 @@ public sealed class CopySqlBuilder(CopyJob job, ResolvedPeriod period,
         throw new InvalidOperationException($"기간 열 '{column}' 의 타입 {dataType} 은 날짜로 비교할 수 없다.");
     }
 
-    private TableRule RuleOf(string table)
-        => job.Tables.FirstOrDefault(r => string.Equals(r.Table, table, StringComparison.Ordinal))
-           ?? throw new InvalidOperationException($"작업에 테이블 '{table}' 규칙이 없다.");
+    private TableRule RuleOf(string key)
+        => CopyOwners.Find(job, key) ?? throw new InvalidOperationException($"작업에 테이블 '{key}' 규칙이 없다.");
+
+    private string SourceTable(string key)
+    {
+        var rule = RuleOf(key);
+        return Qualified(CopyOwners.Source(job, rule), rule.Table);
+    }
+
+    private string TargetTable(string key)
+    {
+        var rule = RuleOf(key);
+        return Qualified(CopyOwners.Target(job, rule), rule.Table);
+    }
 
     private static string Qualified(string owner, string table)
         => SqlIdentifier.QuoteAlways(owner) + "." + SqlIdentifier.QuoteAlways(table);
