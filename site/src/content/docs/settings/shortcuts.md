@@ -104,6 +104,7 @@ Oranda의 모든 명령은 단축키로 부르거나 명령 팔레트에서 이�
 | 참조하는 행 열기(부모) | `F4` | `F4` |
 | 이 행을 참조하는 행 열기 | `Shift+F4` | `Shift+F4` |
 | 행 보기 | `Alt+Enter` | `Cmd+Option+R` |
+| 셀 편집 열기(편집 모드 결과) | `Enter`, `F2` | `Enter`, `F2` |
 | 행 추가 | `Alt+Insert` | `Cmd+Option+N` |
 | 행 복제 | `Ctrl+Shift+D`, `Ctrl+D` | `Cmd+Shift+D`, `Cmd+D` |
 | 행 붙여넣기 | `Ctrl+Shift+V` | `Cmd+Shift+V` |
