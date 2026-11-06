@@ -36,7 +36,8 @@ public sealed class ManualCopyScreens : IDisposable
     private static readonly Guid DevId = new("00000000-0000-0000-0000-0000000000a3");
 
     private static readonly ConnectionProfile Prod = new("prod-db", "acme", "db.example.com:1521/prodsvc", Id: ProdId, Environment: ConnectionEnvironment.Production);
-    private static readonly ConnectionProfile Test = new("test-db", "acme_test", "db.example.com:1521/testsvc", Id: TestId, Environment: ConnectionEnvironment.Test);
+    // 대상 접속 계정 = 예시 작업의 기본 대상 계정(ACME_SALES): 다른 계정에 쓰는 규칙만 경고색으로 보인다(묶음 B).
+    private static readonly ConnectionProfile Test = new("test-db", "acme_sales","db.example.com:1521/testsvc", Id: TestId, Environment: ConnectionEnvironment.Test);
 
     /// <summary>PC 시간대와 상관없이 같은 시계 글자로 보이는 시각(화면은 <c>LocalDateTime</c> 으로 그린다).</summary>
     private static DateTimeOffset Local(int year, int month, int day, int hour, int minute, int second = 0) =>
@@ -209,6 +210,55 @@ public sealed class ManualCopyScreens : IDisposable
                 new(Named<ComboBox>(window, "KindBox"), 8),
                 new(VisibleText(window, "마스킹"), 9, -14, 0),
                 new(Named<Button>(window, "ToPrecheckButton"), 10, -12, 0),
+            ]);
+        }
+        finally
+        {
+            window.Close();
+        }
+    });
+
+    // ---- 1단계: 여러 계정·시노님 ------------------------------------------------------------------
+
+    [Fact]
+    public Task Rule_edit_with_other_schemas() => HeadlessHost.Run(async () =>
+    {
+        if (!ManualCapture.Enabled)
+        {
+            return;
+        }
+
+        var h = new DataCopyHarness();
+        var (window, vm, overlay) = await OpenWindowAsync(h);
+        try
+        {
+            // 시노님 ORDER_HIST 로 더한 다른 계정의 표(ACME_ARCH.ORDER_HIST)와 대상 계정을 바꾼 코드 표.
+            var job = ExampleJob(MainJobId, "월말 테스트 DB 갱신", rules:
+            [
+                new TableRule("ORDERS", RuleKind.Period, TargetAction.DeleteRangeInsert) { PeriodColumns = [new PeriodColumn("ORDER_DT", "YYYYMMDD")] },
+                new TableRule("ORDER_HIST", RuleKind.ParentKey, TargetAction.DeleteRangeInsert)
+                {
+                    SourceOwner = "ACME_ARCH",
+                    TargetOwner = "ACME_ARCH",
+                    WrittenAs = "ORDER_HIST",
+                    Parent = new ParentLink("ORDERS", ["ORDER_ID"], ["ORDER_ID"], "FK_HIST_ORDERS") { ParentOwner = "ACME_SALES" },
+                },
+                new TableRule("CODES", RuleKind.All, TargetAction.MergeByPk) { SourceOwner = "ACME_COMMON", TargetOwner = "ACME_SALES" },
+            ]);
+            h.Store.Jobs[MainJobId] = job;
+            await vm.OpenJobAsync(job);
+            vm.Editor.SelectedRule = vm.Editor.Rules[1];
+            Settle(window);
+
+            var grid = Named<MonitorGrid>(window, "RuleGrid");
+            ManualCapture.SaveOverlaid(window, overlay, "data-copy-owners",
+            [
+                new(ByAutomationName<TextBox>(window, "원본 기본 계정"), 1),
+                new(ByAutomationName<TextBox>(window, "대상 기본 계정"), 2),
+                GridCell(grid, 3, -1, 0),
+                GridCell(grid, 4, 1, 2),
+                new(Named<TextBlock>(window, "RuleHeaderText"), 5, -14, 0),
+                new(Named<ComboBox>(window, "TargetOwnerBox"), 6),
             ]);
         }
         finally
