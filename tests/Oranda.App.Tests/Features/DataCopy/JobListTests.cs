@@ -6,6 +6,31 @@ namespace Oranda.App.Tests.Features.DataCopy;
 public sealed class JobListTests
 {
     [Fact]
+    public void Unique_name_skips_names_already_in_the_list()
+    {
+        Assert.Equal("새 작업", JobListViewModel.UniqueName("새 작업", ["월말 복사"]));
+        Assert.Equal("새 작업 2", JobListViewModel.UniqueName("새 작업", ["새 작업"]));
+        Assert.Equal("새 작업 3", JobListViewModel.UniqueName("새 작업", [" 새 작업 ", "새 작업 2", "새 작업 4"]));
+        Assert.Equal("Orders copy 2", JobListViewModel.UniqueName("Orders copy", ["ORDERS COPY"])); // 대소문자 무시
+    }
+
+    [Fact]
+    public async Task Suggested_names_for_new_and_duplicate_do_not_clash()
+    {
+        var store = new FakeJobStore();
+        var list = new JobListViewModel(new DataCopyServices { Store = store });
+        Assert.Equal("새 작업", list.SuggestName("새 작업"));
+
+        await list.NewAsync(list.SuggestName("새 작업"));
+        Assert.Equal("새 작업 2", list.SuggestName("새 작업"));
+        await list.NewAsync(list.SuggestName("새 작업"));
+        Assert.Equal("새 작업 3", list.SuggestName("새 작업"));
+
+        await list.DuplicateAsync(list.SuggestName(list.Selected!.Name + " 복사본"));
+        Assert.Equal("새 작업 2 복사본 2", list.SuggestName("새 작업 2 복사본"));
+    }
+
+    [Fact]
     public async Task Job_menu_new_duplicate_rename_export_import_delete()
     {
         var store = new FakeJobStore();

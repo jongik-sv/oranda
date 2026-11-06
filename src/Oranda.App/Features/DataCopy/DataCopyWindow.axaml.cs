@@ -274,7 +274,8 @@ public partial class DataCopyWindow : Window
 
     private async void OnNewJob(object? sender, RoutedEventArgs e)
     {
-        var name = await Dialogs.PromptAsync("새 작업 이름", "새 작업", CancellationToken.None).ConfigureAwait(true);
+        var initial = Vm?.Jobs.SuggestName("새 작업") ?? "새 작업"; // 「새 작업」이 있으면 「새 작업 2」…
+        var name = await Dialogs.PromptAsync("새 작업 이름", initial, CancellationToken.None).ConfigureAwait(true);
         if (string.IsNullOrWhiteSpace(name) || Vm is not { } vm)
         {
             return;
@@ -296,7 +297,7 @@ public partial class DataCopyWindow : Window
             return;
         }
 
-        var name = await Dialogs.PromptAsync("복제한 작업 이름", item.Name + " 복사본", CancellationToken.None).ConfigureAwait(true);
+        var name = await Dialogs.PromptAsync("복제한 작업 이름", vm.Jobs.SuggestName(item.Name + " 복사본"), CancellationToken.None).ConfigureAwait(true);
         if (!string.IsNullOrWhiteSpace(name))
         {
             await RunUiAsync(async ct =>

@@ -57,6 +57,27 @@ public sealed partial class JobListViewModel(DataCopyServices services) : ViewMo
 
     public ObservableCollection<JobListItem> Items { get; } = [];
 
+    /// <summary>
+    /// 목록에 없는 작업 이름을 제안한다: <paramref name="baseName"/> 이 목록에 없으면 그대로, 있으면 「이름 2」, 「이름 3」… 가운데 처음 빈 것.
+    /// 새 작업(「새 작업」)과 복제(「원래 이름 복사본」) 대화상자의 처음 값에 쓴다. 이름 비교는 대소문자·앞뒤 공백을 무시한다.
+    /// </summary>
+    public string SuggestName(string baseName) => UniqueName(baseName, Items.Select(i => i.Name));
+
+    /// <inheritdoc cref="SuggestName"/>
+    public static string UniqueName(string baseName, IEnumerable<string> taken)
+    {
+        ArgumentNullException.ThrowIfNull(baseName);
+        ArgumentNullException.ThrowIfNull(taken);
+        var used = taken.Select(n => n.Trim()).ToHashSet(StringComparer.CurrentCultureIgnoreCase);
+        var name = baseName.Trim();
+        for (var n = 2; used.Contains(name); n++)
+        {
+            name = string.Create(CultureInfo.InvariantCulture, $"{baseName.Trim()} {n}");
+        }
+
+        return name;
+    }
+
     /// <summary>목록을 다시 읽는다. 읽은 뒤에도 같은 작업이 있으면 선택을 유지한다.</summary>
     public async Task RefreshAsync(CancellationToken ct = default)
     {
