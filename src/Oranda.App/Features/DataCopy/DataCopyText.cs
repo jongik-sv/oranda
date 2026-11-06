@@ -37,6 +37,13 @@ internal static class DataCopyText
     /// <summary>원본 세션 없이 시노님 노드를 더하려 할 때.</summary>
     public const string SynonymNeedsSource = "시노님은 원본 접속을 열어야 실제 표로 풀 수 있습니다. 원본 접속을 고른 뒤 다시 추가하세요.";
 
+    /// <summary>실행 확인이 필요한 작업인데 확인 창을 띄울 수 없을 때(묻지 못했으면 실행하지 않는다).</summary>
+    public const string RunConfirmMissing = "실행 확인 창을 띄울 수 없어 복사를 시작하지 않았습니다.";
+
+    /// <summary>원본 세션은 열렸지만 메타데이터 서비스가 없어 시노님을 풀지 못하고 적은 이름 그대로 더했을 때.</summary>
+    public static string SynonymNotResolved(string table) =>
+        $"{table} 규칙을 추가했지만 메타데이터 서비스를 찾을 수 없어 시노님인지 확인하지 못했습니다. 시노님이면 실제 계정.표로 다시 추가하세요.";
+
     public static string InvalidCondition(string table, string problem) => $"테이블 {table} 의 조건을 쓸 수 없습니다. {problem}";
 
     public static string RecreateNotAllowed(string table) =>

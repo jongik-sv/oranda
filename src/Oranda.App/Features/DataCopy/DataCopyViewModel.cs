@@ -138,7 +138,10 @@ public sealed partial class DataCopyViewModel : ViewModelBase, IAsyncDisposable
 
     public bool HasUnfinished => UnfinishedRuns.Count > 0;
 
-    /// <summary>실행 확인 대화상자(창이 복사 창을 소유자로 띄워 연결한다). 연결이 없으면(화면 없는 시험) 묻지 않는다.</summary>
+    /// <summary>
+    /// 실행 확인 대화상자(창이 복사 창을 소유자로 띄워 연결한다). 물어야 하는 작업(<see cref="RunConfirmation.For"/>)인데 연결이 없으면
+    /// 묻지 못했으니 실행하지 않는다(fail-closed).
+    /// </summary>
     public Func<RunConfirmation, Task<bool>>? ConfirmRun { get; set; }
 
     public bool IsRuleEdit => Step == DataCopyStep.RuleEdit;
@@ -231,7 +234,7 @@ public sealed partial class DataCopyViewModel : ViewModelBase, IAsyncDisposable
         Precheck.Reset();
         Run.Reset();
         _checkedPeriod = null;
-        IsReadOnlyJob = Jobs.Items.FirstOrDefault(i => i.Job.Id == job.Id)?.IsReadOnly ?? false;
+        IsReadOnlyJob = IsReadOnlyEntry(job);
         Run.SaveLastRun = !IsReadOnlyJob;
         var source = ConnectionRelinker.Resolve(job.Source, _profiles, isTarget: false);
         var target = ConnectionRelinker.Resolve(job.Target, _profiles, isTarget: true);
@@ -260,6 +263,25 @@ public sealed partial class DataCopyViewModel : ViewModelBase, IAsyncDisposable
         Step = DataCopyStep.RuleEdit;
         Say(string.Join(' ', notices), error: notices.Count > 0);
         await LoadUnfinishedAsync(job, ct).ConfigureAwait(true);
+    }
+
+    /// <summary>
+    /// 연 작업이 새 버전 파일(읽기 전용)인지: ID 가 아니라 고른 목록 항목으로 본다(같은 ID 의 파일이 둘이면 ID 로는 다른 파일의 값을 볼 수 있다).
+    /// 고른 항목이 이 작업이면 그 항목, 아니면 같은 작업 객체의 항목을 본다. 둘 다 없으면 같은 ID 의 항목 가운데 하나라도 읽기 전용이면 읽기 전용으로 본다(막는 쪽).
+    /// </summary>
+    private bool IsReadOnlyEntry(CopyJob job)
+    {
+        if (Jobs.Selected is { } selected && ReferenceEquals(selected.Job, job))
+        {
+            return selected.IsReadOnly;
+        }
+
+        if (Jobs.Items.FirstOrDefault(i => ReferenceEquals(i.Job, job)) is { } item)
+        {
+            return item.IsReadOnly;
+        }
+
+        return Jobs.Items.Any(i => i.Job.Id == job.Id && i.IsReadOnly);
     }
 
     private async Task LoadUnfinishedAsync(CopyJob job, CancellationToken ct)
@@ -461,6 +483,11 @@ public sealed partial class DataCopyViewModel : ViewModelBase, IAsyncDisposable
 
         var fallback = owner ?? (Editor.SourceOwner.Length > 0 ? Editor.SourceOwner : Editor.Source?.Profile.User.ToUpperInvariant() ?? string.Empty);
         await AddResolvedAsync(new CopyTableName(fallback, name), null, ct).ConfigureAwait(true);
+        if (session is not null)
+        {
+            // 원본 세션은 열렸지만 메타데이터 서비스가 없어 시노님을 풀지 못했다: 적은 이름 그대로 더했음을 알린다.
+            Say(DataCopyText.SynonymNotResolved(Editor.SelectedRule?.SourceName ?? name), error: true);
+        }
     }
 
     private async Task AddResolutionAsync(CopyTableResolution resolution, ISession session, CancellationToken ct)
@@ -862,6 +889,30 @@ public sealed partial class DataCopyViewModel : ViewModelBase, IAsyncDisposable
             return;
         }
 
+        // 대상 계정이 둘 이상이거나 접속 계정이 아닌 계정에 쓰면 계정별 지울 표를 보이고 묻는다(결정 B-2 a, 기본 단추 취소).
+        // 먼저 묻고 그 뒤에 직전 확인(PreflightAsync)을 한다: 대화상자가 떠 있는 사이에 접속 설정이 바뀌어도 바뀐 접속으로 실행하지 않는다.
+        var job = CurrentJob;
+        var sessionUser = (_checkedTarget?.User ?? _sessions?.Target.Profile.User ?? string.Empty).ToUpperInvariant();
+        if (RunConfirmation.For(job, sessionUser) is { } confirmation)
+        {
+            if (ConfirmRun is not { } ask)
+            {
+                Say(DataCopyText.RunConfirmMissing, error: true); // 묻지 못했으면 실행하지 않는다
+                return;
+            }
+
+            if (!await ask(confirmation).ConfigureAwait(true))
+            {
+                Say("복사를 시작하지 않았습니다.");
+                return;
+            }
+
+            if (!ReferenceEquals(job, CurrentJob) || Run.IsRunning || IsBusy || !Precheck.CanRun || Step != DataCopyStep.Precheck)
+            {
+                return; // 묻는 사이에 작업·상태가 바뀌었다
+            }
+        }
+
         IsBusy = true;
         CopySessions? sessions;
         try
@@ -878,20 +929,14 @@ public sealed partial class DataCopyViewModel : ViewModelBase, IAsyncDisposable
             return;
         }
 
-        // 대상 계정이 둘 이상이거나 접속 계정이 아닌 계정에 쓰면 계정별 지울 표를 보이고 묻는다(결정 B-2 a, 기본 단추 취소).
-        var job = CurrentJob;
-        if (RunConfirmation.For(job, sessions.Target.Profile.User.ToUpperInvariant()) is { } confirmation && ConfirmRun is { } ask)
+        // 확인한 작업·대상 접속 계정 그대로인지 한 번 더 본다(직전 확인이 점검한 것과 같은지 봤지만, 물은 내용과도 같아야 한다).
+        if (!ReferenceEquals(job, CurrentJob)
+            || !string.Equals(sessions.Target.Profile.User.ToUpperInvariant(), sessionUser, StringComparison.Ordinal))
         {
-            if (!await ask(confirmation).ConfigureAwait(true))
-            {
-                Say("복사를 시작하지 않았습니다.");
-                return;
-            }
-
-            if (!ReferenceEquals(job, CurrentJob) || Run.IsRunning || IsBusy || !Precheck.CanRun)
-            {
-                return; // 묻는 사이에 작업·상태가 바뀌었다
-            }
+            Precheck.Invalidate();
+            _checkedJob = null;
+            Say("확인한 뒤 작업이나 대상 접속이 바뀌었습니다. 다시 점검하세요.", error: true);
+            return;
         }
 
         var decisions = Precheck.BuildDecisions();

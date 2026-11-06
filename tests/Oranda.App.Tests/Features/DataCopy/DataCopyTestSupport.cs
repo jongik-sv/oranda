@@ -219,6 +219,9 @@ internal sealed class DataCopyHarness
 
     public FakeMetadataProvider Metadata { get; } = new();
 
+    /// <summary>참이면 메타데이터 서비스가 없는 것처럼 둔다(시노님을 풀 수 없다).</summary>
+    public bool NoMetadata { get; set; }
+
     /// <summary>접속 목록. 시험이 환경 라벨을 바꾸면 다음에 읽을 때 새 값이 보인다.</summary>
     public List<ConnectionProfile> Profiles { get; }
 
@@ -235,7 +238,7 @@ internal sealed class DataCopyHarness
         Precheck = Precheck,
         Runner = Runner,
         RunLog = RunLog,
-        Metadata = Metadata,
+        Metadata = NoMetadata ? null : Metadata,
         Time = new FixedTime(),
         ProfileLoader = _ => Task.FromResult<IReadOnlyList<ConnectionProfile>>([.. Profiles]),
         SessionOpener = (profile, _) =>
@@ -261,7 +264,8 @@ internal sealed class DataCopyHarness
     public async Task<DataCopyViewModel> OpenAsync(CopyJob job)
     {
         Store.Jobs[job.Id] = job;
-        var vm = new DataCopyViewModel(Services());
+        // 실행 확인은 묻지 못하면 실행하지 않는다(fail-closed): 시험은 기본으로 「복사 실행」을 누른 것으로 둔다.
+        var vm = new DataCopyViewModel(Services()) { ConfirmRun = _ => Task.FromResult(true) };
         await vm.InitializeAsync();
         await vm.OpenJobAsync(job);
         return vm;

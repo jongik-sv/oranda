@@ -323,6 +323,107 @@ public sealed class CopyOwnersUiTests
     }
 
     [Fact]
+    public async Task Run_is_not_started_when_the_confirmation_cannot_be_asked()
+    {
+        var h = new DataCopyHarness();
+        var vm = await h.OpenAsync(MixedJob());
+        await vm.GoToPrecheckAsync();
+        vm.ConfirmRun = null; // 창이 확인을 잇지 못했다
+
+        await vm.StartRunAsync();
+        Assert.Equal(0, h.Runner.Calls);
+        Assert.True(vm.StatusIsError);
+        Assert.Equal(DataCopyText.RunConfirmMissing, vm.StatusText);
+    }
+
+    [Fact]
+    public async Task Connection_changed_while_the_confirmation_is_open_is_caught_before_the_run()
+    {
+        // 묻고 나서 직전 확인을 한다: 대화상자가 떠 있는 사이 대상이 운영 접속이 되면 실행하지 않는다.
+        var h = new DataCopyHarness();
+        var vm = await h.OpenAsync(MixedJob());
+        await vm.GoToPrecheckAsync();
+        var asked = 0;
+        vm.ConfirmRun = _ =>
+        {
+            asked++;
+            h.Profiles[1] = h.Target with { Environment = Oranda.Core.Connection.ConnectionEnvironment.Production };
+            return Task.FromResult(true);
+        };
+
+        await vm.StartRunAsync();
+        Assert.Equal(1, asked);
+        Assert.Equal(0, h.Runner.Calls);
+        Assert.False(vm.Precheck.CanRun); // 점검 결과를 지워 다시 점검하게 한다
+        Assert.True(vm.StatusIsError);
+    }
+
+    [Fact]
+    public async Task Read_only_state_comes_from_the_chosen_list_entry_not_the_job_id()
+    {
+        // 같은 ID 의 파일이 둘(하나는 새 버전 파일). 새 버전 파일을 고르면 ID 로 먼저 나온 보통 파일과 상관없이 읽기 전용이다.
+        var h = new DataCopyHarness();
+        var normal = TestJobs.Job("보통", rules: TestJobs.Rule("ORDERS"));
+        var newer = normal with { Name = "새 버전" };
+        var store = new TwoFileStore([new CopyJobEntry(normal, "/jobs/a.json", false, null), new CopyJobEntry(newer, "/jobs/b.json", true, null)]);
+        var services = h.Services();
+        var vm = new DataCopyViewModel(new DataCopyServices
+        {
+            Store = store,
+            Precheck = services.Precheck,
+            Runner = services.Runner,
+            Metadata = services.Metadata,
+            Time = services.Time,
+            ProfileLoader = services.ProfileLoader,
+            SessionOpener = services.SessionOpener,
+        });
+        await vm.InitializeAsync();
+
+        vm.Jobs.Selected = vm.Jobs.Items[1];
+        await vm.OpenJobAsync(vm.Jobs.Items[1].Job);
+        Assert.True(vm.IsReadOnlyJob);
+
+        vm.Jobs.Selected = vm.Jobs.Items[0];
+        await vm.OpenJobAsync(vm.Jobs.Items[0].Job);
+        Assert.False(vm.IsReadOnlyJob);
+
+        // 목록에 없는 같은 ID 의 객체면 하나라도 읽기 전용이면 막는다.
+        vm.Jobs.Selected = null;
+        await vm.OpenJobAsync(normal with { Name = "다른 객체" });
+        Assert.True(vm.IsReadOnlyJob);
+    }
+
+    [Fact]
+    public async Task Typed_name_without_a_metadata_service_says_the_synonym_was_not_resolved()
+    {
+        var h = new DataCopyHarness { NoMetadata = true };
+        var vm = await h.OpenAsync(TestJobs.Job("메타데이터 없음"));
+
+        await vm.AddTableInputAsync("ORDERS");
+
+        Assert.Equal("APP.ORDERS", Assert.Single(vm.Editor.Rules).SourceName);
+        Assert.True(vm.StatusIsError);
+        Assert.Contains("시노님", vm.StatusText, StringComparison.Ordinal);
+    }
+
+    private sealed class TwoFileStore(IReadOnlyList<CopyJobEntry> entries) : ICopyJobStore
+    {
+        public Task<IReadOnlyList<CopyJobEntry>> ListAsync(CancellationToken ct) => Task.FromResult(entries);
+
+        public Task SaveAsync(CopyJob job, CancellationToken ct) => Task.CompletedTask;
+
+        public Task<CopyJob> DuplicateAsync(string id, string newName, CancellationToken ct) => throw new NotSupportedException();
+
+        public Task RenameAsync(string id, string newName, CancellationToken ct) => Task.CompletedTask;
+
+        public Task DeleteAsync(string id, CancellationToken ct) => Task.CompletedTask;
+
+        public Task ExportAsync(string id, string path, CancellationToken ct) => Task.CompletedTask;
+
+        public Task<CopyJob> ImportAsync(string path, CancellationToken ct) => throw new NotSupportedException();
+    }
+
+    [Fact]
     public async Task Run_rows_are_keyed_by_rule_key_and_show_schema_dot_table()
     {
         var h = new DataCopyHarness();
