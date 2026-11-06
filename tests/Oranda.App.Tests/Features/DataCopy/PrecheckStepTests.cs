@@ -2,6 +2,7 @@ using Oranda.App.Features.DataCopy;
 using Oranda.Core.Connection;
 using Oranda.Core.Execution;
 using Oranda.Core.Sessions;
+using Oranda.Core.Metadata;
 using Oranda.Core.Transfer.Copy;
 using Oranda.Testing;
 
@@ -228,6 +229,64 @@ public sealed class PrecheckStepTests
         await vm.GoToPrecheckAsync();
 
         Assert.Equal(["SRC", "TGT", "SRC", "SRC"], h.Opened.Select(p => p.Name));
+    }
+
+    [Fact]
+    public async Task Precheck_reuses_the_source_session_opened_for_column_info_and_closes_each_session_once()
+    {
+        var h = new DataCopyHarness();
+        h.Metadata.Tables[new DbObjectRef("APP", "ORDERS", "TABLE")] = TestJobs.Table("ORDERS", TestJobs.Column("ORDER_ID", "NUMBER", 1));
+        var vm = await h.OpenAsync(TestJobs.Job("세션 다시 쓰기", rules: TestJobs.Rule("ORDERS")));
+
+        await vm.LoadColumnsAsync(vm.Editor.Rules[0]); // 열 정보를 읽으려고 원본만 연다
+        Assert.Equal(["SRC"], h.Opened.Select(p => p.Name));
+
+        await vm.GoToPrecheckAsync();
+        Assert.Equal(["SRC", "TGT"], h.Opened.Select(p => p.Name)); // 원본을 다시 열지 않는다(비밀번호를 두 번 묻지 않는다)
+        Assert.True(h.Opened[0].ReadOnly);
+
+        await vm.CloseSessionsAsync();
+        Assert.All(h.OpenedSessions, s => Assert.Equal(1, s.DisposeCount)); // 넘겨 쓴 원본도 한 번만 닫는다
+    }
+
+    [Fact]
+    public async Task Handed_over_source_session_is_closed_once_when_the_target_does_not_open()
+    {
+        var h = new DataCopyHarness();
+        h.Metadata.Tables[new DbObjectRef("APP", "ORDERS", "TABLE")] = TestJobs.Table("ORDERS", TestJobs.Column("ORDER_ID", "NUMBER", 1));
+        var vm = await h.OpenAsync(TestJobs.Job("대상 열기 실패", rules: TestJobs.Rule("ORDERS")));
+        await vm.LoadColumnsAsync(vm.Editor.Rules[0]);
+        var columnSession = Assert.Single(h.OpenedSessions);
+
+        h.RefuseOpen = p => p.Name == "TGT"; // 대상 비밀번호 입력을 취소했다
+        await vm.GoToPrecheckAsync();
+        Assert.False(vm.HasSessions);
+        Assert.Equal(1, columnSession.DisposeCount); // 넘겨 쓴 원본은 쌍을 못 만들었을 때 한 번 닫힌다
+
+        h.RefuseOpen = null;
+        await vm.LoadColumnsAsync(vm.Editor.Rules[0]); // 닫힌 세션을 다시 쓰지 않고 새로 연다
+        Assert.Equal(["SRC", "TGT", "SRC"], h.Opened.Select(p => p.Name));
+        Assert.Equal(1, columnSession.DisposeCount);
+    }
+
+    [Fact]
+    public async Task Precheck_selects_the_first_confirm_item_and_keeps_the_choice_on_recheck()
+    {
+        var h = new DataCopyHarness();
+        h.Precheck = new FakePrecheck(TestJobs.Report(
+        [
+            new CheckItem("CODES", "COLUMN_MISSING", CheckLevel.Error, "원본에 없는 NOT NULL 열이 대상에 있습니다."),
+            new CheckItem("ORDERS", "TRIGGERS", CheckLevel.Confirm, "대상 트리거가 실행됩니다.") { Choices = [CheckChoice.DisableTriggers] },
+            new CheckItem("ORDER_ITEMS", "FK_CHILD", CheckLevel.Confirm, "대상의 자식 테이블이 참조합니다.") { Choices = [CheckChoice.SwitchToMerge] },
+        ]));
+        var vm = await h.OpenAsync(TestJobs.Job("점검 항목 고르기", rules: TestJobs.Rule("ORDERS")));
+
+        await vm.GoToPrecheckAsync();
+        Assert.Equal("ORDERS", vm.Precheck.SelectedItem?.Table); // 오류가 앞에 있어도 고를 거리가 있는 첫 「확인 필요」
+
+        vm.Precheck.SelectedItem = vm.Precheck.Items.Single(i => i.Table == "ORDER_ITEMS");
+        await vm.GoToPrecheckAsync();
+        Assert.Equal("ORDER_ITEMS", vm.Precheck.SelectedItem?.Table); // 다시 점검해도 고른 항목을 이어 간다
     }
 
     [Fact]

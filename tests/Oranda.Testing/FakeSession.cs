@@ -45,8 +45,12 @@ public sealed class FakeSession : ISession
         return Task.CompletedTask;
     }
 
+    /// <summary>DisposeAsync 를 부른 횟수(세션을 두 번 닫지 않는지 보는 시험용).</summary>
+    public int DisposeCount { get; private set; }
+
     public ValueTask DisposeAsync()
     {
+        DisposeCount++;
         State = SessionState.Closed;
         return ValueTask.CompletedTask;
     }

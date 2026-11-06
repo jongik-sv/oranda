@@ -168,6 +168,41 @@ public sealed class RuleEditorTests
     }
 
     [Fact]
+    public async Task Added_table_starts_target_owner_from_the_target_connection_user()
+    {
+        var h = new DataCopyHarness();
+        h.Metadata.Tables[new DbObjectRef("APP", "ORDERS", "TABLE")] = TestJobs.Table("ORDERS", TestJobs.Column("ORDER_ID", "NUMBER", 1));
+        var vm = await h.OpenAsync(TestJobs.Job("소유자 기본값"));
+        vm.Editor.SourceOwner = string.Empty;
+        vm.Editor.TargetOwner = string.Empty;
+
+        await vm.AddTableAsync(new DbObjectRef("APP", "ORDERS", "TABLE"), h.Source);
+
+        Assert.Equal("APP", vm.Editor.SourceOwner);
+        Assert.Equal("TGT_USER", vm.Editor.TargetOwner); // 원본 표 소유자가 아니라 대상 접속의 사용자(스키마)
+    }
+
+    [Fact]
+    public async Task Table_added_before_choosing_a_target_takes_the_target_user_once_a_target_is_chosen()
+    {
+        var h = new DataCopyHarness();
+        h.Metadata.Tables[new DbObjectRef("APP", "ORDERS", "TABLE")] = TestJobs.Table("ORDERS", TestJobs.Column("ORDER_ID", "NUMBER", 1));
+        var vm = new DataCopyViewModel(h.Services());
+        await vm.InitializeAsync();
+
+        await vm.AddTableAsync(new DbObjectRef("APP", "ORDERS", "TABLE"), h.Source); // 스키마 브라우저: 새 작업, 대상 없음
+        Assert.Null(vm.Editor.Target);
+        Assert.Equal("APP", vm.Editor.TargetOwner);
+
+        vm.Editor.Target = vm.Editor.TargetOptions.Single(o => o.Profile.Name == "TGT");
+        Assert.Equal("TGT_USER", vm.Editor.TargetOwner);
+
+        vm.Editor.TargetOwner = "MINE";
+        vm.Editor.Target = vm.Editor.TargetOptions.Single(o => o.Profile.Name == "SRC");
+        Assert.Equal("MINE", vm.Editor.TargetOwner); // 한 번 바꾼 뒤에는 사용자가 쓴 값을 덮지 않는다
+    }
+
+    [Fact]
     public void Commands_are_listed_in_commands_md()
     {
         var doc = File.ReadAllText(FindCommandsDoc());

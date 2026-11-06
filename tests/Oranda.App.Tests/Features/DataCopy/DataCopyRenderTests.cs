@@ -6,6 +6,7 @@ using Avalonia.Styling;
 using Avalonia.Threading;
 using Oranda.App.Features.DataCopy;
 using Oranda.App.Features.Localization;
+using Oranda.App.Features.SessionMonitor;
 using Oranda.App.Shell;
 using Oranda.App.Tests.Shell.Headless;
 using Oranda.Core.Execution;
@@ -130,8 +131,75 @@ public sealed class DataCopyRenderTests : IDisposable
             Assert.False(window.FindControl<Button>("RunButton")!.IsEffectivelyVisible);
             Assert.False(window.FindControl<Button>("StopButton")!.IsEffectivelyVisible);
             Assert.Equal(4, vm.Editor.Rules.Count);
+            var grid = window.FindControl<MonitorGrid>("RuleGrid")!;
+            Assert.Equal(4, grid.Model!.RowCount); // 규칙 표 = 조회 결과와 같은 그리드
+            Assert.Equal(0, grid.Model.Active.Row); // 고른 규칙(ORDERS)이 현재 행 ▶
+            AssertFillsWidth(grid);
             AssertNotClipped(window, "규칙 편집");
             Shots(window, "1-rules");
+        }
+        finally
+        {
+            window.Close();
+        }
+    });
+
+    // 그리드가 직접 그리는 칸은 TextClipping 이 못 본다: 마지막 열을 뺀 모든 열이 값 글자 수만큼 넓은지(그리드 자동 크기와 같은 계산, 상한 360) 본다.
+    private static void AssertColumnsFit(MonitorGrid grid)
+    {
+        var m = grid.Model!;
+        var cw = new Oranda.App.Features.ResultGrid.GridTextFactory(new Avalonia.Media.Typeface(grid.GridControl.GridFontFamily), grid.GridControl.GridFontSize).CharWidth;
+        for (var c = 0; c < m.Columns.Count - 1; c++)
+        {
+            for (var r = 0; r < m.RowCount; r++)
+            {
+                var text = m.GetCellText(r, c);
+                var need = Math.Min(360, (Oranda.App.Features.ResultGrid.ResultGridModel.DisplayWidth(text) * cw) + 16);
+                Assert.True(m.GetColumnWidth(c) >= need - 0.5, $"{grid.Name} 열 {m.Columns[c].Name}: '{text}' 에 {need} 가 필요한데 {m.GetColumnWidth(c)}");
+            }
+        }
+    }
+
+    // 마지막 열이 남은 폭을 채워 그리드 오른쪽에 빈 끝 칸이 남지 않는다.
+    private static void AssertFillsWidth(MonitorGrid grid)
+    {
+        var c = grid.GridControl;
+        Assert.True(c.ExtentWidth >= c.ViewportWidth - 2, $"그리드 폭 {c.ViewportWidth} 에 열 폭 합 {c.ExtentWidth}");
+    }
+
+    [Fact]
+    public Task Rule_edit_step_fits_a_narrow_window() => HeadlessHost.Run(async () =>
+    {
+        var h = new DataCopyHarness();
+        var (window, _) = await OpenWindowAsync(h);
+        try
+        {
+            window.Width = 1000;
+            Settle(window);
+            AssertNotClipped(window, "규칙 편집(폭 1000)");
+            Shots(window, "1-rules-narrow");
+        }
+        finally
+        {
+            window.Close();
+        }
+    });
+
+    [Fact]
+    public Task Custom_period_and_long_date_format_fit_a_narrow_window() => HeadlessHost.Run(async () =>
+    {
+        var h = new DataCopyHarness();
+        var (window, vm) = await OpenWindowAsync(h);
+        try
+        {
+            vm.Editor.PeriodChoice = vm.Editor.PeriodKinds.Single(k => k.Kind == PeriodKind.Custom);
+            vm.Editor.CustomFrom = new DateTime(2026, 10, 1);
+            vm.Editor.CustomTo = new DateTime(2026, 11, 1);
+            vm.Editor.Rules[0].FirstFormat = "YYYY-MM-DD HH24:MI:SS";
+            window.Width = 1000;
+            Settle(window);
+            AssertNotClipped(window, "직접 지정 기간(폭 1000)");
+            Shots(window, "1-rules-custom-narrow");
         }
         finally
         {
@@ -164,10 +232,15 @@ public sealed class DataCopyRenderTests : IDisposable
             await vm.Precheck.RunAsync(Sessions(), vm.CurrentJob!, new ResolvedPeriod(null, null));
             vm.Step = DataCopyStep.Precheck;
             Settle(window);
+            vm.Precheck.SelectedPreview = vm.Precheck.Preview[1]; // 아래 코드 칸에 문장 전체가 보이는 장면
+            Settle(window);
 
             Assert.True(window.FindControl<Button>("RunButton")!.IsEffectivelyVisible);
             Assert.False(window.FindControl<Button>("RunButton")!.IsEffectivelyEnabled); // 오류가 있어 꺼진다
             Assert.False(window.FindControl<Button>("ToPrecheckButton")!.IsEffectivelyVisible);
+            Assert.Equal("ORDERS", vm.Precheck.SelectedItem?.Table); // 첫 「확인 필요」를 골라 상세 칸에 고를 거리가 보인다
+            Assert.Equal(4, window.FindControl<MonitorGrid>("CheckGrid")!.Model!.RowCount);
+            AssertFillsWidth(window.FindControl<MonitorGrid>("SqlGrid")!);
             AssertNotClipped(window, "사전 점검");
             Shots(window, "2-precheck");
         }
@@ -233,7 +306,8 @@ public sealed class DataCopyRenderTests : IDisposable
     {
         var h = new DataCopyHarness();
         var failed = new FailedRow("ORDERS", new Dictionary<string, string?> { ["ORDER_ID"] = "1003" }, "ORA-02291: integrity constraint violated - parent key not found");
-        h.Runner.Behavior = _ => Task.FromResult(new CopyRunResult(
+        var release = new TaskCompletionSource();
+        h.Runner.Behavior = async _ => { await release.Task; return new CopyRunResult(
             CopyOutcome.PartiallyFailed,
             [
                 new TableRunResult("CODES", 120, 120, TimeSpan.FromSeconds(1), CopyOutcome.Succeeded, null),
@@ -242,19 +316,28 @@ public sealed class DataCopyRenderTests : IDisposable
             ],
             [failed],
             ["FK FK_ITEMS_ORDERS 를 NOVALIDATE 로 켰습니다(부모 없는 행 3개)."],
-            new DateTimeOffset(2026, 11, 6, 12, 0, 0, TimeSpan.Zero)));
+            new DateTimeOffset(2026, 11, 6, 12, 0, 0, TimeSpan.Zero)); };
         var (window, vm) = await OpenWindowAsync(h);
         try
         {
             var report = TestJobs.Report(order: [TestJobs.Plan("CODES"), TestJobs.Plan("ORDERS"), TestJobs.Plan("ORDER_ITEMS")]);
-            await vm.Run.StartAsync(Sessions(), vm.CurrentJob!, report,
+            var run = vm.Run.StartAsync(Sessions(), vm.CurrentJob!, report,
                 new CopyDecisions(new HashSet<string>(), new HashSet<string>(), new HashSet<string>(), false), new ResolvedPeriod(null, null));
             vm.Step = DataCopyStep.Run;
+            await h.Runner.Started.Task.WaitAsync(TimeSpan.FromSeconds(10));
+            Settle(window); // 그리드가 「대기」·빈 건수로 먼저 그려진다
+            release.SetResult();
+            await run.WaitAsync(TimeSpan.FromSeconds(10));
             Settle(window);
 
             Assert.True(window.FindControl<Button>("StopButton")!.IsEffectivelyVisible);
             Assert.True(window.FindControl<Button>("CsvButton")!.IsEffectivelyEnabled);
             Assert.False(window.FindControl<Button>("RunButton")!.IsEffectivelyVisible);
+            var runGrid = window.FindControl<MonitorGrid>("RunGrid")!;
+            Assert.Equal(3, runGrid.Model!.RowCount);
+            Assert.Equal("✓ 같음", runGrid.Model.GetCellText(0, 5)); // 끝난 뒤 값(단계·건수)이 그리드에 반영된다
+            AssertColumnsFit(runGrid); // 「대기」로 처음 정한 너비가 「문제 있음」·「일부 실패 · …」에 맞게 넓어진다
+            AssertFillsWidth(runGrid);
             AssertNotClipped(window, "실행·검증");
             Shots(window, "3-run");
         }

@@ -39,6 +39,22 @@ public sealed partial class RuleEditorViewModel : ViewModelBase
     [ObservableProperty]
     private string _sourceOwner = string.Empty;
 
+    // 대상을 고르기 전에 표를 추가해 원본 표 소유자로 임시로 채운 대상 소유자. 대상을 고르면 그 사용자로 바꾼다.
+    private string? _provisionalTargetOwner;
+
+    partial void OnTargetChanged(ConnectionOption? value)
+    {
+        if (_provisionalTargetOwner is { } provisional && value is { Profile.User: { Length: > 0 } user })
+        {
+            if (string.Equals(TargetOwner, provisional, StringComparison.Ordinal))
+            {
+                TargetOwner = user.ToUpperInvariant();
+            }
+
+            _provisionalTargetOwner = null;
+        }
+    }
+
     [ObservableProperty]
     private string _targetOwner = string.Empty;
 
@@ -166,6 +182,7 @@ public sealed partial class RuleEditorViewModel : ViewModelBase
     {
         ArgumentNullException.ThrowIfNull(job);
         _loaded = job;
+        _provisionalTargetOwner = null;
         Name = job.Name;
         Source = source is null ? null : SourceOptions.FirstOrDefault(o => o.Profile.Id == source.Id && o.Profile.Name == source.Name);
         Target = target is null ? null : TargetOptions.FirstOrDefault(o => o.Profile.Id == target.Id && o.Profile.Name == target.Name);
@@ -278,9 +295,19 @@ public sealed partial class RuleEditorViewModel : ViewModelBase
             SourceOwner = table.Owner;
         }
 
+        // 대상 소유자는 대상 접속의 사용자(스키마)로 시작한다. 대상을 아직 고르지 않았으면(스키마 브라우저에서 새 작업으로 추가) 원본 표 소유자로
+        // 임시로 채워 두고, 나중에 대상을 고르면 그 사용자로 바꾼다(그 사이 사용자가 고친 값은 그대로 둔다).
         if (string.IsNullOrWhiteSpace(TargetOwner))
         {
-            TargetOwner = table.Owner;
+            if (Target is { Profile.User: { Length: > 0 } user })
+            {
+                TargetOwner = user.ToUpperInvariant();
+            }
+            else
+            {
+                TargetOwner = table.Owner;
+                _provisionalTargetOwner = table.Owner;
+            }
         }
 
         var rule = new TableRuleViewModel(new TableRule(table.Name, RuleKind.All, TargetAction.DeleteAllInsert));

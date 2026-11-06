@@ -24,6 +24,16 @@ public sealed class JobListItem(CopyJobEntry entry)
         ? string.Create(CultureInfo.InvariantCulture, $"{run.At.LocalDateTime:yyyy-MM-dd HH:mm} · {OutcomeText(run.Outcome)} · {run.Rows:N0}행")
         : string.Empty;
 
+    /// <summary>작업 목록 왼쪽 아이콘: 마지막 실행 결과(성공 ok·일부 실패 warn·실패 error·중지 cancel), 실행한 적이 없으면 table.</summary>
+    public string IconKey => Job.LastRun?.Outcome switch
+    {
+        null => "table",
+        CopyOutcome.Succeeded => "ok",
+        CopyOutcome.PartiallyFailed => "warn",
+        CopyOutcome.Failed => "error",
+        _ => "cancel",
+    };
+
     private static string OutcomeText(CopyOutcome outcome) => outcome switch
     {
         CopyOutcome.Succeeded => "성공",

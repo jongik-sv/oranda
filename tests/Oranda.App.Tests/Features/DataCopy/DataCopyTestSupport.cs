@@ -221,6 +221,9 @@ internal sealed class DataCopyHarness
 
     public List<FakeSession> OpenedSessions { get; } = [];
 
+    /// <summary>참이면 그 접속은 열지 않는다(비밀번호 입력 취소·접속 실패처럼 null). 연 시도는 <see cref="Opened"/> 에 남는다.</summary>
+    public Func<ConnectionProfile, bool>? RefuseOpen { get; set; }
+
     public DataCopyHarness() => Profiles = [Source, Target, Production];
 
     public DataCopyServices Services() => new()
@@ -235,6 +238,11 @@ internal sealed class DataCopyHarness
         SessionOpener = (profile, _) =>
         {
             Opened.Add(profile);
+            if (RefuseOpen?.Invoke(profile) == true)
+            {
+                return Task.FromResult<ISession?>(null);
+            }
+
             var session = new FakeSession(profile);
             OpenedSessions.Add(session);
             return Task.FromResult<ISession?>(session);

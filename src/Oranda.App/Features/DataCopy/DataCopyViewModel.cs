@@ -457,11 +457,31 @@ public sealed partial class DataCopyViewModel : ViewModelBase, IAsyncDisposable
                 await CloseSessionPairAsync().ConfigureAwait(true); // 접속을 바꿨으면 이전 세션은 쓰지 않는다
             }
 
-            await CloseMetadataSessionAsync().ConfigureAwait(true);
+            // 표를 추가하며 열어 둔 열 정보용 원본 세션이 같은 접속이면 점검 세션 쌍의 원본으로 넘겨 쓴다(비밀번호를 두 번 묻지 않는다).
+            // 넘긴 뒤에는 쌍이 그 세션을 닫는다(대상을 못 열면 DataCopySessions 가 닫는다). 넘기기 전에 실패하면 열 정보용으로 그대로 남는다.
+            var reuse = _metadataSession is { } meta && SameConnection(meta, source.Profile, readOnlySource: true) ? meta : null;
+            if (reuse is null)
+            {
+                await CloseMetadataSessionAsync().ConfigureAwait(true);
+            }
+
+            var handedOver = false;
+            Task<ISession?> Open(ConnectionProfile profile, CancellationToken token)
+            {
+                if (reuse is not null && !handedOver)
+                {
+                    handedOver = true;
+                    _metadataSession = null;
+                    return Task.FromResult<ISession?>(reuse);
+                }
+
+                return _services.OpenSessionAsync(profile, token);
+            }
+
             CopySessions? opened;
             try
             {
-                opened = await DataCopySessions.OpenAsync(_services.OpenSessionAsync, source.Profile, target.Profile, ct).ConfigureAwait(true);
+                opened = await DataCopySessions.OpenAsync(Open, source.Profile, target.Profile, ct).ConfigureAwait(true);
             }
             catch (Exception e) when (e is not OperationCanceledException)
             {

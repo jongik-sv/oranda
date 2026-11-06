@@ -4,6 +4,7 @@ using Avalonia.Controls;
 using Avalonia.Threading;
 using Avalonia.VisualTree;
 using Oranda.App.Features.DataCopy;
+using Oranda.App.Features.SessionMonitor;
 using Oranda.App.Features.Localization;
 using Oranda.App.Shell;
 using Oranda.App.Tests.Features.DataCopy;
@@ -77,6 +78,16 @@ public sealed class ManualCopyScreens : IDisposable
             ContentControl { Content: string s } => s == text,
             _ => false,
         }) ?? throw new Xunit.Sdk.XunitException($"보이는 글자 '{text}' 를 가진 컨트롤을 찾지 못했다.");
+
+    /// <summary>그리드의 칸(보이는 행·열 순서, 0부터) 왼쪽 위를 기준으로 번호를 둔다. 그리드 칸은 그리드가 직접 그려 컨트롤이 없다.</summary>
+    private static ManualCapture.Callout GridCell(MonitorGrid grid, int number, int row, int col = 0, double dx = -12, double dy = 0)
+    {
+        var c = grid.GridControl;
+        var m = grid.Model ?? throw new Xunit.Sdk.XunitException($"그리드 {grid.Name} 에 결과가 없다.");
+        var x = c.RowHeaderWidth + Enumerable.Range(0, col).Sum(i => m.GetColumnWidth(m.VisibleColumns[i]));
+        var y = row < 0 ? 0 : c.HeaderHeight + (row * c.RowHeight);
+        return new(c, number, x + dx, y + (c.RowHeight / 2) + dy);
+    }
 
     private static CheckBox CheckByLabel(Visual root, string label) =>
         ManualCapture.Find<CheckBox>(root, c => c.Content is TextBlock { Text: { } t } && t == label);
@@ -193,9 +204,9 @@ public sealed class ManualCopyScreens : IDisposable
                 new(Named<ComboBox>(window, "TargetBox"), 4),
                 new(ByAutomationName<ComboBox>(window, "기간 종류"), 5),
                 new(ByAutomationName<ComboBox>(window, "커밋 단위"), 6),
-                new(Named<ListBox>(window, "RuleList"), 7, -8, 22),
+                GridCell(Named<MonitorGrid>(window, "RuleGrid"), 7, 0),
                 new(Named<ComboBox>(window, "KindBox"), 8),
-                new(VisibleText(window, "마스킹(대상에 넣기 전에 바꿉니다)"), 9, -14, 0),
+                new(VisibleText(window, "마스킹"), 9, -14, 0),
                 new(Named<Button>(window, "ToPrecheckButton"), 10, -12, 0),
             ]);
         }
@@ -271,18 +282,21 @@ public sealed class ManualCopyScreens : IDisposable
             await vm.Precheck.RunAsync(Sessions(), vm.CurrentJob!, period);
             vm.Step = DataCopyStep.Precheck;
             Settle(window);
+            vm.Precheck.SelectedPreview = vm.Precheck.Preview.First(p => p.IsConfirm); // 아래 칸에 조건 없는 DELETE 전체가 보이게
+            Settle(window);
 
-            var confirmTexts = AllText(window, "확인 필요");
+            var checks = Named<MonitorGrid>(window, "CheckGrid");
+            var sql = Named<MonitorGrid>(window, "SqlGrid");
             ManualCapture.SaveOverlaid(window, overlay, "data-copy-precheck",
             [
                 new(VisibleText(window, "점검 결과"), 1, -14, 0),
                 new(VisibleText(window, "연결된 시퀀스(복사 뒤 값을 맞춥니다)"), 2, -14, 0),
-                new(VisibleText(window, "오류"), 3, -24, 0),
-                new(confirmTexts[0], 4, -24, 0),
+                GridCell(checks, 3, 0),
+                GridCell(checks, 4, 1),
                 new(CheckByLabel(window, "복사하는 동안 트리거를 끄고 끝나면 다시 켜기"), 5, -14, -4),
-                new(VisibleText(window, "작업에 연결:"), 6, -24, -2),
-                new(VisibleText(window, "SQL 미리 보기(대상에서 실행할 문장과 원본 조회)"), 7, -14, 0),
-                new(confirmTexts[^1], 8, 62, 0),
+                new(VisibleText(window, "SQL 미리 보기 (대상에서 실행할 문장과 원본 조회)"), 6, -14, 0),
+                GridCell(sql, 7, vm.Precheck.Preview.IndexOf(vm.Precheck.SelectedPreview!), 1),
+                new(ByAutomationName<TextBox>(window, "고른 문장"), 8, 0, 4),
                 new(Named<Button>(window, "BackToRulesButton"), 9, -8, 0),
                 new(Named<Button>(window, "RunButton"), 10, -10, 0),
             ]);
@@ -344,9 +358,9 @@ public sealed class ManualCopyScreens : IDisposable
 
             ManualCapture.SaveOverlaid(window, overlay, "data-copy-recreate",
             [
-                new(AllText(window, "확인 필요")[0], 1, -24, 0),
-                new(VisibleText(window, "SQL 미리 보기(대상에서 실행할 문장과 원본 조회)"), 2, -14, 0),
-                new(AllText(window, "확인 필요")[^1], 3, 62, 0),
+                GridCell(Named<MonitorGrid>(window, "CheckGrid"), 1, 0),
+                new(VisibleText(window, "SQL 미리 보기 (대상에서 실행할 문장과 원본 조회)"), 2, -14, 0),
+                GridCell(Named<MonitorGrid>(window, "SqlGrid"), 3, vm.Precheck.Preview.ToList().FindIndex(p => p.IsConfirm), 1),
                 new(ByAutomationName<TextBox>(window, "대상 접속 이름 다시 입력"), 4),
                 new(Named<Button>(window, "RunButton"), 5, -10, 0),
             ]);
@@ -398,9 +412,9 @@ public sealed class ManualCopyScreens : IDisposable
                 new(Named<Button>(window, "PauseButton"), 2, 6, 24),
                 new(Named<Button>(window, "RetryButton"), 3, 6, 24),
                 new(Named<Button>(window, "CsvButton"), 4, 6, 24),
-                new(VisibleText(window, "테이블"), 5, -14, 0),
-                new(VisibleText(window, "원본 → 대상 건수"), 6, -14, 0),
-                new(VisibleText(window, "실패한 행(키와 오류)"), 7, -14, 0),
+                GridCell(Named<MonitorGrid>(window, "RunGrid"), 5, 0),
+                GridCell(Named<MonitorGrid>(window, "RunGrid"), 6, -1, 3),
+                GridCell(Named<MonitorGrid>(window, "FailedGrid"), 7, 0),
                 new(VisibleText(window, "FK ACME_SALES.FK_ITEMS_ORDERS: 부모 없는 행 3 때문에 ENABLE NOVALIDATE 로 켰습니다."), 8, -14, 0),
             ]);
         }

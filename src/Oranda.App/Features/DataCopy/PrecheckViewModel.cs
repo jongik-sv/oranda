@@ -149,6 +149,14 @@ public sealed partial class PrecheckViewModel(DataCopyServices services) : ViewM
     [NotifyPropertyChangedFor(nameof(CanRun), nameof(RetypeSatisfied))]
     private string _retypeInput = string.Empty;
 
+    /// <summary>점검 결과 그리드에서 고른 항목(아래 상세 칸이 문장 전체와 고를 거리를 보인다).</summary>
+    [ObservableProperty]
+    private CheckItemViewModel? _selectedItem;
+
+    /// <summary>SQL 미리 보기 그리드에서 고른 문장(아래 코드 칸이 문장 전체를 보인다).</summary>
+    [ObservableProperty]
+    private PreviewRowViewModel? _selectedPreview;
+
     public ObservableCollection<CheckItemViewModel> Items { get; } = [];
 
     public ObservableCollection<PreviewRowViewModel> Preview { get; } = [];
@@ -264,6 +272,7 @@ public sealed partial class PrecheckViewModel(DataCopyServices services) : ViewM
     {
         Cancel();
         ClearResult();
+        _picked = null;
         ProgressText = string.Empty;
         Notice = string.Empty;
     }
@@ -271,6 +280,8 @@ public sealed partial class PrecheckViewModel(DataCopyServices services) : ViewM
     private void ClearResult()
     {
         Report = null;
+        SelectedItem = null;
+        SelectedPreview = null;
         Items.Clear();
         Preview.Clear();
         LinkedSequences.Clear();
@@ -286,8 +297,22 @@ public sealed partial class PrecheckViewModel(DataCopyServices services) : ViewM
     /// <summary>예상 건수 세기까지 포함한 점검을 멈춘다.</summary>
     public void Cancel() => _cts?.Cancel();
 
+    // 마지막으로 고른 점검 항목(테이블·코드). 다시 점검하면 결과를 비운 뒤 새로 채우므로 고른 항목을 여기에 기억해 둔다. 다른 작업을 열면 지운다.
+    private (string? Table, string Code, string Message)? _picked;
+
+    partial void OnSelectedItemChanged(CheckItemViewModel? value)
+    {
+        if (value is not null)
+        {
+            _picked = (value.Table, value.Code, value.Message);
+        }
+    }
+
     private void Fill(CopyJob job, PrecheckReport report)
     {
+        var previous = _picked;
+        SelectedItem = null;
+        SelectedPreview = null;
         Items.Clear();
         Preview.Clear();
         LinkedSequences.Clear();
@@ -328,6 +353,11 @@ public sealed partial class PrecheckViewModel(DataCopyServices services) : ViewM
             Preview.Add(new PreviewRowViewModel(statement));
         }
 
+        // 다시 점검하면 같은 항목(테이블·코드·내용, 내용이 바뀌었으면 테이블·코드)을 다시 고르고, 처음이면 첫 「확인 필요」 항목(없으면 첫 항목)을 고른다: 고를 거리는 상세 칸에만 있다.
+        SelectedItem = (previous is { } p
+                ? Items.FirstOrDefault(i => i.Table == p.Table && i.Code == p.Code && i.Message == p.Message) ?? Items.FirstOrDefault(i => i.Table == p.Table && i.Code == p.Code)
+                : null)
+            ?? Items.FirstOrDefault(i => i.IsConfirm) ?? Items.FirstOrDefault();
         Report = report;
         OnPropertyChanged(nameof(HasLinkedSequences));
         OnPropertyChanged(nameof(HasDenied));

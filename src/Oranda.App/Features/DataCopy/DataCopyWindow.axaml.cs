@@ -135,6 +135,7 @@ public partial class DataCopyWindow : Window
         _editor.PropertyChanged += OnEditorChanged;
         _editor.Rules.CollectionChanged += (_, _) => SyncRulePanel();
         SyncRulePanel();
+        HookGrids(vm);
     }
 
     private void OnEditorChanged(object? sender, PropertyChangedEventArgs e)
@@ -231,13 +232,10 @@ public partial class DataCopyWindow : Window
                 _syncing = false;
             }
         };
-        LoadColumnsButton.Click += async (_, _) =>
-        {
-            if (Vm is { } vm && _rule is { } rule)
-            {
-                await RunUiAsync(ct => vm.LoadColumnsAsync(rule, ct)).ConfigureAwait(true);
-            }
-        };
+        LoadColumnsButton.Click += async (_, _) => await LoadSelectedColumnsAsync().ConfigureAwait(true);
+        ReadColumnsToolButton.Click += async (_, _) => await LoadSelectedColumnsAsync().ConfigureAwait(true);
+        MoveRuleUpButton.Click += (_, _) => MoveSelectedRule(-1);
+        MoveRuleDownButton.Click += (_, _) => MoveSelectedRule(1);
         AddSecondColumnButton.Click += (_, _) => _rule?.AddSecondColumn();
         RemoveSecondColumnButton.Click += (_, _) => _rule?.RemoveSecondColumn();
     }
@@ -249,6 +247,7 @@ public partial class DataCopyWindow : Window
         {
             item.IsEnabled = option.IsEnabled;
             ToolTip.SetTip(item, option.Tooltip);
+            ToolTip.SetShowOnDisabled(item, true); // 꺼진 항목(운영 접속)에도 이유 툴팁이 뜨게
         }
     }
 
@@ -268,7 +267,10 @@ public partial class DataCopyWindow : Window
         }
     }
 
-    private static IEditorDialogs Dialogs => SqlEditorHost.Current.Dialogs;
+    // 이름·확인 대화상자는 복사 창을 소유자로 띄운다(닫힌 뒤 주 창이 복사 창을 덮지 않게).
+    private DataCopyDialogs Dialogs => _dialogs ??= new DataCopyDialogs(this, () => SqlEditorHost.Current.Dialogs);
+
+    private DataCopyDialogs? _dialogs;
 
     private async void OnNewJob(object? sender, RoutedEventArgs e)
     {
