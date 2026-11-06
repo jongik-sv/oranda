@@ -880,7 +880,7 @@ internal sealed partial class CopyPrecheckService(IBulkExecutionService bulk, IM
                 var plan = plans.FirstOrDefault(p => string.Equals(Key(p.Rule), rule.Table, StringComparison.Ordinal));
                 if (plan is null)
                 {
-                    continue;
+                    continue; // 제외 규칙이거나 점검에 실패한 표. 규칙이 아예 없는 연결은 앞의 RuleInvalid(CopyOwners.Problems)가 막았다.
                 }
 
                 progress?.Report($"시퀀스 {rule.Sequence}: 점검 중");

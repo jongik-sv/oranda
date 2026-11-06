@@ -222,9 +222,9 @@ internal sealed class CopyRunner : ICopyRunner
     /// </remarks>
     private static void EnsureReportMatchesJob(CopyJob job, PrecheckReport report, ResolvedPeriod? period)
     {
-        if (CopyOwners.Problems(job).Count > 0)
+        if (CopyOwners.Problems(job) is { Count: > 0 } problems)
         {
-            throw new InvalidOperationException("작업에 같은 원본 표나 같은 대상 표의 규칙이 여럿 있습니다. 사전 점검을 다시 하세요.");
+            throw new InvalidOperationException($"작업 규칙에 모순이 있습니다: {problems[0]} 사전 점검을 다시 하세요.");
         }
 
         var active = job.Tables.Where(r => r.Kind != RuleKind.Exclude).ToDictionary(r => CopyOwners.Key(job, r), StringComparer.Ordinal);

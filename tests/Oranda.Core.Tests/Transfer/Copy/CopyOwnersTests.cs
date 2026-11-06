@@ -193,6 +193,64 @@ public class CopyOwnersTests
     }
 
     [Fact]
+    public void Sequence_linked_to_no_rule_is_a_problem()
+    {
+        var rule = new TableRule("ORDERS", RuleKind.All, TargetAction.MergeByPk);
+        var excluded = new TableRule("CODES", RuleKind.Exclude, TargetAction.MergeByPk);
+        var job = Job(rule, excluded) with
+        {
+            Sequences = [new SequenceRule("S1", "ORDERS", "ID"), new SequenceRule("S2", "CODES", "ID"), new SequenceRule("S3", "SRC.ORDERS", "ID")],
+        };
+
+        // 제외 규칙에 걸린 연결은 괜찮다(일부러 뺀 표). 키가 어느 규칙도 가리키지 않으면 오류다.
+        var problem = Assert.Single(CopyOwners.Problems(job));
+        Assert.Contains("S3", problem, StringComparison.Ordinal);
+        Assert.Contains("SRC.ORDERS", problem, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Rebase_keeps_every_rule_on_its_tables_and_rewrites_sequence_keys()
+    {
+        var mine = new TableRule("ORDERS", RuleKind.All, TargetAction.MergeByPk);
+        var other = new TableRule("CUSTOMERS", RuleKind.All, TargetAction.MergeByPk) { SourceOwner = "APP" };
+        var child = new TableRule("LINES", RuleKind.ParentKey, TargetAction.DeleteRangeInsert)
+        {
+            Parent = new ParentLink("ORDERS", ["ORDER_ID"], ["ID"]),
+        };
+        var job = Job(mine, other, child) with
+        {
+            Sequences =
+            [
+                new SequenceRule("SEQ_ORDERS", "ORDERS", "ID"),
+                new SequenceRule("SEQ_CUST", "APP.CUSTOMERS", "ID"),
+                new SequenceRule("SEQ_LOST", "NONE", "ID"),
+            ],
+        };
+        var before = job.Tables.Select(r => (CopyOwners.SourceName(job, r), CopyOwners.TargetName(job, r))).ToList();
+
+        var moved = CopyOwners.Rebase(job, "APP", "APP_DEV");
+
+        Assert.Equal(("APP", "APP_DEV"), (moved.SourceOwner, moved.TargetOwner));
+        Assert.Equal(before, moved.Tables.Select(r => (CopyOwners.SourceName(moved, r), CopyOwners.TargetName(moved, r))));
+        Assert.Equal(["SRC.ORDERS", "CUSTOMERS", "SRC.LINES"], moved.Tables.Select(r => CopyOwners.Key(moved, r)));
+        Assert.Equal("SRC", moved.Tables[2].Parent!.ParentOwner);
+        Assert.Same(moved.Tables[0], CopyOwners.Parent(moved, moved.Tables[2]));
+        Assert.Equal("DST", CopyOwners.ParentTarget(moved, moved.Tables[2]));
+
+        // 시퀀스는 같은 규칙·같은 계정을 가리킨다. 규칙을 못 찾는 연결은 계정만 적어 두고 오류로 남는다.
+        Assert.Equal(["SRC.ORDERS", "CUSTOMERS", "NONE"], moved.Sequences.Select(s => s.Table));
+        Assert.Equal(["DST", "APP", "DST"], moved.Sequences.Select(s => CopyOwners.SequenceOwner(moved, s)));
+        Assert.Equal("DST", moved.Sequences[2].Owner);
+        Assert.Single(CopyOwners.Problems(moved), p => p.Contains("SEQ_LOST", StringComparison.Ordinal));
+
+        // 원래 작업은 바뀌지 않는다(순수 함수). 다시 돌려도 같은 표다.
+        Assert.Null(job.Tables[0].SourceOwner);
+        var back = CopyOwners.Rebase(moved, "SRC", "DST");
+        Assert.Equal(["ORDERS", "APP.CUSTOMERS", "LINES"], back.Tables.Select(r => CopyOwners.Key(back, r)));
+        Assert.Equal(["ORDERS", "APP.CUSTOMERS", "NONE"], back.Sequences.Select(s => s.Table));
+    }
+
+    [Fact]
     public void Two_rules_for_one_source_or_one_target_table_are_problems()
     {
         var a = new TableRule("ORDERS", RuleKind.All, TargetAction.MergeByPk);

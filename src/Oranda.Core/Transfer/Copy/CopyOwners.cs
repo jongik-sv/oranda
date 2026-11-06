@@ -226,13 +226,49 @@ public static class CopyOwners
     }
 
     /// <summary>
+    /// 작업 기본 원본·대상 계정을 바꾼 작업(순수 함수). 규칙이 가리키는 표는 바꾸지 않는다:
+    /// 규칙마다 지금의 원본·대상 계정을 적어 두고(<see cref="TableRule.SourceOwner"/>·<see cref="TableRule.TargetOwner"/>),
+    /// 부모 키 규칙의 부모 원본 계정(<see cref="ParentLink.ParentOwner"/>)도 적어 두며, 시퀀스 연결의 표 키(<see cref="SequenceRule.Table"/>)를
+    /// 새 기본 계정 기준으로 다시 계산한다. 규칙을 못 찾는 시퀀스 연결은 키를 그대로 두고 계정만 적어 둔다(<see cref="Problems"/> 가 오류로 알린다).
+    /// 화면이 기본 계정을 바꿀 때 이 함수로 작업을 바꾸면 키가 다른 규칙을 가리키거나 시퀀스 보정이 사라지지 않는다.
+    /// </summary>
+    public static CopyJob Rebase(CopyJob job, string newDefaultSourceOwner, string newDefaultTargetOwner)
+    {
+        ArgumentNullException.ThrowIfNull(job);
+        ArgumentNullException.ThrowIfNull(newDefaultSourceOwner);
+        ArgumentNullException.ThrowIfNull(newDefaultTargetOwner);
+        var tables = job.Tables.Select(r => r with
+        {
+            SourceOwner = Source(job, r),
+            TargetOwner = Target(job, r),
+            Parent = r.Parent is null ? null : r.Parent with { ParentOwner = ParentSource(job, r) },
+        }).ToList();
+        var rebased = job with { SourceOwner = newDefaultSourceOwner, TargetOwner = newDefaultTargetOwner, Tables = tables };
+        var sequences = job.Sequences.Select(s =>
+        {
+            var index = job.Tables.Select((r, i) => (r, i)).FirstOrDefault(x => string.Equals(Key(job, x.r), s.Table, StringComparison.Ordinal));
+            return index.r is null
+                ? s with { Owner = SequenceOwner(job, s) }
+                : s with { Table = Key(rebased, tables[index.i]) };
+        }).ToList();
+        return rebased with { Sequences = sequences };
+    }
+
+    /// <summary>
     /// 규칙 사이의 모순(DB 를 보지 않고 알 수 있는 것). 문장 하나씩, 없으면 빈 목록.
     /// 원본 키가 같은 규칙 둘(같은 표를 두 번), 대상 계정·표가 같은 규칙 둘(한 표를 두 규칙이 지우고 넣음)은 오류다. 제외 규칙도 센다.
+    /// 시퀀스 연결의 표(<see cref="SequenceRule.Table"/>, 규칙 키)가 작업의 어느 규칙(제외 규칙 포함)도 가리키지 않아도 오류다:
+    /// 기본 원본 계정이 바뀌어 키가 달라졌을 때 조용히 보정을 건너뛰거나 다른 표를 보정하지 않게 한다(<see cref="Rebase"/>).
     /// </summary>
     public static IReadOnlyList<string> Problems(CopyJob job)
     {
         ArgumentNullException.ThrowIfNull(job);
         var problems = new List<string>();
+        foreach (var sequence in job.Sequences.Where(s => Find(job, s.Table) is null))
+        {
+            problems.Add($"시퀀스 {sequence.Sequence}: 연결한 표 {sequence.Table} 의 규칙이 작업에 없습니다(기본 계정을 바꾸면 표 키가 달라집니다). 시퀀스 연결을 지우거나 다시 연결하세요.");
+        }
+
         foreach (var g in job.Tables.GroupBy(r => Key(job, r), StringComparer.Ordinal).Where(g => g.Count() > 1))
         {
             problems.Add($"{g.Key}: 같은 원본 표의 규칙이 {g.Count().ToString(System.Globalization.CultureInfo.InvariantCulture)}개 있습니다. 하나만 남기세요.");
