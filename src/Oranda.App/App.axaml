@@ -602,6 +602,12 @@
                     <SolidColorBrush x:Key="OrandaWarningForegroundBrush" Color="#B65A00" />
                     <SolidColorBrush x:Key="OrandaDangerForegroundBrush" Color="#C42B1C" />
                     <SolidColorBrush x:Key="OrandaSuccessForegroundBrush" Color="#107C10" />
+                    <!-- 상태 표시줄 업데이트 배지: 꽉 찬 색 바탕 + 흰 글자(4.5:1 이상). 있음 주황, 받는 중 파랑, 준비됨 초록. -->
+                    <SolidColorBrush x:Key="OrandaUpdateAvailableBrush" Color="#B34700" />
+                    <SolidColorBrush x:Key="OrandaUpdateDownloadingBrush" Color="#0A64C8" />
+                    <SolidColorBrush x:Key="OrandaUpdateReadyBrush" Color="#107C10" />
+                    <SolidColorBrush x:Key="OrandaUpdateBadgeForegroundBrush" Color="#FFFFFF" />
+                    <SolidColorBrush x:Key="OrandaUpdateBadgeTrackBrush" Color="#59FFFFFF" />
                 </ResourceDictionary>
                 <ResourceDictionary x:Key="Dark">
                     <SolidColorBrush x:Key="OrandaEnvProductionBrush" Color="#FF6B5E" />
@@ -652,6 +658,12 @@
                     <SolidColorBrush x:Key="OrandaWarningForegroundBrush" Color="#F0A04B" />
                     <SolidColorBrush x:Key="OrandaDangerForegroundBrush" Color="#FF7B72" />
                     <SolidColorBrush x:Key="OrandaSuccessForegroundBrush" Color="#6CCB5F" />
+                    <!-- 어두운 테마: 밝은 배지 + 검은 글자. -->
+                    <SolidColorBrush x:Key="OrandaUpdateAvailableBrush" Color="#FFA25C" />
+                    <SolidColorBrush x:Key="OrandaUpdateDownloadingBrush" Color="#6CB4FF" />
+                    <SolidColorBrush x:Key="OrandaUpdateReadyBrush" Color="#6CCB5F" />
+                    <SolidColorBrush x:Key="OrandaUpdateBadgeForegroundBrush" Color="#111111" />
+                    <SolidColorBrush x:Key="OrandaUpdateBadgeTrackBrush" Color="#40000000" />
                 </ResourceDictionary>
             </ResourceDictionary.ThemeDictionaries>
 
