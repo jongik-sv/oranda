@@ -6,6 +6,7 @@ using Oranda.App.Features.SqlEditor;
 using Oranda.App.Shell;
 using Oranda.App.Shell.Composition;
 using Oranda.App.Shell.Docking;
+using Oranda.Core.Connection;
 using Oranda.Core.Events;
 using Oranda.Core.Security;
 using Oranda.Core.Sessions;
@@ -136,7 +137,17 @@ public static class DedicatedSessionCommands
             return null;
         }
 
-        var profile = work.Profile;
+        return await OpenDedicatedAsync(container, work.Profile, ct).ConfigureAwait(true);
+    }
+
+    /// <summary>
+    /// 지정한 접속으로 전용 세션(<see cref="SessionPurpose.Dedicated"/>)을 연다. 비밀번호는 안전 저장소에서 꺼내고, 없으면 묻는다.
+    /// 사용자가 비밀번호 입력을 취소하면 null. (데이터 복사 창도 원본·대상 세션을 이 경로로 연다.)
+    /// </summary>
+    public static async Task<ISession?> OpenDedicatedAsync(ServiceContainer container, ConnectionProfile profile, CancellationToken ct)
+    {
+        ArgumentNullException.ThrowIfNull(container);
+        ArgumentNullException.ThrowIfNull(profile);
         string? secret = null;
         if (profile.CredentialRef is { } reference && container.GetService<ICredentialStore>() is { } store
             && await store.LoadAsync(reference).ConfigureAwait(true) is { } bytes)

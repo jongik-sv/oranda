@@ -24,6 +24,8 @@
   "Cat.View": "View",
   "Cat.Window": "Window",
   "Cmd.oranda.file.newDedicatedSqlEditor": "New SQL Tab (Dedicated Session)",
+  "Cmd.oranda.schema.addToDataCopy": "Add to Data Copy",
+  "Cmd.oranda.tools.dataCopy": "Data Copy…",
   "ColumnFilter.apply": "Apply",
   "ColumnFilter.clear": "Clear filter",
   "ColumnFilter.clearAll": "Clear all",

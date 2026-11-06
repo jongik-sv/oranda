@@ -1,0 +1,374 @@
+using System.Collections.ObjectModel;
+using System.Text;
+using CommunityToolkit.Mvvm.ComponentModel;
+using Oranda.App.ViewModels;
+using Oranda.Core.Execution;
+using Oranda.Core.Transfer.Copy;
+
+namespace Oranda.App.Features.DataCopy;
+
+/// <summary>점검 항목 아래에 보이는 선택지 한 개(트리거 끄기 등).</summary>
+public sealed partial class CheckChoiceViewModel(CheckChoice choice, string? table, bool isVisible, bool isChosen) : ViewModelBase
+{
+    [ObservableProperty]
+    private bool _isChosen = isChosen;
+
+    public CheckChoice Choice { get; } = choice;
+
+    public string? Table { get; } = table;
+
+    /// <summary>끌 권한이 없으면 선택지를 보이지 않는다(설계 7장: 알림만 남긴다).</summary>
+    public bool IsVisible { get; } = isVisible;
+
+    /// <summary>이 선택지가 달린 점검 항목.</summary>
+    public CheckItemViewModel? Owner { get; internal set; }
+
+    /// <summary>선택하면 작업(규칙)을 바꾸고 점검을 다시 하는 선택지인지. 나머지는 실행 결정만 바꾼다.</summary>
+    public bool ChangesJob => Choice is CheckChoice.SkipColumn or CheckChoice.SwitchToMerge;
+
+    public string Label => Choice switch
+    {
+        CheckChoice.DisableTriggers => "복사하는 동안 트리거를 끄고 끝나면 다시 켜기",
+        CheckChoice.DisableForeignKeys => "복사하는 동안 이 FK 를 끄고 끝나면 다시 켜기",
+        CheckChoice.SkipColumn => "이 열 건너뛰기",
+        CheckChoice.ProceedSequenceGap => "시간이 걸려도 시퀀스를 보정하며 진행",
+        _ => "대상 처리를 PK 기준 MERGE 로 바꾸기",
+    };
+}
+
+/// <summary>점검 결과 한 줄.</summary>
+public sealed class CheckItemViewModel
+{
+    public CheckItemViewModel(CheckItem item, IReadOnlyList<CheckChoiceViewModel> choices)
+    {
+        Item = item;
+        Choices = choices;
+        foreach (var choice in choices)
+        {
+            choice.Owner = this;
+        }
+    }
+
+    public CheckItem Item { get; }
+
+    public CheckLevel Level => Item.Level;
+
+    public string Message => Item.Message;
+
+    public string? Table => Item.Table;
+
+    public string Code => Item.Code;
+
+    public IReadOnlyList<CheckChoiceViewModel> Choices { get; }
+
+    /// <summary>수준별 아이콘 키(오류 = 빨강, 확인 필요 = 주황·노랑, 통과 = 초록 계열 색은 아이콘 톤이 정한다).</summary>
+    public string IconKey => Level switch
+    {
+        CheckLevel.Error => "error",
+        CheckLevel.Confirm => "warn",
+        _ => "ok",
+    };
+
+    public bool IsError => Level == CheckLevel.Error;
+
+    public bool IsConfirm => Level == CheckLevel.Confirm;
+
+    public bool IsPass => Level == CheckLevel.Pass;
+
+    public string LevelText => Level switch
+    {
+        CheckLevel.Pass => "통과",
+        CheckLevel.Confirm => "확인 필요",
+        _ => "오류",
+    };
+}
+
+/// <summary>SQL 미리 보기 한 줄. 정책이 확인을 요구하는 문장은 「복사 실행」으로 미리 확인한 것으로 본다.</summary>
+public sealed class PreviewRowViewModel(PreviewStatement statement)
+{
+    public PreviewStatement Statement { get; } = statement;
+
+    public string Sql => Statement.Sql;
+
+    public bool IsTarget => Statement.Side == PreviewSide.Target;
+
+    public bool IsConfirm => Statement.Policy == PolicyDecisionKind.Confirm;
+
+    public bool IsDenied => Statement.Policy == PolicyDecisionKind.Deny;
+
+    public string SideText => IsTarget ? "대상" : "원본";
+}
+
+/// <summary>
+/// 사전 점검 단계(2단계): 점검 결과, 대상에서 실행할 SQL 미리 보기, 선택지. 오류가 하나라도 있으면 「복사 실행」이 꺼진다.
+/// 정책이 <c>Confirm</c> 을 내는 문장은 한 목록으로 보이고 실행할 때 <see cref="CopyDecisions.PreConfirmedSql"/> 로 넘긴다.
+/// </summary>
+public sealed partial class PrecheckViewModel(DataCopyServices services) : ViewModelBase
+{
+    private CancellationTokenSource? _cts;
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(CanRun), nameof(CanCancel))]
+    private bool _isRunning;
+
+    [ObservableProperty]
+    private string _progressText = string.Empty;
+
+    [ObservableProperty]
+    private string _notice = string.Empty;
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(CanRun), nameof(HasErrors), nameof(HasDenied), nameof(NeedsRetype), nameof(ScriptText))]
+    private PrecheckReport? _report;
+
+    /// <summary>DROP 문장을 확인하려고 다시 입력한 대상 접속 이름(목록 전체에 대한 확인 하나).</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(CanRun), nameof(RetypeSatisfied))]
+    private string _retypeInput = string.Empty;
+
+    public ObservableCollection<CheckItemViewModel> Items { get; } = [];
+
+    public ObservableCollection<PreviewRowViewModel> Preview { get; } = [];
+
+    /// <summary>새 SQL 탭으로 열기(창이 연결한다). 연결이 없으면 아무 일도 하지 않는다.</summary>
+    public Func<string, Task>? OpenInEditor { get; set; }
+
+    /// <summary>SQL 스크립트로 저장(창이 파일 선택 뒤 쓰기를 연결한다).</summary>
+    public Func<string, Task>? SaveScript { get; set; }
+
+    public bool HasErrors => Report?.HasErrors ?? false;
+
+    public bool HasDenied => Preview.Any(p => p.IsDenied);
+
+    /// <summary>다시 입력이 필요한 문장(DROP 등)이 있는지.</summary>
+    public bool NeedsRetype => Preview.Any(p => p.IsConfirm && p.Statement.RetypeText is not null);
+
+    /// <summary>필요한 문장이 모두 그 글자를 입력했는지. 없으면 늘 참.</summary>
+    public bool RetypeSatisfied => !NeedsRetype || IsRetypeMatch();
+
+    /// <summary>
+    /// 다시 입력하는 글자는 대상 접속 이름이다(설계 6.2.3: 한 번 입력하면 지울 테이블 목록 전체를 확인한 것으로 본다).
+    /// 정책이 문장마다 내는 <c>RetypeText</c>(지울 테이블 이름)는 「다시 입력이 필요하다」는 표시로만 쓴다.
+    /// </summary>
+    private bool IsRetypeMatch() =>
+        !string.IsNullOrEmpty(_targetName) && string.Equals(_targetName, RetypeInput.Trim(), StringComparison.Ordinal);
+
+    private string _targetName = string.Empty;
+
+    public bool CanCancel => IsRunning;
+
+    /// <summary>점검을 마쳤고 오류·거부된 문장이 없으며, DROP 확인이 끝났을 때만 실행할 수 있다.</summary>
+    public bool CanRun => !IsRunning && Report is not null && !Report.HasErrors && !HasDenied && RetypeSatisfied;
+
+    /// <summary>대상에서 실행할 문장과 원본 조회 조건을 한 스크립트로 만든다(원본 문장은 주석).</summary>
+    public string ScriptText
+    {
+        get
+        {
+            var text = new StringBuilder();
+            foreach (var row in Preview)
+            {
+                if (!row.IsTarget)
+                {
+                    text.Append("-- 원본 조회\n-- ").Append(row.Sql.ReplaceLineEndings("\n-- ")).Append("\n\n");
+                    continue;
+                }
+
+                text.Append(row.Sql.TrimEnd().TrimEnd(';')).Append(";\n\n");
+            }
+
+            return text.ToString();
+        }
+    }
+
+    public async Task RunAsync(CopySessions sessions, CopyJob job, ResolvedPeriod period, CancellationToken ct = default)
+    {
+        ArgumentNullException.ThrowIfNull(sessions);
+        ArgumentNullException.ThrowIfNull(job);
+        if (services.Precheck is not { } service)
+        {
+            Notice = DataCopyText.PrecheckMissing;
+            return;
+        }
+
+        if (IsRunning)
+        {
+            return; // 점검이 이미 도는 중이면 겹쳐 시작하지 않는다
+        }
+
+        // 새 점검을 시작하면 이전 결과는 실행에 쓸 수 없다(점검이 실패·취소돼도 옛 결과로 실행하지 않는다).
+        ClearResult();
+        _targetName = sessions.Target.Profile.Name;
+        using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        _cts = cts;
+        IsRunning = true;
+        Notice = string.Empty;
+        ProgressText = "점검 중…";
+        try
+        {
+            var report = await service.RunAsync(sessions, job, period, new UiProgress<string>(text => ProgressText = text), cts.Token).ConfigureAwait(true);
+            Fill(job, report);
+            ProgressText = report.HasErrors ? "오류가 있어 실행할 수 없습니다." : "점검을 마쳤습니다.";
+        }
+        catch (OperationCanceledException)
+        {
+            ProgressText = "점검을 취소했습니다.";
+            ClearResult();
+        }
+        catch (Exception e)
+        {
+            ClearResult();
+            Notice = "사전 점검을 마치지 못했습니다: " + e.Message;
+            ProgressText = Notice;
+        }
+        finally
+        {
+            _cts = null;
+            IsRunning = false;
+        }
+    }
+
+    /// <summary>점검 결과를 비운다(작업·접속이 바뀌어 옛 결과로 실행하면 안 될 때).</summary>
+    public void Invalidate() => ClearResult();
+
+    /// <summary>다른 작업을 열 때: 이전 점검 결과로 실행하지 않게 비운다.</summary>
+    public void Reset()
+    {
+        Cancel();
+        ClearResult();
+        ProgressText = string.Empty;
+        Notice = string.Empty;
+    }
+
+    private void ClearResult()
+    {
+        Report = null;
+        Items.Clear();
+        Preview.Clear();
+        RetypeInput = string.Empty;
+        OnPropertyChanged(nameof(HasDenied));
+        OnPropertyChanged(nameof(NeedsRetype));
+        OnPropertyChanged(nameof(RetypeSatisfied));
+        OnPropertyChanged(nameof(CanRun));
+        OnPropertyChanged(nameof(ScriptText));
+    }
+
+    /// <summary>예상 건수 세기까지 포함한 점검을 멈춘다.</summary>
+    public void Cancel() => _cts?.Cancel();
+
+    private void Fill(CopyJob job, PrecheckReport report)
+    {
+        Items.Clear();
+        Preview.Clear();
+        RetypeInput = string.Empty;
+        var plans = report.Order.ToDictionary(p => p.Rule.Table, StringComparer.Ordinal);
+        foreach (var item in report.Items.OrderBy(i => i.Level switch { CheckLevel.Error => 0, CheckLevel.Confirm => 1, _ => 2 }))
+        {
+            var choices = new List<CheckChoiceViewModel>();
+            plans.TryGetValue(item.Table ?? string.Empty, out var plan);
+            foreach (var choice in item.Choices)
+            {
+                var visible = choice switch
+                {
+                    CheckChoice.DisableTriggers => plan?.CanDisableTriggers == true,
+                    CheckChoice.DisableForeignKeys => plan is { DisablableForeignKeys.Count: > 0 },
+                    _ => true,
+                };
+                var chosen = choice == CheckChoice.DisableTriggers && visible && job.Options.DisableTriggersByDefault;
+                choices.Add(new CheckChoiceViewModel(choice, item.Table, visible, chosen));
+            }
+
+            Items.Add(new CheckItemViewModel(item, choices));
+        }
+
+        foreach (var statement in report.Preview)
+        {
+            Preview.Add(new PreviewRowViewModel(statement));
+        }
+
+        Report = report;
+        OnPropertyChanged(nameof(HasDenied));
+        OnPropertyChanged(nameof(NeedsRetype));
+        OnPropertyChanged(nameof(RetypeSatisfied));
+        OnPropertyChanged(nameof(CanRun));
+        OnPropertyChanged(nameof(ScriptText));
+    }
+
+    /// <summary>
+    /// 실행 결정을 만든다. 미리 확인한 문장은 정책이 확인을 요구하는 것 가운데 다시 입력이 필요 없거나 입력을 마친 것뿐이다.
+    /// 정책이 거부한 문장은 어떤 경우에도 넣지 않는다.
+    /// </summary>
+    public CopyDecisions BuildDecisions()
+    {
+        var disableTriggers = new HashSet<string>(StringComparer.Ordinal);
+        var disableForeignKeys = new HashSet<string>(StringComparer.Ordinal);
+        var plans = Report?.Order.ToDictionary(p => p.Rule.Table, StringComparer.Ordinal) ?? [];
+        var proceedGap = false;
+        foreach (var item in Items)
+        {
+            foreach (var choice in item.Choices.Where(c => c.IsVisible && c.IsChosen))
+            {
+                switch (choice.Choice)
+                {
+                    case CheckChoice.DisableTriggers when choice.Table is { } table:
+                        disableTriggers.Add(table);
+                        break;
+                    case CheckChoice.DisableForeignKeys when choice.Table is { } fkTable && plans.TryGetValue(fkTable, out var plan):
+                        foreach (var fk in plan.DisablableForeignKeys)
+                        {
+                            disableForeignKeys.Add(fk.Name);
+                        }
+
+                        break;
+                    case CheckChoice.ProceedSequenceGap:
+                        proceedGap = true;
+                        break;
+                    default:
+                        break;
+                }
+            }
+        }
+
+        var confirmed = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var row in Preview.Where(p => p.IsConfirm))
+        {
+            if (row.Statement.RetypeText is null || IsRetypeMatch())
+            {
+                confirmed.Add(row.Sql);
+            }
+        }
+
+        return new CopyDecisions(disableTriggers, disableForeignKeys, confirmed, proceedGap);
+    }
+
+    /// <summary>작업 규칙을 바꾸는 선택지를 적용한다. 바뀐 작업을 돌려주고, 호출한 쪽이 점검을 다시 한다.</summary>
+    public static CopyJob? ApplyJobChoice(CopyJob job, CheckItemViewModel item, CheckChoice choice)
+    {
+        ArgumentNullException.ThrowIfNull(job);
+        ArgumentNullException.ThrowIfNull(item);
+        var tables = job.Tables.Select(rule => rule.Table != item.Table ? rule : choice switch
+        {
+            CheckChoice.SkipColumn when item.Item.Column is { } column && !rule.SkipColumns.Contains(column, StringComparer.OrdinalIgnoreCase)
+                => rule with { SkipColumns = [.. rule.SkipColumns, column] },
+            CheckChoice.SwitchToMerge => rule with { Action = TargetAction.MergeByPk },
+            _ => rule,
+        }).ToList();
+        return job with { Tables = tables };
+    }
+
+    public async Task OpenScriptInEditorAsync()
+    {
+        if (OpenInEditor is { } open)
+        {
+            await open(ScriptText).ConfigureAwait(true);
+        }
+    }
+
+    public async Task SaveScriptAsync()
+    {
+        if (SaveScript is { } save)
+        {
+            await save(ScriptText).ConfigureAwait(true);
+        }
+    }
+}

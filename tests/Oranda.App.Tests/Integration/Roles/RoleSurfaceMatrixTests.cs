@@ -321,7 +321,7 @@ public sealed class RoleSurfaceMatrixTests
         Assert.Equal(PrdMatrix.AllTasks.Order(), s.StartupTasks.Order());
 
         // 조사 0절의 숫자(명령 281·도구 창 33·상태 칸 10·시작 작업 14) + WP-07 이 더한 것(기능 Role 고르기 명령 1개) + 도움말 「새 기능」(oranda.help.releaseNotes, eab3889) 1개 + 튜닝 「튜닝 추천」(oranda.tuning.recommend, TSK-14-17) 1개. 시작 작업은 그 뒤 공통 2개를 더해 16(PrdMatrix.AllTasks). 도구 창 33 = 개발 빌드 전용 포함.
-        Assert.Equal(296, all.Commands.Count); // + 실행하고 실제 계획(oranda.plan.runActual) 1개 + AI 튜닝 명령 5개(aiTuning 기본 켬) + 도움말 「사용자 문서」(oranda.help.docs, F1) 1개 + 결과 그리드 열 필터 켜기/끄기·정렬 3개(oranda.grid.toggleColumnFilter·sortAscending·sortDescending·clearSort) 4개 + 줄 단위 IN 목록 복사(oranda.grid.copyAsInListLines) 1개
+        Assert.Equal(298, all.Commands.Count); // + 실행하고 실제 계획(oranda.plan.runActual) 1개 + AI 튜닝 명령 5개(aiTuning 기본 켬) + 도움말 「사용자 문서」(oranda.help.docs, F1) 1개 + 결과 그리드 열 필터 켜기/끄기·정렬 3개(oranda.grid.toggleColumnFilter·sortAscending·sortDescending·clearSort) 4개 + 줄 단위 IN 목록 복사(oranda.grid.copyAsInListLines) 1개 + 데이터 복사(oranda.tools.dataCopy·oranda.schema.addToDataCopy) 2개
     });
 
     private static RoleSurface? _baseline;
