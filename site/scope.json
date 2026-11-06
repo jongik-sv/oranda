@@ -381,6 +381,7 @@
   ],
   "dialogSources": [
     {"id": "Features/Ai/Settings/AiConfirmDialog.cs", "page": "ai/commands"},
+    {"id": "Features/DataCopy/DataCopyDialogs.cs", "page": "transfer/data-copy"},
     {"id": "Features/Execution/AvaloniaExecutionDialogs.cs", "page": "run/execute"},
     {"id": "Features/LockMonitor/LockKillDialog.cs", "page": "tools/monitor"},
     {"id": "Features/Navigation/ObjectInfoPopup.cs", "page": "schema/browser"},
