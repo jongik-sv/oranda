@@ -42,6 +42,70 @@ public class CopyOwnersTests
     }
 
     [Fact]
+    public void Dotted_table_of_default_owner_and_table_of_owner_named_like_its_prefix_get_different_keys()
+    {
+        // 기본 계정(SRC)의 표 "X.Y" 와 계정 X 의 표 Y: 예전에는 둘 다 X.Y 였다.
+        var dotted = new TableRule("X.Y", RuleKind.All, TargetAction.MergeByPk);
+        var owned = new TableRule("Y", RuleKind.All, TargetAction.MergeByPk) { SourceOwner = "X", TargetOwner = "XT" };
+        var both = new TableRule("A.B", RuleKind.All, TargetAction.MergeByPk) { SourceOwner = "X", TargetOwner = "XT" };
+        var job = Job(dotted, owned, both);
+
+        Assert.Equal("\"X.Y\"", CopyOwners.Key(job, dotted));
+        Assert.Equal("X.Y", CopyOwners.Key(job, owned));
+        Assert.Equal("X.\"A.B\"", CopyOwners.Key(job, both));
+        Assert.Same(dotted, CopyOwners.Find(job, "\"X.Y\""));
+        Assert.Same(owned, CopyOwners.Find(job, "X.Y"));
+        Assert.Same(both, CopyOwners.Find(job, "X.\"A.B\""));
+        Assert.Same(dotted, CopyOwners.FindBySource(job, "SRC", "X.Y"));
+        Assert.Empty(CopyOwners.Problems(job));
+
+        Assert.Equal((null, "X.Y"), CopyOwners.SplitKey("\"X.Y\""));
+        Assert.Equal(("X", "Y"), CopyOwners.SplitKey("X.Y"));
+        Assert.Equal(("X", "A.B"), CopyOwners.SplitKey("X.\"A.B\""));
+        Assert.Equal((null, "ORDERS"), CopyOwners.SplitKey("ORDERS"));
+        Assert.Equal((null, "Q\"T"), CopyOwners.SplitKey(CopyOwners.Key(job, "SRC", "Q\"T")));
+        Assert.Null(CopyOwners.SplitKey("\"X.Y"));
+        Assert.Null(CopyOwners.SplitKey("A.B.C"));
+        Assert.Null(CopyOwners.SplitKey(""));
+    }
+
+    [Fact]
+    public void Parent_with_dotted_name_finds_the_right_rule()
+    {
+        var dottedParent = new TableRule("X.Y", RuleKind.All, TargetAction.MergeByPk) { TargetOwner = "DST" };
+        var ownerParent = new TableRule("Y", RuleKind.All, TargetAction.MergeByPk) { SourceOwner = "X", TargetOwner = "XT" };
+        var childOfDotted = new TableRule("C1", RuleKind.ParentKey, TargetAction.DeleteRangeInsert)
+        {
+            Parent = new ParentLink("X.Y", ["P"], ["ID"]),
+        };
+        var childOfOwner = new TableRule("C2", RuleKind.ParentKey, TargetAction.DeleteRangeInsert)
+        {
+            Parent = new ParentLink("Y", ["P"], ["ID"]) { ParentOwner = "X" },
+        };
+        var job = Job(dottedParent, ownerParent, childOfDotted, childOfOwner);
+
+        Assert.Same(dottedParent, CopyOwners.Parent(job, childOfDotted));
+        Assert.Same(ownerParent, CopyOwners.Parent(job, childOfOwner));
+        Assert.Equal("DST", CopyOwners.ParentTarget(job, childOfDotted));
+        Assert.Equal("XT", CopyOwners.ParentTarget(job, childOfOwner));
+
+        // 문장도 맞는 부모 규칙의 계정으로 만든다.
+        var builder = new CopySqlBuilder(job, new ResolvedPeriod(null, null), new Dictionary<string, Oranda.Core.Metadata.TableInfo>(), new Dictionary<string, Oranda.Core.Metadata.TableInfo>());
+        Assert.Contains("FROM \"DST\".\"X.Y\"", builder.TargetDelete(CopyOwners.Key(job, childOfDotted))!.Sql, StringComparison.Ordinal);
+        Assert.Contains("FROM \"XT\".\"Y\"", builder.TargetDelete(CopyOwners.Key(job, childOfOwner))!.Sql, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Same_target_check_does_not_mix_owner_dots_with_table_dots()
+    {
+        // 대상 "X.Y"."Z" 와 대상 "X"."Y.Z" 는 다른 표다.
+        var a = new TableRule("Z", RuleKind.All, TargetAction.MergeByPk) { SourceOwner = "S1", TargetOwner = "X.Y" };
+        var b = new TableRule("Y.Z", RuleKind.All, TargetAction.MergeByPk) { SourceOwner = "S2", TargetOwner = "X" };
+        Assert.Empty(CopyOwners.Problems(Job(a, b)));
+        Assert.NotEqual(CopyOwners.QualifiedKey("X.Y", "Z"), CopyOwners.QualifiedKey("X", "Y.Z"));
+    }
+
+    [Fact]
     public void Map_target_keeps_job_mapping_for_default_owner_and_owner_name_otherwise()
     {
         var job = Job();

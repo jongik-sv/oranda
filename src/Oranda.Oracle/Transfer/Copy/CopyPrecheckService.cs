@@ -831,9 +831,9 @@ internal sealed partial class CopyPrecheckService(IBulkExecutionService bulk, IM
         {
             var names = plans.Select(p => Key(p.Rule)).ToList();
             // FK 의 부모(계정, 표) → 규칙 키. 원본 FK 는 원본 계정·표로, 대상 FK 는 대상 계정·표로 찾는다.
-            var bySource = plans.GroupBy(p => SourceOwner(p.Rule) + "." + p.Rule.Table, StringComparer.OrdinalIgnoreCase)
+            var bySource = plans.GroupBy(p => CopyOwners.QualifiedKey(SourceOwner(p.Rule), p.Rule.Table), StringComparer.OrdinalIgnoreCase)
                 .ToDictionary(g => g.Key, g => Key(g.First().Rule), StringComparer.OrdinalIgnoreCase);
-            var byTarget = plans.GroupBy(p => TargetOwner(p.Rule) + "." + p.Rule.Table, StringComparer.OrdinalIgnoreCase)
+            var byTarget = plans.GroupBy(p => CopyOwners.QualifiedKey(TargetOwner(p.Rule), p.Rule.Table), StringComparer.OrdinalIgnoreCase)
                 .ToDictionary(g => g.Key, g => Key(g.First().Rule), StringComparer.OrdinalIgnoreCase);
             var edges = new List<(string Child, string Parent)>();
             foreach (var plan in plans)
@@ -861,7 +861,7 @@ internal sealed partial class CopyPrecheckService(IBulkExecutionService bulk, IM
         private static IEnumerable<(string Child, string Parent)> ForeignKeyEdges(string key, TableInfo info, Dictionary<string, string> parents)
             => info.Constraints
                 .Where(c => c.Kind == ConstraintKind.ForeignKey && c.ReferencedTable is not null)
-                .Select(c => parents.TryGetValue(c.ReferencedTable!.Owner + "." + c.ReferencedTable.Name, out var parent) ? parent : null)
+                .Select(c => parents.TryGetValue(CopyOwners.QualifiedKey(c.ReferencedTable!.Owner, c.ReferencedTable.Name), out var parent) ? parent : null)
                 .OfType<string>()
                 .Select(parent => (key, parent));
 

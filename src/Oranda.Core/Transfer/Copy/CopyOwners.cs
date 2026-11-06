@@ -5,7 +5,8 @@ namespace Oranda.Core.Transfer.Copy;
 /// 규칙의 계정이 비면 그 값을 쓰고, 표 이름만 입력했을 때 먼저 찾는 계정이며, 대상 계정 기본값(<see cref="MapTarget"/>)의 기준이다.
 /// <para>
 /// 규칙 키(<see cref="Key(CopyJob, TableRule)"/>)는 작업 안에서 규칙 하나를 가리킨다. 기본 원본 계정의 표는 이름만(<c>ORDERS</c>),
-/// 다른 계정의 표는 <c>계정.표</c>(<c>APP2.ORDERS</c>)다. 그래서 계정 하나짜리 작업(예전 작업)의 키는 예전 표 이름과 같다.
+/// 다른 계정의 표는 <c>계정.표</c>(<c>APP2.ORDERS</c>)다. 점·큰따옴표 든 이름은 그 마디만 따옴표로 감싼다(<c>"X.Y"</c>, <c>X."A.B"</c>).
+/// 그래서 계정 하나짜리 작업(예전 작업)의 키는 (점 든 이름이 아니면) 예전 표 이름과 같다.
 /// 점검 항목·건수 어림·트리거 끄기 결정·진행·표 결과·실패 행·실행 기록의 표 이름은 모두 이 키다.
 /// </para>
 /// </summary>
@@ -41,7 +42,12 @@ public static class CopyOwners
         return string.Equals(sourceOwner, job.SourceOwner, StringComparison.Ordinal) ? job.TargetOwner : sourceOwner;
     }
 
-    /// <summary>규칙 키. 기본 원본 계정의 표는 이름만, 다른 계정이면 <c>계정.표</c>.</summary>
+    /// <summary>
+    /// 규칙 키. 기본 원본 계정의 표는 이름만, 다른 계정이면 <c>계정.표</c>.
+    /// 계정이나 표 이름에 점·큰따옴표가 들어 있으면 그 부분만 큰따옴표로 감싼다(안의 큰따옴표는 두 번):
+    /// 기본 계정의 표 <c>X.Y</c> 는 <c>"X.Y"</c>, 계정 X 의 표 Y 는 <c>X.Y</c>, 계정 X 의 표 <c>A.B</c> 는 <c>X."A.B"</c> 라 서로 겹치지 않는다.
+    /// 보통 이름(점·따옴표 없음)의 키는 예전과 같다. 나누기는 <see cref="SplitKey"/>.
+    /// </summary>
     public static string Key(CopyJob job, TableRule rule) => Key(job, Source(job, rule), rule.Table);
 
     /// <inheritdoc cref="Key(CopyJob, TableRule)"/>
@@ -50,8 +56,102 @@ public static class CopyOwners
         ArgumentNullException.ThrowIfNull(job);
         ArgumentNullException.ThrowIfNull(table);
         return string.IsNullOrEmpty(sourceOwner) || string.Equals(sourceOwner, job.SourceOwner, StringComparison.Ordinal)
-            ? table
-            : sourceOwner + "." + table;
+            ? KeyPart(table)
+            : KeyPart(sourceOwner) + "." + KeyPart(table);
+    }
+
+    /// <summary>
+    /// 규칙 키를 계정·표로 나눈다(<see cref="Key(CopyJob, TableRule)"/> 의 거꾸로). 계정이 없는 키(기본 원본 계정의 표)면 Owner 가 null.
+    /// 따옴표가 짝이 맞지 않는 등 키 꼴이 아니면 null.
+    /// </summary>
+    public static (string? Owner, string Table)? SplitKey(string key)
+    {
+        ArgumentNullException.ThrowIfNull(key);
+        var parts = new List<string>();
+        var i = 0;
+        while (true)
+        {
+            if (ReadKeyPart(key, ref i) is not { } part)
+            {
+                return null;
+            }
+
+            parts.Add(part);
+            if (i == key.Length)
+            {
+                break;
+            }
+
+            if (key[i] != '.' || parts.Count == 2)
+            {
+                return null;
+            }
+
+            i++;
+        }
+
+        return parts.Count == 1 ? (null, parts[0]) : (parts[0], parts[1]);
+    }
+
+    /// <summary>
+    /// 계정·표를 겹치지 않는 문자열 하나로(<c>계정.표</c>, 점·큰따옴표 든 마디는 따옴표로 감싼다). 계정이 늘 붙는다는 점만 규칙 키와 다르다.
+    /// FK 부모 찾기·같은 표 비교처럼 계정·표 쌍을 사전 키로 쓸 때 쓴다(표시용 이름은 <see cref="SourceName"/>·<see cref="TargetName"/>).
+    /// </summary>
+    public static string QualifiedKey(string owner, string table)
+    {
+        ArgumentNullException.ThrowIfNull(owner);
+        ArgumentNullException.ThrowIfNull(table);
+        return KeyPart(owner) + "." + KeyPart(table);
+    }
+
+    /// <summary>키의 한 마디: 점·큰따옴표가 있으면 큰따옴표로 감싼다.</summary>
+    internal static string KeyPart(string name)
+        => name.Contains('.', StringComparison.Ordinal) || name.Contains('"', StringComparison.Ordinal)
+            ? "\"" + name.Replace("\"", "\"\"", StringComparison.Ordinal) + "\""
+            : name;
+
+    // i 에서 한 마디를 읽는다. 따옴표 마디면 닫는 따옴표 뒤, 아니면 다음 점(또는 끝)까지. 빈 마디·잘못된 따옴표면 null.
+    private static string? ReadKeyPart(string key, ref int i)
+    {
+        if (i < key.Length && key[i] == '"')
+        {
+            var sb = new System.Text.StringBuilder();
+            for (var j = i + 1; j < key.Length; j++)
+            {
+                if (key[j] != '"')
+                {
+                    sb.Append(key[j]);
+                    continue;
+                }
+
+                if (j + 1 < key.Length && key[j + 1] == '"')
+                {
+                    sb.Append('"');
+                    j++;
+                    continue;
+                }
+
+                i = j + 1;
+                return sb.Length == 0 ? null : sb.ToString();
+            }
+
+            return null;
+        }
+
+        var end = key.IndexOf('.', i);
+        if (end < 0)
+        {
+            end = key.Length;
+        }
+
+        var plain = key[i..end];
+        if (plain.Length == 0 || plain.Contains('"', StringComparison.Ordinal))
+        {
+            return null;
+        }
+
+        i = end;
+        return plain;
     }
 
     /// <summary>원본 표 전체 이름(<c>계정.표</c>, 표시용).</summary>
@@ -126,9 +226,9 @@ public static class CopyOwners
             problems.Add($"{g.Key}: 같은 원본 표의 규칙이 {g.Count().ToString(System.Globalization.CultureInfo.InvariantCulture)}개 있습니다. 하나만 남기세요.");
         }
 
-        foreach (var g in job.Tables.GroupBy(r => TargetName(job, r), StringComparer.OrdinalIgnoreCase).Where(g => g.Count() > 1))
+        foreach (var g in job.Tables.GroupBy(r => QualifiedKey(Target(job, r), r.Table), StringComparer.OrdinalIgnoreCase).Where(g => g.Count() > 1))
         {
-            problems.Add($"대상 표 {g.Key} 에 쓰는 규칙이 여럿입니다({string.Join(", ", g.Select(r => Key(job, r)))}). 대상 계정을 바꾸거나 하나만 남기세요.");
+            problems.Add($"대상 표 {TargetName(job, g.First())} 에 쓰는 규칙이 여럿입니다({string.Join(", ", g.Select(r => Key(job, r)))}). 대상 계정을 바꾸거나 하나만 남기세요.");
         }
 
         return problems;
@@ -146,14 +246,14 @@ public static class CopyOwners
         var read = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         foreach (var rule in active)
         {
-            read.Add(SourceName(job, rule));
+            read.Add(QualifiedKey(Source(job, rule), rule.Table));
             if (rule.Kind == RuleKind.ParentKey && rule.Parent is { } link)
             {
-                read.Add(ParentSource(job, rule) + "." + link.ParentTable);
+                read.Add(QualifiedKey(ParentSource(job, rule), link.ParentTable));
             }
         }
 
-        return [.. active.Where(r => read.Contains(TargetName(job, r))).Select(r => (Key(job, r), TargetName(job, r)))];
+        return [.. active.Where(r => read.Contains(QualifiedKey(Target(job, r), r.Table))).Select(r => (Key(job, r), TargetName(job, r)))];
     }
 
     /// <summary>제외 아닌 규칙의 대상 계정 가운데 <paramref name="sessionUser"/>(대상 접속 계정)가 아닌 것(작업 순서, 겹침 없음).</summary>

@@ -49,6 +49,17 @@ public class CopyJobMigrationTests
         Assert.Equal("X", (string?)up["tables"]![0]!["targetOwner"]);
         Assert.Null(up["sequences"]);
 
+        // 점 든 표 이름의 시퀀스 연결은 버전 2 규칙 키(따옴표) 꼴로 바뀐다. 보통 이름은 그대로.
+        var dotted = JsonNode.Parse("""
+            {"schemaVersion":1,"id":"1","name":"n","source":{"name":"s","user":"S"},"target":{"name":"t","user":"T"},"maskSalt":"AA==",
+             "sourceOwner":"S","targetOwner":"T",
+             "tables":[{"table":"A.B","kind":"All","action":"MergeByPk"},{"table":"C","kind":"All","action":"MergeByPk"}],
+             "sequences":[{"sequence":"Q1","table":"A.B","column":"ID"},{"sequence":"Q2","table":"C","column":"ID"}]}
+            """)!;
+        var job = CopyJobMigrations.Upgrade(dotted, 1).Deserialize(CopyJobJsonContext.Default.CopyJob)!;
+        Assert.Equal(["\"A.B\"", "C"], job.Sequences.Select(s => s.Table));
+        Assert.All(job.Sequences, s => Assert.NotNull(CopyOwners.Find(job, s.Table)));
+
         var empty = JsonNode.Parse("""{"schemaVersion":1}""")!;
         Assert.Equal(2, (int)CopyJobMigrations.Upgrade(empty, 1)["schemaVersion"]!);
     }

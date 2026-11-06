@@ -35,6 +35,7 @@ public static class CopyJobMigrations
 /// 복사 작업 1 → 2(묶음 B): 규칙마다 원본·대상 계정을 둔다. 버전 1 의 뜻(모든 표 = 작업 계정)을 그대로 옮겨
 /// <c>tables[].sourceOwner</c>·<c>tables[].targetOwner</c> 를 작업의 <c>sourceOwner</c>·<c>targetOwner</c> 로,
 /// <c>tables[].parent.parentOwner</c> 를 작업 <c>sourceOwner</c> 로, <c>sequences[].owner</c> 를 작업 <c>targetOwner</c> 로 채운다(이미 있으면 둔다).
+/// <c>sequences[].table</c> 은 규칙 키 꼴로 바꾼다(점·큰따옴표 든 표 이름만 따옴표로 감싸고, 보통 이름은 그대로).
 /// 버전을 올리는 까닭: 예전 앱이 새 파일을 읽으면 표마다의 계정을 버리고 작업 대상 계정의 같은 이름 표를 지운다(data-model 4.1 의 의미 변경).
 /// 순수 함수다.
 /// </summary>
@@ -72,6 +73,11 @@ public sealed class CopyJobMigrationV1 : ISettingsMigration
             foreach (var sequence in sequences.OfType<JsonObject>())
             {
                 Fill(sequence, "owner", target);
+                // 버전 1 의 시퀀스 표는 표 이름 그대로다. 버전 2 규칙 키는 점·큰따옴표 든 이름을 따옴표로 감싼다(CopyOwners.Key).
+                if (Text(sequence["table"]) is { Length: > 0 } table)
+                {
+                    sequence["table"] = CopyOwners.KeyPart(table);
+                }
             }
         }
 
