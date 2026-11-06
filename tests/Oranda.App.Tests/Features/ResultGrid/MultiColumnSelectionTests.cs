@@ -67,6 +67,20 @@ public sealed class MultiColumnSelectionTests
     }
 
     [Fact]
+    public async Task A_cell_selected_before_the_first_ctrl_click_is_not_copied()
+    {
+        await using var m = await LoadAsync();
+        m.SelectCell(new GridCell(3, 1)); // 보던 셀
+        foreach (var col in PickedColumns)
+        {
+            m.ToggleColumnInSelection(col);
+        }
+
+        Assert.Equal(PickedColumns, m.SelectedVisibleColumns());
+        Assert.Equal([(0L, RowTotal - 1L)], m.SelectedRowRanges());
+    }
+
+    [Fact]
     public async Task Ctrl_clicking_a_selected_header_again_removes_that_column()
     {
         await using var m = await LoadAsync();
@@ -210,6 +224,7 @@ public sealed class MultiColumnSelectionTests
         try
         {
             await HeadlessHost.WaitUntil(() => m.LoadedRowCount == RowTotal && grid.Bounds.Height > 0);
+            m.SelectCell(new GridCell(2, 1)); // 보던 셀이 있어도 그 열은 더하지 않는다
             Point Header(int col) => grid.TranslatePoint(new Point(grid.RowHeaderWidth + Enumerable.Range(0, col).Sum(c => m.GetColumnWidth(c)) + 12, grid.HeaderHeight / 2), window)!.Value;
             foreach (var col in PickedColumns)
             {

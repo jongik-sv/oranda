@@ -205,6 +205,7 @@ public sealed partial class ResultGridModel
 
     /// <summary>
     /// 머리글을 Ctrl 로 눌렀다: 그 열 전체를 고른 칸에 더하고, 이미 열 전체를 골랐으면 그 열을 모든 범위에서 뺀다(엑셀처럼).
+    /// 아직 열 전체를 고르지 않았으면(셀 하나나 칸 범위만 골랐으면) 그 열부터 새로 고른다.
     /// 더한 열이 현재 칸 범위가 된다(Shift 로 이어서 넓힐 수 있다). 하나만 남은 열은 빼지 않는다.
     /// </summary>
     public void ToggleColumnInSelection(int visibleCol)
@@ -215,13 +216,16 @@ public sealed partial class ResultGridModel
         }
 
         visibleCol = Math.Clamp(visibleCol, 0, _visible.Count - 1);
-        if (!HasSelection)
+        var last = RowCount - 1;
+        var (top, bottom) = SelectionRect();
+        if (!HasSelection || (_extraRanges.Count == 0 && _extraRows.Count == 0 && (top.Row != 0 || bottom.Row < last)))
         {
+            // 열을 고르지 않은 상태(보던 셀 하나·칸 범위)에서 첫 Ctrl+클릭은 그 열부터 새로 고른다.
+            // 남기면 그 칸의 열이 모든 행으로 함께 복사된다(머리글 그냥 클릭은 정렬이라 Ctrl+클릭으로 시작한다).
             SelectColumn(visibleCol);
             return;
         }
 
-        var last = RowCount - 1;
         var ranges = SelectionRanges();
         if (!ranges.Any(r => r.From.Row == 0 && r.To.Row >= last && visibleCol >= r.From.Col && visibleCol <= r.To.Col))
         {
