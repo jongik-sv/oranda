@@ -45,7 +45,7 @@
 |---|---|---|---|---|---|
 | T1 | Core 계약: 작업 모델·저장소·점검·실행기 인터페이스 | M | A | - | 아니오(Core.Tests 의 Copy) |
 | T2 | 기간 계산·문자열 날짜 형식 | S | A | T1 | 아니오 |
-| T3 | 규칙 → SQL 생성 | L | A | T1, T2 | 아니오 |
+| T3 | 규칙 → SQL 생성 | L | A | T1, T2, T6(Core 커밋) | 아니오 |
 | T4 | FK 정렬·기간 열 후보·시퀀스 후보 | M | A | T1 | 아니오 |
 | T5 | 마스킹·접속 재연결·운영 차단 | M | A | T1 | 아니오 |
 | T6 | 대량 실행 경로(정책 1회 + 바인드 배열 + 전체 LOB 읽기) | M | B | - | 통합 시험(CI·win144) |
@@ -54,14 +54,14 @@
 | T9 | 복사 실행기 | L | D | T7, T8 | 통합 시험(CI·win144) |
 | T10 | 테이블 다시 만들기(개발 접속만) | M | D | T9 | 통합 시험(CI·win144) |
 | T11 | 창·규칙 편집 단계·내 작업 메뉴·진입점 | L | F | T1, T2, T4, T5 | 아니오(App.Tests 의 DataCopy) |
-| T12 | 사전 점검·실행·검증 단계 화면 | L | F | T11, T8, T9 | 아니오(App.Tests 의 DataCopy) |
+| T12 | 사전 점검·실행·검증 단계 화면 | L | F | T1, T11 | 아니오(App.Tests 의 DataCopy, 가짜 서비스) |
 | T13 | 문서 마감(PRD·data-model) | S | G | T12 | 아니오 |
-| T14 | 전체 검증·실제 앱 확인 | S | 조정자 | T10, T13 | 전체 시험(win144), 실제 앱(Mac) |
+| T14 | 전체 검증·실제 서비스 연결 확인·실제 앱 확인 | S | 조정자 | T9, T10, T12, T13 | 전체 시험(win144), 실제 앱(Mac) |
 
 레인 소유 범위(겹치지 않는다):
 
-- **A**: `src/Oranda.Core/Transfer/Copy/**`(단 `CreateTableDdl.cs` 는 D), `tests/Oranda.Core.Tests/Transfer/Copy/**`. T1 은 혼자 먼저 머지한다(다른 레인이 이 계약에 맞춰 빌드한다).
-- **B**: `src/Oranda.Core/Execution/IBulkExecutionService.cs`, `src/Oranda.Core/Execution/IExecutionService.cs`(옵션 한 개), `src/Oranda.Core/Execution/BindValue.cs`(열거 값 한 개), `src/Oranda.Core/History/HistoryEntry.cs`(열거 값 한 개), `src/Oranda.Oracle/Execution/**`, 해당 시험. 공유 API 이므로 단독으로 일찍 머지한다.
+- **A**: `src/Oranda.Core/Transfer/Copy/**`, `tests/Oranda.Core.Tests/Transfer/Copy/**`. 단 `CreateTableDdl.cs` 와 `CreateTableDdlTests.cs` 는 D 소유다. T1 은 혼자 먼저 머지한다(다른 레인이 이 계약에 맞춰 빌드한다).
+- **B**: `src/Oranda.Core/Execution/IBulkExecutionService.cs`, `src/Oranda.Core/Execution/IExecutionService.cs`(옵션 한 개), `src/Oranda.Core/Execution/BindValue.cs`(열거 값 한 개), `src/Oranda.Core/History/HistoryEntry.cs`(열거 값 한 개), `src/Oranda.Oracle/Execution/**`, 해당 시험. 공유 API 이므로 단독으로 일찍 머지한다. **첫 커밋은 Core 쪽 추가분만**(`IBulkExecutionService`, `PreConfirmed`, `TimestampLtz`, `HistorySource.DataCopy`) 담아 바로 머지한다. 선행 작업이 없고, 레인 A 의 T3 가 이 커밋을 기다린다.
 - **C**: `src/Oranda.Core/Storage/IAppDataPaths.cs`, `src/Oranda.Platform/Storage/AppDataPaths.cs`, `src/Oranda.Platform/Storage/Copy/**`, `src/Oranda.Core/Settings/SchemaVersions.cs`, `IAppDataPaths` 가짜 구현 3곳(Task 7 Files), `tests/Oranda.Platform.Tests/Storage/Copy/**`.
 - **D**: `src/Oranda.Oracle/Transfer/Copy/**`, `src/Oranda.Core/Transfer/Copy/CreateTableDdl.cs`, `tests/Oranda.Oracle.Tests/Transfer/Copy/**`, `tests/Oranda.Oracle.IntegrationTests/Transfer/Copy/**`.
 - **F**: `src/Oranda.App/Features/DataCopy/**`, `src/Oranda.App/Features/DedicatedSession/DedicatedSessionCommands.cs`(도우미 한 개 분리), `docs/design/commands.md`, `tests/Oranda.App.Tests/Features/DataCopy/**`.
@@ -135,7 +135,7 @@ public static class TargetActions { public static TargetAction DefaultFor(RuleKi
 ```
 
 - `ICopyJobStore`(구현 T7): `ListAsync(ct) → IReadOnlyList<CopyJobEntry>`, `SaveAsync(CopyJob, ct)`, `DuplicateAsync(string id, string newName, ct) → CopyJob`, `RenameAsync(string id, string newName, ct)`, `DeleteAsync(string id, ct)`, `ExportAsync(string id, string path, ct)`, `ImportAsync(string path, ct) → CopyJob`. `CopyJobEntry(CopyJob Job, string FilePath, bool IsReadOnly, string? Notice)`.
-- `ICopyRunLog`(구현 T7): `BeginAsync(CopyRunHeader, ct) → ICopyRunRecord`, `FindUnfinishedAsync(string jobId, ct) → IReadOnlyList<UnfinishedRun>`, `MarkRecoveredAsync(string runFile, ct)`. `ICopyRunRecord : IAsyncDisposable` 은 `RecordDisabledAsync(IReadOnlyList<DisabledObject>, ct)`, `RecordStatementAsync(string sql, ct)`, `RecordTableAsync(TableRunResult, ct)`, `RecordFailedRowAsync(FailedRow, ct)`, `CompleteAsync(CopyOutcome, ct)` 를 가진다. 레코드: `CopyRunHeader(string JobId, string JobName, string SourceName, string TargetName, ResolvedPeriod Period, DateTimeOffset StartedAt)`, `DisabledObject(DisabledKind Kind, string Owner, string Table, string Name)`, `enum DisabledKind { Trigger, ForeignKey }`, `UnfinishedRun(string RunFile, DateTimeOffset StartedAt, IReadOnlyList<DisabledObject> Disabled)`, `FailedRow(string Table, IReadOnlyDictionary<string, string?> Key, string Error)`, `TableRunResult(string Table, long SourceRows, long TargetRows, TimeSpan Elapsed, CopyOutcome Outcome, string? Message)`.
+- `ICopyRunLog`(구현 T7): `BeginAsync(CopyRunHeader, ct) → ICopyRunRecord`, `FindUnfinishedAsync(string jobId, ct) → IReadOnlyList<UnfinishedRun>`, `MarkRecoveredAsync(string runFile, ct)`. `ICopyRunRecord : IAsyncDisposable` 은 `RecordDisabledAsync(IReadOnlyList<DisabledObject>, ct)`, `RecordStatementAsync(string sql, ct)`, `RecordTableAsync(TableRunResult, ct)`, `RecordFailedRowAsync(FailedRow, ct)`, `CompleteAsync(CopyOutcome, ct)` 를 가진다. 레코드: `CopyRunHeader(string JobId, string JobName, string SourceName, string TargetName, ResolvedPeriod Period, DateTimeOffset StartedAt)`, `DisabledObject(DisabledKind Kind, string Owner, string Table, string Name)`, `enum DisabledKind { Trigger, ForeignKey }`, `UnfinishedRun(string RunFile, DateTimeOffset StartedAt, IReadOnlyList<DisabledObject> Disabled)`, `FailedRow(string Table, IReadOnlyDictionary<string, string?> Key, string Error)`(키 값 글자 형식: 숫자 = 고정 소수점 invariant 글자, DATE = `yyyy-MM-ddTHH:mm:ss`, TIMESTAMP = `yyyy-MM-ddTHH:mm:ss.fffffff`(TZ 는 끝에 `zzz`), RAW = 대문자 16진수, 문자 = 그대로. 값이 ODP.NET 형식이므로 변환 함수는 T9 의 `FailedRowKeys` 에 둔다), `TableRunResult(string Table, long SourceRows, long TargetRows, TimeSpan Elapsed, CopyOutcome Outcome, string? Message)`.
 - `ICopyPrecheckService`(구현 T8): `RunAsync(CopySessions sessions, CopyJob job, ResolvedPeriod period, IProgress<string>? progress, CancellationToken ct) → Task<PrecheckReport>`. `CopySessions(ISession Source, ISession Target)`. `enum CheckLevel { Pass, Confirm, Error }`. `enum CheckChoice { DisableTriggers, DisableForeignKeys, SkipColumn, ProceedSequenceGap, SwitchToMerge }`. `CheckItem(string? Table, string Code, CheckLevel Level, string Message) { IReadOnlyList<CheckChoice> Choices; string? Column; }`. `CopyTablePlan(TableRule Rule, TableInfo Source, TableInfo Target, IReadOnlyList<string> Columns, IReadOnlyList<string> KeyColumns) { bool CanDisableTriggers; IReadOnlyList<string> Triggers; IReadOnlyList<DisabledObject> DisablableForeignKeys; }`. `PreviewStatement(string Sql, PreviewSide Side, PolicyDecisionKind Policy, string? PolicyMessage, string? RetypeText)`, `enum PreviewSide { Source, Target }`. `PrecheckReport(IReadOnlyList<CheckItem> Items, IReadOnlyList<CopyTablePlan> Order, IReadOnlyList<PreviewStatement> Preview, IReadOnlyDictionary<string, long> EstimatedRows) { bool HasErrors => Items.Any(i => i.Level == CheckLevel.Error); }`. `Order` 는 부모 → 자식 순서다.
 - `ICopyRunner`(구현 T9): `RunAsync(CopySessions sessions, CopyJob job, PrecheckReport report, CopyDecisions decisions, ResolvedPeriod period, IProgress<CopyProgress>? progress, CopyRunControl control, CancellationToken ct) → Task<CopyRunResult>`, `RetryFailedRowsAsync(CopySessions, CopyJob, PrecheckReport, IReadOnlyList<FailedRow>, IProgress<CopyProgress>?, CancellationToken) → Task<CopyRunResult>`. `CopyDecisions(IReadOnlySet<string> DisableTriggerTables, IReadOnlySet<string> DisableForeignKeys, IReadOnlySet<string> PreConfirmedSql, bool ProceedSequenceGap)`. `CopyProgress(string Table, long Rows, long? Estimated, string Phase)`. `CopyRunResult(CopyOutcome Outcome, IReadOnlyList<TableRunResult> Tables, IReadOnlyList<FailedRow> FailedRows, IReadOnlyList<string> Notices, DateTimeOffset ReadStartedAt)`. `sealed class CopyRunControl { void Pause(); void Resume(); bool IsPaused { get; } Task WaitIfPausedAsync(CancellationToken ct); }` 중지는 `ct` 취소로 한다.
 
@@ -270,8 +270,9 @@ public static class TargetActions { public static TargetAction DefaultFor(RuleKi
 - Modify: `src/Oranda.Core/Execution/IExecutionService.cs` (`ExecutionOptions.PreConfirmed` 추가)
 - Modify: `src/Oranda.Core/Execution/BindValue.cs` (`BindDataType.TimestampLtz` 를 열거 끝에 추가)
 - Modify: `src/Oranda.Core/History/HistoryEntry.cs` (`HistorySource.DataCopy` 를 열거 끝에 추가. 이력 저장소는 이름 문자열로 저장하므로 이전 작업이 필요 없다)
-- Modify: `src/Oranda.Oracle/Execution/OracleExecutionService.cs` (`RunAsync` 의 Confirm 분기에서 미리 받은 확인 사용, 클래스를 `partial` 로)
-- Create: `src/Oranda.Oracle/Execution/OracleExecutionService.Bulk.cs`, `src/Oranda.Oracle/Execution/BulkBinds.cs`
+- Modify: `src/Oranda.Oracle/Execution/OracleExecutionService.cs` (`RunAsync` 의 정책 단계를 `PolicyGate` 로 옮기고 미리 받은 확인 사용)
+- Create: `src/Oranda.Oracle/Execution/PolicyGate.cs` (`internal static Task<PolicyGateResult> DecideAsync(IExecutionPolicy policy, IExecutionInteraction interaction, IEventBus events, ISession s, SqlStatement stmt, ExecutionOptions options, CancellationToken ct)`, 결과 = `Proceed`(적용한 결정 포함)·`Denied`·`Cancelled`. 두 실행 클래스가 함께 쓴다)
+- Create: `src/Oranda.Oracle/Execution/OracleBulkExecutionService.cs`, `src/Oranda.Oracle/Execution/BulkBinds.cs`
 - Modify: `src/Oranda.Oracle/Execution/BindBuilder.cs` (`TimestampLtz → OracleDbType.TimeStampLTZ`)
 - Test: `tests/Oranda.Oracle.Tests/Execution/PreConfirmedPolicyTests.cs`, `tests/Oranda.Oracle.Tests/Execution/BulkBindsTests.cs`, `tests/Oranda.Oracle.IntegrationTests/Execution/BulkExecutionTests.cs`
 
@@ -304,7 +305,7 @@ public sealed class BulkDeniedException(PolicyDecision decision) : Exception(dec
 public IReadOnlySet<string>? PreConfirmed { get; init; }
 ```
 
-- 구현 클래스는 `OracleExecutionService` 이고 `[OrandaService(typeof(IBulkExecutionService))]` 를 함께 붙인다. 세션 명령 잠금(`CommandGate`)과 바쁨 표시는 `RunAsync` 와 같게 잡는다. `StatementExecuted` 이벤트는 `ExecuteArrayAsync` 한 번에 하나만 낸다(이력은 `options.SkipHistory` 를 따른다).
+- 구현 클래스는 따로 둔 `internal sealed class OracleBulkExecutionService`(`[OrandaService(typeof(IBulkExecutionService))]`)다. 서비스 컨테이너는 등록(서비스 형식)마다 인스턴스를 따로 만들므로, `OracleExecutionService` 에 속성을 하나 더 붙이면 세션별 상태(`_runtimes`)가 두 벌로 갈린다. 그래서 정책 단계만 `PolicyGate` 로 함께 쓴다. 세션 명령 잠금(`CommandGate`)과 바쁨 표시는 `RunAsync` 와 같게 잡는다. `StatementExecuted` 이벤트는 `ExecuteArrayAsync` 한 번에 하나만 낸다(이력은 `options.SkipHistory` 를 따른다).
 - `BulkBinds.ToDbType(string serverType) → OracleDbType`: `VARCHAR2`·`CHAR`·`NVARCHAR2`·`NCHAR`, `NUMBER`, `BINARY_FLOAT`, `BINARY_DOUBLE`, `DATE`, `TIMESTAMP(n)`, `… WITH TIME ZONE`, `… WITH LOCAL TIME ZONE`, `INTERVAL DAY(n) TO SECOND(m)`, `INTERVAL YEAR(n) TO MONTH`, `RAW`, `CLOB`, `NCLOB`, `BLOB`. 그 밖은 `NotSupportedException`(설계 8.3 미지원 타입).
 
 - [ ] **Step 1: 실패하는 단위 시험 작성** (`FakeSession`, `FakeExecutionInteraction`, `ExecutionPolicy` 사용)
@@ -318,10 +319,10 @@ public IReadOnlySet<string>? PreConfirmed { get; init; }
 - [ ] **Step 5: 통합 시험 작성** — `BulkExecutionTests`(`OracleFreeShared`, 기존 `DataTransferTests` 와 같은 방식으로 SYSTEM 표를 태그 이름으로 만들고 지운다):
   - `Array_insert_round_trips_all_supported_types`: 설계 8.3 1차 지원 타입 열을 모두 가진 원본 표 3행 → `StreamRowsAsync` → `ExecuteArrayAsync`(INSERT) → `MINUS` 양방향 0건.
   - `Array_insert_round_trips_large_lobs_byte_identical` (Review Focus 1): 100,000자 CLOB 과 200,000바이트 BLOB → `DBMS_LOB.COMPARE = 0`.
-  - `Array_merge_updates_existing_and_inserts_new`
+  - `Array_merge_updates_existing_and_inserts_new`: `MERGE … USING (SELECT :C1 … FROM DUAL)` 에 100,000자 CLOB 열을 넣어도 기존 행은 바뀌고 새 행은 들어간다(설계 전체가 이 경로에 기대므로 가장 먼저 확인한다).
   - `Stream_rows_rejects_non_query`: `DELETE` 문장 → `BulkDeniedException`.
   - `Readonly_source_profile_denies_writes`: `profile with { ReadOnly = true }` 세션에 `ExecuteArrayAsync(INSERT)` → `Status == Denied`.
-- [ ] **Step 6: 통합 시험 실행(CI·win144)** — `dotnet test tests/Oranda.Oracle.IntegrationTests --filter "FullyQualifiedName~BulkExecutionTests"` → PASS. 이 PC 에서는 돌리지 않는다.
+- [ ] **Step 6: 통합 시험 실행(win144 먼저)** — `dotnet test tests/Oranda.Oracle.IntegrationTests --filter "FullyQualifiedName~BulkExecutionTests"` → PASS. 이 PC 에서는 돌리지 않는다. 레인 D 가 T8 을 시작하기 전에 이 결과를 확인한다(바인드 배열 + 큰 LOB + MERGE 가 안 되면 T8·T9 설계를 다시 정한다).
 - [ ] **Step 7: 커밋** — `feat(exec): add bulk execution path with one policy check per statement`
 
 ### Task 7: 작업 파일 저장소·실행 기록
@@ -395,12 +396,12 @@ public IReadOnlySet<string>? PreConfirmed { get; init; }
 ### Task 9: 복사 실행기
 
 **Files:**
-- Create: `src/Oranda.Oracle/Transfer/Copy/CopyRunner.cs`, `src/Oranda.Oracle/Transfer/Copy/SequenceAdvance.cs`
-- Test: `tests/Oranda.Oracle.Tests/Transfer/Copy/SequenceAdvanceTests.cs`, `tests/Oranda.Oracle.IntegrationTests/Transfer/Copy/CopyRunnerTests.cs`
+- Create: `src/Oranda.Oracle/Transfer/Copy/CopyRunner.cs`, `src/Oranda.Oracle/Transfer/Copy/SequenceAdvance.cs`, `src/Oranda.Oracle/Transfer/Copy/FailedRowKeys.cs`
+- Test: `tests/Oranda.Oracle.Tests/Transfer/Copy/SequenceAdvanceTests.cs`, `FailedRowKeysTests.cs`, `tests/Oranda.Oracle.IntegrationTests/Transfer/Copy/CopyRunnerTests.cs`
 
 **Interfaces:**
 - Consumes: T1 계약, `CopySqlBuilder`(T3), `MaskFunctions`·`CopyTargetGuard`(T5), `IBulkExecutionService`·`IExecutionService`(T6), `ICopyRunLog`(T7), `PrecheckReport`(T8), `ImportValueConverter`(마스킹 고정값을 열 타입으로 바꿀 때)
-- Produces: `CopyRunner : ICopyRunner` (`[OrandaService]`). `SequenceAdvance.Plan(long current, long maxValue, long increment) → long` (소비할 `NEXTVAL` 개수, 0 이상), `SequenceAdvance.ChunkSize = 10_000`(한 번에 `CONNECT BY LEVEL <= :n` 으로 소비하는 개수).
+- Produces: `CopyRunner : ICopyRunner` (`[OrandaService]`). `SequenceAdvance.Plan(long current, long maxValue, long increment) → long` (소비할 `NEXTVAL` 개수, 0 이상), `SequenceAdvance.ChunkSize = 10_000`(한 번에 `CONNECT BY LEVEL <= :n` 으로 소비하는 개수). `FailedRowKeys.ToText(object? value, string serverType) → string?`, `FailedRowKeys.FromText(string? text, string serverType) → object?`(T1 의 `FailedRow` 키 글자 형식). 다시 읽을 때 `FromText` 값을 `BulkBinds` 형식으로 바인드한다.
 
 실행 순서(설계 8.2)와 정한 동작:
 - 시작할 때 `CopyTargetGuard.EnsureAllowedTarget(sessions.Target.Profile)` 를 부르고, `sessions.Source.Profile.ReadOnly` 가 거짓이면 `InvalidOperationException` 을 낸다.
@@ -412,10 +413,13 @@ public IReadOnlySet<string>? PreConfirmed { get; init; }
 - 시퀀스 SELECT 권한이 없으면 보정하지 않고 「테스트 중 PK 충돌이 날 수 있음」을 `Notices` 에 넣는다. 모자란 수가 `SequenceGapConfirm` 이상이고 `decisions.ProceedSequenceGap` 이 거짓이면 그 시퀀스를 건너뛴다.
 - 실패한 배치는 한 행씩 다시 실행해 실패 행을 찾는다. 실패 행이 `MaxFailedRows` 를 넘으면 그 표를 `Failed` 로 두고 다음 표로 간다. ORA-01555 는 그 표를 실패로 두고 전체를 멈추며, 기간을 줄이라는 안내를 `Notices` 에 넣는다.
 - 일시 정지는 배치 사이의 `control.WaitIfPausedAsync` 에서 멈춘다. `ct` 취소는 현재 배치를 되돌리고 다시 켜기를 거친 뒤 `Stopped` 로 끝난다.
+- **중지 뒤 정리에는 `ct` 를 쓰지 않는다.** 실행 엔진은 취소된 토큰을 받으면 문장을 보내지 않고 `Cancelled` 를 돌려준다. 그래서 배치 롤백, 모든 `ENABLE` 문장, `RecordDisabledAsync`·`CompleteAsync` 는 `ct` 대신 새 토큰(`new CancellationTokenSource(TimeSpan.FromMinutes(2)).Token`)으로 실행한다.
 - 커밋: `PerTable` 은 표 적재 끝, `PerBatch` 는 배치마다, `AtEnd` 는 모두 끝난 뒤 한 번(실패하면 전체 롤백).
 
-- [ ] **Step 1: 실패하는 단위 시험 작성** — `SequenceAdvanceTests`: `Plan(current: 101, max: 500, increment: 1) == 400`, `Plan(1000, 500, 1) == 0`(내리지 않음), `Plan(10, 100, 5) == 19`.
-- [ ] **Step 2: 실패 확인** — `dotnet test tests/Oranda.Oracle.Tests --filter "FullyQualifiedName~SequenceAdvanceTests"` → FAIL.
+- [ ] **Step 1: 실패하는 단위 시험 작성**
+  - `SequenceAdvanceTests`: `Plan(current: 101, max: 500, increment: 1) == 400`, `Plan(1000, 500, 1) == 0`(내리지 않음), `Plan(10, 100, 5) == 19`.
+  - `FailedRowKeysTests.Key_text_round_trips`: `FromText(ToText(v, t), t)` 가 `NUMBER` 값 `12345678901234567890.5`(`OracleDecimal`), `DATE` `2026-03-05 14:30:15`, `TIMESTAMP(6)`, `RAW(16)` 에서 원래 값과 같다. 숫자 글자에 지수 표기와 쉼표가 없다.
+- [ ] **Step 2: 실패 확인** — `dotnet test tests/Oranda.Oracle.Tests --filter "FullyQualifiedName~SequenceAdvanceTests|FullyQualifiedName~FailedRowKeysTests"` → FAIL.
 - [ ] **Step 3: 구현** — 위 규칙대로 `CopyRunner` 와 `SequenceAdvance` 를 만든다.
 - [ ] **Step 4: 통과 확인** — 같은 명령 → PASS.
 - [ ] **Step 5: 통합 시험 작성** — `CopyRunnerTests`(`CopyDbScope` 사용, 설계 12장 목록):
@@ -424,12 +428,13 @@ public IReadOnlySet<string>? PreConfirmed { get; init; }
   - `Rerun_after_period_value_change_merges_without_dup` (Review Focus 5): 첫 복사 뒤 원본 행의 기간 열을 범위 안 다른 날로 바꾸고 다시 실행 → ORA-00001 없음, 대상 값이 바뀐 값.
   - `Copies_lob_columns`
   - `Triggers_are_reenabled_even_when_copy_fails`: 대상에만 있는 CHECK 로 실패 행을 만들고 `MaxFailedRows = 0` → 결과 `Failed`, `USER_TRIGGERS.STATUS = 'ENABLED'`.
+  - `Triggers_are_reenabled_after_stop`: 적재 도중 `ct` 를 취소 → 결과 `Stopped`, `USER_TRIGGERS.STATUS = 'ENABLED'`, 실행 기록에 `complete` 줄이 있다.
   - `Disabled_objects_are_logged_before_disable` (Review Focus 3): 가짜 `ICopyRunLog` 에 쌓인 사건 순서가 `RecordDisabled` 다음에 `ALTER TRIGGER … DISABLE` 문장 기록이다.
   - `Target_only_check_constraint_creates_failed_rows_with_key_only`
   - `Sequence_is_advanced_by_nextval`: 대상 시퀀스 다음 값 ≥ 최대값 + 1.
   - `Readonly_target_profile_is_denied`: `ReadOnly` 대상 → 표 결과 `Failed`, 메시지에 정책 거부.
   - `Writer_account_copies_without_disable_choices`
-  - `Retry_failed_rows_rereads_by_key`: 실패 원인 CHECK 를 지운 뒤 `RetryFailedRowsAsync` → 실패 행 0.
+  - `Retry_failed_rows_rereads_by_key`: 실패 원인 CHECK 를 지운 뒤 `RetryFailedRowsAsync` → 실패 행 0. NUMBER 키 표와 DATE 가 섞인 복합 키 표 둘 다 확인한다.
 - [ ] **Step 6: 통합 시험 실행(CI·win144)** — `dotnet test tests/Oranda.Oracle.IntegrationTests --filter "FullyQualifiedName~Transfer.Copy.CopyRunnerTests"` → PASS.
 - [ ] **Step 7: 커밋** — `feat(copy): run copy jobs with batch merge, trigger restore and sequence advance`
 
@@ -544,5 +549,6 @@ public IReadOnlySet<string>? PreConfirmed { get; init; }
 
 - [ ] **Step 1: 로컬 시험** — `dotnet test Oranda.sln -c Debug --filter "Category!=Integration"` → 실패 0.
 - [ ] **Step 2: 통합 시험(win144 또는 CI)** — `dotnet test tests/Oranda.Oracle.IntegrationTests --filter "FullyQualifiedName~Transfer.Copy|FullyQualifiedName~BulkExecutionTests"` → 실패 0. 알려진 불안정 시험(메모리 「CI flaky tests」)은 다시 돌려 확인한다.
-- [ ] **Step 3: 실제 앱(Mac)** — 시험 DB 컨테이너 하나에 원본·대상 사용자를 만들고, 「도구 › 데이터 복사…」로 기간 규칙 한 표, 부모 키 규칙 한 표를 복사한다. 운영 라벨 접속이 대상 목록에서 꺼져 있는지 본다.
-- [ ] **Step 4: 저장소 확인** — `git log -p dev-jji-mac..HEAD | grep -iE "password|[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}"` 결과에 비밀번호·실제 주소가 없다.
+- [ ] **Step 3: 실제 서비스 연결** — T12 의 창이 가짜가 아닌 `ICopyPrecheckService`·`ICopyRunner`·`ICopyJobStore`·`ICopyRunLog` 를 `IServiceProvider` 에서 꺼내는지 확인한다(`DataCopyServices`). 빠진 연결이 있으면 레인 F 에 고침을 맡긴다.
+- [ ] **Step 4: 실제 앱(Mac)** — 시험 DB 컨테이너 하나에 원본·대상 사용자를 만들고, 「도구 › 데이터 복사…」로 기간 규칙 한 표, 부모 키 규칙 한 표를 복사한다. 운영 라벨 접속이 대상 목록에서 꺼져 있는지 본다.
+- [ ] **Step 5: 저장소 확인** — `git log -p dev-jji-mac..HEAD | grep -iE "password|[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}"` 결과에 비밀번호·실제 주소가 없다.
