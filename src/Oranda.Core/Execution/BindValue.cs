@@ -17,6 +17,9 @@ public enum BindDataType
     Boolean,
     Json,
     RefCursor,
+
+    /// <summary>TIMESTAMP WITH LOCAL TIME ZONE(데이터 복사의 기간 경계 바인드).</summary>
+    TimestampLtz,
 }
 
 public enum BindDirection

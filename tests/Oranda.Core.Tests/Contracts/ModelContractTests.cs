@@ -55,7 +55,7 @@ public class ModelContractTests
         Assert.Equal(["Development", "Test", "Production"], Enum.GetNames<ConnectionEnvironment>());
         Assert.Equal(["None", "Diagnostics", "DiagnosticsAndTuning"], Enum.GetNames<LicensePack>());
         Assert.Equal(["Query", "Dml", "Ddl", "PlSql", "TransactionControl", "SqlPlus", "Other"], Enum.GetNames<Oranda.Core.Execution.StatementKind>());
-        Assert.Equal(["Editor", "Script", "GridEdit", "SchemaBrowser", "Monitor", "Extension", "Agent"], Enum.GetNames<HistorySource>());
+        Assert.Equal(["Editor", "Script", "GridEdit", "SchemaBrowser", "Monitor", "Extension", "Agent", "DataCopy"], Enum.GetNames<HistorySource>());
         Assert.Equal(["Succeeded", "Failed", "Cancelled", "Denied"], Enum.GetNames<HistoryStatus>());
         Assert.Equal(Enum.GetNames<HistoryStatus>(), Enum.GetNames<Oranda.Core.Execution.ExecutionStatus>());
         Assert.Equal(["Ask", "Stop", "Continue"], Enum.GetNames<Oranda.Core.Execution.ScriptErrorMode>());

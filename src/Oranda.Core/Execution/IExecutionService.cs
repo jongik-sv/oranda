@@ -45,6 +45,14 @@ public sealed record ExecutionOptions
     /// 한 문장 실행은 인자로 받은 바인드를 쓰고 이것은 실행 이력(<c>history.saveBindValues</c>)이 값을 남길 때만 읽는다.
     /// </summary>
     public IReadOnlyDictionary<string, BindValue>? Binds { get; init; }
+
+    /// <summary>
+    /// 호출한 쪽이 이미 사용자 확인을 받은 문장 텍스트(서수 비교, 치환 변수 처리 뒤 텍스트).
+    /// 정책이 Confirm 이고 텍스트가 이 집합에 있으면 <see cref="IExecutionInteraction"/> 을 부르지 않는다.
+    /// Deny 는 그대로 거부한다. <see cref="PolicyDecision.RetypeText"/> 가 있는 Confirm(DROP)도 집합에 있으면 통과한다:
+    /// 호출한 쪽이 다시 입력을 받는다(설계 6.2.3).
+    /// </summary>
+    public IReadOnlySet<string>? PreConfirmed { get; init; }
 }
 
 /// <summary>스크립트 오류 처리(EXEC-10). 설정 <c>execution.scriptErrorMode</c> 와 같은 형식.</summary>

@@ -83,6 +83,7 @@ internal static class BindBuilder
         // JSON 문자열은 19c(JSON 형식 없음)에서도 통하도록 CLOB 으로 보낸다.
         BindDataType.Json => OracleDbType.Clob,
         BindDataType.RefCursor => OracleDbType.RefCursor,
+        BindDataType.TimestampLtz => OracleDbType.TimeStampLTZ,
         _ => throw new ArgumentOutOfRangeException(nameof(type), type, null),
     };
 }
