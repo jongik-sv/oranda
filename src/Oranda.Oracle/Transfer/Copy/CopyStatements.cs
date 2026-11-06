@@ -1,5 +1,6 @@
 using System.Globalization;
 using Oranda.Core.Execution;
+using Oranda.Core.Journal;
 using Oranda.Core.Text;
 using Oranda.Core.Transfer.Copy;
 
@@ -67,9 +68,38 @@ internal static class CopyStatements
     public static SqlStatement DisableConstraint(DisabledObject fk) =>
         Ddl($"ALTER TABLE {Qualified(fk.Owner, fk.Table)} DISABLE CONSTRAINT {SqlIdentifier.QuoteAlways(fk.Name)}");
 
+    /// <summary>다시 만들 표를 참조하는 FK 를 DROP 전에 떼어 낸다(적재 뒤 받아 둔 DDL 로 다시 붙인다).</summary>
+    public static SqlStatement DropConstraint(DisabledObject fk) =>
+        Ddl($"ALTER TABLE {Qualified(fk.Owner, fk.Table)} DROP CONSTRAINT {SqlIdentifier.QuoteAlways(fk.Name)}");
+
     /// <summary><paramref name="validate"/> 가 거짓이면 <c>ENABLE NOVALIDATE</c>(부모 없는 자식 행이 있어도 켠다).</summary>
     public static SqlStatement EnableConstraint(DisabledObject fk, bool validate) =>
         Ddl($"ALTER TABLE {Qualified(fk.Owner, fk.Table)} ENABLE {(validate ? "VALIDATE" : "NOVALIDATE")} CONSTRAINT {SqlIdentifier.QuoteAlways(fk.Name)}");
+
+    /// <summary>
+    /// 「테이블 다시 만들기」의 DROP(설계 6.2.3). <c>PURGE</c> 를 붙이지 않는다(휴지통에 남는다). 정책의 위험 명령이라
+    /// 대상 이름(<see cref="SqlStatement.DangerousTarget"/> = 표 이름) 재입력 확인을 받는다. 변경 일지가 지우기 전 DDL 을 보관한다.
+    /// <c>CASCADE CONSTRAINTS</c> 를 붙이지 않는다(조정 결정 16, 계획과 다른 점): 대상 계정에 보이지 않는 다른 스키마의 FK 를 말없이 지우지 않게,
+    /// 받아 둔 참조 FK 를 먼저 떼어 낸 뒤 지우고, 남은 FK 가 있으면 서버가 ORA-02449 로 거부한다.
+    /// </summary>
+    public static SqlStatement DropTable(string owner, string table) =>
+        new($"DROP TABLE {Qualified(owner, table)}", default, StatementKind.Ddl)
+        {
+            Verb = "DROP",
+            DangerousTarget = table,
+            ChangeTarget = new ChangeTarget(owner, table, "TABLE", ChangeOperation.Drop),
+        };
+
+    /// <summary>이 세션의 휴지통을 켠다(DB 기본이 꺼져 있으면 PURGE 없이도 DROP 이 영구 삭제다). 권한이 필요 없고 커밋하지 않는다.</summary>
+    public static SqlStatement RecycleBinOn() =>
+        new("ALTER SESSION SET RECYCLEBIN = ON", default, StatementKind.Other) { Verb = "ALTER SESSION" };
+
+    /// <summary>다시 만들기·되살리기 DDL(CREATE TABLE·INDEX, COMMENT, ALTER TABLE ADD, CREATE TRIGGER, GRANT). 글은 만든 쪽 그대로 보낸다.</summary>
+    public static SqlStatement RecreateDdl(string text)
+    {
+        var space = text.IndexOf(' ', StringComparison.Ordinal);
+        return new SqlStatement(text, default, StatementKind.Ddl) { Verb = space < 0 ? text : text[..space] };
+    }
 
     /// <summary>시퀀스 값을 한 번에 여러 개 소비한다(설계 8.4). 바인드 <c>:N</c> = 개수. 행을 끝까지 읽어야 그만큼 소비된다.</summary>
     public static SqlStatement NextValues(string owner, string sequence) =>

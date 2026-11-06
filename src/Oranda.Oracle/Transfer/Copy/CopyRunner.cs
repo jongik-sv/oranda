@@ -16,8 +16,9 @@ using Oranda.Oracle.Execution;
 namespace Oranda.Oracle.Transfer.Copy;
 
 /// <summary>
-/// 복사 실행기(설계 8.2). 순서: 끌 트리거·FK 기록 → 끄기 → 대상 정리(자식 → 부모 DELETE) → 적재(부모 → 자식, 배치 바인드 배열)
-/// → 시퀀스 보정 → 대상 트랜잭션 끝내기 → 다시 켜기 → 건수 비교.
+/// 복사 실행기(설계 8.2). 순서: 끌 트리거·FK 기록 → 끄기 → 테이블 다시 만들기(보존 DDL 받기 → 자식 → 부모 DROP → 부모 → 자식 CREATE, 개발 대상만)
+/// → 대상 정리(자식 → 부모 DELETE) → 적재(부모 → 자식, 배치 바인드 배열) → 시퀀스 보정 → 대상 트랜잭션 끝내기 → 다시 켜기
+/// → 다시 만든 표의 트리거·권한·참조 FK 되살리기 → 건수 비교.
 /// <para>
 /// 원본은 읽기 전용 프로필의 전용 세션이다. 시작할 때 바인드 없는 ROLLBACK 으로 앞 트랜잭션을 닫고, 「같은 시점 기준 읽기」면
 /// <c>SET TRANSACTION READ ONLY</c> 를 연다. 원본 읽기는 모두 <see cref="IBulkExecutionService.StreamRowsAsync"/> 다(원본에 <see cref="IExecutionService"/> 를 쓰지 않는다).
@@ -44,8 +45,24 @@ internal sealed class CopyRunner : ICopyRunner
     internal const string PhaseEnable = "다시 켜기";
     internal const string PhaseCount = "건수 비교";
     internal const string PhaseRetry = "다시 넣기";
+    internal const string PhaseRecreate = "다시 만들기";
+    internal const string PhaseRestore = "되살리기";
 
     private const int SnapshotTooOld = 1555;
+
+    /// <summary>ORA-24344: 컴파일 오류가 있는 채로 만들어짐(되살린 트리거가 바뀐 열 구조와 맞지 않음).</summary>
+    private const int CreatedWithCompilationErrors = 24344;
+
+    /// <summary>ORA-02298: 부모 키가 없는 자식 행이 있어 FK 를 VALIDATE 로 켜지 못함.</summary>
+    private const int ParentKeysNotFound = 2298;
+
+    /// <summary>ORA-02449: 다른 표의 FK 가 참조하는 PK·UK 가 있어 DROP 을 거부(대상 계정에 안 보이는 FK).</summary>
+    private const int ReferencedByForeignKeys = 2449;
+
+    private const string TableExistsSql = "SELECT COUNT(*) FROM all_tables WHERE owner = :OWNER AND table_name = :NAME";
+
+    /// <summary>연결이 끊긴 오류(ORA-00028·03113·03114·03135, TNS 12537·12570·12571·12583). COMMIT 중이면 확정됐는지 알 수 없다.</summary>
+    private static readonly HashSet<int> ConnectionLost = [28, 3113, 3114, 3135, 12537, 12570, 12571, 12583];
 
     /// <summary>시퀀스 증가값·디스크에 적힌 상한(LAST_NUMBER)·캐시 크기. 시퀀스 SELECT 권한이 있으면 ALL_SEQUENCES 에 보인다.</summary>
     private const string SequenceIncrementSql =
@@ -95,6 +112,7 @@ internal sealed class CopyRunner : ICopyRunner
         }
 
         EnsureReportMatchesJob(job, report);
+        EnsureRecreateAllowed(sessions, job);
         EnsureDistinct(sessions, job);
         var run = new RunState(sessions, job, report, period, decisions.PreConfirmedSql, progress);
         await using var record = await _runLog.BeginAsync(
@@ -108,6 +126,12 @@ internal sealed class CopyRunner : ICopyRunner
             if (!run.Aborted)
             {
                 await DisableAsync(run, decisions, ct);
+            }
+
+            if (!run.Aborted)
+            {
+                // DROP·CREATE 는 DDL(묵시 커밋)이라 DELETE·적재보다 먼저 한다: 뒤에 하면 앞의 DELETE 를 확정해 버린다.
+                await RecreateTablesAsync(run, ct);
             }
 
             if (!run.Aborted)
@@ -193,12 +217,6 @@ internal sealed class CopyRunner : ICopyRunner
     /// </summary>
     private static void EnsureReportMatchesJob(CopyJob job, PrecheckReport report)
     {
-        if (job.Tables.Any(r => r.Kind != RuleKind.Exclude && r.Action == TargetAction.Recreate))
-        {
-            // T10 이 지우고 다시 만드는 단계를 더하기 전까지는 일반 INSERT 로 처리되어 중복·PK 충돌이 난다.
-            throw new InvalidOperationException("「테이블 다시 만들기」 대상 처리는 아직 실행할 수 없습니다.");
-        }
-
         if (report.Order.Any(p => !string.Equals(p.Source.Table.Owner, job.SourceOwner, StringComparison.Ordinal)
                                   || !string.Equals(p.Target.Table.Owner, job.TargetOwner, StringComparison.Ordinal)))
         {
@@ -256,6 +274,16 @@ internal sealed class CopyRunner : ICopyRunner
 
         return source.IsRac || target.IsRac
                || (SameOrUnknown(source.HostName, target.HostName) && SameOrUnknown(source.InstanceName, target.InstanceName));
+    }
+
+    /// <summary>DROP·CREATE 는 개발 라벨 대상에서만 실행한다(사전 점검과 따로 한 번 더 막는다, Global Constraints).</summary>
+    private static void EnsureRecreateAllowed(CopySessions sessions, CopyJob job)
+    {
+        if (job.Tables.Any(r => r.Kind != RuleKind.Exclude && r.Action == TargetAction.Recreate)
+            && !CopyTargetGuard.CanRecreate(sessions.Target.Profile))
+        {
+            throw new InvalidOperationException($"대상 접속 '{sessions.Target.Profile.Name}' 은 개발 접속이 아니라 「테이블 다시 만들기」를 실행할 수 없습니다.");
+        }
     }
 
     private static void EnsureDistinct(CopySessions sessions, CopyJob job)
@@ -346,6 +374,478 @@ internal sealed class CopyRunner : ICopyRunner
                 run.Abort($"{obj.Name} 을(를) 끄지 못해 복사를 시작하지 않았습니다: {Describe(r)}");
                 return;
             }
+        }
+    }
+
+    // ---- 1a. 테이블 다시 만들기(설계 6.2.3, 개발 대상만) ----
+
+    /// <summary>
+    /// 준비(ct 사용, 하나라도 실패하면 아무것도 지우지 않고 멈춤): 표마다 보존 DDL 받기, CREATE 문장(FK 없이), 원본 카탈로그로 작업 안 FK 문장,
+    /// 휴지통 목록 → 보존 DDL·지울 표 목록을 실행 기록(디스크)에 쓰기 → 이 세션의 휴지통 켜기.
+    /// 실행(첫 파괴적 문장 뒤에는 ct 로 끊지 않음): 자식 → 부모 순서로 표마다 참조 FK 떼어 내기 → DROP(CASCADE 없이) →
+    /// 부모 → 자식 CREATE. 작업 안 FK 는 적재 뒤 <see cref="RestoreAsync"/> 가 붙인다(자기 참조·서로 참조 표에서 자식 행이 부모 행보다 먼저 와도 실패하지 않게).
+    /// 트리거·권한·참조 FK 되살리기는 대상 트랜잭션을 끝낸 뒤 <see cref="RestoreAsync"/> 가 한다(DDL 이 적재분을 확정하지 않게).
+    /// </summary>
+    private async Task RecreateTablesAsync(RunState run, CancellationToken ct)
+    {
+        var plans = run.Report.Order.Where(p => p.Rule.Action == TargetAction.Recreate).ToList();
+        if (plans.Count == 0)
+        {
+            return;
+        }
+
+        var owner = run.Job.TargetOwner;
+        var planned = plans.Select(p => p.Rule.Table).ToHashSet(StringComparer.Ordinal);
+        var step = new RecreateStep(_bulk);
+        var noForeignKeys = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var plan in plans)
+        {
+            var table = run.Table(plan);
+            table.Recreate = true;
+            run.Progress(table.Name, 0, null, PhaseRecreate);
+            try
+            {
+                table.Preserved = await step.CaptureAsync(run.Target, owner, plan.Rule.Table, ct);
+                // 작업 안 FK 는 CreateTableDdl 대신 원본 카탈로그로 만든다(ON DELETE·DEFERRABLE·UK 참조를 원본대로, 조정 결정 16).
+                table.CreateDdl = CreateTableDdl.Build(plan.Source, owner, noForeignKeys);
+                table.JobForeignKeys = await step.SourceForeignKeysAsync(run.Source, run.Job.SourceOwner, plan.Rule.Table, planned, owner, ct);
+                table.BinBefore = await step.RecycleBinAsync(run.Target, plan.Rule.Table, ct);
+            }
+            catch (Exception ex) when (!ct.IsCancellationRequested && ex is OracleException or InvalidOperationException or BulkDeniedException or ArgumentException)
+            {
+                table.Fail("지우기 전에 트리거·권한·참조 FK 를 받아 두거나 CREATE 문장을 만들지 못했습니다: " + SafeError(ex.Message));
+                run.Abort($"{table.Name}: 다시 만들 준비를 하지 못해 아무 표도 지우지 않고 멈췄습니다.");
+                return;
+            }
+        }
+
+        // 앱이 DROP 뒤에 죽어도 참조 FK 정의가 남게, 첫 파괴적 문장 전에 디스크에 쓴다(Review Focus 3 과 같은 원리).
+        // 다른 기록 호출과 달리 예외를 가두고 넘어가지 않는다: 쓰지 못했으면 지우지 않는다.
+        try
+        {
+            await RecordPreservedAsync(run, plans, ct);
+        }
+        catch (Exception ex) when (!(ex is OperationCanceledException && ct.IsCancellationRequested))
+        {
+            run.Abort("실행 기록에 보존 DDL 을 쓰지 못해 아무 표도 지우지 않고 멈췄습니다: " + SafeError(ex.Message));
+            return;
+        }
+
+        // DB 기본이 휴지통 꺼짐이면 PURGE 없이도 영구 삭제된다: 이 세션에서 켠다(묵시 커밋 없음).
+        var bin = await ExecuteLoggedAsync(run, run.Target, CopyStatements.RecycleBinOn(), NoBinds, ct);
+        if (bin.Status != ExecutionStatus.Succeeded)
+        {
+            foreach (var plan in plans)
+            {
+                run.Table(plan).Fail("휴지통을 켜지 못해 표를 지우지 않았습니다: " + Describe(bin));
+            }
+
+            run.Abort("휴지통을 켜지 못해 아무 표도 지우지 않고 멈췄습니다.");
+            return;
+        }
+
+        ct.ThrowIfCancellationRequested();
+        for (var i = plans.Count - 1; i >= 0; i--)
+        {
+            var table = run.Table(plans[i]);
+            run.Progress(table.Name, 0, null, PhaseRecreate);
+            if (!await DetachReferencingAsync(run, table) || !await DropAsync(run, step, table))
+            {
+                break;
+            }
+        }
+
+        foreach (var plan in plans.Where(p => run.Table(p).Dropped))
+        {
+            var table = run.Table(plan);
+            run.Progress(table.Name, 0, null, PhaseRecreate);
+            var statements = table.CreateDdl;
+            var create = await CleanupStatementAsync(run, CopyStatements.RecreateDdl(statements[0]), CleanupTimeout);
+            if (create.Status != ExecutionStatus.Succeeded)
+            {
+                table.Fail("지운 표를 다시 만들지 못했습니다: " + Describe(create));
+                continue;
+            }
+
+            table.Created = true;
+            foreach (var text in statements.Skip(1))
+            {
+                await ApplyOrNoteAsync(run, table, text, "다시 만든 표에 적용하지 못한 문장이 있습니다");
+            }
+        }
+    }
+
+    /// <summary>보존 DDL·지울 표 목록·작업 안 FK 를 실행 기록에 「-- 보존 DDL」 줄로 쓴다(실행한 문장이 아니다, T13 기록 형식).</summary>
+    private static async Task RecordPreservedAsync(RunState run, IReadOnlyList<CopyTablePlan> plans, CancellationToken ct)
+    {
+        if (run.Record is not { } record)
+        {
+            return;
+        }
+
+        await record.RecordStatementAsync(
+            $"-- 보존 DDL: 다시 만들 표 {string.Join(", ", plans.Select(p => p.Rule.Table))}(옛 표는 휴지통으로). 다시 만들기가 끝나지 않았으면 아래 문장을 직접 실행하세요.", ct);
+        foreach (var plan in plans)
+        {
+            var t = run.Table(plan);
+            var kept = t.Preserved!;
+            foreach (var text in kept.Triggers.Concat(kept.Grants).Concat(kept.ReferencingForeignKeys).Concat(t.JobForeignKeys.Select(f => f.Ddl)))
+            {
+                await record.RecordStatementAsync($"-- 보존 DDL {t.Name}: {text}", ct);
+            }
+        }
+    }
+
+    /// <summary>
+    /// 이 표를 참조하는 받아 둔 FK 를 떼어 낸다(DROP 이 CASCADE 없이 되게). 이미 지운 다시 만들기 자식 표의 FK 는 표와 함께 없어졌다.
+    /// 하나라도 못 떼면(자식 표 ALTER 권한 없음 등) 이 표를 지우지 않고 전체를 멈춘다. 떼어 낸 FK 는 끝낼 때 되붙인다.
+    /// </summary>
+    private async Task<bool> DetachReferencingAsync(RunState run, TableState table)
+    {
+        var kept = table.Preserved!;
+        for (var j = 0; j < kept.ReferencingConstraints.Count; j++)
+        {
+            var fk = kept.ReferencingConstraints[j];
+            if (string.Equals(fk.Owner, run.Job.TargetOwner, StringComparison.Ordinal)
+                && run.Tables.TryGetValue(fk.Table, out var child) && child.Dropped)
+            {
+                continue;
+            }
+
+            var r = await CleanupStatementAsync(run, CopyStatements.DropConstraint(fk), CleanupTimeout);
+            if (r.Status != ExecutionStatus.Succeeded)
+            {
+                table.Fail($"이 표를 참조하는 FK {fk.Owner}.{fk.Name} 을(를) 먼저 떼어 내지 못해 표를 지우지 않았습니다: {Describe(r)}");
+                run.Abort($"{table.Name}: 참조 FK 를 떼어 내지 못해 복사를 멈췄습니다. 떼어 낸 FK 는 다시 붙입니다.");
+                return false;
+            }
+
+            table.DetachedReferencing.Add(j);
+        }
+
+        return true;
+    }
+
+    /// <summary>DROP(CASCADE 없이). 지웠으면 true. 안 보이는 FK(ORA-02449)·실패면 전체를 멈춘다. 결과를 모르면 표가 있는지 다시 본다.</summary>
+    private async Task<bool> DropAsync(RunState run, RecreateStep step, TableState table)
+    {
+        var owner = run.Job.TargetOwner;
+        var drop = await CleanupStatementAsync(run, CopyStatements.DropTable(owner, table.Name), LongCleanupTimeout);
+        if (drop.Status != ExecutionStatus.Succeeded)
+        {
+            if (drop.Error?.Number == ReferencedByForeignKeys)
+            {
+                table.Fail("대상 계정에 보이지 않는 FK(다른 스키마)가 이 표를 참조하고 있어 지우지 않았습니다(ORA-02449). 그 FK 를 확인하거나 대상 처리를 바꾸세요.");
+                run.Abort($"{table.Name}: 보이지 않는 FK 때문에 표를 지우지 않고 멈췄습니다. 떼어 낸 FK 는 다시 붙입니다.");
+                return false;
+            }
+
+            if (!await TableGoneAsync(run, owner, table.Name))
+            {
+                table.Fail("표를 지우지 못했습니다: " + Describe(drop));
+                run.Abort($"{table.Name}: 표를 지우지 못해 복사를 멈췄습니다. 이미 지운 표는 다시 만들고 트리거·권한·FK 를 되살립니다.");
+                return false;
+            }
+
+            table.Note("DROP 결과를 받지 못했지만 표가 없어 지운 것으로 봅니다.");
+        }
+
+        // 지운 표는 비었다: 「지운 뒤 적재를 끝내지 못함」 알림이 이 표에도 걸린다(DDL 이라 바로 확정).
+        table.Dropped = true;
+        table.Deleted = true;
+        run.DeletesPersisted = true;
+
+        // 휴지통 전후 비교: 이번 DROP 이 만든 BIN$ 이름. 비면 휴지통에 남지 않았다(영구 삭제).
+        try
+        {
+            using var check = new CancellationTokenSource(CleanupTimeout);
+            var after = await step.RecycleBinAsync(run.Target, table.Name, check.Token);
+            table.BinKnown = true;
+            table.BinName = after.Except(table.BinBefore, StringComparer.Ordinal).Order(StringComparer.Ordinal).LastOrDefault();
+        }
+        catch (Exception ex) when (IsCleanupFailure(ex))
+        {
+            table.BinKnown = false;
+        }
+
+        return true;
+    }
+
+    /// <summary>다시 만든 표에 문장 하나. 실패하면 원문을 표 메시지·알림에 남기고 계속한다.</summary>
+    private async Task ApplyOrNoteAsync(RunState run, TableState table, string text, string what)
+    {
+        var r = await TryRestoreAsync(run, text, CleanupTimeout);
+        if (r is not { Status: ExecutionStatus.Succeeded })
+        {
+            var message = $"{what}({DescribeRestore(r)}). 직접 실행하세요: {text}";
+            table.Degrade(message);
+            run.Notices.Add($"{table.Name}: {message}");
+        }
+    }
+
+    /// <summary>표가 없으면 true. 확인하지 못하면 false(있다고 본다).</summary>
+    private async Task<bool> TableGoneAsync(RunState run, string owner, string table)
+    {
+        try
+        {
+            using var step = new CancellationTokenSource(CleanupTimeout);
+            var n = await ScalarAsync(run, run.Target, CopyStatements.Query(TableExistsSql), new Dictionary<string, BindValue>
+            {
+                ["OWNER"] = new(BindDataType.Varchar2, owner),
+                ["NAME"] = new(BindDataType.Varchar2, table),
+            }, step.Token);
+            return n is OracleDecimal { IsNull: false } d && d.IsZero;
+        }
+        catch (Exception ex) when (IsCleanupFailure(ex))
+        {
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// 대상 트랜잭션을 끝낸 뒤에만 부른다(DDL, 묵시 커밋). 중지·실패 뒤에도 부른다. 객체마다 자기 토큰을 쓰고 예외를 가둔다.
+    /// 다시 만든 표: IDENTITY 다음 값 맞추기 → 트리거 → 권한 → (모든 표 뒤) 참조 FK. 지우지 못한 표: 떼어 낸 참조 FK 만 되붙인다.
+    /// 되살리지 못한 것은 원문을 표 메시지·알림에 남기고 결과를 실패로 둔다.
+    /// </summary>
+    private async Task RestoreAsync(RunState run)
+    {
+        var tables = run.Tables.Values.Where(t => t.Created && t.Preserved is not null).ToList();
+        foreach (var t in tables)
+        {
+            var kept = t.Preserved!;
+            run.Progress(t.Name, 0, null, PhaseRestore);
+
+            // IDENTITY 는 새로 만들면 1부터 시작한다: 복사한 최대값 뒤로 옮긴다(앱이 ID 없이 넣을 때 ORA-00001 이 나지 않게).
+            var plan = run.Report.Order.FirstOrDefault(p => string.Equals(p.Rule.Table, t.Name, StringComparison.Ordinal));
+            foreach (var c in plan?.Source.Columns.Where(c => c.IsIdentity) ?? [])
+            {
+                var text = $"ALTER TABLE {CopyStatements.Qualified(run.Job.TargetOwner, t.Name)} MODIFY ({SqlIdentifier.QuoteAlways(c.Name)}"
+                           + " GENERATED BY DEFAULT AS IDENTITY (START WITH LIMIT VALUE))";
+                var r = await TryRestoreAsync(run, text, LongCleanupTimeout);
+                if (r is not { Status: ExecutionStatus.Succeeded })
+                {
+                    var message = $"IDENTITY 열 {c.Name} 의 다음 값을 맞추지 못했습니다({DescribeRestore(r)}). 직접 실행하세요: {text}";
+                    t.Degrade(message);
+                    run.Notices.Add($"{t.Name}: {message}");
+                }
+            }
+
+            for (var i = 0; i < kept.Triggers.Count; i++)
+            {
+                var text = kept.Triggers[i];
+                var r = await TryRestoreAsync(run, text, CleanupTimeout);
+                if (r is { Status: ExecutionStatus.Succeeded })
+                {
+                    continue;
+                }
+
+                if (r?.Error?.Number == CreatedWithCompilationErrors && i < kept.TriggerObjects.Count)
+                {
+                    // 만들어졌지만 INVALID 다. 켜진 채 두면 이 표의 DML 이 모두 ORA-04098 로 막히므로 끈다.
+                    var obj = kept.TriggerObjects[i];
+                    var off = await TryRestoreAsync(run, CopyStatements.DisableTrigger(obj.Owner, obj.Name).Text, CleanupTimeout);
+                    RestoreFailed(run, t, off is { Status: ExecutionStatus.Succeeded }
+                        ? $"트리거 {obj.Owner}.{obj.Name} 은 다시 만든 열 구조와 맞지 않아 컴파일 오류(ORA-24344)로 INVALID 입니다. 꺼 두었으니 고친 뒤 켜세요."
+                        : $"트리거 {obj.Owner}.{obj.Name} 은 컴파일 오류(ORA-24344)로 INVALID 이고 끄지도 못했습니다. 이 표의 DML 이 막힐 수 있으니 직접 고치거나 지우세요.");
+                    continue;
+                }
+
+                RestoreFailed(run, t, $"트리거를 되살리지 못했습니다({DescribeRestore(r)}). 직접 실행하세요: {text}");
+            }
+
+            foreach (var text in kept.Grants)
+            {
+                var r = await TryRestoreAsync(run, text, CleanupTimeout);
+                if (r is not { Status: ExecutionStatus.Succeeded })
+                {
+                    RestoreFailed(run, t, $"권한을 되살리지 못했습니다({DescribeRestore(r)}). 직접 실행하세요: {text}");
+                }
+            }
+        }
+
+        // 작업 안 FK(원본 카탈로그 기준): 적재가 끝난 뒤 붙인다. 부모 없는 행이면 NOVALIDATE 로 켜고 행 수를 알린다(T9 의 FK 다시 켜기와 같다).
+        foreach (var t in tables)
+        {
+            foreach (var (parent, text, name) in t.JobForeignKeys)
+            {
+                if (run.Tables.TryGetValue(parent, out var p) && p.Dropped && !p.Created)
+                {
+                    var message = $"부모 표 {parent} 를 다시 만들지 못해 FK 를 만들지 않았습니다. 부모를 되돌린 뒤 직접 실행하세요: {text}";
+                    t.Degrade(message);
+                    run.Notices.Add($"{t.Name}: {message}");
+                    continue;
+                }
+
+                await AttachJobForeignKeyAsync(run, t, text, name);
+            }
+        }
+
+        // 참조 FK 는 모든 표의 트리거·권한 뒤에(다른 계정 자식 표의 FK 는 REFERENCES 권한이 먼저 돌아와야 한다).
+        // 다시 만든 표 = 받아 둔 참조 FK 전부, 지우지 못한 표 = 떼어 낸 것만. 자식이 다시 만들기로 지워진 FK 는 원본 FK 로 이미 만들었다.
+        foreach (var t in run.Tables.Values.Where(t => t.Preserved is not null && (t.Created || (!t.Dropped && t.DetachedReferencing.Count > 0))))
+        {
+            var kept = t.Preserved!;
+            var indexes = t.Created ? Enumerable.Range(0, Math.Min(kept.ReferencingForeignKeys.Count, kept.ReferencingConstraints.Count)) : t.DetachedReferencing;
+            foreach (var i in indexes)
+            {
+                var fk = kept.ReferencingConstraints[i];
+                if (string.Equals(fk.Owner, run.Job.TargetOwner, StringComparison.Ordinal)
+                    && run.Tables.TryGetValue(fk.Table, out var child) && child.Dropped)
+                {
+                    continue;
+                }
+
+                await ReattachAsync(run, t, fk, kept.ReferencingForeignKeys[i]);
+            }
+        }
+    }
+
+    /// <summary>
+    /// 다시 만든 표의 원본 FK 하나. 실패하면 원문을 표 메시지·알림에 남기고(부분 실패) 계속한다. 부모 없는 행(ORA-02298)이면 NOVALIDATE 로 켠다.
+    /// </summary>
+    private async Task AttachJobForeignKeyAsync(RunState run, TableState t, string text, string? name)
+    {
+        run.Progress(t.Name, 0, null, PhaseRestore);
+        var r = await TryRestoreAsync(run, text, LongCleanupTimeout);
+        if (r is { Status: ExecutionStatus.Succeeded })
+        {
+            return;
+        }
+
+        var loose = r?.Error?.Number == ParentKeysNotFound ? await TryRestoreAsync(run, text + " ENABLE NOVALIDATE", CleanupTimeout) : null;
+        if (loose is not { Status: ExecutionStatus.Succeeded })
+        {
+            var message = $"원본 FK 를 만들지 못했습니다({DescribeRestore(loose ?? r)}). 직접 실행하세요: {text}";
+            t.Degrade(message);
+            run.Notices.Add($"{t.Name}: {message}");
+            return;
+        }
+
+        var orphans = "수 모름";
+        if (name is not null)
+        {
+            using var count = new CancellationTokenSource(LongCleanupTimeout);
+            orphans = await OrphanCountAsync(run, new DisabledObject(DisabledKind.ForeignKey, run.Job.TargetOwner, t.Name, name), count.Token);
+        }
+
+        run.Notices.Add($"{t.Name}: 원본 FK {name ?? "(서버 이름)"} 는 부모 없는 행 {orphans} 때문에 ENABLE NOVALIDATE 로 만들었습니다.");
+    }
+
+    /// <summary>참조 FK 하나를 다시 붙인다. 부모 없는 행(ORA-02298)일 때만 NOVALIDATE 로 켜고 행 수를 알린다(설계 8.2 의 FK 규칙).</summary>
+    private async Task ReattachAsync(RunState run, TableState t, DisabledObject fk, string text)
+    {
+        run.Progress(fk.Table, 0, null, PhaseRestore);
+        var r = await TryRestoreAsync(run, text, LongCleanupTimeout);
+        if (r is { Status: ExecutionStatus.Succeeded })
+        {
+            return;
+        }
+
+        if (r?.Error?.Number != ParentKeysNotFound)
+        {
+            RestoreFailed(run, t, $"이 표를 참조하던 FK {fk.Owner}.{fk.Name} 을(를) 되살리지 못했습니다({DescribeRestore(r)}). 직접 실행하세요: {text}");
+            return;
+        }
+
+        var loose = await TryRestoreAsync(run, text + " ENABLE NOVALIDATE", CleanupTimeout);
+        if (loose is not { Status: ExecutionStatus.Succeeded })
+        {
+            RestoreFailed(run, t, $"이 표를 참조하던 FK {fk.Owner}.{fk.Name} 을(를) 되살리지 못했습니다({DescribeRestore(loose)}). 직접 실행하세요: {text}");
+            return;
+        }
+
+        using var count = new CancellationTokenSource(LongCleanupTimeout);
+        var orphans = await OrphanCountAsync(run, fk, count.Token);
+        run.Notices.Add($"FK {fk.Owner}.{fk.Name}: 부모 없는 행 {orphans} 때문에 ENABLE NOVALIDATE 로 되살렸습니다.");
+    }
+
+    /// <summary>되살리기 문장 하나. 예외(시간 초과 포함)는 가두고 null 을 돌려준다.</summary>
+    private async Task<ExecutionResult?> TryRestoreAsync(RunState run, string text, TimeSpan timeout)
+    {
+        try
+        {
+            return await CleanupStatementAsync(run, CopyStatements.RecreateDdl(text), timeout);
+        }
+        catch (Exception ex) when (IsCleanupFailure(ex))
+        {
+            run.Notices.Add("되살리기 문장을 보내지 못했습니다: " + SafeError(ex.Message));
+            return null;
+        }
+    }
+
+    private static string DescribeRestore(ExecutionResult? r) => r is null ? "보내지 못함" : Describe(r);
+
+    /// <summary>되살리지 못함: 결과는 실패, 원문은 표 메시지(실행 기록)와 알림 모두에 남긴다.</summary>
+    private static void RestoreFailed(RunState run, TableState table, string message)
+    {
+        run.RestoreFailed = true;
+        table.Degrade(message);
+        run.Notices.Add($"{table.Name}: {message}");
+    }
+
+    /// <summary>
+    /// 다시 만들기를 한 표의 휴지통 안내와, 되살리지 않은 DDL 원문. 화면 알림과 실행 기록(표 메시지)에 함께 남긴다.
+    /// 휴지통 이름(BIN$…)을 알면 그 이름으로 안내한다(같은 원래 이름이 휴지통에 여럿이어도 정확하다).
+    /// </summary>
+    private static void NoteRecreated(RunState run, bool restored)
+    {
+        foreach (var t in run.Tables.Values.Where(t => t.Dropped))
+        {
+            var owner = run.Job.TargetOwner;
+            var source = t.BinName is { } binName ? CopyStatements.Qualified(owner, binName) : CopyStatements.Qualified(owner, t.Name);
+            if (t.BinKnown && t.BinName is null)
+            {
+                const string Lost = "지운 옛 표가 휴지통에 남지 않았습니다(영구 삭제: 테이블스페이스가 휴지통을 지원하지 않거나 공간이 부족했습니다).";
+                t.Degrade(Lost);
+                run.Notices.Add($"{t.Name}: {Lost}");
+            }
+            else
+            {
+                var hint = t.Created
+                    ? $"지운 옛 표는 휴지통에 있습니다. 옛 표를 보려면 FLASHBACK TABLE {source} TO BEFORE DROP RENAME TO {SqlIdentifier.QuoteAlways(t.Name + "_OLD")}"
+                      + " 로 다른 이름으로 되살리세요(Flashback 화면에서도 할 수 있습니다)."
+                    : $"지운 표를 다시 만들지 못해 표가 없습니다. FLASHBACK TABLE {source} TO BEFORE DROP 으로 휴지통에서 되돌리세요"
+                      + "(트리거는 BIN$ 이름으로, 인덱스·권한과 함께 돌아옵니다. 이 표를 참조하던 FK 는 돌아오지 않습니다).";
+                t.Note(hint);
+                run.Notices.Add($"{t.Name}: {hint}");
+            }
+
+            if ((!t.Created || !restored) && t.Preserved is { } kept)
+            {
+                // 이 표의 원본 FK, 그리고 다른 다시 만들기 표가 받아 둔 「이 표가 자식인」 옛 FK 도 넣는다(휴지통에서 되돌려도 다른 표를 참조하는 FK 는 안 돌아온다).
+                var asChild = run.Tables.Values.Where(o => o.Preserved is not null && !ReferenceEquals(o, t))
+                    .SelectMany(o => o.Preserved!.ReferencingConstraints.Select((fk, i) => (fk, i, o.Preserved!))
+                        .Where(x => string.Equals(x.fk.Owner, owner, StringComparison.Ordinal) && x.fk.Table == t.Name && x.i < x.Item3.ReferencingForeignKeys.Count)
+                        .Select(x => x.Item3.ReferencingForeignKeys[x.i]));
+                var pending = kept.Triggers.Concat(kept.Grants).Concat(kept.ReferencingForeignKeys)
+                    .Concat(t.JobForeignKeys.Select(f => f.Ddl))
+                    .Concat(t.Created ? [] : asChild)
+                    .Distinct(StringComparer.Ordinal)
+                    .ToList();
+                if (pending.Count > 0)
+                {
+                    var text = (t.Created
+                                   ? "되살리지 않은 DDL(직접 실행하세요): "
+                                   : "되살리지 않은 DDL(휴지통에서 되돌렸다면 트리거·권한은 이미 있으니 FK 만 직접 실행하세요): ")
+                               + string.Join(" ; ", pending);
+                    t.Note(text);
+                    run.Notices.Add($"{t.Name}: {text}");
+                }
+            }
+        }
+
+        if (restored)
+        {
+            return;
+        }
+
+        // 지우지 못한 표에서 떼어 낸 참조 FK: 되붙이지 못했으면(대상 트랜잭션을 끝내지 못함) 원문을 남긴다.
+        foreach (var t in run.Tables.Values.Where(t => !t.Dropped && t.DetachedReferencing.Count > 0 && t.Preserved is not null))
+        {
+            var text = "떼어 낸 뒤 다시 붙이지 않은 참조 FK(직접 실행하세요): "
+                       + string.Join(" ; ", t.DetachedReferencing.Select(i => t.Preserved!.ReferencingForeignKeys[i]));
+            t.Note(text);
+            run.Notices.Add($"{t.Name}: {text}");
         }
     }
 
@@ -634,8 +1134,9 @@ internal sealed class CopyRunner : ICopyRunner
                 await record.RecordFailedRowAsync(row, step.Token);
             }
         }
-        catch (Exception ex) when (IsCleanupFailure(ex))
+        catch (Exception ex)
         {
+            // 기록 호출만 감싼다: 어떤 예외든(권한·디스크 등) 마무리·다시 켜기를 끊지 않게 모두 가둔다(3차 리뷰 2).
             run.Notices.Add("실행 기록에 실패 행을 남기지 못했습니다: " + SafeError(ex.Message));
         }
     }
@@ -739,6 +1240,9 @@ internal sealed class CopyRunner : ICopyRunner
 
             // 다시 넣기는 표마다 커밋한다. 커밋하지 못한 표의 입력 행은 끝낼 때 그대로 돌려준다(FinishAsync).
             var commit = await ControlAsync(run.Target, CopyStatements.Commit(), ct);
+            // 연결 끊김, 또는 보내는 도중 중지로 취소되면 서버에서 확정됐는지 알 수 없다.
+            table.CommitUnknown = (commit.Status == ExecutionStatus.Failed && commit.Error is { } ce && ConnectionLost.Contains(ce.Number))
+                                  || (commit.Status == ExecutionStatus.Cancelled && ct.IsCancellationRequested);
             if (RunState.Accept(commit, table, "커밋하지 못했습니다", ct))
             {
                 await ConfirmFailedRowsAsync(run, table);
@@ -908,13 +1412,27 @@ internal sealed class CopyRunner : ICopyRunner
         if (ended)
         {
             run.EnableFailed = !await EnableAsync(run);
+            await RestoreAsync(run);
         }
-        else if (run.Disabled.Count > 0)
+        else
         {
-            run.EnableFailed = true;
-            run.Notices.Add("대상 트랜잭션을 끝내지 못해 끈 트리거·FK 를 다시 켜지 않았습니다(켜면 미커밋 행이 확정됩니다). 세션을 정리한 뒤 직접 켜세요: "
-                            + string.Join(", ", run.Disabled.Select(d => d.Owner + "." + d.Name)));
+            if (run.Disabled.Count > 0)
+            {
+                run.EnableFailed = true;
+                run.Notices.Add("대상 트랜잭션을 끝내지 못해 끈 트리거·FK 를 다시 켜지 않았습니다(켜면 미커밋 행이 확정됩니다). 세션을 정리한 뒤 직접 켜세요: "
+                                + string.Join(", ", run.Disabled.Select(d => d.Owner + "." + d.Name)));
+            }
+
+            if (run.Tables.Values.Any(t => (t.Created && t.Preserved is { } p && p.Triggers.Count + p.Grants.Count + p.ReferencingForeignKeys.Count > 0)
+                                           || (!t.Dropped && t.DetachedReferencing.Count > 0)))
+            {
+                // 되살리기도 DDL 이라 미커밋 행을 확정한다. 문장 원문은 NoteRecreated 가 표마다 남긴다.
+                run.RestoreFailed = true;
+                run.Notices.Add("대상 트랜잭션을 끝내지 못해 다시 만든 표의 트리거·권한·참조 FK 를 되살리지 않았습니다. 세션을 정리한 뒤 아래 DDL 을 직접 실행하세요.");
+            }
         }
+
+        NoteRecreated(run, restored: ended);
 
         try
         {
@@ -934,6 +1452,8 @@ internal sealed class CopyRunner : ICopyRunner
         {
             // 적재를 끝내지 못한 표(상한 초과·중지·ORA-01555)는 「배치마다 커밋」이면 앞 배치의 실패 행이 확정돼 있다.
             // 그 행만 다시 넣으면 나머지 배치가 빠진 표가 성공으로 보이므로 결과에서 빼고 다시 실행하라고 적는다.
+            // 실행 기록에는 앞 배치 커밋 때 쓴 failedRow 줄이 남는다(기록에 무효 표시 메서드가 없다). 그 표의 표 결과 메시지
+            // (「적재를 끝내지 못해 … 다시 실행하세요」)가 그 줄들을 덮는다는 것이 기록의 계약이다(3차 리뷰 1, T13 문서).
             foreach (var t in run.Tables.Values.Where(t => !t.LoadCompleted))
             {
                 if (run.FailedRows.RemoveAll(r => r.Table == t.Name) > 0)
@@ -947,7 +1467,11 @@ internal sealed class CopyRunner : ICopyRunner
         {
             // 확정(커밋)하지 못한 표의 입력 행은 사라지지 않게 그대로 돌려준다(중지·실패·시작하지 못한 표).
             var confirmed = run.Tables.Values.Where(t => t.Confirmed).Select(t => t.Name).ToHashSet(StringComparer.Ordinal);
-            var unconfirmed = run.RetryInputs.Where(r => !confirmed.Contains(r.Table)).ToList();
+            // 커밋 도중 연결이 끊긴 표는 확정됐는지 알 수 없다: 행은 돌려주되 이미 들어갔을 수 있다고 적는다(3차 리뷰 3).
+            var unknown = run.Tables.Values.Where(t => t.CommitUnknown).Select(t => t.Name).ToHashSet(StringComparer.Ordinal);
+            var unconfirmed = run.RetryInputs.Where(r => !confirmed.Contains(r.Table))
+                .Select(r => unknown.Contains(r.Table) ? r with { Error = "확정 여부 모름(커밋 중 연결이 끊김, 이미 들어갔을 수 있음): " + r.Error } : r)
+                .ToList();
             run.FailedRows.AddRange(unconfirmed);
             if (run.Record is { } retryRecord)
             {
@@ -959,7 +1483,7 @@ internal sealed class CopyRunner : ICopyRunner
                         await retryRecord.RecordFailedRowAsync(row, step.Token);
                     }
                 }
-                catch (Exception ex) when (IsCleanupFailure(ex))
+                catch (Exception ex)
                 {
                     run.Notices.Add("실행 기록에 실패 행을 남기지 못했습니다: " + SafeError(ex.Message));
                 }
@@ -998,7 +1522,7 @@ internal sealed class CopyRunner : ICopyRunner
                 await record.CompleteAsync(run.Outcome(faulted), step.Token);
             }
         }
-        catch (Exception ex) when (IsCleanupFailure(ex))
+        catch (Exception ex)
         {
             run.Notices.Add("실행 기록을 마무리하지 못했습니다: " + SafeError(ex.Message));
         }
@@ -1026,10 +1550,21 @@ internal sealed class CopyRunner : ICopyRunner
             return;
         }
 
-        var tables = run.Tables.Values.Where(t => t.Deleted && !t.LoadCompleted).ToList();
+        // 다시 만들지 못한 표(표가 없음)는 다시 실행해도 사전 점검이 막는다: 휴지통 안내(NoteRecreated)만 한다.
+        var tables = run.Tables.Values.Where(t => t.Deleted && !t.LoadCompleted && !(t.Recreate && !t.Created)).ToList();
         foreach (var t in tables)
         {
-            t.Note("대상 정리(DELETE)는 확정됐지만 적재를 끝내지 못했습니다. 다시 실행하세요.");
+            if (t.Recreate)
+            {
+                if (t.Created)
+                {
+                    t.Degrade("표를 지우고 다시 만들었지만 적재를 끝내지 못했습니다(비어 있거나 일부만 들어 있습니다). 다시 실행하거나 휴지통에서 되돌리세요.");
+                }
+            }
+            else
+            {
+                t.Note("대상 정리(DELETE)는 확정됐지만 적재를 끝내지 못했습니다. 다시 실행하세요.");
+            }
         }
 
         if (tables.Count > 0)
@@ -1079,9 +1614,24 @@ internal sealed class CopyRunner : ICopyRunner
             t.RolledBack();
         }
 
+        // 다시 만든 표는 DROP·CREATE 가 되돌아가지 않는다: 적재까지 끝냈지만 확정하지 못한 표는 이제 비어 있다(중지여도 알린다).
+        var emptied = run.Tables.Values.Where(t => t.Created && t.LoadCompleted && !t.Confirmed).ToList();
+        foreach (var t in emptied)
+        {
+            t.Degrade("적재를 되돌려 다시 만든 표가 비어 있습니다(DROP·CREATE 는 되돌릴 수 없습니다). 옛 행은 휴지통의 옛 표에 있습니다. 다시 실행하세요.");
+        }
+
+        if (emptied.Count > 0)
+        {
+            run.Notices.Add("다시 만든 표(" + string.Join(", ", emptied.Select(t => t.Name))
+                            + ")는 적재를 되돌려 비어 있습니다. DROP·CREATE 는 되돌릴 수 없어 옛 행은 휴지통의 옛 표에 있습니다.");
+        }
+
         if (run.Job.Options.Commit == CommitMode.AtEnd && !run.Stopped)
         {
-            run.Notices.Add("「모두 끝난 뒤 한 번 커밋」이라 실패 때문에 모든 변경을 되돌렸습니다.");
+            run.Notices.Add(run.Tables.Values.Any(t => t.Created)
+                ? "「모두 끝난 뒤 한 번 커밋」이라 실패 때문에 적재를 되돌렸습니다(다시 만든 표의 DROP·CREATE 는 되돌리지 못합니다)."
+                : "「모두 끝난 뒤 한 번 커밋」이라 실패 때문에 모든 변경을 되돌렸습니다.");
             run.RolledBackAll = true;
         }
 
@@ -1153,7 +1703,7 @@ internal sealed class CopyRunner : ICopyRunner
             {
                 await record.RecordStatementAsync(stmt.Text, step.Token);
             }
-            catch (Exception ex) when (IsCleanupFailure(ex))
+            catch (Exception ex)
             {
                 run.Notices.Add("실행 기록에 문장을 남기지 못했습니다: " + SafeError(ex.Message));
             }
@@ -1474,8 +2024,50 @@ internal sealed class CopyRunner : ICopyRunner
             PendingFailed.Clear();
         }
 
-        /// <summary>대상 정리(DELETE)를 했다.</summary>
+        /// <summary>대상 정리(DELETE)를 했다. 다시 만든 표는 DROP 을 했다.</summary>
         public bool Deleted { get; set; }
+
+        /// <summary>「테이블 다시 만들기」 표.</summary>
+        public bool Recreate { get; set; }
+
+        /// <summary>지우기 전에 받아 둔 트리거·권한·참조 FK.</summary>
+        public PreservedDdl? Preserved { get; set; }
+
+        /// <summary>DROP 이 성공했다(옛 표는 휴지통에 있다).</summary>
+        public bool Dropped { get; set; }
+
+        /// <summary>CREATE TABLE 이 성공했다(되살리기 대상).</summary>
+        public bool Created { get; set; }
+
+        /// <summary>CREATE 문장(FK 없음, 준비 단계에서 만든다).</summary>
+        public IReadOnlyList<string> CreateDdl { get; set; } = [];
+
+        /// <summary>함께 다시 만드는 부모를 참조하는 원본 FK(부모 표, 문장). 모든 CREATE 뒤에 붙인다.</summary>
+        public IReadOnlyList<(string Parent, string Ddl, string? Name)> JobForeignKeys { get; set; } = [];
+
+        /// <summary>DROP 전 휴지통의 이 이름 표(BIN$…).</summary>
+        public IReadOnlySet<string> BinBefore { get; set; } = new HashSet<string>(StringComparer.Ordinal);
+
+        /// <summary>이번 DROP 이 만든 휴지통 이름. <see cref="BinKnown"/> 인데 null 이면 영구 삭제됐다.</summary>
+        public string? BinName { get; set; }
+
+        /// <summary>DROP 뒤 휴지통을 확인했다.</summary>
+        public bool BinKnown { get; set; }
+
+        /// <summary>DROP 전에 떼어 낸 참조 FK(<see cref="PreservedDdl.ReferencingForeignKeys"/> 의 위치). 지우지 못한 표는 이것을 되붙인다.</summary>
+        public List<int> DetachedReferencing { get; } = [];
+
+        /// <summary>다시 넣기 커밋이 연결 끊김으로 실패했다(확정됐는지 모른다).</summary>
+        public bool CommitUnknown { get; set; }
+
+        /// <summary>적재 밖의 일부(다시 만든 표의 문장·되살리기)를 하지 못했다. 성공 표는 부분 실패로 보인다.</summary>
+        public bool Incomplete { get; private set; }
+
+        public void Degrade(string message)
+        {
+            Incomplete = true;
+            _messages.Add(message);
+        }
 
         /// <summary>적재를 끝까지 했다(실패 행이 있어도 표를 멈추지 않았다).</summary>
         public bool LoadCompleted { get; set; }
@@ -1506,7 +2098,7 @@ internal sealed class CopyRunner : ICopyRunner
 
         public TableRunResult ToResult()
         {
-            var outcome = Outcome == CopyOutcome.Succeeded && FailedRows > 0 ? CopyOutcome.PartiallyFailed : Outcome;
+            var outcome = Outcome == CopyOutcome.Succeeded && (FailedRows > 0 || Incomplete) ? CopyOutcome.PartiallyFailed : Outcome;
             // 표 하나가 「중지」여도 실행 전체 판정(RunState.Outcome)은 따로 한다.
             var message = _messages.Count > 0 ? string.Join(" ", _messages) : null;
             return new TableRunResult(Name, SourceRows, TargetRows, Elapsed, outcome, message);
@@ -1580,6 +2172,9 @@ internal sealed class CopyRunner : ICopyRunner
         /// <summary>끈 트리거·FK 중 다시 켜지 못한 것이 있음. 결과는 실패다(꺼진 채 남은 것을 사용자가 알아야 한다, 설계 4장).</summary>
         public bool EnableFailed { get; set; }
 
+        /// <summary>다시 만든 표의 트리거·권한·참조 FK 중 되살리지 못한 것이 있음. 결과는 실패다(사라진 객체를 사용자가 알아야 한다).</summary>
+        public bool RestoreFailed { get; set; }
+
         /// <summary>대상 정리(DELETE) 뒤 커밋이 한 번이라도 성공함(다른 표의 DELETE 도 확정됨).</summary>
         public bool DeletesPersisted { get; set; }
 
@@ -1628,7 +2223,7 @@ internal sealed class CopyRunner : ICopyRunner
         public CopyOutcome Outcome(bool faulted)
         {
             // 다시 켜지 못한 트리거·FK 가 있으면 중지했더라도 실패다(꺼진 채 남은 것을 결과에서 알아야 한다).
-            if (EnableFailed)
+            if (EnableFailed || RestoreFailed)
             {
                 return CopyOutcome.Failed;
             }

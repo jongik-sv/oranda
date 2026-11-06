@@ -45,14 +45,35 @@ internal sealed partial class CopyPrecheckService(IBulkExecutionService bulk, IM
                 [], [], new Dictionary<string, long>());
         }
 
-        var report = await new Run(bulk, metadata, policy, sessions, job, period, progress).ExecuteAsync(ct).ConfigureAwait(false);
-
-        // 「테이블 다시 만들기」는 지우고 만드는 단계(T10)가 들어오기 전까지 실행할 수 없다(일반 INSERT 로 처리되어 중복·PK 충돌이 난다).
-        var recreate = job.Tables.Where(r => r.Kind != RuleKind.Exclude && r.Action == TargetAction.Recreate)
-            .Select(r => new CheckItem(r.Table, "RuleInvalid", CheckLevel.Error, "「테이블 다시 만들기」 대상 처리는 아직 실행할 수 없습니다."))
-            .ToList();
-        return recreate.Count == 0 ? report : report with { Items = [.. report.Items, .. recreate] };
+        return await new Run(bulk, metadata, policy, sessions, job, period, progress).ExecuteAsync(ct).ConfigureAwait(false);
     }
+
+    /// <summary>대상 표에 걸린 트리거 수(상태 무관). 「테이블 다시 만들기」는 꺼진 트리거도 되살리므로 CREATE TRIGGER 권한을 본다.</summary>
+    /// <summary>옛 대상 표의 테이블스페이스(SYSTEM 이면 휴지통에 남지 않는다).</summary>
+    private const string TablespaceSql = "SELECT tablespace_name FROM all_tables WHERE owner = :OWN AND table_name = :TBL";
+
+    /// <summary>대상 소유자의 그 이름 제약이 걸린 표.</summary>
+    private const string ConstraintOwnerSql = "SELECT table_name FROM all_constraints WHERE owner = :OWN AND constraint_name = :NAME";
+
+    /// <summary>대상 소유자의 그 이름 인덱스가 걸린 표.</summary>
+    private const string IndexOwnerSql = "SELECT table_name FROM all_indexes WHERE owner = :OWN AND index_name = :NAME";
+
+    private const string ColumnPrivilegeCountSql = "SELECT COUNT(*) FROM all_col_privs WHERE table_schema = :OWN AND table_name = :TBL";
+
+    private const string OtherGrantorCountSql =
+        "SELECT COUNT(*) FROM all_tab_privs WHERE table_schema = :OWN AND table_name = :TBL AND grantor <> :OWN AND type = 'TABLE'";
+
+    private const string MviewLogCountSql = "SELECT COUNT(*) FROM all_mview_logs WHERE log_owner = :OWN AND master = :TBL";
+
+    private const string VpdPolicyCountSql = "SELECT COUNT(*) FROM all_policies WHERE object_owner = :OWN AND object_name = :TBL";
+
+    private const string FgaPolicyCountSql = "SELECT COUNT(*) FROM all_audit_policies WHERE object_schema = :OWN AND object_name = :TBL";
+
+    /// <summary>대상 소유자에 그 이름의 객체가 있는가(다시 만들 표의 기본값·가상 열 식이 가리키는 시퀀스·함수).</summary>
+    private const string ObjectExistsSql = "SELECT COUNT(*) FROM all_objects WHERE owner = :OWN AND object_name = :NAME";
+
+    private const string AllTriggerCountSql =
+        "SELECT COUNT(*) FROM all_triggers WHERE table_owner = :OWN AND table_name = :TBL AND base_object_type = 'TABLE'";
 
     /// <summary>한 번의 점검이 쓰는 상태. 점검 항목을 순서대로 쌓는다.</summary>
     private sealed class Run(IBulkExecutionService bulk, IMetadataProvider metadata, IExecutionPolicy policy,
@@ -72,6 +93,11 @@ internal sealed partial class CopyPrecheckService(IBulkExecutionService bulk, IM
         private ISession Source => sessions.Source;
 
         private ISession Target => sessions.Target;
+
+        /// <summary>「테이블 다시 만들기」(DROP·CREATE)는 개발 라벨 대상에서만 만든다(Global Constraints).</summary>
+        private bool CanRecreate => CopyTargetGuard.CanRecreate(Target.Profile);
+
+        private static bool IsRecreate(TableRule rule) => rule.Action == TargetAction.Recreate;
 
         public async Task<PrecheckReport> ExecuteAsync(CancellationToken ct)
         {
@@ -105,6 +131,12 @@ internal sealed partial class CopyPrecheckService(IBulkExecutionService bulk, IM
             foreach (var rule in active)
             {
                 progress?.Report($"{rule.Table}: 구조 읽는 중");
+                if (IsRecreate(rule) && !CanRecreate)
+                {
+                    _items.Add(new CheckItem(rule.Table, "RecreateNotAllowed", CheckLevel.Error,
+                        $"{rule.Table}: 대상 접속 '{Target.Profile.Name}' 이 개발 접속이 아니라 「테이블 다시 만들기」를 쓸 수 없습니다. 대상 처리를 바꾸세요."));
+                }
+
                 var source = await TryGetTableAsync(Source, job.SourceOwner, rule.Table, ct).ConfigureAwait(false);
                 if (source is null)
                 {
@@ -125,7 +157,10 @@ internal sealed partial class CopyPrecheckService(IBulkExecutionService bulk, IM
                 }
 
                 _sourceTables[rule.Table] = source;
-                _targetTables[rule.Table] = await AdjustIdentityAsync(target, ct).ConfigureAwait(false);
+                // 다시 만들 표는 적재할 때 원본 구조다: 열·키·문장을 옛 대상 구조가 아니라 다시 만든 구조로 정한다.
+                _targetTables[rule.Table] = IsRecreate(rule) && CanRecreate
+                    ? PrecheckRules.AsRecreated(source, job.TargetOwner)
+                    : await AdjustIdentityAsync(target, ct).ConfigureAwait(false);
             }
         }
 
@@ -189,10 +224,20 @@ internal sealed partial class CopyPrecheckService(IBulkExecutionService bulk, IM
             }
 
             var readable = await CheckSourcePrivilegeAsync(rule, ct).ConfigureAwait(false);
-            await CheckTargetPrivilegesAsync(rule, keys, ct).ConfigureAwait(false);
-            AddTargetOnlyConstraints(rule, source, target);
+            var canDisableTriggers = false;
+            IReadOnlyList<string> triggers = [];
+            if (IsRecreate(rule))
+            {
+                // 지우고 다시 만들므로 옛 대상의 제약·권한 비교는 뜻이 없다. 트리거는 적재 뒤에 되살리므로 끌 것도 없다.
+                await CheckRecreateAsync(rule, source, ct).ConfigureAwait(false);
+            }
+            else
+            {
+                await CheckTargetPrivilegesAsync(rule, keys, ct).ConfigureAwait(false);
+                AddTargetOnlyConstraints(rule, source, target);
+                (canDisableTriggers, triggers) = await CheckTriggersAsync(rule, ct).ConfigureAwait(false);
+            }
 
-            var (canDisableTriggers, triggers) = await CheckTriggersAsync(rule, ct).ConfigureAwait(false);
             var disablable = await CheckChildForeignKeysAsync(rule, keys, ct).ConfigureAwait(false);
 
             if (readable)
@@ -231,6 +276,228 @@ internal sealed partial class CopyPrecheckService(IBulkExecutionService bulk, IM
             {
                 _items.Add(new CheckItem(rule.Table, "TargetNoWrite", CheckLevel.Error,
                     $"{rule.Table}: 대상 표에 필요한 권한이 없습니다: {string.Join(", ", missing)}."));
+            }
+        }
+
+        /// <summary>
+        /// 「테이블 다시 만들기」 점검(조정 결정 9·10). 대상 세션이 대상 소유자이고 CREATE TABLE(트리거가 있으면 CREATE TRIGGER)이 있어야 한다:
+        /// 비소유자는 트리거 DDL(GET_DDL)·권한 되살리기에 더 큰 권한이 들어 DROP 뒤에 되살리지 못할 수 있다.
+        /// 통과하면 되돌릴 수 없음·휴지통·만들지 않는 FK 를 Confirm 항목 하나로 알린다.
+        /// </summary>
+        private async Task CheckRecreateAsync(TableRule rule, TableInfo source, CancellationToken ct)
+        {
+            if (!CanRecreate)
+            {
+                return; // RecreateNotAllowed 를 이미 냈다.
+            }
+
+            var rows = await CopyCatalogQueries.QueryAsync(bulk, Target, AllTriggerCountSql, ct,
+                ("OWN", job.TargetOwner), ("TBL", rule.Table)).ConfigureAwait(false);
+            var triggerCount = CopyCatalogQueries.ToLong(rows.FirstOrDefault()?[0]) ?? 0;
+
+            if (!_targetAccess.IsOwner(job.TargetOwner))
+            {
+                _items.Add(new CheckItem(rule.Table, "RecreateNoPrivilege", CheckLevel.Error,
+                    $"{rule.Table}: 「테이블 다시 만들기」는 대상 소유자({job.TargetOwner}) 계정으로 접속해야 합니다(지금 {_targetAccess.User})."));
+                return;
+            }
+
+            var missing = new List<string>();
+            if (!_targetAccess.Has("CREATE TABLE") && !_targetAccess.Has("CREATE ANY TABLE"))
+            {
+                missing.Add("CREATE TABLE");
+            }
+
+            if (triggerCount > 0 && !_targetAccess.Has("CREATE TRIGGER") && !_targetAccess.Has("CREATE ANY TRIGGER"))
+            {
+                missing.Add("CREATE TRIGGER");
+            }
+
+            if (missing.Count > 0)
+            {
+                _items.Add(new CheckItem(rule.Table, "RecreateNoPrivilege", CheckLevel.Error,
+                    $"{rule.Table}: 표를 지우고 다시 만들 권한이 없습니다: {string.Join(", ", missing)}."));
+                return;
+            }
+
+            var recreated = job.Tables.Where(r => r.Kind != RuleKind.Exclude && IsRecreate(r)).Select(r => r.Table).ToHashSet(StringComparer.Ordinal);
+            var blocked = await RecreateBlockersAsync(rule, source, recreated, ct).ConfigureAwait(false);
+            if (blocked.Count > 0)
+            {
+                // DROP 뒤에야 드러나는 CREATE 실패(표가 휴지통에만 남음)를 지우기 전에 막는다(조정 결정 16).
+                _items.Add(new CheckItem(rule.Table, "RecreateBlocked", CheckLevel.Error,
+                    $"{rule.Table}: 지운 뒤 원본 구조로 다시 만들 수 없어 「테이블 다시 만들기」를 쓸 수 없습니다: {string.Join(" / ", blocked)}."));
+                return;
+            }
+
+            var tablespace = CopyCatalogQueries.Text((await CopyCatalogQueries.QueryAsync(bulk, Target, TablespaceSql, ct,
+                ("OWN", job.TargetOwner), ("TBL", rule.Table)).ConfigureAwait(false)).FirstOrDefault()?[0]);
+            var skipped = source.Constraints
+                .Where(c => c.Kind == ConstraintKind.ForeignKey && c.ReferencedTable is { } p && !recreated.Contains(p.Name))
+                .Select(c => $"{c.Name}(→{c.ReferencedTable!.Name})")
+                .ToList();
+            var message = $"{rule.Table}: 대상 표를 지우고 원본 구조로 다시 만든 뒤 넣습니다."
+                          + (string.Equals(tablespace, "SYSTEM", StringComparison.OrdinalIgnoreCase)
+                              ? " 이 표는 SYSTEM 테이블스페이스에 있어 휴지통에 남지 않고 영구 삭제됩니다."
+                              : " 지운 표는 휴지통에 남습니다(PURGE 없음, 공간이 부족하면 휴지통 객체가 자동으로 지워질 수 있음).")
+                          + " DROP·CREATE 는 DDL 이라 커밋 방식과 상관없이 되돌릴 수 없습니다."
+                          + $" 대상의 트리거 {Number(triggerCount)}개·다른 계정에 준 권한·이 표를 참조하던 FK 는 적재 뒤 되살립니다"
+                          + "(참조 FK 는 지우기 전에 떼어 내고, 대상 계정에 보이지 않는 FK 가 있으면 지우지 않고 멈춥니다).";
+            if (skipped.Count > 0)
+            {
+                message += $" 함께 다시 만들지 않는 표를 참조하는 원본 FK {string.Join(", ", skipped)} 는 만들지 않습니다.";
+            }
+
+            message += " 원본과 다르게 만들어지는 것: 문자 길이는 글자 단위(CHAR), DEFAULT ON NULL·IDENTITY 옵션(ALWAYS·시작·증가)·DEFERRABLE PK/UK·COLLATE"
+                       + (source.Columns.Any(c => c.Domain is not null) ? "·도메인" : string.Empty)
+                       + " 은 빠지고, 파티션·IOT·임시 표는 일반 표가 됩니다.";
+            var lost = await NotRestoredAsync(rule, ct).ConfigureAwait(false);
+            if (lost.Count > 0)
+            {
+                message += $" 되살리지 않는 것: {string.Join(", ", lost)}.";
+            }
+
+            _items.Add(new CheckItem(rule.Table, "RecreateTable", CheckLevel.Confirm, message));
+        }
+
+        /// <summary>
+        /// 지우기 전에 알 수 있는 CREATE 실패 원인. 지원 밖 형식 열(건너뛴 열도 다시 만들 때 만들어진다: 객체형·VECTOR·JSON·XMLTYPE·LONG),
+        /// STANDARD 한도를 넘는 길이(대상 MAX_STRING_SIZE 가 EXTENDED 로 확인되지 않으면), 식이 가리키는 객체가 대상 소유자에 없음,
+        /// 대상 소유자의 다른 표와 겹치는 제약·인덱스 이름(함께 다시 만드는 표의 이름은 먼저 지워지므로 뺀다).
+        /// </summary>
+        private async Task<List<string>> RecreateBlockersAsync(TableRule rule, TableInfo source, HashSet<string> recreated, CancellationToken ct)
+        {
+            var blocked = new List<string>();
+            var unsupported = source.Columns.Where(c => !c.IsVirtual && !PrecheckRules.IsSupportedType(c.DataType))
+                .Select(c => $"{c.Name}({c.DataType})").ToList();
+            if (unsupported.Count > 0)
+            {
+                blocked.Add($"지원하지 않는 형식 열 {string.Join(", ", unsupported)}(건너뛴 열도 다시 만들 때 만들어집니다)");
+            }
+
+            var extended = source.Columns.Where(c => c.Length is { } n && c.DataType.ToUpperInvariant() switch
+            {
+                "VARCHAR2" => n > 4000,
+                "NVARCHAR2" or "RAW" => n > 2000,
+                _ => false,
+            }).Select(c => c.Name).ToList();
+            if (extended.Count > 0)
+            {
+                string? size = null;
+                try
+                {
+                    size = CopyCatalogQueries.Text((await CopyCatalogQueries.QueryAsync(bulk, Target, CopyCatalogQueries.ParameterValue, ct,
+                        ("PNAME", "max_string_size")).ConfigureAwait(false)).FirstOrDefault()?[0]);
+                }
+                catch (OracleException)
+                {
+                    // V$PARAMETER 를 읽지 못하면 EXTENDED 인지 알 수 없다: 막는 쪽.
+                }
+
+                if (!string.Equals(size, "EXTENDED", StringComparison.OrdinalIgnoreCase))
+                {
+                    blocked.Add($"열 {string.Join(", ", extended)} 의 길이가 STANDARD 한도를 넘는데 대상 MAX_STRING_SIZE 가 EXTENDED 로 확인되지 않습니다({size ?? "읽지 못함"})");
+                }
+            }
+
+            // 기본값·가상 열 식이 원본 스키마 객체(시퀀스·함수)를 가리키면 대상 소유자의 같은 이름 객체로 바꿔 만든다.
+            var referenced = source.Columns.Where(c => !c.IsIdentity)
+                .SelectMany(c => CreateTableDdl.ReferencedObjects(c.DefaultValue, job.SourceOwner).Select(o => (Column: c.Name, Object: o)))
+                .ToList();
+            var missingObjects = new List<string>();
+            foreach (var name in referenced.Select(x => x.Object).Distinct(StringComparer.Ordinal))
+            {
+                if (await TryCountAsync(ObjectExistsSql, ct, ("OWN", job.TargetOwner), ("NAME", name)).ConfigureAwait(false) is not > 0)
+                {
+                    missingObjects.Add(name); // 확인하지 못해도 없는 것으로 본다(막는 쪽).
+                }
+            }
+
+            if (missingObjects.Count > 0)
+            {
+                var columns = referenced.Where(x => missingObjects.Contains(x.Object)).Select(x => x.Column).Distinct(StringComparer.Ordinal);
+                blocked.Add($"열 {string.Join(", ", columns)} 의 기본값·가상 열 식이 가리키는 객체 {string.Join(", ", missingObjects)} 가 대상 소유자({job.TargetOwner})에 없습니다");
+            }
+
+            // 이름 겹침: 원본 이름 그대로 만드는 제약·인덱스·작업 안 FK.
+            var (constraints, indexes) = CreateTableDdl.NamedObjects(source);
+            var foreignKeys = source.Constraints
+                .Where(c => c.Kind == ConstraintKind.ForeignKey && !CreateTableDdl.IsServerName(c.Name) && c.ReferencedTable is { } p && recreated.Contains(p.Name))
+                .Select(c => c.Name);
+            var inUse = new List<string>();
+            foreach (var name in constraints.Concat(foreignKeys).Distinct(StringComparer.Ordinal))
+            {
+                inUse.AddRange(await UsedByOtherTablesAsync(ConstraintOwnerSql, name, recreated, ct).ConfigureAwait(false));
+            }
+
+            foreach (var name in indexes)
+            {
+                inUse.AddRange(await UsedByOtherTablesAsync(IndexOwnerSql, name, recreated, ct).ConfigureAwait(false));
+            }
+
+            if (inUse.Count > 0)
+            {
+                blocked.Add($"대상 소유자의 다른 표가 이미 쓰는 이름 {string.Join(", ", inUse.Distinct(StringComparer.Ordinal))}");
+            }
+
+            return blocked;
+        }
+
+        private async Task<IEnumerable<string>> UsedByOtherTablesAsync(string sql, string name, HashSet<string> recreated, CancellationToken ct)
+        {
+            List<object?[]> rows;
+            try
+            {
+                rows = await CopyCatalogQueries.QueryAsync(bulk, Target, sql, ct, ("OWN", job.TargetOwner), ("NAME", name)).ConfigureAwait(false);
+            }
+            catch (OracleException)
+            {
+                return [$"{name}(확인 못 함)"]; // 겹치는지 모르면 막는 쪽.
+            }
+
+            return rows.Select(r => CopyCatalogQueries.Text(r[0]))
+                .Where(t => t is not null && !recreated.Contains(t))
+                .Select(t => $"{name}({t})");
+        }
+
+        /// <summary>DROP 과 함께 사라지고 되살리지 않는 것(열 권한, 다른 계정이 준 권한, MV 로그, VPD·FGA 정책). 볼 권한이 없으면 「확인 못 함」.</summary>
+        private async Task<List<string>> NotRestoredAsync(TableRule rule, CancellationToken ct)
+        {
+            var lost = new List<string>();
+            foreach (var (sql, what) in new[]
+                     {
+                         (ColumnPrivilegeCountSql, "열 권한"),
+                         (OtherGrantorCountSql, "다른 계정이 준 권한"),
+                         (MviewLogCountSql, "MV 로그"),
+                         (VpdPolicyCountSql, "VPD 정책"),
+                         (FgaPolicyCountSql, "FGA 정책"),
+                     })
+            {
+                // 권한·뷰 열 차이 등 어떤 서버 오류든 「확인 못 함」으로 둔다(사전 점검 전체가 예외로 끝나지 않게).
+                var n = await TryCountAsync(sql, ct, ("OWN", job.TargetOwner), ("TBL", rule.Table)).ConfigureAwait(false);
+                if (n is null)
+                {
+                    lost.Add($"{what}(확인 못 함)");
+                }
+                else if (n > 0)
+                {
+                    lost.Add($"{what} {Number(n.Value)}개");
+                }
+            }
+
+            return lost;
+        }
+
+        /// <summary>대상에서 COUNT(*) 하나. 서버 오류면 null.</summary>
+        private async Task<long?> TryCountAsync(string sql, CancellationToken ct, params (string Name, string Value)[] binds)
+        {
+            try
+            {
+                return CopyCatalogQueries.ToLong((await CopyCatalogQueries.QueryAsync(bulk, Target, sql, ct, binds).ConfigureAwait(false)).FirstOrDefault()?[0]) ?? 0;
+            }
+            catch (OracleException)
+            {
+                return null;
             }
         }
 
@@ -644,7 +911,7 @@ internal sealed partial class CopyPrecheckService(IBulkExecutionService bulk, IM
 
         // ---- 미리 보기 ----
 
-        // 원본 SELECT, 대상 DELETE(자식 → 부모), 끌 수 있는 트리거·FK, 시퀀스 소비 순서. 정책은 문장을 보낼 세션의 프로필로 판단한다.
+        // 원본 SELECT, 대상 DELETE(자식 → 부모), 다시 만들 표의 DROP(자식 → 부모), 끌 수 있는 트리거·FK, 시퀀스 소비 순서. 정책은 문장을 보낼 세션의 프로필로 판단한다.
         private async Task<IReadOnlyList<PreviewStatement>> BuildPreviewAsync(IReadOnlyList<CopyTablePlan> order, CancellationToken ct)
         {
             var list = new List<PreviewStatement>();
@@ -661,6 +928,15 @@ internal sealed partial class CopyPrecheckService(IBulkExecutionService bulk, IM
                 if (Build(plan.Rule.Table, () => _builder.TargetDelete(plan.Rule.Table)) is { } delete)
                 {
                     list.Add(await PreviewAsync(Target, CopyStatements.Delete(delete), PreviewSide.Target, ct).ConfigureAwait(false));
+                }
+            }
+
+            // 다시 만들 표의 DROP(자식 → 부모). 개발 라벨 대상이 아니면 만들지 않는다. 화면이 대상 접속 이름을 한 번 다시 입력받으면 미리 받은 확인으로 넘긴다.
+            if (CanRecreate)
+            {
+                foreach (var plan in order.Reverse().Where(p => IsRecreate(p.Rule)))
+                {
+                    list.Add(await PreviewAsync(Target, CopyStatements.DropTable(job.TargetOwner, plan.Rule.Table), PreviewSide.Target, ct).ConfigureAwait(false));
                 }
             }
 

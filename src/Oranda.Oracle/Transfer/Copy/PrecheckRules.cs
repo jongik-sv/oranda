@@ -52,6 +52,18 @@ internal static class PrecheckRules
         return result;
     }
 
+    /// <summary>
+    /// 「테이블 다시 만들기」 뒤의 대상 구조: 원본 구조를 대상 소유자 이름으로 둔다. IDENTITY 는 <see cref="CreateTableDdl"/> 이
+    /// <c>BY DEFAULT</c> 로 만들므로 값을 넣을 수 있다(<see cref="ColumnInfo.IsIdentity"/> = 거짓, 메모 D12 와 같은 표기).
+    /// 점검·실행기는 이 구조로 열·키·문장을 정한다(<see cref="CopyTablePlan.Target"/>).
+    /// </summary>
+    public static TableInfo AsRecreated(TableInfo source, string targetOwner) =>
+        source with
+        {
+            Table = new DbObjectRef(targetOwner, source.Table.Name, "TABLE"),
+            Columns = [.. source.Columns.Select(c => c.IsIdentity ? c with { IsIdentity = false } : c)],
+        };
+
     /// <summary>대상 PK 열. PK 가 없거나 일부가 복사 열에 없으면 빈 목록이다(메모 D11).</summary>
     public static IReadOnlyList<string> KeyColumns(TableInfo target, IReadOnlyList<string> columns)
     {
