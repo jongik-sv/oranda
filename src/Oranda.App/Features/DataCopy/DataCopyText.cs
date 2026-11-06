@@ -25,7 +25,17 @@ internal static class DataCopyText
     /// <summary>작업 파일의 schemaVersion 이 이 앱보다 새것이라 읽기 전용으로 연 작업. 모르는 필드(표마다 계정 등)를 버리고 실행하면 다른 표를 지울 수 있어 점검·실행을 막는다.</summary>
     public const string NewerVersionJob = "새 버전 Oranda 가 만든 작업이라 사전 점검·실행을 할 수 없습니다. Oranda 를 업데이트하세요.";
 
-    public const string SameSourceAndTarget ="원본과 대상이 같은 접속·같은 소유자입니다. 원본 행이 지워질 수 있어 시작하지 않습니다.";
+    public const string SameSourceAndTarget = "원본과 대상이 같은 접속이고 지울 대상 표가 읽을 원본 표와 같습니다. 원본 행이 지워질 수 있어 시작하지 않습니다.";
+
+    /// <summary>같은 접속에서 지울 대상 표가 읽을 원본 표와 겹칠 때. 겹치는 표(<c>계정.표</c>)를 붙인다.</summary>
+    public static string SameSourceTables(IEnumerable<string> tables) =>
+        $"{SameSourceAndTarget} ({string.Join(", ", tables)}) 대상 계정을 바꾸세요.";
+
+    /// <summary>상세 칸: 규칙의 대상 계정이 대상 접속 계정이 아닐 때.</summary>
+    public const string OtherTargetOwner = "접속 계정이 아닌 계정입니다. 그 계정 표의 INSERT·DELETE 권한이 필요합니다.";
+
+    /// <summary>원본 세션 없이 시노님 노드를 더하려 할 때.</summary>
+    public const string SynonymNeedsSource = "시노님은 원본 접속을 열어야 실제 표로 풀 수 있습니다. 원본 접속을 고른 뒤 다시 추가하세요.";
 
     public static string InvalidCondition(string table, string problem) => $"테이블 {table} 의 조건을 쓸 수 없습니다. {problem}";
 

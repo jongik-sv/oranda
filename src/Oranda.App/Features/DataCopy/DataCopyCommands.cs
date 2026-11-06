@@ -94,7 +94,8 @@ public sealed class DataCopyCommandHandler : ICommandHandler
             DbObjectRef r => r,
             _ => schemaVm?.SelectedNode?.Ref,
         };
-        if (target is null || !string.Equals(target.ObjectType, "TABLE", StringComparison.Ordinal))
+        // 표와 시노님(원본 세션으로 실제 계정·표로 풀어 더한다, 묶음 B 설계 3장).
+        if (target is null || target.ObjectType is not ("TABLE" or "SYNONYM"))
         {
             return;
         }

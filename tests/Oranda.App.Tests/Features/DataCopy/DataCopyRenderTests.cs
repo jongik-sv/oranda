@@ -244,8 +244,9 @@ public sealed class DataCopyRenderTests : IDisposable
             Assert.Equal(0, parentCombo.SelectedIndex);
             Assert.Equal("CUSTOMERS", Assert.IsType<ParentLink>(parentCombo.SelectedItem).ParentTable);
 
-            // 헤드리스 글꼴은 글자가 넓다: 조건 칸이 값에 필요한 폭(상한 360)보다 남은 폭이 좁고 최소값보다는 넓은 창 폭에서 본다.
-            foreach (var width in new[] { 1500.0, 1600 })
+            // 헤드리스 글꼴은 글자가 넓다: 조건 칸이 값에 필요한 폭(상한 360)보다 남은 폭이 좁고 최소값보다는 넓은 창 폭에서 본다
+            // (계정 열 둘이 늘어 묶음 B 부터 창 폭을 넓혔다).
+            foreach (var width in new[] { 1900.0, 2000 })
             {
                 window.Width = width;
                 Settle(window);
@@ -445,6 +446,194 @@ public sealed class DataCopyRenderTests : IDisposable
             window.Close();
         }
     });
+    // 묶음 B: 기본 계정 APP→TGT_USER(접속 계정), 시노님으로 더한 APP2.ORDERS(부모 APP.CUSTOMERS), 다른 대상 계정 SRC2.CODES → DST.
+    private static async Task<(DataCopyWindow Window, DataCopyViewModel Vm)> OpenOwnersWindowAsync(DataCopyHarness h)
+    {
+        var text = new ShellText(language: "ko");
+        UiText.Current = text;
+        LiteralTranslator.Install(text);
+        var job = TestJobs.Job("여러 계정 복사", "SRC", "TGT",
+            TestJobs.Rule("CUSTOMERS") with { Action = TargetAction.MergeByPk, TargetOwner = "TGT_USER" },
+            TestJobs.Rule("ORDERS", RuleKind.ParentKey) with
+            {
+                SourceOwner = "APP2",
+                TargetOwner = "APP2",
+                WrittenAs = "ORDERS",
+                Parent = new ParentLink("CUSTOMERS", ["CUST_ID"], ["CUST_ID"], "FK_ORDERS_CUST") { ParentOwner = "APP" },
+            },
+            TestJobs.Rule("CODES") with { SourceOwner = "SRC2", TargetOwner = "DST", Action = TargetAction.MergeByPk },
+            TestJobs.Rule("NOTICES") with { SourceOwner = "TGT_USER", TargetOwner = "TGT_USER" }) with
+        {
+            TargetOwner = "TGT_USER",
+        };
+        var vm = await h.OpenAsync(job);
+        vm.Editor.SelectedRule = vm.Editor.Rules[1];
+        var window = new DataCopyWindow { DataContext = vm };
+        window.Show();
+        LiteralTranslator.Translate(window);
+        Settle(window);
+        return (window, vm);
+    }
+
+    [Fact]
+    public Task Rule_grid_shows_schema_columns_and_the_synonym_detail() => HeadlessHost.Run(async () =>
+    {
+        var h = new DataCopyHarness();
+        var (window, vm) = await OpenOwnersWindowAsync(h);
+        try
+        {
+            // 규칙을 바꿔 골라도 대상 계정 칸이 앞 규칙에 새 규칙 값을 쓰지 않는다.
+            foreach (var pick in (int[])[0, 2, 1])
+            {
+                vm.Editor.SelectedRule = vm.Editor.Rules[pick];
+                Settle(window);
+                Assert.Equal(vm.Editor.Rules[pick].TargetOwner, window.FindControl<ComboBox>("TargetOwnerBox")!.Text);
+            }
+
+            Assert.Equal(["TGT_USER", "APP2", "DST", "TGT_USER"], vm.Editor.Rules.Select(r => r.TargetOwner));
+            var grid = window.FindControl<MonitorGrid>("RuleGrid")!.Model!;
+            Assert.Equal(["원본 계정", "테이블", "대상 계정", "규칙", "대상 처리", "조건"], grid.Columns.Select(c => c.Name));
+            Assert.Equal("APP2", grid.GetCellText(1, 0));
+            Assert.Equal("APP2 (!)", grid.GetCellText(1, 2)); // 접속 계정(TGT_USER)이 아닌 계정: 경고색
+            Assert.True(grid.IsWarned(1, 2));
+            Assert.False(grid.IsWarned(0, 2));
+            Assert.False(grid.IsMuted(1, 2)); // 원본과 같아도 경고가 먼저
+            Assert.Equal("APP.CUSTOMERS 의 키 · CUST_ID", grid.GetCellText(1, 5));
+            Assert.Equal("DST (!)", grid.GetCellText(2, 2));
+
+            Assert.Equal("APP2.ORDERS", window.FindControl<TextBlock>("RuleHeaderText")!.Text);
+            Assert.Equal("APP2", window.FindControl<TextBlock>("RuleSourceOwnerText")!.Text);
+            var targetOwner = window.FindControl<ComboBox>("TargetOwnerBox")!;
+            Assert.Equal("APP2", targetOwner.Text);
+            Assert.Equal(["APP2", "TGT_USER"], targetOwner.Items.OfType<TargetOwnerOption>().Select(o => o.Owner));
+            Assert.True(window.FindControl<TextBlock>("OtherTargetOwnerText")!.IsEffectivelyVisible);
+            AssertNotClipped(window, "규칙 편집(여러 계정)");
+            Shots(window, "1-rules-owners");
+
+            // 대상 계정을 접속 계정으로 고르면 경고가 사라지고 원본과 다르니 흐린 글자도 아니다.
+            targetOwner.SelectedIndex = 1;
+            Settle(window);
+            Assert.Equal("TGT_USER", vm.Editor.Rules[1].TargetOwner);
+            Assert.False(window.FindControl<TextBlock>("OtherTargetOwnerText")!.IsEffectivelyVisible);
+            var after = window.FindControl<MonitorGrid>("RuleGrid")!.Model!;
+            Assert.Equal("TGT_USER", after.GetCellText(1, 2));
+            Assert.False(after.IsWarned(1, 2));
+
+            // 원본과 같은 대상 계정: 접속 계정이면 흐린 글자, 아니면 경고색이 먼저.
+            Assert.True(after.IsMuted(3, 2)); // TGT_USER.NOTICES → TGT_USER
+            vm.Editor.Rules[0].TargetOwner = "APP";
+            Settle(window);
+            var same = window.FindControl<MonitorGrid>("RuleGrid")!.Model!;
+            Assert.True(same.IsWarned(0, 2)); // APP ≠ TGT_USER
+            Assert.False(same.IsMuted(0, 2));
+        }
+        finally
+        {
+            window.Close();
+        }
+    });
+
+    [Fact]
+    public Task Run_confirmation_dialog_lists_schemas_and_defaults_to_cancel() => HeadlessHost.Run(async () =>
+    {
+        var h = new DataCopyHarness();
+        var (window, vm) = await OpenOwnersWindowAsync(h);
+        try
+        {
+            var confirmation = RunConfirmation.For(vm.Editor.BuildJob(), "TGT_USER")!;
+            var dialog = DataCopyDialogs.BuildRunConfirmDialog(confirmation, out var accepted);
+            dialog.Show(window);
+            LiteralTranslator.Translate(dialog);
+            Settle(dialog);
+            var buttons = dialog.GetVisualDescendants().OfType<Button>().ToList();
+            var cancel = Assert.Single(buttons, b => b.IsDefault);
+            Assert.True(cancel.IsCancel); // 기본 단추(Enter) = 취소
+            Assert.Contains(buttons, b => !b.IsDefault && Equals(b.Content, "복사 실행"));
+            var lines = dialog.GetVisualDescendants().OfType<TextBlock>().Select(t => t.Text ?? string.Empty).ToList();
+            Assert.Contains(lines, l => l.StartsWith("APP2 · 표 1개", StringComparison.Ordinal));
+            Assert.Contains(lines, l => l.StartsWith("DST · 표 1개", StringComparison.Ordinal));
+            Assert.Contains(lines, l => l.StartsWith("TGT_USER (접속 계정)", StringComparison.Ordinal));
+            AssertNotClipped(dialog, "실행 확인");
+            Shots(dialog, "3-run-confirm");
+            Assert.False(accepted());
+            dialog.Close();
+        }
+        finally
+        {
+            window.Close();
+        }
+    });
+
+    [Fact]
+    public Task Precheck_results_show_schema_dot_table_and_the_new_checks() => HeadlessHost.Run(async () =>
+    {
+        var h = new DataCopyHarness();
+        var items = new[]
+        {
+            new CheckItem(null, CopyCheckCodes.OtherOwnerTargets, CheckLevel.Confirm, "대상 접속 계정(TGT_USER)이 아닌 계정 APP2, DST 의 표 2개를 지우고 넣습니다."),
+            new CheckItem("APP2.ORDERS", CopyCheckCodes.SynonymChanged, CheckLevel.Confirm, "더할 때 적은 시노님 ORDERS 가 지금은 APP3.ORDERS 를 가리킵니다. 작업은 저장된 APP2.ORDERS 를 복사합니다."),
+            new CheckItem("SRC2.CODES", "TargetNoWrite", CheckLevel.Error, "DST.CODES 에 INSERT·DELETE 권한이 없습니다."),
+            new CheckItem("CUSTOMERS", "ReadConsistency", CheckLevel.Pass, "예상 읽기 시간이 원본 UNDO_RETENTION 안에 끝납니다."),
+        };
+        var preview = new[]
+        {
+            new PreviewStatement("DELETE FROM \"APP2\".\"ORDERS\" t WHERE EXISTS (SELECT 1 FROM \"APP\".\"CUSTOMERS\" p WHERE p.\"CUST_ID\" = t.\"CUST_ID\")", PreviewSide.Target, PolicyDecisionKind.Allow, null, null),
+            new PreviewStatement("MERGE INTO \"DST\".\"CODES\" t USING …", PreviewSide.Target, PolicyDecisionKind.Allow, null, null),
+        };
+        h.Precheck = new FakePrecheck(TestJobs.Report(items, [], preview));
+        var (window, vm) = await OpenOwnersWindowAsync(h);
+        try
+        {
+            await vm.Precheck.RunAsync(Sessions(), vm.Editor.BuildJob(), new ResolvedPeriod(null, null));
+            vm.Step = DataCopyStep.Precheck;
+            Settle(window);
+            vm.Precheck.SelectedItem = vm.Precheck.Items.Single(i => i.Code == CopyCheckCodes.SynonymChanged);
+            Settle(window);
+
+            var checks = window.FindControl<MonitorGrid>("CheckGrid")!.Model!;
+            var tables = Enumerable.Range(0, 4).Select(r => checks.GetCellText(r, 1)).ToList();
+            Assert.Contains("APP2.ORDERS", tables);
+            Assert.Contains("SRC2.CODES", tables);
+            Assert.Contains("APP.CUSTOMERS", tables); // 기본 계정의 표도 계정.표
+            var names = Enumerable.Range(0, 4).Select(r => checks.GetCellText(r, 2)).ToList();
+            Assert.Contains("다른 계정 표에 씀", names);
+            Assert.Contains("시노님이 가리키는 표 바뀜", names);
+            AssertNotClipped(window, "사전 점검(여러 계정)");
+            Shots(window, "2-precheck-owners");
+        }
+        finally
+        {
+            window.Close();
+        }
+    });
+
+    [Fact]
+    public Task Read_only_job_banner_renders_and_turns_off_the_precheck() => HeadlessHost.Run(async () =>
+    {
+        var h = new DataCopyHarness();
+        var text = new ShellText(language: "ko");
+        UiText.Current = text;
+        LiteralTranslator.Install(text);
+        var job = TestJobs.Job("새 버전 작업", rules: TestJobs.Rule("ORDERS"));
+        h.Store.ReadOnlyIds.Add(job.Id);
+        var vm = await h.OpenAsync(job);
+        var window = new DataCopyWindow { DataContext = vm };
+        window.Show();
+        LiteralTranslator.Translate(window);
+        Settle(window);
+        try
+        {
+            Assert.True(window.FindControl<TextBlock>("ReadOnlyJobNoticeText")!.IsEffectivelyVisible);
+            Assert.False(window.FindControl<Button>("ToPrecheckButton")!.IsEffectivelyEnabled);
+            AssertNotClipped(window, "새 버전 작업");
+            Shots(window, "1-rules-newer-job");
+        }
+        finally
+        {
+            window.Close();
+        }
+    });
+
     [Fact]
     public Task Closing_a_running_window_is_cancelled_until_the_user_confirms_stop() => HeadlessHost.Run(async () =>
     {

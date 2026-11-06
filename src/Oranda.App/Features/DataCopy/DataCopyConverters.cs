@@ -66,6 +66,11 @@ public static class DataCopyConverters
         _ => string.Empty,
     });
 
+    /// <summary>부모 키 후보 콤보: 부모 계정을 알면 <c>계정.표</c>(같은 이름 표가 두 계정에 있어도 구별되게), 모르면 표 이름.</summary>
+    public static IValueConverter ParentLinkText { get; } = new TextConverter(v => v is ParentLink link
+        ? (string.IsNullOrEmpty(link.ParentOwner) ? link.ParentTable : link.ParentOwner + "." + link.ParentTable)
+        : string.Empty);
+
     // 바인딩으로 들어가는 글은 화면 번역(LiteralTranslator)이 지나간 뒤에 바뀌므로, 영어 화면이면 여기서 문구 표의 영어로 바꾼다.
     private sealed class TextConverter(Func<object?, string> map) : IValueConverter
     {

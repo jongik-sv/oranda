@@ -31,7 +31,11 @@ public sealed partial class TableRunRowViewModel(string table) : ViewModelBase
     [ObservableProperty]
     private string _message = string.Empty;
 
+    /// <summary>규칙 키(진행·결과가 이 이름으로 온다).</summary>
     public string Table { get; } = table;
+
+    /// <summary>그리드에 보이는 표 이름 <c>계정.표</c>. 정하지 않으면 키 그대로.</summary>
+    public string Display { get; init; } = table;
 
     public bool HasEstimate => Estimated is > 0;
 
@@ -59,11 +63,15 @@ public sealed partial class TableRunRowViewModel(string table) : ViewModelBase
 }
 
 /// <summary>실패 행 목록의 한 줄(키 열 값과 오류 메시지만).</summary>
-public sealed class FailedRowViewModel(FailedRow row)
+public sealed class FailedRowViewModel(FailedRow row, string? display = null)
 {
     public FailedRow Row { get; } = row;
 
+    /// <summary>규칙 키.</summary>
     public string Table => Row.Table;
+
+    /// <summary>그리드에 보이는 표 이름 <c>계정.표</c>.</summary>
+    public string Display { get; } = display ?? row.Table;
 
     public string KeyText => string.Join(", ", Row.Key.Select(k => $"{k.Key}={k.Value ?? "NULL"}"));
 
@@ -151,11 +159,14 @@ public sealed partial class RunViewModel(DataCopyServices services) : ViewModelB
         Notices.Clear();
         Outcome = null;
         ReadStartedAt = null;
+        // 진행·결과·건수 어림의 표 이름은 규칙 키다(같은 이름 표가 두 계정에 있어도 섞이지 않게). 그리드에는 계정.표를 보인다.
         foreach (var plan in report.Order.Where(p => p.Rule.Kind != RuleKind.Exclude))
         {
-            Rows.Add(new TableRunRowViewModel(plan.Rule.Table)
+            var key = CopyOwners.Key(job, plan.Rule);
+            Rows.Add(new TableRunRowViewModel(key)
             {
-                Estimated = report.EstimatedRows.TryGetValue(plan.Rule.Table, out var n) ? n : null,
+                Display = CopyOwners.SourceName(job, plan.Rule),
+                Estimated = report.EstimatedRows.TryGetValue(key, out var n) ? n : null,
             });
         }
 
@@ -243,7 +254,7 @@ public sealed partial class RunViewModel(DataCopyServices services) : ViewModelB
             var row = Rows.FirstOrDefault(r => r.Table == table.Table);
             if (row is null)
             {
-                row = new TableRunRowViewModel(table.Table);
+                row = new TableRunRowViewModel(table.Table) { Display = Display(table.Table) };
                 Rows.Add(row);
             }
 
@@ -259,7 +270,7 @@ public sealed partial class RunViewModel(DataCopyServices services) : ViewModelB
         FailedRows.Clear();
         foreach (var failed in result.FailedRows)
         {
-            FailedRows.Add(new FailedRowViewModel(failed));
+            FailedRows.Add(new FailedRowViewModel(failed, Display(failed.Table)));
         }
 
         Notices.Clear();
@@ -279,6 +290,9 @@ public sealed partial class RunViewModel(DataCopyServices services) : ViewModelB
             _ => "복사에 실패했습니다.",
         };
     }
+
+    // 규칙 키 → 그리드의 계정.표(작업에 없는 키면 그대로).
+    private string Display(string key) => _job is { } job ? PrecheckViewModel.TableText(job, key) : key;
 
     private async Task SaveLastRunAsync(CopyJob job, CopyRunResult result, CancellationToken ct)
     {
@@ -389,7 +403,7 @@ public sealed partial class RunViewModel(DataCopyServices services) : ViewModelB
             FailedRows.Clear();
             foreach (var failed in result.FailedRows)
             {
-                FailedRows.Add(new FailedRowViewModel(failed));
+                FailedRows.Add(new FailedRowViewModel(failed, Display(failed.Table)));
             }
 
             foreach (var table in result.Tables)

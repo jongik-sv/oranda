@@ -344,8 +344,9 @@ public sealed partial class ResultGridControl
                 var isNull = m.IsNull(r, ord);
                 var emphasized = !isNull && m.CellEmphasis is not null && m.IsEmphasized(r, ord); // 모니터의 블로커 칸 등
                 var warned = !isNull && !emphasized && m.CellWarning is not null && m.IsWarned(r, ord); // 튜닝 표의 느린 plan_hash 등
-                var key = (r << 12) | (uint)(ord & 0xFFF) | (isNull ? 1L << 62 : 0) | (emphasized ? 1L << 61 : 0) | (warned ? 1L << 60 : 0);
-                var brush = isNull ? pal.NullText : emphasized ? pal.Danger : warned ? pal.Warning : pal.Text;
+                var muted = !isNull && !emphasized && !warned && m.CellMuted is not null && m.IsMuted(r, ord); // 복사 규칙 표의 원본과 같은 계정 등
+                var key = (r << 12) | (uint)(ord & 0xFFF) | (isNull ? 1L << 62 : 0) | (emphasized ? 1L << 61 : 0) | (warned ? 1L << 60 : 0) | (muted ? 1L << 59 : 0);
+                var brush = isNull || muted ? pal.NullText : emphasized ? pal.Danger : warned ? pal.Warning : pal.Text;
                 var t = _cells.Get(key, text, s => f.Create(s, brush));
                 var tx = m.IsRightAligned(ord) ? x + w - CellPadX - t.Width : x + CellPadX;
                 t.Draw(ctx, new Point(tx, y + (rh - t.Height) / 2));

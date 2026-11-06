@@ -101,11 +101,32 @@ public sealed partial class TableRuleViewModel : ViewModelBase
     [NotifyPropertyChangedFor(nameof(ConditionText))]
     private ParentLink? _parent;
 
+    /// <summary>대상 계정(대상 표 = 이 계정의 <see cref="Table"/>). 상세 칸 콤보에서 고치거나 적는다. 비면 작업 기본 대상 계정.</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(TargetName), nameof(IsTargetSameAsSource), nameof(IsOtherTargetOwner), nameof(OtherTargetOwnerNotice))]
+    private string _targetOwner = string.Empty;
+
+    /// <summary>대상 접속 계정(대문자). 편집 화면이 대상 접속을 고를 때 넣는다. 모르면 빈 글자.</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsOtherTargetOwner), nameof(OtherTargetOwnerNotice))]
+    private string _sessionUser = string.Empty;
+
     private TableInfo? _source;
 
+    /// <summary>저장된 규칙 그대로. 계정이 비었으면 빈 글자로 둔다(<see cref="RuleEditorViewModel"/> 는 계정을 푼 생성자를 쓴다).</summary>
     public TableRuleViewModel(TableRule rule)
+        : this(rule, rule?.SourceOwner ?? string.Empty, rule?.TargetOwner ?? string.Empty)
     {
+    }
+
+    /// <summary>규칙과 그 규칙의 실제 원본·대상 계정(<see cref="CopyOwners.Source"/>·<see cref="CopyOwners.Target"/> 로 푼 값).</summary>
+    public TableRuleViewModel(TableRule rule, string sourceOwner, string targetOwner)
+    {
+        ArgumentNullException.ThrowIfNull(rule);
         Table = rule.Table;
+        SourceOwner = sourceOwner;
+        WrittenAs = rule.WrittenAs;
+        _targetOwner = targetOwner;
         _kind = rule.Kind;
         _action = rule.Action;
         _customWhere = rule.CustomWhere;
@@ -119,6 +140,53 @@ public sealed partial class TableRuleViewModel : ViewModelBase
     }
 
     public string Table { get; }
+
+    /// <summary>원본 계정. 표를 더할 때 정해지고 상세 칸에서는 바꾸지 않는다(바꾸려면 표를 다시 더한다). 기본 계정을 바꾸면 따라 바뀔 수 있다.</summary>
+    public string SourceOwner { get; private set; }
+
+    /// <summary>시노님으로 더했을 때 사용자가 적은 이름(표시용). 아니면 null.</summary>
+    public string? WrittenAs { get; }
+
+    /// <summary>작업에서 불러온 규칙이면 그 규칙(시퀀스 연결의 규칙 키를 저장할 때 다시 잇는다). 새로 더한 표면 null.</summary>
+    internal TableRule? Origin { get; init; }
+
+    /// <summary>원본 표 이름 <c>계정.표</c>(계정을 모르면 표 이름만). 상세 칸 머리에 쓴다.</summary>
+    public string SourceName => SourceOwner.Length > 0 ? SourceOwner + "." + Table : Table;
+
+    /// <summary>대상 표 이름 <c>계정.표</c>.</summary>
+    public string TargetName => TargetOwner.Length > 0 ? TargetOwner + "." + Table : Table;
+
+    /// <summary>상세 칸 머리 옆 작은 글: 「← 시노님 ORDERS」. 시노님으로 더하지 않았으면 빈 글자.</summary>
+    public string SynonymText => WrittenAs is { } written ? "← " + DataCopyText.L("시노님") + " " + written : string.Empty;
+
+    public bool HasSynonym => WrittenAs is not null;
+
+    /// <summary>대상 계정이 원본 계정과 같은지(그리드에서 흐린 글자).</summary>
+    public bool IsTargetSameAsSource => string.Equals(SourceOwner, TargetOwner, StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>대상 계정이 대상 접속 계정이 아닌지(그리드에서 경고색, 상세 칸 안내). 접속을 모르면 거짓.</summary>
+    public bool IsOtherTargetOwner => SessionUser.Length > 0 && TargetOwner.Length > 0
+        && !string.Equals(TargetOwner.Trim(), SessionUser, StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>접속 계정이 아닌 계정에 쓸 때 상세 칸 안내. 아니면 빈 글자.</summary>
+    public string OtherTargetOwnerNotice => IsOtherTargetOwner ? DataCopyText.L(DataCopyText.OtherTargetOwner) : string.Empty;
+
+    /// <summary>
+    /// 기본 계정이 바뀔 때(<see cref="RuleEditorViewModel"/> 한 곳에서만 부른다): 원본·대상 계정을 새 값으로 바꾼다.
+    /// </summary>
+    internal void Rebase(string sourceOwner, string targetOwner)
+    {
+        if (!string.Equals(SourceOwner, sourceOwner, StringComparison.Ordinal))
+        {
+            SourceOwner = sourceOwner;
+            OnPropertyChanged(nameof(SourceOwner));
+            OnPropertyChanged(nameof(SourceName));
+            OnPropertyChanged(nameof(IsTargetSameAsSource));
+            OnPropertyChanged(nameof(ConditionText));
+        }
+
+        TargetOwner = targetOwner;
+    }
 
     /// <summary>대상 처리가 PK 기준 MERGE 일 때만 「원본에서 지워진 행은 MERGE 가 남깁니다」 안내를 보인다(설계 6.2).</summary>
     public bool IsMerge => Action == TargetAction.MergeByPk;
@@ -164,7 +232,7 @@ public sealed partial class TableRuleViewModel : ViewModelBase
     {
         RuleKind.All => "모든 행",
         RuleKind.Period => PeriodText(),
-        RuleKind.ParentKey => Parent is { } p ? $"{p.ParentTable} 의 키 · {string.Join(", ", p.ChildColumns)}" : "부모 키를 고르세요",
+        RuleKind.ParentKey => Parent is { } p ? $"{ParentDisplay(p)} 의 키 · {string.Join(", ", p.ChildColumns)}" : "부모 키를 고르세요",
         RuleKind.Custom => string.IsNullOrWhiteSpace(CustomWhere) ? "조건을 입력하세요" : CustomWhere!,
         _ => "복사하지 않음",
     };
@@ -197,6 +265,15 @@ public sealed partial class TableRuleViewModel : ViewModelBase
         return HasExtraWhere ? $"{period} · 추가 조건 {ExtraWhere!.Trim()}" : period;
     }
 
+    /// <summary>부모 표 이름: 자식 표와 같은 계정이면 이름만, 다른 계정이면 <c>계정.표</c>.</summary>
+    public string ParentDisplay(ParentLink link)
+    {
+        ArgumentNullException.ThrowIfNull(link);
+        return link.ParentOwner is { Length: > 0 } owner && !string.Equals(owner, SourceOwner, StringComparison.Ordinal)
+            ? owner + "." + link.ParentTable
+            : link.ParentTable;
+    }
+
     private static string ColumnText(PeriodColumnOption column, string? format) =>
         string.IsNullOrEmpty(format) ? column.Column : $"{column.Column} · {format} 문자열";
 
@@ -215,10 +292,16 @@ public sealed partial class TableRuleViewModel : ViewModelBase
         foreach (var fk in source.Constraints.Where(c => c.Kind == ConstraintKind.ForeignKey && c.ReferencedTable is not null))
         {
             // 부모 쪽 열은 부모 테이블의 참조 제약(r_constraint_name)에서 읽는다. 부모 정보를 못 읽은 FK 는 후보에서 뺀다.
-            if (parents is not null && parents.TryGetValue(fk.ReferencedTable!.Name, out var parent)
+            // 부모 표는 계정.표로 찾고(다른 계정의 같은 이름 표와 섞이지 않게), 이름만 넣은 사전이면 이름으로 찾는다. 후보에는 부모 계정을 담는다.
+            var referencedTable = fk.ReferencedTable!;
+            if (parents is not null
+                && (parents.TryGetValue(referencedTable.Owner + "." + referencedTable.Name, out var parent) || parents.TryGetValue(referencedTable.Name, out parent))
                 && parent.Constraints.FirstOrDefault(c => c.Name == fk.ReferencedConstraint) is { } referenced)
             {
-                ParentCandidates.Add(new ParentLink(fk.ReferencedTable.Name, fk.Columns, referenced.Columns, fk.Name));
+                ParentCandidates.Add(new ParentLink(referencedTable.Name, fk.Columns, referenced.Columns, fk.Name)
+                {
+                    ParentOwner = string.IsNullOrEmpty(referencedTable.Owner) ? null : referencedTable.Owner,
+                });
             }
         }
 
@@ -287,6 +370,7 @@ public sealed partial class TableRuleViewModel : ViewModelBase
             ?? ParentCandidates.FirstOrDefault(c => saved.ForeignKeyName is not null
                 && string.Equals(c.ForeignKeyName, saved.ForeignKeyName, StringComparison.OrdinalIgnoreCase))
             ?? ParentCandidates.FirstOrDefault(c => string.Equals(c.ParentTable, saved.ParentTable, StringComparison.OrdinalIgnoreCase)
+                && string.Equals(c.ParentOwner ?? SourceOwner, saved.ParentOwner ?? SourceOwner, StringComparison.OrdinalIgnoreCase)
                 && c.ChildColumns.SequenceEqual(saved.ChildColumns, StringComparer.OrdinalIgnoreCase));
         if (found is null)
         {
@@ -385,6 +469,9 @@ public sealed partial class TableRuleViewModel : ViewModelBase
         var skips = _source is null ? SavedSkips : Skips.Where(s => s.IsSkipped).Select(s => s.Column).ToList();
         return new TableRule(Table, Kind, Action)
         {
+            SourceOwner = EmptyToNull(SourceOwner),
+            TargetOwner = EmptyToNull(TargetOwner)?.Trim(),
+            WrittenAs = WrittenAs,
             PeriodColumns = periodColumns,
             Parent = Kind == RuleKind.ParentKey ? Parent : null,
             CustomWhere = Kind == RuleKind.Custom ? CustomWhere : null,

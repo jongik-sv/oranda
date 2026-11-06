@@ -68,6 +68,7 @@ public sealed class CheckItemViewModel
         ["MaskOnKey"] = "키 열 마스킹",
         ["NarrowerType"] = "대상 열이 좁음",
         ["NoPrimaryKey"] = "기본키 없음",
+        [CopyCheckCodes.OtherOwnerTargets] = "다른 계정 표에 씀",
         ["ParentExcluded"] = "부모 표 제외",
         ["ReadConsistency"] = "같은 시점 읽기",
         ["RecreateBlocked"] = "다시 만들기 막힘",
@@ -78,6 +79,7 @@ public sealed class CheckItemViewModel
         ["SameSourceTarget"] = "원본과 대상이 같음",
         ["SequenceGap"] = "시퀀스",
         ["SourceNoSelect"] = "원본 읽기 권한 없음",
+        [CopyCheckCodes.SynonymChanged] = "시노님이 가리키는 표 바뀜",
         ["TargetMissing"] = "대상 표 없음",
         ["TargetNoWrite"] = "대상 쓰기 권한 없음",
         ["TargetOnlyConstraint"] = "대상에만 있는 제약",
@@ -88,10 +90,11 @@ public sealed class CheckItemViewModel
         ["WrongLengthDates"] = "날짜 길이 다름",
     };
 
-    public CheckItemViewModel(CheckItem item, IReadOnlyList<CheckChoiceViewModel> choices)
+    public CheckItemViewModel(CheckItem item, IReadOnlyList<CheckChoiceViewModel> choices, string? tableText = null)
     {
         Item = item;
         Choices = choices;
+        TableText = tableText ?? item.Table ?? string.Empty;
         foreach (var choice in choices)
         {
             choice.Owner = this;
@@ -107,7 +110,11 @@ public sealed class CheckItemViewModel
 
     public string Message => Item.Message;
 
+    /// <summary>규칙 키(<see cref="CopyOwners.Key(CopyJob, TableRule)"/>: 기본 원본 계정의 표는 이름만). 작업 전체 항목이면 null.</summary>
     public string? Table => Item.Table;
+
+    /// <summary>그리드·상세 칸에 보이는 표 이름 <c>계정.표</c>(작업에서 규칙을 찾지 못하면 키 그대로).</summary>
+    public string TableText { get; }
 
     /// <summary>점검 항목 코드(Oracle 점검이 정한 이름). 그리드에는 <see cref="CodeText"/> 를 보이고 코드는 상세 칸에 작게 남긴다.</summary>
     public string Code => Item.Code;
@@ -360,7 +367,8 @@ public sealed partial class PrecheckViewModel(DataCopyServices services) : ViewM
             LinkedSequences.Add(new SequenceLinkViewModel(rule, isLinked: true));
         }
 
-        var plans = report.Order.ToDictionary(p => p.Rule.Table, StringComparer.Ordinal);
+        _job = job;
+        var plans = PlansByKey(job, report);
         foreach (var item in report.Items.OrderBy(i => i.Level switch { CheckLevel.Error => 0, CheckLevel.Confirm => 1, _ => 2 }))
         {
             var choices = new List<CheckChoiceViewModel>();
@@ -377,7 +385,7 @@ public sealed partial class PrecheckViewModel(DataCopyServices services) : ViewM
                 choices.Add(new CheckChoiceViewModel(choice, item.Table, visible, chosen));
             }
 
-            var row = new CheckItemViewModel(item, choices);
+            var row = new CheckItemViewModel(item, choices, TableText(job, item.Table));
             if (item is { Code: "SequenceGap", Table: { } table, Column: { } column, Sequence: { } sequence })
             {
                 row.SequenceLink = new SequenceLinkViewModel(new SequenceRule(sequence, table, column), isLinked: false);
@@ -413,7 +421,7 @@ public sealed partial class PrecheckViewModel(DataCopyServices services) : ViewM
     {
         var disableTriggers = new HashSet<string>(StringComparer.Ordinal);
         var disableForeignKeys = new HashSet<string>(StringComparer.Ordinal);
-        var plans = Report?.Order.ToDictionary(p => p.Rule.Table, StringComparer.Ordinal) ?? [];
+        var plans = Report is { } report && _job is { } job ? PlansByKey(job, report) : [];
         var proceedGap = false;
         foreach (var item in Items)
         {
@@ -452,12 +460,34 @@ public sealed partial class PrecheckViewModel(DataCopyServices services) : ViewM
         return new CopyDecisions(disableTriggers, disableForeignKeys, confirmed, proceedGap);
     }
 
+    // 점검한 작업(점검 항목·건수 어림·트리거 끄기 결정의 표 이름은 규칙 키다).
+    private CopyJob? _job;
+
+    // 점검 계획을 규칙 키로 찾는다(같은 이름 표가 두 계정에 있어도 섞이지 않게).
+    private static Dictionary<string, CopyTablePlan> PlansByKey(CopyJob job, PrecheckReport report)
+    {
+        var plans = new Dictionary<string, CopyTablePlan>(StringComparer.Ordinal);
+        foreach (var plan in report.Order)
+        {
+            plans.TryAdd(CopyOwners.Key(job, plan.Rule), plan);
+        }
+
+        return plans;
+    }
+
+    /// <summary>규칙 키 → 화면에 보일 <c>계정.표</c>. 작업에 그 규칙이 없으면 키 그대로, 작업 전체 항목(null)이면 빈 글자.</summary>
+    public static string TableText(CopyJob job, string? key)
+    {
+        ArgumentNullException.ThrowIfNull(job);
+        return key is null ? string.Empty : CopyOwners.Find(job, key) is { } rule ? CopyOwners.SourceName(job, rule) : key;
+    }
+
     /// <summary>작업 규칙을 바꾸는 선택지를 적용한다. 바뀐 작업을 돌려주고, 호출한 쪽이 점검을 다시 한다.</summary>
     public static CopyJob? ApplyJobChoice(CopyJob job, CheckItemViewModel item, CheckChoice choice)
     {
         ArgumentNullException.ThrowIfNull(job);
         ArgumentNullException.ThrowIfNull(item);
-        var tables = job.Tables.Select(rule => rule.Table != item.Table ? rule : choice switch
+        var tables = job.Tables.Select(rule => CopyOwners.Key(job, rule) != item.Table ? rule : choice switch
         {
             CheckChoice.SkipColumn when item.Item.Column is { } column && !rule.SkipColumns.Contains(column, StringComparer.OrdinalIgnoreCase)
                 => rule with { SkipColumns = [.. rule.SkipColumns, column] },

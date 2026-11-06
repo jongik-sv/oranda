@@ -46,8 +46,14 @@ public sealed class PrecheckStepTests
         var codes = Directory.GetFiles(copyDir, "*.cs")
             .SelectMany(f => System.Text.RegularExpressions.Regex.Matches(File.ReadAllText(f), @"new CheckItem\([^,]+,\s*""(?<code>[A-Za-z]+)""").Select(m => m.Groups["code"].Value))
             .ToHashSet(StringComparer.Ordinal);
+        // 상수로 정한 코드(CopyCheckCodes: OtherOwnerTargets·SynonymChanged 등)도 모은다.
+        foreach (var field in typeof(CopyCheckCodes).GetFields().Where(f => f.IsLiteral))
+        {
+            codes.Add((string)field.GetRawConstantValue()!);
+        }
 
         Assert.NotEmpty(codes);
+        Assert.Contains(CopyCheckCodes.OtherOwnerTargets, codes);
         Assert.Empty(codes.Where(c => !CheckItemViewModel.CodeNameTable.ContainsKey(c)));
         Assert.Empty(CheckItemViewModel.CodeNameTable.Values.Where(n => !Oranda.App.Features.Localization.LiteralTranslator.Table.ContainsKey(n)));
     }

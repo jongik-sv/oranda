@@ -138,6 +138,9 @@ public sealed partial class DataCopyViewModel : ViewModelBase, IAsyncDisposable
 
     public bool HasUnfinished => UnfinishedRuns.Count > 0;
 
+    /// <summary>실행 확인 대화상자(창이 복사 창을 소유자로 띄워 연결한다). 연결이 없으면(화면 없는 시험) 묻지 않는다.</summary>
+    public Func<RunConfirmation, Task<bool>>? ConfirmRun { get; set; }
+
     public bool IsRuleEdit => Step == DataCopyStep.RuleEdit;
 
     public bool IsPrecheck => Step == DataCopyStep.Precheck;
@@ -409,8 +412,73 @@ public sealed partial class DataCopyViewModel : ViewModelBase, IAsyncDisposable
 
         Step = DataCopyStep.RuleEdit;
         var session = await SourceSessionAsync(ct).ConfigureAwait(true);
-        await Editor.AddTableAsync(table, session, ct).ConfigureAwait(true);
-        Say(Editor.Notice.Length > 0 ? Editor.Notice : $"{table.Name} 규칙을 추가했습니다.", Editor.Notice.Length > 0);
+        if (!string.Equals(table.ObjectType, "SYNONYM", StringComparison.Ordinal))
+        {
+            await AddResolvedAsync(new CopyTableName(table.Owner, table.Name), session, ct).ConfigureAwait(true);
+            return;
+        }
+
+        // 시노님 노드: 원본 세션으로 실제 계정·표를 푼다(PUBLIC 시노님은 계정 PUBLIC). 풀 수 없으면 더하지 않는다.
+        if (session is null || _services.Metadata is not { } metadata)
+        {
+            Say(session is null ? DataCopyText.SynonymNeedsSource : DataCopyText.MetadataMissing, error: true);
+            return;
+        }
+
+        var resolution = await CopyTableInput.ResolveAsync((o, n) => metadata.GetNameStepAsync(session, o, n, ct),
+            CopyTableInput.Format(table.Owner, table.Name), Editor.SourceOwner, session.Profile.User.ToUpperInvariant()).ConfigureAwait(true);
+        await AddResolutionAsync(resolution, session, ct).ConfigureAwait(true);
+    }
+
+    /// <summary>
+    /// 창의 표 입력(<c>표</c> 또는 <c>계정.표</c>, 시노님 가능): 원본 세션이 열리면 그 세션으로 실제 계정·표를 풀어 더한다(묶음 B 설계 3장).
+    /// 풀리지 않거나 DB 링크를 거치면 더하지 않고 이유를 알린다. 원본 세션이 없으면(원본 없음·비밀번호 취소) 적은 계정, 없으면 기본 계정으로 더한다.
+    /// </summary>
+    public async Task AddTableInputAsync(string input, CancellationToken ct = default)
+    {
+        ArgumentNullException.ThrowIfNull(input);
+        if (RunInProgress() || CurrentJob is null)
+        {
+            return;
+        }
+
+        Step = DataCopyStep.RuleEdit;
+        var session = await SourceSessionAsync(ct).ConfigureAwait(true);
+        if (session is not null && _services.Metadata is { } metadata)
+        {
+            var resolution = await CopyTableInput.ResolveAsync((o, n) => metadata.GetNameStepAsync(session, o, n, ct),
+                input, Editor.SourceOwner, session.Profile.User.ToUpperInvariant()).ConfigureAwait(true);
+            await AddResolutionAsync(resolution, session, ct).ConfigureAwait(true);
+            return;
+        }
+
+        var (owner, name, problem) = CopyTableInput.Parse(input);
+        if (problem is not null)
+        {
+            Say(problem, error: true);
+            return;
+        }
+
+        var fallback = owner ?? (Editor.SourceOwner.Length > 0 ? Editor.SourceOwner : Editor.Source?.Profile.User.ToUpperInvariant() ?? string.Empty);
+        await AddResolvedAsync(new CopyTableName(fallback, name), null, ct).ConfigureAwait(true);
+    }
+
+    private async Task AddResolutionAsync(CopyTableResolution resolution, ISession session, CancellationToken ct)
+    {
+        if (resolution.Table is not { } table)
+        {
+            Say(resolution.Problem ?? string.Empty, error: true);
+            return;
+        }
+
+        await AddResolvedAsync(table, session, ct).ConfigureAwait(true);
+    }
+
+    private async Task AddResolvedAsync(CopyTableName table, ISession? session, CancellationToken ct)
+    {
+        var rule = await Editor.AddTableAsync(table, session, ct).ConfigureAwait(true);
+        var added = table.ViaSynonym ? $"{rule.SourceName} 규칙을 추가했습니다(시노님 {table.WrittenAs})." : $"{rule.SourceName} 규칙을 추가했습니다.";
+        Say(Editor.Notice.Length > 0 ? Editor.Notice : added, Editor.Notice.Length > 0);
     }
 
     /// <summary>1단계 → 2단계: 입력을 확인하고 작업을 저장한 뒤 세션을 열어 사전 점검을 돌린다.</summary>
@@ -630,9 +698,10 @@ public sealed partial class DataCopyViewModel : ViewModelBase, IAsyncDisposable
             return;
         }
 
-        var owner = string.IsNullOrWhiteSpace(Editor.SourceOwner) ? session.Profile.User.ToUpperInvariant() : Editor.SourceOwner;
+        // 규칙마다 원본 계정이 다를 수 있다(시노님으로 더한 다른 계정의 표).
+        var owner = Editor.EffectiveSource(rule) is { Length: > 0 } ruleOwner ? ruleOwner : session.Profile.User.ToUpperInvariant();
         await Editor.LoadColumnsAsync(rule, new DbObjectRef(owner, rule.Table, "TABLE"), session, ct).ConfigureAwait(true);
-        Say(Editor.Notice.Length > 0 ? Editor.Notice : $"{rule.Table} 의 열 정보를 읽었습니다.", Editor.Notice.Length > 0);
+        Say(Editor.Notice.Length > 0 ? Editor.Notice : $"{owner}.{rule.Table} 의 열 정보를 읽었습니다.", Editor.Notice.Length > 0);
     }
 
     /// <summary>
@@ -809,8 +878,23 @@ public sealed partial class DataCopyViewModel : ViewModelBase, IAsyncDisposable
             return;
         }
 
-        var decisions = Precheck.BuildDecisions();
+        // 대상 계정이 둘 이상이거나 접속 계정이 아닌 계정에 쓰면 계정별 지울 표를 보이고 묻는다(결정 B-2 a, 기본 단추 취소).
         var job = CurrentJob;
+        if (RunConfirmation.For(job, sessions.Target.Profile.User.ToUpperInvariant()) is { } confirmation && ConfirmRun is { } ask)
+        {
+            if (!await ask(confirmation).ConfigureAwait(true))
+            {
+                Say("복사를 시작하지 않았습니다.");
+                return;
+            }
+
+            if (!ReferenceEquals(job, CurrentJob) || Run.IsRunning || IsBusy || !Precheck.CanRun)
+            {
+                return; // 묻는 사이에 작업·상태가 바뀌었다
+            }
+        }
+
+        var decisions = Precheck.BuildDecisions();
         Step = DataCopyStep.Run;
         Say("복사하는 중…");
         await Run.StartAsync(sessions, job, report, decisions, period, ct).ConfigureAwait(true);

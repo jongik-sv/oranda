@@ -19,6 +19,12 @@ public sealed partial class ResultGridModel
     /// <summary>이 칸을 주의색으로 그리는가(<see cref="CellWarning"/>).</summary>
     public bool IsWarned(long viewRow, int ordinal) => CellWarning?.Invoke(viewRow, ordinal) == true;
 
+    /// <summary>(화면 행, 열 ordinal)을 받아 참이면 그 칸 글자를 흐리게(NULL 글자 색) 그린다(데이터 복사 규칙 표의 「원본과 같은 대상 계정」 등). 위험·주의색이 먼저. 기본 없음.</summary>
+    public Func<long, int, bool>? CellMuted { get; set; }
+
+    /// <summary>이 칸을 흐린 글자로 그리는가(<see cref="CellMuted"/>).</summary>
+    public bool IsMuted(long viewRow, int ordinal) => CellMuted?.Invoke(viewRow, ordinal) == true;
+
     /// <summary>화면 행 → 결과 집합의 원래 행 번호(정렬·거르기를 거친 뒤). 새 행이거나 범위 밖이면 -1.</summary>
     public long SourceRowOf(long viewRow)
     {

@@ -131,6 +131,7 @@ public partial class DataCopyWindow : Window
             return Task.CompletedTask;
         };
         vm.Precheck.SaveScript = SaveScriptAsync;
+        vm.ConfirmRun = confirmation => Dialogs.ConfirmRunAsync(confirmation);
         _editor = vm.Editor;
         _editor.PropertyChanged += OnEditorChanged;
         _editor.Rules.CollectionChanged += (_, _) => SyncRulePanel();
@@ -140,7 +141,7 @@ public partial class DataCopyWindow : Window
 
     private void OnEditorChanged(object? sender, PropertyChangedEventArgs e)
     {
-        if (e.PropertyName is nameof(RuleEditorViewModel.SelectedRule) or nameof(RuleEditorViewModel.Target))
+        if (e.PropertyName is nameof(RuleEditorViewModel.SelectedRule) or nameof(RuleEditorViewModel.Target) or nameof(RuleEditorViewModel.TargetOwner))
         {
             SyncRulePanel();
         }
@@ -169,6 +170,11 @@ public partial class DataCopyWindow : Window
             ActionBox.ItemsSource = _editor.AvailableActions;
             ActionBox.SelectedItem = _rule.Action;
             AddMaskBox.ItemsSource = _rule.MaskableColumns.ToList();
+            // 대상 계정 고를 거리(원본과 같음·기본 대상·접속 계정). 칸 글자는 규칙의 TargetOwner 에 묶여 있어 목록을 바꿔도 그대로다.
+            var owner = _rule.TargetOwner;
+            TargetOwnerBox.ItemsSource = _editor.TargetOwnerOptions(_rule);
+            TargetOwnerBox.SelectedItem = null;
+            TargetOwnerBox.Text = owner;
         }
         finally
         {
@@ -193,6 +199,10 @@ public partial class DataCopyWindow : Window
             else if (e.PropertyName == nameof(TableRuleViewModel.Action))
             {
                 ActionBox.SelectedItem = _rule.Action;
+            }
+            else if (e.PropertyName == nameof(TableRuleViewModel.TargetOwner) && !string.Equals(TargetOwnerBox.Text, _rule.TargetOwner, StringComparison.Ordinal))
+            {
+                TargetOwnerBox.Text = _rule.TargetOwner; // 기본 계정을 바꿔 따라 바뀐 값
             }
             else if (e.PropertyName == nameof(TableRuleViewModel.HasColumns))
             {
@@ -232,7 +242,16 @@ public partial class DataCopyWindow : Window
                 _syncing = false;
             }
         };
-        LoadColumnsButton.Click += async (_, _) => await LoadSelectedColumnsAsync().ConfigureAwait(true);
+        // 대상 계정 콤보: 고르거나 적은 글자를 고른 규칙에 돌려준다(코드가 맞추는 동안은 건너뛴다).
+        TargetOwnerBox.PropertyChanged += (_, e) =>
+        {
+            if (e.Property == ComboBox.TextProperty && !_syncing && _rule is not null && TargetOwnerBox.Text is { } text
+                && !string.Equals(text.Trim(), _rule.TargetOwner, StringComparison.Ordinal))
+            {
+                _rule.TargetOwner = text.Trim();
+            }
+        };
+        LoadColumnsButton.Click +=async (_, _) => await LoadSelectedColumnsAsync().ConfigureAwait(true);
         ReadColumnsToolButton.Click += async (_, _) => await LoadSelectedColumnsAsync().ConfigureAwait(true);
         MoveRuleUpButton.Click += (_, _) => MoveSelectedRule(-1);
         MoveRuleDownButton.Click += (_, _) => MoveSelectedRule(1);
@@ -399,9 +418,9 @@ public partial class DataCopyWindow : Window
             return;
         }
 
-        var owner = string.IsNullOrWhiteSpace(vm.Editor.SourceOwner) ? vm.Editor.Source?.Profile.User ?? string.Empty : vm.Editor.SourceOwner;
+        // 표·계정.표·시노님: 원본 세션으로 실제 계정·표를 풀어 더한다(풀리지 않으면 이유를 상태 줄에 알린다).
         AddTableBox.Text = string.Empty;
-        await RunUiAsync(ct => vm.AddTableAsync(new DbObjectRef(owner.ToUpperInvariant(), name.ToUpperInvariant(), "TABLE"), null, ct)).ConfigureAwait(true);
+        await RunUiAsync(ct => vm.AddTableInputAsync(name, ct)).ConfigureAwait(true);
     }
 
     private async void OnReenable(object? sender, RoutedEventArgs e)

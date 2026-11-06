@@ -218,7 +218,8 @@
                       ToolTip.Tip="작업을 저장하고 원본·대상 세션을 열어 사전 점검을 시작합니다" />
               <StackPanel Orientation="Horizontal" Spacing="1" DataContext="{Binding Editor}" x:DataType="dc:RuleEditorViewModel">
                 <TextBox x:Name="AddTableBox" Classes="compact search" Width="220" MinHeight="24" PlaceholderText="테이블 이름 입력 후 Enter"
-                         AutomationProperties.Name="추가할 테이블 이름">
+                         AutomationProperties.Name="추가할 테이블 이름"
+                         ToolTip.Tip="테이블 또는 계정.테이블. 시노님을 적으면 원본에서 실제 계정·테이블로 풀어 더합니다.">
                   <TextBox.InnerLeftContent>
                     <ContentControl Content="{Binding Source='table', Converter={x:Static icons:IconKeyConverter.Instance}, ConverterParameter=14}" VerticalAlignment="Center" />
                   </TextBox.InnerLeftContent>
@@ -274,8 +275,10 @@
                         <DataTemplate x:DataType="dc:ConnectionOption"><TextBlock Text="{Binding Display}" TextTrimming="CharacterEllipsis" /></DataTemplate>
                       </ComboBox.ItemTemplate>
                     </ComboBox>
-                    <TextBlock Grid.Row="2" Classes="field" Text="소유자" />
-                    <TextBox Grid.Row="2" Grid.Column="1" Classes="compact" Text="{Binding SourceOwner}" AutomationProperties.Name="원본 소유자" />
+                    <TextBlock Grid.Row="2" Classes="field" Text="기본 계정"
+                               ToolTip.Tip="표 이름만 적어 더할 때 먼저 찾는 원본 계정입니다. 바꾸면 이 계정이던 규칙도 따라 바뀝니다. 다른 계정의 표는 계정.표로 적거나 시노님으로 더합니다." />
+                    <TextBox Grid.Row="2" Grid.Column="1" Classes="compact" Text="{Binding SourceOwner, UpdateSourceTrigger=LostFocus}" AutomationProperties.Name="원본 기본 계정"
+                             ToolTip.Tip="표 이름만 적어 더할 때 먼저 찾는 원본 계정입니다. 바꾸면 이 계정이던 규칙도 따라 바뀝니다. 다른 계정의 표는 계정.표로 적거나 시노님으로 더합니다." />
                     <CheckBox Grid.Row="3" Grid.ColumnSpan="2" Classes="compact" Content="같은 시점으로 읽기" IsChecked="{Binding ConsistentRead}"
                               ToolTip.Tip="원본 세션을 읽기 전용 트랜잭션 하나로 열어 모든 테이블을 같은 시점으로 읽습니다. 끄면 테이블마다 따로 읽습니다." />
                   </Grid>
@@ -300,8 +303,10 @@
                         </DataTemplate>
                       </ComboBox.ItemTemplate>
                     </ComboBox>
-                    <TextBlock Grid.Row="2" Classes="field" Text="소유자" />
-                    <TextBox Grid.Row="2" Grid.Column="1" Classes="compact" Text="{Binding TargetOwner}" AutomationProperties.Name="대상 소유자" />
+                    <TextBlock Grid.Row="2" Classes="field" Text="기본 계정"
+                               ToolTip.Tip="기본 원본 계정의 표를 넣을 대상 계정입니다. 다른 원본 계정의 표는 같은 이름의 계정에 넣고, 표마다 오른쪽 칸에서 바꿀 수 있습니다. 바꾸면 이 계정이던 규칙도 따라 바뀝니다." />
+                    <TextBox Grid.Row="2" Grid.Column="1" Classes="compact" Text="{Binding TargetOwner, UpdateSourceTrigger=LostFocus}" AutomationProperties.Name="대상 기본 계정"
+                             ToolTip.Tip="기본 원본 계정의 표를 넣을 대상 계정입니다. 다른 원본 계정의 표는 같은 이름의 계정에 넣고, 표마다 오른쪽 칸에서 바꿀 수 있습니다. 바꾸면 이 계정이던 규칙도 따라 바뀝니다." />
                     <TextBlock Grid.Row="3" Classes="field" Text="커밋" />
                     <ComboBox Grid.Row="3" Grid.Column="1" Classes="compact" HorizontalAlignment="Stretch" ItemsSource="{Binding CommitModes}" SelectedItem="{Binding Commit}" AutomationProperties.Name="커밋 단위">
                       <ComboBox.ItemTemplate>
@@ -381,18 +386,43 @@
                       <DockPanel>
                         <Button x:Name="LoadColumnsButton" DockPanel.Dock="Right" Classes="tool" Content="열 정보 읽기" icons:ButtonIcon.Key="refresh" Padding="4,0"
                                 IsVisible="{Binding !HasColumns}" ToolTip.Tip="원본에서 이 테이블의 열 정보를 읽어 기간 열·마스킹·건너뛸 열을 고를 수 있게 합니다" />
-                        <StackPanel Orientation="Horizontal" Spacing="6">
+                        <!-- 계정.표 와 「← 시노님 X」: 좁으면 시노님 글부터 줄인다(열 정보 읽기 단추와 겹치지 않게). -->
+                        <Grid ColumnDefinitions="Auto,Auto,*" ColumnSpacing="6" Margin="0,0,6,0">
                           <ContentControl Content="{Binding Source='table', Converter={x:Static icons:IconKeyConverter.Instance}, ConverterParameter=14}" VerticalAlignment="Center" />
-                          <TextBlock Text="{Binding Table}" VerticalAlignment="Center" FontSize="{DynamicResource OrandaFontSizeBase}" />
-                        </StackPanel>
+                          <TextBlock x:Name="RuleHeaderText" Grid.Column="1" Text="{Binding SourceName}" VerticalAlignment="Center" FontSize="{DynamicResource OrandaFontSizeBase}"
+                                     TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding SourceName}" />
+                          <TextBlock Grid.Column="2" Text="{Binding SynonymText}" IsVisible="{Binding HasSynonym}" Classes="dim" FontSize="{DynamicResource OrandaFontSizeSmall}"
+                                     VerticalAlignment="Center" TextTrimming="CharacterEllipsis" AutomationProperties.Name="더할 때 적은 시노님"
+                                     ToolTip.Tip="이 이름(시노님)으로 더했습니다. 복사는 저장된 실제 표로 합니다." />
+                        </Grid>
                       </DockPanel>
                     </Border>
                     <ScrollViewer DataContext="{Binding SelectedRule}" x:DataType="dc:TableRuleViewModel" HorizontalScrollBarVisibility="Disabled"
                                   IsVisible="{Binding ., Converter={x:Static ObjectConverters.IsNotNull}}">
                       <StackPanel Spacing="5" Margin="8,6,10,8">
-                        <Grid ColumnDefinitions="68,*" RowDefinitions="Auto,Auto,Auto" ColumnSpacing="6" RowSpacing="4" Classes="form">
-                          <TextBlock Text="규칙" />
-                          <ComboBox x:Name="KindBox" Grid.Column="1" Classes="compact" HorizontalAlignment="Stretch" AutomationProperties.Name="규칙 종류"
+                        <Grid ColumnDefinitions="68,*" RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto" ColumnSpacing="6" RowSpacing="4" Classes="form">
+                          <!-- 원본 계정(바꾸려면 표를 다시 더한다) · 대상 계정(고르거나 적는다) -->
+                          <TextBlock Text="원본 계정" />
+                          <TextBlock x:Name="RuleSourceOwnerText" Grid.Column="1" Text="{Binding SourceOwner}" Classes="mono" VerticalAlignment="Center"
+                                     AutomationProperties.Name="원본 계정" ToolTip.Tip="원본 계정은 바꿀 수 없습니다. 다른 계정의 표는 계정.표로 다시 추가하세요." />
+                          <TextBlock Grid.Row="1" Text="대상 계정" />
+                          <!-- 글자는 코드(SyncRulePanel)가 고른 규칙과 맞춘다: 바인딩으로 두면 규칙을 바꾸는 순간 앞 규칙에 새 규칙 값이 써진다. -->
+                          <ComboBox x:Name="TargetOwnerBox" Grid.Row="1" Grid.Column="1" Classes="compact" HorizontalAlignment="Stretch" IsEditable="True"
+                                    AutomationProperties.Name="대상 계정"
+                                    ToolTip.Tip="이 표를 넣을 대상 계정입니다. 고르거나 직접 적습니다.">
+                            <ComboBox.ItemTemplate>
+                              <DataTemplate x:DataType="dc:TargetOwnerOption">
+                                <StackPanel Orientation="Horizontal" Spacing="8">
+                                  <TextBlock Text="{Binding Owner}" Classes="mono" VerticalAlignment="Center" />
+                                  <TextBlock Text="{Binding Hint}" Classes="dim" FontSize="{DynamicResource OrandaFontSizeSmall}" VerticalAlignment="Center" />
+                                </StackPanel>
+                              </DataTemplate>
+                            </ComboBox.ItemTemplate>
+                          </ComboBox>
+                          <TextBlock x:Name="OtherTargetOwnerText" Grid.Row="2" Grid.Column="1" Text="{Binding OtherTargetOwnerNotice}" IsVisible="{Binding IsOtherTargetOwner}"
+                                     Classes="warning-text" TextWrapping="Wrap" FontSize="{DynamicResource OrandaFontSizeSmall}" AutomationProperties.Name="다른 계정 안내" />
+                          <TextBlock Grid.Row="3" Text="규칙" />
+                          <ComboBox x:Name="KindBox" Grid.Row="3" Grid.Column="1" Classes="compact" HorizontalAlignment="Stretch" AutomationProperties.Name="규칙 종류"
                                     ToolTip.Tip="어떤 행을 복사할지 고릅니다. WHERE 절을 직접 쓰려면 「직접 조건」, 기간에 조건을 더하려면 「기간」의 추가 조건을 씁니다.">
                             <ComboBox.ItemTemplate>
                               <DataTemplate x:DataType="core:RuleKind">
@@ -404,13 +434,13 @@
                               </DataTemplate>
                             </ComboBox.ItemTemplate>
                           </ComboBox>
-                          <TextBlock Grid.Row="1" Text="대상 처리" />
-                          <ComboBox x:Name="ActionBox" Grid.Row="1" Grid.Column="1" Classes="compact" HorizontalAlignment="Stretch" AutomationProperties.Name="대상 처리">
+                          <TextBlock Grid.Row="4" Text="대상 처리" />
+                          <ComboBox x:Name="ActionBox" Grid.Row="4" Grid.Column="1" Classes="compact" HorizontalAlignment="Stretch" AutomationProperties.Name="대상 처리">
                             <ComboBox.ItemTemplate>
                               <DataTemplate x:DataType="core:TargetAction"><TextBlock Text="{Binding ., Converter={x:Static dc:DataCopyConverters.ActionText}}" /></DataTemplate>
                             </ComboBox.ItemTemplate>
                           </ComboBox>
-                          <TextBlock Grid.Row="2" Grid.Column="1" Text="원본에서 지워진 행은 MERGE 가 남깁니다" IsVisible="{Binding IsMerge}" Classes="dim" TextWrapping="Wrap"
+                          <TextBlock Grid.Row="5" Grid.Column="1" Text="원본에서 지워진 행은 MERGE 가 남깁니다" IsVisible="{Binding IsMerge}" Classes="dim" TextWrapping="Wrap"
                                      FontSize="{DynamicResource OrandaFontSizeSmall}" />
                         </Grid>
 
@@ -456,7 +486,7 @@
                           <TextBlock Classes="section-label" Text="부모 테이블(FK)" Margin="0,4,0,0" />
                           <ComboBox Classes="compact" ItemsSource="{Binding ParentCandidates}" SelectedItem="{Binding Parent}" HorizontalAlignment="Stretch" AutomationProperties.Name="부모 키 연결">
                             <ComboBox.ItemTemplate>
-                              <DataTemplate x:DataType="core:ParentLink"><TextBlock Text="{Binding ParentTable}" /></DataTemplate>
+                              <DataTemplate x:DataType="core:ParentLink"><TextBlock Text="{Binding ., Converter={x:Static dc:DataCopyConverters.ParentLinkText}}" /></DataTemplate>
                             </ComboBox.ItemTemplate>
                           </ComboBox>
                         </StackPanel>
@@ -579,7 +609,7 @@
                         <ContentControl Content="{Binding IconKey, Converter={x:Static icons:IconKeyConverter.Instance}, ConverterParameter=14}" VerticalAlignment="Center" />
                         <TextBlock Text="{Binding LevelText}" FontWeight="SemiBold" Classes="level" Classes.error="{Binding IsError}"
                                    Classes.confirm="{Binding IsConfirm}" Classes.pass="{Binding IsPass}" />
-                        <TextBlock Text="{Binding Table}" Classes="mono" Opacity="0.8" />
+                        <TextBlock Text="{Binding TableText}" Classes="mono" Opacity="0.8" />
                         <TextBlock Text="{Binding Code}" Classes="mono dim" FontSize="{DynamicResource OrandaFontSizeSmall}" VerticalAlignment="Center"
                                    ToolTip.Tip="점검 항목 코드" AutomationProperties.Name="점검 항목 코드" />
                       </StackPanel>

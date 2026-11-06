@@ -33,9 +33,14 @@ public partial class DataCopyWindow
 
     private static string OneLine(string text) => string.Join(' ', text.Split((char[])['\r', '\n', '\t', ' '], StringSplitOptions.RemoveEmptyEntries));
 
+    /// <summary>규칙 표 열(묶음 B 설계 8장): 원본 계정 | 테이블 | 대상 계정 | 규칙 | 대상 처리 | 조건. 2 = 대상 계정(흐린 글자·경고색 칸 번호).</summary>
+    private const int TargetOwnerColumn = 2;
+
     private static MonitorColumn<TableRuleViewModel>[] RuleColumns() =>
     [
+        new(L("원본 계정"), ColumnDataKind.Text, r => r.SourceOwner),
         new(L("테이블"), ColumnDataKind.Text, r => r.Table),
+        new(L("대상 계정"), ColumnDataKind.Text, r => r.IsOtherTargetOwner ? r.TargetOwner + " (!)" : r.TargetOwner),
         new(L("규칙"), ColumnDataKind.Text, r => Text(DataCopyConverters.RuleKindText, r.Kind)),
         new(L("대상 처리"), ColumnDataKind.Text, r => Text(DataCopyConverters.ActionText, r.Action)),
         new(L("조건"), ColumnDataKind.Text, r => L(r.ConditionText)),
@@ -44,7 +49,7 @@ public partial class DataCopyWindow
     private static MonitorColumn<CheckItemViewModel>[] CheckColumns() =>
     [
         new(L("수준"), ColumnDataKind.Text, c => L(c.LevelText)),
-        new(L("테이블"), ColumnDataKind.Text, c => c.Table),
+        new(L("테이블"), ColumnDataKind.Text, c => c.TableText),
         new(L("항목"), ColumnDataKind.Text, c => L(c.CodeText)),
         new(L("내용"), ColumnDataKind.Text, c => OneLine(c.Message)),
     ];
@@ -72,8 +77,8 @@ public partial class DataCopyWindow
     /// <summary>테이블별 진행 열. 5 = 건수 비교, 6 = 결과(색 칸 번호).</summary>
     private static MonitorColumn<TableRunRowViewModel>[] RunColumns() =>
     [
-        new(L("테이블"), ColumnDataKind.Text, r => r.Table),
-        new(L("진행"), ColumnDataKind.Text, ProgressText),
+        new(L("테이블"), ColumnDataKind.Text, r => r.Display),
+        new(L("진행"),ColumnDataKind.Text, ProgressText),
         new(L("단계"), ColumnDataKind.Text, r => L(r.Phase)),
         new(L("원본 건수"), ColumnDataKind.Number, r => r.SourceRows),
         new(L("대상 건수"), ColumnDataKind.Number, r => r.TargetRows),
@@ -83,7 +88,7 @@ public partial class DataCopyWindow
 
     private static MonitorColumn<FailedRowViewModel>[] FailedColumns() =>
     [
-        new(L("테이블"), ColumnDataKind.Text, f => f.Table),
+        new(L("테이블"), ColumnDataKind.Text, f => f.Display),
         new(L("키"), ColumnDataKind.Text, f => f.KeyText),
         new(L("오류"), ColumnDataKind.Text, f => OneLine(f.Error)),
     ];
@@ -98,6 +103,8 @@ public partial class DataCopyWindow
 
         var editor = vm.Editor;
         _ruleGrid = Bind(RuleGrid, RuleColumns(), r => r);
+        _ruleGrid.CellMuted = (r, col) => col == TargetOwnerColumn && r.IsTargetSameAsSource && !r.IsOtherTargetOwner; // 원본과 같은 계정: 흐린 글자
+        _ruleGrid.CellWarning = (r, col) => col == TargetOwnerColumn && r.IsOtherTargetOwner; // 접속 계정이 아닌 계정에 씀: 경고색
         _ruleGrid.Attach(editor.Rules, editor, nameof(RuleEditorViewModel.SelectedRule), () => editor.SelectedRule, r => editor.SelectedRule = r);
         RefreshOnChange(editor.Rules, _ruleGrid.Refresh);
         RuleGrid.ExtraMenuItems = RuleMenuItems;

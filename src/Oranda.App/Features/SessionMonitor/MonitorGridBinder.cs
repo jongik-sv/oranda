@@ -57,6 +57,9 @@ public sealed class MonitorGridBinder<T> where T : class
     /// <summary>(항목, 열 번호)를 받아 참이면 그 칸을 주의색 글자로 그린다(느린 plan_hash·미승인 baseline). 위험색이 먼저. 행을 채우기 전에 정한다.</summary>
     public Func<T, int, bool>? CellWarning { get; set; }
 
+    /// <summary>(항목, 열 번호)를 받아 참이면 그 칸을 흐린 글자로 그린다(복사 규칙 표의 원본과 같은 대상 계정). 위험·주의색이 먼저.</summary>
+    public Func<T, int, bool>? CellMuted { get; set; }
+
     /// <summary>
     /// 선택 묶음 키(없으면 행 키). 화면 모델이 항목을 고르면 같은 묶음의 행을 모두 고르고 ▶ 를 그 가운데 첫 행에 둔다
     /// (Lock 모니터 잠금 목록: 고른 세션의 잠금 전부). 그리드의 현재 행이 이미 같은 묶음이면 그대로 둔다.
@@ -169,6 +172,11 @@ public sealed class MonitorGridBinder<T> where T : class
         if (CellWarning is { } warning)
         {
             m.CellWarning = (viewRow, ordinal) => m.SourceRowOf(viewRow) is var src && src >= 0 && src < items.Count && warning(items[(int)src], ordinal);
+        }
+
+        if (CellMuted is { } muted)
+        {
+            m.CellMuted = (viewRow, ordinal) => m.SourceRowOf(viewRow) is var src && src >= 0 && src < items.Count && muted(items[(int)src], ordinal);
         }
 
         var old = _grid.Model;
