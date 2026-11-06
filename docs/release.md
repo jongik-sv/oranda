@@ -7,7 +7,7 @@
 | 채널 | 만드는 작업 | 올라가는 파일 |
 |---|---|---|
 | `win` | `windows` (windows-latest) | `Oranda-win-Setup.exe`, `Oranda-win-Portable.zip`, `Oranda-<버전>-full.nupkg`(+ 이전 릴리스가 있으면 `-delta.nupkg`), `releases.win.json`, `RELEASES`, `assets.win.json` |
-| `osx` | `macos` (macos-14, arm64) | `Oranda-osx-Setup.pkg`, `Oranda-osx-Portable.zip`, `Oranda-<버전>-osx-full.nupkg`(+ delta), `releases.osx.json`, `assets.osx.json` |
+| `osx` | `macos` (macos-15, arm64) | `Oranda-osx-Setup.pkg`, `Oranda-osx-Portable.zip`, `Oranda-<버전>-osx-full.nupkg`(+ delta), `releases.osx.json`, `assets.osx.json` |
 
 Windows 줄은 2026-10-25 로컬 `vpk pack --channel win` 결과다. macOS 줄의 nupkg 이름(채널 접미사 `-osx`, Windows 기본 채널만 접미사 없음)은 Velopack 명명 규칙에서 옮긴 것으로 아직 맥 실행으로 확인하지 않았다. 두 채널의 full nupkg 이름이 같으면 한 릴리스에 올릴 때 겹치므로 첫 릴리스에서 확인한다.
 

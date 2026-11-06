@@ -232,14 +232,14 @@ internal sealed class CopyDbScope : IAsyncDisposable
 
     private async Task<OracleConnection> OpenAdminAsync()
     {
-        var conn = new OracleConnection(new ConnectionProfile("admin", "system", _dataSource).BuildConnectionString(_systemPassword));
+        var conn = new ConnectionProfile("admin", "system", _dataSource).CreateConnection(_systemPassword);
         await conn.OpenAsync();
         return conn;
     }
 
     private async Task ExecAsAsync(string user, string sql)
     {
-        await using var conn = new OracleConnection(new ConnectionProfile("direct", user, _dataSource).BuildConnectionString(Password));
+        await using var conn = new ConnectionProfile("direct", user, _dataSource).CreateConnection(Password);
         await conn.OpenAsync();
         await ExecAsync(conn, sql);
     }

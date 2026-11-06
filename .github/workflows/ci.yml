@@ -159,7 +159,7 @@ jobs:
 
   macos:
     name: macos-arm64 (build, unit, ui, package)
-    runs-on: macos-14
+    runs-on: macos-15
     env:
       HAS_APPLE_SECRETS: ${{ secrets.APPLE_CERTIFICATE_P12_BASE64 != '' }}
       IS_RELEASE: ${{ startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch' }}
