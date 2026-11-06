@@ -45,7 +45,7 @@ public partial class DataCopyWindow
     [
         new(L("수준"), ColumnDataKind.Text, c => L(c.LevelText)),
         new(L("테이블"), ColumnDataKind.Text, c => c.Table),
-        new(L("항목"), ColumnDataKind.Text, c => c.Code),
+        new(L("항목"), ColumnDataKind.Text, c => L(c.CodeText)),
         new(L("내용"), ColumnDataKind.Text, c => OneLine(c.Message)),
     ];
 

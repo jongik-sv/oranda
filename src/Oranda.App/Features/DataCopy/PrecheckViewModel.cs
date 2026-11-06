@@ -57,6 +57,37 @@ public sealed partial class SequenceLinkViewModel(SequenceRule rule, bool isLink
 /// <summary>점검 결과 한 줄.</summary>
 public sealed class CheckItemViewModel
 {
+    // PrecheckRules·CopyPrecheckService 가 만드는 CheckItem 코드 → 한국어 이름(영어는 Resources/literals-en.json).
+    private static readonly Dictionary<string, string> CodeNames = new(StringComparer.Ordinal)
+    {
+        ["ChildRowsMayBlock"] = "자식 행이 지우기를 막음",
+        ["ColumnNotInTarget"] = "대상에 없는 열",
+        ["FkCycle"] = "외래키 순환",
+        ["IdentityAlways"] = "IDENTITY 열",
+        ["MaskedColumns"] = "마스킹 열",
+        ["MaskOnKey"] = "키 열 마스킹",
+        ["NarrowerType"] = "대상 열이 좁음",
+        ["NoPrimaryKey"] = "기본키 없음",
+        ["ParentExcluded"] = "부모 표 제외",
+        ["ReadConsistency"] = "같은 시점 읽기",
+        ["RecreateBlocked"] = "다시 만들기 막힘",
+        ["RecreateNoPrivilege"] = "다시 만들기 권한 없음",
+        ["RecreateNotAllowed"] = "다시 만들기 쓸 수 없음",
+        ["RecreateTable"] = "테이블 다시 만들기",
+        ["RuleInvalid"] = "규칙 오류",
+        ["SameSourceTarget"] = "원본과 대상이 같음",
+        ["SequenceGap"] = "시퀀스",
+        ["SourceNoSelect"] = "원본 읽기 권한 없음",
+        ["TargetMissing"] = "대상 표 없음",
+        ["TargetNoWrite"] = "대상 쓰기 권한 없음",
+        ["TargetOnlyConstraint"] = "대상에만 있는 제약",
+        ["TargetProduction"] = "운영 대상",
+        ["TargetRequiredColumnMissing"] = "필수 열 값 없음",
+        ["TargetTriggers"] = "대상 트리거",
+        ["UnsupportedType"] = "지원하지 않는 형식",
+        ["WrongLengthDates"] = "날짜 길이 다름",
+    };
+
     public CheckItemViewModel(CheckItem item, IReadOnlyList<CheckChoiceViewModel> choices)
     {
         Item = item;
@@ -67,6 +98,9 @@ public sealed class CheckItemViewModel
         }
     }
 
+    /// <summary>점검 항목 코드 → 한국어 이름 표. 시험이 문구 표(영어)와 맞는지 본다.</summary>
+    public static IReadOnlyDictionary<string, string> CodeNameTable => CodeNames;
+
     public CheckItem Item { get; }
 
     public CheckLevel Level => Item.Level;
@@ -75,7 +109,11 @@ public sealed class CheckItemViewModel
 
     public string? Table => Item.Table;
 
+    /// <summary>점검 항목 코드(Oracle 점검이 정한 이름). 그리드에는 <see cref="CodeText"/> 를 보이고 코드는 상세 칸에 작게 남긴다.</summary>
     public string Code => Item.Code;
+
+    /// <summary>점검 항목의 사람이 읽는 이름(그리드 「항목」 칸). 모르는 코드면 코드 그대로. 영어 화면은 문구 표가 바꾼다.</summary>
+    public string CodeText => CodeNames.TryGetValue(Item.Code, out var name) ? name : Item.Code;
 
     public IReadOnlyList<CheckChoiceViewModel> Choices { get; }
 

@@ -570,6 +570,8 @@
                         <TextBlock Text="{Binding LevelText}" FontWeight="SemiBold" Classes="level" Classes.error="{Binding IsError}"
                                    Classes.confirm="{Binding IsConfirm}" Classes.pass="{Binding IsPass}" />
                         <TextBlock Text="{Binding Table}" Classes="mono" Opacity="0.8" />
+                        <TextBlock Text="{Binding Code}" Classes="mono dim" FontSize="{DynamicResource OrandaFontSizeSmall}" VerticalAlignment="Center"
+                                   ToolTip.Tip="점검 항목 코드" AutomationProperties.Name="점검 항목 코드" />
                       </StackPanel>
                       <SelectableTextBlock Text="{Binding Message}" TextWrapping="Wrap" />
                       <!-- 시퀀스 후보: 켜면 작업에 연결해 저장하고 다시 점검한다 -->

@@ -300,11 +300,11 @@ public sealed class DataCopyRenderTests : IDisposable
         var h = new DataCopyHarness();
         var items = new[]
         {
-            new CheckItem("ORDERS", "TRIGGERS", CheckLevel.Confirm, "대상 트리거 TRG_ORDERS 가 복사한 행에도 실행됩니다.") { Choices = [CheckChoice.DisableTriggers] },
-            new CheckItem("ORDER_ITEMS", "FK_CHILD", CheckLevel.Confirm, "대상의 자식 테이블이 이 테이블을 참조합니다(ORA-02292 예상). 대상 처리를 MERGE 로 바꾸세요.")
+            new CheckItem("ORDERS", "TargetTriggers", CheckLevel.Confirm, "대상 트리거 TRG_ORDERS 가 복사한 행에도 실행됩니다.") { Choices = [CheckChoice.DisableTriggers] },
+            new CheckItem("ORDER_ITEMS", "ChildRowsMayBlock", CheckLevel.Confirm, "대상의 자식 테이블이 이 테이블을 참조합니다(ORA-02292 예상). 대상 처리를 MERGE 로 바꾸세요.")
                 { Choices = [CheckChoice.SwitchToMerge] },
-            new CheckItem("CODES", "COLUMN_MISSING", CheckLevel.Error, "원본에 없는 NOT NULL 열 CODE_GRP 가 대상에 있습니다."),
-            new CheckItem(null, "READ", CheckLevel.Pass, "원본 SELECT 권한을 확인했습니다."),
+            new CheckItem("CODES", "TargetRequiredColumnMissing", CheckLevel.Error, "원본에 없는 NOT NULL 열 CODE_GRP 가 대상에 있습니다."),
+            new CheckItem(null, "ReadConsistency", CheckLevel.Pass, "예상 읽기 시간이 원본 UNDO_RETENTION 안에 끝납니다."),
         };
         var preview = new[]
         {
@@ -326,7 +326,12 @@ public sealed class DataCopyRenderTests : IDisposable
             Assert.False(window.FindControl<Button>("RunButton")!.IsEffectivelyEnabled); // 오류가 있어 꺼진다
             Assert.False(window.FindControl<Button>("ToPrecheckButton")!.IsEffectivelyVisible);
             Assert.Equal("ORDERS", vm.Precheck.SelectedItem?.Table); // 첫 「확인 필요」를 골라 상세 칸에 고를 거리가 보인다
-            Assert.Equal(4, window.FindControl<MonitorGrid>("CheckGrid")!.Model!.RowCount);
+            var checks = window.FindControl<MonitorGrid>("CheckGrid")!.Model!;
+            Assert.Equal(4, checks.RowCount);
+            // 「항목」 칸은 사람이 읽는 이름, 코드는 상세 칸에만.
+            var names = Enumerable.Range(0, 4).Select(r => checks.GetCellText(r, 2)).ToList();
+            Assert.Contains("대상 트리거", names);
+            Assert.DoesNotContain("TargetTriggers", names);
             AssertFillsWidth(window.FindControl<MonitorGrid>("SqlGrid")!);
             AssertNotClipped(window, "사전 점검");
             Shots(window, "2-precheck");

@@ -21,6 +21,38 @@ public sealed class PrecheckStepTests
     private static CopySessions Sessions() => new(new FakeSession(), new FakeSession());
 
     [Fact]
+    public void Check_item_shows_readable_name_and_keeps_unknown_code()
+    {
+        var known = new CheckItemViewModel(new CheckItem("ORDERS", "TargetTriggers", CheckLevel.Confirm, "트리거"), []);
+        Assert.Equal("대상 트리거", known.CodeText);
+        Assert.Equal("TargetTriggers", known.Code); // 코드는 상세 칸에 남긴다
+
+        var unknown = new CheckItemViewModel(new CheckItem("ORDERS", "SomethingNew", CheckLevel.Pass, "새 점검"), []);
+        Assert.Equal("SomethingNew", unknown.CodeText);
+    }
+
+    [Fact]
+    public void Every_check_code_has_a_name_and_an_english_literal()
+    {
+        // Oracle 점검(PrecheckRules·CopyPrecheckService)이 만드는 코드를 소스에서 모아 이름 표와 맞춘다.
+        var dir = new DirectoryInfo(AppContext.BaseDirectory);
+        while (dir is not null && dir.GetFiles("Oranda.sln*").Length == 0)
+        {
+            dir = dir.Parent;
+        }
+
+        Assert.NotNull(dir);
+        var copyDir = Path.Combine(dir.FullName, "src", "Oranda.Oracle", "Transfer", "Copy");
+        var codes = Directory.GetFiles(copyDir, "*.cs")
+            .SelectMany(f => System.Text.RegularExpressions.Regex.Matches(File.ReadAllText(f), @"new CheckItem\([^,]+,\s*""(?<code>[A-Za-z]+)""").Select(m => m.Groups["code"].Value))
+            .ToHashSet(StringComparer.Ordinal);
+
+        Assert.NotEmpty(codes);
+        Assert.Empty(codes.Where(c => !CheckItemViewModel.CodeNameTable.ContainsKey(c)));
+        Assert.Empty(CheckItemViewModel.CodeNameTable.Values.Where(n => !Oranda.App.Features.Localization.LiteralTranslator.Table.ContainsKey(n)));
+    }
+
+    [Fact]
     public async Task Opening_job_whose_target_is_production_clears_target()
     {
         var h = new DataCopyHarness();
