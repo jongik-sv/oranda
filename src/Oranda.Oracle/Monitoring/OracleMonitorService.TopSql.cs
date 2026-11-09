@@ -5,6 +5,8 @@ using Oranda.Core.Plans;
 using Oranda.Core.Sessions;
 using Oranda.Oracle.Catalog;
 using Oranda.Oracle.Sessions;
+using static Oranda.Core.Catalog.Providers.CatalogValues;
+using static Oranda.Core.Monitoring.Providers.MonitorRows;
 
 namespace Oranda.Oracle.Monitoring;
 
@@ -15,9 +17,6 @@ namespace Oranda.Oracle.Monitoring;
 /// </summary>
 internal sealed partial class OracleMonitorService
 {
-    /// <summary>미리보기 글자 수 상한.</summary>
-    internal const int TopSqlPreviewLength = 200;
-
     private static readonly Lazy<SqlCatalog> TopSqlCatalog = new(EmbeddedCatalog.Load);
 
     public async Task<IReadOnlyList<TopSqlRow>> GetTopSqlAsync(ISession monitor, TopSqlCriteria c, CancellationToken ct)
@@ -37,7 +36,7 @@ internal sealed partial class OracleMonitorService
             TopSqlNumber(cmd, "active_secs", c.ActiveWithin is { } w ? Math.Max(1, Math.Round(w.TotalSeconds)) : null);
         }, ct);
 
-        return [.. rows.Select(TopSqlToRow)];
+        return [.. rows.Select(ToTopSqlRow)];
     }
 
     public async Task<SqlDetail> GetSqlDetailAsync(ISession monitor, CursorRef cursor, CancellationToken ct)
@@ -63,47 +62,6 @@ internal sealed partial class OracleMonitorService
         }, ct);
 
         return new SqlDetail(cursor, fullText) { Binds = TopSqlBinds(binds) };
-    }
-
-    /// <summary>바인드 행(이름·위치·형·값·캡처 시각·캡처 여부)을 위치 순으로 모은다. 자식이 여럿이면 같은 위치는 최근 캡처만 남긴다.</summary>
-    internal static IReadOnlyList<CapturedBind> TopSqlBinds(IEnumerable<object?[]> rows)
-    {
-        var byPosition = new SortedDictionary<int, CapturedBind>();
-        foreach (var r in rows)
-        {
-            var position = Int(r[1]) ?? 0;
-            var captured = r[4] is DateTime dt ? new DateTimeOffset(DateTime.SpecifyKind(dt, DateTimeKind.Unspecified), TimeSpan.Zero) : (DateTimeOffset?)null;
-            var wasCaptured = !string.Equals(Str(r[5]), "NO", StringComparison.OrdinalIgnoreCase);
-            var bind = new CapturedBind(Str(r[0]) ?? string.Empty, position, Str(r[2]), wasCaptured ? Str(r[3]) : null) { CapturedAt = captured };
-            if (!byPosition.TryGetValue(position, out var old) || (bind.CapturedAt ?? DateTimeOffset.MinValue) >= (old.CapturedAt ?? DateTimeOffset.MinValue))
-            {
-                byPosition[position] = bind;
-            }
-        }
-
-        return [.. byPosition.Values];
-    }
-
-    private static TopSqlRow TopSqlToRow(object?[] r)
-    {
-        var preview = (Str(r[3]) ?? string.Empty).ReplaceLineEndings(" ").Trim();
-        if (preview.Length > TopSqlPreviewLength)
-        {
-            preview = preview[..TopSqlPreviewLength];
-        }
-
-        return new TopSqlRow(new CursorRef(Str(r[1]) ?? string.Empty, Int(r[2]), Int(r[0])), preview)
-        {
-            Executions = Long(r[4]) ?? 0,
-            ElapsedSeconds = (Long(r[5]) ?? 0) / 1_000_000d,
-            CpuSeconds = (Long(r[6]) ?? 0) / 1_000_000d,
-            BufferGets = Long(r[7]) ?? 0,
-            DiskReads = Long(r[8]) ?? 0,
-            RowsProcessed = Long(r[9]) ?? 0,
-            ParsingSchema = Str(r[10]),
-            Module = Str(r[11]),
-            LastActiveTime = r[12] is DateTime dt ? new DateTimeOffset(DateTime.SpecifyKind(dt, DateTimeKind.Unspecified), TimeSpan.Zero) : null,
-        };
     }
 
     private static void TopSqlNumber(OracleCommand c, string name, double? value) =>

@@ -9,6 +9,7 @@ using Oranda.Core.Plans;
 using Oranda.Core.Security;
 using Oranda.Core.Sessions;
 using Oranda.Core.Tuning;
+using Oranda.Core.Tuning.Providers;
 using Oranda.Language;
 using Oranda.Oracle.Catalog;
 using Oranda.Oracle.Connection;
@@ -23,7 +24,7 @@ namespace Oranda.Oracle.IntegrationTests.Tuning;
 
 // 소유: TSK-06-02. 튜닝 조회 서비스.
 
-/// <summary>DB 없이 도는 부분: 벤치마크 문장 거르기, 사유 펼치기, 버킷·비율 계산, 트레이스 가능 버전, 세션 거부.</summary>
+/// <summary>DB 없이 도는 부분: 벤치마크 문장 거르기(실제 언어 서비스), 트레이스 가능 버전, 세션 거부. (행 조립은 Core.Tests TuningRowsTests 로 옮겼다.)</summary>
 public class TuningLogicTests
 {
     private static readonly LanguageService Language = new();
@@ -40,7 +41,7 @@ public class TuningLogicTests
     [InlineData("select /* hint */ count(*) from dual")]
     public void Select_and_with_queries_are_accepted(string sql)
     {
-        var stmt = OracleTuningService.BenchmarkStatement(Language, sql);
+        var stmt = Benchmark.Statement(Language, sql);
 
         Assert.Equal(StatementKind.Query, stmt.Kind);
     }
@@ -61,60 +62,7 @@ public class TuningLogicTests
     [InlineData("EXPLAIN PLAN FOR SELECT 1 FROM dual")]
     public void Anything_but_one_plain_select_is_rejected(string sql)
     {
-        Assert.Throws<ArgumentException>(() => OracleTuningService.BenchmarkStatement(Language, sql));
-    }
-
-    [Fact]
-    public void Shared_cursor_rows_unfold_to_one_reason_per_y_column()
-    {
-        string[] names = ["SQL_ID", "ADDRESS", "CHILD_ADDRESS", "CHILD_NUMBER", "UNBOUND_CURSOR", "BIND_MISMATCH", "OPTIMIZER_MISMATCH", "REASON", "CON_ID"];
-        var rows = new List<object?[]>
-        {
-            new object?[] { "abc", new byte[] { 1 }, new byte[] { 2 }, 1m, "N", "Y", "Y", "<ChildNode/>", 3m },
-            new object?[] { "abc", new byte[] { 1 }, new byte[] { 3 }, 0m, "N", "N", "N", null, 3m },
-            new object?[] { "Y", new byte[] { 1 }, new byte[] { 4 }, 2m, "Y", "N", "N", "  ", 3m },
-        };
-
-        var reasons = OracleTuningService.ToReasons(names, rows);
-
-        Assert.Equal([(1, "BIND_MISMATCH"), (1, "OPTIMIZER_MISMATCH"), (2, "UNBOUND_CURSOR")], reasons.Select(r => (r.ChildNumber, r.Reason)));
-        Assert.Equal("<ChildNode/>", reasons[0].Detail);
-        Assert.Null(reasons[2].Detail); // 빈 reason 은 상세 없음. SQL_ID 값 "Y" 는 사유가 아니다.
-    }
-
-    [Fact]
-    public void Shared_cursor_without_reason_column_on_11g_still_unfolds()
-    {
-        string[] names = ["INST_ID", "SQL_ID", "CHILD_NUMBER", "ROLL_INVALID_MISMATCH"];
-
-        var reasons = OracleTuningService.ToReasons(names, [new object?[] { 1m, "a", 4m, "Y" }]);
-
-        var r = Assert.Single(reasons);
-        Assert.Equal(4, r.ChildNumber);
-        Assert.Equal("ROLL_INVALID_MISMATCH", r.Reason);
-        Assert.Null(r.Detail);
-        Assert.Empty(OracleTuningService.ToReasons(names, []));
-    }
-
-    [Fact]
-    public void Histogram_frequency_is_difference_from_previous_endpoint()
-    {
-        var buckets = OracleTuningService.ToBuckets([(9000, "1"), (9100, "2"), (9100, "3"), (10000, null)]);
-
-        Assert.Equal([9000L, 100, 0, 900], buckets.Select(b => b.Frequency));
-        Assert.Null(buckets[3].EndpointValue);
-        Assert.Empty(OracleTuningService.ToBuckets([]));
-        Assert.Equal(0, OracleTuningService.ToBuckets([(5, "a"), (3, "b")])[1].Frequency); // 뒤집힌 순서는 0
-    }
-
-    [Fact]
-    public void Ash_share_is_ratio_of_samples()
-    {
-        var rows = OracleTuningService.ToAshRows([("ON CPU", null, 3), ("db file sequential read", "User I/O", 1)]);
-
-        Assert.Equal(0.75, rows[0].Share, 3);
-        Assert.Equal(0.25, rows[1].Share, 3);
-        Assert.Equal(0, OracleTuningService.ToAshRows([("x", null, 0)])[0].Share);
+        Assert.Throws<ArgumentException>(() => Benchmark.Statement(Language, sql));
     }
 
     [Theory]
@@ -136,15 +84,6 @@ public class TuningLogicTests
         }
     }
 
-    [Theory]
-    [InlineData("/opt/oracle/diag/rdbms/free/FREE/trace/FREE_ora_12.trc", "FREE_ora_12.trc")]
-    [InlineData(@"C:\app\diag\rdbms\orcl\orcl\trace\orcl_ora_7.trc", "orcl_ora_7.trc")]
-    [InlineData("plain.trc", "plain.trc")]
-    public void Trace_file_name_drops_the_directory(string path, string name)
-    {
-        Assert.Equal(name, OracleTuningService.TraceFileName(path));
-    }
-
     [Fact]
     public async Task Non_oracle_session_and_bad_arguments_are_rejected_before_any_driver_call()
     {
@@ -156,7 +95,7 @@ public class TuningLogicTests
         await Assert.ThrowsAsync<ArgumentException>(() => service.GetChildPlanAsync(session, new CursorRef("abc"), "TYPICAL", default));
         await Assert.ThrowsAsync<ArgumentException>(() => service.RunBenchmarkAsync(session, new BenchmarkCase("x", "DELETE FROM t"), 1, default));
         await Assert.ThrowsAsync<ArgumentOutOfRangeException>(() => service.RunBenchmarkAsync(session, new BenchmarkCase("x", "SELECT 1 FROM dual"), 0, default));
-        await Assert.ThrowsAsync<ArgumentOutOfRangeException>(() => service.RunBenchmarkAsync(session, new BenchmarkCase("x", "SELECT 1 FROM dual"), OracleTuningService.MaxIterations + 1, default));
+        await Assert.ThrowsAsync<ArgumentOutOfRangeException>(() => service.RunBenchmarkAsync(session, new BenchmarkCase("x", "SELECT 1 FROM dual"), Benchmark.MaxIterations + 1, default));
         await Assert.ThrowsAsync<NotSupportedException>(() => service.ReadTraceLinesAsync(session, new TraceFileInfo("/x.trc", false, "11g"), default));
         Assert.Equal(0, session.DriverTouches);
     }

@@ -14,34 +14,7 @@ using Oranda.Oracle.Tuning;
 
 namespace Oranda.Oracle.IntegrationTests.Tuning;
 
-// 소유: TSK-14-17. 튜닝 추천 후보 조회(gv$sqlstats·리터럴 묶음·계획 줄).
-
-/// <summary>DB 없이 도는 부분: sql_id 목록 다듬기, 행 매핑.</summary>
-public class TuningRecommendLogicTests
-{
-    [Fact]
-    public void Sql_id_list_drops_blanks_duplicates_and_non_identifiers()
-    {
-        Assert.Null(OracleTuningService.SqlIdList(null));
-        Assert.Null(OracleTuningService.SqlIdList([" ", "a'b"]));
-        Assert.Equal("abc,def", OracleTuningService.SqlIdList(["abc", " abc ", "def", "x,y"]));
-        Assert.Equal(OracleTuningService.MaxSqlIds, OracleTuningService.SqlIdList([.. Enumerable.Range(0, 300).Select(i => "id" + i)])!.Split(',').Length);
-    }
-
-    [Fact]
-    public void Rows_map_by_catalog_column_order()
-    {
-        var c = OracleTuningService.ToCandidate([1m, "abc", 42m, "SELECT 1", 3m, 4m, 5m, 6m, 7m, 8m, 9m, 10m, "17415914164128958688", 11m, 12m, 13m, 14m, null, 99m, "APP_OWNER"]);
-        Assert.Equal(("abc", 1, 42L, 3L, 4L, 10L, "17415914164128958688", "APP_OWNER"), (c.SqlId, c.InstanceId, c.PlanHashValue, c.Executions, c.ElapsedMicros, c.VersionCount, c.ForceMatchingSignature, c.ParsingSchema));
-        Assert.Equal(14, c.ClusterWaitMicros);
-
-        var g = OracleTuningService.ToLiteralGroup(["123", 12m, 100m, 200m, 150m, 300m, 0m, 50m, 100m, 1m, "s1", "SELECT 2", null]);
-        Assert.Equal(("123", 12, "s1", 100L, true), (g.ForceMatchingSignature, g.SqlCount, g.Sample.SqlId, g.Sample.Executions, g.Sample.IsLiteralGroup));
-
-        var p = OracleTuningService.ToPlanFinding([3m, "TABLE ACCESS", "FULL", "APP_OWNER", "T", 1000m, null, null]);
-        Assert.Equal((3, "TABLE ACCESS", "FULL", 1000L, (long?)null), (p.Id, p.Operation, p.Options, p.Cardinality, p.TableBlocks));
-    }
-}
+// 소유: TSK-14-17. 튜닝 추천 후보 조회(gv$sqlstats·리터럴 묶음·계획 줄). 행 매핑·sql_id 목록 시험은 Core.Tests TuningRowsTests 로 옮겼다.
 
 /// <summary>
 /// 상주 컨테이너(26ai oracle-26ai-free, 11g oranda-ora11g)에서 조회 세 개가 돈다는 것(내용은 환경 의존이라 형태만). DB 변경 없음(SELECT 만).

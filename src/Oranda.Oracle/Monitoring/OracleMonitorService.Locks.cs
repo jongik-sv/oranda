@@ -1,4 +1,3 @@
-using System.Globalization;
 using Oracle.ManagedDataAccess.Client;
 using Oracle.ManagedDataAccess.Types;
 using Oranda.Core.Catalog;
@@ -6,6 +5,8 @@ using Oranda.Core.Monitoring;
 using Oranda.Core.Sessions;
 using Oranda.Oracle.Execution;
 using Oranda.Oracle.Sessions;
+using static Oranda.Core.Catalog.Providers.CatalogValues;
+using static Oranda.Core.Monitoring.Providers.MonitorRows;
 
 namespace Oranda.Oracle.Monitoring;
 
@@ -18,12 +19,6 @@ internal sealed partial class OracleMonitorService
 {
     /// <summary>잠금 목록 행 상한(ROWNUM).</summary>
     internal const int LockListMaxRows = 2000;
-
-    /// <summary>잠긴 행 값 문자열 상한(긴 문자열·LOB 는 자른다).</summary>
-    internal const int LockedValueMaxLength = 4000;
-
-    /// <summary><see cref="LockFilter.Types"/> 가 비었을 때 보는 잠금 유형.</summary>
-    internal static readonly string[] DefaultLockTypes = ["TM", "TX", "UL"];
 
     /// <summary>값을 읽을 수 있는 객체 유형(row_wait_obj# 가 가리키는 것).</summary>
     private static readonly string[] RowValueObjectTypes = ["TABLE", "TABLE PARTITION", "TABLE SUBPARTITION"];
@@ -218,32 +213,6 @@ internal sealed partial class OracleMonitorService
         return $"SELECT * FROM \"{owner}\".\"{table}\" WHERE ROWID = CHARTOROWID(:r)";
     }
 
-    /// <summary>잠금 유형 목록을 <c>,TM,TX,</c> 꼴 바인드로. 비면 기본 유형. 영문자·숫자가 아닌 글자는 버린다.</summary>
-    internal static string LockTypesBind(IReadOnlyList<string> types)
-    {
-        var picked = types
-            .Select(t => new string([.. (t ?? string.Empty).Trim().ToUpperInvariant().Where(char.IsAsciiLetterOrDigit)]))
-            .Where(t => t.Length > 0)
-            .Distinct(StringComparer.Ordinal)
-            .ToList();
-        IEnumerable<string> list = picked.Count == 0 ? DefaultLockTypes : picked;
-        return "," + string.Join(',', list) + ",";
-    }
-
-    /// <summary>열 값 하나를 화면용 문자열로. 날짜는 ISO, 이진은 16진(앞 64바이트), 긴 문자열은 <see cref="LockedValueMaxLength"/> 에서 자른다.</summary>
-    internal static string? FormatLockedValue(object? value)
-    {
-        var text = value switch
-        {
-            null or DBNull => null,
-            DateTime dt => dt.ToString(dt.TimeOfDay.Ticks % TimeSpan.TicksPerSecond == 0 ? "yyyy-MM-dd HH:mm:ss" : "yyyy-MM-dd HH:mm:ss.FFFFFFF", CultureInfo.InvariantCulture),
-            DateTimeOffset dto => dto.ToString("yyyy-MM-dd HH:mm:ss.FFFFFFF zzz", CultureInfo.InvariantCulture),
-            byte[] bytes => "0x" + Convert.ToHexString(bytes, 0, Math.Min(bytes.Length, 64)) + (bytes.Length > 64 ? $"… ({bytes.Length} bytes)" : string.Empty),
-            _ => Convert.ToString(value, CultureInfo.InvariantCulture),
-        };
-        return text is { Length: > LockedValueMaxLength } ? text[..LockedValueMaxLength] + "…" : text;
-    }
-
     /// <summary>권한·뷰 없음(ORA-00942·01031·01039). 이때는 빈 결과로 돌린다.</summary>
     internal static bool IsAccessError(OracleException ex) => OracleErrorClassifier.IsNoAccess(ex);
 
@@ -345,64 +314,5 @@ internal sealed partial class OracleMonitorService
             var hex = "0x" + Convert.ToHexString(buffer, 0, Math.Max(0, read));
             return blob.Length > read ? hex + $"… ({blob.Length} bytes)" : hex;
         }
-    }
-
-    /// <summary>열 <paramref name="at"/>·+1·+2 = inst_id, sid, serial#.</summary>
-    private static SessionKey Key(object?[] r, int at) => new(Int(r[at]) ?? 1, Long(r[at + 1]) ?? 0, Long(r[at + 2]) ?? 0);
-
-    private static DateTimeOffset? ServerDate(object? v) =>
-        v is DateTime dt ? new DateTimeOffset(DateTime.SpecifyKind(dt, DateTimeKind.Unspecified), TimeSpan.Zero) : null;
-
-    /// <summary><c>lock.list</c> 열 0~24(24 = status, 없으면 null).</summary>
-    internal static LockRow ToLockRow(object?[] r)
-    {
-        var key = Key(r, 0);
-        var owner = Str(r[13]);
-        var name = Str(r[14]);
-        SessionKey? blocker = Long(r[22]) is { } bs ? new SessionKey(Int(r[21]) ?? key.InstanceId, bs, Long(r[23]) ?? 0) : null;
-        return new LockRow(key, Str(r[6]) ?? string.Empty)
-        {
-            Username = Str(r[3]),
-            Machine = Str(r[4]),
-            Program = Str(r[5]),
-            Id1 = Long(r[7]) ?? 0,
-            Id2 = Long(r[8]) ?? 0,
-            HeldMode = Int(r[9]) ?? 0,
-            RequestedMode = Int(r[10]) ?? 0,
-            CtimeSeconds = Long(r[11]) ?? 0,
-            IsBlocking = (Int(r[12]) ?? 0) > 0,
-            ObjectName = name is null ? null : owner is null ? name : owner + "." + name,
-            TransactionStart = ServerDate(r[15]),
-            UndoBlocks = Long(r[16]),
-            Event = Str(r[17]),
-            SecondsInWait = Long(r[18]),
-            SqlId = Str(r[19]),
-            PrevSqlId = Str(r[20]),
-            BlockingSession = blocker,
-            Status = r.Length > 24 ? Str(r[24]) : null,
-        };
-    }
-
-    /// <summary><c>lock.idle_transactions</c> 열 0~11(11 = 잠금 수).</summary>
-    internal static IdleTransaction ToIdleTransaction(object?[] r) => new(Key(r, 0))
-    {
-        Username = Str(r[3]),
-        Machine = Str(r[4]),
-        Program = Str(r[5]),
-        TransactionStart = ServerDate(r[6]),
-        IdleSeconds = Long(r[7]) ?? 0,
-        UndoBlocks = Long(r[8]),
-        BlockedCount = Int(r[9]) ?? 0,
-        PrevSqlId = Str(r[10]),
-        LockCount = r.Length > 11 ? Int(r[11]) ?? 0 : 0,
-    };
-
-    /// <summary><c>lock.deadlocks</c> 열 0~2. 시각은 UTC, 메시지는 빈 줄을 뺀 줄 목록.</summary>
-    internal static DeadlockEvent ToDeadlockEvent(object?[] r)
-    {
-        var at = r[0] is DateTime dt ? new DateTimeOffset(DateTime.SpecifyKind(dt, DateTimeKind.Unspecified), TimeSpan.Zero) : DateTimeOffset.MinValue;
-        var lines = (Str(r[2]) ?? string.Empty).ReplaceLineEndings("\n")
-            .Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
-        return new DeadlockEvent(at, Int(r[1]) ?? 1, lines);
     }
 }

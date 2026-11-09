@@ -18,63 +18,9 @@ namespace Oranda.Oracle.IntegrationTests.Monitoring;
 
 // 소유: TSK-09-01. 세션 모니터.
 
-/// <summary>DB 없이 도는 부분: 트리 조립, 델타, Kill·트레이스 문장, 라이선스 대조.</summary>
+/// <summary>DB 없이 도는 부분: Kill·트레이스 문장, 라이선스 대조. (트리 조립·델타는 Core.Tests MonitorRowsTests 로 옮겼다.)</summary>
 public class SessionMonitorLogicTests
 {
-    private static SessionKey K(long sid, int inst = 1) => new(inst, sid, sid * 10);
-
-    private static BlockingRow Row(long sid, long? blocker, int inst = 1) =>
-        new(K(sid, inst), blocker is { } b ? new SessionKey(inst, b, 0) : null) { Username = "U" + sid };
-
-    [Fact]
-    public void Tree_roots_are_final_blockers_and_waiters_hang_under_direct_blocker()
-    {
-        // 10 ← 20 ← 30, 10 ← 40, 50(혼자 막는 쪽) ← 60
-        var tree = OracleMonitorService.BuildBlockingTree(
-            [Row(30, 20), Row(20, 10), Row(10, null), Row(40, 10), Row(60, 50), Row(50, null)]);
-
-        Assert.Equal([10L, 50L], tree.Roots.Select(n => n.Session.Sid));
-        var root = tree.Roots[0];
-        Assert.Equal(K(10), root.Session);
-        Assert.Equal([20L, 40L], root.Waiters.Select(n => n.Session.Sid));
-        Assert.Equal(30, Assert.Single(root.Waiters[0].Waiters).Session.Sid);
-        Assert.Equal("U60", Assert.Single(tree.Roots[1].Waiters).Username);
-    }
-
-    [Fact]
-    public void Tree_treats_blocker_outside_list_as_root_and_breaks_cycles()
-    {
-        var outside = OracleMonitorService.BuildBlockingTree([Row(7, 99)]);
-        Assert.Equal(7, Assert.Single(outside.Roots).Session.Sid);
-
-        var cycle = OracleMonitorService.BuildBlockingTree([Row(1, 2), Row(2, 1)]);
-        var root = Assert.Single(cycle.Roots);
-        Assert.Equal(1, root.Session.Sid);
-        Assert.Equal(2, Assert.Single(root.Waiters).Session.Sid);
-    }
-
-    [Fact]
-    public void Tree_separates_instances()
-    {
-        var tree = OracleMonitorService.BuildBlockingTree([Row(5, null, inst: 1), Row(6, 5, inst: 2), Row(5, null, inst: 2)]);
-
-        Assert.Equal(2, tree.Roots.Count);
-        Assert.Empty(tree.Roots[0].Waiters);
-        Assert.Equal(new SessionKey(2, 6, 60), Assert.Single(tree.Roots[1].Waiters).Session);
-    }
-
-    [Fact]
-    public void Deltas_skip_missing_and_decreasing_values()
-    {
-        var deltas = OracleMonitorService.ComputeDeltas([10, 5, null, 100, 7], [15, 5, 3, 50, 9]);
-
-        Assert.Equal(5, deltas["CPU used by this session"]);
-        Assert.Equal(0, deltas["session logical reads"]);
-        Assert.False(deltas.ContainsKey("physical reads"));
-        Assert.False(deltas.ContainsKey("execute count"));
-        Assert.Equal(2, deltas["redo size"]);
-    }
-
     [Theory]
     [InlineData(true, false, "ALTER SYSTEM KILL SESSION '12,345' IMMEDIATE", "12,345")]
     [InlineData(false, false, "ALTER SYSTEM KILL SESSION '12,345'", "12,345")]

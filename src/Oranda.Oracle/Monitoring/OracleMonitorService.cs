@@ -8,10 +8,13 @@ using Oranda.Core.Execution;
 using Oranda.Core.History;
 using Oranda.Core.Metadata;
 using Oranda.Core.Monitoring;
+using Oranda.Core.Monitoring.Providers;
 using Oranda.Core.Plans;
 using Oranda.Core.Sessions;
 using Oranda.Oracle.Catalog;
 using Oranda.Oracle.Sessions;
+using static Oranda.Core.Catalog.Providers.CatalogValues;
+using static Oranda.Core.Monitoring.Providers.MonitorRows;
 
 namespace Oranda.Oracle.Monitoring;
 
@@ -26,16 +29,6 @@ namespace Oranda.Oracle.Monitoring;
 [OrandaService(typeof(IMonitorService), Dbms = Dbms.Oracle)]
 internal sealed partial class OracleMonitorService : IMonitorService
 {
-    /// <summary>델타(SESS-06)로 보는 누적 통계 이름. <c>session.list</c> 의 23~27 열 순서와 같다.</summary>
-    internal static readonly string[] DeltaStatNames =
-    [
-        "CPU used by this session",
-        "session logical reads",
-        "physical reads",
-        "execute count",
-        "redo size",
-    ];
-
     private static readonly Lazy<SqlCatalog> SessionCatalog = new(EmbeddedCatalog.Load);
 
     private readonly IExecutionService _execution;
@@ -67,7 +60,7 @@ internal sealed partial class OracleMonitorService : IMonitorService
         foreach (var r in rows)
         {
             var row = ToSessionRow(r);
-            var stats = new long?[DeltaStatNames.Length];
+            var stats = new long?[DeltaStatNames.Count];
             for (var i = 0; i < stats.Length; i++)
             {
                 stats[i] = Long(r[23 + i]);
@@ -217,109 +210,6 @@ internal sealed partial class OracleMonitorService : IMonitorService
         static string Bool(bool b) => b ? "TRUE" : "FALSE";
     }
 
-    /// <summary>
-    /// 블로킹 행 목록으로 트리를 만든다. 간선 = 직접 블로커(<c>blocking_session</c>). 뿌리 = 목록 안에 블로커가 없는 세션(최종 블로커).
-    /// 순환(교착)이 있으면 순환 안의 가장 작은 키를 뿌리로 삼아 끊는다.
-    /// </summary>
-    internal static BlockingTree BuildBlockingTree(IEnumerable<BlockingRow> source)
-    {
-        var rows = new Dictionary<SessionKey, BlockingRow>();
-        var bySid = new Dictionary<(int, long), SessionKey>();
-        foreach (var r in source)
-        {
-            if (rows.TryAdd(r.Key, r))
-            {
-                bySid.TryAdd((r.Key.InstanceId, r.Key.Sid), r.Key);
-            }
-        }
-
-        // 직접 블로커를 목록 안의 키로 바꾼다(없거나 자기 자신이면 뿌리).
-        SessionKey? ParentOf(BlockingRow r) =>
-            r.Blocker is { } b && bySid.TryGetValue((b.InstanceId, b.Sid), out var p) && p != r.Key ? p : null;
-
-        var children = new Dictionary<SessionKey, List<SessionKey>>();
-        var rootKeys = new List<SessionKey>();
-        foreach (var r in rows.Values)
-        {
-            if (ParentOf(r) is { } p)
-            {
-                if (!children.TryGetValue(p, out var list))
-                {
-                    children[p] = list = [];
-                }
-
-                list.Add(r.Key);
-            }
-            else
-            {
-                rootKeys.Add(r.Key);
-            }
-        }
-
-        var placed = new HashSet<SessionKey>();
-        var roots = new List<BlockingNode>();
-        foreach (var key in Ordered(rootKeys))
-        {
-            roots.Add(Build(key));
-        }
-
-        // 순환(교착): 아직 놓이지 않은 세션이 남으면 그중 가장 작은 키를 뿌리로 삼는다.
-        foreach (var key in Ordered(rows.Keys))
-        {
-            if (!placed.Contains(key))
-            {
-                roots.Add(Build(key));
-            }
-        }
-
-        return new BlockingTree(roots);
-
-        BlockingNode Build(SessionKey key)
-        {
-            placed.Add(key);
-            var r = rows[key];
-            var waiters = new List<BlockingNode>();
-            if (children.TryGetValue(key, out var list))
-            {
-                foreach (var w in Ordered(list))
-                {
-                    if (!placed.Contains(w))
-                    {
-                        waiters.Add(Build(w));
-                    }
-                }
-            }
-
-            return new BlockingNode(key, waiters)
-            {
-                Username = r.Username,
-                Event = r.Event,
-                SecondsInWait = r.SecondsInWait,
-                SqlId = r.SqlId,
-                LockedObject = r.LockedObject,
-                Status = r.Status,
-            };
-        }
-
-        static List<SessionKey> Ordered(IEnumerable<SessionKey> keys) =>
-            [.. keys.OrderBy(k => k.InstanceId).ThenBy(k => k.Sid).ThenBy(k => k.Serial)];
-    }
-
-    /// <summary>직전·이번 누적값 차이. 직전 값이 없거나 줄었으면(세션 재사용 등) 그 통계는 뺀다.</summary>
-    internal static IReadOnlyDictionary<string, long> ComputeDeltas(long?[] before, long?[] now)
-    {
-        var deltas = new Dictionary<string, long>(StringComparer.Ordinal);
-        for (var i = 0; i < DeltaStatNames.Length && i < before.Length && i < now.Length; i++)
-        {
-            if (before[i] is { } b && now[i] is { } n && n >= b)
-            {
-                deltas[DeltaStatNames[i]] = n - b;
-            }
-        }
-
-        return deltas;
-    }
-
     private async Task ExecuteChangeAsync(ISession monitor, SqlStatement stmt, CancellationToken ct)
     {
         // 실행 엔진이 세션 명령 잠금(D-041)을 잡는다. 여기서 먼저 잡으면 같은 잠금을 두 번 잡아 교착이다.
@@ -459,74 +349,4 @@ internal sealed partial class OracleMonitorService : IMonitorService
 
     private static void AddLong(OracleCommand c, string name, long value) =>
         c.Parameters.Add(new OracleParameter(name, OracleDbType.Int64) { Value = value });
-
-    /// <summary><c>session.list</c>·<c>session.detail</c> 공통 열 0~22.</summary>
-    private static SessionRow ToSessionRow(object?[] r)
-    {
-        var key = new SessionKey(Int(r[0]) ?? 1, Long(r[1]) ?? 0, Long(r[2]) ?? 0);
-        SessionKey? blocker = Long(r[19]) is { } bs ? new SessionKey(Int(r[18]) ?? key.InstanceId, bs, 0) : null;
-        return new SessionRow(key, Str(r[3]) ?? string.Empty)
-        {
-            Username = Str(r[4]),
-            OsUser = Str(r[5]),
-            Machine = Str(r[6]),
-            Program = Str(r[7]),
-            Module = Str(r[8]),
-            Action = Str(r[9]),
-            ClientIdentifier = Str(r[10]),
-            SqlId = Str(r[11]),
-            PrevSqlId = Str(r[13]),
-            Event = Str(r[14]),
-            WaitClass = Str(r[15]),
-            SecondsInWait = Long(r[16]),
-            LastCallElapsedSeconds = Long(r[17]),
-            BlockingSession = blocker,
-            LogonTime = r[20] is DateTime dt ? new DateTimeOffset(DateTime.SpecifyKind(dt, DateTimeKind.Unspecified), TimeSpan.Zero) : null,
-        };
-    }
-
-    private static BlockingRow ToBlockingRow(object?[] r)
-    {
-        var key = new SessionKey(Int(r[0]) ?? 1, Long(r[1]) ?? 0, Long(r[2]) ?? 0);
-        SessionKey? blocker = Long(r[8]) is { } bs ? new SessionKey(Int(r[7]) ?? key.InstanceId, bs, 0) : null;
-        return new BlockingRow(key, blocker)
-        {
-            Username = Str(r[3]),
-            Event = Str(r[4]),
-            SecondsInWait = Long(r[5]),
-            SqlId = Str(r[6]),
-            LockedObject = Str(r[11]),
-            Status = r.Length > 12 ? Str(r[12]) : null,
-        };
-    }
-
-    private static string FirstLine(string message)
-    {
-        var i = message.IndexOf('\n', StringComparison.Ordinal);
-        return (i < 0 ? message : message[..i]).Trim();
-    }
-
-    private static string? Str(object? v) => v is null ? null : Convert.ToString(v, CultureInfo.InvariantCulture);
-
-    private static int? Int(object? v) => v is null ? null : Convert.ToInt32(v, CultureInfo.InvariantCulture);
-
-    private static long? Long(object? v) => v is null ? null : Convert.ToInt64(v, CultureInfo.InvariantCulture);
-}
-
-/// <summary>
-/// 블로킹 트리 재료 한 행. <see cref="Blocker"/> 의 Serial 은 서버가 주지 않아 0 이다 — 간선 대조는 (인스턴스, SID) 로 한다.
-/// </summary>
-internal sealed record BlockingRow(SessionKey Key, SessionKey? Blocker)
-{
-    public string? Username { get; init; }
-
-    public string? Event { get; init; }
-
-    public long? SecondsInWait { get; init; }
-
-    public string? SqlId { get; init; }
-
-    public string? LockedObject { get; init; }
-
-    public string? Status { get; init; }
 }

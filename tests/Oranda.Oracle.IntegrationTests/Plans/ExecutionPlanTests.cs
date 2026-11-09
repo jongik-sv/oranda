@@ -16,52 +16,9 @@ namespace Oranda.Oracle.IntegrationTests.Plans;
 
 // 소유: TSK-07-01. 실행 계획.
 
-/// <summary>DB 없이 도는 부분: 위험 단계 판정, 깊이 계산, 드라이버 없는 세션 거부.</summary>
+/// <summary>DB 없이 도는 부분: 드라이버 없는 세션 거부. (위험 단계 판정·깊이 계산은 Core.Tests PlanRowsTests 로 옮겼다.)</summary>
 public class ExecutionPlanLogicTests
 {
-    private static OracleExecutionPlanService.RawStep Step(string op, string? options = null, long? est = null, long? actual = null, long? starts = null) =>
-        new(1, null, op, options, null, null, null, est, actual, starts, null, null, null);
-
-    [Fact]
-    public void Full_table_scan_and_cartesian_join_are_flagged()
-    {
-        Assert.Equal(PlanRisk.FullScan, OracleExecutionPlanService.ClassifyRisk(Step("TABLE ACCESS", "FULL")));
-        Assert.Equal(PlanRisk.None, OracleExecutionPlanService.ClassifyRisk(Step("INDEX", "FULL SCAN")));
-        Assert.Equal(PlanRisk.None, OracleExecutionPlanService.ClassifyRisk(Step("TABLE ACCESS", "BY INDEX ROWID")));
-        Assert.Equal(PlanRisk.Cartesian, OracleExecutionPlanService.ClassifyRisk(Step("MERGE JOIN", "CARTESIAN")));
-    }
-
-    [Fact]
-    public void Cardinality_gap_is_flagged_both_ways_per_start_and_ignores_small_numbers()
-    {
-        Assert.Equal(PlanRisk.CardinalityMisestimate, OracleExecutionPlanService.ClassifyRisk(Step("FILTER", null, est: 10, actual: 10_000, starts: 1)));
-        Assert.Equal(PlanRisk.CardinalityMisestimate, OracleExecutionPlanService.ClassifyRisk(Step("FILTER", null, est: 100_000, actual: 5, starts: 1)));
-        Assert.Equal(PlanRisk.None, OracleExecutionPlanService.ClassifyRisk(Step("FILTER", null, est: 1000, actual: 1500, starts: 1)));
-
-        // 시작 횟수당으로 보면 맞는 추정(예: 1행 × 5000회).
-        Assert.Equal(PlanRisk.None, OracleExecutionPlanService.ClassifyRisk(Step("INDEX", "UNIQUE SCAN", est: 1, actual: 5000, starts: 5000)));
-        Assert.Equal(PlanRisk.None, OracleExecutionPlanService.ClassifyRisk(Step("FILTER", null, est: 1, actual: 8, starts: 1)));
-        Assert.Equal(PlanRisk.None, OracleExecutionPlanService.ClassifyRisk(Step("FILTER", null, est: 1000, actual: null)));
-    }
-
-    [Fact]
-    public void Steps_are_ordered_by_id_with_depth_from_parent_chain()
-    {
-        var steps = OracleExecutionPlanService.BuildSteps(
-        [
-            new(2, 1, "TABLE ACCESS", "FULL", "S", "T", 5, 100, 90, 1, 2000, "a", "f"),
-            new(0, null, "SELECT STATEMENT", null, null, null, 7, null, null, null, null, null, null),
-            new(1, 0, "SORT", "AGGREGATE", null, null, null, 1, 1, 1, null, null, null),
-        ]);
-
-        Assert.Equal([0, 1, 2], steps.Select(x => x.Id));
-        Assert.Equal([0, 1, 2], steps.Select(x => x.Depth));
-        Assert.Equal(PlanRisk.FullScan, steps[2].Risk);
-        Assert.Equal(TimeSpan.FromMilliseconds(2), steps[2].ActualTime);
-        Assert.Equal("a", steps[2].AccessPredicates);
-        Assert.Equal("f", steps[2].FilterPredicates);
-    }
-
     [Fact]
     public async Task Non_oracle_session_is_rejected_before_any_driver_call()
     {

@@ -17,7 +17,7 @@ namespace Oranda.Oracle.IntegrationTests.Monitoring;
 
 // 소유: TSK-05-02. Lock 모니터 조회.
 
-/// <summary>DB 없이 도는 부분: 행 값 SELECT 식별자, 유형 바인드, 값 꼴, 행 변환.</summary>
+/// <summary>DB 없이 도는 부분: 행 값 SELECT 식별자. (유형 바인드·값 꼴·행 변환은 Core.Tests MonitorRowsTests 로 옮겼다.)</summary>
 public class LockMonitorLogicTests
 {
     [Fact]
@@ -36,76 +36,6 @@ public class LockMonitorLogicTests
     public void Locked_row_select_refuses_names_that_cannot_be_quoted(string owner, string table)
     {
         Assert.Null(OracleMonitorService.LockedRowSelect(owner, table));
-    }
-
-    [Fact]
-    public void Lock_types_bind_defaults_to_tm_tx_ul_and_drops_non_alphanumerics()
-    {
-        Assert.Equal(",TM,TX,UL,", OracleMonitorService.LockTypesBind([]));
-        Assert.Equal(",TM,TX,UL,", OracleMonitorService.LockTypesBind(["", " ", ",,"]));
-        Assert.Equal(",TM,UL,", OracleMonitorService.LockTypesBind(["tm", " UL ", "TM"]));
-        Assert.Equal(",TX,", OracleMonitorService.LockTypesBind(["T'X"]));
-    }
-
-    [Fact]
-    public void Locked_values_format_dates_binary_and_long_text()
-    {
-        Assert.Null(OracleMonitorService.FormatLockedValue(null));
-        Assert.Null(OracleMonitorService.FormatLockedValue(DBNull.Value));
-        Assert.Equal("2026-10-24 13:05:09", OracleMonitorService.FormatLockedValue(new DateTime(2026, 10, 24, 13, 5, 9)));
-        Assert.Equal("2026-10-24 13:05:09.5", OracleMonitorService.FormatLockedValue(new DateTime(2026, 10, 24, 13, 5, 9, 500)));
-        Assert.Equal("1.5", OracleMonitorService.FormatLockedValue(1.5m));
-        Assert.Equal("0x0A0B", OracleMonitorService.FormatLockedValue(new byte[] { 10, 11 }));
-
-        var bytes = new byte[100];
-        Assert.EndsWith("… (100 bytes)", OracleMonitorService.FormatLockedValue(bytes), StringComparison.Ordinal);
-        var text = OracleMonitorService.FormatLockedValue(new string('x', OracleMonitorService.LockedValueMaxLength + 10));
-        Assert.Equal(OracleMonitorService.LockedValueMaxLength + 1, text!.Length);
-    }
-
-    [Fact]
-    public void Lock_row_maps_object_transaction_and_blocker()
-    {
-        var start = new DateTime(2026, 10, 24, 9, 0, 0);
-        object?[] r =
-        [
-            2, 30L, 300L, "APP", "pc1", "app.exe", "TX", 65537L, 99L, 0, 6, 12L, 0,
-            null, null, start, 4L, "enq: TX - row lock contention", 12L, "sqlA", "sqlB", 1, 10L, 100L,
-        ];
-
-        var row = OracleMonitorService.ToLockRow(r);
-
-        Assert.Equal(new SessionKey(2, 30, 300), row.Session);
-        Assert.Equal("TX", row.LockType);
-        Assert.Equal(0, row.HeldMode);
-        Assert.Equal(6, row.RequestedMode);
-        Assert.False(row.IsBlocking);
-        Assert.Null(row.ObjectName);
-        Assert.Equal(new DateTimeOffset(start, TimeSpan.Zero), row.TransactionStart);
-        Assert.Equal(new SessionKey(1, 10, 100), row.BlockingSession);
-        Assert.Null(row.Status); // 열 24 가 없는 옛 결과
-        Assert.Equal("INACTIVE", OracleMonitorService.ToLockRow([.. r, "INACTIVE"]).Status);
-
-        r[6] = "TM";
-        r[12] = 2; // RAC 의 전역 막음
-        r[13] = "APP";
-        r[14] = "ORDERS";
-        r[22] = null;
-        var tm = OracleMonitorService.ToLockRow(r);
-        Assert.True(tm.IsBlocking);
-        Assert.Equal("APP.ORDERS", tm.ObjectName);
-        Assert.Null(tm.BlockingSession);
-    }
-
-    [Fact]
-    public void Deadlock_event_splits_message_lines_and_keeps_utc_time()
-    {
-        var at = new DateTime(2026, 10, 24, 1, 2, 3);
-        var e = OracleMonitorService.ToDeadlockEvent([at, 2, "ORA-00060: Deadlock detected.\r\n\r\n  More info in file x.trc.\n"]);
-
-        Assert.Equal(new DateTimeOffset(at, TimeSpan.Zero), e.At);
-        Assert.Equal(2, e.InstanceId);
-        Assert.Equal(["ORA-00060: Deadlock detected.", "More info in file x.trc."], e.MessageLines);
     }
 }
 

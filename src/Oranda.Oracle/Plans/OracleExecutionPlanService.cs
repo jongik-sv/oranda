@@ -1,4 +1,3 @@
-using System.Globalization;
 using Oracle.ManagedDataAccess.Client;
 using Oranda.Core.Catalog;
 using Oranda.Core.Composition;
@@ -6,10 +5,12 @@ using Oranda.Core.Connection;
 using Oranda.Core.Execution;
 using Oranda.Core.History;
 using Oranda.Core.Plans;
+using Oranda.Core.Plans.Providers;
 using Oranda.Core.Sessions;
 using Oranda.Oracle.Catalog;
 using Oranda.Oracle.Monitoring;
 using Oranda.Oracle.Sessions;
+using static Oranda.Core.Catalog.Providers.CatalogValues;
 
 namespace Oranda.Oracle.Plans;
 
@@ -22,12 +23,6 @@ namespace Oranda.Oracle.Plans;
 [OrandaService(typeof(IExecutionPlanService), Dbms = Dbms.Oracle)]
 internal sealed class OracleExecutionPlanService : IExecutionPlanService
 {
-    /// <summary>예상·실제 행 수가 이 배수 이상 다르면 <see cref="PlanRisk.CardinalityMisestimate"/>.</summary>
-    internal const double MisestimateFactor = 10;
-
-    /// <summary>두 값 중 큰 쪽이 이 값 미만이면 오차를 강조하지 않는다(작은 수 잡음).</summary>
-    internal const long MisestimateMinRows = 10;
-
     private static readonly Lazy<SqlCatalog> Catalog = new(EmbeddedCatalog.Load);
 
     private readonly IExecutionService _execution;
@@ -83,9 +78,9 @@ internal sealed class OracleExecutionPlanService : IExecutionPlanService
                 AddText(c, "format", "TYPICAL");
             }, ct);
 
-            var planSteps = BuildSteps(ReadPlanTableRows(names, steps));
+            var planSteps = PlanRows.BuildSteps(PlanRows.ReadPlanTableRows(names, steps));
             // plan_table.plan_id 는 EXPLAIN 마다 새로 매기는 번호라 계획 해시가 아니다. DBMS_XPLAN 글의 「Plan hash value」를 쓴다(PLAN-04 비교).
-            var planText = JoinLines(text);
+            var planText = PlanRows.JoinLines(text);
             return new ExecutionPlan(planSteps, planText)
             {
                 PlanHashValue = ExecutionPlanText.ParsePlanHashValue(planText),
@@ -121,10 +116,10 @@ internal sealed class OracleExecutionPlanService : IExecutionPlanService
             AddText(c, "format", fmt);
         }, ct);
 
-        var steps = BuildSteps(first.Select(r => new RawStep(
+        var steps = PlanRows.BuildSteps(first.Select(r => new RawPlanStep(
             Int(r[2]) ?? 0, Int(r[3]), Str(r[5]) ?? string.Empty, Str(r[6]), Str(r[7]), Str(r[8]),
             Long(r[9]), Long(r[10]), Long(r[11]), Long(r[12]), Long(r[13]), Str(r[14]), Str(r[15]))));
-        return new ExecutionPlan(steps, JoinLines(text))
+        return new ExecutionPlan(steps, PlanRows.JoinLines(text))
         {
             Cursor = new CursorRef(cursor.SqlId, child, cursor.InstanceId ?? inst),
             PlanHashValue = Long(first[0][16]),
@@ -153,94 +148,8 @@ internal sealed class OracleExecutionPlanService : IExecutionPlanService
     {
         ArgumentNullException.ThrowIfNull(s);
         var rows = await QueryAsync(s, "plan.last_cursor_text", _ => { }, ct);
-        return ExecutionPlanText.ParseCursor(JoinLines(rows));
+        return ExecutionPlanText.ParseCursor(PlanRows.JoinLines(rows));
     }
-
-    /// <summary>원자료 → 계획 단계(Id 순). 깊이는 부모 사슬로 구하고 위험 표시를 붙인다.</summary>
-    internal static IReadOnlyList<PlanStep> BuildSteps(IEnumerable<RawStep> raw)
-    {
-        var list = raw.OrderBy(r => r.Id).ToList();
-        var depth = new Dictionary<int, int>();
-        var result = new List<PlanStep>(list.Count);
-        foreach (var r in list)
-        {
-            var d = r.ParentId is { } p && depth.TryGetValue(p, out var pd) ? pd + 1 : 0;
-            depth[r.Id] = d;
-            result.Add(new PlanStep(r.Id, r.ParentId, d, r.Operation)
-            {
-                Options = r.Options,
-                ObjectOwner = r.Owner,
-                ObjectName = r.Name,
-                Cost = r.Cost,
-                EstimatedRows = r.EstimatedRows,
-                ActualRows = r.ActualRows,
-                Starts = r.Starts,
-                ActualTime = r.ElapsedMicros is { } us ? TimeSpan.FromTicks(us * 10) : null,
-                AccessPredicates = r.Access,
-                FilterPredicates = r.Filter,
-                Risk = ClassifyRisk(r),
-            });
-        }
-
-        return result;
-    }
-
-    /// <summary>위험 단계 판정(PLAN-03): 테이블 전체 스캔, 카테시안 조인, 예상·실제 행 수 차이(시작 횟수당 실제 행 기준).</summary>
-    internal static PlanRisk ClassifyRisk(RawStep r)
-    {
-        ArgumentNullException.ThrowIfNull(r);
-
-        var risk = PlanRisk.None;
-        var options = r.Options ?? string.Empty;
-        if (r.Operation.Equals("TABLE ACCESS", StringComparison.OrdinalIgnoreCase) && options.Contains("FULL", StringComparison.OrdinalIgnoreCase))
-        {
-            risk |= PlanRisk.FullScan;
-        }
-
-        if (options.Contains("CARTESIAN", StringComparison.OrdinalIgnoreCase))
-        {
-            risk |= PlanRisk.Cartesian;
-        }
-
-        if (r.ActualRows is { } actual && r.EstimatedRows is { } est)
-        {
-            var a = (double)actual / Math.Max(r.Starts ?? 1, 1);
-            var e = Math.Max(est, 1);
-            var big = Math.Max(a, e);
-            var ratio = big / Math.Max(Math.Min(a, e), 1);
-            if (big >= MisestimateMinRows && ratio >= MisestimateFactor)
-            {
-                risk |= PlanRisk.CardinalityMisestimate;
-            }
-        }
-
-        return risk;
-    }
-
-    /// <summary>
-    /// PLAN_TABLE 행(<c>SELECT p.*</c>)을 열 이름으로 읽는다. 사용자 스키마에 옛 PLAN_TABLE(plan_id·access_predicates 등이 없는 것)이
-    /// 있어도 실패하지 않게, 없는 열은 null 로 본다(서버 버전 무관, TSK-03-07).
-    /// </summary>
-    internal static IEnumerable<RawStep> ReadPlanTableRows(IReadOnlyList<string> names, IEnumerable<object?[]> rows)
-    {
-        ArgumentNullException.ThrowIfNull(names);
-        ArgumentNullException.ThrowIfNull(rows);
-        var index = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
-        for (var i = 0; i < names.Count; i++)
-        {
-            index.TryAdd(names[i], i);
-        }
-
-        object? At(object?[] r, string name) => index.TryGetValue(name, out var i) && i < r.Length ? r[i] : null;
-
-        return rows.Select(r => new RawStep(
-            Int(At(r, "ID")) ?? 0, Int(At(r, "PARENT_ID")), Str(At(r, "OPERATION")) ?? string.Empty, Str(At(r, "OPTIONS")),
-            Str(At(r, "OBJECT_OWNER")), Str(At(r, "OBJECT_NAME")), Long(At(r, "COST")), Long(At(r, "CARDINALITY")),
-            null, null, null, Str(At(r, "ACCESS_PREDICATES")), Str(At(r, "FILTER_PREDICATES"))));
-    }
-
-    private static string JoinLines(List<object?[]> rows) =>
-        string.Join(Environment.NewLine, rows.Select(r => Str(r[0]) ?? string.Empty));
 
     private static async Task<List<object?[]>> QueryAsync(ISession s, string id, Action<OracleCommand> bind, CancellationToken ct, List<string>? columnNames = null)
     {
@@ -297,15 +206,4 @@ internal sealed class OracleExecutionPlanService : IExecutionPlanService
 
     private static void AddInt(OracleCommand c, string name, int? value) =>
         c.Parameters.Add(new OracleParameter(name, OracleDbType.Int32) { Value = value is { } v ? v : DBNull.Value });
-
-    private static string? Str(object? v) => v is null ? null : Convert.ToString(v, CultureInfo.InvariantCulture);
-
-    private static int? Int(object? v) => v is null ? null : Convert.ToInt32(v, CultureInfo.InvariantCulture);
-
-    private static long? Long(object? v) => v is null ? null : Convert.ToInt64(v, CultureInfo.InvariantCulture);
-
-    /// <summary>계획 한 줄의 원자료. 행 수·시간은 <c>last_*</c>(마지막 실행) 값.</summary>
-    internal sealed record RawStep(int Id, int? ParentId, string Operation, string? Options, string? Owner, string? Name,
-                                   long? Cost, long? EstimatedRows, long? ActualRows, long? Starts, long? ElapsedMicros,
-                                   string? Access, string? Filter);
 }

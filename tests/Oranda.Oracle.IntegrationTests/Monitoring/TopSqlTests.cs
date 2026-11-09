@@ -17,31 +17,9 @@ namespace Oranda.Oracle.IntegrationTests.Monitoring;
 
 // 소유: TSK-09-02. Top SQL.
 
-/// <summary>DB 없이 도는 부분: 바인드 행 정리, 모르는 세션 거부.</summary>
+/// <summary>DB 없이 도는 부분: 모르는 세션 거부. (바인드 행 정리는 Core.Tests MonitorRowsTests 로 옮겼다.)</summary>
 public class TopSqlLogicTests
 {
-    [Fact]
-    public void Binds_are_ordered_by_position_and_keep_latest_capture_per_position()
-    {
-        var old = new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Unspecified);
-        var recent = old.AddHours(1);
-        var rows = new List<object?[]>
-        {
-            new object?[] { ":B2", 2m, "NUMBER", "20", old, "YES" },
-            new object?[] { ":B1", 1m, "VARCHAR2(32)", "old", old, "YES" },
-            new object?[] { ":B1", 1m, "VARCHAR2(32)", "new", recent, "YES" },
-            new object?[] { ":B3", 3m, "DATE", null, null, "NO" },
-        };
-
-        var binds = OracleMonitorService.TopSqlBinds(rows);
-
-        Assert.Equal([":B1", ":B2", ":B3"], binds.Select(b => b.Name));
-        Assert.Equal("new", binds[0].Value);
-        Assert.Equal("20", binds[1].Value);
-        Assert.Null(binds[2].Value);
-        Assert.Null(binds[2].CapturedAt);
-    }
-
     [Fact]
     public async Task Non_oracle_session_is_rejected_before_any_driver_call()
     {

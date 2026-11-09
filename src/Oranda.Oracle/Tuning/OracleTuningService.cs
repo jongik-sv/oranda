@@ -1,6 +1,5 @@
 using System.Diagnostics;
 using System.Globalization;
-using System.Text.RegularExpressions;
 using Oracle.ManagedDataAccess.Client;
 using Oranda.Core.Catalog;
 using Oranda.Core.Composition;
@@ -13,11 +12,14 @@ using Oranda.Core.Monitoring;
 using Oranda.Core.Plans;
 using Oranda.Core.Sessions;
 using Oranda.Core.Tuning;
+using Oranda.Core.Tuning.Providers;
 using Oranda.Oracle.Catalog;
 using Oranda.Oracle.Execution;
 using Oranda.Oracle.Monitoring;
 using Oranda.Oracle.Sessions;
 using Oranda.Oracle.SqlPlus;
+using static Oranda.Core.Catalog.Providers.CatalogValues;
+using static Oranda.Core.Tuning.Providers.TuningRows;
 
 namespace Oranda.Oracle.Tuning;
 
@@ -32,16 +34,7 @@ namespace Oranda.Oracle.Tuning;
 [OrandaService(typeof(ITuningService), Dbms = Dbms.Oracle)]
 internal sealed partial class OracleTuningService : ITuningService
 {
-    /// <summary>벤치마크 반복 상한(실수로 큰 값을 넣어 운영 DB 를 오래 두드리지 않게).</summary>
-    internal const int MaxIterations = 100;
-
     private static readonly Lazy<SqlCatalog> Catalog = new(EmbeddedCatalog.Load);
-
-    /// <summary>gv$sql_shared_cursor 에서 사유가 아닌 열.</summary>
-    private static readonly HashSet<string> SharedCursorKeyColumns = new(StringComparer.OrdinalIgnoreCase)
-    {
-        "INST_ID", "SQL_ID", "ADDRESS", "CHILD_ADDRESS", "CHILD_NUMBER", "REASON", "CON_ID",
-    };
 
     private readonly IExecutionService _execution;
     private readonly IExecutionPlanService _plans;
@@ -186,8 +179,8 @@ internal sealed partial class OracleTuningService : ITuningService
         ArgumentNullException.ThrowIfNull(s);
         ArgumentNullException.ThrowIfNull(benchmark);
         ArgumentOutOfRangeException.ThrowIfLessThan(iterations, 1);
-        ArgumentOutOfRangeException.ThrowIfGreaterThan(iterations, MaxIterations);
-        var stmt = BenchmarkStatement(_language, benchmark.Sql, benchmark.Binds);
+        ArgumentOutOfRangeException.ThrowIfGreaterThan(iterations, Benchmark.MaxIterations);
+        var stmt = Benchmark.Statement(_language, benchmark.Sql, benchmark.Binds);
 
         if (benchmark.ReadOnly && !s.Profile.ReadOnly)
         {
@@ -240,7 +233,7 @@ internal sealed partial class OracleTuningService : ITuningService
 
     private async Task<BenchmarkResult> RunBenchmarkCoreAsync(ISession s, BenchmarkCase benchmark, SqlStatement stmt, int iterations, CancellationToken ct)
     {
-        var binds = BenchmarkBinds.For(stmt.BindNames, benchmark.Binds); // 문장이 쓰는 이름만(검사는 BenchmarkStatement 가 했다)
+        var binds = BenchmarkBinds.For(stmt.BindNames, benchmark.Binds); // 문장이 쓰는 이름만(검사는 Benchmark.Statement 가 했다)
         var elapsed = TimeSpan.Zero;
         long logical = 0, physical = 0, rows = 0;
         long? planHash = null;
@@ -252,7 +245,7 @@ internal sealed partial class OracleTuningService : ITuningService
             var sw = Stopwatch.StartNew();
             var result = await _execution.ExecuteAsync(s, stmt, binds,
                 new ExecutionOptions { Source = benchmark.Source, SkipHistory = i > 0 }, ct);
-            rows = await DrainAsync(result, ct);
+            rows = await Benchmark.DrainAsync(result, ct);
             sw.Stop();
             elapsed += sw.Elapsed;
 
@@ -320,109 +313,6 @@ internal sealed partial class OracleTuningService : ITuningService
         })];
     }
 
-    /// <summary>
-    /// 벤치마크로 보낼 문장: 한 문장, SELECT/WITH 질의, FOR UPDATE 없음(잠금), 치환 변수 없음, 바인드는 이름마다 <paramref name="binds"/> 에 값이 있을 때만.
-    /// 분류는 언어 서비스(StatementClassifier)가 한다. 아니면 <see cref="ArgumentException"/> — 아무것도 보내지 않는다.
-    /// 바인드 값이 없는 호출(사람이 쓰는 튜닝 도우미)은 예전처럼 바인드가 있는 문장을 거부한다.
-    /// </summary>
-    internal static SqlStatement BenchmarkStatement(ILanguageService language, string sql, IReadOnlyDictionary<string, BindValue>? binds = null)
-    {
-        ArgumentNullException.ThrowIfNull(language);
-        if (string.IsNullOrWhiteSpace(sql))
-        {
-            throw new ArgumentException("벤치마크할 문장이 비었습니다.", nameof(sql));
-        }
-
-        var stmts = language.Split(sql, SplitOptions.Default);
-        if (stmts.Count != 1)
-        {
-            throw new ArgumentException($"벤치마크는 문장 하나만 받습니다(받은 문장 {stmts.Count}개).", nameof(sql));
-        }
-
-        var stmt = stmts[0];
-        if (stmt.Kind != StatementKind.Query || stmt.IsClassificationUncertain || stmt.Verb is not ("SELECT" or "WITH"))
-        {
-            throw new ArgumentException($"벤치마크는 SELECT(WITH) 질의만 실행합니다: {stmt.Verb ?? stmt.Kind.ToString()}", nameof(sql));
-        }
-
-        if (ForUpdate().IsMatch(stmt.Text))
-        {
-            throw new ArgumentException("SELECT … FOR UPDATE 는 행을 잠가 벤치마크하지 않습니다.", nameof(sql));
-        }
-
-        if (stmt.SubstitutionNames.Count > 0 || (stmt.BindNames.Count > 0 && (binds is null || binds.Count == 0)))
-        {
-            throw new ArgumentException("바인드·치환 변수가 있는 문장은 벤치마크하지 않습니다(값을 글자로 넣어 주세요).", nameof(sql));
-        }
-
-        if (BenchmarkBinds.MissingReason(stmt.BindNames, binds ?? new Dictionary<string, BindValue>()) is { } missing)
-        {
-            throw new ArgumentException(missing, nameof(sql));
-        }
-
-        return stmt;
-    }
-
-    /// <summary>gv$sql_shared_cursor 행을 'Y' 인 열 하나당 사유 한 줄로 펼친다. reason 열(XML)이 있으면 그 자식의 상세로 붙인다.</summary>
-    internal static IReadOnlyList<SharedCursorReason> ToReasons(IReadOnlyList<string> names, IEnumerable<object?[]> rows)
-    {
-        var child = IndexOf(names, "CHILD_NUMBER");
-        var reason = IndexOf(names, "REASON");
-        var result = new List<SharedCursorReason>();
-        foreach (var r in rows)
-        {
-            var number = child >= 0 ? Int(r[child]) ?? 0 : 0;
-            var detail = reason >= 0 ? Str(r[reason]) : null;
-            for (var i = 0; i < names.Count && i < r.Length; i++)
-            {
-                if (!SharedCursorKeyColumns.Contains(names[i]) && r[i] is string v && string.Equals(v, "Y", StringComparison.Ordinal))
-                {
-                    result.Add(new SharedCursorReason(number, names[i].ToUpperInvariant())
-                    {
-                        Detail = string.IsNullOrWhiteSpace(detail) ? null : detail,
-                    });
-                }
-            }
-        }
-
-        return [.. result.OrderBy(x => x.ChildNumber)];
-
-        static int IndexOf(IReadOnlyList<string> names, string name)
-        {
-            for (var i = 0; i < names.Count; i++)
-            {
-                if (string.Equals(names[i], name, StringComparison.OrdinalIgnoreCase))
-                {
-                    return i;
-                }
-            }
-
-            return -1;
-        }
-    }
-
-    /// <summary>endpoint_number 순 버킷의 막대 높이 = 앞 버킷과의 차(첫 버킷은 자기 값). 순서가 뒤집혀 음수가 되면 0.</summary>
-    internal static IReadOnlyList<HistogramBucket> ToBuckets(IEnumerable<(long Endpoint, string? Value)> rows)
-    {
-        var result = new List<HistogramBucket>();
-        long previous = 0;
-        foreach (var (endpoint, value) in rows)
-        {
-            result.Add(new HistogramBucket(endpoint, value, Math.Max(0, endpoint - previous)));
-            previous = endpoint;
-        }
-
-        return result;
-    }
-
-    /// <summary>ASH 표본 수에 비율(0~1)을 붙인다.</summary>
-    internal static IReadOnlyList<AshWaitRow> ToAshRows(IEnumerable<(string Event, string? WaitClass, long Samples)> rows)
-    {
-        var list = rows.ToList();
-        var total = list.Sum(r => r.Samples);
-        return [.. list.Select(r => new AshWaitRow(r.Event, r.WaitClass, r.Samples) { Share = total > 0 ? (double)r.Samples / total : 0 })];
-    }
-
     /// <summary>트레이스 본문을 SQL 로 못 읽는 이유(12.2 미만). 읽을 수 있으면 null.</summary>
     internal static string? TraceUnavailableReason(ServerInfo server)
     {
@@ -439,14 +329,6 @@ internal sealed partial class OracleTuningService : ITuningService
             $"서버 {server.Version} 에서는 트레이스 본문을 SQL 로 읽을 수 없습니다(v$diag_trace_file_contents 는 12.2 이후). 서버의 파일을 직접 여세요.");
     }
 
-    /// <summary>서버 경로에서 파일 이름만(유닉스·윈도 구분자 모두).</summary>
-    internal static string TraceFileName(string path)
-    {
-        ArgumentException.ThrowIfNullOrWhiteSpace(path);
-        var i = path.LastIndexOfAny(['/', '\\']);
-        return i < 0 ? path : path[(i + 1)..];
-    }
-
     private static async Task<long?> PreviousPlanHashAsync(ISession s, CancellationToken ct)
     {
         try
@@ -458,40 +340,6 @@ internal sealed partial class OracleTuningService : ITuningService
         {
             return null; // v$session 을 볼 권한이 없으면 계획 해시는 모른다.
         }
-    }
-
-    private static async Task<long> DrainAsync(ExecutionResult result, CancellationToken ct)
-    {
-        switch (result.Status)
-        {
-            case ExecutionStatus.Succeeded:
-                break;
-            case ExecutionStatus.Cancelled:
-                throw new OperationCanceledException("벤치마크를 취소했습니다.");
-            case ExecutionStatus.Denied:
-                throw new UnauthorizedAccessException(result.Policy?.Message ?? "정책 관문이 실행을 막았습니다.");
-            default:
-                throw new InvalidOperationException(result.Error?.Message ?? "실행하지 못했습니다.");
-        }
-
-        if (result.ResultSet is null)
-        {
-            return result.RowsAffected ?? 0;
-        }
-
-        await using var rs = result.ResultSet;
-        long rows = 0;
-        for (var page = 0; ; page++)
-        {
-            var p = await rs.GetPageAsync(page, ct);
-            rows += p.RowCount;
-            if (p.IsLast || p.RowCount == 0)
-            {
-                break;
-            }
-        }
-
-        return rows;
     }
 
     /// <summary>카탈로그 <c>tuning.*</c> 를 세션 연결로 읽는다(열 이름 포함). 팩이 모자라면 드라이버로 보내지 않는다.</summary>
@@ -544,12 +392,6 @@ internal sealed partial class OracleTuningService : ITuningService
         }
     }
 
-    private static string CheckSqlId(string sqlId)
-    {
-        ArgumentException.ThrowIfNullOrWhiteSpace(sqlId);
-        return sqlId.Trim();
-    }
-
     /// <summary>소유자·표 이름은 딕셔너리 표기 그대로(보통 대문자) 묶는다.</summary>
     private static void BindTable(OracleCommand c, string owner, string table)
     {
@@ -570,19 +412,4 @@ internal sealed partial class OracleTuningService : ITuningService
 
     private static void AddLong(OracleCommand c, string name, long value) =>
         c.Parameters.Add(new OracleParameter(name, OracleDbType.Int64) { Value = value });
-
-    [GeneratedRegex(@"\bFOR\s+UPDATE\b", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
-    private static partial Regex ForUpdate();
-
-    private static bool Yes(object? v, string yes) => string.Equals(Str(v), yes, StringComparison.OrdinalIgnoreCase);
-
-    private static string? Str(object? v) => v is null ? null : Convert.ToString(v, CultureInfo.InvariantCulture);
-
-    private static int? Int(object? v) => v is null ? null : Convert.ToInt32(v, CultureInfo.InvariantCulture);
-
-    private static long? Long(object? v) => v is null ? null : Convert.ToInt64(v, CultureInfo.InvariantCulture);
-
-    private static double? Double(object? v) => v is null ? null : Convert.ToDouble(v, CultureInfo.InvariantCulture);
-
-    private static DateTime? Date(object? v) => v is DateTime d ? d : null;
 }
