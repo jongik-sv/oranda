@@ -87,7 +87,9 @@ public class TiberoMetadataIt
         Assert.Equal("일반", detail.Sections[0].Title);
         Assert.Equal(table.Columns.Count, detail.Sections.Single(x => x.Title == "열").Rows.Count); // 표 주석이 있으면 「설명」 이 「열」 앞에 온다
         Assert.Equal(dual.ObjectType, detail.Sections[0].Rows[0][1]);
-        await Assert.ThrowsAsync<NotSupportedException>(() => provider.GetDdlAsync(session, dual, new DdlOptions(), CancellationToken.None));
+        // 표는 meta.ddl, 뷰는 meta.ddl_view(T3 D2b) 로 만든다: 어느 쪽이든 CREATE 로 시작한다.
+        var ddl = await QuietAsync("GetDdlAsync", () => provider.GetDdlAsync(session, dual, new DdlOptions(), CancellationToken.None));
+        Assert.True(ddl.StartsWith("CREATE", StringComparison.Ordinal), "DUAL 의 DDL 이 CREATE 로 시작하지 않는다");
     }
 
     /// <summary>DBMS_OUTPUT 은 모든 계정이 쓰는 내장 패키지다: 멤버·인자 매핑(오버로드 번호 없는 Tibero 멤버 행)을 본다.</summary>

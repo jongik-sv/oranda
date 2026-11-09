@@ -119,9 +119,9 @@ public class TiberoMetadataProviderDetailTests
         var provider = new TiberoMetadataProvider(Recording(calls, ById()));
         await using var session = Session();
 
-        var ex = await Assert.ThrowsAsync<NotSupportedException>(() => provider.GetDdlAsync(session, new DbObjectRef("SCOTT", "EMP_V", "VIEW"), new DdlOptions(), CancellationToken.None));
+        var ex = await Assert.ThrowsAsync<NotSupportedException>(() => provider.GetDdlAsync(session, new DbObjectRef("SCOTT", "EMP_MV", "MATERIALIZED VIEW"), new DdlOptions(), CancellationToken.None));
 
-        Assert.Equal(TiberoMetadataProvider.DdlNotSupported("VIEW"), ex.Message);
+        Assert.Equal(TiberoMetadataProvider.DdlNotSupported("MATERIALIZED VIEW"), ex.Message);
         Assert.Empty(calls);
     }
 

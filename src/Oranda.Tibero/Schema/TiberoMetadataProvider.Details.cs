@@ -7,15 +7,15 @@ using Oranda.Tibero.Sessions;
 
 namespace Oranda.Tibero.Schema;
 
-/// <summary>객체 상세(Oracle 과 같은 구역 제목·열·순서)·이름 풀이 한 단계·DDL 추출(표·PSM 객체, 나머지 유형은 뒤 단계).</summary>
+/// <summary>객체 상세(Oracle 과 같은 구역 제목·열·순서)·이름 풀이 한 단계·DDL 추출(표·PSM 객체. 사전 뷰로 만드는 유형·표 종속 객체는 .Ddl.cs).</summary>
 internal sealed partial class TiberoMetadataProvider
 {
     /// <summary>
-    /// 이 유형의 DDL 은 아직 만들지 않는다는 이유(화면은 예외 메시지를 DDL 칸·상태 줄에 보인다). 뷰·시퀀스·시노님·인덱스·구체화 뷰 등은 사전 뷰로 만드는 일이
-    /// 따로 필요하다(T3 DDL 2단계, 카탈로그 <c>meta.ddl</c> 머리말: DBMS_METADATA 는 TABLE 만 받는다).
+    /// 이 유형의 DDL 은 아직 만들지 않는다는 이유(화면은 예외 메시지를 DDL 칸·상태 줄에 보인다). 구체화 뷰·DB 링크 등은 사전 뷰로 만드는 일이
+    /// 따로 필요하다(카탈로그 <c>meta.ddl</c> 머리말: DBMS_METADATA 는 TABLE 만 받는다).
     /// </summary>
     internal static string DdlNotSupported(string objectType) =>
-        $"Tibero 는 {objectType} 유형의 DDL 추출을 아직 지원하지 않습니다(지원: TABLE, PROCEDURE, FUNCTION, PACKAGE, PACKAGE BODY, TYPE, TYPE BODY, TRIGGER).";
+        $"Tibero 는 {objectType} 유형의 DDL 추출을 아직 지원하지 않습니다(지원: TABLE, VIEW, SEQUENCE, SYNONYM, INDEX, PROCEDURE, FUNCTION, PACKAGE, PACKAGE BODY, TYPE, TYPE BODY, TRIGGER).";
 
     /// <summary>열·제약·인덱스를 가진 객체 유형(<see cref="GetTableAsync"/> 로 읽는다).</summary>
     private static readonly HashSet<string> TableLike = new(StringComparer.Ordinal) { "TABLE", "VIEW", "MATERIALIZED VIEW" };
@@ -36,15 +36,18 @@ internal sealed partial class TiberoMetadataProvider
     /// 객체 DDL(Oracle <c>DBMS_METADATA.GET_DDL</c> 대응). 부르는 쪽(객체 상세 DDL 탭·속성 창·DDL 일괄 추출·열 순서 바꾸기·AI 뷰 참조 풀이)은 모두 예외를 잡아
     /// 메시지를 보이거나 그 항목만 실패로 적는다.
     /// <list type="bullet">
-    /// <item>TABLE: 카탈로그 <c>meta.ddl</c>(DBMS_METADATA). 끝의 <c>;</c> 는 <see cref="DdlOptions.SqlTerminator"/> 로 맞춘다(카탈로그가 붙이거나 뗀다).</item>
+    /// <item>TABLE: 카탈로그 <c>meta.ddl</c>(DBMS_METADATA). 끝의 <c>;</c> 는 <see cref="DdlOptions.SqlTerminator"/> 로 맞춘다(카탈로그가 붙이거나 뗀다).
+    /// <see cref="DdlOptions.IncludeDependentObjects"/> 면 사전 뷰로 만든 종속 문장을 Oracle 순서(인덱스·제약·외래키·주석·권한·트리거)로 뒤에 붙인다(.Ddl.cs).</item>
+    /// <item>VIEW·SEQUENCE·SYNONYM·INDEX: 사전 뷰 행으로 만든 Oracle 모양 문장(<see cref="TiberoDdlAssembler"/>, .Ddl.cs).</item>
     /// <item>PROCEDURE·FUNCTION·PACKAGE(명세만)·PACKAGE BODY·TYPE(명세만)·TYPE BODY·TRIGGER: <c>meta.source</c> 글로 만든
-    /// <c>CREATE OR REPLACE … "OWNER"."NAME" …</c>. 명세와 본문은 Oracle 처럼 따로다(합치지 않는다). <see cref="DdlOptions.SqlTerminator"/> 면 새 줄에 <c>/</c> 를 붙인다(PL/SQL 관례).</item>
-    /// <item>그 밖의 유형: <see cref="NotSupportedException"/>.</item>
+    /// <c>CREATE OR REPLACE … "OWNER"."NAME" …</c>. 명세와 본문은 Oracle 처럼 따로다(합치지 않는다). <see cref="DdlOptions.SqlTerminator"/> 면 새 줄에 <c>/</c> 를 붙인다(PL/SQL 관례).
+    /// TRIGGER 는 Oracle 처럼 뒤에 <c>ALTER TRIGGER … ENABLE|DISABLE</c> 이 붙는다.</item>
+    /// <item>그 밖의 유형: <see cref="NotSupportedException"/>. 만들 수 없는 인덱스(도메인 등)도 이유를 담아 같은 예외.</item>
     /// <item>없거나 볼 수 없는 객체(줄·결과 없음): <see cref="InvalidOperationException"/>(<see cref="GetSourceAsync"/> 와 같은 모양). 없는 TABLE 은 서버 오류(ODP-15104)가 그대로 올라간다.</item>
     /// </list>
-    /// 옵션: <see cref="DdlOptions.SqlTerminator"/> 만 적용한다. <see cref="DdlOptions.IncludeStorage"/>·<see cref="DdlOptions.IncludeSegmentAttributes"/>·
-    /// <see cref="DdlOptions.IncludeTablespace"/> 는 Tibero 의 DBMS_METADATA 에 SET_TRANSFORM_PARAM 이 없어 적용할 수 없다(서버가 만든 속성이 그대로 들어간다).
-    /// <see cref="DdlOptions.IncludeDependentObjects"/> 는 GET_DEPENDENT_DDL 이 없어 표의 인덱스·제약·주석·권한·트리거 DDL 이 붙지 않는다(뒤 단계에서 사전 뷰로 만든다).
+    /// 옵션: <see cref="DdlOptions.SqlTerminator"/>·<see cref="DdlOptions.IncludeDependentObjects"/> 를 적용한다. <see cref="DdlOptions.IncludeStorage"/>·<see cref="DdlOptions.IncludeSegmentAttributes"/>·
+    /// <see cref="DdlOptions.IncludeTablespace"/> 는 Tibero 의 DBMS_METADATA 에 SET_TRANSFORM_PARAM 이 없어 적용할 수 없다(표는 서버가 만든 속성이 그대로 들어가고,
+    /// 사전 뷰로 만드는 문장에는 저장소 속성을 넣지 않는다).
     /// </summary>
     public async Task<string> GetDdlAsync(ISession s, DbObjectRef obj, DdlOptions o, CancellationToken ct)
     {
@@ -53,9 +56,21 @@ internal sealed partial class TiberoMetadataProvider
         ArgumentNullException.ThrowIfNull(o);
 
         var type = obj.ObjectType.ToUpperInvariant();
-        if (type == "TABLE")
+        switch (type)
         {
-            return await GetTableDdlAsync(s, obj, o, ct).ConfigureAwait(false);
+            case "TABLE":
+                var table = await GetTableDdlAsync(s, obj, o, ct).ConfigureAwait(false);
+                return o.IncludeDependentObjects ? await WithTableDependentsAsync(s, obj, table, o.SqlTerminator, ct).ConfigureAwait(false) : table;
+            case "VIEW":
+                return await GetViewDdlAsync(s, obj, o, ct).ConfigureAwait(false);
+            case "SEQUENCE":
+                return await GetSequenceDdlAsync(s, obj, o, ct).ConfigureAwait(false);
+            case "SYNONYM":
+                return await GetSynonymDdlAsync(s, obj, o, ct).ConfigureAwait(false);
+            case "INDEX":
+                return await GetIndexDdlAsync(s, obj, o, ct).ConfigureAwait(false);
+            case "TRIGGER":
+                return await GetTriggerDdlAsync(s, obj, o, ct).ConfigureAwait(false);
         }
 
         if (SourceDdlTypes.Contains(type))
@@ -94,7 +109,11 @@ internal sealed partial class TiberoMetadataProvider
         return ddl.Length == 0 ? throw DdlNotFound(obj) : ddl;
     }
 
-    private async Task<string> GetSourceDdlAsync(ISession s, DbObjectRef obj, string type, DdlOptions o, CancellationToken ct)
+    private async Task<string> GetSourceDdlAsync(ISession s, DbObjectRef obj, string type, DdlOptions o, CancellationToken ct) =>
+        TiberoDdlText.WithTerminator(await SourceDdlAsync(s, obj, type, ct).ConfigureAwait(false), o.SqlTerminator);
+
+    /// <summary><c>meta.source</c> 글 → 생성 문장(끝 표시 없음). 줄이 없거나 <paramref name="type"/> 로 시작하지 않으면 <see cref="InvalidOperationException"/>.</summary>
+    private async Task<string> SourceDdlAsync(ISession s, DbObjectRef obj, string type, CancellationToken ct)
     {
         var rows = await RunAsync(s, "meta.source", ObjectBinds(obj.Owner, obj.Name, type), ct).ConfigureAwait(false);
         if (rows.Count == 0)
@@ -102,9 +121,8 @@ internal sealed partial class TiberoMetadataProvider
             throw DdlNotFound(obj);
         }
 
-        var ddl = TiberoDdlText.FromSource(type, obj.Owner, obj.Name, [.. rows.Select(r => Str(r[0]))])
+        return TiberoDdlText.FromSource(type, obj.Owner, obj.Name, [.. rows.Select(r => Str(r[0]))])
             ?? throw new InvalidOperationException($"소스가 {type} 로 시작하지 않아 DDL 을 만들 수 없다: {obj.Owner}.{obj.Name} ({type})");
-        return TiberoDdlText.WithTerminator(ddl, o.SqlTerminator);
     }
 
     private static InvalidOperationException DdlNotFound(DbObjectRef obj) =>

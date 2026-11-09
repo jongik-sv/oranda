@@ -37,6 +37,7 @@ internal sealed partial class TiberoMetadataProvider : CachedMetadataProvider, I
         "meta.procedures", "meta.arguments", "meta.detail_general", "meta.detail_triggers", "meta.detail_referenced_by", "meta.detail_partitions",
         "meta.detail_stats", "meta.detail_size", "meta.detail_size_user", "meta.detail_privileges", "meta.detail_privileges_user",
         "meta.detail_dependencies", "meta.source", "meta.compile_errors", "meta.name_step",
+        "meta.ddl_view", "meta.ddl_sequence", "meta.ddl_index", "meta.ddl_table_indexes", "meta.ddl_constraints", "meta.ddl_trigger",
     ];
 
     private readonly CatalogRunner _run;
