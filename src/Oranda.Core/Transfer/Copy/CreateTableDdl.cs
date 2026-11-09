@@ -17,11 +17,13 @@ public static class CreateTableDdl
     /// FK 는 부모가 먼저 만들어져 있어야 하므로 실행기가 부모 → 자식 순서로 보낸다.
     /// </summary>
     /// <param name="tablesInJob">함께 다시 만드는 표 이름. 이 집합 밖 표를 참조하는 FK 는 만들지 않는다</param>
-    public static IReadOnlyList<string> Build(TableInfo source, string targetOwner, IReadOnlySet<string> tablesInJob)
+    /// <param name="isServerName">서버가 지은 이름인가(그 이름은 명시하지 않고 대상 서버가 새로 짓게 둔다). null = Oracle 판정(<see cref="IsServerName(string)"/>)</param>
+    public static IReadOnlyList<string> Build(TableInfo source, string targetOwner, IReadOnlySet<string> tablesInJob, Func<string, bool>? isServerName = null)
     {
         ArgumentNullException.ThrowIfNull(source);
         ArgumentException.ThrowIfNullOrWhiteSpace(targetOwner);
         ArgumentNullException.ThrowIfNull(tablesInJob);
+        var server = isServerName ?? IsSystemName;
 
         var table = Qualified(targetOwner, source.Table.Name);
         var statements = new List<string>();
@@ -40,7 +42,7 @@ public static class CreateTableDdl
             };
             if (body is not null)
             {
-                parts.Add(ConstraintPrefix(c) + body + (c.IsEnabled ? string.Empty : " DISABLE"));
+                parts.Add(ConstraintPrefix(c, server) + body + (c.IsEnabled ? string.Empty : " DISABLE"));
             }
         }
 
@@ -54,11 +56,11 @@ public static class CreateTableDdl
             }
 
             // 부모 열 목록은 TableInfo 에 없으므로 부모의 PK 를 참조한다(REFERENCES 에 열을 쓰지 않음).
-            statements.Add($"ALTER TABLE {table} ADD {ConstraintPrefix(fk)}FOREIGN KEY ({Quoted(fk.Columns)})"
+            statements.Add($"ALTER TABLE {table} ADD {ConstraintPrefix(fk, server)}FOREIGN KEY ({Quoted(fk.Columns)})"
                            + $" REFERENCES {Qualified(targetOwner, parent.Name)}" + (fk.IsEnabled ? string.Empty : " DISABLE"));
         }
 
-        foreach (var index in CreatedIndexes(source))
+        foreach (var index in CreatedIndexes(source, server))
         {
             statements.Add($"CREATE {(index.IsUnique ? "UNIQUE " : string.Empty)}INDEX {Qualified(targetOwner, index.Name)}"
                            + $" ON {table} ({Quoted(index.Columns)})");
@@ -81,25 +83,26 @@ public static class CreateTableDdl
     /// <see cref="Build"/> 가 대상 소유자 스키마에 이름을 지정해 만드는 제약·인덱스 이름(FK 제외). PK·UK 는 같은 이름의 인덱스도 만든다.
     /// 사전 점검이 대상의 다른 표와 이름이 겹치는지 본다(겹치면 DROP 뒤 CREATE 가 ORA-02264·ORA-00955 로 실패한다).
     /// </summary>
-    public static (IReadOnlyList<string> Constraints, IReadOnlyList<string> Indexes) NamedObjects(TableInfo source)
+    public static (IReadOnlyList<string> Constraints, IReadOnlyList<string> Indexes) NamedObjects(TableInfo source, Func<string, bool>? isServerName = null)
     {
         ArgumentNullException.ThrowIfNull(source);
+        var server = isServerName ?? IsSystemName;
         var constraints = source.Constraints
-            .Where(c => !IsSystemName(c.Name) && (c.Kind is ConstraintKind.PrimaryKey or ConstraintKind.Unique
+            .Where(c => !server(c.Name) && (c.Kind is ConstraintKind.PrimaryKey or ConstraintKind.Unique
                                                   || (c.Kind == ConstraintKind.Check && !string.IsNullOrWhiteSpace(c.Condition))))
             .Select(c => c.Name)
             .ToList();
         var indexes = source.Constraints
-            .Where(c => !IsSystemName(c.Name) && c.Kind is ConstraintKind.PrimaryKey or ConstraintKind.Unique)
+            .Where(c => !server(c.Name) && c.Kind is ConstraintKind.PrimaryKey or ConstraintKind.Unique)
             .Select(c => c.Name)
-            .Concat(CreatedIndexes(source).Select(i => i.Name))
+            .Concat(CreatedIndexes(source, server).Select(i => i.Name))
             .Distinct(StringComparer.Ordinal)
             .ToList();
         return (constraints, indexes);
     }
 
     /// <summary>제약에 속하지 않은 일반 인덱스(제약이 만든 인덱스, 함수 기반·LOB·도메인 인덱스, 서버가 지은 이름은 뺀다).</summary>
-    private static IEnumerable<IndexInfo> CreatedIndexes(TableInfo source)
+    private static IEnumerable<IndexInfo> CreatedIndexes(TableInfo source, Func<string, bool> server)
     {
         var keyColumnSets = source.Constraints
             .Where(c => c.Kind is ConstraintKind.PrimaryKey or ConstraintKind.Unique)
@@ -108,7 +111,7 @@ public static class CreateTableDdl
         var constraintNames = source.Constraints.Select(c => c.Name).ToHashSet(StringComparer.Ordinal);
         return source.Indexes.Where(index =>
             !(constraintNames.Contains(index.Name) || keyColumnSets.Contains(string.Join(",", index.Columns))
-              || IsSystemName(index.Name) || !IsNormalIndex(index) || index.Columns.Count == 0
+              || server(index.Name) || !IsNormalIndex(index) || index.Columns.Count == 0
               || index.Columns.Any(col => col.StartsWith("SYS_NC", StringComparison.Ordinal))));
     }
 
@@ -231,8 +234,8 @@ public static class CreateTableDdl
         };
     }
 
-    private static string ConstraintPrefix(ConstraintInfo c) =>
-        IsSystemName(c.Name) ? string.Empty : "CONSTRAINT " + SqlIdentifier.QuoteAlways(c.Name) + " ";
+    private static string ConstraintPrefix(ConstraintInfo c, Func<string, bool> server) =>
+        server(c.Name) ? string.Empty : "CONSTRAINT " + SqlIdentifier.QuoteAlways(c.Name) + " ";
 
     /// <summary>서버가 지은 이름(SYS_C…, SYS_IL…, BIN$…)은 대상 DB 에서 겹칠 수 있어 쓰지 않는다(서버가 새로 짓게 둔다).</summary>
     private static bool IsSystemName(string name) =>

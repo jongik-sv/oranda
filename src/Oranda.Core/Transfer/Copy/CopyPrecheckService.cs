@@ -458,9 +458,11 @@ public partial class CopyPrecheckService(IBulkExecutionService bulk, IMetadataPr
             }
 
             // 이름 겹침: 원본 이름 그대로 만드는 제약·인덱스·작업 안 FK.
-            var (constraints, indexes) = CreateTableDdl.NamedObjects(source);
+            // 서버가 지은 이름 판정은 실행기와 같아야 한다(DBMS 마다 다르다: Oracle SYS_…, Tibero <소유자>_CON<숫자>).
+            bool IsServer(string name) => dialect.IsServerName(name, source.Table.Owner);
+            var (constraints, indexes) = CreateTableDdl.NamedObjects(source, IsServer);
             var foreignKeys = source.Constraints
-                .Where(c => c.Kind == ConstraintKind.ForeignKey && !CreateTableDdl.IsServerName(c.Name) && c.ReferencedTable is { } p && IsLinkedParent(p, rule, linked))
+                .Where(c => c.Kind == ConstraintKind.ForeignKey && !IsServer(c.Name) && c.ReferencedTable is { } p && IsLinkedParent(p, rule, linked))
                 .Select(c => c.Name);
             var inUse = new List<string>();
             foreach (var name in constraints.Concat(foreignKeys).Distinct(StringComparer.Ordinal))

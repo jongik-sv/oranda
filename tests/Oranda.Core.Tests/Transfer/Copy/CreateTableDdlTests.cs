@@ -165,6 +165,49 @@ public class CreateTableDdlTests
         Assert.Equal(["ORDERS_PK", "ORDERS_NAME_IX"], indexes);
     }
 
+    /// <summary>
+    /// 서버가 지은 이름 판정을 DBMS 가 넘길 수 있다(Tibero 이름 없는 제약 = <c>&lt;소유자&gt;_CON&lt;숫자&gt;</c>). 판정이 서버 이름이라 하면 이름을 명시하지 않고
+    /// (대상 서버가 새로 짓게 둔다), 판정을 안 넘기면 Oracle(SYS_/BIN$)만 안다.
+    /// </summary>
+    [Fact]
+    public void Server_name_predicate_decides_which_names_are_left_to_the_server()
+    {
+        var t = Table("ORDERS",
+            [new ColumnInfo("ID", 1, "NUMBER"), new ColumnInfo("CODE", 2, "VARCHAR2") { Length = 5 }, new ColumnInfo("PID", 3, "NUMBER")],
+            [
+                new ConstraintInfo("CP_SRC_CON17", ConstraintKind.PrimaryKey, ["ID"]),
+                new ConstraintInfo("CP_SRC_CON18", ConstraintKind.Unique, ["CODE"]),
+                new ConstraintInfo("CP_SRC_CON19", ConstraintKind.Check, ["ID"]) { Condition = "ID > 0" },
+                new ConstraintInfo("CP_SRC_CON20", ConstraintKind.ForeignKey, ["PID"]) { ReferencedTable = new DbObjectRef("CP_SRC", "P", "TABLE") },
+                new ConstraintInfo("ORDERS_CK", ConstraintKind.Check, ["ID"]) { Condition = "ID < 99" },
+            ],
+            [new IndexInfo("CP_SRC_CON21", false, ["CODE", "PID"]), new IndexInfo("ORDERS_IX", false, ["PID", "CODE"])]);
+        var job = new HashSet<string>(["P"], StringComparer.Ordinal);
+        static bool TiberoLike(string name) => name.StartsWith("CP_SRC_CON", StringComparison.Ordinal);
+
+        // 판정을 안 넘기면(Oracle) 이 이름들은 사용자가 지은 이름으로 보고 명시한다.
+        var oracleDdl = string.Join(" ", CreateTableDdl.Build(t, "CP_DST", job));
+        Assert.Contains("CONSTRAINT \"CP_SRC_CON17\" PRIMARY KEY", oracleDdl, StringComparison.Ordinal);
+        Assert.Contains("CONSTRAINT \"CP_SRC_CON20\" FOREIGN KEY", oracleDdl, StringComparison.Ordinal);
+        Assert.Contains("INDEX \"CP_DST\".\"CP_SRC_CON21\"", oracleDdl, StringComparison.Ordinal);
+
+        var ddl = CreateTableDdl.Build(t, "CP_DST", job, TiberoLike);
+        var all = string.Join(" ", ddl);
+        Assert.DoesNotContain("CP_SRC_CON", all, StringComparison.Ordinal);
+        Assert.Contains("PRIMARY KEY (\"ID\")", ddl[0], StringComparison.Ordinal);
+        Assert.Contains("UNIQUE (\"CODE\")", ddl[0], StringComparison.Ordinal);
+        Assert.Contains("CHECK (ID > 0)", ddl[0], StringComparison.Ordinal);
+        Assert.Contains("CONSTRAINT \"ORDERS_CK\" CHECK (ID < 99)", ddl[0], StringComparison.Ordinal);
+        Assert.Contains("ADD FOREIGN KEY (\"PID\") REFERENCES \"CP_DST\".\"P\"", all, StringComparison.Ordinal);
+        Assert.Contains("INDEX \"CP_DST\".\"ORDERS_IX\"", all, StringComparison.Ordinal);
+
+        // 사전 점검이 보는 이름 목록도 같은 판정이다(서버 이름은 대상 이름 겹침 점검에서 뺀다).
+        var (constraints, indexes) = CreateTableDdl.NamedObjects(t, TiberoLike);
+        Assert.Equal(["ORDERS_CK"], constraints);
+        Assert.Equal(["ORDERS_IX"], indexes);
+        Assert.Equal(["CP_SRC_CON17", "CP_SRC_CON18", "CP_SRC_CON19", "ORDERS_CK"], CreateTableDdl.NamedObjects(t).Constraints);
+    }
+
     /// <summary>Oracle 사전이 내는 형식 이름의 글은 그대로다(TB4 에서 Tibero 갈래를 더할 때 고정).</summary>
     [Theory]
     [InlineData("VARCHAR2", 50, "VARCHAR2(50 CHAR)")]

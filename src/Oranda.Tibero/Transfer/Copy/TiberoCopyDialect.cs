@@ -1,7 +1,9 @@
+using Oranda.Core.Connection;
 using Oranda.Core.Execution;
 using Oranda.Core.Journal;
 using Oranda.Core.Text;
 using Oranda.Core.Transfer.Copy;
+using Oranda.Tibero.Catalog;
 using Oranda.Tibero.Execution;
 
 namespace Oranda.Tibero.Transfer.Copy;
@@ -110,6 +112,25 @@ internal sealed class TiberoCopyDialect : ICopyDialect
     /// 미실측 → 번호 없음. 없는 열을 가리키는 트리거 CREATE 는 오류 없이 받아 INVALID+ENABLED 로 남는다(TB4 #79) — 컴파일 오류 번호가 나오지 않으니 문구에 붙일 번호가 없다.
     /// </summary>
     public string? TriggerCompileErrorName => null;
+
+    private static readonly Lazy<string> TriggerStatus = new(() => TiberoEmbeddedCatalog.Load().Get("copy.trigger_status", 6, Dbms.Tibero).Sql);
+
+    /// <summary>
+    /// TB4 #79 실측: 없는 열을 가리키는 트리거 CREATE 를 오류 없이 받아 <c>user_objects</c> INVALID + <c>user_triggers</c> ENABLED 로 남긴다.
+    /// 그래서 실행기가 되살린 트리거마다 <c>copy.trigger_status</c> 카탈로그 글(Tibero 에만 있는 id)로 상태를 보고 INVALID 이면 끈다
+    /// (안내 글의 번호는 위 <see cref="TriggerCompileErrorName"/> = 없음).
+    /// </summary>
+    public string? TriggerStatusSql => TriggerStatus.Value;
+
+    /// <summary>서버가 지은 이름 = <c>&lt;소유자&gt;_CON&lt;숫자&gt;</c>(#76 실측)·<c>_SYS_…</c>·Oracle 모양. <see cref="TiberoRecreateStep.IsServerName"/> 과 같은 판정.</summary>
+    public bool IsServerName(string name, string owner) => TiberoRecreateStep.IsServerName(name, owner);
+
+    /// <summary>
+    /// 먼저 지운 자식 표가 휴지통에 남아 그 FK 로 부모 DROP 이 TBR-7156 으로 거부될 수 있다(3.7: 휴지통 표 이름 <c>&lt;계정&gt;_TBL…</c>, 같은 DROP 거부는 3.5 실측).
+    /// 휴지통에 FK 가 남는지 자체는 이 조합으로 재지 못했다(미실측) → 「있을 수 있다」 로 적는다.
+    /// </summary>
+    public string? RecycledChildForeignKeyNote(IReadOnlyList<string> children) =>
+        $"이 실행에서 먼저 지운 자식 표 {string.Join(", ", children)} 이(가) 휴지통에 남아 그 FK 가 이 표를 참조하고 있을 수 있습니다(휴지통의 그 표를 PURGE 해야 할 수 있습니다).";
 
     /// <summary>미실측 → 번호 없음(Tibero 의 이전 시점 읽기 실패 번호를 재지 못했다, <c>TiberoErrorClassifier</c> 도 SnapshotTooOld 를 분류하지 않는다).</summary>
     public string? SnapshotTooOldErrorName => null;

@@ -174,6 +174,18 @@ public sealed partial class TiberoCopyPrecheckDialectTests
         Assert.Contains("WHERE 1 = 0", sql, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public void Trigger_status_is_a_tibero_only_file_with_the_owner_and_name_binds_and_one_column()
+    {
+        var entry = Catalog.Get("copy.trigger_status", 6, Dbms.Tibero);
+
+        Assert.Equal(Dbms.Tibero, entry.Header.Dbms);
+        Assert.StartsWith("SELECT", entry.Sql, StringComparison.Ordinal);
+        Assert.True(new HashSet<string>(["OWN", "NAME"], StringComparer.Ordinal).SetEquals(Binds(entry.Sql)));
+        Assert.Equal(1, SelectListCount(entry.Sql));
+        Assert.Equal(entry.Sql, ((ICopyDialect)TiberoCopyDialect.Instance).TriggerStatusSql);
+    }
+
     /// <summary>
     /// 실제 Oracle 판에 있는 id 를 Tibero 판이 같은 바인드·같은 열 수로 따르는지는 IT 가 서버로 본다. 여기서는 Oracle 에만 있는 id 가 예상한 것뿐인지 확인한다:
     /// FGA 점검(사전 뷰 없음)과 트리거 DDL(GET_DDL('TRIGGER') = -14001, Tibero 는 메타데이터 제공자로 조립).
@@ -185,7 +197,9 @@ public sealed partial class TiberoCopyPrecheckDialectTests
         var oracleCopy = oracle.Entries.Where(e => e.Id.StartsWith("copy.", StringComparison.Ordinal)).Select(e => e.Id).ToHashSet(StringComparer.Ordinal);
         var tiberoCopy = Catalog.Entries.Where(e => e.Id.StartsWith("copy.", StringComparison.Ordinal)).Select(e => e.Id).ToHashSet(StringComparer.Ordinal);
 
-        Assert.Empty(tiberoCopy.Except(oracleCopy)); // Tibero 에 Oracle 에 없는 copy.* 가 생기면 안 된다
+        // Tibero 에 Oracle 에 없는 copy.* 는 copy.trigger_status 하나뿐이다: 컴파일 오류 트리거를 오류 없이 받는 서버에서만 쓰는 조회로,
+        // Oracle 은 ORA-24344 로 알려 주므로 쓰지 않는다(Oracle 카탈로그는 바꾸지 않는다). Core 는 이 id 를 모르고 방언(TriggerStatusSql)이 글을 넘긴다.
+        Assert.Equal(["copy.trigger_status"], tiberoCopy.Except(oracleCopy).Order(StringComparer.Ordinal).ToList());
         Assert.Equal(["copy.fga_policy_count", "copy.recreate_trigger_ddl"], oracleCopy.Except(tiberoCopy).Order(StringComparer.Ordinal).ToList());
     }
 

@@ -334,6 +334,27 @@ public sealed class OracleCopyDialectTests
         Assert.Equal("(트리거는 BIN$ 이름으로, 인덱스·권한과 함께 돌아옵니다. 이 표를 참조하던 FK 는 돌아오지 않습니다)", dialect.FlashbackRestoreNote);
     }
 
+    [Fact]
+    public void Server_name_trigger_status_and_recycled_child_hooks_keep_the_oracle_behavior()
+    {
+        ICopyDialect dialect = OracleCopyDialect.Instance;
+        ICopyPrecheckDialect precheck = OracleCopyPrecheckDialect.Instance;
+
+        // Oracle 은 SYS_ / BIN$ 만 서버 이름으로 본다(소유자와 무관). Tibero 모양 이름 SCOTT_CON1 은 사용자가 지은 이름이다.
+        foreach (var name in new[] { "SYS_C001234", "SYS_IL0000012345C00002$$", "BIN$abc==$0" })
+        {
+            Assert.True(dialect.IsServerName(name, "SCOTT"));
+            Assert.True(precheck.IsServerName(name, "SCOTT"));
+        }
+
+        Assert.False(dialect.IsServerName("SCOTT_CON1", "SCOTT"));
+        Assert.False(precheck.IsServerName("SCOTT_CON1", "SCOTT"));
+        Assert.False(dialect.IsServerName("ORDERS_PK", "SCOTT"));
+        // 컴파일 오류 트리거는 ORA-24344 오류로 알려 주므로 상태 조회를 하지 않는다. 지운 자식 표는 FK 를 쥔 채 휴지통에 남지 않는다.
+        Assert.Null(dialect.TriggerStatusSql);
+        Assert.Null(dialect.RecycledChildForeignKeyNote(["SCOTT.CHILD"]));
+    }
+
     [Theory]
     [InlineData(false, " 원본과 다르게 만들어지는 것: 문자 길이는 글자 단위(CHAR), DEFAULT ON NULL·IDENTITY 옵션(ALWAYS·시작·증가)·DEFERRABLE PK/UK·COLLATE 은 빠지고, 파티션·IOT·임시 표는 일반 표가 됩니다.")]
     [InlineData(true, " 원본과 다르게 만들어지는 것: 문자 길이는 글자 단위(CHAR), DEFAULT ON NULL·IDENTITY 옵션(ALWAYS·시작·증가)·DEFERRABLE PK/UK·COLLATE·도메인 은 빠지고, 파티션·IOT·임시 표는 일반 표가 됩니다.")]

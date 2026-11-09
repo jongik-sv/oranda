@@ -83,4 +83,23 @@ public interface ICopyDialect
     /// </summary>
     string FlashbackRestoreNote =>
         "(트리거는 BIN$ 이름으로, 인덱스·권한과 함께 돌아옵니다. 이 표를 참조하던 FK 는 돌아오지 않습니다)";
+
+    /// <summary>
+    /// 컴파일 오류가 있는 트리거 CREATE 를 오류 없이 받는 서버(받으면 INVALID 로 남고 켜진 채 있다)에서 되살린 트리거의 컴파일 상태를 읽는 조회 글.
+    /// 글은 <c>SELECT</c> 로 시작하고 바인드는 <c>OWN</c>(트리거 소유자)·<c>NAME</c>, 결과 = 행 하나·열 하나(<c>VALID</c>/<c>INVALID</c>).
+    /// 실행기는 되살린 트리거마다 이 조회로 INVALID 인지 보고 INVALID 이면 끈다. 기본 null = 조회하지 않음(Oracle 은 ORA-24344 오류로 알려 준다).
+    /// </summary>
+    string? TriggerStatusSql => null;
+
+    /// <summary>
+    /// 이름 없이 만든 제약·인덱스에 서버가 지어 준 이름인가(다시 만들 때 이름을 명시하지 않고 서버가 새로 짓게 둔다). <paramref name="owner"/> = 그 제약이 있던 표의 소유자.
+    /// 기본 구현 = Oracle(<c>SYS_…</c>·<c>BIN$…</c>, 소유자와 무관).
+    /// </summary>
+    bool IsServerName(string name, string owner) => CreateTableDdl.IsServerName(name);
+
+    /// <summary>
+    /// 이 표를 참조하던 자식 표를 이 실행에서 먼저 지운 뒤 부모 DROP 이 「참조하는 FK 가 있음」 으로 거부됐을 때 붙이는 설명(앞 공백 없음). 기본 null = 덧붙일 말 없음(Oracle).
+    /// 지운 자식 표가 휴지통에 FK 를 쥔 채 남는 DBMS 가 채운다. <paramref name="children"/> = 먼저 지운 자식 표 이름(<c>계정.표</c>).
+    /// </summary>
+    string? RecycledChildForeignKeyNote(IReadOnlyList<string> children) => null;
 }

@@ -110,4 +110,46 @@ public sealed class TiberoCopyDialectTests
         Assert.StartsWith("(", dialect.FlashbackRestoreNote, StringComparison.Ordinal);
         Assert.EndsWith(")", dialect.FlashbackRestoreNote, StringComparison.Ordinal);
     }
+
+    /// <summary>없는 열을 가리키는 트리거 CREATE 는 오류 없이 INVALID+ENABLED 로 남는다(#79): 실행기가 상태 조회로 알아챈다.</summary>
+    [Fact]
+    public void Trigger_status_query_reads_one_status_by_owner_and_name_binds()
+    {
+        var sql = ((ICopyDialect)Dialect).TriggerStatusSql;
+
+        Assert.NotNull(sql);
+        Assert.StartsWith("SELECT", sql, StringComparison.Ordinal);
+        Assert.Contains("ALL_OBJECTS", sql, StringComparison.Ordinal);
+        Assert.Contains("'TRIGGER'", sql, StringComparison.Ordinal);
+        Assert.Contains(":OWN", sql, StringComparison.Ordinal);
+        Assert.Contains(":NAME", sql, StringComparison.Ordinal);
+        Assert.DoesNotContain("@PFX@", sql, StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData("SCOTT_CON1", "SCOTT", true)]
+    [InlineData("SCOTT_CON123456", "SCOTT", true)]
+    [InlineData("SCOTT_CON1", "HR", false)]
+    [InlineData("SCOTT_CON", "SCOTT", false)]
+    [InlineData("SCOTT_CON1X", "SCOTT", false)]
+    [InlineData("SYS_C001234", "SCOTT", true)]
+    [InlineData("_SYS_CON12", "SCOTT", true)]
+    [InlineData("EMP_PK", "SCOTT", false)]
+    public void Server_names_follow_the_owner_con_number_form_in_the_runner_dialect_and_the_precheck_dialect(string name, string owner, bool server)
+    {
+        Assert.Equal(server, ((ICopyDialect)Dialect).IsServerName(name, owner));
+        Assert.Equal(server, ((ICopyPrecheckDialect)TiberoCopyPrecheckDialect.Instance).IsServerName(name, owner));
+    }
+
+    [Fact]
+    public void Recycled_child_note_names_the_children_and_says_may_not_certain()
+    {
+        var note = ((ICopyDialect)Dialect).RecycledChildForeignKeyNote(["SCOTT.CHILD1", "SCOTT.CHILD2"]);
+
+        Assert.NotNull(note);
+        Assert.Contains("SCOTT.CHILD1, SCOTT.CHILD2", note, StringComparison.Ordinal);
+        Assert.Contains("휴지통", note, StringComparison.Ordinal);
+        Assert.Contains("있을 수 있습니다", note, StringComparison.Ordinal); // 휴지통의 FK 는 미실측
+        Assert.DoesNotContain("ORA-", note, StringComparison.Ordinal);
+    }
 }

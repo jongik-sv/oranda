@@ -92,5 +92,8 @@ internal sealed class TiberoCopyPrecheckDialect : ICopyPrecheckDialect
         " 원본과 다르게 만들어지는 것: 문자 길이는 글자 단위(CHAR), DEFERRABLE 제약(PK/UK 와, Tibero 카탈로그가 지연 여부를 알려 주지 않아 FK 도)은 즉시 검사로 바뀌고,"
         + " 파티션·IOT·임시 표는 일반 표가 됩니다.";
 
+    /// <summary>서버가 지은 이름 = <c>&lt;소유자&gt;_CON&lt;숫자&gt;</c>(#76 실측)·<c>_SYS_…</c>·Oracle 모양. 실행기의 <see cref="TiberoCopyDialect.IsServerName"/> 과 같은 판정.</summary>
+    public bool IsServerName(string name, string owner) => TiberoRecreateStep.IsServerName(name, owner);
+
     private static string Number(long value) => value.ToString("N0", CultureInfo.InvariantCulture);
 }

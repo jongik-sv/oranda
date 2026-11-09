@@ -502,7 +502,8 @@ public class CopyRunner : ICopyRunner
             {
                 table.Preserved = await step.CaptureAsync(run.Target, owner, plan.Rule.Table, ct);
                 // 작업 안 FK 는 CreateTableDdl 대신 원본 카탈로그로 만든다(ON DELETE·DEFERRABLE·UK 참조를 원본대로, 조정 결정 16).
-                table.CreateDdl = CreateTableDdl.Build(plan.Source, owner, noForeignKeys);
+                // 서버가 지은 제약 이름(Oracle SYS_C…, Tibero <소유자>_CON<숫자>)은 명시하지 않고 대상 서버가 새로 짓게 둔다.
+                table.CreateDdl = CreateTableDdl.Build(plan.Source, owner, noForeignKeys, name => _dialect.IsServerName(name, sourceOwner));
                 table.JobForeignKeys = await step.SourceForeignKeysAsync(run.Source, sourceOwner, plan.Rule.Table, planned, owner, ct);
                 table.BinBefore = await step.RecycleBinAsync(run.Target, plan.Rule.Table, ct);
                 run.Log($"지우기 전에 받아 둠: 트리거 {table.Preserved.Triggers.Count.ToString(CultureInfo.InvariantCulture)}개 · 권한 {table.Preserved.Grants.Count.ToString(CultureInfo.InvariantCulture)}개"
@@ -632,8 +633,17 @@ public class CopyRunner : ICopyRunner
         {
             if (_dialect.IsReferencedByForeignKeys(drop.Error))
             {
-                table.Fail($"대상 계정에 보이지 않는 FK(다른 스키마)가 이 표를 참조하고 있어 지우지 않았습니다{ErrorNameNote(_dialect.ReferencedByForeignKeysErrorName)}. 그 FK 를 확인하거나 대상 처리를 바꾸세요.");
-                run.Abort($"{table.Name}: 보이지 않는 FK 때문에 표를 지우지 않고 멈췄습니다. 떼어 낸 FK 는 다시 붙입니다.");
+                // 이 실행에서 먼저 지운 자식 표가 FK 를 쥔 채 휴지통에 남는 DBMS 는 그 FK 를 원인으로 짚어 준다(「보이지 않는 FK」 라고만 하면 오안내다).
+                var children = table.Preserved is { } kept
+                    ? kept.ReferencingConstraints.Where(fk => run.ByTarget(fk.Owner, fk.Table) is { Dropped: true })
+                        .Select(fk => fk.Owner + "." + fk.Table).Distinct(StringComparer.Ordinal).ToList()
+                    : [];
+                var recycled = children.Count > 0 ? _dialect.RecycledChildForeignKeyNote(children) : null;
+                var name = ErrorNameNote(_dialect.ReferencedByForeignKeysErrorName);
+                table.Fail(recycled is null
+                    ? $"대상 계정에 보이지 않는 FK(다른 스키마)가 이 표를 참조하고 있어 지우지 않았습니다{name}. 그 FK 를 확인하거나 대상 처리를 바꾸세요."
+                    : $"이 표를 참조하는 FK 가 남아 있어 지우지 않았습니다{name}. {recycled} 아니면 대상 계정에 보이지 않는 FK(다른 스키마)일 수도 있습니다. 그 FK 를 확인하거나 대상 처리를 바꾸세요.");
+                run.Abort($"{table.Name}: 참조 FK 때문에 표를 지우지 않고 멈췄습니다. 떼어 낸 FK 는 다시 붙입니다.");
                 return false;
             }
 
@@ -726,29 +736,7 @@ public class CopyRunner : ICopyRunner
                 }
             }
 
-            for (var i = 0; i < kept.Triggers.Count; i++)
-            {
-                var text = kept.Triggers[i];
-                var r = await TryRestoreAsync(run, text, CleanupTimeout);
-                if (r is { Status: ExecutionStatus.Succeeded })
-                {
-                    continue;
-                }
-
-                if (r?.Error?.Kind == DbErrorKind.CompiledWithErrors && i < kept.TriggerObjects.Count)
-                {
-                    // 만들어졌지만 INVALID 다. 켜진 채 두면 이 표의 DML 이 모두 막히므로(Oracle ORA-04098) 끈다.
-                    var obj = kept.TriggerObjects[i];
-                    var off = await TryRestoreAsync(run, _dialect.DisableTrigger(obj.Owner, obj.Name).Text, CleanupTimeout);
-                    var compile = ErrorNameNote(_dialect.TriggerCompileErrorName);
-                    RestoreFailed(run, t, off is { Status: ExecutionStatus.Succeeded }
-                        ? $"트리거 {obj.Owner}.{obj.Name} 은 다시 만든 열 구조와 맞지 않아 컴파일 오류{compile}로 INVALID 입니다. 꺼 두었으니 고친 뒤 켜세요."
-                        : $"트리거 {obj.Owner}.{obj.Name} 은 컴파일 오류{compile}로 INVALID 이고 끄지도 못했습니다. 이 표의 DML 이 막힐 수 있으니 직접 고치거나 지우세요.");
-                    continue;
-                }
-
-                RestoreFailed(run, t, $"트리거를 되살리지 못했습니다({DescribeRestore(r)}). 직접 실행하세요: {text}");
-            }
+            await RestoreTriggersAsync(run, t, kept);
 
             foreach (var text in kept.Grants)
             {
@@ -794,6 +782,102 @@ public class CopyRunner : ICopyRunner
                 await ReattachAsync(run, t, fk, kept.ReferencingForeignKeys[i]);
             }
         }
+    }
+
+    /// <summary>
+    /// 받아 둔 트리거를 되살린다. 만들어졌지만 컴파일 오류로 INVALID 이면 끈다(켜진 채 두면 이 표의 DML 이 막힌다).
+    /// 컴파일 오류를 오류로 알려 주는 DBMS(Oracle ORA-24344)는 그 오류로, 오류 없이 받는 DBMS(Tibero)는 만든 뒤 상태를 조회해 알아챈다
+    /// (<see cref="ICopyDialect.TriggerStatusSql"/>).
+    /// </summary>
+    private async Task RestoreTriggersAsync(RunState run, TableState t, PreservedDdl kept)
+    {
+        for (var i = 0; i < kept.Triggers.Count; i++)
+        {
+            var text = kept.Triggers[i];
+            var r = await TryRestoreAsync(run, text, CleanupTimeout);
+            if (r is { Status: ExecutionStatus.Succeeded })
+            {
+                // 같은 트리거의 다음 문장이 있으면 그것은 원래 꺼져 있던 트리거의 DISABLE 이다(상태를 볼 필요 없음).
+                // 앞 문장과 같은 트리거면 이 문장이 DISABLE 자체다.
+                var obj = i < kept.TriggerObjects.Count ? kept.TriggerObjects[i] : null;
+                var isCreate = obj is not null && (i == 0 || kept.TriggerObjects[i - 1] != obj);
+                var followedByDisable = obj is not null && i + 1 < kept.TriggerObjects.Count && kept.TriggerObjects[i + 1] == obj;
+                if (isCreate && !followedByDisable && _dialect.TriggerStatusSql is { } statusSql)
+                {
+                    await DisableIfInvalidAsync(run, t, obj!, statusSql);
+                }
+
+                continue;
+            }
+
+            if (r?.Error?.Kind == DbErrorKind.CompiledWithErrors && i < kept.TriggerObjects.Count)
+            {
+                await DisableInvalidTriggerAsync(run, t, kept.TriggerObjects[i]);
+                continue;
+            }
+
+            RestoreFailed(run, t, $"트리거를 되살리지 못했습니다({DescribeRestore(r)}). 직접 실행하세요: {text}");
+        }
+    }
+
+    /// <summary>되살린 트리거의 상태를 조회해 INVALID 이면 끈다. 상태를 알 수 없으면 알리고 결과를 실패로 둔다(막힌 DML 을 못 알아챌 수 있다).</summary>
+    private async Task DisableIfInvalidAsync(RunState run, TableState t, DisabledObject obj, string statusSql)
+    {
+        string? status;
+        try
+        {
+            using var step = new CancellationTokenSource(CleanupTimeout);
+            var value = await ScalarAsync(run, run.Target, CopyCommonStatements.Query(statusSql), new Dictionary<string, BindValue>
+            {
+                ["OWN"] = new(BindDataType.Varchar2, obj.Owner),
+                ["NAME"] = new(BindDataType.Varchar2, obj.Name),
+            }, step.Token);
+            status = _codec.ToText(value);
+        }
+        catch (Exception ex) when (IsCleanupFailure(ex))
+        {
+            status = null;
+        }
+
+        if (status is null)
+        {
+            RestoreFailed(run, t, $"트리거 {obj.Owner}.{obj.Name} 을 되살렸지만 컴파일 상태를 확인하지 못했습니다. 컴파일 오류로 INVALID 이면 이 표의 DML 이 막힐 수 있으니 상태를 확인하세요.");
+            return;
+        }
+
+        if (string.Equals(status.Trim(), "INVALID", StringComparison.OrdinalIgnoreCase))
+        {
+            await DisableInvalidTriggerAsync(run, t, obj);
+        }
+    }
+
+    private async Task DisableInvalidTriggerAsync(RunState run, TableState t, DisabledObject obj)
+    {
+        // 만들어졌지만 INVALID 다. 켜진 채 두면 이 표의 DML 이 모두 막히므로(Oracle ORA-04098) 끈다.
+        var off = await TryRestoreAsync(run, _dialect.DisableTrigger(obj.Owner, obj.Name).Text, CleanupTimeout);
+        var compile = ErrorNameNote(_dialect.TriggerCompileErrorName);
+        RestoreFailed(run, t, off is { Status: ExecutionStatus.Succeeded }
+            ? $"트리거 {obj.Owner}.{obj.Name} 은 다시 만든 열 구조와 맞지 않아 컴파일 오류{compile}로 INVALID 입니다. 꺼 두었으니 고친 뒤 켜세요."
+            : $"트리거 {obj.Owner}.{obj.Name} 은 컴파일 오류{compile}로 INVALID 이고 끄지도 못했습니다. 이 표의 DML 이 막힐 수 있으니 직접 고치거나 지우세요.");
+    }
+
+    /// <summary>
+    /// 시험·IT 용: 받아 둔 트리거만 <paramref name="target"/> 에서 되살린다(<see cref="RestoreAsync"/> 의 트리거 단계와 같은 코드).
+    /// 다른 계정이 없어 복사 전체를 못 돌리는 환경에서 INVALID 트리거 판정과 끄기를 실행기 경로로 보는 데 쓴다. 되살리지 못한 것이 있으면 <c>Failed</c>.
+    /// </summary>
+    internal async Task<(bool Failed, IReadOnlyList<string> Notices)> RestoreTriggersForTestAsync(ISession target, string owner, string table, PreservedDdl kept)
+    {
+        ArgumentNullException.ThrowIfNull(target);
+        ArgumentNullException.ThrowIfNull(kept);
+        var job = new CopyJob
+        {
+            Id = "restore-triggers", Name = "restore-triggers", Source = new ConnectionRef("-", owner), Target = new ConnectionRef("-", owner),
+            SourceOwner = owner, TargetOwner = owner, MaskSalt = "AA==",
+        };
+        var run = new RunState(new CopySessions(target, target), job, new PrecheckReport([], [], [], new Dictionary<string, long>()),
+                               new ResolvedPeriod(null, null), new HashSet<string>(StringComparer.Ordinal), null);
+        await RestoreTriggersAsync(run, new TableState(owner + "." + table, owner, table), kept);
+        return (run.RestoreFailed, [.. run.Notices]);
     }
 
     /// <summary>
