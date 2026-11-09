@@ -22,6 +22,7 @@ namespace Oranda.Core.Serialization;
 [JsonSerializable(typeof(FormatterProfile))]
 [JsonSerializable(typeof(Workspace))]
 [JsonSerializable(typeof(AiSettings))]
+[JsonSerializable(typeof(DriverSettings))]
 public sealed partial class OrandaJsonContext : JsonSerializerContext
 {
 }

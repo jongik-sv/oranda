@@ -56,6 +56,22 @@ public sealed record AppSettings
 
     // "ai": null 인 손으로 고친 파일도 기본값으로 받는다.
     private readonly AiSettings _ai = new();
+
+    /// <summary>DBMS 드라이버 위치(Tibero 드라이버 지정, D-046 결정25). 새 섹션이라 스키마 버전은 그대로, 키가 없는 옛 파일 = 지정 안 함.</summary>
+    public DriverSettings Drivers { get => _drivers; init => _drivers = value ?? new(); }
+
+    // "drivers": null 인 손으로 고친 파일도 기본값으로 받는다.
+    private readonly DriverSettings _drivers = new();
+}
+
+/// <summary>
+/// DBMS 드라이버 위치. 드라이버는 라이선스 때문에 앱에 들어 있지 않아 사용자가 위치를 지정한다(docs/design/tibero.md 1장).
+/// JSON: <c>"drivers": { "tiberoPath": "…" }</c>. 환경 변수 <c>ORANDA_TIBERO_DRIVER</c> 가 이 값보다 먼저다(로더 몫).
+/// </summary>
+public sealed record DriverSettings
+{
+    /// <summary>Tibero.DataAccess.dll 의 위치: dll 파일, 그 dll 이 든 폴더, 또는 <c>.nupkg</c>. null·빈 값 = 지정 안 함.</summary>
+    public string? TiberoPath { get; init; }
 }
 
 /// <summary>AI 호출 방식(설계 §2). 새 값은 맨 끝에 추가한다.</summary>
