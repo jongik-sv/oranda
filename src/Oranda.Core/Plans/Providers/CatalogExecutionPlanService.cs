@@ -79,7 +79,7 @@ public abstract class CatalogExecutionPlanService : IExecutionPlanService
             var planText = PlanRows.JoinLines(text.Rows);
             return new ExecutionPlan(planSteps, planText)
             {
-                PlanHashValue = ExplainPlanHash(planText),
+                PlanHashValue = await ExplainPlanHashAsync(s, statementId, planText, ct),
             };
         }
     }
@@ -153,4 +153,11 @@ public abstract class CatalogExecutionPlanService : IExecutionPlanService
 
     /// <summary>예상 계획의 계획 해시(<see cref="ExecutionPlan.PlanHashValue"/>). 기본 = 모름(null).</summary>
     protected virtual long? ExplainPlanHash(string planText) => null;
+
+    /// <summary>
+    /// 예상 계획의 계획 해시를 서버에서 찾는 고리(EXPLAIN 직후, 같은 <paramref name="statementId"/>). 기본 = <see cref="ExplainPlanHash"/>(계획 글에서 읽기, Oracle).
+    /// 글에 해시가 없는 DBMS(Tibero: PLAN_TABLE.SQL_ID·CHILD_NUMBER → V$SQL)가 재정의한다. 해시는 덤이라 찾지 못하면 null 을 돌려주고 예상 계획은 그대로 보인다.
+    /// </summary>
+    protected virtual Task<long?> ExplainPlanHashAsync(ISession s, string statementId, string planText, CancellationToken ct) =>
+        Task.FromResult(ExplainPlanHash(planText));
 }

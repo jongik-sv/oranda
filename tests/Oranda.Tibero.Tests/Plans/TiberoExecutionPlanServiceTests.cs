@@ -115,14 +115,14 @@ public class TiberoExecutionPlanServiceTests
     }
 
     [Fact]
-    public void Last_cursor_reads_the_sql_id_and_leaves_the_child_number_null()
+    public void Last_cursor_reads_the_sql_id_and_the_child_number()
     {
-        // 자식 번호는 열이 있어도 쓰지 않는다: PREV_CHILD_NUMBER 와 V$SQL_PLAN.CHILD_NUMBER 의 같음을 아직 재지 않았다(M6).
-        var cursor = TiberoExecutionPlanService.ParseLastCursor(Rows(["abc123def4567", 3m, 1234567890m]));
+        // 자식 번호 = PREV_CHILD_NUMBER(M6 실측: V$SQL_PLAN.CHILD_NUMBER 와 같은 번호, 값이 크다). NUMBER 는 decimal 로 온다.
+        var cursor = TiberoExecutionPlanService.ParseLastCursor(Rows(["abc123def4567", 451113m, 1234567890m]));
 
         Assert.NotNull(cursor);
         Assert.Equal("abc123def4567", cursor.SqlId);
-        Assert.Null(cursor.ChildNumber);
+        Assert.Equal(451113, cursor.ChildNumber);
         Assert.Null(cursor.InstanceId);
         Assert.Equal(new CursorRef("abc123def4567"), TiberoExecutionPlanService.ParseLastCursor(Rows(["abc123def4567", null, null])));
     }

@@ -83,7 +83,7 @@ public static class DbmsSupport
     private static bool TiberoSupports(DbmsFeature feature) => feature switch
     {
         // DBMS_SQLTUNE.REPORT_SQL_MONITOR 는 있으나 인수가 달라(sql_id => …, type => … 호출이 ODP-11029) Oracle 호출 형태로는 안 된다(catalog-map 요약·5장).
-        // 실측 필요: Tibero 쪽 인수로 호출해 보고서가 나오는지.
+        // 실측(P1 M5, win144 #35, 6.2.15): Tibero 카탈로그 plan.monitor_report 로 방금 끝낸 문장의 보고서를 받으면 빈 글(길이 0) → 끈 채로 둔다.
         DbmsFeature.SqlMonitorReport => false,
 
         // DBA_HIST_* 는 일부 있으나 SQL_ID 대신 SQL_HASH_VALUE 이고 *_DELTA 열이 없어 별도 설계다(catalog-map 요약·tuning.awr_plan_*). 보고서 패키지는 실측 필요.

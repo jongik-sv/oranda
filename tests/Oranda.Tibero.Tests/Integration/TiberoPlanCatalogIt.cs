@@ -16,7 +16,7 @@ public class TiberoPlanCatalogIt(ITestOutputHelper output)
 {
     private static readonly Type[] AllowedTypes = [typeof(decimal), typeof(long), typeof(string), typeof(DateTime)];
 
-    // M0: 결정66 — PLAN_TABLE 이 GLOBAL TEMPORARY 인지. 사전 모양이 서버마다 다를 수 있어 시도마다 결과·실패를 기록하고, 하나라도 돌면 통과한다.
+    // M0: 결정66 — PLAN_TABLE 이 GLOBAL TEMPORARY 인지(실측: SYS 소유 임시 표, DURATION SESSION, PUBLIC 동의어. all_synonyms 질의는 TiberoException 이라 뺐다). 사전 모양이 서버마다 다를 수 있어 시도마다 결과·실패를 기록하고, 하나라도 돌면 통과한다.
     [Fact]
     public async Task M0_plan_table_temporary_flag_is_queried()
     {
@@ -30,7 +30,6 @@ public class TiberoPlanCatalogIt(ITestOutputHelper output)
         var attempts = new[]
         {
             ("all_tables", "SELECT owner, temporary, duration FROM all_tables WHERE table_name = 'PLAN_TABLE'"),
-            ("all_synonyms", "SELECT owner, table_owner, table_name FROM all_synonyms WHERE synonym_name = 'PLAN_TABLE'"),
             ("all_objects", "SELECT owner, object_type FROM all_objects WHERE object_name = 'PLAN_TABLE'"),
         };
 
@@ -112,7 +111,7 @@ public class TiberoPlanCatalogIt(ITestOutputHelper output)
         Report("plan.cursor_steps", all);
         Assert.Equal(direct, (long?)all.Rows.Count);
 
-        // child 를 정수로 묶는 길: v$sql_plan 의 가장 작은 child_number. inst_id 는 SYS_CONTEXT 값과 비교하는 식이라 서버 값을 몰라 null 만 쓴다.
+        // child 를 정수로 묶는 길: v$sql_plan 의 가장 작은 child_number(실측: 451113 처럼 아주 큰 값이 나온다 — 자식 번호는 작은 수가 아니다). inst_id 는 SYS_CONTEXT 값과 비교하는 식이라 서버 값을 몰라 null 만 쓴다.
         var minChild = CatalogValues.Int(await TiberoSessionQuery.ScalarAsync(session,
             "SELECT MIN(child_number) FROM v$sql_plan WHERE sql_id = :sql_id", cmd => TiberoSessionQuery.Bind(cmd, "sql_id", sqlId)));
         var one = await TiberoCatalogPort.QueryAsync(session, "plan.cursor_steps",

@@ -19,6 +19,8 @@
 | `lock.deadlocks` | `V$DIAG_ALERT_EXT` 없음 | 없음(알림 로그는 서버 파일) |
 | `lock.locked_row` | `*_OBJECTS.DATA_OBJECT_ID` 없음. `DBMS_ROWID.ROWID_CREATE(SEGMENT_NUMBER, ABSOLUTE_FNO, BLOCK_NUMBER, ROW_NUMBER)` 의 세그먼트 번호는 OBJECT_ID 와 다르다(실측: 4303 ≠ 2907) | `ROW_WAIT_OBJ_ID` 가 세그먼트 번호인지 쓰기 IT 로 확인 → 맞으면 `ROWID_CREATE(row_wait_obj_id, row_wait_file_no(절대), row_wait_block_no, row_wait_row_no)` 로 파일을 더한다. 확인 전에는 「잠긴 행 보기」 비활성 |
 
+Tibero 에만 있는 id(짝 Oracle 파일 없음, `MonitorCatalogParityTests.TiberoOnly`): `plan.explain_hash` — Oracle 은 예상 계획 해시를 DBMS_XPLAN 글에서 읽고, Tibero 는 글에 해시 줄이 없어 PLAN_TABLE.SQL_ID·CHILD_NUMBER → V$SQL.PLAN_HASH_VALUE 로 찾는다(P1 M4 실측, win144 #35).
+
 ## 3. 공통 바꿈 규칙
 
 | Oracle | Tibero 판 | 근거 |

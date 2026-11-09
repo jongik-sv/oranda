@@ -25,6 +25,13 @@ public partial class MonitorCatalogParityTests
         "tuning.trace_lines", "app.disconnect_session", "app.trace_event_off", "app.trace_event_on", "app.trace_parse",
     ];
 
+    /// <summary>
+    /// Tibero 에만 있는 id(문서 2장 끝). Oracle 은 같은 값을 다른 길로 구해 파일이 없다 — 억지로 Oracle 판을 만들지 않는다.
+    /// <c>plan.explain_hash</c>: Oracle 은 예상 계획 해시를 DBMS_XPLAN 글의 「Plan hash value」에서 읽고, Tibero 글에는 그 줄이 없어
+    /// PLAN_TABLE.SQL_ID·CHILD_NUMBER → V$SQL 로 찾는다(P1 M4 실측).
+    /// </summary>
+    private static readonly string[] TiberoOnly = ["plan.explain_hash"];
+
     private static List<CatalogQuery> Queries(IEnumerable<CatalogSource> sources) =>
         [.. sources
             .Where(s => Folders.Contains(CatalogParser.TopFolder(s.Path)))
@@ -49,6 +56,11 @@ public partial class MonitorCatalogParityTests
     [MemberData(nameof(TiberoIds))]
     public void Tibero_file_uses_the_same_binds_as_the_oracle_file(string id)
     {
+        if (TiberoOnly.Contains(id))
+        {
+            return; // 짝이 없는 id(아래 Tibero_only_ids_have_no_oracle_file 가 따로 단정)
+        }
+
         var oracle = Oracle.Where(q => q.Header.Id == id).MaxBy(q => q.Header.MinVersion);
         Assert.NotNull(oracle); // Oracle 에 없는 id 를 Tibero 에만 두지 않는다
 
@@ -64,6 +76,17 @@ public partial class MonitorCatalogParityTests
 
     [GeneratedRegex("@[A-Z_]+@")]
     private static partial Regex PlaceholderRegex();
+
+    [Fact]
+    public void Tibero_only_ids_have_no_oracle_file()
+    {
+        // 목록의 id 는 Tibero 파일이 있고 Oracle 파일은 없다. Oracle 판이 생기면 목록에서 빼고 바인드 대조를 받게 한다.
+        foreach (var id in TiberoOnly)
+        {
+            Assert.Contains(Tibero, q => q.Header.Id == id);
+            Assert.DoesNotContain(Oracle, q => q.Header.Id == id);
+        }
+    }
 
     [Fact]
     public void Oracle_ids_without_a_tibero_file_are_the_documented_missing_ones()

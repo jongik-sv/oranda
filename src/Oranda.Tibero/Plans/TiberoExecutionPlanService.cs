@@ -6,6 +6,7 @@ using Oranda.Core.Plans;
 using Oranda.Core.Plans.Providers;
 using Oranda.Core.Sessions;
 using Oranda.Tibero.Catalog;
+using Oranda.Tibero.Execution;
 using static Oranda.Core.Catalog.Providers.CatalogValues;
 
 namespace Oranda.Tibero.Plans;
@@ -13,8 +14,8 @@ namespace Oranda.Tibero.Plans;
 /// <summary>
 /// Tibero 실행 계획: DBMS 공통 본문 <see cref="CatalogExecutionPlanService"/> 에 Tibero 질의 포트(<see cref="TiberoCatalogPort"/>)와 고리를 붙여 등록한다. 소유: P1.
 /// 직전 커서는 DBMS_XPLAN 글이 아니라 <c>tuning.prev_cursor</c> 열에서 읽는다(Tibero 글 머리는 「SQL ID : …」 이고 자식 번호 줄이 없다).
+/// 예상 계획의 해시는 글에 없어 <c>plan.explain_hash</c>(PLAN_TABLE.SQL_ID·CHILD_NUMBER → V$SQL)로 찾는다.
 /// </summary>
-// 주의: Explain 이 실행 디스패처를 거치므로 E4(Tibero 실행 서비스 등록)가 main 에 들어가기 전에는 이 서비스를 main 에 올리지 않는다.
 [OrandaService(typeof(IExecutionPlanService), Dbms = Dbms.Tibero)]
 internal sealed class TiberoExecutionPlanService : CatalogExecutionPlanService
 {
@@ -28,14 +29,29 @@ internal sealed class TiberoExecutionPlanService : CatalogExecutionPlanService
 
     protected override RawPlanStep NormalizeStep(RawPlanStep raw) => SplitOperation(raw);
 
-    /// <summary>tuning.prev_cursor(prev_sql_id, prev_child_number, plan_hash_value) → 커서(자식 번호 null, ParseLastCursor 주석). 행이 없거나 sql_id 가 없으면 null.</summary>
+    /// <summary>tuning.prev_cursor(prev_sql_id, prev_child_number, plan_hash_value) → 커서(sql_id·자식 번호). 행이 없거나 sql_id 가 없으면 null.</summary>
     protected override async Task<CursorRef?> ReadLastCursorAsync(ISession s, CancellationToken ct)
     {
         var rows = await QueryAsync(s, "tuning.prev_cursor", CatalogBinds.None, CatalogQueryOptions.Default, ct);
         return ParseLastCursor(rows);
     }
 
-    // ExplainPlanHash 는 재정의하지 않는다(기본 = null): Tibero PLAN_TABLE 은 계획 해시를 주지 않고 DISPLAY 글에도 「Plan hash value」 가 없다(Q4, 결정42).
+    /// <summary>
+    /// 예상 계획의 해시: Tibero 글(plan.explain_text)에는 「Plan hash value」 가 없다. PLAN_TABLE 의 SQL_ID·CHILD_NUMBER 가 V$SQL 커서로 이어져
+    /// PLAN_HASH_VALUE 를 준다(실측 M4, win144 #35 — 같은 문장의 실제 커서 해시와 같은 값). 커서가 밀려났거나 V$SQL 을 볼 수 없으면 null(해시는 덤, 예상 계획은 그대로).
+    /// </summary>
+    protected override async Task<long?> ExplainPlanHashAsync(ISession s, string statementId, string planText, CancellationToken ct)
+    {
+        try
+        {
+            var rows = await QueryAsync(s, "plan.explain_hash", [CatalogBinds.Text("stmt_id", statementId)], CatalogQueryOptions.Default, ct);
+            return rows.Rows.Count == 0 ? null : Long(rows.Rows[0][0]);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException && TiberoErrorClassifier.IsDriverException(ex))
+        {
+            return null;
+        }
+    }
 
     /// <summary>Tibero 에는 HTML 보고서가 없다(<c>DbmsFeature.SqlMonitorReportHtml = false</c> 가 화면에서 막는다). 서비스는 마지막 방어선.</summary>
     public override Task<string> GetSqlMonitorReportAsync(ISession s, CursorRef cursor, bool html, CancellationToken ct)
@@ -51,8 +67,8 @@ internal sealed class TiberoExecutionPlanService : CatalogExecutionPlanService
     }
 
     /// <summary>
-    /// 행 하나 → 커서. 자식 번호는 항상 null 이다(p1-prep §1): PREV_CHILD_NUMBER 가 V$SQL_PLAN.CHILD_NUMBER 와 같은 번호인지 아직 재지 않았다(M6 이 정한다).
-    /// null 이면 계획 조회가 전체 자식 중 첫 자식을 쓴다. sql_id 만 읽는다.
+    /// 행 하나 → 커서. 자식 번호 = PREV_CHILD_NUMBER(실측 M6, win144 #35: V$SQL·V$SQL_PLAN 의 CHILD_NUMBER 와 같은 번호, 값이 크다 — 예 451113).
+    /// 자식 번호가 null 이면 계획 조회가 전체 자식 중 첫 자식을 쓴다. 인스턴스는 모름(null).
     /// </summary>
     internal static CursorRef? ParseLastCursor(CatalogRows rows)
     {
@@ -69,7 +85,7 @@ internal sealed class TiberoExecutionPlanService : CatalogExecutionPlanService
             return null;
         }
 
-        return new CursorRef(sqlId);
+        return new CursorRef(sqlId, Int(row[1]));
     }
 
     /// <summary>
