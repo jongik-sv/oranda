@@ -67,7 +67,7 @@ internal static class TiberoColumns
         {
             return read();
         }
-        catch (Exception e) when (e is DbException or InvalidOperationException)
+        catch (Exception e) when (e is DbException or InvalidOperationException or NotSupportedException)
         {
             return null;
         }

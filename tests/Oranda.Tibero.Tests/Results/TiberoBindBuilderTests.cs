@@ -139,6 +139,22 @@ public class TiberoBindBuilderTests
     }
 
     [Fact]
+    public void Number_output_is_a_varchar2_output_never_a_decimal_output()
+    {
+        var cmd = NewCommand();
+
+        var p = TiberoBindBuilder.Create(Driver, cmd, "n", new BindValue(BindDataType.Number, null, BindDirection.Out));
+        var io = TiberoBindBuilder.Create(Driver, cmd, "m", new BindValue(BindDataType.Number, 5m, BindDirection.InOut));
+
+        Assert.Equal("Varchar2", KindOf(p));
+        Assert.Equal(ParameterDirection.Output, p.Direction);
+        Assert.Equal(TiberoBindPlan.TextOutSize, p.Size);
+        Assert.Equal("Varchar2", KindOf(io));
+        Assert.Equal("5", io.Value);
+        Assert.Equal(ParameterDirection.InputOutput, io.Direction);
+    }
+
+    [Fact]
     public void Ref_cursor_output_and_lob_types_map_to_their_kinds()
     {
         var cmd = NewCommand();

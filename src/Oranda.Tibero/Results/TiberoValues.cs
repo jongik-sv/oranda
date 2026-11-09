@@ -99,7 +99,7 @@ internal static class TiberoValues
             case TiberoValueKind.Null:
                 return null;
             case TiberoValueKind.String:
-                return AsBoolean(bind, (string?)value.Value);
+                return AsBind(bind, (string?)value.Value);
             case TiberoValueKind.Decimal:
                 return FromDecimalText((string)value.Value!);
             case TiberoValueKind.Date:
@@ -119,9 +119,18 @@ internal static class TiberoValues
         }
     }
 
-    /// <summary>드라이버가 글자로 돌려준 값(Boolean 은 OUT 이 안 돼 글자로 받는다)을 형식에 맞게 되돌린다. 그 밖은 글자 그대로.</summary>
-    private static object? AsBoolean(BindValue bind, string? text)
+    /// <summary>
+    /// 드라이버가 글자로 돌려준 값(NUMBER·Boolean 등은 OUT 이 안 되거나 위험해 글자로 받는다)을 요청한 형식으로 되돌린다.
+    /// NUMBER → <see cref="decimal"/>(28자리 이내) 또는 글자, Boolean → <c>1</c>/<c>0</c> 을 <see cref="bool"/>. 그 밖은 글자 그대로.
+    /// </summary>
+    private static object? AsBind(BindValue bind, string? text)
     {
+        if (bind.Type == BindDataType.Number && text is not null)
+        {
+            var trimmed = text.Trim();
+            return trimmed.Length == 0 ? null : FromDecimalText(trimmed);
+        }
+
         if (bind.Type == BindDataType.Boolean)
         {
             if (text == "1")

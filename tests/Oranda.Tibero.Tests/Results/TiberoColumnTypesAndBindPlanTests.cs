@@ -135,6 +135,7 @@ public class TiberoBindPlanTests
     [InlineData(BindDataType.TimestampLtz)]
     [InlineData(BindDataType.Boolean)]
     [InlineData(BindDataType.BinaryDouble)]
+    [InlineData(BindDataType.Number)] // 드라이버가 OUT NUMBER 를 decimal 로 바꾸다 28자리를 넘으면 OverflowException
     public void Out_types_the_driver_rejects_are_received_as_text(BindDataType type)
     {
         var plan = TiberoBindPlan.For(new BindValue(type, null, BindDirection.Out));
@@ -142,6 +143,20 @@ public class TiberoBindPlanTests
         Assert.True(plan.OutAsText);
         Assert.Equal(TiberoBindPlan.TextOutSize, plan.Size);
         Assert.Equal(TiberoBindWrapper.None, plan.Wrapper);
+    }
+
+    [Fact]
+    public void InOut_number_input_is_sent_as_invariant_text_and_in_number_stays_a_number()
+    {
+        var inout = TiberoBindPlan.For(new BindValue(BindDataType.Number, 1234.5m, BindDirection.InOut));
+        var input = TiberoBindPlan.For(new BindValue(BindDataType.Number, 1234.5m));
+
+        Assert.True(inout.OutAsText);
+        Assert.Equal(126, inout.ProviderType);
+        Assert.Equal("1234.5", inout.Value);
+        Assert.False(input.OutAsText);
+        Assert.Equal(107, input.ProviderType);
+        Assert.Equal(1234.5m, input.Value);
     }
 
     [Fact]

@@ -167,6 +167,40 @@ public class TiberoValuesTests
         Assert.Equal(1234567890123456789012345678m, TiberoValues.FromDecimalText("1234567890123456789012345678"));
     }
 
+    [Theory]
+    [InlineData("12.5", "12.5")]
+    [InlineData(" .5 ", "0.5")]
+    [InlineData("-3", "-3")]
+    [InlineData("1234567890123456789012345678", "1234567890123456789012345678")]
+    public void Out_number_text_becomes_decimal_when_it_fits(string text, string expected)
+    {
+        var bind = new BindValue(BindDataType.Number, null, BindDirection.Out);
+
+        var value = Out(FakeDriverHost.New(TypesNs + "TiberoString", text), bind);
+
+        Assert.Equal(decimal.Parse(expected, System.Globalization.CultureInfo.InvariantCulture), Assert.IsType<decimal>(value));
+    }
+
+    [Theory]
+    [InlineData("1.5E+30")]
+    [InlineData("1234567890123456789012345678901234567.5")]
+    public void Out_number_text_that_does_not_fit_stays_text_without_losing_digits(string text)
+    {
+        var bind = new BindValue(BindDataType.Number, null, BindDirection.InOut);
+
+        Assert.Equal(text, Out(FakeDriverHost.New(TypesNs + "TiberoString", text), bind));
+    }
+
+    [Fact]
+    public void Out_number_null_and_empty_text_are_null_and_varchar2_binds_keep_their_text()
+    {
+        var number = new BindValue(BindDataType.Number, null, BindDirection.Out);
+
+        Assert.Null(Out(FakeDriverHost.Static(TypesNs + "TiberoString", "Null"), number));
+        Assert.Null(Out(FakeDriverHost.New(TypesNs + "TiberoString", "  "), number));
+        Assert.Equal("12.5", Out(FakeDriverHost.New(TypesNs + "TiberoString", "12.5")));
+    }
+
     [Fact]
     public void Out_string_date_and_binary_are_plain()
     {

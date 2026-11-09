@@ -128,10 +128,14 @@ internal sealed record TiberoBindPlan(int ProviderType, ParameterDirection Direc
         _ => throw new ArgumentOutOfRangeException(nameof(type), type, null),
     };
 
-    /// <summary>OUT·INOUT 매개변수로 쓸 수 있는 형식(ODP-590703 이 나지 않는 것).</summary>
+    /// <summary>
+    /// OUT·INOUT 매개변수로 쓸 수 있는 형식(ODP-590703 이 나지 않고 값도 안전하게 오는 것).
+    /// <c>Decimal</c> 은 뺀다: 드라이버 1.1.35 가 OUT NUMBER 를 <c>ExecuteNonQuery</c> 안에서 <see cref="decimal"/> 로 바꾸다가
+    /// 28자리를 넘으면 <see cref="OverflowException"/>(TbNumber.toDecimal)을 던진다(실서버 실측). 그래서 NUMBER OUT 도 글자로 받는다.
+    /// </summary>
     internal static bool IsOutCapable(int providerType) => providerType is
         TiberoColumnTypes.PtVarchar2 or TiberoColumnTypes.PtNVarchar2 or TiberoColumnTypes.PtChar or TiberoColumnTypes.PtNChar
-        or TiberoColumnTypes.PtDecimal or TiberoColumnTypes.PtDate or TiberoColumnTypes.PtTimeStamp or TiberoColumnTypes.PtRaw
+        or TiberoColumnTypes.PtDate or TiberoColumnTypes.PtTimeStamp or TiberoColumnTypes.PtRaw
         or TiberoColumnTypes.PtClob or TiberoColumnTypes.PtBlob or TiberoColumnTypes.PtRefCursor;
 
     private static string ToText(object value) => value switch
