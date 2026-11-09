@@ -2,6 +2,8 @@ using System.Text;
 using Oranda.App.Features.ConnectionManager;
 using Oranda.App.Features.SessionMonitor;
 using Oranda.App.Features.SqlMonitor;
+using Oranda.Core.Composition;
+using Oranda.Core.Composition.Dispatch;
 using Oranda.Core.Connection;
 using Oranda.Core.Plans;
 using Oranda.Core.Monitoring;
@@ -178,6 +180,58 @@ public class MonitorAccessTests
         await h.Opener.OpenDefaultAsync(CancellationToken.None);
 
         Assert.Equal("ft-dev", Assert.Single(h.Manager.Calls).Profile);
+    }
+
+    // ---- 모니터 구현이 없는 DBMS(Tibero) 프로필은 열지 않고 이유를 알린다 ----
+
+    private static readonly ConnectionProfile TiberoProfile = new("tb", "SYS", "h:8629/s", Id: Guid.NewGuid(), CredentialRef: "ref-dev", Dbms: Dbms.Tibero);
+
+    private sealed class SelectorProvider(IDbmsServiceSelector selector) : IServiceProvider
+    {
+        public object? GetService(Type serviceType) => serviceType == typeof(IDbmsServiceSelector) ? selector : null;
+    }
+
+    [Fact]
+    public async Task Choosing_a_profile_of_a_dbms_without_a_monitor_is_refused_with_the_reason_and_calls_nothing()
+    {
+        var h = new OpenerHarness(new SelectorProvider(new DbmsServiceTable())) { Pick = TiberoProfile };
+        h.Connection.Profiles = [Dev, TiberoProfile];
+
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() => h.Opener.OpenChosenAsync(CancellationToken.None));
+
+        Assert.Contains("Tibero", ex.Message, StringComparison.Ordinal);
+        Assert.Empty(h.Manager.Calls); // 세션을 열지도 않는다
+        Assert.Equal(0, h.PasswordPrompts);
+    }
+
+    [Fact]
+    public async Task Remembered_profile_of_a_dbms_without_a_monitor_is_refused_but_Oracle_opens_as_before()
+    {
+        var h = new OpenerHarness(new SelectorProvider(new DbmsServiceTable()));
+        h.Connection.Profiles = [Dev, DbaProfile, TiberoProfile];
+        h.Connection.Active = new MonitorFakeSession(Dev, NoPrivilege);
+
+        h.Memory.Remember("sessionMonitor", TiberoProfile.Id);
+        await Assert.ThrowsAsync<InvalidOperationException>(() => h.Opener.OpenDefaultAsync(CancellationToken.None));
+        Assert.Empty(h.Manager.Calls);
+
+        h.Memory.Remember("sessionMonitor", DbaProfile.Id);
+        await h.Opener.OpenDefaultAsync(CancellationToken.None);
+        Assert.Equal("ft-dba", Assert.Single(h.Manager.Calls).Profile);
+
+        h.Pick = Dev;
+        await h.Opener.OpenChosenAsync(CancellationToken.None);
+        Assert.Equal(2, h.Manager.Calls.Count);
+    }
+
+    [Fact]
+    public async Task Without_a_service_provider_nothing_is_filtered()
+    {
+        var h = new OpenerHarness { Pick = TiberoProfile };
+        h.Connection.Profiles = [TiberoProfile];
+
+        Assert.NotNull(await h.Opener.OpenChosenAsync(CancellationToken.None));
+        Assert.Equal("tb", Assert.Single(h.Manager.Calls).Profile);
     }
 
     [Fact]
@@ -410,13 +464,13 @@ public class MonitorAccessTests
 
     private sealed class OpenerHarness
     {
-        public OpenerHarness()
+        public OpenerHarness(IServiceProvider? services = null)
         {
             var credentials = new InMemoryCredentials();
             credentials.Put("ref-dev", "dev-secret");
             credentials.Put("ref-dba", "dba-secret");
             Memory = new MemoryOnly();
-            Opener = new MonitorSessionOpener(Connection, Manager, credentials, Memory, "sessionMonitor")
+            Opener = new MonitorSessionOpener(Connection, Manager, credentials, Memory, "sessionMonitor", services)
             {
                 PickProfile = (profiles, current) =>
                 {

@@ -9,6 +9,8 @@ using System.Threading;
 using System.Threading.Tasks;
 using CommunityToolkit.Mvvm.ComponentModel;
 using Oranda.App.Features.ConnectionManager;
+using Oranda.App.Features.Localization;
+using Oranda.App.Shell.Features;
 using Oranda.Core.Connection;
 using Oranda.Core.Security;
 using Oranda.Core.Sessions;
@@ -167,7 +169,8 @@ public sealed class MonitorSessionOpener(
     ISessionManager sessions,
     ICredentialStore? credentials,
     IMonitorProfileMemory? memory,
-    string monitorId)
+    string monitorId,
+    IServiceProvider? services = null)
 {
     /// <summary>저장된 접속 목록과 지금 기본값을 보여 주고 하나를 고르게 한다. 취소하면 null. 없으면 고를 수 없다.</summary>
     public Func<IReadOnlyList<ConnectionProfile>, Guid?, Task<ConnectionProfile?>>? PickProfile { get; set; }
@@ -181,18 +184,33 @@ public sealed class MonitorSessionOpener(
         var work = connection.ActiveSession;
         if (work is not null && work.Server.Capabilities.CanQueryPerformanceViews)
         {
-            return await OpenAsync(work.Profile, ct).ConfigureAwait(true);
+            return await OpenCheckedAsync(work.Profile, ct).ConfigureAwait(true);
         }
 
         if (memory?.Recall(monitorId) is { } remembered
             && (await connection.LoadAsync(ct).ConfigureAwait(true)).Value.Profiles.FirstOrDefault(p => p.Id == remembered) is { } profile)
         {
-            return await OpenAsync(profile, ct).ConfigureAwait(true);
+            return await OpenCheckedAsync(profile, ct).ConfigureAwait(true);
         }
 
         return work is not null
-            ? await OpenAsync(work.Profile, ct).ConfigureAwait(true)
+            ? await OpenCheckedAsync(work.Profile, ct).ConfigureAwait(true)
             : await OpenChosenAsync(ct).ConfigureAwait(true);
+    }
+
+    /// <summary>
+    /// 프로필의 DBMS 에 모니터 구현이 없으면(Tibero 등) 여는 시도 없이 이유를 <see cref="InvalidOperationException"/> 로 알린다
+    /// (모니터 창이 「모니터 세션을 열지 못했습니다: …」 로 보인다). 서비스 공급자를 못 받았으면 거르지 않는다. Oracle 은 늘 열린다.
+    /// </summary>
+    private async Task<ISession?> OpenCheckedAsync(ConnectionProfile profile, CancellationToken ct)
+    {
+        if (services is not null
+            && DbmsServiceKeys.Reason(services, profile.Dbms, DbmsServiceArea.Monitor, key => UiText.Current?.TryLookup(key)) is { } notImplemented)
+        {
+            throw new InvalidOperationException(notImplemented);
+        }
+
+        return await OpenAsync(profile, ct).ConfigureAwait(true);
     }
 
     /// <summary>「다른 접속으로 열기」: 프로필을 고르게 하고 그 프로필로 연다. 취소하면 null, 저장된 접속이 없으면 <see cref="InvalidOperationException"/>.</summary>
@@ -211,7 +229,7 @@ public sealed class MonitorSessionOpener(
 
         var current = memory?.Recall(monitorId) ?? connection.ActiveSession?.Profile.Id;
         return await PickProfile(profiles, current).ConfigureAwait(true) is { } picked
-            ? await OpenAsync(picked, ct).ConfigureAwait(true)
+            ? await OpenCheckedAsync(picked, ct).ConfigureAwait(true)
             : null;
     }
 

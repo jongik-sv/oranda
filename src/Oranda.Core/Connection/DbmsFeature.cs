@@ -31,7 +31,7 @@ public enum DbmsFeature
 
 /// <summary>
 /// DBMS 별 <see cref="DbmsFeature"/> 지원 표. 라이선스 팩 같은 Oracle 안쪽 조건은 여기서 보지 않는다(다른 곳에서 점검한다).
-/// Tibero 쪽은 첫 판 값이며 실측 뒤에 표를 고친다.
+/// Tibero 쪽은 6.2.15 실측(tibero-catalog-map.md)까지 반영한 값이며, 실측이 켤 근거를 주지 못한 행은 끈 채로 둔다(행마다 주석).
 /// </summary>
 public static class DbmsSupport
 {
@@ -59,20 +59,28 @@ public static class DbmsSupport
         _ => throw new ArgumentOutOfRangeException(nameof(feature), feature, null),
     };
 
-    // Tibero: docs/design/tibero.md 3장 첫 판 값. 실측 뒤 행마다 고친다.
+    // Tibero: docs/design/tibero.md 3장 + tibero-catalog-map.md(시험 서버 6.2.15 실측, 읽기 전용). 7행 모두 끔 유지 — 실측이 켤 근거를 주지 못했다.
     private static bool TiberoSupports(DbmsFeature feature) => feature switch
     {
-        // 3장 "SQL Monitor 보고서·AWR·ASH" = 안 됨(첫 판, Oracle 팩 기능)
+        // DBMS_SQLTUNE.REPORT_SQL_MONITOR 는 있으나 인수가 달라(sql_id => …, type => … 호출이 ODP-11029) Oracle 호출 형태로는 안 된다(catalog-map 요약·5장).
+        // 실측 필요: Tibero 쪽 인수로 호출해 보고서가 나오는지.
         DbmsFeature.SqlMonitorReport => false,
+
+        // DBA_HIST_* 는 일부 있으나 SQL_ID 대신 SQL_HASH_VALUE 이고 *_DELTA 열이 없어 별도 설계다(catalog-map 요약·tuning.awr_plan_*). 보고서 패키지는 실측 필요.
         DbmsFeature.AwrReport => false,
+
+        // V$ACTIVE_SESSION_HISTORY 는 있으나 SESSION_STATE·WAIT_CLASS 열이 없고 EVENT → WAIT_EVENT 다(catalog-map 4장). 실측 필요: 값의 뜻.
         DbmsFeature.Ash => false,
 
-        // 3장 "트레이스·TKPROF·10053" = 안 됨(첫 판)
+        // DBMS_MONITOR 패키지가 없다(catalog-map 5.1·요약) → 실측으로 확정된 「안 됨」.
         DbmsFeature.SessionTrace => false,
+
+        // 외부 TKPROF 도구·10053 이벤트는 사전 조사 대상이 아니었다. 실측 필요(근거 없음 → 안전값).
         DbmsFeature.Tkprof => false,
         DbmsFeature.OptimizerTrace => false,
 
-        // 3장 "Java 저장 소스" = 안 됨
+        // DBMS_JAVA 와 *_JAVA_CLASSES 등은 있으나 *_JAVA_DERIVATIONS·*_JAVA_IMPLEMENTS·*_JAVA_INNERS 가 없고 DBMS_JAVA.SHORTNAME 은 빈 값(catalog-map 3·5장).
+        // 실측 필요: JAVA SOURCE 객체를 만들고 컴파일할 수 있는지.
         DbmsFeature.JavaSource => false,
         _ => throw new ArgumentOutOfRangeException(nameof(feature), feature, null),
     };

@@ -9,6 +9,7 @@ using AvaloniaEdit.Editing;
 using Oranda.App.Features.ConnectionManager;
 using Oranda.App.Features.SqlEditor;
 using Oranda.App.Shell.Composition;
+using Oranda.App.Shell.Features;
 using Oranda.Core.Language;
 using Oranda.Core.Metadata;
 using Oranda.Core.Sessions;
@@ -35,6 +36,13 @@ public sealed class CompletionController : IDisposable
 
     /// <summary>메타데이터 제공자(인자 도움말). 시험이 바꾼다.</summary>
     public Func<IMetadataProvider?> MetadataResolver { get; set; } = () => Resolve<IMetadataProvider>();
+
+    /// <summary>
+    /// 세션의 DBMS 에 스키마 트리·메타데이터 구현이 있나(기본 = <see cref="DbmsServiceKeys.HasImplementation"/>, Oracle 은 항상 있음). 없으면(Tibero 등)
+    /// 후보 제공자에 세션을 넘기지 않아 DB 를 읽지 않고 키워드·내장 목록만 만들며, 인자 도움말은 열지 않는다. 시험이 바꾼다.
+    /// </summary>
+    public Func<ISession, bool> HasMetadataService { get; set; } = static session =>
+        DbmsServiceKeys.HasImplementation(Services, session.Profile.Dbms, DbmsServiceArea.Metadata);
 
     /// <summary>편집기 탭의 세션(기본 = 탭 접속 프로필의 작업 세션 → 현재 접속 → 마지막 작업 세션). 시험이 바꾼다.</summary>
     public Func<SqlEditorViewModel?, ISession?> SessionResolver { get; set; } = DefaultSession;
@@ -109,7 +117,9 @@ public sealed class CompletionController : IDisposable
         CompletionResult result;
         try
         {
-            result = await Task.Run(() => provider.GetCompletionsAsync(session, text, caret, ct), ct).ConfigureAwait(true);
+            // 메타데이터 구현이 없는 DBMS 는 세션 없이 묻는다: 제공자가 DB 를 읽지 않고 키워드·내장 목록만 돌려준다.
+            var querySession = session is not null && !HasMetadataService(session) ? null : session;
+            result = await Task.Run(() => provider.GetCompletionsAsync(querySession, text, caret, ct), ct).ConfigureAwait(true);
         }
         catch (OperationCanceledException)
         {
@@ -349,7 +359,7 @@ public sealed class CompletionController : IDisposable
     {
         ArgumentNullException.ThrowIfNull(area);
         var session = SessionResolver(tab);
-        var meta = session is null ? null : MetadataResolver();
+        var meta = session is null || !HasMetadataService(session) ? null : MetadataResolver();
         if (session is null || meta is null || area.Document is null)
         {
             return false;

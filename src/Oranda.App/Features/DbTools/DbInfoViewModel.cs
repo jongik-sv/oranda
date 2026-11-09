@@ -5,8 +5,10 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using CommunityToolkit.Mvvm.ComponentModel;
+using Oranda.App.Features.Localization;
 using Oranda.App.Features.ObjectDetail;
 using Oranda.App.Shell;
+using Oranda.App.Shell.Features;
 using Oranda.Core.Metadata;
 using Oranda.Core.Sessions;
 using Oranda.Core.Shell;
@@ -32,6 +34,7 @@ public sealed partial class DbInfoViewModel : ToolPanelViewModelBase
 {
     private readonly IServiceProvider? _services;
     private IDatabaseInfoProvider? _provider;
+    private readonly bool _providerInjected;
     private int _generation;
 
     public DbInfoViewModel()
@@ -48,6 +51,7 @@ public sealed partial class DbInfoViewModel : ToolPanelViewModelBase
     internal DbInfoViewModel(IDatabaseInfoProvider provider, IServiceProvider? services = null)
     {
         _provider = provider;
+        _providerInjected = true;
         _services = services;
     }
 
@@ -122,6 +126,16 @@ public sealed partial class DbInfoViewModel : ToolPanelViewModelBase
         Session = session;
         RefreshPreview(); // 세션의 DBMS 가 정해졌으니 미리보기 문장을 다시 만든다.
         var gen = Interlocked.Increment(ref _generation);
+        // 이 DBMS 에 DB 정보 구현이 없으면(Tibero 등) 부르지 않고 이유만 보인다. 제공자를 직접 넣은 시험 생성자는 거르지 않는다.
+        if (!_providerInjected
+            && DbmsServiceKeys.Reason(_services, session.Profile.Dbms, DbmsServiceArea.DatabaseInfo, key => UiText.Current?.TryLookup(key)) is { } notImplemented)
+        {
+            Sections.Clear();
+            SelectedSection = null;
+            StatusText = notImplemented;
+            return;
+        }
+
         var provider = ResolveProvider();
         if (provider is null)
         {

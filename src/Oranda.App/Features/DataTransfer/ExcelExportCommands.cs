@@ -14,7 +14,7 @@ namespace Oranda.App.Features.DataTransfer;
 /// 오른쪽 클릭 메뉴는 「파일로 내보내기…」와 같은 묶음·같은 순서 값이고, 같은 값이면 제목순(「Excel…」이 「파일로…」 앞)으로 놓여 내보내기 묶음이 맨 아래에 남는다.
 /// </para>
 /// </summary>
-[OrandaCommand("oranda.grid.exportExcel", CommandCategory.Result, Title = "Excel 로 내보내기…", When = "gridFocus", Enablement = "gridHasResult",
+[OrandaCommand("oranda.grid.exportExcel", CommandCategory.Result, Title = "Excel 로 내보내기…", When = "gridFocus", Enablement = "gridHasResult && !noImplDataTransfer",
     Placements = ["menu:result/exportExcel@-100", "context:grid/export@10"])]
 public sealed class ExcelExportCommandHandler : ICommandHandler
 {

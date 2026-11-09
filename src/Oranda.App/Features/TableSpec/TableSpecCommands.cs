@@ -19,7 +19,7 @@ namespace Oranda.App.Features.TableSpec;
 /// </summary>
 [OrandaCommand("oranda.schema.tableSpec", CommandCategory.Database, When = "schemaFocus", Enablement = "tableNodeSelected && hasSession",
     Placements = ["context:schema/tableSpec@70"])]
-[OrandaCommand("oranda.tools.tableSpec", CommandCategory.Tools, Enablement = "hasSession",
+[OrandaCommand("oranda.tools.tableSpec", CommandCategory.Tools, Enablement = "hasSession && !noImplMetadata",
     Placements = ["menu:tools/tableSpec@50"])]
 public sealed class TableSpecCommandHandler : ICommandHandler
 {

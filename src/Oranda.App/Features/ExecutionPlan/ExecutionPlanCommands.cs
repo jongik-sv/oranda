@@ -53,11 +53,11 @@ public static class ExecutionPlanCommands
 /// 예상 계획(Ctrl+E)·실제 계획(Ctrl+Shift+E)·형식 옵션·창 열기·비교 기준 고정·고정 계획과 비교(PLAN-04).
 /// 편집기 현재 문장은 <see cref="IEditorContext"/> 로 얻고(소비만), 마지막 실행의 sql_id 는 <c>StatementExecuted</c> 이벤트의 커서를 기억한다.
 /// </summary>
-[OrandaCommand("oranda.plan.explain", CommandCategory.Sql, When = "sqlDocFocus", Enablement = "(hasSession || dedicatedSession) && !sessionBusy && !mybatisDocActive",
+[OrandaCommand("oranda.plan.explain", CommandCategory.Sql, When = "sqlDocFocus", Enablement = "(hasSession || dedicatedSession) && !sessionBusy && !mybatisDocActive && !noImplExecutionPlan",
     Icon = "explainPlan", Placements = ["menu:sql/explain@50", "menu:tuning/explain@10", "toolbar:main/explain@230", "context:editor/explain@1020"])]
-[OrandaCommand("oranda.plan.actual", CommandCategory.Sql, When = "sqlDocFocus", Enablement = "(hasSession || dedicatedSession) && !mybatisDocActive",
+[OrandaCommand("oranda.plan.actual", CommandCategory.Sql, When = "sqlDocFocus", Enablement = "(hasSession || dedicatedSession) && !mybatisDocActive && !noImplExecutionPlan",
     Placements = ["menu:sql/actualPlan@60", "menu:tuning/actualPlan@20"])]
-[OrandaCommand(ExecutionPlanCommands.RunActualId, CommandCategory.Sql, When = "sqlDocFocus", Enablement = "(hasSession || dedicatedSession) && !sessionBusy && !mybatisDocActive",
+[OrandaCommand(ExecutionPlanCommands.RunActualId, CommandCategory.Sql, When = "sqlDocFocus", Enablement = "(hasSession || dedicatedSession) && !sessionBusy && !mybatisDocActive && !noImplExecutionPlan",
     Icon = "planRun", Placements = ["menu:tuning/runActualPlan@25", "toolbar:main/explain@231"])]
 [OrandaCommand("oranda.plan.displayCursorOptions", CommandCategory.Sql, Enablement = "hasSession",
     Placements = ["menu:tuning/displayCursorOptions@30"])]
@@ -66,9 +66,9 @@ public static class ExecutionPlanCommands
 [OrandaCommand("oranda.plan.compare", CommandCategory.Sql, Icon = "diff",
     Placements = ["menu:tuning/comparePlan@50", "context:plan/compare@11"])]
 [OrandaCommand("oranda.view.plan", CommandCategory.View)]
-[OrandaCommand(ExecutionPlanCommands.RerunWithHintId, CommandCategory.Sql, Enablement = "(hasSession || dedicatedSession) && !sessionBusy && !mybatisDocActive",
+[OrandaCommand(ExecutionPlanCommands.RerunWithHintId, CommandCategory.Sql, Enablement = "(hasSession || dedicatedSession) && !sessionBusy && !mybatisDocActive && !noImplExecutionPlan",
     Icon = "run", Placements = ["menu:tuning/rerunStats/hint@300"])]
-[OrandaCommand(ExecutionPlanCommands.RerunWithStatisticsLevelId, CommandCategory.Sql, Enablement = "(hasSession || dedicatedSession) && !sessionBusy && !mybatisDocActive",
+[OrandaCommand(ExecutionPlanCommands.RerunWithStatisticsLevelId, CommandCategory.Sql, Enablement = "(hasSession || dedicatedSession) && !sessionBusy && !mybatisDocActive && !noImplExecutionPlan",
     Placements = ["menu:tuning/rerunStats/statisticsLevel@301"])]
 public sealed class ExecutionPlanCommandHandler : ICommandHandler
 {

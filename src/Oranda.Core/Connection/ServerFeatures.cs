@@ -29,18 +29,20 @@ public sealed record ServerFeatures(
 
     /// <summary>
     /// DBMS 와 주 버전으로 기능을 정한다. Oracle 은 <see cref="For(int)"/> 와 같다.
-    /// Tibero 는 Oracle 12c·23ai 의 출시 기능이라 첫 판에서는 모두 없는 것으로 본다(실측 뒤에 고친다).
-    /// <para>
-    /// 확인 필요: docs/design/tibero.md 3장에는 이 네 칸에 맞는 행이 없다. 안전한 쪽(끔)으로 둔 값이다.
-    /// Tibero 6 이상은 FETCH FIRST·OFFSET(<see cref="RowLimiting"/>)이나 identity 열(<see cref="Release12Columns"/>)을 지원할 수 있어
-    /// T2 실측 뒤 칸마다 고친다. <see cref="Multitenant"/>(CDB/PDB)·<see cref="Release23Types"/> 는 Oracle 전용으로 본다.
-    /// </para>
+    /// Tibero 는 칸마다 실측(시험 서버 6.2.15, docs/design/tibero-catalog-map.md)으로 정한다.
+    /// <list type="bullet">
+    /// <item><see cref="RowLimiting"/> = 켬. <c>FETCH FIRST n ROWS ONLY</c>·<c>OFFSET 0 ROWS FETCH NEXT 1 ROWS ONLY</c> 가 6.2.15 에서 실행됨(tibero-catalog-map.md 5.3).</item>
+    /// <item><see cref="Release12Columns"/> = 끔. 6.2.15 의 <c>*_TAB_COLS</c> 에 <c>IDENTITY_COLUMN</c>·<c>USER_GENERATED</c>, <c>*_OBJECTS</c> 에 <c>EDITIONABLE</c> 열이 없다(같은 문서 요약·4장).
+    /// 실측 필요: identity·invisible 열 DDL 을 직접 실행해 본 결과는 없다. 사전 뷰에 열이 없다는 점만 근거다.</item>
+    /// <item><see cref="Multitenant"/> = 끔. <c>V$DATABASE.CDB</c> 열이 없고 <c>SYS_CONTEXT('USERENV','CON_NAME')</c> 는 <c>ODP-11006</c> 오류(같은 문서 5.3).</item>
+    /// <item><see cref="Release23Types"/> = 끔. 도메인(<c>*_TAB_COLS.DOMAIN_NAME</c>) 열이 없다. 실측 필요: VECTOR·BOOLEAN 열은 시험하지 않았다. 6.2.15 한 대 기준이며 Tibero 7 은 서버가 없어 못 쟀다.</item>
+    /// </list>
     /// </summary>
     public static ServerFeatures For(int majorVersion, Dbms dbms) => dbms switch
     {
         Dbms.Oracle => For(majorVersion),
         Dbms.Tibero => new ServerFeatures(
-            Release12Columns: false, Multitenant: false, RowLimiting: false, Release23Types: false, Dbms: Dbms.Tibero),
+            Release12Columns: false, Multitenant: false, RowLimiting: true, Release23Types: false, Dbms: Dbms.Tibero),
         _ => throw new ArgumentOutOfRangeException(nameof(dbms), dbms, null),
     };
 

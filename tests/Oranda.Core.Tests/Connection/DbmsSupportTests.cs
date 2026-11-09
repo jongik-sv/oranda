@@ -16,21 +16,34 @@ public class DbmsSupportTests
         => Assert.Equal(ServerFeatures.For(major), ServerFeatures.For(major, Dbms.Oracle));
 
     [Fact]
-    public void Tibero_turns_off_every_version_feature_and_says_why()
+    public void Tibero_version_features_follow_the_6_2_15_measurements()
     {
-        var f = ServerFeatures.For(7, Dbms.Tibero);
+        // 실측(docs/design/tibero-catalog-map.md): FETCH FIRST·OFFSET … FETCH 됨, 나머지 세 칸은 근거 없음/없음 확인 → 끔.
+        foreach (var major in new[] { 6, 7 })
+        {
+            var f = ServerFeatures.For(major, Dbms.Tibero);
 
-        Assert.False(f.Release12Columns);
-        Assert.False(f.Multitenant);
-        Assert.False(f.RowLimiting);
-        Assert.False(f.Release23Types);
-        Assert.Equal(Dbms.Tibero, f.Dbms);
-        Assert.Equal("Tibero 에서는 지원하지 않음", f.UnavailableReason);
+            Assert.True(f.RowLimiting);
+            Assert.False(f.Release12Columns);
+            Assert.False(f.Multitenant);
+            Assert.False(f.Release23Types);
+            Assert.Equal(Dbms.Tibero, f.Dbms);
+        }
+
+        var tibero = ServerFeatures.For(6, Dbms.Tibero);
+        Assert.Equal("Tibero 에서는 지원하지 않음", tibero.UnavailableReason);
+    }
+
+    [Fact]
+    public void Oracle_row_limiting_still_needs_12c()
+    {
+        Assert.False(ServerFeatures.For(11).RowLimiting);
+        Assert.True(ServerFeatures.For(12).RowLimiting);
         Assert.Equal(ServerFeatures.UnavailableText, ServerFeatures.For(11).UnavailableReason);
         Assert.Equal(ServerFeatures.UnavailableText, ServerFeatures.For(19).UnavailableReason);
     }
 
-    // 기능마다 한 행(tibero.md 3장 첫 판). 실측으로 한 행을 고치면 이 행만 바뀐다.
+    // 기능마다 한 행(tibero.md 3장 + tibero-catalog-map.md 6.2.15 실측). 실측으로 한 행을 고치면 이 행만 바뀐다. 7행 모두 아직 끔(근거 부족).
     [Theory]
     [InlineData(DbmsFeature.SqlMonitorReport, true, false)]
     [InlineData(DbmsFeature.AwrReport, true, false)]

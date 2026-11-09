@@ -1228,7 +1228,9 @@ public sealed class ConnectionService : IConnectionService, IDisposable
     }
 
     private static string VersionText(ServerInfo server) =>
-        server.IsAutonomous ? "ADB" : ServerLabel(server.Version) ?? server.Version;
+        server.IsAutonomous ? "ADB"
+        : server.Dbms != Dbms.Oracle && ConnectionStatusViewModel.VersionLabel(server.Dbms, server.Version) is { Length: > 0 } other ? other
+        : ServerLabel(server.Version) ?? server.Version;
 
     private static string UniqueName(string wanted, IEnumerable<string> existing)
     {

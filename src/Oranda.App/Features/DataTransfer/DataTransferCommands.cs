@@ -145,9 +145,9 @@ public static class DataTransferCommands
 /// 결과 그리드 「내보내기」(<c>oranda.grid.export</c>, 하나로 합친 내보내기 대화상자를 마지막에 쓴 형식으로 연다)와 도구 「데이터 가져오기」(<c>oranda.tools.import</c>).
 /// 셸의 처리기 팩터리(DI)가 <see cref="IServiceProvider"/> 를 넣어 준다. 인자 없는 생성자는 아무것도 하지 않는다.
 /// </summary>
-[OrandaCommand("oranda.grid.export", CommandCategory.Result, Title = "파일로 내보내기…", When = "gridFocus", Enablement = "gridHasResult",
+[OrandaCommand("oranda.grid.export", CommandCategory.Result, Title = "파일로 내보내기…", When = "gridFocus", Enablement = "gridHasResult && !noImplDataTransfer",
     Placements = ["context:grid/export@10"])]
-[OrandaCommand("oranda.tools.import", CommandCategory.Tools, Title = "데이터 가져오기(CSV·xlsx)", Enablement = "hasSession && !readOnlySession",
+[OrandaCommand("oranda.tools.import", CommandCategory.Tools, Title = "데이터 가져오기(CSV·xlsx)", Enablement = "hasSession && !readOnlySession && !noImplDataTransfer",
     Placements = ["menu:tools/import@40"])]
 public sealed class DataTransferCommandHandler : ICommandHandler
 {

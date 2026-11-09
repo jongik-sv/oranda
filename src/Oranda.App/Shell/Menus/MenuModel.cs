@@ -234,7 +234,7 @@ public static class MenuModelBuilder
                 Children = children,
                 AccessHeader = text.TryLookup($"Menu.{id}.access"),
                 EmptyText = text.TryLookup($"Menu.{id}.empty") ?? text.Lookup("Menu.empty"),
-                ReasonText = Features.DbmsFeatureKeys.WrapPhrase(text.TryLookup),
+                ReasonText = Features.DbmsServiceKeys.WrapPhrase(Features.DbmsFeatureKeys.WrapPhrase(text.TryLookup)),
             });
         }
 

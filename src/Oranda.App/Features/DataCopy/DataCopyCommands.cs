@@ -55,8 +55,8 @@ public static class DataCopyCommands
 /// 도구 「데이터 복사…」와 스키마 브라우저 표 오른쪽 클릭 「데이터 복사에 추가」.
 /// 셸의 처리기 팩터리(DI)가 <see cref="IServiceProvider"/> 를 넣어 준다. 인자 없는 생성자는 아무것도 하지 않는다.
 /// </summary>
-[OrandaCommand(DataCopyCommands.OpenCommandId, CommandCategory.Tools, Title = "데이터 복사…", Placements = ["menu:tools/dataCopy@41"])]
-[OrandaCommand(DataCopyCommands.AddCommandId, CommandCategory.Database, Title = "데이터 복사에 추가", When = "schemaFocus", Enablement = "schemaNodeSelected",
+[OrandaCommand(DataCopyCommands.OpenCommandId, CommandCategory.Tools, Title = "데이터 복사…", Enablement = "!noImplDataTransfer", Placements = ["menu:tools/dataCopy@41"])]
+[OrandaCommand(DataCopyCommands.AddCommandId, CommandCategory.Database, Title = "데이터 복사에 추가", When = "schemaFocus", Enablement = "schemaNodeSelected && !noImplDataTransfer",
     Placements = ["context:schema/dataCopy@46"])]
 public sealed class DataCopyCommandHandler : ICommandHandler
 {

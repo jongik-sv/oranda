@@ -48,7 +48,8 @@ public sealed class BlockerStatusViewModel : ViewModelBase, IStatusBarItem, IDis
                 events,
                 (profile, ct) => OpenMonitorAsync(container, profile, ct),
                 (session, sid, ct) => QueryAsync(container, session, sid, ct),
-                time);
+                time,
+                hasMonitorService: profile => DbmsServiceKeys.HasImplementation(container, profile.Dbms, DbmsServiceArea.Monitor));
             Attach();
         }
     }

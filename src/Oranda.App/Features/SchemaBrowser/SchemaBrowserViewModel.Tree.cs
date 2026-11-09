@@ -1,3 +1,5 @@
+using Oranda.App.Features.Localization;
+using Oranda.App.Shell.Features;
 using Oranda.Core.Metadata;
 using Oranda.Core.Sessions;
 
@@ -73,6 +75,13 @@ public sealed partial class SchemaBrowserViewModel
             return;
         }
 
+        // 이 DBMS 에 스키마 트리·메타데이터 구현이 없으면(Tibero 등) 읽지 않고 이유만 패널 아래 안내줄에 보인다.
+        if (NotImplementedReason(session) is { } notImplemented)
+        {
+            StatusText = notImplemented;
+            return;
+        }
+
         IsBusy = true;
         try
         {
@@ -124,6 +133,10 @@ public sealed partial class SchemaBrowserViewModel
             }
         }
     }
+
+    /// <summary>세션의 DBMS 에 <see cref="DbmsServiceArea.Metadata"/> 구현이 없을 때의 이유 문구(현재 언어). 있으면 null.</summary>
+    private string? NotImplementedReason(ISession session)
+        => DbmsServiceKeys.Reason(_services, session.Profile.Dbms, DbmsServiceArea.Metadata, key => UiText.Current?.TryLookup(key));
 
     private SchemaFilter BuildFilter() => new(FilterText, Types.SelectedTypes, InvalidOnly, FavoritesOnly);
 

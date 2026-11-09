@@ -185,6 +185,12 @@ public sealed partial class SettingsViewModel : ViewModelBase
     /// <summary>업데이트 탭의 순서(<c>SettingsWindow.axaml</c> 의 업데이트 탭, 그 뒤에 AI 모델 탭).</summary>
     public const int UpdateTabIndex = 8;
 
+    /// <summary>「드라이버」 탭의 순서(맨 끝, AI 모델 탭 다음). <c>oranda.settings.openDrivers</c> 가 이 탭으로 연다.</summary>
+    public const int DriversTabIndex = 10;
+
+    /// <summary>「드라이버」 탭(Tibero 드라이버 위치, 결정25).</summary>
+    public DriverSettingsPage Drivers { get; }
+
     [ObservableProperty]
     private bool _updateCheckOnStartup;
 
@@ -213,10 +219,12 @@ public sealed partial class SettingsViewModel : ViewModelBase
 
     /// <param name="sqlFormat">「SQL 포맷」 쪽. null 이면 앱 서비스(프로필 저장소·포매터)로 만든다(앱 밖이면 저장하지 않는 기본값 쪽).</param>
     /// <param name="featureGate">「기능」 탭의 재시작 안내를 읽을 게이트. null 이면 앱 서비스에서 찾는다(앱 밖이면 안내 없음).</param>
-    public SettingsViewModel(SettingsService settings, IShellText text, IEnumerable<string>? installedFonts = null, SqlFormatPage? sqlFormat = null, IFeatureGate? featureGate = null)
+    /// <param name="drivers">「드라이버」 탭. null 이면 앱 서비스에서 Tibero 드라이버 상태(로더)를 찾아 만든다(앱 밖이면 로더 없음).</param>
+    public SettingsViewModel(SettingsService settings, IShellText text, IEnumerable<string>? installedFonts = null, SqlFormatPage? sqlFormat = null, IFeatureGate? featureGate = null, DriverSettingsPage? drivers = null)
     {
         _settings = settings;
         _text = text;
+        Drivers = drivers ?? CreateDriverPage(settings, text);
         SqlFormat = sqlFormat ?? CreateSqlFormatPage(settings, text);
         Features = new FeatureSettingsPage(
             settings.Current.Features,
@@ -317,6 +325,14 @@ public sealed partial class SettingsViewModel : ViewModelBase
             services?.GetService<IEventBus>(),
             text,
             services?.GetService<IAiCustomCliLocator>() is { } locator ? name => locator.Locate(name) is not null : null);
+    }
+
+    private static DriverSettingsPage CreateDriverPage(SettingsService settings, IShellText text)
+    {
+        var services = (Avalonia.Application.Current as App)?.Services;
+        var selector = Oranda.App.Features.DbmsServices.SelectorOf(services);
+        var status = selector?.Find<Oranda.Core.Connection.IDbmsDriverStatus>(Oranda.Core.Connection.Dbms.Tibero);
+        return new DriverSettingsPage(settings, text, status, Oranda.App.Features.ConnectionManager.DbmsAvailability.Current.Contains(Oranda.Core.Connection.Dbms.Tibero));
     }
 
     private static SqlFormatPage CreateSqlFormatPage(SettingsService settings, IShellText text)
@@ -582,6 +598,8 @@ public sealed partial class SettingsViewModel : ViewModelBase
                 Monitor = s.Monitor with { RefreshSeconds = Math.Clamp((int)MonitorRefreshSeconds, 2, 60) },
                 // 프로필 목록은 저장소의 지금 값을 쓴다: 프로필 관리 창이 그사이 기록한 목록을 옛 사본으로 덮지 않는다.
                 Ai = AiModel.ToSettings(s.Ai),
+                // 칸을 바꾸지 않았으면 설정을 그대로 둔다.
+                Drivers = Drivers.ToSettings(s.Drivers),
                 Workspace = s.Workspace with
                 {
                     AutosaveSeconds = Math.Clamp((int)AutosaveSeconds, 1, 10),
@@ -612,6 +630,7 @@ public sealed partial class SettingsViewModel : ViewModelBase
         PublishAiChanged();
         UpdateService.Current?.RefreshSettings(); // 건너뛴 버전을 지웠으면 상태 표시줄 표시도 바로 맞춘다
         Features.AcceptSaved();
+        Drivers.AcceptSaved();
         if (allowStayOpen && featuresChanged && Features.HasPendingRestart)
         {
             // 재시작해야 적용되는 기능이 있으면 안내 띠가 보이게 창을 둔다(닫기를 누르면 닫힌다).

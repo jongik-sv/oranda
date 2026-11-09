@@ -3,8 +3,11 @@ using Oranda.App.Features.ConnectionManager;
 using Oranda.App.Features.DedicatedSession;
 using Oranda.App.Features.Execution;
 using Oranda.App.Features.SqlEditor;
+using Oranda.App.Shell;
+using Oranda.App.Shell.Features;
 using Oranda.App.Tests.Features.Execution;
 using Oranda.App.Tests.Features.SqlEditor;
+using Oranda.Core.Composition;
 using Oranda.Core.Connection;
 using Oranda.Core.Events;
 using Oranda.Core.Sessions;
@@ -13,6 +16,7 @@ namespace Oranda.App.Tests.Features.ConnectionManager;
 
 // 소유: TSK-12-04. 툴바 접속 콤보로 고른 접속이 활성 문서(SQL 탭·PL/SQL 문서)의 다음 실행 대상이 되는지,
 // 이전 접속의 미커밋은 묻고(커밋/롤백/그대로 두고 바꾸기/취소) 실행 중이면 바꾸지 않는지.
+[Collection("DbmsFeatureKeysSerial")] // DBMS 키 시험이 쓰는 정적 상태와 겹치지 않게
 public sealed class ConnectionComboSwitchTests
 {
     private static ConnectionProfile Profile(string name) => new(name, "scott", "localhost:1521/FREEPDB1");
@@ -262,6 +266,49 @@ public sealed class ConnectionComboSwitchTests
         var b = await ConnectAsync(rig.Fx, "b");
         rig.Registry.Attach(tab, new FakeSession(b.Profile));
         Assert.Equal(SessionSelect.Dedicated, await rig.Router.SelectAsync(a));
+    });
+
+    private sealed class SelectorProvider(IDbmsServiceSelector selector) : IServiceProvider
+    {
+        public object? GetService(Type serviceType) => serviceType == typeof(IDbmsServiceSelector) ? selector : null;
+    }
+
+    [Fact]
+    public Task Dbms_keys_follow_the_shown_tab_session_and_not_the_current_connection() => Ui.Run(async () =>
+    {
+        using var rig = new RouterRig();
+        var keys = new ContextKeyService();
+        ConnectionManagerCommands.WatchDbmsKeys(rig.Router, keys, new SelectorProvider(new DbmsServiceTable())); // Tibero 는 어느 영역도 구현이 없다
+        var current = await ConnectAsync(rig.Fx, "a"); // 지금 접속 = Oracle
+        var oracleTab = rig.Host.NewDocument();
+        var tiberoTab = rig.Host.NewDocument();
+        Assert.Same(tiberoTab, rig.Host.Active);
+        var monitorOn = DbmsServiceKeys.Enabled(DbmsServiceArea.Monitor);
+        var planOn = DbmsServiceKeys.Enabled(DbmsServiceArea.ExecutionPlan);
+        try
+        {
+            Assert.True(keys.Evaluate(monitorOn)); // Oracle 탭
+
+            rig.Registry.Attach(tiberoTab, new FakeSession(new ConnectionProfile("tb", "SYS", "h:8629/s", Dbms: Dbms.Tibero)));
+            Pump();
+            Assert.Same(current, rig.Fx.Service.ActiveSession); // 전용 세션 탭은 지금 접속을 바꾸지 않는다
+            Assert.False(keys.Evaluate(monitorOn)); // 그래도 보이는 탭이 Tibero 라서 영역 키가 Tibero 기준
+            Assert.False(keys.Evaluate(planOn));
+
+            rig.Host.Active = oracleTab; // 활성 탭이 바뀌면 키도 따라간다(지금 접속은 처음부터 Oracle)
+            Pump();
+            Assert.True(keys.Evaluate(monitorOn));
+            Assert.True(keys.Evaluate(planOn));
+
+            rig.Host.Active = tiberoTab;
+            Pump();
+            Assert.False(keys.Evaluate(monitorOn));
+        }
+        finally
+        {
+            DbmsServiceKeys.Apply(keys, null, null);
+            DbmsFeatureKeys.Apply(keys, null);
+        }
     });
 
     // ---------- PL/SQL 문서 ----------

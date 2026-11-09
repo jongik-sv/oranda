@@ -30,8 +30,8 @@ public class QuickOpenObjectTests
         var reg = ShellTestHelpers.CreateCommandRegistry();
         var quick = reg.Find("oranda.nav.quickOpenObject")!;
         var reveal = reg.Find("oranda.schema.reveal")!;
-        Assert.Equal("hasSession", quick.Enablement);
-        Assert.Equal("hasSession", reveal.Enablement);
+        Assert.Equal("hasSession && !noImplMetadata", quick.Enablement);
+        Assert.Equal("hasSession && !noImplMetadata", reveal.Enablement);
         Assert.Equal(CommandCategory.Navigate, quick.Category);
         Assert.Contains("context:editor/revealInSchema@330", reveal.Placements);
         Assert.Contains("menu:edit/go/quickOpenObject@500", quick.Placements); // 편집 > 이동 ▸ (TSK-09-02)

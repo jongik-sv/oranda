@@ -18,9 +18,9 @@ namespace Oranda.App.Features.ObjectDetail;
 /// 대상 객체는 명령 인자(<see cref="SchemaNode"/> 또는 <see cref="DbObjectRef"/>), 없으면 스키마 브라우저의 선택 노드.
 /// 서비스는 실행할 때 꺼낸다(시작 경로에서 Oracle 어셈블리를 올리지 않기 위해).
 /// </summary>
-[OrandaCommand("oranda.schema.openDetail", CommandCategory.Database, When = "schemaFocus", Enablement = "schemaNodeSelected",
+[OrandaCommand("oranda.schema.openDetail", CommandCategory.Database, When = "schemaFocus", Enablement = "schemaNodeSelected && !noImplMetadata",
     Placements = ["context:schema/detail@40"])]
-[OrandaCommand("oranda.schema.showDdl", CommandCategory.Database, When = "schemaFocus", Enablement = "schemaNodeSelected",
+[OrandaCommand("oranda.schema.showDdl", CommandCategory.Database, When = "schemaFocus", Enablement = "schemaNodeSelected && !noImplMetadata",
     Placements = ["context:schema/detail@41"])]
 public sealed class ObjectDetailCommandHandler : ICommandHandler
 {

@@ -36,7 +36,7 @@ public static class SqlMonitorCommands
 }
 
 /// <summary>튜닝 메뉴의 SQL 모니터 명령(SQLM-01·02).</summary>
-[OrandaCommand("oranda.monitor.sql", CommandCategory.Monitor, Icon = "sqlMonitor", Placements = ["menu:tuning/sql@100", "toolbar:main/sqlMonitor@520"])]
+[OrandaCommand("oranda.monitor.sql", CommandCategory.Monitor, Enablement = "!noImplMonitor", Icon = "sqlMonitor", Placements = ["menu:tuning/sql@100", "toolbar:main/sqlMonitor@520"])]
 [OrandaCommand("oranda.monitor.sqlSearch", CommandCategory.Monitor, When = "monitorFocus", Enablement = "monitorSqlOpen",
     Placements = ["menu:tuning/sqlSearch@110"])]
 [OrandaCommand("oranda.monitor.sqlShowPlan", CommandCategory.Monitor, When = "monitorFocus", Enablement = "monitorSqlSelected",
@@ -44,11 +44,11 @@ public static class SqlMonitorCommands
 [OrandaCommand("oranda.monitor.sqlShowBinds", CommandCategory.Monitor, When = "monitorFocus", Enablement = "monitorSqlSelected",
     Placements = ["menu:tuning/sqlShowBinds@130", "context:monitor/sqlShowBinds@51"])]
 // TSK-06-06 튜닝 메뉴 「대기·이력」(500~): SQL 모니터를 열고 그 탭으로 / 스크립트 만들기 하위 메뉴(새 편집기 탭에 글만, 실행 안 함).
-[OrandaCommand("oranda.tuning.ashWaits", CommandCategory.Monitor, Enablement = "!unsupportedAsh", Icon = "aggregate", Placements = ["menu:tuning/sqlWaits@500"])]
-[OrandaCommand("oranda.tuning.awrHistory", CommandCategory.Monitor, Enablement = "!unsupportedAwrReport", Icon = "history", Placements = ["menu:tuning/awrHistory@510"])]
-[OrandaCommand("oranda.tuning.planControls", CommandCategory.Monitor, Icon = "key", Placements = ["menu:tuning/planControls@520"])]
+[OrandaCommand("oranda.tuning.ashWaits", CommandCategory.Monitor, Enablement = "!unsupportedAsh && !noImplMonitor", Icon = "aggregate", Placements = ["menu:tuning/sqlWaits@500"])]
+[OrandaCommand("oranda.tuning.awrHistory", CommandCategory.Monitor, Enablement = "!unsupportedAwrReport && !noImplMonitor", Icon = "history", Placements = ["menu:tuning/awrHistory@510"])]
+[OrandaCommand("oranda.tuning.planControls", CommandCategory.Monitor, Enablement = "!noImplMonitor", Icon = "key", Placements = ["menu:tuning/planControls@520"])]
 // TSK-14-17 튜닝 추천(규칙 기반): SQL 모니터를 열고 「튜닝 추천」 탭으로. 인자 sql_id 면 그 SQL 을 골라 보인다(세션 모니터 바로 가기).
-[OrandaCommand(SqlMonitorViewModel.RecommendCommand, CommandCategory.Monitor, Icon = "star", Placements = ["menu:tuning/recommend@505"])]
+[OrandaCommand(SqlMonitorViewModel.RecommendCommand, CommandCategory.Monitor, Enablement = "!noImplMonitor", Icon = "star", Placements = ["menu:tuning/recommend@505"])]
 [OrandaCommand("oranda.tuning.tuningAdvisorScript", CommandCategory.Monitor, Icon = "docEdit", Enablement = "monitorSqlSelected",
     Placements = ["menu:tuning/scripts/tuningAdvisor@540"])]
 [OrandaCommand("oranda.tuning.baselineScript", CommandCategory.Monitor, Icon = "docEdit", Enablement = "monitorSqlSelected",

@@ -20,11 +20,11 @@ namespace Oranda.App.Features.DbTools;
     Placements = ["context:schema/recyclebin@60"])]
 [OrandaCommand("oranda.schema.recyclebinFlashback", CommandCategory.Database, When = "schemaFocus", Enablement = "recyclebinNodeSelected && !readOnlySession",
     Placements = ["context:schema/recyclebin@61"])]
-[OrandaCommand("oranda.schema.objectSearch", CommandCategory.Database, Enablement = "hasSession",
+[OrandaCommand("oranda.schema.objectSearch", CommandCategory.Database, Enablement = "hasSession && !noImplDatabaseInfo",
     Placements = ["menu:database/objectSearch@1000"])]
-[OrandaCommand("oranda.db.info", CommandCategory.Database, Enablement = "hasSession",
+[OrandaCommand("oranda.db.info", CommandCategory.Database, Enablement = "hasSession && !noImplDatabaseInfo",
     Icon = "database", Placements = ["menu:database/dbInfo@1010", "toolbar:main/dbInfo@530"])]
-[OrandaCommand("oranda.db.ddlExtract", CommandCategory.Database, Enablement = "hasSession",
+[OrandaCommand("oranda.db.ddlExtract", CommandCategory.Database, Enablement = "hasSession && !noImplMetadata",
     Placements = ["menu:database/ddlExtract@1030"])]
 public sealed class DbToolsCommandHandler : ICommandHandler
 {

@@ -92,6 +92,7 @@ public static class AppComposition
         container.AddInstance<IContextKeys>(keys);
         container.AddType(typeof(SettingsService), typeof(SettingsService));
         container.AddType(typeof(Oranda.Core.Grid.IGridFetchSettings), typeof(Oranda.App.Features.ResultGrid.GridFetchSettings));
+        container.AddType(typeof(Oranda.Core.Connection.IDriverPathSource), typeof(DriverPathSource)); // 드라이버 위치(설정 drivers.*)를 로더에 알린다
         container.AddType(typeof(ThemeService), typeof(ThemeService));
         container.AddType(typeof(KeymapService), typeof(KeymapService));
         container.AddType(typeof(ILayoutStore), typeof(LayoutStore));

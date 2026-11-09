@@ -1,4 +1,5 @@
 using Oranda.App.Features.ConnectionManager;
+using Oranda.Core.Connection;
 
 namespace Oranda.App.Tests.Features.ConnectionManager;
 
@@ -18,6 +19,30 @@ public class ServerVersionLabelTests
     [InlineData("abc", "")]
     public void Status_bar_short_version(string? version, string expected)
         => Assert.Equal(expected, ConnectionStatusViewModel.ShortVersion(version));
+
+    // 접속 서버 표시: Oracle 은 위 표 그대로, Tibero 는 「Tibero 주.부」(6.2.15 → Tibero 6.2).
+    [Theory]
+    [InlineData(Dbms.Oracle, "19.25.0.0.0", "19c")]
+    [InlineData(Dbms.Oracle, "11.2.0.4.0", "11.2")]
+    [InlineData(Dbms.Oracle, "23.26.0.0.0", "26ai")]
+    [InlineData(Dbms.Tibero, "6.2.15", "Tibero 6.2")]
+    [InlineData(Dbms.Tibero, "7.1.0", "Tibero 7.1")]
+    [InlineData(Dbms.Tibero, "7", "Tibero 7")]
+    [InlineData(Dbms.Tibero, "", "")]
+    [InlineData(Dbms.Tibero, "abc", "")]
+    public void Status_bar_version_label_names_the_dbms(Dbms dbms, string version, string expected)
+        => Assert.Equal(expected, ConnectionStatusViewModel.VersionLabel(dbms, version));
+
+    [Fact]
+    public void Status_bar_tooltip_keeps_oracle_text_and_renames_the_dbms_for_tibero()
+    {
+        const string format = "{0}@{1} · Oracle {2} · SID {3} — x";
+
+        Assert.Equal("scott@db · Oracle 19.3.0.0.0 · SID 7 — x",
+            ConnectionStatusViewModel.TipFormat(format, Dbms.Oracle, "scott", "db", "19.3.0.0.0", "7"));
+        Assert.Equal("scott@db · Tibero 6.2.15 · SID 7 — x",
+            ConnectionStatusViewModel.TipFormat(format, Dbms.Tibero, "scott", "db", "6.2.15", "7"));
+    }
 
     [Theory]
     [InlineData("11.2.0.2.0", "11g")]

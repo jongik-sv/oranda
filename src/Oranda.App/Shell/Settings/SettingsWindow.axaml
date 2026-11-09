@@ -371,6 +371,27 @@
           <aiSettings:AiModelSettingsView DataContext="{Binding AiModel}" />
         </ScrollViewer>
       </TabItem>
+      <!-- 드라이버: Tibero 드라이버(TDP.NET Core)는 라이선스 때문에 앱에 없다. 위치를 지정하고 [확인] 으로 사전 검사한다. 이 탭은 Tibero 가 보이든 아니든 항상 있다. -->
+      <TabItem x:Name="DriversTab" Header="{Binding Strings[tab.drivers]}">
+        <ScrollViewer HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
+          <StackPanel Spacing="8" DataContext="{Binding Drivers}" x:DataType="settings:DriverSettingsPage" MaxWidth="480" HorizontalAlignment="Left">
+            <TextBlock Text="{Binding Title}" FontWeight="SemiBold" TextAlignment="Left" HorizontalAlignment="Left" TextWrapping="Wrap" />
+            <TextBox x:Name="DriverPathBox" Text="{Binding Path, Mode=TwoWay}" PlaceholderText="{Binding Placeholder}"
+                     AutomationProperties.Name="{Binding PathName}" />
+            <WrapPanel Orientation="Horizontal">
+              <Button x:Name="DriverBrowseButton" Margin="0,0,8,4" Content="{Binding BrowseText}" Command="{Binding BrowseFileCommand}" />
+              <Button x:Name="DriverBrowseFolderButton" Margin="0,0,8,4" Content="{Binding BrowseFolderText}" Command="{Binding BrowseFolderCommand}" />
+              <Button x:Name="DriverCheckButton" Margin="0,0,8,4" Content="{Binding CheckText}" Command="{Binding CheckCommand}" />
+              <Button x:Name="DriverClearButton" Margin="0,0,8,4" Content="{Binding ClearText}" Command="{Binding ClearCommand}" />
+            </WrapPanel>
+            <TextBlock x:Name="DriverStatus" Classes="hint" Classes.error="{Binding StatusIsError}" TextAlignment="Left"
+                       Text="{Binding StatusText}" IsVisible="{Binding StatusText, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"
+                       AutomationProperties.LiveSetting="Polite" />
+            <TextBlock x:Name="DriverStatusDetail" Classes="hint" TextAlignment="Left" Text="{Binding StatusDetail}" IsVisible="{Binding HasStatusDetail}" />
+            <TextBlock x:Name="DriverNotice" Classes="hint" TextAlignment="Left" Text="{Binding NoticeText}" />
+          </StackPanel>
+        </ScrollViewer>
+      </TabItem>
     </TabControl>
     <TextBlock Grid.Row="1" Text="{Binding Notice}" IsVisible="{Binding HasNotice}"
                TextWrapping="Wrap" MaxWidth="480" Margin="0,12,0,0" />

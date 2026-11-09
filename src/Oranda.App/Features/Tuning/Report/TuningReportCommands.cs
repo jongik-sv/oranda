@@ -56,7 +56,7 @@ public static class TuningReportNavigation
 /// → 편집기 현재 문장(같은 세션의 마지막 실행 커서, 없으면 글로 셈한 sql_id) → 계획 창 마지막 커서 순으로 찾고, 대화 상자를 띄운다.
 /// 저장하면 상태 줄 저장 알림(열기·폴더 열기)을 보이고, 고른 경우 기본 브라우저로 연다.
 /// </summary>
-[OrandaCommand(TuningReportNavigation.CommandId, CommandCategory.Sql, Icon = "exportFile", Enablement = "hasSession || dedicatedSession",
+[OrandaCommand(TuningReportNavigation.CommandId, CommandCategory.Sql, Icon = "exportFile", Enablement = "(hasSession || dedicatedSession) && !noImplTuning",
     Placements = ["menu:tuning/report@490"])]
 public sealed class TuningReportCommandHandler : ICommandHandler
 {

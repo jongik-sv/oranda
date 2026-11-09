@@ -86,7 +86,7 @@ public sealed class ExcelExportTests : IDisposable
         var attr = typeof(ExcelExportCommandHandler).GetCustomAttributes<OrandaCommandAttribute>().Single();
         Assert.Equal("oranda.grid.exportExcel", attr.Id);
         Assert.Equal("gridFocus", attr.When);
-        Assert.Equal("gridHasResult", attr.Enablement);
+        Assert.Equal("gridHasResult && !noImplDataTransfer", attr.Enablement);
         Assert.True(attr.ShowInPalette);
         Assert.Contains("menu:result/exportExcel@-100", attr.Placements!);
 

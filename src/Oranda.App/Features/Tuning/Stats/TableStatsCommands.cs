@@ -38,11 +38,11 @@ public static class TableStatsCommands
 /// 「통계 보기」(편집기 커서 아래 표, 다른 창이 넘긴 표), 스키마 브라우저 표 문맥 메뉴의 「통계 보기」, 「통계 수집 스크립트 만들기」(새 편집기 탭에 넣기만).
 /// 다른 창이 표를 넘기는 방법은 <see cref="TuningNavigation.OpenStatsAsync"/>(또는 매개변수 <see cref="TableStatsTarget"/>·<c>"OWNER.TABLE"</c>).
 /// </summary>
-[OrandaCommand("oranda.tuning.stats", CommandCategory.Database, Enablement = "hasSession", Icon = "table",
+[OrandaCommand("oranda.tuning.stats", CommandCategory.Database, Enablement = "hasSession && !noImplTuning", Icon = "table",
     Placements = ["menu:tuning/stats@200", "context:editor/tableStats@1030"])]
 [OrandaCommand("oranda.tuning.gatherStatsScript", CommandCategory.Database, Enablement = TableStatsCommands.ActiveKey, Icon = "docEdit",
     Placements = ["menu:tuning/scripts/gatherStats@590"])]
-[OrandaCommand("oranda.schema.tableStats", CommandCategory.Database, When = "schemaFocus", Enablement = "tableNodeSelected && hasSession", Icon = "table",
+[OrandaCommand("oranda.schema.tableStats", CommandCategory.Database, When = "schemaFocus", Enablement = "tableNodeSelected && hasSession && !noImplTuning", Icon = "table",
     Placements = ["context:schema/tableStats@72"])]
 public sealed class TableStatsCommandHandler : ICommandHandler
 {

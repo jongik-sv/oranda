@@ -26,7 +26,8 @@
 - `ConnectionProfile` 끝에 `Dbms Dbms = Dbms.Oracle` 를 더한다(D-004: 끝에 기본값으로 추가, 옛 파일은 Oracle 로 읽음).
 - DBMS 선택 = 세션 단위. `ISessionManager` 가 프로필의 `Dbms` 로 공급자를 고른다. 서비스 인터페이스(`IExecutionService`·`IMetadataProvider`·`IExecutionPlanService`·`IMonitorService`·`ITuningService`·`IDataTransferService` 등)는 세션의 DBMS 로 구현을 고르는 디스패처 하나를 둔다. App 코드는 지금처럼 인터페이스만 본다.
 - 카탈로그 SQL: `.sql` 헤더에 `dbms: oracle|tibero` 를 더한다. 없으면 `oracle`. Tibero 용 파일은 `src/Oranda.Tibero/Catalog/` 에 같은 `id` 로 둔다. `ISqlCatalog` 는 세션의 DBMS 로 파일을 고른다.
-- 기능 지원 표시: `ServerFeatures`·`ServerCapabilities` 에 DBMS 축을 더한다. 안 되는 기능은 메뉴를 숨기지 않고 비활성 + 이유(「Tibero 에서는 지원하지 않음」)를 보인다.
+- 기능 지원 표시: `ServerFeatures`·`ServerCapabilities` 에 DBMS 축을 더한다. 안 되는 기능은 메뉴를 숨기지 않고 비활성 + 이유를 보인다. 이유는 두 단위로 나뉜다. ① 서비스 구현 유무(`DbmsServiceKeys`): 그 DBMS 에 서비스(`IMonitorService` 등) 구현이 아직 없으면 「Tibero 에서는 아직 지원하지 않음」 — 구현이 들어오면 저절로 풀린다. ② 기능 단위(`DbmsFeatureKeys` ← `DbmsFeature`·`DbmsSupport`): 서비스는 있어도 그 DBMS 가 해당 기능을 지원하지 않으면 「Tibero 에서는 지원하지 않음」 — 실측 표(`DbmsSupport`)를 고쳐야 풀린다. 서버 버전으로 정해지는 네 칸(`ServerFeatures`)은 3장 아래 「버전 기능 칸」에 따른다.
+- 표시 이름·오류 코드: 상태 표시줄은 Oracle 이 `19c`·`26ai`, Tibero 가 `Tibero 6.2`(서버 `6.2.15` → 주.부)로 보인다(툴팁은 `Tibero 6.2.15`). 오류 코드는 `DbError.Code` 가 이미 DBMS 원문(`ORA-00942`·`TBR-8033`)이고, 번호만 있는 곳은 `DbErrorCodes.Display(dbms, number)` 로 쓴다 — App 에 `ORA-` 접두를 직접 붙이는 곳은 없다.
 - 오류 번호: `DbError` 에 `Dbms` 와 원문 코드(`ORA-01013`·`TBR-nnnn`)를 둔다. 의미 분류(취소·교착·연결 끊김·제약 위반·스냅샷 너무 오래됨 등)는 Core 의 `DbErrorKind` 로 모으고, Oracle·Tibero 공급자가 번호를 분류로 옮긴다. App 의 `OracleException`·숫자 비교는 분류로 바꾼다.
 - App 의 ODP.NET 직접 사용(2개 파일, `ConnectionService`·`ConnectionTesters`)과 Oranda.Oracle 정적 도우미 사용(10개 파일)을 인터페이스 뒤로 옮긴다. App 의 인라인 Oracle SQL(약 10곳)은 카탈로그 파일로 옮긴다.
 - 편집기 언어: Tibero SQL·PSM 은 Oracle 문법과 대부분 같아 같은 렉서·파서를 쓴다. 자동완성의 `DBMS_*` 목록은 DBMS 별로 거른다.
@@ -46,16 +47,25 @@
 | PL/SQL(PSM) 편집·컴파일 오류 | 다르게 | 오류 뷰·번호 체계 차이 |
 | 실행 계획(EXPLAIN PLAN) | 다르게 | `PLAN_TABLE` = 세션 임시 표, `DBMS_XPLAN.DISPLAY` |
 | 커서의 실제 계획·A-Rows | 다르게 | `DISPLAY_CURSOR`, `GATHER_SQL_PLAN_STAT` 필요 |
-| SQL Monitor 보고서·AWR·ASH | 안 됨(첫 판) | Oracle 팩 기능 |
+| SQL Monitor 보고서·AWR·ASH | 안 됨(끔 유지, 실측 필요) | 6.2.15 실측([tibero-catalog-map.md](tibero-catalog-map.md)): `DBMS_SQLTUNE.REPORT_SQL_MONITOR` 는 있으나 인수가 달라 Oracle 호출 형태로는 ODP-11029. `DBA_HIST_*` 는 일부 있으나 `SQL_ID` 대신 `SQL_HASH_VALUE`·`*_DELTA` 열 없음. `V$ACTIVE_SESSION_HISTORY` 는 있으나 `SESSION_STATE`·`WAIT_CLASS` 없음·`EVENT` → `WAIT_EVENT`. Tibero 호출 형태로 보고서가 나오는지는 아직 못 쟀다 |
 | 세션 모니터·세션 끊기 | 다르게 | `ALTER SYSTEM KILL SESSION (sid, serial#)`, SERIAL# 음수 버그 보정 |
 | Lock 모니터 | 다르게 | V$ 뷰 차이 확인 |
-| 트레이스·TKPROF·10053 | 안 됨(첫 판) | |
-| 표·열 통계, 자식 커서 | 확인 필요 | |
+| 트레이스·TKPROF·10053 | 안 됨 | 세션 트레이스: `DBMS_MONITOR` 패키지 없음(6.2.15 실측). TKPROF·10053 은 조사 대상이 아니었다 → 끔 유지, 실측 필요 |
+| 표·열 통계, 자식 커서 | 다르게(6.2.15 실측) | `*_TAB_STATISTICS`·`*_IND_STATISTICS`·`GV$SQL_SHARED_CURSOR` 없음 → `*_TABLES`·`*_INDEXES` 통계 열을 쓴다. `DBMS_STATS` 는 있음. 자식 커서 사유는 끔 |
 | 데이터 복사·내보내기·가져오기 | 됨(대부분 공통) | 오류 번호 분류만 다르게 |
 | 플래시백 조회 | 확인 필요 | |
-| Java 저장 소스 | 안 됨 | |
+| Java 저장 소스 | 안 됨(끔 유지, 실측 필요) | `DBMS_JAVA`·`*_JAVA_CLASSES` 등은 있으나 `*_JAVA_DERIVATIONS`·`*_JAVA_IMPLEMENTS`·`*_JAVA_INNERS` 없음, `DBMS_JAVA.SHORTNAME` 은 빈 값(6.2.15 실측). JAVA SOURCE 를 만들고 컴파일하는 것은 못 쟀다 |
 | MyBatis 작업 공간 | 됨 | DB 와 무관한 부분 공통 |
 | AI 튜닝 | 다르게 | 도구가 쓰는 계획·통계 경로를 따라감 |
+
+### 버전 기능 칸(`ServerFeatures.For(major, Dbms.Tibero)`, 6.2.15 실측)
+
+| 칸 | 값 | 근거 |
+|---|---|---|
+| `RowLimiting` (FETCH FIRST·OFFSET) | 켬 | `FETCH FIRST 1 ROWS ONLY`·`OFFSET 0 ROWS FETCH NEXT 1 ROWS ONLY` 실행됨 |
+| `Release12Columns` (identity·invisible 열, editionable) | 끔 | `*_TAB_COLS` 에 `IDENTITY_COLUMN`·`USER_GENERATED`, `*_OBJECTS` 에 `EDITIONABLE` 열 없음. identity·invisible DDL 직접 시험은 안 했다 → 실측 필요 |
+| `Multitenant` (CDB/PDB) | 끔 | `V$DATABASE.CDB` 열 없음, `SYS_CONTEXT('USERENV','CON_NAME')` → ODP-11006 |
+| `Release23Types` (도메인·VECTOR·BOOLEAN) | 끔 | `*_TAB_COLS.DOMAIN_NAME` 열 없음. VECTOR·BOOLEAN 열은 안 쟀다 → 실측 필요. Tibero 7 은 서버가 없어 못 쟀다 |
 
 ## 4. 시험
 

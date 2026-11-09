@@ -19,7 +19,7 @@ namespace Oranda.App.Features.Tuning.Assistant;
 /// TSK-06-05 튜닝 도우미 명령: 열기(튜닝 메뉴·편집기 오른쪽 클릭), 인덱스·재작성 후보 탭으로 가기, 벤치마크 실행.
 /// 편집기 현재 문장은 <see cref="IEditorContext"/> 로, 실제 계획은 그 문장을 마지막으로 실행한 커서(<c>StatementExecuted</c>)로 받는다.
 /// </summary>
-[OrandaCommand("oranda.tuning.assistant", CommandCategory.Sql, Icon = "star", Enablement = "hasSession || dedicatedSession",
+[OrandaCommand("oranda.tuning.assistant", CommandCategory.Sql, Icon = "star", Enablement = "(hasSession || dedicatedSession) && !noImplTuning",
     Placements = ["menu:tuning/assistant@400", "context:editor/tuningAssistant@1030"])]
 [OrandaCommand("oranda.tuning.benchmark", CommandCategory.Sql, Icon = "timer", Enablement = "tuningAssistantOpen",
     Placements = ["menu:tuning/benchmark@410"])]

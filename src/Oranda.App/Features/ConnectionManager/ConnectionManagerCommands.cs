@@ -59,14 +59,17 @@ public static class ConnectionManagerCommands
 
             // 탭 → 세션 고르기·창 테두리(환경 색)는 라우터가 맡는다. 접속 서비스와 함께 만들어 첫 접속부터 이벤트를 받는다
             // (시작 때 만들면 Oracle 어셈블리를 깨운다).
-            SessionRouter.Resolve(container);
+            var router = SessionRouter.Resolve(container);
             if (container.GetService<ContextKeyService>() is { } keys)
             {
+                // DBMS 키는 지금 접속이 아니라 화면에 보이는(활성 탭의) 세션을 따른다: 전용 세션 탭은 지금 접속을 바꾸지 않는다.
+                // 활성 탭이 바뀌거나 지금 접속이 바뀌면 라우터가 Changed 를 올린다.
+                WatchDbmsKeys(router, keys, container);
+
                 // 세션 모니터 권한 키(kill·trace)는 마지막에 연 접속이 아니라 지금 접속의 권한을 따른다.
                 service.ActiveSessionChanged += (_, _) =>
                 {
-                    // DBMS 가 지원하지 않는 기능은 메뉴에서 회색 + 이유(A5).
-                    Shell.Features.DbmsFeatureKeys.Apply(keys, service.ActiveSession?.Profile.Dbms);
+                    ApplyDbmsKeys(keys, container, router.ShownSession);
                     if (service.ActiveSession is { } active)
                     {
                         SessionMonitor.SessionMonitorCommands.ApplyPrivilegeKeys(keys, active.Server.Capabilities);
@@ -81,6 +84,20 @@ public static class ConnectionManagerCommands
 
             return service;
         }
+    }
+
+    /// <summary>라우터의 보이는 세션이 바뀔 때마다(활성 탭·지금 접속) DBMS 키를 맞추게 한다.</summary>
+    internal static void WatchDbmsKeys(SessionRouter router, ContextKeyService keys, IServiceProvider? services) =>
+        router.Changed += (_, _) => ApplyDbmsKeys(keys, services, router.ShownSession);
+
+    /// <summary>
+    /// 보이는 세션(<paramref name="shown"/>)의 DBMS 로 「DBMS 가 못 하는 기능」 키(A5)와 「구현 없는 영역」 키(U1)를 맞춘다. 세션이 없으면 모두 켜 둔다.
+    /// </summary>
+    internal static void ApplyDbmsKeys(ContextKeyService keys, IServiceProvider? services, ISession? shown)
+    {
+        var dbms = shown?.Profile.Dbms;
+        Shell.Features.DbmsFeatureKeys.Apply(keys, dbms);
+        Shell.Features.DbmsServiceKeys.Apply(keys, services, dbms);
     }
 
     /// <summary>

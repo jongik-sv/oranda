@@ -22,6 +22,9 @@ public enum DriverState
 
     /// <summary>쓸 수는 있지만 시험하지 않은 버전(1.x 중 확인된 1.1.35 가 아닌 것). <see cref="DriverCheck.Version"/> 에 버전.</summary>
     Unverified,
+
+    /// <summary>메타데이터 검사는 통과했지만 올린 뒤 필요한 멤버를 묶지 못했다(「쓸 수 없음(없는 멤버: …)」). <see cref="DriverCheck.Reason"/> 에 없는 멤버 이름.</summary>
+    Unusable,
 }
 
 /// <summary>드라이버 사전 검사 결과. <see cref="Reason"/> 은 사용자에게 보일 한국어 문장(<see cref="DriverState.Ok"/> 면 null 일 수 있다).</summary>

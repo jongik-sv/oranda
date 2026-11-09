@@ -131,7 +131,7 @@ public sealed partial class SessionMonitorViewModel : ToolPanelViewModelBase, ID
     /// <summary>「다른 접속으로 열기」로 연 프로필을 다음에 열 때의 기본값으로 기억하는 방법. 없으면 기억하지 않는다.</summary>
     public Action<ConnectionProfile>? Remember { get; set; }
 
-    /// <summary>세션 닫기를 기다리는 최대 시간. null 이면 기본(<c>SessionCloser.Timeout</c>). 시험이 줄인다.</summary>
+    /// <summary>세션 닫기를 기다리는 최대 시간. null 이면 기본(<c>TimedClose.Timeout</c>). 시험이 줄인다.</summary>
     public TimeSpan? CloseTimeout { get; set; }
 
     /// <summary>권한 없음 안내 띠와 「모니터 접속: …」 표시.</summary>

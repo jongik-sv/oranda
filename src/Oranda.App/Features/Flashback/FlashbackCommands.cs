@@ -26,11 +26,11 @@ namespace Oranda.App.Features.Flashback;
 /// 쓸 수 없으면 이유를 결과 요약 줄과 메시지 창에 보인다.
 /// 서버에 보조 객체를 설치하지 않는다. 되돌리기는 미리보기를 거쳐 커밋 없이 반영한다(커밋은 사용자가 한다).
 /// </summary>
-[OrandaCommand("oranda.grid.flashback.asOf", CommandCategory.Result, Title = "N분 전 값 보기…", When = "gridFocus", Enablement = "gridHasSelection",
+[OrandaCommand("oranda.grid.flashback.asOf", CommandCategory.Result, Title = "N분 전 값 보기…", When = "gridFocus", Enablement = "gridHasSelection && !noImplMetadata",
     Placements = ["context:grid/edit/flashback@20"])]
-[OrandaCommand("oranda.grid.flashback.history", CommandCategory.Result, Title = "이 행 변경 이력", When = "gridFocus", Enablement = "gridHasSelection",
+[OrandaCommand("oranda.grid.flashback.history", CommandCategory.Result, Title = "이 행 변경 이력", When = "gridFocus", Enablement = "gridHasSelection && !noImplMetadata",
     Placements = ["context:grid/edit/flashback@30"])]
-[OrandaCommand("oranda.grid.flashback.restore", CommandCategory.Result, Title = "이전 값으로 되돌리기…", When = "gridFocus", Enablement = "gridHasSelection && !sessionBusy",
+[OrandaCommand("oranda.grid.flashback.restore", CommandCategory.Result, Title = "이전 값으로 되돌리기…", When = "gridFocus", Enablement = "gridHasSelection && !sessionBusy && !noImplMetadata",
     Placements = ["context:grid/edit/flashback@130"])]
 public sealed class FlashbackCommandHandler : ICommandHandler
 {

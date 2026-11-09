@@ -49,8 +49,8 @@ public sealed class ConnectionStatusViewModel : ViewModelBase, IStatusBarItem
 
     public string Text => Current is { } s
         ? ShownPendingNew
-            ? UiText.Format("Execution.status.pendingNew", "{0} · 새 세션(첫 실행 때)", $"{s.Profile.User}@{s.Profile.Name}  {ShortVersion(s.Server.Version)}".TrimEnd())
-            : $"{s.Profile.User}@{s.Profile.Name}  {ShortVersion(s.Server.Version)}".TrimEnd() + (ShownBroken ? UiText.Get("Execution.status.brokenSuffix", " (끊김)") : string.Empty)
+            ? UiText.Format("Execution.status.pendingNew", "{0} · 새 세션(첫 실행 때)", $"{s.Profile.User}@{s.Profile.Name}  {VersionLabel(s.Server.Dbms, s.Server.Version)}".TrimEnd())
+            : $"{s.Profile.User}@{s.Profile.Name}  {VersionLabel(s.Server.Dbms, s.Server.Version)}".TrimEnd() + (ShownBroken ? UiText.Get("Execution.status.brokenSuffix", " (끊김)") : string.Empty)
         : _hooked?.ShownMissing is { } missing
             ? UiText.Format("Execution.status.notConnectedNamed", "접속 안 됨({0})", _hooked.ProfileName(missing) ?? "?")
             : UiText.Get("Execution.status.notConnected", "접속 안 됨");
@@ -89,11 +89,55 @@ public sealed class ConnectionStatusViewModel : ViewModelBase, IStatusBarItem
 
     public string ToolTip => Current is { } s
         ? ShownPendingNew
-            ? UiText.Format("Execution.status.pendingNewTip", "{0}@{1} · Oracle {2} · 첫 실행 때 이 워크스페이스 전용 세션을 엽니다 — 눌러서 접속 관리자 열기",
-                s.Profile.User, ConnectStringText.Normalize(s.Profile.DataSource), s.Server.Version)
-            : UiText.Format("Execution.status.connTip", "{0}@{1} · Oracle {2} · SID {3} — 눌러서 접속 관리자 열기",
-                s.Profile.User, ConnectStringText.Normalize(s.Profile.DataSource), s.Server.Version, s.Server.SessionId.ToString(CultureInfo.InvariantCulture))
+            ? TipFormat(UiText.Get("Execution.status.pendingNewTip", "{0}@{1} · Oracle {2} · 첫 실행 때 이 워크스페이스 전용 세션을 엽니다 — 눌러서 접속 관리자 열기"),
+                s.Server.Dbms, s.Profile.User, ConnectStringText.Normalize(s.Profile.DataSource), s.Server.Version)
+            : TipFormat(UiText.Get("Execution.status.connTip", "{0}@{1} · Oracle {2} · SID {3} — 눌러서 접속 관리자 열기"),
+                s.Server.Dbms, s.Profile.User, ConnectStringText.Normalize(s.Profile.DataSource), s.Server.Version, s.Server.SessionId.ToString(CultureInfo.InvariantCulture))
         : UiText.Get("Execution.status.connTipNone", "접속 관리자 열기");
+
+    /// <summary>
+    /// 툴팁 글. 번역 글의 「Oracle {2}」 자리가 DBMS 이름을 품고 있으므로 Oracle 은 그대로 두고,
+    /// 다른 DBMS 는 그 자리를 「{DBMS 이름} {서버 버전}」 으로 바꾼다(번역 파일 키 추가 없이).
+    /// </summary>
+    internal static string TipFormat(string template, Dbms dbms, string user, string dataSource, string version, string? sessionId = null)
+    {
+        object[] args = sessionId is null ? [user, dataSource, version] : [user, dataSource, version, sessionId];
+        if (dbms != Dbms.Oracle)
+        {
+            template = template.Replace("Oracle {2}", "{2}", StringComparison.Ordinal);
+            args[2] = $"{DbmsAvailability.Label(dbms)} {version}".TrimEnd();
+        }
+
+        return string.Format(CultureInfo.InvariantCulture, template, args);
+    }
+
+    /// <summary>
+    /// 서버 버전의 짧은 표기. Oracle 은 <see cref="ShortVersion"/>(<c>19c</c>·<c>26ai</c>), 그 밖의 DBMS 는 「{이름} {주}.{부}」
+    /// (Tibero <c>6.2.15</c> → <c>Tibero 6.2</c>, 부 버전이 없으면 주 버전만). 버전을 모르면 빈 글.
+    /// </summary>
+    public static string VersionLabel(Dbms dbms, string? version)
+    {
+        if (dbms == Dbms.Oracle)
+        {
+            return ShortVersion(version);
+        }
+
+        if (string.IsNullOrWhiteSpace(version))
+        {
+            return string.Empty;
+        }
+
+        var parts = version.Split('.');
+        if (!int.TryParse(parts[0], NumberStyles.None, CultureInfo.InvariantCulture, out var major))
+        {
+            return string.Empty;
+        }
+
+        var name = DbmsAvailability.Label(dbms);
+        return parts.Length > 1 && int.TryParse(parts[1], NumberStyles.None, CultureInfo.InvariantCulture, out var minor)
+            ? string.Create(CultureInfo.InvariantCulture, $"{name} {major}.{minor}")
+            : string.Create(CultureInfo.InvariantCulture, $"{name} {major}");
+    }
 
     /// <summary><c>23.26.0.0.0</c> → <c>26ai</c>, <c>19.3.0.0.0</c> → <c>19c</c>. 모르면 빈 글.</summary>
     public static string ShortVersion(string? version)

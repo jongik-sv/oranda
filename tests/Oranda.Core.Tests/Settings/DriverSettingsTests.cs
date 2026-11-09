@@ -38,6 +38,7 @@ public class DriverSettingsTests
     [InlineData(DriverState.NotFound, false)]
     [InlineData(DriverState.WrongAssembly, false)]
     [InlineData(DriverState.FrameworkBuild, false)]
+    [InlineData(DriverState.Unusable, false)]
     public void Only_ok_and_unverified_drivers_are_usable(DriverState state, bool usable)
     {
         Assert.Equal(usable, new DriverCheck(state).IsUsable);

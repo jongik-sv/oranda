@@ -72,6 +72,7 @@ public sealed class BlockerWatcher : IDisposable
 
     private readonly Func<ConnectionProfile, CancellationToken, Task<ISession?>> _openMonitor;
     private readonly Func<ISession, long, CancellationToken, Task<BlockerSnapshot>> _query;
+    private readonly Func<ConnectionProfile, bool>? _hasMonitorService;
     private readonly TimeProvider _time;
     private readonly Action<string> _log;
     private readonly List<IDisposable> _subscriptions = [];
@@ -105,13 +106,15 @@ public sealed class BlockerWatcher : IDisposable
         Func<ConnectionProfile, CancellationToken, Task<ISession?>> openMonitor,
         Func<ISession, long, CancellationToken, Task<BlockerSnapshot>> query,
         TimeProvider? time = null,
-        Action<string>? log = null)
+        Action<string>? log = null,
+        Func<ConnectionProfile, bool>? hasMonitorService = null)
     {
         ArgumentNullException.ThrowIfNull(bus);
         ArgumentNullException.ThrowIfNull(openMonitor);
         ArgumentNullException.ThrowIfNull(query);
         _openMonitor = openMonitor;
         _query = query;
+        _hasMonitorService = hasMonitorService;
         _time = time ?? TimeProvider.System;
         _log = log ?? (message => Trace.TraceWarning("{0}", message));
         _subscriptions.Add(bus.Subscribe<SessionOpened>(this, OnOpened));
@@ -194,7 +197,10 @@ public sealed class BlockerWatcher : IDisposable
             _workId = e.SessionId;
             _profile = e.Profile;
             _sid = e.Server.SessionId;
-            _off = e.Server.Capabilities.CanQueryPerformanceViews ? BlockerDisabledReason.None : BlockerDisabledReason.NoPrivilege;
+            // 이 DBMS 에 모니터 서비스 구현이 없으면(Tibero 등) 모니터 세션을 열지도, 폴링을 시작하지도 않는다(Unsupported: 칩 숨김).
+            _off = _hasMonitorService is { } has && !has(e.Profile)
+                ? BlockerDisabledReason.Unsupported
+                : e.Server.Capabilities.CanQueryPerformanceViews ? BlockerDisabledReason.None : BlockerDisabledReason.NoPrivilege;
         }
     }
 

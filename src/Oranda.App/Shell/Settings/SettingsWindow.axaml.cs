@@ -1,5 +1,7 @@
+using System.Threading.Tasks;
 using Avalonia;
 using Avalonia.Controls;
+using Avalonia.Platform.Storage;
 
 namespace Oranda.App.Shell.Settings;
 
@@ -16,10 +18,35 @@ public partial class SettingsWindow : Window
             if (DataContext is SettingsViewModel vm)
             {
                 vm.CloseRequested += (_, _) => Close();
+                vm.Drivers.PickFile ??= () => PickDriverAsync(vm.Drivers, folder: false);
+                vm.Drivers.PickFolder ??= () => PickDriverAsync(vm.Drivers, folder: true);
             }
         };
         Opened += (_, _) => FitLargestCategory();
         Closed += (_, _) => (DataContext as SettingsViewModel)?.Features.Dispose();
+    }
+
+    /// <summary>「드라이버」 탭의 찾아보기: 파일(dll·nupkg) 또는 폴더 하나의 로컬 경로. 취소하거나 로컬 경로가 아니면 null.</summary>
+    private async Task<string?> PickDriverAsync(DriverSettingsPage page, bool folder)
+    {
+        var storage = StorageProvider;
+        if (folder)
+        {
+            var folders = await storage.OpenFolderPickerAsync(new FolderPickerOpenOptions
+            {
+                Title = page.FolderDialogTitle,
+                AllowMultiple = false,
+            }).ConfigureAwait(true);
+            return folders.Count > 0 ? folders[0].TryGetLocalPath() : null;
+        }
+
+        var files = await storage.OpenFilePickerAsync(new FilePickerOpenOptions
+        {
+            Title = page.FileDialogTitle,
+            AllowMultiple = false,
+            FileTypeFilter = [new FilePickerFileType(page.FileTypeName) { Patterns = ["*.dll", "*.nupkg"] }],
+        }).ConfigureAwait(true);
+        return files.Count > 0 ? files[0].TryGetLocalPath() : null;
     }
 
     /// <summary>Fluent 템플릿이 안내 글자(PART_Placeholder)에 Opacity 0.5 를 직접 박아 스타일로는 되돌릴 수 없다. 반투명이면 어떤 색이든 4.5:1 에 못 미치므로

@@ -19,9 +19,9 @@ namespace Oranda.App.Features.Tuning.Trace;
 /// 트레이스 보기는 매개변수로 <see cref="SessionKey"/> 를 받으면 그 세션(세션 모니터), 없으면 내 세션의 파일을 연다.
 /// 10053 은 편집기 지금 문장의 사본을 파싱만 시킨 뒤 트레이스 보기로 연다(<see cref="OptimizerTraceRunner"/>).
 /// </summary>
-[OrandaCommand("oranda.tuning.optimizerTrace", CommandCategory.Sql, When = "sqlDocFocus", Enablement = "!unsupportedOptimizerTrace && hasSession && !sessionBusy",
+[OrandaCommand("oranda.tuning.optimizerTrace", CommandCategory.Sql, When = "sqlDocFocus", Enablement = "!unsupportedOptimizerTrace && !noImplTuning && hasSession && !sessionBusy",
     Icon = "bug", Placements = ["menu:tuning/optimizerTrace@310"])]
-[OrandaCommand("oranda.tuning.traceViewer", CommandCategory.Sql, Enablement = "hasSession",
+[OrandaCommand("oranda.tuning.traceViewer", CommandCategory.Sql, Enablement = "hasSession && !noImplTuning",
     Icon = "console", Placements = ["menu:tuning/traceViewer@320"])]
 public sealed class TraceCommandHandler : ICommandHandler
 {

@@ -30,7 +30,7 @@ public static class ChildCursorsCommands
 /// 「자식 커서」: sql_id 는 다른 창이 맡긴 것(<see cref="TuningNavigation.OpenChildCursorsAsync"/>) → 매개변수(<see cref="CursorRef"/>·sql_id 글)
 /// → 앞에 있는 SQL 모니터의 고른 SQL(그 모니터 세션으로) → 계획 창의 마지막 커서 순으로 찾고, 없으면 빈 탭(sql_id 칸)을 연다.
 /// </summary>
-[OrandaCommand("oranda.tuning.childCursors", CommandCategory.Monitor, Enablement = "hasSession", Icon = "diff",
+[OrandaCommand("oranda.tuning.childCursors", CommandCategory.Monitor, Enablement = "hasSession && !noImplTuning", Icon = "diff",
     Placements = ["menu:tuning/childCursors@210"])]
 public sealed class ChildCursorsCommandHandler : ICommandHandler
 {

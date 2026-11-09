@@ -12,9 +12,9 @@ namespace Oranda.App.Features.SchemaBrowser;
 /// 명령을 실행할 때마다 도킹 트리에서 도구 창의 ViewModel 을 찾는다(<see cref="ObjectDetail.ObjectDetailCommandHandler.FindSchemaBrowser"/>).
 /// 인자 없는 생성자(기본 <c>Activator</c>)는 아무것도 하지 않는다.
 /// </summary>
-[OrandaCommand("oranda.schema.refresh", CommandCategory.Database, When = "schemaFocus", Enablement = "hasSession",
+[OrandaCommand("oranda.schema.refresh", CommandCategory.Database, When = "schemaFocus", Enablement = "hasSession && !noImplMetadata",
     Placements = ["context:schema/refresh@10"])]
-[OrandaCommand("oranda.schema.filter", CommandCategory.Database, When = "schemaFocus", Enablement = "hasSession")]
+[OrandaCommand("oranda.schema.filter", CommandCategory.Database, When = "schemaFocus", Enablement = "hasSession && !noImplMetadata")]
 [OrandaCommand("oranda.schema.editFilters", CommandCategory.Database, Placements = ["context:schema/refresh@15"])]
 [OrandaCommand("oranda.schema.toggleFavorite", CommandCategory.Database, When = "schemaFocus", Enablement = "schemaNodeSelected",
     Placements = ["context:schema/favorite@20"])]
