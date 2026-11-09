@@ -39,7 +39,7 @@ public static class DbmsAvailability
     /// 어셈블리만 있고 세션 관리자가 아직 없으면 보이지 않는다(연결해 봐야 「구현이 없다」만 뜬다). 세션 관리자가 들어오면 자동으로 보인다.
     /// 선택기가 없으면 Oracle 뿐.
     /// <para>
-    /// 드라이버 지정(결정25) 이후: 세션 관리자는 Tibero 드라이버(<c>Tibero.DataAccess.dll</c>) 유무와 상관없이 <c>Oranda.Tibero</c> 가 항상 등록하므로
+    /// 드라이버 지정(결정25) 이후: 세션 관리자는 Tibero 드라이버(dll) 유무와 상관없이 <c>Oranda.Tibero</c> 가 항상 등록하므로
     /// 이 규칙은 곧 「Oranda.Tibero 어셈블리가 있으면 Tibero 는 항상 보인다」 가 된다. 드라이버가 없을 때의 안내·접속 막기는 이 목록이 아니라
     /// 편집 영역의 드라이버 띠(<see cref="DriverBandRules"/>)가 맡는다.
     /// </para>
