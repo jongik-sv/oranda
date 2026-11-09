@@ -13,11 +13,22 @@ public sealed class FetchCancellation : IDisposable
     /// <summary>사용자 취소 뒤 하드 취소까지 기다리는 시간. 보통 왕복(약 한 페이지)은 이보다 훨씬 빨리 끝난다.</summary>
     public static readonly TimeSpan HardCancelDelay = TimeSpan.FromSeconds(2);
 
-    private readonly CancellationTokenSource _driver = new();
+    private readonly CancellationTokenSource _driver;
     private readonly CancellationTokenRegistration _user;
 
     public FetchCancellation(TimeSpan hardCancelDelay, CancellationToken user)
+        : this(hardCancelDelay, TimeProvider.System, user)
     {
+    }
+
+    /// <summary>
+    /// <paramref name="time"/> 으로 하드 취소 지연을 잰다(<see cref="CancellationTokenSource.CancelAfter(TimeSpan)"/> 가 그 시계의 타이머를 쓴다).
+    /// 제품은 <see cref="TimeProvider.System"/>(위 생성자). 시험은 손으로 돌리는 시계로 「지연 직전 = 안 됨, 지연 뒤 = 됨」을 결정적으로 본다(K4).
+    /// </summary>
+    public FetchCancellation(TimeSpan hardCancelDelay, TimeProvider time, CancellationToken user)
+    {
+        ArgumentNullException.ThrowIfNull(time);
+        _driver = new CancellationTokenSource(Timeout.InfiniteTimeSpan, time);
         _user = user.Register(static s =>
         {
             var (driver, delay) = ((CancellationTokenSource, TimeSpan))s!;

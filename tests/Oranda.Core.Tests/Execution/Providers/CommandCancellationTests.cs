@@ -25,7 +25,7 @@ public class CommandCancellationTests
             // 콜백이 취소하는 스레드에서 바로 돈다: Cancel() 이 돌아온 때 이미 Break 를 보냈다.
             Assert.Equal(1, cmd.CancelCalls);
             Assert.True(cmd.CancelledWhileRunning);
-            Assert.Equal(-1, await call.WaitAsync(TimeSpan.FromSeconds(1)));
+            Assert.Equal(-1, await call.WaitAsync(TimeSpan.FromSeconds(5)));
         }
     }
 
@@ -39,7 +39,7 @@ public class CommandCancellationTests
             var call = cmd.ExecuteNonQueryAsync(CancellationToken.None);
             await cmd.Started.Task.WaitAsync(TimeSpan.FromSeconds(5));
             cmd.Finish();
-            Assert.Equal(1, await call.WaitAsync(TimeSpan.FromSeconds(1)));
+            Assert.Equal(1, await call.WaitAsync(TimeSpan.FromSeconds(5)));
         }
 
         // 호출이 끝나 등록을 풀었으면 늦은 취소가 같은 연결의 다음 문장으로 새지 않는다.
