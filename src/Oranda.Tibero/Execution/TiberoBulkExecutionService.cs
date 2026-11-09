@@ -33,7 +33,7 @@ namespace Oranda.Tibero.Execution;
 /// <para>
 /// 읽기 전용 프로필이라도 문장마다 읽기 전용 트랜잭션을 걸지 않는다(원본 스냅숏은 호출한 쪽이 <see cref="TiberoExecutionService.ReadOnlyBlock"/> 으로 연다 —
 /// 읽기 전용 프로필에서는 그 글만 이중 방어를 지난다). DBMS_OUTPUT·변경 일지도 거치지 않는다.
-/// 등록하지 않는다: Tibero 복사(TI1b)가 붙을 때 DBMS 키로 등록한다(TiberoDataTransferService 와 같은 순서).
+/// 등록하지 않는다: Tibero 복사 키 등록(두 번째 계정 복사 IT 뒤, TI1b 결정65)에 DBMS 키로 등록한다(TiberoDataTransferService 와 같은 순서).
 /// </para>
 /// </summary>
 internal sealed partial class TiberoBulkExecutionService : IBulkExecutionService

@@ -11,7 +11,7 @@ namespace Oranda.Tibero.Transfer;
 /// 값 변환기(<see cref="TiberoImportValueConverter"/>)만 넘긴다. 내보내기는 Tibero 실행 서비스(<see cref="IExecutionService"/> 디스패처 → Tibero 키)의 결과 집합
 /// 페이지를 그대로 읽고, 가져오기는 <c>INSERT … SELECT … FROM DUAL UNION ALL …</c> 한 문장을 같은 실행 서비스로 보낸다(정책 관문·세이브포인트 포함).
 /// DBMS 키로 등록한다. 화면은 DbmsServiceKeys 영역 규칙대로 같은 영역의 복사 서비스(ICopyRunner·ICopyPrecheckService)까지 있어야 켜지므로
-/// 복사(T5 TI1b)가 붙기 전까지 가져오기·내보내기 메뉴는 꺼진 채다(TU1 이 영역을 나눈다).
+/// 복사 키가 등록되기 전까지(두 번째 계정 복사 IT 뒤, T5 TI1b 결정65) 가져오기·내보내기 메뉴는 꺼진 채다(TU1 이 영역을 나눈다).
 /// </summary>
 [OrandaService(typeof(IDataTransferService), Dbms = Dbms.Tibero)]
 internal sealed class TiberoDataTransferService(IExecutionService execution, IMetadataProvider metadata)

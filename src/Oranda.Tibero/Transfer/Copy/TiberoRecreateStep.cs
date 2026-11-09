@@ -27,7 +27,7 @@ namespace Oranda.Tibero.Transfer.Copy;
 /// <item>휴지통: <c>USER_RECYCLEBIN</c> 에 OPERATION 이 없다(3.7). 휴지통 이름은 <c>BIN$…</c> 가 아니라 <c>&lt;계정&gt;_TBL…</c> 모양.</item>
 /// </list>
 /// 카탈로그 SELECT 는 <c>Catalog/copy/recreate_*.sql</c>(<c>dbms: tibero</c>, Oracle 과 같은 id·바인드·열 위치). 값은 <see cref="Text"/> 로 글자로 바꾼다(Tibero 대량 코덱에 기대지 않는다).
-/// 키 서비스가 아니다: Tibero 복사 실행기 하위 형식(TI1b)이 생성자에서 넘긴다.
+/// 키 서비스가 아니다: Tibero 복사 실행기 하위 형식 <c>TiberoCopyRunner</c>(TI1b)가 생성자에서 넘긴다.
 /// </summary>
 internal sealed partial class TiberoRecreateStep : ICopyRecreateStep
 {

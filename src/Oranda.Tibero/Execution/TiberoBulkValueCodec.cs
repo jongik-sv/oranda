@@ -9,7 +9,7 @@ namespace Oranda.Tibero.Execution;
 /// 형식표는 <see cref="TiberoBulkTypes.ShapeOf"/> 한 곳이고, 꺼진 형식(<see cref="TiberoBulkShape.IsSupported"/> 거짓)은 지원하지 않는 형식과 같게 다룬다.
 /// 키 글자는 Oracle <c>FailedRowKeys</c> 와 같은 형식이다(숫자 = 고정 소수점, DATE = <c>yyyy-MM-ddTHH:mm:ss</c>, TIMESTAMP = 소수 7자리 또는 9자리, RAW = 대문자 16진).
 /// Tibero 전용 멤버 <see cref="BindExpression"/>·<see cref="ToBindText"/>·<see cref="ToBindBytes"/> 는 배열 DML 의 값 자리 글과 바인드 값(글자)을 정한다.
-/// 등록하지 않는다(키 서비스 아님, Tibero 복사 하위 형식이 TI1b 에서 넘긴다).
+/// 등록하지 않는다(키 서비스 아님, Tibero 복사 하위 형식 <c>TiberoCopyRunner</c>·<c>TiberoCopyPrecheckService</c>(TI1b)가 넘긴다).
 /// </summary>
 internal sealed class TiberoBulkValueCodec : IBulkValueCodec
 {

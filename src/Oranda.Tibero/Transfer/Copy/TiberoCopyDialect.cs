@@ -16,7 +16,7 @@ namespace Oranda.Tibero.Transfer.Copy;
 /// <item>오류 판정: FK VALIDATE 실패 = TBR-7161(Oracle ORA-02298, 3.5), 참조되는 부모 DROP 거부 = TBR-7156(Oracle ORA-02449, 3.5). 드라이버는 번호를 음수로 주므로 부호를 무시한다.</item>
 /// <item>IDENTITY 없음(3.6): <see cref="RestartIdentity"/> 는 부를 일이 없다(Tibero 메타데이터는 IDENTITY 열을 내지 않는다).</item>
 /// </list>
-/// 하위 형식이 생성자에서 넘긴다(키 서비스 아님). 실행기 하위 형식·등록은 TI1b.
+/// 하위 형식이 생성자에서 넘긴다(키 서비스 아님). 실행기 하위 형식 = <c>TiberoCopyRunner</c>(TI1b), 키 등록은 두 번째 계정 복사 IT 뒤(TI1b 결정65).
 /// </summary>
 internal sealed class TiberoCopyDialect : ICopyDialect
 {
@@ -94,7 +94,7 @@ internal sealed class TiberoCopyDialect : ICopyDialect
     /// </summary>
     public string RestartIdentity(string owner, string table, string column) => "-- " + IdentityNotSupported;
 
-    /// <summary>FK 를 붙이는 DDL 끝에 <c>ENABLE NOVALIDATE</c>(TBR-7161 뒤에만). ADD 와 함께 쓰는 꼴은 TI1b 복사 IT 가 확인한다.</summary>
+    /// <summary>FK 를 붙이는 DDL 끝에 <c>ENABLE NOVALIDATE</c>(TBR-7161 뒤에만). ADD 와 함께 쓰는 꼴은 두 번째 계정 복사 IT(TI1b 결정65 - 지금 TI1b IT 는 같은 계정 거부만 본다)가 확인한다.</summary>
     public string AddForeignKeyWithoutValidation(string addForeignKeyDdl)
     {
         ArgumentNullException.ThrowIfNull(addForeignKeyDdl);

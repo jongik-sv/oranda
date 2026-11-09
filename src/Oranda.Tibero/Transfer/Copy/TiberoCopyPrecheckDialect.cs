@@ -7,8 +7,8 @@ namespace Oranda.Tibero.Transfer.Copy;
 
 /// <summary>
 /// Tibero 사전 점검 방언(<see cref="ICopyPrecheckDialect"/>, T5 결정 65 TB3a). 근거는 docs/design/tibero-driver-transfer.md 3장(TM0b 실측, 6.2.15).
-/// 이 형식은 키 서비스가 아니고 등록하지 않는다: Tibero 복사는 복사 키 등록(TI1b) 전까지 꺼져 있고, 사전 점검 하위 형식은 그때
-/// Tibero 코덱(TB1)·실행 방언(TB3b)과 함께 만든다. 카탈로그 SELECT 는 <c>Catalog/copy/*.sql</c>(<c>dbms: tibero</c>).
+/// 이 형식은 키 서비스가 아니고 등록하지 않는다: Tibero 복사는 복사 키 등록(두 번째 계정 복사 IT 뒤, TI1b 결정65) 전까지 꺼져 있고, 사전 점검 하위 형식
+/// <c>TiberoCopyPrecheckService</c>(TI1b)가 Tibero 코덱(TB1)·실행 방언(TB3b)과 함께 이 방언을 넘긴다. 카탈로그 SELECT 는 <c>Catalog/copy/*.sql</c>(<c>dbms: tibero</c>).
 /// </summary>
 internal sealed class TiberoCopyPrecheckDialect : ICopyPrecheckDialect
 {
@@ -34,7 +34,7 @@ internal sealed class TiberoCopyPrecheckDialect : ICopyPrecheckDialect
 
     /// <summary>
     /// 「테이블 다시 만들기」는 아직 막는다(TB4 결정). 받아 두기 부품(<see cref="TiberoRecreateStep"/>: 트리거 DDL = T3 <c>*_SOURCE</c> 조립, 휴지통 BIN 이름,
-    /// <c>FLASHBACK TABLE … TO BEFORE DROP [RENAME TO]</c>)은 <c>TiberoRecreateStepIt</c> 가 잰다. 남은 위험(TB4 리뷰)은 실제 실행기로 도는 TI1b 복사 IT 가 재고 나서 푼다:
+    /// <c>FLASHBACK TABLE … TO BEFORE DROP [RENAME TO]</c>)은 <c>TiberoRecreateStepIt</c> 가 잰다. 남은 위험(TB4 리뷰)은 실제 실행기로 도는 두 번째 계정 복사 IT(TI1b 결정65 - 지금 TI1b IT 는 같은 계정 거부만 본다)가 재고 나서 푼다:
     /// 컴파일 오류 트리거(번호 미분류 → 끄지 못함), 바이트 길이를 CHAR 로 다시 쓸 때 큰 열, 부모·자식을 함께 다시 만들 때 휴지통의 자식 FK,
     /// DEFERRABLE FK 를 카탈로그로 못 읽어 즉시 검사로 돌아옴, 서버 이름 제약(<c>&lt;소유자&gt;_CON&lt;숫자&gt;</c>)을 Core 가 명시 이름으로 다시 만듦.
     /// </summary>
