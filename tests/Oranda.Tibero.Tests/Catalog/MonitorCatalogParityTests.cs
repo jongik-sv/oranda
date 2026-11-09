@@ -12,14 +12,18 @@ namespace Oranda.Tibero.Tests.Catalog;
 /// </summary>
 public partial class MonitorCatalogParityTests
 {
-    private static readonly string[] Folders = ["plan", "session", "lock", "tuning"];
+    private static readonly string[] Folders = ["plan", "session", "lock", "tuning", "sql", "app"];
 
-    /// <summary>모든 id 를 다 본 폴더(없음 목록을 단정한다). tuning 은 실행 계획·통계 쪽만 했다.</summary>
-    private static readonly string[] CompleteFolders = ["plan", "session", "lock"];
+    /// <summary>모든 id 를 다 본 폴더(없음 목록을 단정한다).</summary>
+    private static readonly string[] CompleteFolders = Folders;
 
     /// <summary>Tibero 에 해당 뷰·기능이 없어 파일을 두지 않은 id(문서 2장).</summary>
     private static readonly string[] Missing =
-        ["plan.monitor_report_html", "session.trace_file", "session.wait_history", "lock.deadlocks", "lock.locked_row"];
+    [
+        "plan.monitor_report_html", "session.trace_file", "session.wait_history", "lock.deadlocks", "lock.locked_row",
+        "tuning.plan_controls", "tuning.recommend_literals", "tuning.shared_cursor", "tuning.trace_file", "tuning.trace_file_self",
+        "tuning.trace_lines", "app.disconnect_session", "app.trace_event_off", "app.trace_event_on", "app.trace_parse",
+    ];
 
     private static List<CatalogQuery> Queries(IEnumerable<CatalogSource> sources) =>
         [.. sources
@@ -51,8 +55,15 @@ public partial class MonitorCatalogParityTests
         foreach (var tibero in Tibero.Where(q => q.Header.Id == id))
         {
             Assert.Equal(Binds(oracle.Sql), Binds(tibero.Sql));
+            Assert.Equal(Placeholders(oracle.Sql), Placeholders(tibero.Sql)); // @PFX@·@TABLE@ 등 호출자가 채우는 자리
         }
     }
+
+    private static string[] Placeholders(string sql) =>
+        [.. PlaceholderRegex().Matches(sql).Select(m => m.Value).Distinct().Order(StringComparer.Ordinal)];
+
+    [GeneratedRegex("@[A-Z_]+@")]
+    private static partial Regex PlaceholderRegex();
 
     [Fact]
     public void Oracle_ids_without_a_tibero_file_are_the_documented_missing_ones()

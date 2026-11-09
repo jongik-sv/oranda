@@ -77,4 +77,30 @@
 | `tuning.histogram`·`tuning.index_columns` | Oracle 과 같은 열(본문 그대로) |
 | `tuning.recommend_plan` | `V$SQL_PLAN.OPERATION`(「table access (full)」) 을 Oracle 모양 operation·options(`TABLE ACCESS`/`FULL`, `INDEX`/`FULL SCAN`, `CARTESIAN`)로 나눔. 실측 operation 62종 목록에 카티션이 없어 `%(cartesian)%` 은 짐작(쓰기 IT 또는 카티션 질의로 확인) |
 
-남은 12개(`ash_waits`·`awr_plan_history`·`awr_plan_steps`·`plan_controls`·`recommend_candidates`·`recommend_literals`·`report_env`·`shared_cursor`·`trace_file`·`trace_file_self`·`trace_lines`·`wait_sample`)는 T4 몫. 그중 `plan_controls`(SQL 프로필·기준선·패치 없음)·`shared_cursor`(`V$SQL_SHARED_CURSOR` 없음)·`trace_file_self`·`trace_lines`(`V$DIAG_*` 없음)는 뷰 실측표상 Tibero 판을 둘 수 없다.
+## 6. X4b: tuning 나머지 12개, sql 3개, app 9개
+
+T4 화면(실행 계획·세션·Lock 모니터·튜닝·Top SQL)이 쓰는 `sql.*`·`app.*` 는 모두다(App 코드 검색). id 24개 = Tibero 판 14개(tuning 6·sql 3·app 5) + 없음 10개. 서버 실행: 질의 11/11 성공, `ALTER`·`GRANT` 3개는 아래처럼 따로 확인.
+
+| id | Tibero 판 |
+|---|---|
+| `tuning.ash_waits` | `V$ACTIVE_SESSION_HISTORY`: SESSION_STATE·EVENT·WAIT_CLASS 없음 → `WAIT_EVENT < 0` = 'ON CPU', 그 밖 `V$EVENT_NAME`. 시험 서버 표본 0행 |
+| `tuning.awr_plan_history`·`awr_plan_steps` | TPR(`DBA_HIST_SQLSTAT`·`SNAPSHOT`·`SQL_PLAN`)은 SQL_ID 대신 **SQL_HASH_VALUE**. sql_id(13자 base32)의 아래 32비트 = hash value(Oracle 과 같은 규칙, V$SQL 두 건 일치 확인) → SQL 안 `CONNECT BY` 로 계산. DBID·*_DELTA 없음. 값은 **스냅숏 구간 값**(실측: 같은 SQL 의 EXECUTIONS 가 54→333→54→45 로 오르내림 = 누적 아님) → 그대로 합한다. 계획 단계는 options NULL(operation 에 방식 포함) |
+| `tuning.recommend_candidates` | `V$SQLSTATS` 의 ELAPSED_TIME·CPU_TIME 등이 음수가 부호 없는 64비트로 넘어간 값(18446744073…)을 준다(실측) → `V$SQL` 을 sql_id·plan_hash 로 묶는다. version_count = 자식 수, fms NULL |
+| `tuning.report_env` | VERSION = V$VERSION 행(PRODUCT_MAJOR·BUILD_NUMBER·STABLE_VERSION)을 한 줄 배너로. PARAMETER = `V$PARAMETERS` 의 Tibero 이름(OPTIMIZER_MODE·CURSOR_SHARING·GATHER_SQL_PLAN_STAT·MEMORY_TARGET 등, 소문자로). NLS = `NLS_DATABASE_PARAMETERS`(문자 집합 행 없음) |
+| `tuning.wait_sample` | V$SESSION + V$EVENT_NAME, 내 SID = V$MYSTAT, 실행 중 = RUNNING |
+| `sql.binds`·`sql.full_text`·`sql.top` | `lock.waiting_binds`·`session.sql_text` 와 같은 규칙. top 의 파싱 스키마 = `PARSING_SCHEMA_ID` → `ALL_USERS`. `FETCH FIRST :top ROWS ONLY` 바인드 됨 |
+| `app.fk_index_check`·`app.locked_row_select` | Oracle 본문 그대로(사전 열 같음, ROWID 글 비교 읽힘) |
+| `app.kill_session` | `ALTER SYSTEM KILL SESSION (@ID@)`(괄호, IMMEDIATE 없음), @ID@ = 'sid,serial#'. 일반 계정 = TBR-17004 권한 없음까지 파싱 → 실제 종료는 권한 계정 IT |
+| `app.statistics_level` | `STATISTICS_LEVEL` 은 TBR-7001 → `ALTER SESSION SET GATHER_SQL_PLAN_STAT = Y`(켠 뒤 ALLSTATS LAST 에 CR Gets 찬 것 확인) |
+| `app.ddl_locks_grant` | 같은 GRANT(끝 `;` 뺌). 권한 부여라 실행 안 함 |
+
+| 없음 | 이유 | 대안 |
+|---|---|---|
+| `tuning.plan_controls` | SQL 프로필·기준선·패치 뷰 없음, signature 열 없음 | 화면 비활성 + 이유 |
+| `tuning.recommend_literals` | FORCE_MATCHING_SIGNATURE 없음 | 리터럴 묶음 추천은 Tibero 에서 끔(`CURSOR_SHARING` 값은 report_env 로 보임) |
+| `tuning.shared_cursor` | `V$SQL_SHARED_CURSOR` 없음 | 자식 수만(`child_cursors`) |
+| `tuning.trace_file`·`trace_file_self`·`trace_lines` | `V$PROCESS.TRACEFILE`·`V$DIAG_*` 없음(추적 파일은 서버 파일) | 없음 |
+| `app.disconnect_session` | `ALTER SYSTEM DISCONNECT SESSION` = TBR-7001 | 세션 끊기는 KILL 하나만 |
+| `app.trace_event_on`·`off`·`trace_parse` | 10053 이벤트 = TBR-7001(옵티마이저 추적은 `OPTIMIZER_TRACE` 매개변수가 있으나 결과가 서버 파일이라 읽을 길 없음) → 파싱만 하는 블록도 쓸 데 없음 | 10053 보기 비활성 + 이유 |
+
+`MonitorCatalogParityTests` 가 여섯 폴더(plan·session·lock·tuning·sql·app)의 바인드·`@KEY@` 자리가 Oracle 과 같은지와 없음 15개를 단정한다.
