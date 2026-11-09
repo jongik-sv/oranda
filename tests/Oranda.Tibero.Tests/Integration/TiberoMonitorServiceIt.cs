@@ -40,14 +40,21 @@ public class TiberoMonitorServiceIt(ITestOutputHelper output)
 
         var first = await service.GetSessionsAsync(monitor, new SessionFilter(), CancellationToken.None);
         output.WriteLine($"[M1] sessions = {first.Count}, statuses = {string.Join(",", first.Select(r => r.Status).Distinct(StringComparer.Ordinal))}");
-        var mine = Assert.Single(first, r => r.Key == key);
+        var mines = first.Where(r => r.Key == key).ToList(); // 컬렉션 단정은 실패 때 행(계정 이름)을 찍는다
+        Assert.True(mines.Count == 1, $"목록에 작업 세션이 한 번이어야 한다: {mines.Count}");
+        var mine = mines[0];
         output.WriteLine($"[M1] work row: status {mine.Status}, event {mine.Event ?? "-"}, class {mine.WaitClass ?? "-"}, last_call_et {mine.LastCallElapsedSeconds?.ToString(CultureInfo.InvariantCulture) ?? "-"}");
-        Assert.All(first, r => Assert.True(r.Status is "ACTIVE" or "INACTIVE", "상태가 ACTIVE/INACTIVE 가 아니다: " + r.Status));
+        foreach (var r in first)
+        {
+            Assert.True(r.Status is "ACTIVE" or "INACTIVE", "상태가 ACTIVE/INACTIVE 가 아니다: " + r.Status);
+        }
         Assert.Empty(mine.Deltas); // 첫 조회는 비교할 이전 값이 없다
 
         await TiberoSessionQuery.RunAsync(work, WorkProbeSql); // 델타가 0 이 아니도록 일을 시킨다
         var second = await service.GetSessionsAsync(monitor, new SessionFilter(), CancellationToken.None);
-        var again = Assert.Single(second, r => r.Key == key);
+        var agains = second.Where(r => r.Key == key).ToList();
+        Assert.True(agains.Count == 1, $"두 번째 목록에 작업 세션이 한 번이어야 한다: {agains.Count}");
+        var again = agains[0];
         output.WriteLine($"[M1] deltas = {string.Join(", ", again.Deltas.Select(d => $"{d.Key}:{d.Value}"))}");
         Assert.NotEmpty(again.Deltas);
         Assert.False(monitor.CommandGate.IsHeld);

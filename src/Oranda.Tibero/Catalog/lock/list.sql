@@ -1,6 +1,7 @@
 -- Lock 모니터 잠금 목록(Tibero). 열 순서·바인드는 Oracle lock.list 와 같다.
 -- V$LOCK(TYPE, ID1, ID2, LMODE, REQUESTED, SESS_ID, CTIME) + V$SESSION. 잠금 종류는 Oracle 두 글자로 바꾼다: WLOCK_DML → TM(ID1 = 객체 번호), WLOCK_TX → TX
--- (그 밖은 Tibero 이름 그대로 — :types 에 없으면 빠진다). 모드 = Tibero 번호 + 1(실측 1 = Row-Shared, Oracle 2). block = 이 잠금을 기다리는
+-- (그 밖은 Tibero 이름 그대로 — :types 에 없으면 빠진다). 보유 모드 = Tibero LMODE + 1(실측 1 = Row-Shared, Oracle 2; TX 보유 5 → 6).
+-- 요청 모드는 원값 그대로(실측 쓰기 IT W1, win144 #60 — TX 대기 요청 원값 6 = Oracle X, +1 하면 7 로 범위 밖). block = 이 잠금을 기다리는
 -- 세션이 V$WAITER_SESSION 에 있으면 1. V$LOCK 에 요청 행이 없는 대기자는 V$WAITER_SESSION 으로 채운다. 세션마다 늘 있는 WLOCK_SESS·WLOCK_USER 는 뺀다.
 -- 트랜잭션(start_date·used_ublk)은 TX 보유 행에만, V$TRANSACTION.SESS_ID 로 잇는다. start_date 는 서버 시간대로 UTC 로 바꾼다.
 -- 확인 필요(쓰기 IT): WLOCK_DML·WLOCK_TX 이름과 ID 뜻, CTIME 단위(초로 봄), MODE_REQ 번호. docs/design/tibero-monitor-catalog.md
@@ -26,7 +27,7 @@ SELECT inst_id, sid, serial#, username, machine, program, type, id1, id2, lmode,
                DECODE(s.status, 'RUNNING', 'ACTIVE', 'READY', 'INACTIVE', s.status) AS status
           FROM (SELECT l.sess_id AS sid, DECODE(l.type, 'WLOCK_DML', 'TM', 'WLOCK_TX', 'TX', l.type) AS type, l.id1, l.id2,
                        CASE WHEN l.lmode > 0 THEN l.lmode + 1 ELSE 0 END AS lmode,
-                       CASE WHEN l.requested > 0 THEN l.requested + 1 ELSE 0 END AS request, l.ctime,
+                       CASE WHEN l.requested > 0 THEN l.requested ELSE 0 END AS request, l.ctime,
                        CASE WHEN EXISTS (SELECT 1 FROM v$waiter_session w
                                           WHERE w.hold_sid = l.sess_id AND w.type = l.type AND w.id1 = l.id1 AND w.id2 = l.id2)
                             THEN 1 ELSE 0 END AS block
@@ -34,7 +35,7 @@ SELECT inst_id, sid, serial#, username, machine, program, type, id1, id2, lmode,
                  WHERE l.type NOT IN ('WLOCK_SESS', 'WLOCK_USER')
                 UNION ALL
                 SELECT w.wait_sid, DECODE(w.type, 'WLOCK_DML', 'TM', 'WLOCK_TX', 'TX', w.type), w.id1, w.id2, 0,
-                       CASE WHEN w.mode_req > 0 THEN w.mode_req + 1 ELSE 0 END,
+                       CASE WHEN w.mode_req > 0 THEN w.mode_req ELSE 0 END,
                        (SELECT TRUNC(q.wait_time / 10) FROM v$session q WHERE q.sid = w.wait_sid), 0
                   FROM v$waiter_session w
                  WHERE NOT EXISTS (SELECT 1 FROM v$lock r WHERE r.sess_id = w.wait_sid AND r.requested > 0)) x
