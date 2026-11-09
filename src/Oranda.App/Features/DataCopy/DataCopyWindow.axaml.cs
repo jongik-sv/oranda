@@ -76,6 +76,16 @@ public partial class DataCopyWindow : Window
                 VariablesExpander.IsExpanded = true;
             }
         };
+        SaveJobButton.Click += async (_, _) => await RunUiAsync(ct => Vm?.SaveCurrentJobAsync(quiet: false, ct) ?? Task.CompletedTask).ConfigureAwait(true);
+        // Ctrl+S(맥은 Cmd+S): 규칙 편집 중인 작업 저장. 입력 칸이 키를 먼저 먹지 않게 터널로 받는다.
+        AddHandler(KeyDownEvent, async (_, e) =>
+        {
+            if (e.Key == Avalonia.Input.Key.S && e.KeyModifiers is Avalonia.Input.KeyModifiers.Control or Avalonia.Input.KeyModifiers.Meta && Vm is { HasJob: true } vm)
+            {
+                e.Handled = true;
+                await RunUiAsync(ct => vm.SaveCurrentJobAsync(quiet: false, ct)).ConfigureAwait(true);
+            }
+        }, RoutingStrategies.Tunnel);
         WireRulePanel();
         DataContextChanged += (_, _) => Hook();
         Opened += async (_, _) => await RunUiAsync(ct => Vm?.InitializeAsync(ct) ?? Task.CompletedTask).ConfigureAwait(true);
@@ -93,6 +103,25 @@ public partial class DataCopyWindow : Window
 
     private bool _closeApproved;
     private bool _closeInProgress;
+    private bool _closeSaved;
+
+    private async Task SaveAndCloseAsync(DataCopyViewModel vm)
+    {
+        try
+        {
+            await vm.SaveCurrentJobAsync(quiet: true, CancellationToken.None).ConfigureAwait(true);
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Trace.TraceWarning("데이터 복사 작업을 닫으며 저장하지 못했다: {0}", ex.Message);
+        }
+
+        // 저장에 실패했으면(상태 줄에 이유) 창을 열어 둔다. 한 번 더 닫으면 저장 없이 닫는다.
+        if (!vm.HasUnsavedChanges)
+        {
+            Close();
+        }
+    }
 
     private DataCopyViewModel? Vm => DataContext as DataCopyViewModel;
 
@@ -100,8 +129,21 @@ public partial class DataCopyWindow : Window
     // 창을 열어 둔 채 기다린 뒤 닫는다(그동안 같은 창이 이미 있으므로 새 창이 열리지 않고, 진행 상태는 이 창의 상태 줄에 보인다).
     private void OnClosing(object? sender, WindowClosingEventArgs e)
     {
-        if (_closeApproved || Vm is not { } vm || !vm.Run.IsRunning)
+        if (_closeApproved || Vm is not { } vm)
         {
+            return;
+        }
+
+        if (!vm.Run.IsRunning)
+        {
+            // 닫기 전에 규칙 편집에서 한 일을 저장한다(저장이 끝난 뒤 다시 닫는다).
+            if (!_closeSaved && vm.HasUnsavedChanges)
+            {
+                e.Cancel = true;
+                _closeSaved = true;
+                _ = SaveAndCloseAsync(vm);
+            }
+
             return;
         }
 

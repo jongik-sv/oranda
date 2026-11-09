@@ -224,6 +224,10 @@
               <Button x:Name="ToPrecheckButton" DockPanel.Dock="Right" Classes="accent" Content="사전 점검 ›" IsEnabled="{Binding CanGoToPrecheck}"
                       Padding="14,0" MinHeight="24" Margin="0,1,2,1"
                       ToolTip.Tip="작업을 저장하고 원본·대상 세션을 열어 사전 점검을 시작합니다" />
+              <Button x:Name="SaveJobButton" DockPanel.Dock="Right" Content="저장" icons:ButtonIcon.Key="save"
+                      MinHeight="24" Margin="0,1,6,1" IsEnabled="{Binding HasJob}"
+                      ToolTip.Tip="지금까지 편집한 작업을 저장합니다 (Ctrl+S). 다른 작업을 열거나 창을 닫을 때도 저장합니다."
+                      AutomationProperties.Name="작업 저장" />
               <TextBlock Text="원본·대상을 고르고 아래 테이블 규칙에 테이블을 더한 뒤 사전 점검으로 넘어갑니다." VerticalAlignment="Center" Margin="6,0"
                          Classes="dim" FontSize="{DynamicResource OrandaFontSizeSmall}" TextTrimming="CharacterEllipsis" />
             </DockPanel>

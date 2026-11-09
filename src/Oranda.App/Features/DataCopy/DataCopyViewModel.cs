@@ -229,6 +229,12 @@ public sealed partial class DataCopyViewModel : ViewModelBase, IAsyncDisposable
             return;
         }
 
+        // 다른 작업을 열기 전에 지금 작업에서 한 일을 저장한다(사전 점검으로 넘어가지 않았어도 잃지 않게).
+        if (CurrentJob is { } open && open.Id != job.Id)
+        {
+            await SaveCurrentJobAsync(quiet: true, ct).ConfigureAwait(true);
+        }
+
         await RefreshProfilesAsync(ct).ConfigureAwait(true);
         await CloseSessionsAsync().ConfigureAwait(true);
         Precheck.Reset();
@@ -673,6 +679,100 @@ public sealed partial class DataCopyViewModel : ViewModelBase, IAsyncDisposable
         var rule = await Editor.AddTableAsync(table, session, ct).ConfigureAwait(true);
         var added = table.ViaSynonym ? $"{rule.SourceName} 규칙을 추가했습니다(시노님 {table.WrittenAs})." : $"{rule.SourceName} 규칙을 추가했습니다.";
         Say(Editor.Notice.Length > 0 ? Editor.Notice : added, Editor.Notice.Length > 0);
+    }
+
+    /// <summary>
+    /// 화면의 작업이 저장된 작업과 다르다(규칙·변수·계정·옵션 등 무엇이든). 작업이 없거나 읽기 전용이면 false.
+    /// 저장 파일과 같은 JSON 으로 비교한다(목록 필드는 참조가 아니라 내용으로).
+    /// </summary>
+    public bool HasUnsavedChanges
+    {
+        get
+        {
+            if (CurrentJob is not { } saved || IsReadOnlyJob)
+            {
+                return false;
+            }
+
+            try
+            {
+                return !SameJobContent(Editor.BuildJob(), saved);
+            }
+            catch (InvalidOperationException)
+            {
+                return false;
+            }
+        }
+    }
+
+    private static bool SameJobContent(CopyJob a, CopyJob b) =>
+        string.Equals(
+            System.Text.Json.JsonSerializer.Serialize(a, CopyJobJsonContext.Default.CopyJob),
+            System.Text.Json.JsonSerializer.Serialize(b, CopyJobJsonContext.Default.CopyJob),
+            StringComparison.Ordinal);
+
+    /// <summary>
+    /// 규칙 편집 중인 작업을 그대로 저장한다(입력 확인 없이 — 사전 점검으로 넘어가지 않아도 한 일을 잃지 않게).
+    /// 바뀐 것이 없으면 쓰지 않는다. 「저장」 단추·Ctrl+S, 다른 작업을 열 때, 창을 닫을 때 부른다.
+    /// </summary>
+    /// <param name="quiet">참이면 저장했다는 알림을 띄우지 않는다(작업을 바꾸거나 창을 닫을 때). 실패는 늘 알린다.</param>
+    /// <returns>저장했으면 true.</returns>
+    public async Task<bool> SaveCurrentJobAsync(bool quiet = false, CancellationToken ct = default)
+    {
+        if (CurrentJob is not { } saved || _services.Store is not { } store)
+        {
+            return false;
+        }
+
+        if (IsReadOnlyJob)
+        {
+            if (!quiet)
+            {
+                Say(DataCopyText.NewerVersionJob, error: true);
+            }
+
+            return false;
+        }
+
+        CopyJob job;
+        try
+        {
+            job = Editor.BuildJob();
+        }
+        catch (InvalidOperationException)
+        {
+            return false;
+        }
+
+        if (SameJobContent(job, saved))
+        {
+            if (!quiet)
+            {
+                Say("바뀐 내용이 없습니다(이미 저장됨).");
+            }
+
+            return false;
+        }
+
+        try
+        {
+            await store.SaveAsync(job, ct).ConfigureAwait(true);
+        }
+        catch (Exception e) when (e is not OperationCanceledException)
+        {
+            Say("작업을 저장하지 못했습니다: " + e.Message, error: true);
+            return false;
+        }
+
+        CurrentJob = job;
+        Editor.UpdateBase(job);
+        if (!quiet)
+        {
+            Say($"작업 「{job.Name}」 을(를) 저장했습니다.");
+        }
+
+        await Jobs.RefreshAsync(ct).ConfigureAwait(true);
+        return true;
     }
 
     /// <summary>1단계 → 2단계: 입력을 확인하고 작업을 저장한 뒤 세션을 열어 사전 점검을 돌린다.</summary>
