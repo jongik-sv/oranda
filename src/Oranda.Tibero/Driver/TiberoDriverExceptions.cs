@@ -31,9 +31,8 @@ internal sealed class TiberoDriverBindException : TiberoDriverUnavailableExcepti
     {
         ArgumentNullException.ThrowIfNull(missingMembers);
 
-        // DriverState.Unusable(DU1) 이 main 에 들어오면 바꾼다
         return new DriverCheck(
-            DriverState.WrongAssembly,
+            DriverState.Unusable,
             version,
             path,
             $"이 드라이버는 쓸 수 없습니다(없는 멤버: {string.Join(", ", missingMembers)})");

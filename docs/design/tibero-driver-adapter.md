@@ -24,7 +24,7 @@
 | `Version` | `Version` | `AssemblyName.Version` | 상태 줄·로그 |
 | `Location` | `string` | `Assembly.Location` | 상태 줄 |
 | `TiberoDriverUnavailableException` | `InvalidOperationException` 파생, `DriverCheck Check` | `Require(paths)` 가 못 쓸 때. `Message` = 사용자에게 보일 문장(`Check.Reason`, 지정 안 함이면 `NotSpecifiedMessage`). `Check.IsUsable` 은 늘 false | 세션 관리자·접속 시험이 잡아 실패 결과로 |
-| `TiberoDriverBindException` | `TiberoDriverUnavailableException` 파생, `IReadOnlyList<string> MissingMembers` | 없는 멤버 이름(`TiberoCommand.BindByName` 꼴) 전부. `Check.State = DriverState.Unusable`(DU0 에 값 추가 요청), `Reason` = 「이 드라이버는 쓸 수 없습니다(없는 멤버: …)」. 그 뒤 `IDbmsDriverStatus.Current` 도 이 결과 | 로더, DV6 실제 드라이버 시험 |
+| `TiberoDriverBindException` | `TiberoDriverUnavailableException` 파생, `IReadOnlyList<string> MissingMembers` | 없는 멤버 이름(`TiberoCommand.BindByName` 꼴) 전부. `Check.State = DriverState.Unusable`, `Reason` = 「이 드라이버는 쓸 수 없습니다(없는 멤버: …)」. 그 뒤 `IDbmsDriverStatus.Current` 도 이 결과 | 로더, DV6 실제 드라이버 시험 |
 
 ### 2.2 연결·명령
 

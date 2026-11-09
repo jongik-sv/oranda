@@ -71,8 +71,7 @@ public class TiberoDriverHostTests
         Assert.Contains("TiberoCommand", first.MissingMembers);
         Assert.False(first.Check.IsUsable);
 
-        // DriverState.Unusable(DU1) 이 main 에 들어오면 이 단정을 Unusable 로 바꾼다.
-        Assert.Equal(DriverState.WrongAssembly, first.Check.State);
+        Assert.Equal(DriverState.Unusable, first.Check.State);
         Assert.Contains("없는 멤버", first.Message, StringComparison.Ordinal);
 
         paths.Path = FakeDriverHost.DllPath;
