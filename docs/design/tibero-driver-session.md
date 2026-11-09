@@ -26,6 +26,7 @@
 | 기본(풀링) 연결을 `Close()` | 그 SID 가 `V$SESSION` 에 **남음**(풀에 돌아감) → 세션 관리자는 `Pooling=false` 필수 |
 | `StateChange` | 열 때 `Closed->Open`, 닫을 때 `Open->Closed` 한 번씩 |
 | 닫힌 연결에 명령 | `TbOdpException` `ODP-90603:Invalid operation: disconnected from the server.` |
+| 닫힌 연결의 `TiberoTransaction.Dispose` | **`NullReferenceException`**(드라이버 결함, 2026-11-09 win144 IT) → `TiberoSession` 은 연결이 `Open` 이 아니면 트랜잭션 정리를 건너뛰고(서버 세션이 없어 롤백할 것도 없음), 정리 중 NRE 도 삼킨 뒤 연결을 닫는다 |
 | 없는 포트로 열기 | `TbOdpException` `-90401` `ODP-90401:Connection refused by the server. - No route to host <주소>:<포트>` (메시지에 주소가 실린다 → 로그에 그대로 쓰지 않는다) |
 | 틀린 DB 이름으로 열기 | `TbOdpException` `-12079` `ODP-12079:The requested DB_NAME does not match with the server DB_NAME.` |
 | 세션이 서버에서 죽음(KILL) | **실측 못 함**: 시험 계정에 `ALTER SYSTEM` 이 없다. 번호는 오류 참조 안내서의 `12001`(ERROR_SESS_KILLED)·`12002`·`12094` 와 드라이버 상수(위)로 둔다 |
