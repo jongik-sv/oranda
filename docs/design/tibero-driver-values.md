@@ -79,10 +79,10 @@
 | TimestampTz | 원시 바이트 | `DateTimeOffset` (UTC 시각 + 오프셋) |
 | IntervalYearMonth | 원시 바이트 | `long` 총 개월(`CellValueFormatter` 가 `+yy-mm` 으로 그림) |
 | IntervalDaySecond | 원시 바이트 | `TimeSpan` |
-| Raw | `GetValue` 의 `sbyte[]` | `byte[]` |
-| Text / RowId | `GetString` | `string` |
+| Raw | `GetValue` 의 `sbyte[]` (LONG RAW(110) 도 같음 — 원시 바이트는 72바이트 서술자, `GetBytes` 조각은 쓰레기, R1x win144 #85·#86) | `byte[]` |
+| Text / RowId | `GetString`. **LONG(109) 만 `GetValue`** — `GetString` 은 값이 있어도 빈 글자, 원시 바이트는 72바이트 서술자, `GetChars` 는 오류(R1x #85, 40000자까지 `GetValue` 정확) | `string` |
 | Clob / Blob | `GetTiberoClob` / `GetTiberoBlob` 로케이터 + 미리보기 | `LobValue` |
-| BinaryFloat | `GetValue` | `float` / `double` |
+| BinaryFloat | **원시 바이트**(4 = BINARY_FLOAT, 8 = BINARY_DOUBLE): 저장 형식 = 순서 보존 인코딩(big-endian, 맨 위 비트 1 = 양수 → 부호 비트만 반전, 0 = 음수 → 모든 비트 반전) 을 풀어 IEEE 로. `GetValue`·`GetFloat`·`GetDouble` 은 음수가 틀림(드라이버가 부호 비트만 뒤집음: -2.25 → -1.8749999, R1x #85). 서버는 -0.0 을 +0 으로 저장 | `float` / `double` |
 | RefCursor | OUT 값 `TiberoRefCursor.GetDataReader()` | 결과 집합 |
 
 ## 4. LOB

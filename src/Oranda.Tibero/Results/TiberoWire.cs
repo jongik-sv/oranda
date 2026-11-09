@@ -196,6 +196,35 @@ internal static class TiberoWire
         }
     }
 
+    /// <summary>
+    /// BINARY_FLOAT(4바이트) → <see cref="float"/>, BINARY_DOUBLE(8바이트) → <see cref="double"/>. 서버가 저장한 바이트는 빅엔디언이고 크기 순서를 지키는 부호화다:
+    /// 맨 위 비트가 1(양수·+0·NaN)이면 부호 비트만 뒤집고, 0(음수)이면 모든 비트를 뒤집은 뒤 IEEE 754 로 읽는다.
+    /// 드라이버(TDP.NET 1.1.35)의 <c>GetValue</c>/<c>GetFloat</c>/<c>GetDouble</c> 은 음수에서 틀린 값을 주므로(-2.25 → -1.8749999) 이 바이트를 직접 푼다.
+    /// 길이가 4·8 이 아니면 <see cref="FormatException"/>.
+    /// </summary>
+    internal static object DecodeBinaryFloat(ReadOnlySpan<byte> bytes)
+    {
+        switch (bytes.Length)
+        {
+            case 4:
+                {
+                    var stored = BinaryPrimitives.ReadUInt32BigEndian(bytes);
+                    var bits = (stored & 0x80000000u) != 0 ? stored ^ 0x80000000u : ~stored;
+                    return BitConverter.UInt32BitsToSingle(bits);
+                }
+
+            case 8:
+                {
+                    var stored = BinaryPrimitives.ReadUInt64BigEndian(bytes);
+                    var bits = (stored & 0x8000000000000000ul) != 0 ? stored ^ 0x8000000000000000ul : ~stored;
+                    return BitConverter.UInt64BitsToDouble(bits);
+                }
+
+            default:
+                throw new FormatException("BINARY_FLOAT/BINARY_DOUBLE 원시 바이트는 4바이트 또는 8바이트여야 합니다: " + bytes.Length);
+        }
+    }
+
     /// <summary>드라이버가 RAW 를 <c>sbyte[]</c> 로 주므로 같은 메모리를 <c>byte[]</c> 로 옮긴다(복사).</summary>
     public static byte[] ToBytes(sbyte[] raw)
     {

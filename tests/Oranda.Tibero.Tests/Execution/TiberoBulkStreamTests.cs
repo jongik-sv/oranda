@@ -93,8 +93,8 @@ public sealed class TiberoBulkStreamTests : IDisposable
         FakeDriverHost.ProviderColumn(table, "N", typeof(byte[]), TiberoColumnTypes.PtDecimal);
         FakeDriverHost.ProviderColumn(table, "N29", typeof(byte[]), TiberoColumnTypes.PtInt64); // 정수 형식 열도 원시 바이트
         FakeDriverHost.ProviderColumn(table, "ND", typeof(decimal), TiberoColumnTypes.PtDecimal); // 원시 바이트가 없으면 GetValue 글자
-        FakeDriverHost.ProviderColumn(table, "BD", typeof(double), TiberoColumnTypes.PtBinaryDouble);
-        FakeDriverHost.ProviderColumn(table, "BF", typeof(float), TiberoColumnTypes.PtBinaryFloat);
+        FakeDriverHost.ProviderColumn(table, "BD", typeof(byte[]), TiberoColumnTypes.PtBinaryDouble); // 원시 바이트(R1x: 드라이버 GetValue 는 음수가 틀림)
+        FakeDriverHost.ProviderColumn(table, "BF", typeof(byte[]), TiberoColumnTypes.PtBinaryFloat);
         FakeDriverHost.ProviderColumn(table, "V", typeof(string), TiberoColumnTypes.PtVarchar2);
         FakeDriverHost.ProviderColumn(table, "C", typeof(string), TiberoColumnTypes.PtChar);
         FakeDriverHost.ProviderColumn(table, "CL", typeof(string), TiberoColumnTypes.PtClob);
@@ -105,7 +105,7 @@ public sealed class TiberoBulkStreamTests : IDisposable
         table.Rows.Add(
             Hex("04 3E 7F 4E F0"), // -1.5
             Hex("10 CF 81 97 AD C3 D9 81 97 AD C3 D9 81 97 AD C3 D9"), // 29자리
-            1.50m, 1.25d, 0.5f, "v", "ab   ", clob, blob, new byte[] { 0x0A, 0xFF }, new DateTime(2026, 1, 2, 3, 4, 5),
+            1.50m, Hex("3F FD FF FF FF FF FF FF"), Hex("3F EF FF FF"), "v", "ab   ", clob, blob, new byte[] { 0x0A, 0xFF }, new DateTime(2026, 1, 2, 3, 4, 5),
             Hex("78 7E 01 02 03 04 05 00 07 5B CD 15")); // 2026-01-02 03:04:05.123456789
         table.Rows.Add(Enumerable.Repeat<object>(DBNull.Value, table.Columns.Count).ToArray());
         Serve(cmd => cmd.CommandText == Select ? table : null);
@@ -119,8 +119,8 @@ public sealed class TiberoBulkStreamTests : IDisposable
         Assert.Equal("-1.5", Assert.IsType<TiberoBulkNumber>(row[0]).Text);
         Assert.Equal("12345678901234567890123456789", Assert.IsType<TiberoBulkNumber>(row[1]).Text);
         Assert.Equal("1.5", Assert.IsType<TiberoBulkNumber>(row[2]).Text);
-        Assert.Equal(1.25d, Assert.IsType<double>(row[3]));
-        Assert.Equal(0.5f, Assert.IsType<float>(row[4]));
+        Assert.Equal(-2.25d, Assert.IsType<double>(row[3]));
+        Assert.Equal(-2.25f, Assert.IsType<float>(row[4]));
         Assert.Equal("v", row[5]);
         Assert.Equal("ab   ", row[6]); // CHAR 끝 공백 그대로
         Assert.Equal(clob, row[7]);
@@ -135,6 +135,63 @@ public sealed class TiberoBulkStreamTests : IDisposable
         Assert.Equal([Select], Texts());
         Assert.False(session.CommandGate.IsHeld);
         Assert.Equal(SessionState.Idle, session.State);
+    }
+
+    [Fact]
+    public async Task Binary_float_double_decode_the_raw_bytes_and_long_and_long_raw_read_through_get_value()
+    {
+        // R1x 실측(win144, Tibero 6, 드라이버 1.1.35): BINARY_* 는 원시 바이트로 풀고, LONG 은 GetValue(가짜 GetString 은 "" 를 준다),
+        // LONG RAW 도 GetValue(가짜 ReadRawBytes 는 72바이트 서술자를 준다).
+        var longText = new string('L', 40_000);
+        var longRaw = Enumerable.Range(0, 40_000).Select(i => (byte)i).ToArray();
+        var table = new DataTable();
+        FakeDriverHost.ProviderColumn(table, "BF", typeof(byte[]), TiberoColumnTypes.PtBinaryFloat);
+        FakeDriverHost.ProviderColumn(table, "BD", typeof(byte[]), TiberoColumnTypes.PtBinaryDouble);
+        FakeDriverHost.ProviderColumn(table, "LG", typeof(string), TiberoColumnTypes.PtLong);
+        FakeDriverHost.ProviderColumn(table, "LR", typeof(byte[]), TiberoColumnTypes.PtLongRaw);
+        table.Rows.Add(Hex("3F EF FF FF"), Hex("3F FD FF FF FF FF FF FF"), "x", new byte[] { 0x01 }); // -2.25
+        table.Rows.Add(Hex("C0 10 00 00"), Hex("C0 02 00 00 00 00 00 00"), longText, longRaw); // 2.25
+        table.Rows.Add(Hex("FF C0 00 00"), Hex("80 00 00 00 00 00 00 00"), "y", new byte[] { 0xFF }); // NaN, 0
+        table.Rows.Add(Hex("FF 7F FF FF"), Hex("FF EF FF FF FF FF FF FF"), "z", new byte[] { 0x00 }); // +max
+        table.Rows.Add(Hex("00 80 00 00"), Hex("00 10 00 00 00 00 00 00"), "w", new byte[] { 0x02 }); // -max
+        Serve(cmd => cmd.CommandText == Select ? table : null);
+        var service = NewService();
+        await using var session = NewSession();
+
+        var rows = await Collect(service.StreamRowsAsync(session, Query(), NoBinds, ExecutionOptions.Default, CancellationToken.None));
+
+        Assert.Equal(5, rows.Count);
+        Assert.Equal(-2.25f, Assert.IsType<float>(rows[0][0]));
+        Assert.Equal(-2.25d, Assert.IsType<double>(rows[0][1]));
+        Assert.Equal(2.25f, Assert.IsType<float>(rows[1][0]));
+        Assert.Equal(2.25d, Assert.IsType<double>(rows[1][1]));
+        Assert.True(float.IsNaN(Assert.IsType<float>(rows[2][0])));
+        Assert.Equal(0d, Assert.IsType<double>(rows[2][1]));
+        Assert.Equal(float.MaxValue, Assert.IsType<float>(rows[3][0]));
+        Assert.Equal(double.MaxValue, Assert.IsType<double>(rows[3][1]));
+        Assert.Equal(-float.MaxValue, Assert.IsType<float>(rows[4][0]));
+        Assert.Equal(-double.MaxValue, Assert.IsType<double>(rows[4][1]));
+        Assert.Equal("x", rows[0][2]);
+        Assert.Equal(longText, rows[1][2]);
+        Assert.Equal(new byte[] { 0x01 }, rows[0][3]);
+        Assert.Equal(longRaw, Assert.IsType<byte[]>(rows[1][3]));
+    }
+
+    [Fact]
+    public async Task A_binary_float_column_whose_raw_bytes_have_the_wrong_length_is_a_format_error_naming_the_column()
+    {
+        var table = new DataTable();
+        FakeDriverHost.ProviderColumn(table, "BF", typeof(byte[]), TiberoColumnTypes.PtBinaryFloat);
+        table.Rows.Add(new byte[] { 1, 2, 3 });
+        Serve(cmd => cmd.CommandText == Select ? table : null);
+        var service = NewService();
+        await using var session = NewSession();
+
+        var ex = await Assert.ThrowsAsync<FormatException>(() =>
+            Collect(service.StreamRowsAsync(session, Query(), NoBinds, ExecutionOptions.Default, CancellationToken.None)));
+
+        Assert.Contains("BF", ex.Message, StringComparison.Ordinal);
+        Assert.False(session.CommandGate.IsHeld);
     }
 
     [Fact]

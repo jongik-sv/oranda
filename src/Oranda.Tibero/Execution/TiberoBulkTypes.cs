@@ -273,16 +273,16 @@ internal enum TiberoBulkReadKind
     /// <summary>원시 바이트 → <see cref="TiberoBulkNumber"/>(정수·실수 형식 열도).</summary>
     Number,
 
-    /// <summary>GetValue → float.</summary>
+    /// <summary>원시 바이트(4바이트) → float(드라이버 GetValue 는 음수가 틀림, R1x).</summary>
     BinaryFloat,
 
-    /// <summary>GetValue → double.</summary>
+    /// <summary>원시 바이트(8바이트) → double(드라이버 GetValue 는 음수가 틀림, R1x).</summary>
     BinaryDouble,
 
     /// <summary>GetString → string(CHAR 끝 공백 그대로).</summary>
     Text,
 
-    /// <summary>GetString → string(쓰기 꺼짐).</summary>
+    /// <summary>GetValue → string(GetString 은 빈 글자, R1x. 쓰기 꺼짐).</summary>
     Long,
 
     /// <summary>LOB 끝까지 → string.</summary>
@@ -294,7 +294,7 @@ internal enum TiberoBulkReadKind
     /// <summary>원시 바이트 → byte[].</summary>
     Raw,
 
-    /// <summary>원시 바이트 → byte[](읽기 미실측).</summary>
+    /// <summary>GetValue → byte[](ReadRawBytes 는 72바이트 서술자, R1x).</summary>
     LongRaw,
 
     /// <summary>GetValue → DateTime(초).</summary>

@@ -38,6 +38,10 @@ internal static class TiberoCellConverter
         ColumnDataKind.Number => TiberoCellSource.Raw,
         ColumnDataKind.Timestamp when providerType == TiberoColumnTypes.PtTimeStampLTZ => TiberoCellSource.LtzDateTime,
         ColumnDataKind.Timestamp or ColumnDataKind.TimestampTz or ColumnDataKind.IntervalYearMonth or ColumnDataKind.IntervalDaySecond => TiberoCellSource.Raw,
+        // BINARY_FLOAT/DOUBLE: 드라이버 GetValue 가 음수에서 틀리므로(R1x 실측) 원시 바이트를 직접 푼다.
+        ColumnDataKind.BinaryFloat => TiberoCellSource.Raw,
+        // LONG: GetString 은 값이 있어도 빈 글자를 주므로(R1x 실측) GetValue 로 읽는다.
+        ColumnDataKind.Text when providerType == TiberoColumnTypes.PtLong => TiberoCellSource.Clr,
         ColumnDataKind.Text or ColumnDataKind.RowId => TiberoCellSource.String,
         ColumnDataKind.Clob => TiberoCellSource.Clob,
         ColumnDataKind.Blob => TiberoCellSource.Blob,
@@ -56,6 +60,7 @@ internal static class TiberoCellConverter
             {
                 ColumnDataKind.Number => TiberoWire.DecodeNumber(raw),
                 ColumnDataKind.Timestamp => TiberoWire.DecodeTimestamp(raw),
+                ColumnDataKind.BinaryFloat => TiberoWire.DecodeBinaryFloat(raw),
                 ColumnDataKind.TimestampTz => TiberoWire.DecodeTimestampTz(raw),
                 ColumnDataKind.IntervalYearMonth => TiberoWire.DecodeIntervalYearMonth(raw),
                 ColumnDataKind.IntervalDaySecond => TiberoWire.DecodeIntervalDaySecond(raw),

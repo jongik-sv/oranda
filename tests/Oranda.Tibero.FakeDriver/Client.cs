@@ -173,7 +173,9 @@ namespace Tibero.DataAccess.Client
         public override int GetOrdinal(string name) => _t.Columns[name]?.Ordinal ?? throw new IndexOutOfRangeException(name);
         public override string GetDataTypeName(int ordinal) => _t.Columns[ordinal].DataType.Name;
         public override Type GetFieldType(int ordinal) => _t.Columns[ordinal].DataType;
-        public override object GetValue(int ordinal) => Cell(ordinal);
+        // R1x 실측(win144 #86): 실제 드라이버는 LONG RAW(ProviderType 110)를 GetValue 로 sbyte[] 로 준다.
+        public override object GetValue(int ordinal) =>
+            IsProviderType(ordinal, 110) && Cell(ordinal) is byte[] b ? (object)Array.ConvertAll(b, x => unchecked((sbyte)x)) : Cell(ordinal);
         public override int GetValues(object[] values)
         {
             int n = Math.Min(values.Length, FieldCount);
@@ -194,7 +196,12 @@ namespace Tibero.DataAccess.Client
         public override short GetInt16(int ordinal) => Convert.ToInt16(Cell(ordinal));
         public override int GetInt32(int ordinal) => Convert.ToInt32(Cell(ordinal));
         public override long GetInt64(int ordinal) => Convert.ToInt64(Cell(ordinal));
-        public override string GetString(int ordinal) => (string)Cell(ordinal);
+        // R1x 실측: 실제 드라이버는 LONG(ProviderType 109)을 GetString 으로 읽으면 값이 있어도 빈 글자를 준다(GetValue 는 전체 글자).
+        public override string GetString(int ordinal) => IsProviderType(ordinal, 109) ? string.Empty : (string)Cell(ordinal);
+
+        private bool IsProviderType(int ordinal, int providerType) =>
+            _t.Columns[ordinal].ExtendedProperties.ContainsKey("ProviderType")
+            && Convert.ToInt32(_t.Columns[ordinal].ExtendedProperties["ProviderType"], CultureInfo.InvariantCulture) == providerType;
         public override IEnumerator GetEnumerator() => throw new NotSupportedException();
 
         // 스키마 표: 열 하나라도 ExtendedProperties["ProviderType"](TiberoDbType 정수)를 달았을 때만 만든다(실제 드라이버의 ProviderType·IsRowID 열).
@@ -228,7 +235,9 @@ namespace Tibero.DataAccess.Client
             return schema;
         }
 
-        public TiberoBinary GetTiberoBinary(int i) => Cell(i) is byte[] b ? new TiberoBinary(b) : TiberoBinary.Null;
+        // R1x 실측: LONG RAW(ProviderType 110)의 원시 바이트는 72바이트 서술자(값이 아님)다. GetValue 만 값을 준다.
+        public TiberoBinary GetTiberoBinary(int i) =>
+            Cell(i) is byte[] b ? new TiberoBinary(IsProviderType(i, 110) ? new byte[72] : b) : TiberoBinary.Null;
         public TiberoClob GetTiberoClob(int i) => Cell(i) is string s ? new TiberoClob(s) : Cell(i) is TiberoClob c ? c : TiberoClob.Null;
         public TiberoBlob GetTiberoBlob(int i) => Cell(i) is byte[] b ? new TiberoBlob(b) : Cell(i) is TiberoBlob l ? l : TiberoBlob.Null;
         public TiberoTimeStampLTZ GetTiberoTimeStampLTZ(int i) =>

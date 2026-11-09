@@ -40,6 +40,44 @@ public class TiberoValuesTests
         Assert.Equal(1.5m, Cell(Hex("03C181B2"), typeof(byte[]), ColumnDataKind.Number, TiberoColumnTypes.PtDecimal));
     }
 
+    /// <summary>스키마 표(ProviderType)를 단 1열 리더의 첫 행 셀. 가짜 드라이버가 ProviderType 109/110 의 GetString/원시 바이트를 실측대로 틀리게 준다.</summary>
+    private static object? DescribedCell(object value, Type type, ColumnDataKind kind, int providerType)
+    {
+        var table = new DataTable();
+        FakeDriverHost.ProviderColumn(table, "c", type, providerType);
+        table.Rows.Add(value);
+        using var reader = FakeDriverHost.NewReader(table);
+        Assert.True(reader.Read());
+        return TiberoValues.ReadCell(Driver, reader, 0, kind, providerType);
+    }
+
+    [Fact]
+    public void Binary_float_and_double_columns_are_decoded_from_raw_bytes_not_the_driver_value()
+    {
+        // 드라이버 GetValue 는 음수에서 틀린 값을 준다(R1x). 원시 바이트(byte[])만 쓰는 셀이라 GetValue 를 쓰면 byte[] 가 나와 실패한다.
+        Assert.Equal(-2.25f, Assert.IsType<float>(DescribedCell(Hex("3FEFFFFF"), typeof(byte[]), ColumnDataKind.BinaryFloat, TiberoColumnTypes.PtBinaryFloat)));
+        Assert.Equal(-2.25d, Assert.IsType<double>(DescribedCell(Hex("3FFDFFFFFFFFFFFF"), typeof(byte[]), ColumnDataKind.BinaryFloat, TiberoColumnTypes.PtBinaryDouble)));
+        Assert.Equal(2.25d, Assert.IsType<double>(DescribedCell(Hex("C002000000000000"), typeof(byte[]), ColumnDataKind.BinaryFloat, TiberoColumnTypes.PtBinaryDouble)));
+        Assert.Equal("0x3FEFFF", DescribedCell(Hex("3FEFFF"), typeof(byte[]), ColumnDataKind.BinaryFloat, TiberoColumnTypes.PtBinaryFloat));
+    }
+
+    [Fact]
+    public void Long_column_is_read_with_get_value_because_get_string_is_empty()
+    {
+        var text = new string('L', 40_000);
+
+        Assert.Equal(text, DescribedCell(text, typeof(string), ColumnDataKind.Text, TiberoColumnTypes.PtLong));
+        Assert.Equal("abc", DescribedCell("abc", typeof(string), ColumnDataKind.Text, TiberoColumnTypes.PtVarchar2));
+    }
+
+    [Fact]
+    public void Long_raw_column_is_read_with_get_value_because_the_raw_bytes_are_a_descriptor()
+    {
+        var bytes = Enumerable.Range(0, 40_000).Select(i => (byte)i).ToArray();
+
+        Assert.Equal(bytes, DescribedCell(bytes, typeof(byte[]), ColumnDataKind.Raw, TiberoColumnTypes.PtLongRaw));
+    }
+
     [Fact]
     public void Native_numeric_column_uses_the_clr_value()
     {

@@ -258,7 +258,7 @@ internal static class TiberoBulkReader
                     bytes += value switch
                     {
                         byte[] b => b.Length,
-                        string s when plan[i] == TiberoBulkReadKind.Clob => 2L * s.Length,
+                        string s when plan[i] is TiberoBulkReadKind.Clob or TiberoBulkReadKind.Long => 2L * s.Length, // LONG 도 본문 전체(최대 2GB)
                         _ => 0,
                     };
                 }
@@ -274,12 +274,14 @@ internal static class TiberoBulkReader
     internal static object? ReadValue(DbDataReader reader, TiberoDriver driver, int i, TiberoBulkReadKind kind) => kind switch
     {
         TiberoBulkReadKind.Number => ReadNumber(reader, driver, i),
-        TiberoBulkReadKind.BinaryFloat => reader.GetValue(i) is float f ? f : Convert.ToSingle(reader.GetValue(i), CultureInfo.InvariantCulture),
-        TiberoBulkReadKind.BinaryDouble => reader.GetValue(i) is double d ? d : Convert.ToDouble(reader.GetValue(i), CultureInfo.InvariantCulture),
-        TiberoBulkReadKind.Text or TiberoBulkReadKind.Long => reader.GetString(i), // CHAR 끝 공백 그대로
+        TiberoBulkReadKind.BinaryFloat => ReadBinaryFloat<float>(reader, driver, i, 4),
+        TiberoBulkReadKind.BinaryDouble => ReadBinaryFloat<double>(reader, driver, i, 8),
+        TiberoBulkReadKind.Text => reader.GetString(i), // CHAR 끝 공백 그대로
+        TiberoBulkReadKind.Long => ReadLong(reader, i),
         TiberoBulkReadKind.Clob => ReadClob(reader, driver, i),
         TiberoBulkReadKind.Blob => ReadBlob(reader, driver, i),
-        TiberoBulkReadKind.Raw or TiberoBulkReadKind.LongRaw => driver.ReadRawBytes(reader, i),
+        TiberoBulkReadKind.Raw => driver.ReadRawBytes(reader, i),
+        TiberoBulkReadKind.LongRaw => ReadLongRaw(reader, i),
         TiberoBulkReadKind.Date => DateTime.SpecifyKind(
             reader.GetValue(i) is DateTime date ? date : Convert.ToDateTime(reader.GetValue(i), CultureInfo.InvariantCulture), DateTimeKind.Unspecified),
         TiberoBulkReadKind.Timestamp => driver.ReadRawBytes(reader, i) is { } ts ? TiberoBulkTimestamp.FromBytes(ts) : null,
@@ -289,6 +291,46 @@ internal static class TiberoBulkReader
         TiberoBulkReadKind.IntervalDs => driver.ReadRawBytes(reader, i) is { } ds ? TiberoBulkIntervalDs.FromBytes(ds) : null,
         _ => throw new NotSupportedException($"데이터 복사가 지원하지 않는 열 형식입니다: {reader.GetName(i)} ({kind})"),
     };
+
+    /// <summary>
+    /// BINARY_FLOAT/DOUBLE: 원시 바이트(4·8바이트)를 직접 푼다. 드라이버 GetValue/GetFloat/GetDouble 은 음수에서 틀린 값을 준다(R1x 실측).
+    /// 바이트 길이가 열 형식과 맞지 않으면 열 이름과 함께 <see cref="FormatException"/>.
+    /// </summary>
+    private static T ReadBinaryFloat<T>(DbDataReader reader, TiberoDriver driver, int i, int length)
+        where T : struct
+    {
+        var raw = driver.ReadRawBytes(reader, i);
+        if (raw is null || raw.Length != length)
+        {
+            throw new FormatException($"BINARY_FLOAT/BINARY_DOUBLE 열 {reader.GetName(i)} 의 원시 바이트가 {length}바이트가 아닙니다: {(raw is null ? "null" : raw.Length.ToString(CultureInfo.InvariantCulture))}");
+        }
+
+        return (T)TiberoWire.DecodeBinaryFloat(raw);
+    }
+
+    /// <summary>LONG: GetValue 로 읽는다(GetString 은 값이 있어도 빈 글자, ReadRawBytes 는 72바이트 서술자 — R1x 실측).</summary>
+    private static string ReadLong(DbDataReader reader, int i) => reader.GetValue(i) switch
+    {
+        string s => s,
+        var v => Convert.ToString(v, CultureInfo.InvariantCulture) ?? string.Empty,
+    };
+
+    /// <summary>
+    /// LONG RAW: GetValue 가 값을 준다(ReadRawBytes 는 72바이트 서술자, GetBytes 조각은 쓰레기 — R1x 실측). 실제 드라이버는 <c>sbyte[]</c> 를 준다(win144 #86).
+    /// CLR 은 <c>sbyte[]</c> 객체를 <c>byte[]</c> 패턴에도 맞춰 주므로 형식을 정확히 비교한다(그대로 내면 받는 쪽이 <c>byte[]</c> 가 아닌 값을 받는다).
+    /// </summary>
+    private static byte[] ReadLongRaw(DbDataReader reader, int i)
+    {
+        var value = reader.GetValue(i);
+        if (value.GetType() == typeof(sbyte[]))
+        {
+            return TiberoWire.ToBytes((sbyte[])value);
+        }
+
+        return value.GetType() == typeof(byte[])
+            ? (byte[])value
+            : throw new FormatException($"LONG RAW 열 {reader.GetName(i)} 의 값이 바이트 배열이 아닙니다: {value.GetType().Name}");
+    }
 
     /// <summary>NUMBER: 원시 바이트 → 고정 소수점(38자리·1E±125 손실 없음). 바이트를 못 풀 때만 GetValue 값의 invariant 글자.</summary>
     private static TiberoBulkNumber ReadNumber(DbDataReader reader, TiberoDriver driver, int i)
