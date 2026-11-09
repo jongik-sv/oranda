@@ -1,3 +1,6 @@
+using System.ComponentModel;
+using Oranda.Core.Connection;
+
 namespace Oranda.Core.Composition;
 
 /// <summary>
@@ -16,6 +19,26 @@ public sealed class OrandaServiceAttribute(Type serviceType) : Attribute
 
     /// <summary>이 OS 에서만 등록(예: DPAPI 는 Windows).</summary>
     public ServicePlatform Platform { get; set; } = ServicePlatform.Any;
+
+    private Dbms? _dbms;
+
+    /// <summary>
+    /// 이 구현이 맡는 DBMS(D-046). 달면 <see cref="ServiceType"/> 로 바로 등록하지 않고 (서비스 형식, DBMS) 키로 등록해
+    /// <see cref="IDbmsServiceSelector"/> 로만 꺼낸다. 앱이 보는 <see cref="ServiceType"/> 자리는 세션의 DBMS 로 고르는 디스패처가 맡는다.
+    /// 달지 않으면(<see cref="ForDbms"/> = null) 지금처럼 DBMS 와 무관한 서비스로 등록한다.
+    /// <see cref="Lifetime"/>·<see cref="Platform"/> 은 키 등록에도 그대로 적용한다.
+    /// 이 속성은 특성에 값을 다는 용도다. 읽을 때는 <see cref="ForDbms"/> 를 쓴다 — 안 달았을 때도 여기서는 Oracle 이 읽힌다.
+    /// </summary>
+    /// <example><c>[OrandaService(typeof(IExecutionService), Dbms = Dbms.Oracle)]</c></example>
+    [EditorBrowsable(EditorBrowsableState.Never)]
+    public Dbms Dbms
+    {
+        get => _dbms ?? Dbms.Oracle;
+        set => _dbms = value;
+    }
+
+    /// <summary><see cref="Dbms"/> 를 달았으면 그 값, 안 달았으면 null(DBMS 와 무관한 서비스).</summary>
+    public Dbms? ForDbms => _dbms;
 }
 
 public enum ServiceLifetimeKind
