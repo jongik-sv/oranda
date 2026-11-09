@@ -14,6 +14,7 @@ using Oranda.App.Shell;
 using Oranda.Core.Execution;
 using Oranda.Core.Metadata;
 using Oranda.Core.Sessions;
+using Oranda.Language.Errors;
 using Oranda.Core.Shell;
 
 namespace Oranda.App.Features.DbTools;
@@ -747,7 +748,7 @@ public sealed partial class ObjectSearchViewModel : ToolPanelViewModelBase
         }
 
         // 컴파일 오류가 있으면 서버는 「오류가 있는 채로 컴파일됨」(ORA-24344)을 알린다 — 실패가 아니라 INVALID 로 남은 것이다.
-        return failure is not null && !failure.Contains("24344", StringComparison.Ordinal)
+        return failure is not null && !DbErrorClassification.HasInMessage(failure, DbErrorKind.CompiledWithErrors)
             ? new CompileResultItem(obj, CompileOutcome.Failed, failure)
             : new CompileResultItem(obj, CompileOutcome.StillInvalid, obj.ObjectType.StartsWith("JAVA ", StringComparison.Ordinal)
                 ? "컴파일 오류가 있다(객체 상세의 「컴파일 오류」 구역에서 확인)"

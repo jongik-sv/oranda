@@ -12,6 +12,7 @@ using Oranda.Core.Monitoring;
 using Oranda.Core.Sessions;
 using Oranda.Core.Shell;
 using Oranda.Core.Tuning;
+using Oranda.Language.Errors;
 
 namespace Oranda.App.Features.Tuning.Trace;
 
@@ -529,8 +530,7 @@ public sealed partial class TraceViewerViewModel : ToolPanelViewModelBase
         Message = ex is OperationCanceledException ? "트레이스 읽기를 취소했습니다." : "트레이스를 읽지 못했습니다: " + FirstLine(ex);
     }
 
-    private static bool IsPrivilegeError(Exception ex) =>
-        ex.Message.Contains("ORA-00942", StringComparison.Ordinal) || ex.Message.Contains("ORA-01031", StringComparison.Ordinal);
+    private static bool IsPrivilegeError(Exception ex) => DbErrorClassification.IsNoAccessTop(ex);
 
     private static string FirstLine(Exception ex) => (ex.Message ?? string.Empty).Split('\n', 2)[0].Trim();
 

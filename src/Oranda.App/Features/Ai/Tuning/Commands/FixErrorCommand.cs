@@ -10,8 +10,10 @@ using System.Threading.Tasks;
 using Oranda.App.Features.Execution;
 using Oranda.Core.Ai.Access;
 using Oranda.Core.Ai.Schemas;
+using Oranda.Core.Connection;
 using Oranda.Core.Events;
 using Oranda.Core.Settings;
+using Oranda.Language.Errors;
 
 namespace Oranda.App.Features.Ai.Tuning.Commands;
 
@@ -20,12 +22,12 @@ namespace Oranda.App.Features.Ai.Tuning.Commands;
 /// 번호·위치는 항상 읽을 수 있지만 <see cref="Message"/> 는 리터럴을 가리지 않는 대화에서만 읽는다(서버가 만든 글이라 <c>ISqlLiteralMasker</c> 로 가릴 수 없고
 /// <c>ORA-20xxx</c> 처럼 서버 값이 들어갈 수 있다). <see cref="Line"/>·<see cref="Column"/> 은 원문 기준이라 가린 글과 어긋나므로 가리는 대화에서는 읽지 않는다.
 /// </summary>
-/// <param name="Number">ORA 번호(서버 오류가 아니면 0).</param>
+/// <param name="Number">서버 오류 번호(ORA-nnnnn·TBR-nnnn 의 숫자, 서버 오류가 아니면 0).</param>
 /// <param name="Offset">문장 본문 안 0부터 위치(원문 기준). 모르면 null.</param>
 /// <param name="Line">원문 기준 줄. 가리는 대화에서는 읽지 않는다.</param>
 /// <param name="Column">원문 기준 열. 가리는 대화에서는 읽지 않는다.</param>
 /// <param name="Message">서버 오류 글. 가리는 대화에서는 읽지 않는다.</param>
-internal sealed record FixErrorState(int Number, int? Offset, int? Line, int? Column, string? Message);
+internal sealed record FixErrorState(int Number, int? Offset, int? Line, int? Column, string? Message, Dbms Dbms = Dbms.Oracle);
 
 /// <summary>
 /// 「오류 고치기」: 마지막 실행 오류가 난 문장(커서 문장이 아니다)을 오류와 함께 AI 에 보내 고친 문장 하나를 구조 결과로 받는다.
@@ -177,7 +179,7 @@ public sealed class FixErrorCommand(IEditorTabs tabs) : AiCommandSpec
         // 치환 변수(&name)가 든 문장은 서버가 치환한 글 기준으로 위치를 돌려주는데 오류 상태에는 편집기 원문이 들어 있어 기준 글이 다르다.
         // 어긋난 위치를 보내느니 위치를 뺀다(가린 대화의 환산도 같은 이유로 null 이 되도록 위치 자체를 비운다).
         var located = statement.SubstitutionNames.Count == 0;
-        var fix = new FixErrorState(error.Number, located ? error.Offset : null, located ? error.Line : null, located ? error.Column : null, error.Message);
+        var fix = new FixErrorState(error.Number, located ? error.Offset : null, located ? error.Line : null, located ? error.Column : null, error.Message, error.Dbms);
         return Task.FromResult(AiCommandPreparation.Ready(new AiCommandTarget(statement, TabId: tab, State: fix)));
     }
 
@@ -250,7 +252,9 @@ public sealed class FixErrorCommand(IEditorTabs tabs) : AiCommandSpec
     /// </summary>
     private static IEnumerable<string> ErrorLines(FixErrorState state, AiCommandPromptInput input)
     {
-        var code = state.Number > 0 ? string.Create(CultureInfo.InvariantCulture, $"ORA-{state.Number:D5}") : "(not an Oracle server error)";
+        var code = state.Number > 0
+            ? DbErrorCodes.Display(state.Dbms, state.Number)
+            : state.Dbms == Dbms.Tibero ? "(not a Tibero server error)" : "(not an Oracle server error)";
         yield return "Error: " + code;
         if (!input.Masked && !string.IsNullOrWhiteSpace(state.Message))
         {

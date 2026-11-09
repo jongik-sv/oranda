@@ -263,12 +263,12 @@ public class JavaCompileTests
     {
         var stmt = new SqlStatement("CREATE OR REPLACE AND COMPILE JAVA SOURCE NAMED \"Hello\" AS\nclass Hello { int a; }", default, StatementKind.Ddl);
         Assert.True(SqlCompileErrors.ShouldCapture(stmt, new ExecutionResult(stmt, ExecutionStatus.Succeeded)));
-        Assert.True(SqlCompileErrors.ShouldCapture(stmt, new ExecutionResult(stmt, ExecutionStatus.Failed) { Error = new DbError("ORA-24344", "x") }));
-        Assert.True(SqlCompileErrors.ShouldCapture(stmt, new ExecutionResult(stmt, ExecutionStatus.Failed) { Error = new DbError("ORA-29535", "x") }));
-        Assert.False(SqlCompileErrors.ShouldCapture(stmt, new ExecutionResult(stmt, ExecutionStatus.Failed) { Error = new DbError("ORA-29538", "Java not installed") }));
+        Assert.True(SqlCompileErrors.ShouldCapture(stmt, new ExecutionResult(stmt, ExecutionStatus.Failed) { Error = new DbError("ORA-24344", "x") { Number = 24344, Kind = DbErrorKind.CompiledWithErrors } }));
+        Assert.True(SqlCompileErrors.ShouldCapture(stmt, new ExecutionResult(stmt, ExecutionStatus.Failed) { Error = new DbError("ORA-29535", "x") { Number = 29535 } }));
+        Assert.False(SqlCompileErrors.ShouldCapture(stmt, new ExecutionResult(stmt, ExecutionStatus.Failed) { Error = new DbError("ORA-29538", "Java not installed") { Number = 29538 } }));
 
         var plsql = new SqlStatement("CREATE OR REPLACE PROCEDURE p AS BEGIN NULL; END;", default, StatementKind.Ddl);
-        Assert.False(SqlCompileErrors.ShouldCapture(plsql, new ExecutionResult(plsql, ExecutionStatus.Failed) { Error = new DbError("ORA-29535", "x") }));
+        Assert.False(SqlCompileErrors.ShouldCapture(plsql, new ExecutionResult(plsql, ExecutionStatus.Failed) { Error = new DbError("ORA-29535", "x") { Number = 29535 } }));
     }
 
     private sealed class Probe

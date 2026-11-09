@@ -1,6 +1,5 @@
 using System.Runtime.CompilerServices;
 using System.Text.Json.Nodes;
-using System.Text.RegularExpressions;
 using Oranda.Core.Ai.Access;
 using Oranda.Core.Ai.Gate;
 using Oranda.Core.Ai.Schemas;
@@ -12,6 +11,7 @@ using Oranda.Core.Plans;
 using Oranda.Core.Tuning;
 using Oranda.Language.Ai.References;
 using Oranda.Language.Ai.Tools;
+using Oranda.Language.Errors;
 
 namespace Oranda.Language.Ai.Handlers;
 
@@ -72,8 +72,8 @@ internal abstract partial class ToolHandlerBase(AgentToolboxProvider boxes) : IA
         }
         catch (Exception ex)
         {
-            var code = OraCode().Match(ex.Message).Value;
-            return AgentToolOutput.Error(code.Length > 0 ? $"조회에 실패했습니다 ({code})." : "조회에 실패했습니다.") with { LogDetail = Detail(ex) };
+            var code = DbErrorClassification.CodeOf(ex);
+            return AgentToolOutput.Error(code is not null ? $"조회에 실패했습니다 ({code})." : "조회에 실패했습니다.") with { LogDetail = Detail(ex) };
         }
     }
 
@@ -113,9 +113,6 @@ internal abstract partial class ToolHandlerBase(AgentToolboxProvider boxes) : IA
     /// <summary>sql_id 도구가 볼 수 있는 커서의 파싱 스키마: 실행 범위의 현재 스키마, 없으면 접속 사용자.</summary>
     protected static string ScopeSchema(AgentToolInvocation inv) =>
         (string.IsNullOrWhiteSpace(inv.Session.Context.CurrentSchema) ? inv.Session.Profile.User : inv.Session.Context.CurrentSchema).ToUpperInvariant();
-
-    [GeneratedRegex(@"ORA-\d{5}")]
-    private static partial Regex OraCode();
 
     protected static JsonNode Node<T>(T value) => ToolJson.ToNode(value);
 

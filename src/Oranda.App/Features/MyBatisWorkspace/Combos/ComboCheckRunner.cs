@@ -1,11 +1,11 @@
 using System.Globalization;
-using System.Text.RegularExpressions;
 using Oranda.Core.Execution;
 using Oranda.Core.Language;
 using Oranda.Core.MyBatis;
 using Oranda.Core.Plans;
 using Oranda.Core.Sessions;
 using Oranda.Core.Text;
+using Oranda.Language.Errors;
 using Oranda.Language.MyBatis;
 
 namespace Oranda.App.Features.MyBatisWorkspace.Combos;
@@ -213,18 +213,16 @@ internal sealed partial class ComboCheckRunner(IMyBatisEvaluator evaluator, ILan
         catch (Exception ex)
         {
             // 접속·권한 탓(읽기 전용 DB·대기 DB, 권한 없음)은 문장 탓이 아니므로 거부로 알린다. 그 밖은 조합 하나의 오류로 남기고 다음 조합을 잇는다.
-            var code = OraCode().Match(ex.Message);
-            if (code.Success && EnvironmentCodes.Contains(code.Value))
+            var code = DbErrorClassification.CodeOf(ex);
+            if (DbErrorClassification.LeadingKindOf(ex) is DbErrorKind.ReadOnly or DbErrorKind.InsufficientPrivileges)
             {
                 return new(number, title, states, scenario, ComboOutcome.Warning, ComboText.PlanDenied, ex.Message, sql, null, null);
             }
 
-            return new(number, title, states, scenario, ComboOutcome.Error, code.Success ? $"{ComboText.PlanError} {code.Value}" : ComboText.PlanError,
+            return new(number, title, states, scenario, ComboOutcome.Error, code is not null ? $"{ComboText.PlanError} {code}" : ComboText.PlanError,
                 ComboText.PlanErrorDetail(ex.Message), sql, null, null);
         }
     }
-
-    private static readonly HashSet<string> EnvironmentCodes = new(StringComparer.Ordinal) { "ORA-01456", "ORA-01031", "ORA-16000" };
 
     /// <summary>
     /// 미리 푼 조각 해석기. 부른 스레드에서 한 번 펼쳐(include 는 조건과 무관하게 모두 펼친다) 찾은 조각을 기억하고,
@@ -376,7 +374,4 @@ internal sealed partial class ComboCheckRunner(IMyBatisEvaluator evaluator, ILan
         MyBatisScenarioValueKind.Boolean => string.Equals(text, "true", StringComparison.OrdinalIgnoreCase),
         _ => text,
     };
-
-    [GeneratedRegex(@"ORA-\d{5}", RegexOptions.CultureInvariant)]
-    private static partial Regex OraCode();
 }

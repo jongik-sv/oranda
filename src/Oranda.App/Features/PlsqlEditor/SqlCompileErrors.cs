@@ -5,6 +5,7 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Oranda.App.Features.SqlEditor;
+using Oranda.Core.Connection;
 using Oranda.Core.Execution;
 using Oranda.Core.Metadata;
 using Oranda.Core.Sessions;
@@ -103,6 +104,9 @@ public static class SqlCompileErrors
 {
     private static readonly Dictionary<string, SqlCompileErrorSource> Sources = [];
 
+    /// <summary>Oracle ORA-29535 「다시 컴파일해야 한다」: Java 소스 전용이라 <see cref="DbErrorKind"/> 가 없다. <see cref="DbError.Dbms"/> 가 Oracle 일 때만 본다.</summary>
+    private const int OraJavaNeedsRecompile = 29535;
+
     /// <summary>
     /// 이 문장이 오류를 읽어 볼 만한가: CREATE 문장이고 성공했거나 「오류가 있는 채로 컴파일됨」(ORA-24344)으로 끝났다.
     /// 그 밖의 실패(구문 오류 ORA-00900 등)는 객체가 만들어지지 않았으므로 읽지 않는다.
@@ -119,8 +123,8 @@ public static class SqlCompileErrors
         // Java 소스는 「다시 컴파일해야 한다」(ORA-29535)로 끝나도 객체는 만들어졌다.
         return result.Status == ExecutionStatus.Succeeded
             || (result.Status == ExecutionStatus.Failed && result.Error is { } e
-                && (e.Code.Contains("24344", StringComparison.Ordinal)
-                    || (header.ObjectType == "JAVA SOURCE" && e.Code.Contains("29535", StringComparison.Ordinal))));
+                && (e.Kind == DbErrorKind.CompiledWithErrors
+                    || (header.ObjectType == "JAVA SOURCE" && e.Dbms == Dbms.Oracle && e.Number == OraJavaNeedsRecompile)));
     }
 
     /// <summary>PL/SQL 단위 또는 Java 소스(<c>NAMED</c> 가 있는 꼴)의 CREATE 머리.</summary>

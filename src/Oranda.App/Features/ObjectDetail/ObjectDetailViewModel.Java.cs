@@ -10,6 +10,7 @@ using Oranda.App.Shell;
 using Oranda.Core.Execution;
 using Oranda.Core.Metadata;
 using Oranda.Core.Sessions;
+using Oranda.Language.Errors;
 
 namespace Oranda.App.Features.ObjectDetail;
 
@@ -142,7 +143,7 @@ public sealed partial class ObjectDetailViewModel
             }
 
             // 「오류가 있는 채로 컴파일됨」(ORA-24344)·「다시 컴파일해야 한다」(ORA-29535)는 오류 목록을 본다. 그 밖의 실패는 그대로 알린다.
-            var failure = outcome.Succeeded || outcome.Message is { } m && (m.Contains("24344", StringComparison.Ordinal) || m.Contains("29535", StringComparison.Ordinal))
+            var failure = outcome.Succeeded || outcome.Message is { } m && (DbErrorClassification.HasInMessage(m, DbErrorKind.CompiledWithErrors) || m.Contains("29535", StringComparison.Ordinal))
                 ? null
                 : outcome.Message ?? "실패";
             var errors = await ReadJavaErrorsAsync(session, target, ct);

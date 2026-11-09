@@ -2,6 +2,7 @@ using Oranda.Core.Execution;
 using Oranda.Core.History;
 using Oranda.Core.Sessions;
 using Oranda.Core.Tuning;
+using Oranda.Language.Errors;
 
 namespace Oranda.Language.Ai.Tools;
 
@@ -142,8 +143,8 @@ public sealed partial class TuningToolbox
             catch (Exception ex) when (ex is not OperationCanceledException && ex is not AiToolException && !ct.IsCancellationRequested)
             {
                 // 서버 오류 원문에는 변환에 실패한 값이 들어갈 수 있으므로 LLM 에는 오류 번호만 돌려준다. 원문은 원인 예외로 넘겨 게이트가 가려 로그에 쓴다.
-                var code = System.Text.RegularExpressions.Regex.Match(ex.Message, @"ORA-\d{5}").Value;
-                throw new AiToolException($"'{v.Label}' 문장 실행이 실패했습니다" + (code.Length > 0 ? $" ({code})." : "."), ex);
+                var code = DbErrorClassification.CodeOf(ex);
+                throw new AiToolException($"'{v.Label}' 문장 실행이 실패했습니다" + (code is not null ? $" ({code})." : "."), ex);
             }
 
             // 실행한 문장의 sql_id: 글에서 계산한 값이 공유 풀에 있고 이 실행 범위의 스키마가 파싱한 커서일 때만 알린다.

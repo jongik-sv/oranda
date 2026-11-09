@@ -16,6 +16,7 @@ using Oranda.App.Features.SessionMonitor;
 using Oranda.App.Shell;
 using Oranda.Core.Connection;
 using Oranda.Core.Execution;
+using Oranda.Language.Errors;
 using Oranda.Oracle.Catalog;
 using Oranda.Core.History;
 using Oranda.Core.Monitoring;
@@ -2233,25 +2234,9 @@ public sealed partial class LockMonitorViewModel : ToolPanelViewModelBase, IDisp
         IsStale = false;
     }
 
-    private static bool IsDisconnect(Exception ex)
-    {
-        for (var e = ex; e is not null; e = e.InnerException)
-        {
-            if (e.Message.Contains("ORA-03113", StringComparison.Ordinal) || e.Message.Contains("ORA-03114", StringComparison.Ordinal)
-                || e.Message.Contains("ORA-03135", StringComparison.Ordinal) || e.Message.Contains("ORA-00028", StringComparison.Ordinal))
-            {
-                return true;
-            }
-        }
+    private static bool IsDisconnect(Exception ex) => DbErrorClassification.IsDisconnected(ex);
 
-        return false;
-    }
-
-    private static string? OraCode(string message)
-    {
-        var i = message.IndexOf("ORA-", StringComparison.Ordinal);
-        return i >= 0 && i + 9 <= message.Length ? message.Substring(i, 9) : null;
-    }
+    private static string? OraCode(string message) => DbErrorClassification.CodeOf(message);
 
     private void UpdateKeys()
     {

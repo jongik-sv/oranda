@@ -12,6 +12,7 @@ using Oranda.App.Features.ConnectionManager;
 using Oranda.Core.Connection;
 using Oranda.Core.Security;
 using Oranda.Core.Sessions;
+using Oranda.Language.Errors;
 
 namespace Oranda.App.Features.SessionMonitor;
 
@@ -78,14 +79,18 @@ public sealed partial class MonitorAccessState : ObservableObject
         return $"GRANT SELECT_CATALOG_ROLE TO {name};";
     }
 
-    /// <summary>예외가 V$ 뷰 권한 부족(ORA-00942 테이블·뷰 없음, ORA-01031 권한 부족)인지.</summary>
+    /// <summary>예외가 V$ 뷰 권한 부족(객체 없음·권한 부족 = <c>DbErrorKinds.IsNoAccess</c>: Oracle ORA-00942·ORA-01031)인지.</summary>
     public static bool IsPrivilegeError(Exception ex)
     {
+        if (DbErrorClassification.IsNoAccess(ex))
+        {
+            return true;
+        }
+
         for (var e = ex; e is not null; e = e.InnerException)
         {
             var m = e.Message;
-            if (m.Contains("ORA-00942", StringComparison.Ordinal) || m.Contains("ORA-01031", StringComparison.Ordinal)
-                || (m.Contains("table or view", StringComparison.OrdinalIgnoreCase) && m.Contains("does not exist", StringComparison.OrdinalIgnoreCase)))
+            if (m.Contains("table or view", StringComparison.OrdinalIgnoreCase) && m.Contains("does not exist", StringComparison.OrdinalIgnoreCase))
             {
                 return true;
             }

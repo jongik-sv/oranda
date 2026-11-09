@@ -4,6 +4,7 @@ using Oranda.Core.Language;
 using Oranda.Core.Plans;
 using Oranda.Core.Tuning;
 using Oranda.Language.Ai.References;
+using Oranda.Language.Errors;
 using Oranda.Core.Sessions;
 
 namespace Oranda.Language.Ai.Tools;
@@ -55,8 +56,7 @@ public sealed partial class TuningToolbox
         }
     }
 
-    private static bool IsNoPrivilege(Exception ex) =>
-        ex.Message.Contains("ORA-00942", StringComparison.Ordinal) || ex.Message.Contains("ORA-01031", StringComparison.Ordinal);
+    private static bool IsNoPrivilege(Exception ex) => DbErrorClassification.IsNoAccessTop(ex);
 
     /// <summary>
     /// <c>explain_plan</c>: 예상 계획. 먼저 접속의 실효 허용(<paramref name="allowExplainPlan"/>: 개발 켬·운영 끔)과
@@ -77,9 +77,10 @@ public sealed partial class TuningToolbox
             var plan = await plans.ExplainAsync(s, statement, ct).ConfigureAwait(false);
             return Describe(plan, null);
         }
-        catch (InvalidOperationException ex) when (ex.Message.Contains("ORA-01456", StringComparison.Ordinal))
+        catch (InvalidOperationException ex) when (DbErrorClassification.IsReadOnly(ex))
         {
-            throw new AiToolException(CursorPlanHint("서버가 읽기 전용 접속의 EXPLAIN PLAN 을 막습니다(ORA-01456)."));
+            var code = DbErrorClassification.CodeOfKind(ex, DbErrorKind.ReadOnly);
+            throw new AiToolException(CursorPlanHint("서버가 읽기 전용 접속의 EXPLAIN PLAN 을 막습니다" + (code is null ? "." : $"({code}).")));
         }
         catch (UnauthorizedAccessException ex)
         {

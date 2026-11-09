@@ -907,7 +907,7 @@ public class PlsqlEditorTests
         var (_, select) = SqlTab("SELECT 1 FROM dual", "SELECT 1 FROM dual");
 
         Assert.True(SqlCompileErrors.ShouldCapture(create, new ExecutionResult(create, ExecutionStatus.Succeeded)));
-        Assert.True(SqlCompileErrors.ShouldCapture(create, new ExecutionResult(create, ExecutionStatus.Failed) { Error = new DbError("ORA-24344", "success with compilation error") }));
+        Assert.True(SqlCompileErrors.ShouldCapture(create, new ExecutionResult(create, ExecutionStatus.Failed) { Error = new DbError("ORA-24344", "success with compilation error") { Number = 24344, Kind = DbErrorKind.CompiledWithErrors } }));
         Assert.False(SqlCompileErrors.ShouldCapture(create, new ExecutionResult(create, ExecutionStatus.Failed) { Error = new DbError("ORA-00900", "invalid SQL statement") }));
         Assert.False(SqlCompileErrors.ShouldCapture(select, new ExecutionResult(select, ExecutionStatus.Succeeded)));
     }

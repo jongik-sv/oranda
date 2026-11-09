@@ -3,6 +3,7 @@ using Oranda.Core.Metadata;
 using Oranda.Core.Plans;
 using Oranda.Core.Sessions;
 using Oranda.Language.Ai.References;
+using Oranda.Language.Errors;
 
 namespace Oranda.Language.Ai.Tools;
 
@@ -260,8 +261,8 @@ public sealed partial class TuningToolbox
             return $"{what}: {ex.Message}";
         }
 
-        var code = System.Text.RegularExpressions.Regex.Match(ex.Message, @"ORA-\d{5}").Value;
-        return code.Length > 0 ? $"{what}: 읽지 못했습니다({code})" : $"{what}: 읽지 못했습니다";
+        var code = DbErrorClassification.CodeOf(ex);
+        return code is not null ? $"{what}: 읽지 못했습니다({code})" : $"{what}: 읽지 못했습니다";
     }
 
     private static string Count(long? n) => n?.ToString("N0", CultureInfo.InvariantCulture) ?? "?";

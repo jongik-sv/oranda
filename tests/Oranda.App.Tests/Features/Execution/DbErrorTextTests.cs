@@ -1,4 +1,5 @@
 using Oranda.App.Features.Execution;
+using Oranda.Core.Connection;
 using Oranda.Core.Execution;
 
 namespace Oranda.App.Tests.Features.Execution;
@@ -48,5 +49,21 @@ public sealed class DbErrorTextTests
         var error = new DbError("E", "연결이 끊겼다") { Number = 0 };
 
         Assert.Equal("연결이 끊겼다", DbErrorText.Format(error));
+    }
+
+    [Fact]
+    public void Format_uses_the_tibero_notation_for_tibero_errors()
+    {
+        var error = new DbError("TBR-8033", "object does not exist") { Number = 8033, Dbms = Dbms.Tibero };
+
+        Assert.Equal("TBR-8033: object does not exist", DbErrorText.Format(error));
+    }
+
+    [Fact]
+    public void Format_does_not_repeat_a_tibero_code_already_in_the_message()
+    {
+        var error = new DbError("TBR-8033", "TBR-8033: object does not exist") { Number = 8033, Dbms = Dbms.Tibero };
+
+        Assert.Equal("TBR-8033: object does not exist", DbErrorText.Format(error));
     }
 }

@@ -11,6 +11,7 @@ using Oranda.Core.Execution;
 using Oranda.Core.Features;
 using Oranda.Core.History;
 using Oranda.Core.Sessions;
+using Oranda.Language.Errors;
 
 namespace Oranda.App.Features.Execution;
 
@@ -750,17 +751,17 @@ public sealed class ExecutionState : ObservableObject
 
         if (_tracks.TryGetValue(e.SessionId, out var t))
         {
-            t.LastRun = new RunSummary(e.Result.Status, e.Result.RowsAffected, e.Result.Elapsed, e.Result.Error?.Number);
+            t.LastRun = new RunSummary(e.Result.Status, e.Result.RowsAffected, e.Result.Elapsed, e.Result.Error?.Number, e.Result.Error?.Dbms ?? Dbms.Oracle);
             RaiseAll();
         }
     }
 
     /// <summary>「마지막 실행」 요약(결과 전체를 붙잡지 않는다): 상태·영향 행 수·소요 시간·오류 번호.</summary>
-    public sealed record RunSummary(ExecutionStatus Status, long? RowsAffected, TimeSpan Elapsed, int? ErrorNumber);
+    public sealed record RunSummary(ExecutionStatus Status, long? RowsAffected, TimeSpan Elapsed, int? ErrorNumber, Dbms ErrorDbms = Dbms.Oracle);
 
     /// <summary>「마지막 실행」 글: 행 수·소요 시간·오류 번호.</summary>
     public static string DescribeRun(ExecutionResult r) =>
-        DescribeRun(new RunSummary(r.Status, r.RowsAffected, r.Elapsed, r.Error?.Number));
+        DescribeRun(new RunSummary(r.Status, r.RowsAffected, r.Elapsed, r.Error?.Number, r.Error?.Dbms ?? Dbms.Oracle));
 
     private static string DescribeRun(RunSummary r)
     {
@@ -770,7 +771,7 @@ public sealed class ExecutionState : ObservableObject
             ExecutionStatus.Succeeded when r.RowsAffected is { } n =>
                 UiText.Format("Execution.status.run.rows", "{0}행 · {1}", n.ToString("N0", CultureInfo.InvariantCulture), time),
             ExecutionStatus.Succeeded => UiText.Format("Execution.status.run.done", "완료 · {0}", time),
-            ExecutionStatus.Failed => (r.ErrorNumber is > 0 ? $"ORA-{r.ErrorNumber:00000}" : UiText.Get("Execution.status.run.error", "오류")) + " · " + time,
+            ExecutionStatus.Failed => (r.ErrorNumber is > 0 ? DbErrorCodes.Display(r.ErrorDbms, r.ErrorNumber.Value) : UiText.Get("Execution.status.run.error", "오류")) + " · " + time,
             ExecutionStatus.Cancelled => UiText.Get("Execution.status.run.cancelled", "취소됨"),
             _ => UiText.Get("Execution.status.run.denied", "거부됨"),
         };
