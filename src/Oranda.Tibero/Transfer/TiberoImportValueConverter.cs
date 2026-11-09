@@ -1,3 +1,5 @@
+using Oranda.Core.Composition;
+using Oranda.Core.Connection;
 using Oranda.Core.Grid;
 using Oranda.Core.Metadata;
 using Oranda.Core.Transfer;
@@ -10,8 +12,9 @@ namespace Oranda.Tibero.Transfer;
 /// (docs/design/tibero-driver-transfer.md). 달라지는 것은 열 타입 이름표 뿐이다: Tibero 사전은 <c>VARCHAR</c>(Oracle 의 VARCHAR2)·<c>NVARCHAR</c>,
 /// <c>TIMESTAMP(6)</c>·<c>TIMESTAMP(6) WITH TIME ZONE</c>, <c>INTERVAL DAY(3) TO SECOND(0)</c> 처럼 정밀도가 붙은 이름을 낸다.
 /// BOOLEAN 열·리터럴은 이 서버에 없어(<c>SELECT TRUE FROM DUAL</c> = ODP-8026) 분류하지 않는다.
-/// DBMS 키 등록(<c>[OrandaService(…, Dbms = Dbms.Tibero)]</c>)은 통합 시험을 통과하는 TI1a 에서 한다.
+/// DBMS 키 서비스로 등록한다(가져오기 대화 상자가 세션 DBMS 로 고른다).
 /// </summary>
+[OrandaService(typeof(IImportValueConverter), Dbms = Dbms.Tibero)]
 internal sealed class TiberoImportValueConverter : IImportValueConverter
 {
     /// <summary>

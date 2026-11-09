@@ -18,6 +18,18 @@ public sealed class TiberoDataTransferServiceTests
         new ColumnInfo("HIRED", 3, "DATE"),
     ]);
 
+    [Theory]
+    [InlineData(typeof(TiberoDataTransferService), typeof(IDataTransferService))]
+    [InlineData(typeof(TiberoImportValueConverter), typeof(IImportValueConverter))]
+    public void Both_are_registered_as_tibero_keyed_services(Type implementation, Type service)
+    {
+        var attribute = Assert.Single(implementation.GetCustomAttributes(typeof(Oranda.Core.Composition.OrandaServiceAttribute), inherit: false)
+            .Cast<Oranda.Core.Composition.OrandaServiceAttribute>());
+
+        Assert.Equal(service, attribute.ServiceType);
+        Assert.Equal(Oranda.Core.Connection.Dbms.Tibero, attribute.ForDbms);
+    }
+
     [Fact]
     public void Dialect_makes_dual_selects_and_oracle_style_savepoints()
     {
