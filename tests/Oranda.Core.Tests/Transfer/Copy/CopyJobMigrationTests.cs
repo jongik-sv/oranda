@@ -17,6 +17,7 @@ public class CopyJobMigrationTests
         var v1 = JsonNode.Parse(File.ReadAllText(Path.Combine(ExamplesDirectory(), "v1", "copy-job.json")))!;
         var expected = JsonNode.Parse(File.ReadAllText(Path.Combine(ExamplesDirectory(), "copy-job.json")))!;
         expected["tables"]!.AsArray().RemoveAt(4); // 새 예제에만 있는 다른 계정 규칙
+        expected.AsObject().Remove("variables"); // 새 예제에만 있는 작업 변수(버전 3)
 
         var upgraded = CopyJobMigrations.Upgrade(v1, 1);
 
@@ -34,6 +35,8 @@ public class CopyJobMigrationTests
         var job = JsonSerializer.Deserialize(text, CopyJobJsonContext.Default.CopyJob)!;
         Assert.Equal(CopyJobSchema.Current, job.SchemaVersion);
         Assert.Equal("APP2.ORDERS", CopyOwners.Key(job, job.Tables[4]));
+        Assert.Equal(["C2611001", "C2611002"], job.Variables[0].Values);
+        Assert.Equal(CopyVariableType.Number, job.Variables[1].Type);
         AssertSame(JsonNode.Parse(text)!, JsonNode.Parse(JsonSerializer.Serialize(job, CopyJobJsonContext.Default.CopyJob))!, "$");
     }
 
@@ -61,7 +64,7 @@ public class CopyJobMigrationTests
         Assert.All(job.Sequences, s => Assert.NotNull(CopyOwners.Find(job, s.Table)));
 
         var empty = JsonNode.Parse("""{"schemaVersion":1}""")!;
-        Assert.Equal(2, (int)CopyJobMigrations.Upgrade(empty, 1)["schemaVersion"]!);
+        Assert.Equal(CopyJobSchema.Current, (int)CopyJobMigrations.Upgrade(empty, 1)["schemaVersion"]!);
     }
 
     private static void AssertSame(JsonNode expected, JsonNode actual, string path)

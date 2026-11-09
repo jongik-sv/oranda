@@ -201,7 +201,7 @@ public sealed class ManualCopyScreens : IDisposable
             ManualCapture.SaveOverlaid(window, overlay, "data-copy-rules",
             [
                 new(Named<ListBox>(window, "JobList"), 1, 190, 10),
-                new(Named<TextBox>(window, "AddTableBox"), 2),
+                new(Named<AutoCompleteBox>(window, "AddTableBox"), 2),
                 new(Named<ComboBox>(window, "SourceBox"), 3),
                 new(Named<ComboBox>(window, "TargetBox"), 4),
                 new(ByAutomationName<ComboBox>(window, "기간 종류"), 5),

@@ -32,13 +32,21 @@ public partial class DataCopyWindow : Window
         DeleteJobButton.Click += OnDeleteJob;
         JobList.SelectionChanged += OnJobSelected;
         AddTableButton.Click += OnAddTable;
-        AddTableBox.KeyDown += (_, e) =>
+        // Enter 는 자동 완성 칸보다 먼저 받는다(터널): 목록에서 고른 후보가 있으면 그 이름, 아니면 적은 글로 바로 더한다.
+        AddTableBox.AddHandler(KeyDownEvent, (_, e) =>
         {
             if (e.Key == Avalonia.Input.Key.Enter)
             {
+                e.Handled = true;
                 OnAddTable(this, new RoutedEventArgs());
             }
+        }, RoutingStrategies.Tunnel);
+        AddTableBox.AsyncPopulator = async (text, ct) =>
+        {
+            IReadOnlyList<string> found = Vm is { } vm ? await vm.TableCandidatesAsync(text, ct).ConfigureAwait(true) : [];
+            return found;
         };
+        AddTableBox.GotFocus += async (_, _) => await RunUiAsync(ct => Vm?.PrepareTableCandidatesAsync(ct) ?? Task.CompletedTask).ConfigureAwait(true);
         RemoveRuleButton.Click += (_, _) =>
         {
             if (Vm is { Editor.SelectedRule: { } rule } vm)
@@ -60,6 +68,14 @@ public partial class DataCopyWindow : Window
         RetryButton.Click += async (_, _) => await RunUiAsync(ct => Vm!.RetryFailedRowsAsync(ct)).ConfigureAwait(true);
         CsvButton.Click += OnSaveCsv;
         TargetBox.ContainerPrepared += OnTargetContainerPrepared;
+        AddVariableButton.Click += (_, _) =>
+        {
+            if (Vm is { HasJob: true } vm)
+            {
+                vm.Editor.AddVariable();
+                VariablesExpander.IsExpanded = true;
+            }
+        };
         WireRulePanel();
         DataContextChanged += (_, _) => Hook();
         Opened += async (_, _) => await RunUiAsync(ct => Vm?.InitializeAsync(ct) ?? Task.CompletedTask).ConfigureAwait(true);
@@ -137,7 +153,7 @@ public partial class DataCopyWindow : Window
         vm.ConfirmRun = confirmation => Dialogs.ConfirmRunAsync(confirmation);
         _editor = vm.Editor;
         _editor.PropertyChanged += OnEditorChanged;
-        _editor.Rules.CollectionChanged += (_, _) => SyncRulePanel();
+        _editor.Rules.CollectionChanged += (_, _) => SyncRulePanel(); // 변수 칸은 접힌 채로 둔다(머리줄에 변수 수가 보인다)
         SyncRulePanel();
         HookGrids(vm);
     }
@@ -465,15 +481,24 @@ public partial class DataCopyWindow : Window
 
     private async void OnAddTable(object? sender, RoutedEventArgs e)
     {
-        var name = AddTableBox.Text?.Trim();
+        var name = (AddTableBox.IsDropDownOpen && AddTableBox.SelectedItem is string picked ? picked : AddTableBox.Text)?.Trim();
         if (string.IsNullOrEmpty(name) || Vm is not { } vm)
         {
             return;
         }
 
         // 표·계정.표·시노님: 원본 세션으로 실제 계정·표를 풀어 더한다(풀리지 않으면 이유를 상태 줄에 알린다).
+        AddTableBox.IsDropDownOpen = false;
         AddTableBox.Text = string.Empty;
         await RunUiAsync(ct => vm.AddTableInputAsync(name, ct)).ConfigureAwait(true);
+    }
+
+    private void OnRemoveVariable(object? sender, RoutedEventArgs e)
+    {
+        if (Vm is { } vm && (sender as Control)?.DataContext is CopyVariableViewModel variable)
+        {
+            vm.Editor.RemoveVariable(variable);
+        }
     }
 
     private async void OnReenable(object? sender, RoutedEventArgs e)

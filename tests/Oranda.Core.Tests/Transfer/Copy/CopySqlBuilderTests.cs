@@ -326,9 +326,18 @@ public class CopySqlBuilderTests
     [Fact]
     public void Open_period_binds_null_for_named_custom_params_and_skips_period_columns()
     {
-        var b = B([new TableRule("C", RuleKind.Custom, TargetAction.DeleteRangeInsert) { CustomWhere = "D >= :FROM_DT AND X = :FROM_DT2" }],
-                  new ResolvedPeriod(null, null), ("C", Cols(("D", "DATE"))));
+        // :FROM_DT2 는 :FROM_DT 가 아니다(이름 경계). 변수로 두지 않은 이름은 막으므로 작업 변수로 둔다.
+        var rule = new TableRule("C", RuleKind.Custom, TargetAction.DeleteRangeInsert) { CustomWhere = "D >= :FROM_DT AND X = :FROM_DT2" };
+        var job = new CopyJob
+        {
+            Id = "1", Name = "n", Source = new ConnectionRef("s", "SRC"), Target = new ConnectionRef("t", "TGT"),
+            SourceOwner = "SRC", TargetOwner = "TGT", MaskSalt = "AA==", Tables = [rule],
+            Variables = [new CopyVariable("FROM_DT2", CopyVariableType.Text, ["A"])],
+        };
+        var b = new CopySqlBuilder(job, new ResolvedPeriod(null, null),
+            new Dictionary<string, TableInfo> { ["C"] = T("SRC", "C", ("D", "DATE")) }, new Dictionary<string, TableInfo> { ["C"] = T("TGT", "C", ("D", "DATE")) });
         var s = b.SourceSelect("C", ["D"]);
+        Assert.Equal(new BindValue(BindDataType.Varchar2, "A"), s.Binds["FROM_DT2"]);
         Assert.Equal(new BindValue(BindDataType.Date, null), s.Binds["FROM_DT"]);
         Assert.False(s.Binds.ContainsKey("TO_DT"));
 

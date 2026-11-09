@@ -146,10 +146,22 @@ public sealed class CopySqlBuilder(CopyJob job, ResolvedPeriod period,
         if (string.IsNullOrWhiteSpace(where)) return null;
         if (CheckUserCondition(where) is { } problem)
             throw new InvalidOperationException($"{table}: 조건을 쓸 수 없습니다. {problem}");
+        if (CopyVariables.UnknownProblem(where, job.Variables) is { } unknown)
+            throw new InvalidOperationException($"{table}: {unknown}");
         // 기간이 열려 있어도 조건에 이름이 있으면 NULL 로 묶는다(바인드 누락 오류를 막는다).
         if (FromDtRegex.IsMatch(where)) binds["FROM_DT"] = new BindValue(BindDataType.Date, period.TimeFrom);
         if (ToDtRegex.IsMatch(where)) binds["TO_DT"] = new BindValue(BindDataType.Date, period.TimeTo);
-        return $"({where})";
+        string expanded;
+        try
+        {
+            expanded = CopyVariables.Expand(where, job.Variables, binds); // 작업 변수: 값을 바인드하고 여러 값은 목록으로 펼친다
+        }
+        catch (InvalidOperationException ex)
+        {
+            throw new InvalidOperationException($"{table}: {ex.Message}", ex);
+        }
+
+        return $"({expanded})";
     }
 
     /// <summary>

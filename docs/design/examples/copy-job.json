@@ -1,5 +1,5 @@
 {
-  "schemaVersion": 2,
+  "schemaVersion": 3,
   "id": "0123456789abcdef0123456789abcdef",
   "name": "월간 주문 복사",
   "source": {
@@ -103,6 +103,23 @@
       "table": "ORDERS",
       "column": "ID",
       "owner": "DST"
+    }
+  ],
+  "variables": [
+    {
+      "name": "COILS",
+      "type": "Text",
+      "values": [
+        "C2611001",
+        "C2611002"
+      ]
+    },
+    {
+      "name": "MO_NO",
+      "type": "Number",
+      "values": [
+        "42"
+      ]
     }
   ],
   "consistentRead": true,

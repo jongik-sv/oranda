@@ -162,6 +162,45 @@ public sealed class DataCopyRenderTests : IDisposable
     });
 
     [Fact]
+    public Task Job_variables_render_expanded_with_count_usage_and_problems() => HeadlessHost.Run(async () =>
+    {
+        // 작업 변수(코일 목록·MO 하나·잘못된 숫자): 변수 칸이 펼쳐지고 값 수·조건에 쓰는 꼴·문제를 보인다.
+        var h = new DataCopyHarness();
+        var (window, vm) = await OpenWindowAsync(h);
+        try
+        {
+            var job = vm.Editor.BuildJob() with
+            {
+                Variables =
+                [
+                    new CopyVariable("COILS", CopyVariableType.Text, ["C2611001", "C2611002", "C2611003", "C2611004"]),
+                    new CopyVariable("MO_NO", CopyVariableType.Text, ["MO-26-0042"]),
+                    new CopyVariable("MAT_CD", CopyVariableType.Number, ["1001", "ABC"]),
+                ],
+                Tables = [.. vm.Editor.BuildJob().Tables.Select(t => t.Kind == RuleKind.Custom ? t with { CustomWhere = "COIL_NO IN (:COILS) AND MO_NO = :MO_NO" } : t)],
+            };
+            await vm.OpenJobAsync(job);
+            vm.Editor.SelectedRule = vm.Editor.Rules.Single(r => r.Kind == RuleKind.Custom);
+            Settle(window);
+
+            var expander = window.FindControl<Expander>("VariablesExpander")!;
+            Assert.False(expander.IsExpanded); // 변수가 있어도 접힌 채로 연다(머리줄의 변수 수로 안다)
+            expander.IsExpanded = true;
+            Settle(window);
+            Assert.Equal(["4개", "1개", "2개"], vm.Editor.Variables.Select(v => v.CountText));
+            Assert.Equal(["IN (:COILS)", "= :MO_NO", "IN (:MAT_CD)"], vm.Editor.Variables.Select(v => v.UsageText));
+            Assert.Contains("숫자", vm.Editor.Variables[2].Problem, StringComparison.Ordinal);
+            Assert.Contains("숫자", vm.Editor.Validate(), StringComparison.Ordinal); // 잘못된 값은 점검으로 넘어가지 못한다
+            AssertNotClipped(window, "변수");
+            Shots(window, "1-variables");
+        }
+        finally
+        {
+            window.Close();
+        }
+    });
+
+    [Fact]
     public Task Saved_job_shows_period_columns_before_columns_are_read() => HeadlessHost.Run(async () =>
     {
         // 저장된 작업을 열고 「열 정보 읽기」 전: 기간 열 콤보 둘과 형식 칸이 저장된 값을 보인다(빈칸이 아니다).

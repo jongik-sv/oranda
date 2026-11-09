@@ -169,12 +169,16 @@ public sealed class PrecheckStepTests
         Assert.False(vm.CanRun); // 다시 입력 전에는 「복사 실행」이 꺼진다
         Assert.Empty(vm.BuildDecisions().PreConfirmedSql);
 
+        Assert.Equal("TGT", vm.RetypeTargetName); // 입력할 이름을 화면에 그대로 보인다
+        Assert.Contains("「TGT」", vm.RetypeState, StringComparison.Ordinal); // 「복사 실행」이 꺼진 이유
+
         vm.RetypeInput = "ORDERS"; // 테이블 이름은 확인이 아니다
         Assert.False(vm.CanRun);
         Assert.Empty(vm.BuildDecisions().PreConfirmedSql);
 
-        vm.RetypeInput = "TGT"; // 대상 접속 이름 한 번으로 목록 전체를 확인한다
+        vm.RetypeInput = " tgt "; // 대상 접속 이름 한 번으로 목록 전체를 확인한다(대소문자·앞뒤 공백 무시)
         Assert.True(vm.CanRun);
+        Assert.StartsWith("확인했습니다", vm.RetypeState, StringComparison.Ordinal);
         Assert.Equal(new[] { DropA, DropB }.Order(), vm.BuildDecisions().PreConfirmedSql.Order());
     }
 

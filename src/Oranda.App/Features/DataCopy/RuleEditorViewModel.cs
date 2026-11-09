@@ -401,9 +401,28 @@ public sealed partial class RuleEditorViewModel : ViewModelBase
         }
 
         SelectedRule = Rules.FirstOrDefault();
+        Variables.Clear();
+        foreach (var variable in job.Variables)
+        {
+            Variables.Add(new CopyVariableViewModel(variable));
+        }
+
         Notice = notice;
         OnPropertyChanged(nameof(PeriodText));
     }
+
+    /// <summary>작업 변수(조건에서 <c>:이름</c> 으로 쓴다).</summary>
+    public ObservableCollection<CopyVariableViewModel> Variables { get; } = [];
+
+    /// <summary>빈 변수 한 줄을 더한다.</summary>
+    public CopyVariableViewModel AddVariable()
+    {
+        var variable = new CopyVariableViewModel();
+        Variables.Add(variable);
+        return variable;
+    }
+
+    public void RemoveVariable(CopyVariableViewModel variable) => Variables.Remove(variable);
 
     /// <summary>화면에 없는 필드(마지막 실행·식별자 등)의 기준 작업을 바꾼다. 실행·이름 바꾸기 뒤 옛 값으로 덮어쓰지 않게 한다.</summary>
     /// <remarks>
@@ -478,6 +497,7 @@ public sealed partial class RuleEditorViewModel : ViewModelBase
             Period = Period,
             Tables = tables,
             Sequences = sequences,
+            Variables = [.. Variables.Select(v => v.ToVariable())],
             Options = new CopyOptions
             {
                 BatchSize = BatchSize,
@@ -541,6 +561,29 @@ public sealed partial class RuleEditorViewModel : ViewModelBase
         if (Rules.FirstOrDefault(r => r.Kind != RuleKind.Exclude && r.HasConditionError) is { } invalid)
         {
             return DataCopyText.InvalidCondition(invalid.Table, invalid.ConditionError!);
+        }
+
+        // 작업 변수: 이름·값이 바르고, 조건에 쓴 :이름 이 모두 변수(또는 :FROM_DT·:TO_DT)여야 한다.
+        if (job is not null)
+        {
+            if (CopyVariables.Problems(job.Variables) is { Count: > 0 } variableProblems)
+            {
+                return variableProblems[0];
+            }
+
+            foreach (var rule in job.Tables.Where(r => r.Kind != RuleKind.Exclude))
+            {
+                var where = rule.Kind switch
+                {
+                    RuleKind.Custom => rule.CustomWhere,
+                    RuleKind.Period => rule.ExtraWhere,
+                    _ => null,
+                };
+                if (!string.IsNullOrWhiteSpace(where) && CopyVariables.UnknownProblem(where, job.Variables) is { } unknown)
+                {
+                    return DataCopyText.InvalidCondition(rule.Table, unknown);
+                }
+            }
         }
 
         return Rules.Any(r => r.Kind != RuleKind.Exclude) ? null : DataCopyText.NoTables;

@@ -5,10 +5,12 @@ namespace Oranda.Core.Transfer.Copy;
 /// <summary>
 /// 작업 파일 스키마 버전. 파일의 <c>schemaVersion</c> 이 이보다 크면 읽기 전용으로 연다.
 /// 2 = 규칙마다 원본·대상 계정(묶음 B). 1 → 2 변환은 <see cref="CopyJobMigrationV1"/>.
+/// 3 = 작업 변수(<see cref="CopyJob.Variables"/>). 2 → 3 은 바꿀 것이 없다(<see cref="CopyJobMigrationV2"/>). 버전을 올리는 까닭: 예전 앱이 변수를 버린 채
+/// 조건의 <c>:이름</c> 을 실행하지 않게(읽기 전용으로 열게) 한다.
 /// </summary>
 public static class CopyJobSchema
 {
-    public const int Current = 2;
+    public const int Current = 3;
 }
 
 /// <summary>접속 간 데이터 복사 작업 한 건. 비밀번호는 담지 않는다(설계 6.1).</summary>
@@ -26,6 +28,9 @@ public sealed record CopyJob
     public CopyOptions Options { get; init; } = new();
     public IReadOnlyList<SequenceRule> Sequences { get; init; } = [];
 
+    /// <summary>조건(직접 조건·추가 조건)에서 <c>:이름</c> 으로 쓰는 작업 변수(<see cref="CopyVariables"/>).</summary>
+    public IReadOnlyList<CopyVariable> Variables { get; init; } = [];
+
     /// <summary>설계 8.1 「같은 시점 기준으로 읽기」.</summary>
     public bool ConsistentRead { get; init; } = true;
 
@@ -36,6 +41,14 @@ public sealed record CopyJob
 }
 
 public sealed record ConnectionRef(string Name, string User, Guid? IdHint = null);
+
+public enum CopyVariableType { Text, Number, Date }
+
+/// <summary>
+/// 작업 변수 하나. 값이 하나면 <c>:이름</c> 그대로 바인드하고, 여럿이면 목록으로 펼친다(<c>IN (:이름)</c> 으로 쓴다, <see cref="CopyVariables.Expand"/>).
+/// 값은 적은 글 그대로 둔다(숫자는 <c>123.4</c>, 날짜는 <c>yyyy-MM-dd</c> 또는 <c>yyyy-MM-dd HH:mm:ss</c>).
+/// </summary>
+public sealed record CopyVariable(string Name, CopyVariableType Type, IReadOnlyList<string> Values);
 
 public enum PeriodKind { None, LastWeek, LastMonth, Last3Months, PreviousMonth, Custom }
 

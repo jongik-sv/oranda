@@ -122,6 +122,47 @@ public sealed class CopyOwnersUiTests
     }
 
     [Fact]
+    public async Task Table_input_suggests_source_tables_and_synonyms_without_prompting_while_typing()
+    {
+        var h = new DataCopyHarness();
+        h.Metadata.Objects.AddRange(
+        [
+            new DbObjectRef("APP", "ORDERS", "TABLE"),
+            new DbObjectRef("APP", "ORDER_ITEMS", "TABLE"),
+            new DbObjectRef("APP", "CUSTOMER_ORDERS", "SYNONYM"),
+            new DbObjectRef("APP", "ORDERS_V", "VIEW"),
+            new DbObjectRef("APP2", "ORDERS", "TABLE"),
+        ]);
+        var vm = await h.OpenAsync(TestJobs.Job("자동 완성"));
+
+        Assert.Empty(await vm.TableCandidatesAsync("ord")); // 원본 세션이 없으면 찾지 않는다(키 입력 중에 비밀번호를 묻지 않는다)
+        Assert.Empty(h.Opened);
+
+        await vm.PrepareTableCandidatesAsync(); // 입력 칸에 들어갈 때 한 번 연다
+        Assert.True(Assert.Single(h.Opened).ReadOnly);
+
+        Assert.Equal(["ORDERS", "ORDER_ITEMS", "CUSTOMER_ORDERS"], await vm.TableCandidatesAsync("ord")); // 앞이 같은 것 먼저, 뷰는 빼고
+        Assert.Equal(["APP2.ORDERS"], await vm.TableCandidatesAsync("app2.or"));
+        Assert.Empty(await vm.TableCandidatesAsync("zzz"));
+
+        await vm.PrepareTableCandidatesAsync(); // 이미 열렸으면 다시 열지 않는다
+        Assert.Single(h.Opened);
+    }
+
+    [Fact]
+    public async Task Cancelled_password_is_not_asked_again_on_every_focus()
+    {
+        var h = new DataCopyHarness { RefuseOpen = _ => true };
+        var vm = await h.OpenAsync(TestJobs.Job("취소"));
+
+        await vm.PrepareTableCandidatesAsync();
+        await vm.PrepareTableCandidatesAsync();
+
+        Assert.Single(h.Opened); // 연 시도는 한 번
+        Assert.Empty(await vm.TableCandidatesAsync("ORD"));
+    }
+
+    [Fact]
     public async Task Unresolvable_names_and_db_link_synonyms_are_not_added()
     {
         var h = new DataCopyHarness();

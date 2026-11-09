@@ -192,8 +192,16 @@ public sealed partial class PrecheckViewModel(DataCopyServices services) : ViewM
 
     /// <summary>DROP 문장을 확인하려고 다시 입력한 대상 접속 이름(목록 전체에 대한 확인 하나).</summary>
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(CanRun), nameof(RetypeSatisfied))]
+    [NotifyPropertyChangedFor(nameof(CanRun), nameof(RetypeSatisfied), nameof(RetypeState))]
     private string _retypeInput = string.Empty;
+
+    /// <summary>다시 입력할 대상 접속 이름(안내 글·입력 칸 흐린 글자에 보인다).</summary>
+    public string RetypeTargetName => _targetName;
+
+    /// <summary>다시 입력 칸 옆의 상태 글: 아직 안 맞으면 「복사 실행」이 꺼진 이유, 맞으면 확인됨.</summary>
+    public string RetypeState => !NeedsRetype ? string.Empty
+        : IsRetypeMatch() ? "확인했습니다. 「복사 실행」을 누를 수 있습니다."
+        : $"「{_targetName}」 을(를) 입력하기 전에는 「복사 실행」을 누를 수 없습니다.";
 
     /// <summary>점검 결과 그리드에서 고른 항목(아래 상세 칸이 문장 전체와 고를 거리를 보인다).</summary>
     [ObservableProperty]
@@ -231,9 +239,10 @@ public sealed partial class PrecheckViewModel(DataCopyServices services) : ViewM
     /// <summary>
     /// 다시 입력하는 글자는 대상 접속 이름이다(설계 6.2.3: 한 번 입력하면 지울 테이블 목록 전체를 확인한 것으로 본다).
     /// 정책이 문장마다 내는 <c>RetypeText</c>(지울 테이블 이름)는 「다시 입력이 필요하다」는 표시로만 쓴다.
+    /// 대소문자·앞뒤 공백은 가리지 않는다(SQL 실행 확인 창 <c>ExecutionDialogs.CanAccept</c> 와 같다).
     /// </summary>
     private bool IsRetypeMatch() =>
-        !string.IsNullOrEmpty(_targetName) && string.Equals(_targetName, RetypeInput.Trim(), StringComparison.Ordinal);
+        !string.IsNullOrEmpty(_targetName) && string.Equals(_targetName.Trim(), RetypeInput.Trim(), StringComparison.OrdinalIgnoreCase);
 
     private string _targetName = string.Empty;
 
@@ -281,6 +290,7 @@ public sealed partial class PrecheckViewModel(DataCopyServices services) : ViewM
         // 새 점검을 시작하면 이전 결과는 실행에 쓸 수 없다(점검이 실패·취소돼도 옛 결과로 실행하지 않는다).
         ClearResult();
         _targetName = sessions.Target.Profile.Name;
+        OnPropertyChanged(nameof(RetypeTargetName));
         using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
         _cts = cts;
         IsRunning = true;
@@ -336,6 +346,7 @@ public sealed partial class PrecheckViewModel(DataCopyServices services) : ViewM
         OnPropertyChanged(nameof(HasDenied));
         OnPropertyChanged(nameof(NeedsRetype));
         OnPropertyChanged(nameof(RetypeSatisfied));
+        OnPropertyChanged(nameof(RetypeState));
         OnPropertyChanged(nameof(CanRun));
         OnPropertyChanged(nameof(ScriptText));
     }
@@ -410,6 +421,7 @@ public sealed partial class PrecheckViewModel(DataCopyServices services) : ViewM
         OnPropertyChanged(nameof(HasDenied));
         OnPropertyChanged(nameof(NeedsRetype));
         OnPropertyChanged(nameof(RetypeSatisfied));
+        OnPropertyChanged(nameof(RetypeState));
         OnPropertyChanged(nameof(CanRun));
         OnPropertyChanged(nameof(ScriptText));
     }

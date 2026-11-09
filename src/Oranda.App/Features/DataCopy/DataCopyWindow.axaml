@@ -63,6 +63,11 @@
     </Style>
     <!-- 촘촘한 체크 상자(Fluent 기본 32 → 22). -->
     <Style Selector="CheckBox.compact"><Setter Property="MinHeight" Value="0" /></Style>
+    <!-- 테이블 입력 자동 완성 칸: 안쪽 글 칸을 TextBox.compact 높이에 맞춘다. -->
+    <Style Selector="AutoCompleteBox.compact /template/ TextBox#PART_TextBox">
+      <Setter Property="MinHeight" Value="24" />
+      <Setter Property="Padding" Value="6,3" />
+    </Style>
     <Style Selector="CheckBox.compact /template/ Grid#RootGrid > Grid"><Setter Property="Height" Value="22" /></Style>
   </Window.Styles>
   <DockPanel>
@@ -149,13 +154,16 @@
 
       <!-- 단계 화면 -->
       <DockPanel Grid.Column="2">
-        <!-- 단계 표시줄: ① 규칙 편집 › ② 사전 점검 › ③ 실행·검증, 오른쪽에 작업 이름 -->
+        <!-- 작업 이름: 세 단계 모두 이 작업의 일이므로 단계 표시줄보다 위에 둔다. -->
+        <Border DockPanel.Dock="Top" Padding="8,6,8,4" IsVisible="{Binding HasJob}">
+          <Grid ColumnDefinitions="Auto,320,*" ColumnSpacing="8" Classes="form" DataContext="{Binding Editor}" x:DataType="dc:RuleEditorViewModel">
+            <TextBlock Text="작업 이름" />
+            <TextBox x:Name="JobNameBox" Grid.Column="1" Classes="compact" Text="{Binding Name}" FontWeight="SemiBold" AutomationProperties.Name="작업 이름" />
+          </Grid>
+        </Border>
+        <!-- 단계 표시줄: ① 규칙 편집 › ② 사전 점검 › ③ 실행·검증 -->
         <Border DockPanel.Dock="Top" Classes="panel-toolbar" Padding="6,2">
           <DockPanel>
-            <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" Spacing="6" IsVisible="{Binding HasJob}" Margin="12,0,4,0">
-              <ContentControl Content="{Binding Source='table', Converter={x:Static icons:IconKeyConverter.Instance}, ConverterParameter=14}" VerticalAlignment="Center" />
-              <TextBlock Text="{Binding Editor.Name}" FontWeight="SemiBold" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" MaxWidth="320" />
-            </StackPanel>
             <StackPanel Orientation="Horizontal" Spacing="6">
               <Border Classes="step" Classes.current="{Binding IsRuleEdit}">
                 <StackPanel Orientation="Horizontal" Spacing="6">
@@ -216,27 +224,8 @@
               <Button x:Name="ToPrecheckButton" DockPanel.Dock="Right" Classes="accent" Content="사전 점검 ›" IsEnabled="{Binding CanGoToPrecheck}"
                       Padding="14,0" MinHeight="24" Margin="0,1,2,1"
                       ToolTip.Tip="작업을 저장하고 원본·대상 세션을 열어 사전 점검을 시작합니다" />
-              <StackPanel Orientation="Horizontal" Spacing="1" DataContext="{Binding Editor}" x:DataType="dc:RuleEditorViewModel">
-                <TextBox x:Name="AddTableBox" Classes="compact search" Width="220" MinHeight="24" PlaceholderText="테이블 이름 입력 후 Enter"
-                         AutomationProperties.Name="추가할 테이블 이름"
-                         ToolTip.Tip="테이블 또는 계정.테이블. 시노님을 적으면 원본에서 실제 계정·테이블로 풀어 더합니다.">
-                  <TextBox.InnerLeftContent>
-                    <ContentControl Content="{Binding Source='table', Converter={x:Static icons:IconKeyConverter.Instance}, ConverterParameter=14}" VerticalAlignment="Center" />
-                  </TextBox.InnerLeftContent>
-                </TextBox>
-                <Button x:Name="AddTableButton" Classes="toolbar" Focusable="False" Content="테이블 추가" icons:ButtonIcon.Key="rowAdd" icons:ButtonIcon.IconOnly="True"
-                        ToolTip.Tip="테이블 규칙 추가 (Enter)" />
-                <Button x:Name="RemoveRuleButton" Classes="toolbar" Focusable="False" Content="규칙 제거" icons:ButtonIcon.Key="rowDelete" icons:ButtonIcon.IconOnly="True"
-                        ToolTip.Tip="선택한 규칙 제거 (Delete)" IsEnabled="{Binding SelectedRule, Converter={x:Static ObjectConverters.IsNotNull}}" />
-                <Separator Classes="toolbar" />
-                <Button x:Name="MoveRuleUpButton" Classes="toolbar" Focusable="False" Content="위로" icons:ButtonIcon.Key="up" icons:ButtonIcon.IconOnly="True"
-                        ToolTip.Tip="선택한 규칙을 위로(처리 순서는 사전 점검이 FK 로 정합니다)" IsEnabled="{Binding SelectedRule, Converter={x:Static ObjectConverters.IsNotNull}}" />
-                <Button x:Name="MoveRuleDownButton" Classes="toolbar" Focusable="False" Content="아래로" icons:ButtonIcon.Key="down" icons:ButtonIcon.IconOnly="True"
-                        ToolTip.Tip="선택한 규칙을 아래로(처리 순서는 사전 점검이 FK 로 정합니다)" IsEnabled="{Binding SelectedRule, Converter={x:Static ObjectConverters.IsNotNull}}" />
-                <Separator Classes="toolbar" />
-                <Button x:Name="ReadColumnsToolButton" Classes="toolbar" Focusable="False" Content="열 정보 읽기" icons:ButtonIcon.Key="columns" icons:ButtonIcon.IconOnly="True"
-                        ToolTip.Tip="선택한 테이블의 열 정보를 원본에서 읽기" IsEnabled="{Binding SelectedRule, Converter={x:Static ObjectConverters.IsNotNull}}" />
-              </StackPanel>
+              <TextBlock Text="원본·대상을 고르고 아래 테이블 규칙에 테이블을 더한 뒤 사전 점검으로 넘어갑니다." VerticalAlignment="Center" Margin="6,0"
+                         Classes="dim" FontSize="{DynamicResource OrandaFontSizeSmall}" TextTrimming="CharacterEllipsis" />
             </DockPanel>
           </Border>
 
@@ -251,12 +240,8 @@
           </Border>
 
           <DockPanel IsEnabled="{Binding HasJob}">
-            <!-- 작업 설정: 작업 이름 줄 + 원본 | 대상 | 범위·실행 묶음 -->
+            <!-- 작업 설정: 원본 | 대상 | 범위·실행 묶음 -->
             <StackPanel DockPanel.Dock="Top" Spacing="6" Margin="8,6,8,0" DataContext="{Binding Editor}" x:DataType="dc:RuleEditorViewModel">
-              <Grid ColumnDefinitions="Auto,280,*" ColumnSpacing="8" Classes="form">
-                <TextBlock Text="작업 이름" />
-                <TextBox Grid.Column="1" Classes="compact" Text="{Binding Name}" AutomationProperties.Name="작업 이름" />
-              </Grid>
               <Grid ColumnDefinitions="*,8,*,8,1.3*">
                 <!-- 원본 -->
                 <Border Classes="group">
@@ -365,6 +350,53 @@
                 </Border>
               </Grid>
 
+              <!-- 작업 변수: 조건에서 :이름 으로 쓴다(값 여러 개면 IN (:이름)). -->
+              <Expander x:Name="VariablesExpander" Padding="8,4" HorizontalAlignment="Stretch" AutomationProperties.Name="변수">
+                <Expander.Header>
+                  <StackPanel Orientation="Horizontal" Spacing="6">
+                    <ContentControl Content="{Binding Source='binds', Converter={x:Static icons:IconKeyConverter.Instance}, ConverterParameter=14}" VerticalAlignment="Center" />
+                    <TextBlock Classes="section-label" Text="변수" VerticalAlignment="Center" />
+                    <TextBlock Text="{Binding Variables.Count, StringFormat='({0})'}" Classes="dim" VerticalAlignment="Center" />
+                    <TextBlock Text="직접 조건·추가 조건에서 :이름 으로 씁니다. 값이 여러 개면 IN (:이름) 으로 씁니다." Classes="dim"
+                               FontSize="{DynamicResource OrandaFontSizeSmall}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
+                  </StackPanel>
+                </Expander.Header>
+                <StackPanel Spacing="4">
+                  <ItemsControl ItemsSource="{Binding Variables}">
+                    <ItemsControl.ItemTemplate>
+                      <DataTemplate x:DataType="dc:CopyVariableViewModel">
+                        <Grid ColumnDefinitions="150,80,*,120,Auto" ColumnSpacing="6" Margin="0,2">
+                          <TextBox Classes="compact" Text="{Binding Name}" PlaceholderText="이름(예: COILS)" VerticalAlignment="Top"
+                                   FontFamily="{DynamicResource OrandaGridFontFamily}" AutomationProperties.Name="변수 이름" />
+                          <ComboBox Grid.Column="1" Classes="compact" ItemsSource="{x:Static dc:VariableTypeOption.All}" SelectedItem="{Binding TypeOption}" HorizontalAlignment="Stretch"
+                                    VerticalAlignment="Top" AutomationProperties.Name="변수 형식">
+                            <ComboBox.ItemTemplate>
+                              <DataTemplate x:DataType="dc:VariableTypeOption"><TextBlock Text="{Binding Display}" /></DataTemplate>
+                            </ComboBox.ItemTemplate>
+                          </ComboBox>
+                          <StackPanel Grid.Column="2" Spacing="2">
+                            <TextBox Classes="compact" Text="{Binding ValuesText}" AcceptsReturn="True" TextWrapping="Wrap" MinHeight="26" MaxHeight="96"
+                                     FontFamily="{DynamicResource OrandaGridFontFamily}" PlaceholderText="값(여러 개면 줄바꿈·쉼표로 나눔, 엑셀 열 붙여넣기 가능)"
+                                     ScrollViewer.VerticalScrollBarVisibility="Auto" AutomationProperties.Name="변수 값" />
+                            <TextBlock Text="{Binding Problem}" IsVisible="{Binding HasProblem}" Classes="danger-text" TextWrapping="Wrap"
+                                       FontSize="{DynamicResource OrandaFontSizeSmall}" AutomationProperties.Name="변수 오류" />
+                          </StackPanel>
+                          <StackPanel Grid.Column="3" Spacing="0" VerticalAlignment="Top" Margin="0,4,0,0">
+                            <TextBlock Text="{Binding CountText}" Classes="dim" FontSize="{DynamicResource OrandaFontSizeSmall}" />
+                            <TextBlock Text="{Binding UsageText}" Classes="mono" FontSize="{DynamicResource OrandaFontSizeSmall}" TextTrimming="CharacterEllipsis"
+                                       ToolTip.Tip="조건에 이렇게 씁니다" />
+                          </StackPanel>
+                          <Button Grid.Column="4" Classes="toolbar" Content="변수 빼기" icons:ButtonIcon.Key="remove" icons:ButtonIcon.IconOnly="True"
+                                  VerticalAlignment="Top" ToolTip.Tip="이 변수 빼기" Click="OnRemoveVariable" />
+                        </Grid>
+                      </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                  </ItemsControl>
+                  <Button x:Name="AddVariableButton" Classes="tool" Content="변수 더하기" icons:ButtonIcon.Key="add" HorizontalAlignment="Left"
+                          ToolTip.Tip="코일·주문번호·MO·자재코드처럼 조건에 넣을 값을 변수로 둡니다" />
+                </StackPanel>
+              </Expander>
+
               <TextBlock Text="{Binding Notice}" TextWrapping="Wrap" Classes="error" IsVisible="{Binding Notice, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
               <StackPanel Orientation="Horizontal" Spacing="6" IsVisible="{Binding HasTargetReadOnlyNotice}">
                 <ContentControl Content="{Binding Source='error', Converter={x:Static icons:IconKeyConverter.Instance}, ConverterParameter=14}" VerticalAlignment="Center" />
@@ -382,7 +414,28 @@
                 <ColumnDefinition Width="2*" MinWidth="320" MaxWidth="420" />
               </Grid.ColumnDefinitions>
               <DockPanel>
-                <TextBlock DockPanel.Dock="Top" Classes="section-label" Text="테이블 규칙" Margin="0,0,0,3" />
+                <!-- 테이블 규칙 머리줄: 이름 + 테이블 입력(원본의 표·시노님 자동 완성) + 규칙 단추. 원본을 고른 뒤에 쓰므로 원본 설정 아래에 둔다. -->
+                <DockPanel DockPanel.Dock="Top" Margin="0,0,0,3">
+                  <TextBlock DockPanel.Dock="Left" Classes="section-label" Text="테이블 규칙" VerticalAlignment="Center" Margin="0,0,8,0" />
+                  <StackPanel Orientation="Horizontal" Spacing="1">
+                    <AutoCompleteBox x:Name="AddTableBox" Classes="compact" Width="240" PlaceholderText="테이블 이름 입력 후 Enter"
+                                     MinimumPrefixLength="1" MinimumPopulateDelay="0:0:0.15" FilterMode="None" MaxDropDownHeight="320"
+                                     AutomationProperties.Name="추가할 테이블 이름"
+                                     ToolTip.Tip="테이블 또는 계정.테이블. 원본의 테이블·시노님을 이름으로 찾아 보여 줍니다. 시노님은 원본에서 실제 계정·테이블로 풀어 더합니다." />
+                    <Button x:Name="AddTableButton" Classes="toolbar" Focusable="False" Content="테이블 추가" icons:ButtonIcon.Key="rowAdd" icons:ButtonIcon.IconOnly="True"
+                            ToolTip.Tip="테이블 규칙 추가 (Enter)" />
+                    <Button x:Name="RemoveRuleButton" Classes="toolbar" Focusable="False" Content="규칙 제거" icons:ButtonIcon.Key="rowDelete" icons:ButtonIcon.IconOnly="True"
+                            ToolTip.Tip="선택한 규칙 제거 (Delete)" IsEnabled="{Binding SelectedRule, Converter={x:Static ObjectConverters.IsNotNull}}" />
+                    <Separator Classes="toolbar" />
+                    <Button x:Name="MoveRuleUpButton" Classes="toolbar" Focusable="False" Content="위로" icons:ButtonIcon.Key="up" icons:ButtonIcon.IconOnly="True"
+                            ToolTip.Tip="선택한 규칙을 위로(처리 순서는 사전 점검이 FK 로 정합니다)" IsEnabled="{Binding SelectedRule, Converter={x:Static ObjectConverters.IsNotNull}}" />
+                    <Button x:Name="MoveRuleDownButton" Classes="toolbar" Focusable="False" Content="아래로" icons:ButtonIcon.Key="down" icons:ButtonIcon.IconOnly="True"
+                            ToolTip.Tip="선택한 규칙을 아래로(처리 순서는 사전 점검이 FK 로 정합니다)" IsEnabled="{Binding SelectedRule, Converter={x:Static ObjectConverters.IsNotNull}}" />
+                    <Separator Classes="toolbar" />
+                    <Button x:Name="ReadColumnsToolButton" Classes="toolbar" Focusable="False" Content="열 정보 읽기" icons:ButtonIcon.Key="columns" icons:ButtonIcon.IconOnly="True"
+                            ToolTip.Tip="선택한 테이블의 열 정보를 원본에서 읽기" IsEnabled="{Binding SelectedRule, Converter={x:Static ObjectConverters.IsNotNull}}" />
+                  </StackPanel>
+                </DockPanel>
                 <Border Classes="grid-frame">
                   <!-- 조회 결과와 같은 그리드(MonitorGrid). 행은 코드(MonitorGridBinder)가 Rules 에서 채운다. -->
                   <sm:MonitorGrid x:Name="RuleGrid" AutomationProperties.Name="테이블 규칙" />
@@ -583,10 +636,18 @@
             </DockPanel>
           </Border>
           <Border DockPanel.Dock="Bottom" Classes="panel-status" IsVisible="{Binding Precheck.NeedsRetype}">
-            <StackPanel Orientation="Horizontal" Spacing="8">
-              <TextBlock Text="테이블을 지우는 문장이 있습니다. 대상 접속 이름을 다시 입력하면 목록 전체를 확인한 것으로 봅니다." VerticalAlignment="Center" />
-              <TextBox Classes="compact" Width="220" Text="{Binding Precheck.RetypeInput}" AutomationProperties.Name="대상 접속 이름 다시 입력" />
-            </StackPanel>
+            <!-- 테이블 다시 만들기 등 DROP 이 있으면: 입력할 대상 접속 이름을 그대로 보이고, 안 맞으면 「복사 실행」이 꺼진 이유를 옆에 보인다. -->
+            <WrapPanel Orientation="Horizontal">
+              <TextBlock VerticalAlignment="Center" Margin="0,0,8,0" TextWrapping="Wrap">
+                <Run Text="테이블을 지우는(DROP) 문장이 있습니다. 대상 접속 이름" />
+                <Run Text="{Binding Precheck.RetypeTargetName, StringFormat='「{0}」'}" FontWeight="SemiBold" />
+                <Run Text="을(를) 입력하면 목록 전체를 확인한 것으로 봅니다." />
+              </TextBlock>
+              <TextBox x:Name="RetypeBox" Classes="compact" Width="220" Text="{Binding Precheck.RetypeInput}" PlaceholderText="{Binding Precheck.RetypeTargetName}"
+                       AutomationProperties.Name="대상 접속 이름 다시 입력" Margin="0,0,8,0" />
+              <TextBlock x:Name="RetypeStateText" Text="{Binding Precheck.RetypeState}" VerticalAlignment="Center" FontWeight="SemiBold"
+                         Classes.warning-text="{Binding !Precheck.RetypeSatisfied}" AutomationProperties.Name="다시 입력 상태" />
+            </WrapPanel>
           </Border>
           <Grid ColumnDefinitions="*,4,*" Margin="8,6,8,8">
             <!-- 점검 결과: 그리드 + 고른 항목 상세(문장 전체·고를 거리) -->
