@@ -95,6 +95,7 @@ public sealed partial class TableFinderViewModel : ObservableObject
     private readonly Func<string, string, bool> _isAdded;
     private readonly Dictionary<string, IReadOnlyList<TableFinderSource>> _byOwner = new(CopyOwners.OwnerComparer);
     private readonly Dictionary<string, TableFinderSource> _picked = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, string> _loadErrors = new(CopyOwners.OwnerComparer);
     private CancellationTokenSource? _loading;
 
     /// <param name="owners">계정 목록(콤보).</param>
@@ -205,6 +206,7 @@ public sealed partial class TableFinderViewModel : ObservableObject
         {
             var items = await _load(owner, cts.Token).ConfigureAwait(true);
             _byOwner[owner] = [.. items.OrderBy(i => i.Name, StringComparer.Ordinal)];
+            _loadErrors.Remove(owner);
         }
         catch (OperationCanceledException)
         {
@@ -213,6 +215,7 @@ public sealed partial class TableFinderViewModel : ObservableObject
         catch (Exception e)
         {
             _byOwner.Remove(owner);
+            _loadErrors[owner] = $"{owner} 계정의 표를 읽지 못했습니다: {e.Message}";
             if (ReferenceEquals(cts, _loading))
             {
                 IsLoading = false;
@@ -239,7 +242,8 @@ public sealed partial class TableFinderViewModel : ObservableObject
         if (IsLoading || !_byOwner.TryGetValue(owner, out var all))
         {
             SummaryText = $"{owner} 계정";
-            EmptyText = IsLoading ? "표 목록을 읽는 중…" : string.Empty;
+            // 읽기에 실패한 계정은 검색 값을 바꿔도 이유를 계속 보인다(계정을 다시 고르면 다시 읽는다).
+            EmptyText = IsLoading ? "표 목록을 읽는 중…" : _loadErrors.GetValueOrDefault(owner) ?? string.Empty;
             NotifyRows();
             return;
         }
