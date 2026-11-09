@@ -66,7 +66,7 @@ internal sealed partial class CopyPrecheckService(IBulkExecutionService bulk, IM
     private const string ColumnPrivilegeCountSql = "SELECT COUNT(*) FROM all_col_privs WHERE table_schema = :OWN AND table_name = :TBL";
 
     private const string OtherGrantorCountSql =
-        "SELECT COUNT(*) FROM all_tab_privs WHERE table_schema = :OWN AND table_name = :TBL AND grantor <> :OWN AND type = 'TABLE'";
+        "SELECT COUNT(*) FROM all_tab_privs WHERE table_schema = :OWN AND table_name = :TBL AND grantor <> :OWN"; // TYPE 열은 12c 부터(11.2 에 없다)
 
     private const string MviewLogCountSql = "SELECT COUNT(*) FROM all_mview_logs WHERE log_owner = :OWN AND master = :TBL";
 

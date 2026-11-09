@@ -47,9 +47,10 @@ internal sealed class RecreateStep
 
     private const string TriggerDdlSql = "SELECT DBMS_METADATA.GET_DDL('TRIGGER', :NAME, :OWN) FROM DUAL";
 
+    // ALL_TAB_PRIVS 의 TYPE 열은 12c 부터 있다(11.2 는 ORA-00904). 한 계정 안에서 표 이름은 다른 객체와 겹치지 않으므로 이름으로만 거른다.
     private const string GrantsSql =
         "SELECT grantee, privilege, grantable FROM all_tab_privs"
-        + " WHERE table_schema = :OWN AND table_name = :TBL AND grantor = :OWN AND type = 'TABLE'"
+        + " WHERE table_schema = :OWN AND table_name = :TBL AND grantor = :OWN"
         + " ORDER BY grantee, privilege";
 
     /// <summary>이 표의 PK·UK 를 참조하는 다른 표의 FK(자기 참조 제외). 열은 위치 순서.</summary>
