@@ -1,3 +1,4 @@
+using Oranda.Core.Connection;
 using Oranda.Core.Grid;
 using Oranda.Core.Plans;
 
@@ -12,10 +13,16 @@ public enum ExecutionStatus
     Denied,
 }
 
-/// <summary>서버 오류(ORA-nnnnn). <see cref="Offset"/> 은 문장 본문 안 0부터 위치.</summary>
+/// <summary>
+/// 서버 오류. <see cref="Code"/> 는 DBMS 원문 코드(<c>ORA-01013</c>·<c>TBR-17001</c>) 또는 앱 자체 오류 코드(<c>ORANDA-*</c>).
+/// <see cref="Offset"/> 은 문장 본문 안 0부터 위치. 의미 판단은 번호 대신 <see cref="Kind"/> 로 한다(D-046).
+/// </summary>
 public sealed record DbError(string Code, string Message)
 {
-    /// <summary>ORA 번호(예: 942). 서버 오류가 아니면 0.</summary>
+    /// <summary>
+    /// DBMS 원문 오류 번호 — 드라이버가 준 값 그대로(부호 포함, 예: ORA-00942 → 942). 서버 오류가 아니면 0.
+    /// 사람이 보는 표기는 <see cref="Code"/> 다.
+    /// </summary>
     public int Number { get; init; }
 
     public int? Offset { get; init; }
@@ -23,6 +30,12 @@ public sealed record DbError(string Code, string Message)
     public int? Line { get; init; }
 
     public int? Column { get; init; }
+
+    /// <summary><see cref="Code"/>·<see cref="Number"/> 를 낸 DBMS. 앱 자체 오류는 기본값(Oracle) 그대로 둔다.</summary>
+    public Dbms Dbms { get; init; } = Dbms.Oracle;
+
+    /// <summary>의미 분류(<see cref="IDbErrorClassifier"/> 가 채움). 채우지 않으면 <see cref="DbErrorKind.Other"/>.</summary>
+    public DbErrorKind Kind { get; init; } = DbErrorKind.Other;
 }
 
 /// <summary>문장 1개의 실행 결과. 질의면 <see cref="ResultSet"/> 이 있고 호출자가 Dispose 한다.</summary>

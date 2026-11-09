@@ -146,6 +146,7 @@
 | `credentialRef` | string | ○ | null | `ICredentialStore` 키. **null = 「저장 안 함」**(접속 때마다 묻기, SAFE-06). 형식은 5.1 |
 | `lastConnectedAt` | DateTimeOffset | ○ | null | 접속에 성공할 때 적는다. 시작 화면 「최근 접속」, 접속 관리자 목록의 마지막 접속 시각·「최근 접속순」 정렬(CONN-14). 접속 시험(CONN-15)과 복제는 적지 않는다 |
 | `comment` | string | ○ | null(없음) | 사람이 적는 설명(여러 줄, 앞뒤 공백만 뺀다). 접속 관리자 목록 줄 도움말·보조 글·찾기에 쓰인다. 복제는 그대로 옮긴다 (TSK-13-12) |
+| `dbms` | `Dbms` = `Oracle`\|`Tibero` | ○ | `Oracle` | 접속 대상 DBMS(D-046, docs/design/tibero.md). 세션의 공급자·카탈로그 파일·오류 분류를 이 값으로 고른다. 키가 없는 옛 파일은 `Oracle` 로 읽는다. 내보내기·복제는 그대로 옮긴다 |
 
 검증(저장·읽기 때 둘 다):
 
@@ -691,7 +692,11 @@ public sealed record ConnectionProfile(
     string? ProxyUser = null,
     string? Color = null,
     string? Group = null,
-    DateTimeOffset? LastConnectedAt = null);
+    DateTimeOffset? LastConnectedAt = null,
+    string? Comment = null,                             // TSK-13-12
+    AiAccessLevel? AiAccess = null,                     // null = 환경 라벨 기본값
+    bool? AllowExplainPlan = null,
+    Dbms Dbms = Dbms.Oracle);                           // D-046. enum Dbms { Oracle, Tibero }
 
 public sealed record ConnectionsDocument
 {

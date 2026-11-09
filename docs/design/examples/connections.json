@@ -4,6 +4,7 @@
     {
       "id": "b1f6c2d4-7a3e-4c1b-9f2a-1d0e5c8b7a61",
       "name": "운영-주문DB",
+      "dbms": "Oracle",
       "user": "app_ro",
       "dataSource": "tcps://db01.corp.example:1522/ORDERS_PDB?retry_count=3",
       "auth": "Default",
