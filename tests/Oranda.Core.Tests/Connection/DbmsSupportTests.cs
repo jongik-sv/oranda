@@ -43,7 +43,8 @@ public class DbmsSupportTests
         Assert.Equal(ServerFeatures.UnavailableText, ServerFeatures.For(19).UnavailableReason);
     }
 
-    // 기능마다 한 행(tibero.md 3장 + tibero-catalog-map.md 6.2.15 실측). 실측으로 한 행을 고치면 이 행만 바뀐다. 7행 모두 아직 끔(근거 부족).
+    // 기능마다 한 행(tibero.md 3장 + tibero-catalog-map.md 6.2.15 실측). 실측으로 한 행을 고치면 이 행만 바뀐다. 처음 7행은 아직 끔(근거 부족),
+    // 뒤 5행(P0-b)은 원본이 없어 끔(t4-decision Q2, tibero-monitor-catalog.md).
     [Theory]
     [InlineData(DbmsFeature.SqlMonitorReport, true, false)]
     [InlineData(DbmsFeature.AwrReport, true, false)]
@@ -52,6 +53,11 @@ public class DbmsSupportTests
     [InlineData(DbmsFeature.Tkprof, true, false)]
     [InlineData(DbmsFeature.OptimizerTrace, true, false)]
     [InlineData(DbmsFeature.JavaSource, true, false)]
+    [InlineData(DbmsFeature.SharedCursorReasons, true, false)]
+    [InlineData(DbmsFeature.PlanControls, true, false)]
+    [InlineData(DbmsFeature.Deadlocks, true, false)]
+    [InlineData(DbmsFeature.LiteralGroups, true, false)]
+    [InlineData(DbmsFeature.SqlMonitorReportHtml, true, false)]
     public void Each_feature_has_its_own_row_per_dbms(DbmsFeature feature, bool oracle, bool tibero)
     {
         Assert.Equal(oracle, DbmsSupport.Supports(Dbms.Oracle, feature));

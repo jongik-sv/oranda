@@ -173,6 +173,9 @@ public sealed record SessionDetail(SessionRow Session)
     public CursorRef? CurrentCursor { get; init; }
 
     public IReadOnlyList<Metadata.DetailSection> Sections { get; init; } = [];
+
+    /// <summary>이 DBMS 에 원본이 없어 빈 채로 둔 구획(제목 → 이유). Oracle 은 늘 비어 있다(t4-decision Q2).</summary>
+    public IReadOnlyDictionary<string, string> UnavailableSections { get; init; } = System.Collections.ObjectModel.ReadOnlyDictionary<string, string>.Empty;
 }
 
 public sealed record TraceOptions

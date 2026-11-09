@@ -824,13 +824,14 @@ public sealed class DbaFlowTests
         await using var env = await DbaFlowEnv.CreateAsync(rows: 10);
         var none = await env.OpenOrandaAsync();
         var cursor = new CursorRef("0000000000000");
+        var plans = env.PlanService();
 
         // 선언 없음: Tuning 태그 호출은 드라이버로 보내지 않고 거부.
-        await Assert.ThrowsAsync<UnauthorizedAccessException>(() => OracleExecutionPlanService.GetSqlMonitorReportAsync(none, cursor, default));
+        await Assert.ThrowsAsync<UnauthorizedAccessException>(() => plans.GetSqlMonitorReportAsync(none, cursor, html: false, default));
 
         // Diagnostics 만 선언: Tuning 태그는 여전히 거부.
         var diag = await env.OpenOrandaAsync(pack: LicensePack.Diagnostics);
-        await Assert.ThrowsAsync<UnauthorizedAccessException>(() => OracleExecutionPlanService.GetSqlMonitorReportAsync(diag, cursor, default));
+        await Assert.ThrowsAsync<UnauthorizedAccessException>(() => plans.GetSqlMonitorReportAsync(diag, cursor, html: false, default));
 
         Assert.Empty(await env.PackAuditHitsAsync());
 
@@ -848,7 +849,7 @@ public sealed class DbaFlowTests
 
         // 대조군 2: 팩을 선언(Diagnostics+Tuning)하면 같은 호출이 서버까지 가고 감사에 잡힌다.
         var full = await env.OpenOrandaAsync(pack: LicensePack.DiagnosticsAndTuning);
-        _ = await Record.ExceptionAsync(() => OracleExecutionPlanService.GetSqlMonitorReportAsync(full, cursor, default));
+        _ = await Record.ExceptionAsync(() => plans.GetSqlMonitorReportAsync(full, cursor, html: false, default));
         var declared = await env.PackAuditHitsAsync();
         Assert.Contains(declared, h => h.Contains("DBMS_SQLTUNE", StringComparison.OrdinalIgnoreCase) || h.Contains("SQL_MONITOR", StringComparison.OrdinalIgnoreCase));
         _ = probe;

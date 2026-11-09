@@ -26,7 +26,7 @@ public class ExecutionPlanLogicTests
         var session = new DriverlessSession(new ConnectionProfile("p", "u", "h:1521/s"));
 
         await Assert.ThrowsAsync<ArgumentException>(() => service.GetCursorPlanAsync(session, new CursorRef("abc"), "TYPICAL", default));
-        await Assert.ThrowsAsync<ArgumentException>(() => OracleExecutionPlanService.GetSqlMonitorReportAsync(session, new CursorRef("abc"), default));
+        await Assert.ThrowsAsync<ArgumentException>(() => service.GetSqlMonitorReportAsync(session, new CursorRef("abc"), html: false, default));
         Assert.Equal(0, session.DriverTouches);
     }
 
@@ -223,10 +223,10 @@ public sealed class ExecutionPlanTests : IAsyncLifetime
     {
         await using var undeclared = await OpenAsync();
         var service = Service();
-        var ex = await Assert.ThrowsAsync<UnauthorizedAccessException>(() => OracleExecutionPlanService.GetSqlMonitorReportAsync(undeclared, new CursorRef("0000000000000"), default));
+        var ex = await Assert.ThrowsAsync<UnauthorizedAccessException>(() => service.GetSqlMonitorReportAsync(undeclared, new CursorRef("0000000000000"), html: false, default));
         Assert.Contains("DiagnosticsAndTuning", ex.Message, StringComparison.Ordinal);
 
         await using var diagnosticsOnly = await OpenAsync(pack: LicensePack.Diagnostics);
-        await Assert.ThrowsAsync<UnauthorizedAccessException>(() => OracleExecutionPlanService.GetSqlMonitorReportAsync(diagnosticsOnly, new CursorRef("0000000000000"), default));
+        await Assert.ThrowsAsync<UnauthorizedAccessException>(() => service.GetSqlMonitorReportAsync(diagnosticsOnly, new CursorRef("0000000000000"), html: false, default));
     }
 }

@@ -1,6 +1,5 @@
 using System.Globalization;
 using Oracle.ManagedDataAccess.Client;
-using Oranda.Core.Catalog;
 using Oranda.Core.Connection;
 using Oranda.Core.Events;
 using Oranda.Core.Execution;
@@ -18,7 +17,7 @@ namespace Oranda.Oracle.IntegrationTests.Monitoring;
 
 // 소유: TSK-09-01. 세션 모니터.
 
-/// <summary>DB 없이 도는 부분: Kill·트레이스 문장, 라이선스 대조. (트리 조립·델타는 Core.Tests MonitorRowsTests 로 옮겼다.)</summary>
+/// <summary>DB 없이 도는 부분: Kill·트레이스 문장. (트리 조립·델타는 Core.Tests MonitorRowsTests, 라이선스 대조는 Core.Tests CatalogLicenseGateTests 로 옮겼다.)</summary>
 public class SessionMonitorLogicTests
 {
     [Theory]
@@ -71,50 +70,6 @@ public class SessionMonitorLogicTests
         Assert.Equal(StatementKind.PlSql, on.Kind);
         Assert.Contains("SESSION_TRACE_ENABLE(session_id => 12, serial_num => 345, waits => FALSE, binds => TRUE)", on.Text, StringComparison.Ordinal);
         Assert.Contains("SESSION_TRACE_DISABLE(session_id => 12, serial_num => 345)", off.Text, StringComparison.Ordinal);
-    }
-
-    [Theory]
-    [InlineData(LicensePack.None, null, CatalogLicense.None, true)]
-    [InlineData(LicensePack.None, null, CatalogLicense.Diagnostics, false)]
-    [InlineData(LicensePack.Diagnostics, null, CatalogLicense.Diagnostics, true)]
-    [InlineData(LicensePack.Diagnostics, "NONE", CatalogLicense.Diagnostics, false)]
-    [InlineData(LicensePack.Diagnostics, null, CatalogLicense.Tuning, false)]
-    [InlineData(LicensePack.DiagnosticsAndTuning, "DIAGNOSTIC+TUNING", CatalogLicense.Tuning, true)]
-    public void License_tagged_query_needs_declared_pack(LicensePack held, string? serverAccess, CatalogLicense need, bool allowed)
-    {
-        var session = new LicenseSession(new ConnectionProfile("p", "u", "h") { LicensePack = held }, serverAccess);
-
-        var ex = Record.Exception(() => OracleMonitorService.EnsureLicense(session, need));
-
-        Assert.Equal(allowed, ex is null);
-        if (!allowed)
-        {
-            Assert.IsType<UnauthorizedAccessException>(ex);
-        }
-    }
-
-    private sealed class LicenseSession(ConnectionProfile profile, string? access) : ISession
-    {
-        public Guid Id { get; } = Guid.NewGuid();
-
-        public ConnectionProfile Profile { get; } = profile;
-
-        public ServerInfo Server { get; } = new("23.26.0.0.0", "FREE", "h", "s", "FREE", "FREEPDB1", true, 1,
-            new ServerCapabilities(true, true, true, true, true), ManagementPackAccess: access);
-
-        public SessionPurpose Purpose => SessionPurpose.Monitor;
-
-        public string DbKey => "FREE/FREEPDB1/U";
-
-        public SessionState State => SessionState.Idle;
-
-        public bool HasPendingTransaction => false;
-
-        public Task CommitAsync(CancellationToken ct) => Task.CompletedTask;
-
-        public Task RollbackAsync(CancellationToken ct) => Task.CompletedTask;
-
-        public ValueTask DisposeAsync() => ValueTask.CompletedTask;
     }
 }
 

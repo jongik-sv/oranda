@@ -27,6 +27,21 @@ public enum DbmsFeature
 
     /// <summary>자바 소스 객체(JAVA SOURCE) 조회·컴파일.</summary>
     JavaSource,
+
+    /// <summary>자식 커서가 따로 생긴 사유(V$SQL_SHARED_CURSOR, 튜닝 TN-04).</summary>
+    SharedCursorReasons,
+
+    /// <summary>SQL 프로필·기준선·패치 보기(튜닝 TN-15).</summary>
+    PlanControls,
+
+    /// <summary>최근 데드락 기록(알림 로그, 잠금 LK-12).</summary>
+    Deadlocks,
+
+    /// <summary>리터럴만 다른 SQL 묶음(FORCE_MATCHING_SIGNATURE, 튜닝 추천).</summary>
+    LiteralGroups,
+
+    /// <summary>SQL 모니터 보고서 HTML 형식(REPORT_SQL_MONITOR 의 type 인수).</summary>
+    SqlMonitorReportHtml,
 }
 
 /// <summary>
@@ -56,10 +71,15 @@ public static class DbmsSupport
         DbmsFeature.Tkprof => true,
         DbmsFeature.OptimizerTrace => true,
         DbmsFeature.JavaSource => true,
+        DbmsFeature.SharedCursorReasons => true,
+        DbmsFeature.PlanControls => true,
+        DbmsFeature.Deadlocks => true,
+        DbmsFeature.LiteralGroups => true,
+        DbmsFeature.SqlMonitorReportHtml => true,
         _ => throw new ArgumentOutOfRangeException(nameof(feature), feature, null),
     };
 
-    // Tibero: docs/design/tibero.md 3장 + tibero-catalog-map.md(시험 서버 6.2.15 실측, 읽기 전용). 7행 모두 끔 유지 — 실측이 켤 근거를 주지 못했다.
+    // Tibero: docs/design/tibero.md 3장 + tibero-catalog-map.md(시험 서버 6.2.15 실측, 읽기 전용). 처음 7행은 끔 유지 — 실측이 켤 근거를 주지 못했다. 뒤 5행(P0-b)은 원본이 없음을 실측으로 확인.
     private static bool TiberoSupports(DbmsFeature feature) => feature switch
     {
         // DBMS_SQLTUNE.REPORT_SQL_MONITOR 는 있으나 인수가 달라(sql_id => …, type => … 호출이 ODP-11029) Oracle 호출 형태로는 안 된다(catalog-map 요약·5장).
@@ -82,6 +102,22 @@ public static class DbmsSupport
         // DBMS_JAVA 와 *_JAVA_CLASSES 등은 있으나 *_JAVA_DERIVATIONS·*_JAVA_IMPLEMENTS·*_JAVA_INNERS 가 없고 DBMS_JAVA.SHORTNAME 은 빈 값(catalog-map 3·5장).
         // 실측 필요: JAVA SOURCE 객체를 만들고 컴파일할 수 있는지.
         DbmsFeature.JavaSource => false,
+
+        // 아래 다섯 행은 원본 뷰·인수가 없어 실측으로 확정된 「안 됨」(t4-decision Q2, tibero-monitor-catalog.md 2·3장 「없음」 표).
+        // V$SQL_SHARED_CURSOR 없음 → tuning.shared_cursor 없음(자식 수만 child_cursors).
+        DbmsFeature.SharedCursorReasons => false,
+
+        // SQL 프로필·기준선·패치 뷰와 signature 열 없음 → tuning.plan_controls 없음.
+        DbmsFeature.PlanControls => false,
+
+        // V$DIAG_ALERT_EXT 없음 → lock.deadlocks 없음(알림 로그는 서버 파일).
+        DbmsFeature.Deadlocks => false,
+
+        // FORCE_MATCHING_SIGNATURE 없음 → tuning.recommend_literals 없음.
+        DbmsFeature.LiteralGroups => false,
+
+        // REPORT_SQL_MONITOR 에 형식(type) 인수가 없다(텍스트 CLOB 만) → plan.monitor_report_html 없음.
+        DbmsFeature.SqlMonitorReportHtml => false,
         _ => throw new ArgumentOutOfRangeException(nameof(feature), feature, null),
     };
 
