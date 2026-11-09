@@ -1,6 +1,6 @@
 -- 블로킹 트리 재료(Tibero): 대기자(V$WAITER_SESSION 의 WAIT_SID)와 그 보유자. 열 순서는 Oracle session.blocking_tree 와 같다.
 -- blocking_session = 직접 보유자(여럿이면 가장 작은 SID), final_blocking_session = 보유자를 따라 올라간 뿌리(V$SESSION 에 그 열이 없어 계산).
--- 대기자 행의 locked_object 는 기다리는 행의 객체(ROW_WAIT_OBJ_ID). 마지막 열 = status(RUNNING/READY → ACTIVE/INACTIVE). @PFX@ = dba 또는 all.
+-- 대기자 행의 locked_object 는 기다리는 행의 객체(ROW_WAIT_OBJ_ID). 마지막 열 = status(RUNNING·ASSIGNED/READY → ACTIVE/INACTIVE). @PFX@ = dba 또는 all.
 -- id: session.blocking_tree
 -- dbms: tibero
 -- min-version: 6
@@ -22,7 +22,7 @@ SELECT TO_NUMBER(SYS_CONTEXT('USERENV', 'INSTANCE')) AS inst_id, s.sid, s.serial
        CASE WHEN b.hold_sid IS NOT NULL AND s.row_wait_obj_id > 0 THEN
             (SELECT o.owner || '.' || o.object_name FROM @PFX@_objects o WHERE o.object_id = s.row_wait_obj_id)
        END AS locked_object,
-       DECODE(s.status, 'RUNNING', 'ACTIVE', 'READY', 'INACTIVE', s.status) AS status
+       DECODE(s.status, 'RUNNING', 'ACTIVE', 'ASSIGNED', 'ACTIVE', 'READY', 'INACTIVE', s.status) AS status
   FROM v$session s
   LEFT JOIN v$event_name e ON e.event# = s.wait_event
   LEFT JOIN (SELECT w.wait_sid, MIN(w.hold_sid) AS hold_sid FROM v$waiter_session w GROUP BY w.wait_sid) b

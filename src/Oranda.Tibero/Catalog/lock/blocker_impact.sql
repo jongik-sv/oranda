@@ -7,7 +7,7 @@
 -- license: none
 SELECT x.holder_inst, x.holder_sid, h.serial#, COUNT(*) AS waiter_count,
        MAX(x.wait_secs) AS max_wait_secs, SUM(x.wait_secs) AS total_wait_secs,
-       DECODE(h.status, 'RUNNING', 'ACTIVE', 'READY', 'INACTIVE', h.status) AS status
+       DECODE(h.status, 'RUNNING', 'ACTIVE', 'ASSIGNED', 'ACTIVE', 'READY', 'INACTIVE', h.status) AS status
   FROM (SELECT p.waiter, TO_NUMBER(SYS_CONTEXT('USERENV', 'INSTANCE')) AS holder_inst, p.holder AS holder_sid,
                CASE WHEN q.wait_event >= 0 THEN TRUNC(q.wait_time / 10) ELSE 0 END AS wait_secs
           FROM (SELECT w.wait_sid AS waiter, w.hold_sid AS holder

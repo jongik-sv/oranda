@@ -5,7 +5,7 @@
 -- requires: v$session, v$event_name, v$waiter_session
 -- license: none
 SELECT TO_NUMBER(SYS_CONTEXT('USERENV', 'INSTANCE')) AS inst_id, s.sid, s.serial#,
-       DECODE(s.status, 'RUNNING', 'ACTIVE', 'READY', 'INACTIVE', s.status) AS status,
+       DECODE(s.status, 'RUNNING', 'ACTIVE', 'ASSIGNED', 'ACTIVE', 'READY', 'INACTIVE', s.status) AS status,
        s.username, s.osuser, s.machine, s.prog_name AS program, s.module, s.action,
        s.client_identifier, s.sql_id, s.sql_child_number, s.prev_sql_id,
        CASE WHEN e.name IS NOT NULL THEN e.name WHEN s.state = 'RECV_WAITING' THEN 'RECV_WAITING' END AS event,
@@ -15,7 +15,7 @@ SELECT TO_NUMBER(SYS_CONTEXT('USERENV', 'INSTANCE')) AS inst_id, s.sid, s.serial
                         'STAT_CLASS_SYSTEM_IO', 'System I/O', 'STAT_CLASS_CLUSTER', 'Cluster', 'STAT_CLASS_CACHE', 'Cache',
                         'STAT_CLASS_SQL', 'SQL', 'STAT_CLASS_OTHER', 'Other', e.class) END AS wait_class,
        CASE WHEN s.wait_event >= 0 THEN TRUNC(s.wait_time / 10) ELSE 0 END AS seconds_in_wait,
-       CASE WHEN s.status = 'RUNNING' THEN TRUNC(s.sql_et / 1000) ELSE TRUNC(s.wait_time / 10) END AS last_call_et,
+       CASE WHEN s.status IN ('RUNNING', 'ASSIGNED') THEN TRUNC(s.sql_et / 1000) ELSE TRUNC(s.wait_time / 10) END AS last_call_et,
        CASE WHEN b.hold_sid IS NOT NULL THEN TO_NUMBER(SYS_CONTEXT('USERENV', 'INSTANCE')) END AS blocking_instance,
        b.hold_sid AS blocking_session, s.logon_time,
        CASE WHEN s.type = 'WTHR' THEN 'USER' ELSE 'BACKGROUND' END AS type, s.prev_child_number

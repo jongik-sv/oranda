@@ -24,7 +24,7 @@ SELECT inst_id, sid, serial#, username, machine, program, type, id1, id2, lmode,
                s.sql_id, s.prev_sql_id,
                CASE WHEN bw.hold_sid IS NOT NULL THEN TO_NUMBER(SYS_CONTEXT('USERENV', 'INSTANCE')) END AS blocking_instance,
                bw.hold_sid AS blocking_session, b.serial# AS blocking_serial,
-               DECODE(s.status, 'RUNNING', 'ACTIVE', 'READY', 'INACTIVE', s.status) AS status
+               DECODE(s.status, 'RUNNING', 'ACTIVE', 'ASSIGNED', 'ACTIVE', 'READY', 'INACTIVE', s.status) AS status
           FROM (SELECT l.sess_id AS sid, DECODE(l.type, 'WLOCK_DML', 'TM', 'WLOCK_TX', 'TX', l.type) AS type, l.id1, l.id2,
                        CASE WHEN l.lmode > 0 THEN l.lmode + 1 ELSE 0 END AS lmode,
                        CASE WHEN l.requested > 0 THEN l.requested ELSE 0 END AS request, l.ctime,

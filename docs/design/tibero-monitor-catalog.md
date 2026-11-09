@@ -26,12 +26,12 @@ Tibero 에만 있는 id(짝 Oracle 파일 없음, `MonitorCatalogParityTests.Tib
 | Oracle | Tibero 판 | 근거 |
 |---|---|---|
 | `gv$…` + `inst_id` | `v$…` + `TO_NUMBER(SYS_CONTEXT('USERENV','INSTANCE'))`(시험 서버 0). `inst_id` 바인드는 `(:inst_id IS NULL OR :inst_id = 그 값)` | `gv$` 는 있으나 단일 인스턴스에서 `INST_ID` 가 NULL(실측). `V$WAITER_SESSION`·`V$BLOCKER_SESSION` 은 `gv$` 없음. TAC 는 나중 |
-| `status` ACTIVE/INACTIVE | `DECODE(status, 'RUNNING','ACTIVE', 'READY','INACTIVE', status)` | 실측 값 RUNNING·READY |
+| `status` ACTIVE/INACTIVE | `DECODE(status, 'RUNNING','ACTIVE', 'ASSIGNED','ACTIVE', 'READY','INACTIVE', status)` | 실측 값 RUNNING·ASSIGNED(작업 스레드에 막 배정된 순간)·READY |
 | `type` USER/BACKGROUND | `WTHR` → USER, 그 밖 BACKGROUND | 사용자 세션 TYPE = WTHR(81/81) |
 | `program` | `prog_name` | |
 | `event`·`wait_class` | `V$EVENT_NAME`(EVENT#, NAME, CLASS) 을 `WAIT_EVENT` 번호로 합침. CLASS `STAT_CLASS_*` → Oracle 이름(Idle·Application·Concurrency·User I/O·System I/O·Cluster·Cache·SQL·Other). 클라이언트를 기다리는 세션(`STATE = RECV_WAITING`, WAIT_EVENT −1)은 event `RECV_WAITING`·wait_class `Idle` | `WAIT_EVENT` 는 숫자 |
 | `seconds_in_wait`(대기 중이면 wait_time_micro) | `WAIT_EVENT >= 0` 이면 `TRUNC(WAIT_TIME / 10)` | 실측: 쉬는 세션 WAIT_TIME 이 초당 약 9~10 증가(1/10초). 1,604초 = 로그온 뒤 경과와 맞음 |
-| `last_call_et` | 실행 중(RUNNING) `TRUNC(SQL_ET / 1000)`, 쉬는 중 `TRUNC(WAIT_TIME / 10)` | 실측: 실행 중 SQL_ET 가 초당 약 900~1000 증가(밀리초), 쉬면 0 |
+| `last_call_et` | 실행 중(RUNNING·ASSIGNED) `TRUNC(SQL_ET / 1000)`, 쉬는 중 `TRUNC(WAIT_TIME / 10)` | 실측: 실행 중 SQL_ET 가 초당 약 900~1000 증가(밀리초), 쉬면 0 |
 | `blocking_session`·`blocking_instance` | `V$WAITER_SESSION(WAIT_SID, HOLD_SID, TYPE, ID1, ID2, MODE_REQ, MODE_HELD)` 의 `MIN(HOLD_SID)` | V$SESSION 에 그 열 없음 |
 | `final_blocking_session` | `V$WAITER_SESSION` 을 `CONNECT BY NOCYCLE PRIOR hold_sid = wait_sid` 로 올라간 잎(뿌리 보유자) | 같음 |
 | `taddr`·`addr` 로 트랜잭션 | `V$TRANSACTION.SESS_ID = V$SESSION.SID` | |
