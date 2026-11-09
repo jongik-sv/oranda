@@ -46,6 +46,13 @@ internal static class FakeDriverHost
     internal static object Static(string fullName, string field) =>
         TypeOf(fullName).GetField(field)!.GetValue(null)!;
 
+    /// <summary>
+    /// 가짜 값 형식(<c>Tibero.DataAccess.Types</c> 의 짧은 이름, 예: <c>TiberoString</c>)의 값. 인자가 없으면 그 형식의 NULL(<c>IsNull</c> 인 <c>Null</c> 필드).
+    /// 드라이버 이름공간 글자를 시험 파일마다 적지 않게 한다(adapter 문서 5장).
+    /// </summary>
+    internal static object ProviderValue(string typeName, params object?[] args) =>
+        args.Length == 0 ? Static("Tibero.DataAccess.Types." + typeName, "Null") : New("Tibero.DataAccess.Types." + typeName, args);
+
     internal static object? Get(object target, string property) =>
         target.GetType().GetProperty(property)!.GetValue(target);
 
