@@ -974,5 +974,11 @@
   "Shell.settings.drivers.state.noTibero": "이 빌드에는 Tibero 가 포함되어 있지 않음",
   "Shell.settings.drivers.state.noLoader": "드라이버 로더를 찾을 수 없음",
   "TypeChoice.all": "모든 유형",
-  "TypeChoice.more": "{0} 외 {1}"
+  "TypeChoice.more": "{0} 외 {1}",
+  "Connection.driver.band.missing": "Tibero 드라이버가 지정되지 않았습니다.",
+  "Connection.driver.band.notFound": "Tibero 드라이버 파일을 찾을 수 없습니다.",
+  "Connection.driver.band.unusable": "쓸 수 없는 Tibero 드라이버입니다.",
+  "Connection.driver.band.unusableReason": "쓸 수 없는 Tibero 드라이버입니다: {0}",
+  "Connection.driver.band.assign": "드라이버 지정…",
+  "Catalog.text.unavailable": "{0} 서버에서는 이 기능에 쓸 SQL 이 없어 쓸 수 없습니다."
 }

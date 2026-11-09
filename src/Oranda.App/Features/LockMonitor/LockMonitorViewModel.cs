@@ -17,7 +17,6 @@ using Oranda.App.Shell;
 using Oranda.Core.Connection;
 using Oranda.Core.Execution;
 using Oranda.Language.Errors;
-using Oranda.Oracle.Catalog;
 using Oranda.Core.History;
 using Oranda.Core.Monitoring;
 using Oranda.Core.Plans;
@@ -1344,7 +1343,8 @@ public sealed partial class LockMonitorViewModel : ToolPanelViewModelBase, IDisp
                 LockedRowId = row.RowId;
                 LockedRowCaption = LockedRowText(row) + $" · 대기자 {waiter.KeyText}";
                 LockedRowCells = [.. row.ColumnNames.Select((c, i) => (IReadOnlyList<object?>)[c, i < row.Values.Count ? row.Values[i] ?? "(null)" : string.Empty])];
-                LockedRowSelect = EmbeddedCatalog.Text("app.locked_row_select", ("table", $"\"{row.Owner}\".\"{row.Table}\""), ("rowid", row.RowId));
+                // 이 DBMS·버전에 문장이 없으면 null — 「SELECT 복사」만 빠지고 행 값은 그대로 보인다.
+                LockedRowSelect = CatalogRouting.Text(_services, session, "app.locked_row_select", ("table", $"\"{row.Owner}\".\"{row.Table}\""), ("rowid", row.RowId));
                 LockedRowMessage = string.Empty;
                 OnPropertyChanged(nameof(HasLockedRow));
             });
@@ -1435,7 +1435,7 @@ public sealed partial class LockMonitorViewModel : ToolPanelViewModelBase, IDisp
         if (denied is not null)
         {
             DdlNotice = "DDL 잠금은 dba_ddl_locks 권한이 필요합니다.";
-            DdlGrantSql = EmbeddedCatalog.Text("app.ddl_locks_grant", ("user", session.Profile.User.ToUpperInvariant()));
+            DdlGrantSql = CatalogRouting.Text(_services, session, "app.ddl_locks_grant", ("user", session.Profile.User.ToUpperInvariant())); // 문장이 없으면 null(GRANT 안내만 빠진다)
             DdlSummary = "권한 없음 · " + FirstLine(denied.Message);
         }
         else
@@ -1505,7 +1505,7 @@ public sealed partial class LockMonitorViewModel : ToolPanelViewModelBase, IDisp
         }
 
         Hints.Clear();
-        foreach (var h in LockHints.Build(_allTree))
+        foreach (var h in LockHints.Build(_allTree, _services, _session))
         {
             Hints.Add(h);
         }
@@ -1937,8 +1937,15 @@ public sealed partial class LockMonitorViewModel : ToolPanelViewModelBase, IDisp
         }
 
         var statement = disconnect
-            ? SessionMonitorCommands.DisconnectStatement(key, immediate: true, rac).Text
-            : LockText.KillStatement(key, rac);
+            ? SessionMonitorCommands.DisconnectStatement(_services, session, key, immediate: true, rac)?.Text
+            : LockText.KillStatement(_services, session, key, rac);
+        if (statement is null)
+        {
+            // 이 DBMS·버전에 KILL/DISCONNECT 문장이 없다 — 확인 창을 열지 않고 이유를 보인다.
+            StatusText = CatalogRouting.Unavailable(session);
+            return null;
+        }
+
         var verb = disconnect ? "연결을 끊을까요?" : "종료할까요?";
         return new LockKillRequest(key, disconnect)
         {
@@ -2001,7 +2008,8 @@ public sealed partial class LockMonitorViewModel : ToolPanelViewModelBase, IDisp
 
             var exec = Execution ?? _services?.GetService(typeof(IExecutionService)) as IExecutionService
                 ?? throw new InvalidOperationException("실행 엔진이 없습니다.");
-            var stmt = SessionMonitorCommands.DisconnectStatement(request.Target, immediate: true, session.Server.IsRac);
+            var stmt = SessionMonitorCommands.DisconnectStatement(_services, session, request.Target, immediate: true, session.Server.IsRac)
+                ?? throw new InvalidOperationException(CatalogRouting.Unavailable(session));
             var result = await exec.ExecuteAsync(session, stmt, new Dictionary<string, BindValue>(),
                 new ExecutionOptions { Source = HistorySource.Monitor }, ct);
             switch (result.Status)

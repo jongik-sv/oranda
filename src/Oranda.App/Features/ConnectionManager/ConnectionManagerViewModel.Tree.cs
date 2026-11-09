@@ -85,6 +85,7 @@ public sealed partial class ConnectionManagerViewModel
         if (newValue is not null)
         {
             newValue.KnownGroups = _allFolders;
+            newValue.AttachDriverStatus(_service.DriverStatusOf);
         }
 
         UpdateModifiedMarker();
@@ -99,6 +100,7 @@ public sealed partial class ConnectionManagerViewModel
                 SaveCommand.NotifyCanExecuteChanged();
                 break;
             case nameof(ProfileEditorViewModel.HasRequiredFields):
+            case nameof(ProfileEditorViewModel.DriverBlocked):
                 ConnectCommand.NotifyCanExecuteChanged();
                 TestCommand.NotifyCanExecuteChanged();
                 break;

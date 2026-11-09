@@ -974,5 +974,11 @@
   "Shell.settings.drivers.state.noTibero": "This build does not include Tibero",
   "Shell.settings.drivers.state.noLoader": "The driver loader was not found",
   "TypeChoice.all": "All types",
-  "TypeChoice.more": "{0} +{1} more"
+  "TypeChoice.more": "{0} +{1} more",
+  "Connection.driver.band.missing": "The Tibero driver has not been specified.",
+  "Connection.driver.band.notFound": "The Tibero driver file was not found.",
+  "Connection.driver.band.unusable": "The Tibero driver cannot be used.",
+  "Connection.driver.band.unusableReason": "The Tibero driver cannot be used: {0}",
+  "Connection.driver.band.assign": "Set Driver…",
+  "Catalog.text.unavailable": "This feature is not available on {0}: there is no SQL for it on this server."
 }

@@ -29,7 +29,9 @@
                  Classes.error="{Binding StatusIsError}" AutomationProperties.Name="상태" />
       <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="8">
         <Button x:Name="SaveButton" Content="저장" Command="{Binding SaveCommand}" />
-        <Button x:Name="ConnectButton" Content="접속" Command="{Binding ConnectCommand}" IsDefault="True" Classes="accent" />
+        <!-- 도움말은 Tibero 드라이버를 쓸 수 없어 꺼졌을 때만 이유(띠 문구)를 보인다. -->
+        <Button x:Name="ConnectButton" Content="접속" Command="{Binding ConnectCommand}" IsDefault="True" Classes="accent"
+                ToolTip.Tip="{Binding Editor.DriverBlockReason}" />
         <Button x:Name="CloseButton" Content="닫기" Command="{Binding CloseCommand}" IsCancel="True" />
       </StackPanel>
     </Grid>
@@ -133,6 +135,17 @@
                  HorizontalAlignment="Center" VerticalAlignment="Center"
                  IsVisible="{Binding Editor, Converter={x:Static ObjectConverters.IsNull}}" />
       <DockPanel Grid.Column="2" IsVisible="{Binding Editor, Converter={x:Static ObjectConverters.IsNotNull}}">
+        <!-- Tibero 드라이버 상태 띠(DU3): Tibero 프로필인데 드라이버를 쓸 수 없을 때만 보인다. 문구·단추 글자는 모델이 언어에 맞춰 준다. -->
+        <Border x:Name="DriverBandBar" DockPanel.Dock="Top" Margin="0,0,12,6" Padding="8,6" CornerRadius="3" BorderThickness="1"
+                BorderBrush="{DynamicResource OrandaWarningForegroundBrush}"
+                IsVisible="{Binding Editor.ShowDriverBand}" AutomationProperties.Name="{Binding Editor.DriverBandText}">
+          <DockPanel>
+            <Button x:Name="DriverAssignButton" DockPanel.Dock="Right" Margin="8,0,0,0" VerticalAlignment="Center"
+                    Content="{Binding Editor.DriverBandButtonText}" Command="{Binding OpenDriversCommand}" />
+            <TextBlock x:Name="DriverBandLabel" Text="{Binding Editor.DriverBandText}" TextWrapping="Wrap" VerticalAlignment="Center"
+                       Foreground="{DynamicResource OrandaWarningForegroundBrush}" />
+          </DockPanel>
+        </Border>
         <!-- 연결 문자열 미리보기(읽기 전용, 비밀번호는 넣지 않는다): 폼을 스크롤해도 늘 보이게 아래에 붙인다. -->
         <Grid DockPanel.Dock="Bottom" ColumnDefinitions="Auto,*,Auto" ColumnSpacing="12" Margin="0,8,12,0">
           <TextBlock Grid.Column="0" Text="연결 문자열" MinWidth="96" TextAlignment="Right" VerticalAlignment="Center" />

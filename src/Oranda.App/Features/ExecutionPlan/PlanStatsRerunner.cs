@@ -5,7 +5,6 @@ using System.Threading.Tasks;
 using Oranda.App.Features.Binds;
 using Oranda.App.Features.Execution;
 using Oranda.Core.Execution;
-using Oranda.Oracle.Catalog;
 using Oranda.Core.History;
 using Oranda.Core.Plans;
 using Oranda.Core.Sessions;
@@ -38,10 +37,13 @@ public sealed record PlanRerunOutcome(ISession Session, CursorRef Cursor, long R
 /// </summary>
 public sealed partial class PlanStatsRerunner(
     ExecutionState state, Func<BindVariableStore> binds, Func<ISession?> session, Func<IExecutionService> execution, Func<IExecutionPlanService> plans,
-    Func<object?>? owner = null)
+    Func<object?>? owner = null, IServiceProvider? services = null)
 {
-    /// <summary>ALTER SESSION 문(운영에서도 묻지 않는 ALTER, <see cref="ExecutionPolicy"/>). 이 세션에만 걸리고 DB 에 쓰지 않는다.</summary>
-    public static string StatisticsLevelSql => EmbeddedCatalog.Text("app.statistics_level");
+    /// <summary>
+    /// ALTER SESSION 문(운영에서도 묻지 않는 ALTER, <see cref="ExecutionPolicy"/>). 이 세션에만 걸리고 DB 에 쓰지 않는다.
+    /// Oracle 고정 호환 멤버(세션·서비스 공급자 없음) — 운영 경로는 <see cref="StatisticsLevelStatement(IServiceProvider?, ISession?)"/>.
+    /// </summary>
+    public static string StatisticsLevelSql => CatalogRouting.OracleFixed("app.statistics_level");
 
     /// <summary>실행을 시작한 작업 공간을 알려 주는 방법(연결 확인용).</summary>
     internal Func<object?>? OwnerSource => owner;
@@ -146,6 +148,12 @@ public sealed partial class PlanStatsRerunner(
     public static SqlStatement StatisticsLevelStatement() =>
         new(StatisticsLevelSql, default, StatementKind.Ddl) { Verb = "ALTER SESSION" };
 
+    /// <summary>세션 서버의 DBMS 카탈로그로 만든 ALTER SESSION 문장. 그 DBMS·버전에 문장이 없으면 null(부르는 쪽이 이유를 보인다).</summary>
+    public static SqlStatement? StatisticsLevelStatement(IServiceProvider? services, ISession? session) =>
+        CatalogRouting.Text(services, session, "app.statistics_level") is { } text
+            ? new SqlStatement(text, default, StatementKind.Ddl) { Verb = "ALTER SESSION" }
+            : null;
+
     public async Task<PlanRerunOutcome> RunAsync(SqlStatement stmt, PlanRerunMode mode, CancellationToken ct)
     {
         var copy = BuildCopy(stmt, mode);
@@ -164,6 +172,10 @@ public sealed partial class PlanStatsRerunner(
             throw new PlanRerunNotStartedException("다른 문장을 실행하는 중입니다. 끝난 뒤 다시 실행하세요.");
         }
 
+        // 이 DBMS·버전에 STATISTICS_LEVEL 문장이 없으면 아무것도 보내기 전에 이유를 담아 막는다(자동 재실행은 다음 계획 열기에서 다시 시도해도 된다).
+        var alterStatement = mode == PlanRerunMode.StatisticsLevel
+            ? StatisticsLevelStatement(services, s) ?? throw new PlanRerunNotStartedException(CatalogRouting.Unavailable(s))
+            : null;
         var values = GridRowCounter.BuildBinds(binds(), copy.BindNames, null);
         state.BeginRun(s.Id, owner?.Invoke()); // 시작한 작업 공간을 알려 그 화면의 바쁨 표시·「새 세션에서 실행」 안내가 맞게 한다(일반 실행과 같다)
         using var linked = CancellationTokenSource.CreateLinkedTokenSource(ct);
@@ -172,9 +184,9 @@ public sealed partial class PlanStatsRerunner(
         try
         {
             var exec = execution();
-            if (mode == PlanRerunMode.StatisticsLevel)
+            if (alterStatement is not null)
             {
-                var alter = await Task.Run(() => exec.ExecuteAsync(s, StatisticsLevelStatement(), new Dictionary<string, BindValue>(), Options, ct), CancellationToken.None).ConfigureAwait(true);
+                var alter = await Task.Run(() => exec.ExecuteAsync(s, alterStatement, new Dictionary<string, BindValue>(), Options, ct), CancellationToken.None).ConfigureAwait(true);
                 EnsureSucceeded(alter, ct);
             }
 

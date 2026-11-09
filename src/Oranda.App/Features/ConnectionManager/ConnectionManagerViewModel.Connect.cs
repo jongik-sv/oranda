@@ -7,6 +7,8 @@ using System.Threading;
 using System.Threading.Tasks;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using Oranda.App.Shell;
+using Oranda.App.Shell.Settings;
 using Oranda.App.ViewModels;
 using Oranda.Core.Connection;
 using Oranda.Platform.Storage;
@@ -83,14 +85,29 @@ public sealed partial class ConnectionManagerViewModel
         }
     }
 
-    private bool CanTest() => Editor is { HasRequiredFields: true } && !IsBusy;
+    // 필수 칸이 차야 하고, Tibero 드라이버를 쓸 수 없으면(DriverBlocked) 꺼진다. 이유는 편집 영역 위 띠와 [접속] 도움말에 보인다.
+    private bool CanTest() => Editor is { HasRequiredFields: true, DriverBlocked: false } && !IsBusy;
 
     /// <summary>고른 접속을 지우거나 복제할 수 있는지(시험·접속 중에는 끈다).</summary>
     private bool CanChangeSelection() => HasSelection && !IsBusy;
 
     private bool CanDelete() => HasAnySelection && !IsBusy;
 
-    private bool CanConnect() => Editor is { HasRequiredFields: true } && !IsBusy;
+    private bool CanConnect() => Editor is { HasRequiredFields: true, DriverBlocked: false } && !IsBusy;
+
+    /// <summary>
+    /// 띠의 [드라이버 지정…] 이 실행하는 길(명령 ID → 실행). 비우면 <see cref="ShellCommandRunner"/>(셸 명령 등록부)로 간다(시험이 넣는다).
+    /// </summary>
+    public Func<string, Task>? RunCommand { get; set; }
+
+    /// <summary>[드라이버 지정…]: 설정 창을 「드라이버」 탭으로 연다(<c>oranda.settings.openDrivers</c>).</summary>
+    [RelayCommand]
+    private Task OpenDriversAsync() => (RunCommand ?? ShellCommandRunner.RunAsync)(DriverSettingsCommands.OpenDrivers);
+
+    /// <summary>
+    /// 편집 중인 프로필의 드라이버 상태를 다시 읽는다. 설정에서 경로를 바꾸고 접속 창으로 돌아오면(창이 다시 활성화되면) 부른다.
+    /// </summary>
+    public void RefreshDriverStatus() => Editor?.RefreshDriverStatus();
 
     /// <summary>마지막 접속 시험 결과(시험용).</summary>
     public ConnectionTestOutcome? LastTestOutcome { get; private set; }

@@ -5,7 +5,6 @@ using System.Threading;
 using System.Threading.Tasks;
 using Oranda.App.Features.Execution;
 using Oranda.Core.Execution;
-using Oranda.Oracle.Catalog;
 using Oranda.Core.History;
 using Oranda.Core.Sessions;
 using Oranda.Core.Tuning;
@@ -24,15 +23,25 @@ public sealed record OptimizerTraceOutcome(ISession Session, TraceFileInfo File,
 /// </para>
 /// <para>세 문장 모두 실행 엔진(정책 관문)을 거친다. ALTER SESSION 은 운영에서도 묻지 않지만, PL/SQL 블록은 운영 접속에서 확인을 묻는다.</para>
 /// </summary>
-public sealed class OptimizerTraceRunner(ExecutionState state, Func<ISession?> session, Func<IExecutionService> execution, Func<ITuningService> tuning)
+public sealed class OptimizerTraceRunner(ExecutionState state, Func<ISession?> session, Func<IExecutionService> execution, Func<ITuningService> tuning,
+    IServiceProvider? services = null)
 {
-    /// <summary>문장 본문은 카탈로그(<c>app.trace_event_on</c> 등).</summary>
-    public static string EventOnSql => EmbeddedCatalog.Text("app.trace_event_on");
-    public static string EventOffSql => EmbeddedCatalog.Text("app.trace_event_off");
+    /// <summary>문장 본문은 카탈로그(<c>app.trace_event_on</c> 등). Oracle 고정 호환 멤버(세션·서비스 공급자 없음) — 운영 경로는 <see cref="EventOn"/>·<see cref="EventOff"/>.</summary>
+    public static string EventOnSql => CatalogRouting.OracleFixed("app.trace_event_on");
+    public static string EventOffSql => CatalogRouting.OracleFixed("app.trace_event_off");
     public const string SqlBindName = "oranda_sql";
 
-    /// <summary>사본을 파싱만 하는 블록(카탈로그 <c>app.trace_parse</c>). 사본 글은 바인드로 넘긴다(따옴표 이스케이프 없음).</summary>
-    public static string ParseBlock => EmbeddedCatalog.Text("app.trace_parse");
+    /// <summary>
+    /// 사본을 파싱만 하는 블록(카탈로그 <c>app.trace_parse</c>). 사본 글은 바인드로 넘긴다(따옴표 이스케이프 없음).
+    /// Oracle 고정 호환 멤버 — 운영 경로는 <see cref="ParseStatement(IServiceProvider?, ISession?)"/>.
+    /// </summary>
+    public static string ParseBlock => CatalogRouting.OracleFixed("app.trace_parse");
+
+    /// <summary>세션 서버의 DBMS 카탈로그로 만든 이벤트 켜기 문장. 그 DBMS·버전에 없으면 null.</summary>
+    public static string? EventOn(IServiceProvider? services, ISession? session) => CatalogRouting.Text(services, session, "app.trace_event_on");
+
+    /// <summary>세션 서버의 DBMS 카탈로그로 만든 이벤트 끄기 문장. 없으면 null.</summary>
+    public static string? EventOff(IServiceProvider? services, ISession? session) => CatalogRouting.Text(services, session, "app.trace_event_off");
 
     /// <summary>앱이 대신 보내는 문장이라 이력에 남기지 않는다(정책 관문은 그대로).</summary>
     private static readonly ExecutionOptions Options = new() { Source = HistorySource.Editor, SkipHistory = true };
@@ -61,6 +70,12 @@ public sealed class OptimizerTraceRunner(ExecutionState state, Func<ISession?> s
 
     public static SqlStatement ParseStatement() => new(ParseBlock, default, StatementKind.PlSql) { Verb = "DECLARE", BindNames = [SqlBindName] };
 
+    /// <summary>세션 서버의 DBMS 카탈로그로 만든 파싱 블록 문장. 없으면 null.</summary>
+    public static SqlStatement? ParseStatement(IServiceProvider? services, ISession? session) =>
+        CatalogRouting.Text(services, session, "app.trace_parse") is { } text
+            ? new SqlStatement(text, default, StatementKind.PlSql) { Verb = "DECLARE", BindNames = [SqlBindName] }
+            : null;
+
     public async Task<OptimizerTraceOutcome> RunAsync(SqlStatement stmt, CancellationToken ct)
     {
         var marker = NewMarker(DateTime.Now);
@@ -80,24 +95,33 @@ public sealed class OptimizerTraceRunner(ExecutionState state, Func<ISession?> s
             throw new InvalidOperationException("다른 문장을 실행하는 중입니다. 끝난 뒤 다시 하세요.");
         }
 
+        // 이 DBMS·버전에 10053 문장이 없으면 아무것도 보내기 전에 이유를 담아 막는다(호출 쪽이 던진 예외를 화면에 보인다).
+        var eventOn = EventOn(services, s);
+        var eventOff = EventOff(services, s);
+        var parse = ParseStatement(services, s);
+        if (eventOn is null || eventOff is null || parse is null)
+        {
+            throw new InvalidOperationException(CatalogRouting.Unavailable(s));
+        }
+
         state.BeginRun(s.Id);
         try
         {
             var exec = execution();
             var none = new Dictionary<string, BindValue>();
-            Ensure(await Task.Run(() => exec.ExecuteAsync(s, Alter(EventOnSql), none, Options, ct), CancellationToken.None).ConfigureAwait(true), ct);
+            Ensure(await Task.Run(() => exec.ExecuteAsync(s, Alter(eventOn), none, Options, ct), CancellationToken.None).ConfigureAwait(true), ct);
             try
             {
                 var binds = new Dictionary<string, BindValue>(StringComparer.OrdinalIgnoreCase)
                 {
                     [SqlBindName] = new(copy.Length > 32000 ? BindDataType.Clob : BindDataType.Varchar2, copy),
                 };
-                Ensure(await Task.Run(() => exec.ExecuteAsync(s, ParseStatement(), binds, Options, ct), CancellationToken.None).ConfigureAwait(true), ct);
+                Ensure(await Task.Run(() => exec.ExecuteAsync(s, parse, binds, Options, ct), CancellationToken.None).ConfigureAwait(true), ct);
             }
             finally
             {
                 // 켠 이벤트는 실패·취소에도 끈다(이 세션의 다음 파스가 모두 10053 을 남기지 않게).
-                await Task.Run(() => exec.ExecuteAsync(s, Alter(EventOffSql), none, Options, CancellationToken.None), CancellationToken.None).ConfigureAwait(true);
+                await Task.Run(() => exec.ExecuteAsync(s, Alter(eventOff), none, Options, CancellationToken.None), CancellationToken.None).ConfigureAwait(true);
             }
 
             var file = await Task.Run(() => tuning().GetTraceFileAsync(s, default, ct), CancellationToken.None).ConfigureAwait(true);

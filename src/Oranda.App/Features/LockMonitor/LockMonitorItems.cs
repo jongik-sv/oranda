@@ -6,7 +6,7 @@ using System.Text;
 using Oranda.App.Features.ExecutionPlan;
 using Oranda.Core.Connection;
 using Oranda.Core.Monitoring;
-using Oranda.Oracle.Catalog;
+using Oranda.Core.Sessions;
 
 namespace Oranda.App.Features.LockMonitor;
 
@@ -33,8 +33,17 @@ public static class LockText
         _ => Dash,
     };
 
-    /// <summary><c>ALTER SYSTEM KILL SESSION 'sid,serial#[,@inst]' IMMEDIATE</c>.</summary>
-    public static string KillStatement(SessionKey k, bool rac)
+    /// <summary>
+    /// <c>ALTER SYSTEM KILL SESSION 'sid,serial#[,@inst]' IMMEDIATE</c>.
+    /// Oracle 고정 호환 멤버(세션·서비스 공급자 없음) — 운영 경로는 <see cref="KillStatement(IServiceProvider?, ISession?, SessionKey, bool)"/>.
+    /// </summary>
+    public static string KillStatement(SessionKey k, bool rac) => CatalogRouting.OracleFixed("app.kill_session", ("id", KillId(k, rac)));
+
+    /// <summary>세션 서버의 DBMS 카탈로그로 만든 KILL 문장(확인 창에 보일 글). 그 DBMS·버전에 문장이 없으면 null.</summary>
+    public static string? KillStatement(IServiceProvider? services, ISession? session, SessionKey k, bool rac)
+        => CatalogRouting.Text(services, session, "app.kill_session", ("id", KillId(k, rac)));
+
+    private static string KillId(SessionKey k, bool rac)
     {
         var id = string.Create(CultureInfo.InvariantCulture, $"{k.Sid},{k.Serial}");
         if (rac)
@@ -42,7 +51,7 @@ public static class LockText
             id += string.Create(CultureInfo.InvariantCulture, $",@{k.InstanceId}");
         }
 
-        return EmbeddedCatalog.Text("app.kill_session", ("id", id));
+        return id;
     }
 
     /// <summary>접속 환경 이름(운영·테스트·개발).</summary>
@@ -346,7 +355,14 @@ public sealed record LockHint(LockHintSeverity Severity, string Title, string Bo
 /// <summary>대기 이벤트로 원인 힌트를 만든다(TX row lock · TM contention(FK 인덱스) · ITL · library cache).</summary>
 public static class LockHints
 {
-    public static IReadOnlyList<LockHint> Build(IReadOnlyList<LockTreeItem> all)
+    /// <summary>Oracle 고정 호환 멤버(세션·서비스 공급자 없음). 운영 경로는 <see cref="Build(IReadOnlyList{LockTreeItem}, IServiceProvider?, ISession?)"/>.</summary>
+    public static IReadOnlyList<LockHint> Build(IReadOnlyList<LockTreeItem> all) => BuildCore(all, ForeignKeyIndexCheck);
+
+    /// <summary>힌트 목록. FK 인덱스 점검 SELECT(<c>app.fk_index_check</c>)는 세션 서버의 DBMS 카탈로그에서 꺼내고, 없으면 그 힌트의 복사 SQL 만 뺀다.</summary>
+    public static IReadOnlyList<LockHint> Build(IReadOnlyList<LockTreeItem> all, IServiceProvider? services, ISession? session)
+        => BuildCore(all, ownerDotName => ForeignKeyIndexCheck(services, session, ownerDotName));
+
+    private static List<LockHint> BuildCore(IReadOnlyList<LockTreeItem> all, Func<string, string?> foreignKeyIndexCheck)
     {
         ArgumentNullException.ThrowIfNull(all);
         var hints = new List<LockHint>();
@@ -378,7 +394,7 @@ public static class LockHints
                 $"enq: TM - contention · {obj}",
                 $"부모 표의 행을 지우거나 키를 바꿀 때 자식 표 {obj} 전체에 잠금을 요청했습니다. 외래 키 열에 인덱스가 없을 때 흔합니다.",
                 $"{obj} 의 외래 키 열에 인덱스가 있는지 확인",
-                g.Key.Length > 0 ? ForeignKeyIndexCheck(g.Key) : null));
+                g.Key.Length > 0 ? foreignKeyIndexCheck(g.Key) : null));
         }
 
         foreach (var g in waiters.Where(w => w.Node.Event?.Contains("allocate ITL", StringComparison.OrdinalIgnoreCase) == true)
@@ -404,14 +420,25 @@ public static class LockHints
     /// <summary>표(<c>OWNER.NAME</c>)의 외래 키 가운데 앞머리 인덱스가 없는 열을 찾는 SELECT(all_* 뷰, 읽기 전용).</summary>
     public static string ForeignKeyIndexCheck(string ownerDotName)
     {
+        var (ownerFilter, table) = FkArgs(ownerDotName);
+        return CatalogRouting.OracleFixed("app.fk_index_check", ("owner_filter", ownerFilter), ("table", table));
+    }
+
+    /// <summary>세션 서버의 DBMS 카탈로그로 만든 FK 인덱스 점검 SELECT. 그 DBMS·버전에 문장이 없으면 null.</summary>
+    public static string? ForeignKeyIndexCheck(IServiceProvider? services, ISession? session, string ownerDotName)
+    {
+        var (ownerFilter, table) = FkArgs(ownerDotName);
+        return CatalogRouting.Text(services, session, "app.fk_index_check", ("owner_filter", ownerFilter), ("table", table));
+    }
+
+    private static (string OwnerFilter, string Table) FkArgs(string ownerDotName)
+    {
         ArgumentNullException.ThrowIfNull(ownerDotName);
         var dot = ownerDotName.IndexOf('.', StringComparison.Ordinal);
         var owner = dot < 0 ? string.Empty : ownerDotName[..dot];
         var name = dot < 0 ? ownerDotName : ownerDotName[(dot + 1)..];
         static string Q(string s) => "'" + s.Replace("'", "''", StringComparison.Ordinal) + "'";
-        return EmbeddedCatalog.Text("app.fk_index_check",
-            ("owner_filter", owner.Length > 0 ? "   AND c.owner = " + Q(owner) + "\n" : string.Empty),
-            ("table", Q(name)));
+        return (owner.Length > 0 ? "   AND c.owner = " + Q(owner) + "\n" : string.Empty, Q(name));
     }
 
     private static LockTreeItem Root(LockTreeItem i)

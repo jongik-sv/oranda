@@ -9,7 +9,6 @@ using Oranda.App.Shell.Composition;
 using Oranda.Core.Connection;
 using Oranda.Core.Events;
 using Oranda.Core.Execution;
-using Oranda.Oracle.Catalog;
 using Oranda.Core.Monitoring;
 using Oranda.Core.Security;
 using Oranda.Core.Sessions;
@@ -84,18 +83,36 @@ public static class SessionMonitorCommands
     /// </summary>
     public static SqlStatement DisconnectStatement(SessionKey target, bool immediate, bool rac)
     {
+        // Oracle 고정 호환 멤버(세션·서비스 공급자 없음) — 운영 경로는 아래 오버로드.
+        var id = DisconnectId(target, rac);
+        return Disconnect(CatalogRouting.OracleFixed("app.disconnect_session", ("id", id), ("mode", Mode(immediate))), id);
+    }
+
+    /// <summary>세션 서버의 DBMS 카탈로그로 만든 DISCONNECT 문장. 그 DBMS·버전에 문장이 없으면 null(부르는 쪽이 이유를 보인다).</summary>
+    public static SqlStatement? DisconnectStatement(IServiceProvider? services, ISession? session, SessionKey target, bool immediate, bool rac)
+    {
+        var id = DisconnectId(target, rac);
+        return CatalogRouting.Text(services, session, "app.disconnect_session", ("id", id), ("mode", Mode(immediate))) is { } text ? Disconnect(text, id) : null;
+    }
+
+    private static string Mode(bool immediate) => immediate ? "IMMEDIATE" : "POST_TRANSACTION";
+
+    private static string DisconnectId(SessionKey target, bool rac)
+    {
         var id = string.Create(CultureInfo.InvariantCulture, $"{target.Sid},{target.Serial}");
         if (rac)
         {
             id += string.Create(CultureInfo.InvariantCulture, $",@{target.InstanceId}");
         }
 
-        return new SqlStatement(EmbeddedCatalog.Text("app.disconnect_session", ("id", id), ("mode", immediate ? "IMMEDIATE" : "POST_TRANSACTION")), default, StatementKind.Other)
-        {
-            Verb = "ALTER SYSTEM",
-            DangerousTarget = id,
-        };
+        return id;
     }
+
+    private static SqlStatement Disconnect(string text, string id) => new(text, default, StatementKind.Other)
+    {
+        Verb = "ALTER SYSTEM",
+        DangerousTarget = id,
+    };
 
     /// <summary>
     /// 모니터 전용 세션(<see cref="SessionPurpose.Monitor"/>)을 여는 도구를 만든다. <paramref name="monitorId"/> 는 기억하는 프로필의 구분 키.

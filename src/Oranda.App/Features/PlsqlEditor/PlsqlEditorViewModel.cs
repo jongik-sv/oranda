@@ -13,7 +13,6 @@ using Oranda.App.Features.SqlEditor;
 using Oranda.App.Shell;
 using Oranda.Core.Events;
 using Oranda.Core.Execution;
-using Oranda.Oracle.Catalog;
 using Oranda.Core.History;
 using Oranda.Core.Journal;
 using Oranda.Core.Metadata;
@@ -748,11 +747,17 @@ public sealed partial class PlsqlEditorViewModel : ToolPanelViewModelBase, IComp
     }
 
     /// <summary>이 객체를 쓰고 있는 다른 세션 수(v$access). 권한이 없거나 못 읽으면 0(경고만 못 한다).</summary>
-    private static async Task<int> CountOtherUsersAsync(IExecutionService exec, ISession session, DbObjectRef target, CancellationToken ct)
+    private async Task<int> CountOtherUsersAsync(IExecutionService exec, ISession session, DbObjectRef target, CancellationToken ct)
     {
         static string Lit(string s) => s.Replace("'", "''", StringComparison.Ordinal);
 
-        var sql = EmbeddedCatalog.Text("meta.object_users", ("owner", Lit(target.Owner)), ("name", Lit(target.Name)));
+        // 이 DBMS·버전에 문장이 없으면 null — 못 읽은 것과 같게 0(경고만 못 한다, 컴파일은 막지 않는다).
+        var sql = CatalogRouting.Text(_services, session, "meta.object_users", ("owner", Lit(target.Owner)), ("name", Lit(target.Name)));
+        if (sql is null)
+        {
+            return 0;
+        }
+
         try
         {
             var stmt = new SqlStatement(sql, default, StatementKind.Query) { Verb = "SELECT" };

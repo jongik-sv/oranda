@@ -350,7 +350,9 @@ public sealed partial class SessionMonitorViewModel : ToolPanelViewModelBase, ID
         {
             var exec = Execution ?? _services?.GetService(typeof(IExecutionService)) as IExecutionService
                 ?? throw new InvalidOperationException("실행 엔진이 없습니다.");
-            var stmt = SessionMonitorCommands.DisconnectStatement(row.Key, immediate, session.Server.IsRac);
+            // 이 DBMS·버전에 문장이 없으면 던진다 — 목록 아래 실패 안내(ChangeSessionAsync 의 기존 실패 경로)에 이유가 보인다.
+            var stmt = SessionMonitorCommands.DisconnectStatement(_services, session, row.Key, immediate, session.Server.IsRac)
+                ?? throw new InvalidOperationException(CatalogRouting.Unavailable(session));
             var result = await exec.ExecuteAsync(session, stmt, new Dictionary<string, BindValue>(),
                 new ExecutionOptions { Source = HistorySource.Monitor }, ct);
             switch (result.Status)

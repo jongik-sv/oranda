@@ -52,7 +52,7 @@ public sealed class SessionRunLog
         && r.Status switch
         {
             ExecutionStatus.Succeeded => true,
-            ExecutionStatus.Failed => r.Error is { Number: > 0 },
+            ExecutionStatus.Failed => r.Error is { Number: not 0 }, // Tibero 드라이버 오류 번호는 음수(TBR-8033 → -8033)
             ExecutionStatus.Cancelled => r.Elapsed > TimeSpan.Zero,
             _ => false,
         };

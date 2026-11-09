@@ -98,7 +98,8 @@ public sealed class TraceCommandHandler : ICommandHandler
                 ExecutionCommands.EnsureEngineServices(container, state);
                 return container.GetRequiredService<IExecutionService>();
             },
-            () => container.GetService<ITuningService>() ?? throw new NotSupportedException("튜닝 서비스가 없습니다."));
+            () => container.GetService<ITuningService>() ?? throw new NotSupportedException("튜닝 서비스가 없습니다."),
+            container); // 세션 서버의 DBMS 카탈로그(app.trace_*)를 고른다
         return runner.RunAsync(stmt, ct);
     }
 

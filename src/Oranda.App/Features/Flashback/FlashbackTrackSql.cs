@@ -1,8 +1,8 @@
 using System.Globalization;
 using System.Text;
 using Oranda.Core.Metadata;
+using Oranda.Core.Sessions;
 using Oranda.Language.Editing;
-using Oranda.Oracle.Catalog;
 
 namespace Oranda.App.Features.Flashback;
 
@@ -43,6 +43,20 @@ internal static class FlashbackTrackSql
     /// </summary>
     public static string Build(DbObjectRef table, IReadOnlyList<string> columns, IReadOnlyList<string> keyColumns, IReadOnlyList<object?> keyValues,
                                string? currentUser = null, decimal? days = DefaultDays, DateTime? lastDdl = null)
+        // Oracle 고정 호환 멤버(세션·서비스 공급자 없음) — 운영 경로는 BuildFor.
+        => BuildCore(table, columns, keyColumns, keyValues, currentUser, days, lastDdl, args => CatalogRouting.OracleFixed("dbinfo.flashback_versions", args))!;
+
+    /// <summary>
+    /// <see cref="Build"/> 와 같되 변경 이력 질의 문장(<c>dbinfo.flashback_versions</c>)을 세션 서버의 DBMS 카탈로그에서 꺼낸다.
+    /// 그 DBMS·버전에 문장이 없으면 null(부르는 쪽이 이유를 보인다). 인자 검증 예외는 <see cref="Build"/> 와 같다.
+    /// </summary>
+    public static string? BuildFor(IServiceProvider? services, ISession? session, DbObjectRef table, IReadOnlyList<string> columns, IReadOnlyList<string> keyColumns,
+                                   IReadOnlyList<object?> keyValues, string? currentUser = null, decimal? days = DefaultDays, DateTime? lastDdl = null)
+        => BuildCore(table, columns, keyColumns, keyValues, currentUser, days, lastDdl,
+            args => CatalogRouting.Text(services, session, "dbinfo.flashback_versions", args));
+
+    private static string? BuildCore(DbObjectRef table, IReadOnlyList<string> columns, IReadOnlyList<string> keyColumns, IReadOnlyList<object?> keyValues,
+                                     string? currentUser, decimal? days, DateTime? lastDdl, Func<(string Key, string Value)[], string?> versionsSql)
     {
         ArgumentNullException.ThrowIfNull(table);
         ArgumentNullException.ThrowIfNull(columns);
@@ -102,12 +116,20 @@ internal static class FlashbackTrackSql
             sb.Append(" 다른 스키마 표는 FLASHBACK 권한이 있어야 합니다.");
         }
 
-        sb.Append('\n');
-        sb.Append(EmbeddedCatalog.Text("dbinfo.flashback_versions",
+        var versions = versionsSql(
+        [
             ("columns", string.Join(", ", columns.Select(Column))),
             ("table", RowDmlBuilder.QualifiedName(table)),
             ("range", range),
-            ("conditions", string.Join(" AND ", conditions))));
+            ("conditions", string.Join(" AND ", conditions)),
+        ]);
+        if (versions is null)
+        {
+            return null;
+        }
+
+        sb.Append('\n');
+        sb.Append(versions);
         return sb.ToString();
     }
 

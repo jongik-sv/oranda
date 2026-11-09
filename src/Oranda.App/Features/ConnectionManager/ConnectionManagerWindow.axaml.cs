@@ -34,6 +34,9 @@ public partial class ConnectionManagerWindow : Window
         ConnectionTree.AddHandler(LostFocusEvent, OnTreeLostFocus);
         ConnectionTree.DoubleTapped += OnTreeDoubleTapped;
         Closing += OnClosing;
+
+        // 설정 창에서 Tibero 드라이버 경로를 바꾸고 돌아오면 띠·[접속]·[시험] 의 드라이버 상태를 다시 읽는다.
+        Activated += (_, _) => Model?.RefreshDriverStatus();
         DataContextChanged += (_, _) =>
         {
             if (DataContext is ConnectionManagerViewModel vm)

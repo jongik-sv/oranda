@@ -418,6 +418,7 @@ public sealed partial class ProfileEditorViewModel : ViewModelBase
     /// <summary>DBMS 를 바꾸면 기본 포트(Oracle 1521, Tibero 8629)가 따라 바뀐다(사람이 고친 포트는 두고), Tibero 는 호스트·포트 방식으로 맞춘다.</summary>
     partial void OnDbmsChanged(Dbms value)
     {
+        RefreshDriverStatus();
         if (_loading)
         {
             return;
@@ -435,6 +436,54 @@ public sealed partial class ProfileEditorViewModel : ViewModelBase
             UseTls = false;
             UseSid = false;
             Auth = AuthMode.Default;
+        }
+    }
+
+    // ---- 드라이버 상태 띠(DU3): Tibero 프로필인데 드라이버를 쓸 수 없으면 띠를 보이고 [접속]·[시험] 을 끈다 ----
+
+    private Func<Dbms, IDbmsDriverStatus?>? _driverStatus;
+
+    /// <summary>띠 문구(<see cref="DriverBandRules"/>). 띠가 없으면 빈 글자.</summary>
+    public string DriverBandText { get; private set; } = string.Empty;
+
+    /// <summary>드라이버 상태 띠를 보인다.</summary>
+    public bool ShowDriverBand => DriverBandText.Length > 0;
+
+    /// <summary>드라이버를 쓸 수 없어 [접속]·[시험] 이 꺼진다(띠가 보일 때와 같다).</summary>
+    public bool DriverBlocked => ShowDriverBand;
+
+    /// <summary>[접속] 단추의 도움말: 꺼진 이유(띠 문구). 꺼지지 않았으면 null.</summary>
+    public string? DriverBlockReason => ShowDriverBand ? DriverBandText : null;
+
+    /// <summary>띠의 [드라이버 지정…] 단추 글자(띠가 없으면 빈 글자).</summary>
+    public string DriverBandButtonText => ShowDriverBand ? UiText.Get("Connection.driver.band.assign", "드라이버 지정…") : string.Empty;
+
+    /// <summary>
+    /// 드라이버 상태를 읽는 길(DBMS → <see cref="IDbmsDriverStatus"/>, 구현이 없으면 null)을 정하고 띠를 다시 계산한다.
+    /// 길이 없으면(null) 띠는 늘 없다. 접속 관리자가 편집기를 만들 때 서비스의 길을 넣는다.
+    /// </summary>
+    public void AttachDriverStatus(Func<Dbms, IDbmsDriverStatus?>? source)
+    {
+        _driverStatus = source;
+        RefreshDriverStatus();
+    }
+
+    /// <summary>
+    /// 드라이버 상태를 다시 읽어 띠를 맞춘다(DBMS 를 바꿀 때, 설정에서 경로를 바꾸고 접속 창으로 돌아올 때).
+    /// 이미 열려 있는 Tibero 세션과는 상관없다 — 편집기의 접속·시험만 막는다.
+    /// </summary>
+    public void RefreshDriverStatus()
+    {
+        var text = DriverBandRules.Message(Dbms, _driverStatus) ?? string.Empty;
+        if (text == DriverBandText)
+        {
+            return;
+        }
+
+        DriverBandText = text;
+        foreach (var name in new[] { nameof(DriverBandText), nameof(ShowDriverBand), nameof(DriverBlocked), nameof(DriverBlockReason), nameof(DriverBandButtonText) })
+        {
+            base.OnPropertyChanged(new PropertyChangedEventArgs(name));
         }
     }
 

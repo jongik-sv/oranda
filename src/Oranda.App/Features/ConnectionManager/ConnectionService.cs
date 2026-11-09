@@ -73,6 +73,12 @@ public interface IConnectionService
     /// <summary>접속 대화 상자에서 고를 수 있는 DBMS(D-046). 기본은 공급자 어셈블리 유무만 본다. 실제 서비스는 세션 관리자 구현이 있는 DBMS 만 낸다(<see cref="DbmsAvailability.Detect(string, Oranda.Core.Composition.IDbmsServiceSelector?)"/>).</summary>
     IReadOnlyList<Dbms> AvailableDbms => DbmsAvailability.Current;
 
+    /// <summary>
+    /// <paramref name="dbms"/> 의 드라이버 상태(사용자가 위치를 지정하는 드라이버: Tibero). 그 DBMS 용 <see cref="IDbmsDriverStatus"/> 구현이 없으면 null
+    /// (접속 대화상자는 Tibero 에서 null 을 「지정되지 않음」 으로 본다. Oracle 은 드라이버를 앱이 싣고 있어 묻지 않는다).
+    /// </summary>
+    IDbmsDriverStatus? DriverStatusOf(Dbms dbms) => null;
+
     /// <summary>지금 접속·열린 접속 목록·끊김 상태가 바뀌었다. 아무 스레드에서나 온다.</summary>
     event EventHandler? ActiveSessionChanged;
 
@@ -250,6 +256,9 @@ public sealed class ConnectionService : IConnectionService, IDisposable
 
     /// <summary>공급자 어셈블리가 있고 선택기에 그 DBMS 의 세션 관리자가 있는 DBMS 만(<see cref="DbmsAvailability.Detect(string, IDbmsServiceSelector?)"/>).</summary>
     public IReadOnlyList<Dbms> AvailableDbms => DbmsAvailability.Detect(AppContext.BaseDirectory, DbmsServices.SelectorOf(_services));
+
+    /// <summary>선택기에서 꺼낸 그 DBMS 의 드라이버 상태. 선택기나 구현이 없으면 null.</summary>
+    public IDbmsDriverStatus? DriverStatusOf(Dbms dbms) => DbmsServices.Find<IDbmsDriverStatus>(_services, dbms);
 
     public ISession? ActiveSession
     {

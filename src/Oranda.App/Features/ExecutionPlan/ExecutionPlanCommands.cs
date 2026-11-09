@@ -271,7 +271,8 @@ public sealed class ExecutionPlanCommandHandler : ICommandHandler
                 return container.GetRequiredService<IExecutionService>();
             },
             () => container.GetRequiredService<IExecutionPlanService>(),
-            () => (tab ?? SqlEditorHost.Current.Active) is { } t ? SqlEditorHost.Current.WorkspaceOf(t) : null); // 시작한 작업 공간(바쁨 표시)
+            () => (tab ?? SqlEditorHost.Current.Active) is { } t ? SqlEditorHost.Current.WorkspaceOf(t) : null, // 시작한 작업 공간(바쁨 표시)
+            container); // 세션 서버의 DBMS 카탈로그(app.statistics_level)를 고른다
     }
 
     /// <summary>탭의 계획 모델에 다시 실행·설정·문장 얻기를 한 번 잇는다(모델마다 한 번).</summary>

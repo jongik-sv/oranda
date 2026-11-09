@@ -15,7 +15,6 @@ using Oranda.Core.Sessions;
 using Oranda.Core.Settings;
 using Oranda.Core.Shell;
 using Oranda.Language.Editing;
-using Oranda.Oracle.Catalog;
 
 namespace Oranda.App.Features.Flashback;
 
@@ -37,7 +36,12 @@ public sealed class FlashbackCommandHandler : ICommandHandler
     private const int DefaultAsOfMinutes = 10;
     private const int MaxRestoreRows = 200;
 
-    private static readonly Lazy<SqlCatalog> Catalog = new(EmbeddedCatalog.Load);
+    /// <summary>
+    /// 세션 서버의 DBMS 카탈로그(<c>dbinfo.flashback_ddl</c>·<c>dbinfo.flashback_env</c> 를 꺼낸다). 그 DBMS 용 구현이 없으면 이유를 담아 던진다 —
+    /// 실행 입구(<see cref="ExecuteAsync"/>)가 먼저 확인해 안내하므로 여기까지 오는 일은 드물다.
+    /// </summary>
+    private static ISqlCatalog CatalogFor(IServiceProvider services, ISession session)
+        => DbmsServices.For<ISqlCatalog>(services, session) ?? throw new InvalidOperationException(CatalogRouting.Unavailable(session));
 
     private readonly IServiceProvider? _services;
 
@@ -64,6 +68,12 @@ public sealed class FlashbackCommandHandler : ICommandHandler
                 return;
             }
 
+            if (DbmsServices.For<ISqlCatalog>(container, source.Session) is null)
+            {
+                Notify(container, model, CatalogRouting.Unavailable(source.Session)); // 이 DBMS 에는 플래시백 문장 카탈로그가 없다 — 기능을 끄고 이유를 보인다
+                return;
+            }
+
             var edit = source.Edit;
             if (edit is { IsDirty: true })
             {
@@ -75,7 +85,7 @@ public sealed class FlashbackCommandHandler : ICommandHandler
             switch (context.CommandId)
             {
                 case "oranda.grid.flashback.asOf":
-                    await AsOfAsync(runner, model, source, cancellationToken).ConfigureAwait(true);
+                    await AsOfAsync(container, runner, model, source, cancellationToken).ConfigureAwait(true);
                     break;
                 case "oranda.grid.flashback.history":
                     await HistoryAsync(container, model, source, cancellationToken).ConfigureAwait(true);
@@ -152,10 +162,10 @@ public sealed class FlashbackCommandHandler : ICommandHandler
     }
 
     /// <summary>「N분 전 값 보기」: 불러온 행의 키로 AS OF 질의를 실행해 새 결과 탭에 열고 지금 값과 다른 칸을 강조한다.</summary>
-    private static async Task AsOfAsync(FlashbackRunner runner, ResultGridModel model, FlashbackSource source, CancellationToken ct)
+    private static async Task AsOfAsync(IServiceProvider services, FlashbackRunner runner, ResultGridModel model, FlashbackSource source, CancellationToken ct)
     {
         var (tabs, tab, session, target) = (source.Tabs, source.Tab, source.Session, source.Target);
-        var minutes = await AskMinutesAsync(runner, session, "N분 전 값 보기", DefaultAsOfMinutes, ct).ConfigureAwait(true);
+        var minutes = await AskMinutesAsync(services, runner, session, "N분 전 값 보기", DefaultAsOfMinutes, ct).ConfigureAwait(true);
         if (minutes is not { } n)
         {
             return;
@@ -182,7 +192,7 @@ public sealed class FlashbackCommandHandler : ICommandHandler
         }
         catch (InvalidOperationException e) when (FlashbackErrorAdvisor.IsDefinitionChanged(e.Message))
         {
-            var ddl = await runner.LastDdlAsync(session, Catalog.Value, target.Table, ct).ConfigureAwait(true);
+            var ddl = await runner.LastDdlAsync(session, CatalogFor(services, session), target.Table, ct).ConfigureAwait(true);
             throw ddl is { } t
                 ? new InvalidOperationException($"{e.Message} 표 정의가 마지막으로 바뀐 시각: {t.ToString("yyyy-MM-dd HH:mm:ss", CultureInfo.InvariantCulture)}. 그 이후 시각만 조회할 수 있습니다.", e)
                 : e;
@@ -213,11 +223,17 @@ public sealed class FlashbackCommandHandler : ICommandHandler
 
         // 기간은 설정 「변경 추적 기간」(TSK-13-44). 최근 N일이면 표 정의가 마지막으로 바뀐 시각 앞으로는 잡지 않는다(ORA-01466).
         var days = FlashbackTrackSql.DaysFrom(container.GetService<SettingsService>()?.Current.Grid ?? new GridSettings());
-        var lastDdl = days is null ? null : await Runner(container).LastDdlAsync(source.Session, Catalog.Value, target.Table, ct).ConfigureAwait(true);
+        var lastDdl = days is null ? null : await Runner(container).LastDdlAsync(source.Session, CatalogFor(container, source.Session), target.Table, ct).ConfigureAwait(true);
         var host = SqlEditorHost.Current;
         var profileId = host.Active?.ConnectionProfileId ?? source.Session.Profile.Id;
-        var text = FlashbackTrackSql.Build(target.Table, target.Names, target.KeyNames, target.KeyOf(row),
+        var text = FlashbackTrackSql.BuildFor(container, source.Session, target.Table, target.Names, target.KeyNames, target.KeyOf(row),
             source.Session.Server.SessionUser ?? source.Session.Profile.User, days, lastDdl);
+        if (text is null)
+        {
+            model.ReportNotice(CatalogRouting.Unavailable(source.Session)); // 이 DBMS·버전에 변경 이력 질의 문장이 없다
+            return;
+        }
+
         await OpenAndRunAsync(host, text, profileId, token => ExecutionCommands.Resolve(container).RunAsync(RunMode.Statement, ct: token), ct).ConfigureAwait(true);
         model.ReportNotice(string.Empty);
     }
@@ -243,7 +259,7 @@ public sealed class FlashbackCommandHandler : ICommandHandler
             return;
         }
 
-        var minutes = await AskMinutesAsync(runner, edit.Session, "이전 값으로 되돌리기", DefaultAsOfMinutes, ct).ConfigureAwait(true);
+        var minutes = await AskMinutesAsync(container, runner, edit.Session, "이전 값으로 되돌리기", DefaultAsOfMinutes, ct).ConfigureAwait(true);
         if (minutes is not { } n)
         {
             return;
@@ -300,9 +316,9 @@ public sealed class FlashbackCommandHandler : ICommandHandler
     }
 
     /// <summary>분 입력 대화상자. 제목에 undo_retention 안내를 붙인다. 취소하거나 잘못 입력하면 null.</summary>
-    private static async Task<int?> AskMinutesAsync(FlashbackRunner runner, ISession session, string title, int initial, CancellationToken ct)
+    private static async Task<int?> AskMinutesAsync(IServiceProvider services, FlashbackRunner runner, ISession session, string title, int initial, CancellationToken ct)
     {
-        var env = await runner.EnvironmentAsync(session, Catalog.Value, ct).ConfigureAwait(true);
+        var env = await runner.EnvironmentAsync(session, CatalogFor(services, session), ct).ConfigureAwait(true);
         var text = await new AvaloniaEditorDialogs().PromptAsync($"{title} — 몇 분 전? ({env})", initial.ToString(CultureInfo.InvariantCulture), ct).ConfigureAwait(true);
         if (text is null)
         {
