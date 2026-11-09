@@ -23,10 +23,11 @@
   </ItemGroup>
 
   <ItemGroup Label="Tibero">
-    <!-- TDP.NET 은 nuget.org 에 없고 재배포 조건을 확인하기 전이라 리포에 넣지 않는다. 환경 변수 ORANDA_TIBERO_FEED(로컬 피드 폴더)가 있을 때만 Oranda.Tibero 가 참조한다(Directory.Build.props). -->
-    <PackageVersion Include="Tibero.DataAccess" Version="1.1.35" />
-    <!-- Tibero.DataAccess 가 끌어오는 4.7.0 에 알려진 취약점(GHSA-rxg9-xrhp-64gj)이 있어 직접 올린다. 이 앱은 System.Drawing 을 쓰지 않는다. -->
-    <PackageVersion Include="System.Drawing.Common" Version="10.0.13" />
+    <!--
+      TDP.NET(Tibero.DataAccess) 은 참조하지 않는다 — 사용자가 위치를 지정하고 실행 중에 읽는다(D-046-1).
+      드라이버가 쓰는 System.Security.Permissions 는 .NET 런타임에 없어 Oranda.Tibero 가 함께 싣는다(MIT).
+    -->
+    <PackageVersion Include="System.Security.Permissions" Version="10.0.13" />
   </ItemGroup>
 
   <ItemGroup Label="Oracle">

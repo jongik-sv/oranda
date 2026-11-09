@@ -73,8 +73,8 @@ public class ProjectReferenceTests
     }
 
     /// <summary>
-    /// Tibero 드라이버는 Oranda.Tibero 만 참조한다(D-046). 직접 참조만 본다 — Core·Language 는 위 시험이 재귀로 막고,
-    /// App 은 Oranda.Tibero 를 거쳐 전이로 받을 수는 있어도 csproj 에 패키지를 직접 두지 않는다.
+    /// App 은 Tibero 드라이버 패키지를 직접 두지 않는다(D-046). 어떤 프로젝트도 드라이버를 참조하지 않는다는 시험은
+    /// <see cref="TiberoDriverIsolationTests"/>(D-046-1).
     /// </summary>
     [Theory]
     [InlineData("src/Oranda.App/Oranda.App.csproj")]
@@ -105,20 +105,6 @@ public class ProjectReferenceTests
             .Where(e => e.Name.LocalName is "PackageReference" or "GlobalPackageReference")
             .Select(e => (string?)e.Attribute("Include") ?? string.Empty)
             .Where(include => include.StartsWith("Tibero.DataAccess", StringComparison.OrdinalIgnoreCase))
-            .ToList();
-
-        Assert.Empty(violations);
-    }
-
-    [Fact]
-    public void Tibero_driver_is_referenced_only_by_oranda_tibero()
-    {
-        var root = FindRepositoryRoot();
-        var violations = Directory.EnumerateFiles(Path.Combine(root, "src"), "*.csproj", SearchOption.AllDirectories)
-            .Where(path => !Path.GetFileNameWithoutExtension(path).Equals("Oranda.Tibero", StringComparison.Ordinal))
-            .Where(path => XDocument.Load(path).Descendants("PackageReference")
-                .Any(p => ((string?)p.Attribute("Include") ?? string.Empty).StartsWith("Tibero.DataAccess", StringComparison.OrdinalIgnoreCase)))
-            .Select(Path.GetFileName)
             .ToList();
 
         Assert.Empty(violations);
