@@ -1,6 +1,6 @@
-using Oranda.Oracle.Execution;
+using Oranda.Core.Execution.Providers;
 
-namespace Oranda.Oracle.Tests.Execution;
+namespace Oranda.Core.Tests.Execution.Providers;
 
 // 소유: cancel-fetch. 페이지 가져오기 취소 = 협조적 취소 + 왕복이 늦을 때만 드라이버 하드 취소. DB 없이 토큰만 본다.
 // 실제 시간을 쓰므로 「아직 안 됨」 단정에는 지연을 넉넉히(1 s) 둔다(바쁜 CI 에서 멈칫해도 넘지 않게).

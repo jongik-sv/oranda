@@ -1,6 +1,5 @@
 using Oranda.Core.Connection;
 using Oranda.Core.Schema;
-using Oranda.Core.Sessions;
 using Oranda.Oracle.Connection;
 using Oranda.Oracle.Schema;
 using Oranda.Oracle.Sessions;
@@ -109,12 +108,6 @@ public class OracleConnectionServicesTests : IDisposable
         Assert.Equal(Dbms.Oracle, sut.Dbms);
         Assert.Equal(SupportedServerPolicy.MinimumText, sut.MinimumText);
         Assert.Equal(SupportedServerPolicy.TestedVersions, sut.TestedVersions);
-    }
-
-    [Fact]
-    public void Session_closer_timeout_is_the_core_timed_close_timeout()
-    {
-        Assert.Equal(TimedClose.Timeout, SessionCloser.Timeout);
     }
 
     [Fact]

@@ -1,9 +1,9 @@
 using Oranda.Core.Sessions;
 
-namespace Oranda.Oracle.Sessions;
+namespace Oranda.Core.Execution.Providers;
 
 /// <summary>
-/// 세션 연결 하나에 한 번에 한 명령만 보내게 하는 잠금(D-041). <see cref="OracleSession"/> 이 하나 가지고, 그 연결을 쓰는 모든 기능
+/// 세션 연결 하나에 한 번에 한 명령만 보내게 하는 잠금(D-041). 공급자 세션(Oracle: <c>OracleSession</c>)이 하나 가지고, 그 연결을 쓰는 모든 기능
 /// (실행·결과 페이지·OUT 커서·커밋·롤백·Keep Alive·메타데이터·DDL·계획·튜닝·모니터·LOB 읽기)이 이 잠금 하나를 쥔 동안에만 서버에 명령을 보낸다.
 /// ODP.NET 연결은 스레드 안전하지 않고, 취소(브레이크)는 연결 단위라 잠금을 쥔 명령에만 닿아야 한다.
 /// <para>
@@ -16,7 +16,7 @@ namespace Oranda.Oracle.Sessions;
 /// </para>
 /// </summary>
 [System.Diagnostics.CodeAnalysis.SuppressMessage("Design", "CA1001", Justification = "SemaphoreSlim 은 대기 핸들을 만들지 않으면 정리할 자원이 없고, 세션이 닫힌 뒤 늦게 끝나는 작업이 놓을 수 있게 둔다.")]
-internal sealed class SessionCommandGate
+public sealed class SessionCommandGate
 {
     // 세션이 닫혀도 Dispose 하지 않는다: 늦게 끝나는 결과 집합 정리·닫는 중인 명령이 놓을 수 있어야 한다(AvailableWaitHandle 을 쓰지 않으므로 놓아 둬도 된다).
     private readonly SemaphoreSlim _semaphore = new(1, 1);

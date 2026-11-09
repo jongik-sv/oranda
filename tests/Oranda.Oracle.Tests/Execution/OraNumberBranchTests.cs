@@ -60,7 +60,19 @@ public class OraNumberBranchTests
     [Fact]
     public void Change_capture_object_not_found_is_ora_31603()
     {
-        Assert.Equal(31603, OracleExecutionService.ChangeCapture.ObjectNotFound);
+        Assert.Equal(31603, OracleExecutionService.OracleDdlSource.ObjectNotFound);
+    }
+
+    [Fact]
+    public void Change_capture_oracle_source_numbers_and_error_text()
+    {
+        // Core ChangeCapture 가 실패 행 사유·「객체 없음」 판정을 이 값으로 만든다(K1). 연결은 열지 않는다.
+        var source = new OracleExecutionService.OracleDdlSource(new global::Oracle.ManagedDataAccess.Client.OracleConnection());
+
+        Assert.Equal(31603, source.ObjectNotFoundNumber);
+        Assert.NotEqual(OracleExecutionService.OracleDdlSource.InsufficientPrivileges, source.ObjectNotFoundNumber);
+        Assert.Equal("ORA-01031 x", source.DescribeError(1031, "x"));
+        Assert.Equal("ORA-31603", source.DescribeError(31603, null));
     }
 
     // CopyRunner 의 private 번호들 중 Kind 로 옮기지 못한(Core 에 대응 분류가 없는) Oracle 전용 번호.

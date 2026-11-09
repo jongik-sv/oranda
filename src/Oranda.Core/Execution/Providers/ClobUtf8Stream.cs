@@ -1,13 +1,13 @@
 using System.Text;
 
-namespace Oranda.Oracle.Grid;
+namespace Oranda.Core.Execution.Providers;
 
 /// <summary>문자 읽기 원천(CLOB)을 UTF-8 바이트 스트림으로 읽는다. 한 번에 <see cref="ChunkChars"/> 문자만 메모리에 둔다.</summary>
 /// <param name="readChars">(버퍼, 시작, 개수) → 읽은 문자 수, 끝이면 0</param>
 /// <param name="owner">스트림을 닫을 때 같이 닫을 객체</param>
-internal sealed class ClobUtf8Stream(Func<char[], int, int, int> readChars, IDisposable? owner, int chunkChars = ClobUtf8Stream.ChunkChars) : Stream
+public sealed class ClobUtf8Stream(Func<char[], int, int, int> readChars, IDisposable? owner, int chunkChars = ClobUtf8Stream.ChunkChars) : Stream
 {
-    internal const int ChunkChars = 32 * 1024;
+    public const int ChunkChars = 32 * 1024;
 
     private readonly Encoder _encoder = new UTF8Encoding(false).GetEncoder();
     private readonly char[] _chars = new char[chunkChars];

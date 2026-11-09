@@ -1,12 +1,12 @@
 using System.Text;
 
-namespace Oranda.Oracle.Execution;
+namespace Oranda.Core.Execution.Providers;
 
 /// <summary>
 /// 치환 변수(<c>&amp;name</c>, <c>&amp;&amp;name</c>) 텍스트 치환(EXEC-03, SQL*Plus 방식).
 /// 이름 바로 뒤의 <c>.</c> 는 이름 끝 표시로 보고 지운다. 값이 없는 이름은 그대로 둔다. 문자열 안도 치환한다(SQL*Plus 와 같음).
 /// </summary>
-internal static class SubstitutionText
+public static class SubstitutionText
 {
     /// <param name="text">원문</param>
     /// <param name="lookup">이름 → 값(없으면 null)</param>

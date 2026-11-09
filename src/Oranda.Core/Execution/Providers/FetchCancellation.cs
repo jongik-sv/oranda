@@ -1,14 +1,14 @@
-namespace Oranda.Oracle.Execution;
+namespace Oranda.Core.Execution.Providers;
 
 /// <summary>
 /// 페이지 가져오기 취소(EXEC-02). 사용자 취소는 행 사이에서 받고(협조적), 진행 중인 서버 왕복이 정한 시간 안에 끝나지 않을 때만
 /// 드라이버에 넘긴 토큰(<see cref="DriverToken"/>)을 취소한다(하드 취소).
 /// <para>
-/// ODP.NET 리더는 한 번 Cancel 되면(<c>OracleDataReaderImpl.m_bCancelled</c>, 새 리더에서만 지워짐) 그 뒤 서버에서 행을 더 가져올 때마다
+/// Oracle(ODP.NET) 리더는 한 번 Cancel 되면(<c>OracleDataReaderImpl.m_bCancelled</c>, 새 리더에서만 지워짐) 그 뒤 서버에서 행을 더 가져올 때마다
 /// ORA-01013 을 낸다. 그래서 하드 취소가 나간 결과는 더 이어 가져올 수 없다(<see cref="HardCancelled"/>).
 /// </para>
 /// </summary>
-internal sealed class FetchCancellation : IDisposable
+public sealed class FetchCancellation : IDisposable
 {
     /// <summary>사용자 취소 뒤 하드 취소까지 기다리는 시간. 보통 왕복(약 한 페이지)은 이보다 훨씬 빨리 끝난다.</summary>
     public static readonly TimeSpan HardCancelDelay = TimeSpan.FromSeconds(2);

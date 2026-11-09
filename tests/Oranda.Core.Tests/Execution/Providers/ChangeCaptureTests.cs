@@ -1,20 +1,20 @@
+using Oranda.Core.Execution.Providers;
 using Oranda.Core.Journal;
-using Oranda.Oracle.Execution;
 
-namespace Oranda.Oracle.Tests.Execution;
+namespace Oranda.Core.Tests.Execution.Providers;
 
-// 소유: TSK-13-07. 실행 전 DDL 보관 규칙(계획·실패 격리·제한 시간·취소). DB 없이 가짜 DDL 원천으로 본다.
+// 소유: TSK-13-07. 실행 전 DDL 보관 규칙(계획·실패 격리·제한 시간·취소). DB 없이 가짜 DDL 원천(Oracle 번호·표기를 흉내 냄)으로 본다.
 public class ChangeCaptureTests
 {
     private static readonly JournalEntry Template = new() { ProfileName = "p", DbKey = "FREE/FREEPDB1/APP", StatementSummary = "ALTER TABLE emp ADD x NUMBER" };
 
     private static Task<IReadOnlyList<JournalEntry>> Capture(ChangeTarget target, FakeSource source, TimeSpan? timeout = null, CancellationToken ct = default)
-        => OracleExecutionService.ChangeCapture.CaptureAsync(target, Template, "APP", source, timeout ?? TimeSpan.FromSeconds(5), ct);
+        => ChangeCapture.CaptureAsync(target, Template, "APP", source, timeout ?? TimeSpan.FromSeconds(5), ct);
 
     [Fact]
     public async Task Alter_table_stores_one_row_with_resolved_owner()
     {
-        var source = new FakeSource().Add("TABLE", new OracleExecutionService.DdlRead("CREATE TABLE \"APP\".\"EMP\" (ID NUMBER)", "APP"));
+        var source = new FakeSource().Add("TABLE", new DdlRead("CREATE TABLE \"APP\".\"EMP\" (ID NUMBER)", "APP"));
 
         var row = Assert.Single(await Capture(new ChangeTarget(null, "EMP", "TABLE", ChangeOperation.Alter), source));
 
@@ -31,13 +31,13 @@ public class ChangeCaptureTests
     public async Task Drop_package_stores_spec_and_body_but_tolerates_missing_body()
     {
         var both = new FakeSource()
-            .Add("PACKAGE_SPEC", new OracleExecutionService.DdlRead("spec", "APP"))
-            .Add("PACKAGE_BODY", new OracleExecutionService.DdlRead("body", "APP"));
+            .Add("PACKAGE_SPEC", new DdlRead("spec", "APP"))
+            .Add("PACKAGE_BODY", new DdlRead("body", "APP"));
         var rows = await Capture(new ChangeTarget(null, "PKG", "PACKAGE", ChangeOperation.Drop), both);
         Assert.Equal([("PACKAGE", "spec"), ("PACKAGE BODY", "body")], rows.Select(r => (r.ObjectType, r.PreviousDdl!)));
 
         var noBody = new FakeSource()
-            .Add("PACKAGE_SPEC", new OracleExecutionService.DdlRead("spec", "APP"))
+            .Add("PACKAGE_SPEC", new DdlRead("spec", "APP"))
             .Add("PACKAGE_BODY", NotFound());
         var only = Assert.Single(await Capture(new ChangeTarget(null, "PKG", "PACKAGE", ChangeOperation.Drop), noBody));
         Assert.Equal("PACKAGE", only.ObjectType);
@@ -46,7 +46,7 @@ public class ChangeCaptureTests
     [Fact]
     public async Task Create_or_replace_package_reads_spec_only_and_skips_new_objects()
     {
-        var source = new FakeSource().Add("PACKAGE_SPEC", new OracleExecutionService.DdlRead("spec", "APP"));
+        var source = new FakeSource().Add("PACKAGE_SPEC", new DdlRead("spec", "APP"));
         var row = Assert.Single(await Capture(new ChangeTarget(null, "PKG", "PACKAGE", ChangeOperation.CreateOrReplace), source));
         Assert.Equal("PACKAGE", row.ObjectType);
         Assert.Equal(["PACKAGE_SPEC"], source.Reads);
@@ -62,7 +62,7 @@ public class ChangeCaptureTests
     [InlineData("TYPE BODY", "TYPE_BODY")]
     public async Task Maps_object_type_to_dbms_metadata_name(string type, string getDdlType)
     {
-        var source = new FakeSource().Add(getDdlType, new OracleExecutionService.DdlRead("x", "APP"));
+        var source = new FakeSource().Add(getDdlType, new DdlRead("x", "APP"));
         var row = Assert.Single(await Capture(new ChangeTarget("APP", "O", type, ChangeOperation.Alter), source));
         Assert.Equal(type, row.ObjectType);
         Assert.Equal([getDdlType], source.Reads);
@@ -78,7 +78,7 @@ public class ChangeCaptureTests
         Assert.Equal("HR", row.Owner);
         Assert.Contains("ORA-31603", row.FailureReason, StringComparison.Ordinal);
 
-        var denied = new FakeSource().Add("TABLE", new OracleExecutionService.DdlRead(null, null, 31603 + 1, "ORA-31604 insufficient privileges"));
+        var denied = new FakeSource().Add("TABLE", new DdlRead(null, null, 31603 + 1, "ORA-31604 insufficient privileges"));
         var denial = Assert.Single(await Capture(new ChangeTarget(null, "T", "TABLE", ChangeOperation.Alter), denied));
         Assert.Equal("APP", denial.Owner); // 서버가 소유자를 못 알려 주면 접속 사용자
         Assert.Contains("insufficient privileges", denial.FailureReason, StringComparison.Ordinal);
@@ -88,14 +88,14 @@ public class ChangeCaptureTests
     public async Task Unreadable_existing_object_is_a_failure_row_even_for_create_or_replace()
     {
         // 객체는 ALL_OBJECTS 에 있는데 DDL 을 못 읽음(예: SYS 객체): 「새 객체」로 오인해 조용히 넘기면 안 된다.
-        var unreadable = new OracleExecutionService.DdlRead(null, "HR", OracleExecutionService.ChangeCapture.InsufficientPrivileges, "ORA-31603: 객체는 있으나 DDL 을 읽을 수 없다(권한 부족 등)");
+        var unreadable = new DdlRead(null, "HR", FakeSource.Unreadable, "ORA-31603: 객체는 있으나 DDL 을 읽을 수 없다(권한 부족 등)");
         var source = new FakeSource().Add("VIEW", unreadable);
         var row = Assert.Single(await Capture(new ChangeTarget("HR", "V", "VIEW", ChangeOperation.CreateOrReplace), source));
         Assert.True(row.IsFailure);
         Assert.Contains("읽을 수 없다", row.FailureReason, StringComparison.Ordinal);
 
         // 본문 없는 패키지(NULL, ALL_OBJECTS 에도 없음 = 객체 없음 취급)는 DROP·ALTER 에서도 조용히 넘어간다.
-        var spec = new FakeSource().Add("PACKAGE_SPEC", new OracleExecutionService.DdlRead("spec", "APP")).Add("PACKAGE_BODY", NotFound());
+        var spec = new FakeSource().Add("PACKAGE_SPEC", new DdlRead("spec", "APP")).Add("PACKAGE_BODY", NotFound());
         Assert.Single(await Capture(new ChangeTarget(null, "P", "PACKAGE", ChangeOperation.Alter), spec));
     }
 
@@ -111,7 +111,7 @@ public class ChangeCaptureTests
     [Fact]
     public async Task Rename_resolves_type_first_and_reports_unresolved_objects()
     {
-        var source = new FakeSource { ResolvedType = "VIEW" }.Add("VIEW", new OracleExecutionService.DdlRead("view ddl", "APP"));
+        var source = new FakeSource { ResolvedType = "VIEW" }.Add("VIEW", new DdlRead("view ddl", "APP"));
         var row = Assert.Single(await Capture(new ChangeTarget(null, "V1", null, ChangeOperation.Rename), source));
         Assert.Equal("VIEW", row.ObjectType);
 
@@ -142,16 +142,24 @@ public class ChangeCaptureTests
     [Fact]
     public void Summary_is_first_nonblank_line_capped_at_200_chars()
     {
-        Assert.Equal("ALTER TABLE t", OracleExecutionService.ChangeCapture.Summarize("\n  ALTER TABLE t  \nADD x NUMBER"));
-        Assert.Equal(200, OracleExecutionService.ChangeCapture.Summarize(new string('a', 500)).Length);
+        Assert.Equal("ALTER TABLE t", ChangeCapture.Summarize("\n  ALTER TABLE t  \nADD x NUMBER"));
+        Assert.Equal(200, ChangeCapture.Summarize(new string('a', 500)).Length);
     }
 
-    private static OracleExecutionService.DdlRead NotFound()
-        => new(null, null, OracleExecutionService.ChangeCapture.ObjectNotFound, "ORA-31603: object \"X\" of type TABLE not found in schema \"APP\"");
+    private static DdlRead NotFound()
+        => new(null, null, FakeSource.ObjectNotFound, "ORA-31603: object \"X\" of type TABLE not found in schema \"APP\"");
 
-    private sealed class FakeSource : OracleExecutionService.IDdlSource
+    private sealed class FakeSource : IDdlSource
     {
-        private readonly Dictionary<string, OracleExecutionService.DdlRead> _reads = [];
+        /// <summary>ORA-31603: 객체가 없다.</summary>
+        public const int ObjectNotFound = 31603;
+
+        /// <summary>객체는 있으나 DDL 을 읽을 수 없다(Oracle 원천의 내부 표지 ORA-01031).</summary>
+        public const int Unreadable = 1031;
+
+        private readonly Dictionary<string, DdlRead> _reads = [];
+
+        public int ObjectNotFoundNumber => ObjectNotFound;
 
         public List<string> Reads { get; } = [];
 
@@ -161,7 +169,7 @@ public class ChangeCaptureTests
 
         public Exception? Throw { get; init; }
 
-        public FakeSource Add(string getDdlType, OracleExecutionService.DdlRead read)
+        public FakeSource Add(string getDdlType, DdlRead read)
         {
             _reads[getDdlType] = read;
             return this;
@@ -169,7 +177,9 @@ public class ChangeCaptureTests
 
         public Task<string?> ResolveTypeAsync(string? owner, string name, CancellationToken ct) => Task.FromResult(ResolvedType);
 
-        public async Task<OracleExecutionService.DdlRead> ReadAsync(string getDdlType, string? owner, string name, CancellationToken ct)
+        public string DescribeError(int number, string? message) => $"ORA-{number:D5} {message}".TrimEnd();
+
+        public async Task<DdlRead> ReadAsync(string getDdlType, string? owner, string name, CancellationToken ct)
         {
             Reads.Add(getDdlType);
             if (Throw is not null)

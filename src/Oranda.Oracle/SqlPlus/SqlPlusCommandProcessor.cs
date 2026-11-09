@@ -5,10 +5,10 @@ using Oranda.Core.Composition;
 using Oranda.Core.Connection;
 using Oranda.Core.Events;
 using Oranda.Core.Execution;
+using Oranda.Core.Execution.Providers;
 using Oranda.Core.History;
 using Oranda.Core.Language;
 using Oranda.Core.Sessions;
-using Oranda.Oracle.Execution;
 
 namespace Oranda.Oracle.SqlPlus;
 

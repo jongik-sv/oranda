@@ -2,6 +2,7 @@ using Oracle.ManagedDataAccess.Client;
 using Oranda.Core.Connection;
 using Oranda.Core.Events;
 using Oranda.Core.Execution;
+using Oranda.Core.Execution.Providers;
 using Oranda.Core.Sessions;
 
 namespace Oranda.Oracle.Sessions;
@@ -126,7 +127,7 @@ internal sealed class OracleSession : ISession
         _onDisposed?.Invoke(Id);
         _events.Publish(new SessionClosed(Id));
         // 명령 잠금은 Dispose 하지 않는다(SessionCommandGate): 닫는 중에도 진행 중인 작업·결과 집합 정리가 놓을 수 있어야 한다.
-        await SessionCloser.RunAsync(_closeConnection, "세션 " + Id.ToString("N")[..8]).ConfigureAwait(false);
+        await TimedClose.RunAsync(_closeConnection, "세션 " + Id.ToString("N")[..8]).ConfigureAwait(false);
     }
 
     private async Task ExecAsync(string sql, CancellationToken ct)

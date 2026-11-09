@@ -6,57 +6,13 @@ using Oranda.Oracle.Sessions;
 
 namespace Oranda.Oracle.Tests.Sessions;
 
-/// <summary>세션·연결 닫기가 호출 스레드를 막지 않고, 제한 시간이 지나면 기다림을 그만두고 경고를 남긴다.</summary>
-public sealed class SessionCloserTests
+/// <summary>
+/// <see cref="OracleSession"/> 닫기가 호출 스레드를 막지 않는다: 상태·목록·이벤트를 먼저 바꾸고 막힌 연결 닫기는 백그라운드에서 기다린다.
+/// 닫기 대기 규칙 자체(<see cref="TimedClose"/>)는 Oranda.Core.Tests 의 TimedCloseTests 가 본다.
+/// </summary>
+public sealed class OracleSessionCloseTests
 {
     private static readonly TimeSpan Quick = TimeSpan.FromSeconds(3);
-
-    [Fact]
-    public async Task RunAsync_does_not_run_dispose_on_calling_thread_and_stops_waiting_at_timeout()
-    {
-        using var gate = new ManualResetEventSlim(false);
-        var callerThread = Environment.CurrentManagedThreadId;
-        var disposeThread = -1;
-        var finished = false;
-        var warnings = new List<string>();
-
-        var run = SessionCloser.RunAsync(
-            () =>
-            {
-                disposeThread = Environment.CurrentManagedThreadId;
-                gate.Wait(Quick);
-                finished = true;
-                return ValueTask.CompletedTask;
-            },
-            "세션 test", warnings.Add, TimeSpan.FromMilliseconds(100));
-
-        await run.WaitAsync(Quick); // 막힌 Dispose 와 상관없이 제한 시간에 돌아온다
-        Assert.False(finished);
-        Assert.Single(warnings);
-        Assert.Contains("세션 test", warnings[0], StringComparison.Ordinal);
-
-        gate.Set(); // 막힌 Dispose 는 나중에 백그라운드에서 끝난다
-        SpinWait.SpinUntil(() => finished, Quick);
-        Assert.True(finished);
-        Assert.NotEqual(callerThread, disposeThread);
-    }
-
-    [Fact]
-    public async Task RunAsync_returns_without_warning_when_dispose_finishes_in_time()
-    {
-        var warnings = new List<string>();
-
-        await SessionCloser.RunAsync(() => ValueTask.CompletedTask, "세션 ok", warnings.Add).WaitAsync(Quick);
-
-        Assert.Empty(warnings);
-    }
-
-    [Fact]
-    public async Task RunAsync_rethrows_a_failure_that_happens_within_the_timeout()
-    {
-        await Assert.ThrowsAsync<InvalidOperationException>(() =>
-            SessionCloser.RunAsync(() => throw new InvalidOperationException("boom"), "세션 bad"));
-    }
 
     [Fact]
     public async Task OracleSession_dispose_publishes_closed_first_then_waits_for_stuck_connection_close_in_background()

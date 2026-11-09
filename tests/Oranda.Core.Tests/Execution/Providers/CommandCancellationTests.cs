@@ -1,9 +1,9 @@
 using System.Data;
 using System.Data.Common;
 using System.Diagnostics.CodeAnalysis;
-using Oranda.Oracle.Execution;
+using Oranda.Core.Execution.Providers;
 
-namespace Oranda.Oracle.Tests.Execution;
+namespace Oranda.Core.Tests.Execution.Providers;
 
 // 소유: TSK-06-11. 취소 토큰 → 실행 중인 서버 호출에 Cancel(드라이버 Break). DB 없이 가짜 명령으로 본다.
 public class CommandCancellationTests

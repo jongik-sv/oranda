@@ -4,15 +4,14 @@ namespace Oranda.Core.Sessions;
 
 /// <summary>
 /// 세션·연결 닫기를 호출한 스레드(UI)에서 떼어 내고 기다리는 시간을 제한한다. DBMS 와 무관하며,
-/// Oranda.Oracle 의 <c>SessionCloser</c> 를 대신해 App·Tibero 가 Oranda.Oracle 에 기대지 않게 한다.
+/// Oranda.Oracle·App·Tibero 가 함께 쓴다(DBMS 별 사본을 두지 않는다).
 /// 드라이버의 Close/Dispose 는 서버가 응답하지 않거나 내부 잠금을 쥔 작업이 있으면 끝나지 않을 수 있으므로,
 /// UI 스레드에서 직접 부르거나 끝까지 기다리지 않는다. 시간이 지나면 기다림만 그만두고 닫기는 백그라운드에서 끝나게 둔다.
 /// </summary>
 public static class TimedClose
 {
     /// <summary>
-    /// 닫기를 기다리는 최대 시간. 세션·연결을 닫는 모든 경로가 이 값 하나를 쓴다
-    /// (Oranda.Oracle <c>SessionCloser.Timeout</c> 이 이 값으로 옮겨 올 때까지 둘은 같은 값을 유지한다).
+    /// 닫기를 기다리는 최대 시간. 세션·연결을 닫는 모든 경로가 이 값 하나를 쓴다.
     /// </summary>
     public static readonly TimeSpan Timeout = TimeSpan.FromSeconds(5);
 

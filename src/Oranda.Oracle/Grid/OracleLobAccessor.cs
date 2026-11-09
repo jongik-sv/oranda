@@ -1,6 +1,7 @@
 using Oracle.ManagedDataAccess.Types;
 using Oranda.Core.Composition;
 using Oranda.Core.Connection;
+using Oranda.Core.Execution.Providers;
 using Oranda.Core.Grid;
 using Oranda.Core.Sessions;
 using Oranda.Oracle.Sessions;

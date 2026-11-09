@@ -1,12 +1,10 @@
-using Oranda.Oracle.Sessions;
-
-namespace Oranda.Oracle.Grid;
+namespace Oranda.Core.Execution.Providers;
 
 /// <summary>
 /// 서버 LOB 스트림의 읽기·닫기를 세션 명령 잠금(D-041) 안에서 한다. LOB 읽기는 조각마다 같은 연결로 서버 왕복을 하므로
 /// 같은 세션의 실행·메타데이터 조회와 섞이지 않게 조각 하나 읽는 동안만 잠금을 쥔다(조각 사이에는 다른 명령이 돈다).
 /// </summary>
-internal sealed class SessionGatedStream(Stream inner, SessionCommandGate gate) : Stream
+public sealed class SessionGatedStream(Stream inner, SessionCommandGate gate) : Stream
 {
     private int _disposed;
 
