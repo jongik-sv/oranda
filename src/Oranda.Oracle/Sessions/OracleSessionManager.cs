@@ -30,6 +30,12 @@ internal sealed class OracleSessionManager : ISessionManager
         ArgumentNullException.ThrowIfNull(profile);
         ArgumentNullException.ThrowIfNull(credential);
 
+        // 이 관리자는 Oracle 만 연다. DBMS 별 고르기(디스패처)가 다른 DBMS 프로필을 여기로 보내면 연결을 만들기 전에 거부한다.
+        if (profile.Dbms != Dbms.Oracle)
+        {
+            throw new ArgumentException($"OracleSessionManager 는 Oracle 프로필만 받는다(받은 DBMS: {profile.Dbms}).", nameof(profile));
+        }
+
         var connection = profile.CreateConnection(credential.Secret.ToString());
         try
         {

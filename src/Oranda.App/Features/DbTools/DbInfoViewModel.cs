@@ -10,10 +10,11 @@ using Oranda.App.Shell;
 using Oranda.Core.Metadata;
 using Oranda.Core.Sessions;
 using Oranda.Core.Shell;
+using Oranda.Core.Schema;
 
 namespace Oranda.App.Features.DbTools;
 
-/// <summary>파라미터 변경 적용 범위 선택(화면용). 값은 <c>Oranda.Oracle.Schema.ParameterScope</c> 와 같은 순서.</summary>
+/// <summary>파라미터 변경 적용 범위 선택(화면용). 값은 <c>Oranda.Core.Schema.ParameterScope</c> 와 같은 순서.</summary>
 public enum DbParameterScope
 {
     Memory,
@@ -199,5 +200,5 @@ public sealed partial class DbInfoViewModel : ToolPanelViewModelBase
 
     // Oracle 어셈블리 형식은 이 메서드 안에서만 쓴다(처음 부를 때 올라온다).
     private static string DefaultBuildParameterDdl(string name, string value, DbParameterScope scope)
-        => Oranda.Oracle.Schema.SchemaStatements.ParameterChangeDdl(name, value, (Oranda.Oracle.Schema.ParameterScope)(int)scope);
+        => Oranda.Oracle.Schema.SchemaStatements.ParameterChangeDdl(name, value, (Oranda.Core.Schema.ParameterScope)(int)scope);
 }

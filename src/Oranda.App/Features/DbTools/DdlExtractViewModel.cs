@@ -11,6 +11,7 @@ using Oranda.App.Shell;
 using Oranda.Core.Metadata;
 using Oranda.Core.Sessions;
 using Oranda.Core.Shell;
+using Oranda.Core.Schema;
 
 namespace Oranda.App.Features.DbTools;
 
@@ -316,17 +317,17 @@ public sealed partial class DdlExtractViewModel : ToolPanelViewModelBase
     private static async Task<DdlExtractOutcome> RunWithExporterAsync(IMetadataProvider meta, ISession session, DdlExtractPlan plan,
                                                                       IProgress<(int Done, int Total)>? progress, CancellationToken ct)
     {
-        var request = new Oranda.Oracle.Schema.DdlExtractRequest
+        var request = new Oranda.Core.Schema.DdlExtractRequest
         {
             Owner = plan.Owner,
             ObjectTypes = plan.ObjectTypes,
             NamePattern = plan.NamePattern,
             InvalidOnly = plan.InvalidOnly,
             Ddl = plan.Ddl,
-            Renames = [.. plan.Renames.Select(r => new Oranda.Oracle.Schema.DdlRename(r.From, r.To))],
+            Renames = [.. plan.Renames.Select(r => new Oranda.Core.Schema.DdlRename(r.From, r.To))],
             OutputDirectory = plan.OutputDirectory,
             Objects = plan.Objects,
-            Layout = plan.FilePerObject ? Oranda.Oracle.Schema.DdlExtractLayout.FilePerObject : Oranda.Oracle.Schema.DdlExtractLayout.SingleFile,
+            Layout = plan.FilePerObject ? Oranda.Core.Schema.DdlExtractLayout.FilePerObject : Oranda.Core.Schema.DdlExtractLayout.SingleFile,
         };
         var result = await Oranda.Oracle.Schema.DdlBulkExporter.ExtractAsync(meta, session, request, progress, ct);
         return new DdlExtractOutcome(

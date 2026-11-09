@@ -1,4 +1,5 @@
 using Oranda.Core.Metadata;
+using Oranda.Core.Schema;
 using Oranda.Oracle.Schema;
 
 namespace Oranda.Oracle.Tests.Schema;

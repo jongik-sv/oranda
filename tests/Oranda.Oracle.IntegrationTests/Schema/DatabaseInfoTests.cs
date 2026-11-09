@@ -5,6 +5,7 @@ using Oranda.Core.Metadata;
 using Oranda.Core.Security;
 using Oranda.Core.Sessions;
 using Oranda.Core.Catalog;
+using Oranda.Core.Schema;
 using Oranda.Oracle.Catalog;
 using Oranda.Oracle.Connection;
 using Oranda.Oracle.IntegrationTests.Integration;

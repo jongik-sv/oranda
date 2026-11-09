@@ -2,18 +2,9 @@ using System.Globalization;
 using System.Text;
 using Oranda.Core.Execution;
 using Oranda.Core.Metadata;
+using Oranda.Core.Schema;
 
 namespace Oranda.Oracle.Schema;
-
-/// <summary>열 순서 바꾸는 방식(TSK-13-01).</summary>
-public enum ColumnReorderMethod
-{
-    /// <summary>12c 이상: 열마다 INVISIBLE → VISIBLE (메타데이터만 바뀌어 큰 표도 즉시 끝난다).</summary>
-    InvisibleVisible,
-
-    /// <summary>재생성 스크립트: Enterprise Edition 이면 DBMS_REDEFINITION, 아니면 CTAS + RENAME. 스크립트만 만든다.</summary>
-    Rebuild,
-}
 
 /// <summary>
 /// 열 순서 바꾸기 스크립트 만들기. 문장·텍스트만 만들고 실행하지 않는다 — 실행은 반드시 <c>IExecutionService</c>(정책 관문)로 보낸다.

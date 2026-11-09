@@ -1,6 +1,7 @@
 using System;
 using Avalonia.Controls;
 using Avalonia.Input.Platform;
+using Oranda.Core.Schema;
 
 namespace Oranda.App.Features.DbTools;
 

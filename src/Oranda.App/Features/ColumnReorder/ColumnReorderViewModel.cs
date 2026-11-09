@@ -12,6 +12,7 @@ using Oranda.Core.Execution;
 using Oranda.Core.History;
 using Oranda.Core.Metadata;
 using Oranda.Core.Sessions;
+using Oranda.Core.Schema;
 using Oranda.Oracle.Schema;
 
 namespace Oranda.App.Features.ColumnReorder;

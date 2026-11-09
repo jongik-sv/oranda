@@ -1,20 +1,8 @@
 using System.Text.RegularExpressions;
 using Oranda.Core.Metadata;
+using Oranda.Core.Schema;
 
 namespace Oranda.Oracle.Schema;
-
-/// <summary>열 순서를 바꾸면 결과가 달라질 수 있는 소스 줄의 종류.</summary>
-public enum ColumnReorderRisk
-{
-    /// <summary><c>SELECT *</c> (또는 <c>t.*</c>): 열 순서가 곧 결과 열 순서다.</summary>
-    SelectStar,
-
-    /// <summary>열 목록 없는 <c>INSERT INTO 표 VALUES (…)</c> 또는 <c>INSERT INTO 표 SELECT …</c>: 값이 열 위치로 들어간다.</summary>
-    InsertWithoutColumns,
-}
-
-/// <summary>위험 후보 한 줄.</summary>
-public sealed record ColumnReorderRiskHit(DbObjectRef Ref, int Line, ColumnReorderRisk Risk, string Text);
 
 /// <summary>
 /// 표를 참조하는 소스 줄에서 열 순서에 민감한 문장 후보를 가려낸다(한 줄 단위 판정이라 줄을 넘는 문장은 못 찾는다). 소유: TSK-13-01.

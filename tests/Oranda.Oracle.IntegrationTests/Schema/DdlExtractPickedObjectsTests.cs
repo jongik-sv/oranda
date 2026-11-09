@@ -3,6 +3,7 @@ using Oranda.Core.Connection;
 using Oranda.Core.Metadata;
 using Oranda.Core.Security;
 using Oranda.Core.Sessions;
+using Oranda.Core.Schema;
 using Oranda.Oracle.Connection;
 using Oranda.Oracle.IntegrationTests.Integration;
 using Oranda.Oracle.IntegrationTests.Metadata;

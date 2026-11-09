@@ -1,6 +1,7 @@
 using Oranda.App.Features.ColumnReorder;
 using Oranda.Core.Execution;
 using Oranda.Core.Metadata;
+using Oranda.Core.Schema;
 using Oranda.Oracle.Schema;
 
 namespace Oranda.App.Tests.Features.ColumnReorder;

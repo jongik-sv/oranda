@@ -7,6 +7,7 @@ using Oranda.Core.Execution;
 using Oranda.Core.Metadata;
 using Oranda.Core.Sessions;
 using Oranda.Core.Shell;
+using Oranda.Core.Schema;
 
 namespace Oranda.App.Tests.Features.DbTools;
 

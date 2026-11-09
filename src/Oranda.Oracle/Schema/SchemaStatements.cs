@@ -1,17 +1,10 @@
 using System.Text.RegularExpressions;
 using Oranda.Core.Execution;
 using Oranda.Core.Metadata;
+using Oranda.Core.Schema;
 using Oranda.Core.Text;
 
 namespace Oranda.Oracle.Schema;
-
-/// <summary>파라미터 변경 적용 범위(ALTER SYSTEM SET … SCOPE).</summary>
-public enum ParameterScope
-{
-    Memory,
-    Spfile,
-    Both,
-}
 
 /// <summary>
 /// 객체 관리 문장 만들기(INVALID 컴파일·휴지통 Purge/Flashback·파라미터 변경 DDL). 문장만 만들고 실행하지 않는다 —
