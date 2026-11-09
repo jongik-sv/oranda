@@ -23,7 +23,7 @@ namespace Oranda.Oracle.Monitoring;
 /// Kill·Disconnect·트레이스는 상태를 바꾸므로 <see cref="IExecutionService"/>(정책 관문: 위험 명령·운영 확인, 이력 source=Monitor)로만 보낸다.
 /// </para>
 /// </summary>
-[OrandaService(typeof(IMonitorService))]
+[OrandaService(typeof(IMonitorService), Dbms = Dbms.Oracle)]
 internal sealed partial class OracleMonitorService : IMonitorService
 {
     /// <summary>델타(SESS-06)로 보는 누적 통계 이름. <c>session.list</c> 의 23~27 열 순서와 같다.</summary>

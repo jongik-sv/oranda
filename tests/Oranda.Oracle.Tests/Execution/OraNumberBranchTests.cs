@@ -1,4 +1,5 @@
 using System.Reflection;
+using Oranda.Core.Execution;
 using Oranda.Oracle.Execution;
 using Oranda.Oracle.Sessions;
 using Oranda.Oracle.Transfer.Copy;
@@ -62,10 +63,9 @@ public class OraNumberBranchTests
         Assert.Equal(31603, OracleExecutionService.ChangeCapture.ObjectNotFound);
     }
 
-    // CopyRunner 의 private 번호들. 이름과 값 모두 지금 그대로여야 O2 가 같은 뜻의 Kind 로 옮길 수 있다.
+    // CopyRunner 의 private 번호들 중 Kind 로 옮기지 못한(Core 에 대응 분류가 없는) Oracle 전용 번호.
+    // SnapshotTooOld·CreatedWithCompilationErrors·ConnectionLost 는 O2 에서 Kind 로 옮겼다(OracleErrorClassifierTests 가 같은 번호를 고정).
     [Theory]
-    [InlineData("SnapshotTooOld", 1555)]
-    [InlineData("CreatedWithCompilationErrors", 24344)]
     [InlineData("ParentKeysNotFound", 2298)]
     [InlineData("ReferencedByForeignKeys", 2449)]
     public void Copy_runner_numbers(string field, int expected)
@@ -75,12 +75,11 @@ public class OraNumberBranchTests
         Assert.Equal(expected, (int)f.GetRawConstantValue()!);
     }
 
+    // 복사 실행기가 쓰던 「연결 끊김」 집합이 Disconnected 분류와 정확히 같다(O2 전에는 CopyRunner.ConnectionLost).
     [Fact]
-    public void Copy_runner_connection_lost_set()
+    public void Disconnected_kind_is_the_copy_runner_connection_lost_set()
     {
-        var f = typeof(CopyRunner).GetField("ConnectionLost", BindingFlags.NonPublic | BindingFlags.Static);
-        Assert.NotNull(f);
-        var set = (HashSet<int>)f.GetValue(null)!;
-        Assert.Equal(ConnectionLostNumbers, set.OrderBy(n => n).ToArray());
+        var actual = Enumerable.Range(0, 40000).Where(n => OracleErrorClassifier.ClassifyNumber(n) == DbErrorKind.Disconnected).ToArray();
+        Assert.Equal(ConnectionLostNumbers, actual);
     }
 }

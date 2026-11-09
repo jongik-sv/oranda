@@ -13,6 +13,7 @@ using Oranda.Core.Plans;
 using Oranda.Core.Sessions;
 using Oranda.Core.Tuning;
 using Oranda.Oracle.Catalog;
+using Oranda.Oracle.Execution;
 using Oranda.Oracle.Monitoring;
 using Oranda.Oracle.Sessions;
 using Oranda.Oracle.SqlPlus;
@@ -27,7 +28,7 @@ namespace Oranda.Oracle.Tuning;
 /// 자식 계획은 <see cref="IExecutionPlanService"/>(plan.cursor_steps) 를 그대로 부른다.
 /// </para>
 /// </summary>
-[OrandaService(typeof(ITuningService))]
+[OrandaService(typeof(ITuningService), Dbms = Dbms.Oracle)]
 internal sealed partial class OracleTuningService : ITuningService
 {
     /// <summary>벤치마크 반복 상한(실수로 큰 값을 넣어 운영 DB 를 오래 두드리지 않게).</summary>
@@ -300,7 +301,7 @@ internal sealed partial class OracleTuningService : ITuningService
         {
             rows = (await QueryAsync(s, "tuning.plan_controls", c => AddText(c, "sql_id", id), ct)).Rows;
         }
-        catch (OracleException ex) when (ex.Number is 942 or 1031)
+        catch (OracleException ex) when (OracleErrorClassifier.IsNoAccess(ex))
         {
             return []; // dba_sql_* 를 볼 권한이 없다(계약: 빈 목록).
         }

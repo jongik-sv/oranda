@@ -1,4 +1,5 @@
 using Oranda.Core.Composition;
+using Oranda.Core.Connection;
 using Oranda.Core.Metadata;
 using Oranda.Core.Sessions;
 
@@ -8,7 +9,7 @@ namespace Oranda.Oracle.Schema;
 /// DB 정보(인스턴스·데이터베이스·버전·옵션·파라미터·NLS). 소유: TSK-07-04.
 /// 구역 하나를 읽지 못해도(권한 부족 등) 나머지는 보여 준다 — 못 읽은 구역은 「오류」 한 줄로 채운다.
 /// </summary>
-[OrandaService(typeof(IDatabaseInfoProvider))]
+[OrandaService(typeof(IDatabaseInfoProvider), Dbms = Dbms.Oracle)]
 internal sealed class OracleDatabaseInfoProvider : IDatabaseInfoProvider
 {
     private static readonly (string Title, string Id, bool Transpose)[] Plan =

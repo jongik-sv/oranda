@@ -3,8 +3,10 @@ using System.Text.RegularExpressions;
 using Oracle.ManagedDataAccess.Client;
 using Oranda.Core.Catalog;
 using Oranda.Core.Composition;
+using Oranda.Core.Connection;
 using Oranda.Core.Metadata;
 using Oranda.Core.Sessions;
+using Oranda.Oracle.Execution;
 
 namespace Oranda.Oracle.Metadata;
 
@@ -12,11 +14,11 @@ namespace Oranda.Oracle.Metadata;
 /// 객체 상세에서 인덱스·제약 줄을 고를 때 그 키의 열을 읽는다(TSK-13-34, 카탈로그 <c>meta.index_columns</c>·<c>meta.constraint_columns</c>).
 /// 조회는 <see cref="OracleMetadataProvider.QueryAsync"/> 를 거친다 — 세션마다 하나인 메타데이터 잠금을 같이 써서 한 연결에 명령이 겹치지 않는다.
 /// </summary>
-[OrandaService(typeof(ITableKeyDetailProvider))]
+[OrandaService(typeof(ITableKeyDetailProvider), Dbms = Dbms.Oracle)]
 internal sealed partial class OracleTableKeyDetailProvider : ITableKeyDetailProvider
 {
-    // ORA-00942(뷰 없음·권한 없음)·ORA-01031(권한 부족)은 「권한 없음」, 나머지 오류는 그대로 던진다.
-    private static bool IsDenied(OracleException ex) => ex.Number is 942 or 1031;
+    // 「볼 수 없음」(뷰 없음·권한 부족, DbErrorKinds.IsNoAccess)은 「권한 없음」, 나머지 오류는 그대로 던진다.
+    private static bool IsDenied(OracleException ex) => OracleErrorClassifier.IsNoAccess(ex);
 
     public async Task<SchemaFolderResult<IndexColumnDetail>> GetIndexColumnsAsync(ISession s, DbObjectRef table, string indexName, CancellationToken ct)
     {

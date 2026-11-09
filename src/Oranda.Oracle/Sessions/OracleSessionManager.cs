@@ -10,7 +10,7 @@ using Oranda.Oracle.Connection;
 namespace Oranda.Oracle.Sessions;
 
 /// <summary>ODP.NET 세션 관리자(작업·전용 세션, Pooling=false, 지원 버전 관문, Keep Alive, 끊김 감지). 소유: TSK-03-03.</summary>
-[OrandaService(typeof(ISessionManager))]
+[OrandaService(typeof(ISessionManager), Dbms = Dbms.Oracle)]
 internal sealed class OracleSessionManager : ISessionManager
 {
     public const string ModuleName = "Oranda";

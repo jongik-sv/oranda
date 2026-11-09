@@ -1,12 +1,13 @@
 using Oracle.ManagedDataAccess.Client;
 using Oranda.Core.Composition;
+using Oranda.Core.Connection;
 using Oranda.Core.Metadata;
 using Oranda.Core.Sessions;
 
 namespace Oranda.Oracle.Schema;
 
 /// <summary>열 순서 바꾸기의 표 종류·참조 소스 줄 조회(읽기 전용). 소유: TSK-13-01.</summary>
-[OrandaService(typeof(IColumnReorderProvider))]
+[OrandaService(typeof(IColumnReorderProvider), Dbms = Dbms.Oracle)]
 internal sealed class ColumnReorderProvider : IColumnReorderProvider
 {
     /// <summary>한 번에 가져올 소스 줄 수 상한(넘으면 앞쪽만 쓴다).</summary>

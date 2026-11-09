@@ -4,6 +4,7 @@ using System.Runtime.CompilerServices;
 using Oracle.ManagedDataAccess.Client;
 using Oracle.ManagedDataAccess.Types;
 using Oranda.Core.Composition;
+using Oranda.Core.Connection;
 using Oranda.Core.Events;
 using Oranda.Core.Execution;
 using Oranda.Core.Sessions;
@@ -22,7 +23,7 @@ namespace Oranda.Oracle.Execution;
 /// 하나에서 모든 테이블을 같은 시점으로 읽는다(설계 8.1). 쓰기는 정책 관문의 읽기 전용 규칙이 막는다.
 /// </para>
 /// </summary>
-[OrandaService(typeof(IBulkExecutionService))]
+[OrandaService(typeof(IBulkExecutionService), Dbms = Dbms.Oracle)]
 internal sealed class OracleBulkExecutionService : IBulkExecutionService
 {
     /// <summary>한 번에 가져올 행 수(FetchSize = RowSize × 이 값). LOB 은 위치자만 오고 값은 열마다 따로 읽는다.</summary>

@@ -1,5 +1,6 @@
 using Oracle.ManagedDataAccess.Types;
 using Oranda.Core.Composition;
+using Oranda.Core.Connection;
 using Oranda.Core.Grid;
 using Oranda.Core.Sessions;
 using Oranda.Oracle.Sessions;
@@ -11,7 +12,7 @@ namespace Oranda.Oracle.Grid;
 /// CLOB 은 UTF-8 로 인코딩한 바이트(문자 쌍 경계가 청크에 걸려도 깨지지 않게 상태를 가진 인코더 사용), BLOB·BFILE 은 원시 바이트.
 /// 결과 셀의 <see cref="LobValue.Locator"/> 를 복제해 읽으므로 그리드가 쓰는 로케이터의 위치는 건드리지 않는다.
 /// </summary>
-[OrandaService(typeof(ILobAccessor))]
+[OrandaService(typeof(ILobAccessor), Dbms = Dbms.Oracle)]
 internal sealed class OracleLobAccessor : ILobAccessor
 {
     public async Task<Stream> OpenReadAsync(ISession s, LobValue lob, CancellationToken ct)

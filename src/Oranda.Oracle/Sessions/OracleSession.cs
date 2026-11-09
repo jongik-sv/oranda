@@ -95,7 +95,7 @@ internal sealed class OracleSession : ISession
             return false;
         }
 
-        MarkBroken(new DbError($"ORA-{ex.Number:D5}", ex.Message) { Number = ex.Number });
+        MarkBroken(Execution.OracleErrorClassifier.ToDbError(ex));
         return true;
     }
 

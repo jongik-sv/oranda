@@ -1,12 +1,13 @@
 using Oracle.ManagedDataAccess.Client;
 using Oranda.Core.Composition;
+using Oranda.Core.Connection;
 using Oranda.Core.Metadata;
 using Oranda.Core.Sessions;
 
 namespace Oranda.Oracle.Schema;
 
 /// <summary>객체 검색·소스 본문 검색·열 이름 검색·참조 관계·휴지통 목록(읽기 전용). 소유: TSK-07-04.</summary>
-[OrandaService(typeof(ISchemaAdminProvider))]
+[OrandaService(typeof(ISchemaAdminProvider), Dbms = Dbms.Oracle)]
 internal sealed class OracleSchemaAdminProvider : ISchemaAdminProvider
 {
     public async Task<IReadOnlyList<ObjectSearchRow>> SearchObjectsAsync(ISession s, ObjectSearchQuery q, CancellationToken ct)

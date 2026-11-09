@@ -2,6 +2,7 @@ using System.Globalization;
 using Oracle.ManagedDataAccess.Client;
 using Oranda.Core.Catalog;
 using Oranda.Core.Composition;
+using Oranda.Core.Connection;
 using Oranda.Core.Execution;
 using Oranda.Core.History;
 using Oranda.Core.Plans;
@@ -18,7 +19,7 @@ namespace Oranda.Oracle.Plans;
 /// 실제 계획: <c>DBMS_XPLAN.DISPLAY_CURSOR</c>(팩 불필요). DISPLAY_AWR·ASH 는 쓰지 않는다.
 /// 팩이 필요한 SQL 모니터 보고서는 <see cref="GetSqlMonitorReportAsync"/> 가 보유 선언·서버 설정과 대조해 모자라면 보내지 않는다.</para>
 /// </summary>
-[OrandaService(typeof(IExecutionPlanService))]
+[OrandaService(typeof(IExecutionPlanService), Dbms = Dbms.Oracle)]
 internal sealed class OracleExecutionPlanService : IExecutionPlanService
 {
     /// <summary>예상·실제 행 수가 이 배수 이상 다르면 <see cref="PlanRisk.CardinalityMisestimate"/>.</summary>
@@ -65,7 +66,7 @@ internal sealed class OracleExecutionPlanService : IExecutionPlanService
             case ExecutionStatus.Failed:
                 throw new InvalidOperationException(result.Error switch
                 {
-                    { } e when e.Number == 1456 || e.Message.Contains("ORA-01456", StringComparison.Ordinal) => $"{e.Code}: 읽기 전용 접속은 서버가 EXPLAIN PLAN 의 PLAN_TABLE 기록을 막습니다. 실제 계획(DISPLAY_CURSOR)을 쓰세요. {e.Message}",
+                    { } e when e.Kind == DbErrorKind.ReadOnly || e.Message.Contains("ORA-01456", StringComparison.Ordinal) => $"{e.Code}: 읽기 전용 접속은 서버가 EXPLAIN PLAN 의 PLAN_TABLE 기록을 막습니다. 실제 계획(DISPLAY_CURSOR)을 쓰세요. {e.Message}",
                     { } e => $"{e.Code}: {e.Message}",
                     _ => "예상 계획 생성에 실패했습니다.",
                 });

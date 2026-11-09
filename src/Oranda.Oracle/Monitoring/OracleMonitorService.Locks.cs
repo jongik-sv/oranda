@@ -4,6 +4,7 @@ using Oracle.ManagedDataAccess.Types;
 using Oranda.Core.Catalog;
 using Oranda.Core.Monitoring;
 using Oranda.Core.Sessions;
+using Oranda.Oracle.Execution;
 using Oranda.Oracle.Sessions;
 
 namespace Oranda.Oracle.Monitoring;
@@ -244,7 +245,7 @@ internal sealed partial class OracleMonitorService
     }
 
     /// <summary>권한·뷰 없음(ORA-00942·01031·01039). 이때는 빈 결과로 돌린다.</summary>
-    internal static bool IsAccessError(OracleException ex) => ex.Number is 942 or 1031 or 1039;
+    internal static bool IsAccessError(OracleException ex) => OracleErrorClassifier.IsNoAccess(ex);
 
     private static LockedRowInfo LockedRowError(LockedRowInfo info, string reason) =>
         info with { ColumnNames = ["오류"], Values = [reason] }; // 상세 구획 오류와 같은 꼴(SectionAsync)

@@ -2,6 +2,7 @@ using System.Globalization;
 using System.Runtime.CompilerServices;
 using System.Text;
 using Oranda.Core.Composition;
+using Oranda.Core.Connection;
 using Oranda.Core.Events;
 using Oranda.Core.Execution;
 using Oranda.Core.History;
@@ -17,7 +18,7 @@ namespace Oranda.Oracle.SqlPlus;
 /// 실행 엔진은 이 처리기를 부르고, 이 처리기는 파일 안 문장을 다시 실행 엔진으로 보낸다(순환을 피하려고 서비스는 처음 쓸 때 꺼낸다).
 /// 소유: TSK-06-06.
 /// </summary>
-[OrandaService(typeof(ISqlPlusCommandProcessor))]
+[OrandaService(typeof(ISqlPlusCommandProcessor), Dbms = Dbms.Oracle)]
 internal sealed class SqlPlusCommandProcessor : ISqlPlusCommandProcessor
 {
     /// <summary>@파일 안에서 다시 @파일 을 부를 수 있는 깊이(SQL*Plus 도 같은 보호가 있다).</summary>
@@ -554,7 +555,15 @@ internal sealed class SqlPlusCommandProcessor : ISqlPlusCommandProcessor
 
         var status = cancelled ? ExecutionStatus.Cancelled : errors > 0 ? ExecutionStatus.Failed : ExecutionStatus.Succeeded;
         var summary = errors > 0
-            ? new DbError(firstError!.Code, errors == 1 && !stopped ? firstError.Message : $"{firstError.Message} (오류 {errors}건{(stopped ? ", 중단" : string.Empty)})")
+            ? firstError! with
+            {
+                Message = errors == 1 && !stopped ? firstError.Message : $"{firstError.Message} (오류 {errors}건{(stopped ? ", 중단" : string.Empty)})",
+
+                // 위치는 그 문장 본문 기준이라 스크립트 요약에는 맞지 않는다(전에도 비어 있었다). 번호·Dbms·Kind 는 그대로 이어받는다.
+                Offset = null,
+                Line = null,
+                Column = null,
+            }
             : null;
         return new ExecutionResult(stmt, status)
         {

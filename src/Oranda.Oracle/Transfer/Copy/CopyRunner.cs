@@ -29,7 +29,7 @@ namespace Oranda.Oracle.Transfer.Copy;
 /// 중지 뒤 정리(롤백·다시 켜기·기록)는 <c>ct</c> 대신 새 토큰을 쓴다: 실행 엔진은 취소된 토큰을 받으면 문장을 보내지 않는다.
 /// </para>
 /// </summary>
-[OrandaService(typeof(ICopyRunner))]
+[OrandaService(typeof(ICopyRunner), Dbms = Dbms.Oracle)]
 internal sealed class CopyRunner : ICopyRunner
 {
     /// <summary>중지 뒤 정리에 주는 시간.</summary>
@@ -51,10 +51,9 @@ internal sealed class CopyRunner : ICopyRunner
     internal const string PhaseSource = "원본 준비";
     internal const string PhaseFinish = "마무리";
 
-    private const int SnapshotTooOld = 1555;
-
-    /// <summary>ORA-24344: 컴파일 오류가 있는 채로 만들어짐(되살린 트리거가 바뀐 열 구조와 맞지 않음).</summary>
-    private const int CreatedWithCompilationErrors = 24344;
+    // 스냅샷 너무 오래됨(SnapshotTooOld)·컴파일 오류와 함께 만들어짐(CompiledWithErrors: 되살린 트리거가 바뀐 열 구조와 맞지 않음)·
+    // 연결 끊김(Disconnected: COMMIT 중이면 확정됐는지 알 수 없다)은 OracleErrorClassifier 의 DbErrorKind 로 본다.
+    // 아래 둘은 Core 에 대응하는 분류가 없는 Oracle 전용 번호다.
 
     /// <summary>ORA-02298: 부모 키가 없는 자식 행이 있어 FK 를 VALIDATE 로 켜지 못함.</summary>
     private const int ParentKeysNotFound = 2298;
@@ -63,9 +62,6 @@ internal sealed class CopyRunner : ICopyRunner
     private const int ReferencedByForeignKeys = 2449;
 
     private const string TableExistsSql = "SELECT COUNT(*) FROM all_tables WHERE owner = :OWNER AND table_name = :NAME";
-
-    /// <summary>연결이 끊긴 오류(ORA-00028·03113·03114·03135, TNS 12537·12570·12571·12583). COMMIT 중이면 확정됐는지 알 수 없다.</summary>
-    private static readonly HashSet<int> ConnectionLost = [28, 3113, 3114, 3135, 12537, 12570, 12571, 12583];
 
     /// <summary>시퀀스 증가값·디스크에 적힌 상한(LAST_NUMBER)·캐시 크기. 시퀀스 SELECT 권한이 있으면 ALL_SEQUENCES 에 보인다.</summary>
     private const string SequenceIncrementSql =
@@ -769,7 +765,7 @@ internal sealed class CopyRunner : ICopyRunner
                     continue;
                 }
 
-                if (r?.Error?.Number == CreatedWithCompilationErrors && i < kept.TriggerObjects.Count)
+                if (r?.Error?.Kind == DbErrorKind.CompiledWithErrors && i < kept.TriggerObjects.Count)
                 {
                     // 만들어졌지만 INVALID 다. 켜진 채 두면 이 표의 DML 이 모두 ORA-04098 로 막히므로 끈다.
                     var obj = kept.TriggerObjects[i];
@@ -1077,7 +1073,7 @@ internal sealed class CopyRunner : ICopyRunner
             }
             catch (OracleException ex) when (!ct.IsCancellationRequested)
             {
-                if (ex.Number == SnapshotTooOld)
+                if (OracleErrorClassifier.KindOf(ex) == DbErrorKind.SnapshotTooOld)
                 {
                     run.Notices.Add($"{table.Name}: 원본 읽기가 오래 걸려 이전 시점 데이터를 읽지 못했습니다(ORA-01555). 기간을 줄이거나 나눠 실행하세요.");
                     run.Abort(null);
@@ -1418,7 +1414,7 @@ internal sealed class CopyRunner : ICopyRunner
             // 다시 넣기는 표마다 커밋한다. 커밋하지 못한 표의 입력 행은 끝낼 때 그대로 돌려준다(FinishAsync).
             var commit = await ControlLoggedAsync(run, run.Target, CopyStatements.Commit(), ct, "표마다 커밋");
             // 연결 끊김, 또는 보내는 도중 중지로 취소되면 서버에서 확정됐는지 알 수 없다.
-            table.CommitUnknown = (commit.Status == ExecutionStatus.Failed && commit.Error is { } ce && ConnectionLost.Contains(ce.Number))
+            table.CommitUnknown = (commit.Status == ExecutionStatus.Failed && commit.Error is { Kind: DbErrorKind.Disconnected })
                                   || (commit.Status == ExecutionStatus.Cancelled && ct.IsCancellationRequested);
             if (RunState.Accept(commit, table, "커밋하지 못했습니다", ct))
             {

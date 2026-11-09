@@ -2,6 +2,7 @@ using System.Diagnostics;
 using System.Globalization;
 using System.Text;
 using Oranda.Core.Composition;
+using Oranda.Core.Connection;
 using Oranda.Core.Execution;
 using Oranda.Core.Grid;
 using Oranda.Core.History;
@@ -22,7 +23,7 @@ namespace Oranda.Oracle.Transfer;
 /// <c>「행 N: 이유」</c> 로 따로 보고하고 나머지는 계속 넣는다.
 /// </para>
 /// </summary>
-[OrandaService(typeof(IDataTransferService))]
+[OrandaService(typeof(IDataTransferService), Dbms = Dbms.Oracle)]
 internal sealed class OracleDataTransferService : IDataTransferService
 {
     /// <summary>

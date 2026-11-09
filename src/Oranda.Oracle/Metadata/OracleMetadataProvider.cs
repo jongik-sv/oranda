@@ -26,7 +26,7 @@ namespace Oranda.Oracle.Metadata;
 /// 뒤에서 <see cref="RefreshAsync"/> 가 <c>last_ddl_time</c>·상태 변경을 감지해 <see cref="MetadataInvalidated"/> 를 낸다.
 /// </para>
 /// </summary>
-[OrandaService(typeof(IMetadataProvider))]
+[OrandaService(typeof(IMetadataProvider), Dbms = Dbms.Oracle)]
 internal sealed partial class OracleMetadataProvider : IMetadataProvider
 {
     /// <summary>

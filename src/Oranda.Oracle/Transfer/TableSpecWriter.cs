@@ -2,12 +2,13 @@ using System.Globalization;
 using System.Net;
 using System.Text;
 using Oranda.Core.Composition;
+using Oranda.Core.Connection;
 using Oranda.Core.Transfer;
 
 namespace Oranda.Oracle.Transfer;
 
 /// <summary>테이블 정의서 쓰기: xlsx(<see cref="TableSpecXlsx"/>)·Markdown·HTML. 소유: TSK-13-06.</summary>
-[OrandaService(typeof(ITableSpecWriter))]
+[OrandaService(typeof(ITableSpecWriter), Dbms = Dbms.Oracle)]
 internal sealed class TableSpecWriter : ITableSpecWriter
 {
     internal static readonly string[] ColumnHeaders = ["순번", "열 이름", "타입", "NULL", "PK", "FK", "기본값", "주석"];

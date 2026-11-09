@@ -5,6 +5,7 @@ using Oranda.Core.Execution;
 using Oranda.Core.History;
 using Oranda.Core.Sessions;
 using Oranda.Core.Transfer.Copy;
+using Oranda.Oracle.Execution;
 
 namespace Oranda.Oracle.Transfer.Copy;
 
@@ -126,8 +127,8 @@ internal static class CopyCatalogQueries
         return held;
     }
 
-    /// <summary>카탈로그 조회가 권한·객체 문제로 실패했나(ORA-00942, ORA-01031).</summary>
-    public static bool IsNoAccess(OracleException ex) => ex.Number is 942 or 1031;
+    /// <summary>카탈로그 조회가 권한·객체 문제로 실패했나(<see cref="DbErrorKinds.IsNoAccess(DbErrorKind)"/>).</summary>
+    public static bool IsNoAccess(OracleException ex) => OracleErrorClassifier.IsNoAccess(ex);
 
     public static string? Text(object? value) => value switch
     {

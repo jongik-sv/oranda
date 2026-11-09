@@ -3,6 +3,7 @@ using System.Runtime.CompilerServices;
 using System.Text.RegularExpressions;
 using Oracle.ManagedDataAccess.Client;
 using Oranda.Core.Composition;
+using Oranda.Core.Connection;
 using Oranda.Core.Events;
 using Oranda.Core.Execution;
 using Oranda.Core.Grid;
@@ -21,7 +22,7 @@ namespace Oranda.Oracle.Execution;
 /// 커밋·메타데이터·모니터 등 같은 연결을 쓰는 모든 기능이 함께 쓴다. 연결은 자동 커밋·파이프라이닝을 끈다.
 /// </para>
 /// </summary>
-[OrandaService(typeof(IExecutionService))]
+[OrandaService(typeof(IExecutionService), Dbms = Dbms.Oracle)]
 internal sealed partial class OracleExecutionService : IExecutionService
 {
     /// <summary>ORA-01013: 사용자가 현재 작업을 취소함.</summary>
@@ -553,7 +554,7 @@ internal sealed partial class OracleExecutionService : IExecutionService
             column = off - (before.LastIndexOf('\n') + 1) + 1;
         }
 
-        return new DbError($"ORA-{ex.Number:D5}", ex.Message) { Number = ex.Number, Offset = offset, Line = line, Column = column };
+        return OracleErrorClassifier.ToDbError(ex) with { Offset = offset, Line = line, Column = column };
     }
 
     /// <summary>잠금 없는 질의(SELECT·WITH, FOR UPDATE 아님): 트랜잭션도 출력도 바꾸지 않는다고 보고 뒤따르는 숨은 문장을 보내지 않는다.</summary>
