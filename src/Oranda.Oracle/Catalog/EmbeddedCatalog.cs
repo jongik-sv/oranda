@@ -18,14 +18,14 @@ public static partial class EmbeddedCatalog
 
     private static readonly Lazy<SqlCatalog> Shared = new(Load);
 
-    [GeneratedRegex(@"\{([a-z_]+)\}", RegexOptions.CultureInvariant)]
+    [GeneratedRegex("@([A-Z_]+)@", RegexOptions.CultureInvariant)]
     private static partial Regex Placeholder();
 
     /// <summary>서버 버전과 무관한 문장을 꺼낼 때 쓰는 버전(가장 높은 후보를 고른다).</summary>
     private const int LatestMajor = 23;
 
     /// <summary>
-    /// 서버 버전에 따라 갈리지 않는 문장 하나를 id 로 꺼낸다. <paramref name="args"/> 의 <c>{키}</c> 를 값으로 바꾼다
+    /// 서버 버전에 따라 갈리지 않는 문장 하나를 id 로 꺼낸다. <paramref name="args"/> 의 <c>@KEY@</c> 를 값으로 바꾼다(키는 소문자로 넘겨도 되고 파일 쪽은 대문자)
     /// (바인드로 보낼 수 없는 식별자·리터럴 자리). 값은 호출자가 이스케이프해서 넘긴다.
     /// </summary>
     public static string Text(string id, params (string Key, string Value)[] args)
@@ -36,8 +36,8 @@ public static partial class EmbeddedCatalog
             return sql;
         }
 
-        // 한 번에 바꾼다: 값 안에 {키} 모양 글이 있어도 다시 바뀌지 않는다.
-        var map = args.ToDictionary(a => a.Key, a => a.Value, StringComparer.Ordinal);
+        // 한 번에 바꾼다: 값 안에 @KEY@ 모양 글이 있어도 다시 바뀌지 않는다.
+        var map = args.ToDictionary(a => a.Key.ToUpperInvariant(), a => a.Value, StringComparer.Ordinal);
         return Placeholder().Replace(sql, m => map.TryGetValue(m.Groups[1].Value, out var v) ? v : m.Value);
     }
 

@@ -1215,6 +1215,7 @@ alter_session
 
 alter_session_set_clause
     : (parameter_name '=' parameter_value)+
+    | EVENTS CHAR_STRING
     | EDITION '=' en = id_expression
     | CONTAINER '=' cn = id_expression (SERVICE '=' sn = id_expression)?
     | ROW ARCHIVAL VISIBILITY '=' (ACTIVE | ALL)
@@ -2693,6 +2694,7 @@ compiler_parameters_clause
 parameter_value
     : regular_id
     | CHAR_STRING
+    | ALL
     ;
 
 library_name

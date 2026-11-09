@@ -32,8 +32,8 @@ public class AppSqlCatalogTests
     [Fact]
     public void Placeholder_values_are_not_expanded_again()
     {
-        var sql = EmbeddedCatalog.Text("meta.object_users", ("owner", "{name}"), ("name", "X"));
-        Assert.Contains("owner = '{name}'", sql, StringComparison.Ordinal);
+        var sql = EmbeddedCatalog.Text("meta.object_users", ("owner", "@NAME@"), ("name", "X"));
+        Assert.Contains("owner = '@NAME@'", sql, StringComparison.Ordinal);
         Assert.Contains("object = 'X'", sql, StringComparison.Ordinal);
     }
 

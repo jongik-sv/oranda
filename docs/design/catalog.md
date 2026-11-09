@@ -141,7 +141,7 @@ TRD 4.2 의 "19 미만 대상에 `FETCH FIRST` 금지" 는 `pre12c-feature` 가 
 | `meta/` | `meta.` | TSK-04-04 메타데이터 제공자·캐시 | 딕셔너리 조회, 23 전용 객체는 `min-version: 23` |
 | `plan/` | `plan.` | TSK-07-01 실행 계획 | `DISPLAY_CURSOR` 등(라이선스 대상은 쓰지 않음) |
 | `lock/` | `lock.` | TSK-05-02 Lock 모니터 | `gv$lock`·`gv$transaction`·`DBMS_ROWID.ROWID_CREATE`·`dba_ddl_locks`·`v$diag_alert_ext`(19 이상 전용 `lock.deadlocks`) |
-| `app/` | `app.` | Tibero T1 O6 | App 이 직접 보내던 문장(세션 종료·연결 끊기, 10053 트레이스, STATISTICS_LEVEL, FK 인덱스 점검, 잠긴 행 읽기). `{키}` 자리는 `EmbeddedCatalog.Text(id, (키, 값)…)` 가 채움. DBMS 별로 갈리는 문장이 여기에 모임 |
+| `app/` | `app.` | Tibero T1 O6 | App 이 직접 보내던 문장(세션 종료·연결 끊기, 10053 트레이스, STATISTICS_LEVEL, FK 인덱스 점검, 잠긴 행 읽기). `@KEY@` 자리는 `EmbeddedCatalog.Text(id, (키, 값)…)` 가 채움. DBMS 별로 갈리는 문장이 여기에 모임 |
 
 새 기능이 카탈로그가 필요하면 새 폴더를 만들고(id 접두어 = 폴더 이름) 아래 표에 한 줄 더한다. 한 폴더는 한 Task 만 소유한다.
 

@@ -38,6 +38,8 @@ public class PlSqlAnalyzerTests(ITestOutputHelper output)
         "GRANT SELECT ON t TO scott",
         "COMMIT",
         "ROLLBACK",
+        "ALTER SESSION SET STATISTICS_LEVEL = ALL",
+        "ALTER SESSION SET EVENTS '10053 trace name context forever, level 1'",
         "CREATE SEQUENCE s START WITH 1 INCREMENT BY 1",
         "BEGIN\n  NULL;\nEND;",
         "DECLARE\n  v NUMBER := 0;\nBEGIN\n  FOR r IN (SELECT empno FROM emp) LOOP\n    v := v + 1;\n  END LOOP;\n  DBMS_OUTPUT.PUT_LINE(v);\nEXCEPTION\n  WHEN OTHERS THEN\n    RAISE;\nEND;",
@@ -68,10 +70,15 @@ public class PlSqlAnalyzerTests(ITestOutputHelper output)
         var failures = new List<string>();
         foreach (var file in files)
         {
-            // 카탈로그 자리 표시자: @PFX@ 는 뷰 접두사, @SEGMENTS@ 는 세그먼트 뷰(표 자리), 그 밖의 @이름@ 은 실행 때 식으로 바뀐다.
+            // 카탈로그 자리 표시자: @PFX@ 는 뷰 접두사, @SEGMENTS@ 는 세그먼트 뷰(표 자리), @USER@ 는 계정 이름, @TABLE@ 는 표 이름,
+            // @OWNER_FILTER@ 는 조건 줄 통째(없으면 빈 글), @RANGE@ 는 VERSIONS BETWEEN 구간. 그 밖의 @이름@ 은 실행 때 식으로 바뀐다.
             var sql = System.Text.RegularExpressions.Regex.Replace(
                 (await File.ReadAllTextAsync(file)).Replace("@PFX@", "dba", StringComparison.Ordinal)
-                    .Replace("@SEGMENTS@", "dba_segments", StringComparison.Ordinal),
+                    .Replace("@SEGMENTS@", "dba_segments", StringComparison.Ordinal)
+                    .Replace("@USER@", "scott", StringComparison.Ordinal)
+                    .Replace("@TABLE@", "t", StringComparison.Ordinal)
+                    .Replace("@RANGE@", "SCN MINVALUE", StringComparison.Ordinal)
+                    .Replace("@OWNER_FILTER@", string.Empty, StringComparison.Ordinal),
                 "@[A-Z_]+@",
                 "NULL");
             var diagnostics = await service.AnalyzeAsync(sql, CancellationToken.None);
