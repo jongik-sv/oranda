@@ -36,8 +36,8 @@ Tibero 에만 있는 id(짝 Oracle 파일 없음, `MonitorCatalogParityTests.Tib
 | `final_blocking_session` | `V$WAITER_SESSION` 을 `CONNECT BY NOCYCLE PRIOR hold_sid = wait_sid` 로 올라간 잎(뿌리 보유자) | 같음 |
 | `taddr`·`addr` 로 트랜잭션 | `V$TRANSACTION.SESS_ID = V$SESSION.SID` | |
 | `xidusn.xidslot.xidsqn`, `used_ublk`, `used_urec`, `start_date` | `usn.slot.wrap`, `used_blk`, `used_rec`, `start_time` | |
-| 잠금 종류 TM·TX | `DECODE(type, 'WLOCK_DML','TM', 'WLOCK_TX','TX', type)` | **확인 필요**(아래 4장) |
-| 잠금 모드 번호 | Tibero + 1(0 은 0) | 실측: DBA_DDL_LOCKS 「Row-Shared(RS)」 = V$LOCK LMODE 1(Oracle RS = 2). WLOCK_SESS 보유 5 = X |
+| 잠금 종류 TM·TX | `DECODE(type, 'WLOCK_DML','TM', 'WLOCK_TX','TX', type)` | 실측(4장 1): 행 갱신 대기에서 WLOCK_DML·WLOCK_TX. 그 밖에 WLOCK_DD_OBJ(보유 1)가 보이나 TM·TX·UL 이 아니라 목록에서 빠진다 |
+| 잠금 모드 번호 | 보유 = Tibero LMODE + 1(0 은 0), 요청 = 원값 그대로 | 실측: DBA_DDL_LOCKS 「Row-Shared(RS)」 = V$LOCK LMODE 1(Oracle RS = 2). WLOCK_SESS 보유 5 = X. 쓰기 IT(win144 #60·#63, main 568db678): TX 보유 LMODE 5 → 6(X), DML 보유 2 → 3(SX), 대기 세션의 V$LOCK.REQUESTED·V$WAITER_SESSION.MODE_REQ = 6(이미 Oracle 체계, +1 하면 7 로 범위 밖) |
 | `V$LOCK.SID`·`REQUEST`·`BLOCK` | `SESS_ID`·`REQUESTED`·`V$WAITER_SESSION` 에 그 잠금(종류·ID1·ID2)을 기다리는 행이 있으면 1 | |
 | 세션 통계 `v$sesstat` + `v$statname` 조인 | `V$SESSTAT` 에 NAME 이 있어 조인 없음(STATISTIC# 은 TBR-8026) | |
 | 통계 이름 | CPU = `'DB CPU time'/10000`(마이크로초 → 1/100초), logical reads = `'logical reads'`, redo = `'redo log size'` | driver-exec 6장 표 |
@@ -56,13 +56,17 @@ Tibero 에만 있는 id(짝 Oracle 파일 없음, `MonitorCatalogParityTests.Tib
 ## 4. 쓰기 IT(D3, win144)에서 확인할 것
 
 시험 서버에 잠금·대기가 없어 값이 비어 있는 경로다. 두 세션 + `ORT_` 표로 행 잠금 대기를 만들어 본다.
+실측 = tb-mon P7 쓰기 IT `TiberoLockWriteIt.W1`(같은 시험 계정 세션 둘이 `ORT_LKW_BLOCK` 한 행을 갱신, win144 #60·#63, main 568db678). 시험 계정은 performance views = 볼 수 있음, dictionary = 못 봄.
 
-1. 표 DML 잠금·트랜잭션 잠금의 `V$LOCK.TYPE` 이름(WLOCK_DML·WLOCK_TX 로 짐작)과 ID1·ID2 뜻(DML = 객체 번호?)
-2. `V$LOCK.CTIME` 단위(초로 봄), `V$WAITER_SESSION.MODE_REQ` 번호(LMODE 와 같은 체계로 봄)
-3. 행 잠금 대기 세션의 `STATE`·`WAIT_EVENT`·`WAIT_TIME`(대기 초 계산), `ROW_WAIT_OBJ_ID` 가 객체 번호인지 세그먼트 번호인지(`lock.locked_row`)
-4. `V$TRANSACTION.STATE` 번호의 뜻(`session.transaction` 의 status 는 지금 번호 글자)
-5. `V$SESSION_LONGOPS.ELAPSED_TIME` 단위(긴 작업이 있을 때)
-6. `final_blocking_session` 계산(3단 대기 사슬)
+1. **닫음.** 표 DML 잠금 = `WLOCK_DML`, ID1 = 객체 번호(`ALL_OBJECTS.OBJECT_ID` 로 이으면 `ORT_LKW_BLOCK`), ID2 는 세션마다 0·2 로 달라 뜻 모름(쓰지 않음). 트랜잭션 잠금 = `WLOCK_TX`, 보유자·대기자의 ID1·ID2 가 같고 V$WAITER_SESSION 의 TYPE·ID1·ID2 와도 같다(block 판정이 맞게 켜짐)
+2. **반만 닫음.** `MODE_REQ` = `V$LOCK.REQUESTED` 와 같은 값(6 = X)이고 Oracle 체계다 — LMODE(0 기반)와 체계가 다르다 → `lock.list` 는 요청 모드에 +1 하지 않는다. `V$LOCK.CTIME` 단위는 대기가 1초 안이라 0 만 보여 아직 모름(초로 봄)
+3. **반만 닫음.** 대기 세션 이벤트 = `WE_WLOCK_TX`, 블로킹 트리·`session.my_blocking`·`lock.blocker_impact`·`lock.idle_transactions` 가 대기를 보인다. 대기 초(`WAIT_TIME`)는 대기가 짧아 0. `ROW_WAIT_OBJ_ID` 는 재지 않았다(`lock.locked_row` 는 없음 그대로)
+4. 확인 필요 그대로: `V$TRANSACTION.STATE` 번호의 뜻
+5. 확인 필요 그대로: `V$SESSION_LONGOPS.ELAPSED_TIME` 단위(긴 작업이 있을 때)
+6. 확인 필요 그대로: `final_blocking_session` 계산(3단 대기 사슬 — 세션 둘로는 못 만든다)
+
+그 밖의 실측(win144 #58·#63): `SYS_CONTEXT('USERENV','INSTANCE')` = 0(세션 키·inst_id 가 0). `V$SQL_BIND_CAPTURE` 는 바인드를 쓴 문장도 0행 → `lock.waiting_binds`·`sql.binds` 는 빈 결과가 정상.
+일반 계정의 `ALTER SYSTEM KILL SESSION` = TBR-17004 → 권한 부족으로 분류, SERIAL# 이 2^31 이상인 문장도 그 단계까지 파싱된다(`TiberoMonitorKillIt.K1`). 권한 계정 Kill(K2)은 시험 서버에 권한 계정이 없어 아직 안 돌렸다.
 
 ## 5. tuning(실행 계획·통계 쪽 9개)
 
