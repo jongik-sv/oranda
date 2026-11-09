@@ -82,7 +82,7 @@
 |---|---|---|
 | null·`DBNull`·`INullable.IsNull = true` | `Null` | null, `IsNull = true`(`ProviderTypeName` 은 드라이버 형식이면 채움) |
 | `TiberoString` | `String` | `string`(`Value`) |
-| `TiberoDecimal` | `Decimal` | invariant 글자(`ToString()` 을 invariant 로). 23자리 값은 실측됨(values 6장), 28자리 넘는 값이 잃지 않는지는 DV6 실측 — 잃으면 이 표에 적고 호출자는 `Varchar2` OUT 으로 받는다 |
+| `TiberoDecimal` | `Decimal` | invariant 글자(`ToString()` 을 invariant 로). 23자리 값은 실측됨(values 6장). **OUT 파라미터는 해당 없음**(DV6 실측, win144 #11): 1.1.35 는 `Decimal` OUT 을 `ExecuteNonQuery` 안에서 `System.Decimal` 로 바꿔(`TbNumber.toDecimal` → `Decimal.Parse`) 28자리를 넘으면 `OverflowException` 이 나고 `TiberoDecimal` 로 받을 기회가 없다 → NUMBER OUT 은 `Varchar2` OUT 으로 받는다(결정40, `TiberoBindPlan` = tb-result) |
 | `TiberoDate` | `Date` | `DateTime`(`Value`) |
 | `TiberoTimeStamp` | `TimeStamp` | `DateTime`(`Value` 의 초까지) + `Nanosecond` = `TiberoTimeStamp.Nanosecond` 속성 |
 | `TiberoTimeStampLTZ` | `TimeStampLtz` | `DateTime`(`Value`, 클라이언트 PC 시간대, 초까지) + `Nanosecond` 속성 |
@@ -111,7 +111,7 @@
 
 - `ReadClob`·`ReadBlob`·`ConvertProviderValue` 는 부를 때마다 드라이버에서 새 로케이터를 받아 새 `TiberoLob` 을 만든다(둘이 한 드라이버 객체를 나누지 않음). 받은 쪽이 `Dispose` 한다.
 - `TiberoLob` 은 스트림이라 스레드 안전하지 않다(한 번에 한 스레드). 어댑터(`TiberoDriver`)만 스레드 안전.
-- 리더가 다음 행으로 넘어가도 앞 행의 로케이터는 읽힌다(values 4장). 리더·연결을 닫은 뒤에 읽히는지는 실측 전 → 연결이 열려 있는 동안만 쓴다고 본다(DV6 에서 리더 닫은 뒤를 잰다).
+- 리더가 다음 행으로 넘어가도 앞 행의 로케이터는 읽힌다(values 4장). 리더를 닫은 뒤에도 연결이 열려 있으면 읽힌다(DV6 실측, win144 #11). 연결을 닫은 뒤는 재지 않았다 → 연결이 열려 있는 동안만 쓴다.
 
 ### 2.7 예외
 
@@ -163,6 +163,6 @@
   - `ServerError(int number, string message)` = 서버 오류(`TiberoException`, `Number` 그대로), `ClientError(int code, string message)` = 드라이버 쪽 오류(`TbOdpException`). `Reset()` = 처리기 빼기.
   - 가짜 값 만들기: `New(fullName, args…)`·`Static(fullName, field)`·`Get(target, property)`·`NewReader(DataTable)`·`TypeOf(fullName)`(드라이버 형식 이름 문자열은 시험 쪽 `Driver/` 폴더에서만 쓴다).
 - 프로세스 단위 상태는 `TiberoDriverHost`(앱 = `TiberoDriverHost.Shared`, 기본 ALC). 시험은 `new TiberoDriverHost(새 ALC, 환경 변수 함수, 풀기 폴더)` 로 따로 만든다.
-- DV6 에서 잴 것: 실제 드라이버의 `GetTiberoClob(i)`·`GetTiberoBlob(i)` 가 부를 때마다 새 객체를 주는지(같은 객체면 `ReadClob`·`ReadBlob` 도 `Clone()` 으로 바꾼다), 리더·연결을 닫은 뒤 로케이터 읽기, `TiberoDecimal` 28자리 초과 글자.
+- DV6 실측(win144 #11, Tibero 6.2.15, 드라이버 위치 = dll·nupkg 둘 다 같은 결과): 실제 1.1.35 검사 Ok·2장 모든 멤버 묶임(nupkg 도 로케이터가 풂). 2.70(.NET Framework 판) 거절. 같은 칸 `ReadClob` 두 번 = 서로 독립(`Clone()` 불필요), 리더 닫은 뒤(연결 열림) 로케이터 읽힘. NUMBER 28자리 초과 `Decimal` OUT = 드라이버 안 `OverflowException` → `Varchar2` OUT 이면 글자 그대로(2.5 `TiberoDecimal` 행, 결정40). NUMBER 는 유효 숫자 38자리까지라 39자리 이상은 서버가 반올림한다(win144 #13, 결정43 — 시험 기대값 = 38자리).
 - 메모리 PE 거절·판정: 이름 다름·`Oracle.DataAccess`·`mscorlib` 참조·메이저 2·`Unverified`(1.2.0 등)·없는 경로·텍스트 파일·폴더·nupkg. 버전별 판정은 메모리에서 만든 PE 로 보고, 가짜 드라이버는 1.1.35 하나만 둔다. 멤버 하나가 빠진 경우(`Unusable`)는 가짜 드라이버 어셈블리를 묶을 때 형식을 일부 빼는 시험용 바인드 옵션 또는 멤버 없는 메모리 어셈블리로 본다(DV4).
 - 실제 드라이버 IT: `ORANDA_TIBERO_DRIVER` = 실제 1.1.35 dll 일 때만. 2장의 모든 멤버가 묶이는지(핵심), 2.70 거절(파일이 있을 때만).
