@@ -14,6 +14,8 @@ public class LayerDependencyTests
     [
         "Avalonia",
         "Oracle.ManagedDataAccess",
+        "Oranda.Tibero",
+        "Tibero.DataAccess",
     ];
 
     public static TheoryData<string> GuardedAssemblies => new()

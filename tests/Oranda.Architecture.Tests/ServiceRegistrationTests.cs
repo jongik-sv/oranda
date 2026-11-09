@@ -3,6 +3,7 @@ using Oranda.Core.Composition;
 using Oranda.Language;
 using Oranda.Oracle;
 using Oranda.Platform;
+using Oranda.Tibero;
 
 namespace Oranda.Architecture.Tests;
 
@@ -16,6 +17,7 @@ public class ServiceRegistrationTests
         typeof(LanguageAssembly).Assembly.GetName().Name!,
         typeof(OracleAssembly).Assembly.GetName().Name!,
         typeof(PlatformAssembly).Assembly.GetName().Name!,
+        typeof(TiberoAssembly).Assembly.GetName().Name!,
     };
 
     [Theory]

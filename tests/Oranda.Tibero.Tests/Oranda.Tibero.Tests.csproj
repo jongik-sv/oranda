@@ -1,0 +1,28 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Oranda.Tibero 의 단위 시험. 드라이버·서버 없이 도는 것만 둔다.
+    서버가 필요한 시험은 [Trait("Category", "Integration")] 를 붙이고 TiberoItEnv.Skip() 으로 시작한다:
+    ORANDA_IT_TIBERO_* 환경 변수가 없으면 아무것도 하지 않고, ORANDA_IT_REQUIRE=1 이면 실패한다.
+  -->
+
+  <PropertyGroup>
+    <IsTestProject>true</IsTestProject>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="coverlet.collector" />
+    <PackageReference Include="Microsoft.NET.Test.Sdk" />
+    <PackageReference Include="xunit" />
+    <PackageReference Include="xunit.runner.visualstudio" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Using Include="Xunit" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Oranda.Tibero\Oranda.Tibero.csproj" />
+  </ItemGroup>
+
+</Project>

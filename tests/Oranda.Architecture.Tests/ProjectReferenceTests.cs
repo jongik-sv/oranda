@@ -12,11 +12,13 @@ public class ProjectReferenceTests
     [
         "Avalonia",
         "Oracle.ManagedDataAccess",
+        "Tibero.DataAccess",
     ];
 
     private static readonly string[] ForbiddenProjects =
     [
         "Oranda.Oracle",
+        "Oranda.Tibero",
         "Oranda.App",
         "Oranda.Platform",
         "Oranda.Agent.Cli",
