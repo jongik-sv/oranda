@@ -414,7 +414,8 @@ public sealed class ManualPlanSchemaScreens
                 new Mark(Named<ToggleButton>(view, "FavoritesToggle"), 4),
                 new Mark(Named<Button>(view, "RefreshButton"), 5),
                 new Mark(Named<TextBox>(view, "FilterBox"), 6),
-                new Mark(Named<TreeView>(view, "Tree"), 7, 215, 90),
+                new Mark(ManualCapture.Find<CheckBox>(view, c => AutomationProperties.GetName(c) == "테이블 명 보이기"), 7),
+                new Mark(Named<TreeView>(view, "Tree"), 8, 150, 36),
             ]);
         }
     });

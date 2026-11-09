@@ -141,6 +141,8 @@ public sealed class ManualCopyScreens : IDisposable
 
     private const string MainJobId = "20261106main";
 
+    private static readonly string[] FinderPicks = ["ORDER_STATUS_HIST", "ORDER_HIST", "SHIPMENT_ORDERS"];
+
     /// <summary>내 작업 목록에 보일 작업 넷. 첫째가 화면에서 여는 작업이다.</summary>
     private static void SeedJobs(DataCopyHarness h)
     {
@@ -157,7 +159,7 @@ public sealed class ManualCopyScreens : IDisposable
         }
     }
 
-    private static async Task<(DataCopyWindow Window, DataCopyViewModel Vm, Canvas Overlay)> OpenWindowAsync(DataCopyHarness h)
+    private static async Task<(DataCopyWindow Window, DataCopyViewModel Vm, Canvas Overlay)> OpenWindowAsync(DataCopyHarness h, double? height = null)
     {
         var text = new ShellText(language: "ko");
         UiText.Current = text;
@@ -175,6 +177,11 @@ public sealed class ManualCopyScreens : IDisposable
         vm.Editor.SelectedRule = vm.Editor.Rules[0];
 
         var window = new DataCopyWindow { DataContext = vm };
+        if (height is { } tall)
+        {
+            window.Height = tall; // 상세 칸 아래쪽(마스킹·변수)까지 보이게
+        }
+
         window.Show();
         LiteralTranslator.Translate(window);
         Settle(window);
@@ -195,7 +202,7 @@ public sealed class ManualCopyScreens : IDisposable
         }
 
         var h = new DataCopyHarness();
-        var (window, _, overlay) = await OpenWindowAsync(h);
+        var (window, _, overlay) = await OpenWindowAsync(h, height: 900);
         try
         {
             ManualCapture.SaveOverlaid(window, overlay, "data-copy-rules",
@@ -259,6 +266,119 @@ public sealed class ManualCopyScreens : IDisposable
                 GridCell(grid, 4, 1, 2),
                 new(Named<TextBlock>(window, "RuleHeaderText"), 5, -14, 0),
                 new(Named<ComboBox>(window, "TargetOwnerBox"), 6),
+            ]);
+        }
+        finally
+        {
+            window.Close();
+        }
+    });
+
+    // ---- 1단계: 테이블 찾기 창 -------------------------------------------------------------------
+
+    [Fact]
+    public Task Table_finder() => HeadlessHost.Run(async () =>
+    {
+        if (!ManualCapture.Enabled)
+        {
+            return;
+        }
+
+        var text = new ShellText(language: "ko");
+        UiText.Current = text;
+        LiteralTranslator.Install(text);
+
+        IReadOnlyList<TableFinderSource> tables =
+        [
+            new("ACME_SALES", "CUSTOMERS", "TABLE", "고객"),
+            new("ACME_SALES", "ORDERS", "TABLE", "주문"),
+            new("ACME_SALES", "ORDER_ITEMS", "TABLE", "주문 품목"),
+            new("ACME_SALES", "ORDER_STATUS_HIST", "TABLE", "주문 상태 이력"),
+            new("ACME_SALES", "ORDER_HIST", "SYNONYM", null),
+            new("ACME_SALES", "PRODUCTS", "TABLE", "상품"),
+            new("ACME_SALES", "PRODUCT_PRICES", "TABLE", "상품 단가(주문 시점)"),
+            new("ACME_SALES", "SHIPMENTS", "TABLE", "출고"),
+            new("ACME_SALES", "SHIPMENT_ORDERS", "TABLE", "출고별 주문"),
+            new("ACME_SALES", "CODES", "TABLE", "공통 코드"),
+            new("ACME_SALES", "RETURN_ORDERS", "TABLE", "반품 주문"),
+        ];
+        var added = new HashSet<string>(StringComparer.Ordinal) { "ORDERS", "ORDER_ITEMS" };
+        var vm = new TableFinderViewModel(["ACME_ARCH", "ACME_COMMON", "ACME_SALES"], "ACME_SALES",
+            (_, _) => Task.FromResult(tables), (_, table) => added.Contains(table));
+        var window = new TableFinderWindow { DataContext = vm };
+        window.Show();
+        LiteralTranslator.Translate(window);
+        try
+        {
+            await vm.LoadAsync();
+            vm.IncludeSynonyms = true;
+            vm.FilterText = "order";
+            Settle(window);
+            foreach (var name in FinderPicks)
+            {
+                vm.Rows.First(r => r.Name == name).IsChecked = true;
+            }
+
+            Settle(window);
+            var overlay = ManualCapture.AddOverlay(window);
+            var list = Named<ListBox>(window, "List");
+            ManualCapture.SaveOverlaid(window, overlay, "data-copy-finder",
+            [
+                new(Named<ComboBox>(window, "OwnerBox"), 1),
+                new(Named<TextBox>(window, "FilterBox"), 2),
+                new(ManualCapture.Find<CheckBox>(window, c => c.Content is string s && s == "시노님 포함"), 3),
+                new(VisibleText(window, vm.SummaryText), 4, -14, 0),
+                new(ByAutomationName<CheckBox>(window, "보이는 표 모두 고르기"), 5),
+                new(VisibleText(window, "이미 있음", under: list), 6, -14, 0),
+                new(ByAutomationName<CheckBox>(list, "ORDER_HIST"), 7),
+                new(VisibleText(window, vm.PickedText), 8, -14, 0),
+                new(Named<Button>(window, "AddButton"), 9, -12, 0),
+            ]);
+        }
+        finally
+        {
+            window.Close();
+        }
+    });
+
+    // ---- 1단계: 변수와 조건에 넣기 ---------------------------------------------------------------
+
+    [Fact]
+    public Task Variables() => HeadlessHost.Run(async () =>
+    {
+        if (!ManualCapture.Enabled)
+        {
+            return;
+        }
+
+        var h = new DataCopyHarness();
+        var (window, vm, overlay) = await OpenWindowAsync(h, height: 900);
+        try
+        {
+            var orderIds = vm.Editor.AddVariable();
+            orderIds.Name = "ORDER_IDS";
+            orderIds.TypeOption = VariableTypeOption.For(CopyVariableType.Number);
+            orderIds.ValuesText = "100342\n100977\n101205";
+            var status = vm.Editor.AddVariable();
+            status.Name = "STATUS_CD";
+            status.ValuesText = "DONE";
+            var expander = Named<Expander>(window, "VariablesExpander");
+            expander.IsExpanded = true;
+            vm.Editor.SelectedRule = vm.Editor.Rules[0];
+            vm.InsertVariableCondition(orderIds);
+            Settle(window);
+
+            ManualCapture.SaveOverlaid(window, overlay, "data-copy-variables",
+            [
+                new(VisibleText(window, "변수", under: expander), 1, -14, 0),
+                new(ByAutomationName<TextBox>(expander, "변수 이름"), 2),
+                new(ByAutomationName<ComboBox>(expander, "변수 형식"), 3),
+                new(ByAutomationName<TextBox>(expander, "변수 값"), 4),
+                new(VisibleText(window, orderIds.UsageText, under: expander), 5, -14, 0),
+                new(ManualCapture.Find<Button>(expander, b => ToolTip.GetTip(b) is string s && s == "고른 규칙의 WHERE 조건에 넣기"), 6, -12, 0),
+                new(Named<Button>(window, "AddVariableButton"), 7, -12, 0),
+                new(VisibleText(window, "추가 조건(AND)"), 8, -14, 0),
+                new(VisibleText(window, vm.StatusText!), 9, -14, 0),
             ]);
         }
         finally
@@ -467,6 +587,81 @@ public sealed class ManualCopyScreens : IDisposable
                 GridCell(Named<MonitorGrid>(window, "RunGrid"), 6, -1, 3),
                 GridCell(Named<MonitorGrid>(window, "FailedGrid"), 7, 0),
                 new(VisibleText(window, "FK ACME_SALES.FK_ITEMS_ORDERS: 부모 없는 행 3 때문에 ENABLE NOVALIDATE 로 켰습니다."), 8, -14, 0),
+            ]);
+        }
+        finally
+        {
+            window.Close();
+        }
+    });
+
+    // ---- 3단계: 작업 로그 ----------------------------------------------------------------------
+
+    [Fact]
+    public Task Run_log() => HeadlessHost.Run(async () =>
+    {
+        if (!ManualCapture.Enabled)
+        {
+            return;
+        }
+
+        var h = new DataCopyHarness();
+        h.Runner.Behavior = _ => Task.FromResult(new CopyRunResult(
+            CopyOutcome.Succeeded,
+            [
+                new TableRunResult("CODES", 120, 120, TimeSpan.FromSeconds(1), CopyOutcome.Succeeded, null),
+                new TableRunResult("ORDERS", 15_000, 15_000, TimeSpan.FromSeconds(9), CopyOutcome.Succeeded, null),
+            ],
+            [],
+            [],
+            Local(2026, 11, 6, 10, 30, 0)));
+        var (window, vm, overlay) = await OpenWindowAsync(h, height: 1040);
+        try
+        {
+            var report = TestJobs.Report(order: [TestJobs.Plan("CODES"), TestJobs.Plan("ORDERS")]);
+            await vm.Run.StartAsync(Sessions(), vm.CurrentJob!, report,
+                new CopyDecisions(new HashSet<string>(), new HashSet<ForeignKeyRef>(), new HashSet<string>(), false),
+                PeriodCalculator.Resolve(vm.CurrentJob!.Period, new DateTime(2026, 11, 6)));
+
+            // 실행기가 남기는 꼴 그대로의 예시 줄(가짜 실행기는 로그를 남기지 않는다).
+            var log = vm.Run.Log;
+            log.Clear();
+            void Line(int second, string phase, string? table, string body, CopyLogKind kind = CopyLogKind.Info) =>
+                log.Append(new CopyLogEntry(Local(2026, 11, 6, 10, 30, second), phase, table, body, kind));
+            Line(0, "시작", null, "작업 「월말 테스트 DB 갱신」 · prod-db → test-db · 표 2개 · 커밋 테이블마다 · 배치 5,000행 · 실패 상한 100행 · 같은 시점 읽기");
+            Line(0, "시작", null, "기간 2026-10-07 00:00:00 이상 ~ 2026-11-07 00:00:00 미만");
+            Line(0, "원본 준비", null, "원본: SET TRANSACTION READ ONLY", CopyLogKind.Statement);
+            Line(1, "정리", "ORDERS", "대상: DELETE FROM ACME_SALES.ORDERS WHERE ORDER_DT >= :FROM_DT AND ORDER_DT < :TO_DT  [바인드 :FROM_DT = 2026-10-07 00:00:00, :TO_DT = 2026-11-07 00:00:00]", CopyLogKind.Statement);
+            Line(1, "정리", "ORDERS", "→ 완료 · 14,812행 · 0.84초");
+            Line(2, "적재", "CODES", "예상 120행");
+            Line(2, "적재", "CODES", "원본: SELECT CODE_ID, CODE_NM, USE_YN FROM ACME_SALES.CODES", CopyLogKind.Statement);
+            Line(2, "적재", "CODES", "대상: MERGE INTO ACME_SALES.CODES T USING (SELECT :C1 CODE_ID, :C2 CODE_NM, :C3 USE_YN FROM DUAL) S ON (T.CODE_ID = S.CODE_ID) …  [바인드 배열 :C1…:C3, 배치 5000행씩]", CopyLogKind.Statement);
+            Line(3, "적재", "CODES", "끝 · 읽음 120건 · 넣음 120행 · 1.02초");
+            Line(3, "적재", "ORDERS", "예상 15,000행 · 마스킹 CUST_NAME(해시)");
+            Line(3, "적재", "ORDERS", "배치 1 · 5,000행 보냄 · 누적 5,000행");
+            Line(5, "적재", "ORDERS", "배치 2 · 5,000행 보냄 · 누적 10,000행");
+            Line(6, "적재", "ORDERS", "배치 3 이 실패해 한 행씩 다시 넣습니다.", CopyLogKind.Warning);
+            Line(8, "적재", "ORDERS", "배치 3 · 5,000행 보냄 · 누적 15,000행");
+            Line(9, "건수 비교", "ORDERS", "대상: SELECT COUNT(*) FROM ACME_SALES.ORDERS WHERE ORDER_DT >= :FROM_DT AND ORDER_DT < :TO_DT", CopyLogKind.Statement);
+            Line(9, "건수 비교", "ORDERS", "→ 원본 15,000건 · 대상 15,000건 · 같음");
+            Line(9, "마무리", null, "원본 트랜잭션을 닫지 못했습니다: ORA-03113", CopyLogKind.Error);
+            Line(9, "마무리", null, "끝: 성공 · 표 2개 · 넣음 15,120행 · 실패 0행 · 9.84초");
+            vm.Step = DataCopyStep.Run;
+            vm.Run.DetailTab = 0;
+            Settle(window);
+
+            var logList = Named<ListBox>(window, "LogList");
+            TextBlock LogLine(string part) => ManualCapture.Find<TextBlock>(logList, t => t.Text?.Contains(part, StringComparison.Ordinal) == true);
+            ManualCapture.SaveOverlaid(window, overlay, "data-copy-runlog",
+            [
+                new(Named<TabItem>(window, "RunLogTab"), 1, -12, 0),
+                new(Named<Button>(window, "CopyLogButton"), 2, -12, 0),
+                new(Named<Button>(window, "SaveLogButton"), 3, 6, 24),
+                new(LogLine("[시작]"), 4, -14, 6),
+                new(LogLine("[바인드 :FROM_DT"), 5, -14, 6),
+                new(LogLine("→ 완료"), 6, -14, 6),
+                new(LogLine("알림:"), 7, -14, 6),
+                new(LogLine("오류:"), 8, -14, 6),
             ]);
         }
         finally

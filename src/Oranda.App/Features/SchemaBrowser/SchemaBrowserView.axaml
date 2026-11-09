@@ -35,10 +35,10 @@
     <Panel DockPanel.Dock="Top" Margin="4,4,4,0">
       <DockPanel Margin="0,0,0,3">
         <!-- 체크하면 표·뷰 이름 옆에 테이블 명(주석)을 흐리게 보인다(기본 켬, 설정에 남는다). -->
-        <CheckBox x:Name="ShowCommentsCheck" DockPanel.Dock="Right" Margin="6,0,0,0" VerticalAlignment="Center"
+        <CheckBox x:Name="ShowCommentsCheck" DockPanel.Dock="Right" Margin="6,0,0,0" MinHeight="0" VerticalAlignment="Center"
                   Content="테이블 명" IsChecked="{Binding ShowTableComments, Mode=TwoWay}"
                   ToolTip.Tip="표·뷰 이름 옆에 테이블 명(주석) 보이기" AutomationProperties.Name="테이블 명 보이기" />
-        <TextBox x:Name="FilterBox" Classes="compact search"
+        <TextBox x:Name="FilterBox" Classes="compact search" VerticalAlignment="Center"
                  PlaceholderText="이름 필터 (* 와일드카드)" Text="{Binding FilterText, Mode=TwoWay}" AutomationProperties.Name="이름 필터" />
       </DockPanel>
       <ProgressBar x:Name="LoadingBar" IsIndeterminate="True" IsVisible="{Binding IsLoading}" Height="2" MinHeight="2"
