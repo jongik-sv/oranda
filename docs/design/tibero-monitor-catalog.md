@@ -1,0 +1,80 @@
+# Tibero 실행 계획·세션·잠금 카탈로그 (X4, T4 선행)
+
+결정 D-046, 조정 결정24. `src/Oranda.Oracle/Catalog/{plan,session,lock}` 과 같은 id 의 Tibero 판을 `src/Oranda.Tibero/Catalog/{plan,session,lock}` 에 둔다.
+근거 = [tibero-catalog-map.md](tibero-catalog-map.md)(뷰 실측표), [tibero-driver-exec.md](tibero-driver-exec.md), 이 문서의 실측(2026-11-09, 6.2.15, 읽기만).
+
+## 1. 계약
+
+- **같은 id = 같은 열(개수·순서·이름)과 같은 바인드 이름.** 호출 쪽(T4 의 Tibero 모니터·계획 서비스)이 Oracle 행 매핑을 그대로 쓸 수 있게 한다. Tibero 에 없는 열은 `CAST(NULL AS …)` 로 자리만 둔다.
+- 바인드가 같은지는 `tests/Oranda.Tibero.Tests/Catalog/MonitorCatalogParityTests` 가 단정한다(서버 없이). 열은 서버에서 파일마다 실행해 확인했다(예시 바인드, `@PFX@` = dba·all 둘 다, 23개 파일 모두 성공. Oracle id 28개 = Tibero 판 23 + 없음 5).
+- 형식 검사(`SqlCatalog.Validate`)는 `TiberoEmbeddedCatalogTests`·`CombinedCatalogTests` 가 돈다.
+
+## 2. Tibero 판이 없는 id
+
+| id | 없는 것 | 대안 |
+|---|---|---|
+| `plan.monitor_report_html` | `REPORT_SQL_MONITOR` 에 형식(type) 인수 없음(텍스트 CLOB 만) | `plan.monitor_report`(텍스트)를 보인다 |
+| `session.trace_file` | `V$DIAG_INFO` 없음, `V$PROCESS` 에 `TRACEFILE`·`ADDR` 없음 | 없음(추적 파일은 서버 파일) |
+| `session.wait_history` | `V$SESSION_WAIT_HISTORY` 없음 | 지금 대기 = `V$SESSION_WAIT`(SID, NAME, ID1, ID2, SEQ#, TIME_WAITED, TIMEOUT), 누적 = `V$SESSION_EVENT` — 「최근 10건」 화면은 Tibero 에서 비활성 + 이유 |
+| `lock.deadlocks` | `V$DIAG_ALERT_EXT` 없음 | 없음(알림 로그는 서버 파일) |
+| `lock.locked_row` | `*_OBJECTS.DATA_OBJECT_ID` 없음. `DBMS_ROWID.ROWID_CREATE(SEGMENT_NUMBER, ABSOLUTE_FNO, BLOCK_NUMBER, ROW_NUMBER)` 의 세그먼트 번호는 OBJECT_ID 와 다르다(실측: 4303 ≠ 2907) | `ROW_WAIT_OBJ_ID` 가 세그먼트 번호인지 쓰기 IT 로 확인 → 맞으면 `ROWID_CREATE(row_wait_obj_id, row_wait_file_no(절대), row_wait_block_no, row_wait_row_no)` 로 파일을 더한다. 확인 전에는 「잠긴 행 보기」 비활성 |
+
+## 3. 공통 바꿈 규칙
+
+| Oracle | Tibero 판 | 근거 |
+|---|---|---|
+| `gv$…` + `inst_id` | `v$…` + `TO_NUMBER(SYS_CONTEXT('USERENV','INSTANCE'))`(시험 서버 0). `inst_id` 바인드는 `(:inst_id IS NULL OR :inst_id = 그 값)` | `gv$` 는 있으나 단일 인스턴스에서 `INST_ID` 가 NULL(실측). `V$WAITER_SESSION`·`V$BLOCKER_SESSION` 은 `gv$` 없음. TAC 는 나중 |
+| `status` ACTIVE/INACTIVE | `DECODE(status, 'RUNNING','ACTIVE', 'READY','INACTIVE', status)` | 실측 값 RUNNING·READY |
+| `type` USER/BACKGROUND | `WTHR` → USER, 그 밖 BACKGROUND | 사용자 세션 TYPE = WTHR(81/81) |
+| `program` | `prog_name` | |
+| `event`·`wait_class` | `V$EVENT_NAME`(EVENT#, NAME, CLASS) 을 `WAIT_EVENT` 번호로 합침. CLASS `STAT_CLASS_*` → Oracle 이름(Idle·Application·Concurrency·User I/O·System I/O·Cluster·Cache·SQL·Other). 클라이언트를 기다리는 세션(`STATE = RECV_WAITING`, WAIT_EVENT −1)은 event `RECV_WAITING`·wait_class `Idle` | `WAIT_EVENT` 는 숫자 |
+| `seconds_in_wait`(대기 중이면 wait_time_micro) | `WAIT_EVENT >= 0` 이면 `TRUNC(WAIT_TIME / 10)` | 실측: 쉬는 세션 WAIT_TIME 이 초당 약 9~10 증가(1/10초). 1,604초 = 로그온 뒤 경과와 맞음 |
+| `last_call_et` | 실행 중(RUNNING) `TRUNC(SQL_ET / 1000)`, 쉬는 중 `TRUNC(WAIT_TIME / 10)` | 실측: 실행 중 SQL_ET 가 초당 약 900~1000 증가(밀리초), 쉬면 0 |
+| `blocking_session`·`blocking_instance` | `V$WAITER_SESSION(WAIT_SID, HOLD_SID, TYPE, ID1, ID2, MODE_REQ, MODE_HELD)` 의 `MIN(HOLD_SID)` | V$SESSION 에 그 열 없음 |
+| `final_blocking_session` | `V$WAITER_SESSION` 을 `CONNECT BY NOCYCLE PRIOR hold_sid = wait_sid` 로 올라간 잎(뿌리 보유자) | 같음 |
+| `taddr`·`addr` 로 트랜잭션 | `V$TRANSACTION.SESS_ID = V$SESSION.SID` | |
+| `xidusn.xidslot.xidsqn`, `used_ublk`, `used_urec`, `start_date` | `usn.slot.wrap`, `used_blk`, `used_rec`, `start_time` | |
+| 잠금 종류 TM·TX | `DECODE(type, 'WLOCK_DML','TM', 'WLOCK_TX','TX', type)` | **확인 필요**(아래 4장) |
+| 잠금 모드 번호 | Tibero + 1(0 은 0) | 실측: DBA_DDL_LOCKS 「Row-Shared(RS)」 = V$LOCK LMODE 1(Oracle RS = 2). WLOCK_SESS 보유 5 = X |
+| `V$LOCK.SID`·`REQUEST`·`BLOCK` | `SESS_ID`·`REQUESTED`·`V$WAITER_SESSION` 에 그 잠금(종류·ID1·ID2)을 기다리는 행이 있으면 1 | |
+| 세션 통계 `v$sesstat` + `v$statname` 조인 | `V$SESSTAT` 에 NAME 이 있어 조인 없음(STATISTIC# 은 TBR-8026) | |
+| 통계 이름 | CPU = `'DB CPU time'/10000`(마이크로초 → 1/100초), logical reads = `'logical reads'`, redo = `'redo log size'` | driver-exec 6장 표 |
+| `v$sess_io` | `V$SESSION_IO`(같은 열) | |
+| `sql_fulltext` | `V$SQL.SQL_TEXT`(전문: 10,957자 문장의 길이 = `V$SQLTEXT` 조각 합) | |
+| `DBMS_XPLAN.DISPLAY_CURSOR` 의 `plan_table_output` | `column_value AS plan_table_output`. 인수 (IN_SQL_ID, IN_CHILD_NO, FORMAT), TYPICAL·BASIC·ALLSTATS LAST 모두 됨 | 줄 모양이 Oracle 과 다르다: 머리 「SQL ID : …」, 자식 번호 줄 없음 → `plan.last_cursor_text` 의 머리를 읽는 쪽은 Tibero 모양을 따로 읽는다 |
+| `DBMS_XPLAN.DISPLAY` | 없음 → `plan.explain_text` 는 PLAN_TABLE 을 들여쓰기 표(ID·Operation·Name·Cost·Cards + Access·Filter 줄)로 직접 그린다 | |
+| `V$SQL_PLAN_STATISTICS_ALL` | `V$SQL_PLAN` + `V$SQL_PLAN_STATISTICS`(SQL_ID·CHILD_NUMBER·ID). OPTIONS 열 없음(OPERATION 이 「index (full)」처럼 방식을 담음) → options NULL | 실행 통계는 `GATHER_SQL_PLAN_STAT=YES` 일 때만(시험 서버 NO) |
+| `REPORT_SQL_MONITOR(sql_id =>, type =>)` | `REPORT_SQL_MONITOR(:sql_id)`(CLOB). `license: none`(Tibero 는 팩 없음) | |
+| `V$LOCKED_OBJECT` | `V$LOCK` 의 WLOCK_DML(ID1 = 객체 번호) | 동의어 순환으로 못 읽음 |
+| `MAX_IDLE_BLOCKER_TIME` | NULL(해당 매개변수 없음, `V$PARAMETERS` 실측) | |
+| `V$OPEN_CURSOR.CURSOR_TYPE`·`LAST_SQL_ACTIVE_TIME`, `V$SESSION_LONGOPS.TIME_REMAINING`·`MESSAGE`, `V$SQL_BIND_CAPTURE.WAS_CAPTURED` | NULL(was_captured 는 캡처 시각이 있으면 YES). 열린 커서는 CURSOR_ID 내림차순 | |
+| UNION ALL 갈래에 바인드를 그대로 열로 | `CAST(:x AS …)` | 안 하면 TBR-11022(`lock.waiting_binds` 실측) |
+| `DBA_DDL_LOCKS` | `SYS.DBA_DDL_LOCKS`. 모드 글은 Tibero 모양(「Row-Shared(RS)」). 걸러 내는 보유 = None·Row-Shared(RS) | PUBLIC 동의어 순환 |
+
+## 4. 쓰기 IT(D3, win144)에서 확인할 것
+
+시험 서버에 잠금·대기가 없어 값이 비어 있는 경로다. 두 세션 + `ORT_` 표로 행 잠금 대기를 만들어 본다.
+
+1. 표 DML 잠금·트랜잭션 잠금의 `V$LOCK.TYPE` 이름(WLOCK_DML·WLOCK_TX 로 짐작)과 ID1·ID2 뜻(DML = 객체 번호?)
+2. `V$LOCK.CTIME` 단위(초로 봄), `V$WAITER_SESSION.MODE_REQ` 번호(LMODE 와 같은 체계로 봄)
+3. 행 잠금 대기 세션의 `STATE`·`WAIT_EVENT`·`WAIT_TIME`(대기 초 계산), `ROW_WAIT_OBJ_ID` 가 객체 번호인지 세그먼트 번호인지(`lock.locked_row`)
+4. `V$TRANSACTION.STATE` 번호의 뜻(`session.transaction` 의 status 는 지금 번호 글자)
+5. `V$SESSION_LONGOPS.ELAPSED_TIME` 단위(긴 작업이 있을 때)
+6. `final_blocking_session` 계산(3단 대기 사슬)
+
+## 5. tuning(실행 계획·통계 쪽 9개)
+
+`tuning/` 21개 중 9개를 했다. 서버 실행 9/9 성공(예시 표 = 시험 계정의 통계 있는 표, 계획 = `/*+ FULL */` 질의의 커서).
+
+| id | Tibero 판 |
+|---|---|
+| `tuning.prev_cursor` | 내 SID = `V$MYSTAT`(USERENV 'SID' 는 TBR-11006) |
+| `tuning.child_cursors` | `V$SQL`. 바인드 민감·인식 열 없음 → NULL |
+| `tuning.sql_stats` | `V$SQL` 합. `PARSING_SCHEMA_ID` → `ALL_USERS.USERNAME`. instances = 0/1 |
+| `tuning.table_stats` | `*_TAB_STATISTICS` 없음 → `@PFX@_TABLES` 통계 열. stale_stats NULL |
+| `tuning.index_stats` | `@PFX@_INDEXES`. `*_IND_STATISTICS` 없음 → stale_stats NULL |
+| `tuning.column_stats` | `@PFX@_TAB_COL_STATISTICS`(소유자 열 = TABLE_OWNER). HISTOGRAM 열 없음 → 버킷 2개 이상이면 `HISTOGRAM`, 아니면 `NONE` |
+| `tuning.histogram`·`tuning.index_columns` | Oracle 과 같은 열(본문 그대로) |
+| `tuning.recommend_plan` | `V$SQL_PLAN.OPERATION`(「table access (full)」) 을 Oracle 모양 operation·options(`TABLE ACCESS`/`FULL`, `INDEX`/`FULL SCAN`, `CARTESIAN`)로 나눔. 실측 operation 62종 목록에 카티션이 없어 `%(cartesian)%` 은 짐작(쓰기 IT 또는 카티션 질의로 확인) |
+
+남은 12개(`ash_waits`·`awr_plan_history`·`awr_plan_steps`·`plan_controls`·`recommend_candidates`·`recommend_literals`·`report_env`·`shared_cursor`·`trace_file`·`trace_file_self`·`trace_lines`·`wait_sample`)는 T4 몫. 그중 `plan_controls`(SQL 프로필·기준선·패치 없음)·`shared_cursor`(`V$SQL_SHARED_CURSOR` 없음)·`trace_file_self`·`trace_lines`(`V$DIAG_*` 없음)는 뷰 실측표상 Tibero 판을 둘 수 없다.

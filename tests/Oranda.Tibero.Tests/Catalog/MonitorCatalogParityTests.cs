@@ -1,0 +1,88 @@
+using System.Text.RegularExpressions;
+using Oranda.Core.Catalog;
+using Oranda.Oracle;
+using Oranda.Oracle.Catalog;
+using Oranda.Tibero.Catalog;
+
+namespace Oranda.Tibero.Tests.Catalog;
+
+/// <summary>
+/// 실행 계획·세션·잠금 카탈로그(X4)의 Tibero 판이 같은 id 의 Oracle 판과 같은 바인드를 쓰는지, Tibero 판이 없는 id 가 문서의 「없음」 목록과 같은지
+/// (docs/design/tibero-monitor-catalog.md). 서버 없이 돈다. 열 순서·이름은 서버 실측(읽기)으로 확인했다.
+/// </summary>
+public partial class MonitorCatalogParityTests
+{
+    private static readonly string[] Folders = ["plan", "session", "lock", "tuning"];
+
+    /// <summary>모든 id 를 다 본 폴더(없음 목록을 단정한다). tuning 은 실행 계획·통계 쪽만 했다.</summary>
+    private static readonly string[] CompleteFolders = ["plan", "session", "lock"];
+
+    /// <summary>Tibero 에 해당 뷰·기능이 없어 파일을 두지 않은 id(문서 2장).</summary>
+    private static readonly string[] Missing =
+        ["plan.monitor_report_html", "session.trace_file", "session.wait_history", "lock.deadlocks", "lock.locked_row"];
+
+    private static List<CatalogQuery> Queries(IEnumerable<CatalogSource> sources) =>
+        [.. sources
+            .Where(s => Folders.Contains(CatalogParser.TopFolder(s.Path)))
+            .Select(s => CatalogParser.Parse(s).Query)
+            .OfType<CatalogQuery>()];
+
+    private static readonly List<CatalogQuery> Oracle = Queries(EmbeddedCatalog.ReadSources(typeof(OracleAssembly).Assembly));
+    private static readonly List<CatalogQuery> Tibero = Queries(TiberoEmbeddedCatalog.Sources);
+
+    public static TheoryData<string> TiberoIds()
+    {
+        var data = new TheoryData<string>();
+        foreach (var id in Tibero.Select(q => q.Header.Id).Distinct().Order(StringComparer.Ordinal))
+        {
+            data.Add(id);
+        }
+
+        return data;
+    }
+
+    [Theory]
+    [MemberData(nameof(TiberoIds))]
+    public void Tibero_file_uses_the_same_binds_as_the_oracle_file(string id)
+    {
+        var oracle = Oracle.Where(q => q.Header.Id == id).MaxBy(q => q.Header.MinVersion);
+        Assert.NotNull(oracle); // Oracle 에 없는 id 를 Tibero 에만 두지 않는다
+
+        foreach (var tibero in Tibero.Where(q => q.Header.Id == id))
+        {
+            Assert.Equal(Binds(oracle.Sql), Binds(tibero.Sql));
+        }
+    }
+
+    [Fact]
+    public void Oracle_ids_without_a_tibero_file_are_the_documented_missing_ones()
+    {
+        var tiberoIds = Tibero.Select(q => q.Header.Id).ToHashSet(StringComparer.Ordinal);
+        var withoutTibero = Oracle.Select(q => q.Header.Id)
+            .Where(id => CompleteFolders.Contains(id[..id.IndexOf('.', StringComparison.Ordinal)]))
+            .Distinct().Where(id => !tiberoIds.Contains(id)).Order(StringComparer.Ordinal);
+
+        Assert.Equal(Missing.Order(StringComparer.Ordinal), withoutTibero);
+    }
+
+    [Fact]
+    public void Bind_scanner_ignores_strings_comments_and_assignments()
+    {
+        Assert.Equal(["a", "b"], Binds("SELECT ':x' || :a FROM dual -- :y\n WHERE b = :b AND :A IS NULL AND x := 1"));
+    }
+
+    private static string[] Binds(string sql)
+    {
+        var text = CommentRegex().Replace(StringRegex().Replace(sql, "''"), string.Empty);
+        return [.. BindRegex().Matches(text).Select(m => m.Groups[1].Value.ToLowerInvariant()).Distinct().Order(StringComparer.Ordinal)];
+    }
+
+    [GeneratedRegex("'[^']*'")]
+    private static partial Regex StringRegex();
+
+    [GeneratedRegex("--[^\n]*")]
+    private static partial Regex CommentRegex();
+
+    [GeneratedRegex(@"(?<![:\w]):([A-Za-z_]\w*)")]
+    private static partial Regex BindRegex();
+}
