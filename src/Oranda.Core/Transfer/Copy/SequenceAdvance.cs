@@ -1,4 +1,4 @@
-namespace Oranda.Oracle.Transfer.Copy;
+namespace Oranda.Core.Transfer.Copy;
 
 /// <summary>
 /// 시퀀스 보정 계산(설계 8.4). 대상 계정은 <c>ALTER SEQUENCE</c> 권한이 없을 수 있으므로 <c>NEXTVAL</c> 을 모자란 수만큼 소비한다.

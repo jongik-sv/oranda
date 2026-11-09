@@ -75,14 +75,14 @@ public class OraNumberBranchTests
         Assert.Equal("ORA-31603", source.DescribeError(31603, null));
     }
 
-    // CopyRunner 의 private 번호들 중 Kind 로 옮기지 못한(Core 에 대응 분류가 없는) Oracle 전용 번호.
+    // 복사 실행기 번호들 중 Kind 로 옮기지 못한(Core 에 대응 분류가 없는) Oracle 전용 번호. TP0b-2 커밋 B 부터 Oracle 방언(OracleCopyDialect)에 있다.
     // SnapshotTooOld·CreatedWithCompilationErrors·ConnectionLost 는 O2 에서 Kind 로 옮겼다(OracleErrorClassifierTests 가 같은 번호를 고정).
     [Theory]
     [InlineData("ParentKeysNotFound", 2298)]
     [InlineData("ReferencedByForeignKeys", 2449)]
     public void Copy_runner_numbers(string field, int expected)
     {
-        var f = typeof(CopyRunner).GetField(field, BindingFlags.NonPublic | BindingFlags.Static);
+        var f = typeof(OracleCopyDialect).GetField(field, BindingFlags.NonPublic | BindingFlags.Static);
         Assert.NotNull(f);
         Assert.Equal(expected, (int)f.GetRawConstantValue()!);
     }

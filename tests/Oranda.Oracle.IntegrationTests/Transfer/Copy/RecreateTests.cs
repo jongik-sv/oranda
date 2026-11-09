@@ -337,7 +337,7 @@ public sealed class RecreateTests
             new HashSet<string>(StringComparer.Ordinal), new HashSet<ForeignKeyRef>(),
             report.Preview.Where(p => p.Policy == PolicyDecisionKind.Confirm).Select(p => p.Sql).ToHashSet(StringComparer.Ordinal),
             ProceedSequenceGap: false);
-        var runner = new CopyRunner(scope.Bulk(), NewExecution(scope), log);
+        var runner = new OracleCopyRunner(scope.Bulk(), NewExecution(scope), log);
         return runner.RunAsync(sessions, job, report, decisions, NoPeriod, null, new CopyRunControl(), CancellationToken.None);
     }
 

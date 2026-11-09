@@ -137,7 +137,7 @@ internal static class CrossOwnerCases
     public static readonly ResolvedPeriod NoPeriod = new(null, null);
 
     public static CopyRunner NewRunner(CopyDbScope scope)
-        => new(scope.Bulk(), new OracleExecutionService(new ExecutionPolicy(), scope.Ui, scope.Bus, null, pageSize: 500), new NullRunLog());
+        => new OracleCopyRunner(scope.Bulk(), new OracleExecutionService(new ExecutionPolicy(), scope.Ui, scope.Bus, null, pageSize: 500), new NullRunLog());
 
     /// <summary>화면이 「복사 실행」에서 하는 것처럼 미리 보기에서 확인이 필요한 문장을 미리 받은 확인으로 넘긴다.</summary>
     public static CopyDecisions Decisions(PrecheckReport report)

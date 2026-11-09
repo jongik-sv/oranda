@@ -1,6 +1,6 @@
-using Oranda.Oracle.Transfer.Copy;
+using Oranda.Core.Transfer.Copy;
 
-namespace Oranda.Oracle.Tests.Transfer.Copy;
+namespace Oranda.Core.Tests.Transfer.Copy;
 
 // 소유: 데이터 복사 Task 9. 시퀀스 보정에 소비할 NEXTVAL 개수(설계 8.4). 값을 내리지 않는다.
 public class SequenceAdvanceTests

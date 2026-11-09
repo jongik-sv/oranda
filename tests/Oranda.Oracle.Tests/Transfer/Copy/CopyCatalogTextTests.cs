@@ -6,7 +6,7 @@ using Oranda.Oracle.Catalog;
 
 namespace Oranda.Oracle.Tests.Transfer.Copy;
 
-// 소유: TP0b-1 커밋 A. 사전 점검 SELECT 글을 C# 상수에서 Catalog/copy/*.sql 로 옮긴 뒤 글자·바인드 이름이 그대로인지(DB 없음).
+// 소유: TP0b-1 커밋 A, TP0b-2 커밋 A(실행 경로 SELECT 추가). 사전 점검·실행 경로 SELECT 글을 C# 상수에서 Catalog/copy/*.sql 로 옮긴 뒤 글자·바인드 이름이 그대로인지(DB 없음).
 // 기대값은 옮기기 전 상수(CopyCatalogQueries.cs·CopyPrecheckService.cs)를 글자 그대로 옮겨 적은 것이다.
 
 [Trait("Category", "Catalog")]
@@ -21,7 +21,7 @@ public sealed partial class CopyCatalogTextTests
         new("19.0.0.0.0", "ORCL", "h", "PDB1", "ORCL", "PDB1", true, 1, new ServerCapabilities(false, true, true, false, false));
 
     /// <summary>id → (옮기기 전 상수 글, 바인드 이름 순서대로).</summary>
-    private static readonly Dictionary<string, (string Sql, string[] Binds)> Previous = new(StringComparer.Ordinal)
+    private static readonly Dictionary<string, (string Sql, string[] Binds)> PrecheckPrevious = new(StringComparer.Ordinal)
     {
         // CopyCatalogQueries.cs
         ["copy.session_user"] = ("SELECT USER FROM DUAL", []),
@@ -66,6 +66,74 @@ public sealed partial class CopyCatalogTextTests
             ["OWN", "TBL"]),
     };
 
+    /// <summary>TP0b-2 커밋 A: 실행 경로(CopyRunner.cs·RecreateStep.cs)의 SELECT. 옮기기 전 C# 상수를 글자 그대로 옮겨 적었다.</summary>
+    private static readonly Dictionary<string, (string Sql, string[] Binds)> RunnerPrevious = new(StringComparer.Ordinal)
+    {
+        // CopyRunner.cs
+        ["copy.table_exists"] = ("SELECT COUNT(*) FROM all_tables WHERE owner = :OWNER AND table_name = :NAME", ["OWNER", "NAME"]),
+        ["copy.sequence_increment"] = (
+            "SELECT increment_by, last_number, cache_size FROM all_sequences WHERE sequence_owner = :OWNER AND sequence_name = :NAME",
+            ["OWNER", "NAME"]),
+        ["copy.fk_columns"] = (
+            "SELECT cc.column_name, pc.column_name, p.owner, p.table_name"
+            + " FROM all_constraints c"
+            + " JOIN all_cons_columns cc ON cc.owner = c.owner AND cc.constraint_name = c.constraint_name"
+            + " JOIN all_constraints p ON p.owner = c.r_owner AND p.constraint_name = c.r_constraint_name"
+            + " JOIN all_cons_columns pc ON pc.owner = p.owner AND pc.constraint_name = p.constraint_name AND pc.position = cc.position"
+            + " WHERE c.owner = :OWNER AND c.constraint_name = :NAME"
+            + " ORDER BY cc.position",
+            ["OWNER", "NAME"]),
+
+        // RecreateStep.cs
+        ["copy.recreate_triggers"] = (
+            "SELECT owner, trigger_name, status FROM all_triggers"
+            + " WHERE table_owner = :OWN AND table_name = :TBL AND base_object_type = 'TABLE' ORDER BY trigger_name",
+            ["OWN", "TBL"]),
+        ["copy.recreate_trigger_ddl"] = ("SELECT DBMS_METADATA.GET_DDL('TRIGGER', :NAME, :OWN) FROM DUAL", ["NAME", "OWN"]),
+        ["copy.recreate_grants"] = (
+            "SELECT grantee, privilege, grantable FROM all_tab_privs"
+            + " WHERE table_schema = :OWN AND table_name = :TBL AND grantor = :OWN"
+            + " ORDER BY grantee, privilege",
+            ["OWN", "TBL", "OWN"]),
+        ["copy.recreate_referencing_fks"] = (
+            "SELECT c.owner, c.table_name, c.constraint_name, c.delete_rule, cc.column_name, pc.column_name, c.status, c.deferrable, c.deferred"
+            + " FROM all_constraints c"
+            + " JOIN all_constraints p ON p.owner = c.r_owner AND p.constraint_name = c.r_constraint_name"
+            + " JOIN all_cons_columns cc ON cc.owner = c.owner AND cc.constraint_name = c.constraint_name"
+            + " JOIN all_cons_columns pc ON pc.owner = p.owner AND pc.constraint_name = p.constraint_name AND pc.position = cc.position"
+            + " WHERE c.constraint_type = 'R' AND p.owner = :OWN AND p.table_name = :TBL"
+            + " AND NOT (c.owner = p.owner AND c.table_name = p.table_name)"
+            + " ORDER BY c.owner, c.table_name, c.constraint_name, cc.position",
+            ["OWN", "TBL"]),
+        ["copy.recreate_source_fks"] = (
+            "SELECT c.owner, c.table_name, c.constraint_name, c.delete_rule, cc.column_name, pc.column_name, c.status, c.deferrable, c.deferred, p.table_name"
+            + " FROM all_constraints c"
+            + " JOIN all_constraints p ON p.owner = c.r_owner AND p.constraint_name = c.r_constraint_name"
+            + " JOIN all_cons_columns cc ON cc.owner = c.owner AND cc.constraint_name = c.constraint_name"
+            + " JOIN all_cons_columns pc ON pc.owner = p.owner AND pc.constraint_name = p.constraint_name AND pc.position = cc.position"
+            + " WHERE c.constraint_type = 'R' AND c.owner = :OWN AND c.table_name = :TBL AND p.owner = c.owner"
+            + " ORDER BY c.constraint_name, cc.position",
+            ["OWN", "TBL"]),
+        ["copy.recreate_recycle_bin"] = (
+            "SELECT object_name FROM user_recyclebin WHERE original_name = :TBL AND type = 'TABLE' AND operation = 'DROP'", ["TBL"]),
+    };
+
+    private static readonly Dictionary<string, (string Sql, string[] Binds)> Previous =
+        PrecheckPrevious.Concat(RunnerPrevious).ToDictionary(p => p.Key, p => p.Value, StringComparer.Ordinal);
+
+    /// <summary>
+    /// 실제로 쓰는 경로: 사전 점검·실행기(TP0b-2 커밋 B 부터) 모두 Core 의 <see cref="CopyCatalogQueries.Sql"/>(Oracle 카탈로그·서버 버전).
+    /// Oracle 에 남은 <c>RecreateStep</c> 은 아직 <see cref="EmbeddedCatalog.Text"/> 로 읽는다(<see cref="RecreateStepIds"/>).
+    /// </summary>
+    private static string Actual(string id) => CopyCatalogQueries.Sql(ServiceCatalog, Server19, id);
+
+    /// <summary>Oracle <c>RecreateStep.cs</c> 가 <see cref="EmbeddedCatalog.Text"/> 로 읽는 id.</summary>
+    private static readonly string[] RecreateStepIds =
+    [
+        "copy.recreate_triggers", "copy.recreate_trigger_ddl", "copy.recreate_grants", "copy.recreate_referencing_fks",
+        "copy.recreate_source_fks", "copy.recreate_recycle_bin",
+    ];
+
     // OracleCopyPrecheckDialect.cs: 되살리지 않는 것 조회 id(NotRestoredProbes) 가 사전 점검 서비스에서 방언으로 옮겨 갔다(TP0b-1 커밋 B).
     // 사전 점검 본문은 Core, Oracle 방언만 Oracle 에 있다(TP0b-1 C). 경로는 리포 뿌리 기준.
     private static readonly string[] Sources =
@@ -73,6 +141,8 @@ public sealed partial class CopyCatalogTextTests
         "src/Oranda.Core/Transfer/Copy/CopyCatalogQueries.cs",
         "src/Oranda.Core/Transfer/Copy/CopyPrecheckService.cs",
         "src/Oranda.Oracle/Transfer/Copy/OracleCopyPrecheckDialect.cs",
+        "src/Oranda.Core/Transfer/Copy/CopyRunner.cs",
+        "src/Oranda.Oracle/Transfer/Copy/RecreateStep.cs",
     ];
 
     public static TheoryData<string> Ids()
@@ -95,7 +165,11 @@ public sealed partial class CopyCatalogTextTests
     {
         var expected = Previous[id].Sql;
 
-        Assert.Equal(expected, CopyCatalogQueries.Sql(ServiceCatalog, Server19, id)); // 서비스가 실제로 쓰는 경로
+        Assert.Equal(expected, Actual(id)); // 서비스가 실제로 쓰는 경로
+        if (RecreateStepIds.Contains(id, StringComparer.Ordinal))
+        {
+            Assert.Equal(expected, EmbeddedCatalog.Text(id)); // Oracle RecreateStep 의 경로
+        }
         Assert.Equal(expected, Catalog.Get(id, MinVersionOf(id)).Sql);
         Assert.Same(Catalog.Get(id, MinVersionOf(id)), Catalog.Get(id, 26)); // 버전 변형 없음: 최소 버전 ~ 26ai 가 한 파일
     }
@@ -104,7 +178,7 @@ public sealed partial class CopyCatalogTextTests
     [MemberData(nameof(Ids))]
     public void Bind_names_are_unchanged(string id)
     {
-        var binds = BindName().Matches(CopyCatalogQueries.Sql(ServiceCatalog, Server19, id)).Select(m => m.Groups[1].Value).ToArray();
+        var binds = BindName().Matches(Actual(id)).Select(m => m.Groups[1].Value).ToArray();
 
         Assert.Equal(Previous[id].Binds, binds);
     }
@@ -133,7 +207,7 @@ public sealed partial class CopyCatalogTextTests
         Assert.Equal(Previous.Keys.Order(StringComparer.Ordinal).ToList(), inCatalog);
         foreach (var id in inCatalog)
         {
-            Assert.NotEmpty(CopyCatalogQueries.Sql(ServiceCatalog, Server19, id));
+            Assert.NotEmpty(Actual(id));
         }
     }
 

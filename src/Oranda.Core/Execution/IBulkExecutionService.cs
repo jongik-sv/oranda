@@ -19,8 +19,10 @@ public interface IBulkExecutionService
 {
     /// <summary>
     /// 정책을 한 번 평가한다. 실효 분류가 Query 가 아니거나 글의 첫 낱말이 SELECT·WITH 가 아니면 행을 내지 않고 <see cref="BulkDeniedException"/>.
-    /// 값: CLOB·NCLOB → string(전체), BLOB·RAW → byte[](전체), 그 밖은 손실 없는 ODP.NET 값(OracleDecimal, OracleDate,
-    /// OracleTimeStamp*, OracleIntervalDS/YM, float, double, string). <see cref="ExecuteArrayAsync"/> 가 그대로 받는다.
+    /// 값은 손실 없는 DBMS 고유 값이다(T5 결정 Q1): 같은 DBMS 의 <see cref="ExecuteArrayAsync"/> 가 바꾸지 않고 그대로 받는다.
+    /// Core 는 값을 직접 해석하지 않고 그 DBMS 의 <c>Oranda.Core.Transfer.Copy.IBulkValueCodec</c> 로만 본다(건수·시퀀스 번호·실패 행 키·마스킹 갈래).
+    /// Oracle: CLOB·NCLOB → string(전체), BLOB·RAW → byte[](전체), 그 밖은 ODP.NET 값(OracleDecimal, OracleDate,
+    /// OracleTimeStamp*, OracleIntervalDS/YM, float, double, string).
     /// 열거가 끝나거나 열거자를 Dispose 할 때까지 세션 <paramref name="s"/> 를 쥔다(같은 세션의 다른 명령은 기다린다).
     /// 같은 세션을 다시 쓰려면 <c>await foreach</c> 를 끝내거나 빠져나온 뒤에 쓴다. 쓰기는 다른 세션(대상)에 한다.
     /// </summary>

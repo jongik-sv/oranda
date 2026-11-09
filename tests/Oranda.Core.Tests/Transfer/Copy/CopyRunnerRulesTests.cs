@@ -2,9 +2,8 @@ using Oranda.Core.Connection;
 using Oranda.Core.Execution;
 using Oranda.Core.Metadata;
 using Oranda.Core.Transfer.Copy;
-using Oranda.Oracle.Transfer.Copy;
 
-namespace Oranda.Oracle.Tests.Transfer.Copy;
+namespace Oranda.Core.Tests.Transfer.Copy;
 
 // 소유: 데이터 복사 Task 9. 실행기의 순수 판정: 오류 문구에서 행 값 지우기, 사전 점검 뒤 규칙 변경 감지.
 public class CopyRunnerRulesTests

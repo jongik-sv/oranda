@@ -807,8 +807,8 @@ public sealed class CopyRunnerTests
 
     // ---- 실행 도우미 ----
 
-    private static CopyRunner NewRunner(CopyDbScope scope, ICopyRunLog log)
-        => new(scope.Bulk(), new OracleExecutionService(new ExecutionPolicy(), scope.Ui, scope.Bus, null, pageSize: 500), log);
+    private static OracleCopyRunner NewRunner(CopyDbScope scope, ICopyRunLog log)
+        => new OracleCopyRunner(scope.Bulk(), new OracleExecutionService(new ExecutionPolicy(), scope.Ui, scope.Bus, null, pageSize: 500), log);
 
     /// <summary>사전 점검을 돌리고 오류가 없음을 확인한다(실행기는 오류가 있으면 예외를 낸다).</summary>
     private static async Task<PrecheckReport> PrecheckAsync(CopyDbScope scope, CopySessions sessions, CopyJob job, ResolvedPeriod period)

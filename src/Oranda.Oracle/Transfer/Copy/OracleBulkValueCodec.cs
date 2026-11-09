@@ -46,6 +46,29 @@ internal sealed class OracleBulkValueCodec : IBulkValueCodec
 
     public string? ToText(object? value) => Text(value);
 
+    /// <summary>예전 실행기의 <c>n is OracleDecimal { IsNull: false } d ? d.ToString() : …</c> 그대로.</summary>
+    public string? NumberText(object? value) => value is OracleDecimal { IsNull: false } d ? d.ToString() : null;
+
+    /// <summary>예전 실행기의 <c>n is OracleDecimal { IsNull: false } d &amp;&amp; d.IsZero</c> 그대로.</summary>
+    public bool IsZero(object? value) => value is OracleDecimal { IsNull: false } d && d.IsZero;
+
+    public long ToInt64Exact(object? value) => value is OracleDecimal { IsNull: false } d
+        ? ToLongExact(d)
+        : throw new InvalidCastException("NUMBER 값이 아닙니다.");
+
+    /// <summary>NUMBER → long. 범위를 넘으면 <see cref="OverflowException"/>(호출한 쪽이 알림으로 바꾼다). 예전 실행기 <c>ToLong(OracleDecimal)</c> 본문 그대로.</summary>
+    internal static long ToLongExact(OracleDecimal value)
+    {
+        try
+        {
+            return (long)value;
+        }
+        catch (InvalidCastException ex)
+        {
+            throw new OverflowException("NUMBER 값이 long 범위를 넘습니다.", ex);
+        }
+    }
+
     /// <summary>카탈로그 조회 값 → 글자. OracleDecimal 은 ODP.NET 글자(<see cref="OracleDecimal.ToString()"/>) 그대로.</summary>
     internal static string? Text(object? value) => value switch
     {

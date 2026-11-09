@@ -231,4 +231,10 @@ internal sealed class ScalarOnlyCodec : IBulkValueCodec
     public long? ToInt64(object? value) => throw new NotSupportedException();
 
     public string? ToText(object? value) => throw new NotSupportedException();
+
+    public string? NumberText(object? value) => throw new NotSupportedException();
+
+    public bool IsZero(object? value) => throw new NotSupportedException();
+
+    public long ToInt64Exact(object? value) => throw new NotSupportedException();
 }

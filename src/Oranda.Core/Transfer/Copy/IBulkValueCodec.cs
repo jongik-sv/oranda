@@ -30,6 +30,21 @@ public interface IBulkValueCodec
 
     /// <summary>카탈로그 조회 값 → 글자. NULL 이면 null. 숫자는 그 DBMS 드라이버의 글자 그대로다.</summary>
     string? ToText(object? value);
+
+    /// <summary>
+    /// 숫자 결과(건수·최대값·시퀀스 번호)면 그 DBMS 드라이버의 글자, NULL 이거나 그 DBMS 의 숫자 값이 아니면 null. 실행기의 「숫자인가」 판정이다
+    /// (<see cref="ToText"/> 와 달리 글자·다른 형식은 숫자로 보지 않는다).
+    /// </summary>
+    string? NumberText(object? value);
+
+    /// <summary>숫자 결과가 0 인가. NULL·숫자 아님 = false.</summary>
+    bool IsZero(object? value);
+
+    /// <summary>
+    /// 숫자 결과(<see cref="NumberText"/> 가 null 이 아닌 값) → long. long 범위를 넘으면 <see cref="OverflowException"/>
+    /// (<see cref="ToInt64"/> 처럼 끝값으로 자르지 않는다: 시퀀스 보정이 「값이 너무 큼」으로 건너뛴다). 숫자가 아니면 <see cref="InvalidCastException"/>.
+    /// </summary>
+    long ToInt64Exact(object? value);
 }
 
 /// <summary>대량 값의 갈래(<see cref="IBulkValueCodec.KindOf"/>). 문자 열만 마스킹 함수를 걸 수 있고, LOB 는 고정값을 따로 바꾼다.</summary>
