@@ -410,6 +410,11 @@
                 <TextBlock x:Name="TargetReadOnlyNoticeText" Text="{Binding TargetReadOnlyNotice}" TextWrapping="Wrap" VerticalAlignment="Center" FontWeight="SemiBold"
                            AutomationProperties.Name="대상 접속 읽기 전용 안내" />
               </StackPanel>
+              <StackPanel Orientation="Horizontal" Spacing="6" IsVisible="{Binding HasDifferentDbmsNotice}">
+                <ContentControl Content="{Binding Source='error', Converter={x:Static icons:IconKeyConverter.Instance}, ConverterParameter=14}" VerticalAlignment="Center" />
+                <TextBlock x:Name="DifferentDbmsNoticeText" Text="{Binding DifferentDbmsNotice}" TextWrapping="Wrap" VerticalAlignment="Center" FontWeight="SemiBold"
+                           AutomationProperties.Name="원본·대상 DBMS 불일치 안내" />
+              </StackPanel>
             </StackPanel>
 
             <!-- 규칙 그리드 | 선택한 규칙 편집 -->

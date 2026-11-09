@@ -822,6 +822,43 @@ public sealed class PrecheckStepTests
     }
 
     [Fact]
+    public async Task Different_dbms_pair_stops_before_the_precheck_with_a_notice()
+    {
+        var h = new DataCopyHarness();
+        h.Profiles[1] = h.Target with { Dbms = Dbms.Tibero };
+        var vm = await h.OpenAsync(TestJobs.Job("DBMS 다른 쌍", rules: TestJobs.Rule("ORDERS")));
+
+        var reason = DataCopyText.DifferentDbms("Oracle", "Tibero");
+        Assert.Equal(reason, vm.Editor.DifferentDbmsNotice);
+        Assert.True(vm.Editor.HasDifferentDbmsNotice);
+        Assert.Equal(reason, vm.Editor.Validate());
+        Assert.False(vm.CanGoToPrecheck);
+
+        await vm.GoToPrecheckAsync();
+
+        Assert.Equal(DataCopyStep.RuleEdit, vm.Step);
+        Assert.Empty(h.Opened); // 세션을 열기 전에 막는다
+        Assert.Equal(0, h.Precheck.Calls);
+        Assert.Equal(reason, vm.StatusText);
+        Assert.True(vm.StatusIsError);
+    }
+
+    [Fact]
+    public async Task Same_dbms_pair_has_no_dbms_notice_for_oracle_and_for_tibero()
+    {
+        var h = new DataCopyHarness();
+        var vm = await h.OpenAsync(TestJobs.Job("같은 DBMS", rules: TestJobs.Rule("ORDERS")));
+        Assert.False(vm.Editor.HasDifferentDbmsNotice);
+        Assert.True(vm.CanGoToPrecheck);
+
+        h.Profiles[0] = h.Source with { Dbms = Dbms.Tibero };
+        h.Profiles[1] = h.Target with { Dbms = Dbms.Tibero };
+        var tibero = await h.OpenAsync(TestJobs.Job("Tibero 끼리", rules: TestJobs.Rule("ORDERS")));
+        Assert.False(tibero.Editor.HasDifferentDbmsNotice);
+        Assert.Null(tibero.Editor.Validate());
+    }
+
+    [Fact]
     public async Task Job_from_a_newer_file_version_cannot_be_prechecked_or_run()
     {
         // 예전 앱이 새 버전 파일(표마다 계정)을 읽기 전용으로 열면 모르는 필드를 버린 채 기본 계정의 표를 지울 수 있다: 점검·실행을 막는다.

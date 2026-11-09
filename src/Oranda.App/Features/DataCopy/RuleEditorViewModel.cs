@@ -1,6 +1,7 @@
 using System.Collections.ObjectModel;
 using System.Globalization;
 using CommunityToolkit.Mvvm.ComponentModel;
+using Oranda.App.Features.ConnectionManager;
 using Oranda.App.ViewModels;
 using Oranda.Core.Connection;
 using Oranda.Core.Metadata;
@@ -42,10 +43,12 @@ public sealed partial class RuleEditorViewModel : ViewModelBase
     private string _name = string.Empty;
 
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(DifferentDbmsNotice), nameof(HasDifferentDbmsNotice))]
     private ConnectionOption? _source;
 
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(CanRecreate), nameof(AvailableActions), nameof(TargetReadOnlyNotice), nameof(HasTargetReadOnlyNotice))]
+    [NotifyPropertyChangedFor(nameof(CanRecreate), nameof(AvailableActions), nameof(TargetReadOnlyNotice), nameof(HasTargetReadOnlyNotice),
+        nameof(DifferentDbmsNotice), nameof(HasDifferentDbmsNotice))]
     private ConnectionOption? _target;
 
     [ObservableProperty]
@@ -306,6 +309,13 @@ public sealed partial class RuleEditorViewModel : ViewModelBase
 
     public bool HasTargetReadOnlyNotice => TargetReadOnlyNotice.Length > 0;
 
+    /// <summary>원본과 대상의 DBMS 가 다르면 복사할 수 없다는 안내(TU0). 같거나 한쪽을 안 골랐으면 빈 글자.</summary>
+    public string DifferentDbmsNotice => Source is { } s && Target is { } t && s.Profile.Dbms != t.Profile.Dbms
+        ? DataCopyText.DifferentDbms(DbmsAvailability.Label(s.Profile.Dbms), DbmsAvailability.Label(t.Profile.Dbms))
+        : string.Empty;
+
+    public bool HasDifferentDbmsNotice => DifferentDbmsNotice.Length > 0;
+
     public IReadOnlyList<TargetAction> AvailableActions =>
         CanRecreate
             ? [TargetAction.DeleteAllInsert, TargetAction.DeleteRangeInsert, TargetAction.AppendOnly, TargetAction.MergeByPk, TargetAction.Recreate]
@@ -524,6 +534,12 @@ public sealed partial class RuleEditorViewModel : ViewModelBase
         if (Target is null)
         {
             return DataCopyText.TargetMissing;
+        }
+
+        // DBMS 가 다른 쌍은 이번 회차에 지원하지 않는다: 세션을 열기 전에 이유를 알리고 막는다.
+        if (DifferentDbmsNotice is { Length: > 0 } differentDbms)
+        {
+            return differentDbms;
         }
 
         if (!CopyTargetGuard.IsAllowedTarget(Target.Profile))
