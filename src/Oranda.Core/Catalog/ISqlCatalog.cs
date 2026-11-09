@@ -10,8 +10,8 @@ namespace Oranda.Core.Catalog;
 public interface ISqlCatalog
 {
     /// <summary>
-    /// 같은 <paramref name="id"/> 후보 가운데 서버 주 버전 이하에서 가장 높은 min-version 을 고른다.
-    /// 없으면 <see cref="CatalogQueryNotFoundException"/>.
+    /// 같은 <paramref name="id"/> 후보 가운데 <see cref="ServerInfo.Dbms"/> 가 같은 파일만 놓고(다른 DBMS 로 대신 고르지 않음),
+    /// 서버 주 버전 이하에서 가장 높은 min-version 을 고른다. 없으면 <see cref="CatalogQueryNotFoundException"/>.
     /// </summary>
     [SuppressMessage("Naming", "CA1716:Identifiers should not match keywords", Justification = "TRD 6장 계약 이름(ISqlCatalog.Get). VB 소비자 없음.")]
     CatalogQuery Get(string id, ServerInfo server);

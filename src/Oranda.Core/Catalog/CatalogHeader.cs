@@ -1,22 +1,32 @@
+using Oranda.Core.Connection;
+
 namespace Oranda.Core.Catalog;
 
 /// <summary>카탈로그 파일 머리 주석(<c>-- key: value</c>) 메타데이터. 형식은 docs/design/catalog.md.</summary>
 /// <param name="Id">점으로 나눈 소문자 이름. 첫 마디는 소유 폴더 이름과 같다(예: <c>session.list</c>)</param>
-/// <param name="MinVersion">이 파일을 쓸 수 있는 가장 낮은 서버 주 버전. <see cref="LowestMinVersion"/> 이상</param>
+/// <param name="MinVersion">이 파일을 쓸 수 있는 가장 낮은 서버 주 버전(그 <paramref name="Dbms"/> 의 버전). <see cref="LowestMinVersionFor"/> 이상</param>
 /// <param name="Requires">필요한 권한·뷰 이름(접속 점검 결과와 대조). 없으면 빈 목록</param>
 /// <param name="License">필요한 관리 팩</param>
 /// <param name="Rac">RAC 에서 어느 뷰 계열을 쓰는 쿼리인지</param>
 /// <param name="Path">원본 파일 경로(Catalog/ 아래 상대, '/' 구분)</param>
+/// <param name="Dbms">이 파일이 겨냥하는 DBMS(<c>dbms:</c> 키, 생략하면 Oracle)</param>
 public sealed record CatalogHeader(
     string Id,
     int MinVersion,
     IReadOnlyList<string> Requires,
     CatalogLicense License,
     CatalogRac Rac,
-    string Path)
+    string Path,
+    Dbms Dbms = Dbms.Oracle)
 {
-    /// <summary>지원 서버 하한(PRD D-06, D-026: 11.2 추가). 구버전을 더하면 이 값만 내리고 같은 id 의 낮은 min-version 파일을 더한다.</summary>
+    /// <summary>Oracle 지원 서버 하한(PRD D-06, D-026: 11.2 추가). 구버전을 더하면 이 값만 내리고 같은 id 의 낮은 min-version 파일을 더한다.</summary>
     public const int LowestMinVersion = 11;
+
+    /// <summary>Tibero 지원 서버 하한(Tibero 6 이상, docs/design/tibero.md).</summary>
+    public const int LowestTiberoMinVersion = 6;
+
+    /// <summary><paramref name="dbms"/> 의 min-version 하한. Oracle 11, Tibero 6.</summary>
+    public static int LowestMinVersionFor(Dbms dbms) => dbms == Dbms.Tibero ? LowestTiberoMinVersion : LowestMinVersion;
 
     /// <summary>
     /// 이 값보다 낮은 min-version 파일(11g 용)은 12c 이후 문법(<c>FETCH FIRST</c>·<c>OFFSET … ROWS</c>)과

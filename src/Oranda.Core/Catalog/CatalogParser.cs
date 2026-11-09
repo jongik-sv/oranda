@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.Text.RegularExpressions;
+using Oranda.Core.Connection;
 
 namespace Oranda.Core.Catalog;
 
@@ -34,8 +35,9 @@ public static partial class CatalogParser
     public const string RequiresKey = "requires";
     public const string LicenseKey = "license";
     public const string RacKey = "rac";
+    public const string DbmsKey = "dbms";
 
-    private static readonly string[] KnownKeys = [IdKey, MinVersionKey, RequiresKey, LicenseKey, RacKey];
+    private static readonly string[] KnownKeys = [IdKey, MinVersionKey, RequiresKey, LicenseKey, RacKey, DbmsKey];
 
     [GeneratedRegex(@"^--\s*([a-z][a-z-]*)\s*:\s*(.*)$")]
     private static partial Regex FieldLine();
@@ -103,6 +105,14 @@ public static partial class CatalogParser
                 $"id '{id}' 의 첫 마디가 폴더 '{TopFolder(source.Path)}' 와 다르다"));
         }
 
+        var dbms = Dbms.Oracle;
+        var hasDbms = fields.TryGetValue(DbmsKey, out var dbmsText);
+        var dbmsValid = !hasDbms || TryParseDbms(dbmsText!, out dbms);
+        if (!dbmsValid)
+        {
+            problems.Add(Problem(source, CatalogRules.HeaderInvalid, $"dbms '{dbmsText}' 는 oracle|tibero 중 하나여야 한다"));
+        }
+
         var minVersion = 0;
         var minVersionText = Required(source, fields, MinVersionKey, problems);
         if (minVersionText is not null)
@@ -111,10 +121,18 @@ public static partial class CatalogParser
             {
                 problems.Add(Problem(source, CatalogRules.HeaderInvalid, $"min-version '{minVersionText}' 는 주 버전 정수여야 한다"));
             }
-            else if (minVersion < CatalogHeader.LowestMinVersion)
+            else if (dbmsValid && minVersion < CatalogHeader.LowestMinVersionFor(dbms))
             {
-                problems.Add(Problem(source, CatalogRules.MinVersionTooLow,
-                    $"min-version {minVersion} 은 지원 하한 {CatalogHeader.LowestMinVersion} 보다 낮다"));
+                // dbms 값이 틀렸으면 하한을 알 수 없으므로 하한 검사는 건너뛴다(header-invalid 하나만 낸다).
+                var message = dbms == Dbms.Oracle
+                    ? $"min-version {minVersion} 은 지원 하한 {CatalogHeader.LowestMinVersion} 보다 낮다"
+                    : $"min-version {minVersion} 은 {dbms} 지원 하한 {CatalogHeader.LowestMinVersionFor(dbms)} 보다 낮다";
+                if (!hasDbms && minVersion >= CatalogHeader.LowestTiberoMinVersion)
+                {
+                    message += "(Tibero 파일이면 '-- dbms: tibero' 를 단다)";
+                }
+
+                problems.Add(Problem(source, CatalogRules.MinVersionTooLow, message));
             }
         }
 
@@ -139,7 +157,7 @@ public static partial class CatalogParser
         {
             problems.Add(Problem(source, CatalogRules.BodyEmpty, "머리 주석 뒤에 SQL 본문이 없다"));
         }
-        else if (minVersion >= CatalogHeader.LowestMinVersion && minVersion < CatalogHeader.Release12)
+        else if (dbms == Dbms.Oracle && minVersion >= CatalogHeader.LowestMinVersion && minVersion < CatalogHeader.Release12)
         {
             foreach (var feature in FindPre12cFeatures(body))
             {
@@ -153,7 +171,7 @@ public static partial class CatalogParser
             return (null, problems);
         }
 
-        var header = new CatalogHeader(id!, minVersion, requires, license, rac, source.Path);
+        var header = new CatalogHeader(id!, minVersion, requires, license, rac, source.Path, dbms);
         return (new CatalogQuery(header, body), problems);
     }
 
@@ -211,6 +229,17 @@ public static partial class CatalogParser
             "diagnostics" => (true, CatalogLicense.Diagnostics),
             "tuning" => (true, CatalogLicense.Tuning),
             _ => (false, CatalogLicense.None),
+        };
+        return ok;
+    }
+
+    private static bool TryParseDbms(string text, out Dbms dbms)
+    {
+        (var ok, dbms) = text switch
+        {
+            "oracle" => (true, Dbms.Oracle),
+            "tibero" => (true, Dbms.Tibero),
+            _ => (false, Dbms.Oracle),
         };
         return ok;
     }

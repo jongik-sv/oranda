@@ -1,6 +1,6 @@
 # SQL 카탈로그 설계 (TSK-02-04)
 
-딕셔너리 SQL 은 코드에 흩어 두지 않고 `src/Oranda.Oracle/Catalog/**/*.sql` 파일로만 둔다(TRD 4.2, TC-03, TC-06).
+딕셔너리 SQL 은 코드에 흩어 두지 않고 `src/Oranda.Oracle/Catalog/**/*.sql`(Oracle)·`src/Oranda.Tibero/Catalog/**/*.sql`(Tibero, D-046) 파일로만 둔다(TRD 4.2, TC-03, TC-06).
 파일 하나 = 쿼리 하나. 맨 앞 머리 주석에 메타데이터를 단다.
 
 ## 1. 구성
@@ -9,7 +9,7 @@
 |------|------|
 | `src/Oranda.Core/Catalog/ISqlCatalog.cs` | 계약 `CatalogQuery Get(string id, ServerInfo server)` (TRD 6장) |
 | `src/Oranda.Core/Catalog/CatalogQuery.cs` | `CatalogQuery(Header, Sql)`, 원문 `CatalogSource(Path, Text)` |
-| `src/Oranda.Core/Catalog/CatalogHeader.cs` | 머리 주석 record, `CatalogLicense`, `CatalogRac`, 하한 `LowestMinVersion = 11` |
+| `src/Oranda.Core/Catalog/CatalogHeader.cs` | 머리 주석 record(`Dbms` 포함), `CatalogLicense`, `CatalogRac`, 하한 `LowestMinVersion = 11`(Oracle)·`LowestTiberoMinVersion = 6`·`LowestMinVersionFor(dbms)` |
 | `src/Oranda.Core/Catalog/CatalogParser.cs` | 머리 주석 파서, 검사 규칙 이름 `CatalogRules`, 문제 `CatalogProblem` |
 | `src/Oranda.Core/Catalog/SqlCatalog.cs` | `ISqlCatalog` 구현(검사 + 선택), `CatalogFormatException`, `CatalogQueryNotFoundException` |
 | `src/Oranda.Oracle/Catalog/EmbeddedCatalog.cs` | 임베디드 리소스 자동 수집 `ReadSources(assembly)`, `Load()` |
@@ -17,6 +17,7 @@
 | `tests/Oranda.Oracle.Tests/Catalog/` | 카탈로그 검사 시험(`Category=Catalog`) |
 
 Core 는 원문 목록만 받는다(ODP.NET·어셈블리 리소스 모름). 리소스를 읽는 일은 Oracle 쪽 `EmbeddedCatalog` 가 한다.
+Tibero 파일은 `Oranda.Tibero` 어셈블리 리소스로 싣고, 그 수집기는 Tibero 레인이 같은 방식으로 둔다. 세션이 쓰는 카탈로그는 두 어셈블리의 원문을 합쳐 `SqlCatalog` 하나로 만든다(Tibero 어셈블리가 없으면 Oracle 원문만).
 
 ## 2. 머리 주석 형식
 
@@ -26,10 +27,11 @@ Core 는 원문 목록만 받는다(ODP.NET·어셈블리 리소스 모름). 리
 | 키 | 필수 | 값 | 기본 | 뜻 |
 |----|:---:|----|------|----|
 | `id` | ○ | `폴더.이름` 소문자·숫자·`_`, 점으로 2마디 이상 (예: `session.blocking_tree`) | - | 기능 코드가 부르는 이름. **첫 마디 = 소유 폴더 이름** |
-| `min-version` | ○ | 서버 주 버전 정수. 11 이상 | - | 이 파일을 쓸 수 있는 가장 낮은 서버 버전. 11g 에서도 도는 문장은 `11`, 12c 이후 문법·열을 쓰면 `19`, 23ai/26ai 전용은 `23` |
-| `license` | ○ | `none` \| `diagnostics` \| `tuning` | - | 필요한 관리 팩(TC-06) |
+| `min-version` | ○ | 서버 주 버전 정수. Oracle 11 이상, Tibero 6 이상 | - | 이 파일을 쓸 수 있는 가장 낮은 서버 버전(그 DBMS 의 버전). 11g 에서도 도는 문장은 `11`, 12c 이후 문법·열을 쓰면 `19`, 23ai/26ai 전용은 `23` |
+| `license` | ○ | `none` \| `diagnostics` \| `tuning` | - | 필요한 Oracle 관리 팩(TC-06). Tibero 파일은 팩이 없어 `none` 만 쓴다 |
 | `requires` | | 권한·뷰 이름, 쉼표 구분 | 빈 목록 | 접속 점검 결과와 대조할 대상(예: `v$session, v$sql`). 특별 항목 `jvm` = 서버에 Java(JVM)가 있어야 한다(`*_java_*` 뷰·`DBMS_JAVA`). 호출 쪽은 `meta.java_available` 로 먼저 보고, 통합 파싱 시험은 JVM 없는 서버에서 건너뛴다 |
-| `rac` | | `v` \| `gv` | `v` | `gv` = `gv$` 뷰로 모든 인스턴스를 본다(`inst_id` 포함) |
+| `rac` | | `v` \| `gv` | `v` | `gv` = `gv$` 뷰로 모든 인스턴스를 본다(`inst_id` 포함). Tibero(TAC)의 `gv$` 쓰임은 T3·T4 실측 뒤 정한다. 그 전까지 Tibero 파일은 생략(`v`) |
+| `dbms` | | `oracle` \| `tibero` (소문자 그대로) | `oracle` | 이 파일이 겨냥하는 DBMS(D-046). 없으면 Oracle 파일. Tibero 파일은 `src/Oranda.Tibero/Catalog/<폴더>/<이름>.sql` 에 두고 Oracle 파일과 같은 id 를 쓴다 |
 
 그 밖의 키, 같은 키 두 번은 오류다(오타 방지).
 
@@ -62,22 +64,37 @@ SELECT s.inst_id, s.sid, s.serial#, s.username
 
 23 이상에서 다른 SQL 을 쓰려면 같은 id 로 파일을 하나 더 둔다: `session/list.23.sql` 에 `-- min-version: 23`.
 
+Tibero 용은 `src/Oranda.Tibero/Catalog/session/list.sql` 처럼 같은 id 에 `dbms: tibero` 를 단다(Tibero 6 이상).
+
+```sql
+-- 세션 목록(Tibero)
+-- id: session.list
+-- dbms: tibero
+-- min-version: 6
+-- license: none
+SELECT s.sid, s.serial#, s.username
+  FROM v$session s
+```
+
 ## 3. 파일 이름·폴더 관례
 
 | 항목 | 규칙 |
 |------|------|
-| 위치 | `src/Oranda.Oracle/Catalog/<폴더>/<이름>.sql`. Catalog/ 바로 아래 파일은 id 첫 마디와 맞지 않아 검사에 걸린다 |
+| 위치 | `src/Oranda.Oracle/Catalog/<폴더>/<이름>.sql`(Oracle), `src/Oranda.Tibero/Catalog/<폴더>/<이름>.sql`(Tibero, `dbms: tibero`). Catalog/ 바로 아래 파일은 id 첫 마디와 맞지 않아 검사에 걸린다 |
 | 이름 | id 의 나머지 마디를 그대로(권장). 버전 변형은 `<이름>.<min-version>.sql` (권장) |
 | 수집 | csproj 한 줄이 `Catalog/**/*.sql` 을 리소스 `Catalog/<폴더>/<파일>` 로 싣는다. 기능 Task 는 **파일만 더한다**(공유 진입점·목록 수정 없음) |
 | 인코딩 | UTF-8 |
 
 ## 4. 선택 규칙
 
-`ISqlCatalog.Get(id, server)` 는 `server.MajorVersion` 으로 고른다.
+`ISqlCatalog.Get(id, server)` 는 `server.Dbms` 와 `server.MajorVersion` 으로 고른다.
 
-1. 같은 `id` 후보 가운데 `min-version ≤ 서버 주 버전` 인 것만 남긴다.
-2. 그중 `min-version` 이 가장 높은 것을 돌려준다.
-3. 하나도 없으면 `CatalogQueryNotFoundException(id, 버전)`.
+1. 같은 `id` 후보 가운데 **같은 DBMS 파일만** 남긴다. 다른 DBMS 의 파일로 대신 고르지 않는다.
+2. 그중 `min-version ≤ 서버 주 버전` 인 것만 남긴다.
+3. 그중 `min-version` 이 가장 높은 것을 돌려준다.
+4. 하나도 없으면 `CatalogQueryNotFoundException(id, 버전, DBMS)`. Oracle 이 아니면 메시지에 DBMS 이름이 들어간다.
+
+예(Oracle 파일, Oracle 서버):
 
 | 후보 | 서버 11 | 서버 19 | 서버 21 | 서버 23 | 서버 26(23.26) | 서버 18 |
 |------|---------|---------|---------|---------|----------------|---------|
@@ -96,10 +113,10 @@ SELECT s.inst_id, s.sid, s.serial#, s.username
 |----------------------|---------|
 | `header-missing` | 머리 주석 필드가 하나도 없다 |
 | `header-invalid` | 필수 키(id·min-version·license) 없음, 값 형식 오류, 모르는 키, 같은 키 두 번, id 형식 오류 |
-| `min-version-too-low` | `min-version` 이 11(지원 하한) 미만 |
-| `pre12c-feature` | `min-version` 12 미만(11g) 파일이 `FETCH FIRST/NEXT`·`OFFSET … ROWS`, 12c 이후 열(`identity_column`·`user_generated`·`search_condition_vc`·`editionable`·`banner_full`·`version_full`·`.cdb`·`.edition`·`con_id`·`CON_NAME` 등)·뷰(`v$pdbs`·`cdb_*`)를 쓴다. 주석은 빼고 본다 |
+| `min-version-too-low` | `min-version` 이 그 DBMS 의 지원 하한 미만(Oracle 11, Tibero 6. `CatalogHeader.LowestMinVersionFor`) |
+| `pre12c-feature` | **Oracle 파일만.** `min-version` 12 미만(11g) 파일이 `FETCH FIRST/NEXT`·`OFFSET … ROWS`, 12c 이후 열(`identity_column`·`user_generated`·`search_condition_vc`·`editionable`·`banner_full`·`version_full`·`.cdb`·`.edition`·`con_id`·`CON_NAME` 등)·뷰(`v$pdbs`·`cdb_*`)를 쓴다. 주석은 빼고 본다 |
 | `id-folder-mismatch` | id 첫 마디가 소유 폴더 이름과 다르다 |
-| `duplicate-id` | 같은 `id` + 같은 `min-version` 이 두 파일 이상 |
+| `duplicate-id` | 같은 `id` + 같은 `dbms` + 같은 `min-version` 이 두 파일 이상(Oracle 과 Tibero 가 같은 id·min-version 인 것은 중복이 아니다) |
 | `body-empty` | 머리 주석 뒤 SQL 본문이 없다 |
 
 TRD 4.2 의 "19 미만 대상에 `FETCH FIRST` 금지" 는 `pre12c-feature` 가 맡는다. 열 이름 규칙은 점으로 한정한 `.cdb`·`.edition` 외에는 낱말 전체로 잡으므로, 11 변형은 12c 열 이름을 별칭으로도 쓰지 않는다.
@@ -149,6 +166,7 @@ TRD 4.2 의 "19 미만 대상에 `FETCH FIRST` 금지" 는 `pre12c-feature` 가 
 | 카탈로그 시험은 새 프로젝트 `tests/Oranda.Oracle.Tests` 에 둔다 | 수집 검사는 Oranda.Oracle 어셈블리 리소스를 읽어야 하는데, `Oranda.Core.Tests` 가 Oracle 을 참조하면 Core 시험이 드라이버를 끌고 온다. `Oranda.Oracle.IntegrationTests` 는 컨테이너 시험용이라 성격이 다르다. DB 없는 Oracle 단위 시험의 자리로 쓴다 |
 | 파서·선택·검사는 Core, 리소스 수집만 Oracle | TRD 3: "SQL 카탈로그 로더" 는 Core. Core 는 원문 목록만 받아 ODP.NET·어셈블리 의존이 없다 |
 | `license` 는 카탈로그 전용 `CatalogLicense(None/Diagnostics/Tuning)` | 쿼리 쪽은 "필요한 팩", 프로필 쪽 `LicensePack` 은 "보유 조합". 뜻이 달라 별도 형식으로 두고 대조표(2절)로 잇는다. `LicensePack` 은 중복 정의하지 않는다 |
-| `min-version` 은 주 버전 정수 | 지원 단위가 19·23 이고 구버전 추가도 `11` 같은 주 버전으로 충분하다 |
+| `min-version` 은 주 버전 정수 | 지원 단위가 Oracle 19·23, Tibero 6·7 이고 구버전 추가도 `11` 같은 주 버전으로 충분하다 |
+| 선택은 같은 DBMS 파일만, 다른 DBMS 로 대신 고르지 않는다 | `min-version` 의 뜻이 DBMS 마다 달라(Oracle 19 와 Tibero 6 은 같은 축이 아님) 섞을 수 없다. 같은 문장이 둘 다에서 돌면 Tibero 폴더에 파일을 하나 더 둔다 |
 | id 첫 마디 = 폴더 이름을 검사한다 | 폴더 소유 단위가 id 공간까지 나누므로 두 Task 가 같은 id 를 만들 수 없다 |
 | 리소스 이름은 `LogicalName="Catalog/…"` 로 폴더 경로를 보존 | 기본 리소스 이름은 폴더 구분이 점으로 바뀌어 `list.23.sql` 같은 이름과 섞인다 |

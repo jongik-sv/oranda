@@ -30,25 +30,28 @@ public sealed class SqlCatalog : ISqlCatalog
     public CatalogQuery Get(string id, ServerInfo server)
     {
         ArgumentNullException.ThrowIfNull(server);
-        return Get(id, server.MajorVersion);
+        return Get(id, server.MajorVersion, server.Dbms);
     }
 
-    /// <summary>선택 규칙: 같은 id 중 <c>min-version ≤ majorVersion</c> 인 것 가운데 가장 높은 것.</summary>
-    public CatalogQuery Get(string id, int majorVersion)
+    /// <summary>
+    /// 선택 규칙: 같은 id 중 같은 <paramref name="dbms"/> 의 파일만 남기고, 그 가운데 <c>min-version ≤ majorVersion</c> 인 것 중
+    /// 가장 높은 것. 다른 DBMS 의 파일로 대신 고르지 않는다.
+    /// </summary>
+    public CatalogQuery Get(string id, int majorVersion, Dbms dbms = Dbms.Oracle)
     {
         ArgumentNullException.ThrowIfNull(id);
         if (_byId.TryGetValue(id, out var candidates))
         {
             foreach (var candidate in candidates)
             {
-                if (candidate.Header.MinVersion <= majorVersion)
+                if (candidate.Header.Dbms == dbms && candidate.Header.MinVersion <= majorVersion)
                 {
                     return candidate;
                 }
             }
         }
 
-        throw new CatalogQueryNotFoundException(id, majorVersion);
+        throw new CatalogQueryNotFoundException(id, majorVersion, dbms);
     }
 
     /// <summary>빌드 검사용: 원문 전체의 문제 목록. 비어 있으면 통과.</summary>
@@ -70,13 +73,14 @@ public sealed class SqlCatalog : ISqlCatalog
             }
         }
 
-        foreach (var duplicate in queries.GroupBy(q => (q.Header.Id, q.Header.MinVersion)).Where(g => g.Count() > 1))
+        foreach (var duplicate in queries.GroupBy(q => (q.Header.Id, q.Header.Dbms, q.Header.MinVersion)).Where(g => g.Count() > 1))
         {
             var paths = string.Join(", ", duplicate.Select(q => q.Header.Path));
+            var dbms = duplicate.Key.Dbms == Dbms.Oracle ? string.Empty : $" dbms {duplicate.Key.Dbms.ToString().ToLowerInvariant()}";
             foreach (var query in duplicate)
             {
                 problems.Add(new CatalogProblem(query.Header.Path, CatalogRules.DuplicateId,
-                    $"id '{duplicate.Key.Id}' min-version {duplicate.Key.MinVersion} 이 여러 파일에 있다: {paths}"));
+                    $"id '{duplicate.Key.Id}'{dbms} min-version {duplicate.Key.MinVersion} 이 여러 파일에 있다: {paths}"));
             }
         }
 
@@ -100,13 +104,25 @@ public sealed class CatalogFormatException : Exception
 public sealed class CatalogQueryNotFoundException : Exception
 {
     public CatalogQueryNotFoundException(string id, int majorVersion)
-        : base($"SQL 카탈로그에 서버 버전 {majorVersion} 에서 쓸 수 있는 '{id}' 가 없다.")
+        : this(id, majorVersion, Dbms.Oracle)
+    {
+    }
+
+    /// <summary>Oracle 이 아니면 메시지에 DBMS 이름을 넣는다.</summary>
+    public CatalogQueryNotFoundException(string id, int majorVersion, Dbms dbms)
+        : base(dbms == Dbms.Oracle
+            ? $"SQL 카탈로그에 서버 버전 {majorVersion} 에서 쓸 수 있는 '{id}' 가 없다."
+            : $"SQL 카탈로그에 {dbms} 서버 버전 {majorVersion} 에서 쓸 수 있는 '{id}' 가 없다.")
     {
         Id = id;
         MajorVersion = majorVersion;
+        Dbms = dbms;
     }
 
     public string Id { get; }
 
     public int MajorVersion { get; }
+
+    /// <summary>찾던 DBMS. 기본 Oracle.</summary>
+    public Dbms Dbms { get; }
 }
