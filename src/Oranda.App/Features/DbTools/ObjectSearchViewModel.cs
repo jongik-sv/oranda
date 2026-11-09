@@ -794,7 +794,8 @@ public sealed partial class ObjectSearchViewModel : ToolPanelViewModelBase
     /// <summary>항목을 되살린다(<see cref="FlashbackName"/> 이 있으면 그 이름으로).</summary>
     public Task FlashbackAsync(RecycleBinItem? item = null, CancellationToken ct = default)
     {
-        var rename = string.IsNullOrWhiteSpace(FlashbackName) ? null : FlashbackName.Trim();
+        // 새 이름은 따옴표로 감싸 문장에 들어가므로 사전 이름으로 정리한다: 따옴표 없이 적은 소문자는 대문자로(소문자 표가 생기지 않게).
+        var rename = string.IsNullOrWhiteSpace(FlashbackName) ? null : Oranda.Language.Editing.SelectAnalyzer.NormalizeIdentifier(FlashbackName.Trim());
         return ChangeRecycleBinAsync(item ?? SelectedRecycle?.Item, i => BuildFlashback(i, rename), "되살렸다", ct);
     }
 

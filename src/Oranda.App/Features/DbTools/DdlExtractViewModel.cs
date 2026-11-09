@@ -184,7 +184,10 @@ public sealed partial class DdlExtractViewModel : ToolPanelViewModelBase
         IncludeDependentObjects = IncludeDependentObjects,
     };
 
-    /// <summary><c>이전=새</c> 줄을 읽는다. 형식이 틀린 줄은 건너뛴다.</summary>
+    /// <summary>
+    /// <c>이전=새</c> 줄을 읽는다. 형식이 틀린 줄은 건너뛴다. 이름은 사전 이름으로 정리한다: 따옴표 없이 적으면 대문자(<c>scott=hr</c> = <c>SCOTT=HR</c>),
+    /// 큰따옴표로 감싸면 글자 그대로.
+    /// </summary>
     public static IReadOnlyList<(string From, string To)> ParseRenames(string? text)
     {
         var list = new List<(string, string)>();
@@ -197,8 +200,8 @@ public sealed partial class DdlExtractViewModel : ToolPanelViewModelBase
                 continue;
             }
 
-            var from = line[..eq].Trim().Trim('"');
-            var to = line[(eq + 1)..].Trim().Trim('"');
+            var from = Oranda.Language.Editing.SelectAnalyzer.NormalizeIdentifier(line[..eq].Trim());
+            var to = Oranda.Language.Editing.SelectAnalyzer.NormalizeIdentifier(line[(eq + 1)..].Trim());
             if (from.Length > 0 && to.Length > 0)
             {
                 list.Add((from, to));

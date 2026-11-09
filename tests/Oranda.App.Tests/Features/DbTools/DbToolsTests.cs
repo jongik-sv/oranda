@@ -569,6 +569,26 @@ public class DbToolsTests
     }
 
     [Fact]
+    public void Rename_names_typed_in_lowercase_match_dictionary_names_and_quoted_names_keep_case()
+    {
+        var list = DdlExtractViewModel.ParseRenames("scott=hr\n\"Mixed\"=\"New\"\n");
+
+        Assert.Equal([("SCOTT", "HR"), ("Mixed", "New")], list);
+    }
+
+    [Fact]
+    public async Task Flashback_new_name_typed_in_lowercase_becomes_a_dictionary_name()
+    {
+        var item = new RecycleBinItem("BIN$x==$0", "EMP", "TABLE", null, null, true, true, null);
+        var exec = new FakeExec();
+        var vm = new ObjectSearchViewModel(new FakeAdmin { Bin = [item] }, exec) { FlashbackName = " emp_back " };
+        vm.Attach(new FakeSession());
+
+        await vm.FlashbackAsync(item);
+        Assert.Equal("FLASHBACK TABLE \"BIN$x==$0\" TO BEFORE DROP RENAME TO \"EMP_BACK\"", exec.Statements[0].Text);
+    }
+
+    [Fact]
     public void Plan_carries_filters_options_and_selected_types()
     {
         var vm = new DdlExtractViewModel(new FakeMeta());
