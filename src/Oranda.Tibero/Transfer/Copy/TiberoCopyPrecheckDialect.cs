@@ -14,14 +14,6 @@ internal sealed class TiberoCopyPrecheckDialect : ICopyPrecheckDialect
 {
     public static readonly TiberoCopyPrecheckDialect Instance = new();
 
-    /// <summary>
-    /// 「테이블 다시 만들기」를 막는 이유. TB4(트리거 DDL 을 ALL_TRIGGERS·ALL_SOURCE 로 조립하고 휴지통 안전망을 정하는 항목)가 끝나면 null 로 바꾼다.
-    /// 지금까지 실측: DBMS_METADATA.GET_DDL('TRIGGER') 는 -14001, 휴지통은 서버 기본이 꺼짐이고 BIN 이름으로는 읽을 수 없어(-8052)
-    /// 지운 표를 되읽는 안전망을 쓸 수 없다.
-    /// </summary>
-    internal const string RecreateBlocked =
-        "Tibero 의 테이블 다시 만들기는 아직 지원하지 않습니다(트리거 DDL 조립과 지운 표의 복구 경로가 확인되지 않음)";
-
     /// <summary>지운 표가 남는 곳을 알리는 문장에서 영구 삭제로 보는 테이블스페이스.</summary>
     private const string SystemTablespace = "SYSTEM";
 
@@ -40,12 +32,22 @@ internal sealed class TiberoCopyPrecheckDialect : ICopyPrecheckDialect
     /// <summary>Tibero 에는 조회만 주는 READ 객체 권한·READ ANY TABLE 이 없다(확인된 것이 없어 SELECT 권한만 SELECT 로 본다).</summary>
     public bool SupportsReadPrivilege => false;
 
+    /// <summary>
+    /// 「테이블 다시 만들기」는 아직 막는다(TB4 결정). 받아 두기 부품(<see cref="TiberoRecreateStep"/>: 트리거 DDL = T3 <c>*_SOURCE</c> 조립, 휴지통 BIN 이름,
+    /// <c>FLASHBACK TABLE … TO BEFORE DROP [RENAME TO]</c>)은 <c>TiberoRecreateStepIt</c> 가 잰다. 남은 위험(TB4 리뷰)은 실제 실행기로 도는 TI1b 복사 IT 가 재고 나서 푼다:
+    /// 컴파일 오류 트리거(번호 미분류 → 끄지 못함), 바이트 길이를 CHAR 로 다시 쓸 때 큰 열, 부모·자식을 함께 다시 만들 때 휴지통의 자식 FK,
+    /// DEFERRABLE FK 를 카탈로그로 못 읽어 즉시 검사로 돌아옴, 서버 이름 제약(<c>&lt;소유자&gt;_CON&lt;숫자&gt;</c>)을 Core 가 명시 이름으로 다시 만듦.
+    /// </summary>
     public string? RecreateBlockedReason(ISession target) => RecreateBlocked;
+
+    internal const string RecreateBlocked =
+        "Tibero 의 테이블 다시 만들기는 아직 지원하지 않습니다(트리거 컴파일 오류·지연 FK·큰 바이트 길이 열을 다시 만드는 경로가 서버에서 확인되지 않음)";
 
     /// <summary>
     /// 원본도 Tibero 이므로(DBMS 가 다른 복사는 실행 전에 막는다, 결정 Q4) 문자열 길이 한도가 같아 막을 것이 없다.
     /// Oracle 의 MAX_STRING_SIZE 같은 문자열 한도 파라미터가 Tibero 에는 확인되지 않았다.
-    /// TB4 주의: 다시 만들기 DDL 은 길이를 CHAR 단위로 쓰므로, 멀티바이트 문자셋에서 원본의 큰 BYTE 길이가 바이트 한도를 넘을 수 있다 — 차단을 풀기 전에 실측한다.
+    /// 다시 만들기 DDL 은 길이를 CHAR 단위로 쓴다: <c>VARCHAR2(4000 BYTE)</c> 를 CHAR 길이로 다시 만들어 4000바이트 값을 다시 넣는 것은 <c>TiberoRecreateStepIt</c> 가 단언하고,
+    /// 최대 바이트 길이(65532 BYTE) 열은 같은 IT 가 결과만 남긴다(다시 만들기는 지금 막혀 있다 — 풀 때 그 결과로 여기서 막을지 정한다).
     /// </summary>
     public Task<IReadOnlyList<string>> ExtendedStringBlockersAsync(TableInfo source, Func<string, CancellationToken, Task<string?>> targetParameter,
                                                                    CancellationToken ct)

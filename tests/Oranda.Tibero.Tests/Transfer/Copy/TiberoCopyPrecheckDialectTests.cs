@@ -30,13 +30,41 @@ public sealed partial class TiberoCopyPrecheckDialectTests
         Assert.Empty(blockers);
     }
 
+    /// <summary>TB4 뒤로 막지 않는다(받아 두기·되살리기·휴지통 안내는 <c>TiberoRecreateStepIt</c> 가 서버로 잰다).</summary>
     [Fact]
-    public void Recreate_is_blocked_with_a_reason_until_tb4()
+    public void Recreate_stays_blocked_with_a_reason_until_the_runner_copy_it()
     {
-        var reason = Dialect.RecreateBlockedReason(null!);
+        Assert.Equal(TiberoCopyPrecheckDialect.RecreateBlocked, Dialect.RecreateBlockedReason(null!));
+        Assert.False(string.IsNullOrWhiteSpace(TiberoCopyPrecheckDialect.RecreateBlocked));
+    }
 
-        Assert.False(string.IsNullOrWhiteSpace(reason));
-        Assert.Equal(TiberoCopyPrecheckDialect.RecreateBlocked, reason);
+    /// <summary>
+    /// 다시 만들기 단계(<see cref="TiberoRecreateStep"/>)가 쓰는 5개 id 가 Tibero 파일로 있고 Oracle 판과 바인드 이름·열 수가 같다(호출 쪽이 이름으로 보내고 위치로 읽는다).
+    /// 이 id 들은 Core 가 아니라 DBMS 단계가 쓰므로 Core 소스 훑기(<see cref="Every_copy_id_the_core_asks_for_resolves_to_a_tibero_file"/>)에 잡히지 않는다.
+    /// </summary>
+    [Theory]
+    [InlineData("copy.recreate_triggers", 3)]
+    [InlineData("copy.recreate_grants", 3)]
+    [InlineData("copy.recreate_referencing_fks", 9)]
+    [InlineData("copy.recreate_source_fks", 10)]
+    [InlineData("copy.recreate_recycle_bin", 1)]
+    public void Recreate_step_ids_are_tibero_files_with_the_oracle_binds_and_column_count(string id, int columns)
+    {
+        var oracle = new SqlCatalog(Oranda.Oracle.Catalog.EmbeddedCatalog.ReadSources(typeof(Oranda.Oracle.OracleAssembly).Assembly)).Get(id, 19, Dbms.Oracle);
+        var tibero = Catalog.Get(id, 6, Dbms.Tibero);
+
+        Assert.Equal(Dbms.Tibero, tibero.Header.Dbms);
+        Assert.StartsWith("SELECT", tibero.Sql, StringComparison.Ordinal);
+        Assert.DoesNotContain("@PFX@", tibero.Sql, StringComparison.Ordinal);
+        Assert.True(Binds(oracle.Sql).SetEquals(Binds(tibero.Sql)), id + ": 바인드 이름이 Oracle 판과 다르다");
+        Assert.Equal(columns, SelectListCount(oracle.Sql));
+        Assert.Equal(columns, SelectListCount(tibero.Sql));
+
+        // TM0b 3.5·3.7·3.9: Tibero 사전 뷰에 없는 열을 쓰지 않는다.
+        foreach (var missing in new[] { "base_object_type", "table_schema", "operation", "c.deferrable", "c.deferred" })
+        {
+            Assert.DoesNotContain(missing, tibero.Sql, StringComparison.OrdinalIgnoreCase);
+        }
     }
 
     [Fact]
@@ -129,19 +157,54 @@ public sealed partial class TiberoCopyPrecheckDialectTests
         Assert.Contains("WHERE 1 = 0", sql, StringComparison.Ordinal);
     }
 
-    /// <summary>실제 Oracle 판에 있는 id 를 Tibero 판이 같은 바인드·같은 열 수로 따르는지는 IT 가 서버로 본다. 여기서는 Oracle 에만 있는 id 가 예상한 것뿐인지 확인한다.</summary>
+    /// <summary>
+    /// 실제 Oracle 판에 있는 id 를 Tibero 판이 같은 바인드·같은 열 수로 따르는지는 IT 가 서버로 본다. 여기서는 Oracle 에만 있는 id 가 예상한 것뿐인지 확인한다:
+    /// FGA 점검(사전 뷰 없음)과 트리거 DDL(GET_DDL('TRIGGER') = -14001, Tibero 는 메타데이터 제공자로 조립).
+    /// </summary>
     [Fact]
-    public void Ids_that_only_oracle_has_are_exactly_the_fga_probe_and_the_recreate_step_selects()
+    public void Ids_that_only_oracle_has_are_exactly_the_fga_probe_and_the_trigger_ddl()
     {
         var oracle = new SqlCatalog(Oranda.Oracle.Catalog.EmbeddedCatalog.ReadSources(typeof(Oranda.Oracle.OracleAssembly).Assembly));
         var oracleCopy = oracle.Entries.Where(e => e.Id.StartsWith("copy.", StringComparison.Ordinal)).Select(e => e.Id).ToHashSet(StringComparer.Ordinal);
         var tiberoCopy = Catalog.Entries.Where(e => e.Id.StartsWith("copy.", StringComparison.Ordinal)).Select(e => e.Id).ToHashSet(StringComparer.Ordinal);
 
         Assert.Empty(tiberoCopy.Except(oracleCopy)); // Tibero 에 Oracle 에 없는 copy.* 가 생기면 안 된다
-        Assert.Equal(
-            ["copy.fga_policy_count", "copy.recreate_grants", "copy.recreate_recycle_bin", "copy.recreate_referencing_fks", "copy.recreate_source_fks",
-             "copy.recreate_trigger_ddl", "copy.recreate_triggers"],
-            oracleCopy.Except(tiberoCopy).Order(StringComparer.Ordinal).ToList());
+        Assert.Equal(["copy.fga_policy_count", "copy.recreate_trigger_ddl"], oracleCopy.Except(tiberoCopy).Order(StringComparer.Ordinal).ToList());
+    }
+
+    /// <summary>첫 <c>SELECT</c> 와 같은 깊이의 첫 <c>FROM</c> 사이 선택 목록 항목 수(괄호·따옴표 안의 쉼표는 세지 않는다).</summary>
+    private static int SelectListCount(string sql)
+    {
+        var start = sql.IndexOf("SELECT", StringComparison.OrdinalIgnoreCase) + "SELECT".Length;
+        var depth = 0;
+        var quoted = false;
+        var count = 1;
+        for (var i = start; i < sql.Length; i++)
+        {
+            var ch = sql[i];
+            if (ch == '\'')
+            {
+                quoted = !quoted;
+            }
+            else if (!quoted && ch == '(')
+            {
+                depth++;
+            }
+            else if (!quoted && ch == ')')
+            {
+                depth--;
+            }
+            else if (!quoted && depth == 0 && ch == ',')
+            {
+                count++;
+            }
+            else if (!quoted && depth == 0 && string.Compare(sql, i, " FROM ", 0, 6, StringComparison.OrdinalIgnoreCase) == 0)
+            {
+                return count;
+            }
+        }
+
+        throw new InvalidOperationException("FROM 을 찾지 못했다");
     }
 
     /// <summary>각 id 가 Oracle 판과 같은 바인드 이름 집합을 쓴다(호출 쪽이 이름으로 보낸다).</summary>

@@ -164,4 +164,27 @@ public class CreateTableDdlTests
         Assert.Equal(["ORDERS_PK", "ORDERS_CK"], constraints);
         Assert.Equal(["ORDERS_PK", "ORDERS_NAME_IX"], indexes);
     }
+
+    /// <summary>Oracle 사전이 내는 형식 이름의 글은 그대로다(TB4 에서 Tibero 갈래를 더할 때 고정).</summary>
+    [Theory]
+    [InlineData("VARCHAR2", 50, "VARCHAR2(50 CHAR)")]
+    [InlineData("CHAR", 3, "CHAR(3 CHAR)")]
+    [InlineData("NVARCHAR2", 20, "NVARCHAR2(20)")]
+    [InlineData("NCHAR", 2, "NCHAR(2)")]
+    [InlineData("RAW", 16, "RAW(16)")]
+    [InlineData("varchar2", 7, "VARCHAR2(7 CHAR)")]
+    public void Oracle_type_names_keep_their_text(string type, int length, string expected)
+    {
+        Assert.Equal(expected, CreateTableDdl.TypeText(new ColumnInfo("C", 1, type) { Length = length }));
+    }
+
+    /// <summary>Tibero 사전은 VARCHAR2·NVARCHAR2 열을 VARCHAR·NVARCHAR 로 낸다: 길이를 붙여 Oracle 꼴로 쓴다(없으면 길이 없는 「VARCHAR」 → TBR-7001, win144 #77).</summary>
+    [Theory]
+    [InlineData("VARCHAR", 4000, "VARCHAR2(4000 CHAR)")]
+    [InlineData("NVARCHAR", 30, "NVARCHAR2(30)")]
+    [InlineData("varchar", 5, "VARCHAR2(5 CHAR)")]
+    public void Tibero_dictionary_varchar_names_get_their_length(string type, int length, string expected)
+    {
+        Assert.Equal(expected, CreateTableDdl.TypeText(new ColumnInfo("C", 1, type) { Length = length }));
+    }
 }

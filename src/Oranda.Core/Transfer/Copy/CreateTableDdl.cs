@@ -216,6 +216,9 @@ public static class CreateTableDdl
         {
             "VARCHAR2" or "CHAR" when c.Length is { } n => $"{upper}({N(n)} CHAR)",
             "NVARCHAR2" or "NCHAR" or "RAW" when c.Length is { } n => $"{upper}({N(n)})",
+            // Tibero 사전은 VARCHAR2·NVARCHAR2 열을 VARCHAR·NVARCHAR 로 낸다(Oracle 사전은 이 이름을 내지 않는다) — 같은 뜻의 Oracle 꼴로 쓴다.
+            "VARCHAR" when c.Length is { } n => $"VARCHAR2({N(n)} CHAR)",
+            "NVARCHAR" when c.Length is { } n => $"NVARCHAR2({N(n)})",
             "NUMBER" => c switch
             {
                 { Precision: { } p, Scale: { } s } when s != 0 => $"NUMBER({N(p)},{N(s)})",
