@@ -12,12 +12,31 @@ public partial class TiberoDriverIsolationTests
     private const string DriverAssembly = "Tibero.DataAccess";
 
     /// <summary>
-    /// 아직 어댑터로 옮기지 않은 파일(`#if TIBERO_DRIVER` 안의 옛 코드). 옮기는 항목에서 지운다: DV5 = 접속 시험.
+    /// 아직 어댑터로 옮기지 않은 파일. DV5 로 모두 옮겼다 — 새로 넣지 않는다.
     /// </summary>
-    private static readonly string[] PendingAdapterMove =
-    [
-        "src/Oranda.Tibero/Connection/TiberoConnectionProbe.cs",
-    ];
+    private static readonly string[] PendingAdapterMove = [];
+
+    // 옛 드라이버 빌드 기호. 환경 변수 ORANDA_TIBERO_DRIVER 는 걸리지 않는다.
+    [GeneratedRegex(@"(?<![A-Za-z0-9_])TIBERO_DRIVER(?![A-Za-z0-9_])", RegexOptions.CultureInvariant)]
+    private static partial Regex OldDriverSymbol();
+
+    [Fact]
+    public void The_old_driver_build_symbol_is_gone()
+    {
+        var root = FindRepositoryRoot();
+        var files = Directory.EnumerateFiles(Path.Combine(root, "src"), "*.*", SearchOption.AllDirectories)
+            .Concat(Directory.EnumerateFiles(Path.Combine(root, "tests"), "*.*", SearchOption.AllDirectories))
+            .Where(path => path.EndsWith(".cs", StringComparison.OrdinalIgnoreCase) || path.EndsWith(".csproj", StringComparison.OrdinalIgnoreCase))
+            .Concat(Directory.EnumerateFiles(root, "Directory.*.props", SearchOption.TopDirectoryOnly))
+            .Where(path => !IsBuildOutput(path) && !path.EndsWith(nameof(TiberoDriverIsolationTests) + ".cs", StringComparison.Ordinal))
+            .ToList();
+
+        var violations = files.Where(path => OldDriverSymbol().IsMatch(File.ReadAllText(path))).Select(path => Path.GetRelativePath(root, path)).ToList();
+
+        Assert.True(violations.Count == 0, "옛 TIBERO_DRIVER 기호가 남아 있다: " + string.Join(", ", violations));
+        Assert.Matches(OldDriverSymbol(), "#if TIBERO_DRIVER");
+        Assert.DoesNotMatch(OldDriverSymbol(), "ORANDA_TIBERO_DRIVER");
+    }
 
     // 드라이버 이름공간(Tibero.DataAccess 아래 모두, tbcomm). "Tibero.DataAccess.dll" 같은 파일 이름과 Oranda.Tibero 는 걸리지 않는다.
     [GeneratedRegex(@"(?<![\w.])(Tibero\.DataAccess(\.(?!dll\b)\w+|\s*;)|tbcomm\.)", RegexOptions.CultureInvariant)]

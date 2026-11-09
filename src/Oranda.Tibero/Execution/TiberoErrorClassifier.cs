@@ -1,9 +1,9 @@
 using System.Globalization;
-using System.Reflection;
 using System.Text.RegularExpressions;
 using Oranda.Core.Composition;
 using Oranda.Core.Connection;
 using Oranda.Core.Execution;
+using Oranda.Tibero.Driver;
 
 namespace Oranda.Tibero.Execution;
 
@@ -14,9 +14,9 @@ namespace Oranda.Tibero.Execution;
 /// <see cref="DbErrorKind.ReadOnly"/>·<see cref="DbErrorKind.AccountLocked"/>·<see cref="DbErrorKind.PasswordExpired"/>·
 /// <see cref="DbErrorKind.CompiledWithErrors"/>)는 번호를 추측해 넣지 않고 <see cref="DbErrorKind.Other"/> 로 둔다.
 /// <para>
-/// 드라이버를 컴파일 때 참조하지 않으므로(결정25) 드라이버 예외는 형식 이름과 공개 속성으로 알아본다(실측 1장):
-/// 서버 오류 <c>TiberoException</c>(<c>Number</c>), 드라이버 쪽 오류(접속 실패·끊긴 연결) <c>TbOdpException</c>(<c>ErrorCode</c>, <c>DbException</c> 아님).
-/// 이 읽기는 <see cref="TryReadDriverError"/> 한 곳에만 있고, 드라이버 어댑터(tb-driver DV5)가 생기면 그쪽으로 옮긴다.
+/// 드라이버를 컴파일 때 참조하지 않으므로(D-046-1) 드라이버 예외는 어댑터(<see cref="TiberoDriver.TryReadError"/>)가 알아본다(실측 1장):
+/// 서버 오류(<c>Number</c>), 드라이버 쪽 오류(접속 실패·끊긴 연결, <c>ErrorCode</c>, <c>DbException</c> 아님).
+/// 이 읽기는 <see cref="TryReadDriverError"/> 한 곳에만 있다.
 /// </para>
 /// </summary>
 [OrandaService(typeof(IDbErrorClassifier), Dbms = Dbms.Tibero)]
@@ -261,51 +261,25 @@ internal sealed partial class TiberoErrorClassifier : IDbErrorClassifier
         return string.Join('\n', lines).TrimEnd('\n');
     }
 
-    /// <summary>예외 사슬(Inner·Aggregate)에서 첫 드라이버 예외의 번호·메시지.</summary>
-    /// <summary>서버 오류 예외의 형식 이름과 번호 속성.</summary>
-    private const string ServerExceptionName = "TiberoException";
-
-    /// <summary>드라이버 쪽 오류 예외(<c>System.Exception</c> 바탕)의 형식 이름과 번호 속성.</summary>
-    private const string DriverSideExceptionName = "TbOdpException";
-
     /// <summary>
     /// 이 예외 자체(안쪽은 보지 않음)가 드라이버 예외면 true 와 번호(드라이버 값 그대로, 부호 포함)·메시지.
-    /// 번호를 못 읽으면 0(메시지의 <c>ODP-</c>/<c>TBR-</c> 번호로 넘어간다).
+    /// 드라이버 형식은 어댑터만 안다(docs/design/tibero-driver-adapter.md 2.7) — 묶인 어댑터 어느 것이든 알아보면 드라이버 예외다.
     /// </summary>
     private static bool TryReadDriverError(Exception exception, out int number, out string message)
     {
+        if (TiberoDriver.TryReadAnyError(exception, out var error))
+        {
+            number = error.Number;
+            message = error.Message;
+            return true;
+        }
+
         number = 0;
         message = string.Empty;
-        string? property = null;
-        for (var type = exception.GetType(); type is not null && property is null; type = type.BaseType)
-        {
-            property = type.Name switch
-            {
-                ServerExceptionName => "Number",
-                DriverSideExceptionName => "ErrorCode",
-                _ => null,
-            };
-        }
-
-        if (property is null)
-        {
-            return false;
-        }
-
-        message = exception.Message;
-        try
-        {
-            var info = exception.GetType().GetProperty(property, BindingFlags.Public | BindingFlags.Instance);
-            number = info?.PropertyType == typeof(int) && info.GetValue(exception) is int value ? value : 0;
-        }
-        catch (Exception ex) when (ex is AmbiguousMatchException or TargetInvocationException)
-        {
-            number = 0; // 번호를 못 읽어도 원래 오류를 가리지 않는다.
-        }
-
-        return true;
+        return false;
     }
 
+    /// <summary>예외 사슬(Inner·Aggregate)에서 첫 드라이버 예외의 번호·메시지.</summary>
     private static (int Number, string Message)? Find(Exception exception)
     {
         var pending = new Stack<Exception>();

@@ -256,7 +256,13 @@ internal sealed partial class TiberoDriver
         ArgumentNullException.ThrowIfNull(driver);
         try
         {
-            return new TiberoDriver(driver);
+            var bound = new TiberoDriver(driver);
+            lock (BoundGate)
+            {
+                Volatile.Write(ref s_bound, [.. s_bound, bound]);
+            }
+
+            return bound;
         }
         catch (TiberoDriverBindException)
         {
@@ -465,7 +471,31 @@ internal sealed partial class TiberoDriver
         return false;
     }
 
+    /// <summary>
+    /// 이 프로세스에서 묶인 모든 어댑터(앱 = <see cref="TiberoDriverHost.Shared"/> 하나, 시험 = 가짜도)에 <see cref="TryReadError"/> 를 묻는다.
+    /// 어댑터를 받지 않는 정적 오류 분류(<c>TiberoErrorClassifier</c>)가 쓴다. 아무것도 묶이지 않았으면 드라이버 예외도 있을 수 없어 false.
+    /// </summary>
+    internal static bool TryReadAnyError(Exception ex, out TiberoErrorInfo error)
+    {
+        ArgumentNullException.ThrowIfNull(ex);
+        foreach (var driver in Volatile.Read(ref s_bound))
+        {
+            if (driver.TryReadError(ex, out error))
+            {
+                return true;
+            }
+        }
+
+        error = default;
+        return false;
+    }
+
     // ---- 내부 ----
+
+    private static readonly Lock BoundGate = new();
+
+    // 묶을 때만 바뀐다(드물다). 읽기는 잠금 없이 복사본을 본다.
+    private static TiberoDriver[] s_bound = [];
 
     private TiberoLob MakeClob(Stream s) =>
         new(_isNClob(s) ? TiberoLobKind.NClob : TiberoLobKind.Clob, s, _cloneClob, _readChars);

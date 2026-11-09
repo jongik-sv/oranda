@@ -1,12 +1,18 @@
 using Oranda.Core.Connection;
 using Oranda.Core.Execution;
 using Oranda.Tibero.Execution;
+using Oranda.Tibero.Tests.Driver;
 
 namespace Oranda.Tibero.Tests.Execution;
 
 public class TiberoErrorClassifierTests
 {
     private readonly TiberoErrorClassifier _classifier = new();
+
+    // 드라이버 예외는 가짜 드라이버(같은 형식 이름·모양, 실측 docs/design/tibero-driver-session.md 1장)로 만든다 — 분류기는 어댑터로 알아본다.
+    private static Exception Server(string message, int number) => FakeDriverHost.ServerError(number, message);
+
+    private static Exception Client(int code, string message) => FakeDriverHost.ClientError(code, message);
 
     [Theory]
     [InlineData(12040, DbErrorKind.Cancelled)]
@@ -163,7 +169,7 @@ public class TiberoErrorClassifierTests
     public void FromException_reads_the_server_exception()
     {
         // 실측: Number 음수, 메시지 머리말 ODP-.
-        var error = _classifier.FromException(new TiberoException("ODP-12040:Statement canceled.   ", -12040));
+        var error = _classifier.FromException(Server("ODP-12040:Statement canceled.   ", -12040));
 
         Assert.NotNull(error);
         Assert.Equal("TBR-12040", error.Code);
@@ -176,7 +182,7 @@ public class TiberoErrorClassifierTests
     public void FromException_reads_the_driver_side_exception()
     {
         // 실측: 닫힌 연결에 명령 → tbcomm.err.TbOdpException(System.Exception 바탕), ErrorCode=-90603, Number 속성 없음.
-        var ex = new TbOdpException(-90603, "ODP-90603:Invalid operation: disconnected from the server.");
+        var ex = Client(-90603, "ODP-90603:Invalid operation: disconnected from the server.");
 
         var error = _classifier.FromException(ex);
 
@@ -190,7 +196,7 @@ public class TiberoErrorClassifierTests
     [Fact]
     public void FromException_finds_the_driver_exception_inside_wrappers()
     {
-        var inner = new TbOdpException(-90403, "ODP-90403:broken");
+        var inner = Client(-90403, "ODP-90403:broken");
 
         Assert.Equal(DbErrorKind.Disconnected, _classifier.FromException(new InvalidOperationException("x", inner))!.Kind);
         Assert.Equal(DbErrorKind.Disconnected, _classifier.FromException(new AggregateException(new IOException("y"), inner))!.Kind);
@@ -200,7 +206,7 @@ public class TiberoErrorClassifierTests
     public void ToDbError_adds_the_statement_position()
     {
         const string text = "SELECT *\n  FROM ORT_NO_SUCH_TABLE_XYZ";
-        var ex = new TiberoException("ODP-8033:Specified schema object was not found.   \nat line 2, column 9 of null:\n  FROM ORT_NO_SUCH_TABLE_XYZ\n       ^", -8033);
+        var ex = Server("ODP-8033:Specified schema object was not found.   \nat line 2, column 9 of null:\n  FROM ORT_NO_SUCH_TABLE_XYZ\n       ^", -8033);
 
         var error = TiberoErrorClassifier.ToDbError(ex, text);
 
@@ -212,23 +218,10 @@ public class TiberoErrorClassifierTests
     [Fact]
     public void Unreadable_number_falls_back_to_the_message()
     {
-        var error = _classifier.FromException(new TiberoException("TBR-12032: deadlock", int.MinValue));
+        var error = _classifier.FromException(Server("TBR-12032: deadlock", int.MinValue));
 
         Assert.NotNull(error);
         Assert.Equal(DbErrorKind.Other, error.Kind); // int.MinValue 는 번호로 보지 않는다
-        Assert.Equal(DbErrorKind.Deadlock, _classifier.FromException(new TiberoException("TBR-12032: deadlock", 0))!.Kind);
+        Assert.Equal(DbErrorKind.Deadlock, _classifier.FromException(Server("TBR-12032: deadlock", 0))!.Kind);
     }
 }
-
-// 드라이버 예외 모양만 흉내 낸다(형식 이름 + 공개 번호 속성, 실측 docs/design/tibero-driver-session.md 1장).
-#pragma warning disable CA1032, CA1064, CA1711, SA1402 // 이름이 드라이버와 같아야 찾는다.
-internal sealed class TiberoException(string message, int number) : System.Data.Common.DbException(message)
-{
-    public int Number { get; } = number;
-}
-
-internal sealed class TbOdpException(int errorCode, string message) : Exception(message)
-{
-    public int ErrorCode { get; } = errorCode;
-}
-#pragma warning restore CA1032, CA1064, CA1711, SA1402

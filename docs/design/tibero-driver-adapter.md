@@ -119,6 +119,8 @@
 |---|---|---|---|
 | `TryReadError(Exception ex, out TiberoErrorInfo error)` | `bool` | 이 예외 자체만 본다(안쪽은 호출자가 훑음). 서버 오류 `Tibero.DataAccess.Client.TiberoException.Number`(`DbException`), 드라이버 쪽 오류 `tbcomm.err.TbOdpException.ErrorCode`(`System.Exception`) | tb-session S4 `TiberoErrorClassifier`(지금의 `TiberoDriverErrors.TryRead` 를 대신), DV5 |
 
+| `TiberoDriver.TryReadAnyError(Exception ex, out TiberoErrorInfo error)` | `static bool` | 이 프로세스에서 묶인 모든 어댑터(앱 `Shared` + 시험 가짜)에 `TryReadError` 를 묻는다. 묶인 것이 없으면 false | 어댑터를 받지 않는 정적 분류(`TiberoErrorClassifier.FromException`·`ToDbError`·`IsDriverException`, DV5) |
+
 `TiberoErrorInfo`(readonly record struct): `int Number`(드라이버 값 그대로, 보통 음수 — 부호 없애기는 분류기 몫: `TiberoErrorClassifier.Classify` 가 `Math.Abs`), `string Message`, `TiberoErrorOrigin Origin`(`Server` = `TiberoException`, `Client` = `TbOdpException`. 번호 범위가 달라 분류기가 나눠 본다, session 7장).
 
 오류 위치(줄·열)는 드라이버 멤버가 없다(`TiberoError` 에 `ParseErrorOffset` 없음). 메시지의 `at line L, column C` 와 `^` 줄을 `TiberoErrorClassifier`(S4)가 해석한다 — 어댑터 멤버가 아니다.

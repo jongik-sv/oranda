@@ -1,5 +1,7 @@
 using Oranda.Core.Connection;
 using Oranda.Tibero.Connection;
+using Oranda.Tibero.Driver;
+using Oranda.Tibero.Tests.Driver;
 
 namespace Oranda.Tibero.Tests.Connection;
 
@@ -149,15 +151,71 @@ public class TiberoConnectionProbeTests
         Assert.NotNull(result.Message);
     }
 
-#if !TIBERO_DRIVER
     [Fact]
-    public async Task Probe_without_the_driver_fails_with_a_clear_message()
+    public async Task Probe_without_the_driver_tells_the_user_to_specify_it()
     {
-        var result = await new TiberoConnectionProbe().ProbeAsync(Profile(), "pw", CancellationToken.None);
+        var probe = new TiberoConnectionProbe(static () => throw new TiberoDriverUnavailableException(DriverCheck.Missing));
+
+        var result = await probe.ProbeAsync(Profile(), "pw", CancellationToken.None);
+
         Assert.False(result.Succeeded);
-        Assert.Equal(TiberoConnectionProbe.NoDriverMessage, result.Message);
+        Assert.Equal(TiberoDriver.NotSpecifiedMessage, result.Message);
     }
-#endif
+
+    [Fact]
+    public async Task Probe_reads_the_version_through_the_adapter()
+    {
+        var table = new System.Data.DataTable();
+        table.Columns.Add("NAME", typeof(string));
+        table.Columns.Add("VALUE", typeof(string));
+        table.Rows.Add("PRODUCT_MAJOR", "6");
+        table.Rows.Add("PRODUCT_MINOR", " ");
+        string? sql = null;
+        FakeDriverHost.SetHandler(command =>
+        {
+            sql = command.CommandText;
+            return table;
+        });
+
+        var result = await new TiberoConnectionProbe(static () => FakeDriverHost.Driver).ProbeAsync(Profile(), "pw", CancellationToken.None);
+
+        Assert.True(result.Succeeded, result.Message);
+        Assert.Equal("6", result.ServerVersion);
+        Assert.Equal("SELECT * FROM V$VERSION", sql);
+    }
+
+    [Fact]
+    public async Task Probe_stops_waiting_at_the_time_limit()
+    {
+        using var release = new ManualResetEventSlim();
+        FakeDriverHost.SetHandler(_ =>
+        {
+            release.Wait(TimeSpan.FromSeconds(10)); // 응답 없는 서버
+            return null;
+        });
+        var profile = Profile() with { ConnectTimeoutSeconds = 1 };
+
+        var started = System.Diagnostics.Stopwatch.StartNew();
+        var result = await new TiberoConnectionProbe(static () => FakeDriverHost.Driver).ProbeAsync(profile, "pw", CancellationToken.None);
+        release.Set();
+
+        Assert.False(result.Succeeded);
+        Assert.Contains("제한 시간", result.Message, StringComparison.Ordinal);
+        Assert.True(started.Elapsed < TimeSpan.FromSeconds(8), started.Elapsed.ToString());
+    }
+
+    [Fact]
+    public async Task Probe_classifies_a_driver_side_failure_and_hides_the_password()
+    {
+        FakeDriverHost.SetHandler(static _ => throw FakeDriverHost.ClientError(-90401, "ODP-90401:Connection refused by the server. pw=s3cret"));
+
+        var result = await new TiberoConnectionProbe(static () => FakeDriverHost.Driver).ProbeAsync(Profile(), "s3cret", CancellationToken.None);
+
+        Assert.False(result.Succeeded);
+        Assert.Equal("TBR-90401", result.Error!.Code);
+        Assert.DoesNotContain("s3cret", result.Message, StringComparison.Ordinal);
+        Assert.DoesNotContain("s3cret", result.Error.Message, StringComparison.Ordinal);
+    }
 
     [Fact]
     public async Task Probe_honours_a_canceled_token()
@@ -184,7 +242,8 @@ public class TiberoConnectionProbeTests
     public async Task Probe_against_a_real_server_reports_the_version()
     {
         var env = new TiberoItEnv();
-        if (env.Skip() || !TiberoDriverInfo.IsLinked)
+        // 드라이버 위치(ORANDA_TIBERO_DRIVER)가 없으면 접속할 수 없다 — 서버 정보만 있어도 건너뛴다.
+        if (env.Skip() || string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable("ORANDA_TIBERO_DRIVER")))
         {
             return;
         }
