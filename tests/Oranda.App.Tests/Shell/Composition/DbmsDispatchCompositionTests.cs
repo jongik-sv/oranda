@@ -28,6 +28,7 @@ public class DbmsDispatchCompositionTests
         typeof(Oranda.Core.Schema.ISchemaStatements),
         typeof(Oranda.Core.Schema.IDdlBulkExporter),
         typeof(Oranda.Core.Schema.IColumnReorderScripts),
+        typeof(IImportValueConverter), // 세션을 받지 않는 값 변환 — 가져오기 대화 상자가 세션 DBMS 로 Get<T>
     ];
 
     private static ServiceContainer Compose() =>
@@ -39,11 +40,11 @@ public class DbmsDispatchCompositionTests
         using var c = new ServiceContainer();
         c.AddAssembly(typeof(OracleAssembly).Assembly);
 
-        Assert.Null(c.GetService<ITableSpecWriter>()); // 디스패처(Core)가 없으면 서비스 형식으로는 보이지 않는다
-        var writer = c.DbmsServices.Find<ITableSpecWriter>(Dbms.Oracle);
-        Assert.NotNull(writer);
-        Assert.Equal(typeof(OracleAssembly).Assembly, writer.GetType().Assembly);
-        Assert.Same(writer, c.DbmsServices.Find<ITableSpecWriter>(Dbms.Oracle)); // 특성 수명(싱글턴) 그대로
+        Assert.Null(c.GetService<IImportValueConverter>()); // 디스패처(Core)가 없으면 서비스 형식으로는 보이지 않는다
+        var converter = c.DbmsServices.Find<IImportValueConverter>(Dbms.Oracle);
+        Assert.NotNull(converter);
+        Assert.Equal(typeof(OracleAssembly).Assembly, converter.GetType().Assembly);
+        Assert.Same(converter, c.DbmsServices.Find<IImportValueConverter>(Dbms.Oracle)); // 특성 수명(싱글턴) 그대로
         Assert.Same(c.DbmsServices, c.GetService<IDbmsServiceSelector>());
     }
 
@@ -55,12 +56,12 @@ public class DbmsDispatchCompositionTests
         var writer = c.GetRequiredService<ITableSpecWriter>();
         var sessions = c.GetRequiredService<ISessionManager>();
         _ = c.GetRequiredService<IExecutionService>();
-        Assert.IsType<TableSpecWriterDispatcher>(writer);
         Assert.IsType<SessionManagerDispatcher>(sessions);
         Assert.Empty(sessions.Sessions); // 「세션이 있나」만 물어도 Oracle 을 깨우지 않는다(SessionRouter.CurrentOf 의 길)
+        Assert.Equal(".xlsx", writer.Extension(TableSpecFormat.Xlsx)); // 정의서 쓰기는 키 없는 Core 서비스 — 디스패처도 Oracle 로드도 없다
         Assert.False(c.DeferredScanned, c.DeferredScanTrigger);
 
-        Assert.Equal(".xlsx", writer.Extension(TableSpecFormat.Xlsx)); // Oracle 구현까지 넘어간다
+        Assert.NotNull(c.GetRequiredService<IDbmsServiceSelector>().Find<IImportValueConverter>(Dbms.Oracle)); // 처음 DBMS 구현을 고르면 Oracle 이 로드된다
 
         Assert.True(c.DeferredScanned);
         Assert.Equal(typeof(IDbmsServiceSelector).FullName, c.DeferredScanTrigger);

@@ -62,7 +62,6 @@ public static class DbmsServiceKeys
         typeof(IColumnReorderProvider),
         typeof(ISchemaAdminProvider),
         typeof(ITableKeyDetailProvider),
-        typeof(ITableSpecWriter),
     ];
 
     private static Dbms? _active;

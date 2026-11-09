@@ -2,9 +2,8 @@ using System.Globalization;
 using System.IO.Compression;
 using System.Text;
 using System.Xml;
-using Oranda.Core.Transfer;
 
-namespace Oranda.Oracle.Transfer;
+namespace Oranda.Core.Transfer;
 
 /// <summary>
 /// 가져오기 원본(CSV·TSV·xlsx) 행 읽기. 앞에서부터 한 행씩 흘려 읽는다(전체를 메모리에 올리지 않는다). 소유: TSK-06-07.
@@ -410,4 +409,15 @@ public static class TransferFileReader
 
         return false;
     }
+}
+
+/// <summary>
+/// <see cref="ITransferFileReader"/> 구현: 정적 <see cref="TransferFileReader"/> 를 그대로 부른다. 파일 해석은 DBMS 와 무관해 키 없는 서비스로 등록한다(Oracle·Tibero 가 같이 쓴다).
+/// </summary>
+[Oranda.Core.Composition.OrandaService(typeof(ITransferFileReader))]
+public sealed class TransferFileReaderService : ITransferFileReader
+{
+    public IEnumerable<object?[]> ReadRows(TransferFormat format, Stream source) => TransferFileReader.ReadRows(format, source);
+
+    public IReadOnlyList<object?[]> Preview(TransferFormat format, Stream source, int maxRows) => TransferFileReader.Preview(format, source, maxRows);
 }

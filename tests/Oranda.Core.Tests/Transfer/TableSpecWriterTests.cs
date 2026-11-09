@@ -1,9 +1,8 @@
 using System.IO.Compression;
 using System.Xml.Linq;
 using Oranda.Core.Transfer;
-using Oranda.Oracle.Transfer;
 
-namespace Oranda.Oracle.Tests.Transfer;
+namespace Oranda.Core.Tests.Transfer;
 
 // 소유: TSK-13-06. 테이블 정의서 xlsx(목차 + 표마다 시트)·Markdown·HTML 내용 단위 시험.
 public class TableSpecWriterTests

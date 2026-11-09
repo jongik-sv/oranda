@@ -122,7 +122,7 @@ public sealed class ExportBindsIntegrationTests(ItDb db, ITestOutputHelper outpu
             // xlsx 를 같은 모양의 표에 다시 가져와 값(행·이름·날짜)이 원본과 같은지 본다.
             var dst = NewTable();
             await rig.RunSqlAsync($"create table {dst} (id number primary key, name varchar2(40), d date)");
-            var import = new ImportDialogViewModel(service, rig.Container.GetRequiredService<IMetadataProvider>(), rig.Session) { FilePath = xlsx, TargetTable = dst };
+            var import = new ImportDialogViewModel(service, rig.Container.GetRequiredService<IMetadataProvider>(), rig.Session, Oranda.App.Features.DbmsServices.For<IImportValueConverter>(rig.Container, rig.Session)) { FilePath = xlsx, TargetTable = dst };
             await import.LoadAsync();
             Assert.True(import.IsReady, import.Status);
             await import.StartAsync();

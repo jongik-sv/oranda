@@ -81,7 +81,7 @@ public sealed class TransferFlowTests(ItDb db, ITestOutputHelper output) : IClas
             Assert.Contains("\"a,b \"\"q\"\" 한글\"", text, StringComparison.Ordinal); // 쉼표·따옴표 이스케이프
             Assert.Contains("line1\nline2", text.Replace("\r\n", "\n", StringComparison.Ordinal), StringComparison.Ordinal);
 
-            var import = new ImportDialogViewModel(service, rig.Container.GetRequiredService<IMetadataProvider>(), rig.Session)
+            var import = new ImportDialogViewModel(service, rig.Container.GetRequiredService<IMetadataProvider>(), rig.Session, Oranda.App.Features.DbmsServices.For<IImportValueConverter>(rig.Container, rig.Session))
             {
                 FilePath = file,
                 TargetTable = dst,
@@ -124,7 +124,7 @@ public sealed class TransferFlowTests(ItDb db, ITestOutputHelper output) : IClas
             // 오류: 중복 키가 섞인 파일은 오류 행만 보고되고 정상 행은 들어간다(되돌림은 아래에서 삭제로).
             var dup = Path.Combine(dir, "dup.csv");
             await File.WriteAllTextAsync(dup, "ID,NAME,AMT,D\n1,one,1,2026-01-01\n2,two,2,2026-01-02\n2,two-again,3,2026-01-03\n", new UTF8Encoding(false));
-            var vm = new ImportDialogViewModel(service, meta, rig.Session) { FilePath = dup, TargetTable = dst };
+            var vm = new ImportDialogViewModel(service, meta, rig.Session, Oranda.App.Features.DbmsServices.For<IImportValueConverter>(rig.Container, rig.Session)) { FilePath = dup, TargetTable = dst };
             await vm.LoadAsync();
             await vm.StartAsync();
             // 설계: 오류 행은 건너뛰고 따로 보고하며 나머지는 넣는다. 행 번호는 머리글을 센 파일 줄 번호라
@@ -141,7 +141,7 @@ public sealed class TransferFlowTests(ItDb db, ITestOutputHelper output) : IClas
             // 경계: 원본에 대상에 없는 열이 있으면 매핑에서 건너뛰고 나머지는 들어간다. 빈 값은 NULL.
             var extra = Path.Combine(dir, "extra.csv");
             await File.WriteAllTextAsync(extra, "ID,NAME,EXTRA_COL\n10,열 건너뜀,zzz\n11,,yyy\n", new UTF8Encoding(false));
-            var vm2 = new ImportDialogViewModel(service, meta, rig.Session) { FilePath = extra, TargetTable = dst };
+            var vm2 = new ImportDialogViewModel(service, meta, rig.Session, Oranda.App.Features.DbmsServices.For<IImportValueConverter>(rig.Container, rig.Session)) { FilePath = extra, TargetTable = dst };
             await vm2.LoadAsync();
             Assert.Contains(vm2.Mappings, m => m.IsSkipped && m.Source == "EXTRA_COL");
             await vm2.StartAsync();
@@ -153,7 +153,7 @@ public sealed class TransferFlowTests(ItDb db, ITestOutputHelper output) : IClas
             var before = db.Text($"select count(*) from {dst}");
             var bad = Path.Combine(dir, "bad.csv");
             await File.WriteAllTextAsync(bad, "ID,NAME,AMT\n20,ok,1\n21,notnum,abc\n", new UTF8Encoding(false));
-            var vm3 = new ImportDialogViewModel(service, meta, rig.Session) { FilePath = bad, TargetTable = dst };
+            var vm3 = new ImportDialogViewModel(service, meta, rig.Session, Oranda.App.Features.DbmsServices.For<IImportValueConverter>(rig.Container, rig.Session)) { FilePath = bad, TargetTable = dst };
             await vm3.LoadAsync();
             Assert.Contains(vm3.Mappings, m => m.PreviewIsError);
             await vm3.StartAsync();
@@ -161,18 +161,18 @@ public sealed class TransferFlowTests(ItDb db, ITestOutputHelper output) : IClas
             Assert.True(after == before || after == (int.Parse(before, System.Globalization.CultureInfo.InvariantCulture) + 1).ToString(System.Globalization.CultureInfo.InvariantCulture), $"before={before} after={after}");
 
             // 오류: 없는 파일·없는 표는 로드 단계에서 오류로 알리고 가져오기 버튼이 열리지 않는다.
-            var missing = new ImportDialogViewModel(service, meta, rig.Session) { FilePath = Path.Combine(dir, "nope.csv"), TargetTable = dst };
+            var missing = new ImportDialogViewModel(service, meta, rig.Session, Oranda.App.Features.DbmsServices.For<IImportValueConverter>(rig.Container, rig.Session)) { FilePath = Path.Combine(dir, "nope.csv"), TargetTable = dst };
             await missing.LoadAsync();
             Assert.False(missing.IsReady);
             Assert.True(missing.StatusIsError);
-            var noTable = new ImportDialogViewModel(service, meta, rig.Session) { FilePath = dup, TargetTable = "NO_SUCH_TABLE_X" };
+            var noTable = new ImportDialogViewModel(service, meta, rig.Session, Oranda.App.Features.DbmsServices.For<IImportValueConverter>(rig.Container, rig.Session)) { FilePath = dup, TargetTable = "NO_SUCH_TABLE_X" };
             await noTable.LoadAsync();
             Assert.False(noTable.IsReady);
 
             // 경계: 헤더 없는 파일(HasHeader=false)은 열 순서대로 매핑 후보가 만들어진다. 빈 파일은 읽을 행 없음.
             var empty = Path.Combine(dir, "empty.csv");
             await File.WriteAllTextAsync(empty, string.Empty);
-            var vm4 = new ImportDialogViewModel(service, meta, rig.Session) { FilePath = empty, TargetTable = dst };
+            var vm4 = new ImportDialogViewModel(service, meta, rig.Session, Oranda.App.Features.DbmsServices.For<IImportValueConverter>(rig.Container, rig.Session)) { FilePath = empty, TargetTable = dst };
             await vm4.LoadAsync();
             Assert.False(vm4.IsReady);
             output.WriteLine("S6-2 OK: 중복 키 롤백·열 건너뜀·빈 값 NULL·숫자 오류·없는 파일/표·빈 파일");
@@ -240,7 +240,7 @@ public sealed class TransferFlowTests(ItDb db, ITestOutputHelper output) : IClas
                 Assert.Contains(zip.Entries, e => e.FullName.StartsWith("xl/worksheets/", StringComparison.Ordinal));
             }
 
-            var import = new ImportDialogViewModel(service, rig.Container.GetRequiredService<IMetadataProvider>(), rig.Session) { FilePath = xlsx, TargetTable = dst };
+            var import = new ImportDialogViewModel(service, rig.Container.GetRequiredService<IMetadataProvider>(), rig.Session, Oranda.App.Features.DbmsServices.For<IImportValueConverter>(rig.Container, rig.Session)) { FilePath = xlsx, TargetTable = dst };
             await import.LoadAsync();
             Assert.True(import.IsReady, import.Status);
             await import.StartAsync();

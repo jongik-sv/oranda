@@ -183,7 +183,9 @@ public sealed class DataTransferCommandHandler : ICommandHandler
                 if (session is not null && TransferServices.Resolve(_services) is { } transfer
                     && await DataTransferCommands.ReadyForImportAsync(_services, session, cancellationToken).ConfigureAwait(true))
                 {
-                    var vm = new ImportDialogViewModel(transfer, TransferServices.ResolveMetadata(_services), session)
+                    var vm = new ImportDialogViewModel(transfer, TransferServices.ResolveMetadata(_services), session,
+                        DbmsServices.For<Oranda.Core.Transfer.IImportValueConverter>(_services, session),
+                        _services.GetService(typeof(Oranda.Core.Transfer.ITransferFileReader)) as Oranda.Core.Transfer.ITransferFileReader)
                     {
                         State = Oranda.App.Features.Execution.ExecutionState.For(_services.GetService(typeof(Oranda.Core.Events.IEventBus)) as Oranda.Core.Events.IEventBus),
                         Owner = router?.ActiveWorkspace,

@@ -3,9 +3,8 @@ using System.IO.Compression;
 using System.Text;
 using System.Xml;
 using Oranda.Core.Grid;
-using Oranda.Core.Transfer;
 
-namespace Oranda.Oracle.Transfer;
+namespace Oranda.Core.Transfer;
 
 internal static partial class TransferWriters
 {

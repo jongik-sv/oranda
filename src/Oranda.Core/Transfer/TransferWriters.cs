@@ -1,9 +1,8 @@
 using System.Globalization;
 using System.Text;
 using Oranda.Core.Grid;
-using Oranda.Core.Transfer;
 
-namespace Oranda.Oracle.Transfer;
+namespace Oranda.Core.Transfer;
 
 /// <summary>내보내기 파일 쓰기(행 단위, 스트리밍). 소유: TSK-06-07.</summary>
 internal interface ITransferWriter : IDisposable

@@ -12,7 +12,6 @@ using Oranda.App.ViewModels;
 using Oranda.Core.Metadata;
 using Oranda.Core.Sessions;
 using Oranda.Core.Transfer;
-using Oranda.Oracle.Transfer;
 
 namespace Oranda.App.Features.DataTransfer;
 
@@ -52,6 +51,8 @@ public sealed partial class ImportDialogViewModel : ViewModelBase, IDisposable
     private readonly IDataTransferService _service;
     private readonly IMetadataProvider _metadata;
     private readonly ISession _session;
+    private readonly ITransferFileReader _reader;
+    private readonly IImportValueConverter? _converter;
     private TableInfo? _table;
     private IReadOnlyList<object?[]> _previewRows = [];
     private CancellationTokenSource? _cts;
@@ -97,7 +98,12 @@ public sealed partial class ImportDialogViewModel : ViewModelBase, IDisposable
     [NotifyCanExecuteChangedFor(nameof(StartCommand), nameof(LoadCommand), nameof(CancelCommand))]
     private bool _isRunning;
 
-    public ImportDialogViewModel(IDataTransferService service, IMetadataProvider metadata, ISession session)
+    /// <param name="service">가져오기 실행(세션 DBMS 로 고른 서비스).</param>
+    /// <param name="metadata">대상 표 열 정보.</param>
+    /// <param name="session">가져올 세션.</param>
+    /// <param name="converter">미리보기용 값 변환기 — 세션 DBMS 로 고른 <see cref="IImportValueConverter"/>. null 이면 변환 미리보기 없이 열 매핑만 보여 준다.</param>
+    /// <param name="reader">파일 읽기. null 이면 기본 구현(<see cref="TransferFileReaderService"/>, DBMS 와 무관).</param>
+    public ImportDialogViewModel(IDataTransferService service, IMetadataProvider metadata, ISession session, IImportValueConverter? converter = null, ITransferFileReader? reader = null)
     {
         ArgumentNullException.ThrowIfNull(service);
         ArgumentNullException.ThrowIfNull(metadata);
@@ -105,6 +111,8 @@ public sealed partial class ImportDialogViewModel : ViewModelBase, IDisposable
         _service = service;
         _metadata = metadata;
         _session = session;
+        _converter = converter;
+        _reader = reader ?? new TransferFileReaderService();
         _targetOwner = session.Profile.User.ToUpperInvariant();
     }
 
@@ -168,7 +176,7 @@ public sealed partial class ImportDialogViewModel : ViewModelBase, IDisposable
             _table = await _metadata.GetTableAsync(_session, new DbObjectRef(TargetOwner.Trim().ToUpperInvariant(), TargetTable.Trim().ToUpperInvariant(), "TABLE"), CancellationToken.None).ConfigureAwait(true);
             await using (var fs = new FileStream(FilePath.Trim(), FileMode.Open, FileAccess.Read, FileShare.Read, 81920, FileOptions.Asynchronous))
             {
-                _previewRows = TransferFileReader.Preview(Format, fs, PreviewRowCount + 1);
+                _previewRows = _reader.Preview(Format, fs, PreviewRowCount + 1);
             }
 
             Rebuild();
@@ -241,6 +249,13 @@ public sealed partial class ImportDialogViewModel : ViewModelBase, IDisposable
         }
 
         var column = _table.Columns.First(c => string.Equals(c.Name, row.Target, StringComparison.OrdinalIgnoreCase));
+        if (_converter is null)
+        {
+            row.Preview = column.DataType;
+            row.PreviewIsError = false;
+            return;
+        }
+
         var data = HasHeader ? _previewRows.Skip(1) : _previewRows;
         var errors = 0;
         string? firstError = null;
@@ -248,7 +263,7 @@ public sealed partial class ImportDialogViewModel : ViewModelBase, IDisposable
         foreach (var r in data.Take(PreviewRowCount))
         {
             var cell = i0 < r.Length ? r[i0] : null;
-            if (ImportValueConverter.TryConvert(column, cell, out var literal, out var error))
+            if (_converter.TryConvert(column, cell, out var literal, out var error))
             {
                 firstOk ??= literal;
             }

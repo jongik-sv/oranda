@@ -2,9 +2,8 @@ using System.Globalization;
 using System.IO.Compression;
 using System.Text;
 using System.Xml;
-using Oranda.Core.Transfer;
 
-namespace Oranda.Oracle.Transfer;
+namespace Oranda.Core.Transfer;
 
 /// <summary>
 /// 테이블 정의서 xlsx: 목차 시트 하나 + 표마다 시트 하나. 문자열은 인라인 문자열로 쓰고 서식은 머리 줄(굵게·바탕색·테두리)과 본문 테두리뿐이다.

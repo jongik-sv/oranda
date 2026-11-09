@@ -2,9 +2,8 @@ using System.IO.Compression;
 using System.Text.RegularExpressions;
 using Oranda.Core.Grid;
 using Oranda.Core.Transfer;
-using Oranda.Oracle.Transfer;
 
-namespace Oranda.Oracle.Tests.Transfer;
+namespace Oranda.Core.Tests.Transfer;
 
 /// <summary>「Excel 로 내보내기」가 쓰는 xlsx 쓰기: 파일을 zip 으로 풀어 시트·스타일 XML 을 직접 본다.</summary>
 public sealed class XlsxWriterTests

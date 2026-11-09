@@ -66,7 +66,7 @@ public sealed class DataTransferTests : IDisposable
         var path = Path.Combine(_dir, "emp.csv");
         await File.WriteAllTextAsync(path, "id,name,hired,extra\n1,Kim,2026-01-02,x\nabc,Lee,not-a-date,y\n");
         var service = new RecordingService();
-        using var vm = new ImportDialogViewModel(service, new OneTable(EmpTable()), new StubSession());
+        using var vm = new ImportDialogViewModel(service, new OneTable(EmpTable()), new StubSession(), new OracleConverter());
         vm.FilePath = path;
         vm.TargetOwner = "scott";
         vm.TargetTable = "emp";
@@ -104,7 +104,7 @@ public sealed class DataTransferTests : IDisposable
     {
         var path = Path.Combine(_dir, "raw.csv");
         await File.WriteAllTextAsync(path, "1,Kim\n2,Lee\n");
-        using var vm = new ImportDialogViewModel(new RecordingService(), new OneTable(EmpTable()), new StubSession())
+        using var vm = new ImportDialogViewModel(new RecordingService(), new OneTable(EmpTable()), new StubSession(), new OracleConverter())
         {
             FilePath = path,
             TargetOwner = "SCOTT",
@@ -224,6 +224,17 @@ public sealed class DataTransferTests : IDisposable
         await vm.StartAsync();
         Assert.False(state.IsRunning(session.Id));
     });
+
+    /// <summary>세션 DBMS 로 고른 변환기 자리(앱에서는 선택기가 준다). 시험은 Oracle 규칙(정적 변환기)을 감싼 것을 직접 넘긴다.</summary>
+    private sealed class OracleConverter : IImportValueConverter
+    {
+        public ColumnDataKind KindOf(string dataType) => Oranda.Oracle.Transfer.ImportValueConverter.KindOf(dataType);
+
+        public string ToLiteral(ColumnInfo column, object? cell) => Oranda.Oracle.Transfer.ImportValueConverter.ToLiteral(column, cell);
+
+        public bool TryConvert(ColumnInfo column, object? cell, out string literal, out string? reason) =>
+            Oranda.Oracle.Transfer.ImportValueConverter.TryConvert(column, cell, out literal, out reason);
+    }
 
     private sealed class RecordingService : IDataTransferService
     {

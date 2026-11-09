@@ -378,7 +378,8 @@ public sealed class ManualToolScreens
         {
             using var shell = await ManualShell.OpenAsync();
             var services = shell.Harness.Services;
-            var vm = new ImportDialogViewModel(TransferServices.Resolve(services)!, TransferServices.ResolveMetadata(services)!, SessionRouter.CurrentOf(services)!)
+            var vm = new ImportDialogViewModel(TransferServices.Resolve(services)!, TransferServices.ResolveMetadata(services)!, SessionRouter.CurrentOf(services)!,
+                Oranda.App.Features.DbmsServices.For<Oranda.Core.Transfer.IImportValueConverter>(services, SessionRouter.CurrentOf(services)))
             {
                 FilePath = file,
                 TargetOwner = "SAMPLE",
