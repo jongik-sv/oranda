@@ -12,6 +12,7 @@
 | `src/Oranda.Core/Catalog/CatalogHeader.cs` | 머리 주석 record(`Dbms` 포함), `CatalogLicense`, `CatalogRac`, 하한 `LowestMinVersion = 11`(Oracle)·`LowestTiberoMinVersion = 6`·`LowestMinVersionFor(dbms)` |
 | `src/Oranda.Core/Catalog/CatalogParser.cs` | 머리 주석 파서, 검사 규칙 이름 `CatalogRules`, 문제 `CatalogProblem` |
 | `src/Oranda.Core/Catalog/SqlCatalog.cs` | `ISqlCatalog` 구현(검사 + 선택), `CatalogFormatException`, `CatalogQueryNotFoundException` |
+| `src/Oranda.Core/Composition/Dispatch/SqlCatalogDispatcher.cs` | 컨테이너가 보는 `ISqlCatalog`. `server.Dbms` 로 키 등록(`[OrandaService(typeof(ISqlCatalog), Dbms = …)]`) 카탈로그를 골라 넘긴다(D-046, C7). 아직 키 등록한 카탈로그가 없어 부르면 `DbmsNotSupportedException` — 지금 기능은 `EmbeddedCatalog` 를 직접 쓴다 |
 | `src/Oranda.Oracle/Catalog/EmbeddedCatalog.cs` | 임베디드 리소스 자동 수집 `ReadSources(assembly)`, `Load()` |
 | `src/Oranda.Oracle/Oranda.Oracle.csproj` | `<EmbeddedResource Include="Catalog\**\*.sql" LogicalName="Catalog/%(RecursiveDir)%(Filename)%(Extension)" />` 한 줄 |
 | `tests/Oranda.Oracle.Tests/Catalog/` | 카탈로그 검사 시험(`Category=Catalog`) |
