@@ -66,7 +66,7 @@
 | 단계 | 내용 | 막힘 |
 |---|---|---|
 | T0 | 드라이버 확보, win30·Mac 에서 접속·`SELECT * FROM V$VERSION` 실측(macOS arm64 판정). **2026-11-09: TDP.NET Core `Tibero.DataAccess` 1.1.35(net5.0, 관리 코드)로 WSL(Linux)·.NET 10 에서 접속·읽기 확인.** macOS 실측 남음 | macOS 실측 |
-| T1 | DBMS 추상화: `Dbms` 프로필 칸, 접속 대화 상자의 DBMS 선택, 세션별 공급자 디스패처, 카탈로그 `dbms:` 헤더, `DbErrorKind`, App 의 ODP.NET 직접 사용 걷어 내기 | 없음(지금 시작 가능) |
+| T1 | DBMS 추상화: `Dbms` 프로필 칸, 접속 대화 상자의 DBMS 선택, 세션별 공급자 디스패처, 카탈로그 `dbms:` 헤더, `DbErrorKind`, App 의 ODP.NET 직접 사용 걷어 내기. **2026-11-09: Oracle 쪽(O0~O6) 끝, main 반영** — 특성 시험, App 인라인 SQL 의 `.sql` 이전, `OracleErrorClassifier`(ORA → `DbErrorKind`), `Dbms.Oracle` 서비스 키, C4 계약 구현(접속 시험·서버 버전 정책·스키마 문장·DDL 내보내기·열 순서 변경), `OracleSessionManager` 의 비 Oracle 프로필 거부. 남음: App 쪽 using 교체·TnsResolver 합치기(tb-app), C7 디스패처(tb-core) | App·Core 쪽 |
 | T2 | `Oranda.Tibero` 접속·실행·취소·결과·DBMS_OUTPUT, 지원 표시 | T0, T1 |
 | T3 | 카탈로그·스키마 브라우저·객체 상세·DDL·PSM 편집 | T2 |
 | T4 | 실행 계획·세션·Lock 모니터·튜닝 | T2 |
