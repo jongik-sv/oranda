@@ -103,9 +103,9 @@ internal sealed partial class OracleExecutionService : IExecutionService
             if (result.Status is ExecutionStatus.Failed or ExecutionStatus.Denied)
             {
                 // 스크립트 안의 WHENEVER SQLERROR EXIT 는 설정(묻기·계속)보다 앞선다(SQL*Plus 와 같다).
-                if (_sqlPlus is SqlPlus.SqlPlusCommandProcessor processor && processor.ExitOnError(s))
+                if (_sqlPlus is IScriptDirectives directives && directives.ExitOnError(s))
                 {
-                    await processor.ApplyOnErrorTransactionAsync(s, ct);
+                    await directives.ApplyOnErrorTransactionAsync(s, ct);
                     yield break;
                 }
 
@@ -490,7 +490,7 @@ internal sealed partial class OracleExecutionService : IExecutionService
         var defines = runtime?.Defines;
 
         // DEFINE 은 SQL*Plus 처리기가 기억한다. 같은 저장소를 봐야 「define d = 20」 뒤 &d 를 다시 묻지 않는다.
-        var processor = _sqlPlus as SqlPlus.SqlPlusCommandProcessor;
+        var processor = _sqlPlus as IScriptDirectives;
         string? Known(string name) => processor?.GetDefine(s, name)
             ?? (defines is not null && defines.TryGetValue(name, out var d) ? d : null);
         var missing = stmt.SubstitutionNames.Where(n => Known(n) is null).ToList();

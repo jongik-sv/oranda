@@ -19,7 +19,7 @@ namespace Oranda.Oracle.SqlPlus;
 /// 소유: TSK-06-06.
 /// </summary>
 [OrandaService(typeof(ISqlPlusCommandProcessor), Dbms = Dbms.Oracle)]
-internal sealed class SqlPlusCommandProcessor : ISqlPlusCommandProcessor
+internal sealed class SqlPlusCommandProcessor : ISqlPlusCommandProcessor, IScriptDirectives
 {
     /// <summary>@파일 안에서 다시 @파일 을 부를 수 있는 깊이(SQL*Plus 도 같은 보호가 있다).</summary>
     internal const int MaxDepth = 20;
@@ -69,17 +69,17 @@ internal sealed class SqlPlusCommandProcessor : ISqlPlusCommandProcessor
     }
 
     /// <summary>세션의 DEFINE 값(없으면 null). 실행 엔진의 치환 변수도 이 값을 본다(DEFINE 뒤 &amp;이름 을 다시 묻지 않게).</summary>
-    internal string? GetDefine(ISession s, string name)
+    public string? GetDefine(ISession s, string name)
         => _states.TryGetValue(s, out var st) && st.Defines.TryGetValue(name, out var v) ? v : null;
 
     /// <summary>실행 엔진이 받은 &amp;&amp;이름 값을 같은 DEFINE 저장소에 기억한다.</summary>
-    internal void SetDefine(ISession s, string name, string value) => _states.GetValue(s, _ => new SessionState()).Defines[name] = value;
+    public void SetDefine(ISession s, string name, string value) => _states.GetValue(s, _ => new SessionState()).Defines[name] = value;
 
     /// <summary>편집기 스크립트가 WHENEVER SQLERROR EXIT 를 따르게: 오류 뒤 멈춰야 하는지.</summary>
-    internal bool ExitOnError(ISession s) => _states.TryGetValue(s, out var st) && st.ExitOnError;
+    public bool ExitOnError(ISession s) => _states.TryGetValue(s, out var st) && st.ExitOnError;
 
     /// <summary>WHENEVER SQLERROR EXIT COMMIT|ROLLBACK 의 트랜잭션 처리를 한다(편집기 스크립트가 멈출 때).</summary>
-    internal Task ApplyOnErrorTransactionAsync(ISession s, CancellationToken ct)
+    public Task ApplyOnErrorTransactionAsync(ISession s, CancellationToken ct)
         => _states.TryGetValue(s, out var st) ? ApplyTransactionActionAsync(s, st.OnErrorTransaction, ct) : Task.CompletedTask;
 
     private async Task<ExecutionResult> DispatchAsync(ISession s, SessionState state, SqlStatement stmt, CancellationToken ct)
