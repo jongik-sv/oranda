@@ -102,6 +102,12 @@ public sealed partial class DbInfoViewModel : ToolPanelViewModelBase
     [ObservableProperty]
     private string _previewError = string.Empty;
 
+    private Oranda.Core.Connection.Dbms? _scopeDefaultFor;
+
+    /// <summary>이 DBMS 의 파라미터 변경 적용 범위 기본값: Oracle 은 Both, 그 밖은 Memory.</summary>
+    public static DbParameterScope DefaultScope(Oranda.Core.Connection.Dbms dbms) =>
+        dbms == Oranda.Core.Connection.Dbms.Oracle ? DbParameterScope.Both : DbParameterScope.Memory;
+
     partial void OnSelectedSectionChanged(DetailSection? value) => RefreshText();
 
     partial void OnFilterTextChanged(string value) => RefreshText();
@@ -124,6 +130,20 @@ public sealed partial class DbInfoViewModel : ToolPanelViewModelBase
     {
         ArgumentNullException.ThrowIfNull(session);
         Session = session;
+
+        // 적용 범위 기본값은 DBMS 를 따른다: Oracle 은 Both(그대로), 그 밖(Tibero 는 SPFILE·BOTH 가 없다)은 Memory.
+        // 세션의 DBMS 가 처음 정해지거나 바뀔 때만 맞추고, 같은 DBMS 로 다시 읽을 때는 사용자가 고른 값을 두며, Oracle 첫 읽기에서는 아무것도 바꾸지 않는다.
+        var dbms = session.Profile.Dbms;
+        if (_scopeDefaultFor != dbms)
+        {
+            if (dbms != Oranda.Core.Connection.Dbms.Oracle || _scopeDefaultFor is not null)
+            {
+                ParameterScope = DefaultScope(dbms);
+            }
+
+            _scopeDefaultFor = dbms;
+        }
+
         RefreshPreview(); // 세션의 DBMS 가 정해졌으니 미리보기 문장을 다시 만든다.
         var gen = Interlocked.Increment(ref _generation);
         // 이 DBMS 에 DB 정보 구현이 없으면(Tibero 등) 부르지 않고 이유만 보인다. 제공자를 직접 넣은 시험 생성자는 거르지 않는다.

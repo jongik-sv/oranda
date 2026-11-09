@@ -66,6 +66,37 @@ public class DbInfoDbmsTests
     }
 
     [Fact]
+    public async Task Tibero_session_defaults_the_parameter_scope_to_memory_and_oracle_keeps_both()
+    {
+        var oracle = new DbInfoViewModel(new Provider(new CountingInfo(), new DbmsServiceTable()));
+        Assert.Equal(DbParameterScope.Both, oracle.ParameterScope);
+        await oracle.LoadAsync(new DbmsSession(Dbms.Oracle));
+        Assert.Equal(DbParameterScope.Both, oracle.ParameterScope);
+
+        var tibero = new DbInfoViewModel(new Provider(new CountingInfo(), new DbmsServiceTable()));
+        await tibero.LoadAsync(new DbmsSession(Dbms.Tibero)); // 구현이 없어 일찍 끝나도 범위 기본은 맞춘다
+        Assert.Equal(DbParameterScope.Memory, tibero.ParameterScope);
+    }
+
+    [Fact]
+    public async Task Reloading_the_same_dbms_keeps_the_scope_the_user_picked_and_a_dbms_change_resets_it()
+    {
+        var vm = new DbInfoViewModel(new Provider(new CountingInfo(), new DbmsServiceTable()));
+        var oracleSession = new DbmsSession(Dbms.Oracle);
+        await vm.LoadAsync(oracleSession);
+        vm.ParameterScope = DbParameterScope.Spfile; // 사용자가 고름
+        await vm.LoadAsync(oracleSession); // 새로 고침
+        Assert.Equal(DbParameterScope.Spfile, vm.ParameterScope); // Oracle 동작 불변
+
+        await vm.LoadAsync(new DbmsSession(Dbms.Tibero)); // 같은 패널에서 접속이 Tibero 로 바뀜
+        Assert.Equal(DbParameterScope.Memory, vm.ParameterScope);
+
+        vm.ParameterScope = DbParameterScope.Memory;
+        await vm.LoadAsync(new DbmsSession(Dbms.Oracle));
+        Assert.Equal(DbParameterScope.Both, vm.ParameterScope);
+    }
+
+    [Fact]
     public async Task Oracle_is_queried_as_before_even_when_the_selector_has_no_entries()
     {
         var info = new CountingInfo();

@@ -19,6 +19,21 @@ public partial class DbInfoView : UserControl
                 vm.ParameterScope = scope;
             }
         };
+        // 모델이 DBMS 에 맞춰 기본 범위를 바꾸면(Tibero 는 Memory) 콤보도 따라간다.
+        DataContextChanged += (_, _) =>
+        {
+            if (DataContext is DbInfoViewModel vm)
+            {
+                ScopeBox.SelectedItem = vm.ParameterScope;
+                vm.PropertyChanged += (_, e) =>
+                {
+                    if (e.PropertyName == nameof(DbInfoViewModel.ParameterScope))
+                    {
+                        ScopeBox.SelectedItem = vm.ParameterScope;
+                    }
+                };
+            }
+        };
         RefreshButton.Click += (_, _) =>
         {
             if (DataContext is DbInfoViewModel { Session: { } session } vm)
