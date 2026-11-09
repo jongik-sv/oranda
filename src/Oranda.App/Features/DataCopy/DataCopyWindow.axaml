@@ -773,7 +773,7 @@
               <TextBlock Text="{Binding StatusText}" VerticalAlignment="Center" Margin="10,0,0,0" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding StatusText}" FontWeight="SemiBold" />
             </DockPanel>
           </Border>
-          <Grid RowDefinitions="3*,4,2*,Auto" Margin="8,6,8,8">
+          <Grid RowDefinitions="*,4,*,Auto" Margin="8,6,8,8">
             <DockPanel>
               <TextBlock DockPanel.Dock="Top" Classes="section-label" Text="테이블별 진행" Margin="0,0,0,3" />
               <Border Classes="grid-frame">
@@ -781,15 +781,23 @@
               </Border>
             </DockPanel>
             <GridSplitter Grid.Row="1" ResizeDirection="Rows" Background="Transparent" />
-            <DockPanel Grid.Row="2">
-              <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Spacing="4" Margin="0,0,0,3">
-                <TextBlock Classes="section-label" Text="실패한 행(키와 오류)" />
-                <TextBlock Classes="section-label" Text="{Binding FailedRows.Count}" />
-              </StackPanel>
-              <Border Classes="grid-frame">
-                <sm:MonitorGrid x:Name="FailedGrid" AutomationProperties.Name="실패한 행" />
-              </Border>
-            </DockPanel>
+            <!-- 아래 칸: 작업 로그(실제로 보낸 문장·결과) | 실패한 행. 끝나서 실패 행이 있으면 실패한 행 탭으로 옮긴다. -->
+            <TabControl x:Name="RunDetailTabs" Grid.Row="2" Classes="compact" Padding="0" SelectedIndex="{Binding DetailTab, Mode=TwoWay}">
+              <TabItem x:Name="RunLogTab" Header="작업 로그">
+                <dc:CopyRunLogView x:Name="RunLogView" DataContext="{Binding Log}" Margin="0,2,0,0" />
+              </TabItem>
+              <TabItem x:Name="FailedRowsTab">
+                <TabItem.Header>
+                  <StackPanel Orientation="Horizontal" Spacing="4">
+                    <TextBlock Text="실패한 행(키와 오류)" VerticalAlignment="Center" />
+                    <TextBlock Text="{Binding FailedRows.Count}" VerticalAlignment="Center" />
+                  </StackPanel>
+                </TabItem.Header>
+                <Border Classes="grid-frame" Margin="0,4,0,0">
+                  <sm:MonitorGrid x:Name="FailedGrid" AutomationProperties.Name="실패한 행" />
+                </Border>
+              </TabItem>
+            </TabControl>
             <ItemsControl Grid.Row="3" ItemsSource="{Binding Notices}" Margin="0,6,0,0">
               <ItemsControl.ItemTemplate>
                 <DataTemplate x:DataType="sys:String">

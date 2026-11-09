@@ -1,0 +1,51 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:dc="using:Oranda.App.Features.DataCopy"
+             xmlns:icons="using:Oranda.App.Shell.Icons"
+             x:Class="Oranda.App.Features.DataCopy.CopyRunLogView"
+             x:DataType="dc:CopyRunLogViewModel">
+  <UserControl.Styles>
+    <Style Selector="ListBox#LogList > ListBoxItem">
+      <Setter Property="Padding" Value="6,0" />
+      <Setter Property="MinHeight" Value="0" />
+    </Style>
+    <Style Selector="TextBlock.log-line">
+      <Setter Property="FontFamily" Value="{DynamicResource OrandaGridFontFamily}" />
+      <Setter Property="FontSize" Value="{DynamicResource OrandaFontSizeSmall}" />
+      <Setter Property="TextWrapping" Value="Wrap" />
+    </Style>
+    <Style Selector="TextBlock.log-line.statement"><Setter Property="Foreground" Value="{DynamicResource OrandaIconBlueBrush}" /></Style>
+    <Style Selector="TextBlock.log-line.warning"><Setter Property="Foreground" Value="{DynamicResource OrandaWarningForegroundBrush}" /></Style>
+    <Style Selector="TextBlock.log-line.error"><Setter Property="Foreground" Value="{DynamicResource OrandaDangerForegroundBrush}" /></Style>
+  </UserControl.Styles>
+  <DockPanel>
+    <!-- 실행기가 실제로 보낸 문장과 결과. 바인드는 기간 경계만 값, 나머지는 개수만(행 값·마스킹 값·비밀번호는 남지 않는다). -->
+    <DockPanel DockPanel.Dock="Top" Margin="0,2,0,3">
+      <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" Spacing="1">
+        <Button x:Name="CopyLogButton" Classes="toolbar" Focusable="False" Content="로그 복사" icons:ButtonIcon.Key="copy" icons:ButtonIcon.IconOnly="True"
+                ToolTip.Tip="작업 로그 전체를 클립보드에 복사" IsEnabled="{Binding HasLines}" />
+        <Button x:Name="SaveLogButton" Classes="toolbar" Focusable="False" Content="로그 저장…" icons:ButtonIcon.Key="save" icons:ButtonIcon.IconOnly="True"
+                ToolTip.Tip="작업 로그를 텍스트 파일로 저장" IsEnabled="{Binding HasLines}" />
+      </StackPanel>
+      <TextBlock Text="실제로 보낸 문장과 결과(바인드 값은 기간만, 나머지는 개수만)" Classes="dim" VerticalAlignment="Center"
+                 FontSize="{DynamicResource OrandaFontSizeSmall}" TextTrimming="CharacterEllipsis" />
+    </DockPanel>
+    <TextBlock DockPanel.Dock="Top" Text="{Binding DroppedText}" IsVisible="{Binding HasDropped}" Classes="dim warning-text"
+               FontSize="{DynamicResource OrandaFontSizeSmall}" Margin="0,0,0,2" />
+    <Border Classes="grid-frame">
+      <Panel>
+        <TextBlock Text="복사를 실행하면 보낸 문장이 여기에 차례로 보입니다." Classes="dim" Margin="8,6"
+                   FontSize="{DynamicResource OrandaFontSizeSmall}" IsVisible="{Binding !HasLines}" />
+        <ListBox x:Name="LogList" ItemsSource="{Binding Lines}" Background="Transparent" SelectionMode="Single"
+                 ScrollViewer.HorizontalScrollBarVisibility="Disabled" AutomationProperties.Name="작업 로그">
+          <ListBox.ItemTemplate>
+            <DataTemplate x:DataType="dc:CopyLogLineViewModel">
+              <TextBlock Classes="log-line" Text="{Binding Text}" Classes.statement="{Binding IsStatement}"
+                         Classes.warning="{Binding IsWarning}" Classes.error="{Binding IsError}" />
+            </DataTemplate>
+          </ListBox.ItemTemplate>
+        </ListBox>
+      </Panel>
+    </Border>
+  </DockPanel>
+</UserControl>

@@ -118,10 +118,18 @@ internal sealed class FakeRunner : ICopyRunner
 
     public TaskCompletionSource Started { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
 
+    /// <summary>실행을 시작할 때 진행 통로로 차례로 보낼 보고(진행·작업 로그 줄).</summary>
+    public List<CopyProgress> Reports { get; } = [];
+
     public Task<CopyRunResult> RunAsync(CopySessions sessions, CopyJob job, PrecheckReport report, CopyDecisions decisions, ResolvedPeriod period,
         IProgress<CopyProgress>? progress, CopyRunControl control, CancellationToken ct)
     {
         Calls++;
+        foreach (var p in Reports)
+        {
+            progress?.Report(p);
+        }
+
         Decisions = decisions;
         Token = ct;
         Started.TrySetResult();

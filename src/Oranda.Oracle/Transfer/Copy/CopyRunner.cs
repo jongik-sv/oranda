@@ -47,6 +47,9 @@ internal sealed class CopyRunner : ICopyRunner
     internal const string PhaseRetry = "다시 넣기";
     internal const string PhaseRecreate = "다시 만들기";
     internal const string PhaseRestore = "되살리기";
+    internal const string PhaseStart = "시작";
+    internal const string PhaseSource = "원본 준비";
+    internal const string PhaseFinish = "마무리";
 
     private const int SnapshotTooOld = 1555;
 
@@ -118,6 +121,7 @@ internal sealed class CopyRunner : ICopyRunner
         await using var record = await _runLog.BeginAsync(
             new CopyRunHeader(job.Id, job.Name, job.Source.Name, job.Target.Name, period, DateTimeOffset.Now), ct);
         run.Record = record;
+        LogStart(run, "복사 시작", period);
 
         var finished = false;
         try
@@ -181,6 +185,7 @@ internal sealed class CopyRunner : ICopyRunner
         await using var record = await _runLog.BeginAsync(
             new CopyRunHeader(job.Id, job.Name, job.Source.Name, job.Target.Name, period, DateTimeOffset.Now), ct);
         run.Record = record;
+        LogStart(run, $"실패 행 다시 넣기 시작({rows.Count.ToString("N0", CultureInfo.InvariantCulture)}행)", period: null);
 
         var finished = false;
         try
@@ -210,6 +215,28 @@ internal sealed class CopyRunner : ICopyRunner
     }
 
     // ---- 시작 ----
+
+    /// <summary>작업 로그 첫 줄: 작업·접속 이름(프로필 이름만, 비밀 없음)·커밋 단위·읽기 방식, 그리고 기간 경계.</summary>
+    private static void LogStart(RunState run, string what, ResolvedPeriod? period)
+    {
+        var job = run.Job;
+        var options = job.Options;
+        var commit = options.Commit switch
+        {
+            CommitMode.PerBatch => "배치마다",
+            CommitMode.AtEnd => "모두 끝난 뒤 한 번",
+            _ => "표마다",
+        };
+        run.Enter(PhaseStart);
+        run.Log($"{what}: 작업 「{job.Name}」 · 원본 {job.Source.Name} → 대상 {job.Target.Name} · 표 {run.Report.Order.Count.ToString(CultureInfo.InvariantCulture)}개"
+                + $" · 커밋 {commit} · 배치 {options.BatchSize.ToString("N0", CultureInfo.InvariantCulture)}행 · 실패 행 상한 {options.MaxFailedRows.ToString("N0", CultureInfo.InvariantCulture)}"
+                + (job.ConsistentRead ? " · 같은 시점 기준 읽기" : " · 표마다 따로 읽기"));
+        if (period is { } p && (p.TimeFrom is not null || p.TimeTo is not null))
+        {
+            static string At(DateTime? d) => d?.ToString("yyyy-MM-dd HH:mm:ss", CultureInfo.InvariantCulture) ?? "(열림)";
+            run.Log($"기간: {At(p.TimeFrom)} 이상 ~ {At(p.TimeTo)} 미만");
+        }
+    }
 
     /// <summary>
     /// 사전 점검 뒤 규칙이 바뀌었으면 실행하지 않는다. 문장(DELETE·SELECT)은 작업에서, MERGE 판정·마스킹·끄기는 보고서에서 만들므로
@@ -391,7 +418,8 @@ internal sealed class CopyRunner : ICopyRunner
     /// <summary>원본 앞 트랜잭션을 닫고 읽기 전용 트랜잭션을 연다. 그 시각이 <c>ReadStartedAt</c> 이다.</summary>
     private async Task OpenSourceAsync(RunState run, CancellationToken ct)
     {
-        var rollback = await ControlAsync(run.Source, CopyStatements.Rollback(), ct);
+        run.Enter(PhaseSource);
+        var rollback = await ControlLoggedAsync(run, run.Source, CopyStatements.Rollback(), ct, "앞 트랜잭션 닫기");
         if (rollback.Status != ExecutionStatus.Succeeded)
         {
             run.Abort("원본 세션의 트랜잭션을 정리하지 못했습니다: " + Describe(rollback));
@@ -400,7 +428,8 @@ internal sealed class CopyRunner : ICopyRunner
 
         // 「같은 시점 기준 읽기」를 꺼도 원본에는 DB 수준 READ ONLY 를 건다(그때는 표마다 새로 연다, BeginTableReadAsync).
         run.ReadStartedAt = DateTimeOffset.Now;
-        var set = await ControlAsync(run.Source, CopyStatements.SetTransactionReadOnly(), ct);
+        var set = await ControlLoggedAsync(run, run.Source, CopyStatements.SetTransactionReadOnly(), ct,
+            run.Job.ConsistentRead ? "모든 표를 이 시점 기준으로 읽기" : "읽기 전용(표마다 새로 엽니다)");
         if (set.Status != ExecutionStatus.Succeeded)
         {
             run.Abort("원본에서 읽기 전용 트랜잭션을 시작하지 못했습니다: " + Describe(set));
@@ -419,6 +448,8 @@ internal sealed class CopyRunner : ICopyRunner
         }
 
         await run.Record!.RecordDisabledAsync([.. chosen.Select(c => c.Object)], ct);
+        run.Log($"끌 목록을 실행 기록에 먼저 남겼습니다: 트리거 {chosen.Count(c => c.Object.Kind == DisabledKind.Trigger).ToString(CultureInfo.InvariantCulture)}개"
+                + $", FK {chosen.Count(c => c.Object.Kind == DisabledKind.ForeignKey).ToString(CultureInfo.InvariantCulture)}개", phase: PhaseDisable);
         foreach (var (obj, key) in chosen)
         {
             run.Progress(key, 0, null, PhaseDisable); // 진행 줄은 규칙 키다(다른 계정의 같은 이름 표와 섞이지 않게)
@@ -508,6 +539,8 @@ internal sealed class CopyRunner : ICopyRunner
                 table.CreateDdl = CreateTableDdl.Build(plan.Source, owner, noForeignKeys);
                 table.JobForeignKeys = await step.SourceForeignKeysAsync(run.Source, sourceOwner, plan.Rule.Table, planned, owner, ct);
                 table.BinBefore = await step.RecycleBinAsync(run.Target, plan.Rule.Table, ct);
+                run.Log($"지우기 전에 받아 둠: 트리거 {table.Preserved.Triggers.Count.ToString(CultureInfo.InvariantCulture)}개 · 권한 {table.Preserved.Grants.Count.ToString(CultureInfo.InvariantCulture)}개"
+                        + $" · 참조 FK {table.Preserved.ReferencingForeignKeys.Count.ToString(CultureInfo.InvariantCulture)}개 · 작업 안 FK {table.JobForeignKeys.Count.ToString(CultureInfo.InvariantCulture)}개");
             }
             catch (Exception ex) when (!ct.IsCancellationRequested && ex is OracleException or InvalidOperationException or BulkDeniedException or ArgumentException)
             {
@@ -1003,9 +1036,10 @@ internal sealed class CopyRunner : ICopyRunner
             var dml = CopyStatements.ArrayDml(DmlFor(run.Builder, plan, table.Name), plan.Columns.Count);
             var estimated = run.Report.EstimatedRows.TryGetValue(table.Name, out var e) ? e : (long?)null;
             run.Progress(table.Name, 0, estimated, PhaseLoad);
+            run.Log("적재 시작" + (estimated is { } est ? $" · 예상 {est.ToString("N0", CultureInfo.InvariantCulture)}건" : string.Empty));
 
             // 실패 행 상한을 넘거나 원본 읽기가 실패하면 이 표의 적재분만 되돌린다(앞 표의 정리·적재는 남긴다).
-            var savepoint = await ControlAsync(run.Target, CopyStatements.Savepoint(CopyStatements.TableSavepoint), ct);
+            var savepoint = await ControlLoggedAsync(run, run.Target, CopyStatements.Savepoint(CopyStatements.TableSavepoint), ct, "이 표를 되돌릴 자리");
             if (!RunState.Accept(savepoint, table, "적재를 시작하지 못했습니다", ct))
             {
                 return;
@@ -1018,6 +1052,7 @@ internal sealed class CopyRunner : ICopyRunner
             }
 
             var select = run.Builder.SourceSelect(table.Name, plan.Columns);
+            LogLoadStatements(run, plan, select, dml);
             var batch = new List<object?[]>(run.Job.Options.BatchSize);
             var stop = false;
             try
@@ -1066,7 +1101,7 @@ internal sealed class CopyRunner : ICopyRunner
 
             if (run.Job.Options.Commit == CommitMode.PerTable)
             {
-                var commit = await ControlAsync(run.Target, CopyStatements.Commit(), ct);
+                var commit = await ControlLoggedAsync(run, run.Target, CopyStatements.Commit(), ct, "표마다 커밋");
                 if (RunState.Accept(commit, table, "커밋하지 못했습니다", ct))
                 {
                     run.DeletesPersisted = true;
@@ -1090,7 +1125,40 @@ internal sealed class CopyRunner : ICopyRunner
         finally
         {
             table.Elapsed += sw.Elapsed;
+            LogTableEnd(run, table, sw.Elapsed);
         }
+    }
+
+    /// <summary>원본 SELECT(바인드 요약)·대상 INSERT/MERGE(표마다 한 번)·마스킹 열(이름과 방식만, 값은 남기지 않는다).</summary>
+    private static void LogLoadStatements(RunState run, CopyTablePlan plan, SqlWithBinds select, SqlStatement dml)
+    {
+        run.LogStatement(run.Source, select.Sql, select.Binds);
+        run.Log(CopyLogText.Statement(run.SideOf(run.Target), dml.Text)
+                + $"  [바인드 배열 :C1…:C{plan.Columns.Count.ToString(CultureInfo.InvariantCulture)}, 배치 {run.Job.Options.BatchSize.ToString("N0", CultureInfo.InvariantCulture)}행씩]",
+                CopyLogKind.Statement);
+        var masks = plan.Rule.Masks.Where(m => plan.Columns.Contains(m.Column, StringComparer.Ordinal)).ToList();
+        if (masks.Count > 0)
+        {
+            run.Log("마스킹(앱에서 바꿔 보냄, 값은 남기지 않음): " + string.Join(", ", masks.Select(m => $"{m.Column}({MaskText(m)})")));
+        }
+    }
+
+    private static string MaskText(MaskRule m) => m.Kind switch
+    {
+        MaskKind.Fixed => "고정값",
+        MaskKind.KeepFirst => $"앞 {m.Count.ToString(CultureInfo.InvariantCulture)}자 남김",
+        MaskKind.KeepLast => $"뒤 {m.Count.ToString(CultureInfo.InvariantCulture)}자 남김",
+        MaskKind.Hash => "해시",
+        _ => "NULL",
+    };
+
+    private static void LogTableEnd(RunState run, TableState table, TimeSpan elapsed)
+    {
+        var text = $"적재 끝 · 원본 {table.SourceRows.ToString("N0", CultureInfo.InvariantCulture)}건 읽음 · {table.Loaded.ToString("N0", CultureInfo.InvariantCulture)}행 넣음"
+                   + (table.FailedRows > 0 ? $" · 실패 {table.FailedRows.ToString("N0", CultureInfo.InvariantCulture)}행" : string.Empty)
+                   + (table.WasRolledBack ? " · 되돌림" : string.Empty)
+                   + " · " + CopyLogText.Elapsed(elapsed);
+        run.Log(text, table.Outcome == CopyOutcome.Failed ? CopyLogKind.Error : CopyLogKind.Info, table.Name);
     }
 
     /// <summary>
@@ -1109,6 +1177,7 @@ internal sealed class CopyRunner : ICopyRunner
             return false;
         }
 
+        table.Batches++;
         var r = await _bulk.ExecuteArrayAsync(run.Target, dml, shape.Columns, batch, run.BulkOptions, ct);
         if (r.Status == ExecutionStatus.Succeeded)
         {
@@ -1116,8 +1185,9 @@ internal sealed class CopyRunner : ICopyRunner
         }
         else if (r.Status == ExecutionStatus.Failed)
         {
+            run.Log($"배치 {table.Batches.ToString(CultureInfo.InvariantCulture)} 실패({Describe(r)}) → 배치 시작점으로 되돌리고 한 행씩 다시 넣습니다", CopyLogKind.Warning);
             // 배열 DML 이 실패하면 실패한 행 앞의 행이 트랜잭션에 남아 있을 수 있다.
-            var back = await ControlAsync(run.Target, CopyStatements.RollbackTo(CopyStatements.BatchSavepoint), ct);
+            var back = await ControlLoggedAsync(run, run.Target, CopyStatements.RollbackTo(CopyStatements.BatchSavepoint), ct);
             if (!RunState.Accept(back, table, "실패한 배치를 되돌리지 못했습니다", ct))
             {
                 return false;
@@ -1142,10 +1212,11 @@ internal sealed class CopyRunner : ICopyRunner
                 // 「실패 행만 다시 넣기」를 하면 나머지 행이 빠진 표가 성공으로 보이기 때문이다.
                 table.PendingFailed.Add(new FailedRow(table.Name, shape.KeyOf(row), ErrorText(one.Error)));
                 table.FailedRows++;
+                run.Log($"실패 행 {table.FailedRows.ToString("N0", CultureInfo.InvariantCulture)}: {ErrorText(one.Error)}", CopyLogKind.Error);
                 if (table.FailedRows > run.Job.Options.MaxFailedRows)
                 {
                     // 이 배치에서 한 행씩 넣은 행도 되돌린다(「배치마다 커밋」이면 표 세이브포인트가 없으므로 여기서만 되돌릴 수 있다).
-                    var undo = await ControlAsync(run.Target, CopyStatements.RollbackTo(CopyStatements.BatchSavepoint), ct);
+                    var undo = await ControlLoggedAsync(run, run.Target, CopyStatements.RollbackTo(CopyStatements.BatchSavepoint), ct, "상한을 넘은 배치 되돌리기");
                     if (undo.Status == ExecutionStatus.Succeeded)
                     {
                         // 이 배치의 실패 행만 뺀다. 앞 배치의 대기 행은 표 되돌리기가 성공할 때 함께 버린다(RolledBack).
@@ -1167,6 +1238,7 @@ internal sealed class CopyRunner : ICopyRunner
             return false;
         }
 
+        var batchText = $"배치 {table.Batches.ToString(CultureInfo.InvariantCulture)} · {batch.Count.ToString("N0", CultureInfo.InvariantCulture)}행 보냄 · 누적 {table.Loaded.ToString("N0", CultureInfo.InvariantCulture)}행";
         if (perBatch)
         {
             var commit = await ControlAsync(run.Target, CopyStatements.Commit(), ct);
@@ -1175,8 +1247,14 @@ internal sealed class CopyRunner : ICopyRunner
                 return false;
             }
 
+            run.Log(batchText + " · COMMIT");
+
             run.DeletesPersisted = true;
             await ConfirmFailedRowsAsync(run, table);
+        }
+        else
+        {
+            run.Log(batchText);
         }
 
         return true;
@@ -1195,7 +1273,7 @@ internal sealed class CopyRunner : ICopyRunner
         }
 
         var token = ct.IsCancellationRequested ? CancellationToken.None : ct;
-        var r = await ControlAsync(run.Target, CopyStatements.RollbackTo(CopyStatements.TableSavepoint), token);
+        var r = await ControlLoggedAsync(run, run.Target, CopyStatements.RollbackTo(CopyStatements.TableSavepoint), token, "이 표의 적재분 되돌리기");
         if (r.Status != ExecutionStatus.Succeeded)
         {
             run.Notices.Add("실패한 표의 적재분을 되돌리지 못했습니다: " + Describe(r));
@@ -1243,13 +1321,13 @@ internal sealed class CopyRunner : ICopyRunner
     /// </summary>
     private async Task<bool> BeginTableReadAsync(RunState run, TableState table, CancellationToken ct)
     {
-        var rollback = await ControlAsync(run.Source, CopyStatements.Rollback(), ct);
+        var rollback = await ControlLoggedAsync(run, run.Source, CopyStatements.Rollback(), ct);
         if (!RunState.Accept(rollback, table, "원본 트랜잭션을 정리하지 못했습니다", ct))
         {
             return false;
         }
 
-        var set = await ControlAsync(run.Source, CopyStatements.SetTransactionReadOnly(), ct);
+        var set = await ControlLoggedAsync(run, run.Source, CopyStatements.SetTransactionReadOnly(), ct, "이 표를 읽을 시점");
         return RunState.Accept(set, table, "원본에서 읽기 전용 트랜잭션을 시작하지 못했습니다", ct);
     }
 
@@ -1289,7 +1367,11 @@ internal sealed class CopyRunner : ICopyRunner
             var shape = RowShape.Create(run.Job, plan);
             var dml = CopyStatements.ArrayDml(DmlFor(run.Builder, plan, tableName), plan.Columns.Count);
             var query = CopyStatements.Query(run.Builder.SourceSelectByKeys(tableName, plan.Columns, plan.KeyColumns));
-            var savepoint = await ControlAsync(run.Target, CopyStatements.Savepoint(CopyStatements.TableSavepoint), ct);
+            run.Progress(tableName, 0, rows.Count, PhaseRetry);
+            run.Log(CopyLogText.Statement(run.SideOf(run.Source), query.Text)
+                    + $"  [바인드 키 :K1…:K{plan.KeyColumns.Count.ToString(CultureInfo.InvariantCulture)}, {rows.Count.ToString("N0", CultureInfo.InvariantCulture)}행을 한 행씩]", CopyLogKind.Statement);
+            run.Log(CopyLogText.Statement(run.SideOf(run.Target), dml.Text), CopyLogKind.Statement);
+            var savepoint = await ControlLoggedAsync(run, run.Target, CopyStatements.Savepoint(CopyStatements.TableSavepoint), ct, "이 표를 되돌릴 자리");
             if (!RunState.Accept(savepoint, table, "다시 넣기를 시작하지 못했습니다", ct))
             {
                 return;
@@ -1334,7 +1416,7 @@ internal sealed class CopyRunner : ICopyRunner
             }
 
             // 다시 넣기는 표마다 커밋한다. 커밋하지 못한 표의 입력 행은 끝낼 때 그대로 돌려준다(FinishAsync).
-            var commit = await ControlAsync(run.Target, CopyStatements.Commit(), ct);
+            var commit = await ControlLoggedAsync(run, run.Target, CopyStatements.Commit(), ct, "표마다 커밋");
             // 연결 끊김, 또는 보내는 도중 중지로 취소되면 서버에서 확정됐는지 알 수 없다.
             table.CommitUnknown = (commit.Status == ExecutionStatus.Failed && commit.Error is { } ce && ConnectionLost.Contains(ce.Number))
                                   || (commit.Status == ExecutionStatus.Cancelled && ct.IsCancellationRequested);
@@ -1362,6 +1444,7 @@ internal sealed class CopyRunner : ICopyRunner
         finally
         {
             table.Elapsed += sw.Elapsed;
+            LogTableEnd(run, table, sw.Elapsed);
         }
     }
 
@@ -1390,13 +1473,16 @@ internal sealed class CopyRunner : ICopyRunner
             try
             {
                 var next = CopyStatements.NextValues(owner, rule.Sequence);
-                var maxCell = await ScalarAsync(run, run.Target,
-                    CopyStatements.Query($"SELECT MAX({SqlIdentifier.QuoteAlways(rule.Column)}) FROM {CopyStatements.Qualified(loaded.Owner, loaded.TableName)}"),
-                    NoBinds, ct);
+                var maxQuery = CopyStatements.Query($"SELECT MAX({SqlIdentifier.QuoteAlways(rule.Column)}) FROM {CopyStatements.Qualified(loaded.Owner, loaded.TableName)}");
+                run.LogStatement(run.Target, maxQuery.Text);
+                var maxCell = await ScalarAsync(run, run.Target, maxQuery, NoBinds, ct);
                 if (maxCell is not OracleDecimal { IsNull: false } maxValue)
                 {
+                    run.Log("→ 대상 표가 비어 보정하지 않습니다");
                     continue; // 대상 표가 비었다.
                 }
+
+                run.Log("→ 최대값 " + maxValue.ToString());
 
                 var info = await RowsAsync(run, run.Target, CopyStatements.Query(SequenceIncrementSql),
                     new Dictionary<string, BindValue>
@@ -1442,6 +1528,18 @@ internal sealed class CopyRunner : ICopyRunner
                 {
                     run.Notices.Add($"시퀀스 {rule.Sequence}: 모자란 수({need.ToString(CultureInfo.InvariantCulture)})가 커서 보정을 건너뛰었습니다.");
                     continue;
+                }
+
+                if (need > 0)
+                {
+                    var rounds = (need + SequenceAdvance.ChunkSize - 1) / SequenceAdvance.ChunkSize;
+                    run.Log(CopyLogText.Statement(run.SideOf(run.Target), next.Text)
+                            + $"  [:{CopyStatements.NextValuesBind} = 한 번에 최대 {SequenceAdvance.ChunkSize.ToString("N0", CultureInfo.InvariantCulture)}, {rounds.ToString("N0", CultureInfo.InvariantCulture)}회 · 모두 {need.ToString("N0", CultureInfo.InvariantCulture)}개]",
+                            CopyLogKind.Statement);
+                }
+                else
+                {
+                    run.Log("→ 시퀀스가 이미 최대값 뒤에 있어 보정하지 않습니다");
                 }
 
                 for (var left = need; left > 0;)
@@ -1495,6 +1593,16 @@ internal sealed class CopyRunner : ICopyRunner
     /// </summary>
     private async Task FinishAsync(RunState run, bool faulted)
     {
+        run.Enter(PhaseFinish);
+        if (run.Stopped)
+        {
+            run.Log("중지 요청을 받았습니다. 대상 변경을 되돌리고 끈 것을 다시 켭니다.", CopyLogKind.Warning);
+        }
+        else if (faulted)
+        {
+            run.Log("예상하지 못한 오류로 멈춥니다. 대상 변경을 되돌리고 끈 것을 다시 켭니다.", CopyLogKind.Error);
+        }
+
         var ended = false;
         try
         {
@@ -1533,7 +1641,8 @@ internal sealed class CopyRunner : ICopyRunner
         try
         {
             using var step = new CancellationTokenSource(CleanupTimeout);
-            var rollback = await ControlAsync(run.Source, CopyStatements.Rollback(), step.Token);
+            run.Enter(PhaseFinish);
+            var rollback = await ControlLoggedAsync(run, run.Source, CopyStatements.Rollback(), step.Token, "원본 읽기 전용 트랜잭션 닫기");
             if (rollback.Status != ExecutionStatus.Succeeded)
             {
                 run.Notices.Add("원본 읽기 전용 트랜잭션을 닫지 못했습니다: " + Describe(rollback));
@@ -1598,6 +1707,7 @@ internal sealed class CopyRunner : ICopyRunner
         }
 
         NoteDeletedButNotLoaded(run);
+        LogEnd(run, faulted);
 
         if (run.Record is not { } record)
         {
@@ -1626,6 +1736,26 @@ internal sealed class CopyRunner : ICopyRunner
 
     private static bool IsCleanupFailure(Exception ex) =>
         ex is OracleException or OperationCanceledException or InvalidOperationException or IOException or BulkDeniedException;
+
+    /// <summary>작업 로그 끝줄: 결과·표 수·넣은 행·실패 행·걸린 시간.</summary>
+    private static void LogEnd(RunState run, bool faulted)
+    {
+        var outcome = run.Outcome(faulted);
+        var results = run.Tables.Values.Select(t => t.ToResult()).ToList();
+        var text = (outcome switch
+                   {
+                       CopyOutcome.Succeeded => "끝: 성공",
+                       CopyOutcome.PartiallyFailed => "끝: 일부 실패",
+                       CopyOutcome.Stopped => "끝: 중지",
+                       _ => "끝: 실패",
+                   })
+                   + $" · 표 {results.Count.ToString(CultureInfo.InvariantCulture)}개(성공 {results.Count(r => r.Outcome == CopyOutcome.Succeeded).ToString(CultureInfo.InvariantCulture)})"
+                   + $" · {run.Tables.Values.Sum(t => t.Loaded).ToString("N0", CultureInfo.InvariantCulture)}행 넣음"
+                   + $" · 실패 행 {run.FailedRows.Count.ToString("N0", CultureInfo.InvariantCulture)}"
+                   + " · 걸린 시간 " + CopyLogText.Elapsed(run.Clock.Elapsed);
+        run.Enter(PhaseFinish);
+        run.Log(text, outcome is CopyOutcome.Succeeded ? CopyLogKind.Info : outcome is CopyOutcome.Failed ? CopyLogKind.Error : CopyLogKind.Warning);
+    }
 
     /// <summary>
     /// 정리(DELETE)는 모든 표에 먼저 하므로(설계 8.2, 자식 → 부모), 한 표의 커밋이 다른 표의 DELETE 도 확정한다.
@@ -1679,7 +1809,7 @@ internal sealed class CopyRunner : ICopyRunner
         if (!rollback)
         {
             using var commitStep = new CancellationTokenSource(CleanupTimeout);
-            var commit = await ControlAsync(run.Target, CopyStatements.Commit(), commitStep.Token);
+            var commit = await ControlLoggedAsync(run, run.Target, CopyStatements.Commit(), commitStep.Token, "대상 트랜잭션 끝내기");
             if (commit.Status == ExecutionStatus.Succeeded)
             {
                 run.DeletesPersisted = true;
@@ -1697,7 +1827,7 @@ internal sealed class CopyRunner : ICopyRunner
 
         // 큰 적재를 되돌리는 ROLLBACK 은 오래 걸릴 수 있다.
         using var step = new CancellationTokenSource(LongCleanupTimeout);
-        var r = await ControlAsync(run.Target, CopyStatements.Rollback(), step.Token);
+        var r = await ControlLoggedAsync(run, run.Target, CopyStatements.Rollback(), step.Token, "확정하지 않은 대상 변경 되돌리기");
         if (r.Status != ExecutionStatus.Succeeded)
         {
             run.Notices.Add("대상 롤백을 하지 못했습니다: " + Describe(r));
@@ -1792,7 +1922,9 @@ internal sealed class CopyRunner : ICopyRunner
     private async Task<ExecutionResult> CleanupStatementAsync(RunState run, SqlStatement stmt, TimeSpan timeout)
     {
         using var step = new CancellationTokenSource(timeout);
+        run.LogStatement(run.Target, stmt.Text);
         var r = await _execution.ExecuteAsync(run.Target, stmt, NoBinds, run.HistoryOptions, step.Token);
+        LogResult(run, r);
         if (r.Status == ExecutionStatus.Succeeded && run.Record is { } record)
         {
             try
@@ -1848,8 +1980,12 @@ internal sealed class CopyRunner : ICopyRunner
             try
             {
                 var count = run.Builder.TargetCount(table.Name);
+                run.LogStatement(run.Target, count.Sql, count.Binds);
                 var n = await ScalarAsync(run, run.Target, CopyStatements.Query(count), count.Binds, token);
                 table.TargetRows = n is OracleDecimal { IsNull: false } d ? ToLong(d) : -1;
+                run.Log($"→ 원본 {table.SourceRows.ToString("N0", CultureInfo.InvariantCulture)}건 · 대상 {(table.TargetRows < 0 ? "모름" : table.TargetRows.ToString("N0", CultureInfo.InvariantCulture))}건"
+                        + (table.TargetRows == table.SourceRows ? " · 같음" : " · 다름"),
+                        table.TargetRows == table.SourceRows ? CopyLogKind.Info : CopyLogKind.Warning);
             }
             catch (Exception ex) when (ex is OracleException or BulkDeniedException or InvalidOperationException)
             {
@@ -1865,11 +2001,40 @@ internal sealed class CopyRunner : ICopyRunner
     private Task<BulkResult> ControlAsync(ISession s, SqlStatement stmt, CancellationToken ct) =>
         _bulk.ExecuteArrayAsync(s, stmt, [], [], new ExecutionOptions { Source = HistorySource.DataCopy, SkipHistory = true }, ct);
 
+    /// <summary>트랜잭션 제어(<see cref="ControlAsync"/>)를 작업 로그에 남기며 보낸다. 배치마다 도는 세이브포인트에는 쓰지 않는다(줄이 넘친다).</summary>
+    private async Task<BulkResult> ControlLoggedAsync(RunState run, ISession s, SqlStatement stmt, CancellationToken ct, string? note = null)
+    {
+        run.Log(CopyLogText.Statement(run.SideOf(s), stmt.Text) + (note is null ? string.Empty : "  — " + note), CopyLogKind.Statement);
+        var r = await ControlAsync(s, stmt, ct);
+        if (r.Status != ExecutionStatus.Succeeded)
+        {
+            run.Log("→ " + Describe(r), CopyLogKind.Error);
+        }
+
+        return r;
+    }
+
+    /// <summary>실행 엔진 결과 한 줄: 완료(영향 행 수·걸린 시간) 또는 실패 사유.</summary>
+    private static void LogResult(RunState run, ExecutionResult r)
+    {
+        if (r.Status == ExecutionStatus.Succeeded)
+        {
+            var rows = r.RowsAffected is { } n ? n.ToString("N0", CultureInfo.InvariantCulture) + "행 · " : string.Empty;
+            run.Log($"→ 완료 · {rows}{CopyLogText.Elapsed(r.Elapsed)}");
+        }
+        else
+        {
+            run.Log("→ " + Describe(r), CopyLogKind.Error);
+        }
+    }
+
     /// <summary>DELETE·ALTER: 실행 엔진(정책·이력)으로 보내고, 성공하면 실행 기록에도 같은 글을 남긴다.</summary>
     private async Task<ExecutionResult> ExecuteLoggedAsync(RunState run, ISession s, SqlStatement stmt,
                                                            IReadOnlyDictionary<string, BindValue> binds, CancellationToken ct)
     {
+        run.LogStatement(s, stmt.Text, binds);
         var r = await _execution.ExecuteAsync(s, stmt, binds, run.HistoryOptions, ct);
+        LogResult(run, r);
         if (r.Status == ExecutionStatus.Cancelled && ct.IsCancellationRequested)
         {
             throw new OperationCanceledException(ct);
@@ -2108,6 +2273,9 @@ internal sealed class CopyRunner : ICopyRunner
 
         public long Loaded { get; set; }
 
+        /// <summary>보낸 배치 수(작업 로그의 배치 번호).</summary>
+        public int Batches { get; set; }
+
         public long TargetRows { get; set; } = -1;
 
         public int FailedRows { get; set; }
@@ -2188,10 +2356,14 @@ internal sealed class CopyRunner : ICopyRunner
 
         public CopyOutcome Outcome { get; private set; } = CopyOutcome.Succeeded;
 
+        /// <summary>실패 메시지를 작업 로그에 남기는 통로.</summary>
+        public Action<string>? Failed { get; init; }
+
         public void Fail(string message)
         {
             Outcome = CopyOutcome.Failed;
             _messages.Add(message);
+            Failed?.Invoke(message);
         }
 
         public void Note(string message) => _messages.Add(message);
@@ -2214,6 +2386,22 @@ internal sealed class CopyRunner : ICopyRunner
         }
     }
 
+    /// <summary>알림 목록. 더할 때마다 <paramref name="added"/> 로 작업 로그에 남긴다.</summary>
+    private sealed class NoticeList(Action<string> added) : IEnumerable<string>
+    {
+        private readonly List<string> _items = [];
+
+        public void Add(string notice)
+        {
+            _items.Add(notice);
+            added(notice);
+        }
+
+        public IEnumerator<string> GetEnumerator() => _items.GetEnumerator();
+
+        System.Collections.IEnumerator System.Collections.IEnumerable.GetEnumerator() => GetEnumerator();
+    }
+
     private sealed class RunState
     {
         private readonly IProgress<CopyProgress>? _progress;
@@ -2233,6 +2421,7 @@ internal sealed class CopyRunner : ICopyRunner
             Builder = new CopySqlBuilder(job, period, _sourceTables, _targetTables);
             HistoryOptions = new ExecutionOptions { Source = HistorySource.DataCopy, PreConfirmed = preConfirmed };
             BulkOptions = new ExecutionOptions { Source = HistorySource.DataCopy, SkipHistory = true, PreConfirmed = preConfirmed };
+            Notices = new NoticeList(text => Log(text, CopyLogKind.Warning));
         }
 
         public ISession Source { get; }
@@ -2264,7 +2453,17 @@ internal sealed class CopyRunner : ICopyRunner
 
         public List<FailedRow> FailedRows { get; } = [];
 
-        public List<string> Notices { get; } = [];
+        /// <summary>알림. 더할 때마다 작업 로그에도 한 줄 남긴다.</summary>
+        public NoticeList Notices { get; }
+
+        /// <summary>지금 단계(마지막 진행 보고의 단계). 작업 로그 줄의 단계 칸.</summary>
+        public string CurrentPhase { get; private set; } = PhaseStart;
+
+        /// <summary>지금 표(마지막 진행 보고의 규칙 키). 작업 로그 줄의 표 칸.</summary>
+        public string? CurrentTable { get; private set; }
+
+        /// <summary>실행 전체에 걸린 시간.</summary>
+        public Stopwatch Clock { get; } = Stopwatch.StartNew();
 
         /// <summary>전체를 멈춤(끄기 실패·ORA-01555·원본 준비 실패). 중지(<see cref="Stopped"/>)와 달리 결과는 실패다.</summary>
         public bool Aborted { get; private set; }
@@ -2298,7 +2497,10 @@ internal sealed class CopyRunner : ICopyRunner
             var key = Key(plan);
             if (!Tables.TryGetValue(key, out var t))
             {
-                t = new TableState(key, plan.Target.Table.Owner, plan.Rule.Table);
+                t = new TableState(key, plan.Target.Table.Owner, plan.Rule.Table)
+                {
+                    Failed = message => Log(message, CopyLogKind.Error, key),
+                };
                 Tables[key] = t;
             }
 
@@ -2319,8 +2521,29 @@ internal sealed class CopyRunner : ICopyRunner
             }
         }
 
-        public void Progress(string table, long rows, long? estimated, string phase) =>
+        public void Progress(string table, long rows, long? estimated, string phase)
+        {
+            CurrentPhase = phase;
+            CurrentTable = table;
             _progress?.Report(new CopyProgress(table, rows, estimated, phase));
+        }
+
+        /// <summary>단계를 바꾼다(표와 상관없는 단계: 시작·원본 준비·마무리). 진행 줄은 보내지 않는다.</summary>
+        public void Enter(string phase)
+        {
+            CurrentPhase = phase;
+            CurrentTable = null;
+        }
+
+        /// <summary>작업 로그 한 줄. 표·단계를 주지 않으면 지금 표·단계다. 행 값·비밀은 넣지 않는다(부르는 쪽 책임).</summary>
+        public void Log(string text, CopyLogKind kind = CopyLogKind.Info, string? table = null, string? phase = null) =>
+            _progress?.Report(CopyProgress.ForLog(new CopyLogEntry(DateTimeOffset.Now, phase ?? CurrentPhase, table ?? CurrentTable, text, kind)));
+
+        /// <summary>보낸 문장 한 줄(원본·대상, 바인드 요약).</summary>
+        public void LogStatement(ISession session, string sql, IReadOnlyDictionary<string, BindValue>? binds = null) =>
+            Log(CopyLogText.Statement(SideOf(session), sql, binds), CopyLogKind.Statement);
+
+        public string SideOf(ISession session) => ReferenceEquals(session, Source) ? "원본" : "대상";
 
         /// <summary>
         /// 대상 문장 결과를 받는다. 성공이면 true. 중지로 취소됐으면 중지 예외를 올리고, 정책 거부·확인 거절·실패면 표를 실패로 둔다(예외로 던지지 않는다).

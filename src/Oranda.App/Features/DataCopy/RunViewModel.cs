@@ -107,7 +107,14 @@ public sealed partial class RunViewModel(DataCopyServices services) : ViewModelB
     [ObservableProperty]
     private DateTimeOffset? _readStartedAt;
 
+    /// <summary>아래 칸의 탭: 0 = 작업 로그, 1 = 실패한 행. 실행이 끝나 실패 행이 있으면 실패한 행 탭으로 옮긴다.</summary>
+    [ObservableProperty]
+    private int _detailTab;
+
     public ObservableCollection<TableRunRowViewModel> Rows { get; } = [];
+
+    /// <summary>실행기가 실제로 보낸 문장·결과(작업 로그).</summary>
+    public CopyRunLogViewModel Log { get; } = new();
 
     public ObservableCollection<FailedRowViewModel> FailedRows { get; } = [];
 
@@ -157,6 +164,8 @@ public sealed partial class RunViewModel(DataCopyServices services) : ViewModelB
         Rows.Clear();
         FailedRows.Clear();
         Notices.Clear();
+        Log.Clear();
+        DetailTab = 0;
         Outcome = null;
         ReadStartedAt = null;
         // 진행·결과·건수 어림의 표 이름은 규칙 키다(같은 이름 표가 두 계정에 있어도 섞이지 않게). 그리드에는 계정.표를 보인다.
@@ -193,6 +202,7 @@ public sealed partial class RunViewModel(DataCopyServices services) : ViewModelB
         {
             Outcome = CopyOutcome.Failed;
             StatusText = "복사를 마치지 못했습니다: " + e.Message;
+            Log.Append("마무리", StatusText, CopyLogKind.Error);
         }
         finally
         {
@@ -235,6 +245,12 @@ public sealed partial class RunViewModel(DataCopyServices services) : ViewModelB
 
     private void OnProgress(CopyProgress p)
     {
+        if (p.Log is { } entry)
+        {
+            Log.Append(entry); // 로그 줄은 진행 값을 바꾸지 않는다
+            return;
+        }
+
         var row = Rows.FirstOrDefault(r => r.Table == p.Table);
         if (row is null)
         {
@@ -281,6 +297,11 @@ public sealed partial class RunViewModel(DataCopyServices services) : ViewModelB
 
         ReadStartedAt = result.ReadStartedAt;
         OnPropertyChanged(nameof(ReadStartedText));
+        if (FailedRows.Count > 0)
+        {
+            DetailTab = 1;
+        }
+
         Outcome = result.Outcome;
         StatusText = result.Outcome switch
         {
@@ -333,6 +354,8 @@ public sealed partial class RunViewModel(DataCopyServices services) : ViewModelB
         Rows.Clear();
         FailedRows.Clear();
         Notices.Clear();
+        Log.Clear();
+        DetailTab = 0;
         Outcome = null;
         ReadStartedAt = null;
         StatusText = string.Empty;
@@ -393,6 +416,7 @@ public sealed partial class RunViewModel(DataCopyServices services) : ViewModelB
         using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
         _cts = cts;
         _control = null; // 다시 넣기에는 일시 정지가 없다(중지만)
+        DetailTab = 0; // 다시 넣기 로그는 앞 실행 로그 뒤에 이어 붙인다
         IsRunning = true;
         StatusText = "실패 행을 다시 넣는 중…";
         var running = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -429,6 +453,11 @@ public sealed partial class RunViewModel(DataCopyServices services) : ViewModelB
                 Notices.Add(notice);
             }
 
+            if (result.FailedRows.Count > 0)
+            {
+                DetailTab = 1;
+            }
+
             Outcome = result.FailedRows.Count == 0 ? CopyOutcome.Succeeded : CopyOutcome.PartiallyFailed;
             StatusText = result.FailedRows.Count == 0 ? "실패했던 행을 모두 넣었습니다." : $"실패한 행이 {result.FailedRows.Count:N0}개 남았습니다.";
         }
@@ -439,6 +468,7 @@ public sealed partial class RunViewModel(DataCopyServices services) : ViewModelB
         catch (Exception e)
         {
             StatusText = "실패 행을 다시 넣지 못했습니다: " + e.Message;
+            Log.Append("마무리", StatusText, CopyLogKind.Error);
         }
         finally
         {

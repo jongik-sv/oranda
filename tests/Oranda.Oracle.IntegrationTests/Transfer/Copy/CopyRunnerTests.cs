@@ -267,6 +267,47 @@ public sealed class CopyRunnerTests
     }
 
     [Fact]
+    public async Task Work_log_shows_the_statements_sent_without_bind_or_masked_values()
+    {
+        await using var scope = await CopyDbScope.CreateAsync(_db, CopyDbScope.NewTag());
+        await BothAsync(scope, "LOG_DOC", "ID NUMBER PRIMARY KEY, DOC_NO VARCHAR2(20), CUST_NAME VARCHAR2(40)");
+        await scope.ExecSourceAsync(Block(
+            "INSERT INTO LOG_DOC VALUES (1, 'DOCVAL-1', 'SECRET-NAME-1')",
+            "INSERT INTO LOG_DOC VALUES (2, 'DOCVAL-2', 'SECRET-NAME-2')",
+            "INSERT INTO LOG_DOC VALUES (3, 'DOCVAL-3', 'SECRET-NAME-3')"));
+        var job = scope.Job(new TableRule("LOG_DOC", RuleKind.Custom, TargetAction.DeleteRangeInsert)
+        {
+            CustomWhere = "DOC_NO IN (:DOCS)",
+            Masks = [new MaskRule("CUST_NAME", MaskKind.Fixed, "MASK-FIXED")],
+        }) with
+        {
+            Variables = [new CopyVariable("DOCS", CopyVariableType.Text, ["DOCVAL-1", "DOCVAL-2"])],
+        };
+        var sessions = await scope.OpenSessionsAsync();
+        var report = await PrecheckAsync(scope, sessions, job, March);
+        var lines = new LogRecorder();
+
+        var result = await RunAsync(scope, sessions, job, report, March, new RecordingRunLog(), progress: lines);
+
+        AssertSucceeded(result);
+        var text = string.Join('\n', lines.Entries.Select(CopyLogText.Format));
+        var delete = Assert.Single(report.Preview, p => p.Side == PreviewSide.Target && p.Sql.StartsWith("DELETE", StringComparison.Ordinal)).Sql;
+        Assert.Contains("대상: " + delete + "  [바인드 :DOCS = 2개]", text, StringComparison.Ordinal); // 미리 보기와 같은 실제 글
+        Assert.Contains("원본: SET TRANSACTION READ ONLY", text, StringComparison.Ordinal);
+        // PK 가 있어 MERGE 로 넣는다. 적재 문장은 배치마다 되풀이하지 않고 한 번만 남는다.
+        Assert.Single(lines.Entries, e => e.Text.StartsWith("대상: MERGE INTO", StringComparison.Ordinal) || e.Text.StartsWith("대상: INSERT INTO", StringComparison.Ordinal));
+        Assert.Contains("마스킹(앱에서 바꿔 보냄, 값은 남기지 않음): CUST_NAME(고정값)", text, StringComparison.Ordinal);
+        Assert.Contains("배치 1 · 2행 보냄 · 누적 2행", text, StringComparison.Ordinal);
+        Assert.Contains("대상: COMMIT", text, StringComparison.Ordinal);
+        Assert.Contains("→ 원본 2건 · 대상 2건 · 같음", text, StringComparison.Ordinal);
+        Assert.Contains("끝: 성공", text, StringComparison.Ordinal);
+        Assert.DoesNotContain("DOCVAL", text, StringComparison.Ordinal);
+        Assert.DoesNotContain("SECRET-NAME", text, StringComparison.Ordinal);
+        Assert.DoesNotContain("MASK-FIXED", text, StringComparison.Ordinal);
+        Assert.All(lines.Entries, e => Assert.False(string.IsNullOrEmpty(e.Phase)));
+    }
+
+    [Fact]
     public async Task Copies_lob_columns()
     {
         await using var scope = await CopyDbScope.CreateAsync(_db, CopyDbScope.NewTag());
@@ -909,6 +950,26 @@ public sealed class CopyRunnerTests
             if (value.Phase == CopyRunner.PhaseLoad && value.Rows > 0 && (table is null || value.Table == table))
             {
                 cts.Cancel();
+            }
+        }
+    }
+
+    /// <summary>작업 로그 줄만 동기로 모은다(진행 보고는 버린다).</summary>
+    private sealed class LogRecorder : IProgress<CopyProgress>
+    {
+        private readonly object _gate = new();
+        private readonly List<CopyLogEntry> _entries = [];
+
+        public IReadOnlyList<CopyLogEntry> Entries
+        {
+            get { lock (_gate) { return [.. _entries]; } }
+        }
+
+        public void Report(CopyProgress value)
+        {
+            if (value.Log is { } entry)
+            {
+                lock (_gate) { _entries.Add(entry); }
             }
         }
     }

@@ -29,7 +29,20 @@ public sealed record ForeignKeyRef(string Owner, string Name)
     }
 }
 
-public sealed record CopyProgress(string Table, long Rows, long? Estimated, string Phase);
+/// <summary>
+/// 진행 보고. <see cref="Log"/> 가 있으면 작업 로그 한 줄이고 진행 값(<see cref="Rows"/> 등)은 뜻이 없다(받는 쪽은 진행 줄을 바꾸지 않는다).
+/// </summary>
+public sealed record CopyProgress(string Table, long Rows, long? Estimated, string Phase)
+{
+    /// <summary>작업 로그 한 줄(진행 보고면 null).</summary>
+    public CopyLogEntry? Log { get; init; }
+
+    public static CopyProgress ForLog(CopyLogEntry entry)
+    {
+        ArgumentNullException.ThrowIfNull(entry);
+        return new CopyProgress(entry.Table ?? string.Empty, 0, null, entry.Phase) { Log = entry };
+    }
+}
 
 public sealed record CopyRunResult(CopyOutcome Outcome, IReadOnlyList<TableRunResult> Tables,
                                    IReadOnlyList<FailedRow> FailedRows, IReadOnlyList<string> Notices,

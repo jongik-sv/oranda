@@ -1702,5 +1702,12 @@
   "AI 가 쓰는 조인 문법": "Join syntax AI writes",
   "Oracle (쉼표 FROM, (+))": "Oracle (comma FROM, (+))",
   "AI 튜닝의 재작성 제안과 오류 고치기에 적용됩니다. AI 에 주는 지시이므로 적용 전에 비교 창에서 확인하세요.": "Applies to AI tuning rewrites and error fixes. It is an instruction to the AI, so check the result in the compare window before applying it.",
-  "운영 접속에서 AI 벤치마크가 문장 하나(반복 전체)에 허용하는 시간입니다. 기본 30초, 0 은 제한 없음입니다. 튜닝 시작 창에서 이번 실행만 바꿀 수 있습니다. 시작 창이 없는 일반 대화에는 0 이어도 30초가 적용됩니다.": "Time the AI benchmark may spend on one statement (all repeats) on a production connection. Default 30 seconds; 0 means no limit. You can change it for one run in the tuning start dialog. General chat has no start dialog, so 30 seconds applies even when this is 0."
+  "운영 접속에서 AI 벤치마크가 문장 하나(반복 전체)에 허용하는 시간입니다. 기본 30초, 0 은 제한 없음입니다. 튜닝 시작 창에서 이번 실행만 바꿀 수 있습니다. 시작 창이 없는 일반 대화에는 0 이어도 30초가 적용됩니다.": "Time the AI benchmark may spend on one statement (all repeats) on a production connection. Default 30 seconds; 0 means no limit. You can change it for one run in the tuning start dialog. General chat has no start dialog, so 30 seconds applies even when this is 0.",
+  "로그 복사": "Copy log",
+  "작업 로그 전체를 클립보드에 복사": "Copy the whole work log to the clipboard",
+  "로그 저장…": "Save log…",
+  "작업 로그를 텍스트 파일로 저장": "Save the work log as a text file",
+  "실제로 보낸 문장과 결과(바인드 값은 기간만, 나머지는 개수만)": "Statements actually sent and their results (bind values: period only, others as counts)",
+  "복사를 실행하면 보낸 문장이 여기에 차례로 보입니다.": "When the copy runs, the statements it sends appear here in order.",
+  "작업 로그": "Work log"
 }

@@ -482,6 +482,25 @@ public sealed class DataCopyRenderTests : IDisposable
             [failed],
             ["FK FK_ITEMS_ORDERS 를 NOVALIDATE 로 켰습니다(부모 없는 행 3개)."],
             new DateTimeOffset(2026, 11, 6, 12, 0, 0, TimeSpan.Zero)); };
+        var at = new DateTimeOffset(2026, 11, 9, 14, 3, 0, TimeSpan.FromHours(9));
+        void Log(int sec, string phase, string? table, string text, CopyLogKind kind = CopyLogKind.Info) =>
+            h.Runner.Reports.Add(CopyProgress.ForLog(new CopyLogEntry(at.AddSeconds(sec), phase, table, text, kind)));
+        Log(0, "시작", null, "복사 시작: 작업 「월말 운영 데이터 복사」 · 원본 SRC → 대상 TGT · 표 3개 · 커밋 표마다 · 배치 5,000행 · 실패 행 상한 100 · 같은 시점 기준 읽기");
+        Log(0, "시작", null, "기간: 2026-10-01 00:00:00 이상 ~ 2026-11-01 00:00:00 미만");
+        Log(0, "원본 준비", null, "원본: ROLLBACK  — 앞 트랜잭션 닫기", CopyLogKind.Statement);
+        Log(0, "원본 준비", null, "원본: SET TRANSACTION READ ONLY  — 모든 표를 이 시점 기준으로 읽기", CopyLogKind.Statement);
+        Log(1, "끄기", "ORDERS", "대상: ALTER TRIGGER \"TGT\".\"TRG_ORDERS_AUDIT\" DISABLE", CopyLogKind.Statement);
+        Log(1, "끄기", "ORDERS", "→ 완료 · 0.03초");
+        Log(1, "정리", "ORDERS", "대상: DELETE FROM \"TGT\".\"ORDERS\" WHERE \"ORDER_DT\" >= :B1_FROM AND \"ORDER_DT\" < :B1_TO AND (CSM_DOC_NO IN (:CSM_DOC_NOS_1, …))  [바인드 :B1_FROM = 2026-10-01 00:00:00, :B1_TO = 2026-11-01 00:00:00, :CSM_DOC_NOS = 23개]", CopyLogKind.Statement);
+        Log(2, "정리", "ORDERS", "→ 완료 · 14,120행 · 0.84초");
+        Log(2, "적재", "ORDERS", "원본: SELECT \"ORDER_ID\", \"ORDER_DT\", \"CUST_NAME\" FROM \"SRC\".\"ORDERS\" WHERE …  [바인드 :B1_FROM = 2026-10-01 00:00:00, :B1_TO = 2026-11-01 00:00:00, :CSM_DOC_NOS = 23개]", CopyLogKind.Statement);
+        Log(2, "적재", "ORDERS", "대상: INSERT INTO \"TGT\".\"ORDERS\" (\"ORDER_ID\", \"ORDER_DT\", \"CUST_NAME\") VALUES (:C1, :C2, :C3)  [바인드 배열 :C1…:C3, 배치 5,000행씩]", CopyLogKind.Statement);
+        Log(2, "적재", "ORDERS", "마스킹(앱에서 바꿔 보냄, 값은 남기지 않음): CUST_NAME(해시)");
+        Log(4, "적재", "ORDERS", "배치 1 · 5,000행 보냄 · 누적 5,000행");
+        Log(6, "적재", "ORDERS", "실패 행 1: ORA-02291: integrity constraint violated - parent key not found", CopyLogKind.Error);
+        Log(9, "적재", "ORDERS", "적재 끝 · 원본 15,000건 읽음 · 14,999행 넣음 · 실패 1행 · 9.02초");
+        Log(30, "건수 비교", "ORDERS", "→ 원본 15,000건 · 대상 14,999건 · 다름", CopyLogKind.Warning);
+        Log(31, "마무리", null, "끝: 일부 실패 · 표 3개(성공 2) · 57,419행 넣음 · 실패 행 1 · 걸린 시간 31.40초", CopyLogKind.Warning);
         var (window, vm) = await OpenWindowAsync(h);
         try
         {
@@ -504,7 +523,19 @@ public sealed class DataCopyRenderTests : IDisposable
             AssertColumnsFit(runGrid); // 「대기」로 처음 정한 너비가 「문제 있음」·「일부 실패 · …」에 맞게 넓어진다
             AssertFillsWidth(runGrid);
             AssertNotClipped(window, "실행·검증");
+            Assert.Equal(1, vm.Run.DetailTab); // 실패 행이 있어 실패한 행 탭으로 옮겼다
             Shots(window, "3-run");
+
+            // 작업 로그 탭: 실행기가 보낸 줄이 모두 보이고(끝으로 스크롤), 복사·저장 단추가 켜진다.
+            vm.Run.DetailTab = 0;
+            Settle(window);
+            Assert.Equal(16, vm.Run.Log.Lines.Count);
+            Assert.True(window.FindControl<CopyRunLogView>("RunLogView")!.IsEffectivelyVisible);
+            var logView = window.FindControl<CopyRunLogView>("RunLogView")!;
+            Assert.True(logView.FindControl<Button>("CopyLogButton")!.IsEffectivelyEnabled);
+            Assert.True(logView.FindControl<Button>("SaveLogButton")!.IsEffectivelyEnabled);
+            AssertNotClipped(window, "작업 로그");
+            Shots(window, "3-run-log");
         }
         finally
         {
