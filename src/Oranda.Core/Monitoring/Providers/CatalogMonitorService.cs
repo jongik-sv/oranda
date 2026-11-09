@@ -157,6 +157,13 @@ public abstract partial class CatalogMonitorService : IMonitorService
         await ExecuteChangeAsync(monitor, stmt, ct);
     }
 
+    /// <summary><see cref="KillAsync"/> 와 같은 문장(<see cref="KillStatement"/>). 보내지 않는다.</summary>
+    public SqlStatement PreviewKill(ISession monitor, SessionKey target, bool immediate)
+    {
+        ArgumentNullException.ThrowIfNull(monitor);
+        return KillStatement(monitor, target, immediate);
+    }
+
     public async Task<string?> SetTraceAsync(ISession monitor, SessionKey target, bool enable, TraceOptions options, CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(monitor);

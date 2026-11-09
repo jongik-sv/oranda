@@ -1,3 +1,4 @@
+using Oranda.Core.Execution;
 using Oranda.Core.Monitoring;
 using Oranda.Core.Plans;
 using Oranda.Core.Sessions;
@@ -30,6 +31,9 @@ public sealed class MonitorServiceDispatcher : IMonitorService
 
     public Task KillAsync(ISession monitor, SessionKey target, bool immediate, CancellationToken ct) =>
         _selector.For<IMonitorService>(monitor).KillAsync(monitor, target, immediate, ct);
+
+    public SqlStatement PreviewKill(ISession monitor, SessionKey target, bool immediate) =>
+        _selector.For<IMonitorService>(monitor).PreviewKill(monitor, target, immediate);
 
     public Task<string?> SetTraceAsync(ISession monitor, SessionKey target, bool enable, TraceOptions options, CancellationToken ct) =>
         _selector.For<IMonitorService>(monitor).SetTraceAsync(monitor, target, enable, options, ct);

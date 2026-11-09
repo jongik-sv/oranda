@@ -1,3 +1,4 @@
+using Oranda.Core.Execution;
 using Oranda.Core.Plans;
 using Oranda.Core.Sessions;
 
@@ -22,6 +23,13 @@ public interface IMonitorService
 
     /// <summary><c>ALTER SYSTEM KILL SESSION</c>(또는 DISCONNECT). TSK-09-01.</summary>
     Task KillAsync(ISession monitor, SessionKey target, bool immediate, CancellationToken ct);
+
+    /// <summary>
+    /// <see cref="KillAsync"/> 가 보낼 문장(보내지 않는다). 확인 창이 실제 문장과 재입력 이름(<see cref="SqlStatement.DangerousTarget"/>)을 그대로 보이게 한다
+    /// (Tibero 는 음수 SERIAL# 을 고쳐 보내므로 화면이 따로 만든 글과 다를 수 있다). 기본 구현은 지원하지 않음(시험용 가짜가 구현하지 않아도 되게 한다).
+    /// </summary>
+    SqlStatement PreviewKill(ISession monitor, SessionKey target, bool immediate) =>
+        throw new NotSupportedException();
 
     /// <summary>DBMS_MONITOR 트레이스 켜기/끄기. 켜면 트레이스 파일 경로(v$diag_info)를 돌려준다. TSK-09-01.</summary>
     Task<string?> SetTraceAsync(ISession monitor, SessionKey target, bool enable, TraceOptions options, CancellationToken ct);

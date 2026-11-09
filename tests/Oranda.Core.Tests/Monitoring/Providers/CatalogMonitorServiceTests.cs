@@ -81,6 +81,18 @@ public class CatalogMonitorServiceTests
     }
 
     [Fact]
+    public void Kill_preview_is_the_statement_kill_sends_and_sends_nothing()
+    {
+        var service = new Service(_exec, _port);
+
+        var preview = service.PreviewKill(Monitor, Target, immediate: true);
+
+        Assert.Equal("KILL 12,345 NOW", preview.Text);
+        Assert.Empty(_exec.Calls);
+        Assert.Empty(_port.Entered);
+    }
+
+    [Fact]
     public async Task Lock_list_without_access_is_an_empty_snapshot_and_other_server_errors_still_throw()
     {
         var service = new Service(_exec, _port);

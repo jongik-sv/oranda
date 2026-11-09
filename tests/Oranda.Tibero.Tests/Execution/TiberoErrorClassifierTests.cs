@@ -30,6 +30,7 @@ public class TiberoErrorClassifierTests
     [InlineData(2069, DbErrorKind.Disconnected)]
     [InlineData(8033, DbErrorKind.ObjectNotFound)]
     [InlineData(8053, DbErrorKind.InsufficientPrivileges)]
+    [InlineData(-17004, DbErrorKind.InsufficientPrivileges)] // 일반 계정의 KILL SESSION
     [InlineData(12033, DbErrorKind.ResourceBusy)]
     [InlineData(12034, DbErrorKind.ResourceBusy)]
     [InlineData(12022, DbErrorKind.InvalidCredentials)]

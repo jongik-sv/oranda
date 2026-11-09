@@ -55,6 +55,7 @@ internal sealed partial class TiberoErrorClassifier : IDbErrorClassifier
         [4008] = DbErrorKind.ConstraintViolation, // ERROR_TD_MI_UNIQ_VIOLATION
         [8033] = DbErrorKind.ObjectNotFound, // ERROR_DML_OBJ_NOT_EXIST (실측: 권한 없는 객체도 이 번호)
         [8053] = DbErrorKind.InsufficientPrivileges, // ERROR_DML_NOT_ENOUGH_PRIVILEGE
+        [17004] = DbErrorKind.InsufficientPrivileges, // ALTER SYSTEM 권한 없음 (실측: 일반 계정의 ALTER SYSTEM KILL SESSION, tibero-monitor-catalog.md app.kill_session)
         [12033] = DbErrorKind.ResourceBusy, // ERROR_LOCKFAIL_IN_NOWAIT
         [12034] = DbErrorKind.ResourceBusy, // ERROR_LOCKFAIL_IN_WAIT_TIMEOUT
         [12022] = DbErrorKind.InvalidCredentials, // ERROR_CLIMSG_AUTH_FAILED
