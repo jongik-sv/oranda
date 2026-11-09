@@ -1,5 +1,6 @@
 -- sql_id 의 누적 실행 통계(Tibero V$SQL, 자식 커서 합). 열은 Oracle tuning.sql_stats 와 같다. 공유 풀에 없으면 children = 0.
 -- PARSING_SCHEMA_NAME 이 없어 PARSING_SCHEMA_ID 를 ALL_USERS 로 이름으로 바꾼다. 단일 인스턴스라 instances = 0 또는 1. 바인드: sql_id
+-- V$SQL 의 일부 값은 음수가 부호 없는 64비트로 넘어간 값이다(P5b H3 실측, win144 #49) → 0 ~ 2^62-1 밖이면 NULL(Int64 넘침 막음).
 -- id: tuning.sql_stats
 -- dbms: tibero
 -- min-version: 6
@@ -17,5 +18,18 @@ SELECT a.children, a.instances, a.executions, a.elapsed_time, a.cpu_time, a.buff
                SUM(q.parse_calls) AS parse_calls, SUM(q.fetches) AS fetches,
                MAX(q.parsing_schema_id) AS parsing_schema_id, MAX(q.module) AS module,
                MAX(q.last_active_time) AS last_active_time, MIN(q.first_load_time) AS first_load_time
-          FROM v$sql q
-         WHERE q.sql_id = :sql_id) a
+          FROM (SELECT r.parsing_schema_id, r.module, r.last_active_time, r.first_load_time,
+                       CASE WHEN r.executions BETWEEN 0 AND 4611686018427387903 THEN r.executions END AS executions,
+                       CASE WHEN r.elapsed_time BETWEEN 0 AND 4611686018427387903 THEN r.elapsed_time END AS elapsed_time,
+                       CASE WHEN r.cpu_time BETWEEN 0 AND 4611686018427387903 THEN r.cpu_time END AS cpu_time,
+                       CASE WHEN r.buffer_gets BETWEEN 0 AND 4611686018427387903 THEN r.buffer_gets END AS buffer_gets,
+                       CASE WHEN r.disk_reads BETWEEN 0 AND 4611686018427387903 THEN r.disk_reads END AS disk_reads,
+                       CASE WHEN r.rows_processed BETWEEN 0 AND 4611686018427387903 THEN r.rows_processed END AS rows_processed,
+                       CASE WHEN r.application_wait_time BETWEEN 0 AND 4611686018427387903 THEN r.application_wait_time END AS application_wait_time,
+                       CASE WHEN r.concurrency_wait_time BETWEEN 0 AND 4611686018427387903 THEN r.concurrency_wait_time END AS concurrency_wait_time,
+                       CASE WHEN r.cluster_wait_time BETWEEN 0 AND 4611686018427387903 THEN r.cluster_wait_time END AS cluster_wait_time,
+                       CASE WHEN r.user_io_wait_time BETWEEN 0 AND 4611686018427387903 THEN r.user_io_wait_time END AS user_io_wait_time,
+                       CASE WHEN r.parse_calls BETWEEN 0 AND 4611686018427387903 THEN r.parse_calls END AS parse_calls,
+                       CASE WHEN r.fetches BETWEEN 0 AND 4611686018427387903 THEN r.fetches END AS fetches
+                  FROM v$sql r
+                 WHERE r.sql_id = :sql_id) q) a

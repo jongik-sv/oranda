@@ -121,7 +121,7 @@ public abstract partial class CatalogTuningService : ITuningService
         return [.. rows.Select(r => new WaitSample(at, Long(r[1]) ?? 0, Str(r[2]), Str(r[3]), Str(r[4])))];
     }
 
-    public async Task<TraceFileInfo> GetTraceFileAsync(ISession s, SessionKey target, CancellationToken ct)
+    public virtual async Task<TraceFileInfo> GetTraceFileAsync(ISession s, SessionKey target, CancellationToken ct)
     {
         // default(SessionKey) = 이 세션(TSK-06-04): v$diag_info 의 Default Trace File(gv$process 권한 없이도 읽힌다).
         var rows = target == default
@@ -256,6 +256,12 @@ public abstract partial class CatalogTuningService : ITuningService
     /// </summary>
     protected abstract Task BeginReadOnlyAsync(ISession s, CancellationToken ct);
 
+    /// <summary>벤치마크가 논리 읽기로 세는 세션 통계 이름(<see cref="SessionStatisticsSource"/> 가 주는 이름). DBMS 마다 다르면 재정의한다.</summary>
+    protected virtual string LogicalReadsStatistic => "session logical reads";
+
+    /// <summary>벤치마크가 물리 읽기로 세는 세션 통계 이름. DBMS 마다 다르면 재정의한다.</summary>
+    protected virtual string PhysicalReadsStatistic => "physical reads";
+
     /// <summary>소유자·표 이름은 딕셔너리 표기 그대로(보통 대문자) 묶는다.</summary>
     private static IReadOnlyList<CatalogBind> BindTable(string owner, string table)
     {
@@ -298,8 +304,8 @@ public abstract partial class CatalogTuningService : ITuningService
             if (before is not null && after is not null)
             {
                 var diff = SessionStatistics.Diff(before, after);
-                logical += Stat(diff, "session logical reads");
-                physical += Stat(diff, "physical reads");
+                logical += Stat(diff, LogicalReadsStatistic);
+                physical += Stat(diff, PhysicalReadsStatistic);
             }
         }
 
