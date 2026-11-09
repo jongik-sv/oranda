@@ -3,6 +3,7 @@ using Oranda.Core.Events;
 using Oranda.Core.Sessions;
 using Oranda.Tibero.Schema;
 using Oranda.Tibero.Sessions;
+using Oranda.Tibero.Tests.Driver;
 using Oranda.Tibero.Tests.Sessions;
 
 namespace Oranda.Tibero.Tests.Schema;
@@ -31,4 +32,7 @@ internal static class SchemaFakes
 
     /// <summary>늘 <paramref name="exception"/> 을 던지는 실행기.</summary>
     public static CatalogRunner Throwing(Exception exception) => (_, _, _, _) => Task.FromException<TiberoSessionQuery.Table>(exception);
+
+    /// <summary>서버 오류(가짜 드라이버의 <c>TiberoException</c>, 번호는 드라이버처럼 음수).</summary>
+    public static Exception ServerError(int number, string message) => FakeDriverHost.ServerError(number, message);
 }

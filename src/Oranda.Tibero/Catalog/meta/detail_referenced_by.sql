@@ -1,4 +1,5 @@
 -- 이 테이블의 기본키·유일 키를 참조하는 외래키(다른 테이블 또는 자기 자신). 바인드: owner, name (Oracle 판과 같은 문장)
+-- 위치 보정: *_CONS_COLUMNS.POSITION 은 Tibero 에서 0부터지만 여기서는 열 순서 정렬에만 쓰므로 보정하지 않는다.
 -- id: meta.detail_referenced_by
 -- dbms: tibero
 -- min-version: 6
