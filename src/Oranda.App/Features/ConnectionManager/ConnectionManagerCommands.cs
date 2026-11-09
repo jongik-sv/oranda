@@ -110,6 +110,29 @@ public static class ConnectionManagerCommands
 
         return outcome?.IsConnected == true ? service.SessionOf(profileId) : null;
     }
+
+    /// <summary>
+    /// 「세션 새로 고침」(상태 표시줄 단추·메뉴 「다시 접속」): 보이는 접속(활성 탭의 접속)이 끊겼으면 그 접속, 탭의 접속이 닫혔으면(「접속 안 됨(이름)」)
+    /// 그 프로필에 다시 접속한다. 다시 연 세션이 끊긴 자리를 이어받으므로 탭·작업 공간은 그대로 새 세션을 쓴다(<see cref="IConnectionService.ReopenedAs"/>).
+    /// 다시 붙을 대상이 없으면 false(부른 쪽이 마지막 접속으로 다시 붙는 예전 동작을 쓴다).
+    /// </summary>
+    public static async Task<bool> ReconnectShownAsync(ServiceContainer container)
+    {
+        ArgumentNullException.ThrowIfNull(container);
+        if (SessionRouter.Find(container) is not { } router)
+        {
+            return false;
+        }
+
+        Guid? target = router.ShownSession is { } shown && router.IsBroken(shown) ? shown.Profile.Id : router.ShownMissing;
+        if (target is not { } profileId)
+        {
+            return false;
+        }
+
+        await router.ReconnectAsync(profileId, () => ConnectProfileAsync(container, profileId)).ConfigureAwait(true);
+        return true;
+    }
 }
 
 /// <summary>접속 메뉴·명령 팔레트의 접속 명령(CONN-01~04).</summary>
@@ -142,7 +165,12 @@ public sealed class ConnectionCommandHandler(ServiceContainer container) : IComm
                 await DisconnectAsync(service, cancellationToken).ConfigureAwait(true);
                 break;
             case "oranda.conn.reconnect":
-                await new ConnectionManagerViewModel(service) { AskPassword = Prompt }.ReconnectAsync().ConfigureAwait(true);
+                // 보이는 끊긴 접속에 다시 붙는다(접속이 여럿이면 마지막 접속이 아니다). 대상이 없을 때만 마지막 접속에 다시 붙는다.
+                if (!await ConnectionManagerCommands.ReconnectShownAsync(container).ConfigureAwait(true))
+                {
+                    await new ConnectionManagerViewModel(service) { AskPassword = Prompt }.ReconnectAsync().ConfigureAwait(true);
+                }
+
                 break;
             case "oranda.conn.changePassword":
                 await ChangePasswordAsync(service, cancellationToken).ConfigureAwait(true);

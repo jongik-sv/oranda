@@ -126,6 +126,15 @@ public sealed class ConnectionStatusViewModel : ViewModelBase, IStatusBarItem
         return major >= 23 ? major.ToString(CultureInfo.InvariantCulture) + "ai" : major.ToString(CultureInfo.InvariantCulture) + "c";
     }
 
+    /// <summary>보이는 접속이 끊겼으면 참: 접속 글 옆에 「새로 고침」 단추를 보인다.</summary>
+    public bool CanReconnect => Current is not null && ShownBroken;
+
+    /// <summary>「새로 고침」: 끊긴 접속에 다시 접속한다(메뉴 「다시 접속」 과 같은 명령, <see cref="ConnectionManagerCommands.ReconnectShownAsync"/>).</summary>
+    public Task ReconnectAsync() =>
+        _container?.GetService<ICommandRegistry>() is { } registry && _container.GetService<IContextKeys>() is { } keys
+            ? registry.ExecuteAsync("oranda.conn.reconnect", keys)
+            : Task.CompletedTask;
+
     public Task OpenManagerAsync() =>
         _container?.GetService<ICommandRegistry>() is { } registry && _container.GetService<IContextKeys>() is { } keys
             ? registry.ExecuteAsync("oranda.conn.manage", keys)
@@ -171,6 +180,7 @@ public sealed class ConnectionStatusViewModel : ViewModelBase, IStatusBarItem
         OnPropertyChanged(nameof(EnvironmentText));
         OnPropertyChanged(nameof(EnvironmentBrushKey));
         OnPropertyChanged(nameof(ToolTip));
+        OnPropertyChanged(nameof(CanReconnect));
     }
 
     private static void Post(Action a)
@@ -186,19 +196,51 @@ public sealed class ConnectionStatusViewModel : ViewModelBase, IStatusBarItem
     }
 }
 
-/// <summary>1번 구간 View: 환경 칩(색 바탕 글자) + 접속 글. 누르면 접속 관리자.</summary>
+/// <summary>1번 구간 View: 환경 칩(색 바탕 글자) + 접속 글 + (끊겼을 때) 「새로 고침」 단추. 단추 밖을 누르면 접속 관리자.</summary>
 public sealed class ConnectionStatusView : UserControl
 {
     private readonly Border _chip = new() { CornerRadius = new CornerRadius(3), Padding = new Thickness(5, 0), VerticalAlignment = VerticalAlignment.Center };
     private readonly TextBlock _chipText = new() { FontSize = 11, FontWeight = FontWeight.SemiBold };
     private readonly TextBlock _text = new() { VerticalAlignment = VerticalAlignment.Center, TextTrimming = TextTrimming.CharacterEllipsis };
+
+    // 끊긴 접속에 다시 접속하는 단추(단추를 눌러도 접속 관리자는 열리지 않는다: 단추가 누름을 처리한다).
+    private readonly Button _reconnect = new()
+    {
+        Content = UiText.Get("Execution.status.reconnect", "새로 고침"),
+        Padding = new Thickness(6, 0),
+        MinHeight = 0,
+        FontSize = 11,
+        VerticalAlignment = VerticalAlignment.Center,
+        IsVisible = false,
+    };
+
     private ConnectionStatusViewModel? _vm;
 
     public ConnectionStatusView()
     {
         _chip.Child = _chipText;
         _chipText.Bind(TextBlock.ForegroundProperty, _chipText.GetResourceObservable("OrandaEnvChipForegroundBrush")); // 색은 리소스 키로만(ui-shell 6장)
-        Content = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 6, Children = { _chip, _text } };
+        _reconnect.Classes.Add("accent");
+        Oranda.App.Shell.Icons.ButtonIcon.SetKey(_reconnect, "refresh");
+        ToolTip.SetTip(_reconnect, UiText.Get("Execution.status.reconnectTip", "끊긴 세션에 다시 접속합니다. 이 탭과 작업 공간은 새 세션을 그대로 씁니다."));
+        Avalonia.Automation.AutomationProperties.SetName(_reconnect, UiText.Get("Execution.status.reconnectName", "세션 새로 고침"));
+        _reconnect.Click += async (_, e) =>
+        {
+            e.Handled = true;
+            if (_vm is not null)
+            {
+                _reconnect.IsEnabled = false;
+                try
+                {
+                    await _vm.ReconnectAsync();
+                }
+                finally
+                {
+                    _reconnect.IsEnabled = true;
+                }
+            }
+        };
+        Content = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 6, Children = { _chip, _text, _reconnect } };
         Cursor = new Cursor(StandardCursorType.Hand);
         Background = Brushes.Transparent; // 글자 사이도 눌리게
         PointerPressed += async (_, e) =>
@@ -233,6 +275,10 @@ public sealed class ConnectionStatusView : UserControl
         _text.Opacity = _vm?.Current is null ? 0.65 : 1;
         ToolTip.SetTip(this, _vm?.ToolTip);
         Avalonia.Automation.AutomationProperties.SetName(this, _vm?.Text ?? string.Empty);
+        _reconnect.IsVisible = _vm?.CanReconnect == true;
+        _reconnect.Content = UiText.Get("Execution.status.reconnect", "새로 고침"); // 언어를 바꾸면 다시 정한다
+        ToolTip.SetTip(_reconnect, UiText.Get("Execution.status.reconnectTip", "끊긴 세션에 다시 접속합니다. 이 탭과 작업 공간은 새 세션을 그대로 씁니다."));
+        Avalonia.Automation.AutomationProperties.SetName(_reconnect, UiText.Get("Execution.status.reconnectName", "세션 새로 고침"));
         _chipText.Text = _vm?.EnvironmentText ?? string.Empty;
         _chip.IsVisible = _vm?.EnvironmentBrushKey is not null;
         if (_vm?.EnvironmentBrushKey is { } key)
