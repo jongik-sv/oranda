@@ -51,7 +51,7 @@ internal sealed class TiberoConnectionProbe : IConnectionProbe
         {
             version = await ReadVersionAsync(connectionString, profile.ConnectTimeoutSeconds, ct).ConfigureAwait(false);
         }
-        catch (DbException ex)
+        catch (Exception ex) when (ex is DbException || TiberoErrorClassifier.IsDriverException(ex))
         {
             // 드라이버는 문장 취소를 DbException(12040)으로 알린다 — 호출자가 취소했으면 결과가 아니라 취소로 돌려준다.
             ct.ThrowIfCancellationRequested();
@@ -109,7 +109,7 @@ internal sealed class TiberoConnectionProbe : IConnectionProbe
 
                 return TiberoServerVersionPolicy.FromVersionRows(rows) ?? connection.ServerVersion;
             }
-            catch (Exception ex) when ((ex is OperationCanceledException or DbException) && linked.IsCancellationRequested)
+            catch (Exception ex) when ((ex is OperationCanceledException or DbException || TiberoErrorClassifier.IsDriverException(ex)) && linked.IsCancellationRequested)
             {
                 // 호출자가 취소했으면 취소로, 아니면 제한 시간 초과로 알린다(드라이버는 문장 취소를 DbException 으로 던질 수 있다).
                 ct.ThrowIfCancellationRequested();

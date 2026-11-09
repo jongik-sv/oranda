@@ -38,6 +38,8 @@ internal sealed class TiberoConnectionStringFactory : IConnectionStringFactory
         builder.Append("Data Source=").Append(Descriptor(profile.DataSource));
         builder.Append(";User Id=").Append(Value(profile.User));
         builder.Append(";Password=").Append(Value(password));
+        // 세션 하나 = 연결 하나(Oracle 과 같은 규칙). 실측: 기본 풀링이면 Close 뒤에도 서버 세션이 남는다(docs/design/tibero-driver-session.md 2장).
+        builder.Append(";Pooling=false");
         return builder.ToString();
     }
 

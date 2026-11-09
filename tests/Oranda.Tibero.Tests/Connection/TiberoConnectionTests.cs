@@ -9,9 +9,9 @@ public class TiberoConnectionStringFactoryTests
         new("t", user, dataSource, Dbms: Dbms.Tibero);
 
     [Theory]
-    [InlineData("db1:8629/tibero", "Data Source=((INSTANCE=(HOST=db1)(PORT=8629)(DB_NAME=tibero)));User Id=scott;Password=pw")]
-    [InlineData("db1/tibero", "Data Source=((INSTANCE=(HOST=db1)(PORT=8629)(DB_NAME=tibero)));User Id=scott;Password=pw")]
-    [InlineData("[::1]:9000/tb", "Data Source=((INSTANCE=(HOST=::1)(PORT=9000)(DB_NAME=tb)));User Id=scott;Password=pw")]
+    [InlineData("db1:8629/tibero", "Data Source=((INSTANCE=(HOST=db1)(PORT=8629)(DB_NAME=tibero)));User Id=scott;Password=pw;Pooling=false")]
+    [InlineData("db1/tibero", "Data Source=((INSTANCE=(HOST=db1)(PORT=8629)(DB_NAME=tibero)));User Id=scott;Password=pw;Pooling=false")]
+    [InlineData("[::1]:9000/tb", "Data Source=((INSTANCE=(HOST=::1)(PORT=9000)(DB_NAME=tb)));User Id=scott;Password=pw;Pooling=false")]
     public void Build_assembles_the_descriptor(string dataSource, string expected)
     {
         Assert.Equal(expected, new TiberoConnectionStringFactory().Build(Profile(dataSource), "pw"));
@@ -29,7 +29,7 @@ public class TiberoConnectionStringFactoryTests
     public void Build_quotes_values_with_separators()
     {
         var cs = new TiberoConnectionStringFactory().Build(Profile("h:1/d", "a;b"), "p\"w;x");
-        Assert.EndsWith(";User Id=\"a;b\";Password=\"p\"\"w;x\"", cs, StringComparison.Ordinal);
+        Assert.EndsWith(";User Id=\"a;b\";Password=\"p\"\"w;x\";Pooling=false", cs, StringComparison.Ordinal);
     }
 
     [Theory]
