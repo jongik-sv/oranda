@@ -13,7 +13,6 @@ using Oranda.Core.History;
 using Oranda.Core.Metadata;
 using Oranda.Core.Sessions;
 using Oranda.Core.Schema;
-using Oranda.Oracle.Schema;
 
 namespace Oranda.App.Features.ColumnReorder;
 
@@ -63,6 +62,8 @@ public sealed partial class ColumnReorderViewModel : ObservableObject, IDisposab
     private readonly IMetadataProvider _meta;
     private readonly IColumnReorderProvider? _reorder;
     private readonly IExecutionService? _exec;
+    private readonly IServiceProvider? _services;
+    private IColumnReorderScripts? _scripts;
     private ISession? _session;
     private IReadOnlyList<ColumnInfo> _columns = [];
     private IReadOnlyList<string> _original = [];
@@ -74,12 +75,15 @@ public sealed partial class ColumnReorderViewModel : ObservableObject, IDisposab
     private bool _dependentDdlLoaded;
     private CancellationTokenSource? _scan;
 
-    public ColumnReorderViewModel(IMetadataProvider meta, IColumnReorderProvider? reorder = null, IExecutionService? exec = null)
+    /// <param name="services">DBMS 별 스크립트 만들기(<see cref="IColumnReorderScripts"/>)를 세션의 DBMS 로 고르는 데 쓴다. 구현을 못 찾으면 이 기능은 쓸 수 없다.</param>
+    public ColumnReorderViewModel(IMetadataProvider meta, IColumnReorderProvider? reorder = null, IExecutionService? exec = null,
+                                  IServiceProvider? services = null)
     {
         ArgumentNullException.ThrowIfNull(meta);
         _meta = meta;
         _reorder = reorder;
         _exec = exec;
+        _services = services;
     }
 
     public DbObjectRef? Table { get; private set; }
@@ -168,6 +172,16 @@ public sealed partial class ColumnReorderViewModel : ObservableObject, IDisposab
 
         _session = session;
         Table = table;
+
+        // 스크립트 만들기는 DBMS 마다 다르다 — 세션의 DBMS 용 구현이 없으면 이 기능만 쓸 수 없다고 알린다.
+        _scripts = DbmsServices.For<IColumnReorderScripts>(_services, session);
+        if (_scripts is null)
+        {
+            IsUnsupported = true;
+            StatusText = $"이 DBMS({session.Profile.Dbms}) 용 열 순서 바꾸기 구현이 없다";
+            return;
+        }
+
         IsBusy = true;
         try
         {
@@ -263,16 +277,16 @@ public sealed partial class ColumnReorderViewModel : ObservableObject, IDisposab
     /// <summary>방식 ① 을 실행 엔진으로 돌린다. 정책 관문(운영 확인 포함)이 막으면 거기서 멈춘다.</summary>
     public async Task<bool> RunAsync(CancellationToken ct = default)
     {
-        if (!CanRun || _session is null || Table is null || _exec is null)
+        if (!CanRun || _session is null || Table is null || _exec is null || _scripts is null)
         {
             return false;
         }
 
-        var statements = ColumnReorderScripts.InvisibleVisible(Table, _original, CurrentOrder());
+        var statements = _scripts.InvisibleVisible(Table, _original, CurrentOrder());
 
         // 운영 접속은 정책 관문이 문장마다 확인하므로 한 블록으로 묶어 한 번만 확인받는다(개발 접속은 문장별 그대로).
         var asBlock = _session.Profile.Environment == ConnectionEnvironment.Production && statements.Count > 1;
-        IReadOnlyList<SqlStatement> toRun = asBlock ? [ColumnReorderScripts.AsSingleBlock(Table, statements)] : statements;
+        IReadOnlyList<SqlStatement> toRun = asBlock ? [_scripts.AsSingleBlock(Table, statements)] : statements;
         IsBusy = true;
         try
         {
@@ -364,7 +378,13 @@ public sealed partial class ColumnReorderViewModel : ObservableObject, IDisposab
     private async Task RefreshAsync()
     {
         BlockReasons.Clear();
-        foreach (var r in ColumnReorderScripts.BlockReasons(Method, _columns, _traits, _atLeast12c))
+        if (_scripts is null)
+        {
+            NotifyActions();
+            return;
+        }
+
+        foreach (var r in _scripts.BlockReasons(Method, _columns, _traits, _atLeast12c))
         {
             BlockReasons.Add(r);
         }
@@ -383,20 +403,20 @@ public sealed partial class ColumnReorderViewModel : ObservableObject, IDisposab
         }
 
         PreviewText = Method == ColumnReorderMethod.InvisibleVisible
-            ? ColumnReorderScripts.ToText(ColumnReorderScripts.InvisibleVisible(Table, _original, CurrentOrder()))
+            ? _scripts.ToText(_scripts.InvisibleVisible(Table, _original, CurrentOrder()))
             : await BuildRebuildAsync(CancellationToken.None).ConfigureAwait(true);
     }
 
     private async Task<string> BuildRebuildAsync(CancellationToken ct)
     {
         await EnsureDependentDdlAsync(ct).ConfigureAwait(true);
-        return ColumnReorderScripts.Rebuild(Table!, _columns, CurrentOrder(), _enterprise, _usePrimaryKey, _dependentDdl ?? string.Empty);
+        return _scripts!.Rebuild(Table!, _columns, CurrentOrder(), _enterprise, _usePrimaryKey, _dependentDdl ?? string.Empty);
     }
 
     /// <summary>표 DDL 에서 제약·인덱스·트리거·권한·주석 DDL 부분을 한 번만 읽는다.</summary>
     private async Task EnsureDependentDdlAsync(CancellationToken ct)
     {
-        if (_dependentDdlLoaded || _session is null || Table is null)
+        if (_dependentDdlLoaded || _session is null || Table is null || _scripts is null)
         {
             return;
         }
@@ -407,7 +427,7 @@ public sealed partial class ColumnReorderViewModel : ObservableObject, IDisposab
             var table = await _meta.GetDdlAsync(_session, Table, plain, ct).ConfigureAwait(true);
             var full = await _meta.GetDdlAsync(_session, Table, new DdlOptions { SqlTerminator = true, IncludeDependentObjects = true }, ct)
                 .ConfigureAwait(true);
-            _dependentDdl = ColumnReorderScripts.DependentPart(table, full);
+            _dependentDdl = _scripts.DependentPart(table, full);
         }
         catch (OperationCanceledException)
         {
@@ -424,7 +444,7 @@ public sealed partial class ColumnReorderViewModel : ObservableObject, IDisposab
 
     private async Task ScanSourcesAsync(ISession session, DbObjectRef table)
     {
-        if (_reorder is null)
+        if (_reorder is null || _scripts is null)
         {
             return;
         }
@@ -436,7 +456,7 @@ public sealed partial class ColumnReorderViewModel : ObservableObject, IDisposab
         try
         {
             var lines = await _reorder.FindReferencingSourceLinesAsync(session, table, ct).ConfigureAwait(true);
-            var hits = ColumnReorderSourceScan.Filter(lines, table);
+            var hits = _scripts.FilterRiskHits(lines, table);
             Warnings.Clear();
             foreach (var h in hits.Take(MaxWarnings))
             {

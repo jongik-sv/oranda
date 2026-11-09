@@ -15,19 +15,23 @@ namespace Oranda.App.Tests.Features.ConnectionManager;
 // 소유: TSK-03-04. 접속 관리자 사용성 개선(찾기·묶기·정렬, 행 동작·단축키, 접속 시험, 연결 문자열, 편집 상태, 배치) 시험.
 // 서비스·가짜 저장소는 ConnectionManagerTests.cs 의 ServiceFixture 를 같이 쓴다.
 
-/// <summary>접속 시험 가짜 도구: 받은 프로필·비밀번호를 적어 두고 <see cref="Behavior"/> 대로 답한다(기본은 26ai 성공).</summary>
-internal sealed class StubConnectionTester : IConnectionTester
+/// <summary>접속 시험 가짜 도구: 받은 프로필·비밀번호를 적어 두고 <see cref="Behavior"/> 대로 답한다(기본은 26ai 성공). <see cref="FakeConnectionProbe"/> 가 위임한다.</summary>
+internal sealed class StubConnectionTester
 {
-    public Func<ConnectionProfile, string, CancellationToken, Task<ConnectionProbeResult>> Behavior { get; set; } =
-        (_, _, _) => Task.FromResult(ConnectionProbeResult.Ok("23.26.0.0.0"));
+    public Func<ConnectionProfile, string, CancellationToken, Task<ServerProbeResult>> Behavior { get; set; } =
+        (_, _, _) => Task.FromResult(ServerProbeResult.Ok("23.26.0.0.0"));
 
     public List<(ConnectionProfile Profile, string Password)> Calls { get; } = [];
 
-    public Task<ConnectionProbeResult> ProbeAsync(ConnectionProfile driverProfile, string password, CancellationToken ct)
+    public Task<ServerProbeResult> ProbeAsync(ConnectionProfile profile, string password, CancellationToken ct)
     {
-        Calls.Add((driverProfile, password));
-        return Behavior(driverProfile, password, ct);
+        Calls.Add((profile, password));
+        return Behavior(profile, password, ct);
     }
+
+    /// <summary>서버 오류 번호가 붙은 실패 결과(Oracle).</summary>
+    public static ServerProbeResult Fail(int number, string message) =>
+        ServerProbeResult.Fail(new Oranda.Core.Execution.DbError($"ORA-{number:00000}", message) { Number = number, Dbms = Dbms.Oracle }, message);
 }
 
 // 폼 높이를 픽셀로 단정하는 시험이 있다. 앱 리소스(글자 크기=UiScale)는 프로세스에 하나라서 병렬로 도는 설정·테마 시험이 그 값을 바꾸면 높이가 달라진다.
@@ -398,7 +402,7 @@ public sealed class ConnectionManagerUxTests
     public async Task Failed_test_shows_ora_number_and_message_in_red(int number, string driverMessage, string shown)
     {
         using var fx = new ServiceFixture();
-        fx.Tester.Behavior = (_, _, _) => Task.FromResult(ConnectionProbeResult.Fail(number, driverMessage));
+        fx.Tester.Behavior = (_, _, _) => Task.FromResult(StubConnectionTester.Fail(number, driverMessage));
         var vm = await SelectAsync(fx, "ft-dev");
 
         await vm.TestCommand.ExecuteAsync(null);
@@ -413,7 +417,7 @@ public sealed class ConnectionManagerUxTests
     public async Task Unsupported_server_version_is_reported_as_a_failed_test()
     {
         using var fx = new ServiceFixture();
-        fx.Tester.Behavior = (_, _, _) => Task.FromResult(new ConnectionProbeResult(false, "12.2.0.1.0", null, "12c 는 지원하지 않는다"));
+        fx.Tester.Behavior = (_, _, _) => Task.FromResult(ServerProbeResult.Unsupported("12.2.0.1.0", "12c 는 지원하지 않는다"));
         var vm = await SelectAsync(fx, "ft-dev");
 
         await vm.TestCommand.ExecuteAsync(null);
@@ -426,7 +430,7 @@ public sealed class ConnectionManagerUxTests
     public async Task Test_without_stored_password_asks_and_never_saves_or_shows_the_typed_password()
     {
         using var fx = new ServiceFixture();
-        fx.Tester.Behavior = (_, pw, _) => Task.FromResult(ConnectionProbeResult.Fail(1017, $"ORA-01017: rejected {pw}"));
+        fx.Tester.Behavior = (_, pw, _) => Task.FromResult(StubConnectionTester.Fail(1017, $"ORA-01017: rejected {pw}"));
         var vm = await SelectAsync(fx, "zeta");
         var asked = 0;
         vm.AskPassword = _ =>
@@ -445,7 +449,7 @@ public sealed class ConnectionManagerUxTests
         Assert.DoesNotContain("typed-secret", fx.ConnectionsJson, StringComparison.Ordinal);
 
         // 비밀번호 칸에 적은 값이 있으면 묻지 않고 그 값을 쓴다(저장하지 않는다).
-        fx.Tester.Behavior = (_, _, _) => Task.FromResult(ConnectionProbeResult.Ok("19.24.0.0.0"));
+        fx.Tester.Behavior = (_, _, _) => Task.FromResult(ServerProbeResult.Ok("19.24.0.0.0"));
         vm.Editor!.Password = "field-secret";
         await vm.TestCommand.ExecuteAsync(null);
         Assert.Equal(1, asked);
@@ -471,7 +475,7 @@ public sealed class ConnectionManagerUxTests
         {
             started.TrySetResult();
             await Task.Delay(Timeout.Infinite, ct);
-            return ConnectionProbeResult.Ok("23.26.0.0.0");
+            return ServerProbeResult.Ok("23.26.0.0.0");
         };
         var vm = await SelectAsync(fx, "ft-dev");
 
@@ -501,7 +505,7 @@ public sealed class ConnectionManagerUxTests
         fx.Tester.Behavior = async (_, _, ct) =>
         {
             await Task.Delay(Timeout.Infinite, ct);
-            return ConnectionProbeResult.Ok("23.26.0.0.0");
+            return ServerProbeResult.Ok("23.26.0.0.0");
         };
         var vm = await SelectAsync(fx, "ft-dev");
         vm.Editor!.ConnectTimeoutSeconds = 1;

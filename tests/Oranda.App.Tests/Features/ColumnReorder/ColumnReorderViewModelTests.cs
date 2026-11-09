@@ -1,4 +1,5 @@
 using Oranda.App.Features.ColumnReorder;
+using Oranda.App.Tests.TestSupport;
 using Oranda.Core.Execution;
 using Oranda.Core.Metadata;
 using Oranda.Core.Schema;
@@ -18,7 +19,7 @@ public class ColumnReorderViewModelTests
         var reorder = new ReorderProvider();
         setup?.Invoke(meta, reorder);
         var exec = new ReorderExec();
-        var vm = new ColumnReorderViewModel(meta, reorder, exec);
+        var vm = new ColumnReorderViewModel(meta, reorder, exec, OracleDbmsServices.Provider);
         await vm.LoadAsync(session ?? new ReorderSession(), Emp);
         return (vm, meta, reorder, exec);
     }
@@ -281,6 +282,66 @@ public class ColumnReorderViewModelTests
         Assert.False(vm.IsUnsupported);
         vm.MoveTo(vm.Items[1], 0);
         Assert.True(vm.CanPreview);
+    }
+
+    [Fact]
+    public async Task Without_a_selector_the_feature_is_disabled_with_a_reason_and_no_exception()
+    {
+        var vm = new ColumnReorderViewModel(new ReorderMeta(), new ReorderProvider(), new ReorderExec()); // 서비스 공급자 없음 = 선택기 없음
+
+        await vm.LoadAsync(new ReorderSession(), Emp);
+
+        Assert.True(vm.IsUnsupported);
+        Assert.Contains("구현이 없다", vm.StatusText, StringComparison.Ordinal);
+        Assert.False(vm.CanPreview);
+        Assert.False(await vm.RunAsync());
+        Assert.Empty(vm.Items);
+    }
+
+    [Fact]
+    public async Task The_script_text_comes_from_the_implementation_the_selector_picks_for_the_session_dbms()
+    {
+        var selector = new Oranda.Core.Composition.DbmsServiceTable()
+            .Add<IColumnReorderScripts>(Oranda.Core.Connection.Dbms.Oracle, () => new MarkedScripts(OracleDbmsServices.ColumnReorderScripts));
+        var services = new SelectorOnly(selector);
+        var vm = new ColumnReorderViewModel(new ReorderMeta(), new ReorderProvider(), new ReorderExec(), services);
+        await vm.LoadAsync(new ReorderSession(), Emp);
+        vm.Method = ColumnReorderMethod.Rebuild;
+        vm.MoveTo(vm.Items[1], 0);
+
+        await vm.ShowPreviewAsync();
+
+        Assert.StartsWith("-- 가짜 구현", vm.PreviewText, StringComparison.Ordinal);
+    }
+
+    private sealed class SelectorOnly(Oranda.Core.Composition.IDbmsServiceSelector selector) : IServiceProvider
+    {
+        public object? GetService(Type serviceType) => serviceType == typeof(Oranda.Core.Composition.IDbmsServiceSelector) ? selector : null;
+    }
+
+    /// <summary>Rebuild 만 표시를 붙이고 나머지는 Oracle 구현에 넘기는 가짜.</summary>
+    private sealed class MarkedScripts(IColumnReorderScripts inner) : IColumnReorderScripts
+    {
+        public Oranda.Core.Connection.Dbms Dbms => inner.Dbms;
+
+        public IReadOnlyList<string> BlockReasons(ColumnReorderMethod method, IReadOnlyList<ColumnInfo> columns, ColumnReorderTraits traits, bool supportsInvisibleColumns)
+            => inner.BlockReasons(method, columns, traits, supportsInvisibleColumns);
+
+        public int FirstDifference(IReadOnlyList<string> original, IReadOnlyList<string> desired) => inner.FirstDifference(original, desired);
+
+        public IReadOnlyList<SqlStatement> InvisibleVisible(DbObjectRef table, IReadOnlyList<string> original, IReadOnlyList<string> desired)
+            => inner.InvisibleVisible(table, original, desired);
+
+        public SqlStatement AsSingleBlock(DbObjectRef table, IReadOnlyList<SqlStatement> statements) => inner.AsSingleBlock(table, statements);
+
+        public string ToText(IReadOnlyList<SqlStatement> statements) => inner.ToText(statements);
+
+        public string Rebuild(DbObjectRef table, IReadOnlyList<ColumnInfo> columns, IReadOnlyList<string> desired, bool enterprise, bool usePrimaryKey, string dependentDdl)
+            => "-- 가짜 구현\n" + inner.Rebuild(table, columns, desired, enterprise, usePrimaryKey, dependentDdl);
+
+        public string DependentPart(string tableDdl, string fullDdl) => inner.DependentPart(tableDdl, fullDdl);
+
+        public IReadOnlyList<ColumnReorderRiskHit> FilterRiskHits(IEnumerable<SourceSearchHit> lines, DbObjectRef table) => inner.FilterRiskHits(lines, table);
     }
 
     private static async Task HeadlessWait(Func<bool> condition)

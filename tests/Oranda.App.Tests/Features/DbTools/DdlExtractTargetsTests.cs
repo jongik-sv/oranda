@@ -6,6 +6,7 @@ using Avalonia.Threading;
 using Avalonia.VisualTree;
 using Oranda.App.Features.DbTools;
 using Oranda.App.Tests.Shell.Headless;
+using Oranda.App.Tests.TestSupport;
 using Oranda.Core.Metadata;
 using Oranda.Core.Sessions;
 using Oranda.Testing;
@@ -31,7 +32,7 @@ public class DdlExtractTargetsTests(ITestOutputHelper output)
 
     private static DdlExtractViewModel NewVm(FakeAdmin admin, FakeMeta? meta = null, bool attach = true)
     {
-        var vm = new DdlExtractViewModel(meta ?? new FakeMeta(), admin) { TargetDebounceMilliseconds = 20 };
+        var vm = new DdlExtractViewModel(meta ?? new FakeMeta(), admin, OracleDbmsServices.Provider) { TargetDebounceMilliseconds = 20 };
         if (attach)
         {
             vm.Attach(new FakeSession());
@@ -336,7 +337,7 @@ public class DdlExtractTargetsTests(ITestOutputHelper output)
         try
         {
             var meta = new FakeMeta();
-            var vm = new DdlExtractViewModel(meta);
+            var vm = new DdlExtractViewModel(meta, services: OracleDbmsServices.Provider);
             vm.Attach(new FakeSession());
             vm.OutputDirectory = dir;
 

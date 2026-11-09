@@ -13,6 +13,7 @@ using Oranda.App.Features.SchemaBrowser;
 using Oranda.App.Shell;
 using Oranda.Core.Execution;
 using Oranda.Core.Metadata;
+using Oranda.Core.Schema;
 using Oranda.Core.Sessions;
 using Oranda.Language.Errors;
 using Oranda.Core.Shell;
@@ -165,6 +166,7 @@ public sealed partial class ObjectSearchViewModel : ToolPanelViewModelBase
     private readonly IServiceProvider? _services;
     private ISchemaAdminProvider? _admin;
     private IExecutionService? _exec;
+    private readonly ISchemaStatements? _statements;
     private int _generation;
     private CancellationTokenSource? _searchCts;
     private int _sourceGeneration;
@@ -181,10 +183,11 @@ public sealed partial class ObjectSearchViewModel : ToolPanelViewModelBase
     }
 
     /// <summary>시험용: 서비스를 직접 넣는다.</summary>
-    internal ObjectSearchViewModel(ISchemaAdminProvider admin, IExecutionService exec)
+    internal ObjectSearchViewModel(ISchemaAdminProvider admin, IExecutionService exec, ISchemaStatements? statements = null)
     {
         _admin = admin;
         _exec = exec;
+        _statements = statements;
     }
 
     /// <summary>시험용: INVALID Java 객체(JAVA SOURCE·JAVA CLASS)를 묻는 메타데이터 제공자(기본 = 서비스의 <see cref="IMetadataProvider"/>).</summary>
@@ -620,6 +623,12 @@ public sealed partial class ObjectSearchViewModel : ToolPanelViewModelBase
             return;
         }
 
+        if (ResolveStatements() is not { } statements)
+        {
+            StatusText = NoStatementsText;
+            return;
+        }
+
         var owner = string.IsNullOrWhiteSpace(Owner) ? DbToolsSupport.DefaultOwner(session) : Owner.Trim().ToUpperInvariant();
         var query = new ObjectSearchQuery { Owner = owner, InvalidOnly = true, Limit = 0 };
         IsBusy = true;
@@ -642,7 +651,7 @@ public sealed partial class ObjectSearchViewModel : ToolPanelViewModelBase
                 foreach (var obj in pending)
                 {
                     ct.ThrowIfCancellationRequested();
-                    var stmt = BuildCompile(obj);
+                    var stmt = statements.Compile(obj);
                     if (stmt is null)
                     {
                         continue;
@@ -678,7 +687,7 @@ public sealed partial class ObjectSearchViewModel : ToolPanelViewModelBase
             var stillInvalid = (await InvalidTargetsAsync(admin, session, query, ct)).ToHashSet();
             foreach (var obj in initial)
             {
-                CompileResults.Add(Classify(obj, stillInvalid.Contains(obj), failures.GetValueOrDefault(obj) ?? (stopped ? stopMessage : null)));
+                CompileResults.Add(Classify(obj, stillInvalid.Contains(obj), failures.GetValueOrDefault(obj) ?? (stopped ? stopMessage : null), statements));
             }
 
             var ok = CompileResults.Count(r => r.Outcome == CompileOutcome.Compiled);
@@ -735,9 +744,9 @@ public sealed partial class ObjectSearchViewModel : ToolPanelViewModelBase
         return list;
     }
 
-    internal static CompileResultItem Classify(DbObjectRef obj, bool stillInvalid, string? failure)
+    internal static CompileResultItem Classify(DbObjectRef obj, bool stillInvalid, string? failure, ISchemaStatements statements)
     {
-        if (BuildCompile(obj) is null)
+        if (statements.Compile(obj) is null)
         {
             return new CompileResultItem(obj, CompileOutcome.Skipped, "컴파일할 수 없는 유형");
         }
@@ -786,21 +795,21 @@ public sealed partial class ObjectSearchViewModel : ToolPanelViewModelBase
 
     /// <summary>항목 하나를 영구 삭제한다(이름 재입력 확인은 정책 관문이 한다). 항목을 안 주면 선택 항목.</summary>
     public Task PurgeAsync(RecycleBinItem? item = null, CancellationToken ct = default)
-        => ChangeRecycleBinAsync(item ?? SelectedRecycle?.Item, static i => BuildPurge(i), "비웠다", ct);
+        => ChangeRecycleBinAsync(item ?? SelectedRecycle?.Item, static (s, i) => s.PurgeItem(i), "비웠다", ct);
 
     /// <summary>휴지통 전체를 비운다.</summary>
     public Task PurgeAllAsync(CancellationToken ct = default)
-        => ChangeRecycleBinAsync(null, _ => BuildPurgeAll(), "휴지통을 모두 비웠다", ct, allowNoItem: true);
+        => ChangeRecycleBinAsync(null, static (s, _) => s.PurgeAll(), "휴지통을 모두 비웠다", ct, allowNoItem: true);
 
     /// <summary>항목을 되살린다(<see cref="FlashbackName"/> 이 있으면 그 이름으로).</summary>
     public Task FlashbackAsync(RecycleBinItem? item = null, CancellationToken ct = default)
     {
         // 새 이름은 따옴표로 감싸 문장에 들어가므로 사전 이름으로 정리한다: 따옴표 없이 적은 소문자는 대문자로(소문자 표가 생기지 않게).
         var rename = string.IsNullOrWhiteSpace(FlashbackName) ? null : Oranda.Language.Editing.SelectAnalyzer.NormalizeIdentifier(FlashbackName.Trim());
-        return ChangeRecycleBinAsync(item ?? SelectedRecycle?.Item, i => BuildFlashback(i, rename), "되살렸다", ct);
+        return ChangeRecycleBinAsync(item ?? SelectedRecycle?.Item, (s, i) => s.Flashback(i, rename), "되살렸다", ct);
     }
 
-    private async Task ChangeRecycleBinAsync(RecycleBinItem? item, Func<RecycleBinItem, SqlStatement> build, string doneText,
+    private async Task ChangeRecycleBinAsync(RecycleBinItem? item, Func<ISchemaStatements, RecycleBinItem, SqlStatement> build, string doneText,
                                              CancellationToken ct, bool allowNoItem = false)
     {
         if (Session is not { } session || ResolveExec() is not { } exec)
@@ -821,10 +830,16 @@ public sealed partial class ObjectSearchViewModel : ToolPanelViewModelBase
             return;
         }
 
+        if (ResolveStatements() is not { } statements)
+        {
+            StatusText = NoStatementsText;
+            return;
+        }
+
         IsBusy = true;
         try
         {
-            var outcome = await DbToolsSupport.RunAsync(exec, session, build(item!), ct);
+            var outcome = await DbToolsSupport.RunAsync(exec, session, build(statements, item!), ct);
             StatusText = outcome.Succeeded ? doneText : (outcome.Status == ExecutionStatus.Denied ? "막힘: " : "실패: ") + outcome.Message;
             if (outcome.Succeeded)
             {
@@ -846,14 +861,11 @@ public sealed partial class ObjectSearchViewModel : ToolPanelViewModelBase
         }
     }
 
-    // Oracle 어셈블리 형식은 아래 작은 메서드 안에서만 쓴다(처음 부를 때 올라온다).
-    private static SqlStatement? BuildCompile(DbObjectRef obj) => Oranda.Oracle.Schema.SchemaStatements.Compile(obj);
+    /// <summary>세션의 DBMS 용 객체 관리 문장 만들기. 선택기가 없거나 그 DBMS 용 구현이 없으면 null(기능을 쓸 수 없다).</summary>
+    private ISchemaStatements? ResolveStatements()
+        => _statements ?? DbmsServices.For<ISchemaStatements>(_services, Session);
 
-    private static SqlStatement BuildPurge(RecycleBinItem item) => Oranda.Oracle.Schema.SchemaStatements.PurgeItem(item);
-
-    private static SqlStatement BuildPurgeAll() => Oranda.Oracle.Schema.SchemaStatements.PurgeAll();
-
-    private static SqlStatement BuildFlashback(RecycleBinItem item, string? rename) => Oranda.Oracle.Schema.SchemaStatements.Flashback(item, rename);
+    private string NoStatementsText => Session is { } s ? $"이 DBMS({s.Profile.Dbms}) 용 객체 관리 구현이 없다" : "접속이 없다";
 
     private ISchemaAdminProvider? ResolveAdmin()
         => _admin ??= (ISchemaAdminProvider?)_services?.GetService(typeof(ISchemaAdminProvider));

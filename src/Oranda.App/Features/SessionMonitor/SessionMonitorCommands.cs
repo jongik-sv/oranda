@@ -145,9 +145,9 @@ public static class SessionMonitorCommands
     Placements = ["menu:monitor/kill@210", "context:monitor/kill@30"])]
 [OrandaCommand("oranda.monitor.disconnectSession", CommandCategory.Monitor, When = "monitorFocus", Enablement = "monitorSessionSelected && canKillSession",
     Placements = ["menu:monitor/disconnect@220", "context:monitor/disconnect@31"])]
-[OrandaCommand("oranda.monitor.traceOn", CommandCategory.Monitor, When = "monitorFocus", Enablement = "monitorSessionSelected && canTraceSessions",
+[OrandaCommand("oranda.monitor.traceOn", CommandCategory.Monitor, When = "monitorFocus", Enablement = "!unsupportedSessionTrace && monitorSessionSelected && canTraceSessions",
     Placements = ["menu:monitor/traceOn@230", "context:monitor/traceOn@40"])]
-[OrandaCommand("oranda.monitor.traceOff", CommandCategory.Monitor, When = "monitorFocus", Enablement = "monitorSessionSelected && canTraceSessions",
+[OrandaCommand("oranda.monitor.traceOff", CommandCategory.Monitor, When = "monitorFocus", Enablement = "!unsupportedSessionTrace && monitorSessionSelected && canTraceSessions",
     Placements = ["menu:monitor/traceOff@231", "context:monitor/traceOff@41"])]
 public sealed class SessionMonitorCommandHandler : ICommandHandler
 {

@@ -43,6 +43,9 @@ public sealed partial class ObjectDetailViewModel
     /// <summary>시험용: 실행 엔진(기본 = 서비스의 <see cref="IExecutionService"/>).</summary>
     internal IExecutionService? Exec { get; set; }
 
+    /// <summary>시험용: 컴파일 문장을 만드는 DBMS 별 구현(기본 = 서비스 공급자의 선택기가 세션의 DBMS 로 고른 <see cref="Oranda.Core.Schema.ISchemaStatements"/>).</summary>
+    internal Oranda.Core.Schema.ISchemaStatements? Statements { get; set; }
+
     /// <summary>시험용: 새 SQL 탭에 글을 넣는 방법(글, 접속 프로필). 기본 = <see cref="SqlEditor.SqlEditorHost"/> 의 새 문서.</summary>
     internal Func<string, Guid?, bool>? EditorOpener { get; set; }
 
@@ -110,7 +113,14 @@ public sealed partial class ObjectDetailViewModel
             return false;
         }
 
-        if (BuildJavaCompile(target) is not { } stmt)
+        var statements = Statements ?? DbmsServices.For<Oranda.Core.Schema.ISchemaStatements>(_services, session);
+        if (statements is null)
+        {
+            StatusText = $"이 DBMS({session.Profile.Dbms}) 용 객체 컴파일 구현이 없다";
+            return false;
+        }
+
+        if (statements.Compile(target) is not { } stmt)
         {
             return false;
         }
@@ -201,9 +211,6 @@ public sealed partial class ObjectDetailViewModel
         tab.ConnectionProfileId = profileId;
         return true;
     }
-
-    // Oracle 어셈블리 형식은 이 작은 메서드 안에서만 쓴다(처음 부를 때 올라온다).
-    private static SqlStatement? BuildJavaCompile(DbObjectRef target) => Oranda.Oracle.Schema.SchemaStatements.Compile(target);
 
     private async Task<IReadOnlyList<CompileError>> ReadJavaErrorsAsync(ISession session, DbObjectRef target, CancellationToken ct)
     {

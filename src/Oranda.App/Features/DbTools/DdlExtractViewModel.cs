@@ -82,23 +82,26 @@ public sealed partial class DdlExtractViewModel : ToolPanelViewModelBase
     }
 
     /// <summary>시험용: 제공자와 실행기를 직접 넣는다.</summary>
-    internal DdlExtractViewModel(IMetadataProvider meta, ISchemaAdminProvider? admin = null)
+    internal DdlExtractViewModel(IMetadataProvider meta, ISchemaAdminProvider? admin = null, IServiceProvider? services = null)
         : this()
     {
         _meta = meta;
         Admin = admin;
+        _services = services;
     }
 
-    /// <summary>의존 순서(Oracle 쪽 <c>DdlBulkExporter.DefaultTypes</c> 와 같다 — 시험이 맞는지 본다).</summary>
+    /// <summary>
+    /// 처음 보이는 유형 목록의 의존 순서(Oracle 쪽 <c>DdlBulkExporter.DefaultTypes</c> 와 같다 — 시험이 맞는지 본다).
+    /// 접속하면(<see cref="Attach"/>) 세션의 DBMS 용 <see cref="IDdlBulkExporter.DefaultTypes"/> 가 다르면 그 목록으로 바꾼다.
+    /// </summary>
     public static IReadOnlyList<string> DefaultTypes { get; } =
     [
         "SEQUENCE", "TYPE", "TABLE", "VIEW", "MATERIALIZED VIEW", "SYNONYM", "FUNCTION", "PROCEDURE",
         "PACKAGE", "PACKAGE BODY", "TYPE BODY", "TRIGGER",
     ];
 
-    /// <summary>시험용: 추출 실행기를 바꾼다(기본 = Oracle 쪽 <c>DdlBulkExporter</c>).</summary>
-    internal Func<IMetadataProvider, ISession, DdlExtractPlan, IProgress<(int Done, int Total)>?, CancellationToken, Task<DdlExtractOutcome>> Runner { get; set; }
-        = RunWithExporterAsync;
+    /// <summary>시험용: 추출 실행기를 바꾼다(기본 = 세션의 DBMS 용 <see cref="IDdlBulkExporter"/>).</summary>
+    internal Func<IMetadataProvider, ISession, DdlExtractPlan, IProgress<(int Done, int Total)>?, CancellationToken, Task<DdlExtractOutcome>>? Runner { get; set; }
 
     public ISession? Session { get; private set; }
 
@@ -172,8 +175,32 @@ public sealed partial class DdlExtractViewModel : ToolPanelViewModelBase
             OutputDirectory = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "oranda-ddl");
         }
 
+        ApplyExporterTypes(session);
         OnPropertyChanged(nameof(CanRun));
         StartRefresh(0);
+    }
+
+    // 세션의 DBMS 용 기본 유형 목록이 처음 목록과 다르면 바꾼다(같으면 사용자가 고른 체크를 건드리지 않는다).
+    private void ApplyExporterTypes(ISession session)
+    {
+        var exporter = DbmsServices.For<IDdlBulkExporter>(_services, session);
+        if (exporter is null || exporter.DefaultTypes.SequenceEqual(TypeChoices.Select(t => t.Name), StringComparer.Ordinal))
+        {
+            return;
+        }
+
+        foreach (var old in TypeChoices)
+        {
+            old.PropertyChanged -= OnTypeChoiceChanged;
+        }
+
+        TypeChoices.Clear();
+        foreach (var t in exporter.DefaultTypes)
+        {
+            var choice = new DdlTypeChoice(t, true);
+            choice.PropertyChanged += OnTypeChoiceChanged;
+            TypeChoices.Add(choice);
+        }
     }
 
     public DdlOptions CurrentOptions => new()
@@ -286,7 +313,7 @@ public sealed partial class DdlExtractViewModel : ToolPanelViewModelBase
         try
         {
             var progress = new Progress<(int Done, int Total)>(p => Progress = p.Total == 0 ? 0 : 100.0 * p.Done / p.Total);
-            var outcome = await Runner(meta, session, plan, progress, ct);
+            var outcome = await (Runner ?? RunWithExporterAsync)(meta, session, plan, progress, ct);
             foreach (var row in outcome.Rows)
             {
                 Results.Add(row);
@@ -313,10 +340,12 @@ public sealed partial class DdlExtractViewModel : ToolPanelViewModelBase
         }
     }
 
-    // Oracle 어셈블리 형식은 이 메서드 안에서만 쓴다(처음 부를 때 올라온다).
-    private static async Task<DdlExtractOutcome> RunWithExporterAsync(IMetadataProvider meta, ISession session, DdlExtractPlan plan,
-                                                                      IProgress<(int Done, int Total)>? progress, CancellationToken ct)
+    // 세션의 DBMS 용 추출기를 골라 돌린다. 구현이 없으면 NotSupportedException(RunAsync 가 상태 줄에 보인다).
+    private async Task<DdlExtractOutcome> RunWithExporterAsync(IMetadataProvider meta, ISession session, DdlExtractPlan plan,
+                                                               IProgress<(int Done, int Total)>? progress, CancellationToken ct)
     {
+        var exporter = DbmsServices.For<IDdlBulkExporter>(_services, session)
+            ?? throw new NotSupportedException($"이 DBMS({session.Profile.Dbms}) 용 DDL 일괄 추출 구현이 없다");
         var request = new Oranda.Core.Schema.DdlExtractRequest
         {
             Owner = plan.Owner,
@@ -329,7 +358,7 @@ public sealed partial class DdlExtractViewModel : ToolPanelViewModelBase
             Objects = plan.Objects,
             Layout = plan.FilePerObject ? Oranda.Core.Schema.DdlExtractLayout.FilePerObject : Oranda.Core.Schema.DdlExtractLayout.SingleFile,
         };
-        var result = await Oranda.Oracle.Schema.DdlBulkExporter.ExtractAsync(meta, session, request, progress, ct);
+        var result = await exporter.ExtractAsync(meta, session, request, progress, ct);
         return new DdlExtractOutcome(
             [.. result.Items.Select(i => new DdlExtractRow($"{i.Ref.ObjectType} {i.Ref.Owner}.{i.Ref.Name}", i.Succeeded, i.Error))],
             result.Files);

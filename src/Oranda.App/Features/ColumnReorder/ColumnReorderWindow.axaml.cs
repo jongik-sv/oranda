@@ -3,7 +3,6 @@ using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.VisualTree;
-using Oranda.Oracle.Schema;
 using Oranda.Core.Schema;
 
 namespace Oranda.App.Features.ColumnReorder;

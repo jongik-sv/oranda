@@ -7,8 +7,10 @@ using Oranda.App.Shell;
 using Oranda.App.Shell.Composition;
 using Oranda.App.Tests.Shell;
 using Oranda.App.Tests.Shell.Headless;
+using Oranda.Core.Composition;
 using Oranda.Core.Connection;
 using Oranda.Core.Events;
+using Oranda.Core.Execution;
 using Oranda.Core.Security;
 using Oranda.Core.Sessions;
 using Oranda.Core.Storage;
@@ -145,7 +147,8 @@ internal sealed class StubSessionManager(IEventBus events) : ISessionManager
     }
 }
 
-internal sealed class StubPasswordChanger : IPasswordChanger
+/// <summary>비밀번호 변경 기록용 가짜: 받은 (현재, 새) 비밀번호를 적어 두고 <see cref="Failure"/> 가 있으면 그 예외로 실패한다. <see cref="FakeConnectionProbe"/> 가 쓴다.</summary>
+internal sealed class StubPasswordChanger
 {
     public List<(string Old, string New)> Calls { get; } = [];
 
@@ -156,6 +159,37 @@ internal sealed class StubPasswordChanger : IPasswordChanger
         Calls.Add((oldPassword, newPassword));
         return Failure is null ? Task.CompletedTask : Task.FromException(Failure);
     }
+}
+
+/// <summary>Oracle 용 <see cref="IConnectionProbe"/> 가짜: 접속 시험은 <see cref="StubConnectionTester"/>, 비밀번호 변경은 <see cref="StubPasswordChanger"/> 가 맡는다.</summary>
+internal sealed class FakeConnectionProbe(StubConnectionTester tester, StubPasswordChanger changer) : IConnectionProbe
+{
+    public Dbms Dbms { get; init; } = Dbms.Oracle;
+
+    public Task<ServerProbeResult> ProbeAsync(ConnectionProfile profile, string password, CancellationToken ct) =>
+        tester.ProbeAsync(profile, password, ct);
+
+    public Task ChangePasswordAsync(ConnectionProfile profile, string oldPassword, string newPassword, CancellationToken ct) =>
+        changer.ChangeAsync(profile, oldPassword, newPassword, ct);
+}
+
+/// <summary>
+/// 오류 분류 가짜: <paramref name="expiredNumber"/>(Oracle 28001) 만 <see cref="DbErrorKind.PasswordExpired"/>. 드라이버 예외 형식은 모른다(null) —
+/// 글 속 「ORA-28001」·「TBR-…」 은 앱이 <c>Classify</c> 로 옮긴다.
+/// </summary>
+internal sealed class FakeErrorClassifier(Dbms dbms, int expiredNumber) : IDbErrorClassifier
+{
+    public Dbms Dbms => dbms;
+
+    public DbErrorKind Classify(int number) => number == expiredNumber ? DbErrorKind.PasswordExpired : DbErrorKind.Other;
+
+    public DbError? FromException(Exception exception) => null;
+}
+
+/// <summary>고정된 DBMS 별 구현 고르기 하나만 내는 서비스 공급자(<see cref="Oranda.App.Features.DbmsServices"/> 가 꺼낸다).</summary>
+internal sealed class FixedServices(IDbmsServiceSelector selector) : IServiceProvider
+{
+    public object? GetService(Type serviceType) => serviceType == typeof(IDbmsServiceSelector) ? selector : null;
 }
 
 /// <summary>실제 <c>ConnectionStore</c>(임시 폴더) + 가짜 비밀 저장소·세션 관리자로 서비스를 만든다.</summary>
@@ -173,8 +207,18 @@ internal sealed class ServiceFixture : IDisposable
         Keys = new ContextKeyService();
         Changer = new StubPasswordChanger();
         Tester = new StubConnectionTester();
-        Service = new ConnectionService(Store, Credentials, Sessions, Paths, Events, Changer, Keys, Tester);
+        Probe = new FakeConnectionProbe(Tester, Changer);
+        Selector = new DbmsServiceTable()
+            .Add<IConnectionProbe>(Dbms.Oracle, () => Probe)
+            .Add<IDbErrorClassifier>(Dbms.Oracle, () => new FakeErrorClassifier(Dbms.Oracle, 28001));
+        Service = new ConnectionService(Store, Credentials, Sessions, Paths, Events, Keys, new FixedServices(Selector));
     }
+
+    /// <summary>선택기에 꽂힌 Oracle 용 <see cref="IConnectionProbe"/> 가짜(<see cref="Tester"/>·<see cref="Changer"/> 에 위임).</summary>
+    public FakeConnectionProbe Probe { get; }
+
+    /// <summary>서비스에 주는 DBMS 별 구현 고르기(Oracle: 접속 가짜·오류 분류 가짜).</summary>
+    public DbmsServiceTable Selector { get; }
 
     public string Directory { get; }
 
@@ -619,14 +663,15 @@ public sealed class ConnectionManagerTests
     }
 
     [Fact]
-    public async Task Proxy_profile_is_sent_to_the_driver_as_proxy_bracket_user_but_stored_as_is()
+    public async Task Proxy_profile_is_handed_to_the_session_manager_as_stored_and_stored_as_is()
     {
+        // 드라이버용 proxy[user] 변환은 세션 관리자(Oranda.Oracle, OracleDriverProfile.From)가 한다 — 그쪽 시험이 고정한다.
         using var fx = new ServiceFixture();
         var saved = await fx.Service.SaveProfileAsync(Profile(user: "scott") with { ProxyUser = "app" }, "pw", true, CancellationToken.None);
         await fx.Service.ConnectAsync(saved, null, CancellationToken.None);
 
-        Assert.Equal("app[scott]", fx.Sessions.Calls.Single().Profile.User);
-        Assert.Null(fx.Sessions.Calls.Single().Profile.ProxyUser);
+        Assert.Equal("scott", fx.Sessions.Calls.Single().Profile.User);
+        Assert.Equal("app", fx.Sessions.Calls.Single().Profile.ProxyUser);
         var stored = (await fx.Service.LoadAsync(CancellationToken.None)).Value.Profiles.Single();
         Assert.Equal(("scott", "app"), (stored.User, stored.ProxyUser));
     }
@@ -750,6 +795,71 @@ public sealed class ConnectionManagerTests
         Assert.True(vm.StatusIsError);
         Assert.Contains("12.2.0.1.0", vm.Status, StringComparison.Ordinal);
         Assert.Contains("지원", vm.Status, StringComparison.Ordinal);
+    }
+
+    // ---------- DBMS 별 구현 고르기(A2): 접속 시험·비밀번호 변경·만료 판정은 프로필의 DBMS 용 구현을 쓴다 ----------
+
+    private static ConnectionProfile TiberoProfile() => new("tb", "sys", "localhost:8629/tb", Dbms: Dbms.Tibero);
+
+    [Fact]
+    public async Task Test_connection_uses_the_probe_registered_for_the_profile_dbms_and_passes_the_profile_as_saved()
+    {
+        using var fx = new ServiceFixture();
+        var tibero = new StubConnectionTester { Behavior = (_, _, _) => Task.FromResult(ServerProbeResult.Ok("7.2.0")) };
+        fx.Selector.Add<IConnectionProbe>(Dbms.Tibero, () => new FakeConnectionProbe(tibero, new StubPasswordChanger()) { Dbms = Dbms.Tibero });
+        var profile = TiberoProfile();
+
+        var outcome = await fx.Service.TestConnectionAsync(profile, "pw", CancellationToken.None);
+
+        Assert.True(outcome.Succeeded);
+        Assert.Equal(profile, Assert.Single(tibero.Calls).Profile); // 드라이버용 변환 없이 저장된 그대로
+        Assert.Empty(fx.Tester.Calls); // Oracle 용 구현은 부르지 않았다
+    }
+
+    [Fact]
+    public async Task Test_connection_failure_from_the_probe_is_reported_with_the_dbms_error_code()
+    {
+        using var fx = new ServiceFixture();
+        var tibero = new StubConnectionTester();
+        tibero.Behavior = (_, _, _) => Task.FromResult(ServerProbeResult.Fail(
+            new Oranda.Core.Execution.DbError("TBR-17001", "login denied") { Number = 17001, Dbms = Dbms.Tibero }, "login denied"));
+        fx.Selector.Add<IConnectionProbe>(Dbms.Tibero, () => new FakeConnectionProbe(tibero, new StubPasswordChanger()) { Dbms = Dbms.Tibero });
+
+        var outcome = await fx.Service.TestConnectionAsync(TiberoProfile(), "pw", CancellationToken.None);
+
+        Assert.Equal(ConnectStatus.Failed, outcome.Status);
+        Assert.Equal(17001, outcome.ErrorNumber);
+        Assert.Equal("접속 시험 실패: TBR-17001: login denied", outcome.Message);
+    }
+
+    [Fact]
+    public async Task Test_connection_and_password_change_without_a_driver_for_the_dbms_fail_with_a_message()
+    {
+        using var fx = new ServiceFixture();
+        var profile = TiberoProfile(); // Oracle 구현만 등록되어 있다
+
+        var test = await fx.Service.TestConnectionAsync(profile, "pw", CancellationToken.None);
+        var change = await fx.Service.ChangePasswordAsync(profile, "old", "new!1", CancellationToken.None);
+
+        Assert.Equal(ConnectStatus.Failed, test.Status);
+        Assert.Contains("드라이버가 없", test.Message, StringComparison.Ordinal);
+        Assert.False(change.Succeeded);
+        Assert.Contains("드라이버가 없", change.Message, StringComparison.Ordinal);
+        Assert.Empty(fx.Changer.Calls);
+    }
+
+    [Fact]
+    public async Task Expired_password_is_recognized_by_the_classifier_of_the_profile_dbms()
+    {
+        using var fx = new ServiceFixture();
+        fx.Selector.Add<IDbErrorClassifier>(Dbms.Tibero, () => new FakeErrorClassifier(Dbms.Tibero, 17001));
+        fx.Sessions.Behavior = (_, _) => new InvalidOperationException("TBR-17001: password expired");
+
+        var outcome = await fx.Service.ConnectAsync(TiberoProfile(), "pw", CancellationToken.None);
+
+        Assert.Equal(ConnectStatus.PasswordExpired, outcome.Status);
+        Assert.Contains("TBR-17001", outcome.Message, StringComparison.Ordinal);
+        Assert.Null(fx.Service.ActiveSession);
     }
 
     [Fact]
@@ -964,9 +1074,10 @@ public sealed class ConnectionManagerTests
 
         Assert.True(closed);
         var sent = fx.Sessions.Calls.Single().Profile;
-        Assert.StartsWith("(description=", sent.DataSource, StringComparison.Ordinal);
-        Assert.Contains("MY_WALLET_DIRECTORY=", sent.DataSource, StringComparison.Ordinal);
-        Assert.Contains("s_high.adb.oraclecloud.com", sent.DataSource, StringComparison.Ordinal);
+        // 별칭 펼치기·지갑 위치 알림은 세션 관리자(Oranda.Oracle)가 한다 — 여기서는 저장된 프로필(별칭 + 지갑 폴더)이 그대로 넘어가는지만 본다.
+        Assert.False(sent.DataSource.StartsWith('('));
+        Assert.False(string.IsNullOrWhiteSpace(sent.TnsAdmin));
+        Assert.False(string.IsNullOrWhiteSpace(sent.WalletLocation));
         Assert.Equal("admin-pw", fx.Sessions.Calls.Single().Password);
         Assert.Equal("MYDB", vm.Selected!.Title);
         Assert.NotNull(fx.Service.ActiveSession);
@@ -1026,32 +1137,6 @@ public sealed class ConnectionManagerTests
         TnsResolver.TryFind(SampleTns, "first", out var without);
         var b = TnsResolver.WithWalletDirectory(without, "C:/w");
         Assert.EndsWith("(SECURITY=(MY_WALLET_DIRECTORY=C:/w)))", b, StringComparison.Ordinal);
-    }
-
-    [Fact]
-    public void Driver_profile_resolves_alias_so_tns_admin_is_not_needed_process_wide()
-    {
-        var dir = NewTempDir();
-        try
-        {
-            File.WriteAllText(Path.Combine(dir, "tnsnames.ora"), SampleTns);
-            var profile = new ConnectionProfile("t", "u", "first", TnsAdmin: dir);
-
-            var driver = ConnectionService.ToDriverProfile(profile);
-
-            Assert.StartsWith("(DESCRIPTION=", driver.DataSource, StringComparison.Ordinal);
-            Assert.Null(driver.TnsAdmin);
-            Assert.Equal("first", profile.DataSource);
-
-            // 별칭이 없거나 EZConnect 문자열이면 그대로 둔다.
-            Assert.Equal("nope", ConnectionService.ToDriverProfile(profile with { DataSource = "nope" }).DataSource);
-            var ez = ConnectionService.ToDriverProfile(profile with { DataSource = "h:1521/s" });
-            Assert.Equal("h:1521/s", ez.DataSource);
-        }
-        finally
-        {
-            Directory.Delete(dir, recursive: true);
-        }
     }
 
     // ---------- 창(Headless) ----------
@@ -1150,7 +1235,8 @@ public sealed class ConnectionManagerIntegrationTests : IDisposable
             _fx.Container.GetRequiredService<ISessionManager>(),
             _fx.Paths,
             _fx.Events,
-            keys: _fx.Keys);
+            keys: _fx.Keys,
+            services: _fx.Container);
     }
 
     private static bool Configured =>

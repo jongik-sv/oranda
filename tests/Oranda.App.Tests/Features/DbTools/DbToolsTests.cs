@@ -2,6 +2,7 @@ using System.Runtime.CompilerServices;
 using Oranda.App.Features.DbTools;
 using Oranda.App.Shell;
 using Oranda.App.Tests.Shell;
+using Oranda.App.Tests.TestSupport;
 using Oranda.Core.Connection;
 using Oranda.Core.Execution;
 using Oranda.Core.Metadata;
@@ -26,7 +27,7 @@ public class DbToolsTests
     [Fact]
     public Task Parameter_ddl_preview_is_a_colored_read_only_code_view() => Oranda.App.Tests.Shell.Headless.HeadlessHost.Run(() =>
     {
-        var vm = new DbInfoViewModel();
+        var vm = new DbInfoViewModel(new FakeInfo(), OracleDbmsServices.Provider) { Session = new FakeSession() };
         vm.PickParameter("processes", "300");
         vm.ParameterValue = "400";
         var view = new DbInfoView { DataContext = vm };
@@ -109,7 +110,7 @@ public class DbToolsTests
     [Fact]
     public void Parameter_change_ddl_preview_updates_and_rejects_bad_names()
     {
-        var vm = new DbInfoViewModel();
+        var vm = new DbInfoViewModel(new FakeInfo(), OracleDbmsServices.Provider) { Session = new FakeSession() };
 
         vm.ParameterName = "processes";
         vm.ParameterValue = "400";
@@ -131,7 +132,7 @@ public class DbToolsTests
     [Fact]
     public void Search_query_converts_filters()
     {
-        var vm = new ObjectSearchViewModel(new FakeAdmin(), new FakeExec())
+        var vm = new ObjectSearchViewModel(new FakeAdmin(), new FakeExec(), OracleDbmsServices.Statements)
         {
             Owner = " scott ",
             NameText = "emp*",
@@ -157,7 +158,7 @@ public class DbToolsTests
     public async Task Newer_search_cancels_the_older_one_and_results_are_swapped_in_one_piece()
     {
         var admin = new FakeAdmin { Rows = [new ObjectSearchRow(new DbObjectRef("SCOTT", "OLD", "TABLE"), "VALID", null, null, null)], SearchGate = new TaskCompletionSource() };
-        var vm = new ObjectSearchViewModel(admin, new FakeExec());
+        var vm = new ObjectSearchViewModel(admin, new FakeExec(), OracleDbmsServices.Statements);
         vm.Attach(new FakeSession());
         var swaps = 0;
         vm.PropertyChanged += (_, e) => swaps += e.PropertyName == nameof(vm.Results) ? 1 : 0;
@@ -178,7 +179,7 @@ public class DbToolsTests
     public async Task Invalid_search_lists_the_invalid_objects_of_the_owner()
     {
         var admin = new FakeAdmin { Invalid = [BadProc, BadView] };
-        var vm = new ObjectSearchViewModel(admin, new FakeExec()) { InvalidOnly = true };
+        var vm = new ObjectSearchViewModel(admin, new FakeExec(), OracleDbmsServices.Statements) { InvalidOnly = true };
         vm.Attach(new FakeSession());
 
         await vm.SearchAsync();
@@ -192,7 +193,7 @@ public class DbToolsTests
     public async Task Search_fills_results_and_selection_loads_references()
     {
         var admin = new FakeAdmin { Rows = [new ObjectSearchRow(new DbObjectRef("SCOTT", "EMP", "TABLE"), "VALID", new DateTime(2026, 1, 2), null, 8192)] };
-        var vm = new ObjectSearchViewModel(admin, new FakeExec());
+        var vm = new ObjectSearchViewModel(admin, new FakeExec(), OracleDbmsServices.Statements);
         vm.Attach(new FakeSession());
 
         await vm.SearchAsync();
@@ -215,7 +216,7 @@ public class DbToolsTests
     [Fact]
     public void Source_query_carries_owner_type_text_and_options()
     {
-        var vm = new ObjectSearchViewModel(new FakeAdmin(), new FakeExec())
+        var vm = new ObjectSearchViewModel(new FakeAdmin(), new FakeExec(), OracleDbmsServices.Statements)
         {
             Owner = " scott ",
             SourceText = "v_total",
@@ -232,7 +233,7 @@ public class DbToolsTests
         Assert.Equal("v_total", q.Text);
         Assert.True(q.MatchCase && q.WholeWord && q.UseRegex);
         Assert.Equal(ObjectSearchViewModel.MaxHits, q.Limit);
-        Assert.Empty(new ObjectSearchViewModel(new FakeAdmin(), new FakeExec()).BuildSourceQuery().ObjectTypes);
+        Assert.Empty(new ObjectSearchViewModel(new FakeAdmin(), new FakeExec(), OracleDbmsServices.Statements).BuildSourceQuery().ObjectTypes);
     }
 
     [Fact]
@@ -243,7 +244,7 @@ public class DbToolsTests
         {
             SourceHits = new([new SourceSearchHit(body, 6, "    v_total := 0;  "), new SourceSearchHit(body, 9, "\tRETURN v_total;")], Capped: false),
         };
-        var vm = new ObjectSearchViewModel(admin, new FakeExec()) { SourceText = "v_total" };
+        var vm = new ObjectSearchViewModel(admin, new FakeExec(), OracleDbmsServices.Statements) { SourceText = "v_total" };
         vm.Attach(new FakeSession());
 
         await vm.SearchSourceAsync();
@@ -271,7 +272,7 @@ public class DbToolsTests
         {
             SourceHits = new([new SourceSearchHit(new DbObjectRef("SCOTT", "P", "PROCEDURE"), 1, "x")], Capped: false),
         };
-        var vm = new ObjectSearchViewModel(admin, new FakeExec()) { SourceText = "   " };
+        var vm = new ObjectSearchViewModel(admin, new FakeExec(), OracleDbmsServices.Statements) { SourceText = "   " };
         vm.Attach(new FakeSession());
 
         await vm.SearchSourceAsync();
@@ -307,7 +308,7 @@ public class DbToolsTests
                 new ColumnSearchHit(new DbObjectRef("SCOTT", "EMP_V", "VIEW"), "EMP_ID", "NUMBER(6)", true),
             ], Capped: false),
         };
-        var vm = new ObjectSearchViewModel(admin, new FakeExec());
+        var vm = new ObjectSearchViewModel(admin, new FakeExec(), OracleDbmsServices.Statements);
         vm.Attach(new FakeSession());
 
         await vm.SearchColumnsAsync();
@@ -338,7 +339,7 @@ public class DbToolsTests
         var emp = new DbObjectRef("SCOTT", "EMP", "TABLE");
         var openedSource = new List<(ISession, DbObjectRef, int)>();
         var openedDetail = new List<(ISession, DbObjectRef)>();
-        var vm = new ObjectSearchViewModel(new FakeAdmin(), new FakeExec())
+        var vm = new ObjectSearchViewModel(new FakeAdmin(), new FakeExec(), OracleDbmsServices.Statements)
         {
             OpenSourceAt = (s, r, line, _) =>
             {
@@ -373,7 +374,7 @@ public class DbToolsTests
     [Fact]
     public async Task Opening_hits_without_hooks_or_services_does_nothing()
     {
-        var vm = new ObjectSearchViewModel(new FakeAdmin(), new FakeExec());
+        var vm = new ObjectSearchViewModel(new FakeAdmin(), new FakeExec(), OracleDbmsServices.Statements);
         vm.Attach(new FakeSession());
 
         await vm.OpenSourceHitAsync(new SourceSearchItem(new SourceSearchHit(new DbObjectRef("SCOTT", "P", "PROCEDURE"), 1, "x")));
@@ -394,7 +395,7 @@ public class DbToolsTests
             // 컴파일하면 VALID 로 바뀐다.
             admin.Invalid = [.. admin.Invalid.Where(o => !stmt.Text.Contains(o.Name, StringComparison.Ordinal))];
         };
-        var vm = new ObjectSearchViewModel(admin, exec);
+        var vm = new ObjectSearchViewModel(admin, exec, OracleDbmsServices.Statements);
         vm.Attach(new FakeSession());
 
         await vm.CompileInvalidAsync();
@@ -425,7 +426,7 @@ public class DbToolsTests
             admin.Invalid = [.. admin.Invalid.Where(o => !stmt.Text.Contains(o.Name, StringComparison.Ordinal))];
             java.Invalid = [.. java.Invalid.Where(o => !stmt.Text.Contains(o.Ref.ObjectType, StringComparison.Ordinal))];
         };
-        var vm = new ObjectSearchViewModel(admin, exec) { Metadata = java };
+        var vm = new ObjectSearchViewModel(admin, exec, OracleDbmsServices.Statements) { Metadata = java };
         vm.Attach(new FakeSession());
 
         await vm.CompileInvalidAsync();
@@ -442,7 +443,7 @@ public class DbToolsTests
         Assert.All(vm.CompileResults, r => Assert.Equal(CompileOutcome.Compiled, r.Outcome));
         Assert.Contains("3개 컴파일됨", vm.StatusText);
 
-        var noJvm = new ObjectSearchViewModel(new FakeAdmin { Invalid = [BadProc] }, new FakeExec()) { Metadata = new JavaInvalidMeta { Jvm = false } };
+        var noJvm = new ObjectSearchViewModel(new FakeAdmin { Invalid = [BadProc] }, new FakeExec(), OracleDbmsServices.Statements) { Metadata = new JavaInvalidMeta { Jvm = false } };
         noJvm.Attach(new FakeSession());
         await noJvm.CompileInvalidAsync();
         Assert.Equal([BadProc], noJvm.CompileResults.Select(r => r.Ref));
@@ -453,7 +454,7 @@ public class DbToolsTests
     {
         var exec = new FakeExec { Failure = new DbError("ORA-24344", "success with compilation error") };
         var admin = new FakeAdmin { Invalid = [BadProc] };
-        var vm = new ObjectSearchViewModel(admin, exec);
+        var vm = new ObjectSearchViewModel(admin, exec, OracleDbmsServices.Statements);
         vm.Attach(new FakeSession());
 
         await vm.CompileInvalidAsync();
@@ -469,7 +470,7 @@ public class DbToolsTests
     {
         var exec = new FakeExec { DeniedMessage = "운영 접속입니다" };
         var admin = new FakeAdmin { Invalid = [BadProc, BadView] };
-        var vm = new ObjectSearchViewModel(admin, exec);
+        var vm = new ObjectSearchViewModel(admin, exec, OracleDbmsServices.Statements);
         vm.Attach(new FakeSession());
 
         await vm.CompileInvalidAsync();
@@ -483,7 +484,7 @@ public class DbToolsTests
     public async Task Compile_invalid_is_refused_on_read_only_session_without_calling_engine()
     {
         var exec = new FakeExec();
-        var vm = new ObjectSearchViewModel(new FakeAdmin { Invalid = [BadProc] }, exec);
+        var vm = new ObjectSearchViewModel(new FakeAdmin { Invalid = [BadProc] }, exec, OracleDbmsServices.Statements);
         vm.Attach(new FakeSession(readOnly: true));
 
         await vm.CompileInvalidAsync();
@@ -496,10 +497,83 @@ public class DbToolsTests
     public void Compile_classification()
     {
         var table = new DbObjectRef("SCOTT", "T", "TABLE");
-        Assert.Equal(CompileOutcome.Skipped, ObjectSearchViewModel.Classify(table, true, null).Outcome);
-        Assert.Equal(CompileOutcome.Compiled, ObjectSearchViewModel.Classify(BadProc, false, "ORA-24344").Outcome);
-        Assert.Equal(CompileOutcome.Failed, ObjectSearchViewModel.Classify(BadProc, true, "ORA-00942").Outcome);
-        Assert.Equal(CompileOutcome.StillInvalid, ObjectSearchViewModel.Classify(BadProc, true, "ORA-24344 …").Outcome);
+        Assert.Equal(CompileOutcome.Skipped, ObjectSearchViewModel.Classify(table, true, null, OracleDbmsServices.Statements).Outcome);
+        Assert.Equal(CompileOutcome.Compiled, ObjectSearchViewModel.Classify(BadProc, false, "ORA-24344", OracleDbmsServices.Statements).Outcome);
+        Assert.Equal(CompileOutcome.Failed, ObjectSearchViewModel.Classify(BadProc, true, "ORA-00942", OracleDbmsServices.Statements).Outcome);
+        Assert.Equal(CompileOutcome.StillInvalid, ObjectSearchViewModel.Classify(BadProc, true, "ORA-24344 …", OracleDbmsServices.Statements).Outcome);
+    }
+
+    // ---- DBMS 별 구현 고르기(A3) ----
+
+    [Fact]
+    public async Task Recycle_bin_and_compile_statements_come_from_the_implementation_the_selector_picks()
+    {
+        var exec = new FakeExec();
+        var selector = new Oranda.Core.Composition.DbmsServiceTable().Add<ISchemaStatements>(Dbms.Oracle, () => new FakeStatements());
+        var vm = new ObjectSearchViewModel(new Services(new FakeAdmin { Invalid = [BadProc] }, exec, selector));
+        vm.Attach(new FakeSession());
+
+        await vm.PurgeAllAsync();
+        await vm.CompileInvalidAsync();
+
+        Assert.Equal("PURGE-FAKE", exec.Statements[0].Text);
+        Assert.Contains(exec.Statements, s => s.Text == "COMPILE-FAKE BAD_P");
+    }
+
+    [Fact]
+    public async Task Without_a_selector_object_management_is_disabled_with_a_reason_and_nothing_is_sent()
+    {
+        var exec = new FakeExec();
+        var vm = new ObjectSearchViewModel(new Services(new FakeAdmin { Invalid = [BadProc] }, exec));
+        vm.Attach(new FakeSession());
+
+        await vm.PurgeAllAsync();
+        Assert.Contains("구현이 없다", vm.StatusText, StringComparison.Ordinal);
+
+        vm.StatusText = string.Empty;
+        await vm.CompileInvalidAsync();
+        Assert.Contains("구현이 없다", vm.StatusText, StringComparison.Ordinal);
+        Assert.Empty(exec.Statements);
+    }
+
+    [Fact]
+    public void Without_a_selector_the_parameter_ddl_preview_shows_a_reason_instead_of_throwing()
+    {
+        var vm = new DbInfoViewModel(new FakeInfo()) { Session = new FakeSession() };
+
+        vm.ParameterName = "processes";
+        vm.ParameterValue = "400";
+
+        Assert.Equal(string.Empty, vm.PreviewDdl);
+        Assert.Contains("구현이 없다", vm.PreviewError, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task Ddl_extract_uses_the_exporter_the_selector_picks_and_its_default_types()
+    {
+        var selector = new Oranda.Core.Composition.DbmsServiceTable().Add<IDdlBulkExporter>(Dbms.Oracle, () => new FakeExporter());
+        var vm = new DdlExtractViewModel(new FakeMeta(), services: new Services(selector));
+        vm.Attach(new FakeSession());
+        vm.OutputDirectory = Path.GetTempPath();
+
+        Assert.Equal(["TABLE", "FAKE_TYPE"], vm.TypeChoices.Select(t => t.Name));
+        await vm.RunAsync();
+
+        Assert.Equal("TABLE SCOTT.X", Assert.Single(vm.Results).Title);
+        Assert.Contains("1개 추출", vm.StatusText, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task Ddl_extract_without_a_selector_reports_the_missing_implementation()
+    {
+        var vm = new DdlExtractViewModel(new FakeMeta());
+        vm.Attach(new FakeSession());
+        vm.OutputDirectory = Path.GetTempPath();
+
+        await vm.RunAsync();
+
+        Assert.Contains("구현이 없다", vm.StatusText, StringComparison.Ordinal);
+        Assert.False(vm.IsBusy);
     }
 
     // ---- 휴지통 ----
@@ -511,7 +585,7 @@ public class DbToolsTests
         var exec = new FakeExec();
         var admin = new FakeAdmin { Bin = [item] };
         exec.OnExecute = _ => admin.Bin = [];
-        var vm = new ObjectSearchViewModel(admin, exec);
+        var vm = new ObjectSearchViewModel(admin, exec, OracleDbmsServices.Statements);
         vm.Attach(new FakeSession());
         await vm.LoadRecycleBinAsync();
         vm.SelectedRecycle = vm.RecycleBin[0];
@@ -530,7 +604,7 @@ public class DbToolsTests
     {
         var item = new RecycleBinItem("BIN$x==$0", "EMP", "TABLE", null, null, true, true, null);
         var exec = new FakeExec();
-        var vm = new ObjectSearchViewModel(new FakeAdmin { Bin = [item] }, exec) { FlashbackName = "EMP_BACK" };
+        var vm = new ObjectSearchViewModel(new FakeAdmin { Bin = [item] }, exec, OracleDbmsServices.Statements) { FlashbackName = "EMP_BACK" };
         vm.Attach(new FakeSession());
 
         await vm.FlashbackAsync(item);
@@ -546,13 +620,13 @@ public class DbToolsTests
     public async Task Recyclebin_changes_need_a_target_and_a_writable_session()
     {
         var exec = new FakeExec();
-        var vm = new ObjectSearchViewModel(new FakeAdmin(), exec);
+        var vm = new ObjectSearchViewModel(new FakeAdmin(), exec, OracleDbmsServices.Statements);
         vm.Attach(new FakeSession());
 
         await vm.PurgeAsync();
         Assert.Contains("고르세요", vm.StatusText);
 
-        var ro = new ObjectSearchViewModel(new FakeAdmin(), exec);
+        var ro = new ObjectSearchViewModel(new FakeAdmin(), exec, OracleDbmsServices.Statements);
         ro.Attach(new FakeSession(readOnly: true));
         await ro.PurgeAllAsync();
         Assert.Contains("읽기 전용", ro.StatusText);
@@ -582,7 +656,7 @@ public class DbToolsTests
     {
         var item = new RecycleBinItem("BIN$x==$0", "EMP", "TABLE", null, null, true, true, null);
         var exec = new FakeExec();
-        var vm = new ObjectSearchViewModel(new FakeAdmin { Bin = [item] }, exec) { FlashbackName = " emp_back " };
+        var vm = new ObjectSearchViewModel(new FakeAdmin { Bin = [item] }, exec, OracleDbmsServices.Statements) { FlashbackName = " emp_back " };
         vm.Attach(new FakeSession());
 
         await vm.FlashbackAsync(item);
@@ -592,7 +666,7 @@ public class DbToolsTests
     [Fact]
     public void Plan_carries_filters_options_and_selected_types()
     {
-        var vm = new DdlExtractViewModel(new FakeMeta());
+        var vm = new DdlExtractViewModel(new FakeMeta(), services: OracleDbmsServices.Provider);
         vm.Attach(new FakeSession());
         vm.NameText = "emp";
         vm.IncludeStorage = true;
@@ -619,7 +693,7 @@ public class DbToolsTests
         var dir = Path.Combine(Path.GetTempPath(), "oranda-dbtools-" + Guid.NewGuid().ToString("N")[..8]);
         try
         {
-            var vm = new DdlExtractViewModel(new FakeMeta());
+            var vm = new DdlExtractViewModel(new FakeMeta(), services: OracleDbmsServices.Provider);
             vm.Attach(new FakeSession());
             vm.OutputDirectory = dir;
             vm.RenameText = "SCOTT=HR";
@@ -648,7 +722,7 @@ public class DbToolsTests
     [Fact]
     public async Task Run_requires_session_owner_output_and_types()
     {
-        var vm = new DdlExtractViewModel(new FakeMeta());
+        var vm = new DdlExtractViewModel(new FakeMeta(), services: OracleDbmsServices.Provider);
         await vm.RunAsync();
         Assert.Equal("접속이 없다", vm.StatusText);
 
@@ -670,7 +744,7 @@ public class DbToolsTests
     [Fact]
     public async Task Run_reports_runner_failure()
     {
-        var vm = new DdlExtractViewModel(new FakeMeta())
+        var vm = new DdlExtractViewModel(new FakeMeta(), services: OracleDbmsServices.Provider)
         {
             Runner = (_, _, _, _, _) => throw new InvalidOperationException("디스크가 가득 찼다"),
         };
@@ -689,7 +763,7 @@ public class DbToolsTests
     {
         var session = new FakeSession();
         var opened = new List<(string Id, ToolPanelViewModelBase Vm)>();
-        var handler = new DbToolsCommandHandler(new Services(new FakeInfo(), new FakeAdmin { Invalid = [] }, new FakeExec(), new FakeMeta()))
+        var handler = new DbToolsCommandHandler(new Services(new FakeInfo(), new FakeAdmin { Invalid = [] }, new FakeExec(), new FakeMeta(), OracleDbmsServices.Selector))
         {
             SessionProvider = () => session,
             OpenDocument = (id, vm, _) =>
@@ -737,7 +811,7 @@ public class DbToolsTests
     {
         var item = new RecycleBinItem("BIN$x==$0", "EMP", "TABLE", null, null, true, true, null);
         var exec = new FakeExec();
-        var search = new ObjectSearchViewModel(new FakeAdmin { Bin = [item] }, exec);
+        var search = new ObjectSearchViewModel(new FakeAdmin { Bin = [item] }, exec, OracleDbmsServices.Statements);
         var handler = new DbToolsCommandHandler(new Services())
         {
             SessionProvider = () => new FakeSession(),
@@ -758,6 +832,33 @@ public class DbToolsTests
     private sealed class Services(params object[] items) : IServiceProvider
     {
         public object? GetService(Type serviceType) => items.FirstOrDefault(serviceType.IsInstanceOfType);
+    }
+
+    /// <summary>문장마다 표시가 붙는 가짜 객체 관리 문장 만들기(선택기를 거쳐 쓰이는지 본다).</summary>
+    private sealed class FakeStatements : ISchemaStatements
+    {
+        public Dbms Dbms => Dbms.Oracle;
+
+        public SqlStatement? Compile(DbObjectRef obj) => new($"COMPILE-FAKE {obj.Name}", default, StatementKind.Ddl);
+
+        public SqlStatement PurgeItem(RecycleBinItem item) => new("PURGE-ITEM-FAKE", default, StatementKind.Ddl);
+
+        public SqlStatement PurgeAll() => new("PURGE-FAKE", default, StatementKind.Ddl);
+
+        public SqlStatement Flashback(RecycleBinItem item, string? renameTo = null) => new("FLASHBACK-FAKE", default, StatementKind.Ddl);
+
+        public string ParameterChangeDdl(string name, string value, ParameterScope scope) => "PARAM-FAKE";
+    }
+
+    private sealed class FakeExporter : IDdlBulkExporter
+    {
+        public Dbms Dbms => Dbms.Oracle;
+
+        public IReadOnlyList<string> DefaultTypes { get; } = ["TABLE", "FAKE_TYPE"];
+
+        public Task<DdlExtractResult> ExtractAsync(IMetadataProvider meta, ISession session, DdlExtractRequest request,
+                                                   IProgress<(int Done, int Total)>? progress, CancellationToken ct)
+            => Task.FromResult(new DdlExtractResult([new DdlExtractItem(new DbObjectRef("SCOTT", "X", "TABLE"), true, null)], ["x.sql"]));
     }
 
     private sealed class FakeSession(bool readOnly = false) : ISession

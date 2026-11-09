@@ -326,6 +326,8 @@
   "Menu.disabled.not.readOnlySession": "읽기 전용 접속이나 조회 전용 Role 에서는 쓸 수 없습니다",
   "Menu.disabled.not.sessionBusy": "실행 중인 문장이 끝나야 쓸 수 있습니다",
   "Menu.disabled.not.sessionBusyElsewhere": "다른 워크스페이스가 시작한 실행이라 여기서 취소하지 않습니다",
+  "Menu.disabled.unsupportedOn.Oracle": "Oracle 에서는 지원하지 않음",
+  "Menu.disabled.unsupportedOn.Tibero": "Tibero 에서는 지원하지 않음",
   "Menu.disabled.plsqlDocActive": "PL/SQL 편집기 탭에서 쓸 수 있습니다",
   "Menu.disabled.plsqlNodeSelected": "스키마 브라우저에서 PL/SQL 객체를 고르세요",
   "Menu.disabled.recyclebinNodeSelected": "스키마 브라우저에서 휴지통 항목을 고르세요",

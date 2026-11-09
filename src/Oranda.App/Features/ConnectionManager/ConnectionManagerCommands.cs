@@ -53,7 +53,8 @@ public static class ConnectionManagerCommands
                 container.GetRequiredService<ISessionManager>(),
                 container.GetRequiredService<IAppDataPaths>(),
                 container.GetRequiredService<IEventBus>(),
-                keys: container.GetService<ContextKeyService>());
+                keys: container.GetService<ContextKeyService>(),
+                services: container);
             container.AddInstance<IConnectionService>(service);
 
             // 탭 → 세션 고르기·창 테두리(환경 색)는 라우터가 맡는다. 접속 서비스와 함께 만들어 첫 접속부터 이벤트를 받는다
@@ -64,6 +65,8 @@ public static class ConnectionManagerCommands
                 // 세션 모니터 권한 키(kill·trace)는 마지막에 연 접속이 아니라 지금 접속의 권한을 따른다.
                 service.ActiveSessionChanged += (_, _) =>
                 {
+                    // DBMS 가 지원하지 않는 기능은 메뉴에서 회색 + 이유(A5).
+                    Shell.Features.DbmsFeatureKeys.Apply(keys, service.ActiveSession?.Profile.Dbms);
                     if (service.ActiveSession is { } active)
                     {
                         SessionMonitor.SessionMonitorCommands.ApplyPrivilegeKeys(keys, active.Server.Capabilities);

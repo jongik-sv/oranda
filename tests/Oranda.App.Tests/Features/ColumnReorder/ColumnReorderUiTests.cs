@@ -8,6 +8,8 @@ using Oranda.App.Features.ColumnReorder;
 using Oranda.App.Features.ObjectDetail;
 using Oranda.App.Tests.Shell;
 using Oranda.App.Tests.Shell.Headless;
+using Oranda.App.Tests.TestSupport;
+using Oranda.Core.Composition;
 using Oranda.Core.Metadata;
 using Oranda.Core.Shell;
 
@@ -22,7 +24,7 @@ public class ColumnReorderUiTests
     private static async Task<(ColumnReorderWindow Window, ColumnReorderViewModel Vm, ReorderExec Exec)> ShowAsync(ReorderSession? session = null)
     {
         var exec = new ReorderExec();
-        var vm = new ColumnReorderViewModel(new ReorderMeta(), new ReorderProvider(), exec);
+        var vm = new ColumnReorderViewModel(new ReorderMeta(), new ReorderProvider(), exec, OracleDbmsServices.Provider);
         await vm.LoadAsync(session ?? new ReorderSession(), ReorderMeta.Emp);
         var window = new ColumnReorderWindow { DataContext = vm };
         window.RefreshHeader();
@@ -94,7 +96,7 @@ public class ColumnReorderUiTests
     [Fact]
     public Task Block_reasons_are_visible_in_the_window() => HeadlessHost.Run(async () =>
     {
-        var vm = new ColumnReorderViewModel(new ReorderMeta(), new ReorderProvider { Traits = new ColumnReorderTraits(true, false, null) }, new ReorderExec());
+        var vm = new ColumnReorderViewModel(new ReorderMeta(), new ReorderProvider { Traits = new ColumnReorderTraits(true, false, null) }, new ReorderExec(), OracleDbmsServices.Provider);
         await vm.LoadAsync(new ReorderSession(), ReorderMeta.Emp);
         var window = new ColumnReorderWindow { DataContext = vm };
         window.Show();
@@ -150,6 +152,6 @@ public class ColumnReorderUiTests
     private sealed class Services(IMetadataProvider meta) : IServiceProvider
     {
         public object? GetService(Type serviceType)
-            => serviceType == typeof(IMetadataProvider) ? meta : serviceType == typeof(IColumnReorderProvider) ? new ReorderProvider() : null;
+            => serviceType == typeof(IMetadataProvider) ? meta : serviceType == typeof(IColumnReorderProvider) ? new ReorderProvider() : serviceType == typeof(IDbmsServiceSelector) ? OracleDbmsServices.Selector : null;
     }
 }

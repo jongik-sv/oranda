@@ -326,6 +326,8 @@
   "Menu.disabled.not.readOnlySession": "Not available on a read-only connection or with the viewer-only role",
   "Menu.disabled.not.sessionBusy": "Wait until the running statement finishes",
   "Menu.disabled.not.sessionBusyElsewhere": "The run was started by another workspace, so it is not cancelled from here",
+  "Menu.disabled.unsupportedOn.Oracle": "Not supported on Oracle",
+  "Menu.disabled.unsupportedOn.Tibero": "Not supported on Tibero",
   "Menu.disabled.plsqlDocActive": "Available in a PL/SQL editor tab",
   "Menu.disabled.plsqlNodeSelected": "Select a PL/SQL object in the schema browser",
   "Menu.disabled.recyclebinNodeSelected": "Select a recycle bin item in the schema browser",

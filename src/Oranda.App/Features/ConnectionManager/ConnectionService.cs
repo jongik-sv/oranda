@@ -5,15 +5,14 @@ using System.Linq;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
-using Oracle.ManagedDataAccess.Client;
 using Oranda.App.Shell;
 using Oranda.Core.Connection;
 using Oranda.Core.Events;
+using Oranda.Core.Execution;
 using Oranda.Core.Security;
 using Oranda.Core.Sessions;
 using Oranda.Core.Storage;
-using Oranda.Oracle.Connection;
-using Oranda.Oracle.Sessions;
+using Oranda.Language.Errors;
 using Oranda.Platform.Storage;
 
 namespace Oranda.App.Features.ConnectionManager;
@@ -26,7 +25,7 @@ public enum ConnectStatus
     /// <summary>저장된 비밀번호가 없다(저장 안 함). 물어서 다시 시도한다.</summary>
     PasswordRequired,
 
-    /// <summary>ORA-28001. 비밀번호 변경 대화상자를 띄운다(CONN-04).</summary>
+    /// <summary>비밀번호 만료(<see cref="DbErrorKind.PasswordExpired"/>, Oracle ORA-28001). 비밀번호 변경 대화상자를 띄운다(CONN-04).</summary>
     PasswordExpired,
 
     /// <summary>지원하지 않는 서버 버전. <see cref="ConnectOutcome.ServerVersion"/>·<see cref="ConnectOutcome.Reason"/> 를 보인다.</summary>
@@ -46,19 +45,11 @@ public sealed record PasswordChangeOutcome(bool Succeeded, string Message);
 
 /// <summary>
 /// 접속 시험 결과(SQL Developer 의 Test, DBeaver 의 Test Connection). 비밀번호는 담지 않는다.
-/// <see cref="ConnectStatus.Connected"/> 면 서버 버전과 걸린 시간을, 실패면 ORA 번호와 메시지를 담는다.
+/// <see cref="ConnectStatus.Connected"/> 면 서버 버전과 걸린 시간을, 실패면 서버 오류 번호(ORA-·TBR- 번호의 숫자)와 메시지를 담는다.
 /// </summary>
 public sealed record ConnectionTestOutcome(ConnectStatus Status, string Message, string? ServerVersion = null, TimeSpan Elapsed = default, int? ErrorNumber = null)
 {
     public bool Succeeded => Status == ConnectStatus.Connected;
-}
-
-/// <summary>접속 시험 도구가 돌려주는 날 결과(서버 버전 또는 오류 번호·메시지).</summary>
-public sealed record ConnectionProbeResult(bool Succeeded, string? ServerVersion, int? ErrorNumber, string? Message)
-{
-    public static ConnectionProbeResult Ok(string? serverVersion) => new(true, serverVersion, null, null);
-
-    public static ConnectionProbeResult Fail(int? errorNumber, string message) => new(false, null, errorNumber, message);
 }
 
 /// <summary>
@@ -177,12 +168,6 @@ public interface IConnectionService
     Task UpdateFoldersAsync(Func<ConnectionsDocument, ConnectionsDocument> edit, CancellationToken ct);
 }
 
-/// <summary>비밀번호 변경 도구(ODP.NET <c>OpenWithNewPassword</c>). 시험은 가짜로 바꾼다.</summary>
-public interface IPasswordChanger
-{
-    Task ChangeAsync(ConnectionProfile profile, string oldPassword, string newPassword, CancellationToken ct);
-}
-
 /// <summary>
 /// <see cref="IConnectionService"/> 구현. 비밀번호는 <see cref="ICredentialStore"/> 에만 두고(data-model 5.1),
 /// <c>connections.json</c> 에는 <c>credentialRef</c> 문자열만 남긴다.
@@ -193,8 +178,7 @@ public sealed class ConnectionService : IConnectionService, IDisposable
     private readonly ICredentialStore _credentials;
     private readonly ISessionManager _sessions;
     private readonly IAppDataPaths _paths;
-    private readonly IPasswordChanger _passwordChanger;
-    private readonly IConnectionTester _tester;
+    private readonly IServiceProvider? _services; // DBMS 별 구현(IConnectionProbe·IDbErrorClassifier)을 고르는 선택기를 얻는 곳. null 이면 접속 시험·비밀번호 변경은 「드라이버 없음」
     private readonly IEventBus _events;
     private readonly ContextKeyService? _keys;
     private readonly SemaphoreSlim _gate = new(1, 1);
@@ -222,17 +206,15 @@ public sealed class ConnectionService : IConnectionService, IDisposable
         ISessionManager sessions,
         IAppDataPaths paths,
         IEventBus events,
-        IPasswordChanger? passwordChanger = null,
         ContextKeyService? keys = null,
-        IConnectionTester? tester = null)
+        IServiceProvider? services = null)
     {
         ArgumentNullException.ThrowIfNull(events);
         _store = store;
         _credentials = credentials;
         _sessions = sessions;
         _paths = paths;
-        _passwordChanger = passwordChanger ?? new OdpPasswordChanger();
-        _tester = tester ?? new OdpConnectionTester();
+        _services = services;
         _events = events;
         _keys = keys;
         _subscriptions.Add(events.Subscribe<SessionBroken>(this, OnBroken));
@@ -533,7 +515,7 @@ public sealed class ConnectionService : IConnectionService, IDisposable
         ISession session;
         try
         {
-            session = await _sessions.OpenAsync(ToDriverProfile(profile), credential, SessionPurpose.Work, ct).ConfigureAwait(false);
+            session = await _sessions.OpenAsync(profile, credential, SessionPurpose.Work, ct).ConfigureAwait(false);
         }
         catch (UnsupportedServerException ex)
         {
@@ -541,15 +523,12 @@ public sealed class ConnectionService : IConnectionService, IDisposable
             var reason = ex.Reason ?? ex.Message;
             return new ConnectOutcome(ConnectStatus.Unsupported, $"지원하지 않는 서버 버전 {version}: {reason}", null, version, reason);
         }
-        catch (Exception ex) when (IsPasswordExpired(ex))
+        catch (Exception ex) when (IsPasswordExpired(ex, profile))
         {
-            return new ConnectOutcome(ConnectStatus.PasswordExpired, "비밀번호가 만료되었습니다(ORA-28001). 새 비밀번호를 입력하세요.");
+            var code = DbErrorClassification.CodeOf(ex);
+            return new ConnectOutcome(ConnectStatus.PasswordExpired, $"비밀번호가 만료되었습니다{(code is null ? string.Empty : $"({code})")}. 새 비밀번호를 입력하세요.");
         }
-        catch (OracleException ex)
-        {
-            return new ConnectOutcome(ConnectStatus.Failed, FirstLine(ex.Message));
-        }
-        catch (Exception ex) when (ex is InvalidOperationException or ArgumentException or IOException or TimeoutException)
+        catch (Exception ex) when (IsDriverFailure(ex, profile))
         {
             return new ConnectOutcome(ConnectStatus.Failed, FirstLine(ex.Message));
         }
@@ -672,13 +651,9 @@ public sealed class ConnectionService : IConnectionService, IDisposable
         try
         {
             using var credential = new SecureCredential(secret);
-            session = await _sessions.OpenAsync(ToDriverProfile(profile), credential, SessionPurpose.Work, ct).ConfigureAwait(false);
+            session = await _sessions.OpenAsync(profile, credential, SessionPurpose.Work, ct).ConfigureAwait(false);
         }
-        catch (OracleException ex)
-        {
-            return new ConnectOutcome(ConnectStatus.Failed, FirstLine(ex.Message));
-        }
-        catch (Exception ex) when (ex is UnsupportedServerException or InvalidOperationException or ArgumentException or IOException or TimeoutException)
+        catch (Exception ex) when (ex is UnsupportedServerException || IsDriverFailure(ex, profile))
         {
             return new ConnectOutcome(ConnectStatus.Failed, FirstLine(ex.Message));
         }
@@ -809,15 +784,15 @@ public sealed class ConnectionService : IConnectionService, IDisposable
     internal static readonly TimeSpan RollbackBeforeCloseTimeout = TimeSpan.FromSeconds(2);
 
     /// <summary>
-    /// 세션 닫기를 호출한 스레드(UI)에서 떼어 내고 <see cref="SessionCloser.Timeout"/> 까지만 기다린다.
-    /// ODP.NET 의 Dispose 는 서버가 응답하지 않으면 끝나지 않으므로 UI 스레드에서 직접 기다리지 않는다.
+    /// 세션 닫기를 호출한 스레드(UI)에서 떼어 내고 <see cref="TimedClose.Timeout"/> 까지만 기다린다.
+    /// 드라이버의 Dispose 는 서버가 응답하지 않으면 끝나지 않을 수 있으므로 UI 스레드에서 직접 기다리지 않는다.
     /// 닫기 전에 시간 제한(<see cref="RollbackBeforeCloseTimeout"/>)을 둔 ROLLBACK 을 보낸다(TSK-14-08): 닫는 경로는 모두 미커밋을 묻고 커밋·롤백했거나
     /// 미커밋이 없다고 본 뒤이므로, 남은 변경이 있더라도 정상 로그오프가 그것을 확정하지 않게 한다. 끊긴 세션에는 보내지 않는다.
     /// </summary>
     internal static Task CloseAsync(ISession session, Action<string>? warn = null, TimeSpan? timeout = null)
     {
         ArgumentNullException.ThrowIfNull(session);
-        return SessionCloser.RunAsync(() => RollbackThenDisposeAsync(session), "세션 " + session.Id.ToString("N")[..8], warn, timeout);
+        return TimedClose.RunAsync(() => RollbackThenDisposeAsync(session), "세션 " + session.Id.ToString("N")[..8], warn, timeout);
     }
 
     private static async ValueTask RollbackThenDisposeAsync(ISession session)
@@ -868,15 +843,17 @@ public sealed class ConnectionService : IConnectionService, IDisposable
             return new PasswordChangeOutcome(false, "현재 비밀번호를 입력하세요.");
         }
 
+        if (DbmsServices.For<IConnectionProbe>(_services, profile) is not { } probe)
+        {
+            return new PasswordChangeOutcome(false, NoDriverText(profile));
+        }
+
         try
         {
-            await _passwordChanger.ChangeAsync(profile, old, newPassword, ct).ConfigureAwait(false);
+            // 저장된 프로필 그대로 넘긴다(프록시 사용자 처리 등 드라이버용 변환은 구현이 한다).
+            await probe.ChangePasswordAsync(profile, old, newPassword, ct).ConfigureAwait(false);
         }
-        catch (OracleException ex)
-        {
-            return new PasswordChangeOutcome(false, FirstLine(ex.Message));
-        }
-        catch (Exception ex) when (ex is InvalidOperationException or ArgumentException or IOException or TimeoutException)
+        catch (Exception ex) when (IsDriverFailure(ex, profile))
         {
             return new PasswordChangeOutcome(false, FirstLine(ex.Message));
         }
@@ -930,8 +907,15 @@ public sealed class ConnectionService : IConnectionService, IDisposable
             return new ConnectionTestOutcome(ConnectStatus.PasswordRequired, $"'{profile.Name}' 의 비밀번호를 입력하세요.");
         }
 
+        if (DbmsServices.For<IConnectionProbe>(_services, profile) is not { } prober)
+        {
+            return new ConnectionTestOutcome(ConnectStatus.Failed, $"접속 시험 실패: {NoDriverText(profile)}");
+        }
+
         var watch = System.Diagnostics.Stopwatch.StartNew();
-        var probe = await _tester.ProbeAsync(ToDriverProfile(profile), secret, ct).ConfigureAwait(false);
+
+        // 저장된 프로필 그대로 넘긴다(프록시 표기·tnsnames.ora 펼치기 같은 드라이버용 변환은 구현이 한다).
+        var probe = await prober.ProbeAsync(profile, secret, ct).ConfigureAwait(false);
         watch.Stop();
         if (probe.Succeeded)
         {
@@ -946,15 +930,35 @@ public sealed class ConnectionService : IConnectionService, IDisposable
 
         // 드라이버 메시지에 비밀번호가 섞여 나오는 일은 없어야 하지만, 상태 줄로 나가기 전에 한 번 더 지운다.
         var message = FirstLine(probe.Message ?? string.Empty).Replace(secret, "***", StringComparison.Ordinal);
-        if (probe.ErrorNumber is { } number && !message.StartsWith("ORA-", StringComparison.OrdinalIgnoreCase))
+        int? errorNumber = probe.Error is { Number: not 0 } error ? error.Number : null;
+        if (errorNumber is { } number)
         {
-            message = $"ORA-{number:00000}: {message}";
+            // 드라이버가 번호를 따로 주고 글에는 접두(ORA-·TBR-)가 없을 수 있다: DBMS 의 표기로 앞에 붙인다.
+            var shown = DbErrorCodes.Display(probe.Error!.Dbms, number);
+            var family = shown[..(shown.IndexOf('-') + 1)];
+            if (!message.StartsWith(family, StringComparison.OrdinalIgnoreCase))
+            {
+                message = $"{shown}: {message}";
+            }
         }
 
         var status = probe.ServerVersion is null ? ConnectStatus.Failed : ConnectStatus.Unsupported;
         var prefix = status == ConnectStatus.Unsupported ? $"지원하지 않는 서버 버전 {probe.ServerVersion}" : "접속 시험 실패";
-        return new ConnectionTestOutcome(status, $"{prefix}: {message}", probe.ServerVersion, watch.Elapsed, probe.ErrorNumber);
+        return new ConnectionTestOutcome(status, $"{prefix}: {message}", probe.ServerVersion, watch.Elapsed, errorNumber);
     }
+
+    /// <summary>이 DBMS 용 접속 드라이버(IConnectionProbe 구현)가 없을 때의 안내(드라이버 어셈블리가 빠진 빌드·아직 안 만든 DBMS).</summary>
+    private static string NoDriverText(ConnectionProfile profile) =>
+        $"이 DBMS({profile.Dbms}) 용 드라이버가 없어 접속 시험·비밀번호 변경을 할 수 없습니다.";
+
+    /// <summary>
+    /// 접속·시험이 던진 예외를 「실패 결과」로 돌려줄 드라이버 오류인가: 일반 입출력·인수 오류, 그 DBMS 드라이버의 예외
+    /// (<see cref="IDbErrorClassifier.FromException"/>), 또는 글에 서버 오류 코드(ORA-·TBR-)가 있는 것.
+    /// </summary>
+    private bool IsDriverFailure(Exception ex, ConnectionProfile profile) =>
+        ex is InvalidOperationException or ArgumentException or IOException or TimeoutException
+        || DbmsServices.For<IDbErrorClassifier>(_services, profile)?.FromException(ex) is not null
+        || DbErrorClassification.CodeOf(ex) is not null;
 
     /// <summary>서버 버전 문자열의 짧은 이름(23 이상 = 26ai, 19 = 19c, 11 = 11g). 읽을 수 없으면 null.</summary>
     internal static string? ServerLabel(string? version)
@@ -1015,54 +1019,33 @@ public sealed class ConnectionService : IConnectionService, IDisposable
         return await SaveProfileAsync(copy, null, savePassword: false, ct).ConfigureAwait(false);
     }
 
-    /// <summary>ORA-28001(비밀번호 만료). 드라이버 예외 번호 또는 메시지로 판별한다.</summary>
-    internal static bool IsPasswordExpired(Exception ex) =>
-        ex is OracleException { Number: 28001 } || ex.Message.Contains("ORA-28001", StringComparison.Ordinal);
-
     /// <summary>
-    /// 세션 관리자에 넘길 사본을 만든다(저장된 프로필은 바꾸지 않는다).
-    /// 프록시 접속이면 사용자를 ODP.NET 형식 <c>proxy[user]</c> 로 바꾸고,
-    /// TNS 디렉터리의 별칭이면 tnsnames.ora 에서 기술자를 찾아 접속 문자열로 넘긴다
-    /// (ODP.NET 의 TNS_ADMIN 은 프로세스 전체 설정이라 연결을 연 뒤에는 바꿀 수 없다).
-    /// 지갑 폴더는 기술자의 <c>MY_WALLET_DIRECTORY</c> 로도 알린다.
+    /// 비밀번호 만료(<see cref="DbErrorKind.PasswordExpired"/>)인가. 조립이 <see cref="DbErrorClassification.Selector"/> 를 연결했으면 그 분류로,
+    /// 아니면 이 서비스의 선택기가 주는 프로필 DBMS 의 <see cref="IDbErrorClassifier"/> 로 판정한다(드라이버 예외 자체 → 글 속 오류 번호 순).
     /// </summary>
-    internal static ConnectionProfile ToDriverProfile(ConnectionProfile profile)
+    private bool IsPasswordExpired(Exception ex, ConnectionProfile profile)
     {
-        var result = profile;
-        if (!string.IsNullOrWhiteSpace(profile.ProxyUser))
+        if (DbErrorClassification.Has(ex, DbErrorKind.PasswordExpired))
         {
-            result = result with { User = $"{profile.ProxyUser}[{profile.User}]", ProxyUser = null };
+            return true;
         }
 
-        if (!string.IsNullOrWhiteSpace(profile.TnsAdmin)
-            && TnsResolver.TryResolve(profile.TnsAdmin, profile.DataSource, out var descriptor))
+        if (DbmsServices.For<IDbErrorClassifier>(_services, profile) is not { } classifier)
         {
-            if (!string.IsNullOrWhiteSpace(profile.WalletLocation))
-            {
-                descriptor = TnsResolver.WithWalletDirectory(descriptor, profile.WalletLocation);
-            }
-
-            // 기술자를 직접 넘기므로 TNS 디렉터리는 필요 없다. 지갑 위치는 프로세스에서 처음 쓰는 폴더일 때만 함께 남겨
-            // 드라이버의 전역 설정이 한 번 맞게 하고(이전 방식), 다른 폴더면 기술자의 값에 맡긴다.
-            var keepWallet = AppliedWallet is null || string.Equals(AppliedWallet, profile.WalletLocation, StringComparison.OrdinalIgnoreCase);
-            if (keepWallet && !string.IsNullOrWhiteSpace(profile.WalletLocation))
-            {
-                AppliedWallet = profile.WalletLocation;
-            }
-
-            result = result with
-            {
-                DataSource = descriptor,
-                TnsAdmin = null,
-                WalletLocation = keepWallet ? profile.WalletLocation : null,
-            };
+            return false;
         }
 
-        return result;
+        if (classifier.FromException(ex)?.Kind == DbErrorKind.PasswordExpired)
+        {
+            return true;
+        }
+
+        // 드라이버 예외가 감싸져 글만 남은 경우: 「ORA-28001」·「TBR-…」 의 번호 부분을 그 DBMS 분류기로 옮긴다.
+        var code = DbErrorClassification.CodeOf(ex);
+        return code is not null
+            && int.TryParse(code.AsSpan(code.IndexOf('-') + 1), System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture, out var number)
+            && classifier.Classify(number) == DbErrorKind.PasswordExpired;
     }
-
-    /// <summary>이 프로세스에서 드라이버 전역 지갑 위치로 이미 넘긴 폴더(없으면 null).</summary>
-    private static string? AppliedWallet { get; set; }
 
     internal string WalletFolder(Guid id) => Path.Combine(_paths.DataDirectory, "wallets", id.ToString("D").ToLowerInvariant());
 

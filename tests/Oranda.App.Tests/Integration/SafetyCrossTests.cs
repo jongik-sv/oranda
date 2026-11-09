@@ -974,7 +974,7 @@ public sealed class SafetyCrossTests : IClassFixture<SafetyAppDbFixture>, IAsync
 
     // ---- 스키마 관리(Purge·Flashback·컴파일) --------------------------------------------------------------
 
-    private ObjectSearchViewModel SearchVm(ISession session) => new(_rig.Container.GetRequiredService<ISchemaAdminProvider>(), _rig.Exec)
+    private ObjectSearchViewModel SearchVm(ISession session) => new(_rig.Container.GetRequiredService<ISchemaAdminProvider>(), _rig.Exec, Oranda.App.Tests.TestSupport.OracleDbmsServices.Statements)
     {
         Session = session,
     };

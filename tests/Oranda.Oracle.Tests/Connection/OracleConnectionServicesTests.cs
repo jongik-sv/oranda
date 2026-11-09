@@ -66,6 +66,27 @@ public class OracleConnectionServicesTests : IDisposable
     }
 
     [Fact]
+    public void Driver_profile_passes_only_the_first_wallet_folder_to_the_driver_and_leaves_the_rest_to_the_descriptor()
+    {
+        // 접속 시험과 세션 열기가 같은 변환·같은 지갑 상태를 쓴다(A2). 번갈아 다른 지갑을 써도 드라이버 전역 지갑 위치는 한 폴더뿐이다.
+        File.WriteAllText(Path.Combine(_dir, "tnsnames.ora"), "ORCL =\n  (DESCRIPTION = (ADDRESS = (PROTOCOL = TCP)(HOST = h)(PORT = 1521)) (CONNECT_DATA = (SERVICE_NAME = s)))\n");
+        var walletA = Path.Combine(_dir, "wallet-a-" + Guid.NewGuid().ToString("N"));
+        var walletB = Path.Combine(_dir, "wallet-b-" + Guid.NewGuid().ToString("N"));
+        var a = new ConnectionProfile("a", "scott", "ORCL", TnsAdmin: _dir, WalletLocation: walletA);
+        var b = a with { Name = "b", WalletLocation = walletB };
+
+        var first = OracleDriverProfile.From(a);
+        var second = OracleDriverProfile.From(b);
+        var again = OracleDriverProfile.From(a);
+
+        Assert.Contains("MY_WALLET_DIRECTORY=" + walletA, first.DataSource, StringComparison.Ordinal);
+        Assert.Contains("MY_WALLET_DIRECTORY=" + walletB, second.DataSource, StringComparison.Ordinal);
+        Assert.True(first.WalletLocation is null || string.Equals(first.WalletLocation, walletA, StringComparison.Ordinal));
+        Assert.Null(second.WalletLocation);
+        Assert.Equal(first.WalletLocation, again.WalletLocation);
+    }
+
+    [Fact]
     public void Driver_profile_leaves_a_plain_profile_unchanged()
     {
         var profile = new ConnectionProfile("o", "scott", "db:1521/XE");

@@ -36,6 +36,9 @@ internal sealed class OracleSessionManager : ISessionManager
             throw new ArgumentException($"OracleSessionManager 는 Oracle 프로필만 받는다(받은 DBMS: {profile.Dbms}).", nameof(profile));
         }
 
+        // 저장된 프로필을 받아 드라이버용으로 바꾼다(프록시 proxy[user]·TNS 별칭 펼치기·지갑 — 접속 시험과 같은 변환·같은 지갑 상태).
+        profile = OracleDriverProfile.From(profile);
+
         var connection = profile.CreateConnection(credential.Secret.ToString());
         try
         {

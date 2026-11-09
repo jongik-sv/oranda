@@ -45,12 +45,19 @@ public sealed partial class DbInfoViewModel : ToolPanelViewModelBase
     }
 
     /// <summary>시험용: 제공자를 직접 넣는다.</summary>
-    internal DbInfoViewModel(IDatabaseInfoProvider provider) => _provider = provider;
+    internal DbInfoViewModel(IDatabaseInfoProvider provider, IServiceProvider? services = null)
+    {
+        _provider = provider;
+        _services = services;
+    }
 
-    /// <summary>파라미터 변경 DDL 을 만드는 방법. 기본은 Oracle 쪽 <c>SchemaStatements.ParameterChangeDdl</c>(처음 쓸 때 어셈블리를 올린다).</summary>
-    internal Func<string, string, DbParameterScope, string> BuildParameterDdl { get; set; } = DefaultBuildParameterDdl;
+    /// <summary>
+    /// 시험용: 파라미터 변경 DDL 을 만드는 방법. 기본(null)은 세션의 DBMS 용 <see cref="ISchemaStatements.ParameterChangeDdl"/>
+    /// (서비스 공급자의 선택기로 고른다).
+    /// </summary>
+    internal Func<string, string, DbParameterScope, string>? BuildParameterDdl { get; set; }
 
-    public ISession? Session { get; private set; }
+    public ISession? Session { get; internal set; }
 
     public ObservableCollection<DetailSection> Sections { get; } = [];
 
@@ -113,6 +120,7 @@ public sealed partial class DbInfoViewModel : ToolPanelViewModelBase
     {
         ArgumentNullException.ThrowIfNull(session);
         Session = session;
+        RefreshPreview(); // 세션의 DBMS 가 정해졌으니 미리보기 문장을 다시 만든다.
         var gen = Interlocked.Increment(ref _generation);
         var provider = ResolveProvider();
         if (provider is null)
@@ -185,11 +193,17 @@ public sealed partial class DbInfoViewModel : ToolPanelViewModelBase
 
         try
         {
-            PreviewDdl = BuildParameterDdl(ParameterName, ParameterValue ?? string.Empty, ParameterScope);
+            PreviewDdl = (BuildParameterDdl ?? DefaultBuildParameterDdl)(ParameterName, ParameterValue ?? string.Empty, ParameterScope);
             PreviewError = string.Empty;
         }
         catch (ArgumentException ex)
         {
+            PreviewDdl = string.Empty;
+            PreviewError = ex.Message;
+        }
+        catch (NotSupportedException ex)
+        {
+            // 이 DBMS 에 없는 적용 범위이거나, 이 DBMS 용 구현이 없다.
             PreviewDdl = string.Empty;
             PreviewError = ex.Message;
         }
@@ -198,7 +212,11 @@ public sealed partial class DbInfoViewModel : ToolPanelViewModelBase
     private IDatabaseInfoProvider? ResolveProvider()
         => _provider ??= (IDatabaseInfoProvider?)_services?.GetService(typeof(IDatabaseInfoProvider));
 
-    // Oracle 어셈블리 형식은 이 메서드 안에서만 쓴다(처음 부를 때 올라온다).
-    private static string DefaultBuildParameterDdl(string name, string value, DbParameterScope scope)
-        => Oranda.Oracle.Schema.SchemaStatements.ParameterChangeDdl(name, value, (Oranda.Core.Schema.ParameterScope)(int)scope);
+    // 세션의 DBMS 용 문장 만들기. 접속이 없거나 구현이 없으면 NotSupportedException(미리보기 오류로 보인다).
+    private string DefaultBuildParameterDdl(string name, string value, DbParameterScope scope)
+        => (DbmsServices.For<ISchemaStatements>(_services, Session)
+                ?? throw new NotSupportedException(Session is null
+                    ? "접속이 없어 파라미터 변경 DDL 을 만들 수 없다"
+                    : $"이 DBMS({Session.Profile.Dbms}) 용 파라미터 변경 DDL 구현이 없다"))
+            .ParameterChangeDdl(name, value, (Oranda.Core.Schema.ParameterScope)(int)scope);
 }

@@ -4,6 +4,7 @@ using Avalonia.Threading;
 using Oranda.App.Features.ObjectDetail;
 using Oranda.App.Features.PlsqlEditor;
 using Oranda.App.Tests.Shell.Headless;
+using Oranda.App.Tests.TestSupport;
 using Oranda.Core.Connection;
 using Oranda.Core.Execution;
 using Oranda.Core.Metadata;
@@ -21,7 +22,7 @@ public class JavaCompileTests
 
     private static readonly DbObjectRef Class = new("SCOTT", "com/example/Hello", "JAVA CLASS");
 
-    private static (ObjectDetailViewModel Vm, Meta Meta, Exec Exec, Probe Probe) Make(bool jvm = true)
+    private static (ObjectDetailViewModel Vm, Meta Meta, Exec Exec, Probe Probe) Make(bool jvm = true, bool statements = true)
     {
         var meta = new Meta { Jvm = jvm };
         var exec = new Exec();
@@ -29,6 +30,7 @@ public class JavaCompileTests
         var vm = new ObjectDetailViewModel(meta)
         {
             Exec = exec,
+            Statements = statements ? OracleDbmsServices.Statements : null,
             Confirm = (message, _) =>
             {
                 probe.Asked.Add(message);
@@ -93,6 +95,19 @@ public class JavaCompileTests
         Assert.Equal(0, probe.Shown);
         Assert.Empty(vm.JavaErrors);
         Assert.Equal("컴파일됨", vm.StatusText);
+    }
+
+    [Fact]
+    public async Task Without_a_statements_implementation_nothing_is_sent_and_a_reason_is_shown()
+    {
+        var (vm, _, exec, probe) = Make(statements: false);
+        await vm.OpenAsync(new Session(), Source, showDdl: false);
+
+        Assert.False(await vm.CompileJavaAsync());
+
+        Assert.Empty(exec.Statements);
+        Assert.Empty(probe.Asked);
+        Assert.Contains("구현이 없다", vm.StatusText, StringComparison.Ordinal);
     }
 
     [Fact]

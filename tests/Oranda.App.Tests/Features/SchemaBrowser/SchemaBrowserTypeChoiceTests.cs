@@ -162,7 +162,7 @@ public sealed class SchemaBrowserTypeChoiceTests
     [Fact]
     public void Object_search_sends_the_checked_types()
     {
-        var vm = new ObjectSearchViewModel(new Oranda.App.Tests.Features.DbTools.DbToolsTests.FakeAdmin(), new Oranda.App.Tests.Features.DbTools.DbToolsTests.FakeExec());
+        var vm = new ObjectSearchViewModel(new Oranda.App.Tests.Features.DbTools.DbToolsTests.FakeAdmin(), new Oranda.App.Tests.Features.DbTools.DbToolsTests.FakeExec(), Oranda.App.Tests.TestSupport.OracleDbmsServices.Statements);
         Assert.Empty(vm.BuildQuery().ObjectTypes);
 
         vm.Types.SelectOnly(["TABLE", "JAVA SOURCE"]);

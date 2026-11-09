@@ -80,7 +80,8 @@ internal static class ColumnReorderLauncher
         var vm = new ColumnReorderViewModel(
             meta,
             services.GetService(typeof(IColumnReorderProvider)) as IColumnReorderProvider,
-            services.GetService(typeof(IExecutionService)) as IExecutionService)
+            services.GetService(typeof(IExecutionService)) as IExecutionService,
+            services)
         {
             InvalidateCache = (s, table, ct) => cache?.InvalidateAsync(s.DbKey, [table], ct) ?? Task.CompletedTask,
         };
