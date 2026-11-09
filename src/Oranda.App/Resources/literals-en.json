@@ -888,6 +888,7 @@
   "선택한 규칙 제거": "Remove the selected rule",
   "작업 이름": "Job name",
   "대상 접속 읽기 전용 안내": "Read-only target notice",
+  "원본·대상 DBMS 불일치 안내": "Source and target DBMS mismatch notice",
   "새 버전 작업 안내": "Newer job file notice",
   "새 버전 Oranda 가 만든 작업이라 사전 점검·실행을 할 수 없습니다. Oranda 를 업데이트하세요.": "This job was made by a newer version of Oranda, so it cannot be prechecked or run. Update Oranda.",
   "모든 테이블을 같은 시점 기준으로 읽기": "Read all tables as of the same point in time",
