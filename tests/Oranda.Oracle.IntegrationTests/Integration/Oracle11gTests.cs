@@ -300,6 +300,8 @@ public sealed class Oracle11gTests : IAsyncLifetime
         // Java 문장(requires: jvm)은 JVM 이 있는 서버에서만 본다. XE 에는 *_java_* 뷰·DBMS_JAVA 가 없다(제품도 meta.java_available 로 보고 보내지 않는다).
         var jvm = await HasJvmAsync(raw, catalog.Get("meta.java_available", info));
         var skippedForJvm = new List<string>();
+        var skippedForParse = new List<string>();
+        var skippedForTemplate = new List<string>();
 
         // 일부러 19 이상 전용인 id(예: session.my_blocking)는 11 변형이 없고 기능을 숨긴다. 단위 시험 Oracle11CatalogTests 가 목록을 단정한다.
         foreach (var id in catalog.Entries.Where(e => e.MinVersion < 12).Select(e => e.Id).Distinct(StringComparer.Ordinal).Order(StringComparer.Ordinal))
@@ -317,11 +319,27 @@ public sealed class Oracle11gTests : IAsyncLifetime
                 continue;
             }
 
+            // 구문 분석 = 실행인 문장은 보내지 않는다(K5): DBMS_SQL.PARSE 는 DDL·DCL·ALTER SYSTEM/SESSION 을 구문 분석하는 순간 실행한다
+            // (시험 서버의 권한·세션 설정이 실제로 바뀐다). 이런 문장은 자리표시자(:sid·@USER@ 등)를 채워 보내는 실행용 문장이나 DBA 에게 복사해 주는
+            // 안내문이라 자리를 비운 채로는 구문도 맞지 않는다(ORA-02000). 파일 이름이 아니라 첫 낱말 규칙으로 가린다 — 질의·DML·PL/SQL 블록만 보낸다.
+            if (!IsParseOnlySafe(query.Sql))
+            {
+                skippedForParse.Add(query.Header.Path);
+                continue;
+            }
+
+            // 틀 문장(K5)은 보내지 않는다: 이 훑기가 채우는 자리(@PFX@·@SEGMENTS@·@LONGNAME@) 말고 다른 @KEY@ 가 남으면 앱이 표·조건·리터럴을 끼워 넣는 틀이다.
+            // 자리마다 뜻이 달라(@TABLE@ = 표 이름 또는 따옴표 리터럴) 빈 값으로는 구문이 맞지 않는다(ORA-00933·ORA-00903).
+            var templateKeys = TemplateKeys(Fill(query.Sql, "dba"));
+            if (templateKeys.Count > 0)
+            {
+                skippedForTemplate.Add($"{query.Header.Path} [{string.Join(' ', templateKeys)}]");
+                continue;
+            }
+
             foreach (var prefix in new[] { "dba", "all" })
             {
-                var sql = query.Sql.Replace("@PFX@", prefix, StringComparison.Ordinal)
-                    .Replace("@SEGMENTS@", "dba_segments", StringComparison.Ordinal)
-                    .Replace("@LONGNAME@", "DBMS_JAVA.LONGNAME(j.object_name)", StringComparison.Ordinal);
+                var sql = Fill(query.Sql, prefix);
                 try
                 {
                     await ParseOnlyAsync(raw, sql);
@@ -339,8 +357,72 @@ public sealed class Oracle11gTests : IAsyncLifetime
             _output.WriteLine($"JVM 없음(SYS.DBMS_JAVA 없음) — 건너뛴 Java 문장 {skippedForJvm.Count}개: {string.Join(", ", skippedForJvm)}");
         }
 
-        Assert.True(failures.Count == 0, string.Join(Environment.NewLine, failures));
-        Assert.True(checkedCount >= 100, $"검사한 문장 {checkedCount}");
+        _output.WriteLine($"구문 분석 = 실행이라 보내지 않은 문장 {skippedForParse.Count}개: {string.Join(", ", skippedForParse)}");
+        _output.WriteLine($"틀 문장(채울 자리가 남음)이라 보내지 않은 문장 {skippedForTemplate.Count}개: {string.Join(", ", skippedForTemplate)}");
+
+        // 한 번 돌려 문제를 모두 본다(K5): 구문 실패 전부 + 건너뛴 목록이 바뀐 것 + 검사 수를 한 메시지로 모아 마지막에 한 번 단정한다.
+        // 건너뛴 목록 = 지금 11 대상 카탈로그 전수(첫 낱말이 질의·DML·블록이 아닌 파일, 채울 자리가 남는 틀). 새 파일이 생기면 여기서 알게 한다.
+        string[] expectedParse =
+        [
+            "app/ddl_locks_grant.sql", "app/disconnect_session.sql", "app/kill_session.sql",
+            "app/statistics_level.sql", "app/trace_event_off.sql", "app/trace_event_on.sql",
+        ];
+        string[] expectedTemplate =
+        [
+            "app/fk_index_check.sql [@OWNER_FILTER@ @TABLE@]", "app/locked_row_select.sql [@ROWID@ @TABLE@]",
+            "dbinfo/flashback_versions.sql [@COLUMNS@ @CONDITIONS@ @RANGE@ @TABLE@]", "meta/object_users.sql [@NAME@ @OWNER@]",
+        ];
+        var problems = new List<string>(failures);
+        if (!skippedForParse.Order(StringComparer.Ordinal).SequenceEqual(expectedParse))
+        {
+            problems.Add($"구문 분석 = 실행 목록이 바뀜: {string.Join(", ", skippedForParse.Order(StringComparer.Ordinal))}");
+        }
+
+        if (!skippedForTemplate.Order(StringComparer.Ordinal).SequenceEqual(expectedTemplate))
+        {
+            problems.Add($"틀 문장 목록이 바뀜: {string.Join(", ", skippedForTemplate.Order(StringComparer.Ordinal))}");
+        }
+
+        if (checkedCount < 100)
+        {
+            problems.Add($"검사한 문장 {checkedCount}(100 이상이어야 함)");
+        }
+
+        Assert.True(problems.Count == 0, $"문제 {problems.Count}개:{Environment.NewLine}{string.Join(Environment.NewLine, problems)}");
+    }
+
+    /// <summary>이 훑기가 채우는 자리: 사전 뷰 앞머리·세그먼트 뷰·Java 긴 이름.</summary>
+    private static string Fill(string sql, string prefix) =>
+        sql.Replace("@PFX@", prefix, StringComparison.Ordinal)
+           .Replace("@SEGMENTS@", "dba_segments", StringComparison.Ordinal)
+           .Replace("@LONGNAME@", "DBMS_JAVA.LONGNAME(j.object_name)", StringComparison.Ordinal);
+
+    /// <summary>주석 줄을 뗀 본문에 남은 <c>@KEY@</c> 자리(이름 순, 겹치지 않게).</summary>
+    private static List<string> TemplateKeys(string sql)
+    {
+        var body = string.Join('\n', sql.Split('\n').Where(l => !l.TrimStart().StartsWith("--", StringComparison.Ordinal)));
+        return [.. System.Text.RegularExpressions.Regex.Matches(body, "@[A-Z_]+@").Select(m => m.Value).Distinct(StringComparer.Ordinal).Order(StringComparer.Ordinal)];
+    }
+
+    /// <summary>
+    /// DBMS_SQL.PARSE 가 실행하지 않는 문장: 주석 줄을 뗀 뒤 첫 낱말이 SELECT·WITH·INSERT·UPDATE·DELETE·MERGE·BEGIN·DECLARE 이거나 「(」 로 시작한다.
+    /// 그 밖(GRANT·REVOKE·ALTER·CREATE·DROP·TRUNCATE 등)은 구문 분석 = 실행이라 보내지 않는다.
+    /// </summary>
+    private static bool IsParseOnlySafe(string sql)
+    {
+        var body = string.Join('\n', sql.Split('\n').Where(l => !l.TrimStart().StartsWith("--", StringComparison.Ordinal))).TrimStart();
+        if (body.StartsWith('('))
+        {
+            return true;
+        }
+
+        var end = 0;
+        while (end < body.Length && char.IsAsciiLetter(body[end]))
+        {
+            end++;
+        }
+
+        return body[..end].ToUpperInvariant() is "SELECT" or "WITH" or "INSERT" or "UPDATE" or "DELETE" or "MERGE" or "BEGIN" or "DECLARE";
     }
 
     /// <summary>meta.java_available 를 그대로 돌려 서버에 JVM 이 있는지 본다.</summary>
