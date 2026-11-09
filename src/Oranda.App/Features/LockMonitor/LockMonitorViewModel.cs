@@ -16,6 +16,7 @@ using Oranda.App.Features.SessionMonitor;
 using Oranda.App.Shell;
 using Oranda.Core.Connection;
 using Oranda.Core.Execution;
+using Oranda.Oracle.Catalog;
 using Oranda.Core.History;
 using Oranda.Core.Monitoring;
 using Oranda.Core.Plans;
@@ -1342,7 +1343,7 @@ public sealed partial class LockMonitorViewModel : ToolPanelViewModelBase, IDisp
                 LockedRowId = row.RowId;
                 LockedRowCaption = LockedRowText(row) + $" · 대기자 {waiter.KeyText}";
                 LockedRowCells = [.. row.ColumnNames.Select((c, i) => (IReadOnlyList<object?>)[c, i < row.Values.Count ? row.Values[i] ?? "(null)" : string.Empty])];
-                LockedRowSelect = $"SELECT * FROM \"{row.Owner}\".\"{row.Table}\" WHERE ROWID = '{row.RowId}'";
+                LockedRowSelect = EmbeddedCatalog.Text("app.locked_row_select", ("table", $"\"{row.Owner}\".\"{row.Table}\""), ("rowid", row.RowId));
                 LockedRowMessage = string.Empty;
                 OnPropertyChanged(nameof(HasLockedRow));
             });
@@ -1433,7 +1434,7 @@ public sealed partial class LockMonitorViewModel : ToolPanelViewModelBase, IDisp
         if (denied is not null)
         {
             DdlNotice = "DDL 잠금은 dba_ddl_locks 권한이 필요합니다.";
-            DdlGrantSql = $"GRANT SELECT ON sys.dba_ddl_locks TO {session.Profile.User.ToUpperInvariant()};";
+            DdlGrantSql = EmbeddedCatalog.Text("app.ddl_locks_grant", ("user", session.Profile.User.ToUpperInvariant()));
             DdlSummary = "권한 없음 · " + FirstLine(denied.Message);
         }
         else

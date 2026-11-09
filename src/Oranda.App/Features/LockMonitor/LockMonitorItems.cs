@@ -6,6 +6,7 @@ using System.Text;
 using Oranda.App.Features.ExecutionPlan;
 using Oranda.Core.Connection;
 using Oranda.Core.Monitoring;
+using Oranda.Oracle.Catalog;
 
 namespace Oranda.App.Features.LockMonitor;
 
@@ -41,7 +42,7 @@ public static class LockText
             id += string.Create(CultureInfo.InvariantCulture, $",@{k.InstanceId}");
         }
 
-        return $"ALTER SYSTEM KILL SESSION '{id}' IMMEDIATE";
+        return EmbeddedCatalog.Text("app.kill_session", ("id", id));
     }
 
     /// <summary>접속 환경 이름(운영·테스트·개발).</summary>
@@ -408,16 +409,9 @@ public static class LockHints
         var owner = dot < 0 ? string.Empty : ownerDotName[..dot];
         var name = dot < 0 ? ownerDotName : ownerDotName[(dot + 1)..];
         static string Q(string s) => "'" + s.Replace("'", "''", StringComparison.Ordinal) + "'";
-        return "SELECT c.constraint_name, cc.column_name, cc.position\n"
-            + "  FROM all_constraints c\n"
-            + "  JOIN all_cons_columns cc ON cc.owner = c.owner AND cc.constraint_name = c.constraint_name\n"
-            + " WHERE c.constraint_type = 'R'\n"
-            + (owner.Length > 0 ? "   AND c.owner = " + Q(owner) + "\n" : string.Empty)
-            + "   AND c.table_name = " + Q(name) + "\n"
-            + "   AND NOT EXISTS (SELECT 1 FROM all_ind_columns ic\n"
-            + "                    WHERE ic.table_owner = cc.owner AND ic.table_name = cc.table_name\n"
-            + "                      AND ic.column_name = cc.column_name AND ic.column_position = cc.position)\n"
-            + " ORDER BY c.constraint_name, cc.position";
+        return EmbeddedCatalog.Text("app.fk_index_check",
+            ("owner_filter", owner.Length > 0 ? "   AND c.owner = " + Q(owner) + "\n" : string.Empty),
+            ("table", Q(name)));
     }
 
     private static LockTreeItem Root(LockTreeItem i)

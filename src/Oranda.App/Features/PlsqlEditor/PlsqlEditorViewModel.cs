@@ -13,6 +13,7 @@ using Oranda.App.Features.SqlEditor;
 using Oranda.App.Shell;
 using Oranda.Core.Events;
 using Oranda.Core.Execution;
+using Oranda.Oracle.Catalog;
 using Oranda.Core.History;
 using Oranda.Core.Journal;
 using Oranda.Core.Metadata;
@@ -751,8 +752,7 @@ public sealed partial class PlsqlEditorViewModel : ToolPanelViewModelBase, IComp
     {
         static string Lit(string s) => s.Replace("'", "''", StringComparison.Ordinal);
 
-        var sql = $"SELECT COUNT(DISTINCT sid) FROM v$access WHERE owner = '{Lit(target.Owner)}' AND object = '{Lit(target.Name)}' "
-            + "AND sid <> TO_NUMBER(SYS_CONTEXT('USERENV', 'SID'))";
+        var sql = EmbeddedCatalog.Text("meta.object_users", ("owner", Lit(target.Owner)), ("name", Lit(target.Name)));
         try
         {
             var stmt = new SqlStatement(sql, default, StatementKind.Query) { Verb = "SELECT" };

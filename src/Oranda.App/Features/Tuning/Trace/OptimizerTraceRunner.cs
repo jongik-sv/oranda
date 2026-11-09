@@ -5,6 +5,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using Oranda.App.Features.Execution;
 using Oranda.Core.Execution;
+using Oranda.Oracle.Catalog;
 using Oranda.Core.History;
 using Oranda.Core.Sessions;
 using Oranda.Core.Tuning;
@@ -25,14 +26,13 @@ public sealed record OptimizerTraceOutcome(ISession Session, TraceFileInfo File,
 /// </summary>
 public sealed class OptimizerTraceRunner(ExecutionState state, Func<ISession?> session, Func<IExecutionService> execution, Func<ITuningService> tuning)
 {
-    public const string EventOnSql = "ALTER SESSION SET EVENTS '10053 trace name context forever, level 1'";
-    public const string EventOffSql = "ALTER SESSION SET EVENTS '10053 trace name context off'";
+    /// <summary>문장 본문은 카탈로그(<c>app.trace_event_on</c> 등).</summary>
+    public static string EventOnSql => EmbeddedCatalog.Text("app.trace_event_on");
+    public static string EventOffSql => EmbeddedCatalog.Text("app.trace_event_off");
     public const string SqlBindName = "oranda_sql";
 
-    /// <summary>사본을 파싱만 하는 블록. 사본 글은 바인드로 넘긴다(따옴표 이스케이프 없음).</summary>
-    public const string ParseBlock =
-        "DECLARE\n  c INTEGER := DBMS_SQL.OPEN_CURSOR;\nBEGIN\n  DBMS_SQL.PARSE(c, :oranda_sql, DBMS_SQL.NATIVE);\n  DBMS_SQL.CLOSE_CURSOR(c);\n"
-        + "EXCEPTION\n  WHEN OTHERS THEN\n    IF DBMS_SQL.IS_OPEN(c) THEN\n      DBMS_SQL.CLOSE_CURSOR(c);\n    END IF;\n    RAISE;\nEND;";
+    /// <summary>사본을 파싱만 하는 블록(카탈로그 <c>app.trace_parse</c>). 사본 글은 바인드로 넘긴다(따옴표 이스케이프 없음).</summary>
+    public static string ParseBlock => EmbeddedCatalog.Text("app.trace_parse");
 
     /// <summary>앱이 대신 보내는 문장이라 이력에 남기지 않는다(정책 관문은 그대로).</summary>
     private static readonly ExecutionOptions Options = new() { Source = HistorySource.Editor, SkipHistory = true };

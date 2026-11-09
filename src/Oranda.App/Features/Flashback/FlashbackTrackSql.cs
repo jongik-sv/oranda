@@ -2,6 +2,7 @@ using System.Globalization;
 using System.Text;
 using Oranda.Core.Metadata;
 using Oranda.Language.Editing;
+using Oranda.Oracle.Catalog;
 
 namespace Oranda.App.Features.Flashback;
 
@@ -102,11 +103,11 @@ internal static class FlashbackTrackSql
         }
 
         sb.Append('\n');
-        sb.Append("SELECT VERSIONS_STARTTIME, VERSIONS_ENDTIME, VERSIONS_OPERATION, RAWTOHEX(VERSIONS_XID) AS VERSIONS_XID, ")
-          .AppendJoin(", ", columns.Select(Column)).Append('\n')
-          .Append("FROM ").Append(RowDmlBuilder.QualifiedName(table)).Append(" VERSIONS BETWEEN ").Append(range).Append(" AND MAXVALUE\n")
-          .Append("WHERE ").AppendJoin(" AND ", conditions).Append('\n')
-          .Append("ORDER BY VERSIONS_STARTSCN DESC NULLS LAST");
+        sb.Append(EmbeddedCatalog.Text("dbinfo.flashback_versions",
+            ("columns", string.Join(", ", columns.Select(Column))),
+            ("table", RowDmlBuilder.QualifiedName(table)),
+            ("range", range),
+            ("conditions", string.Join(" AND ", conditions))));
         return sb.ToString();
     }
 

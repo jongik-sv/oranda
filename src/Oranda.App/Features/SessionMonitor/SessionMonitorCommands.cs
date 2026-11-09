@@ -9,6 +9,7 @@ using Oranda.App.Shell.Composition;
 using Oranda.Core.Connection;
 using Oranda.Core.Events;
 using Oranda.Core.Execution;
+using Oranda.Oracle.Catalog;
 using Oranda.Core.Monitoring;
 using Oranda.Core.Security;
 using Oranda.Core.Sessions;
@@ -89,7 +90,7 @@ public static class SessionMonitorCommands
             id += string.Create(CultureInfo.InvariantCulture, $",@{target.InstanceId}");
         }
 
-        return new SqlStatement($"ALTER SYSTEM DISCONNECT SESSION '{id}' {(immediate ? "IMMEDIATE" : "POST_TRANSACTION")}", default, StatementKind.Other)
+        return new SqlStatement(EmbeddedCatalog.Text("app.disconnect_session", ("id", id), ("mode", immediate ? "IMMEDIATE" : "POST_TRANSACTION")), default, StatementKind.Other)
         {
             Verb = "ALTER SYSTEM",
             DangerousTarget = id,

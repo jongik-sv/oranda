@@ -5,6 +5,7 @@ using System.Threading.Tasks;
 using Oranda.App.Features.Binds;
 using Oranda.App.Features.Execution;
 using Oranda.Core.Execution;
+using Oranda.Oracle.Catalog;
 using Oranda.Core.History;
 using Oranda.Core.Plans;
 using Oranda.Core.Sessions;
@@ -40,7 +41,7 @@ public sealed partial class PlanStatsRerunner(
     Func<object?>? owner = null)
 {
     /// <summary>ALTER SESSION 문(운영에서도 묻지 않는 ALTER, <see cref="ExecutionPolicy"/>). 이 세션에만 걸리고 DB 에 쓰지 않는다.</summary>
-    public const string StatisticsLevelSql = "ALTER SESSION SET STATISTICS_LEVEL = ALL";
+    public static string StatisticsLevelSql => EmbeddedCatalog.Text("app.statistics_level");
 
     /// <summary>실행을 시작한 작업 공간을 알려 주는 방법(연결 확인용).</summary>
     internal Func<object?>? OwnerSource => owner;
