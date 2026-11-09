@@ -71,9 +71,12 @@ public interface IColumnReorderScripts
     /// <param name="desired">보이는 열의 새 순서(INVISIBLE 열은 뒤에 붙는다)</param>
     /// <param name="enterprise">Enterprise Edition 이면 온라인 재정의(Oracle 은 DBMS_REDEFINITION), 아니면 CTAS + RENAME</param>
     /// <param name="usePrimaryKey">기본키가 있으면 true(CONS_USE_PK), 없으면 ROWID 로 재정의</param>
-    /// <param name="dependentDdl">제약·인덱스·트리거·권한·주석 DDL(<c>meta.ddl</c> 의 종속 객체 부분). 없으면 빈 문자열</param>
+    /// <param name="dependentDdl">
+    /// 제약·인덱스·트리거·권한·주석 DDL(<c>meta.ddl</c> 의 종속 객체 부분). 읽었는데 없으면 빈 문자열, 읽지 못했으면 null
+    /// (구현은 null 이면 원본을 지우지 않는 등 더 조심할 수 있다 — Tibero, D4c)
+    /// </param>
     string Rebuild(
-        DbObjectRef table, IReadOnlyList<ColumnInfo> columns, IReadOnlyList<string> desired, bool enterprise, bool usePrimaryKey, string dependentDdl);
+        DbObjectRef table, IReadOnlyList<ColumnInfo> columns, IReadOnlyList<string> desired, bool enterprise, bool usePrimaryKey, string? dependentDdl);
 
     /// <summary>
     /// 표 DDL(종속 객체 없음)과 종속 객체까지 담은 DDL 에서 종속 객체 부분만 떼어 낸다.

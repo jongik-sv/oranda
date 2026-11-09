@@ -314,6 +314,27 @@ public class ColumnReorderViewModelTests
         Assert.StartsWith("-- 가짜 구현", vm.PreviewText, StringComparison.Ordinal);
     }
 
+    /// <summary>D4c: 종속 DDL 읽기 실패는 null, 읽었으면 글(없으면 빈 글)로 구분해 넘긴다(Tibero 는 null 이면 원본을 지우지 않는다).</summary>
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task Rebuild_gets_null_dependent_ddl_only_when_reading_it_failed(bool ddlFails)
+    {
+        var scripts = new MarkedScripts(OracleDbmsServices.ColumnReorderScripts);
+        var selector = new Oranda.Core.Composition.DbmsServiceTable()
+            .Add<IColumnReorderScripts>(Oranda.Core.Connection.Dbms.Oracle, () => scripts);
+        var meta = new ReorderMeta { DdlFails = ddlFails };
+        var vm = new ColumnReorderViewModel(meta, new ReorderProvider(), new ReorderExec(), new SelectorOnly(selector));
+        await vm.LoadAsync(new ReorderSession(), Emp);
+        vm.Method = ColumnReorderMethod.Rebuild;
+        vm.MoveTo(vm.Items[1], 0);
+
+        await vm.ShowPreviewAsync();
+
+        Assert.Equal(ddlFails, scripts.LastDependentDdl is null);
+        Assert.NotEqual("(불리지 않음)", scripts.LastDependentDdl);
+    }
+
     private sealed class SelectorOnly(Oranda.Core.Composition.IDbmsServiceSelector selector) : IServiceProvider
     {
         public object? GetService(Type serviceType) => serviceType == typeof(Oranda.Core.Composition.IDbmsServiceSelector) ? selector : null;
@@ -336,8 +357,14 @@ public class ColumnReorderViewModelTests
 
         public string ToText(IReadOnlyList<SqlStatement> statements) => inner.ToText(statements);
 
-        public string Rebuild(DbObjectRef table, IReadOnlyList<ColumnInfo> columns, IReadOnlyList<string> desired, bool enterprise, bool usePrimaryKey, string dependentDdl)
-            => "-- 가짜 구현\n" + inner.Rebuild(table, columns, desired, enterprise, usePrimaryKey, dependentDdl);
+        /// <summary>마지막 <see cref="Rebuild"/> 가 받은 종속 DDL(읽기 실패면 null).</summary>
+        public string? LastDependentDdl { get; private set; } = "(불리지 않음)";
+
+        public string Rebuild(DbObjectRef table, IReadOnlyList<ColumnInfo> columns, IReadOnlyList<string> desired, bool enterprise, bool usePrimaryKey, string? dependentDdl)
+        {
+            LastDependentDdl = dependentDdl;
+            return "-- 가짜 구현\n" + inner.Rebuild(table, columns, desired, enterprise, usePrimaryKey, dependentDdl);
+        }
 
         public string DependentPart(string tableDdl, string fullDdl) => inner.DependentPart(tableDdl, fullDdl);
 

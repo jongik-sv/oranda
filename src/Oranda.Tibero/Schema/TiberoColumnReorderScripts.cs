@@ -3,6 +3,7 @@ using Oranda.Core.Connection;
 using Oranda.Core.Execution;
 using Oranda.Core.Metadata;
 using Oranda.Core.Schema;
+using Oranda.Core.Text;
 
 namespace Oranda.Tibero.Schema;
 
@@ -66,9 +67,57 @@ internal sealed class TiberoColumnReorderScripts : IColumnReorderScripts
 
     public string ToText(IReadOnlyList<SqlStatement> statements) => ColumnReorderBuilder.ToText(statements);
 
+    /// <summary>
+    /// Core 스크립트 그대로. 다만 종속 DDL 을 읽지 못했으면(null — 빈 글은 「읽었는데 없음」) 원본(<c>"T$OLD"</c>)을 지우는 줄을 주석으로 바꿔 남긴다:
+    /// 인덱스·제약·트리거·권한은 RENAME 뒤 원본에 붙어 있으므로, 지우면 다시 붙일 길이 없다(D4c).
+    /// </summary>
     public string Rebuild(
-        DbObjectRef table, IReadOnlyList<ColumnInfo> columns, IReadOnlyList<string> desired, bool enterprise, bool usePrimaryKey, string dependentDdl) =>
-        ColumnReorderBuilder.Rebuild(table, columns, desired, enterprise: false, usePrimaryKey, dependentDdl);
+        DbObjectRef table, IReadOnlyList<ColumnInfo> columns, IReadOnlyList<string> desired, bool enterprise, bool usePrimaryKey, string? dependentDdl)
+    {
+        var script = ColumnReorderBuilder.Rebuild(table, columns, desired, enterprise: false, usePrimaryKey, dependentDdl ?? string.Empty);
+        return ForTibero(script, table, keepOriginal: dependentDdl is null);
+    }
+
+    internal const string OriginalKept =
+        "-- 원본을 남긴다: 종속 객체(제약·인덱스·트리거·권한·주석) DDL 을 읽지 못해 원본을 지우면 되살릴 수 없다. 새 표를 확인하고 옮긴 뒤 직접 지운다";
+
+    /// <summary>Core 의 4) 머리 줄(「휴지통으로 간다」)은 Tibero 에서 사실과 다르다: 서버 기본이 휴지통 꺼짐이라 PURGE 없이도 영구 삭제다(실측 3.7).</summary>
+    internal const string CoreDropHeading = "-- 4) 원본을 지운다(휴지통으로 간다).";
+
+    internal const string DropHeading =
+        "-- 4) 원본을 지운다(Tibero 는 휴지통이 꺼져 있으면 — 서버 기본 — 영구 삭제된다. 되살릴 수 없으니 새 표를 먼저 확인한다). 다른 표가 참조하는 외래키가 있으면 실패하니 그 외래키를 먼저 풀고 4) 뒤에 다시 만든다";
+
+    internal const string KeptHeading = "-- 4) 원본은 지우지 않는다(아래 이유).";
+
+    /// <summary>
+    /// Core 스크립트를 Tibero 글로 고친다: 4) 머리 줄을 바꾸고, <paramref name="keepOriginal"/> 이면 <c>DROP TABLE "o"."T$OLD";</c> 줄을 이유 + 주석으로 바꾼다.
+    /// DROP 줄이 없으면(빌더가 바뀜) 원본을 지울 수 있는 글을 그대로 내지 않도록 예외 — 단위 시험이 잡는다. 머리 줄은 주석이라 없으면 그냥 둔다.
+    /// 줄 끝은 <see cref="Environment.NewLine"/> 하나로 맞춘다.
+    /// </summary>
+    internal static string ForTibero(string script, DbObjectRef table, bool keepOriginal)
+    {
+        var drop = "DROP TABLE " + SqlIdentifier.QuoteAlways(table.Owner) + "." + SqlIdentifier.QuoteAlways(table.Name + "$OLD") + ";";
+        var lines = script.ReplaceLineEndings("\n").Split('\n').ToList();
+        var at = lines.FindIndex(l => string.Equals(l.Trim(), drop, StringComparison.Ordinal));
+        if (at < 0)
+        {
+            throw new InvalidOperationException("다시 만들기 스크립트에서 원본 DROP 줄을 찾지 못했다");
+        }
+
+        if (keepOriginal)
+        {
+            lines[at] = "-- " + drop;
+            lines.Insert(at, OriginalKept);
+        }
+
+        var heading = lines.FindIndex(l => l.StartsWith(CoreDropHeading, StringComparison.Ordinal));
+        if (heading >= 0)
+        {
+            lines[heading] = keepOriginal ? KeptHeading : DropHeading;
+        }
+
+        return string.Join(Environment.NewLine, lines);
+    }
 
     public string DependentPart(string tableDdl, string fullDdl) => ColumnReorderBuilder.DependentPart(tableDdl, fullDdl);
 

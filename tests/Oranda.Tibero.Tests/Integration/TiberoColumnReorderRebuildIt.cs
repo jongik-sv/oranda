@@ -41,6 +41,30 @@ public class TiberoColumnReorderRebuildIt(ITestOutputHelper output)
     [Fact]
     public Task Rebuild_keeps_data_constraints_index_trigger_comments_and_grants() => WriteAsync(MainTable, RebuildMainAsync);
 
+    /// <summary>
+    /// D4c: 휴지통이 켜진 세션. 스크립트의 <c>DROP TABLE "T$OLD"</c> 는 PURGE 가 없어 원본이 휴지통으로 간다 — 그때도 원본의 인덱스·제약 이름이 비어
+    /// 종속 DDL(같은 이름)이 충돌 없이 다시 붙는지 본다(서버 기본은 휴지통 꺼짐이라 시험 1 은 이 경우를 덮지 않는다).
+    /// </summary>
+    [Fact]
+    public Task Rebuild_with_the_recycle_bin_on_reattaches_dependents_without_name_clashes() => WriteAsync(MainTable, async (s, o) =>
+    {
+        string[] own = [MainTable + "$OLD", MainTable + "$NEW", MainTable];
+        await PurgeOwnBinItemsAsync(s, own); // 지난 실행의 남은 항목이 아래 단언을 거짓으로 채우지 않게
+        await ExecQuietAsync(s, "recycle bin on", "ALTER SESSION SET USE_RECYCLEBIN = Y");
+        try
+        {
+            await RebuildMainAsync(s, o);
+            var binned = await CountAsync(s, $"SELECT COUNT(*) FROM user_recyclebin WHERE original_name = '{MainTable}$OLD'");
+            Assert.True(binned == 1, "the dropped $OLD table is not in the recycle bin exactly once (recycle bin was not on?)");
+        }
+        finally
+        {
+            // 이 시험이 지운 표의 휴지통 항목만(PURGE RECYCLEBIN 은 계정 휴지통의 다른 항목까지 지운다).
+            await PurgeOwnBinItemsAsync(s, own);
+            await TryExecAsync(s, "ALTER SESSION SET USE_RECYCLEBIN = N");
+        }
+    });
+
     [Fact]
     public Task Rebuild_re_adds_a_virtual_column_after_the_copied_columns() => WriteAsync(VirtualTable, (s, o) => RebuildVirtualAsync(s, o));
 
@@ -150,6 +174,9 @@ public class TiberoColumnReorderRebuildIt(ITestOutputHelper output)
         await ExecQuietAsync(session, "insert after rebuild", $"INSERT INTO {t} (A, B) VALUES (10, 20)");
         Assert.True(await CountAsync(session, $"SELECT COUNT(*) FROM {t} WHERE A = 10 AND V = 30") == 1, "V does not compute A + B for a new row");
         await ExecQuietAsync(session, "rollback test row", "ROLLBACK");
+
+        // 이 표는 종속 객체가 없다(종속 DDL 을 읽었고 빈 글) → 보통 스크립트대로 원본을 지운다(D4c 의 원본 남기기는 읽기 실패 = null 때만).
+        Assert.True(!script.Contains(TiberoColumnReorderScripts.OriginalKept, StringComparison.Ordinal), "dependent DDL was read (empty): the script should not keep the original");
         Assert.True(await CountAsync(session, $"SELECT COUNT(*) FROM user_objects WHERE object_name IN ('{t}$OLD', '{t}$NEW')") == 0, "a $OLD or $NEW table is left over");
     }
 
@@ -272,6 +299,34 @@ public class TiberoColumnReorderRebuildIt(ITestOutputHelper output)
 
     private static async Task<long> CountRawAsync(TiberoSession session, string sql) =>
         TiberoSessionQuery.Long(await TiberoSessionQuery.ScalarAsync(session, sql)) ?? 0;
+
+    /// <summary>휴지통에서 이 시험이 지운 ORT_ 표의 항목만 BIN 이름으로 <c>PURGE TABLE</c> 한다(<c>PURGE RECYCLEBIN</c> 금지, TM0b 규칙). 오류는 무시한다.</summary>
+    private static async Task PurgeOwnBinItemsAsync(TiberoSession session, IEnumerable<string> tables)
+    {
+        foreach (var table in tables)
+        {
+            TiberoSessionQuery.Table items;
+            try
+            {
+                items = await TiberoSessionQuery.RunAsync(session, "SELECT object_name FROM user_recyclebin WHERE original_name = :t",
+                    c => TiberoSessionQuery.Bind(c, "t", table));
+            }
+#pragma warning disable CA1031 // 정리 단계: 오류는 무시한다.
+            catch (Exception)
+#pragma warning restore CA1031
+            {
+                continue;
+            }
+
+            foreach (var row in items.Rows)
+            {
+                if (TiberoSessionQuery.Str(row[0]) is { Length: > 0 } binName)
+                {
+                    await TryExecAsync(session, "PURGE TABLE \"" + binName.Replace("\"", "\"\"", StringComparison.Ordinal) + "\"");
+                }
+            }
+        }
+    }
 
     /// <summary>문장을 보내고 실패하면 (형식 이름·오류 번호) 글을, 성공하면 null 을 돌려준다.</summary>
     private static async Task<string?> TryExecAsync(TiberoSession session, string sql)

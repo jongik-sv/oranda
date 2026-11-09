@@ -75,7 +75,51 @@ public class TiberoColumnReorderScriptsTests
         Assert.Contains("CREATE TABLE \"HR\".\"EMP$NEW\" AS SELECT \"MEMO\", \"ID\", \"NAME\" FROM \"HR\".\"EMP\";", script, StringComparison.Ordinal);
         Assert.Contains("RENAME TO \"EMP$OLD\"", script, StringComparison.Ordinal);
         Assert.Contains("CREATE INDEX \"HR\".\"IX\"", script, StringComparison.Ordinal);
+        Assert.Contains(Environment.NewLine + "DROP TABLE \"HR\".\"EMP$OLD\";" + Environment.NewLine, script, StringComparison.Ordinal);
+        Assert.DoesNotContain(TiberoColumnReorderScripts.OriginalKept, script, StringComparison.Ordinal);
+
+        // 4) 머리 줄은 Tibero 글(휴지통 기본 꺼짐 = 영구 삭제), 줄 끝은 한 가지.
+        Assert.DoesNotContain(TiberoColumnReorderScripts.CoreDropHeading, script, StringComparison.Ordinal);
+        Assert.Contains(TiberoColumnReorderScripts.DropHeading, script, StringComparison.Ordinal);
+        Assert.Equal(script.ReplaceLineEndings(), script);
     }
+
+    /// <summary>D4c: 종속 DDL 을 읽지 못했으면(null) 원본을 지우지 않는다 — 지우면 제약·인덱스·트리거를 되살릴 길이 없다.</summary>
+    [Fact]
+    public void Rebuild_keeps_the_original_table_when_the_dependent_ddl_could_not_be_read()
+    {
+        var script = Scripts.Rebuild(Emp, Columns, ["MEMO", "ID", "NAME"], enterprise: false, usePrimaryKey: true, dependentDdl: null);
+        var lines = script.ReplaceLineEndings("\n").Split('\n');
+
+        Assert.DoesNotContain("DROP TABLE \"HR\".\"EMP$OLD\";", lines);
+        Assert.Contains("-- DROP TABLE \"HR\".\"EMP$OLD\";", lines);
+        Assert.Contains(TiberoColumnReorderScripts.OriginalKept, lines);
+        Assert.Contains(TiberoColumnReorderScripts.KeptHeading, lines);
+        Assert.DoesNotContain(lines, l => l.StartsWith(TiberoColumnReorderScripts.CoreDropHeading, StringComparison.Ordinal));
+        Assert.Contains("ALTER TABLE \"HR\".\"EMP$NEW\" RENAME TO \"EMP\";", lines); // 나머지 단계는 그대로
+        Assert.DoesNotContain(lines, l => l.StartsWith("DROP ", StringComparison.Ordinal));
+        Assert.Equal(script.ReplaceLineEndings(), script); // 줄 끝 섞지 않음
+    }
+
+    /// <summary>읽었는데 종속 객체가 없으면(빈 글) 보통 스크립트: 원본을 지운다(단순한 표에 $OLD 를 남기지 않는다).</summary>
+    [Theory]
+    [InlineData("")]
+    [InlineData("  \n")]
+    public void Rebuild_drops_the_original_when_the_table_has_no_dependents(string dependentDdl)
+    {
+        var lines = Scripts.Rebuild(Emp, Columns, ["MEMO", "ID", "NAME"], enterprise: false, usePrimaryKey: true, dependentDdl)
+            .ReplaceLineEndings("\n").Split('\n');
+
+        Assert.Contains("DROP TABLE \"HR\".\"EMP$OLD\";", lines);
+        Assert.DoesNotContain(TiberoColumnReorderScripts.OriginalKept, lines);
+        Assert.Contains(TiberoColumnReorderScripts.DropHeading, lines);
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void For_tibero_throws_when_the_builder_no_longer_emits_the_drop_line(bool keepOriginal) =>
+        Assert.Throws<InvalidOperationException>(() => TiberoColumnReorderScripts.ForTibero("SELECT 1 FROM DUAL;", Emp, keepOriginal));
 
     [Fact]
     public void Helpers_delegate_to_the_shared_text_builders()

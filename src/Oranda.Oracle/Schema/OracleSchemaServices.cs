@@ -49,8 +49,8 @@ internal sealed class OracleColumnReorderScripts : IColumnReorderScripts
     public string ToText(IReadOnlyList<SqlStatement> statements) => ColumnReorderScripts.ToText(statements);
 
     public string Rebuild(
-        DbObjectRef table, IReadOnlyList<ColumnInfo> columns, IReadOnlyList<string> desired, bool enterprise, bool usePrimaryKey, string dependentDdl) =>
-        ColumnReorderScripts.Rebuild(table, columns, desired, enterprise, usePrimaryKey, dependentDdl);
+        DbObjectRef table, IReadOnlyList<ColumnInfo> columns, IReadOnlyList<string> desired, bool enterprise, bool usePrimaryKey, string? dependentDdl) =>
+        ColumnReorderScripts.Rebuild(table, columns, desired, enterprise, usePrimaryKey, dependentDdl ?? string.Empty); // Oracle: 읽기 실패도 빈 글과 같게(예전 동작)
 
     public string DependentPart(string tableDdl, string fullDdl) => ColumnReorderScripts.DependentPart(tableDdl, fullDdl);
 

@@ -59,8 +59,11 @@ internal sealed class ReorderMeta : IMetadataProvider
         });
     }
 
+    /// <summary>참이면 DDL 읽기가 실패한다(종속 DDL 을 읽지 못한 경우).</summary>
+    public bool DdlFails { get; set; }
+
     public Task<string> GetDdlAsync(ISession s, DbObjectRef obj, DdlOptions o, CancellationToken ct)
-        => Task.FromResult(o.IncludeDependentObjects
+        => DdlFails ? Task.FromException<string>(new InvalidOperationException("ddl failed")) : Task.FromResult(o.IncludeDependentObjects
             ? "CREATE TABLE \"SCOTT\".\"EMP\" (ID NUMBER);\nCREATE UNIQUE INDEX \"SCOTT\".\"EMP_PK\" ON \"SCOTT\".\"EMP\" (\"ID\");"
             : "CREATE TABLE \"SCOTT\".\"EMP\" (ID NUMBER);");
 

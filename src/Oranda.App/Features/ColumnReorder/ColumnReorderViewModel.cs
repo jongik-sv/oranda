@@ -410,7 +410,8 @@ public sealed partial class ColumnReorderViewModel : ObservableObject, IDisposab
     private async Task<string> BuildRebuildAsync(CancellationToken ct)
     {
         await EnsureDependentDdlAsync(ct).ConfigureAwait(true);
-        return _scripts!.Rebuild(Table!, _columns, CurrentOrder(), _enterprise, _usePrimaryKey, _dependentDdl ?? string.Empty);
+        // null = 종속 DDL 을 읽지 못함(빈 글 = 읽었는데 없음). 구분해서 넘긴다(Tibero 는 null 이면 원본을 지우지 않는다).
+        return _scripts!.Rebuild(Table!, _columns, CurrentOrder(), _enterprise, _usePrimaryKey, _dependentDdl);
     }
 
     /// <summary>표 DDL 에서 제약·인덱스·트리거·권한·주석 DDL 부분을 한 번만 읽는다.</summary>
