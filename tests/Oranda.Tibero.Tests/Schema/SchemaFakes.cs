@@ -30,6 +30,10 @@ internal static class SchemaFakes
             return Task.FromResult(answer(id));
         };
 
+    /// <summary>카탈로그 id 별 답. 목록에 없는 id 는 빈 표(열·행 없음).</summary>
+    public static Func<string, TiberoSessionQuery.Table> ById(params (string Id, TiberoSessionQuery.Table Table)[] answers) =>
+        id => answers.FirstOrDefault(a => a.Id == id).Table ?? new TiberoSessionQuery.Table([], []);
+
     /// <summary>늘 <paramref name="exception"/> 을 던지는 실행기.</summary>
     public static CatalogRunner Throwing(Exception exception) => (_, _, _, _) => Task.FromException<TiberoSessionQuery.Table>(exception);
 
