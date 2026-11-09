@@ -369,7 +369,7 @@
                   <ItemsControl ItemsSource="{Binding Variables}">
                     <ItemsControl.ItemTemplate>
                       <DataTemplate x:DataType="dc:CopyVariableViewModel">
-                        <Grid ColumnDefinitions="150,80,*,120,Auto" ColumnSpacing="6" Margin="0,2">
+                        <Grid ColumnDefinitions="150,80,*,120,Auto,Auto" ColumnSpacing="6" Margin="0,2">
                           <TextBox Classes="compact" Text="{Binding Name}" PlaceholderText="이름(예: COILS)" VerticalAlignment="Top"
                                    FontFamily="{DynamicResource OrandaGridFontFamily}" AutomationProperties.Name="변수 이름" />
                           <ComboBox Grid.Column="1" Classes="compact" ItemsSource="{x:Static dc:VariableTypeOption.All}" SelectedItem="{Binding TypeOption}" HorizontalAlignment="Stretch"
@@ -390,7 +390,10 @@
                             <TextBlock Text="{Binding UsageText}" Classes="mono" FontSize="{DynamicResource OrandaFontSizeSmall}" TextTrimming="CharacterEllipsis"
                                        ToolTip.Tip="조건에 이렇게 씁니다" />
                           </StackPanel>
-                          <Button Grid.Column="4" Classes="toolbar" Content="변수 빼기" icons:ButtonIcon.Key="remove" icons:ButtonIcon.IconOnly="True"
+                          <Button Grid.Column="4" Classes="toolbar" Content="조건에 넣기" icons:ButtonIcon.Key="filter" icons:ButtonIcon.IconOnly="True"
+                                  VerticalAlignment="Top" ToolTip.Tip="고른 규칙의 WHERE 조건에 넣기" Click="OnInsertVariableCondition"
+                                  IsEnabled="{Binding $parent[ItemsControl].((dc:RuleEditorViewModel)DataContext).CanInsertVariableCondition, FallbackValue=False}" />
+                          <Button Grid.Column="5" Classes="toolbar" Content="변수 빼기" icons:ButtonIcon.Key="remove" icons:ButtonIcon.IconOnly="True"
                                   VerticalAlignment="Top" ToolTip.Tip="이 변수 빼기" Click="OnRemoveVariable" />
                         </Grid>
                       </DataTemplate>

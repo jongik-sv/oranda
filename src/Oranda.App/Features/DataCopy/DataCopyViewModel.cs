@@ -186,6 +186,13 @@ public sealed partial class DataCopyViewModel : ViewModelBase, IAsyncDisposable
         StatusIsError = error;
     }
 
+    /// <summary>변수 줄 「조건에 넣기」: 고른 규칙의 WHERE 에 변수 조건을 넣고 결과를 상태 줄에 알린다.</summary>
+    public void InsertVariableCondition(CopyVariableViewModel variable)
+    {
+        var result = Editor.InsertVariableCondition(variable);
+        Say(result.Message, result.NeedsAttention);
+    }
+
     /// <summary>창을 처음 열 때: 접속 목록과 내 작업 목록을 읽는다.</summary>
     public async Task InitializeAsync(CancellationToken ct = default)
     {

@@ -66,7 +66,8 @@ public sealed partial class SkipColumnViewModel(string column, bool skipped) : V
 public sealed partial class TableRuleViewModel : ViewModelBase
 {
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(IsPeriod), nameof(IsParentKey), nameof(IsCustom), nameof(ConditionText), nameof(ConditionError), nameof(HasConditionError))]
+    [NotifyPropertyChangedFor(nameof(IsPeriod), nameof(IsParentKey), nameof(IsCustom), nameof(ConditionText), nameof(ConditionError), nameof(HasConditionError),
+        nameof(CanTakeCondition))]
     private RuleKind _kind;
 
     [ObservableProperty]
@@ -325,6 +326,14 @@ public sealed partial class TableRuleViewModel : ViewModelBase
     public bool SecondFormatVisible => SecondColumn is not null && (SecondColumn.DefaultFormat is not null || IsStringType(SecondColumn.DataType));
 
     public bool HasColumns => _source is not null;
+
+    /// <summary>원본 열 이름(열 정보를 아직 읽지 않았으면 빈 목록). 변수를 조건에 넣을 때 열 이름을 짐작하는 데 쓴다.</summary>
+    public IReadOnlyList<string> ColumnNames => _source is null ? [] : [.. _source.Columns.Select(c => c.Name)];
+
+    /// <summary>
+    /// 사용자 조건(WHERE)을 받을 수 있는 규칙인지: 직접 조건·기간(추가 조건)·전체(직접 조건으로 바꿔 넣는다). 부모 키·제외는 받지 않는다.
+    /// </summary>
+    public bool CanTakeCondition => Kind is RuleKind.All or RuleKind.Period or RuleKind.Custom;
 
     public IReadOnlyList<PeriodColumn> SavedPeriodColumns { get; private set; }
 

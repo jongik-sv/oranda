@@ -543,6 +543,14 @@ public partial class DataCopyWindow : Window
         }
     }
 
+    private void OnInsertVariableCondition(object? sender, RoutedEventArgs e)
+    {
+        if (Vm is { } vm && (sender as Control)?.DataContext is CopyVariableViewModel variable)
+        {
+            vm.InsertVariableCondition(variable);
+        }
+    }
+
     private async void OnReenable(object? sender, RoutedEventArgs e)
     {
         if (Vm is { } vm && (sender as Control)?.DataContext is UnfinishedRunItem item)

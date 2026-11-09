@@ -191,6 +191,10 @@ public sealed class DataCopyRenderTests : IDisposable
             Assert.Equal(["IN (:COILS)", "= :MO_NO", "IN (:MAT_CD)"], vm.Editor.Variables.Select(v => v.UsageText));
             Assert.Contains("숫자", vm.Editor.Variables[2].Problem, StringComparison.Ordinal);
             Assert.Contains("숫자", vm.Editor.Validate(), StringComparison.Ordinal); // 잘못된 값은 점검으로 넘어가지 못한다
+            // 변수 줄마다 「조건에 넣기」 단추: 고른 규칙(직접 조건)이 WHERE 를 받으므로 켜져 있다.
+            var inserts = expander.GetVisualDescendants().OfType<Button>().Where(b => Equals(ToolTip.GetTip(b), "고른 규칙의 WHERE 조건에 넣기")).ToList();
+            Assert.Equal(3, inserts.Count);
+            Assert.All(inserts, b => Assert.True(b.IsEffectivelyEnabled));
             AssertNotClipped(window, "변수");
             Shots(window, "1-variables");
         }
