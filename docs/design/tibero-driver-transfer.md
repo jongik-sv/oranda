@@ -69,3 +69,159 @@ DB 파라미터(`nls_database_parameters`)도 같은 값(`NLS_LANG_AT_BOOT` = MS
 | 가져오기 IT(`TiberoTransferIt`) | CSV 5행을 배치 2 로 넣어 값(따옴표·쉼표·한글·날짜·`TIMESTAMP(6)`·4500자 CLOB·RAW·NUMBER(12,2))이 맞고, 같은 파일을 다시 넣으면 5행 모두 중복 키 경고로 남고 표는 그대로, 값 오류 행은 보내기 전에 경고로 걸러진다. 2·0·0 통과 |
 
 배치 크기 기본값 500(`ImportOptions.BatchSize`)은 Tibero 에서도 그대로 써도 된다(문장 20 KB, 69 ms).
+
+## 3. 복사 실측 (TM0b, `TiberoBulkMeasureIt`, ORT_TBM_* 표, 쓰기 IT)
+
+근거: win144 #28(1c095842, `TiberoBulkMeasureIt` 12 Fact 통과), #36(b0da912d, Measure_array_bind* 4 통과), #42(675e2a80, 되읽기 예외로 중간 멈춤), #53(c02f1aaf, 1 통과). 서버 6.2.15(BUILD 302172), 드라이버 Tibero.DataAccess 1.1.35. 계정 이름은 `<USER>` 로 가림.
+
+### 3.1 배열 바인드 (ArrayBindCount)
+
+| 모양 | 결과 |
+|---|---|
+값 모양 표(#36 `array_bind.shape.*`, 열 하나·3행):
+
+| 열 / 매개변수 종류 | 형식 배열 | `object[]` |
+|---|---|---|
+| NUMBER / Decimal, `decimal[]` | 됨(합 6.5) | InvalidCast Decimal→String |
+| NUMBER / Decimal, `string?[]`(NULL 포함) | **됨**(1.5+2, NULL 1행) | InvalidCast DBNull→String |
+| NUMBER / Int64, `long[]` | 됨 | InvalidCast Int64→String |
+| NUMBER / Double | — | InvalidCast Double→String |
+| VARCHAR2, `string?[]`(NULL·한글) | 됨(COUNT 2, NULL 1) | InvalidCast DBNull→String |
+| DATE, `DateTime[]`(NULL 없음) | 됨 | InvalidCast DateTime→String |
+| CLOB, `string?[]`(5001자·NULL) | 됨(COUNT 2, 최대 5001) | InvalidCast DBNull→String |
+| BLOB / Blob, `byte[][]` | **NullReferenceException** | InvalidCast Byte[]→String |
+| BLOB / LongRaw, `byte[][]` | InvalidCast Byte[][]→SByte[] | — |
+| BLOB / Raw | — | InvalidCast Byte[]→String |
+| RAW(2000) / Raw, `byte[][]` | **NullReferenceException** | InvalidCast Byte[]→String |
+
+- **`object[]` 배열 바인드는 값 종류와 관계없이 안 됨**: 드라이버가 원소를 string 으로 캐스트한다(글자만 든 object[] 도 DBNull 에서 실패). 드라이버 동작으로 본다.
+- **이진(BLOB·RAW) 배열 바인드 안 됨**: 형식 배열도 NRE / InvalidCast.
+NULL 섞인 배열(#42, 675e2a80 `array_bind.null_shape.*`, 3행 중 1행 NULL):
+
+| 열 | 모양 | 결과 |
+|---|---|---|
+| NUMBER | `decimal?[]` / `long?[]` (Decimal·Int64 종류) | **NullReferenceException** |
+| NUMBER | `string?[]` + Decimal 종류 | 됨, `12345678901234567890.123456789`·`-0.000001` 정확(읽기 `-.000001`) |
+| NUMBER | `string?[]` + `TO_NUMBER(:V)` | 됨 |
+| DATE | `DateTime?[]` | **NRE** |
+| DATE | `string?[]` + `TO_DATE(:V, 'YYYY-MM-DD HH24:MI:SS')` | 됨 |
+| TIMESTAMP | `DateTime[]`(NULL 없음, TimeStamp 종류) | 됨, 단 **밀리초로 잘림**(.1234567 → .123) |
+| TIMESTAMP | `DateTime?[]` | **NRE** |
+| TIMESTAMP | `string?[]` + `TO_TIMESTAMP(:V, '… HH24:MI:SS.FF7')` | 됨, .123456(열 정밀도 6) |
+| RAW(2000) | 16진 `string?[]` + `HEXTORAW(:V)`(100·2000바이트) | 됨(되읽기 `RAWTOHEX(UTL_RAW.SUBSTR(…))` 는 ODP-15115 — 측정 쪽 문제, 길이로 다시 봄) |
+
+- 결론: **nullable 형식 배열은 전부 NRE**. NULL 이 들어갈 수 있는 열은 글자 배열(`string?[]`) + 변환 함수(또는 Decimal 종류)가 기본.
+- 결론: **nullable 형식 배열은 #53 에서도 전부 NRE**(decimal?·long?·DateTime?(DATE·TIMESTAMP)).
+
+한 행씩 스칼라 바인드(#53 `single_bind.*`, ArrayBindCount 없이):
+
+| 열 | 값 | 결과 |
+|---|---|---|
+| BLOB | `byte[]` 3000·40000바이트 | 됨, 길이·앞 4바이트 같음 |
+| BLOB | NULL(DBNull) | 됨, NULL |
+| BLOB | 빈 `byte[0]` | 됨, **NULL 로 들어감**(길이 0 BLOB 아님) |
+| RAW(2000) | `byte[]` 2000바이트 | 됨 |
+| RAW(2000) | NULL | 됨 |
+| BLOB | 같은 준비문(`:ID, :BL`)을 값만 바꿔 3번(3000바이트·NULL·10바이트) | 3번 모두 1행, 되읽기 3000·NULL·10 |
+
+묶음 크기(#36, 형식 배열): NUMBER+VARCHAR2 1·100·1000·10000행 됨(10000행 40 ms), NUMBER+CLOB 5000자 10·100행 됨(100행 47 ms), NUMBER+BLOB 3000바이트 10·100행 = NRE.
+
+| 경우 | 결과 |
+|---|---|
+| ArrayBindCount 3 > 배열 길이 2 | **드라이버 IndexOutOfRangeException**, 행 0(#53) |
+| ArrayBindCount 2 < 배열 길이 3 | 됨, 앞 2행만 들어감(반환 2) — 남는 원소는 조용히 버림(#53) |
+| 형식 배열 DML 뒤 커밋 전 다른 세션 | 안 보임(0), 커밋 뒤 3 — 배열 DML 은 트랜잭션 안(#53) |
+
+**묶음 안 제약 위반 = 예외 없음** (형식 배열, 3~4행 묶음):
+
+| 경우 | ExecuteNonQuery 반환 | 남은 행 |
+|---|---|---|
+| PK 중복이 가운데 | 1 | 위반 앞 1행 |
+| PK 중복이 맨 뒤 | 2 | 앞 2행 |
+| PK 중복이 맨 앞 | 0 | 없음 |
+| 값 너무 큼(가운데) | 1 | 앞 1행 |
+| 묶음 안끼리 PK 중복 | 2 | 앞 2행 |
+
+- 위반 행부터 뒤는 들어가지 않는다. 오류도 `Errors` 도 없다 → **영향 행 수가 유일한 신호**.
+- 트랜잭션은 열린 채(다른 세션엔 안 보임), 다음 문장 정상, ROLLBACK 이 앞 행까지 되돌림.
+- Oracle(ODP) 은 OracleException + 행별 오류(ArrayBindErrors)를 주므로 **Tibero 실패 판정은 Oracle 과 다르다**(3.10 TB1-①).
+
+### 3.2 세이브포인트·트랜잭션
+
+- `SAVEPOINT x`·`ROLLBACK TO x`·`ROLLBACK TO SAVEPOINT x`·같은 이름 다시 쓰기·`ORANDA_COPY_BATCH` 이름 됨.
+- 중첩: A, B 만든 뒤 A 로 되돌리면 B 는 사라짐(-21008, Oracle 같음). COMMIT 뒤 세이브포인트 없음(-21008).
+- 실패 묶음 → ROLLBACK TO → 한 행씩 다시: 성공 행 들어감, 중복 행만 -10007(UNIQUE), 끝난 뒤 정리 ROLLBACK TO 됨.
+- 최상위 `SET TRANSACTION READ ONLY` = -7001(문법), `EXECUTE IMMEDIATE` 안도 -7001. PSM 블록 안에서는 됨(E1 이 쓰는 경로).
+- READ ONLY 트랜잭션 안에서도 INSERT·DDL·SELECT FOR UPDATE 가 **된다**(쓰기 안 막음). 스냅숏 일관성은 됨(다른 세션 커밋이 안 보임). → 복사 원본 읽기 일관성 용도로만 쓰고, 읽기 전용 보호는 앱 정책 관문(driver-exec 2장, 결정76).
+
+### 3.3 암시적 커밋 (앞서 넣은 행이 다른 세션에 보이는지 / ROLLBACK 뒤 남는지)
+
+| 문장 | 커밋함 |
+|---|---|
+| SELECT, SAVEPOINT, ALTER SESSION(NLS), LOCK TABLE | 아니오 |
+| ALTER TABLE ADD COLUMN(성공·실패 둘 다), CREATE INDEX(성공·실패 둘 다), COMMENT ON TABLE, CREATE/ALTER/DROP SEQUENCE, ALTER TABLE DISABLE ALL TRIGGERS, DROP INDEX | 예 |
+
+Oracle 과 같음. **실패한 DDL 도 커밋한다** → 복사 도중 DDL(트리거·제약 끄기, 시퀀스 조정)은 묶음 트랜잭션 밖, 앞에서 한다.
+
+### 3.4 트리거
+
+- `ALTER TABLE … DISABLE/ENABLE ALL TRIGGERS`, `ALTER TRIGGER [따옴표 이름] DISABLE/ENABLE` 됨, ALL_TRIGGERS.STATUS 반영, 꺼진 동안 트리거 안 돎.
+- `DBMS_METADATA.GET_DDL('TRIGGER', …)` = **-14001 Not yet implemented**(TABLE 은 됨) → 트리거 DDL 은 ALL_TRIGGERS + ALL_SOURCE 로 조립(TB4).
+
+### 3.5 외래 키
+
+- 켜진 FK 고아 INSERT = -10008. `DISABLE CONSTRAINT` 뒤 고아 들어감.
+- `ENABLE VALIDATE` + 고아 = -7161, `ENABLE NOVALIDATE` 됨(뒤 새 고아는 -10008, 정상), 고아 지운 뒤 VALIDATE 됨.
+- ON DELETE CASCADE·SET NULL·DEFERRABLE INITIALLY DEFERRED/IMMEDIATE 문법 됨. 그러나 **ALL_CONSTRAINTS 에 DEFERRABLE·DEFERRED 열 없음**(-8026) → 지연 여부를 카탈로그로 못 읽음.
+- 참조되는 부모 DROP·TRUNCATE = -7156.
+- ALL_CONS_COLUMNS 조인(자식·부모 열) 됨.
+
+### 3.6 시퀀스·IDENTITY
+
+- NEXTVAL 묶음: `CONNECT BY LEVEL <= :N`(decimal·int 바인드)·LEVEL 하위 질의·리터럴 모두 됨, 따옴표 소유자.시퀀스 됨.
+- 1000행 NEXTVAL 질의에서 1행만 읽어도 1000 소비(35 → 1037). NEXTVAL 은 트랜잭션 안 엶, ROLLBACK 으로 안 돌아감.
+- ALL_SEQUENCES.LAST_NUMBER 는 캐시 끝(CACHE 20). ALTER SEQUENCE INCREMENT BY 100·-값·1 복원 됨.
+- **IDENTITY 없음**: `GENERATED … AS IDENTITY` 4가지 = -7001, ALL_TAB_IDENTITY_COLS = -8103(순환 동의어), ALL_TAB_COLUMNS.IDENTITY_COLUMN 없음. 대체 `DEFAULT seq.NEXTVAL` 됨(DATA_DEFAULT = `ORT_TBM_IDS.NEXTVAL`).
+
+### 3.7 휴지통
+
+- USER_RECYCLEBIN·RECYCLEBIN 있음, 열 = OBJECT_NAME, ORIGINAL_NAME, TYPE, TS_NAME, CREATETIME, DROPTIME, DROPTSN, BASE_OBJECT, SPACE(**OPERATION 없음**).
+- DROP(PURGE 없이) → 휴지통에 BIN 이름(`<USER>_TBL…`, 따옴표 없는 `BIN$` 모양 아님) 1행. 그 이름 SELECT = -8052.
+- FLASHBACK TABLE … TO BEFORE DROP [RENAME TO] 됨. PURGE TABLE 원래 이름·BIN 이름, DROP … PURGE, PURGE RECYCLEBIN 됨.
+- `ALTER SESSION SET RECYCLEBIN = ON` = -7001, `USE_RECYCLEBIN` 됨. V$PARAMETER 없음(-8033) → 휴지통 켜짐 여부 파라미터로 확인 못 함.
+
+### 3.8 MERGE·바인드
+
+- MERGE USING DUAL: 리터럴·스칼라 바인드·NULL·형식 배열(3행) 됨, INSERT 만 있는 MERGE 두 번째 = 0행. object[] 배열 = InvalidCast(3.1 과 같음).
+- 바인드 이름: 남는 매개변수 OK, 모자라면 -12029, 같은 이름 두 번 = 매개변수 1개로 OK.
+
+### 3.9 복사 카탈로그 (copy.* — Oracle SQL 그대로 Tibero 에 보냈을 때)
+
+| copy.* id | Tibero | TB3a 처리 |
+|---|---|---|
+| session_user·session_roles·session_privs | 됨 | 그대로 |
+| table_privs | -8026: ALL_TAB_PRIVS 에 TABLE_SCHEMA·TYPE 없음 | `OWNER` 로 |
+| enabled_triggers·referencing_fks | 됨 | 그대로 |
+| identity_cols | -8103 | 쿼리 없이 「IDENTITY 없음」(빈 결과) |
+| sequence_info·sequence_names | 됨 | 그대로 |
+| parameter_value | -8033: V$PARAMETER 없음 | V$PARAMETERS 후보(미실측) — UNDO_RETENTION·MAX_STRING_SIZE 이름도 미실측. 못 읽으면 힌트 생략 |
+| tablespace·constraint_owner·index_owner | 됨 | 그대로 |
+| col_priv_count·other_grantor_count | -8026: TABLE_SCHEMA 없음 | `OWNER` 로 |
+| mview_log_count·vpd_policy_count | 됨 | 그대로 |
+| fga_policy_count | -8033: ALL_AUDIT_POLICIES 없음 | NotRestoredProbes 에서 뺌 |
+| object_exists·target_is_table | 됨 | 그대로 |
+| trigger_count_all | -8026: BASE_OBJECT_TYPE 없음 | 조건 뺌(ALL_TRIGGERS 는 표 트리거만 TABLE_NAME 채움 — TB3a 확인) |
+
+다시 만들기(RecreateStep, TB4) 쪽: triggers_of_table(BASE_OBJECT_TYPE)·referencing_fk_columns/source_foreign_keys(DEFERRABLE·DEFERRED)·recycle_bin_of_table(OPERATION) = -8026, grants_by_owner_twice_bound(TABLE_SCHEMA) = -8026, GET_DDL(TRIGGER) = -14001. GET_DDL(TABLE)·foreign_key_columns·table_exists 됨.
+
+### 3.10 TB1·TB3·TB4 규칙 (이 실측으로 정함)
+
+1. **TB1 실패 판정 = 영향 행 수**: 묶음 ExecuteNonQuery 반환 ≠ 묶음 행 수 → 실패로 보고, 반환값 k 로 「k 번째 행(0부터)이 첫 위반」을 알 수 있음. 처리 = 세이브포인트 ROLLBACK TO → 한 행씩 다시(T5 결정). 예외가 나도(형식·드라이버 오류) 같은 경로.
+2. **TB1 값 배열 = 형식 배열만**: `object[]` 는 어떤 종류도 금지(#36: 드라이버가 원소를 string 으로 캐스트). 열마다 형식 배열을 만든다(nullable 형식 배열은 NRE, #42) — VARCHAR2·CHAR·CLOB = `string?[]`, NUMBER = `string?[]` + Decimal 종류(invariant 고정 소수점 글자, NULL·30자리 소수 됨), DATE = `string?[]` + `TO_DATE(:V, 'YYYY-MM-DD HH24:MI:SS')`, TIMESTAMP = `string?[]` + `TO_TIMESTAMP(:V, 'YYYY-MM-DD HH24:MI:SS.FF7')`(#42 실측 형식, 형식 DateTime[] 은 밀리초로 잘려 안 씀), RAW = 16진 `string?[]` + `HEXTORAW(:V)`. NULL 이 없는 열도 같은 경로(경로 하나). ArrayBindCount = 모든 배열 길이(크면 드라이버 IndexOutOfRange, 작으면 뒤 행을 조용히 버림 — #53) → TB1 은 묶음마다 길이를 단정한다. INSERT/MERGE 글의 값 자리에 변환 함수를 감싸는 것은 Tibero 실행 방언(TB3b), 값 → 글자는 TiberoBulkValueCodec 한 곳.
+2-1. **BLOB·LONG RAW 열이 있는 표 = 배열 바인드 안 함**: 같은 트랜잭션·같은 준비문으로 한 행씩(스칼라 byte[] 바인드, 보충 측정 `single_bind.*` 로 확인), 묶음 단위 세이브포인트·실패 처리는 같게. RAW 는 16진 + `HEXTORAW(:V)` 배열(#42 됨)이라 배열 경로에 남고, 한 행씩은 BLOB·LONG RAW 열이 있는 표만(2000바이트 넘는 값을 HEXTORAW 로 못 넘김). 스칼라 byte[] 바인드·준비문 재사용 됨(#53). 빈 byte[] 는 NULL 로 들어감 → 원본 길이 0 BLOB 은 NULL 이 된다(Oracle 결과와 다를 수 있어 TI1b 에서 Oracle 과 비교, 차이면 EMPTY_BLOB() 경로). 속도 목표 없음(Q3), 행/초만 기록.
+3. **DDL 은 묶음 밖**: 트리거·제약 끄기, 시퀀스 조정은 묶음 트랜잭션 시작 전에(실패한 DDL 도 커밋).
+4. **트리거 DDL 조립**: GET_DDL(TRIGGER) 대신 ALL_TRIGGERS + ALL_SOURCE(TB4, Q5).
+5. **FK 다시 켜기**: VALIDATE 실패(-7161) 시 NOVALIDATE 로 켜고 고아 수를 알림(Oracle 경로와 같음). 지연 FK 여부는 카탈로그로 못 읽음 → TB3a 는 「지연 여부 모름」으로 두고 차단하지 않음(또는 사유 표시 — TB3a 결정).
+6. **IDENTITY 규칙 없음**: Tibero 방언은 IDENTITY 점검·GENERATED ALWAYS 차단을 하지 않음(쿼리도 안 보냄).
+7. **휴지통**: Recreate 안전망은 BIN 이름 SELECT 가 안 되므로(-8052) 「휴지통에서 되읽기」에 기대지 않음. FLASHBACK TO BEFORE DROP 은 됨 — Recreate 차단 해제 여부는 T5 결정 Q5(실측 없으면 차단) 따라 TB4 에서.
+8. **시퀀스 다음 값 = CONNECT BY 묶음**: Oracle `CopyStatements.NextValues` 모양 그대로 써도 됨. 소비가 읽은 행 수보다 클 수 있음(Oracle 같음).
