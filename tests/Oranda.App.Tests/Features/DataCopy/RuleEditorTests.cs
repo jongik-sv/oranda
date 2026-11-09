@@ -354,7 +354,7 @@ public sealed class RuleEditorTests
         Assert.Equal(typeof(DataCopyCommandHandler), registered["oranda.tools.dataCopy"].HandlerType);
         Assert.Contains("menu:tools/dataCopy@41", registered["oranda.tools.dataCopy"].Definition.Placements);
         Assert.Equal("schemaFocus", registered["oranda.schema.addToDataCopy"].Definition.When);
-        Assert.Equal("schemaNodeSelected && !noImplDataTransfer", registered["oranda.schema.addToDataCopy"].Definition.Enablement);
+        Assert.Equal("schemaNodeSelected && !noImplDataCopy", registered["oranda.schema.addToDataCopy"].Definition.Enablement);
         Assert.Contains("context:schema/dataCopy@46", registered["oranda.schema.addToDataCopy"].Definition.Placements);
     }
 

@@ -43,9 +43,16 @@ public static class DbmsServiceKeys
         [DbmsServiceArea.ExecutionPlan] = [typeof(IExecutionPlanService)],
         [DbmsServiceArea.Tuning] = [typeof(ITuningService)],
         [DbmsServiceArea.Metadata] = [typeof(IMetadataProvider), typeof(ISchemaTreeProvider)],
-        [DbmsServiceArea.DataTransfer] = [typeof(IDataTransferService), typeof(ICopyRunner), typeof(ICopyPrecheckService)],
+        [DbmsServiceArea.DataTransfer] = [typeof(IDataTransferService), typeof(IImportValueConverter)],
+        [DbmsServiceArea.DataCopy] = [typeof(ICopyRunner), typeof(ICopyPrecheckService)],
         [DbmsServiceArea.DatabaseInfo] = [typeof(IDatabaseInfoProvider)],
     };
+
+    /// <summary>
+    /// <see cref="Areas"/> 에 있으면서 디스패처 없이 선택기에서 바로 꺼내는 형식(호출 쪽이 세션 DBMS 로 고른다). 영역 판정에는 쓰이고,
+    /// 「표의 형식은 디스패처가 있어야 한다」 시험에서만 빠진다.
+    /// </summary>
+    public static IReadOnlyCollection<Type> KeyedOnly { get; } = [typeof(IImportValueConverter)];
 
     /// <summary>
     /// 디스패처는 있으나 영역 키를 만들지 않는 서비스 형식(실행·세션 관리·LOB 처럼 모든 화면의 바탕이거나, 영역 안 일부 화면이 따로 다룬다).
@@ -151,8 +158,11 @@ public enum DbmsServiceArea
     /// <summary>스키마 트리·객체 상세 메타데이터(<c>IMetadataProvider</c>·<c>ISchemaTreeProvider</c>).</summary>
     Metadata,
 
-    /// <summary>데이터 전송·복사(<c>IDataTransferService</c>·<c>ICopyRunner</c>·<c>ICopyPrecheckService</c>).</summary>
+    /// <summary>내보내기·가져오기(<c>IDataTransferService</c>·<c>IImportValueConverter</c>).</summary>
     DataTransfer,
+
+    /// <summary>데이터 복사(<c>ICopyRunner</c>·<c>ICopyPrecheckService</c>). 내보내기·가져오기와 따로 켜진다.</summary>
+    DataCopy,
 
     /// <summary>DB 정보·객체 검색(<c>IDatabaseInfoProvider</c>).</summary>
     DatabaseInfo,
