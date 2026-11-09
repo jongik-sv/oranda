@@ -452,3 +452,23 @@
 3. **통계·튜닝 계열은 Oracle 만 쓰는 기능**(SQL 프로필, SQL 패치, 베이스라인, 공유 커서 사유, bind-aware)은 Tibero 에서 끄고 이유를 보인다(A5 의 «비활성 + 이유» 부품). AWR 은 `DBA_HIST_*` 가 일부 있으나 `SQL_ID` 대신 `SQL_HASH_VALUE`, 델타 열 없음이라 별도 설계.
 4. **버전 판정**: Tibero 7 에서 이 표가 바뀔 수 있다(서버 없음). 판정은 «뷰가 있는가» 로 하고 버전 숫자로 막지 않는다는 설계(tibero.md 머리말)대로, 파일 접미사(`.7.sql`)로 갈라 쓴다.
 5. **확인이 남은 것**: ① DBA 계정으로 같은 측정(권한 때문에 숨은 뷰가 없는지) ② 값의 뜻·단위(`WAIT_TIME`, `ELAPSED_TIME`, `SQL_ET`, `V$SESSION.STATE`) ③ `FROM {table} VERSIONS BETWEEN …`(플래시백 버전 조회) 지원 ④ Tibero 의 `EXPLAIN PLAN` 결과를 읽는 방법(`DBMS_XPLAN.DISPLAY` 가 없음) ⑤ `DBMS_METADATA` 변환 옵션을 대신할 방법.
+
+## 8. X3 결과 — Tibero 판 `meta`·`dbinfo` 카탈로그 (2026-11-09, 서버 6.2.15)
+
+`src/Oranda.Tibero/Catalog/{meta,dbinfo}/` 에 Oracle 판과 같은 id 의 Tibero 판 42개(meta 27 = 기존 `schemas` 포함, dbinfo 15)를 두었다. 파일마다 `@PFX@` 를 dba/all 로 풀어 바인드를 NULL 로 실제 서버에서 실행해 열 이름·순서가 Oracle 판과 같은 것을 확인했다(행 값은 바인드가 NULL 이라 파일마다 별도 조회로 일부만 확인). 버전 변형(`.11`/`.23`)이 있는 id 는 Tibero 가 가장 보수적인 `.11` 쪽 문장을 기준으로 파일 하나(min-version 6)만 둔다.
+
+**만들지 않은 id**
+| id | 이유 | 대안 |
+|---|---|---|
+| `meta.java_*` 12개(`java_arguments`·`java_available`·`java_class`·`java_errors`·`java_fields`·`java_implements`·`java_inners`·`java_longname`·`java_methods`·`java_objects`·`java_source_classes`·`java_source_object`) | Java 저장 소스는 Tibero 첫 판 범위 밖(tibero.md 3장) | 없음(기능을 끈다) |
+| `dbinfo.flashback_versions` | `VERSIONS BETWEEN` 구문을 Tibero 6 이 파싱하지 못함(`ODP-8022`), `VERSIONS_*` 의사 열 없음 | `AS OF TIMESTAMP`·`AS OF SCN` 시점 조회만(`flashback_env`·`flashback_ddl` 은 만들었다) |
+| `dbinfo.options` | `V$OPTION` 없음 | 가장 가까운 `V$LICENSE`(에디션·제한)는 옵션이 아니라 만들지 않음. 호출하는 쪽의 「옵션」 구역은 쿼리 없음으로 처리 |
+
+**Oracle 판과 달라 읽는 쪽(T3 C#)이 맞춰야 하는 것**
+- `meta.ddl`: 바인드 `:type` → `:p_type` (Tibero PSM 에서 `type` 이 예약어). `GET_DDL` 은 TABLE 만 의미 있게 돈다(SEQUENCE·TRIGGER·VIEW·PROCEDURE·FUNCTION·SYNONYM = `ODP-14001`, INDEX·PACKAGE·TYPE = 빈 결과). `storage`·`segment_attributes`·`tablespace`·`dependents` 바인드는 받기만 하고 무시한다. 다른 형식의 DDL 은 사전 뷰(`*_source`·`*_triggers`·`*_indexes` 등)로 읽는 쪽이 만든다.
+- `meta.arguments`: `dba_arguments` 가 없어 `all_arguments` 만 쓴다(`@PFX@` 없음). `data_level` 거르기 없음, `defaulted` 는 NULL(기본값 여부를 알 수 없음).
+- `meta.columns`: `hidden_column`/`virtual_column` 을 `YES`/`NO` 로 바꿔 돌려주고 `column_id` 는 1부터로 맞춤. `identity_flag`·`domain_name` NULL. 문자 길이 판정에 `VARCHAR`/`NVARCHAR` 포함. 숫자 아닌 열의 precision/scale 은 NULL.
+- `meta.constraint_columns`·`meta.constraints`: Tibero `cons_columns.position` 이 0부터(그대로 둠). 검사 조건 열은 `search_condition`.
+- `meta.procedures`: `overload` NULL, `subprogram_id` = `member_no`, `object_type` 은 `*_objects` 조인. `meta.name_step`: `db_link` NULL(원격 시노님 따라가기 불가). `meta.object_users`: 내 SID 를 `V$MYSTAT` 로. `meta.detail_general`: `edition_flag` NULL.
+- `dbinfo.column_search`: `data_type` 이 `VARCHAR`·`NVARCHAR` 로 나온다(Oracle `VARCHAR2`) — Tibero 용 `TypeText` 가 `VARCHAR` 계열을 문자 열로 인식해야 길이가 붙는다.
+- `dbinfo.version`: `V$VERSION` 에 `BANNER` 가 없어 첫 줄 요약 + `NAME = VALUE` 줄들을 `banner` 한 열로 돌려준다. `dbinfo.database`: `database_role`·`force_logging`·`flashback_on` NULL. `dbinfo.instance`: `database_status`·`instance_role`·`logins`·`archiver`·`db_unique_name`·`service_name` NULL, `version` 은 주 버전 숫자. `dbinfo.parameters`: `V$PARAMETERS`, `isdefault` 는 `DECODE(value, dflt_value, …)`, 나머지 NULL. `dbinfo.recyclebin`: `can_undrop`·`can_purge` NULL(되돌리기·비우기 막힘), `droptime` 형식 미확인(서버에 행 없음). `dbinfo.column_reorder_traits`: `cluster_name` NULL.
