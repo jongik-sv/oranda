@@ -2,6 +2,7 @@ using Oranda.App.Features.SessionMonitor;
 using Oranda.App.Shell;
 using Oranda.Core.Connection;
 using Oranda.Core.Events;
+using Oranda.Core.Execution;
 using Oranda.Core.Metadata;
 using Oranda.Core.Monitoring;
 using Oranda.Core.Plans;
@@ -139,6 +140,33 @@ public class SessionMonitorTests
         Assert.Equal((new SessionKey(1, 10, 100), true), Assert.Single(h.Monitor.Killed));
         Assert.True(h.Monitor.ListCalls > before);
         Assert.Contains("세션 종료(KILL", h.Vm.StatusText, StringComparison.Ordinal); // 메뉴 이름과 같은 낱말(TSK-09-01)
+    }
+
+    [Fact]
+    public async Task Kill_confirmation_shows_the_corrected_retype_name_only_when_it_differs_from_the_grid()
+    {
+        var h = new Harness();
+        await h.Vm.StartAsync();
+        h.Vm.SelectedSession = h.Vm.Sessions.Single(s => s.Row.Key.Sid == 10);
+        string? asked = null;
+        h.Vm.Confirm = m =>
+        {
+            asked = m;
+            return Task.FromResult(false);
+        };
+
+        // 미리보기 없음(기본) 또는 격자와 같은 이름 = 예전 모양 그대로.
+        await h.Vm.KillAsync(immediate: true);
+        Assert.DoesNotContain("재입력 이름", asked, StringComparison.Ordinal);
+        h.Monitor.Preview = k => new SqlStatement($"KILL {k.Sid},{k.Serial}", default, StatementKind.Other) { DangerousTarget = $"{k.Sid},{k.Serial}" };
+        await h.Vm.KillAsync(immediate: true);
+        Assert.DoesNotContain("재입력 이름", asked, StringComparison.Ordinal);
+
+        // 교정된 SERIAL# = 확인 창에 서비스가 쓸 이름을 보인다.
+        h.Monitor.Preview = k => new SqlStatement($"KILL {k.Sid},4294967196", default, StatementKind.Other) { DangerousTarget = $"{k.Sid},4294967196" };
+        await h.Vm.KillAsync(immediate: true);
+        Assert.Contains("재입력 이름: 10,4294967196", asked, StringComparison.Ordinal);
+        Assert.Contains("SERIAL# 100", asked, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -342,6 +370,12 @@ public class SessionMonitorTests
         public SessionFilter? LastFilter { get; private set; }
 
         public List<(SessionKey, bool)> Killed { get; } = [];
+
+        /// <summary>있으면 <see cref="PreviewKill"/> 이 이 문장을 돌려준다. 없으면 기본(NotSupportedException).</summary>
+        public Func<SessionKey, SqlStatement>? Preview { get; set; }
+
+        public SqlStatement PreviewKill(ISession monitor, SessionKey target, bool immediate) =>
+            Preview is { } p ? p(target) : throw new NotSupportedException();
 
         public TraceOptions? LastTrace { get; private set; }
 

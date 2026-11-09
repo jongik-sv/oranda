@@ -43,6 +43,28 @@ public static class LockText
     public static string? KillStatement(IServiceProvider? services, ISession? session, SessionKey k, bool rac)
         => CatalogRouting.Text(services, session, "app.kill_session", ("id", KillId(k, rac)));
 
+    /// <summary>
+    /// 서비스가 보낼 KILL 문장의 재입력 이름(<c>sid,serial[,@inst]</c>)이 격자에 보이는 값(SID·SERIAL#)과 다르면 확인 창에 보일 한 줄.
+    /// 같으면(Oracle 포함) null — 확인 창 모양은 그대로다. 다른 경우 = Tibero 가 V$SESSION 의 음수 SERIAL# 을 교정한 값.
+    /// </summary>
+    public static string? KillTargetNote(SessionKey k, string? retypeName)
+    {
+        if (string.IsNullOrEmpty(retypeName))
+        {
+            return null;
+        }
+
+        var parts = retypeName.Split(',');
+        if (parts.Length >= 2
+            && string.Equals(parts[0].Trim(), k.Sid.ToString(CultureInfo.InvariantCulture), StringComparison.Ordinal)
+            && string.Equals(parts[1].Trim(), k.Serial.ToString(CultureInfo.InvariantCulture), StringComparison.Ordinal))
+        {
+            return null;
+        }
+
+        return string.Create(CultureInfo.InvariantCulture, $"{retypeName} (목록의 SERIAL# {k.Serial} 을 교정한 값)");
+    }
+
     private static string KillId(SessionKey k, bool rac)
     {
         var id = string.Create(CultureInfo.InvariantCulture, $"{k.Sid},{k.Serial}");

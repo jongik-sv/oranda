@@ -1946,9 +1946,25 @@ public sealed partial class LockMonitorViewModel : ToolPanelViewModelBase, IDisp
             facts2.Add(new("트랜잭션", LockText.Seconds((long)Math.Max(0, (snap.CollectedAt - t).TotalSeconds)) + undo));
         }
 
-        var statement = disconnect
-            ? SessionMonitorCommands.DisconnectStatement(_services, session, key, immediate: true, rac)?.Text
-            : LockText.KillStatement(_services, session, key, rac);
+        string? statement;
+        if (disconnect)
+        {
+            statement = SessionMonitorCommands.DisconnectStatement(_services, session, key, immediate: true, rac)?.Text;
+        }
+        else if (PreviewKill(session, key) is { } preview)
+        {
+            // 서비스가 실제로 보낼 문장 그대로 — 재입력 이름이 격자 값과 다르면(교정된 SERIAL#) 한 줄 덧붙인다.
+            statement = preview.Text;
+            if (LockText.KillTargetNote(key, preview.DangerousTarget) is { } note)
+            {
+                facts2.Add(new("재입력 이름", note));
+            }
+        }
+        else
+        {
+            statement = LockText.KillStatement(_services, session, key, rac);
+        }
+
         if (statement is null)
         {
             // 이 DBMS·버전에 KILL/DISCONNECT 문장이 없다 — 확인 창을 열지 않고 이유를 보인다.
@@ -1972,6 +1988,25 @@ public sealed partial class LockMonitorViewModel : ToolPanelViewModelBase, IDisp
                 : "종료하면 열린 트랜잭션은 롤백됩니다. undo 가 크면 롤백에 시간이 걸리고 그동안 잠금이 남을 수 있습니다.",
             Statement = statement,
         };
+    }
+
+    /// <summary>서비스가 KILL 로 보낼 문장(보내지 않는다). 서비스가 없거나 미리보기를 지원하지 않으면 null — 예전 카탈로그 문장으로 돌아간다.</summary>
+    private SqlStatement? PreviewKill(ISession session, SessionKey key)
+    {
+        var monitor = _monitor ??= _services?.GetService(typeof(IMonitorService)) as IMonitorService;
+        if (monitor is null)
+        {
+            return null;
+        }
+
+        try
+        {
+            return monitor.PreviewKill(session, key, immediate: true);
+        }
+        catch (NotSupportedException)
+        {
+            return null;
+        }
     }
 
     private IEnumerable<LockTreeItem> Descendants(LockTreeItem root)

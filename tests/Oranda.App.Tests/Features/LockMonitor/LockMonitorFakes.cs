@@ -1,6 +1,7 @@
 using Oranda.App.Features.LockMonitor;
 using Oranda.App.Shell;
 using Oranda.Core.Connection;
+using Oranda.Core.Execution;
 using Oranda.Core.Monitoring;
 using Oranda.Core.Plans;
 using Oranda.Core.Sessions;
@@ -34,6 +35,12 @@ internal sealed class FakeLockMonitor : IMonitorService
     public LockFilter? LastFilter { get; private set; }
 
     public List<(SessionKey Key, bool Immediate)> Killed { get; } = [];
+
+    /// <summary>있으면 <see cref="PreviewKill"/> 이 이 문장을 돌려준다. 없으면 기본(NotSupportedException).</summary>
+    public Func<SessionKey, SqlStatement>? Preview { get; set; }
+
+    public SqlStatement PreviewKill(ISession monitor, SessionKey target, bool immediate) =>
+        Preview is { } p ? p(target) : throw new NotSupportedException();
 
     public Exception? Fail { get; set; }
 

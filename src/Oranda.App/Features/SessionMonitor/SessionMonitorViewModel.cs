@@ -342,7 +342,26 @@ public sealed partial class SessionMonitorViewModel : ToolPanelViewModelBase, ID
     /// <summary>선택한 세션을 종료(KILL)한다. 대상 정보를 보여 주는 확인 뒤, 실행 엔진의 위험 명령 확인을 거친다.</summary>
     public Task KillAsync(bool immediate, CancellationToken ct = default) =>
         ChangeSessionAsync(immediate ? "세션 종료(KILL IMMEDIATE)" : "세션 종료(KILL)", async (monitor, session, row) =>
-            await monitor.KillAsync(session, row.Key, immediate, ct), ct);
+            await monitor.KillAsync(session, row.Key, immediate, ct), ct, row => PreviewKillTarget(row.Key, immediate));
+
+    /// <summary>서비스가 KILL 로 보낼 재입력 이름(보내지 않는다). 서비스·세션이 없거나 미리보기를 지원하지 않으면 null.</summary>
+    private string? PreviewKillTarget(SessionKey key, bool immediate)
+    {
+        if (_session is not { } session)
+        {
+            return null;
+        }
+
+        var monitor = _monitor ??= _services?.GetService(typeof(IMonitorService)) as IMonitorService;
+        try
+        {
+            return monitor?.PreviewKill(session, key, immediate).DangerousTarget;
+        }
+        catch (NotSupportedException)
+        {
+            return null;
+        }
+    }
 
     /// <summary>선택한 세션의 연결을 끊는다(DISCONNECT, <c>POST_TRANSACTION</c> 또는 <c>IMMEDIATE</c>).</summary>
     public Task DisconnectAsync(bool immediate, CancellationToken ct = default) =>
@@ -389,12 +408,17 @@ public sealed partial class SessionMonitorViewModel : ToolPanelViewModelBase, ID
     }
 
     /// <summary>Kill·Disconnect 확인 대화상자에 보일 대상 세션 정보.</summary>
-    public static string DescribeTarget(SessionRow row, string action)
+    public static string DescribeTarget(SessionRow row, string action, string? retypeName = null)
     {
         ArgumentNullException.ThrowIfNull(row);
         var sb = new StringBuilder();
         sb.Append("다음 세션에 ").Append(action).AppendLine(" 을(를) 보냅니다.");
         sb.Append(CultureInfo.InvariantCulture, $"SID {row.Key.Sid}, SERIAL# {row.Key.Serial}, 인스턴스 {row.Key.InstanceId}").AppendLine();
+        if (LockMonitor.LockText.KillTargetNote(row.Key, retypeName) is { } note)
+        {
+            sb.Append("재입력 이름: ").AppendLine(note);
+        }
+
         sb.Append("사용자: ").Append(row.Username ?? "-").Append(" / OS: ").Append(row.OsUser ?? "-").AppendLine();
         sb.Append("머신: ").Append(row.Machine ?? "-").AppendLine();
         sb.Append("프로그램: ").Append(row.Program ?? "-").Append(" / 모듈: ").Append(row.Module ?? "-").AppendLine();
@@ -475,14 +499,15 @@ public sealed partial class SessionMonitorViewModel : ToolPanelViewModelBase, ID
         }
     }
 
-    private async Task ChangeSessionAsync(string action, Func<IMonitorService, ISession, SessionRow, Task> change, CancellationToken ct)
+    private async Task ChangeSessionAsync(string action, Func<IMonitorService, ISession, SessionRow, Task> change, CancellationToken ct,
+        Func<SessionRow, string?>? previewRetypeName = null)
     {
         if (SelectedSession is not { } item)
         {
             return;
         }
 
-        if (Confirm is null || !await Confirm(DescribeTarget(item.Row, action)))
+        if (Confirm is null || !await Confirm(DescribeTarget(item.Row, action, previewRetypeName?.Invoke(item.Row))))
         {
             StatusText = $"{action} 을(를) 취소했습니다.";
             return;

@@ -6,6 +6,7 @@ using Oranda.App.Tests.Features.LockMonitor;
 using Oranda.App.Tests.Shell;
 using Oranda.Core.Composition;
 using Oranda.Core.Connection;
+using Oranda.Core.Execution;
 using Oranda.Core.Monitoring;
 using Oranda.Core.Plans;
 using Oranda.Core.Sessions;
@@ -170,6 +171,40 @@ public class TiberoMonitorFlowTests
         Assert.Equal(expected, vm.StatusText);
         Assert.Equal(0, confirms);
         Assert.Empty(monitor.Killed);
+    }
+
+    [Fact]
+    public async Task Kill_request_uses_the_service_preview_statement_and_shows_the_corrected_retype_name()
+    {
+        var monitor = new FakeLockMonitor
+        {
+            Preview = k => new SqlStatement($"ALTER SYSTEM KILL SESSION ({k.Sid}, 2156873394)", default, StatementKind.Other)
+            {
+                Verb = "ALTER SYSTEM",
+                DangerousTarget = $"{k.Sid},2156873394",
+            },
+        };
+        var tibero = TiberoSession();
+        var vm = new LockMonitorViewModel(new Services(new DbmsServiceTable(), monitor))
+        {
+            PostToUi = a => a(),
+            StartAutoRefresh = false,
+            OpenSession = _ => Task.FromResult<ISession?>(tibero),
+        };
+        await vm.StartAsync();
+        vm.SelectedKey = FakeLockMonitor.H1;
+
+        var request = vm.BuildKillRequest(disconnect: false)!;
+
+        Assert.Equal("ALTER SYSTEM KILL SESSION (1287, 2156873394)", request.Statement);
+        var note = Assert.Single(request.Facts, f => f.Key == "재입력 이름").Value;
+        Assert.StartsWith("1287,2156873394", note, StringComparison.Ordinal);
+        Assert.Contains("40211", note, StringComparison.Ordinal); // 목록에 보이던 SERIAL#
+
+        // 이름이 격자와 같으면(Oracle 포함) 줄을 더하지 않는다.
+        Assert.Null(LockText.KillTargetNote(FakeLockMonitor.H1, "1287,40211"));
+        Assert.Null(LockText.KillTargetNote(FakeLockMonitor.H1, "1287,40211,@1"));
+        Assert.Null(LockText.KillTargetNote(FakeLockMonitor.H1, null));
     }
 
     [Fact]
