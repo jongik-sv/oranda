@@ -43,6 +43,8 @@ internal sealed partial class TiberoExecutionService : IExecutionService
     /// <summary>
     /// 읽기 전용 프로필의 문장마다 보내는 블록. 최상위 <c>SET TRANSACTION READ ONLY</c> 는 TBR-7001 이고 <c>DBMS_TRANSACTION.READ_ONLY</c> 는 없다
     /// → PSM 블록 안에서만 된다(실측 2장). 앞 트랜잭션을 먼저 끝내 이전 스냅숏을 끌고 가지 않는다.
+    /// 주의: Tibero 의 READ ONLY 트랜잭션은 쓰기를 막지 않는다(INSERT·DDL·FOR UPDATE 가 성공, 쓰기 IT #28) — 이 블록은 읽기 일관성만 준다.
+    /// 읽기 전용 프로필의 쓰기 차단은 정책 관문(<c>ExecutionPolicy</c> ReadOnlyProfile)이 서버로 보내기 전에 한다.
     /// </summary>
     internal const string ReadOnlyBlock = "BEGIN ROLLBACK; SET TRANSACTION READ ONLY; END;";
 

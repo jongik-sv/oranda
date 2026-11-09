@@ -545,6 +545,28 @@ public sealed class TiberoExecutionServiceTests : IDisposable
         Assert.Equal(SessionState.Idle, session.State);
     }
 
+    [Theory]
+    [InlineData("INSERT INTO t VALUES (1)", StatementKind.Dml, false)]
+    [InlineData("CREATE TABLE ort_x (a NUMBER)", StatementKind.Ddl, false)]
+    [InlineData("BEGIN DELETE FROM t; END;", StatementKind.PlSql, false)]
+    [InlineData("CALL p()", StatementKind.Other, true)]
+    public async Task A_read_only_tibero_profile_is_protected_only_by_the_policy_gate_and_writes_never_reach_the_server(
+        string text, StatementKind kind, bool uncertain)
+    {
+        // 실측 #28: Tibero 는 READ ONLY 트랜잭션 안에서도 INSERT·DDL 을 받아들인다(Oracle 은 ORA-01456). 서버 쪽 막이가 없으므로
+        // 읽기 전용 프로필의 쓰기 차단은 실제 정책 관문(ExecutionPolicy ReadOnlyProfile)뿐이다 — 이 시험이 그 막이를 고정한다.
+        Serve();
+        var service = new TiberoExecutionService(new ExecutionPolicy(), new FakeInteraction(null), _bus, null, dbmsOutput: false);
+        await using var session = NewSession(readOnly: true);
+
+        var result = await service.ExecuteAsync(session, Stmt(text, kind) with { IsClassificationUncertain = uncertain }, NoBinds, null,
+            CancellationToken.None);
+
+        Assert.Equal(ExecutionStatus.Denied, result.Status);
+        Assert.Equal(PolicyRule.ReadOnlyProfile, result.Policy?.Rule);
+        Assert.Empty(Sent()); // 준비 블록(읽기 전용 트랜잭션)조차 보내지 않는다
+    }
+
     [Fact]
     public async Task Policy_denial_never_reaches_the_driver()
     {

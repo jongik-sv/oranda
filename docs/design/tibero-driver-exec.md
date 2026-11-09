@@ -31,7 +31,8 @@ ME(tb-exec), 2026-11-09. 읽기만(SELECT·PSM 블록·트랜잭션 제어). 쓰
 | `EXECUTE IMMEDIATE 'SET TRANSACTION READ ONLY'` | TBR-7001 |
 
 - 읽기 전용 프로필 세션 준비 = Oracle 의 `DBMS_TRANSACTION.READ_ONLY` 대신 `BEGIN ROLLBACK; SET TRANSACTION READ ONLY; END;`(문장마다, 수동 모드 안에서).
-- 읽기 전용이 쓰기를 실제로 막는지는 쓰기 시험이라 여기서 재지 않았다 → 쓰기 IT(D3, `ORANDA_IT_TIBERO_WRITE=1`, `ORT_` 표)에서 「읽기 전용 트랜잭션 안 INSERT 가 실패」로 확인한다.
+- **읽기 전용 트랜잭션이 쓰기를 막지 않는다**(쓰기 IT #28, `TiberoBulkMeasureIt.Measure_read_only_transaction_in_psm_block`): 블록 뒤 `INSERT` 성공(행 1), DDL 성공(암시적 커밋으로 끝남), `SELECT … FOR UPDATE` 성공. 읽기 일관성(블록 시점 스냅숏)은 된다 — 다른 세션이 커밋한 행이 안 보인다. `ROLLBACK`·`COMMIT` 이 끝낸다. Oracle 은 ORA-01456 으로 막는다.
+- 그래서 Tibero 읽기 전용 프로필의 쓰기 차단은 **정책 관문(`ExecutionPolicy` ReadOnlyProfile)뿐**이다: DML·DDL·PSM·분류 불확실 문장을 서버에 보내기 전에 거부한다(단위 시험 `A_read_only_tibero_profile_is_protected_only_by_the_policy_gate…`). 준비 블록은 스냅숏 일관성만 준다. 남는 틈: 정책 관문이 질의로 통과시키는 `SELECT … FOR UPDATE` 는 Tibero 에서 행을 잠근다(Oracle 은 서버가 거부). 서버 쪽 추가 막이는 T2 에서 안 함(조정 결정, 사용자 보고).
 - 사용자가 스크립트에 쓴 최상위 `SET TRANSACTION READ ONLY` 는 서버가 거부한다(TBR-7001 그대로 보인다). 고쳐 보내지 않는다.
 
 ## 3. 비질의 실행·바인드·OUT 값
