@@ -1,4 +1,6 @@
 using System.Text;
+using Oranda.Core.Connection;
+using Oranda.Core.Execution;
 using Oranda.Core.Metadata;
 using Oranda.Core.Transfer;
 using Oranda.Testing;
@@ -59,5 +61,43 @@ public sealed class TiberoDataTransferServiceTests
             ") SELECT 1, 'O''Neil', TO_DATE('2026-03-05 00:00:00', 'YYYY-MM-DD HH24:MI:SS') FROM DUAL" +
             " UNION ALL SELECT 2, NULL, TO_DATE('2026-03-06 07:08:09', 'YYYY-MM-DD HH24:MI:SS') FROM DUAL",
             exec.Calls[1].Statement.Text, StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData("TBR-10007", "ODP-10007:UNIQUE constraint violation ('SCOTT'.'PK_EMP')", "ODP-10007:UNIQUE constraint violation ('SCOTT'.'PK_EMP')")]
+    [InlineData("TBR-10007", "TBR-10007: Unique constraint violation", "TBR-10007: Unique constraint violation")]
+    [InlineData("TBR-10007", "  odp-10007:lower case prefix", "odp-10007:lower case prefix")]
+    [InlineData("TBR-8033", "ODP-8033:Specified schema object was not found.\nat line 1, column 16 of null:", "ODP-8033:Specified schema object was not found.\nat line 1, column 16 of null:")]
+    [InlineData("TBR-10007", "ODP-10008:a different number", "TBR-10007: ODP-10008:a different number")] // 번호가 다르면 코드를 앞에 붙인다
+    [InlineData("TBR-10007", "failed, see ODP-10007", "TBR-10007: failed, see ODP-10007")] // 맨 앞이 아니면 그대로 둔다
+    [InlineData("TBR-10007", "ODP-100071:longer number", "TBR-10007: ODP-100071:longer number")]
+    [InlineData("TBR-10007", "plain message", "TBR-10007: plain message")]
+    [InlineData("TBR", "ODP-10007:no number in the code", "TBR: ODP-10007:no number in the code")]
+    public void Import_error_text_names_the_code_once_when_the_driver_message_leads_with_the_same_number(string code, string message, string expected) =>
+        Assert.Equal(expected, DataTransferService.ErrorText(code, message, TiberoDataTransferDialect.Instance));
+
+    [Fact]
+    public async Task A_failed_import_row_reads_as_one_tibero_code_not_two()
+    {
+        var exec = new FakeExecutionService
+        {
+            Responder = call => call.Statement.Text.StartsWith("INSERT", StringComparison.Ordinal)
+                ? new ExecutionResult(call.Statement, ExecutionStatus.Failed)
+                {
+                    Error = new DbError("TBR-10007", "ODP-10007:UNIQUE constraint violation ('SCOTT'.'PK_EMP')") { Dbms = Dbms.Tibero, Number = -10007 },
+                }
+                : new ExecutionResult(call.Statement, ExecutionStatus.Succeeded),
+        };
+        var meta = new FakeMetadataProvider();
+        meta.Tables[Target] = Emp;
+        var service = new TiberoDataTransferService(exec, meta);
+        var options = new ImportOptions(TransferFormat.Csv, Target, [new ColumnMapping("id", "ID")]) { BatchSize = 1 };
+        using var csv = new MemoryStream(Encoding.UTF8.GetBytes("id\n1\n"));
+
+        var summary = await service.ImportAsync(new FakeSession(), options, csv, null, CancellationToken.None);
+
+        var warning = Assert.Single(summary.Warnings);
+        Assert.Equal("행 2: ODP-10007:UNIQUE constraint violation ('SCOTT'.'PK_EMP')", warning);
+        Assert.DoesNotContain("TBR-10007", warning, StringComparison.Ordinal);
     }
 }

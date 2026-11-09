@@ -632,7 +632,7 @@ public class CopyRunner : ICopyRunner
         {
             if (_dialect.IsReferencedByForeignKeys(drop.Error))
             {
-                table.Fail("대상 계정에 보이지 않는 FK(다른 스키마)가 이 표를 참조하고 있어 지우지 않았습니다(ORA-02449). 그 FK 를 확인하거나 대상 처리를 바꾸세요.");
+                table.Fail($"대상 계정에 보이지 않는 FK(다른 스키마)가 이 표를 참조하고 있어 지우지 않았습니다{ErrorNameNote(_dialect.ReferencedByForeignKeysErrorName)}. 그 FK 를 확인하거나 대상 처리를 바꾸세요.");
                 run.Abort($"{table.Name}: 보이지 않는 FK 때문에 표를 지우지 않고 멈췄습니다. 떼어 낸 FK 는 다시 붙입니다.");
                 return false;
             }
@@ -737,12 +737,13 @@ public class CopyRunner : ICopyRunner
 
                 if (r?.Error?.Kind == DbErrorKind.CompiledWithErrors && i < kept.TriggerObjects.Count)
                 {
-                    // 만들어졌지만 INVALID 다. 켜진 채 두면 이 표의 DML 이 모두 ORA-04098 로 막히므로 끈다.
+                    // 만들어졌지만 INVALID 다. 켜진 채 두면 이 표의 DML 이 모두 막히므로(Oracle ORA-04098) 끈다.
                     var obj = kept.TriggerObjects[i];
                     var off = await TryRestoreAsync(run, _dialect.DisableTrigger(obj.Owner, obj.Name).Text, CleanupTimeout);
+                    var compile = ErrorNameNote(_dialect.TriggerCompileErrorName);
                     RestoreFailed(run, t, off is { Status: ExecutionStatus.Succeeded }
-                        ? $"트리거 {obj.Owner}.{obj.Name} 은 다시 만든 열 구조와 맞지 않아 컴파일 오류(ORA-24344)로 INVALID 입니다. 꺼 두었으니 고친 뒤 켜세요."
-                        : $"트리거 {obj.Owner}.{obj.Name} 은 컴파일 오류(ORA-24344)로 INVALID 이고 끄지도 못했습니다. 이 표의 DML 이 막힐 수 있으니 직접 고치거나 지우세요.");
+                        ? $"트리거 {obj.Owner}.{obj.Name} 은 다시 만든 열 구조와 맞지 않아 컴파일 오류{compile}로 INVALID 입니다. 꺼 두었으니 고친 뒤 켜세요."
+                        : $"트리거 {obj.Owner}.{obj.Name} 은 컴파일 오류{compile}로 INVALID 이고 끄지도 못했습니다. 이 표의 DML 이 막힐 수 있으니 직접 고치거나 지우세요.");
                     continue;
                 }
 
@@ -878,11 +879,14 @@ public class CopyRunner : ICopyRunner
         run.Notices.Add($"{table.Name}: {message}");
     }
 
+    /// <summary>안내 글에 붙이는 서버 오류 이름 괄호(<c>(ORA-02449)</c>). 방언이 번호를 모르면(null) 붙이지 않는다.</summary>
+    private static string ErrorNameNote(string? errorName) => errorName is null ? string.Empty : $"({errorName})";
+
     /// <summary>
     /// 다시 만들기를 한 표의 휴지통 안내와, 되살리지 않은 DDL 원문. 화면 알림과 실행 기록(표 메시지)에 함께 남긴다.
     /// 휴지통 이름(BIN$…)을 알면 그 이름으로 안내한다(같은 원래 이름이 휴지통에 여럿이어도 정확하다).
     /// </summary>
-    private static void NoteRecreated(RunState run, bool restored)
+    private void NoteRecreated(RunState run, bool restored)
     {
         foreach (var t in run.Tables.Values.Where(t => t.Dropped))
         {
@@ -900,7 +904,7 @@ public class CopyRunner : ICopyRunner
                     ? $"지운 옛 표는 휴지통에 있습니다. 옛 표를 보려면 FLASHBACK TABLE {source} TO BEFORE DROP RENAME TO {SqlIdentifier.QuoteAlways(t.TableName + "_OLD")}"
                       + " 로 다른 이름으로 되살리세요(Flashback 화면에서도 할 수 있습니다)."
                     : $"지운 표를 다시 만들지 못해 표가 없습니다. FLASHBACK TABLE {source} TO BEFORE DROP 으로 휴지통에서 되돌리세요"
-                      + "(트리거는 BIN$ 이름으로, 인덱스·권한과 함께 돌아옵니다. 이 표를 참조하던 FK 는 돌아오지 않습니다).";
+                      + _dialect.FlashbackRestoreNote + ".";
                 t.Note(hint);
                 run.Notices.Add($"{t.Name}: {hint}");
             }
@@ -1045,7 +1049,7 @@ public class CopyRunner : ICopyRunner
             {
                 if (error.Kind == DbErrorKind.SnapshotTooOld)
                 {
-                    run.Notices.Add($"{table.Name}: 원본 읽기가 오래 걸려 이전 시점 데이터를 읽지 못했습니다(ORA-01555). 기간을 줄이거나 나눠 실행하세요.");
+                    run.Notices.Add($"{table.Name}: 원본 읽기가 오래 걸려 이전 시점 데이터를 읽지 못했습니다{ErrorNameNote(_dialect.SnapshotTooOldErrorName)}. 기간을 줄이거나 나눠 실행하세요.");
                     run.Abort(null);
                 }
 

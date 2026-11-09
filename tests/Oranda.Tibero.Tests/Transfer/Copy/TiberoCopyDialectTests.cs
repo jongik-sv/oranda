@@ -88,4 +88,26 @@ public sealed class TiberoCopyDialectTests
         Assert.False(Dialect.IsParentKeysNotFound(null));
         Assert.False(Dialect.IsReferencedByForeignKeys(null));
     }
+
+    [Fact]
+    public void Notice_error_names_are_only_the_measured_tibero_numbers_and_never_oracle_numbers()
+    {
+        ICopyDialect dialect = Dialect;
+
+        Assert.Equal("TBR-7156", dialect.ReferencedByForeignKeysErrorName); // 3.5 실측: 참조되는 부모 DROP
+        Assert.Null(dialect.TriggerCompileErrorName); // 미실측: 컴파일 오류 트리거는 오류 없이 INVALID+ENABLED 로 남는다
+        Assert.Null(dialect.SnapshotTooOldErrorName); // 미실측
+    }
+
+    [Fact]
+    public void Flashback_note_does_not_claim_oracle_bin_names_or_what_comes_back_with_the_table()
+    {
+        ICopyDialect dialect = Dialect;
+
+        Assert.DoesNotContain("BIN$", dialect.FlashbackRestoreNote, StringComparison.Ordinal);
+        Assert.DoesNotContain("ORA-", dialect.FlashbackRestoreNote, StringComparison.Ordinal);
+        Assert.Contains("확인되지 않았습니다", dialect.FlashbackRestoreNote, StringComparison.Ordinal);
+        Assert.StartsWith("(", dialect.FlashbackRestoreNote, StringComparison.Ordinal);
+        Assert.EndsWith(")", dialect.FlashbackRestoreNote, StringComparison.Ordinal);
+    }
 }

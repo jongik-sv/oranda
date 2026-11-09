@@ -23,4 +23,12 @@ public interface IDbErrorClassifier
     /// 이 DBMS 드라이버의 예외가 아니면 null(호출자가 일반 오류로 다룬다).
     /// </summary>
     DbError? FromException(Exception exception);
+
+    /// <summary>
+    /// 이 예외 <b>자체</b>(안쪽 예외는 보지 않는다)가 이 DBMS 드라이버가 낸 예외인가 — <see cref="System.Data.Common.DbException"/> 이 아닌 형식(드라이버 쪽·클라이언트 오류,
+    /// 예: Tibero 드라이버의 접속 끊김 <c>TbOdpException</c>)도 포함한다. 복사(<c>CopyErrors</c>)는 <see cref="System.Data.Common.DbException"/> 만 서버 오류로 보므로
+    /// 드라이버 예외가 <see cref="System.Data.Common.DbException"/> 에서 파생하지 않는 DBMS 는 이것을 구현해야 그 오류가 복사 밖으로 새지 않는다.
+    /// 기본 구현 = false(드라이버 예외가 모두 <see cref="System.Data.Common.DbException"/> 인 Oracle).
+    /// </summary>
+    bool IsOwnDriverException(Exception exception) => false;
 }

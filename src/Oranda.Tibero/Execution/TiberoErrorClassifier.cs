@@ -70,6 +70,16 @@ internal sealed partial class TiberoErrorClassifier : IDbErrorClassifier
     internal static DbErrorKind ClassifyNumber(int number) =>
         number == int.MinValue ? DbErrorKind.Other : Kinds.GetValueOrDefault(Math.Abs(number), DbErrorKind.Other);
 
+    /// <summary>
+    /// 이 예외 자체가 드라이버 예외(서버 오류 <c>TbException</c>·드라이버 쪽 <c>TbOdpException</c>)인가. 드라이버 쪽 오류는 <c>DbException</c> 이 아니라서
+    /// 복사(<c>CopyErrors</c>)가 이것으로 서버 오류 범위에 넣는다(안쪽 예외는 보지 않는다).
+    /// </summary>
+    public bool IsOwnDriverException(Exception exception)
+    {
+        ArgumentNullException.ThrowIfNull(exception);
+        return TryReadDriverError(exception, out _, out _);
+    }
+
     public DbError? FromException(Exception exception)
     {
         ArgumentNullException.ThrowIfNull(exception);

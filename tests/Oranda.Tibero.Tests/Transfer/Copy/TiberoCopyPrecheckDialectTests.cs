@@ -30,6 +30,23 @@ public sealed partial class TiberoCopyPrecheckDialectTests
         Assert.Empty(blockers);
     }
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void Recreate_difference_note_names_the_lost_deferrable_fk_and_none_of_the_unconfirmed_oracle_options(bool hasDomain)
+    {
+        var note = Dialect.RecreateDifferenceNote(hasDomain);
+
+        Assert.StartsWith(" 원본과 다르게 만들어지는 것:", note, StringComparison.Ordinal);
+        Assert.Contains("DEFERRABLE", note, StringComparison.Ordinal);
+        Assert.Contains("FK", note, StringComparison.Ordinal); // 카탈로그에 DEFERRABLE 이 없어 FK 도 즉시 검사로 돌아온다
+        Assert.EndsWith(".", note, StringComparison.Ordinal);
+        foreach (var oracleOnly in new[] { "DEFAULT ON NULL", "IDENTITY", "COLLATE", "도메인" })
+        {
+            Assert.DoesNotContain(oracleOnly, note, StringComparison.Ordinal);
+        }
+    }
+
     /// <summary>TB4 뒤로 막지 않는다(받아 두기·되살리기·휴지통 안내는 <c>TiberoRecreateStepIt</c> 가 서버로 잰다).</summary>
     [Fact]
     public void Recreate_stays_blocked_with_a_reason_until_the_runner_copy_it()

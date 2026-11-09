@@ -34,4 +34,36 @@ internal sealed class TiberoDataTransferDialect : IDataTransferDialect
     public string SavepointStatement(string name) => "SAVEPOINT " + name;
 
     public string RollbackToSavepointStatement(string name) => "ROLLBACK TO SAVEPOINT " + name;
+
+    /// <summary>
+    /// 오류 코드는 <c>TBR-10007</c> 인데 드라이버 메시지는 <c>ODP-10007:UNIQUE constraint violation …</c> 로 시작한다(6.2.15 실측, transfer.md 3장) — 접두(<c>TBR-</c>/<c>ODP-</c>)가 달라도
+    /// 번호가 같으면 같은 오류이므로 코드를 또 붙이지 않는다(<c>행 2: TBR-10007: ODP-10007:…</c> 방지). 메시지 맨 앞 번호만 본다(중간의 다른 번호는 그대로 둔다).
+    /// </summary>
+    public bool MessageStartsWithCode(string code, string message)
+    {
+        ArgumentNullException.ThrowIfNull(code);
+        ArgumentNullException.ThrowIfNull(message);
+        return message.StartsWith(code, StringComparison.OrdinalIgnoreCase)
+               || (LeadingNumber(code) is { } wanted && LeadingNumber(message) == wanted);
+    }
+
+    /// <summary>글 맨 앞(공백 뒤)의 <c>TBR-nnnn</c>/<c>ODP-nnnn</c> 번호. 아니거나 뒤가 숫자로 이어지는 너무 긴 번호면 null.</summary>
+    private static int? LeadingNumber(string text)
+    {
+        var span = text.AsSpan().TrimStart();
+        if (span.Length < 5 || !(span.StartsWith("TBR-", StringComparison.OrdinalIgnoreCase) || span.StartsWith("ODP-", StringComparison.OrdinalIgnoreCase)))
+        {
+            return null;
+        }
+
+        var digits = 0;
+        while (4 + digits < span.Length && span[4 + digits] is >= '0' and <= '9')
+        {
+            digits++;
+        }
+
+        return digits is >= 1 and <= 9 && int.TryParse(span.Slice(4, digits), System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture, out var n)
+            ? n
+            : null;
+    }
 }

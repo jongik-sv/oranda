@@ -386,12 +386,18 @@ public class DataTransferService : IDataTransferService
         return sb.ToString();
     }
 
-    private static string ErrorText(ExecutionResult r) => r.Error is { } e ? ErrorText(e.Code, e.Message) : "알 수 없는 오류";
+    private string ErrorText(ExecutionResult r) => r.Error is { } e ? ErrorText(e.Code, e.Message, _dialect) : "알 수 없는 오류";
 
     /// <summary>
     /// 「코드: 메시지」. 드라이버 메시지가 이미 같은 코드로 시작하면(<c>ORA-00001: unique constraint …</c>) 코드를 또 붙이지 않는다.
     /// </summary>
-    public static string ErrorText(string? code, string? message)
+    public static string ErrorText(string? code, string? message) => ErrorText(code, message, null);
+
+    /// <summary>
+    /// <see cref="ErrorText(string?, string?)"/> 에 DBMS 방언의 「메시지가 이미 이 코드로 시작하는가」 판정을 쓴다(<paramref name="dialect"/> 가 null 이면 글자 앞부분 비교).
+    /// Tibero 는 코드가 <c>TBR-10007</c> 인데 드라이버 메시지가 <c>ODP-10007:…</c> 로 시작해 접두가 달라도 같은 오류다.
+    /// </summary>
+    public static string ErrorText(string? code, string? message, IDataTransferDialect? dialect)
     {
         var c = (code ?? string.Empty).Trim();
         var m = (message ?? string.Empty).Trim();
@@ -405,10 +411,11 @@ public class DataTransferService : IDataTransferService
             return c;
         }
 
-        return m.StartsWith(c, StringComparison.OrdinalIgnoreCase) ? m : $"{c}: {m}";
+        var leads = dialect?.MessageStartsWithCode(c, m) ?? m.StartsWith(c, StringComparison.OrdinalIgnoreCase);
+        return leads ? m : $"{c}: {m}";
     }
 
-    private static InvalidOperationException Failure(ExecutionResult r, string prefix)
+    private InvalidOperationException Failure(ExecutionResult r, string prefix)
     {
         var detail = r.Status switch
         {

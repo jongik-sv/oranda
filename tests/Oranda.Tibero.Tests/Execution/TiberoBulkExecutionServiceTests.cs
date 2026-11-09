@@ -684,6 +684,55 @@ public sealed class TiberoBulkExecutionServiceTests : IDisposable
     }
 
     [Fact]
+    public async Task A_driver_cancel_error_during_a_blob_row_after_our_cancel_is_cancelled_and_the_remaining_rows_are_not_sent()
+    {
+        // 한 행씩 경로의 우리 취소: 드라이버가 TBR-12040 을 내면 실패가 아니라 취소다(복사 실행기는 Cancelled + 취소된 토큰을 OperationCanceledException 으로 바꾼다).
+        using var cts = new CancellationTokenSource();
+        Serve(cmd =>
+        {
+            if (cmd.CommandText != BlobInsert)
+            {
+                return null;
+            }
+
+            cts.Cancel();
+            throw FakeDriverHost.ServerError(-12040, "ODP-12040:Statement canceled.");
+        });
+        var service = NewService();
+        await using var session = NewSession();
+
+        var result = await service.ExecuteArrayAsync(session, Dml(BlobInsert), BlobColumns, BlobRows(), ExecutionOptions.Default, cts.Token);
+
+        Assert.Equal(ExecutionStatus.Cancelled, result.Status);
+        Assert.Null(result.Error);
+        Assert.Equal([BlobInsert, TiberoExecutionService.TransactionIdSql], Texts());
+        Assert.False(session.CommandGate.IsHeld);
+    }
+
+    [Fact]
+    public async Task A_driver_cancel_error_inside_a_wrapper_after_our_cancel_is_still_cancelled()
+    {
+        using var cts = new CancellationTokenSource();
+        Serve(cmd =>
+        {
+            if (cmd.CommandText != Insert)
+            {
+                return null;
+            }
+
+            cts.Cancel();
+            throw new InvalidOperationException("driver wrapper", FakeDriverHost.ServerError(-12040, "ODP-12040:Statement canceled."));
+        });
+        var service = NewService();
+        await using var session = NewSession();
+
+        var result = await service.ExecuteArrayAsync(session, Dml(Insert), Columns, Rows(3), ExecutionOptions.Default, cts.Token);
+
+        Assert.Equal(ExecutionStatus.Cancelled, result.Status);
+        Assert.Null(result.Error);
+    }
+
+    [Fact]
     public async Task A_single_blob_row_is_one_scalar_execution()
     {
         Serve(cmd => cmd.CommandText == BlobInsert ? 1 : null);

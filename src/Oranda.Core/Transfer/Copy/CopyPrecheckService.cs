@@ -392,9 +392,7 @@ public partial class CopyPrecheckService(IBulkExecutionService bulk, IMetadataPr
                 message += $" 함께 다시 만들지 않는 표를 참조하는 원본 FK {string.Join(", ", skipped)} 는 만들지 않습니다.";
             }
 
-            message += " 원본과 다르게 만들어지는 것: 문자 길이는 글자 단위(CHAR), DEFAULT ON NULL·IDENTITY 옵션(ALWAYS·시작·증가)·DEFERRABLE PK/UK·COLLATE"
-                       + (source.Columns.Any(c => c.Domain is not null) ? "·도메인" : string.Empty)
-                       + " 은 빠지고, 파티션·IOT·임시 표는 일반 표가 됩니다.";
+            message += dialect.RecreateDifferenceNote(source.Columns.Any(c => c.Domain is not null));
             var lost = await NotRestoredAsync(rule, ct).ConfigureAwait(false);
             if (lost.Count > 0)
             {

@@ -19,6 +19,21 @@ public class ImportErrorTextTests
     public void Code_is_written_once(string? code, string? message, string expected) =>
         Assert.Equal(expected, DataTransferService.ErrorText(code, message));
 
+    [Theory]
+    [InlineData("ORA-00001", "ODP-00001: other prefix, same number", "ORA-00001: ODP-00001: other prefix, same number")] // 기본 방언은 글자 앞부분만 본다(Oracle 그대로)
+    [InlineData("ORA-00001", "ORA-00001: unique", "ORA-00001: unique")]
+    public void The_default_dialect_only_compares_the_leading_text(string code, string message, string expected) =>
+        Assert.Equal(expected, DataTransferService.ErrorText(code, message, new DefaultDialect()));
+
+    private sealed class DefaultDialect : IDataTransferDialect
+    {
+        public string SelectRow(IReadOnlyList<string> literals) => string.Join(", ", literals);
+
+        public string SavepointStatement(string name) => name;
+
+        public string RollbackToSavepointStatement(string name) => name;
+    }
+
     [Fact]
     public void A_different_code_inside_the_message_is_kept_after_the_leading_code()
     {

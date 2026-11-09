@@ -17,4 +17,10 @@ public interface IDataTransferDialect
 
     /// <summary>세이브포인트까지만 되돌리는 문장(<c>ROLLBACK TO SAVEPOINT name</c>).</summary>
     string RollbackToSavepointStatement(string name);
+
+    /// <summary>
+    /// 서버 오류 메시지가 이미 오류 코드(<see cref="Oranda.Core.Execution.DbError.Code"/>)로 시작하는가. 그러면 오류 행 문구에 코드를 또 붙이지 않는다.
+    /// 기본 구현 = 메시지가 코드 글자로 시작함(Oracle: <c>ORA-00001: …</c>). 드라이버 메시지의 접두가 코드의 접두와 다른 DBMS 가 다시 구현한다.
+    /// </summary>
+    bool MessageStartsWithCode(string code, string message) => message.StartsWith(code, StringComparison.OrdinalIgnoreCase);
 }

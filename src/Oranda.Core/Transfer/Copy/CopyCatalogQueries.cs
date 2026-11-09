@@ -26,7 +26,7 @@ public static class CopyCatalogQueries
         return catalog.Get(id, server).Sql;
     }
 
-    /// <summary>문장을 보내 모든 행을 읽는다. <paramref name="binds"/> 는 글이 쓰는 이름만 담는다(남는 이름은 ORA-01036).</summary>
+    /// <summary>문장을 보내 모든 행을 읽는다. <paramref name="binds"/> 는 글이 쓰는 이름만 담는다(남는 이름은 서버가 거부한다: Oracle ORA-01036. 다른 DBMS 의 번호는 이 줄에서 판정하지 않는다).</summary>
     public static async Task<List<object?[]>> QueryAsync(IBulkExecutionService bulk, ISession s, string sql,
                                                          IReadOnlyDictionary<string, BindValue> binds, CancellationToken ct)
     {

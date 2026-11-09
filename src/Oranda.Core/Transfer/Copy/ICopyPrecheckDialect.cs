@@ -47,4 +47,13 @@ public interface ICopyPrecheckDialect
 
     /// <summary>자식 행이 남아 부모 행을 지우지 못할 때 서버가 내는 오류 이름(확인 글에 들어간다, Oracle = <c>ORA-02292</c>).</summary>
     string ChildRecordFoundError { get; }
+
+    /// <summary>
+    /// 다시 만들기 확인 글의 「원본과 다르게 만들어지는 것」 문장(앞 공백 포함, 마침표로 끝남). 다시 만들 때 원본에서 빠지거나 바뀌는 속성은 DBMS 마다 다르다.
+    /// 기본 구현 = Oracle 의 글. <paramref name="hasDomain"/> = 원본에 도메인 열이 있음. 확인하지 못한 속성은 DBMS 가 문장에서 뺀다(없다고 말하지 않는다).
+    /// </summary>
+    string RecreateDifferenceNote(bool hasDomain) =>
+        " 원본과 다르게 만들어지는 것: 문자 길이는 글자 단위(CHAR), DEFAULT ON NULL·IDENTITY 옵션(ALWAYS·시작·증가)·DEFERRABLE PK/UK·COLLATE"
+        + (hasDomain ? "·도메인" : string.Empty)
+        + " 은 빠지고, 파티션·IOT·임시 표는 일반 표가 됩니다.";
 }

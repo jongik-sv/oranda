@@ -101,6 +101,25 @@ internal sealed class TiberoCopyDialect : ICopyDialect
         return addForeignKeyDdl + " ENABLE NOVALIDATE";
     }
 
+    // ---- 안내 글의 오류 이름(ICopyDialect 기본 = Oracle 번호). 실측한 것만 쓰고 나머지는 번호 없는 일반 문구로 둔다. ----
+
+    /// <summary>TBR-7156(3.5 실측). 안내에 붙는 이름.</summary>
+    public string? ReferencedByForeignKeysErrorName => "TBR-" + ReferencedByForeignKeys.ToString(System.Globalization.CultureInfo.InvariantCulture);
+
+    /// <summary>
+    /// 미실측 → 번호 없음. 없는 열을 가리키는 트리거 CREATE 는 오류 없이 받아 INVALID+ENABLED 로 남는다(TB4 #79) — 컴파일 오류 번호가 나오지 않으니 문구에 붙일 번호가 없다.
+    /// </summary>
+    public string? TriggerCompileErrorName => null;
+
+    /// <summary>미실측 → 번호 없음(Tibero 의 이전 시점 읽기 실패 번호를 재지 못했다, <c>TiberoErrorClassifier</c> 도 SnapshotTooOld 를 분류하지 않는다).</summary>
+    public string? SnapshotTooOldErrorName => null;
+
+    /// <summary>
+    /// 휴지통 이름은 <c>&lt;계정&gt;_…</c> 꼴(BIN$ 아님, 3.7 실측)이고, 그 이름으로 <c>FLASHBACK … RENAME TO</c> 가 된다. 트리거·인덱스·권한·참조 FK 가 함께 돌아오는지는 미실측이다.
+    /// </summary>
+    public string FlashbackRestoreNote =>
+        "(트리거·인덱스·권한과 이 표를 참조하던 FK 가 함께 돌아오는지는 Tibero 에서 확인되지 않았습니다. 돌아왔는지 확인하고 없는 것은 직접 만드세요)";
+
     public bool IsParentKeysNotFound(DbError? dbError) => Is(dbError, ParentKeysNotFound);
 
     public bool IsReferencedByForeignKeys(DbError? dbError) => Is(dbError, ReferencedByForeignKeys);

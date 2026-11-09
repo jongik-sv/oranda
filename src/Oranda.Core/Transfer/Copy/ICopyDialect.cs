@@ -64,4 +64,23 @@ public interface ICopyDialect
 
     /// <summary>다른 표의 FK 가 참조하는 PK·UK 가 있어 DROP 을 거부했는가(대상 계정에 안 보이는 FK, Oracle ORA-02449). 오류가 없으면 false.</summary>
     bool IsReferencedByForeignKeys(DbError? dbError);
+
+    // ---- 안내 글에 들어가는 서버 오류 이름·휴지통 문장. 기본 구현 = Oracle 의 글(Oracle 방언은 따로 구현하지 않는다). ----
+    // 번호를 실측으로 확인하지 못한 DBMS 는 이름을 null 로 두어 번호 없는 일반 문구를 낸다(번호를 추측해 넣지 않는다).
+
+    /// <summary>DROP 이 「다른 계정에 보이지 않는 FK 가 참조함」 으로 거부됐을 때 안내에 붙는 오류 이름(Oracle <c>ORA-02449</c>). 모르면 null.</summary>
+    string? ReferencedByForeignKeysErrorName => "ORA-02449";
+
+    /// <summary>되살린 트리거가 컴파일 오류로 INVALID 일 때 안내에 붙는 오류 이름(Oracle <c>ORA-24344</c>). 이 오류가 없거나 모르면 null.</summary>
+    string? TriggerCompileErrorName => "ORA-24344";
+
+    /// <summary>원본 읽기가 이전 시점 데이터를 잃었을 때(<c>DbErrorKind.SnapshotTooOld</c>) 안내에 붙는 오류 이름(Oracle <c>ORA-01555</c>). 모르면 null.</summary>
+    string? SnapshotTooOldErrorName => "ORA-01555";
+
+    /// <summary>
+    /// 지운 표를 휴지통에서 되돌릴 때(<c>FLASHBACK TABLE … TO BEFORE DROP</c>) 무엇이 함께 돌아오는지 말하는 괄호 문장(앞 공백 없음, 괄호 포함).
+    /// Oracle 은 휴지통 이름이 <c>BIN$…</c> 이고 트리거·인덱스·권한이 함께 돌아오지만 이 표를 참조하던 FK 는 돌아오지 않는다.
+    /// </summary>
+    string FlashbackRestoreNote =>
+        "(트리거는 BIN$ 이름으로, 인덱스·권한과 함께 돌아옵니다. 이 표를 참조하던 FK 는 돌아오지 않습니다)";
 }

@@ -63,7 +63,7 @@ DB 파라미터(`nls_database_parameters`)도 같은 값(`NLS_LANG_AT_BOOT` = MS
 | RAW(100) 에 101바이트 | 실측 못 함(BLOB 단계 실패로 건너뜀) |
 | SAVEPOINT | `SAVEPOINT` → INSERT → `ROLLBACK TO SAVEPOINT` → COMMIT: 건수 16 → 18 → 16 → 16. Oracle 과 같은 문법·같은 동작 |
 | 배치 안 중복 키 | **문장 단위 원자**: `ODP-4008 Duplicate unique key found during multi insert.` 로 실패, 건수 전·뒤 16 그대로. 이미 있는 키 한 행: `ODP-10007 UNIQUE constraint violation ('<사용자>'.'<표>_PK')` |
-| 가져오기 오류 문구 | `행 2: TBR-10007: ODP-10007:UNIQUE constraint violation (…)` — 코드가 두 번 붙는다(`TBR-` 접두 + 드라이버 메시지의 `ODP-`). Oracle 판은 드라이버 메시지가 이미 같은 코드로 시작하면 또 붙이지 않는데 Tibero 는 접두가 다르다(개선 후보, 동작에는 영향 없음) |
+| 가져오기 오류 문구 | `행 2: TBR-10007: ODP-10007:UNIQUE constraint violation (…)` — 코드가 두 번 붙는다(`TBR-` 접두 + 드라이버 메시지의 `ODP-`). Oracle 판은 드라이버 메시지가 이미 같은 코드로 시작하면 또 붙이지 않는데 Tibero 는 접두가 다르다 → **고침(T5 켜기 전 4)**: `IDataTransferDialect.MessageStartsWithCode`(기본 = 글자 앞부분 비교, Oracle 그대로)를 Tibero 방언이 다시 구현해 맨 앞 `TBR-n`/`ODP-n` 번호가 코드와 같으면 코드를 붙이지 않는다(`행 2: ODP-10007:UNIQUE constraint violation (…)`). 번호가 다르거나 맨 앞이 아니면 그대로 붙는다 |
 | 자동 커밋 | 아니다 — INSERT 뒤 `ROLLBACK` 이 되돌린다(id=300 건수 0) |
 | 배치 크기 | 한 문장 `INSERT … UNION ALL`: 50행 13 ms(문장 1,958자) / 500행 69 ms(20,408자) / 2000행 528 ms(84,908자) — 모두 성공 |
 | 가져오기 IT(`TiberoTransferIt`) | CSV 5행을 배치 2 로 넣어 값(따옴표·쉼표·한글·날짜·`TIMESTAMP(6)`·4500자 CLOB·RAW·NUMBER(12,2))이 맞고, 같은 파일을 다시 넣으면 5행 모두 중복 키 경고로 남고 표는 그대로, 값 오류 행은 보내기 전에 경고로 걸러진다. 2·0·0 통과 |
@@ -253,9 +253,17 @@ Oracle 과 같음. **실패한 DDL 도 커밋한다** → 복사 도중 DDL(트�
 - **있지만 꺼진 것 = Tibero 데이터 복사**: 대량 실행(`TiberoBulkExecutionService`)·값 코덱(`TiberoBulkValueCodec`)·방언(`TiberoCopyDialect`)·사전 점검 방언·다시 만들기 단계·실행기/사전 점검 하위 형식(`TiberoCopyRunner`·`TiberoCopyPrecheckService`)이 모두 있으나 어느 것도 `[OrandaService]` 로 등록하지 않았다. 이유: 같은 계정 안 복사는 Core 가 막고(같은 DB·같은 소유자, `TiberoCopySameAccountIt` 로 확인), 다른 계정으로의 실제 복사를 잴 두 번째 Tibero 계정이 시험 서버에 없다(결정65). 화면은 「Tibero 복사는 아직 꺼져 있음」으로 남는다(TU1).
 - **켜기 전에 할 일** (두 번째 계정 `ORANDA_IT_TIBERO_USER2`·`PASSWORD2` 가 생기면):
   1. 실제 복사 IT(실행기 경로: 다중 배치·배치 실패 뒤 한 행씩·실패 행 재시도·4000자 넘는 CLOB·1 MB BLOB, Q7·Q8) → 녹색이면 대량 실행·실행기·사전 점검을 `Dbms.Tibero` 키로 등록.
-  2. CopyRunner 안내 글의 Oracle 번호 고정(ORA-01555·02449·24344) → 방언 메시지로.
-  3. Tibero 드라이버의 `DbException` 이 아닌 클라이언트 오류를 `CopyErrors` 가 놓치는지 확인·분류.
-  4. 대량 실행 중 취소: 우리 취소 뒤 TBR-12040 이 OperationCanceledException 으로 이어지는 경로 확인.
+  2. ~~CopyRunner 안내 글의 Oracle 번호 고정 → 방언 메시지로.~~ **서버 없이 끝냄(T5 켜기 전 1)**: `ICopyDialect` 에 기본 구현(= 지금 Oracle 글) 멤버를 더했고 Tibero 방언이 채운다. Oracle 글은 한 글자도 안 바뀐다(`OracleCopyDialectTests` 가 글자까지 못 박음). 한국어 글을 코드에 두는 복사 쪽 기존 방식 그대로(복사 Core 에 리소스 파일 방식은 없다).
+     | 자리 | Oracle(기본) | Tibero |
+     |---|---|---|
+     | DROP 이 안 보이는 FK 로 거부(`CopyRunner.DropAsync`) | `(ORA-02449)` | `(TBR-7156)` — 3.5 실측 |
+     | 되살린 트리거 컴파일 오류 INVALID(`TriggerCompileErrorName`) | `컴파일 오류(ORA-24344)` | **미실측 — 번호 없는 「컴파일 오류」**. 컴파일 오류 트리거 CREATE 가 오류 없이 INVALID+ENABLED 로 남으므로(TB4 #79) 이 경로 자체가 안 탄다(다시 만들기 차단의 근거와 같음) |
+     | 원본 읽기 이전 시점 상실(`SnapshotTooOldErrorName`) | `(ORA-01555)` | **미실측 — 번호 없음**(`TiberoErrorClassifier` 도 SnapshotTooOld 를 분류하지 않음) |
+     | 휴지통에서 되돌리기 안내(`FlashbackRestoreNote`) | `(트리거는 BIN$ 이름으로, 인덱스·권한과 함께 돌아옵니다. 이 표를 참조하던 FK 는 돌아오지 않습니다)` | `BIN$` 말하지 않음(휴지통 이름은 `<계정>_…`, 3.7). **미실측 — 트리거·인덱스·권한·참조 FK 가 함께 돌아오는지** 는 「확인되지 않았습니다」로 적음 |
+     | 다시 만들기 확인 글 「원본과 다르게 만들어지는 것」(`ICopyPrecheckDialect.RecreateDifferenceNote`) | `DEFAULT ON NULL·IDENTITY 옵션·DEFERRABLE PK/UK·COLLATE(·도메인) 은 빠지고` | `DEFERRABLE 제약(PK/UK 와, 카탈로그가 지연 여부를 안 알려 줘서 FK 도) 은 즉시 검사로 바뀌고` — `ALL_CONSTRAINTS` 에 DEFERRABLE 열 없음(handover). DEFAULT ON NULL·COLLATE·도메인은 Tibero 에서 확인하지 않아 말하지 않음 |
+     그 밖의 `CopyRunner` 안의 `ORA-04098`·`ORA-02298` 은 주석뿐이고 판정은 이미 방언(`IsParentKeysNotFound` = TBR-7161)이 한다. `CopyCatalogQueries` 문서의 ORA-01036 은 문서를 번호 비고정으로 고침(판정 코드 없음).
+  3. ~~Tibero 드라이버의 `DbException` 이 아닌 클라이언트 오류를 `CopyErrors` 가 놓치는지 확인·분류.~~ **놓치고 있었고 고침(T5 켜기 전 2)**: 접속 끊김 같은 드라이버 쪽 오류(`TbOdpException`)는 `DbException` 이 아니라서 `CopyErrors.Server` 가 서버 오류로 보지 않아 복사 읽기·쓰기·정리 밖으로 새어 나갔다(그 오류의 `Disconnected` 분류로 하는 COMMIT 결과 불명 판정도 못 탐). `IDbErrorClassifier.IsOwnDriverException`(기본 false = Oracle 그대로, 그 예외 **자체**만 보고 안쪽 예외는 안 봄)을 Tibero 분류기가 어댑터로 구현해 `CopyErrors` 가 `DbException || 분류기가 알아본 예외` 로 본다. 감싼 예외를 삼키지 않는 범위 규칙은 그대로. 시험: `TiberoCopyErrorsTests`·`CopyErrorsTests`(Core).
+  4. ~~대량 실행 중 취소: 우리 취소 뒤 TBR-12040 이 OperationCanceledException 으로 이어지는 경로 확인.~~ **코드 경로 확인함, 고칠 것 없음(서버 실측은 못 함)**: 읽기(`TiberoBulkReader.ReadAsync`)는 실행 단계·묶음 읽기 단계 둘 다 `IsCancellation(ex, ct)`(토큰 취소 + 취소된 토큰 뒤의 TBR-12040)이면 `OperationCanceledException`(안쪽에 12040)으로 바꿔 올린다. 쓰기(`ExecuteArrayAsync`)는 배열·스칼라·BLOB 한 행씩 모두 같은 판정으로 `BulkResult.Cancelled` 를 돌려주고 Core 의 `RunState.Accept`·`ExecuteLoggedAsync` 가 `Cancelled` + 취소된 토큰이면 `OperationCanceledException` 으로 올린다. 우리가 취소하지 않은 12040(다른 세션의 KILL 등)은 실패로 남는다. 가짜 12040 주입 시험: 배열·한 행씩·감싼 예외(`TiberoBulkExecutionServiceTests`), 읽기(`TiberoBulkStreamTests`). **미실측**: 실서버에서 대량 읽기/쓰기 도중 우리 취소가 12040 으로 돌아오는 시점(서버가 취소를 늦게 받아 문장이 정상 완료하면 실행 뒤 `ThrowIfCancellationRequested` 가 취소로 처리한다). 두 번째 계정 복사 IT 에서 중지 시험으로 확인한다.
   5. 다시 만들기(Recreate) 차단 해제는 실행기 복사 IT 에서 FK `ADD … ENABLE NOVALIDATE`·휴지통 되살리기를 잰 뒤(TB4).
   6. 쓰기 형식 늘리기 후보(3.11 측정): TIMESTAMP WITH TIME ZONE(지역 이름·음수 분 오프셋 측정 뒤), BINARY_FLOAT/DOUBLE(쓰기 됨, 'Infinity' 글자 대안 필요).
 - **다른 backlog(조정 등록)**: 스키마 표를 못 읽을 때 결과 격자가 모든 열을 GetString 으로 읽음(실서버에서 본 적 없음), Oracle `CopyCrossOwnerTests` 가 같은 DB 가드 앞에서 멈출 수 있음(미확인).

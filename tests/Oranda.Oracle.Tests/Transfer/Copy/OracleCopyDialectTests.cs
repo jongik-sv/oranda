@@ -321,6 +321,38 @@ public sealed class OracleCopyDialectTests
         Assert.Equal(expected.BindNames, actual.BindNames);
     }
 
+    // ---- 안내 글의 오류 번호·휴지통·다시 만들기 문장: Core 가 방언으로 옮기기 전(Core 에 박혀 있던 글)과 같은 글자 ----
+
+    [Fact]
+    public void Notice_error_names_and_flashback_note_keep_the_oracle_numbers_and_bin_wording()
+    {
+        ICopyDialect dialect = OracleCopyDialect.Instance;
+
+        Assert.Equal("ORA-02449", dialect.ReferencedByForeignKeysErrorName);
+        Assert.Equal("ORA-24344", dialect.TriggerCompileErrorName);
+        Assert.Equal("ORA-01555", dialect.SnapshotTooOldErrorName);
+        Assert.Equal("(트리거는 BIN$ 이름으로, 인덱스·권한과 함께 돌아옵니다. 이 표를 참조하던 FK 는 돌아오지 않습니다)", dialect.FlashbackRestoreNote);
+    }
+
+    [Theory]
+    [InlineData(false, " 원본과 다르게 만들어지는 것: 문자 길이는 글자 단위(CHAR), DEFAULT ON NULL·IDENTITY 옵션(ALWAYS·시작·증가)·DEFERRABLE PK/UK·COLLATE 은 빠지고, 파티션·IOT·임시 표는 일반 표가 됩니다.")]
+    [InlineData(true, " 원본과 다르게 만들어지는 것: 문자 길이는 글자 단위(CHAR), DEFAULT ON NULL·IDENTITY 옵션(ALWAYS·시작·증가)·DEFERRABLE PK/UK·COLLATE·도메인 은 빠지고, 파티션·IOT·임시 표는 일반 표가 됩니다.")]
+    public void Recreate_difference_note_is_the_text_the_precheck_wrote_before(bool hasDomain, string expected)
+    {
+        ICopyPrecheckDialect dialect = OracleCopyPrecheckDialect.Instance;
+
+        Assert.Equal(expected, dialect.RecreateDifferenceNote(hasDomain));
+    }
+
+    [Fact]
+    public void Oracle_error_classifier_has_no_driver_exceptions_outside_dbexception()
+    {
+        IDbErrorClassifier errors = new OracleErrorClassifier();
+
+        Assert.False(errors.IsOwnDriverException(new InvalidOperationException("x")));
+        Assert.False(errors.IsOwnDriverException(new OperationCanceledException()));
+    }
+
     // ---- 오류 범위: 예전 catch (OracleException) 과 같게 바깥 예외만 ----
 
     [Fact]

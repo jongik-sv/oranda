@@ -83,5 +83,14 @@ internal sealed class TiberoCopyPrecheckDialect : ICopyPrecheckDialect
     /// <summary>TBR-10009: 자식 행이 남아 있어 부모 행을 지울 수 없음(<c>TiberoErrorClassifier</c> 의 FK_EXIST).</summary>
     public string ChildRecordFoundError => "TBR-10009";
 
+    /// <summary>
+    /// 다시 만들 때 원본에서 빠지거나 바뀌는 것(Oracle 글의 DEFAULT ON NULL·IDENTITY·COLLATE·도메인은 Tibero 에서 확인하지 않아 말하지 않는다).
+    /// 실측: <c>ALL_CONSTRAINTS</c> 에 <c>DEFERRABLE</c>·<c>DEFERRED</c> 열이 없어(handover) 지연 FK 도 읽지 못한 채 즉시 검사로 돌아온다 — Oracle 글의 「DEFERRABLE PK/UK」 에 FK 가 더해진다.
+    /// 문자 길이는 CHAR 단위(<c>TiberoRecreateStepIt</c> 가 BYTE → CHAR 를 확인). 파티션·IOT·임시 표는 Core DDL 이 일반 표로 만든다.
+    /// </summary>
+    public string RecreateDifferenceNote(bool hasDomain) =>
+        " 원본과 다르게 만들어지는 것: 문자 길이는 글자 단위(CHAR), DEFERRABLE 제약(PK/UK 와, Tibero 카탈로그가 지연 여부를 알려 주지 않아 FK 도)은 즉시 검사로 바뀌고,"
+        + " 파티션·IOT·임시 표는 일반 표가 됩니다.";
+
     private static string Number(long value) => value.ToString("N0", CultureInfo.InvariantCulture);
 }
