@@ -59,6 +59,8 @@ public class TiberoErrorClassifierTests
     [Theory]
     [InlineData("TBR-10007: Unique constraint violation", 10007)]
     [InlineData("  error TBR-8033 (object not found) TBR-1", 8033)]
+    [InlineData("ODP-8033:Specified schema object was not found.   \nat line 1, column 16 of null:\nSELECT * FROM T\n ^", 8033)] // 실측(TDP.NET 1.1.35, 서버 6)
+    [InlineData("ODP-15146:PSM compilation error.   \nODP-15002:Parsing failed.", 15146)]
     public void Parses_the_first_code_in_a_message(string text, int expected)
     {
         Assert.True(TiberoErrorClassifier.TryParseCode(text, out var number));
@@ -87,6 +89,18 @@ public class TiberoErrorClassifierTests
         Assert.Equal(-10007, error.Number);
         Assert.Equal(Dbms.Tibero, error.Dbms);
         Assert.Equal(DbErrorKind.ConstraintViolation, error.Kind);
+    }
+
+    [Fact]
+    public void FromException_matches_the_measured_driver_shape_for_cancel()
+    {
+        // 실측: 실행 중 Cancel()·CommandTimeout 모두 Number=-12040, Message="ODP-12040:Statement canceled.   ".
+        var error = _classifier.FromException(new TiberoException("ODP-12040:Statement canceled.   ", -12040));
+
+        Assert.NotNull(error);
+        Assert.Equal("TBR-12040", error.Code);
+        Assert.Equal(-12040, error.Number);
+        Assert.Equal(DbErrorKind.Cancelled, error.Kind);
     }
 
     [Fact]

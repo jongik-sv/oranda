@@ -72,6 +72,58 @@ public class ProjectReferenceTests
         Assert.True(violations.Count == 0, $"금지된 참조: {string.Join(", ", violations)}");
     }
 
+    /// <summary>
+    /// Tibero 드라이버는 Oranda.Tibero 만 참조한다(D-046). 직접 참조만 본다 — Core·Language 는 위 시험이 재귀로 막고,
+    /// App 은 Oranda.Tibero 를 거쳐 전이로 받을 수는 있어도 csproj 에 패키지를 직접 두지 않는다.
+    /// </summary>
+    [Theory]
+    [InlineData("src/Oranda.App/Oranda.App.csproj")]
+    public void Project_does_not_reference_the_tibero_driver_directly(string relativePath)
+    {
+        var document = XDocument.Load(Path.Combine(FindRepositoryRoot(), relativePath));
+
+        var violations = document.Descendants("PackageReference")
+            .Select(p => (string?)p.Attribute("Include") ?? string.Empty)
+            .Where(include => include.StartsWith("Tibero.DataAccess", StringComparison.OrdinalIgnoreCase))
+            .ToList();
+
+        Assert.Empty(violations);
+    }
+
+    /// <summary>
+    /// 루트 props 에 PackageReference·GlobalPackageReference 로 드라이버를 두면 Core 까지 퍼진다. 버전 칸(PackageVersion)만 허용한다.
+    /// </summary>
+    [Theory]
+    [InlineData("Directory.Build.props")]
+    [InlineData("Directory.Packages.props")]
+    [InlineData("tests/Directory.Build.props")]
+    public void Root_props_do_not_add_the_tibero_driver_to_every_project(string relativePath)
+    {
+        var document = XDocument.Load(Path.Combine(FindRepositoryRoot(), relativePath));
+
+        var violations = document.Descendants()
+            .Where(e => e.Name.LocalName is "PackageReference" or "GlobalPackageReference")
+            .Select(e => (string?)e.Attribute("Include") ?? string.Empty)
+            .Where(include => include.StartsWith("Tibero.DataAccess", StringComparison.OrdinalIgnoreCase))
+            .ToList();
+
+        Assert.Empty(violations);
+    }
+
+    [Fact]
+    public void Tibero_driver_is_referenced_only_by_oranda_tibero()
+    {
+        var root = FindRepositoryRoot();
+        var violations = Directory.EnumerateFiles(Path.Combine(root, "src"), "*.csproj", SearchOption.AllDirectories)
+            .Where(path => !Path.GetFileNameWithoutExtension(path).Equals("Oranda.Tibero", StringComparison.Ordinal))
+            .Where(path => XDocument.Load(path).Descendants("PackageReference")
+                .Any(p => ((string?)p.Attribute("Include") ?? string.Empty).StartsWith("Tibero.DataAccess", StringComparison.OrdinalIgnoreCase)))
+            .Select(Path.GetFileName)
+            .ToList();
+
+        Assert.Empty(violations);
+    }
+
     private static string FindRepositoryRoot()
     {
         var directory = new DirectoryInfo(AppContext.BaseDirectory);

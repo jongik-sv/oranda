@@ -2,8 +2,14 @@
 
   <!--
     Tibero 6·7 구현(docs/design/tibero.md, D-046). Oracle 처럼 Core 인터페이스를 구현하고 [assembly: OrandaServiceAssembly] 로 등록한다.
-    Tibero 드라이버(TDP.NET)는 nuget.org 에 없어 아직 참조하지 않는다. Core·Language 는 이 프로젝트를 참조하지 않는다.
+    드라이버(TDP.NET)는 환경 변수 ORANDA_TIBERO_FEED 가 있을 때만 참조한다(Directory.Build.props, 상수 TIBERO_DRIVER 도 거기서 정의).
+    Core·Language·App 은 이 프로젝트의 드라이버를 직접 참조하지 않는다(아키텍처 시험).
   -->
+
+  <ItemGroup Condition="'$(OrandaTiberoDriver)' == 'true'">
+    <PackageReference Include="Tibero.DataAccess" />
+    <PackageReference Include="System.Drawing.Common" />
+  </ItemGroup>
 
   <!-- SQL 카탈로그 자동 수집. Tibero 용 .sql 은 Catalog/<폴더>/ 에 같은 id 로 둔다. -->
   <ItemGroup>

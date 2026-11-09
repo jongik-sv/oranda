@@ -83,7 +83,7 @@ internal sealed partial class TiberoErrorClassifier : IDbErrorClassifier
         };
     }
 
-    /// <summary>글 안의 <c>TBR-nnnnn</c> 에서 번호를 뽑는다(앞쪽 첫 번째). 없으면 false.</summary>
+    /// <summary>글 안의 <c>TBR-nnnnn</c>·<c>ODP-nnnnn</c>(TDP.NET 메시지 머리말, 실측 2026-11-09) 에서 번호를 뽑는다(앞쪽 첫 번째). 없으면 false.</summary>
     internal static bool TryParseCode(string? text, out int number)
     {
         number = 0;
@@ -96,7 +96,7 @@ internal sealed partial class TiberoErrorClassifier : IDbErrorClassifier
         return match.Success && int.TryParse(match.Groups[1].ValueSpan, NumberStyles.None, CultureInfo.InvariantCulture, out number);
     }
 
-    [GeneratedRegex(@"(?<![A-Za-z0-9])TBR-(\d{1,9})(?!\d)", RegexOptions.CultureInvariant)]
+    [GeneratedRegex(@"(?<![A-Za-z0-9])(?:TBR|ODP)-(\d{1,9})(?!\d)", RegexOptions.CultureInvariant)]
     private static partial Regex CodePattern();
 
     /// <summary>예외 사슬(Inner·Aggregate)에서 드라이버 예외를 찾는다.</summary>

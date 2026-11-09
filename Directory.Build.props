@@ -20,4 +20,25 @@
     <RepositoryUrl>https://github.com/jongik-sv/oranda</RepositoryUrl>
     <RepositoryType>git</RepositoryType>
   </PropertyGroup>
+
+  <!--
+    Tibero 드라이버(TDP.NET, Tibero.DataAccess)는 nuget.org 에 없고 재배포 조건 확인 전이라 리포에 넣지 않는다(docs/design/tibero.md 1장).
+    환경 변수 ORANDA_TIBERO_FEED = nupkg 가 든 로컬 폴더. 폴더가 있으면 복원 원본에 더하고 OrandaTiberoDriver=true 로 Oranda.Tibero 가
+    드라이버를 참조한다(상수 TIBERO_DRIVER). 없으면 드라이버 의존 코드는 빠진 채 지금처럼 빌드된다. PC 경로는 nuget.config 에 쓰지 않는다.
+  -->
+  <PropertyGroup Condition="'$(ORANDA_TIBERO_FEED)' != '' And Exists('$(ORANDA_TIBERO_FEED)')">
+    <OrandaTiberoDriver>true</OrandaTiberoDriver>
+    <RestoreAdditionalProjectSources>$(RestoreAdditionalProjectSources);$(ORANDA_TIBERO_FEED)</RestoreAdditionalProjectSources>
+    <!-- 시험 프로젝트에서도 드라이버 있는 빌드를 알 수 있게 모든 프로젝트에 정의한다. -->
+    <DefineConstants>$(DefineConstants);TIBERO_DRIVER</DefineConstants>
+  </PropertyGroup>
+
+  <!--
+    드라이버 있는 빌드를 발행하면 드라이버·그 의존 DLL 이 설치본에 섞인다(재배포 조건 확인 전). 발행하는 프로젝트가 Oranda.Tibero 를 참조하는데
+    OrandaAllowTiberoDriverPublish=true 가 없으면 막는다. 사내 빌드는 -p:OrandaAllowTiberoDriverPublish=true 로 뜻을 밝힌다.
+  -->
+  <Target Name="OrandaGuardTiberoDriverPublish" BeforeTargets="PrepareForPublish"
+          Condition="'$(OrandaTiberoDriver)' == 'true' And '$(OrandaAllowTiberoDriverPublish)' != 'true' And '@(ProjectReference->WithMetadataValue('Filename','Oranda.Tibero'))' != ''">
+    <Error Text="ORANDA_TIBERO_FEED 가 설정돼 있어 Tibero 드라이버(TDP.NET)가 이 발행물에 들어간다. 재배포 조건 확인 전에는 공개 배포본에 넣지 않는다. 사내 빌드면 -p:OrandaAllowTiberoDriverPublish=true 를, 공개 배포면 ORANDA_TIBERO_FEED 를 비우고 다시 빌드한다." />
+  </Target>
 </Project>
