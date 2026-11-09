@@ -847,6 +847,8 @@
   "데이터 복사": "Data copy",
   "새 작업": "New job",
   "새 작업 만들기": "Create a new job",
+  "마스킹 빼기": "Remove masking",
+  "이 열의 마스킹 빼기": "Remove masking from this column",
   "이름·테이블 명으로 찾아 여러 테이블을 한 번에 추가": "Find tables by name or table name and add several at once",
   "테이블 찾기": "Find tables",
   "테이블 찾기…": "Find tables…",

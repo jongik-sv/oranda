@@ -559,6 +559,16 @@ public partial class DataCopyWindow : Window
         }
     }
 
+    // 마스킹 줄의 「−」: 그 열의 마스킹을 뺀다. 뺀 열은 「마스킹할 열 추가…」 목록에 다시 나온다.
+    private void OnRemoveMask(object? sender, RoutedEventArgs e)
+    {
+        if (Vm?.Editor.SelectedRule is { } rule && (sender as Control)?.DataContext is MaskRowViewModel mask)
+        {
+            rule.RemoveMask(mask);
+            AddMaskBox.ItemsSource = rule.MaskableColumns.ToList();
+        }
+    }
+
     private void OnInsertVariableCondition(object? sender, RoutedEventArgs e)
     {
         if (Vm is { } vm && (sender as Control)?.DataContext is CopyVariableViewModel variable)

@@ -33,9 +33,9 @@
     <!-- 아래: 안내 · 선택한 N개 추가 · 닫기 -->
     <DockPanel DockPanel.Dock="Bottom" Margin="0,10,0,0">
       <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" Spacing="8">
-        <Button x:Name="AddButton" Classes="accent" Content="{Binding AddButtonText}" IsEnabled="{Binding CanAdd}" IsDefault="True" MinWidth="120"
+        <Button x:Name="AddButton" Classes="accent" Content="{Binding AddButtonText}" IsEnabled="{Binding CanAdd}" IsDefault="True"
                 AutomationProperties.Name="선택한 테이블 추가" />
-        <Button x:Name="CloseButton" Content="닫기" IsCancel="True" MinWidth="80" />
+        <Button x:Name="CloseButton" Content="닫기" IsCancel="True" />
       </StackPanel>
       <StackPanel VerticalAlignment="Center" Spacing="1">
         <TextBlock Text="{Binding PickedText}" Opacity="0.7" FontSize="{DynamicResource OrandaFontSizeSmall}" />

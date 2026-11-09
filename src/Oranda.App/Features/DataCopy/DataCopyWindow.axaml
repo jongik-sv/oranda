@@ -585,7 +585,7 @@
                             <ItemsControl.ItemTemplate>
                               <DataTemplate x:DataType="dc:MaskRowViewModel">
                                 <!-- 값 칸은 테마 최소 폭(64)이 열 폭보다 크면 오른쪽이 잘리므로 MinWidth 를 풀고 열 폭을 넉넉히 둔다. -->
-                                <Grid x:Name="MaskRow" ColumnDefinitions="*,104,72" ColumnSpacing="4" Margin="0,1">
+                                <Grid x:Name="MaskRow" ColumnDefinitions="*,104,72,Auto" ColumnSpacing="4" Margin="0,1">
                                   <TextBlock Text="{Binding Column}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" Classes="mono" ToolTip.Tip="{Binding Column}" />
                                   <ComboBox Grid.Column="1" Classes="compact" ItemsSource="{Binding AllowedKinds}" SelectedItem="{Binding Kind}" HorizontalAlignment="Stretch" AutomationProperties.Name="마스킹 방법">
                                     <ComboBox.ItemTemplate>
@@ -595,6 +595,8 @@
                                   <TextBox Grid.Column="2" Classes="compact" MinWidth="0" Text="{Binding Value}" IsVisible="{Binding NeedsValue}" AutomationProperties.Name="고정값" />
                                   <NumericUpDown Grid.Column="2" MinWidth="0" Minimum="0" Maximum="200" FormatString="0" Value="{Binding Count}" IsVisible="{Binding NeedsCount}"
                                                  AutomationProperties.Name="남길 글자 수" ShowButtonSpinner="False" />
+                                  <Button Grid.Column="3" Classes="toolbar" Content="마스킹 빼기" icons:ButtonIcon.Key="remove" icons:ButtonIcon.IconOnly="True"
+                                          VerticalAlignment="Center" ToolTip.Tip="이 열의 마스킹 빼기" Click="OnRemoveMask" />
                                 </Grid>
                               </DataTemplate>
                             </ItemsControl.ItemTemplate>

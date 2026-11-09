@@ -543,6 +543,17 @@ public sealed partial class TableRuleViewModel : ViewModelBase
         Masks.Add(new MaskRowViewModel(column, type));
     }
 
+    /// <summary>
+    /// 마스킹 줄 하나를 뺀다. 열 정보를 아직 읽지 않은 규칙(저장된 마스킹만 있는 상태)이면 저장된 목록에서도 뺀다:
+    /// 그러지 않으면 <see cref="ToRule"/> 이 저장된 목록을 그대로 돌려 뺀 마스킹이 되살아난다.
+    /// </summary>
+    public void RemoveMask(MaskRowViewModel mask)
+    {
+        ArgumentNullException.ThrowIfNull(mask);
+        Masks.Remove(mask);
+        SavedMasks = [.. SavedMasks.Where(m => !string.Equals(m.Column, mask.Column, StringComparison.OrdinalIgnoreCase))];
+    }
+
     public IEnumerable<string> MaskableColumns =>
         _source?.Columns.Where(c => !Masks.Any(m => string.Equals(m.Column, c.Name, StringComparison.OrdinalIgnoreCase))).Select(c => c.Name) ?? [];
 

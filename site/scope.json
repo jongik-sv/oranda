@@ -358,6 +358,7 @@
     {"id": "ConnectionPickDialog", "page": "connect/manage"},
     {"id": "ConvertDialog", "page": "editor/mybatis"},
     {"id": "DataCopyWindow", "page": "transfer/data-copy"},
+    {"id": "TableFinderWindow", "page": "transfer/data-copy"},
     {"id": "ExportDialogWindow", "page": "transfer/data-transfer"},
     {"id": "FloatHostWindow", "exclude": "독립 창 틀일 뿐 사용자가 여는 화면이 아님(창 분리는 설정/레이아웃 쪽에서 설명)"},
     {"id": "ImportDialogWindow", "page": "transfer/data-transfer"},
