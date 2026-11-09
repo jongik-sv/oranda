@@ -34,6 +34,7 @@ public sealed record AppCompositionOptions
 /// <summary>
 /// 앱 조립(design.md 3장 「자동 수집」): Platform 어셈블리는 바로, Oracle·Language 어셈블리는 처음 쓸 때까지 미뤄서 등록한다.
 /// 시작 경로에서 Oracle·ANTLR 어셈블리를 로드하지 않는다(TRD 8) — 어셈블리 이름만 적어 두고 컨테이너가 필요할 때 로드한다.
+/// Core 어셈블리(DBMS 디스패처)는 바로 등록한다 — DBMS 키 구현(<c>Oranda.Oracle</c>)은 디스패처가 처음 고를 때 로드된다.
 /// 명령·도구 창·상태 표시줄 구간은 Oranda.App 어셈블리를 한 번 스캔해 모은다.
 /// </summary>
 public static class AppComposition
@@ -45,6 +46,13 @@ public static class AppComposition
     {
         options ??= new AppCompositionOptions { DevBuild = AppCompositionOptions.DefaultDevBuild };
         var container = new ServiceContainer();
+
+        // 0) DBMS 디스패처(Core, D-046): 앱이 보는 서비스 형식(IExecutionService 등)을 세션의 DBMS 로 골라 키 등록 구현에 넘긴다.
+        //    바로 등록해도 Oracle 은 로드하지 않는다(처음 구현을 고를 때 지연 어셈블리를 훑는다). 맨 먼저 두어 뒤의 직접 등록(시험 가짜 등)이 이긴다.
+        container.AddAssembly(typeof(Oranda.Core.CoreAssembly).Assembly);
+
+        // 오류 분류 퍼사드(Oranda.Language DbErrorClassification.Selector)는 아직 잇지 않는다: 이으면 Oracle 판정이 LegacyOracle 표에서
+        // 전체 OracleErrorClassifier 로 바뀐다(C7 리뷰). 퍼사드를 고친 뒤 tb-app 이 AfterDeferredScan 으로 잇는다(시작 경로에서 Oranda.Language 를 로드하지 않게).
 
         // 1) 이벤트 버스(Core 구현은 스캔 대상이 아니라 직접 등록)와 구현 어셈블리.
         container.AddInstance<IEventBus>(new EventBus());

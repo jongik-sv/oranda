@@ -10,14 +10,37 @@ namespace Oranda.App.Shell.Composition;
 /// 가벼운 서비스 컨테이너(생성자 주입). <see cref="OrandaServiceAttribute"/> 를 단 클래스를 어셈블리 단위로 모아 등록한다.
 /// 외부 DI 패키지 없이 두 가지만 더 한다: <see cref="AddDeferredAssembly"/>(처음 모르는 형식을 물을 때 비로소 훑는다 —
 /// 시작 경로에서 Oracle·ANTLR 어셈블리를 로드하지 않기 위함, TRD 8)와 <c>IEnumerable&lt;T&gt;</c> 해석.
+/// DBMS 키(<see cref="OrandaServiceAttribute.ForDbms"/>)를 단 등록은 서비스 형식으로 바로 등록하지 않고 <see cref="DbmsServices"/> 에 넣는다(D-046) —
+/// 앱이 보는 서비스 형식 자리는 Core 디스패처(<c>Oranda.Core.Composition.Dispatch</c>)가 맡아 세션의 DBMS 로 고른다.
 /// </summary>
 public sealed partial class ServiceContainer : IServiceProvider, IDisposable
 {
     private readonly object _gate = new();
+    private readonly object _scanGate = new();
     private readonly Dictionary<Type, List<Registration>> _registrations = [];
     private readonly List<string> _deferred = [];
     private readonly List<object> _disposables = [];
+    private readonly List<Action> _afterScan = [];
     private bool _disposed;
+    private volatile bool _scanDone;
+
+    public ServiceContainer()
+    {
+        // 표가 답하기 전에 지연 어셈블리를 훑는다: 디스패처를 꺼내는 것만으로는 Oracle 을 로드하지 않고, 처음 구현을 고를 때 로드한다.
+        DbmsServices = new DbmsServiceTable(ensureLoaded: () =>
+        {
+            if (!DeferredScanned)
+            {
+                DeferredScanTrigger ??= typeof(IDbmsServiceSelector).FullName;
+            }
+
+            ScanDeferred();
+        });
+        AddInstance<IDbmsServiceSelector>(DbmsServices);
+    }
+
+    /// <summary>(서비스 형식, DBMS) → 구현 표. 디스패처가 <see cref="IDbmsServiceSelector"/> 로 받는다.</summary>
+    public DbmsServiceTable DbmsServices { get; }
 
     /// <summary>지연 어셈블리를 지금까지 훑었는지(시험·진단용).</summary>
     public bool DeferredScanned { get; private set; }
@@ -50,13 +73,26 @@ public sealed partial class ServiceContainer : IServiceProvider, IDisposable
         return this;
     }
 
-    /// <summary>어셈블리의 <see cref="OrandaServiceAttribute"/> 클래스를 모두 등록한다(플랫폼 조건 적용).</summary>
+    /// <summary>
+    /// 어셈블리의 <see cref="OrandaServiceAttribute"/> 클래스를 모두 등록한다(플랫폼 조건 적용).
+    /// DBMS 키를 단 것은 <see cref="DbmsServices"/> 에 (서비스 형식, DBMS) 로 넣고 서비스 형식으로는 등록하지 않는다(수명은 특성 그대로).
+    /// </summary>
     public ServiceContainer AddAssembly(Assembly assembly)
     {
         ArgumentNullException.ThrowIfNull(assembly);
         foreach (var (type, attribute) in ScanAttributes(assembly))
         {
-            if (PlatformMatches(attribute.Platform))
+            if (!PlatformMatches(attribute.Platform))
+            {
+                continue;
+            }
+
+            if (attribute.ForDbms is { } dbms)
+            {
+                var implementation = type;
+                DbmsServices.Add(attribute.ServiceType, dbms, () => Create(implementation), attribute.Lifetime);
+            }
+            else
             {
                 Add(attribute.ServiceType, new Registration(attribute.ServiceType, type, attribute.Lifetime, null));
             }
@@ -80,25 +116,79 @@ public sealed partial class ServiceContainer : IServiceProvider, IDisposable
         return this;
     }
 
-    /// <summary>지연 어셈블리를 지금 로드해 등록한다(첫 프레임 뒤 유휴 때 미리 데울 때 쓴다).</summary>
+    /// <summary>
+    /// 지연 어셈블리를 지금 로드해 등록한다(첫 프레임 뒤 유휴 때 미리 데울 때 쓴다). 두 번째부터는 아무것도 하지 않는다.
+    /// <see cref="DbmsServices"/> 가 답하기 전에도 불린다. 다른 스레드가 훑는 중이면 끝날 때까지 기다린다(덜 채운 표로 답하지 않게).
+    /// 같은 스레드에서 다시 들어오면(훑는 중 등록이 다시 묻는 경우) 이미 표시했으므로 바로 돌아간다.
+    /// </summary>
     public void ScanDeferred()
     {
-        string[] names;
-        lock (_gate)
+        if (_scanDone)
         {
-            if (DeferredScanned)
+            return; // DBMS 구현을 고를 때마다 불리므로 다 훑은 뒤에는 잠그지 않는다
+        }
+
+        lock (_scanGate)
+        {
+            string[] names;
+            lock (_gate)
             {
-                return;
+                if (DeferredScanned)
+                {
+                    return;
+                }
+
+                DeferredScanned = true;
+                names = [.. _deferred];
             }
 
-            DeferredScanned = true;
-            names = [.. _deferred];
+            // 훑기는 등록만 한다(인스턴스를 만들지 않는다) — 바깥 잠금(_scanGate)을 쥔 채 남의 잠금을 기다리지 않는다.
+            Action[] after;
+            try
+            {
+                foreach (var name in names)
+                {
+                    AddAssembly(Assembly.Load(new AssemblyName(name)));
+                }
+            }
+            finally
+            {
+                lock (_gate)
+                {
+                    after = [.. _afterScan];
+                    _afterScan.Clear();
+                }
+
+                _scanDone = true;
+            }
+
+            foreach (var action in after)
+            {
+                action();
+            }
+        }
+    }
+
+    /// <summary>
+    /// 지연 어셈블리를 다 훑은 뒤 한 번 부를 일을 건다(이미 훑었으면 바로 부른다).
+    /// 지연 어셈블리 안의 정적 상태를 잇는 데 쓴다 — 시작 경로에서 그 어셈블리를 로드하지 않게(TRD 8).
+    /// </summary>
+    public ServiceContainer AfterDeferredScan(Action action)
+    {
+        ArgumentNullException.ThrowIfNull(action);
+        lock (_gate)
+        {
+            if (!DeferredScanned)
+            {
+                _afterScan.Add(action);
+                return this;
+            }
         }
 
-        foreach (var name in names)
-        {
-            AddAssembly(Assembly.Load(new AssemblyName(name)));
-        }
+        // 훑는 중이면 끝날 때까지 기다린 뒤 부른다
+        ScanDeferred();
+        action();
+        return this;
     }
 
     public object? GetService(Type serviceType)
@@ -281,9 +371,14 @@ public sealed partial class ServiceContainer : IServiceProvider, IDisposable
         }
 
         // 지연 어셈블리 안 형식일 수 있으니 훑은 뒤 다시 본다(이미 훑었으면 값이 바뀌지 않는다).
-        if (!DeferredScanned && MayBeDeferred(t))
+        // DeferredScanned 는 훑기 시작 때 켜지므로 조건으로 쓰지 않는다 — 다른 스레드가 훑는 중이면 ScanDeferred 가 끝날 때까지 기다린다.
+        if (MayBeDeferred(t))
         {
-            DeferredScanTrigger ??= t.FullName;
+            if (!DeferredScanned)
+            {
+                DeferredScanTrigger ??= t.FullName;
+            }
+
             ScanDeferred();
             lock (_gate)
             {
