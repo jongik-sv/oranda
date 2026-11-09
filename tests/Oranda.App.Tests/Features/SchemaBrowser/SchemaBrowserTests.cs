@@ -95,6 +95,111 @@ public class SchemaBrowserTests
     }
 
     [Fact]
+    public async Task Table_and_view_rows_show_their_comment_after_the_name()
+    {
+        var h = new Harness();
+        h.Meta.Comments[("SCOTT", "EMP")] = "사원";
+        h.Meta.Comments[("SCOTT", "V_EMP")] = "사원 보기";
+        h.Meta.Comments[("SCOTT", "PROC1")] = "표가 아니다"; // 표·뷰가 아니면 붙이지 않는다
+        await h.Vm.SetSessionAsync(h.Session);
+        var scott = h.Vm.Roots.Single(r => r.Title == "SCOTT");
+        foreach (var cat in scott.Children.ToList())
+        {
+            await h.Vm.ExpandAsync(cat);
+        }
+
+        Assert.True(h.Vm.ShowTableComments); // 기본 켬
+        var items = scott.Children.SelectMany(c => c.Children).ToDictionary(n => n.Title, n => n.Comment);
+        Assert.Equal("사원", items["EMP"]);
+        Assert.Null(items["DEPT"]); // 주석 없음 = 이름만
+        Assert.Equal("사원 보기", items["V_EMP"]);
+        Assert.Null(items["PROC1"]);
+        Assert.Equal(1, h.Meta.CommentCalls); // 스키마를 펼칠 때 한 번에
+    }
+
+    [Fact]
+    public async Task Comments_are_reused_while_typing_a_filter_and_read_again_on_refresh()
+    {
+        var h = new Harness();
+        h.Vm.DebounceMilliseconds = 0;
+        h.Meta.Comments[("SCOTT", "EMP")] = "사원";
+        await h.Vm.SetSessionAsync(h.Session);
+        Assert.Equal(1, h.Meta.CommentCalls);
+
+        h.Vm.FilterText = "emp";
+        await Shell.Headless.HeadlessHost.WaitUntil(() => !h.Vm.IsLoading);
+        Assert.Equal(1, h.Meta.CommentCalls); // 이름 거르기만 바뀌면 다시 읽지 않는다
+
+        h.Meta.Comments[("SCOTT", "EMP")] = "직원";
+        await h.Vm.LoadAsync();
+        Assert.Equal(2, h.Meta.CommentCalls);
+        var tables = h.Vm.Roots.Single(r => r.Title == "SCOTT").Children[0];
+        await h.Vm.ExpandAsync(tables);
+        Assert.Equal("직원", tables.Children.Single(c => c.Title == "EMP").Comment);
+    }
+
+    [Fact]
+    public async Task Unchecking_table_names_stops_reading_comments_and_checking_reads_them_again()
+    {
+        var h = new Harness();
+        h.Meta.Comments[("SCOTT", "EMP")] = "사원";
+        await h.Vm.SetSessionAsync(h.Session);
+        Assert.Equal(1, h.Meta.CommentCalls);
+
+        h.Vm.ShowTableComments = false;
+        await WaitForAsync(() => h.Settings.Current.SchemaBrowser.HideTableComments); // 설정에 남는다
+        await h.Vm.LoadAsync();
+        Assert.Equal(1, h.Meta.CommentCalls); // 끄면 서버를 부르지 않는다
+        var tables = h.Vm.Roots.Single(r => r.Title == "SCOTT").Children[0];
+        await h.Vm.ExpandAsync(tables);
+        Assert.Null(tables.Children.Single(c => c.Title == "EMP").Comment);
+
+        h.Vm.ShowTableComments = true; // 켜면 펼쳐 둔 스키마를 다시 읽어 주석을 붙인다
+        await WaitForAsync(() => h.Meta.CommentCalls == 2 && !h.Vm.IsLoading);
+        tables = h.Vm.Roots.Single(r => r.Title == "SCOTT").Children[0];
+        await h.Vm.ExpandAsync(tables);
+        await WaitForAsync(() => tables.Children.Any(c => c.Title == "EMP" && c.Comment == "사원"));
+    }
+
+    [Fact]
+    public async Task Table_names_choice_comes_from_settings()
+    {
+        var h = new Harness();
+        Assert.True(h.Vm.ShowTableComments);
+        await h.Settings.UpdateAsync(s => s with { SchemaBrowser = s.SchemaBrowser with { HideTableComments = true } });
+        Assert.False(new SchemaBrowserViewModel(new Services(h)).ShowTableComments);
+    }
+
+    [Fact]
+    public async Task Tree_still_loads_when_comments_cannot_be_read()
+    {
+        var h = new Harness();
+        h.Meta.FailComments = true;
+        await h.Vm.SetSessionAsync(h.Session);
+        var tables = h.Vm.Roots.Single(r => r.Title == "SCOTT").Children[0];
+        await h.Vm.ExpandAsync(tables);
+
+        Assert.Equal(["DEPT", "EMP"], tables.Children.Select(c => c.Title).Order(StringComparer.Ordinal));
+        Assert.All(tables.Children, c => Assert.Null(c.Comment));
+    }
+
+    [Theory]
+    [InlineData(null, null)]
+    [InlineData("  ", null)]
+    [InlineData("사원", "사원")]
+    [InlineData(" 주문\r\n  상세 ", "주문 상세")]
+    public void Comment_label_is_one_short_line(string? comment, string? expected) =>
+        Assert.Equal(expected, SchemaBrowserViewModel.CommentLabel(comment));
+
+    [Fact]
+    public void Long_comment_is_cut_with_an_ellipsis()
+    {
+        var label = SchemaBrowserViewModel.CommentLabel(new string('가', 100))!;
+        Assert.Equal(SchemaBrowserViewModel.CommentMaxLength + 1, label.Length);
+        Assert.EndsWith("…", label, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task Ten_thousand_objects_are_shown_in_pages()
     {
         var h = new Harness();
@@ -542,6 +647,26 @@ public class SchemaBrowserTests
         }
 
         public int ListObjectsCalls { get; private set; }
+
+        /// <summary>테이블·뷰 주석(소유자, 이름) → 주석. 트리 줄의 「테이블 명」.</summary>
+        public Dictionary<(string Owner, string Name), string> Comments { get; } = [];
+
+        public int CommentCalls { get; private set; }
+
+        /// <summary>참이면 주석 조회가 실패한다(권한 없음 등).</summary>
+        public bool FailComments { get; set; }
+
+        public Task<IReadOnlyDictionary<string, string>> ListTableCommentsAsync(ISession s, string owner, CancellationToken ct)
+        {
+            CommentCalls++;
+            if (FailComments)
+            {
+                throw new InvalidOperationException("ORA-00942");
+            }
+
+            return Task.FromResult<IReadOnlyDictionary<string, string>>(
+                Comments.Where(c => c.Key.Owner == owner).ToDictionary(c => c.Key.Name, c => c.Value, StringComparer.Ordinal));
+        }
 
         public int TableCalls { get; private set; }
 

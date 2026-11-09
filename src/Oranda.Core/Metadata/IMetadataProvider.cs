@@ -35,6 +35,13 @@ public interface IMetadataProvider
     Task<TableInfo> GetTableAsync(ISession s, DbObjectRef table, CancellationToken ct);
 
     /// <summary>
+    /// 소유자 하나의 테이블·뷰 주석(이름 → 주석, 주석이 있는 것만). 스키마 브라우저 트리가 이름 옆에 흐리게 보인다.
+    /// 기본 구현은 빈 사전(주석을 보이지 않는다).
+    /// </summary>
+    Task<IReadOnlyDictionary<string, string>> ListTableCommentsAsync(ISession s, string owner, CancellationToken ct)
+        => Task.FromResult<IReadOnlyDictionary<string, string>>(new Dictionary<string, string>(StringComparer.Ordinal));
+
+    /// <summary>
     /// 프로시저·함수·패키지의 멤버와 인자(all_arguments). 단독 프로시저면 원소 1개. TSK-04-04.
     /// </summary>
     Task<IReadOnlyList<ProcedureInfo>> GetProceduresAsync(ISession s, DbObjectRef obj, CancellationToken ct);

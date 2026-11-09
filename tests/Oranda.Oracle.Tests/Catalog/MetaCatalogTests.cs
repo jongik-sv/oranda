@@ -17,6 +17,7 @@ public partial class MetaCatalogTests
     [InlineData("meta.constraints")]
     [InlineData("meta.indexes")]
     [InlineData("meta.table_comment")]
+    [InlineData("meta.table_comments")]
     [InlineData("meta.procedures")]
     [InlineData("meta.arguments")]
     [InlineData("meta.detail_triggers")]
@@ -99,6 +100,17 @@ public partial class MetaCatalogTests
         var binds = BindName().Matches(Catalog.Get(id, 26).Sql).Select(m => m.Groups[1].Value).ToHashSet(StringComparer.Ordinal);
 
         Assert.Equal(["name", "owner"], binds.Order(StringComparer.Ordinal));
+    }
+
+    [Fact]
+    public void Owner_table_comments_bind_only_the_owner_and_skip_empty_comments()
+    {
+        // 스키마 브라우저가 스키마를 펼칠 때 한 번 부른다: 소유자만 묶고 (이름, 주석) 두 열.
+        var sql = Catalog.Get("meta.table_comments", 11).Sql;
+
+        Assert.Equal(["owner"], BindName().Matches(sql).Select(m => m.Groups[1].Value).Distinct());
+        Assert.Contains("SELECT t.table_name, t.comments", sql, StringComparison.Ordinal);
+        Assert.Contains("t.comments IS NOT NULL", sql, StringComparison.Ordinal);
     }
 
     [Fact]

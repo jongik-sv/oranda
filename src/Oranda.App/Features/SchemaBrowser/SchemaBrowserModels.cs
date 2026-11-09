@@ -85,6 +85,9 @@ public sealed partial class SchemaNode : ObservableObject
     /// <summary>열 노드의 자료형 요약 등 부가 설명.</summary>
     public string? Detail { get; internal init; }
 
+    /// <summary>표·뷰 노드: 테이블 명(주석) 한 줄. 이름 옆에 흐리게 보이며 「테이블 명」 체크를 끄면 숨는다. 없으면 null.</summary>
+    public string? Comment { get; internal init; }
+
     /// <summary>범주 노드: 아직 화면에 올리지 않은 전체 항목.</summary>
     internal IReadOnlyList<DbObjectRef> Items { get; set; } = [];
 

@@ -33,8 +33,14 @@
     </Border>
     <!-- 읽는 동안 필터 칸 아래 여백에 가는 막대를 겹쳐 보인다(트리가 밀리지 않게 자리를 따로 차지하지 않는다). -->
     <Panel DockPanel.Dock="Top" Margin="4,4,4,0">
-      <TextBox x:Name="FilterBox" Classes="compact search" Margin="0,0,0,3"
-               PlaceholderText="이름 필터 (* 와일드카드)" Text="{Binding FilterText, Mode=TwoWay}" AutomationProperties.Name="이름 필터" />
+      <DockPanel Margin="0,0,0,3">
+        <!-- 체크하면 표·뷰 이름 옆에 테이블 명(주석)을 흐리게 보인다(기본 켬, 설정에 남는다). -->
+        <CheckBox x:Name="ShowCommentsCheck" DockPanel.Dock="Right" Margin="6,0,0,0" VerticalAlignment="Center"
+                  Content="테이블 명" IsChecked="{Binding ShowTableComments, Mode=TwoWay}"
+                  ToolTip.Tip="표·뷰 이름 옆에 테이블 명(주석) 보이기" AutomationProperties.Name="테이블 명 보이기" />
+        <TextBox x:Name="FilterBox" Classes="compact search"
+                 PlaceholderText="이름 필터 (* 와일드카드)" Text="{Binding FilterText, Mode=TwoWay}" AutomationProperties.Name="이름 필터" />
+      </DockPanel>
       <ProgressBar x:Name="LoadingBar" IsIndeterminate="True" IsVisible="{Binding IsLoading}" Height="2" MinHeight="2"
                    VerticalAlignment="Bottom" AutomationProperties.Name="객체 목록을 읽는 중" />
     </Panel>
@@ -57,6 +63,8 @@
             <ContentControl Content="{Binding Source='star', Converter={x:Static icons:IconKeyConverter.Instance}, ConverterParameter=11}"
                             IsVisible="{Binding IsFavorite}" VerticalAlignment="Center" />
             <TextBlock Text="{Binding Detail}" Opacity="0.55" VerticalAlignment="Center" />
+            <TextBlock Text="{Binding Comment}" Opacity="0.55" VerticalAlignment="Center" ToolTip.Tip="{Binding Comment}"
+                       IsVisible="{Binding $parent[TreeView].((vm:SchemaBrowserViewModel)DataContext).ShowTableComments, FallbackValue=False}" />
           </StackPanel>
         </TreeDataTemplate>
       </TreeView.ItemTemplate>

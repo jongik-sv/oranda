@@ -290,6 +290,27 @@ public sealed class MetadataProviderIntegrationTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task Table_comments_of_an_owner_are_read_at_once_for_dba_and_non_dba()
+    {
+        var provider = NewProvider(out _, out _);
+        await using (var conn = await OpenSystemAsync())
+        {
+            await ExecAsync(conn, $"COMMENT ON TABLE {_owner}.emp IS 'employee'");
+            await ExecAsync(conn, $"COMMENT ON TABLE {_owner}.emp_v IS 'employee view'");
+        }
+
+        var dba = await provider.ListTableCommentsAsync(await OpenAsync("system", _db.SystemPassword), _owner, default);
+        Assert.Equal("department", dba["DEPT"]);
+        Assert.Equal("employee", dba["EMP"]);
+        Assert.Equal("employee view", dba["EMP_V"]);
+        Assert.False(dba.ContainsKey("DOM_T")); // 주석 없는 표는 빠진다
+
+        // 권한 받은 표·뷰만 보인다(all_tab_comments).
+        var app = await provider.ListTableCommentsAsync(await OpenAsync(OracleFreeFixture.AppUser, _db.AppPassword), _owner, default);
+        Assert.Equal(["EMP", "EMP_V"], app.Keys.Order(StringComparer.Ordinal));
+    }
+
+    [Fact]
     public async Task Table_info_has_columns_constraints_indexes_and_comments()
     {
         var provider = NewProvider(out _, out _);

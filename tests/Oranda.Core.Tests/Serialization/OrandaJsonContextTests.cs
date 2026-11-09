@@ -37,6 +37,15 @@ public class OrandaJsonContextTests
         Assert.Empty(value.SchemaBrowser.Filters);
         Assert.Empty(value.SchemaBrowser.ActiveFilters);
         Assert.Equal(new SchemaBrowserSettings { SingleClickPreview = false }, value.SchemaBrowser);
+        Assert.False(value.SchemaBrowser.HideTableComments); // 옛 설정 = 테이블 명 보임
+    }
+
+    [Fact]
+    public void Hidden_table_names_choice_round_trips()
+    {
+        var json = JsonSerializer.Serialize(new AppSettings { SchemaBrowser = new SchemaBrowserSettings { HideTableComments = true } }, OrandaJsonContext.Default.AppSettings);
+        Assert.Contains("\"hideTableComments\": true", json.Replace("\":true", "\": true", StringComparison.Ordinal), StringComparison.Ordinal);
+        Assert.True(JsonSerializer.Deserialize(json, OrandaJsonContext.Default.AppSettings)!.SchemaBrowser.HideTableComments);
     }
 
     [Fact]

@@ -232,6 +232,23 @@ internal sealed partial class OracleMetadataProvider : IMetadataProvider
         return info;
     }
 
+    public async Task<IReadOnlyDictionary<string, string>> ListTableCommentsAsync(ISession s, string owner, CancellationToken ct)
+    {
+        ArgumentNullException.ThrowIfNull(s);
+        ArgumentNullException.ThrowIfNull(owner);
+        var rows = await QueryAsync(s, "meta.table_comments", c => c.Parameters.Add("owner", owner), ct);
+        var result = new Dictionary<string, string>(StringComparer.Ordinal);
+        foreach (var r in rows)
+        {
+            if (Str(r[0]) is { } name && Str(r[1]) is { Length: > 0 } comment)
+            {
+                result[name] = comment;
+            }
+        }
+
+        return result;
+    }
+
     public async Task<IReadOnlyList<ProcedureInfo>> GetProceduresAsync(ISession s, DbObjectRef obj, CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(s);

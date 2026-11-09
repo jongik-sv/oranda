@@ -593,6 +593,11 @@ public sealed class Oracle11gTests : IAsyncLifetime
             var deptInfo = await provider.GetTableAsync(s, new DbObjectRef(_db.Owner, dept, "TABLE"), default);
             Assert.Equal("부서 표", deptInfo.Comment);
             Assert.Equal("부서 이름", deptInfo.Columns.Single(c => c.Name == "NAME").Comment);
+
+            // 트리 줄의 테이블 명: 소유자 하나의 주석을 한 번에(meta.table_comments). 주석 없는 표는 빠진다.
+            var comments = await provider.ListTableCommentsAsync(s, _db.Owner, default);
+            Assert.Equal("부서 표", comments[dept]);
+            Assert.False(comments.ContainsKey(emp));
             Assert.False(deptInfo.Columns.Single(c => c.Name == "NAME").IsNullable);
             Assert.Equal("0", deptInfo.Columns.Single(c => c.Name == "BUDGET").DefaultValue?.Trim());
             Assert.Equal([dept + "_CK", dept + "_PK"], deptInfo.Constraints.Select(c => c.Name).Order(StringComparer.Ordinal));

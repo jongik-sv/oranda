@@ -73,6 +73,9 @@ public sealed partial class SchemaBrowserViewModel : ToolPanelViewModelBase, IDi
     private SchemaFilter _filter = new();
     private readonly Dictionary<string, HashSet<string>> _invalidByOwner = new(StringComparer.Ordinal);
     private bool _reuseInvalid;
+
+    /// <summary>소유자별 테이블·뷰 주석(이름 → 주석). INVALID 목록과 같은 때 다시 읽는다(이름·유형 거르기만 바뀌면 그대로 쓴다).</summary>
+    private readonly Dictionary<string, IReadOnlyDictionary<string, string>> _commentsByOwner = new(StringComparer.Ordinal);
     private int _generation;
     private int _buildGeneration;
     private int _loadsInFlight;
@@ -282,6 +285,48 @@ public sealed partial class SchemaBrowserViewModel : ToolPanelViewModelBase, IDi
     public bool SingleClickPreview => SingleClickPreviewProvider?.Invoke()
         ?? (_services?.GetService(typeof(SettingsService)) as SettingsService)?.Current.SchemaBrowser.SingleClickPreview
         ?? true;
+
+    private bool? _showTableComments;
+
+    /// <summary>
+    /// 표·뷰 줄 이름 옆에 테이블 명(주석)을 보인다(패널의 「테이블 명」 체크, 기본 켬, 끄면 설정 <c>schemaBrowser.hideTableComments</c> 에 남는다).
+    /// 켜면 펼쳐 둔 스키마의 주석을 읽어 다시 그리고, 끄면 숨기기만 한다.
+    /// </summary>
+    public bool ShowTableComments
+    {
+        get => _showTableComments ?? !(Settings?.Current.SchemaBrowser.HideTableComments ?? false);
+        set
+        {
+            if (value == ShowTableComments)
+            {
+                return;
+            }
+
+            _showTableComments = value;
+            OnPropertyChanged();
+            if (Settings is { } settings)
+            {
+                _ = SaveShowTableCommentsAsync(settings, value);
+            }
+
+            if (value && CurrentSession is not null)
+            {
+                _ = ApplyFilterCoreAsync(_filter.InvalidOnly == InvalidOnly, default);
+            }
+        }
+    }
+
+    private static async Task SaveShowTableCommentsAsync(SettingsService settings, bool value)
+    {
+        try
+        {
+            await settings.UpdateAsync(s => s with { SchemaBrowser = s.SchemaBrowser with { HideTableComments = !value } }).ConfigureAwait(false);
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Trace.TraceWarning("스키마 브라우저 「테이블 명」 선택을 저장하지 못했다: {0}", ex.Message);
+        }
+    }
 
     /// <summary><c>oranda.schema.filter</c> 가 필터 입력칸으로 포커스를 옮기라고 알린다.</summary>
     public event EventHandler? FilterFocusRequested;

@@ -533,6 +533,12 @@ public sealed record SchemaBrowserSettings
     /// <summary>객체를 한 번 누르면(방향키로 고르고 잠깐 멈추면) 미리보기 문서로 연다. 끄면 두 번 누르기·Enter 로만 연다.</summary>
     public bool SingleClickPreview { get; init; } = true;
 
+    /// <summary>
+    /// 트리의 표·뷰 줄 이름 옆 테이블 명(주석)을 숨긴다(패널의 「테이블 명」 체크를 끈 것). 숨기면 주석을 읽지도 않는다.
+    /// 「숨김」 으로 두는 까닭: 이 키가 없는 옛 settings.json 을 소스 생성 직렬화기가 false 로 읽어도 기본(보임)이 되게.
+    /// </summary>
+    public bool HideTableComments { get; init; }
+
     /// <summary>이름 붙여 저장한 트리 필터(오렌지 Schema Browser Filter, TSK-13-10). 모든 접속이 같이 쓴다.</summary>
     public IReadOnlyList<SchemaBrowserFilter> Filters { get => _filters; init => _filters = value ?? []; }
 
@@ -561,11 +567,12 @@ public sealed record SchemaBrowserSettings
     public bool Equals(SchemaBrowserSettings? other) =>
         other is not null
         && SingleClickPreview == other.SingleClickPreview
+        && HideTableComments == other.HideTableComments
         && Filters.SequenceEqual(other.Filters)
         && ContentEquality.SameEntries(ActiveFilters, other.ActiveFilters)
         && ContentEquality.SameEntries(TypeChoices, other.TypeChoices);
 
-    public override int GetHashCode() => HashCode.Combine(SingleClickPreview, Filters.Count, ActiveFilters.Count, TypeChoices.Count);
+    public override int GetHashCode() => HashCode.Combine(SingleClickPreview, HideTableComments, Filters.Count, ActiveFilters.Count, TypeChoices.Count);
 }
 
 /// <summary>저장 필터의 스키마 범위(오렌지 필터 Schema 탭).</summary>

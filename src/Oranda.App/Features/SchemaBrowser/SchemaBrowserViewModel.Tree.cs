@@ -62,6 +62,7 @@ public sealed partial class SchemaBrowserViewModel
         var gen = Interlocked.Increment(ref _buildGeneration);
         Interlocked.Increment(ref _generation); // 옛 트리 노드의 읽기는 버린다
         Roots.Clear();
+        _commentsByOwner.Clear(); // 새로 고침: 주석도 서버에서 다시 읽는다
         _favoritesNode = null;
         SelectedNode = null;
         OnPropertyChanged(nameof(HasSession));
@@ -293,6 +294,12 @@ public sealed partial class SchemaBrowserViewModel
             _invalidByOwner[owner] = invalid;
         }
 
+        // 테이블 명: 「테이블 명」 체크가 켜져 있을 때만 읽는다(끄면 서버를 부르지 않는다). 켜면 그때 다시 거르며 읽는다.
+        if (ShowTableComments && node.Owner is { } commentOwner && !(_reuseInvalid && _commentsByOwner.ContainsKey(commentOwner)))
+        {
+            _commentsByOwner[commentOwner] = await ListCommentsAsync(session, commentOwner, ct);
+        }
+
         var objects = await _meta!.ListObjectsAsync(session, query, ct);
 
         // Java 저장 객체는 객체 목록 캐시와 따로 이 소유자만 묻는다(행 수 제한, JVM 이 없으면 빈 목록). 실패해도 다른 객체는 보인다.
@@ -392,6 +399,44 @@ public sealed partial class SchemaBrowserViewModel
         }
     }
 
+    /// <summary>소유자의 테이블·뷰 주석. 읽지 못하면(권한·끊김) 빈 사전: 주석 없이 트리는 그대로 보인다.</summary>
+    private async Task<IReadOnlyDictionary<string, string>> ListCommentsAsync(ISession session, string owner, CancellationToken ct)
+    {
+        try
+        {
+            return await _meta!.ListTableCommentsAsync(session, owner, ct);
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (Exception)
+        {
+            return new Dictionary<string, string>(StringComparer.Ordinal);
+        }
+    }
+
+    /// <summary>트리 줄에 붙일 주석 글: 줄바꿈·연속 공백은 공백 하나로, 길면 <see cref="CommentMaxLength"/> 자에서 자르고 「…」.</summary>
+    internal static string? CommentLabel(string? comment)
+    {
+        if (string.IsNullOrWhiteSpace(comment))
+        {
+            return null;
+        }
+
+        var text = string.Join(' ', comment.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries));
+        return text.Length > CommentMaxLength ? text[..CommentMaxLength] + "…" : text;
+    }
+
+    /// <summary>트리 줄에 보이는 주석 최대 글자 수.</summary>
+    internal const int CommentMaxLength = 60;
+
+    /// <summary>표·뷰 노드의 주석(그 소유자를 읽었을 때만). 다른 유형은 null.</summary>
+    private string? CommentOf(DbObjectRef r) =>
+        SchemaNode.IsTableLike(r.ObjectType) && _commentsByOwner.TryGetValue(r.Owner, out var map) && map.TryGetValue(r.Name, out var c)
+            ? CommentLabel(c)
+            : null;
+
     /// <summary>트리에 보이는 객체 이름: Java 객체는 긴 이름(<c>com/example/Util</c>), 나머지는 사전 이름.</summary>
     internal string DisplayName(DbObjectRef r) => _javaNames.TryGetValue(r, out var longName) ? longName : r.Name;
 
@@ -421,6 +466,7 @@ public sealed partial class SchemaBrowserViewModel
             Parent = parent,
             Status = status,
             Detail = detail,
+            Comment = CommentOf(r),
             IsFavorite = _favorites.Contains(SchemaSql.FavoriteKey(r)),
         };
         n.ResetChildren();
