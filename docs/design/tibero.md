@@ -2,7 +2,7 @@
 
 결정: decisions D-046(2026-11-09, PRD D-03 뒤집음). 범위 = Oracle 과 같은 수준 전체.
 
-대상 버전: Tibero 6(시험 서버 = 6.2.15, 사용자 확인 2026-11-09)과 Tibero 7. 버전별로 다른 SQL 은 Oracle 처럼 카탈로그 파일 접미사(`.7.sql`)로 나눈다. Tibero 7 시험 서버는 아직 없다.
+대상 버전: Tibero 6 이상 전부(6·7 과 이후 판, 사용자 지시 2026-11-09). 시험 서버 = 6.2.15(빌드 302172, 프로토콜 2.15). 버전으로 막지 않고, 없는 뷰·기능만 버전 판정으로 끈다. 버전별로 다른 SQL 은 Oracle 처럼 카탈로그 파일 접미사(`.7.sql`)로 나눈다. Tibero 7 시험 서버는 아직 없다.
 
 ## 1. 접속 방법
 
@@ -65,7 +65,7 @@
 
 | 단계 | 내용 | 막힘 |
 |---|---|---|
-| T0 | 드라이버 확보, win30·Mac 에서 접속·`SELECT * FROM V$VERSION` 실측(macOS arm64 판정) | 시험 서버 접속 정보, TDP.NET `.nupkg` |
+| T0 | 드라이버 확보, win30·Mac 에서 접속·`SELECT * FROM V$VERSION` 실측(macOS arm64 판정). **2026-11-09: TDP.NET Core `Tibero.DataAccess` 1.1.35(net5.0, 관리 코드)로 WSL(Linux)·.NET 10 에서 접속·읽기 확인.** macOS 실측 남음 | macOS 실측 |
 | T1 | DBMS 추상화: `Dbms` 프로필 칸, 접속 대화 상자의 DBMS 선택, 세션별 공급자 디스패처, 카탈로그 `dbms:` 헤더, `DbErrorKind`, App 의 ODP.NET 직접 사용 걷어 내기 | 없음(지금 시작 가능) |
 | T2 | `Oranda.Tibero` 접속·실행·취소·결과·DBMS_OUTPUT, 지원 표시 | T0, T1 |
 | T3 | 카탈로그·스키마 브라우저·객체 상세·DDL·PSM 편집 | T2 |
