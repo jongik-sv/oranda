@@ -15,13 +15,21 @@ Windows 줄은 2026-10-25 로컬 `vpk pack --channel win` 결과다. macOS 줄�
 
 ## 태그 푸시로 내기
 
-1. 올릴 커밋에서 태그를 만든다. 태그 이름이 패키지 버전이 된다(`vX.Y.Z` → `X.Y.Z`, 시험판은 `vX.Y.Z-beta.1` 형식).
+같은 커밋을 여러 ref 에 push 하면 ref 마다 `ci` 가 처음부터 돈다(concurrency 그룹이 ref 별). 그래서 릴리스 때는 **main 과 태그만** push 한다. 작업 브랜치(`dev-*`)는 릴리스 때 push 하지 않고, 다음 작업을 push 할 때 함께 따라가게 둔다.
+
+1. 릴리스 노트(`docs/release-notes/<버전>.md`)를 커밋하고 main 에 push 한다. 이 main 실행이 단위·UI·통합 시험을 모두 돈다.
+2. 같은 커밋에 태그를 만들어 바로 push 한다. main 실행이 끝나기를 기다릴 필요는 없다. 태그 이름이 패키지 버전이 된다(`vX.Y.Z` → `X.Y.Z`, 시험판은 `vX.Y.Z-beta.1` 형식).
    ```
+   git push origin main
    git tag v0.2.0
    git push origin v0.2.0
    ```
-2. `ci` 워크플로의 `windows`·`macos` 작업이 각자 패키지를 만든다(아래 「서명 상태별 동작」). 두 작업이 같은 규칙으로 버전을 정하고, `release` 작업이 두 버전이 같은지 확인한 뒤 `vpk upload github --channel win` → `--channel osx` 순서로 GitHub Release `Oranda 0.2.0` 에 올린다(`--publish --merge`: 두 번째 채널은 같은 릴리스에 더해진다). 이전 릴리스가 있으면 각 작업이 먼저 받아 델타 패키지도 만든다.
-3. 설치본은 시작 20초 뒤(24시간마다) 또는 도움말 > 업데이트 확인에서 새 버전을 찾아 내려받고, 종료할 때 적용한다.
+3. 태그 실행은 시험을 다시 돌리지 않는다. `verify-main` 작업이 같은 커밋의 main 실행을 찾아 끝날 때까지(최대 60분) 기다리고, 통과했을 때만 `release` 작업이 올린다. 그동안 `windows`·`macos` 작업은 빌드 시험 없이 바로 게시·패키지를 만든다.
+   - main 실행이 없으면(main 을 push 하지 않고 태그만 올림) `verify-main` 이 실패한다. main 을 push 한 뒤 태그 실행을 다시 돌린다.
+   - main 실행이 간헐 실패로 떨어지면 main 실행의 실패한 작업을 다시 돌려 통과시킨 뒤, 태그 실행의 실패한 작업(`verify-main`·`release`)을 다시 돌린다.
+   - 수동 실행(`workflow_dispatch`)은 이 확인 없이 예전처럼 시험까지 돌고 올린다.
+4. `windows`·`macos` 작업이 각자 패키지를 만든다(아래 「서명 상태별 동작」). 두 작업이 같은 규칙으로 버전을 정하고, `release` 작업이 두 버전이 같은지 확인한 뒤 `vpk upload github --channel win` → `--channel osx` 순서로 GitHub Release `Oranda 0.2.0` 에 올린다(`--publish --merge`: 두 번째 채널은 같은 릴리스에 더해진다). 이전 릴리스가 있으면 각 작업이 먼저 받아 델타 패키지도 만든다.
+5. 설치본은 시작 20초 뒤(24시간마다) 또는 도움말 > 업데이트 확인에서 새 버전을 찾아 내려받고, 종료할 때 적용한다.
 
 ## 릴리스 노트
 
