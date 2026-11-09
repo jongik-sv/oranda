@@ -16,7 +16,7 @@ public class TiberoTriggerDdlIt
     private static readonly string Table = TiberoItSessions.ObjectName("T3DDL");
     private static readonly string Trigger = TiberoItSessions.ObjectName("T3DDL_TRG");
 
-    [Fact]
+    [TiberoWriteFact]
     public async Task Source_text_rebuilds_a_working_trigger()
     {
         if (TiberoItSessions.SkipWrite())

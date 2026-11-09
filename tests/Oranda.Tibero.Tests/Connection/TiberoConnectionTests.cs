@@ -238,7 +238,7 @@ public class TiberoConnectionProbeTests
         await Assert.ThrowsAsync<NotSupportedException>(() => new TiberoConnectionProbe().ChangePasswordAsync(Profile(), "a", "b", CancellationToken.None));
     }
 
-    [Fact]
+    [TiberoItFact]
     public async Task Probe_against_a_real_server_reports_the_version()
     {
         var env = new TiberoItEnv();

@@ -22,7 +22,7 @@ public class TiberoTransferProbeIt(ITestOutputHelper output)
 
     private const string AllColumns = "id, v, d, ts, tstz, iym, ids, r, b, c, n, nv";
 
-    [Fact]
+    [TiberoWriteFact]
     public async Task Import_statement_shapes_savepoints_literals_and_batch_sizes()
     {
         if (TiberoItSessions.SkipWrite())

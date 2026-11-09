@@ -20,7 +20,7 @@ public class TiberoExportIt
         "SELECT 1 AS ID, 'a,b' AS NAME, DATE '2026-03-05' AS D, TIMESTAMP '2026-03-05 14:30:15.25' AS TS, TO_CLOB('clobtext') AS C, HEXTORAW('CAFE') AS R, 1234.5 AS N FROM DUAL " +
         "UNION ALL SELECT 2, NULL, NULL, NULL, NULL, NULL, NULL FROM DUAL";
 
-    [Fact]
+    [TiberoItFact]
     public async Task Typed_rows_are_written_as_csv_json_insert_and_xlsx()
     {
         await using var it = TiberoItSessions.Create();
@@ -61,7 +61,7 @@ public class TiberoExportIt
         Assert.Equal((byte)'K', xlsx[1]);
     }
 
-    [Fact]
+    [TiberoItFact]
     public async Task Rows_across_many_pages_are_all_written()
     {
         await using var it = TiberoItSessions.Create();

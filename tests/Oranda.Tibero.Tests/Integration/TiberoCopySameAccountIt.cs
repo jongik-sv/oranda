@@ -22,7 +22,7 @@ public class TiberoCopySameAccountIt
 {
     private static readonly string TempTable = TiberoItSessions.ObjectName("TI1B_T");
 
-    [Fact]
+    [TiberoItFact]
     public async Task Same_account_same_table_copy_is_blocked_by_the_precheck_and_refused_by_the_runner()
     {
         await using var it = TiberoItSessions.Create();

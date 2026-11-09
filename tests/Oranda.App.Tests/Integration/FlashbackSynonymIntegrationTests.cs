@@ -21,7 +21,7 @@ public sealed class FlashbackSynonymIntegrationTests(ItDb db) : IClassFixture<It
 {
     private static SqlStatement Select(string sql) => new(sql, default, StatementKind.Query) { Verb = "SELECT" };
 
-    [Fact]
+    [ItDbFact]
     public Task Synonym_result_targets_the_owning_table_and_the_history_query_runs() => Ui.Run(async () =>
     {
         if (!db.Enabled)

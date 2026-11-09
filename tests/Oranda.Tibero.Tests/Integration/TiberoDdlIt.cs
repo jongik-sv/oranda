@@ -19,7 +19,7 @@ public class TiberoDdlIt
 
     private static TiberoMetadataProvider NewProvider() => new(TiberoCatalogQuery.RunAsync);
 
-    [Fact]
+    [TiberoItFact]
     public async Task A_visible_sys_package_spec_comes_back_as_a_qualified_create_or_replace()
     {
         await using var it = TiberoItSessions.Create();
@@ -50,7 +50,7 @@ public class TiberoDdlIt
     }
 
     /// <summary>쓰기 없이 meta.ddl(PSM 블록, OUT CLOB, :terminator 두 번)을 서버에 보낸다. 접속 계정에 표가 없으면 아무것도 하지 않는다.</summary>
-    [Fact]
+    [TiberoItFact]
     public async Task A_table_of_the_login_schema_comes_back_from_the_metadata_block_with_and_without_the_terminator()
     {
         await using var it = TiberoItSessions.Create();
@@ -77,7 +77,7 @@ public class TiberoDdlIt
         Assert.True(withSemicolon.EndsWith(';') && !bare.EndsWith(';'), "끝 표시 ; 가 켬·끔을 따르지 않는다");
     }
 
-    [Fact]
+    [TiberoWriteFact]
     public async Task A_table_and_a_procedure_rebuild_from_their_ddl()
     {
         if (TiberoItSessions.SkipWrite())

@@ -18,7 +18,7 @@ public class TiberoRowEditIt
 {
     private static readonly IReadOnlyDictionary<string, BindValue> NoBinds = new Dictionary<string, BindValue>();
 
-    [Fact]
+    [TiberoItFact]
     public async Task Query_with_rowid_column_plans_as_rowid_key_and_select_star_offers_the_rowid_rerun()
     {
         await using var it = TiberoItSessions.Create();
@@ -74,7 +74,7 @@ public class TiberoRowEditIt
         }
     }
 
-    [Fact]
+    [TiberoWriteFact]
     public async Task Row_editor_updates_and_deletes_by_rowid_and_key_and_rolls_back_only_the_failed_row()
     {
         if (TiberoItSessions.SkipWrite())

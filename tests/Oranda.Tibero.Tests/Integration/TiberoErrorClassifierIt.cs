@@ -9,7 +9,7 @@ namespace Oranda.Tibero.Tests.Integration;
 [Trait("Category", "Integration")]
 public class TiberoErrorClassifierIt
 {
-    [Fact]
+    [TiberoItFact]
     public async Task Server_error_maps_to_kind_and_statement_position()
     {
         await using var it = TiberoItSessions.Create();
@@ -31,7 +31,7 @@ public class TiberoErrorClassifierIt
         Assert.Equal((16, 2, 8), (error.Offset, error.Line, error.Column));
     }
 
-    [Fact]
+    [TiberoItFact]
     public async Task Command_on_a_closed_connection_is_a_disconnect()
     {
         await using var it = TiberoItSessions.Create();

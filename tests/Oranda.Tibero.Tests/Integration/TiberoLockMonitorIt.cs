@@ -19,7 +19,7 @@ namespace Oranda.Tibero.Tests.Integration;
 public class TiberoLockMonitorIt(ITestOutputHelper output)
 {
     // L1: 기본 필터로 잠금 목록이 돈다. Tibero 모드 번호 +1 변환은 SQL 에서 하므로 보유·요청 모드는 Oracle 의 0..6 안.
-    [Fact]
+    [TiberoItFact]
     public async Task L1_locks_list_runs_and_modes_are_in_oracle_range()
     {
         await using var it = TiberoItSessions.Create();
@@ -59,7 +59,7 @@ public class TiberoLockMonitorIt(ITestOutputHelper output)
     }
 
     // L2: 보유자 영향 순위. 아무도 기다리지 않으면 빈 목록이 보통이지만 비어 있음을 단정하지 않는다(다른 사용자가 있을 수 있다).
-    [Fact]
+    [TiberoItFact]
     public async Task L2_blocker_impact_runs()
     {
         await using var it = TiberoItSessions.Create();
@@ -96,7 +96,7 @@ public class TiberoLockMonitorIt(ITestOutputHelper output)
     }
 
     // L3: DDL 잠금은 딕셔너리 능력이 없으면 빈 목록(보내지 않음), 있으면 쿼리가 돈다.
-    [Fact]
+    [TiberoItFact]
     public async Task L3_ddl_locks_empty_without_dictionary_else_runs()
     {
         await using var it = TiberoItSessions.Create();
@@ -133,7 +133,7 @@ public class TiberoLockMonitorIt(ITestOutputHelper output)
     }
 
     // L4: 바인드 있는 문장을 작업 세션이 돌린 뒤 그 커서·세션의 캡처 바인드를 읽는다. Tibero 는 캡처가 꺼져 있거나 비어 있을 수 있어 비어 있음을 단정하지 않는다.
-    [Fact]
+    [TiberoItFact]
     public async Task L4_waiting_binds_by_cursor_and_session_run()
     {
         await using var it = TiberoItSessions.Create();
@@ -195,7 +195,7 @@ public class TiberoLockMonitorIt(ITestOutputHelper output)
     }
 
     // L5: 방치 트랜잭션. 작업 세션은 트랜잭션을 열지 않았으므로 목록에 없다.
-    [Fact]
+    [TiberoItFact]
     public async Task L5_idle_transactions_runs_and_work_session_is_not_listed()
     {
         await using var it = TiberoItSessions.Create();
@@ -228,7 +228,7 @@ public class TiberoLockMonitorIt(ITestOutputHelper output)
     }
 
     // L6: 데드락 기록은 Tibero 에 원본이 없어 빈 목록, 잠긴 행은 대기 중이 아니면 null.
-    [Fact]
+    [TiberoItFact]
     public async Task L6_deadlocks_empty_and_locked_row_null_for_idle_session()
     {
         await using var it = TiberoItSessions.Create();

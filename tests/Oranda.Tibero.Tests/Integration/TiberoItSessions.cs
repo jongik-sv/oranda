@@ -14,6 +14,7 @@ namespace Oranda.Tibero.Tests.Integration;
 /// <see cref="TablePrefix"/>(<c>ORT_</c>) 로 시작해야 한다(<see cref="ObjectName"/>, D3).</item>
 /// <item>접속 정보(주소·계정·비밀번호)는 시험 메시지·로그에 싣지 않는다. 값 비교는 <c>Assert.True(string.Equals(…))</c> 로 한다.</item>
 /// </list>
+/// 시험 메서드에는 <c>[TiberoItFact]</c>/<c>[TiberoWriteFact]</c>/<c>[TiberoKillFact]</c> 를 붙여 환경이 없으면 「건너뜀」으로 보이게 한다(<c>TiberoItFacts.cs</c>).
 /// 사용: <c>await using var it = TiberoItSessions.Create(); if (it is null) return; var s = await it.OpenAsync();</c>
 /// </summary>
 internal sealed partial class TiberoItSessions : IAsyncDisposable

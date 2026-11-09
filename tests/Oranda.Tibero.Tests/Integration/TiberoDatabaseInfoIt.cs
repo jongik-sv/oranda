@@ -7,7 +7,7 @@ namespace Oranda.Tibero.Tests.Integration;
 [Trait("Category", "Integration")]
 public class TiberoDatabaseInfoIt
 {
-    [Fact]
+    [TiberoItFact]
     public async Task Every_section_reads_without_an_error_row()
     {
         await using var it = TiberoItSessions.Create();

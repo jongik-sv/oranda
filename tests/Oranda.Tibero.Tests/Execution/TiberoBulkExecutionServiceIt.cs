@@ -59,7 +59,7 @@ public class TiberoBulkExecutionServiceIt(ITestOutputHelper output)
     /// 원본 표(SQL 로 채움 + 바인드로 NVARCHAR2·100k자 CLOB) 300행을 StreamRowsAsync 로 읽어 배치 50 으로 대상 표에 넣고, SQL(MINUS·DBMS_LOB.COMPARE)과
     /// 값·키 글자 비교로 같음을 확인한다. NULL·DATE 끝값·TIMESTAMP(9) 나노초·CHAR 끝 공백·CP949 밖 글자·RAW 2000B 포함.
     /// </summary>
-    [Fact]
+    [TiberoWriteFact]
     public async Task Step1_round_trip_of_all_supported_types_through_stream_and_array_insert()
     {
         if (TiberoItSessions.SkipWrite())
@@ -193,7 +193,7 @@ public class TiberoBulkExecutionServiceIt(ITestOutputHelper output)
     /// 메모 확인 (b): 정수·실수 선언 열이 StreamRowsAsync 에서 모두 <see cref="TiberoBulkNumber"/> 인가(정밀도 바뀜 없이). 38자리 INTEGER 가 그대로 나오는지,
     /// BINARY_FLOAT/DOUBLE 은 float/double 인지(만들어지면) 본다.
     /// </summary>
-    [Fact]
+    [TiberoWriteFact]
     public async Task Step1b_integer_float_and_double_columns_are_read_as_number_values()
     {
         if (TiberoItSessions.SkipWrite())
@@ -274,7 +274,7 @@ public class TiberoBulkExecutionServiceIt(ITestOutputHelper output)
     /// 50행 배열의 가운데(25번째)가 PK 중복이면 오류 없이 앞 24행만 들어가고 ORANDA-ARRAY-PARTIAL 로 실패한다. 세이브포인트로 되돌린 뒤 한 행씩 넣으면
     /// 중복 행만 서버 오류(10007, ConstraintViolation)로 실패한다. 그다음 같은 서비스로 300행을 배치 50 으로 넣는다.
     /// </summary>
-    [Fact]
+    [TiberoWriteFact]
     public async Task Step2_array_batch_with_a_duplicate_key_fails_as_partial_then_rows_one_by_one_isolate_the_bad_row()
     {
         if (TiberoItSessions.SkipWrite())
@@ -363,7 +363,7 @@ public class TiberoBulkExecutionServiceIt(ITestOutputHelper output)
     /// BLOB 열이 있는 3행 묶음(1 MB·가운데 PK 중복·NULL)은 첫 실패 행에서 멈추고(Failed, 세 번째 행은 안 감) 앞 행은 트랜잭션에 남는다. 되돌리고 한 행씩 넣으면
     /// 중복만 실패. 빈 byte[] 는 NULL 로 저장되는지 측정하고, 3000B BLOB 200행을 배치 50 으로 넣어 읽어 본다.
     /// </summary>
-    [Fact]
+    [TiberoWriteFact]
     public async Task Step3_blob_table_runs_row_by_row_and_stops_at_the_first_failing_row()
     {
         if (TiberoItSessions.SkipWrite())
@@ -460,7 +460,7 @@ public class TiberoBulkExecutionServiceIt(ITestOutputHelper output)
     /// UPDATE 가 있는 MERGE 는 일치·새 행이 섞여도 k == n. 키 열만 있는 MERGE 는 일치 행이 있으면 반환 행 수가 n 보다 작아 ORANDA-ARRAY-PARTIAL 이 되고(설계 3.2),
     /// 되돌린 뒤 한 행씩 보내면 일치 행(반환 0)도 성공한다. 모두 새 행이면 배열 한 번에 성공.
     /// </summary>
-    [Fact]
+    [TiberoWriteFact]
     public async Task Step4_merge_with_update_returns_n_and_key_only_merge_with_matches_falls_back_to_rows_one_by_one()
     {
         if (TiberoItSessions.SkipWrite())
@@ -559,7 +559,7 @@ public class TiberoBulkExecutionServiceIt(ITestOutputHelper output)
     /// 38자리·1E125·1E-125·-0.000001·0 을 스칼라(행 1)·배열(7행)·두 행 배열(값마다)로 넣어 읽은 <see cref="TiberoBulkNumber.Text"/> 가 보낸 값과 같은지 본다.
     /// 어느 경로가 어떤 값에서 실패하는지는 로그에 남고, 실패는 모아서 끝에 단정한다. 39자리(38자리로 반올림 저장)는 측정만.
     /// </summary>
-    [Fact]
+    [TiberoWriteFact]
     public async Task Step5_number_extreme_values_survive_array_and_scalar_binds()
     {
         if (TiberoItSessions.SkipWrite())
@@ -672,7 +672,7 @@ public class TiberoBulkExecutionServiceIt(ITestOutputHelper output)
     /// 읽은 키 값을 실패 행 키 글자(<c>ToKeyText</c>/<c>FromKeyText</c>)로 왕복시켜 <see cref="TiberoBulkNumber"/>(38자리)·<see cref="TiberoBulkTimestamp"/>(나노초 9자리)·
     /// DateTime 으로 바인드하면 마지막 자리만 다른 이웃 행과 섞이지 않고 정확히 한 행을 찾는지 본다.
     /// </summary>
-    [Fact]
+    [TiberoWriteFact]
     public async Task Step6_keys_of_38_digits_and_9_digit_timestamps_find_exactly_one_row()
     {
         if (TiberoItSessions.SkipWrite())
@@ -765,7 +765,7 @@ public class TiberoBulkExecutionServiceIt(ITestOutputHelper output)
     /// 서버가 오래 계산하는 읽기(3중 카티전 SUM)와 행이 계속 나오는 읽기(CONNECT BY 5천만 행)를 읽는 도중 취소하면
     /// <see cref="OperationCanceledException"/> 이다. 취소 뒤 명령 잠금이 풀리고 세션이 Idle 이며 다음 SELECT 1 이 된다. 서버 CPU 를 쓰므로 한 번에 하나만 돌린다.
     /// </summary>
-    [Fact]
+    [TiberoWriteFact]
     public async Task Step7_cancelling_a_long_read_throws_cancellation_releases_the_lock_and_the_session_keeps_working()
     {
         if (TiberoItSessions.SkipWrite())
@@ -827,7 +827,7 @@ public class TiberoBulkExecutionServiceIt(ITestOutputHelper output)
     // =================================================================================================================
 
     /// <summary>읽기 전용 프로필: <see cref="TiberoExecutionService.ReadOnlyBlock"/> 은 Succeeded, INSERT 는 서버로 보내지 않고 Denied, 읽기 전용 트랜잭션 안의 SELECT 는 된다.</summary>
-    [Fact]
+    [TiberoWriteFact]
     public async Task Step8_read_only_profile_accepts_the_read_only_block_and_denies_an_insert()
     {
         if (TiberoItSessions.SkipWrite())
@@ -868,7 +868,7 @@ public class TiberoBulkExecutionServiceIt(ITestOutputHelper output)
     /// 메모 확인 (a), 측정만: CHAR(3) 키(끝 공백 채움)를 읽어 CHAR(5) 키 표에 MERGE 한다. 키는 Varchar2 배열로 바인드되므로 <c>T.K = S.K</c> 가 끝 공백 채움 비교인지
     /// (일치해 UPDATE 되는지, 안 맞아 새 행 INSERT 가 PK 중복이 되는지) 본다. 끝 공백을 자른 키와 직접 바인드 비교도 같이 찍는다.
     /// </summary>
-    [Fact]
+    [TiberoWriteFact]
     public async Task Step_a_measure_char3_keys_merged_into_char5_target()
     {
         if (TiberoItSessions.SkipWrite())
@@ -939,7 +939,7 @@ public class TiberoBulkExecutionServiceIt(ITestOutputHelper output)
     /// 단정 없음. 꺼진 형식(BINARY_FLOAT/DOUBLE·TZ·LTZ·INTERVAL·LONG·LONG RAW)의 후보 감싸기 글과 TIMESTAMP FF9/FF7 을 배열·스칼라 바인드로 보내 결과와 되읽은 값을
     /// <c>TB1 measure &lt;형식&gt; …</c> 줄로 남긴다. 어떤 실패도 시험을 실패시키지 않는다.
     /// </summary>
-    [Fact]
+    [TiberoWriteFact]
     public async Task Step9_measure_candidate_bind_texts_for_disabled_types()
     {
         if (TiberoItSessions.SkipWrite())
@@ -1175,7 +1175,7 @@ public class TiberoBulkExecutionServiceIt(ITestOutputHelper output)
     }
 
     /// <summary>(a) 지원 형식 하나씩 단독 표(ID + 그 열)에 50행을 배열 한 번으로 — 어느 형식이 연결을 끊는지.</summary>
-    [Fact]
+    [TiberoWriteFact]
     public async Task Step1c_bisect_array_insert_by_type()
     {
         if (TiberoItSessions.SkipWrite())
@@ -1208,7 +1208,7 @@ public class TiberoBulkExecutionServiceIt(ITestOutputHelper output)
     }
 
     /// <summary>(b) CLOB 한 열 50행: 모든 행이 같은 길이 L 일 때 + Step1 처럼 2행만 100000자이고 나머지는 짧을 때.</summary>
-    [Fact]
+    [TiberoWriteFact]
     public async Task Step1d_bisect_clob_array_sizes()
     {
         if (TiberoItSessions.SkipWrite())
@@ -1234,7 +1234,7 @@ public class TiberoBulkExecutionServiceIt(ITestOutputHelper output)
     }
 
     /// <summary>(c) NVARCHAR2 한 열: CP949 밖 글자 vs ASCII 만.</summary>
-    [Fact]
+    [TiberoWriteFact]
     public async Task Step1e_bisect_nvarchar2_national_vs_ascii()
     {
         if (TiberoItSessions.SkipWrite())
@@ -1254,7 +1254,7 @@ public class TiberoBulkExecutionServiceIt(ITestOutputHelper output)
     }
 
     /// <summary>(d) Step1 의 전체 열 묶음에서 CLOB 을 뺀 것 / CLOB 을 4000자로 줄인 것.</summary>
-    [Fact]
+    [TiberoWriteFact]
     public async Task Step1f_bisect_mixed_column_set_without_clob_and_with_capped_clob()
     {
         if (TiberoItSessions.SkipWrite())
@@ -1277,7 +1277,7 @@ public class TiberoBulkExecutionServiceIt(ITestOutputHelper output)
     /// (g) Step1 의 실제 값으로 이분(win144 #81: 형식 하나·CLOB 크기 하나로는 끊김이 재현 안 됨). 원본 표를 Step1 과 같게 채워 열거로 다 읽은 뒤(열거 닫힘)
     /// 첫 묶음 50행을 — 모든 열 / 열 하나씩 뺌 / ID + 열 하나 / 앞 25행·뒤 25행 — 로 사례마다 새 표·새 세션에 넣고, 마지막으로 원본 열거가 열린 채 넣는다(Step1 모양).
     /// </summary>
-    [Fact]
+    [TiberoWriteFact]
     public async Task Step1g_bisect_step1_rows_by_column_and_with_the_source_stream_open()
     {
         if (TiberoItSessions.SkipWrite())
@@ -1373,7 +1373,7 @@ public class TiberoBulkExecutionServiceIt(ITestOutputHelper output)
     /// (e) 드라이버 직접: BLOB 3행(가운데 PK 중복)을 명령 하나 재사용 vs 행마다 새 명령으로 실행해 행마다 오류 번호를 찍는다(1 MB 뒤 TBR-590727 이 재사용 때문인지).
     /// 사례마다 새 세션.
     /// </summary>
-    [Fact]
+    [TiberoWriteFact]
     public async Task Step3b_blob_reuse_measure()
     {
         if (TiberoItSessions.SkipWrite())

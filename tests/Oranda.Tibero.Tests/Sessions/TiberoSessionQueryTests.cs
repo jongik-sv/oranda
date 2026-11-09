@@ -60,7 +60,7 @@ public class TiberoSessionQueryTests
 [Trait("Category", "Integration")]
 public class TiberoSessionQueryIt
 {
-    [Fact]
+    [TiberoItFact]
     public async Task Run_reads_rows_with_named_binds_and_releases_the_gate()
     {
         await using var it = TiberoItSessions.Create();

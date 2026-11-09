@@ -43,11 +43,11 @@ public class TiberoRecreateStepIt(ITestOutputHelper output)
     private static readonly string ByteMaxTable = TiberoItSessions.ObjectName("RCS_BMAX");
     private static readonly string BadTrigger = TiberoItSessions.ObjectName("RCS_TRG_BAD");
 
-    [Fact]
+    [TiberoWriteFact]
     public Task Recreate_captures_drops_into_the_bin_recreates_restores_and_flashes_back_the_old_table() =>
         WriteAsync([Child, ServerChild, Parent, OldParent], MainAsync);
 
-    [Fact]
+    [TiberoWriteFact]
     public Task Byte_length_varchar2_and_server_named_constraints_round_trip_through_the_recreate_ddl() =>
         WriteAsync([ByteTable, ByteMaxTable], ByteAsync);
 

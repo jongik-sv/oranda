@@ -31,7 +31,7 @@ public sealed class ConnectionFlowTests(ItDb db, ITestOutputHelper output) : ICl
         }),
     });
 
-    [Fact]
+    [ItDbFact]
     public Task S1_1_Import_sql_developer_file_then_connect_with_typed_password() => Ui.Run(async () =>
     {
         if (!db.Enabled)
@@ -83,7 +83,7 @@ public sealed class ConnectionFlowTests(ItDb db, ITestOutputHelper output) : ICl
         }
     });
 
-    [Fact]
+    [ItDbFact]
     public Task S1_2_Import_boundaries_duplicate_names_malformed_files_and_placeholder_user() => Ui.Run(async () =>
     {
         if (!db.Enabled)
@@ -145,7 +145,7 @@ public sealed class ConnectionFlowTests(ItDb db, ITestOutputHelper output) : ICl
         }
     });
 
-    [Fact]
+    [ItDbFact]
     public Task S1_3_Command_line_target_finds_the_saved_profile_and_boundaries() => Ui.Run(async () =>
     {
         if (!db.Enabled)

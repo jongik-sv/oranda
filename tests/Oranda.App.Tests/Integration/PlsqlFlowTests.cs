@@ -24,7 +24,7 @@ public sealed class PlsqlFlowTests(ItDb db, ITestOutputHelper output) : IClassFi
 
     private string Status(string name) => db.Text($"select status from user_objects where object_name = '{name}'");
 
-    [Fact]
+    [ItDbFact]
     public Task S5_0_Compile_right_after_connect_works_before_any_sql_was_run() => Ui.Run(async () =>
     {
         if (!db.Enabled)
@@ -50,7 +50,7 @@ public sealed class PlsqlFlowTests(ItDb db, ITestOutputHelper output) : IClassFi
         }
     });
 
-    [Fact]
+    [ItDbFact]
     public Task S5_1_New_source_compiles_reopens_edits_and_errors_are_navigable_then_fixed() => Ui.Run(async () =>
     {
         if (!db.Enabled)
@@ -120,7 +120,7 @@ public sealed class PlsqlFlowTests(ItDb db, ITestOutputHelper output) : IClassFi
         }
     });
 
-    [Fact]
+    [ItDbFact]
     public Task S5_2_Other_session_change_is_a_conflict_and_force_overwrites_it() => Ui.Run(async () =>
     {
         if (!db.Enabled)
@@ -161,7 +161,7 @@ public sealed class PlsqlFlowTests(ItDb db, ITestOutputHelper output) : IClassFi
         }
     });
 
-    [Fact]
+    [ItDbFact]
     public Task S5_3_Run_dialog_passes_arguments_returns_out_values_dbms_output_and_reports_errors() => Ui.Run(async () =>
     {
         if (!db.Enabled)
@@ -237,7 +237,7 @@ public sealed class PlsqlFlowTests(ItDb db, ITestOutputHelper output) : IClassFi
         }
     });
 
-    [Fact]
+    [ItDbFact]
     public Task S5_4_Package_overloads_become_candidates_and_member_filter_picks_one() => Ui.Run(async () =>
     {
         if (!db.Enabled)

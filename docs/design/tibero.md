@@ -72,7 +72,7 @@
 ## 4. 시험
 
 - 단위 시험: 공급자 없이 도는 부분(디스패처, 카탈로그 선택, 오류 분류, 프로필 읽기)은 지금 CI 에서 돈다.
-- 통합 시험: 공개 Tibero 컨테이너가 없다. `ORANDA_IT_TIBERO_*` 환경 변수(주소·포트·DB 이름·계정·비밀번호)가 있을 때만 돈다(`ItDb` 와 같은 건너뛰기 규칙, `ORANDA_IT_REQUIRE=1` 이면 실패). 접속 정보는 리포·로그·커밋에 넣지 않는다. CI 는 비밀이 없으면 건너뛴다.
+- 통합 시험: 공개 Tibero 컨테이너가 없다. `ORANDA_IT_TIBERO_*` 환경 변수(주소·포트·DB 이름·계정·비밀번호)가 있을 때만 돈다(`ItDb` 와 같은 건너뛰기 규칙, `ORANDA_IT_REQUIRE=1` 이면 실패). 환경이 안 갖춰진 시험은 「통과」가 아니라 「건너뜀(Skipped)」으로 보여야 한다: 시험 메서드에 `[TiberoItFact]`(서버+드라이버)·`[TiberoWriteFact]`(+`ORANDA_IT_TIBERO_WRITE=1`)·`[TiberoKillFact]`(+`ORANDA_IT_TIBERO_KILL=1`·`KILL_USER`·`KILL_PASSWORD`)를 붙인다(`tests/Oranda.Tibero.Tests/TiberoItFacts.cs`, xunit 2.5.3 에 동적 Skip 이 없어 정적으로 사유를 붙인다). 본문 `if (…) return;` 만으로는 건너뜀이 아니라 통과로 찍힌다. 접속 정보는 리포·로그·커밋에 넣지 않는다. CI 는 비밀이 없으면 건너뛴다.
 - 쓰기·DDL 시험: 전용 시험 사용자와 접두어(`ORT_`)만 쓰고, 처음엔 읽기 시험만 돈다. 쓰기 시험 전에 사용자에게 한 번 확인한다.
 - 공유 시험 서버(운영 아님)를 쓴다. 운영 DB 에는 접속하지 않는다.
 

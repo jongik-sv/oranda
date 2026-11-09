@@ -29,7 +29,7 @@ public class TiberoPlanServiceIt(ITestOutputHelper output)
     private static readonly string[] CursorFormats = ["BASIC", "ALLSTATS LAST"];
 
     // M3: 예상 계획. EXPLAIN PLAN → plan.explain_steps·explain_text → NormalizeStep 뒤 TABLE ACCESS 의 FULL 이 Options 로 간다. 계획 해시는 null(Q4).
-    [Fact]
+    [TiberoItFact]
     public async Task M3_explain_returns_steps_text_and_normalized_full_access()
     {
         await using var it = TiberoItSessions.Create();
@@ -62,7 +62,7 @@ public class TiberoPlanServiceIt(ITestOutputHelper output)
     }
 
     // M4: PLAN_TABLE 에 SQL_ID·PLAN_HASH_VALUE 열이 있는지, 있으면 EXPLAIN 뒤 그 값이 V$SQL 로 이어지는지(Q4). 측정만 한다 — 열 질의가 도는지만 단정한다.
-    [Fact]
+    [TiberoItFact]
     public async Task M4_plan_table_sql_id_columns_are_measured()
     {
         await using var it = TiberoItSessions.Create();
@@ -130,7 +130,7 @@ public class TiberoPlanServiceIt(ITestOutputHelper output)
     }
 
     // M5: SQL 모니터 보고서(텍스트). 측정만 한다 — 예외는 형식·메시지를 기록하고 넘어간다.
-    [Fact]
+    [TiberoItFact]
     public async Task M5_sql_monitor_report_text_is_measured()
     {
         await using var it = TiberoItSessions.Create();
@@ -160,7 +160,7 @@ public class TiberoPlanServiceIt(ITestOutputHelper output)
 
     // M6: 자식 번호. tuning.prev_cursor 의 PREV_CHILD_NUMBER 가 V$SQL_PLAN·V$SQL 의 CHILD_NUMBER 와 같은 번호인지 잰다.
     // prev_cursor 를 두 번 부르면 두 번째는 첫 번째 질의를 보므로, 같은 문장(같은 SQL ID)을 두 번 실행해 GetLastCursorAsync 와 prev_cursor 를 한 번씩 부른다.
-    [Fact]
+    [TiberoItFact]
     public async Task M6_child_number_of_the_last_cursor_is_measured()
     {
         await using var it = TiberoItSessions.Create();
@@ -198,7 +198,7 @@ public class TiberoPlanServiceIt(ITestOutputHelper output)
     }
 
     // M7: DISPLAY_CURSOR 글 세 가지 형식. TYPICAL 은 단계·글이 있어야 하고, BASIC·ALLSTATS LAST 는 실패해도 기록하고 넘어간다.
-    [Fact]
+    [TiberoItFact]
     public async Task M7_cursor_plan_text_formats_are_measured()
     {
         await using var it = TiberoItSessions.Create();
@@ -232,7 +232,7 @@ public class TiberoPlanServiceIt(ITestOutputHelper output)
     }
 
     // M8: GATHER_SQL_PLAN_STAT 설정과 실제 행·시간 열(ActualRows·Starts·ActualTime) 값. 측정만 한다.
-    [Fact]
+    [TiberoItFact]
     public async Task M8_actual_statistics_columns_and_gather_parameter_are_measured()
     {
         await using var it = TiberoItSessions.Create();

@@ -23,7 +23,7 @@ public class TiberoTransferIt(Xunit.Abstractions.ITestOutputHelper output)
 
     private static readonly string[] Header = ["id", "name", "hired", "ts", "note", "bin", "amt"];
 
-    [Fact]
+    [TiberoWriteFact]
     public async Task Csv_import_in_batches_stores_typed_values_and_rolls_back_as_one_unit_on_failure()
     {
         if (TiberoItSessions.SkipWrite())

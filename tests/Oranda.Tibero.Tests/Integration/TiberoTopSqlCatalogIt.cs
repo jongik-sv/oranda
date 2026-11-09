@@ -15,7 +15,7 @@ public class TiberoTopSqlCatalogIt(ITestOutputHelper output)
     /// <summary>sql.top 의 숫자 열(executions·elapsed_time·cpu_time·buffer_gets·disk_reads·rows_processed).</summary>
     private static readonly int[] NumberColumns = [4, 5, 6, 7, 8, 9];
 
-    [Theory]
+    [TiberoItTheory]
     [InlineData(0)]
     [InlineData(1)]
     [InlineData(2)]

@@ -24,7 +24,7 @@ public class TiberoLockWriteIt(ITestOutputHelper output)
     private static readonly TimeSpan DoneTimeout = TimeSpan.FromSeconds(15);
 
     // W1: A 가 행 잠금을 쥐고 B 가 기다리는 동안 모든 Lock 모니터 조회가 그 모습을 보여 준다.
-    [Fact]
+    [TiberoWriteFact]
     public async Task W1_blocked_update_shows_in_every_lock_monitor_read()
     {
         if (TiberoItSessions.SkipWrite())

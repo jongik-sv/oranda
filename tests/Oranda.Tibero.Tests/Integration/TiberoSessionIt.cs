@@ -10,7 +10,7 @@ namespace Oranda.Tibero.Tests.Integration;
 [Trait("Category", "Integration")]
 public class TiberoSessionIt
 {
-    [Fact]
+    [TiberoItFact]
     public async Task Open_fills_server_info_identity_and_publishes()
     {
         await using var it = TiberoItSessions.Create();
@@ -38,7 +38,7 @@ public class TiberoSessionIt
         Assert.Equal("oranda:" + session.Id.ToString("N")[..8], row[2]);
     }
 
-    [Fact]
+    [TiberoItFact]
     public async Task Session_is_in_manual_commit_mode_and_sql_commit_keeps_it()
     {
         await using var it = TiberoItSessions.Create();
@@ -60,7 +60,7 @@ public class TiberoSessionIt
         Assert.NotNull(await OpenTransactionAndReadIdAsync(session));
     }
 
-    [Fact]
+    [TiberoItFact]
     public async Task Nls_is_applied_and_unsupported_items_are_skipped()
     {
         await using var it = TiberoItSessions.Create();
@@ -76,7 +76,7 @@ public class TiberoSessionIt
         Assert.Equal("YYYY-MM-DD", row[0]);
     }
 
-    [Fact]
+    [TiberoItFact]
     public async Task Close_ends_the_server_session_and_keep_alive_runs()
     {
         await using var it = TiberoItSessions.Create();
@@ -108,7 +108,7 @@ public class TiberoSessionIt
     }
 
     /// <summary>쓰기 IT(D3: ORANDA_IT_TIBERO_WRITE=1, ORT_ 표 하나): DML 은 커밋 전에는 다른 세션에 안 보이고, 커밋 없이 닫으면 롤백된다.</summary>
-    [Fact]
+    [TiberoWriteFact]
     public async Task Write_dml_stays_uncommitted_and_close_rolls_it_back()
     {
         if (TiberoItSessions.SkipWrite())

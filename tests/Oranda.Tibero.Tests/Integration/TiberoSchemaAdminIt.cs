@@ -16,7 +16,7 @@ public class TiberoSchemaAdminIt
     /// 이 계정의 <c>all_objects</c> 에 실제로 보이는 SYS 표·뷰 이름 하나를 골라 그 이름으로 찾는다. 빈 결과면 질의 결함이다.
     /// SYS.DUAL 은 쓰지 않는다: 비 DBA 계정의 Tibero <c>all_objects</c> 에는 SYS.DUAL 이 없다(win144 #39 실측, 이름 조건만 끄면 SYS 객체는 나옴).
     /// </summary>
-    [Fact]
+    [TiberoItFact]
     public async Task Objects_found_by_an_exact_name_come_with_status_and_a_row_limit()
     {
         await using var it = TiberoItSessions.Create();
@@ -110,7 +110,7 @@ public class TiberoSchemaAdminIt
         }
     }
 
-    [Fact]
+    [TiberoItFact]
     public async Task Objects_of_the_login_schema_come_back_filtered_by_owner_and_type_within_the_limit()
     {
         await using var it = TiberoItSessions.Create();
@@ -130,7 +130,7 @@ public class TiberoSchemaAdminIt
         Assert.True(onlyOwnTables, "소유자·유형 거르기 밖의 객체가 왔다");
     }
 
-    [Fact]
+    [TiberoItFact]
     public async Task Columns_named_dummy_are_found_and_the_login_schemas_columns_respect_the_limit()
     {
         await using var it = TiberoItSessions.Create();
@@ -154,7 +154,7 @@ public class TiberoSchemaAdminIt
     }
 
     /// <summary>접속 스키마의 소스를 일반 글자로 찾는다. 결과 내용은 보지 않고, 상한과 소유자 거르기만 본다.</summary>
-    [Fact]
+    [TiberoItFact]
     public async Task Source_search_of_the_login_schema_respects_the_limit()
     {
         await using var it = TiberoItSessions.Create();
@@ -175,7 +175,7 @@ public class TiberoSchemaAdminIt
     }
 
     /// <summary>괄호가 닫히지 않은 정규식은 서버가 거부해 <see cref="SearchPatternException"/> 이 된다(소스를 읽기 전에 검사한다).</summary>
-    [Fact]
+    [TiberoItFact]
     public async Task A_regex_with_an_unclosed_group_is_a_pattern_error()
     {
         await using var it = TiberoItSessions.Create();
@@ -198,7 +198,7 @@ public class TiberoSchemaAdminIt
     /// 낱말 단위 찾기는 검색 글자를 POSIX 문자 묶음(<c>[^[:alnum:]_$#]</c>)으로 감싼다 — Tibero 가 이를 받는지 실측한다
     /// (못 받으면 낱말 단위 찾기마다 서버 오류가 난다).
     /// </summary>
-    [Fact]
+    [TiberoItFact]
     public async Task Whole_word_source_search_runs_on_the_server()
     {
         await using var it = TiberoItSessions.Create();
@@ -215,7 +215,7 @@ public class TiberoSchemaAdminIt
         Assert.True(result.Rows.Count <= 3, "max_rows 를 넘었다");
     }
 
-    [Fact]
+    [TiberoItFact]
     public async Task Recycle_bin_lists_without_an_error()
     {
         await using var it = TiberoItSessions.Create();
@@ -232,7 +232,7 @@ public class TiberoSchemaAdminIt
     }
 
     /// <summary>DBMS_OUTPUT 패키지의 참조 관계를 읽는다. 있는 만큼만 보고, 모든 줄에 이름이 있는지만 본다.</summary>
-    [Fact]
+    [TiberoItFact]
     public async Task References_of_dbms_output_come_back_with_names()
     {
         await using var it = TiberoItSessions.Create();

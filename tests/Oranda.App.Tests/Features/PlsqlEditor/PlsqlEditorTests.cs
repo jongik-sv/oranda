@@ -17,9 +17,15 @@ namespace Oranda.App.Tests.Features.PlsqlEditor;
 /// <summary>TSK-08-01 PL/SQL 소스 편집·컴파일·충돌 확인 시험(글자 도우미·ViewModel·명령 처리기·등록).</summary>
 // 컴파일 결과는 정적 알림(CompileErrorsViewModel.Publish/Current)으로 올라가므로, 다른 시험이 새 창으로 Current 를 바꾸지 않게 직렬 묶음에 둔다.
 [Collection(Oranda.App.Tests.Features.PlsqlWorkspace.PlsqlStatics.Name)]
-public class PlsqlEditorTests
+public sealed class PlsqlEditorTests : IDisposable
 {
     private static readonly DbObjectRef Body = new("SCOTT", "PK", "PACKAGE BODY");
+
+    // 정적 활성 탭(PlsqlEditorViewModel.Active)이 남아 있으면 탭을 열 때 컴파일 오류 목록을 올리지 않는다(LoadErrorsAsync: Active 가 null 이거나 자기 자신일 때만).
+    // 앞선 시험(같은 묶음의 다른 클래스가 시험 도중 실패해 못 비웠거나, 보기 시험이 포커스를 받아 Active 를 설정해 둔 경우)에 따라 오류 목록 시험이 흔들리므로 시험마다 비우고 끝나면 비운다.
+    public PlsqlEditorTests() => PlsqlEditorViewModel.Active = null;
+
+    public void Dispose() => PlsqlEditorViewModel.Active = null;
 
     private const string BodySource = "PACKAGE BODY pk AS\n  PROCEDURE a IS BEGIN\n    NULL;\n  END;\nEND pk;\n";
 

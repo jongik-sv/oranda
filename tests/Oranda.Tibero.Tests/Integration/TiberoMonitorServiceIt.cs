@@ -22,7 +22,7 @@ public class TiberoMonitorServiceIt(ITestOutputHelper output)
     private static readonly string[] ExpectedSections = ["트랜잭션", "잠금 객체", "통계", "I/O", "긴 작업", "열린 커서"];
 
     // M1: 목록에 작업 세션이 있고 상태는 ACTIVE/INACTIVE 만. 두 번째 조회는 델타를 채운다.
-    [Fact]
+    [TiberoItFact]
     public async Task M1_sessions_list_contains_the_work_session_with_normalized_status_and_deltas()
     {
         await using var it = TiberoItSessions.Create();
@@ -61,7 +61,7 @@ public class TiberoMonitorServiceIt(ITestOutputHelper output)
     }
 
     // M2: 상세 구획·대기 이력 미지원 이유·오류 꼴 구획 없음.
-    [Fact]
+    [TiberoItFact]
     public async Task M2_session_detail_has_sections_and_marks_wait_history_unavailable()
     {
         await using var it = TiberoItSessions.Create();
@@ -109,7 +109,7 @@ public class TiberoMonitorServiceIt(ITestOutputHelper output)
     }
 
     // M3: 블로킹 트리·내가 막는 수. 이 시험의 작업 세션은 아무도 막지 않는다.
-    [Fact]
+    [TiberoItFact]
     public async Task M3_blocking_tree_runs_and_my_blocking_is_zero()
     {
         await using var it = TiberoItSessions.Create();
@@ -133,7 +133,7 @@ public class TiberoMonitorServiceIt(ITestOutputHelper output)
     }
 
     // M4: 트레이스는 미지원, 데드락 기록은 빈 목록, 잠긴 행은 null(행 위치를 알 수 있는 뷰가 없다).
-    [Fact]
+    [TiberoItFact]
     public async Task M4_unsupported_features_answer_without_throwing_server_errors()
     {
         await using var it = TiberoItSessions.Create();

@@ -20,7 +20,7 @@ public sealed class TuningReportIntegrationTests
 {
     private static string? Env(string name) => Environment.GetEnvironmentVariable("ORANDA_IT_" + name);
 
-    [Fact]
+    [ItDbFact]
     public async Task Report_from_a_real_statement_on_26ai()
     {
         using var db = new ItDb();

@@ -55,7 +55,7 @@ public class TiberoReadTypesMeasureIt(ITestOutputHelper output)
     // 1. BINARY_FLOAT / BINARY_DOUBLE
     // =================================================================================================================
 
-    [Fact]
+    [TiberoWriteFact]
     public async Task R1x_binary_float_and_double_reads()
     {
         if (TiberoItSessions.SkipWrite())
@@ -148,7 +148,7 @@ public class TiberoReadTypesMeasureIt(ITestOutputHelper output)
     // 2. LONG
     // =================================================================================================================
 
-    [Fact]
+    [TiberoWriteFact]
     public async Task R1x_long_reads()
     {
         if (TiberoItSessions.SkipWrite())
@@ -221,7 +221,7 @@ public class TiberoReadTypesMeasureIt(ITestOutputHelper output)
     // 3. LONG RAW
     // =================================================================================================================
 
-    [Fact]
+    [TiberoWriteFact]
     public async Task R1x_long_raw_reads()
     {
         if (TiberoItSessions.SkipWrite())

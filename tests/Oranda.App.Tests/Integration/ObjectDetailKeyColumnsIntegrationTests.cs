@@ -13,7 +13,7 @@ namespace Oranda.App.Tests.Integration;
 [Oranda.App.Tests.TestSupport.ResetUiLanguage]
 public sealed class ObjectDetailKeyColumnsIntegrationTests(ItDb db) : IClassFixture<ItDb>
 {
-    [Fact]
+    [ItDbFact]
     public Task Index_and_constraint_columns_come_from_the_live_dictionary() => Ui.Run(async () =>
     {
         if (!db.Enabled)

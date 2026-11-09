@@ -787,7 +787,7 @@ public sealed class SafetyCrossTests : IClassFixture<SafetyAppDbFixture>, IAsync
         public void Dispose() => SqlEditorHost.Current = _previousHost;
     }
 
-    [Theory]
+    [SafetyDbTheory]
     [MemberData(nameof(Modes))]
     public Task Editor_run_applies_the_policy_for_every_mode(AppSafeMode mode) => Ui.Run(async () =>
     {
@@ -861,7 +861,7 @@ public sealed class SafetyCrossTests : IClassFixture<SafetyAppDbFixture>, IAsync
             columns, (r, c) => data[r][c], () => data.Length, new DbObjectRef(_db.User, T, "TABLE"), default);
     }
 
-    [Theory]
+    [SafetyDbTheory]
     [MemberData(nameof(Modes))]
     public Task Grid_edit_session_applies_the_policy_for_every_mode(AppSafeMode mode) => Ui.Run(async () =>
     {
@@ -911,7 +911,7 @@ public sealed class SafetyCrossTests : IClassFixture<SafetyAppDbFixture>, IAsync
 
     // ---- LOB 저장 ---------------------------------------------------------------------------------
 
-    [Theory]
+    [SafetyDbTheory]
     [MemberData(nameof(Modes))]
     public async Task Lob_save_applies_the_policy_for_every_mode(AppSafeMode mode)
     {
@@ -953,7 +953,7 @@ public sealed class SafetyCrossTests : IClassFixture<SafetyAppDbFixture>, IAsync
         Assert.Equal(lobValue, await _db.ScalarAsync($"SELECT c FROM {T} WHERE id = 1"));
     }
 
-    [Fact]
+    [SafetyDbFact]
     public async Task Lob_save_with_a_missing_key_row_changes_nothing_in_every_environment()
     {
         if (!_db.Enabled)
@@ -979,7 +979,7 @@ public sealed class SafetyCrossTests : IClassFixture<SafetyAppDbFixture>, IAsync
         Session = session,
     };
 
-    [Theory]
+    [SafetyDbTheory]
     [MemberData(nameof(Modes))]
     public async Task Schema_purge_and_flashback_apply_the_policy_for_every_mode(AppSafeMode mode)
     {
@@ -1027,7 +1027,7 @@ public sealed class SafetyCrossTests : IClassFixture<SafetyAppDbFixture>, IAsync
         Assert.Equal("1", await _db.ScalarAsync($"SELECT COUNT(*) FROM user_tables WHERE table_name = '{T}_B2'"));
     }
 
-    [Theory]
+    [SafetyDbTheory]
     [MemberData(nameof(Modes))]
     public async Task Schema_compile_invalid_applies_the_policy_for_every_mode(AppSafeMode mode)
     {
@@ -1088,7 +1088,7 @@ public sealed class SafetyCrossTests : IClassFixture<SafetyAppDbFixture>, IAsync
         public object? GetService(Type serviceType) => serviceType == typeof(ISessionManager) ? new Manager(session) : inner.GetService(serviceType);
     }
 
-    [Theory]
+    [SafetyDbTheory]
     [MemberData(nameof(Modes))]
     public Task Plsql_source_compile_applies_the_policy_for_every_mode(AppSafeMode mode) => Ui.Run(async () =>
     {
@@ -1129,7 +1129,7 @@ public sealed class SafetyCrossTests : IClassFixture<SafetyAppDbFixture>, IAsync
 
     // ---- PL/SQL 실행 대화상자 ------------------------------------------------------------------------------
 
-    [Theory]
+    [SafetyDbTheory]
     [MemberData(nameof(Modes))]
     public Task Plsql_run_dialog_applies_the_policy_for_every_mode(AppSafeMode mode) => Ui.Run(async () =>
     {
@@ -1178,7 +1178,7 @@ public sealed class SafetyCrossTests : IClassFixture<SafetyAppDbFixture>, IAsync
 
     // ---- 확장 패널 -----------------------------------------------------------------------------------------
 
-    [Theory]
+    [SafetyDbTheory]
     [MemberData(nameof(Modes))]
     public Task Extension_panel_run_applies_the_policy_for_every_mode(AppSafeMode mode) => Ui.Run(async () =>
     {
@@ -1225,7 +1225,7 @@ public sealed class SafetyCrossTests : IClassFixture<SafetyAppDbFixture>, IAsync
 
     // ---- 이력 다시 실행 --------------------------------------------------------------------------------------
 
-    [Theory]
+    [SafetyDbTheory]
     [MemberData(nameof(Modes))]
     public async Task History_rerun_applies_the_policy_for_every_mode(AppSafeMode mode)
     {
@@ -1262,7 +1262,7 @@ public sealed class SafetyCrossTests : IClassFixture<SafetyAppDbFixture>, IAsync
         Assert.Equal("1/h", await _db.ScalarAsync(Rows()));
     }
 
-    [Fact]
+    [SafetyDbFact]
     public async Task History_rerun_of_a_multi_statement_text_stops_at_the_first_refusal_on_a_read_only_profile()
     {
         if (!_db.Enabled)
@@ -1282,7 +1282,7 @@ public sealed class SafetyCrossTests : IClassFixture<SafetyAppDbFixture>, IAsync
 
     // ---- 평문 검색(실제 접속) --------------------------------------------------------------------------------
 
-    [Fact]
+    [SafetyDbFact]
     public async Task Connecting_running_secret_statements_and_failing_leaves_no_plaintext_password_anywhere()
     {
         if (!_db.Enabled)

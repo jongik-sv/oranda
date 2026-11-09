@@ -45,7 +45,7 @@ public sealed class WorkspaceSessionFlowTests(ItDb db, ITestOutputHelper output)
         }
     }
 
-    [Fact]
+    [ItDbFact]
     public Task Two_workspaces_on_one_profile_run_side_by_side_on_their_own_sessions() => Ui.Run(async () =>
     {
         if (!db.Enabled)
@@ -107,7 +107,7 @@ public sealed class WorkspaceSessionFlowTests(ItDb db, ITestOutputHelper output)
         }
     });
 
-    [Fact]
+    [ItDbFact]
     public Task Workspaces_can_share_one_session_and_move_to_a_new_one() => Ui.Run(async () =>
     {
         if (!db.Enabled)
@@ -163,7 +163,7 @@ public sealed class WorkspaceSessionFlowTests(ItDb db, ITestOutputHelper output)
 
     // ---- TSK-14-05: PRD 16.3 수락 기준 중 앞 시험이 재지 않은 것 ----
 
-    [Fact]
+    [ItDbFact]
     public Task A_shared_session_that_is_really_running_blocks_the_other_workspace_until_it_ends() => Ui.Run(async () =>
     {
         if (!db.Enabled)
@@ -202,7 +202,7 @@ public sealed class WorkspaceSessionFlowTests(ItDb db, ITestOutputHelper output)
         }
     });
 
-    [Fact]
+    [ItDbFact]
     public Task With_the_setting_off_both_workspaces_use_one_server_session() => Ui.Run(async () =>
     {
         if (!db.Enabled)
@@ -231,7 +231,7 @@ public sealed class WorkspaceSessionFlowTests(ItDb db, ITestOutputHelper output)
         }
     });
 
-    [Fact]
+    [ItDbFact]
     public Task Closing_a_workspace_asks_once_for_its_uncommitted_session_and_then_closes_that_session() => Ui.Run(async () =>
     {
         if (!db.Enabled)
@@ -270,7 +270,7 @@ public sealed class WorkspaceSessionFlowTests(ItDb db, ITestOutputHelper output)
         }
     });
 
-    [Fact]
+    [ItDbFact]
     public Task A_profile_opens_at_most_eight_sessions_and_the_ninth_is_refused_with_a_reason() => Ui.Run(async () =>
     {
         if (!db.Enabled)

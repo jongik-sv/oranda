@@ -36,27 +36,27 @@ public class TiberoCopyDialectIt(ITestOutputHelper output)
     private static readonly string Sequence = TiberoItSessions.ObjectName("CPD_SEQ");
     private static readonly string BinTable = TiberoItSessions.ObjectName("CPD_BIN");
 
-    [Fact]
+    [TiberoWriteFact]
     public Task Foreign_key_disable_enable_novalidate_drop_readd_and_referenced_parent_drop() =>
         WriteAsync([Child, Parent], [], false, FkAsync);
 
-    [Fact]
+    [TiberoWriteFact]
     public Task Trigger_disable_and_enable_change_the_catalog_status() =>
         WriteAsync([TriggerTable], [], false, TriggerAsync);
 
-    [Fact]
+    [TiberoWriteFact]
     public Task Recycle_bin_on_savepoint_and_rollback_to_savepoint_are_accepted() =>
         WriteAsync([TxTable], [], false, TransactionAsync);
 
-    [Fact]
+    [TiberoWriteFact]
     public Task Read_only_block_keeps_one_snapshot_until_rollback() =>
         WriteAsync([SnapshotTable], [], false, ReadOnlySnapshotAsync);
 
-    [Fact]
+    [TiberoWriteFact]
     public Task Next_values_consumes_n_distinct_increasing_sequence_values() =>
         WriteAsync([], [Sequence], false, SequenceAsync);
 
-    [Fact]
+    [TiberoWriteFact]
     public Task Drop_table_without_purge_goes_to_the_recycle_bin_when_it_is_on() =>
         WriteAsync([BinTable], [], true, RecycleBinAsync);
 

@@ -17,7 +17,7 @@ namespace Oranda.App.Tests.Integration;
 [Oranda.App.Tests.TestSupport.ResetUiLanguage]
 public sealed class InvalidSearchIntegrationTests(ItDb db, ITestOutputHelper output) : IClassFixture<ItDb>
 {
-    [Fact]
+    [ItDbFact]
     public Task Every_invalid_filter_finds_objects_that_became_invalid_after_the_cache_was_filled() => Oranda.App.Tests.Features.SqlEditor.Ui.Run(async () =>
     {
         if (!db.Enabled)

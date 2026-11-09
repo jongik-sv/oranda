@@ -23,7 +23,7 @@ public sealed class SessionCommandGateFlowTests(ItDb db, ITestOutputHelper outpu
 {
     private static readonly Dictionary<string, BindValue> NoBinds = [];
 
-    [Fact]
+    [ItDbFact]
     public Task Metadata_on_the_same_session_waits_for_a_long_run_or_skips_when_brief() => Ui.Run(async () =>
     {
         if (!db.Enabled)
@@ -79,7 +79,7 @@ public sealed class SessionCommandGateFlowTests(ItDb db, ITestOutputHelper outpu
         await AssertNextStatementRunsAsync(exec, session);
     });
 
-    [Fact]
+    [ItDbFact]
     public Task Cancel_stops_only_the_running_statement_and_the_waiting_query_runs_afterwards() => Ui.Run(async () =>
     {
         if (!db.Enabled)

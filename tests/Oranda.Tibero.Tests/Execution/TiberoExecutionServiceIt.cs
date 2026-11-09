@@ -19,7 +19,7 @@ public class TiberoExecutionServiceIt
 
     private static readonly IReadOnlyDictionary<string, BindValue> NoBinds = new Dictionary<string, BindValue>();
 
-    [Fact]
+    [TiberoItFact]
     public async Task Block_with_in_and_out_binds_returns_the_out_value_and_no_pending_transaction()
     {
         await using var it = TiberoItSessions.Create();
@@ -46,7 +46,7 @@ public class TiberoExecutionServiceIt
         Assert.Equal(SessionState.Idle, session.State);
     }
 
-    [Fact]
+    [TiberoItFact]
     public async Task An_open_transaction_is_tracked_as_pending_and_sql_rollback_clears_it()
     {
         await using var it = TiberoItSessions.Create();
@@ -71,7 +71,7 @@ public class TiberoExecutionServiceIt
         Assert.False(session.HasPendingTransaction);
     }
 
-    [Fact]
+    [TiberoItFact]
     public async Task Read_only_profile_prepares_inside_a_block_and_server_errors_come_back_as_results()
     {
         await using var it = TiberoItSessions.Create();
@@ -97,7 +97,7 @@ public class TiberoExecutionServiceIt
         Assert.False(session.CommandGate.IsHeld);
     }
 
-    [Fact]
+    [TiberoItFact]
     public async Task Dbms_output_lines_are_collected_after_a_block_and_a_null_line_is_empty()
     {
         await using var it = TiberoItSessions.Create();
@@ -118,7 +118,7 @@ public class TiberoExecutionServiceIt
         Assert.False(session.CommandGate.IsHeld);
     }
 
-    [Fact]
+    [TiberoItFact]
     public async Task A_select_returns_a_result_set_with_one_row_and_releases_the_gate_when_disposed()
     {
         await using var it = TiberoItSessions.Create();
@@ -151,7 +151,7 @@ public class TiberoExecutionServiceIt
         Assert.False(session.HasPendingTransaction);
     }
 
-    [Fact]
+    [TiberoItFact]
     public async Task A_three_statement_script_runs_query_block_query_and_every_result_succeeds()
     {
         await using var it = TiberoItSessions.Create();
@@ -195,7 +195,7 @@ public class TiberoExecutionServiceIt
         Assert.False(session.CommandGate.IsHeld);
     }
 
-    [Fact]
+    [TiberoItFact]
     public async Task A_ref_cursor_out_bind_comes_back_as_a_readable_result_set_after_its_command_is_gone()
     {
         await using var it = TiberoItSessions.Create();
@@ -223,7 +223,7 @@ public class TiberoExecutionServiceIt
         Assert.False(session.CommandGate.IsHeld);
     }
 
-    [Fact]
+    [TiberoItFact]
     public async Task An_uncertain_query_keeps_its_reader_and_leaves_dbms_output_for_the_next_statement()
     {
         await using var it = TiberoItSessions.Create();
@@ -268,7 +268,7 @@ public class TiberoExecutionServiceIt
     /// 오래 도는 읽기 질의(3중 카티전 COUNT)를 2초 뒤 취소하면 Cancelled 로 돌아온다. 서버가 멈추는 데 10ms~58초가 걸리고(실측 4장)
     /// 그동안 호출은 끝나지 않는다 → 최대 90초 기다린다. 취소 뒤에도 같은 세션이 정상이다. 서버 CPU 를 쓰므로 IT 는 한 번에 하나만 돌린다.
     /// </summary>
-    [Fact]
+    [TiberoItFact]
     public async Task A_long_read_query_cancelled_after_two_seconds_returns_cancelled_and_the_session_stays_usable()
     {
         await using var it = TiberoItSessions.Create();

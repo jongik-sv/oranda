@@ -15,7 +15,7 @@ public class TiberoColumnReorderIt
         "SELECT table_name FROM (SELECT table_name FROM user_tables WHERE table_name NOT LIKE 'BIN$%' ORDER BY table_name) WHERE ROWNUM = 1";
 
     /// <summary>접속 계정의 표 하나의 종류를 읽는다(질의가 오류 없이 돈다). 계정에 표가 없으면 건너뛴다.</summary>
-    [Fact]
+    [TiberoItFact]
     public async Task Traits_of_a_table_in_the_login_schema_read_without_an_error_and_are_not_clustered()
     {
         await using var it = TiberoItSessions.Create();
@@ -39,7 +39,7 @@ public class TiberoColumnReorderIt
     }
 
     /// <summary>없는 표는 모든 종류가 꺼진 값을 돌려주고, 참조 소스 줄은 빈 목록이다.</summary>
-    [Fact]
+    [TiberoItFact]
     public async Task A_missing_table_has_no_traits_and_no_referencing_source_lines()
     {
         await using var it = TiberoItSessions.Create();
@@ -60,7 +60,7 @@ public class TiberoColumnReorderIt
     }
 
     /// <summary>접속 계정 표를 참조하는 소스 줄 조회가 오류 없이 돌고 상한·줄 번호·줄 끝 모양을 지킨다(없으면 빈 목록이어도 된다).</summary>
-    [Fact]
+    [TiberoItFact]
     public async Task Referencing_source_lines_of_a_login_schema_table_read_within_the_limit()
     {
         await using var it = TiberoItSessions.Create();

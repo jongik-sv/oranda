@@ -57,6 +57,11 @@ public sealed class CopyCrossOwnerTests
         await scope.ExecAppAsync($"GRANT SELECT, INSERT, UPDATE, DELETE ON CUSTOMERS TO {scope.DstUser}");
         await scope.ExecAppAsync("BEGIN INSERT INTO CUSTOMERS VALUES (1, 'keep'); COMMIT; END;");
 
+        // 실행기의 같은 DB 거부(EnsureDistinct)까지 닿으려면 점검 보고서가 작업 규칙과 맞아야 한다(EnsureReportMatchesJob 이 먼저 돈다).
+        // 이 작업의 점검은 같은 DB 오류에서 멈춰 계획이 비므로, 대상 계정만 DST 로 한 형제 작업의 진짜 점검 결과에서 계획을 얻는다.
+        // 세션을 열기 전에(DDL 직후 세션 대기 규칙) 형제 작업의 대상 표를 만들어 둔다.
+        await scope.CreateTargetTableAsync("CUSTOMERS", CrossOwnerCases.CustomerColumns);
+
         // 시노님으로 더한 다른 계정 표의 대상 기본값은 원본 계정 그대로(B-1 a): 같은 DB 면 원본 표를 지우게 된다.
         var probe = scope.Job();
         var rule = new TableRule("CUSTOMERS", RuleKind.All, TargetAction.DeleteAllInsert)
@@ -74,9 +79,22 @@ public sealed class CopyCrossOwnerTests
         Assert.Equal($"{scope.AppUser}.CUSTOMERS", item.Table);
         Assert.Empty(report.Order);
 
-        // 실행기도 따로 막는다(점검 오류를 지운 보고서로도).
-        await Assert.ThrowsAsync<InvalidOperationException>(() => CrossOwnerCases.NewRunner(scope).RunAsync(
-            sessions, job, report with { Items = [] }, CrossOwnerCases.Decisions(report), CrossOwnerCases.NoPeriod, null, new CopyRunControl(), default));
+        // 실행기도 따로 막는다(점검 오류를 지운 보고서로도). 빈 계획의 보고서(report with { Items = [] })로는 같은 DB 거부 앞의
+        // 「사전 점검 뒤 작업 규칙이 바뀌었습니다」 검사에서 먼저 던져 이 거부를 시험하지 못한다. 그래서 작업 규칙과 맞는 계획·지우기 문장을 붙인다.
+        var sibling = scope.Job(rule with { TargetOwner = scope.DstUser });
+        var siblingReport = await scope.Precheck().RunAsync(sessions, sibling, CrossOwnerCases.NoPeriod, null, default);
+        Assert.False(siblingReport.HasErrors, CrossOwnerCases.Errors(siblingReport));
+        var siblingPlan = Assert.Single(siblingReport.Order);
+        var forced = report with
+        {
+            Items = [],
+            Order = [siblingPlan with { Rule = rule, Target = siblingPlan.Source }],
+            Preview = [new PreviewStatement($"DELETE FROM \"{scope.AppUser}\".\"CUSTOMERS\"", PreviewSide.Target, PolicyDecisionKind.Confirm, null, null)],
+        };
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() => CrossOwnerCases.NewRunner(scope).RunAsync(
+            sessions, job, forced, CrossOwnerCases.Decisions(forced), CrossOwnerCases.NoPeriod, null, new CopyRunControl(), default));
+        Assert.Contains("같은 DB", ex.Message, StringComparison.Ordinal); // 보고서 불일치가 아니라 EnsureDistinct 의 거부
+        Assert.Contains($"{scope.AppUser}.CUSTOMERS", ex.Message, StringComparison.Ordinal);
         Assert.Equal(1, await scope.CountAsync(scope.AppUser, "CUSTOMERS")); // 원본 행은 그대로
     }
 

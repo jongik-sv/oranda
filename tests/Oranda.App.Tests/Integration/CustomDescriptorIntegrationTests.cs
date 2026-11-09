@@ -10,7 +10,7 @@ namespace Oranda.App.Tests.Integration;
 [Trait("Category", "Integration")]
 public sealed class CustomDescriptorIntegrationTests(ItDb db) : IClassFixture<ItDb>
 {
-    [Fact]
+    [ItDbFact]
     public async Task Multi_line_tnsnames_entry_connects()
     {
         if (!db.Enabled)

@@ -31,7 +31,7 @@ public sealed class WritePathSessionFlowTests(ItDb db, ITestOutputHelper output)
         }
     }
 
-    [Fact]
+    [ItDbFact]
     public Task Cancelled_import_with_commit_at_end_rolls_back_to_its_savepoint_and_keeps_earlier_uncommitted_work() => Ui.Run(async () =>
     {
         if (!db.Enabled)
@@ -78,7 +78,7 @@ public sealed class WritePathSessionFlowTests(ItDb db, ITestOutputHelper output)
         }
     });
 
-    [Fact]
+    [ItDbFact]
     public Task Closing_a_session_with_uncommitted_changes_does_not_commit_them() => Ui.Run(async () =>
     {
         if (!db.Enabled)

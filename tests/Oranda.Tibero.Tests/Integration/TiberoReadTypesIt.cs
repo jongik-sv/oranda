@@ -46,7 +46,7 @@ public class TiberoReadTypesIt
     // BINARY_FLOAT / BINARY_DOUBLE
     // =================================================================================================================
 
-    [Fact]
+    [TiberoWriteFact]
     public async Task Binary_float_and_double_read_exactly_in_the_grid_and_in_the_bulk_stream()
     {
         if (TiberoItSessions.SkipWrite())
@@ -106,7 +106,7 @@ public class TiberoReadTypesIt
     // LONG
     // =================================================================================================================
 
-    [Fact]
+    [TiberoWriteFact]
     public async Task Long_reads_the_full_text_in_the_grid_and_in_the_bulk_stream()
     {
         if (TiberoItSessions.SkipWrite())
@@ -160,7 +160,7 @@ public class TiberoReadTypesIt
     // LONG RAW
     // =================================================================================================================
 
-    [Fact]
+    [TiberoWriteFact]
     public async Task Long_raw_reads_the_full_bytes_in_the_grid_and_in_the_bulk_stream()
     {
         if (TiberoItSessions.SkipWrite())

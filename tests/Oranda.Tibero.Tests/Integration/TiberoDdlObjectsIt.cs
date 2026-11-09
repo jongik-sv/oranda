@@ -64,7 +64,7 @@ public class TiberoDdlObjectsIt(ITestOutputHelper output)
 
     private static TiberoMetadataProvider NewProvider() => new(TiberoCatalogQuery.RunAsync);
 
-    [Fact]
+    [TiberoItFact]
     public async Task New_ddl_catalog_queries_parse_on_this_server()
     {
         await using var it = TiberoItSessions.Create();
@@ -82,7 +82,7 @@ public class TiberoDdlObjectsIt(ITestOutputHelper output)
         }
     }
 
-    [Fact]
+    [TiberoItFact]
     public async Task A_visible_sys_view_and_a_public_synonym_come_back_in_oracle_shape()
     {
         await using var it = TiberoItSessions.Create();
@@ -112,17 +112,17 @@ public class TiberoDdlObjectsIt(ITestOutputHelper output)
         }
     }
 
-    [Fact]
+    [TiberoWriteFact]
     public Task Table_dependent_ddl_rebuilds_a_ctas_copy_and_the_plain_table_ddl_rebuilds_the_table() =>
         WriteAsync(TableObjects, async (session, owner) => { await TableAsync(session, owner); return true; });
 
-    [Fact]
+    [TiberoWriteFact]
     public Task View_ddl_rebuilds_the_view() => WriteAsync(ViewObjects, ViewAsync);
 
-    [Fact]
+    [TiberoWriteFact]
     public Task Sequence_ddl_rebuilds_the_sequence_starting_where_it_was() => WriteAsync(SequenceObjects, SequenceAsync);
 
-    [Fact]
+    [TiberoWriteFact]
     public Task Synonym_ddl_rebuilds_the_synonym() => WriteAsync(SynonymObjects, SynonymAsync);
 
     /// <summary>

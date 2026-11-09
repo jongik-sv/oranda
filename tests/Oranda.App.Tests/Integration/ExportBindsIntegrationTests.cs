@@ -48,7 +48,7 @@ public sealed class ExportBindsIntegrationTests(ItDb db, ITestOutputHelper outpu
         return t;
     }
 
-    [Fact]
+    [ItDbFact]
     public Task Reexport_count_and_server_filter_use_the_bind_values_the_result_was_made_with() => Ui.Run(async () =>
     {
         if (!db.Enabled)

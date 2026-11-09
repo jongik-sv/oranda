@@ -8,7 +8,7 @@ namespace Oranda.Tibero.Tests.Integration;
 [Trait("Category", "Integration")]
 public class TiberoServerProbeIt
 {
-    [Fact]
+    [TiberoItFact]
     public async Task Open_reads_the_session_identity_and_capabilities()
     {
         await using var it = TiberoItSessions.Create();

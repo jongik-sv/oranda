@@ -24,7 +24,7 @@ public class TiberoMonitorKillIt(ITestOutputHelper output)
     private static readonly TimeSpan GoneTimeout = TimeSpan.FromSeconds(10);
 
     // K1: 일반 계정의 Kill 은 17004 로 거절되고 작업 세션은 살아 있다.
-    [Fact]
+    [TiberoWriteFact]
     public async Task K1_kill_without_privilege_is_rejected_with_17004_and_session_survives()
     {
         if (TiberoItSessions.SkipWrite())
@@ -76,7 +76,7 @@ public class TiberoMonitorKillIt(ITestOutputHelper output)
     }
 
     // K2: 권한 계정이 이 시험의 작업 세션만 죽인다. 작업 세션의 다음 명령은 끊김으로 실패하거나, 세션이 목록에서 사라진다.
-    [Fact]
+    [TiberoKillFact]
     public async Task K2_privileged_kill_ends_the_work_session()
     {
         if (TiberoItSessions.SkipWrite() || KillEnv() is not { } killEnv)

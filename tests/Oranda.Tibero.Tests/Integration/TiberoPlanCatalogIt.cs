@@ -17,7 +17,7 @@ public class TiberoPlanCatalogIt(ITestOutputHelper output)
     private static readonly Type[] AllowedTypes = [typeof(decimal), typeof(long), typeof(string), typeof(DateTime)];
 
     // M0: 결정66 — PLAN_TABLE 이 GLOBAL TEMPORARY 인지(실측: SYS 소유 임시 표, DURATION SESSION, PUBLIC 동의어. all_synonyms 질의는 TiberoException 이라 뺐다). 사전 모양이 서버마다 다를 수 있어 시도마다 결과·실패를 기록하고, 하나라도 돌면 통과한다.
-    [Fact]
+    [TiberoItFact]
     public async Task M0_plan_table_temporary_flag_is_queried()
     {
         await using var it = TiberoItSessions.Create();
@@ -58,7 +58,7 @@ public class TiberoPlanCatalogIt(ITestOutputHelper output)
     }
 
     // M1: 카탈로그 질의 열 값의 CLR 형식. NUMBER 는 decimal 로 온다는 가정(Convert 도우미가 받는다)을 확인한다.
-    [Fact]
+    [TiberoItFact]
     public async Task M1_catalog_column_values_have_known_clr_types()
     {
         await using var it = TiberoItSessions.Create();
@@ -81,7 +81,7 @@ public class TiberoPlanCatalogIt(ITestOutputHelper output)
     }
 
     // M2: 계획이 확실히 있는 문장의 sql_id 로 plan.cursor_steps(같은 이름 두 번 + null = 전체)를 읽어 v$sql_plan 직접 개수와 맞춘다.
-    [Fact]
+    [TiberoItFact]
     public async Task M2_cursor_steps_with_null_binds_matches_v_sql_plan()
     {
         await using var it = TiberoItSessions.Create();
@@ -123,7 +123,7 @@ public class TiberoPlanCatalogIt(ITestOutputHelper output)
     }
 
     // M2b: 바인드 형(Text·Int32·Int64·Double·Date·null)과 같은 이름 두 번이 실서버에서 값을 그대로 왕복하는지(ApplyBinds 의 드라이버 어댑터 길).
-    [Fact]
+    [TiberoItFact]
     public async Task M2b_bind_kinds_round_trip()
     {
         await using var it = TiberoItSessions.Create();

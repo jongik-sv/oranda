@@ -19,7 +19,7 @@ namespace Oranda.Tibero.Tests.Integration;
 public class TiberoTopSqlIt(ITestOutputHelper output)
 {
     // P1: 정렬 기준 여섯 가지가 모두 돌고, 해당 지표에 대해 비증가 순서다(NULL 로 바뀐 값은 0 이 되어 끝에 온다).
-    [Theory]
+    [TiberoItTheory]
     [InlineData(TopSqlOrder.ElapsedTime)]
     [InlineData(TopSqlOrder.CpuTime)]
     [InlineData(TopSqlOrder.BufferGets)]
@@ -64,7 +64,7 @@ public class TiberoTopSqlIt(ITestOutputHelper output)
     }
 
     // P2: 표식 SELECT 를 돌리면 Top SQL 에서 그 문장만 찾아진다(자식 여러 개일 수 있다).
-    [Fact]
+    [TiberoItFact]
     public async Task P2_marker_statement_is_found_by_text_with_its_counters_and_schema()
     {
         await using var it = TiberoItSessions.Create();
@@ -103,7 +103,7 @@ public class TiberoTopSqlIt(ITestOutputHelper output)
     }
 
     // P3: 조건 — 큰 최소 실행 횟수는 빈 결과, 파싱 스키마는 그 스키마 행만, 최근 1시간은 방금 돌린 표식을 포함한다.
-    [Fact]
+    [TiberoItFact]
     public async Task P3_filters_by_executions_schema_and_recent_activity()
     {
         await using var it = TiberoItSessions.Create();
@@ -138,7 +138,7 @@ public class TiberoTopSqlIt(ITestOutputHelper output)
     }
 
     // P4: SQL 상세 — 전문에 표식이 들어 있고, 바인드 문장은 바인드 캡처를 읽는다(캡처는 드물 수 있어 개수는 단정하지 않는다).
-    [Fact]
+    [TiberoItFact]
     public async Task P4_sql_detail_returns_full_text_and_reads_bind_capture()
     {
         await using var it = TiberoItSessions.Create();
@@ -191,7 +191,7 @@ public class TiberoTopSqlIt(ITestOutputHelper output)
     }
 
     // P5: 공유 풀에 없는 sql_id 는 InvalidOperationException.
-    [Fact]
+    [TiberoItFact]
     public async Task P5_unknown_sql_id_throws_invalid_operation()
     {
         await using var it = TiberoItSessions.Create();

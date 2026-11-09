@@ -36,7 +36,7 @@ public sealed class MultiConnectionFlowTests(ItDb db, ITestOutputHelper output) 
         return results.Selected?.Pane?.Model is null ? string.Empty : await FlowRig.CellAsync(results.Selected);
     }
 
-    [Fact]
+    [ItDbFact]
     public Task Two_tabs_with_the_same_bind_name_run_with_their_own_values_on_a_live_server() => Ui.Run(async () =>
     {
         if (!db.Enabled)
@@ -60,7 +60,7 @@ public sealed class MultiConnectionFlowTests(ItDb db, ITestOutputHelper output) 
         Assert.Equal("11", a.Binds.Find("ID")!.Text);
     });
 
-    [Fact]
+    [ItDbFact]
     public Task Two_connections_run_side_by_side_and_keep_their_own_transactions() => Ui.Run(async () =>
     {
         if (!db.Enabled)

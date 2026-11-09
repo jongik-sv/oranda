@@ -40,7 +40,7 @@ public sealed class RealDriverIt
             : new TiberoDriverHost(new AssemblyLoadContext("tb-real-driver-it"), () => path, Path.Combine(Path.GetTempPath(), "oranda-tbdrv-it"));
     }
 
-    [Fact]
+    [TiberoDriverFact]
     public void Real_driver_passes_the_check_and_binds_every_adapter_member()
     {
         if (Host.Value is not { } host)
@@ -70,7 +70,7 @@ public sealed class RealDriverIt
         Assert.NotNull(driver.CreateTimeStampTz(new DateTime(2024, 1, 2, 3, 4, 5), "+09:00"));
     }
 
-    [Fact]
+    [TiberoFrameworkDriverFact]
     public void Framework_build_of_the_driver_is_refused()
     {
         var path = Environment.GetEnvironmentVariable("ORANDA_IT_TIBERO_FRAMEWORK_DRIVER");
@@ -85,7 +85,7 @@ public sealed class RealDriverIt
         Assert.Equal(TiberoDriverLoader.FrameworkBuildReason, check.Reason);
     }
 
-    [Fact]
+    [TiberoItFact]
     public void Each_clob_read_gives_an_independent_locator_that_outlives_the_reader()
     {
         if (Open() is not { } opened)
@@ -123,7 +123,7 @@ public sealed class RealDriverIt
         }
     }
 
-    [Fact]
+    [TiberoItFact]
     public void Number_out_over_28_digits_overflows_as_decimal_and_survives_as_varchar2()
     {
         if (Open() is not { } opened)

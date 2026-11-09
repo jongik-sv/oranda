@@ -18,7 +18,7 @@ namespace Oranda.App.Tests.Integration;
 [Oranda.App.Tests.TestSupport.ResetUiLanguage]
 public sealed class PlsqlRunWindowFlowTests(ItDb db, ITestOutputHelper output) : IClassFixture<ItDb>
 {
-    [Fact]
+    [ItDbFact]
     public Task Command_opens_window_with_rows_for_procedure_function_and_package() => Ui.Run(async () =>
     {
         if (!db.Enabled)
@@ -57,7 +57,7 @@ public sealed class PlsqlRunWindowFlowTests(ItDb db, ITestOutputHelper output) :
         Assert.Equal(["N"], member.Rows.Where(r => r.CanEdit).Select(r => r.Name));
     });
 
-    [Fact]
+    [ItDbFact]
     public Task Real_window_shows_controls_and_rows() => Ui.Run(async () =>
     {
         if (!db.Enabled)
@@ -86,7 +86,7 @@ public sealed class PlsqlRunWindowFlowTests(ItDb db, ITestOutputHelper output) :
         shown.Close();
     });
 
-    [Fact]
+    [ItDbFact]
     public Task Full_shell_command_registry_opens_window_over_main_window() => Ui.Run(async () =>
     {
         if (!db.Enabled)

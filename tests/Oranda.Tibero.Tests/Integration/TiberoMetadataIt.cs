@@ -16,7 +16,7 @@ public class TiberoMetadataIt
     private static TiberoMetadataProvider NewProvider()
         => new(new MemoryMetadataCache(), new RecordingEventBus(), Timeout.InfiniteTimeSpan, TiberoCatalogQuery.RunAsync);
 
-    [Fact]
+    [TiberoItFact]
     public async Task Schemas_include_the_login_schema_and_its_tables_come_back_filtered_by_type()
     {
         await using var it = TiberoItSessions.Create();
@@ -43,7 +43,7 @@ public class TiberoMetadataIt
     /// DUAL 은 모든 계정이 읽을 수 있는 사전 표다(PUBLIC 시노님 → SYS 의 표). 시노님 풀이·객체 목록·표 정보·상세를 한 번에 본다.
     /// 시노님 사슬은 3 단계까지 따라가고, 시노님이 없는 서버면 SYS.DUAL 을 쓴다. 목록에 없으면(이 계정에 안 보이면) 아무것도 하지 않는다.
     /// </summary>
-    [Fact]
+    [TiberoItFact]
     public async Task Dual_resolves_lists_and_reads_as_a_table_with_the_general_and_column_sections()
     {
         await using var it = TiberoItSessions.Create();
@@ -93,7 +93,7 @@ public class TiberoMetadataIt
     }
 
     /// <summary>DBMS_OUTPUT 은 모든 계정이 쓰는 내장 패키지다: 멤버·인자 매핑(오버로드 번호 없는 Tibero 멤버 행)을 본다.</summary>
-    [Fact]
+    [TiberoItFact]
     public async Task Dbms_output_members_include_put_line_with_an_in_argument()
     {
         await using var it = TiberoItSessions.Create();
@@ -119,7 +119,7 @@ public class TiberoMetadataIt
     }
 
     /// <summary>SYS.DBMS_SQL.PARSE 는 오버로드가 여럿인 내장 프로시저다: 멤버 행 수만큼 나오고, 인자를 오버로드별로 나눴다면 한 항목 안에 같은 위치가 두 번 없다.</summary>
-    [Fact]
+    [TiberoItFact]
     public async Task Dbms_sql_parse_comes_back_as_several_overloads_without_repeated_positions()
     {
         await using var it = TiberoItSessions.Create();
@@ -140,7 +140,7 @@ public class TiberoMetadataIt
         }
     }
 
-    [Fact]
+    [TiberoWriteFact]
     public async Task A_test_table_reads_back_its_columns_keys_and_detail_sections()
     {
         if (TiberoItSessions.SkipWrite())
@@ -197,7 +197,7 @@ public class TiberoMetadataIt
     /// 캐시한 표 상세(payload)는 객체 목록 갱신이 LAST_DDL_TIME 변화를 볼 때만 버려진다. Tibero 가 인덱스·주석·제약 DDL 에서
     /// 표의 LAST_DDL_TIME 을 올리는지 실측한다(DATE 라 초 단위 → DDL 앞에 1초 넘게 쉰다). 어느 DDL 이 안 올리는지 메시지에 참·거짓으로 찍는다.
     /// </summary>
-    [Fact]
+    [TiberoWriteFact]
     public async Task Index_comment_and_constraint_ddl_refresh_a_cached_table()
     {
         if (TiberoItSessions.SkipWrite())

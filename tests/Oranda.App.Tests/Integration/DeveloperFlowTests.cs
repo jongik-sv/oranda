@@ -41,7 +41,7 @@ public sealed class DeveloperFlowTests(ItDb db, ITestOutputHelper output) : ICla
     // S2. 작성(자동완성) → 포맷 → 실행
     // ------------------------------------------------------------------------------------------
 
-    [Fact]
+    [ItDbFact]
     public Task S2_1_Completion_after_alias_dot_lists_table_columns_from_the_live_server() => Ui.Run(async () =>
     {
         if (!db.Enabled)
@@ -133,7 +133,7 @@ public sealed class DeveloperFlowTests(ItDb db, ITestOutputHelper output) : ICla
         return (window, view, vm);
     }
 
-    [Fact]
+    [ItDbFact]
     public Task S2_2_Format_then_run_gives_the_same_rows_as_the_unformatted_text() => Ui.Run(async () =>
     {
         if (!db.Enabled)
@@ -224,7 +224,7 @@ public sealed class DeveloperFlowTests(ItDb db, ITestOutputHelper output) : ICla
         }
     });
 
-    [Fact]
+    [ItDbFact]
     public Task S2_3_Statement_scope_format_touches_only_the_current_statement() => Ui.Run(async () =>
     {
         if (!db.Enabled)
@@ -259,7 +259,7 @@ public sealed class DeveloperFlowTests(ItDb db, ITestOutputHelper output) : ICla
         output.WriteLine("S2-3 OK: 현재 문장만 포맷, 빈 문서, 실행");
     });
 
-    [Fact]
+    [ItDbFact]
     public Task S2_4_Run_results_cover_null_dml_rollback_and_error_recovery() => Ui.Run(async () =>
     {
         if (!db.Enabled)
@@ -316,7 +316,7 @@ public sealed class DeveloperFlowTests(ItDb db, ITestOutputHelper output) : ICla
     private static async Task RunGrid(string id, long? row = null) =>
         await new GridEditCommandHandler().ExecuteAsync(new CommandContext(id, FakeContextKeys.AllTrue, row), default);
 
-    [Fact]
+    [ItDbFact]
     public Task S3_1_Edit_result_preview_decline_apply_commit_and_other_session_sees_it() => Ui.Run(async () =>
     {
         if (!db.Enabled)
@@ -389,7 +389,7 @@ public sealed class DeveloperFlowTests(ItDb db, ITestOutputHelper output) : ICla
         }
     });
 
-    [Fact]
+    [ItDbFact]
     public Task S3_2_Constraint_failure_marks_the_row_and_optimistic_lock_detects_other_session_changes() => Ui.Run(async () =>
     {
         if (!db.Enabled)
@@ -450,7 +450,7 @@ public sealed class DeveloperFlowTests(ItDb db, ITestOutputHelper output) : ICla
         }
     });
 
-    [Fact]
+    [ItDbFact]
     public Task S3_3_Keyless_result_is_blocked_then_editable_after_adding_rowid_and_read_only_profile_blocks() => Ui.Run(async () =>
     {
         if (!db.Enabled)
@@ -513,7 +513,7 @@ public sealed class DeveloperFlowTests(ItDb db, ITestOutputHelper output) : ICla
         }
     });
 
-    [Fact]
+    [ItDbFact]
     public Task S3_4_Edit_mode_on_dual_synonym_and_view_queries_explains_instead_of_throwing() => Ui.Run(async () =>
     {
         if (!db.Enabled)
@@ -567,7 +567,7 @@ public sealed class DeveloperFlowTests(ItDb db, ITestOutputHelper output) : ICla
     // S7. 파일 열기 → 실행 → 수정 저장 → 작업 공간 복원 (b143610 작업 공간·파일 동작)
     // ------------------------------------------------------------------------------------------
 
-    [Fact]
+    [ItDbFact]
     public Task S7_1_Open_script_file_run_edit_save_and_restore_workspace_keeps_text_and_file_binding() => Ui.Run(async () =>
     {
         if (!db.Enabled)
@@ -635,7 +635,7 @@ public sealed class DeveloperFlowTests(ItDb db, ITestOutputHelper output) : ICla
     // S4. 실행 이력 → 검색 → 다시 실행
     // ------------------------------------------------------------------------------------------
 
-    [Fact]
+    [ItDbFact]
     public Task S4_1_History_records_runs_and_failures_search_filter_rerun_delete_clear() => Ui.Run(async () =>
     {
         if (!db.Enabled)
@@ -724,7 +724,7 @@ public sealed class DeveloperFlowTests(ItDb db, ITestOutputHelper output) : ICla
         }
     });
 
-    [Fact]
+    [ItDbFact]
     public Task S4_2_History_text_is_redacted_and_history_off_or_skip_history_records_nothing() => Ui.Run(async () =>
     {
         if (!db.Enabled)

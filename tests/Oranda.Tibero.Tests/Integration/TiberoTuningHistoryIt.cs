@@ -33,7 +33,7 @@ public class TiberoTuningHistoryIt(ITestOutputHelper output)
     private static readonly TimeSpan WaitLimit = TimeSpan.FromSeconds(120);
 
     // H0: 이력·ASH 환경. 개수·범위·매개변수만 남기고 단정하지 않는다.
-    [Fact]
+    [TiberoItFact]
     public async Task H0_history_and_ash_environment()
     {
         await using var it = TiberoItSessions.Create();
@@ -63,7 +63,7 @@ public class TiberoTuningHistoryIt(ITestOutputHelper output)
     }
 
     // H1: 계획 이력. probe(방금 실행, 이력엔 없을 것)와 이력이 실제로 있는 sql_id 하나.
-    [Fact]
+    [TiberoItFact]
     public async Task H1_awr_plan_history_of_probe_and_of_a_statement_with_history()
     {
         await using var it = TiberoItSessions.Create();
@@ -120,7 +120,7 @@ public class TiberoTuningHistoryIt(ITestOutputHelper output)
     }
 
     // H2: ASH 대기. probe sql_id 와, ASH 표본이 있으면 표본이 가장 많은 sql_id.
-    [Fact]
+    [TiberoItFact]
     public async Task H2_ash_waits_of_probe_and_of_the_busiest_sql_id()
     {
         await using var it = TiberoItSessions.Create();
@@ -177,7 +177,7 @@ public class TiberoTuningHistoryIt(ITestOutputHelper output)
     }
 
     // H3: 추천 후보. V$SQL 에서 읽으므로 실행된 문장이 있으면 비어 있지 않고, 시간 값은 음수가 아니다(V$SQLSTATS 의 부호 없는 64비트 넘침을 피했는지).
-    [Fact]
+    [TiberoItFact]
     public async Task H3_tuning_candidates_are_returned_with_non_negative_times()
     {
         await using var it = TiberoItSessions.Create();
@@ -241,7 +241,7 @@ public class TiberoTuningHistoryIt(ITestOutputHelper output)
     }
 
     // H4: 계획 발견. 첫 후보(기록만)와 probe(표 전체 스캔 줄이 있어야 한다).
-    [Fact]
+    [TiberoItFact]
     public async Task H4_plan_findings_of_first_candidate_and_probe()
     {
         await using var it = TiberoItSessions.Create();
@@ -310,7 +310,7 @@ public class TiberoTuningHistoryIt(ITestOutputHelper output)
     }
 
     // H5: 꺼진 기능. 자식 커서 사유·SQL 계획 고정은 NotSupportedException(마지막 방어선), 리터럴 묶음은 후보 조회의 IncludeLiteralGroups 가 막는다.
-    [Fact]
+    [TiberoItFact]
     public async Task H5_unsupported_features_throw_and_literal_groups_are_logged()
     {
         await using var it = TiberoItSessions.Create();

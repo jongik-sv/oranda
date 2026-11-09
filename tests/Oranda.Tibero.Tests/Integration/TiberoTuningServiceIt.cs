@@ -27,7 +27,7 @@ public class TiberoTuningServiceIt(ITestOutputHelper output)
     private static readonly TimeSpan WaitLimit = TimeSpan.FromSeconds(120);
 
     // T1: 표 통계·열 통계·인덱스 통계·인덱스 열.
-    [Fact]
+    [TiberoItFact]
     public async Task T1_table_column_index_stats_and_index_columns()
     {
         await using var it = TiberoItSessions.Create();
@@ -86,7 +86,7 @@ public class TiberoTuningServiceIt(ITestOutputHelper output)
     }
 
     // T2: 히스토그램 한 열(히스토그램이 있는 열을 사전에서 찾고, 없으면 고른 표의 첫 열).
-    [Fact]
+    [TiberoItFact]
     public async Task T2_histogram_of_one_column()
     {
         await using var it = TiberoItSessions.Create();
@@ -165,7 +165,7 @@ public class TiberoTuningServiceIt(ITestOutputHelper output)
     }
 
     // T3: 방금 실행한 문장의 자식 커서와 자식 계획.
-    [Fact]
+    [TiberoItFact]
     public async Task T3_child_cursors_and_child_plan()
     {
         await using var it = TiberoItSessions.Create();
@@ -218,7 +218,7 @@ public class TiberoTuningServiceIt(ITestOutputHelper output)
     }
 
     // T4: 대기 표본 — 내 세션(null)과 sql_id 로.
-    [Fact]
+    [TiberoItFact]
     public async Task T4_sample_waits_for_own_session_and_for_a_sql_id()
     {
         await using var it = TiberoItSessions.Create();
@@ -265,7 +265,7 @@ public class TiberoTuningServiceIt(ITestOutputHelper output)
     }
 
     // T5: sql_id 의 누적 실행 통계.
-    [Fact]
+    [TiberoItFact]
     public async Task T5_sql_stats_of_the_probe_statement()
     {
         await using var it = TiberoItSessions.Create();
@@ -288,7 +288,7 @@ public class TiberoTuningServiceIt(ITestOutputHelper output)
     }
 
     // T6: 보고서 환경 행(버전·매개변수·NLS).
-    [Fact]
+    [TiberoItFact]
     public async Task T6_tuning_environment_rows()
     {
         await using var it = TiberoItSessions.Create();
@@ -311,7 +311,7 @@ public class TiberoTuningServiceIt(ITestOutputHelper output)
     }
 
     // T7: 벤치마크 두 번. 읽기 수(통계 출처 연결)와 계획 해시를 기록한다.
-    [Fact]
+    [TiberoItFact]
     public async Task T7_run_benchmark_two_iterations()
     {
         await using var it = TiberoItSessions.Create();
@@ -335,7 +335,7 @@ public class TiberoTuningServiceIt(ITestOutputHelper output)
 
     // T7b: 읽기 전용 벤치마크는 거절된다. Tibero 의 READ ONLY 트랜잭션은 쓰기를 막지 않아(쓰기 IT #28, main a0140964) 사용자 함수가 든 문장이 실제로 쓸 수 있다.
     // 거절 뒤에도 같은 세션이 정상이어야 한다(서버로 아무것도 보내지 않았다).
-    [Fact]
+    [TiberoItFact]
     public async Task T7b_read_only_benchmark_is_refused_and_the_session_stays_usable()
     {
         await using var it = TiberoItSessions.Create();

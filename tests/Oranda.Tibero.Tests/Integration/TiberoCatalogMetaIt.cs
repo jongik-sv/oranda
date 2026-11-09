@@ -19,7 +19,7 @@ public class TiberoCatalogMetaIt
     private const int Position = 2;
     private const int ArgSubprogramId = 10;
 
-    [Fact]
+    [TiberoItFact]
     public async Task Objects_by_prefix_is_ordered_limited_prefix_only_and_escapes_underscore()
     {
         await using var it = TiberoItSessions.Create();
@@ -46,7 +46,7 @@ public class TiberoCatalogMetaIt
         Assert.Empty(await ByPrefixAsync(session, "ORT\\_NO\\_SUCH\\_PREFIX\\_XYZ%", 10));
     }
 
-    [Fact]
+    [TiberoItFact]
     public async Task Package_members_and_arguments_share_overload_keys()
     {
         await using var it = TiberoItSessions.Create();
@@ -71,7 +71,7 @@ public class TiberoCatalogMetaIt
         }
     }
 
-    [Fact]
+    [TiberoItFact]
     public async Task Standalone_routine_arguments_attach_and_arguments_are_ordered()
     {
         await using var it = TiberoItSessions.Create();

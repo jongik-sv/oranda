@@ -8,7 +8,7 @@ namespace Oranda.Tibero.Tests.Integration;
 [Trait("Category", "Integration")]
 public class TiberoSchemaFolderIt
 {
-    [Fact]
+    [TiberoItFact]
     public async Task Folders_of_a_missing_table_are_empty_not_denied()
     {
         await using var it = TiberoItSessions.Create();
@@ -29,7 +29,7 @@ public class TiberoSchemaFolderIt
         Assert.Equal((false, 0), (keys.Denied, keys.Items.Count));
     }
 
-    [Fact]
+    [TiberoWriteFact]
     public async Task Primary_key_index_and_constraint_columns_of_a_test_table()
     {
         if (TiberoItSessions.SkipWrite())

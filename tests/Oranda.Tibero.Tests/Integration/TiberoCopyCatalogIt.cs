@@ -44,7 +44,7 @@ public partial class TiberoCopyCatalogIt
         ("copy.vpd_policy_count", 1),
     ];
 
-    [Fact]
+    [TiberoItFact]
     public async Task Every_copy_select_parses_and_returns_the_oracle_column_count_for_non_existent_names()
     {
         await using var it = TiberoItSessions.Create();
@@ -75,7 +75,7 @@ public partial class TiberoCopyCatalogIt
         Assert.True(failures.Count == 0, string.Join(" | ", failures));
     }
 
-    [Fact]
+    [TiberoItFact]
     public async Task Session_selects_see_the_login_user_and_roles_and_privileges()
     {
         await using var it = TiberoItSessions.Create();
@@ -94,7 +94,7 @@ public partial class TiberoCopyCatalogIt
         Assert.True(privileges.Count + roles.Count > 0, "시스템 권한도 롤도 없다(접속만 되는 계정이 아니다)");
     }
 
-    [Fact]
+    [TiberoItFact]
     public async Task Own_table_is_found_by_the_existence_and_count_selects_and_the_counts_agree()
     {
         await using var it = TiberoItSessions.Create();
@@ -138,7 +138,7 @@ public partial class TiberoCopyCatalogIt
         Assert.True(otherGrantors <= privileges.Count, "다른 계정이 준 권한 수가 객체 권한 행 수보다 많다");
     }
 
-    [Fact]
+    [TiberoItFact]
     public async Task Foreign_key_selects_pair_child_and_parent_columns_when_the_schema_has_a_foreign_key()
     {
         await using var it = TiberoItSessions.Create();
@@ -184,7 +184,7 @@ public partial class TiberoCopyCatalogIt
         }
     }
 
-    [Fact]
+    [TiberoItFact]
     public async Task Sequence_selects_agree_when_the_schema_has_a_sequence()
     {
         await using var it = TiberoItSessions.Create();
@@ -213,7 +213,7 @@ public partial class TiberoCopyCatalogIt
         Assert.True(TiberoSessionQuery.Long(increment[0][2]) is not null, "copy.sequence_increment 의 캐시 크기를 숫자로 읽지 못했다");
     }
 
-    [Fact]
+    [TiberoItFact]
     public async Task Identity_cols_answers_none_and_the_trigger_count_does_not_count_other_objects()
     {
         await using var it = TiberoItSessions.Create();
@@ -246,7 +246,7 @@ public partial class TiberoCopyCatalogIt
         Assert.True((await RunAsync(session, "copy.table_privs", ("OWN", "SYS"), ("TBL", sysTable))).Columns.Count == 2, "copy.table_privs 열 수");
     }
 
-    [Fact]
+    [TiberoItFact]
     public async Task Undo_retention_is_read_as_a_number_from_one_row()
     {
         await using var it = TiberoItSessions.Create();

@@ -99,7 +99,7 @@ public sealed class ConnectionComboSwitchFlowTests(ItDb db, ITestOutputHelper ou
         }
     }
 
-    [Fact]
+    [ItDbFact]
     public Task Choosing_another_connection_in_the_toolbar_combo_runs_the_next_query_there() => HeadlessHost.Run(async () =>
     {
         if (!db.Enabled)
@@ -135,7 +135,7 @@ public sealed class ConnectionComboSwitchFlowTests(ItDb db, ITestOutputHelper ou
         output.WriteLine($"콤보 바꾸기: B={onB}, A={onA}");
     });
 
-    [Fact]
+    [ItDbFact]
     public Task An_uncommitted_change_on_the_previous_connection_is_asked_before_switching() => HeadlessHost.Run(async () =>
     {
         if (!db.Enabled)
@@ -192,7 +192,7 @@ public sealed class ConnectionComboSwitchFlowTests(ItDb db, ITestOutputHelper ou
         }
     });
 
-    [Fact]
+    [ItDbFact]
     public Task A_plsql_document_compiles_into_the_connection_chosen_in_the_combo() => HeadlessHost.Run(async () =>
     {
         if (!db.Enabled)

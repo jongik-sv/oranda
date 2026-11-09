@@ -609,7 +609,7 @@ public sealed class SafetyCrossDbTests : IClassFixture<SafetyDbFixture>, IAsyncL
 
     // ---- 읽기 전용(운영 라벨 유무와 상관없이) --------------------------------------------------
 
-    [Theory]
+    [SafetyDbTheory]
     [MemberData(nameof(CaseNamesByReadOnlyMode))]
     public async Task Read_only_profile_blocks_every_editor_path_and_nothing_changes(string name, SafeMode mode)
     {
@@ -638,7 +638,7 @@ public sealed class SafetyCrossDbTests : IClassFixture<SafetyDbFixture>, IAsyncL
 
     // ---- 운영 라벨 ----------------------------------------------------------------------------
 
-    [Theory]
+    [SafetyDbTheory]
     [MemberData(nameof(CaseNames))]
     public async Task Production_label_asks_first_and_declining_changes_nothing(string name)
     {
@@ -677,7 +677,7 @@ public sealed class SafetyCrossDbTests : IClassFixture<SafetyDbFixture>, IAsyncL
         Assert.Equal(before, await _db.ScalarAsync(c.Snapshot));
     }
 
-    [Theory]
+    [SafetyDbTheory]
     [MemberData(nameof(CaseNames))]
     public async Task Production_label_runs_after_approval_and_the_change_is_real(string name)
     {
@@ -710,7 +710,7 @@ public sealed class SafetyCrossDbTests : IClassFixture<SafetyDbFixture>, IAsyncL
 
     // ---- 개발 접속: 같은 문장이 물음 없이 돌아야 한다(위험 명령만 이름 재입력) ---------------------
 
-    [Theory]
+    [SafetyDbTheory]
     [MemberData(nameof(CaseNames))]
     public async Task Development_profile_runs_without_asking_except_dangerous_commands(string name)
     {
@@ -746,7 +746,7 @@ public sealed class SafetyCrossDbTests : IClassFixture<SafetyDbFixture>, IAsyncL
 
     // ---- 스크립트·되돌림 -------------------------------------------------------------------------
 
-    [Fact]
+    [SafetyDbFact]
     public async Task Production_script_declined_midway_stops_and_rolling_back_restores_the_original()
     {
         if (!_db.Enabled)
@@ -775,7 +775,7 @@ public sealed class SafetyCrossDbTests : IClassFixture<SafetyDbFixture>, IAsyncL
         Assert.Equal(before, await _db.ScalarAsync(Rows()));
     }
 
-    [Theory]
+    [SafetyDbTheory]
     [InlineData(SafeMode.ReadOnly)]
     [InlineData(SafeMode.ProdReadOnly)]
     public async Task Read_only_script_is_denied_per_statement_and_stops(SafeMode mode)
@@ -804,7 +804,7 @@ public sealed class SafetyCrossDbTests : IClassFixture<SafetyDbFixture>, IAsyncL
         Assert.Equal(before, await _db.ScalarAsync(Rows()));
     }
 
-    [Theory]
+    [SafetyDbTheory]
     [InlineData(HistorySource.Editor)]
     [InlineData(HistorySource.GridEdit)]
     [InlineData(HistorySource.Script)]
@@ -848,7 +848,7 @@ public sealed class SafetyCrossDbTests : IClassFixture<SafetyDbFixture>, IAsyncL
         },
     ];
 
-    [Theory]
+    [SafetyDbTheory]
     [InlineData(SafeMode.ReadOnly)]
     [InlineData(SafeMode.ProdReadOnly)]
     public async Task Grid_edit_on_read_only_profile_reports_every_row_and_sends_nothing(SafeMode mode)
@@ -871,7 +871,7 @@ public sealed class SafetyCrossDbTests : IClassFixture<SafetyDbFixture>, IAsyncL
         Assert.Equal(before, await _db.ScalarAsync(Rows()));
     }
 
-    [Fact]
+    [SafetyDbFact]
     public async Task Grid_edit_in_production_declined_rolls_the_whole_batch_back()
     {
         if (!_db.Enabled)
@@ -896,7 +896,7 @@ public sealed class SafetyCrossDbTests : IClassFixture<SafetyDbFixture>, IAsyncL
         Assert.Equal("a", await _db.ScalarAsync($"SELECT v FROM {T} WHERE id = 1"));
     }
 
-    [Fact]
+    [SafetyDbFact]
     public async Task Grid_edit_in_production_approved_applies_and_commits()
     {
         if (!_db.Enabled)
@@ -915,7 +915,7 @@ public sealed class SafetyCrossDbTests : IClassFixture<SafetyDbFixture>, IAsyncL
         Assert.Equal("g", await _db.ScalarAsync($"SELECT v FROM {T} WHERE id = 1"));
     }
 
-    [Fact]
+    [SafetyDbFact]
     public async Task Grid_edit_on_development_applies_without_asking()
     {
         if (!_db.Enabled)
@@ -945,7 +945,7 @@ public sealed class SafetyCrossDbTests : IClassFixture<SafetyDbFixture>, IAsyncL
 
     private static MemoryStream Csv() => new("ID,V\n20,x\n21,y\n22,z\n"u8.ToArray());
 
-    [Theory]
+    [SafetyDbTheory]
     [InlineData(SafeMode.ReadOnly)]
     [InlineData(SafeMode.ProdReadOnly)]
     public async Task Import_on_read_only_profile_is_blocked_before_any_row_is_written(SafeMode mode)
@@ -965,7 +965,7 @@ public sealed class SafetyCrossDbTests : IClassFixture<SafetyDbFixture>, IAsyncL
         Assert.Equal(before, await _db.ScalarAsync(Rows()));
     }
 
-    [Fact]
+    [SafetyDbFact]
     public async Task Import_in_production_asks_per_batch_and_a_declined_batch_leaves_nothing()
     {
         if (!_db.Enabled)
@@ -984,7 +984,7 @@ public sealed class SafetyCrossDbTests : IClassFixture<SafetyDbFixture>, IAsyncL
         Assert.Equal(before, await _db.ScalarAsync(Rows()));
     }
 
-    [Fact]
+    [SafetyDbFact]
     public async Task Import_in_production_with_commit_per_batch_keeps_only_the_approved_batches()
     {
         if (!_db.Enabled)
@@ -1001,7 +1001,7 @@ public sealed class SafetyCrossDbTests : IClassFixture<SafetyDbFixture>, IAsyncL
         Assert.Equal("3/y", await _db.ScalarAsync(Rows()));
     }
 
-    [Fact]
+    [SafetyDbFact]
     public async Task Import_in_production_approved_inserts_all_rows()
     {
         if (!_db.Enabled)
@@ -1017,7 +1017,7 @@ public sealed class SafetyCrossDbTests : IClassFixture<SafetyDbFixture>, IAsyncL
         Assert.Equal("4/z", await _db.ScalarAsync(Rows()));
     }
 
-    [Fact]
+    [SafetyDbFact]
     public async Task Import_on_development_inserts_without_asking()
     {
         if (!_db.Enabled)
@@ -1038,7 +1038,7 @@ public sealed class SafetyCrossDbTests : IClassFixture<SafetyDbFixture>, IAsyncL
     public static IEnumerable<object[]> ModesAndPacks() =>
         Enum.GetValues<SafeMode>().SelectMany(m => Enum.GetValues<LicensePack>().Select(p => new object[] { m, p }));
 
-    [Theory]
+    [SafetyDbTheory]
     [MemberData(nameof(ModesAndPacks))]
     public async Task License_tagged_query_follows_the_declared_pack_in_every_mode(SafeMode mode, LicensePack declared)
     {
@@ -1081,7 +1081,7 @@ public sealed class SafetyCrossDbTests : IClassFixture<SafetyDbFixture>, IAsyncL
     /// 관측(결함 DEF-08, 중간): 읽기 전용 프로필은 문장마다 <c>SET TRANSACTION READ ONLY</c> 로 시작하므로, 다른 세션이 방금 만든(바꾼) 표를 읽으면
     /// 몇 초 동안 ORA-01466(표 정의가 바뀌었다)으로 실패한다. 일반 접속은 영향이 없다. 지금 동작을 고정한다(고치면 첫 시도 실패 단정을 뒤집는다).
     /// </summary>
-    [Fact]
+    [SafetyDbFact]
     public async Task Observed_read_only_profile_cannot_read_a_just_created_table_for_a_few_seconds()
     {
         if (!_db.Enabled)
@@ -1137,7 +1137,7 @@ public sealed class SafetyCrossDbTests : IClassFixture<SafetyDbFixture>, IAsyncL
 
     // ---- 자동 커밋 끔·서버 추적 정보(SAFE-04·05) --------------------------------------------------------
 
-    [Fact]
+    [SafetyDbFact]
     public async Task Auto_commit_is_off_changes_stay_invisible_to_others_until_commit_and_rollback_undoes_them()
     {
         if (!_db.Enabled)
@@ -1163,7 +1163,7 @@ public sealed class SafetyCrossDbTests : IClassFixture<SafetyDbFixture>, IAsyncL
     /// SAFE-05: 서버 감사에서 Oranda 세션을 알아보게 module·action·client_identifier 를 채운다. 관측(결함 DEF-09, 낮음): PRD 는 「도구명과 OS 사용자」 라고
     /// 했지만 client_identifier 에는 OS 사용자 이름이 없다(<c>oranda:</c> + 세션 id 앞 8자). OS 사용자는 서버가 v$session.osuser 에 따로 적는다.
     /// </summary>
-    [Fact]
+    [SafetyDbFact]
     public async Task Server_side_identity_names_the_tool_and_session_purpose()
     {
         if (!_db.Enabled)
@@ -1185,7 +1185,7 @@ public sealed class SafetyCrossDbTests : IClassFixture<SafetyDbFixture>, IAsyncL
 
     // ---- 내보내기 ---------------------------------------------------------------------------------
 
-    [Theory]
+    [SafetyDbTheory]
     [InlineData(SafeMode.ReadOnly)]
     [InlineData(SafeMode.ProdReadOnly)]
     public async Task Export_of_a_query_works_on_read_only_but_a_change_statement_is_refused(SafeMode mode)
@@ -1229,7 +1229,7 @@ public sealed class SafetyCrossDbTests : IClassFixture<SafetyDbFixture>, IAsyncL
     /// 관측(결함 DEF-06, 낮음): 가져오기의 INSERT 는 이력에 남기지 않는다(<c>SkipHistory</c>). 운영 접속에 대량 데이터를 넣어도 이력에는 흔적이 없다.
     /// 지금 동작을 고정한다. 고치면 이 단정을 뒤집는다.
     /// </summary>
-    [Fact]
+    [SafetyDbFact]
     public async Task Observed_import_inserts_are_not_recorded_in_history()
     {
         if (!_db.Enabled)
@@ -1265,7 +1265,7 @@ public sealed class SafetyCrossDbTests : IClassFixture<SafetyDbFixture>, IAsyncL
         return BinItem(item.ObjectName, item.OriginalName);
     }
 
-    [Theory]
+    [SafetyDbTheory]
     [InlineData("purge")]
     [InlineData("purge-all")]
     [InlineData("flashback")]
@@ -1310,7 +1310,7 @@ public sealed class SafetyCrossDbTests : IClassFixture<SafetyDbFixture>, IAsyncL
         Assert.Equal(before, await _db.ScalarAsync(binCount));
     }
 
-    [Fact]
+    [SafetyDbFact]
     public async Task Purge_in_production_after_approval_really_empties_the_recycle_bin_entry()
     {
         if (!_db.Enabled)
@@ -1347,7 +1347,7 @@ public sealed class SafetyCrossDbTests : IClassFixture<SafetyDbFixture>, IAsyncL
     private static Task<string> VictimStatusAsync(SessionKey key) => SafetyDbFixture.AdminScalarAsync(
         string.Create(CultureInfo.InvariantCulture, $"SELECT NVL(MAX(status), 'GONE') FROM v$session WHERE sid = {key.Sid} AND serial# = {key.Serial}"));
 
-    [Theory]
+    [SafetyDbTheory]
     [InlineData(SafeMode.ReadOnly)]
     [InlineData(SafeMode.ProdReadOnly)]
     public async Task Kill_and_trace_on_read_only_profile_are_denied_and_the_victim_lives(SafeMode mode)
@@ -1371,7 +1371,7 @@ public sealed class SafetyCrossDbTests : IClassFixture<SafetyDbFixture>, IAsyncL
         }
     }
 
-    [Fact]
+    [SafetyDbFact]
     public async Task Kill_in_production_asks_with_the_session_id_and_declining_keeps_the_victim()
     {
         if (!_db.Enabled)
@@ -1393,7 +1393,7 @@ public sealed class SafetyCrossDbTests : IClassFixture<SafetyDbFixture>, IAsyncL
         }
     }
 
-    [Theory]
+    [SafetyDbTheory]
     [InlineData(SafeMode.Dev)]
     [InlineData(SafeMode.Prod)]
     public async Task Kill_after_confirmation_really_kills_the_victim(SafeMode mode)
@@ -1417,7 +1417,7 @@ public sealed class SafetyCrossDbTests : IClassFixture<SafetyDbFixture>, IAsyncL
 
     // ---- 이중 방어와 한계(관측) ----------------------------------------------------------------------
 
-    [Theory]
+    [SafetyDbTheory]
     [InlineData("UPDATE {T} SET v = 'bad' WHERE id = 1")]
     [InlineData("DELETE FROM {T} WHERE id = 1")]
     [InlineData("INSERT INTO {T} VALUES (50, 'bad')")]
@@ -1443,7 +1443,7 @@ public sealed class SafetyCrossDbTests : IClassFixture<SafetyDbFixture>, IAsyncL
         Assert.Equal(before, await _db.ScalarAsync(Rows()));
     }
 
-    [Fact]
+    [SafetyDbFact]
     public async Task Server_read_only_transaction_rejects_set_transaction_read_write()
     {
         if (!_db.Enabled)
@@ -1466,7 +1466,7 @@ public sealed class SafetyCrossDbTests : IClassFixture<SafetyDbFixture>, IAsyncL
     /// 한계(결함 아님, 결과서 「알려진 한계」): 분류가 틀린 DDL 은 서버 읽기 전용 트랜잭션이 막지 못한다(DDL 은 암묵 커밋으로 트랜잭션을 끝낸다).
     /// 지금 분류기는 이런 DDL 을 모두 DDL 로 분류하므로 정책 관문이 막는다. 서버 쪽 방어는 DML 에만 유효하다는 사실을 고정한다.
     /// </summary>
-    [Fact]
+    [SafetyDbFact]
     public async Task Observed_misclassified_ddl_is_not_stopped_by_the_server_read_only_transaction()
     {
         if (!_db.Enabled)
@@ -1487,7 +1487,7 @@ public sealed class SafetyCrossDbTests : IClassFixture<SafetyDbFixture>, IAsyncL
     /// 한계(결함 아님): 읽기 전용 프로필에서 SELECT 안에서 부르는 자율 트랜잭션(PRAGMA AUTONOMOUS_TRANSACTION) 함수는 DB 에 쓴다.
     /// 문장은 질의라 정책 관문이 허용하고 서버 읽기 전용 트랜잭션은 별도 트랜잭션을 막지 못한다. DB 쪽 권한(읽기 전용 계정)이 최종 방어다.
     /// </summary>
-    [Fact]
+    [SafetyDbFact]
     public async Task Observed_autonomous_function_in_a_select_writes_even_on_a_read_only_profile()
     {
         if (!_db.Enabled)
@@ -1510,7 +1510,7 @@ public sealed class SafetyCrossDbTests : IClassFixture<SafetyDbFixture>, IAsyncL
     /// 그리드 편집·LOB 저장은 먼저 SAVEPOINT 를 잡으므로, 운영 확인을 거절해 아무것도 안 바뀌었는데도 「미커밋」 표시·종료 시 커밋 질문이 남는다.
     /// 지금 동작을 고정한다. 고치면 첫 단정을 뒤집는다.
     /// </summary>
-    [Theory]
+    [SafetyDbTheory]
     [InlineData(SafeMode.Dev)]
     [InlineData(SafeMode.Prod)]
     public async Task Observed_savepoint_alone_marks_the_session_uncommitted_until_rollback(SafeMode mode)
@@ -1532,7 +1532,7 @@ public sealed class SafetyCrossDbTests : IClassFixture<SafetyDbFixture>, IAsyncL
 
     // ---- 이력 다시 실행: 정책 판단 입력 ------------------------------------------------------------------
 
-    [Fact]
+    [SafetyDbFact]
     public async Task Rerun_of_a_recorded_dml_text_gets_the_same_gate_as_typing_it()
     {
         if (!_db.Enabled)

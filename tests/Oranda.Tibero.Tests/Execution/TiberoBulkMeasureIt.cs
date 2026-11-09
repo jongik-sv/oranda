@@ -35,7 +35,7 @@ public class TiberoBulkMeasureIt(ITestOutputHelper output)
     // ---------------------------------------------------------------------------------------------------------------
 
     /// <summary>ArrayBindCount 로 NUMBER·VARCHAR2·DATE·CLOB(4000자 초과)·BLOB 을 배열로 넣는다: object[] 와 형식 배열, 전체와 열별.</summary>
-    [Fact]
+    [TiberoWriteFact]
     public async Task Measure_array_bind_types_rows_affected_and_readback()
     {
         if (TiberoItSessions.SkipWrite())
@@ -117,7 +117,7 @@ public class TiberoBulkMeasureIt(ITestOutputHelper output)
     }
 
     /// <summary>배치 크기(1·100·1000·10000 행)와 LOB 배치의 시간·성공 여부. 복사 배치 크기를 정하는 근거.</summary>
-    [Fact]
+    [TiberoWriteFact]
     public async Task Measure_array_bind_batch_sizes()
     {
         if (TiberoItSessions.SkipWrite())
@@ -172,7 +172,7 @@ public class TiberoBulkMeasureIt(ITestOutputHelper output)
     /// 배열 바인드 값 모양(#28 재측정): 열 하나씩, 매개변수 형식 × 값 배열 모양(형식 배열·object[]·글자 object[])마다 들어가는지와 되읽은 값.
     /// #28 에서 object[] 의 decimal 이 InvalidCast(Decimal→String), byte[][] BLOB 이 NullReferenceException 이었다 — 어느 모양이 되는지 가린다.
     /// </summary>
-    [Fact]
+    [TiberoWriteFact]
     public async Task Measure_array_bind_value_shapes()
     {
         if (TiberoItSessions.SkipWrite())
@@ -245,7 +245,7 @@ public class TiberoBulkMeasureIt(ITestOutputHelper output)
     /// 여기서 가린다 — nullable 형식 배열(decimal?[]·long?[]·DateTime?[]), 글자 배열 + 변환 함수(TO_NUMBER·TO_DATE·TO_TIMESTAMP·HEXTORAW),
     /// BLOB·RAW 한 행씩 스칼라 바인드, 형식 배열로 개수 ≠ 배열 길이, 형식 배열 뒤 커밋 전 다른 세션 가시성.
     /// </summary>
-    [Fact]
+    [TiberoWriteFact]
     public async Task Measure_array_bind_nulls_and_binary_alternatives()
     {
         if (TiberoItSessions.SkipWrite())
@@ -393,7 +393,7 @@ public class TiberoBulkMeasureIt(ITestOutputHelper output)
     }
 
     /// <summary>배열 한 건이 제약을 어기면: 예외 번호·메시지·배열 오류 목록, 몇 행이 들어갔나(부분 적용?), 트랜잭션이 살아 있나.</summary>
-    [Fact]
+    [TiberoWriteFact]
     public async Task Measure_array_bind_constraint_violation_partial_rows_and_transaction_state()
     {
         if (TiberoItSessions.SkipWrite())
@@ -454,7 +454,7 @@ public class TiberoBulkMeasureIt(ITestOutputHelper output)
     // ---------------------------------------------------------------------------------------------------------------
 
     /// <summary>원본을 읽기 전용 트랜잭션으로 읽는다: PSM 블록으로 SET TRANSACTION READ ONLY → SELECT(다른 세션의 커밋이 안 보이나) → 쓰기 거부 → ROLLBACK.</summary>
-    [Fact]
+    [TiberoWriteFact]
     public async Task Measure_read_only_transaction_in_psm_block()
     {
         if (TiberoItSessions.SkipWrite())
@@ -525,7 +525,7 @@ public class TiberoBulkMeasureIt(ITestOutputHelper output)
     // ---------------------------------------------------------------------------------------------------------------
 
     /// <summary>SAVEPOINT → INSERT → ROLLBACK TO: 그 뒤 행만 사라지나, 실패한 배열 배치 뒤 되돌리기, 자동 커밋이 없나.</summary>
-    [Fact]
+    [TiberoWriteFact]
     public async Task Measure_savepoint_rollback_to_and_failed_array_batch()
     {
         if (TiberoItSessions.SkipWrite())
@@ -599,7 +599,7 @@ public class TiberoBulkMeasureIt(ITestOutputHelper output)
     }
 
     /// <summary>DDL·그 밖 문장이 열려 있던 트랜잭션을 확정하나: INSERT(미커밋) → 문장 → 다른 세션에서 보이나. 실패한 DDL 도 확인한다.</summary>
-    [Fact]
+    [TiberoWriteFact]
     public async Task Measure_implicit_commit_of_ddl_and_other_statements()
     {
         if (TiberoItSessions.SkipWrite())
@@ -668,7 +668,7 @@ public class TiberoBulkMeasureIt(ITestOutputHelper output)
     // ---------------------------------------------------------------------------------------------------------------
 
     /// <summary>트리거 끄기·켜기(표 전체·개별)와 FK 끄기·ENABLE NOVALIDATE·ENABLE VALIDATE(부모 없는 행이 있을 때), FK 다시 붙이기 문장, 참조당한 부모 DROP.</summary>
-    [Fact]
+    [TiberoWriteFact]
     public async Task Measure_triggers_and_foreign_key_enable_disable()
     {
         if (TiberoItSessions.SkipWrite())
@@ -814,7 +814,7 @@ public class TiberoBulkMeasureIt(ITestOutputHelper output)
     // ---------------------------------------------------------------------------------------------------------------
 
     /// <summary>NEXTVAL 반복·한 번에 여러 개 소비(CONNECT BY LEVEL, 서브쿼리, 바인드)·ALTER SEQUENCE INCREMENT BY 요령·ALL_SEQUENCES 값.</summary>
-    [Fact]
+    [TiberoWriteFact]
     public async Task Measure_sequence_nextval_bulk_consumption_and_alter_increment()
     {
         if (TiberoItSessions.SkipWrite())
@@ -923,7 +923,7 @@ public class TiberoBulkMeasureIt(ITestOutputHelper output)
     // ---------------------------------------------------------------------------------------------------------------
 
     /// <summary>IDENTITY 열 문법이 되나(Tibero 6 는 안 될 것으로 예상), ALL_TAB_COLUMNS 의 IDENTITY_COLUMN 열, 시퀀스 DEFAULT 대안.</summary>
-    [Fact]
+    [TiberoWriteFact]
     public async Task Measure_identity_columns_syntax_and_catalog()
     {
         if (TiberoItSessions.SkipWrite())
@@ -998,7 +998,7 @@ public class TiberoBulkMeasureIt(ITestOutputHelper output)
     // ---------------------------------------------------------------------------------------------------------------
 
     /// <summary>DROP TABLE(PURGE 없음) 뒤 휴지통 뷰, "BIN$…" 조회, FLASHBACK TABLE … TO BEFORE DROP [RENAME TO], PURGE TABLE, PURGE RECYCLEBIN.</summary>
-    [Fact]
+    [TiberoWriteFact]
     public async Task Measure_recycle_bin_drop_flashback_and_purge()
     {
         if (TiberoItSessions.SkipWrite())
@@ -1130,7 +1130,7 @@ public class TiberoBulkMeasureIt(ITestOutputHelper output)
     // ---------------------------------------------------------------------------------------------------------------
 
     /// <summary>MERGE INTO … USING (SELECT … FROM DUAL) … WHEN MATCHED / NOT MATCHED: 리터럴·바인드·배열 바인드, 영향 행 수.</summary>
-    [Fact]
+    [TiberoWriteFact]
     public async Task Measure_merge_using_dual_literal_bind_and_array()
     {
         if (TiberoItSessions.SkipWrite())
@@ -1238,7 +1238,7 @@ public class TiberoBulkMeasureIt(ITestOutputHelper output)
     // ---------------------------------------------------------------------------------------------------------------
 
     /// <summary>Oracle 복사 카탈로그 조회(CopyCatalogQueries·CopyRunner·RecreateStep·CopyPrecheckService)가 쓰는 뷰·열이 Tibero 에 있나. 읽기만 한다.</summary>
-    [Fact]
+    [TiberoItFact]
     public async Task Measure_copy_catalog_views_and_columns()
     {
         await using var it = TiberoItSessions.Create();

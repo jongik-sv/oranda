@@ -19,7 +19,7 @@ public class TiberoSchemaStatementsIt
 
     private readonly TiberoSchemaStatements _statements = new();
 
-    [Fact]
+    [TiberoWriteFact]
     public async Task Compile_flashback_and_purge_statements_work_on_the_server()
     {
         if (TiberoItSessions.SkipWrite())

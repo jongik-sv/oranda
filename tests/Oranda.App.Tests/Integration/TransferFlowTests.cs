@@ -52,7 +52,7 @@ public sealed class TransferFlowTests(ItDb db, ITestOutputHelper output) : IClas
     private string Fingerprint(string table) =>
         db.Text($"select listagg(id || '|' || nvl(name, '~') || '|' || nvl(to_char(amt), '~') || '|' || nvl(to_char(d, 'YYYY-MM-DD'), '~'), ';') within group (order by id) from {table}");
 
-    [Fact]
+    [ItDbFact]
     public Task S6_1_Csv_export_then_import_round_trips_nulls_quotes_newlines_and_korean() => Ui.Run(async () =>
     {
         if (!db.Enabled)
@@ -103,7 +103,7 @@ public sealed class TransferFlowTests(ItDb db, ITestOutputHelper output) : IClas
         }
     });
 
-    [Fact]
+    [ItDbFact]
     public Task S6_2_Import_boundaries_duplicate_key_rolls_back_unknown_column_skipped_and_bad_file() => Ui.Run(async () =>
     {
         if (!db.Enabled)
@@ -184,7 +184,7 @@ public sealed class TransferFlowTests(ItDb db, ITestOutputHelper output) : IClas
         }
     });
 
-    [Fact]
+    [ItDbFact]
     public Task S6_3_Json_xlsx_and_insert_exports_are_valid_and_xlsx_reimports() => Ui.Run(async () =>
     {
         if (!db.Enabled)

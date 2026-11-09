@@ -38,14 +38,14 @@ public class TiberoColumnReorderRebuildIt(ITestOutputHelper output)
 
     private static readonly string[] ExpectedRows = ["1|a|c1|5|-", "2|b|c2|0|1", "3|c|c3|7|1"];
 
-    [Fact]
+    [TiberoWriteFact]
     public Task Rebuild_keeps_data_constraints_index_trigger_comments_and_grants() => WriteAsync(MainTable, RebuildMainAsync);
 
     /// <summary>
     /// D4c: 휴지통이 켜진 세션. 스크립트의 <c>DROP TABLE "T$OLD"</c> 는 PURGE 가 없어 원본이 휴지통으로 간다 — 그때도 원본의 인덱스·제약 이름이 비어
     /// 종속 DDL(같은 이름)이 충돌 없이 다시 붙는지 본다(서버 기본은 휴지통 꺼짐이라 시험 1 은 이 경우를 덮지 않는다).
     /// </summary>
-    [Fact]
+    [TiberoWriteFact]
     public Task Rebuild_with_the_recycle_bin_on_reattaches_dependents_without_name_clashes() => WriteAsync(MainTable, async (s, o) =>
     {
         string[] own = [MainTable + "$OLD", MainTable + "$NEW", MainTable];
@@ -65,7 +65,7 @@ public class TiberoColumnReorderRebuildIt(ITestOutputHelper output)
         }
     });
 
-    [Fact]
+    [TiberoWriteFact]
     public Task Rebuild_re_adds_a_virtual_column_after_the_copied_columns() => WriteAsync(VirtualTable, (s, o) => RebuildVirtualAsync(s, o));
 
     private static async Task RebuildMainAsync(TiberoSession session, string owner)
