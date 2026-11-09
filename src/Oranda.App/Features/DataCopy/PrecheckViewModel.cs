@@ -62,6 +62,10 @@ public sealed class CheckItemViewModel
     {
         ["ChildRowsMayBlock"] = "자식 행이 지우기를 막음",
         ["ColumnNotInTarget"] = "대상에 없는 열",
+        [CopyCheckCodes.CreateBlocked] = "없으면 만들기 막힘",
+        ["ParentWillBeCreated"] = "부모 표를 새로 만들어 범위를 못 지움",
+        [CopyCheckCodes.CreateNoPrivilege] = "없으면 만들기 권한 없음",
+        [CopyCheckCodes.CreateTable] = "없으면 표 만들기",
         [CopyCheckCodes.EmptyPeriod] = "빈 기간",
         ["FkCycle"] = "외래키 순환",
         ["IdentityAlways"] = "IDENTITY 열",

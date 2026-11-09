@@ -317,12 +317,13 @@ select * from emp where empno = :empno;
 
 ### 2.7 `copy-jobs/{작업 이름}.json` — `CopyJob`
 
-접속 간 데이터 복사(PRD EXP-04, 설계 `docs/superpowers/specs/2026-11-06-cross-connection-data-copy-design.md`)의 작업 파일이다. 직렬화는 1.3 의 공통 규칙을 따르며 문맥은 Core 의 `CopyJobJsonContext` 다. 현재 버전 상수는 `CopyJobSchema.Current` = **2** 이다(`SchemaVersions` 에 넣지 않고 복사 쪽에 둔다). 버전 2 는 규칙마다 원본·대상 계정을 둔다: 예전 앱이 새 파일을 읽으면 표마다의 계정을 버리고 작업 대상 계정의 같은 이름 표를 지우게 되므로(의미 변경) 버전을 올렸다.
+접속 간 데이터 복사(PRD EXP-04, 설계 `docs/superpowers/specs/2026-11-06-cross-connection-data-copy-design.md`)의 작업 파일이다. 직렬화는 1.3 의 공통 규칙을 따르며 문맥은 Core 의 `CopyJobJsonContext` 다. 현재 버전 상수는 `CopyJobSchema.Current` = **4** 이다(`SchemaVersions` 에 넣지 않고 복사 쪽에 둔다). 버전 2 는 규칙마다 원본·대상 계정을 둔다: 예전 앱이 새 파일을 읽으면 표마다의 계정을 버리고 작업 대상 계정의 같은 이름 표를 지우게 되므로(의미 변경) 버전을 올렸다. 버전 3 은 작업 변수(`variables`), 버전 4 는 규칙의 「대상에 표가 없으면 만들기」(`tables[].createIfMissing`)이며 둘 다 예전 앱이 칸을 버린 채 다시 저장하지 않게(읽기 전용으로 열게) 올렸다.
 
 - 파일 이름은 작업 이름에서 만든다(파일 이름에 못 쓰는 글자와 제어 문자는 `_` 로 바꾸고, UTF-8 80바이트까지). 겹치면 `{이름} (2).json` 처럼 번호를 붙인다. 작업은 파일 이름이 아니라 `id` 로 찾는다.
 - 비밀번호 필드는 모델에 없다. 해시 마스킹의 비밀 값(`maskSalt`)은 들어 있으며, 작업을 내보내고 가져와도 같은 값을 써서 서로 복사한 데이터끼리 조인이 맞게 한다.
 - `schemaVersion` 이 현재보다 크면 읽기 전용으로 연다(4.1 의 미래 버전 규칙). 저장·이름 바꾸기·복제·내보내기는 하지 않고 삭제만 한다.
 - 1 → 2 변환기 `CopyJobMigrationV1`(파일 종류 `copy-job`): 규칙마다 `sourceOwner`·`targetOwner` 를 작업의 값으로, `parent.parentOwner` 를 작업 `sourceOwner` 로, `sequences[].owner` 를 작업 `targetOwner` 로 채운다(이미 있으면 둔다). 읽기(백업 후 다시 쓰기)와 가져오기가 같은 변환기를 쓴다. 예제: `examples/v1/copy-job.json` → `examples/copy-job.json`.
+- 2 → 3(`CopyJobMigrationV2`), 3 → 4(`CopyJobMigrationV3`) 변환기는 바꿀 것이 없다(새 칸이 없으면 기본값 = 꺼짐). 버전만 올려 다시 쓴다. 예제 `examples/copy-job.json` 의 마지막 규칙이 `createIfMissing: true` 를 보인다.
 - 가져오기는 기존 작업을 덮어쓰지 않는다. `id` 나 이름이 겹치면 새 `id` 와 ` (2)` 를 붙인 이름으로 저장한다. 가져오기와 복제는 `lastRun` 을 비운다. `schemaVersion` 이 현재보다 큰 파일은 열기는 읽기 전용이지만 가져오기는 거부한다(`InvalidDataException`).
 
 | 필드 | 형식 | 필수 | 기본값 | 설명 |
@@ -346,6 +347,7 @@ select * from emp where empno = :empno;
 | `tables[].extraWhere` | string | ○ | null | 기간 규칙(`kind: Period`)의 추가 조건. 기간식과 `AND` 로 묶어 원본 조회·대상 지우기·건수 비교에 쓰고 다른 종류에서는 무시한다. `:FROM_DT`·`:TO_DT` 를 쓸 수 있다 |
 | `tables[].masks[]` | `MaskRule[]` | ○ | `[]` | `column`, `kind`(`Fixed`·`KeepFirst`·`KeepLast`·`Hash`·`Null`), `value`, `count` |
 | `tables[].skipColumns[]` | string[] | ○ | `[]` | 복사하지 않는 열 |
+| `tables[].createIfMissing` | bool | ○ | false | 대상 계정에 같은 이름의 표가 없으면 원본 구조로 만든 뒤 넣는다(아래 「대상에 표가 없으면 만들기」). 꺼짐이면 쓰지 않는다(예전 파일과 같다). `action` 이 `Recreate` 이면 뜻이 없어 무시한다 |
 | `options` | `CopyOptions` | ○ | | `batchSize`(5000), `commit`(`PerTable`·`PerBatch`·`AtEnd`, 기본 `PerTable`), `disableTriggersByDefault`(false), `maxFailedRows`(100), `sequenceGapConfirm`(10000000) |
 | `sequences[]` | `SequenceRule[]` | ○ | `[]` | 시퀀스 보정 연결. `sequence`, `table`(규칙 키, 아래), `column`, `owner`(시퀀스 계정, 없으면 그 표 규칙의 대상 계정) |
 | `consistentRead` | bool | ○ | true | 모든 표를 같은 시점 기준으로 읽기 |
@@ -354,6 +356,12 @@ select * from emp where empno = :empno;
 
 - **규칙 키.** 작업 안에서 규칙 하나를 가리키는 이름이다(Core `CopyOwners.Key`). 원본 계정이 `sourceOwner` 와 같으면 표 이름만(`ORDERS`), 다르면 `계정.표`(`APP2.ORDERS`)다. 그래서 계정이 하나인 작업의 키는 표 이름 그대로다. `sequences[].table`, 사전 점검 항목·실행 결과·실패 행·실행 기록(2.8)의 표 이름이 이 키다.
 - 원본 키가 같은 규칙 둘, 대상 `계정.표` 가 같은 규칙 둘은 오류다(사전 점검 `RuleInvalid`, 실행기도 거부). 원본과 대상이 같은 DB 이면 어떤 규칙이 쓰는 대상 표가 다른 규칙이 읽는 원본 표(부모 키 규칙의 부모 원본 표 포함)와 같을 때 `SameSourceTarget` 으로 막는다.
+- **대상에 표가 없으면 만들기(`createIfMissing`).** 대상 처리 `DeleteAllInsert`·`DeleteRangeInsert`·`AppendOnly`·`MergeByPk` 와 함께 쓰는 선택이다. 기본 동작은 그대로다: 대상 계정에 같은 이름의 표가 없으면 사전 점검이 `TargetMissing` 오류로 멈춘다.
+  - **켰을 때.** 대상에 그 이름의 객체가 **아무것도** 없으면(뷰·시노님이 있으면 만들 수 없다) 오류 대신 확인 항목 `CreateTable` 을 내고, 실행기가 원본 구조로 `CREATE`(부모 → 자식) 한 뒤 적재한다. 새 표는 비어 있으니 대상 지우기는 건너뛰고 `INSERT` 로 넣는다(`AppendOnly` 와 같다). 대상 표가 이미 있으면 선택을 무시한다(두 번째 실행부터는 규칙대로 지우고 넣는다).
+  - **개발 접속만.** `DROP`·`CREATE TABLE` 은 개발 접속에서만 한다(`CopyTargetGuard.CanRecreate`, 「테이블 다시 만들기」와 같다). 다른 접속이면 `TargetMissing` 오류에 「개발 접속에서만 만들 수 있습니다」를 덧붙인다. 대상 소유자 계정으로 접속해야 하고 `CREATE TABLE` 권한이 있어야 한다(`CreateNoPrivilege`). 원본 구조를 만들 수 없는 이유(지원하지 않는 형식 열·문자열 한도·식이 가리키는 객체 없음·이름 겹침)는 「테이블 다시 만들기」와 같은 조건으로 미리 막는다(`CreateBlocked`).
+  - **만드는 범위(「테이블 다시 만들기」와 같다).** 표·열·PK·UK·CHECK·함께 만드는 표끼리의 FK(적재 뒤에 붙인다)·제약에 속하지 않은 인덱스·COMMENT. **트리거·다른 계정에 준 권한·시노님은 만들지 않는다**(새 표에는 되살릴 대상 표의 것이 없고, 원본 것도 가져오지 않는다). 확인 항목이 「만들지 않는 것」을 한 줄로 알리고, DBMS 마다 다른 「원본과 다르게 만들어지는 것」(`RecreateDifferenceNote`)도 붙인다. 만드는 문장은 미리 보기에 있다.
+  - **적재 실패.** `CREATE` 뒤 적재를 끝내지 못하면(실패·중지·앞 표 실패로 시작하지 못함, 「모두 끝난 뒤 한 번 커밋」이 되돌려져 빈 표) 만든 표를 `DROP TABLE … PURGE` 로 지운다(되살릴 것이 없는 새 표라 휴지통을 거치지 않는다). 지우는 문장은 위험 명령이라 미리 보기에 들어 있어 이름 재입력 확인을 미리 받는다. 지우지 못하면 경고(알림·표 메시지)로 지울 문장을 알리고 원래 오류는 그대로 보고한다. 이번 실행의 `CREATE` 가 성공하지 못한 표(이름이 이미 쓰이고 있어 거부됨)는 지우지 않는다. 지운 부모를 가리킬 FK 는 만들지 않는다. 다른 표의 정상 적재는 남는다.
+  - 저장 형식: 버전 4(위). 예전 앱은 이 칸을 버리므로 읽기 전용으로 연다.
 
 ### 2.8 `logs/copy-runs/*.jsonl` — 복사 실행 기록
 

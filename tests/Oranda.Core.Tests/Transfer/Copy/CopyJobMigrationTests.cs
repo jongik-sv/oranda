@@ -67,6 +67,29 @@ public class CopyJobMigrationTests
         Assert.Equal(CopyJobSchema.Current, (int)CopyJobMigrations.Upgrade(empty, 1)["schemaVersion"]!);
     }
 
+    [Fact]
+    public void V3_migration_leaves_the_document_alone_and_upgrade_from_3_sets_current_version()
+    {
+        var node = JsonNode.Parse("""
+            {"schemaVersion":3,"id":"1","name":"n","source":{"name":"s","user":"S"},"target":{"name":"t","user":"T"},"maskSalt":"AA==",
+             "sourceOwner":"S","targetOwner":"T",
+             "tables":[{"table":"A","kind":"All","action":"MergeByPk","sourceOwner":"S","targetOwner":"T"}]}
+            """)!;
+        var before = node.ToJsonString();
+
+        var migration = new CopyJobMigrationV3();
+        Assert.Equal(3, migration.FromVersion);
+        Assert.Equal(CopyJobMigrations.FileKind, migration.FileKind);
+        Assert.Equal(before, migration.Apply(JsonNode.Parse(before)!).ToJsonString());
+
+        var upgraded = CopyJobMigrations.Upgrade(JsonNode.Parse(before)!, 3);
+        Assert.Equal(4, CopyJobSchema.Current);
+        Assert.Equal(CopyJobSchema.Current, (int)upgraded["schemaVersion"]!);
+        var job = upgraded.Deserialize(CopyJobJsonContext.Default.CopyJob)!;
+        Assert.False(job.Tables[0].CreateIfMissing); // 버전 3 파일에는 이 칸이 없다 = 꺼짐
+        Assert.Contains(CopyJobMigrations.All, m => m.FromVersion == 3);
+    }
+
     private static void AssertSame(JsonNode expected, JsonNode actual, string path)
     {
         switch (expected)

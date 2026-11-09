@@ -146,7 +146,7 @@ public sealed class CopyJobStoreTests : IDisposable
         var job = Sample();
         await store.SaveAsync(job, CancellationToken.None);
         var path = Assert.Single(await store.ListAsync(CancellationToken.None)).FilePath;
-        var text = (await File.ReadAllTextAsync(path)).Replace("\"schemaVersion\": 3", "\"schemaVersion\": 99", StringComparison.Ordinal);
+        var text = (await File.ReadAllTextAsync(path)).Replace($"\"schemaVersion\": {CopyJobSchema.Current}", "\"schemaVersion\": 99", StringComparison.Ordinal);
         await File.WriteAllTextAsync(path, text);
 
         var entry = Assert.Single(await store.ListAsync(CancellationToken.None));
@@ -173,7 +173,7 @@ public sealed class CopyJobStoreTests : IDisposable
         Assert.Equal(("SCOTT", "SCOTT_DEV"), (rule.SourceOwner, rule.TargetOwner));
         Assert.Equal("SCOTT", rule.Parent!.ParentOwner);
         Assert.Equal("SCOTT_DEV", Assert.Single(entry.Job.Sequences).Owner);
-        Assert.Contains("\"schemaVersion\": 3", await File.ReadAllTextAsync(path), StringComparison.Ordinal);
+        Assert.Contains($"\"schemaVersion\": {CopyJobSchema.Current}", await File.ReadAllTextAsync(path), StringComparison.Ordinal);
         Assert.Single(Directory.GetFiles(Paths.BackupDirectory, "옛 작업.json.v1.*.bak"));
     }
 
@@ -233,7 +233,7 @@ public sealed class CopyJobStoreTests : IDisposable
         // 버전 2 → 3 은 바꿀 것이 없다(작업 변수가 생겼을 뿐): 백업하고 버전만 올려 다시 쓰며, 빈 계정 칸은 채우지 않는다.
         Assert.Single(Directory.GetFiles(Paths.BackupDirectory, "일부 계정.json.v2.*.bak"));
         var rewritten = await File.ReadAllTextAsync(path);
-        Assert.Contains("\"schemaVersion\": 3", rewritten, StringComparison.Ordinal);
+        Assert.Contains($"\"schemaVersion\": {CopyJobSchema.Current}", rewritten, StringComparison.Ordinal);
         Assert.DoesNotContain("\"targetOwner\": \"APP2\"", rewritten, StringComparison.Ordinal);
         Assert.Empty(job.Variables);
     }
@@ -260,7 +260,7 @@ public sealed class CopyJobStoreTests : IDisposable
         var job = Sample();
         await store.SaveAsync(job, CancellationToken.None);
         var path = Assert.Single(await store.ListAsync(CancellationToken.None)).FilePath;
-        await File.WriteAllTextAsync(path, (await File.ReadAllTextAsync(path)).Replace("\"schemaVersion\": 3", "\"schemaVersion\": 99", StringComparison.Ordinal));
+        await File.WriteAllTextAsync(path, (await File.ReadAllTextAsync(path)).Replace($"\"schemaVersion\": {CopyJobSchema.Current}", "\"schemaVersion\": 99", StringComparison.Ordinal));
 
         await Assert.ThrowsAsync<InvalidOperationException>(() => store.DuplicateAsync(job.Id, "사본", CancellationToken.None));
         await Assert.ThrowsAsync<InvalidOperationException>(() => store.ExportAsync(job.Id, Path.Combine(_root, "x.json"), CancellationToken.None));

@@ -71,8 +71,12 @@ public sealed partial class TableRuleViewModel : ViewModelBase
     private RuleKind _kind;
 
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(IsMerge))]
+    [NotifyPropertyChangedFor(nameof(IsMerge), nameof(CanCreateIfMissing))]
     private TargetAction _action;
+
+    /// <summary>대상 계정에 같은 이름 표가 없으면 원본 구조로 만든 뒤 넣는다(<see cref="TableRule.CreateIfMissing"/>). 대상 처리가 <see cref="TargetAction.Recreate"/> 이면 늘 거짓이다.</summary>
+    [ObservableProperty]
+    private bool _createIfMissing;
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(ConditionText), nameof(FirstFormatVisible))]
@@ -167,6 +171,7 @@ public sealed partial class TableRuleViewModel : ViewModelBase
         _targetOwner = targetOwner;
         _kind = rule.Kind;
         _action = rule.Action;
+        _createIfMissing = rule.CreateIfMissing && rule.Action != TargetAction.Recreate;
         _customWhere = rule.CustomWhere;
         _extraWhere = rule.ExtraWhere;
         _parent = rule.Parent;
@@ -299,6 +304,17 @@ public sealed partial class TableRuleViewModel : ViewModelBase
 
     /// <summary>대상 처리가 PK 기준 MERGE 일 때만 「원본에서 지워진 행은 MERGE 가 남깁니다」 안내를 보인다(설계 6.2).</summary>
     public bool IsMerge => Action == TargetAction.MergeByPk;
+
+    /// <summary>「없으면 만들기」는 지우고 넣기·범위 지우고 넣기·추가만·PK 기준 MERGE 에서만 켠다(다시 만들기는 이미 만든다).</summary>
+    public bool CanCreateIfMissing => Action != TargetAction.Recreate;
+
+    partial void OnActionChanged(TargetAction value)
+    {
+        if (value == TargetAction.Recreate)
+        {
+            CreateIfMissing = false;
+        }
+    }
 
     public bool IsPeriod => Kind == RuleKind.Period;
 
@@ -606,6 +622,7 @@ public sealed partial class TableRuleViewModel : ViewModelBase
             ExtraWhere = Kind == RuleKind.Period ? EmptyToNull(ExtraWhere)?.Trim() : null,
             Masks = masks,
             SkipColumns = skips,
+            CreateIfMissing = CreateIfMissing && CanCreateIfMissing,
         };
     }
 

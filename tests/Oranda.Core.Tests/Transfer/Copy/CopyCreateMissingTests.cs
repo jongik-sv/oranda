@@ -1,0 +1,666 @@
+using System.Runtime.CompilerServices;
+using Oranda.Core.Connection;
+using Oranda.Core.Execution;
+using Oranda.Core.Metadata;
+using Oranda.Core.Sessions;
+using Oranda.Core.Transfer.Copy;
+using Oranda.Testing;
+
+namespace Oranda.Core.Tests.Transfer.Copy;
+
+/// <summary>
+/// 「대상에 표가 없으면 원본 구조로 만든 뒤 넣기」(<see cref="TableRule.CreateIfMissing"/>)의 실행기 흐름(서버 없음, 가짜 협력자).
+/// 보낸 문장의 순서와 적재 실패 때의 DROP … PURGE 정리를 본다. 실제 서버로 도는 확인은 Oracle 통합 시험이 맡는다.
+/// </summary>
+public sealed class CopyCreateMissingTests
+{
+    private const string CreateText = "CREATE TABLE \"DST\".\"ORDERS\" (\"ID\" NUMBER(10) NOT NULL, \"NAME\" VARCHAR2(20 CHAR))";
+    private const string CommentText = "COMMENT ON TABLE \"DST\".\"ORDERS\" IS '주문'";
+    private const string DropText = "DROP TABLE \"DST\".\"ORDERS\" PURGE";
+
+    private static readonly DbError NameInUse = new("ORA-00955", "name is already used by an existing object");
+
+    // ---- 실행기: 만든 뒤 적재 ----
+
+    [Theory]
+    [InlineData(TargetAction.DeleteAllInsert)]
+    [InlineData(TargetAction.MergeByPk)]
+    [InlineData(TargetAction.AppendOnly)]
+    public async Task Missing_table_is_created_then_loaded_by_insert_without_any_delete(TargetAction action)
+    {
+        var f = new Fixture(action, createMissing: true);
+
+        var result = await f.RunAsync();
+
+        // 보낸 순서: CREATE → 나머지 DDL(표 주석) → INSERT 배열 적재. DELETE·MERGE·DROP 은 없다.
+        Assert.Equal(2, f.Order.Count(x => x.StartsWith("EXEC ", StringComparison.Ordinal)));
+        Assert.Equal("EXEC " + CreateText, f.Order[0]);
+        Assert.Equal("EXEC " + CommentText, f.Order[1]);
+        Assert.StartsWith("BULK INSERT INTO \"DST\".\"ORDERS\" (\"ID\", \"NAME\") VALUES (:C1, :C2)", f.Order[2], StringComparison.Ordinal);
+        Assert.Equal(3, f.Order.Count);
+        Assert.DoesNotContain(f.All, x => x.Contains("DELETE", StringComparison.Ordinal) || x.Contains("MERGE", StringComparison.Ordinal)
+                                                                                         || x.Contains("DROP", StringComparison.Ordinal));
+        Assert.DoesNotContain(f.Execution.Calls, c => c.Statement.Verb == "DELETE");
+
+        var table = Assert.Single(result.Tables);
+        Assert.Equal(CopyOutcome.Succeeded, table.Outcome);
+        Assert.Equal(2, table.SourceRows);
+        Assert.Equal(2, table.TargetRows);
+        Assert.Contains("원본 구조로 만들었습니다", table.Message, StringComparison.Ordinal);
+        Assert.Equal(CopyOutcome.Succeeded, result.Outcome);
+        Assert.Empty(result.Notices);
+
+        // 만든 CREATE 는 실행 기록에도 남는다(정리 문장과 같은 경로).
+        Assert.Contains(CreateText, f.RunRecord.Statements);
+        Assert.Equal(CopyOutcome.Succeeded, f.RunRecord.Completed);
+    }
+
+    [Fact]
+    public async Task Existing_table_is_not_created_and_the_normal_delete_is_still_sent()
+    {
+        // 같은 규칙인데 대상 표가 있어 계획이 CreateMissing=false 이면 지금까지처럼 DELETE 한 뒤 넣는다(CREATE 없음).
+        var f = new Fixture(TargetAction.DeleteAllInsert, createMissing: false);
+
+        var result = await f.RunAsync();
+
+        Assert.DoesNotContain(f.Order, x => x.Contains("CREATE TABLE", StringComparison.Ordinal));
+        Assert.Equal("EXEC DELETE FROM \"DST\".\"ORDERS\"", f.Order[0]);
+        Assert.StartsWith("BULK INSERT INTO", f.Order[1], StringComparison.Ordinal);
+        Assert.Equal(CopyOutcome.Succeeded, result.Outcome);
+        Assert.DoesNotContain(f.All, x => x.Contains("PURGE", StringComparison.Ordinal));
+    }
+
+    // ---- 실행기: 적재 실패 → 만든 표 지우기 ----
+
+    [Fact]
+    public async Task Load_failure_drops_the_table_it_created_with_purge_after_ending_the_transaction()
+    {
+        var f = new Fixture(TargetAction.DeleteAllInsert, createMissing: true);
+        f.Bulk.OnArray = c => c.ColumnCount > 0 ? new BulkResult(ExecutionStatus.Denied, 0) { Policy = new PolicyDecision(PolicyDecisionKind.Deny, Message: "insert denied") } : null;
+
+        var result = await f.RunAsync();
+
+        // 만들고 → 넣기 실패 → 대상 트랜잭션을 끝낸 뒤 DROP … PURGE.
+        var texts = f.Execution.Calls.Select(c => c.Statement.Text).ToList();
+        Assert.Equal([CreateText, CommentText, DropText], texts);
+        var drop = f.Execution.Calls[^1].Statement;
+        Assert.Equal("DROP", drop.Verb);
+        Assert.Equal("ORDERS", drop.DangerousTarget);
+        Assert.Same(f.Target, f.Execution.Calls[^1].Session);
+        var dropAt = f.All.IndexOf("EXEC " + DropText);
+        Assert.True(dropAt > 0);
+        Assert.Contains("CTL COMMIT", f.All.Take(dropAt)); // DROP 은 DDL(묵시 커밋)이라 대상 트랜잭션을 끝낸 뒤에 보낸다
+
+        var table = Assert.Single(result.Tables);
+        Assert.Equal(CopyOutcome.Failed, table.Outcome);
+        Assert.Contains("배치를 넣지 못했습니다", table.Message, StringComparison.Ordinal);
+        Assert.Contains("DROP … PURGE", table.Message, StringComparison.Ordinal);
+        Assert.Equal(-1, table.TargetRows); // 지운 표는 건수를 세지 않는다
+        var notice = Assert.Single(result.Notices);
+        Assert.Contains("지웠습니다", notice, StringComparison.Ordinal);
+        Assert.Contains("DST.ORDERS", notice, StringComparison.Ordinal);
+        Assert.Equal(CopyOutcome.Failed, result.Outcome);
+    }
+
+    [Fact]
+    public async Task Source_read_failure_also_drops_the_created_table()
+    {
+        var f = new Fixture(TargetAction.DeleteAllInsert, createMissing: true);
+        f.Bulk.SourceReadFails = true;
+
+        var result = await f.RunAsync();
+
+        Assert.Equal([CreateText, CommentText, DropText], f.Execution.Calls.Select(c => c.Statement.Text).ToList());
+        Assert.DoesNotContain(f.Order, x => x.StartsWith("BULK ", StringComparison.Ordinal)); // 한 행도 넣지 않았다
+        var table = Assert.Single(result.Tables);
+        Assert.Equal(CopyOutcome.Failed, table.Outcome);
+        Assert.Contains("정책이 원본 읽기를 거부했습니다", table.Message, StringComparison.Ordinal);
+        Assert.Contains("지웠습니다", Assert.Single(result.Notices), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task Drop_that_fails_tells_the_user_to_drop_by_hand_and_keeps_the_original_failure()
+    {
+        var f = new Fixture(TargetAction.DeleteAllInsert, createMissing: true);
+        f.Bulk.OnArray = c => c.ColumnCount > 0 ? new BulkResult(ExecutionStatus.Denied, 0) { Policy = new PolicyDecision(PolicyDecisionKind.Deny, Message: "insert denied") } : null;
+        f.FailExecution = text => text == DropText ? new DbError("ORA-00054", "resource busy") : null;
+
+        var result = await f.RunAsync();
+
+        var table = Assert.Single(result.Tables);
+        Assert.Equal(CopyOutcome.Failed, table.Outcome); // 원래 실패 그대로
+        Assert.Contains("배치를 넣지 못했습니다", table.Message, StringComparison.Ordinal);
+        Assert.Contains("지우지 못했습니다. 직접 지우세요: " + DropText, table.Message, StringComparison.Ordinal);
+        var notice = Assert.Single(result.Notices);
+        Assert.Contains("직접 지우세요: " + DropText, notice, StringComparison.Ordinal);
+        Assert.DoesNotContain("지웠습니다", notice, StringComparison.Ordinal);
+        Assert.Equal(CopyOutcome.Failed, result.Outcome);
+        Assert.Equal(3, f.Execution.Calls.Count); // DROP 을 한 번만 시도하고 되풀이하지 않는다
+    }
+
+    [Fact]
+    public async Task Create_that_fails_because_the_name_is_taken_sends_no_drop_and_loads_nothing()
+    {
+        var f = new Fixture(TargetAction.DeleteAllInsert, createMissing: true);
+        f.FailExecution = text => text.StartsWith("CREATE TABLE", StringComparison.Ordinal) ? NameInUse : null;
+
+        var result = await f.RunAsync();
+
+        // 남이 만든 같은 이름 표일 수 있으니 지우지 않는다(만든 표가 아니다).
+        Assert.Equal([CreateText], f.Execution.Calls.Select(c => c.Statement.Text).ToList());
+        Assert.DoesNotContain(f.All, x => x.Contains("DROP", StringComparison.Ordinal));
+        Assert.DoesNotContain(f.Order, x => x.StartsWith("BULK ", StringComparison.Ordinal));
+        var table = Assert.Single(result.Tables);
+        Assert.Equal(CopyOutcome.Failed, table.Outcome);
+        Assert.Contains("대상에 표를 만들지 못했습니다", table.Message, StringComparison.Ordinal);
+        Assert.Contains("ORA-00955", table.Message, StringComparison.Ordinal);
+        Assert.Equal(-1, table.TargetRows); // 만들지 못한 표는 건수를 세지 않는다
+        Assert.Empty(result.Notices);
+        Assert.Equal(CopyOutcome.Failed, result.Outcome);
+    }
+
+    // ---- 실행기: 만들 수 없는 대상 ----
+
+    [Fact]
+    public async Task Non_development_target_is_refused_before_anything_is_sent()
+    {
+        var f = new Fixture(TargetAction.DeleteAllInsert, createMissing: true, environment: ConnectionEnvironment.Test);
+
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() => f.RunAsync());
+
+        Assert.Contains("개발 접속이 아니라", ex.Message, StringComparison.Ordinal);
+        Assert.Contains("없으면 만들기", ex.Message, StringComparison.Ordinal);
+        Assert.Empty(f.All);
+    }
+
+    [Fact]
+    public async Task Create_by_another_account_than_the_target_owner_is_refused_before_anything_is_sent()
+    {
+        var f = new Fixture(TargetAction.DeleteAllInsert, createMissing: true, targetUser: "OTHER");
+
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() => f.RunAsync());
+
+        Assert.Contains("대상 소유자(DST) 계정으로 접속해야 합니다(지금 OTHER)", ex.Message, StringComparison.Ordinal);
+        Assert.Empty(f.All);
+    }
+
+    // ---- 사전 점검: 대상에 표가 없을 때 ----
+
+    [Fact]
+    public async Task Precheck_plans_the_create_on_a_development_target_instead_of_reporting_a_missing_target()
+    {
+        var p = new PrecheckFixture(createIfMissing: true, targetHasTable: false);
+
+        var report = await p.RunAsync();
+
+        Assert.False(report.HasErrors);
+        Assert.DoesNotContain(report.Items, i => i.Code == "TargetMissing");
+        var item = Assert.Single(report.Items, i => i.Code == CopyCheckCodes.CreateTable);
+        Assert.Equal(CheckLevel.Confirm, item.Level);
+        Assert.Equal("ORDERS", item.Table);
+        Assert.Contains("원본 구조로 만든 뒤 넣습니다", item.Message, StringComparison.Ordinal);
+        Assert.Contains("새 표라 대상을 지우지 않습니다", item.Message, StringComparison.Ordinal);
+        Assert.Contains("DROP … PURGE", item.Message, StringComparison.Ordinal);
+
+        var plan = Assert.Single(report.Order);
+        Assert.True(plan.CreateMissing);
+        Assert.Equal("DST", plan.Target.Table.Owner); // 만들 구조는 대상 계정 이름이다
+        Assert.Equal(2, report.EstimatedRows["ORDERS"]);
+
+        // 미리 보기: 만드는 문장 → 적재 실패 때 지우는 DROP … PURGE. 새 표라 대상 DELETE 는 없다.
+        var target = report.Preview.Where(x => x.Side == PreviewSide.Target).Select(x => x.Sql).ToList();
+        var createAt = target.FindIndex(x => x.StartsWith("CREATE TABLE \"DST\".\"ORDERS\"", StringComparison.Ordinal));
+        var dropAt = target.IndexOf(DropText);
+        Assert.True(createAt >= 0);
+        Assert.True(dropAt > createAt);
+        Assert.DoesNotContain(target, x => x.StartsWith("DELETE", StringComparison.Ordinal));
+        Assert.Contains(report.Preview, x => x.Side == PreviewSide.Source && x.Sql.StartsWith("SELECT", StringComparison.Ordinal));
+
+        // 지우는 문장은 정책이 위험 명령으로 볼 수 있게(Verb·대상) 평가로 넘어갔다 → 화면이 미리 받은 확인으로 넘긴다.
+        Assert.Contains(p.Policy.Evaluated, s => s.Verb == "DROP" && s.DangerousTarget == "ORDERS" && s.Text == DropText);
+
+        // 실행기가 같은 보고서를 받아들인다(DELETE 미리 보기가 없어도 만드는 표는 통과).
+        CopyRunner.EnsureReportMatchesJob(p.Job, report, new ResolvedPeriod(null, null));
+    }
+
+    [Fact]
+    public async Task Precheck_refuses_to_create_on_a_non_development_target_with_the_development_only_wording()
+    {
+        var p = new PrecheckFixture(createIfMissing: true, targetHasTable: false, environment: ConnectionEnvironment.Test);
+
+        var report = await p.RunAsync();
+
+        Assert.True(report.HasErrors);
+        var item = Assert.Single(report.Items, i => i.Code == "TargetMissing");
+        Assert.Equal(CheckLevel.Error, item.Level);
+        Assert.Contains("「없으면 만들기」를 쓸 수 없습니다", item.Message, StringComparison.Ordinal);
+        Assert.Contains("개발 접속에서만 만들 수 있습니다", item.Message, StringComparison.Ordinal);
+        Assert.DoesNotContain(report.Items, i => i.Code == CopyCheckCodes.CreateTable);
+        Assert.Empty(report.Order);
+        Assert.DoesNotContain(report.Preview, x => x.Sql.Contains("CREATE TABLE", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task Precheck_keeps_the_missing_target_error_when_the_option_is_off()
+    {
+        var p = new PrecheckFixture(createIfMissing: false, targetHasTable: false);
+
+        var report = await p.RunAsync();
+
+        var item = Assert.Single(report.Items, i => i.Code == "TargetMissing");
+        Assert.DoesNotContain("없으면 만들기", item.Message, StringComparison.Ordinal);
+        Assert.DoesNotContain(report.Items, i => i.Code == CopyCheckCodes.CreateTable);
+        Assert.Empty(report.Order);
+    }
+
+    [Fact]
+    public async Task Precheck_ignores_the_option_when_the_target_table_exists()
+    {
+        var p = new PrecheckFixture(createIfMissing: true, targetHasTable: true);
+
+        var report = await p.RunAsync();
+
+        Assert.DoesNotContain(report.Items, i => i.Code is "TargetMissing" or CopyCheckCodes.CreateTable);
+        var plan = Assert.Single(report.Order);
+        Assert.False(plan.CreateMissing);
+        var target = report.Preview.Where(x => x.Side == PreviewSide.Target).Select(x => x.Sql).ToList();
+        Assert.Contains("DELETE FROM \"DST\".\"ORDERS\"", target); // 지금 동작 그대로: 지우고 넣는다
+        Assert.DoesNotContain(target, x => x.Contains("CREATE TABLE", StringComparison.Ordinal) || x.Contains("PURGE", StringComparison.Ordinal));
+        CopyRunner.EnsureReportMatchesJob(p.Job, report, new ResolvedPeriod(null, null));
+    }
+
+    [Fact]
+    public async Task Precheck_refuses_when_a_non_table_object_has_the_same_name()
+    {
+        var p = new PrecheckFixture(createIfMissing: true, targetHasTable: false, otherObjectExists: true);
+
+        var report = await p.RunAsync();
+
+        var item = Assert.Single(report.Items, i => i.Code == "TargetMissing");
+        Assert.Contains("같은 이름의 표가 아닌 객체가 있습니다", item.Message, StringComparison.Ordinal);
+        Assert.Empty(report.Order);
+    }
+
+    [Fact]
+    public async Task Precheck_reports_missing_create_table_privilege_as_an_error()
+    {
+        var p = new PrecheckFixture(createIfMissing: true, targetHasTable: false, canCreateTable: false);
+
+        var report = await p.RunAsync();
+
+        Assert.True(report.HasErrors);
+        var item = Assert.Single(report.Items, i => i.Code == CopyCheckCodes.CreateNoPrivilege);
+        Assert.Equal(CheckLevel.Error, item.Level);
+        Assert.Contains("CREATE TABLE", item.Message, StringComparison.Ordinal);
+        Assert.DoesNotContain(report.Items, i => i.Code == CopyCheckCodes.CreateTable);
+    }
+
+    // ---- 가짜 협력자 ----
+
+    private sealed class PrecheckFixture
+    {
+        public PrecheckFixture(bool createIfMissing, bool targetHasTable, ConnectionEnvironment environment = ConnectionEnvironment.Development,
+                               bool otherObjectExists = false, bool canCreateTable = true)
+        {
+            Job = new CopyJob
+            {
+                Id = "1", Name = "n", Source = new ConnectionRef("s", "SRC"), Target = new ConnectionRef("t", "DST"),
+                SourceOwner = "SRC", TargetOwner = "DST", MaskSalt = "AA==",
+                Tables = [new TableRule("ORDERS", RuleKind.All, TargetAction.DeleteAllInsert) { CreateIfMissing = createIfMissing }],
+            };
+            Source = new FakeSession(TestData.Profile(readOnly: true), TestData.Server()) { DbKey = "SRCDB/PDB1/SRC" };
+            Target = new FakeSession(TestData.Profile(environment) with { Name = "dev" }, TestData.Server()) { DbKey = "DSTDB/PDB1/DST" };
+            var metadata = new FakeMetadataProvider();
+            metadata.Tables[new DbObjectRef("SRC", "ORDERS", "TABLE")] = OrdersWithPrimaryKey("SRC");
+            if (targetHasTable)
+            {
+                metadata.Tables[new DbObjectRef("DST", "ORDERS", "TABLE")] = OrdersWithPrimaryKey("DST");
+            }
+
+            Policy = new RecordingPolicy();
+            Service = new CopyPrecheckService(new FakePrecheckBulk(Source, Target, targetHasTable, otherObjectExists, canCreateTable), metadata, Policy,
+                new FakeCatalog(), new FakeClassifier(), new FakePrecheckDialect(), new FakeDialect(), new FakeCodec());
+        }
+
+        public CopyJob Job { get; }
+
+        public FakeSession Source { get; }
+
+        public FakeSession Target { get; }
+
+        public RecordingPolicy Policy { get; }
+
+        private CopyPrecheckService Service { get; }
+
+        public Task<PrecheckReport> RunAsync() => Service.RunAsync(new CopySessions(Source, Target), Job, new ResolvedPeriod(null, null), null, CancellationToken.None);
+
+        private static TableInfo OrdersWithPrimaryKey(string owner) =>
+            new(new DbObjectRef(owner, "ORDERS", "TABLE"),
+            [
+                new ColumnInfo("ID", 1, "NUMBER") { Precision = 10, Scale = 0, IsNullable = false },
+                new ColumnInfo("NAME", 2, "VARCHAR2") { Length = 20 },
+            ])
+            {
+                Constraints = [new ConstraintInfo("PK_ORDERS", ConstraintKind.PrimaryKey, ["ID"])],
+            };
+    }
+
+    /// <summary>카탈로그 글 대신 id 를 그대로 글로 돌려준다(가짜 대량 읽기가 id 로 답한다).</summary>
+    private sealed class FakeCatalog : Oranda.Core.Catalog.ISqlCatalog
+    {
+        public Oranda.Core.Catalog.CatalogQuery Get(string id, ServerInfo server) =>
+            new(new Oranda.Core.Catalog.CatalogHeader(id, 11, [], Oranda.Core.Catalog.CatalogLicense.None, Oranda.Core.Catalog.CatalogRac.V, id + ".sql"), id);
+    }
+
+    /// <summary>점검 조회(id)에 답한다. 모르는 id 는 행 없음, <c>SELECT COUNT(*)</c> 는 2.</summary>
+    private sealed class FakePrecheckBulk(ISession source, ISession target, bool targetHasTable, bool otherObjectExists, bool canCreateTable) : IBulkExecutionService
+    {
+        public async IAsyncEnumerable<object?[]> StreamRowsAsync(ISession s, SqlStatement query, IReadOnlyDictionary<string, BindValue> binds,
+                                                                 ExecutionOptions options, [EnumeratorCancellation] CancellationToken ct)
+        {
+            await Task.CompletedTask;
+            var isTarget = ReferenceEquals(s, target);
+            object?[][] rows = query.Text switch
+            {
+                "copy.session_user" => [[isTarget ? "DST" : "SRC"]],
+                "copy.session_privs" when isTarget && canCreateTable => [["CREATE TABLE"]],
+                "copy.target_is_table" => [[targetHasTable ? 1L : 0L]],
+                "copy.object_exists" => [[otherObjectExists ? 1L : 0L]],
+                _ when query.Text.StartsWith("SELECT COUNT(*)", StringComparison.Ordinal) && ReferenceEquals(s, source) => [[2L]],
+                _ => [],
+            };
+            foreach (var row in rows)
+            {
+                yield return row;
+            }
+        }
+
+        public Task<BulkResult> ExecuteArrayAsync(ISession s, SqlStatement stmt, IReadOnlyList<BulkColumn> columns, IReadOnlyList<object?[]> rows,
+                                                  ExecutionOptions options, CancellationToken ct) =>
+            throw new NotSupportedException();
+    }
+
+    private sealed class RecordingPolicy : IExecutionPolicy
+    {
+        public List<SqlStatement> Evaluated { get; } = [];
+
+        public ValueTask<PolicyDecision> EvaluateAsync(PolicyContext ctx, SqlStatement stmt, CancellationToken ct)
+        {
+            Evaluated.Add(stmt);
+            return ValueTask.FromResult(PolicyDecision.Allowed);
+        }
+    }
+
+    private sealed class FakePrecheckDialect : ICopyPrecheckDialect
+    {
+        public bool SupportsReadPrivilege => false;
+
+        public string? RecreateBlockedReason(ISession target) => null;
+
+        public Task<IReadOnlyList<string>> ExtendedStringBlockersAsync(TableInfo source, Func<string, CancellationToken, Task<string?>> targetParameter,
+                                                                       CancellationToken ct) => Task.FromResult<IReadOnlyList<string>>([]);
+
+        public IReadOnlyList<(string CatalogId, string Label)> NotRestoredProbes => [];
+
+        public string RecycleBinNote(string? tablespace) => string.Empty;
+
+        public string? ReadConsistencyParameter => null;
+
+        public (CheckLevel Level, string Message) ReadConsistencyHint(long estimatedSeconds, long? retention) => (CheckLevel.Pass, "읽기 일관성");
+
+        public string ChildRecordFoundError => "ORA-02292";
+    }
+
+    private sealed class Fixture
+    {
+        public Fixture(TargetAction action, bool createMissing, ConnectionEnvironment environment = ConnectionEnvironment.Development,
+                       string targetUser = "DST")
+        {
+            Rule = new TableRule("ORDERS", RuleKind.All, action) { CreateIfMissing = createMissing };
+            Job = new CopyJob
+            {
+                Id = "1", Name = "n", Source = new ConnectionRef("s", "SRC"), Target = new ConnectionRef("t", "DST"),
+                SourceOwner = "SRC", TargetOwner = "DST", MaskSalt = "AA==", Tables = [Rule],
+            };
+            var source = Orders("SRC");
+            Plan = new CopyTablePlan(Rule, source, Orders("DST"), ["ID", "NAME"], ["ID"]) { CreateMissing = createMissing };
+            var preview = new List<PreviewStatement>();
+            if (!createMissing)
+            {
+                // 사전 점검이 낼 미리 보기처럼: 있는 표의 대상 DELETE.
+                var builder = new CopySqlBuilder(Job, new ResolvedPeriod(null, null),
+                    new Dictionary<string, TableInfo> { ["ORDERS"] = Plan.Source }, new Dictionary<string, TableInfo> { ["ORDERS"] = Plan.Target });
+                preview.AddRange(new[] { builder.TargetDelete("ORDERS") }.OfType<SqlWithBinds>()
+                    .Select(d => new PreviewStatement(d.Sql, PreviewSide.Target, PolicyDecisionKind.Allow, null, null)));
+            }
+
+            Report = new PrecheckReport([], [Plan], preview, new Dictionary<string, long>());
+
+            Source = new FakeSession(TestData.Profile(readOnly: true), TestData.Server()) { DbKey = "SRCDB/PDB1/SRC" };
+            Target = new FakeSession(TestData.Profile(environment) with { Name = "dev" }, TestData.Server()) { DbKey = "DSTDB/PDB1/" + targetUser };
+
+            Execution = new FakeExecutionService();
+            Execution.Responder = call =>
+            {
+                All.Add("EXEC " + call.Statement.Text);
+                return FailExecution(call.Statement.Text) is { } error
+                    ? new ExecutionResult(call.Statement, ExecutionStatus.Failed) { Error = error }
+                    : new ExecutionResult(call.Statement, ExecutionStatus.Succeeded);
+            };
+            Bulk = new FakeBulk(this);
+            RunRecord = new FakeRunRecord();
+            Runner = new CopyRunner(Bulk, Execution, new FakeRunLog(RunRecord), new NoCatalog(), new FakeClassifier(), new FakeDialect(), new FakeCodec(), new FakeRecreateStep());
+        }
+
+        public TableRule Rule { get; }
+
+        public CopyJob Job { get; }
+
+        public CopyTablePlan Plan { get; }
+
+        public PrecheckReport Report { get; }
+
+        public FakeSession Source { get; }
+
+        public FakeSession Target { get; }
+
+        public FakeExecutionService Execution { get; }
+
+        public FakeBulk Bulk { get; }
+
+        public FakeRunRecord RunRecord { get; }
+
+        private CopyRunner Runner { get; }
+
+        /// <summary>실행 엔진에 보낸 문장을 실패시키려면 오류를 돌려준다(없으면 성공).</summary>
+        public Func<string, DbError?> FailExecution { get; set; } = _ => null;
+
+        /// <summary>보낸 모든 문장(순서대로): <c>EXEC</c>=실행 엔진, <c>BULK</c>=배열 DML, <c>CTL</c>=트랜잭션 제어.</summary>
+        public List<string> All { get; } = [];
+
+        /// <summary>트랜잭션 제어를 뺀 문장.</summary>
+        public List<string> Order => [.. All.Where(x => !x.StartsWith("CTL ", StringComparison.Ordinal))];
+
+        public Task<CopyRunResult> RunAsync() => Runner.RunAsync(new CopySessions(Source, Target), Job, Report,
+            new CopyDecisions(new HashSet<string>(), new HashSet<ForeignKeyRef>(), new HashSet<string>(), false),
+            new ResolvedPeriod(null, null), null, new CopyRunControl(), CancellationToken.None);
+
+        private static TableInfo Orders(string owner) =>
+            new(new DbObjectRef(owner, "ORDERS", "TABLE"),
+            [
+                new ColumnInfo("ID", 1, "NUMBER") { Precision = 10, Scale = 0, IsNullable = false },
+                new ColumnInfo("NAME", 2, "VARCHAR2") { Length = 20 },
+            ])
+            {
+                Comment = "주문",
+            };
+    }
+
+    private sealed record BulkCall(ISession Session, string Text, int ColumnCount, int RowCount);
+
+    private sealed class FakeBulk(Fixture fixture) : IBulkExecutionService
+    {
+        private long _inserted;
+
+        /// <summary>배열 DML·트랜잭션 제어에 대한 응답. null 을 돌려주면 성공(행 수만큼 영향).</summary>
+        public Func<BulkCall, BulkResult?>? OnArray { get; set; }
+
+        public bool SourceReadFails { get; set; }
+
+        public async IAsyncEnumerable<object?[]> StreamRowsAsync(ISession s, SqlStatement query, IReadOnlyDictionary<string, BindValue> binds,
+                                                                 ExecutionOptions options, [EnumeratorCancellation] CancellationToken ct)
+        {
+            await Task.CompletedTask;
+            if (ReferenceEquals(s, fixture.Source))
+            {
+                if (SourceReadFails)
+                {
+                    throw new BulkDeniedException(new PolicyDecision(PolicyDecisionKind.Deny, Message: "read denied"));
+                }
+
+                yield return [1L, "kim"];
+                yield return [2L, "lee"];
+                yield break;
+            }
+
+            yield return [_inserted]; // 대상 COUNT(*)
+        }
+
+        public Task<BulkResult> ExecuteArrayAsync(ISession s, SqlStatement stmt, IReadOnlyList<BulkColumn> columns, IReadOnlyList<object?[]> rows,
+                                                  ExecutionOptions options, CancellationToken ct)
+        {
+            var isDml = columns.Count > 0;
+            fixture.All.Add((isDml ? "BULK " : "CTL ") + stmt.Text);
+            var call = new BulkCall(s, stmt.Text, columns.Count, rows.Count);
+            var result = OnArray?.Invoke(call) ?? new BulkResult(ExecutionStatus.Succeeded, isDml ? rows.Count : 0);
+            if (isDml && result.Status == ExecutionStatus.Succeeded && ReferenceEquals(s, fixture.Target))
+            {
+                _inserted += rows.Count;
+            }
+
+            return Task.FromResult(result);
+        }
+    }
+
+    private sealed class FakeRunRecord : ICopyRunRecord
+    {
+        public List<string> Statements { get; } = [];
+
+        public CopyOutcome? Completed { get; private set; }
+
+        public Task RecordDisabledAsync(IReadOnlyList<DisabledObject> objects, CancellationToken ct) => Task.CompletedTask;
+
+        public Task RecordStatementAsync(string sql, CancellationToken ct)
+        {
+            Statements.Add(sql);
+            return Task.CompletedTask;
+        }
+
+        public Task RecordTableAsync(TableRunResult result, CancellationToken ct) => Task.CompletedTask;
+
+        public Task RecordFailedRowAsync(FailedRow row, CancellationToken ct) => Task.CompletedTask;
+
+        public Task CompleteAsync(CopyOutcome outcome, CancellationToken ct)
+        {
+            Completed = outcome;
+            return Task.CompletedTask;
+        }
+
+        public ValueTask DisposeAsync() => ValueTask.CompletedTask;
+    }
+
+    private sealed class FakeRunLog(FakeRunRecord record) : ICopyRunLog
+    {
+        public Task<ICopyRunRecord> BeginAsync(CopyRunHeader header, CancellationToken ct) => Task.FromResult<ICopyRunRecord>(record);
+
+        public Task<IReadOnlyList<UnfinishedRun>> FindUnfinishedAsync(string jobId, CancellationToken ct) => Task.FromResult<IReadOnlyList<UnfinishedRun>>([]);
+
+        public Task MarkRecoveredAsync(string runFile, CancellationToken ct) => Task.CompletedTask;
+    }
+
+    private sealed class NoCatalog : Oranda.Core.Catalog.ISqlCatalog
+    {
+        public Oranda.Core.Catalog.CatalogQuery Get(string id, ServerInfo server) => throw new NotSupportedException("이 시험은 카탈로그 조회를 쓰지 않는다: " + id);
+    }
+
+    private sealed class FakeClassifier : IDbErrorClassifier
+    {
+        public Dbms Dbms => Dbms.Oracle;
+
+        public DbErrorKind Classify(int number) => DbErrorKind.Other;
+
+        public DbError? FromException(Exception exception) => null;
+    }
+
+    private sealed class FakeCodec : IBulkValueCodec
+    {
+        public bool IsSupported(string serverType) => true;
+
+        public BulkKind KindOf(string serverType) => serverType.StartsWith("VARCHAR", StringComparison.Ordinal) ? BulkKind.Text : BulkKind.Other;
+
+        public BindDataType BindTypeOf(string serverType) => BindDataType.Varchar2;
+
+        public string? ToKeyText(object? value, string serverType) => value?.ToString();
+
+        public object? FromKeyText(string? text, string serverType) => text;
+
+        public long? ToInt64(object? value) => value is long l ? l : null;
+
+        public string? ToText(object? value) => value?.ToString();
+
+        public string? NumberText(object? value) => value is long l ? l.ToString(System.Globalization.CultureInfo.InvariantCulture) : null;
+
+        public bool IsZero(object? value) => value is 0L;
+
+        public long ToInt64Exact(object? value) => Convert.ToInt64(value, System.Globalization.CultureInfo.InvariantCulture);
+    }
+
+    private sealed class FakeRecreateStep : ICopyRecreateStep
+    {
+        public Task<PreservedDdl> CaptureAsync(ISession target, string owner, string table, CancellationToken ct) => throw new NotSupportedException();
+
+        public Task<IReadOnlyList<(string Parent, string Ddl, string? Name)>> SourceForeignKeysAsync(ISession source, string sourceOwner, string table,
+            IReadOnlySet<string> parents, string targetOwner, CancellationToken ct) =>
+            Task.FromResult<IReadOnlyList<(string Parent, string Ddl, string? Name)>>([]);
+
+        public Task<HashSet<string>> RecycleBinAsync(ISession target, string table, CancellationToken ct) => throw new NotSupportedException();
+    }
+
+    /// <summary>문장 글만 만드는 방언. <c>DropCreatedTable</c> 은 인터페이스 기본 구현(공통 글)을 그대로 쓴다.</summary>
+    private sealed class FakeDialect : ICopyDialect
+    {
+        private static SqlStatement Ddl(string text) => new(text, default, StatementKind.Ddl);
+
+        public string BindPlaceholder(string bindName, string serverType) => ":" + bindName;
+
+        public SqlStatement DisableTrigger(string owner, string trigger) => Ddl($"ALTER TRIGGER \"{owner}\".\"{trigger}\" DISABLE");
+
+        public SqlStatement DisableConstraint(DisabledObject fk) => Ddl($"ALTER TABLE \"{fk.Owner}\".\"{fk.Table}\" DISABLE CONSTRAINT \"{fk.Name}\"");
+
+        public SqlStatement DropTable(string owner, string table) => Ddl($"DROP TABLE \"{owner}\".\"{table}\"");
+
+        public SqlStatement NextValues(string owner, string sequence) => throw new NotSupportedException();
+
+        public SqlStatement SetTransactionReadOnly() => new("SET TRANSACTION READ ONLY", default, StatementKind.TransactionControl);
+
+        public SqlStatement Savepoint(string name) => new("SAVEPOINT " + name, default, StatementKind.TransactionControl);
+
+        public SqlStatement RollbackToSavepoint(string name) => new("ROLLBACK TO SAVEPOINT " + name, default, StatementKind.TransactionControl);
+
+        public SqlStatement EnableTrigger(string owner, string trigger) => Ddl($"ALTER TRIGGER \"{owner}\".\"{trigger}\" ENABLE");
+
+        public SqlStatement DropConstraint(DisabledObject fk) => Ddl($"ALTER TABLE \"{fk.Owner}\".\"{fk.Table}\" DROP CONSTRAINT \"{fk.Name}\"");
+
+        public SqlStatement EnableConstraint(DisabledObject fk, bool validate) => Ddl($"ALTER TABLE \"{fk.Owner}\".\"{fk.Table}\" ENABLE CONSTRAINT \"{fk.Name}\"");
+
+        public SqlStatement RecycleBinOn() => throw new NotSupportedException();
+
+        public string RestartIdentity(string owner, string table, string column) => throw new NotSupportedException();
+
+        public string AddForeignKeyWithoutValidation(string addForeignKeyDdl) => addForeignKeyDdl;
+
+        public bool IsParentKeysNotFound(DbError? dbError) => false;
+
+        public bool IsReferencedByForeignKeys(DbError? dbError) => false;
+    }
+}

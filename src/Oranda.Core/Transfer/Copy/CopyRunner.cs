@@ -46,6 +46,7 @@ public class CopyRunner : ICopyRunner
     internal const string PhaseCount = "건수 비교";
     internal const string PhaseRetry = "다시 넣기";
     internal const string PhaseRecreate = "다시 만들기";
+    internal const string PhaseCreate = "표 만들기";
     internal const string PhaseRestore = "되살리기";
     internal const string PhaseStart = "시작";
     internal const string PhaseSource = "원본 준비";
@@ -101,6 +102,7 @@ public class CopyRunner : ICopyRunner
 
         EnsureReportMatchesJob(job, report, period);
         EnsureRecreateAllowed(sessions, job);
+        EnsureCreateAllowed(sessions, job, report);
         EnsureDistinct(sessions, job);
         var run = new RunState(sessions, job, report, period, decisions.PreConfirmedSql, progress);
         await using var record = await _runLog.BeginAsync(
@@ -121,6 +123,12 @@ public class CopyRunner : ICopyRunner
             {
                 // DROP·CREATE 는 DDL(묵시 커밋)이라 DELETE·적재보다 먼저 한다: 뒤에 하면 앞의 DELETE 를 확정해 버린다.
                 await RecreateTablesAsync(run, ct);
+            }
+
+            if (!run.Aborted)
+            {
+                // 대상에 없는 표 만들기(「없으면 만들기」)도 DDL 이라 DELETE·적재보다 먼저 한다.
+                await CreateMissingTablesAsync(run, ct);
             }
 
             if (!run.Aborted)
@@ -261,9 +269,15 @@ public class CopyRunner : ICopyRunner
             return;
         }
 
+        if (report.Order.Any(p => p.CreateMissing && (!p.Rule.CreateIfMissing || p.Rule.Action == TargetAction.Recreate)))
+        {
+            throw new InvalidOperationException("사전 점검 뒤 「없으면 만들기」 선택이 바뀌었습니다. 사전 점검을 다시 하세요.");
+        }
+
         var builder = new CopySqlBuilder(job, period,
             report.Order.ToDictionary(p => CopyOwners.Key(job, p.Rule), p => p.Source, StringComparer.Ordinal),
-            report.Order.ToDictionary(p => CopyOwners.Key(job, p.Rule), p => p.Target, StringComparer.Ordinal));
+            report.Order.ToDictionary(p => CopyOwners.Key(job, p.Rule), p => p.Target, StringComparer.Ordinal),
+            FreshKeys(job, report));
         var previewed = report.Preview.Where(x => x.Side == PreviewSide.Target).Select(x => x.Sql).ToHashSet(StringComparer.Ordinal);
         foreach (var plan in report.Order)
         {
@@ -289,7 +303,7 @@ public class CopyRunner : ICopyRunner
 
     /// <summary>규칙 값 비교(목록은 내용으로 비교한다. record 의 기본 비교는 목록을 참조로 비교한다). 표마다의 계정도 비교한다.</summary>
     internal static bool SameRule(TableRule a, TableRule b) =>
-        a.Table == b.Table && a.Kind == b.Kind && a.Action == b.Action
+        a.Table == b.Table && a.Kind == b.Kind && a.Action == b.Action && a.CreateIfMissing == b.CreateIfMissing
         && string.Equals(a.SourceOwner, b.SourceOwner, StringComparison.Ordinal)
         && string.Equals(a.TargetOwner, b.TargetOwner, StringComparison.Ordinal)
         && string.Equals(a.CustomWhere, b.CustomWhere, StringComparison.Ordinal)
@@ -344,6 +358,33 @@ public class CopyRunner : ICopyRunner
             throw new InvalidOperationException($"{CopyOwners.Key(job, other)}: 「테이블 다시 만들기」는 대상 소유자({CopyOwners.Target(job, other)}) 계정으로 접속해야 합니다(지금 {user}).");
         }
     }
+
+    /// <summary>
+    /// 「없으면 만들기」 표(<see cref="CopyTablePlan.CreateMissing"/>)도 개발 접속·대상 소유자 계정으로만 만든다(사전 점검과 따로 한 번 더 막는다).
+    /// </summary>
+    private static void EnsureCreateAllowed(CopySessions sessions, CopyJob job, PrecheckReport report)
+    {
+        var creating = report.Order.Where(p => p.CreateMissing).ToList();
+        if (creating.Count == 0)
+        {
+            return;
+        }
+
+        if (!CopyTargetGuard.CanRecreate(sessions.Target.Profile))
+        {
+            throw new InvalidOperationException($"대상 접속 '{sessions.Target.Profile.Name}' 은 개발 접속이 아니라 「없으면 만들기」로 표를 만들 수 없습니다.");
+        }
+
+        var user = SessionUser(sessions.Target.DbKey);
+        if (user is not null && creating.FirstOrDefault(p => !CopyOwners.SameOwner(CopyOwners.Target(job, p.Rule), user)) is { } other)
+        {
+            throw new InvalidOperationException($"{CopyOwners.Key(job, other.Rule)}: 「없으면 만들기」는 대상 소유자({CopyOwners.Target(job, other.Rule)}) 계정으로 접속해야 합니다(지금 {user}).");
+        }
+    }
+
+    /// <summary>이번 실행이 만드는 표(「없으면 만들기」)의 규칙 키. 새 표라 대상 DELETE 를 만들지 않는다(<see cref="CopySqlBuilder"/>).</summary>
+    private static HashSet<string> FreshKeys(CopyJob job, PrecheckReport report)
+        => report.Order.Where(p => p.CreateMissing).Select(p => CopyOwners.Key(job, p.Rule)).ToHashSet(StringComparer.Ordinal);
 
     /// <summary><c>{DB_UNIQUE_NAME}/{CON_NAME}/{SESSION_USER}</c> 의 끝 마디. 모양이 다르면 null.</summary>
     private static string? SessionUser(string dbKey)
@@ -495,8 +536,8 @@ public class CopyRunner : ICopyRunner
             // 표마다 그 표의 대상 계정에 다시 만든다. 작업 안 FK 는 원본 계정·대상 계정이 모두 같은 다시 만들기 표끼리만 붙인다(사전 점검과 같은 판정).
             var owner = plan.Target.Table.Owner;
             var sourceOwner = plan.Source.Table.Owner;
-            var planned = plans.Where(p => CopyOwners.SameOwner(p.Target.Table.Owner, owner)
-                                           && CopyOwners.SameOwner(p.Source.Table.Owner, sourceOwner))
+            var planned = BuiltPlans(run).Where(p => CopyOwners.SameOwner(p.Target.Table.Owner, owner)
+                                                      && CopyOwners.SameOwner(p.Source.Table.Owner, sourceOwner))
                 .Select(p => p.Rule.Table).ToHashSet(StringComparer.Ordinal);
             try
             {
@@ -571,6 +612,105 @@ public class CopyRunner : ICopyRunner
             {
                 await ApplyOrNoteAsync(run, table, text, "다시 만든 표에 적용하지 못한 문장이 있습니다");
             }
+        }
+    }
+
+    // ---- 1b. 대상에 없는 표 만들기(「없으면 만들기」, 개발 대상만) ----
+
+    /// <summary>이번 실행이 만드는 표의 계획: 다시 만들기 + 없으면 만들기. 작업 안 FK 를 원본대로 붙이는 부모 후보다(사전 점검 <c>BuiltTables</c> 와 같은 판정).</summary>
+    private static IEnumerable<CopyTablePlan> BuiltPlans(RunState run)
+        => run.Report.Order.Where(p => p.Rule.Action == TargetAction.Recreate || p.CreateMissing);
+
+    /// <summary>
+    /// 대상에 표가 없는 규칙(<see cref="CopyTablePlan.CreateMissing"/>)의 표를 부모 → 자식 순서로 만든다. 지울 것도 보존할 것도 없다(새 표).
+    /// 표마다 CREATE 문장·작업 안 FK 문장을 준비한 뒤 CREATE 를 보낸다: 준비·CREATE 에 실패한 표는 실패로 두고(적재하지 않는다) 다른 표는 계속한다.
+    /// 작업 안 FK·IDENTITY 다음 값은 적재 뒤 <see cref="RestoreAsync"/> 가 맞춘다(다시 만든 표와 같다).
+    /// 이름이 이미 쓰이고 있으면(사전 점검 뒤에 생긴 표, 권한이 없어 안 보이던 표) CREATE 가 거부돼 그 표만 실패한다 — 지우지 않는다(<see cref="TableState.Created"/> 가 거짓).
+    /// </summary>
+    private async Task CreateMissingTablesAsync(RunState run, CancellationToken ct)
+    {
+        var plans = run.Report.Order.Where(p => p.CreateMissing).ToList();
+        foreach (var plan in plans)
+        {
+            ct.ThrowIfCancellationRequested();
+            var table = run.Table(plan);
+            table.CreateRequested = true;
+            run.Progress(table.Name, 0, null, PhaseCreate);
+            var owner = plan.Target.Table.Owner;
+            var sourceOwner = plan.Source.Table.Owner;
+            var planned = BuiltPlans(run).Where(p => CopyOwners.SameOwner(p.Target.Table.Owner, owner)
+                                                      && CopyOwners.SameOwner(p.Source.Table.Owner, sourceOwner))
+                .Select(p => p.Rule.Table).ToHashSet(StringComparer.Ordinal);
+            try
+            {
+                table.CreateDdl = CreateTableDdl.Build(plan.Source, owner, new HashSet<string>(StringComparer.Ordinal), name => _dialect.IsServerName(name, sourceOwner));
+                table.JobForeignKeys = await _recreate.SourceForeignKeysAsync(run.Source, sourceOwner, plan.Rule.Table, planned, owner, ct);
+            }
+            catch (Exception ex) when (!ct.IsCancellationRequested
+                                       && (CopyErrors.IsServer(_errors, ex) || ex is InvalidOperationException or BulkDeniedException or ArgumentException))
+            {
+                table.Fail("만들 표의 문장을 준비하지 못했습니다: " + SafeError(ex.Message));
+                continue;
+            }
+
+            var create = await CleanupStatementAsync(run, CopyCommonStatements.RecreateDdl(table.CreateDdl[0]), CleanupTimeout);
+            if (create.Status != ExecutionStatus.Succeeded)
+            {
+                table.Fail("대상에 표를 만들지 못했습니다: " + Describe(create));
+                continue;
+            }
+
+            table.Created = true;
+            table.CreatedNew = true;
+            table.Preserved = PreservedDdl.Empty; // 새 표: 되살릴 트리거·권한·참조 FK 가 없다
+            table.Note("대상에 표가 없어 원본 구조로 만들었습니다.");
+            foreach (var text in table.CreateDdl.Skip(1))
+            {
+                await ApplyOrNoteAsync(run, table, text, "만든 표에 적용하지 못한 문장이 있습니다");
+            }
+        }
+    }
+
+    /// <summary>
+    /// 이번 실행이 만든 표(<see cref="TableState.CreatedNew"/>) 가운데 적재를 끝내지 못한 표를 <c>DROP … PURGE</c> 로 지운다(자식 → 부모). 대상 트랜잭션을 끝낸 뒤에만 부른다(DDL, 묵시 커밋).
+    /// 지우는 표: 적재를 끝내지 못한 표(실패·중지·앞 표 실패로 시작하지 못함), 「모두 끝난 뒤 커밋」인데 되돌려져 빈 표.
+    /// 지우지 못하면 경고로 남기고 원래 실패는 그대로 둔다(알림에 지울 문장을 적는다). 지운 표는 되살리기 대상에서 뺀다(<see cref="TableState.Purged"/>).
+    /// </summary>
+    private async Task PurgeUnloadedNewTablesAsync(RunState run)
+    {
+        var rolledBackAll = run.Job.Options.Commit == CommitMode.AtEnd && run.TargetRolledBack;
+        var doomed = run.Tables.Values
+            .Where(t => t.CreatedNew && (!t.LoadCompleted || rolledBackAll)).Reverse().ToList();
+        foreach (var t in doomed)
+        {
+            run.Progress(t.Name, 0, null, PhaseRestore);
+            var drop = _dialect.DropCreatedTable(t.Owner, t.TableName);
+            ExecutionResult? r = null;
+            try
+            {
+                r = await CleanupStatementAsync(run, drop, LongCleanupTimeout);
+            }
+            catch (Exception ex) when (IsCleanupFailure(ex))
+            {
+                run.Notices.Add($"{t.Name}: 만든 표를 지우지 못했습니다: {SafeError(ex.Message)}");
+            }
+
+            if (r is { Status: ExecutionStatus.Succeeded })
+            {
+                t.Purged = true;
+                t.Degrade("적재를 끝내지 못해 이번에 만든 표를 지웠습니다(DROP … PURGE). 다시 실행하면 다시 만듭니다.");
+                run.Notices.Add($"{t.Name}: 적재를 끝내지 못해 이번에 만든 표 {t.TargetName} 을(를) 지웠습니다(DROP … PURGE).");
+                continue;
+            }
+
+            if (r is not null)
+            {
+                run.Log("만든 표를 지우지 못했습니다: " + Describe(r), CopyLogKind.Warning, t.Name);
+            }
+
+            var message = $"적재를 끝내지 못했고 이번에 만든 표 {t.TargetName} 을(를) 지우지 못했습니다. 직접 지우세요: {drop.Text}";
+            t.Degrade(message);
+            run.Notices.Add($"{t.Name}: {message}");
         }
     }
 
@@ -716,7 +856,7 @@ public class CopyRunner : ICopyRunner
     /// </summary>
     private async Task RestoreAsync(RunState run)
     {
-        var tables = run.Tables.Values.Where(t => t.Created && t.Preserved is not null).ToList();
+        var tables = run.Tables.Values.Where(t => t.Created && !t.Purged && t.Preserved is not null).ToList();
         foreach (var t in tables)
         {
             var kept = t.Preserved!;
@@ -753,6 +893,14 @@ public class CopyRunner : ICopyRunner
         {
             foreach (var (parent, text, name) in t.JobForeignKeys)
             {
+                if (run.ByTarget(t.Owner, parent) is { Purged: true } or { CreateRequested: true, Created: false })
+                {
+                    var message = $"부모 표 {parent} 를 이번에 만들지 못했거나 적재를 끝내지 못해 지웠으므로 FK 를 만들지 않았습니다. 다시 실행하세요.";
+                    t.Degrade(message);
+                    run.Notices.Add($"{t.Name}: {message}");
+                    continue;
+                }
+
                 if (run.ByTarget(t.Owner, parent) is { Dropped: true, Created: false })
                 {
                     var message = $"부모 표 {parent} 를 다시 만들지 못해 FK 를 만들지 않았습니다. 부모를 되돌린 뒤 직접 실행하세요: {text}";
@@ -1022,6 +1170,14 @@ public class CopyRunner : ICopyRunner
             return;
         }
 
+        // 이번에 만든 표(「없으면 만들기」)의 원본 FK: 적재 뒤 붙이기 전에 대상 트랜잭션을 끝내지 못했다.
+        foreach (var t in run.Tables.Values.Where(t => t.CreatedNew && !t.Purged && t.JobForeignKeys.Count > 0))
+        {
+            var text = "붙이지 않은 원본 FK(직접 실행하세요): " + string.Join(" ; ", t.JobForeignKeys.Select(f => f.Ddl));
+            t.Note(text);
+            run.Notices.Add($"{t.Name}: {text}");
+        }
+
         // 지우지 못한 표에서 떼어 낸 참조 FK: 되붙이지 못했으면(대상 트랜잭션을 끝내지 못함) 원문을 남긴다.
         foreach (var t in run.Tables.Values.Where(t => !t.Dropped && t.DetachedReferencing.Count > 0 && t.Preserved is not null))
         {
@@ -1087,7 +1243,7 @@ public class CopyRunner : ICopyRunner
         try
         {
             var shape = RowShape.Create(_codec, run.Job, plan);
-            var dml = CopyCommonStatements.ArrayDml(DmlFor(run.Builder, plan, table.Name, shape), plan.Columns.Count);
+            var dml = CopyCommonStatements.ArrayDml(DmlFor(run.Builder, plan, table.Name, shape, freshTable: plan.CreateMissing), plan.Columns.Count);
             var estimated = run.Report.EstimatedRows.TryGetValue(table.Name, out var e) ? e : (long?)null;
             run.Progress(table.Name, 0, estimated, PhaseLoad);
             run.Log("적재 시작" + (estimated is { } est ? $" · 예상 {est.ToString("N0", CultureInfo.InvariantCulture)}건" : string.Empty));
@@ -1385,11 +1541,11 @@ public class CopyRunner : ICopyRunner
         return RunState.Accept(set, table, "원본에서 읽기 전용 트랜잭션을 시작하지 못했습니다", ct);
     }
 
-    private string DmlFor(CopySqlBuilder builder, CopyTablePlan plan, string key, RowShape shape)
+    private string DmlFor(CopySqlBuilder builder, CopyTablePlan plan, string key, RowShape shape, bool freshTable = false)
     {
-        // 사전 점검의 필요 권한(UPDATE)과 같은 판정을 쓴다.
-        var merge = PrecheckRules.UsesMerge(plan.Rule, plan.KeyColumns);
-        if (!merge && plan.Rule.Action == TargetAction.MergeByPk)
+        // 사전 점검의 필요 권한(UPDATE)과 같은 판정을 쓴다. 이번에 새로 만든 빈 표(「없으면 만들기」)는 MERGE 가 필요 없어 INSERT 로 넣는다(AppendOnly 와 같다).
+        var merge = !freshTable && PrecheckRules.UsesMerge(plan.Rule, plan.KeyColumns);
+        if (!merge && !freshTable && plan.Rule.Action == TargetAction.MergeByPk)
         {
             throw new InvalidOperationException($"{key}: PK 기준 MERGE 에 쓸 키 열이 없습니다.");
         }
@@ -1659,11 +1815,19 @@ public class CopyRunner : ICopyRunner
 
         if (ended)
         {
+            await PurgeUnloadedNewTablesAsync(run);
             run.EnableFailed = !await EnableAsync(run);
             await RestoreAsync(run);
         }
         else
         {
+            if (run.Tables.Values.Any(t => t.CreatedNew && (!t.LoadCompleted || run.Job.Options.Commit == CommitMode.AtEnd)))
+            {
+                // 지우는 DROP 도 DDL(묵시 커밋)이라 대상 트랜잭션을 끝내지 못했으면 보내지 않는다.
+                var left = run.Tables.Values.Where(t => t.CreatedNew && (!t.LoadCompleted || run.Job.Options.Commit == CommitMode.AtEnd)).Select(t => t.TargetName);
+                run.Notices.Add("대상 트랜잭션을 끝내지 못해 적재를 끝내지 못한 새 표를 지우지 않았습니다. 세션을 정리한 뒤 직접 지우세요(DROP … PURGE): " + string.Join(", ", left));
+            }
+
             if (run.Disabled.Count > 0)
             {
                 run.EnableFailed = true;
@@ -1878,6 +2042,8 @@ public class CopyRunner : ICopyRunner
             return false;
         }
 
+        run.TargetRolledBack = true;
+
         // 확정되지 않은 적재는 모두 되돌아갔다: 그 실패 행은 버린다.
         foreach (var t in run.Tables.Values.Where(t => t.PendingFailed.Count > 0 || (!t.Confirmed && t.FailedRows > 0)))
         {
@@ -1885,7 +2051,13 @@ public class CopyRunner : ICopyRunner
         }
 
         // 다시 만든 표는 DROP·CREATE 가 되돌아가지 않는다: 적재까지 끝냈지만 확정하지 못한 표는 이제 비어 있다(중지여도 알린다).
-        var emptied = run.Tables.Values.Where(t => t.Created && t.LoadCompleted && !t.Confirmed).ToList();
+        // 새로 만든 표(「없으면 만들기」)는 옛 표가 없다: 비어 있다고만 알린다(끝낼 때 적재를 끝내지 못한 표는 지운다, PurgeUnloadedNewTablesAsync).
+        foreach (var t in run.Tables.Values.Where(t => t.CreatedNew && t.LoadCompleted && !t.Confirmed && run.Job.Options.Commit != CommitMode.AtEnd))
+        {
+            t.Degrade("적재를 되돌려 이번에 만든 표가 비어 있습니다. 다시 실행하세요(표가 있으므로 만들지 않고 규칙대로 넣습니다).");
+        }
+
+        var emptied = run.Tables.Values.Where(t => t.Created && !t.CreatedNew && t.LoadCompleted && !t.Confirmed).ToList();
         foreach (var t in emptied)
         {
             t.Degrade("적재를 되돌려 다시 만든 표가 비어 있습니다(DROP·CREATE 는 되돌릴 수 없습니다). 옛 행은 휴지통의 옛 표에 있습니다. 다시 실행하세요.");
@@ -2018,7 +2190,7 @@ public class CopyRunner : ICopyRunner
     /// <summary>원본 건수 = 적재할 때 읽은 행 수, 대상 건수 = 같은 조건으로 대상에서 COUNT(*).</summary>
     private async Task CountTargetsAsync(RunState run, CancellationToken token)
     {
-        foreach (var table in run.Tables.Values)
+        foreach (var table in run.Tables.Values.Where(t => !t.Purged && !(t.CreateRequested && !t.Created)))
         {
             run.Progress(table.Name, table.SourceRows, null, PhaseCount);
             try
@@ -2362,6 +2534,15 @@ public class CopyRunner : ICopyRunner
         /// <summary>CREATE TABLE 이 성공했다(되살리기 대상).</summary>
         public bool Created { get; set; }
 
+        /// <summary>대상에 없던 표를 이번 실행이 만들었다(「없으면 만들기」, <see cref="Created"/> 도 참). 옛 표가 없으니 휴지통·보존 DDL 이 없다.</summary>
+        public bool CreatedNew { get; set; }
+
+        /// <summary>만들 표로 정해 CREATE 를 시도했다(<see cref="Created"/> 가 거짓이면 만들지 못했다 — 그 표는 대상 건수를 세지 않는다).</summary>
+        public bool CreateRequested { get; set; }
+
+        /// <summary>적재를 끝내지 못해 이번에 만든 표를 <c>DROP … PURGE</c> 로 지웠다(되살리기·건수 비교 대상이 아니다).</summary>
+        public bool Purged { get; set; }
+
         /// <summary>CREATE 문장(FK 없음, 준비 단계에서 만든다).</summary>
         public IReadOnlyList<string> CreateDdl { get; set; } = [];
 
@@ -2464,7 +2645,7 @@ public class CopyRunner : ICopyRunner
             _progress = progress;
             _sourceTables = report.Order.ToDictionary(p => CopyOwners.Key(job, p.Rule), p => p.Source, StringComparer.Ordinal);
             _targetTables = report.Order.ToDictionary(p => CopyOwners.Key(job, p.Rule), p => p.Target, StringComparer.Ordinal);
-            Builder = new CopySqlBuilder(job, period, _sourceTables, _targetTables);
+            Builder = new CopySqlBuilder(job, period, _sourceTables, _targetTables, FreshKeys(job, report));
             HistoryOptions = new ExecutionOptions { Source = HistorySource.DataCopy, PreConfirmed = preConfirmed };
             BulkOptions = new ExecutionOptions { Source = HistorySource.DataCopy, SkipHistory = true, PreConfirmed = preConfirmed };
             Notices = new NoticeList(text => Log(text, CopyLogKind.Warning));
@@ -2534,6 +2715,9 @@ public class CopyRunner : ICopyRunner
 
         /// <summary>대상 정리(DELETE) 뒤 커밋이 한 번이라도 성공함(다른 표의 DELETE 도 확정됨).</summary>
         public bool DeletesPersisted { get; set; }
+
+        /// <summary>끝낼 때 대상 트랜잭션을 롤백으로 끝냈다(커밋하지 않은 적재가 모두 되돌아갔다).</summary>
+        public bool TargetRolledBack { get; set; }
 
         /// <summary>규칙 키.</summary>
         public string Key(CopyTablePlan plan) => CopyOwners.Key(Job, plan.Rule);

@@ -1,6 +1,7 @@
 using Oracle.ManagedDataAccess.Client;
 using Oracle.ManagedDataAccess.Types;
 using Oranda.Core.Execution;
+using Oranda.Core.Journal;
 using Oranda.Core.Metadata;
 using Oranda.Core.Transfer.Copy;
 using Oranda.Oracle.Execution;
@@ -92,6 +93,21 @@ public sealed class OracleCopyDialectTests
         var delete = new SqlWithBinds("DELETE FROM \"APP\".\"ORDERS\"", new Dictionary<string, BindValue>());
         SameStatement(CopyStatements.Delete(delete), CopyCommonStatements.Delete(delete));
         SameStatement(CopyStatements.Query("SELECT 1 FROM DUAL"), CopyCommonStatements.Query("SELECT 1 FROM DUAL"));
+    }
+
+    [Fact]
+    public void Created_table_is_dropped_with_purge_as_a_dangerous_command_retyped_by_table_name()
+    {
+        // 「없으면 만들기」로 방금 만든 표를 적재 실패 뒤 지운다: 휴지통 없이(PURGE), 위험 명령이라 표 이름 재입력, 변경 일지에 DROP 으로 남는다.
+        var drop = ((ICopyDialect)OracleCopyDialect.Instance).DropCreatedTable("APP", "ORDERS");
+
+        Assert.Equal("DROP TABLE \"APP\".\"ORDERS\" PURGE", drop.Text);
+        Assert.Equal("DROP", drop.Verb);
+        Assert.Equal(StatementKind.Ddl, drop.Kind);
+        Assert.Equal("ORDERS", drop.DangerousTarget);
+        Assert.Equal(new ChangeTarget("APP", "ORDERS", "TABLE", ChangeOperation.Drop), drop.ChangeTarget);
+        // 다시 만들기의 DROP(휴지통에 남김)과 글이 다르다: 미리 받은 확인이 서로 섞이지 않는다.
+        Assert.NotEqual(OracleCopyDialect.Instance.DropTable("APP", "ORDERS").Text, drop.Text);
     }
 
     // ---- TP0b-2 커밋 B: 실행기가 쓰는 문장. 옮기기 전 CopyStatements·CopyRunner 의 글을 글자 그대로 옮겨 적었다 ----

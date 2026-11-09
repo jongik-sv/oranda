@@ -69,6 +69,9 @@ public partial class CopyPrecheckService(IBulkExecutionService bulk, IMetadataPr
         private readonly Dictionary<string, long> _estimated = new(StringComparer.Ordinal);
         private readonly Dictionary<string, TableInfo> _sourceTables = new(StringComparer.Ordinal);
         private readonly Dictionary<string, TableInfo> _targetTables = new(StringComparer.Ordinal);
+
+        /// <summary>대상에 표가 없어 이번 실행이 만들 표의 규칙 키(「없으면 만들기」, <see cref="CopyTablePlan.CreateMissing"/>).</summary>
+        private readonly HashSet<string> _creating = new(StringComparer.Ordinal);
         private SessionAccess _sourceAccess = null!;
         private SessionAccess _targetAccess = null!;
         private CopySqlBuilder _builder = null!;
@@ -89,7 +92,7 @@ public partial class CopyPrecheckService(IBulkExecutionService bulk, IMetadataPr
 
             var active = job.Tables.Where(r => r.Kind != RuleKind.Exclude).ToList();
             await LoadTablesAsync(active, ct).ConfigureAwait(false);
-            _builder = new CopySqlBuilder(job, period, _sourceTables, _targetTables);
+            _builder = new CopySqlBuilder(job, period, _sourceTables, _targetTables, _creating);
 
             if (PrecheckRules.EmptyPeriod(job, period) is { } empty)
             {
@@ -149,11 +152,27 @@ public partial class CopyPrecheckService(IBulkExecutionService bulk, IMetadataPr
                 // 대상은 표여야 한다(뷰·시노님·MV 에 지우고 넣지 않는다). 표가 아니거나 확인하지 못하면(조회 오류) 구조를 읽지 않고 막는다.
                 var isTable = await TryCountAsync(TargetSql("copy.target_is_table"), ct, ("OWN", targetOwner), ("TBL", rule.Table)).ConfigureAwait(false);
                 var target = isTable is > 0 ? await TryGetTableAsync(Target, targetOwner, rule.Table, ct).ConfigureAwait(false) : null;
+
+                // 「없으면 만들기」: 대상 계정에 그 이름의 객체가 아무것도 없을 때만 원본 구조로 만든다(대상 표가 있으면 선택을 무시한다).
+                string? createRefused = null;
+                if (target is null && source is not null && rule.CreateIfMissing && !IsRecreate(rule) && isTable == 0)
+                {
+                    createRefused = await CreateRefusedAsync(targetOwner, rule.Table, ct).ConfigureAwait(false);
+                    if (createRefused is null)
+                    {
+                        _sourceTables[key] = source;
+                        _targetTables[key] = PrecheckRules.AsRecreated(source, targetOwner);
+                        _creating.Add(key);
+                        continue;
+                    }
+                }
+
                 if (target is null)
                 {
                     _items.Add(new CheckItem(key, "TargetMissing", CheckLevel.Error, isTable is null
                         ? $"{key}: 대상 {targetOwner}.{rule.Table} 이(가) 표인지 확인하지 못했습니다(ALL_TABLES·ALL_MVIEWS 조회 실패). 확인할 수 있을 때까지 실행하지 않습니다."
-                        : $"{key}: 대상에 표 {targetOwner}.{rule.Table} 이(가) 없거나 표가 아니거나(뷰·시노님·MV) 접근 권한이 없습니다(권한이 없으면 표가 없는 것처럼 보입니다)."));
+                        : $"{key}: 대상에 표 {targetOwner}.{rule.Table} 이(가) 없거나 표가 아니거나(뷰·시노님·MV) 접근 권한이 없습니다(권한이 없으면 표가 없는 것처럼 보입니다)."
+                          + (createRefused is null ? string.Empty : $" 「없으면 만들기」를 쓸 수 없습니다: {createRefused}")));
                 }
 
                 if (source is null || target is null)
@@ -167,6 +186,26 @@ public partial class CopyPrecheckService(IBulkExecutionService bulk, IMetadataPr
                     ? PrecheckRules.AsRecreated(source, targetOwner)
                     : await AdjustIdentityAsync(target, targetOwner, ct).ConfigureAwait(false);
             }
+        }
+
+        /// <summary>
+        /// 대상에 표가 없을 때 「없으면 만들기」를 쓸 수 없는 이유(쓸 수 있으면 null). 개발 접속에서만 만들 수 있고,
+        /// 같은 이름의 다른 객체(뷰·시노님·MV·시퀀스 …)가 있거나 있는지 확인하지 못하면 만들 수 없다(CREATE 가 이름 충돌로 실패한다).
+        /// </summary>
+        private async Task<string?> CreateRefusedAsync(string targetOwner, string table, CancellationToken ct)
+        {
+            if (!CanRecreate)
+            {
+                return $"대상 접속 '{Target.Profile.Name}' 이 개발 접속이 아니라 표를 만들 수 없습니다. 개발 접속에서만 만들 수 있습니다.";
+            }
+
+            var objects = await TryCountAsync(TargetSql("copy.object_exists"), ct, ("OWN", targetOwner), ("NAME", table)).ConfigureAwait(false);
+            return objects switch
+            {
+                null => "같은 이름의 객체가 있는지 확인하지 못했습니다(ALL_OBJECTS 조회 실패).",
+                > 0 => $"{targetOwner} 에 같은 이름의 표가 아닌 객체가 있습니다.",
+                _ => null,
+            };
         }
 
         /// <summary>
@@ -255,9 +294,11 @@ public partial class CopyPrecheckService(IBulkExecutionService bulk, IMetadataPr
             var keys = PrecheckRules.KeyColumns(target, columns);
             _items.AddRange(PrecheckRules.CheckMasks(rule, source, keys, key));
 
+            var creating = _creating.Contains(key);
             if (keys.Count == 0)
             {
-                _items.Add(rule.Action == TargetAction.MergeByPk
+                // 새로 만드는 표는 비어 있어 INSERT 로 넣는다: PK 기준 MERGE 에 쓸 키가 없어도 막지 않는다.
+                _items.Add(rule.Action == TargetAction.MergeByPk && !creating
                     ? new CheckItem(key, "NoPrimaryKey", CheckLevel.Error,
                         $"{key}: PK 기준 MERGE 인데 대상에 쓸 수 있는 PK 가 없습니다. 대상 처리를 바꾸세요.")
                     : new CheckItem(key, "NoPrimaryKey", CheckLevel.Confirm,
@@ -267,7 +308,12 @@ public partial class CopyPrecheckService(IBulkExecutionService bulk, IMetadataPr
             var readable = await CheckSourcePrivilegeAsync(rule, ct).ConfigureAwait(false);
             var canDisableTriggers = false;
             IReadOnlyList<string> triggers = [];
-            if (IsRecreate(rule))
+            if (creating)
+            {
+                // 대상에 표가 없어 만든다: 옛 대상의 제약·권한·트리거·자식 FK 가 없다. 새 표라 지우지도 않는다.
+                await CheckCreateAsync(rule, source, ct).ConfigureAwait(false);
+            }
+            else if (IsRecreate(rule))
             {
                 // 지우고 다시 만들므로 옛 대상의 제약·권한 비교는 뜻이 없다. 트리거는 적재 뒤에 되살리므로 끌 것도 없다.
                 await CheckRecreateAsync(rule, source, ct).ConfigureAwait(false);
@@ -279,7 +325,7 @@ public partial class CopyPrecheckService(IBulkExecutionService bulk, IMetadataPr
                 (canDisableTriggers, triggers) = await CheckTriggersAsync(rule, ct).ConfigureAwait(false);
             }
 
-            var disablable = await CheckChildForeignKeysAsync(rule, keys, ct).ConfigureAwait(false);
+            IReadOnlyList<DisabledObject> disablable = creating ? [] : await CheckChildForeignKeysAsync(rule, keys, ct).ConfigureAwait(false);
 
             if (readable)
             {
@@ -289,6 +335,7 @@ public partial class CopyPrecheckService(IBulkExecutionService bulk, IMetadataPr
 
             return new CopyTablePlan(rule, source, target, columns, keys)
             {
+                CreateMissing = creating,
                 CanDisableTriggers = canDisableTriggers,
                 Triggers = triggers,
                 DisablableForeignKeys = disablable,
@@ -366,7 +413,7 @@ public partial class CopyPrecheckService(IBulkExecutionService bulk, IMetadataPr
 
             // 대상 계정이 같은 다시 만들기 표(먼저 지워지므로 이름 겹침에서 뺀다), 그중 원본 계정도 같은 표(작업 안 FK 를 원본대로 붙인다).
             var recreatedHere = RecreatedTables(owner, sourceOwner: null);
-            var linked = RecreatedTables(owner, SourceOwner(rule));
+            var linked = BuiltTables(owner, SourceOwner(rule));
             var blocked = await RecreateBlockersAsync(rule, source, recreatedHere, linked, ct).ConfigureAwait(false);
             if (blocked.Count > 0)
             {
@@ -408,6 +455,63 @@ public partial class CopyPrecheckService(IBulkExecutionService bulk, IMetadataPr
                                      && CopyOwners.SameOwner(TargetOwner(r), targetOwner)
                                      && (sourceOwner is null || CopyOwners.SameOwner(SourceOwner(r), sourceOwner)))
                 .Select(r => r.Table).ToHashSet(StringComparer.Ordinal);
+
+        /// <summary>
+        /// 이번 실행이 만드는 표(다시 만들기 + 없으면 만들기) 가운데 대상 계정이 <paramref name="targetOwner"/>, 원본 계정이 <paramref name="sourceOwner"/> 인 표 이름.
+        /// 작업 안 FK 를 원본대로 붙이는 부모 후보다(실행기 <c>CopyRunner</c> 의 <c>planned</c> 와 같은 판정).
+        /// </summary>
+        private HashSet<string> BuiltTables(string targetOwner, string sourceOwner)
+            => job.Tables.Where(r => r.Kind != RuleKind.Exclude && (IsRecreate(r) || _creating.Contains(Key(r)))
+                                     && CopyOwners.SameOwner(TargetOwner(r), targetOwner)
+                                     && CopyOwners.SameOwner(SourceOwner(r), sourceOwner))
+                .Select(r => r.Table).ToHashSet(StringComparer.Ordinal);
+
+        /// <summary>
+        /// 「없으면 만들기」 점검(D4): 대상 소유자 계정으로 접속해 CREATE TABLE 이 있어야 하고, 원본 구조를 만들 수 없는 이유(<see cref="RecreateBlockersAsync"/> 와 같은 조건)가 없어야 한다.
+        /// 통과하면 만드는 것·안 만드는 것·적재 실패 때의 정리를 Confirm 항목 하나로 알린다.
+        /// </summary>
+        private async Task CheckCreateAsync(TableRule rule, TableInfo source, CancellationToken ct)
+        {
+            var key = Key(rule);
+            var owner = TargetOwner(rule);
+            if (!_targetAccess.IsOwner(owner))
+            {
+                _items.Add(new CheckItem(key, CopyCheckCodes.CreateNoPrivilege, CheckLevel.Error,
+                    $"{key}: 「없으면 만들기」는 대상 소유자({owner}) 계정으로 접속해야 합니다(지금 {_targetAccess.User})."));
+                return;
+            }
+
+            if (!_targetAccess.Has("CREATE TABLE") && !_targetAccess.Has("CREATE ANY TABLE"))
+            {
+                _items.Add(new CheckItem(key, CopyCheckCodes.CreateNoPrivilege, CheckLevel.Error,
+                    $"{key}: 표를 만들 권한이 없습니다: CREATE TABLE."));
+                return;
+            }
+
+            var linked = BuiltTables(owner, SourceOwner(rule));
+            var blocked = await RecreateBlockersAsync(rule, source, RecreatedTables(owner, sourceOwner: null), linked, ct).ConfigureAwait(false);
+            if (blocked.Count > 0)
+            {
+                _items.Add(new CheckItem(key, CopyCheckCodes.CreateBlocked, CheckLevel.Error,
+                    $"{key}: 원본 구조로 만들 수 없어 「없으면 만들기」를 쓸 수 없습니다: {string.Join(" / ", blocked)}."));
+                return;
+            }
+
+            var skipped = source.Constraints
+                .Where(c => c.Kind == ConstraintKind.ForeignKey && c.ReferencedTable is { } p && !IsLinkedParent(p, rule, linked))
+                .Select(c => $"{c.Name}(→{c.ReferencedTable!.Name})")
+                .ToList();
+            var message = $"{key}: 대상에 표 {owner}.{rule.Table} 이(가) 없어 원본 구조로 만든 뒤 넣습니다(만드는 문장은 미리 보기에 있습니다). 새 표라 대상을 지우지 않습니다."
+                          + " 넣기가 실패하면 만든 표를 휴지통 없이 지웁니다(DROP … PURGE)."
+                          + " 만들지 않는 것: 트리거·다른 계정에 준 권한·시노님(원본 것을 가져오지 않습니다).";
+            if (skipped.Count > 0)
+            {
+                message += $" 함께 만들지 않는 표를 참조하는 원본 FK {string.Join(", ", skipped)} 는 만들지 않습니다.";
+            }
+
+            message += dialect.RecreateDifferenceNote(source.Columns.Any(c => c.Domain is not null));
+            _items.Add(new CheckItem(key, CopyCheckCodes.CreateTable, CheckLevel.Confirm, message));
+        }
 
         /// <summary>원본 FK 의 부모가 같은 원본 계정·같은 대상 계정으로 함께 다시 만드는 표인가(실행기 <c>RecreateStep.SourceForeignKeysAsync</c> 와 같은 판정).</summary>
         private bool IsLinkedParent(DbObjectRef parent, TableRule rule, HashSet<string> linked)
@@ -754,6 +858,13 @@ public partial class CopyPrecheckService(IBulkExecutionService bulk, IMetadataPr
                     continue;
                 }
 
+                // 부모 표를 이번에 새로 만들면(비어 있다) 대상에 있는 이 표의 범위 지우기가 아무것도 지우지 못해 행이 겹친다.
+                if (!_creating.Contains(key) && rule.Action == TargetAction.DeleteRangeInsert && _creating.Contains(CopyOwners.ParentKey(job, rule)))
+                {
+                    _items.Add(new CheckItem(key, "ParentWillBeCreated", CheckLevel.Error,
+                        $"{key}: 부모 표 {rule.Parent.ParentTable} 를 이번에 새로 만들어 비어 있어서, 부모 범위로 대상을 지우는 이 규칙은 아무것도 지우지 못합니다. 대상 처리를 바꾸거나 부모의 「없으면 만들기」를 끄세요."));
+                }
+
                 var parent = CopyOwners.Parent(job, rule);
                 if (parent is not null && parent.Kind != RuleKind.Exclude)
                 {
@@ -1010,6 +1121,23 @@ public partial class CopyPrecheckService(IBulkExecutionService bulk, IMetadataPr
                 {
                     list.Add(await PreviewAsync(Target, statements.DropTable(TargetOwner(plan.Rule), plan.Rule.Table), PreviewSide.Target, ct).ConfigureAwait(false));
                 }
+            }
+
+            // 대상에 없어 만들 표(부모 → 자식): 만드는 문장 전부, 그리고 적재가 실패하면 만든 표를 지우는 DROP … PURGE(자식 → 부모).
+            // 지우는 문장은 위험 명령이라 실행 중에 확인을 받을 수 없다: 여기 들어 있어야 화면이 미리 받은 확인으로 넘어간다.
+            var created = order.Where(p => p.CreateMissing).ToList();
+            foreach (var plan in created)
+            {
+                var owner = TargetOwner(plan.Rule);
+                foreach (var text in CreateTableDdl.Build(plan.Source, owner, new HashSet<string>(StringComparer.Ordinal), name => dialect.IsServerName(name, SourceOwner(plan.Rule))))
+                {
+                    list.Add(await PreviewAsync(Target, CopyCommonStatements.RecreateDdl(text), PreviewSide.Target, ct).ConfigureAwait(false));
+                }
+            }
+
+            foreach (var plan in Enumerable.Reverse(created))
+            {
+                list.Add(await PreviewAsync(Target, statements.DropCreatedTable(TargetOwner(plan.Rule), plan.Rule.Table), PreviewSide.Target, ct).ConfigureAwait(false));
             }
 
             foreach (var plan in order.Where(p => p.CanDisableTriggers))

@@ -174,6 +174,74 @@ public class CopyRunnerRulesTests
     }
 
     [Fact]
+    public void Same_rule_notices_a_create_if_missing_difference()
+    {
+        var a = new TableRule("T", RuleKind.All, TargetAction.DeleteAllInsert);
+        Assert.True(CopyRunner.SameRule(a, a with { }));
+        Assert.False(CopyRunner.SameRule(a, a with { CreateIfMissing = true }));
+        Assert.False(CopyRunner.SameRule(a with { CreateIfMissing = true }, a));
+        Assert.True(CopyRunner.SameRule(a with { CreateIfMissing = true }, a with { CreateIfMissing = true }));
+    }
+
+    /// <summary>첫 계획을 「대상에 없어 만들 표」로 바꾼 보고서: 새 표라 DELETE 미리 보기가 없다.</summary>
+    private static PrecheckReport CreatingReport(CopyJob job)
+    {
+        var report = ReportFor(job);
+        return report with
+        {
+            Order = [report.Order[0] with { CreateMissing = true }, .. report.Order.Skip(1)],
+            Preview = report.Preview.Where(x => !x.Sql.Contains("\"ORDERS\"", StringComparison.Ordinal)).ToList(),
+        };
+    }
+
+    [Fact]
+    public void Create_missing_plan_passes_without_a_delete_preview_but_a_normal_plan_still_needs_it()
+    {
+        var job = ReportJob(new TableRule("ORDERS", RuleKind.All, TargetAction.DeleteAllInsert) { CreateIfMissing = true },
+            new TableRule("CUSTOMERS", RuleKind.All, TargetAction.DeleteAllInsert));
+        var creating = CreatingReport(job);
+        Assert.DoesNotContain(creating.Preview, x => x.Sql.Contains("\"ORDERS\"", StringComparison.Ordinal));
+        Assert.Contains(creating.Preview, x => x.Sql.Contains("\"CUSTOMERS\"", StringComparison.Ordinal)); // 있는 표의 DELETE 는 남는다
+        CopyRunner.EnsureReportMatchesJob(job, creating, NoPeriod);
+
+        // 만들지 않는 계획(일반)에서 같은 DELETE 미리 보기가 빠졌으면 여전히 던진다.
+        var normal = creating with { Order = creating.Order.Select(p => p with { CreateMissing = false }).ToList() };
+        var ex = Assert.Throws<InvalidOperationException>(() => CopyRunner.EnsureReportMatchesJob(job, normal, NoPeriod));
+        Assert.Contains("지우기 문장이 바뀌었습니다", ex.Message, StringComparison.Ordinal);
+
+        // 만드는 표가 아닌 쪽의 DELETE 미리 보기가 빠져도 던진다.
+        var missingOther = creating with { Preview = [] };
+        Assert.Throws<InvalidOperationException>(() => CopyRunner.EnsureReportMatchesJob(job, missingOther, NoPeriod));
+    }
+
+    [Theory]
+    [InlineData(false, TargetAction.DeleteAllInsert)] // 점검 뒤 「없으면 만들기」가 꺼졌다
+    [InlineData(true, TargetAction.Recreate)]         // 점검 뒤 다시 만들기로 바뀌었다
+    public void Create_missing_plan_is_refused_when_the_rule_no_longer_allows_it(bool createIfMissing, TargetAction action)
+    {
+        var planned = ReportJob(new TableRule("ORDERS", RuleKind.All, TargetAction.DeleteAllInsert) { CreateIfMissing = true });
+        var report = CreatingReport(planned);
+        var now = ReportJob(new TableRule("ORDERS", RuleKind.All, action) { CreateIfMissing = createIfMissing });
+
+        // 계획이 든 규칙(점검할 때의 것)과 지금 작업이 같은 채로 어긋난 경우: 보고서 안의 규칙이 곧 지금 규칙이다.
+        var stale = report with { Order = [report.Order[0] with { Rule = now.Tables[0] }] };
+        var ex = Assert.Throws<InvalidOperationException>(() => CopyRunner.EnsureReportMatchesJob(now, stale, NoPeriod));
+        Assert.Contains("없으면 만들기", ex.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Create_if_missing_turned_off_after_precheck_is_refused_as_a_rule_change()
+    {
+        // 점검 때 켜져 있던 규칙이 지금 작업에서 꺼졌다(SameRule 이 CreateIfMissing 도 비교한다).
+        var planned = ReportJob(new TableRule("ORDERS", RuleKind.All, TargetAction.DeleteAllInsert) { CreateIfMissing = true });
+        var report = CreatingReport(planned);
+        var now = ReportJob(new TableRule("ORDERS", RuleKind.All, TargetAction.DeleteAllInsert));
+
+        var ex = Assert.Throws<InvalidOperationException>(() => CopyRunner.EnsureReportMatchesJob(now, report, NoPeriod));
+        Assert.Contains("규칙이 바뀌었습니다", ex.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void Disable_targets_turn_off_only_the_chosen_schemas_foreign_key_and_report_rule_keys()
     {
         // 같은 이름 FK(FK_ORD)가 두 계정에 있다: APP 쪽만 고르면 APP2 쪽 FK 는 그대로 켜져 있어야 한다.

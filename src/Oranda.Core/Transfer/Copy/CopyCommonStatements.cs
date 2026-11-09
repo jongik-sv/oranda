@@ -1,5 +1,6 @@
 using System.Globalization;
 using Oranda.Core.Execution;
+using Oranda.Core.Journal;
 using Oranda.Core.Text;
 
 namespace Oranda.Core.Transfer.Copy;
@@ -58,6 +59,19 @@ public static class CopyCommonStatements
     /// <summary><c>C1</c>…<c>Cn</c>.</summary>
     public static IReadOnlyList<string> BindNames(int columnCount) =>
         [.. Enumerable.Range(1, columnCount).Select(i => "C" + i.ToString(CultureInfo.InvariantCulture))];
+
+    /// <summary>
+    /// 「없으면 만들기」로 방금 만든 표를 적재 실패 뒤 지우는 DROP(<c>PURGE</c>: 휴지통을 거치지 않는다. 되살릴 것이 없는 표다).
+    /// 정책의 위험 명령이라 대상 이름 재입력 확인을 받는다(사전 점검 미리 보기에 들어 있어 미리 받은 확인으로 넘어간다).
+    /// <c>CASCADE CONSTRAINTS</c> 를 붙이지 않는다: 작업 안 FK 는 적재 뒤에 붙이므로 지우는 시점에는 이 표를 참조하는 FK 가 없다.
+    /// </summary>
+    public static SqlStatement DropCreatedTable(string owner, string table) =>
+        new($"DROP TABLE {Qualified(owner, table)} PURGE", default, StatementKind.Ddl)
+        {
+            Verb = "DROP",
+            DangerousTarget = table,
+            ChangeTarget = new ChangeTarget(owner, table, "TABLE", ChangeOperation.Drop),
+        };
 
     /// <summary>다시 만들기·되살리기 DDL(CREATE TABLE·INDEX, COMMENT, ALTER TABLE ADD, CREATE TRIGGER, GRANT). 글은 만든 쪽 그대로 보낸다.</summary>
     public static SqlStatement RecreateDdl(string text)

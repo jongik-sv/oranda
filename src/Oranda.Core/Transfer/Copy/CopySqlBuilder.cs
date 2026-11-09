@@ -21,7 +21,8 @@ public sealed record SqlWithBinds(string Sql, IReadOnlyDictionary<string, BindVa
 /// </summary>
 public sealed class CopySqlBuilder(CopyJob job, ResolvedPeriod period,
                                    IReadOnlyDictionary<string, TableInfo> sourceTables,
-                                   IReadOnlyDictionary<string, TableInfo> targetTables)
+                                   IReadOnlyDictionary<string, TableInfo> targetTables,
+                                   IReadOnlySet<string>? freshTables = null)
 {
     private static readonly Regex FromDtRegex = new(@":FROM_DT\b", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
     private static readonly Regex ToDtRegex = new(@":TO_DT\b", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
@@ -39,10 +40,14 @@ public sealed class CopySqlBuilder(CopyJob job, ResolvedPeriod period,
 
     public SqlWithBinds TargetCount(string key) => Count(key, isTarget: true);
 
-    /// <summary><c>DeleteAllInsert</c> → 조건 없는 DELETE, <c>DeleteRangeInsert</c> → 범위 DELETE, 그 밖은 null. 지우는 표는 규칙의 대상 계정이다.</summary>
+    /// <summary>
+    /// <c>DeleteAllInsert</c> → 조건 없는 DELETE, <c>DeleteRangeInsert</c> → 범위 DELETE, 그 밖은 null. 지우는 표는 규칙의 대상 계정이다.
+    /// 이번 실행에서 새로 만드는 표(<c>freshTables</c>, 「없으면 만들기」)는 비어 있으니 지우지 않는다(null).
+    /// </summary>
     public SqlWithBinds? TargetDelete(string key)
     {
         var rule = RuleOf(key);
+        if (freshTables?.Contains(key) == true) return null;
         if (rule.Action is not (TargetAction.DeleteAllInsert or TargetAction.DeleteRangeInsert)) return null;
         var binds = new Dictionary<string, BindValue>(StringComparer.Ordinal);
         var sql = $"DELETE FROM {TargetTable(key)}";

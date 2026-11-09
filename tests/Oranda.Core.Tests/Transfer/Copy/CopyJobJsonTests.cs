@@ -117,6 +117,28 @@ public class CopyJobJsonTests
     }
 
     [Fact]
+    public void Create_if_missing_is_written_only_when_on_and_older_files_read_as_off()
+    {
+        // 꺼짐(기본값)은 쓰지 않아 예전 파일과 같다.
+        var off = JsonSerializer.Serialize(Sample(), CopyJobJsonContext.Default.CopyJob);
+        Assert.DoesNotContain("createIfMissing", off, StringComparison.Ordinal);
+        Assert.All(JsonSerializer.Deserialize(off, CopyJobJsonContext.Default.CopyJob)!.Tables, r => Assert.False(r.CreateIfMissing));
+
+        // 켜짐은 쓰고 읽으면 그대로다.
+        var on = Sample() with
+        {
+            Tables = [new TableRule("ORDERS", RuleKind.All, TargetAction.DeleteAllInsert) { CreateIfMissing = true },
+                      new TableRule("CODE", RuleKind.All, TargetAction.MergeByPk)],
+        };
+        var json = JsonSerializer.Serialize(on, CopyJobJsonContext.Default.CopyJob);
+        Assert.Contains("\"createIfMissing\": true", json, StringComparison.Ordinal);
+        var back = JsonSerializer.Deserialize(json, CopyJobJsonContext.Default.CopyJob)!;
+        Assert.True(back.Tables[0].CreateIfMissing);
+        Assert.False(back.Tables[1].CreateIfMissing);
+        Assert.Equivalent(on, back);
+    }
+
+    [Fact]
     public void Writes_camel_case_enum_strings_and_no_password_field()
     {
         var json = JsonSerializer.Serialize(Sample(), CopyJobJsonContext.Default.CopyJob);

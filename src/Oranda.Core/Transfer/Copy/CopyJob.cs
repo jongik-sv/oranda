@@ -7,10 +7,12 @@ namespace Oranda.Core.Transfer.Copy;
 /// 2 = 규칙마다 원본·대상 계정(묶음 B). 1 → 2 변환은 <see cref="CopyJobMigrationV1"/>.
 /// 3 = 작업 변수(<see cref="CopyJob.Variables"/>). 2 → 3 은 바꿀 것이 없다(<see cref="CopyJobMigrationV2"/>). 버전을 올리는 까닭: 예전 앱이 변수를 버린 채
 /// 조건의 <c>:이름</c> 을 실행하지 않게(읽기 전용으로 열게) 한다.
+/// 4 = 표 규칙의 「대상에 표가 없으면 만들기」(<see cref="TableRule.CreateIfMissing"/>). 3 → 4 는 바꿀 것이 없다(<see cref="CopyJobMigrationV3"/>, 옛 파일 = 꺼짐).
+/// 버전을 올리는 까닭: 예전 앱이 이 칸을 버린 채 다시 저장해 선택이 사라지지 않게(읽기 전용으로 열게) 한다.
 /// </summary>
 public static class CopyJobSchema
 {
-    public const int Current = 3;
+    public const int Current = 4;
 }
 
 /// <summary>접속 간 데이터 복사 작업 한 건. 비밀번호는 담지 않는다(설계 6.1).</summary>
@@ -122,6 +124,13 @@ public sealed record TableRule(string Table, RuleKind Kind, TargetAction Action)
     public string? ExtraWhere { get; init; }
     public IReadOnlyList<MaskRule> Masks { get; init; } = [];
     public IReadOnlyList<string> SkipColumns { get; init; } = [];
+
+    /// <summary>
+    /// 대상 계정에 같은 이름의 표가 없으면 원본 구조로 만든 뒤 넣는다(개발 접속만). 대상 표가 있으면 무시한다(지금 동작 그대로).
+    /// <see cref="TargetAction.Recreate"/> 와는 뜻이 없다(이미 만든다). 꺼짐이면 파일에 쓰지 않는다(예전 파일과 같다).
+    /// </summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
+    public bool CreateIfMissing { get; init; }
 }
 
 public enum CommitMode { PerTable, PerBatch, AtEnd }

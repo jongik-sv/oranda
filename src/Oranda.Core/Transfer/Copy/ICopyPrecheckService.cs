@@ -29,6 +29,15 @@ public static class CopyCheckCodes
 
     /// <summary>오류: 기간 규칙이 있는데 기간 범위가 비었다(끝 경계가 시작보다 늦지 않음). 그대로 두면 0행을 복사하고 성공으로 끝난다.</summary>
     public const string EmptyPeriod = "EmptyPeriod";
+
+    /// <summary>확인 필요: 대상에 표가 없어 원본 구조로 만든 뒤 넣는다(<see cref="TableRule.CreateIfMissing"/>). 메시지에 만드는 것·안 만드는 것·실패 때의 정리를 적는다.</summary>
+    public const string CreateTable = "CreateTable";
+
+    /// <summary>오류: 「없으면 만들기」를 쓸 수 없다 — 대상 소유자 계정이 아니거나 CREATE TABLE 권한이 없다.</summary>
+    public const string CreateNoPrivilege = "CreateNoPrivilege";
+
+    /// <summary>오류: 원본 구조로 만들 수 없는 이유가 있다(지원하지 않는 형식 열·문자열 한도·가리키는 객체 없음·이름 겹침 …, <c>RecreateBlocked</c> 와 같은 조건).</summary>
+    public const string CreateBlocked = "CreateBlocked";
 }
 
 public enum CheckChoice { DisableTriggers, DisableForeignKeys, SkipColumn, ProceedSequenceGap, SwitchToMerge }
@@ -46,6 +55,12 @@ public sealed record CheckItem(string? Table, string Code, CheckLevel Level, str
 public sealed record CopyTablePlan(TableRule Rule, TableInfo Source, TableInfo Target,
                                    IReadOnlyList<string> Columns, IReadOnlyList<string> KeyColumns)
 {
+    /// <summary>
+    /// 대상에 표가 없어 이번 실행이 원본 구조로 만든 뒤 넣는 표(<see cref="TableRule.CreateIfMissing"/>). <see cref="Target"/> 은 만들 구조다.
+    /// 새 표라 지우기를 건너뛰고(INSERT 로 넣는다) 제약·트리거·권한 점검을 하지 않는다.
+    /// </summary>
+    public bool CreateMissing { get; init; }
+
     public bool CanDisableTriggers { get; init; }
     public IReadOnlyList<string> Triggers { get; init; } = [];
     public IReadOnlyList<DisabledObject> DisablableForeignKeys { get; init; } = [];

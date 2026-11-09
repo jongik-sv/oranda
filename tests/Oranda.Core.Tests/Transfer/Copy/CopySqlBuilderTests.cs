@@ -286,6 +286,35 @@ public class CopySqlBuilderTests
     }
 
     [Fact]
+    public void Fresh_tables_are_not_deleted_from_but_other_rules_still_are()
+    {
+        // 「없으면 만들기」로 이번에 만드는 표(freshTables)는 비어 있으니 DELETE 가 없다. 안 든 규칙은 그대로다.
+        var rules = new[]
+        {
+            new TableRule("A", RuleKind.All, TargetAction.DeleteAllInsert),
+            new TableRule("B", RuleKind.Period, TargetAction.DeleteRangeInsert) { PeriodColumns = [new PeriodColumn("DT")] },
+            new TableRule("C", RuleKind.All, TargetAction.DeleteAllInsert),
+        };
+        var job = new CopyJob
+        {
+            Id = "1", Name = "n", Source = new ConnectionRef("s", "SRC"), Target = new ConnectionRef("t", "TGT"),
+            SourceOwner = "SRC", TargetOwner = "TGT", MaskSalt = "AA==", Tables = rules,
+        };
+        var names = new[] { "A", "B", "C" };
+        var src = names.ToDictionary(n => n, n => T("SRC", n, ("X", "NUMBER"), ("DT", "DATE")), StringComparer.Ordinal);
+        var tgt = names.ToDictionary(n => n, n => T("TGT", n, ("X", "NUMBER"), ("DT", "DATE")), StringComparer.Ordinal);
+
+        var withFresh = new CopySqlBuilder(job, Period, src, tgt, new HashSet<string>(StringComparer.Ordinal) { "A", "B" });
+        Assert.Null(withFresh.TargetDelete("A"));
+        Assert.Null(withFresh.TargetDelete("B"));
+        Assert.Equal("DELETE FROM \"TGT\".\"C\"", withFresh.TargetDelete("C")!.Sql);
+
+        // 없음(null)·빈 집합이면 지금까지처럼 모두 DELETE 다.
+        Assert.NotNull(new CopySqlBuilder(job, Period, src, tgt).TargetDelete("A"));
+        Assert.NotNull(new CopySqlBuilder(job, Period, src, tgt, new HashSet<string>()).TargetDelete("B"));
+    }
+
+    [Fact]
     public void Merge_updates_non_key_columns_and_omits_matched_when_all_keys()
     {
         var b = B([new TableRule("M", RuleKind.All, TargetAction.MergeByPk)], null, ("M", Cols(("K", "NUMBER"))));

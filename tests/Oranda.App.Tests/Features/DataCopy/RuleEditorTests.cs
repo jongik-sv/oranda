@@ -165,6 +165,40 @@ public sealed class RuleEditorTests
     }
 
     [Fact]
+    public void Create_if_missing_is_off_by_default_and_round_trips_through_the_rule()
+    {
+        var rule = new TableRuleViewModel(TestJobs.Rule("CODES"));
+        Assert.False(rule.CreateIfMissing);
+        Assert.True(rule.CanCreateIfMissing);
+        Assert.False(rule.ToRule().CreateIfMissing);
+
+        rule.CreateIfMissing = true;
+        Assert.True(rule.ToRule().CreateIfMissing);
+
+        var loaded = new TableRuleViewModel(TestJobs.Rule("CODES") with { CreateIfMissing = true });
+        Assert.True(loaded.CreateIfMissing);
+        Assert.True(loaded.ToRule().CreateIfMissing);
+    }
+
+    [Fact]
+    public void Create_if_missing_is_disabled_and_cleared_for_the_recreate_action()
+    {
+        var rule = new TableRuleViewModel(TestJobs.Rule("CODES") with { CreateIfMissing = true });
+        rule.Action = TargetAction.Recreate;
+
+        Assert.False(rule.CanCreateIfMissing);
+        Assert.False(rule.CreateIfMissing);
+        Assert.False(rule.ToRule().CreateIfMissing);
+
+        rule.Action = TargetAction.AppendOnly; // 되돌려도 지워진 선택은 살아나지 않는다
+        Assert.True(rule.CanCreateIfMissing);
+        Assert.False(rule.CreateIfMissing);
+
+        // 예전 파일처럼 다시 만들기와 함께 저장된 값도 불러올 때 끈다
+        Assert.False(new TableRuleViewModel(TestJobs.Rule("CODES") with { Action = TargetAction.Recreate, CreateIfMissing = true }).CreateIfMissing);
+    }
+
+    [Fact]
     public void Consistent_read_toggle_defaults_on()
     {
         var h = new DataCopyHarness();

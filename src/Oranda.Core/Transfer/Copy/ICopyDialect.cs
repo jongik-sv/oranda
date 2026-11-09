@@ -26,6 +26,12 @@ public interface ICopyDialect
     /// <summary>「테이블 다시 만들기」의 DROP(위험 명령, 대상 이름 재입력 확인).</summary>
     SqlStatement DropTable(string owner, string table);
 
+    /// <summary>
+    /// 「없으면 만들기」로 방금 만든 표를 적재 실패 뒤 휴지통 없이 지우는 DROP(<c>DROP TABLE … PURGE</c>). 기본 구현 = Oracle·Tibero 공통 글
+    /// (<see cref="CopyCommonStatements.DropCreatedTable"/>).
+    /// </summary>
+    SqlStatement DropCreatedTable(string owner, string table) => CopyCommonStatements.DropCreatedTable(owner, table);
+
     /// <summary>시퀀스 값을 한 번에 여러 개 소비하는 조회(바인드 <see cref="CopyCommonStatements.NextValuesBind"/> = 개수). 행을 끝까지 읽어야 그만큼 소비된다.</summary>
     SqlStatement NextValues(string owner, string sequence);
 

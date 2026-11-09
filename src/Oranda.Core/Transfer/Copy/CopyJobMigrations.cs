@@ -9,7 +9,7 @@ public static class CopyJobMigrations
     /// <summary>변환기 선택용 파일 종류.</summary>
     public const string FileKind = "copy-job";
 
-    public static IReadOnlyList<ISettingsMigration> All { get; } = [new CopyJobMigrationV1(), new CopyJobMigrationV2()];
+    public static IReadOnlyList<ISettingsMigration> All { get; } = [new CopyJobMigrationV1(), new CopyJobMigrationV2(), new CopyJobMigrationV3()];
 
     /// <summary>
     /// <paramref name="version"/>(0 이면 1 로 본다)에서 <see cref="CopyJobSchema.Current"/> 까지 한 단계씩 변환한다. 미래 버전은 부른 쪽이 먼저 거른다.
@@ -28,6 +28,20 @@ public static class CopyJobMigrations
         }
 
         return work;
+    }
+}
+
+/// <summary>복사 작업 3 → 4: 표 규칙의 <c>createIfMissing</c>(대상에 표가 없으면 만들기)이 생겼다. 버전 3 파일에는 없으므로(= 꺼짐) 바꿀 것이 없다. 순수 함수다.</summary>
+public sealed class CopyJobMigrationV3 : ISettingsMigration
+{
+    public string FileKind => CopyJobMigrations.FileKind;
+
+    public int FromVersion => 3;
+
+    public JsonNode Apply(JsonNode document)
+    {
+        ArgumentNullException.ThrowIfNull(document);
+        return document;
     }
 }
 
