@@ -32,6 +32,7 @@ public partial class DataCopyWindow : Window
         DeleteJobButton.Click += OnDeleteJob;
         JobList.SelectionChanged += OnJobSelected;
         AddTableButton.Click += OnAddTable;
+        FindTablesButton.Click += async (_, _) => await RunUiAsync(OpenTableFinderAsync).ConfigureAwait(true);
         // Enter 는 자동 완성 칸보다 먼저 받는다(터널): 목록에서 고른 후보가 있으면 그 이름, 아니면 적은 글로 바로 더한다.
         AddTableBox.AddHandler(KeyDownEvent, (_, e) =>
         {
@@ -518,6 +519,21 @@ public partial class DataCopyWindow : Window
         if (Vm is { Jobs.Selected: { } item } vm && item.Job.Id != vm.CurrentJob?.Id)
         {
             await RunUiAsync(ct => vm.OpenJobAsync(item.Job, ct)).ConfigureAwait(true);
+        }
+    }
+
+    // 「테이블 찾기…」: 팝업에서 검색·체크한 표를 한 번에 규칙으로 더한다.
+    private async Task OpenTableFinderAsync(CancellationToken ct)
+    {
+        if (Vm is not { } vm || await vm.CreateTableFinderAsync(ct).ConfigureAwait(true) is not { } finder)
+        {
+            return;
+        }
+
+        var ok = await new TableFinderWindow { DataContext = finder }.ShowDialog<bool>(this).ConfigureAwait(true);
+        if (ok)
+        {
+            await vm.AddFoundTablesAsync(finder.PickedTables, ct).ConfigureAwait(true);
         }
     }
 

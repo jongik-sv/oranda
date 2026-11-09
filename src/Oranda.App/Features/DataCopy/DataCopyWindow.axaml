@@ -431,6 +431,9 @@
                                      ToolTip.Tip="테이블 또는 계정.테이블. 원본의 테이블·시노님을 이름으로 찾아 보여 줍니다. 시노님은 원본에서 실제 계정·테이블로 풀어 더합니다." />
                     <Button x:Name="AddTableButton" Classes="toolbar" Focusable="False" Content="테이블 추가" icons:ButtonIcon.Key="rowAdd" icons:ButtonIcon.IconOnly="True"
                             ToolTip.Tip="테이블 규칙 추가 (Enter)" />
+                    <Button x:Name="FindTablesButton" Classes="toolbar" Focusable="False" Content="테이블 찾기…" icons:ButtonIcon.Key="find"
+                            ToolTip.Tip="이름·테이블 명으로 찾아 여러 테이블을 한 번에 추가" IsEnabled="{Binding $parent[Window].((dc:DataCopyViewModel)DataContext).HasJob}"
+                            AutomationProperties.Name="테이블 찾기" />
                     <Button x:Name="RemoveRuleButton" Classes="toolbar" Focusable="False" Content="규칙 제거" icons:ButtonIcon.Key="rowDelete" icons:ButtonIcon.IconOnly="True"
                             ToolTip.Tip="선택한 규칙 제거 (Delete)" IsEnabled="{Binding SelectedRule, Converter={x:Static ObjectConverters.IsNotNull}}" />
                     <Separator Classes="toolbar" />
