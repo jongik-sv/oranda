@@ -94,7 +94,7 @@ internal sealed class CopyDbScope : IAsyncDisposable
 
     public OracleBulkExecutionService Bulk() => new(new ExecutionPolicy(), Ui, Bus);
 
-    public CopyPrecheckService Precheck() => new(Bulk(), Metadata, new ExecutionPolicy());
+    public CopyPrecheckService Precheck() => new OracleCopyPrecheckService(Bulk(), Metadata, new ExecutionPolicy());
 
     // ---- 세션 ----
 

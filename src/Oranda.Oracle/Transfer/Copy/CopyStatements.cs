@@ -25,9 +25,9 @@ internal static class CopyStatements
     public static string Qualified(string owner, string name) => SqlIdentifier.QuoteAlways(owner) + "." + SqlIdentifier.QuoteAlways(name);
 
     /// <summary>조회 문장. 원본 읽기·건수·카탈로그 조회 모두 이것으로 만든다(대량 읽기는 첫 낱말이 SELECT·WITH 인지 다시 본다).</summary>
-    public static SqlStatement Query(string sql) => new(sql, default, StatementKind.Query) { Verb = "SELECT" };
+    public static SqlStatement Query(string sql) => CopyCommonStatements.Query(sql);
 
-    public static SqlStatement Query(SqlWithBinds sql) => Query(sql.Sql);
+    public static SqlStatement Query(SqlWithBinds sql) => CopyCommonStatements.Query(sql);
 
     public static SqlStatement SetTransactionReadOnly() =>
         new("SET TRANSACTION READ ONLY", default, StatementKind.TransactionControl) { Verb = "SET TRANSACTION" };
@@ -43,12 +43,7 @@ internal static class CopyStatements
         new("ROLLBACK TO SAVEPOINT " + name, default, StatementKind.TransactionControl) { Verb = "ROLLBACK" };
 
     /// <summary>대상 DELETE(<see cref="CopySqlBuilder.TargetDelete"/>). WHERE 가 없으면 정책이 확인을 내도록 <c>IsUnfilteredDml</c> 을 붙인다.</summary>
-    public static SqlStatement Delete(SqlWithBinds delete) =>
-        new(delete.Sql, default, StatementKind.Dml)
-        {
-            Verb = "DELETE",
-            IsUnfilteredDml = !delete.Sql.Contains(" WHERE ", StringComparison.Ordinal),
-        };
+    public static SqlStatement Delete(SqlWithBinds delete) => CopyCommonStatements.Delete(delete);
 
     /// <summary>바인드 배열로 보내는 INSERT·MERGE. 바인드 이름은 <c>C1</c>…<c>Cn</c>(<see cref="CopySqlBuilder.Insert"/>·<see cref="CopySqlBuilder.Merge"/>).</summary>
     public static SqlStatement ArrayDml(string sql, int columnCount)

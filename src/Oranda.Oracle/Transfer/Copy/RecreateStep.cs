@@ -88,10 +88,10 @@ internal sealed class RecreateStep
         var triggerObjects = new List<DisabledObject>();
         foreach (var row in await CopyCatalogQueries.QueryAsync(_bulk, target, TriggersSql, ct, ("OWN", owner), ("TBL", table)))
         {
-            var trgOwner = CopyCatalogQueries.Text(row[0])!;
-            var name = CopyCatalogQueries.Text(row[1])!;
+            var trgOwner = OracleBulkValueCodec.Text(row[0])!;
+            var name = OracleBulkValueCodec.Text(row[1])!;
             var ddl = await CopyCatalogQueries.QueryAsync(_bulk, target, TriggerDdlSql, ct, ("NAME", name), ("OWN", trgOwner));
-            if (ddl.Count == 0 || CopyCatalogQueries.Text(ddl[0][0]) is not { } text)
+            if (ddl.Count == 0 || OracleBulkValueCodec.Text(ddl[0][0]) is not { } text)
             {
                 throw new InvalidOperationException($"트리거 {trgOwner}.{name} 의 DDL 을 받지 못했습니다.");
             }
@@ -99,7 +99,7 @@ internal sealed class RecreateStep
             var obj = new DisabledObject(DisabledKind.Trigger, trgOwner, table, name);
             triggers.Add(TriggerCreate(text));
             triggerObjects.Add(obj);
-            if (!string.Equals(CopyCatalogQueries.Text(row[2]), "ENABLED", StringComparison.Ordinal))
+            if (!string.Equals(OracleBulkValueCodec.Text(row[2]), "ENABLED", StringComparison.Ordinal))
             {
                 triggers.Add($"ALTER TRIGGER {CopyStatements.Qualified(trgOwner, name)} DISABLE");
                 triggerObjects.Add(obj);
@@ -109,9 +109,9 @@ internal sealed class RecreateStep
         var grants = new List<string>();
         foreach (var row in await CopyCatalogQueries.QueryAsync(_bulk, target, GrantsSql, ct, ("OWN", owner), ("TBL", table)))
         {
-            var grantee = CopyCatalogQueries.Text(row[0])!;
-            var privilege = CopyCatalogQueries.Text(row[1])!;
-            var withGrant = string.Equals(CopyCatalogQueries.Text(row[2]), "YES", StringComparison.Ordinal) ? " WITH GRANT OPTION" : string.Empty;
+            var grantee = OracleBulkValueCodec.Text(row[0])!;
+            var privilege = OracleBulkValueCodec.Text(row[1])!;
+            var withGrant = string.Equals(OracleBulkValueCodec.Text(row[2]), "YES", StringComparison.Ordinal) ? " WITH GRANT OPTION" : string.Empty;
             var to = string.Equals(grantee, "PUBLIC", StringComparison.Ordinal) ? "PUBLIC" : SqlIdentifier.QuoteAlways(grantee);
             grants.Add($"GRANT {privilege} ON {CopyStatements.Qualified(owner, table)} TO {to}{withGrant}");
         }
@@ -119,7 +119,7 @@ internal sealed class RecreateStep
         var fks = new List<string>();
         var referencing = new List<DisabledObject>();
         var rows = await CopyCatalogQueries.QueryAsync(_bulk, target, ReferencingSql, ct, ("OWN", owner), ("TBL", table));
-        foreach (var fk in rows.GroupBy(r => (Owner: CopyCatalogQueries.Text(r[0])!, Table: CopyCatalogQueries.Text(r[1])!, Name: CopyCatalogQueries.Text(r[2])!)))
+        foreach (var fk in rows.GroupBy(r => (Owner: OracleBulkValueCodec.Text(r[0])!, Table: OracleBulkValueCodec.Text(r[1])!, Name: OracleBulkValueCodec.Text(r[2])!)))
         {
             fks.Add(ForeignKeyDdl(fk.Key.Owner, fk.Key.Table, fk.Key.Name, owner, table, [.. fk]));
             referencing.Add(new DisabledObject(DisabledKind.ForeignKey, fk.Key.Owner, fk.Key.Table, fk.Key.Name));
@@ -140,7 +140,7 @@ internal sealed class RecreateStep
         ArgumentNullException.ThrowIfNull(parents);
         var rows = await CopyCatalogQueries.QueryAsync(_bulk, source, SourceForeignKeysSql, ct, ("OWN", sourceOwner), ("TBL", table));
         var result = new List<(string, string, string?)>();
-        foreach (var fk in rows.GroupBy(r => (Name: CopyCatalogQueries.Text(r[2])!, Parent: CopyCatalogQueries.Text(r[9])!)))
+        foreach (var fk in rows.GroupBy(r => (Name: OracleBulkValueCodec.Text(r[2])!, Parent: OracleBulkValueCodec.Text(r[9])!)))
         {
             if (!parents.Contains(fk.Key.Parent))
             {
@@ -161,7 +161,7 @@ internal sealed class RecreateStep
     public async Task<HashSet<string>> RecycleBinAsync(ISession target, string table, CancellationToken ct)
     {
         var rows = await CopyCatalogQueries.QueryAsync(_bulk, target, RecycleBinSql, ct, ("TBL", table));
-        return rows.Select(r => CopyCatalogQueries.Text(r[0])).OfType<string>().ToHashSet(StringComparer.Ordinal);
+        return rows.Select(r => OracleBulkValueCodec.Text(r[0])).OfType<string>().ToHashSet(StringComparer.Ordinal);
     }
 
     /// <summary>
@@ -173,8 +173,8 @@ internal sealed class RecreateStep
                                          IReadOnlyList<object?[]> rows)
     {
         var first = rows[0];
-        var childColumns = string.Join(", ", rows.Select(r => SqlIdentifier.QuoteAlways(CopyCatalogQueries.Text(r[4])!)));
-        var parentColumns = string.Join(", ", rows.Select(r => SqlIdentifier.QuoteAlways(CopyCatalogQueries.Text(r[5])!)));
+        var childColumns = string.Join(", ", rows.Select(r => SqlIdentifier.QuoteAlways(OracleBulkValueCodec.Text(r[4])!)));
+        var parentColumns = string.Join(", ", rows.Select(r => SqlIdentifier.QuoteAlways(OracleBulkValueCodec.Text(r[5])!)));
         var sb = new StringBuilder()
             .Append("ALTER TABLE ").Append(CopyStatements.Qualified(childOwner, childTable)).Append(" ADD ");
         if (name is not null)
@@ -184,7 +184,7 @@ internal sealed class RecreateStep
 
         sb.Append("FOREIGN KEY (").Append(childColumns).Append(") REFERENCES ")
             .Append(CopyStatements.Qualified(parentOwner, parentTable)).Append(" (").Append(parentColumns).Append(')');
-        switch (CopyCatalogQueries.Text(first[3]))
+        switch (OracleBulkValueCodec.Text(first[3]))
         {
             case "CASCADE":
                 sb.Append(" ON DELETE CASCADE");
@@ -194,13 +194,13 @@ internal sealed class RecreateStep
                 break;
         }
 
-        if (string.Equals(CopyCatalogQueries.Text(first[7]), "DEFERRABLE", StringComparison.Ordinal))
+        if (string.Equals(OracleBulkValueCodec.Text(first[7]), "DEFERRABLE", StringComparison.Ordinal))
         {
-            sb.Append(string.Equals(CopyCatalogQueries.Text(first[8]), "DEFERRED", StringComparison.Ordinal)
+            sb.Append(string.Equals(OracleBulkValueCodec.Text(first[8]), "DEFERRED", StringComparison.Ordinal)
                 ? " DEFERRABLE INITIALLY DEFERRED" : " DEFERRABLE INITIALLY IMMEDIATE");
         }
 
-        if (string.Equals(CopyCatalogQueries.Text(first[6]), "DISABLED", StringComparison.Ordinal))
+        if (string.Equals(OracleBulkValueCodec.Text(first[6]), "DISABLED", StringComparison.Ordinal))
         {
             sb.Append(" DISABLE");
         }

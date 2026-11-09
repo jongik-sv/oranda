@@ -1,24 +1,26 @@
 using System.Globalization;
 using System.Text.RegularExpressions;
-using Oracle.ManagedDataAccess.Client;
-using Oranda.Core.Composition;
+using Oranda.Core.Catalog;
 using Oranda.Core.Connection;
 using Oranda.Core.Execution;
 using Oranda.Core.History;
 using Oranda.Core.Metadata;
 using Oranda.Core.Sessions;
 using Oranda.Core.Text;
-using Oranda.Core.Transfer.Copy;
 
-namespace Oranda.Oracle.Transfer.Copy;
+namespace Oranda.Core.Transfer.Copy;
 
 /// <summary>
 /// 접속 간 복사 사전 점검(설계 7장). 모든 조회는 대량 실행 경로의 읽기(<see cref="IBulkExecutionService.StreamRowsAsync"/>)로 보내고
 /// 하나씩 끝까지 읽은 뒤 다음 조회를 보낸다. 표 구조는 <see cref="IMetadataProvider"/> 로 읽는다(원본·대상 모두 점검 때만, 메모 D3).
 /// 판정 규칙 가운데 DB 가 필요 없는 것은 <see cref="PrecheckRules"/> 에 있다.
+/// DBMS 마다 다른 것은 생성자로 받는다: SELECT 글 = <paramref name="catalog"/>(<c>copy.*</c>), 서버 오류 분류 = <paramref name="errors"/>(바깥 예외만, <see cref="CopyErrors"/>),
+/// 기능 차이·안내 글 = <paramref name="dialect"/>, 미리 보기 문장 = <paramref name="statements"/>, 값 해석 = <paramref name="codec"/>.
+/// DBMS 별 하위 형식(본문 없음)이 그 DBMS 의 것을 넘기고 키 서비스로 등록된다(Oracle = <c>OracleCopyPrecheckService</c>).
 /// </summary>
-[OrandaService(typeof(ICopyPrecheckService), Dbms = Dbms.Oracle)]
-internal sealed partial class CopyPrecheckService(IBulkExecutionService bulk, IMetadataProvider metadata, IExecutionPolicy policy) : ICopyPrecheckService
+public partial class CopyPrecheckService(IBulkExecutionService bulk, IMetadataProvider metadata, IExecutionPolicy policy, ISqlCatalog catalog,
+                                         IDbErrorClassifier errors, ICopyPrecheckDialect dialect, ICopyDialect statements, IBulkValueCodec codec)
+    : ICopyPrecheckService
 {
     public async Task<PrecheckReport> RunAsync(CopySessions sessions, CopyJob job, ResolvedPeriod period,
                                                IProgress<string>? progress, CancellationToken ct)
@@ -43,7 +45,7 @@ internal sealed partial class CopyPrecheckService(IBulkExecutionService bulk, IM
         }
 
         // 같은 DB 에서 어떤 규칙이 쓰는 대상 표가 어떤 규칙이 읽는 원본 표와 같으면 대상 정리가 원본 행을 지운다(표 단위·규칙 사이). 이 오류들만 낸다.
-        if (CopyRunner.SameSourceTargets(sessions, job) is { Count: > 0 } same)
+        if (CopySameDatabase.SameSourceTargets(sessions, job) is { Count: > 0 } same)
         {
             return new PrecheckReport(
                 [.. same.Select(x => new CheckItem(x.Key, "SameSourceTarget", CheckLevel.Error,
@@ -51,46 +53,13 @@ internal sealed partial class CopyPrecheckService(IBulkExecutionService bulk, IM
                 [], [], new Dictionary<string, long>());
         }
 
-        return await new Run(bulk, metadata, policy, sessions, job, period, progress).ExecuteAsync(ct).ConfigureAwait(false);
+        return await new Run(bulk, metadata, policy, catalog, errors, dialect, statements, codec, sessions, job, period, progress)
+            .ExecuteAsync(ct).ConfigureAwait(false);
     }
 
-    /// <summary>대상 표에 걸린 트리거 수(상태 무관). 「테이블 다시 만들기」는 꺼진 트리거도 되살리므로 CREATE TRIGGER 권한을 본다.</summary>
-    /// <summary>옛 대상 표의 테이블스페이스(SYSTEM 이면 휴지통에 남지 않는다).</summary>
-    private const string TablespaceSql = "SELECT tablespace_name FROM all_tables WHERE owner = :OWN AND table_name = :TBL";
-
-    /// <summary>대상 소유자의 그 이름 제약이 걸린 표.</summary>
-    private const string ConstraintOwnerSql = "SELECT table_name FROM all_constraints WHERE owner = :OWN AND constraint_name = :NAME";
-
-    /// <summary>대상 소유자의 그 이름 인덱스가 걸린 표.</summary>
-    private const string IndexOwnerSql = "SELECT table_name FROM all_indexes WHERE owner = :OWN AND index_name = :NAME";
-
-    private const string ColumnPrivilegeCountSql = "SELECT COUNT(*) FROM all_col_privs WHERE table_schema = :OWN AND table_name = :TBL";
-
-    private const string OtherGrantorCountSql =
-        "SELECT COUNT(*) FROM all_tab_privs WHERE table_schema = :OWN AND table_name = :TBL AND grantor <> :OWN"; // TYPE 열은 12c 부터(11.2 에 없다)
-
-    private const string MviewLogCountSql = "SELECT COUNT(*) FROM all_mview_logs WHERE log_owner = :OWN AND master = :TBL";
-
-    private const string VpdPolicyCountSql = "SELECT COUNT(*) FROM all_policies WHERE object_owner = :OWN AND object_name = :TBL";
-
-    private const string FgaPolicyCountSql = "SELECT COUNT(*) FROM all_audit_policies WHERE object_schema = :OWN AND object_name = :TBL";
-
-    /// <summary>대상 소유자에 그 이름의 객체가 있는가(다시 만들 표의 기본값·가상 열 식이 가리키는 시퀀스·함수).</summary>
-    private const string ObjectExistsSql = "SELECT COUNT(*) FROM all_objects WHERE owner = :OWN AND object_name = :NAME";
-
-    private const string AllTriggerCountSql =
-        "SELECT COUNT(*) FROM all_triggers WHERE table_owner = :OWN AND table_name = :TBL AND base_object_type = 'TABLE'";
-
-    /// <summary>
-    /// 대상이 표인가(뷰·시노님·MV 는 대상으로 쓰지 않는다). 권한이 하나라도 있으면 보인다.
-    /// MV 의 저장 표는 ALL_TABLES 에도 같은 이름으로 나오므로 ALL_MVIEWS 에 있으면 뺀다(11.2·26ai 모두 있는 뷰).
-    /// </summary>
-    private const string TargetIsTableSql =
-        "SELECT COUNT(*) FROM all_tables t WHERE t.owner = :OWN AND t.table_name = :TBL"
-        + " AND NOT EXISTS (SELECT 1 FROM all_mviews m WHERE m.owner = t.owner AND m.mview_name = t.table_name)";
-
     /// <summary>한 번의 점검이 쓰는 상태. 점검 항목을 순서대로 쌓는다.</summary>
-    private sealed class Run(IBulkExecutionService bulk, IMetadataProvider metadata, IExecutionPolicy policy,
+    private sealed class Run(IBulkExecutionService bulk, IMetadataProvider metadata, IExecutionPolicy policy, ISqlCatalog catalog,
+                             IDbErrorClassifier errors, ICopyPrecheckDialect dialect, ICopyDialect statements, IBulkValueCodec codec,
                              CopySessions sessions, CopyJob job, ResolvedPeriod period, IProgress<string>? progress)
     {
         /// <summary>읽기 시간 어림에 쓰는 초당 행 수(보수적으로 작게 잡는다).</summary>
@@ -115,8 +84,8 @@ internal sealed partial class CopyPrecheckService(IBulkExecutionService bulk, IM
 
         public async Task<PrecheckReport> ExecuteAsync(CancellationToken ct)
         {
-            _sourceAccess = await CopyCatalogQueries.ReadAccessAsync(bulk, Source, ct).ConfigureAwait(false);
-            _targetAccess = await CopyCatalogQueries.ReadAccessAsync(bulk, Target, ct).ConfigureAwait(false);
+            _sourceAccess = await CopyCatalogQueries.ReadAccessAsync(bulk, catalog, codec, Source, ct).ConfigureAwait(false);
+            _targetAccess = await CopyCatalogQueries.ReadAccessAsync(bulk, catalog, codec, Target, ct).ConfigureAwait(false);
 
             var active = job.Tables.Where(r => r.Kind != RuleKind.Exclude).ToList();
             await LoadTablesAsync(active, ct).ConfigureAwait(false);
@@ -178,7 +147,7 @@ internal sealed partial class CopyPrecheckService(IBulkExecutionService bulk, IM
                 }
 
                 // 대상은 표여야 한다(뷰·시노님·MV 에 지우고 넣지 않는다). 표가 아니거나 확인하지 못하면(조회 오류) 구조를 읽지 않고 막는다.
-                var isTable = await TryCountAsync(TargetIsTableSql, ct, ("OWN", targetOwner), ("TBL", rule.Table)).ConfigureAwait(false);
+                var isTable = await TryCountAsync(TargetSql("copy.target_is_table"), ct, ("OWN", targetOwner), ("TBL", rule.Table)).ConfigureAwait(false);
                 var target = isTable is > 0 ? await TryGetTableAsync(Target, targetOwner, rule.Table, ct).ConfigureAwait(false) : null;
                 if (target is null)
                 {
@@ -259,12 +228,12 @@ internal sealed partial class CopyPrecheckService(IBulkExecutionService bulk, IM
             HashSet<string> always;
             try
             {
-                var rows = await CopyCatalogQueries.QueryAsync(bulk, Target, CopyCatalogQueries.IdentityColumns, ct,
+                var rows = await CopyCatalogQueries.QueryAsync(bulk, Target, TargetSql("copy.identity_cols"), ct,
                     ("OWN", targetOwner), ("TBL", target.Table.Name)).ConfigureAwait(false);
-                always = rows.Where(r => string.Equals(CopyCatalogQueries.Text(r[1]), "ALWAYS", StringComparison.OrdinalIgnoreCase))
-                    .Select(r => CopyCatalogQueries.Text(r[0])).OfType<string>().ToHashSet(StringComparer.Ordinal);
+                always = rows.Where(r => string.Equals(codec.ToText(r[1]), "ALWAYS", StringComparison.OrdinalIgnoreCase))
+                    .Select(r => codec.ToText(r[0])).OfType<string>().ToHashSet(StringComparer.Ordinal);
             }
-            catch (OracleException ex) when (CopyCatalogQueries.IsNoAccess(ex))
+            catch (Exception ex) when (CopyErrors.IsNoAccess(errors, ex))
             {
                 return target; // 구분할 수 없으면 모두 ALWAYS 로 본다(오류 쪽으로 기운다).
             }
@@ -281,8 +250,8 @@ internal sealed partial class CopyPrecheckService(IBulkExecutionService bulk, IM
             var source = _sourceTables[key];
             var target = _targetTables[key];
 
-            _items.AddRange(PrecheckRules.CompareColumns(source, target, rule, key));
-            var columns = PrecheckRules.SelectColumns(source, target, rule);
+            _items.AddRange(PrecheckRules.CompareColumns(codec, source, target, rule, key));
+            var columns = PrecheckRules.SelectColumns(codec, source, target, rule);
             var keys = PrecheckRules.KeyColumns(target, columns);
             _items.AddRange(PrecheckRules.CheckMasks(rule, source, keys, key));
 
@@ -328,7 +297,7 @@ internal sealed partial class CopyPrecheckService(IBulkExecutionService bulk, IM
 
         private async Task<bool> CheckSourcePrivilegeAsync(TableRule rule, CancellationToken ct)
         {
-            var held = await CopyCatalogQueries.ReadObjectPrivilegesAsync(bulk, Source, _sourceAccess, SourceOwner(rule), rule.Table, "TABLE", ct)
+            var held = await CopyCatalogQueries.ReadObjectPrivilegesAsync(bulk, catalog, codec, Source, _sourceAccess, SourceOwner(rule), rule.Table, "TABLE", dialect.SupportsReadPrivilege, ct)
                 .ConfigureAwait(false);
             if (held.Contains("SELECT"))
             {
@@ -341,7 +310,7 @@ internal sealed partial class CopyPrecheckService(IBulkExecutionService bulk, IM
 
         private async Task CheckTargetPrivilegesAsync(TableRule rule, IReadOnlyList<string> keys, CancellationToken ct)
         {
-            var held = await CopyCatalogQueries.ReadObjectPrivilegesAsync(bulk, Target, _targetAccess, TargetOwner(rule), rule.Table, "TABLE", ct)
+            var held = await CopyCatalogQueries.ReadObjectPrivilegesAsync(bulk, catalog, codec, Target, _targetAccess, TargetOwner(rule), rule.Table, "TABLE", dialect.SupportsReadPrivilege, ct)
                 .ConfigureAwait(false);
             var missing = PrecheckRules.RequiredTargetPrivileges(rule, keys).Where(p => !held.Contains(p)).ToList();
             if (missing.Count > 0)
@@ -365,9 +334,9 @@ internal sealed partial class CopyPrecheckService(IBulkExecutionService bulk, IM
 
             var key = Key(rule);
             var owner = TargetOwner(rule);
-            var rows = await CopyCatalogQueries.QueryAsync(bulk, Target, AllTriggerCountSql, ct,
+            var rows = await CopyCatalogQueries.QueryAsync(bulk, Target, TargetSql("copy.trigger_count_all"), ct,
                 ("OWN", owner), ("TBL", rule.Table)).ConfigureAwait(false);
-            var triggerCount = CopyCatalogQueries.ToLong(rows.FirstOrDefault()?[0]) ?? 0;
+            var triggerCount = codec.ToInt64(rows.FirstOrDefault()?[0]) ?? 0;
 
             // 표마다 본다: 계정이 섞인 작업에서 접속 계정이 아닌 계정의 표는 다시 만들 수 없다.
             if (!_targetAccess.IsOwner(owner))
@@ -407,16 +376,14 @@ internal sealed partial class CopyPrecheckService(IBulkExecutionService bulk, IM
                 return;
             }
 
-            var tablespace = CopyCatalogQueries.Text((await CopyCatalogQueries.QueryAsync(bulk, Target, TablespaceSql, ct,
+            var tablespace = codec.ToText((await CopyCatalogQueries.QueryAsync(bulk, Target, TargetSql("copy.tablespace"), ct,
                 ("OWN", owner), ("TBL", rule.Table)).ConfigureAwait(false)).FirstOrDefault()?[0]);
             var skipped = source.Constraints
                 .Where(c => c.Kind == ConstraintKind.ForeignKey && c.ReferencedTable is { } p && !IsLinkedParent(p, rule, linked))
                 .Select(c => $"{c.Name}(→{c.ReferencedTable!.Name})")
                 .ToList();
             var message = $"{key}: 대상 표 {owner}.{rule.Table} 을(를) 지우고 원본 구조로 다시 만든 뒤 넣습니다."
-                          + (string.Equals(tablespace, "SYSTEM", StringComparison.OrdinalIgnoreCase)
-                              ? " 이 표는 SYSTEM 테이블스페이스에 있어 휴지통에 남지 않고 영구 삭제됩니다."
-                              : " 지운 표는 휴지통에 남습니다(PURGE 없음, 공간이 부족하면 휴지통 객체가 자동으로 지워질 수 있음).")
+                          + dialect.RecycleBinNote(tablespace)
                           + " DROP·CREATE 는 DDL 이라 커밋 방식과 상관없이 되돌릴 수 없습니다."
                           + $" 대상의 트리거 {Number(triggerCount)}개·다른 계정에 준 권한·이 표를 참조하던 FK 는 적재 뒤 되살립니다"
                           + "(참조 FK 는 지우기 전에 떼어 내고, 대상 계정에 보이지 않는 FK 가 있으면 지우지 않고 멈춥니다).";
@@ -458,37 +425,20 @@ internal sealed partial class CopyPrecheckService(IBulkExecutionService bulk, IM
         {
             var owner = TargetOwner(rule);
             var blocked = new List<string>();
-            var unsupported = source.Columns.Where(c => !c.IsVirtual && !PrecheckRules.IsSupportedType(c.DataType))
+            if (dialect.RecreateBlockedReason(Target) is { } reason)
+            {
+                blocked.Add(reason);
+            }
+
+            var unsupported = source.Columns.Where(c => !c.IsVirtual && !codec.IsSupported(c.DataType))
                 .Select(c => $"{c.Name}({c.DataType})").ToList();
             if (unsupported.Count > 0)
             {
                 blocked.Add($"지원하지 않는 형식 열 {string.Join(", ", unsupported)}(건너뛴 열도 다시 만들 때 만들어집니다)");
             }
 
-            var extended = source.Columns.Where(c => c.Length is { } n && c.DataType.ToUpperInvariant() switch
-            {
-                "VARCHAR2" => n > 4000,
-                "NVARCHAR2" or "RAW" => n > 2000,
-                _ => false,
-            }).Select(c => c.Name).ToList();
-            if (extended.Count > 0)
-            {
-                string? size = null;
-                try
-                {
-                    size = CopyCatalogQueries.Text((await CopyCatalogQueries.QueryAsync(bulk, Target, CopyCatalogQueries.ParameterValue, ct,
-                        ("PNAME", "max_string_size")).ConfigureAwait(false)).FirstOrDefault()?[0]);
-                }
-                catch (OracleException)
-                {
-                    // V$PARAMETER 를 읽지 못하면 EXTENDED 인지 알 수 없다: 막는 쪽.
-                }
-
-                if (!string.Equals(size, "EXTENDED", StringComparison.OrdinalIgnoreCase))
-                {
-                    blocked.Add($"열 {string.Join(", ", extended)} 의 길이가 STANDARD 한도를 넘는데 대상 MAX_STRING_SIZE 가 EXTENDED 로 확인되지 않습니다({size ?? "읽지 못함"})");
-                }
-            }
+            // 기본 문자열 한도를 넘는 길이(Oracle: MAX_STRING_SIZE 가 EXTENDED 로 확인되지 않으면 막는다).
+            blocked.AddRange(await dialect.ExtendedStringBlockersAsync(source, TargetParameterAsync, ct).ConfigureAwait(false));
 
             // 기본값·가상 열 식이 원본 스키마 객체(시퀀스·함수)를 가리키면 대상 소유자의 같은 이름 객체로 바꿔 만든다.
             var referenced = source.Columns.Where(c => !c.IsIdentity)
@@ -497,7 +447,7 @@ internal sealed partial class CopyPrecheckService(IBulkExecutionService bulk, IM
             var missingObjects = new List<string>();
             foreach (var name in referenced.Select(x => x.Object).Distinct(StringComparer.Ordinal))
             {
-                if (await TryCountAsync(ObjectExistsSql, ct, ("OWN", owner), ("NAME", name)).ConfigureAwait(false) is not > 0)
+                if (await TryCountAsync(TargetSql("copy.object_exists"), ct, ("OWN", owner), ("NAME", name)).ConfigureAwait(false) is not > 0)
                 {
                     missingObjects.Add(name); // 확인하지 못해도 없는 것으로 본다(막는 쪽).
                 }
@@ -517,12 +467,12 @@ internal sealed partial class CopyPrecheckService(IBulkExecutionService bulk, IM
             var inUse = new List<string>();
             foreach (var name in constraints.Concat(foreignKeys).Distinct(StringComparer.Ordinal))
             {
-                inUse.AddRange(await UsedByOtherTablesAsync(ConstraintOwnerSql, owner, name, recreated, ct).ConfigureAwait(false));
+                inUse.AddRange(await UsedByOtherTablesAsync(TargetSql("copy.constraint_owner"), owner, name, recreated, ct).ConfigureAwait(false));
             }
 
             foreach (var name in indexes)
             {
-                inUse.AddRange(await UsedByOtherTablesAsync(IndexOwnerSql, owner, name, recreated, ct).ConfigureAwait(false));
+                inUse.AddRange(await UsedByOtherTablesAsync(TargetSql("copy.index_owner"), owner, name, recreated, ct).ConfigureAwait(false));
             }
 
             if (inUse.Count > 0)
@@ -540,31 +490,27 @@ internal sealed partial class CopyPrecheckService(IBulkExecutionService bulk, IM
             {
                 rows = await CopyCatalogQueries.QueryAsync(bulk, Target, sql, ct, ("OWN", owner), ("NAME", name)).ConfigureAwait(false);
             }
-            catch (OracleException)
+            catch (Exception ex) when (CopyErrors.IsServer(errors, ex))
             {
                 return [$"{name}(확인 못 함)"]; // 겹치는지 모르면 막는 쪽.
             }
 
-            return rows.Select(r => CopyCatalogQueries.Text(r[0]))
+            return rows.Select(r => codec.ToText(r[0]))
                 .Where(t => t is not null && !recreated.Contains(t))
                 .Select(t => $"{name}({t})");
         }
 
-        /// <summary>DROP 과 함께 사라지고 되살리지 않는 것(열 권한, 다른 계정이 준 권한, MV 로그, VPD·FGA 정책). 볼 권한이 없으면 「확인 못 함」.</summary>
+        /// <summary>
+        /// DROP 과 함께 사라지고 되살리지 않는 것(<see cref="ICopyPrecheckDialect.NotRestoredProbes"/>, Oracle = 열 권한, 다른 계정이 준 권한, MV 로그, VPD·FGA 정책).
+        /// 볼 권한이 없으면 「확인 못 함」.
+        /// </summary>
         private async Task<List<string>> NotRestoredAsync(TableRule rule, CancellationToken ct)
         {
             var lost = new List<string>();
-            foreach (var (sql, what) in new[]
-                     {
-                         (ColumnPrivilegeCountSql, "열 권한"),
-                         (OtherGrantorCountSql, "다른 계정이 준 권한"),
-                         (MviewLogCountSql, "MV 로그"),
-                         (VpdPolicyCountSql, "VPD 정책"),
-                         (FgaPolicyCountSql, "FGA 정책"),
-                     })
+            foreach (var (id, what) in dialect.NotRestoredProbes)
             {
                 // 권한·뷰 열 차이 등 어떤 서버 오류든 「확인 못 함」으로 둔다(사전 점검 전체가 예외로 끝나지 않게).
-                var n = await TryCountAsync(sql, ct, ("OWN", TargetOwner(rule)), ("TBL", rule.Table)).ConfigureAwait(false);
+                var n = await TryCountAsync(TargetSql(id), ct, ("OWN", TargetOwner(rule)), ("TBL", rule.Table)).ConfigureAwait(false);
                 if (n is null)
                 {
                     lost.Add($"{what}(확인 못 함)");
@@ -583,9 +529,9 @@ internal sealed partial class CopyPrecheckService(IBulkExecutionService bulk, IM
         {
             try
             {
-                return CopyCatalogQueries.ToLong((await CopyCatalogQueries.QueryAsync(bulk, Target, sql, ct, binds).ConfigureAwait(false)).FirstOrDefault()?[0]) ?? 0;
+                return codec.ToInt64((await CopyCatalogQueries.QueryAsync(bulk, Target, sql, ct, binds).ConfigureAwait(false)).FirstOrDefault()?[0]) ?? 0;
             }
-            catch (OracleException)
+            catch (Exception ex) when (CopyErrors.IsServer(errors, ex))
             {
                 return null;
             }
@@ -623,9 +569,9 @@ internal sealed partial class CopyPrecheckService(IBulkExecutionService bulk, IM
         {
             var key = Key(rule);
             var owner = TargetOwner(rule);
-            var rows = await CopyCatalogQueries.QueryAsync(bulk, Target, CopyCatalogQueries.EnabledTriggers, ct,
+            var rows = await CopyCatalogQueries.QueryAsync(bulk, Target, TargetSql("copy.enabled_triggers"), ct,
                 ("OWN", owner), ("TBL", rule.Table)).ConfigureAwait(false);
-            var all = rows.Select(r => (Owner: CopyCatalogQueries.Text(r[0]), Name: CopyCatalogQueries.Text(r[1]))).ToList();
+            var all = rows.Select(r => (Owner: codec.ToText(r[0]), Name: codec.ToText(r[1]))).ToList();
 
             // 트리거 이름은 그 표의 대상 소유자 기준이다(메모 D4). 다른 소유자의 트리거는 보여 주기만 한다.
             var owned = all.Where(t => t.Name is not null && CopyOwners.SameOwner(t.Owner, owner))
@@ -661,10 +607,10 @@ internal sealed partial class CopyPrecheckService(IBulkExecutionService bulk, IM
                 return [];
             }
 
-            var rows = await CopyCatalogQueries.QueryAsync(bulk, Target, CopyCatalogQueries.ReferencingForeignKeys, ct,
+            var rows = await CopyCatalogQueries.QueryAsync(bulk, Target, TargetSql("copy.referencing_fks"), ct,
                 ("OWN", TargetOwner(rule)), ("TBL", rule.Table)).ConfigureAwait(false);
             var blocking = rows
-                .Select(r => (Owner: CopyCatalogQueries.Text(r[0]), Table: CopyCatalogQueries.Text(r[1]), Name: CopyCatalogQueries.Text(r[2])))
+                .Select(r => (Owner: codec.ToText(r[0]), Table: codec.ToText(r[1]), Name: codec.ToText(r[2])))
                 .Where(fk => fk.Owner is not null && fk.Table is not null && fk.Name is not null && ChildKeepsRows(fk.Owner, fk.Table, rule))
                 .Select(fk => new DisabledObject(DisabledKind.ForeignKey, fk.Owner!, fk.Table!, fk.Name!))
                 .ToList();
@@ -689,7 +635,7 @@ internal sealed partial class CopyPrecheckService(IBulkExecutionService bulk, IM
             var children = string.Join(", ", blocking.Select(fk => (CopyOwners.SameOwner(fk.Owner, TargetOwner(rule)) ? "" : fk.Owner + ".")
                                                                     + $"{fk.Table}({fk.Name})").Distinct(StringComparer.Ordinal));
             _items.Add(new CheckItem(Key(rule), "ChildRowsMayBlock", CheckLevel.Confirm,
-                $"{Key(rule)}: 자식 표 {children} 의 행이 남아 있으면 지울 때 ORA-02292 가 날 수 있습니다. 대상 처리를 PK 기준 MERGE 로 바꾸세요.")
+                $"{Key(rule)}: 자식 표 {children} 의 행이 남아 있으면 지울 때 {dialect.ChildRecordFoundError} 가 날 수 있습니다. 대상 처리를 PK 기준 MERGE 로 바꾸세요.")
             {
                 Choices = choices,
             });
@@ -730,13 +676,13 @@ internal sealed partial class CopyPrecheckService(IBulkExecutionService bulk, IM
             try
             {
                 var rows = await CopyCatalogQueries.QueryAsync(bulk, Source, count.Sql, count.Binds, ct).ConfigureAwait(false);
-                _estimated[key] = CopyCatalogQueries.ToLong(rows.FirstOrDefault()?[0]) ?? 0;
+                _estimated[key] = codec.ToInt64(rows.FirstOrDefault()?[0]) ?? 0;
             }
-            catch (OracleException ex) when (CopyCatalogQueries.IsNoAccess(ex))
+            catch (Exception ex) when (CopyErrors.IsNoAccess(errors, ex))
             {
                 _items.Add(new CheckItem(key, "SourceNoSelect", CheckLevel.Error, $"{key}: 원본 표(또는 부모 키 규칙의 부모 표)를 읽을 권한이 없습니다."));
             }
-            catch (OracleException ex)
+            catch (Exception ex) when (CopyErrors.IsServer(errors, ex))
             {
                 AddInvalid(key, $"원본 건수를 세지 못했습니다: {ex.Message}");
             }
@@ -778,7 +724,7 @@ internal sealed partial class CopyPrecheckService(IBulkExecutionService bulk, IM
                 try
                 {
                     var rows = await CopyCatalogQueries.QueryAsync(bulk, Source, sql, binds, ct).ConfigureAwait(false);
-                    var wrong = CopyCatalogQueries.ToLong(rows.FirstOrDefault()?[0]) ?? 0;
+                    var wrong = codec.ToInt64(rows.FirstOrDefault()?[0]) ?? 0;
                     if (wrong > 0)
                     {
                         _items.Add(new CheckItem(key, "WrongLengthDates", CheckLevel.Confirm,
@@ -788,7 +734,7 @@ internal sealed partial class CopyPrecheckService(IBulkExecutionService bulk, IM
                         });
                     }
                 }
-                catch (OracleException ex)
+                catch (Exception ex) when (CopyErrors.IsServer(errors, ex))
                 {
                     AddInvalid(key, $"{pc.Column}: 문자열 날짜 길이를 세지 못했습니다: {ex.Message}");
                 }
@@ -820,16 +766,16 @@ internal sealed partial class CopyPrecheckService(IBulkExecutionService bulk, IM
                     $"{key}: 부모 표 {sourceParent} 가 {(parent is null ? "작업에 없어" : "제외되어 있어")} 부모 전체를 기준으로 연결합니다(대상 쪽은 {targetParent})."));
 
                 // 작업 밖 부모는 다른 규칙이 권한을 보지 않는다: 원본 조회·대상 범위 지우기·건수 비교가 부모 표를 읽으므로 양쪽 SELECT 를 본다.
-                var sourceHeld = await CopyCatalogQueries.ReadObjectPrivilegesAsync(bulk, Source, _sourceAccess,
-                    CopyOwners.ParentSource(job, rule), rule.Parent.ParentTable, "TABLE", ct).ConfigureAwait(false);
+                var sourceHeld = await CopyCatalogQueries.ReadObjectPrivilegesAsync(bulk, catalog, codec, Source, _sourceAccess,
+                    CopyOwners.ParentSource(job, rule), rule.Parent.ParentTable, "TABLE", dialect.SupportsReadPrivilege, ct).ConfigureAwait(false);
                 if (!sourceHeld.Contains("SELECT"))
                 {
                     _items.Add(new CheckItem(key, "SourceNoSelect", CheckLevel.Error,
                         $"{key}: 부모 키 규칙이 읽는 원본 부모 표 {sourceParent} 에 SELECT 권한이 없습니다."));
                 }
 
-                var targetHeld = await CopyCatalogQueries.ReadObjectPrivilegesAsync(bulk, Target, _targetAccess,
-                    CopyOwners.ParentTarget(job, rule), rule.Parent.ParentTable, "TABLE", ct).ConfigureAwait(false);
+                var targetHeld = await CopyCatalogQueries.ReadObjectPrivilegesAsync(bulk, catalog, codec, Target, _targetAccess,
+                    CopyOwners.ParentTarget(job, rule), rule.Parent.ParentTable, "TABLE", dialect.SupportsReadPrivilege, ct).ConfigureAwait(false);
                 if (!targetHeld.Contains("SELECT"))
                 {
                     _items.Add(new CheckItem(key, "TargetNoWrite", CheckLevel.Error,
@@ -906,9 +852,9 @@ internal sealed partial class CopyPrecheckService(IBulkExecutionService bulk, IM
             };
 
             var owner = CopyOwners.SequenceOwner(job, rule);
-            var info = await CopyCatalogQueries.QueryAsync(bulk, Target, CopyCatalogQueries.SequenceInfo, ct,
+            var info = await CopyCatalogQueries.QueryAsync(bulk, Target, TargetSql("copy.sequence_info"), ct,
                 ("OWN", owner), ("SEQ", rule.Sequence)).ConfigureAwait(false);
-            var held = await CopyCatalogQueries.ReadObjectPrivilegesAsync(bulk, Target, _targetAccess, owner, rule.Sequence, "SEQUENCE", ct)
+            var held = await CopyCatalogQueries.ReadObjectPrivilegesAsync(bulk, catalog, codec, Target, _targetAccess, owner, rule.Sequence, "SEQUENCE", dialect.SupportsReadPrivilege, ct)
                 .ConfigureAwait(false);
             if (info.Count == 0 || !held.Contains("SELECT"))
             {
@@ -916,8 +862,8 @@ internal sealed partial class CopyPrecheckService(IBulkExecutionService bulk, IM
                 return;
             }
 
-            var next = CopyCatalogQueries.ToLong(info[0][0]) ?? 0;
-            var increment = CopyCatalogQueries.ToLong(info[0][1]) ?? 1;
+            var next = codec.ToInt64(info[0][0]) ?? 0;
+            var increment = codec.ToInt64(info[0][1]) ?? 1;
             var count = Build(rule.Table, () => _builder.SourceCount(rule.Table));
             if (count is null || !count.Sql.StartsWith(CountPrefix, StringComparison.Ordinal))
             {
@@ -929,9 +875,9 @@ internal sealed partial class CopyPrecheckService(IBulkExecutionService bulk, IM
             {
                 var sql = $"SELECT MAX({SqlIdentifier.QuoteAlways(rule.Column)}){count.Sql[CountPrefix.Length..]}";
                 var rows = await CopyCatalogQueries.QueryAsync(bulk, Source, sql, count.Binds, ct).ConfigureAwait(false);
-                max = CopyCatalogQueries.ToLong(rows.FirstOrDefault()?[0]) ?? long.MinValue;
+                max = codec.ToInt64(rows.FirstOrDefault()?[0]) ?? long.MinValue;
             }
-            catch (OracleException ex)
+            catch (Exception ex) when (CopyErrors.IsServer(errors, ex))
             {
                 _items.Add(new CheckItem(rule.Table, "SequenceGap", CheckLevel.Confirm,
                     $"{rule.Table}.{rule.Column}: 원본 최대값을 읽지 못해 시퀀스를 보정할 수 있는지 알 수 없습니다: {ex.Message}")
@@ -973,10 +919,10 @@ internal sealed partial class CopyPrecheckService(IBulkExecutionService bulk, IM
             {
                 try
                 {
-                    var rows = await CopyCatalogQueries.QueryAsync(bulk, Target, CopyCatalogQueries.SequenceNames, ct, ("OWN", owner)).ConfigureAwait(false);
-                    namesByOwner[owner] = [.. rows.Select(r => CopyCatalogQueries.Text(r[0])).OfType<string>()];
+                    var rows = await CopyCatalogQueries.QueryAsync(bulk, Target, TargetSql("copy.sequence_names"), ct, ("OWN", owner)).ConfigureAwait(false);
+                    namesByOwner[owner] = [.. rows.Select(r => codec.ToText(r[0])).OfType<string>()];
                 }
-                catch (OracleException ex) when (CopyCatalogQueries.IsNoAccess(ex))
+                catch (Exception ex) when (CopyErrors.IsNoAccess(errors, ex))
                 {
                     namesByOwner[owner] = [];
                 }
@@ -1012,29 +958,24 @@ internal sealed partial class CopyPrecheckService(IBulkExecutionService bulk, IM
             }
 
             long? undo = null;
-            try
+            if (dialect.ReadConsistencyParameter is { } parameter)
             {
-                var rows = await CopyCatalogQueries.QueryAsync(bulk, Source, CopyCatalogQueries.ParameterValue, ct, ("PNAME", "undo_retention")).ConfigureAwait(false);
-                undo = CopyCatalogQueries.ToLong(rows.FirstOrDefault()?[0]);
-            }
-            catch (OracleException)
-            {
-                // V$PARAMETER 를 읽을 권한이 없으면 알 수 없음으로 둔다.
-            }
-
-            if (undo is not { } retention)
-            {
-                _items.Add(new CheckItem(null, "ReadConsistency", CheckLevel.Pass,
-                    "원본 UNDO_RETENTION 을 읽을 수 없어 같은 시점 읽기가 끝까지 유지되는지는 알 수 없습니다."));
-                return;
+                try
+                {
+                    var rows = await CopyCatalogQueries.QueryAsync(bulk, Source, SourceSql("copy.parameter_value"), ct,
+                        ("PNAME", parameter)).ConfigureAwait(false);
+                    undo = codec.ToInt64(rows.FirstOrDefault()?[0]);
+                }
+                catch (Exception ex) when (CopyErrors.IsServer(errors, ex))
+                {
+                    // V$PARAMETER 를 읽을 권한이 없으면 알 수 없음으로 둔다.
+                }
             }
 
-            var seconds = Math.Ceiling(_estimated.Values.Sum() / AssumedRowsPerSecond);
-            var tooLong = seconds > retention;
-            _items.Add(new CheckItem(null, "ReadConsistency", tooLong ? CheckLevel.Confirm : CheckLevel.Pass,
-                tooLong
-                    ? $"예상 읽기 시간 약 {Number((long)seconds)}초가 원본 UNDO_RETENTION {Number(retention)}초보다 깁니다. ORA-01555 로 멈출 수 있으니 기간을 줄이거나 나눠 실행하세요."
-                    : $"예상 읽기 시간 약 {Number((long)seconds)}초, 원본 UNDO_RETENTION {Number(retention)}초."));
+            // 못 읽었으면(null) 어림 시간은 글에 쓰이지 않으므로 계산하지 않는다(옮기기 전과 같음).
+            var seconds = undo is null ? 0 : (long)Math.Ceiling(_estimated.Values.Sum() / AssumedRowsPerSecond);
+            var (level, message) = dialect.ReadConsistencyHint(seconds, undo);
+            _items.Add(new CheckItem(null, "ReadConsistency", level, message));
         }
 
         // ---- 미리 보기 ----
@@ -1048,7 +989,7 @@ internal sealed partial class CopyPrecheckService(IBulkExecutionService bulk, IM
                 var key = Key(plan.Rule);
                 if (Build(key, () => _builder.SourceSelect(key, plan.Columns)) is { } select)
                 {
-                    list.Add(await PreviewAsync(Source, CopyStatements.Query(select), PreviewSide.Source, ct).ConfigureAwait(false));
+                    list.Add(await PreviewAsync(Source, CopyCommonStatements.Query(select), PreviewSide.Source, ct).ConfigureAwait(false));
                 }
             }
 
@@ -1058,7 +999,7 @@ internal sealed partial class CopyPrecheckService(IBulkExecutionService bulk, IM
                 var key = Key(plan.Rule);
                 if (Build(key, () => _builder.TargetDelete(key)) is { } delete)
                 {
-                    list.Add(await PreviewAsync(Target, CopyStatements.Delete(delete), PreviewSide.Target, ct).ConfigureAwait(false));
+                    list.Add(await PreviewAsync(Target, CopyCommonStatements.Delete(delete), PreviewSide.Target, ct).ConfigureAwait(false));
                 }
             }
 
@@ -1067,7 +1008,7 @@ internal sealed partial class CopyPrecheckService(IBulkExecutionService bulk, IM
             {
                 foreach (var plan in order.Reverse().Where(p => IsRecreate(p.Rule)))
                 {
-                    list.Add(await PreviewAsync(Target, CopyStatements.DropTable(TargetOwner(plan.Rule), plan.Rule.Table), PreviewSide.Target, ct).ConfigureAwait(false));
+                    list.Add(await PreviewAsync(Target, statements.DropTable(TargetOwner(plan.Rule), plan.Rule.Table), PreviewSide.Target, ct).ConfigureAwait(false));
                 }
             }
 
@@ -1075,18 +1016,18 @@ internal sealed partial class CopyPrecheckService(IBulkExecutionService bulk, IM
             {
                 foreach (var trigger in plan.Triggers)
                 {
-                    list.Add(await PreviewAsync(Target, CopyStatements.DisableTrigger(TargetOwner(plan.Rule), trigger), PreviewSide.Target, ct).ConfigureAwait(false));
+                    list.Add(await PreviewAsync(Target, statements.DisableTrigger(TargetOwner(plan.Rule), trigger), PreviewSide.Target, ct).ConfigureAwait(false));
                 }
             }
 
             foreach (var fk in order.SelectMany(p => p.DisablableForeignKeys).Distinct())
             {
-                list.Add(await PreviewAsync(Target, CopyStatements.DisableConstraint(fk), PreviewSide.Target, ct).ConfigureAwait(false));
+                list.Add(await PreviewAsync(Target, statements.DisableConstraint(fk), PreviewSide.Target, ct).ConfigureAwait(false));
             }
 
             foreach (var rule in job.Sequences.Where(r => order.Any(p => string.Equals(Key(p.Rule), r.Table, StringComparison.Ordinal))))
             {
-                list.Add(await PreviewAsync(Target, CopyStatements.NextValues(CopyOwners.SequenceOwner(job, rule), rule.Sequence), PreviewSide.Target, ct).ConfigureAwait(false));
+                list.Add(await PreviewAsync(Target, statements.NextValues(CopyOwners.SequenceOwner(job, rule), rule.Sequence), PreviewSide.Target, ct).ConfigureAwait(false));
             }
 
             return list;
@@ -1101,6 +1042,26 @@ internal sealed partial class CopyPrecheckService(IBulkExecutionService bulk, IM
         // ---- 도우미 ----
 
         private const string CountPrefix = "SELECT COUNT(*)";
+
+        /// <summary>대상 세션 DBMS 의 카탈로그 SELECT 글(<c>copy.*</c>).</summary>
+        private string TargetSql(string id) => CopyCatalogQueries.Sql(catalog, Target.Server, id);
+
+        /// <summary>원본 세션 DBMS 의 카탈로그 SELECT 글(<c>copy.*</c>).</summary>
+        private string SourceSql(string id) => CopyCatalogQueries.Sql(catalog, Source.Server, id);
+
+        /// <summary>대상 초기화 파라미터 값(<c>copy.parameter_value</c>)을 글자로. 행이 없거나 서버 오류면 null.</summary>
+        private async Task<string?> TargetParameterAsync(string name, CancellationToken ct)
+        {
+            try
+            {
+                return codec.ToText((await CopyCatalogQueries.QueryAsync(bulk, Target, TargetSql("copy.parameter_value"), ct,
+                    ("PNAME", name)).ConfigureAwait(false)).FirstOrDefault()?[0]);
+            }
+            catch (Exception ex) when (CopyErrors.IsServer(errors, ex))
+            {
+                return null; // V$PARAMETER 를 읽지 못하면 알 수 없음.
+            }
+        }
 
         private string Key(TableRule rule) => CopyOwners.Key(job, rule);
 

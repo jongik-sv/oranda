@@ -1,14 +1,16 @@
+using Oranda.Core.Execution;
 using Oranda.Core.Metadata;
 using Oranda.Core.Transfer.Copy;
-using Oranda.Oracle.Transfer.Copy;
 
-namespace Oranda.Oracle.Tests.Transfer.Copy;
+namespace Oranda.Core.Tests.Transfer.Copy;
 
 // 소유: 데이터 복사 Task 8. 사전 점검의 순수 판정(DB 없음).
 
 public sealed class PrecheckRulesTests
 {
     private static readonly TableRule Rule = new("ORDERS", RuleKind.All, TargetAction.MergeByPk);
+
+    private static readonly IBulkValueCodec Codec = new ScalarOnlyCodec();
 
     private static ColumnInfo Col(string name, string type, int position = 1) => new(name, position, type);
 
@@ -23,13 +25,13 @@ public sealed class PrecheckRulesTests
         var source = Table(Col("ID", "NUMBER"), Col("MEMO", "VARCHAR2"));
         var target = Table(Col("ID", "NUMBER"));
 
-        var items = PrecheckRules.CompareColumns(source, target, Rule);
+        var items = PrecheckRules.CompareColumns(Codec, source, target, Rule);
 
         var item = Assert.Single(items);
         Assert.Equal("ColumnNotInTarget", item.Code);
         Assert.Equal(CheckLevel.Confirm, item.Level);
         Assert.Equal("MEMO", item.Column);
-        Assert.Equal(["ID"], PrecheckRules.SelectColumns(source, target, Rule));
+        Assert.Equal(["ID"], PrecheckRules.SelectColumns(Codec, source, target, Rule));
     }
 
     [Fact]
@@ -42,7 +44,7 @@ public sealed class PrecheckRulesTests
             Col("STATUS", "VARCHAR2", 3) with { IsNullable = false, DefaultValue = "'N'" },
             Col("NOTE", "VARCHAR2", 4));
 
-        var items = PrecheckRules.CompareColumns(source, target, Rule);
+        var items = PrecheckRules.CompareColumns(Codec, source, target, Rule);
 
         var item = Assert.Single(items);
         Assert.Equal("TargetRequiredColumnMissing", item.Code);
@@ -62,7 +64,7 @@ public sealed class PrecheckRulesTests
             Col("AMOUNT", "NUMBER", 2) with { Precision = 8, Scale = 2 },
             Col("SAME", "VARCHAR2", 3) with { Length = 10 });
 
-        var items = PrecheckRules.CompareColumns(source, target, Rule);
+        var items = PrecheckRules.CompareColumns(Codec, source, target, Rule);
 
         Assert.Equal(2, items.Count);
         Assert.All(items, i =>
@@ -79,16 +81,16 @@ public sealed class PrecheckRulesTests
         var source = Table(Col("ID", "NUMBER"), Col("DOC", "XMLTYPE", 2));
         var target = Table(Col("ID", "NUMBER"), Col("DOC", "XMLTYPE", 2));
 
-        var item = Assert.Single(PrecheckRules.CompareColumns(source, target, Rule));
+        var item = Assert.Single(PrecheckRules.CompareColumns(Codec, source, target, Rule));
 
         Assert.Equal("UnsupportedType", item.Code);
         Assert.Equal(CheckLevel.Error, item.Level);
         Assert.Equal("DOC", item.Column);
         Assert.Contains(CheckChoice.SkipColumn, item.Choices);
-        Assert.Equal(["ID"], PrecheckRules.SelectColumns(source, target, Rule));
+        Assert.Equal(["ID"], PrecheckRules.SelectColumns(Codec, source, target, Rule));
 
         // 건너뛰기로 정하면 오류가 사라진다.
-        Assert.Empty(PrecheckRules.CompareColumns(source, target, Rule with { SkipColumns = ["DOC"] }));
+        Assert.Empty(PrecheckRules.CompareColumns(Codec, source, target, Rule with { SkipColumns = ["DOC"] }));
     }
 
     [Fact]
@@ -99,14 +101,14 @@ public sealed class PrecheckRulesTests
             Col("ID", "NUMBER") with { IsIdentity = true, IsNullable = false },
             Col("TOTAL", "NUMBER", 2) with { IsVirtual = true });
 
-        var items = PrecheckRules.CompareColumns(source, target, Rule);
+        var items = PrecheckRules.CompareColumns(Codec, source, target, Rule);
 
         var item = Assert.Single(items);
         Assert.Equal("IdentityAlways", item.Code);
         Assert.Equal(CheckLevel.Error, item.Level);
         Assert.Equal("ID", item.Column);
         Assert.DoesNotContain(items, i => i.Column == "TOTAL");
-        Assert.DoesNotContain("TOTAL", PrecheckRules.SelectColumns(source, target, Rule));
+        Assert.DoesNotContain("TOTAL", PrecheckRules.SelectColumns(Codec, source, target, Rule));
     }
 
     [Fact]
@@ -206,4 +208,27 @@ public sealed class PrecheckRulesTests
         Assert.Equal("APP2.ORDERS", item.Table);
         Assert.Equal("MaskOnKey", item.Code);
     }
+}
+
+/// <summary>
+/// 판정 시험용 코덱: 이 시험이 쓰는 형식 가운데 NUMBER·VARCHAR2 만 지원(XMLTYPE 등은 미지원)으로 본다. 값 해석은 쓰지 않는다.
+/// Oracle 코덱(<c>OracleBulkValueCodec</c>)의 지원 목록은 Oracle.Tests 가 따로 본다.
+/// </summary>
+internal sealed class ScalarOnlyCodec : IBulkValueCodec
+{
+    private static readonly HashSet<string> Supported = new(StringComparer.OrdinalIgnoreCase) { "NUMBER", "VARCHAR2" };
+
+    public bool IsSupported(string serverType) => Supported.Contains(serverType);
+
+    public BulkKind KindOf(string serverType) => string.Equals(serverType, "VARCHAR2", StringComparison.OrdinalIgnoreCase) ? BulkKind.Text : BulkKind.Other;
+
+    public BindDataType BindTypeOf(string serverType) => throw new NotSupportedException();
+
+    public string? ToKeyText(object? value, string serverType) => throw new NotSupportedException();
+
+    public object? FromKeyText(string? text, string serverType) => throw new NotSupportedException();
+
+    public long? ToInt64(object? value) => throw new NotSupportedException();
+
+    public string? ToText(object? value) => throw new NotSupportedException();
 }

@@ -42,10 +42,20 @@ public sealed class PrecheckStepTests
         }
 
         Assert.NotNull(dir);
-        var copyDir = Path.Combine(dir.FullName, "src", "Oranda.Oracle", "Transfer", "Copy");
-        var codes = Directory.GetFiles(copyDir, "*.cs")
+        // 점검 본문(CopyPrecheckService·PrecheckRules)은 Core, DBMS 방언은 각 DBMS 어셈블리에 있다(TP0b-1 C).
+        var copyDirs = new[]
+        {
+            Path.Combine(dir.FullName, "src", "Oranda.Core", "Transfer", "Copy"),
+            Path.Combine(dir.FullName, "src", "Oranda.Oracle", "Transfer", "Copy"),
+        };
+        var files = copyDirs.SelectMany(d => Directory.GetFiles(d, "*.cs")).ToList();
+        // 폴더가 옮겨져 본문을 못 읽으면 아래 검사가 상수만으로 조용히 통과한다 → 본문 두 파일이 실제로 읽혔는지 먼저 본다.
+        Assert.Contains(files, f => Path.GetFileName(f) == "CopyPrecheckService.cs");
+        Assert.Contains(files, f => Path.GetFileName(f) == "PrecheckRules.cs");
+        var codes = files
             .SelectMany(f => System.Text.RegularExpressions.Regex.Matches(File.ReadAllText(f), @"new CheckItem\([^,]+,\s*""(?<code>[A-Za-z]+)""").Select(m => m.Groups["code"].Value))
             .ToHashSet(StringComparer.Ordinal);
+        Assert.NotEmpty(codes); // 소스에서 모은 코드(상수를 더하기 전)가 0 이면 검사 대상이 빈 것이다.
         // 상수로 정한 코드(CopyCheckCodes: OtherOwnerTargets·SynonymChanged 등)도 모은다.
         foreach (var field in typeof(CopyCheckCodes).GetFields().Where(f => f.IsLiteral))
         {

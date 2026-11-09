@@ -50,6 +50,6 @@ public class RecreateStepTests
 
         Assert.Equal(new DbObjectRef("CP_DST", "T", "TABLE"), target.Table);
         Assert.False(target.Columns[0].IsIdentity); // CreateTableDdl 이 BY DEFAULT 로 만든다: 값을 넣을 수 있다.
-        Assert.Equal(["ID"], PrecheckRules.KeyColumns(target, PrecheckRules.SelectColumns(source, target, new TableRule("T", RuleKind.All, TargetAction.Recreate))));
+        Assert.Equal(["ID"], PrecheckRules.KeyColumns(target, PrecheckRules.SelectColumns(OracleBulkValueCodec.Instance, source, target, new TableRule("T", RuleKind.All, TargetAction.Recreate))));
     }
 }

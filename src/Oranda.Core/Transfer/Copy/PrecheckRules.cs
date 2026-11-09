@@ -1,38 +1,27 @@
 using System.Globalization;
 using Oranda.Core.Metadata;
-using Oranda.Core.Transfer.Copy;
-using Oranda.Oracle.Execution;
 
-namespace Oranda.Oracle.Transfer.Copy;
+namespace Oranda.Core.Transfer.Copy;
 
 /// <summary>
 /// 사전 점검의 순수 판정(DB 를 부르지 않는다). 열 목록·키 열·필요 권한을 고르는 함수는 실행기(T9)도 같이 쓴다:
 /// 점검이 본 열과 실행기가 넣는 열이 달라지지 않게 한곳에서 정한다.
+/// 형식 지원 여부는 DBMS 의 <see cref="IBulkValueCodec.IsSupported"/>(실행기의 바인드 형식 목록과 같음, 설계 8.3)로 본다.
 /// </summary>
-internal static class PrecheckRules
+public static class PrecheckRules
 {
     // ---- 열 목록(점검과 실행기가 공유) ----
 
-    /// <summary>대량 실행 경로가 다루는 형식인가. 실행기가 쓰는 <see cref="BulkBinds.ToDbType"/> 와 같은 목록이다(설계 8.3).</summary>
-    public static bool IsSupportedType(string dataType)
-    {
-        try
-        {
-            _ = BulkBinds.ToDbType(dataType);
-            return true;
-        }
-        catch (NotSupportedException)
-        {
-            return false;
-        }
-    }
-
     /// <summary>
     /// 복사할 열(<see cref="CopyTablePlan.Columns"/>). 원본 열 순서, 숨김 열 포함.
-    /// 가상 열(양쪽)·대상에 없는 열·<see cref="TableRule.SkipColumns"/>·지원하지 않는 형식 열은 뺀다(메모 D10).
+    /// 가상 열(양쪽)·대상에 없는 열·<see cref="TableRule.SkipColumns"/>·지원하지 않는 형식 열(<paramref name="codec"/>)은 뺀다(메모 D10).
     /// </summary>
-    public static IReadOnlyList<string> SelectColumns(TableInfo source, TableInfo target, TableRule rule)
+    public static IReadOnlyList<string> SelectColumns(IBulkValueCodec codec, TableInfo source, TableInfo target, TableRule rule)
     {
+        ArgumentNullException.ThrowIfNull(codec);
+        ArgumentNullException.ThrowIfNull(source);
+        ArgumentNullException.ThrowIfNull(target);
+        ArgumentNullException.ThrowIfNull(rule);
         var targetColumns = target.Columns.ToDictionary(c => c.Name, StringComparer.Ordinal);
         var skip = rule.SkipColumns.ToHashSet(StringComparer.Ordinal);
         var result = new List<string>();
@@ -43,7 +32,7 @@ internal static class PrecheckRules
                 continue;
             }
 
-            if (IsSupportedType(column.DataType) && IsSupportedType(t.DataType))
+            if (codec.IsSupported(column.DataType) && codec.IsSupported(t.DataType))
             {
                 result.Add(column.Name);
             }
@@ -103,8 +92,12 @@ internal static class PrecheckRules
     // ---- 열 비교(설계 7장) ----
 
     /// <summary>원본과 대상의 열 차이. 항목의 <see cref="CheckItem.Table"/> 은 <paramref name="key"/>(규칙 키, 없으면 <c>rule.Table</c>)다.</summary>
-    public static IReadOnlyList<CheckItem> CompareColumns(TableInfo source, TableInfo target, TableRule rule, string? key = null)
+    public static IReadOnlyList<CheckItem> CompareColumns(IBulkValueCodec codec, TableInfo source, TableInfo target, TableRule rule, string? key = null)
     {
+        ArgumentNullException.ThrowIfNull(codec);
+        ArgumentNullException.ThrowIfNull(source);
+        ArgumentNullException.ThrowIfNull(target);
+        ArgumentNullException.ThrowIfNull(rule);
         var table = key ?? rule.Table;
         var items = new List<CheckItem>();
         var skip = rule.SkipColumns.ToHashSet(StringComparer.Ordinal);
@@ -130,9 +123,9 @@ internal static class PrecheckRules
                 continue;
             }
 
-            if (!IsSupportedType(s.DataType) || !IsSupportedType(t.DataType))
+            if (!codec.IsSupported(s.DataType) || !codec.IsSupported(t.DataType))
             {
-                var unsupported = IsSupportedType(s.DataType) ? t.DataType : s.DataType;
+                var unsupported = codec.IsSupported(s.DataType) ? t.DataType : s.DataType;
                 items.Add(new CheckItem(table, "UnsupportedType", CheckLevel.Error,
                     $"{table}.{s.Name}: 복사가 지원하지 않는 형식({unsupported})입니다. 이 열을 건너뛰거나 규칙에서 빼세요.")
                 {
