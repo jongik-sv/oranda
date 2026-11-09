@@ -33,8 +33,11 @@ public class DbmsFeatureKeysTests
         keys.Set("hasSession", true);
         DbmsFeatureKeys.Apply(keys, Dbms.Tibero);
 
-        var expression = DbmsFeatureKeys.Enabled(DbmsFeature.AwrReport) + " && hasSession";
+        var expression = DbmsFeatureKeys.Enabled(DbmsFeature.Ash) + " && hasSession"; // 아직 Tibero = false 인 기능
         Assert.False(keys.Evaluate(expression));
+
+        // 실측으로 켠 기능은 Tibero 에서도 켜진다(AwrReport = 계획 이력, P5b TPR 실측).
+        Assert.True(keys.Evaluate(DbmsFeatureKeys.Enabled(DbmsFeature.AwrReport) + " && hasSession"));
         var reason = ContextKeyReasons.Explain(expression, keys.Evaluate, DbmsFeatureKeys.WrapPhrase(Phrase, () => Dbms.Tibero));
         Assert.Equal("Tibero 에서는 지원하지 않음", reason);
 

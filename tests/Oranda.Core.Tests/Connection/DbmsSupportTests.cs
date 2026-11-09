@@ -43,11 +43,11 @@ public class DbmsSupportTests
         Assert.Equal(ServerFeatures.UnavailableText, ServerFeatures.For(19).UnavailableReason);
     }
 
-    // 기능마다 한 행(tibero.md 3장 + tibero-catalog-map.md 6.2.15 실측). 실측으로 한 행을 고치면 이 행만 바뀐다. 처음 7행은 아직 끔(근거 부족),
+    // 기능마다 한 행(tibero.md 3장 + tibero-catalog-map.md 6.2.15 실측). 실측으로 한 행을 고치면 이 행만 바뀐다. 처음 7행 가운데 AwrReport 는 실측으로 켬, 나머지는 아직 끔(근거 부족),
     // 뒤 5행(P0-b)은 원본이 없어 끔(t4-decision Q2, tibero-monitor-catalog.md).
     [Theory]
     [InlineData(DbmsFeature.SqlMonitorReport, true, false)]
-    [InlineData(DbmsFeature.AwrReport, true, false)]
+    [InlineData(DbmsFeature.AwrReport, true, true)] // P5b 실측: TPR 계획 이력이 된다(win144 #49·#50)
     [InlineData(DbmsFeature.Ash, true, false)]
     [InlineData(DbmsFeature.SessionTrace, true, false)]
     [InlineData(DbmsFeature.Tkprof, true, false)]

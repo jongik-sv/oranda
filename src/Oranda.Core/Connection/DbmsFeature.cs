@@ -86,10 +86,13 @@ public static class DbmsSupport
         // 실측(P1 M5, win144 #35, 6.2.15): Tibero 카탈로그 plan.monitor_report 로 방금 끝낸 문장의 보고서를 받으면 빈 글(길이 0) → 끈 채로 둔다.
         DbmsFeature.SqlMonitorReport => false,
 
-        // DBA_HIST_* 는 일부 있으나 SQL_ID 대신 SQL_HASH_VALUE 이고 *_DELTA 열이 없어 별도 설계다(catalog-map 요약·tuning.awr_plan_*). 보고서 패키지는 실측 필요.
-        DbmsFeature.AwrReport => false,
+        // 이 키의 소비자 = 계획 이력 명령(oranda.tuning.awrHistory). TPR(DBA_HIST_SQLSTAT·SNAPSHOT·SQL_PLAN)로 tuning.awr_plan_history·awr_plan_steps 가 된다
+        // (SQL_ID 대신 SQL_HASH_VALUE, *_DELTA 없음 — 스냅숏 행 값 그대로). 실측(P5b H1, win144 #49·#50, 6.2.15): 이력 행·계획 단계·해시가 나옴 → 켬.
+        // TPR 이 꺼진 서버는 이력이 빈 목록일 뿐 오류가 아니다.
+        DbmsFeature.AwrReport => true,
 
-        // V$ACTIVE_SESSION_HISTORY 는 있으나 SESSION_STATE·WAIT_CLASS 열이 없고 EVENT → WAIT_EVENT 다(catalog-map 4장). 실측 필요: 값의 뜻.
+        // V$ACTIVE_SESSION_HISTORY 는 있으나 SESSION_STATE·WAIT_CLASS 열이 없고 EVENT → WAIT_EVENT 다(catalog-map 4장).
+        // 실측(P5b H0·H2, win144 #49): 시험 서버는 ACTIVE_SESSION_HISTORY = NO 라 표본 0행 → 값의 뜻을 잴 수 없어 끈 채로 둔다(ASH 를 켠 서버에서 다시 잼).
         DbmsFeature.Ash => false,
 
         // DBMS_MONITOR 패키지가 없다(catalog-map 5.1·요약) → 실측으로 확정된 「안 됨」.

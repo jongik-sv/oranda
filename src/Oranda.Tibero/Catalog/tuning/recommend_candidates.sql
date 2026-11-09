@@ -1,7 +1,8 @@
 -- 튜닝 추천 후보(Tibero): 누적 경과 시간 상위 :top 개. 열 순서는 Oracle tuning.recommend_candidates 와 같다.
 -- Oracle 은 GV$SQLSTATS 를 쓰지만 Tibero V$SQLSTATS 는 ELAPSED_TIME·CPU_TIME 등이 음수가 부호 없는 64비트로 넘어간 값(18446744073…)을 돌려줘
 -- 순위가 깨진다(실측) → V$SQL 을 sql_id·plan_hash_value 로 묶는다(V$SQLSTATS 와 같은 단위).
--- V$SQL 도 일부 행·열이 같은 식으로 넘어간 값을 준다(P5b H3 실측, win144 #49: 묶은 합이 Int64 를 넘어 OverflowException) →
+-- V$SQL 도 일부 행·열이 같은 식으로 넘어간 값을 준다(P5b H3 실측, win144 #49: 묶은 합이 Int64 를 넘어 OverflowException,
+-- #50: USER_IO·APPLICATION·CONCURRENCY_WAIT_TIME 세 열만 2·6·4행, 나머지 열은 0행) → 모든 숫자 열에 같은 규칙으로
 -- 행마다 0 ~ 2^62-1 밖의 값(음수가 넘어간 값, 마이크로초로 14만 년 넘음)은 NULL 로 빼고 묶는다. 합계·순위는 남은 값으로 낸다.
 -- version_count = 묶음 안 자식 수, fms = NULL(FORCE_MATCHING_SIGNATURE 없음), 파싱 스키마 = PARSING_SCHEMA_ID → ALL_USERS, inst_id = USERENV INSTANCE.
 -- 바인드: top, min_executions, sql_ids(쉼표로 이은 sql_id 목록 — null 이면 전체)
