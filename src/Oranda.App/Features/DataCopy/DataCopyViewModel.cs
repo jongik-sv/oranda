@@ -417,6 +417,86 @@ public sealed partial class DataCopyViewModel : ViewModelBase, IAsyncDisposable
     private static string QuoteName(string name) => "\"" + name.Replace("\"", "\"\"", StringComparison.Ordinal) + "\"";
 
     /// <summary>
+    /// 「테이블 찾기」 팝업의 모델을 만든다: 원본 세션을 열어(필요하면 비밀번호를 묻는다) 계정 목록을 읽고,
+    /// 계정마다 표·시노님과 테이블 명을 읽는 함수를 건넨다. 작업이 없거나 원본 세션을 열 수 없으면 null(이유는 상태 줄).
+    /// </summary>
+    public async Task<TableFinderViewModel?> CreateTableFinderAsync(CancellationToken ct = default)
+    {
+        if (RunInProgress() || CurrentJob is null)
+        {
+            return null;
+        }
+
+        if (Editor.Source is null)
+        {
+            Say(DataCopyText.SourceMissing, error: true);
+            return null;
+        }
+
+        var session = await SourceSessionAsync(ct).ConfigureAwait(true);
+        if (session is null || _services.Metadata is not { } metadata)
+        {
+            Say(session is null ? DataCopyText.SynonymNeedsSource : DataCopyText.MetadataMissing, error: true);
+            return null;
+        }
+
+        IReadOnlyList<string> owners;
+        try
+        {
+            owners = await metadata.ListSchemasAsync(session, ct).ConfigureAwait(true);
+        }
+        catch (Exception e) when (e is not OperationCanceledException)
+        {
+            owners = [];
+        }
+
+        var defaultOwner = Editor.SourceOwner.Length > 0 ? Editor.SourceOwner : session.Profile.User.ToUpperInvariant();
+        return new TableFinderViewModel(owners, defaultOwner,
+            async (owner, token) =>
+            {
+                var objects = await metadata.ListObjectsAsync(session, new ObjectQuery { Owner = owner, ObjectTypes = CandidateTypes }, token).ConfigureAwait(true);
+                IReadOnlyDictionary<string, string> comments;
+                try
+                {
+                    comments = await metadata.ListTableCommentsAsync(session, owner, token).ConfigureAwait(true);
+                }
+                catch (Exception e) when (e is not OperationCanceledException)
+                {
+                    comments = new Dictionary<string, string>(StringComparer.Ordinal); // 테이블 명 없이도 고를 수 있다
+                }
+
+                return [.. objects.Select(o => new TableFinderSource(o.Owner, o.Name, o.ObjectType, comments.GetValueOrDefault(o.Name)))];
+            },
+            (owner, table) => Editor.Rules.Any(r => CopyOwners.SameOwner(Editor.EffectiveSource(r), owner) && string.Equals(r.Table, table, StringComparison.Ordinal)));
+    }
+
+    /// <summary>「테이블 찾기」에서 고른 표를 한 번에 규칙으로 더한다(시노님은 실제 표로 푼다). 끝나면 몇 개 더했는지 알린다.</summary>
+    public async Task AddFoundTablesAsync(IReadOnlyList<DbObjectRef> tables, CancellationToken ct = default)
+    {
+        ArgumentNullException.ThrowIfNull(tables);
+        if (tables.Count == 0)
+        {
+            return;
+        }
+
+        var before = Editor.Rules.Count;
+        var problems = new List<string>();
+        foreach (var table in tables)
+        {
+            ct.ThrowIfCancellationRequested();
+            await AddTableAsync(table, null, ct).ConfigureAwait(true);
+            if (StatusIsError)
+            {
+                problems.Add(StatusText);
+            }
+        }
+
+        var added = Editor.Rules.Count - before;
+        var text = $"테이블 {added.ToString(System.Globalization.CultureInfo.InvariantCulture)}개 규칙을 추가했습니다.";
+        Say(problems.Count == 0 ? text : $"{text} 더하지 못한 것: {string.Join(" / ", problems)}", problems.Count > 0);
+    }
+
+    /// <summary>
     /// 스키마 브라우저 「데이터 복사에 추가」: 열려 있는 작업에 표 규칙을 더한다. 열린 작업이 없으면 새 작업을 만들고,
     /// 원본 접속이 비어 있으면 표를 고른 접속(<paramref name="sourceProfile"/>)을 원본으로 둔다.
     /// </summary>
