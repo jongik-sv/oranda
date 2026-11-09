@@ -23,11 +23,23 @@ public sealed record ServerInfo(
     bool IsRac = false,
     Dbms Dbms = Dbms.Oracle)
 {
-    /// <summary>12c 이상이면 true. 12c 부터 CDB/PDB, DBMS_DEBUG_JDWP, blocking_session 컬럼 등이 달라진다.</summary>
-    public bool IsAtLeast12c => MajorVersion >= 12;
+    private readonly ServerCapabilities _capabilities = Capabilities;
 
-    /// <summary>서버 버전으로 정해지는 기능 켜짐(11g 에서 12c 이후 기능 끄기, TSK-03-07).</summary>
-    public ServerFeatures Features => ServerFeatures.For(MajorVersion);
+    /// <summary>
+    /// 접속 계정의 도구 권한. 늘 이 서버의 <see cref="Dbms"/> 를 따른다: 공급자가 권한 계산에 DBMS 를 넘기지 않았어도
+    /// (<see cref="ServerCapabilities.Dbms"/> 가 다르면) <see cref="ServerCapabilities.WithDbms"/> 로 맞춘 값을 돌려준다.
+    /// </summary>
+    public ServerCapabilities Capabilities
+    {
+        get => _capabilities is null || _capabilities.Dbms == Dbms ? _capabilities! : _capabilities.WithDbms(Dbms);
+        init => _capabilities = value;
+    }
+
+    /// <summary>Oracle 12c 이상이면 true. 12c 부터 CDB/PDB, DBMS_DEBUG_JDWP, blocking_session 컬럼 등이 달라진다. Oracle 버전 기준이라 Tibero 는 false.</summary>
+    public bool IsAtLeast12c => Dbms == Dbms.Oracle && MajorVersion >= 12;
+
+    /// <summary>서버 버전과 DBMS 로 정해지는 기능 켜짐(11g 에서 12c 이후 기능 끄기, TSK-03-07).</summary>
+    public ServerFeatures Features => ServerFeatures.For(MajorVersion, Dbms);
 
     public int MajorVersion =>
         int.TryParse(Version.Split('.')[0], out var major) ? major : 0;
