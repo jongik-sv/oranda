@@ -122,6 +122,29 @@ public class OrandaJsonContextTests
         Assert.Equal(new DateTimeOffset(2026, 10, 19, 8, 0, 0, TimeSpan.Zero), value.Profiles[0].LastConnectedAt);
         Assert.Equal("주문 조회 전용 계정.\n배치 시간(02~04시)에는 쓰지 않는다", value.Profiles[0].Comment);
         Assert.Null(value.Profiles[1].Comment); // 키가 없으면 null
+        Assert.All(value.Profiles, p => Assert.Equal(Dbms.Oracle, p.Dbms)); // 옛 파일(dbms 키 없음) = Oracle
+    }
+
+    [Fact]
+    public void Profile_without_dbms_key_reads_as_oracle()
+    {
+        const string json = """{ "schemaVersion": 1, "profiles": [ { "name": "a", "user": "u", "dataSource": "h:1521/s" } ] }""";
+
+        var doc = JsonSerializer.Deserialize(json, OrandaJsonContext.Default.ConnectionsDocument)!;
+
+        Assert.Equal(Dbms.Oracle, Assert.Single(doc.Profiles).Dbms);
+    }
+
+    [Fact]
+    public void Tibero_profile_round_trips_as_string()
+    {
+        var doc = new ConnectionsDocument { Profiles = [new ConnectionProfile("t", "u", "h:8629/tibero", Dbms: Dbms.Tibero)] };
+
+        var json = JsonSerializer.Serialize(doc, OrandaJsonContext.Default.ConnectionsDocument);
+        var back = JsonSerializer.Deserialize(json, OrandaJsonContext.Default.ConnectionsDocument)!;
+
+        Assert.Contains("\"dbms\": \"Tibero\"", json, StringComparison.Ordinal);
+        Assert.Equal(Dbms.Tibero, Assert.Single(back.Profiles).Dbms);
     }
 
     [Fact]

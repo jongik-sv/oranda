@@ -53,6 +53,7 @@ public sealed record NlsSettings
 /// <see cref="Comment"/> 는 사람이 적는 여러 줄 설명(null = 없음, TSK-13-12).
 /// <see cref="AiAccess"/> 는 AI 허용 수준, <see cref="AllowExplainPlan"/> 은 AI 의 EXPLAIN PLAN 허용 여부 — 둘 다 null 이면 환경 라벨의 기본값
 /// (<see cref="AiAccessPolicy"/>, 옛 JSON 도 null 로 읽힌다).
+/// <see cref="Dbms"/> 는 접속 대상 DBMS 종류(D-046). 옛 JSON(키 없음)은 <see cref="Connection.Dbms.Oracle"/> 로 읽힌다.
 /// D-004: 위치 매개변수 record 를 유지하고 새 매개변수는 끝에 기본값과 함께 덧붙인다.
 /// </summary>
 public sealed record ConnectionProfile(
@@ -76,7 +77,8 @@ public sealed record ConnectionProfile(
     DateTimeOffset? LastConnectedAt = null,
     string? Comment = null,
     AiAccessLevel? AiAccess = null,
-    bool? AllowExplainPlan = null);
+    bool? AllowExplainPlan = null,
+    Dbms Dbms = Dbms.Oracle);
 
 /// <summary><c>connections.json</c> 루트.</summary>
 public sealed record ConnectionsDocument

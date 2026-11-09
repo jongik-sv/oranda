@@ -33,6 +33,16 @@ public class ConnectionExportTests
     }
 
     [Fact]
+    public void Dbms_survives_export_and_import()
+    {
+        var tibero = Local with { Dbms = Dbms.Tibero };
+
+        var back = ConnectionExport.Read(ConnectionExport.Write([tibero, Orders]));
+
+        Assert.Equal([Dbms.Tibero, Dbms.Oracle], back.Select(p => p.Dbms));
+    }
+
+    [Fact]
     public void Written_file_round_trips_profile_values_without_secrets()
     {
         var json = ConnectionExport.Write([Orders, Local], new DateTimeOffset(2026, 10, 22, 1, 2, 3, TimeSpan.Zero));

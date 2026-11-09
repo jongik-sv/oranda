@@ -28,7 +28,7 @@ public class ModelContractTests
         Assert.Equal(
             ["Name", "User", "DataSource", "Auth", "TnsAdmin", "WalletLocation", "ConnectTimeoutSeconds",
              "Id", "Environment", "ReadOnly", "LicensePack", "KeepAliveSeconds", "Nls", "CredentialRef",
-             "ProxyUser", "Color", "Group", "LastConnectedAt", "Comment", "AiAccess", "AllowExplainPlan"],
+             "ProxyUser", "Color", "Group", "LastConnectedAt", "Comment", "AiAccess", "AllowExplainPlan", "Dbms"],
             ctor.GetParameters().Select(p => p.Name));
     }
 
@@ -46,6 +46,7 @@ public class ModelContractTests
         Assert.Equal(0, p.KeepAliveSeconds);
         Assert.Null(p.CredentialRef);
         Assert.Null(p.Comment);
+        Assert.Equal(Dbms.Oracle, p.Dbms);
     }
 
     [Fact]
