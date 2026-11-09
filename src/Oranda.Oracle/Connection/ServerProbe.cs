@@ -59,7 +59,8 @@ public static class ServerProbe
             IsAutonomous: IsAutonomousService(cloudService?[0]),
             Edition: ParseEdition(banner),
             ManagementPackAccess: packAccess,
-            IsRac: string.Equals(clusterDb, "TRUE", StringComparison.OrdinalIgnoreCase));
+            IsRac: string.Equals(clusterDb, "TRUE", StringComparison.OrdinalIgnoreCase),
+            Dbms: Dbms.Oracle);
     }
 
     /// <summary>CLOUD_SERVICE 컨텍스트는 ADB 에서만 값이 있다(OLTP, DWCS, JDCS, ...).</summary>

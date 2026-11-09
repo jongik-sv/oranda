@@ -1,3 +1,4 @@
+using Oranda.Core.Catalog;
 using Oranda.Core.Composition;
 using Oranda.Core.Connection;
 using Oranda.Core.Sessions;
@@ -24,6 +25,30 @@ public static class DbmsServices
     public static T? For<T>(IServiceProvider? services, ISession? session)
         where T : class
         => session is null ? null : Find<T>(services, session.Profile.Dbms);
+
+    /// <summary>
+    /// 세션 서버의 DBMS·버전에 맞는 카탈로그 문장 <paramref name="id"/> 를 꺼내 <c>@KEY@</c> 자리를 채운다(<see cref="Oranda.Core.Catalog.CatalogText.Fill"/>).
+    /// App 이 <c>EmbeddedCatalog.Text</c> 를 직접 쓰던 자리의 대체. 세션이 없거나 카탈로그 구현이 없거나 그 DBMS·버전에 id 가 없으면 null —
+    /// 부르는 쪽이 기능을 끄고 이유를 보인다. 카탈로그 원문 형식 오류(<see cref="CatalogFormatException"/>)는 null 이 아니라 그대로 던진다(빌드 검사가 먼저 잡는 결함).
+    /// 구현은 프로필의 DBMS 로, 파일은 <see cref="ServerInfo.Dbms"/> 로 고른다 — 세션 관리자가 둘을 같게 채운다(다르면 id 를 못 찾아 null).
+    /// </summary>
+    public static string? CatalogText(IServiceProvider? services, ISession? session, string id, params (string Key, string Value)[] args)
+    {
+        var catalog = For<ISqlCatalog>(services, session);
+        if (catalog is null || session is null)
+        {
+            return null;
+        }
+
+        try
+        {
+            return Oranda.Core.Catalog.CatalogText.Fill(catalog.Get(id, session.Server).Sql, args);
+        }
+        catch (CatalogQueryNotFoundException)
+        {
+            return null;
+        }
+    }
 
     /// <summary>프로필의 DBMS 용 구현. 없으면 null.</summary>
     public static T? For<T>(IServiceProvider? services, ConnectionProfile profile)
