@@ -254,6 +254,7 @@ public sealed class TableFinderTests : IDisposable
 
         vm.FilterText = "mo"; // 검색 값을 바꿔도 이유가 지워지지 않는다
         Assert.Equal("APP 계정의 표를 읽지 못했습니다: ORA-00942: 표가 없습니다", vm.EmptyText);
+        vm.FilterText = string.Empty;
 
         loader.Failure = null; // 실패한 계정은 다시 고르면 다시 읽는다
         await vm.LoadAsync();
