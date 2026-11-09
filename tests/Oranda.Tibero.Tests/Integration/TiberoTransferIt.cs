@@ -48,7 +48,7 @@ public class TiberoTransferIt(Xunit.Abstractions.ITestOutputHelper output)
         await ExecAsync(session, $"CREATE TABLE {table} ({Columns.Replace("@T@", table, StringComparison.Ordinal)})");
         try
         {
-            var service = new TiberoDataTransferService(new TiberoExecutionService(new AllowAll(), new NoQuestions(), it.Events, null, dbmsOutput: false), new TiberoMetadataProvider());
+            var service = new TiberoDataTransferService(new TiberoExecutionService(new AllowAll(), new NoQuestions(), it.Events, null, dbmsOutput: false), new TiberoMetadataProvider(new Schema.MemoryMetadataCache(), it.Events, Timeout.InfiniteTimeSpan, TiberoCatalogQuery.RunAsync));
             var target = new DbObjectRef(owner, table, "TABLE");
             var options = new ImportOptions(TransferFormat.Csv, target, [.. Header.Select(h => new ColumnMapping(h, h.ToUpperInvariant()))]) { BatchSize = 2 };
             var note = new string('가', 4500);

@@ -1,6 +1,7 @@
 using Oranda.Core.Metadata;
 using Oranda.Tibero.Schema;
 using Oranda.Tibero.Sessions;
+using Oranda.Tibero.Tests.Schema;
 
 namespace Oranda.Tibero.Tests.Integration;
 
@@ -11,6 +12,10 @@ namespace Oranda.Tibero.Tests.Integration;
 [Trait("Category", "Integration")]
 public class TiberoMetadataIt
 {
+    /// <summary>메모리 캐시·기록 버스를 붙이고 백그라운드 갱신은 끈 제공자(시험이 배경 작업에 흔들리지 않게).</summary>
+    private static TiberoMetadataProvider NewProvider()
+        => new(new MemoryMetadataCache(), new RecordingEventBus(), Timeout.InfiniteTimeSpan, TiberoCatalogQuery.RunAsync);
+
     [Fact]
     public async Task Schemas_include_the_login_schema_and_its_tables_come_back_filtered_by_type()
     {
@@ -22,7 +27,7 @@ public class TiberoMetadataIt
 
         var session = await it.OpenAsync();
         var user = it.Env.User.ToUpperInvariant();
-        var provider = new TiberoMetadataProvider();
+        var provider = NewProvider();
 
         var schemas = await provider.ListSchemasAsync(session, CancellationToken.None);
         var tables = await provider.ListObjectsAsync(session, new ObjectQuery { Owner = user, ObjectTypes = ["TABLE"], Limit = 50 }, CancellationToken.None);
@@ -48,7 +53,7 @@ public class TiberoMetadataIt
         }
 
         var session = await it.OpenAsync();
-        var provider = new TiberoMetadataProvider();
+        var provider = NewProvider();
 
         var (owner, name) = ("PUBLIC", "DUAL");
         var resolved = false;
@@ -96,7 +101,7 @@ public class TiberoMetadataIt
         }
 
         var session = await it.OpenAsync();
-        var provider = new TiberoMetadataProvider();
+        var provider = NewProvider();
         var step = await provider.GetNameStepAsync(session, "PUBLIC", "DBMS_OUTPUT", CancellationToken.None);
         var owner = step is { IsSynonym: true, TargetOwner: { } o } ? o : "SYS";
 
@@ -122,7 +127,7 @@ public class TiberoMetadataIt
         }
 
         var session = await it.OpenAsync();
-        var members = await new TiberoMetadataProvider().GetProceduresAsync(session, new DbObjectRef("SYS", "DBMS_SQL", "PACKAGE"), CancellationToken.None);
+        var members = await NewProvider().GetProceduresAsync(session, new DbObjectRef("SYS", "DBMS_SQL", "PACKAGE"), CancellationToken.None);
 
         var parse = members.Where(m => m.Name == "PARSE").ToList();
         Assert.True(parse.Count > 1, $"PARSE 항목 수 {parse.Count}");
@@ -156,7 +161,7 @@ public class TiberoMetadataIt
         {
             await ExecAsync(session, $"INSERT INTO {name} (ID, NAME) VALUES (1, 'A')");
             var user = it.Env.User.ToUpperInvariant();
-            var provider = new TiberoMetadataProvider();
+            var provider = NewProvider();
 
             var listed = await provider.ListObjectsAsync(session, new ObjectQuery { Owner = user, NamePattern = name, ObjectTypes = ["TABLE"] }, CancellationToken.None);
             var found = await provider.FindObjectsByPrefixAsync(session, name, 10, CancellationToken.None);
@@ -179,6 +184,58 @@ public class TiberoMetadataIt
             Assert.Equal(["ID"], Assert.Single(table.Indexes).Columns);
             Assert.Equal(["일반", "열", "제약", "인덱스"], detail.Sections.Select(x => x.Title).Take(4));
             Assert.Equal(NameStep.TableOrView, step);
+        }
+        finally
+        {
+            await ExecAsync(session, $"DROP TABLE {name}");
+        }
+    }
+
+    /// <summary>
+    /// 캐시한 표 상세(payload)는 객체 목록 갱신이 LAST_DDL_TIME 변화를 볼 때만 버려진다. Tibero 가 인덱스·주석·제약 DDL 에서
+    /// 표의 LAST_DDL_TIME 을 올리는지 실측한다(DATE 라 초 단위 → DDL 앞에 1초 넘게 쉰다). 어느 DDL 이 안 올리는지 메시지에 참·거짓으로 찍는다.
+    /// </summary>
+    [Fact]
+    public async Task Index_comment_and_constraint_ddl_refresh_a_cached_table()
+    {
+        if (TiberoItSessions.SkipWrite())
+        {
+            return;
+        }
+
+        await using var it = TiberoItSessions.Create();
+        if (it is null)
+        {
+            return;
+        }
+
+        var name = TiberoItSessions.ObjectName("T3E_DDL");
+        var session = await it.OpenAsync();
+        await DropIfLeftAsync(session, name);
+        await ExecAsync(session, $"CREATE TABLE {name} (ID NUMBER(9), V NUMBER(9))");
+        try
+        {
+            var user = it.Env.User.ToUpperInvariant();
+            var table = new DbObjectRef(user, name, "TABLE");
+            var provider = NewProvider();
+            await provider.ListObjectsAsync(session, new ObjectQuery(), CancellationToken.None); // 객체 목록 캐시를 채운다
+            var before = await QuietAsync("GetTableAsync", () => provider.GetTableAsync(session, table, CancellationToken.None));
+
+            async Task<TableInfo> AfterAsync(string ddl)
+            {
+                await Task.Delay(TimeSpan.FromSeconds(1.2));
+                await ExecAsync(session, ddl);
+                await provider.RefreshAsync(session, CancellationToken.None);
+                return await QuietAsync("GetTableAsync", () => provider.GetTableAsync(session, table, CancellationToken.None));
+            }
+
+            var index = (await AfterAsync($"CREATE INDEX {name}_IX ON {name} (V)")).Indexes.Any(i => i.Name == name + "_IX");
+            var comment = (await AfterAsync($"COMMENT ON TABLE {name} IS 'T3E'")).Comment == "T3E";
+            var constraint = (await AfterAsync($"ALTER TABLE {name} ADD CONSTRAINT {name}_CK CHECK (ID > 0)")).Constraints.Any(c => c.Name == name + "_CK");
+
+            Assert.True(before.Indexes.Count == 0 && before.Comment is null, "처음 읽은 표에 인덱스·주석이 이미 있다");
+            Assert.True(index && comment && constraint,
+                $"캐시한 표가 DDL 뒤에도 그대로다(LAST_DDL_TIME 안 오름): index={index} comment={comment} constraint={constraint}");
         }
         finally
         {
