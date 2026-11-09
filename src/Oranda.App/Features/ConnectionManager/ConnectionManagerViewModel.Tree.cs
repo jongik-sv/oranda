@@ -35,7 +35,7 @@ public sealed partial class ConnectionManagerViewModel
             return;
         }
 
-        Editor = ProfileEditorViewModel.From(profile);
+        Editor = ProfileEditorViewModel.From(profile, _service.AvailableDbms);
     }
 
     /// <summary>저장 안 한 편집을 정리(저장·버리기)한 뒤 고른 접속으로 바꾼다. 취소하면 앞의 선택으로 되돌린다.</summary>
@@ -50,7 +50,7 @@ public sealed partial class ConnectionManagerViewModel
         if (FindNode(target) is { Profile: { } profile } node)
         {
             SelectQuietly(node);
-            Editor = ProfileEditorViewModel.From(profile);
+            Editor = ProfileEditorViewModel.From(profile, _service.AvailableDbms);
         }
     }
 
@@ -211,7 +211,7 @@ public sealed partial class ConnectionManagerViewModel
         // 찾기 글자에 걸려 목록에서 빠진 접속이어도 편집기는 저장된 값으로 다시 채운다(저장 뒤 변경 표시가 남지 않게).
         if (reloadEditor && (selectNode?.Profile ?? _profiles.FirstOrDefault(p => p.Id == keep)) is { } profile)
         {
-            Editor = ProfileEditorViewModel.From(profile);
+            Editor = ProfileEditorViewModel.From(profile, _service.AvailableDbms);
         }
 
         UpdateModifiedMarker();

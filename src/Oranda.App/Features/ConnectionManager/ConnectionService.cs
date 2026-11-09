@@ -70,6 +70,9 @@ public interface IConnectionService
     /// <summary>지금 접속이 끊긴 상태.</summary>
     bool IsBroken { get; }
 
+    /// <summary>접속 대화 상자에서 고를 수 있는 DBMS(D-046). 기본은 공급자 어셈블리 유무만 본다. 실제 서비스는 세션 관리자 구현이 있는 DBMS 만 낸다(<see cref="DbmsAvailability.Detect(string, Oranda.Core.Composition.IDbmsServiceSelector?)"/>).</summary>
+    IReadOnlyList<Dbms> AvailableDbms => DbmsAvailability.Current;
+
     /// <summary>지금 접속·열린 접속 목록·끊김 상태가 바뀌었다. 아무 스레드에서나 온다.</summary>
     event EventHandler? ActiveSessionChanged;
 
@@ -244,6 +247,9 @@ public sealed class ConnectionService : IConnectionService, IDisposable
 
         _gate.Dispose();
     }
+
+    /// <summary>공급자 어셈블리가 있고 선택기에 그 DBMS 의 세션 관리자가 있는 DBMS 만(<see cref="DbmsAvailability.Detect(string, IDbmsServiceSelector?)"/>).</summary>
+    public IReadOnlyList<Dbms> AvailableDbms => DbmsAvailability.Detect(AppContext.BaseDirectory, DbmsServices.SelectorOf(_services));
 
     public ISession? ActiveSession
     {
@@ -853,6 +859,11 @@ public sealed class ConnectionService : IConnectionService, IDisposable
             // 저장된 프로필 그대로 넘긴다(프록시 사용자 처리 등 드라이버용 변환은 구현이 한다).
             await probe.ChangePasswordAsync(profile, old, newPassword, ct).ConfigureAwait(false);
         }
+        catch (NotSupportedException)
+        {
+            // 이 DBMS 는 비밀번호 변경을 지원하지 않는다(Tibero). 개발자용 예외 문구 대신 사용자 문구.
+            return new PasswordChangeOutcome(false, $"이 DBMS({profile.Dbms})에서는 비밀번호 변경을 지원하지 않습니다.");
+        }
         catch (Exception ex) when (IsDriverFailure(ex, profile))
         {
             return new PasswordChangeOutcome(false, FirstLine(ex.Message));
@@ -956,7 +967,7 @@ public sealed class ConnectionService : IConnectionService, IDisposable
     /// (<see cref="IDbErrorClassifier.FromException"/>), 또는 글에 서버 오류 코드(ORA-·TBR-)가 있는 것.
     /// </summary>
     private bool IsDriverFailure(Exception ex, ConnectionProfile profile) =>
-        ex is InvalidOperationException or ArgumentException or IOException or TimeoutException
+        ex is InvalidOperationException or ArgumentException or IOException or TimeoutException or NotSupportedException
         || DbmsServices.For<IDbErrorClassifier>(_services, profile)?.FromException(ex) is not null
         || DbErrorClassification.CodeOf(ex) is not null;
 

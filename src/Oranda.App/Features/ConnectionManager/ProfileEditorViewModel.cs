@@ -574,13 +574,14 @@ public sealed partial class ProfileEditorViewModel : ViewModelBase
     public string ConnectionStringPreview => DataSourceComposer.Describe(User, ProxyUser, CurrentDataSource(), Auth);
 
     /// <summary>새 프로필 편집기(새 Id, 개발 환경).</summary>
-    public static ProfileEditorViewModel ForNew() => new();
+    public static ProfileEditorViewModel ForNew(IReadOnlyList<Dbms>? available = null) => new(available);
 
     /// <summary>저장된 프로필로 편집기를 채운다(비밀번호는 비워 둔다: 저장 여부만 <see cref="SavePassword"/> 로 보인다).</summary>
-    public static ProfileEditorViewModel From(ConnectionProfile profile)
+    /// <param name="available">고를 수 있는 DBMS(<see cref="IConnectionService.AvailableDbms"/>). null 이면 <see cref="DbmsAvailability.Current"/>.</param>
+    public static ProfileEditorViewModel From(ConnectionProfile profile, IReadOnlyList<Dbms>? available = null)
     {
         ArgumentNullException.ThrowIfNull(profile);
-        var vm = new ProfileEditorViewModel(DbmsAvailability.With(DbmsAvailability.Current, profile.Dbms)) { Original = profile, IsNew = false };
+        var vm = new ProfileEditorViewModel(DbmsAvailability.With(available ?? DbmsAvailability.Current, profile.Dbms)) { Original = profile, IsNew = false };
         vm._loading = true;
         try
         {

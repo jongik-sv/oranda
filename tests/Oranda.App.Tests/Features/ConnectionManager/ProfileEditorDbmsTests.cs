@@ -1,5 +1,8 @@
 using Oranda.App.Features.ConnectionManager;
+using Oranda.Core.Composition;
 using Oranda.Core.Connection;
+using Oranda.Core.Events;
+using Oranda.Core.Sessions;
 
 namespace Oranda.App.Tests.Features.ConnectionManager;
 
@@ -21,6 +24,27 @@ public sealed class ProfileEditorDbmsTests : IDisposable
         File.WriteAllBytes(Path.Combine(_dir, "Oranda.Tibero.dll"), []);
 
         Assert.Equal([Dbms.Oracle, Dbms.Tibero], DbmsAvailability.Detect(_dir));
+    }
+
+    [Fact]
+    public void Tibero_is_listed_only_when_the_selector_has_its_session_manager_too()
+    {
+        File.WriteAllBytes(Path.Combine(_dir, "Oranda.Tibero.dll"), []);
+        var withoutSessions = new DbmsServiceTable().Add<IConnectionProbe>(Dbms.Tibero, () => new FakeConnectionProbe(new StubConnectionTester(), new StubPasswordChanger()) { Dbms = Dbms.Tibero });
+        var withSessions = new DbmsServiceTable().Add<ISessionManager>(Dbms.Tibero, () => new StubSessionManager(new EventBus()));
+
+        Assert.Equal([Dbms.Oracle], DbmsAvailability.Detect(_dir, null)); // 선택기 없음
+        Assert.Equal([Dbms.Oracle], DbmsAvailability.Detect(_dir, withoutSessions)); // 어셈블리만 있고 세션 관리자는 아직 없음
+        Assert.Equal([Dbms.Oracle, Dbms.Tibero], DbmsAvailability.Detect(_dir, withSessions));
+        Assert.Equal([Dbms.Oracle], DbmsAvailability.Detect(Path.Combine(_dir, "none"), withSessions)); // 세션 관리자가 있어도 어셈블리가 없으면 숨김
+    }
+
+    [Fact]
+    public void Connection_service_offers_only_dbms_the_selector_can_open()
+    {
+        using var fx = new ServiceFixture();
+
+        Assert.Equal([Dbms.Oracle], fx.Service.AvailableDbms);
     }
 
     [Fact]

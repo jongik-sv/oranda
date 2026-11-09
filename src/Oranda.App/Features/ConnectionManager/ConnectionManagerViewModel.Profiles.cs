@@ -25,7 +25,7 @@ public sealed partial class ConnectionManagerViewModel
         // 접속이 하나도 없으면 「새 접속」 을 누른 상태로 연다(첫 접속 흐름, TSK-09-09·D-018).
         if (_profiles.Count == 0 && Editor is null)
         {
-            Editor = ProfileEditorViewModel.ForNew();
+            Editor = ProfileEditorViewModel.ForNew(_service.AvailableDbms);
             SetStatus(StatusKind.Info, "새 접속을 입력하세요.");
         }
     }
@@ -39,7 +39,7 @@ public sealed partial class ConnectionManagerViewModel
         }
 
         SelectQuietly(null);
-        Editor = ProfileEditorViewModel.ForNew();
+        Editor = ProfileEditorViewModel.ForNew(_service.AvailableDbms);
         SetStatus(StatusKind.Info, "새 접속을 입력하세요.");
     }
 
@@ -63,7 +63,7 @@ public sealed partial class ConnectionManagerViewModel
             case UnsavedChoice.Save:
                 return await SaveCurrentAsync().ConfigureAwait(true);
             case UnsavedChoice.Discard:
-                Editor = editor.IsNew ? null : ProfileEditorViewModel.From(editor.Original);
+                Editor = editor.IsNew ? null : ProfileEditorViewModel.From(editor.Original, _service.AvailableDbms);
                 return true;
             default:
                 return false;

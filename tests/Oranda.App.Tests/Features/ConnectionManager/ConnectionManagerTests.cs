@@ -726,6 +726,20 @@ public sealed class ConnectionManagerTests
         Assert.Equal("old", fx.Credentials.Text(saved.CredentialRef!));
     }
 
+    [Fact]
+    public async Task Password_change_on_a_dbms_that_does_not_support_it_is_a_failed_outcome_with_a_user_message()
+    {
+        using var fx = new ServiceFixture();
+        var saved = await fx.Service.SaveProfileAsync(Profile(), "old", true, CancellationToken.None);
+        fx.Changer.Failure = new NotSupportedException("Tibero 는 아직 비밀번호 변경을 지원하지 않습니다.");
+
+        var result = await fx.Service.ChangePasswordAsync(saved, null, "new!1", CancellationToken.None);
+
+        Assert.False(result.Succeeded);
+        Assert.Contains("비밀번호 변경을 지원하지 않습니다", result.Message, StringComparison.Ordinal);
+        Assert.Equal("old", fx.Credentials.Text(saved.CredentialRef!));
+    }
+
     // ---------- 모델 흐름(묻기·만료·지원 안 함) ----------
 
     [Fact]

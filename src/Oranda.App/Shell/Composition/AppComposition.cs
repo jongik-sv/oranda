@@ -51,8 +51,10 @@ public static class AppComposition
         //    바로 등록해도 Oracle 은 로드하지 않는다(처음 구현을 고를 때 지연 어셈블리를 훑는다). 맨 먼저 두어 뒤의 직접 등록(시험 가짜 등)이 이긴다.
         container.AddAssembly(typeof(Oranda.Core.CoreAssembly).Assembly);
 
-        // 오류 분류 퍼사드(Oranda.Language DbErrorClassification.Selector)는 아직 잇지 않는다: 이으면 Oracle 판정이 LegacyOracle 표에서
-        // 전체 OracleErrorClassifier 로 바뀐다(C7 리뷰). 퍼사드를 고친 뒤 tb-app 이 AfterDeferredScan 으로 잇는다(시작 경로에서 Oranda.Language 를 로드하지 않게).
+        // 오류 분류 퍼사드(Oranda.Language DbErrorClassification.Selector)를 지연 어셈블리 훑기가 끝난 뒤 잇는다(A4b).
+        // Create 안에서 직접 쓰면 Oranda.Language 가 시작 경로에서 로드된다(TRD 8) — 별도 NoInlining 메서드로 JIT 가 미루게 한다.
+        // 이어도 Oracle 판정은 그대로다(퍼사드가 Oracle 에는 연결 전 번호표를 계속 쓴다), Tibero 만 공급자 표를 쓴다.
+        container.AfterDeferredScan(() => ConnectErrorClassification(container.DbmsServices));
 
         // 1) 이벤트 버스(Core 구현은 스캔 대상이 아니라 직접 등록)와 구현 어셈블리.
         container.AddInstance<IEventBus>(new EventBus());
@@ -104,6 +106,11 @@ public static class AppComposition
 
         return container;
     }
+
+    /// <summary>오류 분류 퍼사드에 DBMS 선택기를 잇는다. 인라인되면 Create 가 Oranda.Language 를 로드하므로 인라인을 막는다.</summary>
+    [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]
+    private static void ConnectErrorClassification(Oranda.Core.Composition.IDbmsServiceSelector selector) =>
+        Oranda.Language.Errors.DbErrorClassification.Selector = selector;
 
     /// <summary>
     /// AI 튜닝 서비스(Core 구현은 스캔 대상이 아니라 직접 등록): 실행 토큰 저장소(앱 전체 하나)·에이전트 세션 출처·게이트.

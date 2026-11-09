@@ -14,7 +14,10 @@ namespace Oranda.Language.Errors;
 /// <para>
 /// 이 표는 정적이다: 호출 지점(정적 판정 함수)이 세션을 받지 않기 때문이다. <see cref="Selector"/> 를 앱 조립이 연결한다(tb-core C7).
 /// <b>연결되기 전(null)</b>에는 지금까지의 Oracle 번호 비교와 똑같은 한정된 표(<see cref="LegacyOracle"/>)로 판정해 Oracle 동작이 바뀌지 않는다.
-/// 연결된 뒤에는 이 표를 쓰지 않는다.
+/// 연결된 뒤에도 <b>Oracle 은 이 표를 그대로 쓴다</b>(글 속 <c>ORA-</c> 번호와 Oracle 드라이버 예외의 번호 모두) — 선택기 연결이 Oracle 판정을 넓히지 않는다.
+/// 다른 DBMS(Tibero)는 그 공급자의 표·<see cref="IDbErrorClassifier.FromException"/> 을 쓴다.
+/// 바깥 메시지만 보는 판정(<see cref="TopKindsOf"/>·<see cref="LeadingKindOf"/>·<see cref="IsReadOnly"/>·<see cref="IsNoAccessTop"/>)은
+/// 바깥 예외 자신이 드라이버 예외일 때만 드라이버 분류를 더한다.
 /// </para>
 /// </summary>
 public static partial class DbErrorClassification
@@ -30,18 +33,18 @@ public static partial class DbErrorClassification
 
     /// <summary>예외 사슬(Inner·Aggregate) 전체에서 나온 분류. 분류할 수 없으면(<see cref="DbErrorKind.Other"/>) 넣지 않는다.</summary>
     public static IReadOnlySet<DbErrorKind> KindsOf(Exception? exception) =>
-        exception is null ? new HashSet<DbErrorKind>() : Collect(exception, Chain(exception).Select(e => e.Message ?? string.Empty).ToList());
+        exception is null ? new HashSet<DbErrorKind>() : Collect(exception, Chain(exception).Select(e => e.Message ?? string.Empty).ToList(), directOnly: false);
 
     /// <summary>
-    /// 예외 <b>바깥 메시지만</b>의 분류(사슬의 안쪽 예외는 보지 않는다). 드라이버 예외 자체의 분류는 포함한다.
-    /// 예전에 <c>ex.Message.Contains("ORA-…")</c> 로 바깥 글만 보던 자리가 쓴다.
+    /// 예외 <b>바깥 메시지만</b>의 분류(사슬의 안쪽 예외는 보지 않는다). 바깥 예외 <b>자신이</b> 드라이버 예외일 때만 드라이버의 분류를 포함한다
+    /// (드라이버 예외가 안쪽에 감싸져 있으면 포함하지 않는다 — 예전 <c>ex.Message.Contains("ORA-…")</c> 와 같은 범위).
     /// </summary>
     public static IReadOnlySet<DbErrorKind> TopKindsOf(Exception? exception) =>
-        exception is null ? new HashSet<DbErrorKind>() : Collect(exception, [exception.Message ?? string.Empty]);
+        exception is null ? new HashSet<DbErrorKind>() : Collect(exception, [exception.Message ?? string.Empty], directOnly: true);
 
     /// <summary>오류 글(서버 메시지·실패 사유 문자열)에 들어 있는 오류 번호의 분류. 예외 대신 글만 남은 자리가 쓴다.</summary>
     public static IReadOnlySet<DbErrorKind> KindsOf(string? message) =>
-        string.IsNullOrEmpty(message) ? new HashSet<DbErrorKind>() : Collect(null, [message]);
+        string.IsNullOrEmpty(message) ? new HashSet<DbErrorKind>() : Collect(null, [message], directOnly: false);
 
     /// <summary>
     /// 바깥 메시지에서 <b>맨 앞</b> 오류 번호의 분류(예: 「ORA-00604 … ORA-01031」은 604 의 분류). 번호가 없으면 <see cref="DbErrorKind.Other"/>.
@@ -58,9 +61,9 @@ public static partial class DbErrorClassification
         {
             foreach (var dbms in selector.AvailableDbms)
             {
-                if (selector.Find<IDbErrorClassifier>(dbms)?.FromException(exception) is { } error)
+                if (selector.Find<IDbErrorClassifier>(dbms) is { } classifier && DriverKind(classifier, exception, directOnly: true) is { } kind)
                 {
-                    return error.Kind;
+                    return kind;
                 }
             }
         }
@@ -91,16 +94,16 @@ public static partial class DbErrorClassification
         return null;
     }
 
-    private static HashSet<DbErrorKind> Collect(Exception? exception, IReadOnlyList<string> texts)
+    private static HashSet<DbErrorKind> Collect(Exception? exception, IReadOnlyList<string> texts, bool directOnly)
     {
         var kinds = new HashSet<DbErrorKind>();
         if (_selector is { } selector && exception is not null)
         {
             foreach (var dbms in selector.AvailableDbms)
             {
-                if (selector.Find<IDbErrorClassifier>(dbms)?.FromException(exception) is { } error)
+                if (selector.Find<IDbErrorClassifier>(dbms) is { } classifier && DriverKind(classifier, exception, directOnly) is { } kind)
                 {
-                    AddKind(kinds, error.Kind);
+                    AddKind(kinds, kind);
                 }
             }
         }
@@ -112,6 +115,34 @@ public static partial class DbErrorClassification
 
         return kinds;
     }
+
+    /// <summary>
+    /// 드라이버 예외의 분류. Oracle 은 번호를 <see cref="LegacyOracle"/> 표로 옮겨 연결 전과 같은 판정을 유지한다(전체 <c>OracleErrorClassifier</c> 표는 쓰지 않는다).
+    /// <paramref name="directOnly"/> 면 바깥 예외 자신이 드라이버 예외일 때만(안쪽에 감싸진 것은 제외). 드라이버 예외가 아니면 null.
+    /// </summary>
+    private static DbErrorKind? DriverKind(IDbErrorClassifier classifier, Exception exception, bool directOnly)
+    {
+        if (directOnly && !IsDirectDriverException(classifier, exception))
+        {
+            return null;
+        }
+
+        if (classifier.FromException(exception) is not { } error)
+        {
+            return null;
+        }
+
+        return classifier.Dbms == Dbms.Oracle ? LegacyOracle(error.Number) : error.Kind;
+    }
+
+    /// <summary>
+    /// 분류기가 이 예외를 알아보고, 그 이유가 안쪽 예외가 아닌 경우. 분류기의 <c>FromException</c> 은 안쪽 사슬까지 훑으므로,
+    /// 안쪽 예외(들)도 알아보면 바깥은 감싼 예외로 본다. <see cref="AggregateException"/> 은 항상 감싼 예외다.
+    /// </summary>
+    private static bool IsDirectDriverException(IDbErrorClassifier classifier, Exception exception) =>
+        exception is not AggregateException
+        && classifier.FromException(exception) is not null
+        && (exception.InnerException is not { } inner || classifier.FromException(inner) is null);
 
     /// <summary>글 안의 오류 번호를 나온 순서대로 (코드 글, 분류)로. 연결 전(Selector 없음)에는 Oracle 한정 표를 쓴다.</summary>
     private static List<(string Code, DbErrorKind Kind)> Hits(IReadOnlyList<string> texts)
@@ -131,7 +162,8 @@ public static partial class DbErrorClassification
                 {
                     if (selector.Find<IDbErrorClassifier>(dbms) is { } classifier)
                     {
-                        AddMatches(found, text, CodePattern(dbms), classifier.Classify);
+                        // Oracle 은 선택기가 연결돼도 연결 전과 같은 번호표를 쓴다(Oracle 동작 불변). 다른 DBMS 는 그 공급자의 표.
+                        AddMatches(found, text, CodePattern(dbms), dbms == Dbms.Oracle ? LegacyOracle : classifier.Classify);
                     }
                 }
             }

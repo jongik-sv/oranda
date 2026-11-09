@@ -466,6 +466,12 @@ public sealed partial class PlanViewModel
         }
 
         _reportCursor = cursor;
+        if (Oranda.App.Shell.Features.DbmsFeatureKeys.Reason(session.Profile.Dbms, Oranda.Core.Connection.DbmsFeature.SqlMonitorReport) is { } unsupported)
+        {
+            SetReport(PlanReportState.NoLicense, unsupported); // 이 DBMS 에는 SQL 모니터 보고서가 없다(Tibero) — 서버에 보내지 않고 이유만 보인다
+            return;
+        }
+
         if (!HasTuningPack(session))
         {
             SetReport(PlanReportState.NoLicense, "이 접속 프로필에 Tuning Pack 보유가 선언되어 있지 않아 DBMS_SQLTUNE.REPORT_SQL_MONITOR 를 보내지 않았습니다.\n"

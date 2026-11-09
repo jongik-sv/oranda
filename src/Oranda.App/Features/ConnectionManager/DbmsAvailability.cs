@@ -2,7 +2,9 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using Oranda.Core.Composition;
 using Oranda.Core.Connection;
+using Oranda.Core.Sessions;
 
 namespace Oranda.App.Features.ConnectionManager;
 
@@ -17,10 +19,10 @@ public static class DbmsAvailability
 
     private static readonly Lazy<IReadOnlyList<Dbms>> Detected = new(() => Detect(AppContext.BaseDirectory));
 
-    /// <summary>이 설치본에서 고를 수 있는 DBMS(처음 한 번 계산).</summary>
+    /// <summary>이 설치본에 공급자 어셈블리가 있는 DBMS(처음 한 번 계산, 구현 유무는 안 봄). 화면은 <see cref="Detect(string, IDbmsServiceSelector?)"/> 로 거른 목록을 쓴다.</summary>
     public static IReadOnlyList<Dbms> Current => Detected.Value;
 
-    /// <summary>앱 폴더에 있는 공급자 어셈블리로 고를 수 있는 DBMS를 정한다. Oracle 이 항상 맨 앞.</summary>
+    /// <summary>앱 폴더에 있는 공급자 어셈블리로 설치된 DBMS를 정한다(구현이 갖춰졌는지는 보지 않는다). Oracle 이 항상 맨 앞.</summary>
     public static IReadOnlyList<Dbms> Detect(string appDirectory)
     {
         List<Dbms> list = [Dbms.Oracle];
@@ -31,6 +33,14 @@ public static class DbmsAvailability
 
         return list;
     }
+
+    /// <summary>
+    /// 접속 대화 상자에서 고를 수 있는 DBMS: 공급자 어셈블리가 있고(<see cref="Detect(string)"/>) <b>선택기에 그 DBMS 의 <see cref="ISessionManager"/> 구현이 있을 때만</b>.
+    /// 어셈블리만 있고 세션 관리자가 아직 없으면 보이지 않는다(연결해 봐야 「구현이 없다」만 뜬다). 세션 관리자가 들어오면 자동으로 보인다.
+    /// 선택기가 없으면 Oracle 뿐.
+    /// </summary>
+    public static IReadOnlyList<Dbms> Detect(string appDirectory, IDbmsServiceSelector? selector) =>
+        [.. Detect(appDirectory).Where(d => d == Dbms.Oracle || selector?.Find<ISessionManager>(d) is not null)];
 
     /// <summary>목록에 <paramref name="dbms"/> 가 없으면 덧붙인다(이미 저장된 프로필을 보여 줄 수 있게).</summary>
     public static IReadOnlyList<Dbms> With(IReadOnlyList<Dbms> available, Dbms dbms) =>

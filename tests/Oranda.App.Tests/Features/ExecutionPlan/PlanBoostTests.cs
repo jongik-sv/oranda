@@ -305,6 +305,22 @@ public class PlanBoostTests
     }
 
     [Fact]
+    public async Task Report_on_a_dbms_without_sql_monitor_shows_the_reason_and_sends_nothing()
+    {
+        var plans = new FakePlans();
+        plans.Cursors["r"] = WithActuals("r");
+        var vm = NewVm(plans, out _);
+        var tibero = new TestSession(TestData.Profile(licensePack: LicensePack.DiagnosticsAndTuning) with { Dbms = Dbms.Tibero });
+
+        await vm.ShowCursorAsync(tibero, new CursorRef("r"));
+        await vm.LoadReportAsync();
+
+        Assert.Equal(PlanReportState.NoLicense, vm.ReportState);
+        Assert.Empty(plans.ReportCalls);
+        Assert.Contains("Tibero", vm.ReportMessage, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task Server_pack_access_lower_than_the_declaration_wins()
     {
         var server = TestData.Server() with { ManagementPackAccess = "DIAGNOSTIC" };

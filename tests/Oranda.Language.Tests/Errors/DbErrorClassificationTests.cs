@@ -86,11 +86,44 @@ public sealed class DbErrorClassificationTests : IDisposable
     {
         DbErrorClassification.Selector = Selector();
 
-        // 가짜 Oracle 표: 1039 도 권한 부족(안전판에는 없는 번호), 8033 은 Tibero 표.
-        Assert.True(DbErrorClassification.IsNoAccess(new InvalidOperationException("ORA-01039: insufficient privileges on underlying objects")));
+        // Tibero 는 그 공급자 표(8033 = 객체 없음, 10007 = 제약 위반).
         Assert.True(DbErrorClassification.IsNoAccess(new InvalidOperationException("TBR-8033: object does not exist")));
         Assert.False(DbErrorClassification.IsNoAccess(new InvalidOperationException("TBR-10007: unique constraint")));
         Assert.True(DbErrorClassification.Has(new InvalidOperationException("TBR-10007: unique constraint"), DbErrorKind.ConstraintViolation));
+    }
+
+    [Fact]
+    public void With_selector_oracle_keeps_the_legacy_number_table()
+    {
+        DbErrorClassification.Selector = Selector();
+
+        // 가짜 Oracle 공급자 표는 1039 도 권한 부족이라 하지만, 선택기가 연결돼도 Oracle 은 연결 전 표(안전판)를 그대로 쓴다.
+        Assert.False(DbErrorClassification.IsNoAccess(new InvalidOperationException("ORA-01039: insufficient privileges on underlying objects")));
+        Assert.True(DbErrorClassification.IsNoAccess(new InvalidOperationException("ORA-00942: table or view does not exist")));
+        Assert.True(DbErrorClassification.IsNoAccess(new InvalidOperationException("ORA-01031: insufficient privileges")));
+    }
+
+    [Fact]
+    public void With_selector_an_oracle_driver_exception_uses_the_legacy_numbers_too()
+    {
+        DbErrorClassification.Selector = Selector();
+
+        Assert.False(DbErrorClassification.IsNoAccess(new FakeDriverException(1039)));
+        Assert.True(DbErrorClassification.IsNoAccess(new FakeDriverException(942)));
+    }
+
+    [Fact]
+    public void With_selector_top_checks_count_only_a_driver_exception_that_is_the_outer_one()
+    {
+        DbErrorClassification.Selector = Selector();
+        var wrapped = new InvalidOperationException("조회 실패", new FakeDriverException(942));
+
+        Assert.True(DbErrorClassification.IsNoAccess(wrapped));
+        Assert.False(DbErrorClassification.IsNoAccessTop(wrapped));
+        Assert.Equal(DbErrorKind.Other, DbErrorClassification.LeadingKindOf(wrapped));
+        Assert.True(DbErrorClassification.IsNoAccessTop(new FakeDriverException(942)));
+        Assert.Equal(DbErrorKind.ObjectNotFound, DbErrorClassification.LeadingKindOf(new FakeDriverException(942)));
+        Assert.False(DbErrorClassification.IsNoAccessTop(new AggregateException(new FakeDriverException(942))));
     }
 
     [Fact]
@@ -218,9 +251,28 @@ public sealed class DbErrorClassificationTests : IDisposable
             _ => DbErrorKind.Other,
         };
 
-        public DbError? FromException(Exception exception) =>
-            Dbms == Dbms.Oracle && exception is FakeDriverException f
-                ? new DbError($"ORA-{f.Number:D5}", f.Message) { Number = f.Number, Dbms = Dbms.Oracle, Kind = Classify(f.Number) }
-                : null;
+        // 실제 분류기처럼 안쪽 예외 사슬까지 훑는다.
+        public DbError? FromException(Exception exception)
+        {
+            if (Dbms != Dbms.Oracle)
+            {
+                return null;
+            }
+
+            for (var e = exception; e is not null; e = e.InnerException)
+            {
+                if (e is FakeDriverException f)
+                {
+                    return new DbError($"ORA-{f.Number:D5}", f.Message) { Number = f.Number, Dbms = Dbms.Oracle, Kind = Classify(f.Number) };
+                }
+
+                if (e is AggregateException agg && agg.InnerExceptions.Select(FromException).FirstOrDefault(x => x is not null) is { } found)
+                {
+                    return found;
+                }
+            }
+
+            return null;
+        }
     }
 }
