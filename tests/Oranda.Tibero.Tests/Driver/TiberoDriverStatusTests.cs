@@ -10,10 +10,14 @@ public class TiberoDriverStatusTests
         public string? GetPath(Dbms dbms) => dbms == Dbms.Tibero ? path : null;
     }
 
+    // 상태 시험은 올리지 않으므로 컨텍스트는 쓰이지 않는다(기본 컨텍스트를 건드리지 않게 새것).
+    private static TiberoDriverHost Host(Func<string?> environment, string extractRoot) =>
+        new(new System.Runtime.Loader.AssemblyLoadContext("tb-status-test", isCollectible: true), environment, extractRoot);
+
     [Fact]
     public void Check_of_blank_is_missing()
     {
-        var status = new TiberoDriverStatus();
+        var status = new TiberoDriverStatus(null, Host(() => null, Path.GetTempPath()));
 
         Assert.Equal(DriverState.Missing, status.Check(null).State);
         Assert.Equal(DriverState.Missing, status.Check("  ").State);
@@ -28,11 +32,11 @@ public class TiberoDriverStatusTests
         var cfgDir = Path.Combine(temp.Path, "cfg");
         temp.File(Path.Combine("cfg", "Tibero.DataAccess.dll"), TestAssemblies.Build("Tibero.DataAccess", new Version(1, 2, 0, 0)));
 
-        var withEnv = new TiberoDriverStatus(new FakePaths(cfgDir), () => envDir, temp.Path);
+        var withEnv = new TiberoDriverStatus(new FakePaths(cfgDir), Host(() => envDir, temp.Path));
         Assert.Equal(DriverState.Ok, withEnv.Current.State);
         Assert.Equal(cfgDir, withEnv.ConfiguredPath);
 
-        var withoutEnv = new TiberoDriverStatus(new FakePaths(cfgDir), () => null, temp.Path);
+        var withoutEnv = new TiberoDriverStatus(new FakePaths(cfgDir), Host(() => null, temp.Path));
         Assert.Equal(DriverState.Unverified, withoutEnv.Current.State);
         Assert.False(withoutEnv.RestartRequired);
     }
@@ -40,7 +44,7 @@ public class TiberoDriverStatusTests
     [Fact]
     public void Nothing_configured_is_missing()
     {
-        var status = new TiberoDriverStatus(new FakePaths(" "), () => null, Path.GetTempPath());
+        var status = new TiberoDriverStatus(new FakePaths(" "), Host(() => null, Path.GetTempPath()));
 
         Assert.Equal(Dbms.Tibero, status.Dbms);
         Assert.Null(status.ConfiguredPath);

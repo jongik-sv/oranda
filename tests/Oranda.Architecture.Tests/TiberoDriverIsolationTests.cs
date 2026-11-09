@@ -12,11 +12,10 @@ public partial class TiberoDriverIsolationTests
     private const string DriverAssembly = "Tibero.DataAccess";
 
     /// <summary>
-    /// 아직 어댑터로 옮기지 않은 파일(`#if TIBERO_DRIVER` 안의 옛 코드). 옮기는 항목에서 지운다: DV2 = TiberoDriverInfo, DV5 = 접속 시험.
+    /// 아직 어댑터로 옮기지 않은 파일(`#if TIBERO_DRIVER` 안의 옛 코드). 옮기는 항목에서 지운다: DV5 = 접속 시험.
     /// </summary>
     private static readonly string[] PendingAdapterMove =
     [
-        "src/Oranda.Tibero/TiberoDriverInfo.cs",
         "src/Oranda.Tibero/Connection/TiberoConnectionProbe.cs",
     ];
 

@@ -4,26 +4,26 @@ using Oranda.Core.Connection;
 namespace Oranda.Tibero.Driver;
 
 /// <inheritdoc cref="IDbmsDriverStatus"/>
-/// <remarks>생성할 때 드라이버를 읽지 않는다. 경로는 부를 때마다 환경 변수·설정 순으로 다시 해석한다.</remarks>
+/// <remarks>
+/// 생성할 때 드라이버를 읽지 않는다. 드라이버를 아직 안 올렸으면 경로를 부를 때마다 환경 변수·설정 순으로 다시 해석해 검사하고,
+/// 올렸으면 올린 것의 결과(묶기 실패 포함)를 준다.
+/// </remarks>
 [OrandaService(typeof(IDbmsDriverStatus), Dbms = Dbms.Tibero)]
 internal sealed class TiberoDriverStatus : IDbmsDriverStatus
 {
     private readonly IDriverPathSource? _paths;
 
-    private readonly Func<string?> _environment;
-
-    private readonly string _extractRoot;
+    private readonly TiberoDriverHost _host;
 
     public TiberoDriverStatus(IDriverPathSource? paths = null)
-        : this(paths, static () => Environment.GetEnvironmentVariable(TiberoDriverLocator.EnvironmentVariable), TiberoDriverLocator.DefaultExtractRoot)
+        : this(paths, TiberoDriverHost.Shared)
     {
     }
 
-    internal TiberoDriverStatus(IDriverPathSource? paths, Func<string?> environment, string extractRoot)
+    internal TiberoDriverStatus(IDriverPathSource? paths, TiberoDriverHost host)
     {
         _paths = paths;
-        _environment = environment ?? throw new ArgumentNullException(nameof(environment));
-        _extractRoot = extractRoot ?? throw new ArgumentNullException(nameof(extractRoot));
+        _host = host ?? throw new ArgumentNullException(nameof(host));
     }
 
     public Dbms Dbms => Dbms.Tibero;
@@ -37,10 +37,28 @@ internal sealed class TiberoDriverStatus : IDbmsDriverStatus
         }
     }
 
-    public DriverCheck Current => Check(TiberoDriverLocator.SelectPath(_environment(), ConfiguredPath));
+    public DriverCheck Current => _host.LoadedCheck ?? Check(_host.SelectPath(_paths));
 
-    // 드라이버를 올리는 DV3 에서 읽은 뒤 경로가 바뀌었는지로 바꾼다.
-    public bool RestartRequired => false;
+    /// <summary>올린 뒤 고른 경로가 가리키는 dll 이 올린 것과 다르다(지우기·다른 파일). nupkg·폴더는 찾아낸 dll 로 비교한다.</summary>
+    public bool RestartRequired
+    {
+        get
+        {
+            if (_host.LoadedPath is not { } loaded)
+            {
+                return false;
+            }
+
+            if (_host.SelectPath(_paths) is not { } selected)
+            {
+                return true;
+            }
+
+            var located = TiberoDriverLocator.Locate(selected, _host.ExtractRoot);
+            return located.DllPath is not { } dll
+                || !string.Equals(Path.GetFullPath(dll), loaded, OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal);
+        }
+    }
 
     public DriverCheck Check(string? path)
     {
@@ -50,7 +68,7 @@ internal sealed class TiberoDriverStatus : IDbmsDriverStatus
             return DriverCheck.Missing;
         }
 
-        var located = TiberoDriverLocator.Locate(normalized, _extractRoot);
+        var located = TiberoDriverLocator.Locate(normalized, _host.ExtractRoot);
         return located.DllPath is { } dll
             ? TiberoDriverLoader.Inspect(dll)
             : located.Failure!;

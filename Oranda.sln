@@ -49,6 +49,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Oranda.Tibero", "src\Oranda
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Oranda.Tibero.Tests", "tests\Oranda.Tibero.Tests\Oranda.Tibero.Tests.csproj", "{0B644AF8-8AF9-4B1D-8A24-1D7BCEB77D98}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Oranda.Tibero.FakeDriver", "tests\Oranda.Tibero.FakeDriver\Oranda.Tibero.FakeDriver.csproj", "{7AD3D366-8677-48DD-B4DD-910D7A377C5A}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -311,6 +313,18 @@ Global
 		{0B644AF8-8AF9-4B1D-8A24-1D7BCEB77D98}.Release|x64.Build.0 = Release|Any CPU
 		{0B644AF8-8AF9-4B1D-8A24-1D7BCEB77D98}.Release|x86.ActiveCfg = Release|Any CPU
 		{0B644AF8-8AF9-4B1D-8A24-1D7BCEB77D98}.Release|x86.Build.0 = Release|Any CPU
+		{7AD3D366-8677-48DD-B4DD-910D7A377C5A}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{7AD3D366-8677-48DD-B4DD-910D7A377C5A}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{7AD3D366-8677-48DD-B4DD-910D7A377C5A}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{7AD3D366-8677-48DD-B4DD-910D7A377C5A}.Debug|x64.Build.0 = Debug|Any CPU
+		{7AD3D366-8677-48DD-B4DD-910D7A377C5A}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{7AD3D366-8677-48DD-B4DD-910D7A377C5A}.Debug|x86.Build.0 = Debug|Any CPU
+		{7AD3D366-8677-48DD-B4DD-910D7A377C5A}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{7AD3D366-8677-48DD-B4DD-910D7A377C5A}.Release|Any CPU.Build.0 = Release|Any CPU
+		{7AD3D366-8677-48DD-B4DD-910D7A377C5A}.Release|x64.ActiveCfg = Release|Any CPU
+		{7AD3D366-8677-48DD-B4DD-910D7A377C5A}.Release|x64.Build.0 = Release|Any CPU
+		{7AD3D366-8677-48DD-B4DD-910D7A377C5A}.Release|x86.ActiveCfg = Release|Any CPU
+		{7AD3D366-8677-48DD-B4DD-910D7A377C5A}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -337,5 +351,6 @@ Global
 		{C106738E-32FE-4063-85C1-447BF67A7505} = {EC1F7F4A-7499-424F-8EB7-E78DEFE9C2AA}
 		{20434C57-ECF1-4DF3-941E-82426F4DC504} = {EC1F7F4A-7499-424F-8EB7-E78DEFE9C2AA}
 		{0B644AF8-8AF9-4B1D-8A24-1D7BCEB77D98} = {A7449CE5-4A0A-41C3-836D-3F0A67F30E55}
+		{7AD3D366-8677-48DD-B4DD-910D7A377C5A} = {A7449CE5-4A0A-41C3-836D-3F0A67F30E55}
 	EndGlobalSection
 EndGlobal

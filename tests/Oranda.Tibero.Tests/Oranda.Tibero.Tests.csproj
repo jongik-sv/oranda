@@ -25,6 +25,17 @@
     <ProjectReference Include="..\..\src\Oranda.Tibero\Oranda.Tibero.csproj" />
     <!-- 합친 카탈로그 시험(Oracle 원문 + Tibero 원문)에만 쓴다. -->
     <ProjectReference Include="..\..\src\Oranda.Oracle\Oranda.Oracle.csproj" />
+    <!-- 가짜 드라이버는 빌드만 하고 출력 하위 폴더(fake-driver/)에 둔다. 출력 루트에 두면 기본 로드 컨텍스트가 먼저 잡는다. -->
+    <ProjectReference Include="..\Oranda.Tibero.FakeDriver\Oranda.Tibero.FakeDriver.csproj" ReferenceOutputAssembly="false" />
   </ItemGroup>
+
+  <Target Name="CopyFakeDriver" AfterTargets="Build">
+    <MSBuild Projects="..\Oranda.Tibero.FakeDriver\Oranda.Tibero.FakeDriver.csproj" Targets="GetTargetPath">
+      <Output TaskParameter="TargetOutputs" ItemName="FakeDriverDll" />
+    </MSBuild>
+    <Copy SourceFiles="@(FakeDriverDll)" DestinationFolder="$(OutDir)fake-driver" SkipUnchangedFiles="true">
+      <Output TaskParameter="CopiedFiles" ItemName="FileWrites" />
+    </Copy>
+  </Target>
 
 </Project>

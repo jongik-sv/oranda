@@ -1,0 +1,20 @@
+<!-- 시험 전용 가짜 드라이버. 실제 Tibero.DataAccess 1.1.35 와 같은 어셈블리 이름·버전·이름공간·형식·멤버 서명을 가지며 동작은 메모리 안 최소 구현이다.
+     리포에 실제 드라이버(재배포 불가)를 넣지 않는다. Oranda.* 를 참조하지 않는다. -->
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <AssemblyName>Tibero.DataAccess</AssemblyName>
+    <RootNamespace>Tibero.DataAccess</RootNamespace>
+    <Version>1.1.35</Version>
+    <AssemblyVersion>1.1.35.0</AssemblyVersion>
+    <FileVersion>1.1.35.0</FileVersion>
+    <IsPackable>false</IsPackable>
+    <IsTestProject>false</IsTestProject>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <AnalysisLevel>none</AnalysisLevel>
+    <EnableNETAnalyzers>false</EnableNETAnalyzers>
+    <EnforceCodeStyleInBuild>false</EnforceCodeStyleInBuild>
+    <NoWarn>$(NoWarn);CA1716;CA1711;CA1720;CA1707;CS1591</NoWarn>
+  </PropertyGroup>
+</Project>

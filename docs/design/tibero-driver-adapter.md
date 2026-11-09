@@ -156,6 +156,11 @@
 ## 5. 시험(DV4·DV6)
 
 - 가짜 드라이버 `tests/Oranda.Tibero.FakeDriver`: 어셈블리 이름 `Tibero.DataAccess`, 버전 1.1.35, 2장이 묶는 형식·멤버를 같은 이름공간·이름으로 둔다. 동작은 최소(연결 열기·닫기·상태, 명령 속성 기록, 시험이 넣은 처리기의 결과·예외를 돌려줌). 시험 프로젝트는 `ReferenceOutputAssembly=false` 로 빌드만 하고 출력 하위 폴더(`fake-driver/`)에 둔다.
-- 시험 도우미 `tests/Oranda.Tibero.Tests/Driver/FakeDriverHost.cs`: `FakeDriverHost.Driver` = 새 ALC 에 가짜를 읽어 `Bind` 한 어댑터. 세션·실행·결과 단위 시험도 이것을 쓴다. 처리기를 넣는 API 는 DV4 머지 때 이 장에 적는다.
+- 시험 도우미 `tests/Oranda.Tibero.Tests/Driver/FakeDriverHost.cs`(이름공간 `Oranda.Tibero.Tests.Driver`): `FakeDriverHost.Driver` = 새 ALC 에 가짜를 읽어 `Bind` 한 어댑터(시험 프로세스에 하나). 세션·실행·결과 단위 시험도 이것을 쓴다.
+  - `SetHandler(Func<DbCommand, object?>? handler)`: 명령 실행 결과를 정한다. `ExecuteReader` = 처리기가 돌려준 `DataTable` 위 리더(없으면 빈 것), `ExecuteNonQuery` = 돌려준 `int`(아니면 -1), `ExecuteScalar` = 돌려준 값. 처리기가 던지면 그대로 나간다. OUT 값은 처리기 안에서 `DbParameter.Value` 에 넣는다. 처리기는 비동기 흐름마다 따로(AsyncLocal)라 다른 시험과 병렬로 돌아도 섞이지 않는다 — 시험 메서드 본문에서 부른다.
+  - `ServerError(int number, string message)` = 서버 오류(`TiberoException`, `Number` 그대로), `ClientError(int code, string message)` = 드라이버 쪽 오류(`TbOdpException`). `Reset()` = 처리기 빼기.
+  - 가짜 값 만들기: `New(fullName, args…)`·`Static(fullName, field)`·`Get(target, property)`·`NewReader(DataTable)`·`TypeOf(fullName)`(드라이버 형식 이름 문자열은 시험 쪽 `Driver/` 폴더에서만 쓴다).
+- 프로세스 단위 상태는 `TiberoDriverHost`(앱 = `TiberoDriverHost.Shared`, 기본 ALC). 시험은 `new TiberoDriverHost(새 ALC, 환경 변수 함수, 풀기 폴더)` 로 따로 만든다.
+- DV6 에서 잴 것: 실제 드라이버의 `GetTiberoClob(i)`·`GetTiberoBlob(i)` 가 부를 때마다 새 객체를 주는지(같은 객체면 `ReadClob`·`ReadBlob` 도 `Clone()` 으로 바꾼다), 리더·연결을 닫은 뒤 로케이터 읽기, `TiberoDecimal` 28자리 초과 글자.
 - 메모리 PE 거절·판정: 이름 다름·`Oracle.DataAccess`·`mscorlib` 참조·메이저 2·`Unverified`(1.2.0 등)·없는 경로·텍스트 파일·폴더·nupkg. 버전별 판정은 메모리에서 만든 PE 로 보고, 가짜 드라이버는 1.1.35 하나만 둔다. 멤버 하나가 빠진 경우(`Unusable`)는 가짜 드라이버 어셈블리를 묶을 때 형식을 일부 빼는 시험용 바인드 옵션 또는 멤버 없는 메모리 어셈블리로 본다(DV4).
 - 실제 드라이버 IT: `ORANDA_TIBERO_DRIVER` = 실제 1.1.35 dll 일 때만. 2장의 모든 멤버가 묶이는지(핵심), 2.70 거절(파일이 있을 때만).

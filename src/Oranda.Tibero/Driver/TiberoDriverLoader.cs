@@ -116,22 +116,24 @@ internal static class TiberoDriverLoader
 
         lock (Gate)
         {
-            if (Registered.TryGetValue(context, out var driverFolder))
+            if (Registered.TryGetValue(context, out var existing))
             {
-                if (!string.Equals(driverFolder.Path, folder, StringComparison.OrdinalIgnoreCase))
+                if (!string.Equals(existing.Path, folder, StringComparison.OrdinalIgnoreCase))
                 {
                     throw new InvalidOperationException("이 로드 컨텍스트에는 이미 다른 폴더의 Tibero 드라이버를 올렸습니다. 다시 시작하면 적용됩니다.");
                 }
-            }
-            else
-            {
-                driverFolder = new DriverFolder(folder);
-                Registered.Add(context, driverFolder);
-                context.Resolving += driverFolder.Resolve;
+
+                var again = context.LoadFromAssemblyPath(full);
+                existing.Allow(again);
+                return again;
             }
 
+            // 올리기에 실패하면 폴더를 묶지 않는다 — 사용자가 다른 폴더로 고쳐 다시 시도할 수 있게.
             var assembly = context.LoadFromAssemblyPath(full);
+            var driverFolder = new DriverFolder(folder);
             driverFolder.Allow(assembly);
+            Registered.Add(context, driverFolder);
+            context.Resolving += driverFolder.Resolve;
             return assembly;
         }
     }
