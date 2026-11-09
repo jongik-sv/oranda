@@ -32,15 +32,15 @@ public sealed record AppCompositionOptions
 }
 
 /// <summary>
-/// 앱 조립(design.md 3장 「자동 수집」): Platform 어셈블리는 바로, Oracle·Language 어셈블리는 처음 쓸 때까지 미뤄서 등록한다.
-/// 시작 경로에서 Oracle·ANTLR 어셈블리를 로드하지 않는다(TRD 8) — 어셈블리 이름만 적어 두고 컨테이너가 필요할 때 로드한다.
+/// 앱 조립(design.md 3장 「자동 수집」): Platform 어셈블리는 바로, Oracle·Tibero·Language 어셈블리는 처음 쓸 때까지 미뤄서 등록한다.
+/// 시작 경로에서 Oracle·Tibero·ANTLR 어셈블리를 로드하지 않는다(TRD 8) — 어셈블리 이름만 적어 두고 컨테이너가 필요할 때 로드한다.
 /// Core 어셈블리(DBMS 디스패처)는 바로 등록한다 — DBMS 키 구현(<c>Oranda.Oracle</c>)은 디스패처가 처음 고를 때 로드된다.
 /// 명령·도구 창·상태 표시줄 구간은 Oranda.App 어셈블리를 한 번 스캔해 모은다.
 /// </summary>
 public static class AppComposition
 {
     /// <summary>지연 로드할 어셈블리 이름(첫 프레임 전에 열지 않는다).</summary>
-    public static readonly string[] DeferredAssemblies = ["Oranda.Oracle", "Oranda.Language"];
+    public static readonly string[] DeferredAssemblies = ["Oranda.Oracle", "Oranda.Language", "Oranda.Tibero"];
 
     public static ServiceContainer Create(AppCompositionOptions? options = null)
     {
@@ -65,7 +65,7 @@ public static class AppComposition
         container.AddAssembly(typeof(AppComposition).Assembly); // 앱 어셈블리의 [OrandaService](편집기 문맥·시작 작업 등)
         foreach (var name in DeferredAssemblies)
         {
-            container.AddDeferredAssembly(name);
+            container.AddDeferredAssembly(name, optional: name == "Oranda.Tibero"); // Tibero 는 없는 배포(드라이버 없는 빌드 등)에서도 Oracle 이 그대로 돌아야 한다
         }
 
         if (options.DataDirectory is { } dir)

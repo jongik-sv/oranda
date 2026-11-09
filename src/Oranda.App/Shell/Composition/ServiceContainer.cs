@@ -19,6 +19,9 @@ public sealed partial class ServiceContainer : IServiceProvider, IDisposable
     private readonly object _scanGate = new();
     private readonly Dictionary<Type, List<Registration>> _registrations = [];
     private readonly List<string> _deferred = [];
+
+    /// <summary>없어도 되는 지연 어셈블리(예: 드라이버 없는 배포의 Oranda.Tibero). 못 읽으면 건너뛰고 다른 어셈블리 등록을 막지 않는다.</summary>
+    private readonly HashSet<string> _optionalDeferred = new(StringComparer.Ordinal);
     private readonly List<object> _disposables = [];
     private readonly List<Action> _afterScan = [];
     private bool _disposed;
@@ -105,12 +108,16 @@ public sealed partial class ServiceContainer : IServiceProvider, IDisposable
     /// 어셈블리 이름만 적어 두고, 컨테이너가 모르는 형식을 처음 받을 때 로드해 등록한다.
     /// 이미 로드된 어셈블리를 다시 훑지 않는다.
     /// </summary>
-    public ServiceContainer AddDeferredAssembly(string assemblyName)
+    public ServiceContainer AddDeferredAssembly(string assemblyName, bool optional = false)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(assemblyName);
         lock (_gate)
         {
             _deferred.Add(assemblyName);
+            if (optional)
+            {
+                _optionalDeferred.Add(assemblyName);
+            }
         }
 
         return this;
@@ -148,7 +155,17 @@ public sealed partial class ServiceContainer : IServiceProvider, IDisposable
             {
                 foreach (var name in names)
                 {
-                    AddAssembly(Assembly.Load(new AssemblyName(name)));
+                    Assembly loaded;
+                    try
+                    {
+                        loaded = Assembly.Load(new AssemblyName(name));
+                    }
+                    catch (Exception ex) when ((ex is FileNotFoundException or FileLoadException or BadImageFormatException) && IsOptionalDeferred(name))
+                    {
+                        continue; // 선택 어셈블리가 없다 — 그 DBMS 만 빠지고 Oracle·Language 는 그대로 등록한다.
+                    }
+
+                    AddAssembly(loaded);
                 }
             }
             finally
@@ -166,6 +183,14 @@ public sealed partial class ServiceContainer : IServiceProvider, IDisposable
             {
                 action();
             }
+        }
+    }
+
+    private bool IsOptionalDeferred(string name)
+    {
+        lock (_gate)
+        {
+            return _optionalDeferred.Contains(name);
         }
     }
 

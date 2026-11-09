@@ -671,7 +671,8 @@ public class ShellHeadlessTests
 
         Assert.DoesNotContain(loaded, n => n.StartsWith("Oracle.", StringComparison.Ordinal)
             || n.StartsWith("Antlr4", StringComparison.Ordinal)
-            || n is "Oranda.Oracle" or "Oranda.Language");
+            || n.StartsWith("Tibero.", StringComparison.Ordinal)
+            || n is "Oranda.Oracle" or "Oranda.Language" or "Oranda.Tibero");
     });
 
     [Theory]

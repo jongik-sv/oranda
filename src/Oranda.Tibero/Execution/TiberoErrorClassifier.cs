@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.Reflection;
 using System.Text.RegularExpressions;
+using Oranda.Core.Composition;
 using Oranda.Core.Connection;
 using Oranda.Core.Execution;
 
@@ -17,6 +18,7 @@ namespace Oranda.Tibero.Execution;
 /// 공개 속성 <c>Number</c> 로 찾는다. 드라이버를 참조하는 단계(T2)에서 형식 있는 코드로 바꾼다.
 /// </para>
 /// </summary>
+[OrandaService(typeof(IDbErrorClassifier), Dbms = Dbms.Tibero)]
 internal sealed partial class TiberoErrorClassifier : IDbErrorClassifier
 {
     private const string DriverExceptionName = "TiberoException";
