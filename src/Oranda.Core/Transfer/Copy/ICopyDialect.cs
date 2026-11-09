@@ -10,6 +10,13 @@ namespace Oranda.Core.Transfer.Copy;
 /// </summary>
 public interface ICopyDialect
 {
+    /// <summary>
+    /// 배열 DML(INSERT·MERGE)의 값 자리 글. <paramref name="bindName"/> 은 쌍점 없는 바인드 이름(<see cref="CopyCommonStatements.BindNames"/>, <c>C1</c>),
+    /// <paramref name="serverType"/> 은 그 열의 원본 서버 형식(<c>ColumnInfo.DataType</c>, 괄호가 붙어도 된다 — 값이 원본 형식의 대량 값이다).
+    /// 바인드 값이 글자로 가는 DBMS 는 여기서 변환 함수로 감싼다(Tibero <c>TO_DATE(:C1, …)</c>). Oracle 은 <c>:C1</c> 그대로다.
+    /// </summary>
+    string BindPlaceholder(string bindName, string serverType);
+
     /// <summary>대상 트리거 끄기.</summary>
     SqlStatement DisableTrigger(string owner, string trigger);
 

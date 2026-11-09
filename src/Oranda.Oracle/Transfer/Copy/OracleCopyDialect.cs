@@ -14,6 +14,9 @@ internal sealed class OracleCopyDialect : ICopyDialect
     /// <summary>ORA-02449: 다른 표의 FK 가 참조하는 PK·UK 가 있어 DROP 을 거부(대상 계정에 안 보이는 FK).</summary>
     internal const int ReferencedByForeignKeys = 2449;
 
+    /// <summary>값 자리는 바인드 이름 그대로(<c>:C1</c>) — 형식은 ODP.NET 매개변수가 맡는다. 형식과 무관하다.</summary>
+    public string BindPlaceholder(string bindName, string serverType) => ":" + bindName;
+
     public SqlStatement DisableTrigger(string owner, string trigger) => CopyStatements.DisableTrigger(owner, trigger);
 
     public SqlStatement DisableConstraint(DisabledObject fk) => CopyStatements.DisableConstraint(fk);

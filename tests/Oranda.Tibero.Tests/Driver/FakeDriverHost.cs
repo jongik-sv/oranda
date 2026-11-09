@@ -60,6 +60,24 @@ internal static class FakeDriverHost
     internal static DbDataReader NewReader(System.Data.DataTable table) =>
         (DbDataReader)New("Tibero.DataAccess.Client.TiberoDataReader", table);
 
+    /// <summary>
+    /// <paramref name="table"/> 에 스키마 표 정보가 붙은 열을 더한다: <paramref name="providerType"/> = 드라이버 <c>TiberoDbType</c> 정수
+    /// (<c>TiberoColumnTypes.Pt*</c>), <paramref name="isRowId"/> = 스키마 표 <c>IsRowID</c>. 열 하나라도 이것으로 더하면 가짜 리더가
+    /// <c>GetSchemaTable()</c> 을 돌려준다(아니면 지금처럼 NotSupported).
+    /// </summary>
+    internal static System.Data.DataColumn ProviderColumn(System.Data.DataTable table, string name, Type type, int providerType, bool isRowId = false)
+    {
+        ArgumentNullException.ThrowIfNull(table);
+        var column = table.Columns.Add(name, type);
+        column.ExtendedProperties["ProviderType"] = providerType;
+        if (isRowId)
+        {
+            column.ExtendedProperties["IsRowID"] = true;
+        }
+
+        return column;
+    }
+
     private static Type Server() => TypeOf("Tibero.DataAccess.Client.FakeServer");
 
     private static (TiberoDriver, Assembly) Load()

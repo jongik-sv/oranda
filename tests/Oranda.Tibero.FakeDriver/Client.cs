@@ -3,6 +3,7 @@ using System.Collections;
 using System.Collections.Generic;
 using System.Data;
 using System.Data.Common;
+using System.Globalization;
 using System.Threading;
 using Tibero.DataAccess.Types;
 
@@ -195,6 +196,37 @@ namespace Tibero.DataAccess.Client
         public override long GetInt64(int ordinal) => Convert.ToInt64(Cell(ordinal));
         public override string GetString(int ordinal) => (string)Cell(ordinal);
         public override IEnumerator GetEnumerator() => throw new NotSupportedException();
+
+        // 스키마 표: 열 하나라도 ExtendedProperties["ProviderType"](TiberoDbType 정수)를 달았을 때만 만든다(실제 드라이버의 ProviderType·IsRowID 열).
+        // 아무 열도 달지 않았으면 지금까지처럼 NotSupported — 스키마 표 없이 도는 기존 시험(모든 열을 글자로 읽는 경로)은 그대로다.
+        public override DataTable GetSchemaTable()
+        {
+            bool described = false;
+            foreach (DataColumn c in _t.Columns)
+            {
+                if (c.ExtendedProperties.ContainsKey("ProviderType")) { described = true; break; }
+            }
+
+            if (!described) throw new NotSupportedException();
+
+            var schema = new DataTable("SchemaTable") { Locale = CultureInfo.InvariantCulture };
+            schema.Columns.Add("ColumnName", typeof(string));
+            schema.Columns.Add("ColumnOrdinal", typeof(int));
+            schema.Columns.Add("ProviderType", typeof(int));
+            schema.Columns.Add("IsRowID", typeof(bool));
+            schema.Columns.Add("AllowDBNull", typeof(bool));
+            schema.Columns.Add("DataType", typeof(Type));
+            foreach (DataColumn c in _t.Columns)
+            {
+                object providerType = c.ExtendedProperties.ContainsKey("ProviderType")
+                    ? Convert.ToInt32(c.ExtendedProperties["ProviderType"], CultureInfo.InvariantCulture)
+                    : DBNull.Value;
+                bool isRowId = c.ExtendedProperties.ContainsKey("IsRowID") && Convert.ToBoolean(c.ExtendedProperties["IsRowID"], CultureInfo.InvariantCulture);
+                schema.Rows.Add(c.ColumnName, c.Ordinal, providerType, isRowId, c.AllowDBNull, c.DataType);
+            }
+
+            return schema;
+        }
 
         public TiberoBinary GetTiberoBinary(int i) => Cell(i) is byte[] b ? new TiberoBinary(b) : TiberoBinary.Null;
         public TiberoClob GetTiberoClob(int i) => Cell(i) is string s ? new TiberoClob(s) : Cell(i) is TiberoClob c ? c : TiberoClob.Null;

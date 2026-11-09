@@ -999,7 +999,7 @@ public class CopyRunner : ICopyRunner
         try
         {
             var shape = RowShape.Create(_codec, run.Job, plan);
-            var dml = CopyCommonStatements.ArrayDml(DmlFor(run.Builder, plan, table.Name), plan.Columns.Count);
+            var dml = CopyCommonStatements.ArrayDml(DmlFor(run.Builder, plan, table.Name, shape), plan.Columns.Count);
             var estimated = run.Report.EstimatedRows.TryGetValue(table.Name, out var e) ? e : (long?)null;
             run.Progress(table.Name, 0, estimated, PhaseLoad);
             run.Log("적재 시작" + (estimated is { } est ? $" · 예상 {est.ToString("N0", CultureInfo.InvariantCulture)}건" : string.Empty));
@@ -1297,7 +1297,7 @@ public class CopyRunner : ICopyRunner
         return RunState.Accept(set, table, "원본에서 읽기 전용 트랜잭션을 시작하지 못했습니다", ct);
     }
 
-    private static string DmlFor(CopySqlBuilder builder, CopyTablePlan plan, string key)
+    private string DmlFor(CopySqlBuilder builder, CopyTablePlan plan, string key, RowShape shape)
     {
         // 사전 점검의 필요 권한(UPDATE)과 같은 판정을 쓴다.
         var merge = PrecheckRules.UsesMerge(plan.Rule, plan.KeyColumns);
@@ -1306,7 +1306,9 @@ public class CopyRunner : ICopyRunner
             throw new InvalidOperationException($"{key}: PK 기준 MERGE 에 쓸 키 열이 없습니다.");
         }
 
-        return merge ? builder.Merge(key, plan.Columns, plan.KeyColumns) : builder.Insert(key, plan.Columns);
+        // 값 자리 글은 방언이 정한다(바인드 이름·원본 형식 = 행 배치의 열). Oracle 은 :Cn 그대로라 글이 바뀌지 않는다.
+        string ValueAt(int i) => _dialect.BindPlaceholder(shape.Columns[i].BindName, shape.Columns[i].ServerType);
+        return merge ? builder.Merge(key, plan.Columns, plan.KeyColumns, ValueAt) : builder.Insert(key, plan.Columns, ValueAt);
     }
 
     // ---- 「실패 행만 다시 넣기」 ----
@@ -1331,7 +1333,7 @@ public class CopyRunner : ICopyRunner
             }
 
             var shape = RowShape.Create(_codec, run.Job, plan);
-            var dml = CopyCommonStatements.ArrayDml(DmlFor(run.Builder, plan, tableName), plan.Columns.Count);
+            var dml = CopyCommonStatements.ArrayDml(DmlFor(run.Builder, plan, tableName, shape), plan.Columns.Count);
             var query = CopyCommonStatements.Query(run.Builder.SourceSelectByKeys(tableName, plan.Columns, plan.KeyColumns));
             run.Progress(tableName, 0, rows.Count, PhaseRetry);
             run.Log(CopyLogText.Statement(run.SideOf(run.Source), query.Text)

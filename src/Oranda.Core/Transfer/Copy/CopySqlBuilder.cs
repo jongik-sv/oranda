@@ -50,18 +50,26 @@ public sealed class CopySqlBuilder(CopyJob job, ResolvedPeriod period,
         return new SqlWithBinds(sql, binds);
     }
 
-    /// <summary>바인드 이름은 <c>:C1</c>…<c>:Cn</c>, 열 순서와 같다.</summary>
-    public string Insert(string key, IReadOnlyList<string> columns)
-        => $"INSERT INTO {TargetTable(key)} ({Quoted(columns)}) VALUES ({string.Join(", ", columns.Select((_, i) => ":C" + (i + 1).ToString(CultureInfo.InvariantCulture)))})";
-
-    public string Merge(string key, IReadOnlyList<string> columns, IReadOnlyList<string> keyColumns)
+    /// <summary>
+    /// 바인드 이름은 <c>:C1</c>…<c>:Cn</c>, 열 순서와 같다. <paramref name="valueAt"/> 는 i 번째(0부터) 열의 값 자리 글이다(<see cref="ICopyDialect.BindPlaceholder"/>,
+    /// 예: Tibero 의 <c>TO_DATE(:C2, …)</c>). 없으면 <c>:C{i+1}</c> 그대로다.
+    /// </summary>
+    public string Insert(string key, IReadOnlyList<string> columns, Func<int, string>? valueAt = null)
     {
+        var value = valueAt ?? DefaultValueAt;
+        return $"INSERT INTO {TargetTable(key)} ({Quoted(columns)}) VALUES ({string.Join(", ", columns.Select((_, i) => value(i)))})";
+    }
+
+    /// <summary>값 자리(<paramref name="valueAt"/>)는 <see cref="Insert"/> 와 같다. <c>USING (SELECT … FROM DUAL)</c> 의 값 자리에만 들어간다.</summary>
+    public string Merge(string key, IReadOnlyList<string> columns, IReadOnlyList<string> keyColumns, Func<int, string>? valueAt = null)
+    {
+        var value = valueAt ?? DefaultValueAt;
         if (keyColumns.Count == 0) throw new ArgumentException("MERGE 에는 키 열이 필요하다.", nameof(keyColumns));
         if (keyColumns.Any(k => !columns.Contains(k, StringComparer.Ordinal)))
             throw new ArgumentException("키 열이 복사 열에 없다.", nameof(keyColumns));
         var sb = new StringBuilder();
         sb.Append("MERGE INTO ").Append(TargetTable(key)).Append(" T USING (SELECT ");
-        sb.Append(string.Join(", ", columns.Select((c, i) => $":C{(i + 1).ToString(CultureInfo.InvariantCulture)} AS {SqlIdentifier.QuoteAlways(c)}")));
+        sb.Append(string.Join(", ", columns.Select((c, i) => $"{value(i)} AS {SqlIdentifier.QuoteAlways(c)}")));
         sb.Append(" FROM DUAL) S ON (");
         sb.Append(string.Join(" AND ", keyColumns.Select(k => $"T.{SqlIdentifier.QuoteAlways(k)} = S.{SqlIdentifier.QuoteAlways(k)}")));
         sb.Append(')');
@@ -75,6 +83,9 @@ public sealed class CopySqlBuilder(CopyJob job, ResolvedPeriod period,
         sb.Append(string.Join(", ", columns.Select(c => "S." + SqlIdentifier.QuoteAlways(c)))).Append(')');
         return sb.ToString();
     }
+
+    /// <summary>값 자리 기본 글 <c>:C{i+1}</c>(<see cref="CopyCommonStatements.BindNames"/> 의 이름 앞에 쌍점).</summary>
+    private static string DefaultValueAt(int index) => ":C" + (index + 1).ToString(CultureInfo.InvariantCulture);
 
     /// <summary>실패 행 다시 읽기. 키 바인드는 <c>:K1</c>…<c>:Kn</c>.</summary>
     public string SourceSelectByKeys(string key, IReadOnlyList<string> columns, IReadOnlyList<string> keyColumns)

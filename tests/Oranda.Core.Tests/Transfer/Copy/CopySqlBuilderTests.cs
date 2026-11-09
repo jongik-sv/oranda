@@ -300,6 +300,25 @@ public class CopySqlBuilderTests
     }
 
     [Fact]
+    public void Value_placeholders_default_to_bind_names_and_follow_value_at()
+    {
+        var b = B([new TableRule("M", RuleKind.All, TargetAction.MergeByPk)], null, ("M", Cols(("K", "NUMBER"))));
+
+        // 기본 = :Cn — 값 자리 함수가 :Cn 을 주면 글이 같다(Oracle 방언).
+        static string Plain(int i) => ":C" + (i + 1).ToString(System.Globalization.CultureInfo.InvariantCulture);
+        Assert.Equal(b.Insert("M", ["K", "V"]), b.Insert("M", ["K", "V"], Plain));
+        Assert.Equal(b.Merge("M", ["K", "V"], ["K"]), b.Merge("M", ["K", "V"], ["K"], Plain));
+
+        // 감싸는 방언(Tibero): VALUES 와 USING (SELECT …) 의 값 자리에만 들어가고, MERGE 의 INSERT VALUES 는 S.열 그대로다.
+        string Wrapped(int i) => i == 1 ? "TO_DATE(:C2, 'YYYY-MM-DD HH24:MI:SS')" : Plain(i);
+        Assert.Equal("INSERT INTO \"TGT\".\"M\" (\"K\", \"V\") VALUES (:C1, TO_DATE(:C2, 'YYYY-MM-DD HH24:MI:SS'))", b.Insert("M", ["K", "V"], Wrapped));
+        Assert.Equal(
+            "MERGE INTO \"TGT\".\"M\" T USING (SELECT :C1 AS \"K\", TO_DATE(:C2, 'YYYY-MM-DD HH24:MI:SS') AS \"V\" FROM DUAL) S ON (T.\"K\" = S.\"K\") " +
+            "WHEN MATCHED THEN UPDATE SET T.\"V\" = S.\"V\" WHEN NOT MATCHED THEN INSERT (\"K\", \"V\") VALUES (S.\"K\", S.\"V\")",
+            b.Merge("M", ["K", "V"], ["K"], Wrapped));
+    }
+
+    [Fact]
     public void Identifiers_are_always_quoted()
     {
         var b = B([new TableRule("MixedCase", RuleKind.All, TargetAction.DeleteAllInsert)], null, ("MixedCase", Cols(("a", "NUMBER"))));

@@ -42,6 +42,14 @@ public sealed class TiberoCopyDialectTests
     }
 
     [Fact]
+    public void Date_value_slot_is_wrapped_in_to_date_so_the_time_survives_the_nls_format() =>
+        Assert.Equal("TO_DATE(:C1, 'YYYY-MM-DD HH24:MI:SS')", Dialect.BindPlaceholder("C1", "DATE"));
+
+    [Fact]
+    public void Text_value_slot_is_the_plain_bind() =>
+        Assert.Equal(":C1", Dialect.BindPlaceholder("C1", "VARCHAR2(10 CHAR)"));
+
+    [Fact]
     public void Read_only_transaction_is_the_psm_block_and_recycle_bin_uses_use_recyclebin()
     {
         var readOnly = Dialect.SetTransactionReadOnly();

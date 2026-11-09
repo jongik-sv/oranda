@@ -521,7 +521,7 @@ internal sealed partial class TiberoExecutionService : IExecutionService
     /// 명령·리더·결과 집합을 닫는다. 닫기 실패(드라이버 오류·이미 닫힌 연결)가 이미 만든 결과를 덮지 않게 삼킨다 — Oracle 처럼 결과는 늘 돌려준다.
     /// 그 밖의 예외(프로그램 오류)는 그대로 낸다.
     /// </summary>
-    private static async ValueTask SafeDisposeAsync(IAsyncDisposable? resource)
+    internal static async ValueTask SafeDisposeAsync(IAsyncDisposable? resource)
     {
         if (resource is null)
         {

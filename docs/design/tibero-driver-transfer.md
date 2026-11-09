@@ -217,11 +217,32 @@ Oracle 과 같음. **실패한 DDL 도 커밋한다** → 복사 도중 DDL(트�
 ### 3.10 TB1·TB3·TB4 규칙 (이 실측으로 정함)
 
 1. **TB1 실패 판정 = 영향 행 수**: 묶음 ExecuteNonQuery 반환 ≠ 묶음 행 수 → 실패로 보고, 반환값 k 로 「k 번째 행(0부터)이 첫 위반」을 알 수 있음. 처리 = 세이브포인트 ROLLBACK TO → 한 행씩 다시(T5 결정). 예외가 나도(형식·드라이버 오류) 같은 경로.
-2. **TB1 값 배열 = 형식 배열만**: `object[]` 는 어떤 종류도 금지(#36: 드라이버가 원소를 string 으로 캐스트). 열마다 형식 배열을 만든다(nullable 형식 배열은 NRE, #42) — VARCHAR2·CHAR·CLOB = `string?[]`, NUMBER = `string?[]` + Decimal 종류(invariant 고정 소수점 글자, NULL·30자리 소수 됨), DATE = `string?[]` + `TO_DATE(:V, 'YYYY-MM-DD HH24:MI:SS')`, TIMESTAMP = `string?[]` + `TO_TIMESTAMP(:V, 'YYYY-MM-DD HH24:MI:SS.FF7')`(#42 실측 형식, 형식 DateTime[] 은 밀리초로 잘려 안 씀), RAW = 16진 `string?[]` + `HEXTORAW(:V)`. NULL 이 없는 열도 같은 경로(경로 하나). ArrayBindCount = 모든 배열 길이(크면 드라이버 IndexOutOfRange, 작으면 뒤 행을 조용히 버림 — #53) → TB1 은 묶음마다 길이를 단정한다. INSERT/MERGE 글의 값 자리에 변환 함수를 감싸는 것은 Tibero 실행 방언(TB3b), 값 → 글자는 TiberoBulkValueCodec 한 곳.
-2-1. **BLOB·LONG RAW 열이 있는 표 = 배열 바인드 안 함**: 같은 트랜잭션·같은 준비문으로 한 행씩(스칼라 byte[] 바인드, 보충 측정 `single_bind.*` 로 확인), 묶음 단위 세이브포인트·실패 처리는 같게. RAW 는 16진 + `HEXTORAW(:V)` 배열(#42 됨)이라 배열 경로에 남고, 한 행씩은 BLOB·LONG RAW 열이 있는 표만(2000바이트 넘는 값을 HEXTORAW 로 못 넘김). 스칼라 byte[] 바인드·준비문 재사용 됨(#53). 빈 byte[] 는 NULL 로 들어감 → 원본 길이 0 BLOB 은 NULL 이 된다(Oracle 결과와 다를 수 있어 TI1b 에서 Oracle 과 비교, 차이면 EMPTY_BLOB() 경로). 속도 목표 없음(Q3), 행/초만 기록.
+2. **TB1 값 배열 = 형식 배열만**: `object[]` 는 어떤 종류도 금지(#36: 드라이버가 원소를 string 으로 캐스트). 열마다 형식 배열을 만든다(nullable 형식 배열은 NRE, #42) — VARCHAR2·CHAR·CLOB = `string?[]`, NUMBER = `string?[]` + Decimal 종류(invariant 고정 소수점 글자, NULL·30자리 소수 됨), DATE = `string?[]` + `TO_DATE(:V, 'YYYY-MM-DD HH24:MI:SS')`, TIMESTAMP = `string?[]` + `TO_TIMESTAMP(:V, 'YYYY-MM-DD HH24:MI:SS.FF9')`(#42 는 FF7 로 실측, TB1 IT 에서 FF9 9자리 확인 — 3.11. 형식 DateTime[] 은 밀리초로 잘려 안 씀), RAW = 16진 `string?[]` + `HEXTORAW(:V)`. NULL 이 없는 열도 같은 경로(경로 하나). ArrayBindCount = 모든 배열 길이(크면 드라이버 IndexOutOfRange, 작으면 뒤 행을 조용히 버림 — #53) → TB1 은 묶음마다 길이를 단정한다. INSERT/MERGE 글의 값 자리에 변환 함수를 감싸는 것은 Tibero 실행 방언(TB3b), 값 → 글자는 TiberoBulkValueCodec 한 곳.
+2-1. **BLOB·LONG RAW 열이 있는 표 = 배열 바인드 안 함**: 같은 트랜잭션·같은 준비문으로 한 행씩(스칼라 byte[] 바인드, 보충 측정 `single_bind.*` 로 확인), 묶음 단위 세이브포인트·실패 처리는 같게. RAW 는 16진 + `HEXTORAW(:V)` 배열(#42 됨)이라 배열 경로에 남고, 한 행씩은 BLOB·LONG RAW 열이 있는 표만(2000바이트 넘는 값을 HEXTORAW 로 못 넘김). 스칼라 byte[] 바인드 됨(#53). 준비문 재사용은 #53 에서 됐으나 TB1 IT 에서 1 MB 행 다음에 TBR-590727 이 나 행마다 새 명령으로 보낸다(3.11). 빈 byte[] 는 NULL 로 들어감 → 원본 길이 0 BLOB 은 NULL 이 된다(Oracle 결과와 다를 수 있어 TI1b 에서 Oracle 과 비교, 차이면 EMPTY_BLOB() 경로). 속도 목표 없음(Q3), 행/초만 기록.
 3. **DDL 은 묶음 밖**: 트리거·제약 끄기, 시퀀스 조정은 묶음 트랜잭션 시작 전에(실패한 DDL 도 커밋).
 4. **트리거 DDL 조립**: GET_DDL(TRIGGER) 대신 ALL_TRIGGERS + ALL_SOURCE(TB4, Q5).
 5. **FK 다시 켜기**: VALIDATE 실패(-7161) 시 NOVALIDATE 로 켜고 고아 수를 알림(Oracle 경로와 같음). 지연 FK 여부는 카탈로그로 못 읽음 → TB3a 는 「지연 여부 모름」으로 두고 차단하지 않음(또는 사유 표시 — TB3a 결정).
 6. **IDENTITY 규칙 없음**: Tibero 방언은 IDENTITY 점검·GENERATED ALWAYS 차단을 하지 않음(쿼리도 안 보냄).
 7. **휴지통**: Recreate 안전망은 BIN 이름 SELECT 가 안 되므로(-8052) 「휴지통에서 되읽기」에 기대지 않음. FLASHBACK TO BEFORE DROP 은 됨 — Recreate 차단 해제 여부는 T5 결정 Q5(실측 없으면 차단) 따라 TB4 에서.
 8. **시퀀스 다음 값 = CONNECT BY 묶음**: Oracle `CopyStatements.NextValues` 모양 그대로 써도 됨. 소비가 읽은 행 수보다 클 수 있음(Oracle 같음).
+
+### 3.11 TB1 실측 (`TiberoBulkExecutionServiceIt`, ORT_TB1_* 표, win144 #74·#78·#81·#82)
+
+`TiberoBulkExecutionService`(ExecuteArrayAsync·StreamRowsAsync)와 `TiberoBulkValueCodec` 을 실서버로 확인한 결과. 3.10 의 규칙 중 바뀐 것은 ②(TIMESTAMP 서식)와 ②-1(한 행씩 = 행마다 새 명령), 새로 생긴 것은 ③-CLOB.
+
+| 항목 | 결과 | TB1 처리 |
+|---|---|---|
+| 왕복(300행, 배치 50): NUMBER(38,10)·NUMBER·VARCHAR2·CHAR(5)·NVARCHAR2(CP949 밖 글자)·CLOB(100000자 2행)·DATE(0001-01-01·9999-12-31 23:59:59)·TIMESTAMP(9)·RAW(2000B) | 100000자 CLOB 행이 **다른 열과 함께** 배열에 들어가면 서버가 연결을 끊음(TBR-90405 End Of Stream, 재현). 같은 행들을 열 하나씩 빼면 CLOB 을 뺀 경우만 됨, ID + 열 하나는 모두 됨(ID + CLOB 100000자 포함), 큰 CLOB 이 없는 25행은 됨. 생성 값으로 CLOB 을 4000자로 자른 같은 혼합 50행은 됨. 원본 열거가 열려 있는지와는 무관 | 묶음 안 CLOB·NCLOB 값이 4000자(`ArrayClobMaxChars`)를 넘으면 그 묶음만 한 행씩(스칼라 100000자 됨) |
+| 형식 하나씩 배열 50행 | 9형식 모두 됨. CLOB 열만 있는 배열은 1000~100000자(모든 행·일부 행·NULL 섞음) 모두 됨 | — |
+| 묶음 가운데 PK 중복(50행) | 예외 없음, 반환 24 → ORANDA-ARRAY-PARTIAL「앞 24행 … 25번째 행에서」 → ROLLBACK TO SAVEPOINT → 한 행씩: 중복 행만 TBR-10007 ConstraintViolation | 3.10 ① 그대로 |
+| BLOB 3행(1 MB·중복·NULL) 한 행씩, 명령 하나 재사용 | 1 MB 행 다음 행에서 TBR-590727 「Communication protocol error. Invalid message type」. 행마다 새 명령이면 정상(중복 행 10007). 재사용·새 명령 대조 측정(3000B·64KB·1MB)은 #81 에서 모두 정상 — 서비스 경로의 재사용만 재현 | 한 행씩은 **행마다 새 명령**(3.10 ②-1 의 「준비문 재사용」을 쓰지 않음) |
+| 빈 byte[] BLOB | NULL 로 저장(3.10 ②-1 과 같음) | TI1b 에서 Oracle 과 비교 |
+| MERGE | UPDATE 있는 모양 배열 k == n(50). 키만 있는 모양 일치 행 → k < n → 한 행씩 50 모두 성공 | 배열 성공 = k == n 만(k > n 도 한 행씩) |
+| CHAR(5) 표 키 바인드 | `WHERE K = :P` Varchar2 종류 길이 2·3 → 0건, Char 종류 → 1건. 키만 MERGE(배열, Varchar2) 는 공백 채움·안 채움 둘 다 일치로 봄 | CHAR 키 되읽기 = Char 종류(BindDataType.FixedChar) |
+| NUMBER 끝값(38자리·음수·소수 38자리·1E125·1E-125·-0.000001·0) | 스칼라·배열(7행·2행) 모두 같은 글자로 되읽힘. 39자리 = 38자리로 반올림 저장 | Decimal 종류 + 고정 소수점 글자 |
+| 키 되읽기 | 38자리 NUMBER·TIMESTAMP(9)·DATE 키 바인드로 정확히 1행 | 3.5 그대로 |
+| 정수·실수 계열 열(INTEGER·SMALLINT·NUMERIC·FLOAT·DOUBLE PRECISION·REAL) | 원시 바이트가 NUMBER 형식 → TiberoBulkNumber | — |
+| 취소 | 서버 계산 중·행 읽는 중 모두 OperationCanceledException, 잠금 풀림, 다음 SELECT 됨 | — |
+| 읽기 전용 프로필 | `BEGIN ROLLBACK; SET TRANSACTION READ ONLY; END;` 성공, INSERT 거부(ReadOnlyProfile) | 방언과 같은 글만 통과 |
+| TIMESTAMP(9) 배열 | `TO_TIMESTAMP(:C, '… .FF9')` 9자리 됨(FF7 서식도 9자리 글자를 받음) | **FF9**(3.10 ② 의 FF7 대신) |
+| 꺼진 형식 후보(측정만) | BINARY_FLOAT/DOUBLE `TO_BINARY_DOUBLE` 쓰기 됨, 'Infinity' -5074, **읽기 GetValue 가 음수를 틀림**(-2.25 → -1.8749999). TZ `TO_TIMESTAMP_TZ` 배열·스칼라·되읽기 됨. LTZ 되읽기 기준 시간대 불명. INTERVAL YM/DS `TO_YMINTERVAL`/`TO_DSINTERVAL` 음수·나노초까지 됨. LONG 쓰기 됨·읽기 GetString 빈 글자. LONG RAW 4B 쓰기 → 72B 로 읽힘 | **INTERVAL YM/DS 만 켬**(TB1 9). BINARY_*·LONG·LONG RAW = 읽기 틀림이라 끔(결과 격자 읽기 고침은 R1x), TZ = 지역 이름·음수 분 오프셋 미측정, LTZ = 의미 불명으로 끔 |

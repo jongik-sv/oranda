@@ -76,6 +76,8 @@ internal sealed class TiberoCopyDialect : ICopyDialect
     public SqlStatement SetTransactionReadOnly() =>
         new(TiberoExecutionService.ReadOnlyBlock, default, StatementKind.TransactionControl) { Verb = "SET TRANSACTION" };
 
+    public string BindPlaceholder(string bindName, string serverType) => TiberoBulkValueCodec.BindExpression(bindName, serverType);
+
     public SqlStatement Savepoint(string name) =>
         new("SAVEPOINT " + name, default, StatementKind.TransactionControl) { Verb = "SAVEPOINT" };
 

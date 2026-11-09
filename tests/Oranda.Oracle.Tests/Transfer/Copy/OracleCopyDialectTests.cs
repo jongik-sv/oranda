@@ -1,6 +1,7 @@
 using Oracle.ManagedDataAccess.Client;
 using Oracle.ManagedDataAccess.Types;
 using Oranda.Core.Execution;
+using Oranda.Core.Metadata;
 using Oranda.Core.Transfer.Copy;
 using Oranda.Oracle.Execution;
 using Oranda.Oracle.Transfer.Copy;
@@ -127,6 +128,37 @@ public sealed class OracleCopyDialectTests
             dialect.RestartIdentity("APP", "ORDERS", "ID"));
         Assert.Equal("ALTER TABLE \"APP\".\"C\" ADD FOREIGN KEY (\"P_ID\") REFERENCES \"APP\".\"P\" (\"ID\") ENABLE NOVALIDATE",
             dialect.AddForeignKeyWithoutValidation("ALTER TABLE \"APP\".\"C\" ADD FOREIGN KEY (\"P_ID\") REFERENCES \"APP\".\"P\" (\"ID\")"));
+    }
+
+    // ---- TB1 커밋 1: 배열 DML 값 자리 고리(ICopyDialect.BindPlaceholder). Oracle 은 :Cn 그대로라 INSERT·MERGE 글이 고리 전과 바이트 같다 ----
+
+    [Fact]
+    public void Bind_placeholder_keeps_array_dml_text_byte_identical()
+    {
+        var dialect = OracleCopyDialect.Instance;
+        Assert.Equal(":C1", dialect.BindPlaceholder("C1", "NUMBER"));
+        Assert.Equal(":C12", dialect.BindPlaceholder("C12", "TIMESTAMP(6)"));
+        Assert.Equal(":C3", dialect.BindPlaceholder("C3", "DATE")); // 형식과 무관(감싸지 않음)
+
+        var job = new CopyJob
+        {
+            Id = "1", Name = "n", Source = new ConnectionRef("s", "SRC"), Target = new ConnectionRef("t", "TGT"),
+            SourceOwner = "SRC", TargetOwner = "TGT", MaskSalt = "AA==",
+            Tables = [new TableRule("M", RuleKind.All, TargetAction.MergeByPk)],
+        };
+        var types = new[] { "NUMBER(10)", "DATE", "TIMESTAMP(9)", "RAW(16)", "VARCHAR2(10 CHAR)", "CLOB", "BLOB" };
+        var columns = types.Select((_, i) => "COL" + (i + 1).ToString(System.Globalization.CultureInfo.InvariantCulture)).ToList();
+        var info = new TableInfo(new DbObjectRef("SRC", "M", "TABLE"), [.. types.Select((t, i) => new ColumnInfo(columns[i], i + 1, t))]);
+        var tables = new Dictionary<string, TableInfo>(StringComparer.Ordinal) { ["M"] = info };
+        var builder = new CopySqlBuilder(job, new ResolvedPeriod(null, null), tables, tables);
+        var names = CopyCommonStatements.BindNames(columns.Count);
+        string ValueAt(int i) => dialect.BindPlaceholder(names[i], types[i]);
+
+        // 실행기(CopyRunner.DmlFor)가 부르는 모양 = 고리 없는 글.
+        Assert.Equal(builder.Insert("M", columns), builder.Insert("M", columns, ValueAt));
+        Assert.Equal(builder.Merge("M", columns, ["COL1"]), builder.Merge("M", columns, ["COL1"], ValueAt));
+        Assert.Equal(builder.Merge("M", ["COL1"], ["COL1"]), builder.Merge("M", ["COL1"], ["COL1"], ValueAt));
+        Assert.Equal("INSERT INTO \"TGT\".\"M\" (\"COL1\", \"COL2\") VALUES (:C1, :C2)", builder.Insert("M", ["COL1", "COL2"], ValueAt));
     }
 
     [Fact]
