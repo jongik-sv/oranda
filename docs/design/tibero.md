@@ -13,9 +13,12 @@
 | Oracle Managed Driver 로 직접 | — | — | — | 안 됨(Tibero 는 자체 프로토콜, 기본 포트 8629) |
 | JDBC(`jdbc:tibero:thin`) + Java 곁 프로세스 | 됨 | 됨 | JRE 필요 | 예비안(TDP.NET 이 macOS 에서 안 될 때) |
 
-- 드라이버 배포: TDP.NET 은 nuget.org 에 없음. tibero.com 로그인 뒤 받는 `.nupkg`. 재배포 조건 확인 전에는 공개 배포본(GitHub Releases)에 넣지 않는다.
-- 「사용자가 몰라도 되게」(사용자 요청): 재배포가 허용되면 설치본에 넣는다. 허용 전에는 리포 밖 로컬 NuGet 피드(`ORANDA_TIBERO_FEED`)로 빌드에 넣는 경로를 둔다. 사내 배포본은 이 경로로 만든다.
-- 앱은 Tibero 어셈블리를 늦게 읽는다(`Oranda.Tibero` 어셈블리가 없으면 DBMS 목록에 Tibero 가 안 보이고, Oracle 동작은 그대로).
+- 드라이버 배포: TDP.NET 은 nuget.org 에 없음. tibero.com 로그인 뒤 받는 `.nupkg`. 재배포 조건 확인 전에는 설치본(공개·사내 모두)에 넣지 않는다.
+- **드라이버 위치 지정(D-046-1, 2026-11-09)**: 사용자가 설정 > 드라이버 「Tibero 드라이버(TDP.NET Core) 위치」에 `Tibero.DataAccess.dll`·폴더·`.nupkg` 를 지정한다. 개발·IT·WSL 은 환경 변수 `ORANDA_TIBERO_DRIVER` 가 설정보다 먼저다. `Oranda.Tibero` 는 드라이버를 컴파일 때 참조하지 않는다 — `src/Oranda.Tibero/Driver/` 의 리플렉션 어댑터가 첫 Tibero 사용 때 읽고 필요한 멤버를 모두 묶는다. 공개본·CI·사내 빌드가 같은 코드다(`#if TIBERO_DRIVER`·`ORANDA_TIBERO_FEED` 없앰). 어댑터 API·로더·경계 규칙 = [tibero-driver-adapter.md](tibero-driver-adapter.md).
+- 읽기 전 검사(메타데이터만): 이름이 정확히 `Tibero.DataAccess`, 관리 코드, .NET(Core)용(`mscorlib` 참조인 .NET Framework 판 2.70 은 거절), 메이저 1(1.1.35 = 확인됨, 그 밖 1.x = 「시험하지 않은 버전」 경고 후 허용). `Oracle.DataAccess` 1.1.35(같은 패키지의 Oracle 호환 이름 변형)도 거절.
+- 드라이버 의존 중 런타임에 없는 `System.Security.Permissions` 는 `Oranda.Tibero` 가 패키지로 함께 싣는다(MIT).
+- 「사용자가 몰라도 되게」(D-046 사용자 요청): 재배포가 허용되면 설치본에 dll 을 넣고 기본 위치로 지정한다(어댑터는 그대로). 그 전에는 사용자가 한 번 지정한다.
+- 앱은 `Oranda.Tibero` 어셈블리를 늦게 읽는다. 어셈블리가 있으면 DBMS 목록에 Tibero 가 늘 보이고, 드라이버가 지정되지 않았으면 접속 대화상자에 「Tibero 드라이버가 지정되지 않았습니다 [드라이버 지정…]」 띠를 보이고 [연결]·[접속 시험]을 끈다. Oracle 동작은 그대로.
 
 ## 2. 구조
 
@@ -67,10 +70,10 @@
 |---|---|---|
 | T0 | 드라이버 확보, win30·Mac 에서 접속·`SELECT * FROM V$VERSION` 실측(macOS arm64 판정). **2026-11-09: TDP.NET Core `Tibero.DataAccess` 1.1.35(net5.0, 관리 코드)로 WSL(Linux)·.NET 10 에서 접속·읽기 확인.** macOS 실측 남음 | macOS 실측 |
 | T1 | DBMS 추상화: `Dbms` 프로필 칸, 접속 대화 상자의 DBMS 선택, 세션별 공급자 디스패처, 카탈로그 `dbms:` 헤더, `DbErrorKind`, App 의 ODP.NET 직접 사용 걷어 내기. **2026-11-09: Oracle 쪽(O0~O6) 끝, main 반영** — 특성 시험, App 인라인 SQL 의 `.sql` 이전, `OracleErrorClassifier`(ORA → `DbErrorKind`), `Dbms.Oracle` 서비스 키, C4 계약 구현(접속 시험·서버 버전 정책·스키마 문장·DDL 내보내기·열 순서 변경), `OracleSessionManager` 의 비 Oracle 프로필 거부. 남음: App 쪽 using 교체·TnsResolver 합치기(tb-app), C7 디스패처(tb-core) | App·Core 쪽 |
-| T2 | `Oranda.Tibero` 접속·실행·취소·결과·DBMS_OUTPUT, 지원 표시 | T0, T1 |
+| T2 | `Oranda.Tibero` 접속·실행·취소·결과·DBMS_OUTPUT, 지원 표시. **2026-11-09 D-046-1: 드라이버 위치 지정 + 리플렉션 어댑터로 바꿈**(tb-driver DV0~DV6: 어댑터 API 표 → 빌드 정리 → 로더·검사 → 어댑터 → 가짜 드라이버 시험 → 접속 시험·오류 분류 이전 → 실제 드라이버 IT). 설정 화면·접속 대화상자 띠 = tb-appgate DU0~DU4 | T0, T1 |
 | T3 | 카탈로그·스키마 브라우저·객체 상세·DDL·PSM 편집 | T2 |
 | T4 | 실행 계획·세션·Lock 모니터·튜닝 | T2 |
 | T5 | 데이터 복사·내보내기·가져오기, AI 튜닝 경로 | T2 |
-| T6 | 배포: 재배포 확인 결과에 따라 설치본에 넣기 또는 사내 빌드 경로, 사용 설명서 | TmaxTibero 확인 |
+| T6 | 배포: 재배포가 허용되면 설치본에 드라이버를 넣고 기본 위치로 지정, 아니면 지금처럼 사용자 지정. 사용 설명서(드라이버 받기·지정) | TmaxTibero 확인 |
 
 T1 은 Oracle 동작을 바꾸지 않는 리팩터링이라 지금 레인으로 진행한다. T3·T4·T5 는 T2 뒤 병렬 레인으로 나눈다.

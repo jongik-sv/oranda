@@ -424,3 +424,12 @@
 - **Risk**: TDP.NET 은 nuget.org 에 없고 tibero.com 로그인 뒤에 받는다. 재배포 조건이 확인되지 않았다(배포본에 넣기 전에 확인 필요). 문서상 지원 OS 는 Windows 뿐이라 macOS arm64 는 실측해야 한다. CI 용 공개 Tibero 컨테이너가 없다
 - **Reversible**: yes(DBMS 종류가 Oracle 인 프로필은 지금 동작 그대로. Tibero 공급자 어셈블리를 빼면 Oracle 전용으로 돌아간다)
 - **Source**: 사용자 결정 2026-11-09(Mac 조정 세션 전달, win30 진행). 관련: PRD D-03
+
+## D-046-1 (2026-11-09T12:00:00Z)
+- **Phase**: 회차 밖(Tibero 지원, T2)
+- **Decision needed**: D-046 의 「사용자가 드라이버를 따로 설치하거나 지정하지 않아도 되게 한다」를 재배포 조건 확인 전에 어떻게 지킬지. 지금 구조(드라이버를 `ORANDA_TIBERO_FEED` 로 컴파일 참조, `#if TIBERO_DRIVER`)는 공개본·CI 와 사내 빌드의 코드가 갈리고, 공개본에는 Tibero 가 보이지 않는다
+- **Decision made**: D-046 의 그 부분을 바꾼다. 드라이버는 앱에 넣지 않고 사용자가 설정에서 위치(`Tibero.DataAccess.dll`·폴더·`.nupkg`)를 지정한다. `Oranda.Tibero` 는 드라이버를 컴파일 때 참조하지 않고, `src/Oranda.Tibero/Driver/` 의 리플렉션 어댑터(`TiberoDriver`)가 읽은 직후 필요한 멤버를 모두 컴파일된 식으로 묶는다. `#if TIBERO_DRIVER`·`ORANDA_TIBERO_FEED`·발행 가드를 없앤다. Tibero 세션 관리자는 항상 등록하고(공개본에도 Tibero 가 보임) 드라이버가 없으면 「드라이버 지정」 안내를 띄운다. 읽기 전 메타데이터 검사로 .NET Framework 판(2.x)·이름이 같은 다른 어셈블리를 거절한다. 시험은 가짜 드라이버(같은 어셈블리·형식 이름)로 CI 에서 돈다. 설계 = `docs/design/tibero-driver-adapter.md`
+- **Rationale**: 조정자 확정 2026-11-09(결정25, opus/high 판단). 재배포 조건이 확인될 때까지 라이선스 위험 없이 공개본에서도 Tibero 를 쓸 수 있고, 빌드가 하나라 CI 가 Tibero 코드를 늘 컴파일·시험한다. 드라이버 1.1.35 는 강한 이름이 아니고 관리 코드라 런타임 읽기가 된다
+- **Risk**: 드라이버 판이 바뀌어 멤버 이름이 달라지면 컴파일이 아니라 읽을 때 알게 된다(읽을 때 모두 묶어 「쓸 수 없음(멤버 이름)」으로 바로 알린다, 실제 드라이버 IT 로 확인). 드라이버가 `BinaryFormatter`·레지스트리를 참조한다(.NET 9+·macOS 에서 그 경로를 타면 실패, 주 경로는 안 탐으로 추정 — IT·macOS 실측). 사용자가 드라이버를 직접 받아야 한다(tibero.com 로그인)
+- **Reversible**: yes(재배포가 허용되면 설치본에 dll 을 함께 넣고 기본 경로로 지정하면 된다. 어댑터 경계는 그대로)
+- **Source**: 조정자 결정25(2026-11-09), `~/.coord/tibero/driver-decision.md`. 갱신 대상: D-046
