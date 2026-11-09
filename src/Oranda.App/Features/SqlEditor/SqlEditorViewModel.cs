@@ -169,6 +169,21 @@ public sealed partial class SqlEditorViewModel : ToolPanelViewModelBase, IBindOw
     [ObservableProperty]
     public partial int ScrollLine { get; set; } = 1;
 
+    /// <summary>
+    /// 편집기 View 가 화면에서 떨어질 때의 정확한 세로 위치(저장하지 않는다). 작업 공간을 오가며 View 가 새로 만들어질 때
+    /// 줄 단위(<see cref="ScrollLine"/>)보다 정확히 되살린다. 누가 <see cref="ScrollLine"/> 을 새로 정하면 그 줄이 이긴다.
+    /// </summary>
+    public double? ViewScrollOffset { get; private set; }
+
+    /// <summary>View 가 떨어질 때의 스크롤을 남긴다(<see cref="ScrollLine"/> 은 저장용 줄 번호).</summary>
+    internal void RememberScroll(int firstVisibleLine, double verticalOffset)
+    {
+        ScrollLine = firstVisibleLine;
+        ViewScrollOffset = verticalOffset;
+    }
+
+    partial void OnScrollLineChanged(int value) => ViewScrollOffset = null;
+
     /// <summary>결과 영역(TSK-06-03 의 <c>SqlResultPaneViewModel</c> 등)을 편집기 아래에 붙이는 자리.</summary>
     [ObservableProperty]
     public partial object? ResultPane { get; set; }
