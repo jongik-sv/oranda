@@ -1,11 +1,10 @@
 using System.Globalization;
+using System.Text;
 using Oranda.Core.Composition;
 using Oranda.Core.Connection;
-using Oranda.Core.Events;
 using Oranda.Core.Execution;
 using Oranda.Core.Metadata;
 using Oranda.Core.Sessions;
-using Oranda.Core.Storage;
 using Oranda.Tibero.Execution;
 using Oranda.Tibero.Sessions;
 
@@ -17,10 +16,8 @@ namespace Oranda.Tibero.Schema;
 /// 쿼리는 Tibero 카탈로그 <c>meta.*</c> 에서 꺼내고 <see cref="CatalogRunner"/> 로 보낸다(<c>@PFX@</c> = dba/all, 명령 잠금은 <see cref="TiberoSessionQuery"/>).
 /// </para>
 /// <para>
-/// 객체 목록 캐시 흐름(<see cref="CachedMetadataProvider.ListObjectsAsync"/>·<see cref="CachedMetadataProvider.FindObjectsByPrefixAsync"/>·갱신·<c>MetadataInvalidated</c>·payload)은
-/// Core <see cref="CachedMetadataProvider"/> 에 있다(결정 44 의 「캐시 없음」을 T3e 에서 바꿨다). 여기서는 서버 목록 읽기(<c>meta.objects</c>)와
-/// 백그라운드 갱신이 삼킬 실패만 정하고, 테이블·프로시저 상세는 객체 행의 payload 에 담아 둔다.
-/// Java 저장 객체는 Tibero 에 없어 인터페이스 기본 구현(빈 목록·false)을 쓴다.
+/// 결정 44: 객체 목록 캐시(<c>IMetadataCache</c>)·백그라운드 갱신·<c>MetadataInvalidated</c> 를 두지 않는다. 부를 때마다 서버에 직접 묻는다
+/// (캐시를 Core 로 옮기는 일은 T3e). Java 저장 객체는 Tibero 에 없어 인터페이스 기본 구현(빈 목록·false)을 쓴다.
 /// </para>
 /// <para>
 /// 오류 규칙: Oracle 이 실패를 삼키는 덧붙임 구역(트리거·참조됨·크기·이름 풀이)은 Oracle 처럼 드라이버 서버 오류를 삼키되 끊김(Disconnected)은 던진다.
@@ -28,7 +25,7 @@ namespace Oranda.Tibero.Schema;
 /// </para>
 /// </summary>
 [OrandaService(typeof(IMetadataProvider), Dbms = Dbms.Tibero)]
-internal sealed partial class TiberoMetadataProvider : CachedMetadataProvider, IMetadataProvider
+internal sealed partial class TiberoMetadataProvider : IMetadataProvider
 {
     /// <summary>이 제공자가 쓰는 카탈로그 id 모두(시험이 Tibero 카탈로그에서 모두 풀리는지 본다).</summary>
     internal static readonly IReadOnlyList<string> CatalogIds =
@@ -41,23 +38,15 @@ internal sealed partial class TiberoMetadataProvider : CachedMetadataProvider, I
 
     private readonly CatalogRunner _run;
 
-    public TiberoMetadataProvider(IMetadataCache cache, IEventBus events)
-        : this(cache, events, DefaultBackgroundRefreshInterval, TiberoCatalogQuery.RunAsync)
+    public TiberoMetadataProvider()
+        : this(TiberoCatalogQuery.RunAsync)
     {
     }
 
-    /// <param name="backgroundRefreshInterval">캐시로 답한 뒤 백그라운드 갱신을 다시 시작하는 최소 간격. <see cref="Timeout.InfiniteTimeSpan"/> = 하지 않음(시험용).</param>
-    /// <param name="run">시험용: 카탈로그 실행기를 바꿔 끼운다.</param>
-    internal TiberoMetadataProvider(IMetadataCache cache, IEventBus events, TimeSpan backgroundRefreshInterval, CatalogRunner run)
-        : base(cache, events, backgroundRefreshInterval)
+    /// <summary>시험용: 카탈로그 실행기를 바꿔 끼운다.</summary>
+    internal TiberoMetadataProvider(CatalogRunner run)
     {
         _run = run;
-    }
-
-    /// <summary>시험용: 캐시 없이 카탈로그 실행기만 바꿔 끼운다(서버만 읽는 시험. 캐시 오류는 기능을 막지 않으므로 캐시 없이도 서버로 답한다).</summary>
-    internal TiberoMetadataProvider(CatalogRunner run)
-        : this(null!, null!, Timeout.InfiniteTimeSpan, run)
-    {
     }
 
     public async Task<IReadOnlyList<string>> ListSchemasAsync(ISession s, CancellationToken ct)
@@ -67,17 +56,36 @@ internal sealed partial class TiberoMetadataProvider : CachedMetadataProvider, I
         return [.. rows.Select(r => Str(r[0])!)];
     }
 
+    public async Task<IReadOnlyList<DbObjectRef>> ListObjectsAsync(ISession s, ObjectQuery q, CancellationToken ct)
+    {
+        ArgumentNullException.ThrowIfNull(s);
+        ArgumentNullException.ThrowIfNull(q);
+        return ToRefs(await RunAsync(s, "meta.objects", ObjectBinds(q), ct).ConfigureAwait(false));
+    }
+
+    /// <summary>
+    /// 이름 접두어로 서버에 바로 묻는다(<c>meta.objects</c> 의 <c>name_pattern</c> = 접두어 + <c>%</c>, LIKE 특수 글자는 <c>\</c> 로 막는다).
+    /// 인터페이스 기본 구현은 서버 전체 목록을 받아 거르므로 키 입력마다 부르기에 무겁다.
+    /// <paramref name="limit"/> 은 받은 뒤에 적용한다: 카탈로그 정렬이 소유자·유형 순이라 서버에서 자르면 이름순 앞쪽을 놓친다(짧은 접두어면 많이 받는다).
+    /// 이름순 정렬 + ROWNUM 으로 자르는 카탈로그 질의는 뒤 작업이다.
+    /// </summary>
+    public async Task<IReadOnlyList<DbObjectRef>> FindObjectsByPrefixAsync(ISession s, string namePrefix, int limit, CancellationToken ct)
+    {
+        ArgumentNullException.ThrowIfNull(s);
+        ArgumentNullException.ThrowIfNull(namePrefix);
+        if (limit <= 0)
+        {
+            return [];
+        }
+
+        var found = await ListObjectsAsync(s, new ObjectQuery { NamePattern = EscapeLike(namePrefix) + "%" }, ct).ConfigureAwait(false);
+        return [.. found.Where(o => o.Name.StartsWith(namePrefix, StringComparison.Ordinal)).OrderBy(o => o.Name, StringComparer.Ordinal).Take(limit)];
+    }
+
     public async Task<TableInfo> GetTableAsync(ISession s, DbObjectRef table, CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(s);
         ArgumentNullException.ThrowIfNull(table);
-
-        var cachedRow = await FindCachedAsync(s, table, ct).ConfigureAwait(false);
-        if (cachedRow?.PayloadJson is { } json && TryReadPayload(json, "table", out TableInfo? hit))
-        {
-            return hit!;
-        }
-
         var binds = TiberoCatalogQuery.TableBinds(table);
 
         var colRows = await RunAsync(s, "meta.columns", binds, ct).ConfigureAwait(false);
@@ -90,15 +98,12 @@ internal sealed partial class TiberoMetadataProvider : CachedMetadataProvider, I
         var idxRows = await RunAsync(s, "meta.indexes", binds, ct).ConfigureAwait(false);
         var commentRows = await RunAsync(s, "meta.table_comment", binds, ct).ConfigureAwait(false);
 
-        var info = new TableInfo(table, [.. colRows.Select(ToColumn)])
+        return new TableInfo(table, [.. colRows.Select(ToColumn)])
         {
             Constraints = BuildConstraints(consRows),
             Indexes = BuildIndexes(idxRows),
             Comment = commentRows.Count > 0 ? Str(commentRows[0][0]) : null,
         };
-
-        await StorePayloadAsync(s, cachedRow, "table", info, ct).ConfigureAwait(false);
-        return info;
     }
 
     public async Task<IReadOnlyDictionary<string, string>> ListTableCommentsAsync(ISession s, string owner, CancellationToken ct)
@@ -127,21 +132,11 @@ internal sealed partial class TiberoMetadataProvider : CachedMetadataProvider, I
         var normalized = string.Equals(obj.ObjectType, "PACKAGE BODY", StringComparison.OrdinalIgnoreCase)
             ? obj with { ObjectType = "PACKAGE" }
             : obj;
-
-        var cachedRow = await FindCachedAsync(s, normalized, ct).ConfigureAwait(false);
-        // 빈 목록은 믿지 않고 다시 읽는다(Oracle 과 같다): 인자 없는 단독 프로시저를 빈 목록으로 저장한 캐시가 남아 있을 수 있다.
-        if (cachedRow?.PayloadJson is { } json && TryReadPayload(json, "procs", out List<ProcedureInfo>? hit) && hit!.Count > 0)
-        {
-            return hit!;
-        }
-
         var binds = TiberoCatalogQuery.TableBinds(normalized);
 
         var members = await RunAsync(s, "meta.procedures", binds, ct).ConfigureAwait(false);
         var args = await RunAsync(s, "meta.arguments", binds, ct).ConfigureAwait(false);
-        var list = BuildProcedures(normalized, members, args);
-        await StorePayloadAsync(s, cachedRow, "procs", list, ct).ConfigureAwait(false);
-        return list;
+        return BuildProcedures(normalized, members, args);
     }
 
     // ---- 카탈로그 쿼리 실행 ----
@@ -181,42 +176,26 @@ internal sealed partial class TiberoMetadataProvider : CachedMetadataProvider, I
         };
     }
 
-    // ---- 객체 목록 캐시(CachedMetadataProvider) ----
-
-    /// <summary>
-    /// 서버의 전체 객체 목록을 받아 캐시와 비교한다(<see cref="CachedMetadataProvider.RefreshObjectListAsync"/>). 시험이 직접 부른다.
-    /// </summary>
-    /// <returns>갱신 후 캐시에 있는 전체 목록(캐시를 못 쓰면 서버에서 받은 목록).</returns>
-    internal Task<IReadOnlyList<MetaObject>> RefreshAsync(ISession s, CancellationToken ct) => RefreshObjectListAsync(s, ct);
-
-    protected override async Task<IReadOnlyList<MetaObject>> FetchObjectsAsync(ISession s, ObjectQuery q, DateTimeOffset fetchedAt, CancellationToken ct)
+    /// <summary>LIKE 특수 글자(<c>\</c>, <c>%</c>, <c>_</c>)를 <c>\</c> 로 막는다(<c>meta.objects</c> 의 <c>ESCAPE '\'</c>).</summary>
+    internal static string EscapeLike(string text)
     {
-        var dbKey = s.DbKey;
-        var rows = await RunAsync(s, "meta.objects", ObjectBinds(q), ct).ConfigureAwait(false);
-        return [.. rows.Select(r => ToMeta(dbKey, r, fetchedAt))];
+        ArgumentNullException.ThrowIfNull(text);
+        var sb = new StringBuilder(text.Length + 4);
+        foreach (var ch in text)
+        {
+            if (ch is '\\' or '%' or '_')
+            {
+                sb.Append('\\');
+            }
+
+            sb.Append(ch);
+        }
+
+        return sb.ToString();
     }
 
-    /// <summary>
-    /// 세션이 닫혔거나 끊겼거나 바쁘다(<see cref="SessionBusyException"/> 는 <see cref="InvalidOperationException"/>).
-    /// 드라이버 오류는 드라이버 형식을 참조하지 않고 <see cref="TiberoErrorClassifier"/> 가 알아보는 서버 오류로 가른다.
-    /// 카탈로그 변형 없음(<c>CatalogQueryNotFoundException</c>)은 삼키지 않는다.
-    /// </summary>
-    protected override bool IsIgnorableBackgroundRefreshFailure(Exception ex)
-        => TiberoErrorClassifier.IsDriverException(ex) || ex is InvalidOperationException or ObjectDisposedException;
-
-    /// <summary>시험이 부른다(보호 멤버 <see cref="IsIgnorableBackgroundRefreshFailure"/> 를 연다).</summary>
-    internal bool IsIgnorable(Exception ex) => IsIgnorableBackgroundRefreshFailure(ex);
-
-    private static MetaObject ToMeta(string dbKey, object?[] r, DateTimeOffset fetchedAt) => new()
-    {
-        DbKey = dbKey,
-        Owner = Str(r[0])!,
-        Name = Str(r[1])!,
-        Type = Str(r[2])!,
-        Status = Str(r[3]),
-        LastDdlTime = r[4] is DateTime d ? new DateTimeOffset(DateTime.SpecifyKind(d, DateTimeKind.Utc)) : null,
-        FetchedAt = fetchedAt,
-    };
+    private static List<DbObjectRef> ToRefs(IReadOnlyList<object?[]> rows)
+        => [.. rows.Select(r => new DbObjectRef(Str(r[0])!, Str(r[1])!, Str(r[2])!))];
 
     // ---- 행 → 모델 ----
 
@@ -304,9 +283,17 @@ internal sealed partial class TiberoMetadataProvider : CachedMetadataProvider, I
 
     /// <summary>
     /// 멤버(<c>meta.procedures</c>: procedure_name, overload, subprogram_id, object_type)와 인자(<c>meta.arguments</c>: procedure_name, overload, position,
-    /// argument_name, in_out, data_type, defaulted, type_owner, type_name, type_subname, subprogram_id) → 프로시저 목록. Oracle 과 같은 규칙이다:
-    /// 멤버 행마다 (이름, 오버로드) 가 같은 인자 묶음을 붙인다(결정 64 — 두 카탈로그 질의가 오버로드 번호를 같은 규칙으로 낸다: 같은 이름이 둘 이상이면 1..n, 하나면 NULL).
-    /// 인자 행이 없는 멤버도 호출할 수 있는 대상이라 인자 없는 항목으로 낸다. <c>defaulted</c> 가 없어 <see cref="ArgumentInfo.HasDefault"/> 는 늘 false 다.
+    /// argument_name, in_out, data_type, defaulted, type_owner, type_name, type_subname) → 프로시저 목록.
+    /// <para>
+    /// Oracle 과 달라진 점: Tibero 의 멤버 행에는 오버로드 번호가 없다(늘 NULL). 그래서 (이름, 오버로드) 대신 이름으로 인자 묶음을 찾는다.
+    /// <list type="bullet">
+    /// <item>인자 쪽에 오버로드 번호가 있으면 묶음마다 하나씩 낸다.</item>
+    /// <item>멤버 행이 여럿인데 그 이름의 인자 행이 모두 오버로드 NULL 이면 위치로 나눈다(<see cref="SplitByPosition"/>).</item>
+    /// <item>인자 행이 없는 오버로드도 호출할 수 있는 대상이라, 멤버 행 수보다 적으면 인자 없는 항목으로 채운다.</item>
+    /// <item>한 이름에 항목이 여럿인데 오버로드 번호가 모두 없으면 1부터 차례로 붙인다(화면이 「오버로드 n」 으로 가른다).</item>
+    /// </list>
+    /// <c>defaulted</c> 가 없어 <see cref="ArgumentInfo.HasDefault"/> 는 늘 false 다.
+    /// </para>
     /// </summary>
     internal static List<ProcedureInfo> BuildProcedures(DbObjectRef obj, IReadOnlyList<object?[]> members, IReadOnlyList<object?[]> args)
     {
@@ -314,26 +301,91 @@ internal sealed partial class TiberoMetadataProvider : CachedMetadataProvider, I
         ArgumentNullException.ThrowIfNull(members);
         ArgumentNullException.ThrowIfNull(args);
 
-        // 인자를 (프로시저 이름, 오버로드) 로 묶는다.
+        // 인자를 (프로시저 이름, 오버로드) 로 묶는다. 카탈로그가 이름·오버로드·위치 순으로 주므로 묶음 순서는 오버로드 순이다.
         var argGroups = args
             .GroupBy(r => (Name: Str(r[0])!, Overload: Str(r[1])))
-            .ToDictionary(g => g.Key, g => g.ToList());
+            .ToList();
 
         var result = new List<ProcedureInfo>();
-        foreach (var m in members)
+        var isPackage = string.Equals(obj.ObjectType, "PACKAGE", StringComparison.OrdinalIgnoreCase);
+        foreach (var byName in members.GroupBy(m => Str(m[0]) ?? obj.Name, StringComparer.Ordinal))
         {
-            var name = Str(m[0]) ?? obj.Name;
-            var overload = Str(m[1]);
-            result.Add(BuildProcedure(name, overload, argGroups.GetValueOrDefault((name, overload)) ?? []));
+            var memberCount = byName.Count();
+            var groups = argGroups
+                .Where(g => string.Equals(g.Key.Name, byName.Key, StringComparison.Ordinal))
+                .Select(g => (g.Key.Overload, Rows: g.ToList()))
+                .ToList();
+            if (memberCount > 1 && groups is [{ Overload: null } only])
+            {
+                groups = [.. SplitByPosition(only.Rows).Select(rows => ((string?)null, rows))];
+            }
+
+            var built = groups.Select(g => BuildProcedure(byName.Key, g.Overload, g.Rows)).ToList();
+            while (built.Count < memberCount)
+            {
+                built.Add(new ProcedureInfo(byName.Key, false, []));
+            }
+
+            if (built.Count > 1 && built.TrueForAll(p => p.Overload is null))
+            {
+                built = [.. built.Select((p, i) => p with { Overload = i + 1 })];
+            }
+
+            result.AddRange(built);
         }
 
-        if (members.Count == 0 && !string.Equals(obj.ObjectType, "PACKAGE", StringComparison.OrdinalIgnoreCase))
+        if (members.Count == 0 && !isPackage)
         {
             // 단독 프로시저·함수인데 *_procedures 에 행이 없는 경우(권한)에도 인자 행이 있으면 답한다.
-            result.AddRange(argGroups.OrderBy(g => g.Key.Name, StringComparer.Ordinal).Select(g => BuildProcedure(g.Key.Name, g.Key.Overload, g.Value)));
+            result.AddRange(argGroups.OrderBy(g => g.Key.Name, StringComparer.Ordinal).Select(g => BuildProcedure(g.Key.Name, g.Key.Overload, [.. g])));
         }
 
         return result;
+    }
+
+    /// <summary>
+    /// 오버로드 번호 없이 섞여 온 한 이름의 인자 행을 오버로드별로 나눈다(position = r[2]).
+    /// <list type="bullet">
+    /// <item>위치가 한 번이라도 줄면 선언 순서로 온 행이다: 위치가 줄거나 되풀이되는 곳에서 새 묶음을 연다.</item>
+    /// <item>위치가 줄지 않으면 위치순으로 정렬된 행이다(지금 <c>meta.arguments</c> 의 <c>ORDER BY … position</c>): 같은 위치의 k 번째 행을 k 번째 묶음에 넣는다.
+    /// 인자 수가 다른 오버로드는 어느 행이 어느 오버로드 것인지 알 수 없어 앞 묶음부터 채운다(최선의 추정).</item>
+    /// </list>
+    /// </summary>
+    internal static List<List<object?[]>> SplitByPosition(IReadOnlyList<object?[]> rows)
+    {
+        ArgumentNullException.ThrowIfNull(rows);
+        var positions = rows.Select(r => Int(r[2]) ?? 0).ToList();
+        var groups = new List<List<object?[]>>();
+        var declarationOrder = positions.Zip(positions.Skip(1)).Any(p => p.Second < p.First);
+        if (declarationOrder)
+        {
+            for (var i = 0; i < rows.Count; i++)
+            {
+                if (i == 0 || positions[i] <= positions[i - 1])
+                {
+                    groups.Add([]);
+                }
+
+                groups[^1].Add(rows[i]);
+            }
+
+            return groups;
+        }
+
+        var seen = new Dictionary<int, int>();
+        for (var i = 0; i < rows.Count; i++)
+        {
+            var k = seen.GetValueOrDefault(positions[i]);
+            seen[positions[i]] = k + 1;
+            if (k == groups.Count)
+            {
+                groups.Add([]);
+            }
+
+            groups[k].Add(rows[i]);
+        }
+
+        return groups;
     }
 
     private static ProcedureInfo BuildProcedure(string name, string? overload, List<object?[]> rows)

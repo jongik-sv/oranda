@@ -1,7 +1,5 @@
-using Oranda.Core.Catalog;
 using Oranda.Core.Metadata;
 using Oranda.Tibero.Schema;
-using Oranda.Tibero.Sessions;
 using static Oranda.Tibero.Tests.Schema.SchemaFakes;
 
 namespace Oranda.Tibero.Tests.Schema;
@@ -101,94 +99,22 @@ public class TiberoMetadataProviderTests
         }, TiberoMetadataProvider.ObjectBinds(new ObjectQuery()));
     }
 
-    private static TiberoMetadataProvider CachedProvider(List<(string Id, IReadOnlyDictionary<string, object?>? Binds)> calls, Func<string, TiberoSessionQuery.Table> answer)
-        => new(new MemoryMetadataCache(), new RecordingEventBus(), Timeout.InfiniteTimeSpan, Recording(calls, answer));
-
     [Fact]
-    public async Task The_full_object_list_is_read_once_with_empty_binds_and_rows_map_to_meta_objects()
+    public async Task Prefix_search_asks_the_server_with_an_escaped_pattern_and_keeps_the_first_names()
     {
         var calls = new List<(string Id, IReadOnlyDictionary<string, object?>? Binds)>();
-        var provider = CachedProvider(calls, _ => Table(
-            ["OWNER", "OBJECT_NAME", "OBJECT_TYPE", "STATUS", "LAST_DDL_TIME", "CREATED"],
-            ["SCOTT", "EMP", "TABLE", "VALID", new DateTime(2026, 2, 3, 4, 5, 6, DateTimeKind.Unspecified), null],
-            ["SCOTT", "EMP_V", "VIEW", "INVALID", null, null]));
-        await using var session = Session();
-
-        var objects = await provider.RefreshAsync(session, CancellationToken.None);
-        var listed = await provider.ListObjectsAsync(session, new ObjectQuery { ObjectTypes = ["VIEW"] }, CancellationToken.None);
-
-        var (id, binds) = Assert.Single(calls);
-        Assert.Equal("meta.objects", id);
-        Assert.Equal(TiberoMetadataProvider.ObjectBinds(new ObjectQuery()), binds);
-        var emp = objects.Single(o => o.Name == "EMP");
-        Assert.Equal((session.DbKey, "SCOTT", "TABLE", "VALID"), (emp.DbKey, emp.Owner, emp.Type, emp.Status));
-        Assert.Equal(new DateTimeOffset(2026, 2, 3, 4, 5, 6, TimeSpan.Zero), emp.LastDdlTime);
-        Assert.Null(objects.Single(o => o.Name == "EMP_V").LastDdlTime);
-        Assert.Equal([new DbObjectRef("SCOTT", "EMP_V", "VIEW")], listed);
-    }
-
-    [Fact]
-    public async Task Prefix_search_answers_from_the_cache_without_asking_the_server_and_fails_before_the_list_is_cached()
-    {
-        var calls = new List<(string Id, IReadOnlyDictionary<string, object?>? Binds)>();
-        var provider = CachedProvider(calls, _ => Table(
+        var provider = new TiberoMetadataProvider(Recording(calls, _ => Table(
             ["OWNER", "OBJECT_NAME", "OBJECT_TYPE", "STATUS", "LAST_DDL_TIME", "CREATED"],
             ["HR", "T_Z", "TABLE", "VALID", null, null],
-            ["APP", "T_A", "TABLE", "VALID", null, null],
-            ["APP", "OTHER", "TABLE", "VALID", null, null]));
+            ["APP", "T_B", "VIEW", "VALID", null, null],
+            ["APP", "T_A", "TABLE", "VALID", null, null])));
         await using var session = Session();
 
-        await Assert.ThrowsAsync<InvalidOperationException>(() => provider.FindObjectsByPrefixAsync(session, "T_", 5, CancellationToken.None));
-        Assert.Empty(calls);
+        var found = await provider.FindObjectsByPrefixAsync(session, "T_", 2, CancellationToken.None);
 
-        await provider.ListObjectsAsync(session, new ObjectQuery(), CancellationToken.None);
-        var found = await provider.FindObjectsByPrefixAsync(session, "T_", 5, CancellationToken.None);
-        var first = await provider.FindObjectsByPrefixAsync(session, "T_", 1, CancellationToken.None);
-
-        Assert.Equal([new DbObjectRef("APP", "T_A", "TABLE"), new DbObjectRef("HR", "T_Z", "TABLE")], found);
-        Assert.Equal([new DbObjectRef("APP", "T_A", "TABLE")], first);
-        Assert.Single(calls);
-    }
-
-    [Fact]
-    public async Task A_cached_table_and_procedure_list_answer_without_asking_the_server_again()
-    {
-        var calls = new List<(string Id, IReadOnlyDictionary<string, object?>? Binds)>();
-        var provider = CachedProvider(calls, ById(
-            ("meta.objects", Table(
-                ["OWNER", "OBJECT_NAME", "OBJECT_TYPE", "STATUS", "LAST_DDL_TIME", "CREATED"],
-                ["SCOTT", "EMP", "TABLE", "VALID", null, null],
-                ["HR", "PKG", "PACKAGE", "VALID", null, null])),
-            ("meta.columns", Table(ColumnHeader, ["EMPNO", 1m, "NUMBER", null, 4m, 0m, "N", null, "NO", null, "NO", null, null])),
-            ("meta.procedures", Table(MemberHeader, ["PING", null, 1m, "PACKAGE"])),
-            ("meta.arguments", Table(ArgumentHeader))));
-        await using var session = Session();
-        await provider.ListObjectsAsync(session, new ObjectQuery(), CancellationToken.None);
-        var pkg = new DbObjectRef("HR", "PKG", "PACKAGE");
-        var first = await provider.GetTableAsync(session, Emp, CancellationToken.None);
-        var firstProcs = await provider.GetProceduresAsync(session, pkg, CancellationToken.None);
-        calls.Clear();
-
-        var second = await provider.GetTableAsync(session, Emp, CancellationToken.None);
-        var secondProcs = await provider.GetProceduresAsync(session, pkg, CancellationToken.None);
-
-        Assert.Empty(calls);
-        Assert.Equal(first.Columns, second.Columns);
-        Assert.Equal(["PING"], secondProcs.Select(p => p.Name));
-        Assert.Equal(firstProcs.Select(p => p.Name), secondProcs.Select(p => p.Name));
-    }
-
-    [Fact]
-    public void Only_driver_server_errors_and_closed_or_busy_sessions_are_ignored_in_the_background_refresh()
-    {
-        var provider = new TiberoMetadataProvider(Throwing(new InvalidOperationException()));
-
-        Assert.True(provider.IsIgnorable(ServerError(-10007, "TBR-10007: non-access server error")));
-        Assert.True(provider.IsIgnorable(ServerError(-12001, "TBR-12001: session killed")));
-        Assert.True(provider.IsIgnorable(new InvalidOperationException()));
-        Assert.True(provider.IsIgnorable(new ObjectDisposedException("session")));
-        Assert.False(provider.IsIgnorable(new CatalogQueryNotFoundException("meta.objects", 6)));
-        Assert.False(provider.IsIgnorable(new IOException()));
+        Assert.Equal([new DbObjectRef("APP", "T_A", "TABLE"), new DbObjectRef("APP", "T_B", "VIEW")], found);
+        Assert.Equal("T\\_%", Assert.Single(calls).Binds!["name_pattern"]);
+        Assert.Equal("a\\\\b\\%c", TiberoMetadataProvider.EscapeLike("a\\b%c"));
     }
 
     [Fact]
@@ -250,7 +176,7 @@ public class TiberoMetadataProviderTests
     }
 
     [Fact]
-    public async Task Package_members_take_their_arguments_and_a_body_reference_reads_the_specification()
+    public async Task Package_members_take_their_arguments_by_name_since_tibero_members_have_no_overload()
     {
         var calls = new List<(string Id, IReadOnlyDictionary<string, object?>? Binds)>();
         var provider = new TiberoMetadataProvider(Recording(calls, ById(
@@ -277,31 +203,48 @@ public class TiberoMetadataProviderTests
     }
 
     [Fact]
-    public void Overloaded_members_take_the_argument_group_with_the_same_name_and_overload_number()
+    public void Overload_numbers_on_the_argument_side_split_one_member_name_into_one_entry_each()
     {
-        // 결정 64: meta.procedures·meta.arguments 가 같은 규칙으로 오버로드 번호를 낸다(같은 이름 둘 이상 = 1..n, 하나 = NULL). 끝 열 = subprogram_id.
         var procs = TiberoMetadataProvider.BuildProcedures(new DbObjectRef("HR", "PKG", "PACKAGE"),
-            [["F", "1", 1m, "PACKAGE"], ["F", "2", 2m, "PACKAGE"], ["G", null, 3m, "PACKAGE"]],
+            [["F", null, 1m, "PACKAGE"], ["F", null, 2m, "PACKAGE"]],
             [
-                ["F", "1", 1m, "A", "IN", "NUMBER", null, null, null, null, 1m],
-                ["F", "2", 1m, "A", "IN", "VARCHAR2", null, null, null, null, 2m],
-                ["F", "2", 2m, "B", "IN OUT", "DATE", null, null, null, null, 2m],
-                ["G", null, 1m, "X", "IN", "NUMBER", null, null, null, null, 3m],
+                ["F", "1", 1m, "A", "IN", "NUMBER", null, null, null, null],
+                ["F", "2", 1m, "A", "IN", "VARCHAR2", null, null, null, null],
+                ["F", "2", 2m, "B", "IN OUT", "DATE", null, null, null, null],
             ]);
 
-        Assert.Equal([("F", (int?)1, 1), ("F", 2, 2), ("G", null, 1)], procs.Select(p => (p.Name, p.Overload, p.Arguments.Count)));
+        Assert.Equal([(int?)1, 2], procs.Select(p => p.Overload));
         Assert.Equal(["NUMBER"], procs[0].Arguments.Select(a => a.DataType));
         Assert.Equal([ArgumentDirection.In, ArgumentDirection.InOut], procs[1].Arguments.Select(a => a.Direction));
     }
 
     [Fact]
-    public void A_member_without_argument_rows_is_kept_as_an_entry_without_arguments()
+    public void Member_rows_without_arguments_are_padded_so_no_overload_is_dropped()
     {
         var procs = TiberoMetadataProvider.BuildProcedures(new DbObjectRef("HR", "PKG", "PACKAGE"),
-            [["F", "1", 1m, "PACKAGE"], ["F", "2", 2m, "PACKAGE"]],
-            [["F", "1", 1m, "A", "IN", "NUMBER", null, null, null, null, 1m]]);
+            [["F", null, 1m, "PACKAGE"], ["F", null, 2m, "PACKAGE"], ["G", null, 3m, "PACKAGE"], ["G", null, 4m, "PACKAGE"]],
+            [["F", "1", 1m, "A", "IN", "NUMBER", null, null, null, null]]);
 
-        Assert.Equal([("F", (int?)1, 1), ("F", 2, 0)], procs.Select(p => (p.Name, p.Overload, p.Arguments.Count)));
+        Assert.Equal([("F", (int?)1, 1), ("F", null, 0), ("G", 1, 0), ("G", 2, 0)], procs.Select(p => (p.Name, p.Overload, p.Arguments.Count)));
+    }
+
+    [Fact]
+    public void Arguments_without_overload_numbers_split_where_the_position_restarts()
+    {
+        object?[] Arg(decimal position, string name) => ["F", null, position, name, "IN", "NUMBER", null, null, null, null];
+
+        // 선언 순서(위치가 줄어든다): F(A, B), F(C) → 위치가 되풀이·감소하는 곳에서 나눈다.
+        var declared = TiberoMetadataProvider.BuildProcedures(new DbObjectRef("HR", "PKG", "PACKAGE"),
+            [["F", null, 1m, "PACKAGE"], ["F", null, 2m, "PACKAGE"]],
+            [Arg(1m, "A"), Arg(2m, "B"), Arg(1m, "C")]);
+        // 위치순 정렬(지금 meta.arguments 의 ORDER BY): 같은 위치의 k 번째 행 → k 번째 오버로드.
+        var sorted = TiberoMetadataProvider.BuildProcedures(new DbObjectRef("HR", "PKG", "PACKAGE"),
+            [["F", null, 1m, "PACKAGE"], ["F", null, 2m, "PACKAGE"]],
+            [Arg(1m, "A"), Arg(1m, "C"), Arg(2m, "B")]);
+
+        Assert.Equal([["A", "B"], ["C"]], declared.Select(p => p.Arguments.Select(a => a.Name).ToArray()));
+        Assert.Equal([(int?)1, 2], declared.Select(p => p.Overload));
+        Assert.Equal([["A", "B"], ["C"]], sorted.Select(p => p.Arguments.Select(a => a.Name).ToArray()));
     }
 
     [Fact]
