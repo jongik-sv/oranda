@@ -36,6 +36,8 @@ public partial class SqlEditorView : UserControl, IEditorSurface
     private IReadOnlyList<StructurePair> _pairs = [];
     private long _pairsVersion = -1;
     private long _lastChangeTimestamp;
+    /// <summary>되살릴 스크롤(첫 레이아웃 뒤에 옮긴다): 정확한 세로 위치, 없으면 보일 줄. 되살릴 것이 없으면 null.</summary>
+    private (double? Offset, int Line)? _pendingScroll;
 
     public SqlEditorView()
     {
@@ -60,6 +62,7 @@ public partial class SqlEditorView : UserControl, IEditorSurface
         Editor.TextArea.Caret.PositionChanged += (_, _) => OnCaretOrSelectionChanged();
         Editor.TextArea.SelectionChanged += (_, _) => OnCaretOrSelectionChanged();
         Editor.ActualThemeVariantChanged += (_, _) => Editor.TextArea.TextView.Redraw();
+        DetachedFromVisualTree += (_, _) => RememberScroll();
 
         NextButton.Click += (_, _) => _vm?.FindNext();
         PrevButton.Click += (_, _) => _vm?.FindPrevious();
@@ -149,19 +152,55 @@ public partial class SqlEditorView : UserControl, IEditorSurface
         }
 
         RefreshStructureNow();
-        int scrollLine = vm.ScrollLine;
-        Dispatcher.UIThread.Post(() =>
+        _pendingScroll = vm.ViewScrollOffset is > 0 || vm.ScrollLine > 1 ? (vm.ViewScrollOffset, vm.ScrollLine) : null;
+        if (_pendingScroll is not null)
         {
-            if (scrollLine > 1 && scrollLine <= Editor.Document.LineCount)
+            // 스크롤 범위는 레이아웃이 끝나야 생긴다. 그 전에 옮기면 0 으로 깎이므로 첫 레이아웃 뒤에 옮긴다.
+            Editor.LayoutUpdated += OnLayoutForScrollRestore;
+        }
+    }
+
+    private void OnLayoutForScrollRestore(object? sender, EventArgs e)
+    {
+        if (_vm is null || Editor.Bounds.Height <= 0 || Editor.ViewportHeight <= 0)
+        {
+            return;
+        }
+
+        Editor.LayoutUpdated -= OnLayoutForScrollRestore;
+        if (_pendingScroll is { } pending)
+        {
+            _pendingScroll = null;
+            if (pending.Offset is { } offset)
             {
-                Editor.ScrollToLine(scrollLine);
+                // 떠날 때 보던 화면 그대로(ScrollToLine 은 줄을 가운데로 옮겨 달라진다).
+                // TextEditor.ScrollToVerticalOffset 은 AvaloniaEdit 12 에서 오프셋을 바꾸지 않는다(MyBatisScrollSync.ScrollTo 참고).
+                MyBatisWorkspace.Editor.MyBatisScrollSync.ScrollTo(Editor, offset);
             }
-        });
+            else if (pending.Line > 1 && pending.Line <= Editor.Document.LineCount)
+            {
+                Editor.ScrollToLine(pending.Line); // 저장한 작업 공간·「그 줄 보이기」: 전과 같이 그 줄이 보이게
+            }
+        }
+    }
+
+    /// <summary>
+    /// 화면에서 떨어질 때 맨 위에 보이던 줄을 탭에 남긴다. 도킹이 작업 공간을 바꾸면 편집기 View 를 새로 만들기 때문에,
+    /// 새 View 가 이 값으로 스크롤을 되살린다(커서·선택은 이미 탭에 있다). 아직 되살리기 전이면 남기지 않는다(맨 위로 덮어쓰지 않게).
+    /// </summary>
+    private void RememberScroll()
+    {
+        if (_vm is not null && _pendingScroll is null && ReferenceEquals(_vm.Surface, this))
+        {
+            _vm.RememberScroll(FirstVisibleLine, Editor.VerticalOffset);
+        }
     }
 
     private void Detach()
     {
         _structureTimer.Stop();
+        Editor.LayoutUpdated -= OnLayoutForScrollRestore;
+        _pendingScroll = null;
         if (_vm is not null)
         {
             _vm.TextChanged -= OnVmTextChanged;
