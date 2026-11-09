@@ -26,6 +26,7 @@ namespace Oranda.Tibero.Tests.Integration;
 /// 시험마다 시작할 때 남은 제 객체를 지우고, 끝나면 제 객체만 정리한다(정리 실패가 본문 실패를 가리지 않는다).
 /// </summary>
 [Trait("Category", "Integration")]
+[Collection("TiberoPublicGrant")] // #117 TBR-12033
 public class TiberoDdlObjectsIt(ITestOutputHelper output)
 {
     private static readonly string Table = TiberoItSessions.ObjectName("T3D2BT");

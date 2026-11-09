@@ -26,6 +26,7 @@ namespace Oranda.Tibero.Tests.Integration;
 /// 휴지통은 이 시험의 ORT_ 표 항목만 BIN 이름으로 <c>PURGE TABLE</c> 한다(<c>PURGE RECYCLEBIN</c> 금지).
 /// </summary>
 [Trait("Category", "Integration")]
+[Collection("TiberoPublicGrant")] // #117 TBR-12033
 public class TiberoRecreateStepIt(ITestOutputHelper output)
 {
     private static readonly TiberoCopyDialect Dialect = TiberoCopyDialect.Instance;

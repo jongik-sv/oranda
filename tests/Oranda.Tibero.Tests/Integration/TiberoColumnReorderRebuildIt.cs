@@ -23,6 +23,7 @@ namespace Oranda.Tibero.Tests.Integration;
 /// 시험마다 시작할 때 남은 제 표를 지우고, 끝나면 표·<c>$NEW</c>·<c>$OLD</c> 만 지운다(정리 실패가 본문 실패를 가리지 않는다).
 /// </summary>
 [Trait("Category", "Integration")]
+[Collection("TiberoPublicGrant")] // #117 TBR-12033
 public class TiberoColumnReorderRebuildIt(ITestOutputHelper output)
 {
     private static readonly string MainTable = TiberoItSessions.ObjectName("REORDER_RB");
