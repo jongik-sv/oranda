@@ -92,6 +92,108 @@ public class TiberoColumnsTests
         Assert.Equal(113, TiberoColumns.ProviderTypeOf(Schema(("N", 113, 8, 19, 0, true, false)), 0));
     }
 
+    [Theory]
+    [InlineData("BinaryFloat", TiberoColumnTypes.PtBinaryFloat)]
+    [InlineData("BinaryDouble", TiberoColumnTypes.PtBinaryDouble)]
+    [InlineData("BINARY_FLOAT", TiberoColumnTypes.PtBinaryFloat)]
+    [InlineData("Long", TiberoColumnTypes.PtLong)]
+    [InlineData("LongRaw", TiberoColumnTypes.PtLongRaw)]
+    [InlineData("LONG RAW", TiberoColumnTypes.PtLongRaw)]
+    [InlineData("Decimal", TiberoColumnTypes.PtDecimal)]
+    [InlineData("Int64", TiberoColumnTypes.PtInt64)]
+    [InlineData("Varchar2", TiberoColumnTypes.PtVarchar2)]
+    [InlineData("TimeStampLTZ", TiberoColumnTypes.PtTimeStampLTZ)]
+    [InlineData("TIMESTAMP(6)", TiberoColumnTypes.PtTimeStamp)]
+    [InlineData("TIMESTAMP WITH TIME ZONE", TiberoColumnTypes.PtTimeStampTZ)]
+    [InlineData("IntervalYM", TiberoColumnTypes.PtIntervalYM)]
+    [InlineData("Raw", TiberoColumnTypes.PtRaw)]
+    [InlineData("NClob", TiberoColumnTypes.PtNClob)]
+    public void Data_type_name_maps_to_the_same_provider_type_the_schema_table_gives(string name, int providerType)
+    {
+        Assert.Equal((providerType, false), TiberoColumns.ProviderTypeOfName(name));
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("Byte[]")]
+    [InlineData("SomethingNew")]
+    public void Unknown_data_type_name_maps_to_nothing(string? name)
+    {
+        Assert.Null(TiberoColumns.ProviderTypeOfName(name));
+    }
+
+    [Fact]
+    public void Rowid_data_type_name_marks_a_rowid_column_without_the_schema_table()
+    {
+        var columns = TiberoColumns.Read(null, 1, _ => "R", _ => "RowID", _ => typeof(string));
+
+        Assert.Equal(ColumnDataKind.RowId, columns[0].Kind);
+        Assert.Equal("ROWID", columns[0].DbTypeName);
+    }
+
+    [Fact]
+    public void Without_a_schema_table_the_data_type_names_pick_the_special_reads()
+    {
+        string[] names = ["BinaryFloat", "BinaryDouble", "Long", "LongRaw", "Varchar2", "Decimal"];
+        var reader = new NamedTypeReader(names, [names.Select(_ => (object?)null).ToArray()], names);
+
+        var (columns, providerTypes) = TiberoValues.Describe(reader);
+
+        Assert.Equal([TiberoColumnTypes.PtBinaryFloat, TiberoColumnTypes.PtBinaryDouble, TiberoColumnTypes.PtLong, TiberoColumnTypes.PtLongRaw,
+                      TiberoColumnTypes.PtVarchar2, TiberoColumnTypes.PtDecimal], providerTypes);
+        Assert.Equal([TiberoCellSource.Raw, TiberoCellSource.Raw, TiberoCellSource.Clr, TiberoCellSource.Clr, TiberoCellSource.String, TiberoCellSource.Raw],
+                     columns.Select((c, i) => TiberoCellConverter.SourceFor(c.Kind, providerTypes[i])));
+    }
+
+    [Fact]
+    public void Schema_table_wins_over_the_data_type_name_and_the_name_fills_a_missing_provider_type()
+    {
+        var schema = Schema(("A", 107, 22, 38, -128, true, false));
+        schema.Rows.Add("B", 5, (short)0, (short)0, DBNull.Value, true, false, "T", "B");
+
+        var columns = TiberoColumns.Read(schema, 2, i => "C" + i, _ => "Long", _ => typeof(string));
+
+        Assert.Equal(ColumnDataKind.Number, columns[0].Kind); // 표가 정본
+        Assert.Equal("LONG", columns[1].DbTypeName); // ProviderType 이 빈 행은 이름으로
+    }
+
+    [Fact]
+    public void Unknown_name_and_non_text_field_type_is_read_with_get_value_as_unknown()
+    {
+        var reader = new NamedTypeReader(["X", "Y"], [[null, null]], ["SomethingNew", "SomethingNew"], [typeof(DateTime), typeof(string)]);
+
+        var (columns, providerTypes) = TiberoValues.Describe(reader);
+
+        Assert.Equal([TiberoColumns.UnknownProviderType, TiberoColumnTypes.PtVarchar2], providerTypes);
+        Assert.Equal(ColumnDataKind.Other, columns[0].Kind);
+        Assert.Equal(TiberoCellSource.Clr, TiberoCellConverter.SourceFor(columns[0].Kind, providerTypes[0]));
+    }
+
+    [Fact]
+    public void Data_type_name_that_throws_leaves_the_column_text_as_before()
+    {
+        var reader = new NamedTypeReader(["X"], [[null]], null, null, throwOnTypeInfo: true);
+
+        var (columns, providerTypes) = TiberoValues.Describe(reader);
+
+        Assert.Equal(ColumnDataKind.Text, columns[0].Kind);
+        Assert.Equal([TiberoColumnTypes.PtVarchar2], providerTypes);
+    }
+
+    /// <summary>스키마 표를 못 읽고(NotSupported) <c>GetDataTypeName</c>·<c>GetFieldType</c> 만 답하는 리더.</summary>
+    private sealed class NamedTypeReader(string[] names, object?[][] rows, string[]? typeNames, Type[]? fieldTypes = null, bool throwOnTypeInfo = false)
+        : FakeDataReader(names, rows)
+    {
+        public override DataTable? GetSchemaTable() => throw new NotSupportedException();
+
+        public override string GetDataTypeName(int ordinal) =>
+            throwOnTypeInfo ? throw new NotSupportedException() : typeNames![ordinal];
+
+        public override Type GetFieldType(int ordinal) =>
+            throwOnTypeInfo ? throw new NotSupportedException() : fieldTypes?[ordinal] ?? typeof(object);
+    }
+
     private sealed class FakeDbException : DbException
     {
     }

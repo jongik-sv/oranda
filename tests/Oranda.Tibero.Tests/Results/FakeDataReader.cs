@@ -8,7 +8,7 @@ namespace Oranda.Tibero.Tests.Results;
 /// 시험용 <see cref="DbDataReader"/>: 메모리 행을 앞으로만 읽어 준다. 결과 집합·값 읽기 시험이 드라이버·서버 없이 돌게 한다.
 /// <see cref="OnRead"/> 로 n 번째 읽기에서 지연·예외를 흉내 낸다.
 /// </summary>
-internal sealed class FakeDataReader(string[] names, object?[][] rows, DataTable? schema = null) : DbDataReader
+internal class FakeDataReader(string[] names, object?[][] rows, DataTable? schema = null) : DbDataReader
 {
     private int _row = -1;
 

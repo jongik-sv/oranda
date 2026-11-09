@@ -15,16 +15,22 @@ internal static class TiberoValues
     /// <summary>LOB 셀의 기본 미리보기 길이(설정 <c>grid.initialLobFetchSize</c> 기본값과 같다).</summary>
     public const int LobPreviewSize = 4000;
 
-    /// <summary>스키마 표를 한 번 읽어 열 목록과 열별 <c>ProviderType</c> 을 돌려준다(셀 읽기가 열 형식을 다시 묻지 않게).</summary>
+    /// <summary>
+    /// 스키마 표를 한 번 읽어 열 목록과 열별 <c>ProviderType</c> 을 돌려준다(셀 읽기가 열 형식을 다시 묻지 않게).
+    /// 스키마 표를 못 읽으면 <c>GetDataTypeName</c>·<c>GetFieldType</c> 으로 열 형식을 짐작해 특별 읽기(BINARY_FLOAT/DOUBLE·LONG·LONG RAW)를 그대로 탄다
+    /// (<see cref="TiberoColumns.Resolve"/>).
+    /// </summary>
     public static (IReadOnlyList<ResultColumn> Columns, int[] ProviderTypes) Describe(DbDataReader reader)
     {
         ArgumentNullException.ThrowIfNull(reader);
         var schema = TiberoColumns.SchemaOrNull(reader.GetSchemaTable);
-        var columns = TiberoColumns.Read(schema, reader.FieldCount, reader.GetName);
+        var typeName = TiberoColumns.TypeNameOf(reader);
+        var fieldType = TiberoColumns.FieldTypeOf(reader);
+        var columns = TiberoColumns.Read(schema, reader.FieldCount, reader.GetName, typeName, fieldType);
         var types = new int[columns.Count];
         for (var i = 0; i < types.Length; i++)
         {
-            types[i] = TiberoColumns.ProviderTypeOf(schema, i) ?? TiberoColumnTypes.PtVarchar2;
+            types[i] = TiberoColumns.Resolve(schema, i, typeName, fieldType).ProviderType;
         }
 
         return (columns, types);
