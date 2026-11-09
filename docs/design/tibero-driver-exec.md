@@ -70,6 +70,7 @@ ME(tb-exec), 2026-11-09. 읽기만(SELECT·PSM 블록·트랜잭션 제어). 쓰
 | `GET_LINE(:line, :status)` 반복 | 됨. 비면 `status=1`. 한 줄에 왕복 1회 |
 | **채택**: 블록 안 `GET_LINES` → CLOB OUT 으로 묶어 받기 | 됨, 왕복 1회에 최대 N줄. 줄마다 `<길이>:<본문>\n`, NULL 줄 = `-\n`. 한글·5,000자 줄 그대로. `PUT_LINE('a' || CHR(10) || 'b')` 는 서버가 두 줄(`a`, `b`)로 나눠 돌려준다(Oracle 은 한 줄). CLOB OUT 의 `Value` 도 `TiberoString`. 버퍼가 비면 `n=0`, 값은 `IsNull` |
 | 블록이 오류로 끝난 뒤 | 오류 앞에서 낸 줄이 버퍼에 남아 거둘 수 있다(Oracle 과 같음) |
+| 같은 연결에 질의 리더가 열려 있을 때 거두기 | **안 됨**: CLOB OUT 읽기가 드라이버 안에서 `NullReferenceException`(`TiberoClob.Read`, 로케이터 빔. win144 #20). 같은 때 `SELECT DBMS_TRANSACTION.LOCAL_TRANSACTION_ID FROM dual`(VARCHAR2)은 됨 → 실행 서비스는 리더가 열린 채(행을 낸 불확실 문장·FOR UPDATE)로는 거두지 않고, 출력은 다음 문장 뒤에 나온다. 거두기의 NRE 는 삼킨다(결과를 깨지 않음) |
 
 거두기 블록(E3):
 
@@ -130,3 +131,32 @@ END;
 - 읽기 전용 트랜잭션 안 INSERT 거부 오류 번호
 - DDL 뒤 수동 모드 유지 여부(DDL 의 암시적 커밋 뒤 다음 DML 이 새 트랜잭션에 머무는지)
 - `SELECT … FOR UPDATE` 뒤 트랜잭션 id
+
+## 9. 실행 서비스 반영(T2 마감, tb-exec E1′~E5·D5)
+
+`src/Oranda.Tibero/Execution/TiberoExecutionService.cs` = `IExecutionService`(`[OrandaService(Dbms = Tibero)]`, Core `ExecutionServiceDispatcher` 가 세션 DBMS 로 고른다). `OracleExecutionService` 이식이고, 이 문서의 실측이 다른 곳만 다르다.
+
+| 항목 | Tibero 구현 | 근거 |
+|---|---|---|
+| 순서 | 치환(`SubstitutionText` + SQL*Plus DEFINE) → 정책 관문(`PolicyGate`) → SQL*Plus 명령은 처리기로 → 드라이버 | Oracle 과 같음 |
+| 세션 준비 | 첫 실행 때 `DBMS_OUTPUT.ENABLE(NULL)` 1회. 읽기 전용 프로필 = 문장마다 `BEGIN ROLLBACK; SET TRANSACTION READ ONLY; END;` | 1장(자동 커밋 속성 없음 — 세션이 연 직후 잡은 트랜잭션이 끈다), 2장(최상위 = TBR-7001) |
+| 드라이버 호출 | `Task.Run` 안에서 `Execute*Async`(동기) | 3장 |
+| 바인드·OUT | tb-result `TiberoBindBuilder`·`TiberoValues.ReadOut`. NUMBER OUT = Varchar2 로 받아 되읽음(결정40) | values 문서 6장 |
+| 질의 | 리더 → `TiberoResultSets.Create`(결과 집합이 명령·리더 소유, 페이지마다 명령 잠금). 불확실 문장도 행이 있으면 결과 집합. REF CURSOR OUT = 결과 집합(하나씩 감싸 실패 때 새지 않게) | R2 |
+| 트랜잭션 추적 | `SELECT DBMS_TRANSACTION.LOCAL_TRANSACTION_ID FROM dual`, 공급자 NULL 판정(`IsProviderNull`). 순수 질의 뒤엔 안 보냄 | 2장 |
+| DBMS_OUTPUT | 질의가 아닌 문장 뒤(성공·서버 오류 모두) `CollectBlock` 반복(1000줄씩, CLOB 묶음). 리더가 열린 채(행을 낸 불확실 문장·FOR UPDATE)로는 안 거둠 → 다음 문장 뒤. 거두기 실패는 결과를 깨지 않음 | 5장 |
+| 취소 | 토큰 → `DbCommand.Cancel()`. 드라이버가 돌아올 때까지(10ms~58초) 호출이 안 끝남 = App 의 「취소 중」. TBR-12040 + 토큰 취소 = Cancelled, 우리 취소 없는 12040 = Failed. 문장 시간 제한 없음(Oracle 도 없음) | 4장, 결정22 |
+| 스크립트 | Oracle 루프 이식(Stop/Continue/Ask·ContinueAll, WHENEVER SQLERROR EXIT = `IScriptDirectives`) | — |
+| 변경 일지 | DDL 대상마다 `ChangeCapture` + `TiberoDdlSource` = 「보관 안 함 + 이유」 행(`ChangeSnapshotCaptured`), 서버 읽기 없음 | D4 |
+| AUTOTRACE 통계 | `TiberoSessionStatistics`(6장) 를 `TiberoSqlPlusCommandProcessor` 가 Core 처리기에 넘김 | D5 |
+
+시험: 단위 = `tests/Oranda.Tibero.Tests/Execution/TiberoExecutionServiceTests.cs`(가짜 드라이버, `FakeDriver` 컬렉션), IT = `TiberoExecutionServiceIt.cs`(읽기만: 바인드·트랜잭션·읽기 전용 준비·DBMS_OUTPUT·질의·스크립트·REF CURSOR·리더 열린 채 거두기 안 함·긴 질의 취소).
+
+### 남은 일(T3 이후)
+
+- 변경 일지 실제 보관: `TiberoDdlSource` 를 DBMS_METADATA 대응 읽기로 바꾼다(T3). 「객체 없음」 번호 실측 필요.
+- 쓰기 IT(8장, D3 — `ORANDA_IT_TIBERO_WRITE=1`, ORT_ 표): DML 행 수·트랜잭션 id, 읽기 전용 안 INSERT 거부 번호, DDL 뒤 수동 모드, FOR UPDATE 뒤 트랜잭션 id.
+- 리더가 열린 채 출력 거두기: 필요하면 VARCHAR2 OUT(32767바이트 한계) 거두기 블록을 실측해 붙인다(지금은 다음 문장으로 미룸).
+- TIMESTAMP WITH (LOCAL) TIME ZONE·BINARY_DOUBLE/FLOAT·INTERVAL OUT 값 = 서버 글자 그대로(tb-result 몫).
+- 가짜 드라이버 `TiberoCommand.Cancel()` 호출 횟수(결정62 허가, 아직 안 넣음) — 넣으면 취소 단위 시험이 「Cancel 이 불렸다」를 단언할 수 있다.
+- Tibero 대량 실행(`IBulkExecutionService`) 없음 — T5.

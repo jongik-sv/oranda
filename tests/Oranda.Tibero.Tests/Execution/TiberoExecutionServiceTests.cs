@@ -4,8 +4,11 @@ using Oranda.Core.Composition;
 using Oranda.Core.Connection;
 using Oranda.Core.Events;
 using Oranda.Core.Execution;
+using Oranda.Core.Grid;
+using Oranda.Core.History;
 using Oranda.Core.Sessions;
 using Oranda.Tibero.Execution;
+using Oranda.Tibero.Results;
 using Oranda.Tibero.Sessions;
 using Oranda.Tibero.Tests.Driver;
 
@@ -132,12 +135,10 @@ public sealed class TiberoExecutionServiceTests : IDisposable
     }
 
     [Fact]
-    public async Task An_uncertain_statement_that_returns_rows_keeps_its_own_dbms_output()
+    public async Task An_uncertain_statement_that_returns_rows_leaves_dbms_output_for_the_next_statement()
     {
         const string text = "CALL report_rows()";
-        var table = new DataTable();
-        table.Columns.Add("A", typeof(decimal));
-        table.Rows.Add(1m);
+        var table = Table(["A"], ["1"]);
         Serve(cmd =>
         {
             if (cmd.CommandText == text)
@@ -160,11 +161,37 @@ public sealed class TiberoExecutionServiceTests : IDisposable
         var result = await service.ExecuteAsync(session, Stmt(text, StatementKind.Other) with { IsClassificationUncertain = true }, NoBinds, null,
             CancellationToken.None);
 
-        // 결과 집합은 E4 전이라 지원 안 함이지만, 돈 문장의 출력은 다음 문장으로 넘어가지 않고 이 결과에 붙는다.
-        Assert.Equal(TiberoExecutionService.NotSupportedCode, result.Error?.Code);
-        Assert.Equal(["ran!"], result.DbmsOutput);
+        // 리더가 열린 채로는 거두지 않는다(실서버: 같은 연결의 CLOB OUT 읽기가 드라이버 안에서 NullReferenceException). 출력은 버퍼에 남는다.
+        await using (result.ResultSet)
+        {
+            Assert.Equal(ExecutionStatus.Succeeded, result.Status);
+            Assert.NotNull(result.ResultSet);
+            Assert.Empty(result.DbmsOutput);
+            Assert.DoesNotContain(TiberoDbmsOutput.CollectBlock, Sent());
+        }
+
+        var next = await service.ExecuteAsync(session, Stmt(Block, StatementKind.PlSql), NoBinds, null, CancellationToken.None);
+
+        Assert.Equal(["ran!"], next.DbmsOutput);
         Assert.Single(Events<DbmsOutputReceived>());
         Assert.False(session.CommandGate.IsHeld);
+    }
+
+    [Fact]
+    public async Task A_plain_query_with_dbms_output_on_sends_only_the_enable_block_and_the_query()
+    {
+        const string text = "SELECT a FROM t";
+        Serve(cmd => cmd.CommandText == text ? Table(["A"], ["1"]) : null);
+        var service = NewService(dbmsOutput: true);
+        await using var session = NewSession();
+
+        var result = await service.ExecuteAsync(session, Stmt(text, StatementKind.Query), NoBinds, null, CancellationToken.None);
+
+        await using (result.ResultSet)
+        {
+            // 순수 질의 뒤엔 트랜잭션 확인도 거두기도 없다(Oracle 과 같다: 직전 커서를 바꾸지 않는다).
+            Assert.Equal([TiberoDbmsOutput.EnableBlock, text], Sent());
+        }
     }
 
     [Fact]
@@ -347,6 +374,28 @@ public sealed class TiberoExecutionServiceTests : IDisposable
     }
 
     [Fact]
+    public async Task A_ddl_change_journals_one_not_captured_row_with_the_reason_and_reads_nothing_from_the_server()
+    {
+        const string text = "DROP TABLE ort_a";
+        Serve();
+        var service = NewService();
+        await using var session = NewSession();
+        var stmt = Stmt(text, StatementKind.Ddl) with
+        {
+            ChangeTarget = new Oranda.Core.Journal.ChangeTarget(null, "ORT_A", "TABLE", Oranda.Core.Journal.ChangeOperation.Drop),
+        };
+
+        var result = await service.ExecuteAsync(session, stmt, NoBinds, null, CancellationToken.None);
+
+        // D4: T2 는 이전 DDL 을 보관하지 않고 그 이유를 일지에 남긴다. 서버로는 DDL 과 트랜잭션 확인만 간다.
+        Assert.Equal(ExecutionStatus.Succeeded, result.Status);
+        var entry = Assert.Single(Events<Oranda.Core.Journal.ChangeSnapshotCaptured>()).Entry;
+        Assert.Equal(TiberoDdlSource.Reason, entry.FailureReason);
+        Assert.Equal(("U", "ORT_A", "TABLE", "D/-/U"), (entry.Owner, entry.Name, entry.ObjectType, entry.DbKey));
+        Assert.Equal([text, TiberoExecutionService.TransactionIdSql], Sent());
+    }
+
+    [Fact]
     public async Task Named_binds_are_typed_through_the_adapter_and_out_values_come_back_as_clr_values()
     {
         const string text = "BEGIN :msg := 'hi ' || :name; :n := :k * 2; :d := NULL; END;";
@@ -445,10 +494,20 @@ public sealed class TiberoExecutionServiceTests : IDisposable
     }
 
     [Fact]
-    public async Task A_ref_cursor_out_bind_is_not_supported_yet_and_is_not_sent()
+    public async Task A_ref_cursor_out_bind_comes_back_as_a_result_set_that_reads_its_rows()
     {
         const string text = "BEGIN OPEN :c FOR SELECT 1 FROM dual; END;";
-        Serve();
+        var table = Table(["N"], ["1"], ["2"]);
+        Serve(cmd =>
+        {
+            if (cmd.CommandText != text)
+            {
+                return null;
+            }
+
+            cmd.Parameters["c"].Value = FakeDriverHost.ProviderValue("TiberoRefCursor", table);
+            return -1;
+        });
         var service = NewService();
         await using var session = NewSession();
         var binds = new Dictionary<string, BindValue> { ["c"] = new(BindDataType.RefCursor, null, BindDirection.Out) };
@@ -456,9 +515,13 @@ public sealed class TiberoExecutionServiceTests : IDisposable
         var result = await service.ExecuteAsync(session, Stmt(text, StatementKind.PlSql) with { BindNames = ["c"] }, binds, null,
             CancellationToken.None);
 
-        Assert.Equal(ExecutionStatus.Failed, result.Status);
-        Assert.Equal(TiberoExecutionService.NotSupportedCode, result.Error?.Code);
-        Assert.Empty(Sent());
+        Assert.Equal(ExecutionStatus.Succeeded, result.Status);
+        Assert.Null(result.ResultSet); // 문장 자체의 결과 집합은 없다. 커서는 OUT 값으로 온다.
+        await using var cursor = Assert.IsType<TiberoResultSet>(result.OutValues["c"]);
+        Assert.False(session.CommandGate.IsHeld); // 결과 집합은 페이지를 읽을 때만 잠금을 잡는다
+        var page = await cursor.GetPageAsync(0, CancellationToken.None);
+        Assert.Equal(["1", "2"], page.Columns[0].Select(v => (string)v!));
+        Assert.Equal([text, TiberoExecutionService.TransactionIdSql], Sent());
         Assert.False(session.CommandGate.IsHeld);
         Assert.Equal(SessionState.Idle, session.State);
     }
@@ -535,29 +598,139 @@ public sealed class TiberoExecutionServiceTests : IDisposable
     }
 
     [Fact]
-    public async Task Queries_are_not_supported_yet_and_are_not_sent()
+    public async Task A_query_returns_a_result_set_with_its_columns_and_rows_and_sends_nothing_else()
     {
-        Serve();
+        const string text = "SELECT a, b FROM t";
+        Serve(cmd => cmd.CommandText == text ? Table(["A", "B"], ["1", "x"], ["2", "y"]) : null);
         var service = NewService();
         await using var session = NewSession();
 
-        var result = await service.ExecuteAsync(session, Stmt("SELECT 1 FROM dual", StatementKind.Query), NoBinds, null, CancellationToken.None);
+        var result = await service.ExecuteAsync(session, Stmt(text, StatementKind.Query), NoBinds, null, CancellationToken.None);
 
-        Assert.Equal(ExecutionStatus.Failed, result.Status);
-        Assert.Equal(TiberoExecutionService.NotSupportedCode, result.Error?.Code);
-        Assert.Empty(Sent());
+        Assert.Equal(ExecutionStatus.Succeeded, result.Status);
+        await using var resultSet = result.ResultSet;
+        Assert.NotNull(resultSet);
+        Assert.Equal(["A", "B"], resultSet.Columns.Select(c => c.Name));
+        Assert.Null(result.RowsAffected);
+        Assert.Empty(result.DbmsOutput);
+        Assert.False(result.TransactionPending);
+        // 순수 질의 뒤에는 트랜잭션 확인도 출력 거두기도 보내지 않는다(Oracle 과 같다).
+        Assert.Equal([text], Sent());
+        Assert.False(session.CommandGate.IsHeld);
+        Assert.Equal(SessionState.Idle, session.State);
+
+        var page = await resultSet.GetPageAsync(0, CancellationToken.None);
+        Assert.Equal(2, page.RowCount);
+        Assert.Equal(["1", "2"], page.Columns[0].Select(v => (string)v!));
+        Assert.Equal(["x", "y"], page.Columns[1].Select(v => (string)v!));
+        Assert.True(page.IsLast);
+        Assert.Single(Events<StatementExecuted>());
     }
 
     [Fact]
-    public async Task An_uncertain_statement_that_returns_rows_is_reported_as_not_supported()
+    public async Task The_result_set_owns_the_gate_per_page_and_disposing_it_releases_everything()
     {
-        const string text = "WITH x AS (SELECT 1 a FROM dual) SELECT a FROM x";
-        var table = new DataTable();
-        table.Columns.Add("A", typeof(decimal));
-        table.Rows.Add(1m);
+        const string text = "SELECT a FROM t";
+        Serve(cmd => cmd.CommandText == text ? Table(["A"], ["1"], ["2"], ["3"]) : null);
+        var service = NewService(pageSize: 2);
+        await using var session = NewSession();
+
+        var result = await service.ExecuteAsync(session, Stmt(text, StatementKind.Query), NoBinds, null, CancellationToken.None);
+        var resultSet = result.ResultSet!;
+
+        // 실행은 리더를 연 뒤 잠금을 놓았다: 다른 기능이 같은 연결을 쓸 수 있다.
+        Assert.False(session.CommandGate.IsHeld);
+        Assert.Equal(2, resultSet.PageSize);
+
+        await session.CommandGate.EnterAsync(CancellationToken.None);
+        var pending = resultSet.GetPageAsync(0, CancellationToken.None);
+        await Task.Delay(100);
+        Assert.False(pending.IsCompleted); // 페이지 가져오기는 잠금을 기다린다
+        session.CommandGate.Release();
+
+        var first = await pending;
+        Assert.Equal(2, first.RowCount);
+        Assert.False(first.IsLast);
+        Assert.False(session.CommandGate.IsHeld);
+
+        await resultSet.DisposeAsync();
+        Assert.False(session.CommandGate.IsHeld);
+        Assert.Equal(SessionState.Idle, session.State);
+        await session.CommandGate.EnterAsync(CancellationToken.None); // 잠금이 잠긴 채 남았다면 여기서 멈춘다
+        session.CommandGate.Release();
+    }
+
+    [Fact]
+    public async Task The_grid_settings_decide_the_page_size_at_each_execution()
+    {
+        const string text = "SELECT a FROM t";
+        Serve(cmd => cmd.CommandText == text ? Table(["A"], ["1"], ["2"], ["3"]) : null);
+        var grid = new FakeGrid(3, 4000);
+        var service = NewService(pageSize: 1, grid: grid);
+        await using var session = NewSession();
+
+        var first = await service.ExecuteAsync(session, Stmt(text, StatementKind.Query), NoBinds, null, CancellationToken.None);
+        await using (first.ResultSet!)
+        {
+            Assert.Equal(3, first.ResultSet!.PageSize);
+        }
+
+        grid.PageSize = 2;
+        var second = await service.ExecuteAsync(session, Stmt(text, StatementKind.Query), NoBinds, null, CancellationToken.None);
+        await using (second.ResultSet!)
+        {
+            Assert.Equal(2, second.ResultSet!.PageSize);
+        }
+    }
+
+    [Fact]
+    public async Task A_for_update_query_still_tracks_the_transaction()
+    {
+        const string text = "SELECT a FROM t FOR UPDATE";
         Serve(cmd => cmd.CommandText switch
         {
-            text => table,
+            text => Table(["A"], ["1"]),
+            TiberoExecutionService.TransactionIdSql => "12.66.243778",
+            _ => null,
+        });
+        var service = NewService();
+        await using var session = NewSession();
+
+        var result = await service.ExecuteAsync(session, Stmt(text, StatementKind.Query), NoBinds, null, CancellationToken.None);
+
+        await using var resultSet = result.ResultSet;
+        Assert.NotNull(resultSet);
+        Assert.Equal([text, TiberoExecutionService.TransactionIdSql], Sent());
+        Assert.True(result.TransactionPending);
+        Assert.True(session.HasPendingTransaction);
+    }
+
+    [Fact]
+    public async Task A_server_error_on_a_query_fails_without_a_result_set_and_leaves_the_session_usable()
+    {
+        const string text = "SELECT * FROM nope";
+        Serve(cmd => cmd.CommandText == text
+            ? throw FakeDriverHost.ServerError(-8033, "TBR-8033: Specified schema object was not found.")
+            : null);
+        var service = NewService();
+        await using var session = NewSession();
+
+        var result = await service.ExecuteAsync(session, Stmt(text, StatementKind.Query), NoBinds, null, CancellationToken.None);
+
+        Assert.Equal(ExecutionStatus.Failed, result.Status);
+        Assert.Equal("TBR-8033", result.Error?.Code);
+        Assert.Null(result.ResultSet);
+        Assert.False(session.CommandGate.IsHeld);
+        Assert.Equal(SessionState.Idle, session.State);
+    }
+
+    [Fact]
+    public async Task An_uncertain_statement_that_returns_rows_gives_a_result_set_and_tracks_the_transaction()
+    {
+        const string text = "WITH x AS (SELECT 1 a FROM dual) SELECT a FROM x";
+        Serve(cmd => cmd.CommandText switch
+        {
+            text => Table(["A"], ["1"]),
             TiberoExecutionService.TransactionIdSql => "12.66.243778",
             _ => null,
         });
@@ -567,13 +740,32 @@ public sealed class TiberoExecutionServiceTests : IDisposable
         var result = await service.ExecuteAsync(session, Stmt(text, StatementKind.Other) with { IsClassificationUncertain = true }, NoBinds, null,
             CancellationToken.None);
 
-        // 실행은 되었다: 트랜잭션을 갱신하고 걸린 시간을 남긴다(보내지 않은 질의 거절과 구별, App 쪽 WasSent 보완은 따로).
-        Assert.Equal(ExecutionStatus.Failed, result.Status);
-        Assert.Equal(TiberoExecutionService.NotSupportedCode, result.Error?.Code);
+        // 분류가 불확실하면 문장이 트랜잭션을 바꿨을 수 있다 → 질의로 보고 건너뛰지 않고 늘 묻는다.
+        Assert.Equal(ExecutionStatus.Succeeded, result.Status);
+        await using var resultSet = result.ResultSet;
+        Assert.NotNull(resultSet);
         Assert.Equal([text, TiberoExecutionService.TransactionIdSql], Sent());
         Assert.True(result.TransactionPending);
         Assert.True(session.HasPendingTransaction);
         Assert.True(result.Elapsed > TimeSpan.Zero);
+        Assert.False(session.CommandGate.IsHeld);
+        Assert.Equal("1", (await resultSet.GetPageAsync(0, CancellationToken.None)).Columns[0][0]);
+    }
+
+    [Fact]
+    public async Task An_uncertain_statement_without_rows_has_no_result_set()
+    {
+        const string text = "CALL do_something()";
+        Serve(cmd => cmd.CommandText == text ? new DataTable() : null);
+        var service = NewService();
+        await using var session = NewSession();
+
+        var result = await service.ExecuteAsync(session, Stmt(text, StatementKind.Other) with { IsClassificationUncertain = true }, NoBinds, null,
+            CancellationToken.None);
+
+        Assert.Equal(ExecutionStatus.Succeeded, result.Status);
+        Assert.Null(result.ResultSet);
+        Assert.Null(result.RowsAffected); // 가짜 리더의 RecordsAffected 는 -1
         Assert.False(session.CommandGate.IsHeld);
     }
 
@@ -648,6 +840,95 @@ public sealed class TiberoExecutionServiceTests : IDisposable
     }
 
     [Fact]
+    public async Task A_cancel_keeps_the_call_open_until_the_driver_returns_then_reports_cancelled()
+    {
+        // 서버가 늦게 멈추는 상황(실측 4장: 10ms~58초). 취소를 눌러도 드라이버가 돌아올 때까지 호출은 끝나지 않고 세션은 Busy 다(화면의 「취소 중」).
+        const string text = "SELECT COUNT(*) FROM all_objects a, all_objects b, all_objects d";
+        using var cts = new CancellationTokenSource();
+        using var started = new ManualResetEventSlim();
+        using var serverStops = new SemaphoreSlim(0);
+        Serve(cmd =>
+        {
+            if (cmd.CommandText == text)
+            {
+                started.Set();
+                serverStops.Wait(TimeSpan.FromSeconds(30));
+                throw FakeDriverHost.ServerError(-12040, "TBR-12040: Statement was canceled.");
+            }
+
+            return cmd.CommandText == TiberoExecutionService.TransactionIdSql ? "12.66.243778" : null;
+        });
+        var service = NewService();
+        await using var session = NewSession();
+
+        var run = service.ExecuteAsync(session, Stmt(text, StatementKind.Query), NoBinds, null, cts.Token);
+        Assert.True(started.Wait(TimeSpan.FromSeconds(10)));
+        cts.Cancel();
+        await Task.Delay(100);
+
+        Assert.False(run.IsCompleted);
+        Assert.Equal(SessionState.Busy, session.State);
+        Assert.True(session.CommandGate.IsHeld);
+
+        serverStops.Release();
+        var result = await run.WaitAsync(TimeSpan.FromSeconds(10));
+
+        Assert.Equal(ExecutionStatus.Cancelled, result.Status);
+        Assert.Null(result.Error);
+        Assert.Null(result.ResultSet);
+        Assert.Equal(SessionState.Idle, session.State);
+        Assert.False(session.CommandGate.IsHeld);
+        Assert.Equal([text, TiberoExecutionService.TransactionIdSql], Sent());
+    }
+
+    [Fact]
+    public async Task A_token_that_a_caller_cancels_after_a_time_limit_is_a_cancel_like_any_other()
+    {
+        // Oracle 서비스에는 문장 시간 제한이 없다: 호출한 쪽이 CancelAfter 로 건 토큰이 취소되면 사용자 취소와 같은 Cancelled 다(구분 없음).
+        const string text = "UPDATE t SET a = 1";
+        using var limit = new CancellationTokenSource();
+        limit.CancelAfter(TimeSpan.FromMilliseconds(100));
+        Serve(cmd =>
+        {
+            if (cmd.CommandText == text)
+            {
+                limit.Token.WaitHandle.WaitOne(TimeSpan.FromSeconds(30));
+                throw FakeDriverHost.ServerError(-12040, "TBR-12040: Statement was canceled.");
+            }
+
+            return cmd.CommandText == TiberoExecutionService.TransactionIdSql ? "12.66.243778" : null;
+        });
+        var service = NewService();
+        await using var session = NewSession();
+
+        var result = await service.ExecuteAsync(session, Stmt(text, StatementKind.Dml), NoBinds, null, limit.Token).WaitAsync(TimeSpan.FromSeconds(10));
+
+        Assert.Equal(ExecutionStatus.Cancelled, result.Status);
+        Assert.Null(result.Error);
+        Assert.True(result.TransactionPending);
+        Assert.Equal(SessionState.Idle, session.State);
+    }
+
+    [Fact]
+    public async Task A_cancel_error_without_a_cancelled_token_is_a_failure_and_does_not_break_the_session()
+    {
+        // 우리가 취소하지 않았는데 온 TBR-12040(다른 세션의 KILL 등)은 Oracle 의 ORA-01013 처럼 실패로 낸다.
+        const string text = "UPDATE t SET a = 1";
+        Serve(cmd => cmd.CommandText == text ? throw FakeDriverHost.ServerError(-12040, "TBR-12040: Statement was canceled.") : null);
+        var service = NewService();
+        await using var session = NewSession();
+
+        var result = await service.ExecuteAsync(session, Stmt(text, StatementKind.Dml), NoBinds, null, CancellationToken.None);
+
+        Assert.Equal(ExecutionStatus.Failed, result.Status);
+        Assert.Equal(-12040, result.Error?.Number);
+        Assert.Equal("TBR-12040", result.Error?.Code);
+        Assert.Equal(DbErrorKind.Cancelled, result.Error?.Kind);
+        Assert.Equal(SessionState.Idle, session.State);
+        Assert.False(session.CommandGate.IsHeld);
+    }
+
+    [Fact]
     public async Task A_cancel_while_preparing_the_session_reports_zero_elapsed_and_never_sends_the_statement()
     {
         const string text = "UPDATE t SET a = 1";
@@ -688,13 +969,122 @@ public sealed class TiberoExecutionServiceTests : IDisposable
     }
 
     [Fact]
-    public async Task Script_execution_is_not_supported_yet()
+    public async Task A_script_runs_every_statement_in_order_and_reports_each_result()
     {
+        Serve();
         var service = NewService();
         await using var session = NewSession();
 
-        Assert.Throws<DbmsNotSupportedException>(() =>
-            service.ExecuteScriptAsync(session, [Stmt(Block, StatementKind.PlSql)], ScriptErrorMode.Stop, null, CancellationToken.None));
+        var results = await RunScriptAsync(service, session, ScriptErrorMode.Stop, Stmt(Block, StatementKind.PlSql), Stmt("COMMIT", StatementKind.TransactionControl));
+
+        Assert.Equal([ExecutionStatus.Succeeded, ExecutionStatus.Succeeded], results.Select(r => r.Status));
+        Assert.Equal([Block, "COMMIT"], results.Select(r => r.Statement.Text));
+        Assert.Equal(
+            [Block, TiberoExecutionService.TransactionIdSql, "COMMIT", TiberoExecutionService.TransactionIdSql],
+            Sent());
+        Assert.Equal(2, Events<StatementExecuted>().Count);
+        Assert.All(Events<StatementExecuted>(), e => Assert.Equal(HistorySource.Script, e.Options.Source));
+        Assert.False(session.CommandGate.IsHeld);
+    }
+
+    [Fact]
+    public async Task A_script_stops_at_the_first_failure_in_stop_mode_and_keeps_going_in_continue_mode()
+    {
+        const string bad = "DELETE FROM nope";
+        Serve(cmd => cmd.CommandText == bad ? throw FakeDriverHost.ServerError(-8033, "TBR-8033: not found") : null);
+        var service = NewService();
+        await using var session = NewSession();
+        SqlStatement[] script = [Stmt(bad, StatementKind.Dml), Stmt(Block, StatementKind.PlSql)];
+
+        var stopped = await RunScriptAsync(service, session, ScriptErrorMode.Stop, script);
+        var continued = await RunScriptAsync(service, session, ScriptErrorMode.Continue, script);
+
+        Assert.Equal([ExecutionStatus.Failed], stopped.Select(r => r.Status));
+        Assert.Equal([ExecutionStatus.Failed, ExecutionStatus.Succeeded], continued.Select(r => r.Status));
+    }
+
+    [Fact]
+    public async Task In_ask_mode_the_user_decides_and_continue_all_stops_the_questions()
+    {
+        const string bad = "DELETE FROM nope";
+        Serve(cmd => cmd.CommandText == bad ? throw FakeDriverHost.ServerError(-8033, "TBR-8033: not found") : null);
+        var interaction = new FakeInteraction(null, ScriptErrorAction.ContinueAll);
+        var service = NewService(interaction: interaction);
+        await using var session = NewSession();
+
+        var results = await RunScriptAsync(service, session, ScriptErrorMode.Ask,
+            Stmt(bad, StatementKind.Dml), Stmt(bad, StatementKind.Dml), Stmt(Block, StatementKind.PlSql));
+
+        Assert.Equal([ExecutionStatus.Failed, ExecutionStatus.Failed, ExecutionStatus.Succeeded], results.Select(r => r.Status));
+        Assert.Equal(1, interaction.AskedErrors); // 첫 실패에서 「이후 계속」을 골랐으니 두 번째 실패는 묻지 않는다
+        Assert.Equal("TBR-8033", interaction.LastFailure?.Code);
+
+        var stop = new FakeInteraction(null, ScriptErrorAction.Stop);
+        var stopped = await RunScriptAsync(NewService(interaction: stop), session, ScriptErrorMode.Ask, Stmt(bad, StatementKind.Dml), Stmt(Block, StatementKind.PlSql));
+        Assert.Single(stopped);
+    }
+
+    [Fact]
+    public async Task Whenever_sqlerror_exit_stops_the_script_even_in_continue_mode_and_ends_the_transaction()
+    {
+        const string bad = "DELETE FROM nope";
+        Serve(cmd => cmd.CommandText == bad ? throw FakeDriverHost.ServerError(-8033, "TBR-8033: not found") : null);
+        var sqlPlus = new FakeSqlPlus { Exit = true };
+        var service = NewService(sqlPlus: sqlPlus);
+        await using var session = NewSession();
+
+        var results = await RunScriptAsync(service, session, ScriptErrorMode.Continue, Stmt(bad, StatementKind.Dml), Stmt(Block, StatementKind.PlSql));
+
+        Assert.Equal([ExecutionStatus.Failed], results.Select(r => r.Status));
+        Assert.Equal(1, sqlPlus.OnErrorApplied);
+        Assert.DoesNotContain(Block, Sent());
+    }
+
+    [Fact]
+    public async Task A_cancelled_script_yields_a_cancelled_result_and_stops()
+    {
+        Serve();
+        var service = NewService();
+        await using var session = NewSession();
+        var results = new List<ExecutionResult>();
+
+        await foreach (var r in service.ExecuteScriptAsync(session, [Stmt(Block, StatementKind.PlSql), Stmt(Block, StatementKind.PlSql)],
+                           ScriptErrorMode.Continue, null, new CancellationToken(canceled: true)))
+        {
+            results.Add(r);
+        }
+
+        Assert.Equal([ExecutionStatus.Cancelled], results.Select(r => r.Status));
+        Assert.Empty(Sent());
+    }
+
+    private static async Task<List<ExecutionResult>> RunScriptAsync(TiberoExecutionService service, ISession session, ScriptErrorMode mode,
+                                                                    params SqlStatement[] statements)
+    {
+        var results = new List<ExecutionResult>();
+        await foreach (var r in service.ExecuteScriptAsync(session, statements, mode, null, CancellationToken.None))
+        {
+            results.Add(r);
+        }
+
+        return results;
+    }
+
+    /// <summary>문자열 열만 가진 DataTable(스키마 표가 없는 가짜 리더는 모든 열을 글자로 읽는다).</summary>
+    private static DataTable Table(string[] columns, params string[][] rows)
+    {
+        var table = new DataTable();
+        foreach (var c in columns)
+        {
+            table.Columns.Add(c, typeof(string));
+        }
+
+        foreach (var row in rows)
+        {
+            table.Rows.Add([.. row]);
+        }
+
+        return table;
     }
 
     private static SqlStatement Stmt(string text, StatementKind kind) => new(text, default, kind);
@@ -704,8 +1094,8 @@ public sealed class TiberoExecutionServiceTests : IDisposable
         text is null ? FakeDriverHost.ProviderValue("TiberoString") : FakeDriverHost.ProviderValue("TiberoString", text);
 
     private TiberoExecutionService NewService(FakePolicy? policy = null, FakeInteraction? interaction = null, FakeSqlPlus? sqlPlus = null,
-                                              bool dbmsOutput = false) =>
-        new(policy ?? new FakePolicy(PolicyDecision.Allowed), interaction ?? new FakeInteraction(null), _bus, sqlPlus, dbmsOutput);
+                                              bool dbmsOutput = false, int pageSize = 500, IGridFetchSettings? grid = null) =>
+        new(policy ?? new FakePolicy(PolicyDecision.Allowed), interaction ?? new FakeInteraction(null), _bus, sqlPlus, dbmsOutput, pageSize, grid);
 
     private TiberoSession NewSession(bool readOnly = false)
     {
@@ -764,7 +1154,7 @@ public sealed class TiberoExecutionServiceTests : IDisposable
         public ValueTask<PolicyDecision> EvaluateAsync(PolicyContext ctx, SqlStatement stmt, CancellationToken ct) => ValueTask.FromResult(decision);
     }
 
-    private sealed class FakeInteraction(IReadOnlyDictionary<string, string>? answers) : IExecutionInteraction
+    private sealed class FakeInteraction(IReadOnlyDictionary<string, string>? answers, ScriptErrorAction onScriptError = ScriptErrorAction.Stop) : IExecutionInteraction
     {
         public List<string> Asked { get; } = [];
 
@@ -776,8 +1166,23 @@ public sealed class TiberoExecutionServiceTests : IDisposable
             return Task.FromResult(answers);
         }
 
-        public Task<ScriptErrorAction> AskScriptErrorAsync(SqlStatement stmt, DbError failure, CancellationToken ct) =>
-            Task.FromResult(ScriptErrorAction.Stop);
+        public int AskedErrors { get; private set; }
+
+        public DbError? LastFailure { get; private set; }
+
+        public Task<ScriptErrorAction> AskScriptErrorAsync(SqlStatement stmt, DbError failure, CancellationToken ct)
+        {
+            AskedErrors++;
+            LastFailure = failure;
+            return Task.FromResult(onScriptError);
+        }
+    }
+
+    private sealed class FakeGrid(int pageSize, int lobFetchSize) : IGridFetchSettings
+    {
+        public int PageSize { get; set; } = pageSize;
+
+        public int InitialLobFetchSize { get; set; } = lobFetchSize;
     }
 
     private sealed class FakeSqlPlus : ISqlPlusCommandProcessor, IScriptDirectives
@@ -792,9 +1197,17 @@ public sealed class TiberoExecutionServiceTests : IDisposable
             return Task.FromResult(new ExecutionResult(stmt, ExecutionStatus.Succeeded));
         }
 
-        public bool ExitOnError(ISession s) => false;
+        public bool Exit { get; init; }
 
-        public Task ApplyOnErrorTransactionAsync(ISession s, CancellationToken ct) => Task.CompletedTask;
+        public int OnErrorApplied { get; private set; }
+
+        public bool ExitOnError(ISession s) => Exit;
+
+        public Task ApplyOnErrorTransactionAsync(ISession s, CancellationToken ct)
+        {
+            OnErrorApplied++;
+            return Task.CompletedTask;
+        }
 
         public string? GetDefine(ISession s, string name) => Defines.TryGetValue(name, out var v) ? v : null;
 
