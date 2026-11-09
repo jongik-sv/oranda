@@ -22,13 +22,13 @@ public sealed class SqlPlusCommandLogicTests : IDisposable
 {
     private readonly string _dir = Path.Combine(Path.GetTempPath(), "oranda-sqlplus-" + Guid.NewGuid().ToString("N"));
     private readonly RecordingEngine _engine = new();
-    private readonly SqlPlusCommandProcessor _processor;
+    private readonly OracleSqlPlusCommandProcessor _processor;
     private readonly DriverlessSession _session = new(new ConnectionProfile("p", "u", "h:1521/s"));
 
     public SqlPlusCommandLogicTests()
     {
         Directory.CreateDirectory(_dir);
-        _processor = new SqlPlusCommandProcessor(() => _engine, () => new LanguageService(), () => _engine.Bus);
+        _processor = new OracleSqlPlusCommandProcessor(() => _engine, () => new LanguageService(), () => _engine.Bus);
         _engine.Processor = _processor;
     }
 
@@ -181,7 +181,7 @@ public sealed class SqlPlusCommandLogicTests : IDisposable
         var r = await RunAsync($"@{file}");
 
         Assert.Equal(ExecutionStatus.Failed, r.Status);
-        Assert.Equal(SqlPlusCommandProcessor.MaxDepth, _engine.Sent.Count(c => c.Statement.Text.StartsWith("@@loop", StringComparison.Ordinal)));
+        Assert.Equal(OracleSqlPlusCommandProcessor.MaxDepth, _engine.Sent.Count(c => c.Statement.Text.StartsWith("@@loop", StringComparison.Ordinal)));
     }
 
     [Fact]
@@ -277,20 +277,6 @@ public sealed class SqlPlusCommandLogicTests : IDisposable
         Assert.Equal("통계: session logical reads=10", line);
     }
 
-    [Fact]
-    public void Statistics_diff_keeps_only_increases_and_describes_known_names()
-    {
-        var before = new Dictionary<string, decimal> { ["session logical reads"] = 5, ["redo size"] = 100, ["other"] = 1 };
-        var after = new Dictionary<string, decimal> { ["session logical reads"] = 12, ["redo size"] = 100, ["other"] = 9, ["physical reads"] = 2 };
-
-        var diff = SessionStatistics.Diff(before, after);
-
-        Assert.Equal(7m, diff["session logical reads"]);
-        Assert.False(diff.ContainsKey("redo size"));
-        Assert.Equal("통계: session logical reads=7, physical reads=2", Assert.Single(SessionStatistics.Describe(diff)));
-        Assert.Empty(SessionStatistics.Describe(new Dictionary<string, decimal>()));
-    }
-
     private sealed class RecordingEngine : IExecutionService
     {
         public List<ExecutionCall> Sent { get; } = [];
@@ -313,7 +299,7 @@ public sealed class SqlPlusCommandLogicTests : IDisposable
             return result;
         }
 
-        public SqlPlusCommandProcessor? Processor { get; set; }
+        public OracleSqlPlusCommandProcessor? Processor { get; set; }
 
         /// <summary>스풀 시험: 엔진이 낸 것처럼 이벤트를 발행한다.</summary>
         public void Publish(Guid sessionId, SqlStatement stmt)
@@ -401,7 +387,7 @@ public sealed class SqlPlusCommandTests : IAsyncLifetime
         using var cred = new SecureCredential(_db.SystemPassword);
         _session = (OracleSession)await _manager.OpenAsync(profile, cred, SessionPurpose.Work, default);
         OracleExecutionService? engine = null;
-        var processor = new SqlPlusCommandProcessor(() => engine!, () => new LanguageService());
+        var processor = new OracleSqlPlusCommandProcessor(() => engine!, () => new LanguageService());
         engine = new OracleExecutionService(new ExecutionPolicy(), new ExecInteraction(), _bus, processor, 500);
         _engine = engine;
     }

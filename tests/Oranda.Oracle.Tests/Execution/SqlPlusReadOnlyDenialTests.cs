@@ -108,7 +108,7 @@ public class SqlPlusReadOnlyDenialTests
             Gate = new Gate { ReadOnlyRole = viewerRole };
             Session = new FakeSession(new ConnectionProfile("p", "scott", "h:1521/s", ReadOnly: readOnlyProfile));
             var engine = new PolicyEngine(new ExecutionPolicy(Gate), Sent);
-            Processor = new SqlPlusCommandProcessor(() => engine, () => null!);
+            Processor = new OracleSqlPlusCommandProcessor(() => engine, () => null!);
         }
 
         public Gate Gate { get; }
@@ -117,7 +117,7 @@ public class SqlPlusReadOnlyDenialTests
 
         public ConcurrentQueue<SqlStatement> Sent { get; } = new();
 
-        public SqlPlusCommandProcessor Processor { get; }
+        public OracleSqlPlusCommandProcessor Processor { get; }
     }
 
     /// <summary>OracleExecutionService 2단계처럼 정책 관문을 먼저 보고, 거부가 아니면 「드라이버」(목록)에 넘긴다.</summary>

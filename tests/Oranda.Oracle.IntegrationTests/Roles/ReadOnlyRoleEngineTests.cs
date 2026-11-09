@@ -237,7 +237,7 @@ internal sealed class RoleEngineRig : IAsyncDisposable
         _manager = new OracleSessionManager(Bus);
         Language = new LanguageService();
         Policy = new ExecutionPolicy(Gate);
-        var processor = new SqlPlusCommandProcessor(() => Exec!, () => Language, () => Bus);
+        var processor = new OracleSqlPlusCommandProcessor(() => Exec!, () => Language, () => Bus);
         Exec = new OracleExecutionService(Policy, Ui, Bus, processor, pageSize: 100);
     }
 

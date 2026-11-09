@@ -1,6 +1,7 @@
 using Oranda.App.Shell.Composition;
 using Oranda.Core.Composition;
 using Oranda.Core.Composition.Dispatch;
+using Oranda.Core.Connection;
 using Oranda.Core.Execution;
 using Oranda.Core.History;
 using Oranda.Testing;
@@ -51,6 +52,25 @@ public class SqlPlusDirectivesCompositionTests
         Assert.Equal(ExecutionStatus.Succeeded, results[0].Status);
         Assert.Equal(ExecutionStatus.Failed, results[1].Status);
         Assert.Equal(1, session.RollbackCount); // EXIT ROLLBACK 의 트랜잭션 처리
+    }
+
+    [Theory]
+    [InlineData(Dbms.Oracle, "OracleSqlPlusCommandProcessor")]
+    [InlineData(Dbms.Tibero, "TiberoSqlPlusCommandProcessor")]
+    public void Each_dbms_key_resolves_its_core_based_processor_with_script_directives(Dbms dbms, string typeName)
+    {
+        // K2: 처리기 본체는 Core, 공급자 어셈블리가 키로 등록한다. 디스패처는 Find 로 같은 싱글턴을 IScriptDirectives 로 본다.
+        var (c, _) = Compose();
+        using var _c = c;
+        var selector = c.GetRequiredService<IDbmsServiceSelector>();
+
+        var processor = selector.Find<ISqlPlusCommandProcessor>(dbms);
+
+        Assert.NotNull(processor);
+        Assert.Equal(typeName, processor.GetType().Name);
+        Assert.IsAssignableFrom<Oranda.Core.Execution.SqlPlus.SqlPlusCommandProcessor>(processor);
+        Assert.IsAssignableFrom<IScriptDirectives>(processor);
+        Assert.Same(processor, selector.Find<ISqlPlusCommandProcessor>(dbms));
     }
 
     [Fact]

@@ -445,7 +445,7 @@ internal sealed class SafetyRig
         Bus = new EventBus();
         _manager = new OracleSessionManager(Bus);
         Language = new LanguageService();
-        var processor = new SqlPlusCommandProcessor(() => Exec!, () => Language, () => Bus);
+        var processor = new OracleSqlPlusCommandProcessor(() => Exec!, () => Language, () => Bus);
         Exec = new OracleExecutionService(Policy, Ui, Bus, processor, pageSize: 100);
     }
 

@@ -1,28 +1,34 @@
 using System.Globalization;
 using System.Runtime.CompilerServices;
 using System.Text;
-using Oranda.Core.Composition;
 using Oranda.Core.Connection;
 using Oranda.Core.Events;
-using Oranda.Core.Execution;
 using Oranda.Core.Execution.Providers;
 using Oranda.Core.History;
 using Oranda.Core.Language;
 using Oranda.Core.Sessions;
 
-namespace Oranda.Oracle.SqlPlus;
+namespace Oranda.Core.Execution.SqlPlus;
 
 /// <summary>
 /// SQL*Plus 명령 처리(SET SERVEROUTPUT, DEFINE/UNDEFINE, PROMPT, @파일·@@·START, SPOOL, WHENEVER SQLERROR, EXEC, EXIT).
 /// 상태(DEFINE 값, WHENEVER, SPOOL, 현재 스크립트 폴더)는 세션마다 따로 갖는다.
 /// 실행 엔진은 이 처리기를 부르고, 이 처리기는 파일 안 문장을 다시 실행 엔진으로 보낸다(순환을 피하려고 서비스는 처음 쓸 때 꺼낸다).
 /// 소유: TSK-06-06.
+/// <para>
+/// DBMS 에 매이지 않는다(D2). 등록은 DBMS 쪽 하위 형식이 한다(<c>[OrandaService(typeof(ISqlPlusCommandProcessor), Dbms = …)]</c>) —
+/// 이 형식 자체는 등록하지 않는다. 같은 형식이 <see cref="IScriptDirectives"/>(WHENEVER SQLERROR EXIT, DEFINE 저장소)도 구현해
+/// 실행 엔진이 구현 형식을 모르고 스크립트 지시를 묻게 한다.
+/// 서버쪽 PL/SQL 블록(SET SERVEROUTPUT, EXEC)과 세션 통계는 DBMS 가 지원하는 만큼만 쓴다 — 통계는 <see cref="SessionStatisticsSource"/> 가 있을 때만.
+/// </para>
 /// </summary>
-[OrandaService(typeof(ISqlPlusCommandProcessor), Dbms = Dbms.Oracle)]
-internal sealed class SqlPlusCommandProcessor : ISqlPlusCommandProcessor, IScriptDirectives
+public class SqlPlusCommandProcessor : ISqlPlusCommandProcessor, IScriptDirectives
 {
     /// <summary>@파일 안에서 다시 @파일 을 부를 수 있는 깊이(SQL*Plus 도 같은 보호가 있다).</summary>
-    internal const int MaxDepth = 20;
+    public const int MaxDepth = 20;
+
+    /// <summary>SET STATISTICS ON 인데 이 DBMS 가 세션 통계를 지원하지 않을 때 알리는 글.</summary>
+    public const string StatisticsNotSupportedMessage = "이 DBMS 는 세션 통계(SET STATISTICS)를 지원하지 않아 켜지 않았습니다.";
 
     private static readonly HashSet<string> IgnoredVerbs = new(StringComparer.OrdinalIgnoreCase)
     {
@@ -37,13 +43,17 @@ internal sealed class SqlPlusCommandProcessor : ISqlPlusCommandProcessor, IScrip
     private readonly Func<IExecutionService> _execution;
     private readonly Func<ILanguageService> _language;
     private readonly Func<IEventBus?> _events;
+    private readonly SessionStatisticsSource? _statistics;
     private readonly ConditionalWeakTable<ISession, SessionState> _states = new();
 
-    public SqlPlusCommandProcessor(IServiceProvider services)
+    /// <param name="services">실행 엔진·언어 서비스·이벤트 버스·메타데이터를 처음 쓸 때 꺼내는 곳.</param>
+    /// <param name="statistics">세션 통계 출처. null 이면 이 DBMS 는 통계를 지원하지 않는다(SET STATISTICS ON 을 거절한다).</param>
+    public SqlPlusCommandProcessor(IServiceProvider services, SessionStatisticsSource? statistics)
         : this(
             () => (IExecutionService)services.GetService(typeof(IExecutionService))!,
             () => (ILanguageService)services.GetService(typeof(ILanguageService))!,
-            () => services.GetService(typeof(IEventBus)) as IEventBus)
+            () => services.GetService(typeof(IEventBus)) as IEventBus,
+            statistics)
     {
         _metadata = () => services.GetService(typeof(Oranda.Core.Metadata.IMetadataProvider)) as Oranda.Core.Metadata.IMetadataProvider;
     }
@@ -51,11 +61,13 @@ internal sealed class SqlPlusCommandProcessor : ISqlPlusCommandProcessor, IScrip
     /// <summary>DESC 가 쓰는 메타데이터(처음 쓸 때 꺼낸다). 시험 생성자에서는 없다.</summary>
     private readonly Func<Oranda.Core.Metadata.IMetadataProvider?> _metadata = () => null;
 
-    internal SqlPlusCommandProcessor(Func<IExecutionService> execution, Func<ILanguageService> language, Func<IEventBus?>? events = null)
+    /// <summary>서비스 제공자 없이 만든다(시험·하위 형식의 시험 생성자).</summary>
+    public SqlPlusCommandProcessor(Func<IExecutionService> execution, Func<ILanguageService> language, Func<IEventBus?>? events = null, SessionStatisticsSource? statistics = null)
     {
         _execution = execution;
         _language = language;
         _events = events ?? (() => null);
+        _statistics = statistics;
     }
 
     public async Task<ExecutionResult> ExecuteAsync(ISession s, SqlStatement stmt, CancellationToken ct)
@@ -264,6 +276,12 @@ internal sealed class SqlPlusCommandProcessor : ISqlPlusCommandProcessor, IScrip
                     return Fail(stmt, "SP2-0158", "SET STATISTICS 는 ON 또는 OFF 입니다.");
                 }
 
+                if (value == "ON" && _statistics is null)
+                {
+                    state.Statistics = false;
+                    return Ok(stmt, StatisticsNotSupportedMessage); // 측정하지 못하는 값은 끄고 이유를 알린다(D5).
+                }
+
                 state.Statistics = value == "ON";
                 return Ok(stmt);
             default:
@@ -340,7 +358,7 @@ internal sealed class SqlPlusCommandProcessor : ISqlPlusCommandProcessor, IScrip
     }
 
     /// <summary>세션의 SET SERVEROUTPUT 상태(시험이 거부 때 상태가 안 바뀌는지 본다).</summary>
-    internal bool IsServerOutputOn(ISession s) => _states.TryGetValue(s, out var st) && st.ServerOutput;
+    public bool IsServerOutputOn(ISession s) => _states.TryGetValue(s, out var st) && st.ServerOutput;
 
     /// <summary>
     /// SET SERVEROUTPUT: 안쪽 블록이 정책 관문에서 거부되면(읽기 전용 프로필·조회 전용 Role) 상태를 바꾸지 않는다.
@@ -483,7 +501,8 @@ internal sealed class SqlPlusCommandProcessor : ISqlPlusCommandProcessor, IScrip
         var stopped = false;
         try
         {
-            var before = state.Statistics ? await SessionStatistics.CaptureAsync(exec, s, ct).ConfigureAwait(false) : null;
+            var stats = state.Statistics ? _statistics : null;
+            var before = stats is not null ? await SessionStatistics.CaptureAsync(stats, exec, s, ct).ConfigureAwait(false) : null;
             foreach (var child in statements)
             {
                 if (ct.IsCancellationRequested)
@@ -505,12 +524,12 @@ internal sealed class SqlPlusCommandProcessor : ISqlPlusCommandProcessor, IScrip
                     await last.ReplaceAsync(r.ResultSet).ConfigureAwait(false);
                 }
 
-                if (state.Statistics && before is not null)
+                if (stats is not null && state.Statistics && before is not null)
                 {
-                    var after = await SessionStatistics.CaptureAsync(exec, s, ct).ConfigureAwait(false);
+                    var after = await SessionStatistics.CaptureAsync(stats, exec, s, ct).ConfigureAwait(false);
                     if (after is not null)
                     {
-                        lines.AddRange(SessionStatistics.Describe(SessionStatistics.Diff(before, after)));
+                        lines.AddRange(SessionStatistics.Describe(stats, SessionStatistics.Diff(before, after)));
                     }
 
                     before = after;

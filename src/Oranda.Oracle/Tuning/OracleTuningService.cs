@@ -6,6 +6,7 @@ using Oranda.Core.Catalog;
 using Oranda.Core.Composition;
 using Oranda.Core.Connection;
 using Oranda.Core.Execution;
+using Oranda.Core.Execution.SqlPlus;
 using Oranda.Core.History;
 using Oranda.Core.Language;
 using Oranda.Core.Monitoring;
@@ -246,7 +247,7 @@ internal sealed partial class OracleTuningService : ITuningService
         for (var i = 0; i < iterations; i++)
         {
             ct.ThrowIfCancellationRequested();
-            var before = await SessionStatistics.CaptureAsync(_execution, s, ct);
+            var before = await SessionStatistics.CaptureAsync(OracleSessionStatistics.Source, _execution, s, ct);
 
             var sw = Stopwatch.StartNew();
             var result = await _execution.ExecuteAsync(s, stmt, binds,
@@ -261,7 +262,7 @@ internal sealed partial class OracleTuningService : ITuningService
                 planHash = await PreviousPlanHashAsync(s, ct);
             }
 
-            var after = await SessionStatistics.CaptureAsync(_execution, s, ct);
+            var after = await SessionStatistics.CaptureAsync(OracleSessionStatistics.Source, _execution, s, ct);
             if (before is not null && after is not null)
             {
                 var diff = SessionStatistics.Diff(before, after);
