@@ -7,7 +7,7 @@
 
 - `Oranda.Tibero` 는 컴파일 때 `Tibero.DataAccess` 를 참조하지 않는다. 공개본·CI·사내 빌드가 같은 코드다(`#if TIBERO_DRIVER`·`ORANDA_TIBERO_FEED`·`OrandaTiberoDriver` 없음).
 - 사용자가 설정에서 `Tibero.DataAccess.dll`(또는 폴더·`.nupkg`) 위치를 지정한다. 개발·IT·WSL 은 환경 변수 `ORANDA_TIBERO_DRIVER` 가 설정보다 먼저다.
-- 앱 시작 때는 읽지 않는다. 첫 Tibero 접속·접속 시험·설정 [확인] 중 먼저 오는 때 읽는다. 한 프로세스에서 어셈블리는 한 번만 올린다(올린 뒤 바뀐 경로는 「다시 시작하면 적용」). 올리기 전 실패(지정 안 함·파일 없음·검사 거절)는 기억하지 않는다 — 사용자가 경로를 고치면 다음 `Require()` 가 다시 해석한다.
+- 앱 시작 때는 읽지 않는다. 첫 Tibero 접속·접속 시험·설정 [확인] 중 먼저 오는 때 읽는다. 한 프로세스에서 어셈블리는 한 번만 올린다(올린 뒤 바뀐 경로는 「다시 시작하면 적용」). 올리기 전 실패(지정 안 함·파일 없음·검사 거절)는 기억하지 않는다 — 사용자가 경로를 고치면 다음 `Require(paths)` 가 다시 해석한다.
 - 드라이버 형식을 아는 코드는 `src/Oranda.Tibero/Driver/` 의 어댑터 `TiberoDriver` 뿐이다. 읽은 직후 아래 2장의 모든 멤버를 컴파일된 식으로 묶고, 하나라도 없으면 「쓸 수 없음(없는 멤버 이름)」이다. `Unverified` 판(1.1.35 아닌 1.x)에도 같은 규칙이다(일부만 묶인 어댑터는 없다).
 
 ## 2. 어댑터 API 표 (`Oranda.Tibero.Driver`, 모두 `internal`)
@@ -18,12 +18,12 @@
 
 | 멤버 | 형식 | 드라이버 쪽 | 쓰는 곳 |
 |---|---|---|---|
-| `TiberoDriver.Require()` | `static TiberoDriver` | 로더(3장): 경로 해석 → 검사 → 로드 → `Bind`. 처음 한 번, 그 뒤 같은 인스턴스 | 세션 관리자(tb-session S1′), 접속 시험(DV5)만 |
+| `TiberoDriver.Require(IDriverPathSource? paths)` | `static TiberoDriver` | 로더(3장): 경로 해석(`ORANDA_TIBERO_DRIVER` → `paths.GetPath(Dbms.Tibero)`) → 검사 → 로드 → `Bind`. 처음 한 번, 그 뒤 같은 인스턴스. `paths` = 부르는 서비스가 생성자 선택 인자 `IDriverPathSource? paths = null` 로 받은 것(App 이 DU1 에서 등록, 없으면 환경 변수만) | 세션 관리자(tb-session S1′), 접속 시험(DV5)만 |
 | `TiberoDriver.Bind(Assembly driver)` | `static TiberoDriver` | 넘긴 어셈블리에서 모든 멤버를 묶는다. 실패 = `TiberoDriverBindException` | 로더, 시험(`FakeDriverHost`) |
 | `TiberoDriver.NotSpecifiedMessage` | `const string` | — | 「Tibero 드라이버가 지정되지 않았습니다. 설정 > 드라이버에서 TDP.NET Core(Tibero.DataAccess.dll) 위치를 지정하세요.」 지금의 `NoDriverMessage` 두 개를 대신한다 |
 | `Version` | `Version` | `AssemblyName.Version` | 상태 줄·로그 |
 | `Location` | `string` | `Assembly.Location` | 상태 줄 |
-| `TiberoDriverUnavailableException` | `InvalidOperationException` 파생, `DriverCheck Check` | `Require()` 가 못 쓸 때. `Message` = 사용자에게 보일 문장(`Check.Reason`, 지정 안 함이면 `NotSpecifiedMessage`). `Check.IsUsable` 은 늘 false | 세션 관리자·접속 시험이 잡아 실패 결과로 |
+| `TiberoDriverUnavailableException` | `InvalidOperationException` 파생, `DriverCheck Check` | `Require(paths)` 가 못 쓸 때. `Message` = 사용자에게 보일 문장(`Check.Reason`, 지정 안 함이면 `NotSpecifiedMessage`). `Check.IsUsable` 은 늘 false | 세션 관리자·접속 시험이 잡아 실패 결과로 |
 | `TiberoDriverBindException` | `TiberoDriverUnavailableException` 파생, `IReadOnlyList<string> MissingMembers` | 없는 멤버 이름(`TiberoCommand.BindByName` 꼴) 전부. `Check.State = DriverState.Unusable`(DU0 에 값 추가 요청), `Reason` = 「이 드라이버는 쓸 수 없습니다(없는 멤버: …)」. 그 뒤 `IDbmsDriverStatus.Current` 도 이 결과 | 로더, DV6 실제 드라이버 시험 |
 
 ### 2.2 연결·명령
@@ -138,8 +138,8 @@
 | 부품 | 일 |
 |---|---|
 | `TiberoDriverLocator` | 경로 해석: `ORANDA_TIBERO_DRIVER` → `IDriverPathSource.GetPath(Dbms.Tibero)`. 파일이면 그 dll, 폴더면 그 안 `Tibero.DataAccess.dll` → 없으면 `lib/net5.0/Tibero.DataAccess.dll`. `.nupkg` 는 `lib/net5.0/Tibero.DataAccess.dll` 을 `%LOCALAPPDATA%/Oranda/drivers/tibero/<sha256>/` 에 풀어 그 파일을 쓴다 |
-| `TiberoDriverLoader.Check(path)` | `System.Reflection.Metadata` `PEReader` 로 메타데이터만 읽는다(올리지 않음, 파일을 열어 둔 채 두지 않음). 관리 코드(ILOnly 아니면 `WrongAssembly`) → 어셈블리 이름이 정확히 `Tibero.DataAccess`(아니면 `WrongAssembly`, `Oracle.DataAccess` 포함) → `mscorlib` 참조면 `FrameworkBuild`(「.NET Framework 용 TDP.NET(2.x)은 쓸 수 없습니다. TDP.NET Core 1.1.x 가 필요합니다.」) → 메이저 1 이 아니면 `WrongAssembly` → 1.1.35 = `Ok`, 그 밖 1.x = `Unverified`(「시험하지 않은 버전」 경고, 허용) |
-| `TiberoDriverLoader.Load(AssemblyLoadContext alc, string path)` | `alc.LoadFromAssemblyPath` 한 번 + `alc.Resolving` 에 드라이버 폴더 안 같은 파일 이름 대응을 예비로 건다 → `TiberoDriver.Bind`. 앱은 `AssemblyLoadContext.Default`, 시험은 새 ALC |
+| `TiberoDriverLoader.Inspect(path)` | `System.Reflection.Metadata` `PEReader` 로 메타데이터만 읽는다(올리지 않음, 파일을 열어 둔 채 두지 않음). 경로는 앞뒤 공백·따옴표를 걷고 `~`·`%VAR%` 를 펼친다. 관리 코드(ILOnly 아니면 `WrongAssembly`) → 어셈블리 이름이 정확히 `Tibero.DataAccess`(아니면 `WrongAssembly`, `Oracle.DataAccess` 포함) → `mscorlib` 참조면 `FrameworkBuild`(「.NET Framework 용 TDP.NET(2.x)은 쓸 수 없습니다. TDP.NET Core 1.1.x 가 필요합니다.」) → 메이저 1 이 아니면 `WrongAssembly` → 1.1.35 = `Ok`, 그 밖 1.x = `Unverified`(「시험하지 않은 버전」 경고, 허용) |
+| `TiberoDriverLoader.Load(AssemblyLoadContext alc, string path)` | `alc.LoadFromAssemblyPath` 한 번 + `alc.Resolving` 예비 처리기: 드라이버가 직접 참조하는 이름만, 드라이버 폴더의 같은 이름·요청 이상 버전 파일로 찾아 준다(앱의 다른 실패에 끼어들지 않음). 한 컨텍스트에 한 폴더 → `TiberoDriver.Bind`. 앱은 `AssemblyLoadContext.Default`, 시험은 새 ALC |
 | `TiberoDriverStatus` | `IDbmsDriverStatus`(Core, DU0) 구현, `[OrandaService(typeof(IDbmsDriverStatus), Dbms = Dbms.Tibero)]`. `Check(path)`·`Current`·`ConfiguredPath`·`RestartRequired`. 지금의 `TiberoDriverInfo` 를 대신한다 |
 
 검사 결과 형식 = Core `DriverCheck(State, Version, Path, Reason)`, `DriverState { Ok, Missing, NotFound, WrongAssembly, FrameworkBuild, Unverified, Unusable }`(DU0. `Unusable` = 검사는 통과했으나 올린 뒤 멤버 묶기 실패, 이 문서가 DU0 에 추가 요청). 3장 부품은 모두 `src/Oranda.Tibero/Driver/` 에 둔다.
@@ -148,7 +148,7 @@
 
 1. 드라이버 형식 이름(`TiberoConnection`·`TiberoCommand`·`TiberoParameter`·`TiberoDataReader`·`TiberoException`·`TbOdpException`·`TiberoDecimal`·`TiberoTimeStamp*`·`TiberoClob`·`TiberoBlob`·`TiberoRefCursor`·`INullable` 등)과 `TiberoDbType` 값 이름, 형식 이름 문자열·리플렉션·컴파일된 식은 `src/Oranda.Tibero/Driver/` 에만 둔다.
 2. `Sessions`·`Execution`·`Results`·`Grid`·`Connection` 은 `System.Data.Common`(`DbConnection`·`DbCommand`·`DbParameter`·`DbDataReader`·`DbException`)과 2장의 어댑터 멤버만 쓴다. 예외 형식 판정도 `TryReadError` 로 한다(형식 이름 비교 금지).
-3. `TiberoDriver.Require()` 는 세션 관리자와 접속 시험만 부른다. Tibero 세션 형식(tb-session 소유)은 연 때 받은 어댑터를 `internal TiberoDriver Driver { get; }` 로 들고 있고, 실행·결과 코드는 거기서 받아 쓴다. 정적 도우미(`TiberoValues`·`TiberoBindBuilder` 등)는 `TiberoDriver` 를 첫 인자로 받는다. 정적 `Require()` 를 여기저기서 부르지 않는다 → 시험이 가짜 어댑터를 넘길 수 있다.
+3. `TiberoDriver.Require(paths)` 는 세션 관리자와 접속 시험만 부른다. Tibero 세션 형식(tb-session 소유)은 연 때 받은 어댑터를 `internal TiberoDriver Driver { get; }` 로 들고 있고, 실행·결과 코드는 거기서 받아 쓴다. 정적 도우미(`TiberoValues`·`TiberoBindBuilder` 등)는 `TiberoDriver` 를 첫 인자로 받는다. 정적 `Require(paths)` 를 여기저기서 부르지 않는다 → 시험이 가짜 어댑터를 넘길 수 있다.
 4. `[OrandaService]` 생성자·정적 초기화에서 드라이버를 읽지 않는다(시작 때 안 읽음).
 5. 어댑터 인스턴스는 바뀌지 않고 여러 스레드에서 써도 된다. 드라이버의 `*Async` 는 동기로 돈다 → 호출자가 `Task.Run` 으로 옮긴다(exec 4장).
 6. 아키텍처 시험(기계로 막는 것): `Tibero.DataAccess` 어셈블리·패키지 참조 없음(csproj·props 와 `Oranda.Tibero` 의 참조 어셈블리 목록), 드라이버 이름공간 `Tibero.DataAccess.Client`·`Tibero.DataAccess.Types`·`tbcomm.` 이 `src/**/*.cs` 의 코드(주석 뺀 줄)에서 `src/Oranda.Tibero/Driver/` 밖에 없음(`"Tibero.DataAccess.dll"` 같은 파일 이름은 걸리지 않음), 빌드 출력에 `Tibero.DataAccess.dll` 없음, `src/**` 가 `Oranda.Tibero.FakeDriver` 를 참조하지 않음, `TIBERO_DRIVER` 기호가 쓰이지 않음. 1번의 형식 이름(이름공간 없이 쓴 `TiberoDbType` 값 이름 등)은 기계로 다 막지 못한다 → 리뷰로 본다.
