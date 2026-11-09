@@ -14,6 +14,7 @@ namespace Oranda.App.Tests.Features.Roles;
 /// TSK-07-02: 게이트 해석 규칙 표(TRD 10.5 — Role 조합·덮어쓰기·겹침·조회 전용·Requires·StartupBound·모르는 id), 꼬리표 전수(TRD 10.2·10.11),
 /// <c>SettingsChanged("features")</c> 재해석, <c>feature.&lt;id&gt;</c> 문맥 키.
 /// </summary>
+[Collection(Oranda.App.Tests.Features.PlsqlWorkspace.PlsqlStatics.Name)] // 정적 컴파일 오류 창(CompileErrorsViewModel.Current)을 쓴다
 public sealed class FeatureGateTests
 {
     private static FeaturesSettings Roles(params string[] roles) => new() { Roles = roles };

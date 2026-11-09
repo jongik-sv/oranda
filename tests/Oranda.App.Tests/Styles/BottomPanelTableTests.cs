@@ -16,6 +16,7 @@ namespace Oranda.App.Tests.Styles;
 /// <summary>
 /// TSK-13-15 아래 도구 창(메시지·실행 이력·변경 일지·컴파일 오류)의 표 모양: 심각도 아이콘 키, 촘촘한 표 목록·머리글, 아이콘 툴바.
 /// </summary>
+[Collection(Oranda.App.Tests.Features.PlsqlWorkspace.PlsqlStatics.Name)] // 정적 컴파일 오류 창(CompileErrorsViewModel.Current)을 쓴다
 public class BottomPanelTableTests
 {
     private static readonly string[] HistoryActions = ["RerunButton", "ToEditorButton", "DeleteButton", "ClearButton"];

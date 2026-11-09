@@ -15,6 +15,8 @@ using Oranda.Core.Shell;
 namespace Oranda.App.Tests.Features.PlsqlEditor;
 
 /// <summary>TSK-08-01 PL/SQL 소스 편집·컴파일·충돌 확인 시험(글자 도우미·ViewModel·명령 처리기·등록).</summary>
+// 컴파일 결과는 정적 알림(CompileErrorsViewModel.Publish/Current)으로 올라가므로, 다른 시험이 새 창으로 Current 를 바꾸지 않게 직렬 묶음에 둔다.
+[Collection(Oranda.App.Tests.Features.PlsqlWorkspace.PlsqlStatics.Name)]
 public class PlsqlEditorTests
 {
     private static readonly DbObjectRef Body = new("SCOTT", "PK", "PACKAGE BODY");

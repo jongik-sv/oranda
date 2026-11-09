@@ -16,6 +16,7 @@ namespace Oranda.App.Tests.Features.ObjectDetail;
 /// TSK-14-23 Java 객체 컴파일·적용: 객체 상세의 「다시 컴파일」(확인 → ALTER JAVA … 를 실행 엔진으로 → ALL_ERRORS 오류 → 상세·브라우저 새로 읽기),
 /// JVM 없음·읽기 전용 접속이면 막고 이유, Java 소스의 「편집기로 열기」, SQL 편집기에서 실행한 CREATE JAVA SOURCE 의 오류 읽기 판정. 가짜 메타데이터·엔진(Oracle 없음).
 /// </summary>
+[Collection(Oranda.App.Tests.Features.PlsqlWorkspace.PlsqlStatics.Name)] // 정적 컴파일 오류 창(CompileErrorsViewModel.Current)을 쓴다
 public class JavaCompileTests
 {
     private static readonly DbObjectRef Source = new("SCOTT", "com/example/Hello", "JAVA SOURCE");
