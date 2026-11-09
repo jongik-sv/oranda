@@ -981,5 +981,7 @@
   "Connection.driver.band.unusable": "The Tibero driver cannot be used.",
   "Connection.driver.band.unusableReason": "The Tibero driver cannot be used: {0}",
   "Connection.driver.band.assign": "Set Driver…",
-  "Catalog.text.unavailable": "This feature is not available on {0}: there is no SQL for it on this server."
+  "Catalog.text.unavailable": "This feature is not available on {0}: there is no SQL for it on this server.",
+  "Connection.readOnly.tiberoNote": "The Tibero server does not block writes in a read-only transaction. The app blocks write statements, but to be sure, use an account that has only SELECT privileges.",
+  "Policy.readOnlyTiberoForUpdate": "The Tibero server does not block writes even in a read-only transaction, so SELECT … FOR UPDATE, which locks rows, is not run on a read-only connection."
 }

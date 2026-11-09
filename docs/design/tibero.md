@@ -41,6 +41,7 @@
 | SYSDBA 등 인증 모드 | 다르게 | Tibero 권한 체계 확인 필요 |
 | SQL 실행·바인드·취소 | 됨 | `TiberoCommand.Cancel()`, `CommandTimeout` |
 | DBMS_OUTPUT | 됨(확인 필요) | |
+| 읽기 전용 접속 | 앱 관문만 막음 | 6.2.15 실측: 서버가 읽기 전용 트랜잭션을 지키지 않는다(최상위 `SET TRANSACTION READ ONLY` = -7001, PSM 블록 안 `ReadOnlyBlock` 은 받지만 쓰기를 막지 않음). 그래서 쓰기는 앱 정책 관문이 서버로 보내기 전에 막고, 행을 잠그는 `SELECT … FOR UPDATE`(OF·NOWAIT·WAIT·SKIP LOCKED 포함)도 쓰기로 보고 막는다(Oracle 은 서버가 ORA-01456 으로 막아 그대로). 접속 대화상자가 읽기 전용을 켠 Tibero 프로필에 안내를 보인다. 권고 = 확실히 막으려면 SELECT 권한만 있는 계정 |
 | 결과 편집(ROWID)·LOB | 확인 필요 | |
 | 스키마 브라우저·객체 상세 | 다르게 | `ALL_TAB_COLUMNS` 는 `ALL_TBL_COLUMNS` 의 동의어 등 뷰 이름 차이 |
 | DDL 추출 | 다르게 | `DBMS_METADATA.GET_DDL` 은 INDEX·TRIGGER 를 받지 않음 → 따로 |

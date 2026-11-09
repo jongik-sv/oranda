@@ -11,7 +11,7 @@ namespace Oranda.Core.Execution;
 /// 정책 관문 규칙(TRD 4.9, SAFE-02·03·07·08). 앱 조립이 등록한다(Core 는 스캔 대상이 아니다). 소유: TSK-06-01.
 /// <list type="number">
 /// <item>(규칙 0) 에이전트 출처: 실효 분류가 Query 가 아니면 거부</item>
-/// <item>읽기 전용 프로필: 질의·트랜잭션 제어·SQL*Plus·EXPLAIN 외 거부</item>
+/// <item>읽기 전용 프로필: 질의·트랜잭션 제어·SQL*Plus·EXPLAIN 외 거부. Tibero 는 서버가 읽기 전용 트랜잭션을 지키지 않아 <c>SELECT … FOR UPDATE</c> 도 거부</item>
 /// <item>조회 전용 Role(D-006, TSK-07-05): 게이트의 <see cref="IFeatureGate.ReadOnlyRole"/> 가 참이면 1번과 같은 기준으로 거부</item>
 /// <item>라이선스: 요구 팩이 프로필 선언(서버 <c>control_management_pack_access</c> 를 알면 그것과 둘 중 낮은 값)보다 높으면 거부</item>
 /// <item>운영 라벨: DML·DDL·PL/SQL 확인(데이터·객체·다른 세션에 영향이 없는 ALTER 는 묻지 않는다, <see cref="IsHarmlessAlter"/>)</item>
@@ -30,6 +30,17 @@ public sealed class ExecutionPolicy : IExecutionPolicy
 
     /// <summary>조회 전용 Role 거부 문구(TRD 10.7.4). <c>{0}</c> = 문장 종류.</summary>
     private static readonly CompositeFormat ReadOnlyRoleDenied = CompositeFormat.Parse(FeatureTexts.ReadOnlyRoleDeniedMessage);
+
+    /// <summary>
+    /// Tibero 읽기 전용 프로필이 <c>SELECT … FOR UPDATE</c> 를 막는 문구. Tibero 6.2.15 는 읽기 전용 트랜잭션(<c>SET TRANSACTION READ ONLY</c>)이
+    /// 서버에서 듣지 않아(최상위 -7001, PSM 블록 안은 받지만 쓰기를 막지 않는다) 행이 실제로 잠기므로 앱 관문이 쓰기로 본다.
+    /// Core 정책 관문은 App 문구 표를 못 읽어 한국어 글자를 두고, 같은 글이 <c>strings-ko.json</c> 의 <see cref="TiberoForUpdateDeniedKey"/> 와 <c>literals-en.json</c> 에 있다.
+    /// </summary>
+    public const string TiberoForUpdateDeniedMessage =
+        "Tibero 는 읽기 전용 트랜잭션에서도 서버가 쓰기를 막지 않아, 행을 잠그는 SELECT … FOR UPDATE 는 읽기 전용 접속에서 실행하지 않습니다.";
+
+    /// <summary><see cref="TiberoForUpdateDeniedMessage"/> 의 문구 키.</summary>
+    public const string TiberoForUpdateDeniedKey = "Policy.readOnlyTiberoForUpdate";
 
     private readonly IFeatureGate? _features;
 
@@ -97,6 +108,19 @@ public sealed class ExecutionPolicy : IExecutionPolicy
         {
             return new PolicyDecision(PolicyDecisionKind.Deny, PolicyRule.ReadOnlyProfile,
                 $"읽기 전용 접속 '{ctx.Profile.Name}' 에서는 {Describe(stmt, kind)} 을(를) 실행할 수 없습니다.");
+        }
+
+        // 1-1. 읽기 전용 프로필 + Tibero: 서버가 읽기 전용 트랜잭션을 지키지 않아 SELECT … FOR UPDATE 가 행을 잠근다. 앱이 쓰기로 본다.
+        //      Oracle 은 서버가 ORA-01456 으로 막으므로 바꾸지 않는다(분류는 DBMS 와 상관없이 Query 그대로).
+        if (ctx.Profile.ReadOnly && ctx.Profile.Dbms == Dbms.Tibero && kind == StatementKind.Query && SelectLocking.HasForUpdate(stmt.Text))
+        {
+            return new PolicyDecision(PolicyDecisionKind.Deny, PolicyRule.ReadOnlyProfile, TiberoForUpdateDeniedMessage);
+        }
+
+        // 1-1b. 조회 전용 Role + Tibero: 같은 이유로 SELECT … FOR UPDATE 를 거부한다(같은 문구, 규칙은 ReadOnlyRole).
+        if (_features?.ReadOnlyRole == true && ctx.Profile.Dbms == Dbms.Tibero && kind == StatementKind.Query && SelectLocking.HasForUpdate(stmt.Text))
+        {
+            return new PolicyDecision(PolicyDecisionKind.Deny, PolicyRule.ReadOnlyRole, TiberoForUpdateDeniedMessage);
         }
 
         // 1-2. 조회 전용 Role(D-006). 게이트 값은 문장마다 다시 읽는다(Role 을 바꾸면 다음 문장부터).

@@ -274,7 +274,12 @@
         </Grid.ColumnDefinitions>
         <TextBlock Grid.Row="0" Text="프록시 사용자" />
         <TextBox x:Name="ProxyBox" Grid.Row="0" Grid.Column="1" Text="{Binding ProxyUser}" PlaceholderText="비워 두면 프록시를 쓰지 않습니다" AutomationProperties.Name="프록시 사용자" />
-        <CheckBox x:Name="ReadOnlyBox" Grid.Row="1" Grid.Column="1" Content="읽기 전용 접속(쓰기 문장 차단)" IsChecked="{Binding ReadOnly}" />
+        <StackPanel Grid.Row="1" Grid.Column="1" Spacing="4">
+          <CheckBox x:Name="ReadOnlyBox" Content="읽기 전용 접속(쓰기 문장 차단)" IsChecked="{Binding ReadOnly}" />
+          <!-- Tibero 는 서버가 읽기 전용 트랜잭션에서 쓰기를 막지 않는다: 켰을 때만 안내한다(문구는 모델이 언어에 맞춰 준다). -->
+          <TextBlock x:Name="ReadOnlyServerNote" Text="{Binding ReadOnlyServerNoteText}" TextWrapping="Wrap" Margin="24,0,0,0"
+                     Foreground="{DynamicResource OrandaWarningForegroundBrush}" IsVisible="{Binding ShowReadOnlyServerNote}" />
+        </StackPanel>
         <TextBlock Grid.Row="2" Text="관리 팩" />
         <ComboBox x:Name="PackBox" Grid.Row="2" Grid.Column="1" HorizontalAlignment="Stretch"
                   ItemsSource="{Binding Packs}" SelectedValueBinding="{ReflectionBinding Value}"

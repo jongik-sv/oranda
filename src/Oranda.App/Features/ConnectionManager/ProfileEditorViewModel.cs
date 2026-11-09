@@ -423,6 +423,7 @@ public sealed partial class ProfileEditorViewModel : ViewModelBase
     partial void OnDbmsChanged(Dbms value)
     {
         RefreshDriverStatus();
+        RaiseReadOnlyNote();
         if (_loading)
         {
             return;
@@ -500,6 +501,29 @@ public sealed partial class ProfileEditorViewModel : ViewModelBase
         {
             base.OnPropertyChanged(new PropertyChangedEventArgs(name));
         }
+    }
+
+    // ---- 읽기 전용 안내(Tibero): Tibero 서버는 읽기 전용 트랜잭션에서 쓰기를 막지 않아 앱의 문장 관문만 막는다 ----
+
+    /// <summary>
+    /// Tibero 프로필에서 읽기 전용을 켰을 때 읽기 전용 칸 아래에 보이는 안내: 서버가 쓰기를 막지 않으니 확실히 막으려면 SELECT 권한만 있는 계정을 쓰라는 말.
+    /// 켜지 않았거나 Oracle(서버가 막는다)이면 보이지 않는다.
+    /// </summary>
+    public bool ShowReadOnlyServerNote => ReadOnly && Dbms == Dbms.Tibero;
+
+    /// <summary>읽기 전용 안내 문구(<see cref="ShowReadOnlyServerNote"/> 일 때만 보인다). 언어는 문구 표를 따른다.</summary>
+    public string ReadOnlyServerNoteText => !ShowReadOnlyServerNote
+        ? string.Empty
+        : UiText.Get(
+            "Connection.readOnly.tiberoNote",
+            "Tibero 는 서버가 읽기 전용 트랜잭션에서 쓰기를 막지 않습니다. 앱이 쓰기 문장을 막지만, 확실히 막으려면 SELECT 권한만 있는 계정을 쓰세요.");
+
+    partial void OnReadOnlyChanged(bool value) => RaiseReadOnlyNote();
+
+    private void RaiseReadOnlyNote()
+    {
+        base.OnPropertyChanged(new PropertyChangedEventArgs(nameof(ShowReadOnlyServerNote)));
+        base.OnPropertyChanged(new PropertyChangedEventArgs(nameof(ReadOnlyServerNoteText)));
     }
 
     /// <summary>편집 시작 때의 프로필(Id·credentialRef·마지막 접속 시각을 이어 받는다). 새 프로필이면 Id 만 새로 발급한 빈 값.</summary>

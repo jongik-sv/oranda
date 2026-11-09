@@ -981,5 +981,7 @@
   "Connection.driver.band.unusable": "쓸 수 없는 Tibero 드라이버입니다.",
   "Connection.driver.band.unusableReason": "쓸 수 없는 Tibero 드라이버입니다: {0}",
   "Connection.driver.band.assign": "드라이버 지정…",
-  "Catalog.text.unavailable": "{0} 서버에서는 이 기능에 쓸 SQL 이 없어 쓸 수 없습니다."
+  "Catalog.text.unavailable": "{0} 서버에서는 이 기능에 쓸 SQL 이 없어 쓸 수 없습니다.",
+  "Connection.readOnly.tiberoNote": "Tibero 는 서버가 읽기 전용 트랜잭션에서 쓰기를 막지 않습니다. 앱이 쓰기 문장을 막지만, 확실히 막으려면 SELECT 권한만 있는 계정을 쓰세요.",
+  "Policy.readOnlyTiberoForUpdate": "Tibero 는 읽기 전용 트랜잭션에서도 서버가 쓰기를 막지 않아, 행을 잠그는 SELECT … FOR UPDATE 는 읽기 전용 접속에서 실행하지 않습니다."
 }
