@@ -92,7 +92,16 @@ internal sealed class MapperFileWatcher : IMapperFileWatcher
         }
     }
 
-    private void OnEvent(object sender, FileSystemEventArgs e) => Changed?.Invoke(this, EventArgs.Empty);
+    // Dispose 뒤에 늦게 도착한 알림(macOS FSEvents 등)은 구독자에게 넘기지 않는다 — 구독자가 이미 정리됐을 수 있고, 스레드 풀 예외는 프로세스를 죽인다.
+    private void OnEvent(object sender, FileSystemEventArgs e)
+    {
+        if (IsDisposed())
+        {
+            return;
+        }
+
+        Changed?.Invoke(this, EventArgs.Empty);
+    }
 
     private void OnError(object sender, ErrorEventArgs e)
     {
@@ -102,6 +111,19 @@ internal sealed class MapperFileWatcher : IMapperFileWatcher
         }
 
         Start();
+        if (IsDisposed())
+        {
+            return;
+        }
+
         Changed?.Invoke(this, EventArgs.Empty); // 놓친 사건이 있을 수 있으니 한 번 다시 본다
+    }
+
+    private bool IsDisposed()
+    {
+        lock (_gate)
+        {
+            return _disposed;
+        }
     }
 }

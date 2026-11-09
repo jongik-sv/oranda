@@ -43,7 +43,7 @@ public static class LockMonitorCommands
 }
 
 /// <summary>「모니터」 메뉴의 Lock 모니터 명령(LK-01~09). 세션 모니터 다음 자리(@15), 창 명령은 Lock 모니터가 열려 있을 때만 보인다.</summary>
-[OrandaCommand(LockMonitorCommands.Open, CommandCategory.Monitor, Enablement = "!noImplMonitor", Icon = "lock", Placements = ["menu:monitor/locks@15"])]
+[OrandaCommand(LockMonitorCommands.Open, CommandCategory.Monitor, Icon = "lock", Placements = ["menu:monitor/locks@15"])]
 [OrandaCommand(LockMonitorCommands.Refresh, CommandCategory.Monitor, Icon = "refresh", When = "lockMonitorFocus", Enablement = "lockMonitorOpen",
     Placements = ["menu:monitor/locks.refresh@300", "context:lockMonitor/refresh@10"])]
 [OrandaCommand(LockMonitorCommands.ToggleAutoRefresh, CommandCategory.Monitor, Icon = "timer", When = "lockMonitorFocus", Enablement = "lockMonitorOpen",

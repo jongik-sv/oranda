@@ -352,6 +352,9 @@ public sealed partial class ProfileEditorViewModel : ViewModelBase
     /// <summary>편집을 시작할 때의 폼 값. 지금 값과 다르면 <see cref="IsDirty"/>.</summary>
     private FormState _baseline;
 
+    /// <summary>필수 표시용 기준 폼 값. 처음엔 <see cref="_baseline"/> 과 같고, 새 접속에서 필드를 건드리기 전 DBMS 를 고르면 그 결과로 다시 잡는다(IsDirty 와 별개).</summary>
+    private FormState _touchBaseline;
+
     private ConnectionAiAccessViewModel? _aiAccess;
 
     /// <summary>「AI 허용 수준」 영역을 보인다: aiTuning 기능이 켜져 있을 때만(앱 밖에서는 보이지 않는다).</summary>
@@ -394,6 +397,7 @@ public sealed partial class ProfileEditorViewModel : ViewModelBase
     {
         DbmsChoices = Choices(available ?? DbmsAvailability.Current);
         _baseline = Capture();
+        _touchBaseline = _baseline;
     }
 
     /// <summary>DBMS 선택지(화면 콤보). 고를 수 있는 DBMS 가 하나뿐이면 콤보를 보이지 않는다(<see cref="ShowDbmsChoice"/>).</summary>
@@ -424,6 +428,11 @@ public sealed partial class ProfileEditorViewModel : ViewModelBase
             return;
         }
 
+        // 새 접속에서 아직 필드를 건드리지 않았다면 DBMS 를 고르는 것(과 그에 딸린 기본 포트·방식 정리)은 필수 표시 면에서 입력으로 치지 않는다 —
+        // 그러지 않으면 Oracle 과 달리 Tibero 를 고르자마자 필수 칸 빨간 표시가 뜬다. IsDirty(저장 켜짐)는 그대로 DBMS 변경도 변경으로 센다.
+        // 이 시점 Capture() 는 이미 새 Dbms 를 담고 있으므로 Dbms 는 비교에서 뺀다.
+        var untouchedNew = IsNew && Password.Length == 0 && (Capture() with { Dbms = _touchBaseline.Dbms }) == _touchBaseline;
+
         var oldDefault = DbmsAvailability.DefaultPort(value == Dbms.Oracle ? Dbms.Tibero : Dbms.Oracle);
         if (Port.Trim() == oldDefault)
         {
@@ -436,6 +445,12 @@ public sealed partial class ProfileEditorViewModel : ViewModelBase
             UseTls = false;
             UseSid = false;
             Auth = AuthMode.Default;
+        }
+
+        if (untouchedNew)
+        {
+            _touchBaseline = Capture();
+            RefreshDerived();
         }
     }
 
@@ -592,7 +607,10 @@ public sealed partial class ProfileEditorViewModel : ViewModelBase
     public bool IsDirty { get; private set; }
 
     /// <summary>필수 칸 표시를 보일지. 새 접속은 무엇이든 입력하기 전까지 빨간 표시를 늘어놓지 않는다.</summary>
-    public bool ShowRequired => !IsNew || IsDirty;
+    public bool ShowRequired => !IsNew || IsTouched;
+
+    /// <summary>필드를 건드렸는지(비밀번호 입력 포함). 새 접속에서 DBMS 만 고른 것은 건드린 것이 아니다.</summary>
+    private bool IsTouched => Password.Length > 0 || Capture() != _touchBaseline;
 
     public bool NameMissing => ShowRequired && IsBlank(Name);
 
@@ -643,6 +661,7 @@ public sealed partial class ProfileEditorViewModel : ViewModelBase
 
         vm._aiAccess = vm.CreateAiAccess(); // 기준 값을 잡기 전에 만들어 둔다(나중에 만들면 저장된 허용 수준이 변경으로 보인다)
         vm._baseline = vm.Capture();
+        vm._touchBaseline = vm._baseline;
         vm.RefreshDerived();
         return vm;
     }

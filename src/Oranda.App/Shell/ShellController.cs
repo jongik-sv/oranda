@@ -319,21 +319,40 @@ public sealed class ShellController : IShellUi
     private void Present(Window window, bool modal)
     {
         LastWindow = window;
-        if (MainWindow is { IsVisible: true } owner)
+        if (MainWindow is { IsVisible: true } main)
         {
             if (modal)
             {
-                _ = window.ShowDialog(owner);
+                // 모달 창은 지금 앞에 있는 창(접속 관리자 같은 대화상자)을 소유자로 삼는다 — 메인 창을 소유자로 하면 그 대화상자가 가려진다.
+                _ = window.ShowDialog(FrontOwner(main));
             }
             else
             {
-                window.Show(owner);
+                window.Show(main);
             }
         }
         else
         {
             window.Show();
         }
+    }
+
+    /// <summary>
+    /// 모달 창의 소유자: 지금 활성인 보이는 창(메인 창 위에 떠 있는 접속 관리자 등). 명령 팔레트·메인 창이 활성이거나 찾지 못하면 <paramref name="main"/>.
+    /// 팔레트는 곧 닫히는 창이라 소유자로 삼지 않는다(소유자가 닫히면 딸린 창도 닫힌다).
+    /// </summary>
+    private Window FrontOwner(Window main)
+    {
+        if (Application.Current?.ApplicationLifetime is Avalonia.Controls.ApplicationLifetimes.IClassicDesktopStyleApplicationLifetime desktop)
+        {
+            var front = desktop.Windows.LastOrDefault(w => w.IsVisible && w.IsActive);
+            if (front is not null && !ReferenceEquals(front, _palette) && !ReferenceEquals(front, main))
+            {
+                return front;
+            }
+        }
+
+        return main;
     }
 
     private void UpdateDocumentKeys()

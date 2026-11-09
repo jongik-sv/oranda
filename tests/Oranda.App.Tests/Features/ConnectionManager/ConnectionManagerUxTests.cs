@@ -686,6 +686,34 @@ public sealed class ConnectionManagerUxTests
     }
 
     [Fact]
+    public async Task Choosing_tibero_on_an_untouched_new_profile_shows_no_required_marks_like_oracle()
+    {
+        using var fx = new ServiceFixture();
+        var vm = await SeedAsync(fx);
+        await vm.AddNewCommand.ExecuteAsync(null);
+        var e = vm.Editor!;
+
+        e.Dbms = Dbms.Tibero;
+
+        Assert.True(e.IsDirty); // DBMS 변경은 변경으로 남는다(저장 켜짐)
+        Assert.False(e.ShowRequired);
+        Assert.False(e.NameMissing);
+        Assert.False(e.UserMissing);
+        Assert.False(e.HostMissing);
+        Assert.False(e.ServiceMissing);
+
+        e.Dbms = Dbms.Oracle;
+        Assert.False(e.ShowRequired);
+
+        // 무엇이든 입력하면 Oracle 과 똑같이 표시가 뜬다.
+        e.Dbms = Dbms.Tibero;
+        e.Name = "tb";
+        Assert.True(e.ShowRequired);
+        Assert.True(e.UserMissing);
+        Assert.True(e.HostMissing);
+    }
+
+    [Fact]
     public async Task Missing_required_fields_are_flagged_and_disable_connect_and_test()
     {
         using var fx = new ServiceFixture();

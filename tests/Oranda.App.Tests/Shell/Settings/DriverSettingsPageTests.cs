@@ -116,6 +116,21 @@ public sealed class DriverSettingsPageTests
     }
 
     [Fact]
+    public async Task Unusable_with_a_reason_that_already_says_so_is_shown_as_is_without_wrapping()
+    {
+        var (settings, _) = await Create();
+        const string reason = "이 드라이버는 쓸 수 없습니다(없는 멤버: TiberoCommand.BindByName)";
+        var status = new FakeStatus { OnCheck = _ => new DriverCheck(DriverState.Unusable, "1.1.35", Reason: reason) };
+        var page = Page(settings, status);
+
+        page.CheckCommand.Execute(null);
+
+        Assert.Equal(reason, page.StatusText);
+        Assert.False(page.HasStatusDetail);
+        Assert.True(page.StatusIsError);
+    }
+
+    [Fact]
     public async Task The_reason_is_shown_as_a_second_sentence()
     {
         var (settings, _) = await Create();

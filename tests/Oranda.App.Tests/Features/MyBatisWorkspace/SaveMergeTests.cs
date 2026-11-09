@@ -461,11 +461,39 @@ public sealed class SaveMergeTests : IDisposable
     public async Task Real_watcher_reports_an_atomic_replace()
     {
         var path = Write(MapperSamples.EmpMapper);
-        using var watcher = new MapperFileWatcher(path);
-        using var hit = new SemaphoreSlim(0);
-        watcher.Changed += (_, _) => hit.Release();
-        await new Oranda.Platform.MyBatis.MapperFileWriter().WriteAsync(path, Change(MapperSamples.EmpMapper, "COUNT(*)", "COUNT(1)"), MapperFileFormat.Default with { NewLine = "\n" }, CancellationToken.None);
-        Assert.True(await hit.WaitAsync(TimeSpan.FromSeconds(10)), "감시가 바꾸기 사건을 내지 않았다(macOS FSEvents 는 늦을 수 있어 10초를 준다)");
+        // 정리 순서가 중요하다: 늦은 알림(macOS FSEvents)이 이미 Dispose 된 세마포어를 Release 하면 스레드 풀 예외로 시험 호스트가 죽는다.
+        // 그래서 처리기를 떼고 → 감시를 멈춘 뒤에야 세마포어를 정리한다(처리기 안에서도 정리된 뒤의 호출은 삼킨다).
+        var watcher = new MapperFileWatcher(path);
+        var hit = new SemaphoreSlim(0);
+        var active = true;
+        void OnChanged(object? sender, EventArgs e)
+        {
+            try
+            {
+                if (Volatile.Read(ref active))
+                {
+                    hit.Release();
+                }
+            }
+            catch (ObjectDisposedException)
+            {
+                // 정리 뒤에 도착한 알림
+            }
+        }
+
+        watcher.Changed += OnChanged;
+        try
+        {
+            await new Oranda.Platform.MyBatis.MapperFileWriter().WriteAsync(path, Change(MapperSamples.EmpMapper, "COUNT(*)", "COUNT(1)"), MapperFileFormat.Default with { NewLine = "\n" }, CancellationToken.None);
+            Assert.True(await hit.WaitAsync(TimeSpan.FromSeconds(10)), "감시가 바꾸기 사건을 내지 않았다(macOS FSEvents 는 늦을 수 있어 10초를 준다)");
+        }
+        finally
+        {
+            Volatile.Write(ref active, false);
+            watcher.Changed -= OnChanged;
+            watcher.Dispose();
+            hit.Dispose();
+        }
     }
 
     // ---- 닫기 확인 · 명령 ------------------------------------------------------------------------

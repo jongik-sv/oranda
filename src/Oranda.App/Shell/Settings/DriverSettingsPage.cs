@@ -226,6 +226,24 @@ public sealed partial class DriverSettingsPage : ObservableObject
         StatusIsError = check.State is not (DriverState.Ok or DriverState.Unverified or DriverState.Missing);
     }
 
+    /// <summary>
+    /// 「쓸 수 없음({이유})」. 로더가 이미 「…쓸 수 없습니다(없는 멤버: …)」 한 문장으로 준 이유(<c>쓸 수 없</c>·<c>cannot</c>·<c>unusable</c> 이 든 것)는
+    /// 감싸지 않고 그대로 보인다 — 문구가 겹쳐 「쓸 수 없음(이 드라이버는 쓸 수 없습니다(…))」 가 되지 않게.
+    /// </summary>
+    private string DescribeUnusable(string? reason)
+    {
+        var text = reason?.Trim() ?? string.Empty;
+        if (text.Length > 0
+            && (text.Contains("쓸 수 없", StringComparison.Ordinal)
+                || text.Contains("cannot", StringComparison.OrdinalIgnoreCase)
+                || text.Contains("unusable", StringComparison.OrdinalIgnoreCase)))
+        {
+            return text;
+        }
+
+        return string.Format(CultureInfo.CurrentCulture, L("Shell.settings.drivers.state.unusable"), text);
+    }
+
     /// <summary>검사 결과 한 줄(다시 시작 안내와 보조 문장 제외). 시험이 문구를 직접 확인한다.</summary>
     internal string Describe(DriverCheck check) => check.State switch
     {
@@ -234,7 +252,7 @@ public sealed partial class DriverSettingsPage : ObservableObject
         DriverState.FrameworkBuild => L("Shell.settings.drivers.state.framework"),
         DriverState.NotFound => L("Shell.settings.drivers.state.notFound"),
         DriverState.WrongAssembly => L("Shell.settings.drivers.state.wrongAssembly"),
-        DriverState.Unusable => string.Format(CultureInfo.CurrentCulture, L("Shell.settings.drivers.state.unusable"), check.Reason),
+        DriverState.Unusable => DescribeUnusable(check.Reason),
         _ => L("Shell.settings.drivers.state.missing"),
     };
 }
