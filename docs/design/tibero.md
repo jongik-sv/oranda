@@ -52,7 +52,8 @@
 | Lock 모니터 | 다르게 | V$ 뷰 차이 확인 |
 | 트레이스·TKPROF·10053 | 안 됨 | 세션 트레이스: `DBMS_MONITOR` 패키지 없음(6.2.15 실측). TKPROF·10053 은 조사 대상이 아니었다 → 끔 유지, 실측 필요 |
 | 표·열 통계, 자식 커서 | 다르게(6.2.15 실측) | `*_TAB_STATISTICS`·`*_IND_STATISTICS`·`GV$SQL_SHARED_CURSOR` 없음 → `*_TABLES`·`*_INDEXES` 통계 열을 쓴다. `DBMS_STATS` 는 있음. 자식 커서 사유는 끔 |
-| 데이터 복사·내보내기·가져오기 | 됨(대부분 공통) | 오류 번호 분류만 다르게 |
+| 데이터 내보내기·가져오기 | 됨(T5 TI1a) | 값 변환·오류 분류만 다르게 |
+| 데이터 복사 | 있지만 꺼짐(T5) | 실행기·대량 실행·방언 모두 있으나 등록 안 함 — 두 번째 계정 복사 IT 뒤 켬. 같은 계정 안 복사는 Core 가 막음. 켜기 전 남은 일 = [tibero-driver-transfer.md](tibero-driver-transfer.md) 4장 |
 | 플래시백 조회 | 확인 필요 | |
 | Java 저장 소스 | 안 됨(끔 유지, 실측 필요) | `DBMS_JAVA`·`*_JAVA_CLASSES` 등은 있으나 `*_JAVA_DERIVATIONS`·`*_JAVA_IMPLEMENTS`·`*_JAVA_INNERS` 없음, `DBMS_JAVA.SHORTNAME` 은 빈 값(6.2.15 실측). JAVA SOURCE 를 만들고 컴파일하는 것은 못 쟀다 |
 | MyBatis 작업 공간 | 됨 | DB 와 무관한 부분 공통 |

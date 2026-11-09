@@ -246,3 +246,16 @@ Oracle 과 같음. **실패한 DDL 도 커밋한다** → 복사 도중 DDL(트�
 | 읽기 전용 프로필 | `BEGIN ROLLBACK; SET TRANSACTION READ ONLY; END;` 성공, INSERT 거부(ReadOnlyProfile) | 방언과 같은 글만 통과 |
 | TIMESTAMP(9) 배열 | `TO_TIMESTAMP(:C, '… .FF9')` 9자리 됨(FF7 서식도 9자리 글자를 받음) | **FF9**(3.10 ② 의 FF7 대신) |
 | 꺼진 형식 후보(측정만) | BINARY_FLOAT/DOUBLE `TO_BINARY_DOUBLE` 쓰기 됨, 'Infinity' -5074, **읽기 GetValue 가 음수를 틀림**(-2.25 → -1.8749999). TZ `TO_TIMESTAMP_TZ` 배열·스칼라·되읽기 됨. LTZ 되읽기 기준 시간대 불명. INTERVAL YM/DS `TO_YMINTERVAL`/`TO_DSINTERVAL` 음수·나노초까지 됨. LONG 쓰기 됨·읽기 GetString 빈 글자. LONG RAW 4B 쓰기 → 72B 로 읽힘 | **INTERVAL YM/DS 만 켬**(TB1 9). BINARY_*·LONG·LONG RAW = 읽기 틀림이라 끔(결과 격자 읽기 고침은 R1x), TZ = 지역 이름·음수 분 오프셋 미측정, LTZ = 의미 불명으로 끔 |
+
+## 4. T5 마감 상태 (T5-9, 2026-11-10)
+
+- **켜진 것**: 내보내기·가져오기·정의서(TI1a 키 등록). 결과 격자·복사 읽기의 BINARY_FLOAT/DOUBLE·LONG·LONG RAW 읽기 고침(R1x, values.md 3장).
+- **있지만 꺼진 것 = Tibero 데이터 복사**: 대량 실행(`TiberoBulkExecutionService`)·값 코덱(`TiberoBulkValueCodec`)·방언(`TiberoCopyDialect`)·사전 점검 방언·다시 만들기 단계·실행기/사전 점검 하위 형식(`TiberoCopyRunner`·`TiberoCopyPrecheckService`)이 모두 있으나 어느 것도 `[OrandaService]` 로 등록하지 않았다. 이유: 같은 계정 안 복사는 Core 가 막고(같은 DB·같은 소유자, `TiberoCopySameAccountIt` 로 확인), 다른 계정으로의 실제 복사를 잴 두 번째 Tibero 계정이 시험 서버에 없다(결정65). 화면은 「Tibero 복사는 아직 꺼져 있음」으로 남는다(TU1).
+- **켜기 전에 할 일** (두 번째 계정 `ORANDA_IT_TIBERO_USER2`·`PASSWORD2` 가 생기면):
+  1. 실제 복사 IT(실행기 경로: 다중 배치·배치 실패 뒤 한 행씩·실패 행 재시도·4000자 넘는 CLOB·1 MB BLOB, Q7·Q8) → 녹색이면 대량 실행·실행기·사전 점검을 `Dbms.Tibero` 키로 등록.
+  2. CopyRunner 안내 글의 Oracle 번호 고정(ORA-01555·02449·24344) → 방언 메시지로.
+  3. Tibero 드라이버의 `DbException` 이 아닌 클라이언트 오류를 `CopyErrors` 가 놓치는지 확인·분류.
+  4. 대량 실행 중 취소: 우리 취소 뒤 TBR-12040 이 OperationCanceledException 으로 이어지는 경로 확인.
+  5. 다시 만들기(Recreate) 차단 해제는 실행기 복사 IT 에서 FK `ADD … ENABLE NOVALIDATE`·휴지통 되살리기를 잰 뒤(TB4).
+  6. 쓰기 형식 늘리기 후보(3.11 측정): TIMESTAMP WITH TIME ZONE(지역 이름·음수 분 오프셋 측정 뒤), BINARY_FLOAT/DOUBLE(쓰기 됨, 'Infinity' 글자 대안 필요).
+- **다른 backlog(조정 등록)**: 스키마 표를 못 읽을 때 결과 격자가 모든 열을 GetString 으로 읽음(실서버에서 본 적 없음), Oracle `CopyCrossOwnerTests` 가 같은 DB 가드 앞에서 멈출 수 있음(미확인).
