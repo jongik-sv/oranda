@@ -529,7 +529,7 @@ public sealed partial class PlanViewModel : ToolPanelViewModelBase, IDisposable
     {
         ArgumentNullException.ThrowIfNull(session);
         ArgumentNullException.ThrowIfNull(statement);
-        await RunAsync("예상 계획", async plans => (await plans.ExplainAsync(session, statement, ct).ConfigureAwait(false), "예상"), session.Profile.Dbms);
+        await RunAsync("예상 계획", async plans => (await plans.ExplainAsync(session, statement, ct).ConfigureAwait(false), "예상"), session, ct);
     }
 
     /// <summary>커서(sql_id·child)의 실제 계획을 형식 옵션대로 읽는다.</summary>
@@ -540,7 +540,7 @@ public sealed partial class PlanViewModel : ToolPanelViewModelBase, IDisposable
         var format = BuildFormat();
         LastCursor = cursor;
         LastSession = session;
-        await RunAsync("실제 계획", async plans => (await plans.GetCursorPlanAsync(session, cursor, format, ct).ConfigureAwait(false), $"실제({format})"), session.Profile.Dbms);
+        await RunAsync("실제 계획", async plans => (await plans.GetCursorPlanAsync(session, cursor, format, ct).ConfigureAwait(false), $"실제({format})"), session, ct);
     }
 
     /// <summary>입력칸의 sql_id 로 실제 계획을 읽는다.</summary>
@@ -727,7 +727,7 @@ public sealed partial class PlanViewModel : ToolPanelViewModelBase, IDisposable
         return $", 가장 비싼 단계 Id {plan.Steps[metrics.HottestIndex].Id}({basis} {PlanRowItem.Percent(share)})";
     }
 
-    private async Task RunAsync(string what, Func<IExecutionPlanService, Task<(CorePlan Plan, string Kind)>> run, Oranda.Core.Connection.Dbms? dbms = null)
+    private async Task RunAsync(string what, Func<IExecutionPlanService, Task<(CorePlan Plan, string Kind)>> run, ISession? session = null, CancellationToken ct = default)
     {
         try
         {
@@ -735,9 +735,25 @@ public sealed partial class PlanViewModel : ToolPanelViewModelBase, IDisposable
                 ?? throw new InvalidOperationException("실행 계획 서비스가 없습니다.");
             var (plan, kind) = await run(plans).ConfigureAwait(false);
             string? actualsNotice = null;
-            if (dbms is { } d)
+            if (session is not null)
             {
-                plan = PlanActuals.Normalize(plan, d, out actualsNotice); // Tibero 는 통계를 안 모으면 실제 열이 0 이다 — 0 을 실제 값처럼 보이지 않게
+                var dbms = session.Profile.Dbms;
+                bool? gatherStats = null;
+                if (PlanActuals.NeedsEnvironmentCheck(plan, dbms)
+                    && _services?.GetService(typeof(Oranda.Core.Tuning.ITuningService)) is Oranda.Core.Tuning.ITuningService tuning)
+                {
+                    // 실제 열이 비었거나 0 뿐인 Oracle 아닌 계획만 환경 값(gather_sql_plan_stat)을 한 번 물어 근거로 삼는다. 못 읽으면 0 값 추정 그대로.
+                    try
+                    {
+                        gatherStats = PlanActuals.GatherStatsFrom(await tuning.GetTuningEnvironmentAsync(session, ct).ConfigureAwait(false));
+                    }
+                    catch (Exception e) when (e is not OperationCanceledException and not OutOfMemoryException)
+                    {
+                        gatherStats = null;
+                    }
+                }
+
+                plan = PlanActuals.Normalize(plan, dbms, out actualsNotice, gatherStats); // Tibero 는 통계를 안 모으면 실제 열이 0 이다 — 0 을 실제 값처럼 보이지 않게
             }
 
             PostToUi(() =>
