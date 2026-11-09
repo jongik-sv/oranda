@@ -500,6 +500,9 @@ public sealed partial class DataCopyViewModel : ViewModelBase, IAsyncDisposable
     private ISession? _candidateSession;
     private readonly Dictionary<string, IReadOnlyList<string>> _candidateNames = new(StringComparer.Ordinal);
 
+    // 계정별로 읽는 중인 후보 목록(같은 계정을 두 번 읽지 않는다). 끝나면 _candidateNames 로 옮긴다.
+    private readonly Dictionary<string, Task<IReadOnlyList<string>>> _candidateLoads = new(StringComparer.Ordinal);
+
     // 표 입력 칸에 들어가며 원본 세션을 열어 본 원본(취소해도 같은 원본으로는 다시 묻지 않는다).
     private ConnectionProfile? _candidateTried;
 
@@ -509,14 +512,29 @@ public sealed partial class DataCopyViewModel : ViewModelBase, IAsyncDisposable
     /// </summary>
     public async Task PrepareTableCandidatesAsync(CancellationToken ct = default)
     {
-        if (CurrentJob is null || Run.IsRunning || Editor.Source is not { } source || OpenSourceSession() is not null
-            || (_candidateTried is { } tried && SameSnapshot(tried, source.Profile)))
+        if (CurrentJob is null || Run.IsRunning || Editor.Source is not { } source)
         {
             return;
         }
 
-        _candidateTried = source.Profile;
-        await SourceSessionAsync(ct).ConfigureAwait(true);
+        var session = OpenSourceSession();
+        if (session is null)
+        {
+            if (_candidateTried is { } tried && SameSnapshot(tried, source.Profile))
+            {
+                return;
+            }
+
+            _candidateTried = source.Profile;
+            session = await SourceSessionAsync(ct).ConfigureAwait(true);
+        }
+
+        // 기본 원본 계정의 후보를 미리 읽기 시작한다(첫 글자를 칠 때 이미 읽고 있거나 끝나 있게). 기다리지 않는다.
+        var owner = Editor.SourceOwner.Length > 0 ? Editor.SourceOwner : session?.Profile.User.ToUpperInvariant() ?? string.Empty;
+        if (session is not null && _services.Metadata is { } metadata && owner.Length > 0)
+        {
+            _ = OwnerTableNamesAsync(session, metadata, owner, CancellationToken.None);
+        }
     }
 
     /// <summary>
@@ -576,6 +594,7 @@ public sealed partial class DataCopyViewModel : ViewModelBase, IAsyncDisposable
         {
             _candidateSession = session;
             _candidateNames.Clear();
+            _candidateLoads.Clear();
         }
 
         if (_candidateNames.TryGetValue(owner, out var cached))
@@ -583,18 +602,42 @@ public sealed partial class DataCopyViewModel : ViewModelBase, IAsyncDisposable
             return cached;
         }
 
+        // 읽기는 기다리는 쪽의 취소와 따로 끝까지 간다: 첫 읽기(객체 목록 캐시가 없으면 서버 전체 목록)는 몇 초 걸리는데,
+        // 키를 누를 때마다 자동 완성이 앞 요청을 취소해 읽기가 끝나지 못하고 후보가 끝내 안 나오던 문제를 막는다.
+        if (!_candidateLoads.TryGetValue(owner, out var load))
+        {
+            load = LoadOwnerTableNamesAsync(session, metadata, owner);
+            _candidateLoads[owner] = load;
+        }
+
+        return await load.WaitAsync(ct).ConfigureAwait(true);
+    }
+
+    private async Task<IReadOnlyList<string>> LoadOwnerTableNamesAsync(ISession session, IMetadataProvider metadata, string owner)
+    {
         IReadOnlyList<string> names;
         try
         {
-            var objects = await metadata.ListObjectsAsync(session, new ObjectQuery { Owner = owner, ObjectTypes = CandidateTypes }, ct).ConfigureAwait(true);
+            var objects = await metadata.ListObjectsAsync(session, new ObjectQuery { Owner = owner, ObjectTypes = CandidateTypes }, CancellationToken.None).ConfigureAwait(true);
             names = [.. objects.Select(o => o.Name).Distinct(StringComparer.Ordinal).Order(StringComparer.Ordinal)];
         }
-        catch (Exception e) when (e is not OperationCanceledException)
+        catch (Exception)
         {
-            return []; // 후보를 못 읽어도 이름을 적어 더하는 길은 그대로다(다음 입력에서 다시 읽는다)
+            names = []; // 후보를 못 읽어도 이름을 적어 더하는 길은 그대로다(다음 입력에서 다시 읽는다)
+            if (ReferenceEquals(_candidateSession, session))
+            {
+                _candidateLoads.Remove(owner);
+            }
+
+            return names;
         }
 
-        _candidateNames[owner] = names;
+        if (ReferenceEquals(_candidateSession, session))
+        {
+            _candidateNames[owner] = names;
+            _candidateLoads.Remove(owner);
+        }
+
         return names;
     }
 

@@ -27,15 +27,27 @@ public sealed class FakeMetadataProvider : IMetadataProvider
     public Task<IReadOnlyList<string>> ListSchemasAsync(ISession s, CancellationToken ct) =>
         Task.FromResult<IReadOnlyList<string>>(Schemas);
 
-    public Task<IReadOnlyList<DbObjectRef>> ListObjectsAsync(ISession s, ObjectQuery q, CancellationToken ct)
+    /// <summary>객체 목록 조회 횟수.</summary>
+    public int ListObjectsCalls { get; private set; }
+
+    /// <summary>닫아 두면 객체 목록 조회가 열릴 때까지 끝나지 않는다(느린 첫 조회 흉내). 취소 토큰은 지킨다.</summary>
+    public TaskCompletionSource? ListObjectsGate { get; set; }
+
+    public async Task<IReadOnlyList<DbObjectRef>> ListObjectsAsync(ISession s, ObjectQuery q, CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(q);
+        ListObjectsCalls++;
+        if (ListObjectsGate is { } gate)
+        {
+            await gate.Task.WaitAsync(ct).ConfigureAwait(false);
+        }
+
         var result = Objects
             .Where(o => q.Owner is null || string.Equals(o.Owner, q.Owner, StringComparison.OrdinalIgnoreCase))
             .Where(o => q.ObjectTypes.Count == 0 || q.ObjectTypes.Contains(o.ObjectType, StringComparer.OrdinalIgnoreCase))
             .Take(q.Limit ?? int.MaxValue)
             .ToList();
-        return Task.FromResult<IReadOnlyList<DbObjectRef>>(result);
+        return result;
     }
 
     public Task<TableInfo> GetTableAsync(ISession s, DbObjectRef table, CancellationToken ct) =>

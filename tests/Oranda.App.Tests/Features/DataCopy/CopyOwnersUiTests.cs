@@ -150,6 +150,34 @@ public sealed class CopyOwnersUiTests
     }
 
     [Fact]
+    public async Task First_slow_candidate_read_survives_keystroke_cancels_and_starts_on_focus()
+    {
+        // 첫 후보 읽기(캐시 없으면 서버 전체 목록)가 느릴 때: 키마다 앞 요청이 취소돼도 읽기는 끝까지 가고, 마지막 요청이 그 결과를 받는다.
+        var h = new DataCopyHarness();
+        h.Metadata.Objects.AddRange([new DbObjectRef("APP", "ORDERS", "TABLE"), new DbObjectRef("APP", "ORDER_ITEMS", "TABLE")]);
+        var vm = await h.OpenAsync(TestJobs.Job("느린 첫 읽기"));
+        h.Metadata.ListObjectsGate = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        await vm.PrepareTableCandidatesAsync(); // 입력 칸에 들어가면 세션을 열고 기본 계정 후보를 미리 읽기 시작한다
+        Assert.Equal(1, h.Metadata.ListObjectsCalls);
+
+        using (var typed = new CancellationTokenSource())
+        {
+            var first = vm.TableCandidatesAsync("o", typed.Token);
+            typed.Cancel(); // 다음 글자를 쳐서 앞 요청이 취소됐다
+            await Assert.ThrowsAnyAsync<OperationCanceledException>(() => first);
+        }
+
+        var last = vm.TableCandidatesAsync("ord");
+        Assert.False(last.IsCompleted);
+        h.Metadata.ListObjectsGate.SetResult();
+
+        Assert.Equal(["ORDERS", "ORDER_ITEMS"], await last);
+        Assert.Equal(1, h.Metadata.ListObjectsCalls); // 한 번만 읽었다
+        Assert.Equal(["ORDER_ITEMS"], await vm.TableCandidatesAsync("order_")); // 소문자로 적어도 찾는다
+    }
+
+    [Fact]
     public async Task Cancelled_password_is_not_asked_again_on_every_focus()
     {
         var h = new DataCopyHarness { RefuseOpen = _ => true };
