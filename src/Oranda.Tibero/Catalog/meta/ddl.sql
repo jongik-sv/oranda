@@ -14,8 +14,8 @@
 DECLARE
   l_ddl CLOB;
   l_len NUMBER;
-  l_tail VARCHAR2(32);
-  l_trim VARCHAR2(32);
+  l_tail VARCHAR2(128 CHAR);
+  l_trim VARCHAR2(128 CHAR);
   l_ws NUMBER;
   l_ignored NUMBER := NVL(:storage, 0) + NVL(:segment_attributes, 0) + NVL(:tablespace, 0) + NVL(:dependents, 0);
 BEGIN

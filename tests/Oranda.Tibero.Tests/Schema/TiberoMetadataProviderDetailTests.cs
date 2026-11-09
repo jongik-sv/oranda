@@ -113,15 +113,15 @@ public class TiberoMetadataProviderDetailTests
     }
 
     [Fact]
-    public async Task Ddl_is_not_supported_yet_and_asks_nothing()
+    public async Task Ddl_of_a_type_not_built_yet_is_not_supported_and_asks_nothing()
     {
         var calls = new List<(string Id, IReadOnlyDictionary<string, object?>? Binds)>();
         var provider = new TiberoMetadataProvider(Recording(calls, ById()));
         await using var session = Session();
 
-        var ex = await Assert.ThrowsAsync<NotSupportedException>(() => provider.GetDdlAsync(session, Emp, new DdlOptions(), CancellationToken.None));
+        var ex = await Assert.ThrowsAsync<NotSupportedException>(() => provider.GetDdlAsync(session, new DbObjectRef("SCOTT", "EMP_V", "VIEW"), new DdlOptions(), CancellationToken.None));
 
-        Assert.Equal(TiberoMetadataProvider.DdlNotSupported, ex.Message);
+        Assert.Equal(TiberoMetadataProvider.DdlNotSupported("VIEW"), ex.Message);
         Assert.Empty(calls);
     }
 
