@@ -1,4 +1,3 @@
-using System.Text;
 using Oranda.Core.Metadata;
 using Oranda.Core.Schema;
 using Oranda.Core.Sessions;
@@ -6,8 +5,7 @@ using Oranda.Core.Sessions;
 namespace Oranda.Oracle.Schema;
 
 /// <summary>
-/// DDL 일괄 추출(SCH-10). 객체 목록은 <see cref="IMetadataProvider.ListObjectsAsync"/>, DDL 은 <see cref="IMetadataProvider.GetDdlAsync"/> 를
-/// 객체마다 부른다. 한 객체가 실패해도 나머지는 계속하고 결과 목록에 오류를 남긴다. 상태를 바꾸지 않는 읽기 작업이다.
+/// Oracle DDL 일괄 추출(SCH-10). 흐름·파일 쓰기·이름 바꾸기는 Core <see cref="DdlBulkExport"/> 에 있고, 여기서는 Oracle 기본 유형 목록만 정한다.
 /// </summary>
 public static class DdlBulkExporter
 {
@@ -18,129 +16,13 @@ public static class DdlBulkExporter
         "PACKAGE", "PACKAGE BODY", "TYPE BODY", "TRIGGER",
     ];
 
-    public static async Task<DdlExtractResult> ExtractAsync(IMetadataProvider meta, ISession session, DdlExtractRequest request,
-                                                            IProgress<(int Done, int Total)>? progress, CancellationToken ct)
-    {
-        ArgumentNullException.ThrowIfNull(meta);
-        ArgumentNullException.ThrowIfNull(session);
-        ArgumentNullException.ThrowIfNull(request);
+    public static Task<DdlExtractResult> ExtractAsync(IMetadataProvider meta, ISession session, DdlExtractRequest request,
+                                                      IProgress<(int Done, int Total)>? progress, CancellationToken ct) =>
+        DdlBulkExport.ExtractAsync(meta, session, request, DefaultTypes, progress, ct);
 
-        var types = request.ObjectTypes.Count == 0 ? DefaultTypes : request.ObjectTypes;
-        var listed = request.Objects ?? await meta.ListObjectsAsync(session, new ObjectQuery
-        {
-            Owner = request.Owner,
-            ObjectTypes = [.. types],
-            NamePattern = request.NamePattern,
-            InvalidOnly = request.InvalidOnly,
-        }, ct);
+    /// <inheritdoc cref="DdlBulkExport.ApplyRenames"/>
+    public static string ApplyRenames(string ddl, IReadOnlyList<DdlRename> renames) => DdlBulkExport.ApplyRenames(ddl, renames);
 
-        var order = types.Select((t, i) => (t, i)).ToDictionary(x => x.t, x => x.i, StringComparer.Ordinal);
-        var objects = listed
-            .OrderBy(o => order.GetValueOrDefault(o.ObjectType, int.MaxValue))
-            .ThenBy(o => o.Name, StringComparer.Ordinal)
-            .ToList();
-
-        var items = new List<DdlExtractItem>();
-        var ddls = new List<(DbObjectRef Ref, string Ddl)>();
-        for (var i = 0; i < objects.Count; i++)
-        {
-            ct.ThrowIfCancellationRequested();
-            var obj = objects[i];
-            try
-            {
-                var ddl = await meta.GetDdlAsync(session, obj, request.Ddl, ct);
-                ddls.Add((obj, ApplyRenames(ddl, request.Renames)));
-                items.Add(new DdlExtractItem(obj, true, null));
-            }
-            catch (OperationCanceledException)
-            {
-                throw;
-            }
-            catch (Exception ex)
-            {
-                items.Add(new DdlExtractItem(obj, false, ex.Message.ReplaceLineEndings(" ")));
-            }
-
-            progress?.Report((i + 1, objects.Count));
-        }
-
-        var files = await WriteAsync(request, ddls, ct);
-        return new DdlExtractResult(items, files);
-    }
-
-    /// <summary>따옴표 식별자 이름 바꾸기. 긴 이름부터 바꿔 겹침을 피한다.</summary>
-    public static string ApplyRenames(string ddl, IReadOnlyList<DdlRename> renames)
-    {
-        ArgumentNullException.ThrowIfNull(ddl);
-        if (renames is null || renames.Count == 0)
-        {
-            return ddl;
-        }
-
-        // 한 번에 바꾸려고 자리 표시 문자열을 거치지 않고 정규식으로 한 번만 훑는다(바꾼 결과가 다시 바뀌지 않게).
-        var map = renames.Where(r => !string.IsNullOrEmpty(r.From)).GroupBy(r => r.From, StringComparer.Ordinal)
-            .ToDictionary(g => g.Key, g => g.Last().To, StringComparer.Ordinal);
-        if (map.Count == 0)
-        {
-            return ddl;
-        }
-
-        var pattern = "\"(" + string.Join('|', map.Keys.OrderByDescending(k => k.Length).Select(System.Text.RegularExpressions.Regex.Escape)) + ")\"";
-        return System.Text.RegularExpressions.Regex.Replace(ddl, pattern, m => "\"" + map[m.Groups[1].Value] + "\"");
-    }
-
-    /// <summary>파일 이름으로 못 쓰는 글자를 <c>_</c> 로.</summary>
-    public static string SafeFileName(string name)
-    {
-        var invalid = Path.GetInvalidFileNameChars();
-        var sb = new StringBuilder(name.Length);
-        foreach (var c in name)
-        {
-            sb.Append(Array.IndexOf(invalid, c) >= 0 ? '_' : c);
-        }
-
-        return sb.Length == 0 ? "_" : sb.ToString();
-    }
-
-    private static async Task<IReadOnlyList<string>> WriteAsync(DdlExtractRequest request, List<(DbObjectRef Ref, string Ddl)> ddls, CancellationToken ct)
-    {
-        if (ddls.Count == 0)
-        {
-            return [];
-        }
-
-        Directory.CreateDirectory(request.OutputDirectory);
-        var utf8 = new UTF8Encoding(false);
-        var files = new List<string>();
-
-        if (request.Layout == DdlExtractLayout.SingleFile)
-        {
-            var owner = Rename(request.Owner, request.Renames);
-            var path = Path.Combine(request.OutputDirectory, SafeFileName(owner) + ".sql");
-            var sb = new StringBuilder();
-            sb.Append("-- DDL extract: ").Append(owner).Append(", ").Append(ddls.Count).AppendLine(" objects");
-            foreach (var (obj, ddl) in ddls)
-            {
-                sb.AppendLine().Append("-- ").Append(obj.ObjectType).Append(' ').AppendLine(Rename(obj.Name, request.Renames)).AppendLine(ddl);
-            }
-
-            await File.WriteAllTextAsync(path, sb.ToString(), utf8, ct);
-            files.Add(path);
-            return files;
-        }
-
-        foreach (var (obj, ddl) in ddls)
-        {
-            var dir = Path.Combine(request.OutputDirectory, SafeFileName(obj.ObjectType.ToLowerInvariant().Replace(' ', '_')));
-            Directory.CreateDirectory(dir);
-            var path = Path.Combine(dir, SafeFileName(Rename(obj.Name, request.Renames)) + ".sql");
-            await File.WriteAllTextAsync(path, ddl + Environment.NewLine, utf8, ct);
-            files.Add(path);
-        }
-
-        return files;
-    }
-
-    private static string Rename(string name, IReadOnlyList<DdlRename> renames)
-        => renames.LastOrDefault(r => string.Equals(r.From, name, StringComparison.Ordinal))?.To ?? name;
+    /// <inheritdoc cref="DdlBulkExport.SafeFileName"/>
+    public static string SafeFileName(string name) => DdlBulkExport.SafeFileName(name);
 }
