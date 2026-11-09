@@ -248,6 +248,10 @@ public sealed partial class ProfileEditorViewModel : ViewModelBase
     [ObservableProperty]
     private string _colorText = string.Empty;
 
+    /// <summary>접속 대상 DBMS(D-046). 옛 프로필은 Oracle.</summary>
+    [ObservableProperty]
+    private Dbms _dbms = Dbms.Oracle;
+
     [ObservableProperty]
     private ConnectionMode _mode = ConnectionMode.HostPortService;
 
@@ -339,7 +343,7 @@ public sealed partial class ProfileEditorViewModel : ViewModelBase
         nameof(IsDirty), nameof(ShowRequired), nameof(NameMissing), nameof(UserMissing), nameof(HostMissing), nameof(ServiceMissing),
         nameof(EasyConnectMissing), nameof(EasyConnectError), nameof(TnsAliasMissing), nameof(HasRequiredFields), nameof(ConnectionStringPreview),
         nameof(IsHostPortMode), nameof(IsEasyConnectMode), nameof(IsTnsMode), nameof(UsesWallet), nameof(CanPickColor),
-        nameof(EffectiveColor), nameof(ColorLabel), nameof(ColorWarning),
+        nameof(EffectiveColor), nameof(ColorLabel), nameof(ColorWarning), nameof(IsOracle), nameof(ShowModeChoice), nameof(ShowServiceKind), nameof(UsesWalletFolder),
     ];
 
     /// <summary>저장된 값을 채우는 중(변경으로 치지 않는다).</summary>
@@ -381,8 +385,57 @@ public sealed partial class ProfileEditorViewModel : ViewModelBase
     }
 
     public ProfileEditorViewModel()
+        : this(null)
     {
+    }
+
+    /// <param name="available">고를 수 있는 DBMS. null 이면 <see cref="DbmsAvailability.Current"/>(Tibero 는 Oranda.Tibero 어셈블리가 있을 때만).</param>
+    public ProfileEditorViewModel(IReadOnlyList<Dbms>? available)
+    {
+        DbmsChoices = Choices(available ?? DbmsAvailability.Current);
         _baseline = Capture();
+    }
+
+    /// <summary>DBMS 선택지(화면 콤보). 고를 수 있는 DBMS 가 하나뿐이면 콤보를 보이지 않는다(<see cref="ShowDbmsChoice"/>).</summary>
+    public IReadOnlyList<ChoiceItem<Dbms>> DbmsChoices { get; private set; }
+
+    public bool ShowDbmsChoice => DbmsChoices.Count > 1;
+
+    private static IReadOnlyList<ChoiceItem<Dbms>> Choices(IReadOnlyList<Dbms> available) =>
+        [.. available.Distinct().Select(d => new ChoiceItem<Dbms>(d, DbmsAvailability.Label(d)))];
+
+    public bool IsOracle => Dbms == Dbms.Oracle;
+
+    /// <summary>접속 방식 단추를 보인다: Oracle 만 TNS·사용자 지정을 쓴다(Tibero 는 호스트·포트·DB 이름뿐).</summary>
+    public bool ShowModeChoice => IsOracle;
+
+    /// <summary>서비스 이름/SID 고르기를 보인다(Oracle 만).</summary>
+    public bool ShowServiceKind => IsOracle;
+
+    /// <summary>지갑 폴더 칸을 보인다(Oracle 만, 그리고 <see cref="UsesWallet"/>).</summary>
+    public bool UsesWalletFolder => IsOracle && UsesWallet;
+
+    /// <summary>DBMS 를 바꾸면 기본 포트(Oracle 1521, Tibero 8629)가 따라 바뀐다(사람이 고친 포트는 두고), Tibero 는 호스트·포트 방식으로 맞춘다.</summary>
+    partial void OnDbmsChanged(Dbms value)
+    {
+        if (_loading)
+        {
+            return;
+        }
+
+        var oldDefault = DbmsAvailability.DefaultPort(value == Dbms.Oracle ? Dbms.Tibero : Dbms.Oracle);
+        if (Port.Trim() == oldDefault)
+        {
+            Port = DbmsAvailability.DefaultPort(value);
+        }
+
+        if (value != Dbms.Oracle)
+        {
+            Mode = ConnectionMode.HostPortService;
+            UseTls = false;
+            UseSid = false;
+            Auth = AuthMode.Default;
+        }
     }
 
     /// <summary>편집 시작 때의 프로필(Id·credentialRef·마지막 접속 시각을 이어 받는다). 새 프로필이면 Id 만 새로 발급한 빈 값.</summary>
@@ -527,7 +580,7 @@ public sealed partial class ProfileEditorViewModel : ViewModelBase
     public static ProfileEditorViewModel From(ConnectionProfile profile)
     {
         ArgumentNullException.ThrowIfNull(profile);
-        var vm = new ProfileEditorViewModel { Original = profile, IsNew = false };
+        var vm = new ProfileEditorViewModel(DbmsAvailability.With(DbmsAvailability.Current, profile.Dbms)) { Original = profile, IsNew = false };
         vm._loading = true;
         try
         {
@@ -668,14 +721,14 @@ public sealed partial class ProfileEditorViewModel : ViewModelBase
     private FormState Capture() => new(
         Name, Group, Environment, ColorText, Mode, Host, Port, Service, UseTls, UseSid, EasyConnect, TnsAlias, TnsAdmin, WalletLocation,
         User, SavePassword, Auth, ProxyUser, ReadOnly, LicensePack, ConnectTimeoutSeconds, KeepAliveSeconds,
-        NlsDateFormat, NlsTimestampFormat, NlsLanguage, NlsTerritory, NlsSort, Comment, _aiAccess?.Draft.AiAccess, _aiAccess?.Draft.AllowExplainPlan);
+        NlsDateFormat, NlsTimestampFormat, NlsLanguage, NlsTerritory, NlsSort, Comment, _aiAccess?.Draft.AiAccess, _aiAccess?.Draft.AllowExplainPlan, Dbms);
 
     private sealed record FormState(
         string Name, string Group, ConnectionEnvironment Environment, string ColorText, ConnectionMode Mode, string Host, string Port,
         string Service, bool UseTls, bool UseSid, string EasyConnect, string TnsAlias, string TnsAdmin, string WalletLocation, string User,
         bool SavePassword, AuthMode Auth, string ProxyUser, bool ReadOnly, LicensePack LicensePack, decimal ConnectTimeoutSeconds,
         decimal KeepAliveSeconds, string NlsDateFormat, string NlsTimestampFormat, string NlsLanguage, string NlsTerritory, string NlsSort,
-        string Comment, Oranda.Core.Ai.Access.AiAccessLevel? AiAccess, bool? AiExplain);
+        string Comment, Oranda.Core.Ai.Access.AiAccessLevel? AiAccess, bool? AiExplain, Dbms Dbms);
 
     /// <summary>검증을 거쳐 프로필로 만든다. 문제가 있으면 null 과 문제 목록.</summary>
     public ConnectionProfile? TryBuild(out IReadOnlyList<string> errors)
@@ -739,7 +792,7 @@ public sealed partial class ProfileEditorViewModel : ViewModelBase
             DataSource = dataSource,
             Auth = Auth,
             TnsAdmin = tnsAdmin,
-            WalletLocation = UsesWallet ? NullIfBlank(WalletLocation) : null,
+            WalletLocation = UsesWalletFolder ? NullIfBlank(WalletLocation) : null,
             ConnectTimeoutSeconds = (int)ConnectTimeoutSeconds,
             Environment = Environment,
             ReadOnly = ReadOnly,
@@ -752,6 +805,7 @@ public sealed partial class ProfileEditorViewModel : ViewModelBase
             Comment = NullIfBlank(Comment),
             AiAccess = ai.AiAccess,
             AllowExplainPlan = ai.AllowExplainPlan,
+            Dbms = Dbms,
         };
 
         list.AddRange(ConnectionProfileValidator.Validate(profile));
@@ -781,6 +835,7 @@ public sealed partial class ProfileEditorViewModel : ViewModelBase
 
     private void Load(ConnectionProfile p)
     {
+        Dbms = p.Dbms;
         Name = p.Name;
         Group = p.Group ?? string.Empty;
         Comment = p.Comment ?? string.Empty;

@@ -137,7 +137,19 @@
     <Border Classes="section">
       <TextBlock Text="접속" />
     </Border>
-    <Grid ColumnSpacing="12">
+    <!-- DBMS 고르기: Oranda.Tibero 어셈블리가 있을 때만 두 개 이상이라 보인다(D-046). -->
+    <Grid IsVisible="{Binding ShowDbmsChoice}" ColumnSpacing="12">
+      <Grid.ColumnDefinitions>
+        <ColumnDefinition Width="Auto" SharedSizeGroup="Label" />
+        <ColumnDefinition Width="*" />
+      </Grid.ColumnDefinitions>
+      <TextBlock Text="DBMS" />
+      <ComboBox x:Name="DbmsBox" Grid.Column="1" MinWidth="160" HorizontalAlignment="Left"
+                ItemsSource="{Binding DbmsChoices}" SelectedValueBinding="{ReflectionBinding Value}"
+                SelectedValue="{Binding Dbms}" AutomationProperties.Name="DBMS" />
+    </Grid>
+
+    <Grid IsVisible="{Binding ShowModeChoice}" ColumnSpacing="12">
       <Grid.ColumnDefinitions>
         <ColumnDefinition Width="Auto" SharedSizeGroup="Label" />
         <ColumnDefinition Width="*" />
@@ -167,13 +179,14 @@
       <TextBlock Grid.Row="0" Grid.Column="2" Classes="inline" Text="포트" />
       <TextBox x:Name="PortBox" Grid.Row="0" Grid.Column="3" Width="80" Text="{Binding Port}" AutomationProperties.Name="포트" />
       <!-- SQL Developer·DBeaver 처럼 서비스 이름과 SID 를 고른다. 줄을 늘리지 않게 라벨 자리에 둔다(SID 는 접속 기술자로 저장). -->
-      <ComboBox x:Name="ServiceKindBox" Grid.Row="1" Classes="label-choice" HorizontalAlignment="Right"
+      <TextBlock Grid.Row="1" Text="DB 이름" IsVisible="{Binding !IsOracle}" Classes.error="{Binding ServiceMissing}" />
+      <ComboBox x:Name="ServiceKindBox" Grid.Row="1" Classes="label-choice" HorizontalAlignment="Right" IsVisible="{Binding ShowServiceKind}"
                 SelectedIndex="{Binding ServiceKindIndex}" AutomationProperties.Name="서비스 이름 또는 SID">
         <ComboBoxItem Content="서비스 이름" />
         <ComboBoxItem Content="SID" />
       </ComboBox>
       <TextBox x:Name="ServiceBox" Grid.Row="1" Grid.Column="1" Text="{Binding Service}" Classes.missing="{Binding ServiceMissing}" AutomationProperties.Name="서비스" />
-      <CheckBox x:Name="TlsBox" Grid.Row="1" Grid.Column="2" Grid.ColumnSpan="2" Content="TLS(tcps)" IsChecked="{Binding UseTls}" />
+      <CheckBox x:Name="TlsBox" Grid.Row="1" Grid.Column="2" Grid.ColumnSpan="2" Content="TLS(tcps)" IsChecked="{Binding UseTls}" IsVisible="{Binding IsOracle}" />
     </Grid>
 
     <Grid IsVisible="{Binding IsEasyConnectMode}" RowDefinitions="Auto,Auto" ColumnSpacing="12" RowSpacing="2">
@@ -219,7 +232,7 @@
                  FontSize="{DynamicResource OrandaFontSizeSmall}" IsVisible="{Binding TnsAliasDetail, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
     </Grid>
 
-    <Grid IsVisible="{Binding UsesWallet}" ColumnSpacing="12">
+    <Grid IsVisible="{Binding UsesWalletFolder}" ColumnSpacing="12">
       <Grid.ColumnDefinitions>
         <ColumnDefinition Width="Auto" SharedSizeGroup="Label" />
         <ColumnDefinition Width="*" />
