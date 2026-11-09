@@ -453,6 +453,34 @@ public class LockMonitorTests
     }
 
     [Fact]
+    public async Task Kill_privilege_failure_says_alter_system_and_keeps_the_lock_view()
+    {
+        var h = await StartedAsync();
+        h.Vm.SelectedKey = FakeLockMonitor.H1;
+        h.Answer = true;
+        h.Monitor.KillFail = new InvalidOperationException("ORA-01031: insufficient privileges");
+        var state = h.Vm.State;
+        var rows = h.Vm.TreeRows.Count;
+
+        await h.Vm.KillAsync();
+
+        Assert.Contains("세션 종료 권한(ALTER SYSTEM)이 없습니다", h.Vm.StatusText, StringComparison.Ordinal);
+        Assert.Equal(state, h.Vm.State); // 목록 읽기 권한 없음 화면(Denied)으로 바뀌지 않는다
+        Assert.Equal(rows, h.Vm.TreeRows.Count); // 데이터 유지
+        Assert.False(h.Vm.Access.HasNotice);
+    }
+
+    [Fact]
+    public void Missing_locked_row_reason_names_tibero_and_keeps_the_oracle_wording()
+    {
+        Assert.Contains("row_wait_obj#", LockMonitorViewModel.LockedRowMissingReason(Dbms.Oracle), StringComparison.Ordinal);
+        var tibero = LockMonitorViewModel.LockedRowMissingReason(Dbms.Tibero);
+        Assert.Contains("Tibero", tibero, StringComparison.Ordinal);
+        Assert.Contains("잠긴 행 위치를 제공하지 않습니다", tibero, StringComparison.Ordinal);
+        Assert.DoesNotContain("row_wait_obj#", tibero, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task Waiter_without_waiters_gets_no_warning_and_disconnect_uses_the_execution_engine_text()
     {
         var h = await StartedAsync();

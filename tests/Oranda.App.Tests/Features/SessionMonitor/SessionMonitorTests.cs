@@ -142,6 +142,55 @@ public class SessionMonitorTests
     }
 
     [Fact]
+    public async Task Kill_privilege_failure_says_alter_system_and_keeps_the_list_and_refresh()
+    {
+        const string message = "ORA-01031: insufficient privileges"; // Tibero 의 TBR-17004 도 같은 분류기(IsNoAccess)를 탄다
+        var h = new Harness();
+        await h.Vm.StartAsync();
+        h.Vm.SelectedSession = h.Vm.Sessions.Single(s => s.Row.Key.Sid == 10);
+        h.Vm.Confirm = _ => Task.FromResult(true);
+        h.Monitor.KillFail = new InvalidOperationException(message);
+        var autoRefresh = h.Vm.AutoRefresh;
+
+        await h.Vm.KillAsync(immediate: true);
+
+        Assert.Contains("ALTER SYSTEM", h.Vm.StatusText, StringComparison.Ordinal);
+        Assert.DoesNotContain("SELECT_CATALOG_ROLE", h.Vm.Access.Notice ?? string.Empty, StringComparison.Ordinal);
+        Assert.False(h.Vm.Access.HasNotice); // 목록 읽기 권한 띠가 뜨지 않는다
+        Assert.Equal(3, h.Vm.Sessions.Count); // 목록 유지
+        Assert.NotNull(h.Vm.SelectedSession);
+        Assert.Equal(autoRefresh, h.Vm.AutoRefresh); // 자동 새로 고침 유지
+    }
+
+    [Fact]
+    public async Task List_privilege_failure_still_clears_the_list_and_shows_the_banner()
+    {
+        var h = new Harness();
+        await h.Vm.StartAsync();
+        h.Monitor.Fail = new InvalidOperationException("ORA-01031: insufficient privileges");
+
+        await h.Vm.RefreshAsync();
+
+        Assert.Empty(h.Vm.Sessions); // 목록 읽기 실패는 예전 그대로
+        Assert.True(h.Vm.Access.HasNotice);
+    }
+
+    [Fact]
+    public void Unavailable_detail_section_shows_its_reason_instead_of_none()
+    {
+        var detail = new SessionDetail(new SessionRow(new SessionKey(1, 5, 6), "ACTIVE"))
+        {
+            Sections = [new DetailSection("대기 이력", ["이벤트"], []), new DetailSection("트랜잭션", ["XID"], [])],
+            UnavailableSections = new Dictionary<string, string> { ["대기 이력"] = "Tibero 에는 대기 이력 뷰가 없습니다" },
+        };
+
+        var text = SessionMonitorViewModel.FormatDetail(detail).ReplaceLineEndings("\n");
+
+        Assert.Contains("[대기 이력]\n(없음 — Tibero 에는 대기 이력 뷰가 없습니다)", text, StringComparison.Ordinal);
+        Assert.Contains("[트랜잭션]\n(없음)", text, StringComparison.Ordinal); // 이유가 없는 구획은 그대로
+    }
+
+    [Fact]
     public async Task Kill_without_confirm_callback_does_nothing()
     {
         var h = new Harness();
@@ -343,8 +392,15 @@ public class SessionMonitorTests
                 Sections = [new DetailSection("잠금 객체", ["소유자", "객체", "유형", "잠금 모드"], [["SCOTT", "EMP", "TABLE", "Row-X (SX)"]])],
             });
 
+        public Exception? KillFail { get; set; }
+
         public Task KillAsync(ISession monitor, SessionKey target, bool immediate, CancellationToken ct)
         {
+            if (KillFail is { } ex)
+            {
+                throw ex;
+            }
+
             Killed.Add((target, immediate));
             return Task.CompletedTask;
         }

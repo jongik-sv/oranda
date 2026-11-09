@@ -1331,7 +1331,7 @@ public sealed partial class LockMonitorViewModel : ToolPanelViewModelBase, IDisp
             {
                 if (row is null)
                 {
-                    Reset("잠긴 행을 찾지 못했습니다(대기가 끝났거나 row_wait_obj# 가 없습니다).");
+                    Reset(LockedRowMissingReason(session.Profile.Dbms));
                     return;
                 }
 
@@ -1352,6 +1352,14 @@ public sealed partial class LockMonitorViewModel : ToolPanelViewModelBase, IDisp
             });
         }, ct);
     }
+
+    /// <summary>
+    /// 잠긴 행을 못 찾았을 때의 이유. Tibero 는 잠긴 행 위치를 제공하지 않으므로(DbmsFeature 값 없이 DBMS 로 판정) 그 사실을 알리고,
+    /// 그 밖(Oracle)은 예전 문구(대기가 끝났거나 row_wait_obj# 가 없음)를 그대로 쓴다.
+    /// </summary>
+    public static string LockedRowMissingReason(Oranda.Core.Connection.Dbms dbms) => dbms == Oranda.Core.Connection.Dbms.Oracle
+        ? "잠긴 행을 찾지 못했습니다(대기가 끝났거나 row_wait_obj# 가 없습니다)."
+        : $"{dbms} 는 잠긴 행 위치를 제공하지 않습니다.";
 
     /// <summary>「MES.LOT_HIST · 파일 7 · 블록 2495 · 행 2」(파일·블록·행이 없으면 표 이름만).</summary>
     public static string LockedRowText(LockedRowInfo row)
@@ -2023,7 +2031,7 @@ public sealed partial class LockMonitorViewModel : ToolPanelViewModelBase, IDisp
                 case ExecutionStatus.Failed:
                     throw new InvalidOperationException(result.Error?.Message ?? "실행하지 못했습니다.");
             }
-        }, ct, reportAsBanner: false);
+        }, ct, reportAsBanner: false, isSessionChange: true);
 
         if (done)
         {
@@ -2149,7 +2157,7 @@ public sealed partial class LockMonitorViewModel : ToolPanelViewModelBase, IDisp
     // ---- 공통 -------------------------------------------------------------------------------
 
     /// <summary>모니터 세션에서 한 번에 하나씩 실행한다. 성공하면 true. 실패는 띠(목록 읽기) 또는 상태 줄(동작)에 보인다.</summary>
-    private async Task<bool> RunAsync(Func<IMonitorService, ISession, Task> work, CancellationToken ct, bool reportAsBanner = true)
+    private async Task<bool> RunAsync(Func<IMonitorService, ISession, Task> work, CancellationToken ct, bool reportAsBanner = true, bool isSessionChange = false)
     {
         if (_session is not { } session)
         {
@@ -2185,7 +2193,7 @@ public sealed partial class LockMonitorViewModel : ToolPanelViewModelBase, IDisp
         }
         catch (Exception ex) when (ex is not OutOfMemoryException)
         {
-            PostToUi(() => ShowFailure(ex, session, reportAsBanner));
+            PostToUi(() => ShowFailure(ex, session, reportAsBanner, isSessionChange));
             return false;
         }
         finally
@@ -2194,9 +2202,16 @@ public sealed partial class LockMonitorViewModel : ToolPanelViewModelBase, IDisp
         }
     }
 
-    private void ShowFailure(Exception ex, ISession session, bool banner)
+    private void ShowFailure(Exception ex, ISession session, bool banner, bool isSessionChange = false)
     {
         var message = FirstLine(ex.Message);
+        if (isSessionChange && MonitorAccessState.IsPrivilegeError(ex))
+        {
+            // 종료·연결 끊기는 목록을 읽을 권한(SELECT_CATALOG_ROLE)이 아니라 ALTER SYSTEM 이 모자란 것이다 — 목록·새로 고침은 그대로 두고 상태 줄에만 알린다.
+            StatusText = "세션 종료 권한(ALTER SYSTEM)이 없습니다 · " + (OraCode(message) ?? message);
+            return;
+        }
+
         if (MonitorAccessState.IsPrivilegeError(ex))
         {
             AutoRefresh = false;

@@ -165,8 +165,15 @@ internal sealed class FakeLockMonitor : IMonitorService
         ]);
     }
 
+    public Exception? KillFail { get; set; }
+
     public Task KillAsync(ISession monitor, SessionKey target, bool immediate, CancellationToken ct)
     {
+        if (KillFail is { } fail)
+        {
+            throw fail;
+        }
+
         Killed.Add((target, immediate));
         return Task.CompletedTask;
     }

@@ -493,7 +493,7 @@ public sealed partial class SessionMonitorViewModel : ToolPanelViewModelBase, ID
         {
             await change(monitor, session, item.Row);
             done = true;
-        }, ct);
+        }, ct, isSessionChange: true);
 
         if (done)
         {
@@ -503,7 +503,7 @@ public sealed partial class SessionMonitorViewModel : ToolPanelViewModelBase, ID
     }
 
     /// <summary>모니터 세션에서 한 번에 하나씩 실행한다. 실패는 상태 줄에 보인다.</summary>
-    private async Task RunAsync(Func<IMonitorService, ISession, Task> work, CancellationToken ct)
+    private async Task RunAsync(Func<IMonitorService, ISession, Task> work, CancellationToken ct, bool isSessionChange = false)
     {
         if (_session is not { } session)
         {
@@ -537,7 +537,7 @@ public sealed partial class SessionMonitorViewModel : ToolPanelViewModelBase, ID
         }
         catch (Exception ex) when (ex is not OutOfMemoryException)
         {
-            PostToUi(() => ShowFailure(ex, session));
+            PostToUi(() => ShowFailure(ex, session, isSessionChange));
         }
         finally
         {
@@ -549,11 +549,18 @@ public sealed partial class SessionMonitorViewModel : ToolPanelViewModelBase, ID
     /// 서버 오류를 상태 줄에 보인다. 권한 부족(ORA-00942·ORA-01031)이면 점검을 통과했어도 일부 뷰를 못 읽는 것이므로
     /// 목록을 비우고 안내 띠를 켠다(자동 새로 고침은 멈춘다).
     /// </summary>
-    private void ShowFailure(Exception ex, ISession session)
+    private void ShowFailure(Exception ex, ISession session, bool isSessionChange = false)
     {
         StatusText = FirstLine(ex.Message);
         if (!MonitorAccessState.IsPrivilegeError(ex))
         {
+            return;
+        }
+
+        if (isSessionChange)
+        {
+            // 종료·연결 끊기는 목록을 읽을 권한(SELECT_CATALOG_ROLE)이 아니라 ALTER SYSTEM 이 모자란 것이다 — 목록·자동 새로 고침·선택은 그대로 두고 상태 줄에만 알린다.
+            StatusText = "세션 종료 권한(ALTER SYSTEM)이 없습니다 · " + FirstLine(ex.Message);
             return;
         }
 
@@ -662,17 +669,18 @@ public sealed partial class SessionMonitorViewModel : ToolPanelViewModelBase, ID
         {
             sb.AppendLine();
             sb.Append('[').Append(section.Title).AppendLine("]");
-            AppendTable(sb, section);
+            // 이 DBMS 에 원본이 없는 구획(Tibero 의 대기 이력 등)은 질의하지 않고 빈 구획 + 이유로 온다 — 「없음」 대신 이유를 보인다.
+            AppendTable(sb, section, detail.UnavailableSections.TryGetValue(section.Title, out var why) ? why : null);
         }
 
         return sb.ToString();
     }
 
-    private static void AppendTable(StringBuilder sb, DetailSection section)
+    private static void AppendTable(StringBuilder sb, DetailSection section, string? unavailableReason = null)
     {
         if (section.Rows.Count == 0)
         {
-            sb.AppendLine("(없음)");
+            sb.AppendLine(string.IsNullOrWhiteSpace(unavailableReason) ? "(없음)" : "(없음 — " + unavailableReason.Trim() + ")");
             return;
         }
 
