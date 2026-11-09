@@ -27,6 +27,8 @@
     <ProjectReference Include="..\..\src\Oranda.Oracle\Oranda.Oracle.csproj" />
     <!-- 결과 편집(R4)이 쓰는 DBMS 무관 편집 계획·DML 생성이 Tibero 모양 결과 열에서 맞는지 확인한다. -->
     <ProjectReference Include="..\..\src\Oranda.Language\Oranda.Language.csproj" />
+    <!-- 가져오기·내보내기 서비스(T5) 시험이 쓰는 가짜 실행 서비스·메타데이터·세션. -->
+    <ProjectReference Include="..\Oranda.Testing\Oranda.Testing.csproj" />
     <!-- 가짜 드라이버는 빌드만 하고 출력 하위 폴더(fake-driver/)에 둔다. 출력 루트에 두면 기본 로드 컨텍스트가 먼저 잡는다. -->
     <ProjectReference Include="..\Oranda.Tibero.FakeDriver\Oranda.Tibero.FakeDriver.csproj" ReferenceOutputAssembly="false" />
   </ItemGroup>
